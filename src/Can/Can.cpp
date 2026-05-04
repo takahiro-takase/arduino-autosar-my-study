@@ -69,7 +69,7 @@ void Can_SetControllerMode(Can_ControllerStateType mode)
 // -----------------------------
 // AUTOSAR API：Can_Write()
 // -----------------------------
-Can_ReturnType Can_Write(uint32_t id, uint8_t dlc, const uint8_t* data)
+Can_ReturnType Can_Write(uint32 id, uint8 dlc, const uint8* data)
 {
     if (CanState != CAN_CS_STARTED)
         return Can_ReturnType::CAN_NOT_OK;
@@ -100,9 +100,9 @@ void Can_MainFunction_Read(void)
 
     if (Mcp2515_CheckReceive() == Mcp2515_ReturnType::OK)
     {
-        uint32_t rxId;
-        uint8_t len;
-        uint8_t buf[8];
+        uint32 rxId;
+        uint8 len;
+        uint8 buf[8];
         Mcp2515_Read(&rxId, &len, buf);
 
         // AUTOSAR ならここで CanIf_RxIndication() を呼ぶ
@@ -119,9 +119,9 @@ void Can_Isr(void)
 {
     if (!digitalRead(2)) // MCP2515の割り込みピン（INT）を接続しているピンを読み取る
     {
-        uint32_t rxId;
-        uint8_t len;
-        uint8_t buf[8];
+        uint32 rxId;
+        uint8 len;
+        uint8 buf[8];
         Mcp2515_Read(&rxId, &len, buf);
 
         Serial.print("[Can_Isr] Recv ID=0x");

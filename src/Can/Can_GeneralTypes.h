@@ -1,7 +1,10 @@
 #ifndef CAN_GENERAL_TYPES_H
 #define CAN_GENERAL_TYPES_H
 
-#include <stdint.h>
+#include "Platform_Types.h"
+#include "ComStack_Types.h"
+
+typedef uint32 Can_IdType;
 
 typedef enum
 {
@@ -17,5 +20,12 @@ typedef enum
     CAN_CS_STARTED,
     CAN_CS_SLEEP
 } Can_ControllerStateType;
+
+typedef struct
+{
+    Can_IdType id;
+    uint8 length;
+    uint8* sdu;
+} Can_PduType;
 
 #endif
