@@ -37,7 +37,7 @@ void loop()
         lastSendTime = millis();
 
         uint8_t data[8] = {0x11,0x22,0x33,0x44,0x55,0x66,0x77,0x88};
-        Can_Write(0x123, 8, data);
+        (void)Can_Write(0x123, 8, data);
     }
 
     // ② 割り込みによる受信処理
