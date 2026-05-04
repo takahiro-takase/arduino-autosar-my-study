@@ -11,8 +11,9 @@ enum class Mcp2515_ReturnType : uint8_t
 
 enum class Mcp2515_Mode : uint8_t
 {
-    NORMAL = 0,
-    SLEEP = 1
+    NORMAL      = 0, // 通常動作（TX/RX 可）
+    LISTEN_ONLY = 1, // 受信専用（TX 不可）← AUTOSAR CAN_CS_STOPPED に対応
+    SLEEP       = 2  // 低電力スリープ     ← AUTOSAR CAN_CS_SLEEP に対応
 };
 
 Mcp2515_ReturnType Mcp2515_Init(uint8_t csPin, uint32_t baudrate);

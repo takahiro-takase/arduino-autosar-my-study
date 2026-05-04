@@ -15,14 +15,18 @@ typedef struct
 typedef struct
 {
     Can_FilterConfigType filter;
-    uint8 csPin;
+    uint8  csPin;    // SPI チップセレクトピン番号
+    uint8  intPin;   // MCP2515 の INT ピン番号（Can_Isr で使用）
     uint32 baudrate;
 } Can_ConfigType;
 
-void Can_Init(const Can_ConfigType* Config);
-void Can_SetControllerMode(Can_ControllerStateType mode);
-Can_ReturnType Can_Write(uint32 id, uint8 dlc, const uint8* data);
-void Can_MainFunction_Read(void);
-void Can_Isr(void);
+void           Can_Init(const Can_ConfigType* Config);
+void           Can_SetControllerMode(Can_ControllerStateType mode);
+// AUTOSAR SWS_Can_00233: Can_Write(Hth, PduInfo)
+// Hth: Hardware Transmit Handle（使用する TX バッファ識別子）
+// PduInfo: 送信データ（id / length / sdu を含む Can_PduType へのポインタ）
+Can_ReturnType Can_Write(Can_HwHandleType Hth, const Can_PduType* PduInfo);
+void           Can_MainFunction_Read(void);
+void           Can_Isr(void);
 
 #endif

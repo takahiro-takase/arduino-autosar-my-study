@@ -6,6 +6,10 @@
 
 typedef uint32 Can_IdType;
 
+// ハードウェア送信オブジェクト（HOH: Hardware Object Handle）の識別子
+// MCP2515 は TX バッファを 3 つ持つが、ここでは簡略化して uint8 で管理
+typedef uint8 Can_HwHandleType;
+
 typedef enum
 {
     CAN_OK = 0,

@@ -7,8 +7,9 @@ unsigned long sendInterval = 5000;
 unsigned long lastSendTime = 0;
 
 const Can_ConfigType CanConfig = {
-    .filter = {0x123, 0x7FF},
-    .csPin = 10,
+    .filter  = {0x123, 0x7FF},
+    .csPin   = 10,
+    .intPin  = 2,   // MCP2515 INT → Arduino D2
     .baudrate = CAN_500KBPS
 };
 
@@ -36,8 +37,9 @@ void loop()
     if (millis() - lastSendTime >= sendInterval) {
         lastSendTime = millis();
 
-        uint8_t data[8] = {0x11,0x22,0x33,0x44,0x55,0x66,0x77,0x88};
-        (void)Can_Write(0x123, 8, data);
+        uint8_t data[8] = {0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88};
+        Can_PduType pdu = {.id = 0x123, .length = 8, .sdu = data};
+        (void)Can_Write(0, &pdu); // Hth=0（TX バッファ 0 を指定）
     }
 
     // ② 割り込みによる受信処理

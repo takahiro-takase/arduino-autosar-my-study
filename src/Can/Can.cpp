@@ -2,12 +2,14 @@
 #include "Can.h"
 #include "Mcp2515_Wrapper.h"
 
-static const Can_ConfigType* Can_ConfigPtr = nullptr;
-static Can_ControllerStateType CanState = CAN_CS_UNINIT;
+static const Can_ConfigType*   Can_ConfigPtr = nullptr;
+static Can_ControllerStateType CanState      = CAN_CS_UNINIT;
 
 // -----------------------------
 // AUTOSAR API：Can_Init(Config)
 // CAN ドライバの初期化
+// 完了後の状態は CAN_CS_STOPPED（AUTOSAR SWS_Can_00246）
+// 通信開始は Can_SetControllerMode(CAN_CS_STARTED) で明示的に行う
 // -----------------------------
 void Can_Init(const Can_ConfigType* Config)
 {
@@ -21,77 +23,90 @@ void Can_Init(const Can_ConfigType* Config)
     // MCP_STDEXT : 標準ID/拡張IDを受信（フィルタ有効） ← フィルタ使用時はこれ
     // MCP_STD    : 標準IDのみ受信（フィルタ有効） ← [Can_Init] FAIL
     // MCP_EXT    : 拡張IDのみ受信（フィルタ有効）
-    if (Mcp2515_Init(Config->csPin, Config->baudrate) == Mcp2515_ReturnType::OK)
-    {
-        Serial.println("[Can_Init] CAN Initialized successfully");
-
-        // フィルタ設定
-        Mcp2515_InitMask(0, 0, Config->filter.mask << 16);
-        Mcp2515_InitFilter(0, 0, Config->filter.filterId << 16);
-        Mcp2515_InitFilter(1, 0, Config->filter.filterId << 16);
-        Mcp2515_InitMask(1, 0, Config->filter.mask << 16);
-        Mcp2515_InitFilter(2, 0, Config->filter.filterId << 16);
-        Mcp2515_InitFilter(3, 0, Config->filter.filterId << 16);
-        Mcp2515_InitFilter(4, 0, Config->filter.filterId << 16);
-        Mcp2515_InitFilter(5, 0, Config->filter.filterId << 16);
-
-        // NORMAL モードへ
-        Mcp2515_SetMode(Mcp2515_Mode::NORMAL);
-
-        CanState = CAN_CS_STARTED;
-    }
-    else
+    if (Mcp2515_Init(Config->csPin, Config->baudrate) != Mcp2515_ReturnType::OK)
     {
         Serial.println("[Can_Init] FAIL");
         while (1)
             ;
     }
+
+    Serial.println("[Can_Init] CAN Initialized successfully");
+
+    // フィルタ設定（init_Mask/init_Filt は内部で CONFIG モードに切り替えて設定する）
+    Mcp2515_InitMask(0, 0, Config->filter.mask << 16);
+    Mcp2515_InitFilter(0, 0, Config->filter.filterId << 16);
+    Mcp2515_InitFilter(1, 0, Config->filter.filterId << 16);
+    Mcp2515_InitMask(1, 0, Config->filter.mask << 16);
+    Mcp2515_InitFilter(2, 0, Config->filter.filterId << 16);
+    Mcp2515_InitFilter(3, 0, Config->filter.filterId << 16);
+    Mcp2515_InitFilter(4, 0, Config->filter.filterId << 16);
+    Mcp2515_InitFilter(5, 0, Config->filter.filterId << 16);
+
+    // AUTOSAR 準拠: Init 完了後は STOPPED 状態
+    // TX/RX は行わず、LISTEN_ONLY モード（受信専用）でハードウェアを待機させる
+    Mcp2515_SetMode(Mcp2515_Mode::LISTEN_ONLY);
+    CanState = CAN_CS_STOPPED;
 }
 
 // -----------------------------
 // AUTOSAR API：Can_SetControllerMode()
-// Normal / Sleep / Stop の切替
+// コントローラの状態を明示的に切り替える
+//   CAN_CS_STARTED  → NORMAL モード（TX/RX 可）
+//   CAN_CS_STOPPED  → LISTEN_ONLY モード（TX 不可、コンフィグ保持）
+//   CAN_CS_SLEEP    → SLEEP モード（低電力）
 // -----------------------------
 void Can_SetControllerMode(Can_ControllerStateType mode)
 {
-    if (mode == CAN_CS_STARTED)
+    switch (mode)
     {
+    case CAN_CS_STARTED:
         Mcp2515_SetMode(Mcp2515_Mode::NORMAL);
-    }
-    else if (mode == CAN_CS_STOPPED)
-    {
+        break;
+    case CAN_CS_STOPPED:
+        // SLEEP とは異なり低電力ではないが TX を禁止する
+        Mcp2515_SetMode(Mcp2515_Mode::LISTEN_ONLY);
+        break;
+    case CAN_CS_SLEEP:
         Mcp2515_SetMode(Mcp2515_Mode::SLEEP);
+        break;
+    default:
+        return;
     }
 
     CanState = mode;
 }
 
 // -----------------------------
-// AUTOSAR API：Can_Write()
+// AUTOSAR API：Can_Write(Hth, PduInfo)
+// Hth     : Hardware Transmit Handle（TX バッファ識別子、今回は未使用）
+// PduInfo : 送信 PDU（id / length / sdu）
 // -----------------------------
-Can_ReturnType Can_Write(uint32 id, uint8 dlc, const uint8* data)
+Can_ReturnType Can_Write(Can_HwHandleType Hth, const Can_PduType* PduInfo)
 {
-    if (CanState != CAN_CS_STARTED)
-        return Can_ReturnType::CAN_NOT_OK;
+    (void)Hth; // MCP2515 は TX バッファを自動選択するため使用しない
 
-    Mcp2515_Send(id, dlc, data);
+    if (CanState != CAN_CS_STARTED)
+        return CAN_NOT_OK;
+
+    if (Mcp2515_Send(PduInfo->id, PduInfo->length, PduInfo->sdu) != Mcp2515_ReturnType::OK)
+        return CAN_NOT_OK;
 
     Serial.print("[Can_Write] Sent ID=0x");
-    Serial.print(id, HEX);
+    Serial.print(PduInfo->id, HEX);
     Serial.print(" Data=");
-    for (int i = 0; i < dlc; i++)
+    for (int i = 0; i < PduInfo->length; i++)
     {
-        Serial.print(data[i], HEX);
+        Serial.print(PduInfo->sdu[i], HEX);
         Serial.print(" ");
     }
     Serial.println();
 
-    return Can_ReturnType::CAN_OK;
+    return CAN_OK;
 }
 
 // -----------------------------
 // AUTOSAR API：Can_MainFunction_Read()
-// 受信ポーリング処理
+// 受信ポーリング処理（タスクから周期的に呼ぶ）
 // -----------------------------
 void Can_MainFunction_Read(void)
 {
@@ -101,8 +116,8 @@ void Can_MainFunction_Read(void)
     if (Mcp2515_CheckReceive() == Mcp2515_ReturnType::OK)
     {
         uint32 rxId;
-        uint8 len;
-        uint8 buf[8];
+        uint8  len;
+        uint8  buf[8];
         Mcp2515_Read(&rxId, &len, buf);
 
         // AUTOSAR ならここで CanIf_RxIndication() を呼ぶ
@@ -113,17 +128,22 @@ void Can_MainFunction_Read(void)
 
 // -----------------------------
 // AUTOSAR API：Can_Isr()
-// （受信割り込み処理）
+// MCP2515 の INT ピンを監視し、受信フレームを取り出す
+// INT ピンはアクティブ LOW（LOW = 割り込み発生中）
 // -----------------------------
 void Can_Isr(void)
 {
-    if (!digitalRead(2)) // MCP2515の割り込みピン（INT）を接続しているピンを読み取る
+    if (Can_ConfigPtr == nullptr)
+        return;
+
+    if (!digitalRead(Can_ConfigPtr->intPin))
     {
         uint32 rxId;
-        uint8 len;
-        uint8 buf[8];
+        uint8  len;
+        uint8  buf[8];
         Mcp2515_Read(&rxId, &len, buf);
 
+        // AUTOSAR ならここで CanIf_RxIndication() を呼ぶ
         Serial.print("[Can_Isr] Recv ID=0x");
         Serial.print(rxId, HEX);
         Serial.print(" Data=");
