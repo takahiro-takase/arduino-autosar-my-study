@@ -1,9 +1,12 @@
 #include "Can.h"
 #include <mcp_can.h>
 #include <SPI.h>
-#include <HardwareSerial.h>
+//#include <HardwareSerial.h>
 
-extern MCP_CAN CAN;
+static const Can_ConfigType* Can_ConfigPtr = nullptr;
+//extern MCP_CAN CAN;
+static MCP_CAN* CanDriver = nullptr;
+static Can_ControllerStateType CanState = CAN_CS_UNINIT;
 
 const int CAN_INT_PIN = 2;
 
@@ -15,61 +18,62 @@ void Can_Init(const Can_ConfigType* Config)
 {
     Serial.println("[Can_Init] Initializing CAN...");
 
+    Can_ConfigPtr = Config;
+
+    CanDriver = new MCP_CAN(Config->csPin);
+
+    // CONFIG モードで初期化
     // CAN.begin(mode, speed, clock) の mode の意味
     // MCP_ANY    : 標準ID/拡張IDを全受信（フィルタ無効になるので注意）
     // MCP_STDEXT : 標準ID/拡張IDを受信（フィルタ有効） ← フィルタ使用時はこれ
     // MCP_STD    : 標準IDのみ受信（フィルタ有効） ← [Can_Init] FAIL
     // MCP_EXT    : 拡張IDのみ受信（フィルタ有効）
-    if (CAN.begin(MCP_STDEXT, CAN_500KBPS, MCP_8MHZ) != CAN_OK) {
-        Serial.println("[Can_Init] FAIL");
-        while (1);
+    if (CanDriver->begin(MCP_STDEXT, Config->baudrate, MCP_8MHZ) == CAN_OK)
+    {
+        Serial.println("[Can_Init] CAN Initialized successfully");
+
+        // フィルタ設定
+        CanDriver->init_Mask(0, 0, Config->filter.mask << 16);
+        CanDriver->init_Filt(0, 0, Config->filter.filterId << 16);
+
+        // NORMAL モードへ
+        CanDriver->setMode(MCP_NORMAL);
+
+        CanState = CAN_CS_STARTED;
     }
-
-    // -----------------------------
-    // Day5：フィルタ設定（AUTOSAR の CanHwFilter）
-    // -----------------------------
-    uint32_t shiftedId = (uint32_t)Config->filterId << 16;
-    uint32_t shiftedMask = (uint32_t)Config->mask << 16;
-
-    CAN.init_Mask(0, 0, shiftedMask);   // Mask0
-    CAN.init_Filt(0, 0, shiftedId);  // Filter0
-    CAN.init_Filt(1, 0, shiftedId);  // Filter1
-    
-    CAN.init_Mask(1, 0, shiftedMask);   // Mask1
-    CAN.init_Filt(2, 0, shiftedId);  // Filter2
-    CAN.init_Filt(3, 0, shiftedId);  // Filter3
-    CAN.init_Filt(4, 0, shiftedId);  // Filter4
-    CAN.init_Filt(5, 0, shiftedId);  // Filter5
-
-    Serial.println("[Can_Init] Filter set: ID=0x123 only");
-
-    // CAN.setMode(MCP_NORMAL)
-    // begin() の後に NORMAL を再設定しても問題なし（NORMAL→NORMAL）
-    // CONFIG モードでフィルタ設定した後に NORMAL に戻す用途でも使える
-    CAN.setMode(MCP_NORMAL);
+    else
+    {
+        Serial.println("[Can_Init] FAIL");
+        while(1);
+    }
 }
 
 // -----------------------------
 // AUTOSAR API：Can_SetControllerMode()
 // Normal / Sleep / Stop の切替
 // -----------------------------
-void Can_SetControllerMode(uint8_t mode)
+void Can_SetControllerMode(Can_ControllerStateType mode)
 {
-    if (mode == 1) {  // 1 = Normal
-        CAN.setMode(MCP_NORMAL);
-        Serial.println("[Can_SetControllerMode] NORMAL mode");
+    if (mode == CAN_CS_STARTED)
+    {
+        CanDriver->setMode(MCP_NORMAL);
     }
-    else {
-        Serial.println("[Can_SetControllerMode] Unsupported mode");
+    else if (mode == CAN_CS_STOPPED)
+    {
+        CanDriver->setMode(MCP_SLEEP);
     }
+
+    CanState = mode;
 }
 
 // -----------------------------
 // AUTOSAR API：Can_Write()
 // -----------------------------
-void Can_Write(uint32_t id, uint8_t dlc, uint8_t* data)
+void Can_Write(uint32_t id, uint8_t dlc, const uint8_t* data)
 {
-    CAN.sendMsgBuf(id, 0, dlc, data);
+    if (CanState != CAN_CS_STARTED) return;
+
+    CanDriver->sendMsgBuf(id, 0, dlc, (uint8_t*)data);
 
     Serial.print("[Can_Write] Sent ID=0x");
     Serial.print(id, HEX);
@@ -87,22 +91,19 @@ void Can_Write(uint32_t id, uint8_t dlc, uint8_t* data)
 // -----------------------------
 void Can_MainFunction_Read(void)
 {
-    if (!digitalRead(CAN_INT_PIN)) {  // INT が LOW → 受信あり
+    if (CanState != CAN_CS_STARTED) return;
+
+    if (CanDriver->checkReceive() == CAN_MSGAVAIL)
+    {
         long unsigned int rxId;
-        unsigned char len = 0;
+        unsigned char len;
         unsigned char buf[8];
 
-        CAN.readMsgBuf(&rxId, &len, buf);
+        CanDriver->readMsgBuf(&rxId, &len, buf);
 
-        Serial.print("[Can_MainFunction_Read] Recv ID=0x");
-        Serial.print(rxId, HEX);
-        Serial.print(" Data=");
-
-        for (int i = 0; i < len; i++) {
-            Serial.print(buf[i], HEX);
-            Serial.print(" ");
-        }
-        Serial.println();
+        // AUTOSAR ならここで CanIf_RxIndication() を呼ぶ
+        Serial.print("[RX] ID=0x");
+        Serial.println(rxId, HEX);
     }
 }
 
@@ -117,7 +118,7 @@ void Can_Isr(void)
         unsigned char len;
         unsigned char buf[8];
 
-        CAN.readMsgBuf(&rxId, &len, buf);
+        CanDriver->readMsgBuf(&rxId, &len, buf);
 
         Serial.print("[Can_Isr] Recv ID=0x");
         Serial.print(rxId, HEX);

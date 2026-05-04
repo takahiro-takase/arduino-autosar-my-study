@@ -1,31 +1,36 @@
 #include <Arduino.h>
 #include "Can.h"
-#include <mcp_can.h>
-
-const int SPI_CS_PIN = 10;
-MCP_CAN CAN(SPI_CS_PIN);
-
-const Can_ConfigType CanConfig = {0x123, 0x7FF};
+#include <mcp_can_dfs.h>
 
 // 送信周期（5秒）
 unsigned long sendInterval = 5000;
 unsigned long lastSendTime = 0;
 
+const Can_ConfigType CanConfig = {
+    .filter = {0x123, 0x7FF},
+    .csPin = 10,
+    .baudrate = CAN_500KBPS
+};
 
 // -----------------------------
 // Arduino setup()
 // -----------------------------
-void setup() {
+void setup()
+{
     Serial.begin(115200);
 
-    Can_Init(&CanConfig);       // AUTOSAR 風初期化（フィルタ設定含む）
-    Can_SetControllerMode(1);   // AUTOSAR: Normal モード
+    // AUTOSAR 風初期化（フィルタ設定含む）
+    Can_Init(&CanConfig);
+
+    // AUTOSAR: Normal モード
+    Can_SetControllerMode(CAN_CS_STARTED);
 }
 
 // -----------------------------
 // Arduino loop()
 // -----------------------------
-void loop() {
+void loop()
+{
 
     // ① 5秒周期で送信（AUTOSAR: Can_Write）
     if (millis() - lastSendTime >= sendInterval) {
