@@ -1,6 +1,7 @@
 #include <SPI.h>
 #include "Can.h"
 #include "Mcp2515_Wrapper.h"
+#include "CanIf.h" // AUTOSAR SWS_Can_00396: CanDrv は受信時に CanIf_RxIndication を呼ぶ
 
 static const Can_ConfigType*   Can_ConfigPtr = nullptr;
 static Can_ControllerStateType CanState      = CAN_CS_UNINIT;
@@ -101,6 +102,10 @@ Can_ReturnType Can_Write(Can_HwHandleType Hth, const Can_PduType* PduInfo)
     }
     Serial.println();
 
+    // AUTOSAR SWS_Can_00016: 送信完了を CanIf に通知する
+    // swPduHandle は CanIf_Transmit が書き込んだ TxPduId をそのまま返す
+    CanIf_TxConfirmation(PduInfo->swPduHandle);
+
     return CAN_OK;
 }
 
@@ -118,11 +123,13 @@ void Can_MainFunction_Read(void)
         uint32 rxId;
         uint8  len;
         uint8  buf[8];
-        Mcp2515_Read(&rxId, &len, buf);
 
-        // AUTOSAR ならここで CanIf_RxIndication() を呼ぶ
-        Serial.print("[RX] ID=0x");
-        Serial.println(rxId, HEX);
+        if (Mcp2515_Read(&rxId, &len, buf) == Mcp2515_ReturnType::OK)
+        {
+            // AUTOSAR SWS_Can_00396: 受信フレームを CanIf に通知する
+            // HRH=0: 今回は RXB0/RXB1 を区別せず単一グループとして扱う
+            CanIf_RxIndication(0, rxId, len, buf);
+        }
     }
 }
 
@@ -141,18 +148,11 @@ void Can_Isr(void)
         uint32 rxId;
         uint8  len;
         uint8  buf[8];
-        Mcp2515_Read(&rxId, &len, buf);
 
-        // AUTOSAR ならここで CanIf_RxIndication() を呼ぶ
-        Serial.print("[Can_Isr] Recv ID=0x");
-        Serial.print(rxId, HEX);
-        Serial.print(" Data=");
-
-        for (int i = 0; i < len; i++)
+        if (Mcp2515_Read(&rxId, &len, buf) == Mcp2515_ReturnType::OK)
         {
-            Serial.print(buf[i], HEX);
-            Serial.print(" ");
+            // AUTOSAR SWS_Can_00396: 受信フレームを CanIf に通知する
+            CanIf_RxIndication(0, rxId, len, buf);
         }
-        Serial.println();
     }
 }

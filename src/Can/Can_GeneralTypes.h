@@ -27,9 +27,10 @@ typedef enum
 
 typedef struct
 {
+    PduIdType  swPduHandle; // CanIf が書き込む PDU ID（TxConfirmation で返ってくる）
     Can_IdType id;
-    uint8 length;
-    uint8* sdu;
+    uint8      length;
+    uint8*     sdu;
 } Can_PduType;
 
 #endif
