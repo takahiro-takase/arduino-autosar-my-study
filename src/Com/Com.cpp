@@ -112,11 +112,62 @@ void Com_Init(const Com_ConfigType* Config)
     }
 }
 
+// -------------------------------------------------------
+// Com_RxIndication
+// -------------------------------------------------------
 void Com_RxIndication(PduIdType PduId, const PduInfoType* PduInfoPtr)
 {
-    (void)PduId;
-    (void)PduInfoPtr;
-    // Step 4 で実装
+    // --- 1. 初期化・NULL チェック ---
+    if (Com_ConfigPtr == nullptr || PduInfoPtr == nullptr)
+    {
+        return;
+    }
+
+    // --- 2. PduRId で RX I-PDU テーブルを線形探索 ---
+    //    PduR が渡す PduId（DestPduId）= Com_IPduConfigType.PduRId
+    //    名前空間変換: PduR の DestPduId → COM 内部の IPduId
+    for (uint8 i = 0; i < Com_ConfigPtr->RxIPduCount; i++)
+    {
+        const Com_IPduConfigType* ipdu = &Com_ConfigPtr->RxIPdus[i];
+
+        if (ipdu->PduRId != PduId)
+        {
+            continue;
+        }
+
+        // --- 3. RX バッファにバイト列をコピー ---
+        //    DLC と受信長の小さい方だけコピーしてバッファ溢れを防ぐ
+        //    Signal の抽出はここでは行わない（遅延抽出）
+        const uint8 copyLen = (PduInfoPtr->SduLength < ipdu->DLC)
+                              ? PduInfoPtr->SduLength
+                              : ipdu->DLC;
+
+        for (uint8 b = 0; b < copyLen; b++)
+        {
+            Com_RxBuffer[ipdu->IPduId][b] = PduInfoPtr->SduDataPtr[b];
+        }
+
+        // --- 4. ログ出力 ---
+        Serial.print("[Com_RxIndication]");
+        Serial.print(" PduRId=");
+        Serial.print(PduId);
+        Serial.print(" -> IPduId=");
+        Serial.print(ipdu->IPduId);
+        Serial.print(" raw=[");
+        for (uint8 b = 0; b < copyLen; b++)
+        {
+            if (b > 0) { Serial.print(" "); }
+            if (Com_RxBuffer[ipdu->IPduId][b] < 0x10) { Serial.print("0"); }
+            Serial.print(Com_RxBuffer[ipdu->IPduId][b], HEX);
+        }
+        Serial.println("]");
+
+        return; // PduRId は一意のため、一致後は探索終了
+    }
+
+    // --- 5. 一致エントリなし ---
+    Serial.print("[Com_RxIndication] no I-PDU for PduRId=");
+    Serial.println(PduId);
 }
 
 Std_ReturnType Com_ReceiveSignal(Com_SignalIdType SignalId, uint8* SignalDataPtr)
