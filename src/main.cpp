@@ -146,12 +146,13 @@ void loop()
     {
         lastSendTime = millis();
 
-        uint16 rpm       = 1500;
-        uint8  temp      = 85;
-        uint8  engineOn  = 1;
+        // アプリはネイティブ型の変数ポインタを渡すだけ。
+        // PDU内のバイト配置（big-endian）への変換は COM が担う。
+        uint16 rpm      = 1500; // 0x05DC
+        uint8  temp     = 85;   // 0x55
+        uint8  engineOn = 1;
 
-        uint8 rpmBytes[2] = { (uint8)(rpm >> 8), (uint8)(rpm & 0xFF) };
-        (void)Com_SendSignal(COM_SIGNAL_ENGINE_SPEED,   rpmBytes);
+        (void)Com_SendSignal(COM_SIGNAL_ENGINE_SPEED,   (uint8*)&rpm);
         (void)Com_SendSignal(COM_SIGNAL_COOLANT_TEMP,   &temp);
         (void)Com_SendSignal(COM_SIGNAL_ENGINE_ON_FLAG, &engineOn);
 
