@@ -117,10 +117,61 @@ static const PduR_ConfigType PduRConfig = {
 };
 
 // -------------------------------------------------------
+// Application 層：受信シグナルの読み出しと処理
+//
+// アプリはネイティブ型の変数ポインタを Com_ReceiveSignal に渡すだけ。
+// PDU のバイト配置（big-endian）は COM が透過的に吸収する。
+// AVR は little-endian なので、uint16* をそのままキャストして使える。
+// -------------------------------------------------------
+static void App_ProcessSignals(void)
+{
+    uint16 engineSpeed  = 0;
+    uint8  coolantTemp  = 0;
+    uint8  engineOnFlag = 0;
+
+    // Signal ごとにネイティブ型のポインタを渡す
+    // COM が RxBuffer からビット抽出し、ホストバイトオーダーで書き込む
+    if (Com_ReceiveSignal(COM_SIGNAL_ENGINE_SPEED,   (uint8*)&engineSpeed)  != E_OK) { return; }
+    if (Com_ReceiveSignal(COM_SIGNAL_COOLANT_TEMP,   &coolantTemp)          != E_OK) { return; }
+    if (Com_ReceiveSignal(COM_SIGNAL_ENGINE_ON_FLAG, &engineOnFlag)         != E_OK) { return; }
+
+    // ここから先はアプリのロジック（物理値として扱える）
+    Serial.println("[App_ProcessSignals]");
+    Serial.print("  EngineSpeed  = ");
+    Serial.print(engineSpeed);
+    Serial.println(" rpm");
+
+    Serial.print("  CoolantTemp  = ");
+    Serial.print(coolantTemp);
+    Serial.println(" C");
+
+    Serial.print("  EngineOnFlag = ");
+    Serial.println(engineOnFlag);
+
+    // 例：過熱警告（アプリロジックの例）
+    if (coolantTemp >= 100)
+    {
+        Serial.println("  [WARN] Coolant overheating!");
+    }
+
+    // 例：エンジン停止中の異常回転検出
+    if (engineOnFlag == 0 && engineSpeed > 0)
+    {
+        Serial.println("  [WARN] Speed detected while engine is OFF");
+    }
+}
+
+// -------------------------------------------------------
 // 送信周期
 // -------------------------------------------------------
 static unsigned long       lastSendTime = 0;
 static const unsigned long sendInterval = 5000;
+
+// -------------------------------------------------------
+// 受信シグナル読み出し周期
+// -------------------------------------------------------
+static unsigned long       lastReadTime = 0;
+static const unsigned long readInterval = 2000;
 
 // -------------------------------------------------------
 // Arduino setup()
@@ -157,6 +208,13 @@ void loop()
         (void)Com_SendSignal(COM_SIGNAL_ENGINE_ON_FLAG, &engineOn);
 
         (void)Com_TriggerIPDUSend(0);
+    }
+
+    // 2 秒ごとに受信シグナルを読み出してアプリ処理
+    if (millis() - lastReadTime >= readInterval)
+    {
+        lastReadTime = millis();
+        App_ProcessSignals();
     }
 
     Can_Isr();
