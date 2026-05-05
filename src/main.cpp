@@ -31,6 +31,19 @@ static void Com_RxIndication(PduIdType PduId, const PduInfoType* PduInfoPtr)
 }
 
 // -------------------------------------------------------
+// DCM 層スタブ（診断ロガー）
+// マルチキャストの受信先として COM と同時に呼ばれる。
+// 実際の AUTOSAR では DCM モジュールが診断フレームを解析する。
+// -------------------------------------------------------
+static void Diag_RxIndication(PduIdType PduId, const PduInfoType* PduInfoPtr)
+{
+    Serial.print("[Diag_RxIndication] DcmPduId=");
+    Serial.print(PduId);
+    Serial.print(" first_byte=0x");
+    Serial.println(PduInfoPtr->SduDataPtr[0], HEX);
+}
+
+// -------------------------------------------------------
 // CanDrv 設定
 // -------------------------------------------------------
 static const Can_ConfigType CanConfig = {
@@ -77,13 +90,18 @@ static const CanIf_ConfigType CanIfConfig = {
 };
 
 // -------------------------------------------------------
-// PduR RX RoutingPath 転送先（マルチキャストの準備：今は COM のみ）
+// PduR RX RoutingPath 転送先（マルチキャスト：COM と DCM に同時配信）
 // -------------------------------------------------------
 static const PduR_RxDestType PduR_RxDests_Path0[] = {
     {
         .Module    = PDUR_MODULE_COM,
         .DestPduId = 0,                // COM の名前空間での PduId（ComPduId）
         .RxIndFct  = Com_RxIndication
+    },
+    {
+        .Module    = PDUR_MODULE_DCM,
+        .DestPduId = 0,                // DCM の名前空間での PduId（DcmPduId）
+        .RxIndFct  = Diag_RxIndication
     }
 };
 
@@ -95,7 +113,7 @@ static const PduR_RxRoutingPathType PduR_RxPaths[] = {
     {
         .SrcPduId  = 0,                 // CanIf RxPduId=0
         .Dests     = PduR_RxDests_Path0,
-        .DestCount = 1
+        .DestCount = 2                  // COM + DCM にマルチキャスト
     }
 };
 
