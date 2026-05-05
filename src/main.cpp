@@ -2,33 +2,31 @@
 #include "Can.h"
 #include "CanIf.h"
 #include "PduR.h"
+#include "Com.h"
 #include <mcp_can_dfs.h>
 
 // -------------------------------------------------------
-// COM 層スタブ
-// 実際の AUTOSAR では COM モジュールが担う。
+// アプリケーション定義のシグナルID
+//   実際の AUTOSAR では ARXML から自動生成される。
 // -------------------------------------------------------
-static void Com_TxConfirmation(PduIdType PduId)
-{
-    Serial.print("[Com_TxConfirmation] ComPduId=");
-    Serial.print(PduId);
-    Serial.println(" : TX complete");
-}
+#define COM_SIGNAL_ENGINE_RPM    ((Com_SignalIdType)0)  // PDU0 bytes[0-1] uint16
+#define COM_SIGNAL_COOLANT_TEMP  ((Com_SignalIdType)1)  // PDU0 byte[2]    uint8
 
-static void Com_RxIndication(PduIdType PduId, const PduInfoType* PduInfoPtr)
-{
-    Serial.print("[Com_RxIndication] ComPduId=");
-    Serial.print(PduId);
-    Serial.print(" Len=");
-    Serial.print(PduInfoPtr->SduLength);
-    Serial.print(" Data=");
-    for (PduLengthType i = 0; i < PduInfoPtr->SduLength; i++)
-    {
-        Serial.print(PduInfoPtr->SduDataPtr[i], HEX);
-        Serial.print(" ");
-    }
-    Serial.println();
-}
+// -------------------------------------------------------
+// COM シグナル設定テーブル
+//   SignalId / 属するIPduId / PDU内バイトオフセット / バイト長
+// -------------------------------------------------------
+static const Com_SignalConfigType Com_Signals[] = {
+    { .SignalId = COM_SIGNAL_ENGINE_RPM,   .IPduId = 0, .ByteOffset = 0, .ByteLength = 2 },
+    { .SignalId = COM_SIGNAL_COOLANT_TEMP, .IPduId = 0, .ByteOffset = 2, .ByteLength = 1 }
+};
+
+static const Com_ConfigType ComConfig = {
+    .Signals     = Com_Signals,
+    .SignalCount  = 2,
+    .TxIPduId    = 0,   // PduR TX RoutingPath の SrcPduId=0 と一致
+    .TxDlc       = 8
+};
 
 // -------------------------------------------------------
 // DCM 層スタブ（診断ロガー）
@@ -77,7 +75,7 @@ static const CanIf_RxPduConfigType CanIf_RxPduConfig[] = {
     {
         .CanId             = 0x123,
         .Hrh               = 0,
-        .UpperLayerRxPduId = 0,                   // PduR RxPath SrcPduId=0 と一致
+        .UpperLayerRxPduId = 0,                    // PduR RxPath SrcPduId=0 と一致
         .RxIndicationFct   = PduR_CanIfRxIndication
     }
 };
@@ -95,25 +93,25 @@ static const CanIf_ConfigType CanIfConfig = {
 static const PduR_RxDestType PduR_RxDests_Path0[] = {
     {
         .Module    = PDUR_MODULE_COM,
-        .DestPduId = 0,                // COM の名前空間での PduId（ComPduId）
+        .DestPduId = 0,                // COM の名前空間での PduId
         .RxIndFct  = Com_RxIndication
     },
     {
         .Module    = PDUR_MODULE_DCM,
-        .DestPduId = 0,                // DCM の名前空間での PduId（DcmPduId）
+        .DestPduId = 0,                // DCM の名前空間での PduId
         .RxIndFct  = Diag_RxIndication
     }
 };
 
 // -------------------------------------------------------
 // PduR RX RoutingPath テーブル
-//   SrcPduId=0（CanIf の名前空間）→ COM ComPduId=0
+//   SrcPduId=0（CanIf の名前空間）→ COM と DCM にマルチキャスト
 // -------------------------------------------------------
 static const PduR_RxRoutingPathType PduR_RxPaths[] = {
     {
-        .SrcPduId  = 0,                 // CanIf RxPduId=0
+        .SrcPduId  = 0,
         .Dests     = PduR_RxDests_Path0,
-        .DestCount = 2                  // COM + DCM にマルチキャスト
+        .DestCount = 2
     }
 };
 
@@ -124,9 +122,9 @@ static const PduR_RxRoutingPathType PduR_RxPaths[] = {
 // -------------------------------------------------------
 static const PduR_TxRoutingPathType PduR_TxPaths[] = {
     {
-        .SrcPduId      = 0,                  // 上位層が PduR_Transmit に渡す ID
-        .CanIfTxPduId  = 0,                  // CanIf の名前空間での TX PduId
-        .ConfDestPduId = 0,                  // COM の名前空間での TxConfirmation PduId
+        .SrcPduId      = 0,
+        .CanIfTxPduId  = 0,
+        .ConfDestPduId = 0,
         .ConfFct       = Com_TxConfirmation
     }
 };
@@ -155,20 +153,30 @@ void setup()
     Can_SetControllerMode(CAN_CS_STARTED);
     CanIf_Init(&CanIfConfig);
     PduR_Init(&PduRConfig);
+    Com_Init(&ComConfig);
 }
 
 // -------------------------------------------------------
 // Arduino loop()
+// アプリ層は PDU を直接組み立てず、シグナル単位で値を渡す。
+// COM がシグナルをバイト列に詰め、PduR 経由で送信する。
 // -------------------------------------------------------
 void loop()
 {
-    // PduR_Transmit は Step 6 で有効化
     if (millis() - lastSendTime >= sendInterval)
     {
         lastSendTime = millis();
-        uint8_t     data[8] = {0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88};
-        PduInfoType pduInfo = {.SduDataPtr = data, .SduLength = 8};
-        (void)PduR_Transmit(0, &pduInfo);
+
+        // シグナル値を COM バッファに書き込む（big-endian）
+        uint16 rpm  = 1500;  // 1500 rpm
+        uint8  temp = 85;    // 85 ℃
+
+        uint8 rpmBytes[2] = { (uint8)(rpm >> 8), (uint8)(rpm & 0xFF) };
+        (void)Com_SendSignal(COM_SIGNAL_ENGINE_RPM,   rpmBytes);
+        (void)Com_SendSignal(COM_SIGNAL_COOLANT_TEMP, &temp);
+
+        // まとめて 1 フレームで送信
+        (void)Com_TriggerIPDUSend();
     }
 
     Can_Isr();
