@@ -186,10 +186,47 @@ void PduR_CanIfTxConfirmation(PduIdType SrcPduId)
     Serial.println(SrcPduId);
 }
 
-// Step 6 で実装
+// -------------------------------------------------------
+// PduR_Transmit
+// 上位層（アプリ / COM）からの送信要求。
+// SrcPduId（PduR の名前空間）で TX RoutingPath を検索し、
+// CanIf_Transmit(CanIfTxPduId, data) に転送する。
+//
+// ポイント：
+//   SrcPduId（PduR 空間）→ CanIfTxPduId（CanIf 空間）の名前空間変換
+//   RxIndication と対になる前向きのルーティング
+// -------------------------------------------------------
 Std_ReturnType PduR_Transmit(PduIdType SrcPduId, const PduInfoType* PduInfoPtr)
 {
-    (void)SrcPduId;
-    (void)PduInfoPtr;
-    return E_NOT_OK; // Step 6 で実装
+    // --- 1. 初期化・NULL チェック ---
+    if (PduR_ConfigPtr == nullptr || PduInfoPtr == nullptr)
+    {
+        return E_NOT_OK;
+    }
+
+    // --- 2. TX RoutingPath テーブルを SrcPduId で線形探索 ---
+    for (uint8 i = 0; i < PduR_ConfigPtr->TxPathCount; i++)
+    {
+        const PduR_TxRoutingPathType* path = &PduR_ConfigPtr->TxPaths[i];
+
+        if (path->SrcPduId != SrcPduId)
+        {
+            continue;
+        }
+
+        // --- 3. 一致 → CanIf に転送 ---
+        Serial.print("[PduR_Transmit]");
+        Serial.print(" SrcPduId=");
+        Serial.print(SrcPduId);
+        Serial.print(" -> CanIf TxPduId=");
+        Serial.println(path->CanIfTxPduId);
+
+        // 名前空間変換：SrcPduId（PduR 空間）→ CanIfTxPduId（CanIf 空間）
+        return CanIf_Transmit(path->CanIfTxPduId, PduInfoPtr);
+    }
+
+    // --- 4. 一致エントリなし ---
+    Serial.print("[PduR_Transmit] no route for SrcPduId=");
+    Serial.println(SrcPduId);
+    return E_NOT_OK;
 }
