@@ -12,14 +12,11 @@
 #define RTE_SIGNAL_COOLANT_TEMP    ((Com_SignalIdType)1)
 #define RTE_SIGNAL_ENGINE_ON_FLAG  ((Com_SignalIdType)2)
 
-#define RTE_TX_IPDU_ID             ((Com_IPduIdType)0)
-
 // -------------------------------------------------------
 // Runnable 宣言（SW-C が定義し、RTE が呼ぶ）
 // AUTOSAR では ARXML で自動生成されるが、ここでは手書きで宣言する
 // -------------------------------------------------------
-extern void App_EngineMonitor(void);
-extern void App_EngineControl(void);
+extern void App_EngineManager_Run(void);
 
 // -------------------------------------------------------
 // Rte_Read 実装
@@ -43,8 +40,8 @@ Std_ReturnType Rte_Read_EngineStatus_EngineOnFlag(EngineOnFlag_t* data)
 
 // -------------------------------------------------------
 // Rte_Write 実装
-// COM の SendSignal → TriggerIPDUSend を呼ぶ。
-// 将来: 送信タイミング制御（イベント/周期）をここで管理できる。
+// COM の SendSignal を呼ぶ薄いラッパー。
+// 送信トリガは Rte_TriggerTransmit に分離している。
 // -------------------------------------------------------
 Std_ReturnType Rte_Write_EngineCmd_EngineSpeed(EngineSpeed_t data)
 {
@@ -62,30 +59,30 @@ Std_ReturnType Rte_Write_EngineCmd_EngineOnFlag(EngineOnFlag_t data)
 }
 
 // -------------------------------------------------------
+// Rte_TriggerTransmit
+// SW-C が CAN 送信をトリガする唯一の口。
+// SW-C は COM も PduR も CanIf も知らなくてよい。
+// -------------------------------------------------------
+Std_ReturnType Rte_TriggerTransmit(Com_IPduIdType IPduId)
+{
+    return Com_TriggerIPDUSend(IPduId);
+}
+
+// -------------------------------------------------------
 // Rte_ScheduleRunnables
 // millis() ベースで各 Runnable を周期呼び出しする。
 // tick カウンタではなく実時間で管理するため、
 // loop() の実行時間に依存しない。
-//
-// Arduino では loop() から呼ぶ。
-// RTOS があれば周期タスクが各 Runnable を直接呼ぶ。
 // -------------------------------------------------------
 void Rte_ScheduleRunnables(void)
 {
-    static uint32 lastMonitorTime = 0;
-    static uint32 lastControlTime = 0;
+    static uint32 lastRunTime = 0U;
 
-    const uint32 now = millis();
+    const uint32 now = (uint32)millis();
 
-    if (now - lastMonitorTime >= 3000U)
+    if (now - lastRunTime >= 3000U)
     {
-        lastMonitorTime = now;
-        App_EngineMonitor();
-    }
-
-    if (now - lastControlTime >= 5000U)
-    {
-        lastControlTime = now;
-        App_EngineControl();
+        lastRunTime = now;
+        App_EngineManager_Run();
     }
 }

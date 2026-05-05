@@ -3,7 +3,8 @@
 #include "CanIf.h"
 #include "PduR.h"
 #include "Com.h"
-#include "Rte.h"       // SW-C は RTE ヘッダだけをインクルードする
+#include "Rte.h"
+#include "App_EngineManager.h"
 #include <mcp_can_dfs.h>
 
 // -------------------------------------------------------
@@ -44,7 +45,7 @@ static const Can_ConfigType CanConfig = {
     .csPin       = 10,
     .intPin      = 2,
     .baudrate    = CAN_500KBPS,
-    .crystalFreq = CAN_CRYSTAL_8MHZ   // 使用するMCP2515モジュールのクリスタル周波数に合わせる
+    .crystalFreq = CAN_CRYSTAL_8MHZ
 };
 static const CanIf_TxPduConfigType CanIf_TxPduConfig[] = {
     { .UpperLayerTxPduId = 0, .CanId = 0x123, .Dlc = 8, .Hth = 0, .TxConfirmFct = PduR_CanIfTxConfirmation }
@@ -72,60 +73,6 @@ static const PduR_ConfigType PduRConfig = {
 };
 
 // -------------------------------------------------------
-// SW-C: EngineMonitor（10ms 周期 Runnable）
-//
-// RTE API だけを使う。COM / PduR / CanIf は知らない。
-// 「SpeedSensor ポートから EngineSpeed を読む」という概念だけを持つ。
-// -------------------------------------------------------
-void App_EngineMonitor(void)
-{
-    EngineSpeed_t  speed   = 0;
-    CoolantTemp_t  temp    = 0;
-    EngineOnFlag_t flag    = 0;
-
-    // RTE Read：ポート名でアクセス（COM Signal ID は知らない）
-    (void)Rte_Read_SpeedSensor_EngineSpeed(&speed);
-    (void)Rte_Read_TempSensor_CoolantTemp(&temp);
-    (void)Rte_Read_EngineStatus_EngineOnFlag(&flag);
-
-    Serial.println("[App_EngineMonitor]");
-    Serial.print("  EngineSpeed  = "); Serial.print(speed);  Serial.println(" rpm");
-    Serial.print("  CoolantTemp  = "); Serial.print(temp);   Serial.println(" C");
-    Serial.print("  EngineOnFlag = "); Serial.println(flag);
-
-    if (temp >= 100)
-    {
-        Serial.println("  [WARN] Coolant overheating!");
-    }
-    if (flag == 0 && speed > 0)
-    {
-        Serial.println("  [WARN] Speed detected while engine is OFF");
-    }
-}
-
-// -------------------------------------------------------
-// SW-C: EngineControl（5ms 周期 Runnable）
-//
-// Rte_Write でシグナルをセットし、TX を要求する。
-// CanIf / PduR / COM の実装詳細は知らない。
-// -------------------------------------------------------
-void App_EngineControl(void)
-{
-
-    EngineSpeed_t  rpm  = 1500;
-    CoolantTemp_t  temp = 85;
-    EngineOnFlag_t flag = 1;
-
-    // RTE Write：シグナルを TX バッファへ積む
-    (void)Rte_Write_EngineCmd_EngineSpeed(rpm);
-    (void)Rte_Write_EngineCmd_CoolantTemp(temp);
-    (void)Rte_Write_EngineCmd_EngineOnFlag(flag);
-
-    // まとめて 1 フレームで送信
-    (void)Com_TriggerIPDUSend(0);
-}
-
-// -------------------------------------------------------
 // Arduino setup()
 // -------------------------------------------------------
 void setup()
@@ -137,6 +84,7 @@ void setup()
     CanIf_Init(&CanIfConfig);
     PduR_Init(&PduRConfig);
     Com_Init(&ComConfig);
+    App_EngineManager_Init();
 }
 
 // -------------------------------------------------------
