@@ -24,7 +24,7 @@ void Can_Init(const Can_ConfigType* Config)
     // MCP_STDEXT : 標準ID/拡張IDを受信（フィルタ有効） ← フィルタ使用時はこれ
     // MCP_STD    : 標準IDのみ受信（フィルタ有効） ← [Can_Init] FAIL
     // MCP_EXT    : 拡張IDのみ受信（フィルタ有効）
-    if (Mcp2515_Init(Config->csPin, Config->baudrate) != Mcp2515_ReturnType::OK)
+    if (Mcp2515_Init(Config->csPin, Config->baudrate, Config->crystalFreq) != Mcp2515_ReturnType::OK)
     {
         Serial.println("[Can_Init] FAIL");
         while (1)

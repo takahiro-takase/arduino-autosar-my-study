@@ -40,7 +40,11 @@ static void Diag_RxIndication(PduIdType PduId, const PduInfoType* PduInfoPtr)
 // CanDrv / CanIf / PduR 設定
 // -------------------------------------------------------
 static const Can_ConfigType CanConfig = {
-    .filter = {0x123, 0x7FF}, .csPin = 10, .intPin = 2, .baudrate = CAN_500KBPS
+    .filter      = {0x123, 0x7FF},
+    .csPin       = 10,
+    .intPin      = 2,
+    .baudrate    = CAN_500KBPS,
+    .crystalFreq = CAN_CRYSTAL_8MHZ   // 使用するMCP2515モジュールのクリスタル周波数に合わせる
 };
 static const CanIf_TxPduConfigType CanIf_TxPduConfig[] = {
     { .UpperLayerTxPduId = 0, .CanId = 0x123, .Dlc = 8, .Hth = 0, .TxConfirmFct = PduR_CanIfTxConfirmation }

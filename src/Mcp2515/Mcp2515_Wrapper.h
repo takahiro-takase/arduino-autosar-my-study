@@ -16,7 +16,7 @@ enum class Mcp2515_Mode : uint8_t
     SLEEP       = 2  // 低電力スリープ     ← AUTOSAR CAN_CS_SLEEP に対応
 };
 
-Mcp2515_ReturnType Mcp2515_Init(uint8_t csPin, uint32_t baudrate);
+Mcp2515_ReturnType Mcp2515_Init(uint8_t csPin, uint32_t baudrate, uint8_t crystalFreqMhz);
 Mcp2515_ReturnType Mcp2515_Send(uint32_t id, uint8_t dlc, const uint8_t* data);
 Mcp2515_ReturnType Mcp2515_Read(uint32_t* id, uint8_t* dlc, uint8_t* data);
 Mcp2515_ReturnType Mcp2515_InitMask(uint8_t num, uint8_t ext, uint32_t mask);

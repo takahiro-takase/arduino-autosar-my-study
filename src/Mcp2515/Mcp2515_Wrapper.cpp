@@ -6,13 +6,26 @@
 static uint8_t driverBuf[sizeof(MCP_CAN)];
 static MCP_CAN* driver = nullptr;
 
-Mcp2515_ReturnType Mcp2515_Init(uint8_t csPin, uint32_t baudrate)
+Mcp2515_ReturnType Mcp2515_Init(uint8_t csPin, uint32_t baudrate, uint8_t crystalFreqMhz)
 {
+    // MHz 値を mcp_can ライブラリの定数に変換する。
+    // MCP_ 定数はこの関数内にのみ閉じ込め、上位層に漏らさない。
+    uint8_t mcpClock;
+    switch (crystalFreqMhz)
+    {
+    case 8U:  mcpClock = MCP_8MHZ;  break;
+    case 16U: mcpClock = MCP_16MHZ; break;
+    case 20U: mcpClock = MCP_20MHZ; break;
+    default:
+        // 未対応の周波数は初期化失敗として返す
+        return Mcp2515_ReturnType::FAIL;
+    }
+
     driver = new (driverBuf) MCP_CAN(csPin);
 
     // begin() は内部で CONFIG モードを経て MCP_STDEXT（≒NORMAL）モードに遷移する。
     // モード管理は Can 層の責務なので、ここでは setMode を再呼び出ししない。
-    if (driver->begin(MCP_STDEXT, baudrate, MCP_8MHZ) == CAN_OK)
+    if (driver->begin(MCP_STDEXT, baudrate, mcpClock) == CAN_OK)
     {
         return Mcp2515_ReturnType::OK;
     }

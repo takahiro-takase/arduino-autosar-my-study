@@ -12,12 +12,21 @@ typedef struct
     uint32 mask;     // マスク
 } Can_FilterConfigType;
 
+// クリスタル周波数（MHz 単位）
+// MCP2515 ライブラリ固有の定数（MCP_8MHZ 等）はここに出さない。
+// Mcp2515_Wrapper 内部で変換する。
+typedef uint8 Can_CrystalFreqType;
+#define CAN_CRYSTAL_8MHZ  ((Can_CrystalFreqType)8U)
+#define CAN_CRYSTAL_16MHZ ((Can_CrystalFreqType)16U)
+#define CAN_CRYSTAL_20MHZ ((Can_CrystalFreqType)20U)
+
 typedef struct
 {
     Can_FilterConfigType filter;
-    uint8  csPin;    // SPI チップセレクトピン番号
-    uint8  intPin;   // MCP2515 の INT ピン番号（Can_Isr で使用）
-    uint32 baudrate;
+    uint8               csPin;       // SPI チップセレクトピン番号
+    uint8               intPin;      // MCP2515 の INT ピン番号（Can_Isr で使用）
+    uint32              baudrate;
+    Can_CrystalFreqType crystalFreq; // クリスタル発振周波数（MHz）
 } Can_ConfigType;
 
 void           Can_Init(const Can_ConfigType* Config);
