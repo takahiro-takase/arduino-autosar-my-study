@@ -1,14 +1,17 @@
-#include <Arduino.h>
 #include "App_EngineManager.h"
 #include "Rte.h"
+#include "Det.h"
+
+/* millis() は Arduino の wiring.c（C リンケージ）で定義されている */
+extern unsigned long millis(void);
 
 #define ENGINE_SPEED_RUNNING_THRESHOLD  ((EngineSpeed_t)500U)
 #define ENGINE_SPEED_STALL_THRESHOLD    ((EngineSpeed_t)100U)
 #define COOLANT_OVERHEAT_THRESHOLD      ((CoolantTemp_t)100U)
 #define STARTING_TIMEOUT_MS             (5000UL)
 
-static EngineState_t s_state           = ENGINE_STATE_OFF;
-static uint32        s_startingEnterMs = 0U;
+static EngineState_t  s_state           = ENGINE_STATE_OFF;
+static unsigned long  s_startingEnterMs = 0UL;
 
 static void State_Off(EngineSpeed_t speed, CoolantTemp_t temp, EngineOnFlag_t flag);
 static void State_Starting(EngineSpeed_t speed, CoolantTemp_t temp, EngineOnFlag_t flag);
@@ -18,8 +21,8 @@ static void State_Fault(EngineSpeed_t speed, CoolantTemp_t temp, EngineOnFlag_t 
 void App_EngineManager_Init(void)
 {
     s_state           = ENGINE_STATE_OFF;
-    s_startingEnterMs = 0U;
-    Serial.println(F("[EngineManager] Init -> OFF"));
+    s_startingEnterMs = 0UL;
+    Det_LogP(PSTR("[EngineManager] Init->OFF"));
 }
 
 void App_EngineManager_Run(void)
@@ -54,8 +57,8 @@ static void State_Off(EngineSpeed_t speed, CoolantTemp_t temp, EngineOnFlag_t fl
     if (flag == 1U)
     {
         s_state           = ENGINE_STATE_STARTING;
-        s_startingEnterMs = (uint32)millis();
-        Serial.println(F("[EngineManager] OFF->STARTING"));
+        s_startingEnterMs = millis();
+        Det_LogP(PSTR("[EngineManager] OFF->STARTING"));
 
         (void)Rte_Write_EngineCmd_EngineSpeed((EngineSpeed_t)0U);
         (void)Rte_Write_EngineCmd_CoolantTemp(temp);
@@ -65,7 +68,7 @@ static void State_Off(EngineSpeed_t speed, CoolantTemp_t temp, EngineOnFlag_t fl
     else if (speed > 0U)
     {
         s_state = ENGINE_STATE_FAULT;
-        Serial.println(F("[EngineManager] OFF->FAULT(speed w/o flag)"));
+        Det_LogP(PSTR("[EngineManager] OFF->FAULT(spd w/o flag)"));
     }
 }
 
@@ -74,19 +77,19 @@ static void State_Starting(EngineSpeed_t speed, CoolantTemp_t temp, EngineOnFlag
     if (flag == 0U)
     {
         s_state = ENGINE_STATE_OFF;
-        Serial.println(F("[EngineManager] STARTING->OFF"));
+        Det_LogP(PSTR("[EngineManager] STARTING->OFF"));
         return;
     }
     if (speed >= ENGINE_SPEED_RUNNING_THRESHOLD)
     {
         s_state = ENGINE_STATE_RUNNING;
-        Serial.println(F("[EngineManager] STARTING->RUNNING"));
+        Det_LogP(PSTR("[EngineManager] STARTING->RUNNING"));
         return;
     }
-    if ((uint32)millis() - s_startingEnterMs >= STARTING_TIMEOUT_MS)
+    if (millis() - s_startingEnterMs >= STARTING_TIMEOUT_MS)
     {
         s_state = ENGINE_STATE_FAULT;
-        Serial.println(F("[EngineManager] STARTING->FAULT(timeout)"));
+        Det_LogP(PSTR("[EngineManager] STARTING->FAULT(timeout)"));
         return;
     }
 
@@ -101,23 +104,23 @@ static void State_Running(EngineSpeed_t speed, CoolantTemp_t temp, EngineOnFlag_
     if (flag == 0U)
     {
         s_state = ENGINE_STATE_OFF;
-        Serial.println(F("[EngineManager] RUNNING->OFF"));
+        Det_LogP(PSTR("[EngineManager] RUNNING->OFF"));
         return;
     }
     if (temp >= COOLANT_OVERHEAT_THRESHOLD)
     {
         s_state = ENGINE_STATE_FAULT;
-        Serial.print(F("[EngineManager] RUNNING->FAULT(overheat="));
-        Serial.print(temp);
-        Serial.println(')');
+        Det_PrintP(PSTR("[EngineManager] RUNNING->FAULT(overheat="));
+        Det_PrintDec(temp);
+        Det_LogP(PSTR(")"));
         return;
     }
     if (speed < ENGINE_SPEED_STALL_THRESHOLD)
     {
         s_state = ENGINE_STATE_FAULT;
-        Serial.print(F("[EngineManager] RUNNING->FAULT(stall="));
-        Serial.print(speed);
-        Serial.println(')');
+        Det_PrintP(PSTR("[EngineManager] RUNNING->FAULT(stall="));
+        Det_PrintDec(speed);
+        Det_LogP(PSTR(")"));
         return;
     }
 
@@ -126,10 +129,11 @@ static void State_Running(EngineSpeed_t speed, CoolantTemp_t temp, EngineOnFlag_
     (void)Rte_Write_EngineCmd_EngineOnFlag(1U);
     (void)Rte_TriggerTransmit(0U);
 
-    Serial.print(F("[EngineManager] RUNNING spd="));
-    Serial.print(speed);
-    Serial.print(F(" tmp="));
-    Serial.println(temp);
+    Det_PrintP(PSTR("[EngineManager] RUNNING spd="));
+    Det_PrintDec(speed);
+    Det_PrintP(PSTR(" tmp="));
+    Det_PrintDec(temp);
+    Det_Newline();
 }
 
 static void State_Fault(EngineSpeed_t speed, CoolantTemp_t temp, EngineOnFlag_t flag)
@@ -140,10 +144,10 @@ static void State_Fault(EngineSpeed_t speed, CoolantTemp_t temp, EngineOnFlag_t 
     if (flag == 0U)
     {
         s_state = ENGINE_STATE_OFF;
-        Serial.println(F("[EngineManager] FAULT->OFF"));
+        Det_LogP(PSTR("[EngineManager] FAULT->OFF"));
     }
     else
     {
-        Serial.println(F("[EngineManager] FAULT(wait flag=0)"));
+        Det_LogP(PSTR("[EngineManager] FAULT(wait flag=0)"));
     }
 }
