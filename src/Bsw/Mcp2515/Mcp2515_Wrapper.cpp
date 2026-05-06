@@ -1,6 +1,7 @@
 #include "Mcp2515_Wrapper.h"
 #include <mcp_can.h>
 #include <new>
+#include "Det.h"
 
 /*
  * MCP_CAN は C++ クラスのため、このファイルは .cpp のまま。
@@ -30,24 +31,85 @@ Mcp2515_ReturnType Mcp2515_Init(uint8_t csPin, uint32_t baudrate, uint8_t crysta
 
 Mcp2515_ReturnType Mcp2515_Send(uint32_t id, uint8_t dlc, const uint8_t* data)
 {
-    return (driver->sendMsgBuf(id, 0, dlc, (uint8_t*)data) == CAN_OK)
-           ? MCP2515_WRAPPER_OK : MCP2515_WRAPPER_FAIL;
+    INT8U ret;
+    ret = driver->sendMsgBuf(id, 0, dlc, (uint8_t*)data);
+    if (ret != CAN_OK)
+    {
+        Serial.print((__FlashStringHelper*)PSTR("[Mcp2515_Send] FAIL to send message"));
+        Serial.println();
+        return MCP2515_WRAPPER_FAIL;
+    }
+
+    Serial.print((__FlashStringHelper*)PSTR("[Mcp2515_Send] OK >>>> ID=0x"));
+    Serial.print(id, HEX);
+    Serial.print((__FlashStringHelper*)PSTR(" DLC="));
+    Serial.print(dlc, DEC);
+    Serial.print((__FlashStringHelper*)PSTR(" DATA=["));
+    for (uint8_t i = 0; i < dlc; i++)
+    {
+        if (i > 0)
+        {
+            Serial.print((__FlashStringHelper*)PSTR(" "));
+        }
+        if (data[i] < 0x10)
+        {
+            Serial.print((__FlashStringHelper*)PSTR("0"));
+        }
+        Serial.print(data[i], HEX);
+    }
+    Serial.print((__FlashStringHelper*)PSTR("]"));
+    Serial.println();
+
+    return MCP2515_WRAPPER_OK;
 }
 
 Mcp2515_ReturnType Mcp2515_Read(uint32_t* id, uint8_t* dlc, uint8_t* data)
 {
-    if (driver->checkReceive() == CAN_MSGAVAIL)
+    INT8U ret;
+    ret = driver->checkReceive();
+    if (ret != CAN_MSGAVAIL)
     {
-        long unsigned int rxId;
-        unsigned char     len;
-        unsigned char     buf[8];
-        driver->readMsgBuf(&rxId, &len, buf);
-        *id  = (uint32_t)rxId;
-        *dlc = len;
-        for (int i = 0; i < len; i++) data[i] = buf[i];
-        return MCP2515_WRAPPER_OK;
+        Serial.print((__FlashStringHelper*)PSTR("[Mcp2515_Read] No message available"));
+        Serial.println();
+        return MCP2515_WRAPPER_FAIL;
     }
-    return MCP2515_WRAPPER_FAIL;
+
+    long unsigned int rxId = 0;
+    unsigned char     len = 0;
+    unsigned char     buf[8];
+    ret = driver->readMsgBuf(&rxId, &len, buf);
+    if (ret != CAN_OK)
+    {
+        Serial.print((__FlashStringHelper*)PSTR("[Mcp2515_Read] Read message failure"));
+        Serial.println();
+        return MCP2515_WRAPPER_FAIL;
+    }
+
+    *id  = (uint32_t)rxId;
+    *dlc = len;
+    for (int i = 0; i < len; i++) data[i] = buf[i];
+
+    Serial.print((__FlashStringHelper*)PSTR("[Mcp2515_Read] OK >>>> ID=0x"));
+    Serial.print(*id, HEX);
+    Serial.print((__FlashStringHelper*)PSTR(" DLC="));
+    Serial.print(len, DEC);
+    Serial.print((__FlashStringHelper*)PSTR(" DATA=["));
+    for (unsigned char i = 0; i < len; i++)
+    {
+        if (i > 0)
+        {
+            Serial.print((__FlashStringHelper*)PSTR(" "));
+        }
+        if (buf[i] < 0x10)
+        {
+            Serial.print((__FlashStringHelper*)PSTR("0"));
+        }
+        Serial.print(buf[i], HEX);
+    }
+    Serial.print((__FlashStringHelper*)PSTR("]"));
+    Serial.println();
+
+    return MCP2515_WRAPPER_OK;
 }
 
 Mcp2515_ReturnType Mcp2515_InitMask(uint8_t num, uint8_t ext, uint32_t mask)

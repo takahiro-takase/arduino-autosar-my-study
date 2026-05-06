@@ -9,22 +9,28 @@
 
 // -------------------------------------------------------
 // COM I-PDU 設定（BSW 設定はここで集中管理）
+//
+// RX I-PDU (IPduId=0): CAN ID 0x100  EngineSpeed(16bit) + CoolantTemp(8bit) + EngineOnFlag(1bit)
+// TX I-PDU (IPduId=0): CAN ID 0x200  EngineState(8bit)  0=OFF/1=STARTING/2=RUNNING/3=FAULT
 // -------------------------------------------------------
 static const Com_IPduConfigType Com_RxIPdus[] = {
-    { .IPduId = 0, .DLC = 8, .PduRId = 0 }
+    { .IPduId = 0, .DLC = 4, .PduRId = 0 }
 };
 static const Com_IPduConfigType Com_TxIPdus[] = {
-    { .IPduId = 0, .DLC = 8, .PduRId = 0 }
+    { .IPduId = 0, .DLC = 1, .PduRId = 0 }
 };
 static const Com_SignalConfigType Com_Signals[] = {
-    { .SignalId = 0, .IPduId = 0, .BitPosition =  0, .BitSize = 16, .Endian = COM_BIG_ENDIAN },
-    { .SignalId = 1, .IPduId = 0, .BitPosition = 16, .BitSize =  8, .Endian = COM_BIG_ENDIAN },
-    { .SignalId = 2, .IPduId = 0, .BitPosition = 24, .BitSize =  1, .Endian = COM_BIG_ENDIAN }
+    /* RX signals (CAN ID 0x100) */
+    { .SignalId = 0, .IPduId = 0, .BitPosition =  0, .BitSize = 16, .Endian = COM_BIG_ENDIAN }, /* EngineSpeed  */
+    { .SignalId = 1, .IPduId = 0, .BitPosition = 16, .BitSize =  8, .Endian = COM_BIG_ENDIAN }, /* CoolantTemp  */
+    { .SignalId = 2, .IPduId = 0, .BitPosition = 24, .BitSize =  1, .Endian = COM_BIG_ENDIAN }, /* EngineOnFlag */
+    /* TX signals (CAN ID 0x200) */
+    { .SignalId = 3, .IPduId = 0, .BitPosition =  0, .BitSize =  8, .Endian = COM_BIG_ENDIAN }  /* EngineState  */
 };
 static const Com_ConfigType ComConfig = {
     .RxIPdus     = Com_RxIPdus,  .RxIPduCount = 1,
     .TxIPdus     = Com_TxIPdus,  .TxIPduCount = 1,
-    .Signals     = Com_Signals,  .SignalCount  = 3
+    .Signals     = Com_Signals,  .SignalCount  = 4
 };
 
 // -------------------------------------------------------
@@ -41,17 +47,17 @@ static void Diag_RxIndication(PduIdType PduId, const PduInfoType* PduInfoPtr)
 // CanDrv / CanIf / PduR 設定
 // -------------------------------------------------------
 static const Can_ConfigType CanConfig = {
-    .filter      = {0x123, 0x7FF},
+    .filter      = {0x100, 0x7FF},   /* RX: CAN ID 0x100 のみ受信 */
     .csPin       = 10,
     .intPin      = 2,
     .baudrate    = CAN_500KBPS,
     .crystalFreq = CAN_CRYSTAL_8MHZ
 };
 static const CanIf_TxPduConfigType CanIf_TxPduConfig[] = {
-    { .UpperLayerTxPduId = 0, .CanId = 0x123, .Dlc = 8, .Hth = 0, .TxConfirmFct = PduR_CanIfTxConfirmation }
+    { .UpperLayerTxPduId = 0, .CanId = 0x200, .Dlc = 1, .Hth = 0, .TxConfirmFct = PduR_CanIfTxConfirmation }
 };
 static const CanIf_RxPduConfigType CanIf_RxPduConfig[] = {
-    { .CanId = 0x123, .Hrh = 0, .UpperLayerRxPduId = 0, .RxIndicationFct = PduR_CanIfRxIndication }
+    { .CanId = 0x100, .Hrh = 0, .UpperLayerRxPduId = 0, .RxIndicationFct = PduR_CanIfRxIndication }
 };
 static const CanIf_ConfigType CanIfConfig = {
     .TxPduConfig = CanIf_TxPduConfig, .TxPduCount = 1,

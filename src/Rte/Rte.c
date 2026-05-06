@@ -7,6 +7,7 @@ extern unsigned long millis(void);
 #define RTE_SIGNAL_ENGINE_SPEED    ((Com_SignalIdType)0)
 #define RTE_SIGNAL_COOLANT_TEMP    ((Com_SignalIdType)1)
 #define RTE_SIGNAL_ENGINE_ON_FLAG  ((Com_SignalIdType)2)
+#define RTE_SIGNAL_ENGINE_STATE    ((Com_SignalIdType)3)
 
 /* SW-C の Runnable 宣言（App_EngineManager.c が定義） */
 extern void App_EngineManager_Run(void);
@@ -26,19 +27,10 @@ Std_ReturnType Rte_Read_EngineStatus_EngineOnFlag(EngineOnFlag_t* data)
     return Com_ReceiveSignal(RTE_SIGNAL_ENGINE_ON_FLAG, (uint8*)data);
 }
 
-Std_ReturnType Rte_Write_EngineCmd_EngineSpeed(EngineSpeed_t data)
+Std_ReturnType Rte_Write_EngineStatus_EngineState(EngineState_t state)
 {
-    return Com_SendSignal(RTE_SIGNAL_ENGINE_SPEED, (uint8*)&data);
-}
-
-Std_ReturnType Rte_Write_EngineCmd_CoolantTemp(CoolantTemp_t data)
-{
-    return Com_SendSignal(RTE_SIGNAL_COOLANT_TEMP, (uint8*)&data);
-}
-
-Std_ReturnType Rte_Write_EngineCmd_EngineOnFlag(EngineOnFlag_t data)
-{
-    return Com_SendSignal(RTE_SIGNAL_ENGINE_ON_FLAG, (uint8*)&data);
+    uint8 val = (uint8)state;
+    return Com_SendSignal(RTE_SIGNAL_ENGINE_STATE, &val);
 }
 
 Std_ReturnType Rte_TriggerTransmit(Com_IPduIdType IPduId)

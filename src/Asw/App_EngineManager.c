@@ -43,6 +43,10 @@ void App_EngineManager_Run(void)
         case ENGINE_STATE_FAULT:    State_Fault(speed, temp, flag);    break;
         default:                    s_state = ENGINE_STATE_FAULT;      break;
     }
+
+    /* 毎周期、現在の状態を TX (CAN ID 0x200) へ送信 */
+    (void)Rte_Write_EngineStatus_EngineState(s_state);
+    (void)Rte_TriggerTransmit(0U);
 }
 
 EngineState_t App_EngineManager_GetState(void)
@@ -59,11 +63,6 @@ static void State_Off(EngineSpeed_t speed, CoolantTemp_t temp, EngineOnFlag_t fl
         s_state           = ENGINE_STATE_STARTING;
         s_startingEnterMs = millis();
         Det_LogP(PSTR("[EngineManager] OFF->STARTING"));
-
-        (void)Rte_Write_EngineCmd_EngineSpeed((EngineSpeed_t)0U);
-        (void)Rte_Write_EngineCmd_CoolantTemp(temp);
-        (void)Rte_Write_EngineCmd_EngineOnFlag(1U);
-        (void)Rte_TriggerTransmit(0U);
     }
     else if (speed > 0U)
     {
@@ -74,6 +73,8 @@ static void State_Off(EngineSpeed_t speed, CoolantTemp_t temp, EngineOnFlag_t fl
 
 static void State_Starting(EngineSpeed_t speed, CoolantTemp_t temp, EngineOnFlag_t flag)
 {
+    (void)temp;
+
     if (flag == 0U)
     {
         s_state = ENGINE_STATE_OFF;
@@ -90,13 +91,7 @@ static void State_Starting(EngineSpeed_t speed, CoolantTemp_t temp, EngineOnFlag
     {
         s_state = ENGINE_STATE_FAULT;
         Det_LogP(PSTR("[EngineManager] STARTING->FAULT(timeout)"));
-        return;
     }
-
-    (void)Rte_Write_EngineCmd_EngineSpeed(speed);
-    (void)Rte_Write_EngineCmd_CoolantTemp(temp);
-    (void)Rte_Write_EngineCmd_EngineOnFlag(1U);
-    (void)Rte_TriggerTransmit(0U);
 }
 
 static void State_Running(EngineSpeed_t speed, CoolantTemp_t temp, EngineOnFlag_t flag)
@@ -123,11 +118,6 @@ static void State_Running(EngineSpeed_t speed, CoolantTemp_t temp, EngineOnFlag_
         Det_LogP(PSTR(")"));
         return;
     }
-
-    (void)Rte_Write_EngineCmd_EngineSpeed(speed);
-    (void)Rte_Write_EngineCmd_CoolantTemp(temp);
-    (void)Rte_Write_EngineCmd_EngineOnFlag(1U);
-    (void)Rte_TriggerTransmit(0U);
 
     Det_PrintP(PSTR("[EngineManager] RUNNING spd="));
     Det_PrintDec(speed);

@@ -14,4 +14,12 @@ typedef uint16 EngineSpeed_t;   // rpm (0-15000)
 typedef uint8  CoolantTemp_t;   // ℃  (0-255)
 typedef uint8  EngineOnFlag_t;  // 0=OFF, 1=ON (1bit)
 
+typedef enum
+{
+    ENGINE_STATE_OFF      = 0,
+    ENGINE_STATE_STARTING = 1,
+    ENGINE_STATE_RUNNING  = 2,
+    ENGINE_STATE_FAULT    = 3
+} EngineState_t;
+
 #endif
