@@ -1,0 +1,33 @@
+VERSION ""
+
+NS_ :
+
+BS_:
+
+BU_: Arduino External
+
+BO_ 256 EngineInput: 4 External
+ SG_ EngineSpeed  : 7|16@0+ (1,0) [0|15000] "rpm"  Arduino
+ SG_ CoolantTemp  : 23|8@0+ (1,0) [0|255]   "degC" Arduino
+ SG_ EngineOnFlag : 31|1@0+ (1,0) [0|1]     ""     Arduino
+
+BO_ 512 EngineStatus: 1 Arduino
+ SG_ EngineState  : 7|8@0+  (1,0) [0|3]     ""     External
+
+CM_ BO_ 256 "RX: External -> Arduino (CAN ID 0x100)";
+CM_ BO_ 512 "TX: Arduino -> External (CAN ID 0x200)";
+CM_ SG_ 256 EngineSpeed  "Engine speed [rpm]. STARTING->RUNNING when >= 500. RUNNING->FAULT when < 100.";
+CM_ SG_ 256 CoolantTemp  "Coolant temperature [degC]. RUNNING->FAULT when >= 100.";
+CM_ SG_ 256 EngineOnFlag "Engine on request. OFF->STARTING when 1. Any state->OFF when 0.";
+CM_ SG_ 512 EngineState  "Current engine state reported by Arduino every 3 seconds.";
+
+VAL_ 256 EngineOnFlag
+ 0 "OFF"
+ 1 "ON" ;
+
+VAL_ 512 EngineState
+ 0 "OFF"
+ 1 "STARTING"
+ 2 "RUNNING"
+ 3 "FAULT" ;
+
