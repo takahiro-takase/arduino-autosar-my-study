@@ -22,10 +22,7 @@
 
 extern unsigned long millis(void);
 
-#define RTE_SIGNAL_ENGINE_SPEED    ((Com_SignalIdType)0)
-#define RTE_SIGNAL_COOLANT_TEMP    ((Com_SignalIdType)1)
-#define RTE_SIGNAL_ENGINE_ON_FLAG  ((Com_SignalIdType)2)
-#define RTE_SIGNAL_ENGINE_STATE    ((Com_SignalIdType)3)
+/* シグナル ID は Com_Cfg.h の COM_SIGNAL_* を使用（重複定義を排除） */
 
 /* App_EngineManager.c が定義する SW-C Runnable の前方宣言 */
 extern void App_EngineManager_Run(void);
@@ -51,7 +48,7 @@ extern void App_EngineManager_Run(void);
  */
 Std_ReturnType Rte_Read_SpeedSensor_EngineSpeed(EngineSpeed_t* data)
 {
-    return Com_ReceiveSignal(RTE_SIGNAL_ENGINE_SPEED, data);
+    return Com_ReceiveSignal(COM_SIGNAL_ENGINE_SPEED, data);
 }
 
 /**
@@ -74,7 +71,7 @@ Std_ReturnType Rte_Read_SpeedSensor_EngineSpeed(EngineSpeed_t* data)
  */
 Std_ReturnType Rte_Read_TempSensor_CoolantTemp(CoolantTemp_t* data)
 {
-    return Com_ReceiveSignal(RTE_SIGNAL_COOLANT_TEMP, data);
+    return Com_ReceiveSignal(COM_SIGNAL_COOLANT_TEMP, data);
 }
 
 /**
@@ -98,7 +95,7 @@ Std_ReturnType Rte_Read_TempSensor_CoolantTemp(CoolantTemp_t* data)
  */
 Std_ReturnType Rte_Read_EngineStatus_EngineOnFlag(EngineOnFlag_t* data)
 {
-    return Com_ReceiveSignal(RTE_SIGNAL_ENGINE_ON_FLAG, data);
+    return Com_ReceiveSignal(COM_SIGNAL_ENGINE_ON_FLAG, data);
 }
 
 /**
@@ -124,7 +121,7 @@ Std_ReturnType Rte_Read_EngineStatus_EngineOnFlag(EngineOnFlag_t* data)
 Std_ReturnType Rte_Write_EngineStatus_EngineState(EngineState_t state)
 {
     uint8 val = (uint8)state;
-    return Com_SendSignal(RTE_SIGNAL_ENGINE_STATE, &val);
+    return Com_SendSignal(COM_SIGNAL_ENGINE_STATE, &val);
 }
 
 /**
