@@ -23,7 +23,7 @@
 #include "Rte.h"
 #include "Det.h"
 
-/* millis() は Arduino の wiring.c（C リンケージ）で定義されている */
+/* millis() is declared in Arduino wiring.c with C linkage. */
 extern unsigned long millis(void);
 
 #define ENGINE_SPEED_RUNNING_THRESHOLD  ((EngineSpeed_t)500U)

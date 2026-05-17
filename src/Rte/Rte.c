@@ -14,7 +14,6 @@
 #include "Rte.h"
 #include "Com.h"
 
-/* millis() は Arduino の wiring.c（C リンケージ）で定義されている */
 extern unsigned long millis(void);
 
 #define RTE_SIGNAL_ENGINE_SPEED    ((Com_SignalIdType)0)
