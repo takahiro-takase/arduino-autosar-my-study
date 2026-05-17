@@ -12,6 +12,7 @@
 #define CANIF_H
 
 #include "CanIf_Types.h"
+#include "CanIf_Cfg.h"
 
 #ifdef __cplusplus
 extern "C" {
