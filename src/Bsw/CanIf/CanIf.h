@@ -7,10 +7,10 @@
 extern "C" {
 #endif
 
-void           CanIf_Init(const CanIf_ConfigType* Config);
-Std_ReturnType CanIf_Transmit(PduIdType TxPduId, const PduInfoType* PduInfo);
-void           CanIf_RxIndication(Can_HwHandleType Hrh, Can_IdType CanId, uint8 Dlc, const uint8* Data);
-void           CanIf_TxConfirmation(PduIdType TxPduId);
+void           CanIf_Init(const CanIf_ConfigType* ConfigPtr);
+Std_ReturnType CanIf_Transmit(PduIdType TxPduId, const PduInfoType* PduInfoPtr);
+void           CanIf_RxIndication(const Can_HwType* Mailbox, const PduInfoType* PduInfoPtr);
+void           CanIf_TxConfirmation(PduIdType CanTxPduId);
 
 #ifdef __cplusplus
 }

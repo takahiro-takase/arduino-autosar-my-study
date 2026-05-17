@@ -42,4 +42,12 @@ typedef struct
     uint8*     sdu;
 } Can_PduType;
 
+/* SWS_CANInterface_00451 */
+typedef struct
+{
+    Can_IdType       CanId;
+    Can_HwHandleType Hoh;
+    uint8            ControllerId;
+} Can_HwType;
+
 #endif
