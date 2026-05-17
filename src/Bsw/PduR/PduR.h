@@ -12,6 +12,7 @@
 #define PDUR_H
 
 #include "PduR_Types.h"
+#include "PduR_Cfg.h"
 #include "PduR_CanIf.h"
 #include "PduR_COM.h"
 
