@@ -1,14 +1,14 @@
 /**
  * \file    Rte.c
- * \brief   Runtime Environment (AUTOSAR SWS_RTE inspired)
- * \details Implements the AUTOSAR RTE API layer that mediates data exchange
- *          between SW-Components (SW-C) and the Basic Software (BSW) COM module.
- *          Provides typed Read/Write port accessors and a simple round-robin
- *          Runnable scheduler driven by the Arduino millis() timer.
- *          Conforms to the AUTOSAR 4.3.1 SWS_RTE API naming convention
- *          (Rte_Read_<p>_<o> / Rte_Write_<p>_<o>). The optional Rte_Instance
- *          and Rte_TransformerError parameters are omitted because only a
- *          single-instance SW-C without transformer chains is used.
+ * \brief   ランタイム環境 (AUTOSAR SWS_RTE 準拠)
+ * \details SW-Component (SW-C) と BSW の COM モジュール間のデータ交換を
+ *          仲介する AUTOSAR RTE API 層を実装する。
+ *          型付きの Read/Write ポートアクセサと、Arduino の millis() タイマで
+ *          駆動するシンプルな Runnable スケジューラを提供する。
+ *          AUTOSAR 4.3.1 SWS_RTE の API 命名規則
+ *          (Rte_Read_<p>_<o> / Rte_Write_<p>_<o>) に準拠する。
+ *          シングルインスタンス SW-C かつトランスフォーマチェーン不使用のため、
+ *          オプション引数 Rte_Instance / Rte_TransformerError は省略している。
  */
 
 #include "Rte.h"
@@ -21,23 +21,23 @@ extern unsigned long millis(void);
 #define RTE_SIGNAL_ENGINE_ON_FLAG  ((Com_SignalIdType)2)
 #define RTE_SIGNAL_ENGINE_STATE    ((Com_SignalIdType)3)
 
+/* App_EngineManager.c が定義する SW-C Runnable の前方宣言 */
 extern void App_EngineManager_Run(void);
 
 /**
- * \brief   Reads the EngineSpeed signal from the SpeedSensor required port.
+ * \brief   SpeedSensor 要求ポートから EngineSpeed シグナルを読み取る。
  *
- * \details Delegates to Com_ReceiveSignal() to unpack the EngineSpeed signal
- *          from the COM RX I-PDU buffer into the caller's variable
- *          (AUTOSAR SWS_RTE Rte_Read_<p>_<o> pattern).
+ * \details Com_ReceiveSignal() へ委譲し、COM の RX I-PDU バッファから
+ *          EngineSpeed シグナルを呼び出し元変数へアンパックする
+ *          (AUTOSAR SWS_RTE の Rte_Read_<p>_<o> パターン)。
  *
- * \param[out] data  Pointer to the variable that receives the engine speed
- *                   value. Must not be NULL. Populated only when E_OK is
- *                   returned.
+ * \param[out] data  エンジン回転数を受け取る変数へのポインタ。NULL 禁止。
+ *                   E_OK が返された場合のみ有効な値が格納される。
  *
- * \retval  E_OK      Signal was successfully read from the COM buffer.
- * \retval  E_NOT_OK  COM not initialized or SignalId not found.
+ * \retval  E_OK      COM バッファからシグナルを正常に読み取った。
+ * \retval  E_NOT_OK  COM 未初期化またはシグナル ID が見つからない。
  *
- * \pre        Com_Init() and Com_RxIndication() must have been called.
+ * \pre        Com_Init() と Com_RxIndication() が呼ばれていること。
  *
  * \ServiceID      {0xF2}
  * \Reentrancy     {Reentrant}
@@ -49,19 +49,18 @@ Std_ReturnType Rte_Read_SpeedSensor_EngineSpeed(EngineSpeed_t* data)
 }
 
 /**
- * \brief   Reads the CoolantTemp signal from the TempSensor required port.
+ * \brief   TempSensor 要求ポートから CoolantTemp シグナルを読み取る。
  *
- * \details Delegates to Com_ReceiveSignal() to unpack the CoolantTemp signal
- *          from the COM RX I-PDU buffer into the caller's variable
- *          (AUTOSAR SWS_RTE Rte_Read_<p>_<o> pattern).
+ * \details Com_ReceiveSignal() へ委譲し、COM の RX I-PDU バッファから
+ *          CoolantTemp シグナルを呼び出し元変数へアンパックする
+ *          (AUTOSAR SWS_RTE の Rte_Read_<p>_<o> パターン)。
  *
- * \param[out] data  Pointer to the variable that receives the coolant
- *                   temperature value. Must not be NULL.
+ * \param[out] data  冷却水温を受け取る変数へのポインタ。NULL 禁止。
  *
- * \retval  E_OK      Signal was successfully read from the COM buffer.
- * \retval  E_NOT_OK  COM not initialized or SignalId not found.
+ * \retval  E_OK      COM バッファからシグナルを正常に読み取った。
+ * \retval  E_NOT_OK  COM 未初期化またはシグナル ID が見つからない。
  *
- * \pre        Com_Init() and Com_RxIndication() must have been called.
+ * \pre        Com_Init() と Com_RxIndication() が呼ばれていること。
  *
  * \ServiceID      {0xF3}
  * \Reentrancy     {Reentrant}
@@ -73,19 +72,19 @@ Std_ReturnType Rte_Read_TempSensor_CoolantTemp(CoolantTemp_t* data)
 }
 
 /**
- * \brief   Reads the EngineOnFlag signal from the EngineStatus required port.
+ * \brief   EngineStatus 要求ポートから EngineOnFlag シグナルを読み取る。
  *
- * \details Delegates to Com_ReceiveSignal() to unpack the EngineOnFlag signal
- *          from the COM RX I-PDU buffer into the caller's variable
- *          (AUTOSAR SWS_RTE Rte_Read_<p>_<o> pattern).
+ * \details Com_ReceiveSignal() へ委譲し、COM の RX I-PDU バッファから
+ *          EngineOnFlag シグナルを呼び出し元変数へアンパックする
+ *          (AUTOSAR SWS_RTE の Rte_Read_<p>_<o> パターン)。
  *
- * \param[out] data  Pointer to the variable that receives the engine-on flag
- *                   value (0 = off, 1 = on). Must not be NULL.
+ * \param[out] data  エンジン起動フラグを受け取る変数へのポインタ
+ *                   （0 = 停止、1 = 起動）。NULL 禁止。
  *
- * \retval  E_OK      Signal was successfully read from the COM buffer.
- * \retval  E_NOT_OK  COM not initialized or SignalId not found.
+ * \retval  E_OK      COM バッファからシグナルを正常に読み取った。
+ * \retval  E_NOT_OK  COM 未初期化またはシグナル ID が見つからない。
  *
- * \pre        Com_Init() and Com_RxIndication() must have been called.
+ * \pre        Com_Init() と Com_RxIndication() が呼ばれていること。
  *
  * \ServiceID      {0xF4}
  * \Reentrancy     {Reentrant}
@@ -97,19 +96,20 @@ Std_ReturnType Rte_Read_EngineStatus_EngineOnFlag(EngineOnFlag_t* data)
 }
 
 /**
- * \brief   Writes the EngineState signal to the EngineStatus provided port.
+ * \brief   EngineStatus 提供ポートへ EngineState シグナルを書き込む。
  *
- * \details Packs the EngineState value into the COM TX I-PDU buffer via
- *          Com_SendSignal() (AUTOSAR SWS_RTE Rte_Write_<p>_<o> pattern).
- *          The I-PDU is not transmitted immediately; call
- *          Rte_TriggerTransmit() afterward to trigger CAN frame transmission.
+ * \details Com_SendSignal() 経由で EngineState 値を COM の TX I-PDU バッファへ
+ *          パックする (AUTOSAR SWS_RTE の Rte_Write_<p>_<o> パターン)。
+ *          I-PDU は即座には送信されない。
+ *          送信するには Rte_TriggerTransmit() を呼び出すこと。
  *
- * \param[in]  state  Engine state to write (OFF / STARTING / RUNNING / FAULT).
+ * \param[in]  state  書き込むエンジン状態
+ *                    (OFF / STARTING / RUNNING / FAULT)。
  *
- * \retval  E_OK      Signal was successfully packed into the COM TX buffer.
- * \retval  E_NOT_OK  COM not initialized or SignalId not found.
+ * \retval  E_OK      COM の TX バッファへ正常にパックした。
+ * \retval  E_NOT_OK  COM 未初期化またはシグナル ID が見つからない。
  *
- * \pre        Com_Init() must have been called successfully.
+ * \pre        Com_Init() が正常に完了していること。
  *
  * \ServiceID      {0xF5}
  * \Reentrancy     {Reentrant}
@@ -122,25 +122,25 @@ Std_ReturnType Rte_Write_EngineStatus_EngineState(EngineState_t state)
 }
 
 /**
- * \brief   Triggers immediate transmission of a COM TX I-PDU.
+ * \brief   COM の TX I-PDU を即座に送信する。
  *
- * \details Wraps Com_TriggerIPDUSend() to allow SW-Cs to request CAN frame
- *          transmission without a direct dependency on the COM module.
- *          This function is a project-specific RTE extension; it does not
- *          correspond to the AUTOSAR standard Rte_Trigger_<p>_<o> API
- *          (which targets internal SW-C event triggers).
+ * \details COM モジュールへの直接依存なしに SW-C が CAN フレーム送信を
+ *          要求できるよう、Com_TriggerIPDUSend() をラップする。
+ *          この関数はプロジェクト固有の RTE 拡張であり、AUTOSAR 標準の
+ *          Rte_Trigger_<p>_<o> API（SW-C 内部イベントトリガ用）とは
+ *          異なる目的で使用する。
  *
- * \param[in]  IPduId  COM I-PDU handle of the I-PDU to transmit.
+ * \param[in]  IPduId  送信する I-PDU の COM ハンドル。
  *
- * \retval  E_OK      I-PDU was successfully forwarded to PduR and CanIf.
- * \retval  E_NOT_OK  COM not initialized, I-PDU not found, or lower-layer
- *                    transmission failed.
+ * \retval  E_OK      I-PDU が PduR および CanIf へ正常に転送された。
+ * \retval  E_NOT_OK  COM 未初期化、I-PDU が見つからない、
+ *                    または下位層の送信が失敗した。
  *
- * \pre        Com_Init() must have been called successfully.
- * \pre        Rte_Write_EngineStatus_EngineState() must have been called to
- *             populate the TX buffer before triggering transmission.
- * \note       Non-standard AUTOSAR API. Added to decouple App_EngineManager
- *             from direct COM calls.
+ * \pre        Com_Init() が正常に完了していること。
+ * \pre        送信前に Rte_Write_EngineStatus_EngineState() で
+ *             TX バッファへ値を設定しておくこと。
+ * \note       AUTOSAR 非標準 API。App_EngineManager が COM を
+ *             直接呼び出さないようにするために追加した。
  *
  * \ServiceID      {0xF6}
  * \Reentrancy     {Non Reentrant}
@@ -152,18 +152,18 @@ Std_ReturnType Rte_TriggerTransmit(Com_IPduIdType IPduId)
 }
 
 /**
- * \brief   Invokes all scheduled SW-C Runnables based on elapsed time.
+ * \brief   スケジュール済みの SW-C Runnable を経過時間に基づいて呼び出す。
  *
- * \details Checks the Arduino millis() counter and calls
- *          App_EngineManager_Run() every 3000 ms. This replaces the AUTOSAR
- *          OS periodic task scheduling mechanism with a simple polling loop
- *          suitable for the Arduino UNO bare-metal environment.
- *          Must be called from the Arduino loop() function.
+ * \details Arduino の millis() カウンタを確認し、3000 ms ごとに
+ *          App_EngineManager_Run() を呼び出す。
+ *          AUTOSAR OS の周期タスクスケジューリング機構を、
+ *          Arduino UNO のベアメタル環境向けにシンプルなポーリングループで
+ *          代替する。Arduino の loop() 関数から呼び出すこと。
  *
- * \pre        Arduino runtime must be initialized (setup() must have returned).
- * \note       Non-standard AUTOSAR API. In a full AUTOSAR OS environment,
- *             Runnables would be triggered by OsTask activations at configured
- *             periods; here a single 3-second period is hard-coded.
+ * \pre        Arduino ランタイムが初期化済みであること（setup() が返った後）。
+ * \note       AUTOSAR 非標準 API。完全な AUTOSAR OS 環境では、
+ *             Runnable は設定された周期で OsTask アクティベーションにより
+ *             起動される。ここでは 3 秒周期をハードコードしている。
  *
  * \ServiceID      {0xF7}
  * \Reentrancy     {Non Reentrant}

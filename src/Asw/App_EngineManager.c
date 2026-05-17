@@ -1,22 +1,22 @@
 /**
  * \file    App_EngineManager.c
- * \brief   Engine Manager Application SW-Component
- * \details Implements the Engine Manager SW-C as an AUTOSAR-style Application
- *          Software Component (ASW). Contains one periodic Runnable Entity
- *          (App_EngineManager_Run) that reads sensor signals via RTE port
- *          accessors, evaluates the engine state machine, and writes the
- *          resulting state back to the CAN bus every 3 seconds.
+ * \brief   エンジンマネージャ アプリケーション SW-Component
+ * \details AUTOSAR スタイルのアプリケーション SW-C (ASW) として
+ *          エンジンマネージャを実装する。
+ *          周期 Runnable Entity (App_EngineManager_Run) が RTE ポートアクセサ
+ *          経由でセンサシグナルを読み取り、エンジンステートマシンを評価して、
+ *          3 秒ごとに結果を CAN バスへ送信する。
  *
- *          State machine transitions:
- *            OFF      --[flag=1]-->          STARTING
- *            OFF      --[speed>0, flag=0]--> FAULT
- *            STARTING --[flag=0]-->          OFF
- *            STARTING --[speed>=500]-->      RUNNING
- *            STARTING --[timeout 5s]-->      FAULT
- *            RUNNING  --[flag=0]-->          OFF
- *            RUNNING  --[temp>=100]-->       FAULT
- *            RUNNING  --[speed<100]-->       FAULT
- *            FAULT    --[flag=0]-->          OFF
+ *          状態遷移:
+ *            OFF      --[flag=1]-->              STARTING
+ *            OFF      --[speed>0 かつ flag=0]--> FAULT
+ *            STARTING --[flag=0]-->              OFF
+ *            STARTING --[speed>=500]-->          RUNNING
+ *            STARTING --[タイムアウト 5 秒]-->  FAULT
+ *            RUNNING  --[flag=0]-->              OFF
+ *            RUNNING  --[temp>=100]-->           FAULT（過熱）
+ *            RUNNING  --[speed<100]-->           FAULT（失速）
+ *            FAULT    --[flag=0]-->              OFF
  */
 
 #include "App_EngineManager.h"
@@ -40,14 +40,15 @@ static void State_Running(EngineSpeed_t speed, CoolantTemp_t temp, EngineOnFlag_
 static void State_Fault(EngineSpeed_t speed, CoolantTemp_t temp, EngineOnFlag_t flag);
 
 /**
- * \brief   Initializes the Engine Manager SW-Component.
+ * \brief   エンジンマネージャ SW-Component を初期化する。
  *
- * \details Resets the engine state machine to ENGINE_STATE_OFF and clears the
- *          STARTING-state timeout reference. Must be called once during system
- *          initialization before the RTE scheduler starts invoking
- *          App_EngineManager_Run().
+ * \details エンジンステートマシンを ENGINE_STATE_OFF へリセットし、
+ *          STARTING 状態のタイムアウト基準時刻をクリアする。
+ *          RTE スケジューラが App_EngineManager_Run() を呼び始める前に
+ *          システム初期化時に 1 回だけ呼び出すこと。
  *
- * \pre        RTE and all BSW modules must be initialized before this call.
+ * \pre        RTE およびすべての BSW モジュールがこの呼び出しより前に
+ *             初期化済みであること。
  *
  * \ServiceID      {0x00}
  * \Reentrancy     {Non Reentrant}
@@ -61,22 +62,21 @@ void App_EngineManager_Init(void)
 }
 
 /**
- * \brief   Executes the Engine Manager periodic Runnable Entity.
+ * \brief   エンジンマネージャの周期 Runnable Entity を実行する。
  *
- * \details Reads the three RX signals (EngineSpeed, CoolantTemp, EngineOnFlag)
- *          from the RTE, delegates to the current state handler, then writes
- *          the updated EngineState signal and triggers CAN frame transmission
- *          (CAN ID 0x200, DLC 1). Invoked every 3000 ms by
- *          Rte_ScheduleRunnables().
+ * \details RTE から 3 つの RX シグナル（EngineSpeed / CoolantTemp /
+ *          EngineOnFlag）を読み取り、現在の状態ハンドラへ委譲したのち、
+ *          更新された EngineState シグナルを書き込んで CAN フレーム
+ *          (CAN ID 0x200、DLC 1) の送信をトリガする。
+ *          Rte_ScheduleRunnables() から 3000 ms ごとに呼び出される。
  *
- *          This function is the sole Runnable Entity of the Engine Manager
- *          SW-C. In a full AUTOSAR OS environment it would be mapped to a
- *          periodic OsTask; here the period is enforced by the RTE scheduler.
+ *          この関数はエンジンマネージャ SW-C の唯一の Runnable Entity である。
+ *          完全な AUTOSAR OS 環境では周期 OsTask へマッピングされる。
  *
- * \pre        App_EngineManager_Init() must have been called successfully.
- * \note       RTE Read return values are discarded: if a signal is unavailable
- *             the previous buffer value (0 at startup) is used, which causes
- *             the state machine to remain in OFF.
+ * \pre        App_EngineManager_Init() が正常に完了していること。
+ * \note       RTE Read の戻り値は破棄している。シグナルが取得できない場合は
+ *             前回のバッファ値（起動直後は 0）を使用するため、
+ *             ステートマシンは OFF のまま維持される。
  *
  * \ServiceID      {0xF0}
  * \Reentrancy     {Non Reentrant}
@@ -106,16 +106,15 @@ void App_EngineManager_Run(void)
 }
 
 /**
- * \brief   Returns the current engine state.
+ * \brief   現在のエンジン状態を返す。
  *
- * \details Provides read-only access to the internal engine state variable
- *          for external query (e.g., diagnostic or test purposes) without
- *          triggering a state transition.
+ * \details 内部エンジン状態変数への読み取り専用アクセスを提供する。
+ *          状態遷移は発生しない（診断・テスト用途）。
  *
- * \return  Current EngineState_t value
- *          (ENGINE_STATE_OFF / STARTING / RUNNING / FAULT).
+ * \return  現在の EngineState_t 値
+ *          (ENGINE_STATE_OFF / STARTING / RUNNING / FAULT)。
  *
- * \pre        App_EngineManager_Init() must have been called successfully.
+ * \pre        App_EngineManager_Init() が正常に完了していること。
  *
  * \ServiceID      {0xF1}
  * \Reentrancy     {Reentrant}
@@ -127,19 +126,19 @@ EngineState_t App_EngineManager_GetState(void)
 }
 
 /* -----------------------------------------------------------------------
- * Internal state handlers — called exclusively from App_EngineManager_Run
+ * 内部状態ハンドラ — App_EngineManager_Run からのみ呼び出す
  * ----------------------------------------------------------------------- */
 
 /**
- * \brief   Handles the ENGINE_STATE_OFF state.
+ * \brief   ENGINE_STATE_OFF 状態を処理する。
  *
- * \details Transitions out of OFF when the EngineOnFlag rises:
- *          - flag=1            → STARTING (records entry timestamp)
- *          - speed>0 & flag=0  → FAULT    (speed without flag is abnormal)
+ * \details EngineOnFlag が立ったときに OFF から遷移する:
+ *          - flag=1            → STARTING（タイムアウト基準時刻を記録）
+ *          - speed>0 かつ flag=0 → FAULT（フラグなしで速度あり = 異常）
  *
- * \param[in]  speed  Current engine speed (RPM).
- * \param[in]  temp   Current coolant temperature (°C). Unused in this state.
- * \param[in]  flag   EngineOnFlag: 1 = start requested, 0 = no request.
+ * \param[in]  speed  現在のエンジン回転数 (RPM)。
+ * \param[in]  temp   現在の冷却水温 (°C)。この状態では未使用。
+ * \param[in]  flag   エンジン起動フラグ（1 = 起動要求、0 = 要求なし）。
  *
  * \ServiceID      {0xF2}
  * \Reentrancy     {Non Reentrant}
@@ -163,16 +162,16 @@ static void State_Off(EngineSpeed_t speed, CoolantTemp_t temp, EngineOnFlag_t fl
 }
 
 /**
- * \brief   Handles the ENGINE_STATE_STARTING state.
+ * \brief   ENGINE_STATE_STARTING 状態を処理する。
  *
- * \details Monitors the cranking phase with a 5-second timeout:
- *          - flag=0                              → OFF    (start cancelled)
+ * \details 5 秒のタイムアウト付きでクランキング段階を監視する:
+ *          - flag=0                             → OFF（起動キャンセル）
  *          - speed >= ENGINE_SPEED_RUNNING_THRESHOLD (500) → RUNNING
- *          - elapsed >= STARTING_TIMEOUT_MS (5000 ms)      → FAULT
+ *          - 経過時間 >= STARTING_TIMEOUT_MS (5000 ms) → FAULT
  *
- * \param[in]  speed  Current engine speed (RPM).
- * \param[in]  temp   Current coolant temperature (°C). Unused in this state.
- * \param[in]  flag   EngineOnFlag: must remain 1 to stay in STARTING.
+ * \param[in]  speed  現在のエンジン回転数 (RPM)。
+ * \param[in]  temp   現在の冷却水温 (°C)。この状態では未使用。
+ * \param[in]  flag   エンジン起動フラグ（STARTING 継続には 1 が必要）。
  *
  * \ServiceID      {0xF3}
  * \Reentrancy     {Non Reentrant}
@@ -202,17 +201,17 @@ static void State_Starting(EngineSpeed_t speed, CoolantTemp_t temp, EngineOnFlag
 }
 
 /**
- * \brief   Handles the ENGINE_STATE_RUNNING state.
+ * \brief   ENGINE_STATE_RUNNING 状態を処理する。
  *
- * \details Monitors for fault conditions while the engine runs normally:
- *          - flag=0                                     → OFF
- *          - temp >= COOLANT_OVERHEAT_THRESHOLD (100°C) → FAULT (overheat)
- *          - speed < ENGINE_SPEED_STALL_THRESHOLD (100) → FAULT (stall)
- *          Otherwise logs the current speed and temperature each cycle.
+ * \details エンジン正常稼働中の異常条件を監視する:
+ *          - flag=0                                      → OFF
+ *          - temp >= COOLANT_OVERHEAT_THRESHOLD (100°C)  → FAULT（過熱）
+ *          - speed < ENGINE_SPEED_STALL_THRESHOLD (100)  → FAULT（失速）
+ *          上記以外の場合は現在の回転数と水温を毎周期ログ出力する。
  *
- * \param[in]  speed  Current engine speed (RPM).
- * \param[in]  temp   Current coolant temperature (°C).
- * \param[in]  flag   EngineOnFlag: must remain 1 to stay in RUNNING.
+ * \param[in]  speed  現在のエンジン回転数 (RPM)。
+ * \param[in]  temp   現在の冷却水温 (°C)。
+ * \param[in]  flag   エンジン起動フラグ（RUNNING 継続には 1 が必要）。
  *
  * \ServiceID      {0xF4}
  * \Reentrancy     {Non Reentrant}
@@ -251,16 +250,16 @@ static void State_Running(EngineSpeed_t speed, CoolantTemp_t temp, EngineOnFlag_
 }
 
 /**
- * \brief   Handles the ENGINE_STATE_FAULT state.
+ * \brief   ENGINE_STATE_FAULT 状態を処理する。
  *
- * \details Holds the FAULT state until the operator clears the start request:
- *          - flag=0 → OFF (fault acknowledged, system reset)
- *          - flag=1 → remains FAULT (logs a waiting message each cycle)
- *          Speed and temperature are not evaluated in this state.
+ * \details オペレータが起動要求をクリアするまで FAULT 状態を維持する:
+ *          - flag=0 → OFF（異常確認済み、システムリセット）
+ *          - flag=1 → FAULT 継続（毎周期待機メッセージをログ出力）
+ *          この状態では速度と水温は評価しない。
  *
- * \param[in]  speed  Current engine speed (RPM). Unused in this state.
- * \param[in]  temp   Current coolant temperature (°C). Unused in this state.
- * \param[in]  flag   EngineOnFlag: 0 clears the fault and returns to OFF.
+ * \param[in]  speed  現在のエンジン回転数 (RPM)。この状態では未使用。
+ * \param[in]  temp   現在の冷却水温 (°C)。この状態では未使用。
+ * \param[in]  flag   エンジン起動フラグ（0 で異常をクリアして OFF へ戻る）。
  *
  * \ServiceID      {0xF5}
  * \Reentrancy     {Non Reentrant}

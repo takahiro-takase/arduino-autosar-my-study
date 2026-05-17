@@ -1,10 +1,10 @@
 /**
  * \file    CanIf.c
- * \brief   CAN Interface (AUTOSAR SWS_CANInterface inspired)
- * \details Implements the AUTOSAR CanIf API layer that sits between the CAN
- *          Driver (Can.c) and the upper communication layers (PduR, DCM).
- *          Conforms to the AUTOSAR 4.3.1 SWS_CANInterface specification where
- *          noted, with simplifications for Arduino UNO hardware.
+ * \brief   CAN インタフェース (AUTOSAR SWS_CANInterface 準拠)
+ * \details CAN ドライバ (Can.c) と上位通信層 (PduR, DCM) の間に位置する
+ *          AUTOSAR CanIf API を実装する。
+ *          AUTOSAR 4.3.1 SWS_CANInterface 仕様に準拠し、
+ *          Arduino UNO 向けに一部を簡略化している。
  */
 
 #include "CanIf.h"
@@ -14,16 +14,16 @@
 static const CanIf_ConfigType* CanIf_ConfigPtr = NULL;
 
 /**
- * \brief   Initializes the CAN Interface module.
+ * \brief   CAN インタフェースモジュールを初期化する。
  *
- * \details Stores the configuration pointer and logs the number of TX/RX PDUs
- *          configured (AUTOSAR SWS_CANIF_00001). Must be called once after
- *          Can_Init() and before any other CanIf_* API.
+ * \details 設定ポインタを保存し、TX/RX PDU 数をログ出力する
+ *          (AUTOSAR SWS_CANIF_00001)。
+ *          Can_Init() の呼び出し後、他のすべての CanIf_* API より
+ *          先に 1 回だけ呼び出すこと。
  *
- * \param[in]  ConfigPtr  Pointer to the CanIf configuration structure.
- *                        Must not be NULL.
+ * \param[in]  ConfigPtr  CanIf 設定構造体へのポインタ。NULL 禁止。
  *
- * \pre        Can_Init() must have been called successfully.
+ * \pre        Can_Init() が正常に完了していること。
  *
  * \ServiceID      {0x00}
  * \Reentrancy     {Non Reentrant}
@@ -42,23 +42,23 @@ void CanIf_Init(const CanIf_ConfigType* ConfigPtr)
 }
 
 /**
- * \brief   Requests transmission of a PDU via the CAN Driver.
+ * \brief   CAN ドライバ経由で PDU の送信を要求する。
  *
- * \details Looks up the TX PDU configuration by TxPduId, validates the PDU
- *          length against the configured DLC, builds a Can_PduType, and
- *          calls Can_Write() (AUTOSAR SWS_CANIF_00005).
+ * \details TxPduId で TX PDU 設定を検索し、PDU 長を設定 DLC と照合したうえで
+ *          Can_PduType を構築して Can_Write() を呼び出す
+ *          (AUTOSAR SWS_CANIF_00005)。
  *
- * \param[in]  TxPduId     ID of the TX PDU to transmit. Must be less than
- *                         the configured TxPduCount.
- * \param[in]  PduInfoPtr  Pointer to the PDU data and length to transmit.
- *                         Must not be NULL; SduDataPtr must not be NULL.
+ * \param[in]  TxPduId     送信する TX PDU の ID。
+ *                         設定済み TxPduCount 未満であること。
+ * \param[in]  PduInfoPtr  送信するデータと長さへのポインタ。
+ *                         NULL 禁止。SduDataPtr も NULL 禁止。
  *
- * \retval  E_OK      PDU was accepted and passed to Can_Write() successfully.
- * \retval  E_NOT_OK  CanIf not initialized, invalid TxPduId, NULL pointer,
- *                    SduLength exceeds configured DLC, or Can_Write() failed.
+ * \retval  E_OK      PDU が Can_Write() に正常に渡された。
+ * \retval  E_NOT_OK  CanIf 未初期化、TxPduId 不正、NULL ポインタ、
+ *                    SduLength が設定 DLC を超過、または Can_Write() 失敗。
  *
- * \pre        CanIf_Init() must have been called successfully.
- * \pre        The CAN controller must be in CAN_CS_STARTED state.
+ * \pre        CanIf_Init() が正常に完了していること。
+ * \pre        CAN コントローラが CAN_CS_STARTED 状態であること。
  *
  * \ServiceID      {0x49}
  * \Reentrancy     {Reentrant}
@@ -111,22 +111,20 @@ Std_ReturnType CanIf_Transmit(PduIdType TxPduId, const PduInfoType* PduInfoPtr)
 }
 
 /**
- * \brief   Indicates a received CAN frame from the CAN Driver to upper layers.
+ * \brief   CAN ドライバから受信フレームを上位層へ通知する。
  *
- * \details Called by the CAN Driver when a frame is received. Searches the RX
- *          PDU table for a matching HOH and CAN ID, then dispatches the PDU to
- *          the configured upper-layer RxIndication callback
- *          (AUTOSAR SWS_CANIF_00415, SWS_CANInterface_00451).
+ * \details CAN ドライバがフレームを受信した際に呼び出される。
+ *          RX PDU テーブルから HOH と CAN ID が一致するエントリを検索し、
+ *          設定された上位層の RxIndication コールバックへ転送する
+ *          (AUTOSAR SWS_CANIF_00415, SWS_CANInterface_00451)。
+ *          一致するエントリが存在しない場合はフレームを破棄してログを出力する。
  *
- * \param[in]  Mailbox     Pointer to the hardware mailbox descriptor containing
- *                         the received CAN ID, HOH, and controller ID.
- *                         Must not be NULL.
- * \param[in]  PduInfoPtr  Pointer to the received PDU data and length.
- *                         Must not be NULL.
+ * \param[in]  Mailbox     受信 CAN ID・HOH・コントローラ ID を格納した
+ *                         ハードウェアメールボックス記述子へのポインタ。
+ *                         NULL 禁止。
+ * \param[in]  PduInfoPtr  受信 PDU のデータと長さへのポインタ。NULL 禁止。
  *
- * \pre        CanIf_Init() must have been called successfully.
- * \note       If no RX PDU configuration matches the received CAN ID and HOH,
- *             the frame is silently discarded and a log message is emitted.
+ * \pre        CanIf_Init() が正常に完了していること。
  *
  * \ServiceID      {0x10}
  * \Reentrancy     {Reentrant}
@@ -162,18 +160,18 @@ void CanIf_RxIndication(const Can_HwType* Mailbox, const PduInfoType* PduInfoPtr
 }
 
 /**
- * \brief   Confirms successful transmission of a CAN frame from the CAN Driver.
+ * \brief   CAN フレームの送信完了を上位層へ通知する。
  *
- * \details Called by the CAN Driver after a frame has been successfully
- *          transmitted. Looks up the TX PDU configuration by CanTxPduId and
- *          invokes the configured upper-layer TxConfirmation callback
- *          (AUTOSAR SWS_CANIF_00011).
+ * \details CAN ドライバが送信完了を確認した後に呼び出される。
+ *          CanTxPduId で TX PDU 設定を検索し、設定された上位層の
+ *          TxConfirmation コールバックを呼び出す
+ *          (AUTOSAR SWS_CANIF_00011)。
+ *          CanTxPduId が範囲外の場合は処理を無視する。
  *
- * \param[in]  CanTxPduId  ID of the successfully transmitted TX PDU.
- *                         Must be less than the configured TxPduCount.
+ * \param[in]  CanTxPduId  送信が完了した TX PDU の ID。
+ *                         設定済み TxPduCount 未満であること。
  *
- * \pre        CanIf_Init() must have been called successfully.
- * \note       If CanTxPduId is out of range, the call is silently ignored.
+ * \pre        CanIf_Init() が正常に完了していること。
  *
  * \ServiceID      {0x11}
  * \Reentrancy     {Reentrant}
