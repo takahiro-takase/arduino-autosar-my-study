@@ -12,6 +12,7 @@
 #include "Can.h"
 #include "Can_PBCfg.h"
 #include "CanIf.h"
+#include "CanIf_PBCfg.h"
 #include "PduR.h"
 #include "PduR_CanIf.h"
 #include "Com.h"
@@ -57,16 +58,6 @@ static void Diag_RxIndication(PduIdType PduId, const PduInfoType* PduInfoPtr)
 // -------------------------------------------------------
 // CanDrv / CanIf / PduR 設定
 // -------------------------------------------------------
-static const CanIf_TxPduConfigType CanIf_TxPduConfig[] = {
-    { .UpperLayerTxPduId = 0, .CanId = 0x200, .Dlc = 1, .Hth = 0, .TxConfirmFct = PduR_CanIfTxConfirmation }
-};
-static const CanIf_RxPduConfigType CanIf_RxPduConfig[] = {
-    { .CanId = 0x100, .Hrh = 0, .UpperLayerRxPduId = 0, .RxIndicationFct = PduR_CanIfRxIndication }
-};
-static const CanIf_ConfigType CanIfConfig = {
-    .TxPduConfig = CanIf_TxPduConfig, .TxPduCount = 1,
-    .RxPduConfig = CanIf_RxPduConfig, .RxPduCount = 1
-};
 static const PduR_RxDestType PduR_RxDests_Path0[] = {
     { .Module = PDUR_MODULE_COM, .DestPduId = 0, .RxIndFct = Com_RxIndication },
     { .Module = PDUR_MODULE_DCM, .DestPduId = 0, .RxIndFct = Diag_RxIndication }
@@ -91,7 +82,7 @@ void setup()
 
     Can_Init(&Can_Config);
     Can_SetControllerMode(0U, CAN_T_START);
-    CanIf_Init(&CanIfConfig);
+    CanIf_Init(&CanIf_Config);
     PduR_Init(&PduRConfig);
     Com_Init(&ComConfig);
     App_EngineManager_Init();
