@@ -6,6 +6,12 @@
  *          (Motorola/Intel) でシグナルのパック・アンパックを行う。
  *          AUTOSAR 4.3.1 SWS_COM 仕様に準拠し、Arduino UNO 向けに
  *          バッファ数固定・締め切り監視なし・更新ビットなしに簡略化している。
+ *
+ * \copyright  Copyright (c) 2025 T_T
+ * \license    MIT License - 詳細は LICENSE ファイルを参照。
+ *
+ * \note    本ファイルは AUTOSAR 4.3.1 仕様を参考にした学習用実装です。
+ *          AUTOSAR 認証済み実装ではなく、製品への適用は想定していません。
  */
 
 #include "Com.h"

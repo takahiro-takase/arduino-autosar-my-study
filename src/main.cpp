@@ -1,3 +1,13 @@
+/**
+ * \file    main.cpp
+ * \brief   Arduino エントリポイント・BSW スタック初期化
+ *
+ * \copyright  Copyright (c) 2025 T_T
+ * \license    MIT License - 詳細は LICENSE ファイルを参照。
+ *
+ * \note    本ファイルは AUTOSAR 4.3.1 仕様を参考にした学習用実装です。
+ *          AUTOSAR 認証済み実装ではなく、製品への適用は想定していません。
+ */
 #include <Arduino.h>
 #include "Can.h"
 #include "CanIf.h"

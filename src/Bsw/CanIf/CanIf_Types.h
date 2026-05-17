@@ -1,3 +1,13 @@
+/**
+ * \file    CanIf_Types.h
+ * \brief   CAN インタフェース型定義 (AUTOSAR SWS_CANInterface 準拠)
+ *
+ * \copyright  Copyright (c) 2025 T_T
+ * \license    MIT License - 詳細は LICENSE ファイルを参照。
+ *
+ * \note    本ファイルは AUTOSAR 4.3.1 仕様を参考にした学習用実装です。
+ *          AUTOSAR 認証済み実装ではなく、製品への適用は想定していません。
+ */
 #ifndef CANIF_TYPES_H
 #define CANIF_TYPES_H
 
