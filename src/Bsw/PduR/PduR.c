@@ -1,12 +1,12 @@
 /**
  * \file    PduR.c
- * \brief   PDU Router (AUTOSAR SWS_PDURouter inspired)
- * \details Implements the AUTOSAR PduR routing layer that sits between CanIf
- *          and the upper communication modules (COM, DCM). Routes received PDUs
- *          to one or more upper-layer modules (multicast) and forwards transmit
- *          requests and confirmations between COM and CanIf.
- *          Conforms to the AUTOSAR 4.3.1 SWS_PDURouter specification where
- *          noted, with simplifications for Arduino UNO hardware.
+ * \brief   PDU ルータ (AUTOSAR SWS_PDURouter 準拠)
+ * \details CanIf と上位通信モジュール (COM, DCM) の間に位置する
+ *          AUTOSAR PduR ルーティング層を実装する。
+ *          受信 PDU を 1 つ以上の上位層モジュールへ配信（マルチキャスト）し、
+ *          送信要求と送信完了通知を COM と CanIf 間で転送する。
+ *          AUTOSAR 4.3.1 SWS_PDURouter 仕様に準拠し、
+ *          Arduino UNO 向けに一部を簡略化している。
  */
 
 #include "PduR.h"
@@ -16,17 +16,16 @@
 static const PduR_PBConfigType* PduR_ConfigPtr = NULL;
 
 /**
- * \brief   Initializes the PDU Router module.
+ * \brief   PDU ルータモジュールを初期化する。
  *
- * \details Validates all RX routing paths and stores the post-build
- *          configuration pointer (AUTOSAR SWS_PduR_00119). Logs the configured
- *          RX/TX routing table entries for diagnostic purposes.
- *          Initialization is aborted if any RX path has no destinations.
+ * \details すべての RX ルーティングパスを検証し、ポストビルド設定ポインタを
+ *          保存する (AUTOSAR SWS_PduR_00119)。
+ *          TX/RX ルーティングテーブルの内容をログ出力する。
+ *          いずれかの RX パスに転送先がない場合は初期化を中断する。
  *
- * \param[in]  ConfigPtr  Pointer to the post-build PduR configuration.
- *                        Must not be NULL.
+ * \param[in]  ConfigPtr  PduR ポストビルド設定へのポインタ。NULL 禁止。
  *
- * \pre        CanIf_Init() must have been called successfully.
+ * \pre        CanIf_Init() が正常に完了していること。
  *
  * \ServiceID      {0x00}
  * \Reentrancy     {Non Reentrant}
@@ -90,23 +89,21 @@ void PduR_Init(const PduR_PBConfigType* ConfigPtr)
 }
 
 /**
- * \brief   Routes a received PDU from CanIf to all configured upper layers.
+ * \brief   CanIf から受信した PDU をすべての上位層へルーティングする。
  *
- * \details Called indirectly by CanIf via the macro
- *          `#define PduR_CanIfRxIndication PduR_ComRxIndication`
- *          defined in PduR_CanIf.h (AUTOSAR SWS_PduR_00369).
- *          Searches the RX routing table for a path matching RxPduId and
- *          invokes every configured destination's RxIndFct callback
- *          (multicast). If no matching path is found, the PDU is discarded.
+ * \details PduR_CanIf.h の `#define PduR_CanIfRxIndication PduR_ComRxIndication`
+ *          を経由して CanIf から間接的に呼び出される (AUTOSAR SWS_PduR_00369)。
+ *          RxPduId に一致する RX ルーティングパスを検索し、設定された
+ *          すべての転送先の RxIndFct コールバックを呼び出す（マルチキャスト）。
+ *          一致するパスが存在しない場合は PDU を破棄する。
  *
- * \param[in]  RxPduId     Source PDU ID assigned by CanIf. Used to look up
- *                         the RX routing path.
- * \param[in]  PduInfoPtr  Pointer to the received PDU data and length.
- *                         Must not be NULL.
+ * \param[in]  RxPduId     CanIf が割り当てた送信元 PDU ID。
+ *                         RX ルーティングパスの検索に使用する。
+ * \param[in]  PduInfoPtr  受信 PDU のデータと長さへのポインタ。NULL 禁止。
  *
- * \pre        PduR_Init() must have been called successfully.
- * \note       Invoked via #define alias PduR_CanIfRxIndication; do not call
- *             PduR_ComRxIndication directly from application code.
+ * \pre        PduR_Init() が正常に完了していること。
+ * \note       アプリケーションコードから PduR_ComRxIndication を直接呼び出さず、
+ *             #define エイリアスの PduR_CanIfRxIndication 経由で使用すること。
  *
  * \ServiceID      {0x10}
  * \Reentrancy     {Reentrant}
@@ -148,23 +145,19 @@ void PduR_ComRxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
 }
 
 /**
- * \brief   Forwards a TX confirmation from CanIf to the upper layer.
+ * \brief   CanIf からの TX 送信完了通知を上位層へ転送する。
  *
- * \details Called by CanIf after a CAN frame has been successfully transmitted.
- *          Searches the TX routing table for a path matching TxPduId and
- *          invokes the configured upper-layer confirmation callback
- *          (AUTOSAR SWS_PduR_00365).
+ * \details CAN フレームの送信完了後に CanIf から呼び出される。
+ *          TxPduId に一致する TX ルーティングパスを検索し、設定された
+ *          上位層の確認コールバックを呼び出す (AUTOSAR SWS_PduR_00365)。
  *
- * \param[in]  TxPduId  PDU ID of the confirmed transmission, as assigned by
- *                      CanIf. Used to look up the TX routing path.
- * \param[in]  result   Transmission result from CanIf.
- *                      E_OK = success, E_NOT_OK = failure.
- *                      Currently unused; reserved for future TP support.
+ * \param[in]  TxPduId  送信が完了した PDU の ID（CanIf 名前空間）。
+ *                      TX ルーティングパスの検索に使用する。
+ * \param[in]  result   CanIf からの送信結果。
+ *                      E_OK = 成功、E_NOT_OK = 失敗。
+ *                      上位層（COM）の TxConfirmation へそのまま転送する。
  *
- * \pre        PduR_Init() must have been called successfully.
- * \note       The result parameter is accepted but not forwarded to the upper
- *             layer because Com_TxConfirmation() does not take a result
- *             argument per SWS_COM specification.
+ * \pre        PduR_Init() が正常に完了していること。
  *
  * \ServiceID      {0x11}
  * \Reentrancy     {Reentrant}
@@ -172,7 +165,6 @@ void PduR_ComRxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
  */
 void PduR_CanIfTxConfirmation(PduIdType TxPduId, Std_ReturnType result)
 {
-
     if (PduR_ConfigPtr == NULL)
         return;
 
@@ -201,24 +193,24 @@ void PduR_CanIfTxConfirmation(PduIdType TxPduId, Std_ReturnType result)
 }
 
 /**
- * \brief   Requests transmission of a PDU from an upper layer via CanIf.
+ * \brief   上位層からの PDU 送信要求を CanIf へ転送する。
  *
- * \details Called by COM or other upper layers to transmit a PDU. Searches
- *          the TX routing table for a path matching SrcPduId and forwards
- *          the request to CanIf_Transmit() (AUTOSAR SWS_PduR_00109).
- *          Returns E_NOT_OK immediately if no matching path exists.
+ * \details COM 等の上位層から PDU 送信を要求された際に呼び出される。
+ *          SrcPduId に一致する TX ルーティングパスを検索し、
+ *          CanIf_Transmit() へ転送する (AUTOSAR SWS_PduR_00109)。
+ *          一致するパスが存在しない場合は即座に E_NOT_OK を返す。
  *
- * \param[in]  SrcPduId    PDU ID of the upper-layer PDU to transmit. Used to
- *                         look up the TX routing path.
- * \param[in]  PduInfoPtr  Pointer to the PDU data and length to transmit.
- *                         Must not be NULL.
+ * \param[in]  SrcPduId    送信する上位層 PDU の ID。
+ *                         TX ルーティングパスの検索に使用する。
+ * \param[in]  PduInfoPtr  送信するデータと長さへのポインタ。NULL 禁止。
  *
- * \retval  E_OK      PDU was forwarded to CanIf_Transmit() successfully.
- * \retval  E_NOT_OK  PduR not initialized, PduInfoPtr is NULL, no matching
- *                    TX routing path found, or CanIf_Transmit() failed.
+ * \retval  E_OK      PDU が CanIf_Transmit() に正常に転送された。
+ * \retval  E_NOT_OK  PduR 未初期化、PduInfoPtr が NULL、
+ *                    一致する TX ルーティングパスなし、
+ *                    または CanIf_Transmit() が失敗した。
  *
- * \pre        PduR_Init() must have been called successfully.
- * \pre        The CAN controller must be in CAN_CS_STARTED state.
+ * \pre        PduR_Init() が正常に完了していること。
+ * \pre        CAN コントローラが CAN_CS_STARTED 状態であること。
  *
  * \ServiceID      {0x49}
  * \Reentrancy     {Reentrant}

@@ -1,3 +1,16 @@
+/**
+ * \file    Rte.c
+ * \brief   ランタイム環境 (AUTOSAR SWS_RTE 準拠)
+ * \details SW-Component (SW-C) と BSW の COM モジュール間のデータ交換を
+ *          仲介する AUTOSAR RTE API 層を実装する。
+ *          型付きの Read/Write ポートアクセサと、Arduino の millis() タイマで
+ *          駆動するシンプルな Runnable スケジューラを提供する。
+ *          AUTOSAR 4.3.1 SWS_RTE の API 命名規則
+ *          (Rte_Read_<p>_<o> / Rte_Write_<p>_<o>) に準拠する。
+ *          シングルインスタンス SW-C かつトランスフォーマチェーン不使用のため、
+ *          オプション引数 Rte_Instance / Rte_TransformerError は省略している。
+ */
+
 #include "Rte.h"
 #include "Com.h"
 
@@ -9,35 +22,154 @@ extern unsigned long millis(void);
 #define RTE_SIGNAL_ENGINE_ON_FLAG  ((Com_SignalIdType)2)
 #define RTE_SIGNAL_ENGINE_STATE    ((Com_SignalIdType)3)
 
-/* SW-C の Runnable 宣言（App_EngineManager.c が定義） */
+/* App_EngineManager.c が定義する SW-C Runnable の前方宣言 */
 extern void App_EngineManager_Run(void);
 
+/**
+ * \brief   SpeedSensor 要求ポートから EngineSpeed シグナルを読み取る。
+ *
+ * \details Com_ReceiveSignal() へ委譲し、COM の RX I-PDU バッファから
+ *          EngineSpeed シグナルを呼び出し元変数へアンパックする
+ *          (AUTOSAR SWS_RTE の Rte_Read_<p>_<o> パターン)。
+ *
+ * \param[out] data  エンジン回転数を受け取る変数へのポインタ。NULL 禁止。
+ *                   E_OK が返された場合のみ有効な値が格納される。
+ *
+ * \retval  E_OK      COM バッファからシグナルを正常に読み取った。
+ * \retval  E_NOT_OK  COM 未初期化またはシグナル ID が見つからない。
+ *
+ * \pre        Com_Init() と Com_RxIndication() が呼ばれていること。
+ *
+ * \ServiceID      {0xF2}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
 Std_ReturnType Rte_Read_SpeedSensor_EngineSpeed(EngineSpeed_t* data)
 {
     return Com_ReceiveSignal(RTE_SIGNAL_ENGINE_SPEED, data);
 }
 
+/**
+ * \brief   TempSensor 要求ポートから CoolantTemp シグナルを読み取る。
+ *
+ * \details Com_ReceiveSignal() へ委譲し、COM の RX I-PDU バッファから
+ *          CoolantTemp シグナルを呼び出し元変数へアンパックする
+ *          (AUTOSAR SWS_RTE の Rte_Read_<p>_<o> パターン)。
+ *
+ * \param[out] data  冷却水温を受け取る変数へのポインタ。NULL 禁止。
+ *
+ * \retval  E_OK      COM バッファからシグナルを正常に読み取った。
+ * \retval  E_NOT_OK  COM 未初期化またはシグナル ID が見つからない。
+ *
+ * \pre        Com_Init() と Com_RxIndication() が呼ばれていること。
+ *
+ * \ServiceID      {0xF3}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
 Std_ReturnType Rte_Read_TempSensor_CoolantTemp(CoolantTemp_t* data)
 {
     return Com_ReceiveSignal(RTE_SIGNAL_COOLANT_TEMP, data);
 }
 
+/**
+ * \brief   EngineStatus 要求ポートから EngineOnFlag シグナルを読み取る。
+ *
+ * \details Com_ReceiveSignal() へ委譲し、COM の RX I-PDU バッファから
+ *          EngineOnFlag シグナルを呼び出し元変数へアンパックする
+ *          (AUTOSAR SWS_RTE の Rte_Read_<p>_<o> パターン)。
+ *
+ * \param[out] data  エンジン起動フラグを受け取る変数へのポインタ
+ *                   （0 = 停止、1 = 起動）。NULL 禁止。
+ *
+ * \retval  E_OK      COM バッファからシグナルを正常に読み取った。
+ * \retval  E_NOT_OK  COM 未初期化またはシグナル ID が見つからない。
+ *
+ * \pre        Com_Init() と Com_RxIndication() が呼ばれていること。
+ *
+ * \ServiceID      {0xF4}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
 Std_ReturnType Rte_Read_EngineStatus_EngineOnFlag(EngineOnFlag_t* data)
 {
     return Com_ReceiveSignal(RTE_SIGNAL_ENGINE_ON_FLAG, data);
 }
 
+/**
+ * \brief   EngineStatus 提供ポートへ EngineState シグナルを書き込む。
+ *
+ * \details Com_SendSignal() 経由で EngineState 値を COM の TX I-PDU バッファへ
+ *          パックする (AUTOSAR SWS_RTE の Rte_Write_<p>_<o> パターン)。
+ *          I-PDU は即座には送信されない。
+ *          送信するには Rte_TriggerTransmit() を呼び出すこと。
+ *
+ * \param[in]  state  書き込むエンジン状態
+ *                    (OFF / STARTING / RUNNING / FAULT)。
+ *
+ * \retval  E_OK      COM の TX バッファへ正常にパックした。
+ * \retval  E_NOT_OK  COM 未初期化またはシグナル ID が見つからない。
+ *
+ * \pre        Com_Init() が正常に完了していること。
+ *
+ * \ServiceID      {0xF5}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
 Std_ReturnType Rte_Write_EngineStatus_EngineState(EngineState_t state)
 {
     uint8 val = (uint8)state;
     return Com_SendSignal(RTE_SIGNAL_ENGINE_STATE, &val);
 }
 
+/**
+ * \brief   COM の TX I-PDU を即座に送信する。
+ *
+ * \details COM モジュールへの直接依存なしに SW-C が CAN フレーム送信を
+ *          要求できるよう、Com_TriggerIPDUSend() をラップする。
+ *          この関数はプロジェクト固有の RTE 拡張であり、AUTOSAR 標準の
+ *          Rte_Trigger_<p>_<o> API（SW-C 内部イベントトリガ用）とは
+ *          異なる目的で使用する。
+ *
+ * \param[in]  IPduId  送信する I-PDU の COM ハンドル。
+ *
+ * \retval  E_OK      I-PDU が PduR および CanIf へ正常に転送された。
+ * \retval  E_NOT_OK  COM 未初期化、I-PDU が見つからない、
+ *                    または下位層の送信が失敗した。
+ *
+ * \pre        Com_Init() が正常に完了していること。
+ * \pre        送信前に Rte_Write_EngineStatus_EngineState() で
+ *             TX バッファへ値を設定しておくこと。
+ * \note       AUTOSAR 非標準 API。App_EngineManager が COM を
+ *             直接呼び出さないようにするために追加した。
+ *
+ * \ServiceID      {0xF6}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
 Std_ReturnType Rte_TriggerTransmit(Com_IPduIdType IPduId)
 {
     return Com_TriggerIPDUSend(IPduId);
 }
 
+/**
+ * \brief   スケジュール済みの SW-C Runnable を経過時間に基づいて呼び出す。
+ *
+ * \details Arduino の millis() カウンタを確認し、3000 ms ごとに
+ *          App_EngineManager_Run() を呼び出す。
+ *          AUTOSAR OS の周期タスクスケジューリング機構を、
+ *          Arduino UNO のベアメタル環境向けにシンプルなポーリングループで
+ *          代替する。Arduino の loop() 関数から呼び出すこと。
+ *
+ * \pre        Arduino ランタイムが初期化済みであること（setup() が返った後）。
+ * \note       AUTOSAR 非標準 API。完全な AUTOSAR OS 環境では、
+ *             Runnable は設定された周期で OsTask アクティベーションにより
+ *             起動される。ここでは 3 秒周期をハードコードしている。
+ *
+ * \ServiceID      {0xF7}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
 void Rte_ScheduleRunnables(void)
 {
     static unsigned long lastRunTime = 0UL;

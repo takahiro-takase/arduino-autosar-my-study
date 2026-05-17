@@ -1,12 +1,11 @@
 /**
  * \file    Com.c
- * \brief   Communication Manager (AUTOSAR SWS_COM inspired)
- * \details Implements the AUTOSAR COM API layer for signal-based communication.
- *          Manages RX/TX I-PDU buffers and performs signal packing/unpacking
- *          with configurable bit endianness (Motorola/Intel).
- *          Conforms to the AUTOSAR 4.3.1 SWS_COM specification where noted,
- *          with simplifications for Arduino UNO hardware (fixed buffer counts,
- *          no deadline monitoring, no update bits).
+ * \brief   通信マネージャ (AUTOSAR SWS_COM 準拠)
+ * \details シグナルベースの通信を行う AUTOSAR COM API 層を実装する。
+ *          RX/TX I-PDU バッファを管理し、設定可能なビットエンディアン
+ *          (Motorola/Intel) でシグナルのパック・アンパックを行う。
+ *          AUTOSAR 4.3.1 SWS_COM 仕様に準拠し、Arduino UNO 向けに
+ *          バッファ数固定・締め切り監視なし・更新ビットなしに簡略化している。
  */
 
 #include "Com.h"
@@ -22,19 +21,18 @@ static uint8 Com_RxBuffer[COM_RX_IPDU_MAX][COM_IPDU_MAX_DLC];
 static uint8 Com_TxBuffer[COM_TX_IPDU_MAX][COM_IPDU_MAX_DLC];
 
 /**
- * \brief   Initializes the COM module and clears all I-PDU buffers.
+ * \brief   COM モジュールを初期化し、すべての I-PDU バッファをクリアする。
  *
- * \details Stores the configuration pointer, zero-initializes all RX and TX
- *          I-PDU buffers, and logs the signal configuration table
- *          (AUTOSAR SWS_Com_00864). Initialization is aborted if the
- *          RX or TX I-PDU count exceeds the compiled-in maximum.
+ * \details 設定ポインタを保存し、RX/TX の全 I-PDU バッファをゼロクリアして
+ *          シグナル設定テーブルをログ出力する (AUTOSAR SWS_Com_00864)。
+ *          RX または TX の I-PDU 数がコンパイル時上限を超える場合は
+ *          初期化を中断する。
  *
- * \param[in]  config  Pointer to the COM configuration structure.
- *                     Must not be NULL.
+ * \param[in]  config  COM 設定構造体へのポインタ。NULL 禁止。
  *
- * \pre        PduR_Init() must have been called successfully.
- * \note       COM_RX_IPDU_MAX and COM_TX_IPDU_MAX are compile-time constants
- *             fixed at 1. Configurations with more I-PDUs are rejected.
+ * \pre        PduR_Init() が正常に完了していること。
+ * \note       COM_RX_IPDU_MAX / COM_TX_IPDU_MAX はコンパイル時定数で 1 に固定。
+ *             それを超える設定は拒否される。
  *
  * \ServiceID      {0x00}
  * \Reentrancy     {Non Reentrant}
@@ -95,20 +93,19 @@ void Com_Init(const Com_ConfigType* config)
 }
 
 /**
- * \brief   Copies a received I-PDU payload into the internal RX buffer.
+ * \brief   受信した I-PDU ペイロードを内部 RX バッファへコピーする。
  *
- * \details Called by PduR when a CAN frame is received. Searches the RX I-PDU
- *          table for an entry matching RxPduId (PduR namespace), copies the
- *          payload bytes into the corresponding RX buffer slot, and logs the
- *          raw data (AUTOSAR SWS_Com_00442).
- *          After this call, signal values are accessible via Com_ReceiveSignal().
+ * \details PduR がフレームを受信した際に呼び出される。
+ *          RxPduId（PduR 名前空間）に一致する RX I-PDU エントリを検索し、
+ *          ペイロードを対応する RX バッファスロットへコピーしてログ出力する
+ *          (AUTOSAR SWS_Com_00442)。
+ *          この呼び出し後、Com_ReceiveSignal() でシグナル値を取得できる。
  *
- * \param[in]  RxPduId     PduR-layer PDU ID of the received I-PDU. Used to
- *                         look up the matching Com_IPduConfigType entry.
- * \param[in]  PduInfoPtr  Pointer to the received PDU data and length.
- *                         Must not be NULL.
+ * \param[in]  RxPduId     受信 I-PDU の PduR 層 PDU ID。
+ *                         Com_IPduConfigType エントリの検索に使用する。
+ * \param[in]  PduInfoPtr  受信 PDU のデータと長さへのポインタ。NULL 禁止。
  *
- * \pre        Com_Init() must have been called successfully.
+ * \pre        Com_Init() が正常に完了していること。
  *
  * \ServiceID      {0x10}
  * \Reentrancy     {Non Reentrant}
@@ -150,23 +147,23 @@ void Com_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
 }
 
 /* -----------------------------------------------------------------------
- * Internal helpers — not part of the public AUTOSAR COM API
+ * 内部ヘルパー — AUTOSAR COM 公開 API の範囲外
  * ----------------------------------------------------------------------- */
 
 /**
- * \brief   Extracts a bit field from a byte buffer using network bit ordering.
+ * \brief   ネットワークビット順でバイトバッファからビットフィールドを取り出す。
  *
- * \details Bit numbering: bit 0 = MSB of byte[0], bit 7 = LSB of byte[0],
- *          bit 8 = MSB of byte[1], ... (network/Motorola convention).
- *          For COM_BIG_ENDIAN the first bit read becomes the MSB of the
- *          result; for COM_LITTLE_ENDIAN the first bit read is the LSB.
+ * \details ビット番号の定義: bit 0 = byte[0] の MSB、bit 7 = byte[0] の LSB、
+ *          bit 8 = byte[1] の MSB、...（ネットワーク / Motorola 順）。
+ *          COM_BIG_ENDIAN では最初に読んだビットが結果の MSB になり、
+ *          COM_LITTLE_ENDIAN では最初に読んだビットが LSB になる。
  *
- * \param[in]  buf      Byte buffer to read from.
- * \param[in]  bitPos   Start bit position (network bit order).
- * \param[in]  bitSize  Number of bits to extract (1–32).
- * \param[in]  endian   Bit significance order (COM_BIG_ENDIAN / COM_LITTLE_ENDIAN).
+ * \param[in]  buf      読み取り元バイトバッファ。
+ * \param[in]  bitPos   開始ビット位置（ネットワークビット順）。
+ * \param[in]  bitSize  取り出すビット数（1〜32）。
+ * \param[in]  endian   ビット重みの方向 (COM_BIG_ENDIAN / COM_LITTLE_ENDIAN)。
  *
- * \return  Unpacked signal value as uint32.
+ * \return  アンパックしたシグナル値（uint32）。
  *
  * \ServiceID      {0xF0}
  * \Reentrancy     {Reentrant}
@@ -191,17 +188,17 @@ static uint32 Com_UnpackSignal(const uint8* buf,
 }
 
 /**
- * \brief   Packs a value into a bit field of a byte buffer using network bit ordering.
+ * \brief   ネットワークビット順でバイトバッファのビットフィールドに値を書き込む。
  *
- * \details Writes bitSize bits of value into buf starting at bitPos using the
- *          same network bit numbering as Com_UnpackSignal(). Only the target
- *          bits are modified; all other bits in buf are preserved.
+ * \details Com_UnpackSignal() と同じネットワークビット番号定義に従い、
+ *          bitPos から bitSize ビット分の value を buf へ書き込む。
+ *          対象ビット以外の buf の内容は保持される。
  *
- * \param[in,out] buf      Byte buffer to write into.
- * \param[in]     bitPos   Start bit position (network bit order).
- * \param[in]     bitSize  Number of bits to write (1–32).
- * \param[in]     endian   Bit significance order (COM_BIG_ENDIAN / COM_LITTLE_ENDIAN).
- * \param[in]     value    Signal value to pack; only the lower bitSize bits are used.
+ * \param[in,out] buf      書き込み先バイトバッファ。
+ * \param[in]     bitPos   開始ビット位置（ネットワークビット順）。
+ * \param[in]     bitSize  書き込むビット数（1〜32）。
+ * \param[in]     endian   ビット重みの方向 (COM_BIG_ENDIAN / COM_LITTLE_ENDIAN)。
+ * \param[in]     value    パックするシグナル値。下位 bitSize ビットのみ使用する。
  *
  * \ServiceID      {0xF1}
  * \Reentrancy     {Reentrant}
@@ -228,29 +225,30 @@ static void Com_PackSignal(uint8* buf,
 }
 
 /**
- * \brief   Extracts a signal value from the RX I-PDU buffer.
+ * \brief   RX I-PDU バッファからシグナル値を取り出す。
  *
- * \details Unpacks the signal identified by SignalId from the internal RX
- *          buffer using the bit position, size, and endianness defined in the
- *          signal configuration table (AUTOSAR SWS_Com_00194).
- *          The unpacked value is always written as a 4-byte little-endian
- *          integer into SignalDataPtr regardless of BitSize.
+ * \details シグナル設定テーブルの SignalId に一致するエントリを検索し、
+ *          ビット位置・サイズ・エンディアンに従って内部 RX バッファから
+ *          アンパックする (AUTOSAR SWS_Com_00194)。
+ *          アンパックした値は BitSize にかかわらず、常に 4 バイトの
+ *          リトルエンディアン整数として SignalDataPtr へ書き込む。
  *
- * \param[in]  SignalId      ID of the signal to read. Must match an entry
- *                           in the signal configuration table.
- * \param[out] SignalDataPtr Pointer to the output buffer. Must be at least
- *                           4 bytes. Written as uint32 in little-endian order.
- *                           Must not be NULL.
+ * \param[in]  SignalId      読み取るシグナルの ID。
+ *                           シグナル設定テーブルのエントリと一致すること。
+ * \param[out] SignalDataPtr 出力バッファへのポインタ。4 バイト以上必要。
+ *                           リトルエンディアン uint32 として書き込まれる。
+ *                           NULL 禁止。
  *
- * \retval  E_OK      Signal was found and value was written to SignalDataPtr.
- * \retval  E_NOT_OK  COM not initialized, SignalDataPtr is NULL, or SignalId
- *                    not found in the configuration table.
+ * \retval  E_OK      シグナルが見つかり、SignalDataPtr へ値を書き込んだ。
+ * \retval  E_NOT_OK  COM 未初期化、SignalDataPtr が NULL、
+ *                    またはシグナル設定テーブルに SignalId が存在しない。
  *
- * \pre        Com_Init() must have been called successfully.
- * \pre        Com_RxIndication() must have been called at least once for the
- *             I-PDU containing this signal.
- * \note       Return type is uint8 per SWS_Com_00194. E_OK / E_NOT_OK values
- *             (0x00 / 0x01) are compatible with Std_ReturnType used by the RTE.
+ * \pre        Com_Init() が正常に完了していること。
+ * \pre        このシグナルが属する I-PDU で Com_RxIndication() が
+ *             少なくとも 1 回呼ばれていること。
+ * \note       戻り値型は SWS_Com_00194 に従い uint8。
+ *             E_OK / E_NOT_OK の値（0x00 / 0x01）は RTE が使う
+ *             Std_ReturnType と互換性がある。
  *
  * \ServiceID      {0x0B}
  * \Reentrancy     {Reentrant}
@@ -283,29 +281,29 @@ uint8 Com_ReceiveSignal(Com_SignalIdType SignalId, void* SignalDataPtr)
 }
 
 /**
- * \brief   Packs a signal value into the TX I-PDU buffer.
+ * \brief   TX I-PDU バッファへシグナル値をパックする。
  *
- * \details Writes the signal value from SignalDataPtr into the internal TX
- *          buffer at the bit position and with the endianness defined in the
- *          signal configuration table (AUTOSAR SWS_Com_00171).
- *          The value is read as a 4-byte little-endian integer from
- *          SignalDataPtr regardless of BitSize; only the relevant bits are
- *          packed into the TX buffer.
- *          The I-PDU is not transmitted immediately; call Com_TriggerIPDUSend()
- *          to trigger transmission.
+ * \details シグナル設定テーブルの SignalId に一致するエントリを検索し、
+ *          ビット位置・サイズ・エンディアンに従って内部 TX バッファへ
+ *          パックする (AUTOSAR SWS_Com_00171)。
+ *          SignalDataPtr から 4 バイトのリトルエンディアン整数として
+ *          値を読み取り、BitSize に関係なく該当ビットのみ書き換える。
+ *          I-PDU は即座には送信されない。送信するには
+ *          Com_TriggerIPDUSend() を呼び出すこと。
  *
- * \param[in]  SignalId      ID of the signal to write. Must match an entry
- *                           in the signal configuration table.
- * \param[in]  SignalDataPtr Pointer to the signal value. Must be at least
- *                           4 bytes in little-endian order. Must not be NULL.
+ * \param[in]  SignalId      書き込むシグナルの ID。
+ *                           シグナル設定テーブルのエントリと一致すること。
+ * \param[in]  SignalDataPtr シグナル値へのポインタ。4 バイト以上で
+ *                           リトルエンディアン順。NULL 禁止。
  *
- * \retval  E_OK      Signal was found and value was packed into the TX buffer.
- * \retval  E_NOT_OK  COM not initialized, SignalDataPtr is NULL, or SignalId
- *                    not found in the configuration table.
+ * \retval  E_OK      シグナルが見つかり、TX バッファへ値をパックした。
+ * \retval  E_NOT_OK  COM 未初期化、SignalDataPtr が NULL、
+ *                    またはシグナル設定テーブルに SignalId が存在しない。
  *
- * \pre        Com_Init() must have been called successfully.
- * \note       Return type is uint8 per SWS_Com_00171. E_OK / E_NOT_OK values
- *             (0x00 / 0x01) are compatible with Std_ReturnType used by the RTE.
+ * \pre        Com_Init() が正常に完了していること。
+ * \note       戻り値型は SWS_Com_00171 に従い uint8。
+ *             E_OK / E_NOT_OK の値（0x00 / 0x01）は RTE が使う
+ *             Std_ReturnType と互換性がある。
  *
  * \ServiceID      {0x0A}
  * \Reentrancy     {Reentrant}
@@ -337,23 +335,21 @@ uint8 Com_SendSignal(Com_SignalIdType SignalId, const void* SignalDataPtr)
 }
 
 /**
- * \brief   Triggers immediate transmission of a TX I-PDU via PduR.
+ * \brief   TX I-PDU を PduR 経由で即座に送信する。
  *
- * \details Looks up the TX I-PDU configuration by PduId, builds a PduInfoType
- *          pointing to the internal TX buffer, and calls PduR_Transmit()
- *          (AUTOSAR SWS_Com_00725). Logs the TX buffer contents before
- *          forwarding to PduR.
+ * \details PduId で TX I-PDU 設定を検索し、内部 TX バッファを指す
+ *          PduInfoType を構築して PduR_Transmit() を呼び出す
+ *          (AUTOSAR SWS_Com_00725)。転送前に TX バッファの内容をログ出力する。
  *
- * \param[in]  PduId  COM I-PDU handle of the I-PDU to send. Must match an
- *                    IPduId in the TX I-PDU configuration table.
+ * \param[in]  PduId  送信する I-PDU の COM ハンドル。
+ *                    TX I-PDU 設定テーブルの IPduId と一致すること。
  *
- * \retval  E_OK      I-PDU was forwarded to PduR_Transmit() successfully.
- * \retval  E_NOT_OK  COM not initialized, PduId not found, or
- *                    PduR_Transmit() returned E_NOT_OK.
+ * \retval  E_OK      I-PDU が PduR_Transmit() に正常に転送された。
+ * \retval  E_NOT_OK  COM 未初期化、PduId が見つからない、
+ *                    または PduR_Transmit() が失敗した。
  *
- * \pre        Com_Init() must have been called successfully.
- * \pre        Signal values must have been set via Com_SendSignal() before
- *             calling this function.
+ * \pre        Com_Init() が正常に完了していること。
+ * \pre        送信前に Com_SendSignal() で TX バッファへ値を設定しておくこと。
  *
  * \ServiceID      {0x17}
  * \Reentrancy     {Non Reentrant}
@@ -395,21 +391,20 @@ Std_ReturnType Com_TriggerIPDUSend(PduIdType PduId)
 }
 
 /**
- * \brief   Notifies COM that a TX I-PDU was successfully transmitted.
+ * \brief   TX I-PDU の送信完了を COM へ通知する。
  *
- * \details Called by PduR after CanIf confirms a successful CAN frame
- *          transmission (AUTOSAR SWS_Com_00695). In this implementation
- *          the notification is logged only; no retry or deadline logic is
- *          performed.
+ * \details CAN フレームの送信完了後に PduR から呼び出される
+ *          (AUTOSAR SWS_Com_00695)。
+ *          この実装ではログ出力のみ行い、リトライや締め切り処理は行わない。
  *
- * \param[in]  TxPduId  PduR-layer PDU ID of the confirmed TX I-PDU.
- * \param[in]  result   Transmission result forwarded from CanIf.
- *                      E_OK = success, E_NOT_OK = failure.
- *                      Currently unused; reserved for future error handling.
+ * \param[in]  TxPduId  送信が完了した TX I-PDU の PduR 層 PDU ID。
+ * \param[in]  result   CanIf から転送された送信結果。
+ *                      E_OK = 成功、E_NOT_OK = 失敗。
+ *                      TX リトライやエラーカウンタを実装しないため未使用。
  *
- * \pre        Com_Init() must have been called successfully.
- * \note       result is accepted but not acted upon because this implementation
- *             does not support TX retry or error counters.
+ * \pre        Com_Init() が正常に完了していること。
+ * \note       result を上位層へ転送しない理由は、SWS_COM 仕様の
+ *             Com_TxConfirmation が result 引数を持たないため。
  *
  * \ServiceID      {0x11}
  * \Reentrancy     {Non Reentrant}
