@@ -14,6 +14,7 @@
 #include "CanIf.h"
 #include "CanIf_PBCfg.h"
 #include "PduR.h"
+#include "PduR_PBCfg.h"
 #include "PduR_CanIf.h"
 #include "Com.h"
 #include "Rte.h"
@@ -46,34 +47,6 @@ static const Com_ConfigType ComConfig = {
 };
 
 // -------------------------------------------------------
-// DCM 層スタブ
-// -------------------------------------------------------
-static void Diag_RxIndication(PduIdType PduId, const PduInfoType* PduInfoPtr)
-{
-    Serial.print("[Diag_RxIndication] first_byte=0x");
-    Serial.println(PduInfoPtr->SduDataPtr[0], HEX);
-    (void)PduId;
-}
-
-// -------------------------------------------------------
-// CanDrv / CanIf / PduR 設定
-// -------------------------------------------------------
-static const PduR_RxDestType PduR_RxDests_Path0[] = {
-    { .Module = PDUR_MODULE_COM, .DestPduId = 0, .RxIndFct = Com_RxIndication },
-    { .Module = PDUR_MODULE_DCM, .DestPduId = 0, .RxIndFct = Diag_RxIndication }
-};
-static const PduR_RxRoutingPathType PduR_RxPaths[] = {
-    { .SrcPduId = 0, .Dests = PduR_RxDests_Path0, .DestCount = 2 }
-};
-static const PduR_TxRoutingPathType PduR_TxPaths[] = {
-    { .SrcPduId = 0, .CanIfTxPduId = 0, .ConfDestPduId = 0, .ConfFct = Com_TxConfirmation }
-};
-static const PduR_PBConfigType PduRConfig = {
-    .RxPaths = PduR_RxPaths, .RxPathCount = 1,
-    .TxPaths = PduR_TxPaths, .TxPathCount = 1
-};
-
-// -------------------------------------------------------
 // Arduino setup()
 // -------------------------------------------------------
 void setup()
@@ -83,7 +56,7 @@ void setup()
     Can_Init(&Can_Config);
     Can_SetControllerMode(0U, CAN_T_START);
     CanIf_Init(&CanIf_Config);
-    PduR_Init(&PduRConfig);
+    PduR_Init(&PduR_Config);
     Com_Init(&ComConfig);
     App_EngineManager_Init();
 }
