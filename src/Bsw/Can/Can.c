@@ -1,9 +1,10 @@
 /**
  * \file    Can.c
- * \brief   CAN Driver (AUTOSAR SWS_Can inspired)
- * \details Implements the AUTOSAR CanDrv API layer using MCP2515 via
- *          Mcp2515_Wrapper. Conforms to the AUTOSAR 4.x SWS_Can specification
- *          where noted, with simplifications for Arduino UNO hardware.
+ * \brief   CAN ドライバ (AUTOSAR SWS_Can 準拠)
+ * \details AUTOSAR CanDrv API を MCP2515 上に実装する。
+ *          Mcp2515_Wrapper 経由でハードウェアを操作し、
+ *          AUTOSAR 4.x SWS_Can 仕様に準拠する。
+ *          Arduino UNO 向けに一部を簡略化している。
  */
 
 #include "Can.h"
@@ -11,26 +12,26 @@
 #include "CanIf.h"
 #include "Det.h"
 
-/* Arduino wiring.c (C linkage) */
+/* Arduino wiring.c（C リンケージ）で定義 */
 extern int digitalRead(uint8 pin);
 
 static const Can_ConfigType*   Can_ConfigPtr = NULL;
 static Can_ControllerStateType CanState      = CAN_CS_UNINIT;
 
 /**
- * \brief   Initializes the CAN driver.
+ * \brief   CAN ドライバを初期化する。
  *
- * \details Initializes the MCP2515 hardware, configures all hardware
- *          acceptance filters/masks, and places the controller in
- *          CAN_CS_STOPPED state (AUTOSAR SWS_Can_00246).
- *          Halts execution on initialization failure.
+ * \details MCP2515 ハードウェアを初期化し、受信フィルタ・マスクを
+ *          すべて設定したうえでコントローラを CAN_CS_STOPPED 状態に
+ *          移行する (AUTOSAR SWS_Can_00246)。
+ *          初期化に失敗した場合は無限ループで停止する。
  *
- * \param[in]  Config  Pointer to the CAN driver configuration structure.
- *                     Must not be NULL.
+ * \param[in]  Config  CAN ドライバ設定構造体へのポインタ。
+ *                     NULL 禁止。
  *
- * \pre        SPI peripheral must be initialized before this call.
- * \note       Must be called once at system startup before any other
- *             Can_* API.
+ * \pre        SPI ペリフェラルがこの呼び出しより前に初期化済みであること。
+ * \note       他のすべての Can_* API より先に、システム起動時に
+ *             1 回だけ呼び出すこと。
  *
  * \ServiceID      {0x00}
  * \Reentrancy     {Non Reentrant}
@@ -65,21 +66,22 @@ void Can_Init(const Can_ConfigType* Config)
 }
 
 /**
- * \brief   Performs a CAN controller state transition.
+ * \brief   CAN コントローラの状態遷移を要求する。
  *
- * \details Maps the AUTOSAR state transition to the corresponding MCP2515
- *          operating mode (AUTOSAR SWS_Can_00017, SWS_Can_00230):
- *          - CAN_T_START  : CAN_CS_STOPPED -> CAN_CS_STARTED (MCP_NORMAL)
- *          - CAN_T_STOP   : CAN_CS_STARTED -> CAN_CS_STOPPED (MCP_LISTENONLY)
- *          - CAN_T_SLEEP  : CAN_CS_STOPPED -> CAN_CS_SLEEP   (MCP_SLEEP)
- *          - CAN_T_WAKEUP : CAN_CS_SLEEP   -> CAN_CS_STOPPED (MCP_LISTENONLY)
+ * \details AUTOSAR の状態遷移を対応する MCP2515 動作モードへ
+ *          マッピングする (AUTOSAR SWS_Can_00017, SWS_Can_00230)。
+ *          - CAN_T_START  : CAN_CS_STOPPED → CAN_CS_STARTED (通常モード)
+ *          - CAN_T_STOP   : CAN_CS_STARTED → CAN_CS_STOPPED (受信専用モード)
+ *          - CAN_T_SLEEP  : CAN_CS_STOPPED → CAN_CS_SLEEP   (スリープモード)
+ *          - CAN_T_WAKEUP : CAN_CS_SLEEP   → CAN_CS_STOPPED (受信専用モード)
  *
- * \param[in]  Controller  CAN controller index. Only controller 0 is present;
- *                         other values return CAN_NOT_OK.
- * \param[in]  Transition  Requested state transition (Can_StateTransitionType).
+ * \param[in]  Controller  CAN コントローラのインデックス。
+ *                         本実装はコントローラ 0 のみ対応。
+ *                         0 以外を指定すると CAN_NOT_OK を返す。
+ * \param[in]  Transition  要求する状態遷移 (Can_StateTransitionType)。
  *
- * \return  CAN_OK      Transition applied successfully.
- * \return  CAN_NOT_OK  Invalid Controller index or unsupported Transition value.
+ * \retval  CAN_OK      遷移が正常に適用された。
+ * \retval  CAN_NOT_OK  Controller が無効、または未対応の Transition 値。
  *
  * \ServiceID      {0x03}
  * \Reentrancy     {Non Reentrant}
@@ -116,21 +118,22 @@ Can_ReturnType Can_SetControllerMode(uint8 Controller, Can_StateTransitionType T
 }
 
 /**
- * \brief   Requests transmission of a CAN frame.
+ * \brief   CAN フレームの送信を要求する。
  *
- * \details Passes the PDU to the MCP2515 transmit buffer and notifies
- *          CanIf via CanIf_TxConfirmation on success (AUTOSAR SWS_Can_00016).
- *          Returns CAN_NOT_OK immediately if the controller is not in
- *          CAN_CS_STARTED state.
+ * \details PDU を MCP2515 の送信バッファに渡し、送信成功後に
+ *          CanIf_TxConfirmation() で上位層へ通知する
+ *          (AUTOSAR SWS_Can_00016)。
+ *          コントローラが CAN_CS_STARTED 状態でない場合は
+ *          即座に CAN_NOT_OK を返す。
  *
- * \param[in]  Hth      Hardware transmit handle. Ignored in this implementation
- *                      because MCP2515 selects the TX buffer automatically.
- * \param[in]  PduInfo  Pointer to the PDU to transmit. Must not be NULL.
- *                      Members used: id, length, sdu, swPduHandle.
+ * \param[in]  Hth      ハードウェア送信ハンドル。MCP2515 が TX バッファを
+ *                      自動選択するため、この実装では使用しない。
+ * \param[in]  PduInfo  送信する PDU へのポインタ。NULL 禁止。
+ *                      使用メンバー: id, length, sdu, swPduHandle。
  *
- * \return  CAN_OK      Frame was accepted and transmitted successfully.
- * \return  CAN_NOT_OK  Controller not started, or MCP2515 transmission failed.
- * \return  CAN_BUSY    Not returned by this implementation (MCP2515 auto-retry).
+ * \retval  CAN_OK      フレームが受理され、送信に成功した。
+ * \retval  CAN_NOT_OK  コントローラ未起動、または MCP2515 送信失敗。
+ * \retval  CAN_BUSY    この実装では返さない（MCP2515 が自動リトライ）。
  *
  * \ServiceID      {0x06}
  * \Reentrancy     {Reentrant (different Hth)}
@@ -162,15 +165,16 @@ Can_ReturnType Can_Write(Can_HwHandleType Hth, const Can_PduType* PduInfo)
 }
 
 /**
- * \brief   Polling-based receive processing function.
+ * \brief   ポーリング方式で受信フレームを処理する。
  *
- * \details Checks the MCP2515 receive status register and, if a frame is
- *          available, reads it and notifies CanIf via CanIf_RxIndication
- *          (AUTOSAR SWS_Can_00108). Intended to be called periodically
- *          from the main loop or a task scheduler.
+ * \details MCP2515 の受信ステータスレジスタを確認し、フレームが
+ *          存在する場合に読み出して CanIf_RxIndication() で
+ *          上位層へ通知する (AUTOSAR SWS_Can_00108)。
+ *          メインループまたはタスクスケジューラから定期的に
+ *          呼び出すことを想定している。
  *
- * \pre        Can_Init() must have been called successfully.
- * \pre        Controller must be in CAN_CS_STARTED state.
+ * \pre        Can_Init() が正常に完了していること。
+ * \pre        コントローラが CAN_CS_STARTED 状態であること。
  *
  * \ServiceID      {0x08}
  * \Reentrancy     {Non Reentrant}
@@ -197,18 +201,18 @@ void Can_MainFunction_Read(void)
 }
 
 /**
- * \brief   Simulated interrupt service routine for MCP2515 INT pin.
+ * \brief   MCP2515 INT ピンを監視する割り込みサービスルーティン（擬似 ISR）。
  *
- * \details Polls the MCP2515 INT pin (active LOW). When asserted, reads the
- *          received frame and notifies CanIf via CanIf_RxIndication
- *          (AUTOSAR SWS_Can_00396). Called from the Arduino main loop,
- *          replacing a hardware ISR attachment.
+ * \details INT ピン（アクティブ LOW）をポーリングし、アサートされている
+ *          場合に受信フレームを読み出して CanIf_RxIndication() で
+ *          上位層へ通知する (AUTOSAR SWS_Can_00396)。
+ *          Arduino の loop() から呼び出し、ハードウェア ISR の代替として
+ *          機能する。
  *
- * \note       Non-standard AUTOSAR API. In a full AUTOSAR OS environment this
- *             would be an ISR category 2 handler registered via the OS.
- *             The INT pin number is taken from Can_ConfigType::intPin.
- *
- * \pre        Can_Init() must have been called successfully.
+ * \pre        Can_Init() が正常に完了していること。
+ * \note       AUTOSAR 標準外の API。完全な AUTOSAR OS 環境では
+ *             OS に登録された ISR カテゴリ 2 ハンドラとして実装される。
+ *             INT ピン番号は Can_ConfigType::intPin から取得する。
  *
  * \ServiceID      {0xF0}
  * \Reentrancy     {Non Reentrant}
