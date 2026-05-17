@@ -14,17 +14,17 @@ extern void App_EngineManager_Run(void);
 
 Std_ReturnType Rte_Read_SpeedSensor_EngineSpeed(EngineSpeed_t* data)
 {
-    return Com_ReceiveSignal(RTE_SIGNAL_ENGINE_SPEED, (uint8*)data);
+    return Com_ReceiveSignal(RTE_SIGNAL_ENGINE_SPEED, data);
 }
 
 Std_ReturnType Rte_Read_TempSensor_CoolantTemp(CoolantTemp_t* data)
 {
-    return Com_ReceiveSignal(RTE_SIGNAL_COOLANT_TEMP, (uint8*)data);
+    return Com_ReceiveSignal(RTE_SIGNAL_COOLANT_TEMP, data);
 }
 
 Std_ReturnType Rte_Read_EngineStatus_EngineOnFlag(EngineOnFlag_t* data)
 {
-    return Com_ReceiveSignal(RTE_SIGNAL_ENGINE_ON_FLAG, (uint8*)data);
+    return Com_ReceiveSignal(RTE_SIGNAL_ENGINE_ON_FLAG, data);
 }
 
 Std_ReturnType Rte_Write_EngineStatus_EngineState(EngineState_t state)
