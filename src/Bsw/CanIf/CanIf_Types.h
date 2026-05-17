@@ -6,20 +6,12 @@
 #include "ComStack_Types.h"
 #include "Can_GeneralTypes.h"
 
-// -------------------------------------------------------
-// 上位層（PduR / アプリ）への受信通知コールバック型
-// AUTOSAR SWS_CANIF_00056 相当
-//   RxPduId  : CanIf が上位層に渡す受信 PDU の論理 ID
-//   PduInfoPtr: 受信データ（ポインタ + 長さ）
-// -------------------------------------------------------
+/* SWS_CANIF_00056: upper-layer RX indication callback. */
 typedef void (*CanIf_RxIndicationFctType)(PduIdType RxPduId, const PduInfoType* PduInfoPtr);
 
-// -------------------------------------------------------
-// 上位層への送信完了通知コールバック型
-// AUTOSAR SWS_CANIF_00011 相当
-//   TxPduId  : 完了した送信 PDU の論理 ID
-// -------------------------------------------------------
-typedef void (*CanIf_TxConfirmationFctType)(PduIdType TxPduId);
+/* SWS_CANIF_00011: upper-layer TX confirmation callback.
+ * result: E_OK = transmitted successfully, E_NOT_OK = failed. */
+typedef void (*CanIf_TxConfirmationFctType)(PduIdType TxPduId, Std_ReturnType result);
 
 // -------------------------------------------------------
 // TX PDU 設定エントリ（テーブルの 1 行）
@@ -37,13 +29,9 @@ typedef struct
     CanIf_TxConfirmationFctType TxConfirmFct;      // 送信完了コールバック（不要なら NULL）
 } CanIf_TxPduConfigType;
 
-// -------------------------------------------------------
-// RX PDU 設定エントリ（テーブルの 1 行）
-//
-// CanDrv から CanIf_RxIndication(Hrh, CanId, Dlc, Data) が来ると、
-// このテーブルを検索して一致するエントリを見つけ、
-// RxIndicationFct(UpperLayerRxPduId, PduInfo) で上位層に通知する。
-// -------------------------------------------------------
+/* RX PDU configuration entry (one row of the routing table).
+ * CanIf_RxIndication(Mailbox, PduInfoPtr) searches this table by HOH and
+ * CAN ID, then calls RxIndicationFct(UpperLayerRxPduId, PduInfoPtr). */
 typedef struct
 {
     Can_IdType                CanId;              // マッチさせる CAN ID

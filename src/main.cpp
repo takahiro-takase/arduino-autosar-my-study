@@ -2,6 +2,7 @@
 #include "Can.h"
 #include "CanIf.h"
 #include "PduR.h"
+#include "PduR_CanIf.h"
 #include "Com.h"
 #include "Rte.h"
 #include "App_EngineManager.h"
@@ -73,7 +74,7 @@ static const PduR_RxRoutingPathType PduR_RxPaths[] = {
 static const PduR_TxRoutingPathType PduR_TxPaths[] = {
     { .SrcPduId = 0, .CanIfTxPduId = 0, .ConfDestPduId = 0, .ConfFct = Com_TxConfirmation }
 };
-static const PduR_ConfigType PduRConfig = {
+static const PduR_PBConfigType PduRConfig = {
     .RxPaths = PduR_RxPaths, .RxPathCount = 1,
     .TxPaths = PduR_TxPaths, .TxPathCount = 1
 };
