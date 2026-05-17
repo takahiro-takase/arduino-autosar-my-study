@@ -65,43 +65,54 @@ void Can_Init(const Can_ConfigType* Config)
 }
 
 /**
- * \brief   Transitions the CAN controller to the requested state.
+ * \brief   Performs a CAN controller state transition.
  *
- * \details Maps the AUTOSAR controller state to the corresponding MCP2515
- *          operating mode (AUTOSAR SWS_Can_00017):
- *          - CAN_CS_STARTED  -> MCP_NORMAL      (TX and RX enabled)
- *          - CAN_CS_STOPPED  -> MCP_LISTENONLY  (RX only, TX disabled)
- *          - CAN_CS_SLEEP    -> MCP_SLEEP        (low-power)
+ * \details Maps the AUTOSAR state transition to the corresponding MCP2515
+ *          operating mode (AUTOSAR SWS_Can_00017, SWS_Can_00230):
+ *          - CAN_T_START  : CAN_CS_STOPPED -> CAN_CS_STARTED (MCP_NORMAL)
+ *          - CAN_T_STOP   : CAN_CS_STARTED -> CAN_CS_STOPPED (MCP_LISTENONLY)
+ *          - CAN_T_SLEEP  : CAN_CS_STOPPED -> CAN_CS_SLEEP   (MCP_SLEEP)
+ *          - CAN_T_WAKEUP : CAN_CS_SLEEP   -> CAN_CS_STOPPED (MCP_LISTENONLY)
  *
- * \param[in]  mode  Requested controller state.
- *                   Valid values: CAN_CS_STARTED, CAN_CS_STOPPED, CAN_CS_SLEEP.
+ * \param[in]  Controller  CAN controller index. Only controller 0 is present;
+ *                         other values return CAN_NOT_OK.
+ * \param[in]  Transition  Requested state transition (Can_StateTransitionType).
  *
- * \note       Simplified from the AUTOSAR specification: returns void instead
- *             of Std_ReturnType and omits the Controller index parameter,
- *             as only one CAN controller is present.
+ * \return  CAN_OK      Transition applied successfully.
+ * \return  CAN_NOT_OK  Invalid Controller index or unsupported Transition value.
  *
  * \ServiceID      {0x03}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
  */
-void Can_SetControllerMode(Can_ControllerStateType mode)
+Can_ReturnType Can_SetControllerMode(uint8 Controller, Can_StateTransitionType Transition)
 {
-    switch (mode)
+    if (Controller != 0U)
+        return CAN_NOT_OK;
+
+    switch (Transition)
     {
-    case CAN_CS_STARTED:
+    case CAN_T_START:
         Mcp2515_SetMode(MCP2515_MODE_NORMAL);
+        CanState = CAN_CS_STARTED;
         break;
-    case CAN_CS_STOPPED:
+    case CAN_T_STOP:
         Mcp2515_SetMode(MCP2515_MODE_LISTEN_ONLY);
+        CanState = CAN_CS_STOPPED;
         break;
-    case CAN_CS_SLEEP:
+    case CAN_T_SLEEP:
         Mcp2515_SetMode(MCP2515_MODE_SLEEP);
+        CanState = CAN_CS_SLEEP;
+        break;
+    case CAN_T_WAKEUP:
+        Mcp2515_SetMode(MCP2515_MODE_LISTEN_ONLY);
+        CanState = CAN_CS_STOPPED;
         break;
     default:
-        return;
+        return CAN_NOT_OK;
     }
 
-    CanState = mode;
+    return CAN_OK;
 }
 
 /**
