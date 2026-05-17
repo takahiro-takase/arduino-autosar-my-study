@@ -189,7 +189,9 @@ void Can_MainFunction_Read(void)
 
         if (Mcp2515_Read(&rxId, &len, buf) == MCP2515_WRAPPER_OK)
         {
-            CanIf_RxIndication(0, rxId, len, buf);
+            Can_HwType  mailbox = { .CanId = rxId, .Hoh = 0U, .ControllerId = 0U };
+            PduInfoType pduInfo = { .SduDataPtr = buf, .SduLength = (PduLengthType)len };
+            CanIf_RxIndication(&mailbox, &pduInfo);
         }
     }
 }
@@ -225,7 +227,9 @@ void Can_Isr(void)
 
         if (Mcp2515_Read(&rxId, &len, buf) == MCP2515_WRAPPER_OK)
         {
-            CanIf_RxIndication(0, rxId, len, buf);
+            Can_HwType  mailbox = { .CanId = rxId, .Hoh = 0U, .ControllerId = 0U };
+            PduInfoType pduInfo = { .SduDataPtr = buf, .SduLength = (PduLengthType)len };
+            CanIf_RxIndication(&mailbox, &pduInfo);
         }
     }
 }
