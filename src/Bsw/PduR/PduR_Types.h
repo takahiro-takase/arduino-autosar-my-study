@@ -14,7 +14,7 @@ typedef enum
 
 typedef void (*PduR_RxIndicationFctType)(PduIdType DestPduId, const PduInfoType* PduInfoPtr);
 
-typedef void (*PduR_TxConfirmationFctType)(PduIdType DestPduId);
+typedef void (*PduR_TxConfirmationFctType)(PduIdType DestPduId, Std_ReturnType result);
 
 typedef struct
 {

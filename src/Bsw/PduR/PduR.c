@@ -172,7 +172,6 @@ void PduR_ComRxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
  */
 void PduR_CanIfTxConfirmation(PduIdType TxPduId, Std_ReturnType result)
 {
-    (void)result;
 
     if (PduR_ConfigPtr == NULL)
         return;
@@ -191,7 +190,7 @@ void PduR_CanIfTxConfirmation(PduIdType TxPduId, Std_ReturnType result)
         Det_Newline();
 
         if (path->ConfFct != NULL)
-            path->ConfFct(path->ConfDestPduId);
+            path->ConfFct(path->ConfDestPduId, result);
 
         return;
     }
