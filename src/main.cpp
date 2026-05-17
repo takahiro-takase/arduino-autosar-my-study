@@ -1,7 +1,18 @@
+/**
+ * \file    main.cpp
+ * \brief   Arduino エントリポイント・BSW スタック初期化
+ *
+ * \copyright  Copyright (c) 2025 T_T
+ * \license    MIT License - 詳細は LICENSE ファイルを参照。
+ *
+ * \note    本ファイルは AUTOSAR 4.3.1 仕様を参考にした学習用実装です。
+ *          AUTOSAR 認証済み実装ではなく、製品への適用は想定していません。
+ */
 #include <Arduino.h>
 #include "Can.h"
 #include "CanIf.h"
 #include "PduR.h"
+#include "PduR_CanIf.h"
 #include "Com.h"
 #include "Rte.h"
 #include "App_EngineManager.h"
@@ -73,7 +84,7 @@ static const PduR_RxRoutingPathType PduR_RxPaths[] = {
 static const PduR_TxRoutingPathType PduR_TxPaths[] = {
     { .SrcPduId = 0, .CanIfTxPduId = 0, .ConfDestPduId = 0, .ConfFct = Com_TxConfirmation }
 };
-static const PduR_ConfigType PduRConfig = {
+static const PduR_PBConfigType PduRConfig = {
     .RxPaths = PduR_RxPaths, .RxPathCount = 1,
     .TxPaths = PduR_TxPaths, .TxPathCount = 1
 };
@@ -86,7 +97,7 @@ void setup()
     Serial.begin(115200);
 
     Can_Init(&CanConfig);
-    Can_SetControllerMode(CAN_CS_STARTED);
+    Can_SetControllerMode(0U, CAN_T_START);
     CanIf_Init(&CanIfConfig);
     PduR_Init(&PduRConfig);
     Com_Init(&ComConfig);
