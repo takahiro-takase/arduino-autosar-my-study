@@ -86,7 +86,7 @@ void setup()
     Serial.begin(115200);
 
     Can_Init(&CanConfig);
-    Can_SetControllerMode(CAN_CS_STARTED);
+    Can_SetControllerMode(0U, CAN_T_START);
     CanIf_Init(&CanIfConfig);
     PduR_Init(&PduRConfig);
     Com_Init(&ComConfig);

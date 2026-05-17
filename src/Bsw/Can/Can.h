@@ -30,7 +30,7 @@ typedef struct
 } Can_ConfigType;
 
 void           Can_Init(const Can_ConfigType* Config);
-void           Can_SetControllerMode(Can_ControllerStateType mode);
+Can_ReturnType Can_SetControllerMode(uint8 Controller, Can_StateTransitionType Transition);
 Can_ReturnType Can_Write(Can_HwHandleType Hth, const Can_PduType* PduInfo);
 void           Can_MainFunction_Read(void);
 void           Can_Isr(void);
