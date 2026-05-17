@@ -12,6 +12,7 @@
 #define COM_H
 
 #include "Com_Types.h"
+#include "Com_Cfg.h"
 
 #ifdef __cplusplus
 extern "C" {
