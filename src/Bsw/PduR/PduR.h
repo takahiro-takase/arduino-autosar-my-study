@@ -2,15 +2,17 @@
 #define PDUR_H
 
 #include "PduR_Types.h"
+#include "PduR_CanIf.h"
+#include "PduR_COM.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-void           PduR_Init(const PduR_ConfigType* Config);
+/* SWS_PduR_00119 */
+void           PduR_Init(const PduR_PBConfigType* ConfigPtr);
+/* SWS_PduR_00109 */
 Std_ReturnType PduR_Transmit(PduIdType SrcPduId, const PduInfoType* PduInfoPtr);
-void           PduR_CanIfRxIndication(PduIdType SrcPduId, const PduInfoType* PduInfoPtr);
-void           PduR_CanIfTxConfirmation(PduIdType SrcPduId);
 
 #ifdef __cplusplus
 }

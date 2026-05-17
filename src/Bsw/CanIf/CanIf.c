@@ -194,5 +194,5 @@ void CanIf_TxConfirmation(PduIdType CanTxPduId)
     Det_Newline();
 
     if (txCfg->TxConfirmFct != NULL)
-        txCfg->TxConfirmFct(txCfg->UpperLayerTxPduId);
+        txCfg->TxConfirmFct(txCfg->UpperLayerTxPduId, E_OK);
 }
