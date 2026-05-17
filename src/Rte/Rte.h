@@ -1,3 +1,13 @@
+/**
+ * \file    Rte.h
+ * \brief   ランタイム環境 公開インタフェース (AUTOSAR SWS_RTE 準拠)
+ *
+ * \copyright  Copyright (c) 2025 T_T
+ * \license    MIT License - 詳細は LICENSE ファイルを参照。
+ *
+ * \note    本ファイルは AUTOSAR 4.3.1 仕様を参考にした学習用実装です。
+ *          AUTOSAR 認証済み実装ではなく、製品への適用は想定していません。
+ */
 #ifndef RTE_H
 #define RTE_H
 

@@ -17,6 +17,12 @@
  *            RUNNING  --[temp>=100]-->           FAULT（過熱）
  *            RUNNING  --[speed<100]-->           FAULT（失速）
  *            FAULT    --[flag=0]-->              OFF
+ *
+ * \copyright  Copyright (c) 2025 T_T
+ * \license    MIT License - 詳細は LICENSE ファイルを参照。
+ *
+ * \note    本ファイルは AUTOSAR 4.3.1 仕様を参考にした学習用実装です。
+ *          AUTOSAR 認証済み実装ではなく、製品への適用は想定していません。
  */
 
 #include "App_EngineManager.h"

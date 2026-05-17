@@ -5,6 +5,12 @@
  *          AUTOSAR CanIf API を実装する。
  *          AUTOSAR 4.3.1 SWS_CANInterface 仕様に準拠し、
  *          Arduino UNO 向けに一部を簡略化している。
+ *
+ * \copyright  Copyright (c) 2025 T_T
+ * \license    MIT License - 詳細は LICENSE ファイルを参照。
+ *
+ * \note    本ファイルは AUTOSAR 4.3.1 仕様を参考にした学習用実装です。
+ *          AUTOSAR 認証済み実装ではなく、製品への適用は想定していません。
  */
 
 #include "CanIf.h"

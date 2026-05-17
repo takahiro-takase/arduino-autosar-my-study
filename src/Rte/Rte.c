@@ -9,6 +9,12 @@
  *          (Rte_Read_<p>_<o> / Rte_Write_<p>_<o>) に準拠する。
  *          シングルインスタンス SW-C かつトランスフォーマチェーン不使用のため、
  *          オプション引数 Rte_Instance / Rte_TransformerError は省略している。
+ *
+ * \copyright  Copyright (c) 2025 T_T
+ * \license    MIT License - 詳細は LICENSE ファイルを参照。
+ *
+ * \note    本ファイルは AUTOSAR 4.3.1 仕様を参考にした学習用実装です。
+ *          AUTOSAR 認証済み実装ではなく、製品への適用は想定していません。
  */
 
 #include "Rte.h"
