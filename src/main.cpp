@@ -10,13 +10,13 @@
  */
 #include <Arduino.h>
 #include "Can.h"
+#include "Can_PBCfg.h"
 #include "CanIf.h"
 #include "PduR.h"
 #include "PduR_CanIf.h"
 #include "Com.h"
 #include "Rte.h"
 #include "App_EngineManager.h"
-#include <mcp_can_dfs.h>
 
 // -------------------------------------------------------
 // COM I-PDU 設定（BSW 設定はここで集中管理）
@@ -57,13 +57,6 @@ static void Diag_RxIndication(PduIdType PduId, const PduInfoType* PduInfoPtr)
 // -------------------------------------------------------
 // CanDrv / CanIf / PduR 設定
 // -------------------------------------------------------
-static const Can_ConfigType CanConfig = {
-    .filter      = {0x100, 0x7FF},   /* RX: CAN ID 0x100 のみ受信 */
-    .csPin       = 10,
-    .intPin      = 2,
-    .baudrate    = CAN_500KBPS,
-    .crystalFreq = CAN_CRYSTAL_8MHZ
-};
 static const CanIf_TxPduConfigType CanIf_TxPduConfig[] = {
     { .UpperLayerTxPduId = 0, .CanId = 0x200, .Dlc = 1, .Hth = 0, .TxConfirmFct = PduR_CanIfTxConfirmation }
 };
@@ -96,7 +89,7 @@ void setup()
 {
     Serial.begin(115200);
 
-    Can_Init(&CanConfig);
+    Can_Init(&Can_Config);
     Can_SetControllerMode(0U, CAN_T_START);
     CanIf_Init(&CanIfConfig);
     PduR_Init(&PduRConfig);
