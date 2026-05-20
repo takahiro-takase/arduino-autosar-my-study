@@ -8,10 +8,13 @@
  *
  *          本プロジェクトの設定:
  *            RX パス 0 (SrcPduId=0, CAN ID 0x100):
- *              配信先 1: COM  → Com_RxIndication
- *              配信先 2: DCM  → Dcm_ComIndication
+ *              配信先: COM のみ → Com_RxIndication
+ *            RX パス 1 (SrcPduId=1, CAN ID 0x7E0):
+ *              配信先: DCM のみ → Dcm_ComIndication
  *            TX パス 0 (SrcPduId=0):
- *              CanIf TxPduId=0, TxConfirmation → Com_TxConfirmation
+ *              CanIf TxPduId=0 → CAN 0x200, TxConfirmation → Com_TxConfirmation
+ *            TX パス 1 (SrcPduId=1):
+ *              CanIf TxPduId=1 → CAN 0x7E8, TxConfirmation → NULL
  *
  * \copyright  Copyright (c) 2025 T_T
  * \license    MIT License - 詳細は LICENSE ファイルを参照。
@@ -29,16 +32,19 @@
  * RX 配信先テーブル（パスごと）
  * 1 つの RX パスに複数の配信先を持たせてマルチキャストを実現する。
  * ----------------------------------------------------------------------- */
+/* パス 0: CAN 0x100 → COM のみ（センサデータはアプリ専用） */
 static const PduR_RxDestType PduR_RxDests_Path0[PDUR_RX_DEST_COUNT_PATH0] = {
     {
-        /* 配信先 1: COM モジュール */
-        .Module   = PDUR_MODULE_COM,
+        .Module    = PDUR_MODULE_COM,
         .DestPduId = 0U,
         .RxIndFct  = Com_RxIndication
-    },
+    }
+};
+
+/* パス 1: CAN 0x7E0 → DCM のみ（診断要求は DCM 専用） */
+static const PduR_RxDestType PduR_RxDests_Path1[PDUR_RX_DEST_COUNT_PATH1] = {
     {
-        /* 配信先 2: DCM モジュール（診断通信スタブ） */
-        .Module   = PDUR_MODULE_DCM,
+        .Module    = PDUR_MODULE_DCM,
         .DestPduId = 0U,
         .RxIndFct  = Dcm_ComIndication
     }
@@ -50,10 +56,16 @@ static const PduR_RxDestType PduR_RxDests_Path0[PDUR_RX_DEST_COUNT_PATH0] = {
  * ----------------------------------------------------------------------- */
 static const PduR_RxRoutingPathType PduR_RxPaths[PDUR_RX_PATH_COUNT] = {
     {
-        /* パス 0: CAN ID 0x100 受信フレーム → COM + DCM へマルチキャスト */
+        /* パス 0: CanIf RxPduId=0 (CAN 0x100) → COM */
         .SrcPduId  = 0U,
         .Dests     = PduR_RxDests_Path0,
         .DestCount = PDUR_RX_DEST_COUNT_PATH0
+    },
+    {
+        /* パス 1: CanIf RxPduId=1 (CAN 0x7E0) → DCM */
+        .SrcPduId  = 1U,
+        .Dests     = PduR_RxDests_Path1,
+        .DestCount = PDUR_RX_DEST_COUNT_PATH1
     }
 };
 
@@ -63,11 +75,18 @@ static const PduR_RxRoutingPathType PduR_RxPaths[PDUR_RX_PATH_COUNT] = {
  * ----------------------------------------------------------------------- */
 static const PduR_TxRoutingPathType PduR_TxPaths[PDUR_TX_PATH_COUNT] = {
     {
-        /* パス 0: COM TX PDU 0 → CanIf TxPduId 0 */
+        /* パス 0: COM (SrcPduId=0) → CanIf TxPduId=0 (CAN 0x200) */
         .SrcPduId      = 0U,
         .CanIfTxPduId  = 0U,
         .ConfDestPduId = 0U,
         .ConfFct       = Com_TxConfirmation
+    },
+    {
+        /* パス 1: DCM (SrcPduId=1) → CanIf TxPduId=1 (CAN 0x7E8) */
+        .SrcPduId      = 1U,
+        .CanIfTxPduId  = 1U,
+        .ConfDestPduId = 0U,
+        .ConfFct       = NULL
     }
 };
 

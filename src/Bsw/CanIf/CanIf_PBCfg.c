@@ -7,11 +7,17 @@
  *          実装コードから分離して管理する。
  *
  *          本プロジェクトの設定:
- *            TX PDU (TxPduId=0):
+ *            TX PDU (TxPduId=0): EngineState
  *              CanId=0x200, DLC=1, HTH=0
  *              TxConfirmation → PduR_CanIfTxConfirmation
- *            RX PDU (RxPduId=0):
+ *            TX PDU (TxPduId=1): UDS 診断応答
+ *              CanId=0x7E8, DLC=8, HTH=0
+ *              TxConfirmation → NULL (DCM は送信確認不要)
+ *            RX PDU (RxPduId=0): センサデータ
  *              CanId=0x100, HRH=0
+ *              RxIndication  → PduR_CanIfRxIndication
+ *            RX PDU (RxPduId=1): UDS 診断要求
+ *              CanId=0x7E0, HRH=0
  *              RxIndication  → PduR_CanIfRxIndication
  *
  * \copyright  Copyright (c) 2025 T_T
@@ -37,6 +43,14 @@ static const CanIf_TxPduConfigType CanIf_TxPduConfigData[CANIF_TX_PDU_COUNT] = {
         .Dlc               = 1U,
         .Hth               = 0U,
         .TxConfirmFct      = PduR_CanIfTxConfirmation
+    },
+    {
+        /* TxPduId=1: UDS 診断応答 (CAN ID 0x7E8, DLC 8) */
+        .UpperLayerTxPduId = 1U,
+        .CanId             = 0x7E8U,
+        .Dlc               = 8U,
+        .Hth               = 0U,
+        .TxConfirmFct      = NULL
     }
 };
 
@@ -46,10 +60,17 @@ static const CanIf_TxPduConfigType CanIf_TxPduConfigData[CANIF_TX_PDU_COUNT] = {
  * ----------------------------------------------------------------------- */
 static const CanIf_RxPduConfigType CanIf_RxPduConfigData[CANIF_RX_PDU_COUNT] = {
     {
-        /* RxPduId=0: センサフレーム (CAN ID 0x100) */
+        /* RxPduId=0: センサフレーム (CAN ID 0x100) → PduR RxPduId=0 → COM */
         .CanId             = 0x100U,
         .Hrh               = 0U,
         .UpperLayerRxPduId = 0U,
+        .RxIndicationFct   = PduR_CanIfRxIndication
+    },
+    {
+        /* RxPduId=1: UDS 診断要求 (CAN ID 0x7E0) → PduR RxPduId=1 → DCM */
+        .CanId             = 0x7E0U,
+        .Hrh               = 0U,
+        .UpperLayerRxPduId = 1U,
         .RxIndicationFct   = PduR_CanIfRxIndication
     }
 };

@@ -22,6 +22,7 @@ extern "C" {
 Std_ReturnType Rte_Read_SpeedSensor_EngineSpeed(EngineSpeed_t* data);
 Std_ReturnType Rte_Read_TempSensor_CoolantTemp(CoolantTemp_t* data);
 Std_ReturnType Rte_Read_EngineStatus_EngineOnFlag(EngineOnFlag_t* data);
+Std_ReturnType Rte_Read_EngineStatus_EngineState(EngineState_t* data);
 
 Std_ReturnType Rte_Write_EngineStatus_EngineState(EngineState_t state);
 

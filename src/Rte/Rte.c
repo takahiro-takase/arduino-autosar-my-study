@@ -27,6 +27,12 @@ extern unsigned long millis(void);
 /* App_EngineManager.c が定義する SW-C Runnable の前方宣言 */
 extern void App_EngineManager_Run(void);
 
+/* EngineState の内部ミラー変数。
+ * Rte_Write_EngineStatus_EngineState() が書き込み、
+ * Dcm の Rte_Read_EngineStatus_EngineState() が読み出す。
+ * COM TX バッファは Com_ReceiveSignal で読めないため、ここで保持する。 */
+static EngineState_t Rte_EngineStateMirror = ENGINE_STATE_OFF;
+
 /**
  * \brief   SpeedSensor 要求ポートから EngineSpeed シグナルを読み取る。
  *
@@ -120,8 +126,32 @@ Std_ReturnType Rte_Read_EngineStatus_EngineOnFlag(EngineOnFlag_t* data)
  */
 Std_ReturnType Rte_Write_EngineStatus_EngineState(EngineState_t state)
 {
+    Rte_EngineStateMirror = state;
     uint8 val = (uint8)state;
     return Com_SendSignal(COM_SIGNAL_ENGINE_STATE, &val);
+}
+
+/**
+ * \brief   EngineStatus 提供ポートから EngineState を読み取る。
+ *
+ * \details App_EngineManager が Rte_Write_EngineStatus_EngineState() で
+ *          書き込んだ最新値を返す。DCM の DID 0x0103 読み出しに使用する。
+ *
+ * \param[out] data  エンジン状態を受け取る変数へのポインタ。NULL 禁止。
+ *
+ * \retval  E_OK     常に成功。
+ * \retval  E_NOT_OK data が NULL。
+ *
+ * \ServiceID      {0xF8}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType Rte_Read_EngineStatus_EngineState(EngineState_t* data)
+{
+    if (data == NULL)
+        return E_NOT_OK;
+    *data = Rte_EngineStateMirror;
+    return E_OK;
 }
 
 /**

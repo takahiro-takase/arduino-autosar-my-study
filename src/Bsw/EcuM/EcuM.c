@@ -12,7 +12,8 @@
  *            3. CanIf_Init     — CAN インタフェース初期化
  *            4. PduR_Init      — PDU ルータ初期化
  *            5. Com_Init       — COM モジュール初期化
- *            6. App_EngineManager_Init — SW-C 初期化
+ *            6. Dcm_Init       — 診断通信モジュール初期化
+ *            7. App_EngineManager_Init — SW-C 初期化
  *
  *          周期処理 (EcuM_MainFunction):
  *            1. Can_Isr        — CAN 受信ポーリング
@@ -34,6 +35,7 @@
 #include "PduR_PBCfg.h"
 #include "Com.h"
 #include "Com_PBCfg.h"
+#include "Dcm.h"
 #include "Rte.h"
 #include "App_EngineManager.h"
 
@@ -64,6 +66,7 @@ void EcuM_Init(void)
     CanIf_Init(&CanIf_Config);
     PduR_Init(&PduR_Config);
     Com_Init(&Com_Config);
+    Dcm_Init();
     App_EngineManager_Init();
 }
 

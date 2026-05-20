@@ -9,6 +9,8 @@ AUTOSAR の ASW / RTE / BSW という 3 層アーキテクチャを Arduino UNO 
 
 - **RX（CAN ID 0x100）**: 外部ツールから速度・水温・ON フラグを受信
 - **TX（CAN ID 0x200）**: エンジン状態（OFF / STARTING / RUNNING / FAULT）を定期送信
+- **診断 RX（CAN ID 0x7E0）**: UDS 診断要求を受信（ISO 14229-1）
+- **診断 TX（CAN ID 0x7E8）**: UDS 診断応答を送信
 
 ## アーキテクチャ
 
@@ -22,6 +24,7 @@ AUTOSAR の ASW / RTE / BSW という 3 層アーキテクチャを Arduino UNO 
 │       PduR   マルチキャスト PDU ルーティング     │
 │       CanIf  CAN ID ↔ 論理 PDU マッピング      │
 │       Can    MCP2515 ハードウェア制御           │
+│       Dcm    UDS 診断通信 (ISO 14229-1)        │
 │       Det    Serial 出力ブリッジ（デバッグ用）   │
 ├──────────────────────────────────────────────┤
 │  HAL  Mcp2515_Wrapper  SPI 通信ラッパー        │  C++ のみ
@@ -48,6 +51,7 @@ AUTOSAR の ASW / RTE / BSW という 3 層アーキテクチャを Arduino UNO 
 │       ├── Com/                  # COM（シグナル管理）
 │       ├── PduR/                 # PDU ルーター
 │       ├── Det/                  # Default Error Tracer（Serial ブリッジ）
+│       ├── Dcm/                  # 診断通信マネージャ（UDS ISO 14229-1）
 │       └── Mcp2515/              # MCP2515 C++ ラッパー
 ├── dbc/
 │   └── engine_manager.dbc        # CAN シグナル定義（Cangaroo 等で使用）
@@ -83,6 +87,74 @@ byte[0] byte[1] byte[2] byte[3]
 | 0x200 | 1 | 0–7 | 8 bit | EngineState | 0=OFF / 1=STARTING / 2=RUNNING / 3=FAULT |
 
 3 秒周期で現在の状態を送信します。
+
+## UDS 診断通信（ISO 14229-1）
+
+Dcm (Diagnostic Communication Manager) モジュールが UDS over CAN を処理します。
+診断フレームはアプリデータとは独立した CAN ID で通信します。
+
+### 診断フレームルーティング
+
+```
+外部テスター（CANアナライザ等）
+  │  CAN 0x7E0  [UDS 要求]
+  ↓
+MCP2515 → Can → CanIf（CanId=0x7E0 → RxPduId=1）
+                  ↓
+                PduR（パス 1: DCM 専用ルート）
+                  ↓
+                Dcm_ComIndication() → UDS サービス処理
+                  ↓
+                PduR_Transmit(SrcPduId=1) → CanIf → Can
+  │  CAN 0x7E8  [UDS 応答]
+  ↓
+外部テスター
+```
+
+CAN 0x100（COM データ）と 0x7E0（診断要求）は PduR でルートが分離されており、互いに干渉しません。
+
+### 対応 UDS サービス
+
+| SID  | サービス名 | SubFunction | 正応答 SID |
+|------|-----------|-------------|-----------|
+| 0x10 | DiagnosticSessionControl | 0x01=Default / 0x03=Extended | 0x50 |
+| 0x11 | ECUReset | 0x01=hardReset / 0x03=softReset | 0x51 |
+| 0x22 | ReadDataByIdentifier | — | 0x62 |
+| 0x3E | TesterPresent | 0x00 | 0x7E |
+
+非対応サービスは NRC 0x11（serviceNotSupported）で応答します。
+
+### DID 一覧（0x22 ReadDataByIdentifier）
+
+| DID    | データ      | 型                                            | 単位 |
+|--------|------------|-----------------------------------------------|------|
+| 0x0101 | EngineSpeed | uint16, big-endian                           | rpm  |
+| 0x0102 | CoolantTemp | uint8                                        | ℃   |
+| 0x0103 | EngineState | uint8（0=OFF / 1=STARTING / 2=RUNNING / 3=FAULT） | —  |
+
+### フレーム例
+
+ISO 15765-2 Single Frame のみ対応。`byte[0]` が PCI バイト（上位ニブル=0x0, 下位ニブル=UDS ペイロード長）。
+
+**セッション切替（ExtendedDiagnosticSession）:**
+```
+送信 → 0x7E0: [02 10 03 00 00 00 00 00]
+受信 ← 0x7E8: [06 50 03 00 19 01 F4 00]
+```
+
+**EngineSpeed 読み出し（DID 0x0101）:**
+```
+送信 → 0x7E0: [03 22 01 01 00 00 00 00]
+受信 ← 0x7E8: [05 62 01 01 HH LL 00 00]  ← HH:LL が rpm 値（big-endian）
+```
+
+**ECUReset（hardReset）:**
+```
+送信 → 0x7E0: [02 11 01 00 00 00 00 00]
+受信 ← 0x7E8: [02 51 01 00 00 00 00 00]
+```
+
+> **注意**: Multi-frame（FF/CF/FC）は未実装。Single Frame（最大 7 バイト UDS ペイロード）のみ対応。
 
 ## エンジン状態遷移
 
@@ -165,6 +237,7 @@ pio device monitor
 [Can_Init] CAN Initialized successfully
 [Com_Init] OK
   RxIPdus=1 TxIPdus=1 Signals=4
+[Dcm_Init] session=Default
 [EngineManager] Init->OFF
 
 # 0x100 受信時（Mcp2515_Wrapper レベル）
@@ -178,6 +251,13 @@ pio device monitor
 
 # 0x200 送信時
 [Mcp2515_Send] OK >>>> ID=0x200 DLC=1 DATA=[02]
+
+# UDS 診断要求 0x7E0: [03 22 01 01] EngineSpeed 読み出し
+[Mcp2515_Read] OK >>>> ID=0x7E0 DLC=8 DATA=[03 22 01 01 00 00 00 00]
+[CanIf_RxInd] CanId=0x7E0 -> RxPduId=1
+[Dcm] SID=0x22
+[Dcm 0x22] DID=0x101 len=2
+[Mcp2515_Send] OK >>>> ID=0x7E8 DLC=8 DATA=[05 62 01 01 01 F4 00 00]
 ```
 
 ## 設計上の注意点
