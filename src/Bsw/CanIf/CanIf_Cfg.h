@@ -22,10 +22,14 @@
  * プリコンパイル設定定数
  * ----------------------------------------------------------------------- */
 
-/** TX PDU テーブルのエントリ数（送信 CAN フレーム種別数） */
-#define CANIF_TX_PDU_COUNT  1U
+/** TX PDU テーブルのエントリ数（送信 CAN フレーム種別数）
+ *  TxPduId=0: EngineState  (CAN 0x200, COM)
+ *  TxPduId=1: UDS 診断応答 (CAN 0x7E8, DCM) */
+#define CANIF_TX_PDU_COUNT  2U
 
-/** RX PDU テーブルのエントリ数（受信 CAN フレーム種別数） */
-#define CANIF_RX_PDU_COUNT  1U
+/** RX PDU テーブルのエントリ数（受信 CAN フレーム種別数）
+ *  RxPduId=0: センサデータ  (CAN 0x100, COM)
+ *  RxPduId=1: UDS 診断要求  (CAN 0x7E0, DCM) */
+#define CANIF_RX_PDU_COUNT  2U
 
 #endif /* CANIF_CFG_H */
