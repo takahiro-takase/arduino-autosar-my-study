@@ -34,7 +34,10 @@
  *          ボーレートは mcp_can_dfs.h の CAN_500KBPS を参照する。
  */
 const Can_ConfigType Can_Config = {
-    .filter      = { .filterId = 0x100U, .mask = 0x7FFU },
+    /* mask=0x000: 全 CAN ID を受け入れ、CanIf ソフトウェアフィルタに委ねる。
+     * 0x100 (COM データ) と 0x7E0 (UDS 診断) を同時に受信するために必要。
+     * 本来は RX バッファごとに mask/filter を設定するが、学習用実装のため省略。 */
+    .filter      = { .filterId = 0x000U, .mask = 0x000U },
     .csPin       = CAN_CS_PIN,
     .intPin      = CAN_INT_PIN,
     .baudrate    = CAN_BAUDRATE_500KBPS,

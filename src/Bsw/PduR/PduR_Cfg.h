@@ -22,13 +22,20 @@
  * プリコンパイル設定定数
  * ----------------------------------------------------------------------- */
 
-/** RX ルーティングパス数（受信 CAN フレームの配信先グループ数） */
-#define PDUR_RX_PATH_COUNT   1U
+/** RX ルーティングパス数
+ *  パス 0: CAN 0x100 → COM  (センサデータ)
+ *  パス 1: CAN 0x7E0 → DCM  (UDS 診断要求) */
+#define PDUR_RX_PATH_COUNT   2U
 
-/** RX パス 0 の配信先数（COM + DCM の 2 モジュールへマルチキャスト） */
-#define PDUR_RX_DEST_COUNT_PATH0  2U
+/** RX パス 0 の配信先数（COM のみ: 0x100 はアプリデータ専用） */
+#define PDUR_RX_DEST_COUNT_PATH0  1U
 
-/** TX ルーティングパス数（送信 CAN フレームの種別数） */
-#define PDUR_TX_PATH_COUNT   1U
+/** RX パス 1 の配信先数（DCM のみ: 0x7E0 は診断専用） */
+#define PDUR_RX_DEST_COUNT_PATH1  1U
+
+/** TX ルーティングパス数
+ *  パス 0: COM  → CanIf TxPduId=0 (CAN 0x200, EngineState)
+ *  パス 1: DCM  → CanIf TxPduId=1 (CAN 0x7E8, UDS 診断応答) */
+#define PDUR_TX_PATH_COUNT   2U
 
 #endif /* PDUR_CFG_H */
