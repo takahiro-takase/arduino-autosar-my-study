@@ -8,6 +8,8 @@
  *          本プロジェクトで対応するサービス:
  *            0x10 DiagnosticSessionControl (Default / Extended)
  *            0x11 ECUReset (hardReset / softReset)
+ *            0x14 ClearDiagnosticInformation (groupOfDTC=0xFFFFFF)
+ *            0x19 ReadDTCInformation (subFunc 0x01/0x02)
  *            0x22 ReadDataByIdentifier (DID 0x0101-0x0103)
  *            0x3E TesterPresent
  *
@@ -29,11 +31,22 @@
 /* -----------------------------------------------------------------------
  * UDS サービス識別子 (ISO 14229-1 Table 3)
  * ----------------------------------------------------------------------- */
-#define DCM_SID_SESSION_CTRL    0x10U  /**< DiagnosticSessionControl */
-#define DCM_SID_ECU_RESET       0x11U  /**< ECUReset                 */
-#define DCM_SID_READ_DATA       0x22U  /**< ReadDataByIdentifier     */
-#define DCM_SID_TESTER_PRESENT  0x3EU  /**< TesterPresent            */
-#define DCM_SID_NEGATIVE_RESP   0x7FU  /**< NegativeResponse         */
+#define DCM_SID_SESSION_CTRL    0x10U  /**< DiagnosticSessionControl      */
+#define DCM_SID_ECU_RESET       0x11U  /**< ECUReset                      */
+#define DCM_SID_CLEAR_DTC       0x14U  /**< ClearDiagnosticInformation    */
+#define DCM_SID_READ_DTC_INFO   0x19U  /**< ReadDTCInformation            */
+#define DCM_SID_READ_DATA       0x22U  /**< ReadDataByIdentifier          */
+#define DCM_SID_TESTER_PRESENT  0x3EU  /**< TesterPresent                 */
+#define DCM_SID_NEGATIVE_RESP   0x7FU  /**< NegativeResponse              */
+
+/* -----------------------------------------------------------------------
+ * ReadDTCInformation (SID 0x19) サブ機能
+ * ----------------------------------------------------------------------- */
+#define DCM_DTC_SUBFUNC_REPORT_COUNT  0x01U  /**< reportNumberOfDTCByStatusMask */
+#define DCM_DTC_SUBFUNC_REPORT_BY_MASK 0x02U /**< reportDTCByStatusMask         */
+
+/** ISO 14229-1 DTC フォーマット識別子 (0x01 = ISO 15031-6 / SAE J2012) */
+#define DCM_DTC_FORMAT_ISO15031         0x01U
 
 /* -----------------------------------------------------------------------
  * UDS 否定応答コード (ISO 14229-1 Table A.1)

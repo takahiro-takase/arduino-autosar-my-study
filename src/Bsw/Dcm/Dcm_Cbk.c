@@ -26,6 +26,7 @@
 
 #include "Dcm.h"
 #include "Dcm_Cfg.h"
+#include "Dem.h"
 #include "PduR.h"
 #include "Rte.h"
 #include "Det.h"
@@ -50,6 +51,10 @@ static void Dcm_Transmit(void);
 static void Dcm_SendNegativeResponse(uint8 sid, uint8 nrc);
 static void Dcm_HandleSessionControl(const uint8* uds, uint8 udsLen);
 static void Dcm_HandleEcuReset(const uint8* uds, uint8 udsLen);
+static void Dcm_HandleClearDtc(const uint8* uds, uint8 udsLen);
+static void Dcm_HandleReadDtcInfo(const uint8* uds, uint8 udsLen);
+static void Dcm_HandleReadDtcCount(const uint8* uds, uint8 udsLen);
+static void Dcm_HandleReadDtcByMask(const uint8* uds, uint8 udsLen);
 static void Dcm_HandleReadDataById(const uint8* uds, uint8 udsLen);
 static void Dcm_HandleTesterPresent(const uint8* uds, uint8 udsLen);
 static Std_ReturnType Dcm_ReadDid(uint16 did, uint8* buf, uint8* dataLen);
@@ -214,6 +219,204 @@ static void Dcm_HandleEcuReset(const uint8* uds, uint8 udsLen)
     /* リセット後処理: セッションをデフォルトに戻す */
     Dcm_CurrentSession = DCM_SESSION_DEFAULT;
     Det_LogP(PSTR("[Dcm 0x11] session reset to Default"));
+}
+
+/* -----------------------------------------------------------------------
+ * 0x14 ClearDiagnosticInformation
+ * ----------------------------------------------------------------------- */
+
+/**
+ * \brief   UDS 0x14 ClearDiagnosticInformation を処理する。
+ *
+ * \details groupOfDTC=0xFFFFFF (全 DTC クリア) のみ対応する。
+ *          Dem_ClearAllDTCs() を呼び出して DTC ステータスと EEPROM をリセットし、
+ *          正応答 [0x01, 0x54] を返す。
+ *
+ * \param[in]  uds     UDS ペイロード先頭ポインタ (uds[0]=SID 0x14)。
+ * \param[in]  udsLen  UDS ペイロード長。
+ */
+static void Dcm_HandleClearDtc(const uint8* uds, uint8 udsLen)
+{
+    if (udsLen < 4U)
+    {
+        Dcm_SendNegativeResponse(DCM_SID_CLEAR_DTC, DCM_NRC_CONDITIONS_NOT_CORRECT);
+        return;
+    }
+
+    uint32 group = ((uint32)uds[1] << 16U)
+                 | ((uint32)uds[2] <<  8U)
+                 | (uint32)uds[3];
+
+    if (group != DEM_GROUP_ALL_DTCS)
+    {
+        /* 本実装はグループ指定クリアを未対応 */
+        Dcm_SendNegativeResponse(DCM_SID_CLEAR_DTC, DCM_NRC_REQUEST_OUT_OF_RANGE);
+        return;
+    }
+
+    Det_LogP(PSTR("[Dcm 0x14] ClearAllDTCs"));
+    Dem_ClearAllDTCs();
+
+    /* 正応答: [0x01, 0x54] */
+    Dcm_TxBuf[0] = 0x01U;
+    Dcm_TxBuf[1] = 0x54U;               /* SID 0x14 + 0x40 */
+    Dcm_TxBuf[2] = 0x00U;
+    Dcm_TxBuf[3] = 0x00U;
+    Dcm_TxBuf[4] = 0x00U;
+    Dcm_TxBuf[5] = 0x00U;
+    Dcm_TxBuf[6] = 0x00U;
+    Dcm_TxBuf[7] = 0x00U;
+
+    Dcm_Transmit();
+}
+
+/* -----------------------------------------------------------------------
+ * 0x19 ReadDTCInformation — サブ機能ディスパッチ
+ * ----------------------------------------------------------------------- */
+
+/**
+ * \brief   SID 0x19 subFunc 0x01 reportNumberOfDTCByStatusMask を処理する。
+ *
+ * \details statusMask に一致する DTC の件数を返す。
+ *          応答: [0x06, 0x59, 0x01, statusAvailMask, dtcFormat, countH, countL]
+ *          (7 バイト UDS ペイロード = 1 SF に収まる)
+ *
+ * \param[in]  uds     UDS ペイロード先頭ポインタ。
+ * \param[in]  udsLen  UDS ペイロード長。
+ */
+static void Dcm_HandleReadDtcCount(const uint8* uds, uint8 udsLen)
+{
+    if (udsLen < 3U)
+    {
+        Dcm_SendNegativeResponse(DCM_SID_READ_DTC_INFO, DCM_NRC_CONDITIONS_NOT_CORRECT);
+        return;
+    }
+
+    uint8  statusMask = uds[2];
+    uint32 dtcBuf[DEM_EVENT_COUNT];
+    uint8  statusBuf[DEM_EVENT_COUNT];
+    uint8  count = 0U;
+
+    Dem_GetAllDTCs(dtcBuf, statusBuf, &count, statusMask);
+
+    Det_PrintP(PSTR("[Dcm 0x19/01] mask=0x"));
+    Det_PrintHex(statusMask);
+    Det_PrintP(PSTR(" count="));
+    Det_PrintDec(count);
+    Det_Newline();
+
+    /* 正応答: [0x06, 0x59, 0x01, statusAvailMask, dtcFormat, countH, countL] */
+    Dcm_TxBuf[0] = 0x06U;
+    Dcm_TxBuf[1] = 0x59U;                        /* SID 0x19 + 0x40 */
+    Dcm_TxBuf[2] = DCM_DTC_SUBFUNC_REPORT_COUNT;
+    Dcm_TxBuf[3] = DEM_STATUS_AVAILABILITY_MASK;
+    Dcm_TxBuf[4] = DCM_DTC_FORMAT_ISO15031;
+    Dcm_TxBuf[5] = 0x00U;                        /* countH */
+    Dcm_TxBuf[6] = count;                        /* countL */
+    Dcm_TxBuf[7] = 0x00U;
+
+    Dcm_Transmit();
+}
+
+/**
+ * \brief   SID 0x19 subFunc 0x02 reportDTCByStatusMask を処理する。
+ *
+ * \details statusMask に一致する DTC を返す。
+ *          Single Frame (最大 7 バイト UDS ペイロード) の制約上、
+ *          1 件の DTC (3 バイト DTC + 1 バイトステータス = 4 バイト) のみ返す。
+ *          複数件ある場合は先頭 1 件のみ返し、残りはシリアルログに記録する。
+ *          応答 (0 件): [0x03, 0x59, 0x02, statusAvailMask]
+ *          応答 (1 件): [0x07, 0x59, 0x02, statusAvailMask, D1, D2, D3, status]
+ *
+ * \param[in]  uds     UDS ペイロード先頭ポインタ。
+ * \param[in]  udsLen  UDS ペイロード長。
+ */
+static void Dcm_HandleReadDtcByMask(const uint8* uds, uint8 udsLen)
+{
+    if (udsLen < 3U)
+    {
+        Dcm_SendNegativeResponse(DCM_SID_READ_DTC_INFO, DCM_NRC_CONDITIONS_NOT_CORRECT);
+        return;
+    }
+
+    uint8  statusMask = uds[2];
+    uint32 dtcBuf[DEM_EVENT_COUNT];
+    uint8  statusBuf[DEM_EVENT_COUNT];
+    uint8  count = 0U;
+
+    Dem_GetAllDTCs(dtcBuf, statusBuf, &count, statusMask);
+
+    Det_PrintP(PSTR("[Dcm 0x19/02] mask=0x"));
+    Det_PrintHex(statusMask);
+    Det_PrintP(PSTR(" found="));
+    Det_PrintDec(count);
+    Det_Newline();
+
+    if (count == 0U)
+    {
+        /* DTC なし: statusAvailabilityMask のみ返す */
+        Dcm_TxBuf[0] = 0x03U;
+        Dcm_TxBuf[1] = 0x59U;
+        Dcm_TxBuf[2] = DCM_DTC_SUBFUNC_REPORT_BY_MASK;
+        Dcm_TxBuf[3] = DEM_STATUS_AVAILABILITY_MASK;
+        Dcm_TxBuf[4] = 0x00U;
+        Dcm_TxBuf[5] = 0x00U;
+        Dcm_TxBuf[6] = 0x00U;
+        Dcm_TxBuf[7] = 0x00U;
+    }
+    else
+    {
+        /* SF 制約: 先頭 1 件のみ返す (マルチフレーム未対応) */
+        if (count > 1U)
+        {
+            Det_LogP(PSTR("[Dcm 0x19/02] truncated to 1 DTC (SF limit)"));
+        }
+
+        Dcm_TxBuf[0] = 0x07U;
+        Dcm_TxBuf[1] = 0x59U;
+        Dcm_TxBuf[2] = DCM_DTC_SUBFUNC_REPORT_BY_MASK;
+        Dcm_TxBuf[3] = DEM_STATUS_AVAILABILITY_MASK;
+        Dcm_TxBuf[4] = (uint8)(dtcBuf[0] >> 16U);   /* DTC 上位バイト */
+        Dcm_TxBuf[5] = (uint8)(dtcBuf[0] >>  8U);   /* DTC 中位バイト */
+        Dcm_TxBuf[6] = (uint8)(dtcBuf[0]);           /* DTC 下位バイト */
+        Dcm_TxBuf[7] = statusBuf[0];                 /* DTC ステータス */
+    }
+
+    Dcm_Transmit();
+}
+
+/**
+ * \brief   UDS 0x19 ReadDTCInformation のサブ機能をディスパッチする。
+ *
+ * \details 対応サブ機能:
+ *            0x01 reportNumberOfDTCByStatusMask → Dcm_HandleReadDtcCount()
+ *            0x02 reportDTCByStatusMask         → Dcm_HandleReadDtcByMask()
+ *
+ * \param[in]  uds     UDS ペイロード先頭ポインタ。
+ * \param[in]  udsLen  UDS ペイロード長。
+ */
+static void Dcm_HandleReadDtcInfo(const uint8* uds, uint8 udsLen)
+{
+    if (udsLen < 2U)
+    {
+        Dcm_SendNegativeResponse(DCM_SID_READ_DTC_INFO, DCM_NRC_CONDITIONS_NOT_CORRECT);
+        return;
+    }
+
+    uint8 subFunc = uds[1] & 0x7FU;   /* bit7: suppressPosRsp (本実装では無視) */
+
+    switch (subFunc)
+    {
+    case DCM_DTC_SUBFUNC_REPORT_COUNT:
+        Dcm_HandleReadDtcCount(uds, udsLen);
+        break;
+    case DCM_DTC_SUBFUNC_REPORT_BY_MASK:
+        Dcm_HandleReadDtcByMask(uds, udsLen);
+        break;
+    default:
+        Dcm_SendNegativeResponse(DCM_SID_READ_DTC_INFO, DCM_NRC_SUB_FUNC_NOT_SUPPORTED);
+        break;
+    }
 }
 
 /* -----------------------------------------------------------------------
@@ -404,6 +607,12 @@ void Dcm_ComIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
         break;
     case DCM_SID_ECU_RESET:
         Dcm_HandleEcuReset(uds, udsLen);
+        break;
+    case DCM_SID_CLEAR_DTC:
+        Dcm_HandleClearDtc(uds, udsLen);
+        break;
+    case DCM_SID_READ_DTC_INFO:
+        Dcm_HandleReadDtcInfo(uds, udsLen);
         break;
     case DCM_SID_READ_DATA:
         Dcm_HandleReadDataById(uds, udsLen);

@@ -1,0 +1,74 @@
+/**
+ * \file    Dem_Cfg.h
+ * \brief   DEM プリコンパイル設定 (AUTOSAR SWS_DEM 準拠)
+ * \details DEM モジュールのコンパイル時定数を定義する。
+ *          実際の AUTOSAR 環境ではコンフィギュレーションツールが生成する
+ *          ファイルに相当する。
+ *
+ *          本プロジェクトで管理するイベント:
+ *            DEM_EVENT_ENGINE_OVERHEAT      — 冷却水温過熱 (temp >= 100°C)
+ *            DEM_EVENT_ENGINE_STALL         — エンジン失速 (speed < 100 RPM)
+ *            DEM_EVENT_ENGINE_SPEED_NO_FLAG — フラグなし回転検出
+ *            DEM_EVENT_STARTING_TIMEOUT     — 起動タイムアウト (5 秒超過)
+ *
+ *          EEPROM レイアウト (Arduino UNO 内蔵 EEPROM 1KB の先頭 5 バイト使用):
+ *            Addr 0x00: マジックバイト (0xDE = 有効な DEM データ)
+ *            Addr 0x01: イベント 0 (ENGINE_OVERHEAT)  ステータスバイト
+ *            Addr 0x02: イベント 1 (ENGINE_STALL)     ステータスバイト
+ *            Addr 0x03: イベント 2 (SPEED_NO_FLAG)    ステータスバイト
+ *            Addr 0x04: イベント 3 (STARTING_TIMEOUT) ステータスバイト
+ *
+ * \copyright  Copyright (c) 2025 T_T
+ * \license    MIT License - 詳細は LICENSE ファイルを参照。
+ *
+ * \note    本ファイルは AUTOSAR 4.3.1 仕様を参考にした学習用実装です。
+ *          AUTOSAR 認証済み実装ではなく、製品への適用は想定していません。
+ */
+#ifndef DEM_CFG_H
+#define DEM_CFG_H
+
+/* -----------------------------------------------------------------------
+ * イベント ID 定義
+ * App_EngineManager の状態ハンドラが Dem_ReportErrorStatus() に渡す。
+ * ----------------------------------------------------------------------- */
+#define DEM_EVENT_ENGINE_OVERHEAT       0U  /**< 冷却水温過熱           */
+#define DEM_EVENT_ENGINE_STALL          1U  /**< エンジン失速           */
+#define DEM_EVENT_ENGINE_SPEED_NO_FLAG  2U  /**< フラグなし回転検出     */
+#define DEM_EVENT_STARTING_TIMEOUT      3U  /**< 起動タイムアウト       */
+#define DEM_EVENT_COUNT                 4U  /**< イベント総数           */
+
+/* -----------------------------------------------------------------------
+ * DTC コード (24-bit, ISO 14229-1)
+ * 製造者定義領域を使用 (byte1=0x00, byte2-3=0x01xx)
+ * ----------------------------------------------------------------------- */
+#define DEM_DTC_ENGINE_OVERHEAT         0x000101UL  /**< 冷却水温過熱   */
+#define DEM_DTC_ENGINE_STALL            0x000102UL  /**< エンジン失速   */
+#define DEM_DTC_ENGINE_SPEED_NO_FLAG    0x000103UL  /**< フラグなし回転 */
+#define DEM_DTC_STARTING_TIMEOUT        0x000104UL  /**< 起動タイムアウト */
+
+/* -----------------------------------------------------------------------
+ * DTC ステータスビットマスク (ISO 14229-1 Annex B)
+ * ----------------------------------------------------------------------- */
+#define DEM_STATUS_TEST_FAILED               0x01U  /**< bit0: testFailed                       */
+#define DEM_STATUS_TF_THIS_OP_CYCLE          0x02U  /**< bit1: testFailedThisOperationCycle      */
+#define DEM_STATUS_PENDING                   0x04U  /**< bit2: pendingDTC                        */
+#define DEM_STATUS_CONFIRMED                 0x08U  /**< bit3: confirmedDTC (NvM 保存)           */
+#define DEM_STATUS_NOT_COMPLETED_SINCE_CLEAR 0x10U  /**< bit4: testNotCompletedSinceLastClear    */
+#define DEM_STATUS_FAILED_SINCE_CLEAR        0x20U  /**< bit5: testFailedSinceLastClear          */
+#define DEM_STATUS_NOT_COMPLETED_THIS_CYCLE  0x40U  /**< bit6: testNotCompletedThisOperationCycle */
+
+/** SID 0x19 応答の statusAvailabilityMask: bits 0,2,3,4,5 をサポート */
+#define DEM_STATUS_AVAILABILITY_MASK         0x2DU
+
+/* -----------------------------------------------------------------------
+ * EEPROM ストレージアドレス
+ * ----------------------------------------------------------------------- */
+#define DEM_NVM_BASE_ADDR                    0U
+#define DEM_NVM_MAGIC_ADDR                   DEM_NVM_BASE_ADDR
+#define DEM_NVM_MAGIC_BYTE                   0xDEU   /**< EEPROM 有効データのマーカー */
+#define DEM_NVM_STATUS_BASE_ADDR             (DEM_NVM_BASE_ADDR + 1U)
+
+/** SID 0x14 で "全 DTC クリア" を指定するグループコード */
+#define DEM_GROUP_ALL_DTCS                   0xFFFFFFUL
+
+#endif /* DEM_CFG_H */

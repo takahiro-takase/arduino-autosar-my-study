@@ -36,6 +36,7 @@
 #include "Com.h"
 #include "Com_PBCfg.h"
 #include "Dcm.h"
+#include "Dem.h"
 #include "Rte.h"
 #include "App_EngineManager.h"
 
@@ -67,6 +68,7 @@ void EcuM_Init(void)
     PduR_Init(&PduR_Config);
     Com_Init(&Com_Config);
     Dcm_Init();
+    Dem_Init();
     App_EngineManager_Init();
 }
 

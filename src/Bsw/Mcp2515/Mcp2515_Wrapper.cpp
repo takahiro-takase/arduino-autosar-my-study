@@ -46,6 +46,9 @@ Mcp2515_ReturnType Mcp2515_Send(uint32_t id, uint8_t dlc, const uint8_t* data)
     if (ret != CAN_OK)
     {
         Serial.print((__FlashStringHelper*)PSTR("[Mcp2515_Send] FAIL to send message"));
+        Serial.print(id, HEX);
+        Serial.print((__FlashStringHelper*)PSTR(" DLC="));
+        Serial.print(dlc, DEC);
         Serial.println();
         return MCP2515_WRAPPER_FAIL;
     }
@@ -142,6 +145,7 @@ Mcp2515_ReturnType Mcp2515_SetMode(Mcp2515_Mode mode)
     case MCP2515_MODE_NORMAL:      mcpMode = MCP_NORMAL;     break;
     case MCP2515_MODE_LISTEN_ONLY: mcpMode = MCP_LISTENONLY; break;
     case MCP2515_MODE_SLEEP:       mcpMode = MCP_SLEEP;      break;
+    case MCP2515_MODE_LOOPBACK:    mcpMode = MCP_LOOPBACK;   break;
     default:
         return MCP2515_WRAPPER_FAIL;
     }
