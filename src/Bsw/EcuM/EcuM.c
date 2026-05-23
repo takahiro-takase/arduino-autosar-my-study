@@ -12,12 +12,15 @@
  *            3. CanIf_Init     — CAN インタフェース初期化
  *            4. PduR_Init      — PDU ルータ初期化
  *            5. Com_Init       — COM モジュール初期化
- *            6. Dcm_Init       — 診断通信モジュール初期化
- *            7. App_EngineManager_Init — SW-C 初期化
+ *            6. CanTp_Init     — CAN トランスポートプロトコル初期化
+ *            7. Dcm_Init       — 診断通信モジュール初期化
+ *            8. Dem_Init       — 診断イベントマネージャ初期化
+ *            9. App_EngineManager_Init — SW-C 初期化
  *
  *          周期処理 (EcuM_MainFunction):
- *            1. Can_Isr        — CAN 受信ポーリング
- *            2. Rte_ScheduleRunnables — RTE Runnable スケジューリング
+ *            1. Can_Isr            — CAN 受信ポーリング
+ *            2. CanTp_MainFunction — タイムアウト監視・CF 送信
+ *            3. Rte_ScheduleRunnables — RTE Runnable スケジューリング
  *
  * \copyright  Copyright (c) 2025 T_T
  * \license    MIT License - 詳細は LICENSE ファイルを参照。
@@ -35,6 +38,7 @@
 #include "PduR_PBCfg.h"
 #include "Com.h"
 #include "Com_PBCfg.h"
+#include "CanTp.h"
 #include "Dcm.h"
 #include "Dem.h"
 #include "Rte.h"
@@ -50,6 +54,9 @@
  *          - CanIf_Init: CAN インタフェース層を初期化し、ルーティングテーブルを設定。
  *          - PduR_Init: PDU ルータを初期化し、RX/TX ルーティングパスを設定。
  *          - Com_Init: COM モジュールを初期化し、シグナル/I-PDU テーブルを設定。
+ *          - CanTp_Init: トランスポートプロトコルを初期化し、RX/TX チャネルを IDLE に。
+ *          - Dcm_Init: 診断セッションをデフォルトに初期化する。
+ *          - Dem_Init: DTC ステータスを EEPROM から復元する。
  *          - App_EngineManager_Init: SW-C を初期化する。
  *
  * \pre        Arduino ランタイムが初期化済みであること（setup() の先頭で呼ぶ想定）。
@@ -67,6 +74,7 @@ void EcuM_Init(void)
     CanIf_Init(&CanIf_Config);
     PduR_Init(&PduR_Config);
     Com_Init(&Com_Config);
+    CanTp_Init();
     Dcm_Init();
     Dem_Init();
     App_EngineManager_Init();
@@ -78,6 +86,7 @@ void EcuM_Init(void)
  * \details Arduino の loop() から毎ループ呼び出される。
  *          - Can_Isr: MCP2515 の INT ピンを確認し、受信フレームがあれば
  *            CanIf_RxIndication を通じて上位層へ配信する。
+ *          - CanTp_MainFunction: タイムアウト監視と CF 送信タイミング管理を行う。
  *          - Rte_ScheduleRunnables: 経過時間を確認し、周期が来た
  *            SW-C Runnable (App_EngineManager_Run) を呼び出す。
  *
@@ -92,5 +101,6 @@ void EcuM_Init(void)
 void EcuM_MainFunction(void)
 {
     Can_Isr();
+    CanTp_MainFunction();
     Rte_ScheduleRunnables();
 }
