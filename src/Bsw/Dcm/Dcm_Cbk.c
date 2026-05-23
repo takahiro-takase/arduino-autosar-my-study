@@ -1,20 +1,23 @@
 /**
  * \file    Dcm_Cbk.c
  * \brief   DCM モジュール実装 (AUTOSAR SWS_DCM 準拠, UDS ISO 14229-1)
- * \details PduR から配信された UDS 診断フレームを解析し、
+ * \details CanTp から配信された UDS 診断ペイロードを解析し、
  *          以下の UDS サービスを処理して CAN 0x7E8 で応答する。
  *
  *          対応サービス:
  *            0x10 DiagnosticSessionControl — Default / Extended セッション切替
  *            0x11 ECUReset               — hardReset / softReset (応答後セッションリセット)
+ *            0x14 ClearDiagnosticInformation — 全 DTC クリア
+ *            0x19 ReadDTCInformation     — subFunc 0x01/0x02
  *            0x22 ReadDataByIdentifier   — DID 0x0101/0x0102/0x0103
  *            0x3E TesterPresent          — セッション維持
  *
- *          ISO 15765-2 (CAN TP) は Single Frame (SF) のみ対応。
- *          マルチフレーム (FF/CF) は本実装の範囲外。
+ *          ISO 15765-2 (CAN TP) は CanTp モジュールが担当する。
+ *          本モジュールは UDS ペイロード (PCI バイトなし) のみを扱う。
+ *          マルチフレーム対応により SID 0x19/02 は複数 DTC を一度に返せる。
  *
  *          応答送信フロー:
- *            Dcm → PduR_Transmit(DCM_TX_PDUR_ID) → CanIf_Transmit(1)
+ *            Dcm → CanTp_Transmit(CANTP_TX_SDU_ID) → PduR_Transmit → CanIf
  *            → Can_Write → MCP2515 → CAN 0x7E8
  *
  * \copyright  Copyright (c) 2025 T_T
@@ -27,7 +30,7 @@
 #include "Dcm.h"
 #include "Dcm_Cfg.h"
 #include "Dem.h"
-#include "PduR.h"
+#include "CanTp.h"
 #include "Rte.h"
 #include "Det.h"
 
@@ -38,10 +41,11 @@
 /** 現在の診断セッション (DCM_SESSION_DEFAULT / DCM_SESSION_EXTENDED) */
 static uint8 Dcm_CurrentSession;
 
-/** CAN 送信応答バッファ (DLC=8 固定, ISO 15765-2 Single Frame) */
-static uint8 Dcm_TxBuf[8];
+/** UDS 応答バッファ (PCI バイトなし; CanTp がトランスポート層を付加する)
+ *  最大サイズ: 0x19/02 応答 (4 DTC) = 3 + 4×4 = 19 バイト → 32 バイトで余裕を持たせる */
+static uint8 Dcm_TxBuf[32];
 
-/** PduR_Transmit に渡す PDU 情報構造体 */
+/** CanTp_Transmit に渡す PDU 情報構造体 */
 static PduInfoType Dcm_TxPdu;
 
 /* -----------------------------------------------------------------------
@@ -77,7 +81,7 @@ void Dcm_Init(void)
 {
     Dcm_CurrentSession   = DCM_SESSION_DEFAULT;
     Dcm_TxPdu.SduDataPtr = Dcm_TxBuf;
-    Dcm_TxPdu.SduLength  = (PduLengthType)sizeof(Dcm_TxBuf);
+    Dcm_TxPdu.SduLength  = 0U;   /* 各ハンドラで送信長を設定する */
     Det_LogP(PSTR("[Dcm_Init] session=Default"));
 }
 
@@ -85,30 +89,31 @@ void Dcm_Init(void)
  * 応答送信ヘルパー
  * ----------------------------------------------------------------------- */
 
-/** Dcm_TxBuf の内容を PduR 経由で CAN 0x7E8 に送信する。 */
+/**
+ * \brief   Dcm_TxBuf の内容を CanTp 経由で CAN 0x7E8 に送信する。
+ *
+ * \details CanTp がペイロード長に応じて SF/FF+CF を選択する。
+ *          呼び出し前に Dcm_TxPdu.SduLength を設定すること。
+ */
 static void Dcm_Transmit(void)
 {
-    PduR_Transmit(DCM_TX_PDUR_ID, &Dcm_TxPdu);
+    CanTp_Transmit(CANTP_TX_SDU_ID, &Dcm_TxPdu);
 }
 
 /**
  * \brief   UDS 否定応答 (NRC) フレームを送信する。
  *
- * \details ISO 14229-1 に従い [0x03, 0x7F, SID, NRC] を送信する。
+ * \details ISO 14229-1 に従い [0x7F, SID, NRC] を CanTp へ渡す。
  *
  * \param[in]  sid  失敗したサービス ID。
  * \param[in]  nrc  否定応答コード (DCM_NRC_*)。
  */
 static void Dcm_SendNegativeResponse(uint8 sid, uint8 nrc)
 {
-    Dcm_TxBuf[0] = 0x03U;               /* PCI: SF, UDS length=3 */
-    Dcm_TxBuf[1] = DCM_SID_NEGATIVE_RESP;
-    Dcm_TxBuf[2] = sid;
-    Dcm_TxBuf[3] = nrc;
-    Dcm_TxBuf[4] = 0x00U;
-    Dcm_TxBuf[5] = 0x00U;
-    Dcm_TxBuf[6] = 0x00U;
-    Dcm_TxBuf[7] = 0x00U;
+    Dcm_TxBuf[0] = DCM_SID_NEGATIVE_RESP;
+    Dcm_TxBuf[1] = sid;
+    Dcm_TxBuf[2] = nrc;
+    Dcm_TxPdu.SduLength = 3U;
 
     Det_PrintP(PSTR("[Dcm] NRC sid=0x"));
     Det_PrintHex(sid);
@@ -156,15 +161,14 @@ static void Dcm_HandleSessionControl(const uint8* uds, uint8 udsLen)
     Det_PrintHex(subFunc);
     Det_Newline();
 
-    /* 正応答: [0x06, 0x50, subFunc, P2_H, P2_L, P2X_H, P2X_L] */
-    Dcm_TxBuf[0] = 0x06U;
-    Dcm_TxBuf[1] = 0x50U;               /* SID + 0x40 */
-    Dcm_TxBuf[2] = subFunc;
-    Dcm_TxBuf[3] = DCM_SESSION_P2_HIGH;
-    Dcm_TxBuf[4] = DCM_SESSION_P2_LOW;
-    Dcm_TxBuf[5] = DCM_SESSION_P2X_HIGH;
-    Dcm_TxBuf[6] = DCM_SESSION_P2X_LOW;
-    Dcm_TxBuf[7] = 0x00U;
+    /* 正応答: [0x50, subFunc, P2_H, P2_L, P2X_H, P2X_L] */
+    Dcm_TxBuf[0] = 0x50U;               /* SID + 0x40 */
+    Dcm_TxBuf[1] = subFunc;
+    Dcm_TxBuf[2] = DCM_SESSION_P2_HIGH;
+    Dcm_TxBuf[3] = DCM_SESSION_P2_LOW;
+    Dcm_TxBuf[4] = DCM_SESSION_P2X_HIGH;
+    Dcm_TxBuf[5] = DCM_SESSION_P2X_LOW;
+    Dcm_TxPdu.SduLength = 6U;
 
     Dcm_Transmit();
 }
@@ -204,15 +208,10 @@ static void Dcm_HandleEcuReset(const uint8* uds, uint8 udsLen)
     Det_PrintHex(subFunc);
     Det_Newline();
 
-    /* 正応答: [0x02, 0x51, subFunc] */
-    Dcm_TxBuf[0] = 0x02U;
-    Dcm_TxBuf[1] = 0x51U;               /* SID + 0x40 */
-    Dcm_TxBuf[2] = subFunc;
-    Dcm_TxBuf[3] = 0x00U;
-    Dcm_TxBuf[4] = 0x00U;
-    Dcm_TxBuf[5] = 0x00U;
-    Dcm_TxBuf[6] = 0x00U;
-    Dcm_TxBuf[7] = 0x00U;
+    /* 正応答: [0x51, subFunc] */
+    Dcm_TxBuf[0] = 0x51U;               /* SID + 0x40 */
+    Dcm_TxBuf[1] = subFunc;
+    Dcm_TxPdu.SduLength = 2U;
 
     Dcm_Transmit();
 
@@ -230,7 +229,7 @@ static void Dcm_HandleEcuReset(const uint8* uds, uint8 udsLen)
  *
  * \details groupOfDTC=0xFFFFFF (全 DTC クリア) のみ対応する。
  *          Dem_ClearAllDTCs() を呼び出して DTC ステータスと EEPROM をリセットし、
- *          正応答 [0x01, 0x54] を返す。
+ *          正応答 [0x54] を返す。
  *
  * \param[in]  uds     UDS ペイロード先頭ポインタ (uds[0]=SID 0x14)。
  * \param[in]  udsLen  UDS ペイロード長。
@@ -257,15 +256,9 @@ static void Dcm_HandleClearDtc(const uint8* uds, uint8 udsLen)
     Det_LogP(PSTR("[Dcm 0x14] ClearAllDTCs"));
     Dem_ClearAllDTCs();
 
-    /* 正応答: [0x01, 0x54] */
-    Dcm_TxBuf[0] = 0x01U;
-    Dcm_TxBuf[1] = 0x54U;               /* SID 0x14 + 0x40 */
-    Dcm_TxBuf[2] = 0x00U;
-    Dcm_TxBuf[3] = 0x00U;
-    Dcm_TxBuf[4] = 0x00U;
-    Dcm_TxBuf[5] = 0x00U;
-    Dcm_TxBuf[6] = 0x00U;
-    Dcm_TxBuf[7] = 0x00U;
+    /* 正応答: [0x54] */
+    Dcm_TxBuf[0] = 0x54U;               /* SID 0x14 + 0x40 */
+    Dcm_TxPdu.SduLength = 1U;
 
     Dcm_Transmit();
 }
@@ -278,8 +271,7 @@ static void Dcm_HandleClearDtc(const uint8* uds, uint8 udsLen)
  * \brief   SID 0x19 subFunc 0x01 reportNumberOfDTCByStatusMask を処理する。
  *
  * \details statusMask に一致する DTC の件数を返す。
- *          応答: [0x06, 0x59, 0x01, statusAvailMask, dtcFormat, countH, countL]
- *          (7 バイト UDS ペイロード = 1 SF に収まる)
+ *          応答: [0x59, 0x01, statusAvailMask, dtcFormat, countH, countL]
  *
  * \param[in]  uds     UDS ペイロード先頭ポインタ。
  * \param[in]  udsLen  UDS ペイロード長。
@@ -305,15 +297,14 @@ static void Dcm_HandleReadDtcCount(const uint8* uds, uint8 udsLen)
     Det_PrintDec(count);
     Det_Newline();
 
-    /* 正応答: [0x06, 0x59, 0x01, statusAvailMask, dtcFormat, countH, countL] */
-    Dcm_TxBuf[0] = 0x06U;
-    Dcm_TxBuf[1] = 0x59U;                        /* SID 0x19 + 0x40 */
-    Dcm_TxBuf[2] = DCM_DTC_SUBFUNC_REPORT_COUNT;
-    Dcm_TxBuf[3] = DEM_STATUS_AVAILABILITY_MASK;
-    Dcm_TxBuf[4] = DCM_DTC_FORMAT_ISO15031;
-    Dcm_TxBuf[5] = 0x00U;                        /* countH */
-    Dcm_TxBuf[6] = count;                        /* countL */
-    Dcm_TxBuf[7] = 0x00U;
+    /* 正応答: [0x59, 0x01, statusAvailMask, dtcFormat, countH, countL] */
+    Dcm_TxBuf[0] = 0x59U;                        /* SID 0x19 + 0x40 */
+    Dcm_TxBuf[1] = DCM_DTC_SUBFUNC_REPORT_COUNT;
+    Dcm_TxBuf[2] = DEM_STATUS_AVAILABILITY_MASK;
+    Dcm_TxBuf[3] = DCM_DTC_FORMAT_ISO15031;
+    Dcm_TxBuf[4] = 0x00U;                        /* countH */
+    Dcm_TxBuf[5] = count;                        /* countL */
+    Dcm_TxPdu.SduLength = 6U;
 
     Dcm_Transmit();
 }
@@ -321,12 +312,12 @@ static void Dcm_HandleReadDtcCount(const uint8* uds, uint8 udsLen)
 /**
  * \brief   SID 0x19 subFunc 0x02 reportDTCByStatusMask を処理する。
  *
- * \details statusMask に一致する DTC を返す。
- *          Single Frame (最大 7 バイト UDS ペイロード) の制約上、
- *          1 件の DTC (3 バイト DTC + 1 バイトステータス = 4 バイト) のみ返す。
- *          複数件ある場合は先頭 1 件のみ返し、残りはシリアルログに記録する。
- *          応答 (0 件): [0x03, 0x59, 0x02, statusAvailMask]
- *          応答 (1 件): [0x07, 0x59, 0x02, statusAvailMask, D1, D2, D3, status]
+ * \details statusMask に一致する DTC をすべて返す。
+ *          CanTp がマルチフレームを担当するため、SF の 7 バイト制限がなくなった。
+ *          応答 (0 件): [0x59, 0x02, statusAvailMask]
+ *          応答 (n 件): [0x59, 0x02, statusAvailMask,
+ *                        DTC1_H, DTC1_M, DTC1_L, S1,
+ *                        DTC2_H, DTC2_M, DTC2_L, S2, ...]
  *
  * \param[in]  uds     UDS ペイロード先頭ポインタ。
  * \param[in]  udsLen  UDS ペイロード長。
@@ -352,35 +343,20 @@ static void Dcm_HandleReadDtcByMask(const uint8* uds, uint8 udsLen)
     Det_PrintDec(count);
     Det_Newline();
 
-    if (count == 0U)
-    {
-        /* DTC なし: statusAvailabilityMask のみ返す */
-        Dcm_TxBuf[0] = 0x03U;
-        Dcm_TxBuf[1] = 0x59U;
-        Dcm_TxBuf[2] = DCM_DTC_SUBFUNC_REPORT_BY_MASK;
-        Dcm_TxBuf[3] = DEM_STATUS_AVAILABILITY_MASK;
-        Dcm_TxBuf[4] = 0x00U;
-        Dcm_TxBuf[5] = 0x00U;
-        Dcm_TxBuf[6] = 0x00U;
-        Dcm_TxBuf[7] = 0x00U;
-    }
-    else
-    {
-        /* SF 制約: 先頭 1 件のみ返す (マルチフレーム未対応) */
-        if (count > 1U)
-        {
-            Det_LogP(PSTR("[Dcm 0x19/02] truncated to 1 DTC (SF limit)"));
-        }
+    Dcm_TxBuf[0] = 0x59U;
+    Dcm_TxBuf[1] = DCM_DTC_SUBFUNC_REPORT_BY_MASK;
+    Dcm_TxBuf[2] = DEM_STATUS_AVAILABILITY_MASK;
 
-        Dcm_TxBuf[0] = 0x07U;
-        Dcm_TxBuf[1] = 0x59U;
-        Dcm_TxBuf[2] = DCM_DTC_SUBFUNC_REPORT_BY_MASK;
-        Dcm_TxBuf[3] = DEM_STATUS_AVAILABILITY_MASK;
-        Dcm_TxBuf[4] = (uint8)(dtcBuf[0] >> 16U);   /* DTC 上位バイト */
-        Dcm_TxBuf[5] = (uint8)(dtcBuf[0] >>  8U);   /* DTC 中位バイト */
-        Dcm_TxBuf[6] = (uint8)(dtcBuf[0]);           /* DTC 下位バイト */
-        Dcm_TxBuf[7] = statusBuf[0];                 /* DTC ステータス */
+    uint8 offset = 3U;
+    uint8 i;
+    for (i = 0U; i < count; i++)
+    {
+        Dcm_TxBuf[offset++] = (uint8)(dtcBuf[i] >> 16U);   /* DTC 上位バイト */
+        Dcm_TxBuf[offset++] = (uint8)(dtcBuf[i] >>  8U);   /* DTC 中位バイト */
+        Dcm_TxBuf[offset++] = (uint8)(dtcBuf[i]);           /* DTC 下位バイト */
+        Dcm_TxBuf[offset++] = statusBuf[i];                 /* DTC ステータス */
     }
+    Dcm_TxPdu.SduLength = (PduLengthType)offset;
 
     Dcm_Transmit();
 }
@@ -471,7 +447,7 @@ static Std_ReturnType Dcm_ReadDid(uint16 did, uint8* buf, uint8* dataLen)
  * \brief   UDS 0x22 ReadDataByIdentifier を処理する。
  *
  * \details 要求フレームから DID を抽出し、対応するデータを読み出して
- *          正応答 [PCI, 0x62, DID_H, DID_L, data...] を返す。
+ *          正応答 [0x62, DID_H, DID_L, data...] を返す。
  *
  * \param[in]  uds     UDS ペイロード先頭ポインタ。
  * \param[in]  udsLen  UDS ペイロード長。
@@ -501,18 +477,16 @@ static void Dcm_HandleReadDataById(const uint8* uds, uint8 udsLen)
     Det_PrintDec(dataLen);
     Det_Newline();
 
-    /* 正応答: [PCI, 0x62, DID_H, DID_L, data...] */
-    uint8 udsRspLen = (uint8)(3U + dataLen);   /* 0x62(1) + DID(2) + data */
-    Dcm_TxBuf[0] = udsRspLen;                  /* PCI: SF, length */
-    Dcm_TxBuf[1] = 0x62U;                      /* SID + 0x40 */
-    Dcm_TxBuf[2] = (uint8)(did >> 8U);
-    Dcm_TxBuf[3] = (uint8)(did & 0xFFU);
+    /* 正応答: [0x62, DID_H, DID_L, data...] */
+    Dcm_TxBuf[0] = 0x62U;                      /* SID + 0x40 */
+    Dcm_TxBuf[1] = (uint8)(did >> 8U);
+    Dcm_TxBuf[2] = (uint8)(did & 0xFFU);
 
     uint8 i;
     for (i = 0U; i < dataLen; i++)
-        Dcm_TxBuf[4U + i] = dataBuf[i];
-    for (; 4U + i < 8U; i++)
-        Dcm_TxBuf[4U + i] = 0x00U;             /* padding */
+        Dcm_TxBuf[3U + i] = dataBuf[i];
+
+    Dcm_TxPdu.SduLength = (PduLengthType)(3U + dataLen);
 
     Dcm_Transmit();
 }
@@ -525,7 +499,7 @@ static void Dcm_HandleReadDataById(const uint8* uds, uint8 udsLen)
  * \brief   UDS 0x3E TesterPresent を処理する。
  *
  * \details セッションタイムアウトをリセットし (本実装ではタイムアウト未実装)、
- *          正応答 [0x02, 0x7E, subFunc] を返す。
+ *          正応答 [0x7E, subFunc] を返す。
  *
  * \param[in]  uds     UDS ペイロード先頭ポインタ。
  * \param[in]  udsLen  UDS ペイロード長。
@@ -536,32 +510,27 @@ static void Dcm_HandleTesterPresent(const uint8* uds, uint8 udsLen)
 
     Det_LogP(PSTR("[Dcm 0x3E] TesterPresent"));
 
-    /* 正応答: [0x02, 0x7E, subFunc] */
-    Dcm_TxBuf[0] = 0x02U;
-    Dcm_TxBuf[1] = 0x7EU;               /* SID + 0x40 */
-    Dcm_TxBuf[2] = subFunc;
-    Dcm_TxBuf[3] = 0x00U;
-    Dcm_TxBuf[4] = 0x00U;
-    Dcm_TxBuf[5] = 0x00U;
-    Dcm_TxBuf[6] = 0x00U;
-    Dcm_TxBuf[7] = 0x00U;
+    /* 正応答: [0x7E, subFunc] */
+    Dcm_TxBuf[0] = 0x7EU;               /* SID + 0x40 */
+    Dcm_TxBuf[1] = subFunc;
+    Dcm_TxPdu.SduLength = 2U;
 
     Dcm_Transmit();
 }
 
 /* -----------------------------------------------------------------------
- * Dcm_ComIndication — PduR から呼び出されるエントリポイント
+ * Dcm_ComIndication — CanTp から呼び出されるエントリポイント
  * ----------------------------------------------------------------------- */
 
 /**
- * \brief   PduR から配信された UDS フレームを処理する。
+ * \brief   CanTp から配信された UDS ペイロードを処理する。
  *
- * \details ISO 15765-2 の PCI バイトを解析し、Single Frame (SF) であれば
- *          UDS サービス ID に応じてハンドラへディスパッチする。
- *          マルチフレームは本実装の範囲外のためスキップする。
+ * \details CanTp が ISO 15765-2 トランスポート層を処理済みであるため、
+ *          PduInfoPtr には PCI バイトを含まない生 UDS ペイロードが格納されている。
+ *          先頭バイト (uds[0]) が UDS サービス ID (SID) となる。
  *
- * \param[in]  RxPduId     受信 PDU ID（未使用; 本実装では DCM 専用パス固定）。
- * \param[in]  PduInfoPtr  受信データへのポインタ。NULL 禁止。
+ * \param[in]  RxPduId     受信 PDU ID（未使用; CanTp からの単一チャネル固定）。
+ * \param[in]  PduInfoPtr  組立済み UDS ペイロードへのポインタ。NULL 禁止。
  *
  * \ServiceID      {0xF0}
  * \Reentrancy     {Reentrant}
@@ -575,25 +544,10 @@ void Dcm_ComIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
         || PduInfoPtr->SduLength == 0U)
         return;
 
-    /* --- ISO 15765-2 PCI 解析 --- */
-    uint8 pci = PduInfoPtr->SduDataPtr[0];
-
-    if ((pci & DCM_ISOTP_SF_PCI_MASK) != DCM_ISOTP_SF_PCI_TYPE)
-    {
-        /* マルチフレーム (FF/CF/FC) は未対応 */
-        Det_LogP(PSTR("[Dcm] Non-SF: not supported"));
-        return;
-    }
-
-    uint8 udsLen = pci & 0x0FU;   /* SF: 下位ニブルが UDS ペイロード長 */
-
-    if (udsLen == 0U || udsLen > DCM_ISOTP_SF_MAX_LEN
-        || PduInfoPtr->SduLength < (PduLengthType)(1U + udsLen))
-        return;
-
-    /* UDS ペイロード = PCI バイトの直後 */
-    const uint8* uds = &PduInfoPtr->SduDataPtr[1];
-    uint8 sid = uds[0];
+    /* CanTp が PCI を除去済み: 先頭バイトは UDS SID */
+    const uint8* uds    = PduInfoPtr->SduDataPtr;
+    uint8        udsLen = (uint8)PduInfoPtr->SduLength;
+    uint8        sid    = uds[0];
 
     Det_PrintP(PSTR("[Dcm] SID=0x"));
     Det_PrintHex(sid);
