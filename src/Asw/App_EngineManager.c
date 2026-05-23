@@ -27,6 +27,7 @@
 
 #include "App_EngineManager.h"
 #include "Rte.h"
+#include "Dem.h"
 #include "Det.h"
 
 /* millis() is declared in Arduino wiring.c with C linkage. */
@@ -158,12 +159,18 @@ static void State_Off(EngineSpeed_t speed, CoolantTemp_t temp, EngineOnFlag_t fl
     {
         s_state           = ENGINE_STATE_STARTING;
         s_startingEnterMs = millis();
+        Dem_ReportErrorStatus(DEM_EVENT_ENGINE_SPEED_NO_FLAG, DEM_EVENT_STATUS_PASSED);
         Det_LogP(PSTR("[EngineManager] OFF->STARTING"));
     }
     else if (speed > 0U)
     {
         s_state = ENGINE_STATE_FAULT;
+        Dem_ReportErrorStatus(DEM_EVENT_ENGINE_SPEED_NO_FLAG, DEM_EVENT_STATUS_FAILED);
         Det_LogP(PSTR("[EngineManager] OFF->FAULT(spd w/o flag)"));
+    }
+    else
+    {
+        Dem_ReportErrorStatus(DEM_EVENT_ENGINE_SPEED_NO_FLAG, DEM_EVENT_STATUS_PASSED);
     }
 }
 
@@ -196,12 +203,14 @@ static void State_Starting(EngineSpeed_t speed, CoolantTemp_t temp, EngineOnFlag
     if (speed >= ENGINE_SPEED_RUNNING_THRESHOLD)
     {
         s_state = ENGINE_STATE_RUNNING;
+        Dem_ReportErrorStatus(DEM_EVENT_STARTING_TIMEOUT, DEM_EVENT_STATUS_PASSED);
         Det_LogP(PSTR("[EngineManager] STARTING->RUNNING"));
         return;
     }
     if (millis() - s_startingEnterMs >= STARTING_TIMEOUT_MS)
     {
         s_state = ENGINE_STATE_FAULT;
+        Dem_ReportErrorStatus(DEM_EVENT_STARTING_TIMEOUT, DEM_EVENT_STATUS_FAILED);
         Det_LogP(PSTR("[EngineManager] STARTING->FAULT(timeout)"));
     }
 }
@@ -234,6 +243,8 @@ static void State_Running(EngineSpeed_t speed, CoolantTemp_t temp, EngineOnFlag_
     if (temp >= COOLANT_OVERHEAT_THRESHOLD)
     {
         s_state = ENGINE_STATE_FAULT;
+        Dem_ReportErrorStatus(DEM_EVENT_ENGINE_OVERHEAT, DEM_EVENT_STATUS_FAILED);
+        Dem_ReportErrorStatus(DEM_EVENT_ENGINE_STALL,    DEM_EVENT_STATUS_PASSED);
         Det_PrintP(PSTR("[EngineManager] RUNNING->FAULT(overheat="));
         Det_PrintDec(temp);
         Det_LogP(PSTR(")"));
@@ -242,11 +253,17 @@ static void State_Running(EngineSpeed_t speed, CoolantTemp_t temp, EngineOnFlag_
     if (speed < ENGINE_SPEED_STALL_THRESHOLD)
     {
         s_state = ENGINE_STATE_FAULT;
+        Dem_ReportErrorStatus(DEM_EVENT_ENGINE_STALL,    DEM_EVENT_STATUS_FAILED);
+        Dem_ReportErrorStatus(DEM_EVENT_ENGINE_OVERHEAT, DEM_EVENT_STATUS_PASSED);
         Det_PrintP(PSTR("[EngineManager] RUNNING->FAULT(stall="));
         Det_PrintDec(speed);
         Det_LogP(PSTR(")"));
         return;
     }
+
+    /* 正常 RUNNING: 両フォルト条件を PASSED 報告 */
+    Dem_ReportErrorStatus(DEM_EVENT_ENGINE_OVERHEAT, DEM_EVENT_STATUS_PASSED);
+    Dem_ReportErrorStatus(DEM_EVENT_ENGINE_STALL,    DEM_EVENT_STATUS_PASSED);
 
     Det_PrintP(PSTR("[EngineManager] RUNNING spd="));
     Det_PrintDec(speed);

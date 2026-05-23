@@ -30,9 +30,10 @@ typedef enum
 
 typedef enum
 {
-    MCP2515_MODE_NORMAL      = 0, /* 通常動作（TX/RX 可）  */
-    MCP2515_MODE_LISTEN_ONLY = 1, /* 受信専用（TX 不可）   */
-    MCP2515_MODE_SLEEP       = 2  /* 低電力スリープ        */
+    MCP2515_MODE_NORMAL      = 0, /* 通常動作（TX/RX 可）        */
+    MCP2515_MODE_LISTEN_ONLY = 1, /* 受信専用（TX 不可）         */
+    MCP2515_MODE_SLEEP       = 2, /* 低電力スリープ              */
+    MCP2515_MODE_LOOPBACK    = 3  /* 内部ループバック（テスト用） */
 } Mcp2515_Mode;
 
 Mcp2515_ReturnType Mcp2515_Init(uint8_t csPin, uint32_t baudrate, uint8_t crystalFreqMhz);

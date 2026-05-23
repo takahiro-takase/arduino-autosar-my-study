@@ -102,6 +102,7 @@ Can_ReturnType Can_SetControllerMode(uint8 Controller, Can_StateTransitionType T
     {
     case CAN_T_START:
         Mcp2515_SetMode(MCP2515_MODE_NORMAL);
+        //Mcp2515_SetMode(MCP2515_MODE_LOOPBACK);  // ← 単体テスト用（通常はコメントアウト）
         CanState = CAN_CS_STARTED;
         break;
     case CAN_T_STOP:
