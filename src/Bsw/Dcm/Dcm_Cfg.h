@@ -9,9 +9,12 @@
  *            0x10 DiagnosticSessionControl (Default / Extended)
  *            0x11 ECUReset (hardReset / softReset)
  *            0x14 ClearDiagnosticInformation (groupOfDTC=0xFFFFFF)
- *            0x19 ReadDTCInformation (subFunc 0x01/0x02)
+ *            0x19 ReadDTCInformation (subFunc 0x01/0x02) — マルチフレーム対応
  *            0x22 ReadDataByIdentifier (DID 0x0101-0x0103)
  *            0x3E TesterPresent
+ *
+ *          ISO 15765-2 (CAN TP) トランスポート層は CanTp モジュールが担当する。
+ *          本モジュールは PCI バイトを含まない生 UDS ペイロードのみを扱う。
  *
  * \copyright  Copyright (c) 2025 T_T
  * \license    MIT License - 詳細は LICENSE ファイルを参照。
@@ -71,13 +74,6 @@
 #define DCM_RESET_SOFT  0x03U  /**< softReset  */
 
 /* -----------------------------------------------------------------------
- * ISO 15765-2 (CAN Transport Protocol) 定数 — Single Frame のみ対応
- * ----------------------------------------------------------------------- */
-#define DCM_ISOTP_SF_PCI_MASK  0xF0U  /**< PCI タイプ判定マスク       */
-#define DCM_ISOTP_SF_PCI_TYPE  0x00U  /**< Single Frame の PCI タイプ */
-#define DCM_ISOTP_SF_MAX_LEN   7U     /**< SF の最大 UDS ペイロード長  */
-
-/* -----------------------------------------------------------------------
  * DiagnosticSessionControl 応答の P2 タイミングパラメータ
  * ----------------------------------------------------------------------- */
 #define DCM_SESSION_P2_HIGH   0x00U  /**< P2  = 0x0019 = 25 ms        */
@@ -86,9 +82,10 @@
 #define DCM_SESSION_P2X_LOW   0xF4U
 
 /* -----------------------------------------------------------------------
- * PduR 送信 PDU ID (DCM 診断応答)
- * PduR_PBCfg.c の TX ルーティングパス 1 に対応する。
+ * CanTp 送信 N-SDU ID (DCM 診断応答)
+ * CanTp_Cfg.h の CANTP_TX_SDU_ID と同値。CanTp_Transmit() 呼び出しに使用する。
  * ----------------------------------------------------------------------- */
-#define DCM_TX_PDUR_ID  1U
+/* DCM は CanTp_Cfg.h をインクルードして CANTP_TX_SDU_ID を直接参照するため、
+ * ここでは重複定義を避ける。                                                 */
 
 #endif /* DCM_CFG_H */

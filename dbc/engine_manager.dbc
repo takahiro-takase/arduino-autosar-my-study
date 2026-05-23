@@ -31,8 +31,8 @@ BO_ 2024 UdsDiagResponse: 8 Arduino
 
 CM_ BO_ 256  "RX: External -> Arduino (CAN ID 0x100)";
 CM_ BO_ 512  "TX: Arduino -> External (CAN ID 0x200)";
-CM_ BO_ 2016 "TX: External -> Arduino (CAN ID 0x7E0) UDS diagnostic request (ISO 14229-1). Single Frame only (ISO 15765-2). Pci=0x0N (N=UDS payload length), ServiceId=SID.";
-CM_ BO_ 2024 "TX: Arduino -> External (CAN ID 0x7E8) UDS diagnostic response. Positive: ServiceId = request SID + 0x40. Negative: ServiceId=0x7F, byte[2]=failed SID, byte[3]=NRC.";
+CM_ BO_ 2016 "TX: External -> Arduino (CAN ID 0x7E0) UDS diagnostic request (ISO 14229-1 / ISO 15765-2). リクエストは最大7バイトのため常に Single Frame (SF)。Pci=0x0N (N=UDS payload length), ServiceId=SID.";
+CM_ BO_ 2024 "TX: Arduino -> External (CAN ID 0x7E8) UDS diagnostic response (ISO 15765-2 CanTp)。Short response (<=7byte): Single Frame (PCI=0x0N)。Long response (>=8byte): First Frame (PCI=0x10 0xNN) + Consecutive Frame (PCI=0x21..)。DBCシグナルはSF時のみ正確にデコードされる。FF/CF時はCangarooの生Hexビューで確認すること。";
 
 CM_ SG_ 256 EngineSpeed  "Engine speed [rpm]. STARTING->RUNNING when >= 500. RUNNING->FAULT when < 100.";
 CM_ SG_ 256 CoolantTemp  "Coolant temperature [degC]. RUNNING->FAULT when >= 100.";
@@ -43,7 +43,7 @@ CM_ SG_ 2016 Pci       "ISO 15765-2 PCI byte. Upper nibble=frame type (0x0=Singl
 CM_ SG_ 2016 ServiceId   "UDS Service ID (SID). 0x10=DiagnosticSessionControl, 0x11=ECUReset, 0x14=ClearDiagnosticInformation, 0x19=ReadDTCInformation, 0x22=ReadDataByIdentifier, 0x3E=TesterPresent.";
 CM_ SG_ 2016 SubFunction "byte[2]. SID 0x19: subFunction (0x01=reportCount / 0x02=reportByMask). SID 0x14: groupOfDTC upper byte (0xFF for all).";
 CM_ SG_ 2016 StatusMask  "byte[3]. SID 0x19: statusMask to filter DTCs. bit0=TF, bit2=PDTC, bit3=CDTC, bit4=TNCLC, bit5=TFSLC. Use 0x08 for confirmedDTC only.";
-CM_ SG_ 2024 Pci         "ISO 15765-2 PCI byte. Upper nibble=frame type (0x0=SingleFrame). Lower nibble=UDS payload length.";
+CM_ SG_ 2024 Pci         "ISO 15765-2 PCI byte. SF: 0x0N (lower nibble=UDS length). FF: 0x10 (next byte=total length). CF: 0x2N (N=sequence number).";
 CM_ SG_ 2024 ServiceId   "UDS Response SID. Positive = request SID + 0x40. 0x50=SessionCtrl_Pos, 0x51=ECUReset_Pos, 0x54=ClearDTC_Pos, 0x59=ReadDTC_Pos, 0x62=ReadData_Pos, 0x7E=TesterPresent_Pos, 0x7F=NegativeResponse.";
 CM_ SG_ 2024 SubFuncEcho     "byte[2]. Echo of request subFunction. 0x01=reportCount / 0x02=reportByMask.";
 CM_ SG_ 2024 StatusAvailMask "byte[3]. statusAvailabilityMask: supported status bits (0x2D in this implementation). bit0=TF, bit2=PDTC, bit3=CDTC, bit4=TNCLC, bit5=TFSLC.";

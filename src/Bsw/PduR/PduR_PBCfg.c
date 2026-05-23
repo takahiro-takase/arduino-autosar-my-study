@@ -10,11 +10,11 @@
  *            RX パス 0 (SrcPduId=0, CAN ID 0x100):
  *              配信先: COM のみ → Com_RxIndication
  *            RX パス 1 (SrcPduId=1, CAN ID 0x7E0):
- *              配信先: DCM のみ → Dcm_ComIndication
+ *              配信先: CanTp → CanTp_RxIndication (トランスポート層経由で DCM へ渡す)
  *            TX パス 0 (SrcPduId=0):
  *              CanIf TxPduId=0 → CAN 0x200, TxConfirmation → Com_TxConfirmation
  *            TX パス 1 (SrcPduId=1):
- *              CanIf TxPduId=1 → CAN 0x7E8, TxConfirmation → NULL
+ *              CanIf TxPduId=1 → CAN 0x7E8, TxConfirmation → CanTp_TxConfirmation
  *
  * \copyright  Copyright (c) 2025 T_T
  * \license    MIT License - 詳細は LICENSE ファイルを参照。
@@ -26,7 +26,7 @@
 #include "PduR_PBCfg.h"
 #include "PduR_Cfg.h"
 #include "Com.h"
-#include "Dcm_Cbk.h"
+#include "CanTp.h"
 
 /* -----------------------------------------------------------------------
  * RX 配信先テーブル（パスごと）
@@ -41,12 +41,12 @@ static const PduR_RxDestType PduR_RxDests_Path0[PDUR_RX_DEST_COUNT_PATH0] = {
     }
 };
 
-/* パス 1: CAN 0x7E0 → DCM のみ（診断要求は DCM 専用） */
+/* パス 1: CAN 0x7E0 → CanTp (診断要求は CanTp でトランスポート処理後 DCM へ渡す) */
 static const PduR_RxDestType PduR_RxDests_Path1[PDUR_RX_DEST_COUNT_PATH1] = {
     {
-        .Module    = PDUR_MODULE_DCM,
+        .Module    = PDUR_MODULE_CANTP,
         .DestPduId = 0U,
-        .RxIndFct  = Dcm_ComIndication
+        .RxIndFct  = CanTp_RxIndication
     }
 };
 
@@ -82,11 +82,12 @@ static const PduR_TxRoutingPathType PduR_TxPaths[PDUR_TX_PATH_COUNT] = {
         .ConfFct       = Com_TxConfirmation
     },
     {
-        /* パス 1: DCM (SrcPduId=1) → CanIf TxPduId=1 (CAN 0x7E8) */
+        /* パス 1: CanTp (SrcPduId=1) → CanIf TxPduId=1 (CAN 0x7E8)
+         * TxConfirmation → CanTp_TxConfirmation (CF タイミング管理用) */
         .SrcPduId      = 1U,
         .CanIfTxPduId  = 1U,
         .ConfDestPduId = 0U,
-        .ConfFct       = NULL
+        .ConfFct       = CanTp_TxConfirmation
     }
 };
 
