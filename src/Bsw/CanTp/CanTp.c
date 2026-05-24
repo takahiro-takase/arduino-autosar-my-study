@@ -36,6 +36,8 @@
 #include "Dcm_Cbk.h"
 #include "Det.h"
 
+#define TAG "CanTp"
+
 extern unsigned long millis(void);
 
 /* -----------------------------------------------------------------------
@@ -125,7 +127,7 @@ void CanTp_Init(void)
 {
     CanTp_Rx.state  = CANTP_RX_IDLE;
     CanTp_Tx.state  = CANTP_TX_IDLE;
-    Det_LogP(PSTR("[CanTp_Init] initialized"));
+    DET_LOGI(TAG, "Init ok");
 }
 
 /* -----------------------------------------------------------------------
@@ -159,11 +161,7 @@ static void CanTp_SendFlowControl(uint8 fs, uint8 bs, uint8 stMin)
     CanTp_TxFrameBuf[6] = 0x00U;
     CanTp_TxFrameBuf[7] = 0x00U;
 
-    Det_PrintP(PSTR("[CanTp_Tx] FC fs="));
-    Det_PrintDec(fs);
-    Det_PrintP(PSTR(" bs="));
-    Det_PrintDec(bs);
-    Det_Newline();
+    DET_LOGD(TAG, "TX FC fs=%u bs=%u", (unsigned)fs, (unsigned)bs);
 
     CanTp_SendFrame();
 }
@@ -188,11 +186,7 @@ static void CanTp_SendNextCF(void)
     for (; i < CANTP_CF_DATA; i++)
         CanTp_TxFrameBuf[1U + i] = 0x00U;
 
-    Det_PrintP(PSTR("[CanTp_Tx] CF sn="));
-    Det_PrintDec(CanTp_Tx.sn);
-    Det_PrintP(PSTR(" pos="));
-    Det_PrintDec(CanTp_Tx.pos);
-    Det_Newline();
+    DET_LOGD(TAG, "TX CF sn=%u pos=%u", (unsigned)CanTp_Tx.sn, (unsigned)CanTp_Tx.pos);
 
     CanTp_SendFrame();
 
@@ -201,7 +195,7 @@ static void CanTp_SendNextCF(void)
 
     if (CanTp_Tx.pos >= CanTp_Tx.msgLen)
     {
-        Det_LogP(PSTR("[CanTp_Tx] complete"));
+        DET_LOGI(TAG, "TX done");
         CanTp_Tx.state = CANTP_TX_IDLE;
         return;
     }
@@ -212,7 +206,7 @@ static void CanTp_SendNextCF(void)
         CanTp_Tx.bsCnt--;
         if (CanTp_Tx.bsCnt == 0U)
         {
-            Det_LogP(PSTR("[CanTp_Tx] block done, wait FC"));
+            DET_LOGI(TAG, "TX block done wait FC");
             CanTp_Tx.state   = CANTP_TX_WAIT_FC;
             CanTp_Tx.bsTimer = millis();
         }
@@ -250,7 +244,7 @@ Std_ReturnType CanTp_Transmit(PduIdType TxSduId, const PduInfoType* PduInfoPtr)
 
     if (msgLen == 0U || msgLen > (uint16)CANTP_TX_BUFFER_SIZE)
     {
-        Det_LogP(PSTR("[CanTp_Tx] E: invalid length"));
+        DET_LOGE(TAG, "TX E: invalid len");
         return E_NOT_OK;
     }
 
@@ -264,9 +258,7 @@ Std_ReturnType CanTp_Transmit(PduIdType TxSduId, const PduInfoType* PduInfoPtr)
         for (; i < CANTP_SF_MAX_DATA; i++)
             CanTp_TxFrameBuf[1U + i] = 0x00U;
 
-        Det_PrintP(PSTR("[CanTp_Tx] SF len="));
-        Det_PrintDec((uint8)msgLen);
-        Det_Newline();
+        DET_LOGI(TAG, "TX SF len=%u", (unsigned)msgLen);
 
         CanTp_SendFrame();
         return E_OK;
@@ -275,7 +267,7 @@ Std_ReturnType CanTp_Transmit(PduIdType TxSduId, const PduInfoType* PduInfoPtr)
     /* ---- Multi Frame: First Frame ---- */
     if (CanTp_Tx.state != CANTP_TX_IDLE)
     {
-        Det_LogP(PSTR("[CanTp_Tx] E: TX busy"));
+        DET_LOGE(TAG, "TX E: busy");
         return E_NOT_OK;
     }
 
@@ -294,9 +286,7 @@ Std_ReturnType CanTp_Transmit(PduIdType TxSduId, const PduInfoType* PduInfoPtr)
     for (k = 0U; k < CANTP_FF_DATA; k++)
         CanTp_TxFrameBuf[2U + k] = CanTp_Tx.buf[k];
 
-    Det_PrintP(PSTR("[CanTp_Tx] FF len="));
-    Det_PrintDec((uint8)msgLen);
-    Det_Newline();
+    DET_LOGI(TAG, "TX FF len=%u", (unsigned)msgLen);
 
     CanTp_SendFrame();
 
@@ -357,9 +347,7 @@ void CanTp_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
         sfUds.SduDataPtr = CanTp_Rx.buf;
         sfUds.SduLength  = (PduLengthType)udsLen;
 
-        Det_PrintP(PSTR("[CanTp_Rx] SF udsLen="));
-        Det_PrintDec(udsLen);
-        Det_Newline();
+        DET_LOGI(TAG, "RX SF len=%u", (unsigned)udsLen);
 
         Dcm_ComIndication(0U, &sfUds);
         break;
@@ -376,7 +364,7 @@ void CanTp_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
 
         if (msgLen > (uint16)CANTP_RX_BUFFER_SIZE)
         {
-            Det_LogP(PSTR("[CanTp_Rx] FF: overflow, send FC(OVFLW)"));
+            DET_LOGE(TAG, "RX FF overflow FC_OVFLW");
             CanTp_SendFlowControl(CANTP_FC_OVFLW, 0U, 0U);
             break;
         }
@@ -394,9 +382,7 @@ void CanTp_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
             CanTp_Rx.buf[i] = data[2U + i];
         CanTp_Rx.pos = copyLen;
 
-        Det_PrintP(PSTR("[CanTp_Rx] FF msgLen="));
-        Det_PrintDec(msgLen);
-        Det_Newline();
+        DET_LOGI(TAG, "RX FF len=%u", (unsigned)msgLen);
 
         CanTp_SendFlowControl(CANTP_FC_CTS, CANTP_BLOCK_SIZE, CANTP_ST_MIN);
         break;
@@ -412,11 +398,8 @@ void CanTp_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
 
         if (sn != (CanTp_Rx.sn & 0x0FU))
         {
-            Det_PrintP(PSTR("[CanTp_Rx] CF SN err exp="));
-            Det_PrintDec(CanTp_Rx.sn & 0x0FU);
-            Det_PrintP(PSTR(" got="));
-            Det_PrintDec(sn);
-            Det_Newline();
+            DET_LOGE(TAG, "RX CF SN err exp=%u got=%u",
+                     (unsigned)(CanTp_Rx.sn & 0x0FU), (unsigned)sn);
             CanTp_Rx.state = CANTP_RX_IDLE;
             break;
         }
@@ -432,11 +415,7 @@ void CanTp_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
         CanTp_Rx.sn   = (uint8)((CanTp_Rx.sn + 1U) & 0x0FU);
         CanTp_Rx.timer = millis();
 
-        Det_PrintP(PSTR("[CanTp_Rx] CF sn="));
-        Det_PrintDec(sn);
-        Det_PrintP(PSTR(" pos="));
-        Det_PrintDec(CanTp_Rx.pos);
-        Det_Newline();
+        DET_LOGD(TAG, "RX CF sn=%u pos=%u", (unsigned)sn, (unsigned)CanTp_Rx.pos);
 
         if (CanTp_Rx.pos >= CanTp_Rx.msgLen)
         {
@@ -446,9 +425,7 @@ void CanTp_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
             mfUds.SduDataPtr = CanTp_Rx.buf;
             mfUds.SduLength  = (PduLengthType)CanTp_Rx.msgLen;
 
-            Det_PrintP(PSTR("[CanTp_Rx] MF complete msgLen="));
-            Det_PrintDec(CanTp_Rx.msgLen);
-            Det_Newline();
+            DET_LOGI(TAG, "RX MF done len=%u", (unsigned)CanTp_Rx.msgLen);
 
             Dcm_ComIndication(0U, &mfUds);
         }
@@ -463,9 +440,7 @@ void CanTp_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
 
         uint8 fs = pci & 0x0FU;
 
-        Det_PrintP(PSTR("[CanTp_Rx] FC fs="));
-        Det_PrintDec(fs);
-        Det_Newline();
+        DET_LOGD(TAG, "RX FC fs=%u", (unsigned)fs);
 
         if (fs == CANTP_FC_CTS)
         {
@@ -481,7 +456,7 @@ void CanTp_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
         }
         else   /* OVFLW */
         {
-            Det_LogP(PSTR("[CanTp_Tx] FC OVFLW: abort TX"));
+            DET_LOGE(TAG, "TX FC OVFLW abort");
             CanTp_Tx.state = CANTP_TX_IDLE;
         }
         break;
@@ -535,7 +510,7 @@ void CanTp_MainFunction(void)
     {
         if (now - CanTp_Tx.bsTimer >= CANTP_N_BS_TIMEOUT_MS)
         {
-            Det_LogP(PSTR("[CanTp_Tx] N_Bs timeout: abort TX"));
+            DET_LOGE(TAG, "TX N_Bs timeout abort");
             CanTp_Tx.state = CANTP_TX_IDLE;
         }
     }
@@ -555,7 +530,7 @@ void CanTp_MainFunction(void)
     {
         if (now - CanTp_Rx.timer >= CANTP_N_CR_TIMEOUT_MS)
         {
-            Det_LogP(PSTR("[CanTp_Rx] N_Cr timeout: abort RX"));
+            DET_LOGE(TAG, "RX N_Cr timeout abort");
             CanTp_Rx.state = CANTP_RX_IDLE;
         }
     }

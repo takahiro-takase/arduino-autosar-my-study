@@ -17,6 +17,8 @@
 #include "Can.h"
 #include "Det.h"
 
+#define TAG "CanIf"
+
 static const CanIf_ConfigType* CanIf_ConfigPtr = NULL;
 
 /**
@@ -38,13 +40,8 @@ static const CanIf_ConfigType* CanIf_ConfigPtr = NULL;
 void CanIf_Init(const CanIf_ConfigType* ConfigPtr)
 {
     CanIf_ConfigPtr = ConfigPtr;
-    Det_LogP(PSTR("[CanIf_Init] initialized"));
-    Det_PrintP(PSTR("  TX PDU count: "));
-    Det_PrintDec(ConfigPtr->TxPduCount);
-    Det_Newline();
-    Det_PrintP(PSTR("  RX PDU count: "));
-    Det_PrintDec(ConfigPtr->RxPduCount);
-    Det_Newline();
+    DET_LOGI(TAG, "Init ok TX=%u RX=%u",
+             (unsigned)ConfigPtr->TxPduCount, (unsigned)ConfigPtr->RxPduCount);
 }
 
 /**
@@ -77,13 +74,13 @@ Std_ReturnType CanIf_Transmit(PduIdType TxPduId, const PduInfoType* PduInfoPtr)
 
     if (TxPduId >= CanIf_ConfigPtr->TxPduCount)
     {
-        Det_LogP(PSTR("[CanIf_Transmit] E: invalid TxPduId"));
+        DET_LOGE(TAG, "TX E: invalid TxPduId");
         return E_NOT_OK;
     }
 
     if (PduInfoPtr == NULL || PduInfoPtr->SduDataPtr == NULL)
     {
-        Det_LogP(PSTR("[CanIf_Transmit] E: PduInfoPtr NULL"));
+        DET_LOGE(TAG, "TX E: PduInfoPtr NULL");
         return E_NOT_OK;
     }
 
@@ -91,7 +88,7 @@ Std_ReturnType CanIf_Transmit(PduIdType TxPduId, const PduInfoType* PduInfoPtr)
 
     if (PduInfoPtr->SduLength > txCfg->Dlc)
     {
-        Det_LogP(PSTR("[CanIf_Transmit] E: SduLength>DLC"));
+        DET_LOGE(TAG, "TX E: SduLength>DLC");
         return E_NOT_OK;
     }
 
@@ -102,16 +99,12 @@ Std_ReturnType CanIf_Transmit(PduIdType TxPduId, const PduInfoType* PduInfoPtr)
         .sdu         = PduInfoPtr->SduDataPtr
     };
 
-    Det_PrintP(PSTR("[CanIf_Transmit] TxPduId="));
-    Det_PrintDec(TxPduId);
-    Det_PrintP(PSTR(" CanId=0x"));
-    Det_PrintHex(txCfg->CanId);
-    Det_Newline();
+    DET_LOGD(TAG, "TX id=%u can=0x%lX", (unsigned)TxPduId, (unsigned long)txCfg->CanId);
 
     Can_ReturnType ret = Can_Write(txCfg->Hth, &canPdu);
 
     if (ret == CAN_BUSY)
-        Det_LogP(PSTR("[CanIf_Transmit] BUSY"));
+        DET_LOGW(TAG, "TX BUSY");
 
     return (ret == CAN_OK) ? E_OK : E_NOT_OK;
 }
@@ -147,11 +140,9 @@ void CanIf_RxIndication(const Can_HwType* Mailbox, const PduInfoType* PduInfoPtr
 
         if (rxCfg->Hrh == Mailbox->Hoh && rxCfg->CanId == Mailbox->CanId)
         {
-            Det_PrintP(PSTR("[CanIf_RxInd] CanId=0x"));
-            Det_PrintHex(Mailbox->CanId);
-            Det_PrintP(PSTR(" -> RxPduId="));
-            Det_PrintDec(rxCfg->UpperLayerRxPduId);
-            Det_Newline();
+            DET_LOGD(TAG, "RX can=0x%lX pdu=%u",
+                     (unsigned long)Mailbox->CanId,
+                     (unsigned)rxCfg->UpperLayerRxPduId);
 
             if (rxCfg->RxIndicationFct != NULL)
                 rxCfg->RxIndicationFct(rxCfg->UpperLayerRxPduId, PduInfoPtr);
@@ -160,9 +151,7 @@ void CanIf_RxIndication(const Can_HwType* Mailbox, const PduInfoType* PduInfoPtr
         }
     }
 
-    Det_PrintP(PSTR("[CanIf_RxInd] no match CanId=0x"));
-    Det_PrintHex(Mailbox->CanId);
-    Det_Newline();
+    DET_LOGW(TAG, "RX no match can=0x%lX", (unsigned long)Mailbox->CanId);
 }
 
 /**
@@ -193,9 +182,7 @@ void CanIf_TxConfirmation(PduIdType CanTxPduId)
 
     const CanIf_TxPduConfigType* txCfg = &CanIf_ConfigPtr->TxPduConfig[CanTxPduId];
 
-    Det_PrintP(PSTR("[CanIf_TxConf] TxPduId="));
-    Det_PrintDec(CanTxPduId);
-    Det_Newline();
+    DET_LOGD(TAG, "TxConf id=%u", (unsigned)CanTxPduId);
 
     if (txCfg->TxConfirmFct != NULL)
         txCfg->TxConfirmFct(txCfg->UpperLayerTxPduId, E_OK);

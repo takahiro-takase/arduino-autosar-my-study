@@ -13,6 +13,8 @@
 #include <new>
 #include "Det.h"
 
+#define TAG "Mcp2515"
+
 /*
  * MCP_CAN は C++ クラスのため、このファイルは .cpp のまま。
  * placement new でヒープを使わず静的バッファ上にインスタンスを構築する。
@@ -45,33 +47,13 @@ Mcp2515_ReturnType Mcp2515_Send(uint32_t id, uint8_t dlc, const uint8_t* data)
     ret = driver->sendMsgBuf(id, 0, dlc, (uint8_t*)data);
     if (ret != CAN_OK)
     {
-        Serial.print((__FlashStringHelper*)PSTR("[Mcp2515_Send] FAIL to send message"));
-        Serial.print(id, HEX);
-        Serial.print((__FlashStringHelper*)PSTR(" DLC="));
-        Serial.print(dlc, DEC);
-        Serial.println();
+        DET_LOGE(TAG, "TX FAIL id=0x%lX dlc=%u", (unsigned long)id, (unsigned)dlc);
         return MCP2515_WRAPPER_FAIL;
     }
 
-    Serial.print((__FlashStringHelper*)PSTR("[Mcp2515_Send] OK >>>> ID=0x"));
-    Serial.print(id, HEX);
-    Serial.print((__FlashStringHelper*)PSTR(" DLC="));
-    Serial.print(dlc, DEC);
-    Serial.print((__FlashStringHelper*)PSTR(" DATA=["));
-    for (uint8_t i = 0; i < dlc; i++)
-    {
-        if (i > 0)
-        {
-            Serial.print((__FlashStringHelper*)PSTR(" "));
-        }
-        if (data[i] < 0x10)
-        {
-            Serial.print((__FlashStringHelper*)PSTR("0"));
-        }
-        Serial.print(data[i], HEX);
-    }
-    Serial.print((__FlashStringHelper*)PSTR("]"));
-    Serial.println();
+    char hexbuf[25];
+    Log_HexStr(hexbuf, sizeof(hexbuf), data, dlc);
+    DET_LOGD(TAG, "TX OK id=0x%lX dlc=%u [%s]", (unsigned long)id, (unsigned)dlc, hexbuf);
 
     return MCP2515_WRAPPER_OK;
 }
@@ -82,8 +64,7 @@ Mcp2515_ReturnType Mcp2515_Read(uint32_t* id, uint8_t* dlc, uint8_t* data)
     ret = driver->checkReceive();
     if (ret != CAN_MSGAVAIL)
     {
-        Serial.print((__FlashStringHelper*)PSTR("[Mcp2515_Read] No message available"));
-        Serial.println();
+        DET_LOGW(TAG, "Read: no msg");
         return MCP2515_WRAPPER_FAIL;
     }
 
@@ -93,8 +74,7 @@ Mcp2515_ReturnType Mcp2515_Read(uint32_t* id, uint8_t* dlc, uint8_t* data)
     ret = driver->readMsgBuf(&rxId, &len, buf);
     if (ret != CAN_OK)
     {
-        Serial.print((__FlashStringHelper*)PSTR("[Mcp2515_Read] Read message failure"));
-        Serial.println();
+        DET_LOGE(TAG, "Read: msg read fail");
         return MCP2515_WRAPPER_FAIL;
     }
 
@@ -102,25 +82,9 @@ Mcp2515_ReturnType Mcp2515_Read(uint32_t* id, uint8_t* dlc, uint8_t* data)
     *dlc = len;
     for (int i = 0; i < len; i++) data[i] = buf[i];
 
-    Serial.print((__FlashStringHelper*)PSTR("[Mcp2515_Read] OK >>>> ID=0x"));
-    Serial.print(*id, HEX);
-    Serial.print((__FlashStringHelper*)PSTR(" DLC="));
-    Serial.print(len, DEC);
-    Serial.print((__FlashStringHelper*)PSTR(" DATA=["));
-    for (unsigned char i = 0; i < len; i++)
-    {
-        if (i > 0)
-        {
-            Serial.print((__FlashStringHelper*)PSTR(" "));
-        }
-        if (buf[i] < 0x10)
-        {
-            Serial.print((__FlashStringHelper*)PSTR("0"));
-        }
-        Serial.print(buf[i], HEX);
-    }
-    Serial.print((__FlashStringHelper*)PSTR("]"));
-    Serial.println();
+    char hexbuf[25];
+    Log_HexStr(hexbuf, sizeof(hexbuf), buf, len);
+    DET_LOGD(TAG, "RX OK id=0x%lX dlc=%u [%s]", (unsigned long)*id, (unsigned)len, hexbuf);
 
     return MCP2515_WRAPPER_OK;
 }

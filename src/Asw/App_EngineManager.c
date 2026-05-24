@@ -30,6 +30,8 @@
 #include "Dem.h"
 #include "Det.h"
 
+#define TAG "AppEng"
+
 /* millis() is declared in Arduino wiring.c with C linkage. */
 extern unsigned long millis(void);
 
@@ -65,7 +67,7 @@ void App_EngineManager_Init(void)
 {
     s_state           = ENGINE_STATE_OFF;
     s_startingEnterMs = 0UL;
-    Det_LogP(PSTR("[EngineManager] Init->OFF"));
+    DET_LOGI(TAG, "Init->OFF");
 }
 
 /**
@@ -160,13 +162,13 @@ static void State_Off(EngineSpeed_t speed, CoolantTemp_t temp, EngineOnFlag_t fl
         s_state           = ENGINE_STATE_STARTING;
         s_startingEnterMs = millis();
         Dem_ReportErrorStatus(DEM_EVENT_ENGINE_SPEED_NO_FLAG, DEM_EVENT_STATUS_PASSED);
-        Det_LogP(PSTR("[EngineManager] OFF->STARTING"));
+        DET_LOGI(TAG, "OFF->STARTING");
     }
     else if (speed > 0U)
     {
         s_state = ENGINE_STATE_FAULT;
         Dem_ReportErrorStatus(DEM_EVENT_ENGINE_SPEED_NO_FLAG, DEM_EVENT_STATUS_FAILED);
-        Det_LogP(PSTR("[EngineManager] OFF->FAULT(spd w/o flag)"));
+        DET_LOGW(TAG, "OFF->FAULT spd_no_flag");
     }
     else
     {
@@ -197,21 +199,21 @@ static void State_Starting(EngineSpeed_t speed, CoolantTemp_t temp, EngineOnFlag
     if (flag == 0U)
     {
         s_state = ENGINE_STATE_OFF;
-        Det_LogP(PSTR("[EngineManager] STARTING->OFF"));
+        DET_LOGI(TAG, "STARTING->OFF");
         return;
     }
     if (speed >= ENGINE_SPEED_RUNNING_THRESHOLD)
     {
         s_state = ENGINE_STATE_RUNNING;
         Dem_ReportErrorStatus(DEM_EVENT_STARTING_TIMEOUT, DEM_EVENT_STATUS_PASSED);
-        Det_LogP(PSTR("[EngineManager] STARTING->RUNNING"));
+        DET_LOGI(TAG, "STARTING->RUNNING");
         return;
     }
     if (millis() - s_startingEnterMs >= STARTING_TIMEOUT_MS)
     {
         s_state = ENGINE_STATE_FAULT;
         Dem_ReportErrorStatus(DEM_EVENT_STARTING_TIMEOUT, DEM_EVENT_STATUS_FAILED);
-        Det_LogP(PSTR("[EngineManager] STARTING->FAULT(timeout)"));
+        DET_LOGW(TAG, "STARTING->FAULT timeout");
     }
 }
 
@@ -237,7 +239,7 @@ static void State_Running(EngineSpeed_t speed, CoolantTemp_t temp, EngineOnFlag_
     if (flag == 0U)
     {
         s_state = ENGINE_STATE_OFF;
-        Det_LogP(PSTR("[EngineManager] RUNNING->OFF"));
+        DET_LOGI(TAG, "RUNNING->OFF");
         return;
     }
     if (temp >= COOLANT_OVERHEAT_THRESHOLD)
@@ -245,9 +247,7 @@ static void State_Running(EngineSpeed_t speed, CoolantTemp_t temp, EngineOnFlag_
         s_state = ENGINE_STATE_FAULT;
         Dem_ReportErrorStatus(DEM_EVENT_ENGINE_OVERHEAT, DEM_EVENT_STATUS_FAILED);
         Dem_ReportErrorStatus(DEM_EVENT_ENGINE_STALL,    DEM_EVENT_STATUS_PASSED);
-        Det_PrintP(PSTR("[EngineManager] RUNNING->FAULT(overheat="));
-        Det_PrintDec(temp);
-        Det_LogP(PSTR(")"));
+        DET_LOGW(TAG, "RUNNING->FAULT overheat=%u", (unsigned)temp);
         return;
     }
     if (speed < ENGINE_SPEED_STALL_THRESHOLD)
@@ -255,9 +255,7 @@ static void State_Running(EngineSpeed_t speed, CoolantTemp_t temp, EngineOnFlag_
         s_state = ENGINE_STATE_FAULT;
         Dem_ReportErrorStatus(DEM_EVENT_ENGINE_STALL,    DEM_EVENT_STATUS_FAILED);
         Dem_ReportErrorStatus(DEM_EVENT_ENGINE_OVERHEAT, DEM_EVENT_STATUS_PASSED);
-        Det_PrintP(PSTR("[EngineManager] RUNNING->FAULT(stall="));
-        Det_PrintDec(speed);
-        Det_LogP(PSTR(")"));
+        DET_LOGW(TAG, "RUNNING->FAULT stall=%u", (unsigned)speed);
         return;
     }
 
@@ -265,11 +263,7 @@ static void State_Running(EngineSpeed_t speed, CoolantTemp_t temp, EngineOnFlag_
     Dem_ReportErrorStatus(DEM_EVENT_ENGINE_OVERHEAT, DEM_EVENT_STATUS_PASSED);
     Dem_ReportErrorStatus(DEM_EVENT_ENGINE_STALL,    DEM_EVENT_STATUS_PASSED);
 
-    Det_PrintP(PSTR("[EngineManager] RUNNING spd="));
-    Det_PrintDec(speed);
-    Det_PrintP(PSTR(" tmp="));
-    Det_PrintDec(temp);
-    Det_Newline();
+    DET_LOGD(TAG, "RUNNING spd=%u tmp=%u", (unsigned)speed, (unsigned)temp);
 }
 
 /**
@@ -296,10 +290,10 @@ static void State_Fault(EngineSpeed_t speed, CoolantTemp_t temp, EngineOnFlag_t 
     if (flag == 0U)
     {
         s_state = ENGINE_STATE_OFF;
-        Det_LogP(PSTR("[EngineManager] FAULT->OFF"));
+        DET_LOGI(TAG, "FAULT->OFF");
     }
     else
     {
-        Det_LogP(PSTR("[EngineManager] FAULT(wait flag=0)"));
+        DET_LOGD(TAG, "FAULT wait flag=0");
     }
 }

@@ -18,6 +18,8 @@
 #include "PduR.h"
 #include "Det.h"
 
+#define TAG "Com"
+
 #define COM_IPDU_MAX_DLC  8U
 #define COM_RX_IPDU_MAX   1U
 #define COM_TX_IPDU_MAX   1U
@@ -48,17 +50,17 @@ void Com_Init(const Com_ConfigType* config)
 {
     if (config == NULL)
     {
-        Det_LogP(PSTR("[Com_Init] E: config NULL"));
+        DET_LOGE(TAG, "Init E: config NULL");
         return;
     }
     if (config->RxIPduCount > COM_RX_IPDU_MAX)
     {
-        Det_LogP(PSTR("[Com_Init] E: RxIPduCount>max"));
+        DET_LOGE(TAG, "Init E: RxIPduCount>max");
         return;
     }
     if (config->TxIPduCount > COM_TX_IPDU_MAX)
     {
-        Det_LogP(PSTR("[Com_Init] E: TxIPduCount>max"));
+        DET_LOGE(TAG, "Init E: TxIPduCount>max");
         return;
     }
 
@@ -72,30 +74,10 @@ void Com_Init(const Com_ConfigType* config)
         for (uint8 j = 0; j < COM_IPDU_MAX_DLC; j++)
             Com_TxBuffer[i][j] = 0U;
 
-    Det_LogP(PSTR("[Com_Init] OK"));
-
-    Det_PrintP(PSTR("  RxIPdus="));
-    Det_PrintDec(config->RxIPduCount);
-    Det_PrintP(PSTR(" TxIPdus="));
-    Det_PrintDec(config->TxIPduCount);
-    Det_PrintP(PSTR(" Signals="));
-    Det_PrintDec(config->SignalCount);
-    Det_Newline();
-
-    for (uint8 s = 0; s < config->SignalCount; s++)
-    {
-        const Com_SignalConfigType* sig = &config->Signals[s];
-        Det_PrintP(PSTR("  Sig["));
-        Det_PrintDec(sig->SignalId);
-        Det_PrintP(PSTR("] IPdu="));
-        Det_PrintDec(sig->IPduId);
-        Det_PrintP(PSTR(" Bit="));
-        Det_PrintDec(sig->BitPosition);
-        Det_PrintP(PSTR("/"));
-        Det_PrintDec(sig->BitSize);
-        Det_PrintP(PSTR(" "));
-        Det_LogP(sig->Endian == COM_BIG_ENDIAN ? PSTR("BIG") : PSTR("LITTLE"));
-    }
+    DET_LOGI(TAG, "Init ok RX=%u TX=%u sig=%u",
+             (unsigned)config->RxIPduCount,
+             (unsigned)config->TxIPduCount,
+             (unsigned)config->SignalCount);
 }
 
 /**
@@ -134,22 +116,13 @@ void Com_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
         for (uint8 b = 0; b < copyLen; b++)
             Com_RxBuffer[ipdu->IPduId][b] = PduInfoPtr->SduDataPtr[b];
 
-        Det_PrintP(PSTR("[Com_RxInd] IPdu="));
-        Det_PrintDec(ipdu->IPduId);
-        Det_PrintP(PSTR(" raw=["));
-        for (uint8 b = 0; b < copyLen; b++)
-        {
-            if (b > 0U) Det_Print(" ");
-            if (Com_RxBuffer[ipdu->IPduId][b] < 0x10U) Det_Print("0");
-            Det_PrintHex(Com_RxBuffer[ipdu->IPduId][b]);
-        }
-        Det_LogP(PSTR("]"));
+        char hexbuf[25];
+        Log_HexStr(hexbuf, sizeof(hexbuf), Com_RxBuffer[ipdu->IPduId], copyLen);
+        DET_LOGD(TAG, "RX iPdu=%u [%s]", (unsigned)ipdu->IPduId, hexbuf);
         return;
     }
 
-    Det_PrintP(PSTR("[Com_RxInd] no IPdu PduRId="));
-    Det_PrintDec(RxPduId);
-    Det_Newline();
+    DET_LOGW(TAG, "RX no iPdu src=%u", (unsigned)RxPduId);
 }
 
 /* -----------------------------------------------------------------------
@@ -372,16 +345,9 @@ Std_ReturnType Com_TriggerIPDUSend(PduIdType PduId)
         if ((PduIdType)ipdu->IPduId != PduId)
             continue;
 
-        Det_PrintP(PSTR("[Com_TxSend] IPdu="));
-        Det_PrintDec(PduId);
-        Det_PrintP(PSTR(" data=["));
-        for (uint8 b = 0; b < ipdu->DLC; b++)
-        {
-            if (b > 0U) Det_Print(" ");
-            if (Com_TxBuffer[PduId][b] < 0x10U) Det_Print("0");
-            Det_PrintHex(Com_TxBuffer[PduId][b]);
-        }
-        Det_LogP(PSTR("]"));
+        char hexbuf[25];
+        Log_HexStr(hexbuf, sizeof(hexbuf), Com_TxBuffer[PduId], ipdu->DLC);
+        DET_LOGD(TAG, "TX iPdu=%u [%s]", (unsigned)PduId, hexbuf);
 
         PduInfoType pduInfo = {
             .SduDataPtr = Com_TxBuffer[PduId],
@@ -390,9 +356,7 @@ Std_ReturnType Com_TriggerIPDUSend(PduIdType PduId)
         return PduR_Transmit(ipdu->PduRId, &pduInfo);
     }
 
-    Det_PrintP(PSTR("[Com_TxSend] no TX IPdu="));
-    Det_PrintDec(PduId);
-    Det_Newline();
+    DET_LOGW(TAG, "TX no iPdu=%u", (unsigned)PduId);
     return E_NOT_OK;
 }
 
@@ -419,7 +383,5 @@ Std_ReturnType Com_TriggerIPDUSend(PduIdType PduId)
 void Com_TxConfirmation(PduIdType TxPduId, Std_ReturnType result)
 {
     (void)result;
-    Det_PrintP(PSTR("[Com_TxConf] TxPduId="));
-    Det_PrintDec(TxPduId);
-    Det_Newline();
+    DET_LOGD(TAG, "TxConf id=%u", (unsigned)TxPduId);
 }
