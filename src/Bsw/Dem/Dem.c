@@ -27,6 +27,8 @@
 #include "Det.h"
 #include <avr/eeprom.h>
 
+#define TAG "Dem"
+
 /* -----------------------------------------------------------------------
  * モジュール内部状態
  * ----------------------------------------------------------------------- */
@@ -92,7 +94,7 @@ void Dem_Init(void)
                                    & (uint8)(~DEM_STATUS_TF_THIS_OP_CYCLE))
                                   | DEM_STATUS_NOT_COMPLETED_THIS_CYCLE;
         }
-        Det_LogP(PSTR("[Dem_Init] restored from NvM"));
+        DET_LOGI(TAG, "Init NvM restored ev=%u", (unsigned)DEM_EVENT_COUNT);
     }
     else
     {
@@ -106,12 +108,8 @@ void Dem_Init(void)
         eeprom_update_byte(
             (uint8_t*)(uintptr_t)DEM_NVM_MAGIC_ADDR,
             DEM_NVM_MAGIC_BYTE);
-        Det_LogP(PSTR("[Dem_Init] NvM init (first run)"));
+        DET_LOGI(TAG, "Init first-run ev=%u", (unsigned)DEM_EVENT_COUNT);
     }
-
-    Det_PrintP(PSTR("  events="));
-    Det_PrintDec(DEM_EVENT_COUNT);
-    Det_Newline();
 }
 
 /**
@@ -148,13 +146,8 @@ void Dem_ReportErrorStatus(Dem_EventIdType EventId,
         status &= (uint8)(~DEM_STATUS_NOT_COMPLETED_SINCE_CLEAR);
         status &= (uint8)(~DEM_STATUS_NOT_COMPLETED_THIS_CYCLE);
 
-        Det_PrintP(PSTR("[Dem] FAILED ev="));
-        Det_PrintDec(EventId);
-        Det_PrintP(PSTR(" DTC=0x"));
-        Det_PrintHex((uint8)(Dem_DtcTable[EventId] >> 16U));
-        Det_PrintHex((uint8)(Dem_DtcTable[EventId] >>  8U));
-        Det_PrintHex((uint8)(Dem_DtcTable[EventId]));
-        Det_Newline();
+        DET_LOGW(TAG, "FAILED ev=%u dtc=0x%06lX",
+                 (unsigned)EventId, (unsigned long)Dem_DtcTable[EventId]);
     }
     else if (EventStatus == DEM_EVENT_STATUS_PASSED)
     {
@@ -233,7 +226,7 @@ Std_ReturnType Dem_ClearAllDTCs(void)
                            | DEM_STATUS_NOT_COMPLETED_THIS_CYCLE;
         Dem_NvmWrite(i, Dem_StatusTable[i]);
     }
-    Det_LogP(PSTR("[Dem] All DTCs cleared"));
+    DET_LOGI(TAG, "ClearAll ok");
     return E_OK;
 }
 

@@ -34,6 +34,8 @@
 #include "Rte.h"
 #include "Det.h"
 
+#define TAG "Dcm"
+
 /* -----------------------------------------------------------------------
  * モジュール内部状態
  * ----------------------------------------------------------------------- */
@@ -82,7 +84,7 @@ void Dcm_Init(void)
     Dcm_CurrentSession   = DCM_SESSION_DEFAULT;
     Dcm_TxPdu.SduDataPtr = Dcm_TxBuf;
     Dcm_TxPdu.SduLength  = 0U;   /* 各ハンドラで送信長を設定する */
-    Det_LogP(PSTR("[Dcm_Init] session=Default"));
+    DET_LOGI(TAG, "Init ok");
 }
 
 /* -----------------------------------------------------------------------
@@ -115,11 +117,7 @@ static void Dcm_SendNegativeResponse(uint8 sid, uint8 nrc)
     Dcm_TxBuf[2] = nrc;
     Dcm_TxPdu.SduLength = 3U;
 
-    Det_PrintP(PSTR("[Dcm] NRC sid=0x"));
-    Det_PrintHex(sid);
-    Det_PrintP(PSTR(" nrc=0x"));
-    Det_PrintHex(nrc);
-    Det_Newline();
+    DET_LOGE(TAG, "NRC sid=0x%02X nrc=0x%02X", (unsigned)sid, (unsigned)nrc);
 
     Dcm_Transmit();
 }
@@ -157,9 +155,7 @@ static void Dcm_HandleSessionControl(const uint8* uds, uint8 udsLen)
 
     Dcm_CurrentSession = subFunc;
 
-    Det_PrintP(PSTR("[Dcm 0x10] session=0x"));
-    Det_PrintHex(subFunc);
-    Det_Newline();
+    DET_LOGI(TAG, "10 session=0x%02X", (unsigned)subFunc);
 
     /* 正応答: [0x50, subFunc, P2_H, P2_L, P2X_H, P2X_L] */
     Dcm_TxBuf[0] = 0x50U;               /* SID + 0x40 */
@@ -204,9 +200,7 @@ static void Dcm_HandleEcuReset(const uint8* uds, uint8 udsLen)
         return;
     }
 
-    Det_PrintP(PSTR("[Dcm 0x11] ECUReset sub=0x"));
-    Det_PrintHex(subFunc);
-    Det_Newline();
+    DET_LOGI(TAG, "11 sub=0x%02X", (unsigned)subFunc);
 
     /* 正応答: [0x51, subFunc] */
     Dcm_TxBuf[0] = 0x51U;               /* SID + 0x40 */
@@ -217,7 +211,7 @@ static void Dcm_HandleEcuReset(const uint8* uds, uint8 udsLen)
 
     /* リセット後処理: セッションをデフォルトに戻す */
     Dcm_CurrentSession = DCM_SESSION_DEFAULT;
-    Det_LogP(PSTR("[Dcm 0x11] session reset to Default"));
+    DET_LOGI(TAG, "11 session->Default");
 }
 
 /* -----------------------------------------------------------------------
@@ -253,7 +247,7 @@ static void Dcm_HandleClearDtc(const uint8* uds, uint8 udsLen)
         return;
     }
 
-    Det_LogP(PSTR("[Dcm 0x14] ClearAllDTCs"));
+    DET_LOGI(TAG, "14 ClearAllDTC");
     Dem_ClearAllDTCs();
 
     /* 正応答: [0x54] */
@@ -291,11 +285,7 @@ static void Dcm_HandleReadDtcCount(const uint8* uds, uint8 udsLen)
 
     Dem_GetAllDTCs(dtcBuf, statusBuf, &count, statusMask);
 
-    Det_PrintP(PSTR("[Dcm 0x19/01] mask=0x"));
-    Det_PrintHex(statusMask);
-    Det_PrintP(PSTR(" count="));
-    Det_PrintDec(count);
-    Det_Newline();
+    DET_LOGI(TAG, "19/01 mask=0x%02X cnt=%u", (unsigned)statusMask, (unsigned)count);
 
     /* 正応答: [0x59, 0x01, statusAvailMask, dtcFormat, countH, countL] */
     Dcm_TxBuf[0] = 0x59U;                        /* SID 0x19 + 0x40 */
@@ -337,11 +327,7 @@ static void Dcm_HandleReadDtcByMask(const uint8* uds, uint8 udsLen)
 
     Dem_GetAllDTCs(dtcBuf, statusBuf, &count, statusMask);
 
-    Det_PrintP(PSTR("[Dcm 0x19/02] mask=0x"));
-    Det_PrintHex(statusMask);
-    Det_PrintP(PSTR(" found="));
-    Det_PrintDec(count);
-    Det_Newline();
+    DET_LOGI(TAG, "19/02 mask=0x%02X found=%u", (unsigned)statusMask, (unsigned)count);
 
     Dcm_TxBuf[0] = 0x59U;
     Dcm_TxBuf[1] = DCM_DTC_SUBFUNC_REPORT_BY_MASK;
@@ -471,11 +457,7 @@ static void Dcm_HandleReadDataById(const uint8* uds, uint8 udsLen)
         return;
     }
 
-    Det_PrintP(PSTR("[Dcm 0x22] DID=0x"));
-    Det_PrintHex(did);
-    Det_PrintP(PSTR(" len="));
-    Det_PrintDec(dataLen);
-    Det_Newline();
+    DET_LOGI(TAG, "22 did=0x%04X len=%u", (unsigned)did, (unsigned)dataLen);
 
     /* 正応答: [0x62, DID_H, DID_L, data...] */
     Dcm_TxBuf[0] = 0x62U;                      /* SID + 0x40 */
@@ -508,7 +490,7 @@ static void Dcm_HandleTesterPresent(const uint8* uds, uint8 udsLen)
 {
     uint8 subFunc = (udsLen >= 2U) ? (uds[1] & 0x7FU) : 0x00U;
 
-    Det_LogP(PSTR("[Dcm 0x3E] TesterPresent"));
+    DET_LOGI(TAG, "3E TesterPresent");
 
     /* 正応答: [0x7E, subFunc] */
     Dcm_TxBuf[0] = 0x7EU;               /* SID + 0x40 */
@@ -549,9 +531,7 @@ void Dcm_ComIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
     uint8        udsLen = (uint8)PduInfoPtr->SduLength;
     uint8        sid    = uds[0];
 
-    Det_PrintP(PSTR("[Dcm] SID=0x"));
-    Det_PrintHex(sid);
-    Det_Newline();
+    DET_LOGI(TAG, "req SID=0x%02X", (unsigned)sid);
 
     /* --- UDS サービスディスパッチ --- */
     switch (sid)

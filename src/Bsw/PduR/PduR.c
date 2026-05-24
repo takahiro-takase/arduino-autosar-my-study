@@ -19,6 +19,8 @@
 #include "CanIf.h"
 #include "Det.h"
 
+#define TAG "PduR"
+
 static const PduR_PBConfigType* PduR_ConfigPtr = NULL;
 
 /**
@@ -41,7 +43,7 @@ void PduR_Init(const PduR_PBConfigType* ConfigPtr)
 {
     if (ConfigPtr == NULL)
     {
-        Det_LogP(PSTR("[PduR_Init] E: ConfigPtr NULL"));
+        DET_LOGE(TAG, "Init E: config NULL");
         return;
     }
 
@@ -49,49 +51,14 @@ void PduR_Init(const PduR_PBConfigType* ConfigPtr)
     {
         if (ConfigPtr->RxPaths[i].Dests == NULL || ConfigPtr->RxPaths[i].DestCount == 0)
         {
-            Det_PrintP(PSTR("[PduR_Init] E: RxPath["));
-            Det_PrintDec(i);
-            Det_LogP(PSTR("] no dests"));
+            DET_LOGE(TAG, "Init E: RxPath[%u] no dests", (unsigned)i);
             return;
         }
     }
 
     PduR_ConfigPtr = ConfigPtr;
-    Det_LogP(PSTR("[PduR_Init] initialized"));
-
-    Det_PrintP(PSTR("  RX paths: "));
-    Det_PrintDec(ConfigPtr->RxPathCount);
-    Det_Newline();
-    for (uint8 i = 0; i < ConfigPtr->RxPathCount; i++)
-    {
-        const PduR_RxRoutingPathType* path = &ConfigPtr->RxPaths[i];
-        Det_PrintP(PSTR("    SrcPduId="));
-        Det_PrintDec(path->SrcPduId);
-        Det_PrintP(PSTR(" dests="));
-        Det_PrintDec(path->DestCount);
-        Det_Newline();
-        for (uint8 d = 0; d < path->DestCount; d++)
-        {
-            Det_PrintP(PSTR("      Module="));
-            Det_PrintDec(path->Dests[d].Module);
-            Det_PrintP(PSTR(" DestPduId="));
-            Det_PrintDec(path->Dests[d].DestPduId);
-            Det_Newline();
-        }
-    }
-
-    Det_PrintP(PSTR("  TX paths: "));
-    Det_PrintDec(ConfigPtr->TxPathCount);
-    Det_Newline();
-    for (uint8 i = 0; i < ConfigPtr->TxPathCount; i++)
-    {
-        const PduR_TxRoutingPathType* path = &ConfigPtr->TxPaths[i];
-        Det_PrintP(PSTR("    SrcPduId="));
-        Det_PrintDec(path->SrcPduId);
-        Det_PrintP(PSTR(" -> CanIfTxPduId="));
-        Det_PrintDec(path->CanIfTxPduId);
-        Det_Newline();
-    }
+    DET_LOGI(TAG, "Init ok RX=%u TX=%u",
+             (unsigned)ConfigPtr->RxPathCount, (unsigned)ConfigPtr->TxPathCount);
 }
 
 /**
@@ -131,13 +98,9 @@ void PduR_ComRxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
         {
             const PduR_RxDestType* dest = &path->Dests[d];
 
-            Det_PrintP(PSTR("[PduR_RxInd] Src="));
-            Det_PrintDec(RxPduId);
-            Det_PrintP(PSTR(" Mod="));
-            Det_PrintDec(dest->Module);
-            Det_PrintP(PSTR(" Dst="));
-            Det_PrintDec(dest->DestPduId);
-            Det_Newline();
+            DET_LOGD(TAG, "RxInd src=%u mod=%u dst=%u",
+                     (unsigned)RxPduId, (unsigned)dest->Module,
+                     (unsigned)dest->DestPduId);
 
             if (dest->RxIndFct != NULL)
                 dest->RxIndFct(dest->DestPduId, PduInfoPtr);
@@ -145,9 +108,7 @@ void PduR_ComRxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
         return;
     }
 
-    Det_PrintP(PSTR("[PduR_RxInd] no route Src="));
-    Det_PrintDec(RxPduId);
-    Det_Newline();
+    DET_LOGW(TAG, "RxInd no route src=%u", (unsigned)RxPduId);
 }
 
 /**
@@ -181,11 +142,8 @@ void PduR_CanIfTxConfirmation(PduIdType TxPduId, Std_ReturnType result)
         if (path->SrcPduId != TxPduId)
             continue;
 
-        Det_PrintP(PSTR("[PduR_TxConf] Src="));
-        Det_PrintDec(TxPduId);
-        Det_PrintP(PSTR(" ConfDst="));
-        Det_PrintDec(path->ConfDestPduId);
-        Det_Newline();
+        DET_LOGD(TAG, "TxConf src=%u dst=%u",
+                 (unsigned)TxPduId, (unsigned)path->ConfDestPduId);
 
         if (path->ConfFct != NULL)
             path->ConfFct(path->ConfDestPduId, result);
@@ -193,9 +151,7 @@ void PduR_CanIfTxConfirmation(PduIdType TxPduId, Std_ReturnType result)
         return;
     }
 
-    Det_PrintP(PSTR("[PduR_TxConf] no route Src="));
-    Det_PrintDec(TxPduId);
-    Det_Newline();
+    DET_LOGW(TAG, "TxConf no route src=%u", (unsigned)TxPduId);
 }
 
 /**
@@ -234,17 +190,12 @@ Std_ReturnType PduR_Transmit(PduIdType SrcPduId, const PduInfoType* PduInfoPtr)
         if (path->SrcPduId != SrcPduId)
             continue;
 
-        Det_PrintP(PSTR("[PduR_Transmit] Src="));
-        Det_PrintDec(SrcPduId);
-        Det_PrintP(PSTR(" -> CanIf="));
-        Det_PrintDec(path->CanIfTxPduId);
-        Det_Newline();
+        DET_LOGD(TAG, "TX src=%u canif=%u",
+                 (unsigned)SrcPduId, (unsigned)path->CanIfTxPduId);
 
         return CanIf_Transmit(path->CanIfTxPduId, PduInfoPtr);
     }
 
-    Det_PrintP(PSTR("[PduR_Transmit] no route Src="));
-    Det_PrintDec(SrcPduId);
-    Det_Newline();
+    DET_LOGW(TAG, "TX no route src=%u", (unsigned)SrcPduId);
     return E_NOT_OK;
 }

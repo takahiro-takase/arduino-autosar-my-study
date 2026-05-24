@@ -18,6 +18,9 @@
 #include "CanIf.h"
 #include "Det.h"
 
+#define TAG "Can"
+
+
 /* Arduino wiring.c（C リンケージ）で定義 */
 extern int digitalRead(uint8 pin);
 
@@ -45,18 +48,18 @@ static Can_ControllerStateType CanState      = CAN_CS_UNINIT;
  */
 void Can_Init(const Can_ConfigType* Config)
 {
-    Det_LogP(PSTR("[Can_Init] Initializing CAN..."));
+    DET_LOGI(TAG, "Init...");
 
     Can_ConfigPtr = Config;
 
     if (Mcp2515_Init(Config->csPin, Config->baudrate, Config->crystalFreq) != MCP2515_WRAPPER_OK)
     {
-        Det_LogP(PSTR("[Can_Init] FAIL"));
+        DET_LOGE(TAG, "Init FAIL");
         while (1)
             ;
     }
 
-    Det_LogP(PSTR("[Can_Init] CAN Initialized successfully"));
+    DET_LOGI(TAG, "Init ok");
 
     Mcp2515_InitMask(0, 0, Config->filter.mask << 16);
     Mcp2515_InitFilter(0, 0, Config->filter.filterId << 16);
@@ -156,15 +159,9 @@ Can_ReturnType Can_Write(Can_HwHandleType Hth, const Can_PduType* PduInfo)
     if (Mcp2515_Send(PduInfo->id, PduInfo->length, PduInfo->sdu) != MCP2515_WRAPPER_OK)
         return CAN_NOT_OK;
 
-    Det_PrintP(PSTR("[Can_Write] Sent ID=0x"));
-    Det_PrintHex(PduInfo->id);
-    Det_PrintP(PSTR(" Data="));
-    for (int i = 0; i < PduInfo->length; i++)
-    {
-        Det_PrintHex(PduInfo->sdu[i]);
-        Det_PrintP(PSTR(" "));
-    }
-    Det_Newline();
+    char hexbuf[25];
+    Log_HexStr(hexbuf, sizeof(hexbuf), PduInfo->sdu, PduInfo->length);
+    DET_LOGD(TAG, "TX id=0x%lX [%s]", (unsigned long)PduInfo->id, hexbuf);
 
     CanIf_TxConfirmation(PduInfo->swPduHandle);
 
