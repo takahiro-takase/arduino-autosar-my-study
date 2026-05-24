@@ -20,8 +20,6 @@
 #include "Rte.h"
 #include "Com.h"
 
-extern unsigned long millis(void);
-
 /* シグナル ID は Com_Cfg.h の COM_SIGNAL_* を使用（重複定義を排除） */
 
 /* App_EngineManager.c が定義する SW-C Runnable の前方宣言 */
@@ -185,18 +183,16 @@ Std_ReturnType Rte_TriggerTransmit(Com_IPduIdType IPduId)
 }
 
 /**
- * \brief   スケジュール済みの SW-C Runnable を経過時間に基づいて呼び出す。
+ * \brief   マッピングされた SW-C Runnable を起動する。
  *
- * \details Arduino の millis() カウンタを確認し、3000 ms ごとに
- *          App_EngineManager_Run() を呼び出す。
- *          AUTOSAR OS の周期タスクスケジューリング機構を、
- *          Arduino UNO のベアメタル環境向けにシンプルなポーリングループで
- *          代替する。Arduino の loop() 関数から呼び出すこと。
+ * \details OS タスク (Task 2, 3000 ms 周期) から呼び出される。
+ *          実行周期の管理は Os_PBCfg.c のタスクテーブルが担うため、
+ *          この関数は App_EngineManager_Run() を無条件に呼び出すだけでよい。
  *
- * \pre        Arduino ランタイムが初期化済みであること（setup() が返った後）。
- * \note       AUTOSAR 非標準 API。完全な AUTOSAR OS 環境では、
- *             Runnable は設定された周期で OsTask アクティベーションにより
- *             起動される。ここでは 3 秒周期をハードコードしている。
+ *          AUTOSAR OS 環境では OsTask が直接 Runnable を呼び出すが、
+ *          本実装では RTE が仲介することで SW-C と OS の直接依存を断つ。
+ *
+ * \pre        App_EngineManager_Init() が正常に完了していること。
  *
  * \ServiceID      {0xF7}
  * \Reentrancy     {Non Reentrant}
@@ -204,12 +200,5 @@ Std_ReturnType Rte_TriggerTransmit(Com_IPduIdType IPduId)
  */
 void Rte_ScheduleRunnables(void)
 {
-    static unsigned long lastRunTime = 0UL;
-    const unsigned long now = millis();
-
-    if (now - lastRunTime >= 3000UL)
-    {
-        lastRunTime = now;
-        App_EngineManager_Run();
-    }
+    App_EngineManager_Run();
 }

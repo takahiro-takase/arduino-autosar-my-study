@@ -17,11 +17,13 @@
  *            8. Dcm_Init       — 診断通信モジュール初期化
  *            9. Dem_Init       — NvM 経由で DTC ステータスを復元
  *           10. App_EngineManager_Init — SW-C 初期化
+ *           11. Os_Init        — タスクスケジューラ初期化 (全モジュール初期化後)
  *
  *          周期処理 (EcuM_MainFunction):
- *            1. Can_Isr            — CAN 受信ポーリング
- *            2. CanTp_MainFunction — タイムアウト監視・CF 送信
- *            3. Rte_ScheduleRunnables — RTE Runnable スケジューリング
+ *            Os_SchedulerStep() — タスクテーブルに従い周期到来タスクを実行
+ *              Task 0: Can_Isr            (1 ms)    — CAN 受信ポーリング
+ *              Task 1: CanTp_MainFunction (1 ms)    — タイムアウト監視・CF 送信
+ *              Task 2: Rte_ScheduleRunnables (3000 ms) — エンジン Runnable 起動
  *
  * \copyright  Copyright (c) 2025 T_T
  * \license    MIT License - 詳細は LICENSE ファイルを参照。
@@ -33,6 +35,8 @@
 #include "EcuM.h"
 #include "NvM.h"
 #include "NvM_PBCfg.h"
+#include "Os.h"
+#include "Os_PBCfg.h"
 #include "Can.h"
 #include "Can_PBCfg.h"
 #include "CanIf.h"
@@ -84,6 +88,7 @@ void EcuM_Init(void)
     Dcm_Init();
     Dem_Init();
     App_EngineManager_Init();
+    Os_Init(&Os_Config);
 }
 
 /**
@@ -106,7 +111,5 @@ void EcuM_Init(void)
  */
 void EcuM_MainFunction(void)
 {
-    Can_Isr();
-    CanTp_MainFunction();
-    Rte_ScheduleRunnables();
+    Os_SchedulerStep();
 }
