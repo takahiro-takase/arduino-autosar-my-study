@@ -61,12 +61,11 @@
 #define DEM_STATUS_AVAILABILITY_MASK         0x2DU
 
 /* -----------------------------------------------------------------------
- * EEPROM ストレージアドレス
+ * NvM 関連定数
+ * EEPROM アドレスは NvM_Cfg.h (NVM_BLOCK_DEM_* 定数) で管理する。
+ * DEM はアドレスを知らず、NvM_BlockIdType (NVM_BLOCK_ID_DEM_*) でアクセスする。
  * ----------------------------------------------------------------------- */
-#define DEM_NVM_BASE_ADDR                    0U
-#define DEM_NVM_MAGIC_ADDR                   DEM_NVM_BASE_ADDR
-#define DEM_NVM_MAGIC_BYTE                   0xDEU   /**< EEPROM 有効データのマーカー */
-#define DEM_NVM_STATUS_BASE_ADDR             (DEM_NVM_BASE_ADDR + 1U)
+#define DEM_NVM_MAGIC_BYTE  0xDEU  /**< EEPROM 有効データのマーカー (DEM 固有知識) */
 
 /** SID 0x14 で "全 DTC クリア" を指定するグループコード */
 #define DEM_GROUP_ALL_DTCS                   0xFFFFFFUL

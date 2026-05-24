@@ -7,15 +7,16 @@
  *          ECU を起動・運転できるようにする。
  *
  *          起動シーケンス (EcuM_Init):
- *            1. Can_Init       — CAN コントローラ初期化
- *            2. Can_SetControllerMode(START) — CAN バス通信開始
- *            3. CanIf_Init     — CAN インタフェース初期化
- *            4. PduR_Init      — PDU ルータ初期化
- *            5. Com_Init       — COM モジュール初期化
- *            6. CanTp_Init     — CAN トランスポートプロトコル初期化
- *            7. Dcm_Init       — 診断通信モジュール初期化
- *            8. Dem_Init       — 診断イベントマネージャ初期化
- *            9. App_EngineManager_Init — SW-C 初期化
+ *            1. NvM_Init       — EEPROM → RAM ミラー一括ロード (最初期)
+ *            2. Can_Init       — CAN コントローラ初期化
+ *            3. Can_SetControllerMode(START) — CAN バス通信開始
+ *            4. CanIf_Init     — CAN インタフェース初期化
+ *            5. PduR_Init      — PDU ルータ初期化
+ *            6. Com_Init       — COM モジュール初期化
+ *            7. CanTp_Init     — CAN トランスポートプロトコル初期化
+ *            8. Dcm_Init       — 診断通信モジュール初期化
+ *            9. Dem_Init       — NvM 経由で DTC ステータスを復元
+ *           10. App_EngineManager_Init — SW-C 初期化
  *
  *          周期処理 (EcuM_MainFunction):
  *            1. Can_Isr            — CAN 受信ポーリング
@@ -30,6 +31,8 @@
  */
 
 #include "EcuM.h"
+#include "NvM.h"
+#include "NvM_PBCfg.h"
 #include "Can.h"
 #include "Can_PBCfg.h"
 #include "CanIf.h"
@@ -49,6 +52,8 @@
  *
  * \details AUTOSAR の依存関係順（下位層から上位層）に各モジュールの
  *          _Init 関数を呼び出す。
+ *          - NvM_Init: 全 NvM ブロックを EEPROM から RAM ミラーへ一括ロードする。
+ *            他モジュールより先に呼ぶことで、Dem_Init 時に NvM が使用可能になる。
  *          - Can_Init / Can_SetControllerMode: CAN コントローラを初期化し
  *            CAN バスへの送受信を開始する (CAN_T_START)。
  *          - CanIf_Init: CAN インタフェース層を初期化し、ルーティングテーブルを設定。
@@ -56,7 +61,7 @@
  *          - Com_Init: COM モジュールを初期化し、シグナル/I-PDU テーブルを設定。
  *          - CanTp_Init: トランスポートプロトコルを初期化し、RX/TX チャネルを IDLE に。
  *          - Dcm_Init: 診断セッションをデフォルトに初期化する。
- *          - Dem_Init: DTC ステータスを EEPROM から復元する。
+ *          - Dem_Init: NvM 経由で前回の DTC ステータスを復元する。
  *          - App_EngineManager_Init: SW-C を初期化する。
  *
  * \pre        Arduino ランタイムが初期化済みであること（setup() の先頭で呼ぶ想定）。
@@ -69,6 +74,7 @@
  */
 void EcuM_Init(void)
 {
+    NvM_Init(&NvM_Config);
     Can_Init(&Can_Config);
     Can_SetControllerMode(0U, CAN_T_START);
     CanIf_Init(&CanIf_Config);
