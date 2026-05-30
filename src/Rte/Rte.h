@@ -33,6 +33,9 @@ void Rte_ScheduleRunnables(void);
 Std_ReturnType Rte_Read_WarningIndicator_EngineState(EngineState_t* data);
 void Rte_ScheduleWarningIndicator(void);
 
+/* Client/Server ポート — IoHwAb_Led_SetLevel へ委譲 */
+Std_ReturnType Rte_Call_Led_SetLevel(uint8 level);
+
 #ifdef __cplusplus
 }
 #endif
