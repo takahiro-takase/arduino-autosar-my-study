@@ -20,6 +20,7 @@
 #include "Rte.h"
 #include "Com.h"
 #include "IoHwAb.h"
+#include "SchM.h"
 
 /* シグナル ID は Com_Cfg.h の COM_SIGNAL_* を使用（重複定義を排除） */
 
@@ -128,7 +129,9 @@ Std_ReturnType Rte_Read_EngineStatus_EngineOnFlag(EngineOnFlag_t* data)
  */
 Std_ReturnType Rte_Write_EngineStatus_EngineState(EngineState_t state)
 {
+    SchM_Enter_Rte_MIRROR_EXCLUSIVE_AREA();
     Rte_EngineStateMirror = state;
+    SchM_Exit_Rte_MIRROR_EXCLUSIVE_AREA();
     uint8 val = (uint8)state;
     return Com_SendSignal(COM_SIGNAL_ENGINE_STATE, &val);
 }
@@ -152,7 +155,9 @@ Std_ReturnType Rte_Read_EngineStatus_EngineState(EngineState_t* data)
 {
     if (data == NULL)
         return E_NOT_OK;
+    SchM_Enter_Rte_MIRROR_EXCLUSIVE_AREA();
     *data = Rte_EngineStateMirror;
+    SchM_Exit_Rte_MIRROR_EXCLUSIVE_AREA();
     return E_OK;
 }
 
