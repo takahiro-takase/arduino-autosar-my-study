@@ -6,14 +6,16 @@
  *          に相当する。
  *
  *          タスク一覧:
- *            Task 0: Can_Isr             1 ms  — CAN 受信ポーリング
- *            Task 1: CanTp_MainFunction  1 ms  — タイムアウト監視・CF 送信
- *            Task 2: Rte_ScheduleRunnables 3000 ms — エンジン Runnable 起動
+ *            Task 0: Can_Isr                  1 ms  — CAN 受信ポーリング
+ *            Task 1: CanTp_MainFunction        1 ms  — タイムアウト監視・CF 送信
+ *            Task 2: Rte_ScheduleRunnables  3000 ms  — エンジン Runnable 起動
+ *            Task 3: Rte_ScheduleWarningIndicator 500 ms — 警告灯 Runnable 起動
  *
  *          周期の根拠:
  *            Can_Isr / CanTp_MainFunction は CAN フレーム到着の応答性と
  *            CanTp タイムアウト精度のため 1 ms とする。
  *            App_EngineManager_Run は RTE コントラクト (3 秒周期) に従い 3000 ms とする。
+ *            App_WarningIndicator_Run は LED 点滅半周期 (500 ms ON/OFF) のため 500 ms とする。
  *
  * \copyright  Copyright (c) 2025 T_T
  * \license    MIT License - 詳細は LICENSE ファイルを参照。
@@ -30,6 +32,7 @@
 extern void Can_Isr(void);
 extern void CanTp_MainFunction(void);
 extern void Rte_ScheduleRunnables(void);
+extern void Rte_ScheduleWarningIndicator(void);
 
 /* -----------------------------------------------------------------------
  * タスクテーブル
@@ -38,9 +41,10 @@ extern void Rte_ScheduleRunnables(void);
  * ----------------------------------------------------------------------- */
 static const Os_TaskType Os_TaskTable[OS_TASK_COUNT] =
 {
-    /* Task 0 */ { Can_Isr,               1U    },  /* 1 ms    : CAN 受信ポーリング    */
-    /* Task 1 */ { CanTp_MainFunction,    1U    },  /* 1 ms    : タイムアウト監視      */
-    /* Task 2 */ { Rte_ScheduleRunnables, 3000U }   /* 3000 ms : エンジン Runnable     */
+    /* Task 0 */ { Can_Isr,                      1U    },  /* 1 ms    : CAN 受信ポーリング    */
+    /* Task 1 */ { CanTp_MainFunction,           1U    },  /* 1 ms    : タイムアウト監視      */
+    /* Task 2 */ { Rte_ScheduleRunnables,        3000U },  /* 3000 ms : エンジン Runnable     */
+    /* Task 3 */ { Rte_ScheduleWarningIndicator, 500U  }   /* 500 ms  : 警告灯 Runnable       */
 };
 
 /* -----------------------------------------------------------------------
