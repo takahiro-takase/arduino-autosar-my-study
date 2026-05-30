@@ -8,7 +8,8 @@
  *
  *          起動シーケンス (EcuM_Init):
  *            1. NvM_Init       — EEPROM → RAM ミラー一括ロード (最初期)
- *            2. Can_Init       — CAN コントローラ初期化（バスはまだ非アクティブ）
+ *            2. Port_Init      — ピン方向設定（Dio 操作より前に完了）
+ *            3. Can_Init       — CAN コントローラ初期化（バスはまだ非アクティブ）
  *            3. CanIf_Init     — CAN インタフェース初期化
  *            4. PduR_Init      — PDU ルータ初期化
  *            5. Com_Init       — COM モジュール初期化
@@ -54,6 +55,7 @@
 #include "CanTp.h"
 #include "Dcm.h"
 #include "Dem.h"
+#include "Port.h"
 #include "CanSM.h"
 #include "ComM.h"
 #include "Rte.h"
@@ -87,6 +89,7 @@
 void EcuM_Init(void)
 {
     NvM_Init(&NvM_Config);
+    Port_Init();                    /* ピン方向設定（Dio 操作より前に完了）    */
     Can_Init(&Can_Config);          /* ハードウェア初期化（LISTEN_ONLY で待機） */
     CanIf_Init(&CanIf_Config);
     PduR_Init(&PduR_Config);

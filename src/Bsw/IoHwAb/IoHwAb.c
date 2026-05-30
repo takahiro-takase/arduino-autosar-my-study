@@ -25,9 +25,12 @@
 /**
  * \brief   IoHwAb モジュールを初期化する。
  *
- * \details 警告灯 LED チャネルを出力モードに設定し、消灯状態で起動する。
+ * \details 警告灯 LED を消灯状態で起動する。
+ *          ピン方向設定は Port_Init() が担うため、本関数では行わない。
  *          チャネル番号 (DIO_CHANNEL_LED_WARNING) は Dio_Cfg.h で一元管理し、
  *          上位層には公開しない。
+ *
+ * \pre        Port_Init() が正常完了していること。
  *
  * \ServiceID      {0xC0}
  * \Reentrancy     {Non Reentrant}
@@ -35,8 +38,7 @@
  */
 void IoHwAb_Init(void)
 {
-    Dio_InitChannel(DIO_CHANNEL_LED_WARNING);
-    Dio_WriteChannel(DIO_CHANNEL_LED_WARNING, DIO_LOW);
+    Dio_WriteChannel(DIO_CHANNEL_LED_WARNING, DIO_LOW);  /* 消灯状態で起動 */
     DET_LOGI(TAG, "Init");
 }
 
