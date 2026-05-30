@@ -2,8 +2,9 @@
  * \file    Dio.h
  * \brief   デジタル入出力 公開インタフェース (AUTOSAR SWS_Dio 準拠)
  * \details MCAL 層のデジタル I/O 抽象化 API を提供する。
- *          Arduino の pinMode / digitalWrite を直接呼び出す代わりに
- *          本インタフェースを経由することで、上位層をハードウェア依存から分離する。
+ *          ピン値の読み書き（DIO_HIGH / DIO_LOW）のみを担当する。
+ *          ピン方向（INPUT / OUTPUT）の設定は Port モジュールの責務であり、
+ *          Port_Init() が事前に完了していることを前提とする。
  *
  * \copyright  Copyright (c) 2025 T_T
  * \license    MIT License - 詳細は LICENSE ファイルを参照。
@@ -30,23 +31,12 @@ typedef uint8 Dio_LevelType;
 #define DIO_LOW   0U  /**< 出力 LOW  (GND) */
 
 /**
- * \brief   指定チャネルを出力モードに設定する。
- *
- * \param[in]  channelId  初期化するチャネル ID (Arduino ピン番号)。
- *
- * \ServiceID      {0xE0}
- * \Reentrancy     {Non Reentrant}
- * \Synchronicity  {Synchronous}
- */
-void Dio_InitChannel(Dio_ChannelType channelId);
-
-/**
  * \brief   指定チャネルへ出力レベルを書き込む。
  *
  * \param[in]  channelId  書き込み先チャネル ID (Arduino ピン番号)。
  * \param[in]  level      出力レベル (DIO_HIGH / DIO_LOW)。
  *
- * \pre        Dio_InitChannel() で対象チャネルを出力モードに設定済みであること。
+ * \pre        Port_Init() で対象チャネルを出力モードに設定済みであること。
  *
  * \ServiceID      {0xE1}
  * \Reentrancy     {Reentrant}

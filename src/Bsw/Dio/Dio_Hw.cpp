@@ -17,11 +17,6 @@
 
 extern "C" {
 
-void Dio_Hw_InitChannel(Dio_ChannelType channelId)
-{
-    pinMode((uint8_t)channelId, OUTPUT);
-}
-
 void Dio_Hw_WriteChannel(Dio_ChannelType channelId, Dio_LevelType level)
 {
     digitalWrite((uint8_t)channelId, (level != DIO_LOW) ? HIGH : LOW);
