@@ -16,20 +16,6 @@
 #include "Dio_Hw.h"
 
 /**
- * \brief   指定チャネルを出力モードに設定する。
- *
- * \param[in]  channelId  初期化するチャネル ID (Arduino ピン番号)。
- *
- * \ServiceID      {0xE0}
- * \Reentrancy     {Non Reentrant}
- * \Synchronicity  {Synchronous}
- */
-void Dio_InitChannel(Dio_ChannelType channelId)
-{
-    Dio_Hw_InitChannel(channelId);
-}
-
-/**
  * \brief   指定チャネルへ出力レベルを書き込む。
  *
  * \param[in]  channelId  書き込み先チャネル ID (Arduino ピン番号)。
