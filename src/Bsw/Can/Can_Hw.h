@@ -40,6 +40,7 @@ Can_Hw_ReturnType Can_Hw_InitMask(uint8_t num, uint8_t ext, uint32_t mask);
 Can_Hw_ReturnType Can_Hw_InitFilter(uint8_t num, uint8_t ext, uint32_t filter);
 Can_Hw_ReturnType Can_Hw_SetMode(Can_Hw_Mode mode);
 Can_Hw_ReturnType Can_Hw_CheckReceive(void);
+Can_Hw_ReturnType Can_Hw_IsBusOff(void);
 
 #ifdef __cplusplus
 }

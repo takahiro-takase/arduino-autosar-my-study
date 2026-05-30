@@ -15,6 +15,7 @@
 
 #include "CanIf.h"
 #include "Can.h"
+#include "CanSM.h"
 #include "Det.h"
 
 #define TAG "CanIf"
@@ -186,4 +187,23 @@ void CanIf_TxConfirmation(PduIdType CanTxPduId)
 
     if (txCfg->TxConfirmFct != NULL)
         txCfg->TxConfirmFct(txCfg->UpperLayerTxPduId, E_OK);
+}
+
+/**
+ * \brief   CAN コントローラの Bus-Off 状態を上位層へ通知する。
+ *
+ * \details Can_Isr() が Bus-Off を検出した際に呼び出される。
+ *          CanSM_ControllerBusOff() へ委譲し、回復シーケンスを起動する
+ *          (AUTOSAR SWS_CANIF_00233)。
+ *
+ * \param[in]  ControllerId  Bus-Off を検出したコントローラ ID。
+ *
+ * \ServiceID      {0x16}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void CanIf_ControllerBusOff(uint8 ControllerId)
+{
+    DET_LOGW(TAG, "ControllerBusOff ch=%u", (unsigned)ControllerId);
+    CanSM_ControllerBusOff(ControllerId);
 }

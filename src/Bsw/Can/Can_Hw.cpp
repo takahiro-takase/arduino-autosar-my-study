@@ -47,7 +47,13 @@ Can_Hw_ReturnType Can_Hw_Send(uint32_t id, uint8_t dlc, const uint8_t* data)
     ret = driver->sendMsgBuf(id, 0, dlc, (uint8_t*)data);
     if (ret != CAN_OK)
     {
-        DET_LOGE(TAG, "TX FAIL id=0x%lX dlc=%u", (unsigned long)id, (unsigned)dlc);
+        uint8_t eflg = driver->getError();
+        DET_LOGE(TAG, "TX FAIL id=0x%lX eflg=0x%02X (TXBO=%u TXEP=%u TXWAR=%u)",
+                 (unsigned long)id,
+                 (unsigned)eflg,
+                 (unsigned)((eflg >> 5) & 1U),  /* bit5: Bus-Off */
+                 (unsigned)((eflg >> 4) & 1U),  /* bit4: TX Error-Passive */
+                 (unsigned)((eflg >> 2) & 1U));  /* bit2: TX Error-Warning */
         return CAN_HW_FAIL;
     }
 
@@ -121,4 +127,26 @@ Can_Hw_ReturnType Can_Hw_CheckReceive(void)
 {
     return (driver->checkReceive() == CAN_MSGAVAIL)
            ? CAN_HW_OK : CAN_HW_FAIL;
+}
+
+Can_Hw_ReturnType Can_Hw_IsBusOff(void)
+{
+    if (driver == nullptr) return CAN_HW_FAIL;
+
+    uint8_t eflg = driver->getError();
+    static uint8_t prevEflg = 0xFFU;  /* 初回は必ずログ出力するため、前回値を存在し得ない値で初期化 */
+    /* エラーフラグに変更がある場合のみログ出力（1ms 周期での呼び出しによる大量出力を防ぐ） */
+    if (eflg != prevEflg)
+    {
+        prevEflg = eflg;
+        DET_LOGD(TAG, "EFLG=0x%02X TXBO=%u TXEP=%u TXWAR=%u EWARN=%u",
+                 (unsigned)eflg,
+                 (unsigned)((eflg >> 5) & 1U),  /* bit5: Bus-Off */
+                 (unsigned)((eflg >> 4) & 1U),  /* bit4: TX Error-Passive */
+                 (unsigned)((eflg >> 2) & 1U),  /* bit2: TX Error-Warning */
+                 (unsigned)((eflg >> 0) & 1U));  /* bit0: Error Warning */
+    }
+
+    /* MCP2515 EFLG bit5 = TXBO（Bus-Off Error Flag） */
+    return ((eflg & 0x20U) != 0U) ? CAN_HW_OK : CAN_HW_FAIL;
 }
