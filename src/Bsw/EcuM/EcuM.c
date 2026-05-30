@@ -50,6 +50,7 @@
 #include "Dem.h"
 #include "Rte.h"
 #include "App_EngineManager.h"
+#include "App_WarningIndicator.h"
 
 /**
  * \brief   BSW スタック全体を起動フェーズ順に初期化する。
@@ -88,6 +89,7 @@ void EcuM_Init(void)
     Dcm_Init();
     Dem_Init();
     App_EngineManager_Init();
+    App_WarningIndicator_Init();
     Os_Init(&Os_Config);
 }
 

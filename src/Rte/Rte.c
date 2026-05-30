@@ -25,6 +25,9 @@
 /* App_EngineManager.c が定義する SW-C Runnable の前方宣言 */
 extern void App_EngineManager_Run(void);
 
+/* App_WarningIndicator.c が定義する SW-C Runnable の前方宣言 */
+extern void App_WarningIndicator_Run(void);
+
 /* EngineState の内部ミラー変数。
  * Rte_Write_EngineStatus_EngineState() が書き込み、
  * Dcm の Rte_Read_EngineStatus_EngineState() が読み出す。
@@ -201,4 +204,43 @@ Std_ReturnType Rte_TriggerTransmit(Com_IPduIdType IPduId)
 void Rte_ScheduleRunnables(void)
 {
     App_EngineManager_Run();
+}
+
+/**
+ * \brief   WarningIndicator SW-C の EngineState ポートを読み取る。
+ *
+ * \details App_EngineManager が書き込んだ Rte_EngineStateMirror を返す。
+ *          同一ミラー変数を複数の SW-C が読み取れるよう、
+ *          WarningIndicator 用の独立したポートとして定義する
+ *          (AUTOSAR Sender/Receiver の n:1 受信パターン)。
+ *
+ * \param[out] data  エンジン状態を受け取る変数へのポインタ。NULL 禁止。
+ *
+ * \retval  E_OK      正常に読み取った。
+ * \retval  E_NOT_OK  data が NULL。
+ *
+ * \ServiceID      {0xF9}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType Rte_Read_WarningIndicator_EngineState(EngineState_t* data)
+{
+    return Rte_Read_EngineStatus_EngineState(data);
+}
+
+/**
+ * \brief   WarningIndicator SW-C の Runnable を起動する。
+ *
+ * \details OS タスク (Task 3, 500 ms 周期) から呼び出される。
+ *          App_WarningIndicator_Run() を無条件に呼び出す。
+ *
+ * \pre        App_WarningIndicator_Init() が正常に完了していること。
+ *
+ * \ServiceID      {0xFA}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void Rte_ScheduleWarningIndicator(void)
+{
+    App_WarningIndicator_Run();
 }

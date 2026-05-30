@@ -30,6 +30,9 @@ Std_ReturnType Rte_TriggerTransmit(Com_IPduIdType IPduId);
 
 void Rte_ScheduleRunnables(void);
 
+Std_ReturnType Rte_Read_WarningIndicator_EngineState(EngineState_t* data);
+void Rte_ScheduleWarningIndicator(void);
+
 #ifdef __cplusplus
 }
 #endif
