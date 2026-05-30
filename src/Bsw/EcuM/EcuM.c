@@ -8,24 +8,28 @@
  *
  *          起動シーケンス (EcuM_Init):
  *            1. NvM_Init       — EEPROM → RAM ミラー一括ロード (最初期)
- *            2. Can_Init       — CAN コントローラ初期化
- *            3. Can_SetControllerMode(START) — CAN バス通信開始
- *            4. CanIf_Init     — CAN インタフェース初期化
- *            5. PduR_Init      — PDU ルータ初期化
- *            6. Com_Init       — COM モジュール初期化
- *            7. CanTp_Init     — CAN トランスポートプロトコル初期化
- *            8. Dcm_Init       — 診断通信モジュール初期化
- *            9. Dem_Init       — NvM 経由で DTC ステータスを復元
- *           10. App_EngineManager_Init — SW-C 初期化
- *           11. IoHwAb_Init    — I/O ハードウェア抽象化層初期化 (LED チャネル設定)
- *           12. App_WarningIndicator_Init — 警告灯 SW-C 初期化
- *           13. Os_Init        — タスクスケジューラ初期化 (全モジュール初期化後)
+ *            2. Can_Init       — CAN コントローラ初期化（バスはまだ非アクティブ）
+ *            3. CanIf_Init     — CAN インタフェース初期化
+ *            4. PduR_Init      — PDU ルータ初期化
+ *            5. Com_Init       — COM モジュール初期化
+ *            6. CanTp_Init     — CAN トランスポートプロトコル初期化
+ *            7. Dcm_Init       — 診断通信モジュール初期化
+ *            8. Dem_Init       — NvM 経由で DTC ステータスを復元
+ *            9. ComM_Init      — 通信マネージャ初期化 (NO_COM 状態)
+ *           10. ComM_RequestComMode(FULL_COM) — CAN バス通信開始
+ *                               （全上位層初期化後に開始することで
+ *                                 フレーム到着時の未初期化アクセスを防ぐ）
+ *           11. App_EngineManager_Init — SW-C 初期化
+ *           12. IoHwAb_Init    — I/O ハードウェア抽象化層初期化 (LED チャネル設定)
+ *           13. App_WarningIndicator_Init — 警告灯 SW-C 初期化
+ *           14. Os_Init        — タスクスケジューラ初期化 (全モジュール初期化後)
  *
  *          周期処理 (EcuM_MainFunction):
  *            Os_SchedulerStep() — タスクテーブルに従い周期到来タスクを実行
  *              Task 0: Can_Isr            (1 ms)    — CAN 受信ポーリング
  *              Task 1: CanTp_MainFunction (1 ms)    — タイムアウト監視・CF 送信
  *              Task 2: Rte_ScheduleRunnables (3000 ms) — エンジン Runnable 起動
+ *              Task 3: Rte_ScheduleWarningIndicator (500 ms) — 警告灯 Runnable 起動
  *
  * \copyright  Copyright (c) 2025 T_T
  * \license    MIT License - 詳細は LICENSE ファイルを参照。
@@ -50,6 +54,7 @@
 #include "CanTp.h"
 #include "Dcm.h"
 #include "Dem.h"
+#include "ComM.h"
 #include "Rte.h"
 #include "IoHwAb.h"
 #include "App_EngineManager.h"
@@ -61,16 +66,14 @@
  * \details AUTOSAR の依存関係順（下位層から上位層）に各モジュールの
  *          _Init 関数を呼び出す。
  *          - NvM_Init: 全 NvM ブロックを EEPROM から RAM ミラーへ一括ロードする。
- *            他モジュールより先に呼ぶことで、Dem_Init 時に NvM が使用可能になる。
- *          - Can_Init / Can_SetControllerMode: CAN コントローラを初期化し
- *            CAN バスへの送受信を開始する (CAN_T_START)。
- *          - CanIf_Init: CAN インタフェース層を初期化し、ルーティングテーブルを設定。
- *          - PduR_Init: PDU ルータを初期化し、RX/TX ルーティングパスを設定。
- *          - Com_Init: COM モジュールを初期化し、シグナル/I-PDU テーブルを設定。
- *          - CanTp_Init: トランスポートプロトコルを初期化し、RX/TX チャネルを IDLE に。
- *          - Dcm_Init: 診断セッションをデフォルトに初期化する。
- *          - Dem_Init: NvM 経由で前回の DTC ステータスを復元する。
- *          - App_EngineManager_Init: SW-C を初期化する。
+ *          - Can_Init: CAN コントローラを初期化する（LISTEN_ONLY 状態で待機）。
+ *            CanIf/PduR/Com 等の上位層初期化前に CAN バスをアクティブにしないため、
+ *            Can_SetControllerMode() は直接呼ばず ComM 経由で行う。
+ *          - CanIf_Init 〜 Dem_Init: 各 BSW モジュールを下位層から順に初期化。
+ *          - ComM_Init: 通信マネージャを NO_COM 状態で初期化する。
+ *          - ComM_RequestComMode(FULL_COM): 全上位層が初期化された後で CAN バスを
+ *            アクティブにする。これにより起動直後のフレーム受信でも上位層が
+ *            正しく処理できる。
  *
  * \pre        Arduino ランタイムが初期化済みであること（setup() の先頭で呼ぶ想定）。
  * \note       AUTOSAR EcuM では StartupOne (OS 起動前) と
@@ -83,14 +86,15 @@
 void EcuM_Init(void)
 {
     NvM_Init(&NvM_Config);
-    Can_Init(&Can_Config);
-    Can_SetControllerMode(0U, CAN_T_START);
+    Can_Init(&Can_Config);          /* ハードウェア初期化（LISTEN_ONLY で待機） */
     CanIf_Init(&CanIf_Config);
     PduR_Init(&PduR_Config);
     Com_Init(&Com_Config);
     CanTp_Init();
     Dcm_Init();
     Dem_Init();
+    ComM_Init();                                              /* NO_COM 状態で開始 */
+    ComM_RequestComMode(COMM_USER_0, COMM_FULL_COMMUNICATION);/* 全層初期化後に開通 */
     App_EngineManager_Init();
     IoHwAb_Init();
     App_WarningIndicator_Init();
@@ -101,11 +105,6 @@ void EcuM_Init(void)
  * \brief   BSW スタックの周期処理を実行する。
  *
  * \details Arduino の loop() から毎ループ呼び出される。
- *          - Can_Isr: MCP2515 の INT ピンを確認し、受信フレームがあれば
- *            CanIf_RxIndication を通じて上位層へ配信する。
- *          - CanTp_MainFunction: タイムアウト監視と CF 送信タイミング管理を行う。
- *          - Rte_ScheduleRunnables: 経過時間を確認し、周期が来た
- *            SW-C Runnable (App_EngineManager_Run) を呼び出す。
  *
  * \pre        EcuM_Init() が正常完了していること。
  * \note       AUTOSAR 標準の EcuM_MainFunction は主に状態遷移管理を行うが、
