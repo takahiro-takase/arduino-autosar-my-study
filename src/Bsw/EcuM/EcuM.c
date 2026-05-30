@@ -17,7 +17,9 @@
  *            8. Dcm_Init       — 診断通信モジュール初期化
  *            9. Dem_Init       — NvM 経由で DTC ステータスを復元
  *           10. App_EngineManager_Init — SW-C 初期化
- *           11. Os_Init        — タスクスケジューラ初期化 (全モジュール初期化後)
+ *           11. IoHwAb_Init    — I/O ハードウェア抽象化層初期化 (LED チャネル設定)
+ *           12. App_WarningIndicator_Init — 警告灯 SW-C 初期化
+ *           13. Os_Init        — タスクスケジューラ初期化 (全モジュール初期化後)
  *
  *          周期処理 (EcuM_MainFunction):
  *            Os_SchedulerStep() — タスクテーブルに従い周期到来タスクを実行
@@ -49,6 +51,7 @@
 #include "Dcm.h"
 #include "Dem.h"
 #include "Rte.h"
+#include "IoHwAb.h"
 #include "App_EngineManager.h"
 #include "App_WarningIndicator.h"
 
@@ -89,6 +92,7 @@ void EcuM_Init(void)
     Dcm_Init();
     Dem_Init();
     App_EngineManager_Init();
+    IoHwAb_Init();
     App_WarningIndicator_Init();
     Os_Init(&Os_Config);
 }

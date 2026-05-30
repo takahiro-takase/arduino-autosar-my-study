@@ -1,7 +1,7 @@
 /**
  * \file    App_WarningIndicator.c
  * \brief   警告灯インジケータ SW-C 実装 (AUTOSAR ASW)
- * \details RTE 経由で EngineState を受信し、Arduino 内蔵 LED (D13) を
+ * \details RTE 経由で EngineState を受信し、警告灯 LED を
  *          エンジン状態に応じて制御するメータ ECU 用 SW-C。
  *
  *          LED 制御ルール:
@@ -9,9 +9,10 @@
  *            - ENGINE_STATE_FAULT   : 点滅 (500 ms 周期 = 本 Runnable の呼出周期)
  *            - それ以外 (OFF / STARTING) : 消灯
  *
- *          点滅は s_blinkState を毎回トグルすることで実現する。
- *          Runnable 周期 (500 ms) が点滅半周期に相当するため、
- *          500 ms ON → 500 ms OFF → ... の 1 Hz 点滅となる。
+ *          本 SW-C は Dio / IoHwAb を直接参照しない。
+ *          LED 操作はすべて RTE の Client/Server ポート
+ *          (Rte_Call_Led_SetLevel) 経由で行い、ピン番号などの
+ *          ハードウェア詳細から完全に分離されている。
  *
  * \copyright  Copyright (c) 2025 T_T
  * \license    MIT License - 詳細は LICENSE ファイルを参照。
@@ -22,20 +23,20 @@
 
 #include "App_WarningIndicator.h"
 #include "Rte.h"
-#include "Dio.h"
-#include "Dio_Cfg.h"
 #include "Det.h"
 
 #define TAG "WarnInd"
 
-static Dio_LevelType s_blinkState = DIO_LOW;
+static uint8 s_blinkState = 0U;
 
 /**
  * \brief   警告灯インジケータ SW-C を初期化する。
  *
- * \details LED チャネルを OUTPUT に設定し、消灯状態で起動する。
+ * \details LED を消灯状態にし、点滅用内部状態を初期化する。
+ *          LED チャネルの方向設定は IoHwAb_Init() が担うため、
+ *          本関数では行わない。
  *
- * \pre        Arduino ランタイムが初期化済みであること。
+ * \pre        IoHwAb_Init() が正常完了していること。
  *
  * \ServiceID      {0xD0}
  * \Reentrancy     {Non Reentrant}
@@ -43,9 +44,8 @@ static Dio_LevelType s_blinkState = DIO_LOW;
  */
 void App_WarningIndicator_Init(void)
 {
-    Dio_InitChannel(DIO_CHANNEL_LED_WARNING);
-    Dio_WriteChannel(DIO_CHANNEL_LED_WARNING, DIO_LOW);
-    s_blinkState = DIO_LOW;
+    (void)Rte_Call_Led_SetLevel(0U);
+    s_blinkState = 0U;
     DET_LOGI(TAG, "Init");
 }
 
@@ -54,11 +54,10 @@ void App_WarningIndicator_Init(void)
  *
  * \details OS の 500 ms タスクから周期的に呼び出される。
  *          Rte_Read_WarningIndicator_EngineState() で最新の EngineState を取得し、
- *          状態に応じた LED 制御を行う。
+ *          Rte_Call_Led_SetLevel() で LED レベルを設定する。
  *          FAULT 時は呼出ごとに s_blinkState をトグルし 1 Hz 点滅を実現する。
  *
  * \pre        App_WarningIndicator_Init() が正常完了していること。
- * \pre        Rte_Write_EngineStatus_EngineState() で EngineState が更新されていること。
  *
  * \ServiceID      {0xD1}
  * \Reentrancy     {Non Reentrant}
@@ -73,18 +72,18 @@ void App_WarningIndicator_Run(void)
     {
         case ENGINE_STATE_RUNNING:
             DET_LOGI(TAG, "LED ON");
-            Dio_WriteChannel(DIO_CHANNEL_LED_WARNING, DIO_HIGH);
+            (void)Rte_Call_Led_SetLevel(1U);
             break;
 
         case ENGINE_STATE_FAULT:
-            s_blinkState = (s_blinkState == DIO_HIGH) ? DIO_LOW : DIO_HIGH;
+            s_blinkState ^= 1U;
             DET_LOGI(TAG, "LED BLINK");
-            Dio_WriteChannel(DIO_CHANNEL_LED_WARNING, s_blinkState);
+            (void)Rte_Call_Led_SetLevel(s_blinkState);
             break;
 
         default:
             DET_LOGI(TAG, "LED OFF");
-            Dio_WriteChannel(DIO_CHANNEL_LED_WARNING, DIO_LOW);
+            (void)Rte_Call_Led_SetLevel(0U);
             break;
     }
 }
