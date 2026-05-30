@@ -2,7 +2,7 @@
  * \file    Can.c
  * \brief   CAN ドライバ (AUTOSAR SWS_Can 準拠)
  * \details AUTOSAR CanDrv API を MCP2515 上に実装する。
- *          Mcp2515_Wrapper 経由でハードウェアを操作し、
+ *          Can_Hw.cpp（MCP2515 ハードウェアラッパー）経由でハードウェアを操作し、
  *          AUTOSAR 4.x SWS_Can 仕様に準拠する。
  *          Arduino UNO 向けに一部を簡略化している。
  *
@@ -14,7 +14,7 @@
  */
 
 #include "Can.h"
-#include "Mcp2515_Wrapper.h"
+#include "Can_Hw.h"
 #include "CanIf.h"
 #include "Det.h"
 
@@ -52,7 +52,7 @@ void Can_Init(const Can_ConfigType* Config)
 
     Can_ConfigPtr = Config;
 
-    if (Mcp2515_Init(Config->csPin, Config->baudrate, Config->crystalFreq) != MCP2515_WRAPPER_OK)
+    if (Can_Hw_Init(Config->csPin, Config->baudrate, Config->crystalFreq) != CAN_HW_OK)
     {
         DET_LOGE(TAG, "Init FAIL");
         while (1)
@@ -61,16 +61,16 @@ void Can_Init(const Can_ConfigType* Config)
 
     DET_LOGI(TAG, "Init ok");
 
-    Mcp2515_InitMask(0, 0, Config->filter.mask << 16);
-    Mcp2515_InitFilter(0, 0, Config->filter.filterId << 16);
-    Mcp2515_InitFilter(1, 0, Config->filter.filterId << 16);
-    Mcp2515_InitMask(1, 0, Config->filter.mask << 16);
-    Mcp2515_InitFilter(2, 0, Config->filter.filterId << 16);
-    Mcp2515_InitFilter(3, 0, Config->filter.filterId << 16);
-    Mcp2515_InitFilter(4, 0, Config->filter.filterId << 16);
-    Mcp2515_InitFilter(5, 0, Config->filter.filterId << 16);
+    Can_Hw_InitMask(0, 0, Config->filter.mask << 16);
+    Can_Hw_InitFilter(0, 0, Config->filter.filterId << 16);
+    Can_Hw_InitFilter(1, 0, Config->filter.filterId << 16);
+    Can_Hw_InitMask(1, 0, Config->filter.mask << 16);
+    Can_Hw_InitFilter(2, 0, Config->filter.filterId << 16);
+    Can_Hw_InitFilter(3, 0, Config->filter.filterId << 16);
+    Can_Hw_InitFilter(4, 0, Config->filter.filterId << 16);
+    Can_Hw_InitFilter(5, 0, Config->filter.filterId << 16);
 
-    Mcp2515_SetMode(MCP2515_MODE_LISTEN_ONLY);
+    Can_Hw_SetMode(CAN_HW_MODE_LISTEN_ONLY);
     CanState = CAN_CS_STOPPED;
 }
 
@@ -104,20 +104,20 @@ Can_ReturnType Can_SetControllerMode(uint8 Controller, Can_StateTransitionType T
     switch (Transition)
     {
     case CAN_T_START:
-        Mcp2515_SetMode(MCP2515_MODE_NORMAL);
-        //Mcp2515_SetMode(MCP2515_MODE_LOOPBACK);  // ← 単体テスト用（通常はコメントアウト）
+        Can_Hw_SetMode(CAN_HW_MODE_NORMAL);
+        //Can_Hw_SetMode(CAN_HW_MODE_LOOPBACK);  // ← 単体テスト用（通常はコメントアウト）
         CanState = CAN_CS_STARTED;
         break;
     case CAN_T_STOP:
-        Mcp2515_SetMode(MCP2515_MODE_LISTEN_ONLY);
+        Can_Hw_SetMode(CAN_HW_MODE_LISTEN_ONLY);
         CanState = CAN_CS_STOPPED;
         break;
     case CAN_T_SLEEP:
-        Mcp2515_SetMode(MCP2515_MODE_SLEEP);
+        Can_Hw_SetMode(CAN_HW_MODE_SLEEP);
         CanState = CAN_CS_SLEEP;
         break;
     case CAN_T_WAKEUP:
-        Mcp2515_SetMode(MCP2515_MODE_LISTEN_ONLY);
+        Can_Hw_SetMode(CAN_HW_MODE_LISTEN_ONLY);
         CanState = CAN_CS_STOPPED;
         break;
     default:
@@ -156,7 +156,7 @@ Can_ReturnType Can_Write(Can_HwHandleType Hth, const Can_PduType* PduInfo)
     if (CanState != CAN_CS_STARTED)
         return CAN_NOT_OK;
 
-    if (Mcp2515_Send(PduInfo->id, PduInfo->length, PduInfo->sdu) != MCP2515_WRAPPER_OK)
+    if (Can_Hw_Send(PduInfo->id, PduInfo->length, PduInfo->sdu) != CAN_HW_OK)
         return CAN_NOT_OK;
 
     char hexbuf[25];
@@ -189,13 +189,13 @@ void Can_MainFunction_Read(void)
     if (CanState != CAN_CS_STARTED)
         return;
 
-    if (Mcp2515_CheckReceive() == MCP2515_WRAPPER_OK)
+    if (Can_Hw_CheckReceive() == CAN_HW_OK)
     {
         uint32 rxId;
         uint8  len;
         uint8  buf[8];
 
-        if (Mcp2515_Read(&rxId, &len, buf) == MCP2515_WRAPPER_OK)
+        if (Can_Hw_Read(&rxId, &len, buf) == CAN_HW_OK)
         {
             Can_HwType  mailbox = { .CanId = rxId, .Hoh = 0U, .ControllerId = 0U };
             PduInfoType pduInfo = { .SduDataPtr = buf, .SduLength = (PduLengthType)len };
@@ -233,7 +233,7 @@ void Can_Isr(void)
         uint8  len;
         uint8  buf[8];
 
-        if (Mcp2515_Read(&rxId, &len, buf) == MCP2515_WRAPPER_OK)
+        if (Can_Hw_Read(&rxId, &len, buf) == CAN_HW_OK)
         {
             Can_HwType  mailbox = { .CanId = rxId, .Hoh = 0U, .ControllerId = 0U };
             PduInfoType pduInfo = { .SduDataPtr = buf, .SduLength = (PduLengthType)len };
