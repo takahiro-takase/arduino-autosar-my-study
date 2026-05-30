@@ -19,6 +19,7 @@
 
 #include "Rte.h"
 #include "Com.h"
+#include "IoHwAb.h"
 
 /* シグナル ID は Com_Cfg.h の COM_SIGNAL_* を使用（重複定義を排除） */
 
@@ -243,4 +244,25 @@ Std_ReturnType Rte_Read_WarningIndicator_EngineState(EngineState_t* data)
 void Rte_ScheduleWarningIndicator(void)
 {
     App_WarningIndicator_Run();
+}
+
+/**
+ * \brief   警告灯 LED レベル設定の Client/Server ポート。
+ *
+ * \details SW-C (App_WarningIndicator) から呼び出され、
+ *          IoHwAb_Led_SetLevel() へ委譲する。
+ *          C/S ポートにより SW-C は IoHwAb の存在を知らない
+ *          (AUTOSAR SWS_RTE の Rte_Call_<p>_<o> パターン)。
+ *
+ * \param[in]  level  出力レベル。0 = 消灯、1 = 点灯。
+ *
+ * \retval  E_OK  常に成功。
+ *
+ * \ServiceID      {0xFB}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType Rte_Call_Led_SetLevel(uint8 level)
+{
+    return IoHwAb_Led_SetLevel(level);
 }
