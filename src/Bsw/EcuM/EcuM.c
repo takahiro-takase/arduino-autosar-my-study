@@ -54,6 +54,7 @@
 #include "CanTp.h"
 #include "Dcm.h"
 #include "Dem.h"
+#include "CanSM.h"
 #include "ComM.h"
 #include "Rte.h"
 #include "IoHwAb.h"
@@ -93,7 +94,8 @@ void EcuM_Init(void)
     CanTp_Init();
     Dcm_Init();
     Dem_Init();
-    ComM_Init();                                              /* NO_COM 状態で開始 */
+    CanSM_Init();                                             /* NO_COM 状態で開始 */
+    ComM_Init();
     ComM_RequestComMode(COMM_USER_0, COMM_FULL_COMMUNICATION);/* 全層初期化後に開通 */
     App_EngineManager_Init();
     IoHwAb_Init();

@@ -35,7 +35,7 @@
  */
 
 #include "ComM.h"
-#include "Can.h"
+#include "CanSM.h"
 #include "Det.h"
 
 #define TAG "ComM"
@@ -93,31 +93,11 @@ Std_ReturnType ComM_RequestComMode(ComM_UserHandleType User, ComM_ModeType ComMo
     if (current == ComMode)
         return E_OK;
 
-    switch (ComMode)
-    {
-        case COMM_FULL_COMMUNICATION:
-            Can_SetControllerMode(0U, CAN_T_START);
-            ComM_ChannelMode[0U] = COMM_FULL_COMMUNICATION;
-            DET_LOGI(TAG, "ch0 NO_COM/SILENT->FULL_COM");
-            break;
+    if (CanSM_RequestComMode(0U, ComMode) != E_OK)
+        return E_NOT_OK;
 
-        case COMM_SILENT_COMMUNICATION:
-            if (current == COMM_FULL_COMMUNICATION)
-                Can_SetControllerMode(0U, CAN_T_STOP);
-            ComM_ChannelMode[0U] = COMM_SILENT_COMMUNICATION;
-            DET_LOGI(TAG, "ch0 ->SILENT_COM");
-            break;
-
-        case COMM_NO_COMMUNICATION:
-            if (current == COMM_FULL_COMMUNICATION)
-                Can_SetControllerMode(0U, CAN_T_STOP);
-            ComM_ChannelMode[0U] = COMM_NO_COMMUNICATION;
-            DET_LOGI(TAG, "ch0 ->NO_COM");
-            break;
-
-        default:
-            return E_NOT_OK;
-    }
+    ComM_ChannelMode[0U] = ComMode;
+    DET_LOGI(TAG, "ch0 ->mode=%u", (unsigned)ComMode);
 
     return E_OK;
 }

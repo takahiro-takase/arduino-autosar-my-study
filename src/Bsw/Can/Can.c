@@ -24,8 +24,23 @@
 /* Arduino wiring.c（C リンケージ）で定義 */
 extern int digitalRead(uint8 pin);
 
-static const Can_ConfigType*   Can_ConfigPtr = NULL;
-static Can_ControllerStateType CanState      = CAN_CS_UNINIT;
+static const Can_ConfigType*   Can_ConfigPtr  = NULL;
+static Can_ControllerStateType CanState       = CAN_CS_UNINIT;
+
+/* -----------------------------------------------------------------------
+ * Bus-Off ソフトウェア補完カウンタ
+ *
+ * 一次検出: Can_Isr() が EFLG.TXBO ビット（getError()）をポーリング
+ *           → AUTOSAR SWS_Can 準拠、ハードウェア Bus-Off 到達時に確実に検出
+ *
+ * 二次検出（本カウンタ）: 連続 TX 失敗回数でソフトウェア的に Bus-Off を判断
+ *   → mcp_can の sendMsgBuf() がタイムアウト/TXERR 早期リターンにより
+ *     TEC が 256（Bus-Off 閾値）に到達する前に TX リトライを止めるため、
+ *     TXBO=1 が発生しない MCP2515 + mcp_can 環境向けの補完。
+ * ----------------------------------------------------------------------- */
+static uint8 Can_TxErrCount = 0U;
+#define CAN_BUSOFF_TX_ERR_THRESHOLD  5U
+
 
 /**
  * \brief   CAN ドライバを初期化する。
@@ -157,7 +172,21 @@ Can_ReturnType Can_Write(Can_HwHandleType Hth, const Can_PduType* PduInfo)
         return CAN_NOT_OK;
 
     if (Can_Hw_Send(PduInfo->id, PduInfo->length, PduInfo->sdu) != CAN_HW_OK)
+    {
+        /* 一次検出（EFLG.TXBO）は Can_Isr() のポーリングが担う。
+         * 二次検出: mcp_can 環境で TXBO=1 が発生しない場合の補完。 */
+        Can_TxErrCount++;
+        if (Can_TxErrCount >= CAN_BUSOFF_TX_ERR_THRESHOLD)
+        {
+            Can_TxErrCount = 0U;
+            DET_LOGW(TAG, "SW BusOff fallback: %u consecutive TX failures",
+                     (unsigned)CAN_BUSOFF_TX_ERR_THRESHOLD);
+            CanIf_ControllerBusOff(0U);
+        }
         return CAN_NOT_OK;
+    }
+
+    Can_TxErrCount = 0U;
 
     char hexbuf[25];
     Log_HexStr(hexbuf, sizeof(hexbuf), PduInfo->sdu, PduInfo->length);
@@ -239,5 +268,13 @@ void Can_Isr(void)
             PduInfoType pduInfo = { .SduDataPtr = buf, .SduLength = (PduLengthType)len };
             CanIf_RxIndication(&mailbox, &pduInfo);
         }
+    }
+
+    /* Bus-Off 検出: INT ピン状態に依存せず毎回確認（1 ms 周期）
+     * MCP2515 の ERRIE がデフォルト無効のため INT アサートを期待できない。
+     * EFLG.TXBO ビットを直接ポーリングすることで Bus-Off を確実に検出する。 */
+    if (CanState == CAN_CS_STARTED && Can_Hw_IsBusOff() == CAN_HW_OK)
+    {
+        CanIf_ControllerBusOff(0U);
     }
 }
