@@ -21,8 +21,8 @@
 #define TAG "Com"
 
 #define COM_IPDU_MAX_DLC  8U
-#define COM_RX_IPDU_MAX   1U
-#define COM_TX_IPDU_MAX   1U
+#define COM_RX_IPDU_MAX   COM_RX_IPDU_COUNT  /* Com_Cfg.h の設定値に連動 */
+#define COM_TX_IPDU_MAX   COM_TX_IPDU_COUNT  /* Com_Cfg.h の設定値に連動 */
 
 static const Com_ConfigType* Com_ConfigPtr = NULL;
 static uint8 Com_RxBuffer[COM_RX_IPDU_MAX][COM_IPDU_MAX_DLC];

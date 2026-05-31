@@ -1,13 +1,17 @@
 /**
  * \file    App_WarningIndicator.c
  * \brief   警告灯インジケータ SW-C 実装 (AUTOSAR ASW)
- * \details RTE 経由で EngineState を受信し、警告灯 LED を
- *          エンジン状態に応じて制御するメータ ECU 用 SW-C。
+ * \details RTE 経由で EngineState と AbsActive を受信し、警告灯 LED を
+ *          優先度順に制御するメータ ECU 用 SW-C。
  *
- *          LED 制御ルール:
- *            - ENGINE_STATE_RUNNING : 点灯 (定常)
- *            - ENGINE_STATE_FAULT   : 点滅 (500 ms 周期 = 本 Runnable の呼出周期)
- *            - それ以外 (OFF / STARTING) : 消灯
+ *          LED 制御ルール（優先度順）:
+ *            優先度 1: ENGINE_STATE_FAULT  → 点滅 (500 ms 周期 = 本 Runnable の呼出周期)
+ *            優先度 2: ABS_ACTIVE = 1      → 点灯 (ABS 作動中警告)
+ *            優先度 3: ENGINE_STATE_RUNNING → 点灯 (正常稼働)
+ *            それ以外 (OFF / STARTING)     → 消灯
+ *
+ *          エンジン FAULT 中に ABS が同時作動しても点滅を維持する
+ *          (エンジン異常を最優先で通知するため)。
  *
  *          本 SW-C は Dio / IoHwAb を直接参照しない。
  *          LED 操作はすべて RTE の Client/Server ポート
@@ -50,12 +54,18 @@ void App_WarningIndicator_Init(void)
 }
 
 /**
- * \brief   エンジン状態に応じて LED を制御する Runnable。
+ * \brief   エンジン状態と ABS 作動状態に応じて LED を優先度制御する Runnable。
  *
  * \details OS の 500 ms タスクから周期的に呼び出される。
- *          Rte_Read_WarningIndicator_EngineState() で最新の EngineState を取得し、
- *          Rte_Call_Led_SetLevel() で LED レベルを設定する。
- *          FAULT 時は呼出ごとに s_blinkState をトグルし 1 Hz 点滅を実現する。
+ *          Rte_Read_WarningIndicator_EngineState() と
+ *          Rte_Read_AbsSensor_AbsActive() で最新の状態を取得し、
+ *          優先度順に Rte_Call_Led_SetLevel() で LED レベルを決定する。
+ *
+ *          優先度ルール:
+ *            1. ENGINE_STATE_FAULT  → 呼出ごとに s_blinkState をトグルして 1 Hz 点滅
+ *            2. ABS_ACTIVE = 1      → 点灯 (エンジン FAULT でなければ ABS 警告を表示)
+ *            3. ENGINE_STATE_RUNNING → 点灯
+ *            4. その他              → 消灯
  *
  * \pre        App_WarningIndicator_Init() が正常完了していること。
  *
@@ -66,24 +76,30 @@ void App_WarningIndicator_Init(void)
 void App_WarningIndicator_Run(void)
 {
     EngineState_t state;
+    AbsActive_t   absActive = 0U;
+
     (void)Rte_Read_WarningIndicator_EngineState(&state);
+    (void)Rte_Read_AbsSensor_AbsActive(&absActive);
 
-    switch (state)
+    if (state == ENGINE_STATE_FAULT)
     {
-        case ENGINE_STATE_RUNNING:
-            DET_LOGI(TAG, "LED ON");
-            (void)Rte_Call_Led_SetLevel(1U);
-            break;
-
-        case ENGINE_STATE_FAULT:
-            s_blinkState ^= 1U;
-            DET_LOGI(TAG, "LED BLINK");
-            (void)Rte_Call_Led_SetLevel(s_blinkState);
-            break;
-
-        default:
-            DET_LOGI(TAG, "LED OFF");
-            (void)Rte_Call_Led_SetLevel(0U);
-            break;
+        s_blinkState ^= 1U;
+        DET_LOGI(TAG, "LED BLINK(Fault)");
+        (void)Rte_Call_Led_SetLevel(s_blinkState);
+    }
+    else if (absActive != 0U)
+    {
+        DET_LOGI(TAG, "LED ON(ABS)");
+        (void)Rte_Call_Led_SetLevel(1U);
+    }
+    else if (state == ENGINE_STATE_RUNNING)
+    {
+        DET_LOGI(TAG, "LED ON");
+        (void)Rte_Call_Led_SetLevel(1U);
+    }
+    else
+    {
+        DET_LOGI(TAG, "LED OFF");
+        (void)Rte_Call_Led_SetLevel(0U);
     }
 }
