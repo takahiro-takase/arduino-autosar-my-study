@@ -12,6 +12,10 @@
  *          Rte.c は RTE_SIGNAL_* を独自定義せず、このファイルをインクルード
  *          して COM_SIGNAL_* を参照することで ID の重複定義を防ぐ。
  *
+ *          DaVinci 対応:
+ *            本ファイルは /ActiveEcuC/Com/ComConfig の
+ *            ComIPdu / ComSignal ノード数に対応する。
+ *
  * \copyright  Copyright (c) 2025 T_T
  * \license    MIT License - 詳細は LICENSE ファイルを参照。
  *
@@ -25,19 +29,24 @@
 
 /* -----------------------------------------------------------------------
  * プリコンパイル設定定数
+ * DaVinci: /ActiveEcuC/Com/ComConfig/ 配下の ComIPdu ノード数に相当
  * ----------------------------------------------------------------------- */
 
-/** RX I-PDU テーブルのエントリ数 */
-#define COM_RX_IPDU_COUNT   1U
+/** RX I-PDU テーブルのエントリ数
+ *  DaVinci: /ActiveEcuC/Com/ComConfig/ 内 Direction=RECEIVE の ComIPdu 数 */
+#define COM_RX_IPDU_COUNT   2U  /* [0]=EngineInfo 0x100, [1]=AbsInfo 0x110 */
 
-/** TX I-PDU テーブルのエントリ数 */
-#define COM_TX_IPDU_COUNT   1U
+/** TX I-PDU テーブルのエントリ数
+ *  DaVinci: /ActiveEcuC/Com/ComConfig/ 内 Direction=SEND の ComIPdu 数 */
+#define COM_TX_IPDU_COUNT   1U  /* [0]=MeterStatus 0x200 */
 
-/** シグナルテーブルのエントリ数（RX + TX の合計） */
-#define COM_SIGNAL_COUNT    4U
+/** シグナルテーブルのエントリ数（RX + TX の合計）
+ *  DaVinci: /ActiveEcuC/Com/ComConfig/ 内 ComSignal ノード数の合計 */
+#define COM_SIGNAL_COUNT    7U
 
 /* -----------------------------------------------------------------------
  * シグナル ID 定数
+ * DaVinci: /ActiveEcuC/Com/ComConfig/[ComSignal]/ComHandleId に相当
  * Com_ReceiveSignal() / Com_SendSignal() の第 1 引数として使用する。
  * RTE は RTE_SIGNAL_* を独自定義せず、これらの定数を参照すること。
  * ----------------------------------------------------------------------- */
@@ -53,5 +62,18 @@
 
 /** TX: エンジン状態シグナル (8 bit, CAN ID 0x200, byte[0]) */
 #define COM_SIGNAL_ENGINE_STATE    3U
+
+/* -----------------------------------------------------------------------
+ * ABS ECU シグナル (CAN ID 0x110 AbsInfo フレーム)
+ * ----------------------------------------------------------------------- */
+
+/** RX: 車速シグナル (16 bit, CAN ID 0x110, byte[0-1], 0.01 km/h) */
+#define COM_SIGNAL_VEHICLE_SPEED   4U
+
+/** RX: ブレーキ作動フラグ (1 bit, CAN ID 0x110, byte[2] bit7, 0=解除/1=作動) */
+#define COM_SIGNAL_BRAKE_ACTIVE    5U
+
+/** RX: ABS 作動フラグ (1 bit, CAN ID 0x110, byte[2] bit6, 0=非作動/1=作動) */
+#define COM_SIGNAL_ABS_ACTIVE      6U
 
 #endif /* COM_CFG_H */

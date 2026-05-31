@@ -23,15 +23,21 @@
  * ----------------------------------------------------------------------- */
 
 /** RX ルーティングパス数
- *  パス 0: CAN 0x100 → COM   (センサデータ)
- *  パス 1: CAN 0x7E0 → CanTp (UDS 診断要求; CanTp → DCM) */
-#define PDUR_RX_PATH_COUNT   2U
+ *  DaVinci: /ActiveEcuC/PduR/PduRConfig/PduRRoutingTable 内の
+ *           RECEIVE 方向 PduRRoutingPath ノード数
+ *  パス 0: CAN 0x100 → COM   (EngineInfo,  エンジン ECU)
+ *  パス 1: CAN 0x7E0 → CanTp (UDS 診断要求, 診断ツール)
+ *  パス 2: CAN 0x110 → COM   (AbsInfo,     ABS ECU) */
+#define PDUR_RX_PATH_COUNT   3U
 
-/** RX パス 0 の配信先数（COM のみ: 0x100 はアプリデータ専用） */
+/** RX パス 0 の配信先数（COM のみ） */
 #define PDUR_RX_DEST_COUNT_PATH0  1U
 
-/** RX パス 1 の配信先数（CanTp のみ: 0x7E0 は診断専用） */
+/** RX パス 1 の配信先数（CanTp のみ） */
 #define PDUR_RX_DEST_COUNT_PATH1  1U
+
+/** RX パス 2 の配信先数（COM のみ: AbsInfo は ABS ECU からの受信専用） */
+#define PDUR_RX_DEST_COUNT_PATH2  1U
 
 /** TX ルーティングパス数
  *  パス 0: COM   → CanIf TxPduId=0 (CAN 0x200, EngineState)
