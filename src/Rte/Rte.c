@@ -271,3 +271,66 @@ Std_ReturnType Rte_Call_Led_SetLevel(uint8 level)
 {
     return IoHwAb_Led_SetLevel(level);
 }
+
+/**
+ * \brief   VehicleSensor 要求ポートから VehicleSpeed シグナルを読み取る。
+ *
+ * \details Com_ReceiveSignal() へ委譲し、COM の RX I-PDU バッファ (IPduId=1) から
+ *          VehicleSpeed シグナルをアンパックする（0.01 km/h 単位）。
+ *          シグナルの発信元は ABS ECU (CAN ID 0x110)。
+ *
+ * \param[out] data  車速を受け取る変数へのポインタ。NULL 禁止。
+ *
+ * \retval  E_OK      正常に読み取った。
+ * \retval  E_NOT_OK  COM 未初期化またはシグナル ID が見つからない。
+ *
+ * \ServiceID      {0xFC}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType Rte_Read_VehicleSensor_VehicleSpeed(VehicleSpeed_t* data)
+{
+    return Com_ReceiveSignal(COM_SIGNAL_VEHICLE_SPEED, data);
+}
+
+/**
+ * \brief   BrakeSensor 要求ポートから BrakeActive シグナルを読み取る。
+ *
+ * \details Com_ReceiveSignal() へ委譲し、COM の RX I-PDU バッファ (IPduId=1) から
+ *          BrakeActive シグナルをアンパックする（0=解除 / 1=作動）。
+ *          シグナルの発信元は ABS ECU (CAN ID 0x110)。
+ *
+ * \param[out] data  ブレーキ作動フラグを受け取る変数へのポインタ。NULL 禁止。
+ *
+ * \retval  E_OK      正常に読み取った。
+ * \retval  E_NOT_OK  COM 未初期化またはシグナル ID が見つからない。
+ *
+ * \ServiceID      {0xFD}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType Rte_Read_BrakeSensor_BrakeActive(BrakeActive_t* data)
+{
+    return Com_ReceiveSignal(COM_SIGNAL_BRAKE_ACTIVE, data);
+}
+
+/**
+ * \brief   AbsSensor 要求ポートから AbsActive シグナルを読み取る。
+ *
+ * \details Com_ReceiveSignal() へ委譲し、COM の RX I-PDU バッファ (IPduId=1) から
+ *          AbsActive シグナルをアンパックする（0=非作動 / 1=ABS 作動中）。
+ *          シグナルの発信元は ABS ECU (CAN ID 0x110)。
+ *
+ * \param[out] data  ABS 作動フラグを受け取る変数へのポインタ。NULL 禁止。
+ *
+ * \retval  E_OK      正常に読み取った。
+ * \retval  E_NOT_OK  COM 未初期化またはシグナル ID が見つからない。
+ *
+ * \ServiceID      {0xFE}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType Rte_Read_AbsSensor_AbsActive(AbsActive_t* data)
+{
+    return Com_ReceiveSignal(COM_SIGNAL_ABS_ACTIVE, data);
+}

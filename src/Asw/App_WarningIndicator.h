@@ -24,10 +24,11 @@ extern "C" {
 void App_WarningIndicator_Init(void);
 
 /**
- * \brief   エンジン状態に応じて LED を制御する Runnable。
+ * \brief   エンジン状態と ABS 作動状態に応じて LED を優先度制御する Runnable。
  *
- * \details RTE 経由で EngineState を読み取り、
- *          RUNNING=点灯、FAULT=点滅 (500 ms 周期)、その他=消灯 を実現する。
+ * \details RTE 経由で EngineState と AbsActive を読み取り、
+ *          優先度順に LED を制御する。
+ *          FAULT=点滅 (最優先)、ABS_ACTIVE=点灯、RUNNING=点灯、その他=消灯。
  *          OS の 500 ms タスクから呼び出すこと。
  */
 void App_WarningIndicator_Run(void);
