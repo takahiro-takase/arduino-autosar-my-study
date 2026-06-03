@@ -49,17 +49,20 @@ typedef enum
 // -------------------------------------------------------
 // I-PDU 設定（1エントリ = 1つの I-PDU）
 //
-//   IPduId  : COM 内の I-PDU インデックス（0始まり）
-//   DLC     : PDU のバイト長 = 内部バッファサイズ
-//   PduRId  : PduR 空間での ID
-//             RX → PduR_RxRoutingPath の SrcPduId と一致させる
-//             TX → PduR_Transmit に渡す SrcPduId と一致させる
+//   IPduId    : COM 内の I-PDU インデックス（0始まり）
+//   DLC       : PDU のバイト長 = 内部バッファサイズ
+//   PduRId    : PduR 空間での ID
+//               RX → Com_RxIndication に渡される DestPduId と一致させる
+//               TX → PduR_Transmit に渡す SrcPduId と一致させる
+//   TimeoutMs : RX 受信デッドライン [ms]（DaVinci: ComRxDeadlineMonitoringPeriod）
+//               0 = 監視無効。TX I-PDU では 0 を設定すること。
 // -------------------------------------------------------
 typedef struct
 {
     Com_IPduIdType  IPduId;
     uint8           DLC;
     PduIdType       PduRId;
+    uint16          TimeoutMs;
 } Com_IPduConfigType;
 
 // -------------------------------------------------------

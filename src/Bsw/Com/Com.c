@@ -5,7 +5,11 @@
  *          RX/TX I-PDU バッファを管理し、設定可能なビットエンディアン
  *          (Motorola/Intel) でシグナルのパック・アンパックを行う。
  *          AUTOSAR 4.3.1 SWS_COM 仕様に準拠し、Arduino UNO 向けに
- *          バッファ数固定・締め切り監視なし・更新ビットなしに簡略化している。
+ *          バッファ数固定・更新ビットなしに簡略化している。
+ *          受信デッドライン監視 (SWS_Com_00398) を実装しており、
+ *          Com_MainFunction() が周期的にタイムアウトを検出する。
+ *          タイムアウト中の I-PDU に属するシグナルは Com_ReceiveSignal() が
+ *          E_NOT_OK を返し、上位層（RTE/ASW）がフェイルセーフ処理を行う。
  *
  * \copyright  Copyright (c) 2025 T_T
  * \license    MIT License - 詳細は LICENSE ファイルを参照。
@@ -24,9 +28,14 @@
 #define COM_RX_IPDU_MAX   COM_RX_IPDU_COUNT  /* Com_Cfg.h の設定値に連動 */
 #define COM_TX_IPDU_MAX   COM_TX_IPDU_COUNT  /* Com_Cfg.h の設定値に連動 */
 
+/* millis() は Arduino wiring.c で C リンケージ定義されている */
+extern unsigned long millis(void);
+
 static const Com_ConfigType* Com_ConfigPtr = NULL;
-static uint8 Com_RxBuffer[COM_RX_IPDU_MAX][COM_IPDU_MAX_DLC];
-static uint8 Com_TxBuffer[COM_TX_IPDU_MAX][COM_IPDU_MAX_DLC];
+static uint8         Com_RxBuffer[COM_RX_IPDU_MAX][COM_IPDU_MAX_DLC];
+static uint8         Com_TxBuffer[COM_TX_IPDU_MAX][COM_IPDU_MAX_DLC];
+static unsigned long Com_RxLastMs[COM_RX_IPDU_MAX];   /* 最終受信時刻 [ms] */
+static uint8         Com_RxTimedOut[COM_RX_IPDU_MAX];  /* 1 = タイムアウト中 */
 
 /**
  * \brief   COM モジュールを初期化し、すべての I-PDU バッファをクリアする。
@@ -66,9 +75,14 @@ void Com_Init(const Com_ConfigType* config)
 
     Com_ConfigPtr = config;
 
+    const unsigned long now = millis();
     for (uint8 i = 0; i < COM_RX_IPDU_MAX; i++)
+    {
         for (uint8 j = 0; j < COM_IPDU_MAX_DLC; j++)
             Com_RxBuffer[i][j] = 0U;
+        Com_RxLastMs[i]  = now;  /* タイムアウト計測を Init 時刻から開始 */
+        Com_RxTimedOut[i] = 0U;
+    }
 
     for (uint8 i = 0; i < COM_TX_IPDU_MAX; i++)
         for (uint8 j = 0; j < COM_IPDU_MAX_DLC; j++)
@@ -115,6 +129,10 @@ void Com_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
 
         for (uint8 b = 0; b < copyLen; b++)
             Com_RxBuffer[ipdu->IPduId][b] = PduInfoPtr->SduDataPtr[b];
+
+        /* 受信成功 → タイムアウトタイマをリセット */
+        Com_RxLastMs[ipdu->IPduId]  = millis();
+        Com_RxTimedOut[ipdu->IPduId] = 0U;
 
         char hexbuf[25];
         Log_HexStr(hexbuf, sizeof(hexbuf), Com_RxBuffer[ipdu->IPduId], copyLen);
@@ -245,6 +263,10 @@ uint8 Com_ReceiveSignal(Com_SignalIdType SignalId, void* SignalDataPtr)
         const Com_SignalConfigType* sig = &Com_ConfigPtr->Signals[s];
         if (sig->SignalId != SignalId)
             continue;
+
+        /* タイムアウト中は値を書き込まず E_NOT_OK を返す（呼び出し元の初期値=安全値を使用） */
+        if (Com_RxTimedOut[sig->IPduId])
+            return E_NOT_OK;
 
         const uint32 value = Com_UnpackSignal(
             Com_RxBuffer[sig->IPduId],
@@ -384,4 +406,44 @@ void Com_TxConfirmation(PduIdType TxPduId, Std_ReturnType result)
 {
     (void)result;
     DET_LOGD(TAG, "TxConf id=%u", (unsigned)TxPduId);
+}
+
+/**
+ * \brief   受信デッドライン監視タイムアウトを周期的に検出する。
+ *
+ * \details Os の 100 ms タスクから呼び出される (SWS_Com_00398)。
+ *          TimeoutMs > 0 の各 RX I-PDU について、最終受信からの経過時間を確認し、
+ *          設定値を超えた場合に Com_RxTimedOut フラグを立てて WARN ログを出力する。
+ *          その後 Com_ReceiveSignal() は当該 I-PDU のシグナルに対して E_NOT_OK を返し、
+ *          上位層（RTE → ASW）がフェイルセーフ処理（FAULT 遷移など）を実施する。
+ *
+ *          タイムアウトは Com_RxIndication() でフレームを受信するまで継続する。
+ *
+ * \pre        Com_Init() が正常に完了していること。
+ *
+ * \ServiceID      {0x20}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void Com_MainFunction(void)
+{
+    if (Com_ConfigPtr == NULL)
+        return;
+
+    const unsigned long now = millis();
+
+    for (uint8 i = 0; i < Com_ConfigPtr->RxIPduCount; i++)
+    {
+        const Com_IPduConfigType* ipdu = &Com_ConfigPtr->RxIPdus[i];
+        if (ipdu->TimeoutMs == 0U)
+            continue;  /* 監視無効 */
+
+        if (!Com_RxTimedOut[ipdu->IPduId] &&
+            (now - Com_RxLastMs[ipdu->IPduId]) >= (unsigned long)ipdu->TimeoutMs)
+        {
+            Com_RxTimedOut[ipdu->IPduId] = 1U;
+            DET_LOGW(TAG, "RX timeout iPdu=%u (%ums)",
+                     (unsigned)ipdu->IPduId, (unsigned)ipdu->TimeoutMs);
+        }
+    }
 }
