@@ -10,13 +10,15 @@
  *            DEM_EVENT_ENGINE_STALL         — エンジン失速 (speed < 100 RPM)
  *            DEM_EVENT_ENGINE_SPEED_NO_FLAG — フラグなし回転検出
  *            DEM_EVENT_STARTING_TIMEOUT     — 起動タイムアウト (5 秒超過)
+ *            DEM_EVENT_COMM_TIMEOUT         — EngineInfo 受信タイムアウト
  *
- *          EEPROM レイアウト (Arduino UNO 内蔵 EEPROM 1KB の先頭 5 バイト使用):
+ *          EEPROM レイアウト (Arduino UNO 内蔵 EEPROM 1KB の先頭 6 バイト使用):
  *            Addr 0x00: マジックバイト (0xDE = 有効な DEM データ)
  *            Addr 0x01: イベント 0 (ENGINE_OVERHEAT)  ステータスバイト
  *            Addr 0x02: イベント 1 (ENGINE_STALL)     ステータスバイト
  *            Addr 0x03: イベント 2 (SPEED_NO_FLAG)    ステータスバイト
  *            Addr 0x04: イベント 3 (STARTING_TIMEOUT) ステータスバイト
+ *            Addr 0x05: イベント 4 (COMM_TIMEOUT)     ステータスバイト
  *
  * \copyright  Copyright (c) 2025 T_T
  * \license    MIT License - 詳細は LICENSE ファイルを参照。
@@ -31,20 +33,22 @@
  * イベント ID 定義
  * App_EngineManager の状態ハンドラが Dem_ReportErrorStatus() に渡す。
  * ----------------------------------------------------------------------- */
-#define DEM_EVENT_ENGINE_OVERHEAT       0U  /**< 冷却水温過熱           */
-#define DEM_EVENT_ENGINE_STALL          1U  /**< エンジン失速           */
-#define DEM_EVENT_ENGINE_SPEED_NO_FLAG  2U  /**< フラグなし回転検出     */
-#define DEM_EVENT_STARTING_TIMEOUT      3U  /**< 起動タイムアウト       */
-#define DEM_EVENT_COUNT                 4U  /**< イベント総数           */
+#define DEM_EVENT_ENGINE_OVERHEAT       0U  /**< 冷却水温過熱                     */
+#define DEM_EVENT_ENGINE_STALL          1U  /**< エンジン失速                     */
+#define DEM_EVENT_ENGINE_SPEED_NO_FLAG  2U  /**< フラグなし回転検出               */
+#define DEM_EVENT_STARTING_TIMEOUT      3U  /**< 起動タイムアウト                 */
+#define DEM_EVENT_COMM_TIMEOUT          4U  /**< EngineInfo 受信タイムアウト      */
+#define DEM_EVENT_COUNT                 5U  /**< イベント総数                     */
 
 /* -----------------------------------------------------------------------
  * DTC コード (24-bit, ISO 14229-1)
  * 製造者定義領域を使用 (byte1=0x00, byte2-3=0x01xx)
  * ----------------------------------------------------------------------- */
-#define DEM_DTC_ENGINE_OVERHEAT         0x000101UL  /**< 冷却水温過熱   */
-#define DEM_DTC_ENGINE_STALL            0x000102UL  /**< エンジン失速   */
-#define DEM_DTC_ENGINE_SPEED_NO_FLAG    0x000103UL  /**< フラグなし回転 */
-#define DEM_DTC_STARTING_TIMEOUT        0x000104UL  /**< 起動タイムアウト */
+#define DEM_DTC_ENGINE_OVERHEAT         0x000101UL  /**< 冷却水温過熱             */
+#define DEM_DTC_ENGINE_STALL            0x000102UL  /**< エンジン失速             */
+#define DEM_DTC_ENGINE_SPEED_NO_FLAG    0x000103UL  /**< フラグなし回転           */
+#define DEM_DTC_STARTING_TIMEOUT        0x000104UL  /**< 起動タイムアウト         */
+#define DEM_DTC_COMM_TIMEOUT            0x000105UL  /**< EngineInfo 受信タイムアウト */
 
 /* -----------------------------------------------------------------------
  * DTC ステータスビットマスク (ISO 14229-1 Annex B)

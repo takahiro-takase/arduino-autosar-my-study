@@ -6,11 +6,12 @@
  *          に相当する。
  *
  *          タスク一覧:
- *            Task 0: Can_Isr                  1 ms  — CAN 受信ポーリング
- *            Task 1: CanTp_MainFunction        1 ms  — タイムアウト監視・CF 送信
- *            Task 2: Rte_ScheduleRunnables  3000 ms  — エンジン Runnable 起動
+ *            Task 0: Can_Isr                   1 ms  — CAN 受信ポーリング
+ *            Task 1: CanTp_MainFunction         1 ms  — タイムアウト監視・CF 送信
+ *            Task 2: Rte_ScheduleRunnables   3000 ms  — エンジン Runnable 起動
  *            Task 3: Rte_ScheduleWarningIndicator 500 ms — 警告灯 Runnable 起動
  *            Task 4: CanSM_MainFunction           10 ms  — Bus-Off 回復タイマ監視
+ *            Task 5: Com_MainFunction            100 ms  — RX 受信デッドライン監視
  *
  *          周期の根拠:
  *            Can_Isr / CanTp_MainFunction は CAN フレーム到着の応答性と
@@ -36,6 +37,7 @@ extern void CanTp_MainFunction(void);
 extern void Rte_ScheduleRunnables(void);
 extern void Rte_ScheduleWarningIndicator(void);
 extern void CanSM_MainFunction(void);
+extern void Com_MainFunction(void);
 
 /* -----------------------------------------------------------------------
  * タスクテーブル
@@ -44,11 +46,12 @@ extern void CanSM_MainFunction(void);
  * ----------------------------------------------------------------------- */
 static const Os_TaskType Os_TaskTable[OS_TASK_COUNT] =
 {
-    /* Task 0 */ { Can_Isr,                      1U    },  /* 1 ms    : CAN 受信ポーリング    */
-    /* Task 1 */ { CanTp_MainFunction,           1U    },  /* 1 ms    : タイムアウト監視      */
-    /* Task 2 */ { Rte_ScheduleRunnables,        3000U },  /* 3000 ms : エンジン Runnable     */
-    /* Task 3 */ { Rte_ScheduleWarningIndicator, 500U  },  /* 500 ms  : 警告灯 Runnable       */
-    /* Task 4 */ { CanSM_MainFunction,           10U   }   /* 10 ms   : BusOff 回復タイマ監視 */
+    /* Task 0 */ { Can_Isr,                      1U    },  /* 1 ms    : CAN 受信ポーリング        */
+    /* Task 1 */ { CanTp_MainFunction,           1U    },  /* 1 ms    : CanTp タイムアウト監視    */
+    /* Task 2 */ { Rte_ScheduleRunnables,        3000U },  /* 3000 ms : エンジン Runnable         */
+    /* Task 3 */ { Rte_ScheduleWarningIndicator, 500U  },  /* 500 ms  : 警告灯 Runnable           */
+    /* Task 4 */ { CanSM_MainFunction,           10U   },  /* 10 ms   : BusOff 回復タイマ監視     */
+    /* Task 5 */ { Com_MainFunction,             100U  }   /* 100 ms  : COM 受信デッドライン監視  */
 };
 
 /* -----------------------------------------------------------------------

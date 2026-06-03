@@ -15,6 +15,6 @@
 #define OS_CFG_H
 
 /** 管理タスク総数 (Os_PBCfg.c の Os_TaskTable 要素数と一致させること) */
-#define OS_TASK_COUNT  5U
+#define OS_TASK_COUNT  6U
 
 #endif /* OS_CFG_H */

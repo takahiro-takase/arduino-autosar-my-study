@@ -79,13 +79,14 @@ void App_EngineManager_Init(void)
  *          (CAN ID 0x200、DLC 1) の送信をトリガする。
  *          Rte_ScheduleRunnables() から 3000 ms ごとに呼び出される。
  *
- *          この関数はエンジンマネージャ SW-C の唯一の Runnable Entity である。
- *          完全な AUTOSAR OS 環境では周期 OsTask へマッピングされる。
+ *          受信タイムアウト処理:
+ *          いずれかの Rte_Read が E_NOT_OK を返した場合は EngineInfo の
+ *          受信デッドラインを超過したと判断する（3 シグナルはすべて同一
+ *          I-PDU に属するため、1 つが E_NOT_OK なら残りも同様）。
+ *          STARTING / RUNNING 中のタイムアウトは FAULT 遷移し DEM に記録する。
+ *          OFF / FAULT 中は通信不在が正常のためタイムアウトを無視する。
  *
  * \pre        App_EngineManager_Init() が正常に完了していること。
- * \note       RTE Read の戻り値は破棄している。シグナルが取得できない場合は
- *             前回のバッファ値（起動直後は 0）を使用するため、
- *             ステートマシンは OFF のまま維持される。
  *
  * \ServiceID      {0xF0}
  * \Reentrancy     {Non Reentrant}
@@ -97,17 +98,33 @@ void App_EngineManager_Run(void)
     CoolantTemp_t  temp  = 0U;
     EngineOnFlag_t flag  = 0U;
 
-    (void)Rte_Read_SpeedSensor_EngineSpeed(&speed);
-    (void)Rte_Read_TempSensor_CoolantTemp(&temp);
-    (void)Rte_Read_EngineStatus_EngineOnFlag(&flag);
+    const Std_ReturnType speedRet = Rte_Read_SpeedSensor_EngineSpeed(&speed);
+    const Std_ReturnType tempRet  = Rte_Read_TempSensor_CoolantTemp(&temp);
+    const Std_ReturnType flagRet  = Rte_Read_EngineStatus_EngineOnFlag(&flag);
 
-    switch (s_state)
+    /* EngineInfo タイムアウト検出（3 シグナルは同一 I-PDU のため代表値で判定） */
+    if (speedRet != E_OK || tempRet != E_OK || flagRet != E_OK)
     {
-        case ENGINE_STATE_OFF:      State_Off(speed, temp, flag);      break;
-        case ENGINE_STATE_STARTING: State_Starting(speed, temp, flag); break;
-        case ENGINE_STATE_RUNNING:  State_Running(speed, temp, flag);  break;
-        case ENGINE_STATE_FAULT:    State_Fault(speed, temp, flag);    break;
-        default:                    s_state = ENGINE_STATE_FAULT;      break;
+        Dem_ReportErrorStatus(DEM_EVENT_COMM_TIMEOUT, DEM_EVENT_STATUS_FAILED);
+        if (s_state == ENGINE_STATE_STARTING || s_state == ENGINE_STATE_RUNNING)
+        {
+            s_state = ENGINE_STATE_FAULT;
+            DET_LOGW(TAG, "->FAULT comm timeout");
+        }
+    }
+    else
+    {
+        /* 正常受信 → COMM_TIMEOUT イベントを PASSED 報告 */
+        Dem_ReportErrorStatus(DEM_EVENT_COMM_TIMEOUT, DEM_EVENT_STATUS_PASSED);
+
+        switch (s_state)
+        {
+            case ENGINE_STATE_OFF:      State_Off(speed, temp, flag);      break;
+            case ENGINE_STATE_STARTING: State_Starting(speed, temp, flag); break;
+            case ENGINE_STATE_RUNNING:  State_Running(speed, temp, flag);  break;
+            case ENGINE_STATE_FAULT:    State_Fault(speed, temp, flag);    break;
+            default:                    s_state = ENGINE_STATE_FAULT;      break;
+        }
     }
 
     (void)Rte_Write_EngineStatus_EngineState(s_state);
