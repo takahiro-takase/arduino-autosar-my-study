@@ -30,6 +30,8 @@ uint8 Com_SendSignal(Com_SignalIdType SignalId, const void* SignalDataPtr);
 Std_ReturnType Com_TriggerIPDUSend(PduIdType PduId);
 /* SWS_Com_00695 */
 void Com_TxConfirmation(PduIdType TxPduId, Std_ReturnType result);
+/* SWS_Com_00398: 受信デッドライン監視タイムアウト検出。Os の 100ms タスクから呼び出す */
+void Com_MainFunction(void);
 
 #ifdef __cplusplus
 }

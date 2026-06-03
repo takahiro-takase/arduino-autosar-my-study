@@ -56,20 +56,24 @@ static const Com_IPduConfigType Com_RxIPduConfigData[COM_RX_IPDU_COUNT] = {
          * RX IPduId=0: EngineInfo フレーム (エンジン ECU 送信)
          * DaVinci: /ActiveEcuC/Com/ComConfig/EngineInfo_Rx
          * --------------------------------------------------------------- */
-        .IPduId = 0U,   /* DaVinci: ComIPduHandleId  - I-PDU 識別番号 */
-        .DLC    = 4U,   /* DaVinci: ComIPduLength    - I-PDU バイト長 */
-        .PduRId = 0U    /* DaVinci: ComIPduPduRef    - PduR が Com_RxIndication へ渡す DestPduId
-                         *          (PduR_PBCfg.c PduR_RxDests_Path0[0].DestPduId と一致させること) */
+        .IPduId    = 0U,                        /* DaVinci: ComIPduHandleId  - I-PDU 識別番号 */
+        .DLC       = 4U,                        /* DaVinci: ComIPduLength    - I-PDU バイト長 */
+        .PduRId    = 0U,                        /* DaVinci: ComIPduPduRef    - PduR が Com_RxIndication へ渡す DestPduId
+                                                 *          (PduR_PBCfg.c PduR_RxDests_Path0[0].DestPduId と一致させること) */
+        .TimeoutMs = COM_TIMEOUT_ENGINE_INFO_MS /* DaVinci: ComRxDeadlineMonitoringPeriod
+                                                 *          エンジン ECU からの受信が途絶えたと判断するまでの時間 */
     },
     {
         /* ---------------------------------------------------------------
          * RX IPduId=1: AbsInfo フレーム (ABS ECU 送信)
          * DaVinci: /ActiveEcuC/Com/ComConfig/AbsInfo_Rx
          * --------------------------------------------------------------- */
-        .IPduId = 1U,   /* DaVinci: ComIPduHandleId  - I-PDU 識別番号 */
-        .DLC    = 3U,   /* DaVinci: ComIPduLength    - I-PDU バイト長 */
-        .PduRId = 1U    /* DaVinci: ComIPduPduRef    - PduR が Com_RxIndication へ渡す DestPduId
-                         *          (PduR_PBCfg.c PduR_RxDests_Path2[0].DestPduId と一致させること) */
+        .IPduId    = 1U,                       /* DaVinci: ComIPduHandleId  - I-PDU 識別番号 */
+        .DLC       = 3U,                       /* DaVinci: ComIPduLength    - I-PDU バイト長 */
+        .PduRId    = 1U,                       /* DaVinci: ComIPduPduRef    - PduR が Com_RxIndication へ渡す DestPduId
+                                                *          (PduR_PBCfg.c PduR_RxDests_Path2[0].DestPduId と一致させること) */
+        .TimeoutMs = COM_TIMEOUT_ABS_INFO_MS   /* DaVinci: ComRxDeadlineMonitoringPeriod
+                                                *          ABS ECU からの受信が途絶えたと判断するまでの時間 */
     }
 };
 
@@ -84,9 +88,10 @@ static const Com_IPduConfigType Com_TxIPduConfigData[COM_TX_IPDU_COUNT] = {
          * TX IPduId=0: MeterStatus フレーム (メータ ECU 送信)
          * DaVinci: /ActiveEcuC/Com/ComConfig/MeterStatus_Tx
          * --------------------------------------------------------------- */
-        .IPduId = 0U,   /* DaVinci: ComIPduHandleId  - I-PDU 識別番号 */
-        .DLC    = 1U,   /* DaVinci: ComIPduLength    - I-PDU バイト長 */
-        .PduRId = 0U    /* DaVinci: ComIPduPduRef    - PduR TX パス 0 へのリンク */
+        .IPduId    = 0U,  /* DaVinci: ComIPduHandleId  - I-PDU 識別番号 */
+        .DLC       = 1U,  /* DaVinci: ComIPduLength    - I-PDU バイト長 */
+        .PduRId    = 0U,  /* DaVinci: ComIPduPduRef    - PduR TX パス 0 へのリンク */
+        .TimeoutMs = 0U   /* TX I-PDU のため監視無効 */
     }
 };
 

@@ -36,6 +36,21 @@
  *  DaVinci: /ActiveEcuC/Com/ComConfig/ 内 Direction=RECEIVE の ComIPdu 数 */
 #define COM_RX_IPDU_COUNT   2U  /* [0]=EngineInfo 0x100, [1]=AbsInfo 0x110 */
 
+/* -----------------------------------------------------------------------
+ * 受信デッドライン監視（タイムアウト）設定
+ * DaVinci: /ActiveEcuC/Com/ComConfig/[ComIPdu]/ComRxDeadlineMonitoringPeriod
+ * 0 を設定すると監視無効。単位: ms。
+ * ----------------------------------------------------------------------- */
+
+/** EngineInfo (0x100) 受信タイムアウト [ms]
+ *  エンジン ECU からの受信が途絶えた場合に FAULT 遷移させる基準時間。
+ *  App_EngineManager_Run の周期 (3000ms) より長く設定すること。 */
+#define COM_TIMEOUT_ENGINE_INFO_MS  5000U
+
+/** AbsInfo (0x110) 受信タイムアウト [ms]
+ *  ABS ECU からの受信が途絶えた場合に ABS 警告灯を消灯にフォールバックする。 */
+#define COM_TIMEOUT_ABS_INFO_MS     5000U
+
 /** TX I-PDU テーブルのエントリ数
  *  DaVinci: /ActiveEcuC/Com/ComConfig/ 内 Direction=SEND の ComIPdu 数 */
 #define COM_TX_IPDU_COUNT   1U  /* [0]=MeterStatus 0x200 */
