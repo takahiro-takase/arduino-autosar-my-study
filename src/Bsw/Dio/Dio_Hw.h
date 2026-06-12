@@ -19,7 +19,8 @@
 extern "C" {
 #endif
 
-void Dio_Hw_WriteChannel(Dio_ChannelType channelId, Dio_LevelType level);
+void         Dio_Hw_WriteChannel(Dio_ChannelType channelId, Dio_LevelType level);
+Dio_LevelType Dio_Hw_ReadChannel(Dio_ChannelType channelId);
 
 #ifdef __cplusplus
 }

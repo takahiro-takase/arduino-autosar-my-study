@@ -44,6 +44,22 @@ typedef uint8 Dio_LevelType;
  */
 void Dio_WriteChannel(Dio_ChannelType channelId, Dio_LevelType level);
 
+/**
+ * \brief   指定チャネルの入力レベルを読み取る。
+ *
+ * \param[in]  channelId  読み取り元チャネル ID (Arduino ピン番号)。
+ *
+ * \return  DIO_HIGH または DIO_LOW。
+ *
+ * \pre        Port_Init() で対象チャネルを入力モード (PORT_PIN_IN / PORT_PIN_IN_PULLUP)
+ *             に設定済みであること。
+ *
+ * \ServiceID      {0xE2}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Dio_LevelType Dio_ReadChannel(Dio_ChannelType channelId);
+
 #ifdef __cplusplus
 }
 #endif

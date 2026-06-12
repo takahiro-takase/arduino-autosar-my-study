@@ -50,6 +50,25 @@ void IoHwAb_Init(void);
  */
 Std_ReturnType IoHwAb_Led_SetLevel(uint8 level);
 
+/**
+ * \brief   エンジン起動ボタンの押下状態を取得する。
+ *
+ * \details MCAL Dio_ReadChannel() で DIO_CHANNEL_BUTTON の物理レベルを読み取り、
+ *          INPUT_PULLUP による論理反転（LOW=押下）を吸収して上位層に渡す。
+ *          呼び出し元は物理的なプルアップ配線を意識しない。
+ *          RTE の Client/Server ポート (Rte_Call_Button_GetLevel) から呼び出される。
+ *
+ * \param[out] level  押下状態を受け取る変数へのポインタ。
+ *                    0 = ボタン解放、1 = ボタン押下。NULL 禁止。
+ *
+ * \retval  E_OK  常に成功。
+ *
+ * \ServiceID      {0xC2}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType IoHwAb_Button_GetLevel(uint8* level);
+
 #ifdef __cplusplus
 }
 #endif

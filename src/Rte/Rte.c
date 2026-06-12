@@ -273,6 +273,27 @@ Std_ReturnType Rte_Call_Led_SetLevel(uint8 level)
 }
 
 /**
+ * \brief   エンジン起動ボタン押下状態取得の Client/Server ポート。
+ *
+ * \details SW-C (App_EngineManager) から呼び出され、
+ *          IoHwAb_Button_GetLevel() へ委譲する。
+ *          C/S ポートにより SW-C は Dio チャネル番号やプルアップ配線を知らない
+ *          (AUTOSAR SWS_RTE の Rte_Call_<p>_<o> パターン)。
+ *
+ * \param[out] level  押下状態 (0=解放, 1=押下)。NULL 禁止。
+ *
+ * \retval  E_OK  常に成功。
+ *
+ * \ServiceID      {0xFF}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType Rte_Call_Button_GetLevel(uint8* level)
+{
+    return IoHwAb_Button_GetLevel(level);
+}
+
+/**
  * \brief   VehicleSensor 要求ポートから VehicleSpeed シグナルを読み取る。
  *
  * \details Com_ReceiveSignal() へ委譲し、COM の RX I-PDU バッファ (IPduId=1) から

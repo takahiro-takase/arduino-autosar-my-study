@@ -19,4 +19,12 @@
  */
 #define DIO_CHANNEL_LED_WARNING  8U
 
+/**
+ * Arduino UNO プッシュボタン (D9)。
+ * エンジン起動トリガとして使用する。
+ * Port は INPUT_PULLUP で設定するため、押下時は DIO_LOW となる。
+ * IoHwAb_Button_GetLevel() で論理反転し、押下=1 に変換する。
+ */
+#define DIO_CHANNEL_BUTTON       9U
+
 #endif /* DIO_CFG_H */
