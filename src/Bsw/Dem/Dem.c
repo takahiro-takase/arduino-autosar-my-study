@@ -9,7 +9,7 @@
  *            EEPROM への永続化はすべて NvM_ReadBlock() / NvM_WriteBlock() 経由で行う。
  *            NvM が管理するブロック:
  *              NVM_BLOCK_ID_DEM_MAGIC  — 有効データマーカー (1 byte)
- *              NVM_BLOCK_ID_DEM_STATUS — イベントステータステーブル (4 bytes)
+ *              NVM_BLOCK_ID_DEM_STATUS — イベントステータステーブル (6 bytes)
  *
  *          DTC ライフサイクル:
  *            報告なし → TNCLC=1, TNCTOC=1 (未テスト状態)
@@ -47,7 +47,9 @@ static const uint32 Dem_DtcTable[DEM_EVENT_COUNT] = {
     DEM_DTC_ENGINE_OVERHEAT,         /* event 0 */
     DEM_DTC_ENGINE_STALL,            /* event 1 */
     DEM_DTC_ENGINE_SPEED_NO_FLAG,    /* event 2 */
-    DEM_DTC_STARTING_TIMEOUT         /* event 3 */
+    DEM_DTC_STARTING_TIMEOUT,        /* event 3 */
+    DEM_DTC_COMM_TIMEOUT,            /* event 4 */
+    DEM_DTC_BUTTON_STUCK             /* event 5 */
 };
 
 /* -----------------------------------------------------------------------

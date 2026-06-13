@@ -44,7 +44,7 @@
 static uint8 Dcm_CurrentSession;
 
 /** UDS 応答バッファ (PCI バイトなし; CanTp がトランスポート層を付加する)
- *  最大サイズ: 0x19/02 応答 (4 DTC) = 3 + 4×4 = 19 バイト → 32 バイトで余裕を持たせる */
+ *  最大サイズ: 0x19/02 応答 (6 DTC) = 3 + 6×4 = 27 バイト → 32 バイトで余裕を持たせる */
 static uint8 Dcm_TxBuf[32];
 
 /** CanTp_Transmit に渡す PDU 情報構造体 */
