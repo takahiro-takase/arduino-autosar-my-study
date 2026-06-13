@@ -51,6 +51,38 @@ void IoHwAb_Init(void);
 Std_ReturnType IoHwAb_Led_SetLevel(uint8 level);
 
 /**
+ * \brief   RUNNING LED (D6) の出力レベルを設定する。
+ *
+ * \details ENGINE_STATE_RUNNING 中に点灯する専用 LED を制御する。
+ *          RTE の Client/Server ポート (Rte_Call_LedRunning_SetLevel) から呼び出される。
+ *
+ * \param[in]  level  出力レベル。0 = 消灯、1 = 点灯。
+ *
+ * \retval  E_OK  常に成功。
+ *
+ * \ServiceID      {0xC3}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType IoHwAb_LedRunning_SetLevel(uint8 level);
+
+/**
+ * \brief   FAULT LED (D7) の出力レベルを設定する。
+ *
+ * \details ENGINE_STATE_FAULT 中に点滅する専用 LED を制御する。
+ *          RTE の Client/Server ポート (Rte_Call_LedFault_SetLevel) から呼び出される。
+ *
+ * \param[in]  level  出力レベル。0 = 消灯、1 = 点灯。
+ *
+ * \retval  E_OK  常に成功。
+ *
+ * \ServiceID      {0xC4}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType IoHwAb_LedFault_SetLevel(uint8 level);
+
+/**
  * \brief   エンジン起動ボタンの押下状態を取得する。
  *
  * \details MCAL Dio_ReadChannel() で DIO_CHANNEL_BUTTON の物理レベルを読み取り、

@@ -34,8 +34,10 @@
  */
 void Port_Init(void)
 {
-    Port_Hw_SetPinDirection(PORT_PIN_LED_WARNING, PORT_PIN_OUT);
-    Port_Hw_SetPinDirection(PORT_PIN_BUTTON, PORT_PIN_IN_PULLUP);
+    Port_Hw_SetPinDirection(PORT_PIN_LED_RUNNING, PORT_PIN_OUT);
+    Port_Hw_SetPinDirection(PORT_PIN_LED_FAULT,   PORT_PIN_OUT);
+    Port_Hw_SetPinDirection(PORT_PIN_LED_WARNING,  PORT_PIN_OUT);
+    Port_Hw_SetPinDirection(PORT_PIN_BUTTON,       PORT_PIN_IN_PULLUP);
     DET_LOGI(TAG, "Init pins=%u", (unsigned)PORT_PIN_COUNT);
 }
 
