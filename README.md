@@ -1,4 +1,4 @@
-# arduino-mcp2515-autosar-my-study
+# arduino-autosar-my-study
 
 Arduino + MCP2515 を用いて AUTOSAR CP の BSW CAN スタックを学習目的で実装したプロジェクトです。
 ARXML や設定ツールは使用せず、コードで階層構造・型定義・設定テーブルを再現しています。
