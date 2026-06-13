@@ -22,4 +22,9 @@ void Dio_Hw_WriteChannel(Dio_ChannelType channelId, Dio_LevelType level)
     digitalWrite((uint8_t)channelId, (level != DIO_LOW) ? HIGH : LOW);
 }
 
+Dio_LevelType Dio_Hw_ReadChannel(Dio_ChannelType channelId)
+{
+    return (digitalRead((uint8_t)channelId) == HIGH) ? DIO_HIGH : DIO_LOW;
+}
+
 } /* extern "C" */

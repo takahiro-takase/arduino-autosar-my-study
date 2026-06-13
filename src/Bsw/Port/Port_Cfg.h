@@ -18,9 +18,14 @@
 #define PORT_CFG_H
 
 /** 管理ピン総数 */
-#define PORT_PIN_COUNT          1U
+#define PORT_PIN_COUNT          2U
 
 /** 警告灯 LED (D8) — 出力ピン */
 #define PORT_PIN_LED_WARNING    8U
+
+/** エンジン起動ボタン (D9) — 入力ピン (INPUT_PULLUP)
+ *  ボタン押下時は GND と接続され DIO_LOW が読まれる。
+ *  IoHwAb_Button_GetLevel() で論理反転して 押下=1 に変換する。 */
+#define PORT_PIN_BUTTON         9U
 
 #endif /* PORT_CFG_H */

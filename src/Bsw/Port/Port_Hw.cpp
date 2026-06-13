@@ -19,7 +19,20 @@ extern "C" {
 
 void Port_Hw_SetPinDirection(Port_PinType pin, Port_PinDirectionType direction)
 {
-    pinMode((uint8_t)pin, (direction == PORT_PIN_OUT) ? OUTPUT : INPUT);
+    uint8_t mode;
+    if (direction == PORT_PIN_OUT)
+    {
+        mode = OUTPUT;
+    }
+    else if (direction == PORT_PIN_IN_PULLUP)
+    {
+        mode = INPUT_PULLUP;
+    }
+    else
+    {
+        mode = INPUT;
+    }
+    pinMode((uint8_t)pin, mode);
 }
 
 } /* extern "C" */

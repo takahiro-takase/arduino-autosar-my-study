@@ -29,6 +29,9 @@ typedef uint16 VehicleSpeed_t;   /* 0.01 km/h (0-655.35 km/h) */
 typedef uint8  BrakeActive_t;    /* 0=解除, 1=作動 (1bit) */
 typedef uint8  AbsActive_t;      /* 0=非作動, 1=ABS 作動中 (1bit) */
 
+/* ローカルボタン入力型（IoHwAb 経由で読み取る GPIO 入力）*/
+typedef uint8  ButtonState_t;    /* 0=解放, 1=押下 */
+
 typedef enum
 {
     ENGINE_STATE_OFF      = 0,

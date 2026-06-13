@@ -31,8 +31,9 @@ typedef uint8 Port_PinType;
 /** ピン方向型 */
 typedef uint8 Port_PinDirectionType;
 
-#define PORT_PIN_IN   0U  /**< 入力方向 */
-#define PORT_PIN_OUT  1U  /**< 出力方向 */
+#define PORT_PIN_IN          0U  /**< 入力方向 (フローティング) */
+#define PORT_PIN_OUT         1U  /**< 出力方向 */
+#define PORT_PIN_IN_PULLUP   2U  /**< 入力方向（内部プルアップ有効）ボタン等に使用 */
 
 /**
  * \brief   Port モジュールを初期化する。
