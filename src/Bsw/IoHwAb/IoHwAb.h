@@ -83,11 +83,25 @@ Std_ReturnType IoHwAb_LedRunning_SetLevel(uint8 level);
 Std_ReturnType IoHwAb_LedFault_SetLevel(uint8 level);
 
 /**
- * \brief   エンジン起動ボタンの押下状態を取得する。
+ * \brief   ボタンのデバウンス処理を実行する周期関数。
  *
- * \details MCAL Dio_ReadChannel() で DIO_CHANNEL_BUTTON の物理レベルを読み取り、
- *          INPUT_PULLUP による論理反転（LOW=押下）を吸収して上位層に渡す。
- *          呼び出し元は物理的なプルアップ配線を意識しない。
+ * \details 10 ms 周期で呼び出し、生レベルが IOHWAB_BUTTON_DEBOUNCE_COUNT 回
+ *          連続して確定値と異なった場合に確定値を更新する（積分カウンタ方式）。
+ *          本関数が唯一 Dio_ReadChannel を呼び出す。
+ *          IoHwAb_Button_GetLevel は本関数が確定した値を返すだけになる。
+ *          Os_PBCfg.c のタスクテーブルに 10 ms 周期で登録すること。
+ *
+ * \ServiceID      {0xC5}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void IoHwAb_MainFunction(void);
+
+/**
+ * \brief   警告確認ボタンの押下状態を取得する。
+ *
+ * \details IoHwAb_MainFunction が確定したデバウンス済み状態を返す。
+ *          INPUT_PULLUP による論理反転（LOW=押下）は IoHwAb_MainFunction 内で吸収済み。
  *          RTE の Client/Server ポート (Rte_Call_Button_GetLevel) から呼び出される。
  *
  * \param[out] level  押下状態を受け取る変数へのポインタ。

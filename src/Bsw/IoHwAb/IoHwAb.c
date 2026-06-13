@@ -22,6 +22,12 @@
 
 #define TAG "IoHwAb"
 
+/** ボタン確定に必要な連続一致サンプル数 (4 × 10ms = 40ms) */
+#define IOHWAB_BUTTON_DEBOUNCE_COUNT  4U
+
+static uint8 s_confirmedLevel  = 0U;  /* デバウンス確定値 (0=解放, 1=押下) */
+static uint8 s_debounceCounter = 0U;  /* 未確定サンプル積算カウンタ */
+
 /**
  * \brief   IoHwAb モジュールを初期化する。
  *
@@ -41,6 +47,8 @@ void IoHwAb_Init(void)
     Dio_WriteChannel(DIO_CHANNEL_LED_RUNNING, DIO_LOW);  /* 消灯状態で起動 */
     Dio_WriteChannel(DIO_CHANNEL_LED_FAULT,   DIO_LOW);  /* 消灯状態で起動 */
     Dio_WriteChannel(DIO_CHANNEL_LED_WARNING,  DIO_LOW);  /* 消灯状態で起動 */
+    s_confirmedLevel  = 0U;
+    s_debounceCounter = 0U;
     DET_LOGI(TAG, "Init");
 }
 
@@ -99,12 +107,45 @@ Std_ReturnType IoHwAb_LedFault_SetLevel(uint8 level)
 }
 
 /**
- * \brief   エンジン起動ボタンの押下状態を取得する。
+ * \brief   ボタンのデバウンス処理を実行する周期関数。
  *
- * \details DIO_CHANNEL_BUTTON は PORT_PIN_IN_PULLUP で設定されているため、
- *          ボタン未押下時は VCC に引き上げられ DIO_HIGH、
- *          押下時は GND に接続され DIO_LOW となる。
- *          本関数でその論理を反転して呼び出し元に渡す（押下=1）。
+ * \details 積分カウンタ方式:
+ *          生レベルが確定値と異なれば s_debounceCounter をインクリメントし、
+ *          IOHWAB_BUTTON_DEBOUNCE_COUNT に達した時点で確定値を更新する。
+ *          生レベルが確定値と一致すればカウンタをリセットする。
+ *          Dio_ReadChannel の呼び出しは本関数に集約し、
+ *          IoHwAb_Button_GetLevel は確定値を返すだけにする。
+ *
+ * \ServiceID      {0xC5}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void IoHwAb_MainFunction(void)
+{
+    /* INPUT_PULLUP: LOW = 押下（GND接続）、HIGH = 解放（プルアップ電位）*/
+    const uint8 rawLevel = (Dio_ReadChannel(DIO_CHANNEL_BUTTON) == DIO_LOW) ? 1U : 0U;
+
+    if (rawLevel == s_confirmedLevel)
+    {
+        s_debounceCounter = 0U;  /* 安定、カウンタリセット */
+    }
+    else
+    {
+        s_debounceCounter++;
+        if (s_debounceCounter >= IOHWAB_BUTTON_DEBOUNCE_COUNT)
+        {
+            s_confirmedLevel  = rawLevel;
+            s_debounceCounter = 0U;
+            DET_LOGI(TAG, "Button confirmed level=%u", (unsigned)s_confirmedLevel);
+        }
+    }
+}
+
+/**
+ * \brief   警告確認ボタンの押下状態を取得する。
+ *
+ * \details IoHwAb_MainFunction が確定したデバウンス済み状態を返す。
+ *          Dio_ReadChannel は呼び出さず、静的変数 s_confirmedLevel を参照するだけ。
  *
  * \param[out] level  押下状態 (0=解放, 1=押下)。
  *
@@ -116,7 +157,6 @@ Std_ReturnType IoHwAb_LedFault_SetLevel(uint8 level)
  */
 Std_ReturnType IoHwAb_Button_GetLevel(uint8* level)
 {
-    /* INPUT_PULLUP: LOW = 押下（GND接続）、HIGH = 解放（プルアップ電位）*/
-    *level = (Dio_ReadChannel(DIO_CHANNEL_BUTTON) == DIO_LOW) ? 1U : 0U;
+    *level = s_confirmedLevel;
     return E_OK;
 }

@@ -311,7 +311,7 @@ Std_ReturnType Rte_Call_LedFault_SetLevel(uint8 level)
 }
 
 /**
- * \brief   エンジン起動ボタン押下状態取得の Client/Server ポート。
+ * \brief   警告確認ボタン押下状態取得の Client/Server ポート。
  *
  * \details SW-C (App_EngineManager) から呼び出され、
  *          IoHwAb_Button_GetLevel() へ委譲する。
