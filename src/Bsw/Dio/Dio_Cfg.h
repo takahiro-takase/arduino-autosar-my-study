@@ -14,6 +14,18 @@
 #define DIO_CFG_H
 
 /**
+ * Arduino UNO RUNNING LED (D6)。
+ * エンジン正常稼働中（ENGINE_STATE_RUNNING）に点灯する。
+ */
+#define DIO_CHANNEL_LED_RUNNING  6U
+
+/**
+ * Arduino UNO FAULT LED (D7)。
+ * 異常状態（ENGINE_STATE_FAULT）に点滅する。
+ */
+#define DIO_CHANNEL_LED_FAULT    7U
+
+/**
  * Arduino UNO LED (D8)。
  * 警告灯インジケータとして使用する。
  */
@@ -21,7 +33,7 @@
 
 /**
  * Arduino UNO プッシュボタン (D9)。
- * エンジン起動トリガとして使用する。
+ * 警告確認ボタン。FAULT 状態でボタン押下 → FAULT→OFF 遷移。
  * Port は INPUT_PULLUP で設定するため、押下時は DIO_LOW となる。
  * IoHwAb_Button_GetLevel() で論理反転し、押下=1 に変換する。
  */

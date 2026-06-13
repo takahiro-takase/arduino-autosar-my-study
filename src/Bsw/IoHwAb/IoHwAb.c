@@ -38,7 +38,9 @@
  */
 void IoHwAb_Init(void)
 {
-    Dio_WriteChannel(DIO_CHANNEL_LED_WARNING, DIO_LOW);  /* 消灯状態で起動 */
+    Dio_WriteChannel(DIO_CHANNEL_LED_RUNNING, DIO_LOW);  /* 消灯状態で起動 */
+    Dio_WriteChannel(DIO_CHANNEL_LED_FAULT,   DIO_LOW);  /* 消灯状態で起動 */
+    Dio_WriteChannel(DIO_CHANNEL_LED_WARNING,  DIO_LOW);  /* 消灯状態で起動 */
     DET_LOGI(TAG, "Init");
 }
 
@@ -59,6 +61,40 @@ void IoHwAb_Init(void)
 Std_ReturnType IoHwAb_Led_SetLevel(uint8 level)
 {
     Dio_WriteChannel(DIO_CHANNEL_LED_WARNING, (Dio_LevelType)level);
+    return E_OK;
+}
+
+/**
+ * \brief   RUNNING LED (D6) の出力レベルを設定する。
+ *
+ * \param[in]  level  出力レベル。0 = 消灯、1 = 点灯。
+ *
+ * \retval  E_OK  常に成功。
+ *
+ * \ServiceID      {0xC3}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType IoHwAb_LedRunning_SetLevel(uint8 level)
+{
+    Dio_WriteChannel(DIO_CHANNEL_LED_RUNNING, (Dio_LevelType)level);
+    return E_OK;
+}
+
+/**
+ * \brief   FAULT LED (D7) の出力レベルを設定する。
+ *
+ * \param[in]  level  出力レベル。0 = 消灯、1 = 点灯。
+ *
+ * \retval  E_OK  常に成功。
+ *
+ * \ServiceID      {0xC4}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType IoHwAb_LedFault_SetLevel(uint8 level)
+{
+    Dio_WriteChannel(DIO_CHANNEL_LED_FAULT, (Dio_LevelType)level);
     return E_OK;
 }
 
