@@ -19,14 +19,19 @@
 #include "Dio.h"
 #include "Dio_Cfg.h"
 #include "Det.h"
+#include "Dem.h"
 
 #define TAG "IoHwAb"
 
 /** ボタン確定に必要な連続一致サンプル数 (4 × 10ms = 40ms) */
 #define IOHWAB_BUTTON_DEBOUNCE_COUNT  4U
 
-static uint8 s_confirmedLevel  = 0U;  /* デバウンス確定値 (0=解放, 1=押下) */
-static uint8 s_debounceCounter = 0U;  /* 未確定サンプル積算カウンタ */
+/** ボタン固着と判定するまでの確定押下継続サンプル数 (500 × 10ms = 5000ms) */
+#define IOHWAB_BUTTON_STUCK_COUNT     500U
+
+static uint8  s_confirmedLevel  = 0U;  /* デバウンス確定値 (0=解放, 1=押下) */
+static uint8  s_debounceCounter = 0U;  /* 未確定サンプル積算カウンタ */
+static uint16 s_stuckCounter    = 0U;  /* 確定押下継続サンプル数 */
 
 /**
  * \brief   IoHwAb モジュールを初期化する。
@@ -49,6 +54,7 @@ void IoHwAb_Init(void)
     Dio_WriteChannel(DIO_CHANNEL_LED_WARNING,  DIO_LOW);  /* 消灯状態で起動 */
     s_confirmedLevel  = 0U;
     s_debounceCounter = 0U;
+    s_stuckCounter    = 0U;
     DET_LOGI(TAG, "Init");
 }
 
@@ -138,6 +144,30 @@ void IoHwAb_MainFunction(void)
             s_debounceCounter = 0U;
             DET_LOGI(TAG, "Button confirmed level=%u", (unsigned)s_confirmedLevel);
         }
+    }
+
+    /* ボタン固着検出 (デバウンス確定値を使用) */
+    if (s_confirmedLevel == 1U)
+    {
+        if (s_stuckCounter < IOHWAB_BUTTON_STUCK_COUNT)
+        {
+            s_stuckCounter++;
+            if (s_stuckCounter == IOHWAB_BUTTON_STUCK_COUNT)
+            {
+                Dem_ReportErrorStatus(DEM_EVENT_BUTTON_STUCK, DEM_EVENT_STATUS_FAILED);
+                DET_LOGW(TAG, "Button stuck dtc=0x%06lX", (unsigned long)DEM_DTC_BUTTON_STUCK);
+            }
+        }
+    }
+    else
+    {
+        if (s_stuckCounter >= IOHWAB_BUTTON_STUCK_COUNT)
+        {
+            /* 固着から解放 → PASSED 報告 */
+            Dem_ReportErrorStatus(DEM_EVENT_BUTTON_STUCK, DEM_EVENT_STATUS_PASSED);
+            DET_LOGI(TAG, "Button stuck cleared");
+        }
+        s_stuckCounter = 0U;
     }
 }
 

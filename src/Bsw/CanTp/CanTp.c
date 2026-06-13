@@ -106,7 +106,7 @@ static uint8 CanTp_TxFrameBuf[8];
 /* -----------------------------------------------------------------------
  * 内部関数プロトタイプ
  * ----------------------------------------------------------------------- */
-static void CanTp_SendFrame(void);
+static Std_ReturnType CanTp_SendFrame(void);
 static void CanTp_SendFlowControl(uint8 fs, uint8 bs, uint8 stMin);
 static void CanTp_SendNextCF(void);
 
@@ -134,13 +134,15 @@ void CanTp_Init(void)
  * 内部ヘルパー: フレーム送信
  * ----------------------------------------------------------------------- */
 
-/** CanTp_TxFrameBuf の内容 (8 バイト) を PduR 経由で CAN 0x7E8 に送信する。 */
-static void CanTp_SendFrame(void)
+/** CanTp_TxFrameBuf の内容 (8 バイト) を PduR 経由で CAN 0x7E8 に送信する。
+ *  \retval E_OK     送信受け付け成功。
+ *  \retval E_NOT_OK PduR / CanIf / Can_Write が失敗（TX バッファビジー等）。 */
+static Std_ReturnType CanTp_SendFrame(void)
 {
     static PduInfoType pdu;
     pdu.SduDataPtr = CanTp_TxFrameBuf;
     pdu.SduLength  = 8U;
-    PduR_Transmit(CANTP_PDUR_TX_SDU_ID, &pdu);
+    return PduR_Transmit(CANTP_PDUR_TX_SDU_ID, &pdu);
 }
 
 /**
@@ -163,7 +165,7 @@ static void CanTp_SendFlowControl(uint8 fs, uint8 bs, uint8 stMin)
 
     DET_LOGD(TAG, "TX FC fs=%u bs=%u", (unsigned)fs, (unsigned)bs);
 
-    CanTp_SendFrame();
+    (void)CanTp_SendFrame();   /* FC 送信失敗は N_Cr タイムアウトで上位が再試行 */
 }
 
 /**
@@ -188,7 +190,12 @@ static void CanTp_SendNextCF(void)
 
     DET_LOGD(TAG, "TX CF sn=%u pos=%u", (unsigned)CanTp_Tx.sn, (unsigned)CanTp_Tx.pos);
 
-    CanTp_SendFrame();
+    if (CanTp_SendFrame() != E_OK)
+    {
+        /* 送信失敗: pos/sn を進めず次の CanTp_MainFunction 呼び出しでリトライ */
+        DET_LOGE(TAG, "TX CF FAIL sn=%u retry", (unsigned)CanTp_Tx.sn);
+        return;
+    }
 
     CanTp_Tx.pos += (uint16)copyLen;
     CanTp_Tx.sn   = (uint8)((CanTp_Tx.sn + 1U) & 0x0FU);
@@ -288,7 +295,12 @@ Std_ReturnType CanTp_Transmit(PduIdType TxSduId, const PduInfoType* PduInfoPtr)
 
     DET_LOGI(TAG, "TX FF len=%u", (unsigned)msgLen);
 
-    CanTp_SendFrame();
+    if (CanTp_SendFrame() != E_OK)
+    {
+        DET_LOGE(TAG, "TX FF FAIL abort");
+        CanTp_Tx.state = CANTP_TX_IDLE;
+        return E_NOT_OK;
+    }
 
     CanTp_Tx.state   = CANTP_TX_WAIT_FC;
     CanTp_Tx.bsTimer = millis();
