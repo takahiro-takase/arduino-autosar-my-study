@@ -1,0 +1,794 @@
+# arduino-mcp2515-autosar-my-study
+
+Arduino + MCP2515 を用いて AUTOSAR CP の BSW CAN スタックを学習目的で実装したプロジェクトです。
+ARXML や設定ツールは使用せず、コードで階層構造・型定義・設定テーブルを再現しています。
+
+## 概要
+
+本プロジェクトは、学習目的で AUTOSAR の ASW / RTE / BSW の 3 層アーキテクチャを
+Arduino UNO 上に最小構成で再現し、その上でメータ ECU（インストルメントクラスタ）相当の
+アプリケーションを動作させることを目的としています。
+
+システムは、エンジン ECU（CAN 0x100）と ABS ECU（CAN 0x110）の 2 つの周辺 ECU から
+CAN バス経由でデータを受信し、BSW（CanDrv / CanIf / PduR / Com）が信号を抽象化します。
+
+抽象化されたデータは RTE を介して 2 つの ASW SW-Component に提供されます。
+SW-C は RTE の Client/Server ポート経由で IoHwAb（I/O Hardware Abstraction）を呼び出し、
+SW-C がピン番号などのハードウェア詳細を知ることなく警告灯（LED）を制御します。
+
+これにより、実車のメータ ECU が持つ
+「CAN 受信（複数 ECU）→ 状態判定 → 優先度付き警告灯制御」
+という典型的な処理フローを、Arduino 上で簡易的に再現します。
+
+- **RX（CAN ID 0x100）**: エンジン ECU から回転数・水温・ON フラグを受信
+- **RX（CAN ID 0x110）**: ABS ECU から車速・ブレーキ作動・ABS 作動フラグを受信
+- **TX（CAN ID 0x200）**: エンジン状態（OFF / STARTING / RUNNING / FAULT）を定期送信
+- **診断 RX（CAN ID 0x7E0）**: UDS 診断要求を受信（ISO 14229-1 / ISO 15765-2）
+- **診断 TX（CAN ID 0x7E8）**: UDS 診断応答を送信（マルチフレーム対応）
+- **RUNNING LED（D6）**: ENGINE_STATE_RUNNING のとき点灯
+- **FAULT LED（D7）**: ENGINE_STATE_FAULT のとき 500ms 周期で点滅
+- **ABS LED（D8）**: ABS 作動（AbsActive=1）のとき点灯
+- **警告確認ボタン（D9）**: FAULT 状態でボタンを押すと FAULT→OFF に遷移（ドライバーが警告を確認したことを通知）
+
+## アーキテクチャ
+
+```
+┌──────────────────────────────────────────────────────┐
+│  ASW  App_EngineManager    エンジン状態遷移           │
+│       App_WarningIndicator 3 LED 独立制御             │
+├──────────────────────────────────────────────────────┤
+│  RTE  ポートベース API (S/R インタフェース)           │
+│       複数 SW-C が同一シグナルを独立ポートで受信      │
+├──────────────────────────────────────────────────────┤
+│  OS   タイムトリガスケジューラ                        │  タスク周期管理
+├──────────────────────────────────────────────────────┤
+│  BSW  IoHwAb I/O ハードウェア抽象化（ECU 抽象化層）  │  RTE C/S ポート経由
+│              IoHwAb_MainFunction（ボタンデバウンス）  │  10ms 周期タスク
+│       SchM  排他エリア保護（共有リソース管理）        │
+│       ComM  通信マネージャ（CAN バス通信モード管理）  │
+│       CanSM CAN ステートマネージャ（Bus-Off 回復）    │
+│       COM    シグナルのビット単位パック/アンパック     │
+│              受信デッドライン監視（タイムアウト検出）  │
+│       PduR   マルチキャスト PDU ルーティング          │
+│       CanIf  CAN ID ↔ 論理 PDU マッピング            │
+│       Can    MCP2515 ハードウェア制御                 │
+│       CanTp  ISO 15765-2 マルチフレーム処理           │
+│       Dcm    UDS 診断通信 (ISO 14229-1)              │
+│       Dem    DTC 管理（NvM 経由で永続化）             │
+│       NvM    EEPROM 抽象化・RAM ミラー管理            │
+│       Det    Serial 出力ブリッジ（デバッグ用）         │
+│       Dio    デジタル I/O 値読み書き（MCAL）           │
+│              Dio_WriteChannel（LED 出力）              │
+│              Dio_ReadChannel（ボタン入力）             │
+│       Port   ピン方向設定（MCAL）                     │
+│              OUTPUT（LED）/ INPUT_PULLUP（ボタン）     │
+├──────────────────────────────────────────────────────┤
+│  HAL  Can_Hw  MCP2515 C++ ラッパー                    │  C++ のみ
+│       Dio_Hw  Arduino digitalWrite/digitalRead ラッパー│  C++ のみ
+│       Port_Hw Arduino pinMode ラッパー                 │  C++ のみ
+└──────────────────────────────────────────────────────┘
+```
+
+各モジュールは上位層のヘッダのみに依存し、下位層の実装詳細を知りません。
+
+## BSW モジュール概要
+
+| モジュール | AUTOSAR 仕様 | 本プロジェクトでの役割 |
+|-----------|-------------|----------------------|
+| **Can** | SWS_Can | MCP2515 の送受信・Bus-Off 検出を担う MCAL 最下層。直接 HW を操作する唯一のモジュール |
+| **CanIf** | SWS_CanIf | CAN ID ↔ 論理 PDU のマッピング。上位層は CAN ID を知らず PDU ID で通信する |
+| **PduR** | SWS_PduR | 受信 PDU を COM へ、送信 PDU を CanIf へルーティング。通信スタックの配管役 |
+| **Com** | SWS_Com | シグナルのビット単位パック／アンパックと受信デッドライン監視（タイムアウト検出） |
+| **CanTp** | SWS_CanTp | ISO 15765-2 のフレーム分割（FF/CF）と再組立。8 バイトを超える UDS 応答を実現 |
+| **Dcm** | SWS_Dcm | UDS 診断サービス処理（SID 0x10 / 0x11 / 0x14 / 0x19 / 0x22 / 0x3E） |
+| **Dem** | SWS_Dem | 診断イベントを DTC として管理。NvM 経由で EEPROM に永続化する |
+| **NvM** | SWS_NvM | EEPROM の読み書きを抽象化。Dem は EEPROM アドレスを直接知らない |
+| **IoHwAb** | AUTOSAR 抽象化層 | Dio チャネル番号を隠蔽し SW-C に論理的な LED / ボタン API を提供する。`IoHwAb_MainFunction`（10ms）でボタンのデバウンス処理（積分カウンタ方式・40ms 確定）を行い、信号品質を保証する。Dio_Cfg.h を知る唯一の非 MCAL ファイル |
+| **Dio** | SWS_Dio | `Dio_WriteChannel` / `Dio_ReadChannel` で GPIO 値を読み書きする MCAL |
+| **Port** | SWS_Port | `Port_Init` でピン方向（OUTPUT / INPUT_PULLUP）を設定する MCAL |
+| **ComM** | SWS_ComM | CAN バスの通信モード（NO_COM / FULL_COM）を管理し CanSM へ要求する |
+| **CanSM** | SWS_CanSM | Bus-Off 発生時の回復シーケンス（最大 3 回リトライ）を実施する |
+| **SchM** | SWS_SchM | 排他エリアマクロ（`SchM_Enter` / `SchM_Exit`）で共有リソースを保護する |
+| **Det** | SWS_Det | `DET_LOG*` マクロ経由でタイムスタンプ付きログを Serial に出力するデバッグ用ブリッジ |
+
+> 各モジュールの詳細（フレーム構造・状態マシン・設定値）は後続セクションを参照してください。
+
+## ディレクトリ構成
+
+```
+├── src/
+│   ├── main.cpp                  # 全 BSW の設定テーブル・初期化・メインループ
+│   ├── Asw/
+│   │   ├── App_EngineManager.h
+│   │   ├── App_EngineManager.c      # エンジン状態遷移
+│   │   ├── App_WarningIndicator.h
+│   │   └── App_WarningIndicator.c   # 3 LED 独立制御（D6=RUNNING / D7=FAULT 点滅 / D8=ABS）
+│   ├── Os/
+│   │   ├── Os_Cfg.h              # タスク数定数
+│   │   ├── Os.h / Os.c           # タイムトリガスケジューラ（Os_SchedulerStep）
+│   │   ├── Os_PBCfg.h
+│   │   └── Os_PBCfg.c            # タスクテーブル（周期・関数ポインタ）
+│   ├── Rte/
+│   │   ├── Rte_Type.h            # アプリ型エイリアス（ARXML 自動生成相当）
+│   │   ├── Rte.h
+│   │   └── Rte.c                 # ポート API（周期管理は Os へ移管済み）
+│   └── Bsw/
+│       ├── Can/                  # CAN ドライバ（AUTOSAR SWS_Can 準拠 API）
+│       │   ├── Can_Hw.h          # 内部インタフェース（Can.c と Can_Hw.cpp の境界）
+│       │   └── Can_Hw.cpp        # MCP2515 / mcp_can C++ ラッパー（旧 Mcp2515_Wrapper.cpp）
+│       ├── CanIf/                # CAN インタフェース
+│       ├── CanTp/                # CAN トランスポートプロトコル（ISO 15765-2）
+│       ├── Com/                  # COM（シグナル管理）
+│       ├── PduR/                 # PDU ルーター
+│       ├── Det/                  # Default Error Tracer（Serial ブリッジ）
+│       ├── Dio/                  # デジタル I/O 値読み書き（MCAL・方向設定は Port が担う）
+│       │   ├── Dio_Cfg.h         # チャネル ID 定義（D6=RUNNING / D7=FAULT / D8=ABS / D9=ボタン）
+│       │   ├── Dio.h             # 公開インタフェース（Dio_WriteChannel / Dio_ReadChannel）
+│       │   ├── Dio.c             # AUTOSAR Dio モジュール（純粋 C、Dio_Hw へ委譲）
+│       │   ├── Dio_Hw.h          # 内部インタフェース（Dio.c と Dio_Hw.cpp の境界）
+│       │   └── Dio_Hw.cpp        # Arduino digitalWrite / digitalRead ラッパー（C++ のみ）
+│       ├── Port/                 # ピン方向設定（MCAL・Dio と責務を分離）
+│       │   ├── Port_Cfg.h        # ピン番号定義（D6/D7/D8 OUTPUT / D9 INPUT_PULLUP）
+│       │   ├── Port.h            # 公開インタフェース（Port_Init / Port_SetPinDirection）
+│       │   ├── Port.c            # AUTOSAR Port モジュール（純粋 C、Port_Hw へ委譲）
+│       │   ├── Port_Hw.h         # 内部インタフェース（Port.c と Port_Hw.cpp の境界）
+│       │   └── Port_Hw.cpp       # Arduino pinMode ラッパー（C++ のみ）
+│       ├── IoHwAb/               # I/O ハードウェア抽象化（MCAL と SW-C の境界）
+│       │   ├── IoHwAb.h          # 公開インタフェース（RTE が参照）
+│       │   └── IoHwAb.c          # Dio へ委譲・INPUT_PULLUP 論理反転・ボタンデバウンス（積分カウンタ 40ms）
+│       ├── SchM/                 # スケジュールマネージャ（排他エリアマクロ）
+│       │   └── SchM.h            # SchM_Enter/Exit マクロ定義（全モジュール共通）
+│       ├── ComM/                 # 通信マネージャ（CAN バス通信モード管理）
+│       │   ├── ComM_Cfg.h        # チャネル数・ユーザ数定数
+│       │   ├── ComM.h            # 公開インタフェース（NO_COM/SILENT_COM/FULL_COM）
+│       │   └── ComM.c            # 状態機械・CanSM_RequestComMode へ委譲
+│       ├── CanSM/                # CAN ステートマネージャ（Bus-Off 回復シーケンス）
+│       │   ├── CanSM_Cfg.h       # 回復待機時間・最大試行回数
+│       │   ├── CanSM.h           # 公開インタフェース・CanSM_ControllerBusOff コールバック
+│       │   └── CanSM.c           # 状態機械・Bus-Off 回復タイマ管理
+│       ├── Dcm/                  # 診断通信マネージャ（UDS ISO 14229-1）
+│       ├── Dem/                  # 診断イベントマネージャ（DTC 管理）
+│       └── NvM/                  # Non-Volatile Memory Manager（EEPROM 抽象化）
+├── dbc/
+│   └── engine_manager.dbc        # CAN シグナル定義（Cangaroo 等で使用）
+└── platformio.ini
+```
+
+## CAN フレーム仕様
+
+エンディアンはすべてビッグエンディアン（Motorola / CAN 標準）。
+ビット 0 = byte[0] の MSB、ビット 7 = byte[0] の LSB。
+
+### RX フレーム（周辺 ECU → MeterEcu）
+
+**EngineInfo（エンジン ECU / CAN ID 0x100 / DLC=4）**
+
+| ビット位置 | サイズ | シグナル | 単位・値域 |
+|-----------|--------|---------|----------|
+| 0–15 | 16 bit | EngineSpeed | rpm（0–15000） |
+| 16–23 | 8 bit | CoolantTemp | ℃（0–255） |
+| 24 | 1 bit | EngineOnFlag | 0=OFF / 1=ON |
+
+**RUNNING 状態に入る最小フレーム例（DLC=4）：**
+
+```
+byte[0] byte[1] byte[2] byte[3]
+  01      F4      00      80
+  └─────┘         └──┘   └──── EngineOnFlag=1（bit24 = byte[3] の MSB）
+  Speed=500rpm    Temp=0℃
+```
+
+**AbsInfo（ABS ECU / CAN ID 0x110 / DLC=3）**
+
+| ビット位置 | サイズ | シグナル | 単位・値域 |
+|-----------|--------|---------|----------|
+| 0–15 | 16 bit | VehicleSpeed | 0.01 km/h（raw 0x0064 = 1.00 km/h） |
+| 16 | 1 bit | BrakeActive | 0=解除 / 1=作動 |
+| 17 | 1 bit | AbsActive | 0=非作動 / 1=ABS 作動中 |
+
+**ABS 作動フレーム例（VehicleSpeed=100km/h, BrakeActive=1, AbsActive=1）：**
+
+```
+byte[0] byte[1] byte[2]
+  27      10      C0
+  └─────┘         └──── BrakeActive=1（bit16）, AbsActive=1（bit17）
+  Speed=10000 → 100.00 km/h （0x2710 × 0.01 = 100.00）
+```
+
+### TX フレーム（Arduino → 外部）
+
+| CAN ID | DLC | ビット位置 | サイズ | シグナル | 値 |
+|--------|-----|-----------|--------|---------|-----|
+| 0x200 | 1 | 0–7 | 8 bit | EngineState | 0=OFF / 1=STARTING / 2=RUNNING / 3=FAULT |
+
+3 秒周期で現在の状態を送信します。
+
+## UDS 診断通信（ISO 14229-1 / ISO 15765-2）
+
+Dcm (Diagnostic Communication Manager) が UDS サービスを処理し、
+CanTp (CAN Transport Protocol) が ISO 15765-2 のフレーム分割・組立を担います。
+診断フレームはアプリデータとは独立した CAN ID で通信します。
+
+### 診断フレームルーティング
+
+```
+外部テスター（Cangaroo 等）
+  │  CAN 0x7E0  [UDS 要求 / FC]
+  ↓
+MCP2515 → Can → CanIf（CanId=0x7E0 → RxPduId=1）
+                  ↓
+                PduR（パス 1: CanTp 専用ルート）
+                  ↓
+                CanTp_RxIndication()
+                  SF → UDS ペイロードを即時渡し
+                  FF → FC 送信、CF 待ち
+                  CF → バッファ組立、完成後に渡し
+                  FC → TX 側の CF 送信を再開
+                  ↓
+                Dcm_ComIndication() → UDS サービス処理
+                  ↓
+                CanTp_Transmit()
+                  ≤7B → SF 送信
+                  ≥8B → FF 送信 → FC 待ち → CF 送信
+                  ↓
+                PduR_Transmit(SrcPduId=1) → CanIf → Can
+  │  CAN 0x7E8  [UDS 応答 / FC]
+  ↓
+外部テスター
+```
+
+CAN 0x100（EngineInfo）・0x110（AbsInfo）・0x7E0（診断要求）は PduR でルートが分離されており、互いに干渉しません。
+
+## 受信デッドライン監視（COM Deadline Monitoring）
+
+COM モジュールが各 RX I-PDU の受信間隔を監視し、設定タイムアウト内にフレームが届かない場合に
+上位層へエラーを通知します（AUTOSAR SWS_COM_00398 準拠）。
+
+```
+エンジン ECU がフレームを送り続けている間
+  ↓ 受信のたびに
+  Com_RxIndication() → Com_RxLastMs[0] = millis()   ← タイマリセット
+
+100 ms ごとに（Task 5）
+  Com_MainFunction()
+    now - Com_RxLastMs[0] >= 5000 ms?
+      YES → Com_RxTimedOut[0] = 1
+             WARN ログ出力
+
+3000 ms ごとに（Task 2）
+  App_EngineManager_Run()
+    Rte_Read_SpeedSensor_EngineSpeed()
+      → Com_ReceiveSignal()
+          Com_RxTimedOut[0] == 1 → return E_NOT_OK
+    E_NOT_OK を検知
+      → DEM_EVENT_COMM_TIMEOUT FAILED 報告
+      → ENGINE_STATE_FAULT 遷移
+      → LED 点滅（App_WarningIndicator がそのまま動く）
+```
+
+### タイムアウト設定値（`Com_Cfg.h`）
+
+| I-PDU | 定数 | 既定値 | フォールバック動作 |
+|-------|------|--------|-----------------|
+| EngineInfo (0x100) | `COM_TIMEOUT_ENGINE_INFO_MS` | 5000 ms | STARTING/RUNNING → FAULT |
+| AbsInfo (0x110) | `COM_TIMEOUT_ABS_INFO_MS` | 5000 ms | AbsActive が 0 に戻り ABS 警告消灯 |
+
+### タイムアウト確認手順
+
+1. RUNNING 状態に遷移させてから EngineInfo の送信を止める
+2. 5 秒後：`WARN Com: RX timeout iPdu=0 (5000ms)` が出力される
+3. さらに最大 3 秒後（次の Runnable 起動時）：`WARN AppEng: ->FAULT comm timeout` が出力される
+4. LED が点滅に変わる
+5. UDS SID 0x19 で DTC 0x000105 (COMM_TIMEOUT) が取得できる
+6. EngineInfo を再送すると Com_RxTimedOut がリセットされ、次の Runnable サイクルで復帰する
+
+### 対応 UDS サービス
+
+| SID  | サービス名 | SubFunction | 正応答 SID |
+|------|-----------|-------------|-----------|
+| 0x10 | DiagnosticSessionControl | 0x01=Default / 0x03=Extended | 0x50 |
+| 0x11 | ECUReset | 0x01=hardReset / 0x03=softReset | 0x51 |
+| 0x14 | ClearDiagnosticInformation | groupOfDTC=0xFFFFFF（全クリア） | 0x54 |
+| 0x19 | ReadDTCInformation | 0x01=件数取得 / 0x02=DTC 一覧取得 | 0x59 |
+| 0x22 | ReadDataByIdentifier | — | 0x62 |
+| 0x3E | TesterPresent | 0x00 | 0x7E |
+
+非対応サービスは NRC 0x11（serviceNotSupported）で応答します。
+
+### DID 一覧（0x22 ReadDataByIdentifier）
+
+| DID    | データ      | 型                                            | 単位 |
+|--------|------------|-----------------------------------------------|------|
+| 0x0101 | EngineSpeed | uint16, big-endian                           | rpm  |
+| 0x0102 | CoolantTemp | uint8                                        | ℃   |
+| 0x0103 | EngineState | uint8（0=OFF / 1=STARTING / 2=RUNNING / 3=FAULT） | —  |
+
+### フレーム例（シングルフレーム）
+
+**セッション切替（ExtendedDiagnosticSession）:**
+```
+送信 → 0x7E0: [02 10 03 00 00 00 00 00]
+受信 ← 0x7E8: [06 50 03 00 19 01 F4 00]
+```
+
+**EngineSpeed 読み出し（DID 0x0101）:**
+```
+送信 → 0x7E0: [03 22 01 01 00 00 00 00]
+受信 ← 0x7E8: [05 62 01 01 HH LL 00 00]  ← HH:LL が rpm 値（big-endian）
+```
+
+**ECUReset（hardReset）:**
+```
+送信 → 0x7E0: [02 11 01 00 00 00 00 00]
+受信 ← 0x7E8: [02 51 01 00 00 00 00 00]
+```
+
+## CanTp（ISO 15765-2 トランスポートプロトコル）
+
+CanTp モジュールが ISO 15765-2 のフレーム処理を担い、
+DCM は PCI バイトを意識せず生 UDS ペイロードのみを扱います。
+
+### ISO 15765-2 フレーム構造
+
+| フレーム種別 | PCI (byte[0]) | 内容 |
+|------------|--------------|------|
+| SF (Single Frame) | `0x0N` N=ペイロード長 | UDS ペイロード ≤ 7 バイト |
+| FF (First Frame)  | `0x1H 0xLL` HL=総長 | UDS ペイロード ≥ 8 バイト の先頭 6 バイト |
+| CF (Consecutive Frame) | `0x2n` n=シーケンス番号 | 続きのデータ（最大 7 バイト/フレーム） |
+| FC (Flow Control) | `0x3X` X=FS | CTS(0)/WAIT(1)/OVFLW(2)、BS、STmin |
+
+### RX 状態マシン（Arduino 受信側）
+
+```
+IDLE ──── SF 受信 ──────────────────→ Dcm_ComIndication → IDLE
+     ──── FF 受信 → FC(CTS) 送信 ──→ WAIT_CF
+WAIT_CF ─ CF 受信(未完) ────────────→ WAIT_CF
+        ─ CF 受信(完成) ────────────→ Dcm_ComIndication → IDLE
+        ─ N_Cr タイムアウト(5 秒) ──→ IDLE (中断)
+```
+
+### TX 状態マシン（Arduino 送信側）
+
+```
+IDLE ──── ≤7 バイト → SF 送信 ──────────────────────────→ IDLE
+     ──── ≥8 バイト → FF 送信 ──────────────────────────→ WAIT_FC
+WAIT_FC ─ FC(CTS) 受信 ─────────────→ SEND_CF
+        ─ N_Bs タイムアウト(5 秒) ──→ IDLE (中断)
+SEND_CF ─ CF 送信(MainFunction 毎) ─→ 完了 → IDLE
+```
+
+### マルチフレーム応答例（2 DTC の場合）
+
+2 件以上の DTC が一致すると応答が 8 バイトを超え、FF + CF に分割されます。
+
+```
+# 要求（SF）
+送信 → 0x7E0: [04 19 02 FF 00 00 00 00]
+
+# 応答 FF（総長 11 バイト = 3 ヘッダ + 2 DTC × 4 バイト）
+受信 ← 0x7E8: [10 0B 59 02 2D 00 01 03]
+               └──┘ └──────────────────┘
+               FF    59=応答SID 02=subFunc 2D=availMask
+               総長  00 01 03 = DTC1コード(ENGINE_SPEED_NO_FLAG)
+
+# FC 送信（Cangaroo 等で手動送信 / 自動応答）
+送信 → 0x7E0: [30 00 00 00 00 00 00 00]
+               └┘ └┘ └┘
+               FC  BS  STmin（すべて 0 = 即時全 CF 送信）
+
+# 応答 CF（シーケンス番号 1）
+受信 ← 0x7E8: [21 2C 00 01 04 2C 00 00]
+               └┘ └┘ └──────┘ └┘
+               CF SN=1        DTC2コード   DTC2ステータス
+                  DTC1ステータス(ENGINE_SPEED_NO_FLAG=0x2C)
+                              (STARTING_TIMEOUT=0x000104)
+                                           (0x2C=FAILED_history)
+```
+
+**ステータス 0x2C（FAILED_history）:**
+```
+0x2C = 0b00101100
+  bit5 (TFSLC) = 1  クリア後に一度は失敗した
+  bit3 (CDTC)  = 1  確定済み（EEPROM 保存）
+  bit2 (PDTC)  = 1  保留中
+  bit0 (TF)    = 0  現在は失敗中でない（電源 OFF/ON 後にクリア）
+```
+
+### Cangaroo で FC を手動送信する方法
+
+Arduino が FF を送信すると WAIT_FC 状態になります。
+5 秒以内に Cangaroo から FC を送信してください。
+
+```
+Plugins → RawSender で新しいフレームを作成:
+  ID:   0x7E0
+  Data: 30 00 00 00 00 00 00 00
+        └┘ └┘ └┘
+        FC CTS  BS=0  STmin=0ms
+```
+
+## DEM 診断イベント管理（AUTOSAR SWS_DEM）
+
+Dem (Diagnostic Event Manager) モジュールがエンジン管理の故障を DTC として管理します。
+DTC の永続化は NvM (Non-Volatile Memory Manager) 経由で行い、
+Dem は EEPROM アドレスを直接知りません（NvM_WriteBlock / NvM_ReadBlock のみ使用）。
+電源オフ後もクリア操作（SID 0x14）が行われない限り DTC が保持されます。
+
+### イベントと DTC コード
+
+| EventId | イベント名 | 検出条件 | DTC コード |
+|---------|-----------|---------|-----------|
+| 0 | ENGINE_OVERHEAT | CoolantTemp ≥ 100 ℃（RUNNING 中） | 0x000101 |
+| 1 | ENGINE_STALL | EngineSpeed < 100 rpm（RUNNING 中） | 0x000102 |
+| 2 | ENGINE_SPEED_NO_FLAG | speed > 0 かつ flag = 0（OFF 中） | 0x000103 |
+| 3 | STARTING_TIMEOUT | 起動から 5 秒超過（STARTING 中） | 0x000104 |
+| 4 | COMM_TIMEOUT | EngineInfo 受信が 5 秒以上途絶（STARTING/RUNNING 中） | 0x000105 |
+
+### 複数 DTC を発生させる手順
+
+各操作後は 3〜4 秒待ってシリアルモニタで状態遷移を確認してください（Runnable は 3 秒周期）。
+フレーム表記は `<CAN ID>#<byte0>.<byte1>...`（Cangaroo 等の送信フォーマット）。
+
+| 順序 | 操作 | 状態 | 登録 DTC |
+|-----|------|------|---------|
+| 1 | `100#01.F4.19.00` 送信（speed=500, flag=0） | OFF→FAULT | ENGINE_SPEED_NO_FLAG |
+| 2 | `100#00.00.19.00` 送信（flag=0） | FAULT→OFF | — |
+| 3 | `100#00.64.19.80` 送信（speed=100, flag=1）→ 6 秒待つ | OFF→STARTING→FAULT | STARTING_TIMEOUT |
+| 4 | `100#00.00.19.00` 送信（flag=0） | FAULT→OFF | — |
+| 5 | `100#03.E8.19.80` 送信（speed=1000, flag=1） | OFF→STARTING→RUNNING | — |
+| 6 | EngineInfo の送信を止めて 5 秒以上待つ | RUNNING→FAULT | **COMM_TIMEOUT** |
+| 7 | `100#00.00.00.00` 送信（flag=0, speed=0）で復帰→ OFF へ | FAULT→OFF | — |
+| 8 | `100#03.E8.19.80` 送信（speed=1000, flag=1） | OFF→STARTING→RUNNING | — |
+| 9 | `100#03.E8.64.80` 送信（temp=100, flag=1） | RUNNING→FAULT | ENGINE_OVERHEAT |
+| 10 | `100#00.00.19.00` 送信（flag=0） | FAULT→OFF | — |
+| 11 | `100#03.E8.19.80` 送信（speed=1000, flag=1） | OFF→STARTING→RUNNING | — |
+| 12 | `100#00.32.19.80` 送信（speed=50, flag=1） | RUNNING→FAULT | ENGINE_STALL |
+
+### ABS LED 動作確認手順
+
+RUNNING 状態で以下の AbsInfo フレームを 0x110 で送信して LED 動作を確認します。
+
+| 送信フレーム | AbsActive | BrakeActive | D6 RUNNING | D7 FAULT | D8 ABS |
+|------------|-----------|-------------|:----------:|:--------:|:------:|
+| `110#27.10.00` | 0 | 0 | 点灯 | 消灯 | 消灯 |
+| `110#27.10.40` | 0 | 1 | 点灯 | 消灯 | 消灯（BrakeActive は LED に影響しない） |
+| `110#27.10.C0` | 1 | 1 | 点灯 | 消灯 | **点灯** |
+| `110#27.10.80` | 1 | 0 | 点灯 | 消灯 | **点灯** |
+
+FAULT 状態で `110#27.10.C0`（AbsActive=1）を送信すると、D7 が点滅しつつ D8 も同時に点灯します（3 LED は独立制御）。
+
+### DTC ステータスバイト（ISO 14229-1 Annex B）
+
+SID 0x19 の応答に含まれるステータスバイトの各ビットの意味。
+
+| ビット | マスク | 略称 | 意味 |
+|-------|--------|------|------|
+| bit0 | 0x01 | TF | testFailed — 今現在壊れている |
+| bit2 | 0x04 | PDTC | pendingDTC — 今の電源サイクルで失敗した |
+| bit3 | 0x08 | CDTC | confirmedDTC — 確定済み・EEPROM 保存済み |
+| bit4 | 0x10 | TNCLC | testNotCompletedSinceLastClear — クリア後未テスト |
+| bit5 | 0x20 | TFSLC | testFailedSinceLastClear — クリア後に失敗あり |
+
+statusAvailabilityMask = **0x2D**（本実装がサポートするビットの OR）。
+
+### DTC ライフサイクル
+
+| フェーズ | TF | PDTC | CDTC | TFSLC | TNCLC | ステータス値 |
+|---------|:--:|:----:|:----:|:-----:|:-----:|:-----------:|
+| 初回起動（EEPROM 未初期化） | 0 | 0 | 0 | 0 | **1** | `0x10` |
+| PASSED 報告後 | 0 | 0 | 0 | 0 | 0 | `0x00` |
+| **FAILED 報告後** | **1** | **1** | **1** | **1** | 0 | **`0x2D`** |
+| 電源再投入後（TF のみリセット） | **0** | 1 | **1** | 1 | 0 | **`0x2C`** |
+| SID 0x14 実行後 | 0 | 0 | **0** | **0** | **1** | `0x10` |
+
+- **CDTC（bit3）が永続化の本体**。電源再投入後も保持されるため、整備ツールで過去の故障を確認できる。
+- TF（bit0）は電源再投入時にクリア。「今は動いているが過去に壊れた」を表現できる。
+- CDTC を消すには SID 0x14 による明示的なクリアのみ。
+
+### フレーム例（DTC 操作）
+
+**DTC 件数を確認（confirmedDTC のみ = statusMask 0x08）:**
+```
+送信 → 0x7E0: [04 19 01 08 00 00 00 00]
+受信 ← 0x7E8: [06 59 01 2D 01 00 NN 00]
+                                   ↑ byte[5] が DTC 件数
+```
+
+**DTC 一覧を取得（全ステータス = statusMask 0xFF）:**
+
+1 件の場合（SF 応答）:
+```
+送信 → 0x7E0: [04 19 02 FF 00 00 00 00]
+受信 ← 0x7E8: [07 59 02 2D D1 D2 D3 SS]
+                            └────────┘ └── byte[7]: DTC ステータス
+                            byte[4-6]: DTC コード (例: 00 01 01 = EngineOverheat)
+```
+
+2 件以上の場合（マルチフレーム応答 → FC 要）:
+```
+送信 → 0x7E0: [04 19 02 FF 00 00 00 00]
+受信 ← 0x7E8: [10 0B 59 02 2D D1 D2 D3]  FF（総長 0x0B=11 バイト）
+送信 → 0x7E0: [30 00 00 00 00 00 00 00]  FC(CTS)
+受信 ← 0x7E8: [21 SS D1 D2 D3 SS 00 00]  CF（残りの DTC）
+```
+
+**全 DTC クリア:**
+```
+送信 → 0x7E0: [04 14 FF FF FF 00 00 00]
+受信 ← 0x7E8: [01 54 00 00 00 00 00 00]
+```
+
+### EEPROM レイアウト
+
+Arduino UNO の内蔵 EEPROM 先頭 6 バイトを使用します。
+アドレス割り当ては NvM_Cfg.h (`NVM_BLOCK_DEM_*_EEPROM_ADDR`) で一元管理しています。
+Dem は NvM_BlockIdType (NVM_BLOCK_ID_DEM_MAGIC / NVM_BLOCK_ID_DEM_STATUS) でのみアクセスします。
+
+| アドレス | NvM ブロック | 内容 |
+|---------|-------------|------|
+| 0x00 | NVM_BLOCK_ID_DEM_MAGIC (1 byte) | マジックバイト（0xDE = 有効データあり） |
+| 0x01 | NVM_BLOCK_ID_DEM_STATUS (5 bytes) | EVENT_ENGINE_OVERHEAT ステータス |
+| 0x02 | 〃 | EVENT_ENGINE_STALL ステータス |
+| 0x03 | 〃 | EVENT_ENGINE_SPEED_NO_FLAG ステータス |
+| 0x04 | 〃 | EVENT_STARTING_TIMEOUT ステータス |
+| 0x05 | 〃 | EVENT_COMM_TIMEOUT ステータス |
+
+## エンジン状態遷移
+
+```
+          flag=1
+  [OFF] ──────────> [STARTING]
+    ^                  │  │  │  │
+    │ flag=0           │  │  │  └── comm timeout ──> [FAULT]
+    │                  │  │  └───── timeout(5s) ────> [FAULT]
+    │                  │  └──────── flag=0 ──────────> [OFF]
+    │        speed≥500 │
+    │                  v
+    │              [RUNNING]
+    │                  │  │  │
+    │    flag=0 ─────  ┘  │  └── comm timeout ──────> [FAULT]
+    │                      └── temp≥100℃ or speed<100rpm
+    │                                   ↓
+    └──────── flag=0 ────────────── [FAULT]
+                                      │
+                              flag=0 or btn=1
+                                      │
+                                    [OFF]
+```
+
+| 状態 | 遷移条件 | 遷移先 |
+|------|---------|--------|
+| OFF | EngineOnFlag = 1 | STARTING |
+| STARTING | EngineSpeed ≥ 500 rpm | RUNNING |
+| STARTING | 5 秒経過 | FAULT |
+| STARTING | EngineOnFlag = 0 | OFF |
+| STARTING | EngineInfo 受信タイムアウト（5 秒） | FAULT（通信断） |
+| RUNNING | CoolantTemp ≥ 100 ℃ | FAULT（過熱） |
+| RUNNING | EngineSpeed < 100 rpm | FAULT（エンスト） |
+| RUNNING | EngineOnFlag = 0 | OFF |
+| RUNNING | EngineInfo 受信タイムアウト（5 秒） | FAULT（通信断） |
+| FAULT | EngineOnFlag = 0 | OFF |
+| FAULT | 警告確認ボタン押下（D9） | OFF |
+
+## ハードウェア構成
+
+| 機器 | 用途 |
+|------|------|
+| Arduino UNO R3 | マイコン本体 |
+| MCP2515 + TJA1051 | CAN コントローラ + トランシーバ |
+| LED + 抵抗（220〜470 Ω）× 3 | RUNNING 灯（D6）/ FAULT 灯（D7）/ ABS 灯（D8）各 1 本 |
+| プッシュボタン | 警告確認ボタン（D9 と GND を接続・内部プルアップ使用） |
+| USB-CAN アダプタ | PC との CAN バス接続（解析用） |
+| Cangaroo 等 | CAN フレーム送受信ツール |
+
+### MCP2515 接続（Arduino UNO）
+
+| MCP2515 ピン | Arduino ピン | 備考 |
+|-------------|-------------|------|
+| CS | D10 | SPI チップセレクト |
+| INT | D2 | 受信割り込み（ポーリング）|
+| SCK | D13 | SPI クロック |
+| SI (MOSI) | D11 | SPI データ出力 |
+| SO (MISO) | D12 | SPI データ入力 |
+
+> **D13 は MCP2515 の SCK と共用されるため LED には使用できません。**
+> LED は D6（RUNNING）・D7（FAULT）・D8（ABS）それぞれに 220〜470 Ω の抵抗を直列に挿入して接続してください。
+
+> **警告確認ボタン（D9）** は D9 と GND の間にプッシュボタンを接続するだけです。
+> Port が `INPUT_PULLUP` で初期化するため、外部プルアップ抵抗は不要です。
+> ボタン押下時に D9 が GND と接続され `DIO_LOW` となり、`IoHwAb_Button_GetLevel()` 内で論理反転して「押下=1」に変換されます。
+
+> CAN バスには両端に終端抵抗（120 Ω）が必要です。
+
+## ビルド環境・設定
+
+| 項目 | 値 |
+|------|-----|
+| プラットフォーム | PlatformIO + Atmel AVR |
+| ボード | Arduino UNO |
+| フレームワーク | Arduino |
+| 外部ライブラリ | coryjfowler/mcp_can @ ^1.5.1 |
+| CAN ボーレート | 500 kbps |
+| クリスタル周波数 | 8 MHz |
+| シリアルモニタ | 115200 bps |
+
+## ビルドと書き込み
+
+```bash
+# ビルド
+pio run
+
+# 書き込み
+pio run --target upload
+
+# シリアルモニタ
+pio device monitor
+```
+
+## シリアルモニタ出力例
+
+出力フォーマット: `[<起動からの経過ms>ms] LEVEL TAG: メッセージ`
+LEVEL は ERROR / WARN  / INFO  / DEBUG の 5 文字固定幅で列が揃います。
+
+```
+# 起動シーケンス（2 回目以降）
+[1ms] INFO  NvM: Init ok blocks=2
+[2ms] INFO  Port: Init pins=4             # ピン方向設定（D6/D7/D8 を OUTPUT、D9 を INPUT_PULLUP に）
+[3ms] INFO  Can: Init ok
+[4ms] INFO  CanIf: Init ok TX=2 RX=3
+[5ms] INFO  PduR: Init ok RX=3 TX=2
+[6ms] INFO  Com: Init ok RX=2 TX=1 sig=7
+[7ms] INFO  CanTp: Init ok
+[8ms] INFO  Dcm: Init ok
+[9ms] INFO  Dem: Init NvM restored ev=5   # 前回の DTC を EEPROM から復元
+[10ms] INFO  CanSM: Init                  # NO_COM 状態で初期化
+[11ms] INFO  ComM: Init ch=1
+[12ms] INFO  CanSM: ->FULL_COM            # ComM 経由で CAN バス開通
+[13ms] INFO  ComM: ch0 ->mode=2
+[14ms] INFO  AppEng: Init->OFF
+[15ms] INFO  IoHwAb: Init                 # LED 消灯（ピン方向は Port_Init 済み）
+[16ms] INFO  WarnInd: Init
+[17ms] INFO  Os: Init ok tasks=7          # タスクスケジューラ起動（全モジュール初期化後）
+
+# 0x100 受信時（EngineOnFlag=1, Speed=500rpm）
+[102ms] DEBUG Can_Hw: RX OK id=0x100 dlc=4 [01 F4 00 80]
+[103ms] DEBUG CanIf: RX can=0x100 pdu=0
+[104ms] DEBUG PduR: RxInd src=0 mod=0 dst=0
+[105ms] DEBUG Com: RX iPdu=0 [01 F4 00 80]
+
+# 0x110 受信時（VehicleSpeed=100km/h, BrakeActive=0, AbsActive=0）
+[110ms] DEBUG Can_Hw: RX OK id=0x110 dlc=3 [27 10 00]
+[111ms] DEBUG CanIf: RX can=0x110 pdu=2
+[112ms] DEBUG PduR: RxInd src=2 mod=0 dst=1
+[113ms] DEBUG Com: RX iPdu=1 [27 10 00]
+
+# 3 秒周期の Runnable 起動 → OFF→STARTING
+[3010ms] INFO  AppEng: OFF->STARTING
+
+# 500ms 周期の警告灯 Runnable（初期は OFF）
+[500ms]  INFO  WarnInd: [RUN:0 FAULT:0 ABS:0]
+
+# 次の 3 秒周期 → STARTING→RUNNING
+[6010ms] INFO  AppEng: STARTING->RUNNING
+[6011ms] DEBUG Can: TX id=0x200 [02]
+[6012ms] DEBUG Can_Hw: TX OK id=0x200 dlc=1 [02]
+[6500ms] INFO  WarnInd: [RUN:1 FAULT:0 ABS:0]   # RUNNING → D6 点灯
+
+# 0x110 受信時（AbsActive=1）→ ABS LED 点灯
+[7000ms] DEBUG Can_Hw: RX OK id=0x110 dlc=3 [27 10 C0]
+[7001ms] DEBUG Com: RX iPdu=1 [27 10 C0]
+[7500ms] INFO  WarnInd: [RUN:1 FAULT:0 ABS:1]   # AbsActive=1 → D8 点灯（D6 も継続）
+
+# EngineInfo 送信停止 → タイムアウト → FAULT
+[5100ms] WARN  Com: RX timeout iPdu=0 (5000ms)   # Com_MainFunction が検出
+[6010ms] WARN  AppEng: ->FAULT comm timeout       # 次の Runnable で E_NOT_OK を受け取り遷移
+[6500ms] INFO  WarnInd: [RUN:0 FAULT:1 ABS:0]   # FAULT → D7 点滅（500ms ごとにトグル）
+
+# FAULT 中にボタン押下 → デバウンス確定（40ms = 4 サンプル × 10ms）→ FAULT→OFF
+[7010ms] INFO  IoHwAb: Button confirmed level=1  # 押下確定（IoHwAb_MainFunction が更新）
+[9010ms] INFO  AppEng: FAULT->OFF btn=1          # App_EngineManager_Run が確定値を読み取り遷移
+[9011ms] INFO  WarnInd: [RUN:0 FAULT:0 ABS:0]   # 3 LED すべて消灯
+# ボタン解放後も同様に 40ms 後に level=0 が確定する
+[9100ms] INFO  IoHwAb: Button confirmed level=0  # 解放確定
+
+# 過熱検出（CoolantTemp=101℃）→ RUNNING→FAULT
+[9010ms] WARN  AppEng: RUNNING->FAULT overheat=101
+[9500ms] INFO  WarnInd: [RUN:0 FAULT:1 ABS:0]   # D7 点滅開始
+[10000ms] INFO  WarnInd: [RUN:0 FAULT:0 ABS:0]  # 500ms 後にトグル（D7 消灯）
+[9011ms] WARN  Dem: FAILED ev=0 dtc=0x000101   # NvM 経由で EEPROM に保存
+
+# Bus-Off 発生時（CAN バス切断 → TX エラー検出）
+# TX 失敗のたびに EFLG 変化をログ出力（TXWAR→TXEP と TEC が積み上がる）
+[15082ms] ERROR Can_Hw: TX FAIL id=0x200 eflg=0x05 (TXBO=0 TXEP=0 TXWAR=1)
+[15083ms] DEBUG Can_Hw: EFLG=0x05 TXBO=0 TXEP=0 TXWAR=1 EWARN=1
+# （3 秒ごとに TX 失敗が繰り返され TEC が積み上がる）
+[15092ms] ERROR Can_Hw: TX FAIL id=0x200 eflg=0x15 (TXBO=0 TXEP=1 TXWAR=1)
+[15093ms] DEBUG Can_Hw: EFLG=0x15 TXBO=0 TXEP=1 TXWAR=1 EWARN=1
+# 5 回連続失敗でソフトウェア Bus-Off 検出（HW Bus-Off の補完）
+[15094ms] WARN  Can: SW BusOff fallback: 5 consecutive TX failures
+[15100ms] WARN  CanIf: ControllerBusOff ch=0
+[15106ms] WARN  CanSM: BusOff detected! retry=0/3 recovery in 200ms
+[15112ms] INFO  WarnInd: [RUN:0 FAULT:0 ABS:0]  # EngineState が不定に
+
+# 200ms 後に回復試行（アダプタ再接続済みなら正常復帰）
+[15312ms] INFO  CanSM: BusOff: restart attempt 1/3
+# → TX 成功 → 通常動作に復帰
+
+# アダプタ未接続のままなら最大 3 回試行後に停止
+[30312ms] ERROR CanSM: BusOff: max retries (3) exceeded, recovery stopped
+
+# UDS 診断要求 0x7E0（ReadDataByIdentifier DID=0x0101）
+[9500ms] DEBUG Can_Hw: RX OK id=0x7E0 dlc=8 [03 22 01 01 00 00 00 00]
+[9501ms] DEBUG CanIf: RX can=0x7E0 pdu=1
+[9502ms] INFO  CanTp: RX SF len=3
+[9503ms] INFO  Dcm: req SID=0x22
+[9504ms] INFO  Dcm: 22 did=0x0101 len=2
+[9505ms] INFO  CanTp: TX SF len=5
+[9506ms] DEBUG Can_Hw: TX OK id=0x7E8 dlc=8 [05 62 01 01 01 F4 00 00]
+
+# UDS SID 0x19/02: DTC 一覧取得（2 件以上 → マルチフレーム応答）
+[10000ms] INFO  CanTp: RX SF len=4
+[10001ms] INFO  Dcm: req SID=0x19
+[10002ms] INFO  Dcm: 19/02 mask=0xFF found=2
+[10003ms] INFO  CanTp: TX FF len=11        # 11 バイト → FF+CF に分割
+[10004ms] DEBUG Can_Hw: TX OK id=0x7E8 dlc=8 [10 0B 59 02 2D 00 01 03]
+# (Cangaroo から FC を受信後)
+[10200ms] DEBUG CanTp: RX FC fs=0          # ContinueToSend
+[10201ms] DEBUG CanTp: TX CF sn=1 pos=6
+[10202ms] DEBUG Can_Hw: TX OK id=0x7E8 dlc=8 [21 2C 00 01 04 2C 00 00]
+[10203ms] INFO  CanTp: TX done
+
+# UDS SID 0x14: 全 DTC クリア
+[11000ms] INFO  Dcm: 14 ClearAllDTC
+[11001ms] INFO  Dem: ClearAll ok
+[11002ms] INFO  CanTp: TX SF len=1
+[11003ms] DEBUG Can_Hw: TX OK id=0x7E8 dlc=8 [01 54 00 00 00 00 00 00]
+```
+
+## 設計上の注意点
+
+### C / C++ 言語境界
+
+| ファイル | 言語 | 理由 |
+|---------|------|------|
+| `Can_Hw.cpp` | C++ | MCP_CAN クラスのインスタンス化に placement new が必要 |
+| `Det.cpp` | C++ | Arduino の `Serial` API を使用 |
+| `Dio_Hw.cpp` | C++ | Arduino の `digitalWrite` API を使用 |
+| `Port_Hw.cpp` | C++ | Arduino の `pinMode` API を使用 |
+| その他すべて | C | AUTOSAR CP の標準に準拠 |
+
+C ファイルから C++ 関数を呼ぶすべてのヘッダに `extern "C"` ガードを設けています。
+
+### AVR メモリ最適化
+
+Arduino UNO の SRAM は 2 KB しかないため、文字列リテラルを Flash に配置します。
+`DET_LOG*` マクロは `PSTR()` で文字列を Flash 領域に置き、`vsnprintf_P` で展開します。
+
+```c
+// TAG・フォーマット文字列は Flash に配置される（SRAM を消費しない）
+#define TAG "AppEng"
+DET_LOGI(TAG, "STARTING->RUNNING");
+DET_LOGW(TAG, "RUNNING->FAULT overheat=%u", (unsigned)temp);
+```
+
+`Det.cpp` が唯一 `Serial.print()` を呼ぶファイルです。他の `.c` ファイルは `DET_LOG*` マクロのみを使います。
+
+### 設定テーブルの一元管理
+
+各モジュールの設定は対応する `*_PBCfg.c` ファイルで管理しています。
+
+| 変更したい内容 | 編集ファイル |
+|---|---|
+| CAN ID・DLC（EngineInfo / AbsInfo など） | `CanIf_PBCfg.c` + `CanIf_Cfg.h` |
+| シグナルのビット位置・エンディアン | `Com_PBCfg.c` + `Com_Cfg.h` |
+| PDU ルーティングパス（RX/TX の対応関係） | `PduR_PBCfg.c` + `PduR_Cfg.h` |
+| RTE ポート API（SW-C から見えるシグナル名） | `Rte.h` / `Rte.c` / `Rte_Type.h` |
+| EEPROM アドレス・ブロックサイズ | `NvM_PBCfg.c` / `NvM_Cfg.h` |
+| **タスク周期・タスク追加/削除** | **`Os_PBCfg.c`** |
+| LED / ボタンのピン番号変更 | `Dio_Cfg.h`（`DIO_CHANNEL_LED_RUNNING` / `_LED_FAULT` / `_LED_WARNING` / `_BUTTON`） |
+
+## 前提条件
+
+- ARXML や設定ツールは使用しません
+- MCP2515 クリスタルは 8 MHz を想定しています（`Can_CrystalFreqType` で変更可）
+- CAN バスには終端抵抗（120 Ω）を両端に取り付けてください
