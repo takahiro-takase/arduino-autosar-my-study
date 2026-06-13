@@ -94,9 +94,13 @@ void App_EngineManager_Init(void)
  */
 void App_EngineManager_Run(void)
 {
-    EngineSpeed_t  speed = 0U;
-    CoolantTemp_t  temp  = 0U;
-    EngineOnFlag_t flag  = 0U;
+    EngineSpeed_t  speed      = 0U;
+    CoolantTemp_t  temp       = 0U;
+    EngineOnFlag_t flag       = 0U;
+    uint8          btnPressed = 0U;
+
+    /* ボタン状態読み取り（GPIO 入力: CAN 通信と独立して常に取得可能）*/
+    (void)Rte_Call_Button_GetLevel(&btnPressed);
 
     const Std_ReturnType speedRet = Rte_Read_SpeedSensor_EngineSpeed(&speed);
     const Std_ReturnType tempRet  = Rte_Read_TempSensor_CoolantTemp(&temp);
@@ -125,6 +129,15 @@ void App_EngineManager_Run(void)
             case ENGINE_STATE_FAULT:    State_Fault(speed, temp, flag);    break;
             default:                    s_state = ENGINE_STATE_FAULT;      break;
         }
+    }
+
+    /* 警告確認ボタンは CAN 通信状態によらず常に有効。
+     * comm timeout 中の FAULT（CAN E_NOT_OK 継続）でも上記 switch に到達しないため、
+     * ここで独立してチェックする。 */
+    if (s_state == ENGINE_STATE_FAULT && btnPressed == 1U)
+    {
+        s_state = ENGINE_STATE_OFF;
+        DET_LOGI(TAG, "FAULT->OFF btn=1");
     }
 
     (void)Rte_Write_EngineStatus_EngineState(s_state);
@@ -286,9 +299,11 @@ static void State_Running(EngineSpeed_t speed, CoolantTemp_t temp, EngineOnFlag_
 /**
  * \brief   ENGINE_STATE_FAULT 状態を処理する。
  *
- * \details オペレータが起動要求をクリアするまで FAULT 状態を維持する:
- *          - flag=0 → OFF（異常確認済み、システムリセット）
- *          - flag=1 → FAULT 継続（毎周期待機メッセージをログ出力）
+ * \details CAN 経由の flag をもとに FAULT 状態を維持する:
+ *          - flag=0 → OFF（EngineEcu が起動要求をクリア）
+ *          - それ以外 → FAULT 継続（毎周期待機メッセージをログ出力）
+ *          警告確認ボタン（btnPressed）による FAULT クリアは、CAN 通信状態に依存させない
+ *          ため App_EngineManager_Run 側で独立してチェックする。
  *          この状態では速度と水温は評価しない。
  *
  * \param[in]  speed  現在のエンジン回転数 (RPM)。この状態では未使用。
@@ -307,10 +322,10 @@ static void State_Fault(EngineSpeed_t speed, CoolantTemp_t temp, EngineOnFlag_t 
     if (flag == 0U)
     {
         s_state = ENGINE_STATE_OFF;
-        DET_LOGI(TAG, "FAULT->OFF");
+        DET_LOGI(TAG, "FAULT->OFF flag=0");
     }
     else
     {
-        DET_LOGD(TAG, "FAULT wait flag=0");
+        DET_LOGD(TAG, "FAULT wait flag=0 or btn");
     }
 }

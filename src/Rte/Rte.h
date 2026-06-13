@@ -36,6 +36,9 @@ void Rte_ScheduleWarningIndicator(void);
 /* Client/Server ポート — IoHwAb_Led_SetLevel へ委譲 */
 Std_ReturnType Rte_Call_Led_SetLevel(uint8 level);
 
+/* Client/Server ポート — IoHwAb_Button_GetLevel へ委譲 */
+Std_ReturnType Rte_Call_Button_GetLevel(uint8* level);
+
 /* ABS ECU シグナル読み取りポート (AbsInfo フレーム 0x110) */
 Std_ReturnType Rte_Read_VehicleSensor_VehicleSpeed(VehicleSpeed_t* data);
 Std_ReturnType Rte_Read_BrakeSensor_BrakeActive(BrakeActive_t* data);

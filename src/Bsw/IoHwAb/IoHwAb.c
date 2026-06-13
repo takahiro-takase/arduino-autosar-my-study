@@ -61,3 +61,26 @@ Std_ReturnType IoHwAb_Led_SetLevel(uint8 level)
     Dio_WriteChannel(DIO_CHANNEL_LED_WARNING, (Dio_LevelType)level);
     return E_OK;
 }
+
+/**
+ * \brief   エンジン起動ボタンの押下状態を取得する。
+ *
+ * \details DIO_CHANNEL_BUTTON は PORT_PIN_IN_PULLUP で設定されているため、
+ *          ボタン未押下時は VCC に引き上げられ DIO_HIGH、
+ *          押下時は GND に接続され DIO_LOW となる。
+ *          本関数でその論理を反転して呼び出し元に渡す（押下=1）。
+ *
+ * \param[out] level  押下状態 (0=解放, 1=押下)。
+ *
+ * \retval  E_OK  常に成功。
+ *
+ * \ServiceID      {0xC2}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType IoHwAb_Button_GetLevel(uint8* level)
+{
+    /* INPUT_PULLUP: LOW = 押下（GND接続）、HIGH = 解放（プルアップ電位）*/
+    *level = (Dio_ReadChannel(DIO_CHANNEL_BUTTON) == DIO_LOW) ? 1U : 0U;
+    return E_OK;
+}

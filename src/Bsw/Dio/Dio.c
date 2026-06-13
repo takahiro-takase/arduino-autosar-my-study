@@ -31,3 +31,21 @@ void Dio_WriteChannel(Dio_ChannelType channelId, Dio_LevelType level)
 {
     Dio_Hw_WriteChannel(channelId, level);
 }
+
+/**
+ * \brief   指定チャネルの入力レベルを読み取る。
+ *
+ * \param[in]  channelId  読み取り元チャネル ID (Arduino ピン番号)。
+ *
+ * \return  DIO_HIGH または DIO_LOW。
+ *
+ * \pre        Port_Init() で対象チャネルを入力モードに設定済みであること。
+ *
+ * \ServiceID      {0xE2}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Dio_LevelType Dio_ReadChannel(Dio_ChannelType channelId)
+{
+    return Dio_Hw_ReadChannel(channelId);
+}
