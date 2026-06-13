@@ -273,6 +273,44 @@ Std_ReturnType Rte_Call_Led_SetLevel(uint8 level)
 }
 
 /**
+ * \brief   RUNNING LED (D6) レベル設定の Client/Server ポート。
+ *
+ * \details SW-C (App_WarningIndicator) から呼び出され、
+ *          IoHwAb_LedRunning_SetLevel() へ委譲する。
+ *
+ * \param[in]  level  出力レベル。0 = 消灯、1 = 点灯。
+ *
+ * \retval  E_OK  常に成功。
+ *
+ * \ServiceID      {0xFC}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType Rte_Call_LedRunning_SetLevel(uint8 level)
+{
+    return IoHwAb_LedRunning_SetLevel(level);
+}
+
+/**
+ * \brief   FAULT LED (D7) レベル設定の Client/Server ポート。
+ *
+ * \details SW-C (App_WarningIndicator) から呼び出され、
+ *          IoHwAb_LedFault_SetLevel() へ委譲する。
+ *
+ * \param[in]  level  出力レベル。0 = 消灯、1 = 点灯。
+ *
+ * \retval  E_OK  常に成功。
+ *
+ * \ServiceID      {0xFD}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType Rte_Call_LedFault_SetLevel(uint8 level)
+{
+    return IoHwAb_LedFault_SetLevel(level);
+}
+
+/**
  * \brief   エンジン起動ボタン押下状態取得の Client/Server ポート。
  *
  * \details SW-C (App_EngineManager) から呼び出され、

@@ -18,12 +18,19 @@
 #define PORT_CFG_H
 
 /** 管理ピン総数 */
-#define PORT_PIN_COUNT          2U
+#define PORT_PIN_COUNT          4U
 
-/** 警告灯 LED (D8) — 出力ピン */
+/** RUNNING LED (D6) — 出力ピン（エンジン正常稼働中に点灯） */
+#define PORT_PIN_LED_RUNNING    6U
+
+/** FAULT LED (D7) — 出力ピン（異常状態に点滅） */
+#define PORT_PIN_LED_FAULT      7U
+
+/** ABS / 警告灯 LED (D8) — 出力ピン（ABS 作動中に点灯） */
 #define PORT_PIN_LED_WARNING    8U
 
-/** エンジン起動ボタン (D9) — 入力ピン (INPUT_PULLUP)
+/** 警告確認ボタン (D9) — 入力ピン (INPUT_PULLUP)
+ *  FAULT 状態でボタン押下 → FAULT→OFF 遷移。
  *  ボタン押下時は GND と接続され DIO_LOW が読まれる。
  *  IoHwAb_Button_GetLevel() で論理反転して 押下=1 に変換する。 */
 #define PORT_PIN_BUTTON         9U

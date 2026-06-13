@@ -36,6 +36,12 @@ void Rte_ScheduleWarningIndicator(void);
 /* Client/Server ポート — IoHwAb_Led_SetLevel へ委譲 */
 Std_ReturnType Rte_Call_Led_SetLevel(uint8 level);
 
+/* Client/Server ポート — IoHwAb_LedRunning_SetLevel へ委譲 */
+Std_ReturnType Rte_Call_LedRunning_SetLevel(uint8 level);
+
+/* Client/Server ポート — IoHwAb_LedFault_SetLevel へ委譲 */
+Std_ReturnType Rte_Call_LedFault_SetLevel(uint8 level);
+
 /* Client/Server ポート — IoHwAb_Button_GetLevel へ委譲 */
 Std_ReturnType Rte_Call_Button_GetLevel(uint8* level);
 
