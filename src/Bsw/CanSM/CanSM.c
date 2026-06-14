@@ -100,6 +100,7 @@ Std_ReturnType CanSM_RequestComMode(CanSM_NetworkHandleType network, ComM_ModeTy
             CanSM_State         = CANSM_STATE_FULL_COM;
             CanSM_BusOffRetries = 0U;
             DET_LOGI(TAG, "->FULL_COM");
+            ComM_BusSMIndication(network, COMM_FULL_COMMUNICATION);
             break;
 
         case COMM_SILENT_COMMUNICATION:
@@ -107,6 +108,7 @@ Std_ReturnType CanSM_RequestComMode(CanSM_NetworkHandleType network, ComM_ModeTy
                 Can_SetControllerMode(0U, CAN_T_STOP);
             CanSM_State = CANSM_STATE_SILENT_COM;
             DET_LOGI(TAG, "->SILENT_COM");
+            ComM_BusSMIndication(network, COMM_SILENT_COMMUNICATION);
             break;
 
         case COMM_NO_COMMUNICATION:
@@ -114,6 +116,7 @@ Std_ReturnType CanSM_RequestComMode(CanSM_NetworkHandleType network, ComM_ModeTy
                 Can_SetControllerMode(0U, CAN_T_STOP);
             CanSM_State = CANSM_STATE_NO_COM;
             DET_LOGI(TAG, "->NO_COM");
+            ComM_BusSMIndication(network, COMM_NO_COMMUNICATION);
             break;
 
         default:
@@ -208,6 +211,8 @@ void CanSM_MainFunction(void)
         DET_LOGE(TAG, "BusOff: max retries (%u) exceeded, recovery stopped",
                  (unsigned)CANSM_BUSOFF_MAX_RETRIES);
         CanSM_BusOffGaveUp = 1U;
+        /* 回復断念 → ComM に NO_COM を通知 → EcuM_ReleaseRUN → POST_RUN へ */
+        ComM_BusSMIndication(0U, COMM_NO_COMMUNICATION);
         return;
     }
 
@@ -217,5 +222,7 @@ void CanSM_MainFunction(void)
 
     Can_SetControllerMode(0U, CAN_T_START);
     CanSM_State = CANSM_STATE_FULL_COM;
+    /* 回復成功 → ComM に FULL_COM を通知 → EcuM_RequestRUN → RUN へ戻る */
+    ComM_BusSMIndication(0U, COMM_FULL_COMMUNICATION);
     /* 再度 Bus-Off が発生すれば CanIf → CanSM_ControllerBusOff() が呼ばれる */
 }

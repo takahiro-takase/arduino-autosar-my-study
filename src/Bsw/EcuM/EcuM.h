@@ -18,6 +18,29 @@
 #define ECUM_H
 
 #include "Std_Types.h"
+#include "EcuM_Cfg.h"
+
+/* -----------------------------------------------------------------------
+ * 型定義
+ * ----------------------------------------------------------------------- */
+
+/**
+ * \brief   EcuM 動作フェーズ (AUTOSAR SWS_EcuM の EcuM_StateType に相当)
+ *
+ * \details フェーズ値は AUTOSAR 仕様の定義に準拠した範囲を使用している。
+ *          STARTUP は EcuM_Init() 実行中のみ、SHUTDOWN は Arduino では
+ *          ハードウェアリセットが必要なためスケジューラ停止の終端状態となる。
+ */
+typedef enum
+{
+    ECUM_STATE_STARTUP  = 0x00U, /**< 初期化フェーズ (EcuM_Init 実行中)        */
+    ECUM_STATE_RUN      = 0x10U, /**< 通常動作フェーズ (RUN ユーザが存在する)  */
+    ECUM_STATE_POST_RUN = 0x20U, /**< 終了移行フェーズ (全 RUN ユーザ解放後)   */
+    ECUM_STATE_SHUTDOWN = 0x30U  /**< シャットダウン完了 (スケジューラ停止)     */
+} EcuM_StateType;
+
+/** EcuM RUN 要求ユーザ型 (ECUM_USER_* 定数を渡す) */
+typedef uint8 EcuM_UserType;
 
 #ifdef __cplusplus
 extern "C" {
@@ -59,6 +82,52 @@ void EcuM_Init(void);
  * \Synchronicity  {Synchronous}
  */
 void EcuM_MainFunction(void);
+
+/**
+ * \brief   現在の EcuM フェーズを返す。
+ *
+ * \return  EcuM_StateType (STARTUP / RUN / POST_RUN / SHUTDOWN)
+ *
+ * \ServiceID      {0x06}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+EcuM_StateType EcuM_GetState(void);
+
+/**
+ * \brief   RUN フェーズの継続を要求する。
+ *
+ * \details POST_RUN 状態で呼ばれた場合は RUN へ戻る。
+ *          STARTUP 状態で呼ばれた場合はビットのみ記録し、
+ *          EcuM_Init() 完了時に RUN へ遷移する。
+ *
+ * \param[in]  user  要求ユーザ (ECUM_USER_* 定数)。
+ *
+ * \retval  E_OK      受理した。
+ * \retval  E_NOT_OK  user が範囲外、または SHUTDOWN 後。
+ *
+ * \ServiceID      {0x03}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType EcuM_RequestRUN(EcuM_UserType user);
+
+/**
+ * \brief   RUN フェーズの継続要求を解放する。
+ *
+ * \details 全ユーザが解放した場合 POST_RUN へ遷移し、
+ *          ECUM_POST_RUN_TIMEOUT_MS 経過後に SHUTDOWN へ移行する。
+ *
+ * \param[in]  user  解放するユーザ (ECUM_USER_* 定数)。
+ *
+ * \retval  E_OK      受理した。
+ * \retval  E_NOT_OK  user が範囲外。
+ *
+ * \ServiceID      {0x04}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType EcuM_ReleaseRUN(EcuM_UserType user);
 
 #ifdef __cplusplus
 }
