@@ -4,3 +4,6 @@
 .vscode/launch.json
 .vscode/ipch
 .claude/
+
+# AUTOSAR specification documents (copyright - do not redistribute)
+docs/*.pdf
