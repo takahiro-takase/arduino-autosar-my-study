@@ -36,6 +36,7 @@
 
 #include "ComM.h"
 #include "CanSM.h"
+#include "EcuM.h"
 #include "Det.h"
 
 #define TAG "ComM"
@@ -88,18 +89,13 @@ Std_ReturnType ComM_RequestComMode(ComM_UserHandleType User, ComM_ModeType ComMo
 
     ComM_UserRequest[User] = ComMode;
 
-    /* 本実装: ユーザ 0 → チャネル 0 の 1:1 マッピング */
-    ComM_ModeType current = ComM_ChannelMode[0U];
-    if (current == ComMode)
+    /* 現在のチャネル状態と同じなら何もしない */
+    if (ComM_ChannelMode[0U] == ComMode)
         return E_OK;
 
-    if (CanSM_RequestComMode(0U, ComMode) != E_OK)
-        return E_NOT_OK;
-
-    ComM_ChannelMode[0U] = ComMode;
-    DET_LOGI(TAG, "ch0 ->mode=%u", (unsigned)ComMode);
-
-    return E_OK;
+    /* CanSM に転送。成功すれば CanSM が ComM_BusSMIndication を呼んで
+     * チャネル状態と EcuM を更新する。Bus-Off 回復中は E_NOT_OK が返る。 */
+    return CanSM_RequestComMode(0U, ComMode);
 }
 
 /**
@@ -116,6 +112,35 @@ Std_ReturnType ComM_GetCurrentComMode(ComM_UserHandleType User, ComM_ModeType* C
     /* ユーザ 0 → チャネル 0 の現在モードを返す */
     *ComMode = ComM_ChannelMode[0U];
     return E_OK;
+}
+
+/**
+ * \brief   CanSM からの通信モード変化通知コールバック（下位層 → 上位層）。
+ *
+ * \details CanSM が実際の CAN バス状態を変化させた後に呼ぶ。
+ *          ComM はチャネル状態を更新し EcuM の RUN 要求を操作する。
+ *
+ * \ServiceID      {0x26}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void ComM_BusSMIndication(uint8 Network, ComM_ModeType Mode)
+{
+    if (Network >= COMM_CHANNEL_COUNT)
+        return;
+
+    ComM_ChannelMode[Network] = Mode;
+    DET_LOGI(TAG, "ch%u ->mode=%u", (unsigned)Network, (unsigned)Mode);
+
+    if (Mode == COMM_FULL_COMMUNICATION)
+    {
+        (void)EcuM_RequestRUN(ECUM_USER_COMM);
+    }
+    else if (Mode == COMM_NO_COMMUNICATION)
+    {
+        (void)EcuM_ReleaseRUN(ECUM_USER_COMM);
+    }
+    /* SILENT_COM: EcuM の RUN 状態は維持（受信専用でも ECU は動作継続） */
 }
 
 /**

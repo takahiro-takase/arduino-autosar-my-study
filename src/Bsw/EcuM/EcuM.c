@@ -40,6 +40,7 @@
  */
 
 #include "EcuM.h"
+#include "EcuM_Cfg.h"
 #include "NvM.h"
 #include "NvM_PBCfg.h"
 #include "Os.h"
@@ -62,6 +63,25 @@
 #include "IoHwAb.h"
 #include "App_EngineManager.h"
 #include "App_WarningIndicator.h"
+#include "Det.h"
+
+#define TAG "EcuM"
+
+/* Arduino wiring.c（C リンケージ）で定義 */
+extern unsigned long millis(void);
+
+/* -----------------------------------------------------------------------
+ * モジュール内部変数
+ * ----------------------------------------------------------------------- */
+
+/** 現在の EcuM フェーズ */
+static EcuM_StateType  EcuM_State          = ECUM_STATE_STARTUP;
+
+/** RUN 要求中ユーザのビットマスク (bit N = ECUM_USER_N が要求中) */
+static uint8           EcuM_RunUsers       = 0U;
+
+/** POST_RUN フェーズ開始時刻 (ms) */
+static unsigned long   EcuM_PostRunTimerMs = 0UL;
 
 /**
  * \brief   BSW スタック全体を起動フェーズ順に初期化する。
@@ -104,6 +124,12 @@ void EcuM_Init(void)
     IoHwAb_Init();
     App_WarningIndicator_Init();
     Os_Init(&Os_Config);
+
+    /* 全モジュール初期化完了 → RUN フェーズへ遷移
+     * ComM_RequestComMode(FULL_COM) がすでに EcuM_RequestRUN を呼んでいるため
+     * EcuM_RunUsers の ECUM_USER_COMM ビットはここで既に立っている。         */
+    EcuM_State = ECUM_STATE_RUN;
+    DET_LOGI(TAG, "->RUN");
 }
 
 /**
@@ -121,5 +147,66 @@ void EcuM_Init(void)
  */
 void EcuM_MainFunction(void)
 {
-    Os_SchedulerStep();
+    switch (EcuM_State)
+    {
+        case ECUM_STATE_RUN:
+            Os_SchedulerStep();
+            break;
+
+        case ECUM_STATE_POST_RUN:
+            Os_SchedulerStep();
+            if ((millis() - EcuM_PostRunTimerMs) >= ECUM_POST_RUN_TIMEOUT_MS)
+            {
+                EcuM_State = ECUM_STATE_SHUTDOWN;
+                DET_LOGI(TAG, "->SHUTDOWN");
+            }
+            break;
+
+        case ECUM_STATE_SHUTDOWN:
+            /* スケジューラを停止。Arduino では電源断不可のためアイドルで待機 */
+            break;
+
+        default:
+            break;
+    }
+}
+
+EcuM_StateType EcuM_GetState(void)
+{
+    return EcuM_State;
+}
+
+Std_ReturnType EcuM_RequestRUN(EcuM_UserType user)
+{
+    if (user >= ECUM_USER_COUNT)
+        return E_NOT_OK;
+    if (EcuM_State == ECUM_STATE_SHUTDOWN)
+        return E_NOT_OK;
+
+    EcuM_RunUsers |= (uint8)(1U << user);
+
+    /* POST_RUN 中に要求が来たら RUN へ戻る */
+    if (EcuM_State == ECUM_STATE_POST_RUN)
+    {
+        EcuM_State = ECUM_STATE_RUN;
+        DET_LOGI(TAG, "->RUN user=%u", (unsigned)user);
+    }
+    return E_OK;
+}
+
+Std_ReturnType EcuM_ReleaseRUN(EcuM_UserType user)
+{
+    if (user >= ECUM_USER_COUNT)
+        return E_NOT_OK;
+
+    EcuM_RunUsers &= (uint8)(~(1U << user));
+
+    /* 全ユーザが解放した場合 POST_RUN へ遷移 */
+    if ((EcuM_RunUsers == 0U) && (EcuM_State == ECUM_STATE_RUN))
+    {
+        EcuM_State          = ECUM_STATE_POST_RUN;
+        EcuM_PostRunTimerMs = millis();
+        DET_LOGI(TAG, "->POST_RUN timeout=%lums", ECUM_POST_RUN_TIMEOUT_MS);
+    }
+    return E_OK;
 }

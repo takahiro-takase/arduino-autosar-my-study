@@ -94,6 +94,27 @@ Std_ReturnType ComM_GetCurrentComMode(ComM_UserHandleType User, ComM_ModeType* C
  */
 void ComM_MainFunction(void);
 
+/**
+ * \brief   CanSM からの通信モード変化通知コールバック（下位層 → 上位層）。
+ *
+ * \details CanSM が実際の CAN バス状態を変化させた際に呼び出す。
+ *          ComM はチャネル状態を更新し、EcuM_RequestRUN / EcuM_ReleaseRUN を通じて
+ *          EcuM に RUN 要求の変化を伝える。
+ *
+ *          呼び出しタイミング:
+ *            - CanSM_RequestComMode 成功後 (FULL_COM / NO_COM への遷移時)
+ *            - Bus-Off 回復成功時 (FULL_COM)
+ *            - Bus-Off 回復断念時 (NO_COM)
+ *
+ * \param[in]  Network  ネットワークハンドル (0 〜 COMM_CHANNEL_COUNT-1)。
+ * \param[in]  Mode     新しい通信モード (ComM_ModeType)。
+ *
+ * \ServiceID      {0x26}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void ComM_BusSMIndication(uint8 Network, ComM_ModeType Mode);
+
 #ifdef __cplusplus
 }
 #endif
