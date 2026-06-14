@@ -43,6 +43,8 @@
 #include "EcuM_Cfg.h"
 #include "BswM.h"
 #include "BswM_PBCfg.h"
+#include "WdgM.h"
+#include "WdgM_PBCfg.h"
 #include "NvM.h"
 #include "NvM_PBCfg.h"
 #include "Os.h"
@@ -126,6 +128,7 @@ void EcuM_Init(void)
     IoHwAb_Init();
     App_WarningIndicator_Init();
     BswM_Init(&BswM_Config);  /* Os_Init より前: ルール評価の準備だけ行う */
+    WdgM_Init(&WdgM_Config);  /* Alive Supervision 初期化 (Os_Init より前) */
     Os_Init(&Os_Config);      /* タスクテーブル初期化 (全タスク有効で起動) */
 
     /* 全モジュール初期化完了 → RUN フェーズへ遷移
