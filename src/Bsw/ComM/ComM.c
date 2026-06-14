@@ -37,6 +37,7 @@
 #include "ComM.h"
 #include "CanSM.h"
 #include "EcuM.h"
+#include "BswM.h"
 #include "Det.h"
 
 #define TAG "ComM"
@@ -141,6 +142,8 @@ void ComM_BusSMIndication(uint8 Network, ComM_ModeType Mode)
         (void)EcuM_ReleaseRUN(ECUM_USER_COMM);
     }
     /* SILENT_COM: EcuM の RUN 状態は維持（受信専用でも ECU は動作継続） */
+
+    BswM_ComM_CurrentMode(Network, Mode);  /* BswM へ ComM モード変化を通知 */
 }
 
 /**

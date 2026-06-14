@@ -41,6 +41,8 @@
 
 #include "EcuM.h"
 #include "EcuM_Cfg.h"
+#include "BswM.h"
+#include "BswM_PBCfg.h"
 #include "NvM.h"
 #include "NvM_PBCfg.h"
 #include "Os.h"
@@ -123,13 +125,15 @@ void EcuM_Init(void)
     App_EngineManager_Init();
     IoHwAb_Init();
     App_WarningIndicator_Init();
-    Os_Init(&Os_Config);
+    BswM_Init(&BswM_Config);  /* Os_Init より前: ルール評価の準備だけ行う */
+    Os_Init(&Os_Config);      /* タスクテーブル初期化 (全タスク有効で起動) */
 
     /* 全モジュール初期化完了 → RUN フェーズへ遷移
      * ComM_RequestComMode(FULL_COM) がすでに EcuM_RequestRUN を呼んでいるため
      * EcuM_RunUsers の ECUM_USER_COMM ビットはここで既に立っている。         */
     EcuM_State = ECUM_STATE_RUN;
     DET_LOGI(TAG, "->RUN");
+    BswM_EcuM_CurrentState(ECUM_STATE_RUN);  /* Rule 0: 全タスク有効化 */
 }
 
 /**
@@ -159,6 +163,7 @@ void EcuM_MainFunction(void)
             {
                 EcuM_State = ECUM_STATE_SHUTDOWN;
                 DET_LOGI(TAG, "->SHUTDOWN");
+                BswM_EcuM_CurrentState(ECUM_STATE_SHUTDOWN);  /* Rule 2: 全タスク無効化 */
             }
             break;
 
@@ -190,6 +195,7 @@ Std_ReturnType EcuM_RequestRUN(EcuM_UserType user)
     {
         EcuM_State = ECUM_STATE_RUN;
         DET_LOGI(TAG, "->RUN user=%u", (unsigned)user);
+        BswM_EcuM_CurrentState(ECUM_STATE_RUN);  /* Rule 0: 全タスク再有効化 */
     }
     return E_OK;
 }
@@ -207,6 +213,7 @@ Std_ReturnType EcuM_ReleaseRUN(EcuM_UserType user)
         EcuM_State          = ECUM_STATE_POST_RUN;
         EcuM_PostRunTimerMs = millis();
         DET_LOGI(TAG, "->POST_RUN timeout=%lums", ECUM_POST_RUN_TIMEOUT_MS);
+        BswM_EcuM_CurrentState(ECUM_STATE_POST_RUN);  /* Rule 1: アプリタスク無効化 */
     }
     return E_OK;
 }
