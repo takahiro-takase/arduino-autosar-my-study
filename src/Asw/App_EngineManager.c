@@ -29,6 +29,7 @@
 #include "Rte.h"
 #include "Dem.h"
 #include "Det.h"
+#include "WdgM.h"
 
 #define TAG "AppEng"
 
@@ -142,6 +143,9 @@ void App_EngineManager_Run(void)
 
     (void)Rte_Write_EngineStatus_EngineState(s_state);
     (void)Rte_TriggerTransmit(0U);
+
+    /* Runnable 実行完了を WdgM へ報告 (Alive Supervision チェックポイント) */
+    (void)WdgM_CheckpointReached(WDGM_ENTITY_ENGINE);
 }
 
 /**
