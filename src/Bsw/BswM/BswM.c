@@ -1,0 +1,109 @@
+/**
+ * \file    BswM.c
+ * \brief   BSW モードマネージャ 実装 (AUTOSAR SWS_BswM 準拠)
+ * \details 他モジュールからのモード通知を受け取り、ルールテーブルを評価して
+ *          Os タスクの有効・無効を切り替えるルールエンジン。
+ *
+ *          処理フロー:
+ *            1. モード通知受信 (BswM_EcuM_CurrentState / BswM_ComM_CurrentMode)
+ *            2. モードキャッシュを更新し変化がなければ早期リターン
+ *            3. BswM_ExecuteRules() でルールテーブルを先頭から走査
+ *            4. (ModeSrc == 通知元) AND (ModeValue == 新しいモード) のルールを実行
+ *            5. TaskMask のビットが立っているタスクに対して Os_SetTaskActive() を呼ぶ
+ *
+ *          AUTOSAR との主な違い (学習用簡略化):
+ *            - 単一条件ルールのみ (AND/OR の LogicalExpression なし)
+ *            - BswM_MainFunction なし (即時評価モードのみ)
+ *            - ActionList は TaskActivation のみ (ModeSwitch / Timer 未実装)
+ *
+ * \copyright  Copyright (c) 2025 T_T
+ * \license    MIT License - 詳細は LICENSE ファイルを参照。
+ *
+ * \note    本ファイルは AUTOSAR 4.3.1 仕様を参考にした学習用実装です。
+ *          AUTOSAR 認証済み実装ではなく、製品への適用は想定していません。
+ */
+
+#include "BswM.h"
+#include "BswM_Cfg.h"
+#include "Os.h"
+#include "Os_Cfg.h"
+#include "Det.h"
+
+#define TAG "BswM"
+
+/* -----------------------------------------------------------------------
+ * モジュール内部変数
+ * ----------------------------------------------------------------------- */
+
+static const BswM_ConfigType* BswM_Cfg;
+
+/** BswM が認識している現在の EcuM フェーズ */
+static EcuM_StateType BswM_EcuMState = ECUM_STATE_STARTUP;
+
+/** BswM が認識している現在の ComM モード */
+static ComM_ModeType  BswM_ComMMode  = COMM_NO_COMMUNICATION;
+
+/* -----------------------------------------------------------------------
+ * 内部関数
+ * ----------------------------------------------------------------------- */
+
+/**
+ * \brief   モード変化をトリガとしてルールテーブルを評価し、アクションを実行する。
+ *
+ * \param[in]  src       通知元モジュールの種別 (BSWM_MODE_SRC_*)。
+ * \param[in]  newValue  新しいモード値。
+ */
+static void BswM_ExecuteRules(BswM_ModeSrcType src, uint8 newValue)
+{
+    for (uint8 i = 0U; i < BswM_Cfg->RuleCount; i++)
+    {
+        const BswM_RuleType* rule = &BswM_Cfg->Rules[i];
+
+        if ((rule->ModeSrc != src) || (rule->ModeValue != newValue))
+            continue;
+
+        DET_LOGI(TAG, "Rule%u fired src=%u val=0x%02X act=%u mask=0x%02X",
+                 (unsigned)i, (unsigned)src, (unsigned)newValue,
+                 (unsigned)rule->Action, (unsigned)rule->TaskMask);
+
+        for (uint8 t = 0U; t < OS_TASK_COUNT; t++)
+        {
+            if ((rule->TaskMask & (uint8)(1U << t)) == 0U)
+                continue;
+
+            Os_SetTaskActive(t, (rule->Action == BSWM_ACTION_ACTIVATE) ? 1U : 0U);
+        }
+    }
+}
+
+/* -----------------------------------------------------------------------
+ * 公開 API
+ * ----------------------------------------------------------------------- */
+
+void BswM_Init(const BswM_ConfigType* ConfigPtr)
+{
+    BswM_Cfg       = ConfigPtr;
+    BswM_EcuMState = ECUM_STATE_STARTUP;
+    BswM_ComMMode  = COMM_NO_COMMUNICATION;
+    DET_LOGI(TAG, "Init ok rules=%u", (unsigned)ConfigPtr->RuleCount);
+}
+
+void BswM_EcuM_CurrentState(EcuM_StateType state)
+{
+    if (BswM_EcuMState == state)
+        return;
+
+    BswM_EcuMState = state;
+    BswM_ExecuteRules(BSWM_MODE_SRC_ECUM, (uint8)state);
+}
+
+void BswM_ComM_CurrentMode(uint8 channel, ComM_ModeType mode)
+{
+    (void)channel;
+
+    if (BswM_ComMMode == mode)
+        return;
+
+    BswM_ComMMode = mode;
+    BswM_ExecuteRules(BSWM_MODE_SRC_COMM, (uint8)mode);
+}

@@ -94,6 +94,22 @@ void Os_Init(const Os_ConfigType* ConfigPtr);
  */
 void Os_SchedulerStep(void);
 
+/**
+ * \brief   指定タスクの有効・無効を切り替える。
+ *
+ * \details BswM がルール実行時に呼び出す。無効化されたタスクは
+ *          Os_SchedulerStep() の走査対象から除外され実行されない。
+ *          有効化されたタスクは次の Os_SchedulerStep() から再び実行対象になる。
+ *
+ * \param[in]  TaskId  タスク ID (Os_PBCfg.c のインデックス)。
+ * \param[in]  Active  1U = 有効, 0U = 無効。
+ *
+ * \ServiceID      {0x05}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void Os_SetTaskActive(uint8 TaskId, uint8 Active);
+
 #ifdef __cplusplus
 }
 #endif

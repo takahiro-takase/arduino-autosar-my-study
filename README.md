@@ -32,65 +32,47 @@ SW-C がピン番号などのハードウェア詳細を知ることなく警告
 
 ## アーキテクチャ
 
+### 層構造
+
 ```
-┌──────────────────────────────────────────────────────┐
-│  ASW  App_EngineManager    エンジン状態遷移           │
-│       App_WarningIndicator 3 LED 独立制御             │
-├──────────────────────────────────────────────────────┤
-│  RTE  ポートベース API (S/R インタフェース)           │
-│       複数 SW-C が同一シグナルを独立ポートで受信      │
-├──────────────────────────────────────────────────────┤
-│  OS   タイムトリガスケジューラ                        │  タスク周期管理
-├──────────────────────────────────────────────────────┤
-│  BSW  IoHwAb I/O ハードウェア抽象化（ECU 抽象化層）  │  RTE C/S ポート経由
-│              IoHwAb_MainFunction（ボタンデバウンス）  │  10ms 周期タスク
-│       SchM  排他エリア保護（共有リソース管理）        │
-│       ComM  通信マネージャ（CAN バス通信モード管理）  │
-│       CanSM CAN ステートマネージャ（Bus-Off 回復）    │
-│       COM    シグナルのビット単位パック/アンパック     │
-│              受信デッドライン監視（タイムアウト検出）  │
-│       PduR   マルチキャスト PDU ルーティング          │
-│       CanIf  CAN ID ↔ 論理 PDU マッピング            │
-│       Can    MCP2515 ハードウェア制御                 │
-│       CanTp  ISO 15765-2 マルチフレーム処理           │
-│       Dcm    UDS 診断通信 (ISO 14229-1)              │
-│       Dem    DTC 管理（NvM 経由で永続化）             │
-│       NvM    EEPROM 抽象化・RAM ミラー管理            │
-│       Det    Serial 出力ブリッジ（デバッグ用）         │
-│       Dio    デジタル I/O 値読み書き（MCAL）           │
-│              Dio_WriteChannel（LED 出力）              │
-│              Dio_ReadChannel（ボタン入力）             │
-│       Port   ピン方向設定（MCAL）                     │
-│              OUTPUT（LED）/ INPUT_PULLUP（ボタン）     │
-├──────────────────────────────────────────────────────┤
-│  HAL  Can_Hw  MCP2515 C++ ラッパー                    │  C++ のみ
-│       Dio_Hw  Arduino digitalWrite/digitalRead ラッパー│  C++ のみ
-│       Port_Hw Arduino pinMode ラッパー                 │  C++ のみ
-└──────────────────────────────────────────────────────┘
+ASW ─── App_EngineManager / App_WarningIndicator
+RTE ─── Rte（ポートベース S/R API）
+OS  ─── Os（タイムトリガスケジューラ）
+BSW ─── EcuM / BswM / ComM / CanSM / Com / PduR / CanIf / Can
+        CanTp / Dcm / Dem / NvM / IoHwAb / Dio / Port / SchM / Det
+HAL ─── Can_Hw / Dio_Hw / Port_Hw（C++ のみ）
 ```
 
-各モジュールは上位層のヘッダのみに依存し、下位層の実装詳細を知りません。
+各層は上位層のヘッダのみに依存し、下位層の実装詳細を知りません。
 
-## BSW モジュール概要
+### モジュール一覧
 
-| モジュール | AUTOSAR 仕様 | 本プロジェクトでの役割 |
-|-----------|-------------|----------------------|
-| **Can** | SWS_Can | MCP2515 の送受信・Bus-Off 検出を担う MCAL 最下層。直接 HW を操作する唯一のモジュール |
-| **CanIf** | SWS_CanIf | CAN ID ↔ 論理 PDU のマッピング。上位層は CAN ID を知らず PDU ID で通信する |
-| **PduR** | SWS_PduR | 受信 PDU を COM へ、送信 PDU を CanIf へルーティング。通信スタックの配管役 |
-| **Com** | SWS_Com | シグナルのビット単位パック／アンパックと受信デッドライン監視（タイムアウト検出） |
-| **CanTp** | SWS_CanTp | ISO 15765-2 のフレーム分割（FF/CF）と再組立。8 バイトを超える UDS 応答を実現 |
-| **Dcm** | SWS_Dcm | UDS 診断サービス処理（SID 0x10 / 0x11 / 0x14 / 0x19 / 0x22 / 0x3E） |
-| **Dem** | SWS_Dem | 診断イベントを DTC として管理。NvM 経由で EEPROM に永続化する |
-| **NvM** | SWS_NvM | EEPROM の読み書きを抽象化。Dem は EEPROM アドレスを直接知らない |
-| **IoHwAb** | AUTOSAR 抽象化層 | Dio チャネル番号を隠蔽し SW-C に論理的な LED / ボタン API を提供する。`IoHwAb_MainFunction`（10ms）でデバウンス（40ms 確定）とボタン固着検出（5 秒超過で `Dem_ReportErrorStatus(FAILED)`）を行う。Dio_Cfg.h を知る唯一の非 MCAL ファイル |
-| **Dio** | SWS_Dio | `Dio_WriteChannel` / `Dio_ReadChannel` で GPIO 値を読み書きする MCAL |
-| **Port** | SWS_Port | `Port_Init` でピン方向（OUTPUT / INPUT_PULLUP）を設定する MCAL |
-| **EcuM** | SWS_EcuStateManager | ECU ライフサイクルを STARTUP → RUN → POST_RUN → SHUTDOWN の状態マシンで管理する。`EcuM_RequestRUN` / `EcuM_ReleaseRUN` により RUN フェーズの継続を調停する |
-| **ComM** | SWS_ComM | CAN バスの通信モード（NO_COM / FULL_COM）を管理し CanSM へ要求する。CanSM からの `ComM_BusSMIndication` を受け EcuM の RUN 要求を操作する |
-| **CanSM** | SWS_CanSM | Bus-Off 発生時の回復シーケンス（最大 3 回リトライ）を実施する。回復断念・回復成功時に `ComM_BusSMIndication` を呼ぶ |
-| **SchM** | SWS_SchM | 排他エリアマクロ（`SchM_Enter` / `SchM_Exit`）で共有リソースを保護する |
-| **Det** | SWS_Det | `DET_LOG*` マクロ経由でタイムスタンプ付きログを Serial に出力するデバッグ用ブリッジ |
+| 層 | モジュール | AUTOSAR 仕様 | 本プロジェクトでの役割 |
+|---|---|---|---|
+| ASW | App_EngineManager | — | エンジン状態遷移（OFF / STARTING / RUNNING / FAULT）・DTC 登録・CAN TX 要求 |
+| ASW | App_WarningIndicator | — | 3 LED 独立制御（D6=RUNNING / D7=FAULT 点滅 / D8=ABS） |
+| RTE | Rte | — | ポートベース S/R API。複数 SW-C が同一シグナルを独立ポートで受信 |
+| OS | Os | SWS_Os | タイムトリガスケジューラ。タスクごとに周期を設定し `Os_SchedulerStep()` で到来タスクを順次実行 |
+| BSW | EcuM | SWS_EcuStateManager | ECU ライフサイクルを STARTUP → RUN → POST_RUN → SHUTDOWN の状態マシンで管理。`EcuM_RequestRUN` / `EcuM_ReleaseRUN` で RUN フェーズを調停 |
+| BSW | BswM | SWS_BswM | EcuM / ComM のモード変化をルールテーブルで受け取り `Os_SetTaskActive()` でタスクを有効・無効化するルールエンジン。POST_RUN 中はアプリタスクのみ停止し BSW タスクは継続 |
+| BSW | ComM | SWS_ComM | CAN バスの通信モード（NO_COM / FULL_COM）を管理し CanSM へ要求。`ComM_BusSMIndication` で EcuM の RUN 要求を操作 |
+| BSW | CanSM | SWS_CanSM | Bus-Off 発生時の回復シーケンス（最大 3 回リトライ）を実施。回復断念・成功時に `ComM_BusSMIndication` を呼ぶ |
+| BSW | Com | SWS_Com | シグナルのビット単位パック／アンパックと受信デッドライン監視（タイムアウト検出） |
+| BSW | PduR | SWS_PduR | 受信 PDU を Com へ、送信 PDU を CanIf へルーティング。通信スタックの配管役 |
+| BSW | CanIf | SWS_CanIf | CAN ID ↔ 論理 PDU のマッピング。上位層は CAN ID を知らず PDU ID で通信 |
+| BSW | Can | SWS_Can | MCP2515 の送受信・Bus-Off 検出を担う MCAL 最下層。HW を直接操作する唯一のモジュール |
+| BSW | CanTp | SWS_CanTp | ISO 15765-2 のフレーム分割（FF/CF）と再組立。8 バイトを超える UDS 応答を実現 |
+| BSW | Dcm | SWS_Dcm | UDS 診断サービス処理（SID 0x10 / 0x11 / 0x14 / 0x19 / 0x22 / 0x3E） |
+| BSW | Dem | SWS_Dem | 診断イベントを DTC として管理。NvM 経由で EEPROM に永続化 |
+| BSW | NvM | SWS_NvM | EEPROM の読み書きを抽象化。Dem は EEPROM アドレスを直接知らない |
+| BSW | IoHwAb | AUTOSAR 抽象化層 | Dio チャネル番号を隠蔽し SW-C に論理的な LED / ボタン API を提供。10ms 周期でデバウンス（40ms 確定）とボタン固着検出（5 秒超過で Dem 報告） |
+| BSW | Dio | SWS_Dio | `Dio_WriteChannel` / `Dio_ReadChannel` で GPIO 値を読み書きする MCAL |
+| BSW | Port | SWS_Port | `Port_Init` でピン方向（OUTPUT / INPUT_PULLUP）を設定する MCAL |
+| BSW | SchM | SWS_SchM | 排他エリアマクロ（`SchM_Enter` / `SchM_Exit`）で共有リソースを保護 |
+| BSW | Det | SWS_Det | `DET_LOG*` マクロ経由でタイムスタンプ付きログを Serial に出力するデバッグ用ブリッジ |
+| HAL | Can_Hw | — | MCP2515 / mcp_can C++ ラッパー |
+| HAL | Dio_Hw | — | Arduino `digitalWrite` / `digitalRead` ラッパー |
+| HAL | Port_Hw | — | Arduino `pinMode` ラッパー |
 
 > 各モジュールの詳細（フレーム構造・状態マシン・設定値）は後続セクションを参照してください。
 
@@ -143,6 +125,12 @@ SW-C がピン番号などのハードウェア詳細を知ることなく警告
 │       │   ├── EcuM_Cfg.h        # RUN ユーザ定義・POST_RUN タイムアウト
 │       │   ├── EcuM.h            # 公開インタフェース・EcuM_StateType 定義
 │       │   └── EcuM.c            # 状態マシン・EcuM_RequestRUN / EcuM_ReleaseRUN
+│       ├── BswM/                 # BSW モードマネージャ（ルール駆動タスク制御）
+│       │   ├── BswM_Cfg.h        # タスク ID 定数・タスクマスク定義
+│       │   ├── BswM_PBCfg.h      # ルール構造体型定義・BswM_Config 宣言
+│       │   ├── BswM_PBCfg.c      # ルールテーブル実体（3 ルール）
+│       │   ├── BswM.h            # 公開インタフェース（Init / EcuM通知 / ComM通知）
+│       │   └── BswM.c            # ルールエンジン実装・Os_SetTaskActive 呼び出し
 │       ├── ComM/                 # 通信マネージャ（CAN バス通信モード管理）
 │       │   ├── ComM_Cfg.h        # チャネル数・ユーザ数定数
 │       │   ├── ComM.h            # 公開インタフェース（NO_COM/SILENT_COM/FULL_COM）
@@ -630,6 +618,79 @@ CanSM_MainFunction（10ms タスク）
 | `ECUM_USER_COMM` | 0 | ComM のユーザ ID |
 | `ECUM_POST_RUN_TIMEOUT_MS` | 5000 ms | POST_RUN タイムアウト |
 
+## BswM（BSW モードマネージャ）
+
+BswM (BSW Mode Manager) は、EcuM や ComM からのモード変化通知を受け取り、
+ルールテーブルに従って Os タスクの有効・無効を切り替えるルールエンジンです。
+
+EcuM が「今どのフェーズか」を決めるのに対し、BswM は「そのフェーズで何をするか」を決めます。
+この責任分離により、フェーズごとの振る舞いをコードを書かずにルールテーブルの変更だけで調整できます。
+
+### ルールテーブル（`BswM_PBCfg.c`）
+
+| No | モード源 | モード値 | アクション | 対象タスクマスク |
+|----|---------|---------|-----------|----------------|
+| 0 | EcuM | RUN | ACTIVATE | 全タスク（0x7F） |
+| 1 | EcuM | POST_RUN | DEACTIVATE | アプリタスクのみ（0x0C） |
+| 2 | EcuM | SHUTDOWN | DEACTIVATE | 全タスク（0x7F） |
+
+### タスク ID とマスク（`BswM_Cfg.h`）
+
+| タスク ID | 定数 | 対応関数 | 周期 |
+|---------|------|---------|------|
+| 0 | `BSWM_OS_TASK_CAN_ISR` | `Can_Isr` | 1 ms |
+| 1 | `BSWM_OS_TASK_CANTP_MAIN` | `CanTp_MainFunction` | 1 ms |
+| 2 | `BSWM_OS_TASK_RTE_ENGINE` | `Rte_ScheduleRunnables` | 3000 ms |
+| 3 | `BSWM_OS_TASK_RTE_WARNING` | `Rte_ScheduleWarningIndicator` | 500 ms |
+| 4 | `BSWM_OS_TASK_CANSM_MAIN` | `CanSM_MainFunction` | 10 ms |
+| 5 | `BSWM_OS_TASK_COM_MAIN` | `Com_MainFunction` | 100 ms |
+| 6 | `BSWM_OS_TASK_IOHWAB_MAIN` | `IoHwAb_MainFunction` | 10 ms |
+
+`BSWM_TASK_MASK_APP = 0x0C`（bit2=Rte_Engine, bit3=Rte_Warning）がアプリタスクマスクです。
+POST_RUN ではこの 2 タスクだけを停止し、BSW タスク（CAN ISR・CanTp・CanSM・Com・IoHwAb）は継続させます。
+
+### POST_RUN でアプリタスクのみ停止する理由
+
+POST_RUN 中も BSW タスクを動かし続けることで、以下のグレースフルシャットダウンが実現されます。
+
+```
+POST_RUN 中も動き続けるタスク:
+  Can_Isr / CanTp_Main → 受信中の診断フレームを最後まで処理
+  CanSM_Main          → 回復シーケンスの完了まで管理
+  Com_MainFunction    → デッドライン監視の最終確認
+  IoHwAb_Main        → ボタンのデバウンス状態を正常終了
+
+POST_RUN 中に停止するタスク:
+  Rte_ScheduleRunnables          → エンジン状態更新・DTC 登録を停止
+  Rte_ScheduleWarningIndicator   → LED 制御を停止（消灯状態で固定）
+```
+
+### 通知チェーン
+
+```
+Bus-Off 回復断念
+  CanSM → ComM_BusSMIndication(NO_COM)
+            ├→ EcuM_ReleaseRUN(ECUM_USER_COMM)
+            │     └→ EcuM: RUN → POST_RUN
+            │               └→ BswM_EcuM_CurrentState(POST_RUN)
+            │                     └→ Rule 1 発火: Os_SetTaskActive(Rte_Engine, OFF)
+            │                                     Os_SetTaskActive(Rte_Warning, OFF)
+            └→ BswM_ComM_CurrentMode(0, NO_COM)   ← ComM モード変化も通知（将来の拡張用）
+
+POST_RUN 5秒後
+  EcuM: POST_RUN → SHUTDOWN
+    └→ BswM_EcuM_CurrentState(SHUTDOWN)
+          └→ Rule 2 発火: Os_SetTaskActive(全タスク, OFF)
+```
+
+### BswM 設定の変更方法
+
+| 変更内容 | 編集ファイル |
+|---------|------------|
+| POST_RUN で停止するタスクの追加・変更 | `BswM_Cfg.h` の `BSWM_TASK_MASK_APP` |
+| ルール追加（例: ComM モードに反応する） | `BswM_PBCfg.c` にルールを追記し `BSWM_RULE_COUNT` を更新 |
+| タスク追加 | `BswM_Cfg.h` に ID 定数を追加し `Os_PBCfg.c` にも追記 |
+
 ## エンジン状態遷移
 
 ```
@@ -897,6 +958,7 @@ DET_LOGW(TAG, "RUNNING->FAULT overheat=%u", (unsigned)temp);
 | EEPROM アドレス・ブロックサイズ | `NvM_PBCfg.c` / `NvM_Cfg.h` |
 | **タスク周期・タスク追加/削除** | **`Os_PBCfg.c`** |
 | EcuM POST_RUN タイムアウト・RUN ユーザ追加 | `EcuM_Cfg.h` |
+| BswM ルール追加・タスクマスク変更 | `BswM_PBCfg.c` / `BswM_Cfg.h` |
 | LED / ボタンのピン番号変更 | `Dio_Cfg.h`（`DIO_CHANNEL_LED_RUNNING` / `_LED_FAULT` / `_LED_WARNING` / `_BUTTON`） |
 
 ## 前提条件
