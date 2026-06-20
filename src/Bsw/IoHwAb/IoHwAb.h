@@ -115,6 +115,23 @@ void IoHwAb_MainFunction(void);
  */
 Std_ReturnType IoHwAb_Button_GetLevel(uint8* level);
 
+/**
+ * \brief   ADC センサ電圧値を取得する。
+ *
+ * \details IoHwAb_MainFunction が計算した最新の mV 値を返す。
+ *          Adc_ReadChannel は呼び出さず、静的変数 s_adcMv を参照するだけ。
+ *          RTE の Client/Server ポート (Rte_Call_Adc_GetValue_mV) から呼び出される。
+ *
+ * \param[out] mv  変換済み電圧値 [mV] の格納先。NULL 禁止。
+ *
+ * \retval  E_OK  常に成功。
+ *
+ * \ServiceID      {0xC6}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType IoHwAb_Adc_GetValue_mV(uint16* mv);
+
 #ifdef __cplusplus
 }
 #endif

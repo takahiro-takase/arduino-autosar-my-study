@@ -1,4 +1,4 @@
-/**
+﻿/**
  * \file    Dem.c
  * \brief   診断イベントマネージャ (AUTOSAR SWS_DEM 準拠)
  * \details SW-C / BSW モジュールから報告されるイベントを受け取り、
@@ -9,7 +9,7 @@
  *            EEPROM への永続化はすべて NvM_ReadBlock() / NvM_WriteBlock() 経由で行う。
  *            NvM が管理するブロック:
  *              NVM_BLOCK_ID_DEM_MAGIC  — 有効データマーカー (1 byte)
- *              NVM_BLOCK_ID_DEM_STATUS — イベントステータステーブル (6 bytes)
+ *              NVM_BLOCK_ID_DEM_STATUS — イベントステータステーブル (7 bytes)
  *
  *          DTC ライフサイクル:
  *            報告なし → TNCLC=1, TNCTOC=1 (未テスト状態)
@@ -49,7 +49,8 @@ static const uint32 Dem_DtcTable[DEM_EVENT_COUNT] = {
     DEM_DTC_ENGINE_SPEED_NO_FLAG,    /* event 2 */
     DEM_DTC_STARTING_TIMEOUT,        /* event 3 */
     DEM_DTC_COMM_TIMEOUT,            /* event 4 */
-    DEM_DTC_BUTTON_STUCK             /* event 5 */
+    DEM_DTC_BUTTON_STUCK,            /* event 5 */
+    DEM_DTC_ADC_VOLT_LOW             /* event 6 */
 };
 
 /* -----------------------------------------------------------------------
