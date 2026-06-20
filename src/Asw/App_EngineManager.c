@@ -144,6 +144,13 @@ void App_EngineManager_Run(void)
     (void)Rte_Write_EngineStatus_EngineState(s_state);
     (void)Rte_TriggerTransmit(0U);
 
+    /* ADC センサ電圧読み取り（ローカル電圧モニタ：参考値ログ出力） */
+    {
+        uint16 adcMv = 0U;
+        (void)Rte_Call_Adc_GetValue_mV(&adcMv);
+        DET_LOGD(TAG, "ADC=%umV", (unsigned)adcMv);
+    }
+
     /* Runnable 実行完了を WdgM へ報告 (Alive Supervision チェックポイント) */
     (void)WdgM_CheckpointReached(WDGM_ENTITY_ENGINE);
 }

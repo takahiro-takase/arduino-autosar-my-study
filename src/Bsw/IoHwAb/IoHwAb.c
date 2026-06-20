@@ -18,6 +18,8 @@
 #include "IoHwAb.h"
 #include "Dio.h"
 #include "Dio_Cfg.h"
+#include "Adc.h"
+#include "Adc_Cfg.h"
 #include "Det.h"
 #include "Dem.h"
 
@@ -29,9 +31,13 @@
 /** ボタン固着と判定するまでの確定押下継続サンプル数 (500 × 10ms = 5000ms) */
 #define IOHWAB_BUTTON_STUCK_COUNT     500U
 
+/** ADC 電圧低下と判定する閾値 [mV] */
+#define IOHWAB_ADC_LOW_VOLT_THRESHOLD_MV  1000U
+
 static uint8  s_confirmedLevel  = 0U;  /* デバウンス確定値 (0=解放, 1=押下) */
 static uint8  s_debounceCounter = 0U;  /* 未確定サンプル積算カウンタ */
 static uint16 s_stuckCounter    = 0U;  /* 確定押下継続サンプル数 */
+static uint16 s_adcMv           = 0U;  /* ADC 変換済み電圧値 [mV] */
 
 /**
  * \brief   IoHwAb モジュールを初期化する。
@@ -55,6 +61,7 @@ void IoHwAb_Init(void)
     s_confirmedLevel  = 0U;
     s_debounceCounter = 0U;
     s_stuckCounter    = 0U;
+    s_adcMv           = 0U;
     DET_LOGI(TAG, "Init");
 }
 
@@ -169,6 +176,21 @@ void IoHwAb_MainFunction(void)
         }
         s_stuckCounter = 0U;
     }
+
+    /* ADC サンプリング: 生値を mV へ変換し、電圧低下を DEM 報告 */
+    {
+        uint16 raw = 0U;
+        (void)Adc_ReadChannel(ADC_CHANNEL_SENSOR, &raw);
+        s_adcMv = (uint16)((uint32)raw * ADC_REF_VOLTAGE_MV / ADC_RESOLUTION_MAX);
+        if (s_adcMv < IOHWAB_ADC_LOW_VOLT_THRESHOLD_MV)
+        {
+            Dem_ReportErrorStatus(DEM_EVENT_ADC_VOLT_LOW, DEM_EVENT_STATUS_FAILED);
+        }
+        else
+        {
+            Dem_ReportErrorStatus(DEM_EVENT_ADC_VOLT_LOW, DEM_EVENT_STATUS_PASSED);
+        }
+    }
 }
 
 /**
@@ -188,5 +210,25 @@ void IoHwAb_MainFunction(void)
 Std_ReturnType IoHwAb_Button_GetLevel(uint8* level)
 {
     *level = s_confirmedLevel;
+    return E_OK;
+}
+
+/**
+ * \brief   ADC センサ電圧値を取得する。
+ *
+ * \details IoHwAb_MainFunction が計算した最新の s_adcMv を返す。
+ *          Adc_ReadChannel は呼び出さず、静的変数を参照するだけ。
+ *
+ * \param[out] mv  変換済み電圧値 [mV]。
+ *
+ * \retval  E_OK  常に成功。
+ *
+ * \ServiceID      {0xC6}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType IoHwAb_Adc_GetValue_mV(uint16* mv)
+{
+    *mv = s_adcMv;
     return E_OK;
 }

@@ -332,6 +332,27 @@ Std_ReturnType Rte_Call_Button_GetLevel(uint8* level)
 }
 
 /**
+ * \brief   ADC センサ電圧値取得の Client/Server ポート。
+ *
+ * \details SW-C (App_EngineManager) から呼び出され、
+ *          IoHwAb_Adc_GetValue_mV() へ委譲する。
+ *          C/S ポートにより SW-C はチャネル番号や ADC スケーリングを知らない
+ *          (AUTOSAR SWS_RTE の Rte_Call_<p>_<o> パターン)。
+ *
+ * \param[out] mv  変換済み電圧値 [mV]。NULL 禁止。
+ *
+ * \retval  E_OK  常に成功。
+ *
+ * \ServiceID      {0xFE}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType Rte_Call_Adc_GetValue_mV(uint16* mv)
+{
+    return IoHwAb_Adc_GetValue_mV(mv);
+}
+
+/**
  * \brief   VehicleSensor 要求ポートから VehicleSpeed シグナルを読み取る。
  *
  * \details Com_ReceiveSignal() へ委譲し、COM の RX I-PDU バッファ (IPduId=1) から

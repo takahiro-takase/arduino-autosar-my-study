@@ -5,9 +5,9 @@
  *          実際の AUTOSAR 環境ではコンフィギュレーションツールが生成する
  *          ファイルに相当する。
  *
- *          本プロジェクトの EEPROM レイアウト (Arduino UNO 内蔵 1KB の先頭 7 バイト):
+ *          本プロジェクトの EEPROM レイアウト (Arduino UNO 内蔵 1KB の先頭 8 バイト):
  *            Addr 0x0000: NVM_BLOCK_ID_DEM_MAGIC  (1 byte)  — DEM 有効マーカー
- *            Addr 0x0001: NVM_BLOCK_ID_DEM_STATUS (6 bytes) — DEM イベントステータス
+ *            Addr 0x0001: NVM_BLOCK_ID_DEM_STATUS (7 bytes) — DEM イベントステータス
  *
  * \copyright  Copyright (c) 2025 T_T
  * \license    MIT License - 詳細は LICENSE ファイルを参照。
@@ -23,7 +23,7 @@
  * NvM_ReadBlock() / NvM_WriteBlock() の第 1 引数に渡す。
  * ----------------------------------------------------------------------- */
 #define NVM_BLOCK_ID_DEM_MAGIC    0U  /**< DEM 有効マーカー (1 byte)         */
-#define NVM_BLOCK_ID_DEM_STATUS   1U  /**< DEM イベントステータス (6 bytes)   */
+#define NVM_BLOCK_ID_DEM_STATUS   1U  /**< DEM イベントステータス (7 bytes)   */
 #define NVM_BLOCK_COUNT           2U  /**< 管理ブロック総数                   */
 
 /* -----------------------------------------------------------------------
@@ -36,6 +36,6 @@
  * ブロックサイズ (bytes)
  * ----------------------------------------------------------------------- */
 #define NVM_BLOCK_DEM_MAGIC_LENGTH    1U  /**< マジックバイト: 1 byte           */
-#define NVM_BLOCK_DEM_STATUS_LENGTH   6U  /**< DEM_EVENT_COUNT = 6 イベント分   */
+#define NVM_BLOCK_DEM_STATUS_LENGTH   7U  /**< DEM_EVENT_COUNT = 7 イベント分   */
 
 #endif /* NVM_CFG_H */
