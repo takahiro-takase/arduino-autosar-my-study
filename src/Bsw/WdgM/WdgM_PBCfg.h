@@ -18,6 +18,19 @@
 #include "WdgM_Cfg.h"
 
 /**
+ * \brief   論理監視 (Logical Supervision) で許可される遷移 1 件
+ * \details AUTOSAR の WdgMCheckpointTransition コンテナに相当する。
+ *          FromCheckpointId から ToCheckpointId への遷移のみを許可する
+ *          有向グラフの辺を表す。FromCheckpointId には WDGM_CP_INITIAL も指定できる
+ *          （起動直後に許可される最初のチェックポイントを表す）。
+ */
+typedef struct
+{
+    uint8 FromCheckpointId;  /**< 遷移元チェックポイント ID（WDGM_CP_INITIAL 可） */
+    uint8 ToCheckpointId;    /**< 遷移先チェックポイント ID */
+} WdgM_TransitionCfgType;
+
+/**
  * \brief   Supervised Entity 1 件の設定
  * \details AUTOSAR の WdgMSupervisedEntity コンテナに相当する。
  */
@@ -26,6 +39,8 @@ typedef struct
     uint8   EntityId;                  /**< エンティティ ID (WDGM_ENTITY_*) */
     uint32  SupervisionCycleMs;        /**< Alive Supervision サイクル時間 (ms) */
     uint8   ExpectedAliveIndications;  /**< サイクル内の最小 Checkpoint 呼び出し回数 */
+    const WdgM_TransitionCfgType* Transitions;    /**< 許可された遷移テーブルの先頭 */
+    uint8                          TransitionCount; /**< 遷移テーブルの要素数 */
 } WdgM_EntityCfgType;
 
 /**
