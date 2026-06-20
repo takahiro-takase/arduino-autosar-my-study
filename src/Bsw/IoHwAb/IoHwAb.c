@@ -161,20 +161,25 @@ void IoHwAb_MainFunction(void)
             s_stuckCounter++;
             if (s_stuckCounter == IOHWAB_BUTTON_STUCK_COUNT)
             {
-                Dem_ReportErrorStatus(DEM_EVENT_BUTTON_STUCK, DEM_EVENT_STATUS_FAILED);
                 DET_LOGW(TAG, "Button stuck dtc=0x%06lX", (unsigned long)DEM_DTC_BUTTON_STUCK);
             }
+        }
+        if (s_stuckCounter >= IOHWAB_BUTTON_STUCK_COUNT)
+        {
+            /* 固着しきい値到達後は毎周期 FAILED を報告し、
+             * 確定判断（デバウンス）は Dem 側に委ねる */
+            Dem_ReportErrorStatus(DEM_EVENT_BUTTON_STUCK, DEM_EVENT_STATUS_FAILED);
         }
     }
     else
     {
         if (s_stuckCounter >= IOHWAB_BUTTON_STUCK_COUNT)
         {
-            /* 固着から解放 → PASSED 報告 */
-            Dem_ReportErrorStatus(DEM_EVENT_BUTTON_STUCK, DEM_EVENT_STATUS_PASSED);
             DET_LOGI(TAG, "Button stuck cleared");
         }
         s_stuckCounter = 0U;
+        /* 固着していない間も毎周期 PASSED を報告し、Dem のデバウンスを進める */
+        Dem_ReportErrorStatus(DEM_EVENT_BUTTON_STUCK, DEM_EVENT_STATUS_PASSED);
     }
 
     /* ADC サンプリング: 生値を mV へ変換し、電圧低下を DEM 報告 */
