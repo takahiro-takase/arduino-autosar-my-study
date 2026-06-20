@@ -107,6 +107,9 @@ void App_EngineManager_Run(void)
     const Std_ReturnType tempRet  = Rte_Read_TempSensor_CoolantTemp(&temp);
     const Std_ReturnType flagRet  = Rte_Read_EngineStatus_EngineOnFlag(&flag);
 
+    /* FreezeFrame 用の現在値を更新（Dem_ReportErrorStatus の FAILED 遷移時にスナップショットされる） */
+    Dem_SetFreezeFrameContext(speed, temp, (uint8)s_state);
+
     /* EngineInfo タイムアウト検出（3 シグナルは同一 I-PDU のため代表値で判定） */
     if (speedRet != E_OK || tempRet != E_OK || flagRet != E_OK)
     {

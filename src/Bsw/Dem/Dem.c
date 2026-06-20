@@ -20,7 +20,8 @@
  *          AUTOSAR 実装との主な違い (学習用簡略化):
  *            - デバウンスカウンタなし (FAILED 即確定)
  *            - 操作サイクル管理なし
- *            - FreezeFrame / ExtendedData 未対応
+ *            - FreezeFrame は RAM のみに保持 (EEPROM 非永続化、電源 OFF で消去)
+ *            - ExtendedData 未対応
  *
  * \copyright  Copyright (c) 2025 T_T
  * \license    MIT License - 詳細は LICENSE ファイルを参照。
@@ -52,6 +53,15 @@ static const uint32 Dem_DtcTable[DEM_EVENT_COUNT] = {
     DEM_DTC_BUTTON_STUCK,            /* event 5 */
     DEM_DTC_ADC_VOLT_LOW             /* event 6 */
 };
+
+/** イベントごとの FreezeFrame (故障時スナップショット)。RAM のみ保持 */
+static Dem_FreezeFrameType Dem_FreezeFrameTable[DEM_EVENT_COUNT];
+
+/** Dem_FreezeFrameTable[i] が有効か (0=未記録, 1=記録あり) */
+static uint8 Dem_FreezeFrameValid[DEM_EVENT_COUNT];
+
+/** SW-C が毎周期更新する「現在値」。FAILED 遷移時にこの値をコピーする */
+static Dem_FreezeFrameType Dem_CurrentContext;
 
 /* -----------------------------------------------------------------------
  * 公開 API
@@ -102,6 +112,15 @@ void Dem_Init(void)
         (void)NvM_WriteBlock(NVM_BLOCK_ID_DEM_MAGIC, &magicVal);
         DET_LOGI(TAG, "Init first-run ev=%u", (unsigned)DEM_EVENT_COUNT);
     }
+
+    /* FreezeFrame は RAM のみで管理するため EEPROM 復元はなく、常に未記録から開始 */
+    for (uint8 i = 0U; i < DEM_EVENT_COUNT; i++)
+    {
+        Dem_FreezeFrameValid[i] = 0U;
+    }
+    Dem_CurrentContext.EngineSpeed = 0U;
+    Dem_CurrentContext.CoolantTemp = 0U;
+    Dem_CurrentContext.EngineState = 0U;
 }
 
 /**
@@ -153,6 +172,21 @@ void Dem_ReportErrorStatus(Dem_EventIdType EventId,
     if (status != prev)
     {
         Dem_StatusTable[EventId] = status;
+
+        if (EventStatus == DEM_EVENT_STATUS_FAILED)
+        {
+            /* FAILED への遷移の瞬間にのみ FreezeFrame を更新する。
+             * (status == prev のときはここに来ないため、既に FAILED の間の
+             *  繰り返し報告で上書きされることはない) */
+            Dem_FreezeFrameTable[EventId] = Dem_CurrentContext;
+            Dem_FreezeFrameValid[EventId] = 1U;
+            DET_LOGI(TAG, "FreezeFrame ev=%u spd=%u tmp=%u st=%u",
+                     (unsigned)EventId,
+                     (unsigned)Dem_CurrentContext.EngineSpeed,
+                     (unsigned)Dem_CurrentContext.CoolantTemp,
+                     (unsigned)Dem_CurrentContext.EngineState);
+        }
+
         (void)NvM_WriteBlock(NVM_BLOCK_ID_DEM_STATUS, Dem_StatusTable);
     }
 }
@@ -252,4 +286,59 @@ void Dem_GetAllDTCs(uint32* dtcBuf, uint8* statusBuf,
             (*count)++;
         }
     }
+}
+
+/**
+ * \brief   FreezeFrame として保存する現在値を更新する。
+ *
+ * \details Dem_ReportErrorStatus() が参照する「現在値」を上書きするだけで、
+ *          この時点では FreezeFrameTable へのコピーは行わない。
+ *
+ * \ServiceID      {0x25}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void Dem_SetFreezeFrameContext(uint16 EngineSpeed, uint8 CoolantTemp, uint8 EngineState)
+{
+    Dem_CurrentContext.EngineSpeed = EngineSpeed;
+    Dem_CurrentContext.CoolantTemp = CoolantTemp;
+    Dem_CurrentContext.EngineState = EngineState;
+}
+
+/**
+ * \brief   指定イベントに保存された FreezeFrame を取得する。
+ *
+ * \ServiceID      {0x26}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType Dem_GetFreezeFrameOfEvent(Dem_EventIdType EventId, Dem_FreezeFrameType* Frame)
+{
+    if (EventId >= DEM_EVENT_COUNT || Frame == NULL || Dem_FreezeFrameValid[EventId] == 0U)
+        return E_NOT_OK;
+    *Frame = Dem_FreezeFrameTable[EventId];
+    return E_OK;
+}
+
+/**
+ * \brief   DTC コード (24-bit) から EventId を逆引きする。
+ *
+ * \ServiceID      {0x27}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType Dem_GetEventIdOfDTC(uint32 DTC, Dem_EventIdType* EventId)
+{
+    if (EventId == NULL)
+        return E_NOT_OK;
+
+    for (uint8 i = 0U; i < DEM_EVENT_COUNT; i++)
+    {
+        if (Dem_DtcTable[i] == DTC)
+        {
+            *EventId = i;
+            return E_OK;
+        }
+    }
+    return E_NOT_OK;
 }

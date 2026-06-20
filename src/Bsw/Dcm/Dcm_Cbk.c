@@ -8,7 +8,7 @@
  *            0x10 DiagnosticSessionControl — Default / Extended セッション切替
  *            0x11 ECUReset               — hardReset / softReset (応答後セッションリセット)
  *            0x14 ClearDiagnosticInformation — 全 DTC クリア
- *            0x19 ReadDTCInformation     — subFunc 0x01/0x02
+ *            0x19 ReadDTCInformation     — subFunc 0x01/0x02/0x04
  *            0x22 ReadDataByIdentifier   — DID 0x0101/0x0102/0x0103
  *            0x3E TesterPresent          — セッション維持
  *
@@ -61,6 +61,7 @@ static void Dcm_HandleClearDtc(const uint8* uds, uint8 udsLen);
 static void Dcm_HandleReadDtcInfo(const uint8* uds, uint8 udsLen);
 static void Dcm_HandleReadDtcCount(const uint8* uds, uint8 udsLen);
 static void Dcm_HandleReadDtcByMask(const uint8* uds, uint8 udsLen);
+static void Dcm_HandleReadDtcSnapshot(const uint8* uds, uint8 udsLen);
 static void Dcm_HandleReadDataById(const uint8* uds, uint8 udsLen);
 static void Dcm_HandleTesterPresent(const uint8* uds, uint8 udsLen);
 static Std_ReturnType Dcm_ReadDid(uint16 did, uint8* buf, uint8* dataLen);
@@ -348,11 +349,78 @@ static void Dcm_HandleReadDtcByMask(const uint8* uds, uint8 udsLen)
 }
 
 /**
+ * \brief   SID 0x19 subFunc 0x04 reportDTCSnapshotRecordByDTCNumber を処理する。
+ *
+ * \details 要求された DTC に一致する FreezeFrame を Dem から取得し、
+ *          EngineSpeed (DID 0x0101) / CoolantTemp (0x0102) / EngineState (0x0103)
+ *          の 3 DID 固定フォーマットで返す。
+ *          本実装はレコード番号 0x01 のみ対応する（イベントごとに 1 スナップショット）。
+ *          応答は 18 バイトで SF の 7 バイト制限を超えるため、CanTp が FF+CF に分割する。
+ *
+ *          要求: [0x19, 0x04, DTC_H, DTC_M, DTC_L, recordNumber]
+ *          応答: [0x59, 0x04, DTC_H, DTC_M, DTC_L, status, recordNumber, numDID,
+ *                 DID1_H, DID1_L, EngineSpeed_H, EngineSpeed_L,
+ *                 DID2_H, DID2_L, CoolantTemp,
+ *                 DID3_H, DID3_L, EngineState]
+ *
+ * \param[in]  uds     UDS ペイロード先頭ポインタ。
+ * \param[in]  udsLen  UDS ペイロード長。
+ */
+static void Dcm_HandleReadDtcSnapshot(const uint8* uds, uint8 udsLen)
+{
+    if (udsLen < 6U)
+    {
+        Dcm_SendNegativeResponse(DCM_SID_READ_DTC_INFO, DCM_NRC_CONDITIONS_NOT_CORRECT);
+        return;
+    }
+
+    uint32 dtc          = ((uint32)uds[2] << 16U) | ((uint32)uds[3] << 8U) | (uint32)uds[4];
+    uint8  recordNumber = uds[5];
+
+    Dem_EventIdType     eventId = 0U;
+    Dem_FreezeFrameType frame;
+
+    if (Dem_GetEventIdOfDTC(dtc, &eventId) != E_OK
+        || recordNumber != DCM_FREEZEFRAME_RECORD_NUMBER
+        || Dem_GetFreezeFrameOfEvent(eventId, &frame) != E_OK)
+    {
+        /* DTC 不明・レコード番号不一致・FreezeFrame 未記録 (一度も FAILED していない) */
+        Dcm_SendNegativeResponse(DCM_SID_READ_DTC_INFO, DCM_NRC_REQUEST_OUT_OF_RANGE);
+        return;
+    }
+
+    DET_LOGI(TAG, "19/04 dtc=0x%06lX rec=%u", (unsigned long)dtc, (unsigned)recordNumber);
+
+    Dcm_TxBuf[0]  = 0x59U;                              /* SID 0x19 + 0x40 */
+    Dcm_TxBuf[1]  = DCM_DTC_SUBFUNC_REPORT_SNAPSHOT;
+    Dcm_TxBuf[2]  = (uint8)(dtc >> 16U);
+    Dcm_TxBuf[3]  = (uint8)(dtc >>  8U);
+    Dcm_TxBuf[4]  = (uint8)(dtc);
+    Dcm_TxBuf[5]  = Dem_GetStatusOfEvent(eventId);
+    Dcm_TxBuf[6]  = recordNumber;
+    Dcm_TxBuf[7]  = DCM_FREEZEFRAME_DID_COUNT;
+    Dcm_TxBuf[8]  = (uint8)(DCM_DID_ENGINE_SPEED >> 8U);
+    Dcm_TxBuf[9]  = (uint8)(DCM_DID_ENGINE_SPEED & 0xFFU);
+    Dcm_TxBuf[10] = (uint8)(frame.EngineSpeed >> 8U);
+    Dcm_TxBuf[11] = (uint8)(frame.EngineSpeed & 0xFFU);
+    Dcm_TxBuf[12] = (uint8)(DCM_DID_COOLANT_TEMP >> 8U);
+    Dcm_TxBuf[13] = (uint8)(DCM_DID_COOLANT_TEMP & 0xFFU);
+    Dcm_TxBuf[14] = frame.CoolantTemp;
+    Dcm_TxBuf[15] = (uint8)(DCM_DID_ENGINE_STATE >> 8U);
+    Dcm_TxBuf[16] = (uint8)(DCM_DID_ENGINE_STATE & 0xFFU);
+    Dcm_TxBuf[17] = frame.EngineState;
+    Dcm_TxPdu.SduLength = 18U;
+
+    Dcm_Transmit();
+}
+
+/**
  * \brief   UDS 0x19 ReadDTCInformation のサブ機能をディスパッチする。
  *
  * \details 対応サブ機能:
- *            0x01 reportNumberOfDTCByStatusMask → Dcm_HandleReadDtcCount()
- *            0x02 reportDTCByStatusMask         → Dcm_HandleReadDtcByMask()
+ *            0x01 reportNumberOfDTCByStatusMask         → Dcm_HandleReadDtcCount()
+ *            0x02 reportDTCByStatusMask                 → Dcm_HandleReadDtcByMask()
+ *            0x04 reportDTCSnapshotRecordByDTCNumber    → Dcm_HandleReadDtcSnapshot()
  *
  * \param[in]  uds     UDS ペイロード先頭ポインタ。
  * \param[in]  udsLen  UDS ペイロード長。
@@ -374,6 +442,9 @@ static void Dcm_HandleReadDtcInfo(const uint8* uds, uint8 udsLen)
         break;
     case DCM_DTC_SUBFUNC_REPORT_BY_MASK:
         Dcm_HandleReadDtcByMask(uds, udsLen);
+        break;
+    case DCM_DTC_SUBFUNC_REPORT_SNAPSHOT:
+        Dcm_HandleReadDtcSnapshot(uds, udsLen);
         break;
     default:
         Dcm_SendNegativeResponse(DCM_SID_READ_DTC_INFO, DCM_NRC_SUB_FUNC_NOT_SUPPORTED);
