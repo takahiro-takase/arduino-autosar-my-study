@@ -29,21 +29,23 @@
 #define BSWM_OS_TASK_COM_MAIN       5U  /**< Com_MainFunction     (100 ms)  */
 #define BSWM_OS_TASK_IOHWAB_MAIN    6U  /**< IoHwAb_MainFunction  (10 ms)   */
 #define BSWM_OS_TASK_WDGM_MAIN      7U  /**< WdgM_MainFunction    (6000 ms) */
+#define BSWM_OS_TASK_DCM_MAIN       8U  /**< Dcm_MainFunction     (1000 ms) */
 
 /* -----------------------------------------------------------------------
  * タスクビットマスク (1ビット = 1タスク; ビット位置 = タスク ID)
+ * タスク数が 8 を超えるため uint16 を使用する。
  * ----------------------------------------------------------------------- */
 
-/** 全タスク (bits 0〜7) */
-#define BSWM_TASK_MASK_ALL  0xFFU
+/** 全タスク (bits 0〜8) */
+#define BSWM_TASK_MASK_ALL  0x1FFU
 
 /** アプリ Runnable タスク: RTE_ENGINE + RTE_WARNING
  *  POST_RUN 時に停止し、アプリロジックを凍結する */
-#define BSWM_TASK_MASK_APP  ((uint8)((1U << BSWM_OS_TASK_RTE_ENGINE) | \
-                                     (1U << BSWM_OS_TASK_RTE_WARNING)))
+#define BSWM_TASK_MASK_APP  ((uint16)((1U << BSWM_OS_TASK_RTE_ENGINE) | \
+                                      (1U << BSWM_OS_TASK_RTE_WARNING)))
 
 /** BSW タスク = ALL & ~APP (後処理・診断・CAN 受信を継続するため残す) */
-#define BSWM_TASK_MASK_BSW  ((uint8)(BSWM_TASK_MASK_ALL & (uint8)(~BSWM_TASK_MASK_APP)))
+#define BSWM_TASK_MASK_BSW  ((uint16)(BSWM_TASK_MASK_ALL & (uint16)(~BSWM_TASK_MASK_APP)))
 
 /* -----------------------------------------------------------------------
  * ルール数

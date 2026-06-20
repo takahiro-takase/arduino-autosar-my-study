@@ -14,6 +14,7 @@
  *            Task 5: Com_MainFunction             100 ms  — RX 受信デッドライン監視
  *            Task 6: IoHwAb_MainFunction           10 ms  — ボタンデバウンスサンプリング
  *            Task 7: WdgM_MainFunction           6000 ms  — Alive Supervision 評価
+ *            Task 8: Dcm_MainFunction            1000 ms  — S3 セッションタイムアウト監視
  *
  *          周期の根拠:
  *            Can_Isr / CanTp_MainFunction は CAN フレーム到着の応答性と
@@ -43,6 +44,7 @@ extern void CanSM_MainFunction(void);
 extern void Com_MainFunction(void);
 extern void IoHwAb_MainFunction(void);
 extern void WdgM_MainFunction(void);
+extern void Dcm_MainFunction(void);
 
 /* -----------------------------------------------------------------------
  * タスクテーブル
@@ -58,7 +60,8 @@ static const Os_TaskType Os_TaskTable[OS_TASK_COUNT] =
     /* Task 4 */ { CanSM_MainFunction,           10U   },  /* 10 ms   : BusOff 回復タイマ監視     */
     /* Task 5 */ { Com_MainFunction,             100U  },  /* 100 ms  : COM 受信デッドライン監視  */
     /* Task 6 */ { IoHwAb_MainFunction,          10U   },  /* 10 ms   : ボタンデバウンスサンプリング */
-    /* Task 7 */ { WdgM_MainFunction,            6000U }   /* 6000 ms : Alive Supervision 評価    */
+    /* Task 7 */ { WdgM_MainFunction,            6000U },  /* 6000 ms : Alive Supervision 評価    */
+    /* Task 8 */ { Dcm_MainFunction,             1000U }   /* 1000 ms : S3 セッションタイムアウト監視 */
 };
 
 /* -----------------------------------------------------------------------

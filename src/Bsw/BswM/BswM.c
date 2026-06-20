@@ -62,13 +62,13 @@ static void BswM_ExecuteRules(BswM_ModeSrcType src, uint8 newValue)
         if ((rule->ModeSrc != src) || (rule->ModeValue != newValue))
             continue;
 
-        DET_LOGI(TAG, "Rule%u fired src=%u val=0x%02X act=%u mask=0x%02X",
+        DET_LOGI(TAG, "Rule%u fired src=%u val=0x%02X act=%u mask=0x%03X",
                  (unsigned)i, (unsigned)src, (unsigned)newValue,
                  (unsigned)rule->Action, (unsigned)rule->TaskMask);
 
         for (uint8 t = 0U; t < OS_TASK_COUNT; t++)
         {
-            if ((rule->TaskMask & (uint8)(1U << t)) == 0U)
+            if ((rule->TaskMask & (uint16)(1U << t)) == 0U)
                 continue;
 
             Os_SetTaskActive(t, (rule->Action == BSWM_ACTION_ACTIVATE) ? 1U : 0U);

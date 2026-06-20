@@ -11,10 +11,14 @@
  *            0x14 ClearDiagnosticInformation (groupOfDTC=0xFFFFFF)
  *            0x19 ReadDTCInformation (subFunc 0x01/0x02/0x04) — マルチフレーム対応
  *            0x22 ReadDataByIdentifier (DID 0x0101-0x0103)
- *            0x3E TesterPresent
+ *            0x3E TesterPresent (S3 タイマ維持)
  *
  *          ISO 15765-2 (CAN TP) トランスポート層は CanTp モジュールが担当する。
  *          本モジュールは PCI バイトを含まない生 UDS ペイロードのみを扱う。
+ *
+ *          S3 タイマ: defaultSession 以外の間、診断要求が DCM_S3_TIMEOUT_MS
+ *          (既定 5000ms) 以上途絶えると defaultSession へ自動復帰する。
+ *          Dcm_MainFunction() が周期的に監視する。
  *
  * \copyright  Copyright (c) 2025 T_T
  * \license    MIT License - 詳細は LICENSE ファイルを参照。
@@ -30,6 +34,10 @@
  * ----------------------------------------------------------------------- */
 #define DCM_SESSION_DEFAULT   0x01U  /**< defaultSession          */
 #define DCM_SESSION_EXTENDED  0x03U  /**< extendedDiagnosticSession */
+
+/** S3 タイマ (ISO 14229-1): defaultSession 以外で、この時間内に診断要求が
+ *  1 件も来なければ defaultSession へ自動遷移する。Dcm_MainFunction が監視する。 */
+#define DCM_S3_TIMEOUT_MS  5000UL
 
 /* -----------------------------------------------------------------------
  * UDS サービス識別子 (ISO 14229-1 Table 3)
