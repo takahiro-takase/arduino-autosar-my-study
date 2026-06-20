@@ -34,6 +34,19 @@ extern "C" {
  */
 void Dcm_Init(void);
 
+/**
+ * \brief   DCM 周期処理。S3 タイマ (セッションタイムアウト) を監視する。
+ *
+ * \details defaultSession 以外のとき、最後に診断要求を受信してから
+ *          DCM_S3_TIMEOUT_MS 以上経過していれば defaultSession へ復帰させる。
+ *          Os タスクテーブルから周期的に呼び出すこと。
+ *
+ * \ServiceID      {0x02}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void Dcm_MainFunction(void);
+
 #ifdef __cplusplus
 }
 #endif

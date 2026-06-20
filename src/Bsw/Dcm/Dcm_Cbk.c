@@ -10,11 +10,17 @@
  *            0x14 ClearDiagnosticInformation — 全 DTC クリア
  *            0x19 ReadDTCInformation     — subFunc 0x01/0x02/0x04
  *            0x22 ReadDataByIdentifier   — DID 0x0101/0x0102/0x0103
- *            0x3E TesterPresent          — セッション維持
+ *            0x3E TesterPresent          — セッション維持 (S3 タイマリセット)
  *
  *          ISO 15765-2 (CAN TP) は CanTp モジュールが担当する。
  *          本モジュールは UDS ペイロード (PCI バイトなし) のみを扱う。
  *          マルチフレーム対応により SID 0x19/02 は複数 DTC を一度に返せる。
+ *
+ *          S3 タイマ:
+ *            defaultSession 以外の間、Dcm_ComIndication() が呼ばれるたびに
+ *            最終活動時刻を更新する (TesterPresent に限らず全サービスが対象)。
+ *            Dcm_MainFunction() が周期的に経過時間を確認し、
+ *            DCM_S3_TIMEOUT_MS 以上要求が来なければ defaultSession へ復帰する。
  *
  *          応答送信フロー:
  *            Dcm → CanTp_Transmit(CANTP_TX_SDU_ID) → PduR_Transmit → CanIf
@@ -34,6 +40,9 @@
 #include "Rte.h"
 #include "Det.h"
 
+/* millis() is declared in Arduino wiring.c with C linkage. */
+extern unsigned long millis(void);
+
 #define TAG "Dcm"
 
 /* -----------------------------------------------------------------------
@@ -42,6 +51,9 @@
 
 /** 現在の診断セッション (DCM_SESSION_DEFAULT / DCM_SESSION_EXTENDED) */
 static uint8 Dcm_CurrentSession;
+
+/** 最後に診断要求を受信した時刻 (S3 タイマの基準点) */
+static unsigned long Dcm_LastActivityMs;
 
 /** UDS 応答バッファ (PCI バイトなし; CanTp がトランスポート層を付加する)
  *  最大サイズ: 0x19/02 応答 (6 DTC) = 3 + 6×4 = 27 バイト → 32 バイトで余裕を持たせる */
@@ -85,7 +97,31 @@ void Dcm_Init(void)
     Dcm_CurrentSession   = DCM_SESSION_DEFAULT;
     Dcm_TxPdu.SduDataPtr = Dcm_TxBuf;
     Dcm_TxPdu.SduLength  = 0U;   /* 各ハンドラで送信長を設定する */
+    Dcm_LastActivityMs   = millis();
     DET_LOGI(TAG, "Init ok");
+}
+
+/**
+ * \brief   DCM 周期処理。S3 タイマ (セッションタイムアウト) を監視する。
+ *
+ * \details defaultSession 中は何もしない。それ以外の間、最後に診断要求を
+ *          受信してから DCM_S3_TIMEOUT_MS 以上経過していれば
+ *          defaultSession へ復帰させる (ISO 14229-1 の S3 タイマに相当)。
+ *
+ * \ServiceID      {0x02}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void Dcm_MainFunction(void)
+{
+    if (Dcm_CurrentSession == DCM_SESSION_DEFAULT)
+        return;
+
+    if ((millis() - Dcm_LastActivityMs) >= DCM_S3_TIMEOUT_MS)
+    {
+        DET_LOGI(TAG, "S3 timeout -> session=Default");
+        Dcm_CurrentSession = DCM_SESSION_DEFAULT;
+    }
 }
 
 /* -----------------------------------------------------------------------
@@ -601,6 +637,9 @@ void Dcm_ComIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
     const uint8* uds    = PduInfoPtr->SduDataPtr;
     uint8        udsLen = (uint8)PduInfoPtr->SduLength;
     uint8        sid    = uds[0];
+
+    /* 診断要求を受信した時点で S3 タイマをリセットする（NRC になる要求も対象） */
+    Dcm_LastActivityMs = millis();
 
     DET_LOGI(TAG, "req SID=0x%02X", (unsigned)sid);
 

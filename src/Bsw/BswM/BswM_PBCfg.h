@@ -57,7 +57,7 @@ typedef struct
     BswM_ModeSrcType  ModeSrc;    /**< トリガとなるモードのソース */
     uint8             ModeValue;  /**< トリガとなるモード値 */
     BswM_ActionType   Action;     /**< 実行するアクション */
-    uint8             TaskMask;   /**< 操作対象タスクのビットマスク */
+    uint16            TaskMask;   /**< 操作対象タスクのビットマスク (9 タスク分) */
 } BswM_RuleType;
 
 /**
