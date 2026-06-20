@@ -11,14 +11,25 @@
  *              NVM_BLOCK_ID_DEM_MAGIC  — 有効データマーカー (1 byte)
  *              NVM_BLOCK_ID_DEM_STATUS — イベントステータステーブル (7 bytes)
  *
+ *          デバウンス (counter-based debouncing):
+ *            各イベントは -DEM_DEBOUNCE_LIMIT 〜 +DEM_DEBOUNCE_LIMIT のカウンタを持つ。
+ *            FAILED 報告でカウンタ+1、PASSED 報告でカウンタ-1 (上下限でクランプ)。
+ *            カウンタが +LIMIT に達した瞬間にのみ DTC ステータスを確定 FAILED にし、
+ *            -LIMIT に達した瞬間にのみ確定 PASSED にする。
+ *            その間 (PRE-FAILED / PRE-PASSED) は DTC ステータスビットを変更しない。
+ *            1 回の報告では確定しないため、単発の事象は DTC を確定させない
+ *            （実車の「数サイクル/数回の再現で確定」という挙動の簡易再現）。
+ *
  *          DTC ライフサイクル:
  *            報告なし → TNCLC=1, TNCTOC=1 (未テスト状態)
- *            PASSED 報告 → TF クリア (CDTC は保持)
- *            FAILED 報告 → TF=1, PDTC=1, CDTC=1, TFSLC=1 (NvM 経由で保存)
+ *            PASSED デバウンス確定 → TF クリア (CDTC は保持)
+ *            FAILED デバウンス確定 → TF=1, PDTC=1, CDTC=1, TFSLC=1 (NvM 経由で保存)
  *            ClearDTC 後 → 全ビットリセット, TNCLC=1
  *
  *          AUTOSAR 実装との主な違い (学習用簡略化):
- *            - デバウンスカウンタなし (FAILED 即確定)
+ *            - 全イベント共通の単一デバウンス閾値 (実車は DemDebounceAlgorithmClass で
+ *              イベントごとに個別設定可能)
+ *            - デバウンスカウンタは RAM のみ保持 (電源 OFF でリセット)
  *            - 操作サイクル管理なし
  *            - FreezeFrame は RAM のみに保持 (EEPROM 非永続化、電源 OFF で消去)
  *            - ExtendedData 未対応
@@ -62,6 +73,9 @@ static uint8 Dem_FreezeFrameValid[DEM_EVENT_COUNT];
 
 /** SW-C が毎周期更新する「現在値」。FAILED 遷移時にこの値をコピーする */
 static Dem_FreezeFrameType Dem_CurrentContext;
+
+/** イベントごとのデバウンスカウンタ (-DEM_DEBOUNCE_LIMIT〜+DEM_DEBOUNCE_LIMIT, 0=中立) */
+static sint8 Dem_DebounceCounter[DEM_EVENT_COUNT];
 
 /* -----------------------------------------------------------------------
  * 公開 API
@@ -113,10 +127,12 @@ void Dem_Init(void)
         DET_LOGI(TAG, "Init first-run ev=%u", (unsigned)DEM_EVENT_COUNT);
     }
 
-    /* FreezeFrame は RAM のみで管理するため EEPROM 復元はなく、常に未記録から開始 */
+    /* FreezeFrame・デバウンスカウンタは RAM のみで管理するため EEPROM 復元はなく、
+     * 常に未記録/中立 (0) から開始する */
     for (uint8 i = 0U; i < DEM_EVENT_COUNT; i++)
     {
-        Dem_FreezeFrameValid[i] = 0U;
+        Dem_FreezeFrameValid[i]  = 0U;
+        Dem_DebounceCounter[i]   = 0;
     }
     Dem_CurrentContext.EngineSpeed = 0U;
     Dem_CurrentContext.CoolantTemp = 0U;
@@ -124,12 +140,17 @@ void Dem_Init(void)
 }
 
 /**
- * \brief   イベントの発生/消滅を DEM に通知する。
+ * \brief   イベントの発生/消滅を DEM に通知する (モニタからの生のテスト結果)。
  *
- * \details FAILED 通知で DTC ステータスの TF/TFTOC/PDTC/CDTC/TFSLC を設定し
- *          NvM_WriteBlock() でステータステーブル全体を永続化する。
- *          PASSED 通知で TF/TFTOC/TNCTOC をクリアするが CDTC/TFSLC は保持する。
- *          ステータスが変化した場合のみ NvM 書き込みを行う。
+ * \details FAILED/PASSED の生の報告をそのまま確定はせず、まずデバウンスカウンタを
+ *          ±1 する。カウンタが ±DEM_DEBOUNCE_LIMIT に達した瞬間にのみ、
+ *          DTC ステータスの TF/TFTOC/PDTC/CDTC/TFSLC を確定し
+ *          NvM_WriteBlock() でステータステーブル全体を永続化する
+ *          (FAILED 確定時は併せて FreezeFrame も更新する)。
+ *          まだ閾値に達していない間 (PRE-FAILED / PRE-PASSED) は
+ *          DTC ステータスビットを変更しない。
+ *          DEM_EVENT_STATUS_PREPASSED / PREFAILED はモニタからの入力としては
+ *          受け付けない（Dem が内部カウンタから導出する値のため）。
  *
  * \param[in]  EventId      イベント ID (DEM_EVENT_* 定数)。
  * \param[in]  EventStatus  DEM_EVENT_STATUS_FAILED または DEM_EVENT_STATUS_PASSED。
@@ -143,12 +164,43 @@ void Dem_ReportErrorStatus(Dem_EventIdType EventId,
 {
     if (EventId >= DEM_EVENT_COUNT)
         return;
+    if (EventStatus != DEM_EVENT_STATUS_FAILED && EventStatus != DEM_EVENT_STATUS_PASSED)
+        return;
+
+    const sint8 prevCounter = Dem_DebounceCounter[EventId];
+    sint8 counter = prevCounter;
+
+    if (EventStatus == DEM_EVENT_STATUS_FAILED)
+    {
+        if (counter < DEM_DEBOUNCE_LIMIT)
+            counter++;
+    }
+    else /* DEM_EVENT_STATUS_PASSED */
+    {
+        if (counter > -DEM_DEBOUNCE_LIMIT)
+            counter--;
+    }
+
+    if (counter == prevCounter)
+    {
+        /* カウンタが上下限で飽和済み（既に確定済みの状態が継続）: 変化なしのため何もしない。
+         * これにより、確定後も毎サイクル報告され続けるイベント（BUTTON_STUCK 等）で
+         * 同じデバウンスログが繰り返し出力されることを防ぐ。 */
+        return;
+    }
+    Dem_DebounceCounter[EventId] = counter;
+
+    const uint8 wasFailedConfirmed = (prevCounter >= DEM_DEBOUNCE_LIMIT)  ? 1U : 0U;
+    const uint8 wasPassedConfirmed = (prevCounter <= -DEM_DEBOUNCE_LIMIT) ? 1U : 0U;
+    const uint8 nowFailedConfirmed = (counter     >= DEM_DEBOUNCE_LIMIT)  ? 1U : 0U;
+    const uint8 nowPassedConfirmed = (counter     <= -DEM_DEBOUNCE_LIMIT) ? 1U : 0U;
 
     uint8 prev   = Dem_StatusTable[EventId];
     uint8 status = prev;
 
-    if (EventStatus == DEM_EVENT_STATUS_FAILED)
+    if (nowFailedConfirmed && !wasFailedConfirmed)
     {
+        /* デバウンス確定: FAILED */
         status |=  DEM_STATUS_TEST_FAILED;
         status |=  DEM_STATUS_TF_THIS_OP_CYCLE;
         status |=  DEM_STATUS_PENDING;
@@ -160,12 +212,21 @@ void Dem_ReportErrorStatus(Dem_EventIdType EventId,
         DET_LOGW(TAG, "FAILED ev=%u dtc=0x%06lX",
                  (unsigned)EventId, (unsigned long)Dem_DtcTable[EventId]);
     }
-    else if (EventStatus == DEM_EVENT_STATUS_PASSED)
+    else if (nowPassedConfirmed && !wasPassedConfirmed)
     {
+        /* デバウンス確定: PASSED */
         status &= (uint8)(~DEM_STATUS_TEST_FAILED);
         status &= (uint8)(~DEM_STATUS_TF_THIS_OP_CYCLE);
         status &= (uint8)(~DEM_STATUS_NOT_COMPLETED_THIS_CYCLE);
         /* CDTC / PDTC / TFSLC は保持 — SID 0x14 でのみクリア可能 */
+    }
+    else
+    {
+        /* PRE-FAILED / PRE-PASSED: まだ確定していないため DTC ステータスは変更しない */
+        DET_LOGD(TAG, "ev=%u debounce=%d (%s)",
+                 (unsigned)EventId, (int)counter,
+                 (counter > 0) ? "PREFAILED" : (counter < 0) ? "PREPASSED" : "neutral");
+        return;
     }
 
     /* ステータスが変化した場合のみ NvM (EEPROM) を更新 */
@@ -173,11 +234,9 @@ void Dem_ReportErrorStatus(Dem_EventIdType EventId,
     {
         Dem_StatusTable[EventId] = status;
 
-        if (EventStatus == DEM_EVENT_STATUS_FAILED)
+        if (nowFailedConfirmed)
         {
-            /* FAILED への遷移の瞬間にのみ FreezeFrame を更新する。
-             * (status == prev のときはここに来ないため、既に FAILED の間の
-             *  繰り返し報告で上書きされることはない) */
+            /* デバウンス確定 FAILED の瞬間にのみ FreezeFrame を更新する */
             Dem_FreezeFrameTable[EventId] = Dem_CurrentContext;
             Dem_FreezeFrameValid[EventId] = 1U;
             DET_LOGI(TAG, "FreezeFrame ev=%u spd=%u tmp=%u st=%u",

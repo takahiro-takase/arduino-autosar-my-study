@@ -37,15 +37,17 @@ typedef uint8 Dem_EventIdType;
 /**
  * \brief   イベントステータス型 (AUTOSAR SWS_Dem_00586)
  *
- * PASSED / FAILED のみ実装する。
- * PRE* はデバウンスカウンタが必要なため本実装の範囲外。
+ * モニタ（呼び出し元）は PASSED / FAILED の生のテスト結果のみを報告する。
+ * PREPASSED / PREFAILED は Dem 内部のデバウンスカウンタが未確定の間の状態を表す
+ * 値であり、Dem_ReportErrorStatus() への入力としては受け付けない
+ * （Dem が内部で導出し、ログ出力にのみ使用する）。
  */
 typedef enum
 {
-    DEM_EVENT_STATUS_PASSED    = 0U,  /**< テスト合格 — TF ビットをクリア           */
-    DEM_EVENT_STATUS_FAILED    = 1U,  /**< テスト失敗 — DTC を記録・EEPROM 保存     */
-    DEM_EVENT_STATUS_PREPASSED = 2U,  /**< 合格中 (デバウンス) — 本実装では未対応   */
-    DEM_EVENT_STATUS_PREFAILED = 3U   /**< 失敗中 (デバウンス) — 本実装では未対応   */
+    DEM_EVENT_STATUS_PASSED    = 0U,  /**< テスト合格 (モニタが報告する生の結果)      */
+    DEM_EVENT_STATUS_FAILED    = 1U,  /**< テスト失敗 (モニタが報告する生の結果)      */
+    DEM_EVENT_STATUS_PREPASSED = 2U,  /**< デバウンス中 (PASSED 方向、未確定)         */
+    DEM_EVENT_STATUS_PREFAILED = 3U   /**< デバウンス中 (FAILED 方向、未確定)         */
 } Dem_EventStatusType;
 
 /**
@@ -82,13 +84,15 @@ typedef struct
 void Dem_Init(void);
 
 /**
- * \brief   イベントの発生/消滅を DEM に通知する。
- * \details FAILED 通知で DTC ステータスの TF/PDTC/CDTC/TFSLC を設定し
- *          EEPROM へ書き込む。PASSED 通知で TF をクリアするが CDTC は保持する。
- *          ステータスが変化した場合のみ EEPROM を更新する。
+ * \brief   イベントの発生/消滅を DEM に通知する (モニタからの生のテスト結果)。
+ * \details FAILED/PASSED の報告でデバウンスカウンタを ±1 し、カウンタが
+ *          ±DEM_DEBOUNCE_LIMIT に達した瞬間にのみ DTC ステータス
+ *          (TF/PDTC/CDTC/TFSLC) を確定して EEPROM へ書き込む。
+ *          1 回の報告だけでは確定しない（学習用の counter-based debouncing）。
  *
  * \param[in]  EventId      イベント ID (DEM_EVENT_* 定数)。
  * \param[in]  EventStatus  DEM_EVENT_STATUS_FAILED または DEM_EVENT_STATUS_PASSED。
+ *                          PREPASSED / PREFAILED は受け付けない。
  *
  * \ServiceID      {0x0F}
  * \Reentrancy     {Non Reentrant}
