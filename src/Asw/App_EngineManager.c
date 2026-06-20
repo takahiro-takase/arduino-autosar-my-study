@@ -100,6 +100,9 @@ void App_EngineManager_Run(void)
     EngineOnFlag_t flag       = 0U;
     uint8          btnPressed = 0U;
 
+    /* Runnable 開始を WdgM へ報告 (Logical Supervision チェックポイント) */
+    (void)WdgM_CheckpointReached(WDGM_ENTITY_ENGINE, WDGM_CP_ENGINE_START);
+
     /* ボタン状態読み取り（GPIO 入力: CAN 通信と独立して常に取得可能）*/
     (void)Rte_Call_Button_GetLevel(&btnPressed);
 
@@ -154,8 +157,8 @@ void App_EngineManager_Run(void)
         DET_LOGD(TAG, "ADC=%umV", (unsigned)adcMv);
     }
 
-    /* Runnable 実行完了を WdgM へ報告 (Alive Supervision チェックポイント) */
-    (void)WdgM_CheckpointReached(WDGM_ENTITY_ENGINE);
+    /* Runnable 実行完了を WdgM へ報告 (Alive + Logical Supervision チェックポイント) */
+    (void)WdgM_CheckpointReached(WDGM_ENTITY_ENGINE, WDGM_CP_ENGINE_END);
 }
 
 /**

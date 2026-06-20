@@ -1,7 +1,7 @@
 /**
  * \file    WdgM_Cfg.h
  * \brief   ウォッチドッグマネージャ プリコンパイル設定 (AUTOSAR SWS_WdgM 準拠)
- * \details WdgM が監視する Supervised Entity と Alive Supervision パラメータを定義する。
+ * \details WdgM が監視する Supervised Entity と Alive/Logical Supervision パラメータを定義する。
  *
  *          Alive Supervision の仕組み:
  *            WdgM_MainFunction が WDGM_SUPERVISION_CYCLE_MS ごとに呼ばれるとき、
@@ -9,9 +9,17 @@
  *            WDGM_EXPECTED_ALIVE_INDICATIONS 回以上呼んでいれば OK、
  *            0 回（下回った）ならば FAILED とみなす。
  *
+ *          Logical Supervision の仕組み:
+ *            WdgM_CheckpointReached() が呼ばれるたびに、直前に報告された
+ *            チェックポイントからの遷移が許可テーブル (WdgM_PBCfg.c の
+ *            WdgM_TransitionCfgType 配列) に含まれるか即座に確認する。
+ *            許可されない遷移（順序違反）が来た場合は即座に FAILED と判定する。
+ *
  *          Supervised Entity:
  *            WDGM_ENTITY_ENGINE — App_EngineManager_Run (3000ms 周期)
- *              監視サイクル 6000ms の間に 1 回以上 CheckpointReached が来ることを期待する。
+ *              Alive  : 監視サイクル 6000ms の間に 1 回以上 CheckpointReached が来ることを期待する。
+ *              Logical: WDGM_CP_ENGINE_START → WDGM_CP_ENGINE_END → (次サイクルの) START
+ *                       の順序のみを許可する。
  *
  * \copyright  Copyright (c) 2025 T_T
  * \license    MIT License - 詳細は LICENSE ファイルを参照。
@@ -35,5 +43,18 @@
 
 /** サイクル内に期待する CheckpointReached 呼び出し最小回数 */
 #define WDGM_EXPECTED_ALIVE_INDICATIONS  1U
+
+/* -----------------------------------------------------------------------
+ * 論理監視 (Logical Supervision) チェックポイント ID
+ * Entity 0 (App_EngineManager_Run) のプログラムフロー上の 2 点を表す。
+ * ----------------------------------------------------------------------- */
+/** Run() 開始直後（RTE 読み取り前）に到達するチェックポイント */
+#define WDGM_CP_ENGINE_START  0U
+/** Run() 終了直前（CAN 送信後）に到達するチェックポイント */
+#define WDGM_CP_ENGINE_END    1U
+
+/** 「まだ一度もチェックポイントが来ていない」ことを示す遷移元の特別値。
+ *  起動直後のみ有効な遷移元として許可テーブルに登場する。 */
+#define WDGM_CP_INITIAL       0xFFU
 
 #endif /* WDGM_CFG_H */

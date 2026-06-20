@@ -1,7 +1,7 @@
 /**
  * \file    WdgM.c
  * \brief   ウォッチドッグマネージャ 実装 (AUTOSAR SWS_WdgM 準拠)
- * \details Supervised Entity の Alive Supervision を管理する。
+ * \details Supervised Entity の Alive Supervision / Logical Supervision を管理する。
  *
  *          Alive Supervision アルゴリズム:
  *            1. 監視対象 Runnable が WdgM_CheckpointReached() を呼ぶたびに
@@ -11,6 +11,15 @@
  *               - 満たす → LOCAL_STATUS_OK: 正常継続
  *               - 満たさない → LOCAL_STATUS_FAILED: WARN ログ出力
  *            3. 検査後カウンタを 0 にリセットし次サイクルを開始する。
+ *
+ *          Logical Supervision アルゴリズム:
+ *            1. WdgM_CheckpointReached(SEID, CheckpointId) が呼ばれるたびに、
+ *               WdgM_LastCheckpoint[SEID]（直前のチェックポイント）から
+ *               今回の CheckpointId への遷移が許可遷移テーブル
+ *               (WdgM_PBCfg.c の Transitions[]) に含まれるかを即座に確認する。
+ *            2. 含まれない場合は LOCAL_STATUS_FAILED にして WARN ログを出力する
+ *               (MainFunction の周期を待たず即時検出)。
+ *            3. WdgM_LastCheckpoint[SEID] を今回の CheckpointId に更新する。
  *
  *          失敗時のアクション (本プロジェクト):
  *            WARN ログで通知する。
@@ -41,6 +50,9 @@ static uint8 WdgM_AliveCount[WDGM_SUPERVISED_ENTITY_COUNT];
 /** エンティティごとのローカルステータス */
 static WdgM_LocalStatusType WdgM_LocalStatus[WDGM_SUPERVISED_ENTITY_COUNT];
 
+/** エンティティごとの直前のチェックポイント ID (Logical Supervision 用) */
+static uint8 WdgM_LastCheckpoint[WDGM_SUPERVISED_ENTITY_COUNT];
+
 /* -----------------------------------------------------------------------
  * 公開 API
  * ----------------------------------------------------------------------- */
@@ -59,8 +71,9 @@ void WdgM_Init(const WdgM_ConfigType* ConfigPtr)
     WdgM_Cfg = ConfigPtr;
     for (uint8 i = 0U; i < ConfigPtr->EntityCount; i++)
     {
-        WdgM_AliveCount[i]  = 0U;
-        WdgM_LocalStatus[i] = WDGM_LOCAL_STATUS_OK;
+        WdgM_AliveCount[i]    = 0U;
+        WdgM_LocalStatus[i]   = WDGM_LOCAL_STATUS_OK;
+        WdgM_LastCheckpoint[i] = WDGM_CP_INITIAL;
     }
     DET_LOGI(TAG, "Init ok entities=%u", (unsigned)ConfigPtr->EntityCount);
 }
@@ -68,19 +81,45 @@ void WdgM_Init(const WdgM_ConfigType* ConfigPtr)
 /**
  * \brief   Supervised Entity がチェックポイントに到達したことを報告する。
  *
- * \details 内部 Alive カウンタをインクリメントする。
+ * \details 内部 Alive カウンタをインクリメントする (Alive Supervision)。
  *          カウンタは uint8 でラップアラウンドするが、期待値が小さいため問題なし。
+ *          続けて、直前のチェックポイントから今回のチェックポイントへの遷移が
+ *          許可遷移テーブルに含まれるかを即座に確認する (Logical Supervision)。
  *
  * \ServiceID      {0x0E}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
  */
-Std_ReturnType WdgM_CheckpointReached(WdgM_SupervisedEntityIdType SEID)
+Std_ReturnType WdgM_CheckpointReached(WdgM_SupervisedEntityIdType SEID, uint8 CheckpointId)
 {
     if (WdgM_Cfg == NULL || SEID >= WdgM_Cfg->EntityCount)
         return E_NOT_OK;
 
     WdgM_AliveCount[SEID]++;
+
+    const WdgM_EntityCfgType* entity = &WdgM_Cfg->Entities[SEID];
+    const uint8 fromCp = WdgM_LastCheckpoint[SEID];
+    uint8 allowed = 0U;
+
+    for (uint8 i = 0U; i < entity->TransitionCount; i++)
+    {
+        if (entity->Transitions[i].FromCheckpointId == fromCp
+            && entity->Transitions[i].ToCheckpointId == CheckpointId)
+        {
+            allowed = 1U;
+            break;
+        }
+    }
+
+    if (allowed == 0U)
+    {
+        WdgM_LocalStatus[SEID] = WDGM_LOCAL_STATUS_FAILED;
+        DET_LOGW(TAG, "SE%u logical FAILED cp %u->%u (unexpected) [HW reset in production]",
+                 (unsigned)SEID, (unsigned)fromCp, (unsigned)CheckpointId);
+    }
+
+    WdgM_LastCheckpoint[SEID] = CheckpointId;
+
     return E_OK;
 }
 
