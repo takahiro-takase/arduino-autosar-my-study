@@ -9,7 +9,7 @@
  *            0x10 DiagnosticSessionControl (Default / Extended)
  *            0x11 ECUReset (hardReset / softReset)
  *            0x14 ClearDiagnosticInformation (groupOfDTC=0xFFFFFF)
- *            0x19 ReadDTCInformation (subFunc 0x01/0x02) — マルチフレーム対応
+ *            0x19 ReadDTCInformation (subFunc 0x01/0x02/0x04) — マルチフレーム対応
  *            0x22 ReadDataByIdentifier (DID 0x0101-0x0103)
  *            0x3E TesterPresent
  *
@@ -47,9 +47,19 @@
  * ----------------------------------------------------------------------- */
 #define DCM_DTC_SUBFUNC_REPORT_COUNT  0x01U  /**< reportNumberOfDTCByStatusMask */
 #define DCM_DTC_SUBFUNC_REPORT_BY_MASK 0x02U /**< reportDTCByStatusMask         */
+#define DCM_DTC_SUBFUNC_REPORT_SNAPSHOT 0x04U /**< reportDTCSnapshotRecordByDTCNumber */
 
 /** ISO 14229-1 DTC フォーマット識別子 (0x01 = ISO 15031-6 / SAE J2012) */
 #define DCM_DTC_FORMAT_ISO15031         0x01U
+
+/* -----------------------------------------------------------------------
+ * FreezeFrame (SID 0x19/04) 関連定数
+ * 本実装はイベントごとに 1 レコードのみ保持する学習用簡略化を行う。
+ * ----------------------------------------------------------------------- */
+/** 本実装で対応する唯一のスナップショットレコード番号 */
+#define DCM_FREEZEFRAME_RECORD_NUMBER  0x01U
+/** FreezeFrame に含む DID 数（EngineSpeed / CoolantTemp / EngineState 固定） */
+#define DCM_FREEZEFRAME_DID_COUNT      0x03U
 
 /* -----------------------------------------------------------------------
  * UDS 否定応答コード (ISO 14229-1 Table A.1)
