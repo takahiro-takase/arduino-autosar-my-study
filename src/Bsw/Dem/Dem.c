@@ -291,6 +291,20 @@ Std_ReturnType Dem_GetDTCOfEvent(Dem_EventIdType EventId, uint32* DTC)
 }
 
 /**
+ * \brief   指定イベントの DTC ステータス・デバウンスカウンタ・FreezeFrame を
+ *          初期状態に戻す（NvM 書き込みは呼び出し元が行う）。
+ *
+ * \param[in]  EventId  イベント ID (DEM_EVENT_* 定数)。範囲チェックは呼び出し元の責務。
+ */
+static void Dem_ClearOne(Dem_EventIdType EventId)
+{
+    Dem_StatusTable[EventId] = DEM_STATUS_NOT_COMPLETED_SINCE_CLEAR
+                             | DEM_STATUS_NOT_COMPLETED_THIS_CYCLE;
+    Dem_DebounceCounter[EventId] = 0;
+    Dem_FreezeFrameValid[EventId] = 0U;
+}
+
+/**
  * \brief   全 DTC をクリアし、NvM (EEPROM) を初期状態へ戻す。
  *
  * \details 全イベントのステータスを TNCLC | TNCTOC にリセットし、
@@ -307,11 +321,38 @@ Std_ReturnType Dem_ClearAllDTCs(void)
 {
     for (uint8 i = 0U; i < DEM_EVENT_COUNT; i++)
     {
-        Dem_StatusTable[i] = DEM_STATUS_NOT_COMPLETED_SINCE_CLEAR
-                           | DEM_STATUS_NOT_COMPLETED_THIS_CYCLE;
+        Dem_ClearOne(i);
     }
     (void)NvM_WriteBlock(NVM_BLOCK_ID_DEM_STATUS, Dem_StatusTable);
     DET_LOGI(TAG, "ClearAll ok");
+    return E_OK;
+}
+
+/**
+ * \brief   指定イベントの DTC のみをクリアし、NvM (EEPROM) へ反映する。
+ *
+ * \details SID 0x14 ClearDiagnosticInformation のグループ指定クリア
+ *          (特定の DTC コードのみを指定するケース) から呼び出す。
+ *          ステータスを TNCLC | TNCTOC にリセットし、デバウンスカウンタと
+ *          FreezeFrame も未記録状態に戻す。
+ *
+ * \param[in]  EventId  イベント ID (DEM_EVENT_* 定数)。
+ *
+ * \retval  E_OK      正常クリア。
+ * \retval  E_NOT_OK  EventId が範囲外。
+ *
+ * \ServiceID      {0x28}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType Dem_ClearDTC(Dem_EventIdType EventId)
+{
+    if (EventId >= DEM_EVENT_COUNT)
+        return E_NOT_OK;
+
+    Dem_ClearOne(EventId);
+    (void)NvM_WriteBlock(NVM_BLOCK_ID_DEM_STATUS, Dem_StatusTable);
+    DET_LOGI(TAG, "Clear ev=%u ok", (unsigned)EventId);
     return E_OK;
 }
 

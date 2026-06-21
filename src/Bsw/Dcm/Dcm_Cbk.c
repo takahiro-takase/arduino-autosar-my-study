@@ -7,7 +7,7 @@
  *          対応サービス:
  *            0x10 DiagnosticSessionControl — Default / Extended セッション切替
  *            0x11 ECUReset               — hardReset / softReset (応答後セッションリセット)
- *            0x14 ClearDiagnosticInformation — 全 DTC クリア
+ *            0x14 ClearDiagnosticInformation — 全 DTC クリア／DTC 指定で 1 件クリア
  *            0x19 ReadDTCInformation     — subFunc 0x01/0x02/0x04
  *            0x22 ReadDataByIdentifier   — DID 0x0101/0x0102/0x0103
  *            0x3E TesterPresent          — セッション維持 (S3 タイマリセット)
@@ -258,9 +258,11 @@ static void Dcm_HandleEcuReset(const uint8* uds, uint8 udsLen)
 /**
  * \brief   UDS 0x14 ClearDiagnosticInformation を処理する。
  *
- * \details groupOfDTC=0xFFFFFF (全 DTC クリア) のみ対応する。
- *          Dem_ClearAllDTCs() を呼び出して DTC ステータスと EEPROM をリセットし、
- *          正応答 [0x54] を返す。
+ * \details groupOfDTC=0xFFFFFF なら Dem_ClearAllDTCs() で全 DTC をクリアする。
+ *          それ以外の値は特定の DTC コードとみなし、Dem_GetEventIdOfDTC() で
+ *          一致するイベントを探して Dem_ClearDTC() で 1 件だけクリアする
+ *          （該当イベントがなければ NRC 0x31）。
+ *          いずれの場合も正応答 [0x54] を返す。
  *
  * \param[in]  uds     UDS ペイロード先頭ポインタ (uds[0]=SID 0x14)。
  * \param[in]  udsLen  UDS ペイロード長。
@@ -277,15 +279,25 @@ static void Dcm_HandleClearDtc(const uint8* uds, uint8 udsLen)
                  | ((uint32)uds[2] <<  8U)
                  | (uint32)uds[3];
 
-    if (group != DEM_GROUP_ALL_DTCS)
+    if (group == DEM_GROUP_ALL_DTCS)
     {
-        /* 本実装はグループ指定クリアを未対応 */
-        Dcm_SendNegativeResponse(DCM_SID_CLEAR_DTC, DCM_NRC_REQUEST_OUT_OF_RANGE);
-        return;
+        DET_LOGI(TAG, "14 ClearAllDTC");
+        Dem_ClearAllDTCs();
     }
+    else
+    {
+        Dem_EventIdType eventId = 0U;
 
-    DET_LOGI(TAG, "14 ClearAllDTC");
-    Dem_ClearAllDTCs();
+        if (Dem_GetEventIdOfDTC(group, &eventId) != E_OK)
+        {
+            /* 指定された DTC コードに一致するイベントがない */
+            Dcm_SendNegativeResponse(DCM_SID_CLEAR_DTC, DCM_NRC_REQUEST_OUT_OF_RANGE);
+            return;
+        }
+
+        DET_LOGI(TAG, "14 ClearDTC dtc=0x%06lX", (unsigned long)group);
+        Dem_ClearDTC(eventId);
+    }
 
     /* 正応答: [0x54] */
     Dcm_TxBuf[0] = 0x54U;               /* SID 0x14 + 0x40 */

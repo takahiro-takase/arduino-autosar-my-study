@@ -8,7 +8,8 @@
  *          本プロジェクトで対応するサービス:
  *            0x10 DiagnosticSessionControl (Default / Extended)
  *            0x11 ECUReset (hardReset / softReset)
- *            0x14 ClearDiagnosticInformation (groupOfDTC=0xFFFFFF)
+ *            0x14 ClearDiagnosticInformation (groupOfDTC=0xFFFFFF で全クリア、
+ *              特定 DTC コード指定で 1 件クリア)
  *            0x19 ReadDTCInformation (subFunc 0x01/0x02/0x04) — マルチフレーム対応
  *            0x22 ReadDataByIdentifier (DID 0x0101-0x0103)
  *            0x3E TesterPresent (S3 タイマ維持)
