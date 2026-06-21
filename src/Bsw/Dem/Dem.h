@@ -143,6 +143,24 @@ Std_ReturnType Dem_GetDTCOfEvent(Dem_EventIdType EventId, uint32* DTC);
 Std_ReturnType Dem_ClearAllDTCs(void);
 
 /**
+ * \brief   指定イベントの DTC のみをクリアし、EEPROM へ反映する。
+ * \details DCM SID 0x14 (ClearDiagnosticInformation) のグループ指定クリア
+ *          (特定の DTC コードのみを指定するケース) から呼び出す。
+ *          対象イベントのステータスを TNCLC | TNCTOC にリセットし、
+ *          デバウンスカウンタと FreezeFrame も未記録状態に戻す。
+ *
+ * \param[in]  EventId  イベント ID (DEM_EVENT_* 定数)。
+ *
+ * \retval  E_OK      正常クリア。
+ * \retval  E_NOT_OK  EventId が範囲外。
+ *
+ * \ServiceID      {0x28}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType Dem_ClearDTC(Dem_EventIdType EventId);
+
+/**
  * \brief   ステータスマスクに一致する全 DTC を列挙する。
  * \details DCM SID 0x19 サブ機能 0x01 / 0x02 から呼び出す。
  *
