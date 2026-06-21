@@ -599,8 +599,8 @@ static void Dcm_HandleReadDataById(const uint8* uds, uint8 udsLen)
 /**
  * \brief   UDS 0x3E TesterPresent を処理する。
  *
- * \details セッションタイムアウトをリセットし (本実装ではタイムアウト未実装)、
- *          正応答 [0x7E, subFunc] を返す。
+ * \details S3 タイマをリセットする (Dcm_ComIndication で全 SID 共通リセット済みのため
+ *          本関数では追加処理不要)。正応答 [0x7E, subFunc] を返す。
  *
  * \param[in]  uds     UDS ペイロード先頭ポインタ。
  * \param[in]  udsLen  UDS ペイロード長。

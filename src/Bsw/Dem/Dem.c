@@ -62,7 +62,8 @@ static const uint32 Dem_DtcTable[DEM_EVENT_COUNT] = {
     DEM_DTC_STARTING_TIMEOUT,        /* event 3 */
     DEM_DTC_COMM_TIMEOUT,            /* event 4 */
     DEM_DTC_BUTTON_STUCK,            /* event 5 */
-    DEM_DTC_ADC_VOLT_LOW             /* event 6 */
+    DEM_DTC_ADC_VOLT_LOW,            /* event 6 */
+    DEM_DTC_CAN_BUSOFF               /* event 7 */
 };
 
 /** イベントごとの FreezeFrame (故障時スナップショット)。RAM のみ保持 */

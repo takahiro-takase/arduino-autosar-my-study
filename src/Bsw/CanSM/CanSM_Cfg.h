@@ -24,7 +24,7 @@
 /**
  * Bus-Off 最大回復試行回数
  * 連続バスオフがこの回数に達すると回復を停止し、
- * DEM へのエラー報告（将来拡張）に移行する。
+ * DEM_EVENT_CAN_BUSOFF (DTC 0x000108) として Dem へ報告する。
  */
 #define CANSM_BUSOFF_MAX_RETRIES    3U
 

@@ -13,8 +13,9 @@
  *            DEM_EVENT_COMM_TIMEOUT         — EngineInfo 受信タイムアウト
  *            DEM_EVENT_BUTTON_STUCK         — 警告確認ボタン固着 (5 秒以上押下)
  *            DEM_EVENT_ADC_VOLT_LOW         — ADC センサ電圧低下 (< 1000 mV)
+ *            DEM_EVENT_CAN_BUSOFF           — CAN Bus-Off 回復断念（最大試行超過）
  *
- *          EEPROM レイアウト (Arduino UNO 内蔵 EEPROM 1KB の先頭 8 バイト使用):
+ *          EEPROM レイアウト (Arduino UNO 内蔵 EEPROM 1KB の先頭 9 バイト使用):
  *            Addr 0x00: マジックバイト (0xDE = 有効な DEM データ)
  *            Addr 0x01: イベント 0 (ENGINE_OVERHEAT)  ステータスバイト
  *            Addr 0x02: イベント 1 (ENGINE_STALL)     ステータスバイト
@@ -23,6 +24,7 @@
  *            Addr 0x05: イベント 4 (COMM_TIMEOUT)     ステータスバイト
  *            Addr 0x06: イベント 5 (BUTTON_STUCK)     ステータスバイト
  *            Addr 0x07: イベント 6 (ADC_VOLT_LOW)     ステータスバイト
+ *            Addr 0x08: イベント 7 (CAN_BUSOFF)       ステータスバイト
  *
  * \copyright  Copyright (c) 2025 T_T
  * \license    MIT License - 詳細は LICENSE ファイルを参照。
@@ -44,7 +46,8 @@
 #define DEM_EVENT_COMM_TIMEOUT          4U  /**< EngineInfo 受信タイムアウト      */
 #define DEM_EVENT_BUTTON_STUCK          5U  /**< 警告確認ボタン固着（5 秒以上押下）*/
 #define DEM_EVENT_ADC_VOLT_LOW          6U  /**< ADC センサ電圧低下（< 1000 mV）  */
-#define DEM_EVENT_COUNT                 7U  /**< イベント総数                     */
+#define DEM_EVENT_CAN_BUSOFF            7U  /**< CAN Bus-Off 回復断念             */
+#define DEM_EVENT_COUNT                 8U  /**< イベント総数                     */
 
 /* -----------------------------------------------------------------------
  * DTC コード (24-bit, ISO 14229-1)
@@ -57,6 +60,7 @@
 #define DEM_DTC_COMM_TIMEOUT            0x000105UL  /**< EngineInfo 受信タイムアウト */
 #define DEM_DTC_BUTTON_STUCK            0x000106UL  /**< 警告確認ボタン固着       */
 #define DEM_DTC_ADC_VOLT_LOW            0x000107UL  /**< ADC センサ電圧低下       */
+#define DEM_DTC_CAN_BUSOFF              0x000108UL  /**< CAN Bus-Off 回復断念     */
 
 /* -----------------------------------------------------------------------
  * デバウンス (counter-based debouncing)
