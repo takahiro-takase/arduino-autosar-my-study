@@ -2,9 +2,6 @@
  * \file    CanSM.c
  * \brief   CAN ステートマネージャ 実装 (AUTOSAR SWS_CanSM 準拠)
  * \details CAN ネットワークの通信モード遷移と Bus-Off 回復シーケンスを管理する。
- *          内側（CANSM_BUSOFF_MAX_RETRIES）・外側（CANSM_BUSOFF_MAX_GIVEUP_CYCLES）の
- *          2 段リトライ構成で、Dem のデバウンス確定 (DEM_DEBOUNCE_LIMIT) に達してから
- *          最終的に通信を断念する。
  *
  *          内部状態機械:
  *
@@ -15,19 +12,16 @@
  *            CANSM_STATE_BUS_OFF                             │
  *              ↓ T_REC 経過 (MainFunction)                   │
  *              → Can_SetControllerMode(CAN_T_START) ─────────┘
- *              → 内側リトライ > MAX_RETRIES (1 回分の回復断念)
- *                  → Dem へ FAILED 報告、外側カウンタ++
- *                  → 外側カウンタ < MAX_GIVEUP_CYCLES なら内側リトライをリセットして再開
- *                  → 外側カウンタ >= MAX_GIVEUP_CYCLES で最終的に回復中止
+ *              → 連続失敗 > MAX_RETRIES → 回復中止
  *
- *          Bus-Off 回復シーケンス（AUTOSAR T_BSM_BUSOFF_RECOVERY 準拠を 2 段に拡張）:
+ *          Bus-Off 回復シーケンス（AUTOSAR T_BSM_BUSOFF_RECOVERY 準拠）:
  *            1. Bus-Off 検出 → コントローラ停止・タイマ起動
  *            2. T_REC ms 待機（CanSM_MainFunction が監視）
  *            3. コントローラ再起動 → FULL_COM に復帰 → Dem へ PASSED 報告
- *            4. 再度 Bus-Off が発生した場合は内側リトライ回数をカウント
- *            5. 内側リトライ超過 → Dem へ FAILED 報告（1 回分の断念）、外側カウンタ++
- *            6. 外側カウンタが上限未満なら内側リトライをリセットして 2. から再開
- *            7. 外側カウンタが上限に達したら最終的に回復中止（ComM へ NO_COM 通知）
+ *            4. 再度 Bus-Off が発生した場合は試行回数をカウント
+ *            5. 最大試行回数超過で回復中止 → Dem へ FAILED 報告 (DEM_EVENT_CAN_BUSOFF)。
+ *               この断念報告は十分なリトライを経た確定情報のため、
+ *               Dem 側は DEM_DEBOUNCE_LIMIT_CAN_BUSOFF=1 で即座に確定する。
  *
  * \copyright  Copyright (c) 2025 T_T
  * \license    MIT License - 詳細は LICENSE ファイルを参照。
@@ -62,9 +56,8 @@ typedef enum
  * ----------------------------------------------------------------------- */
 static CanSM_InternalStateType CanSM_State;
 static unsigned long           CanSM_BusOffTimerMs;   /* Bus-Off 検出時刻 */
-static uint8                   CanSM_BusOffRetries;   /* 内側リトライ回数（1 回復サイクル分） */
-static uint8                   CanSM_BusOffGiveUps;   /* 回復断念回数（外側カウンタ） */
-static uint8                   CanSM_BusOffGaveUp;    /* 最終断念フラグ（GiveUps が上限に達した） */
+static uint8                   CanSM_BusOffRetries;   /* 回復試行回数 */
+static uint8                   CanSM_BusOffGaveUp;    /* 最大試行超過フラグ */
 
 /**
  * \brief   CanSM モジュールを初期化する。
@@ -78,7 +71,6 @@ void CanSM_Init(void)
     CanSM_State          = CANSM_STATE_NO_COM;
     CanSM_BusOffTimerMs  = 0UL;
     CanSM_BusOffRetries  = 0U;
-    CanSM_BusOffGiveUps  = 0U;
     CanSM_BusOffGaveUp   = 0U;
     DET_LOGI(TAG, "Init");
 }
@@ -110,7 +102,6 @@ Std_ReturnType CanSM_RequestComMode(CanSM_NetworkHandleType network, ComM_ModeTy
             Can_SetControllerMode(0U, CAN_T_START);
             CanSM_State         = CANSM_STATE_FULL_COM;
             CanSM_BusOffRetries = 0U;
-            CanSM_BusOffGiveUps = 0U;
             DET_LOGI(TAG, "->FULL_COM");
             /* 通信確立を報告。デバウンス確定すれば CAN_BUSOFF の TF をクリアする */
             Dem_ReportErrorStatus(DEM_EVENT_CAN_BUSOFF, DEM_EVENT_STATUS_PASSED);
@@ -203,12 +194,9 @@ void CanSM_ControllerBusOff(uint8 ControllerId)
  *          再起動後に再度 Bus-Off が発生すると CanSM_ControllerBusOff() が
  *          呼ばれ、試行回数がインクリメントされる（リトライ回数は次回の
  *          CanSM_RequestComMode(FULL_COM) までリセットされない）。
- *          CANSM_BUSOFF_MAX_RETRIES を超えた場合は 1 回分の回復断念として
- *          Dem_ReportErrorStatus(DEM_EVENT_CAN_BUSOFF, FAILED) を報告し、外側カウンタ
- *          (CanSM_BusOffGiveUps) を増やす。外側カウンタが CANSM_BUSOFF_MAX_GIVEUP_CYCLES
- *          未満なら内側リトライ回数をリセットして回復サイクルを再開し、上限に達した
- *          場合のみ最終的に回復を中止する（同一電源サイクル中に複数回断念することで
- *          Dem のデバウンスが確定できるようにする設計）。
+ *          CANSM_BUSOFF_MAX_RETRIES を超えた場合は回復を中止し、
+ *          Dem_ReportErrorStatus(DEM_EVENT_CAN_BUSOFF, FAILED) を報告する
+ *          （Dem 側は DEM_DEBOUNCE_LIMIT_CAN_BUSOFF=1 のため即座に確定する）。
  *
  * \ServiceID      {0x05}
  * \Reentrancy     {Non Reentrant}
@@ -230,30 +218,13 @@ void CanSM_MainFunction(void)
 
     if (CanSM_BusOffRetries > CANSM_BUSOFF_MAX_RETRIES)
     {
-        CanSM_BusOffGiveUps++;
-
-        DET_LOGE(TAG, "BusOff: inner retries (%u) exhausted, giveup %u/%u",
-                 (unsigned)CANSM_BUSOFF_MAX_RETRIES,
-                 (unsigned)CanSM_BusOffGiveUps,
-                 (unsigned)CANSM_BUSOFF_MAX_GIVEUP_CYCLES);
-
-        /* 回復断念 1 回分を DTC として記録（FreezeFrame には断念時点の車両状態が残る）。
-         * GiveUps が複数回積み重なるとデバウンス確定する。 */
+        DET_LOGE(TAG, "BusOff: max retries (%u) exceeded, recovery stopped",
+                 (unsigned)CANSM_BUSOFF_MAX_RETRIES);
+        CanSM_BusOffGaveUp = 1U;
+        /* 回復断念を DTC として記録（FreezeFrame には断念時点の車両状態が残る） */
         Dem_ReportErrorStatus(DEM_EVENT_CAN_BUSOFF, DEM_EVENT_STATUS_FAILED);
-
-        if (CanSM_BusOffGiveUps >= CANSM_BUSOFF_MAX_GIVEUP_CYCLES)
-        {
-            DET_LOGE(TAG, "BusOff: giveup limit (%u) reached, recovery stopped",
-                     (unsigned)CANSM_BUSOFF_MAX_GIVEUP_CYCLES);
-            CanSM_BusOffGaveUp = 1U;
-            /* 最終断念 → ComM に NO_COM を通知 → EcuM_ReleaseRUN → POST_RUN へ */
-            ComM_BusSMIndication(0U, COMM_NO_COMMUNICATION);
-            return;
-        }
-
-        /* まだ最終断念ではない: 内側リトライカウンタをリセットして回復サイクルを再開する */
-        CanSM_BusOffRetries = 0U;
-        CanSM_BusOffTimerMs = millis();
+        /* 回復断念 → ComM に NO_COM を通知 → EcuM_ReleaseRUN → POST_RUN へ */
+        ComM_BusSMIndication(0U, COMM_NO_COMMUNICATION);
         return;
     }
 
