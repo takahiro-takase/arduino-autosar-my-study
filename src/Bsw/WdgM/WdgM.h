@@ -16,9 +16,10 @@
  *
  *          本プロジェクトでの失敗アクション:
  *            WdgM_LocalStatus を FAILED に更新し WARN ログを出力する。
- *            実装製品では WdgM がハードウェアウォッチドッグのリフレッシュを停止し
- *            システムリセットをトリガするが、Arduino UNO では HW ウォッチドッグ経由の
- *            強制リセットは未実装。
+ *            AVR 実ハードウェアウォッチドッグ（<avr/wdt.h>）と連携しており、
+ *            正常な間だけ WdgM_MainFunction が wdt_reset() を呼ぶ。異常時は
+ *            リフレッシュを止め、WDGM_HW_WATCHDOG_TIMEOUT_MS 後に実際に MCU が
+ *            リセットされる（シミュレーションではなく実機で本当に発生する）。
  *
  *          学習用簡略化:
  *            Alive と Logical の判定結果を 1 つの WdgM_LocalStatusType に統合している。
@@ -68,8 +69,10 @@ typedef enum
 /**
  * \brief   WdgM モジュールを初期化する。
  *
- * \details 全エンティティの Alive カウンタとステータスを初期化する。
- *          EcuM_Init() の末尾（Os_Init より前）に呼び出すこと。
+ * \details 全エンティティの Alive カウンタとステータスを初期化し、
+ *          WdgM_EnableHwWatchdog() で AVR 実ハードウェアウォッチドッグを
+ *          有効化する。EcuM_Init() の末尾、他の全 BSW モジュール初期化が
+ *          完了した後（Os_Init より前）に呼び出すこと。
  *
  * \param[in]  ConfigPtr  ポストビルドコンフィグへのポインタ。NULL 禁止。
  *
@@ -78,6 +81,34 @@ typedef enum
  * \Synchronicity  {Synchronous}
  */
 void WdgM_Init(const WdgM_ConfigType* ConfigPtr);
+
+/**
+ * \brief   AVR 実ハードウェアウォッチドッグを WDGM_HW_WATCHDOG_TIMEOUT_MS で有効化する。
+ *
+ * \details WdgM_Init() がこの関数を呼ぶ。また、EcuM が POST_RUN から RUN へ
+ *          復帰する際にも、Alive Supervision の対象タスクが再開するのに合わせて
+ *          再度呼び出す。
+ *
+ * \ServiceID      {0x07}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void WdgM_EnableHwWatchdog(void);
+
+/**
+ * \brief   AVR 実ハードウェアウォッチドッグを無効化する。
+ *
+ * \details EcuM が POST_RUN へ遷移する際に呼び出す。POST_RUN では
+ *          Rte_Engine タスク（WdgM の監視対象）が意図的に停止するため、
+ *          Alive Supervision は必ず FAILED になる。無効化しないと、
+ *          意図した停止にもかかわらず HW ウォッチドッグのタイムアウト後に
+ *          MCU がリセットされてしまう。
+ *
+ * \ServiceID      {0x06}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void WdgM_DisableHwWatchdog(void);
 
 /**
  * \brief   Supervised Entity がチェックポイントに到達したことを報告する。
@@ -111,12 +142,15 @@ Std_ReturnType WdgM_CheckpointReached(WdgM_SupervisedEntityIdType SEID, uint8 Ch
 WdgM_LocalStatusType WdgM_GetLocalStatus(WdgM_SupervisedEntityIdType SEID);
 
 /**
- * \brief   WdgM 周期処理。Alive Supervision を評価する。
+ * \brief   WdgM 周期処理。Alive Supervision を評価し、HW ウォッチドッグを refresh する。
  *
  * \details Os スケジューラから WDGM_SUPERVISION_CYCLE_MS ごとに呼ばれる。
  *          各エンティティの Alive カウンタを検査し、期待回数を満たさない場合は
  *          ローカルステータスを FAILED に更新して WARN ログを出力する。
  *          検査後、カウンタは次のサイクルのためにリセットする。
+ *          全エンティティが OK の場合のみ wdt_reset() を呼ぶ。1 つでも FAILED
+ *          （Alive 不足または Logical Supervision 違反）があれば呼ばない
+ *          ため、WDGM_HW_WATCHDOG_TIMEOUT_MS 後に実際に MCU がリセットされる。
  *
  * \ServiceID      {0x01}
  * \Reentrancy     {Non Reentrant}
