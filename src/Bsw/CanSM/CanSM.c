@@ -17,9 +17,9 @@
  *          Bus-Off 回復シーケンス（AUTOSAR T_BSM_BUSOFF_RECOVERY 準拠）:
  *            1. Bus-Off 検出 → コントローラ停止・タイマ起動
  *            2. T_REC ms 待機（CanSM_MainFunction が監視）
- *            3. コントローラ再起動 → FULL_COM に復帰
+ *            3. コントローラ再起動 → FULL_COM に復帰 → Dem へ PASSED 報告
  *            4. 再度 Bus-Off が発生した場合は試行回数をカウント
- *            5. 最大試行回数超過で回復中止
+ *            5. 最大試行回数超過で回復中止 → Dem へ FAILED 報告 (DEM_EVENT_CAN_BUSOFF)
  *
  * \copyright  Copyright (c) 2025 T_T
  * \license    MIT License - 詳細は LICENSE ファイルを参照。
@@ -30,6 +30,7 @@
 
 #include "CanSM.h"
 #include "Can.h"
+#include "Dem.h"
 #include "Det.h"
 
 #define TAG "CanSM"
@@ -100,6 +101,8 @@ Std_ReturnType CanSM_RequestComMode(CanSM_NetworkHandleType network, ComM_ModeTy
             CanSM_State         = CANSM_STATE_FULL_COM;
             CanSM_BusOffRetries = 0U;
             DET_LOGI(TAG, "->FULL_COM");
+            /* 通信確立を報告。デバウンス確定すれば CAN_BUSOFF の TF をクリアする */
+            Dem_ReportErrorStatus(DEM_EVENT_CAN_BUSOFF, DEM_EVENT_STATUS_PASSED);
             ComM_BusSMIndication(network, COMM_FULL_COMMUNICATION);
             break;
 
@@ -183,10 +186,14 @@ void CanSM_ControllerBusOff(uint8 ControllerId)
  * \brief   CanSM 周期処理（Bus-Off 回復タイマ管理）。
  *
  * \details Bus-Off 状態のとき CANSM_BUSOFF_RECOVERY_MS 経過後に
- *          コントローラの再起動を試みる。
+ *          コントローラの再起動を試みる。再起動成功時は
+ *          Dem_ReportErrorStatus(DEM_EVENT_CAN_BUSOFF, PASSED) を報告する
+ *          （CanSM_RequestComMode を経由しない自動復帰のため、ここで明示的に報告する）。
  *          再起動後に再度 Bus-Off が発生すると CanSM_ControllerBusOff() が
- *          呼ばれ、試行回数がインクリメントされる。
- *          CANSM_BUSOFF_MAX_RETRIES を超えた場合は回復を中止する。
+ *          呼ばれ、試行回数がインクリメントされる（リトライ回数は次回の
+ *          CanSM_RequestComMode(FULL_COM) までリセットされない）。
+ *          CANSM_BUSOFF_MAX_RETRIES を超えた場合は回復を中止し、
+ *          Dem_ReportErrorStatus(DEM_EVENT_CAN_BUSOFF, FAILED) を報告する。
  *
  * \ServiceID      {0x05}
  * \Reentrancy     {Non Reentrant}
@@ -211,6 +218,8 @@ void CanSM_MainFunction(void)
         DET_LOGE(TAG, "BusOff: max retries (%u) exceeded, recovery stopped",
                  (unsigned)CANSM_BUSOFF_MAX_RETRIES);
         CanSM_BusOffGaveUp = 1U;
+        /* 回復断念を DTC として記録（FreezeFrame には断念時点の車両状態が残る） */
+        Dem_ReportErrorStatus(DEM_EVENT_CAN_BUSOFF, DEM_EVENT_STATUS_FAILED);
         /* 回復断念 → ComM に NO_COM を通知 → EcuM_ReleaseRUN → POST_RUN へ */
         ComM_BusSMIndication(0U, COMM_NO_COMMUNICATION);
         return;
@@ -222,6 +231,8 @@ void CanSM_MainFunction(void)
 
     Can_SetControllerMode(0U, CAN_T_START);
     CanSM_State = CANSM_STATE_FULL_COM;
+    /* 回復成功を報告。デバウンス確定すれば CAN_BUSOFF の TF をクリアする */
+    Dem_ReportErrorStatus(DEM_EVENT_CAN_BUSOFF, DEM_EVENT_STATUS_PASSED);
     /* 回復成功 → ComM に FULL_COM を通知 → EcuM_RequestRUN → RUN へ戻る */
     ComM_BusSMIndication(0U, COMM_FULL_COMMUNICATION);
     /* 再度 Bus-Off が発生すれば CanIf → CanSM_ControllerBusOff() が呼ばれる */
