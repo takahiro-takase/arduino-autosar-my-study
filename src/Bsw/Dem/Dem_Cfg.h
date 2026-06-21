@@ -64,10 +64,27 @@
 
 /* -----------------------------------------------------------------------
  * デバウンス (counter-based debouncing)
- * 全イベント共通の単一閾値。FAILED 報告でカウンタ+1、PASSED 報告で-1。
- * カウンタが ±DEM_DEBOUNCE_LIMIT に達した瞬間にのみ DTC ステータスを確定する。
+ * イベントごとに確定 (FAILED/PASSED) に必要なカウンタ絶対値を個別設定する
+ * (実車の DemDebounceAlgorithmClass — イベントごとに別アルゴリズム/閾値を
+ * 持てる — に相当)。FAILED 報告でカウンタ+1、PASSED 報告で-1 し、
+ * ±閾値 に達した瞬間に DTC ステータスを確定する。
+ *
+ * 閾値の決め方:
+ *   モニタ（報告元）が既に十分な持続性チェックを行ってから報告する場合は 1
+ *   （例: IoHwAb の 5 秒固着判定、CanSM の 3 回リトライ後の断念—これらは
+ *   報告そのものが「十分粘った結果」であり、Dem 側で重ねて debounce すると
+ *   二重チェックになり確定が不必要に遅れる、あるいは確定不可能になる）。
+ *   モニタが単発の閾値超えをそのまま報告する場合は 2 以上
+ *   （例: エンジン系の温度/回転数の瞬時しきい値判定）。
  * ----------------------------------------------------------------------- */
-#define DEM_DEBOUNCE_LIMIT  2  /**< 確定 (FAILED/PASSED) に必要なカウンタ絶対値 */
+#define DEM_DEBOUNCE_LIMIT_ENGINE_OVERHEAT       2  /**< 瞬時しきい値判定のため複数回要求 */
+#define DEM_DEBOUNCE_LIMIT_ENGINE_STALL          2  /**< 瞬時しきい値判定のため複数回要求 */
+#define DEM_DEBOUNCE_LIMIT_ENGINE_SPEED_NO_FLAG  2  /**< 瞬時しきい値判定のため複数回要求 */
+#define DEM_DEBOUNCE_LIMIT_STARTING_TIMEOUT      2  /**< 瞬時しきい値判定のため複数回要求 */
+#define DEM_DEBOUNCE_LIMIT_COMM_TIMEOUT          2  /**< 毎サイクル報告のため数百ms〜数秒で確定 */
+#define DEM_DEBOUNCE_LIMIT_BUTTON_STUCK          1  /**< IoHwAb が 5 秒固着判定済み。二重チェック不要 */
+#define DEM_DEBOUNCE_LIMIT_ADC_VOLT_LOW          2  /**< 毎サイクル報告のため数十 ms で確定 */
+#define DEM_DEBOUNCE_LIMIT_CAN_BUSOFF            1  /**< CanSM が 3 回リトライ済み。二重チェック不要 */
 
 /* -----------------------------------------------------------------------
  * DTC ステータスビットマスク (ISO 14229-1 Annex B)

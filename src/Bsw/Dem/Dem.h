@@ -86,9 +86,9 @@ void Dem_Init(void);
 /**
  * \brief   イベントの発生/消滅を DEM に通知する (モニタからの生のテスト結果)。
  * \details FAILED/PASSED の報告でデバウンスカウンタを ±1 し、カウンタが
- *          ±DEM_DEBOUNCE_LIMIT に達した瞬間にのみ DTC ステータス
- *          (TF/PDTC/CDTC/TFSLC) を確定して EEPROM へ書き込む。
- *          1 回の報告だけでは確定しない（学習用の counter-based debouncing）。
+ *          イベントごとの確定閾値（Dem_Cfg.h の DEM_DEBOUNCE_LIMIT_*）に
+ *          達した瞬間にのみ DTC ステータス (TF/PDTC/CDTC/TFSLC) を確定して
+ *          EEPROM へ書き込む（学習用の counter-based debouncing）。
  *
  * \param[in]  EventId      イベント ID (DEM_EVENT_* 定数)。
  * \param[in]  EventStatus  DEM_EVENT_STATUS_FAILED または DEM_EVENT_STATUS_PASSED。

@@ -12,13 +12,18 @@
  *              NVM_BLOCK_ID_DEM_STATUS — イベントステータステーブル (7 bytes)
  *
  *          デバウンス (counter-based debouncing):
- *            各イベントは -DEM_DEBOUNCE_LIMIT 〜 +DEM_DEBOUNCE_LIMIT のカウンタを持つ。
+ *            各イベントは -limit 〜 +limit のカウンタを持つ (limit はイベントごとに
+ *            Dem_DebounceLimitTable[] で個別設定。Dem_Cfg.h の DEM_DEBOUNCE_LIMIT_*)。
  *            FAILED 報告でカウンタ+1、PASSED 報告でカウンタ-1 (上下限でクランプ)。
- *            カウンタが +LIMIT に達した瞬間にのみ DTC ステータスを確定 FAILED にし、
- *            -LIMIT に達した瞬間にのみ確定 PASSED にする。
+ *            カウンタが +limit に達した瞬間にのみ DTC ステータスを確定 FAILED にし、
+ *            -limit に達した瞬間にのみ確定 PASSED にする。
  *            その間 (PRE-FAILED / PRE-PASSED) は DTC ステータスビットを変更しない。
- *            1 回の報告では確定しないため、単発の事象は DTC を確定させない
- *            （実車の「数サイクル/数回の再現で確定」という挙動の簡易再現）。
+ *            limit=1 のイベント（モニタ側が既に十分な持続性チェックをしてから
+ *            報告する BUTTON_STUCK / CAN_BUSOFF）は 1 回の報告で即確定する。
+ *            報告の方向がカウンタの現在の符号と逆の場合は、まず中立 (0) に
+ *            リセットしてから数え始める（IoHwAb のボタンデバウンスと同じ
+ *            「割り込まれたら最初からやり直す」方式）。これにより、反対側の
+ *            確定状態から数え始めて反転に 2*limit 回必要になる問題を防ぐ。
  *
  *          DTC ライフサイクル:
  *            報告なし → TNCLC=1, TNCTOC=1 (未テスト状態)
@@ -27,8 +32,6 @@
  *            ClearDTC 後 → 全ビットリセット, TNCLC=1
  *
  *          AUTOSAR 実装との主な違い (学習用簡略化):
- *            - 全イベント共通の単一デバウンス閾値 (実車は DemDebounceAlgorithmClass で
- *              イベントごとに個別設定可能)
  *            - デバウンスカウンタは RAM のみ保持 (電源 OFF でリセット)
  *            - 操作サイクル管理なし
  *            - FreezeFrame は RAM のみに保持 (EEPROM 非永続化、電源 OFF で消去)
@@ -66,6 +69,18 @@ static const uint32 Dem_DtcTable[DEM_EVENT_COUNT] = {
     DEM_DTC_CAN_BUSOFF               /* event 7 */
 };
 
+/** イベント ID → デバウンス確定閾値 変換テーブル (Dem_Cfg.h の DEM_DEBOUNCE_LIMIT_*) */
+static const sint8 Dem_DebounceLimitTable[DEM_EVENT_COUNT] = {
+    DEM_DEBOUNCE_LIMIT_ENGINE_OVERHEAT,       /* event 0 */
+    DEM_DEBOUNCE_LIMIT_ENGINE_STALL,          /* event 1 */
+    DEM_DEBOUNCE_LIMIT_ENGINE_SPEED_NO_FLAG,  /* event 2 */
+    DEM_DEBOUNCE_LIMIT_STARTING_TIMEOUT,      /* event 3 */
+    DEM_DEBOUNCE_LIMIT_COMM_TIMEOUT,          /* event 4 */
+    DEM_DEBOUNCE_LIMIT_BUTTON_STUCK,          /* event 5 */
+    DEM_DEBOUNCE_LIMIT_ADC_VOLT_LOW,          /* event 6 */
+    DEM_DEBOUNCE_LIMIT_CAN_BUSOFF             /* event 7 */
+};
+
 /** イベントごとの FreezeFrame (故障時スナップショット)。RAM のみ保持 */
 static Dem_FreezeFrameType Dem_FreezeFrameTable[DEM_EVENT_COUNT];
 
@@ -75,7 +90,7 @@ static uint8 Dem_FreezeFrameValid[DEM_EVENT_COUNT];
 /** SW-C が毎周期更新する「現在値」。FAILED 遷移時にこの値をコピーする */
 static Dem_FreezeFrameType Dem_CurrentContext;
 
-/** イベントごとのデバウンスカウンタ (-DEM_DEBOUNCE_LIMIT〜+DEM_DEBOUNCE_LIMIT, 0=中立) */
+/** イベントごとのデバウンスカウンタ (-limit〜+limit, 0=中立。limit は Dem_DebounceLimitTable[]) */
 static sint8 Dem_DebounceCounter[DEM_EVENT_COUNT];
 
 /* -----------------------------------------------------------------------
@@ -144,8 +159,8 @@ void Dem_Init(void)
  * \brief   イベントの発生/消滅を DEM に通知する (モニタからの生のテスト結果)。
  *
  * \details FAILED/PASSED の生の報告をそのまま確定はせず、まずデバウンスカウンタを
- *          ±1 する。カウンタが ±DEM_DEBOUNCE_LIMIT に達した瞬間にのみ、
- *          DTC ステータスの TF/TFTOC/PDTC/CDTC/TFSLC を確定し
+ *          ±1 する。カウンタがイベントごとの確定閾値 (Dem_DebounceLimitTable[EventId])
+ *          に達した瞬間にのみ、DTC ステータスの TF/TFTOC/PDTC/CDTC/TFSLC を確定し
  *          NvM_WriteBlock() でステータステーブル全体を永続化する
  *          (FAILED 確定時は併せて FreezeFrame も更新する)。
  *          まだ閾値に達していない間 (PRE-FAILED / PRE-PASSED) は
@@ -168,33 +183,43 @@ void Dem_ReportErrorStatus(Dem_EventIdType EventId,
     if (EventStatus != DEM_EVENT_STATUS_FAILED && EventStatus != DEM_EVENT_STATUS_PASSED)
         return;
 
+    const sint8 limit       = Dem_DebounceLimitTable[EventId];
     const sint8 prevCounter = Dem_DebounceCounter[EventId];
     sint8 counter = prevCounter;
 
     if (EventStatus == DEM_EVENT_STATUS_FAILED)
     {
-        if (counter < DEM_DEBOUNCE_LIMIT)
+        /* 確定 PASSED 側 (負) からの遷移は中立 (0) からやり直す。
+         * そうしないと、反対側の確定状態から数え始めるせいで
+         * 反転に 2*limit 回分の報告が必要になってしまう
+         * (limit=1 の「1 回で即確定」が実質機能しなくなる)。 */
+        if (counter < 0)
+            counter = 0;
+        if (counter < limit)
             counter++;
     }
     else /* DEM_EVENT_STATUS_PASSED */
     {
-        if (counter > -DEM_DEBOUNCE_LIMIT)
+        /* 確定 FAILED 側 (正) からの遷移も同様に中立からやり直す */
+        if (counter > 0)
+            counter = 0;
+        if (counter > -limit)
             counter--;
     }
 
     if (counter == prevCounter)
     {
         /* カウンタが上下限で飽和済み（既に確定済みの状態が継続）: 変化なしのため何もしない。
-         * これにより、確定後も毎サイクル報告され続けるイベント（BUTTON_STUCK 等）で
+         * これにより、確定後も毎サイクル報告され続けるイベント（ADC_VOLT_LOW 等）で
          * 同じデバウンスログが繰り返し出力されることを防ぐ。 */
         return;
     }
     Dem_DebounceCounter[EventId] = counter;
 
-    const uint8 wasFailedConfirmed = (prevCounter >= DEM_DEBOUNCE_LIMIT)  ? 1U : 0U;
-    const uint8 wasPassedConfirmed = (prevCounter <= -DEM_DEBOUNCE_LIMIT) ? 1U : 0U;
-    const uint8 nowFailedConfirmed = (counter     >= DEM_DEBOUNCE_LIMIT)  ? 1U : 0U;
-    const uint8 nowPassedConfirmed = (counter     <= -DEM_DEBOUNCE_LIMIT) ? 1U : 0U;
+    const uint8 wasFailedConfirmed = (prevCounter >= limit)  ? 1U : 0U;
+    const uint8 wasPassedConfirmed = (prevCounter <= -limit) ? 1U : 0U;
+    const uint8 nowFailedConfirmed = (counter     >= limit)  ? 1U : 0U;
+    const uint8 nowPassedConfirmed = (counter     <= -limit) ? 1U : 0U;
 
     uint8 prev   = Dem_StatusTable[EventId];
     uint8 status = prev;
