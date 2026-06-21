@@ -21,10 +21,16 @@
  *               (MainFunction の周期を待たず即時検出)。
  *            3. WdgM_LastCheckpoint[SEID] を今回の CheckpointId に更新する。
  *
- *          失敗時のアクション (本プロジェクト):
- *            WARN ログで通知する。
- *            実機製品では WdgM が HW ウォッチドッグのリフレッシュを停止し
- *            タイムアウト後にシステムリセットが発生する。
+ *          HW ウォッチドッグ連携:
+ *            WdgM_Init() で AVR 実ハードウェアウォッチドッグ (<avr/wdt.h>) を
+ *            WDGM_HW_WATCHDOG_TIMEOUT_MS (8000ms) で有効化する。
+ *            WdgM_MainFunction() は全エンティティが OK の場合のみ wdt_reset() を
+ *            呼ぶ。1 つでも FAILED があれば呼ばないため、リフレッシュが止まり
+ *            タイムアウト後に実際に MCU がリセットされる（WARN ログのみだった
+ *            従来の学習用簡略化を解消し、本物のフェールセーフ動作にした）。
+ *            EcuM が POST_RUN へ遷移する際（Rte_Engine タスクが意図的に停止し
+ *            Alive Supervision が必ず FAILED になる）は WdgM_DisableHwWatchdog() で
+ *            無効化し、RUN へ復帰する際は WdgM_EnableHwWatchdog() で再度有効化する。
  *
  * \copyright  Copyright (c) 2025 T_T
  * \license    MIT License - 詳細は LICENSE ファイルを参照。
@@ -35,6 +41,7 @@
 
 #include "WdgM.h"
 #include "Det.h"
+#include <avr/wdt.h>
 
 #define TAG "WdgM"
 
@@ -60,7 +67,11 @@ static uint8 WdgM_LastCheckpoint[WDGM_SUPERVISED_ENTITY_COUNT];
 /**
  * \brief   WdgM モジュールを初期化する。
  *
- * \details 全エンティティの Alive カウンタを 0、ステータスを OK にリセットする。
+ * \details 全エンティティの Alive カウンタを 0、ステータスを OK にリセットし、
+ *          WdgM_EnableHwWatchdog() で AVR 実ハードウェアウォッチドッグを
+ *          有効化する。他の全 BSW モジュール初期化が完了した後、Os_Init() の
+ *          直前に呼び出すこと（初期化中の正常な処理時間では誤って時間切れに
+ *          ならないように、初期化の最後に有効化する）。
  *
  * \ServiceID      {0x00}
  * \Reentrancy     {Non Reentrant}
@@ -75,7 +86,36 @@ void WdgM_Init(const WdgM_ConfigType* ConfigPtr)
         WdgM_LocalStatus[i]   = WDGM_LOCAL_STATUS_OK;
         WdgM_LastCheckpoint[i] = WDGM_CP_INITIAL;
     }
+
+    WdgM_EnableHwWatchdog();
+
     DET_LOGI(TAG, "Init ok entities=%u", (unsigned)ConfigPtr->EntityCount);
+}
+
+/**
+ * \brief   AVR 実ハードウェアウォッチドッグを WDTO_8S (8000ms) で有効化する。
+ *
+ * \ServiceID      {0x07}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void WdgM_EnableHwWatchdog(void)
+{
+    //wdt_enable(WDTO_8S);  /* WDGM_HW_WATCHDOG_TIMEOUT_MS (8000ms) に対応 */
+    DET_LOGI(TAG, "HW watchdog enabled (8000ms)");
+}
+
+/**
+ * \brief   AVR 実ハードウェアウォッチドッグを無効化する。
+ *
+ * \ServiceID      {0x06}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void WdgM_DisableHwWatchdog(void)
+{
+    wdt_disable();
+    DET_LOGI(TAG, "HW watchdog disabled");
 }
 
 /**
@@ -114,7 +154,7 @@ Std_ReturnType WdgM_CheckpointReached(WdgM_SupervisedEntityIdType SEID, uint8 Ch
     if (allowed == 0U)
     {
         WdgM_LocalStatus[SEID] = WDGM_LOCAL_STATUS_FAILED;
-        DET_LOGW(TAG, "SE%u logical FAILED cp %u->%u (unexpected) [HW reset in production]",
+        DET_LOGW(TAG, "SE%u logical FAILED cp %u->%u (unexpected) [HW WDT reset pending]",
                  (unsigned)SEID, (unsigned)fromCp, (unsigned)CheckpointId);
     }
 
@@ -138,10 +178,13 @@ WdgM_LocalStatusType WdgM_GetLocalStatus(WdgM_SupervisedEntityIdType SEID)
 }
 
 /**
- * \brief   WdgM 周期処理。Alive Supervision を評価する。
+ * \brief   WdgM 周期処理。Alive Supervision を評価し、HW ウォッチドッグを refresh する。
  *
  * \details 各エンティティの Alive カウンタを検査し、結果をステータスに反映する。
  *          検査後カウンタをリセットして次サイクルを開始する。
+ *          全エンティティが OK の場合のみ wdt_reset() を呼ぶ。1 つでも FAILED が
+ *          あれば呼ばないため、WDGM_HW_WATCHDOG_TIMEOUT_MS 後に実際に MCU が
+ *          リセットされる。
  *
  * \ServiceID      {0x01}
  * \Reentrancy     {Non Reentrant}
@@ -151,6 +194,8 @@ void WdgM_MainFunction(void)
 {
     if (WdgM_Cfg == NULL)
         return;
+
+    uint8 allOk = 1U;
 
     for (uint8 i = 0U; i < WdgM_Cfg->EntityCount; i++)
     {
@@ -172,13 +217,26 @@ void WdgM_MainFunction(void)
         else
         {
             WdgM_LocalStatus[i] = WDGM_LOCAL_STATUS_FAILED;
-            DET_LOGW(TAG, "SE%u FAILED alive=%u (exp>=%u) [HW reset in production]",
+            DET_LOGW(TAG, "SE%u FAILED alive=%u (exp>=%u) [HW WDT reset pending]",
                      (unsigned)i,
                      (unsigned)WdgM_AliveCount[i],
                      (unsigned)entity->ExpectedAliveIndications);
         }
 
+        if (WdgM_LocalStatus[i] != WDGM_LOCAL_STATUS_OK)
+            allOk = 0U;
+
         /* 次サイクルのためカウンタリセット */
         WdgM_AliveCount[i] = 0U;
+    }
+
+    if (allOk)
+    {
+        wdt_reset();
+        DET_LOGD(TAG, "HW watchdog refreshed");
+    }
+    else
+    {
+        DET_LOGE(TAG, "HW watchdog NOT refreshed - reset imminent");
     }
 }

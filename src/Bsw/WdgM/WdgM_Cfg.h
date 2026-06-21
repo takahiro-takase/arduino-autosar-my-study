@@ -44,6 +44,15 @@
 /** サイクル内に期待する CheckpointReached 呼び出し最小回数 */
 #define WDGM_EXPECTED_ALIVE_INDICATIONS  1U
 
+/**
+ * AVR ハードウェアウォッチドッグのタイムアウト。
+ * WdgM.c で <avr/wdt.h> の WDTO_8S（8000ms）として直接使用する
+ * （本ファイルを AVR ヘッダに依存させないため、列挙値はここでは定義しない）。
+ * WDGM_SUPERVISION_CYCLE_MS (6000ms) より長く設定すること。
+ * 健全なサイクルで wdt_reset() が呼ばれなければ、この時間内に MCU がリセットされる。
+ */
+#define WDGM_HW_WATCHDOG_TIMEOUT_MS  8000UL
+
 /* -----------------------------------------------------------------------
  * 論理監視 (Logical Supervision) チェックポイント ID
  * Entity 0 (App_EngineManager_Run) のプログラムフロー上の 2 点を表す。

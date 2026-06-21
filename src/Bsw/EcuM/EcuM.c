@@ -23,7 +23,12 @@
  *           11. App_EngineManager_Init — SW-C 初期化
  *           12. IoHwAb_Init    — I/O ハードウェア抽象化層初期化 (LED チャネル設定)
  *           13. App_WarningIndicator_Init — 警告灯 SW-C 初期化
- *           14. Os_Init        — タスクスケジューラ初期化 (全モジュール初期化後)
+ *           14. BswM_Init      — ルールエンジン初期化
+ *           15. WdgM_Init      — Alive/Logical Supervision 初期化。
+ *                                AVR 実ハードウェアウォッチドッグもここで有効化する
+ *                                （他の全モジュール初期化完了後、最後に有効化することで
+ *                                  初期化処理自体がタイムアウトの影響を受けないようにする）
+ *           16. Os_Init        — タスクスケジューラ初期化 (全モジュール初期化後)
  *
  *          周期処理 (EcuM_MainFunction):
  *            Os_SchedulerStep() — タスクテーブルに従い周期到来タスクを実行
@@ -198,6 +203,9 @@ Std_ReturnType EcuM_RequestRUN(EcuM_UserType user)
     {
         EcuM_State = ECUM_STATE_RUN;
         DET_LOGI(TAG, "->RUN user=%u", (unsigned)user);
+        /* Rte_Engine タスク（WdgM の監視対象）が再開するため、
+         * POST_RUN 移行時に無効化した HW ウォッチドッグを再度有効化する */
+        WdgM_EnableHwWatchdog();
         BswM_EcuM_CurrentState(ECUM_STATE_RUN);  /* Rule 0: 全タスク再有効化 */
     }
     return E_OK;
@@ -216,6 +224,13 @@ Std_ReturnType EcuM_ReleaseRUN(EcuM_UserType user)
         EcuM_State          = ECUM_STATE_POST_RUN;
         EcuM_PostRunTimerMs = millis();
         DET_LOGI(TAG, "->POST_RUN timeout=%lums", ECUM_POST_RUN_TIMEOUT_MS);
+        /* Rule 1 で Rte_Engine タスク（WdgM の唯一の監視対象）が停止するため、
+         * ここで HW ウォッチドッグも無効化する。POST_RUN 中はタスクが
+         * 意図的に停止しており Alive Supervision は必ず FAILED になるため、
+         * SHUTDOWN 遷移（最大 ECUM_POST_RUN_TIMEOUT_MS 後）を待つと
+         * HW ウォッチドッグのタイムアウト（8000ms）より先に意図しないリセットが
+         * 発生し得る。POST_RUN への移行そのものを安全な無効化ポイントとする。 */
+        WdgM_DisableHwWatchdog();
         BswM_EcuM_CurrentState(ECUM_STATE_POST_RUN);  /* Rule 1: アプリタスク無効化 */
     }
     return E_OK;
