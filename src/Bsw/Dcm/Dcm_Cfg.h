@@ -9,11 +9,15 @@
  *            0x10 DiagnosticSessionControl (Default / Extended)
  *            0x11 ECUReset (hardReset / softReset)
  *            0x14 ClearDiagnosticInformation (groupOfDTC=0xFFFFFF で全クリア、
- *              特定 DTC コード指定で 1 件クリア) — SecurityAccess Level1 必須
+ *              特定 DTC コード指定で 1 件クリア) — extendedSession + SecurityAccess Level1 必須
  *            0x19 ReadDTCInformation (subFunc 0x01/0x02/0x04) — マルチフレーム対応
  *            0x22 ReadDataByIdentifier (DID 0x0101-0x0103)
- *            0x27 SecurityAccess (subFunc 0x01 requestSeed / 0x02 sendKey)
+ *            0x27 SecurityAccess (subFunc 0x01 requestSeed / 0x02 sendKey) — extendedSession 限定
  *            0x3E TesterPresent (S3 タイマ維持)
+ *
+ *          SID × セッション許可は Dcm_Cbk.c の Dcm_SidSessionTable[]
+ *          (AUTOSAR DcmDspSessionRow に相当) で一元管理する。テーブルに掲載のない
+ *          SID はセッション制約なし（全セッションで許可）とみなす。
  *
  *          ISO 15765-2 (CAN TP) トランスポート層は CanTp モジュールが担当する。
  *          本モジュールは PCI バイトを含まない生 UDS ペイロードのみを扱う。
@@ -40,6 +44,14 @@
 /** S3 タイマ (ISO 14229-1): defaultSession 以外で、この時間内に診断要求が
  *  1 件も来なければ defaultSession へ自動遷移する。Dcm_MainFunction が監視する。 */
 #define DCM_S3_TIMEOUT_MS  60000UL
+
+/* -----------------------------------------------------------------------
+ * SID × セッション許可マスク (AUTOSAR DcmDspSessionRow に相当)
+ * Dcm_SidSessionTable[] (Dcm_Cbk.c) の AllowedSessionMask 列で使用する。
+ * ----------------------------------------------------------------------- */
+#define DCM_SESSION_MASK_DEFAULT   0x01U  /**< bit0: defaultSession で許可            */
+#define DCM_SESSION_MASK_EXTENDED  0x02U  /**< bit1: extendedDiagnosticSession で許可 */
+#define DCM_SESSION_MASK_ALL       (DCM_SESSION_MASK_DEFAULT | DCM_SESSION_MASK_EXTENDED)
 
 /* -----------------------------------------------------------------------
  * UDS サービス識別子 (ISO 14229-1 Table 3)
@@ -102,6 +114,10 @@
 #define DCM_NRC_INVALID_KEY                0x35U  /**< invalidKey (sendKey の鍵が不一致)        */
 #define DCM_NRC_EXCEEDED_NUM_ATTEMPTS      0x36U  /**< exceededNumberOfAttempts (連続失敗超過)  */
 #define DCM_NRC_REQUIRED_TIME_DELAY_NOT_EXPIRED  0x37U  /**< requiredTimeDelayNotExpired (待機中) */
+/** serviceNotSupportedInActiveSession。値は DCM_SID_NEGATIVE_RESP (0x7F) と
+ *  たまたま同じ 0x7F だが、これは応答フレーム 3 バイト目の NRC であり、
+ *  1 バイト目のネガティブレスポンス SID マーカーとは別物（意味も使用箇所も異なる）。 */
+#define DCM_NRC_SERVICE_NOT_SUPPORTED_IN_SESSION  0x7FU
 
 /* -----------------------------------------------------------------------
  * データ識別子 (DID) 定義
