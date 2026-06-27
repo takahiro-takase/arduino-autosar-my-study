@@ -9,9 +9,10 @@
  *            0x10 DiagnosticSessionControl (Default / Extended)
  *            0x11 ECUReset (hardReset / softReset)
  *            0x14 ClearDiagnosticInformation (groupOfDTC=0xFFFFFF で全クリア、
- *              特定 DTC コード指定で 1 件クリア)
+ *              特定 DTC コード指定で 1 件クリア) — SecurityAccess Level1 必須
  *            0x19 ReadDTCInformation (subFunc 0x01/0x02/0x04) — マルチフレーム対応
  *            0x22 ReadDataByIdentifier (DID 0x0101-0x0103)
+ *            0x27 SecurityAccess (subFunc 0x01 requestSeed / 0x02 sendKey)
  *            0x3E TesterPresent (S3 タイマ維持)
  *
  *          ISO 15765-2 (CAN TP) トランスポート層は CanTp モジュールが担当する。
@@ -38,7 +39,7 @@
 
 /** S3 タイマ (ISO 14229-1): defaultSession 以外で、この時間内に診断要求が
  *  1 件も来なければ defaultSession へ自動遷移する。Dcm_MainFunction が監視する。 */
-#define DCM_S3_TIMEOUT_MS  5000UL
+#define DCM_S3_TIMEOUT_MS  60000UL
 
 /* -----------------------------------------------------------------------
  * UDS サービス識別子 (ISO 14229-1 Table 3)
@@ -48,8 +49,27 @@
 #define DCM_SID_CLEAR_DTC       0x14U  /**< ClearDiagnosticInformation    */
 #define DCM_SID_READ_DTC_INFO   0x19U  /**< ReadDTCInformation            */
 #define DCM_SID_READ_DATA       0x22U  /**< ReadDataByIdentifier          */
+#define DCM_SID_SECURITY_ACCESS 0x27U  /**< SecurityAccess                */
 #define DCM_SID_TESTER_PRESENT  0x3EU  /**< TesterPresent                 */
 #define DCM_SID_NEGATIVE_RESP   0x7FU  /**< NegativeResponse              */
+
+/* -----------------------------------------------------------------------
+ * SecurityAccess (SID 0x27) サブ機能 (ISO 14229-1 Table 44; Level1 のみ対応)
+ * ----------------------------------------------------------------------- */
+#define DCM_SEC_SUBFUNC_REQUEST_SEED  0x01U  /**< requestSeed (Level1) */
+#define DCM_SEC_SUBFUNC_SEND_KEY      0x02U  /**< sendKey     (Level1) */
+
+/** seed→key 変換に使う固定 XOR マスク。
+ *  学習用の単純な例であり、実運用の ECU では使用しないこと
+ *  （量産では暗号学的または OEM 固有の非公開アルゴリズムを用いる）。 */
+#define DCM_SECURITY_KEY_MASK       0xA55AU
+
+/** sendKey 連続失敗の許容回数。これに達すると DCM_SECURITY_DELAY_MS の間
+ *  requestSeed 自体を拒否する (NRC 0x37) ブルートフォース対策。 */
+#define DCM_SECURITY_MAX_ATTEMPTS   3U
+
+/** 試行回数超過後、再度 requestSeed を受け付けるまでの待機時間 [ms]。 */
+#define DCM_SECURITY_DELAY_MS       10000UL
 
 /* -----------------------------------------------------------------------
  * ReadDTCInformation (SID 0x19) サブ機能
@@ -76,7 +96,12 @@
 #define DCM_NRC_SERVICE_NOT_SUPPORTED      0x11U  /**< serviceNotSupported      */
 #define DCM_NRC_SUB_FUNC_NOT_SUPPORTED     0x12U  /**< subFunctionNotSupported  */
 #define DCM_NRC_CONDITIONS_NOT_CORRECT     0x22U  /**< conditionsNotCorrect     */
+#define DCM_NRC_REQUEST_SEQUENCE_ERROR     0x24U  /**< requestSequenceError (seed なしで sendKey 等) */
 #define DCM_NRC_REQUEST_OUT_OF_RANGE       0x31U  /**< requestOutOfRange        */
+#define DCM_NRC_SECURITY_ACCESS_DENIED     0x33U  /**< securityAccessDenied (Level1 未取得)     */
+#define DCM_NRC_INVALID_KEY                0x35U  /**< invalidKey (sendKey の鍵が不一致)        */
+#define DCM_NRC_EXCEEDED_NUM_ATTEMPTS      0x36U  /**< exceededNumberOfAttempts (連続失敗超過)  */
+#define DCM_NRC_REQUIRED_TIME_DELAY_NOT_EXPIRED  0x37U  /**< requiredTimeDelayNotExpired (待機中) */
 
 /* -----------------------------------------------------------------------
  * データ識別子 (DID) 定義
