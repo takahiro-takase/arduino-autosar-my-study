@@ -20,6 +20,7 @@
 #include "Rte.h"
 #include "Com.h"
 #include "IoHwAb.h"
+#include "FiM.h"
 #include "SchM.h"
 
 /* シグナル ID は Com_Cfg.h の COM_SIGNAL_* を使用（重複定義を排除） */
@@ -350,6 +351,29 @@ Std_ReturnType Rte_Call_Button_GetLevel(uint8* level)
 Std_ReturnType Rte_Call_Adc_GetValue_mV(uint16* mv)
 {
     return IoHwAb_Adc_GetValue_mV(mv);
+}
+
+/**
+ * \brief   機能許可状態取得の Client/Server ポート。
+ *
+ * \details SW-C (App_EngineManager / App_WarningIndicator) から呼び出され、
+ *          FiM_GetFunctionPermission() へ委譲する。
+ *          C/S ポートにより SW-C は FiM の判定テーブル構造を知らない
+ *          (AUTOSAR SWS_RTE の Rte_Call_<p>_<o> パターン)。
+ *
+ * \param[in]   functionId  機能 ID (FIM_FID_*)。
+ * \param[out]  status      1=許可 / 0=抑止 の格納先。NULL 禁止。
+ *
+ * \retval  E_OK      正常取得。
+ * \retval  E_NOT_OK  functionId が範囲外、または status が NULL。
+ *
+ * \ServiceID      {0xF1}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType Rte_Call_FiM_GetFunctionPermission(uint8 functionId, uint8* status)
+{
+    return FiM_GetFunctionPermission(functionId, status);
 }
 
 /**
