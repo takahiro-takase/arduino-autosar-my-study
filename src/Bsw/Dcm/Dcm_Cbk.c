@@ -40,6 +40,14 @@
  *            4. ClearDiagnosticInformation (0x14) は Level1 アンロック済みでなければ
  *               NRC 0x33 securityAccessDenied を返す。
  *
+ *          SID × セッション許可 (Dcm_SidSessionTable[], AUTOSAR DcmDspSessionRow 相当):
+ *            Dcm_ComIndication() が SID ディスパッチの前に全 SID 共通で判定する。
+ *            テーブルに掲載のない SID はセッション制約なし。現在は 0x14 と 0x27 のみ
+ *            extendedSession 限定とし、defaultSession では NRC 0x7F
+ *            serviceNotSupportedInActiveSession で拒否する。各ハンドラ個別に
+ *            セッション判定を埋め込むのではなく、一元管理することで
+ *            「どの SID がどのセッションで使えるか」を一覧できるようにしている。
+ *
  *          応答送信フロー:
  *            Dcm → CanTp_Transmit(CANTP_TX_SDU_ID) → PduR_Transmit → CanIf
  *            → Can_Write → MCP2515 → CAN 0x7E8
@@ -317,8 +325,10 @@ static void Dcm_HandleEcuReset(const uint8* uds, uint8 udsLen)
  *          一致するイベントを探して Dem_ClearDTC() で 1 件だけクリアする
  *          （該当イベントがなければ NRC 0x31）。
  *          いずれの場合も正応答 [0x54] を返す。
- *          SecurityAccess Level1 がアンロックされていない場合は NRC 0x33 を返す
- *          (DTC 履歴の消去は誤操作・悪用の影響が大きいため保護対象とする)。
+ *          DTC 履歴の消去は誤操作・悪用の影響が大きいため二重に保護する:
+ *            ・extendedSession 限定（Dcm_ComIndication の Dcm_SidSessionTable[] が判定、
+ *              defaultSession では本関数に到達する前に NRC 0x7F で拒否される）
+ *            ・SecurityAccess Level1 アンロック必須（本関数内で判定、未アンロックは NRC 0x33）
  *
  * \param[in]  uds     UDS ペイロード先頭ポインタ (uds[0]=SID 0x14)。
  * \param[in]  udsLen  UDS ペイロード長。
@@ -809,21 +819,15 @@ static void Dcm_HandleSecuritySendKey(uint8 subFunc, const uint8* uds, uint8 uds
 /**
  * \brief   UDS 0x27 SecurityAccess のサブ機能をディスパッチする。
  *
- * \details defaultSession では NRC 0x22 conditionsNotCorrect を返す
- *          (SecurityAccess は extendedSession 等の非デフォルトセッションでのみ
- *          許可される、という典型的な AUTOSAR/UDS のセッション×サービス制約を模している)。
+ * \details extendedSession 限定であることは Dcm_ComIndication の
+ *          Dcm_SidSessionTable[] チェックで一元的に保証済みのため、
+ *          本関数ではセッション判定を行わない。
  *
  * \param[in]  uds     UDS ペイロード先頭ポインタ (uds[0]=SID 0x27)。
  * \param[in]  udsLen  UDS ペイロード長。
  */
 static void Dcm_HandleSecurityAccess(const uint8* uds, uint8 udsLen)
 {
-    if (Dcm_CurrentSession == DCM_SESSION_DEFAULT)
-    {
-        Dcm_SendNegativeResponse(DCM_SID_SECURITY_ACCESS, DCM_NRC_CONDITIONS_NOT_CORRECT);
-        return;
-    }
-
     if (udsLen < 2U)
     {
         Dcm_SendNegativeResponse(DCM_SID_SECURITY_ACCESS, DCM_NRC_CONDITIONS_NOT_CORRECT);
@@ -874,6 +878,60 @@ static void Dcm_HandleTesterPresent(const uint8* uds, uint8 udsLen)
 }
 
 /* -----------------------------------------------------------------------
+ * SID × セッション許可テーブル (AUTOSAR DcmDspSessionRow に相当)
+ * ----------------------------------------------------------------------- */
+
+/** SID ごとに許可されるセッションを表す 1 行。 */
+typedef struct
+{
+    uint8 Sid;
+    uint8 AllowedSessionMask;  /**< DCM_SESSION_MASK_* の組み合わせ */
+} Dcm_SidSessionRowType;
+
+/** テーブルに掲載のない SID はセッション制約なし（全セッションで許可）とみなす。
+ *  DTC 履歴の消去 (0x14) とセキュリティ認証 (0x27) のみ、誤操作・悪用の影響が
+ *  大きいため extendedSession 限定とする学習用の最小構成。
+ *  実際の AUTOSAR では DcmDspSessionRow がサービス・サブ機能単位で
+ *  この表をコンフィギュレーションツールから生成する。 */
+static const Dcm_SidSessionRowType Dcm_SidSessionTable[] =
+{
+    { DCM_SID_CLEAR_DTC,       DCM_SESSION_MASK_EXTENDED },
+    { DCM_SID_SECURITY_ACCESS, DCM_SESSION_MASK_EXTENDED },
+};
+
+/**
+ * \brief   SID が現在のセッションで許可されているかを判定する。
+ *
+ * \details Dcm_SidSessionTable[] を先頭から探索し、一致する行があれば
+ *          AllowedSessionMask と現在のセッションのビットを照合する。
+ *          一致する行がなければセッション制約なし（常に許可）として扱う。
+ *
+ * \param[in]  sid      判定対象の UDS サービス ID。
+ * \param[in]  session  現在のセッション (DCM_SESSION_DEFAULT / _EXTENDED)。
+ *
+ * \retval  1  現在のセッションで許可されている。
+ * \retval  0  現在のセッションでは許可されない。
+ */
+static uint8 Dcm_IsServiceAllowedInSession(uint8 sid, uint8 session)
+{
+    const uint8 sessionMask = (session == DCM_SESSION_EXTENDED)
+                               ? DCM_SESSION_MASK_EXTENDED
+                               : DCM_SESSION_MASK_DEFAULT;
+    const uint8 rowCount = (uint8)(sizeof(Dcm_SidSessionTable) / sizeof(Dcm_SidSessionTable[0]));
+    uint8 i;
+
+    for (i = 0U; i < rowCount; i++)
+    {
+        if (Dcm_SidSessionTable[i].Sid == sid)
+        {
+            return ((Dcm_SidSessionTable[i].AllowedSessionMask & sessionMask) != 0U) ? 1U : 0U;
+        }
+    }
+
+    return 1U;  /* テーブル未掲載 = 制約なし */
+}
+
+/* -----------------------------------------------------------------------
  * Dcm_ComIndication — CanTp から呼び出されるエントリポイント
  * ----------------------------------------------------------------------- */
 
@@ -908,6 +966,14 @@ void Dcm_ComIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
     Dcm_LastActivityMs = millis();
 
     DET_LOGI(TAG, "req SID=0x%02X", (unsigned)sid);
+
+    /* SID × セッション許可チェック (Dcm_SidSessionTable[]) を全 SID 共通で先に行う。
+     * 各ハンドラ個別の特例チェックに分散させず、ここで一元的に拒否する。 */
+    if (Dcm_IsServiceAllowedInSession(sid, Dcm_CurrentSession) == 0U)
+    {
+        Dcm_SendNegativeResponse(sid, DCM_NRC_SERVICE_NOT_SUPPORTED_IN_SESSION);
+        return;
+    }
 
     /* --- UDS サービスディスパッチ --- */
     switch (sid)
