@@ -30,6 +30,7 @@
 #include "Dem.h"
 #include "Det.h"
 #include "WdgM.h"
+#include "FiM_Cfg.h"
 
 #define TAG "AppEng"
 
@@ -87,6 +88,9 @@ void App_EngineManager_Init(void)
  *          STARTING / RUNNING 中のタイムアウトは FAULT 遷移し DEM に記録する。
  *          OFF / FAULT 中は通信不在が正常のためタイムアウトを無視する。
  *
+ *          警告確認ボタンによる FAULT 解除は FiM_FID_BUTTON_ACK が抑止中
+ *          （ボタン固着確定中）の間は受理しない。
+ *
  * \pre        App_EngineManager_Init() が正常に完了していること。
  *
  * \ServiceID      {0xF0}
@@ -140,11 +144,23 @@ void App_EngineManager_Run(void)
 
     /* 警告確認ボタンは CAN 通信状態によらず常に有効。
      * comm timeout 中の FAULT（CAN E_NOT_OK 継続）でも上記 switch に到達しないため、
-     * ここで独立してチェックする。 */
+     * ここで独立してチェックする。
+     * ただし FiM が抑止中（ボタン固着確定中）は、押下が物理的固着による
+     * 偽信号である可能性を排除できないため受理しない。 */
     if (s_state == ENGINE_STATE_FAULT && btnPressed == 1U)
     {
-        s_state = ENGINE_STATE_OFF;
-        DET_LOGI(TAG, "FAULT->OFF btn=1");
+        uint8 ackPermitted = 1U;
+        (void)Rte_Call_FiM_GetFunctionPermission(FIM_FID_BUTTON_ACK, &ackPermitted);
+
+        if (ackPermitted == 1U)
+        {
+            s_state = ENGINE_STATE_OFF;
+            DET_LOGI(TAG, "FAULT->OFF btn=1");
+        }
+        else
+        {
+            DET_LOGW(TAG, "FAULT->OFF btn=1 inhibited (FiM)");
+        }
     }
 
     (void)Rte_Write_EngineStatus_EngineState(s_state);

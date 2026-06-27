@@ -48,6 +48,9 @@ Std_ReturnType Rte_Call_Button_GetLevel(uint8* level);
 /* Client/Server ポート — IoHwAb_Adc_GetValue_mV へ委譲 */
 Std_ReturnType Rte_Call_Adc_GetValue_mV(uint16* mv);
 
+/* Client/Server ポート — FiM_GetFunctionPermission へ委譲 */
+Std_ReturnType Rte_Call_FiM_GetFunctionPermission(uint8 functionId, uint8* status);
+
 /* ABS ECU シグナル読み取りポート (AbsInfo フレーム 0x110) */
 Std_ReturnType Rte_Read_VehicleSensor_VehicleSpeed(VehicleSpeed_t* data);
 Std_ReturnType Rte_Read_BrakeSensor_BrakeActive(BrakeActive_t* data);

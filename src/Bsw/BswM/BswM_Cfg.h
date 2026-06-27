@@ -30,14 +30,15 @@
 #define BSWM_OS_TASK_IOHWAB_MAIN    6U  /**< IoHwAb_MainFunction  (10 ms)   */
 #define BSWM_OS_TASK_WDGM_MAIN      7U  /**< WdgM_MainFunction    (6000 ms) */
 #define BSWM_OS_TASK_DCM_MAIN       8U  /**< Dcm_MainFunction     (1000 ms) */
+#define BSWM_OS_TASK_FIM_MAIN       9U  /**< FiM_MainFunction     (100 ms)  */
 
 /* -----------------------------------------------------------------------
  * タスクビットマスク (1ビット = 1タスク; ビット位置 = タスク ID)
  * タスク数が 8 を超えるため uint16 を使用する。
  * ----------------------------------------------------------------------- */
 
-/** 全タスク (bits 0〜8) */
-#define BSWM_TASK_MASK_ALL  0x1FFU
+/** 全タスク (bits 0〜9) */
+#define BSWM_TASK_MASK_ALL  0x3FFU
 
 /** アプリ Runnable タスク: RTE_ENGINE + RTE_WARNING
  *  POST_RUN 時に停止し、アプリロジックを凍結する */

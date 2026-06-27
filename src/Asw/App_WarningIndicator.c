@@ -25,6 +25,7 @@
 
 #include "App_WarningIndicator.h"
 #include "Rte.h"
+#include "FiM_Cfg.h"
 #include "Det.h"
 
 #define TAG "WarnInd"
@@ -63,6 +64,7 @@ void App_WarningIndicator_Init(void)
  *
  *          各 LED の制御ルール:
  *            D6 RUNNING LED: ENGINE_STATE_RUNNING → 点灯、それ以外 → 消灯
+ *                            (FiM が FID_RUNNING_LED を抑止中なら強制消灯)
  *            D7 FAULT LED  : ENGINE_STATE_FAULT   → 500 ms ごとにトグル（点滅）、それ以外 → 消灯
  *            D8 ABS LED    : ABS_ACTIVE = 1       → 点灯、それ以外 → 消灯
  *
@@ -83,8 +85,12 @@ void App_WarningIndicator_Run(void)
     (void)Rte_Read_WarningIndicator_EngineState(&state);
     (void)Rte_Read_AbsSensor_AbsActive(&absActive);
 
-    /* D6: RUNNING LED — ENGINE_STATE_RUNNING のとき点灯 */
-    const uint8 runLevel = (state == ENGINE_STATE_RUNNING) ? 1U : 0U;
+    /* D6: RUNNING LED — ENGINE_STATE_RUNNING のとき点灯。
+     * ただし FiM が抑止中（CAN Bus-Off 確定中、EngineState は CAN 受信由来の
+     * ため信頼できない）なら強制消灯する。 */
+    uint8 runPermitted = 1U;
+    (void)Rte_Call_FiM_GetFunctionPermission(FIM_FID_RUNNING_LED, &runPermitted);
+    const uint8 runLevel = (state == ENGINE_STATE_RUNNING && runPermitted == 1U) ? 1U : 0U;
     (void)Rte_Call_LedRunning_SetLevel(runLevel);
 
     /* D7: FAULT LED — ENGINE_STATE_FAULT のとき 500 ms ごとにトグル */

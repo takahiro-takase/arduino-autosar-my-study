@@ -16,19 +16,20 @@
  *            6. CanTp_Init     — CAN トランスポートプロトコル初期化
  *            7. Dcm_Init       — 診断通信モジュール初期化
  *            8. Dem_Init       — NvM 経由で DTC ステータスを復元
- *            9. ComM_Init      — 通信マネージャ初期化 (NO_COM 状態)
- *           10. ComM_RequestComMode(FULL_COM) — CAN バス通信開始
+ *            9. FiM_Init       — 機能抑止状態を初期化 (Dem_Init の後)
+ *           10. ComM_Init      — 通信マネージャ初期化 (NO_COM 状態)
+ *           11. ComM_RequestComMode(FULL_COM) — CAN バス通信開始
  *                               （全上位層初期化後に開始することで
  *                                 フレーム到着時の未初期化アクセスを防ぐ）
- *           11. App_EngineManager_Init — SW-C 初期化
- *           12. IoHwAb_Init    — I/O ハードウェア抽象化層初期化 (LED チャネル設定)
- *           13. App_WarningIndicator_Init — 警告灯 SW-C 初期化
- *           14. BswM_Init      — ルールエンジン初期化
- *           15. WdgM_Init      — Alive/Logical Supervision 初期化。
+ *           12. App_EngineManager_Init — SW-C 初期化
+ *           13. IoHwAb_Init    — I/O ハードウェア抽象化層初期化 (LED チャネル設定)
+ *           14. App_WarningIndicator_Init — 警告灯 SW-C 初期化
+ *           15. BswM_Init      — ルールエンジン初期化
+ *           16. WdgM_Init      — Alive/Logical Supervision 初期化。
  *                                AVR 実ハードウェアウォッチドッグもここで有効化する
  *                                （他の全モジュール初期化完了後、最後に有効化することで
  *                                  初期化処理自体がタイムアウトの影響を受けないようにする）
- *           16. Os_Init        — タスクスケジューラ初期化 (全モジュール初期化後)
+ *           17. Os_Init        — タスクスケジューラ初期化 (全モジュール初期化後)
  *
  *          周期処理 (EcuM_MainFunction):
  *            Os_SchedulerStep() — タスクテーブルに従い周期到来タスクを実行
@@ -65,6 +66,8 @@
 #include "CanTp.h"
 #include "Dcm.h"
 #include "Dem.h"
+#include "FiM.h"
+#include "FiM_PBCfg.h"
 #include "Port.h"
 #include "CanSM.h"
 #include "ComM.h"
@@ -126,6 +129,7 @@ void EcuM_Init(void)
     CanTp_Init();
     Dcm_Init();
     Dem_Init();
+    FiM_Init(&FiM_Config);                                    /* Dem_Init の後（Dem 状態を参照するため） */
     CanSM_Init();                                             /* NO_COM 状態で開始 */
     ComM_Init();
     ComM_RequestComMode(COMM_USER_0, COMM_FULL_COMMUNICATION);/* 全層初期化後に開通 */
