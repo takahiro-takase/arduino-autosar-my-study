@@ -8,8 +8,10 @@
  *            0x10 DiagnosticSessionControl — Default / Extended セッション切替
  *            0x11 ECUReset               — hardReset / softReset (応答後セッションリセット)
  *            0x14 ClearDiagnosticInformation — 全 DTC クリア／DTC 指定で 1 件クリア
+ *                                              (SecurityAccess Level1 必須)
  *            0x19 ReadDTCInformation     — subFunc 0x01/0x02/0x04
  *            0x22 ReadDataByIdentifier   — DID 0x0101/0x0102/0x0103
+ *            0x27 SecurityAccess         — subFunc 0x01 requestSeed / 0x02 sendKey
  *            0x3E TesterPresent          — セッション維持 (S3 タイマリセット)
  *
  *          ISO 15765-2 (CAN TP) は CanTp モジュールが担当する。
@@ -21,6 +23,22 @@
  *            最終活動時刻を更新する (TesterPresent に限らず全サービスが対象)。
  *            Dcm_MainFunction() が周期的に経過時間を確認し、
  *            DCM_S3_TIMEOUT_MS 以上要求が来なければ defaultSession へ復帰する。
+ *
+ *          SecurityAccess (Level1) 状態機械:
+ *            1. requestSeed (27/01): ロック中なら seed を生成して応答し、
+ *               「seed 発行済み・key 未受信」状態にする。アンロック済みなら
+ *               ISO 14229-1 の作法通り allZeroSeed (seed=0x0000) を返す。
+ *            2. sendKey (27/02): 直前に発行した seed から期待される key
+ *               (seed XOR DCM_SECURITY_KEY_MASK) と比較する。
+ *               一致 → Level1 アンロック。不一致 → NRC 0x35、
+ *               DCM_SECURITY_MAX_ATTEMPTS 回連続失敗で NRC 0x36 を返し
+ *               DCM_SECURITY_DELAY_MS の間 requestSeed 自体を NRC 0x37 で拒否する
+ *               (ブルートフォース対策、ISO 14229-1 準拠)。
+ *            3. defaultSession へ遷移（明示要求または S3 タイムアウト）すると
+ *               Level1 は再ロックされる。失敗回数・待機時間はセッションをまたいで
+ *               維持する（再ロックでブルートフォース対策を回避できないようにする）。
+ *            4. ClearDiagnosticInformation (0x14) は Level1 アンロック済みでなければ
+ *               NRC 0x33 securityAccessDenied を返す。
  *
  *          応答送信フロー:
  *            Dcm → CanTp_Transmit(CANTP_TX_SDU_ID) → PduR_Transmit → CanIf
@@ -55,6 +73,27 @@ static uint8 Dcm_CurrentSession;
 /** 最後に診断要求を受信した時刻 (S3 タイマの基準点) */
 static unsigned long Dcm_LastActivityMs;
 
+/** SecurityAccess Level1 状態 (0=Locked, 1=Unlocked) */
+static uint8 Dcm_SecurityLevel;
+
+/** requestSeed 発行済みで対応する sendKey をまだ受信していないか (1=待機中) */
+static uint8 Dcm_SecuritySeedPending;
+
+/** 直前に発行した seed 値 (sendKey 受信時の期待 key 計算に使用) */
+static uint16 Dcm_SecuritySeed;
+
+/** sendKey の連続失敗回数 (DCM_SECURITY_MAX_ATTEMPTS でロックアウト) */
+static uint8 Dcm_SecurityAttemptCount;
+
+/** ロックアウト中か (1=ロックアウト中)。(millis() - Dcm_SecurityLockoutStartMs)
+ *  が DCM_SECURITY_DELAY_MS 以上経過するまで requestSeed を NRC 0x37 で拒否する。
+ *  millis() オーバフロー (約49.7日) でも正しく動作する差分計算にするため、
+ *  絶対時刻ではなく開始時刻+フラグで持つ。 */
+static uint8 Dcm_SecurityLockoutActive;
+
+/** ロックアウト開始時刻 [ms] */
+static unsigned long Dcm_SecurityLockoutStartMs;
+
 /** UDS 応答バッファ (PCI バイトなし; CanTp がトランスポート層を付加する)
  *  最大サイズ: 0x19/02 応答 (6 DTC) = 3 + 6×4 = 27 バイト → 32 バイトで余裕を持たせる */
 static uint8 Dcm_TxBuf[32];
@@ -75,6 +114,11 @@ static void Dcm_HandleReadDtcCount(const uint8* uds, uint8 udsLen);
 static void Dcm_HandleReadDtcByMask(const uint8* uds, uint8 udsLen);
 static void Dcm_HandleReadDtcSnapshot(const uint8* uds, uint8 udsLen);
 static void Dcm_HandleReadDataById(const uint8* uds, uint8 udsLen);
+static void Dcm_HandleSecurityAccess(const uint8* uds, uint8 udsLen);
+static void Dcm_HandleSecurityRequestSeed(uint8 subFunc);
+static void Dcm_HandleSecuritySendKey(uint8 subFunc, const uint8* uds, uint8 udsLen);
+static uint16 Dcm_ComputeSecurityKey(uint16 seed);
+static void Dcm_SecurityLock(void);
 static void Dcm_HandleTesterPresent(const uint8* uds, uint8 udsLen);
 static Std_ReturnType Dcm_ReadDid(uint16 did, uint8* buf, uint8* dataLen);
 
@@ -98,6 +142,12 @@ void Dcm_Init(void)
     Dcm_TxPdu.SduDataPtr = Dcm_TxBuf;
     Dcm_TxPdu.SduLength  = 0U;   /* 各ハンドラで送信長を設定する */
     Dcm_LastActivityMs   = millis();
+
+    Dcm_SecurityLevel         = 0U;
+    Dcm_SecuritySeedPending   = 0U;
+    Dcm_SecurityAttemptCount  = 0U;
+    Dcm_SecurityLockoutActive = 0U;
+
     DET_LOGI(TAG, "Init ok");
 }
 
@@ -121,6 +171,7 @@ void Dcm_MainFunction(void)
     {
         DET_LOGI(TAG, "S3 timeout -> session=Default");
         Dcm_CurrentSession = DCM_SESSION_DEFAULT;
+        Dcm_SecurityLock();
     }
 }
 
@@ -191,6 +242,9 @@ static void Dcm_HandleSessionControl(const uint8* uds, uint8 udsLen)
     }
 
     Dcm_CurrentSession = subFunc;
+
+    if (subFunc == DCM_SESSION_DEFAULT)
+        Dcm_SecurityLock();
 
     DET_LOGI(TAG, "10 session=0x%02X", (unsigned)subFunc);
 
@@ -263,12 +317,20 @@ static void Dcm_HandleEcuReset(const uint8* uds, uint8 udsLen)
  *          一致するイベントを探して Dem_ClearDTC() で 1 件だけクリアする
  *          （該当イベントがなければ NRC 0x31）。
  *          いずれの場合も正応答 [0x54] を返す。
+ *          SecurityAccess Level1 がアンロックされていない場合は NRC 0x33 を返す
+ *          (DTC 履歴の消去は誤操作・悪用の影響が大きいため保護対象とする)。
  *
  * \param[in]  uds     UDS ペイロード先頭ポインタ (uds[0]=SID 0x14)。
  * \param[in]  udsLen  UDS ペイロード長。
  */
 static void Dcm_HandleClearDtc(const uint8* uds, uint8 udsLen)
 {
+    if (Dcm_SecurityLevel == 0U)
+    {
+        Dcm_SendNegativeResponse(DCM_SID_CLEAR_DTC, DCM_NRC_SECURITY_ACCESS_DENIED);
+        return;
+    }
+
     if (udsLen < 4U)
     {
         Dcm_SendNegativeResponse(DCM_SID_CLEAR_DTC, DCM_NRC_CONDITIONS_NOT_CORRECT);
@@ -593,6 +655,198 @@ static void Dcm_HandleReadDataById(const uint8* uds, uint8 udsLen)
 }
 
 /* -----------------------------------------------------------------------
+ * 0x27 SecurityAccess
+ * ----------------------------------------------------------------------- */
+
+/**
+ * \brief   seed から期待される key を計算する。
+ *
+ * \details 学習用の単純な固定 XOR マスクによる変換。
+ *          実際の量産 ECU は暗号学的アルゴリズムや OEM 固有の非公開アルゴリズムを
+ *          用いるため、本実装をそのまま実運用に転用しないこと。
+ *
+ * \param[in]  seed  requestSeed で発行した seed 値。
+ * \return     対応する期待 key 値。
+ */
+static uint16 Dcm_ComputeSecurityKey(uint16 seed)
+{
+    return (uint16)(seed ^ DCM_SECURITY_KEY_MASK);
+}
+
+/**
+ * \brief   SecurityAccess Level1 を再ロックする。
+ *
+ * \details defaultSession への遷移（明示要求・S3 タイムアウトいずれも）で呼ぶ。
+ *          連続失敗回数・ロックアウト解除時刻はあえてリセットしない
+ *          （セッション往復によるブルートフォース対策の回避を防ぐため）。
+ */
+static void Dcm_SecurityLock(void)
+{
+    if (Dcm_SecurityLevel != 0U)
+        DET_LOGI(TAG, "27 Security locked (session->Default)");
+
+    Dcm_SecurityLevel       = 0U;
+    Dcm_SecuritySeedPending = 0U;
+}
+
+/**
+ * \brief   SID 0x27 subFunc 0x01 requestSeed を処理する。
+ *
+ * \details Locked 中はロックアウト中でなければ新しい seed (millis() 由来) を発行し、
+ *          「seed 発行済み・key 未受信」状態にする。ロックアウト中は NRC 0x37。
+ *          Unlocked 済みの場合は ISO 14229-1 の作法に従い allZeroSeed
+ *          (seed=0x0000) を返し、sendKey が不要であることを示す。
+ *
+ * \param[in]  subFunc  要求されたサブ機能 (0x01、suppressPosRsp ビット除去済み)。
+ */
+static void Dcm_HandleSecurityRequestSeed(uint8 subFunc)
+{
+    if (Dcm_SecurityLevel != 0U)
+    {
+        DET_LOGI(TAG, "27/%02X already unlocked -> allZeroSeed", (unsigned)subFunc);
+
+        Dcm_TxBuf[0] = 0x67U;               /* SID + 0x40 */
+        Dcm_TxBuf[1] = subFunc;
+        Dcm_TxBuf[2] = 0x00U;
+        Dcm_TxBuf[3] = 0x00U;
+        Dcm_TxPdu.SduLength = 4U;
+
+        Dcm_SecuritySeedPending = 0U;
+        Dcm_Transmit();
+        return;
+    }
+
+    if (Dcm_SecurityLockoutActive != 0U)
+    {
+        if ((millis() - Dcm_SecurityLockoutStartMs) < DCM_SECURITY_DELAY_MS)
+        {
+            Dcm_SendNegativeResponse(DCM_SID_SECURITY_ACCESS, DCM_NRC_REQUIRED_TIME_DELAY_NOT_EXPIRED);
+            return;
+        }
+        Dcm_SecurityLockoutActive = 0U;  /* 待機時間経過、ロックアウト解除 */
+    }
+
+    Dcm_SecuritySeed        = (uint16)millis();
+    Dcm_SecuritySeedPending = 1U;
+
+    DET_LOGI(TAG, "27/%02X seed=0x%04X", (unsigned)subFunc, (unsigned)Dcm_SecuritySeed);
+
+    /* 正応答: [0x67, subFunc, seedH, seedL] */
+    Dcm_TxBuf[0] = 0x67U;
+    Dcm_TxBuf[1] = subFunc;
+    Dcm_TxBuf[2] = (uint8)(Dcm_SecuritySeed >> 8U);
+    Dcm_TxBuf[3] = (uint8)(Dcm_SecuritySeed & 0xFFU);
+    Dcm_TxPdu.SduLength = 4U;
+
+    Dcm_Transmit();
+}
+
+/**
+ * \brief   SID 0x27 subFunc 0x02 sendKey を処理する。
+ *
+ * \details 直前の requestSeed で発行した seed から期待 key を計算し、
+ *          受信した key と比較する。requestSeed なしでの sendKey は
+ *          NRC 0x24 requestSequenceError。鍵不一致は NRC 0x35、
+ *          DCM_SECURITY_MAX_ATTEMPTS 回連続失敗で NRC 0x36 を返し
+ *          DCM_SECURITY_DELAY_MS の間ロックアウトする。
+ *          1 つの seed は 1 回の sendKey でのみ有効（再試行には新しい
+ *          requestSeed が必要）。
+ *
+ * \param[in]  subFunc  要求されたサブ機能 (0x02、suppressPosRsp ビット除去済み)。
+ * \param[in]  uds      UDS ペイロード先頭ポインタ ([0x27, 0x02, keyH, keyL])。
+ * \param[in]  udsLen   UDS ペイロード長。
+ */
+static void Dcm_HandleSecuritySendKey(uint8 subFunc, const uint8* uds, uint8 udsLen)
+{
+    if (udsLen < 4U)
+    {
+        Dcm_SendNegativeResponse(DCM_SID_SECURITY_ACCESS, DCM_NRC_CONDITIONS_NOT_CORRECT);
+        return;
+    }
+
+    if (Dcm_SecuritySeedPending == 0U)
+    {
+        Dcm_SendNegativeResponse(DCM_SID_SECURITY_ACCESS, DCM_NRC_REQUEST_SEQUENCE_ERROR);
+        return;
+    }
+    Dcm_SecuritySeedPending = 0U;  /* この seed は 1 回限り; 再試行は requestSeed からやり直す */
+
+    uint16 key      = ((uint16)uds[2] << 8U) | (uint16)uds[3];
+    uint16 expected = Dcm_ComputeSecurityKey(Dcm_SecuritySeed);
+
+    if (key != expected)
+    {
+        Dcm_SecurityAttemptCount++;
+        DET_LOGW(TAG, "27/%02X invalid key attempt=%u", (unsigned)subFunc, (unsigned)Dcm_SecurityAttemptCount);
+
+        if (Dcm_SecurityAttemptCount >= DCM_SECURITY_MAX_ATTEMPTS)
+        {
+            Dcm_SecurityLockoutActive  = 1U;
+            Dcm_SecurityLockoutStartMs = millis();
+            Dcm_SecurityAttemptCount   = 0U;
+            DET_LOGW(TAG, "27 lockout %lums", DCM_SECURITY_DELAY_MS);
+            Dcm_SendNegativeResponse(DCM_SID_SECURITY_ACCESS, DCM_NRC_EXCEEDED_NUM_ATTEMPTS);
+        }
+        else
+        {
+            Dcm_SendNegativeResponse(DCM_SID_SECURITY_ACCESS, DCM_NRC_INVALID_KEY);
+        }
+        return;
+    }
+
+    Dcm_SecurityLevel        = 1U;
+    Dcm_SecurityAttemptCount = 0U;
+    DET_LOGI(TAG, "27/%02X unlocked", (unsigned)subFunc);
+
+    /* 正応答: [0x67, subFunc] */
+    Dcm_TxBuf[0] = 0x67U;
+    Dcm_TxBuf[1] = subFunc;
+    Dcm_TxPdu.SduLength = 2U;
+
+    Dcm_Transmit();
+}
+
+/**
+ * \brief   UDS 0x27 SecurityAccess のサブ機能をディスパッチする。
+ *
+ * \details defaultSession では NRC 0x22 conditionsNotCorrect を返す
+ *          (SecurityAccess は extendedSession 等の非デフォルトセッションでのみ
+ *          許可される、という典型的な AUTOSAR/UDS のセッション×サービス制約を模している)。
+ *
+ * \param[in]  uds     UDS ペイロード先頭ポインタ (uds[0]=SID 0x27)。
+ * \param[in]  udsLen  UDS ペイロード長。
+ */
+static void Dcm_HandleSecurityAccess(const uint8* uds, uint8 udsLen)
+{
+    if (Dcm_CurrentSession == DCM_SESSION_DEFAULT)
+    {
+        Dcm_SendNegativeResponse(DCM_SID_SECURITY_ACCESS, DCM_NRC_CONDITIONS_NOT_CORRECT);
+        return;
+    }
+
+    if (udsLen < 2U)
+    {
+        Dcm_SendNegativeResponse(DCM_SID_SECURITY_ACCESS, DCM_NRC_CONDITIONS_NOT_CORRECT);
+        return;
+    }
+
+    uint8 subFunc = uds[1] & 0x7FU;   /* bit7: suppressPosRsp (本実装では無視) */
+
+    switch (subFunc)
+    {
+    case DCM_SEC_SUBFUNC_REQUEST_SEED:
+        Dcm_HandleSecurityRequestSeed(subFunc);
+        break;
+    case DCM_SEC_SUBFUNC_SEND_KEY:
+        Dcm_HandleSecuritySendKey(subFunc, uds, udsLen);
+        break;
+    default:
+        Dcm_SendNegativeResponse(DCM_SID_SECURITY_ACCESS, DCM_NRC_SUB_FUNC_NOT_SUPPORTED);
+        break;
+    }
+}
+
+/* -----------------------------------------------------------------------
  * 0x3E TesterPresent
  * ----------------------------------------------------------------------- */
 
@@ -672,6 +926,9 @@ void Dcm_ComIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
         break;
     case DCM_SID_READ_DATA:
         Dcm_HandleReadDataById(uds, udsLen);
+        break;
+    case DCM_SID_SECURITY_ACCESS:
+        Dcm_HandleSecurityAccess(uds, udsLen);
         break;
     case DCM_SID_TESTER_PRESENT:
         Dcm_HandleTesterPresent(uds, udsLen);
