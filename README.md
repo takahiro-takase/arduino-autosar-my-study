@@ -470,10 +470,23 @@ static const Dcm_SidSessionRowType Dcm_SidSessionTable[] =
 };
 ```
 
+<<<<<<< HEAD
 テーブルに掲載のない SID はセッション制約なしとみなされ、defaultSession でも応答します。
 0x14 と 0x27 のみ extendedSession 限定とし、defaultSession で要求すると各ハンドラに
 到達する前に NRC 0x7F（serviceNotSupportedInActiveSession）で拒否されます
 （各 SID の制約は前述の「対応 UDS サービス」表の Def/Ext 列を参照）。
+=======
+テーブルに掲載のない SID（0x10 / 0x11 / 0x19 / 0x22 / 0x3E）はセッション制約なしとみなされ、
+defaultSession でも応答します。0x14 と 0x27 のみ extendedSession 限定とし、
+defaultSession で要求すると各ハンドラに到達する前に NRC 0x7F
+（serviceNotSupportedInActiveSession）で拒否されます。
+
+| SID | セッション制約 | defaultSession で要求した場合 |
+|---|---|---|
+| 0x14 ClearDiagnosticInformation | extendedSession 限定 | NRC 0x7F |
+| 0x27 SecurityAccess | extendedSession 限定 | NRC 0x7F |
+| その他（0x10/0x11/0x19/0x22/0x3E） | 制約なし | 通常通り応答 |
+>>>>>>> ad6f1c24af39941d4dbb9873b897ddbba84b0949
 
 新しいサービスにセッション制約を追加する場合は、ハンドラ内に判定を書き足すのではなく
 `Dcm_SidSessionTable[]` に行を追加するだけで済みます。
