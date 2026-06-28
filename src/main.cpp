@@ -23,6 +23,7 @@
  */
 #include <Arduino.h>
 #include <avr/wdt.h>
+#include <avr/eeprom.h>
 #include "EcuM.h"
 
 // -------------------------------------------------------
@@ -37,6 +38,14 @@ void setup()
     wdt_disable();
 
     Serial.begin(115200);
+
+    /* NvM CRC 動作確認用 (一時的な動作確認コード):
+     * コメントを外して再アップロードすると、NvM_Init() が EEPROM を読み込む
+     * 直前に DEM_AGING ブロックの先頭バイトを直接破壊する。
+     * NvM: "CRC mismatch" -> "defaults restored" ログが出ることを確認できる。
+     * 確認後は必ずコメントアウトに戻して再アップロードすること。 */
+    // eeprom_write_byte((uint8_t*)0x0BU, 0xFFU);
+
     EcuM_Init();
 }
 

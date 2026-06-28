@@ -5,10 +5,15 @@
  *          実際の AUTOSAR 環境ではコンフィギュレーションツールが生成する
  *          ファイルに相当する。
  *
- *          本プロジェクトの EEPROM レイアウト (Arduino UNO 内蔵 1KB の先頭 17 バイト):
- *            Addr 0x0000: NVM_BLOCK_ID_DEM_MAGIC  (1 byte)  — DEM 有効マーカー
- *            Addr 0x0001: NVM_BLOCK_ID_DEM_STATUS (8 bytes) — DEM イベントステータス
- *            Addr 0x0009: NVM_BLOCK_ID_DEM_AGING  (8 bytes) — DEM 経年回復(Aging)カウンタ
+ *          本プロジェクトの EEPROM レイアウト (Arduino UNO 内蔵 1KB の先頭 20 バイト):
+ *          各ブロックはデータ本体直後に CRC8 (SAE J1850) を 1 バイト付加する
+ *          (NvM.c の NvM_CalcCrc8() / NvM_CrcAddress() 参照)。
+ *            Addr 0x0000: NVM_BLOCK_ID_DEM_MAGIC  データ (1 byte) — DEM 有効マーカー
+ *            Addr 0x0001: NVM_BLOCK_ID_DEM_MAGIC  CRC   (1 byte)
+ *            Addr 0x0002: NVM_BLOCK_ID_DEM_STATUS データ (8 bytes) — DEM イベントステータス
+ *            Addr 0x000A: NVM_BLOCK_ID_DEM_STATUS CRC   (1 byte)
+ *            Addr 0x000B: NVM_BLOCK_ID_DEM_AGING  データ (8 bytes) — DEM 経年回復(Aging)カウンタ
+ *            Addr 0x0013: NVM_BLOCK_ID_DEM_AGING  CRC   (1 byte)
  *
  * \copyright  Copyright (c) 2025 T_T
  * \license    MIT License - 詳細は LICENSE ファイルを参照。
@@ -31,9 +36,11 @@
 /* -----------------------------------------------------------------------
  * EEPROM 先頭アドレス (各ブロックの物理格納先)
  * ----------------------------------------------------------------------- */
-#define NVM_BLOCK_DEM_MAGIC_EEPROM_ADDR   0x0000U  /**< マジックバイトのアドレス      */
-#define NVM_BLOCK_DEM_STATUS_EEPROM_ADDR  0x0001U  /**< ステータステーブルの先頭アドレス */
-#define NVM_BLOCK_DEM_AGING_EEPROM_ADDR   0x0009U  /**< Aging カウンタの先頭アドレス  */
+/* 各ブロックのデータ本体直後 (BaseNumber + Length) に CRC 1 バイトが入るため、
+ * 後続ブロックの先頭アドレスは前ブロックの (データ長+1) ずつ後ろにずれる。 */
+#define NVM_BLOCK_DEM_MAGIC_EEPROM_ADDR   0x0000U  /**< マジックバイトのアドレス (CRC は 0x0001) */
+#define NVM_BLOCK_DEM_STATUS_EEPROM_ADDR  0x0002U  /**< ステータステーブルの先頭アドレス (CRC は 0x000A) */
+#define NVM_BLOCK_DEM_AGING_EEPROM_ADDR   0x000BU  /**< Aging カウンタの先頭アドレス (CRC は 0x0013) */
 
 /* -----------------------------------------------------------------------
  * ブロックサイズ (bytes)
