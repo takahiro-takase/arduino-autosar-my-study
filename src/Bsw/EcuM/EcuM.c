@@ -208,7 +208,12 @@ Std_ReturnType EcuM_RequestRUN(EcuM_UserType user)
         EcuM_State = ECUM_STATE_RUN;
         DET_LOGI(TAG, "->RUN user=%u", (unsigned)user);
         /* Rte_Engine タスク（WdgM の監視対象）が再開するため、
-         * POST_RUN 移行時に無効化した HW ウォッチドッグを再度有効化する */
+         * POST_RUN 移行時に無効化した HW ウォッチドッグを再度有効化する。
+         * その前に WdgM_ResumeSupervision() でチェックポイント基準をリセット
+         * しておく必要がある。POST_RUN 中の停止時間がそのまま残っていると、
+         * 再開後最初のチェックポイントで Deadline Supervision が
+         * 「停止時間」を実際の処理時間と誤認し、誤って FAILED と判定してしまう。 */
+        WdgM_ResumeSupervision();
         WdgM_EnableHwWatchdog();
         BswM_EcuM_CurrentState(ECUM_STATE_RUN);  /* Rule 0: 全タスク再有効化 */
     }

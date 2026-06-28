@@ -45,6 +45,18 @@
  *            MainFunction サイクルで Alive 条件を満たせば OK に上書きされ、
  *            検出した違反が消えてしまう問題があった。
  *
+ *          POST_RUN→RUN 復帰時の Deadline Supervision 誤検出対策:
+ *            POST_RUN 中は監視対象タスクが意図的に停止し WdgM_CheckpointReached()
+ *            が呼ばれないため、WdgM_LastCheckpoint / WdgM_LastCheckpointTimeMs は
+ *            停止前の古い値のまま残る。これをリセットせずに RUN へ復帰すると、
+ *            再開後最初のチェックポイントで「POST_RUN 中の停止時間」を実際の
+ *            処理時間と誤認し、Deadline Supervision が誤って FAILED と判定して
+ *            しまう（Deadline Supervision 導入直後に発覚した不具合）。
+ *            EcuM が RUN へ復帰する際に WdgM_ResumeSupervision() を呼び、
+ *            チェックポイント基準を WDGM_CP_INITIAL にリセットすることで、
+ *            再開後最初の遷移を起動直後と同じ「基準なし」として扱い、
+ *            この誤検出を防ぐ。
+ *
  *          HW ウォッチドッグ連携:
  *            WdgM_Init() で AVR 実ハードウェアウォッチドッグ (<avr/wdt.h>) を
  *            WDGM_HW_WATCHDOG_TIMEOUT_MS (8000ms) で有効化する。
@@ -155,6 +167,36 @@ void WdgM_DisableHwWatchdog(void)
 {
     wdt_disable();
     DET_LOGI(TAG, "HW watchdog disabled");
+}
+
+/**
+ * \brief   全エンティティのチェックポイント追跡基準をリセットする。
+ *
+ * \details WdgM_LastCheckpoint / WdgM_LastCheckpointTimeMs を全エンティティ分
+ *          WDGM_CP_INITIAL・現在時刻にリセットする。POST_RUN 中に蓄積した
+ *          「最後のチェックポイントからの停止時間」が、再開後最初の
+ *          Deadline Supervision 判定に誤って使われることを防ぐ。
+ *          WdgM_AliveStatus / WdgM_LogicalStatus / WdgM_DeadlineStatus
+ *          自体はリセットしない。
+ *
+ * \ServiceID      {0x08}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void WdgM_ResumeSupervision(void)
+{
+    if (WdgM_Cfg == NULL)
+        return;
+
+    const unsigned long now = millis();
+    for (uint8 i = 0U; i < WdgM_Cfg->EntityCount; i++)
+    {
+        WdgM_LastCheckpoint[i]       = WDGM_CP_INITIAL;
+        WdgM_LastCheckpointTimeMs[i] = now;
+    }
+
+    DET_LOGI(TAG, "Supervision resumed (checkpoint baseline reset) entities=%u",
+             (unsigned)WdgM_Cfg->EntityCount);
 }
 
 /**
