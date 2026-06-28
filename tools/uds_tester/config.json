@@ -17,6 +17,8 @@
         { "label": "Read EngineSpeed\n(0x22/0101)", "type": "raw", "payload": ["0x03", "0x22", "0x01", "0x01"] },
         { "label": "Read CoolantTemp\n(0x22/0102)", "type": "raw", "payload": ["0x03", "0x22", "0x01", "0x02"] },
         { "label": "Read EngineState\n(0x22/0103)", "type": "raw", "payload": ["0x03", "0x22", "0x01", "0x03"] },
+        { "label": "Write TestPattern\n(0x2E 複数フレーム要求)", "type": "multiframe", "payload": ["0x2E", "0x01", "0x04", "0x11", "0x22", "0x33", "0x44", "0x55", "0x66", "0x77", "0x88"] },
+        { "label": "Read TestPattern\n(0x22/0104)", "type": "raw", "payload": ["0x03", "0x22", "0x01", "0x04"] },
         { "label": "Tester Present\n(0x3E/00)", "type": "raw", "payload": ["0x02", "0x3E", "0x00"] }
     ]
 }

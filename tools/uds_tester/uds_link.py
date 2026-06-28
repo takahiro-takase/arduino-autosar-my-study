@@ -171,6 +171,65 @@ def _send_flow_control(bus: can.BusABC, request_id: int) -> None:
     bus.send(can.Message(arbitration_id=request_id, data=fc, is_extended_id=False))
 
 
+def send_multiframe_request(
+    bus: can.BusABC,
+    uds_payload: bytes,
+    request_id: int = REQUEST_ID,
+    response_id: int = RESPONSE_ID,
+    timeout: float = 2.0,
+) -> None:
+    """ISO-TP の FF+CF で UDS 要求を送信する (送信側の組立)。
+
+    send_raw() は SF 専用 (本プロジェクトの既存サービスは全て要求 7 バイト以内
+    のため十分だった) だが、CanTp_RxIndication() の FF/CF 受信パスは一度も
+    実機を通っていなかった。0x2E WriteDataByIdentifier (DID 0x0104) のように
+    要求が 7 バイトを超えるサービスを送るために、FF 送信 → ECU からの FC
+    (CTS) 受信待ち → CF 送信、という ISO-TP 送信側プロトコルをここで実装する。
+
+    uds_payload は PCI バイトを含まない生 UDS ペイロード（例: [0x2E, 0x01, 0x04,
+    data...]）。8 バイト以下なら send_raw() と同様 SF として送信する。
+    """
+    msg_len = len(uds_payload)
+    if msg_len <= 7:
+        send_raw(bus, bytes([msg_len]) + uds_payload, request_id)
+        return
+
+    ff_data = bytes([0x10 | ((msg_len >> 8) & 0x0F), msg_len & 0xFF]) + uds_payload[:6]
+    bus.send(can.Message(arbitration_id=request_id, data=ff_data, is_extended_id=False))
+
+    deadline = time.monotonic() + timeout
+    st_min = 0
+    while True:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise UdsTimeoutError(f"FC 待ちタイムアウト ({timeout}s)")
+        msg = bus.recv(timeout=remaining)
+        if msg is None:
+            raise UdsTimeoutError(f"FC 待ちタイムアウト ({timeout}s)")
+        if msg.arbitration_id != response_id or not msg.data or (msg.data[0] >> 4) != 0x3:
+            continue
+
+        fs = msg.data[0] & 0x0F
+        if fs == 0x0:  # CTS
+            st_min = msg.data[2]
+            break
+        if fs == 0x1:  # WAIT
+            deadline = time.monotonic() + timeout
+            continue
+        raise RuntimeError("FC OVFLW: ECU 側の受信バッファを超過した")
+
+    pos = 6
+    sn = 1
+    while pos < msg_len:
+        chunk = uds_payload[pos : pos + 7]
+        cf_data = bytes([0x20 | (sn & 0x0F)]) + chunk + b"\x00" * (7 - len(chunk))
+        bus.send(can.Message(arbitration_id=request_id, data=cf_data, is_extended_id=False))
+        pos += len(chunk)
+        sn = (sn + 1) & 0x0F
+        if st_min > 0:
+            time.sleep(st_min / 1000.0)
+
+
 def receive_uds_response(
     bus: can.BusABC,
     timeout: float = 2.0,

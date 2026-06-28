@@ -10,13 +10,17 @@
  *            0x14 ClearDiagnosticInformation — 全 DTC クリア／DTC 指定で 1 件クリア
  *                                              (SecurityAccess Level1 必須)
  *            0x19 ReadDTCInformation     — subFunc 0x01/0x02/0x04
- *            0x22 ReadDataByIdentifier   — DID 0x0101/0x0102/0x0103
+ *            0x22 ReadDataByIdentifier   — DID 0x0101/0x0102/0x0103/0x0104
  *            0x27 SecurityAccess         — subFunc 0x01 requestSeed / 0x02 sendKey
+ *            0x2E WriteDataByIdentifier  — DID 0x0104 (TestPattern) のみ。
+ *                                          SecurityAccess Level1 必須
  *            0x3E TesterPresent          — セッション維持 (S3 タイマリセット)
  *
  *          ISO 15765-2 (CAN TP) は CanTp モジュールが担当する。
  *          本モジュールは UDS ペイロード (PCI バイトなし) のみを扱う。
- *          マルチフレーム対応により SID 0x19/02 は複数 DTC を一度に返せる。
+ *          マルチフレーム対応により SID 0x19/02 は複数 DTC を一度に返せる
+ *          (応答方向)。0x2E は要求が 11 バイトとなり SF 上限を超えるため、
+ *          CanTp の複数フレーム要求受信 (FF+CF) を実機検証する唯一の SID。
  *
  *          S3 タイマ:
  *            defaultSession 以外の間、Dcm_ComIndication() が呼ばれるたびに
@@ -42,8 +46,8 @@
  *
  *          SID × セッション許可 (Dcm_SidSessionTable[], AUTOSAR DcmDspSessionRow 相当):
  *            Dcm_ComIndication() が SID ディスパッチの前に全 SID 共通で判定する。
- *            テーブルに掲載のない SID はセッション制約なし。現在は 0x14 と 0x27 のみ
- *            extendedSession 限定とし、defaultSession では NRC 0x7F
+ *            テーブルに掲載のない SID はセッション制約なし。現在は 0x14・0x27・0x2E
+ *            のみ extendedSession 限定とし、defaultSession では NRC 0x7F
  *            serviceNotSupportedInActiveSession で拒否する。各ハンドラ個別に
  *            セッション判定を埋め込むのではなく、一元管理することで
  *            「どの SID がどのセッションで使えるか」を一覧できるようにしている。
@@ -106,6 +110,10 @@ static unsigned long Dcm_SecurityLockoutStartMs;
  *  最大サイズ: 0x19/02 応答 (6 DTC) = 3 + 6×4 = 27 バイト → 32 バイトで余裕を持たせる */
 static uint8 Dcm_TxBuf[32];
 
+/** DID 0x0104 (TestPattern) の格納領域。CanTp の複数フレーム要求受信を
+ *  検証するための学習用データ（実際の車両データではない）。 */
+static uint8 Dcm_TestPattern[DCM_DID_TEST_PATTERN_LENGTH];
+
 /** CanTp_Transmit に渡す PDU 情報構造体 */
 static PduInfoType Dcm_TxPdu;
 
@@ -122,6 +130,7 @@ static void Dcm_HandleReadDtcCount(const uint8* uds, uint8 udsLen);
 static void Dcm_HandleReadDtcByMask(const uint8* uds, uint8 udsLen);
 static void Dcm_HandleReadDtcSnapshot(const uint8* uds, uint8 udsLen);
 static void Dcm_HandleReadDataById(const uint8* uds, uint8 udsLen);
+static void Dcm_HandleWriteDataById(const uint8* uds, uint8 udsLen);
 static void Dcm_HandleSecurityAccess(const uint8* uds, uint8 udsLen);
 static void Dcm_HandleSecurityRequestSeed(uint8 subFunc);
 static void Dcm_HandleSecuritySendKey(uint8 subFunc, const uint8* uds, uint8 udsLen);
@@ -615,6 +624,14 @@ static Std_ReturnType Dcm_ReadDid(uint16 did, uint8* buf, uint8* dataLen)
         *dataLen = 1U;
         return E_OK;
     }
+    case DCM_DID_TEST_PATTERN:
+    {
+        uint8 i;
+        for (i = 0U; i < DCM_DID_TEST_PATTERN_LENGTH; i++)
+            buf[i] = Dcm_TestPattern[i];
+        *dataLen = DCM_DID_TEST_PATTERN_LENGTH;
+        return E_OK;
+    }
     default:
         return E_NOT_OK;
     }
@@ -639,7 +656,7 @@ static void Dcm_HandleReadDataById(const uint8* uds, uint8 udsLen)
 
     uint16 did = ((uint16)uds[1] << 8U) | (uint16)uds[2];
 
-    uint8 dataBuf[4];
+    uint8 dataBuf[DCM_DID_TEST_PATTERN_LENGTH];
     uint8 dataLen = 0U;
 
     if (Dcm_ReadDid(did, dataBuf, &dataLen) != E_OK)
@@ -660,6 +677,73 @@ static void Dcm_HandleReadDataById(const uint8* uds, uint8 udsLen)
         Dcm_TxBuf[3U + i] = dataBuf[i];
 
     Dcm_TxPdu.SduLength = (PduLengthType)(3U + dataLen);
+
+    Dcm_Transmit();
+}
+
+/* -----------------------------------------------------------------------
+ * 0x2E WriteDataByIdentifier
+ * ----------------------------------------------------------------------- */
+
+/**
+ * \brief   UDS 0x2E WriteDataByIdentifier を処理する。
+ *
+ * \details DCM_DID_TEST_PATTERN (0x0104, 固定長 DCM_DID_TEST_PATTERN_LENGTH
+ *          バイト) のみ書き込みに対応する。要求ペイロードは
+ *          SID(1)+DID(2)+data(8)=11 バイトとなり CanTp の SF 上限 (7 バイト)
+ *          を超えるため、CanTp_RxIndication() の FF+CF 受信パスが実際に
+ *          動作する（これまで一度も実機を通っていなかったコードパスを
+ *          検証する目的の学習用 DID。実際の車両データではない）。
+ *          0x14 ClearDiagnosticInformation と同じ方針で、extendedSession
+ *          （Dcm_SidSessionTable[] で判定）かつ SecurityAccess Level1
+ *          アンロック済みでなければ NRC 0x33 を返す。
+ *
+ *          要求: [0x2E, DID_H, DID_L, data0..data7]
+ *          応答: [0x6E, DID_H, DID_L]
+ *
+ * \param[in]  uds     UDS ペイロード先頭ポインタ (uds[0]=SID 0x2E)。
+ * \param[in]  udsLen  UDS ペイロード長。
+ */
+static void Dcm_HandleWriteDataById(const uint8* uds, uint8 udsLen)
+{
+    if (Dcm_SecurityLevel == 0U)
+    {
+        Dcm_SendNegativeResponse(DCM_SID_WRITE_DATA, DCM_NRC_SECURITY_ACCESS_DENIED);
+        return;
+    }
+
+    if (udsLen < 3U)
+    {
+        Dcm_SendNegativeResponse(DCM_SID_WRITE_DATA, DCM_NRC_CONDITIONS_NOT_CORRECT);
+        return;
+    }
+
+    uint16 did = ((uint16)uds[1] << 8U) | (uint16)uds[2];
+
+    if (did != DCM_DID_TEST_PATTERN)
+    {
+        Dcm_SendNegativeResponse(DCM_SID_WRITE_DATA, DCM_NRC_REQUEST_OUT_OF_RANGE);
+        return;
+    }
+
+    if (udsLen != (uint8)(3U + DCM_DID_TEST_PATTERN_LENGTH))
+    {
+        Dcm_SendNegativeResponse(DCM_SID_WRITE_DATA, DCM_NRC_INCORRECT_MESSAGE_LENGTH);
+        return;
+    }
+
+    uint8 i;
+    for (i = 0U; i < DCM_DID_TEST_PATTERN_LENGTH; i++)
+        Dcm_TestPattern[i] = uds[3U + i];
+
+    DET_LOGI(TAG, "2E did=0x%04X len=%u (multi-frame request)",
+             (unsigned)did, (unsigned)DCM_DID_TEST_PATTERN_LENGTH);
+
+    /* 正応答: [0x6E, DID_H, DID_L] */
+    Dcm_TxBuf[0] = 0x6EU;               /* SID + 0x40 */
+    Dcm_TxBuf[1] = uds[1];
+    Dcm_TxBuf[2] = uds[2];
+    Dcm_TxPdu.SduLength = 3U;
 
     Dcm_Transmit();
 }
@@ -889,14 +973,15 @@ typedef struct
 } Dcm_SidSessionRowType;
 
 /** テーブルに掲載のない SID はセッション制約なし（全セッションで許可）とみなす。
- *  DTC 履歴の消去 (0x14) とセキュリティ認証 (0x27) のみ、誤操作・悪用の影響が
- *  大きいため extendedSession 限定とする学習用の最小構成。
+ *  DTC 履歴の消去 (0x14)・セキュリティ認証 (0x27)・データ書き込み (0x2E) のみ、
+ *  誤操作・悪用の影響が大きいため extendedSession 限定とする学習用の最小構成。
  *  実際の AUTOSAR では DcmDspSessionRow がサービス・サブ機能単位で
  *  この表をコンフィギュレーションツールから生成する。 */
 static const Dcm_SidSessionRowType Dcm_SidSessionTable[] =
 {
     { DCM_SID_CLEAR_DTC,       DCM_SESSION_MASK_EXTENDED },
     { DCM_SID_SECURITY_ACCESS, DCM_SESSION_MASK_EXTENDED },
+    { DCM_SID_WRITE_DATA,      DCM_SESSION_MASK_EXTENDED },
 };
 
 /**
@@ -992,6 +1077,9 @@ void Dcm_ComIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
         break;
     case DCM_SID_READ_DATA:
         Dcm_HandleReadDataById(uds, udsLen);
+        break;
+    case DCM_SID_WRITE_DATA:
+        Dcm_HandleWriteDataById(uds, udsLen);
         break;
     case DCM_SID_SECURITY_ACCESS:
         Dcm_HandleSecurityAccess(uds, udsLen);
