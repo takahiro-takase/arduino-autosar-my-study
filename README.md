@@ -602,6 +602,40 @@ Plugins → RawSender で新しいフレームを作成:
 > Cangaroo で CF1（`0x21`）が見えにくい場合は、CF1 と CF2 の間隔が約 25ms と短いためです
 >（MCP2515 への SPI 通信 + TxConfirmation コールバックによる遅延）。
 
+#### UDS ボタン送信ツール（tools/uds_tester）
+
+セッション制御・SecurityAccess・複数フレーム応答の FC 送信など、手動操作する
+項目が増えて Cangaroo での都度のフレーム手入力が煩雑になってきたため、
+よく使う UDS コマンドをボタン 1 つで送信できる Python/Tkinter 製の補助ツールを
+`tools/uds_tester/` に用意しています。
+
+| 機能 | 説明 |
+|------|------|
+| ボタン送信 | `config.json` に定義した SF フレームをそのまま送信（要求は全サービス 7 バイト以内のため SF 専用） |
+| 複数フレーム応答の自動 FC | 応答が FF で始まったら `30 00 00 00 00 00 00 00` を自動送信し、CF を再結合（上記の Cangaroo 手動 FC 送信が不要になる） |
+| SecurityAccess Level1 自動実行 | requestSeed → `key = seed XOR 0xA55A`（`Dcm_ComputeSecurityKey()` と同一式）を計算 → sendKey を 1 クリックで実行 |
+| 応答の簡易デコード | 0x22 の DID 値、0x19 の DTC 名・FreezeFrame、0x7F の NRC 名を人間が読める形式で表示 |
+| Tester Present 自動送信 | チェックボックスで 2 秒毎に送信し S3 タイマ（60 秒）を維持 |
+| Session/Security 状態の参考表示 | 送受信したフレームから推測した現在のセッション・ロック状態を表示（ECU 内部の正式な状態ではない点に注意） |
+
+```
+cd tools/uds_tester
+pip install -r requirements.txt
+python app.py
+```
+
+接続先は GUI 上の `interface` / `channel` / `bitrate` で指定します
+（既定値は `config.json` の `can` セクション）。CANable / candleLight 互換
+アダプタの場合は `interface=gs_usb`, `channel=0`。SLCAN 系の COM ポートアダプタ
+の場合は `interface=slcan`, `channel=COM3` のように変更してください。
+
+> **Cangaroo と同時に同じアダプタへ接続することはできません。** 干渉する場合は
+> どちらか一方を切断してください。
+
+ボタンの追加・変更はコードを触らず `config.json` の `buttons` 配列に項目を
+追加するだけで行えます（本プロジェクトの `*_PBCfg.c` と同じ「コードと設定の分離」
+の考え方です）。
+
 ### DEM 診断イベント管理（AUTOSAR SWS_DEM）
 
 Dem (Diagnostic Event Manager) モジュールがエンジン管理の故障を DTC として管理します。
@@ -1532,6 +1566,7 @@ POST_RUN 遷移後は Rte_Warning タスクが停止し、LED は消灯状態で
 | プッシュボタン | 警告確認ボタン（D9 と GND を接続・内部プルアップ使用） |
 | USB-CAN アダプタ | PC との CAN バス接続（解析用） |
 | Cangaroo 等 | CAN フレーム送受信ツール |
+| tools/uds_tester（本リポジトリ同梱） | UDS コマンドのボタン送信・FC 自動応答（後述） |
 
 #### MCP2515 接続（Arduino UNO）
 
