@@ -106,9 +106,16 @@ static uint8 Dcm_SecurityLockoutActive;
 /** ロックアウト開始時刻 [ms] */
 static unsigned long Dcm_SecurityLockoutStartMs;
 
-/** UDS 応答バッファ (PCI バイトなし; CanTp がトランスポート層を付加する)
- *  最大サイズ: 0x19/02 応答 (6 DTC) = 3 + 6×4 = 27 バイト → 32 バイトで余裕を持たせる */
-static uint8 Dcm_TxBuf[32];
+/** UDS 応答バッファの最大サイズ。0x19/02 (reportDTCByStatusMask) が
+ *  DEM_EVENT_COUNT 件全てに一致した場合が最大: [0x59,subFunc,availMask] (3)
+ *  + DEM_EVENT_COUNT 件 × 4 バイト。
+ *  以前は固定値 32 で確保していたが、DEM_EVENT_COUNT が 6→8 に増えた際に
+ *  追従しておらず 3+8×4=35 バイトが 32 バイトのバッファに収まらず
+ *  オーバーフローしていた。DEM_EVENT_COUNT の変化に自動追従する数式に変更。 */
+#define DCM_TX_BUF_SIZE  (3U + (DEM_EVENT_COUNT * 4U))
+
+/** UDS 応答バッファ (PCI バイトなし; CanTp がトランスポート層を付加する) */
+static uint8 Dcm_TxBuf[DCM_TX_BUF_SIZE];
 
 /** DID 0x0104 (TestPattern) の格納領域。CanTp の複数フレーム要求受信を
  *  検証するための学習用データ（実際の車両データではない）。 */
@@ -467,6 +474,15 @@ static void Dcm_HandleReadDtcByMask(const uint8* uds, uint8 udsLen)
     uint8 i;
     for (i = 0U; i < count; i++)
     {
+        if ((offset + 4U) > DCM_TX_BUF_SIZE)
+        {
+            /* DEM_EVENT_COUNT に対して DCM_TX_BUF_SIZE を正しく計算しているため
+             * 通常は到達しないが、将来の設定変更で再びサイズ計算がずれた場合に
+             * メモリ破壊ではなく安全な切り詰めで応答するための防御的チェック。 */
+            DET_LOGE(TAG, "19/02 TxBuf full, truncating at %u/%u DTCs",
+                     (unsigned)i, (unsigned)count);
+            break;
+        }
         Dcm_TxBuf[offset++] = (uint8)(dtcBuf[i] >> 16U);   /* DTC 上位バイト */
         Dcm_TxBuf[offset++] = (uint8)(dtcBuf[i] >>  8U);   /* DTC 中位バイト */
         Dcm_TxBuf[offset++] = (uint8)(dtcBuf[i]);           /* DTC 下位バイト */

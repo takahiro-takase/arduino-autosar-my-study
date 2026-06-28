@@ -1995,6 +1995,27 @@ DET_LOGW(TAG, "RUNNING->FAULT overheat=%u", (unsigned)temp);
 
 `Det.cpp` が唯一 `Serial.print()` を呼ぶファイルです。他の `.c` ファイルは `DET_LOG*` マクロのみを使います。
 
+### 固定長バッファのサイズは設定定数から計算する
+
+`Dcm_Cbk.c` の UDS 応答バッファ `Dcm_TxBuf` は、当初 `DEM_EVENT_COUNT`（その時点では 6）
+から手計算した値に余裕を持たせた固定値 32 バイトで確保していました。
+その後 `DEM_EVENT_COUNT` が 8 に増えた際、最大応答サイズの計算（SID 0x19/02 が
+全イベント一致した場合 `3 + DEM_EVENT_COUNT×4` バイト）を更新し忘れ、
+35 バイトの応答を 32 バイトのバッファへ書き込む実際に到達可能なバッファ
+オーバーフローになっていました（DTC を 8 件同時に確定させると再現する）。
+
+```c
+/* 修正後: DEM_EVENT_COUNT に自動追従する数式で確保 */
+#define DCM_TX_BUF_SIZE  (3U + (DEM_EVENT_COUNT * 4U))
+static uint8 Dcm_TxBuf[DCM_TX_BUF_SIZE];
+```
+
+固定長バッファのサイズを「その時点で必要な値」を手計算した定数にすると、
+後から参照先の設定定数（ここでは `DEM_EVENT_COUNT`）だけが増えてもコンパイラは
+何も警告してくれません。サイズは可能な限り設定定数からの数式で導出し、
+書き込みループにも防御的な境界チェックを入れる（`Dcm_HandleReadDtcByMask()`
+参照）、という二重の対策にしています。
+
 ### 設定テーブルの一元管理
 
 各モジュールの設定は対応する `*_PBCfg.c` ファイルで管理しています。
