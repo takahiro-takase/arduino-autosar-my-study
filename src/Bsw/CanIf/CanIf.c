@@ -122,7 +122,9 @@ Std_ReturnType CanIf_Transmit(PduIdType TxPduId, const PduInfoType* PduInfoPtr)
  * \param[in]  Mailbox     受信 CAN ID・HOH・コントローラ ID を格納した
  *                         ハードウェアメールボックス記述子へのポインタ。
  *                         NULL 禁止。
- * \param[in]  PduInfoPtr  受信 PDU のデータと長さへのポインタ。NULL 禁止。
+ * \param[in]  PduInfoPtr  受信 PDU のデータと長さへのポインタ。
+ *                         NULL 禁止。SduDataPtr も NULL 禁止
+ *                         （CanIf_Transmit と対称の入力検証）。
  *
  * \pre        CanIf_Init() が正常に完了していること。
  *
@@ -132,7 +134,8 @@ Std_ReturnType CanIf_Transmit(PduIdType TxPduId, const PduInfoType* PduInfoPtr)
  */
 void CanIf_RxIndication(const Can_HwType* Mailbox, const PduInfoType* PduInfoPtr)
 {
-    if (CanIf_ConfigPtr == NULL || Mailbox == NULL || PduInfoPtr == NULL)
+    if (CanIf_ConfigPtr == NULL || Mailbox == NULL
+        || PduInfoPtr == NULL || PduInfoPtr->SduDataPtr == NULL)
         return;
 
     for (uint8 i = 0; i < CanIf_ConfigPtr->RxPduCount; i++)

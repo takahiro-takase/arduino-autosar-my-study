@@ -72,7 +72,11 @@ void PduR_Init(const PduR_PBConfigType* ConfigPtr)
  *
  * \param[in]  RxPduId     CanIf が割り当てた送信元 PDU ID。
  *                         RX ルーティングパスの検索に使用する。
- * \param[in]  PduInfoPtr  受信 PDU のデータと長さへのポインタ。NULL 禁止。
+ * \param[in]  PduInfoPtr  受信 PDU のデータと長さへのポインタ。
+ *                         NULL 禁止。SduDataPtr も NULL 禁止
+ *                         （PduR_Transmit が委譲する CanIf_Transmit と
+ *                         対称の入力検証。下流の RxIndFct がそのまま
+ *                         SduDataPtr を参照するため、ここで検証しておく）。
  *
  * \pre        PduR_Init() が正常に完了していること。
  * \note       アプリケーションコードから PduR_ComRxIndication を直接呼び出さず、
@@ -84,7 +88,7 @@ void PduR_Init(const PduR_PBConfigType* ConfigPtr)
  */
 void PduR_ComRxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
 {
-    if (PduR_ConfigPtr == NULL || PduInfoPtr == NULL)
+    if (PduR_ConfigPtr == NULL || PduInfoPtr == NULL || PduInfoPtr->SduDataPtr == NULL)
         return;
 
     for (uint8 i = 0; i < PduR_ConfigPtr->RxPathCount; i++)
