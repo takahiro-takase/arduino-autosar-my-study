@@ -1,0 +1,22 @@
+{
+    "can": {
+        "interface": "gs_usb",
+        "channel": 0,
+        "bitrate": 500000
+    },
+    "buttons": [
+        { "label": "Default Session\n(0x10/01)", "type": "raw", "payload": ["0x02", "0x10", "0x01"] },
+        { "label": "Extended Session\n(0x10/03)", "type": "raw", "payload": ["0x02", "0x10", "0x03"] },
+        { "label": "ECU Reset hard\n(0x11/01)", "type": "raw", "payload": ["0x02", "0x11", "0x01"] },
+        { "label": "ECU Reset soft\n(0x11/03)", "type": "raw", "payload": ["0x02", "0x11", "0x03"] },
+        { "label": "SecurityAccess Lv1\n(seed->key 自動)", "type": "security_access_auto" },
+        { "label": "Clear All DTC\n(0x14)", "type": "raw", "payload": ["0x04", "0x14", "0xFF", "0xFF", "0xFF"] },
+        { "label": "DTC 件数取得\n(0x19/01 全件)", "type": "raw", "payload": ["0x03", "0x19", "0x01", "0xFF"] },
+        { "label": "DTC 一覧取得\n(0x19/02 全件)", "type": "raw", "payload": ["0x03", "0x19", "0x02", "0xFF"] },
+        { "label": "FreezeFrame取得\n(0x19/04 OVERHEAT)", "type": "raw", "payload": ["0x06", "0x19", "0x04", "0x00", "0x01", "0x01", "0x01"] },
+        { "label": "Read EngineSpeed\n(0x22/0101)", "type": "raw", "payload": ["0x03", "0x22", "0x01", "0x01"] },
+        { "label": "Read CoolantTemp\n(0x22/0102)", "type": "raw", "payload": ["0x03", "0x22", "0x01", "0x02"] },
+        { "label": "Read EngineState\n(0x22/0103)", "type": "raw", "payload": ["0x03", "0x22", "0x01", "0x03"] },
+        { "label": "Tester Present\n(0x3E/00)", "type": "raw", "payload": ["0x02", "0x3E", "0x00"] }
+    ]
+}

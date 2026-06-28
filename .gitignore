@@ -7,3 +7,7 @@
 
 # AUTOSAR specification documents (copyright - do not redistribute)
 docs/*.pdf
+
+# Python
+__pycache__/
+*.pyc
