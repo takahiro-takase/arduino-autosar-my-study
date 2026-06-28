@@ -15,16 +15,17 @@
  *            DEM_EVENT_ADC_VOLT_LOW         — ADC センサ電圧低下 (< 1000 mV)
  *            DEM_EVENT_CAN_BUSOFF           — CAN Bus-Off 回復断念（最大試行超過）
  *
- *          EEPROM レイアウト (Arduino UNO 内蔵 EEPROM 1KB の先頭 9 バイト使用):
+ *          EEPROM レイアウト (Arduino UNO 内蔵 EEPROM 1KB の先頭 17 バイト使用):
  *            Addr 0x00: マジックバイト (0xDE = 有効な DEM データ)
- *            Addr 0x01: イベント 0 (ENGINE_OVERHEAT)  ステータスバイト
- *            Addr 0x02: イベント 1 (ENGINE_STALL)     ステータスバイト
- *            Addr 0x03: イベント 2 (SPEED_NO_FLAG)    ステータスバイト
- *            Addr 0x04: イベント 3 (STARTING_TIMEOUT) ステータスバイト
- *            Addr 0x05: イベント 4 (COMM_TIMEOUT)     ステータスバイト
- *            Addr 0x06: イベント 5 (BUTTON_STUCK)     ステータスバイト
- *            Addr 0x07: イベント 6 (ADC_VOLT_LOW)     ステータスバイト
- *            Addr 0x08: イベント 7 (CAN_BUSOFF)       ステータスバイト
+ *            Addr 0x01-0x08: イベント 0-7 ステータスバイト (NVM_BLOCK_ID_DEM_STATUS)
+ *            Addr 0x09-0x10: イベント 0-7 経年回復(Aging)カウンタ (NVM_BLOCK_ID_DEM_AGING)
+ *
+ *          経年回復 (Aging):
+ *            CONFIRMED（確定）した DTC は、再故障せずに DEM_AGING_CYCLES_THRESHOLD 回の
+ *            操作サイクル（起動〜次回起動）を経ると自動的に CONFIRMED が解除される
+ *            (Dem_Init() が起動ごとに前サイクルの結果を評価する)。
+ *            実車では数十サイクル単位が一般的だが、本プロジェクトでは実機での動作
+ *            確認を電源再投入数回で行えるよう小さい値にしている。
  *
  * \copyright  Copyright (c) 2025 T_T
  * \license    MIT License - 詳細は LICENSE ファイルを参照。
@@ -48,6 +49,12 @@
 #define DEM_EVENT_ADC_VOLT_LOW          6U  /**< ADC センサ電圧低下（< 1000 mV）  */
 #define DEM_EVENT_CAN_BUSOFF            7U  /**< CAN Bus-Off 回復断念             */
 #define DEM_EVENT_COUNT                 8U  /**< イベント総数                     */
+
+/** 経年回復 (Aging): CONFIRMED した DTC が、再故障せずに連続でこの回数分の
+ *  操作サイクルを経過すると自動的に CONFIRMED を解除する。
+ *  全イベント共通の閾値とする（学習用簡略化。実車ではイベントごとに
+ *  個別設定できる DemIndicatorAttribute 相当の仕組みがある）。 */
+#define DEM_AGING_CYCLES_THRESHOLD      3U
 
 /* -----------------------------------------------------------------------
  * DTC コード (24-bit, ISO 14229-1)
