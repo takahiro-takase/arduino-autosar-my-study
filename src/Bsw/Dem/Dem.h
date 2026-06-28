@@ -11,8 +11,10 @@
  *          CONFIRMED した DTC は、再故障せずに複数回の操作サイクル（起動〜次回
  *          起動）を経ると Dem_Init() が経年回復 (Aging) を判定し自動的に
  *          CONFIRMED を解除する（詳細は Dem.c / Dem_Cfg.h を参照）。
- *          DCM は Dem_GetAllDTCs() / Dem_ClearAllDTCs() 経由で
- *          UDS SID 0x19 / 0x14 に応答する。
+ *          DCM は Dem_GetAllDTCs() / Dem_ClearAllDTCs() 経由で UDS SID 0x19 / 0x14
+ *          に応答する。FreezeFrame（故障時点のスナップショット）に加え、
+ *          ExtendedData（累積故障確定回数、Dem_GetOccurrenceCounterOfEvent()）
+ *          も SID 0x19 subFunc 0x06 経由で提供する。
  *
  * \copyright  Copyright (c) 2025 T_T
  * \license    MIT License - 詳細は LICENSE ファイルを参照。
@@ -234,6 +236,26 @@ Std_ReturnType Dem_GetFreezeFrameOfEvent(Dem_EventIdType EventId, Dem_FreezeFram
  * \Synchronicity  {Synchronous}
  */
 Std_ReturnType Dem_GetEventIdOfDTC(uint32 DTC, Dem_EventIdType* EventId);
+
+/**
+ * \brief   指定イベントの ExtendedData（故障確定回数）を取得する。
+ *
+ * \details DCM SID 0x19 subFunc 0x06 (reportExtendedDataRecordByDTCNumber) から
+ *          呼び出す。FreezeFrame（故障時点のスナップショット）とは異なり、
+ *          これまでに確定 FAILED した累積回数を返す（0xFF で飽和）。
+ *          一度も確定 FAILED していないイベントは 0 を返す（E_OK のまま）。
+ *
+ * \param[in]   EventId   イベント ID (DEM_EVENT_* 定数)。
+ * \param[out]  Counter   故障確定回数の格納先。NULL 禁止。
+ *
+ * \retval  E_OK      正常取得。
+ * \retval  E_NOT_OK  EventId が範囲外、または Counter が NULL。
+ *
+ * \ServiceID      {0x29}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType Dem_GetOccurrenceCounterOfEvent(Dem_EventIdType EventId, uint8* Counter);
 
 #ifdef __cplusplus
 }

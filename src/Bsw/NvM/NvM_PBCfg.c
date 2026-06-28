@@ -33,6 +33,7 @@
 static uint8 NvM_Ram_DemMagic[NVM_BLOCK_DEM_MAGIC_LENGTH];
 static uint8 NvM_Ram_DemStatus[NVM_BLOCK_DEM_STATUS_LENGTH];
 static uint8 NvM_Ram_DemAging[NVM_BLOCK_DEM_AGING_LENGTH];
+static uint8 NvM_Ram_DemExtended[NVM_BLOCK_DEM_EXTENDED_LENGTH];
 
 /* -----------------------------------------------------------------------
  * ROM デフォルト値 (CRC 不一致時に NvM_Init()/NvM_RestoreBlockDefaults() が
@@ -60,9 +61,10 @@ static const uint8 NvM_Default_DemStatus[NVM_BLOCK_DEM_STATUS_LENGTH] =
     DEM_STATUS_NOT_COMPLETED_SINCE_CLEAR | DEM_STATUS_NOT_COMPLETED_THIS_CYCLE
 };
 
-/* DEM_AGING はデフォルトを定義しない (NULL)。経年回復カウンタの初回起動値は
- * 全イベント 0 であり、これは NvM が NULL の場合に行う全 0 フィルそのものと
- * 一致するため、専用の ROM テーブルを用意する必要がない。 */
+/* DEM_AGING / DEM_EXTENDED はデフォルトを定義しない (NULL)。経年回復カウンタ・
+ * 故障確定回数 (ExtendedData) の初回起動値はいずれも全イベント 0 であり、
+ * これは NvM が NULL の場合に行う全 0 フィルそのものと一致するため、
+ * 専用の ROM テーブルを用意する必要がない。 */
 
 /* -----------------------------------------------------------------------
  * ブロック記述子テーブル
@@ -90,6 +92,13 @@ static const NvM_BlockDescriptorType NvM_BlockTable[NVM_BLOCK_COUNT] =
         NVM_BLOCK_DEM_AGING_LENGTH,        /* NvMNvBlockLength     */
         NvM_Ram_DemAging,                  /* RamBlockDataAddress  */
         NULL                               /* RomBlockDataAddress: 未設定→全0で代替 */
+    },
+    /* NVM_BLOCK_ID_DEM_EXTENDED */
+    {
+        NVM_BLOCK_DEM_EXTENDED_EEPROM_ADDR,  /* NvMNvBlockBaseNumber */
+        NVM_BLOCK_DEM_EXTENDED_LENGTH,       /* NvMNvBlockLength     */
+        NvM_Ram_DemExtended,                 /* RamBlockDataAddress  */
+        NULL                                 /* RomBlockDataAddress: 未設定→全0で代替 */
     }
 };
 

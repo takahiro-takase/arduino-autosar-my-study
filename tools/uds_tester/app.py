@@ -229,6 +229,9 @@ class App(tk.Tk):
             dtc = (raw[2] << 16) | (raw[3] << 8) | raw[4]
             data = " ".join(f"{b:02X}" for b in raw[6:])
             return f"FreezeFrame {uds_link.dtc_name(dtc)} record={raw[5]} data={data}"
+        if sub == 0x06 and len(raw) >= 8:
+            dtc = (raw[2] << 16) | (raw[3] << 8) | raw[4]
+            return f"ExtendedData {uds_link.dtc_name(dtc)} record={raw[5]} occurrence={raw[7]}"
         return " ".join(f"{b:02X}" for b in raw)
 
     def _queue_tracking_update(self, sent: bytes, resp: uds_link.UdsResponse):

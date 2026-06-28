@@ -9,7 +9,7 @@
  *            0x11 ECUReset               — hardReset / softReset (応答後セッションリセット)
  *            0x14 ClearDiagnosticInformation — 全 DTC クリア／DTC 指定で 1 件クリア
  *                                              (SecurityAccess Level1 必須)
- *            0x19 ReadDTCInformation     — subFunc 0x01/0x02/0x04
+ *            0x19 ReadDTCInformation     — subFunc 0x01/0x02/0x04/0x06
  *            0x22 ReadDataByIdentifier   — DID 0x0101/0x0102/0x0103/0x0104
  *            0x27 SecurityAccess         — subFunc 0x01 requestSeed / 0x02 sendKey
  *            0x2E WriteDataByIdentifier  — DID 0x0104 (TestPattern) のみ。
@@ -136,6 +136,7 @@ static void Dcm_HandleReadDtcInfo(const uint8* uds, uint8 udsLen);
 static void Dcm_HandleReadDtcCount(const uint8* uds, uint8 udsLen);
 static void Dcm_HandleReadDtcByMask(const uint8* uds, uint8 udsLen);
 static void Dcm_HandleReadDtcSnapshot(const uint8* uds, uint8 udsLen);
+static void Dcm_HandleReadDtcExtendedData(const uint8* uds, uint8 udsLen);
 static void Dcm_HandleReadDataById(const uint8* uds, uint8 udsLen);
 static void Dcm_HandleWriteDataById(const uint8* uds, uint8 udsLen);
 static void Dcm_HandleSecurityAccess(const uint8* uds, uint8 udsLen);
@@ -560,12 +561,66 @@ static void Dcm_HandleReadDtcSnapshot(const uint8* uds, uint8 udsLen)
 }
 
 /**
+ * \brief   SID 0x19 subFunc 0x06 reportExtendedDataRecordByDTCNumber を処理する。
+ *
+ * \details 要求された DTC の ExtendedData（確定 FAILED の累積回数）を Dem から
+ *          取得して返す。FreezeFrame（故障時点のスナップショット、18 バイトで
+ *          CanTp の FF+CF が必要）とは異なり、応答は 8 バイトで SF に収まる。
+ *          本実装はレコード番号 0x01 のみ対応する（イベントごとに 1 カウンタ）。
+ *
+ *          要求: [0x19, 0x06, DTC_H, DTC_M, DTC_L, recordNumber]
+ *          応答: [0x59, 0x06, DTC_H, DTC_M, DTC_L, status, recordNumber, occurrenceCounter]
+ *
+ * \param[in]  uds     UDS ペイロード先頭ポインタ。
+ * \param[in]  udsLen  UDS ペイロード長。
+ */
+static void Dcm_HandleReadDtcExtendedData(const uint8* uds, uint8 udsLen)
+{
+    if (udsLen < 6U)
+    {
+        Dcm_SendNegativeResponse(DCM_SID_READ_DTC_INFO, DCM_NRC_CONDITIONS_NOT_CORRECT);
+        return;
+    }
+
+    uint32 dtc          = ((uint32)uds[2] << 16U) | ((uint32)uds[3] << 8U) | (uint32)uds[4];
+    uint8  recordNumber = uds[5];
+
+    Dem_EventIdType eventId = 0U;
+    uint8           occurrenceCounter = 0U;
+
+    if (Dem_GetEventIdOfDTC(dtc, &eventId) != E_OK
+        || recordNumber != DCM_EXTENDED_DATA_RECORD_NUMBER
+        || Dem_GetOccurrenceCounterOfEvent(eventId, &occurrenceCounter) != E_OK)
+    {
+        /* DTC 不明、またはレコード番号不一致 */
+        Dcm_SendNegativeResponse(DCM_SID_READ_DTC_INFO, DCM_NRC_REQUEST_OUT_OF_RANGE);
+        return;
+    }
+
+    DET_LOGI(TAG, "19/06 dtc=0x%06lX rec=%u occurrence=%u",
+             (unsigned long)dtc, (unsigned)recordNumber, (unsigned)occurrenceCounter);
+
+    Dcm_TxBuf[0] = 0x59U;                              /* SID 0x19 + 0x40 */
+    Dcm_TxBuf[1] = DCM_DTC_SUBFUNC_REPORT_EXTDATA;
+    Dcm_TxBuf[2] = (uint8)(dtc >> 16U);
+    Dcm_TxBuf[3] = (uint8)(dtc >>  8U);
+    Dcm_TxBuf[4] = (uint8)(dtc);
+    Dcm_TxBuf[5] = Dem_GetStatusOfEvent(eventId);
+    Dcm_TxBuf[6] = recordNumber;
+    Dcm_TxBuf[7] = occurrenceCounter;
+    Dcm_TxPdu.SduLength = 8U;
+
+    Dcm_Transmit();
+}
+
+/**
  * \brief   UDS 0x19 ReadDTCInformation のサブ機能をディスパッチする。
  *
  * \details 対応サブ機能:
  *            0x01 reportNumberOfDTCByStatusMask         → Dcm_HandleReadDtcCount()
  *            0x02 reportDTCByStatusMask                 → Dcm_HandleReadDtcByMask()
  *            0x04 reportDTCSnapshotRecordByDTCNumber    → Dcm_HandleReadDtcSnapshot()
+ *            0x06 reportExtendedDataRecordByDTCNumber   → Dcm_HandleReadDtcExtendedData()
  *
  * \param[in]  uds     UDS ペイロード先頭ポインタ。
  * \param[in]  udsLen  UDS ペイロード長。
@@ -590,6 +645,9 @@ static void Dcm_HandleReadDtcInfo(const uint8* uds, uint8 udsLen)
         break;
     case DCM_DTC_SUBFUNC_REPORT_SNAPSHOT:
         Dcm_HandleReadDtcSnapshot(uds, udsLen);
+        break;
+    case DCM_DTC_SUBFUNC_REPORT_EXTDATA:
+        Dcm_HandleReadDtcExtendedData(uds, udsLen);
         break;
     default:
         Dcm_SendNegativeResponse(DCM_SID_READ_DTC_INFO, DCM_NRC_SUB_FUNC_NOT_SUPPORTED);
