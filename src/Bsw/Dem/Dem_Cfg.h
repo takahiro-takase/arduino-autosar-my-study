@@ -21,8 +21,9 @@
  *            Addr 0x09-0x10: イベント 0-7 経年回復(Aging)カウンタ (NVM_BLOCK_ID_DEM_AGING)
  *
  *          経年回復 (Aging):
- *            CONFIRMED（確定）した DTC は、再故障せずに DEM_AGING_CYCLES_THRESHOLD 回の
- *            操作サイクル（起動〜次回起動）を経ると自動的に CONFIRMED が解除される
+ *            CONFIRMED（確定）した DTC は、再故障せずに DEM_AGING_THRESHOLD_*
+ *            （イベントごとに個別設定）回の操作サイクル（起動〜次回起動）を経ると
+ *            自動的に CONFIRMED が解除される
  *            (Dem_Init() が起動ごとに前サイクルの結果を評価する)。
  *            実車では数十サイクル単位が一般的だが、本プロジェクトでは実機での動作
  *            確認を電源再投入数回で行えるよう小さい値にしている。
@@ -49,12 +50,6 @@
 #define DEM_EVENT_ADC_VOLT_LOW          6U  /**< ADC センサ電圧低下（< 1000 mV）  */
 #define DEM_EVENT_CAN_BUSOFF            7U  /**< CAN Bus-Off 回復断念             */
 #define DEM_EVENT_COUNT                 8U  /**< イベント総数                     */
-
-/** 経年回復 (Aging): CONFIRMED した DTC が、再故障せずに連続でこの回数分の
- *  操作サイクルを経過すると自動的に CONFIRMED を解除する。
- *  全イベント共通の閾値とする（学習用簡略化。実車ではイベントごとに
- *  個別設定できる DemIndicatorAttribute 相当の仕組みがある）。 */
-#define DEM_AGING_CYCLES_THRESHOLD      3U
 
 /* -----------------------------------------------------------------------
  * DTC コード (24-bit, ISO 14229-1)
@@ -92,6 +87,24 @@
 #define DEM_DEBOUNCE_LIMIT_BUTTON_STUCK          1  /**< IoHwAb が 5 秒固着判定済み。二重チェック不要 */
 #define DEM_DEBOUNCE_LIMIT_ADC_VOLT_LOW          2  /**< 毎サイクル報告のため数十 ms で確定 */
 #define DEM_DEBOUNCE_LIMIT_CAN_BUSOFF            1  /**< CanSM が 3 回リトライ済み。二重チェック不要 */
+
+/* -----------------------------------------------------------------------
+ * 経年回復 (Aging)
+ * CONFIRMED した DTC が、再故障せずに連続でこの回数分の操作サイクル
+ * （起動〜次回起動）を経過すると自動的に CONFIRMED を解除する閾値を
+ * イベントごとに個別設定する（実車の DemIndicatorAttribute に相当）。
+ * デバウンス閾値と同様、イベントの重大度・再発しやすさに応じて変える:
+ *   重大・誤回復のリスクが大きいイベントは大きめ（5）、
+ *   一過性の可能性が高いイベントは小さめ（2）、それ以外は標準（3）。
+ * ----------------------------------------------------------------------- */
+#define DEM_AGING_THRESHOLD_ENGINE_OVERHEAT       5U  /**< 重大故障。誤って早期回復しないよう慎重に */
+#define DEM_AGING_THRESHOLD_ENGINE_STALL          5U  /**< 重大故障。誤って早期回復しないよう慎重に */
+#define DEM_AGING_THRESHOLD_ENGINE_SPEED_NO_FLAG  3U  /**< 標準 */
+#define DEM_AGING_THRESHOLD_STARTING_TIMEOUT      2U  /**< 起動時の一過性要因の可能性が高い */
+#define DEM_AGING_THRESHOLD_COMM_TIMEOUT          3U  /**< 標準 */
+#define DEM_AGING_THRESHOLD_BUTTON_STUCK          3U  /**< 標準 */
+#define DEM_AGING_THRESHOLD_ADC_VOLT_LOW          3U  /**< 標準 */
+#define DEM_AGING_THRESHOLD_CAN_BUSOFF            5U  /**< 通信路の重大故障。誤って早期回復しないよう慎重に */
 
 /* -----------------------------------------------------------------------
  * DTC ステータスビットマスク (ISO 14229-1 Annex B)
