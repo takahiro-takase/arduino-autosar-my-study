@@ -63,7 +63,7 @@ HAL ─── Can_Hw / Dio_Hw / Port_Hw / Adc_Hw（C++ のみ）
 |  | CanIf | SWS_CanIf | CAN ID ↔ 論理 PDU のマッピング。上位層は CAN ID を知らず PDU ID で通信 |
 |  | Can | SWS_Can | MCP2515 の送受信・Bus-Off 検出を担う MCAL 最下層。HW を直接操作する唯一のモジュール |
 |  | CanTp | SWS_CanTp | ISO 15765-2 のフレーム分割（FF/CF）と再組立。8 バイトを超える UDS 応答を実現 |
-|  | Dcm | SWS_Dcm | UDS 診断サービス処理（SID 0x10 / 0x11 / 0x14 / 0x19 / 0x22 / 0x27 / 0x3E）。S3 タイマでセッションを自動失効。SID×セッション許可テーブルで 0x14/0x27 を extendedSession 限定とし、SecurityAccess (0x27) で ClearDTC をシード・キー認証保護 |
+|  | Dcm | SWS_Dcm | UDS 診断サービス処理（SID 0x10 / 0x11 / 0x14 / 0x19 / 0x22 / 0x27 / 0x2E / 0x3E）。S3 タイマでセッションを自動失効。SID×セッション許可テーブルで 0x14/0x27/0x2E を extendedSession 限定とし、SecurityAccess (0x27) でシード・キー認証保護。0x2E は要求が7バイト超のため CanTp の複数フレーム要求受信を実機検証 |
 |  | Dem | SWS_Dem | 診断イベントを DTC として管理。カウンタベースのデバウンスで確定し、NvM 経由で EEPROM に永続化。デバウンス確定 FAILED 時に FreezeFrame（RAM のみ）を記録。再故障せず複数回の操作サイクルを経ると経年回復（Aging）で CONFIRMED を自動解除 |
 |  | FiM | SWS_FiM | Dem が確定（CONFIRMED）した DTC をもとにアプリ機能（FID）の実行許可を判定。100ms 周期で再評価し、結果を ASW へ `Rte_Call_FiM_GetFunctionPermission` で公開 |
 |  | NvM | SWS_NvM | EEPROM の読み書きを抽象化。Dem は EEPROM アドレスを直接知らない |
@@ -350,7 +350,7 @@ CAN 0x100（EngineInfo）・0x110（AbsInfo）・0x7E0（診断要求）は PduR
 
 テスト時に毎回フレーム構造を探し回らずに済むよう、SID×SubFunc 単位で送信フレームの
 固定バイト・可変バイトをまとめます。byte0 は CanTp の SF PCI（UDS ペイロード長）です。
-全サービスの要求ペイロードは 7 バイト以内のため、要求は必ず SF で送信できます
+0x2E（後述）以外の要求ペイロードは 7 バイト以内のため SF で送信できます
 （応答が長くなるケースは個別に後述します）。
 **正応答 SID は ISO 14229-1 の共通規則により常に「要求 SID + 0x40」**
 （例: 0x10→0x50、0x27→0x67）のため、表には記載しない。
@@ -365,9 +365,10 @@ CAN 0x100（EngineInfo）・0x110（AbsInfo）・0x7E0（診断要求）は PduR
 | 0x19<br>ReadDTCInformation | ○ | ○ | 0x01<br>(件数取得) | `03 19 01 MM 00 00 00 00` | byte3=statusMask |
 |  |  |  | 0x02<br>(DTC一覧取得) | `03 19 02 MM 00 00 00 00` | byte3=statusMask |
 |  |  |  | 0x04<br>(FreezeFrame取得) | `06 19 04 HH MM LL RR 00` | byte3-5=DTCコード<br>byte6=recordNumber（固定0x01） |
-| 0x22<br>ReadDataByIdentifier | ○ | ○ | — | `03 22 HH LL 00 00 00 00` | byte2-3=DID（0x0101/0x0102/0x0103） |
+| 0x22<br>ReadDataByIdentifier | ○ | ○ | — | `03 22 HH LL 00 00 00 00` | byte2-3=DID（0x0101/0x0102/0x0103/0x0104） |
 | 0x27<br>SecurityAccess | × | ○ | 0x01<br>(requestSeed) | `02 27 01 00 00 00 00 00` | seed 2 バイト |
 |  |  |  | 0x02<br>(sendKey) | `04 27 02 HH LL 00 00 00` | byte2-3=key（big-endian） |
+| 0x2E<br>WriteDataByIdentifier | × | ○ | — | FF+CF（後述、SF 不可） | DID=0x0104 (TestPattern) 固定 8 バイトのみ対応<br>**SecurityAccess Level1 必須**（未認証は NRC 0x33） |
 | 0x3E<br>TesterPresent | ○ | ○ | 0x00 | `02 3E 00 00 00 00 00 00` | S3タイマ維持 |
 
 Def/Ext 列は `Dcm_SidSessionTable[]`（Dcm_Cbk.c）の設定そのもので、SID 単位
@@ -602,6 +603,33 @@ Plugins → RawSender で新しいフレームを作成:
 > Cangaroo で CF1（`0x21`）が見えにくい場合は、CF1 と CF2 の間隔が約 25ms と短いためです
 >（MCP2515 への SPI 通信 + TxConfirmation コールバックによる遅延）。
 
+#### 0x2E WriteDataByIdentifier — 複数フレーム要求 (FF+CF) の実機検証
+
+`CanTp_RxIndication()` の FF/CF 受信パス（複数フレーム**要求**の組立）は
+実装こそされていましたが、対応する全 UDS サービスの要求が 7 バイト以内に
+収まるため、これまで一度も実機を通っていませんでした。
+
+DID 0x0104 (TestPattern, 固定 8 バイト) への書き込みは、要求ペイロードが
+`SID(1) + DID(2) + data(8) = 11 バイト` となり SF の 7 バイト制限を超えるため、
+このコードパスを実際に検証できる唯一の UDS サービスです。
+
+```
+要求: [0x2E, 0x01, 0x04, data0..data7]  (11 バイト、SF 不可)
+  → FF: [0x1B, 0x0B, 0x2E, 0x01, 0x04, data0, data1, data2]  (PCI=0x1, len=0x00B, 先頭6バイト)
+  → ECU が FC(CTS, BS=0, STmin=0) を返す
+  → CF: [0x21, data3, data4, data5, data6, data7, 00, 00]    (SN=1, 残り5バイト)
+応答: [0x6E, 0x01, 0x04]  (SF, 3 バイト)
+```
+
+extendedSession かつ SecurityAccess Level1 アンロック済みでなければ NRC 0x33
+（0x14 ClearDiagnosticInformation と同じ保護方針）。書き込んだ値は 0x22 で
+DID 0x0104 を読み出すことで読み戻し確認できます（読み出し応答も
+`0x62 + DID(2) + 8バイト = 11バイト` となり、こちらは既存の 0x19/04 等と同じ
+応答方向の FF+CF で送られます）。
+
+実際の車両データではなく、CanTp のトランスポート層を実機で確かめるための
+学習用 DID です。
+
 #### UDS ボタン送信ツール（tools/uds_tester）
 
 セッション制御・SecurityAccess・複数フレーム応答の FC 送信など、手動操作する
@@ -611,7 +639,8 @@ Plugins → RawSender で新しいフレームを作成:
 
 | 機能 | 説明 |
 |------|------|
-| ボタン送信 | `config.json` に定義した SF フレームをそのまま送信（要求は全サービス 7 バイト以内のため SF 専用） |
+| ボタン送信 | `config.json` に定義した SF フレームをそのまま送信 |
+| 複数フレーム要求の送信 | `type: "multiframe"` のボタンは FF 送信 → ECU からの FC(CTS) 待ち → CF 送信、という ISO-TP 送信側を自前で実装（0x2E WriteDataByIdentifier 用） |
 | 複数フレーム応答の自動 FC | 応答が FF で始まったら `30 00 00 00 00 00 00 00` を自動送信し、CF を再結合（上記の Cangaroo 手動 FC 送信が不要になる） |
 | SecurityAccess Level1 自動実行 | requestSeed → `key = seed XOR 0xA55A`（`Dcm_ComputeSecurityKey()` と同一式）を計算 → sendKey を 1 クリックで実行 |
 | 応答の簡易デコード | 0x22 の DID 値、0x19 の DTC 名・FreezeFrame、0x7F の NRC 名を人間が読める形式で表示 |

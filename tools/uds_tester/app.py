@@ -182,6 +182,17 @@ class App(tk.Tk):
                     resp = uds_link.receive_uds_response(self.bus)
                     self.log_queue.put(f"[{label}] RX " + self._decode_response(payload, resp))
                     self._queue_tracking_update(payload, resp)
+                elif btn_cfg["type"] == "multiframe":
+                    uds_payload = parse_payload(btn_cfg["payload"])
+                    self.log_queue.put(
+                        f"[{label}] TX (FF+CF, {len(uds_payload)}B) "
+                        + " ".join(f"{b:02X}" for b in uds_payload)
+                    )
+                    uds_link.send_multiframe_request(self.bus, uds_payload)
+                    resp = uds_link.receive_uds_response(self.bus)
+                    sent = bytes([0]) + uds_payload  # _decode_response は sent[1]=SID を見る
+                    self.log_queue.put(f"[{label}] RX " + self._decode_response(sent, resp))
+                    self._queue_tracking_update(sent, resp)
                 else:
                     self.log_queue.put(f"[{label}] 未知のボタン種別: {btn_cfg['type']}")
             except uds_link.UdsTimeoutError as exc:

@@ -11,8 +11,12 @@
  *            0x14 ClearDiagnosticInformation (groupOfDTC=0xFFFFFF で全クリア、
  *              特定 DTC コード指定で 1 件クリア) — extendedSession + SecurityAccess Level1 必須
  *            0x19 ReadDTCInformation (subFunc 0x01/0x02/0x04) — マルチフレーム対応
- *            0x22 ReadDataByIdentifier (DID 0x0101-0x0103)
+ *            0x22 ReadDataByIdentifier (DID 0x0101-0x0103, 0x0104)
  *            0x27 SecurityAccess (subFunc 0x01 requestSeed / 0x02 sendKey) — extendedSession 限定
+ *            0x2E WriteDataByIdentifier (DID 0x0104 のみ) — extendedSession +
+ *              SecurityAccess Level1 必須。要求が 11 バイトと SF の 7 バイト制限を
+ *              超えるため CanTp の複数フレーム受信 (FF+CF) を実機検証する目的の DID
+ *              （学習用。実際の車両データではない）
  *            0x3E TesterPresent (S3 タイマ維持)
  *
  *          SID × セッション許可は Dcm_Cbk.c の Dcm_SidSessionTable[]
@@ -62,6 +66,7 @@
 #define DCM_SID_READ_DTC_INFO   0x19U  /**< ReadDTCInformation            */
 #define DCM_SID_READ_DATA       0x22U  /**< ReadDataByIdentifier          */
 #define DCM_SID_SECURITY_ACCESS 0x27U  /**< SecurityAccess                */
+#define DCM_SID_WRITE_DATA      0x2EU  /**< WriteDataByIdentifier         */
 #define DCM_SID_TESTER_PRESENT  0x3EU  /**< TesterPresent                 */
 #define DCM_SID_NEGATIVE_RESP   0x7FU  /**< NegativeResponse              */
 
@@ -107,6 +112,10 @@
  * ----------------------------------------------------------------------- */
 #define DCM_NRC_SERVICE_NOT_SUPPORTED      0x11U  /**< serviceNotSupported      */
 #define DCM_NRC_SUB_FUNC_NOT_SUPPORTED     0x12U  /**< subFunctionNotSupported  */
+/** incorrectMessageLengthOrInvalidFormat。0x2E WriteDataByIdentifier の
+ *  データ長固定 DID で、要求データ長が一致しない場合に使用する
+ *  （他ハンドラの「必須バイト数不足」は既存どおり 0x22 で代替する）。 */
+#define DCM_NRC_INCORRECT_MESSAGE_LENGTH   0x13U
 #define DCM_NRC_CONDITIONS_NOT_CORRECT     0x22U  /**< conditionsNotCorrect     */
 #define DCM_NRC_REQUEST_SEQUENCE_ERROR     0x24U  /**< requestSequenceError (seed なしで sendKey 等) */
 #define DCM_NRC_REQUEST_OUT_OF_RANGE       0x31U  /**< requestOutOfRange        */
@@ -126,6 +135,13 @@
 #define DCM_DID_ENGINE_SPEED   0x0101U  /**< EngineSpeed: uint16, rpm */
 #define DCM_DID_COOLANT_TEMP   0x0102U  /**< CoolantTemp: uint8,  ℃  */
 #define DCM_DID_ENGINE_STATE   0x0103U  /**< EngineState: uint8,  enum */
+
+/** TestPattern: uint8[DCM_DID_TEST_PATTERN_LENGTH], 読み書き可能 (0x22 / 0x2E)。
+ *  実際の車両データではなく、CanTp の複数フレーム要求受信 (FF+CF) を
+ *  実機で検証するために用意した学習用 DID。0x2E の要求ペイロードが
+ *  SID(1)+DID(2)+data(8)=11 バイトとなり SF の 7 バイト制限を超える。 */
+#define DCM_DID_TEST_PATTERN          0x0104U
+#define DCM_DID_TEST_PATTERN_LENGTH   8U
 
 /* -----------------------------------------------------------------------
  * ECUReset サブ機能
