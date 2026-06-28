@@ -15,6 +15,13 @@
  *            WdgM_TransitionCfgType 配列) に含まれるか即座に確認する。
  *            許可されない遷移（順序違反）が来た場合は即座に FAILED と判定する。
  *
+ *          Deadline Supervision の仕組み (Alive/Logical に続く 3 つ目のアルゴリズム):
+ *            WdgM_CheckpointReached() が呼ばれるたびに、直前のチェックポイントから
+ *            今回のチェックポイントまでの実際の経過時間を計測し、許可テーブル
+ *            (WdgM_PBCfg.c の WdgM_DeadlineCfgType 配列) に設定された
+ *            [MinMs, MaxMs] の範囲内かを確認する。範囲外（遅すぎる／速すぎる）
+ *            なら即座に FAILED と判定する。
+ *
  *          Supervised Entity:
  *            WDGM_ENTITY_ENGINE — App_EngineManager_Run (3000ms 周期)
  *              Alive  : 監視サイクル 6000ms の間に 1 回以上 CheckpointReached が来ることを期待する。
@@ -65,5 +72,22 @@
 /** 「まだ一度もチェックポイントが来ていない」ことを示す遷移元の特別値。
  *  起動直後のみ有効な遷移元として許可テーブルに登場する。 */
 #define WDGM_CP_INITIAL       0xFFU
+
+/* -----------------------------------------------------------------------
+ * Deadline Supervision 許容経過時間 (Entity 0 用)
+ * ----------------------------------------------------------------------- */
+
+/** START→END（Run() 1 回分の処理時間）の許容範囲。
+ *  通常は数 ms で完了するはずの処理に上限を設け、無限ループや
+ *  ブロッキング処理による異常な遅延を検出する。下限は本処理にとって
+ *  特に意味を持たないため 0（実質チェックなし）とする。 */
+#define WDGM_DEADLINE_START_TO_END_MIN_MS   0UL
+#define WDGM_DEADLINE_START_TO_END_MAX_MS   500UL
+
+/** END→START（次サイクルの Run() 呼び出しまでの間隔）の許容範囲。
+ *  タスク周期 3000ms (Os_PBCfg.c Task 2) を中心に ±500ms の余裕を持たせる
+ *  (協調スケジューラのため、他タスクの実行による多少のジッタを許容する)。 */
+#define WDGM_DEADLINE_END_TO_START_MIN_MS   2500UL
+#define WDGM_DEADLINE_END_TO_START_MAX_MS   3500UL
 
 #endif /* WDGM_CFG_H */
