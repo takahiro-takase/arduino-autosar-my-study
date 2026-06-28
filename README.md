@@ -1448,6 +1448,39 @@ Alive Supervision が FAILED を検出し続け、リフレッシュが止まっ
 CanSM の Bus-Off 回復等で POST_RUN から RUN へ復帰した場合は、`WdgM_EnableHwWatchdog()`
 で再度有効化し、Alive Supervision による監視を再開します。
 
+#### POST_RUN→RUN 復帰時の Deadline Supervision 誤検出（Deadline Supervision 追加直後に発覚・修正済み）
+
+Deadline Supervision を追加した直後の見直しで、POST_RUN→RUN 復帰時に
+誤って FAILED と判定してしまう不具合が見つかりました。
+
+POST_RUN 中は Rte_Engine タスクが意図的に停止するため `WdgM_CheckpointReached()`
+が呼ばれず、「直前のチェックポイントの発生時刻」(`WdgM_LastCheckpointTimeMs[]`)
+は停止前の古い値のまま残ります。これをリセットせずに RUN へ復帰すると、再開後
+最初のチェックポイントで、END→START の経過時間として **POST_RUN の停止時間
+（最大 `ECUM_POST_RUN_TIMEOUT_MS`=5000ms）** を計算してしまい、許容上限
+`WDGM_DEADLINE_END_TO_START_MAX_MS`（3500ms）を確実に超過し、誤って
+Deadline Supervision が FAILED と判定 → ラッチされてしまいます。
+
+これを防ぐため、`EcuM_RequestRUN()` が POST_RUN→RUN へ遷移する際に
+`WdgM_ResumeSupervision()` を呼び、全エンティティのチェックポイント基準
+（`WdgM_LastCheckpoint[]`）を `WDGM_CP_INITIAL` にリセットします。
+これにより再開後最初の遷移は起動直後と同じ「基準なしの遷移」として扱われ、
+Deadline 比較の対象から外れます（既存の `WDGM_CP_INITIAL` 除外ルールを
+そのまま再利用しているだけで、`WdgM_CheckpointReached()` 自体への変更は
+不要でした）。既にラッチされている Logical/Deadline の FAILED 状態は
+リセットしません（停止前に本当に違反していた事実は消さないため）。
+
+```
+WdgM_EnableHwWatchdog()   ← HW ウォッチドッグの有効/無効のみを切り替える
+WdgM_ResumeSupervision()  ← チェックポイント基準のリセット（NEW）
+```
+
+> 現在 `wdt_enable()` 自体がコメントアウトされているため、本不具合は
+> 今すぐ実機リセットを引き起こすわけではありません。しかし
+> `WdgM_GetLocalStatus()` はこの間ソフトウェア的に FAILED を返しており、
+> HW ウォッチドッグを有効化した瞬間に実害（不要な MCU リセット）が
+> 発生する状態でした。
+
 #### 本プロジェクトでの失敗アクション
 
 | 環境 | 失敗時のアクション |

@@ -94,8 +94,8 @@ void WdgM_Init(const WdgM_ConfigType* ConfigPtr);
  * \brief   AVR 実ハードウェアウォッチドッグを WDGM_HW_WATCHDOG_TIMEOUT_MS で有効化する。
  *
  * \details WdgM_Init() がこの関数を呼ぶ。また、EcuM が POST_RUN から RUN へ
- *          復帰する際にも、Alive Supervision の対象タスクが再開するのに合わせて
- *          再度呼び出す。
+ *          復帰する際にも、監視対象タスクが再開するのに合わせて再度呼び出す
+ *          （その際は WdgM_ResumeSupervision() も併せて呼ぶこと）。
  *
  * \ServiceID      {0x07}
  * \Reentrancy     {Non Reentrant}
@@ -117,6 +117,30 @@ void WdgM_EnableHwWatchdog(void);
  * \Synchronicity  {Synchronous}
  */
 void WdgM_DisableHwWatchdog(void);
+
+/**
+ * \brief   全エンティティのチェックポイント追跡基準をリセットする。
+ *
+ * \details EcuM が POST_RUN から RUN へ復帰し、監視対象タスクの実行を
+ *          再開する直前に呼び出すこと（WdgM_EnableHwWatchdog() と対になる）。
+ *          POST_RUN 中は監視対象タスクが意図的に停止しているため、
+ *          WdgM_CheckpointReached() が呼ばれず、内部の「直前チェックポイント」
+ *          基準（チェックポイント ID・発生時刻）は停止前の古い値のまま残る。
+ *          これをリセットせずに再開すると、再開後最初のチェックポイントで
+ *          Deadline Supervision が「POST_RUN 中の停止時間」を実際の処理時間と
+ *          誤認し、誤って FAILED と判定してしまう。
+ *          チェックポイント基準を WDGM_CP_INITIAL に戻すことで、再開後最初の
+ *          チェックポイントは起動直後と同じ「基準なしの遷移」として扱われ、
+ *          Deadline 比較の対象から外れる（Logical Supervision も同様に
+ *          WDGM_CP_INITIAL からの遷移として許可される）。
+ *          既にラッチされている Logical/Deadline の FAILED 状態自体は
+ *          リセットしない（停止前に本当に違反していた事実は消さない）。
+ *
+ * \ServiceID      {0x08}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void WdgM_ResumeSupervision(void);
 
 /**
  * \brief   Supervised Entity がチェックポイントに到達したことを報告する。
