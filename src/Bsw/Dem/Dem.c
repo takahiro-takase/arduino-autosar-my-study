@@ -39,7 +39,8 @@
  *              CDTC=1 かつ TF=1（再故障）    → 連続性が途切れたためカウンタ=0
  *              CDTC=1 かつ TNCTC=1（未テスト）→ このサイクルは数えない（カウンタ維持）
  *              CDTC=1 かつ TF=0 かつ TNCTC=0 → 「クリーンな操作サイクル」としてカウンタ+1
- *                → DEM_AGING_CYCLES_THRESHOLD に達したら CDTC を自動クリア
+ *                → Dem_AgingThresholdTable[EventId]（イベントごとの閾値、
+ *                  Dem_Cfg.h の DEM_AGING_THRESHOLD_*）に達したら CDTC を自動クリア
  *            カウンタは NvM_BLOCK_ID_DEM_AGING で永続化する（電源サイクルをまたいで
  *            連続性を判定するため、RAM のみでは意味がない）。
  *
@@ -47,7 +48,6 @@
  *            - デバウンスカウンタは RAM のみ保持 (電源 OFF でリセット)
  *            - 操作サイクルの境界判定は Dem_Init() (起動時) のみで行う
  *              (実車は明示的な OperationCycle Start/End API を持つ)
- *            - 経年回復閾値は全イベント共通 (DEM_AGING_CYCLES_THRESHOLD)
  *            - FreezeFrame は RAM のみに保持 (EEPROM 非永続化、電源 OFF で消去)
  *            - ExtendedData 未対応
  *
@@ -95,6 +95,18 @@ static const sint8 Dem_DebounceLimitTable[DEM_EVENT_COUNT] = {
     DEM_DEBOUNCE_LIMIT_CAN_BUSOFF             /* event 7 */
 };
 
+/** イベント ID → 経年回復(Aging)閾値 変換テーブル (Dem_Cfg.h の DEM_AGING_THRESHOLD_*) */
+static const uint8 Dem_AgingThresholdTable[DEM_EVENT_COUNT] = {
+    DEM_AGING_THRESHOLD_ENGINE_OVERHEAT,       /* event 0 */
+    DEM_AGING_THRESHOLD_ENGINE_STALL,          /* event 1 */
+    DEM_AGING_THRESHOLD_ENGINE_SPEED_NO_FLAG,  /* event 2 */
+    DEM_AGING_THRESHOLD_STARTING_TIMEOUT,      /* event 3 */
+    DEM_AGING_THRESHOLD_COMM_TIMEOUT,          /* event 4 */
+    DEM_AGING_THRESHOLD_BUTTON_STUCK,          /* event 5 */
+    DEM_AGING_THRESHOLD_ADC_VOLT_LOW,          /* event 6 */
+    DEM_AGING_THRESHOLD_CAN_BUSOFF             /* event 7 */
+};
+
 /** イベントごとの FreezeFrame (故障時スナップショット)。RAM のみ保持 */
 static Dem_FreezeFrameType Dem_FreezeFrameTable[DEM_EVENT_COUNT];
 
@@ -115,14 +127,16 @@ static uint8 Dem_AgingCounter[DEM_EVENT_COUNT];
  *
  * \details 直前の操作サイクルの最終ステータス（TF/TFTOC/TNCTC が新サイクル用に
  *          リセットされる前の値）を評価し、Dem_AgingCounter[EventId] を更新する。
- *          DEM_AGING_CYCLES_THRESHOLD に達したら CONFIRMED を自動解除する。
+ *          Dem_AgingThresholdTable[EventId]（イベントごとの閾値）に達したら
+ *          CONFIRMED を自動解除する。
  *          Dem_Init() からのみ呼び出すこと（呼び出し順序に依存するため非公開）。
  *
  * \param[in]  EventId  イベント ID。範囲チェックは呼び出し元の責務。
  */
 static void Dem_EvaluateAging(Dem_EventIdType EventId)
 {
-    const uint8 status = Dem_StatusTable[EventId];
+    const uint8 status    = Dem_StatusTable[EventId];
+    const uint8 threshold = Dem_AgingThresholdTable[EventId];
 
     if ((status & DEM_STATUS_CONFIRMED) == 0U)
     {
@@ -147,7 +161,7 @@ static void Dem_EvaluateAging(Dem_EventIdType EventId)
         /* 確定故障あり、かつ直前サイクルは故障なし・テスト済み: クリーンな操作サイクル */
         Dem_AgingCounter[EventId]++;
 
-        if (Dem_AgingCounter[EventId] >= DEM_AGING_CYCLES_THRESHOLD)
+        if (Dem_AgingCounter[EventId] >= threshold)
         {
             Dem_StatusTable[EventId] &= (uint8)(~DEM_STATUS_CONFIRMED);
             Dem_AgingCounter[EventId] = 0U;
@@ -157,7 +171,7 @@ static void Dem_EvaluateAging(Dem_EventIdType EventId)
         else
         {
             DET_LOGI(TAG, "ev=%u aging=%u/%u", (unsigned)EventId,
-                     (unsigned)Dem_AgingCounter[EventId], (unsigned)DEM_AGING_CYCLES_THRESHOLD);
+                     (unsigned)Dem_AgingCounter[EventId], (unsigned)threshold);
         }
     }
 }
