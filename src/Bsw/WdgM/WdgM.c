@@ -21,17 +21,29 @@
  *               WARN ログを出力する (MainFunction の周期を待たず即時検出)。
  *            3. WdgM_LastCheckpoint[SEID] を今回の CheckpointId に更新する。
  *
- *          Alive と Logical の判定結果統合 (AUTOSAR 同等の挙動):
- *            WdgM_AliveStatus[] (Alive Supervision 用) と WdgM_LogicalStatus[]
- *            (Logical Supervision 用) を別々の配列で保持する。WdgM_GetLocalStatus()
- *            と WdgM_MainFunction() の HW ウォッチドッグ refresh 判定は、両方が
- *            OK の場合のみ OK とみなす。WdgM_AliveStatus は周期ごとに OK/FAILED を
- *            再評価するが、WdgM_LogicalStatus は WdgM_Init() でのみ OK に戻る
- *            （不正な遷移が起きたという事実は Alive 条件を満たしても消えない）。
- *            旧実装ではこの 2 つを 1 つの WdgM_LocalStatus に統合していたため、
- *            Logical Supervision が FAILED と判定した直後でも次の MainFunction
- *            サイクルで Alive 条件を満たせば OK に上書きされ、検出した違反が
- *            消えてしまう問題があった。
+ *          Deadline Supervision アルゴリズム (Alive/Logical に続く 3 つ目):
+ *            1. WdgM_CheckpointReached(SEID, CheckpointId) が呼ばれるたびに、
+ *               WdgM_LastCheckpointTimeMs[SEID]（直前のチェックポイントの発生時刻）
+ *               からの実際の経過時間を計算する。
+ *            2. 直前のチェックポイントから今回のチェックポイントへの区間が
+ *               許容テーブル (WdgM_PBCfg.c の Deadlines[]) に設定されていれば、
+ *               経過時間が [MinMs, MaxMs] の範囲内かを確認する。範囲外なら
+ *               WdgM_DeadlineStatus[SEID] を FAILED にして WARN ログを出力する。
+ *            3. WdgM_LastCheckpointTimeMs[SEID] を現在時刻に更新する
+ *               (WDGM_CP_INITIAL からの最初の遷移には基準時刻がないため対象外)。
+ *
+ *          3 アルゴリズムの判定結果統合 (AUTOSAR 同等の挙動):
+ *            WdgM_AliveStatus[] (Alive)・WdgM_LogicalStatus[] (Logical)・
+ *            WdgM_DeadlineStatus[] (Deadline) を別々の配列で保持する。
+ *            WdgM_GetLocalStatus() と WdgM_MainFunction() の HW ウォッチドッグ
+ *            refresh 判定は、3 つ全てが OK の場合のみ OK とみなす。
+ *            WdgM_AliveStatus は周期ごとに OK/FAILED を再評価するが、
+ *            WdgM_LogicalStatus と WdgM_DeadlineStatus は WdgM_Init() でのみ
+ *            OK に戻る（違反が起きたという事実は Alive 条件を満たしても消えない）。
+ *            旧実装ではこれらを 1 つの WdgM_LocalStatus に統合していたため、
+ *            Logical/Deadline Supervision が FAILED と判定した直後でも次の
+ *            MainFunction サイクルで Alive 条件を満たせば OK に上書きされ、
+ *            検出した違反が消えてしまう問題があった。
  *
  *          HW ウォッチドッグ連携:
  *            WdgM_Init() で AVR 実ハードウェアウォッチドッグ (<avr/wdt.h>) を
@@ -55,6 +67,9 @@
 #include "Det.h"
 #include <avr/wdt.h>
 
+/* millis() is declared in Arduino wiring.c with C linkage. */
+extern unsigned long millis(void);
+
 #define TAG "WdgM"
 
 /* -----------------------------------------------------------------------
@@ -72,8 +87,14 @@ static WdgM_LocalStatusType WdgM_AliveStatus[WDGM_SUPERVISED_ENTITY_COUNT];
 /** エンティティごとの Logical Supervision ステータス (WdgM_Init まで FAILED がラッチされる) */
 static WdgM_LocalStatusType WdgM_LogicalStatus[WDGM_SUPERVISED_ENTITY_COUNT];
 
+/** エンティティごとの Deadline Supervision ステータス (WdgM_Init まで FAILED がラッチされる) */
+static WdgM_LocalStatusType WdgM_DeadlineStatus[WDGM_SUPERVISED_ENTITY_COUNT];
+
 /** エンティティごとの直前のチェックポイント ID (Logical Supervision 用) */
 static uint8 WdgM_LastCheckpoint[WDGM_SUPERVISED_ENTITY_COUNT];
+
+/** エンティティごとの直前のチェックポイント発生時刻 [ms] (Deadline Supervision 用) */
+static unsigned long WdgM_LastCheckpointTimeMs[WDGM_SUPERVISED_ENTITY_COUNT];
 
 /* -----------------------------------------------------------------------
  * 公開 API
@@ -97,10 +118,12 @@ void WdgM_Init(const WdgM_ConfigType* ConfigPtr)
     WdgM_Cfg = ConfigPtr;
     for (uint8 i = 0U; i < ConfigPtr->EntityCount; i++)
     {
-        WdgM_AliveCount[i]     = 0U;
-        WdgM_AliveStatus[i]    = WDGM_LOCAL_STATUS_OK;
-        WdgM_LogicalStatus[i]  = WDGM_LOCAL_STATUS_OK;
-        WdgM_LastCheckpoint[i] = WDGM_CP_INITIAL;
+        WdgM_AliveCount[i]          = 0U;
+        WdgM_AliveStatus[i]         = WDGM_LOCAL_STATUS_OK;
+        WdgM_LogicalStatus[i]       = WDGM_LOCAL_STATUS_OK;
+        WdgM_DeadlineStatus[i]      = WDGM_LOCAL_STATUS_OK;
+        WdgM_LastCheckpoint[i]      = WDGM_CP_INITIAL;
+        WdgM_LastCheckpointTimeMs[i] = millis();
     }
 
     WdgM_EnableHwWatchdog();
@@ -141,6 +164,8 @@ void WdgM_DisableHwWatchdog(void)
  *          カウンタは uint8 でラップアラウンドするが、期待値が小さいため問題なし。
  *          続けて、直前のチェックポイントから今回のチェックポイントへの遷移が
  *          許可遷移テーブルに含まれるかを即座に確認する (Logical Supervision)。
+ *          さらに、直前のチェックポイントからの実際の経過時間が許容範囲内かを
+ *          確認する (Deadline Supervision)。
  *
  * \ServiceID      {0x0E}
  * \Reentrancy     {Non Reentrant}
@@ -155,6 +180,7 @@ Std_ReturnType WdgM_CheckpointReached(WdgM_SupervisedEntityIdType SEID, uint8 Ch
 
     const WdgM_EntityCfgType* entity = &WdgM_Cfg->Entities[SEID];
     const uint8 fromCp = WdgM_LastCheckpoint[SEID];
+    const unsigned long now = millis();
     uint8 allowed = 0U;
 
     for (uint8 i = 0U; i < entity->TransitionCount; i++)
@@ -174,7 +200,31 @@ Std_ReturnType WdgM_CheckpointReached(WdgM_SupervisedEntityIdType SEID, uint8 Ch
                  (unsigned)SEID, (unsigned)fromCp, (unsigned)CheckpointId);
     }
 
-    WdgM_LastCheckpoint[SEID] = CheckpointId;
+    /* Deadline Supervision: fromCp→CheckpointId に対応する許容範囲が設定されて
+     * いれば、実際の経過時間と比較する。WDGM_CP_INITIAL からの最初の遷移は
+     * 比較対象の基準時刻が存在しないため対象外とする。 */
+    if (fromCp != WDGM_CP_INITIAL)
+    {
+        for (uint8 d = 0U; d < entity->DeadlineCount; d++)
+        {
+            const WdgM_DeadlineCfgType* dl = &entity->Deadlines[d];
+            if (dl->FromCheckpointId != fromCp || dl->ToCheckpointId != CheckpointId)
+                continue;
+
+            unsigned long elapsed = now - WdgM_LastCheckpointTimeMs[SEID];
+            if (elapsed < dl->MinMs || elapsed > dl->MaxMs)
+            {
+                WdgM_DeadlineStatus[SEID] = WDGM_LOCAL_STATUS_FAILED;
+                DET_LOGW(TAG, "SE%u deadline FAILED cp %u->%u elapsed=%lu (exp %lu..%lu) [HW WDT reset pending]",
+                         (unsigned)SEID, (unsigned)fromCp, (unsigned)CheckpointId,
+                         elapsed, dl->MinMs, dl->MaxMs);
+            }
+            break;
+        }
+    }
+
+    WdgM_LastCheckpoint[SEID]        = CheckpointId;
+    WdgM_LastCheckpointTimeMs[SEID]  = now;
 
     return E_OK;
 }
@@ -182,8 +232,9 @@ Std_ReturnType WdgM_CheckpointReached(WdgM_SupervisedEntityIdType SEID, uint8 Ch
 /**
  * \brief   Supervised Entity の現在のローカルステータスを取得する。
  *
- * \details Alive Supervision (WdgM_AliveStatus) と Logical Supervision
- *          (WdgM_LogicalStatus) のどちらか一方でも FAILED なら FAILED を返す。
+ * \details Alive Supervision (WdgM_AliveStatus)・Logical Supervision
+ *          (WdgM_LogicalStatus)・Deadline Supervision (WdgM_DeadlineStatus)
+ *          のいずれか一つでも FAILED なら FAILED を返す。
  *
  * \ServiceID      {0x0B}
  * \Reentrancy     {Reentrant}
@@ -193,8 +244,9 @@ WdgM_LocalStatusType WdgM_GetLocalStatus(WdgM_SupervisedEntityIdType SEID)
 {
     if (WdgM_Cfg == NULL || SEID >= WdgM_Cfg->EntityCount)
         return WDGM_LOCAL_STATUS_DEACTIVATED;
-    if (WdgM_AliveStatus[SEID] != WDGM_LOCAL_STATUS_OK
-        || WdgM_LogicalStatus[SEID] != WDGM_LOCAL_STATUS_OK)
+    if (WdgM_AliveStatus[SEID]    != WDGM_LOCAL_STATUS_OK
+        || WdgM_LogicalStatus[SEID]  != WDGM_LOCAL_STATUS_OK
+        || WdgM_DeadlineStatus[SEID] != WDGM_LOCAL_STATUS_OK)
         return WDGM_LOCAL_STATUS_FAILED;
     return WDGM_LOCAL_STATUS_OK;
 }
@@ -203,12 +255,13 @@ WdgM_LocalStatusType WdgM_GetLocalStatus(WdgM_SupervisedEntityIdType SEID)
  * \brief   WdgM 周期処理。Alive Supervision を評価し、HW ウォッチドッグを refresh する。
  *
  * \details 各エンティティの Alive カウンタを検査し、WdgM_AliveStatus に反映する
- *          (WdgM_LogicalStatus はここでは変更しない。WdgM_Init までラッチされる)。
+ *          (WdgM_LogicalStatus / WdgM_DeadlineStatus はここでは変更しない。
+ *          いずれも WdgM_Init までラッチされる)。
  *          検査後カウンタをリセットして次サイクルを開始する。
  *          全エンティティの WdgM_GetLocalStatus() が OK の場合のみ wdt_reset() を
- *          呼ぶ。1 つでも FAILED (Alive 不足または Logical Supervision 違反) が
- *          あれば呼ばないため、WDGM_HW_WATCHDOG_TIMEOUT_MS 後に実際に MCU が
- *          リセットされる。
+ *          呼ぶ。1 つでも FAILED (Alive 不足、Logical Supervision 違反、または
+ *          Deadline Supervision 違反) があれば呼ばないため、
+ *          WDGM_HW_WATCHDOG_TIMEOUT_MS 後に実際に MCU がリセットされる。
  *
  * \ServiceID      {0x01}
  * \Reentrancy     {Non Reentrant}
@@ -249,6 +302,10 @@ void WdgM_MainFunction(void)
 
         if (WdgM_LogicalStatus[i] != WDGM_LOCAL_STATUS_OK)
             DET_LOGW(TAG, "SE%u logical still FAILED (latched since violation) [HW WDT reset pending]",
+                     (unsigned)i);
+
+        if (WdgM_DeadlineStatus[i] != WDGM_LOCAL_STATUS_OK)
+            DET_LOGW(TAG, "SE%u deadline still FAILED (latched since violation) [HW WDT reset pending]",
                      (unsigned)i);
 
         if (WdgM_GetLocalStatus(i) != WDGM_LOCAL_STATUS_OK)

@@ -31,6 +31,20 @@ typedef struct
 } WdgM_TransitionCfgType;
 
 /**
+ * \brief   Deadline Supervision で監視する 1 件のチェックポイント間隔。
+ * \details AUTOSAR の WdgMDeadlineSupervision コンテナに相当する。
+ *          FromCheckpointId から ToCheckpointId への実際の経過時間が
+ *          [MinMs, MaxMs] の範囲内であることを検証する。
+ */
+typedef struct
+{
+    uint8  FromCheckpointId;  /**< 計測開始チェックポイント ID */
+    uint8  ToCheckpointId;    /**< 計測終了チェックポイント ID */
+    uint32 MinMs;             /**< 許容最小経過時間 (ms) */
+    uint32 MaxMs;             /**< 許容最大経過時間 (ms) */
+} WdgM_DeadlineCfgType;
+
+/**
  * \brief   Supervised Entity 1 件の設定
  * \details AUTOSAR の WdgMSupervisedEntity コンテナに相当する。
  */
@@ -39,8 +53,10 @@ typedef struct
     uint8   EntityId;                  /**< エンティティ ID (WDGM_ENTITY_*) */
     uint32  SupervisionCycleMs;        /**< Alive Supervision サイクル時間 (ms) */
     uint8   ExpectedAliveIndications;  /**< サイクル内の最小 Checkpoint 呼び出し回数 */
-    const WdgM_TransitionCfgType* Transitions;    /**< 許可された遷移テーブルの先頭 */
+    const WdgM_TransitionCfgType* Transitions;      /**< 許可された遷移テーブルの先頭 */
     uint8                          TransitionCount; /**< 遷移テーブルの要素数 */
+    const WdgM_DeadlineCfgType*   Deadlines;        /**< Deadline テーブルの先頭 (NULL 可) */
+    uint8                          DeadlineCount;   /**< Deadline テーブルの要素数 */
 } WdgM_EntityCfgType;
 
 /**
