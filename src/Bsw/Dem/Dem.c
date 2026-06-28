@@ -8,8 +8,10 @@
  *            本モジュールは avr/eeprom.h を直接参照しない。
  *            EEPROM への永続化はすべて NvM_ReadBlock() / NvM_WriteBlock() 経由で行う。
  *            NvM が管理するブロック:
- *              NVM_BLOCK_ID_DEM_MAGIC  — 有効データマーカー (1 byte)
- *              NVM_BLOCK_ID_DEM_STATUS — イベントステータステーブル (7 bytes)
+ *              NVM_BLOCK_ID_DEM_MAGIC    — 有効データマーカー (1 byte)
+ *              NVM_BLOCK_ID_DEM_STATUS   — イベントステータステーブル (DEM_EVENT_COUNT bytes)
+ *              NVM_BLOCK_ID_DEM_AGING    — 経年回復(Aging)カウンタ (DEM_EVENT_COUNT bytes)
+ *              NVM_BLOCK_ID_DEM_EXTENDED — ExtendedData 故障確定回数 (DEM_EVENT_COUNT bytes)
  *
  *          デバウンス (counter-based debouncing):
  *            各イベントは -limit 〜 +limit のカウンタを持つ (limit はイベントごとに
@@ -44,12 +46,22 @@
  *            カウンタは NvM_BLOCK_ID_DEM_AGING で永続化する（電源サイクルをまたいで
  *            連続性を判定するため、RAM のみでは意味がない）。
  *
+ *          ExtendedData (故障確定回数) — FreezeFrame との違い:
+ *            FreezeFrame は「故障した瞬間の車両状態のスナップショット」（1 件のみ、
+ *            上書きされる）であるのに対し、ExtendedData (Dem_OccurrenceCounter) は
+ *            「これまでに何回確定 FAILED したか」を表す累積カウンタである。
+ *            デバウンス確定 FAILED の瞬間（FreezeFrame 更新と同じ箇所）でのみ
+ *            +1 し、0xFF で飽和する。SID 0x14 でのクリア時は経年回復カウンタと
+ *            同様に 0 へ戻る（CDTC 自体のライフサイクルとは独立）。
+ *            NVM_BLOCK_ID_DEM_EXTENDED で永続化し、UDS SID 0x19 subFunc 0x06
+ *            (reportExtendedDataRecordByDTCNumber) で読み出せる。
+ *
  *          AUTOSAR 実装との主な違い (学習用簡略化):
  *            - デバウンスカウンタは RAM のみ保持 (電源 OFF でリセット)
  *            - 操作サイクルの境界判定は Dem_Init() (起動時) のみで行う
  *              (実車は明示的な OperationCycle Start/End API を持つ)
  *            - FreezeFrame は RAM のみに保持 (EEPROM 非永続化、電源 OFF で消去)
- *            - ExtendedData 未対応
+ *            - ExtendedData はカウンタ 1 種類のみ（実車は OperationCycle 情報等も持てる）
  *
  * \copyright  Copyright (c) 2025 T_T
  * \license    MIT License - 詳細は LICENSE ファイルを参照。
@@ -122,6 +134,9 @@ static sint8 Dem_DebounceCounter[DEM_EVENT_COUNT];
 /** イベントごとの経年回復 (Aging) カウンタ。NvM 経由で操作サイクルをまたいで永続化する */
 static uint8 Dem_AgingCounter[DEM_EVENT_COUNT];
 
+/** イベントごとの ExtendedData（確定 FAILED の累積回数、0xFF で飽和）。NvM 経由で永続化する */
+static uint8 Dem_OccurrenceCounter[DEM_EVENT_COUNT];
+
 /**
  * \brief   経年回復 (Aging) を判定する。
  *
@@ -185,10 +200,11 @@ static void Dem_EvaluateAging(Dem_EventIdType EventId)
  *
  * \details NvM_Init() 完了後に呼び出すこと。
  *          NVM_BLOCK_ID_DEM_MAGIC のマジックバイトが有効 (0xDE) なら
- *          NVM_BLOCK_ID_DEM_STATUS / NVM_BLOCK_ID_DEM_AGING から前回の状態を復元し、
- *          経年回復 (Dem_EvaluateAging) を評価したうえで、
+ *          NVM_BLOCK_ID_DEM_STATUS / _DEM_AGING / _DEM_EXTENDED から前回の状態を
+ *          復元し、経年回復 (Dem_EvaluateAging) を評価したうえで、
  *          TF / TFTOC をクリアし TNCTOC (今サイクル未テスト) を立てる
- *          （新しい操作サイクルの開始）。
+ *          （新しい操作サイクルの開始）。ExtendedData (Dem_OccurrenceCounter) は
+ *          サイクル境界での評価対象ではないため、そのまま復元するだけでよい。
  *          マジックバイトが無効なら全イベントを初期状態にして NvM へ書き込む。
  *
  * \ServiceID      {0x01}
@@ -203,8 +219,9 @@ void Dem_Init(void)
     if (magic == DEM_NVM_MAGIC_BYTE)
     {
         /* NvM から前回の最終状態を復元する */
-        (void)NvM_ReadBlock(NVM_BLOCK_ID_DEM_STATUS, Dem_StatusTable);
-        (void)NvM_ReadBlock(NVM_BLOCK_ID_DEM_AGING,  Dem_AgingCounter);
+        (void)NvM_ReadBlock(NVM_BLOCK_ID_DEM_STATUS,   Dem_StatusTable);
+        (void)NvM_ReadBlock(NVM_BLOCK_ID_DEM_AGING,    Dem_AgingCounter);
+        (void)NvM_ReadBlock(NVM_BLOCK_ID_DEM_EXTENDED, Dem_OccurrenceCounter);
 
         /* 経年回復の判定は「前サイクルの最終結果」を見る必要があるため、
          * TF/TFTOC/TNCTC を新サイクル用にリセットする前に行う */
@@ -233,12 +250,14 @@ void Dem_Init(void)
         /* 初回起動または EEPROM 破損: 全イベントを初期状態に設定 */
         for (uint8 i = 0U; i < DEM_EVENT_COUNT; i++)
         {
-            Dem_StatusTable[i]  = DEM_STATUS_NOT_COMPLETED_SINCE_CLEAR
-                                | DEM_STATUS_NOT_COMPLETED_THIS_CYCLE;
-            Dem_AgingCounter[i] = 0U;
+            Dem_StatusTable[i]      = DEM_STATUS_NOT_COMPLETED_SINCE_CLEAR
+                                     | DEM_STATUS_NOT_COMPLETED_THIS_CYCLE;
+            Dem_AgingCounter[i]     = 0U;
+            Dem_OccurrenceCounter[i] = 0U;
         }
-        (void)NvM_WriteBlock(NVM_BLOCK_ID_DEM_STATUS, Dem_StatusTable);
-        (void)NvM_WriteBlock(NVM_BLOCK_ID_DEM_AGING,  Dem_AgingCounter);
+        (void)NvM_WriteBlock(NVM_BLOCK_ID_DEM_STATUS,   Dem_StatusTable);
+        (void)NvM_WriteBlock(NVM_BLOCK_ID_DEM_AGING,    Dem_AgingCounter);
+        (void)NvM_WriteBlock(NVM_BLOCK_ID_DEM_EXTENDED, Dem_OccurrenceCounter);
         uint8 magicVal = DEM_NVM_MAGIC_BYTE;
         (void)NvM_WriteBlock(NVM_BLOCK_ID_DEM_MAGIC, &magicVal);
         DET_LOGI(TAG, "Init first-run ev=%u", (unsigned)DEM_EVENT_COUNT);
@@ -263,7 +282,8 @@ void Dem_Init(void)
  *          ±1 する。カウンタがイベントごとの確定閾値 (Dem_DebounceLimitTable[EventId])
  *          に達した瞬間にのみ、DTC ステータスの TF/TFTOC/PDTC/CDTC/TFSLC を確定し
  *          NvM_WriteBlock() でステータステーブル全体を永続化する
- *          (FAILED 確定時は併せて FreezeFrame も更新する)。
+ *          (FAILED 確定時は併せて FreezeFrame も更新し、ExtendedData の
+ *          故障確定回数カウンタを +1 する)。
  *          まだ閾値に達していない間 (PRE-FAILED / PRE-PASSED) は
  *          DTC ステータスビットを変更しない。
  *          DEM_EVENT_STATUS_PREPASSED / PREFAILED はモニタからの入力としては
@@ -371,6 +391,13 @@ void Dem_ReportErrorStatus(Dem_EventIdType EventId,
                      (unsigned)Dem_CurrentContext.EngineSpeed,
                      (unsigned)Dem_CurrentContext.CoolantTemp,
                      (unsigned)Dem_CurrentContext.EngineState);
+
+            /* ExtendedData: 確定 FAILED の累積回数を +1 (0xFF で飽和) */
+            if (Dem_OccurrenceCounter[EventId] < 0xFFU)
+                Dem_OccurrenceCounter[EventId]++;
+            (void)NvM_WriteBlock(NVM_BLOCK_ID_DEM_EXTENDED, Dem_OccurrenceCounter);
+            DET_LOGI(TAG, "ExtendedData ev=%u occurrence=%u",
+                     (unsigned)EventId, (unsigned)Dem_OccurrenceCounter[EventId]);
         }
 
         (void)NvM_WriteBlock(NVM_BLOCK_ID_DEM_STATUS, Dem_StatusTable);
@@ -419,7 +446,7 @@ Std_ReturnType Dem_GetDTCOfEvent(Dem_EventIdType EventId, uint32* DTC)
 
 /**
  * \brief   指定イベントの DTC ステータス・デバウンスカウンタ・経年回復カウンタ・
- *          FreezeFrame を初期状態に戻す（NvM 書き込みは呼び出し元が行う）。
+ *          ExtendedData・FreezeFrame を初期状態に戻す（NvM 書き込みは呼び出し元が行う）。
  *
  * \param[in]  EventId  イベント ID (DEM_EVENT_* 定数)。範囲チェックは呼び出し元の責務。
  */
@@ -427,16 +454,17 @@ static void Dem_ClearOne(Dem_EventIdType EventId)
 {
     Dem_StatusTable[EventId] = DEM_STATUS_NOT_COMPLETED_SINCE_CLEAR
                              | DEM_STATUS_NOT_COMPLETED_THIS_CYCLE;
-    Dem_DebounceCounter[EventId] = 0;
-    Dem_AgingCounter[EventId]    = 0U;
-    Dem_FreezeFrameValid[EventId] = 0U;
+    Dem_DebounceCounter[EventId]    = 0;
+    Dem_AgingCounter[EventId]       = 0U;
+    Dem_OccurrenceCounter[EventId]  = 0U;
+    Dem_FreezeFrameValid[EventId]   = 0U;
 }
 
 /**
  * \brief   全 DTC をクリアし、NvM (EEPROM) を初期状態へ戻す。
  *
  * \details 全イベントのステータスを TNCLC | TNCTOC にリセットし、
- *          経年回復カウンタも 0 に戻して NvM_WriteBlock() で永続化する。
+ *          経年回復カウンタ・ExtendedData も 0 に戻して NvM_WriteBlock() で永続化する。
  *          マジックバイトは保持する（再初期化は不要）。
  *
  * \retval  E_OK  常に成功。
@@ -451,8 +479,9 @@ Std_ReturnType Dem_ClearAllDTCs(void)
     {
         Dem_ClearOne(i);
     }
-    (void)NvM_WriteBlock(NVM_BLOCK_ID_DEM_STATUS, Dem_StatusTable);
-    (void)NvM_WriteBlock(NVM_BLOCK_ID_DEM_AGING,  Dem_AgingCounter);
+    (void)NvM_WriteBlock(NVM_BLOCK_ID_DEM_STATUS,   Dem_StatusTable);
+    (void)NvM_WriteBlock(NVM_BLOCK_ID_DEM_AGING,    Dem_AgingCounter);
+    (void)NvM_WriteBlock(NVM_BLOCK_ID_DEM_EXTENDED, Dem_OccurrenceCounter);
     DET_LOGI(TAG, "ClearAll ok");
     return E_OK;
 }
@@ -463,7 +492,7 @@ Std_ReturnType Dem_ClearAllDTCs(void)
  * \details SID 0x14 ClearDiagnosticInformation のグループ指定クリア
  *          (特定の DTC コードのみを指定するケース) から呼び出す。
  *          ステータスを TNCLC | TNCTOC にリセットし、デバウンスカウンタ・
- *          経年回復カウンタ・FreezeFrame も未記録状態に戻す。
+ *          経年回復カウンタ・ExtendedData・FreezeFrame も未記録状態に戻す。
  *
  * \param[in]  EventId  イベント ID (DEM_EVENT_* 定数)。
  *
@@ -480,8 +509,9 @@ Std_ReturnType Dem_ClearDTC(Dem_EventIdType EventId)
         return E_NOT_OK;
 
     Dem_ClearOne(EventId);
-    (void)NvM_WriteBlock(NVM_BLOCK_ID_DEM_STATUS, Dem_StatusTable);
-    (void)NvM_WriteBlock(NVM_BLOCK_ID_DEM_AGING,  Dem_AgingCounter);
+    (void)NvM_WriteBlock(NVM_BLOCK_ID_DEM_STATUS,   Dem_StatusTable);
+    (void)NvM_WriteBlock(NVM_BLOCK_ID_DEM_AGING,    Dem_AgingCounter);
+    (void)NvM_WriteBlock(NVM_BLOCK_ID_DEM_EXTENDED, Dem_OccurrenceCounter);
     DET_LOGI(TAG, "Clear ev=%u ok", (unsigned)EventId);
     return E_OK;
 }
@@ -571,4 +601,22 @@ Std_ReturnType Dem_GetEventIdOfDTC(uint32 DTC, Dem_EventIdType* EventId)
         }
     }
     return E_NOT_OK;
+}
+
+/**
+ * \brief   指定イベントの ExtendedData（故障確定回数）を取得する。
+ *
+ * \details FreezeFrame と異なり「記録なし」という状態を持たない
+ *          （一度も確定 FAILED していなければ単に 0）。
+ *
+ * \ServiceID      {0x29}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType Dem_GetOccurrenceCounterOfEvent(Dem_EventIdType EventId, uint8* Counter)
+{
+    if (EventId >= DEM_EVENT_COUNT || Counter == NULL)
+        return E_NOT_OK;
+    *Counter = Dem_OccurrenceCounter[EventId];
+    return E_OK;
 }

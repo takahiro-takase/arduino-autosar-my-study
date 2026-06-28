@@ -15,10 +15,14 @@
  *            DEM_EVENT_ADC_VOLT_LOW         — ADC センサ電圧低下 (< 1000 mV)
  *            DEM_EVENT_CAN_BUSOFF           — CAN Bus-Off 回復断念（最大試行超過）
  *
- *          EEPROM レイアウト (Arduino UNO 内蔵 EEPROM 1KB の先頭 17 バイト使用):
- *            Addr 0x00: マジックバイト (0xDE = 有効な DEM データ)
- *            Addr 0x01-0x08: イベント 0-7 ステータスバイト (NVM_BLOCK_ID_DEM_STATUS)
- *            Addr 0x09-0x10: イベント 0-7 経年回復(Aging)カウンタ (NVM_BLOCK_ID_DEM_AGING)
+ *          EEPROM レイアウト (Arduino UNO 内蔵 EEPROM 1KB の先頭 29 バイト使用。
+ *          各ブロックには NvM が CRC8 を 1 バイト付加するため、詳細なアドレスは
+ *          NvM_Cfg.h を参照。DEM はブロック ID (NVM_BLOCK_ID_DEM_*) でのみアクセスし
+ *          物理アドレスを知らない):
+ *            NVM_BLOCK_ID_DEM_MAGIC:    マジックバイト (0xDE = 有効な DEM データ)
+ *            NVM_BLOCK_ID_DEM_STATUS:   イベント 0-7 ステータスバイト
+ *            NVM_BLOCK_ID_DEM_AGING:    イベント 0-7 経年回復(Aging)カウンタ
+ *            NVM_BLOCK_ID_DEM_EXTENDED: イベント 0-7 故障確定回数 (ExtendedData)
  *
  *          経年回復 (Aging):
  *            CONFIRMED（確定）した DTC は、再故障せずに DEM_AGING_THRESHOLD_*
@@ -27,6 +31,14 @@
  *            (Dem_Init() が起動ごとに前サイクルの結果を評価する)。
  *            実車では数十サイクル単位が一般的だが、本プロジェクトでは実機での動作
  *            確認を電源再投入数回で行えるよう小さい値にしている。
+ *
+ *          ExtendedData (故障確定回数):
+ *            FreezeFrame が「故障した瞬間のスナップショット」（1 件のみ保持）
+ *            なのに対し、ExtendedData は「これまでに何回確定 FAILED したか」を
+ *            累積するカウンタである（イベントごとに 1 バイト、0xFF で飽和）。
+ *            SID 0x14 でのクリア時は経年回復カウンタと同様に 0 へ戻る
+ *            （CDTC 自体とは異なるライフサイクル）。UDS SID 0x19 サブ機能 0x06
+ *            (reportExtendedDataRecordByDTCNumber) で読み出せる。
  *
  * \copyright  Copyright (c) 2025 T_T
  * \license    MIT License - 詳細は LICENSE ファイルを参照。
