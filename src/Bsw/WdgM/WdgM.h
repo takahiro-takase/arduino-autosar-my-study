@@ -15,17 +15,23 @@
  *               (Logical Supervision)。許可されない順序が来た場合は即座に FAILED とする。
  *
  *          本プロジェクトでの失敗アクション:
- *            WdgM_LocalStatus を FAILED に更新し WARN ログを出力する。
+ *            Alive Supervision と Logical Supervision の判定結果はそれぞれ独立した
+ *            内部ステータスに保持し（AUTOSAR が個々のアルゴリズムごとに判定結果を
+ *            保持するのと同じ考え方）、WdgM_GetLocalStatus() はどちらか一方でも
+ *            FAILED ならローカルステータスとして FAILED を返す。
  *            AVR 実ハードウェアウォッチドッグ（<avr/wdt.h>）と連携しており、
  *            正常な間だけ WdgM_MainFunction が wdt_reset() を呼ぶ。異常時は
  *            リフレッシュを止め、WDGM_HW_WATCHDOG_TIMEOUT_MS 後に実際に MCU が
  *            リセットされる（シミュレーションではなく実機で本当に発生する）。
  *
- *          学習用簡略化:
- *            Alive と Logical の判定結果を 1 つの WdgM_LocalStatusType に統合している。
- *            そのため Logical Supervision が FAILED と判定した直後でも、次の
- *            WdgM_MainFunction サイクルで Alive 条件を満たせば「recovered」として
- *            OK に復帰する（AUTOSAR ではアルゴリズムごとに個別の判定結果を保持する）。
+ *          Logical Supervision の FAILED は WdgM_Init() までラッチされる:
+ *            WdgM_CheckpointReached() が不正な遷移を検出すると Logical の
+ *            内部ステータスを FAILED にする。Alive Supervision とは異なり
+ *            WdgM_MainFunction() の周期処理では自動的に OK へ復帰させない
+ *            （誤った遷移が起きたという事実は、その後 Alive 条件を満たしても
+ *            消えないため）。HW ウォッチドッグのリフレッシュも止まるので、
+ *            WDGM_HW_WATCHDOG_TIMEOUT_MS 後の MCU リセット → WdgM_Init() の
+ *            再実行でのみ OK に戻る。
  *
  * \copyright  Copyright (c) 2025 T_T
  * \license    MIT License - 詳細は LICENSE ファイルを参照。
@@ -131,6 +137,10 @@ Std_ReturnType WdgM_CheckpointReached(WdgM_SupervisedEntityIdType SEID, uint8 Ch
 
 /**
  * \brief   Supervised Entity の現在のローカルステータスを取得する。
+ *
+ * \details Alive Supervision と Logical Supervision、どちらか一方でも FAILED
+ *          なら FAILED を返す（AUTOSAR の「全アルゴリズムの結果の最悪値」と
+ *          同じ考え方）。
  *
  * \param[in]  SEID  エンティティ ID。
  * \return     WdgM_LocalStatusType 値。ID 不正の場合は DEACTIVATED。
