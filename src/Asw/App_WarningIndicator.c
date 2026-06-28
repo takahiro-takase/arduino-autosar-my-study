@@ -88,8 +88,14 @@ void App_WarningIndicator_Run(void)
     /* D6: RUNNING LED — ENGINE_STATE_RUNNING のとき点灯。
      * ただし FiM が抑止中（CAN Bus-Off 確定中、EngineState は CAN 受信由来の
      * ため信頼できない）なら強制消灯する。 */
-    uint8 runPermitted = 1U;
-    (void)Rte_Call_FiM_GetFunctionPermission(FIM_FID_RUNNING_LED, &runPermitted);
+    /* フェールセーフ既定値: 許可状態を確認できない間は抑止扱いとする
+     * (FiM_GetFunctionPermission は失敗時も Status=0 を書き込むが、
+     * 呼び出し側自身もその実装詳細に依存せず安全側を既定値にする) */
+    uint8 runPermitted = 0U;
+    if (Rte_Call_FiM_GetFunctionPermission(FIM_FID_RUNNING_LED, &runPermitted) != E_OK)
+    {
+        runPermitted = 0U;
+    }
     const uint8 runLevel = (state == ENGINE_STATE_RUNNING && runPermitted == 1U) ? 1U : 0U;
     (void)Rte_Call_LedRunning_SetLevel(runLevel);
 
