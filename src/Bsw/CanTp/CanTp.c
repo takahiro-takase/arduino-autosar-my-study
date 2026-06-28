@@ -15,6 +15,9 @@
  *            WAIT_CF → CF 受信 → 完成なら Dcm_ComIndication → IDLE
  *                             → 未完成なら WAIT_CF (N_Cr リセット)
  *            WAIT_CF → N_Cr タイムアウト → IDLE (中断)
+ *            WAIT_CF → 別の FF 受信 → 無視 (CanTp_Transmit の busy 判定と対称。
+ *                                     進行中の再組立は破棄せず、N_Cr タイムアウト
+ *                                     で自然に中断させる)
  *
  *          TX 状態マシン:
  *            IDLE → CanTp_Transmit (<=7B) → SF 送信 → IDLE
@@ -368,6 +371,18 @@ void CanTp_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
     /* ------------------------------------------------------------------ */
     case CANTP_FRAME_FF:
     {
+        if (CanTp_Rx.state == CANTP_RX_WAIT_CF)
+        {
+            /* 別メッセージの再組立中に新しい FF を受信した。CanTp_Transmit() の
+             * busy 判定（送信中は新規送信を E_NOT_OK で拒否する）と対称的に、
+             * 進行中の再組立バッファを不用意に上書き・破棄しない。
+             * 新しい FF は無視し、進行中のセッションは N_Cr タイムアウト
+             * (CANTP_N_CR_TIMEOUT_MS) で自然に中断させる。中断後の再送であれば
+             * 通常どおり受理される。 */
+            DET_LOGW(TAG, "RX FF ignored: already WAIT_CF (busy)");
+            break;
+        }
+
         uint16 msgLen = (uint16)(((uint16)(pci & 0x0FU) << 8U)
                                  | (uint16)data[1]);
 
