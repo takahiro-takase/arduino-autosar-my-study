@@ -149,8 +149,14 @@ void App_EngineManager_Run(void)
      * 偽信号である可能性を排除できないため受理しない。 */
     if (s_state == ENGINE_STATE_FAULT && btnPressed == 1U)
     {
-        uint8 ackPermitted = 1U;
-        (void)Rte_Call_FiM_GetFunctionPermission(FIM_FID_BUTTON_ACK, &ackPermitted);
+        /* フェールセーフ既定値: 許可状態を確認できない間は抑止扱いとする
+         * (FiM_GetFunctionPermission は失敗時も Status=0 を書き込むが、
+         * 呼び出し側自身もその実装詳細に依存せず安全側を既定値にする) */
+        uint8 ackPermitted = 0U;
+        if (Rte_Call_FiM_GetFunctionPermission(FIM_FID_BUTTON_ACK, &ackPermitted) != E_OK)
+        {
+            ackPermitted = 0U;
+        }
 
         if (ackPermitted == 1U)
         {

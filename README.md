@@ -1026,6 +1026,29 @@ ASW が Dem を直接参照しないことで、「どの DTC が確定したら
 [40500ms] WARN  AppEng: FAULT->OFF btn=1 inhibited (FiM)   # 押下を受理しない
 ```
 
+#### 呼び出し側（ASW）のフェールセーフ既定値
+
+`FiM_GetFunctionPermission()` 自体は、FID が不正・FiM 未初期化などで判定できない
+場合に `Status` を安全側（0 = 抑止）にしてから `E_NOT_OK` を返す契約になっています
+（`FiM.h` 参照）。
+
+ASW 側（`App_EngineManager_Run` / `App_WarningIndicator_Run`）の呼び出しも、
+この契約に依存しきらず、呼び出し前のローカル変数の既定値そのものを
+`0`（抑止）にし、戻り値が `E_NOT_OK` の場合も明示的に `0` へ上書きしています。
+
+```c
+uint8 ackPermitted = 0U;  /* 既定値は「抑止」(許可ではない) */
+if (Rte_Call_FiM_GetFunctionPermission(FIM_FID_BUTTON_ACK, &ackPermitted) != E_OK)
+{
+    ackPermitted = 0U;
+}
+```
+
+呼び出し先の実装が将来変わって `Status` を書き込まない失敗経路が増えても、
+呼び出し側のローカルな既定値だけで安全側に倒れる（fail-safe）ようにする狙いです。
+「許可判定が確認できないときは許可しない」という既定値の選び方は、
+セキュリティ・機能安全の定石（fail-safe defaults）そのものです。
+
 ## ECU 管理層（EcuM / BswM / WdgM / ComM / CanSM）
 
 ECU の起動・シャットダウンのライフサイクルと、タスク制御・ソフトウェア監視を担うモジュール群です。
