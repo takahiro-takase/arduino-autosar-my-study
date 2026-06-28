@@ -105,7 +105,9 @@ void Com_Init(const Com_ConfigType* config)
  *
  * \param[in]  RxPduId     受信 I-PDU の PduR 層 PDU ID。
  *                         Com_IPduConfigType エントリの検索に使用する。
- * \param[in]  PduInfoPtr  受信 PDU のデータと長さへのポインタ。NULL 禁止。
+ * \param[in]  PduInfoPtr  受信 PDU のデータと長さへのポインタ。
+ *                         NULL 禁止。SduDataPtr も NULL 禁止
+ *                         （本関数が直接 SduDataPtr[b] を参照するため必須）。
  *
  * \pre        Com_Init() が正常に完了していること。
  *
@@ -115,7 +117,7 @@ void Com_Init(const Com_ConfigType* config)
  */
 void Com_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
 {
-    if (Com_ConfigPtr == NULL || PduInfoPtr == NULL)
+    if (Com_ConfigPtr == NULL || PduInfoPtr == NULL || PduInfoPtr->SduDataPtr == NULL)
         return;
 
     for (uint8 i = 0; i < Com_ConfigPtr->RxIPduCount; i++)

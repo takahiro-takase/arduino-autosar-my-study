@@ -2016,6 +2016,21 @@ static uint8 Dcm_TxBuf[DCM_TX_BUF_SIZE];
 書き込みループにも防御的な境界チェックを入れる（`Dcm_HandleReadDtcByMask()`
 参照）、という二重の対策にしています。
 
+### RX/TX で対称な入力検証
+
+`CanIf_Transmit()`（TX）は `PduInfoPtr == NULL || PduInfoPtr->SduDataPtr == NULL`
+を検証してから送信データを参照していますが、対応する受信経路
+`CanIf_RxIndication()` → `PduR_ComRxIndication()` → `Com_RxIndication()` は
+`PduInfoPtr == NULL` だけを見て `SduDataPtr` を検証しないまま
+`Com_RxIndication()` が `PduInfoPtr->SduDataPtr[b]` を直接参照していました。
+
+現在の呼び出し元 (`Can.c` の RX 処理) は常にスタック上の有効なバッファを渡すため
+今すぐ問題になるわけではありませんが、関数自身のドキュメント
+（「SduDataPtr も NULL 禁止」）を実際にコードで保証していない状態でした。
+TX 側と同じ検証を RX の各層境界（CanIf → PduR → Com）にも追加し、
+「ドキュメントが約束している契約は、呼び出し元の現状に頼らず関数自身が
+保証する」という、FiM のフェールセーフ修正のときと同じ考え方を踏襲しています。
+
 ### 設定テーブルの一元管理
 
 各モジュールの設定は対応する `*_PBCfg.c` ファイルで管理しています。
