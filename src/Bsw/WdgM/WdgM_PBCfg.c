@@ -9,7 +9,8 @@
  *              周期    : 3000 ms (Os_PBCfg.c Task 2)
  *              Alive   : 6000 ms サイクルで CheckpointReached が 1 回以上来ること
  *              Logical : START → END → START → ... の順序のみを許可
- *              失敗時  : WdgM_LocalStatus → FAILED / WARN ログ出力
+ *              失敗時  : WdgM_AliveStatus または WdgM_LogicalStatus → FAILED / WARN ログ出力
+ *                        (WdgM_GetLocalStatus() はどちらか一方でも FAILED なら FAILED)
  *
  * \copyright  Copyright (c) 2025 T_T
  * \license    MIT License - 詳細は LICENSE ファイルを参照。

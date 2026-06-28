@@ -17,9 +17,21 @@
  *               WdgM_LastCheckpoint[SEID]（直前のチェックポイント）から
  *               今回の CheckpointId への遷移が許可遷移テーブル
  *               (WdgM_PBCfg.c の Transitions[]) に含まれるかを即座に確認する。
- *            2. 含まれない場合は LOCAL_STATUS_FAILED にして WARN ログを出力する
- *               (MainFunction の周期を待たず即時検出)。
+ *            2. 含まれない場合は WdgM_LogicalStatus[SEID] を FAILED にして
+ *               WARN ログを出力する (MainFunction の周期を待たず即時検出)。
  *            3. WdgM_LastCheckpoint[SEID] を今回の CheckpointId に更新する。
+ *
+ *          Alive と Logical の判定結果統合 (AUTOSAR 同等の挙動):
+ *            WdgM_AliveStatus[] (Alive Supervision 用) と WdgM_LogicalStatus[]
+ *            (Logical Supervision 用) を別々の配列で保持する。WdgM_GetLocalStatus()
+ *            と WdgM_MainFunction() の HW ウォッチドッグ refresh 判定は、両方が
+ *            OK の場合のみ OK とみなす。WdgM_AliveStatus は周期ごとに OK/FAILED を
+ *            再評価するが、WdgM_LogicalStatus は WdgM_Init() でのみ OK に戻る
+ *            （不正な遷移が起きたという事実は Alive 条件を満たしても消えない）。
+ *            旧実装ではこの 2 つを 1 つの WdgM_LocalStatus に統合していたため、
+ *            Logical Supervision が FAILED と判定した直後でも次の MainFunction
+ *            サイクルで Alive 条件を満たせば OK に上書きされ、検出した違反が
+ *            消えてしまう問題があった。
  *
  *          HW ウォッチドッグ連携:
  *            WdgM_Init() で AVR 実ハードウェアウォッチドッグ (<avr/wdt.h>) を
@@ -54,8 +66,11 @@ static const WdgM_ConfigType* WdgM_Cfg = NULL;
 /** エンティティごとの Alive カウンタ (CheckpointReached 呼び出し回数) */
 static uint8 WdgM_AliveCount[WDGM_SUPERVISED_ENTITY_COUNT];
 
-/** エンティティごとのローカルステータス */
-static WdgM_LocalStatusType WdgM_LocalStatus[WDGM_SUPERVISED_ENTITY_COUNT];
+/** エンティティごとの Alive Supervision ステータス (WdgM_MainFunction が周期更新) */
+static WdgM_LocalStatusType WdgM_AliveStatus[WDGM_SUPERVISED_ENTITY_COUNT];
+
+/** エンティティごとの Logical Supervision ステータス (WdgM_Init まで FAILED がラッチされる) */
+static WdgM_LocalStatusType WdgM_LogicalStatus[WDGM_SUPERVISED_ENTITY_COUNT];
 
 /** エンティティごとの直前のチェックポイント ID (Logical Supervision 用) */
 static uint8 WdgM_LastCheckpoint[WDGM_SUPERVISED_ENTITY_COUNT];
@@ -82,8 +97,9 @@ void WdgM_Init(const WdgM_ConfigType* ConfigPtr)
     WdgM_Cfg = ConfigPtr;
     for (uint8 i = 0U; i < ConfigPtr->EntityCount; i++)
     {
-        WdgM_AliveCount[i]    = 0U;
-        WdgM_LocalStatus[i]   = WDGM_LOCAL_STATUS_OK;
+        WdgM_AliveCount[i]     = 0U;
+        WdgM_AliveStatus[i]    = WDGM_LOCAL_STATUS_OK;
+        WdgM_LogicalStatus[i]  = WDGM_LOCAL_STATUS_OK;
         WdgM_LastCheckpoint[i] = WDGM_CP_INITIAL;
     }
 
@@ -153,7 +169,7 @@ Std_ReturnType WdgM_CheckpointReached(WdgM_SupervisedEntityIdType SEID, uint8 Ch
 
     if (allowed == 0U)
     {
-        WdgM_LocalStatus[SEID] = WDGM_LOCAL_STATUS_FAILED;
+        WdgM_LogicalStatus[SEID] = WDGM_LOCAL_STATUS_FAILED;
         DET_LOGW(TAG, "SE%u logical FAILED cp %u->%u (unexpected) [HW WDT reset pending]",
                  (unsigned)SEID, (unsigned)fromCp, (unsigned)CheckpointId);
     }
@@ -166,6 +182,9 @@ Std_ReturnType WdgM_CheckpointReached(WdgM_SupervisedEntityIdType SEID, uint8 Ch
 /**
  * \brief   Supervised Entity の現在のローカルステータスを取得する。
  *
+ * \details Alive Supervision (WdgM_AliveStatus) と Logical Supervision
+ *          (WdgM_LogicalStatus) のどちらか一方でも FAILED なら FAILED を返す。
+ *
  * \ServiceID      {0x0B}
  * \Reentrancy     {Reentrant}
  * \Synchronicity  {Synchronous}
@@ -174,15 +193,20 @@ WdgM_LocalStatusType WdgM_GetLocalStatus(WdgM_SupervisedEntityIdType SEID)
 {
     if (WdgM_Cfg == NULL || SEID >= WdgM_Cfg->EntityCount)
         return WDGM_LOCAL_STATUS_DEACTIVATED;
-    return WdgM_LocalStatus[SEID];
+    if (WdgM_AliveStatus[SEID] != WDGM_LOCAL_STATUS_OK
+        || WdgM_LogicalStatus[SEID] != WDGM_LOCAL_STATUS_OK)
+        return WDGM_LOCAL_STATUS_FAILED;
+    return WDGM_LOCAL_STATUS_OK;
 }
 
 /**
  * \brief   WdgM 周期処理。Alive Supervision を評価し、HW ウォッチドッグを refresh する。
  *
- * \details 各エンティティの Alive カウンタを検査し、結果をステータスに反映する。
+ * \details 各エンティティの Alive カウンタを検査し、WdgM_AliveStatus に反映する
+ *          (WdgM_LogicalStatus はここでは変更しない。WdgM_Init までラッチされる)。
  *          検査後カウンタをリセットして次サイクルを開始する。
- *          全エンティティが OK の場合のみ wdt_reset() を呼ぶ。1 つでも FAILED が
+ *          全エンティティの WdgM_GetLocalStatus() が OK の場合のみ wdt_reset() を
+ *          呼ぶ。1 つでも FAILED (Alive 不足または Logical Supervision 違反) が
  *          あれば呼ばないため、WDGM_HW_WATCHDOG_TIMEOUT_MS 後に実際に MCU が
  *          リセットされる。
  *
@@ -203,27 +227,31 @@ void WdgM_MainFunction(void)
 
         if (WdgM_AliveCount[i] >= entity->ExpectedAliveIndications)
         {
-            if (WdgM_LocalStatus[i] != WDGM_LOCAL_STATUS_OK)
+            if (WdgM_AliveStatus[i] != WDGM_LOCAL_STATUS_OK)
             {
-                /* FAILED から回復 */
-                WdgM_LocalStatus[i] = WDGM_LOCAL_STATUS_OK;
-                DET_LOGI(TAG, "SE%u recovered alive=%u", (unsigned)i, (unsigned)WdgM_AliveCount[i]);
+                /* Alive Supervision のみ FAILED から回復 (Logical は別管理) */
+                WdgM_AliveStatus[i] = WDGM_LOCAL_STATUS_OK;
+                DET_LOGI(TAG, "SE%u alive recovered alive=%u", (unsigned)i, (unsigned)WdgM_AliveCount[i]);
             }
             else
             {
-                DET_LOGD(TAG, "SE%u OK alive=%u", (unsigned)i, (unsigned)WdgM_AliveCount[i]);
+                DET_LOGD(TAG, "SE%u alive OK alive=%u", (unsigned)i, (unsigned)WdgM_AliveCount[i]);
             }
         }
         else
         {
-            WdgM_LocalStatus[i] = WDGM_LOCAL_STATUS_FAILED;
-            DET_LOGW(TAG, "SE%u FAILED alive=%u (exp>=%u) [HW WDT reset pending]",
+            WdgM_AliveStatus[i] = WDGM_LOCAL_STATUS_FAILED;
+            DET_LOGW(TAG, "SE%u alive FAILED alive=%u (exp>=%u) [HW WDT reset pending]",
                      (unsigned)i,
                      (unsigned)WdgM_AliveCount[i],
                      (unsigned)entity->ExpectedAliveIndications);
         }
 
-        if (WdgM_LocalStatus[i] != WDGM_LOCAL_STATUS_OK)
+        if (WdgM_LogicalStatus[i] != WDGM_LOCAL_STATUS_OK)
+            DET_LOGW(TAG, "SE%u logical still FAILED (latched since violation) [HW WDT reset pending]",
+                     (unsigned)i);
+
+        if (WdgM_GetLocalStatus(i) != WDGM_LOCAL_STATUS_OK)
             allOk = 0U;
 
         /* 次サイクルのためカウンタリセット */
