@@ -8,6 +8,9 @@
  *          Dem_ReportErrorStatus() でイベントの発生・消滅を通知する。
  *          DEM は DTC ライフサイクル (PENDING → CONFIRMED → STORED) を
  *          管理し、EEPROM へ永続化する。
+ *          CONFIRMED した DTC は、再故障せずに複数回の操作サイクル（起動〜次回
+ *          起動）を経ると Dem_Init() が経年回復 (Aging) を判定し自動的に
+ *          CONFIRMED を解除する（詳細は Dem.c / Dem_Cfg.h を参照）。
  *          DCM は Dem_GetAllDTCs() / Dem_ClearAllDTCs() 経由で
  *          UDS SID 0x19 / 0x14 に応答する。
  *

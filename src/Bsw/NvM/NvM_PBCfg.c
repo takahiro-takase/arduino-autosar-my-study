@@ -25,6 +25,7 @@
  * ----------------------------------------------------------------------- */
 static uint8 NvM_Ram_DemMagic[NVM_BLOCK_DEM_MAGIC_LENGTH];
 static uint8 NvM_Ram_DemStatus[NVM_BLOCK_DEM_STATUS_LENGTH];
+static uint8 NvM_Ram_DemAging[NVM_BLOCK_DEM_AGING_LENGTH];
 
 /* -----------------------------------------------------------------------
  * ブロック記述子テーブル
@@ -43,6 +44,12 @@ static const NvM_BlockDescriptorType NvM_BlockTable[NVM_BLOCK_COUNT] =
         NVM_BLOCK_DEM_STATUS_EEPROM_ADDR,  /* NvMNvBlockBaseNumber */
         NVM_BLOCK_DEM_STATUS_LENGTH,       /* NvMNvBlockLength     */
         NvM_Ram_DemStatus                  /* RamBlockDataAddress  */
+    },
+    /* NVM_BLOCK_ID_DEM_AGING */
+    {
+        NVM_BLOCK_DEM_AGING_EEPROM_ADDR,   /* NvMNvBlockBaseNumber */
+        NVM_BLOCK_DEM_AGING_LENGTH,        /* NvMNvBlockLength     */
+        NvM_Ram_DemAging                   /* RamBlockDataAddress  */
     }
 };
 
