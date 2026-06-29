@@ -274,10 +274,15 @@ uint8 Com_ReceiveSignal(Com_SignalIdType SignalId, void* SignalDataPtr)
             Com_RxBuffer[sig->IPduId],
             sig->BitPosition, sig->BitSize, sig->Endian);
 
-        dataPtr[0] = (uint8)(value);
-        dataPtr[1] = (uint8)(value >>  8U);
-        dataPtr[2] = (uint8)(value >> 16U);
-        dataPtr[3] = (uint8)(value >> 24U);
+        /* SignalDataPtr は呼び出し元が BitSize に応じた幅の変数
+         * (uint8/uint16/uint32) を渡す。常に 4 バイト書き込むと、
+         * 8bit/16bit の呼び出し元ではスタック上の隣接領域を破壊する。
+         * BitSize から必要バイト数だけを書き込む。 */
+        const uint8 byteCount = (uint8)((sig->BitSize + 7U) / 8U);
+        for (uint8 b = 0U; b < byteCount; b++)
+        {
+            dataPtr[b] = (uint8)(value >> (8U * b));
+        }
         return E_OK;
     }
     return E_NOT_OK;
@@ -325,10 +330,16 @@ uint8 Com_SendSignal(Com_SignalIdType SignalId, const void* SignalDataPtr)
         if (sig->SignalId != SignalId)
             continue;
 
-        const uint32 value = (uint32)dataPtr[0]
-                           | ((uint32)dataPtr[1] <<  8U)
-                           | ((uint32)dataPtr[2] << 16U)
-                           | ((uint32)dataPtr[3] << 24U);
+        /* SignalDataPtr は呼び出し元が BitSize に応じた幅の変数
+         * (uint8/uint16/uint32) を渡す。常に 4 バイト読み込むと、
+         * 8bit/16bit の呼び出し元ではスタック上の隣接領域を読んでしまう。
+         * BitSize から必要バイト数だけを読み込む。 */
+        const uint8 byteCount = (uint8)((sig->BitSize + 7U) / 8U);
+        uint32 value = 0U;
+        for (uint8 b = 0U; b < byteCount; b++)
+        {
+            value |= ((uint32)dataPtr[b]) << (8U * b);
+        }
 
         Com_PackSignal(Com_TxBuffer[sig->IPduId],
                        sig->BitPosition, sig->BitSize, sig->Endian, value);

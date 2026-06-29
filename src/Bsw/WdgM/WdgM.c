@@ -152,7 +152,7 @@ void WdgM_Init(const WdgM_ConfigType* ConfigPtr)
  */
 void WdgM_EnableHwWatchdog(void)
 {
-    //wdt_enable(WDTO_8S);  /* WDGM_HW_WATCHDOG_TIMEOUT_MS (8000ms) に対応 */
+    wdt_enable(WDTO_8S);  /* WDGM_HW_WATCHDOG_TIMEOUT_MS (8000ms) に対応 */
     DET_LOGI(TAG, "HW watchdog enabled (8000ms)");
 }
 
