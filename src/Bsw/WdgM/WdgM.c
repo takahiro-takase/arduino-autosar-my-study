@@ -58,10 +58,11 @@
  *            この誤検出を防ぐ。
  *
  *          HW ウォッチドッグ連携:
- *            WdgM_Init() で AVR 実ハードウェアウォッチドッグ (<avr/wdt.h>) を
- *            WDGM_HW_WATCHDOG_TIMEOUT_MS (8000ms) で有効化する。
- *            WdgM_MainFunction() は全エンティティが OK の場合のみ wdt_reset() を
- *            呼ぶ。1 つでも FAILED があれば呼ばないため、リフレッシュが止まり
+ *            WdgM_Init() で実ハードウェアウォッチドッグ (WdgM_Hw 層が
+ *            MCU 固有 API をラップする) を WDGM_HW_WATCHDOG_TIMEOUT_MS
+ *            (8000ms) で有効化する。
+ *            WdgM_MainFunction() は全エンティティが OK の場合のみ
+ *            WdgM_Hw_Refresh() を呼ぶ。1 つでも FAILED があれば呼ばないため、リフレッシュが止まり
  *            タイムアウト後に実際に MCU がリセットされる（WARN ログのみだった
  *            従来の学習用簡略化を解消し、本物のフェールセーフ動作にした）。
  *            EcuM が POST_RUN へ遷移する際（Rte_Engine タスクが意図的に停止し
@@ -76,8 +77,8 @@
  */
 
 #include "WdgM.h"
+#include "WdgM_Hw.h"
 #include "Det.h"
-#include <avr/wdt.h>
 
 /* millis() is declared in Arduino wiring.c with C linkage. */
 extern unsigned long millis(void);
@@ -152,7 +153,7 @@ void WdgM_Init(const WdgM_ConfigType* ConfigPtr)
  */
 void WdgM_EnableHwWatchdog(void)
 {
-    wdt_enable(WDTO_8S);  /* WDGM_HW_WATCHDOG_TIMEOUT_MS (8000ms) に対応 */
+    WdgM_Hw_Enable();  /* WDGM_HW_WATCHDOG_TIMEOUT_MS (8000ms) に対応 */
     DET_LOGI(TAG, "HW watchdog enabled (8000ms)");
 }
 
@@ -165,7 +166,7 @@ void WdgM_EnableHwWatchdog(void)
  */
 void WdgM_DisableHwWatchdog(void)
 {
-    wdt_disable();
+    WdgM_Hw_Disable();
     DET_LOGI(TAG, "HW watchdog disabled");
 }
 
@@ -300,7 +301,7 @@ WdgM_LocalStatusType WdgM_GetLocalStatus(WdgM_SupervisedEntityIdType SEID)
  *          (WdgM_LogicalStatus / WdgM_DeadlineStatus はここでは変更しない。
  *          いずれも WdgM_Init までラッチされる)。
  *          検査後カウンタをリセットして次サイクルを開始する。
- *          全エンティティの WdgM_GetLocalStatus() が OK の場合のみ wdt_reset() を
+ *          全エンティティの WdgM_GetLocalStatus() が OK の場合のみ WdgM_Hw_Refresh() を
  *          呼ぶ。1 つでも FAILED (Alive 不足、Logical Supervision 違反、または
  *          Deadline Supervision 違反) があれば呼ばないため、
  *          WDGM_HW_WATCHDOG_TIMEOUT_MS 後に実際に MCU がリセットされる。
@@ -359,7 +360,7 @@ void WdgM_MainFunction(void)
 
     if (allOk)
     {
-        wdt_reset();
+        WdgM_Hw_Refresh();
         DET_LOGD(TAG, "HW watchdog refreshed");
     }
     else
