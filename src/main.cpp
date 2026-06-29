@@ -9,14 +9,13 @@
  *          setup() に残し、それ以外はすべて EcuM へ委譲する。
  *
  *          HW ウォッチドッグ起因のブートループ対策:
- *            WdgM が <avr/wdt.h> の実ハードウェアウォッチドッグを使用するため、
- *            setup() の最初に MCUSR クリア + wdt_disable() を行う
- *            （Arduino/AVR の定番パターン）。これを怠ると、短いタイムアウトで
- *            WDT が有効なまま再起動した場合に、ブートローダの待機中に再度
- *            タイムアウトしてスケッチに到達できない無限リセットに陥る恐れがある。
- *            MCUSR は読み取り後にクリアする必要があるため、クリア前の値を
- *            一時保存しておき、Serial 初期化後にリセット原因として
- *            ログ出力する（バスオフ/WDT リセット調査用の診断ログ。
+ *            WdgM が実ハードウェアウォッチドッグを使用するため、
+ *            setup() の最初に Mcu_Hw 経由でリセット原因取得 + WDT 無効化を行う
+ *            （Arduino/AVR の定番パターンを MCU 非依存の形でラップしたもの）。
+ *            これを怠ると、短いタイムアウトで WDT が有効なまま再起動した場合に、
+ *            ブートローダの待機中に再度タイムアウトしてスケッチに到達できない
+ *            無限リセットに陥る恐れがある。リセット原因はクリア前の値を
+ *            Serial 初期化後にログ出力する（バスオフ/WDT リセット調査用の診断ログ。
  *            project_busoff_watchdog_reset_bug 参照）。
  *
  * \copyright  Copyright (c) 2025 T_T
@@ -26,10 +25,9 @@
  *          AUTOSAR 認証済み実装ではなく、製品への適用は想定していません。
  */
 #include <Arduino.h>
-#include <avr/wdt.h>
-#include <avr/eeprom.h>
 #include "EcuM.h"
 #include "Det.h"
+#include "Mcu_Hw.h"
 
 #define TAG "Main"
 
@@ -39,14 +37,12 @@
 void setup()
 {
     /* ブートローダ起因の WDT 無限リセットループを防ぐため、
-     * 何よりも先に MCUSR をクリアして WDT を無効化する。
-     * WdgM_Init() が後で必要なタイムアウトで再度有効化する。
-     * MCUSR は読み取り後に必ずクリアすること（クリアしないと次回リセット時に
-     * 古い値が残り原因判定を誤る）。そのため、クリアする直前の値を保存して
-     * おき、Serial が使えるようになった後でログ出力する。 */
-    const uint8_t resetFlags = MCUSR;
-    MCUSR = 0;
-    wdt_disable();
+     * 何よりも先にリセット原因を読み取り(レジスタはクリアされる)、WDT を
+     * 無効化する。WdgM_Init() が後で必要なタイムアウトで再度有効化する。
+     * クリア前の値は Mcu_Hw_ReadAndClearResetReason() が返すので、
+     * Serial が使えるようになった後でログ出力する。 */
+    const uint8 resetFlags = Mcu_Hw_ReadAndClearResetReason();
+    Mcu_Hw_DisableWatchdogAtBoot();
 
     Serial.begin(115200);
 
@@ -61,13 +57,6 @@ void setup()
              (unsigned)((resetFlags >> 2) & 1U),
              (unsigned)((resetFlags >> 1) & 1U),
              (unsigned)(resetFlags & 1U));
-
-    /* NvM CRC 動作確認用 (一時的な動作確認コード):
-     * コメントを外して再アップロードすると、NvM_Init() が EEPROM を読み込む
-     * 直前に DEM_AGING ブロックの先頭バイトを直接破壊する。
-     * NvM: "CRC mismatch" -> "defaults restored" ログが出ることを確認できる。
-     * 確認後は必ずコメントアウトに戻して再アップロードすること。 */
-    // eeprom_write_byte((uint8_t*)0x0BU, 0xFFU);
 
     EcuM_Init();
 }

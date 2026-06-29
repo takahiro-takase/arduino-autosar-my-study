@@ -1,15 +1,15 @@
 /**
  * \file    NvM.c
  * \brief   Non-Volatile Memory Manager 実装 (AUTOSAR SWS_NvM 準拠)
- * \details avr/eeprom.h を直接利用するファイルはこのファイルだけ。
- *          上位モジュール (DEM など) は avr/eeprom.h を include せず、
- *          NvM の API 経由で EEPROM にアクセスする。
+ * \details 実際の不揮発メモリへの読み書きは NvM_Hw 層に委譲し、
+ *          本ファイルは MCU 固有のヘッダ (avr/eeprom.h 等) を直接知らない。
+ *          上位モジュール (DEM など) も NvM の API 経由で EEPROM にアクセスする。
  *
  *          RAM ミラー設計:
  *            NvM_Init() が EEPROM → RAM ミラーを一括ロードする。
  *            NvM_ReadBlock() は RAM ミラーを参照するだけで EEPROM を読まない。
  *            NvM_WriteBlock() は src → RAM ミラーをコピーしたのち
- *            eeprom_update_block で差分バイトのみ EEPROM へ書く。
+ *            NvM_Hw_WriteBlock で差分バイトのみ EEPROM へ書く。
  *
  *          CRC によるデータ破損検出:
  *            各ブロックのデータ本体直後の 1 バイトに AUTOSAR Crc8
@@ -30,8 +30,8 @@
  */
 
 #include "NvM.h"
+#include "NvM_Hw.h"
 #include "Det.h"
-#include <avr/eeprom.h>
 #include <string.h>
 
 #define TAG "NvM"
@@ -99,13 +99,13 @@ static void NvM_ApplyDefault(NvM_BlockIdType id, const NvM_BlockDescriptorType* 
     else
         memset(blk->RamBlockDataAddress, 0, blk->NvMNvBlockLength);
 
-    eeprom_update_block(
+    NvM_Hw_WriteBlock(
         blk->RamBlockDataAddress,
-        (void*)(uintptr_t)blk->NvMNvBlockBaseNumber,
+        blk->NvMNvBlockBaseNumber,
         blk->NvMNvBlockLength);
 
     uint8 crc = NvM_CalcCrc8((const uint8*)blk->RamBlockDataAddress, blk->NvMNvBlockLength);
-    eeprom_update_byte((uint8*)(uintptr_t)NvM_CrcAddress(blk), crc);
+    NvM_Hw_WriteByte(NvM_CrcAddress(blk), crc);
 
     DET_LOGW(TAG, "block=%u defaults restored (%s)", (unsigned)id,
              (blk->RomBlockDataAddress != NULL) ? "ROM default" : "zero-fill");
@@ -118,8 +118,8 @@ static void NvM_ApplyDefault(NvM_BlockIdType id, const NvM_BlockDescriptorType* 
 /**
  * \brief   全ブロックの EEPROM 内容を RAM ミラーへ一括ロードする。
  *
- * \details eeprom_read_block は EEPROM アドレス → RAM へバイト列をコピーする
- *          AVR-libc 関数。引数順は (dst_RAM, src_EEPROM, size)。
+ * \details NvM_Hw_ReadBlock() で EEPROM アドレス → RAM へバイト列をコピーする
+ *          (引数順は dst_RAM, src_EEPROM, size)。
  *          読み込み直後に各ブロックの CRC を検証し、不一致ならデフォルト値
  *          (NvM_ApplyDefault()) で復元する。
  *
@@ -137,12 +137,12 @@ void NvM_Init(const NvM_ConfigType* ConfigPtr)
         if (blk->RamBlockDataAddress == NULL)
             continue;
 
-        eeprom_read_block(
+        NvM_Hw_ReadBlock(
             blk->RamBlockDataAddress,
-            (const void*)(uintptr_t)blk->NvMNvBlockBaseNumber,
+            blk->NvMNvBlockBaseNumber,
             blk->NvMNvBlockLength);
 
-        uint8 storedCrc = eeprom_read_byte((const uint8*)(uintptr_t)NvM_CrcAddress(blk));
+        uint8 storedCrc = NvM_Hw_ReadByte(NvM_CrcAddress(blk));
         uint8 calcCrc    = NvM_CalcCrc8((const uint8*)blk->RamBlockDataAddress, blk->NvMNvBlockLength);
 
         if (storedCrc != calcCrc)
@@ -179,9 +179,8 @@ Std_ReturnType NvM_ReadBlock(NvM_BlockIdType BlockId, void* NvM_DstPtr)
 /**
  * \brief   NvM_SrcPtr を RAM ミラーへコピーし、EEPROM を更新する。
  *
- * \details eeprom_update_block は EEPROM の各バイトと比較し、
- *          値が異なる場合のみ物理書き込みを行う (EEPROM 消耗低減)。
- *          引数順は (src_RAM, dst_EEPROM, size)。
+ * \details NvM_Hw_WriteBlock() は既存値と異なるバイトのみ物理書き込みを行う
+ *          (EEPROM 消耗低減)。引数順は (src_RAM, dst_EEPROM, size)。
  *          書き込んだ内容から CRC を再計算し、データ本体直後の 1 バイトへ
  *          併せて保存する。
  *
@@ -198,14 +197,14 @@ Std_ReturnType NvM_WriteBlock(NvM_BlockIdType BlockId, const void* NvM_SrcPtr)
     /* RAM ミラーを最新値で更新 */
     memcpy(blk->RamBlockDataAddress, NvM_SrcPtr, blk->NvMNvBlockLength);
 
-    /* EEPROM への差分書き込み (eeprom_update_block は比較してから書く) */
-    eeprom_update_block(
+    /* EEPROM への差分書き込み (NvM_Hw_WriteBlock は比較してから書く) */
+    NvM_Hw_WriteBlock(
         blk->RamBlockDataAddress,
-        (void*)(uintptr_t)blk->NvMNvBlockBaseNumber,
+        blk->NvMNvBlockBaseNumber,
         blk->NvMNvBlockLength);
 
     uint8 crc = NvM_CalcCrc8((const uint8*)blk->RamBlockDataAddress, blk->NvMNvBlockLength);
-    eeprom_update_byte((uint8*)(uintptr_t)NvM_CrcAddress(blk), crc);
+    NvM_Hw_WriteByte(NvM_CrcAddress(blk), crc);
 
     return E_OK;
 }
