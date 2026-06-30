@@ -66,8 +66,13 @@
  *            タイムアウト後に実際に MCU がリセットされる（WARN ログのみだった
  *            従来の学習用簡略化を解消し、本物のフェールセーフ動作にした）。
  *            EcuM が POST_RUN へ遷移する際（Rte_Engine タスクが意図的に停止し
- *            Alive Supervision が必ず FAILED になる）は WdgM_DisableHwWatchdog() で
- *            無効化し、RUN へ復帰する際は WdgM_EnableHwWatchdog() で再度有効化する。
+ *            Alive Supervision が必ず FAILED になる）は WdgM_DisableHwWatchdog() を
+ *            呼ぶ。WdgM_SupervisionSuppressed フラグも併せて立て、HW を実際に
+ *            無効化できない MCU (例: Renesas RA の WDT は一度有効化すると
+ *            ソフトウェアから無効化できない) でも、FAILED 判定に関わらず
+ *            refresh を継続することで意図しないリセットを防ぐ。RUN へ復帰する
+ *            際は WdgM_EnableHwWatchdog() でフラグを下ろし、通常の
+ *            FAILED 時リセット動作に戻す。
  *
  * \copyright  Copyright (c) 2025 T_T
  * \license    MIT License - 詳細は LICENSE ファイルを参照。
@@ -90,6 +95,13 @@ extern unsigned long millis(void);
  * ----------------------------------------------------------------------- */
 
 static const WdgM_ConfigType* WdgM_Cfg = NULL;
+
+/** 1 = WdgM_DisableHwWatchdog() 以降 (POST_RUN 中等)。Alive Supervision の
+ *  FAILED 判定に関わらず HW ウォッチドッグを refresh し続ける。
+ *  HW を実際に無効化できる MCU では実質的に無意味だが、HW ウォッチドッグを
+ *  一度有効化すると無効化できない MCU (例: Renesas RA) でも、POST_RUN の
+ *  意図的な Alive Supervision FAILED でリセットしないようにするために使う。 */
+static uint8 WdgM_SupervisionSuppressed = 0U;
 
 /** エンティティごとの Alive カウンタ (CheckpointReached 呼び出し回数) */
 static uint8 WdgM_AliveCount[WDGM_SUPERVISED_ENTITY_COUNT];
@@ -154,6 +166,7 @@ void WdgM_Init(const WdgM_ConfigType* ConfigPtr)
 void WdgM_EnableHwWatchdog(void)
 {
     WdgM_Hw_Enable();  /* WDGM_HW_WATCHDOG_TIMEOUT_MS (8000ms) に対応 */
+    WdgM_SupervisionSuppressed = 0U;
     DET_LOGI(TAG, "HW watchdog enabled (8000ms)");
 }
 
@@ -167,6 +180,7 @@ void WdgM_EnableHwWatchdog(void)
 void WdgM_DisableHwWatchdog(void)
 {
     WdgM_Hw_Disable();
+    WdgM_SupervisionSuppressed = 1U;
     DET_LOGI(TAG, "HW watchdog disabled");
 }
 
@@ -358,7 +372,7 @@ void WdgM_MainFunction(void)
         WdgM_AliveCount[i] = 0U;
     }
 
-    if (allOk)
+    if (allOk || WdgM_SupervisionSuppressed)
     {
         WdgM_Hw_Refresh();
         DET_LOGD(TAG, "HW watchdog refreshed");
