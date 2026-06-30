@@ -41,22 +41,20 @@ void setup()
      * 無効化する。WdgM_Init() が後で必要なタイムアウトで再度有効化する。
      * クリア前の値は Mcu_Hw_ReadAndClearResetReason() が返すので、
      * Serial が使えるようになった後でログ出力する。 */
-    const uint8 resetFlags = Mcu_Hw_ReadAndClearResetReason();
+    const Mcu_Hw_ResetReasonType resetReason = Mcu_Hw_ReadAndClearResetReason();
     Mcu_Hw_DisableWatchdogAtBoot();
 
     Serial.begin(115200);
 
-    /* リセット原因の診断ログ (バスオフ/WDT リセット調査用):
-     * bit3 WDRF=ウォッチドッグリセット、bit2 BORF=低電圧検出リセット、
-     * bit1 EXTRF=外部(RESETボタン)リセット、bit0 PORF=電源投入リセット。
-     * 複数同時に立つこともある（例: 電源投入直後は PORF のみが通常だが、
-     * 環境によっては BORF も同時に立つことがある）。 */
-    DET_LOGI(TAG, "MCUSR=0x%02X (WDRF=%u BORF=%u EXTRF=%u PORF=%u)",
-             (unsigned)resetFlags,
-             (unsigned)((resetFlags >> 3) & 1U),
-             (unsigned)((resetFlags >> 2) & 1U),
-             (unsigned)((resetFlags >> 1) & 1U),
-             (unsigned)(resetFlags & 1U));
+    /* リセット原因の診断ログ (バスオフ/WDT リセット調査用)。
+     * 複数同時に立つこともある（例: 電源投入直後は PowerOn のみが通常だが、
+     * 環境によっては BrownOut も同時に立つことがある）。
+     * External は MCU によっては検出できない (Mcu_Hw.h 参照)。 */
+    DET_LOGI(TAG, "ResetReason WDT=%u BOR=%u EXT=%u POR=%u",
+             (unsigned)resetReason.Watchdog,
+             (unsigned)resetReason.BrownOut,
+             (unsigned)resetReason.External,
+             (unsigned)resetReason.PowerOn);
 
     EcuM_Init();
 }
