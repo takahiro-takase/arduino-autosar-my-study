@@ -20,6 +20,19 @@
         { "label": "Read EngineState\n(0x22/0103)", "type": "raw", "payload": ["0x03", "0x22", "0x01", "0x03"] },
         { "label": "Write TestPattern\n(0x2E 複数フレーム要求)", "type": "multiframe", "payload": ["0x2E", "0x01", "0x04", "0x11", "0x22", "0x33", "0x44", "0x55", "0x66", "0x77", "0x88"] },
         { "label": "Read TestPattern\n(0x22/0104)", "type": "raw", "payload": ["0x03", "0x22", "0x01", "0x04"] },
-        { "label": "Tester Present\n(0x3E/00)", "type": "raw", "payload": ["0x02", "0x3E", "0x00"] }
+        { "label": "Tester Present\n(0x3E/00)", "type": "raw", "payload": ["0x02", "0x3E", "0x00"] },
+
+        { "label": "EngineInfo\n1500rpm/80°C/ON", "type": "can_frame", "can_id": "0x100",
+          "data": ["0x05", "0xDC", "0x50", "0x80"] },
+        { "label": "EngineInfo\n5000rpm/100°C/ON", "type": "can_frame", "can_id": "0x100",
+          "data": ["0x13", "0x88", "0x64", "0x80"] },
+        { "label": "EngineInfo\nエンジン停止", "type": "can_frame", "can_id": "0x100",
+          "data": ["0x00", "0x00", "0x14", "0x00"] },
+        { "label": "AbsInfo\n60km/h 正常", "type": "can_frame", "can_id": "0x110",
+          "data": ["0x17", "0x70", "0x00"] },
+        { "label": "AbsInfo\n60km/h ABS作動", "type": "can_frame", "can_id": "0x110",
+          "data": ["0x17", "0x70", "0xC0"] },
+        { "label": "EngineInfo 周期\n1500rpm/80°C ON", "type": "can_frame", "can_id": "0x100",
+          "data": ["0x05", "0xDC", "0x50", "0x80"], "interval_ms": 100 }
     ]
 }

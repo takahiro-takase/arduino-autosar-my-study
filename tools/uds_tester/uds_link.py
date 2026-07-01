@@ -293,6 +293,14 @@ def dtc_name(dtc: int) -> str:
     return DTC_NAMES.get(dtc, f"0x{dtc:06X}")
 
 
+def send_can_frame(bus: can.BusABC, can_id: int, data: bytes) -> None:
+    """任意の CAN ID で生フレームを送信する。UDS 応答を待たない。
+    data が 8 バイト未満の場合は 0x00 でパディングする。"""
+    padded = bytes(data) + b"\x00" * max(0, 8 - len(data))
+    msg = can.Message(arbitration_id=can_id, data=padded[:8], is_extended_id=False)
+    bus.send(msg)
+
+
 def security_access_auto(
     bus: can.BusABC,
     key_mask: int = SECURITY_KEY_MASK,
