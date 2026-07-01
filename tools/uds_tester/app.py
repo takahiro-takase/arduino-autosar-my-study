@@ -32,7 +32,7 @@ class App(tk.Tk):
     def __init__(self, config_path: str):
         super().__init__()
         self.title("UDS Button Tester")
-        self.geometry("900x600")
+        self.geometry("1100x650")
 
         with open(config_path, "r", encoding="utf-8") as f:
             self.cfg = json.load(f)
@@ -40,8 +40,11 @@ class App(tk.Tk):
         self.bus: can.BusABC | None = None
         self.bus_lock = threading.Lock()
         self.log_queue: "queue.Queue[str]" = queue.Queue()
-        self.state_queue: "queue.Queue[tuple[str, str]]" = queue.Queue()
+        self.state_queue: "queue.Queue[tuple]" = queue.Queue()
         self.tester_present_stop = threading.Event()
+        self._periodic_stops: "dict[str, threading.Event]" = {}
+        self._entry_vars: "dict[int, dict[str, tk.StringVar]]" = {}
+        self._response_vars: "dict[int, tk.StringVar]" = {}
 
         self._build_widgets()
         self.after(100, self._poll_queues)
@@ -92,19 +95,116 @@ class App(tk.Tk):
         body = ttk.Frame(self)
         body.pack(fill="both", expand=True, padx=8, pady=4)
 
-        btn_frame = ttk.LabelFrame(body, text="UDS コマンド")
-        btn_frame.pack(side="left", fill="y", padx=(0, 8))
+        # ---- コマンドリスト (スクロール可能・1列) ----
+        cmd_outer = ttk.LabelFrame(body, text="コマンド")
+        cmd_outer.pack(side="left", fill="y", padx=(0, 8))
 
-        cols = 2
-        for i, btn_cfg in enumerate(self.cfg["buttons"]):
-            b = ttk.Button(
-                btn_frame,
-                text=btn_cfg["label"],
-                width=22,
-                command=lambda c=btn_cfg: self._on_button_click(c),
+        canvas = tk.Canvas(cmd_outer, width=500, highlightthickness=0)
+        vsb = ttk.Scrollbar(cmd_outer, orient="vertical", command=canvas.yview)
+        canvas.configure(yscrollcommand=vsb.set)
+        vsb.pack(side="right", fill="y")
+        canvas.pack(side="left", fill="both", expand=True)
+
+        inner = ttk.Frame(canvas)
+        win_id = canvas.create_window((0, 0), window=inner, anchor="nw")
+
+        inner.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
+        canvas.bind("<Configure>", lambda e: canvas.itemconfig(win_id, width=e.width))
+
+        def _scroll(event):
+            canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+
+        canvas.bind("<MouseWheel>", _scroll)
+        inner.bind("<MouseWheel>", _scroll)
+
+        # ヘッダ行
+        ttk.Label(inner, text="コマンド", font=("", 9, "bold")).grid(
+            row=0, column=0, padx=(4, 2), pady=(4, 1), sticky="w")
+        ttk.Label(inner, text="CAN ID", font=("", 9, "bold")).grid(
+            row=0, column=1, padx=(2, 4), pady=(4, 1), sticky="w")
+        ttk.Label(inner, text="データ (hex)", font=("", 9, "bold")).grid(
+            row=0, column=2, padx=(0, 4), pady=(4, 1), sticky="w")
+        ttk.Separator(inner, orient="horizontal").grid(
+            row=1, column=0, columnspan=3, sticky="ew", padx=4, pady=(0, 2))
+
+        def _hex_str(items) -> str:
+            return " ".join(
+                f"{int(x, 16) if isinstance(x, str) else int(x):02X}" for x in items
             )
-            b.grid(row=i // cols, column=i % cols, padx=4, pady=4, sticky="ew")
 
+        current_row = 2
+        for i, btn_cfg in enumerate(self.cfg["buttons"]):
+            row = current_row
+            b = ttk.Button(
+                inner,
+                text=btn_cfg["label"],
+                width=24,
+                command=lambda c=btn_cfg, idx=i: self._on_button_click(c, idx),
+            )
+            t = btn_cfg.get("type")
+            is_uds = t in ("raw", "multiframe", "security_access_auto")
+            b.grid(row=row, column=0, rowspan=2 if is_uds else 1,
+                   padx=(4, 2), pady=2, sticky="nsew")
+            b.bind("<MouseWheel>", _scroll)
+
+            if is_uds:
+                # TX 行 (上段): CAN ID=0x7E0 + 送信データ(編集可)
+                tx_id = ttk.Label(inner, text="0x7E0", font=("Consolas", 9),
+                                  foreground="#555555")
+                tx_id.grid(row=row, column=1, padx=(2, 6), pady=(3, 1), sticky="w")
+                tx_id.bind("<MouseWheel>", _scroll)
+
+                if t == "security_access_auto":
+                    tx_data = ttk.Label(inner, text="(seed→key 自動計算)",
+                                        font=("Consolas", 9))
+                    tx_data.grid(row=row, column=2, padx=(0, 4), pady=(3, 1), sticky="w")
+                    tx_data.bind("<MouseWheel>", _scroll)
+                else:
+                    default_hex = _hex_str(btn_cfg.get("payload", []))
+                    data_var = tk.StringVar(value=default_hex)
+                    data_entry = ttk.Entry(inner, textvariable=data_var, width=30,
+                                           font=("Consolas", 9))
+                    data_entry.grid(row=row, column=2, padx=(0, 4), pady=(3, 1), sticky="w")
+                    data_entry.bind("<MouseWheel>", _scroll)
+                    self._entry_vars.setdefault(i, {})["data"] = data_var
+
+                # RX 行 (下段): CAN ID=0x7E8 + 受信データ(自動更新)
+                rx_id = ttk.Label(inner, text="0x7E8", font=("Consolas", 9),
+                                  foreground="#3a7ebf")
+                rx_id.grid(row=row + 1, column=1, padx=(2, 6), pady=(1, 3), sticky="w")
+                rx_id.bind("<MouseWheel>", _scroll)
+
+                resp_var = tk.StringVar(value="")
+                resp_lbl = ttk.Label(inner, textvariable=resp_var,
+                                     font=("Consolas", 9), foreground="#3a7ebf",
+                                     anchor="w")
+                resp_lbl.grid(row=row + 1, column=2, padx=(0, 4), pady=(1, 3), sticky="ew")
+                resp_lbl.bind("<MouseWheel>", _scroll)
+                self._response_vars[i] = resp_var
+
+                current_row += 2
+            else:
+                # can_frame: 1行のみ
+                raw_id = btn_cfg.get("can_id", "0x000")
+                can_id_val = int(raw_id, 0) if isinstance(raw_id, str) else int(raw_id)
+                can_id_var = tk.StringVar(value=f"0x{can_id_val:03X}")
+                id_widget = ttk.Entry(inner, textvariable=can_id_var, width=9,
+                                      font=("Consolas", 9))
+                id_widget.grid(row=row, column=1, padx=(2, 6), pady=2, sticky="w")
+                id_widget.bind("<MouseWheel>", _scroll)
+                self._entry_vars.setdefault(i, {})["can_id"] = can_id_var
+
+                default_hex = _hex_str(btn_cfg.get("data", []))
+                data_var = tk.StringVar(value=default_hex)
+                data_entry = ttk.Entry(inner, textvariable=data_var, width=30,
+                                       font=("Consolas", 9))
+                data_entry.grid(row=row, column=2, padx=(0, 4), pady=2, sticky="w")
+                data_entry.bind("<MouseWheel>", _scroll)
+                self._entry_vars.setdefault(i, {})["data"] = data_var
+
+                current_row += 1
+
+        # ---- ログ ----
         log_frame = ttk.LabelFrame(body, text="ログ")
         log_frame.pack(side="left", fill="both", expand=True)
 
@@ -112,6 +212,42 @@ class App(tk.Tk):
             log_frame, font=("Consolas", 10), state="disabled", wrap="word"
         )
         self.log_text.pack(fill="both", expand=True)
+
+    @staticmethod
+    def _btn_meta(btn_cfg) -> tuple[str, str]:
+        """ボタン設定から (CAN ID 文字列, データ hex 文字列) を返す。ヘッダ列の表示用。"""
+        def _hex_list(items) -> str:
+            return " ".join(
+                f"{int(x, 16) if isinstance(x, str) else int(x):02X}" for x in items
+            )
+
+        t = btn_cfg.get("type")
+        if t == "can_frame":
+            raw_id = btn_cfg.get("can_id", "?")
+            can_id = int(raw_id, 0) if isinstance(raw_id, str) else int(raw_id)
+            data_str = _hex_list(btn_cfg.get("data", []))
+            interval = btn_cfg.get("interval_ms")
+            if interval:
+                data_str += f"  [{interval}ms周期]"
+            return f"0x{can_id:03X}", data_str
+        if t in ("raw", "multiframe"):
+            return "0x7E0→7E8", _hex_list(btn_cfg.get("payload", []))
+        if t == "security_access_auto":
+            return "0x7E0→7E8", "(seed→key 自動計算)"
+        return "", ""
+
+    @staticmethod
+    def _parse_hex_bytes(text: str) -> bytes:
+        """スペース区切り hex 文字列をバイト列に変換する。失敗時は ValueError。"""
+        tokens = text.strip().split()
+        if not tokens:
+            return b""
+        return bytes(int(tok, 16) for tok in tokens)
+
+    @staticmethod
+    def _parse_can_id(text: str) -> int:
+        """0x プレフィックス付き/なし hex または 10進数文字列を整数に変換する。"""
+        return int(text.strip(), 0)
 
     # ------------------------------------------------------------------
     # 接続管理
@@ -144,6 +280,9 @@ class App(tk.Tk):
     def _disconnect(self):
         self.tester_present_var.set(False)
         self.tester_present_stop.set()
+        for stop_ev in self._periodic_stops.values():
+            stop_ev.set()
+        self._periodic_stops.clear()
         # python-can の gs_usb バックエンドは shutdown() 内部でデバイスの
         # 再スキャンを行うが、これを明示的に呼ぶと（特に複数回呼ばれた場合に）
         # libusb 側で access violation を起こすことを確認済み。
@@ -158,32 +297,77 @@ class App(tk.Tk):
     # ------------------------------------------------------------------
     # ボタン送信 (バックグラウンドスレッドで実行し、結果は queue 経由で GUI に反映)
     # ------------------------------------------------------------------
-    def _on_button_click(self, btn_cfg):
+    def _on_button_click(self, btn_cfg, idx: int):
         if self.bus is None:
             messagebox.showwarning("未接続", "先に Connect してください")
             return
-        threading.Thread(target=self._send_worker, args=(btn_cfg,), daemon=True).start()
+        # 入力値は tkinter の GUI スレッドで読み取り、ワーカースレッドに渡す
+        entry_data = {k: v.get() for k, v in self._entry_vars.get(idx, {}).items()}
+        threading.Thread(
+            target=self._send_worker, args=(btn_cfg, entry_data, idx), daemon=True
+        ).start()
 
-    def _send_worker(self, btn_cfg):
+    def _send_worker(self, btn_cfg, entry_data: dict, idx: int):
+        """entry_data: GUI スレッドで読み取った入力フィールドの文字列 {"data": "...", "can_id": "..."}"""
         label = btn_cfg["label"].replace("\n", " ")
+
+        # 周期送信トグルはバスロックを長時間保持しないため先行処理する
+        if btn_cfg.get("type") == "can_frame" and btn_cfg.get("interval_ms"):
+            self._handle_periodic_can_toggle(btn_cfg, label, entry_data)
+            return
+
+        # エントリからバイト列 / CAN ID を取得するヘルパー (パース失敗でログして終了)
+        def get_payload(cfg_key: str) -> bytes | None:
+            if "data" in entry_data:
+                try:
+                    return self._parse_hex_bytes(entry_data["data"])
+                except ValueError:
+                    self.log_queue.put(
+                        f"[{label}] データ形式エラー (スペース区切り hex 例: 02 10 01)"
+                    )
+                    return None
+            return parse_payload(btn_cfg.get(cfg_key, []))
+
+        def get_can_id() -> int | None:
+            if "can_id" in entry_data:
+                try:
+                    return self._parse_can_id(entry_data["can_id"])
+                except ValueError:
+                    self.log_queue.put(
+                        f"[{label}] CAN ID 形式エラー (例: 0x100 または 256)"
+                    )
+                    return None
+            raw = btn_cfg.get("can_id", "0")
+            return int(raw, 0) if isinstance(raw, str) else int(raw)
+
         with self.bus_lock:
             try:
                 if btn_cfg["type"] == "security_access_auto":
                     result = uds_link.security_access_auto(self.bus)
                     self.log_queue.put(f"[{label}] {result}")
+                    self.state_queue.put(("resp", (idx, result)))
                     if "成功" in result or "済み" in result:
                         self.state_queue.put(("security", "Security: Unlocked"))
                 elif btn_cfg["type"] == "raw":
-                    payload = parse_payload(btn_cfg["payload"])
+                    payload = get_payload("payload")
+                    if payload is None:
+                        return
+                    self.state_queue.put(("resp", (idx, "")))
                     self.log_queue.put(
                         f"[{label}] TX " + " ".join(f"{b:02X}" for b in payload)
                     )
                     uds_link.send_raw(self.bus, payload)
                     resp = uds_link.receive_uds_response(self.bus)
-                    self.log_queue.put(f"[{label}] RX " + self._decode_response(payload, resp))
+                    decoded = self._decode_response(payload, resp)
+                    self.log_queue.put(f"[{label}] RX " + decoded)
+                    rx_raw = f"{len(resp.raw):02X} " + " ".join(f"{b:02X}" for b in resp.raw)
+                    self.state_queue.put(("resp", (idx, rx_raw)))
                     self._queue_tracking_update(payload, resp)
                 elif btn_cfg["type"] == "multiframe":
-                    uds_payload = parse_payload(btn_cfg["payload"])
+                    uds_payload = get_payload("payload")
+                    if uds_payload is None:
+                        return
+                    self.state_queue.put(("resp", (idx, "")))
                     self.log_queue.put(
                         f"[{label}] TX (FF+CF, {len(uds_payload)}B) "
                         + " ".join(f"{b:02X}" for b in uds_payload)
@@ -191,12 +375,26 @@ class App(tk.Tk):
                     uds_link.send_multiframe_request(self.bus, uds_payload)
                     resp = uds_link.receive_uds_response(self.bus)
                     sent = bytes([0]) + uds_payload  # _decode_response は sent[1]=SID を見る
-                    self.log_queue.put(f"[{label}] RX " + self._decode_response(sent, resp))
+                    decoded = self._decode_response(sent, resp)
+                    self.log_queue.put(f"[{label}] RX " + decoded)
+                    rx_raw = f"{len(resp.raw):02X} " + " ".join(f"{b:02X}" for b in resp.raw)
+                    self.state_queue.put(("resp", (idx, rx_raw)))
                     self._queue_tracking_update(sent, resp)
+                elif btn_cfg["type"] == "can_frame":
+                    can_id = get_can_id()
+                    data = get_payload("data")
+                    if can_id is None or data is None:
+                        return
+                    uds_link.send_can_frame(self.bus, can_id, data)
+                    self.log_queue.put(
+                        f"[{label}] TX ID=0x{can_id:03X} " + " ".join(f"{b:02X}" for b in data)
+                    )
                 else:
                     self.log_queue.put(f"[{label}] 未知のボタン種別: {btn_cfg['type']}")
             except uds_link.UdsTimeoutError as exc:
                 self.log_queue.put(f"[{label}] {exc}")
+                if btn_cfg.get("type") in ("raw", "multiframe", "security_access_auto"):
+                    self.state_queue.put(("resp", (idx, "タイムアウト")))
             except Exception as exc:  # noqa: BLE001 - 想定外のエラーもログに出して継続する
                 self.log_queue.put(f"[{label}] エラー: {exc}")
 
@@ -253,6 +451,79 @@ class App(tk.Tk):
             self.state_queue.put(("session", f"Session: {label}"))
 
     # ------------------------------------------------------------------
+    # 周期 CAN フレーム送信 (can_frame + interval_ms)
+    # ------------------------------------------------------------------
+    def _handle_periodic_can_toggle(self, btn_cfg, label, entry_data: dict):
+        """周期送信の開始/停止をトグルする。バスロック不要のためスレッドで直接呼ぶ。"""
+        stop_ev = self._periodic_stops.get(label)
+        if stop_ev is not None and not stop_ev.is_set():
+            stop_ev.set()
+            self.log_queue.put(f"[{label}] 周期送信 停止")
+        else:
+            if self.bus is None:
+                self.log_queue.put(f"[{label}] 未接続")
+                return
+            # CAN ID の解決 (エントリ優先、なければ config)
+            try:
+                if "can_id" in entry_data:
+                    can_id = self._parse_can_id(entry_data["can_id"])
+                else:
+                    raw = btn_cfg.get("can_id", "0")
+                    can_id = int(raw, 0) if isinstance(raw, str) else int(raw)
+                if "data" in entry_data:
+                    data = self._parse_hex_bytes(entry_data["data"])
+                else:
+                    data = parse_payload(btn_cfg["data"])
+            except ValueError as exc:
+                self.log_queue.put(f"[{label}] 入力エラー: {exc}")
+                return
+            new_stop = threading.Event()
+            self._periodic_stops[label] = new_stop
+            interval_s = btn_cfg["interval_ms"] / 1000.0
+            self.log_queue.put(
+                f"[{label}] 周期送信 開始 ({btn_cfg['interval_ms']}ms 間隔)"
+                f"  ID=0x{can_id:03X} DATA=" + " ".join(f"{b:02X}" for b in data)
+            )
+            threading.Thread(
+                target=self._periodic_can_worker,
+                args=(label, can_id, data, interval_s, new_stop),
+                daemon=True,
+            ).start()
+
+    # 送信直後に UDS が続いても間隔を保てるよう、送信後にロックを保持する時間 (秒)
+    _PERIODIC_POST_SEND_HOLD_S = 0.010  # 10ms
+
+    def _periodic_can_worker(self, label, can_id, data, interval_s, stop_ev):
+        """interval_s ごとに CAN フレームを送り続ける。stop_ev がセットされたら終了。
+
+        bus_lock をノンブロッキングで取得し、送信後 _PERIODIC_POST_SEND_HOLD_S (10ms)
+        ロックを保持してから解放する。
+
+        【なぜ 10ms 保持するか】
+        EngineInfo 送信の直後に UDS request が送られると、Arduino MCP2515 の
+        受信バッファ (RXB0/RXB1) に 2 フレームが数 μs の間隔で詰まり、
+        Can_MainFunction が呼ばれる前にバッファが埋まって UDS request が
+        取りこぼされることがある（結果: receive_uds_response が 2s タイムアウト）。
+        10ms 保持することで、UDS ワーカーがロックを取得するのは EngineInfo 送信
+        から最低 10ms 後になり、Arduino が EngineInfo を読み出す時間を確保できる。
+
+        UDS 処理中 (bus_lock 保持中) は blocking=False で即スキップする。
+        スキップが 2s 続いても COM_TIMEOUT_ENGINE_INFO_MS (5000ms) 以内なので
+        ECU 側のタイムアウトは発生しない。"""
+        while True:
+            if self.bus is not None:
+                if self.bus_lock.acquire(blocking=False):
+                    try:
+                        uds_link.send_can_frame(self.bus, can_id, data)
+                        time.sleep(self._PERIODIC_POST_SEND_HOLD_S)
+                    except Exception:  # noqa: BLE001 - 周期送信中の一時エラーは無視して継続する
+                        pass
+                    finally:
+                        self.bus_lock.release()
+            if stop_ev.wait(interval_s):
+                break
+
+    # ------------------------------------------------------------------
     # Tester Present 自動送信
     # ------------------------------------------------------------------
     def _toggle_tester_present(self):
@@ -299,6 +570,10 @@ class App(tk.Tk):
                 self.session_var.set(value)
             elif kind == "security":
                 self.security_var.set(value)
+            elif kind == "resp":
+                resp_idx, resp_text = value
+                if resp_idx in self._response_vars:
+                    self._response_vars[resp_idx].set(resp_text)
 
         self.after(100, self._poll_queues)
 
