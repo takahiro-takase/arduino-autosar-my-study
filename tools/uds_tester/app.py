@@ -42,6 +42,7 @@ class App(tk.Tk):
         self.log_queue: "queue.Queue[str]" = queue.Queue()
         self.state_queue: "queue.Queue[tuple[str, str]]" = queue.Queue()
         self.tester_present_stop = threading.Event()
+        self._periodic_stops: "dict[str, threading.Event]" = {}
 
         self._build_widgets()
         self.after(100, self._poll_queues)
@@ -92,7 +93,7 @@ class App(tk.Tk):
         body = ttk.Frame(self)
         body.pack(fill="both", expand=True, padx=8, pady=4)
 
-        btn_frame = ttk.LabelFrame(body, text="UDS コマンド")
+        btn_frame = ttk.LabelFrame(body, text="コマンド")
         btn_frame.pack(side="left", fill="y", padx=(0, 8))
 
         cols = 2
@@ -144,6 +145,9 @@ class App(tk.Tk):
     def _disconnect(self):
         self.tester_present_var.set(False)
         self.tester_present_stop.set()
+        for stop_ev in self._periodic_stops.values():
+            stop_ev.set()
+        self._periodic_stops.clear()
         # python-can の gs_usb バックエンドは shutdown() 内部でデバイスの
         # 再スキャンを行うが、これを明示的に呼ぶと（特に複数回呼ばれた場合に）
         # libusb 側で access violation を起こすことを確認済み。
@@ -166,6 +170,12 @@ class App(tk.Tk):
 
     def _send_worker(self, btn_cfg):
         label = btn_cfg["label"].replace("\n", " ")
+
+        # 周期送信トグルはバスロックを長時間保持しないため先行処理する
+        if btn_cfg.get("type") == "can_frame" and btn_cfg.get("interval_ms"):
+            self._handle_periodic_can_toggle(btn_cfg, label)
+            return
+
         with self.bus_lock:
             try:
                 if btn_cfg["type"] == "security_access_auto":
@@ -193,6 +203,13 @@ class App(tk.Tk):
                     sent = bytes([0]) + uds_payload  # _decode_response は sent[1]=SID を見る
                     self.log_queue.put(f"[{label}] RX " + self._decode_response(sent, resp))
                     self._queue_tracking_update(sent, resp)
+                elif btn_cfg["type"] == "can_frame":
+                    can_id = int(btn_cfg["can_id"], 0) if isinstance(btn_cfg["can_id"], str) else int(btn_cfg["can_id"])
+                    data = parse_payload(btn_cfg["data"])
+                    uds_link.send_can_frame(self.bus, can_id, data)
+                    self.log_queue.put(
+                        f"[{label}] TX ID=0x{can_id:03X} " + " ".join(f"{b:02X}" for b in data)
+                    )
                 else:
                     self.log_queue.put(f"[{label}] 未知のボタン種別: {btn_cfg['type']}")
             except uds_link.UdsTimeoutError as exc:
@@ -251,6 +268,43 @@ class App(tk.Tk):
             sub = sent[2] if len(sent) > 2 else 0
             label = "Extended" if sub == 0x03 else "Default"
             self.state_queue.put(("session", f"Session: {label}"))
+
+    # ------------------------------------------------------------------
+    # 周期 CAN フレーム送信 (can_frame + interval_ms)
+    # ------------------------------------------------------------------
+    def _handle_periodic_can_toggle(self, btn_cfg, label):
+        """周期送信の開始/停止をトグルする。バスロック不要のためスレッドで直接呼ぶ。"""
+        stop_ev = self._periodic_stops.get(label)
+        if stop_ev is not None and not stop_ev.is_set():
+            stop_ev.set()
+            self.log_queue.put(f"[{label}] 周期送信 停止")
+        else:
+            if self.bus is None:
+                self.log_queue.put(f"[{label}] 未接続")
+                return
+            new_stop = threading.Event()
+            self._periodic_stops[label] = new_stop
+            can_id = int(btn_cfg["can_id"], 0) if isinstance(btn_cfg["can_id"], str) else int(btn_cfg["can_id"])
+            data = parse_payload(btn_cfg["data"])
+            interval_s = btn_cfg["interval_ms"] / 1000.0
+            self.log_queue.put(f"[{label}] 周期送信 開始 ({btn_cfg['interval_ms']}ms 間隔)")
+            threading.Thread(
+                target=self._periodic_can_worker,
+                args=(label, can_id, data, interval_s, new_stop),
+                daemon=True,
+            ).start()
+
+    def _periodic_can_worker(self, label, can_id, data, interval_s, stop_ev):
+        """interval_s ごとに CAN フレームを送り続ける。stop_ev がセットされたら終了。"""
+        while True:
+            if self.bus is not None:
+                with self.bus_lock:
+                    try:
+                        uds_link.send_can_frame(self.bus, can_id, data)
+                    except Exception:  # noqa: BLE001 - 周期送信中の一時エラーは無視して継続する
+                        pass
+            if stop_ev.wait(interval_s):
+                break
 
     # ------------------------------------------------------------------
     # Tester Present 自動送信
