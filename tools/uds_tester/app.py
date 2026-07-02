@@ -47,6 +47,11 @@ class App(tk.Tk):
         self._response_vars: "dict[int, tk.StringVar]" = {}
         self._periodic_btn_vars: "dict[int, tk.StringVar]" = {}
         self._log_visible = tk.BooleanVar(value=False)
+        self._rx_monitor_vars: "dict[int, tk.StringVar]" = {}
+        self._rx_monitor_ids: "dict[int, int]" = {}
+        self._rx_monitor_decode: "dict[int, str]" = {}
+        self._rx_monitor_name_vars: "dict[int, tk.StringVar]" = {}
+        self._rx_monitor_stop = threading.Event()
 
         self._build_widgets()
         self.after(100, self._poll_queues)
@@ -131,8 +136,16 @@ class App(tk.Tk):
             row=0, column=0, padx=(4, 2), pady=(4, 1), sticky="w")
         ttk.Label(inner, text="CAN ID", font=("", 9, "bold")).grid(
             row=0, column=1, padx=(2, 4), pady=(4, 1), sticky="w")
-        ttk.Label(inner, text="データ (hex)", font=("", 9, "bold")).grid(
-            row=0, column=2, padx=(0, 4), pady=(4, 1), sticky="w")
+        hdr_cell = ttk.Frame(inner)
+        hdr_cell.grid(row=0, column=2, padx=(0, 4), pady=(4, 1), sticky="w")
+        ttk.Label(hdr_cell, text="データ (hex)", font=("", 9, "bold"),
+                  width=30, anchor="w").pack(side="left")
+        ttk.Label(hdr_cell, text="説明", font=("", 9, "bold"),
+                  width=24, anchor="w").pack(side="left", padx=(4, 0))
+        ttk.Label(inner, text="送信", font=("", 9, "bold")).grid(
+            row=0, column=3, padx=(4, 4), pady=(4, 1), sticky="w")
+        ttk.Label(inner, text="定期", font=("", 9, "bold")).grid(
+            row=0, column=4, padx=(4, 4), pady=(4, 1), sticky="w")
         ttk.Separator(inner, orient="horizontal").grid(
             row=1, column=0, columnspan=5, sticky="ew", padx=4, pady=(0, 2))
 
@@ -152,6 +165,41 @@ class App(tk.Tk):
                 sep.grid(row=row, column=0, columnspan=5,
                          padx=(4, 4), pady=(6, 2), sticky="ew")
                 sep.bind("<MouseWheel>", _scroll)
+                current_row += 1
+                continue
+
+            if t == "rx_monitor":
+                raw_id = btn_cfg.get("can_id", "0x000")
+                can_id_int = int(raw_id, 0) if isinstance(raw_id, str) else int(raw_id)
+                cmd_lbl = ttk.Label(inner, text=btn_cfg["label"], width=20,
+                                    anchor="w", justify="left")
+                cmd_lbl.grid(row=row, column=0, padx=(4, 2), pady=2, sticky="nsew")
+                cmd_lbl.bind("<MouseWheel>", _scroll)
+                id_lbl = ttk.Label(inner, text=f"0x{can_id_int:03X}",
+                                   font=("Consolas", 9), foreground="#2a7a2a")
+                id_lbl.grid(row=row, column=1, padx=(2, 6), pady=2, sticky="w")
+                id_lbl.bind("<MouseWheel>", _scroll)
+                rx_var = tk.StringVar(value="")
+                name_var = tk.StringVar(value="")
+                cell = ttk.Frame(inner)
+                cell.grid(row=row, column=2, columnspan=3,
+                          padx=(0, 4), pady=2, sticky="ew")
+                cell.bind("<MouseWheel>", _scroll)
+                rx_lbl = ttk.Label(cell, textvariable=rx_var,
+                                   font=("Consolas", 9), foreground="#2a7a2a",
+                                   anchor="w", width=30)
+                rx_lbl.pack(side="left")
+                rx_lbl.bind("<MouseWheel>", _scroll)
+                name_lbl = ttk.Label(cell, textvariable=name_var,
+                                     font=("", 9), foreground="#2a7a2a",
+                                     anchor="w", width=24)
+                name_lbl.pack(side="left", padx=(4, 0))
+                name_lbl.bind("<MouseWheel>", _scroll)
+                self._rx_monitor_vars[i] = rx_var
+                self._rx_monitor_name_vars[i] = name_var
+                self._rx_monitor_ids[i] = can_id_int
+                if btn_cfg.get("decode"):
+                    self._rx_monitor_decode[i] = btn_cfg["decode"]
                 current_row += 1
                 continue
 
@@ -361,6 +409,9 @@ class App(tk.Tk):
         self.status_label.configure(foreground="green")
         self.connect_btn.configure(text="Disconnect")
         self._log("接続しました")
+        self._rx_monitor_stop.clear()
+        threading.Thread(target=self._rx_monitor_worker,
+                         args=(self._rx_monitor_stop,), daemon=True).start()
 
     def _disconnect(self):
         self.tester_present_var.set(False)
@@ -375,6 +426,7 @@ class App(tk.Tk):
         # libusb 側で access violation を起こすことを確認済み。
         # 参照を破棄するだけにし、後始末は BusABC.__del__ の best-effort
         # 処理（例外を抑制しつつ shutdown を1回だけ試みる）に委ねる。
+        self._rx_monitor_stop.set()
         self.bus = None
         self.status_var.set("● Disconnected")
         self.status_label.configure(foreground="red")
@@ -663,6 +715,34 @@ class App(tk.Tk):
                 break
 
     # ------------------------------------------------------------------
+    # 受信モニター (rx_monitor)
+    # ------------------------------------------------------------------
+    _ENGINE_STATE_NAMES = {0: "OFF", 1: "STARTING", 2: "RUNNING", 3: "FAULT"}
+
+    def _rx_monitor_worker(self, stop_ev: threading.Event):
+        """bus_lock をノンブロッキングで取得し、rx_monitor CAN ID の受信フレームを表示する。
+        UDS 処理中 (bus_lock 保持中) はスキップして干渉を避ける。"""
+        while not stop_ev.is_set():
+            bus = self.bus
+            if bus is None:
+                stop_ev.wait(0.1)
+                continue
+            if not self.bus_lock.acquire(blocking=False):
+                stop_ev.wait(0.02)
+                continue
+            try:
+                msg = bus.recv(timeout=0.05)
+            except Exception:  # noqa: BLE001
+                msg = None
+            finally:
+                self.bus_lock.release()
+            if msg is None:
+                continue
+            for idx, monitor_id in self._rx_monitor_ids.items():
+                if msg.arbitration_id == monitor_id:
+                    self.state_queue.put(("rx_mon", (idx, bytes(msg.data))))
+
+    # ------------------------------------------------------------------
     # Tester Present 自動送信
     # ------------------------------------------------------------------
     def _toggle_tester_present(self):
@@ -722,6 +802,17 @@ class App(tk.Tk):
                 btn_idx, text = value
                 if btn_idx in self._periodic_btn_vars:
                     self._periodic_btn_vars[btn_idx].set(text)
+            elif kind == "rx_mon":
+                mon_idx, data = value
+                if mon_idx in self._rx_monitor_vars:
+                    raw_hex = " ".join(f"{b:02X}" for b in data)
+                    self._rx_monitor_vars[mon_idx].set(raw_hex)
+                    decode = self._rx_monitor_decode.get(mon_idx, "")
+                    if decode == "engine_state" and len(data) >= 1:
+                        name = self._ENGINE_STATE_NAMES.get(data[0], f"0x{data[0]:02X}")
+                        self._rx_monitor_name_vars[mon_idx].set(f"({name})")
+                    elif mon_idx in self._rx_monitor_name_vars:
+                        self._rx_monitor_name_vars[mon_idx].set("")
 
         self.after(100, self._poll_queues)
 
