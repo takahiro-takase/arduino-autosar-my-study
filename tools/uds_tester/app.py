@@ -737,6 +737,8 @@ class App(tk.Tk):
             finally:
                 self.bus_lock.release()
             if msg is None:
+                # フレーム未受信時は次の取得まで待機し、他スレッドがロックを取れる窓を設ける
+                stop_ev.wait(0.1)
                 continue
             for idx, monitor_id in self._rx_monitor_ids.items():
                 if msg.arbitration_id == monitor_id:
