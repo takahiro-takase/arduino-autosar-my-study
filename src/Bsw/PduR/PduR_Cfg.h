@@ -43,8 +43,9 @@
  *  パス 0: COM   → CanIf TxPduId=0 (CAN 0x200, EngineState)
  *  パス 1: CanTp → CanIf TxPduId=1 (CAN 0x7E8, UDS 診断応答)
  *  パス 2: COM   → CanIf TxPduId=3 (CAN 0x210, WarningStatus Signal Group)
+ *  パス 3: COM   → CanIf TxPduId=4 (CAN 0x220, E2EHealthStatus PERIODIC)
  *  SrcPduId は COM と CanTp が共通の名前空間として PduR_Transmit() へ渡すため、
  *  各パスで重複しない値を割り当てること。 */
-#define PDUR_TX_PATH_COUNT   3U
+#define PDUR_TX_PATH_COUNT   4U
 
 #endif /* PDUR_CFG_H */

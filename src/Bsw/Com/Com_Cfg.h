@@ -53,8 +53,14 @@
 
 /** TX I-PDU テーブルのエントリ数
  *  DaVinci: /ActiveEcuC/Com/ComConfig/ 内 Direction=SEND の ComIPdu 数
- *  [0]=MeterStatus 0x200 (直接送信)、[1]=WarningStatus 0x210 (Signal Group) */
-#define COM_TX_IPDU_COUNT   2U
+ *  [0]=MeterStatus 0x200 (MIXED)、[1]=WarningStatus 0x210 (Signal Group, MIXED)、
+ *  [2]=E2EHealthStatus 0x220 (PERIODIC、E2EMon CDD 相当が発行するネットワーク
+ *  健全性テレメトリ。詳細は src/Bsw/E2EMon/E2EMon.c 参照) */
+#define COM_TX_IPDU_COUNT   3U
+
+/** E2EHealthStatus (0x220) の PERIODIC 送信周期 [ms]
+ *  DaVinci: /ActiveEcuC/Com/ComConfig/[ComIPdu]/ComTxModeTimePeriodFactor */
+#define COM_TX_PERIOD_E2EHEALTH_MS  1000U
 
 /**
  * TX I-PDU の周期送信フロア [Com_TriggerIPDUSend 呼び出し回数]
@@ -70,7 +76,7 @@
 
 /** シグナルテーブルのエントリ数（RX + TX の合計）
  *  DaVinci: /ActiveEcuC/Com/ComConfig/ 内 ComSignal ノード数の合計 */
-#define COM_SIGNAL_COUNT    10U
+#define COM_SIGNAL_COUNT    12U
 
 /* -----------------------------------------------------------------------
  * シグナル ID 定数
@@ -118,5 +124,18 @@
 
 /** TX: ABS LED 状態 (1 bit, CAN ID 0x210, byte[0] bit5) */
 #define COM_SIGNAL_ABS_LAMP        9U
+
+/* -----------------------------------------------------------------------
+ * E2EHealthStatus シグナル (CAN ID 0x220, TX, PERIODIC)
+ * E2EMon（CDD 相当、src/Bsw/E2EMon/）が EngineInfo/AbsInfo 受信の E2E
+ * 検証結果を集計し、Com_SendSignal() で書き込む。送信タイミング自体は
+ * Com 自身の PERIODIC モードが担う（E2EMon は関与しない）。
+ * ----------------------------------------------------------------------- */
+
+/** TX: E2E CRC 不一致累積数 (8 bit, CAN ID 0x220, byte[0]、0-255 で飽和) */
+#define COM_SIGNAL_E2E_CRC_ERR_COUNT  10U
+
+/** TX: E2E シーケンス異常累積数 (8 bit, CAN ID 0x220, byte[1]、0-255 で飽和) */
+#define COM_SIGNAL_E2E_SEQ_ERR_COUNT  11U
 
 #endif /* COM_CFG_H */

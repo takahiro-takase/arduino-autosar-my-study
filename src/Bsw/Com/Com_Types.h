@@ -65,6 +65,30 @@ typedef enum
 } Com_FilterAlgorithmType;
 
 // -------------------------------------------------------
+// TX 送信モード（ComTxModeMode 相当、簡略版）
+//
+//   実 AUTOSAR の ComTxModeMode は DIRECT/PERIODIC/MIXED/NONE を持つ。
+//   本実装は以下の 2 値のみをサポートする:
+//
+//   COM_TX_MODE_MIXED    : 送信要否の判断は「呼び出し元が Com_TriggerIPDUSend()
+//     を呼んだとき」に限られる（MeterStatus/WarningStatus が使用）。
+//     ComFilterAlgorithm を通過した変化があれば送信、無くても
+//     COM_TX_PERIODIC_FLOOR_CYCLES 回の呼び出しで周期フロアとして送信する
+//     （実 MIXED モードの簡略版。時刻ではなく呼び出し回数基準）。
+//
+//   COM_TX_MODE_PERIODIC : Com が自分自身の周期タスク（Com_MainFunction）で
+//     実時間ベースに送信タイミングを判断する。ASW/CDD は Com_SendSignal() で
+//     値を更新するだけでよく、Com_TriggerIPDUSend() を呼ぶ必要が一切ない
+//     （実車の Com の PERIODIC 送信モードと同じ「値の生成」と「送信タイミング」
+//     の責務分離）。
+// -------------------------------------------------------
+typedef enum
+{
+    COM_TX_MODE_MIXED    = 0,
+    COM_TX_MODE_PERIODIC = 1
+} Com_TxModeModeType;
+
+// -------------------------------------------------------
 // I-PDU 設定（1エントリ = 1つの I-PDU）
 //
 //   IPduId    : COM 内の I-PDU インデックス（0始まり）
@@ -78,24 +102,31 @@ typedef enum
 //               シャドウバッファへ書き込むのみとし、Com_SendSignalGroup() で
 //               まとめて実バッファへ確定コミットする）。0 = 通常の直接送信
 //               （Com_SendSignal がその場で実バッファへ書き込む、既存の挙動）。
+//   TxModeMode / TxPeriodMs : TX I-PDU のみ使用（DaVinci: ComTxModeMode /
+//               ComTxModeTimePeriodFactor）。COM_TX_MODE_MIXED では未使用。
+//               COM_TX_MODE_PERIODIC では TxPeriodMs [ms] 周期で
+//               Com_MainFunction() が自動送信する。
 //   RxIndicationCbk : RX I-PDU のみ使用。非NULL なら Com_RxIndication() が
 //               バッファ更新後に呼ぶ（実 AUTOSAR の ComNotification /
 //               RTE 生成コールバックに相当）。E2E Transformer 等、
 //               「フレーム受信の都度」処理が必要な上位層向けの汎用フックで
 //               あり、Com はここで何が実行されるか一切関知しない
 //               （IPduId のハードコード比較を Com.c 本体に埋め込まないため）。
-//   TxTransformCbk  : TX I-PDU のみ使用。非NULL なら Com_TriggerIPDUSend() が
-//               PduR_Transmit() へ渡す直前に、実 TX バッファへのポインタと
-//               長さを渡して呼ぶ。E2E Transformer が Counter/CRC をバッファへ
-//               書き込む等の「送信直前の最終変換」に使う汎用フック。
+//   TxTransformCbk  : TX I-PDU のみ使用。非NULL なら実際の送信直前（MIXED は
+//               Com_TriggerIPDUSend()、PERIODIC は Com_MainFunction() 内部）に、
+//               実 TX バッファへのポインタと長さを渡して呼ぶ。E2E Transformer
+//               が Counter/CRC をバッファへ書き込む等の「送信直前の最終変換」
+//               に使う汎用フック。
 // -------------------------------------------------------
 typedef struct
 {
-    Com_IPduIdType  IPduId;
-    uint8           DLC;
-    PduIdType       PduRId;
-    uint16          TimeoutMs;
-    uint8           IsSignalGroup;
+    Com_IPduIdType     IPduId;
+    uint8              DLC;
+    PduIdType          PduRId;
+    uint16             TimeoutMs;
+    uint8              IsSignalGroup;
+    Com_TxModeModeType TxModeMode;
+    uint16             TxPeriodMs;
     void (*RxIndicationCbk)(void);
     void (*TxTransformCbk)(uint8* Data, uint8 Length);
 } Com_IPduConfigType;

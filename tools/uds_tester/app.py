@@ -626,21 +626,20 @@ class App(tk.Tk):
                     data = get_payload("data")
                     if can_id is None or data is None:
                         return
-                    # E2E 付きの場合、CRC は送信直前に再計算する。Counter バイトは
-                    # Entry でユーザーが直接編集した値をそのまま使うため、意図的に
-                    # カウンタを飛ばして WRONGSEQUENCE/SYNC 挙動を検証できる
-                    # (CRC だけ手計算する必要はない)。
+                    # E2E 付きの場合でも、送信するバイト列は Entry の内容をそのまま使う
+                    # （CRC・Counter いずれも再計算しない）。Counter だけでなく CRC も
+                    # 手入力した値をそのまま送れないと、意図的に不正な CRC を送って
+                    # WRONGCRC 挙動を検証することができない
+                    # （以前は CRC のみ常に再計算しており、手入力した不正な CRC が
+                    # 送信直前に正しい値へ上書きされてしまうバグがあった）。
                     e2e_cfg = btn_cfg.get("e2e")
-                    if e2e_cfg:
-                        co = e2e_cfg["counter_offset"]
-                        po = e2e_cfg["payload_offset"]
-                        counter = data[co] & 0x0F if len(data) > co else 0
-                        data = self._apply_e2e(data[po:], e2e_cfg, counter)
                     uds_link.send_can_frame(self.bus, can_id, data)
                     self.log_queue.put(
                         f"[{label}] TX ID=0x{can_id:03X} " + " ".join(f"{b:02X}" for b in data)
                     )
-                    # E2E 付きの場合、送信後にカウンタをインクリメントして Entry を更新する
+                    # E2E 付きの場合、次回送信に備えて Counter を進め、CRC を再計算した
+                    # 「正常なフレーム」を Entry へ書き戻す（今回実際に送信した内容
+                    # そのものには影響しない）。
                     if e2e_cfg:
                         co = e2e_cfg["counter_offset"]
                         po = e2e_cfg["payload_offset"]
@@ -940,10 +939,9 @@ class App(tk.Tk):
                     raw_hex = " ".join(f"{b:02X}" for b in data)
                     self._rx_monitor_vars[mon_idx].set(raw_hex)
                     decode = self._rx_monitor_decode.get(mon_idx, "")
-                    if decode == "engine_state" and len(data) >= 3:
-                        # byte[0]=CRC8 (E2E), byte[1]=Counter (E2E), byte[2]=EngineState
-                        # (AUTOSAR 標準バリアント 1A レイアウト、SWS_E2E_00227)
-                        name = self._ENGINE_STATE_NAMES.get(data[2], f"0x{data[2]:02X}")
+                    if decode == "engine_state" and len(data) >= 1:
+                        # byte[0]=EngineState（E2E保護なし）
+                        name = self._ENGINE_STATE_NAMES.get(data[0], f"0x{data[0]:02X}")
                         self._rx_monitor_name_vars[mon_idx].set(f"({name})")
                     elif decode == "nm_status" and len(data) >= 2:
                         # byte[0]=Control Bit Vector（本プロジェクトでは未使用）、
@@ -953,6 +951,16 @@ class App(tk.Tk):
                     elif decode == "warning_status" and len(data) >= 1:
                         self._rx_monitor_name_vars[mon_idx].set(
                             self._decode_warning_status(data[0])
+                        )
+                    elif decode == "e2e_health" and len(data) >= 4:
+                        # byte[0]=CRC8 (E2E), byte[1]=Counter (E2E)
+                        # (AUTOSAR 標準バリアント 1A レイアウト、SWS_E2E_00227)
+                        # byte[2]=E2E CRCエラー累積数, byte[3]=E2E シーケンスエラー累積数
+                        # (EngineInfo/AbsInfo 受信側の合算、0-255で飽和。E2EMon CDD相当モジュールが
+                        #  Com経由でPERIODIC送信するネットワーク健全性テレメトリ。テレメトリ自体も
+                        #  E2E保護されている)
+                        self._rx_monitor_name_vars[mon_idx].set(
+                            f"(crcErr={data[2]} seqErr={data[3]})"
                         )
                     elif mon_idx in self._rx_monitor_name_vars:
                         self._rx_monitor_name_vars[mon_idx].set("")

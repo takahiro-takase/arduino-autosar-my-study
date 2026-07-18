@@ -8,13 +8,15 @@
  *
  *          本プロジェクトの設定（メータ ECU 想定）:
  *            TX PDU (TxPduId=0): MeterStatus
- *              CanId=0x200, DLC=3 (E2E P01 保護), HTH=0
+ *              CanId=0x200, DLC=1 (E2E 保護なし), HTH=0
  *            TX PDU (TxPduId=1): UDS 診断応答
  *              CanId=0x7E8, DLC=8, HTH=0
  *            TX PDU (TxPduId=2): NM フレーム (Nm、PduR/Com を経由せず直接呼び出す)
  *              CanId=0x400, DLC=2, HTH=0
  *            TX PDU (TxPduId=3): WarningStatus (COM Signal Group)
  *              CanId=0x210, DLC=1, HTH=0
+ *            TX PDU (TxPduId=4): E2EHealthStatus (COM PERIODIC、E2E P01 保護)
+ *              CanId=0x220, DLC=4, HTH=0
  *            RX PDU (RxPduId=0): EngineInfo  (エンジン ECU)
  *              CanId=0x100, HRH=0 → PduR RxPduId=0 → COM IPduId=0
  *            RX PDU (RxPduId=1): UDS 診断要求 (診断ツール)
@@ -67,7 +69,7 @@ static const CanIf_TxPduConfigType CanIf_TxPduConfigData[CANIF_TX_PDU_COUNT] = {
          * --------------------------------------------------------------- */
         .UpperLayerTxPduId = 0U,          /* DaVinci: CanIfTxPduId（上位層の PDU ID） */
         .CanId             = 0x200U,      /* DaVinci: CanIfTxPduCanId */
-        .Dlc               = 3U,          /* DaVinci: CanIfTxPduDlc (E2E P01 保護: シグナル1B+Counter1B+CRC1B) */
+        .Dlc               = 1U,          /* DaVinci: CanIfTxPduDlc (E2E 保護なし、シグナル1Bのみ) */
         .Hth               = 0U,          /* DaVinci: CanIfTxPduHthIdRef */
         .TxConfirmFct      = PduR_CanIfTxConfirmation /* DaVinci: CanIfTxPduUserTxConfirmationName */
     },
@@ -108,6 +110,19 @@ static const CanIf_TxPduConfigType CanIf_TxPduConfigData[CANIF_TX_PDU_COUNT] = {
                                           *          たまたま同値のため、この区別が表面化していなかった） */
         .CanId             = 0x210U,      /* DaVinci: CanIfTxPduCanId */
         .Dlc               = 1U,          /* DaVinci: CanIfTxPduDlc (RunLamp/FaultLamp/AbsLamp 各1bit) */
+        .Hth               = 0U,          /* DaVinci: CanIfTxPduHthIdRef */
+        .TxConfirmFct      = PduR_CanIfTxConfirmation /* DaVinci: CanIfTxPduUserTxConfirmationName */
+    },
+    {
+        /* ---------------------------------------------------------------
+         * TxPduId=4: E2EHealthStatus フレーム (COM PERIODIC)
+         * DaVinci: /ActiveEcuC/CanIf/CanIfInitCfg/CanIfTxPduCfg/E2EHealthStatus_Tx
+         * --------------------------------------------------------------- */
+        .UpperLayerTxPduId = 3U,          /* DaVinci: CanIfTxPduId。PduR_PBCfg.c の
+                                          *          E2EHealthStatus パスの SrcPduId(=3) と一致させる */
+        .CanId             = 0x220U,      /* DaVinci: CanIfTxPduCanId */
+        .Dlc               = 4U,          /* DaVinci: CanIfTxPduDlc (E2E P01 保護: CRC1B+Counter1B
+                                            *          + CrcErrCount1B + SeqErrCount1B) */
         .Hth               = 0U,          /* DaVinci: CanIfTxPduHthIdRef */
         .TxConfirmFct      = PduR_CanIfTxConfirmation /* DaVinci: CanIfTxPduUserTxConfirmationName */
     }

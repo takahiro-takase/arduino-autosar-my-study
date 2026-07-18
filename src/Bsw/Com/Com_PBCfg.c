@@ -18,17 +18,28 @@
  *              Signal 4: VehicleSpeed  16 bit  BitPos=16  BigEndian  0.01 km/h
  *              Signal 5: BrakeActive    1 bit  BitPos=32  BigEndian  0=解除/1=作動
  *              Signal 6: AbsActive      1 bit  BitPos=33  BigEndian  0=非作動/1=作動
- *            TX I-PDU 0 (IPduId=0): CAN ID 0x200, DLC=3  MeterStatus (メータ ECU、E2E P01 保護)
- *              byte[0]: E2E CRC8 / byte[1]: E2E Counter (下位4bit)
- *              （AUTOSAR 標準バリアント 1A、SWS_E2E_00227 準拠のレイアウト）
- *              Signal 3: EngineState    8 bit  BitPos=16  BigEndian
- *              ComFilterAlgorithm=MASKED_NEW_DIFFERS_MASKED_OLD（値変化時のみ送信要求。
- *              詳細は Com_Cfg.h の COM_TX_PERIODIC_FLOOR_CYCLES を参照）
+ *            TX I-PDU 0 (IPduId=0): CAN ID 0x200, DLC=1  MeterStatus
+ *              (メータ ECU、E2E 保護なし。ComFilterAlgorithm=MASKED_NEW_DIFFERS_MASKED_OLD
+ *              で値変化時のみ送信要求、詳細は Com_Cfg.h の COM_TX_PERIODIC_FLOOR_CYCLES 参照)
+ *              Signal 3: EngineState    8 bit  BitPos= 0  BigEndian
  *            TX I-PDU 1 (IPduId=1): CAN ID 0x210, DLC=1  WarningStatus (メータ ECU、Signal Group)
  *              Signal 7: RunLamp        1 bit  BitPos= 0  BigEndian
  *              Signal 8: FaultLamp      1 bit  BitPos= 1  BigEndian
  *              Signal 9: AbsLamp        1 bit  BitPos= 2  BigEndian
  *              IsSignalGroup=1（Com_SendSignalGroup で 3 信号を一括コミット）
+ *            TX I-PDU 2 (IPduId=2): CAN ID 0x220, DLC=4  E2EHealthStatus
+ *              (メータ ECU、TxModeMode=COM_TX_MODE_PERIODIC、E2E P01 保護)
+ *              byte[0]: E2E CRC8 / byte[1]: E2E Counter (下位4bit)
+ *              （AUTOSAR 標準バリアント 1A、SWS_E2E_00227 準拠のレイアウト）
+ *              Signal 10: E2ECrcErrCount  8 bit  BitPos=16  BigEndian
+ *              Signal 11: E2ESeqErrCount  8 bit  BitPos=24  BigEndian
+ *              値は E2EMon（CDD 相当、src/Bsw/E2EMon/）が Com_SendSignal() で
+ *              更新し、送信タイミング自体は Com 自身の PERIODIC モードが
+ *              1000ms 周期で自動的に判断する（ASW/CDD は関与しない）。
+ *              E2EMon 自身は E2E 保護の存在を一切知らない（MeterStatus における
+ *              App_EngineManager と同じ関係。E2E 保護対象は当初 MeterStatus
+ *              だったが、監視ツールがネットワーク健全性テレメトリ自体の破損を
+ *              検出できるよう E2EHealthStatus 側へ移した）。
  *
  *          E2E P01 の設定・ステート実体（DataID/Counter・CRC オフセット等）は
  *          E2E Transformer 方式への移行に伴い src/Bsw/E2EXf/E2EXf_PBCfg.c へ
@@ -74,7 +85,7 @@
  * 避けるためローカル extern 宣言で参照する。 */
 extern void Rte_COMCbk_EngineInfo(void);
 extern void Rte_COMCbk_AbsInfo(void);
-extern void Rte_COMTransform_MeterStatus(uint8* Data, uint8 Length);
+extern void Rte_COMTransform_E2EHealthStatus(uint8* Data, uint8 Length);
 
 /* -----------------------------------------------------------------------
  * RX I-PDU テーブル
@@ -122,17 +133,16 @@ static const Com_IPduConfigType Com_RxIPduConfigData[COM_RX_IPDU_COUNT] = {
 static const Com_IPduConfigType Com_TxIPduConfigData[COM_TX_IPDU_COUNT] = {
     {
         /* ---------------------------------------------------------------
-         * TX IPduId=0: MeterStatus フレーム (メータ ECU 送信、E2E P01 保護)
+         * TX IPduId=0: MeterStatus フレーム (メータ ECU 送信、E2E 保護なし)
          * DaVinci: /ActiveEcuC/Com/ComConfig/MeterStatus_Tx
          * --------------------------------------------------------------- */
         .IPduId    = 0U,  /* DaVinci: ComIPduHandleId  - I-PDU 識別番号 */
-        .DLC       = 3U,  /* DaVinci: ComIPduLength    - I-PDU バイト長
-                           *          byte[0]=シグナル, byte[1]=E2E Counter, byte[2]=E2E CRC */
+        .DLC       = 1U,  /* DaVinci: ComIPduLength    - I-PDU バイト長（byte[0]=EngineState のみ） */
         .PduRId    = 0U,  /* DaVinci: ComIPduPduRef    - PduR TX パス 0 へのリンク */
         .TimeoutMs = 0U,  /* TX I-PDU のため監視無効 */
         .IsSignalGroup = 0U, /* 直接送信（既存の挙動のまま） */
-        .TxTransformCbk = Rte_COMTransform_MeterStatus /* DaVinci: /ActiveEcuC/E2EXf/MeterStatus_Tx_E2EXf
-                                                *          （E2E Transformer 呼び出しは Rte 層が担う） */
+        .TxModeMode = COM_TX_MODE_MIXED /* DaVinci: ComTxModeMode = MIXED
+                                         *          (ASW が Com_TriggerIPDUSend() を呼んだ時のみ評価) */
     },
     {
         /* ---------------------------------------------------------------
@@ -147,7 +157,31 @@ static const Com_IPduConfigType Com_TxIPduConfigData[COM_TX_IPDU_COUNT] = {
                            *          (PduR_Transmit の SrcPduId は COM/CanTp で共通の名前空間のため、
                            *          CanTp が使用する 1U と衝突しないよう 2U を割り当てる) */
         .TimeoutMs = 0U,  /* TX I-PDU のため監視無効 */
-        .IsSignalGroup = 1U /* Signal Group（Com_SendSignalGroup で確定コミット） */
+        .IsSignalGroup = 1U, /* Signal Group（Com_SendSignalGroup で確定コミット） */
+        .TxModeMode = COM_TX_MODE_MIXED /* DaVinci: ComTxModeMode = MIXED */
+    },
+    {
+        /* ---------------------------------------------------------------
+         * TX IPduId=2: E2EHealthStatus フレーム (メータ ECU 送信、PERIODIC、E2E P01 保護)
+         * DaVinci: /ActiveEcuC/Com/ComConfig/E2EHealthStatus_Tx
+         * E2EMon（CDD 相当、src/Bsw/E2EMon/）が E2E 検証エラーの累積数を
+         * 保持し、値が変化するたびに Com_SendSignal() で更新する。
+         * 送信タイミングは Com 自身の PERIODIC モードが担うため、E2EMon 自身は
+         * 周期送信のスケジューリングに一切関与しない（実 AUTOSAR の Com の
+         * PERIODIC 送信モードと同じ責務分離）。ネットワーク健全性テレメトリ
+         * 自体の破損を監視ツールが検出できるよう E2E P01 保護を付与する
+         * （TxTransformCbk 経由、Rte 層が E2EXf を呼ぶ点は MeterStatus と同じ）。
+         * --------------------------------------------------------------- */
+        .IPduId     = 2U,    /* DaVinci: ComIPduHandleId  - I-PDU 識別番号 */
+        .DLC        = 4U,    /* DaVinci: ComIPduLength    - byte[0]=E2E CRC, byte[1]=E2E Counter,
+                              *          byte[2]=CrcErrCount, byte[3]=SeqErrCount */
+        .PduRId     = 3U,    /* DaVinci: ComIPduPduRef    - PduR TX パス 3 へのリンク */
+        .TimeoutMs  = 0U,    /* TX I-PDU のため監視無効 */
+        .IsSignalGroup = 0U, /* 直接送信 */
+        .TxModeMode = COM_TX_MODE_PERIODIC,      /* DaVinci: ComTxModeMode = PERIODIC */
+        .TxPeriodMs = COM_TX_PERIOD_E2EHEALTH_MS, /* DaVinci: ComTxModeTimePeriodFactor */
+        .TxTransformCbk = Rte_COMTransform_E2EHealthStatus /* DaVinci: /ActiveEcuC/E2EXf/E2EHealthStatus_Tx_E2EXf
+                                                *          （E2E Transformer 呼び出しは Rte 層が担う） */
     }
 };
 
@@ -199,14 +233,13 @@ static const Com_SignalConfigType Com_SignalConfigData[COM_SIGNAL_COUNT] = {
     },
     {
         /* ---------------------------------------------------------------
-         * Signal 3: EngineState  TX 8bit  CAN 0x200 byte[2]
-         * （byte[0]=E2E CRC8, byte[1]=E2E Counter を先頭に配置する
-         *   AUTOSAR 標準バリアント 1A レイアウトのため、シグナルは byte[2] から）
+         * Signal 3: EngineState  TX 8bit  CAN 0x200 byte[0]
+         * （E2E 保護なしのため、シグナルは byte[0] から始まる）
          * DaVinci: /ActiveEcuC/Com/ComConfig/EngineState_Tx
          * --------------------------------------------------------------- */
         .SignalId    = COM_SIGNAL_ENGINE_STATE, /* DaVinci: ComHandleId         */
         .IPduId      = 0U,                      /* DaVinci: ComIPduRef → MeterStatus_Tx */
-        .BitPosition = 16U,                     /* DaVinci: ComBitPosition      */
+        .BitPosition = 0U,                      /* DaVinci: ComBitPosition      */
         .BitSize     = 8U,                      /* DaVinci: ComBitSize          */
         .Endian      = COM_BIG_ENDIAN,          /* DaVinci: ComSignalEndianness = OPAQUE */
         .FilterAlgorithm = COM_FILTER_MASKED_NEW_DIFFERS_MASKED_OLD, /* DaVinci: ComFilterAlgorithm
@@ -282,6 +315,30 @@ static const Com_SignalConfigType Com_SignalConfigData[COM_SIGNAL_COUNT] = {
         .BitPosition = 2U,                      /* DaVinci: ComBitPosition       */
         .BitSize     = 1U,                      /* DaVinci: ComBitSize           */
         .Endian      = COM_BIG_ENDIAN           /* DaVinci: ComSignalEndianness = OPAQUE */
+    },
+    {
+        /* ---------------------------------------------------------------
+         * Signal 10: E2ECrcErrCount  TX 8bit  CAN 0x220 byte[2]
+         * （byte[0]=E2E CRC8, byte[1]=E2E Counter を先頭に配置する
+         *   AUTOSAR 標準バリアント 1A レイアウトのため、シグナルは byte[2] から）
+         * DaVinci: /ActiveEcuC/Com/ComConfig/E2ECrcErrCount_Tx
+         * --------------------------------------------------------------- */
+        .SignalId    = COM_SIGNAL_E2E_CRC_ERR_COUNT, /* DaVinci: ComHandleId     */
+        .IPduId      = 2U,                      /* DaVinci: ComIPduRef → E2EHealthStatus_Tx */
+        .BitPosition = 16U,                      /* DaVinci: ComBitPosition      */
+        .BitSize     = 8U,                       /* DaVinci: ComBitSize          */
+        .Endian      = COM_BIG_ENDIAN            /* DaVinci: ComSignalEndianness = OPAQUE */
+    },
+    {
+        /* ---------------------------------------------------------------
+         * Signal 11: E2ESeqErrCount  TX 8bit  CAN 0x220 byte[3]
+         * DaVinci: /ActiveEcuC/Com/ComConfig/E2ESeqErrCount_Tx
+         * --------------------------------------------------------------- */
+        .SignalId    = COM_SIGNAL_E2E_SEQ_ERR_COUNT, /* DaVinci: ComHandleId     */
+        .IPduId      = 2U,                      /* DaVinci: ComIPduRef → E2EHealthStatus_Tx */
+        .BitPosition = 24U,                      /* DaVinci: ComBitPosition      */
+        .BitSize     = 8U,                       /* DaVinci: ComBitSize          */
+        .Endian      = COM_BIG_ENDIAN            /* DaVinci: ComSignalEndianness = OPAQUE */
     }
 };
 

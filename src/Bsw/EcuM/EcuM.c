@@ -71,6 +71,7 @@
 #include "Com.h"
 #include "Com_PBCfg.h"
 #include "E2EXf_PBCfg.h"
+#include "E2EMon.h"
 #include "CanTp.h"
 #include "Dcm.h"
 #include "Dem.h"
@@ -136,6 +137,7 @@ void EcuM_Init(void)
     PduR_Init(&PduR_Config);
     Com_Init(&Com_Config);
     E2EXf_PBCfg_Init();       /* E2E Check/Protect ステート初期化（Com は E2E を関知しないため） */
+    E2EMon_Init();            /* E2E 検証ネットワーク健全性モニタ（CDD 相当、Com_Init 済みが前提） */
     CanTp_Init();
     Dcm_Init();
     Dem_Init();
