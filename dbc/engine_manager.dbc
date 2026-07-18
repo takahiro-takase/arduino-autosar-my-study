@@ -18,15 +18,19 @@ BO_ 272 AbsInfo: 5 AbsEcu
  SG_ BrakeActive  : 39|1@0+  (1,0)    [0|1]      ""     MeterEcu
  SG_ AbsActive    : 38|1@0+  (1,0)    [0|1]      ""     MeterEcu
 
-BO_ 512 MeterStatus: 3 MeterEcu
- SG_ E2ECRC       : 7|8@0+  (1,0)    [0|255]    ""     DiagTool
- SG_ E2ECounter   : 11|4@0+ (1,0)    [0|15]     ""     DiagTool
- SG_ EngineState  : 23|8@0+ (1,0)    [0|3]      ""     DiagTool
+BO_ 512 MeterStatus: 1 MeterEcu
+ SG_ EngineState  : 7|8@0+ (1,0)    [0|3]      ""     DiagTool
 
 BO_ 528 WarningStatus: 1 MeterEcu
  SG_ RunLamp   : 7|1@0+ (1,0) [0|1] "" DiagTool
  SG_ FaultLamp : 6|1@0+ (1,0) [0|1] "" DiagTool
  SG_ AbsLamp   : 5|1@0+ (1,0) [0|1] "" DiagTool
+
+BO_ 544 E2EHealthStatus: 4 MeterEcu
+ SG_ E2ECRC         : 7|8@0+  (1,0) [0|255] "" DiagTool
+ SG_ E2ECounter     : 11|4@0+ (1,0) [0|15]  "" DiagTool
+ SG_ E2ECrcErrCount : 23|8@0+ (1,0) [0|255] "" DiagTool
+ SG_ E2ESeqErrCount : 31|8@0+ (1,0) [0|255] "" DiagTool
 
 BO_ 1024 MeterEcu_Nm: 2 MeterEcu
  SG_ ControlBitVector : 7|8@0+  (1,0) [0|255] "" DiagTool
@@ -49,8 +53,9 @@ BO_ 2024 UdsDiagResponse: 8 MeterEcu
 
 CM_ BO_ 256  "TX: EngineEcu -> MeterEcu (CAN ID 0x100). エンジン ECU が 送信するエンジン情報フレーム。動作確認時はテストツールからこのフレームを送信してエンジン ECU をシミュレートする。";
 CM_ BO_ 272  "TX: AbsEcu -> MeterEcu (CAN ID 0x110). ABS ECU が送信する制動情報フレーム。動作確認時はテストツールからこのフレームを送信して ABS ECU をシミュレートする。AUTOSAR E2E Profile 01 で保護 (E2ECounter/E2ECRC)。";
-CM_ BO_ 512  "TX: MeterEcu -> (CAN ID 0x200). メータ ECU (Arduino) が送信するエンジン状態フレーム。EngineState が変化したときに送信され、変化がなくても約9秒(3回)ごとに周期フロアとして再送される(ComFilterAlgorithm)。AUTOSAR E2E Profile 01 で保護 (E2ECounter/E2ECRC)。";
+CM_ BO_ 512  "TX: MeterEcu -> (CAN ID 0x200). メータ ECU (Arduino) が送信するエンジン状態フレーム。EngineState が変化したときに送信され、変化がなくても約9秒(3回)ごとに周期フロアとして再送される(ComFilterAlgorithm)。E2E保護は付与しない。";
 CM_ BO_ 528  "TX: MeterEcu -> (CAN ID 0x210). メータ ECU (Arduino) が送信する警告灯状態フレーム。RunLamp/FaultLamp/AbsLamp の3信号を Com_SendSignalGroup() で1つの Signal Group としてまとめてコミットし、いずれかが変化したときに送信される(FAULT点滅中は500msごとに送信)。変化がなくても約9秒(3回)ごとに周期フロアとして再送される。";
+CM_ BO_ 544  "TX: MeterEcu -> (CAN ID 0x220). E2EMon (CDD相当モジュール) が発行するネットワーク健全性テレメトリ。EngineInfo/AbsInfo 受信側のE2E検証で検出した累積エラー数 (E2ECrcErrCount=CRC不一致, E2ESeqErrCount=シーケンス異常、それぞれ0-255で飽和、電源投入時0リセット)。Comの PERIODIC送信モードにより1000ms周期で自動送信される(ComTxModeMode=PERIODIC、ASW/CDDは送信タイミングに関与しない)。テレメトリ自体の破損を監視ツールが検出できるようAUTOSAR E2E Profile 01 で保護 (E2ECounter/E2ECRC)。Demの DTC 管理とは独立。";
 CM_ BO_ 1024 "TX: MeterEcu -> (CAN ID 0x400). ネットワークマネジメント(NM)フレーム。ComM が FULL_COM の間、200msごとに送信して生存を示す。シグナル値ではなくバス上の生存確認が目的のため E2E 保護は付与しない。";
 CM_ BO_ 2016 "TX: DiagTool -> MeterEcu (CAN ID 0x7E0). UDS 診断要求 (ISO 14229-1 / ISO 15765-2)。リクエストは最大 7 バイトのため常に Single Frame (SF)。Pci=0x0N (N=UDS payload length), ServiceId=SID.";
 CM_ BO_ 2024 "TX: MeterEcu -> DiagTool (CAN ID 0x7E8). UDS 診断応答 (ISO 15765-2 CanTp)。Short response (<=7byte): Single Frame (PCI=0x0N)。Long response (>=8byte): First Frame (PCI=0x10 0xNN) + Consecutive Frame (PCI=0x21..)。DBCシグナルはSF時のみ正確にデコードされる。FF/CF時はCANアナライザの生Hexビューで確認すること。";

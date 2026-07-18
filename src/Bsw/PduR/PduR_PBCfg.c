@@ -19,6 +19,8 @@
  *              CanIf TxPduId=1 → CAN 0x7E8, TxConfirmation → CanTp_TxConfirmation
  *            TX パス 2 (SrcPduId=2):
  *              CanIf TxPduId=3 → CAN 0x210, TxConfirmation → Com_TxConfirmation
+ *            TX パス 3 (SrcPduId=3):
+ *              CanIf TxPduId=4 → CAN 0x220, TxConfirmation → Com_TxConfirmation
  *
  * =====================================================================
  * DaVinci Configurator 対応表
@@ -147,6 +149,15 @@ static const PduR_TxRoutingPathType PduR_TxPaths[PDUR_TX_PATH_COUNT] = {
         .SrcPduId      = 2U,
         .CanIfTxPduId  = 3U,
         .ConfDestPduId = 1U,
+        .ConfFct       = Com_TxConfirmation
+    },
+    {
+        /* パス 3: COM (SrcPduId=3) → CanIf TxPduId=4 (CAN 0x220, E2EHealthStatus)
+         * DaVinci: PduRRoutingPath/E2EHealthStatus_Tx
+         * COM の 3 番目の TX I-PDU には SrcPduId=3 を割り当てる。 */
+        .SrcPduId      = 3U,
+        .CanIfTxPduId  = 4U,
+        .ConfDestPduId = 2U,
         .ConfFct       = Com_TxConfirmation
     }
 };

@@ -16,6 +16,9 @@
         { "label": "WarningStatus\n(0x210)", "type": "rx_monitor",
           "can_id": "0x210", "decode": "warning_status" },
 
+        { "label": "E2EHealthStatus\n(0x220)", "type": "rx_monitor",
+          "can_id": "0x220", "decode": "e2e_health" },
+
         { "type": "group_header", "label": "周辺ECU" },
 
         { "label": "EngineInfo\n(0x100)", "type": "can_frame", "can_id": "0x100",

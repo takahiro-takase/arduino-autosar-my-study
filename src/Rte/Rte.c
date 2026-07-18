@@ -28,6 +28,7 @@
 #include "SchM.h"
 #include "E2EXf.h"
 #include "E2EXf_PBCfg.h"
+#include "E2EMon.h"
 
 /* シグナル ID は Com_Cfg.h の COM_SIGNAL_* を使用（重複定義を排除） */
 
@@ -139,7 +140,12 @@ static Rte_IStatusType Rte_MapE2EStatus(E2E_P01StatusType status)
  *
  * \details Com_PBCfg.c の RxIndicationCbk として登録される。
  *          E2EXf_InverseTransform() が失敗した場合はミラーを更新せず、
- *          前回の有効値をそのまま使い続けさせる。
+ *          前回の有効値をそのまま使い続けさせる。E2E チェックの生の結果は
+ *          `E2EMon_NotifyCheckResult()`（CDD 相当の独立モジュール、
+ *          src/Bsw/E2EMon/）へも通知する。これは実 AUTOSAR で言う
+ *          「ARXML で設定した OnDataReceived 通知フックが RTE から生成され、
+ *          独自 CDD の関数を呼ぶ」という接続方式を模したもの（本プロジェクトは
+ *          RTE ジェネレータが無いため Rte.c が手書きでこの呼び出しを担う）。
  *
  * \note    Com_PBCfg.c から extern 宣言経由で RxIndicationCbk として
  *          参照されるため non-static。Rte.h には公開しない（RTE の
@@ -154,6 +160,7 @@ void Rte_COMCbk_EngineInfo(void)
     E2E_P01StatusType checkStatus;
     const Std_ReturnType ret = E2EXf_InverseTransform(&E2EXf_EngineInfoRxCfg, buf, 6U, &checkStatus);
     Rte_EngineInfoStatus = Rte_MapE2EStatus(checkStatus);
+    E2EMon_NotifyCheckResult(checkStatus);
     if (ret != E_OK)
         return;
 
@@ -180,6 +187,7 @@ void Rte_COMCbk_AbsInfo(void)
     E2E_P01StatusType checkStatus;
     const Std_ReturnType ret = E2EXf_InverseTransform(&E2EXf_AbsInfoRxCfg, buf, 5U, &checkStatus);
     Rte_AbsInfoStatus = Rte_MapE2EStatus(checkStatus);
+    E2EMon_NotifyCheckResult(checkStatus);
     if (ret != E_OK)
         return;
 
@@ -191,17 +199,21 @@ void Rte_COMCbk_AbsInfo(void)
 }
 
 /**
- * \brief   MeterStatus (TX IPduId=0) 送信直前に呼ばれる E2E Transformer フック。
+ * \brief   E2EHealthStatus (TX IPduId=2) 送信直前に呼ばれる E2E Transformer フック。
  *
- * \details Com_PBCfg.c の TxTransformCbk として登録される。
- *          Com_TriggerIPDUSend() が PduR_Transmit() へ渡す直前の実 TX
- *          バッファへ、Counter・CRC8 を書き込む。
+ * \details Com_PBCfg.c の TxTransformCbk として登録される。COM_TX_MODE_PERIODIC
+ *          のため、Com_MainFunction() が自分の周期タイマで送信を決定した際に
+ *          このフックが呼ばれる（Com_TriggerIPDUSend() 経由の MIXED I-PDU と
+ *          同じ「送信直前の最終変換」の仕組みをそのまま再利用している）。
+ *          実 TX バッファへ Counter・CRC8 を書き込む。E2EMon（CDD 相当）は
+ *          Com_SendSignal() で値をセットするだけで、この E2E 保護の存在自体を
+ *          一切知らない（MeterStatus における App_EngineManager と同じ関係）。
  *
  * \note    Rte_COMCbk_EngineInfo() と同じ理由で non-static。
  */
-void Rte_COMTransform_MeterStatus(uint8* Data, uint8 Length)
+void Rte_COMTransform_E2EHealthStatus(uint8* Data, uint8 Length)
 {
-    E2EXf_Transform(&E2EXf_MeterStatusTxCfg, Data, Length);
+    E2EXf_Transform(&E2EXf_E2EHealthStatusTxCfg, Data, Length);
 }
 
 /* -----------------------------------------------------------------------
