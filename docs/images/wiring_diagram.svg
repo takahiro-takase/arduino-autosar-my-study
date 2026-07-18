@@ -1,0 +1,131 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1080 500" font-family="Consolas, 'Courier New', monospace">
+  <rect x="0" y="0" width="1080" height="500" fill="#ffffff"/>
+
+  <text x="540" y="30" text-anchor="middle" font-size="20" font-weight="bold" fill="#1a1a1a">
+    Arduino UNO R4 WiFi &#8660; MCP2515+TJA1050 &#8660; USB-CAN アダプタ 配線図
+  </text>
+
+  <!-- ================= Arduino UNO R4 WiFi ================= -->
+  <rect x="30" y="60" width="200" height="320" rx="10" fill="#eef3fb" stroke="#2c5282" stroke-width="2"/>
+  <text x="130" y="85" text-anchor="middle" font-size="15" font-weight="bold" fill="#2c5282">Arduino UNO R4 WiFi</text>
+
+  <!-- pins (right edge) -->
+  <g font-size="13" fill="#1a1a1a">
+    <text x="215" y="105" text-anchor="end">5V</text>
+    <text x="215" y="145" text-anchor="end">GND</text>
+    <text x="215" y="185" text-anchor="end">D10</text>
+    <text x="215" y="225" text-anchor="end">D11</text>
+    <text x="215" y="265" text-anchor="end">D12</text>
+    <text x="215" y="305" text-anchor="end">D13</text>
+    <text x="215" y="345" text-anchor="end">D2</text>
+  </g>
+  <g stroke="#2c5282" stroke-width="2">
+    <circle cx="230" cy="100" r="3" fill="#2c5282"/>
+    <circle cx="230" cy="140" r="3" fill="#2c5282"/>
+    <circle cx="230" cy="180" r="3" fill="#2c5282"/>
+    <circle cx="230" cy="220" r="3" fill="#2c5282"/>
+    <circle cx="230" cy="260" r="3" fill="#2c5282"/>
+    <circle cx="230" cy="300" r="3" fill="#2c5282"/>
+    <circle cx="230" cy="340" r="3" fill="#2c5282"/>
+  </g>
+
+  <!-- ================= MCP2515 + TJA1050 module ================= -->
+  <rect x="430" y="80" width="220" height="300" rx="10" fill="#f2f7ee" stroke="#2f6d2f" stroke-width="2"/>
+  <text x="540" y="105" text-anchor="middle" font-size="14" font-weight="bold" fill="#2f6d2f">MCP2515 + TJA1050</text>
+  <text x="540" y="122" text-anchor="middle" font-size="12" fill="#2f6d2f">CAN バスモジュール</text>
+
+  <!-- module left pins -->
+  <g font-size="13" fill="#1a1a1a">
+    <text x="440" y="105" text-anchor="start">&#160;</text>
+    <text x="440" y="105">VCC</text>
+    <text x="440" y="145">GND</text>
+    <text x="440" y="185">CS</text>
+    <text x="440" y="225">SI</text>
+    <text x="440" y="265">SO</text>
+    <text x="440" y="305">SCK</text>
+    <text x="440" y="345">INT</text>
+  </g>
+  <g stroke="#2f6d2f" stroke-width="2">
+    <circle cx="430" cy="100" r="3" fill="#2f6d2f"/>
+    <circle cx="430" cy="140" r="3" fill="#2f6d2f"/>
+    <circle cx="430" cy="180" r="3" fill="#2f6d2f"/>
+    <circle cx="430" cy="220" r="3" fill="#2f6d2f"/>
+    <circle cx="430" cy="260" r="3" fill="#2f6d2f"/>
+    <circle cx="430" cy="300" r="3" fill="#2f6d2f"/>
+    <circle cx="430" cy="340" r="3" fill="#2f6d2f"/>
+  </g>
+
+  <!-- Arduino -> Module wires -->
+  <g stroke="#555555" stroke-width="1.5">
+    <line x1="230" y1="100" x2="430" y2="100"/>
+    <line x1="230" y1="140" x2="430" y2="140"/>
+    <line x1="230" y1="180" x2="430" y2="180"/>
+    <line x1="230" y1="220" x2="430" y2="220"/>
+    <line x1="230" y1="260" x2="430" y2="260"/>
+    <line x1="230" y1="300" x2="430" y2="300"/>
+    <line x1="230" y1="340" x2="430" y2="340"/>
+  </g>
+  <text x="330" y="95" text-anchor="middle" font-size="11" fill="#777777">5V&#8594;VCC</text>
+  <text x="330" y="135" text-anchor="middle" font-size="11" fill="#777777">GND&#8594;GND</text>
+  <text x="330" y="175" text-anchor="middle" font-size="11" fill="#777777">D10&#8594;CS</text>
+  <text x="330" y="215" text-anchor="middle" font-size="11" fill="#777777">D11(MOSI)&#8594;SI</text>
+  <text x="330" y="255" text-anchor="middle" font-size="11" fill="#777777">D12(MISO)&#8594;SO</text>
+  <text x="330" y="295" text-anchor="middle" font-size="11" fill="#777777">D13(SCK)&#8594;SCK</text>
+  <text x="330" y="335" text-anchor="middle" font-size="11" fill="#777777">D2&#8594;INT</text>
+
+  <!-- module right pins: CANH / CANL -->
+  <g font-size="13" fill="#1a1a1a">
+    <text x="655" y="185">CANH</text>
+    <text x="655" y="245">CANL</text>
+  </g>
+  <circle cx="650" cy="180" r="3" fill="#2f6d2f"/>
+  <circle cx="650" cy="240" r="3" fill="#2f6d2f"/>
+
+  <!-- CAN bus lines -->
+  <line x1="650" y1="180" x2="900" y2="180" stroke="#b7461f" stroke-width="2.5"/>
+  <line x1="650" y1="240" x2="900" y2="240" stroke="#1f5cb7" stroke-width="2.5"/>
+  <text x="700" y="170" font-size="11" fill="#b7461f">CAN_H</text>
+  <text x="700" y="258" font-size="11" fill="#1f5cb7">CAN_L</text>
+
+  <!-- termination resistor 1 (near module) -->
+  <g stroke="#444444" stroke-width="1.5" fill="none">
+    <line x1="690" y1="180" x2="690" y2="240"/>
+    <path d="M 680 195 L 700 200 L 680 210 L 700 215 L 680 225" />
+  </g>
+  <text x="705" y="215" font-size="11" fill="#444444">120&#8486;</text>
+
+  <!-- termination resistor 2 (near USB-CAN adapter) -->
+  <g stroke="#444444" stroke-width="1.5" fill="none">
+    <line x1="850" y1="180" x2="850" y2="240"/>
+    <path d="M 840 195 L 860 200 L 840 210 L 860 215 L 840 225" />
+  </g>
+  <text x="865" y="215" font-size="11" fill="#444444">120&#8486;</text>
+
+  <!-- ================= USB-CAN adapter ================= -->
+  <rect x="900" y="150" width="140" height="120" rx="10" fill="#fbf3e8" stroke="#a06a1a" stroke-width="2"/>
+  <text x="970" y="180" text-anchor="middle" font-size="13" font-weight="bold" fill="#a06a1a">USB-CAN</text>
+  <text x="970" y="198" text-anchor="middle" font-size="13" font-weight="bold" fill="#a06a1a">アダプタ</text>
+  <text x="970" y="222" text-anchor="middle" font-size="11" fill="#a06a1a">(gs_usb 等)</text>
+  <text x="970" y="248" text-anchor="middle" font-size="11" fill="#a06a1a">&#8595; USB</text>
+
+  <!-- PC label -->
+  <text x="970" y="290" text-anchor="middle" font-size="12" fill="#555555">PC</text>
+  <text x="970" y="306" text-anchor="middle" font-size="11" fill="#777777">(Cangaroo /</text>
+  <text x="970" y="320" text-anchor="middle" font-size="11" fill="#777777">uds_tester)</text>
+
+  <!-- legend -->
+  <g font-size="11" fill="#555555">
+    <text x="40" y="410">凡例:</text>
+    <line x1="90" y1="406" x2="120" y2="406" stroke="#b7461f" stroke-width="2.5"/>
+    <text x="126" y="410">CAN_H</text>
+    <line x1="180" y1="406" x2="210" y2="406" stroke="#1f5cb7" stroke-width="2.5"/>
+    <text x="216" y="410">CAN_L</text>
+    <text x="270" y="410">120&#8486; = バス終端抵抗（バス両端に1個ずつ）</text>
+  </g>
+  <text x="40" y="432" font-size="11" fill="#777777">
+    ※ MCP2515 と TJA1050 は市販の一体型モジュール基板を想定（基板内部の配線は省略）。
+  </text>
+  <text x="40" y="450" font-size="11" fill="#777777">
+    ※ 5V/GND は Arduino から MCP2515 モジュールへ供給。CANH/CANL がバス本線、USB-CAN アダプタも同じバスに接続する。
+  </text>
+</svg>

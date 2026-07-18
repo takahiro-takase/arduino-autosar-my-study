@@ -1,0 +1,1742 @@
+/**
+ * \file    Dcm_Cbk.c
+ * \brief   DCM モジュール実装 (AUTOSAR SWS_DCM 準拠, UDS ISO 14229-1)
+ * \details CanTp から配信された UDS 診断ペイロードを解析し、
+ *          以下の UDS サービスを処理して CAN 0x7E8 で応答する。
+ *
+ *          対応サービス:
+ *            0x10 DiagnosticSessionControl — Default / Extended セッション切替
+ *            0x11 ECUReset               — hardReset / softReset (応答後セッションリセット)
+ *            0x14 ClearDiagnosticInformation — 全 DTC クリア／DTC 指定で 1 件クリア
+ *                                              (SecurityAccess Level1 必須)
+ *            0x19 ReadDTCInformation     — subFunc 0x01/0x02/0x04/0x06
+ *            0x22 ReadDataByIdentifier   — DID 0x0101/0x0102/0x0103/0x0104
+ *            0x27 SecurityAccess         — subFunc 0x01 requestSeed / 0x02 sendKey
+ *            0x2E WriteDataByIdentifier  — DID 0x0104 (TestPattern) のみ。
+ *                                          SecurityAccess Level1 必須
+ *            0x2F InputOutputControlByIdentifier — DID 0x0105-0x0107
+ *                                          (RunLamp/FaultLamp/AbsLamp)。
+ *                                          extendedSession 限定、SecurityAccess 不要
+ *            0x31 RoutineControl         — RID 0x0203 EngineHealthCheck のみ。
+ *                                          startRoutine/stopRoutine/
+ *                                          requestRoutineResults の3サブ機能。
+ *                                          extendedSession 限定、SecurityAccess 不要
+ *            0x3E TesterPresent          — セッション維持 (S3 タイマリセット)
+ *
+ *          ISO 15765-2 (CAN TP) は CanTp モジュールが担当する。
+ *          本モジュールは UDS ペイロード (PCI バイトなし) のみを扱う。
+ *          マルチフレーム対応により SID 0x19/02 は複数 DTC を一度に返せる
+ *          (応答方向)。0x2E は要求が 11 バイトとなり SF 上限を超えるため、
+ *          CanTp の複数フレーム要求受信 (FF+CF) を実機検証する唯一の SID。
+ *
+ *          S3 タイマ:
+ *            defaultSession 以外の間、Dcm_ComIndication() が呼ばれるたびに
+ *            最終活動時刻を更新する (TesterPresent に限らず全サービスが対象)。
+ *            Dcm_MainFunction() が周期的に経過時間を確認し、
+ *            DCM_S3_TIMEOUT_MS 以上要求が来なければ defaultSession へ復帰する。
+ *
+ *          SecurityAccess (Level1) 状態機械:
+ *            1. requestSeed (27/01): ロック中なら seed を生成して応答し、
+ *               「seed 発行済み・key 未受信」状態にする。アンロック済みなら
+ *               ISO 14229-1 の作法通り allZeroSeed (seed=0x0000) を返す。
+ *            2. sendKey (27/02): 直前に発行した seed から期待される key
+ *               (seed XOR DCM_SECURITY_KEY_MASK) と比較する。
+ *               一致 → Level1 アンロック。不一致 → NRC 0x35、
+ *               DCM_SECURITY_MAX_ATTEMPTS 回連続失敗で NRC 0x36 を返し
+ *               DCM_SECURITY_DELAY_MS の間 requestSeed 自体を NRC 0x37 で拒否する
+ *               (ブルートフォース対策、ISO 14229-1 準拠)。
+ *            3. defaultSession へ遷移（明示要求または S3 タイムアウト）すると
+ *               Level1 は再ロックされる。失敗回数・待機時間はセッションをまたいで
+ *               維持する（再ロックでブルートフォース対策を回避できないようにする）。
+ *            4. ClearDiagnosticInformation (0x14) は Level1 アンロック済みでなければ
+ *               NRC 0x33 securityAccessDenied を返す。
+ *
+ *          RoutineControl (0x31) 状態機械（IDLE/RUNNING/COMPLETED の3状態）:
+ *            IOControl (0x2F) が要求受信と同時に結果を確定するのに対し、
+ *            RoutineControl は「開始」と「結果取得」が別サービス呼び出しに分かれる
+ *            非同期処理を模す。
+ *            1. startRoutine (31/01): IDLE/COMPLETED から RUNNING へ遷移し、
+ *               開始時刻を記録する。RUNNING 中の再 startRoutine は
+ *               NRC 0x22 conditionsNotCorrect。
+ *            2. Dcm_MainFunction() が周期的に経過時間を確認し、
+ *               DCM_ROUTINE_DURATION_MS 経過した時点で EngineSpeed/CoolantTemp
+ *               を読み取って合否を判定し、RUNNING → COMPLETED へ遷移する
+ *               (E2E の SyncCounter 同様、MainFunction 駆動の非同期状態遷移)。
+ *            3. requestRoutineResults (31/03): RUNNING 中は「実行中」
+ *               (routineStatusRecord=0x00) を返す。COMPLETED なら合否結果
+ *               (0x01 + pass/fail バイト) を返す。IDLE で呼ぶと
+ *               NRC 0x24 requestSequenceError（未開始）。
+ *            4. stopRoutine (31/02): RUNNING/COMPLETED を IDLE に戻す。
+ *               IDLE で呼ぶと NRC 0x24（開始していないものは停止できない）。
+ *            5. defaultSession への遷移（SecurityAccess の再ロックと同じ契機）で
+ *               実行中・完了済みのルーチンは破棄し IDLE に戻す。
+ *
+ *          SID × セッション許可 (Dcm_SidSessionTable[], AUTOSAR DcmDspSessionRow 相当):
+ *            Dcm_ComIndication() が SID ディスパッチの前に全 SID 共通で判定する。
+ *            テーブルに掲載のない SID はセッション制約なし。現在は 0x14・0x27・0x2E・0x2F・0x31
+ *            のみ extendedSession 限定とし、defaultSession では NRC 0x7F
+ *            serviceNotSupportedInActiveSession で拒否する。各ハンドラ個別に
+ *            セッション判定を埋め込むのではなく、一元管理することで
+ *            「どの SID がどのセッションで使えるか」を一覧できるようにしている。
+ *
+ *          応答送信フロー:
+ *            Dcm → CanTp_Transmit(CANTP_TX_SDU_ID) → PduR_Transmit → CanIf
+ *            → Can_Write → MCP2515 → CAN 0x7E8
+ *
+ *          ComM ユーザ (COMM_USER_1) としての通信モード要求:
+ *            extendedSession に入っている間、ComM_RequestComMode(COMM_USER_1,
+ *            FULL_COMMUNICATION) を要求し続ける。defaultSession へ戻る
+ *            （明示要求・S3 タイムアウト・ECUReset のいずれも）と同時に
+ *            NO_COMMUNICATION へ要求を下げる。「診断ツールが繋がっている間は
+ *            バスを落とさない」という実車の要件を、EcuM (COMM_USER_0) とは
+ *            独立したユーザ要求として ComM に伝える。現状は EcuM が常時
+ *            FULL_COM を要求し続けるため、この要求だけでチャネルの実状態が
+ *            変わることはない（ComM_RequestComMode() の集約ログで要求自体は
+ *            確認できる）。
+ *
+ * \copyright  Copyright (c) 2025 T_T
+ * \license    MIT License - 詳細は LICENSE ファイルを参照。
+ *
+ * \note    本ファイルは AUTOSAR 4.3.1 仕様を参考にした学習用実装です。
+ *          AUTOSAR 認証済み実装ではなく、製品への適用は想定していません。
+ */
+
+#include "Dcm.h"
+#include "Dcm_Cfg.h"
+#include "Dem.h"
+#include "CanTp.h"
+#include "Rte.h"
+#include "ComM.h"
+#include "Com.h"
+#include "Nm.h"
+#include "Det.h"
+
+/* millis() is declared in Arduino wiring.c with C linkage. */
+extern unsigned long millis(void);
+
+#define TAG "Dcm"
+
+/* -----------------------------------------------------------------------
+ * モジュール内部状態
+ * ----------------------------------------------------------------------- */
+
+/** 現在の診断セッション (DCM_SESSION_DEFAULT / DCM_SESSION_EXTENDED) */
+static uint8 Dcm_CurrentSession;
+
+/** 最後に診断要求を受信した時刻 (S3 タイマの基準点) */
+static unsigned long Dcm_LastActivityMs;
+
+/** SecurityAccess Level1 状態 (0=Locked, 1=Unlocked) */
+static uint8 Dcm_SecurityLevel;
+
+/** requestSeed 発行済みで対応する sendKey をまだ受信していないか (1=待機中) */
+static uint8 Dcm_SecuritySeedPending;
+
+/** 直前に発行した seed 値 (sendKey 受信時の期待 key 計算に使用) */
+static uint16 Dcm_SecuritySeed;
+
+/** sendKey の連続失敗回数 (DCM_SECURITY_MAX_ATTEMPTS でロックアウト) */
+static uint8 Dcm_SecurityAttemptCount;
+
+/** ロックアウト中か (1=ロックアウト中)。(millis() - Dcm_SecurityLockoutStartMs)
+ *  が DCM_SECURITY_DELAY_MS 以上経過するまで requestSeed を NRC 0x37 で拒否する。
+ *  millis() オーバフロー (約49.7日) でも正しく動作する差分計算にするため、
+ *  絶対時刻ではなく開始時刻+フラグで持つ。 */
+static uint8 Dcm_SecurityLockoutActive;
+
+/** ロックアウト開始時刻 [ms] */
+static unsigned long Dcm_SecurityLockoutStartMs;
+
+/* -----------------------------------------------------------------------
+ * RoutineControl (SID 0x31) 状態
+ * ----------------------------------------------------------------------- */
+
+/** RoutineControl (EngineHealthCheck) の実行状態 */
+typedef enum
+{
+    DCM_ROUTINE_STATE_IDLE = 0,      /**< 未実行 / stopRoutine 済み */
+    DCM_ROUTINE_STATE_RUNNING,       /**< 実行中 (結果未確定)       */
+    DCM_ROUTINE_STATE_COMPLETED      /**< 完了 (結果取得可能)       */
+} Dcm_RoutineStateType;
+
+/** EngineHealthCheck ルーチンの現在の状態 */
+static Dcm_RoutineStateType Dcm_RoutineState;
+
+/** startRoutine を受理した時刻 [ms]（DCM_ROUTINE_DURATION_MS 経過判定の基準） */
+static unsigned long Dcm_RoutineStartMs;
+
+/** COMPLETED 時点の合否結果 (DCM_ROUTINE_PASS / DCM_ROUTINE_FAIL) */
+static uint8 Dcm_RoutineResult;
+
+/** UDS 応答バッファの最大サイズ。0x19/02 (reportDTCByStatusMask) が
+ *  DEM_EVENT_COUNT 件全てに一致した場合が最大: [0x59,subFunc,availMask] (3)
+ *  + DEM_EVENT_COUNT 件 × 4 バイト。
+ *  以前は固定値 32 で確保していたが、DEM_EVENT_COUNT が 6→8 に増えた際に
+ *  追従しておらず 3+8×4=35 バイトが 32 バイトのバッファに収まらず
+ *  オーバーフローしていた。DEM_EVENT_COUNT の変化に自動追従する数式に変更。 */
+#define DCM_TX_BUF_SIZE  (3U + (DEM_EVENT_COUNT * 4U))
+
+/** UDS 応答バッファ (PCI バイトなし; CanTp がトランスポート層を付加する) */
+static uint8 Dcm_TxBuf[DCM_TX_BUF_SIZE];
+
+/** DID 0x0104 (TestPattern) の格納領域。CanTp の複数フレーム要求受信を
+ *  検証するための学習用データ（実際の車両データではない）。 */
+static uint8 Dcm_TestPattern[DCM_DID_TEST_PATTERN_LENGTH];
+
+/** CanTp_Transmit に渡す PDU 情報構造体 */
+static PduInfoType Dcm_TxPdu;
+
+/* -----------------------------------------------------------------------
+ * 内部関数プロトタイプ
+ * ----------------------------------------------------------------------- */
+static void Dcm_Transmit(void);
+static void Dcm_SendNegativeResponse(uint8 sid, uint8 nrc);
+static void Dcm_HandleSessionControl(const uint8* uds, uint8 udsLen);
+static void Dcm_HandleEcuReset(const uint8* uds, uint8 udsLen);
+static void Dcm_HandleClearDtc(const uint8* uds, uint8 udsLen);
+static void Dcm_HandleReadDtcInfo(const uint8* uds, uint8 udsLen);
+static void Dcm_HandleReadDtcCount(const uint8* uds, uint8 udsLen);
+static void Dcm_HandleReadDtcByMask(const uint8* uds, uint8 udsLen);
+static void Dcm_HandleReadDtcSnapshot(const uint8* uds, uint8 udsLen);
+static void Dcm_HandleReadDtcExtendedData(const uint8* uds, uint8 udsLen);
+static void Dcm_HandleReadDataById(const uint8* uds, uint8 udsLen);
+static void Dcm_HandleWriteDataById(const uint8* uds, uint8 udsLen);
+static void Dcm_HandleIoControl(const uint8* uds, uint8 udsLen);
+static void Dcm_HandleCommunicationControl(const uint8* uds, uint8 udsLen);
+static void Dcm_CommControlReset(void);
+static Std_ReturnType Dcm_LampIdOfDid(uint16 did, Rte_LampIdType* lamp);
+static void Dcm_UpdateComMRequest(uint8 session);
+static void Dcm_HandleSecurityAccess(const uint8* uds, uint8 udsLen);
+static void Dcm_HandleSecurityRequestSeed(uint8 subFunc);
+static void Dcm_HandleSecuritySendKey(uint8 subFunc, const uint8* uds, uint8 udsLen);
+static uint16 Dcm_ComputeSecurityKey(uint16 seed);
+static void Dcm_SecurityLock(void);
+static void Dcm_HandleTesterPresent(const uint8* uds, uint8 udsLen);
+static Std_ReturnType Dcm_ReadDid(uint16 did, uint8* buf, uint8* dataLen);
+static void Dcm_HandleRoutineControl(const uint8* uds, uint8 udsLen);
+static void Dcm_HandleRoutineStart(uint16 rid);
+static void Dcm_HandleRoutineStop(uint16 rid);
+static void Dcm_HandleRoutineRequestResults(uint16 rid);
+static void Dcm_RoutineAbort(void);
+
+/* -----------------------------------------------------------------------
+ * Dcm_Init
+ * ----------------------------------------------------------------------- */
+
+/**
+ * \brief   DCM モジュールを初期化する。
+ *
+ * \details セッション状態を defaultSession にリセットし、
+ *          TX バッファポインタを設定する。
+ *
+ * \AUTOSARReq     {SWS_Dcm_00769}
+ * \ServiceID      {0x01}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void Dcm_Init(void)
+{
+    Dcm_CurrentSession   = DCM_SESSION_DEFAULT;
+    Dcm_TxPdu.SduDataPtr = Dcm_TxBuf;
+    Dcm_TxPdu.SduLength  = 0U;   /* 各ハンドラで送信長を設定する */
+    Dcm_LastActivityMs   = millis();
+
+    Dcm_SecurityLevel         = 0U;
+    Dcm_SecuritySeedPending   = 0U;
+    Dcm_SecurityAttemptCount  = 0U;
+    Dcm_SecurityLockoutActive = 0U;
+
+    Dcm_RoutineState = DCM_ROUTINE_STATE_IDLE;
+
+    DET_LOGI(TAG, "Init ok");
+}
+
+/**
+ * \brief   DCM 周期処理。S3 タイマ (セッションタイムアウト) を監視する。
+ *
+ * \details defaultSession 中は何もしない。それ以外の間、最後に診断要求を
+ *          受信してから DCM_S3_TIMEOUT_MS 以上経過していれば
+ *          defaultSession へ復帰させる (ISO 14229-1 の S3 タイマに相当)。
+ *
+ * \ServiceID      {0x02}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void Dcm_MainFunction(void)
+{
+    /* RoutineControl (EngineHealthCheck): RUNNING 中は経過時間を監視し、
+     * DCM_ROUTINE_DURATION_MS 経過したら合否を判定して COMPLETED へ遷移する。
+     * RUNNING になれるのは extendedSession 限定のため、defaultSession 中に
+     * この分岐へ来ることはない (Dcm_RoutineAbort() が退出時に IDLE へ戻す)。 */
+    if (Dcm_RoutineState == DCM_ROUTINE_STATE_RUNNING
+        && (millis() - Dcm_RoutineStartMs) >= DCM_ROUTINE_DURATION_MS)
+    {
+        EngineSpeed_t speed = 0U;
+        CoolantTemp_t temp  = 0U;
+        Rte_Read_SpeedSensor_EngineSpeed(&speed);
+        Rte_Read_TempSensor_CoolantTemp(&temp);
+
+        Dcm_RoutineResult = (speed <= DCM_ROUTINE_MAX_ENGINE_SPEED
+                              && temp <= DCM_ROUTINE_MAX_COOLANT_TEMP)
+                             ? DCM_ROUTINE_PASS : DCM_ROUTINE_FAIL;
+        Dcm_RoutineState = DCM_ROUTINE_STATE_COMPLETED;
+
+        DET_LOGI(TAG, "31 EngineHealthCheck completed result=%u (spd=%u tmp=%u)",
+                 (unsigned)Dcm_RoutineResult, (unsigned)speed, (unsigned)temp);
+    }
+
+    if (Dcm_CurrentSession == DCM_SESSION_DEFAULT)
+        return;
+
+    if ((millis() - Dcm_LastActivityMs) >= DCM_S3_TIMEOUT_MS)
+    {
+        DET_LOGI(TAG, "S3 timeout -> session=Default");
+        Dcm_CurrentSession = DCM_SESSION_DEFAULT;
+        Dcm_SecurityLock();
+        Dcm_RoutineAbort();
+        Dcm_CommControlReset();
+        Dcm_UpdateComMRequest(DCM_SESSION_DEFAULT);
+    }
+}
+
+/**
+ * \brief   セッション状態に応じて ComM への通信モード要求 (COMM_USER_1) を更新する。
+ *
+ * \details extendedSession の間は COMM_FULL_COMMUNICATION、defaultSession の間は
+ *          COMM_NO_COMMUNICATION を ComM_RequestComMode() で要求する。
+ *          セッションが切り替わるすべての経路（明示的な 0x10 要求、S3 タイムアウト、
+ *          0x11 ECUReset 後のリセット）から呼ばれる。
+ *
+ * \param[in]  session  現在のセッション (DCM_SESSION_DEFAULT / _EXTENDED)。
+ */
+static void Dcm_UpdateComMRequest(uint8 session)
+{
+    const ComM_ModeType mode = (session == DCM_SESSION_EXTENDED)
+                               ? COMM_FULL_COMMUNICATION : COMM_NO_COMMUNICATION;
+    (void)ComM_RequestComMode(COMM_USER_1, mode);
+}
+
+/* -----------------------------------------------------------------------
+ * 応答送信ヘルパー
+ * ----------------------------------------------------------------------- */
+
+/**
+ * \brief   Dcm_TxBuf の内容を CanTp 経由で CAN 0x7E8 に送信する。
+ *
+ * \details CanTp がペイロード長に応じて SF/FF+CF を選択する。
+ *          呼び出し前に Dcm_TxPdu.SduLength を設定すること。
+ */
+static void Dcm_Transmit(void)
+{
+    CanTp_Transmit(CANTP_TX_SDU_ID, &Dcm_TxPdu);
+}
+
+/**
+ * \brief   UDS 否定応答 (NRC) フレームを送信する。
+ *
+ * \details ISO 14229-1 に従い [0x7F, SID, NRC] を CanTp へ渡す。
+ *
+ * \param[in]  sid  失敗したサービス ID。
+ * \param[in]  nrc  否定応答コード (DCM_NRC_*)。
+ */
+static void Dcm_SendNegativeResponse(uint8 sid, uint8 nrc)
+{
+    Dcm_TxBuf[0] = DCM_SID_NEGATIVE_RESP;
+    Dcm_TxBuf[1] = sid;
+    Dcm_TxBuf[2] = nrc;
+    Dcm_TxPdu.SduLength = 3U;
+
+    DET_LOGE(TAG, "NRC sid=0x%02X nrc=0x%02X", (unsigned)sid, (unsigned)nrc);
+
+    Dcm_Transmit();
+}
+
+/* -----------------------------------------------------------------------
+ * 0x10 DiagnosticSessionControl
+ * ----------------------------------------------------------------------- */
+
+/**
+ * \brief   UDS 0x10 DiagnosticSessionControl を処理する。
+ *
+ * \details subFunction に応じてセッションを切り替え、
+ *          P2/P2* タイミングパラメータを含む正応答を返す。
+ *          対応: 0x01=defaultSession, 0x03=extendedDiagnosticSession
+ *
+ * \param[in]  uds     UDS ペイロード先頭ポインタ (uds[0]=SID)。
+ * \param[in]  udsLen  UDS ペイロード長。
+ */
+static void Dcm_HandleSessionControl(const uint8* uds, uint8 udsLen)
+{
+    if (udsLen < 2U)
+    {
+        Dcm_SendNegativeResponse(DCM_SID_SESSION_CTRL, DCM_NRC_CONDITIONS_NOT_CORRECT);
+        return;
+    }
+
+    /* bit7: suppressPosRspMsgIndicationBit (本実装では無視) */
+    uint8 subFunc = uds[1] & 0x7FU;
+
+    if (subFunc != DCM_SESSION_DEFAULT && subFunc != DCM_SESSION_EXTENDED)
+    {
+        Dcm_SendNegativeResponse(DCM_SID_SESSION_CTRL, DCM_NRC_SUB_FUNC_NOT_SUPPORTED);
+        return;
+    }
+
+    Dcm_CurrentSession = subFunc;
+
+    if (subFunc == DCM_SESSION_DEFAULT)
+    {
+        Dcm_SecurityLock();
+        Dcm_RoutineAbort();
+        Dcm_CommControlReset();
+    }
+
+    Dcm_UpdateComMRequest(subFunc);
+
+    DET_LOGI(TAG, "10 session=0x%02X", (unsigned)subFunc);
+
+    /* 正応答: [0x50, subFunc, P2_H, P2_L, P2X_H, P2X_L] */
+    Dcm_TxBuf[0] = 0x50U;               /* SID + 0x40 */
+    Dcm_TxBuf[1] = subFunc;
+    Dcm_TxBuf[2] = DCM_SESSION_P2_HIGH;
+    Dcm_TxBuf[3] = DCM_SESSION_P2_LOW;
+    Dcm_TxBuf[4] = DCM_SESSION_P2X_HIGH;
+    Dcm_TxBuf[5] = DCM_SESSION_P2X_LOW;
+    Dcm_TxPdu.SduLength = 6U;
+
+    Dcm_Transmit();
+}
+
+/* -----------------------------------------------------------------------
+ * 0x11 ECUReset
+ * ----------------------------------------------------------------------- */
+
+/**
+ * \brief   UDS 0x11 ECUReset を処理する。
+ *
+ * \details 正応答送信後、セッションを defaultSession に戻す。
+ *          Arduino UNO にはウォッチドッグタイマがあるが、本実装では
+ *          ハードウェアリセットを発行せずログのみで代替する（学習用簡略化）。
+ *          対応: 0x01=hardReset, 0x03=softReset
+ *
+ * \param[in]  uds     UDS ペイロード先頭ポインタ。
+ * \param[in]  udsLen  UDS ペイロード長。
+ */
+static void Dcm_HandleEcuReset(const uint8* uds, uint8 udsLen)
+{
+    if (udsLen < 2U)
+    {
+        Dcm_SendNegativeResponse(DCM_SID_ECU_RESET, DCM_NRC_CONDITIONS_NOT_CORRECT);
+        return;
+    }
+
+    uint8 subFunc = uds[1];
+
+    if (subFunc != DCM_RESET_HARD && subFunc != DCM_RESET_SOFT)
+    {
+        Dcm_SendNegativeResponse(DCM_SID_ECU_RESET, DCM_NRC_SUB_FUNC_NOT_SUPPORTED);
+        return;
+    }
+
+    DET_LOGI(TAG, "11 sub=0x%02X", (unsigned)subFunc);
+
+    /* 正応答: [0x51, subFunc] */
+    Dcm_TxBuf[0] = 0x51U;               /* SID + 0x40 */
+    Dcm_TxBuf[1] = subFunc;
+    Dcm_TxPdu.SduLength = 2U;
+
+    Dcm_Transmit();
+
+    /* リセット後処理: セッションをデフォルトに戻す。
+     * Dcm_SecurityLock() も他の defaultSession 遷移経路（明示要求・S3
+     * タイムアウト）と同様に呼ぶ必要がある。これを怠ると、0x27 で
+     * unlock -> 0x11 ECUReset -> 0x10 で extendedSession へ戻る、という
+     * 経路で再認証なしに Dcm_SecurityLevel が unlocked のまま残ってしまう。 */
+    Dcm_CurrentSession = DCM_SESSION_DEFAULT;
+    Dcm_SecurityLock();
+    Dcm_RoutineAbort();
+    Dcm_CommControlReset();
+    Dcm_UpdateComMRequest(DCM_SESSION_DEFAULT);
+    DET_LOGI(TAG, "11 session->Default");
+}
+
+/* -----------------------------------------------------------------------
+ * 0x14 ClearDiagnosticInformation
+ * ----------------------------------------------------------------------- */
+
+/**
+ * \brief   UDS 0x14 ClearDiagnosticInformation を処理する。
+ *
+ * \details groupOfDTC=0xFFFFFF なら Dem_ClearAllDTCs() で全 DTC をクリアする。
+ *          それ以外の値は特定の DTC コードとみなし、Dem_GetEventIdOfDTC() で
+ *          一致するイベントを探して Dem_ClearDTC() で 1 件だけクリアする
+ *          （該当イベントがなければ NRC 0x31）。
+ *          いずれの場合も正応答 [0x54] を返す。
+ *          DTC 履歴の消去は誤操作・悪用の影響が大きいため二重に保護する:
+ *            ・extendedSession 限定（Dcm_ComIndication の Dcm_SidSessionTable[] が判定、
+ *              defaultSession では本関数に到達する前に NRC 0x7F で拒否される）
+ *            ・SecurityAccess Level1 アンロック必須（本関数内で判定、未アンロックは NRC 0x33）
+ *
+ * \param[in]  uds     UDS ペイロード先頭ポインタ (uds[0]=SID 0x14)。
+ * \param[in]  udsLen  UDS ペイロード長。
+ */
+static void Dcm_HandleClearDtc(const uint8* uds, uint8 udsLen)
+{
+    if (Dcm_SecurityLevel == 0U)
+    {
+        Dcm_SendNegativeResponse(DCM_SID_CLEAR_DTC, DCM_NRC_SECURITY_ACCESS_DENIED);
+        return;
+    }
+
+    if (udsLen < 4U)
+    {
+        Dcm_SendNegativeResponse(DCM_SID_CLEAR_DTC, DCM_NRC_CONDITIONS_NOT_CORRECT);
+        return;
+    }
+
+    uint32 group = ((uint32)uds[1] << 16U)
+                 | ((uint32)uds[2] <<  8U)
+                 | (uint32)uds[3];
+
+    if (group == DEM_GROUP_ALL_DTCS)
+    {
+        DET_LOGI(TAG, "14 ClearAllDTC");
+        Dem_ClearAllDTCs();
+    }
+    else
+    {
+        Dem_EventIdType eventId = 0U;
+
+        if (Dem_GetEventIdOfDTC(group, &eventId) != E_OK)
+        {
+            /* 指定された DTC コードに一致するイベントがない */
+            Dcm_SendNegativeResponse(DCM_SID_CLEAR_DTC, DCM_NRC_REQUEST_OUT_OF_RANGE);
+            return;
+        }
+
+        DET_LOGI(TAG, "14 ClearDTC dtc=0x%06lX", (unsigned long)group);
+        Dem_ClearDTC(eventId);
+    }
+
+    /* 正応答: [0x54] */
+    Dcm_TxBuf[0] = 0x54U;               /* SID 0x14 + 0x40 */
+    Dcm_TxPdu.SduLength = 1U;
+
+    Dcm_Transmit();
+}
+
+/* -----------------------------------------------------------------------
+ * 0x19 ReadDTCInformation — サブ機能ディスパッチ
+ * ----------------------------------------------------------------------- */
+
+/**
+ * \brief   SID 0x19 subFunc 0x01 reportNumberOfDTCByStatusMask を処理する。
+ *
+ * \details statusMask に一致する DTC の件数を返す。
+ *          応答: [0x59, 0x01, statusAvailMask, dtcFormat, countH, countL]
+ *
+ * \param[in]  uds     UDS ペイロード先頭ポインタ。
+ * \param[in]  udsLen  UDS ペイロード長。
+ */
+static void Dcm_HandleReadDtcCount(const uint8* uds, uint8 udsLen)
+{
+    if (udsLen < 3U)
+    {
+        Dcm_SendNegativeResponse(DCM_SID_READ_DTC_INFO, DCM_NRC_CONDITIONS_NOT_CORRECT);
+        return;
+    }
+
+    uint8  statusMask = uds[2];
+    uint32 dtcBuf[DEM_EVENT_COUNT];
+    uint8  statusBuf[DEM_EVENT_COUNT];
+    uint8  count = 0U;
+
+    Dem_GetAllDTCs(dtcBuf, statusBuf, &count, statusMask);
+
+    DET_LOGI(TAG, "19/01 mask=0x%02X cnt=%u", (unsigned)statusMask, (unsigned)count);
+
+    /* 正応答: [0x59, 0x01, statusAvailMask, dtcFormat, countH, countL] */
+    Dcm_TxBuf[0] = 0x59U;                        /* SID 0x19 + 0x40 */
+    Dcm_TxBuf[1] = DCM_DTC_SUBFUNC_REPORT_COUNT;
+    Dcm_TxBuf[2] = DEM_STATUS_AVAILABILITY_MASK;
+    Dcm_TxBuf[3] = DCM_DTC_FORMAT_ISO15031;
+    Dcm_TxBuf[4] = 0x00U;                        /* countH */
+    Dcm_TxBuf[5] = count;                        /* countL */
+    Dcm_TxPdu.SduLength = 6U;
+
+    Dcm_Transmit();
+}
+
+/**
+ * \brief   SID 0x19 subFunc 0x02 reportDTCByStatusMask を処理する。
+ *
+ * \details statusMask に一致する DTC をすべて返す。
+ *          CanTp がマルチフレームを担当するため、SF の 7 バイト制限がなくなった。
+ *          応答 (0 件): [0x59, 0x02, statusAvailMask]
+ *          応答 (n 件): [0x59, 0x02, statusAvailMask,
+ *                        DTC1_H, DTC1_M, DTC1_L, S1,
+ *                        DTC2_H, DTC2_M, DTC2_L, S2, ...]
+ *
+ * \param[in]  uds     UDS ペイロード先頭ポインタ。
+ * \param[in]  udsLen  UDS ペイロード長。
+ */
+static void Dcm_HandleReadDtcByMask(const uint8* uds, uint8 udsLen)
+{
+    if (udsLen < 3U)
+    {
+        Dcm_SendNegativeResponse(DCM_SID_READ_DTC_INFO, DCM_NRC_CONDITIONS_NOT_CORRECT);
+        return;
+    }
+
+    uint8  statusMask = uds[2];
+    uint32 dtcBuf[DEM_EVENT_COUNT];
+    uint8  statusBuf[DEM_EVENT_COUNT];
+    uint8  count = 0U;
+
+    Dem_GetAllDTCs(dtcBuf, statusBuf, &count, statusMask);
+
+    DET_LOGI(TAG, "19/02 mask=0x%02X found=%u", (unsigned)statusMask, (unsigned)count);
+
+    Dcm_TxBuf[0] = 0x59U;
+    Dcm_TxBuf[1] = DCM_DTC_SUBFUNC_REPORT_BY_MASK;
+    Dcm_TxBuf[2] = DEM_STATUS_AVAILABILITY_MASK;
+
+    uint8 offset = 3U;
+    uint8 i;
+    for (i = 0U; i < count; i++)
+    {
+        if ((offset + 4U) > DCM_TX_BUF_SIZE)
+        {
+            /* DEM_EVENT_COUNT に対して DCM_TX_BUF_SIZE を正しく計算しているため
+             * 通常は到達しないが、将来の設定変更で再びサイズ計算がずれた場合に
+             * メモリ破壊ではなく安全な切り詰めで応答するための防御的チェック。 */
+            DET_LOGE(TAG, "19/02 TxBuf full, truncating at %u/%u DTCs",
+                     (unsigned)i, (unsigned)count);
+            break;
+        }
+        Dcm_TxBuf[offset++] = (uint8)(dtcBuf[i] >> 16U);   /* DTC 上位バイト */
+        Dcm_TxBuf[offset++] = (uint8)(dtcBuf[i] >>  8U);   /* DTC 中位バイト */
+        Dcm_TxBuf[offset++] = (uint8)(dtcBuf[i]);           /* DTC 下位バイト */
+        Dcm_TxBuf[offset++] = statusBuf[i];                 /* DTC ステータス */
+    }
+    Dcm_TxPdu.SduLength = (PduLengthType)offset;
+
+    Dcm_Transmit();
+}
+
+/**
+ * \brief   SID 0x19 subFunc 0x04 reportDTCSnapshotRecordByDTCNumber を処理する。
+ *
+ * \details 要求された DTC に一致する FreezeFrame を Dem から取得し、
+ *          EngineSpeed (DID 0x0101) / CoolantTemp (0x0102) / EngineState (0x0103)
+ *          の 3 DID 固定フォーマットで返す。
+ *          本実装はレコード番号 0x01 のみ対応する（イベントごとに 1 スナップショット）。
+ *          応答は 18 バイトで SF の 7 バイト制限を超えるため、CanTp が FF+CF に分割する。
+ *
+ *          要求: [0x19, 0x04, DTC_H, DTC_M, DTC_L, recordNumber]
+ *          応答: [0x59, 0x04, DTC_H, DTC_M, DTC_L, status, recordNumber, numDID,
+ *                 DID1_H, DID1_L, EngineSpeed_H, EngineSpeed_L,
+ *                 DID2_H, DID2_L, CoolantTemp,
+ *                 DID3_H, DID3_L, EngineState]
+ *
+ * \param[in]  uds     UDS ペイロード先頭ポインタ。
+ * \param[in]  udsLen  UDS ペイロード長。
+ */
+static void Dcm_HandleReadDtcSnapshot(const uint8* uds, uint8 udsLen)
+{
+    if (udsLen < 6U)
+    {
+        Dcm_SendNegativeResponse(DCM_SID_READ_DTC_INFO, DCM_NRC_CONDITIONS_NOT_CORRECT);
+        return;
+    }
+
+    uint32 dtc          = ((uint32)uds[2] << 16U) | ((uint32)uds[3] << 8U) | (uint32)uds[4];
+    uint8  recordNumber = uds[5];
+
+    Dem_EventIdType     eventId = 0U;
+    Dem_FreezeFrameType frame;
+
+    if (Dem_GetEventIdOfDTC(dtc, &eventId) != E_OK
+        || recordNumber != DCM_FREEZEFRAME_RECORD_NUMBER
+        || Dem_GetFreezeFrameOfEvent(eventId, &frame) != E_OK)
+    {
+        /* DTC 不明・レコード番号不一致・FreezeFrame 未記録 (一度も FAILED していない) */
+        Dcm_SendNegativeResponse(DCM_SID_READ_DTC_INFO, DCM_NRC_REQUEST_OUT_OF_RANGE);
+        return;
+    }
+
+    DET_LOGI(TAG, "19/04 dtc=0x%06lX rec=%u", (unsigned long)dtc, (unsigned)recordNumber);
+
+    Dcm_TxBuf[0]  = 0x59U;                              /* SID 0x19 + 0x40 */
+    Dcm_TxBuf[1]  = DCM_DTC_SUBFUNC_REPORT_SNAPSHOT;
+    Dcm_TxBuf[2]  = (uint8)(dtc >> 16U);
+    Dcm_TxBuf[3]  = (uint8)(dtc >>  8U);
+    Dcm_TxBuf[4]  = (uint8)(dtc);
+    Dcm_TxBuf[5]  = Dem_GetStatusOfEvent(eventId);
+    Dcm_TxBuf[6]  = recordNumber;
+    Dcm_TxBuf[7]  = DCM_FREEZEFRAME_DID_COUNT;
+    Dcm_TxBuf[8]  = (uint8)(DCM_DID_ENGINE_SPEED >> 8U);
+    Dcm_TxBuf[9]  = (uint8)(DCM_DID_ENGINE_SPEED & 0xFFU);
+    Dcm_TxBuf[10] = (uint8)(frame.EngineSpeed >> 8U);
+    Dcm_TxBuf[11] = (uint8)(frame.EngineSpeed & 0xFFU);
+    Dcm_TxBuf[12] = (uint8)(DCM_DID_COOLANT_TEMP >> 8U);
+    Dcm_TxBuf[13] = (uint8)(DCM_DID_COOLANT_TEMP & 0xFFU);
+    Dcm_TxBuf[14] = frame.CoolantTemp;
+    Dcm_TxBuf[15] = (uint8)(DCM_DID_ENGINE_STATE >> 8U);
+    Dcm_TxBuf[16] = (uint8)(DCM_DID_ENGINE_STATE & 0xFFU);
+    Dcm_TxBuf[17] = frame.EngineState;
+    Dcm_TxPdu.SduLength = 18U;
+
+    Dcm_Transmit();
+}
+
+/**
+ * \brief   SID 0x19 subFunc 0x06 reportExtendedDataRecordByDTCNumber を処理する。
+ *
+ * \details 要求された DTC の ExtendedData（確定 FAILED の累積回数）を Dem から
+ *          取得して返す。FreezeFrame（故障時点のスナップショット、18 バイトで
+ *          CanTp の FF+CF が必要）とは異なり、応答は 8 バイトで SF に収まる。
+ *          本実装はレコード番号 0x01 のみ対応する（イベントごとに 1 カウンタ）。
+ *
+ *          要求: [0x19, 0x06, DTC_H, DTC_M, DTC_L, recordNumber]
+ *          応答: [0x59, 0x06, DTC_H, DTC_M, DTC_L, status, recordNumber, occurrenceCounter]
+ *
+ * \param[in]  uds     UDS ペイロード先頭ポインタ。
+ * \param[in]  udsLen  UDS ペイロード長。
+ */
+static void Dcm_HandleReadDtcExtendedData(const uint8* uds, uint8 udsLen)
+{
+    if (udsLen < 6U)
+    {
+        Dcm_SendNegativeResponse(DCM_SID_READ_DTC_INFO, DCM_NRC_CONDITIONS_NOT_CORRECT);
+        return;
+    }
+
+    uint32 dtc          = ((uint32)uds[2] << 16U) | ((uint32)uds[3] << 8U) | (uint32)uds[4];
+    uint8  recordNumber = uds[5];
+
+    Dem_EventIdType eventId = 0U;
+    uint8           occurrenceCounter = 0U;
+
+    if (Dem_GetEventIdOfDTC(dtc, &eventId) != E_OK
+        || recordNumber != DCM_EXTENDED_DATA_RECORD_NUMBER
+        || Dem_GetOccurrenceCounterOfEvent(eventId, &occurrenceCounter) != E_OK)
+    {
+        /* DTC 不明、またはレコード番号不一致 */
+        Dcm_SendNegativeResponse(DCM_SID_READ_DTC_INFO, DCM_NRC_REQUEST_OUT_OF_RANGE);
+        return;
+    }
+
+    DET_LOGI(TAG, "19/06 dtc=0x%06lX rec=%u occurrence=%u",
+             (unsigned long)dtc, (unsigned)recordNumber, (unsigned)occurrenceCounter);
+
+    Dcm_TxBuf[0] = 0x59U;                              /* SID 0x19 + 0x40 */
+    Dcm_TxBuf[1] = DCM_DTC_SUBFUNC_REPORT_EXTDATA;
+    Dcm_TxBuf[2] = (uint8)(dtc >> 16U);
+    Dcm_TxBuf[3] = (uint8)(dtc >>  8U);
+    Dcm_TxBuf[4] = (uint8)(dtc);
+    Dcm_TxBuf[5] = Dem_GetStatusOfEvent(eventId);
+    Dcm_TxBuf[6] = recordNumber;
+    Dcm_TxBuf[7] = occurrenceCounter;
+    Dcm_TxPdu.SduLength = 8U;
+
+    Dcm_Transmit();
+}
+
+/**
+ * \brief   UDS 0x19 ReadDTCInformation のサブ機能をディスパッチする。
+ *
+ * \details 対応サブ機能:
+ *            0x01 reportNumberOfDTCByStatusMask         → Dcm_HandleReadDtcCount()
+ *            0x02 reportDTCByStatusMask                 → Dcm_HandleReadDtcByMask()
+ *            0x04 reportDTCSnapshotRecordByDTCNumber    → Dcm_HandleReadDtcSnapshot()
+ *            0x06 reportExtendedDataRecordByDTCNumber   → Dcm_HandleReadDtcExtendedData()
+ *
+ * \param[in]  uds     UDS ペイロード先頭ポインタ。
+ * \param[in]  udsLen  UDS ペイロード長。
+ */
+static void Dcm_HandleReadDtcInfo(const uint8* uds, uint8 udsLen)
+{
+    if (udsLen < 2U)
+    {
+        Dcm_SendNegativeResponse(DCM_SID_READ_DTC_INFO, DCM_NRC_CONDITIONS_NOT_CORRECT);
+        return;
+    }
+
+    uint8 subFunc = uds[1] & 0x7FU;   /* bit7: suppressPosRsp (本実装では無視) */
+
+    switch (subFunc)
+    {
+    case DCM_DTC_SUBFUNC_REPORT_COUNT:
+        Dcm_HandleReadDtcCount(uds, udsLen);
+        break;
+    case DCM_DTC_SUBFUNC_REPORT_BY_MASK:
+        Dcm_HandleReadDtcByMask(uds, udsLen);
+        break;
+    case DCM_DTC_SUBFUNC_REPORT_SNAPSHOT:
+        Dcm_HandleReadDtcSnapshot(uds, udsLen);
+        break;
+    case DCM_DTC_SUBFUNC_REPORT_EXTDATA:
+        Dcm_HandleReadDtcExtendedData(uds, udsLen);
+        break;
+    default:
+        Dcm_SendNegativeResponse(DCM_SID_READ_DTC_INFO, DCM_NRC_SUB_FUNC_NOT_SUPPORTED);
+        break;
+    }
+}
+
+/* -----------------------------------------------------------------------
+ * 0x22 ReadDataByIdentifier — DID ディスパッチ
+ * ----------------------------------------------------------------------- */
+
+/**
+ * \brief   DID に対応するデータを読み出す。
+ *
+ * \param[in]   did      データ識別子 (DCM_DID_*)。
+ * \param[out]  buf      読み出したデータの格納先。
+ * \param[out]  dataLen  読み出したデータのバイト数。
+ *
+ * \retval  E_OK      正常取得。
+ * \retval  E_NOT_OK  DID 不明またはデータ取得失敗。
+ */
+static Std_ReturnType Dcm_ReadDid(uint16 did, uint8* buf, uint8* dataLen)
+{
+    switch (did)
+    {
+    case DCM_DID_ENGINE_SPEED:
+    {
+        EngineSpeed_t speed = 0U;
+        Rte_Read_SpeedSensor_EngineSpeed(&speed);
+        buf[0]   = (uint8)(speed >> 8U);   /* MSB first (big-endian) */
+        buf[1]   = (uint8)(speed & 0xFFU);
+        *dataLen = 2U;
+        return E_OK;
+    }
+    case DCM_DID_COOLANT_TEMP:
+    {
+        CoolantTemp_t temp = 0U;
+        Rte_Read_TempSensor_CoolantTemp(&temp);
+        buf[0]   = temp;
+        *dataLen = 1U;
+        return E_OK;
+    }
+    case DCM_DID_ENGINE_STATE:
+    {
+        EngineState_t state = ENGINE_STATE_OFF;
+        Rte_Read_EngineStatus_EngineState(&state);
+        buf[0]   = (uint8)state;
+        *dataLen = 1U;
+        return E_OK;
+    }
+    case DCM_DID_TEST_PATTERN:
+    {
+        uint8 i;
+        for (i = 0U; i < DCM_DID_TEST_PATTERN_LENGTH; i++)
+            buf[i] = Dcm_TestPattern[i];
+        *dataLen = DCM_DID_TEST_PATTERN_LENGTH;
+        return E_OK;
+    }
+    default:
+        return E_NOT_OK;
+    }
+}
+
+/**
+ * \brief   UDS 0x22 ReadDataByIdentifier を処理する。
+ *
+ * \details 要求フレームから DID を抽出し、対応するデータを読み出して
+ *          正応答 [0x62, DID_H, DID_L, data...] を返す。
+ *
+ * \param[in]  uds     UDS ペイロード先頭ポインタ。
+ * \param[in]  udsLen  UDS ペイロード長。
+ */
+static void Dcm_HandleReadDataById(const uint8* uds, uint8 udsLen)
+{
+    if (udsLen < 3U)
+    {
+        Dcm_SendNegativeResponse(DCM_SID_READ_DATA, DCM_NRC_CONDITIONS_NOT_CORRECT);
+        return;
+    }
+
+    uint16 did = ((uint16)uds[1] << 8U) | (uint16)uds[2];
+
+    uint8 dataBuf[DCM_DID_TEST_PATTERN_LENGTH];
+    uint8 dataLen = 0U;
+
+    if (Dcm_ReadDid(did, dataBuf, &dataLen) != E_OK)
+    {
+        Dcm_SendNegativeResponse(DCM_SID_READ_DATA, DCM_NRC_REQUEST_OUT_OF_RANGE);
+        return;
+    }
+
+    DET_LOGI(TAG, "22 did=0x%04X len=%u", (unsigned)did, (unsigned)dataLen);
+
+    /* 正応答: [0x62, DID_H, DID_L, data...] */
+    Dcm_TxBuf[0] = 0x62U;                      /* SID + 0x40 */
+    Dcm_TxBuf[1] = (uint8)(did >> 8U);
+    Dcm_TxBuf[2] = (uint8)(did & 0xFFU);
+
+    uint8 i;
+    for (i = 0U; i < dataLen; i++)
+        Dcm_TxBuf[3U + i] = dataBuf[i];
+
+    Dcm_TxPdu.SduLength = (PduLengthType)(3U + dataLen);
+
+    Dcm_Transmit();
+}
+
+/* -----------------------------------------------------------------------
+ * 0x2E WriteDataByIdentifier
+ * ----------------------------------------------------------------------- */
+
+/**
+ * \brief   UDS 0x2E WriteDataByIdentifier を処理する。
+ *
+ * \details DCM_DID_TEST_PATTERN (0x0104, 固定長 DCM_DID_TEST_PATTERN_LENGTH
+ *          バイト) のみ書き込みに対応する。要求ペイロードは
+ *          SID(1)+DID(2)+data(8)=11 バイトとなり CanTp の SF 上限 (7 バイト)
+ *          を超えるため、CanTp_RxIndication() の FF+CF 受信パスが実際に
+ *          動作する（これまで一度も実機を通っていなかったコードパスを
+ *          検証する目的の学習用 DID。実際の車両データではない）。
+ *          0x14 ClearDiagnosticInformation と同じ方針で、extendedSession
+ *          （Dcm_SidSessionTable[] で判定）かつ SecurityAccess Level1
+ *          アンロック済みでなければ NRC 0x33 を返す。
+ *
+ *          要求: [0x2E, DID_H, DID_L, data0..data7]
+ *          応答: [0x6E, DID_H, DID_L]
+ *
+ * \param[in]  uds     UDS ペイロード先頭ポインタ (uds[0]=SID 0x2E)。
+ * \param[in]  udsLen  UDS ペイロード長。
+ */
+static void Dcm_HandleWriteDataById(const uint8* uds, uint8 udsLen)
+{
+    if (Dcm_SecurityLevel == 0U)
+    {
+        Dcm_SendNegativeResponse(DCM_SID_WRITE_DATA, DCM_NRC_SECURITY_ACCESS_DENIED);
+        return;
+    }
+
+    if (udsLen < 3U)
+    {
+        Dcm_SendNegativeResponse(DCM_SID_WRITE_DATA, DCM_NRC_CONDITIONS_NOT_CORRECT);
+        return;
+    }
+
+    uint16 did = ((uint16)uds[1] << 8U) | (uint16)uds[2];
+
+    if (did != DCM_DID_TEST_PATTERN)
+    {
+        Dcm_SendNegativeResponse(DCM_SID_WRITE_DATA, DCM_NRC_REQUEST_OUT_OF_RANGE);
+        return;
+    }
+
+    if (udsLen != (uint8)(3U + DCM_DID_TEST_PATTERN_LENGTH))
+    {
+        Dcm_SendNegativeResponse(DCM_SID_WRITE_DATA, DCM_NRC_INCORRECT_MESSAGE_LENGTH);
+        return;
+    }
+
+    uint8 i;
+    for (i = 0U; i < DCM_DID_TEST_PATTERN_LENGTH; i++)
+        Dcm_TestPattern[i] = uds[3U + i];
+
+    DET_LOGI(TAG, "2E did=0x%04X len=%u (multi-frame request)",
+             (unsigned)did, (unsigned)DCM_DID_TEST_PATTERN_LENGTH);
+
+    /* 正応答: [0x6E, DID_H, DID_L] */
+    Dcm_TxBuf[0] = 0x6EU;               /* SID + 0x40 */
+    Dcm_TxBuf[1] = uds[1];
+    Dcm_TxBuf[2] = uds[2];
+    Dcm_TxPdu.SduLength = 3U;
+
+    Dcm_Transmit();
+}
+
+/* -----------------------------------------------------------------------
+ * 0x2F InputOutputControlByIdentifier
+ * ----------------------------------------------------------------------- */
+
+/**
+ * \brief   DID から対応する Rte ランプ ID を求める。
+ *
+ * \param[in]   did   データ識別子。
+ * \param[out]  lamp  対応する Rte_LampIdType の格納先。
+ *
+ * \retval  E_OK      対応するランプが見つかった。
+ * \retval  E_NOT_OK  DID が RunLamp/FaultLamp/AbsLamp のいずれでもない。
+ */
+static Std_ReturnType Dcm_LampIdOfDid(uint16 did, Rte_LampIdType* lamp)
+{
+    switch (did)
+    {
+    case DCM_DID_RUN_LAMP:   *lamp = RTE_LAMP_RUN;   return E_OK;
+    case DCM_DID_FAULT_LAMP: *lamp = RTE_LAMP_FAULT; return E_OK;
+    case DCM_DID_ABS_LAMP:   *lamp = RTE_LAMP_ABS;   return E_OK;
+    default:                 return E_NOT_OK;
+    }
+}
+
+/**
+ * \brief   UDS 0x2F InputOutputControlByIdentifier を処理する。
+ *
+ * \details 対応 DID: RunLamp(0x0105) / FaultLamp(0x0106) / AbsLamp(0x0107)
+ *          （WarningStatus, CAN 0x210 の Signal Group メンバーと同じ3灯）。
+ *
+ *          controlOptionRecord (ISO 14229-1 Table 209):
+ *            0x00 returnControlToECU  : ASW (App_WarningIndicator) に制御を返す
+ *            0x01 resetToDefault      : デフォルト値(消灯)に固定。制御は診断側が
+ *                                       保持し続け、returnControlToECU まで
+ *                                       ASW の値は無視される
+ *            0x02 freezeCurrentState  : 現在の物理出力値をそのまま固定する
+ *            0x03 shortTermAdjustment : controlState (1 byte, 0/1) の値に固定する
+ *
+ *          いずれの固定 (0x01/0x02/0x03) も、Rte 層で ASW からの SetLevel
+ *          呼び出しを無視させることで実現する（ASW 自身は Dcm の存在を
+ *          一切知らない。Com の ComFilterAlgorithm と同じ「BSW/RTE が実際の
+ *          反映要否を決める」責務分離を、CAN 送信ではなく物理出力の調停に
+ *          適用したもの。詳細は Rte_Call_LedRunning_SetLevel() 等を参照）。
+ *
+ *          セキュリティ方針: 0x14/0x2E とは異なり SecurityAccess は要求しない
+ *          （ダッシュボードランプの一時的な点灯確認のみで、車両制御や NVM
+ *          書き換えを伴わないため、extendedSession のみで許可する設計とした）。
+ *
+ *          要求: [0x2F, DID_H, DID_L, controlOptionRecord, (controlState)]
+ *          応答: [0x6F, DID_H, DID_L, controlOptionRecord, controlStatusRecord]
+ *          controlStatusRecord には固定/復帰後の実際のレベルを 1 バイトで返す。
+ *
+ * \param[in]  uds     UDS ペイロード先頭ポインタ (uds[0]=SID 0x2F)。
+ * \param[in]  udsLen  UDS ペイロード長。
+ */
+static void Dcm_HandleIoControl(const uint8* uds, uint8 udsLen)
+{
+    if (udsLen < 4U)
+    {
+        Dcm_SendNegativeResponse(DCM_SID_IO_CONTROL, DCM_NRC_CONDITIONS_NOT_CORRECT);
+        return;
+    }
+
+    uint16 did           = ((uint16)uds[1] << 8U) | (uint16)uds[2];
+    uint8  controlOption = uds[3];
+
+    Rte_LampIdType lamp;
+    if (Dcm_LampIdOfDid(did, &lamp) != E_OK)
+    {
+        Dcm_SendNegativeResponse(DCM_SID_IO_CONTROL, DCM_NRC_REQUEST_OUT_OF_RANGE);
+        return;
+    }
+
+    uint8 resultLevel = 0U;
+
+    switch (controlOption)
+    {
+    case DCM_IOCTRL_RETURN_CONTROL_TO_ECU:
+        if (udsLen != 4U)
+        {
+            Dcm_SendNegativeResponse(DCM_SID_IO_CONTROL, DCM_NRC_INCORRECT_MESSAGE_LENGTH);
+            return;
+        }
+        (void)Rte_IoControl_Lamp_ReturnControlToEcu(lamp);
+        (void)Rte_IoControl_Lamp_GetCurrentLevel(lamp, &resultLevel);
+        break;
+
+    case DCM_IOCTRL_RESET_TO_DEFAULT:
+        if (udsLen != 4U)
+        {
+            Dcm_SendNegativeResponse(DCM_SID_IO_CONTROL, DCM_NRC_INCORRECT_MESSAGE_LENGTH);
+            return;
+        }
+        (void)Rte_IoControl_Lamp_ResetToDefault(lamp);
+        resultLevel = 0U;
+        break;
+
+    case DCM_IOCTRL_FREEZE_CURRENT_STATE:
+        if (udsLen != 4U)
+        {
+            Dcm_SendNegativeResponse(DCM_SID_IO_CONTROL, DCM_NRC_INCORRECT_MESSAGE_LENGTH);
+            return;
+        }
+        (void)Rte_IoControl_Lamp_FreezeCurrentState(lamp);
+        (void)Rte_IoControl_Lamp_GetCurrentLevel(lamp, &resultLevel);
+        break;
+
+    case DCM_IOCTRL_SHORT_TERM_ADJUSTMENT:
+        if (udsLen != 5U)
+        {
+            Dcm_SendNegativeResponse(DCM_SID_IO_CONTROL, DCM_NRC_INCORRECT_MESSAGE_LENGTH);
+            return;
+        }
+        if (uds[4] != 0U && uds[4] != 1U)
+        {
+            Dcm_SendNegativeResponse(DCM_SID_IO_CONTROL, DCM_NRC_REQUEST_OUT_OF_RANGE);
+            return;
+        }
+        (void)Rte_IoControl_Lamp_ShortTermAdjustment(lamp, uds[4]);
+        resultLevel = uds[4];
+        break;
+
+    default:
+        Dcm_SendNegativeResponse(DCM_SID_IO_CONTROL, DCM_NRC_REQUEST_OUT_OF_RANGE);
+        return;
+    }
+
+    DET_LOGI(TAG, "2F did=0x%04X opt=0x%02X level=%u",
+             (unsigned)did, (unsigned)controlOption, (unsigned)resultLevel);
+
+    /* 正応答: [0x6F, DID_H, DID_L, controlOptionRecord, controlStatusRecord] */
+    Dcm_TxBuf[0] = 0x6FU;               /* SID + 0x40 */
+    Dcm_TxBuf[1] = uds[1];
+    Dcm_TxBuf[2] = uds[2];
+    Dcm_TxBuf[3] = controlOption;
+    Dcm_TxBuf[4] = resultLevel;
+    Dcm_TxPdu.SduLength = 5U;
+
+    Dcm_Transmit();
+}
+
+/* -----------------------------------------------------------------------
+ * 0x28 CommunicationControl
+ * ----------------------------------------------------------------------- */
+
+/**
+ * \brief   通信有効/無効状態を初期状態（enableRxAndTx）へ戻す。
+ *
+ * \details defaultSession への遷移（明示要求・S3 タイムアウト・ECUReset の
+ *          いずれも）で呼ぶ。Dcm_SecurityLock()・Dcm_RoutineAbort() と同じ
+ *          「セッションが変われば診断側の一時状態は破棄する」という方針に
+ *          揃えている。これを怠ると、CommunicationControl で通信を無効化
+ *          したままテスターが切断された場合、ECU が defaultSession に
+ *          戻っても通信不能のまま残ってしまう。
+ */
+static void Dcm_CommControlReset(void)
+{
+    Com_SetCommunicationEnabled(1U, 1U);
+    Nm_SetTxEnabled(1U);
+}
+
+/**
+ * \brief   UDS 0x28 CommunicationControl を処理する。
+ *
+ * \details controlType（サブ機能）で Rx/Tx の有効/無効を、communicationType で
+ *          対象（通常通信=Com / ネットワークマネジメント通信=Nm）を指定する。
+ *          診断通信（CanTp/Dcm 自体）は対象外で本サービスの影響を受けない
+ *          （通信を無効化中でもテスター自身は再有効化できる必要があるため）。
+ *
+ *          対応 controlType（拡張アドレス指定 0x04/0x05 は非対応。本 ECU は
+ *          ゲートウェイではなく単一ネットワークのみのため）:
+ *            0x00 enableRxAndTx           rx=1 tx=1
+ *            0x01 enableRxAndDisableTx    rx=1 tx=0
+ *            0x02 disableRxAndEnableTx    rx=0 tx=1
+ *            0x03 disableRxAndTx          rx=0 tx=0
+ *
+ *          対応 communicationType（サブネット指定は非対応）:
+ *            0x01 normal communication messages（Com へ適用）
+ *            0x02 network management communication messages（Nm へ適用）
+ *            0x03 両方
+ *
+ *          セキュリティ方針: 0x2F と同様に SecurityAccess は要求しない
+ *          （車両制御や NVM 書き換えを伴わないため）。ただし通信そのものを
+ *          止める操作的な影響の大きさから、0x2F/0x31 と同じく extendedSession
+ *          限定とする（Dcm_SidSessionTable[] 参照）。
+ *
+ *          要求: [0x28, controlType, communicationType]
+ *          応答: [0x68, controlType]
+ *
+ * \param[in]  uds     UDS ペイロード先頭ポインタ (uds[0]=SID 0x28)。
+ * \param[in]  udsLen  UDS ペイロード長。
+ */
+static void Dcm_HandleCommunicationControl(const uint8* uds, uint8 udsLen)
+{
+    if (udsLen != 3U)
+    {
+        Dcm_SendNegativeResponse(DCM_SID_COMM_CONTROL, DCM_NRC_INCORRECT_MESSAGE_LENGTH);
+        return;
+    }
+
+    /* bit7: suppressPosRspMsgIndicationBit (本実装では無視。0x10 と同じ方針) */
+    uint8 controlType     = uds[1] & 0x7FU;
+    uint8 communicationType = uds[2];
+
+    if (controlType > DCM_COMMCTRL_DISABLE_RX_TX)
+    {
+        Dcm_SendNegativeResponse(DCM_SID_COMM_CONTROL, DCM_NRC_SUB_FUNC_NOT_SUPPORTED);
+        return;
+    }
+    if (communicationType != DCM_COMMTYPE_NORMAL
+        && communicationType != DCM_COMMTYPE_NM
+        && communicationType != DCM_COMMTYPE_NORMAL_AND_NM)
+    {
+        Dcm_SendNegativeResponse(DCM_SID_COMM_CONTROL, DCM_NRC_REQUEST_OUT_OF_RANGE);
+        return;
+    }
+
+    const uint8 rxEnabled = (controlType == DCM_COMMCTRL_ENABLE_RX_TX
+                              || controlType == DCM_COMMCTRL_ENABLE_RX_DISABLE_TX) ? 1U : 0U;
+    const uint8 txEnabled = (controlType == DCM_COMMCTRL_ENABLE_RX_TX
+                              || controlType == DCM_COMMCTRL_DISABLE_RX_ENABLE_TX) ? 1U : 0U;
+
+    if ((communicationType & DCM_COMMTYPE_NORMAL) != 0U)
+        Com_SetCommunicationEnabled(rxEnabled, txEnabled);
+    if ((communicationType & DCM_COMMTYPE_NM) != 0U)
+        Nm_SetTxEnabled(txEnabled);
+
+    DET_LOGI(TAG, "28 controlType=0x%02X commType=0x%02X",
+             (unsigned)controlType, (unsigned)communicationType);
+
+    /* 正応答: [0x68, controlType] */
+    Dcm_TxBuf[0] = 0x68U;               /* SID + 0x40 */
+    Dcm_TxBuf[1] = controlType;
+    Dcm_TxPdu.SduLength = 2U;
+
+    Dcm_Transmit();
+}
+
+/* -----------------------------------------------------------------------
+ * 0x27 SecurityAccess
+ * ----------------------------------------------------------------------- */
+
+/**
+ * \brief   seed から期待される key を計算する。
+ *
+ * \details 学習用の単純な固定 XOR マスクによる変換。
+ *          実際の量産 ECU は暗号学的アルゴリズムや OEM 固有の非公開アルゴリズムを
+ *          用いるため、本実装をそのまま実運用に転用しないこと。
+ *
+ * \param[in]  seed  requestSeed で発行した seed 値。
+ * \return     対応する期待 key 値。
+ */
+static uint16 Dcm_ComputeSecurityKey(uint16 seed)
+{
+    return (uint16)(seed ^ DCM_SECURITY_KEY_MASK);
+}
+
+/**
+ * \brief   SecurityAccess Level1 を再ロックする。
+ *
+ * \details defaultSession への遷移（明示要求・S3 タイムアウト・ECUReset の
+ *          いずれも）で呼ぶ。連続失敗回数・ロックアウト解除時刻はあえて
+ *          リセットしない（セッション往復によるブルートフォース対策の
+ *          回避を防ぐため）。
+ */
+static void Dcm_SecurityLock(void)
+{
+    if (Dcm_SecurityLevel != 0U)
+        DET_LOGI(TAG, "27 Security locked (session->Default)");
+
+    Dcm_SecurityLevel       = 0U;
+    Dcm_SecuritySeedPending = 0U;
+}
+
+/**
+ * \brief   SID 0x27 subFunc 0x01 requestSeed を処理する。
+ *
+ * \details Locked 中はロックアウト中でなければ新しい seed (millis() 由来) を発行し、
+ *          「seed 発行済み・key 未受信」状態にする。ロックアウト中は NRC 0x37。
+ *          Unlocked 済みの場合は ISO 14229-1 の作法に従い allZeroSeed
+ *          (seed=0x0000) を返し、sendKey が不要であることを示す。
+ *
+ * \param[in]  subFunc  要求されたサブ機能 (0x01、suppressPosRsp ビット除去済み)。
+ */
+static void Dcm_HandleSecurityRequestSeed(uint8 subFunc)
+{
+    if (Dcm_SecurityLevel != 0U)
+    {
+        DET_LOGI(TAG, "27/%02X already unlocked -> allZeroSeed", (unsigned)subFunc);
+
+        Dcm_TxBuf[0] = 0x67U;               /* SID + 0x40 */
+        Dcm_TxBuf[1] = subFunc;
+        Dcm_TxBuf[2] = 0x00U;
+        Dcm_TxBuf[3] = 0x00U;
+        Dcm_TxPdu.SduLength = 4U;
+
+        Dcm_SecuritySeedPending = 0U;
+        Dcm_Transmit();
+        return;
+    }
+
+    if (Dcm_SecurityLockoutActive != 0U)
+    {
+        if ((millis() - Dcm_SecurityLockoutStartMs) < DCM_SECURITY_DELAY_MS)
+        {
+            Dcm_SendNegativeResponse(DCM_SID_SECURITY_ACCESS, DCM_NRC_REQUIRED_TIME_DELAY_NOT_EXPIRED);
+            return;
+        }
+        Dcm_SecurityLockoutActive = 0U;  /* 待機時間経過、ロックアウト解除 */
+    }
+
+    Dcm_SecuritySeed        = (uint16)millis();
+    Dcm_SecuritySeedPending = 1U;
+
+    DET_LOGI(TAG, "27/%02X seed=0x%04X", (unsigned)subFunc, (unsigned)Dcm_SecuritySeed);
+
+    /* 正応答: [0x67, subFunc, seedH, seedL] */
+    Dcm_TxBuf[0] = 0x67U;
+    Dcm_TxBuf[1] = subFunc;
+    Dcm_TxBuf[2] = (uint8)(Dcm_SecuritySeed >> 8U);
+    Dcm_TxBuf[3] = (uint8)(Dcm_SecuritySeed & 0xFFU);
+    Dcm_TxPdu.SduLength = 4U;
+
+    Dcm_Transmit();
+}
+
+/**
+ * \brief   SID 0x27 subFunc 0x02 sendKey を処理する。
+ *
+ * \details 直前の requestSeed で発行した seed から期待 key を計算し、
+ *          受信した key と比較する。requestSeed なしでの sendKey は
+ *          NRC 0x24 requestSequenceError。鍵不一致は NRC 0x35、
+ *          DCM_SECURITY_MAX_ATTEMPTS 回連続失敗で NRC 0x36 を返し
+ *          DCM_SECURITY_DELAY_MS の間ロックアウトする。
+ *          1 つの seed は 1 回の sendKey でのみ有効（再試行には新しい
+ *          requestSeed が必要）。
+ *
+ * \param[in]  subFunc  要求されたサブ機能 (0x02、suppressPosRsp ビット除去済み)。
+ * \param[in]  uds      UDS ペイロード先頭ポインタ ([0x27, 0x02, keyH, keyL])。
+ * \param[in]  udsLen   UDS ペイロード長。
+ */
+static void Dcm_HandleSecuritySendKey(uint8 subFunc, const uint8* uds, uint8 udsLen)
+{
+    if (udsLen < 4U)
+    {
+        Dcm_SendNegativeResponse(DCM_SID_SECURITY_ACCESS, DCM_NRC_CONDITIONS_NOT_CORRECT);
+        return;
+    }
+
+    if (Dcm_SecuritySeedPending == 0U)
+    {
+        Dcm_SendNegativeResponse(DCM_SID_SECURITY_ACCESS, DCM_NRC_REQUEST_SEQUENCE_ERROR);
+        return;
+    }
+    Dcm_SecuritySeedPending = 0U;  /* この seed は 1 回限り; 再試行は requestSeed からやり直す */
+
+    uint16 key      = ((uint16)uds[2] << 8U) | (uint16)uds[3];
+    uint16 expected = Dcm_ComputeSecurityKey(Dcm_SecuritySeed);
+
+    if (key != expected)
+    {
+        Dcm_SecurityAttemptCount++;
+        DET_LOGW(TAG, "27/%02X invalid key attempt=%u", (unsigned)subFunc, (unsigned)Dcm_SecurityAttemptCount);
+
+        if (Dcm_SecurityAttemptCount >= DCM_SECURITY_MAX_ATTEMPTS)
+        {
+            Dcm_SecurityLockoutActive  = 1U;
+            Dcm_SecurityLockoutStartMs = millis();
+            Dcm_SecurityAttemptCount   = 0U;
+            DET_LOGW(TAG, "27 lockout %lums", DCM_SECURITY_DELAY_MS);
+            Dcm_SendNegativeResponse(DCM_SID_SECURITY_ACCESS, DCM_NRC_EXCEEDED_NUM_ATTEMPTS);
+        }
+        else
+        {
+            Dcm_SendNegativeResponse(DCM_SID_SECURITY_ACCESS, DCM_NRC_INVALID_KEY);
+        }
+        return;
+    }
+
+    Dcm_SecurityLevel        = 1U;
+    Dcm_SecurityAttemptCount = 0U;
+    DET_LOGI(TAG, "27/%02X unlocked", (unsigned)subFunc);
+
+    /* 正応答: [0x67, subFunc] */
+    Dcm_TxBuf[0] = 0x67U;
+    Dcm_TxBuf[1] = subFunc;
+    Dcm_TxPdu.SduLength = 2U;
+
+    Dcm_Transmit();
+}
+
+/**
+ * \brief   UDS 0x27 SecurityAccess のサブ機能をディスパッチする。
+ *
+ * \details extendedSession 限定であることは Dcm_ComIndication の
+ *          Dcm_SidSessionTable[] チェックで一元的に保証済みのため、
+ *          本関数ではセッション判定を行わない。
+ *
+ * \param[in]  uds     UDS ペイロード先頭ポインタ (uds[0]=SID 0x27)。
+ * \param[in]  udsLen  UDS ペイロード長。
+ */
+static void Dcm_HandleSecurityAccess(const uint8* uds, uint8 udsLen)
+{
+    if (udsLen < 2U)
+    {
+        Dcm_SendNegativeResponse(DCM_SID_SECURITY_ACCESS, DCM_NRC_CONDITIONS_NOT_CORRECT);
+        return;
+    }
+
+    uint8 subFunc = uds[1] & 0x7FU;   /* bit7: suppressPosRsp (本実装では無視) */
+
+    switch (subFunc)
+    {
+    case DCM_SEC_SUBFUNC_REQUEST_SEED:
+        Dcm_HandleSecurityRequestSeed(subFunc);
+        break;
+    case DCM_SEC_SUBFUNC_SEND_KEY:
+        Dcm_HandleSecuritySendKey(subFunc, uds, udsLen);
+        break;
+    default:
+        Dcm_SendNegativeResponse(DCM_SID_SECURITY_ACCESS, DCM_NRC_SUB_FUNC_NOT_SUPPORTED);
+        break;
+    }
+}
+
+/* -----------------------------------------------------------------------
+ * 0x31 RoutineControl
+ * ----------------------------------------------------------------------- */
+
+/**
+ * \brief   実行中・完了済みの RoutineControl ルーチンを破棄し IDLE に戻す。
+ *
+ * \details defaultSession への遷移（明示要求・S3 タイムアウト・ECUReset）から
+ *          呼ぶ。Dcm_SecurityLock() と同じ「セッションが変われば診断側の
+ *          一時状態は破棄する」という方針に揃えている。
+ */
+static void Dcm_RoutineAbort(void)
+{
+    if (Dcm_RoutineState != DCM_ROUTINE_STATE_IDLE)
+        DET_LOGI(TAG, "31 EngineHealthCheck aborted (session change)");
+
+    Dcm_RoutineState = DCM_ROUTINE_STATE_IDLE;
+}
+
+/**
+ * \brief   SID 0x31 subFunc 0x01 startRoutine を処理する。
+ *
+ * \details IDLE/COMPLETED から RUNNING へ遷移し、開始時刻を記録する。
+ *          RUNNING 中の再要求は NRC 0x22 conditionsNotCorrect
+ *          （多重起動は許可しない）。
+ *
+ * \param[in]  rid  要求された RoutineID（呼び出し前に対応 RID であることを確認済み）。
+ */
+static void Dcm_HandleRoutineStart(uint16 rid)
+{
+    if (Dcm_RoutineState == DCM_ROUTINE_STATE_RUNNING)
+    {
+        Dcm_SendNegativeResponse(DCM_SID_ROUTINE_CONTROL, DCM_NRC_CONDITIONS_NOT_CORRECT);
+        return;
+    }
+
+    Dcm_RoutineState   = DCM_ROUTINE_STATE_RUNNING;
+    Dcm_RoutineStartMs = millis();
+
+    DET_LOGI(TAG, "31/01 EngineHealthCheck started");
+
+    /* 正応答: [0x71, 0x01, RID_H, RID_L] */
+    Dcm_TxBuf[0] = 0x71U;               /* SID + 0x40 */
+    Dcm_TxBuf[1] = DCM_ROUTINE_SUBFUNC_START;
+    Dcm_TxBuf[2] = (uint8)(rid >> 8U);
+    Dcm_TxBuf[3] = (uint8)(rid & 0xFFU);
+    Dcm_TxPdu.SduLength = 4U;
+
+    Dcm_Transmit();
+}
+
+/**
+ * \brief   SID 0x31 subFunc 0x02 stopRoutine を処理する。
+ *
+ * \details RUNNING/COMPLETED を IDLE に戻す。IDLE で呼ぶと
+ *          NRC 0x24 requestSequenceError（開始していないものは停止できない）。
+ *
+ * \param[in]  rid  要求された RoutineID。
+ */
+static void Dcm_HandleRoutineStop(uint16 rid)
+{
+    if (Dcm_RoutineState == DCM_ROUTINE_STATE_IDLE)
+    {
+        Dcm_SendNegativeResponse(DCM_SID_ROUTINE_CONTROL, DCM_NRC_REQUEST_SEQUENCE_ERROR);
+        return;
+    }
+
+    Dcm_RoutineState = DCM_ROUTINE_STATE_IDLE;
+
+    DET_LOGI(TAG, "31/02 EngineHealthCheck stopped");
+
+    /* 正応答: [0x71, 0x02, RID_H, RID_L] */
+    Dcm_TxBuf[0] = 0x71U;
+    Dcm_TxBuf[1] = DCM_ROUTINE_SUBFUNC_STOP;
+    Dcm_TxBuf[2] = (uint8)(rid >> 8U);
+    Dcm_TxBuf[3] = (uint8)(rid & 0xFFU);
+    Dcm_TxPdu.SduLength = 4U;
+
+    Dcm_Transmit();
+}
+
+/**
+ * \brief   SID 0x31 subFunc 0x03 requestRoutineResults を処理する。
+ *
+ * \details IDLE で呼ぶと NRC 0x24 requestSequenceError（未開始）。
+ *          RUNNING 中は routineStatusRecord=[DCM_ROUTINE_RESULT_RUNNING] を返す
+ *          （結果はまだ確定していない。Dcm_MainFunction() が完了させるまで
+ *          再度ポーリングする必要がある）。COMPLETED なら
+ *          routineStatusRecord=[DCM_ROUTINE_RESULT_COMPLETED, pass/fail] を返す。
+ *          COMPLETED の結果は次の startRoutine まで何度でも取得できる。
+ *
+ * \param[in]  rid  要求された RoutineID。
+ */
+static void Dcm_HandleRoutineRequestResults(uint16 rid)
+{
+    if (Dcm_RoutineState == DCM_ROUTINE_STATE_IDLE)
+    {
+        Dcm_SendNegativeResponse(DCM_SID_ROUTINE_CONTROL, DCM_NRC_REQUEST_SEQUENCE_ERROR);
+        return;
+    }
+
+    Dcm_TxBuf[0] = 0x71U;
+    Dcm_TxBuf[1] = DCM_ROUTINE_SUBFUNC_REQUEST_RESULTS;
+    Dcm_TxBuf[2] = (uint8)(rid >> 8U);
+    Dcm_TxBuf[3] = (uint8)(rid & 0xFFU);
+
+    if (Dcm_RoutineState == DCM_ROUTINE_STATE_RUNNING)
+    {
+        DET_LOGI(TAG, "31/03 EngineHealthCheck still running");
+        Dcm_TxBuf[4] = DCM_ROUTINE_RESULT_RUNNING;
+        Dcm_TxPdu.SduLength = 5U;
+    }
+    else /* DCM_ROUTINE_STATE_COMPLETED */
+    {
+        DET_LOGI(TAG, "31/03 EngineHealthCheck result=%u", (unsigned)Dcm_RoutineResult);
+        Dcm_TxBuf[4] = DCM_ROUTINE_RESULT_COMPLETED;
+        Dcm_TxBuf[5] = Dcm_RoutineResult;
+        Dcm_TxPdu.SduLength = 6U;
+    }
+
+    Dcm_Transmit();
+}
+
+/**
+ * \brief   UDS 0x31 RoutineControl のサブ機能をディスパッチする。
+ *
+ * \details extendedSession 限定であることは Dcm_ComIndication の
+ *          Dcm_SidSessionTable[] チェックで一元的に保証済みのため、
+ *          本関数ではセッション判定を行わない。対応 RID は
+ *          DCM_RID_ENGINE_HEALTH_CHECK (0x0203) のみ。
+ *
+ * \param[in]  uds     UDS ペイロード先頭ポインタ (uds[0]=SID 0x31)。
+ * \param[in]  udsLen  UDS ペイロード長。
+ */
+static void Dcm_HandleRoutineControl(const uint8* uds, uint8 udsLen)
+{
+    if (udsLen < 4U)
+    {
+        Dcm_SendNegativeResponse(DCM_SID_ROUTINE_CONTROL, DCM_NRC_CONDITIONS_NOT_CORRECT);
+        return;
+    }
+
+    uint8  subFunc = uds[1] & 0x7FU;   /* bit7: suppressPosRsp (本実装では無視) */
+    uint16 rid     = ((uint16)uds[2] << 8U) | (uint16)uds[3];
+
+    if (rid != DCM_RID_ENGINE_HEALTH_CHECK)
+    {
+        Dcm_SendNegativeResponse(DCM_SID_ROUTINE_CONTROL, DCM_NRC_REQUEST_OUT_OF_RANGE);
+        return;
+    }
+
+    switch (subFunc)
+    {
+    case DCM_ROUTINE_SUBFUNC_START:
+        Dcm_HandleRoutineStart(rid);
+        break;
+    case DCM_ROUTINE_SUBFUNC_STOP:
+        Dcm_HandleRoutineStop(rid);
+        break;
+    case DCM_ROUTINE_SUBFUNC_REQUEST_RESULTS:
+        Dcm_HandleRoutineRequestResults(rid);
+        break;
+    default:
+        Dcm_SendNegativeResponse(DCM_SID_ROUTINE_CONTROL, DCM_NRC_SUB_FUNC_NOT_SUPPORTED);
+        break;
+    }
+}
+
+/* -----------------------------------------------------------------------
+ * 0x3E TesterPresent
+ * ----------------------------------------------------------------------- */
+
+/**
+ * \brief   UDS 0x3E TesterPresent を処理する。
+ *
+ * \details S3 タイマをリセットする (Dcm_ComIndication で全 SID 共通リセット済みのため
+ *          本関数では追加処理不要)。subFunction は ISO 14229-1 の
+ *          zeroSubFunction (0x00、bit7 は suppressPosRspMsgIndicationBit) のみ
+ *          有効で、それ以外は NRC 0x12 (subFunctionNotSupported) を返す
+ *          （本ファイルの他サービスと同じ検証パターン）。
+ *          正応答 [0x7E, subFunc] を返す。
+ *
+ * \param[in]  uds     UDS ペイロード先頭ポインタ。
+ * \param[in]  udsLen  UDS ペイロード長。
+ */
+static void Dcm_HandleTesterPresent(const uint8* uds, uint8 udsLen)
+{
+    if (udsLen < 2U)
+    {
+        Dcm_SendNegativeResponse(DCM_SID_TESTER_PRESENT, DCM_NRC_INCORRECT_MESSAGE_LENGTH);
+        return;
+    }
+
+    uint8 subFunc = uds[1] & 0x7FU;   /* bit7 = suppressPosRspMsgIndicationBit */
+
+    if (subFunc != 0x00U)   /* zeroSubFunction 以外は不正 */
+    {
+        Dcm_SendNegativeResponse(DCM_SID_TESTER_PRESENT, DCM_NRC_SUB_FUNC_NOT_SUPPORTED);
+        return;
+    }
+
+    DET_LOGI(TAG, "3E TesterPresent");
+
+    /* 正応答: [0x7E, subFunc] */
+    Dcm_TxBuf[0] = 0x7EU;               /* SID + 0x40 */
+    Dcm_TxBuf[1] = subFunc;
+    Dcm_TxPdu.SduLength = 2U;
+
+    Dcm_Transmit();
+}
+
+/* -----------------------------------------------------------------------
+ * SID × セッション許可テーブル (AUTOSAR DcmDspSessionRow に相当)
+ * ----------------------------------------------------------------------- */
+
+/** SID ごとに許可されるセッションを表す 1 行。 */
+typedef struct
+{
+    uint8 Sid;
+    uint8 AllowedSessionMask;  /**< DCM_SESSION_MASK_* の組み合わせ */
+} Dcm_SidSessionRowType;
+
+/** テーブルに掲載のない SID はセッション制約なし（全セッションで許可）とみなす。
+ *  DTC 履歴の消去 (0x14)・セキュリティ認証 (0x27)・データ書き込み (0x2E) のみ、
+ *  誤操作・悪用の影響が大きいため extendedSession 限定とする学習用の最小構成。
+ *  0x2F (IOControl) も診断専用の一時的な出力制御であり通常操作ではないため
+ *  extendedSession 限定とするが、車両制御や NVM 書き換えを伴わないため
+ *  SecurityAccess までは要求しない（0x14/0x2E との保護レベルの違いを
+ *  意図的に設けている）。0x31 (RoutineControl) も同様の理由
+ *  （EngineHealthCheck はセンサ値を読むだけで NVM 書き換え・車両制御を
+ *  伴わない）で extendedSession 限定・SecurityAccess 不要とする。
+ *  0x28 (CommunicationControl) も同様に extendedSession 限定・SecurityAccess
+ *  不要とする（通信そのものを止める操作的な影響はあるが、車両制御や NVM
+ *  書き換えは伴わないため 0x2F/0x31 と同じ保護レベル）。
+ *  実際の AUTOSAR では DcmDspSessionRow がサービス・サブ機能単位で
+ *  この表をコンフィギュレーションツールから生成する。 */
+static const Dcm_SidSessionRowType Dcm_SidSessionTable[] =
+{
+    { DCM_SID_CLEAR_DTC,        DCM_SESSION_MASK_EXTENDED },
+    { DCM_SID_SECURITY_ACCESS,  DCM_SESSION_MASK_EXTENDED },
+    { DCM_SID_WRITE_DATA,       DCM_SESSION_MASK_EXTENDED },
+    { DCM_SID_IO_CONTROL,       DCM_SESSION_MASK_EXTENDED },
+    { DCM_SID_COMM_CONTROL,     DCM_SESSION_MASK_EXTENDED },
+    { DCM_SID_ROUTINE_CONTROL,  DCM_SESSION_MASK_EXTENDED },
+};
+
+/**
+ * \brief   SID が現在のセッションで許可されているかを判定する。
+ *
+ * \details Dcm_SidSessionTable[] を先頭から探索し、一致する行があれば
+ *          AllowedSessionMask と現在のセッションのビットを照合する。
+ *          一致する行がなければセッション制約なし（常に許可）として扱う。
+ *
+ * \param[in]  sid      判定対象の UDS サービス ID。
+ * \param[in]  session  現在のセッション (DCM_SESSION_DEFAULT / _EXTENDED)。
+ *
+ * \retval  1  現在のセッションで許可されている。
+ * \retval  0  現在のセッションでは許可されない。
+ */
+static uint8 Dcm_IsServiceAllowedInSession(uint8 sid, uint8 session)
+{
+    const uint8 sessionMask = (session == DCM_SESSION_EXTENDED)
+                               ? DCM_SESSION_MASK_EXTENDED
+                               : DCM_SESSION_MASK_DEFAULT;
+    const uint8 rowCount = (uint8)(sizeof(Dcm_SidSessionTable) / sizeof(Dcm_SidSessionTable[0]));
+    uint8 i;
+
+    for (i = 0U; i < rowCount; i++)
+    {
+        if (Dcm_SidSessionTable[i].Sid == sid)
+        {
+            return ((Dcm_SidSessionTable[i].AllowedSessionMask & sessionMask) != 0U) ? 1U : 0U;
+        }
+    }
+
+    return 1U;  /* テーブル未掲載 = 制約なし */
+}
+
+/* -----------------------------------------------------------------------
+ * Dcm_ComIndication — CanTp から呼び出されるエントリポイント
+ * ----------------------------------------------------------------------- */
+
+/**
+ * \brief   CanTp から配信された UDS ペイロードを処理する。
+ *
+ * \details CanTp が ISO 15765-2 トランスポート層を処理済みであるため、
+ *          PduInfoPtr には PCI バイトを含まない生 UDS ペイロードが格納されている。
+ *          先頭バイト (uds[0]) が UDS サービス ID (SID) となる。
+ *
+ * \param[in]  RxPduId     受信 PDU ID（未使用; CanTp からの単一チャネル固定）。
+ * \param[in]  PduInfoPtr  組立済み UDS ペイロードへのポインタ。NULL 禁止。
+ *
+ * \ServiceID      {0xF0}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void Dcm_ComIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
+{
+    (void)RxPduId;
+
+    if (PduInfoPtr == NULL || PduInfoPtr->SduDataPtr == NULL
+        || PduInfoPtr->SduLength == 0U)
+        return;
+
+    /* CanTp が PCI を除去済み: 先頭バイトは UDS SID */
+    const uint8* uds    = PduInfoPtr->SduDataPtr;
+    uint8        udsLen = (uint8)PduInfoPtr->SduLength;
+    uint8        sid    = uds[0];
+
+    /* 診断要求を受信した時点で S3 タイマをリセットする（NRC になる要求も対象） */
+    Dcm_LastActivityMs = millis();
+
+    DET_LOGI(TAG, "req SID=0x%02X", (unsigned)sid);
+
+    /* SID × セッション許可チェック (Dcm_SidSessionTable[]) を全 SID 共通で先に行う。
+     * 各ハンドラ個別の特例チェックに分散させず、ここで一元的に拒否する。 */
+    if (Dcm_IsServiceAllowedInSession(sid, Dcm_CurrentSession) == 0U)
+    {
+        Dcm_SendNegativeResponse(sid, DCM_NRC_SERVICE_NOT_SUPPORTED_IN_SESSION);
+        return;
+    }
+
+    /* --- UDS サービスディスパッチ --- */
+    switch (sid)
+    {
+    case DCM_SID_SESSION_CTRL:
+        Dcm_HandleSessionControl(uds, udsLen);
+        break;
+    case DCM_SID_ECU_RESET:
+        Dcm_HandleEcuReset(uds, udsLen);
+        break;
+    case DCM_SID_CLEAR_DTC:
+        Dcm_HandleClearDtc(uds, udsLen);
+        break;
+    case DCM_SID_READ_DTC_INFO:
+        Dcm_HandleReadDtcInfo(uds, udsLen);
+        break;
+    case DCM_SID_READ_DATA:
+        Dcm_HandleReadDataById(uds, udsLen);
+        break;
+    case DCM_SID_WRITE_DATA:
+        Dcm_HandleWriteDataById(uds, udsLen);
+        break;
+    case DCM_SID_IO_CONTROL:
+        Dcm_HandleIoControl(uds, udsLen);
+        break;
+    case DCM_SID_COMM_CONTROL:
+        Dcm_HandleCommunicationControl(uds, udsLen);
+        break;
+    case DCM_SID_ROUTINE_CONTROL:
+        Dcm_HandleRoutineControl(uds, udsLen);
+        break;
+    case DCM_SID_SECURITY_ACCESS:
+        Dcm_HandleSecurityAccess(uds, udsLen);
+        break;
+    case DCM_SID_TESTER_PRESENT:
+        Dcm_HandleTesterPresent(uds, udsLen);
+        break;
+    default:
+        Dcm_SendNegativeResponse(sid, DCM_NRC_SERVICE_NOT_SUPPORTED);
+        break;
+    }
+}

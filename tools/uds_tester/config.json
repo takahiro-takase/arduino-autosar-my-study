@@ -1,0 +1,146 @@
+{
+    "can": {
+        "interface": "gs_usb",
+        "channel": 0,
+        "bitrate": 500000
+    },
+    "buttons": [
+        { "type": "group_header", "label": "メータECU" },
+
+        { "label": "NM\n(0x400)", "type": "rx_monitor",
+          "can_id": "0x400", "decode": "nm_status" },
+
+        { "label": "EngineStatus\n(0x200)", "type": "rx_monitor",
+          "can_id": "0x200", "decode": "engine_state" },
+
+        { "label": "WarningStatus\n(0x210)", "type": "rx_monitor",
+          "can_id": "0x210", "decode": "warning_status" },
+
+        { "type": "group_header", "label": "周辺ECU" },
+
+        { "label": "EngineInfo\n(0x100)", "type": "can_frame", "can_id": "0x100",
+          "data": ["0x05", "0xDC", "0x50", "0x80"],
+          "e2e": { "data_id": 256, "frame_length": 6, "crc_offset": 0, "counter_offset": 1, "payload_offset": 2 },
+          "presets": [
+              { "label": "1500rpm / 80°C / ON",    "data": ["0x05", "0xDC", "0x50", "0x80"] },
+              { "label": "5000rpm / 100°C / ON",   "data": ["0x13", "0x88", "0x64", "0x80"] },
+              { "label": "エンジン停止 / 20°C / OFF", "data": ["0x00", "0x00", "0x14", "0x00"] }
+          ]
+        },
+        { "label": "AbsInfo\n(0x110)", "type": "can_frame", "can_id": "0x110",
+          "data": ["0x17", "0x70", "0x00"],
+          "e2e": { "data_id": 272, "frame_length": 5, "crc_offset": 0, "counter_offset": 1, "payload_offset": 2 },
+          "presets": [
+              { "label": "60km/h 正常",    "data": ["0x17", "0x70", "0x00"] },
+              { "label": "60km/h ABS作動", "data": ["0x17", "0x70", "0xC0"] }
+          ]
+        },
+
+        { "type": "group_header", "label": "テスター" },
+
+        { "label": "Session Control\n(0x10)", "type": "raw",
+          "payload": ["0x02", "0x10", "0x01"],
+          "presets": [
+              { "label": "Default Session (0x01)", "payload": ["0x02", "0x10", "0x01"] },
+              { "label": "Extended Session (0x03)", "payload": ["0x02", "0x10", "0x03"] }
+          ]
+        },
+        { "label": "ECU Reset\n(0x11)", "type": "raw",
+          "payload": ["0x02", "0x11", "0x01"],
+          "presets": [
+              { "label": "Hard reset (0x01)", "payload": ["0x02", "0x11", "0x01"] },
+              { "label": "Soft reset (0x03)", "payload": ["0x02", "0x11", "0x03"] }
+          ]
+        },
+        { "label": "CommunicationControl\n(0x28)", "type": "raw",
+          "payload": ["0x03", "0x28", "0x00", "0x01"],
+          "presets": [
+              { "label": "enableRxAndTx / normal (00/01)",       "payload": ["0x03", "0x28", "0x00", "0x01"] },
+              { "label": "disableRxAndTx / normal (03/01)",      "payload": ["0x03", "0x28", "0x03", "0x01"] },
+              { "label": "enableRxAndTx / normal+NM (00/03)",    "payload": ["0x03", "0x28", "0x00", "0x03"] },
+              { "label": "disableRxAndTx / normal+NM (03/03)",   "payload": ["0x03", "0x28", "0x03", "0x03"] }
+          ]
+        },
+        { "label": "SecurityAccess Lv1\nStep1: Seed要求", "type": "security_seed",
+          "payload": ["0x02", "0x27", "0x01"] },
+        { "label": "SecurityAccess Lv1\nStep2: Key送信", "type": "security_key",
+          "payload": ["0x04", "0x27", "0x02", "0x00", "0x00"] },
+        { "label": "Clear All DTC\n(0x14)", "type": "raw",
+          "payload": ["0x04", "0x14", "0xFF", "0xFF", "0xFF"] },
+        { "label": "DTC 件数取得\n(0x19/01)", "type": "raw",
+          "payload": ["0x03", "0x19", "0x01", "0xFF"],
+          "presets": [
+              { "label": "全件 (0xFF)", "payload": ["0x03", "0x19", "0x01", "0xFF"] },
+              { "label": "Active only (0x08)", "payload": ["0x03", "0x19", "0x01", "0x08"] }
+          ]
+        },
+        { "label": "DTC 一覧取得\n(0x19/02)", "type": "raw",
+          "payload": ["0x03", "0x19", "0x02", "0xFF"],
+          "presets": [
+              { "label": "全件 (0xFF)", "payload": ["0x03", "0x19", "0x02", "0xFF"] },
+              { "label": "Active only (0x08)", "payload": ["0x03", "0x19", "0x02", "0x08"] }
+          ]
+        },
+        { "label": "FreezeFrame取得\n(0x19/04)", "type": "raw",
+          "payload": ["0x06", "0x19", "0x04", "0x00", "0x01", "0x01", "0x01"] },
+        { "label": "ExtendedData取得\n(0x19/06)", "type": "raw",
+          "payload": ["0x06", "0x19", "0x06", "0x00", "0x01", "0x01", "0x01"] },
+        { "label": "Read DID\n(0x22)", "type": "raw",
+          "payload": ["0x03", "0x22", "0x01", "0x01"],
+          "presets": [
+              { "label": "EngineSpeed   (DID 0101)", "payload": ["0x03", "0x22", "0x01", "0x01"] },
+              { "label": "CoolantTemp   (DID 0102)", "payload": ["0x03", "0x22", "0x01", "0x02"] },
+              { "label": "EngineState   (DID 0103)", "payload": ["0x03", "0x22", "0x01", "0x03"] },
+              { "label": "TestPattern   (DID 0104)", "payload": ["0x03", "0x22", "0x01", "0x04"] }
+          ]
+        },
+        { "label": "Write TestPattern\n(0x2E 複数フレーム)", "type": "multiframe",
+          "payload": ["0x2E", "0x01", "0x04", "0x11", "0x22", "0x33", "0x44", "0x55", "0x66", "0x77", "0x88"] },
+        { "label": "Tester Present\n(0x3E/00)", "type": "raw",
+          "payload": ["0x02", "0x3E", "0x00"] },
+
+        { "type": "group_header", "label": "ランプ IOControl (0x2F)" },
+
+        { "label": "RunLamp IOControl\n(DID 0105)", "type": "raw",
+          "payload": ["0x04", "0x2F", "0x01", "0x05", "0x00"],
+          "presets": [
+              { "label": "returnControlToECU (00)",  "payload": ["0x04", "0x2F", "0x01", "0x05", "0x00"] },
+              { "label": "resetToDefault (01)",       "payload": ["0x04", "0x2F", "0x01", "0x05", "0x01"] },
+              { "label": "freezeCurrentState (02)",   "payload": ["0x04", "0x2F", "0x01", "0x05", "0x02"] },
+              { "label": "shortTermAdjustment ON",    "payload": ["0x05", "0x2F", "0x01", "0x05", "0x03", "0x01"] },
+              { "label": "shortTermAdjustment OFF",   "payload": ["0x05", "0x2F", "0x01", "0x05", "0x03", "0x00"] }
+          ]
+        },
+        { "label": "FaultLamp IOControl\n(DID 0106)", "type": "raw",
+          "payload": ["0x04", "0x2F", "0x01", "0x06", "0x00"],
+          "presets": [
+              { "label": "returnControlToECU (00)",  "payload": ["0x04", "0x2F", "0x01", "0x06", "0x00"] },
+              { "label": "resetToDefault (01)",       "payload": ["0x04", "0x2F", "0x01", "0x06", "0x01"] },
+              { "label": "freezeCurrentState (02)",   "payload": ["0x04", "0x2F", "0x01", "0x06", "0x02"] },
+              { "label": "shortTermAdjustment ON",    "payload": ["0x05", "0x2F", "0x01", "0x06", "0x03", "0x01"] },
+              { "label": "shortTermAdjustment OFF",   "payload": ["0x05", "0x2F", "0x01", "0x06", "0x03", "0x00"] }
+          ]
+        },
+        { "label": "AbsLamp IOControl\n(DID 0107)", "type": "raw",
+          "payload": ["0x04", "0x2F", "0x01", "0x07", "0x00"],
+          "presets": [
+              { "label": "returnControlToECU (00)",  "payload": ["0x04", "0x2F", "0x01", "0x07", "0x00"] },
+              { "label": "resetToDefault (01)",       "payload": ["0x04", "0x2F", "0x01", "0x07", "0x01"] },
+              { "label": "freezeCurrentState (02)",   "payload": ["0x04", "0x2F", "0x01", "0x07", "0x02"] },
+              { "label": "shortTermAdjustment ON",    "payload": ["0x05", "0x2F", "0x01", "0x07", "0x03", "0x01"] },
+              { "label": "shortTermAdjustment OFF",   "payload": ["0x05", "0x2F", "0x01", "0x07", "0x03", "0x00"] }
+          ]
+        },
+
+        { "type": "group_header", "label": "RoutineControl (0x31)" },
+
+        { "label": "EngineHealthCheck\n(RID 0203)", "type": "raw",
+          "payload": ["0x04", "0x31", "0x01", "0x02", "0x03"],
+          "presets": [
+              { "label": "startRoutine",            "payload": ["0x04", "0x31", "0x01", "0x02", "0x03"] },
+              { "label": "requestRoutineResults",   "payload": ["0x04", "0x31", "0x03", "0x02", "0x03"] },
+              { "label": "stopRoutine",             "payload": ["0x04", "0x31", "0x02", "0x02", "0x03"] }
+          ]
+        }
+    ]
+}

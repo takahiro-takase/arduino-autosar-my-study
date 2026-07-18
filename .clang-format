@@ -1,0 +1,27 @@
+BasedOnStyle: LLVM
+
+# --- インデント設定 ---
+IndentWidth: 4
+TabWidth: 4
+UseTab: Never
+
+# --- ブレース（{}）の位置：Allman スタイル ---
+BraceWrapping:
+  AfterFunction: true
+  AfterClass: true
+  AfterControlStatement: true
+  AfterEnum: true
+  AfterNamespace: true
+  AfterStruct: true
+  AfterUnion: true
+  BeforeElse: true
+  BeforeCatch: true
+
+# --- ポインタの位置（業務でよくあるスタイル） ---
+PointerAlignment: Left   # uint8_t* p;
+
+# --- その他（組込み向け） ---
+AllowShortIfStatementsOnASingleLine: false
+AllowShortLoopsOnASingleLine: false
+BreakBeforeBraces: Allman
+ColumnLimit: 120

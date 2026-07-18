@@ -1,0 +1,1 @@
+python-can[gs_usb]>=4.3.0
