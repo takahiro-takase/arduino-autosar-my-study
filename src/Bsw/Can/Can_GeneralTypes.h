@@ -35,7 +35,7 @@ typedef enum
     CAN_CS_SLEEP
 } Can_ControllerStateType;
 
-/* SWS_Can_00404 */
+/* SWS_Can_00417 */
 typedef enum
 {
     CAN_T_START  = 0x01, /* CAN_CS_STOPPED -> CAN_CS_STARTED */
@@ -52,7 +52,7 @@ typedef struct
     uint8*     sdu;
 } Can_PduType;
 
-/* SWS_CANInterface_00451 */
+/* SWS_Can_00496 */
 typedef struct
 {
     Can_IdType       CanId;

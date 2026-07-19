@@ -40,7 +40,7 @@ extern "C" {
 typedef uint8 Dem_EventIdType;
 
 /**
- * \brief   イベントステータス型 (AUTOSAR SWS_Dem_00586)
+ * \brief   イベントステータス型 (AUTOSAR SWS_Dem_00926)
  *
  * モニタ（呼び出し元）は PASSED / FAILED の生のテスト結果のみを報告する。
  * PREPASSED / PREFAILED は Dem 内部のデバウンスカウンタが未確定の間の状態を表す
