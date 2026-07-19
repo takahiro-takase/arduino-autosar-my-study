@@ -203,7 +203,7 @@ void Rte_COMCbk_AbsInfo(void)
  *
  * \details Com_PBCfg.c の TxTransformCbk として登録される。COM_TX_MODE_PERIODIC
  *          のため、Com_MainFunction() が自分の周期タイマで送信を決定した際に
- *          このフックが呼ばれる（Com_TriggerIPDUSend() 経由の MIXED I-PDU と
+ *          このフックが呼ばれる（DIRECT/MIXED I-PDU のイベント駆動送信と
  *          同じ「送信直前の最終変換」の仕組みをそのまま再利用している）。
  *          実 TX バッファへ Counter・CRC8 を書き込む。E2EMon（CDD 相当）は
  *          Com_SendSignal() で値をセットするだけで、この E2E 保護の存在自体を
@@ -383,8 +383,10 @@ Rte_IStatusType Rte_Read_EngineStatus_EngineOnFlag(EngineOnFlag_t* data)
  *
  * \details Com_SendSignal() 経由で EngineState 値を COM の TX I-PDU バッファへ
  *          パックする (AUTOSAR SWS_RTE の Rte_Write_<p>_<o> パターン)。
- *          I-PDU は即座には送信されない。
- *          送信するには Rte_TriggerTransmit() を呼び出すこと。
+ *          MeterStatus は TxModeMode=MIXED のため、Com が値の変化を検知した
+ *          場合は次回 Com_MainFunction()（Os の 100ms タスク）で送信される
+ *          （呼び出し元が別途送信をトリガする必要はなく、この呼び出し自体は
+ *          PduR_Transmit() を呼ばないため、SPI 送信でブロッキングしない）。
  *
  * \param[in]  state  書き込むエンジン状態
  *                    (OFF / STARTING / RUNNING / FAULT)。
@@ -430,36 +432,6 @@ Std_ReturnType Rte_Read_EngineStatus_EngineState(EngineState_t* data)
     *data = Rte_EngineStateMirror;
     SchM_Exit_Rte_MIRROR_EXCLUSIVE_AREA();
     return E_OK;
-}
-
-/**
- * \brief   COM の TX I-PDU を即座に送信する。
- *
- * \details COM モジュールへの直接依存なしに SW-C が CAN フレーム送信を
- *          要求できるよう、Com_TriggerIPDUSend() をラップする。
- *          この関数はプロジェクト固有の RTE 拡張であり、AUTOSAR 標準の
- *          Rte_Trigger_<p>_<o> API（SW-C 内部イベントトリガ用）とは
- *          異なる目的で使用する。
- *
- * \param[in]  IPduId  送信する I-PDU の COM ハンドル。
- *
- * \retval  E_OK      I-PDU が PduR および CanIf へ正常に転送された。
- * \retval  E_NOT_OK  COM 未初期化、I-PDU が見つからない、
- *                    または下位層の送信が失敗した。
- *
- * \pre        Com_Init() が正常に完了していること。
- * \pre        送信前に Rte_Write_EngineStatus_EngineState() で
- *             TX バッファへ値を設定しておくこと。
- * \note       AUTOSAR 非標準 API。App_EngineManager が COM を
- *             直接呼び出さないようにするために追加した。
- *
- * \ServiceID      {0xF6}
- * \Reentrancy     {Non Reentrant}
- * \Synchronicity  {Synchronous}
- */
-Std_ReturnType Rte_TriggerTransmit(Com_IPduIdType IPduId)
-{
-    return Com_TriggerIPDUSend(IPduId);
 }
 
 /**
@@ -859,7 +831,9 @@ Rte_IStatusType Rte_Read_AbsSensor_AbsActive(AbsActive_t* data)
  *          (AUTOSAR SWS_RTE の Rte_Write_<p>_<o> パターン)。
  *          WarningStatus (CAN 0x210) は Signal Group のため、この関数だけでは
  *          実 TX バッファへ反映されない。RunLamp/FaultLamp/AbsLamp すべてを
- *          書き込んだ後、Rte_SendSignalGroup_WarningStatus() を呼び出すこと。
+ *          書き込んだ後、Rte_SendSignalGroup_WarningStatus() を呼び出すこと
+ *          （TxModeMode=DIRECT のため、そのコミットで変化があれば即座に
+ *          送信される）。
  *
  * \param[in]  level  出力レベル。0 = 消灯、1 = 点灯。
  *
@@ -924,16 +898,18 @@ Std_ReturnType Rte_Write_WarningStatus_AbsLamp(uint8 level)
  *
  * \details Com_SendSignalGroup() をラップし、SW-C (App_WarningIndicator) が
  *          COM の I-PDU ID を意識せずに Signal Group をコミットできるようにする
- *          (AUTOSAR 非標準 API。Rte_TriggerTransmit() と同様の設計方針)。
- *          RunLamp/FaultLamp/AbsLamp すべてを Rte_Write_WarningStatus_*() で
- *          設定した後に呼び出すこと。
+ *          (AUTOSAR 非標準 API)。RunLamp/FaultLamp/AbsLamp すべてを
+ *          Rte_Write_WarningStatus_*() で設定した後に呼び出すこと。
+ *          WarningStatus は TxModeMode=DIRECT のため、このコミットで変化が
+ *          検知されれば次回 Com_MainFunction() で送信される（呼び出し元が
+ *          別途送信をトリガする必要はなく、この呼び出し自体は
+ *          PduR_Transmit() を呼ばないため、SPI 送信でブロッキングしない）。
  *
  * \retval  E_OK      COM の実 TX バッファへ正常にコミットした。
  * \retval  E_NOT_OK  COM 未初期化、または WarningStatus の I-PDU ID が
  *                    見つからない。
  *
  * \pre        Com_Init() が正常に完了していること。
- * \note       コミット後の実送信には Rte_TriggerTransmit() を使用すること。
  *
  * \ServiceID      {0xE3}
  * \Reentrancy     {Non Reentrant}

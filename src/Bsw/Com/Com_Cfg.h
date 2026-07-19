@@ -53,26 +53,28 @@
 
 /** TX I-PDU テーブルのエントリ数
  *  DaVinci: /ActiveEcuC/Com/ComConfig/ 内 Direction=SEND の ComIPdu 数
- *  [0]=MeterStatus 0x200 (MIXED)、[1]=WarningStatus 0x210 (Signal Group, MIXED)、
+ *  [0]=MeterStatus 0x200 (MIXED: 変化時送信 + 周期フロア)、
+ *  [1]=WarningStatus 0x210 (Signal Group, DIRECT: 変化時のみ送信)、
  *  [2]=E2EHealthStatus 0x220 (PERIODIC、E2EMon CDD 相当が発行するネットワーク
  *  健全性テレメトリ。詳細は src/Bsw/E2EMon/E2EMon.c 参照) */
 #define COM_TX_IPDU_COUNT   3U
 
 /** E2EHealthStatus (0x220) の PERIODIC 送信周期 [ms]
  *  DaVinci: /ActiveEcuC/Com/ComConfig/[ComIPdu]/ComTxModeTimePeriodFactor */
-#define COM_TX_PERIOD_E2EHEALTH_MS  1000U
+#define COM_TX_PERIOD_E2EHEALTH_MS  6000U
 
 /**
- * TX I-PDU の周期送信フロア [Com_TriggerIPDUSend 呼び出し回数]
- * DaVinci: /ActiveEcuC/Com/ComConfig/[ComIPdu]/ComTxModeFalse（MIXED 送信モード相当）
+ * MeterStatus (0x200) の MIXED 送信モードにおける周期フロア間隔 [ms]
+ * DaVinci: /ActiveEcuC/Com/ComConfig/[ComIPdu]/ComTxModeFalse/ComTxModeTimePeriodFactor
  *
- * ComFilterAlgorithm によって「変化なし」と判定され続けても、この回数だけ
- * Com_TriggerIPDUSend() が呼ばれたら強制的に送信する（実車の MIXED 送信モードが
- * 持つ「周期フロア」を簡易的に再現）。値が変化した場合は判定を待たず即座に送信する。
- * MeterStatus は App_EngineManager_Run (3000ms 周期) から毎回呼ばれるため、
- * この値が 3 なら実質 9000ms ごとに無変化でも強制送信されることになる。
+ * ComFilterAlgorithm によって「変化なし」と判定され続けても、最終送信から
+ * この間隔が経過したら Com_MainFunction() が強制的に再送する（実車の MIXED
+ * 送信モードが持つ「周期フロア」。起動直後や瞬断から復帰した受信側が、
+ * いつまでも古い EngineState を握り続けないようにするための保険）。
+ * 値が変化した場合は、このフロアを待たず次回 Com_MainFunction()（Os の
+ * 100ms タスク）で送信する。
  */
-#define COM_TX_PERIODIC_FLOOR_CYCLES  3U
+#define COM_TX_PERIOD_METERSTATUS_FLOOR_MS  9000U
 
 /** シグナルテーブルのエントリ数（RX + TX の合計）
  *  DaVinci: /ActiveEcuC/Com/ComConfig/ 内 ComSignal ノード数の合計 */

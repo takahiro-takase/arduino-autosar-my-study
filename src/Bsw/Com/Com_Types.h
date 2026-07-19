@@ -68,24 +68,37 @@ typedef enum
 // TX 送信モード（ComTxModeMode 相当、簡略版）
 //
 //   実 AUTOSAR の ComTxModeMode は DIRECT/PERIODIC/MIXED/NONE を持つ。
-//   本実装は以下の 2 値のみをサポートする:
+//   本実装は以下の 3 値をサポートする。いずれも ASW/CDD は
+//   Com_SendSignal() / Com_SendSignalGroup() で値を更新するだけでよく、
+//   送信要否・タイミングの判断は一切 Com 自身が行う
+//   （実車の Com と同じ「値の生成」と「送信タイミング」の責務分離。
+//   SWS_Com_00734/00742/00743: DIRECT/MIXED は変化検知した signal(group)の
+//   send request が「次回メイン関数までに」送信を開始させる。本実装では
+//   実際の PduR_Transmit() 呼び出しを必ず Com_MainFunction() 側で行う
+//   ことで、この「次回メイン関数まで」の猶予をそのまま「ASW Runnable の
+//   スタックフレームで SPI 送信までブロッキングさせない」設計に利用している）。
 //
-//   COM_TX_MODE_MIXED    : 送信要否の判断は「呼び出し元が Com_TriggerIPDUSend()
-//     を呼んだとき」に限られる（MeterStatus/WarningStatus が使用）。
-//     ComFilterAlgorithm を通過した変化があれば送信、無くても
-//     COM_TX_PERIODIC_FLOOR_CYCLES 回の呼び出しで周期フロアとして送信する
-//     （実 MIXED モードの簡略版。時刻ではなく呼び出し回数基準）。
+//   COM_TX_MODE_DIRECT   : ComFilterAlgorithm を通過した変化があると
+//     次回 Com_MainFunction() で送信する。周期フロアは持たない
+//     （WarningStatus が使用。他 ECU の制御判断に使われないダッシュボード
+//     表示用ミラー情報のため、取りこぼしても実害が小さいと判断した）。
 //
-//   COM_TX_MODE_PERIODIC : Com が自分自身の周期タスク（Com_MainFunction）で
-//     実時間ベースに送信タイミングを判断する。ASW/CDD は Com_SendSignal() で
-//     値を更新するだけでよく、Com_TriggerIPDUSend() を呼ぶ必要が一切ない
-//     （実車の Com の PERIODIC 送信モードと同じ「値の生成」と「送信タイミング」
-//     の責務分離）。
+//   COM_TX_MODE_MIXED    : DIRECT と同じ変化時送信に加えて、
+//     一定時間（TxPeriodMs）変化がなくても周期フロアとして再送する
+//     （MeterStatus が使用。他 ECU がエンジン状態を判断材料にするため、
+//     1 回きりのイベント送信だけでは起動直後の受信側や瞬断からの復帰後に
+//     いつまでも古い値のままになりうる。実 MIXED モードの簡略版で、
+//     フロアタイマーは直近の送信［変化時送信/フロアいずれも］でリセットする
+//     簡略化のため、実車の ComMinimumDelayTime による厳密な位相制御は行わない）。
+//
+//   COM_TX_MODE_PERIODIC : 値の変化には反応せず、Com_MainFunction()
+//     が TxPeriodMs 周期で常に送信する（E2EHealthStatus が使用）。
 // -------------------------------------------------------
 typedef enum
 {
     COM_TX_MODE_MIXED    = 0,
-    COM_TX_MODE_PERIODIC = 1
+    COM_TX_MODE_PERIODIC = 1,
+    COM_TX_MODE_DIRECT   = 2
 } Com_TxModeModeType;
 
 // -------------------------------------------------------
@@ -103,20 +116,20 @@ typedef enum
 //               まとめて実バッファへ確定コミットする）。0 = 通常の直接送信
 //               （Com_SendSignal がその場で実バッファへ書き込む、既存の挙動）。
 //   TxModeMode / TxPeriodMs : TX I-PDU のみ使用（DaVinci: ComTxModeMode /
-//               ComTxModeTimePeriodFactor）。COM_TX_MODE_MIXED では未使用。
-//               COM_TX_MODE_PERIODIC では TxPeriodMs [ms] 周期で
-//               Com_MainFunction() が自動送信する。
+//               ComTxModeTimePeriodFactor）。COM_TX_MODE_DIRECT では
+//               TxPeriodMs は未使用。MIXED では周期フロア間隔として、
+//               PERIODIC では厳密な送信周期として TxPeriodMs [ms] を使う。
 //   RxIndicationCbk : RX I-PDU のみ使用。非NULL なら Com_RxIndication() が
 //               バッファ更新後に呼ぶ（実 AUTOSAR の ComNotification /
 //               RTE 生成コールバックに相当）。E2E Transformer 等、
 //               「フレーム受信の都度」処理が必要な上位層向けの汎用フックで
 //               あり、Com はここで何が実行されるか一切関知しない
 //               （IPduId のハードコード比較を Com.c 本体に埋め込まないため）。
-//   TxTransformCbk  : TX I-PDU のみ使用。非NULL なら実際の送信直前（MIXED は
-//               Com_TriggerIPDUSend()、PERIODIC は Com_MainFunction() 内部）に、
-//               実 TX バッファへのポインタと長さを渡して呼ぶ。E2E Transformer
-//               が Counter/CRC をバッファへ書き込む等の「送信直前の最終変換」
-//               に使う汎用フック。
+//   TxTransformCbk  : TX I-PDU のみ使用。非NULL なら実際の送信直前（DIRECT/
+//               MIXED はイベント駆動の送信直前、PERIODIC は Com_MainFunction()
+//               内部の周期送信直前）に、実 TX バッファへのポインタと長さを
+//               渡して呼ぶ。E2E Transformer が Counter/CRC をバッファへ
+//               書き込む等の「送信直前の最終変換」に使う汎用フック。
 // -------------------------------------------------------
 typedef struct
 {

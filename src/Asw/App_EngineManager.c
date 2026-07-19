@@ -90,8 +90,13 @@ void App_EngineManager_Init(void)
  *
  * \details RTE から 3 つの RX シグナル（EngineSpeed / CoolantTemp /
  *          EngineOnFlag）を読み取り、現在の状態ハンドラへ委譲したのち、
- *          更新された EngineState シグナルを書き込んで CAN フレーム
- *          (CAN ID 0x200、DLC 1) の送信をトリガする。
+ *          更新された EngineState シグナルを書き込む（CAN ID 0x200、DLC 1）。
+ *          MeterStatus は TxModeMode=MIXED のため、値が変化していれば
+ *          次回 Com_MainFunction()（Os の 100ms タスク）で Com が送信し、
+ *          変化がなくても Com 自身の周期フロアで一定間隔ごとに再送される
+ *          （本 Runnable 自身は送信の要否・タイミングに関与せず、実際の
+ *          PduR_Transmit()/SPI 送信も呼ばないため、その所要時間が本
+ *          Runnable の WdgM Deadline Supervision に影響することはない）。
  *          Rte_ScheduleRunnables() から 3000 ms ごとに呼び出される。
  *
  *          受信タイムアウト処理:
@@ -259,7 +264,6 @@ void App_EngineManager_Run(void)
     }
 
     (void)Rte_Write_EngineStatus_EngineState(s_state);
-    (void)Rte_TriggerTransmit(0U);
 
     /* ADC センサ電圧読み取り（ローカル電圧モニタ：参考値ログ出力） */
     {

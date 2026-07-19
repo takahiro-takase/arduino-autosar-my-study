@@ -47,8 +47,10 @@ static uint8         Com_TxBuffer[COM_TX_IPDU_MAX][COM_IPDU_MAX_DLC];
 static unsigned long Com_RxLastMs[COM_RX_IPDU_MAX];   /* 最終受信時刻 [ms] */
 static uint8         Com_RxTimedOut[COM_RX_IPDU_MAX];  /* 1 = タイムアウト中 */
 
-/* COM_TX_MODE_PERIODIC の TX I-PDU 用、最終送信時刻 [ms]。
- * COM_TX_MODE_MIXED の I-PDU では未使用（Com_TxCyclesSinceSent を使う）。 */
+/* COM_TX_MODE_PERIODIC/MIXED の周期フロア判定用、最終送信時刻 [ms]。
+ * Com_MainFunction() が実送信するたび（Com_TxPending 経由・周期フロア
+ * 経由いずれも）更新することで、MIXED の周期フロアが直近の送信からの
+ * 経過時間を基準に動く（COM_TX_MODE_DIRECT の I-PDU では未使用）。 */
 static unsigned long Com_TxLastSentMs[COM_TX_IPDU_MAX];
 
 /* 診断 CommunicationControl (UDS SID 0x28) からの通信有効/無効状態。
@@ -60,8 +62,13 @@ static uint8 Com_TxEnabled = 1U;
  * TX シグナルフィルタ（ComFilterAlgorithm）関連の内部状態
  * ----------------------------------------------------------------------- */
 static uint32 Com_FilterLastValue[COM_SIGNAL_COUNT];  /* シグナルごとの直近フィルタ比較値 */
-static uint8  Com_TxUpdatePending[COM_TX_IPDU_MAX];   /* 1 = フィルタを通過した未送信の更新あり */
-static uint8  Com_TxCyclesSinceSent[COM_TX_IPDU_MAX]; /* Com_TriggerIPDUSend 呼び出し回数（周期フロア用） */
+
+/* DIRECT/MIXED I-PDU 用、「次回 Com_MainFunction() で送信すべき変化あり」フラグ。
+ * 実送信（PduR_Transmit → ... → MCP2515 への SPI 送信）を ASW Runnable の
+ * スタックフレームから切り離し、必ず Com_MainFunction()（Os の 100ms タスク、
+ * WdgM 非監視）側で行うためのディスパッチ機構。COM_TX_MODE_PERIODIC の
+ * I-PDU では未使用（常に 0）。 */
+static uint8 Com_TxPending[COM_TX_IPDU_MAX];
 
 /* -----------------------------------------------------------------------
  * Signal Group（ComIPduConfigType.IsSignalGroup = 1）関連の内部状態
@@ -129,9 +136,8 @@ void Com_Init(const Com_ConfigType* config)
             Com_TxShadowBuffer[i][j]        = 0U;
             Com_GroupFilterLastBuffer[i][j] = 0U;
         }
-        Com_TxUpdatePending[i]   = 0U;
-        Com_TxCyclesSinceSent[i] = 0U;
-        Com_TxLastSentMs[i]      = now;  /* PERIODIC I-PDU の周期計測を Init 時刻から開始 */
+        Com_TxLastSentMs[i]      = now;  /* PERIODIC/MIXED の周期計測を Init 時刻から開始 */
+        Com_TxPending[i]         = 0U;
     }
 
     for (uint8 s = 0; s < COM_SIGNAL_COUNT; s++)
@@ -354,6 +360,91 @@ static const Com_IPduConfigType* Com_FindTxIPdu(Com_IPduIdType IPduId)
 }
 
 /**
+ * \brief   TX I-PDU バッファを実際に PduR_Transmit() へ渡す共通処理。
+ *
+ * \details TxTransformCbk が設定されていれば送信直前に呼び出し（E2E
+ *          Transformer 等、送信直前の最終変換用の汎用フック。Com はここで
+ *          何が実行されるか一切関知しない）、その後 TX バッファの内容を
+ *          ログ出力して PduR_Transmit() を呼ぶ（PduR→CanIf→Can_Write と
+ *          MCP2515 への SPI 送信までブロッキングで完了する）。
+ *          `Com_MainFunction()` からのみ呼ばれる。DIRECT/MIXED I-PDU の
+ *          イベント駆動送信であっても実送信は必ず `Com_MainFunction()`
+ *          （Os の 100ms タスク）側で行う設計とし、WdgM の Deadline
+ *          Supervision 対象である ASW Runnable（`App_EngineManager_Run()`
+ *          等）のスタックフレーム内で SPI 送信がブロッキングしないようにする
+ *          （バス輻輳時に `sendMsgBuf()` の TX バッファ空き待ちが伸びても、
+ *          Runnable 自体の実行時間には影響しない）。
+ *          「送信すべきかどうかの判断」は呼び出し元（`Com_MainFunction()`）が
+ *          既に済ませてから呼ぶ。
+ *
+ * \param[in]  ipdu  送信する TX I-PDU 設定。NULL 禁止（呼び出し元で保証する）。
+ *
+ * \retval  E_OK      PduR_Transmit() が成功した。
+ * \retval  E_NOT_OK  PduR_Transmit() が失敗した。
+ *
+ * \ServiceID      {0xF3}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+static Std_ReturnType Com_DoTransmit(const Com_IPduConfigType* ipdu)
+{
+    if (ipdu->TxTransformCbk != NULL)
+        ipdu->TxTransformCbk(Com_TxBuffer[ipdu->IPduId], ipdu->DLC);
+
+    char hexbuf[25];
+    Log_HexStr(hexbuf, sizeof(hexbuf), Com_TxBuffer[ipdu->IPduId], ipdu->DLC);
+    DET_LOGI(TAG, "TX iPdu=%u [%s]", (unsigned)ipdu->IPduId, hexbuf);
+
+    PduInfoType pduInfo = {
+        .SduDataPtr = Com_TxBuffer[ipdu->IPduId],
+        .SduLength  = ipdu->DLC
+    };
+    return PduR_Transmit(ipdu->PduRId, &pduInfo);
+}
+
+/**
+ * \brief   ComFilterAlgorithm を通過した変化を「次回送信あり」として記録する。
+ *
+ * \details Com_SendSignal() / Com_SendSignalGroup() が変化を検知した際に
+ *          呼ばれる。ここでは `Com_TxPending[]` を立てるだけで、実際の
+ *          PduR_Transmit() 呼び出し（ひいては MCP2515 への SPI 送信）は一切
+ *          行わない（SWS_Com_00734/00742/00743 の要求"shall immediately
+ *          (within the next main function at the latest) initiate..." の
+ *          うち、「次回メイン関数まで」の猶予を使い、実送信は必ず
+ *          `Com_MainFunction()` 側にディスパッチする設計にしている。
+ *          呼び出しスタックと同一フレームで SPI 送信までブロッキングすると、
+ *          WdgM の Deadline Supervision 対象である ASW Runnable
+ *          （App_EngineManager_Run 等）の実行時間がバス輻輳時の SPI 遅延に
+ *          左右されてしまうため）。
+ *
+ *          `TxModeMode` が `COM_TX_MODE_PERIODIC` の I-PDU では何もしない
+ *          （PERIODIC I-PDU は Com_MainFunction() の周期タスクのみが送信を
+ *          担い、値の変化そのものは送信タイミングに影響しない）。
+ *
+ *          診断 CommunicationControl (UDS 0x28) による送信抑制中でも
+ *          ここではフラグを立てるだけとする（実際に送信を抑制するかどうかの
+ *          判断は Com_MainFunction() 側で行う。SWS_Com_00777/SWS_Com_00334
+ *          が要求する「停止中に発生した送信要求は保持されず、再開しても
+ *          古いトリガーで即座に送信してはならない」は、Com_MainFunction()
+ *          が抑制中にこのフラグを見つけ次第、実送信せずに破棄することで
+ *          満たす）。
+ *
+ * \param[in]  ipdu  対象 TX I-PDU 設定。NULL 禁止（呼び出し元で保証する）。
+ *
+ * \AUTOSARReq     {SWS_Com_00734, SWS_Com_00742, SWS_Com_00743}
+ * \ServiceID      {0x17}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+static void Com_RequestTxOnChange(const Com_IPduConfigType* ipdu)
+{
+    if (ipdu->TxModeMode == COM_TX_MODE_PERIODIC)
+        return;
+
+    Com_TxPending[ipdu->IPduId] = 1U;
+}
+
+/**
  * \brief   RX I-PDU バッファからシグナル値を取り出す。
  *
  * \details シグナル設定テーブルの SignalId に一致するエントリを検索し、
@@ -511,8 +602,9 @@ uint8 Com_IsRxTimedOut(Com_IPduIdType IPduId)
  *          ビット位置・サイズ・エンディアンに従って内部 TX バッファへ
  *          パックする。SignalDataPtr から 4 バイトのリトルエンディアン整数として
  *          値を読み取り、BitSize に関係なく該当ビットのみ書き換える。
- *          I-PDU は即座には送信されない。送信するには
- *          Com_TriggerIPDUSend() を呼び出すこと。
+ *          送信要否・タイミングの判断は本関数内で完結する
+ *          （ComFilterAlgorithm 通過時、DIRECT/MIXED I-PDU なら即座に
+ *          送信する。呼び出し元が別途送信をトリガする必要はない）。
  *
  * \param[in]  SignalId      書き込むシグナルの ID。
  *                           シグナル設定テーブルのエントリと一致すること。
@@ -527,9 +619,9 @@ uint8 Com_IsRxTimedOut(Com_IPduIdType IPduId)
  *          値をバッファへパックした後、シグナルの FilterAlgorithm を評価する。
  *          COM_FILTER_ALWAYS なら常に、COM_FILTER_MASKED_NEW_DIFFERS_MASKED_OLD
  *          なら (新値 & Mask) が前回のフィルタ比較値と異なる場合のみ、
- *          所属する TX I-PDU に「送信要求あり」を立てる
- *          (Com_TxUpdatePending[])。実際に送信するかどうかは
- *          Com_TriggerIPDUSend() が判断する。
+ *          「送信すべき変化あり」とみなして Com_RequestTxOnChange() を呼ぶ
+ *          （TxModeMode が DIRECT/MIXED の I-PDU なら次回 Com_MainFunction()
+ *          で送信される。本関数自体は PduR_Transmit() を呼ばない）。
  *
  *          Signal Group（詳細は Com_SendSignalGroup() の \AUTOSARReq 参照）:
  *          所属する I-PDU が IsSignalGroup=1 の場合、値は実 TX バッファ
@@ -615,7 +707,7 @@ uint8 Com_SendSignal(Com_SignalIdType SignalId, const void* SignalDataPtr)
         Com_FilterLastValue[s] = value;
 
         if (passesFilter)
-            Com_TxUpdatePending[sig->IPduId] = 1U;
+            Com_RequestTxOnChange(ipdu);
 
         return E_OK;
     }
@@ -630,9 +722,8 @@ uint8 Com_SendSignal(Com_SignalIdType SignalId, const void* SignalDataPtr)
  *          (Com_TxBuffer) へまとめてコピーする。個々のメンバー単位ではなく、
  *          このコミット単位で
  *          前回コミット値とのバイト比較により変化の有無を判定し、
- *          変化があれば所属 I-PDU に「送信要求あり」を立てる
- *          (Com_TxUpdatePending[])。実際に送信するかどうか（周期フロアを
- *          含む）は Com_TriggerIPDUSend() が判断する。
+ *          変化があれば Com_RequestTxOnChange() を呼ぶ（TxModeMode が
+ *          DIRECT/MIXED の I-PDU なら次回 Com_MainFunction() で送信される）。
  *
  * \param[in]  GroupId  コミットする Signal Group（TX I-PDU）の ID。
  *
@@ -679,148 +770,9 @@ Std_ReturnType Com_SendSignalGroup(Com_IPduIdType GroupId)
     }
 
     if (changed)
-        Com_TxUpdatePending[GroupId] = 1U;
+        Com_RequestTxOnChange(ipdu);
 
     return E_OK;
-}
-
-/**
- * \brief   TX I-PDU バッファを実際に PduR_Transmit() へ渡す共通処理。
- *
- * \details TxTransformCbk が設定されていれば送信直前に呼び出し（E2E
- *          Transformer 等、送信直前の最終変換用の汎用フック。Com はここで
- *          何が実行されるか一切関知しない）、その後 TX バッファの内容を
- *          ログ出力して PduR_Transmit() を呼ぶ。
- *          `Com_TriggerIPDUSend()`（MIXED モード）と `Com_MainFunction()`
- *          （PERIODIC モード）の両方から呼ばれる共通の「実際に送信する」処理
- *          であり、「送信すべきかどうかの判断」はいずれも呼び出し元が
- *          既に済ませてから呼ぶ。
- *
- * \param[in]  ipdu  送信する TX I-PDU 設定。NULL 禁止（呼び出し元で保証する）。
- *
- * \retval  E_OK      PduR_Transmit() が成功した。
- * \retval  E_NOT_OK  PduR_Transmit() が失敗した。
- *
- * \ServiceID      {0xF3}
- * \Reentrancy     {Non Reentrant}
- * \Synchronicity  {Synchronous}
- */
-static Std_ReturnType Com_DoTransmit(const Com_IPduConfigType* ipdu)
-{
-    if (ipdu->TxTransformCbk != NULL)
-        ipdu->TxTransformCbk(Com_TxBuffer[ipdu->IPduId], ipdu->DLC);
-
-    char hexbuf[25];
-    Log_HexStr(hexbuf, sizeof(hexbuf), Com_TxBuffer[ipdu->IPduId], ipdu->DLC);
-    DET_LOGI(TAG, "TX iPdu=%u [%s]", (unsigned)ipdu->IPduId, hexbuf);
-
-    PduInfoType pduInfo = {
-        .SduDataPtr = Com_TxBuffer[ipdu->IPduId],
-        .SduLength  = ipdu->DLC
-    };
-    return PduR_Transmit(ipdu->PduRId, &pduInfo);
-}
-
-/**
- * \brief   TX I-PDU を PduR 経由で即座に送信する（COM_TX_MODE_MIXED 用）。
- *
- * \details PduId で TX I-PDU 設定を検索し、送信要否を判定した上で
- *          `Com_DoTransmit()` へ委譲する。`TxModeMode` が
- *          `COM_TX_MODE_PERIODIC` の I-PDU に対して呼ばれた場合は拒否する
- *          （実 AUTOSAR でも PERIODIC I-PDU は Com 自身の周期タスクが送信を
- *          担い、ASW/CDD が明示的にトリガする対象ではないため）。
- *
- *          送信要否の判定（MIXED 送信モード相当）:
- *          Com_SendSignal() が ComFilterAlgorithm を通過した更新（
- *          Com_TxUpdatePending[]）があれば送信する。無くても
- *          COM_TX_PERIODIC_FLOOR_CYCLES 回呼ばれたら周期フロアとして
- *          強制送信する（実車が変化なしでも一定周期で再送し続けるのと同じ理由:
- *          新規に参加した受信側や、直前のフレームを取りこぼした受信側への配慮）。
- *          いずれも満たさない場合は PduR_Transmit() を呼ばず E_OK を返す
- *          （ASW から見れば「送信要求は正常に受け付けたが、Com が不要と判断した」）。
- *
- *          診断 CommunicationControl (UDS 0x28) による送信抑制中
- *          (Com_TxEnabled==0) は、送信要求があっても実送信は行わず、かつ
- *          その送信トリガー（Com_TxUpdatePending/Com_TxCyclesSinceSent）を
- *          破棄する（SWS_Com_00777: 停止中の I-PDU の送信要求はキャンセル
- *          しなければならない。SWS_Com_00334 の説明文も同旨）。再開直後に
- *          抑制中の古いトリガーで即座に送信されることはない
- *          （TX バッファの値自体は Com_SendSignal() が既に更新済みのため
- *          失われない）。
- *
- * \param[in]  PduId  送信する I-PDU の COM ハンドル。
- *                    TX I-PDU 設定テーブルの IPduId と一致すること。
- *
- * \retval  E_OK      I-PDU が PduR_Transmit() に正常に転送された、
- *                    または Com のフィルタ判定により送信不要と判断された。
- * \retval  E_NOT_OK  COM 未初期化、PduId が見つからない、
- *                    または PduR_Transmit() が失敗した。
- *
- * \pre        Com_Init() が正常に完了していること。
- * \pre        送信前に Com_SendSignal() で TX バッファへ値を設定しておくこと。
- *
- * \AUTOSARReq     {SWS_Com_00348, SWS_Com_00334, SWS_Com_00777}
- * \ServiceID      {0x17}
- * \Reentrancy     {Non Reentrant}
- * \Synchronicity  {Synchronous}
- */
-Std_ReturnType Com_TriggerIPDUSend(PduIdType PduId)
-{
-    if (Com_ConfigPtr == NULL)
-        return E_NOT_OK;
-
-    for (uint8 i = 0; i < Com_ConfigPtr->TxIPduCount; i++)
-    {
-        const Com_IPduConfigType* ipdu = &Com_ConfigPtr->TxIPdus[i];
-        if ((PduIdType)ipdu->IPduId != PduId)
-            continue;
-
-        if (ipdu->TxModeMode == COM_TX_MODE_PERIODIC)
-        {
-            /* PERIODIC I-PDU は Com_MainFunction() が自分の周期タスクで
-             * 送信するため、ASW/CDD からの明示的なトリガは想定していない
-             * （実 AUTOSAR でも同様）。設定ミスの早期発見のため拒否する。 */
-            DET_LOGW(TAG, "TriggerIPDUSend E: iPdu=%u is PERIODIC, not triggerable", (unsigned)PduId);
-            return E_NOT_OK;
-        }
-
-        Com_TxCyclesSinceSent[PduId]++;
-        const uint8 shouldSend = (Com_TxUpdatePending[PduId] != 0U)
-                                  || (Com_TxCyclesSinceSent[PduId] >= COM_TX_PERIODIC_FLOOR_CYCLES);
-
-        if (!shouldSend)
-        {
-            DET_LOGD(TAG, "TX skip iPdu=%u (no change)", (unsigned)PduId);
-            return E_OK;
-        }
-
-        if (Com_TxEnabled == 0U)
-        {
-            /* 診断 CommunicationControl (UDS 0x28) による送信抑制中。
-             * SWS_Com_00334 の説明文・SWS_Com_00777 により、停止中に発生した
-             * 送信トリガーは保持せず破棄することが要求されている
-             * （「再開しても古いトリガーで即座に送信してはならない」）。
-             * そのため Com_TxUpdatePending/Com_TxCyclesSinceSent をここで
-             * リセットする。バッファの値自体は Com_SendSignal() が既に
-             * 更新済みのため失われない。再開後に実際に値が変化した時、
-             * または通常の周期フロアに新たに達した時に初めて送信される。 */
-            Com_TxUpdatePending[PduId]   = 0U;
-            Com_TxCyclesSinceSent[PduId] = 0U;
-            DET_LOGD(TAG, "TX skip iPdu=%u (CommunicationControl disabled)", (unsigned)PduId);
-            return E_OK;
-        }
-
-        /* 実際に送信を決定したときだけカウンタをリセットする
-         * (送信を見送った呼び出しでリセットすると、周期フロアが永遠に
-         * 到達できなくなってしまう)。 */
-        Com_TxUpdatePending[PduId]   = 0U;
-        Com_TxCyclesSinceSent[PduId] = 0U;
-
-        return Com_DoTransmit(ipdu);
-    }
-
-    DET_LOGW(TAG, "TX no iPdu=%u", (unsigned)PduId);
-    return E_NOT_OK;
 }
 
 /**
@@ -876,19 +828,33 @@ void Com_TxConfirmation(PduIdType TxPduId, Std_ReturnType result)
  *
  * \pre        Com_Init() が正常に完了していること。
  *
- *          TX I-PDU の PERIODIC 送信（COM_TX_MODE_PERIODIC）:
- *          `TxModeMode` が `COM_TX_MODE_PERIODIC` の I-PDU について、
- *          最終送信からの経過時間が `TxPeriodMs` を超えたら
- *          `Com_DoTransmit()` で自動的に送信する。ASW/CDD は
+ *          TX I-PDU の送信ディスパッチ（DIRECT/MIXED/PERIODIC 共通）:
+ *          実際に PduR_Transmit()（→ MCP2515 への SPI 送信）を呼ぶのはこの
+ *          関数だけである。DIRECT/MIXED の変化時送信は `Com_RequestTxOnChange()`
+ *          が立てた `Com_TxPending[]` を、MIXED/PERIODIC の周期送信は
+ *          `TxPeriodMs` からの経過時間をそれぞれ判定材料にする:
+ *            - DIRECT   : Com_TxPending[] が立っていれば送信（周期フロアなし）
+ *            - MIXED    : Com_TxPending[] が立っている、または経過時間が
+ *                          TxPeriodMs（周期フロア間隔）を超えたら送信
+ *            - PERIODIC : 経過時間が TxPeriodMs を超えたら常に送信
+ *                          （Com_TxPending[] は使用しない）
+ *          実送信を Com_SendSignal()/Com_SendSignalGroup() の呼び出し元
+ *          （ASW Runnable）ではなく本関数（Os の 100ms タスク、WdgM 非監視）
+ *          側に一元化することで、バス輻輳時に `sendMsgBuf()` の TX バッファ
+ *          空き待ちが伸びても、WdgM の Deadline Supervision 対象である
+ *          ASW Runnable の実行時間には影響しない。ASW/CDD は
  *          `Com_SendSignal()` で値を更新するだけでよく、送信タイミングには
- *          一切関与しない（実車の Com の PERIODIC モードと同じ責務分離）。
+ *          一切関与しない（実車の Com と同じ責務分離）。
  *          診断 CommunicationControl (UDS 0x28) による送信抑制中
- *          (Com_TxEnabled==0) は、MIXED モードと同様に送信自体を行わないが、
- *          経過時間の計測（Com_TxLastSentMs）は継続する（抑制解除直後に
+ *          (Com_TxEnabled==0) は送信自体を行わないが、`Com_TxPending[]` の
+ *          クリアと `Com_TxLastSentMs` の更新は行う（SWS_Com_00777/
+ *          SWS_Com_00334: 停止中に発生した送信要求は保持されず、再開しても
+ *          古いトリガーで即座に送信されることはない。抑制解除直後に
  *          「抑制中に溜まった分」を connectivity 復帰の合図として即座に
  *          送ってしまわないようにするため）。
  *
- * \AUTOSARReq     {SWS_Com_00398, SWS_Com_00684, SWS_Com_00685}
+ * \AUTOSARReq     {SWS_Com_00398, SWS_Com_00684, SWS_Com_00685, SWS_Com_00734,
+ *                  SWS_Com_00742, SWS_Com_00743, SWS_Com_00777}
  * \ServiceID      {0x20}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
@@ -918,23 +884,35 @@ void Com_MainFunction(void)
         }
     }
     /* Com_RxEnabled==0 の間はデッドライン監視自体を無効化する
-     * (SWS_Com_00684/00685)。TX PERIODIC は Rx とは独立した機能のため、
+     * (SWS_Com_00684/00685)。TX 送信は Rx とは独立した機能のため、
      * ここで return せず以下へ続ける。 */
 
     for (uint8 i = 0; i < Com_ConfigPtr->TxIPduCount; i++)
     {
         const Com_IPduConfigType* ipdu = &Com_ConfigPtr->TxIPdus[i];
-        if (ipdu->TxModeMode != COM_TX_MODE_PERIODIC)
+        const Com_IPduIdType      id   = ipdu->IPduId;
+
+        uint8 due;
+        if (ipdu->TxModeMode == COM_TX_MODE_PERIODIC)
+        {
+            due = ((now - Com_TxLastSentMs[id]) >= (unsigned long)ipdu->TxPeriodMs) ? 1U : 0U;
+        }
+        else
+        {
+            const uint8 floorDue = (ipdu->TxModeMode == COM_TX_MODE_MIXED)
+                                    && ((now - Com_TxLastSentMs[id]) >= (unsigned long)ipdu->TxPeriodMs);
+            due = (Com_TxPending[id] != 0U) || floorDue;
+        }
+
+        if (!due)
             continue;
 
-        if ((now - Com_TxLastSentMs[ipdu->IPduId]) < (unsigned long)ipdu->TxPeriodMs)
-            continue;
-
-        Com_TxLastSentMs[ipdu->IPduId] = now;
+        Com_TxPending[id]    = 0U;
+        Com_TxLastSentMs[id] = now;
 
         if (Com_TxEnabled == 0U)
         {
-            DET_LOGD(TAG, "TX skip iPdu=%u (CommunicationControl disabled)", (unsigned)ipdu->IPduId);
+            DET_LOGD(TAG, "TX skip iPdu=%u (CommunicationControl disabled)", (unsigned)id);
             continue;
         }
 
