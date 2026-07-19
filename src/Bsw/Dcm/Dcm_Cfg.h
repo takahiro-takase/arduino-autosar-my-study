@@ -36,6 +36,14 @@
  *              DCM_ROUTINE_DURATION_MS 経過してから Dcm_MainFunction() が
  *              完了判定を行う非同期処理（IOControl とは異なり結果は
  *              即座に確定しない）
+ *            0x34/0x36/0x37 RequestDownload/TransferData/RequestTransferExit
+ *              — extendedSession 限定、0x34 は SecurityAccess Level1 必須
+ *              （0x36/0x37 は Dcm_TransferState が RequestDownload 経由でしか
+ *              DOWNLOADING にならないため個別のセキュリティ判定は行わない）。
+ *              実際のフラッシュ書き換えは行わない学習用シミュレーションで、
+ *              受信データは保持せず、ブロックシーケンスカウンタの検証・
+ *              受信バイト数の集計・簡易チェックサム（XOR）の計算のみ行う
+ *              （詳細は Dcm_Cbk.c 冒頭のコメント参照）
  *            0x3E TesterPresent (S3 タイマ維持)
  *
  *          SID × セッション許可は Dcm_Cbk.c の Dcm_SidSessionTable[]
@@ -91,6 +99,9 @@
 #define DCM_SID_IO_CONTROL      0x2FU  /**< InputOutputControlByIdentifier */
 #define DCM_SID_COMM_CONTROL    0x28U  /**< CommunicationControl          */
 #define DCM_SID_ROUTINE_CONTROL 0x31U  /**< RoutineControl                */
+#define DCM_SID_REQUEST_DOWNLOAD      0x34U  /**< RequestDownload         */
+#define DCM_SID_TRANSFER_DATA         0x36U  /**< TransferData            */
+#define DCM_SID_REQUEST_TRANSFER_EXIT 0x37U  /**< RequestTransferExit     */
 #define DCM_SID_TESTER_PRESENT  0x3EU  /**< TesterPresent                 */
 #define DCM_SID_NEGATIVE_RESP   0x7FU  /**< NegativeResponse              */
 
@@ -155,6 +166,12 @@
 #define DCM_NRC_INVALID_KEY                0x35U  /**< invalidKey (sendKey の鍵が不一致)        */
 #define DCM_NRC_EXCEEDED_NUM_ATTEMPTS      0x36U  /**< exceededNumberOfAttempts (連続失敗超過)  */
 #define DCM_NRC_REQUIRED_TIME_DELAY_NOT_EXPIRED  0x37U  /**< requiredTimeDelayNotExpired (待機中) */
+/** transferDataSuspended。TransferData (0x36) が RequestDownload (0x34) で
+ *  宣言した memorySize を超えて受信した場合に使用する。 */
+#define DCM_NRC_TRANSFER_DATA_SUSPENDED    0x71U
+/** wrongBlockSequenceCounter。TransferData (0x36) の blockSequenceCounter が
+ *  次に期待する値と一致しない場合に使用する。 */
+#define DCM_NRC_WRONG_BLOCK_SEQUENCE_COUNTER  0x73U
 /** serviceNotSupportedInActiveSession。値は DCM_SID_NEGATIVE_RESP (0x7F) と
  *  たまたま同じ 0x7F だが、これは応答フレーム 3 バイト目の NRC であり、
  *  1 バイト目のネガティブレスポンス SID マーカーとは別物（意味も使用箇所も異なる）。 */
@@ -244,6 +261,34 @@
 /** routineStatusRecord の合否バイト（RESULT_COMPLETED の後続に付く） */
 #define DCM_ROUTINE_PASS  0x01U
 #define DCM_ROUTINE_FAIL  0x00U
+
+/* -----------------------------------------------------------------------
+ * RequestDownload/TransferData/RequestTransferExit (SID 0x34/0x36/0x37)
+ * 実際のフラッシュ書き換えは行わない学習用シミュレーション。詳細は
+ * Dcm_Cbk.c 冒頭のコメント参照。
+ * ----------------------------------------------------------------------- */
+
+/** dataFormatIdentifier: 本実装が受け付ける唯一の値（圧縮なし・暗号化なし）。
+ *  高位nibble=圧縮方式、下位nibble=暗号化方式（いずれも 0=なし）。 */
+#define DCM_TRANSFER_DATA_FORMAT_RAW  0x00U
+
+/** RequestDownload の memoryAddress/memorySize は
+ *  addressAndLengthFormatIdentifier の各nibbleで指定される
+ *  バイト数（1-4）だけ可変長で符号化される。本実装は uint32 で
+ *  扱うため、1-4 バイト以外（0 または 5 以上）は非対応とする。 */
+#define DCM_TRANSFER_ADDR_LEN_MIN  1U
+#define DCM_TRANSFER_ADDR_LEN_MAX  4U
+
+/** RequestDownload の応答 maxNumberOfBlockLength [bytes]。以降の
+ *  TransferData 要求（SID+blockSequenceCounter+data を含む総バイト数）が
+ *  これを超えないようテスタ側が調整する。CanTp の再組立バッファ
+ *  (CANTP_RX_BUFFER_SIZE、既定 32 バイト) を下回る値にすること。 */
+#define DCM_TRANSFER_MAX_BLOCK_LENGTH  16U
+
+/** RequestDownload で宣言できる memorySize の上限 [bytes]。実データは
+ *  保持せずチェックサムのみ計算するため RAM 制約はないが、CAN 経由の
+ *  学習用テストとして現実的な範囲に制限する。 */
+#define DCM_TRANSFER_MAX_SIZE  4096UL
 
 /* -----------------------------------------------------------------------
  * ECUReset サブ機能
