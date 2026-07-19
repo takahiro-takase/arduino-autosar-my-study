@@ -49,19 +49,34 @@ typedef enum
 // -------------------------------------------------------
 // シグナルフィルタアルゴリズム（ComFilterAlgorithm 相当）
 //
-// TX シグナルについて、Com_SendSignal() が受け取った新しい値を
-// 実際に「送信すべき更新」とみなすかどうかを Com 自身が判定する。
-// ASW は値をセットするだけで、送信要否の判断は Com の責務とする
-// （AUTOSAR の責務分離：ASW は「何を送るか」、Com は「いつ送るか」を決める）。
+// 実 AUTOSAR では ComFilterAlgorithm は 2 つの異なる目的で使われる:
+//   (1) ComTransferProperty=TRIGGERED_ON_CHANGE の判定材料
+//       （signal(group) の送信要求時、値が変化していれば送信を開始する。
+//       本実装では COM_FILTER_MASKED_NEW_DIFFERS_MASKED_OLD が Com_SendSignal()
+//       内でこの役割を担い、Com_RequestTxOnChange() を呼ぶかどうかを決める）
+//   (2) TMS（Transmission Mode Selector）の評価材料
+//       （SWS_Com_00676-00679: この I-PDU が今 ComTxModeTrue/False の
+//       どちらを使うべきかを、TmsContributor=1 のシグナルの条件評価
+//       （OR 合成）で決める。本実装では COM_FILTER_MASKED_NEW_DIFFERS_X が
+//       この役割を担う。詳細は Com_IPduConfigType の TxModeModeTrue 参照）
+// この 2 つは実 AUTOSAR でも独立した仕組みであり、同じシグナルが両方に
+// 使われるとは限らない（本実装でも、変化時送信の判定用シグナルと TMS 用
+// シグナルは別々に設定できる）。
 //
 //   COM_FILTER_ALWAYS                     : 常に更新とみなす（フィルタなし、既定）
 //   COM_FILTER_MASKED_NEW_DIFFERS_MASKED_OLD
-//     : (新値 & Mask) != (前回値 & Mask) のときだけ更新とみなす
+//     : (新値 & Mask) != (前回値 & Mask) のときだけ更新とみなす（用途 (1)）
+//   COM_FILTER_MASKED_NEW_DIFFERS_X
+//     : (新値 & Mask) != FilterX のときだけ TMC（Transmission Mode Condition）
+//       を true とみなす（用途 (2)。SWS_COM_00813 の MASKED_NEW_DIFFERS_X 相当。
+//       実 AUTOSAR は他に MASKED_NEW_EQUALS_X/NEW_IS_WITHIN/NEW_IS_OUTSIDE も
+//       持つが、本実装では TMS 判定に最小限必要なこの 1 種類のみ実装する）
 // -------------------------------------------------------
 typedef enum
 {
     COM_FILTER_ALWAYS = 0,
-    COM_FILTER_MASKED_NEW_DIFFERS_MASKED_OLD = 1
+    COM_FILTER_MASKED_NEW_DIFFERS_MASKED_OLD = 1,
+    COM_FILTER_MASKED_NEW_DIFFERS_X = 2
 } Com_FilterAlgorithmType;
 
 // -------------------------------------------------------
@@ -93,6 +108,12 @@ typedef enum
 //
 //   COM_TX_MODE_PERIODIC : 値の変化には反応せず、Com_MainFunction()
 //     が TxPeriodMs 周期で常に送信する（E2EHealthStatus が使用）。
+//
+//   1 つの I-PDU に上記モードを 1 つだけ固定で持たせるのではなく、TMS
+//   （Transmission Mode Selector）により状況に応じて 2 つのモードを
+//   自動切り替えすることもできる（WarningStatus が使用。通常は DIRECT、
+//   FAULT/ABS 警告灯が点灯中は MIXED へ切り替わる。詳細は
+//   Com_IPduConfigType の TxModeModeTrue の説明を参照）。
 // -------------------------------------------------------
 typedef enum
 {
@@ -115,10 +136,22 @@ typedef enum
 //               シャドウバッファへ書き込むのみとし、Com_SendSignalGroup() で
 //               まとめて実バッファへ確定コミットする）。0 = 通常の直接送信
 //               （Com_SendSignal がその場で実バッファへ書き込む、既存の挙動）。
-//   TxModeMode / TxPeriodMs : TX I-PDU のみ使用（DaVinci: ComTxModeMode /
-//               ComTxModeTimePeriodFactor）。COM_TX_MODE_DIRECT では
-//               TxPeriodMs は未使用。MIXED では周期フロア間隔として、
+//   TxModeMode / TxPeriodMs : TX I-PDU のみ使用（DaVinci: ComTxModeFalse /
+//               ComTxModeTimePeriodFactor）。TMS（下記）が false と評価された
+//               ときに使うモード。TMS を持たない（TmsContributor なシグナルが
+//               存在しない）I-PDU では常にこちらだけを使う。COM_TX_MODE_DIRECT
+//               では TxPeriodMs は未使用。MIXED では周期フロア間隔として、
 //               PERIODIC では厳密な送信周期として TxPeriodMs [ms] を使う。
+//   TxModeModeTrue / TxPeriodMsTrue : TX I-PDU のみ使用（DaVinci:
+//               ComTxModeTrue / ComTxModeTimePeriodFactor）。TMS（Transmission
+//               Mode Selector、SWS_Com_00032/00799/00676-00679 相当）が true と
+//               評価されたときに使うモード。TMS は、この I-PDU に属する
+//               シグナルのうち TmsContributor=1 のものを対象に
+//               ComFilterAlgorithm=COM_FILTER_MASKED_NEW_DIFFERS_X を評価し、
+//               いずれか 1 つでも真なら true（SWS_Com_00678、OR 合成）、
+//               1 つも無ければ false（SWS_Com_00679）とする。Com_SendSignal()/
+//               Com_SendSignalGroup() のたびに再評価する（SWS_Com_00245）。
+//               ASW/CDD は TMS の存在を一切意識せず、値をセットするだけでよい。
 //   RxIndicationCbk : RX I-PDU のみ使用。非NULL なら Com_RxIndication() が
 //               バッファ更新後に呼ぶ（実 AUTOSAR の ComNotification /
 //               RTE 生成コールバックに相当）。E2E Transformer 等、
@@ -140,6 +173,8 @@ typedef struct
     uint8              IsSignalGroup;
     Com_TxModeModeType TxModeMode;
     uint16             TxPeriodMs;
+    Com_TxModeModeType TxModeModeTrue;
+    uint16             TxPeriodMsTrue;
     void (*RxIndicationCbk)(void);
     void (*TxTransformCbk)(uint8* Data, uint8 Length);
 } Com_IPduConfigType;
@@ -154,7 +189,14 @@ typedef struct
 //                 little-endian → LSB のビット番号
 //   BitSize     : シグナルのビット長（1〜32）
 //   Endian      : ビットの詰め方向
-//   FilterAlgorithm / Mask : TX シグナルの送信要否フィルタ（RX シグナルでは未使用）
+//   FilterAlgorithm / Mask / FilterX : TX シグナルの送信要否フィルタ・TMS 評価
+//               フィルタ（RX シグナルでは未使用）。FilterX は
+//               COM_FILTER_MASKED_NEW_DIFFERS_X 専用の比較値
+//               （MASKED_NEW_DIFFERS_MASKED_OLD では未使用）。
+//   TmsContributor : TX シグナルのみ使用。1 = このシグナルの
+//               ComFilterAlgorithm 評価結果が、所属 I-PDU の TMS
+//               （Com_IPduConfigType.TxModeModeTrue 参照）へ寄与する
+//               （SWS_Com_00676）。0 = TMS 計算に一切関与しない（既定）。
 // -------------------------------------------------------
 typedef struct
 {
@@ -165,6 +207,8 @@ typedef struct
     Com_SignalEndianType    Endian;
     Com_FilterAlgorithmType FilterAlgorithm;
     uint32                  Mask;
+    uint32                  FilterX;
+    uint8                   TmsContributor;
 } Com_SignalConfigType;
 
 // -------------------------------------------------------

@@ -76,6 +76,20 @@
  */
 #define COM_TX_PERIOD_METERSTATUS_FLOOR_MS  9000U
 
+/**
+ * WarningStatus (0x210) の TMS（Transmission Mode Selector）が true と
+ * 評価された（FaultLamp/AbsLamp のいずれかが点灯中の）ときに使う
+ * MIXED 送信モードの周期フロア間隔 [ms]
+ * DaVinci: /ActiveEcuC/Com/ComConfig/[ComIPdu]/ComTxModeTrue/ComTxModeTimePeriodFactor
+ *
+ * TMS が false（全ランプ消灯）の間は DIRECT（周期フロアなし、変化時のみ送信）
+ * だが、FAULT/ABS のいずれかが点灯している間は他 ECU・監視ツールが途中から
+ * 参加した場合でも状態を把握できるよう、この間隔で強制的に再送する
+ * （MeterStatus の周期フロアより短くしているのは、警告状態の方が早く
+ * 伝わってほしいという判断）。
+ */
+#define COM_TX_PERIOD_WARNINGSTATUS_TRUE_FLOOR_MS  2000U
+
 /** シグナルテーブルのエントリ数（RX + TX の合計）
  *  DaVinci: /ActiveEcuC/Com/ComConfig/ 内 ComSignal ノード数の合計 */
 #define COM_SIGNAL_COUNT    12U

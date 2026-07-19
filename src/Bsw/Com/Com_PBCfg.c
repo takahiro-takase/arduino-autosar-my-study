@@ -26,11 +26,16 @@
  *              周期フロア送信する)
  *              Signal 3: EngineState    8 bit  BitPos= 0  BigEndian
  *            TX I-PDU 1 (IPduId=1): CAN ID 0x210, DLC=1  WarningStatus (メータ ECU、Signal Group)
- *              (TxModeMode=DIRECT。ダッシュボード表示用ミラー情報のため
- *              周期フロアを持たず、値変化時のみ次回 Com_MainFunction() で送信する)
+ *              TMS（Transmission Mode Selector）を持つ I-PDU:
+ *                通常（FaultLamp/AbsLamp 消灯 = TMS false）は TxModeMode=DIRECT。
+ *                ダッシュボード表示用ミラー情報のため周期フロアを持たず、
+ *                値変化時のみ次回 Com_MainFunction() で送信する。
+ *                FaultLamp/AbsLamp のいずれかが点灯中（TMS true）は
+ *                TxModeModeTrue=MIXED へ自動切り替えし、
+ *                COM_TX_PERIOD_WARNINGSTATUS_TRUE_FLOOR_MS 間隔で周期フロア送信する。
  *              Signal 7: RunLamp        1 bit  BitPos= 0  BigEndian
- *              Signal 8: FaultLamp      1 bit  BitPos= 1  BigEndian
- *              Signal 9: AbsLamp        1 bit  BitPos= 2  BigEndian
+ *              Signal 8: FaultLamp      1 bit  BitPos= 1  BigEndian  TmsContributor=1
+ *              Signal 9: AbsLamp        1 bit  BitPos= 2  BigEndian  TmsContributor=1
  *              IsSignalGroup=1（Com_SendSignalGroup で 3 信号を一括コミット）
  *            TX I-PDU 2 (IPduId=2): CAN ID 0x220, DLC=4  E2EHealthStatus
  *              (メータ ECU、TxModeMode=COM_TX_MODE_PERIODIC、E2E P01 保護)
@@ -40,7 +45,7 @@
  *              Signal 11: E2ESeqErrCount  8 bit  BitPos=24  BigEndian
  *              値は E2EMon（CDD 相当、src/Bsw/E2EMon/）が Com_SendSignal() で
  *              更新し、送信タイミング自体は Com 自身の PERIODIC モードが
- *              1000ms 周期で自動的に判断する（ASW/CDD は関与しない）。
+ *              6000ms 周期で自動的に判断する（ASW/CDD は関与しない）。
  *              E2EMon 自身は E2E 保護の存在を一切知らない（MeterStatus における
  *              App_EngineManager と同じ関係。E2E 保護対象は当初 MeterStatus
  *              だったが、監視ツールがネットワーク健全性テレメトリ自体の破損を
@@ -161,9 +166,16 @@ static const Com_IPduConfigType Com_TxIPduConfigData[COM_TX_IPDU_COUNT] = {
          * DaVinci: /ActiveEcuC/Com/ComConfig/WarningStatus_Tx
          * App_WarningIndicator が制御する 3 本の警告灯（RUNNING/FAULT/ABS）を
          * 1 つの Signal Group としてまとめて送信する。
-         * DIRECT: ダッシュボード表示用の LED ミラー情報であり、他 ECU の
-         * 制御判断に使う想定がないため、周期フロアを持たず変化時のみ送信する
-         * （取りこぼしても次の変化で追いつけるため実害が小さいと判断）。
+         * TMS（Transmission Mode Selector）を持つ I-PDU:
+         *   通常（FaultLamp/AbsLamp とも消灯 = TMS false）は DIRECT。
+         *   ダッシュボード表示用の LED ミラー情報であり、他 ECU の制御判断に
+         *   使う想定がないため、周期フロアを持たず変化時のみ送信する
+         *   （取りこぼしても次の変化で追いつけるため実害が小さいと判断）。
+         *   FaultLamp/AbsLamp のいずれかが点灯中（TMS true）は MIXED に
+         *   自動切り替えする。警告状態は他 ECU・監視ツールが途中から参加
+         *   しても把握できてほしいため、周期フロアで再送し続ける。
+         *   どの信号が TMS に寄与するかは Signal 8/9（FAULT_LAMP/ABS_LAMP）の
+         *   .TmsContributor=1 で設定する（RunLamp は寄与しない）。
          * --------------------------------------------------------------- */
         .IPduId    = 1U,  /* DaVinci: ComIPduHandleId  - I-PDU 識別番号 */
         .DLC       = 1U,  /* DaVinci: ComIPduLength    - I-PDU バイト長（3bit のみ使用） */
@@ -172,9 +184,11 @@ static const Com_IPduConfigType Com_TxIPduConfigData[COM_TX_IPDU_COUNT] = {
                            *          CanTp が使用する 1U と衝突しないよう 2U を割り当てる) */
         .TimeoutMs = 0U,  /* TX I-PDU のため監視無効 */
         .IsSignalGroup = 1U, /* Signal Group（Com_SendSignalGroup で確定コミット） */
-        .TxModeMode = COM_TX_MODE_DIRECT /* DaVinci: ComTxModeMode = DIRECT
-                                          *          (Com_SendSignalGroup() が変化検知時に Com_TxPending を立て、
-                                          *          次回 Com_MainFunction() で送信。周期フロアなし) */
+        .TxModeMode     = COM_TX_MODE_DIRECT, /* DaVinci: ComTxModeMode = ComTxModeFalse
+                                               *          (TMS false: 通常時) */
+        .TxModeModeTrue = COM_TX_MODE_MIXED,  /* DaVinci: ComTxModeTrue
+                                               *          (TMS true: FAULT/ABS 点灯中) */
+        .TxPeriodMsTrue = COM_TX_PERIOD_WARNINGSTATUS_TRUE_FLOOR_MS
     },
     {
         /* ---------------------------------------------------------------
@@ -314,23 +328,34 @@ static const Com_SignalConfigType Com_SignalConfigData[COM_SIGNAL_COUNT] = {
         /* ---------------------------------------------------------------
          * Signal 8: FaultLamp  TX 1bit  CAN 0x210 byte[0] bit6  (Signal Group メンバー)
          * DaVinci: /ActiveEcuC/Com/ComConfig/FaultLamp_Tx
+         * TMS 寄与シグナル: 点灯（値=1）で WarningStatus の TMS を true にする
+         * （MASKED_NEW_DIFFERS_X、Mask=0x01・FilterX=0 → 値!=0 で真）。
          * --------------------------------------------------------------- */
         .SignalId    = COM_SIGNAL_FAULT_LAMP,   /* DaVinci: ComHandleId          */
         .IPduId      = 1U,                      /* DaVinci: ComIPduRef → WarningStatus_Tx */
         .BitPosition = 1U,                      /* DaVinci: ComBitPosition       */
         .BitSize     = 1U,                      /* DaVinci: ComBitSize           */
-        .Endian      = COM_BIG_ENDIAN           /* DaVinci: ComSignalEndianness = OPAQUE */
+        .Endian      = COM_BIG_ENDIAN,          /* DaVinci: ComSignalEndianness = OPAQUE */
+        .FilterAlgorithm = COM_FILTER_MASKED_NEW_DIFFERS_X, /* DaVinci: ComFilterAlgorithm（TMS 評価用） */
+        .Mask            = 0x01U,
+        .FilterX         = 0U,
+        .TmsContributor  = 1U
     },
     {
         /* ---------------------------------------------------------------
          * Signal 9: AbsLamp  TX 1bit  CAN 0x210 byte[0] bit5  (Signal Group メンバー)
          * DaVinci: /ActiveEcuC/Com/ComConfig/AbsLamp_Tx
+         * TMS 寄与シグナル: FaultLamp と同様（値=1 で WarningStatus の TMS を true に）。
          * --------------------------------------------------------------- */
         .SignalId    = COM_SIGNAL_ABS_LAMP,     /* DaVinci: ComHandleId          */
         .IPduId      = 1U,                      /* DaVinci: ComIPduRef → WarningStatus_Tx */
         .BitPosition = 2U,                      /* DaVinci: ComBitPosition       */
         .BitSize     = 1U,                      /* DaVinci: ComBitSize           */
-        .Endian      = COM_BIG_ENDIAN           /* DaVinci: ComSignalEndianness = OPAQUE */
+        .Endian      = COM_BIG_ENDIAN,          /* DaVinci: ComSignalEndianness = OPAQUE */
+        .FilterAlgorithm = COM_FILTER_MASKED_NEW_DIFFERS_X, /* DaVinci: ComFilterAlgorithm（TMS 評価用） */
+        .Mask            = 0x01U,
+        .FilterX         = 0U,
+        .TmsContributor  = 1U
     },
     {
         /* ---------------------------------------------------------------
