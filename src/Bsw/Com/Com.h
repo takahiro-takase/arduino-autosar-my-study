@@ -26,6 +26,35 @@ void Com_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr);
 uint8 Com_ReceiveSignal(Com_SignalIdType SignalId, void* SignalDataPtr);
 
 /**
+ * \brief   RX Signal Group を I-PDU バッファから RX シャドウバッファへ確定コピーする。
+ *
+ * \details Com_SendSignalGroup() の RX 側対称版（詳細は Com.c の実装コメント、
+ *          および README.md の「RX Signal Group」節を参照）。所属 I-PDU が
+ *          IsSignalGroup=1 の場合、この呼び出し以降 Com_ReceiveSignal() は
+ *          当該 I-PDU のメンバーシグナルを RX シャドウバッファから読む
+ *          （呼び出し前は Com_Init() 直後の初期値のまま、または前回コミット
+ *          時点の値のままとなる）。これにより、同じグループの複数メンバーを
+ *          複数回の Com_ReceiveSignal() 呼び出しにまたがって読む間に、
+ *          途中で新しいフレームが届いても（Com_RxIndication() が
+ *          Com_RxBuffer を上書きしても）読み取り側は常にこの呼び出し時点の
+ *          一貫したスナップショットを見る。
+ *
+ * \param[in]  GroupId  確定コピーする RX Signal Group（RX I-PDU）の ID。
+ *
+ * \retval  E_OK      GroupId が見つかり、コピーを行った（かつ現在タイムアウト中でない）。
+ * \retval  E_NOT_OK  COM 未初期化、GroupId が RX I-PDU 設定テーブルに
+ *                    存在しない、IsSignalGroup=0 の I-PDU を指定した、
+ *                    またはコピー自体は行ったが当該 I-PDU が現在デッドライン
+ *                    監視タイムアウト中である。
+ *
+ * \AUTOSARReq     {SWS_Com_00201, SWS_Com_00051, SWS_Com_00638, SWS_Com_00461}
+ * \ServiceID      {0x19}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType Com_ReceiveSignalGroup(Com_IPduIdType GroupId);
+
+/**
  * \brief   RX I-PDU の生バイト列をそのままコピーする（E2E Transformer 等向け）。
  *
  * \details Com_ReceiveSignal() のビット単位アンパックを経由せず、I-PDU

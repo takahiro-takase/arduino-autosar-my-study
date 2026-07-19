@@ -47,6 +47,22 @@ static uint8         Com_TxBuffer[COM_TX_IPDU_MAX][COM_IPDU_MAX_DLC];
 static unsigned long Com_RxLastMs[COM_RX_IPDU_MAX];   /* 最終受信時刻 [ms] */
 static uint8         Com_RxTimedOut[COM_RX_IPDU_MAX];  /* 1 = タイムアウト中 */
 
+/* -----------------------------------------------------------------------
+ * RX Signal Group（ComIPduConfigType.IsSignalGroup = 1、RX I-PDU 側）関連の
+ * 内部状態。TX 側のシャドウバッファ（Com_TxShadowBuffer 等、下記）の対称。
+ * Com_ReceiveSignalGroup() が Com_RxBuffer から確定コピーし、以降
+ * Com_ReceiveSignal() はグループメンバーに対してこちらを読む。
+ * ----------------------------------------------------------------------- */
+static uint8 Com_RxShadowBuffer[COM_RX_IPDU_MAX][COM_IPDU_MAX_DLC];
+
+/* Com_ReceiveSignalGroup() 実行時点の Com_RxTimedOut[] のスナップショット。
+ * Com_ReceiveSignal() はグループメンバーの読み取り可否をこちらで判定する
+ * （ライブの Com_RxTimedOut[] を都度見ると、同じグループの複数メンバーを
+ * 読む間にタイムアウト判定が変化してしまい、スナップショットの一貫性が
+ * 崩れるため）。既定値 1（未コミット = 利用不可、Com_RxTimedOut の既定 0 とは
+ * 意図的に異なる。詳細は Com_Init() 参照）。 */
+static uint8 Com_RxShadowTimedOut[COM_RX_IPDU_MAX];
+
 /* COM_TX_MODE_PERIODIC/MIXED の周期フロア判定用、最終送信時刻 [ms]。
  * Com_MainFunction() が実送信するたび（Com_TxPending 経由・周期フロア
  * 経由いずれも）更新することで、MIXED の周期フロアが直近の送信からの
@@ -137,9 +153,16 @@ void Com_Init(const Com_ConfigType* config)
     for (uint8 i = 0; i < COM_RX_IPDU_MAX; i++)
     {
         for (uint8 j = 0; j < COM_IPDU_MAX_DLC; j++)
-            Com_RxBuffer[i][j] = 0U;
+        {
+            Com_RxBuffer[i][j]       = 0U;
+            Com_RxShadowBuffer[i][j] = 0U;
+        }
         Com_RxLastMs[i]  = now;  /* タイムアウト計測を Init 時刻から開始 */
         Com_RxTimedOut[i] = 0U;
+        /* RX Signal Group 未コミット状態。Com_ReceiveSignalGroup() が一度も
+         * 呼ばれていないグループメンバーを、ゼロクリアされたシャドウバッファ
+         * を「正常な値」として誤って返さないよう、利用不可扱いにしておく。 */
+        Com_RxShadowTimedOut[i] = 1U;
     }
 
     for (uint8 i = 0; i < COM_TX_IPDU_MAX; i++)
@@ -375,6 +398,33 @@ static const Com_IPduConfigType* Com_FindTxIPdu(Com_IPduIdType IPduId)
 }
 
 /**
+ * \brief   RX I-PDU 設定テーブルから IPduId に一致するエントリを検索する。
+ *
+ * \details Com_ReceiveSignal() / Com_ReceiveSignalGroup() が、シグナルの
+ *          所属する I-PDU が RX Signal Group（IsSignalGroup=1）かどうかを
+ *          判定するために使う（Com_FindTxIPdu() の RX 側対称）。
+ *
+ * \param[in]  IPduId  検索する RX I-PDU の ID。
+ *
+ * \return  一致するエントリへのポインタ。見つからない場合は NULL。
+ *
+ * \pre        Com_ConfigPtr が NULL でないこと（呼び出し元で保証する）。
+ *
+ * \ServiceID      {0xF4}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+static const Com_IPduConfigType* Com_FindRxIPdu(Com_IPduIdType IPduId)
+{
+    for (uint8 i = 0; i < Com_ConfigPtr->RxIPduCount; i++)
+    {
+        if (Com_ConfigPtr->RxIPdus[i].IPduId == IPduId)
+            return &Com_ConfigPtr->RxIPdus[i];
+    }
+    return NULL;
+}
+
+/**
  * \brief   TX I-PDU バッファを実際に PduR_Transmit() へ渡す共通処理。
  *
  * \details TxTransformCbk が設定されていれば送信直前に呼び出し（E2E
@@ -566,6 +616,10 @@ static void Com_RequestTxOnChange(const Com_IPduConfigType* ipdu)
  * \pre        Com_Init() が正常に完了していること。
  * \pre        このシグナルが属する I-PDU で Com_RxIndication() が
  *             少なくとも 1 回呼ばれていること。
+ * \pre        このシグナルが RX Signal Group（所属 I-PDU の IsSignalGroup=1）の
+ *             メンバーである場合は、あわせて Com_ReceiveSignalGroup() が
+ *             少なくとも 1 回呼ばれていること（呼ばれるまでは初期値 = 安全値の
+ *             まま更新されない。Com_ReceiveSignalGroup() 参照）。
  * \note       戻り値型は仕様に従い uint8。E_OK / E_NOT_OK の値（0x00 / 0x01）は
  *             RTE が使う Std_ReturnType と互換性がある。
  *
@@ -600,12 +654,35 @@ uint8 Com_ReceiveSignal(Com_SignalIdType SignalId, void* SignalDataPtr)
             return E_NOT_OK;
         }
 
-        /* タイムアウト中は値を書き込まず E_NOT_OK を返す（呼び出し元の初期値=安全値を使用） */
-        if (Com_RxTimedOut[sig->IPduId])
+        const Com_IPduConfigType* ipdu = Com_FindRxIPdu(sig->IPduId);
+        if (ipdu == NULL)
+        {
+            DET_LOGE(TAG, "ReceiveSignal E: sig=%u IPduId=%u not a registered RX I-PDU",
+                     (unsigned)SignalId, (unsigned)sig->IPduId);
             return E_NOT_OK;
+        }
+
+        /* RX Signal Group メンバーは Com_ReceiveSignalGroup() が確定コピーした
+         * シャドウバッファ・タイムアウトスナップショットを読む（Com_RxBuffer/
+         * Com_RxTimedOut を直接見ない）。これにより、同じグループの複数
+         * メンバーを読む間に新しいフレームが届いても一貫した値が返る。 */
+        const uint8* srcBuf;
+        if (ipdu->IsSignalGroup != 0U)
+        {
+            if (Com_RxShadowTimedOut[sig->IPduId])
+                return E_NOT_OK;
+            srcBuf = Com_RxShadowBuffer[sig->IPduId];
+        }
+        else
+        {
+            /* タイムアウト中は値を書き込まず E_NOT_OK を返す（呼び出し元の初期値=安全値を使用） */
+            if (Com_RxTimedOut[sig->IPduId])
+                return E_NOT_OK;
+            srcBuf = Com_RxBuffer[sig->IPduId];
+        }
 
         const uint32 value = Com_UnpackSignal(
-            Com_RxBuffer[sig->IPduId],
+            srcBuf,
             sig->BitPosition, sig->BitSize, sig->Endian);
 
         /* SignalDataPtr は呼び出し元が BitSize に応じた幅の変数
@@ -620,6 +697,67 @@ uint8 Com_ReceiveSignal(Com_SignalIdType SignalId, void* SignalDataPtr)
         return E_OK;
     }
     return E_NOT_OK;
+}
+
+/**
+ * \brief   RX Signal Group を I-PDU バッファから RX シャドウバッファへ確定コピーする。
+ *
+ * \details Com_SendSignalGroup()（TX 側）の対称版。GroupId が RX Signal Group
+ *          （IsSignalGroup=1）であれば、Com_RxBuffer[GroupId] の内容を
+ *          Com_RxShadowBuffer[GroupId] へバイト単位でコピーし、あわせて
+ *          その時点の Com_RxTimedOut[GroupId] を Com_RxShadowTimedOut[GroupId]
+ *          へスナップショットする。以降 Com_ReceiveSignal() は、このグループに
+ *          属するシグナルに対してこのスナップショットを読む（次に
+ *          Com_ReceiveSignalGroup() が呼ばれるまで更新されない）。
+ *
+ *          コピー自体は、現在タイムアウト中かどうかに関わらず常に行う
+ *          （SWS_Com_00461: I-PDU が停止/タイムアウト中でも既知の最新値を
+ *          シャドウバッファへ反映すること、という実 AUTOSAR の要求に合わせた）。
+ *          ただし本実装は Com_ReceiveSignal() の非グループ経路と同じ簡略化
+ *          （タイムアウト中かどうかを E_OK/E_NOT_OK の 2 値にまとめる）を
+ *          踏襲しており、実 AUTOSAR の COM_SERVICE_NOT_AVAILABLE や
+ *          ComSignalInitValue によるフォールバックといった細分化は行わない。
+ *
+ * \param[in]  GroupId  確定コピーする RX Signal Group（RX I-PDU）の ID。
+ *
+ * \retval  E_OK      GroupId が見つかり、コピー時点でタイムアウト中でなかった。
+ * \retval  E_NOT_OK  COM 未初期化、GroupId が RX I-PDU 設定テーブルに
+ *                    存在しない、IsSignalGroup=0 の I-PDU を指定した、
+ *                    またはコピーは行ったがコピー時点でタイムアウト中だった。
+ *
+ * \pre        Com_Init() が正常に完了していること。
+ *
+ * \AUTOSARReq     {SWS_Com_00201, SWS_Com_00051, SWS_Com_00638, SWS_Com_00461}
+ * \ServiceID      {0x19}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType Com_ReceiveSignalGroup(Com_IPduIdType GroupId)
+{
+    if (Com_ConfigPtr == NULL)
+        return E_NOT_OK;
+
+    /* 範囲チェック: GroupId をそのまま Com_RxBuffer[] 等の配列添字として
+     * 使うため、RX I-PDU 設定テーブル自体に範囲外の IPduId が設定される
+     * 事態に備えて明示的に検査する（Com_ReceiveSignal/Com_SendSignalGroup と
+     * 同じ方針）。 */
+    if (GroupId >= COM_RX_IPDU_MAX)
+    {
+        DET_LOGE(TAG, "ReceiveSignalGroup E: GroupId=%u out of range (max=%u)",
+                 (unsigned)GroupId, (unsigned)COM_RX_IPDU_MAX);
+        return E_NOT_OK;
+    }
+
+    const Com_IPduConfigType* ipdu = Com_FindRxIPdu(GroupId);
+    if (ipdu == NULL || ipdu->IsSignalGroup == 0U)
+        return E_NOT_OK;
+
+    for (uint8 b = 0U; b < ipdu->DLC; b++)
+        Com_RxShadowBuffer[GroupId][b] = Com_RxBuffer[GroupId][b];
+
+    Com_RxShadowTimedOut[GroupId] = Com_RxTimedOut[GroupId];
+
+    return Com_RxShadowTimedOut[GroupId] ? E_NOT_OK : E_OK;
 }
 
 /**

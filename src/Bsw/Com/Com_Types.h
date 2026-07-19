@@ -178,10 +178,17 @@ typedef enum
 //               TX → PduR_Transmit に渡す SrcPduId と一致させる
 //   TimeoutMs : RX 受信デッドライン [ms]（DaVinci: ComRxDeadlineMonitoringPeriod）
 //               0 = 監視無効。TX I-PDU では 0 を設定すること。
-//   IsSignalGroup : TX I-PDU のみ使用。1 = Signal Group（Com_SendSignal は
-//               シャドウバッファへ書き込むのみとし、Com_SendSignalGroup() で
-//               まとめて実バッファへ確定コミットする）。0 = 通常の直接送信
-//               （Com_SendSignal がその場で実バッファへ書き込む、既存の挙動）。
+//   IsSignalGroup : TX/RX 両方の I-PDU で使用。
+//               TX: 1 = Signal Group（Com_SendSignal はシャドウバッファへ
+//               書き込むのみとし、Com_SendSignalGroup() でまとめて実バッファへ
+//               確定コミットする）。0 = 通常の直接送信（Com_SendSignal が
+//               その場で実バッファへ書き込む、既存の挙動）。
+//               RX: 1 = Signal Group（Com_ReceiveSignal はこの I-PDU の
+//               シグナルを RX シャドウバッファから読む。Com_ReceiveSignalGroup()
+//               が I-PDU バッファ → RX シャドウバッファへ確定コピーするまで
+//               更新されない）。0 = 通常の直接受信（Com_ReceiveSignal が
+//               I-PDU バッファを直接読む、既存の挙動）。詳細は
+//               Com_ReceiveSignalGroup() の \AUTOSARReq 参照。
 //   TxModeMode / TxPeriodMs : TX I-PDU のみ使用（DaVinci: ComTxModeFalse /
 //               ComTxModeTimePeriodFactor）。TMS（下記）が false と評価された
 //               ときに使うモード。TMS を持たない（TmsContributor なシグナルが
