@@ -304,17 +304,27 @@ static const Com_SignalConfigType Com_SignalConfigData[COM_SIGNAL_COUNT] = {
          * DaVinci: /ActiveEcuC/Com/ComConfig/VehicleSpeed_Rx
          * RX Signal Group（AbsInfo_Rx）メンバー。Com_ReceiveSignalGroup(1U) 経由
          * でのみ最新化される（Rte_COMCbk_AbsInfo 参照）。
-         * RxDataTimeoutAction=SUBSTITUTE: タイムアウト中は 0xFFFF（655.35 km/h
-         * 相当、物理的にあり得ない値）を返す。停車中の実データ 0 と、
-         * 通信途絶時の「値不明」を明確に区別するため（既定の NONE のまま
-         * だと E_NOT_OK になるだけで、速度そのものは返らない）。
-         * 注意: この VehicleSpeed を読む Com_ReceiveSignal() は
+         * RxDataTimeoutAction=SUBSTITUTE（SWS_Com_00876: VehicleSpeed は
+         * Signal Group メンバーのため、非グループ用の SWS_Com_00875 ではなく
+         * こちらが根拠要求）: タイムアウト中は 0xFFFF（655.35 km/h 相当、
+         * 物理的にあり得ない値）を返す。停車中の実データ 0 と、通信途絶時の
+         * 「値不明」を明確に区別するため（既定の NONE のままだと E_NOT_OK に
+         * なるだけで、速度そのものは返らない）。
+         * 注意 (1): この VehicleSpeed を読む Com_ReceiveSignal() は
          * Rte_COMCbk_AbsInfo()（RxIndicationCbk）内の 1 箇所のみで、
          * フレーム受信・E2E 検証成功直後にしか呼ばれないため、この
          * SUBSTITUTE 分岐は現状のアーキテクチャでは実際には発動しない
          * （実際のフェイルセーフは Rte_Read_* 側の Com_IsRxTimedOut() が
-         * 別途担う）。動機は実利より仕様忠実性。詳細は README.md の
-         * 「ComRxDataTimeoutAction」節を参照。
+         * 別途担う）。
+         * 注意 (2): (1) は本プロジェクトの呼び出し方だけの制約ではない。
+         * Signal Group メンバーの SUBSTITUTE 判定は、Com_ReceiveSignal()
+         * 呼び出し時点のライブな Com_RxTimedOut ではなく、直近の
+         * Com_ReceiveSignalGroup() 呼び出し時点のスナップショットでしか
+         * 評価されない（Com_ReceiveSignalGroup() 自身の \AUTOSARReq 参照）。
+         * これは Signal Group が「Com_ReceiveSignal() はシャドウバッファのみ
+         * を読む」という設計だからであり、ASW の呼び出しタイミングを変えた
+         * だけでは解消しない構造的な性質である。動機は実利より仕様忠実性。
+         * 詳細は README.md の「ComRxDataTimeoutAction」節を参照。
          * --------------------------------------------------------------- */
         .SignalId    = COM_SIGNAL_VEHICLE_SPEED, /* DaVinci: ComHandleId        */
         .IPduId      = 1U,                       /* DaVinci: ComIPduRef → AbsInfo_Rx */

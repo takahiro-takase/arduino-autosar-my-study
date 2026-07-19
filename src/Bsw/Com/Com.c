@@ -628,7 +628,7 @@ static void Com_RequestTxOnChange(const Com_IPduConfigType* ipdu)
  * \note       戻り値型は仕様に従い uint8。E_OK / E_NOT_OK の値（0x00 / 0x01）は
  *             RTE が使う Std_ReturnType と互換性がある。
  *
- * \AUTOSARReq     {SWS_Com_00198, SWS_Com_00500, SWS_Com_00875}
+ * \AUTOSARReq     {SWS_Com_00198, SWS_Com_00500, SWS_Com_00875, SWS_Com_00876}
  * \ServiceID      {0x0B}
  * \Reentrancy     {Reentrant}
  * \Synchronicity  {Synchronous}
@@ -732,6 +732,18 @@ uint8 Com_ReceiveSignal(Com_SignalIdType SignalId, void* SignalDataPtr)
  *          踏襲しており、実 AUTOSAR の COM_SERVICE_NOT_AVAILABLE や
  *          ComSignalInitValue によるフォールバックといった細分化は行わない。
  *
+ *          ComRxDataTimeoutAction=SUBSTITUTE（Com_RxDataTimeoutActionType 参照）
+ *          との関係: このグループのメンバーに対する SUBSTITUTE 判定
+ *          （SWS_Com_00876「...when the reception deadline monitoring timer
+ *          of a signal group expires」）は、この関数が Com_RxTimedOut[GroupId]
+ *          を読むこの瞬間にのみライブに評価される。この呼び出し以降、次に
+ *          本関数が呼ばれるまでの間にタイムアウトが新規発生しても、
+ *          Com_ReceiveSignal() はこの時点のスナップショット
+ *          （Com_RxShadowTimedOut[GroupId]）しか見ないため、SUBSTITUTE は
+ *          即座には反映されない。これは呼び出し側の都合ではなく、Signal
+ *          Group が「Com_ReceiveSignal() はシャドウバッファのみを読む」
+ *          という設計だからである。
+ *
  * \param[in]  GroupId  確定コピーする RX Signal Group（RX I-PDU）の ID。
  *
  * \retval  E_OK      GroupId が見つかり、コピー時点でタイムアウト中でなかった。
@@ -741,7 +753,7 @@ uint8 Com_ReceiveSignal(Com_SignalIdType SignalId, void* SignalDataPtr)
  *
  * \pre        Com_Init() が正常に完了していること。
  *
- * \AUTOSARReq     {SWS_Com_00201, SWS_Com_00051, SWS_Com_00638, SWS_Com_00461}
+ * \AUTOSARReq     {SWS_Com_00201, SWS_Com_00051, SWS_Com_00638, SWS_Com_00461, SWS_Com_00876}
  * \ServiceID      {0x19}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}

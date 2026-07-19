@@ -138,8 +138,28 @@ typedef enum
 //   COM_RX_TIMEOUT_ACTION_SUBSTITUTE
 //     : タイムアウト中、Com_ReceiveSignal() は I-PDU バッファ（正常受信時の
 //       実データ）を読まず、代わりにこのシグナルの `TimeoutSubstitutionValue`
-//       を書き込んで E_OK を返す（SWS_Com_00875、ECUC_Com_10006:
-//       ComTimeoutSubstitutionValue 相当）。
+//       を書き込んで E_OK を返す（ECUC_Com_10006: ComTimeoutSubstitutionValue
+//       相当）。根拠要求は対象シグナルが Signal Group のメンバーかどうかで
+//       異なる: 非グループシグナルは SWS_Com_00875（"the reception deadline
+//       monitoring timer of a signal expires"）、Signal Group メンバーは
+//       SWS_Com_00876（"...of a signal group expires"）。
+//
+//       Signal Group メンバーの場合の注意: この「タイマ満了」判定は
+//       Com_ReceiveSignal() 呼び出し時点のライブな Com_RxTimedOut[] ではなく、
+//       直近の Com_ReceiveSignalGroup() 呼び出し時点でスナップショットした
+//       Com_RxShadowTimedOut[] を見る（Com_ReceiveSignalGroup() 自身は
+//       呼び出し時点のライブな Com_RxTimedOut[] を見ており、この点は
+//       SWS_Com_00876 と整合する）。これは本プロジェクトの呼び出し方（Rte
+//       が常にフレーム受信直後にしか読まない）に起因する制約ではなく、
+//       Signal Group が「Com_ReceiveSignal() はシャドウバッファのみを読み、
+//       ライブな I-PDU バッファ・ライブなタイムアウト状態には一切触れない」
+//       という設計そのものに由来する（実 AUTOSAR も同様: 3212-3216 行
+//       "the RTE accesses the group signals in the shadow buffer" 参照）。
+//       したがって、たとえ将来 ASW がフレーム受信タイミングと無関係な任意の
+//       時刻で Com_ReceiveSignal() を呼ぶ構成に変えても、その直前に
+//       Com_ReceiveSignalGroup() を呼ばない限り、実際にタイムアウトが
+//       発生した瞬間ではなく「最後に Com_ReceiveSignalGroup() を呼んだ時点」
+//       の状態しか観測できない。
 //
 //   実 AUTOSAR にはもう 1 つ REPLACE（SWS_Com_00470: シグナルの
 //   ComSignalInitValue で置き換える）があるが、本実装は ComSignalInitValue
