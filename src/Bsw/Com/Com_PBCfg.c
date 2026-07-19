@@ -33,10 +33,14 @@
  *                FaultLamp/AbsLamp のいずれかが点灯中（TMS true）は
  *                TxModeModeTrue=MIXED へ自動切り替えし、
  *                COM_TX_PERIOD_WARNINGSTATUS_TRUE_FLOOR_MS 間隔で周期フロア送信する。
- *              Signal 7: RunLamp        1 bit  BitPos= 0  BigEndian
- *              Signal 8: FaultLamp      1 bit  BitPos= 1  BigEndian  TmsContributor=1
- *              Signal 9: AbsLamp        1 bit  BitPos= 2  BigEndian  TmsContributor=1
- *              IsSignalGroup=1（Com_SendSignalGroup で 3 信号を一括コミット）
+ *              Signal 7: RunLamp        1 bit  BitPos= 0  BigEndian  TransferProperty=TRIGGERED_ON_CHANGE
+ *              Signal 8: FaultLamp      1 bit  BitPos= 1  BigEndian  TmsContributor=1  TransferProperty=TRIGGERED_ON_CHANGE
+ *              Signal 9: AbsLamp        1 bit  BitPos= 2  BigEndian  TmsContributor=1  TransferProperty=TRIGGERED_ON_CHANGE
+ *              IsSignalGroup=1（Com_SendSignalGroup で 3 信号を一括コミット）。
+ *              3 灯とも ComTransferProperty=TRIGGERED_ON_CHANGE（各灯どれか 1 つでも
+ *              変化すれば送信を引き起こす。COM_TRANSFER_PROPERTY_PENDING を
+ *              使う例は本設定には無いが、フィールド自体は他メンバーの送信に
+ *              便乗させたい灯があれば追加できる）。
  *            TX I-PDU 2 (IPduId=2): CAN ID 0x220, DLC=4  E2EHealthStatus
  *              (メータ ECU、TxModeMode=COM_TX_MODE_PERIODIC、E2E P01 保護)
  *              byte[0]: E2E CRC8 / byte[1]: E2E Counter (下位4bit)
@@ -77,6 +81,7 @@
  *   .Endian      ←→ ComSignalEndianness  （OPAQUE=BigEndian / INTEL=LittleEndian）
  *   .FilterAlgorithm ←→ ComFilterAlgorithm （TX シグナルのみ。RX シグナルは既定の ALWAYS のまま未使用）
  *   .Mask            ←→ ComFilterMask
+ *   .TransferProperty ←→ ComTransferProperty （Signal Group メンバーのみ使用）
  *
  * =====================================================================
  *
@@ -320,12 +325,15 @@ static const Com_SignalConfigType Com_SignalConfigData[COM_SIGNAL_COUNT] = {
         /* ---------------------------------------------------------------
          * Signal 7: RunLamp  TX 1bit  CAN 0x210 byte[0] bit7  (Signal Group メンバー)
          * DaVinci: /ActiveEcuC/Com/ComConfig/RunLamp_Tx
+         * ComTransferProperty=TRIGGERED_ON_CHANGE: 自身の点灯/消灯だけで
+         * WarningStatus の送信を引き起こす（他の灯の変化を待たない）。
          * --------------------------------------------------------------- */
         .SignalId    = COM_SIGNAL_RUN_LAMP,     /* DaVinci: ComHandleId          */
         .IPduId      = 1U,                      /* DaVinci: ComIPduRef → WarningStatus_Tx */
         .BitPosition = 0U,                      /* DaVinci: ComBitPosition       */
         .BitSize     = 1U,                      /* DaVinci: ComBitSize           */
-        .Endian      = COM_BIG_ENDIAN           /* DaVinci: ComSignalEndianness = OPAQUE */
+        .Endian      = COM_BIG_ENDIAN,          /* DaVinci: ComSignalEndianness = OPAQUE */
+        .TransferProperty = COM_TRANSFER_PROPERTY_TRIGGERED_ON_CHANGE /* DaVinci: ComTransferProperty */
     },
     {
         /* ---------------------------------------------------------------
@@ -333,6 +341,8 @@ static const Com_SignalConfigType Com_SignalConfigData[COM_SIGNAL_COUNT] = {
          * DaVinci: /ActiveEcuC/Com/ComConfig/FaultLamp_Tx
          * TMS 寄与シグナル: 点灯（値=1）で WarningStatus の TMS を true にする
          * （MASKED_NEW_DIFFERS_X、Mask=0x01・FilterX=0 → 値!=0 で真）。
+         * ComTransferProperty=TRIGGERED_ON_CHANGE: TMS 判定（FilterAlgorithm）
+         * とは独立に、自身の点灯/消灯だけで送信も引き起こす。
          * --------------------------------------------------------------- */
         .SignalId    = COM_SIGNAL_FAULT_LAMP,   /* DaVinci: ComHandleId          */
         .IPduId      = 1U,                      /* DaVinci: ComIPduRef → WarningStatus_Tx */
@@ -342,13 +352,15 @@ static const Com_SignalConfigType Com_SignalConfigData[COM_SIGNAL_COUNT] = {
         .FilterAlgorithm = COM_FILTER_MASKED_NEW_DIFFERS_X, /* DaVinci: ComFilterAlgorithm（TMS 評価用） */
         .Mask            = 0x01U,
         .FilterX         = 0U,
-        .TmsContributor  = 1U
+        .TmsContributor  = 1U,
+        .TransferProperty = COM_TRANSFER_PROPERTY_TRIGGERED_ON_CHANGE /* DaVinci: ComTransferProperty */
     },
     {
         /* ---------------------------------------------------------------
          * Signal 9: AbsLamp  TX 1bit  CAN 0x210 byte[0] bit5  (Signal Group メンバー)
          * DaVinci: /ActiveEcuC/Com/ComConfig/AbsLamp_Tx
          * TMS 寄与シグナル: FaultLamp と同様（値=1 で WarningStatus の TMS を true に）。
+         * ComTransferProperty=TRIGGERED_ON_CHANGE: FaultLamp と同様。
          * --------------------------------------------------------------- */
         .SignalId    = COM_SIGNAL_ABS_LAMP,     /* DaVinci: ComHandleId          */
         .IPduId      = 1U,                      /* DaVinci: ComIPduRef → WarningStatus_Tx */
@@ -358,7 +370,8 @@ static const Com_SignalConfigType Com_SignalConfigData[COM_SIGNAL_COUNT] = {
         .FilterAlgorithm = COM_FILTER_MASKED_NEW_DIFFERS_X, /* DaVinci: ComFilterAlgorithm（TMS 評価用） */
         .Mask            = 0x01U,
         .FilterX         = 0U,
-        .TmsContributor  = 1U
+        .TmsContributor  = 1U,
+        .TransferProperty = COM_TRANSFER_PROPERTY_TRIGGERED_ON_CHANGE /* DaVinci: ComTransferProperty */
     },
     {
         /* ---------------------------------------------------------------

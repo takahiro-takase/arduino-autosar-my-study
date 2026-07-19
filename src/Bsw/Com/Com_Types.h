@@ -63,6 +63,12 @@ typedef enum
 // 使われるとは限らない（本実装でも、変化時送信の判定用シグナルと TMS 用
 // シグナルは別々に設定できる）。
 //
+// なお Signal Group メンバーの「送信を引き起こすか」判定は
+// ComFilterAlgorithm ではなく Com_TransferPropertyType（下記）が担う。
+// 非 Signal Group シグナルでは ComFilterAlgorithm（用途 (1)）がそのまま
+// 送信要否を決めるため、Signal Group とそれ以外で判定の仕組みが異なる点に
+// 注意（実 AUTOSAR でも同様の構造）。
+//
 //   COM_FILTER_ALWAYS                     : 常に更新とみなす（フィルタなし、既定）
 //   COM_FILTER_MASKED_NEW_DIFFERS_MASKED_OLD
 //     : (新値 & Mask) != (前回値 & Mask) のときだけ更新とみなす（用途 (1)）
@@ -78,6 +84,44 @@ typedef enum
     COM_FILTER_MASKED_NEW_DIFFERS_MASKED_OLD = 1,
     COM_FILTER_MASKED_NEW_DIFFERS_X = 2
 } Com_FilterAlgorithmType;
+
+// -------------------------------------------------------
+// ComTransferProperty（SWS_Com_00742/00743 相当、Signal Group メンバー専用）
+//
+//   非 Signal Group のシグナルは、そのシグナル単体が I-PDU の送信要否を
+//   決めるため「送信を引き起こすか」を別フィールドで宣言する必要がない
+//   （ComFilterAlgorithm の評価結果がそのまま Com_RequestTxOnChange() 呼び出し
+//   の可否になる。Com_SendSignal() 参照）。
+//
+//   一方 Signal Group は複数シグナルが 1 つの I-PDU 送信を共有するため、
+//   「グループ内のどのメンバーの変化が送信の引き金になるか」を
+//   メンバーごとに区別する必要がある。実 AUTOSAR の ComTransferProperty は
+//   PENDING/TRIGGERED/TRIGGERED_ON_CHANGE/TRIGGERED_ON_CHANGE_WITHOUT_REPETITION
+//   の 4 値を持つが、本実装は具体的な使用シーン（WarningStatus の各警告灯）に
+//   必要な最小限としてこの 2 値のみ実装する。
+//
+//   COM_TRANSFER_PROPERTY_PENDING (既定)
+//     : このメンバー自身の値変化では Signal Group の送信を引き起こさない。
+//       値は Com_SendSignalGroup() のコミット時に他メンバー同様バッファへ
+//       反映されるが、「送信のトリガー」にはならない（SWS_Com_00743:
+//       他の TRIGGERED* メンバーが送信を引き起こしたときに便乗して運ばれる）。
+//   COM_TRANSFER_PROPERTY_TRIGGERED_ON_CHANGE
+//     : Com_SendSignal() 呼び出しのたびに前回値と比較し、変化していれば
+//       Signal Group 全体の送信を引き起こす（SWS_Com_00742）。
+//
+//   実装上の注意: この「前回値との比較」は ComFilterAlgorithm/Mask/FilterX
+//   とは独立した仕組みである（Com_SendSignal() 内で Com_FilterLastValue[] を
+//   使い、マスクなしの生値同士を比較する）。同じシグナルが TmsContributor=1
+//   として ComFilterAlgorithm=COM_FILTER_MASKED_NEW_DIFFERS_X を TMS 評価に
+//   使っていても（例: FaultLamp/AbsLamp）、ComTransferProperty の判定とは
+//   競合しない（TMS は「どの送信モードを使うか」、ComTransferProperty は
+//   「今回のコミットで送信を引き起こすか」という別々の問いに答えるため）。
+// -------------------------------------------------------
+typedef enum
+{
+    COM_TRANSFER_PROPERTY_PENDING             = 0,
+    COM_TRANSFER_PROPERTY_TRIGGERED_ON_CHANGE = 1
+} Com_TransferPropertyType;
 
 // -------------------------------------------------------
 // TX 送信モード（ComTxModeMode 相当、簡略版）
@@ -210,18 +254,23 @@ typedef struct
 //               ComFilterAlgorithm 評価結果が、所属 I-PDU の TMS
 //               （Com_IPduConfigType.TxModeModeTrue 参照）へ寄与する
 //               （SWS_Com_00676）。0 = TMS 計算に一切関与しない（既定）。
+//   TransferProperty : Signal Group（所属 I-PDU が IsSignalGroup=1）の
+//               メンバーのみ使用。詳細は Com_TransferPropertyType 参照。
+//               Signal Group でないシグナルでは未使用（FilterAlgorithm が
+//               単独で送信要否を決めるため）。
 // -------------------------------------------------------
 typedef struct
 {
-    Com_SignalIdType        SignalId;
-    Com_IPduIdType          IPduId;
-    uint8                   BitPosition;
-    uint8                   BitSize;
-    Com_SignalEndianType    Endian;
-    Com_FilterAlgorithmType FilterAlgorithm;
-    uint32                  Mask;
-    uint32                  FilterX;
-    uint8                   TmsContributor;
+    Com_SignalIdType          SignalId;
+    Com_IPduIdType            IPduId;
+    uint8                     BitPosition;
+    uint8                     BitSize;
+    Com_SignalEndianType      Endian;
+    Com_FilterAlgorithmType   FilterAlgorithm;
+    uint32                    Mask;
+    uint32                    FilterX;
+    uint8                     TmsContributor;
+    Com_TransferPropertyType  TransferProperty;
 } Com_SignalConfigType;
 
 // -------------------------------------------------------

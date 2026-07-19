@@ -85,7 +85,13 @@ static uint8 Com_TmsState[COM_TX_IPDU_MAX];
  * まとめて実バッファへ確定コミットする。
  * ----------------------------------------------------------------------- */
 static uint8 Com_TxShadowBuffer[COM_TX_IPDU_MAX][COM_IPDU_MAX_DLC];
-static uint8 Com_GroupFilterLastBuffer[COM_TX_IPDU_MAX][COM_IPDU_MAX_DLC];
+
+/* ComTransferProperty=COM_TRANSFER_PROPERTY_TRIGGERED_ON_CHANGE のメンバーが
+ * 変化を検知するたび Com_SendSignal() が立てる、「このグループの送信を
+ * 引き起こす」フラグ。COM_TRANSFER_PROPERTY_PENDING のメンバーはここへ
+ * 一切書き込まない（＝自身の変化だけでは送信を引き起こさない）。
+ * Com_SendSignalGroup() が読み取ってクリアする。 */
+static uint8 Com_GroupTriggerPending[COM_TX_IPDU_MAX];
 
 /**
  * \brief   COM モジュールを初期化し、すべての I-PDU バッファをクリアする。
@@ -140,13 +146,13 @@ void Com_Init(const Com_ConfigType* config)
     {
         for (uint8 j = 0; j < COM_IPDU_MAX_DLC; j++)
         {
-            Com_TxBuffer[i][j]             = 0U;
-            Com_TxShadowBuffer[i][j]        = 0U;
-            Com_GroupFilterLastBuffer[i][j] = 0U;
+            Com_TxBuffer[i][j]       = 0U;
+            Com_TxShadowBuffer[i][j] = 0U;
         }
         Com_TxLastSentMs[i]      = now;  /* PERIODIC/MIXED の周期計測を Init 時刻から開始 */
         Com_TxPending[i]         = 0U;
         Com_TmsState[i]          = 0U;   /* 既定 false（ゼロクリアされたバッファと整合） */
+        Com_GroupTriggerPending[i] = 0U;
     }
 
     for (uint8 s = 0; s < COM_SIGNAL_COUNT; s++)
@@ -720,7 +726,9 @@ uint8 Com_IsRxTimedOut(Com_IPduIdType IPduId)
  *          Signal Group（詳細は Com_SendSignalGroup() の \AUTOSARReq 参照）:
  *          所属する I-PDU が IsSignalGroup=1 の場合、値は実 TX バッファ
  *          (Com_TxBuffer) ではなくシャドウバッファ (Com_TxShadowBuffer) へ
- *          パックするのみとし、ComFilterAlgorithm の判定も行わない。
+ *          パックするのみとし、ComFilterAlgorithm の判定も行わない
+ *          （Signal Group メンバーの送信要否は ComFilterAlgorithm ではなく
+ *          ComTransferProperty が決める。Com_TransferPropertyType 参照）。
  *          Com_SendSignalGroup() が呼ばれるまで実バッファへは反映されない
  *          （グループの複数メンバーを不整合な状態で送信しないため）。
  *
@@ -728,7 +736,7 @@ uint8 Com_IsRxTimedOut(Com_IPduIdType IPduId)
  * \note       戻り値型は仕様に従い uint8。E_OK / E_NOT_OK の値（0x00 / 0x01）は
  *             RTE が使う Std_ReturnType と互換性がある。
  *
- * \AUTOSARReq     {SWS_Com_00197}
+ * \AUTOSARReq     {SWS_Com_00197, SWS_Com_00742, SWS_Com_00743}
  * \ServiceID      {0x0A}
  * \Reentrancy     {Reentrant}
  * \Synchronicity  {Synchronous}
@@ -782,7 +790,24 @@ uint8 Com_SendSignal(Com_SignalIdType SignalId, const void* SignalDataPtr)
         if (ipdu->IsSignalGroup != 0U)
         {
             /* Signal Group メンバー: シャドウバッファへ書き込むのみ。
-             * 実バッファへの反映とフィルタ判定は Com_SendSignalGroup() が行う。 */
+             * 実バッファへの反映は Com_SendSignalGroup() が行う。
+             *
+             * ComTransferProperty（SWS_Com_00742/00743、Com_TransferPropertyType
+             * 参照）: TRIGGERED_ON_CHANGE のメンバーのみ、前回値との比較で
+             * このグループの送信を引き起こすかどうかを判定する。この比較は
+             * ComFilterAlgorithm/Mask/FilterX とは独立しており、マスクなしの
+             * 生値同士を比較する（TmsContributor=1 として同じシグナルが
+             * COM_FILTER_MASKED_NEW_DIFFERS_X を TMS 評価に使っていても競合
+             * しない。TMS 再評価は Com_SendSignalGroup() 側で行う）。
+             * PENDING のメンバーは Com_GroupTriggerPending へ一切書き込まない
+             * （＝自身の変化だけでは送信を引き起こさない。SWS_Com_00743）。 */
+            if (sig->TransferProperty == COM_TRANSFER_PROPERTY_TRIGGERED_ON_CHANGE
+                && value != Com_FilterLastValue[s])
+            {
+                Com_GroupTriggerPending[sig->IPduId] = 1U;
+            }
+            Com_FilterLastValue[s] = value;
+
             Com_PackSignal(Com_TxShadowBuffer[sig->IPduId],
                            sig->BitPosition, sig->BitSize, sig->Endian, value);
             return E_OK;
@@ -821,10 +846,13 @@ uint8 Com_SendSignal(Com_SignalIdType SignalId, const void* SignalDataPtr)
  *
  * \details Com_SendSignal() が Signal Group（IsSignalGroup=1）のメンバーを
  *          書き込んだシャドウバッファ (Com_TxShadowBuffer) を、実 TX バッファ
- *          (Com_TxBuffer) へまとめてコピーする。個々のメンバー単位ではなく、
- *          このコミット単位で
- *          前回コミット値とのバイト比較により変化の有無を判定し、
- *          変化があれば Com_RequestTxOnChange() を呼ぶ（TxModeMode が
+ *          (Com_TxBuffer) へまとめてコピーする（PENDING/TRIGGERED_ON_CHANGE
+ *          いずれのメンバーの値も分け隔てなくコピーする）。
+ *          送信を引き起こすかどうかは、バイト単位の変化比較ではなく
+ *          Com_GroupTriggerPending[GroupId]（ComTransferProperty=
+ *          TRIGGERED_ON_CHANGE のメンバーが Com_SendSignal() 内で変化検知した
+ *          際に立てるフラグ。Com_TransferPropertyType 参照）で判定する。
+ *          立っていれば Com_RequestTxOnChange() を呼ぶ（TxModeMode が
  *          DIRECT/MIXED の I-PDU なら次回 Com_MainFunction() で送信される）。
  *
  * \param[in]  GroupId  コミットする Signal Group（TX I-PDU）の ID。
@@ -837,7 +865,7 @@ uint8 Com_SendSignal(Com_SignalIdType SignalId, const void* SignalDataPtr)
  * \pre        コミット前に、このグループに属する全メンバーを
  *             Com_SendSignal() で設定しておくこと。
  *
- * \AUTOSARReq     {SWS_Com_00200, SWS_Com_00050}
+ * \AUTOSARReq     {SWS_Com_00200, SWS_Com_00050, SWS_Com_00742, SWS_Com_00743}
  * \ServiceID      {0x18}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
@@ -862,26 +890,31 @@ Std_ReturnType Com_SendSignalGroup(Com_IPduIdType GroupId)
     if (ipdu == NULL || ipdu->IsSignalGroup == 0U)
         return E_NOT_OK;
 
-    uint8 changed = 0U;
+    /* PENDING/TRIGGERED_ON_CHANGE を問わず、シャドウバッファの値はすべて
+     * 実バッファへコピーする（SWS_Com_00743: PENDING メンバーも、他の
+     * メンバーが引き起こした送信に便乗して最新値が運ばれる）。 */
     for (uint8 b = 0U; b < ipdu->DLC; b++)
     {
-        if (Com_TxShadowBuffer[GroupId][b] != Com_GroupFilterLastBuffer[GroupId][b])
-            changed = 1U;
-        Com_TxBuffer[GroupId][b]             = Com_TxShadowBuffer[GroupId][b];
-        Com_GroupFilterLastBuffer[GroupId][b] = Com_TxShadowBuffer[GroupId][b];
+        Com_TxBuffer[GroupId][b] = Com_TxShadowBuffer[GroupId][b];
     }
 
-    /* TMS 再評価（SWS_Com_00245）。実バッファへのコミット後、変化判定より
-     * 前に行う必要はないが、Com_RequestTxOnChange() が Com_EffectiveTxModeMode()
-     * 経由で Com_TmsState を参照するため、その呼び出しより前に確定させる。
-     * なお本 I-PDU のようにグループ全体のバイト比較で変化判定する場合、
-     * TMS 寄与シグナルのビットは必ずそのバイトに含まれるため、
-     * 「changed==0 なのに TMS が変化する」ことは起こらない
-     * （マスク済みビットの変化はバイト全体の変化の部分集合であるため）。 */
+    /* TMS 再評価（SWS_Com_00245）。Com_RequestTxOnChange() が
+     * Com_EffectiveTxModeMode() 経由で Com_TmsState を参照するため、
+     * その呼び出しより前に確定させる。TMS 寄与シグナルが PENDING の場合、
+     * 「送信は引き起こさないが TMS だけは変化する」こともあり得るが、
+     * これは仕様上の矛盾ではない（TMS は「次に送信するときどのモードを
+     * 使うか」を決めるだけで、それ自体が送信のトリガーではないため）。 */
     Com_RecalcTms(GroupId);
 
-    if (changed)
+    /* 送信を引き起こすかどうかは、ComTransferProperty=TRIGGERED_ON_CHANGE の
+     * メンバーが Com_SendSignal() 内で変化検知して立てたフラグのみで判定する
+     * （バイト単位の生比較はしない。PENDING メンバーだけが変化した場合は
+     * このフラグは立たず、コミットはされても送信は引き起こされない）。 */
+    if (Com_GroupTriggerPending[GroupId])
+    {
+        Com_GroupTriggerPending[GroupId] = 0U;
         Com_RequestTxOnChange(ipdu);
+    }
 
     return E_OK;
 }
