@@ -949,11 +949,23 @@ void Com_TxConfirmation(PduIdType TxPduId, Std_ReturnType result)
  *          `Com_RequestTxOnChange()` が立てた `Com_TxPending[]` を、
  *          MIXED/PERIODIC の周期送信は実効 TxPeriodMs からの経過時間を
  *          それぞれ判定材料にする:
- *            - DIRECT   : Com_TxPending[] が立っていれば送信（周期フロアなし）
- *            - MIXED    : Com_TxPending[] が立っている、または経過時間が
- *                          実効 TxPeriodMs（周期フロア間隔）を超えたら送信
+ *            - DIRECT   : Com_TxPending[] が立っており、かつ MDT
+ *                          （ComMinimumDelayTime、下記）を満たせば送信
+ *            - MIXED    : (Com_TxPending[] が立っており、かつ MDT を満たす)、
+ *                          または経過時間が実効 TxPeriodMs（周期フロア間隔）
+ *                          を超えたら送信（周期フロアには MDT を適用しない）
  *            - PERIODIC : 経過時間が実効 TxPeriodMs を超えたら常に送信
- *                          （Com_TxPending[] は使用しない）
+ *                          （Com_TxPending[]・MDT のいずれも使用しない）
+ *
+ *          MDT（`ipdu->MinDelayMs`、DaVinci: ComMinimumDelayTime）: DIRECT/
+ *          MIXED I-PDU の変化時送信について、直近の実送信から MinDelayMs
+ *          未満しか経過していなければ送信を保留する（Com_TxPending[] は
+ *          立てたまま破棄しない。次回以降の呼び出しで経過時間を満たし次第
+ *          送信する）。MIXED の周期フロアには適用しない
+ *          （SWS_Com_00789 の既定動作 [ComEnableMDTForCyclicTransmission=false]
+ *          に合わせている）。MinDelayMs=0 の I-PDU は常に満了扱いのため、
+ *          MDT 未設定の I-PDU の挙動に影響しない（SWS_Com_00471）。
+ *
  *          実送信を Com_SendSignal()/Com_SendSignalGroup() の呼び出し元
  *          （ASW Runnable）ではなく本関数（Os の 100ms タスク、WdgM 非監視）
  *          側に一元化することで、バス輻輳時に `sendMsgBuf()` の TX バッファ
@@ -971,7 +983,7 @@ void Com_TxConfirmation(PduIdType TxPduId, Std_ReturnType result)
  *
  * \AUTOSARReq     {SWS_Com_00398, SWS_Com_00684, SWS_Com_00685, SWS_Com_00734,
  *                  SWS_Com_00742, SWS_Com_00743, SWS_Com_00777, SWS_Com_00032,
- *                  SWS_Com_00799}
+ *                  SWS_Com_00799, SWS_Com_00471, SWS_Com_00698, SWS_Com_00789}
  * \ServiceID      {0x20}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
@@ -1020,7 +1032,15 @@ void Com_MainFunction(void)
         {
             const uint8 floorDue = (mode == COM_TX_MODE_MIXED)
                                     && ((now - Com_TxLastSentMs[id]) >= (unsigned long)period);
-            due = (Com_TxPending[id] != 0U) || floorDue;
+            /* MDT（ComMinimumDelayTime）: 変化時送信（Com_TxPending 経由）にのみ
+             * 適用し、MIXED の周期フロア（floorDue）には適用しない
+             * （SWS_Com_00789 の既定動作。MinDelayMs=0 なら常に満了扱いのため
+             * MDT 未設定の I-PDU では以前と同じ挙動になる）。満了前に変化検知が
+             * あっても Com_TxPending は立てたまま保持し、破棄しない
+             * （次回 Com_MainFunction() で再判定する）。 */
+            const uint8 mdtElapsed = (now - Com_TxLastSentMs[id]) >= (unsigned long)ipdu->MinDelayMs;
+            const uint8 changeDue  = (Com_TxPending[id] != 0U) && mdtElapsed;
+            due = changeDue || floorDue;
         }
 
         if (!due)

@@ -176,6 +176,8 @@ static const Com_IPduConfigType Com_TxIPduConfigData[COM_TX_IPDU_COUNT] = {
          *   しても把握できてほしいため、周期フロアで再送し続ける。
          *   どの信号が TMS に寄与するかは Signal 8/9（FAULT_LAMP/ABS_LAMP）の
          *   .TmsContributor=1 で設定する（RunLamp は寄与しない）。
+         * MDT（ComMinimumDelayTime）: 変化時送信に最小送信間隔を設ける
+         * バス輻輳保護。周期フロアには適用されない（Com.c 参照）。
          * --------------------------------------------------------------- */
         .IPduId    = 1U,  /* DaVinci: ComIPduHandleId  - I-PDU 識別番号 */
         .DLC       = 1U,  /* DaVinci: ComIPduLength    - I-PDU バイト長（3bit のみ使用） */
@@ -188,7 +190,8 @@ static const Com_IPduConfigType Com_TxIPduConfigData[COM_TX_IPDU_COUNT] = {
                                                *          (TMS false: 通常時) */
         .TxModeModeTrue = COM_TX_MODE_MIXED,  /* DaVinci: ComTxModeTrue
                                                *          (TMS true: FAULT/ABS 点灯中) */
-        .TxPeriodMsTrue = COM_TX_PERIOD_WARNINGSTATUS_TRUE_FLOOR_MS
+        .TxPeriodMsTrue = COM_TX_PERIOD_WARNINGSTATUS_TRUE_FLOOR_MS,
+        .MinDelayMs     = COM_TX_MIN_DELAY_WARNINGSTATUS_MS /* DaVinci: ComMinimumDelayTime */
     },
     {
         /* ---------------------------------------------------------------

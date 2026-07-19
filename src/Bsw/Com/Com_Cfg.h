@@ -90,6 +90,19 @@
  */
 #define COM_TX_PERIOD_WARNINGSTATUS_TRUE_FLOOR_MS  2000U
 
+/**
+ * WarningStatus (0x210) の MDT（ComMinimumDelayTime、変化時送信の最小送信間隔）[ms]
+ * DaVinci: /ActiveEcuC/Com/ComConfig/[ComIPdu]/ComMinimumDelayTime
+ *
+ * 直近の実送信からこの時間未満しか経過していなければ、値が変化しても実送信を
+ * 保留する（破棄はしない。満了次第送信する）。バス輻輳防止のための保護的な
+ * 既定値であり、本プロジェクトの ASW（App_WarningIndicator_Run、500ms 周期）
+ * は現状これより速く値を変化させないため、通常運用でこの下限に達することは
+ * ない（詳細は README の「MDT」セクション参照）。MIXED の周期フロア送信には
+ * 適用しない（Com_Cfg.h の COM_TX_PERIOD_WARNINGSTATUS_TRUE_FLOOR_MS 参照）。
+ */
+#define COM_TX_MIN_DELAY_WARNINGSTATUS_MS  100U
+
 /** シグナルテーブルのエントリ数（RX + TX の合計）
  *  DaVinci: /ActiveEcuC/Com/ComConfig/ 内 ComSignal ノード数の合計 */
 #define COM_SIGNAL_COUNT    12U
