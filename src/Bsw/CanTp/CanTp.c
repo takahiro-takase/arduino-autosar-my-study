@@ -293,7 +293,7 @@ static void CanTp_SendNextCF(void)
  * \retval  E_OK      送信受け付け済み。
  * \retval  E_NOT_OK  NULL ポインタ、長さ超過、またはチャネルビジー。
  *
- * \AUTOSARReq     {SWS_CanTp_00218}
+ * \AUTOSARReq     {SWS_CanTp_00212}
  * \ServiceID      {0x49}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}

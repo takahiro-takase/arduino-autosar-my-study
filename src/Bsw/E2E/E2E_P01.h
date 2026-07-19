@@ -62,7 +62,10 @@ typedef struct
     uint8  CounterOffset;    /**< Counter バイトの PDU 内オフセット    */
     uint8  CRCOffset;        /**< CRC バイトの PDU 内オフセット        */
     uint8  SyncCounterInit;  /**< WRONGSEQUENCE 検知後、OK/OKSOMELOST へ復帰するまでに
-                                   必要な連続正常受信回数（SWS_E2E_00019）。
+                                   必要な連続正常受信回数（E2E_P01Check、7.3.9 章、
+                                   主要求 SWS_E2E_00196。SyncCounterInit 単体の
+                                   専用要求番号はなく、この値自体は 8.2.1.1 章の
+                                   E2E_P01ConfigType 定義で導入される）。
                                    Protect 側では未使用 */
 } E2E_P01ConfigType;
 
