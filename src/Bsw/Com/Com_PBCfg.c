@@ -19,6 +19,7 @@
  *              3 信号を一括して一貫したスナップショットとして読む。
  *              Rte_COMCbk_AbsInfo が RxIndicationCbk として確定コピーする）
  *              Signal 4: VehicleSpeed  16 bit  BitPos=16  BigEndian  0.01 km/h
+ *                RxDataTimeoutAction=SUBSTITUTE（タイムアウト中は 0xFFFF を返す）
  *              Signal 5: BrakeActive    1 bit  BitPos=32  BigEndian  0=解除/1=作動
  *              Signal 6: AbsActive      1 bit  BitPos=33  BigEndian  0=非作動/1=作動
  *            TX I-PDU 0 (IPduId=0): CAN ID 0x200, DLC=1  MeterStatus
@@ -86,6 +87,8 @@
  *   .FilterAlgorithm ←→ ComFilterAlgorithm （TX シグナルのみ。RX シグナルは既定の ALWAYS のまま未使用）
  *   .Mask            ←→ ComFilterMask
  *   .TransferProperty ←→ ComTransferProperty （Signal Group メンバーのみ使用）
+ *   .RxDataTimeoutAction      ←→ ComRxDataTimeoutAction      （RX シグナルのみ使用）
+ *   .TimeoutSubstitutionValue ←→ ComTimeoutSubstitutionValue （RxDataTimeoutAction=SUBSTITUTE のみ使用）
  *
  * =====================================================================
  *
@@ -301,12 +304,25 @@ static const Com_SignalConfigType Com_SignalConfigData[COM_SIGNAL_COUNT] = {
          * DaVinci: /ActiveEcuC/Com/ComConfig/VehicleSpeed_Rx
          * RX Signal Group（AbsInfo_Rx）メンバー。Com_ReceiveSignalGroup(1U) 経由
          * でのみ最新化される（Rte_COMCbk_AbsInfo 参照）。
+         * RxDataTimeoutAction=SUBSTITUTE: タイムアウト中は 0xFFFF（655.35 km/h
+         * 相当、物理的にあり得ない値）を返す。停車中の実データ 0 と、
+         * 通信途絶時の「値不明」を明確に区別するため（既定の NONE のまま
+         * だと E_NOT_OK になるだけで、速度そのものは返らない）。
+         * 注意: この VehicleSpeed を読む Com_ReceiveSignal() は
+         * Rte_COMCbk_AbsInfo()（RxIndicationCbk）内の 1 箇所のみで、
+         * フレーム受信・E2E 検証成功直後にしか呼ばれないため、この
+         * SUBSTITUTE 分岐は現状のアーキテクチャでは実際には発動しない
+         * （実際のフェイルセーフは Rte_Read_* 側の Com_IsRxTimedOut() が
+         * 別途担う）。動機は実利より仕様忠実性。詳細は README.md の
+         * 「ComRxDataTimeoutAction」節を参照。
          * --------------------------------------------------------------- */
         .SignalId    = COM_SIGNAL_VEHICLE_SPEED, /* DaVinci: ComHandleId        */
         .IPduId      = 1U,                       /* DaVinci: ComIPduRef → AbsInfo_Rx */
         .BitPosition = 16U,                      /* DaVinci: ComBitPosition     */
         .BitSize     = 16U,                      /* DaVinci: ComBitSize         */
-        .Endian      = COM_BIG_ENDIAN            /* DaVinci: ComSignalEndianness = OPAQUE */
+        .Endian      = COM_BIG_ENDIAN,           /* DaVinci: ComSignalEndianness = OPAQUE */
+        .RxDataTimeoutAction     = COM_RX_TIMEOUT_ACTION_SUBSTITUTE, /* DaVinci: ComRxDataTimeoutAction */
+        .TimeoutSubstitutionValue = 0xFFFFU      /* DaVinci: ComTimeoutSubstitutionValue */
     },
     {
         /* ---------------------------------------------------------------

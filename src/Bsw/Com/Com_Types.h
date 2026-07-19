@@ -124,6 +124,39 @@ typedef enum
 } Com_TransferPropertyType;
 
 // -------------------------------------------------------
+// ComRxDataTimeoutAction（ECUC_Com_00412 相当、RX シグナル専用）
+//
+//   RX 受信デッドライン監視タイマが満了した際、Com_ReceiveSignal() が
+//   そのシグナルに対してどう振る舞うかを決める。
+//
+//   COM_RX_TIMEOUT_ACTION_NONE (既定)
+//     : 何も置き換えない。本実装は実 AUTOSAR の「最後の正常値を黙って
+//       返し続ける」動作ではなく、より安全側に倒した簡略化として
+//       Com_ReceiveSignal() が E_NOT_OK を返し値を書き込まない
+//       （呼び出し元が事前にセットした初期値 = 安全値をそのまま使わせる）。
+//       既存のすべてのシグナルはこの既定動作のまま変更されない。
+//   COM_RX_TIMEOUT_ACTION_SUBSTITUTE
+//     : タイムアウト中、Com_ReceiveSignal() は I-PDU バッファ（正常受信時の
+//       実データ）を読まず、代わりにこのシグナルの `TimeoutSubstitutionValue`
+//       を書き込んで E_OK を返す（SWS_Com_00875、ECUC_Com_10006:
+//       ComTimeoutSubstitutionValue 相当）。
+//
+//   実 AUTOSAR にはもう 1 つ REPLACE（SWS_Com_00470: シグナルの
+//   ComSignalInitValue で置き換える）があるが、本実装は ComSignalInitValue
+//   という設定概念自体を持たない（RX バッファは Com_Init() で単純に
+//   ゼロクリアするのみ）。REPLACE は「タイムアウト時 = 起動直後と同じ
+//   初期値」を返すだけで、本物のゼロ値（例: 停車中の VehicleSpeed=0）との
+//   区別がつかない。一方 SUBSTITUTE は起動直後の初期値とは異なる、明確に
+//   「異常」とわかる値（例: VehicleSpeed に 0xFFFF）を設定できるため、
+//   本実装ではこちらのみを実装する。
+// -------------------------------------------------------
+typedef enum
+{
+    COM_RX_TIMEOUT_ACTION_NONE       = 0,
+    COM_RX_TIMEOUT_ACTION_SUBSTITUTE = 1
+} Com_RxDataTimeoutActionType;
+
+// -------------------------------------------------------
 // TX 送信モード（ComTxModeMode 相当、簡略版）
 //
 //   実 AUTOSAR の ComTxModeMode は DIRECT/PERIODIC/MIXED/NONE を持つ。
@@ -265,19 +298,25 @@ typedef struct
 //               メンバーのみ使用。詳細は Com_TransferPropertyType 参照。
 //               Signal Group でないシグナルでは未使用（FilterAlgorithm が
 //               単独で送信要否を決めるため）。
+//   RxDataTimeoutAction / TimeoutSubstitutionValue : RX シグナルのみ使用。
+//               詳細は Com_RxDataTimeoutActionType 参照。
+//               COM_RX_TIMEOUT_ACTION_SUBSTITUTE のときのみ
+//               TimeoutSubstitutionValue を参照する。
 // -------------------------------------------------------
 typedef struct
 {
-    Com_SignalIdType          SignalId;
-    Com_IPduIdType            IPduId;
-    uint8                     BitPosition;
-    uint8                     BitSize;
-    Com_SignalEndianType      Endian;
-    Com_FilterAlgorithmType   FilterAlgorithm;
-    uint32                    Mask;
-    uint32                    FilterX;
-    uint8                     TmsContributor;
-    Com_TransferPropertyType  TransferProperty;
+    Com_SignalIdType            SignalId;
+    Com_IPduIdType              IPduId;
+    uint8                       BitPosition;
+    uint8                       BitSize;
+    Com_SignalEndianType        Endian;
+    Com_FilterAlgorithmType     FilterAlgorithm;
+    uint32                      Mask;
+    uint32                      FilterX;
+    uint8                       TmsContributor;
+    Com_TransferPropertyType    TransferProperty;
+    Com_RxDataTimeoutActionType RxDataTimeoutAction;
+    uint32                      TimeoutSubstitutionValue;
 } Com_SignalConfigType;
 
 // -------------------------------------------------------

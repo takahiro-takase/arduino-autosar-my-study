@@ -609,9 +609,14 @@ static void Com_RequestTxOnChange(const Com_IPduConfigType* ipdu)
  *                           リトルエンディアン uint32 として書き込まれる。
  *                           NULL 禁止。
  *
- * \retval  E_OK      シグナルが見つかり、SignalDataPtr へ値を書き込んだ。
+ * \retval  E_OK      シグナルが見つかり、SignalDataPtr へ値を書き込んだ
+ *                    （実データ、または当該 I-PDU がタイムアウト中かつ
+ *                    RxDataTimeoutAction=SUBSTITUTE の場合は
+ *                    TimeoutSubstitutionValue）。
  * \retval  E_NOT_OK  COM 未初期化、SignalDataPtr が NULL、
- *                    またはシグナル設定テーブルに SignalId が存在しない。
+ *                    シグナル設定テーブルに SignalId が存在しない、
+ *                    または当該 I-PDU がタイムアウト中かつ
+ *                    RxDataTimeoutAction=NONE（既定）。
  *
  * \pre        Com_Init() が正常に完了していること。
  * \pre        このシグナルが属する I-PDU で Com_RxIndication() が
@@ -623,7 +628,7 @@ static void Com_RequestTxOnChange(const Com_IPduConfigType* ipdu)
  * \note       戻り値型は仕様に従い uint8。E_OK / E_NOT_OK の値（0x00 / 0x01）は
  *             RTE が使う Std_ReturnType と互換性がある。
  *
- * \AUTOSARReq     {SWS_Com_00198}
+ * \AUTOSARReq     {SWS_Com_00198, SWS_Com_00500, SWS_Com_00875}
  * \ServiceID      {0x0B}
  * \Reentrancy     {Reentrant}
  * \Synchronicity  {Synchronous}
@@ -666,30 +671,39 @@ uint8 Com_ReceiveSignal(Com_SignalIdType SignalId, void* SignalDataPtr)
          * シャドウバッファ・タイムアウトスナップショットを読む（Com_RxBuffer/
          * Com_RxTimedOut を直接見ない）。これにより、同じグループの複数
          * メンバーを読む間に新しいフレームが届いても一貫した値が返る。 */
-        const uint8* srcBuf;
-        if (ipdu->IsSignalGroup != 0U)
-        {
-            if (Com_RxShadowTimedOut[sig->IPduId])
-                return E_NOT_OK;
-            srcBuf = Com_RxShadowBuffer[sig->IPduId];
-        }
-        else
-        {
-            /* タイムアウト中は値を書き込まず E_NOT_OK を返す（呼び出し元の初期値=安全値を使用） */
-            if (Com_RxTimedOut[sig->IPduId])
-                return E_NOT_OK;
-            srcBuf = Com_RxBuffer[sig->IPduId];
-        }
-
-        const uint32 value = Com_UnpackSignal(
-            srcBuf,
-            sig->BitPosition, sig->BitSize, sig->Endian);
+        const uint8 timedOut = (ipdu->IsSignalGroup != 0U)
+                               ? Com_RxShadowTimedOut[sig->IPduId]
+                               : Com_RxTimedOut[sig->IPduId];
+        const uint8* srcBuf  = (ipdu->IsSignalGroup != 0U)
+                               ? Com_RxShadowBuffer[sig->IPduId]
+                               : Com_RxBuffer[sig->IPduId];
 
         /* SignalDataPtr は呼び出し元が BitSize に応じた幅の変数
          * (uint8/uint16/uint32) を渡す。常に 4 バイト書き込むと、
          * 8bit/16bit の呼び出し元ではスタック上の隣接領域を破壊する。
          * BitSize から必要バイト数だけを書き込む。 */
         const uint8 byteCount = (uint8)((sig->BitSize + 7U) / 8U);
+
+        if (timedOut)
+        {
+            /* ComRxDataTimeoutAction（Com_RxDataTimeoutActionType 参照）:
+             * SUBSTITUTE でなければ、値を書き込まず E_NOT_OK を返す
+             * （呼び出し元の初期値=安全値を使用、既存の既定動作）。
+             * SUBSTITUTE なら I-PDU バッファ/シャドウバッファは読まず、
+             * 設定済みの TimeoutSubstitutionValue を代わりに書き込んで
+             * E_OK を返す（実データが古いまま返ることを防ぐ）。 */
+            if (sig->RxDataTimeoutAction != COM_RX_TIMEOUT_ACTION_SUBSTITUTE)
+                return E_NOT_OK;
+
+            for (uint8 b = 0U; b < byteCount; b++)
+                dataPtr[b] = (uint8)(sig->TimeoutSubstitutionValue >> (8U * b));
+            return E_OK;
+        }
+
+        const uint32 value = Com_UnpackSignal(
+            srcBuf,
+            sig->BitPosition, sig->BitSize, sig->Endian);
+
         for (uint8 b = 0U; b < byteCount; b++)
         {
             dataPtr[b] = (uint8)(value >> (8U * b));
