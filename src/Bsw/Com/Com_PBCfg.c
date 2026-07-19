@@ -15,6 +15,9 @@
  *            RX I-PDU 1 (IPduId=1): CAN ID 0x110, DLC=5  AbsInfo     (ABS ECU, E2E P01 保護)
  *              byte[0]: E2E CRC8 / byte[1]: E2E Counter (下位4bit)
  *              （AUTOSAR 標準バリアント 1A、SWS_E2E_00227 準拠のレイアウト）
+ *              IsSignalGroup=1（RX Signal Group、Com_ReceiveSignalGroup で
+ *              3 信号を一括して一貫したスナップショットとして読む。
+ *              Rte_COMCbk_AbsInfo が RxIndicationCbk として確定コピーする）
  *              Signal 4: VehicleSpeed  16 bit  BitPos=16  BigEndian  0.01 km/h
  *              Signal 5: BrakeActive    1 bit  BitPos=32  BigEndian  0=解除/1=作動
  *              Signal 6: AbsActive      1 bit  BitPos=33  BigEndian  0=非作動/1=作動
@@ -70,8 +73,9 @@
  *   .DLC     ←→ ComIPduLength     （I-PDU のバイト長）
  *   .PduRId  ←→ ComIPduPduRef     （PduR の対応 PDU へのリンク）
  *   .IsSignalGroup ←→ （本プロジェクト独自拡張。DaVinci では ComSignalGroup の
- *                      有無で暗黙的に表現される）1 = Signal Group、
- *                      Com_SendSignalGroup() で確定コミットする対象
+ *                      有無で暗黙的に表現される）1 = Signal Group。
+ *                      TX I-PDU では Com_SendSignalGroup()、RX I-PDU では
+ *                      Com_ReceiveSignalGroup() で確定コミット/コピーする対象
  *
  * [Com_SignalConfigType] ←→ /ActiveEcuC/Com/ComConfig/[ComSignal]
  *   .SignalId    ←→ ComHandleId          （シグナルの識別番号）
@@ -127,6 +131,10 @@ static const Com_IPduConfigType Com_RxIPduConfigData[COM_RX_IPDU_COUNT] = {
         /* ---------------------------------------------------------------
          * RX IPduId=1: AbsInfo フレーム (ABS ECU 送信、E2E P01 保護)
          * DaVinci: /ActiveEcuC/Com/ComConfig/AbsInfo_Rx
+         * IsSignalGroup=1（RX Signal Group）: VehicleSpeed/BrakeActive/AbsActive
+         * の 3 シグナルを Com_ReceiveSignalGroup() 経由で一括して一貫したスナップ
+         * ショットとして読む。Rte_COMCbk_AbsInfo() が RxIndicationCbk として
+         * フレーム受信の都度呼ばれ、その中で確定コピーする。
          * --------------------------------------------------------------- */
         .IPduId    = 1U,                       /* DaVinci: ComIPduHandleId  - I-PDU 識別番号 */
         .DLC       = 5U,                       /* DaVinci: ComIPduLength    - I-PDU バイト長
@@ -135,6 +143,7 @@ static const Com_IPduConfigType Com_RxIPduConfigData[COM_RX_IPDU_COUNT] = {
                                                 *          (PduR_PBCfg.c PduR_RxDests_Path2[0].DestPduId と一致させること) */
         .TimeoutMs = COM_TIMEOUT_ABS_INFO_MS,  /* DaVinci: ComRxDeadlineMonitoringPeriod
                                                 *          ABS ECU からの受信が途絶えたと判断するまでの時間 */
+        .IsSignalGroup = 1U,                   /* RX Signal Group（Com_ReceiveSignalGroup で確定コピー） */
         .RxIndicationCbk = Rte_COMCbk_AbsInfo  /* DaVinci: /ActiveEcuC/E2EXf/AbsInfo_Rx_E2EXf
                                                 *          （E2E Transformer 呼び出しは Rte 層が担う） */
     }
@@ -290,6 +299,8 @@ static const Com_SignalConfigType Com_SignalConfigData[COM_SIGNAL_COUNT] = {
          * （byte[0]=E2E CRC8, byte[1]=E2E Counter を先頭に配置する
          *   AUTOSAR 標準バリアント 1A レイアウトのため、シグナルは byte[2] から）
          * DaVinci: /ActiveEcuC/Com/ComConfig/VehicleSpeed_Rx
+         * RX Signal Group（AbsInfo_Rx）メンバー。Com_ReceiveSignalGroup(1U) 経由
+         * でのみ最新化される（Rte_COMCbk_AbsInfo 参照）。
          * --------------------------------------------------------------- */
         .SignalId    = COM_SIGNAL_VEHICLE_SPEED, /* DaVinci: ComHandleId        */
         .IPduId      = 1U,                       /* DaVinci: ComIPduRef → AbsInfo_Rx */
@@ -302,6 +313,7 @@ static const Com_SignalConfigType Com_SignalConfigData[COM_SIGNAL_COUNT] = {
          * Signal 5: BrakeActive  RX 1bit  CAN 0x110 byte[4] bit7
          *   0=ブレーキ解除, 1=ブレーキ作動
          * DaVinci: /ActiveEcuC/Com/ComConfig/BrakeActive_Rx
+         * RX Signal Group（AbsInfo_Rx）メンバー。VehicleSpeed と同様。
          * --------------------------------------------------------------- */
         .SignalId    = COM_SIGNAL_BRAKE_ACTIVE, /* DaVinci: ComHandleId          */
         .IPduId      = 1U,                      /* DaVinci: ComIPduRef → AbsInfo_Rx */
@@ -314,6 +326,7 @@ static const Com_SignalConfigType Com_SignalConfigData[COM_SIGNAL_COUNT] = {
          * Signal 6: AbsActive  RX 1bit  CAN 0x110 byte[4] bit6
          *   0=ABS 非作動, 1=ABS 作動中
          * DaVinci: /ActiveEcuC/Com/ComConfig/AbsActive_Rx
+         * RX Signal Group（AbsInfo_Rx）メンバー。VehicleSpeed と同様。
          * --------------------------------------------------------------- */
         .SignalId    = COM_SIGNAL_ABS_ACTIVE,   /* DaVinci: ComHandleId          */
         .IPduId      = 1U,                      /* DaVinci: ComIPduRef → AbsInfo_Rx */

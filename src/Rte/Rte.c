@@ -176,6 +176,17 @@ void Rte_COMCbk_EngineInfo(void)
  *
  * \details Com_PBCfg.c の RxIndicationCbk として登録される。
  *
+ *          AbsInfo は RX Signal Group（IsSignalGroup=1、Com_PBCfg.c 参照）
+ *          でもあるため、VehicleSpeed/BrakeActive/AbsActive を読む前に
+ *          Com_ReceiveSignalGroup(1U) で I-PDU バッファを RX シャドウバッファへ
+ *          確定コピーする（Com_ReceiveSignal() はこのグループのメンバーに
+ *          対して、Com_RxBuffer ではなくこのシャドウバッファを読む）。
+ *          この呼び出し自体はフレーム受信直後・Com_RxTimedOut リセット後に
+ *          同期的に実行されるため、実際にタイムアウト中でこの一貫性保証が
+ *          意味を持つ場面はない（既に E2E チェックを通過した新鮮なフレームの
+ *          直後であるため）。TMS/MDT/ComTransferProperty と同じく、動機は
+ *          実利より仕様忠実性（SWS_Com_00201/00051/00638 相当）。
+ *
  * \note    Rte_COMCbk_EngineInfo() と同じ理由で non-static。
  */
 void Rte_COMCbk_AbsInfo(void)
@@ -192,6 +203,7 @@ void Rte_COMCbk_AbsInfo(void)
         return;
 
     SchM_Enter_Rte_MIRROR_EXCLUSIVE_AREA();
+    (void)Com_ReceiveSignalGroup(1U);
     (void)Com_ReceiveSignal(COM_SIGNAL_VEHICLE_SPEED, &Rte_AbsInfoMirror.speed);
     (void)Com_ReceiveSignal(COM_SIGNAL_BRAKE_ACTIVE,  &Rte_AbsInfoMirror.brake);
     (void)Com_ReceiveSignal(COM_SIGNAL_ABS_ACTIVE,    &Rte_AbsInfoMirror.abs);
