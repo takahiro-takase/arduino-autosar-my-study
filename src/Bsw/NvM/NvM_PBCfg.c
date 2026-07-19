@@ -95,12 +95,17 @@ static const NvM_BlockDescriptorType NvM_BlockTable[NVM_BLOCK_COUNT] =
         NvM_Ram_DemAging,                  /* RamBlockDataAddress  */
         NULL                               /* RomBlockDataAddress: 未設定→全0で代替 */
     },
-    /* NVM_BLOCK_ID_DEM_EXTENDED */
+    /* NVM_BLOCK_ID_DEM_EXTENDED — 冗長ブロック（2 面化）。
+     * UDS SID 0x19/06 で読み出せる車両生涯の故障確定回数を保持するため、
+     * 1 バイトの書き込み不良で丸ごと失われる（全 0 へ復元される）ことを
+     * 避ける。詳細は NvM_Cfg.h 冒頭のレイアウトコメントを参照。 */
     {
         NVM_BLOCK_DEM_EXTENDED_EEPROM_ADDR,  /* NvMNvBlockBaseNumber */
         NVM_BLOCK_DEM_EXTENDED_LENGTH,       /* NvMNvBlockLength     */
         NvM_Ram_DemExtended,                 /* RamBlockDataAddress  */
-        NULL                                 /* RomBlockDataAddress: 未設定→全0で代替 */
+        NULL,                                /* RomBlockDataAddress: 未設定→全0で代替 */
+        1U,                                  /* Redundant: 冗長ブロック */
+        NVM_BLOCK_DEM_EXTENDED_MIRROR_EEPROM_ADDR /* NvMNvBlockBaseNumberMirror */
     }
 };
 

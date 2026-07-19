@@ -27,18 +27,19 @@
  *            即座に更新するが、EEPROM への実書き込みは「保留」とマークする
  *            だけで、その場ではブロックしない。NvM_MainFunction() が周期的に
  *            呼ばれるたびに、保留中のブロックのデータ本体または CRC のうち
- *            未書き込みの 1 バイトだけを書き込む。1 ブロック（最大 10 バイト）
- *            を書き終えると次の保留ブロックへ移る。ブロックは同時に 1 個ずつ
+ *            未書き込みの 1 バイトだけを書き込む。1 ブロック（最大 10 バイト、
+ *            冗長ブロックはプライマリ→ミラーの順で 2 面分）を書き終えると
+ *            次の保留ブロックへ移る。ブロックは同時に 1 個ずつ
  *            投入順 (FIFO) で順次処理する。呼び出し元（例: Dem）が複数ブロックを
  *            続けて書く際、電源断時の整合性のために書き込み順序そのものに
  *            意味を持たせている場合があるため（例: 有効性マーカーを最後に
  *            書くことで「途中経過」を無効データとして扱う設計）、ブロック ID の
  *            昇順ではなく投入順を維持しなければならない。
  *            処理中のブロックに対して新たに NvM_WriteBlock() が呼ばれた場合は
- *            書き込み位置を先頭へ巻き戻す。RAM ミラーは既に新しい値に
- *            上書きされているため、巻き戻さずに続行すると「古いバイトと
- *            新しいバイトが混在した」不整合な内容が EEPROM に残ってしまう
- *            （ちぎれ書き）。
+ *            書き込み位置（冗長ブロックはコピー選択も含め）を先頭へ巻き戻す。
+ *            RAM ミラーは既に新しい値に上書きされているため、巻き戻さずに
+ *            続行すると「古いバイトと新しいバイトが混在した」不整合な内容が
+ *            EEPROM に残ってしまう（ちぎれ書き）。
  *
  * \copyright  Copyright (c) 2025 T_T
  * \license    MIT License - 詳細は LICENSE ファイルを参照。
@@ -76,6 +77,12 @@ static uint8 NvM_ActiveBlockId = NVM_BLOCK_COUNT;
 /** 処理中ブロックの次に書き込むバイトオフセット。
  *  [0, NvMNvBlockLength) はデータ本体、NvMNvBlockLength は CRC バイトを指す。 */
 static uint16 NvM_ActiveByteIndex = 0U;
+
+/** 冗長ブロック（Redundant=1）処理中、現在どちらのコピーを書き込んでいるか。
+ *  0 = プライマリ面、1 = ミラー面。非冗長ブロックでは未使用（常に 0）。
+ *  プライマリを完全に書き終えてからミラーへ移るため、書き込み途中で
+ *  電源が落ちても、書き込み中でない側は必ず直前の完了済みの内容を保持する。 */
+static uint8 NvM_ActiveCopyIsMirror = 0U;
 
 /** 保留ブロック ID を投入順 (FIFO) で保持するリングバッファ。
  *  呼び出し元 (Dem 等) は「後から投入したブロックほど後で物理書き込みされる」
@@ -125,10 +132,26 @@ static uint8 NvM_CalcCrc8(const uint8* data, uint16 length)
     return (uint8)(crc ^ NVM_CRC8_XOR_OUT);
 }
 
-/** ブロックの CRC 保存先 (データ本体直後の 1 バイト)。 */
-static uint16 NvM_CrcAddress(const NvM_BlockDescriptorType* blk)
+/** 指定 EEPROM ベースアドレスに対する CRC 保存先 (データ本体直後の 1 バイト)。
+ *  冗長ブロックはプライマリ／ミラーそれぞれのベースアドレスに対して呼ぶ。 */
+static uint16 NvM_CrcAddressForBase(uint16 base, uint16 length)
 {
-    return (uint16)(blk->NvMNvBlockBaseNumber + blk->NvMNvBlockLength);
+    return (uint16)(base + length);
+}
+
+/**
+ * \brief   RAM ミラーの内容を、指定した 1 つの EEPROM コピー（データ本体+CRC）へ
+ *          同期的に書き込む。
+ *
+ * \details 冗長ブロックのプライマリ／ミラーいずれか片方だけを書く共通処理。
+ *          呼び出し元が起動時（NvM_Init 経由）やデフォルト復元時など、
+ *          同期的にブロッキングしてよい文脈でのみ使うこと。
+ */
+static void NvM_WriteCopySync(uint16 base, const void* data, uint16 length)
+{
+    NvM_Hw_WriteBlock(data, base, length);
+    uint8 crc = NvM_CalcCrc8((const uint8*)data, length);
+    NvM_Hw_WriteByte(NvM_CrcAddressForBase(base, length), crc);
 }
 
 /**
@@ -140,6 +163,9 @@ static uint16 NvM_CrcAddress(const NvM_BlockDescriptorType* blk)
  *          巻き込まず無害。実行中に呼ぶ NvM_RestoreBlockDefaults() は
  *          これとは別に、RAM ミラー更新のみ同期で行い EEPROM 書き込みは
  *          非同期ジョブキューへ回す（下記参照）。
+ *          冗長ブロック（Redundant=1）ではプライマリ・ミラー両面へ
+ *          同じデフォルト値を書く（どちらか一方だけが正しい値を持つ
+ *          半端な状態を作らないため）。
  */
 static void NvM_ApplyDefaultSync(NvM_BlockIdType id, const NvM_BlockDescriptorType* blk)
 {
@@ -148,16 +174,84 @@ static void NvM_ApplyDefaultSync(NvM_BlockIdType id, const NvM_BlockDescriptorTy
     else
         memset(blk->RamBlockDataAddress, 0, blk->NvMNvBlockLength);
 
-    NvM_Hw_WriteBlock(
-        blk->RamBlockDataAddress,
-        blk->NvMNvBlockBaseNumber,
-        blk->NvMNvBlockLength);
-
-    uint8 crc = NvM_CalcCrc8((const uint8*)blk->RamBlockDataAddress, blk->NvMNvBlockLength);
-    NvM_Hw_WriteByte(NvM_CrcAddress(blk), crc);
+    NvM_WriteCopySync(blk->NvMNvBlockBaseNumber, blk->RamBlockDataAddress, blk->NvMNvBlockLength);
+    if (blk->Redundant != 0U)
+        NvM_WriteCopySync(blk->NvMNvBlockBaseNumberMirror, blk->RamBlockDataAddress, blk->NvMNvBlockLength);
 
     DET_LOGW(TAG, "block=%u defaults restored (%s)", (unsigned)id,
              (blk->RomBlockDataAddress != NULL) ? "ROM default" : "zero-fill");
+}
+
+/**
+ * \brief   ブロックを EEPROM から読み込み、CRC 検証・（冗長ブロックなら）
+ *          自己修復・デフォルト復元までを行う。NvM_Init() から呼ばれる。
+ *
+ * \details 非冗長ブロック（Redundant=0）: 単純に CRC を検証し、不一致なら
+ *          NvM_ApplyDefaultSync() でデフォルト値へ復元する（従来の挙動）。
+ *
+ *          冗長ブロック（Redundant=1）: プライマリ・ミラー両面を読み、
+ *          それぞれ CRC を検証する。
+ *            - 両面とも正常 → プライマリの内容を採用（ミラーはそのまま）。
+ *            - 片面のみ正常 → 正常な方の内容を RAM ミラーへ採用した上で、
+ *              破損した方をその内容で上書きして自己修復する。
+ *            - 両面とも破損 → 通常ブロックと同様、デフォルト値へ復元する
+ *              （プライマリ・ミラー両面に書く）。
+ *          これにより、書き込み中の電源断で片方のコピーが不完全な状態に
+ *          なっても、もう片方（プライマリ→ミラーの順で完全に書き終えてから
+ *          次のブロックへ移るため、書き込み中でない側は必ず直前の完了済みの
+ *          内容を保持している）からデータを失わずに復旧できる。
+ */
+static void NvM_LoadAndVerifyBlock(NvM_BlockIdType id, const NvM_BlockDescriptorType* blk)
+{
+    if (blk->RamBlockDataAddress == NULL)
+        return;
+
+    NvM_Hw_ReadBlock(blk->RamBlockDataAddress, blk->NvMNvBlockBaseNumber, blk->NvMNvBlockLength);
+    const uint8 storedCrcPrimary = NvM_Hw_ReadByte(
+        NvM_CrcAddressForBase(blk->NvMNvBlockBaseNumber, blk->NvMNvBlockLength));
+    const uint8 calcCrcPrimary = NvM_CalcCrc8((const uint8*)blk->RamBlockDataAddress, blk->NvMNvBlockLength);
+    const uint8 primaryValid = (storedCrcPrimary == calcCrcPrimary) ? 1U : 0U;
+
+    if (blk->Redundant == 0U)
+    {
+        if (!primaryValid)
+        {
+            DET_LOGE(TAG, "block=%u CRC mismatch (stored=0x%02X calc=0x%02X)",
+                     (unsigned)id, (unsigned)storedCrcPrimary, (unsigned)calcCrcPrimary);
+            NvM_ApplyDefaultSync(id, blk);
+        }
+        return;
+    }
+
+    /* 冗長ブロック: ミラー面をスクラッチバッファへ読み、CRC を検証する
+     * （採用する側が決まるまで RAM ミラーへは反映しない）。 */
+    uint8 mirrorBuf[NVM_MAX_BLOCK_LENGTH];
+    NvM_Hw_ReadBlock(mirrorBuf, blk->NvMNvBlockBaseNumberMirror, blk->NvMNvBlockLength);
+    const uint8 storedCrcMirror = NvM_Hw_ReadByte(
+        NvM_CrcAddressForBase(blk->NvMNvBlockBaseNumberMirror, blk->NvMNvBlockLength));
+    const uint8 calcCrcMirror = NvM_CalcCrc8(mirrorBuf, blk->NvMNvBlockLength);
+    const uint8 mirrorValid = (storedCrcMirror == calcCrcMirror) ? 1U : 0U;
+
+    if (primaryValid)
+    {
+        if (!mirrorValid)
+        {
+            DET_LOGW(TAG, "block=%u redundant: mirror CRC mismatch, repairing from primary", (unsigned)id);
+            NvM_WriteCopySync(blk->NvMNvBlockBaseNumberMirror, blk->RamBlockDataAddress, blk->NvMNvBlockLength);
+        }
+        return;
+    }
+
+    if (mirrorValid)
+    {
+        DET_LOGW(TAG, "block=%u redundant: primary CRC mismatch, recovered from mirror", (unsigned)id);
+        memcpy(blk->RamBlockDataAddress, mirrorBuf, blk->NvMNvBlockLength);
+        NvM_WriteCopySync(blk->NvMNvBlockBaseNumber, blk->RamBlockDataAddress, blk->NvMNvBlockLength);
+        return;
+    }
+
+    DET_LOGE(TAG, "block=%u redundant: both copies CRC mismatch, restoring defaults", (unsigned)id);
+    NvM_ApplyDefaultSync(id, blk);
 }
 
 /**
@@ -168,7 +262,8 @@ static void NvM_ApplyDefaultSync(NvM_BlockIdType id, const NvM_BlockDescriptorTy
  *          書き込み位置を先頭 (byte 0) へ巻き戻す。RAM ミラーは直前に
  *          最新値へ上書きされているため、巻き戻さずに続きから書くと
  *          古いバイトと新しいバイトが混在した不整合な内容が EEPROM に
- *          残ってしまう（ちぎれ書き）。
+ *          残ってしまう（ちぎれ書き）。冗長ブロックの場合はコピー選択
+ *          （プライマリ／ミラー）も先頭（プライマリ）へ巻き戻す。
  *          まだ pending でないブロックのみ FIFO キューの末尾に積む
  *          （既に pending 中のブロックを再度積むと、投入順が崩れたり
  *          キューが枯渇前に重複エントリで溢れたりする）。
@@ -186,7 +281,10 @@ static void NvM_MarkPending(NvM_BlockIdType id)
     NvM_BlockResult[id]  = NVM_REQ_PENDING;
 
     if (NvM_ActiveBlockId == id)
-        NvM_ActiveByteIndex = 0U;
+    {
+        NvM_ActiveByteIndex    = 0U;
+        NvM_ActiveCopyIsMirror = 0U;
+    }
 }
 
 /* -----------------------------------------------------------------------
@@ -214,28 +312,12 @@ void NvM_Init(const NvM_ConfigType* ConfigPtr)
         NvM_BlockPending[i] = 0U;
         NvM_BlockResult[i]  = NVM_REQ_OK;
 
-        const NvM_BlockDescriptorType* blk = &ConfigPtr->Blocks[i];
-        if (blk->RamBlockDataAddress == NULL)
-            continue;
-
-        NvM_Hw_ReadBlock(
-            blk->RamBlockDataAddress,
-            blk->NvMNvBlockBaseNumber,
-            blk->NvMNvBlockLength);
-
-        uint8 storedCrc = NvM_Hw_ReadByte(NvM_CrcAddress(blk));
-        uint8 calcCrc    = NvM_CalcCrc8((const uint8*)blk->RamBlockDataAddress, blk->NvMNvBlockLength);
-
-        if (storedCrc != calcCrc)
-        {
-            DET_LOGE(TAG, "block=%u CRC mismatch (stored=0x%02X calc=0x%02X)",
-                     (unsigned)i, (unsigned)storedCrc, (unsigned)calcCrc);
-            NvM_ApplyDefaultSync(i, blk);
-        }
+        NvM_LoadAndVerifyBlock(i, &ConfigPtr->Blocks[i]);
     }
 
-    NvM_ActiveBlockId   = NVM_BLOCK_COUNT;
-    NvM_ActiveByteIndex = 0U;
+    NvM_ActiveBlockId      = NVM_BLOCK_COUNT;
+    NvM_ActiveByteIndex    = 0U;
+    NvM_ActiveCopyIsMirror = 0U;
     NvM_QueueHead = 0U;
     NvM_QueueTail = 0U;
     NvM_QueueLen  = 0U;
@@ -364,16 +446,23 @@ void NvM_MainFunction(void)
         NvM_ActiveBlockId = NvM_PendingQueue[NvM_QueueHead];
         NvM_QueueHead = (uint8)((NvM_QueueHead + 1U) % NVM_BLOCK_COUNT);
         NvM_QueueLen--;
-        NvM_ActiveByteIndex = 0U;
+        NvM_ActiveByteIndex    = 0U;
+        NvM_ActiveCopyIsMirror = 0U;  /* 冗長ブロックは必ずプライマリ面から書き始める */
     }
 
     const NvM_BlockDescriptorType* blk = &NvM_Cfg->Blocks[NvM_ActiveBlockId];
+    /* 冗長ブロックでミラー面を処理中ならミラーのベースアドレスを、
+     * それ以外（非冗長、または冗長のプライマリ面処理中）はプライマリの
+     * ベースアドレスを使う。 */
+    const uint16 activeBase = (blk->Redundant != 0U && NvM_ActiveCopyIsMirror != 0U)
+                               ? blk->NvMNvBlockBaseNumberMirror
+                               : blk->NvMNvBlockBaseNumber;
 
     if (NvM_ActiveByteIndex < blk->NvMNvBlockLength)
     {
         /* データ本体を 1 バイトだけ書く */
         const uint8* ram = (const uint8*)blk->RamBlockDataAddress;
-        NvM_Hw_WriteByte((uint16)(blk->NvMNvBlockBaseNumber + NvM_ActiveByteIndex),
+        NvM_Hw_WriteByte((uint16)(activeBase + NvM_ActiveByteIndex),
                          ram[NvM_ActiveByteIndex]);
         NvM_ActiveByteIndex++;
     }
@@ -384,15 +473,25 @@ void NvM_MainFunction(void)
          * やり直させるため、ここに到達した時点の RAM ミラーはこのジョブの
          * 開始以降変化していないことが保証されている。 */
         uint8 crc = NvM_CalcCrc8((const uint8*)blk->RamBlockDataAddress, blk->NvMNvBlockLength);
-        NvM_Hw_WriteByte(NvM_CrcAddress(blk), crc);
+        NvM_Hw_WriteByte(NvM_CrcAddressForBase(activeBase, blk->NvMNvBlockLength), crc);
         NvM_ActiveByteIndex++;
+    }
+    else if (blk->Redundant != 0U && NvM_ActiveCopyIsMirror == 0U)
+    {
+        /* 冗長ブロックのプライマリ面を書き終えた: 続けてミラー面を
+         * 先頭から書く（ジョブはまだ完了扱いにしない）。プライマリを
+         * 完全に書き終えてからでないとミラーへ移らないため、この時点で
+         * 電源が落ちてもプライマリは既に整合した新データを保持している。 */
+        NvM_ActiveCopyIsMirror = 1U;
+        NvM_ActiveByteIndex    = 0U;
     }
     else
     {
-        /* ブロック完了 */
+        /* ブロック完了（非冗長ブロック、または冗長ブロックの両面完了） */
         NvM_BlockPending[NvM_ActiveBlockId] = 0U;
         NvM_BlockResult[NvM_ActiveBlockId]  = NVM_REQ_OK;
-        NvM_ActiveBlockId   = NVM_BLOCK_COUNT;
-        NvM_ActiveByteIndex = 0U;
+        NvM_ActiveBlockId      = NVM_BLOCK_COUNT;
+        NvM_ActiveByteIndex    = 0U;
+        NvM_ActiveCopyIsMirror = 0U;
     }
 }

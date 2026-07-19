@@ -15,7 +15,8 @@
  *              (AUTOSAR SWS_NvM_00449 相当の非同期ジョブキュー)。
  *            - NvM_MainFunction() が周期的に、保留中のブロックのデータ本体+CRC を
  *              **1 呼び出しにつき 1 バイトずつ** EEPROM へ書き込む。1 ブロック分
- *              (最大 10 バイト) が完了すると次の保留ブロックへ移る。
+ *              (最大 10 バイト、冗長ブロックはプライマリ→ミラーの順で 2 面分)
+ *              が完了すると次の保留ブロックへ移る。
  *            - 各ブロックのデータ本体直後に AUTOSAR Crc8 (SAE J1850) の CRC を
  *              1 バイト付加して保存する。NvM_Init() で検証し、不一致なら
  *              ROM デフォルト値（未設定なら全 0）へ自動復元する。
@@ -31,9 +32,21 @@
  *            NvM_WriteBlock() 自体は即座に返り、実際のブロッキング時間は
  *            NvM_MainFunction() 1 回あたり高々 1 バイト分に抑えられる。
  *
+ *          冗長ブロック (Redundant Block):
+ *            ブロックごとに `NvM_BlockDescriptorType.Redundant` で
+ *            冗長化（2 面化）を選択できる（AUTOSAR NvMBlockManagementType の
+ *            NATIVE/REDUNDANT 相当。DATASET は未対応）。有効にすると
+ *            データ本体+CRC のセットを 2 か所の EEPROM アドレス（プライマリ／
+ *            ミラー）へ保持する。書き込みは必ずプライマリ→ミラーの順で
+ *            完全に書き終えてから次のブロックへ移るため、書き込み途中の
+ *            電源断で「片方だけ」不完全になっても、もう片方は必ず
+ *            （直前の完了済みの内容のまま、または今回の新しい内容で）
+ *            CRC 整合した状態を保つ。読み込み時は両面の CRC を検証し、
+ *            片方だけ不一致なら正常な方の内容で RAM ミラーを復元した上で
+ *            破損した面を同じ内容で書き直す（自己修復）。両方とも不一致
+ *            なら通常のブロックと同様デフォルト値へ復元する。
+ *
  *          AUTOSAR 実装との主な違い (学習用簡略化):
- *            - 冗長ブロック（ミラー/2重化）なし。CRC による破損検出と
- *              デフォルト復元のみ対応
  *            - ジョブは常に 1 個ずつ、投入順 (FIFO) に順次処理（優先度なし、
  *              複数ジョブの並行処理なし）
  *
@@ -89,6 +102,15 @@ typedef struct
                                          *   NULL の場合は全 0 で代替する
                                          *   (AUTOSAR の NvMBlockDescriptor と同様、
                                          *   デフォルト未設定のブロックを許容する)。      */
+    uint8       Redundant;             /**< 1 = 冗長ブロック（2 面化、AUTOSAR
+                                         *   NvMBlockManagementType=NVM_BLOCK_REDUNDANT
+                                         *   相当）。0 = 従来のシングルコピー
+                                         *   （NVM_BLOCK_NATIVE 相当、既定）。          */
+    uint16      NvMNvBlockBaseNumberMirror; /**< Redundant=1 のときのみ使用。ミラー面
+                                         *   （2 つ目のコピー）の EEPROM 先頭アドレス。
+                                         *   CRC はこの直後
+                                         *   (NvMNvBlockBaseNumberMirror + NvMNvBlockLength)
+                                         *   に保存する。Redundant=0 では未使用。       */
 } NvM_BlockDescriptorType;
 
 /**
