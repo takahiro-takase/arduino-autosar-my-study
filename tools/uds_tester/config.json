@@ -144,6 +144,30 @@
               { "label": "requestRoutineResults",   "payload": ["0x04", "0x31", "0x03", "0x02", "0x03"] },
               { "label": "stopRoutine",             "payload": ["0x04", "0x31", "0x02", "0x02", "0x03"] }
           ]
-        }
+        },
+
+        { "type": "group_header", "label": "Software Download (0x34/0x36/0x37)" },
+
+        { "label": "RequestDownload\n(0x34 複数フレーム)", "type": "multiframe",
+          "payload": ["0x34", "0x00", "0x44", "0x00", "0x00", "0x00", "0x00", "0x00", "0x00", "0x00", "0x14"] },
+
+        { "label": "TransferData\n(0x36 複数フレーム)", "type": "multiframe",
+          "payload": ["0x36", "0x01", "0x11", "0x22", "0x33", "0x44", "0x55", "0x66", "0x77", "0x88", "0x99", "0xAA"],
+          "presets": [
+              { "label": "ブロック1 (counter=01)", "payload": ["0x36", "0x01", "0x11", "0x22", "0x33", "0x44", "0x55", "0x66", "0x77", "0x88", "0x99", "0xAA"] },
+              { "label": "ブロック2 (counter=02)", "payload": ["0x36", "0x02", "0xBB", "0xCC", "0xDD", "0xEE", "0xFF", "0x00", "0x11", "0x22", "0x33", "0x44"] }
+          ]
+        },
+
+        { "label": "TransferData 異常系\n(0x36 SF)", "type": "raw",
+          "payload": ["0x04", "0x36", "0x05", "0xFF", "0xFF"],
+          "presets": [
+              { "label": "Wrong Counter (RequestDownload直後に送信)", "payload": ["0x04", "0x36", "0x05", "0xFF", "0xFF"] },
+              { "label": "宣言サイズ超過 (ブロック1+2送信済みの後に送信)", "payload": ["0x03", "0x36", "0x03", "0xFF"] }
+          ]
+        },
+
+        { "label": "RequestTransferExit\n(0x37)", "type": "raw",
+          "payload": ["0x01", "0x37"] }
     ]
 }

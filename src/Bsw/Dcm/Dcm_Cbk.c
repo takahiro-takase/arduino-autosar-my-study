@@ -21,6 +21,11 @@
  *                                          startRoutine/stopRoutine/
  *                                          requestRoutineResults の3サブ機能。
  *                                          extendedSession 限定、SecurityAccess 不要
+ *            0x34/0x36/0x37 RequestDownload/TransferData/RequestTransferExit
+ *                                          — ソフトウェア再書き込み（フラッシュ
+ *                                          ブートローダ）シーケンスの学習用
+ *                                          シミュレーション。extendedSession 限定、
+ *                                          0x34 は SecurityAccess Level1 必須
  *            0x3E TesterPresent          — セッション維持 (S3 タイマリセット)
  *
  *          ISO 15765-2 (CAN TP) は CanTp モジュールが担当する。
@@ -71,9 +76,46 @@
  *            5. defaultSession への遷移（SecurityAccess の再ロックと同じ契機）で
  *               実行中・完了済みのルーチンは破棄し IDLE に戻す。
  *
+ *          RequestDownload/TransferData/RequestTransferExit (0x34/0x36/0x37)
+ *          状態機械（IDLE/DOWNLOADING の2状態）:
+ *            実際にフラッシュへ書き込むわけではない学習用シミュレーション。
+ *            受信データそのものは保持せず、(a) blockSequenceCounter の
+ *            順序検証、(b) 受信バイト数の累計、(c) 簡易チェックサム（全受信
+ *            バイトの XOR）の3点だけを検証・計算する。
+ *            1. RequestDownload (0x34): addressAndLengthFormatIdentifier で
+ *               指定されたバイト数だけ memoryAddress・memorySize を読み取る
+ *               （memoryAddress は妥当性確認のためパースするのみで実際の
+ *               アドレスとしては使用しない）。memorySize が 0 または
+ *               DCM_TRANSFER_MAX_SIZE 超なら NRC 0x31 requestOutOfRange。
+ *               DOWNLOADING 中の再要求は NRC 0x22 conditionsNotCorrect
+ *               （RoutineControl の再 start と同じ考え方）。受理すると
+ *               受信済みバイト数・チェックサムをリセットし、
+ *               blockSequenceCounter の期待値を 0x01 にして DOWNLOADING へ
+ *               遷移、maxNumberOfBlockLength を応答する。
+ *            2. TransferData (0x36): IDLE 中の要求は NRC 0x24
+ *               requestSequenceError（未開始）。blockSequenceCounter が
+ *               期待値と不一致なら NRC 0x73 wrongBlockSequenceCounter。
+ *               受信予定サイズを超える場合は NRC 0x71 transferDataSuspended。
+ *               いずれも通れば受信バイト数に加算し、チェックサムを更新し、
+ *               期待カウンタを 1 進める（ISO 14229-1 の規定どおり 0xFF の
+ *               次は 0x00、その次は 0x01 に戻る）。
+ *            3. RequestTransferExit (0x37): IDLE 中の要求は NRC 0x24。
+ *               受信済みバイト数が RequestDownload で宣言した memorySize と
+ *               一致していなければ NRC 0x22（転送未完了）。一致すれば
+ *               DOWNLOADING → IDLE に戻し、計算済みチェックサムを
+ *               transferResponseParameterRecord として返す（実務でもよく
+ *               見られる「転送完了時にチェックサムで検証する」パターンの模擬）。
+ *            4. defaultSession への遷移（他の状態機械と同じ契機）で
+ *               DOWNLOADING 中の転送は破棄し IDLE に戻す。
+ *            SecurityAccess は RequestDownload (0x34) でのみ判定する。
+ *            TransferData/RequestTransferExit は Dcm_TransferState が
+ *            RequestDownload 経由でしか DOWNLOADING にならないため、
+ *            個別に再チェックしなくても未認証での到達経路が存在しない。
+ *
  *          SID × セッション許可 (Dcm_SidSessionTable[], AUTOSAR DcmDspSessionRow 相当):
  *            Dcm_ComIndication() が SID ディスパッチの前に全 SID 共通で判定する。
- *            テーブルに掲載のない SID はセッション制約なし。現在は 0x14・0x27・0x2E・0x2F・0x31
+ *            テーブルに掲載のない SID はセッション制約なし。現在は
+ *            0x14・0x27・0x2E・0x2F・0x31・0x34・0x36・0x37
  *            のみ extendedSession 限定とし、defaultSession では NRC 0x7F
  *            serviceNotSupportedInActiveSession で拒否する。各ハンドラ個別に
  *            セッション判定を埋め込むのではなく、一元管理することで
@@ -168,6 +210,32 @@ static unsigned long Dcm_RoutineStartMs;
 /** COMPLETED 時点の合否結果 (DCM_ROUTINE_PASS / DCM_ROUTINE_FAIL) */
 static uint8 Dcm_RoutineResult;
 
+/* -----------------------------------------------------------------------
+ * RequestDownload/TransferData/RequestTransferExit (SID 0x34/0x36/0x37) 状態
+ * ----------------------------------------------------------------------- */
+
+/** ソフトウェア転送シーケンスの状態 */
+typedef enum
+{
+    DCM_TRANSFER_STATE_IDLE = 0,     /**< 転送なし（RequestDownload 待ち）      */
+    DCM_TRANSFER_STATE_DOWNLOADING    /**< RequestDownload 済み、TransferData 受付中 */
+} Dcm_TransferStateType;
+
+/** 転送シーケンスの現在の状態 */
+static Dcm_TransferStateType Dcm_TransferState;
+
+/** RequestDownload で宣言された転送予定サイズ [bytes] */
+static uint32 Dcm_TransferExpectedSize;
+
+/** TransferData でこれまでに受信した合計バイト数 [bytes] */
+static uint32 Dcm_TransferReceivedSize;
+
+/** 次に期待する blockSequenceCounter (0x01 開始、0xFF の次は 0x00) */
+static uint8 Dcm_TransferBlockCounter;
+
+/** 受信データの簡易チェックサム（全バイトの XOR）。実データは保持しない。 */
+static uint8 Dcm_TransferChecksum;
+
 /** UDS 応答バッファの最大サイズ。0x19/02 (reportDTCByStatusMask) が
  *  DEM_EVENT_COUNT 件全てに一致した場合が最大: [0x59,subFunc,availMask] (3)
  *  + DEM_EVENT_COUNT 件 × 4 バイト。
@@ -218,6 +286,10 @@ static void Dcm_HandleRoutineStart(uint16 rid);
 static void Dcm_HandleRoutineStop(uint16 rid);
 static void Dcm_HandleRoutineRequestResults(uint16 rid);
 static void Dcm_RoutineAbort(void);
+static void Dcm_HandleRequestDownload(const uint8* uds, uint8 udsLen);
+static void Dcm_HandleTransferData(const uint8* uds, uint8 udsLen);
+static void Dcm_HandleRequestTransferExit(const uint8* uds, uint8 udsLen);
+static void Dcm_TransferAbort(void);
 
 /* -----------------------------------------------------------------------
  * Dcm_Init
@@ -247,6 +319,8 @@ void Dcm_Init(void)
     Dcm_SecurityLockoutActive = 0U;
 
     Dcm_RoutineState = DCM_ROUTINE_STATE_IDLE;
+
+    Dcm_TransferState = DCM_TRANSFER_STATE_IDLE;
 
     DET_LOGI(TAG, "Init ok");
 }
@@ -294,6 +368,7 @@ void Dcm_MainFunction(void)
         Dcm_CurrentSession = DCM_SESSION_DEFAULT;
         Dcm_SecurityLock();
         Dcm_RoutineAbort();
+        Dcm_TransferAbort();
         Dcm_CommControlReset();
         Dcm_UpdateComMRequest(DCM_SESSION_DEFAULT);
     }
@@ -388,6 +463,7 @@ static void Dcm_HandleSessionControl(const uint8* uds, uint8 udsLen)
     {
         Dcm_SecurityLock();
         Dcm_RoutineAbort();
+        Dcm_TransferAbort();
         Dcm_CommControlReset();
     }
 
@@ -455,6 +531,7 @@ static void Dcm_HandleEcuReset(const uint8* uds, uint8 udsLen)
     Dcm_CurrentSession = DCM_SESSION_DEFAULT;
     Dcm_SecurityLock();
     Dcm_RoutineAbort();
+    Dcm_TransferAbort();
     Dcm_CommControlReset();
     Dcm_UpdateComMRequest(DCM_SESSION_DEFAULT);
     DET_LOGI(TAG, "11 session->Default");
@@ -1546,6 +1623,250 @@ static void Dcm_HandleRoutineControl(const uint8* uds, uint8 udsLen)
 }
 
 /* -----------------------------------------------------------------------
+ * 0x34/0x36/0x37 RequestDownload/TransferData/RequestTransferExit
+ * ----------------------------------------------------------------------- */
+
+/**
+ * \brief   進行中の転送シーケンスを破棄し IDLE に戻す。
+ *
+ * \details defaultSession への遷移（明示要求・S3 タイムアウト・ECUReset）から
+ *          呼ぶ。Dcm_RoutineAbort() と同じ「セッションが変われば診断側の
+ *          一時状態は破棄する」という方針に揃えている。
+ */
+static void Dcm_TransferAbort(void)
+{
+    if (Dcm_TransferState != DCM_TRANSFER_STATE_IDLE)
+    {
+        DET_LOGI(TAG, "34 transfer aborted (session change) received=%lu/%lu",
+                 (unsigned long)Dcm_TransferReceivedSize, (unsigned long)Dcm_TransferExpectedSize);
+    }
+
+    Dcm_TransferState = DCM_TRANSFER_STATE_IDLE;
+}
+
+/**
+ * \brief   UDS 0x34 RequestDownload を処理する。
+ *
+ * \details 要求: [0x34, dataFormatIdentifier, addressAndLengthFormatIdentifier,
+ *          memoryAddress(addrBytes), memorySize(sizeBytes)]。
+ *          addressAndLengthFormatIdentifier の下位nibble=memoryAddress の
+ *          バイト数、上位nibble=memorySize のバイト数（本実装は 1-4 バイトの
+ *          みサポート、uint32 として解釈する）。memoryAddress は妥当性確認
+ *          のためパースするのみで、実際のメモリアクセスには使用しない
+ *          （実機のフラッシュを書き換えるものではない学習用シミュレーション）。
+ *
+ *          SecurityAccess Level1 アンロック済みでなければ NRC 0x33。
+ *          DOWNLOADING 中の再要求は NRC 0x22 conditionsNotCorrect。
+ *          dataFormatIdentifier が DCM_TRANSFER_DATA_FORMAT_RAW（圧縮・暗号化
+ *          なし）以外、または memorySize が 0 か DCM_TRANSFER_MAX_SIZE 超は
+ *          NRC 0x31 requestOutOfRange。
+ *
+ *          応答: [0x74, lengthFormatIdentifier, maxNumberOfBlockLength(2 bytes)]
+ *
+ * \param[in]  uds     UDS ペイロード先頭ポインタ (uds[0]=SID 0x34)。
+ * \param[in]  udsLen  UDS ペイロード長。
+ */
+static void Dcm_HandleRequestDownload(const uint8* uds, uint8 udsLen)
+{
+    if (Dcm_SecurityLevel == 0U)
+    {
+        Dcm_SendNegativeResponse(DCM_SID_REQUEST_DOWNLOAD, DCM_NRC_SECURITY_ACCESS_DENIED);
+        return;
+    }
+
+    if (Dcm_TransferState != DCM_TRANSFER_STATE_IDLE)
+    {
+        Dcm_SendNegativeResponse(DCM_SID_REQUEST_DOWNLOAD, DCM_NRC_CONDITIONS_NOT_CORRECT);
+        return;
+    }
+
+    if (udsLen < 3U)
+    {
+        Dcm_SendNegativeResponse(DCM_SID_REQUEST_DOWNLOAD, DCM_NRC_CONDITIONS_NOT_CORRECT);
+        return;
+    }
+
+    uint8 dataFormatId  = uds[1];
+    uint8 addrLenFormat = uds[2];
+    uint8 addrBytes     = addrLenFormat & 0x0FU;
+    uint8 sizeBytes     = (uint8)((addrLenFormat >> 4U) & 0x0FU);
+
+    if (dataFormatId != DCM_TRANSFER_DATA_FORMAT_RAW)
+    {
+        Dcm_SendNegativeResponse(DCM_SID_REQUEST_DOWNLOAD, DCM_NRC_REQUEST_OUT_OF_RANGE);
+        return;
+    }
+
+    if (addrBytes < DCM_TRANSFER_ADDR_LEN_MIN || addrBytes > DCM_TRANSFER_ADDR_LEN_MAX
+        || sizeBytes < DCM_TRANSFER_ADDR_LEN_MIN || sizeBytes > DCM_TRANSFER_ADDR_LEN_MAX)
+    {
+        Dcm_SendNegativeResponse(DCM_SID_REQUEST_DOWNLOAD, DCM_NRC_REQUEST_OUT_OF_RANGE);
+        return;
+    }
+
+    if (udsLen != (uint8)(3U + addrBytes + sizeBytes))
+    {
+        Dcm_SendNegativeResponse(DCM_SID_REQUEST_DOWNLOAD, DCM_NRC_CONDITIONS_NOT_CORRECT);
+        return;
+    }
+
+    uint32 memAddr = 0UL;
+    uint8 i;
+    for (i = 0U; i < addrBytes; i++)
+        memAddr = (memAddr << 8U) | (uint32)uds[3U + i];
+
+    uint32 memSize = 0UL;
+    for (i = 0U; i < sizeBytes; i++)
+        memSize = (memSize << 8U) | (uint32)uds[3U + addrBytes + i];
+
+    if (memSize == 0UL || memSize > DCM_TRANSFER_MAX_SIZE)
+    {
+        Dcm_SendNegativeResponse(DCM_SID_REQUEST_DOWNLOAD, DCM_NRC_REQUEST_OUT_OF_RANGE);
+        return;
+    }
+
+    Dcm_TransferState        = DCM_TRANSFER_STATE_DOWNLOADING;
+    Dcm_TransferExpectedSize = memSize;
+    Dcm_TransferReceivedSize = 0UL;
+    Dcm_TransferBlockCounter = 1U;
+    Dcm_TransferChecksum     = 0U;
+
+    DET_LOGI(TAG, "34 addr=0x%08lX size=%lu maxBlock=%u",
+             (unsigned long)memAddr, (unsigned long)memSize,
+             (unsigned)DCM_TRANSFER_MAX_BLOCK_LENGTH);
+
+    /* 正応答: [0x74, lengthFormatIdentifier, maxNumberOfBlockLength(2 bytes)]
+     * lengthFormatIdentifier の上位nibble=2（maxNumberOfBlockLength を 2 バイトで
+     * 符号化）、下位nibble=0（予約）。 */
+    Dcm_TxBuf[0] = 0x74U;               /* SID + 0x40 */
+    Dcm_TxBuf[1] = 0x20U;
+    Dcm_TxBuf[2] = (uint8)(DCM_TRANSFER_MAX_BLOCK_LENGTH >> 8U);
+    Dcm_TxBuf[3] = (uint8)(DCM_TRANSFER_MAX_BLOCK_LENGTH & 0xFFU);
+    Dcm_TxPdu.SduLength = 4U;
+
+    Dcm_Transmit();
+}
+
+/**
+ * \brief   UDS 0x36 TransferData を処理する。
+ *
+ * \details 要求: [0x36, blockSequenceCounter, transferRequestParameterRecord...]。
+ *          DOWNLOADING 中でなければ NRC 0x24 requestSequenceError（未開始）。
+ *          blockSequenceCounter が期待値と不一致なら NRC 0x73
+ *          wrongBlockSequenceCounter。累計受信サイズが RequestDownload で
+ *          宣言した memorySize を超える場合は NRC 0x71 transferDataSuspended。
+ *          実データは保持せず、累計バイト数への加算と簡易チェックサム
+ *          （XOR）の更新のみ行う。
+ *
+ *          応答: [0x76, blockSequenceCounter]
+ *
+ * \param[in]  uds     UDS ペイロード先頭ポインタ (uds[0]=SID 0x36)。
+ * \param[in]  udsLen  UDS ペイロード長。
+ */
+static void Dcm_HandleTransferData(const uint8* uds, uint8 udsLen)
+{
+    if (Dcm_TransferState != DCM_TRANSFER_STATE_DOWNLOADING)
+    {
+        Dcm_SendNegativeResponse(DCM_SID_TRANSFER_DATA, DCM_NRC_REQUEST_SEQUENCE_ERROR);
+        return;
+    }
+
+    if (udsLen < 2U)
+    {
+        Dcm_SendNegativeResponse(DCM_SID_TRANSFER_DATA, DCM_NRC_CONDITIONS_NOT_CORRECT);
+        return;
+    }
+
+    uint8 blockSequenceCounter = uds[1];
+    uint8 dataLen = (uint8)(udsLen - 2U);
+
+    if (blockSequenceCounter != Dcm_TransferBlockCounter)
+    {
+        DET_LOGW(TAG, "36 wrong counter got=0x%02X expected=0x%02X",
+                 (unsigned)blockSequenceCounter, (unsigned)Dcm_TransferBlockCounter);
+        Dcm_SendNegativeResponse(DCM_SID_TRANSFER_DATA, DCM_NRC_WRONG_BLOCK_SEQUENCE_COUNTER);
+        return;
+    }
+
+    if ((Dcm_TransferReceivedSize + (uint32)dataLen) > Dcm_TransferExpectedSize)
+    {
+        DET_LOGW(TAG, "36 transfer data suspended received=%lu+%u > expected=%lu",
+                 (unsigned long)Dcm_TransferReceivedSize, (unsigned)dataLen,
+                 (unsigned long)Dcm_TransferExpectedSize);
+        Dcm_SendNegativeResponse(DCM_SID_TRANSFER_DATA, DCM_NRC_TRANSFER_DATA_SUSPENDED);
+        return;
+    }
+
+    uint8 i;
+    for (i = 0U; i < dataLen; i++)
+        Dcm_TransferChecksum ^= uds[2U + i];
+    Dcm_TransferReceivedSize += (uint32)dataLen;
+
+    /* ISO 14229-1: 0x01 から開始し 0xFF の次は 0x00、その次はまた 0x01 */
+    Dcm_TransferBlockCounter = (Dcm_TransferBlockCounter == 0xFFU) ? 0x00U : (uint8)(Dcm_TransferBlockCounter + 1U);
+
+    DET_LOGI(TAG, "36 counter=0x%02X len=%u received=%lu/%lu",
+             (unsigned)blockSequenceCounter, (unsigned)dataLen,
+             (unsigned long)Dcm_TransferReceivedSize, (unsigned long)Dcm_TransferExpectedSize);
+
+    /* 正応答: [0x76, blockSequenceCounter] */
+    Dcm_TxBuf[0] = 0x76U;               /* SID + 0x40 */
+    Dcm_TxBuf[1] = blockSequenceCounter;
+    Dcm_TxPdu.SduLength = 2U;
+
+    Dcm_Transmit();
+}
+
+/**
+ * \brief   UDS 0x37 RequestTransferExit を処理する。
+ *
+ * \details DOWNLOADING 中でなければ NRC 0x24 requestSequenceError（未開始）。
+ *          累計受信サイズが RequestDownload で宣言した memorySize と
+ *          一致していなければ NRC 0x22 conditionsNotCorrect（転送未完了）。
+ *          一致すれば IDLE に戻し、計算済みチェックサムを
+ *          transferResponseParameterRecord として返す（実務でもよく見られる
+ *          「転送完了時にチェックサムで検証する」パターンの模擬。
+ *          ISO 14229-1 はこのレコードの内容を規定しない
+ *          manufacturer-specific フィールドである）。
+ *
+ *          応答: [0x77, checksum]
+ *
+ * \param[in]  uds     UDS ペイロード先頭ポインタ (uds[0]=SID 0x37)。
+ * \param[in]  udsLen  UDS ペイロード長。
+ */
+static void Dcm_HandleRequestTransferExit(const uint8* uds, uint8 udsLen)
+{
+    (void)uds;
+    (void)udsLen;
+
+    if (Dcm_TransferState != DCM_TRANSFER_STATE_DOWNLOADING)
+    {
+        Dcm_SendNegativeResponse(DCM_SID_REQUEST_TRANSFER_EXIT, DCM_NRC_REQUEST_SEQUENCE_ERROR);
+        return;
+    }
+
+    if (Dcm_TransferReceivedSize != Dcm_TransferExpectedSize)
+    {
+        DET_LOGW(TAG, "37 transfer incomplete received=%lu/%lu",
+                 (unsigned long)Dcm_TransferReceivedSize, (unsigned long)Dcm_TransferExpectedSize);
+        Dcm_SendNegativeResponse(DCM_SID_REQUEST_TRANSFER_EXIT, DCM_NRC_CONDITIONS_NOT_CORRECT);
+        return;
+    }
+
+    DET_LOGI(TAG, "37 transfer complete size=%lu checksum=0x%02X",
+             (unsigned long)Dcm_TransferReceivedSize, (unsigned)Dcm_TransferChecksum);
+
+    Dcm_TransferState = DCM_TRANSFER_STATE_IDLE;
+
+    /* 正応答: [0x77, checksum] */
+    Dcm_TxBuf[0] = 0x77U;               /* SID + 0x40 */
+    Dcm_TxBuf[1] = Dcm_TransferChecksum;
+    Dcm_TxPdu.SduLength = 2U;
+
+    Dcm_Transmit();
+}
+
+/* -----------------------------------------------------------------------
  * 0x3E TesterPresent
  * ----------------------------------------------------------------------- */
 
@@ -1611,16 +1932,23 @@ typedef struct
  *  0x28 (CommunicationControl) も同様に extendedSession 限定・SecurityAccess
  *  不要とする（通信そのものを止める操作的な影響はあるが、車両制御や NVM
  *  書き換えは伴わないため 0x2F/0x31 と同じ保護レベル）。
+ *  0x34/0x36/0x37 (RequestDownload/TransferData/RequestTransferExit) は
+ *  0x14/0x2E と同じ「誤操作・悪用の影響が大きい」保護レベルのため
+ *  extendedSession 限定とする（SecurityAccess は 0x34 のみで判定する。
+ *  Dcm_Cbk.c 冒頭のコメント参照）。
  *  実際の AUTOSAR では DcmDspSessionRow がサービス・サブ機能単位で
  *  この表をコンフィギュレーションツールから生成する。 */
 static const Dcm_SidSessionRowType Dcm_SidSessionTable[] =
 {
-    { DCM_SID_CLEAR_DTC,        DCM_SESSION_MASK_EXTENDED },
-    { DCM_SID_SECURITY_ACCESS,  DCM_SESSION_MASK_EXTENDED },
-    { DCM_SID_WRITE_DATA,       DCM_SESSION_MASK_EXTENDED },
-    { DCM_SID_IO_CONTROL,       DCM_SESSION_MASK_EXTENDED },
-    { DCM_SID_COMM_CONTROL,     DCM_SESSION_MASK_EXTENDED },
-    { DCM_SID_ROUTINE_CONTROL,  DCM_SESSION_MASK_EXTENDED },
+    { DCM_SID_CLEAR_DTC,             DCM_SESSION_MASK_EXTENDED },
+    { DCM_SID_SECURITY_ACCESS,       DCM_SESSION_MASK_EXTENDED },
+    { DCM_SID_WRITE_DATA,            DCM_SESSION_MASK_EXTENDED },
+    { DCM_SID_IO_CONTROL,            DCM_SESSION_MASK_EXTENDED },
+    { DCM_SID_COMM_CONTROL,          DCM_SESSION_MASK_EXTENDED },
+    { DCM_SID_ROUTINE_CONTROL,       DCM_SESSION_MASK_EXTENDED },
+    { DCM_SID_REQUEST_DOWNLOAD,      DCM_SESSION_MASK_EXTENDED },
+    { DCM_SID_TRANSFER_DATA,         DCM_SESSION_MASK_EXTENDED },
+    { DCM_SID_REQUEST_TRANSFER_EXIT, DCM_SESSION_MASK_EXTENDED },
 };
 
 /**
@@ -1728,6 +2056,15 @@ void Dcm_ComIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
         break;
     case DCM_SID_ROUTINE_CONTROL:
         Dcm_HandleRoutineControl(uds, udsLen);
+        break;
+    case DCM_SID_REQUEST_DOWNLOAD:
+        Dcm_HandleRequestDownload(uds, udsLen);
+        break;
+    case DCM_SID_TRANSFER_DATA:
+        Dcm_HandleTransferData(uds, udsLen);
+        break;
+    case DCM_SID_REQUEST_TRANSFER_EXIT:
+        Dcm_HandleRequestTransferExit(uds, udsLen);
         break;
     case DCM_SID_SECURITY_ACCESS:
         Dcm_HandleSecurityAccess(uds, udsLen);
