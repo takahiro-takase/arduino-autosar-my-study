@@ -19,10 +19,15 @@
  *              Signal 5: BrakeActive    1 bit  BitPos=32  BigEndian  0=解除/1=作動
  *              Signal 6: AbsActive      1 bit  BitPos=33  BigEndian  0=非作動/1=作動
  *            TX I-PDU 0 (IPduId=0): CAN ID 0x200, DLC=1  MeterStatus
- *              (メータ ECU、E2E 保護なし。ComFilterAlgorithm=MASKED_NEW_DIFFERS_MASKED_OLD
- *              で値変化時のみ送信要求、詳細は Com_Cfg.h の COM_TX_PERIODIC_FLOOR_CYCLES 参照)
+ *              (メータ ECU、E2E 保護なし、TxModeMode=MIXED。
+ *              ComFilterAlgorithm=MASKED_NEW_DIFFERS_MASKED_OLD で値変化を
+ *              検知すると次回 Com_MainFunction() で送信、変化がなくても
+ *              Com_Cfg.h の COM_TX_PERIOD_METERSTATUS_FLOOR_MS 間隔で
+ *              周期フロア送信する)
  *              Signal 3: EngineState    8 bit  BitPos= 0  BigEndian
  *            TX I-PDU 1 (IPduId=1): CAN ID 0x210, DLC=1  WarningStatus (メータ ECU、Signal Group)
+ *              (TxModeMode=DIRECT。ダッシュボード表示用ミラー情報のため
+ *              周期フロアを持たず、値変化時のみ次回 Com_MainFunction() で送信する)
  *              Signal 7: RunLamp        1 bit  BitPos= 0  BigEndian
  *              Signal 8: FaultLamp      1 bit  BitPos= 1  BigEndian
  *              Signal 9: AbsLamp        1 bit  BitPos= 2  BigEndian
@@ -128,21 +133,27 @@ static const Com_IPduConfigType Com_RxIPduConfigData[COM_RX_IPDU_COUNT] = {
 /* -----------------------------------------------------------------------
  * TX I-PDU テーブル
  * DaVinci: /ActiveEcuC/Com/ComConfig/[ComIPdu] (Direction=SEND)
- * Com_TriggerIPDUSend() が送信要求を PduR へ転送する際に参照する。
+ * Com_MainFunction()（DIRECT/MIXED の変化時送信・PERIODIC/MIXED の周期送信、
+ * いずれもこの関数のみが実送信を行う）が送信要求を PduR へ転送する際に参照する。
  * ----------------------------------------------------------------------- */
 static const Com_IPduConfigType Com_TxIPduConfigData[COM_TX_IPDU_COUNT] = {
     {
         /* ---------------------------------------------------------------
          * TX IPduId=0: MeterStatus フレーム (メータ ECU 送信、E2E 保護なし)
          * DaVinci: /ActiveEcuC/Com/ComConfig/MeterStatus_Tx
+         * MIXED: EngineState は他 ECU（盗難防止・ボディ制御等）が判断材料に
+         * 使いうるため、変化時送信に加えて周期フロアで再送し続ける
+         * （起動直後や瞬断復帰後の受信側が古い値のままにならないようにする）。
          * --------------------------------------------------------------- */
         .IPduId    = 0U,  /* DaVinci: ComIPduHandleId  - I-PDU 識別番号 */
         .DLC       = 1U,  /* DaVinci: ComIPduLength    - I-PDU バイト長（byte[0]=EngineState のみ） */
         .PduRId    = 0U,  /* DaVinci: ComIPduPduRef    - PduR TX パス 0 へのリンク */
         .TimeoutMs = 0U,  /* TX I-PDU のため監視無効 */
         .IsSignalGroup = 0U, /* 直接送信（既存の挙動のまま） */
-        .TxModeMode = COM_TX_MODE_MIXED /* DaVinci: ComTxModeMode = MIXED
-                                         *          (ASW が Com_TriggerIPDUSend() を呼んだ時のみ評価) */
+        .TxModeMode = COM_TX_MODE_MIXED, /* DaVinci: ComTxModeMode = MIXED
+                                          *          (Com_SendSignal() が変化検知時に Com_TxPending を立て、
+                                          *          次回 Com_MainFunction() で送信) */
+        .TxPeriodMs = COM_TX_PERIOD_METERSTATUS_FLOOR_MS /* DaVinci: ComTxModeTimePeriodFactor（周期フロア間隔） */
     },
     {
         /* ---------------------------------------------------------------
@@ -150,6 +161,9 @@ static const Com_IPduConfigType Com_TxIPduConfigData[COM_TX_IPDU_COUNT] = {
          * DaVinci: /ActiveEcuC/Com/ComConfig/WarningStatus_Tx
          * App_WarningIndicator が制御する 3 本の警告灯（RUNNING/FAULT/ABS）を
          * 1 つの Signal Group としてまとめて送信する。
+         * DIRECT: ダッシュボード表示用の LED ミラー情報であり、他 ECU の
+         * 制御判断に使う想定がないため、周期フロアを持たず変化時のみ送信する
+         * （取りこぼしても次の変化で追いつけるため実害が小さいと判断）。
          * --------------------------------------------------------------- */
         .IPduId    = 1U,  /* DaVinci: ComIPduHandleId  - I-PDU 識別番号 */
         .DLC       = 1U,  /* DaVinci: ComIPduLength    - I-PDU バイト長（3bit のみ使用） */
@@ -158,7 +172,9 @@ static const Com_IPduConfigType Com_TxIPduConfigData[COM_TX_IPDU_COUNT] = {
                            *          CanTp が使用する 1U と衝突しないよう 2U を割り当てる) */
         .TimeoutMs = 0U,  /* TX I-PDU のため監視無効 */
         .IsSignalGroup = 1U, /* Signal Group（Com_SendSignalGroup で確定コミット） */
-        .TxModeMode = COM_TX_MODE_MIXED /* DaVinci: ComTxModeMode = MIXED */
+        .TxModeMode = COM_TX_MODE_DIRECT /* DaVinci: ComTxModeMode = DIRECT
+                                          *          (Com_SendSignalGroup() が変化検知時に Com_TxPending を立て、
+                                          *          次回 Com_MainFunction() で送信。周期フロアなし) */
     },
     {
         /* ---------------------------------------------------------------

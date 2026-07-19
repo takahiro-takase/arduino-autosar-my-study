@@ -134,7 +134,6 @@ void App_WarningIndicator_Run(void)
     (void)Rte_Write_WarningStatus_FaultLamp(faultLevel);
     (void)Rte_Write_WarningStatus_AbsLamp(absLevel);
     (void)Rte_SendSignalGroup_WarningStatus();
-    (void)Rte_TriggerTransmit(1U);
 
     /* Runnable 実行完了を WdgM へ報告 (Alive + Logical Supervision チェックポイント) */
     (void)WdgM_CheckpointReached(WDGM_ENTITY_WARNING, WDGM_CP_WARNING_END);

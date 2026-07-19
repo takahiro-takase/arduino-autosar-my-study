@@ -34,8 +34,6 @@ Std_ReturnType Rte_Read_EngineStatus_EngineState(EngineState_t* data);
 
 Std_ReturnType Rte_Write_EngineStatus_EngineState(EngineState_t state);
 
-Std_ReturnType Rte_TriggerTransmit(Com_IPduIdType IPduId);
-
 void Rte_ScheduleRunnables(void);
 
 /* -----------------------------------------------------------------------

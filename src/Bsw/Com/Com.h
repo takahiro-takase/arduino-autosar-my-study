@@ -67,8 +67,6 @@ uint8 Com_IsRxTimedOut(Com_IPduIdType IPduId);
 uint8 Com_SendSignal(Com_SignalIdType SignalId, const void* SignalDataPtr);
 /* SWS_Com_00200: Signal Group メンバーをシャドウバッファへまとめて確定コミットする */
 Std_ReturnType Com_SendSignalGroup(Com_IPduIdType GroupId);
-/* SWS_Com_00348 */
-Std_ReturnType Com_TriggerIPDUSend(PduIdType PduId);
 /* SWS_Com_00124 */
 void Com_TxConfirmation(PduIdType TxPduId, Std_ReturnType result);
 /* SWS_Com_00398: 受信デッドライン監視タイムアウト検出。Os の 100ms タスクから呼び出す */
@@ -87,14 +85,18 @@ void Com_MainFunction(void);
  *          タイマを再始動する（SWS_Com_00787 相当。リセットしないと、
  *          TimeoutMs 以上の時間受信を抑制していた場合に再開直後で
  *          即座にタイムアウト判定されてしまう）。
- *          TxEnabled=0 の間、Com_TriggerIPDUSend() は実送信を抑制し、かつ
- *          送信トリガー（Com_TxUpdatePending・周期フロアのカウンタ）を破棄する
- *          （SWS_Com_00777: 停止中の I-PDU の送信要求はキャンセルしなければ
- *          ならない。SWS_Com_00334 の説明文も同旨）。TX バッファの値自体は
+ *          TxEnabled=0 の間、DIRECT/MIXED/PERIODIC いずれの I-PDU も
+ *          Com_MainFunction() での実送信を抑制する（DIRECT/MIXED の変化検知
+ *          自体は Com_RequestTxOnChange() が Com_TxPending[] へ記録するが、
+ *          実際に PduR_Transmit() を呼ぶかどうかは Com_MainFunction() が
+ *          Com_TxEnabled を見て判断する）。SWS_Com_00777「停止中の I-PDU の
+ *          送信要求はキャンセルしなければならない」・SWS_Com_00334 の説明文
+ *          の要求は、Com_MainFunction() が抑制中でも Com_TxPending[] を
+ *          破棄する（保留させない）ことで満たす。TX バッファの値自体は
  *          Com_SendSignal() が既に更新済みのため失われないが、再度有効化
- *          された「だけ」で古いトリガーにより即座に送信されることはなく、
- *          再開後に実際に値が変化した時、または通常の周期フロアに新たに
- *          達した時に初めて送信される。
+ *          された「だけ」で即座に送信されることはなく、再開後に実際に値が
+ *          変化した時、または通常の周期フロアに新たに達した時に初めて
+ *          送信される。
  *
  *          AUTOSAR 実装との違い: 実際の AUTOSAR は Com_IpduGroupStart() /
  *          Com_IpduGroupStop() で I-PDU Group 単位に制御するが、本プロジェクトには
