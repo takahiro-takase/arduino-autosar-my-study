@@ -29,6 +29,9 @@
 #include "E2EXf.h"
 #include "E2EXf_PBCfg.h"
 #include "E2EMon.h"
+#include "Det.h"
+
+#define TAG "Rte"
 
 /* シグナル ID は Com_Cfg.h の COM_SIGNAL_* を使用（重複定義を排除） */
 
@@ -169,6 +172,31 @@ void Rte_COMCbk_EngineInfo(void)
     (void)Com_ReceiveSignal(COM_SIGNAL_COOLANT_TEMP,   &Rte_EngineInfoMirror.temp);
     (void)Com_ReceiveSignal(COM_SIGNAL_ENGINE_ON_FLAG, &Rte_EngineInfoMirror.onFlag);
     SchM_Exit_Rte_MIRROR_EXCLUSIVE_AREA();
+}
+
+/**
+ * \brief   CoolantTemp が無効値（0xFF）で受信されたことを通知する。
+ *
+ * \details Com_PBCfg.c の CoolantTemp シグナル設定（DataInvalidAction=
+ *          COM_DATA_INVALID_ACTION_NOTIFY）から InvalidNotificationCbk として
+ *          登録される（実 AUTOSAR の ComInvalidNotification、ECUC_Com_00315
+ *          相当）。Com_ReceiveSignal(COM_SIGNAL_COOLANT_TEMP, ...) が受信値と
+ *          InvalidValue の一致を検知した「次回」の Com_MainFunction() から
+ *          呼ばれる（SWS_Com_00680/00717。同期呼び出しにしていない理由は
+ *          Com.c の Com_RxInvalidNotifyPending 宣言コメント参照 — この関数が
+ *          行う Serial 出力は、Com_ReceiveSignal() の呼び出し元によっては
+ *          割り込み禁止区間内で実行されると WDT リセットを引き起こしうる
+ *          ため）。この関数自体は「異常が起きたことをログへ残す」以上のことは
+ *          行わない（ログ出力のみの CDD 相当。E2EMon のように独自カウンタを
+ *          持って TX シグナルへ反映するような発展はスコープ外）。
+ *
+ * \note    Com_PBCfg.c から extern 宣言経由で InvalidNotificationCbk として
+ *          参照されるため non-static。Rte.h には公開しない（Rte_COMCbk_*
+ *          と同じく Com→Rte 間の内部グルーのため）。
+ */
+void Rte_COMInvalidNotify_CoolantTemp(void)
+{
+    DET_LOGW(TAG, "CoolantTemp invalid value received (sensor fault pattern)");
 }
 
 /**
