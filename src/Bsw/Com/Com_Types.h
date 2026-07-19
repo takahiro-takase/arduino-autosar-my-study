@@ -104,7 +104,9 @@ typedef enum
 //     1 回きりのイベント送信だけでは起動直後の受信側や瞬断からの復帰後に
 //     いつまでも古い値のままになりうる。実 MIXED モードの簡略版で、
 //     フロアタイマーは直近の送信［変化時送信/フロアいずれも］でリセットする
-//     簡略化のため、実車の ComMinimumDelayTime による厳密な位相制御は行わない）。
+//     簡略化のため、実車の ComMinimumDelayTime による MDT 満了待ちでの
+//     厳密な位相シフト［Fig.16/17 の td 分の遅延］までは再現しない。MDT
+//     自体（変化時送信の最小間隔）は MinDelayMs として別途サポートする）。
 //
 //   COM_TX_MODE_PERIODIC : 値の変化には反応せず、Com_MainFunction()
 //     が TxPeriodMs 周期で常に送信する（E2EHealthStatus が使用）。
@@ -163,6 +165,16 @@ typedef enum
 //               内部の周期送信直前）に、実 TX バッファへのポインタと長さを
 //               渡して呼ぶ。E2E Transformer が Counter/CRC をバッファへ
 //               書き込む等の「送信直前の最終変換」に使う汎用フック。
+//   MinDelayMs      : TX I-PDU のみ使用（DaVinci: ComMinimumDelayTime）。
+//               DIRECT/MIXED I-PDU の「変化時送信」に対する最小送信間隔 [ms]。
+//               0 = MDT 監視なし（SWS_Com_00471）。直近の実送信から
+//               MinDelayMs 未満しか経過していない場合、Com_TxPending が
+//               立っていても実送信を保留する（破棄はしない。次回
+//               Com_MainFunction() で経過時間を再判定し、満了次第送信する）。
+//               MIXED の周期フロア送信・PERIODIC の周期送信には適用しない
+//               （SWS_Com_00789: ComEnableMDTForCyclicTransmission が既定
+//               false の場合、MIXED の周期部分・PERIODIC には MDT タイマ
+//               自体を起動しない、という実 AUTOSAR の既定動作に合わせている）。
 // -------------------------------------------------------
 typedef struct
 {
@@ -175,6 +187,7 @@ typedef struct
     uint16             TxPeriodMs;
     Com_TxModeModeType TxModeModeTrue;
     uint16             TxPeriodMsTrue;
+    uint16             MinDelayMs;
     void (*RxIndicationCbk)(void);
     void (*TxTransformCbk)(uint8* Data, uint8 Length);
 } Com_IPduConfigType;
