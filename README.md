@@ -54,13 +54,13 @@ SW-C がピン番号などのハードウェア詳細を知ることなく警告
 
 #### MCP2515 接続（Arduino UNO）
 
-| MCP2515 ピン | Arduino ピン | 備考 |
+| Arduino ピン | MCP2515 ピン | 備考 |
 |-------------|-------------|------|
-| CS | D10 | SPI チップセレクト |
-| INT | D2 | 受信割り込み（ポーリング）|
-| SCK | D13 | SPI クロック |
-| SI (MOSI) | D11 | SPI データ出力 |
-| SO (MISO) | D12 | SPI データ入力 |
+| D10 | CS | SPI チップセレクト |
+| D2 | INT | 受信割り込み（ポーリング）|
+| D13 | SCK | SPI クロック |
+| D11 | SI (MOSI) | SPI データ出力 |
+| D12 | SO (MISO) | SPI データ入力 |
 
 > **D13 は MCP2515 の SCK と共用されるため LED には使用できません。**
 > LED は D6（RUNNING）・D7（FAULT）・D8（ABS）それぞれに 220〜470 Ω の抵抗を直列に挿入して接続してください。
@@ -129,8 +129,9 @@ HAL ─── Can_Hw / Dio_Hw / Port_Hw / Adc_Hw / Mcu_Hw / NvM_Hw / WdgM_Hw（s
 |  | E2E | SWS_E2E | AUTOSAR E2E Profile 01 保護の実処理。DataID・CRC8 (SAE J1850)・4bit カウンタの 3 要素で、`E2E_P01Check` はデータ破壊・フレーム脱落・重複・誤ルーティングを検出、`E2E_P01Protect` は Counter・CRC8 を付加。Com/Rte のどちらにも依存しない純粋な検証/付与ライブラリ |
 |  | E2EXf | SWS_E2ELibrary 12.4 (E2E Transformer) | Com と E2E の間を仲介する統合層。RX は `E2EXf_InverseTransform` が `E2E_P01Check` を呼び、EngineInfo (CAN 0x100)・AbsInfo (CAN 0x110) のデータ破壊・フレーム脱落・重複・誤ルーティングを検出して Dem へそれぞれ DTC 0x00010A・0x000109 を報告。TX は `E2EXf_Transform` が `E2E_P01Protect` を呼び、E2EHealthStatus (CAN 0x220、E2EMon が発行するネットワーク健全性テレメトリ) に Counter・CRC8 を付加。呼び出し元は Rte 層のグルー関数（`Rte_COMCbk_*`/`Rte_COMTransform_*`）で、Com 自身はこの層の存在を知らない |
 |  | E2EMon | — (独自 CDD 相当) | 標準 AUTOSAR モジュールには存在しない、実務でよく見る「独自 CDD」パターンの例。EngineInfo/AbsInfo の E2E 検証結果を `E2EMon_NotifyCheckResult()` 経由で購読し、CRC 不一致・シーケンス異常の累積回数（RAM のみ、0xFF 飽和）を集計して `Com_SendSignal()` で公開する。E2EXf/Rte/Com 自体は無改造のまま、標準モジュールの通知フック経由で配線するだけの独立モジュールとして実装している |
-|  | Com | SWS_Com | シグナルのビット単位パック／アンパックと受信デッドライン監視（タイムアウト検出）のみを担い、E2E には一切関知しない（E2E Transformer 方式）。I-PDU ごとの `RxIndicationCbk`/`TxTransformCbk`（`Com_IPduConfigType` の汎用フック、`Com_PBCfg.c` で設定）を通じて Rte 層のグルー関数を呼ぶだけで、中身が E2E であることも Com.c 本体には埋め込まれない。TX I-PDU ごとに `TxModeMode`（DIRECT/MIXED/PERIODIC）を設定でき、DIRECT/MIXED は `Com_SendSignal()`/`Com_SendSignalGroup()` が ComFilterAlgorithm を通過した変化を検知すると `Com_TxPending[]` を立てて次回 `Com_MainFunction()`（Os の 100ms タスク）で送信、MIXED はさらに変化がなくても一定間隔で再送する周期フロアを併せ持つ、PERIODIC は変化に関わらず `Com_MainFunction()` の中で実時間ベースに送信タイミングを判断する。実際に `PduR_Transmit()`（→ MCP2515 への SPI 送信）を呼ぶのは常に `Com_MainFunction()` のみであり、`Com_SendSignal()`/`Com_SendSignalGroup()` を呼ぶ ASW Runnable のスタックフレーム内で SPI 送信がブロッキングすることはない（バス輻輳時の送信遅延が WdgM の Deadline Supervision に影響しないようにするための設計）。いずれも ASW/CDD は値を更新するだけで送信タイミングには一切関与しない。WarningStatus (0x210) は Signal Group として複数シグナルを `Com_SendSignalGroup()` でシャドウバッファから一括コミットする。さらに I-PDU に固定の `TxModeMode` を 1 つ持たせるだけでなく、TMS（Transmission Mode Selector、`TmsContributor` シグナルの `COM_FILTER_MASKED_NEW_DIFFERS_X` 評価で真偽判定）により 2 組のモード（`TxModeMode`/`TxModeModeTrue`）を自動切り替えすることもできる（WarningStatus が使用：通常 DIRECT、FAULT/ABS 点灯中は MIXED）。DIRECT/MIXED の変化時送信には `MinDelayMs`（ComMinimumDelayTime、MDT）でバス負荷保護のための最小送信間隔も設定できる（MIXED の周期フロアには適用しない） |
-|  | PduR | SWS_PduR | 受信 PDU を Com へ、送信 PDU を CanIf へルーティング。通信スタックの配管役 |
+|  | Com | SWS_Com | シグナルのビット単位パック／アンパックと受信デッドライン監視（タイムアウト検出）のみを担い、E2E には一切関知しない（E2E Transformer 方式）。I-PDU ごとの `RxIndicationCbk`/`TxTransformCbk`（`Com_IPduConfigType` の汎用フック、`Com_PBCfg.c` で設定）を通じて Rte 層のグルー関数を呼ぶだけで、中身が E2E であることも Com.c 本体には埋め込まれない。TX I-PDU ごとに `TxModeMode`（DIRECT/MIXED/PERIODIC）を設定でき、DIRECT/MIXED は `Com_SendSignal()`/`Com_SendSignalGroup()` が ComFilterAlgorithm を通過した変化を検知すると `Com_TxPending[]` を立てて次回 `Com_MainFunction()`（Os の 100ms タスク）で送信、MIXED はさらに変化がなくても一定間隔で再送する周期フロアを併せ持つ、PERIODIC は変化に関わらず `Com_MainFunction()` の中で実時間ベースに送信タイミングを判断する。実際に `PduR_Transmit()`（→ MCP2515 への SPI 送信）を呼ぶのは常に `Com_MainFunction()` のみであり、`Com_SendSignal()`/`Com_SendSignalGroup()` を呼ぶ ASW Runnable のスタックフレーム内で SPI 送信がブロッキングすることはない（バス輻輳時の送信遅延が WdgM の Deadline Supervision に影響しないようにするための設計）。いずれも ASW/CDD は値を更新するだけで送信タイミングには一切関与しない。WarningStatus (0x210) は Signal Group として複数シグナルを `Com_SendSignalGroup()` でシャドウバッファから一括コミットする。さらに I-PDU に固定の `TxModeMode` を 1 つ持たせるだけでなく、TMS（Transmission Mode Selector、`TmsContributor` シグナルの `COM_FILTER_MASKED_NEW_DIFFERS_X` 評価で真偽判定）により 2 組のモード（`TxModeMode`/`TxModeModeTrue`）を自動切り替えすることもできる（WarningStatus が使用：通常 DIRECT、FAULT/ABS 点灯中は MIXED）。DIRECT/MIXED の変化時送信には `MinDelayMs`（ComMinimumDelayTime、MDT）でバス負荷保護のための最小送信間隔も設定できる（MIXED の周期フロアには適用しない）。RX シグナルには `COM_FILTER_NEW_IS_WITHIN` による受信フィルタ（プラウジビリティチェック）も設定でき、範囲外の値を検知すると `Com_ReceiveSignal()` が直近の合格値を返し続ける（EngineSpeed に適用） |
+|  | PduR | SWS_PduR | 受信 PDU を Com/CanTp/SecOC へ（1つの RxPduId から複数宛先への配信にも対応）、送信 PDU を CanIf へルーティング。通信スタックの配管役。TX 経路は既定では `CanIf_Transmit()` へ直接転送するが、`PduR_TxRoutingPathType.TransmitOverrideFct` が設定されている場合は中間モジュール（SecOC）へ委譲できるよう汎用化されている（既存の全 TX パスはこのフィールドを使わないため無変更） |
+|  | SecOC | SWS_SecureOnboardCommunication | メッセージ認証（AES-128-CMAC 自前実装）とフレッシュネス管理によるリプレイ対策。E2E とは異なる軸（E2E=意図しない誤り検出、SecOC=意図的な改ざん・なりすまし検出）で、PduR のルーティング経路上に中間モジュールとして挟まる。RX（ImmobilizerCmd、CAN 0x120）は `SecOC_IfRxIndication()` が PduR の RX 宛先として検証し、成功時のみ `Com_RxIndication()` へ転送。TX（E2EHealthStatus、CAN 0x220）は既に E2E 保護済みのペイロードをさらに認証する二重防御で、`SecOC_IfTransmit()`/`SecOC_MainFunction()` が Freshness+MAC を計算し `PduR_SecOCTransmit()` で CanIf まで送り届ける。Csm/CryIf/KeyM は分離実装せず、暗号計算・鍵管理を SecOC モジュール内に直接持つ簡略化 |
 |  | CanIf | SWS_CanIf | CAN ID ↔ 論理 PDU のマッピング。上位層は CAN ID を知らず PDU ID で通信。設定 DLC 未満の受信 L-PDU は上位層へ渡さず棄却する（SWS_CANIF_00026 のデータ長チェック） |
 |  | Can | SWS_Can | MCP2515 の送受信・Bus-Off 検出・CAN バス活動によるウェイクアップ検出を担う MCAL 最下層。HW を直接操作する唯一のモジュール |
 |  | CanTp | SWS_CanTp | ISO 15765-2 のフレーム分割（FF/CF）と再組立。8 バイトを超える UDS 応答を実現 |
@@ -214,8 +215,18 @@ HAL ─── Can_Hw / Dio_Hw / Port_Hw / Adc_Hw / Mcu_Hw / NvM_Hw / WdgM_Hw（s
 │   │   │   ├── PduR_PBCfg.c      # ルーティングテーブル実体
 │   │   │   ├── PduR_COM.h        # COM 向けコールバック型定義
 │   │   │   ├── PduR_CanIf.h      # CanIf 向けコールバック型定義
+│   │   │   ├── PduR_SecOC.h      # SecOC 向けインタフェース定義（PduR_SecOCTransmit）
 │   │   │   ├── PduR.h            # 公開インタフェース
-│   │   │   └── PduR.c            # PDU マルチキャスト配信・送信完了通知の転送
+│   │   │   └── PduR.c            # PDU マルチキャスト配信・送信完了通知の転送・TX 経路の中間モジュール委譲（TransmitOverrideFct）
+│   │   ├── SecOC/                # メッセージ認証（AES-128-CMAC 自前実装、Csm/CryIf/KeyM は分離しない簡略化）
+│   │   │   ├── SecOC_Types.h     # 型定義（SecOC_RxPduConfigType/SecOC_TxPduConfigType）
+│   │   │   ├── SecOC_Cfg.h       # RX/TX Secured I-PDU 数定数
+│   │   │   ├── SecOC_PBCfg.h     # ポストビルド設定宣言（SecOC_Config）
+│   │   │   ├── SecOC_PBCfg.c     # RX/TX Secured I-PDU 設定実体（DataId/オフセット/鍵）
+│   │   │   ├── SecOC.h           # 公開インタフェース（SecOC_IfRxIndication/SecOC_IfTransmit/SecOC_MainFunction）
+│   │   │   ├── SecOC.c           # MAC・フレッシュネス検証（RX）／計算・Secured I-PDU 組み立て（TX）
+│   │   │   ├── SecOC_Aes128.h/.c # AES-128 自前実装（FIPS-197 KAT セルフテスト付き）
+│   │   │   └── SecOC_Cmac.h/.c   # AES-CMAC 自前実装（NIST SP 800-38B、RFC 4493 で検証）
 │   │   ├── Det/                  # Default Error Tracer（Serial ブリッジ）
 │   │   │   ├── Det.h             # ログマクロ定義（DET_LOGI/W/E/D）
 │   │   │   └── Det.cpp           # Arduino Serial 出力実装（Arduino API を呼ぶ唯一の場所）
