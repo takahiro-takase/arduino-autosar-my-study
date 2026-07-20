@@ -1131,36 +1131,77 @@ Std_ReturnType Com_SendSignalGroup(Com_IPduIdType GroupId)
 }
 
 /**
- * \brief   TX I-PDU の送信完了を COM へ通知する。
+ * \brief   TX I-PDU の送信完了を COM へ通知し、ComNotification（TxAck）を配送する。
  *
- * \details CAN フレームの送信完了後に PduR から呼び出される。
- *          この実装ではログ出力のみ行い、リトライや締め切り処理は行わない。
+ * \details CAN フレームの送信完了後に PduR から呼び出される。まずログ出力を
+ *          行い、result==E_OK（送信成功）であれば、この I-PDU（TxPduId、
+ *          Com_IPduIdType と同一の値空間。PduR_PBCfg.c の ConfDestPduId 参照）
+ *          に属する TX シグナル（Direction==COM_SIGNAL_DIRECTION_TX。RX I-PDU
+ *          と TX I-PDU の IPduId は別値空間で数値が重複しうるため、この
+ *          Direction チェックが方向誤認を防ぐために必須。Com_SignalDirectionType
+ *          参照）のうち `TxAckCbk` が設定されているものすべてを呼び出す
+ *          （Com_CbkTxAck、SWS_Com_00468: "called immediately after
+ *          successful transmission of the I-PDU containing the message"）。
+ *          Signal Group のメンバーかどうかは問わず、シグナル単位に統一して
+ *          扱う（実 AUTOSAR は signal 単位/signal group 単位で別々の
+ *          コールバック名 Rte_COMCbkTAck_<sn>/<sg> を持てるが、本実装は
+ *          シグナル単位の TxAckCbk のみのシンプルな簡略版）。値がこの送信で
+ *          実際に変化したかどうかは問わない（I-PDU が送信されたという事実
+ *          だけで、含まれる全シグナルの TxAckCbk が呼ばれる）。
  *
- * \param[in]  TxPduId  送信が完了した TX I-PDU の PduR 層 PDU ID。
+ *          呼び出しコンテキストについて（Rx 無効値検知の実機障害を踏まえた
+ *          確認事項）: この関数は Can_MainFunction_Write()（Os の 100ms
+ *          タスク）から CanIf_TxConfirmation() → PduR_CanIfTxConfirmation()
+ *          経由で同期的に呼ばれる。この経路上に SchM 排他エリア（割り込み
+ *          禁止区間）は存在しないため、`TxAckCbk` 内で Serial 出力等の
+ *          ブロッキング処理を行っても、Rx 無効値検知（ComInvalidNotification）
+ *          で発生した WDT リセット障害と同じ問題は起きない（呼び出しチェーンを
+ *          実際にたどって確認済み）。
+ *
+ * \param[in]  TxPduId  送信が完了した TX I-PDU の PduR 層 PDU ID
+ *                      （= Com_IPduIdType と同一の値空間）。
  * \param[in]  result   CanIf から転送された送信結果。
  *                      E_OK = 成功、E_NOT_OK = 失敗。
- *                      TX リトライやエラーカウンタを実装しないため未使用。
+ *                      TX リトライやエラーカウンタ、Com_CbkTxErr
+ *                      （SWS_Com_00491、失敗時通知）は実装しない。
  *
  * \pre        Com_Init() が正常に完了していること。
- * \note       result を使用しない理由: Com_TxConfirmation() 自体は SWS_Com_00124
- *             どおり result 引数を持つが、本実装では呼び出し元の CanIf_TxConfirmation()
- *             が result を受け取らない 1 引数 API で、内部で常に E_OK 決め打ちで
- *             呼び出す。さらにその手前の Can_Write()（Can.c）は送信成功時のみ
- *             CanIf_TxConfirmation() を呼び、失敗時は即座に CAN_NOT_OK を同期的な
- *             戻り値で返す（TxConfirmation 自体を呼ばない）。MCP2515 との SPI 通信が
- *             同期的で非同期の送信完了割り込みを使っていないため、TX 失敗は既に
- *             呼び出し元への同期戻り値で伝わっており、この result が実際に
- *             E_NOT_OK になる経路は現状存在しない。
+ * \note       result が実際に E_NOT_OK になる経路は現状存在しない。呼び出し元の
+ *             CanIf_TxConfirmation() が result を受け取らない 1 引数 API で、
+ *             内部で常に E_OK 決め打ちで呼び出すため（さらにその手前の
+ *             Can_Write() は送信成功時のみ CanIf_TxConfirmation() を呼ぶ。
+ *             MCP2515 との SPI 通信が同期的なため）。
  *
- * \AUTOSARReq     {SWS_Com_00124}
+ * \AUTOSARReq     {SWS_Com_00124, SWS_Com_00468}
  * \ServiceID      {0x11}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
  */
 void Com_TxConfirmation(PduIdType TxPduId, Std_ReturnType result)
 {
-    (void)result;
     DET_LOGI(TAG, "TxConf id=%u", (unsigned)TxPduId);
+
+    if (result != E_OK || Com_ConfigPtr == NULL)
+        return;
+
+    for (uint8 s = 0U; s < Com_ConfigPtr->SignalCount; s++)
+    {
+        const Com_SignalConfigType* sig = &Com_ConfigPtr->Signals[s];
+        /* Direction のチェックが必須: RX I-PDU と TX I-PDU の IPduId は
+         * 別々の値空間（どちらも 0 始まり）のため、IPduId の一致だけでは
+         * 方向を判別できない（例: RX の EngineInfo=0 と TX の
+         * MeterStatus=0）。Direction を見ずに sig->IPduId == TxPduId だけで
+         * 判定すると、EngineInfo（RX）に属する EngineSpeed 等が
+         * MeterStatus（TX）の送信確認のたびに誤って候補に入ってしまう
+         * （TxAckCbk が NULL でない限り誤発火する）。詳細は
+         * Com_SignalDirectionType の宣言コメント参照。 */
+        if (sig->Direction == COM_SIGNAL_DIRECTION_TX
+            && sig->TxAckCbk != NULL
+            && sig->IPduId == TxPduId)
+        {
+            sig->TxAckCbk();
+        }
+    }
 }
 
 /**
