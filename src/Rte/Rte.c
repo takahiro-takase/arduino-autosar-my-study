@@ -200,6 +200,28 @@ void Rte_COMInvalidNotify_CoolantTemp(void)
 }
 
 /**
+ * \brief   MeterStatus フレームの送信成功を通知する（EngineState の TxAck）。
+ *
+ * \details Com_PBCfg.c の EngineState シグナル設定（TxAckCbk）から登録される
+ *          （実 AUTOSAR の Com_CbkTxAck、ComNotification = ECUC_Com_00498
+ *          相当）。呼ばれるのは Com_TxConfirmation() が MeterStatus
+ *          （TX IPduId=0）の送信成功を検出した直後（SWS_Com_00468）。
+ *          Com_TxConfirmation() は Can_MainFunction_Write()（Os の 100ms
+ *          タスク）から同期的に呼ばれ、この経路上に割り込み禁止区間は
+ *          存在しないため（Com.c の Com_TxConfirmation() doc 参照）、
+ *          ここで Serial 出力（DET_LOGI）を行っても Rx 無効値検知で発生した
+ *          WDT リセット障害と同じ問題は起きない。
+ *
+ * \note    Com_PBCfg.c から extern 宣言経由で TxAckCbk として参照されるため
+ *          non-static。Rte.h には公開しない（他の Rte_COM* グルーと同じ
+ *          理由）。
+ */
+void Rte_COMTxAck_EngineState(void)
+{
+    DET_LOGI(TAG, "MeterStatus TX ack (EngineState)");
+}
+
+/**
  * \brief   AbsInfo (RX IPduId=1) フレーム受信の都度呼ばれる E2E Transformer フック。
  *
  * \details Com_PBCfg.c の RxIndicationCbk として登録される。

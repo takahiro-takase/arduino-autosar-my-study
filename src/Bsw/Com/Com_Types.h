@@ -338,10 +338,40 @@ typedef struct
 } Com_IPduConfigType;
 
 // -------------------------------------------------------
+// Com_SignalDirectionType（本プロジェクト独自拡張。DaVinci 対応パラメータなし）
+//
+//   実 AUTOSAR には対応する設定パラメータが無い。実 AUTOSAR では ComSignal は
+//   必ずどちらか一方の ComIPdu（RX/TX で別コンテナ）に一意に含まれる構造の
+//   ため、「このシグナルが RX/TX どちらか」を別途持つ必要がない。
+//
+//   本プロジェクトは RX/TX 共通の 1 本の配列（Com_ConfigType.Signals）に
+//   全シグナルを平坦に並べ、所属 I-PDU は IPduId（数値）で示す簡略設計を
+//   採っている。ところが RX I-PDU と TX I-PDU の IPduId は別々の値空間で
+//   0 から振られており数値が重複する（例: RX の EngineInfo=0 と TX の
+//   MeterStatus=0）。そのため「IPduId が一致する」だけでは、そのシグナルが
+//   問い合わせた方向（RX か TX か）のものかを判別できない。
+//
+//   この Direction フィールドは、Com_TxConfirmation() が Com_ConfigPtr->
+//   Signals[] 全体を IPduId だけで走査して TxAckCbk 対象を探す際に必要になった
+//   （Com_SendSignal()/Com_ReceiveSignal() は SignalId で個別の 1 エントリを
+//   検索してから Com_FindTxIPdu()/Com_FindRxIPdu() で方向を確認する設計のため、
+//   この曖昧さの影響を受けない。走査型の処理でのみ問題になる）。
+// -------------------------------------------------------
+typedef enum
+{
+    COM_SIGNAL_DIRECTION_RX = 0,
+    COM_SIGNAL_DIRECTION_TX = 1
+} Com_SignalDirectionType;
+
+// -------------------------------------------------------
 // Signal 設定（1エントリ = 1つのシグナル）
 //
 //   SignalId    : アプリ層が使うシグナル識別子（Com_ReceiveSignal / Com_SendSignal のキー）
-//   IPduId      : このシグナルが属する I-PDU の ID
+//   Direction   : このシグナルが RX/TX どちらの I-PDU に属するか。
+//                 詳細は Com_SignalDirectionType 参照。
+//   IPduId      : このシグナルが属する I-PDU の ID（Direction 側の値空間。
+//                 RX と TX で数値が重複しうるため、Direction とセットで
+//                 初めて一意に I-PDU を特定できる）
 //   BitPosition : I-PDU 内の先頭ビット位置
 //                 big-endian  → MSB のビット番号
 //                 little-endian → LSB のビット番号
@@ -368,10 +398,16 @@ typedef struct
 //               COM_DATA_INVALID_ACTION_NOTIFY のときのみ InvalidValue /
 //               InvalidNotificationCbk を参照する。InvalidNotificationCbk は
 //               NULL 可（通知不要なら未設定でよい）。
+//   TxAckCbk    : TX シグナルのみ使用。非 NULL なら、このシグナルが属する
+//               I-PDU の送信が成功するたびに Com_TxConfirmation() から
+//               呼ばれる（Com_CbkTxAck、SWS_Com_00468 相当）。このシグナル
+//               自体の値がその送信で変化したかどうかは問わない。NULL 可
+//               （通知不要なら未設定でよい）。
 // -------------------------------------------------------
 typedef struct
 {
     Com_SignalIdType            SignalId;
+    Com_SignalDirectionType     Direction;
     Com_IPduIdType              IPduId;
     uint8                       BitPosition;
     uint8                       BitSize;
@@ -386,13 +422,17 @@ typedef struct
     Com_DataInvalidActionType   DataInvalidAction;
     uint32                      InvalidValue;
     void (*InvalidNotificationCbk)(void);
+    void (*TxAckCbk)(void);
 } Com_SignalConfigType;
 
 // -------------------------------------------------------
 // COM 全体設定（Com_Init に渡す）
 //
 //   RX / TX それぞれに IPdu テーブルを持つ。
-//   Signal テーブルは RX / TX 共通（IPduId で区別する）。
+//   Signal テーブルは RX / TX 共通の 1 本の配列。RX I-PDU と TX I-PDU の
+//   IPduId は別々の値空間（どちらも 0 始まり、数値が重複しうる）のため、
+//   IPduId 単体では所属 I-PDU を一意に特定できない。Direction とセットで
+//   区別する（Com_SignalDirectionType 参照）。
 // -------------------------------------------------------
 typedef struct
 {

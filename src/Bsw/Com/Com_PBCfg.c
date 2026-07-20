@@ -30,6 +30,7 @@
  *              Com_Cfg.h の COM_TX_PERIOD_METERSTATUS_FLOOR_MS 間隔で
  *              周期フロア送信する)
  *              Signal 3: EngineState    8 bit  BitPos= 0  BigEndian
+ *                TxAckCbk=Rte_COMTxAck_EngineState（送信成功のたび呼ばれる）
  *            TX I-PDU 1 (IPduId=1): CAN ID 0x210, DLC=1  WarningStatus (メータ ECU、Signal Group)
  *              TMS（Transmission Mode Selector）を持つ I-PDU:
  *                通常（FaultLamp/AbsLamp 消灯 = TMS false）は TxModeMode=DIRECT。
@@ -81,6 +82,9 @@
  *
  * [Com_SignalConfigType] ←→ /ActiveEcuC/Com/ComConfig/[ComSignal]
  *   .SignalId    ←→ ComHandleId          （シグナルの識別番号）
+ *   .Direction   ←→ （本プロジェクト独自拡張。DaVinci では所属 ComIPdu の
+ *                    ComIPduDirection で暗黙的に表現される）RX/TX どちらの
+ *                    I-PDU に属するか。Com_SignalDirectionType 参照
  *   .IPduId      ←→ ComIPduRef           （所属する I-PDU へのリンク）
  *   .BitPosition ←→ ComBitPosition       （PDU バッファ内のビット開始位置）
  *   .BitSize     ←→ ComBitSize           （シグナルのビット長）
@@ -93,6 +97,7 @@
  *   .DataInvalidAction        ←→ ComDataInvalidAction        （RX シグナルのみ使用）
  *   .InvalidValue             ←→ ComSignalDataInvalidValue   （DataInvalidAction=NOTIFY のみ使用）
  *   .InvalidNotificationCbk   ←→ ComInvalidNotification      （DataInvalidAction=NOTIFY のみ使用）
+ *   .TxAckCbk                 ←→ ComNotification              （TX シグナルのみ使用、Com_CbkTxAck 相当）
  *
  * =====================================================================
  *
@@ -113,6 +118,7 @@ extern void Rte_COMCbk_EngineInfo(void);
 extern void Rte_COMCbk_AbsInfo(void);
 extern void Rte_COMTransform_E2EHealthStatus(uint8* Data, uint8 Length);
 extern void Rte_COMInvalidNotify_CoolantTemp(void);
+extern void Rte_COMTxAck_EngineState(void);
 
 /* -----------------------------------------------------------------------
  * RX I-PDU テーブル
@@ -259,6 +265,7 @@ static const Com_SignalConfigType Com_SignalConfigData[COM_SIGNAL_COUNT] = {
          * DaVinci: /ActiveEcuC/Com/ComConfig/EngineSpeed_Rx
          * --------------------------------------------------------------- */
         .SignalId    = COM_SIGNAL_ENGINE_SPEED, /* DaVinci: ComHandleId         */
+        .Direction   = COM_SIGNAL_DIRECTION_RX, /* 本プロジェクト独自拡張。Com_SignalDirectionType 参照 */
         .IPduId      = 0U,                      /* DaVinci: ComIPduRef → EngineInfo_Rx */
         .BitPosition = 16U,                     /* DaVinci: ComBitPosition      */
         .BitSize     = 16U,                     /* DaVinci: ComBitSize          */
@@ -282,6 +289,7 @@ static const Com_SignalConfigType Com_SignalConfigData[COM_SIGNAL_COUNT] = {
          * 実機障害の教訓）。
          * --------------------------------------------------------------- */
         .SignalId    = COM_SIGNAL_COOLANT_TEMP, /* DaVinci: ComHandleId         */
+        .Direction   = COM_SIGNAL_DIRECTION_RX, /* 本プロジェクト独自拡張。Com_SignalDirectionType 参照 */
         .IPduId      = 0U,                      /* DaVinci: ComIPduRef → EngineInfo_Rx */
         .BitPosition = 32U,                     /* DaVinci: ComBitPosition      */
         .BitSize     = 8U,                      /* DaVinci: ComBitSize          */
@@ -296,6 +304,7 @@ static const Com_SignalConfigType Com_SignalConfigData[COM_SIGNAL_COUNT] = {
          * DaVinci: /ActiveEcuC/Com/ComConfig/EngineOnFlag_Rx
          * --------------------------------------------------------------- */
         .SignalId    = COM_SIGNAL_ENGINE_ON_FLAG, /* DaVinci: ComHandleId       */
+        .Direction   = COM_SIGNAL_DIRECTION_RX,   /* 本プロジェクト独自拡張。Com_SignalDirectionType 参照 */
         .IPduId      = 0U,                        /* DaVinci: ComIPduRef → EngineInfo_Rx */
         .BitPosition = 40U,                       /* DaVinci: ComBitPosition    */
         .BitSize     = 1U,                        /* DaVinci: ComBitSize        */
@@ -306,15 +315,20 @@ static const Com_SignalConfigType Com_SignalConfigData[COM_SIGNAL_COUNT] = {
          * Signal 3: EngineState  TX 8bit  CAN 0x200 byte[0]
          * （E2E 保護なしのため、シグナルは byte[0] から始まる）
          * DaVinci: /ActiveEcuC/Com/ComConfig/EngineState_Tx
+         * TxAckCbk=Rte_COMTxAck_EngineState（SWS_Com_00468、ComNotification/
+         * Com_CbkTxAck 相当）: MeterStatus フレームが実際に送信されるたびに
+         * 呼ばれる（この送信で EngineState 自体が変化したかどうかは問わない）。
          * --------------------------------------------------------------- */
         .SignalId    = COM_SIGNAL_ENGINE_STATE, /* DaVinci: ComHandleId         */
+        .Direction   = COM_SIGNAL_DIRECTION_TX, /* 本プロジェクト独自拡張。Com_SignalDirectionType 参照 */
         .IPduId      = 0U,                      /* DaVinci: ComIPduRef → MeterStatus_Tx */
         .BitPosition = 0U,                      /* DaVinci: ComBitPosition      */
         .BitSize     = 8U,                      /* DaVinci: ComBitSize          */
         .Endian      = COM_BIG_ENDIAN,          /* DaVinci: ComSignalEndianness = OPAQUE */
         .FilterAlgorithm = COM_FILTER_MASKED_NEW_DIFFERS_MASKED_OLD, /* DaVinci: ComFilterAlgorithm
                                                  *          値が変化したときだけ送信要求とみなす */
-        .Mask            = 0xFFU                /* DaVinci: ComFilterNewValue/ComFilterMask 相当（8bit 全体を比較） */
+        .Mask            = 0xFFU,               /* DaVinci: ComFilterNewValue/ComFilterMask 相当（8bit 全体を比較） */
+        .TxAckCbk        = Rte_COMTxAck_EngineState /* DaVinci: ComNotification */
     },
     {
         /* ---------------------------------------------------------------
@@ -347,6 +361,7 @@ static const Com_SignalConfigType Com_SignalConfigData[COM_SIGNAL_COUNT] = {
          * 詳細は README.md の「ComRxDataTimeoutAction」節を参照。
          * --------------------------------------------------------------- */
         .SignalId    = COM_SIGNAL_VEHICLE_SPEED, /* DaVinci: ComHandleId        */
+        .Direction   = COM_SIGNAL_DIRECTION_RX,  /* 本プロジェクト独自拡張。Com_SignalDirectionType 参照 */
         .IPduId      = 1U,                       /* DaVinci: ComIPduRef → AbsInfo_Rx */
         .BitPosition = 16U,                      /* DaVinci: ComBitPosition     */
         .BitSize     = 16U,                      /* DaVinci: ComBitSize         */
@@ -362,6 +377,7 @@ static const Com_SignalConfigType Com_SignalConfigData[COM_SIGNAL_COUNT] = {
          * RX Signal Group（AbsInfo_Rx）メンバー。VehicleSpeed と同様。
          * --------------------------------------------------------------- */
         .SignalId    = COM_SIGNAL_BRAKE_ACTIVE, /* DaVinci: ComHandleId          */
+        .Direction   = COM_SIGNAL_DIRECTION_RX, /* 本プロジェクト独自拡張。Com_SignalDirectionType 参照 */
         .IPduId      = 1U,                      /* DaVinci: ComIPduRef → AbsInfo_Rx */
         .BitPosition = 32U,                     /* DaVinci: ComBitPosition       */
         .BitSize     = 1U,                      /* DaVinci: ComBitSize           */
@@ -375,6 +391,7 @@ static const Com_SignalConfigType Com_SignalConfigData[COM_SIGNAL_COUNT] = {
          * RX Signal Group（AbsInfo_Rx）メンバー。VehicleSpeed と同様。
          * --------------------------------------------------------------- */
         .SignalId    = COM_SIGNAL_ABS_ACTIVE,   /* DaVinci: ComHandleId          */
+        .Direction   = COM_SIGNAL_DIRECTION_RX, /* 本プロジェクト独自拡張。Com_SignalDirectionType 参照 */
         .IPduId      = 1U,                      /* DaVinci: ComIPduRef → AbsInfo_Rx */
         .BitPosition = 33U,                     /* DaVinci: ComBitPosition       */
         .BitSize     = 1U,                      /* DaVinci: ComBitSize           */
@@ -388,6 +405,7 @@ static const Com_SignalConfigType Com_SignalConfigData[COM_SIGNAL_COUNT] = {
          * WarningStatus の送信を引き起こす（他の灯の変化を待たない）。
          * --------------------------------------------------------------- */
         .SignalId    = COM_SIGNAL_RUN_LAMP,     /* DaVinci: ComHandleId          */
+        .Direction   = COM_SIGNAL_DIRECTION_TX, /* 本プロジェクト独自拡張。Com_SignalDirectionType 参照 */
         .IPduId      = 1U,                      /* DaVinci: ComIPduRef → WarningStatus_Tx */
         .BitPosition = 0U,                      /* DaVinci: ComBitPosition       */
         .BitSize     = 1U,                      /* DaVinci: ComBitSize           */
@@ -404,6 +422,7 @@ static const Com_SignalConfigType Com_SignalConfigData[COM_SIGNAL_COUNT] = {
          * とは独立に、自身の点灯/消灯だけで送信も引き起こす。
          * --------------------------------------------------------------- */
         .SignalId    = COM_SIGNAL_FAULT_LAMP,   /* DaVinci: ComHandleId          */
+        .Direction   = COM_SIGNAL_DIRECTION_TX, /* 本プロジェクト独自拡張。Com_SignalDirectionType 参照 */
         .IPduId      = 1U,                      /* DaVinci: ComIPduRef → WarningStatus_Tx */
         .BitPosition = 1U,                      /* DaVinci: ComBitPosition       */
         .BitSize     = 1U,                      /* DaVinci: ComBitSize           */
@@ -422,6 +441,7 @@ static const Com_SignalConfigType Com_SignalConfigData[COM_SIGNAL_COUNT] = {
          * ComTransferProperty=TRIGGERED_ON_CHANGE: FaultLamp と同様。
          * --------------------------------------------------------------- */
         .SignalId    = COM_SIGNAL_ABS_LAMP,     /* DaVinci: ComHandleId          */
+        .Direction   = COM_SIGNAL_DIRECTION_TX, /* 本プロジェクト独自拡張。Com_SignalDirectionType 参照 */
         .IPduId      = 1U,                      /* DaVinci: ComIPduRef → WarningStatus_Tx */
         .BitPosition = 2U,                      /* DaVinci: ComBitPosition       */
         .BitSize     = 1U,                      /* DaVinci: ComBitSize           */
@@ -440,6 +460,7 @@ static const Com_SignalConfigType Com_SignalConfigData[COM_SIGNAL_COUNT] = {
          * DaVinci: /ActiveEcuC/Com/ComConfig/E2ECrcErrCount_Tx
          * --------------------------------------------------------------- */
         .SignalId    = COM_SIGNAL_E2E_CRC_ERR_COUNT, /* DaVinci: ComHandleId     */
+        .Direction   = COM_SIGNAL_DIRECTION_TX, /* 本プロジェクト独自拡張。Com_SignalDirectionType 参照 */
         .IPduId      = 2U,                      /* DaVinci: ComIPduRef → E2EHealthStatus_Tx */
         .BitPosition = 16U,                      /* DaVinci: ComBitPosition      */
         .BitSize     = 8U,                       /* DaVinci: ComBitSize          */
@@ -451,6 +472,7 @@ static const Com_SignalConfigType Com_SignalConfigData[COM_SIGNAL_COUNT] = {
          * DaVinci: /ActiveEcuC/Com/ComConfig/E2ESeqErrCount_Tx
          * --------------------------------------------------------------- */
         .SignalId    = COM_SIGNAL_E2E_SEQ_ERR_COUNT, /* DaVinci: ComHandleId     */
+        .Direction   = COM_SIGNAL_DIRECTION_TX, /* 本プロジェクト独自拡張。Com_SignalDirectionType 参照 */
         .IPduId      = 2U,                      /* DaVinci: ComIPduRef → E2EHealthStatus_Tx */
         .BitPosition = 24U,                      /* DaVinci: ComBitPosition      */
         .BitSize     = 8U,                       /* DaVinci: ComBitSize          */

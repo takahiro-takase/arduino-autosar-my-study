@@ -1013,6 +1013,89 @@ WDT（ウォッチドッグタイマ）リセットが発生しました。
 ブロッキングする可能性のある処理（Serial 出力、長時間のループ等）を含めては
 ならない。**
 
+#### ComNotification拡張（Tx確定コールバック、Com_CbkTxAck）
+
+これまでの `Com_TxConfirmation()` は PduR から送信完了を受け取ってログ出力する
+だけで、それより上位（ASW/Rte）へは何も伝えていませんでした。実 AUTOSAR の
+Com は、I-PDU の送信が実際に成功した際、そこに含まれるシグナル/Signal Group
+ごとに個別のコールバック（`Com_CbkTxAck`、SWS_Com_00468。実車の RTE 生成名は
+`Rte_COMCbkTAck_<sn>`/`<sg>`）を呼び出せます。`ComRxDataTimeoutAction`/
+`ComDataInvalidAction` が RX 側の「値の異常」を扱う機能だったのに対し、これは
+TX 側の「送信できたことの確認」を扱う機能です。
+
+本プロジェクトでは `MeterStatus` の `EngineState` に `TxAckCbk` を設定しました。
+
+```
+Com_SignalConfigType (EngineState):
+  TxAckCbk = Rte_COMTxAck_EngineState
+
+Com_TxConfirmation(TxPduId=0/*MeterStatus*/, result=E_OK)  ← PduR から呼ばれる
+  Com_ConfigPtr->Signals[] を走査
+    sig->Direction==TX かつ sig->IPduId == TxPduId かつ sig->TxAckCbk != NULL
+    のものすべてについて sig->TxAckCbk() を呼ぶ  ← EngineState だけでなく、
+                          同じ I-PDU の全 TX シグナルが対象（本設定では
+                          EngineState のみ）
+```
+
+**シグナル単位に統一した理由**: 実 AUTOSAR は signal 単位・signal group 単位で
+別々のコールバック名を持てますが、本実装は `TmsContributor`/`TransferProperty`/
+`RxDataTimeoutAction` 等これまでのフィールドと同じく、シグナル単位の
+`TxAckCbk` のみで統一しています。Signal Group（`WarningStatus`）のメンバーに
+`TxAckCbk` を設定した場合も、`Com_ConfigPtr->Signals[]` を素直に走査するだけの
+実装なので、そのメンバー個別に呼ばれます（実 AUTOSAR の「signal group 全体で
+1 回」という意味論とは異なる簡略化です）。
+
+**レビューで見つかった問題（RX/TX の方向誤認）**: 初期実装は
+`sig->IPduId == TxPduId` だけで走査対象を絞っており、方向（RX/TX）を
+確認していませんでした。RX I-PDU と TX I-PDU の `IPduId` は別々の値空間で
+（どちらも 0 始まり）数値が重複します（例: RX の `EngineInfo=0` と TX の
+`MeterStatus=0`）。そのため `Com_TxConfirmation(TxPduId=0, ...)`
+（`MeterStatus` の送信確認）が呼ばれると、本来対象であるべき TX 側の
+`EngineState` だけでなく、たまたま `IPduId=0` である RX 側の
+`EngineInfo`（`EngineSpeed`/`CoolantTemp`/`EngineOnFlag`）まで走査対象に
+入ってしまいます。当時はどの RX シグナルにも `TxAckCbk` が設定されていな
+かったため実害はありませんでしたが、コード上は何も防いでおらず、将来
+誰かが（コピペ等で）RX シグナルに `TxAckCbk` を設定してしまうと、無関係な
+TX I-PDU の送信完了のたびにそのコールバックが静かに誤発火する
+（クラッシュも DET ログも出ないため発見しづらい）バグになり得ました。
+
+`Com_SendSignal()`/`Com_ReceiveSignal()` は `SignalId` で 1 エントリを検索
+してから `Com_FindTxIPdu()`/`Com_FindRxIPdu()` で方向を確認する設計のため
+この曖昧さの影響を受けませんが、`Com_TxConfirmation()` は逆に
+「`Signals[]` 全体を `IPduId` だけで検索する」という、本実装で初めて
+現れた走査パターンだったために問題が顕在化しました。
+
+修正として `Com_SignalConfigType` に `Direction`（`Com_SignalDirectionType`:
+`COM_SIGNAL_DIRECTION_RX`/`_TX`）フィールドを新設し、全 12 シグナルへ明示的に
+設定したうえで、`Com_TxConfirmation()` の走査条件に
+`sig->Direction == COM_SIGNAL_DIRECTION_TX` を追加しました。実 AUTOSAR には
+対応パラメータがありません（ComSignal は必ずどちらか一方の ComIPdu に構造的に
+含まれるため、そもそもこの曖昧さが発生しない）。本プロジェクトが RX/TX 共通の
+1 本の配列に平坦化した簡略設計を採用したことで生じた、本プロジェクト固有の
+補正です。
+
+**このコールバックはこの送信でシグナル自体が変化したかどうかを問わない**:
+`Com_CbkTxAck` は「I-PDU の送信が成功した」ことの通知であり、含まれる個々の
+シグナルの値がこの送信で変化したかどうかとは無関係です（SWS_Com_00468:
+"called immediately after successful transmission of the I-PDU containing
+the message"）。`EngineState` が変化していなくても、`MeterStatus` が周期
+フロア（MIXED モード）で再送されるたびに `Rte_COMTxAck_EngineState()` が
+呼ばれます。
+
+**割り込み安全性について（前節の教訓を踏まえた確認）**: `Com_TxConfirmation()`
+は `Can_MainFunction_Write()`（Os の 100ms タスク）→ `CanIf_TxConfirmation()`
+→ `PduR_CanIfTxConfirmation()` という経路で同期的に呼ばれます。前節の
+`ComInvalidNotification` とは異なり、この経路上には SchM 排他エリア
+（割り込み禁止区間）が存在しないことを実際にコードを辿って確認済みです。
+したがって `TxAckCbk` の中で `DET_LOGI` のような Serial 出力を行っても、
+前節の WDT リセット障害と同じ問題は起きません。
+
+**この機能は実際に発動するか**: 発動します。`MeterStatus` は `TxModeMode=MIXED`
+（値変化時の即時送信 + 周期フロア再送）のため、通常運用で確実に送信され続け、
+そのたびに `Com_TxConfirmation()` → `Rte_COMTxAck_EngineState()` が呼ばれます。
+ログに `Com: TxConf id=0` の直後に `Rte: MeterStatus TX ack (EngineState)`
+が出力されることを実機で確認できます。
+
 #### 受信デッドライン監視（COM Deadline Monitoring）
 
 COM モジュールが各 RX I-PDU の受信間隔を監視し、設定タイムアウト内にフレームが届かない場合に
