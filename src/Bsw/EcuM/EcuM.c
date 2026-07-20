@@ -12,6 +12,8 @@
  *            3. Can_Init       — CAN コントローラ初期化（バスはまだ非アクティブ）
  *            3. CanIf_Init     — CAN インタフェース初期化
  *            4. PduR_Init      — PDU ルータ初期化
+ *            4b. SecOC_Init    — セキュアオンボード通信初期化（AES-128 自己診断含む。
+ *                                PduR の後・Com の前。PduR→SecOC→Com の依存順）
  *            5. Com_Init       — COM モジュール初期化
  *            5b. E2EXf_PBCfg_Init — E2E Check/Protect ステート初期化
  *                                （E2E Transformer 方式。Com は E2E を関知しないため
@@ -68,6 +70,8 @@
 #include "CanIf_PBCfg.h"
 #include "PduR.h"
 #include "PduR_PBCfg.h"
+#include "SecOC.h"
+#include "SecOC_PBCfg.h"
 #include "Com.h"
 #include "Com_PBCfg.h"
 #include "E2EXf_PBCfg.h"
@@ -135,6 +139,7 @@ void EcuM_Init(void)
     Can_Init(&Can_Config);          /* ハードウェア初期化（LISTEN_ONLY で待機） */
     CanIf_Init(&CanIf_Config);
     PduR_Init(&PduR_Config);
+    SecOC_Init(&SecOC_Config); /* PduR の後、Com の前（PduR→SecOC→Com の依存順） */
     Com_Init(&Com_Config);
     E2EXf_PBCfg_Init();       /* E2E Check/Protect ステート初期化（Com は E2E を関知しないため） */
     E2EMon_Init();            /* E2E 検証ネットワーク健全性モニタ（CDD 相当、Com_Init 済みが前提） */

@@ -20,6 +20,7 @@ typedef enum
     PDUR_MODULE_COM   = 0,
     PDUR_MODULE_CANTP = 1,
     PDUR_MODULE_DCM   = 2,
+    PDUR_MODULE_SECOC = 3,
 } PduR_DestModuleType;
 
 typedef void (*PduR_RxIndicationFctType)(PduIdType DestPduId, const PduInfoType* PduInfoPtr);

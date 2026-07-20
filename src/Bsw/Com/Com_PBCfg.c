@@ -23,6 +23,12 @@
  *                RxDataTimeoutAction=SUBSTITUTE（タイムアウト中は 0xFFFF を返す）
  *              Signal 5: BrakeActive    1 bit  BitPos=32  BigEndian  0=解除/1=作動
  *              Signal 6: AbsActive      1 bit  BitPos=33  BigEndian  0=非作動/1=作動
+ *            RX I-PDU 2 (IPduId=2): CAN ID 0x120, DLC=2  SecureCommand
+ *              (KeyFobEcu 想定送信、SecOC Profile 1 保護。Com はこの I-PDU の
+ *              生の Secured I-PDU を一切見ず、SecOC が検証成功後に
+ *              Com_RxIndication() を直接呼んで Authentic Payload のみ渡す。
+ *              詳細は src/Bsw/SecOC/ 参照)
+ *              Signal 12: ImmobilizerCmd  8 bit  BitPos=0  BigEndian  0x00=LOCK/0x01=UNLOCK
  *            TX I-PDU 0 (IPduId=0): CAN ID 0x200, DLC=1  MeterStatus
  *              (メータ ECU、E2E 保護なし、TxModeMode=MIXED。
  *              ComFilterAlgorithm=MASKED_NEW_DIFFERS_MASKED_OLD で値変化を
@@ -121,6 +127,7 @@ extern void Rte_COMCbk_AbsInfo(void);
 extern void Rte_COMTransform_E2EHealthStatus(uint8* Data, uint8 Length);
 extern void Rte_COMInvalidNotify_CoolantTemp(void);
 extern void Rte_COMTxAck_EngineState(void);
+extern void Rte_COMCbk_SecureCommand(void);
 
 /* -----------------------------------------------------------------------
  * RX I-PDU テーブル
@@ -171,6 +178,34 @@ static const Com_IPduConfigType Com_RxIPduConfigData[COM_RX_IPDU_COUNT] = {
         .UpdateBitPosition = 0xFFU,            /* update-bit なし（本 I-PDU には適用しない。上記コメント参照） */
         .RxIndicationCbk = Rte_COMCbk_AbsInfo  /* DaVinci: /ActiveEcuC/E2EXf/AbsInfo_Rx_E2EXf
                                                 *          （E2E Transformer 呼び出しは Rte 層が担う） */
+    },
+    {
+        /* ---------------------------------------------------------------
+         * RX IPduId=2: SecureCommand フレーム (KeyFobEcu 想定送信、SecOC 保護)
+         * DaVinci: /ActiveEcuC/Com/ComConfig/SecureCommand_Rx
+         * Com はこの I-PDU の生の Secured I-PDU（CAN 0x120、Freshness/MAC 込み）
+         * を一切見ない。SecOC（src/Bsw/SecOC/）が PduR 経由で Secured I-PDU を
+         * 受け取り、MAC・フレッシュネス検証に成功した場合のみ、Authentic
+         * Payload（ImmobilizerCmd 本体）だけを Com_RxIndication(RxPduId=2, ...)
+         * として直接呼び出す。したがって .PduRId は実際の PduR ルーティング
+         * パスではなく、SecOC が Com_RxIndication() を呼ぶ際に使う定数
+         * （SecOC_PBCfg.c の ComRxPduId）と一致させる。
+         * TimeoutMs はあえて 0（監視無効）としている: 本フレームはイベント駆動の
+         * コマンドであり MeterStatus 等の周期送信とは性質が異なるため、単純な
+         * 「最終受信からの経過時間」による受信デッドライン監視は本来の意味を
+         * 持たない（実車ならコマンド送達を別途確認する仕組みが必要になるが、
+         * 本実装はスコープ外とする）。
+         * --------------------------------------------------------------- */
+        .IPduId    = 2U,                       /* DaVinci: ComIPduHandleId  - I-PDU 識別番号 */
+        .DLC       = 2U,                       /* DaVinci: ComIPduLength    - Authentic Payload のみ
+                                                *          （byte[0]=ImmobilizerCmd, byte[1]=Reserved） */
+        .PduRId    = 2U,                       /* DaVinci: ComIPduPduRef    - SecOC が
+                                                *          Com_RxIndication() へ渡す ID
+                                                *          (SecOC_PBCfg.c の ComRxPduId と一致させること) */
+        .TimeoutMs = 0U,                       /* 監視無効（上記コメント参照） */
+        .UpdateBitPosition = 0xFFU,            /* update-bit なし（Signal Group 専用機能のため未使用） */
+        .RxIndicationCbk = Rte_COMCbk_SecureCommand /* ログ出力のみの最小デモ
+                                                *   （Rte_COMInvalidNotify_CoolantTemp と同じパターン） */
     }
 };
 
@@ -497,6 +532,21 @@ static const Com_SignalConfigType Com_SignalConfigData[COM_SIGNAL_COUNT] = {
         .BitPosition = 24U,                      /* DaVinci: ComBitPosition      */
         .BitSize     = 8U,                       /* DaVinci: ComBitSize          */
         .Endian      = COM_BIG_ENDIAN            /* DaVinci: ComSignalEndianness = OPAQUE */
+    },
+    {
+        /* ---------------------------------------------------------------
+         * Signal 12: ImmobilizerCmd  RX 8bit  CAN 0x120 byte[0]
+         * DaVinci: /ActiveEcuC/Com/ComConfig/ImmobilizerCmd_Rx
+         * SecOC（src/Bsw/SecOC/）が MAC・フレッシュネス検証に成功した場合のみ
+         * Com_RxIndication() 経由で更新される（IPduId=2、SecureCommand_Rx 参照）。
+         * 0x00=LOCK, 0x01=UNLOCK。
+         * --------------------------------------------------------------- */
+        .SignalId    = COM_SIGNAL_IMMOBILIZER_CMD, /* DaVinci: ComHandleId       */
+        .Direction   = COM_SIGNAL_DIRECTION_RX,    /* 本プロジェクト独自拡張。Com_SignalDirectionType 参照 */
+        .IPduId      = 2U,                         /* DaVinci: ComIPduRef → SecureCommand_Rx */
+        .BitPosition = 0U,                         /* DaVinci: ComBitPosition    */
+        .BitSize     = 8U,                         /* DaVinci: ComBitSize        */
+        .Endian      = COM_BIG_ENDIAN               /* DaVinci: ComSignalEndianness = OPAQUE */
     }
 };
 

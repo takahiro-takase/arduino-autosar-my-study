@@ -20,6 +20,8 @@ import tkinter as tk
 from tkinter import messagebox, scrolledtext, ttk
 
 import can
+from Crypto.Cipher import AES
+from Crypto.Hash import CMAC
 
 import uds_link
 
@@ -52,7 +54,6 @@ class App(tk.Tk):
         self._rx_monitor_decode: "dict[int, str]" = {}
         self._rx_monitor_name_vars: "dict[int, tk.StringVar]" = {}
         self._rx_monitor_stop = threading.Event()
-        self._e2e_counters: "dict[int, int]" = {}  # E2E P01 送信カウンタ (ボタン index → 0-15)
 
         self._build_widgets()
         self.after(100, self._poll_queues)
@@ -289,10 +290,16 @@ class App(tk.Tk):
                 self._entry_vars.setdefault(i, {})["can_id"] = can_id_var
 
                 _e2e_cfg_btn = btn_cfg.get("e2e")
+                _secoc_cfg_btn = btn_cfg.get("secoc")
                 if _e2e_cfg_btn:
                     _raw_bytes = parse_payload(btn_cfg.get("data", []))
                     default_hex = " ".join(
                         f"{b:02X}" for b in App._apply_e2e(_raw_bytes, _e2e_cfg_btn, 0)
+                    )
+                elif _secoc_cfg_btn:
+                    _raw_bytes = parse_payload(btn_cfg.get("data", []))
+                    default_hex = " ".join(
+                        f"{b:02X}" for b in App._apply_secoc(_raw_bytes, _secoc_cfg_btn, 0)
                     )
                 else:
                     default_hex = _hex_str(btn_cfg.get("data", []))
@@ -312,14 +319,34 @@ class App(tk.Tk):
                 combo.bind("<MouseWheel>", _scroll)
                 if presets:
                     def _on_preset(event, var=data_var, ps=presets, cb=combo,
-                                   ecfg=_e2e_cfg_btn):
+                                   ecfg=_e2e_cfg_btn, scfg=_secoc_cfg_btn):
                         sel = cb.current()
                         if sel >= 0:
                             vals = ps[sel].get("data") or ps[sel].get("payload") or []
+                            # カウンタ/フレッシュネスは Entry に現在入っている値
+                            # （直前の送信で自動的に進んだ値、または初期値）から
+                            # 引き継ぐ。ここで 0 に決め打ちすると、プリセットを
+                            # 切り替えるだけで（例: UNLOCK→LOCK）まだ使っていない
+                            # はずの値がリプレイ扱いされてしまう
+                            # （SecOC の単調増加チェック、E2E の Counter 不整合検知
+                            # いずれも直前値との連続性を見ているため）。
+                            try:
+                                cur = App._parse_hex_bytes(var.get())
+                            except ValueError:
+                                cur = b""
                             if ecfg:
+                                co = ecfg["counter_offset"]
+                                counter = (cur[co] & 0x0F) if len(cur) > co else 0
                                 _pb = parse_payload(vals)
                                 var.set(" ".join(
-                                    f"{b:02X}" for b in App._apply_e2e(_pb, ecfg, 0)
+                                    f"{b:02X}" for b in App._apply_e2e(_pb, ecfg, counter)
+                                ))
+                            elif scfg:
+                                fo = scfg["freshness_offset"]
+                                freshness = cur[fo] if len(cur) > fo else 0
+                                _pb = parse_payload(vals)
+                                var.set(" ".join(
+                                    f"{b:02X}" for b in App._apply_secoc(_pb, scfg, freshness)
                                 ))
                             else:
                                 var.set(_hex_str(vals))
@@ -404,6 +431,55 @@ class App(tk.Tk):
         crc_input += frame[:crc_offset]
         crc_input += frame[crc_offset + 1:]
         frame[crc_offset] = App._crc8_sae_j1850(bytes(crc_input))
+        return bytes(frame)
+
+    # ------------------------------------------------------------------
+    # SecOC (Secure Onboard Communication) 送信サポート
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _secoc_cmac_truncated(key: bytes, data: bytes, trunc_len: int) -> bytes:
+        """AES-128-CMAC (NIST SP 800-38B) を計算し、上位 trunc_len バイトを返す。
+        pycryptodome の実装を使う（Arduino 側は src/Bsw/SecOC/SecOC_Cmac.c に
+        自前実装があり、RFC 4493 の公式テストベクタで本実装と一致することを
+        開発時に確認済み。詳細は README.md の「SecOC」節を参照）。"""
+        mac = CMAC.new(key, ciphermod=AES)
+        mac.update(data)
+        return mac.digest()[:trunc_len]
+
+    @staticmethod
+    def _apply_secoc(payload: bytes, secoc_cfg: dict, freshness: int) -> bytes:
+        """SecOC Profile 1 (24Bit-CMAC-8Bit-FV) 保護バイト
+        (Freshness Value + 切り詰め MAC) を付加した Secured I-PDU を返す。
+        payload は Authentic Payload のみ（Freshness/MAC 未付加）。
+
+        DataToAuthenticator = DataId(2byte, Big Endian) | Authentic Payload |
+        Complete Freshness Value
+        (docs/AUTOSAR_SWS_SecureOnboardCommunication.pdf [7.1.1.2]、
+        Big Endian は [SWS_SecOC_00011]。Arduino 側の SecOC_IfRxIndication()
+        と同一のアルゴリズム)。
+
+        secoc_cfg キー: data_id, frame_length（Secured I-PDU 全体長）,
+        auth_len（Authentic Payload 長）, freshness_offset, mac_offset,
+        mac_len（切り詰め MAC 長、Profile 1 は 3）, key（32桁 hex 文字列、
+        16 バイト AES-128 鍵）。"""
+        data_id: int = secoc_cfg["data_id"]
+        frame_length: int = secoc_cfg["frame_length"]
+        auth_len: int = secoc_cfg["auth_len"]
+        freshness_offset: int = secoc_cfg["freshness_offset"]
+        mac_offset: int = secoc_cfg["mac_offset"]
+        mac_len: int = secoc_cfg["mac_len"]
+        key = bytes.fromhex(secoc_cfg["key"])
+
+        frame = bytearray(frame_length)
+        frame[0:auth_len] = payload[:auth_len]
+        frame[freshness_offset] = freshness & 0xFF
+
+        auth_input = bytearray([(data_id >> 8) & 0xFF, data_id & 0xFF])
+        auth_input += frame[0:auth_len]
+        auth_input += bytes([frame[freshness_offset]])
+
+        mac = App._secoc_cmac_truncated(key, bytes(auth_input), mac_len)
+        frame[mac_offset:mac_offset + mac_len] = mac
         return bytes(frame)
 
     @staticmethod
@@ -633,18 +709,30 @@ class App(tk.Tk):
                     # （以前は CRC のみ常に再計算しており、手入力した不正な CRC が
                     # 送信直前に正しい値へ上書きされてしまうバグがあった）。
                     e2e_cfg = btn_cfg.get("e2e")
+                    secoc_cfg = btn_cfg.get("secoc")
                     uds_link.send_can_frame(self.bus, can_id, data)
                     self.log_queue.put(
                         f"[{label}] TX ID=0x{can_id:03X} " + " ".join(f"{b:02X}" for b in data)
                     )
                     # E2E 付きの場合、次回送信に備えて Counter を進め、CRC を再計算した
                     # 「正常なフレーム」を Entry へ書き戻す（今回実際に送信した内容
-                    # そのものには影響しない）。
+                    # そのものには影響しない）。SecOC も同様に Freshness Value を
+                    # 進めて MAC を再計算する（意図的に不正な MAC・古い Freshness を
+                    # 手入力して検証失敗・リプレイ検知を試すことも今回の送信内容には
+                    # 影響しない）。
                     if e2e_cfg:
                         co = e2e_cfg["counter_offset"]
                         po = e2e_cfg["payload_offset"]
                         next_counter = App._next_e2e_counter(data[co] & 0x0F) if len(data) > co else 0
                         next_frame = self._apply_e2e(data[po:], e2e_cfg, next_counter)
+                        self.state_queue.put(
+                            ("entry_update", (idx, " ".join(f"{b:02X}" for b in next_frame)))
+                        )
+                    elif secoc_cfg:
+                        fo = secoc_cfg["freshness_offset"]
+                        al = secoc_cfg["auth_len"]
+                        next_freshness = ((data[fo] + 1) & 0xFF) if len(data) > fo else 0
+                        next_frame = self._apply_secoc(data[:al], secoc_cfg, next_freshness)
                         self.state_queue.put(
                             ("entry_update", (idx, " ".join(f"{b:02X}" for b in next_frame)))
                         )
@@ -766,10 +854,15 @@ class App(tk.Tk):
                 self.log_queue.put(f"[{label}] 入力エラー: {exc}")
                 return
             e2e_cfg_p = btn_cfg.get("e2e")
+            secoc_cfg_p = btn_cfg.get("secoc")
             if e2e_cfg_p:
                 # Entry には E2E バイト込みの完全フレームが入っているが、
                 # 定期送信ではカウンタをインクリメントするためシグナル部分のみ抽出する
                 data = data[e2e_cfg_p["payload_offset"]:]
+            elif secoc_cfg_p:
+                # SecOC も同様に、定期送信では Freshness Value を毎回進めるため
+                # Authentic Payload 部分のみ抽出する。
+                data = data[:secoc_cfg_p["auth_len"]]
             interval_ms = btn_cfg.get("interval_ms", 100)
             new_stop = threading.Event()
             self._periodic_stops[idx] = new_stop
@@ -780,7 +873,7 @@ class App(tk.Tk):
             )
             threading.Thread(
                 target=self._periodic_can_worker,
-                args=(label, can_id, data, interval_ms / 1000.0, new_stop, e2e_cfg_p),
+                args=(label, can_id, data, interval_ms / 1000.0, new_stop, e2e_cfg_p, secoc_cfg_p),
                 daemon=True,
             ).start()
 
@@ -788,7 +881,7 @@ class App(tk.Tk):
     _PERIODIC_POST_SEND_HOLD_S = 0.010  # 10ms
 
     def _periodic_can_worker(self, label, can_id, data, interval_s, stop_ev,
-                              e2e_cfg=None):
+                              e2e_cfg=None, secoc_cfg=None):
         """interval_s ごとに CAN フレームを送り続ける。stop_ev がセットされたら終了。
 
         bus_lock をノンブロッキングで取得し、送信後 _PERIODIC_POST_SEND_HOLD_S (10ms)
@@ -809,6 +902,7 @@ class App(tk.Tk):
         e2e_cfg が指定された場合は送信ごとにカウンタをインクリメントして
         E2E P01 保護バイト (Counter + CRC) を付加する。"""
         e2e_counter = 0
+        secoc_freshness = 0
         while True:
             if self.bus is not None:
                 if self.bus_lock.acquire(blocking=False):
@@ -816,6 +910,9 @@ class App(tk.Tk):
                         if e2e_cfg:
                             send_data = self._apply_e2e(data, e2e_cfg, e2e_counter)
                             e2e_counter = App._next_e2e_counter(e2e_counter)
+                        elif secoc_cfg:
+                            send_data = self._apply_secoc(data, secoc_cfg, secoc_freshness)
+                            secoc_freshness = (secoc_freshness + 1) & 0xFF
                         else:
                             send_data = data
                         uds_link.send_can_frame(self.bus, can_id, send_data)

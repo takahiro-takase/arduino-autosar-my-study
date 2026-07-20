@@ -1715,6 +1715,134 @@ uds_tester の受信モニター双方で 1 ずつ増えることが確認でき
 [13019ms] INFO  Com: TX iPdu=2 [ZZ 02 01 00]  # crcErr が 0→1 に増加
 ```
 
+### SecOC（Secure Onboard Communication、メッセージ認証）
+
+E2E（上記）は CRC・カウンタによる「意図しない通信エラー」の検出が目的で、
+アルゴリズム自体が公開されており秘密鍵を使わないため、悪意ある攻撃者が正しい
+CRC/カウンタを計算して偽のフレームを送ること自体は防げません。**SecOC** は
+これとは別の軸として、秘密鍵ベースの MAC（Message Authentication Code）と
+フレッシュネス値（リプレイ攻撃対策）で「意図的な改ざん・なりすまし」を検出する
+AUTOSAR モジュールです。ユーザーが実際に AUTOSAR CP R4.3.1 の SWS/SRS 仕様書
+PDF（`docs/AUTOSAR_SWS_SecureOnboardCommunication.pdf`）を入手したため、
+これまでの Com 機能と同様、実 PDF から検証した要求番号を引用しながら実装
+しています。
+
+#### アーキテクチャ — E2E Transformer 方式とは異なる理由
+
+E2E は「Com のコールバックフック（RxIndicationCbk/TxTransformCbk）経由で Rte 層が
+呼ぶ」E2E Transformer 方式（AUTOSAR が定義する 3 つの E2E 統合方式の 1 つ）を
+採用していますが、SecOC には対応する「Com フック経由」の統合方式が実 AUTOSAR に
+存在しません。SecOC は常に、PduR のルーティング経路上に独立した宛先モジュールと
+して構成されます（`Com_IPduConfigType.RxIndicationCbk` のような E2E 用の仕組みを
+流用せず、`PduR_RxDestType`——CanTp/Com と同じ立ち位置——として実装しています）。
+
+```
+KeyFobEcu (uds_tester Python が模擬)
+  → AES-128-CMAC で Secured PDU を生成（pycryptodome。Arduino 側の自前実装
+    との相互検証は下記「検証」節参照）
+  → CAN 0x120 送信
+
+Arduino (MeterEcu):
+  Can_Hw → CanIf_RxIndication → PduR_ComRxIndication
+    → SecOC_IfRxIndication()（新規 PduR 宛先モジュール、DestPduId=0）
+        Authentic Payload / Freshness Value / 切り詰め MAC を分離
+        AES-128-CMAC を自前実装で再計算し MAC 一致を検証
+        Freshness（8bit、単調増加）を検証（リプレイ検知）
+        両方 OK → Com_RxIndication(ComRxIPduId=2, AuthenticPayload) を直接呼ぶ
+        NG → ログのみ、Com へは一切転送しない
+    → Com_ReceiveSignal(IMMOBILIZER_CMD) → Rte_COMCbk_SecureCommand()（ログのみ）
+```
+
+PduR の RX 振り分け機構（`PduR_RxDestType`）は元々、1 つの受信 PDU を複数の
+上位層モジュールへ配信できる汎用的な関数ポインタテーブルだったため、SecOC を
+新しい宛先として追加するだけで済み、`PduR.c` 自体の変更は不要でした
+（`PduR_PBCfg.c` に 1 エントリ追加するだけ）。TX 方向（Arduino が自ら Secured
+I-PDU を生成して送信する）は本実装では未対応です。デモ用フレーム
+（ImmobilizerCmd）は「外部の KeyFobEcu から受信する」想定の RX 専用フレームで
+あり、送信側は uds_tester（Python）が模擬します。これは EngineInfo/AbsInfo の
+E2E 保護が RX 専用で、Python 側が送信側を模擬しているのと同じ構図です。
+
+#### Secured I-PDU バイトレイアウト（SecOC Profile 1 準拠）
+
+`docs/AUTOSAR_SWS_SecureOnboardCommunication.pdf` の **SecOC Profile 1
+(24Bit-CMAC-8Bit-FV)**（`[SWS_SecOC_00192]`）に忠実に、CMAC/AES-128・8bit
+フレッシュネス・24bit 切り詰め MAC を採用しています。対象フレーム
+「ImmobilizerCmd」（CAN ID 0x120、イモビライザー解除コマンドという実車でも
+真に認証が必要な典型シナリオ）のレイアウト:
+
+| byte | 内容 | サイズ |
+|---|---|---|
+| 0 | ImmobilizerCmd（0x00=LOCK, 0x01=UNLOCK） | 1 |
+| 1 | Reserved（常に 0x00。将来の鍵 ID 等を想定） | 1 |
+| 2 | Freshness Value（8bit、切り詰めなしの全ビットを送信） | 1 |
+| 3-5 | 切り詰め MAC（AES-128-CMAC 128bit 出力の上位24bit） | 3 |
+
+**Authenticator の対象データ**（`[7.1.1.2]` "DataToAuthenticator = Data
+Identifier | secured part of the Authentic I-PDU | Complete Freshness
+Value"）: `DataId(2byte, Big Endian, =0x0120) | AuthenticPayload(2byte) |
+FreshnessValue(1byte)` の 5 バイトを AES-128-CMAC へ入力します（Big Endian は
+`[SWS_SecOC_00011]`）。
+
+#### 明示する簡略化
+
+- **Freshness Value は 8bit 幅全体を送信し、切り詰めを行いません**（Profile 1 の
+  `SecOCFreshnessValueTxLength=8` と一致させ、実車で必要な「送信されない上位
+  ビットの推定復元」機構を回避する簡略化）。
+- **Csm/CryIf/KeyM は分離実装せず**、AES-128+CMAC を SecOC モジュール内
+  （`src/Bsw/SecOC/SecOC_Aes128.c`/`SecOC_Cmac.c`）に直接実装しています。
+- **鍵は `SecOC_PBCfg.c` の固定配列**です（実車は KeyM 等による鍵の
+  プロビジョニング・耐タンパ格納が必須で、固定鍵をソースコードへ埋め込むことは
+  本番運用では絶対に行ってはなりません）。
+- **リプレイ判定は単調増加チェックのみ**（`(uint8)(received - lastAccepted) <
+  128` という折り返し許容の「半区間」判定）で、実車の Freshness Manager
+  （11 章、複数カウンタ・マスタースレーブ同期プロトコル）は実装していません。
+- **TX 方向は未実装**（上記アーキテクチャ節参照）。
+
+#### 検証
+
+外部ライブラリに依存しない AES-128+CMAC の自前実装（`SecOC_Aes128.c`/
+`SecOC_Cmac.c`）が正しいことを、以下の独立した手段で確認しています。
+
+1. **FIPS-197 Appendix B の公式 AES-128 テストベクタ**（既知の鍵・平文に対する
+   暗号文が一致するか）を `SecOC_Init()` 起動時セルフテストとして組み込み済み
+   （実機ログで毎回 PASS/FAIL を確認できます）。
+2. **RFC 4493 (The AES-CMAC Algorithm) の公式テストベクタ 4 件**（メッセージ長
+   0/16/40/64 バイトの各ケース、パディングあり/なし・単一/複数ブロック連鎖の
+   すべての分岐を網羅）について、本実装のアルゴリズム（K1/K2 サブ鍵導出・
+   パディング・CBC-MAC 連鎖）を Python へ忠実に移植し、`pycryptodome`
+   （実績のある独立したライブラリ）の CMAC 実装と全件一致することを確認済み
+   （ホスト環境に C コンパイラが無く組込みコードを直接実行できなかったための
+   代替検証手段。C コードとの対応は目視でも再確認済み）。
+3. `tools/uds_tester` の `_apply_secoc()`（Python、pycryptodome で本物の
+   AES-CMAC を計算）と、Arduino 側の `SecOC_IfRxIndication()`（同一の自前実装）
+   が同じ鍵・同じメッセージに対して同じ MAC を計算することを、バイトレイアウト
+   （DataId の Big Endian 連結順・切り詰め位置）も含めて突き合わせ済みです。
+
+**実機で検証可能**: `tools/uds_tester/config.json` に「ImmobilizerCmd
+(0x120, KeyFobEcu)」ボタンを追加しました（UNLOCK/LOCK の 2 プリセット）。
+
+- **正常系**: プリセットを送信すると、Arduino ログに
+  `SecOC: RxInd: iPdu=0 verified OK (freshness=N)` に続けて
+  `Rte: ImmobilizerCmd: UNLOCK (authenticated via SecOC)` が出力されます。
+- **改ざん検知**: 送信前に Entry 欄の MAC バイト（末尾 3 バイト）を手入力で
+  1 桁変更してから送信すると、`SecOC: RxInd W: ... MAC verification failed`
+  が出力され、`Rte_COMCbk_SecureCommand()` は一切呼ばれません（E2E の
+  WRONGCRC 検証と同じ「Entry を手入力で改ざんしてから送信する」方式。
+  送信ボタンは常に Entry の内容をそのまま送るため、意図的な改ざんテストが
+  行えます）。
+- **リプレイ検知**: 一度送信したフレームのログ表示（またはコピーした Entry の
+  内容）をそのまま Entry へ貼り戻し、フレッシュネス値を変えずに再送すると、
+  MAC は依然として正しいにもかかわらず `SecOC: RxInd W: ... freshness check
+  failed (replay or stale)` が出力され、拒否されることが確認できます。
+
+#### 意図的に応用範囲を限定した理由
+
+本モジュールは Com/SecOC/PduR のアーキテクチャ学習が主目的のため、ドア施錠制御
+等の実ハードウェア反応までは作り込んでいません（`Rte_COMCbk_SecureCommand()`
+はログ出力のみ）。他の多くの Com 機能（`ComRxDataTimeoutAction` 等）が
+「実利より仕様忠実性」であったのに対し、この機能は EngineInfo/AbsInfo の
+E2E 検証と同じく、実際に受信経路を通り実機で検証可能です。
+
 ### 診断スタック（CanTp / Dcm / Dem / FiM / NvM）
 
 UDS 診断（ISO 14229-1）を処理するスタックです。

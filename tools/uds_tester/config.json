@@ -39,6 +39,16 @@
               { "label": "60km/h ABS作動", "data": ["0x17", "0x70", "0xC0"] }
           ]
         },
+        { "label": "ImmobilizerCmd\n(0x120, KeyFobEcu)", "type": "can_frame", "can_id": "0x120",
+          "data": ["0x00", "0x00"],
+          "secoc": { "data_id": 288, "frame_length": 6, "auth_len": 2,
+                     "freshness_offset": 2, "mac_offset": 3, "mac_len": 3,
+                     "key": "4b6579466f6253656372657421212121" },
+          "presets": [
+              { "label": "UNLOCK (正常、SecOC認証あり)", "data": ["0x01", "0x00"] },
+              { "label": "LOCK (正常、SecOC認証あり)",   "data": ["0x00", "0x00"] }
+          ]
+        },
 
         { "type": "group_header", "label": "テスター" },
 

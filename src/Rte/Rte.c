@@ -222,6 +222,42 @@ void Rte_COMTxAck_EngineState(void)
 }
 
 /**
+ * \brief   SecureCommand (RX IPduId=2) 受信の都度呼ばれる。
+ *
+ * \details Com_PBCfg.c の ImmobilizerCmd シグナル設定（RxIndicationCbk）から
+ *          登録される。呼ばれるのは SecOC（src/Bsw/SecOC/）が MAC・フレッシュ
+ *          ネス検証に成功し、`Com_RxIndication(2, ...)` を直接呼んだ直後のみ
+ *          （検証に失敗したデータは Com へ一切渡らないため、このコールバック
+ *          自体が呼ばれない。SecOC_IfRxIndication() 参照）。すなわちこのログが
+ *          出力されること自体が「認証済みコマンドである」ことを意味する。
+ *          `Rte_COMTxAck_EngineState()` と同じ理由で、ここで Serial 出力
+ *          （DET_LOGW）を直接行っても安全（この呼び出しチェーン
+ *          Can_MainFunction_Read → ... → SecOC_IfRxIndication →
+ *          Com_RxIndication → このコールバック、の間に割り込み禁止区間は
+ *          存在しない）。
+ *
+ *          この関数自体はログ出力のみを行う。ドア施錠制御等の実ハードウェア
+ *          反応は本実装のスコープ外（`Rte_COMInvalidNotify_CoolantTemp` 等と
+ *          同じ最小デモパターン。Com/SecOC/PduR のアーキテクチャ学習が主目的
+ *          のため、ASW 側の反応まで作り込むことはしない）。
+ *
+ * \note    Com_PBCfg.c から extern 宣言経由で RxIndicationCbk として
+ *          参照されるため non-static。Rte.h には公開しない（他の Rte_COM*
+ *          グルーと同じ理由）。
+ */
+void Rte_COMCbk_SecureCommand(void)
+{
+    uint8 cmd = 0U;
+    if (Com_ReceiveSignal(COM_SIGNAL_IMMOBILIZER_CMD, &cmd) != E_OK)
+        return;
+
+    if (cmd == 0x01U)
+        DET_LOGW(TAG, "ImmobilizerCmd: UNLOCK (authenticated via SecOC)");
+    else
+        DET_LOGW(TAG, "ImmobilizerCmd: LOCK (authenticated via SecOC)");
+}
+
+/**
  * \brief   AbsInfo (RX IPduId=1) フレーム受信の都度呼ばれる E2E Transformer フック。
  *
  * \details Com_PBCfg.c の RxIndicationCbk として登録される。

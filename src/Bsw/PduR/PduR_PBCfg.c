@@ -13,6 +13,10 @@
  *              配信先: CanTp → CanTp_RxIndication (トランスポート層経由で DCM へ, 診断ツール)
  *            RX パス 2 (SrcPduId=2, CAN ID 0x110):
  *              配信先: COM のみ → Com_RxIndication (DestPduId=1: AbsInfo_Rx, ABS ECU)
+ *            RX パス 3 (SrcPduId=3, CAN ID 0x120):
+ *              配信先: SecOC のみ → SecOC_IfRxIndication (DestPduId=0: ImmobilizerCmd,
+ *              KeyFobEcu 想定。SecOC が MAC/フレッシュネス検証後、自ら
+ *              Com_RxIndication() を呼んで COM RX IPduId=2 へ転送する)
  *            TX パス 0 (SrcPduId=0):
  *              CanIf TxPduId=0 → CAN 0x200, TxConfirmation → Com_TxConfirmation
  *            TX パス 1 (SrcPduId=1):
@@ -51,6 +55,7 @@
 #include "PduR_Cfg.h"
 #include "Com.h"
 #include "CanTp.h"
+#include "SecOC.h"
 
 /* -----------------------------------------------------------------------
  * RX 配信先テーブル（パスごと）
@@ -90,6 +95,17 @@ static const PduR_RxDestType PduR_RxDests_Path2[PDUR_RX_DEST_COUNT_PATH2] = {
     }
 };
 
+/* パス 3: CAN 0x120 → SecOC (ImmobilizerCmd)
+ * DaVinci: /ActiveEcuC/PduR/PduRConfig/PduRRoutingTable/ImmobilizerCmd_Rx */
+static const PduR_RxDestType PduR_RxDests_Path3[PDUR_RX_DEST_COUNT_PATH3] = {
+    {
+        .Module    = PDUR_MODULE_SECOC,   /* DaVinci: PduRDestPdu/PduRDestModule = SECOC */
+        .DestPduId = 0U,                  /* DaVinci: PduRDestPdu/PduRDestPduHandleId
+                                           *          → SecOC RX (SecOCRxPduId=0: ImmobilizerCmd) */
+        .RxIndFct  = SecOC_IfRxIndication /* DaVinci: 自動解決（PduRDestModule=SECOC） */
+    }
+};
+
 /* -----------------------------------------------------------------------
  * RX ルーティングパステーブル
  * DaVinci: /ActiveEcuC/PduR/PduRConfig/PduRRoutingTable/[PduRRoutingPath]
@@ -117,6 +133,14 @@ static const PduR_RxRoutingPathType PduR_RxPaths[PDUR_RX_PATH_COUNT] = {
         .SrcPduId  = 2U,
         .Dests     = PduR_RxDests_Path2,
         .DestCount = PDUR_RX_DEST_COUNT_PATH2
+    },
+    {
+        /* パス 3: CanIf RxPduId=3 (CAN 0x120) → SecOC/ImmobilizerCmd
+         * DaVinci: PduRSrcPdu/PduRSrcPduHandleId = 3
+         *          (CanIf_PBCfg の RxPduId=3 と一致) */
+        .SrcPduId  = 3U,
+        .Dests     = PduR_RxDests_Path3,
+        .DestCount = PDUR_RX_DEST_COUNT_PATH3
     }
 };
 

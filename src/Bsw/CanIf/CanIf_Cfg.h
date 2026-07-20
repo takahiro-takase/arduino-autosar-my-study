@@ -32,9 +32,10 @@
 
 /** RX PDU テーブルのエントリ数（受信 CAN フレーム種別数）
  *  DaVinci: /ActiveEcuC/CanIf/CanIfInitCfg/CanIfRxPduCfg ノード数
- *  RxPduId=0: EngineInfo   (CAN 0x100, COM)  エンジン ECU
- *  RxPduId=1: UDS 診断要求 (CAN 0x7E0, DCM)  診断ツール
- *  RxPduId=2: AbsInfo      (CAN 0x110, COM)  ABS ECU */
-#define CANIF_RX_PDU_COUNT  3U
+ *  RxPduId=0: EngineInfo     (CAN 0x100, COM)   エンジン ECU
+ *  RxPduId=1: UDS 診断要求   (CAN 0x7E0, DCM)   診断ツール
+ *  RxPduId=2: AbsInfo        (CAN 0x110, COM)   ABS ECU
+ *  RxPduId=3: ImmobilizerCmd (CAN 0x120, SecOC) KeyFobEcu 想定 */
+#define CANIF_RX_PDU_COUNT  4U
 
 #endif /* CANIF_CFG_H */
