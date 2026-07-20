@@ -32,6 +32,20 @@
  * DaVinci: /ActiveEcuC/Com/ComConfig/ 配下の ComIPdu ノード数に相当
  * ----------------------------------------------------------------------- */
 
+/* -----------------------------------------------------------------------
+ * I-PDU Group ID 定数（Com_IpduGroupIdType、DaVinci: ComIPduGroup）
+ * Com_IpduGroupStart() / Com_IpduGroupStop() の引数として使用する。
+ * ----------------------------------------------------------------------- */
+
+/** テレメトリ I-PDU Group（E2EHealthStatus のみ）。
+ *  診断監視用のネットワーク健全性テレメトリであり、車両の基本動作には
+ *  不要なため、独立して停止/再開できる I-PDU Group として分離している
+ *  （EngineInfo/AbsInfo/MeterStatus/WarningStatus/ImmobilizerCmd は
+ *  どの I-PDU Group にも属さず、常に有効。BswM が EcuM の POST_RUN/RUN
+ *  遷移に応じて Com_IpduGroupStop/Start を呼ぶ。詳細は
+ *  src/Bsw/BswM/BswM_PBCfg.c 参照） */
+#define COM_IPDU_GROUP_TELEMETRY  0U
+
 /** RX I-PDU テーブルのエントリ数
  *  DaVinci: /ActiveEcuC/Com/ComConfig/ 内 Direction=RECEIVE の ComIPdu 数 */
 #define COM_RX_IPDU_COUNT   3U  /* [0]=EngineInfo 0x100, [1]=AbsInfo 0x110,

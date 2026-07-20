@@ -70,9 +70,23 @@ static uint8 Com_RxShadowTimedOut[COM_RX_IPDU_MAX];
 static unsigned long Com_TxLastSentMs[COM_TX_IPDU_MAX];
 
 /* 診断 CommunicationControl (UDS SID 0x28) からの通信有効/無効状態。
- * 既定は両方とも有効 (1)。Com_SetCommunicationEnabled() 参照。 */
+ * 既定は両方とも有効 (1)。Com_SetCommunicationEnabled() 参照。
+ *
+ * Com_Rx/TxIPduStarted[]（下記）とは独立した、直交する抑制機構である点に
+ * 注意: こちらは「全 I-PDU 一括」の診断用スイッチ、Started は「I-PDU Group
+ * 単位」の起動/停止状態。実際に送受信処理が行われるのは両方が真の場合のみ
+ * （AND 条件）。 */
 static uint8 Com_RxEnabled = 1U;
 static uint8 Com_TxEnabled = 1U;
+
+/* I-PDU Group（Com_IPduConfigType.IpduGroupId）の起動/停止状態
+ * （Com_IpduGroupStart()/Com_IpduGroupStop() 参照）。IPduId を添字として使う
+ * （Com_RxBuffer/Com_TxBuffer 等、既存の配列と同じ規約）。
+ * IpduGroupId==COM_IPDU_GROUP_NONE の I-PDU は Com_Init() で常に 1（起動済み）
+ * のまま変化しない（[SWS_Com_00840]）。それ以外は Com_Init() で既定 0（停止）
+ * となり（[SWS_Com_00444]）、Com_IpduGroupStart() が呼ばれるまで有効にならない。 */
+static uint8 Com_RxIPduStarted[COM_RX_IPDU_MAX];
+static uint8 Com_TxIPduStarted[COM_TX_IPDU_MAX];
 
 /* -----------------------------------------------------------------------
  * TX シグナルフィルタ（ComFilterAlgorithm）関連の内部状態
@@ -192,6 +206,9 @@ void Com_Init(const Com_ConfigType* config)
          * 呼ばれていないグループメンバーを、ゼロクリアされたシャドウバッファ
          * を「正常な値」として誤って返さないよう、利用不可扱いにしておく。 */
         Com_RxShadowTimedOut[i] = 1U;
+        Com_RxIPduStarted[i] = 1U;  /* IPduId 範囲外の添字保護のため、まず全域を
+                                     * 起動済みにしておき、下の実ループで
+                                     * I-PDU Group 所属分のみ上書きする */
     }
 
     for (uint8 i = 0; i < COM_TX_IPDU_MAX; i++)
@@ -205,6 +222,25 @@ void Com_Init(const Com_ConfigType* config)
         Com_TxPending[i]         = 0U;
         Com_TmsState[i]          = 0U;   /* 既定 false（ゼロクリアされたバッファと整合） */
         Com_GroupTriggerPending[i] = 0U;
+        Com_TxIPduStarted[i] = 1U;  /* 上と同じ理由 */
+    }
+
+    /* I-PDU Group に所属する I-PDU は既定で停止状態にする（[SWS_Com_00444]:
+     * 全 I-PDU Group は既定で停止。[SWS_Com_00840]: 所属しない I-PDU は常に
+     * 起動済みのまま）。設定テーブルを実際に走査する必要があるため、上の
+     * ゼロクリアループとは別に行う（IpduGroupId は Com_IPduConfigType 側に
+     * あり、添字だけでは判定できないため）。 */
+    for (uint8 i = 0; i < config->RxIPduCount; i++)
+    {
+        const Com_IPduConfigType* ipdu = &config->RxIPdus[i];
+        if (ipdu->IpduGroupId != COM_IPDU_GROUP_NONE)
+            Com_RxIPduStarted[ipdu->IPduId] = 0U;
+    }
+    for (uint8 i = 0; i < config->TxIPduCount; i++)
+    {
+        const Com_IPduConfigType* ipdu = &config->TxIPdus[i];
+        if (ipdu->IpduGroupId != COM_IPDU_GROUP_NONE)
+            Com_TxIPduStarted[ipdu->IPduId] = 0U;
     }
 
     for (uint8 s = 0; s < COM_SIGNAL_COUNT; s++)
@@ -268,6 +304,15 @@ void Com_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
         const Com_IPduConfigType* ipdu = &Com_ConfigPtr->RxIPdus[i];
         if (ipdu->PduRId != RxPduId)
             continue;
+
+        /* I-PDU Group が停止中（Com_IpduGroupStop() 参照）: 受信処理自体を
+         * 無効化する（[SWS_Com_00684]）。バッファ・タイムアウトタイマとも
+         * 更新しない（上の Com_RxEnabled==0 の場合と同じ「何もしない」扱い）。 */
+        if (!Com_RxIPduStarted[ipdu->IPduId])
+        {
+            DET_LOGD(TAG, "RX suppressed (I-PDU Group stopped) iPdu=%u", (unsigned)ipdu->IPduId);
+            return;
+        }
 
         /* 受信長チェック: 設定 DLC に満たないフレーム（ショート/破損フレーム等）
          * はここで棄却し、バッファ・タイムアウトタイマのいずれも更新せずに
@@ -1278,6 +1323,14 @@ void Com_TxConfirmation(PduIdType TxPduId, Std_ReturnType result)
     if (result != E_OK || Com_ConfigPtr == NULL)
         return;
 
+    /* [SWS_Com_00800]: 停止中の I-PDU に対する送信確認は無視する。
+     * TxPduId は Com の TX IPduId 空間（Com_FindTxIPdu() 参照）。 */
+    if (TxPduId < COM_TX_IPDU_MAX && !Com_TxIPduStarted[TxPduId])
+    {
+        DET_LOGD(TAG, "TxConf ignored (I-PDU Group stopped) iPdu=%u", (unsigned)TxPduId);
+        return;
+    }
+
     for (uint8 s = 0U; s < Com_ConfigPtr->SignalCount; s++)
     {
         const Com_SignalConfigType* sig = &Com_ConfigPtr->Signals[s];
@@ -1420,6 +1473,12 @@ void Com_MainFunction(void)
             if (ipdu->TimeoutMs == 0U)
                 continue;  /* 監視無効 */
 
+            /* I-PDU Group が停止中はデッドライン監視自体を評価しない
+             * （[SWS_Com_00685]。Com_RxEnabled==0 の場合と同じ理由：意図的に
+             * 止めているだけの通信を「通信異常」として誤って伝えないため）。 */
+            if (!Com_RxIPduStarted[ipdu->IPduId])
+                continue;
+
             if (!Com_RxTimedOut[ipdu->IPduId] &&
                 (now - Com_RxLastMs[ipdu->IPduId]) >= (unsigned long)ipdu->TimeoutMs)
             {
@@ -1437,6 +1496,13 @@ void Com_MainFunction(void)
     {
         const Com_IPduConfigType* ipdu = &Com_ConfigPtr->TxIPdus[i];
         const Com_IPduIdType      id   = ipdu->IPduId;
+
+        /* I-PDU Group が停止中は due 判定自体を行わない。保留中の送信要求は
+         * Com_IpduGroupStop() が既にキャンセル済み（[SWS_Com_00777]）のため、
+         * ここで due=1 になることはないはずだが、防御的に早期 continue する。 */
+        if (!Com_TxIPduStarted[id])
+            continue;
+
         const Com_TxModeModeType  mode   = Com_EffectiveTxModeMode(ipdu);
         const uint16              period = Com_EffectiveTxPeriodMs(ipdu);
 
@@ -1504,4 +1570,124 @@ void Com_SetCommunicationEnabled(uint8 RxEnabled, uint8 TxEnabled)
 
     Com_RxEnabled = RxEnabled;
     Com_TxEnabled = TxEnabled;
+}
+
+void Com_IpduGroupStart(Com_IpduGroupIdType IpduGroupId, uint8 initialize)
+{
+    if (Com_ConfigPtr == NULL)
+        return;
+
+    const unsigned long now = millis();
+
+    for (uint8 i = 0U; i < Com_ConfigPtr->RxIPduCount; i++)
+    {
+        const Com_IPduConfigType* ipdu = &Com_ConfigPtr->RxIPdus[i];
+        if (ipdu->IpduGroupId != IpduGroupId)
+            continue;
+
+        const Com_IPduIdType id = ipdu->IPduId;
+        Com_RxIPduStarted[id] = 1U;
+
+        /* [SWS_Com_00787] 項目2: 受信デッドライン監視タイマを再始動する
+         * （Com_SetCommunicationEnabled() の再開時と同じ理由）。 */
+        Com_RxLastMs[id]   = now;
+        Com_RxTimedOut[id] = 0U;
+
+        if (initialize != 0U)
+        {
+            /* [SWS_Com_00222] 項目1: I-PDU のデータを初期化する。 */
+            for (uint8 b = 0U; b < COM_IPDU_MAX_DLC; b++)
+                Com_RxBuffer[id][b] = 0U;
+            if (ipdu->IsSignalGroup != 0U)
+            {
+                /* [SWS_Com_00222] 項目2: Signal Group のシャドウバッファも
+                 * 初期化する。未コミット状態（利用不可）へ戻す。 */
+                for (uint8 b = 0U; b < COM_IPDU_MAX_DLC; b++)
+                    Com_RxShadowBuffer[id][b] = 0U;
+                Com_RxShadowTimedOut[id] = 1U;
+            }
+        }
+
+        DET_LOGI(TAG, "IpduGroupStart grp=%u iPdu=%u(RX) init=%u",
+                 (unsigned)IpduGroupId, (unsigned)id, (unsigned)initialize);
+    }
+
+    for (uint8 i = 0U; i < Com_ConfigPtr->TxIPduCount; i++)
+    {
+        const Com_IPduConfigType* ipdu = &Com_ConfigPtr->TxIPdus[i];
+        if (ipdu->IpduGroupId != IpduGroupId)
+            continue;
+
+        const Com_IPduIdType id = ipdu->IPduId;
+        Com_TxIPduStarted[id] = 1U;
+
+        /* [SWS_Com_00787] 項目1/3: MDT・周期タイマの基準時刻を再始動する
+         * （再開直後に「積み残し」として即座に送信されないようにする。
+         * Com_SetCommunicationEnabled() の既存コメントと同じ考え方）。 */
+        Com_TxLastSentMs[id] = now;
+        Com_TxPending[id]    = 0U;
+
+        /* [SWS_Com_00787] 項目4: update-bit をクリアする。 */
+        if (ipdu->UpdateBitPosition != 0xFFU)
+            Com_PackSignal(Com_TxBuffer[id], ipdu->UpdateBitPosition, 1U, COM_BIG_ENDIAN, 0U);
+
+        if (initialize != 0U)
+        {
+            /* [SWS_Com_00222] 項目1: I-PDU のデータを初期化する。 */
+            for (uint8 b = 0U; b < COM_IPDU_MAX_DLC; b++)
+                Com_TxBuffer[id][b] = 0U;
+            if (ipdu->IsSignalGroup != 0U)
+            {
+                for (uint8 b = 0U; b < COM_IPDU_MAX_DLC; b++)
+                    Com_TxShadowBuffer[id][b] = 0U;
+            }
+        }
+
+        /* [SWS_Com_00223] I-PDU 起動時、現在のデータ内容から TMS を再評価する
+         * （initialize の有無に関わらず。ゼロ初期化直後でも、TmsContributor
+         * シグナルの初期値に基づいて正しく再評価される）。 */
+        Com_RecalcTms(id);
+
+        DET_LOGI(TAG, "IpduGroupStart grp=%u iPdu=%u(TX) init=%u",
+                 (unsigned)IpduGroupId, (unsigned)id, (unsigned)initialize);
+    }
+}
+
+void Com_IpduGroupStop(Com_IpduGroupIdType IpduGroupId)
+{
+    if (Com_ConfigPtr == NULL)
+        return;
+
+    for (uint8 i = 0U; i < Com_ConfigPtr->RxIPduCount; i++)
+    {
+        const Com_IPduConfigType* ipdu = &Com_ConfigPtr->RxIPdus[i];
+        if (ipdu->IpduGroupId != IpduGroupId)
+            continue;
+
+        /* [SWS_Com_00684]/[SWS_Com_00685]: 受信処理・デッドライン監視の両方を
+         * 無効化する。Com_RxTimedOut は意図的にクリアしない（Started==0 の間
+         * Com_MainFunction() 側の評価自体を止めるため、値は参照されない）。 */
+        Com_RxIPduStarted[ipdu->IPduId] = 0U;
+
+        DET_LOGI(TAG, "IpduGroupStop grp=%u iPdu=%u(RX)",
+                 (unsigned)IpduGroupId, (unsigned)ipdu->IPduId);
+    }
+
+    for (uint8 i = 0U; i < Com_ConfigPtr->TxIPduCount; i++)
+    {
+        const Com_IPduConfigType* ipdu = &Com_ConfigPtr->TxIPdus[i];
+        if (ipdu->IpduGroupId != IpduGroupId)
+            continue;
+
+        const Com_IPduIdType id = ipdu->IPduId;
+        Com_TxIPduStarted[id] = 0U;
+
+        /* [SWS_Com_00777]: 保留中の送信要求をキャンセルする。再開時に
+         * 「停止中に溜まった分」が積み残しとして即座に送信されないようにする
+         * （Com_SetCommunicationEnabled() の既存コメントと同じ考え方）。 */
+        Com_TxPending[id] = 0U;
+
+        DET_LOGI(TAG, "IpduGroupStop grp=%u iPdu=%u(TX)",
+                 (unsigned)IpduGroupId, (unsigned)id);
+    }
 }

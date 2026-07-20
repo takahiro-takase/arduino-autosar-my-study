@@ -20,6 +20,15 @@
 // -------------------------------------------------------
 typedef uint8 Com_SignalIdType;
 typedef uint8 Com_IPduIdType;
+typedef uint8 Com_IpduGroupIdType;
+
+/* I-PDU が所属する I-PDU Group を持たないことを示すセンチネル値
+ * （UpdateBitPosition の 0xFF センチネルと同じ規約）。
+ * [SWS_Com_00840]: I-PDU Group に属さない I-PDU は Com_Init() 時に常に
+ * 開始済み（Started）として扱われ、Com_IpduGroupStart/Stop() の対象になる
+ * ことも、Com_IpduGroupStop() で停止されることも一切ない（永久に有効）。
+ * Com_IPduConfigType.IpduGroupId 参照。 */
+#define COM_IPDU_GROUP_NONE  0xFFU
 
 // -------------------------------------------------------
 // シグナルのエンディアン
@@ -362,6 +371,22 @@ typedef enum
 //                   （シャドウバッファ・タイムアウトスナップショットとも
 //                   直近の状態のまま更新しない）。1 の場合のみ通常どおり
 //                   確定コピーする。
+//   IpduGroupId : この I-PDU が所属する I-PDU Group（DaVinci: ComIPduGroup
+//               への参照、7.3.5 章）。COM_IPDU_GROUP_NONE（既定）を設定すると
+//               どの I-PDU Group にも属さないものとして扱われ、Com_Init() で
+//               常に開始済み（Started）となり、Com_IpduGroupStart/Stop() の
+//               対象にならない（[SWS_Com_00840]）。それ以外の値を設定すると、
+//               その I-PDU は既定で停止（Started=0）状態で初期化され
+//               （[SWS_Com_00444]: I-PDU Group は既定で全て停止状態）、
+//               Com_IpduGroupStart(IpduGroupId, ...) が呼ばれるまで
+//               送信/受信処理が行われない。停止中の RX I-PDU は
+//               Com_RxIndication() が受信処理自体を無効化し（[SWS_Com_00684]）、
+//               受信デッドライン監視も評価しない（[SWS_Com_00685]）。停止中の
+//               TX I-PDU は Com_MainFunction() が実送信を行わず、保留中の
+//               送信要求は Com_IpduGroupStop() の時点でキャンセルされる
+//               （[SWS_Com_00777]）。Com_SendSignal()/Com_ReceiveSignal() 自体は
+//               停止中でも内部バッファを更新・参照できる（[SWS_Com_00334]、
+//               「値のセット」と「送信/受信タイミング」は独立した責務のため）。
 // -------------------------------------------------------
 typedef struct
 {
@@ -376,6 +401,7 @@ typedef struct
     uint16             TxPeriodMsTrue;
     uint16             MinDelayMs;
     uint8              UpdateBitPosition;
+    Com_IpduGroupIdType IpduGroupId;
     void (*RxIndicationCbk)(void);
     void (*TxTransformCbk)(uint8* Data, uint8 Length);
 } Com_IPduConfigType;

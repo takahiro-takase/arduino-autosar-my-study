@@ -14,7 +14,13 @@
  *          AUTOSAR との主な違い (学習用簡略化):
  *            - 単一条件ルールのみ (AND/OR の LogicalExpression なし)
  *            - BswM_MainFunction なし (即時評価モードのみ)
- *            - ActionList は TaskActivation のみ (ModeSwitch / Timer 未実装)
+ *            - ActionList は TaskActivation（本プロジェクト独自拡張）と
+ *              PduGroupSwitch（[SWS_BswM_00273] 相当、Com_IpduGroupStart/Stop
+ *              呼び出し）の 2 種類のみ (ModeSwitch / Timer 未実装)。
+ *              1 ルール = 1 アクションの簡略化のため、実 AUTOSAR のように
+ *              1 つのモード遷移で複数種のアクションを同時実行したい場合は
+ *              同じ ModeSrc/ModeValue を持つルールを複数登録する
+ *              (BswM_ExecuteRules() は一致する全ルールを実行するため)。
  *
  * \copyright  Copyright (c) 2025 T_T
  * \license    MIT License - 詳細は LICENSE ファイルを参照。
@@ -27,6 +33,7 @@
 #include "BswM_Cfg.h"
 #include "Os.h"
 #include "Os_Cfg.h"
+#include "Com.h"
 #include "Det.h"
 
 #define TAG "BswM"
@@ -69,12 +76,27 @@ static void BswM_ExecuteRules(BswM_ModeSrcType src, uint8 newValue)
                  (unsigned)i, (unsigned)src, (unsigned)newValue,
                  (unsigned)rule->Action, (unsigned)rule->TaskMask);
 
-        for (uint8 t = 0U; t < OS_TASK_COUNT; t++)
+        if (rule->Action == BSWM_ACTION_ACTIVATE || rule->Action == BSWM_ACTION_DEACTIVATE)
         {
-            if ((rule->TaskMask & (uint16)(1U << t)) == 0U)
-                continue;
+            for (uint8 t = 0U; t < OS_TASK_COUNT; t++)
+            {
+                if ((rule->TaskMask & (uint16)(1U << t)) == 0U)
+                    continue;
 
-            Os_SetTaskActive(t, (rule->Action == BSWM_ACTION_ACTIVATE) ? 1U : 0U);
+                Os_SetTaskActive(t, (rule->Action == BSWM_ACTION_ACTIVATE) ? 1U : 0U);
+            }
+        }
+        else if (rule->Action == BSWM_ACTION_PDU_GROUP_START)
+        {
+            /* [SWS_BswM_00273]: BswMEnabledPduGroupRef ごとに Com_IpduGroupStart
+             * を呼ぶ（本実装は 1 ルール = 1 グループの簡略化）。 */
+            Com_IpduGroupStart(rule->IpduGroupId, rule->Initialize);
+        }
+        else if (rule->Action == BSWM_ACTION_PDU_GROUP_STOP)
+        {
+            /* [SWS_BswM_00273]: BswMDisabledPduGroupRef ごとに Com_IpduGroupStop
+             * を呼ぶ。 */
+            Com_IpduGroupStop(rule->IpduGroupId);
         }
     }
 }
