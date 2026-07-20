@@ -10,6 +10,8 @@
  *              byte[0]: E2E CRC8 / byte[1]: E2E Counter (下位4bit)
  *              （AUTOSAR 標準バリアント 1A、SWS_E2E_00227 準拠のレイアウト）
  *              Signal 0: EngineSpeed   16 bit  BitPos=16  BigEndian
+ *                FilterAlgorithm=NEW_IS_WITHIN（[0, 8000] rpm 範囲外は破棄。
+ *                実車ではありえない値をプラウジビリティチェックで弾く）
  *              Signal 1: CoolantTemp    8 bit  BitPos=32  BigEndian
  *                DataInvalidAction=NOTIFY（受信値 0xFF はセンサ異常マーカー）
  *              Signal 2: EngineOnFlag   1 bit  BitPos=40  BigEndian
@@ -97,8 +99,10 @@
  *   .BitPosition ←→ ComBitPosition       （PDU バッファ内のビット開始位置）
  *   .BitSize     ←→ ComBitSize           （シグナルのビット長）
  *   .Endian      ←→ ComSignalEndianness  （OPAQUE=BigEndian / INTEL=LittleEndian）
- *   .FilterAlgorithm ←→ ComFilterAlgorithm （TX シグナルのみ。RX シグナルは既定の ALWAYS のまま未使用）
+ *   .FilterAlgorithm ←→ ComFilterAlgorithm （TX: 送信要否・TMS 評価。RX: NEW_IS_WITHIN のみ受信フィルタとして使用）
  *   .Mask            ←→ ComFilterMask
+ *   .FilterMin / .FilterMax ←→ ComFilterMin / ComFilterMax （FilterAlgorithm=NEW_IS_WITHIN のみ使用、RX シグナルのみ）
+ *   .FilterRejectCbk ←→ ComNotification 相当 （FilterAlgorithm=NEW_IS_WITHIN のみ使用、RX シグナルのみ）
  *   .TransferProperty ←→ ComTransferProperty （Signal Group メンバーのみ使用）
  *   .RxDataTimeoutAction      ←→ ComRxDataTimeoutAction      （RX シグナルのみ使用）
  *   .TimeoutSubstitutionValue ←→ ComTimeoutSubstitutionValue （RxDataTimeoutAction=SUBSTITUTE のみ使用）
@@ -126,6 +130,7 @@ extern void Rte_COMCbk_EngineInfo(void);
 extern void Rte_COMCbk_AbsInfo(void);
 extern void Rte_COMTransform_E2EHealthStatus(uint8* Data, uint8 Length);
 extern void Rte_COMInvalidNotify_CoolantTemp(void);
+extern void Rte_COMFilterReject_EngineSpeed(void);
 extern void Rte_COMTxAck_EngineState(void);
 extern void Rte_COMCbk_SecureCommand(void);
 
@@ -324,7 +329,19 @@ static const Com_SignalConfigType Com_SignalConfigData[COM_SIGNAL_COUNT] = {
         .IPduId      = 0U,                      /* DaVinci: ComIPduRef → EngineInfo_Rx */
         .BitPosition = 16U,                     /* DaVinci: ComBitPosition      */
         .BitSize     = 16U,                     /* DaVinci: ComBitSize          */
-        .Endian      = COM_BIG_ENDIAN           /* DaVinci: ComSignalEndianness = OPAQUE */
+        .Endian      = COM_BIG_ENDIAN,          /* DaVinci: ComSignalEndianness = OPAQUE */
+        .FilterAlgorithm = COM_FILTER_NEW_IS_WITHIN, /* DaVinci: ComFilterAlgorithm（RX 受信フィルタ）
+                                                 *          物理的にあり得ない回転数（センサノイズ・
+                                                 *          ビット化けの疑い）をプラウジビリティチェックで
+                                                 *          破棄する。EngineSpeed は非 Signal Group かつ
+                                                 *          RxIndicationCbk 内で毎フレーム実際に読まれるため
+                                                 *          （VehicleSpeed の RxDataTimeoutAction と異なり）
+                                                 *          このフィルタは実際に効く */
+        .FilterMin       = 0U,                  /* DaVinci: ComFilterMin（下限、rpm） */
+        .FilterMax       = 8000U,               /* DaVinci: ComFilterMax（上限、rpm。本プロジェクト想定
+                                                 *          エンジンのレッドライン相当） */
+        .FilterRejectCbk = Rte_COMFilterReject_EngineSpeed /* DaVinci: ComNotification 相当
+                                                 *          （フィルタで破棄された旨をログするだけの最小デモ） */
     },
     {
         /* ---------------------------------------------------------------

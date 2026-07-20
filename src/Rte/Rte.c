@@ -200,6 +200,28 @@ void Rte_COMInvalidNotify_CoolantTemp(void)
 }
 
 /**
+ * \brief   EngineSpeed が受信フィルタ（NEW_IS_WITHIN、[0,8000]rpm）で
+ *          範囲外と判定され、破棄されたことを通知する。
+ *
+ * \details Com_PBCfg.c の EngineSpeed シグナル設定（FilterAlgorithm=
+ *          COM_FILTER_NEW_IS_WITHIN）から FilterRejectCbk として登録される
+ *          （実 AUTOSAR の ComNotification 相当）。Com_ReceiveSignal(
+ *          COM_SIGNAL_ENGINE_SPEED, ...) が範囲外の値を検知した「次回」の
+ *          Com_MainFunction() から呼ばれる（SWS_Com_00273。Rte_COMInvalidNotify_
+ *          CoolantTemp と同じ理由で同期呼び出しにしていない。Com.c の
+ *          Com_RxFilterRejectPending 宣言コメント参照）。この関数自体は
+ *          「異常が起きたことをログへ残す」以上のことは行わない。
+ *
+ * \note    Com_PBCfg.c から extern 宣言経由で FilterRejectCbk として
+ *          参照されるため non-static。Rte.h には公開しない（他の Rte_COM*
+ *          グルーと同じ理由）。
+ */
+void Rte_COMFilterReject_EngineSpeed(void)
+{
+    DET_LOGW(TAG, "EngineSpeed out of plausible range, rejected by RX filter (kept last valid value)");
+}
+
+/**
  * \brief   MeterStatus フレームの送信成功を通知する（EngineState の TxAck）。
  *
  * \details Com_PBCfg.c の EngineState シグナル設定（TxAckCbk）から登録される

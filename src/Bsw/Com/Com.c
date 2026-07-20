@@ -101,6 +101,13 @@ static uint32 Com_RxLastValidValue[COM_SIGNAL_COUNT];
  * 行う）でこれを回避する。 */
 static uint8 Com_RxInvalidNotifyPending[COM_SIGNAL_COUNT];
 
+/* ComFilterAlgorithm=COM_FILTER_NEW_IS_WITHIN の RX シグナル用、
+ * Com_RxInvalidNotifyPending と全く同じ理由・同じ仕組みの遅延ディスパッチ
+ * フラグ（「次回 Com_MainFunction() で FilterRejectCbk を呼ぶべき」）。
+ * Com_ReceiveSignal() が範囲外の値を検知した際にここを立てるだけに留め、
+ * 実際のコールバック呼び出しは必ず Com_MainFunction() 側で行う。 */
+static uint8 Com_RxFilterRejectPending[COM_SIGNAL_COUNT];
+
 /* DIRECT/MIXED I-PDU 用、「次回 Com_MainFunction() で送信すべき変化あり」フラグ。
  * 実送信（PduR_Transmit → ... → MCP2515 への SPI 送信）を ASW Runnable の
  * スタックフレームから切り離し、必ず Com_MainFunction()（Os の 100ms タスク、
@@ -205,6 +212,7 @@ void Com_Init(const Com_ConfigType* config)
         Com_FilterLastValue[s]         = 0U;
         Com_RxLastValidValue[s]        = 0U;
         Com_RxInvalidNotifyPending[s]  = 0U;
+        Com_RxFilterRejectPending[s]   = 0U;
     }
 
     DET_LOGI(TAG, "Init ok RX=%u TX=%u sig=%u",
@@ -666,8 +674,10 @@ static void Com_RequestTxOnChange(const Com_IPduConfigType* ipdu)
  * \retval  E_OK      シグナルが見つかり、SignalDataPtr へ値を書き込んだ
  *                    （実データ、当該 I-PDU がタイムアウト中かつ
  *                    RxDataTimeoutAction=SUBSTITUTE の場合は
- *                    TimeoutSubstitutionValue、または受信値が InvalidValue と
- *                    一致し DataInvalidAction=NOTIFY の場合は直近の有効値）。
+ *                    TimeoutSubstitutionValue、受信値が InvalidValue と
+ *                    一致し DataInvalidAction=NOTIFY の場合、または
+ *                    FilterAlgorithm=NEW_IS_WITHIN の範囲外の場合は
+ *                    直近の合格値）。
  * \retval  E_NOT_OK  COM 未初期化、SignalDataPtr が NULL、
  *                    シグナル設定テーブルに SignalId が存在しない、
  *                    または当該 I-PDU がタイムアウト中かつ
@@ -684,7 +694,8 @@ static void Com_RequestTxOnChange(const Com_IPduConfigType* ipdu)
  *             RTE が使う Std_ReturnType と互換性がある。
  *
  * \AUTOSARReq     {SWS_Com_00198, SWS_Com_00500, SWS_Com_00875, SWS_Com_00876,
- *                  SWS_Com_00680, SWS_Com_00717}
+ *                  SWS_Com_00680, SWS_Com_00717, SWS_Com_00273, SWS_Com_00303,
+ *                  SWS_Com_00695}
  * \ServiceID      {0x0B}
  * \Reentrancy     {Reentrant}
  * \Synchronicity  {Synchronous}
@@ -771,6 +782,26 @@ uint8 Com_ReceiveSignal(Com_SignalIdType SignalId, void* SignalDataPtr)
             && value == sig->InvalidValue)
         {
             Com_RxInvalidNotifyPending[s] = 1U;
+
+            const uint32 lastValid = Com_RxLastValidValue[s];
+            for (uint8 b = 0U; b < byteCount; b++)
+                dataPtr[b] = (uint8)(lastValid >> (8U * b));
+            return E_OK;
+        }
+
+        /* RX ComFilterAlgorithm（Com_FilterAlgorithmType の用途 (3) 参照）:
+         * COM_FILTER_NEW_IS_WITHIN の場合、値が [FilterMin, FilterMax] の
+         * 範囲外ならフィルタ条件は偽となり、このシグナルを「破棄」する
+         * （SWS_Com_00273: 処理しない。SWS_Com_00303: old_value も更新しない）。
+         * DataInvalidAction と同じ Com_RxLastValidValue[s] を「直近の合格値」
+         * として使い回す（両者は同じ「格納しない」意味論のため、実質的に
+         * 同じ状態を指す。1 つのシグナルに両方を設定する構成は想定していない）。
+         * FilterRejectCbk の実呼び出しは Com_RxInvalidNotifyPending と同じ理由
+         * で次回 Com_MainFunction() まで遅延する。 */
+        if (sig->FilterAlgorithm == COM_FILTER_NEW_IS_WITHIN
+            && (value < sig->FilterMin || value > sig->FilterMax))
+        {
+            Com_RxFilterRejectPending[s] = 1U;
 
             const uint32 lastValid = Com_RxLastValidValue[s];
             for (uint8 b = 0U; b < byteCount; b++)
@@ -1366,6 +1397,19 @@ void Com_MainFunction(void)
         Com_RxInvalidNotifyPending[s] = 0U;
         if (Com_ConfigPtr->Signals[s].InvalidNotificationCbk != NULL)
             Com_ConfigPtr->Signals[s].InvalidNotificationCbk();
+    }
+
+    /* RX ComFilterAlgorithm=NEW_IS_WITHIN の FilterRejectCbk ディスパッチ
+     * （Com_RxFilterRejectPending 参照）。上記 InvalidNotificationCbk と
+     * 全く同じ理由・同じ仕組みで、必ずここ（割り込み禁止区間の外）で呼ぶ。 */
+    for (uint8 s = 0U; s < Com_ConfigPtr->SignalCount; s++)
+    {
+        if (!Com_RxFilterRejectPending[s])
+            continue;
+
+        Com_RxFilterRejectPending[s] = 0U;
+        if (Com_ConfigPtr->Signals[s].FilterRejectCbk != NULL)
+            Com_ConfigPtr->Signals[s].FilterRejectCbk();
     }
 
     if (Com_RxEnabled != 0U)
