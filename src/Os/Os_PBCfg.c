@@ -22,6 +22,7 @@
  *            Task 13: Can_MainFunction_Write        1 ms  — 保留中 TX 確認 (CanIf_TxConfirmation) をドレイン
  *            Task 14: Can_MainFunction_BusOff       1 ms  — Bus-Off (EFLG.TXBO) ポーリング
  *            Task 15: Can_MainFunction_Wakeup       1 ms  — SLEEP 中のウェイクアップペンディングのドレイン
+ *            Task 16: SecOC_MainFunction           100 ms  — TX Secured I-PDU の Freshness/MAC 計算・送信
  *
  *          CAN 受信が真のハードウェア割り込み (Can_Isr(), INT ピン立ち下がりで
  *          attachInterrupt 起動) になったことに伴い、旧 Task 0 (Can_Isr の
@@ -56,6 +57,10 @@
  *            とする。TX 確認 (CanIf_TxConfirmation) は元々 Can_Write() の
  *            呼び出しと同期していたため、遅延を体感できない範囲に抑える
  *            （詳細は Can.c ファイル冒頭のコメントを参照）。
+ *            SecOC_MainFunction は Com_MainFunction と同じ 100 ms とする。
+ *            SecOC_IfTransmit() が Authentic I-PDU をバッファへコピーしてから
+ *            実際に CAN へ送信されるまでの遅延を、E2EHealthStatus の PERIODIC
+ *            送信周期 (6000ms) に対して無視できる範囲に抑える。
  *
  * \copyright  Copyright (c) 2025 T_T
  * \license    MIT License - 詳細は LICENSE ファイルを参照。
@@ -85,6 +90,7 @@ extern void NvM_MainFunction(void);
 extern void Can_MainFunction_Write(void);
 extern void Can_MainFunction_BusOff(void);
 extern void Can_MainFunction_Wakeup(void);
+extern void SecOC_MainFunction(void);
 
 /* -----------------------------------------------------------------------
  * タスクテーブル
@@ -108,7 +114,8 @@ static const Os_TaskType Os_TaskTable[OS_TASK_COUNT] =
     /* Task 12 */ { NvM_MainFunction,              10U  },  /* 10 ms   : 保留中 EEPROM ジョブ処理  */
     /* Task 13 */ { Can_MainFunction_Write,          1U  },  /* 1 ms    : 保留中 TX 確認をドレイン  */
     /* Task 14 */ { Can_MainFunction_BusOff,         1U  },  /* 1 ms    : Bus-Off ポーリング        */
-    /* Task 15 */ { Can_MainFunction_Wakeup,         1U  }   /* 1 ms    : ウェイクアップペンディングのドレイン */
+    /* Task 15 */ { Can_MainFunction_Wakeup,         1U  },  /* 1 ms    : ウェイクアップペンディングのドレイン */
+    /* Task 16 */ { SecOC_MainFunction,            100U  }   /* 100 ms  : TX Secured I-PDU の Freshness/MAC 計算・送信 */
 };
 
 /* -----------------------------------------------------------------------

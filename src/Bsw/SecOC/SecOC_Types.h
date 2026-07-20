@@ -19,9 +19,6 @@
 /* -----------------------------------------------------------------------
  * RX Secured I-PDU 設定（1 エントリ = 1 つの Secured I-PDU）
  *
- *   本実装は RX（受信検証）方向のみサポートする。TX（自ら Secured I-PDU を
- *   生成して送信する）方向は未実装（詳細は README.md の「SecOC」節参照）。
- *
  *   DataId               : SecOCDataId（ECUC_SecOC_00043 相当）。Authenticator
  *                           計算対象データの先頭に連結する識別子
  *                           （[7.1.1.2] "DataToAuthenticator = Data Identifier |
@@ -64,10 +61,46 @@ typedef struct
     PduIdType    ComRxPduId;
 } SecOC_RxPduConfigType;
 
+/* -----------------------------------------------------------------------
+ * TX Secured I-PDU 設定（1 エントリ = 1 つの Secured I-PDU）
+ *
+ *   PduR の TX 経路上（PduR_TxRoutingPathType.TransmitOverrideFct）に
+ *   挟まる中間モジュールとして動作する（[7.4.1] "Authentication during
+ *   direct transmission" の ad-hoc transmission フロー相当）。
+ *   Com が PduR_Transmit() を呼ぶと SecOC_IfTransmit() が Authentic I-PDU を
+ *   内部バッファへコピーして即座に E_OK を返し（[SWS_SecOC_00058]）、
+ *   実際の Freshness/MAC 計算と Secured I-PDU の組み立ては次回
+ *   SecOC_MainFunction() で行う（[SWS_SecOC_00060]〜[SWS_SecOC_00062]）。
+ *   計算完了後、SecOC 自身が PduR_SecOCTransmit() を呼んで CanIf まで
+ *   到達させる。
+ *
+ *   DataId/AuthenticPduLength/FreshnessOffset/FreshnessLength/MacOffset/
+ *   MacTxLength/SecuredPduLength/Key の意味は SecOC_RxPduConfigType と同じ
+ *   （対称の TX 版）。
+ *   PduRSrcPduId : SecOC_MainFunction() が変換完了後に PduR_SecOCTransmit()
+ *                  へ渡す、元の Authentic I-PDU の TX ルーティングパス ID
+ *                  （PduR_TxRoutingPathType.SrcPduId と一致させる）。
+ * ----------------------------------------------------------------------- */
+typedef struct
+{
+    PduIdType    SecOCTxPduId;  /* PduR_TxRoutingPathType.TransmitOverrideId と一致させる検索キー */
+    uint16       DataId;
+    uint8        AuthenticPduLength;
+    uint8        FreshnessOffset;
+    uint8        FreshnessLength;
+    uint8        MacOffset;
+    uint8        MacTxLength;
+    uint8        SecuredPduLength;
+    const uint8* Key;
+    PduIdType    PduRSrcPduId;
+} SecOC_TxPduConfigType;
+
 typedef struct
 {
     const SecOC_RxPduConfigType* RxPdus;
     uint8                        RxPduCount;
+    const SecOC_TxPduConfigType* TxPdus;
+    uint8                        TxPduCount;
 } SecOC_ConfigType;
 
 #endif /* SECOC_TYPES_H */

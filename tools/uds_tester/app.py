@@ -52,6 +52,7 @@ class App(tk.Tk):
         self._rx_monitor_vars: "dict[int, tk.StringVar]" = {}
         self._rx_monitor_ids: "dict[int, int]" = {}
         self._rx_monitor_decode: "dict[int, str]" = {}
+        self._rx_monitor_secoc_verify: "dict[int, dict]" = {}
         self._rx_monitor_name_vars: "dict[int, tk.StringVar]" = {}
         self._rx_monitor_stop = threading.Event()
 
@@ -143,7 +144,7 @@ class App(tk.Tk):
         ttk.Label(hdr_cell, text="データ (hex)", font=("", 9, "bold"),
                   width=30, anchor="w").pack(side="left")
         ttk.Label(hdr_cell, text="説明", font=("", 9, "bold"),
-                  width=24, anchor="w").pack(side="left", padx=(4, 0))
+                  width=40, anchor="w").pack(side="left", padx=(4, 0))
         ttk.Label(inner, text="送信", font=("", 9, "bold")).grid(
             row=0, column=3, padx=(4, 4), pady=(4, 1), sticky="w")
         ttk.Label(inner, text="定期", font=("", 9, "bold")).grid(
@@ -194,7 +195,7 @@ class App(tk.Tk):
                 rx_lbl.bind("<MouseWheel>", _scroll)
                 name_lbl = ttk.Label(cell, textvariable=name_var,
                                      font=("", 9), foreground="#2a7a2a",
-                                     anchor="w", width=24)
+                                     anchor="w", width=40)
                 name_lbl.pack(side="left", padx=(4, 0))
                 name_lbl.bind("<MouseWheel>", _scroll)
                 self._rx_monitor_vars[i] = rx_var
@@ -202,6 +203,8 @@ class App(tk.Tk):
                 self._rx_monitor_ids[i] = can_id_int
                 if btn_cfg.get("decode"):
                     self._rx_monitor_decode[i] = btn_cfg["decode"]
+                if btn_cfg.get("secoc_verify"):
+                    self._rx_monitor_secoc_verify[i] = btn_cfg["secoc_verify"]
                 current_row += 1
                 continue
 
@@ -241,7 +244,7 @@ class App(tk.Tk):
                     data_entry.bind("<MouseWheel>", _scroll)
                     combo_vals = [p["label"] for p in presets] if presets else ["-"]
                     combo = ttk.Combobox(cell, values=combo_vals,
-                                         state="readonly", width=24, font=("", 9))
+                                         state="readonly", width=40, font=("", 9))
                     combo.pack(side="left", padx=(4, 0))
                     combo.bind("<MouseWheel>", _scroll)
                     if presets:
@@ -314,7 +317,7 @@ class App(tk.Tk):
                 data_entry.bind("<MouseWheel>", _scroll)
                 combo_vals = [p["label"] for p in presets] if presets else ["-"]
                 combo = ttk.Combobox(cell, values=combo_vals,
-                                     state="readonly", width=24, font=("", 9))
+                                     state="readonly", width=40, font=("", 9))
                 combo.pack(side="left", padx=(4, 0))
                 combo.bind("<MouseWheel>", _scroll)
                 if presets:
@@ -481,6 +484,26 @@ class App(tk.Tk):
         mac = App._secoc_cmac_truncated(key, bytes(auth_input), mac_len)
         frame[mac_offset:mac_offset + mac_len] = mac
         return bytes(frame)
+
+    @staticmethod
+    def _verify_secoc(data: bytes, secoc_cfg: dict) -> bool:
+        """受信した Secured I-PDU の MAC を検証する（_apply_secoc の逆方向）。
+        Arduino 側 SecOC_MainFunction() が計算した MAC と、pycryptodome で
+        独立に再計算した MAC が一致するかを確認する（Arduino の自前 AES-CMAC
+        実装が TX 方向でも正しく動作していることの実機確認手段）。"""
+        data_id: int = secoc_cfg["data_id"]
+        auth_len: int = secoc_cfg["auth_len"]
+        freshness_offset: int = secoc_cfg["freshness_offset"]
+        mac_offset: int = secoc_cfg["mac_offset"]
+        mac_len: int = secoc_cfg["mac_len"]
+        key = bytes.fromhex(secoc_cfg["key"])
+        if len(data) < mac_offset + mac_len:
+            return False
+        auth_input = bytearray([(data_id >> 8) & 0xFF, data_id & 0xFF])
+        auth_input += data[0:auth_len]
+        auth_input += bytes([data[freshness_offset]])
+        expected = App._secoc_cmac_truncated(key, bytes(auth_input), mac_len)
+        return expected == data[mac_offset:mac_offset + mac_len]
 
     @staticmethod
     def _btn_meta(btn_cfg) -> tuple[str, str]:
@@ -1056,8 +1079,17 @@ class App(tk.Tk):
                         # (EngineInfo/AbsInfo 受信側の合算、0-255で飽和。E2EMon CDD相当モジュールが
                         #  Com経由でPERIODIC送信するネットワーク健全性テレメトリ。テレメトリ自体も
                         #  E2E保護されている)
+                        # byte[4]=SecOC Freshness, byte[5-7]=SecOC 切り詰めMAC
+                        # (E2E保護済みのbyte[0-3]全体をさらにSecOCで認証。Arduino側
+                        #  SecOC_MainFunction()が計算したMACをpycryptodomeで独立に
+                        #  再計算し、一致するか確認する)
+                        secoc_cfg = self._rx_monitor_secoc_verify.get(mon_idx)
+                        secoc_str = ""
+                        if secoc_cfg and len(data) >= 8:
+                            ok = App._verify_secoc(data, secoc_cfg)
+                            secoc_str = " SecOC:OK" if ok else " SecOC:NG"
                         self._rx_monitor_name_vars[mon_idx].set(
-                            f"(crcErr={data[2]} seqErr={data[3]})"
+                            f"(crcErr={data[2]} seqErr={data[3]}{secoc_str})"
                         )
                     elif mon_idx in self._rx_monitor_name_vars:
                         self._rx_monitor_name_vars[mon_idx].set("")

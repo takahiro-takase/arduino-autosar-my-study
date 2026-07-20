@@ -17,7 +17,10 @@
           "can_id": "0x210", "decode": "warning_status" },
 
         { "label": "E2EHealthStatus\n(0x220)", "type": "rx_monitor",
-          "can_id": "0x220", "decode": "e2e_health" },
+          "can_id": "0x220", "decode": "e2e_health",
+          "secoc_verify": { "data_id": 544, "auth_len": 4,
+                             "freshness_offset": 4, "mac_offset": 5, "mac_len": 3,
+                             "key": "54656c656d657472794b657921212121" } },
 
         { "type": "group_header", "label": "周辺ECU" },
 
