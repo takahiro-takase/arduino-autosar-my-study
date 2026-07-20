@@ -127,10 +127,10 @@ void Com_MainFunction(void);
  *          変化した時、または通常の周期フロアに新たに達した時に初めて
  *          送信される。
  *
- *          AUTOSAR 実装との違い: 実際の AUTOSAR は Com_IpduGroupStart() /
- *          Com_IpduGroupStop() で I-PDU Group 単位に制御するが、本プロジェクトには
- *          I-PDU Group という設定概念がないため、Rx/Tx 全体に対する単純な
- *          有効/無効フラグとして簡略化している。
+ *          Com_IpduGroupStart()/Com_IpduGroupStop()（下記）とは独立した、
+ *          直交する抑制機構である点に注意: こちらは全 I-PDU 一括の診断用
+ *          スイッチ、I-PDU Group は個別の I-PDU 単位の起動/停止状態。
+ *          実際に送受信処理が行われるのは両方が有効な場合のみ（AND 条件）。
  *
  * \param[in]  RxEnabled  0=受信を無視する、1=通常どおり受信する。
  * \param[in]  TxEnabled  0=送信を抑制する、1=通常どおり送信する。
@@ -140,6 +140,49 @@ void Com_MainFunction(void);
  * \Synchronicity  {Synchronous}
  */
 void Com_SetCommunicationEnabled(uint8 RxEnabled, uint8 TxEnabled);
+
+/**
+ * \brief   I-PDU Group を起動する（所属する I-PDU の送受信処理を許可する）。
+ *
+ * \details IpduGroupId に一致する `Com_IPduConfigType.IpduGroupId` を持つ
+ *          全 I-PDU（RX/TX 双方）を起動済み状態にする。RX I-PDU は受信処理・
+ *          デッドライン監視タイマを再始動する（[SWS_Com_00787]）。TX I-PDU は
+ *          MDT/周期タイマの基準時刻を再始動し、update-bit をクリアし、
+ *          現在のデータ内容から TMS を再評価する。
+ *
+ * \param[in]  IpduGroupId  起動する I-PDU Group の ID
+ *                          （Com_Cfg.h の COM_IPDU_GROUP_* 参照）。
+ * \param[in]  initialize   非 0 の場合、追加で I-PDU のデータ・Signal Group の
+ *                          シャドウバッファをゼロ初期化する（[SWS_Com_00222]）。
+ *                          0 の場合は直近の値を保持したまま起動する。
+ *
+ * \AUTOSARReq     {SWS_Com_91001, SWS_Com_00114, SWS_Com_00787, SWS_Com_00222,
+ *                  SWS_Com_00223, SWS_Com_00840}
+ * \ServiceID      {0x03}
+ * \Reentrancy     {Reentrant for different I-PDU groups. Non reentrant for the same I-PDU group.}
+ * \Synchronicity  {Synchronous}
+ */
+void Com_IpduGroupStart(Com_IpduGroupIdType IpduGroupId, uint8 initialize);
+
+/**
+ * \brief   I-PDU Group を停止する（所属する I-PDU の送受信処理を禁止する）。
+ *
+ * \details IpduGroupId に一致する `Com_IPduConfigType.IpduGroupId` を持つ
+ *          全 I-PDU（RX/TX 双方）を停止済み状態にする。RX I-PDU は受信処理・
+ *          デッドライン監視を無効化する（[SWS_Com_00684]/[SWS_Com_00685]）。
+ *          TX I-PDU は保留中の送信要求をキャンセルする（[SWS_Com_00777]）。
+ *          `Com_SendSignal()`/`Com_ReceiveSignal()` 自体は停止中でも内部
+ *          バッファを更新・参照できる（[SWS_Com_00334]）。
+ *
+ * \param[in]  IpduGroupId  停止する I-PDU Group の ID。
+ *
+ * \AUTOSARReq     {SWS_Com_91002, SWS_Com_00684, SWS_Com_00685, SWS_Com_00777,
+ *                  SWS_Com_00800, SWS_Com_00334}
+ * \ServiceID      {0x04}
+ * \Reentrancy     {Reentrant for different I-PDU groups. Non reentrant for the same I-PDU group.}
+ * \Synchronicity  {Synchronous}
+ */
+void Com_IpduGroupStop(Com_IpduGroupIdType IpduGroupId);
 
 #ifdef __cplusplus
 }
