@@ -49,19 +49,29 @@ typedef enum
 // -------------------------------------------------------
 // シグナルフィルタアルゴリズム（ComFilterAlgorithm 相当）
 //
-// 実 AUTOSAR では ComFilterAlgorithm は 2 つの異なる目的で使われる:
-//   (1) ComTransferProperty=TRIGGERED_ON_CHANGE の判定材料
+// 実 AUTOSAR では ComFilterAlgorithm は 3 つの異なる目的で使われる:
+//   (1) ComTransferProperty=TRIGGERED_ON_CHANGE の判定材料（TX シグナル）
 //       （signal(group) の送信要求時、値が変化していれば送信を開始する。
 //       本実装では COM_FILTER_MASKED_NEW_DIFFERS_MASKED_OLD が Com_SendSignal()
 //       内でこの役割を担い、Com_RequestTxOnChange() を呼ぶかどうかを決める）
-//   (2) TMS（Transmission Mode Selector）の評価材料
+//   (2) TMS（Transmission Mode Selector）の評価材料（TX シグナル）
 //       （SWS_Com_00676-00679: この I-PDU が今 ComTxModeTrue/False の
 //       どちらを使うべきかを、TmsContributor=1 のシグナルの条件評価
 //       （OR 合成）で決める。本実装では COM_FILTER_MASKED_NEW_DIFFERS_X が
 //       この役割を担う。詳細は Com_IPduConfigType の TxModeModeTrue 参照）
-// この 2 つは実 AUTOSAR でも独立した仕組みであり、同じシグナルが両方に
-// 使われるとは限らない（本実装でも、変化時送信の判定用シグナルと TMS 用
-// シグナルは別々に設定できる）。
+//   (3) 受信フィルタ（RX シグナル、SWS_Com_00273/00695）
+//       （[SWS_Com_00695] 「filter out signals only at receiver side」の
+//       とおり、実 AUTOSAR で「値そのものを破棄する」フィルタリングは
+//       RX 専用の概念である。(1)(2) は TX 側で ComFilterAlgorithm を
+//       Transmission Mode Condition（TMC）の評価に使うだけで、値そのものは
+//       破棄しない（[SWS_Com_00602]）。本実装では COM_FILTER_NEW_IS_WITHIN が
+//       この役割を担い、Com_ReceiveSignal() が範囲外の値を「破棄」して
+//       直近の合格値を返し続ける（詳細は FilterMin/FilterMax、
+//       Com_SignalConfigType の FilterRejectCbk 参照）。
+// これら 3 つは実 AUTOSAR でも独立した仕組みであり、同じシグナルが複数の
+// 用途に使われるとは限らない（本実装でも、変化時送信の判定用シグナルと TMS 用
+// シグナルは別々に設定できる。RX シグナルは (1)(2) と排他、TX シグナルは
+// (3) と排他 — Direction が RX/TX どちらかで実質的に決まる）。
 //
 // なお Signal Group メンバーの「送信を引き起こすか」判定は
 // ComFilterAlgorithm ではなく Com_TransferPropertyType（下記）が担う。
@@ -77,12 +87,21 @@ typedef enum
 //       を true とみなす（用途 (2)。SWS_COM_00813 の MASKED_NEW_DIFFERS_X 相当。
 //       実 AUTOSAR は他に MASKED_NEW_EQUALS_X/NEW_IS_WITHIN/NEW_IS_OUTSIDE も
 //       持つが、本実装では TMS 判定に最小限必要なこの 1 種類のみ実装する）
+//   COM_FILTER_NEW_IS_WITHIN
+//     : FilterMin <= 新値 <= FilterMax のときだけフィルタ条件が真（用途 (3)、
+//       実 AUTOSAR の NEW_IS_WITHIN 相当）。真でなければ Com_ReceiveSignal()
+//       はその受信値を「破棄」し、シグナルオブジェクトへ格納しない
+//       （SWS_Com_00273）。実 AUTOSAR は他に NEW_IS_OUTSIDE/
+//       MASKED_NEW_EQUALS_X/NEVER/ONE_EVERY_N も持つが、本実装は「物理的に
+//       あり得ない受信値をプラウジビリティチェックで弾く」という具体的な
+//       シナリオに最小限必要なこの 1 種類のみ実装する）
 // -------------------------------------------------------
 typedef enum
 {
     COM_FILTER_ALWAYS = 0,
     COM_FILTER_MASKED_NEW_DIFFERS_MASKED_OLD = 1,
-    COM_FILTER_MASKED_NEW_DIFFERS_X = 2
+    COM_FILTER_MASKED_NEW_DIFFERS_X = 2,
+    COM_FILTER_NEW_IS_WITHIN = 3
 } Com_FilterAlgorithmType;
 
 // -------------------------------------------------------
@@ -402,9 +421,17 @@ typedef enum
 //   BitSize     : シグナルのビット長（1〜32）
 //   Endian      : ビットの詰め方向
 //   FilterAlgorithm / Mask / FilterX : TX シグナルの送信要否フィルタ・TMS 評価
-//               フィルタ（RX シグナルでは未使用）。FilterX は
-//               COM_FILTER_MASKED_NEW_DIFFERS_X 専用の比較値
-//               （MASKED_NEW_DIFFERS_MASKED_OLD では未使用）。
+//               フィルタ。FilterX は COM_FILTER_MASKED_NEW_DIFFERS_X 専用の
+//               比較値（MASKED_NEW_DIFFERS_MASKED_OLD では未使用）。
+//   FilterAlgorithm(NEW_IS_WITHIN) / FilterMin / FilterMax / FilterRejectCbk :
+//               RX シグナルの受信フィルタ（Com_FilterAlgorithmType の用途 (3)
+//               参照）。COM_FILTER_NEW_IS_WITHIN のときのみ FilterMin/FilterMax
+//               を参照し、範囲外の受信値を破棄する。FilterRejectCbk は NULL 可
+//               （通知不要なら未設定でよい。DataInvalidAction の
+//               InvalidNotificationCbk と同じ理由で、Com_MainFunction() から
+//               呼ばれる — Com_ReceiveSignal() が割り込み禁止区間から呼ばれる
+//               ことがあるため。Com.c の Com_RxFilterRejectPending 宣言コメント
+//               参照）。
 //   TmsContributor : TX シグナルのみ使用。1 = このシグナルの
 //               ComFilterAlgorithm 評価結果が、所属 I-PDU の TMS
 //               （Com_IPduConfigType.TxModeModeTrue 参照）へ寄与する
@@ -439,6 +466,9 @@ typedef struct
     Com_FilterAlgorithmType     FilterAlgorithm;
     uint32                      Mask;
     uint32                      FilterX;
+    uint32                      FilterMin;
+    uint32                      FilterMax;
+    void (*FilterRejectCbk)(void);
     uint8                       TmsContributor;
     Com_TransferPropertyType    TransferProperty;
     Com_RxDataTimeoutActionType RxDataTimeoutAction;
