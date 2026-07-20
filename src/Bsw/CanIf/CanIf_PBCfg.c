@@ -23,6 +23,8 @@
  *              CanId=0x7E0, HRH=0 → PduR RxPduId=1 → CanTp
  *            RX PDU (RxPduId=2): AbsInfo     (ABS ECU)
  *              CanId=0x110, HRH=0 → PduR RxPduId=2 → COM IPduId=1
+ *            RX PDU (RxPduId=3): ImmobilizerCmd (KeyFobEcu 想定、SecOC 保護)
+ *              CanId=0x120, HRH=0 → PduR RxPduId=3 → SecOC → (検証成功時) COM IPduId=2
  *
  * =====================================================================
  * DaVinci Configurator 対応表
@@ -168,6 +170,21 @@ static const CanIf_RxPduConfigType CanIf_RxPduConfigData[CANIF_RX_PDU_COUNT] = {
         .UpperLayerRxPduId = 2U,          /* DaVinci: CanIfRxPduUpperLayerPduId
                                            *          → PduR RX パス 2 へのリンク */
         .Dlc               = 5U,          /* DaVinci: CanIfRxPduDataLength (E2E P01 保護: CRC1B+Counter1B+シグナル3B) */
+        .RxIndicationFct   = PduR_CanIfRxIndication  /* DaVinci: CanIfRxPduUserRxIndicationName */
+    },
+    {
+        /* ---------------------------------------------------------------
+         * RxPduId=3: ImmobilizerCmd フレーム (KeyFobEcu 想定 → メータ ECU)
+         * DaVinci: /ActiveEcuC/CanIf/CanIfInitCfg/CanIfRxPduCfg/ImmobilizerCmd_Rx
+         * SecOC Profile 1 (24Bit-CMAC-8Bit-FV) で保護される Secured I-PDU。
+         * 詳細は src/Bsw/SecOC/SecOC_PBCfg.c 参照。
+         * --------------------------------------------------------------- */
+        .CanId             = 0x120U,      /* DaVinci: CanIfRxPduCanId */
+        .Hrh               = 0U,          /* DaVinci: CanIfRxPduHrhIdRef */
+        .UpperLayerRxPduId = 3U,          /* DaVinci: CanIfRxPduUpperLayerPduId
+                                           *          → PduR RX パス 3 へのリンク */
+        .Dlc               = 6U,          /* DaVinci: CanIfRxPduDataLength
+                                           *          (Authentic 2B + Freshness 1B + 切り詰めMAC 3B) */
         .RxIndicationFct   = PduR_CanIfRxIndication  /* DaVinci: CanIfRxPduUserRxIndicationName */
     }
 };

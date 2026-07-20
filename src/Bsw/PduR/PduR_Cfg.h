@@ -27,8 +27,11 @@
  *           RECEIVE 方向 PduRRoutingPath ノード数
  *  パス 0: CAN 0x100 → COM   (EngineInfo,  エンジン ECU)
  *  パス 1: CAN 0x7E0 → CanTp (UDS 診断要求, 診断ツール)
- *  パス 2: CAN 0x110 → COM   (AbsInfo,     ABS ECU) */
-#define PDUR_RX_PATH_COUNT   3U
+ *  パス 2: CAN 0x110 → COM   (AbsInfo,     ABS ECU)
+ *  パス 3: CAN 0x120 → SecOC (ImmobilizerCmd, KeyFobEcu 想定。検証成功後
+ *           SecOC 自身が Com_RxIndication() を直接呼ぶため、COM への
+ *           配信先はここには現れない） */
+#define PDUR_RX_PATH_COUNT   4U
 
 /** RX パス 0 の配信先数（COM のみ） */
 #define PDUR_RX_DEST_COUNT_PATH0  1U
@@ -38,6 +41,9 @@
 
 /** RX パス 2 の配信先数（COM のみ: AbsInfo は ABS ECU からの受信専用） */
 #define PDUR_RX_DEST_COUNT_PATH2  1U
+
+/** RX パス 3 の配信先数（SecOC のみ） */
+#define PDUR_RX_DEST_COUNT_PATH3  1U
 
 /** TX ルーティングパス数
  *  パス 0: COM   → CanIf TxPduId=0 (CAN 0x200, EngineState)

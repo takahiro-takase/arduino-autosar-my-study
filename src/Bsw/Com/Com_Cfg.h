@@ -34,7 +34,8 @@
 
 /** RX I-PDU テーブルのエントリ数
  *  DaVinci: /ActiveEcuC/Com/ComConfig/ 内 Direction=RECEIVE の ComIPdu 数 */
-#define COM_RX_IPDU_COUNT   2U  /* [0]=EngineInfo 0x100, [1]=AbsInfo 0x110 */
+#define COM_RX_IPDU_COUNT   3U  /* [0]=EngineInfo 0x100, [1]=AbsInfo 0x110,
+                                 * [2]=SecureCommand 0x120（SecOC 検証成功後に転送） */
 
 /* -----------------------------------------------------------------------
  * 受信デッドライン監視（タイムアウト）設定
@@ -105,7 +106,7 @@
 
 /** シグナルテーブルのエントリ数（RX + TX の合計）
  *  DaVinci: /ActiveEcuC/Com/ComConfig/ 内 ComSignal ノード数の合計 */
-#define COM_SIGNAL_COUNT    12U
+#define COM_SIGNAL_COUNT    13U
 
 /* -----------------------------------------------------------------------
  * シグナル ID 定数
@@ -166,5 +167,15 @@
 
 /** TX: E2E シーケンス異常累積数 (8 bit, CAN ID 0x220, byte[1]、0-255 で飽和) */
 #define COM_SIGNAL_E2E_SEQ_ERR_COUNT  11U
+
+/* -----------------------------------------------------------------------
+ * ImmobilizerCmd シグナル (CAN ID 0x120, RX, SecOC 保護)
+ * KeyFobEcu 想定の送信元から、SecOC（src/Bsw/SecOC/）が MAC・フレッシュネス
+ * 検証に成功した場合のみ Com_RxIndication() 経由でここへ届く。
+ * ----------------------------------------------------------------------- */
+
+/** RX: イモビライザー解除コマンド (8 bit, CAN ID 0x120, byte[0]、
+ *  0x00=LOCK/0x01=UNLOCK。SecOC 検証成功後のみ更新される） */
+#define COM_SIGNAL_IMMOBILIZER_CMD  12U
 
 #endif /* COM_CFG_H */
