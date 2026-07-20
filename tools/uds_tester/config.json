@@ -27,7 +27,8 @@
           "presets": [
               { "label": "1500rpm / 80°C / ON",    "data": ["0x05", "0xDC", "0x50", "0x80"] },
               { "label": "5000rpm / 100°C / ON",   "data": ["0x13", "0x88", "0x64", "0x80"] },
-              { "label": "エンジン停止 / 20°C / OFF", "data": ["0x00", "0x00", "0x14", "0x00"] }
+              { "label": "エンジン停止 / 20°C / OFF", "data": ["0x00", "0x00", "0x14", "0x00"] },
+              { "label": "水温センサ異常 (0xFF)",      "data": ["0x05", "0xDC", "0xFF", "0x80"] }
           ]
         },
         { "label": "AbsInfo\n(0x110)", "type": "can_frame", "can_id": "0x110",

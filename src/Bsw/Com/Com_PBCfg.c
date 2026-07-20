@@ -11,6 +11,7 @@
  *              （AUTOSAR 標準バリアント 1A、SWS_E2E_00227 準拠のレイアウト）
  *              Signal 0: EngineSpeed   16 bit  BitPos=16  BigEndian
  *              Signal 1: CoolantTemp    8 bit  BitPos=32  BigEndian
+ *                DataInvalidAction=NOTIFY（受信値 0xFF はセンサ異常マーカー）
  *              Signal 2: EngineOnFlag   1 bit  BitPos=40  BigEndian
  *            RX I-PDU 1 (IPduId=1): CAN ID 0x110, DLC=5  AbsInfo     (ABS ECU, E2E P01 保護)
  *              byte[0]: E2E CRC8 / byte[1]: E2E Counter (下位4bit)
@@ -89,6 +90,9 @@
  *   .TransferProperty ←→ ComTransferProperty （Signal Group メンバーのみ使用）
  *   .RxDataTimeoutAction      ←→ ComRxDataTimeoutAction      （RX シグナルのみ使用）
  *   .TimeoutSubstitutionValue ←→ ComTimeoutSubstitutionValue （RxDataTimeoutAction=SUBSTITUTE のみ使用）
+ *   .DataInvalidAction        ←→ ComDataInvalidAction        （RX シグナルのみ使用）
+ *   .InvalidValue             ←→ ComSignalDataInvalidValue   （DataInvalidAction=NOTIFY のみ使用）
+ *   .InvalidNotificationCbk   ←→ ComInvalidNotification      （DataInvalidAction=NOTIFY のみ使用）
  *
  * =====================================================================
  *
@@ -108,6 +112,7 @@
 extern void Rte_COMCbk_EngineInfo(void);
 extern void Rte_COMCbk_AbsInfo(void);
 extern void Rte_COMTransform_E2EHealthStatus(uint8* Data, uint8 Length);
+extern void Rte_COMInvalidNotify_CoolantTemp(void);
 
 /* -----------------------------------------------------------------------
  * RX I-PDU テーブル
@@ -263,12 +268,27 @@ static const Com_SignalConfigType Com_SignalConfigData[COM_SIGNAL_COUNT] = {
         /* ---------------------------------------------------------------
          * Signal 1: CoolantTemp  RX 8bit  CAN 0x100 byte[4]
          * DaVinci: /ActiveEcuC/Com/ComConfig/CoolantTemp_Rx
+         * DataInvalidAction=NOTIFY（SWS_Com_00680/00717）: 0xFF は水温センサの
+         * 断線/異常を示す送信元の意図的な無効値マーカー（実車でも一般的な
+         * 8bit センサ値の慣習）。0xFF を受信しても Rte_EngineInfoMirror.temp
+         * は直近の有効値のまま更新されない。ComRxDataTimeoutAction（時間ベース
+         * の異常）とは異なり、これはフレームの中身そのものに基づく異常検知で
+         * あり、Rte_COMCbk_EngineInfo() 経由で毎回のフレーム受信時に実際に
+         * 評価される（他の SUBSTITUTE/RX Signal Group 系の機能と異なり、
+         * uds_tester で CoolantTemp=0xFF のフレームを送れば実機で検証できる）。
+         * Rte_COMInvalidNotify_CoolantTemp() の実呼び出しは次回
+         * Com_MainFunction() まで遅延される（Com_RxInvalidNotifyPending
+         * 参照。割り込み禁止区間からの直接呼び出しで WDT リセットを起こした
+         * 実機障害の教訓）。
          * --------------------------------------------------------------- */
         .SignalId    = COM_SIGNAL_COOLANT_TEMP, /* DaVinci: ComHandleId         */
         .IPduId      = 0U,                      /* DaVinci: ComIPduRef → EngineInfo_Rx */
         .BitPosition = 32U,                     /* DaVinci: ComBitPosition      */
         .BitSize     = 8U,                      /* DaVinci: ComBitSize          */
-        .Endian      = COM_BIG_ENDIAN           /* DaVinci: ComSignalEndianness = OPAQUE */
+        .Endian      = COM_BIG_ENDIAN,          /* DaVinci: ComSignalEndianness = OPAQUE */
+        .DataInvalidAction      = COM_DATA_INVALID_ACTION_NOTIFY, /* DaVinci: ComDataInvalidAction */
+        .InvalidValue           = 0xFFU,                          /* DaVinci: ComSignalDataInvalidValue */
+        .InvalidNotificationCbk = Rte_COMInvalidNotify_CoolantTemp /* DaVinci: ComInvalidNotification */
     },
     {
         /* ---------------------------------------------------------------

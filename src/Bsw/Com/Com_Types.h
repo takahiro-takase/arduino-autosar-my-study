@@ -177,6 +177,47 @@ typedef enum
 } Com_RxDataTimeoutActionType;
 
 // -------------------------------------------------------
+// ComDataInvalidAction（ECUC_Com_00314 相当、RX シグナル専用）
+//
+//   ComRxDataTimeoutAction（上記）が「一定時間フレームが来ない」という
+//   時間ベースの異常を扱うのに対し、こちらは「フレームは届いているが、
+//   中身の値そのものが送信元によって明示的に『無効』とマークされている」
+//   という値ベースの異常を扱う（例: センサ断線を検知した ECU が、
+//   物理的にあり得ない特定ビットパターンを意図的に送信する）。
+//   受信したシグナル値が、このシグナルに設定した `InvalidValue`
+//   （ECUC_Com_00391: ComSignalDataInvalidValue 相当）と一致した場合の
+//   Com_ReceiveSignal() の振る舞いを決める。
+//
+//   COM_DATA_INVALID_ACTION_NONE (既定)
+//     : 無効値チェックを行わない。受信値をそのまま返す（既存の全シグナルの
+//       挙動のまま変更されない）。
+//   COM_DATA_INVALID_ACTION_NOTIFY
+//     : 受信値が InvalidValue と一致する間、Com_ReceiveSignal() はその値を
+//       シグナルの内部状態へ反映せず、直近の有効値を返し続ける
+//       （SWS_Com_00680/00717: "shall not store the received
+//       ComSignalDataInvalidValue into the signal object... The next call to
+//       Com_ReceiveSignal will return the last valid received signal"）。
+//       あわせて `InvalidNotificationCbk`（ECUC_Com_00315:
+//       ComInvalidNotification 相当）が非 NULL なら呼び出す。ただし
+//       Com_ReceiveSignal() の呼び出しスタックフレームで同期的に呼ぶのでは
+//       なく、次回 Com_MainFunction() から呼ぶ（Com_ReceiveSignal() は
+//       割り込み禁止区間から呼ばれることがあり、その中でコールバックを
+//       直接呼ぶとコールバックのブロッキング処理が割り込み禁止を長引かせ
+//       うるため。詳細は Com.c の Com_RxInvalidNotifyPending 宣言コメント
+//       参照）。
+//
+//   実 AUTOSAR にはもう 1 つ REPLACE（SWS_Com_00681: ComSignalInitValue で
+//   置き換えたうえで通常のシグナル処理を続行する）があるが、
+//   Com_RxDataTimeoutActionType の REPLACE を実装しなかった理由と同じく、
+//   本実装は ComSignalInitValue という設定概念自体を持たないため未実装。
+// -------------------------------------------------------
+typedef enum
+{
+    COM_DATA_INVALID_ACTION_NONE   = 0,
+    COM_DATA_INVALID_ACTION_NOTIFY = 1
+} Com_DataInvalidActionType;
+
+// -------------------------------------------------------
 // TX 送信モード（ComTxModeMode 相当、簡略版）
 //
 //   実 AUTOSAR の ComTxModeMode は DIRECT/PERIODIC/MIXED/NONE を持つ。
@@ -322,6 +363,11 @@ typedef struct
 //               詳細は Com_RxDataTimeoutActionType 参照。
 //               COM_RX_TIMEOUT_ACTION_SUBSTITUTE のときのみ
 //               TimeoutSubstitutionValue を参照する。
+//   DataInvalidAction / InvalidValue / InvalidNotificationCbk : RX シグナル
+//               のみ使用。詳細は Com_DataInvalidActionType 参照。
+//               COM_DATA_INVALID_ACTION_NOTIFY のときのみ InvalidValue /
+//               InvalidNotificationCbk を参照する。InvalidNotificationCbk は
+//               NULL 可（通知不要なら未設定でよい）。
 // -------------------------------------------------------
 typedef struct
 {
@@ -337,6 +383,9 @@ typedef struct
     Com_TransferPropertyType    TransferProperty;
     Com_RxDataTimeoutActionType RxDataTimeoutAction;
     uint32                      TimeoutSubstitutionValue;
+    Com_DataInvalidActionType   DataInvalidAction;
+    uint32                      InvalidValue;
+    void (*InvalidNotificationCbk)(void);
 } Com_SignalConfigType;
 
 // -------------------------------------------------------

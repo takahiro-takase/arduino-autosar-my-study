@@ -79,6 +79,28 @@ static uint8 Com_TxEnabled = 1U;
  * ----------------------------------------------------------------------- */
 static uint32 Com_FilterLastValue[COM_SIGNAL_COUNT];  /* シグナルごとの直近フィルタ比較値 */
 
+/* ComDataInvalidAction=COM_DATA_INVALID_ACTION_NOTIFY の RX シグナル用、
+ * 直近の有効値（InvalidValue と一致しなかった、最後に受理した値）。
+ * SWS_Com_00717: 無効値受信中は Com_ReceiveSignal() がこれを返し続け、
+ * 実バッファ/シャドウバッファの中身（無効値そのもの）は返さない。 */
+static uint32 Com_RxLastValidValue[COM_SIGNAL_COUNT];
+
+/* Com_ReceiveSignal() が無効値を検知した際に立てる、「次回 Com_MainFunction()
+ * で InvalidNotificationCbk を呼ぶべき」フラグ。実際のコールバック呼び出しは
+ * 必ず Com_MainFunction() 側へディスパッチし、Com_ReceiveSignal() の呼び出し
+ * スタックフレームでは行わない。
+ *
+ * 理由（実機で確認済みの障害）: Com_ReceiveSignal() は Rte 層の
+ * SchM_Enter/Exit_Rte_MIRROR_EXCLUSIVE_AREA()（実体は noInterrupts()/
+ * interrupts()、グローバル割り込み禁止）の内側から呼ばれることがある
+ * （Rte_COMCbk_EngineInfo() 等）。この区間内でコールバックを直接呼び、
+ * コールバックが Serial 出力のような割り込み駆動の I/O を行うと、
+ * 割り込み禁止中は UART TX バッファが空かず実質無限ループとなり、
+ * WDT リセットを引き起こす。Com_TxPending と同じ設計思想（実処理を
+ * ASW/Rte のスタックフレームから切り離し、必ず Com_MainFunction() 側で
+ * 行う）でこれを回避する。 */
+static uint8 Com_RxInvalidNotifyPending[COM_SIGNAL_COUNT];
+
 /* DIRECT/MIXED I-PDU 用、「次回 Com_MainFunction() で送信すべき変化あり」フラグ。
  * 実送信（PduR_Transmit → ... → MCP2515 への SPI 送信）を ASW Runnable の
  * スタックフレームから切り離し、必ず Com_MainFunction()（Os の 100ms タスク、
@@ -179,7 +201,11 @@ void Com_Init(const Com_ConfigType* config)
     }
 
     for (uint8 s = 0; s < COM_SIGNAL_COUNT; s++)
-        Com_FilterLastValue[s] = 0U;
+    {
+        Com_FilterLastValue[s]         = 0U;
+        Com_RxLastValidValue[s]        = 0U;
+        Com_RxInvalidNotifyPending[s]  = 0U;
+    }
 
     DET_LOGI(TAG, "Init ok RX=%u TX=%u sig=%u",
              (unsigned)config->RxIPduCount,
@@ -610,9 +636,10 @@ static void Com_RequestTxOnChange(const Com_IPduConfigType* ipdu)
  *                           NULL 禁止。
  *
  * \retval  E_OK      シグナルが見つかり、SignalDataPtr へ値を書き込んだ
- *                    （実データ、または当該 I-PDU がタイムアウト中かつ
+ *                    （実データ、当該 I-PDU がタイムアウト中かつ
  *                    RxDataTimeoutAction=SUBSTITUTE の場合は
- *                    TimeoutSubstitutionValue）。
+ *                    TimeoutSubstitutionValue、または受信値が InvalidValue と
+ *                    一致し DataInvalidAction=NOTIFY の場合は直近の有効値）。
  * \retval  E_NOT_OK  COM 未初期化、SignalDataPtr が NULL、
  *                    シグナル設定テーブルに SignalId が存在しない、
  *                    または当該 I-PDU がタイムアウト中かつ
@@ -628,7 +655,8 @@ static void Com_RequestTxOnChange(const Com_IPduConfigType* ipdu)
  * \note       戻り値型は仕様に従い uint8。E_OK / E_NOT_OK の値（0x00 / 0x01）は
  *             RTE が使う Std_ReturnType と互換性がある。
  *
- * \AUTOSARReq     {SWS_Com_00198, SWS_Com_00500, SWS_Com_00875, SWS_Com_00876}
+ * \AUTOSARReq     {SWS_Com_00198, SWS_Com_00500, SWS_Com_00875, SWS_Com_00876,
+ *                  SWS_Com_00680, SWS_Com_00717}
  * \ServiceID      {0x0B}
  * \Reentrancy     {Reentrant}
  * \Synchronicity  {Synchronous}
@@ -704,6 +732,25 @@ uint8 Com_ReceiveSignal(Com_SignalIdType SignalId, void* SignalDataPtr)
             srcBuf,
             sig->BitPosition, sig->BitSize, sig->Endian);
 
+        /* ComDataInvalidAction（Com_DataInvalidActionType 参照）: 受信値が
+         * InvalidValue と一致する場合、NOTIFY なら「シグナルオブジェクトへ
+         * 格納しない」（SWS_Com_00717）。すなわち Com_RxLastValidValue[s]
+         * を更新せず、直近の有効値をそのまま返す。通知コールバックの実呼び出し
+         * はここでは行わず、Com_RxInvalidNotifyPending[s] を立てるだけに留める
+         * （Com_MainFunction() へディスパッチする理由は
+         * Com_RxInvalidNotifyPending の宣言コメント参照）。 */
+        if (sig->DataInvalidAction == COM_DATA_INVALID_ACTION_NOTIFY
+            && value == sig->InvalidValue)
+        {
+            Com_RxInvalidNotifyPending[s] = 1U;
+
+            const uint32 lastValid = Com_RxLastValidValue[s];
+            for (uint8 b = 0U; b < byteCount; b++)
+                dataPtr[b] = (uint8)(lastValid >> (8U * b));
+            return E_OK;
+        }
+
+        Com_RxLastValidValue[s] = value;
         for (uint8 b = 0U; b < byteCount; b++)
         {
             dataPtr[b] = (uint8)(value >> (8U * b));
@@ -1136,6 +1183,17 @@ void Com_TxConfirmation(PduIdType TxPduId, Std_ReturnType result)
  *
  * \pre        Com_Init() が正常に完了していること。
  *
+ *          ComInvalidNotification のディスパッチ（Com_RxInvalidNotifyPending
+ *          参照）: Com_ReceiveSignal() が ComDataInvalidAction=NOTIFY の
+ *          無効値受信を検知した際、その場ではフラグを立てるだけで
+ *          InvalidNotificationCbk() を直接呼ばない。実際の呼び出しは必ず
+ *          本関数の冒頭で行う。理由: Com_ReceiveSignal() は Rte 層の
+ *          SchM_Enter/Exit_Rte_MIRROR_EXCLUSIVE_AREA()（グローバル割り込み
+ *          禁止）の内側から呼ばれることがあり、そこでコールバックを直接
+ *          呼ぶと、コールバックが Serial 出力のような割り込み駆動の I/O を
+ *          行った場合に割り込み禁止のまま停止し続け、WDT リセットを
+ *          引き起こしうる（実機で確認済み）。
+ *
  *          TX I-PDU の送信ディスパッチ（DIRECT/MIXED/PERIODIC 共通）:
  *          実際に PduR_Transmit()（→ MCP2515 への SPI 送信）を呼ぶのはこの
  *          関数だけである。判定に使う `TxModeMode`/`TxPeriodMs` は
@@ -1191,6 +1249,20 @@ void Com_MainFunction(void)
         return;
 
     const unsigned long now = millis();
+
+    /* ComInvalidNotification のディスパッチ（Com_RxInvalidNotifyPending 参照）。
+     * Com_ReceiveSignal() が割り込み禁止区間から呼ばれた場合でも安全なように、
+     * 実際のコールバック呼び出しは必ずここ（Os の 100ms タスク、割り込み
+     * 禁止区間の外）で行う。 */
+    for (uint8 s = 0U; s < Com_ConfigPtr->SignalCount; s++)
+    {
+        if (!Com_RxInvalidNotifyPending[s])
+            continue;
+
+        Com_RxInvalidNotifyPending[s] = 0U;
+        if (Com_ConfigPtr->Signals[s].InvalidNotificationCbk != NULL)
+            Com_ConfigPtr->Signals[s].InvalidNotificationCbk();
+    }
 
     if (Com_RxEnabled != 0U)
     {
