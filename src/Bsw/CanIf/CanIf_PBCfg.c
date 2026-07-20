@@ -117,14 +117,18 @@ static const CanIf_TxPduConfigType CanIf_TxPduConfigData[CANIF_TX_PDU_COUNT] = {
     },
     {
         /* ---------------------------------------------------------------
-         * TxPduId=4: E2EHealthStatus フレーム (COM PERIODIC)
+         * TxPduId=4: E2EHealthStatus フレーム (COM PERIODIC、SecOC 保護)
          * DaVinci: /ActiveEcuC/CanIf/CanIfInitCfg/CanIfTxPduCfg/E2EHealthStatus_Tx
          * --------------------------------------------------------------- */
         .UpperLayerTxPduId = 3U,          /* DaVinci: CanIfTxPduId。PduR_PBCfg.c の
                                           *          E2EHealthStatus パスの SrcPduId(=3) と一致させる */
         .CanId             = 0x220U,      /* DaVinci: CanIfTxPduCanId */
-        .Dlc               = 4U,          /* DaVinci: CanIfTxPduDlc (E2E P01 保護: CRC1B+Counter1B
-                                            *          + CrcErrCount1B + SeqErrCount1B) */
+        .Dlc               = 8U,          /* DaVinci: CanIfTxPduDlc (E2E P01 保護: CRC1B+Counter1B
+                                            *          + CrcErrCount1B + SeqErrCount1B の 4byte を、
+                                            *          SecOC がさらに Freshness1B+MAC3B で保護した
+                                            *          Secured I-PDU 全体の長さ。Com 自身が知る DLC は
+                                            *          従来どおり 4byte のまま — SecOC は PduR の TX 経路
+                                            *          上に挟まる中間モジュールであり、Com は関知しない） */
         .Hth               = 0U,          /* DaVinci: CanIfTxPduHthIdRef */
         .TxConfirmFct      = PduR_CanIfTxConfirmation /* DaVinci: CanIfTxPduUserTxConfirmationName */
     }

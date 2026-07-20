@@ -197,6 +197,13 @@ Std_ReturnType PduR_Transmit(PduIdType SrcPduId, const PduInfoType* PduInfoPtr)
         if (path->SrcPduId != SrcPduId)
             continue;
 
+        if (path->TransmitOverrideFct != NULL)
+        {
+            DET_LOGI(TAG, "TX src=%u -> override id=%u",
+                     (unsigned)SrcPduId, (unsigned)path->TransmitOverrideId);
+            return path->TransmitOverrideFct(path->TransmitOverrideId, PduInfoPtr);
+        }
+
         DET_LOGI(TAG, "TX src=%u canif=%u",
                  (unsigned)SrcPduId, (unsigned)path->CanIfTxPduId);
 
@@ -204,5 +211,54 @@ Std_ReturnType PduR_Transmit(PduIdType SrcPduId, const PduInfoType* PduInfoPtr)
     }
 
     DET_LOGW(TAG, "TX no route src=%u", (unsigned)SrcPduId);
+    return E_NOT_OK;
+}
+
+/**
+ * \brief   SecOC が変換済みの Secured I-PDU を送信する際に呼ぶ、PduR_Transmit()
+ *          とは別の TX エントリポイント。
+ *
+ * \details PduR_Transmit() と異なり TransmitOverrideFct を一切評価せず、常に
+ *          CanIf_Transmit() へ直接転送する（SecOC は既に変換を終えた後にここへ
+ *          来るため、再度 TransmitOverrideFct を評価すると SecOC_IfTransmit() を
+ *          無限に呼び直すことになってしまう）。SrcPduId は元の Authentic I-PDU
+ *          が使っていたのと同じ値（SecOC_TxPduConfigType.PduRSrcPduId）を渡す
+ *          必要がある（同じ TX ルーティングパスを再検索して CanIfTxPduId を
+ *          得るため）。
+ *
+ * \param[in]  SrcPduId    元の Authentic I-PDU の TX ルーティングパス ID。
+ * \param[in]  PduInfoPtr  送信する Secured I-PDU のデータと長さ。NULL 禁止。
+ *
+ * \retval  E_OK      PDU が CanIf_Transmit() に正常に転送された。
+ * \retval  E_NOT_OK  PduR 未初期化、PduInfoPtr が NULL、
+ *                    一致する TX ルーティングパスなし、
+ *                    または CanIf_Transmit() が失敗した。
+ *
+ * \pre        PduR_Init() が正常に完了していること。
+ *
+ * \AUTOSARReq     {SWS_SecOC_00062}
+ * \ServiceID      {0x4A}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType PduR_SecOCTransmit(PduIdType SrcPduId, const PduInfoType* PduInfoPtr)
+{
+    if (PduR_ConfigPtr == NULL || PduInfoPtr == NULL)
+        return E_NOT_OK;
+
+    for (uint8 i = 0; i < PduR_ConfigPtr->TxPathCount; i++)
+    {
+        const PduR_TxRoutingPathType* path = &PduR_ConfigPtr->TxPaths[i];
+
+        if (path->SrcPduId != SrcPduId)
+            continue;
+
+        DET_LOGI(TAG, "TX(SecOC) src=%u canif=%u",
+                 (unsigned)SrcPduId, (unsigned)path->CanIfTxPduId);
+
+        return CanIf_Transmit(path->CanIfTxPduId, PduInfoPtr);
+    }
+
+    DET_LOGW(TAG, "TX(SecOC) no route src=%u", (unsigned)SrcPduId);
     return E_NOT_OK;
 }

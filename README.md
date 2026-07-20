@@ -1820,30 +1820,58 @@ E2E は「Com のコールバックフック（RxIndicationCbk/TxTransformCbk）
 流用せず、`PduR_RxDestType`——CanTp/Com と同じ立ち位置——として実装しています）。
 
 ```
-KeyFobEcu (uds_tester Python が模擬)
+【RX】KeyFobEcu (uds_tester Python が模擬)
   → AES-128-CMAC で Secured PDU を生成（pycryptodome。Arduino 側の自前実装
     との相互検証は下記「検証」節参照）
   → CAN 0x120 送信
 
-Arduino (MeterEcu):
-  Can_Hw → CanIf_RxIndication → PduR_ComRxIndication
-    → SecOC_IfRxIndication()（新規 PduR 宛先モジュール、DestPduId=0）
-        Authentic Payload / Freshness Value / 切り詰め MAC を分離
-        AES-128-CMAC を自前実装で再計算し MAC 一致を検証
-        Freshness（8bit、単調増加）を検証（リプレイ検知）
-        両方 OK → Com_RxIndication(ComRxIPduId=2, AuthenticPayload) を直接呼ぶ
-        NG → ログのみ、Com へは一切転送しない
-    → Com_ReceiveSignal(IMMOBILIZER_CMD) → Rte_COMCbk_SecureCommand()（ログのみ）
+  Arduino (MeterEcu):
+    Can_Hw → CanIf_RxIndication → PduR_ComRxIndication
+      → SecOC_IfRxIndication()（PduR 宛先モジュール、DestPduId=0）
+          Authentic Payload / Freshness Value / 切り詰め MAC を分離
+          AES-128-CMAC を自前実装で再計算し MAC 一致を検証
+          Freshness（8bit、単調増加）を検証（リプレイ検知）
+          両方 OK → Com_RxIndication(ComRxIPduId=2, AuthenticPayload) を直接呼ぶ
+          NG → ログのみ、Com へは一切転送しない
+      → Com_ReceiveSignal(IMMOBILIZER_CMD) → Rte_COMCbk_SecureCommand()（ログのみ）
+
+【TX】Arduino (MeterEcu、E2EHealthStatus):
+  E2EMon → Com_SendSignal() → Com_MainFunction()（PERIODIC、6000ms周期）
+    → TxTransformCbk（E2EXf、E2E CRC/Counter を書き込む）
+    → PduR_Transmit(SrcPduId=3, 4byte)
+        → TransmitOverrideFct=SecOC_IfTransmit()（Authentic I-PDU を内部
+          バッファへコピーし即座に E_OK を返す。[SWS_SecOC_00058]）
+    → 次回 SecOC_MainFunction()（100ms周期）:
+        Freshness（自身の単調増加カウンタ）+ AES-128-CMAC を計算
+        Secured I-PDU（8byte）を組み立て
+        → PduR_SecOCTransmit(SrcPduId=3, 8byte) → CanIf_Transmit() → CAN 0x220 送信
+
+  uds_tester (Python、受信モニター):
+    受信した 8byte から MAC を pycryptodome で再計算し検証（下記「検証」節）
 ```
 
 PduR の RX 振り分け機構（`PduR_RxDestType`）は元々、1 つの受信 PDU を複数の
-上位層モジュールへ配信できる汎用的な関数ポインタテーブルだったため、SecOC を
-新しい宛先として追加するだけで済み、`PduR.c` 自体の変更は不要でした
-（`PduR_PBCfg.c` に 1 エントリ追加するだけ）。TX 方向（Arduino が自ら Secured
-I-PDU を生成して送信する）は本実装では未対応です。デモ用フレーム
-（ImmobilizerCmd）は「外部の KeyFobEcu から受信する」想定の RX 専用フレームで
-あり、送信側は uds_tester（Python）が模擬します。これは EngineInfo/AbsInfo の
-E2E 保護が RX 専用で、Python 側が送信側を模擬しているのと同じ構図です。
+上位層モジュールへ配信できる汎用的な関数ポインタテーブルだったため、RX 方向は
+SecOC を新しい宛先として追加するだけで済み、`PduR.c` 自体の変更は不要でした。
+
+TX 方向は当初 RX 専用スコープとして見送っていましたが、「E2EHealthStatus に
+メッセージ認証を付与したい」という要求をきっかけに、実 AUTOSAR の
+`SecOC_Transmit()` アーキテクチャ（`[7.4.1]` "Authentication during direct
+transmission"）に忠実な形で追加しました。実装当初の RX 専用スコープでは
+「TX 方向は PduR の TX 経路が `CanIf_Transmit()` 直呼びにハードコードされて
+おり、汎用化には手が入る」という理由で意図的に見送っていましたが、今回は
+その汎用化自体を行っています。`PduR_TxRoutingPathType` に
+`TransmitOverrideFct`/`TransmitOverrideId` を追加し、NULL（既定）なら従来どおり
+`CanIf_Transmit()` へ直接転送、非 NULL なら中間モジュール（SecOC）へ委譲する形に
+一般化しました（既存の全 TX パスはこのフィールドを設定しないため無変更・無
+リグレッションです）。中間モジュールは変換完了後、`PduR_Transmit()` とは別の
+`PduR_SecOCTransmit()`（`TransmitOverrideFct` を再評価しない）を呼んで
+`CanIf_Transmit()` まで到達させます。
+
+Com/E2E は SecOC の存在を一切知りません（E2E Transformer 方式で Com が E2E の
+存在を知らないのと同じ設計思想）。`Com_SendSignal()`/`TxTransformCbk` は
+従来どおり 4byte の E2E 保護済みペイロードを扱うだけで、SecOC がその後ろに
+Freshness/MAC を継ぎ足して 8byte の Secured I-PDU にすることを一切意識しません。
 
 #### Secured I-PDU バイトレイアウト（SecOC Profile 1 準拠）
 
@@ -1866,9 +1894,28 @@ Value"）: `DataId(2byte, Big Endian, =0x0120) | AuthenticPayload(2byte) |
 FreshnessValue(1byte)` の 5 バイトを AES-128-CMAC へ入力します（Big Endian は
 `[SWS_SecOC_00011]`）。
 
+TX 対象フレーム「E2EHealthStatus」（CAN ID 0x220）は、既に E2E P01 保護済みの
+4byte ペイロード全体を Authentic I-PDU として扱い、SecOC で外側からさらに
+保護します（内側=E2E で意図しない誤りを検出、外側=SecOC で意図的な改ざん・
+なりすましを検出、という二重防御の実例）:
+
+| byte | 内容 | サイズ |
+|---|---|---|
+| 0 | E2E CRC8（Authentic payload、内側の E2E 保護） | 1 |
+| 1 | E2E Counter（Authentic payload、下位4bit） | 1 |
+| 2 | E2ECrcErrCount（Authentic payload） | 1 |
+| 3 | E2ESeqErrCount（Authentic payload） | 1 |
+| 4 | Freshness Value（8bit、切り詰めなし） | 1 |
+| 5-7 | 切り詰め MAC（AES-128-CMAC 128bit 出力の上位24bit） | 3 |
+
+DLC が 4→8 バイトへ増える点は `CanIf_PBCfg.c` の当該 TxPdu の `.Dlc` のみを
+変更しており、Com/E2E 側の DLC（4byte のまま）には一切手を入れていません
+（Com は SecOC の存在を知らないため）。RX/TX で異なる鍵（用途・アセットが
+異なるため）を割り当てています。
+
 #### 明示する簡略化
 
-- **Freshness Value は 8bit 幅全体を送信し、切り詰めを行いません**（Profile 1 の
+- **Freshness Value は 8bit 幅全体を送受信し、切り詰めを行いません**（Profile 1 の
   `SecOCFreshnessValueTxLength=8` と一致させ、実車で必要な「送信されない上位
   ビットの推定復元」機構を回避する簡略化）。
 - **Csm/CryIf/KeyM は分離実装せず**、AES-128+CMAC を SecOC モジュール内
@@ -1876,10 +1923,17 @@ FreshnessValue(1byte)` の 5 バイトを AES-128-CMAC へ入力します（Big 
 - **鍵は `SecOC_PBCfg.c` の固定配列**です（実車は KeyM 等による鍵の
   プロビジョニング・耐タンパ格納が必須で、固定鍵をソースコードへ埋め込むことは
   本番運用では絶対に行ってはなりません）。
-- **リプレイ判定は単調増加チェックのみ**（`(uint8)(received - lastAccepted) <
-  128` という折り返し許容の「半区間」判定）で、実車の Freshness Manager
-  （11 章、複数カウンタ・マスタースレーブ同期プロトコル）は実装していません。
-- **TX 方向は未実装**（上記アーキテクチャ節参照）。
+- **リプレイ判定（RX）は単調増加チェックのみ**（`(uint8)(received -
+  lastAccepted) < 128` という折り返し許容の「半区間」判定）で、実車の
+  Freshness Manager（11 章、複数カウンタ・マスタースレーブ同期プロトコル）は
+  実装していません。
+- **TX の送信確認（TxConfirmation）経路は SecOC を経由しません**（実
+  AUTOSAR は `[SWS_SecOC_00063]`/`[SWS_SecOC_00064]` で SecOC が確認結果を
+  中継し、動的に確保した Secured I-PDU バッファを解放することを要求しますが、
+  本実装は固定長静的バッファ（`SecOC_TxAuthenticBuffer[]`）のみを使い動的確保を
+  行わないため、解放処理自体が不要です。したがって `CanIf_TxConfirmation` は
+  従来どおり `PduR_CanIfTxConfirmation()` から直接 `Com_TxConfirmation()` へ
+  届き、SecOC は一切関与しません）。
 
 #### 検証
 
@@ -1900,6 +1954,10 @@ FreshnessValue(1byte)` の 5 バイトを AES-128-CMAC へ入力します（Big 
    AES-CMAC を計算）と、Arduino 側の `SecOC_IfRxIndication()`（同一の自前実装）
    が同じ鍵・同じメッセージに対して同じ MAC を計算することを、バイトレイアウト
    （DataId の Big Endian 連結順・切り詰め位置）も含めて突き合わせ済みです。
+4. TX 方向は `SecOC_MainFunction()`（RX と同一の `SecOC_Cmac_Calculate()` を
+   呼ぶ）が計算した MAC を、`tools/uds_tester` の `_verify_secoc()`（受信した
+   Secured I-PDU から MAC を再計算する、`_apply_secoc()` の逆方向）で
+   独立に再検証できます（下記「実機で検証可能」TX 項参照）。
 
 **実機で検証可能**: `tools/uds_tester/config.json` に「ImmobilizerCmd
 (0x120, KeyFobEcu)」ボタンを追加しました（UNLOCK/LOCK の 2 プリセット）。
@@ -1917,6 +1975,14 @@ FreshnessValue(1byte)` の 5 バイトを AES-128-CMAC へ入力します（Big 
   内容）をそのまま Entry へ貼り戻し、フレッシュネス値を変えずに再送すると、
   MAC は依然として正しいにもかかわらず `SecOC: RxInd W: ... freshness check
   failed (replay or stale)` が出力され、拒否されることが確認できます。
+
+**TX 方向の実機確認**: `tools/uds_tester` の「E2EHealthStatus (0x220)」受信
+モニターが、`crcErr=N seqErr=M` に加えて `SecOC:OK`/`SecOC:NG` を表示します
+（受信した 8byte から Python 側で MAC を独立に再計算し、Arduino が計算した
+MAC と一致するかを毎回検証）。Arduino ログでも
+`SecOC: MainFunction: iPdu=0 secured OK (freshness=N)` が 6000ms 周期（
+`Com_MainFunction()` の PERIODIC 送信に追従して `SecOC_MainFunction()` が
+検知した直後）で出力され続けることが確認できます。
 
 #### 意図的に応用範囲を限定した理由
 

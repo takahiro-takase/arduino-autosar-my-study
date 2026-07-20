@@ -15,6 +15,7 @@
 #include "PduR_Cfg.h"
 #include "PduR_CanIf.h"
 #include "PduR_COM.h"
+#include "PduR_SecOC.h"
 
 #ifdef __cplusplus
 extern "C" {

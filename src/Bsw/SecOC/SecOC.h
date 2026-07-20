@@ -51,6 +51,43 @@ void SecOC_Init(const SecOC_ConfigType* config);
  */
 void SecOC_IfRxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr);
 
+/**
+ * \brief   PduR から呼ばれる、Authentic I-PDU 送信要求のエントリポイント。
+ *
+ * \details `PduR_TxTransmitFctType` と同じシグネチャを持ち、PduR の
+ *          `PduR_TxRoutingPathType.TransmitOverrideFct` へ直接登録できる
+ *          （[7.4.1] "Authentication during direct transmission" の ad-hoc
+ *          transmission フロー相当）。Authentic I-PDU を内部バッファへ
+ *          コピーするだけで、Freshness/MAC の計算は一切行わず即座に E_OK を
+ *          返す（[SWS_SecOC_00057]〜[SWS_SecOC_00059]）。実際の Secured I-PDU
+ *          組み立ては次回 SecOC_MainFunction() で行う（[SWS_SecOC_00060]〜
+ *          [SWS_SecOC_00062]）。
+ *
+ * \param[in]  TxPduId     送信対象の SecOC TX Secured I-PDU ID
+ *                         （SecOC_TxPduConfigType.SecOCTxPduId と照合する）。
+ * \param[in]  PduInfoPtr  送信する Authentic I-PDU のデータと長さ。NULL 禁止。
+ *                         SduLength は対象エントリの AuthenticPduLength と
+ *                         一致していること。
+ *
+ * \retval  E_OK      Authentic I-PDU を内部バッファへコピーした。
+ * \retval  E_NOT_OK  SecOC 未初期化、PduInfoPtr が NULL、一致するエントリなし、
+ *                    または SduLength が AuthenticPduLength と不一致。
+ */
+Std_ReturnType SecOC_IfTransmit(PduIdType TxPduId, const PduInfoType* PduInfoPtr);
+
+/**
+ * \brief   周期実行関数。保留中の TX Secured I-PDU を組み立てて送信する。
+ *
+ * \details SecOC_IfTransmit() が内部バッファへコピーした Authentic I-PDU に
+ *          対し、Freshness Value（自身が保持する単調増加カウンタ）と
+ *          AES-128-CMAC（自前実装）を計算し、Secured I-PDU を組み立てて
+ *          PduR_SecOCTransmit() で送信する。保留中の TX Secured I-PDU が
+ *          なければ何もしない。
+ *
+ * \pre        SecOC_Init() が正常に完了していること。
+ */
+void SecOC_MainFunction(void);
+
 #ifdef __cplusplus
 }
 #endif
