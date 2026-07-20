@@ -79,6 +79,8 @@
  *                      有無で暗黙的に表現される）1 = Signal Group。
  *                      TX I-PDU では Com_SendSignalGroup()、RX I-PDU では
  *                      Com_ReceiveSignalGroup() で確定コミット/コピーする対象
+ *   .UpdateBitPosition ←→ ComUpdateBitPosition （Signal Group のみ使用。
+ *                      0xFF = update-bit なし）
  *
  * [Com_SignalConfigType] ←→ /ActiveEcuC/Com/ComConfig/[ComSignal]
  *   .SignalId    ←→ ComHandleId          （シグナルの識別番号）
@@ -138,6 +140,7 @@ static const Com_IPduConfigType Com_RxIPduConfigData[COM_RX_IPDU_COUNT] = {
                                                  *          (PduR_PBCfg.c PduR_RxDests_Path0[0].DestPduId と一致させること) */
         .TimeoutMs = COM_TIMEOUT_ENGINE_INFO_MS,/* DaVinci: ComRxDeadlineMonitoringPeriod
                                                  *          エンジン ECU からの受信が途絶えたと判断するまでの時間 */
+        .UpdateBitPosition = 0xFFU,             /* update-bit なし（Signal Group 専用機能のため未使用） */
         .RxIndicationCbk = Rte_COMCbk_EngineInfo /* DaVinci: /ActiveEcuC/E2EXf/EngineInfo_Rx_E2EXf
                                                  *          （E2E Transformer 呼び出しは Rte 層が担う） */
     },
@@ -149,6 +152,13 @@ static const Com_IPduConfigType Com_RxIPduConfigData[COM_RX_IPDU_COUNT] = {
          * の 3 シグナルを Com_ReceiveSignalGroup() 経由で一括して一貫したスナップ
          * ショットとして読む。Rte_COMCbk_AbsInfo() が RxIndicationCbk として
          * フレーム受信の都度呼ばれ、その中で確定コピーする。
+         * UpdateBitPosition は未使用（0xFF）。Com は update-bit 機構
+         * （SWS_Com_00324/00802、Com_ReceiveSignalGroup() 参照）自体を持つが、
+         * 実車の ABS/車輪速フレームは常に高頻度・固定周期で新鮮なセンサ値を
+         * 送り続けるのが通常で「今回は更新なし」という状況が起きにくいため、
+         * この I-PDU への適用は見送った（鮮度管理は既存の受信デッドライン
+         * 監視で十分カバーされる）。詳細は README.md の
+         * 「Group Signal Update Bit」節を参照。
          * --------------------------------------------------------------- */
         .IPduId    = 1U,                       /* DaVinci: ComIPduHandleId  - I-PDU 識別番号 */
         .DLC       = 5U,                       /* DaVinci: ComIPduLength    - I-PDU バイト長
@@ -158,6 +168,7 @@ static const Com_IPduConfigType Com_RxIPduConfigData[COM_RX_IPDU_COUNT] = {
         .TimeoutMs = COM_TIMEOUT_ABS_INFO_MS,  /* DaVinci: ComRxDeadlineMonitoringPeriod
                                                 *          ABS ECU からの受信が途絶えたと判断するまでの時間 */
         .IsSignalGroup = 1U,                   /* RX Signal Group（Com_ReceiveSignalGroup で確定コピー） */
+        .UpdateBitPosition = 0xFFU,            /* update-bit なし（本 I-PDU には適用しない。上記コメント参照） */
         .RxIndicationCbk = Rte_COMCbk_AbsInfo  /* DaVinci: /ActiveEcuC/E2EXf/AbsInfo_Rx_E2EXf
                                                 *          （E2E Transformer 呼び出しは Rte 層が担う） */
     }
@@ -183,6 +194,7 @@ static const Com_IPduConfigType Com_TxIPduConfigData[COM_TX_IPDU_COUNT] = {
         .PduRId    = 0U,  /* DaVinci: ComIPduPduRef    - PduR TX パス 0 へのリンク */
         .TimeoutMs = 0U,  /* TX I-PDU のため監視無効 */
         .IsSignalGroup = 0U, /* 直接送信（既存の挙動のまま） */
+        .UpdateBitPosition = 0xFFU, /* update-bit なし（Signal Group 専用機能のため未使用） */
         .TxModeMode = COM_TX_MODE_MIXED, /* DaVinci: ComTxModeMode = MIXED
                                           *          (Com_SendSignal() が変化検知時に Com_TxPending を立て、
                                           *          次回 Com_MainFunction() で送信) */
@@ -206,6 +218,12 @@ static const Com_IPduConfigType Com_TxIPduConfigData[COM_TX_IPDU_COUNT] = {
          *   .TmsContributor=1 で設定する（RunLamp は寄与しない）。
          * MDT（ComMinimumDelayTime）: 変化時送信に最小送信間隔を設ける
          * バス輻輳保護。周期フロアには適用されない（Com.c 参照）。
+         * UpdateBitPosition は未使用（0xFF）。Com は update-bit 機構
+         * （SWS_Com_00801、Com_SendSignalGroup() 参照）自体を持ち、周期フロア
+         * 再送とイベント送信を区別する用途としては本 I-PDU にも一定の必然性が
+         * あると考えたが、実機検証可能な具体例として確信が持てなかったため
+         * 適用を見送った。詳細は README.md の「Group Signal Update Bit」節を
+         * 参照。
          * --------------------------------------------------------------- */
         .IPduId    = 1U,  /* DaVinci: ComIPduHandleId  - I-PDU 識別番号 */
         .DLC       = 1U,  /* DaVinci: ComIPduLength    - I-PDU バイト長（3bit のみ使用） */
@@ -214,6 +232,7 @@ static const Com_IPduConfigType Com_TxIPduConfigData[COM_TX_IPDU_COUNT] = {
                            *          CanTp が使用する 1U と衝突しないよう 2U を割り当てる) */
         .TimeoutMs = 0U,  /* TX I-PDU のため監視無効 */
         .IsSignalGroup = 1U, /* Signal Group（Com_SendSignalGroup で確定コミット） */
+        .UpdateBitPosition = 0xFFU, /* update-bit なし（本 I-PDU には適用しない。上記コメント参照） */
         .TxModeMode     = COM_TX_MODE_DIRECT, /* DaVinci: ComTxModeMode = ComTxModeFalse
                                                *          (TMS false: 通常時) */
         .TxModeModeTrue = COM_TX_MODE_MIXED,  /* DaVinci: ComTxModeTrue
@@ -239,6 +258,7 @@ static const Com_IPduConfigType Com_TxIPduConfigData[COM_TX_IPDU_COUNT] = {
         .PduRId     = 3U,    /* DaVinci: ComIPduPduRef    - PduR TX パス 3 へのリンク */
         .TimeoutMs  = 0U,    /* TX I-PDU のため監視無効 */
         .IsSignalGroup = 0U, /* 直接送信 */
+        .UpdateBitPosition = 0xFFU, /* update-bit なし（Signal Group 専用機能のため未使用） */
         .TxModeMode = COM_TX_MODE_PERIODIC,      /* DaVinci: ComTxModeMode = PERIODIC */
         .TxPeriodMs = COM_TX_PERIOD_E2EHEALTH_MS, /* DaVinci: ComTxModeTimePeriodFactor */
         .TxTransformCbk = Rte_COMTransform_E2EHealthStatus /* DaVinci: /ActiveEcuC/E2EXf/E2EHealthStatus_Tx_E2EXf

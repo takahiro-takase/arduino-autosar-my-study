@@ -320,6 +320,29 @@ typedef enum
 //               （SWS_Com_00789: ComEnableMDTForCyclicTransmission が既定
 //               false の場合、MIXED の周期部分・PERIODIC には MDT タイマ
 //               自体を起動しない、という実 AUTOSAR の既定動作に合わせている）。
+//   UpdateBitPosition : Signal Group（IsSignalGroup=1）のみ使用（DaVinci:
+//               ComUpdateBitPosition、ECUC_Com_00257 相当）。この Signal
+//               Group 用 update-bit の I-PDU 内ビット位置（ネットワークビット
+//               順、Com_UnpackSignal/Com_PackSignal と同じ規約）。
+//               0xFF = update-bit なし（既定。実 AUTOSAR の「省略時は
+//               update-bit なし」に対応）。
+//
+//               update-bit（7.8 章、SWS_Com_00055 他）: 送信側が「このグループ
+//               の値を実際に更新して送った」ことを受信側へ伝える 1 ビット
+//               （値そのものとは独立。SWS_Com_00055: シグナル/グループの
+//               一部としてではなく Com 内部でのみ扱う）。
+//                 TX（送信側、SWS_Com_00801）: Com_SendSignalGroup() が呼ばれる
+//                   たびにこのビットを 1 にセットする。クリアタイミングは
+//                   実 AUTOSAR の ComTxIPduClearUpdateBit（Transmit/
+//                   Confirmation/TriggerTransmit の 3 択）のうち、本実装は
+//                   Transmit のみ実装する（SWS_Com_00062: PduR_ComTransmit
+//                   呼び出し直後にクリア。Confirmation/TriggerTransmit は
+//                   未実装。詳細は Com_DoTransmit() 参照）。
+//                 RX（受信側、SWS_Com_00324/00802）: Com_ReceiveSignalGroup()
+//                   はこのビットが 0 の場合、受信データを「破棄」する
+//                   （シャドウバッファ・タイムアウトスナップショットとも
+//                   直近の状態のまま更新しない）。1 の場合のみ通常どおり
+//                   確定コピーする。
 // -------------------------------------------------------
 typedef struct
 {
@@ -333,6 +356,7 @@ typedef struct
     Com_TxModeModeType TxModeModeTrue;
     uint16             TxPeriodMsTrue;
     uint16             MinDelayMs;
+    uint8              UpdateBitPosition;
     void (*RxIndicationCbk)(void);
     void (*TxTransformCbk)(uint8* Data, uint8 Length);
 } Com_IPduConfigType;

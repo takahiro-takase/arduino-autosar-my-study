@@ -468,11 +468,19 @@ static const Com_IPduConfigType* Com_FindRxIPdu(Com_IPduIdType IPduId)
  *          「送信すべきかどうかの判断」は呼び出し元（`Com_MainFunction()`）が
  *          既に済ませてから呼ぶ。
  *
+ *          update-bit クリア（ipdu->UpdateBitPosition が 0xFF 以外の場合、
+ *          SWS_Com_00062: ComTxIPduClearUpdateBit=Transmit 相当）: PduR_Transmit()
+ *          が E_OK を返した場合のみクリアする（SWS_Com_00062 原文 "after this
+ *          I-PDU was sent out via PduR_ComTransmit and PduR_ComTransmit
+ *          returned E_OK" のとおり）。失敗時はクリアせず、次回の再送で
+ *          update-bit ごと正しく伝わるようにする。
+ *
  * \param[in]  ipdu  送信する TX I-PDU 設定。NULL 禁止（呼び出し元で保証する）。
  *
  * \retval  E_OK      PduR_Transmit() が成功した。
  * \retval  E_NOT_OK  PduR_Transmit() が失敗した。
  *
+ * \AUTOSARReq     {SWS_Com_00062}
  * \ServiceID      {0xF3}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
@@ -490,7 +498,27 @@ static Std_ReturnType Com_DoTransmit(const Com_IPduConfigType* ipdu)
         .SduDataPtr = Com_TxBuffer[ipdu->IPduId],
         .SduLength  = ipdu->DLC
     };
-    return PduR_Transmit(ipdu->PduRId, &pduInfo);
+    const Std_ReturnType ret = PduR_Transmit(ipdu->PduRId, &pduInfo);
+
+    /* update-bit クリア（SWS_Com_00062: ComTxIPduClearUpdateBit=Transmit 相当。
+     * Confirmation/TriggerTransmit の 2 択は未実装）。原文は "after this I-PDU
+     * was sent out via PduR_ComTransmit and PduR_ComTransmit returned E_OK"
+     * であり、ret==E_OK のときのみクリアする（ret を無視して無条件にクリア
+     * していた過去の実装は誤り。失敗時にもクリアすると、update-bit だけが
+     * 消えてバッファのデータは残ったまま次回再送されるため、実際には
+     * 初めて正常配信される新データが受信側に「未更新」として誤って破棄
+     * されうる）。PduR_Transmit() はこの呼び出し内で同期的に SPI 送信まで
+     * 完了しているため、この時点で Com_TxBuffer を書き換えても既に送信済み
+     * のバイト列には影響しない。
+     * IsSignalGroup のチェックが必須: この関数はすべての TX I-PDU に対して
+     * 呼ばれるため、Signal Group ではない I-PDU（UpdateBitPosition を明示
+     * 設定しておらず、C の既定初期化で 0 のままの I-PDU）まで対象にすると、
+     * その I-PDU のバッファ bit0（≠ 「update-bit なし」の 0xFF）を毎回誤って
+     * クリアし、シグナル値を破壊してしまう。 */
+    if (ret == E_OK && ipdu->IsSignalGroup != 0U && ipdu->UpdateBitPosition != 0xFFU)
+        Com_PackSignal(Com_TxBuffer[ipdu->IPduId], ipdu->UpdateBitPosition, 1U, COM_BIG_ENDIAN, 0U);
+
+    return ret;
 }
 
 /**
@@ -791,16 +819,25 @@ uint8 Com_ReceiveSignal(Com_SignalIdType SignalId, void* SignalDataPtr)
  *          Group が「Com_ReceiveSignal() はシャドウバッファのみを読む」
  *          という設計だからである。
  *
+ *          update-bit（ipdu->UpdateBitPosition が 0xFF 以外の場合、
+ *          SWS_Com_00324/00802）: I-PDU バッファ内のこのビットが 0（未更新）
+ *          なら、確定コピー・タイムアウトスナップショット更新のいずれも
+ *          行わずに戻る（SWS_Com_00802: "shall discard this signal/ signal
+ *          group... It will only be discarded"）。1（更新済み、SWS_Com_00067）
+ *          の場合のみ、以下の通常の確定コピー処理を行う。
+ *
  * \param[in]  GroupId  確定コピーする RX Signal Group（RX I-PDU）の ID。
  *
- * \retval  E_OK      GroupId が見つかり、コピー時点でタイムアウト中でなかった。
+ * \retval  E_OK      GroupId が見つかり、コピー時点でタイムアウト中でなかった
+ *                    （または update-bit=0 のため何もせず破棄した）。
  * \retval  E_NOT_OK  COM 未初期化、GroupId が RX I-PDU 設定テーブルに
  *                    存在しない、IsSignalGroup=0 の I-PDU を指定した、
  *                    またはコピーは行ったがコピー時点でタイムアウト中だった。
  *
  * \pre        Com_Init() が正常に完了していること。
  *
- * \AUTOSARReq     {SWS_Com_00201, SWS_Com_00051, SWS_Com_00638, SWS_Com_00461, SWS_Com_00876}
+ * \AUTOSARReq     {SWS_Com_00201, SWS_Com_00051, SWS_Com_00638, SWS_Com_00461,
+ *                  SWS_Com_00876, SWS_Com_00324, SWS_Com_00802, SWS_Com_00067}
  * \ServiceID      {0x19}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
@@ -824,6 +861,18 @@ Std_ReturnType Com_ReceiveSignalGroup(Com_IPduIdType GroupId)
     const Com_IPduConfigType* ipdu = Com_FindRxIPdu(GroupId);
     if (ipdu == NULL || ipdu->IsSignalGroup == 0U)
         return E_NOT_OK;
+
+    /* update-bit（SWS_Com_00324/00802）: 設定されており、かつ 0（未更新）の
+     * 場合、受信データを破棄する。シャドウバッファ・タイムアウトスナップ
+     * ショットとも直近の状態のまま更新しない（＝前回 update-bit=1 で確定
+     * コピーした内容を Com_ReceiveSignal() が返し続ける）。 */
+    if (ipdu->UpdateBitPosition != 0xFFU)
+    {
+        const uint32 updateBit = Com_UnpackSignal(Com_RxBuffer[GroupId],
+                                                    ipdu->UpdateBitPosition, 1U, COM_BIG_ENDIAN);
+        if (updateBit == 0U)
+            return E_OK;
+    }
 
     for (uint8 b = 0U; b < ipdu->DLC; b++)
         Com_RxShadowBuffer[GroupId][b] = Com_RxBuffer[GroupId][b];
@@ -1066,6 +1115,11 @@ uint8 Com_SendSignal(Com_SignalIdType SignalId, const void* SignalDataPtr)
  *          立っていれば Com_RequestTxOnChange() を呼ぶ（TxModeMode が
  *          DIRECT/MIXED の I-PDU なら次回 Com_MainFunction() で送信される）。
  *
+ *          update-bit（IPduId->UpdateBitPosition が 0xFF 以外の場合、
+ *          SWS_Com_00801）: 呼ばれるたびに無条件でこのビットをセットする
+ *          （値が実際に変化したかどうかは問わない。Com_GroupTriggerPending
+ *          とは独立の判断軸）。クリアは Com_DoTransmit() 側で行う。
+ *
  * \param[in]  GroupId  コミットする Signal Group（TX I-PDU）の ID。
  *
  * \retval  E_OK      GroupId が見つかり、コミット処理を行った。
@@ -1076,7 +1130,8 @@ uint8 Com_SendSignal(Com_SignalIdType SignalId, const void* SignalDataPtr)
  * \pre        コミット前に、このグループに属する全メンバーを
  *             Com_SendSignal() で設定しておくこと。
  *
- * \AUTOSARReq     {SWS_Com_00200, SWS_Com_00050, SWS_Com_00742, SWS_Com_00743}
+ * \AUTOSARReq     {SWS_Com_00200, SWS_Com_00050, SWS_Com_00742, SWS_Com_00743,
+ *                  SWS_Com_00801, SWS_Com_00055}
  * \ServiceID      {0x18}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
@@ -1107,6 +1162,14 @@ Std_ReturnType Com_SendSignalGroup(Com_IPduIdType GroupId)
     for (uint8 b = 0U; b < ipdu->DLC; b++)
     {
         Com_TxBuffer[GroupId][b] = Com_TxShadowBuffer[GroupId][b];
+    }
+
+    /* update-bit（SWS_Com_00801）: Com_SendSignalGroup() が呼ばれるたびに
+     * セットする。クリアは Com_DoTransmit() 側（ComTxIPduClearUpdateBit=
+     * Transmit 相当、SWS_Com_00062）で行う。 */
+    if (ipdu->UpdateBitPosition != 0xFFU)
+    {
+        Com_PackSignal(Com_TxBuffer[GroupId], ipdu->UpdateBitPosition, 1U, COM_BIG_ENDIAN, 1U);
     }
 
     /* TMS 再評価（SWS_Com_00245）。Com_RequestTxOnChange() が
