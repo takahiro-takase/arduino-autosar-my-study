@@ -26,6 +26,10 @@
  *            TX パス 3 (SrcPduId=3):
  *              COM → SecOC（TransmitOverrideFct）→ CanIf TxPduId=4 → CAN 0x220,
  *              TxConfirmation → Com_TxConfirmation（SecOC は経由しない）
+ *            TX パス 4 (SrcPduId=4):
+ *              CanIf TxPduId=5 → CAN 0x230 (ImmobilizerStatus、Com の Signal
+ *              Gateway が ImmobilizerCmd(RX) から転送), TxConfirmation →
+ *              Com_TxConfirmation
  *
  * =====================================================================
  * DaVinci Configurator 対応表
@@ -200,6 +204,17 @@ static const PduR_TxRoutingPathType PduR_TxPaths[PDUR_TX_PATH_COUNT] = {
         .ConfFct             = Com_TxConfirmation,
         .TransmitOverrideFct = SecOC_IfTransmit,
         .TransmitOverrideId  = 0U /* SecOC_PBCfg.c の該当 TxPdu.SecOCTxPduId と一致 */
+    },
+    {
+        /* パス 4: COM (SrcPduId=4) → CanIf TxPduId=5 (CAN 0x230, ImmobilizerStatus)
+         * DaVinci: PduRRoutingPath/ImmobilizerStatus_Tx
+         * Signal Gateway（Com_GatewayRoute()）の転送先。Com からは通常の
+         * COM_TX_MODE_DIRECT I-PDU の 1 つとして見え、PduR 側にも SecOC の
+         * ような中間モジュールは挟まらない（TransmitOverrideFct 未設定）。 */
+        .SrcPduId      = 4U,
+        .CanIfTxPduId  = 5U,
+        .ConfDestPduId = 3U,
+        .ConfFct       = Com_TxConfirmation
     }
 };
 

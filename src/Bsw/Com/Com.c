@@ -41,6 +41,12 @@
 /* millis() は Arduino wiring.c で C リンケージ定義されている */
 extern unsigned long millis(void);
 
+/* Signal Gateway（Com_GwMappingType 参照）。Com_UnpackSignal() を使うため
+ * 定義は同関数より後に置くが、Com_RxIndication() から呼ぶため前方宣言する
+ * （本ファイルの他の static ヘルパーとは異なり、定義順を呼び出し順と
+ * 一致させられないための例外）。 */
+static void Com_GatewayRoute(Com_IPduIdType rxIPduId);
+
 static const Com_ConfigType* Com_ConfigPtr = NULL;
 static uint8         Com_RxBuffer[COM_RX_IPDU_MAX][COM_IPDU_MAX_DLC];
 static uint8         Com_TxBuffer[COM_TX_IPDU_MAX][COM_IPDU_MAX_DLC];
@@ -366,6 +372,11 @@ void Com_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
         if (ipdu->RxIndicationCbk != NULL)
             ipdu->RxIndicationCbk();
 
+        /* Signal Gateway（[SWS_Com_00872]: I-PDU callout の次の処理段階）。
+         * SWC/Rte を一切介さず、この I-PDU に紐づくゲートウェイ設定があれば
+         * 直接 TX シグナルへ転送する。 */
+        Com_GatewayRoute(ipdu->IPduId);
+
         return;
     }
 
@@ -447,6 +458,72 @@ static void Com_PackSignal(uint8* buf,
             buf[pos / 8U] |=  (uint8)(1U << shift);
         else
             buf[pos / 8U] &= (uint8)~(1U << shift);
+    }
+}
+
+/**
+ * \brief   Signal Gateway: RX I-PDU の受信を機に、紐づく TX シグナルへ値を転送する。
+ *
+ * \details Com_RxIndication() が RX バッファを更新した直後に呼ばれる。
+ *          `Com_ConfigPtr->GwMappings[]` を線形検索し、`SrcSignalId` が
+ *          rxIPduId に属するエントリごとに、RX バッファから生値を直接
+ *          アンパックして `Com_SendSignal(DestSignalId, ...)` を呼ぶ
+ *          （[SWS_Com_00357]/[SWS_Com_00377]）。Com_ReceiveSignal() を経由
+ *          しないため、ComRxDataTimeoutAction・ComDataInvalidAction・
+ *          ComFilterAlgorithm(NEW_IS_WITHIN) はいずれも評価しない
+ *          （[SWS_Com_00872] の RX 側処理段階に、これらは含まれていない）。
+ *          転送先の実際の送信要否・タイミング判定は Com_SendSignal() 自身が
+ *          行う（SWC が直接呼ぶ場合と全く同じ経路。7.2.5 節 "the signal
+ *          processing does not differ ..." のとおり）。
+ *
+ * \param[in]  rxIPduId  受信した RX I-PDU の ID（Com_IPduConfigType.IPduId）。
+ *
+ * \pre        Com_ConfigPtr が NULL でないこと（Com_RxIndication() が保証する）。
+ * \pre        Com_RxBuffer[rxIPduId] が最新の受信データで更新済みであること。
+ *
+ * \AUTOSARReq     {SWS_Com_00357, SWS_Com_00360, SWS_Com_00377, SWS_Com_00701}
+ * \ServiceID      {0xF5}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+static void Com_GatewayRoute(Com_IPduIdType rxIPduId)
+{
+    for (uint8 g = 0U; g < Com_ConfigPtr->GwMappingCount; g++)
+    {
+        const Com_GwMappingType* gw = &Com_ConfigPtr->GwMappings[g];
+
+        /* ゲートウェイ元シグナルの設定を検索し、rxIPduId に属するかを確認する
+         * （SrcSignalId 自体は RX/TX 共通のシグナル ID 空間の値のため、
+         * Direction も確認して RX シグナルであることを保証する。
+         * Com_SignalDirectionType の宣言コメント参照）。 */
+        const Com_SignalConfigType* srcSig = NULL;
+        for (uint8 s = 0U; s < Com_ConfigPtr->SignalCount; s++)
+        {
+            const Com_SignalConfigType* cand = &Com_ConfigPtr->Signals[s];
+            if (cand->SignalId == gw->SrcSignalId && cand->Direction == COM_SIGNAL_DIRECTION_RX)
+            {
+                srcSig = cand;
+                break;
+            }
+        }
+        if (srcSig == NULL || srcSig->IPduId != rxIPduId)
+            continue;
+
+        /* [SWS_Com_00360]: エンディアン変換はアンパック（Src の Endian）と
+         * パック（Com_SendSignal() 内、Dest の Endian）をそれぞれ独立に
+         * 行うだけで自然に達成される（本実装は元々シグナルごとに Endian を
+         * 個別設定できる設計のため、ゲートウェイ専用の変換処理は不要）。 */
+        const uint32 value = Com_UnpackSignal(
+            Com_RxBuffer[rxIPduId], srcSig->BitPosition, srcSig->BitSize, srcSig->Endian);
+
+        DET_LOGI(TAG, "Gateway src=%u -> dst=%u value=%lu",
+                 (unsigned)gw->SrcSignalId, (unsigned)gw->DestSignalId, (unsigned long)value);
+
+        /* SWC が Com_SendSignal() を直接呼ぶのと全く同じ経路（7.2.5 節）。
+         * value は uint32 のローカル変数のため、その先頭アドレスを渡せば
+         * Com_SendSignal() 内部が DestSignalId の BitSize に応じて必要な
+         * バイト数だけリトルエンディアンで読み取る（既存の呼び出し規約と同じ）。 */
+        (void)Com_SendSignal(gw->DestSignalId, &value);
     }
 }
 
