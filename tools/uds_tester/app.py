@@ -1068,6 +1068,14 @@ class App(tk.Tk):
                         # byte[1]=Source Node Identifier
                         name = self._NM_SOURCE_NODE_NAMES.get(data[1], f"node=0x{data[1]:02X}")
                         self._rx_monitor_name_vars[mon_idx].set(f"(alive: {name})")
+                    elif decode == "immobilizer_status" and len(data) >= 1:
+                        # byte[0]=ImmobilizerStatus（Com Signal Gateway が
+                        # ImmobilizerCmd(RX, SecOC検証済み)から直接転送。
+                        # 0x00=LOCK, 0x01=UNLOCK。ImmobilizerCmd ボタンで
+                        # UNLOCK/LOCK を送信した直後にここが追従して更新される
+                        # ことを確認できる）
+                        name = "UNLOCK" if data[0] == 0x01 else "LOCK"
+                        self._rx_monitor_name_vars[mon_idx].set(f"({name})")
                     elif decode == "warning_status" and len(data) >= 1:
                         self._rx_monitor_name_vars[mon_idx].set(
                             self._decode_warning_status(data[0])

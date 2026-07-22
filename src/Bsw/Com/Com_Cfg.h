@@ -71,8 +71,11 @@
  *  [0]=MeterStatus 0x200 (MIXED: 変化時送信 + 周期フロア)、
  *  [1]=WarningStatus 0x210 (Signal Group, DIRECT: 変化時のみ送信)、
  *  [2]=E2EHealthStatus 0x220 (PERIODIC、E2EMon CDD 相当が発行するネットワーク
- *  健全性テレメトリ。詳細は src/Bsw/E2EMon/E2EMon.c 参照) */
-#define COM_TX_IPDU_COUNT   3U
+ *  健全性テレメトリ。詳細は src/Bsw/E2EMon/E2EMon.c 参照)、
+ *  [3]=ImmobilizerStatus 0x230 (DIRECT: 変化時のみ送信。Signal Gateway が
+ *  ImmobilizerCmd（RX、SecOC 検証済み）から SWC を介さず直接転送する。
+ *  詳細は Com_PBCfg.c の Com_GwMappingData 参照) */
+#define COM_TX_IPDU_COUNT   4U
 
 /** E2EHealthStatus (0x220) の PERIODIC 送信周期 [ms]
  *  DaVinci: /ActiveEcuC/Com/ComConfig/[ComIPdu]/ComTxModeTimePeriodFactor */
@@ -120,7 +123,12 @@
 
 /** シグナルテーブルのエントリ数（RX + TX の合計）
  *  DaVinci: /ActiveEcuC/Com/ComConfig/ 内 ComSignal ノード数の合計 */
-#define COM_SIGNAL_COUNT    13U
+#define COM_SIGNAL_COUNT    14U
+
+/** Signal Gateway ルーティングテーブルのエントリ数
+ *  DaVinci: /ActiveEcuC/Com/ComConfig/[ComGwMapping] ノード数
+ *  [0]=ImmobilizerCmd(RX) → ImmobilizerStatus(TX) */
+#define COM_GW_MAPPING_COUNT  1U
 
 /* -----------------------------------------------------------------------
  * シグナル ID 定数
@@ -191,5 +199,14 @@
 /** RX: イモビライザー解除コマンド (8 bit, CAN ID 0x120, byte[0]、
  *  0x00=LOCK/0x01=UNLOCK。SecOC 検証成功後のみ更新される） */
 #define COM_SIGNAL_IMMOBILIZER_CMD  12U
+
+/* -----------------------------------------------------------------------
+ * ImmobilizerStatus シグナル (CAN ID 0x230, TX, DIRECT)
+ * Signal Gateway（Com_PBCfg.c の Com_GwMappingData）が ImmobilizerCmd(RX)から
+ * SWC を介さず直接転送する。値は ImmobilizerCmd と同じ 0x00=LOCK/0x01=UNLOCK。
+ * ----------------------------------------------------------------------- */
+
+/** TX: イモビライザー状態ブロードキャスト (8 bit, CAN ID 0x230, byte[0]) */
+#define COM_SIGNAL_IMMOBILIZER_STATUS  13U
 
 #endif /* COM_CFG_H */

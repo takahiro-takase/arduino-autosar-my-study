@@ -17,6 +17,8 @@
  *              CanId=0x210, DLC=1, HTH=0
  *            TX PDU (TxPduId=4): E2EHealthStatus (COM PERIODIC、E2E P01 保護)
  *              CanId=0x220, DLC=4, HTH=0
+ *            TX PDU (TxPduId=5): ImmobilizerStatus (COM DIRECT、Signal Gateway 転送先)
+ *              CanId=0x230, DLC=1, HTH=0
  *            RX PDU (RxPduId=0): EngineInfo  (エンジン ECU)
  *              CanId=0x100, HRH=0 → PduR RxPduId=0 → COM IPduId=0
  *            RX PDU (RxPduId=1): UDS 診断要求 (診断ツール)
@@ -129,6 +131,18 @@ static const CanIf_TxPduConfigType CanIf_TxPduConfigData[CANIF_TX_PDU_COUNT] = {
                                             *          Secured I-PDU 全体の長さ。Com 自身が知る DLC は
                                             *          従来どおり 4byte のまま — SecOC は PduR の TX 経路
                                             *          上に挟まる中間モジュールであり、Com は関知しない） */
+        .Hth               = 0U,          /* DaVinci: CanIfTxPduHthIdRef */
+        .TxConfirmFct      = PduR_CanIfTxConfirmation /* DaVinci: CanIfTxPduUserTxConfirmationName */
+    },
+    {
+        /* ---------------------------------------------------------------
+         * TxPduId=5: ImmobilizerStatus フレーム (COM DIRECT、Signal Gateway 転送先)
+         * DaVinci: /ActiveEcuC/CanIf/CanIfInitCfg/CanIfTxPduCfg/ImmobilizerStatus_Tx
+         * --------------------------------------------------------------- */
+        .UpperLayerTxPduId = 4U,          /* DaVinci: CanIfTxPduId。PduR_PBCfg.c の
+                                          *          ImmobilizerStatus パスの SrcPduId(=4) と一致させる */
+        .CanId             = 0x230U,      /* DaVinci: CanIfTxPduCanId */
+        .Dlc               = 1U,          /* DaVinci: CanIfTxPduDlc (ImmobilizerStatus のみ) */
         .Hth               = 0U,          /* DaVinci: CanIfTxPduHthIdRef */
         .TxConfirmFct      = PduR_CanIfTxConfirmation /* DaVinci: CanIfTxPduUserTxConfirmationName */
     }

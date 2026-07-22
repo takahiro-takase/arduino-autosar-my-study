@@ -506,6 +506,44 @@ typedef struct
 } Com_SignalConfigType;
 
 // -------------------------------------------------------
+// Signal Gateway（ComGwMapping、7.2.5/7.11 章）
+//
+//   RX シグナルの値を、SWC/Rte を一切介さずに Com 内部で直接 TX シグナルへ
+//   転送する仕組み（[SWS_Com_00357]）。実 AUTOSAR の記述どおり
+//   "the signal processing does not differ if the integrated Signal Gateway
+//   forwards a signal ... or if a Software Component sends it"（7.2.5）を
+//   そのまま実装で表現するため、本実装は「RX バッファから生値をアンパック
+//   → Com_SendSignal(DestSignalId, ...) を呼ぶ」という、SWC が自分で
+//   Com_SendSignal() を呼ぶのと全く同じ経路を内部で流用する（フィルタ・TMS・
+//   送信要否判定は Com_SendSignal() 側の既存ロジックがそのまま適用される）。
+//
+//   RX 側の処理段階は [SWS_Com_00872] のとおり「1) デッドライン監視タイマ
+//   再始動 2) I-PDU callout（RxIndicationCbk） 3) update-bit 確認
+//   4) エンディアン変換」の順であり、ComDataInvalidAction/ComFilterAlgorithm
+//   （NEW_IS_WITHIN 等、Com_ReceiveSignal() 側のみのゲート）は経由しない
+//   （[SWS_Com_00701]: デッドライン監視タイムアウト中でもゲートウェイは
+//   ルーティングを行う、という要求とも整合する。本実装はフレーム受信直後の
+//   同期呼び出しのため、そもそもタイムアウト状態になり得ない）。
+//
+//   本実装は非 Signal Group のシグナル同士（1 RX シグナル → 1 TX シグナル）
+//   のみをサポートする。Signal Group のゲートウェイ（[SWS_Com_00361]/
+//   [SWS_Com_00383]: グループを一貫した集合として転送する要求）や
+//   update-bit 連動（[SWS_Com_00702]〜[SWS_Com_00706]）は、具体的な
+//   実機検証シナリオが無いため未実装（本プロジェクトの他機能と同じ
+//   「実利より学習効果、ただし検証可能な範囲に留める」方針）。
+//
+//   SrcSignalId  : ゲートウェイ元の RX シグナル ID
+//                  （Com_SignalConfigType.Direction=RX のシグナルであること）。
+//   DestSignalId : ゲートウェイ先の TX シグナル ID
+//                  （Com_SignalConfigType.Direction=TX のシグナルであること）。
+// -------------------------------------------------------
+typedef struct
+{
+    Com_SignalIdType SrcSignalId;
+    Com_SignalIdType DestSignalId;
+} Com_GwMappingType;
+
+// -------------------------------------------------------
 // COM 全体設定（Com_Init に渡す）
 //
 //   RX / TX それぞれに IPdu テーブルを持つ。
@@ -522,6 +560,8 @@ typedef struct
     uint8                       TxIPduCount;
     const Com_SignalConfigType* Signals;        // シグナルテーブル
     uint8                       SignalCount;
+    const Com_GwMappingType*    GwMappings;     // Signal Gateway ルーティングテーブル
+    uint8                       GwMappingCount;
 } Com_ConfigType;
 
 #endif

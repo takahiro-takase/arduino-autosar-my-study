@@ -68,6 +68,13 @@
  *              App_EngineManager と同じ関係。E2E 保護対象は当初 MeterStatus
  *              だったが、監視ツールがネットワーク健全性テレメトリ自体の破損を
  *              検出できるよう E2EHealthStatus 側へ移した）。
+ *            TX I-PDU 3 (IPduId=3): CAN ID 0x230, DLC=1  ImmobilizerStatus
+ *              (メータ ECU、TxModeMode=COM_TX_MODE_DIRECT、保護なし)
+ *              Signal 13: ImmobilizerStatus  8 bit  BitPos=0  BigEndian
+ *              Signal Gateway（下記 Com_GwMappingData）が RX の
+ *              ImmobilizerCmd（SecOC 検証済み）から SWC を介さず直接転送する。
+ *              認証は入力側で完了済みのため、このフレームを受信する内部 ECU は
+ *              SecOC を実装する必要がない。
  *
  *          E2E P01 の設定・ステート実体（DataID/Counter・CRC オフセット等）は
  *          E2E Transformer 方式への移行に伴い src/Bsw/E2EXf/E2EXf_PBCfg.c へ
@@ -317,6 +324,30 @@ static const Com_IPduConfigType Com_TxIPduConfigData[COM_TX_IPDU_COUNT] = {
         .TxPeriodMs = COM_TX_PERIOD_E2EHEALTH_MS, /* DaVinci: ComTxModeTimePeriodFactor */
         .TxTransformCbk = Rte_COMTransform_E2EHealthStatus /* DaVinci: /ActiveEcuC/E2EXf/E2EHealthStatus_Tx_E2EXf
                                                 *          （E2E Transformer 呼び出しは Rte 層が担う） */
+    },
+    {
+        /* ---------------------------------------------------------------
+         * TX IPduId=3: ImmobilizerStatus フレーム (メータ ECU 送信、DIRECT)
+         * DaVinci: /ActiveEcuC/Com/ComConfig/ImmobilizerStatus_Tx
+         * Signal Gateway（Com_GwMappingData 参照）が ImmobilizerCmd(RX、
+         * SecOC 検証済み)の値を SWC/Rte を一切介さず直接転送する専用フレーム。
+         * TxTransformCbk/RxIndicationCbk とも未設定（このフレーム自体は
+         * E2E/SecOC いずれの保護も持たない、内部バスの「素の」ブロードキャスト
+         * という位置づけ。認証はゲートウェイの入力側=ImmobilizerCmd で既に
+         * 完了しているため、これを受け取る内部 ECU は SecOC/AES-CMAC を
+         * 実装する必要がない）。
+         * --------------------------------------------------------------- */
+        .IPduId     = 3U,    /* DaVinci: ComIPduHandleId  - I-PDU 識別番号 */
+        .DLC        = 1U,    /* DaVinci: ComIPduLength    - byte[0]=ImmobilizerStatus のみ */
+        .PduRId     = 4U,    /* DaVinci: ComIPduPduRef    - PduR TX パス 4 へのリンク */
+        .TimeoutMs  = 0U,    /* TX I-PDU のため監視無効 */
+        .IsSignalGroup = 0U, /* 直接送信 */
+        .UpdateBitPosition = 0xFFU, /* update-bit なし（Signal Group 専用機能のため未使用） */
+        .IpduGroupId = COM_IPDU_GROUP_NONE, /* I-PDU Group に属さない（常に有効） */
+        .TxModeMode = COM_TX_MODE_DIRECT   /* DaVinci: ComTxModeMode = DIRECT
+                                            *          （ComFilterAlgorithm を通過した変化を
+                                            *          検知すると次回 Com_MainFunction() で送信。
+                                            *          周期フロアなし） */
     }
 };
 
@@ -578,6 +609,40 @@ static const Com_SignalConfigType Com_SignalConfigData[COM_SIGNAL_COUNT] = {
         .BitPosition = 0U,                         /* DaVinci: ComBitPosition    */
         .BitSize     = 8U,                         /* DaVinci: ComBitSize        */
         .Endian      = COM_BIG_ENDIAN               /* DaVinci: ComSignalEndianness = OPAQUE */
+    },
+    {
+        /* ---------------------------------------------------------------
+         * Signal 13: ImmobilizerStatus  TX 8bit  CAN 0x230 byte[0]
+         * DaVinci: /ActiveEcuC/Com/ComConfig/ImmobilizerStatus_Tx
+         * Signal Gateway の転送先（Com_GwMappingData 参照）。ASW/CDD は
+         * このシグナルへ一切書き込まない（Com_SendSignal() を呼ぶのは
+         * Com_GatewayRoute() のみ）。
+         * --------------------------------------------------------------- */
+        .SignalId    = COM_SIGNAL_IMMOBILIZER_STATUS, /* DaVinci: ComHandleId    */
+        .Direction   = COM_SIGNAL_DIRECTION_TX,       /* 本プロジェクト独自拡張。Com_SignalDirectionType 参照 */
+        .IPduId      = 3U,                            /* DaVinci: ComIPduRef → ImmobilizerStatus_Tx */
+        .BitPosition = 0U,                            /* DaVinci: ComBitPosition */
+        .BitSize     = 8U,                            /* DaVinci: ComBitSize     */
+        .Endian      = COM_BIG_ENDIAN,                /* DaVinci: ComSignalEndianness = OPAQUE */
+        .FilterAlgorithm = COM_FILTER_MASKED_NEW_DIFFERS_MASKED_OLD, /* DaVinci: ComFilterAlgorithm
+                                                        *          値が変化したときだけ送信要求とみなす
+                                                        *          （EngineState と同じパターン） */
+        .Mask            = 0xFFU                      /* DaVinci: ComFilterNewValue/ComFilterMask 相当 */
+    }
+};
+
+/* -----------------------------------------------------------------------
+ * Signal Gateway ルーティングテーブル
+ * DaVinci: /ActiveEcuC/Com/ComConfig/[ComGwMapping]
+ * Com_GatewayRoute() が RX I-PDU 受信の都度、この表を走査して転送する。
+ * 詳細は Com_Types.h の Com_GwMappingType コメント参照。
+ * ----------------------------------------------------------------------- */
+static const Com_GwMappingType Com_GwMappingData[COM_GW_MAPPING_COUNT] = {
+    {
+        /* ImmobilizerCmd(RX、SecOC 検証済み) → ImmobilizerStatus(TX)
+         * DaVinci: /ActiveEcuC/Com/ComConfig/ImmobilizerCmd_to_ImmobilizerStatus_Gw */
+        .SrcSignalId  = COM_SIGNAL_IMMOBILIZER_CMD,
+        .DestSignalId = COM_SIGNAL_IMMOBILIZER_STATUS
     }
 };
 
@@ -591,5 +656,7 @@ const Com_ConfigType Com_Config = {
     .TxIPdus     = Com_TxIPduConfigData,
     .TxIPduCount = COM_TX_IPDU_COUNT,
     .Signals     = Com_SignalConfigData,
-    .SignalCount  = COM_SIGNAL_COUNT
+    .SignalCount  = COM_SIGNAL_COUNT,
+    .GwMappings     = Com_GwMappingData,
+    .GwMappingCount = COM_GW_MAPPING_COUNT
 };
