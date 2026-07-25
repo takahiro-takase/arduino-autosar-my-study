@@ -433,11 +433,29 @@ void Com_GetVersionInfo(Std_VersionInfoType* versioninfo)
  *          この呼び出し後、Com_ReceiveSignal() でシグナル値を取得できる。
  *
  *          受信長 (PduInfoPtr->SduLength) が設定 DLC (ipdu->DLC) に満たない
- *          場合はエラー扱いとし、バッファ・タイムアウトタイマのいずれも
- *          更新せずに処理を打ち切る（ショート/破損フレームによる新旧データ
- *          混在を防ぐ。AUTOSAR 本来のシグナル単位部分受理との違いは後述）。
+ *          場合の扱いは Signal Group かどうかで異なる（詳細は本体コメント
+ *          参照）:
+ *            - Signal Group（IsSignalGroup=1）: I-PDU 全体を棄却する
+ *              （[SWS_Com_00575]: 部分受信したグループを一貫性のないまま
+ *              公開しない）。
+ *            - 非 Signal Group: 実際に受信できたバイト数の範囲内に収まる
+ *              シグナルのみを部分的に受理する（[SWS_Com_00574]/
+ *              [SWS_Com_00870]）。範囲外のシグナルは前回受信値のまま
+ *              据え置かれる。
  *          DLC を超える分（CAN フレームが 8 バイト固定でパディングされている
  *          場合の末尾バイト等）は許容し、先頭 DLC バイトのみを読み取る。
+ *
+ *          注意（実機非到達の既知の制約）: 本プロジェクトは「多層防御」として
+ *          CanIf_RxIndication() 自身も独立した受信長チェックを持ち
+ *          （CanIf.c 参照、SWS_CANIF_00026/00168 相当）、CanIf_PBCfg.c の
+ *          該当 RxPdu の `.Dlc` は現状 Com 側の `ipdu->DLC` と同じ値（例:
+ *          EngineInfo は双方とも 6）に設定されている。そのため
+ *          `SduLength < ipdu->DLC` の短小フレームは CanIf 層で先に棄却され、
+ *          本関数（の非 Signal Group 部分受理パス）へは実運用上到達しない
+ *          （2026-07 時点で実機確認済み。VehicleSpeed の
+ *          RxDataTimeoutAction=SUBSTITUTE が実際には発動しないのと同種の
+ *          制約）。本パスを実機で最後まで検証するには、CanIf 側の `.Dlc` を
+ *          Com 側より緩く設定する必要がある。
  *
  * \param[in]  RxPduId     受信 I-PDU の PduR 層 PDU ID。
  *                         Com_IPduConfigType エントリの検索に使用する。
@@ -447,7 +465,7 @@ void Com_GetVersionInfo(Std_VersionInfoType* versioninfo)
  *
  * \pre        Com_Init() が正常に完了していること。
  *
- * \AUTOSARReq     {SWS_Com_00123}
+ * \AUTOSARReq     {SWS_Com_00123, SWS_Com_00574, SWS_Com_00575, SWS_Com_00870}
  * \ServiceID      {0x10}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
@@ -489,61 +507,75 @@ void Com_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
             return;
         }
 
-        /* 受信長チェック: 設定 DLC に満たないフレーム（ショート/破損フレーム等）
-         * はここで棄却し、バッファ・タイムアウトタイマのいずれも更新せずに
-         * 処理を打ち切る。これを行わないと、短いフレームが届いた際に
-         * Com_RxBuffer の一部だけが新しい値で上書きされ、残りバイトは前回値が
-         * 残ったまま（新旧混在の破損データ）「正常受信」として扱われてしまう。
-         * 逆に DLC を超える分（末尾のパディングバイト）は許容する。CAN フレームは
-         * 実際には 8 バイト固定で送信されることが多く（uds_tester の
-         * send_can_frame() 等、DLC 未満は 0x00 で埋めて送る）、DLC より短い
-         * 論理 I-PDU（例: AbsInfo DLC=5）でも物理フレームは 8 バイトで届くのが
-         * 通常運用のため、完全一致を要求すると正常フレームまで拒否してしまう。
-         *
-         * AUTOSAR 実装との違い: 本来 AUTOSAR COM は I-PDU 全体ではなく
-         * シグナル単位で部分受理を行う（SWS_Com_00574: 完全に受信できた
-         * シグナルのみアンパック・通知する。SWS_Com_00575: 部分受信の
-         * シグナルグループは丸ごと不採用。SWS_Com_00870: 部分受信 I-PDU でも
-         * 受信済み範囲に収まる位置のシグナルは受理してよい）。本実装は
-         * この部分受理を行わず I-PDU 全体を丸ごと棄却する、より単純で
-         * 安全側の簡略化を採用している（学習用途では実装・検証が容易なため）。 */
-        if (PduInfoPtr->SduLength < ipdu->DLC)
+        /* [SWS_Com_00575]: Signal Group は受信できたバイト数が DLC に満たない
+         * 場合、グループ全体（含まれる全メンバー）を丸ごと不採用にする。
+         * バッファ・タイムアウトタイマのいずれも更新しない。これは
+         * 「一部のメンバーだけ新しい値、残りは古い値」という一貫性のない
+         * スナップショットを公開しないための要求であり、非 Signal Group の
+         * 部分受理（下記）とは意図的に異なる扱いとなる。 */
+        if (ipdu->IsSignalGroup != 0U && PduInfoPtr->SduLength < ipdu->DLC)
         {
-            DET_LOGW(TAG, "RX iPdu=%u length mismatch got=%u exp=%u",
+            DET_LOGW(TAG, "RX iPdu=%u(group) length mismatch got=%u exp=%u -> discarded",
                      (unsigned)ipdu->IPduId, (unsigned)PduInfoPtr->SduLength,
                      (unsigned)ipdu->DLC);
             return;
         }
 
-        /* この時点で PduInfoPtr->SduLength >= ipdu->DLC が確定している
-         * (冒頭の受信長チェック参照)。DLC を超える分（末尾パディング）は
-         * このシグナルグループの対象外のため読み捨てる。
-         *
-         * Com は E2E 等のペイロード内容には一切関知せず、無条件にバッファ・
+        /* [SWS_Com_00574]/[SWS_Com_00870]: 非 Signal Group の I-PDU は、
+         * 実際に受信できたバイト数（recvLen）分だけバッファを更新する。
+         * DLC 未満の場合、recvLen 以降のバイトには触れない（＝前回受信値の
+         * まま据え置かれる）ことで、新旧データの混在を「シグナル単位の
+         * 部分受理」として意図的に許容する（recvLen に収まらないシグナルの
+         * 扱いは下記 Com_SigTimedOut ループ参照）。DLC を超える分（CAN
+         * フレームの末尾パディング等）はこれまでどおり読み捨てる。 */
+        const uint8 recvLen = (PduInfoPtr->SduLength < (PduLengthType)ipdu->DLC)
+                              ? (uint8)PduInfoPtr->SduLength
+                              : ipdu->DLC;
+        if (recvLen < ipdu->DLC)
+        {
+            DET_LOGW(TAG, "RX iPdu=%u partial length got=%u exp=%u -> signals within range only",
+                     (unsigned)ipdu->IPduId, (unsigned)PduInfoPtr->SduLength,
+                     (unsigned)ipdu->DLC);
+        }
+
+        /* Com は E2E 等のペイロード内容には一切関知せず、無条件にバッファ・
          * タイムアウトタイマを更新する（E2E Transformer 方式。Com_Types.h の
          * RxIndicationCbk 説明参照）。ペイロードの妥当性検証・破棄判断は
          * すべて RxIndicationCbk 側（例: RTE 経由の E2EXf_InverseTransform）
-         * の責務であり、Com はそれがあることすら知らない。 */
-        for (uint8 b = 0; b < ipdu->DLC; b++)
+         * の責務であり、Com はそれがあることすら知らない。E2E 保護された
+         * I-PDU では、部分受信で新旧バイトが混在した内容はほぼ確実に CRC
+         * 不一致となり、E2EXf 側で別途棄却される。Com 層の部分受理（本要求）
+         * と E2E 層の整合性検証は独立した層であり、両者が別々の役割を担う
+         * 構造は実 AUTOSAR と同じである。 */
+        for (uint8 b = 0; b < recvLen; b++)
             Com_RxBuffer[ipdu->IPduId][b] = PduInfoPtr->SduDataPtr[b];
 
         /* 受信成功 → タイムアウトタイマをリセットし、以降は定常状態の
-         * TimeoutMs（ComTimeout 相当）へ切り替える（[SWS_Com_00879] 相当）。 */
+         * TimeoutMs（ComTimeout 相当）へ切り替える（[SWS_Com_00879] 相当）。
+         * 部分受信でも「フレーム自体は届いた」という事実は変わらないため、
+         * I-PDU 単位のタイマは無条件でリセットする（[SWS_Com_00738]: 無効な
+         * シグナル/シグナルグループ受信時もデッドライン監視タイマは再始動
+         * される、という考え方を踏襲）。 */
         Com_RxLastMs[ipdu->IPduId]  = millis();
         Com_RxTimedOut[ipdu->IPduId] = 0U;
         Com_RxUsingFirstTimeout[ipdu->IPduId] = 0U;
 
-        /* シグナル単位のデッドライン監視（非 Signal Group のみ意味を持つ）も
-         * 同じタイミングでリセットする。この I-PDU に属する全 RX シグナルが
-         * 対象（Signal Group メンバーも含めて回しておくが、そちらは
-         * Com_SigTimedOut を参照しないため実害はない）。 */
+        /* シグナル単位のデッドライン監視（非 Signal Group のみ意味を持つ）は、
+         * このシグナルの全ビット範囲が recvLen バイト以内に収まっている
+         * 場合のみリセットする（[SWS_Com_00574]: 完全に受信できたシグナルの
+         * みを「受信した」とみなす）。範囲外のシグナルには新しいデータが
+         * 届いていないので、前回のタイムアウト状態のまま据え置く（Signal
+         * Group メンバーは Com_SigTimedOut を参照しないため、ここで一律に
+         * 回しても実害はない）。 */
         for (uint8 s = 0U; s < Com_ConfigPtr->SignalCount; s++)
         {
-            if (Com_ConfigPtr->Signals[s].Direction == COM_SIGNAL_DIRECTION_RX
-                && Com_ConfigPtr->Signals[s].IPduId == ipdu->IPduId)
-            {
+            const Com_SignalConfigType* sig = &Com_ConfigPtr->Signals[s];
+            if (sig->Direction != COM_SIGNAL_DIRECTION_RX || sig->IPduId != ipdu->IPduId)
+                continue;
+
+            const uint8 lastByte = (uint8)((sig->BitPosition + sig->BitSize + 7U) / 8U);
+            if (lastByte <= recvLen)
                 Com_SigTimedOut[s] = 0U;
-            }
         }
 
         char hexbuf[25];
