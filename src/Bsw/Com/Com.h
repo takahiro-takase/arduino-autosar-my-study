@@ -20,6 +20,56 @@ extern "C" {
 
 /* SWS_Com_00432 */
 void Com_Init(const Com_ConfigType* config);
+
+/**
+ * \brief   COM モジュールを未初期化状態に戻す。
+ *
+ * \details 起動中の全 I-PDU（RX/TX 双方、`COM_IPDU_GROUP_NONE` 所属の
+ *          常時有効 I-PDU も含む）を停止済み状態にした上で、内部設定
+ *          ポインタを NULL に戻す（[SWS_Com_00129]）。以降 `Com_GetStatus()`
+ *          は `COM_UNINIT` を返し、`Com_Init()` を除く他の全 API は
+ *          `COM_E_UNINIT` を報告するようになる（[SWS_Com_00804]）。
+ *          再度通信するには `Com_Init()` を呼び直す必要がある。
+ *
+ * \pre        他の AUTOSAR COM モジュールの API がプリエンプトしていないこと
+ *             （[SWS_Com_00130] の Caveats。呼び出し元が保証する責務）。
+ *
+ * \AUTOSARReq     {SWS_Com_00129, SWS_Com_00130, SWS_Com_00804}
+ * \ServiceID      {0x02}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void Com_DeInit(void);
+
+/**
+ * \brief   COM モジュールの初期化状態を返す。
+ *
+ * \details `Com_Init()` を除く他の全 API が未初期化時に `COM_E_UNINIT` を
+ *          報告する（[SWS_Com_00804]）のに対し、本 API のみがその例外として
+ *          未初期化状態でも安全に呼び出せる（開発エラー報告の対象外）。
+ *
+ * \retval  COM_INIT    COM は初期化済みで使用可能。
+ * \retval  COM_UNINIT  COM は未初期化（Com_Init 前、または Com_DeInit 後）。
+ *
+ * \AUTOSARReq     {SWS_Com_00194}
+ * \ServiceID      {0x07}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Com_StatusType Com_GetStatus(void);
+
+/**
+ * \brief   COM モジュールのバージョン情報を取得する。
+ *
+ * \param[out]  versioninfo  バージョン情報の格納先。NULL 禁止。
+ *
+ * \AUTOSARReq     {SWS_Com_00426}
+ * \ServiceID      {0x09}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void Com_GetVersionInfo(Std_VersionInfoType* versioninfo);
+
 /* SWS_Com_00123 */
 void Com_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr);
 /* SWS_Com_00198 */

@@ -30,6 +30,19 @@ typedef uint8 Com_IpduGroupIdType;
  * Com_IPduConfigType.IpduGroupId 参照。 */
 #define COM_IPDU_GROUP_NONE  0xFFU
 
+/**
+ * \brief   COM モジュールの初期化状態型 (AUTOSAR Com_StatusType)
+ * \details `Com_GetStatus()` の戻り値。[SWS_Com_00804] が「Com_GetStatus を
+ *          除く全 API は未初期化時に COM_E_UNINIT を報告する」と規定しており、
+ *          本型はその唯一の例外である Com_GetStatus() が未初期化時にも安全に
+ *          呼べるようにするためのもの（[SWS_Com_00194]）。
+ */
+typedef enum
+{
+    COM_UNINIT = 0x00U,  /**< COM は未初期化で使用不可 */
+    COM_INIT   = 0x01U   /**< COM は初期化済みで使用可能 */
+} Com_StatusType;
+
 // -------------------------------------------------------
 // シグナルのエンディアン
 //

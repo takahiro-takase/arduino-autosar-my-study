@@ -279,6 +279,92 @@ void Com_Init(const Com_ConfigType* config)
 }
 
 /**
+ * \brief   COM モジュールを未初期化状態に戻す。
+ *
+ * \details [SWS_Com_00129]: 起動中の全 I-PDU を停止済み状態にする。
+ *          `COM_IPDU_GROUP_NONE` 所属（常時有効、Com_IpduGroupStart/Stop() の
+ *          対象外）の I-PDU も含め、モジュール全体が未初期化に戻る以上
+ *          無条件に全エントリを停止する。最後に `Com_ConfigPtr` を NULL へ
+ *          戻すことで、以降 `Com_GetStatus()` は `COM_UNINIT` を返し、他の
+ *          全 API は既存の `Com_ConfigPtr == NULL` チェックにより
+ *          `COM_E_UNINIT` を報告するようになる（[SWS_Com_00804]）。
+ *          Com_TxPending 等の一時状態は明示的にクリアしない
+ *          （次回 Com_Init() が全状態を再初期化するため、ここでの二重クリアは
+ *          不要）。
+ *
+ * \AUTOSARReq     {SWS_Com_00129, SWS_Com_00130, SWS_Com_00804}
+ * \ServiceID      {0x02}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void Com_DeInit(void)
+{
+    if (Com_ConfigPtr == NULL)
+    {
+        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_DEINIT, COM_E_UNINIT);
+        return;
+    }
+
+    for (uint8 i = 0U; i < COM_RX_IPDU_MAX; i++)
+        Com_RxIPduStarted[i] = 0U;
+    for (uint8 i = 0U; i < COM_TX_IPDU_MAX; i++)
+        Com_TxIPduStarted[i] = 0U;
+
+    Com_ConfigPtr = NULL;
+
+    DET_LOGI(TAG, "DeInit ok");
+}
+
+/**
+ * \brief   COM モジュールの初期化状態を返す。
+ *
+ * \details [SWS_Com_00804] が「Com_GetStatus を除く他の全 API は未初期化時に
+ *          COM_E_UNINIT を報告する」と規定しているとおり、本関数のみが
+ *          唯一の例外として未初期化状態でも安全に呼べる（開発エラー報告を
+ *          行わない）。
+ *
+ * \AUTOSARReq     {SWS_Com_00194}
+ * \ServiceID      {0x07}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Com_StatusType Com_GetStatus(void)
+{
+    return (Com_ConfigPtr != NULL) ? COM_INIT : COM_UNINIT;
+}
+
+/**
+ * \brief   COM モジュールのバージョン情報を取得する。
+ *
+ * \param[out]  versioninfo  バージョン情報の格納先。NULL 禁止。
+ *
+ * \AUTOSARReq     {SWS_Com_00426}
+ * \ServiceID      {0x09}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void Com_GetVersionInfo(Std_VersionInfoType* versioninfo)
+{
+    if (Com_ConfigPtr == NULL)
+    {
+        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_GET_VERSION_INFO, COM_E_UNINIT);
+        return;
+    }
+
+    if (versioninfo == NULL)
+    {
+        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_GET_VERSION_INFO, COM_E_PARAM_POINTER);
+        return;
+    }
+
+    versioninfo->vendorID          = COM_VENDOR_ID;
+    versioninfo->moduleID          = COM_MODULE_ID;
+    versioninfo->sw_major_version  = COM_SW_MAJOR_VERSION;
+    versioninfo->sw_minor_version  = COM_SW_MINOR_VERSION;
+    versioninfo->sw_patch_version  = COM_SW_PATCH_VERSION;
+}
+
+/**
  * \brief   受信した I-PDU ペイロードを内部 RX バッファへコピーする。
  *
  * \details PduR がフレームを受信した際に呼び出される。
