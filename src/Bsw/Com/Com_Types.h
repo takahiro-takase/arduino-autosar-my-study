@@ -30,6 +30,19 @@ typedef uint8 Com_IpduGroupIdType;
  * Com_IPduConfigType.IpduGroupId 参照。 */
 #define COM_IPDU_GROUP_NONE  0xFFU
 
+/**
+ * \brief   COM モジュールの初期化状態型 (AUTOSAR Com_StatusType)
+ * \details `Com_GetStatus()` の戻り値。[SWS_Com_00804] が「Com_GetStatus を
+ *          除く全 API は未初期化時に COM_E_UNINIT を報告する」と規定しており、
+ *          本型はその唯一の例外である Com_GetStatus() が未初期化時にも安全に
+ *          呼べるようにするためのもの（[SWS_Com_00194]）。
+ */
+typedef enum
+{
+    COM_UNINIT = 0x00U,  /**< COM は未初期化で使用不可 */
+    COM_INIT   = 0x01U   /**< COM は初期化済みで使用可能 */
+} Com_StatusType;
+
 // -------------------------------------------------------
 // シグナルのエンディアン
 //
@@ -480,6 +493,14 @@ typedef enum
 //               呼ばれる（Com_CbkTxAck、SWS_Com_00468 相当）。このシグナル
 //               自体の値がその送信で変化したかどうかは問わない。NULL 可
 //               （通知不要なら未設定でよい）。
+//   TxErrCbk    : TX シグナルのみ使用。非 NULL なら、このシグナルが属する
+//               I-PDU が「送信済み・未確認」（PduR_Transmit() には渡したが
+//               対応する Com_TxConfirmation() がまだ届いていない）状態のまま
+//               Com_IpduGroupStop() で停止されたときに呼ばれる
+//               （Com_CbkTxErr、SWS_Com_00491/SWS_Com_00479 相当。
+//               "called in case the transmission is not possible because
+//               the corresponding I-PDU group is stopped"）。NULL 可
+//               （通知不要なら未設定でよい）。
 // -------------------------------------------------------
 typedef struct
 {
@@ -503,6 +524,7 @@ typedef struct
     uint32                      InvalidValue;
     void (*InvalidNotificationCbk)(void);
     void (*TxAckCbk)(void);
+    void (*TxErrCbk)(void);
 } Com_SignalConfigType;
 
 // -------------------------------------------------------

@@ -20,6 +20,56 @@ extern "C" {
 
 /* SWS_Com_00432 */
 void Com_Init(const Com_ConfigType* config);
+
+/**
+ * \brief   COM モジュールを未初期化状態に戻す。
+ *
+ * \details 起動中の全 I-PDU（RX/TX 双方、`COM_IPDU_GROUP_NONE` 所属の
+ *          常時有効 I-PDU も含む）を停止済み状態にした上で、内部設定
+ *          ポインタを NULL に戻す（[SWS_Com_00129]）。以降 `Com_GetStatus()`
+ *          は `COM_UNINIT` を返し、`Com_Init()` を除く他の全 API は
+ *          `COM_E_UNINIT` を報告するようになる（[SWS_Com_00804]）。
+ *          再度通信するには `Com_Init()` を呼び直す必要がある。
+ *
+ * \pre        他の AUTOSAR COM モジュールの API がプリエンプトしていないこと
+ *             （[SWS_Com_00130] の Caveats。呼び出し元が保証する責務）。
+ *
+ * \AUTOSARReq     {SWS_Com_00129, SWS_Com_00130, SWS_Com_00804}
+ * \ServiceID      {0x02}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void Com_DeInit(void);
+
+/**
+ * \brief   COM モジュールの初期化状態を返す。
+ *
+ * \details `Com_Init()` を除く他の全 API が未初期化時に `COM_E_UNINIT` を
+ *          報告する（[SWS_Com_00804]）のに対し、本 API のみがその例外として
+ *          未初期化状態でも安全に呼び出せる（開発エラー報告の対象外）。
+ *
+ * \retval  COM_INIT    COM は初期化済みで使用可能。
+ * \retval  COM_UNINIT  COM は未初期化（Com_Init 前、または Com_DeInit 後）。
+ *
+ * \AUTOSARReq     {SWS_Com_00194}
+ * \ServiceID      {0x07}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Com_StatusType Com_GetStatus(void);
+
+/**
+ * \brief   COM モジュールのバージョン情報を取得する。
+ *
+ * \param[out]  versioninfo  バージョン情報の格納先。NULL 禁止。
+ *
+ * \AUTOSARReq     {SWS_Com_00426}
+ * \ServiceID      {0x09}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void Com_GetVersionInfo(Std_VersionInfoType* versioninfo);
+
 /* SWS_Com_00123 */
 void Com_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr);
 /* SWS_Com_00198 */
@@ -171,13 +221,18 @@ void Com_IpduGroupStart(Com_IpduGroupIdType IpduGroupId, uint8 initialize);
  *          全 I-PDU（RX/TX 双方）を停止済み状態にする。RX I-PDU は受信処理・
  *          デッドライン監視を無効化する（[SWS_Com_00684]/[SWS_Com_00685]）。
  *          TX I-PDU は保留中の送信要求をキャンセルする（[SWS_Com_00777]）。
+ *          さらに、PduR へは引き渡し済み（実送信済み）だが対応する
+ *          `Com_TxConfirmation()` がまだ届いていない（未確認の）TX I-PDU が
+ *          あれば、そのシグナル/シグナルグループの `TxErrCbk`
+ *          （Com_CbkTxErr 相当）を即座に呼ぶ（[SWS_Com_00479]/
+ *          [SWS_Com_00491]）。
  *          `Com_SendSignal()`/`Com_ReceiveSignal()` 自体は停止中でも内部
  *          バッファを更新・参照できる（[SWS_Com_00334]）。
  *
  * \param[in]  IpduGroupId  停止する I-PDU Group の ID。
  *
  * \AUTOSARReq     {SWS_Com_91002, SWS_Com_00684, SWS_Com_00685, SWS_Com_00777,
- *                  SWS_Com_00800, SWS_Com_00334}
+ *                  SWS_Com_00800, SWS_Com_00334, SWS_Com_00479, SWS_Com_00491}
  * \ServiceID      {0x04}
  * \Reentrancy     {Reentrant for different I-PDU groups. Non reentrant for the same I-PDU group.}
  * \Synchronicity  {Synchronous}

@@ -63,6 +63,21 @@
 #define COM_API_ID_IS_RX_TIMED_OUT              0x1BU
 #define COM_API_ID_MAIN_FUNCTION                0x20U
 #define COM_API_ID_SET_COMMUNICATION_ENABLED    0x30U
+#define COM_API_ID_DEINIT                       0x02U
+#define COM_API_ID_GET_STATUS                   0x07U
+#define COM_API_ID_GET_VERSION_INFO             0x09U
+
+/* -----------------------------------------------------------------------
+ * Com_GetVersionInfo() が返す固定値
+ * 実登録済みの AUTOSAR ベンダー ID を持たない学習用プロジェクトのため、
+ * VendorId は 0（未登録）とし、モジュールバージョンは本プロジェクト独自の
+ * バージョニングとして 1.0.0 を割り当てる（AUTOSAR 4.3.1 という参照仕様の
+ * バージョンとは別軸）。
+ * ----------------------------------------------------------------------- */
+#define COM_VENDOR_ID           0U
+#define COM_SW_MAJOR_VERSION    1U
+#define COM_SW_MINOR_VERSION    0U
+#define COM_SW_PATCH_VERSION    0U
 
 /* -----------------------------------------------------------------------
  * プリコンパイル設定定数

@@ -19,4 +19,18 @@ typedef uint8 Std_ReturnType;
 #define E_OK     ((Std_ReturnType)0x00U)
 #define E_NOT_OK ((Std_ReturnType)0x01U)
 
+/**
+ * \brief   モジュールのバージョン情報型 (AUTOSAR Std_VersionInfoType)
+ * \details 各 BSW モジュールの `<Module>_GetVersionInfo()` API が返す共通の
+ *          バージョン情報構造体。AUTOSAR_SWS_StandardTypes 準拠。
+ */
+typedef struct
+{
+    uint16 vendorID;
+    uint16 moduleID;
+    uint8  sw_major_version;
+    uint8  sw_minor_version;
+    uint8  sw_patch_version;
+} Std_VersionInfoType;
+
 #endif
