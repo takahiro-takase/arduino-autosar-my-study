@@ -163,8 +163,12 @@ static const Com_IPduConfigType Com_RxIPduConfigData[COM_RX_IPDU_COUNT] = {
                                                  *          byte[0]=E2E CRC, byte[1]=E2E Counter, byte[2-5]=シグナル */
         .PduRId    = 0U,                        /* DaVinci: ComIPduPduRef    - PduR が Com_RxIndication へ渡す DestPduId
                                                  *          (PduR_PBCfg.c PduR_RxDests_Path0[0].DestPduId と一致させること) */
-        .TimeoutMs = COM_TIMEOUT_ENGINE_INFO_MS,/* DaVinci: ComRxDeadlineMonitoringPeriod
-                                                 *          エンジン ECU からの受信が途絶えたと判断するまでの時間 */
+        .FirstTimeoutMs = COM_TIMEOUT_ENGINE_INFO_MS,/* DaVinci: ComFirstTimeout
+                                                 *          Com_Init 直後・初回受信までの猶予（現状は定常値と同じにして
+                                                 *          既存挙動を変えない。将来的に個別調整可能） */
+        .TimeoutMs = COM_TIMEOUT_ENGINE_INFO_MS,/* DaVinci: ComRxDeadlineMonitoringPeriod（ComTimeout 相当）
+                                                 *          初回受信後、以降のエンジン ECU からの受信が途絶えたと
+                                                 *          判断するまでの時間 */
         .UpdateBitPosition = 0xFFU,             /* update-bit なし（Signal Group 専用機能のため未使用） */
         .IpduGroupId = COM_IPDU_GROUP_NONE,     /* I-PDU Group に属さない（常に有効） */
         .RxIndicationCbk = Rte_COMCbk_EngineInfo /* DaVinci: /ActiveEcuC/E2EXf/EngineInfo_Rx_E2EXf
@@ -191,8 +195,10 @@ static const Com_IPduConfigType Com_RxIPduConfigData[COM_RX_IPDU_COUNT] = {
                                                 *          byte[0]=E2E CRC, byte[1]=E2E Counter, byte[2-4]=シグナル */
         .PduRId    = 1U,                       /* DaVinci: ComIPduPduRef    - PduR が Com_RxIndication へ渡す DestPduId
                                                 *          (PduR_PBCfg.c PduR_RxDests_Path2[0].DestPduId と一致させること) */
-        .TimeoutMs = COM_TIMEOUT_ABS_INFO_MS,  /* DaVinci: ComRxDeadlineMonitoringPeriod
-                                                *          ABS ECU からの受信が途絶えたと判断するまでの時間 */
+        .FirstTimeoutMs = COM_TIMEOUT_ABS_INFO_MS,/* DaVinci: ComFirstTimeout
+                                                *          Com_Init 直後・初回受信までの猶予（現状は定常値と同じ） */
+        .TimeoutMs = COM_TIMEOUT_ABS_INFO_MS,  /* DaVinci: ComRxDeadlineMonitoringPeriod（ComTimeout 相当）
+                                                *          初回受信後、ABS ECU からの受信が途絶えたと判断するまでの時間 */
         .IsSignalGroup = 1U,                   /* RX Signal Group（Com_ReceiveSignalGroup で確定コピー） */
         .UpdateBitPosition = 0xFFU,            /* update-bit なし（本 I-PDU には適用しない。上記コメント参照） */
         .IpduGroupId = COM_IPDU_GROUP_NONE,    /* I-PDU Group に属さない（常に有効） */

@@ -311,8 +311,25 @@ typedef enum
 //   PduRId    : PduR 空間での ID
 //               RX → Com_RxIndication に渡される DestPduId と一致させる
 //               TX → PduR_Transmit に渡す SrcPduId と一致させる
-//   TimeoutMs : RX 受信デッドライン [ms]（DaVinci: ComRxDeadlineMonitoringPeriod）
-//               0 = 監視無効。TX I-PDU では 0 を設定すること。
+//   FirstTimeoutMs : RX 受信デッドライン監視の初回猶予時間 [ms]（DaVinci:
+//               ComFirstTimeout。[SWS_Com_00787] 項目2・[SWS_Com_00716]）。
+//               I-PDU Group 起動直後（または Com_SetCommunicationEnabled() に
+//               よる受信再開直後）、最初の受信が来るまではこの値を使う。
+//               0 = このフェーズは監視しない（[SWS_Com_00716]。ただし
+//               TimeoutMs 自体が 0 の場合は TX I-PDU 同様そもそも監視無効の
+//               ため、FirstTimeoutMs は無視される。[SWS_Com_00333]）。
+//               実際に 1 回でも受信すると、以降は TimeoutMs（定常状態、
+//               DaVinci: ComTimeout）へ切り替わる（[SWS_Com_00879] 相当の
+//               「初回は FirstTimeout、以降は Timeout」というロジックを
+//               受信側にもそのまま適用したもの）。
+//   TimeoutMs : RX 受信デッドライン監視の定常状態の周期 [ms]（DaVinci:
+//               ComTimeout。実際に 1 回以上受信した後に使われる値）。
+//               0 = 監視無効（FirstTimeoutMs も無視される）。
+//               TX I-PDU では 0 を設定すること。
+//               本実装は AUTOSAR のようにシグナル/シグナルグループ単位では
+//               なく I-PDU 単位でのみ監視する簡略化のままである点に注意
+//               （[SWS_Com_00787] 原文はシグナル単位の
+//               ComFirstTimeout/ComTimeout を前提にしている）。
 //   IsSignalGroup : TX/RX 両方の I-PDU で使用。
 //               TX: 1 = Signal Group（Com_SendSignal はシャドウバッファへ
 //               書き込むのみとし、Com_SendSignalGroup() でまとめて実バッファへ
@@ -406,6 +423,7 @@ typedef struct
     Com_IPduIdType     IPduId;
     uint8              DLC;
     PduIdType          PduRId;
+    uint16             FirstTimeoutMs;
     uint16             TimeoutMs;
     uint8              IsSignalGroup;
     Com_TxModeModeType TxModeMode;
