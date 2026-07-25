@@ -321,9 +321,19 @@ RX フレームは MCP2515 → Can_Hw → Can → CanIf → PduR → Com の順�
 がそれぞれ独立に自分の期待長を検証する。1 箇所だけに頼らず各層が自分の責務として
 検証するのは、本プロジェクトで実際に発生した「短いフレームで上位層バッファに
 新旧混在の破損データが残る」バグ（Com のシグナル固定長アクセス等）を踏まえた設計判断
-である。なお `Com_RxIndication()` の受信長チェックは AUTOSAR 本来の仕様（SWS_Com_00574/
-00575/00870、シグナル単位の部分受理）とは異なり、I-PDU 全体を丸ごと棄却する、より
-単純で安全側の簡略化を採用している（詳細は `Com.c` のコメント参照）。
+である。`Com_RxIndication()` の受信長チェックは AUTOSAR 本来の仕様（SWS_Com_00574/
+00575/00870）に準拠したシグナル単位の部分受理を実装している: Signal Group は
+一貫性のないスナップショットを公開しないため受信できたバイト数が DLC 未満なら
+グループ全体を棄却するが（SWS_Com_00575）、非 Signal Group の I-PDU は受信できた
+バイト範囲に収まるシグナルのみを部分的に受理し、範囲外のシグナルは前回受信値の
+まま据え置く（SWS_Com_00574/00870）。前述の「新旧混在の破損データ」バグは
+Com_ReceiveSignal/Com_SendSignal が BitSize に関わらず常に 4 バイト読み書きして
+呼び出し元のスタックを破壊していたことが根本原因であり、本対応（未受信バイトに
+触れず前回値をそのまま保持する）とは別の問題である（詳細は `Com.c` のコメント参照）。
+なお `CanIf_PBCfg.c` の各 RxPdu の `.Dlc` は現状 Com 側の `ipdu->DLC` と同じ値に
+設定されているため、`Com_RxIndication()` の部分受理パスは短小フレームが CanIf 層で
+先に棄却されることで実運用上到達しない（2026-07 時点で実機確認済み）。検証するには
+CanIf 側の `.Dlc` を一時的に緩める必要がある。
 
 ##### TX 確認の非同期化（`Can_MainFunction_Write`）
 
@@ -1264,11 +1274,12 @@ discard that signal and shall not process it.
 - 実 AUTOSAR には他に `NEW_IS_OUTSIDE`/`MASKED_NEW_EQUALS_X`/`NEVER`/
   `ONE_EVERY_N` もありますが、「物理的にあり得ない受信値を弾く」という
   具体的なシナリオに最小限必要な `NEW_IS_WITHIN` のみ実装しています。
-- `ComSignalInitValue` という設定概念自体を持たないため（既存の
-  `ComRxDataTimeoutAction`/`ComDataInvalidAction` と同じ理由）、
-  `[SWS_Com_00603]`（起動時 old_value を ComSignalInitValue にする）は
-  未実装です。起動直後は `Com_RxLastValidValue` が 0 のまま（`Com_Init()`
-  でゼロクリア）となります。
+- `ComSignalInitValue`（`Com_SignalConfigType.InitValue`）は実装済みです。
+  `[SWS_Com_00603]`（起動時 old_value を ComSignalInitValue にする）どおり、
+  `Com_Init()`/`Com_IpduGroupStart(initialize=true)` で `Com_RxLastValidValue`
+  を InitValue から初期化します（既定 0 のシグナルは従来どおりゼロクリアと
+  同じ結果になります）。`ComRxDataTimeoutAction`/`ComDataInvalidAction` の
+  `REPLACE` アクションもこの InitValue を使って実装済みです。
 - RX Signal Group への適用（`[SWS_Com_00836]`: グループ全体を破棄する）は
   未実装です（動機は上記の通り、実際に効くシナリオが非グループシグナルに
   あったため）。
