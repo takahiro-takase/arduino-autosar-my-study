@@ -76,7 +76,7 @@ Std_ReturnType ComM_RequestComMode(ComM_UserHandleType User, ComM_ModeType ComMo
  * \retval  E_OK      正常に取得した。
  * \retval  E_NOT_OK  User が範囲外、または ComMode が NULL。
  *
- * \ServiceID      {0x06}
+ * \ServiceID      {0x08}
  * \Reentrancy     {Reentrant}
  * \Synchronicity  {Synchronous}
  */
@@ -88,7 +88,7 @@ Std_ReturnType ComM_GetCurrentComMode(ComM_UserHandleType User, ComM_ModeType* C
  * \details 本実装ではパッシブウェイクアップ・バススリープは未対応のためスタブ。
  *          AUTOSAR 準拠実装では NM（Network Manager）連携を行う。
  *
- * \ServiceID      {0x03}
+ * \ServiceID      {0x60}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
  */
@@ -119,7 +119,7 @@ void ComM_MainFunction(void);
  * \param[in]  Network  ネットワークハンドル (0 〜 COMM_CHANNEL_COUNT-1)。
  * \param[in]  Mode     新しい通信モード (ComM_ModeType)。
  *
- * \ServiceID      {0x26}
+ * \ServiceID      {0x33}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
  */

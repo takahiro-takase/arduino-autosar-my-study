@@ -24,9 +24,13 @@
  * 既定は有効 (1)。Nm_SetTxEnabled() 参照。 */
 static uint8 Nm_TxEnabled = 1U;
 
+/** [SWS_CanNm_00002] 用の初期化済みフラグ。 */
+static uint8 Nm_Initialized = 0U;
+
 void Nm_Init(void)
 {
-    Nm_TxEnabled = 1U;
+    Nm_TxEnabled   = 1U;
+    Nm_Initialized = 1U;
     DET_LOGI(TAG, "Init ok node=0x%02X", (unsigned)NM_SOURCE_NODE_ID);
 }
 
@@ -39,6 +43,12 @@ void Nm_Init(void)
  */
 void Nm_MainFunction(void)
 {
+    if (!Nm_Initialized)
+    {
+        Det_ReportError(NM_MODULE_ID, 0U, NM_API_ID_MAIN_FUNCTION, NM_E_UNINIT);
+        return;
+    }
+
     ComM_ModeType mode;
     if (ComM_GetCurrentComMode(COMM_USER_0, &mode) != E_OK)
         return;
@@ -62,6 +72,12 @@ void Nm_MainFunction(void)
 
 void Nm_SetTxEnabled(uint8 Enabled)
 {
+    if (!Nm_Initialized)
+    {
+        Det_ReportError(NM_MODULE_ID, 0U, NM_API_ID_SET_TX_ENABLED, NM_E_UNINIT);
+        return;
+    }
+
     if (Nm_TxEnabled != Enabled)
         DET_LOGI(TAG, "CommunicationControl tx=%u->%u", (unsigned)Nm_TxEnabled, (unsigned)Enabled);
     Nm_TxEnabled = Enabled;

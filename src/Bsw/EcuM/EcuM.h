@@ -74,7 +74,7 @@ extern "C" {
  * \note       AUTOSAR EcuM では StartupOne (OS 起動前) と
  *             StartupTwo (OS 起動後) に分かれるが、本実装では一本化している。
  *
- * \ServiceID      {0x00}
+ * \ServiceID      {0x01}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
  */

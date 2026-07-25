@@ -34,12 +34,19 @@ static const CanIf_ConfigType* CanIf_ConfigPtr = NULL;
  * \pre        Can_Init() が正常に完了していること。
  *
  * \AUTOSARReq     {SWS_CANIF_00001}
- * \ServiceID      {0x00}
+ * \ServiceID      {0x01}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
  */
 void CanIf_Init(const CanIf_ConfigType* ConfigPtr)
 {
+    if (ConfigPtr == NULL)
+    {
+        DET_LOGE(TAG, "Init: NULL ConfigPtr");
+        Det_ReportError(CANIF_MODULE_ID, 0U, CANIF_API_ID_INIT, CANIF_E_PARAM_POINTER);
+        return;
+    }
+
     CanIf_ConfigPtr = ConfigPtr;
     DET_LOGI(TAG, "Init ok TX=%u RX=%u",
              (unsigned)ConfigPtr->TxPduCount, (unsigned)ConfigPtr->RxPduCount);
@@ -76,12 +83,14 @@ Std_ReturnType CanIf_Transmit(PduIdType TxPduId, const PduInfoType* PduInfoPtr)
     if (TxPduId >= CanIf_ConfigPtr->TxPduCount)
     {
         DET_LOGE(TAG, "TX E: invalid TxPduId");
+        Det_ReportError(CANIF_MODULE_ID, 0U, CANIF_API_ID_TRANSMIT, CANIF_E_INVALID_TXPDUID);
         return E_NOT_OK;
     }
 
     if (PduInfoPtr == NULL || PduInfoPtr->SduDataPtr == NULL)
     {
         DET_LOGE(TAG, "TX E: PduInfoPtr NULL");
+        Det_ReportError(CANIF_MODULE_ID, 0U, CANIF_API_ID_TRANSMIT, CANIF_E_PARAM_POINTER);
         return E_NOT_OK;
     }
 
@@ -136,49 +145,69 @@ Std_ReturnType CanIf_Transmit(PduIdType TxPduId, const PduInfoType* PduInfoPtr)
  * \pre        CanIf_Init() が正常に完了していること。
  *
  * \AUTOSARReq     {SWS_CANIF_00415, SWS_CANIF_00026, SWS_CANIF_00168}
- * \ServiceID      {0x10}
+ * \ServiceID      {0x14}
  * \Reentrancy     {Reentrant}
  * \Synchronicity  {Synchronous}
  */
 void CanIf_RxIndication(const Can_HwType* Mailbox, const PduInfoType* PduInfoPtr)
 {
-    if (CanIf_ConfigPtr == NULL || Mailbox == NULL
-        || PduInfoPtr == NULL || PduInfoPtr->SduDataPtr == NULL)
+    if (CanIf_ConfigPtr == NULL)
+        return;  /* [SWS_CANIF_00421]: 未初期化時は黙って何もしない（DET 報告なし） */
+
+    if (Mailbox == NULL || PduInfoPtr == NULL || PduInfoPtr->SduDataPtr == NULL)
+    {
+        DET_LOGE(TAG, "RX: NULL Mailbox/PduInfoPtr");
+        Det_ReportError(CANIF_MODULE_ID, 0U, CANIF_API_ID_RX_INDICATION, CANIF_E_PARAM_POINTER);
         return;
+    }
 
     CanSM_RxIndication(Mailbox->ControllerId);
+
+    /* SWS_CANIF_00416/00417: Hoh 自体が未設定なのか（HOH エラー）、Hoh は
+     * 設定済みだが CanId が想定と異なるのか（CanId エラー）を区別して
+     * 報告するため、ループ内で Hoh 一致の有無を別途記録する。 */
+    uint8 hohMatched = 0U;
 
     for (uint8 i = 0; i < CanIf_ConfigPtr->RxPduCount; i++)
     {
         const CanIf_RxPduConfigType* rxCfg = &CanIf_ConfigPtr->RxPduConfig[i];
 
-        if (rxCfg->Hrh == Mailbox->Hoh && rxCfg->CanId == Mailbox->CanId)
+        if (rxCfg->Hrh != Mailbox->Hoh)
+            continue;
+
+        hohMatched = 1U;
+
+        if (rxCfg->CanId != Mailbox->CanId)
+            continue;
+
+        /* SWS_CANIF_00026/00168 相当: 設定 DLC に満たない L-PDU は
+         * 上位層へ渡さず棄却する。Com/CanTp 側にも独自の受信長チェックが
+         * あるが、本来この責務は CanIf 層にある。CanIf にチェックがないと、
+         * 将来 PduR に新しいルートが追加された際、上位層側でチェックを
+         * 入れ忘れるリスクを CanIf 一層で防げなくなる。 */
+        if (PduInfoPtr->SduLength < rxCfg->Dlc)
         {
-            /* SWS_CANIF_00026/00168 相当: 設定 DLC に満たない L-PDU は
-             * 上位層へ渡さず棄却する。Com/CanTp 側にも独自の受信長チェックが
-             * あるが、本来この責務は CanIf 層にある。CanIf にチェックがないと、
-             * 将来 PduR に新しいルートが追加された際、上位層側でチェックを
-             * 入れ忘れるリスクを CanIf 一層で防げなくなる。 */
-            if (PduInfoPtr->SduLength < rxCfg->Dlc)
-            {
-                DET_LOGW(TAG, "RX can=0x%lX length mismatch got=%u exp=%u",
-                         (unsigned long)Mailbox->CanId,
-                         (unsigned)PduInfoPtr->SduLength, (unsigned)rxCfg->Dlc);
-                return;
-            }
-
-            DET_LOGI(TAG, "RX can=0x%lX pdu=%u",
+            DET_LOGW(TAG, "RX can=0x%lX length mismatch got=%u exp=%u",
                      (unsigned long)Mailbox->CanId,
-                     (unsigned)rxCfg->UpperLayerRxPduId);
-
-            if (rxCfg->RxIndicationFct != NULL)
-                rxCfg->RxIndicationFct(rxCfg->UpperLayerRxPduId, PduInfoPtr);
-
+                     (unsigned)PduInfoPtr->SduLength, (unsigned)rxCfg->Dlc);
             return;
         }
+
+        DET_LOGI(TAG, "RX can=0x%lX pdu=%u",
+                 (unsigned long)Mailbox->CanId,
+                 (unsigned)rxCfg->UpperLayerRxPduId);
+
+        if (rxCfg->RxIndicationFct != NULL)
+            rxCfg->RxIndicationFct(rxCfg->UpperLayerRxPduId, PduInfoPtr);
+
+        return;
     }
 
     DET_LOGW(TAG, "RX no match can=0x%lX", (unsigned long)Mailbox->CanId);
+    if (hohMatched)
+        Det_ReportError(CANIF_MODULE_ID, 0U, CANIF_API_ID_RX_INDICATION, CANIF_E_PARAM_CANID);
+    else
+        Det_ReportError(CANIF_MODULE_ID, 0U, CANIF_API_ID_RX_INDICATION, CANIF_E_PARAM_HOH);
 }
 
 /**
@@ -195,7 +224,7 @@ void CanIf_RxIndication(const Can_HwType* Mailbox, const PduInfoType* PduInfoPtr
  * \pre        CanIf_Init() が正常に完了していること。
  *
  * \AUTOSARReq     {SWS_CANIF_00007}
- * \ServiceID      {0x11}
+ * \ServiceID      {0x13}
  * \Reentrancy     {Reentrant}
  * \Synchronicity  {Synchronous}
  */
@@ -205,7 +234,10 @@ void CanIf_TxConfirmation(PduIdType CanTxPduId)
         return;
 
     if (CanTxPduId >= CanIf_ConfigPtr->TxPduCount)
+    {
+        Det_ReportError(CANIF_MODULE_ID, 0U, CANIF_API_ID_TX_CONFIRMATION, CANIF_E_PARAM_LPDU);
         return;
+    }
 
     const CanIf_TxPduConfigType* txCfg = &CanIf_ConfigPtr->TxPduConfig[CanTxPduId];
 
@@ -230,6 +262,12 @@ void CanIf_TxConfirmation(PduIdType CanTxPduId)
  */
 void CanIf_ControllerBusOff(uint8 ControllerId)
 {
+    if (ControllerId != 0U)
+    {
+        Det_ReportError(CANIF_MODULE_ID, 0U, CANIF_API_ID_CONTROLLER_BUSOFF, CANIF_E_PARAM_CONTROLLERID);
+        return;
+    }
+
     DET_LOGW(TAG, "ControllerBusOff ch=%u", (unsigned)ControllerId);
     CanSM_ControllerBusOff(ControllerId);
 }

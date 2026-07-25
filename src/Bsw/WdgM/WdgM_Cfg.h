@@ -54,6 +54,35 @@
 #ifndef WDGM_CFG_H
 #define WDGM_CFG_H
 
+/* -----------------------------------------------------------------------
+ * DET（Default Error Tracer）関連定数
+ *
+ * SWS_WdgM 7.6.1 Development Errors 表に基づく開発エラーコード。
+ * ModuleId は SWS 本文には明記されないため、AUTOSAR_TR_BSWModuleList
+ * （Release 4.3.1、docs/ 配下）の「List of Basic Software Modules」表で
+ * Watchdog Manager (WdgM) に割り当てられた固定値 13 を使う。
+ *
+ * WdgM_EnableHwWatchdog/WdgM_DisableHwWatchdog/WdgM_ResumeSupervision は
+ * AUTOSAR 標準の SWS_WdgM には存在しない本プロジェクト独自の拡張関数
+ * （実際の HW ウォッチドッグ有効/無効は WdgIf 経由で内部的に行われる）
+ * のため、DET 対象外とする。
+ * ----------------------------------------------------------------------- */
+
+/** AUTOSAR Watchdog Manager の ModuleId（AUTOSAR_TR_BSWModuleList 参照、固定値 13） */
+#define WDGM_MODULE_ID  13U
+
+/** 開発エラーコード（SWS_WdgM 7.6.1 表より、実際に使用する分のみ） */
+#define WDGM_E_NO_INIT       0x10U  /* [SWS_WdgM_00389 等]: 未初期化時の API 呼び出し */
+#define WDGM_E_PARAM_SEID    0x13U  /* [SWS_WdgM_00xxx]: SEID が範囲外 */
+#define WDGM_E_INV_POINTER   0x14U  /* NULL ポインタチェック */
+
+/** ApiId（各関数の Doxygen \ServiceID タグと一致させること。値は SWS 8.x 章の
+ *  「Service ID[hex]」記載を実測して確認済み） */
+#define WDGM_API_ID_INIT                 0x00U
+#define WDGM_API_ID_CHECKPOINT_REACHED   0x0EU
+#define WDGM_API_ID_GET_LOCAL_STATUS     0x0CU
+#define WDGM_API_ID_MAIN_FUNCTION        0x08U
+
 /** 監視対象エンティティ総数 */
 #define WDGM_SUPERVISED_ENTITY_COUNT     2U
 

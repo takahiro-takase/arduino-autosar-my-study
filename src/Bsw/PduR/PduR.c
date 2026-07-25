@@ -35,7 +35,7 @@ static const PduR_PBConfigType* PduR_ConfigPtr = NULL;
  * \pre        CanIf_Init() が正常に完了していること。
  *
  * \AUTOSARReq     {SWS_PduR_00334}
- * \ServiceID      {0x00}
+ * \ServiceID      {0xF0}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
  */
@@ -44,6 +44,7 @@ void PduR_Init(const PduR_PBConfigType* ConfigPtr)
     if (ConfigPtr == NULL)
     {
         DET_LOGE(TAG, "Init E: config NULL");
+        Det_ReportError(PDUR_MODULE_ID, 0U, PDUR_API_ID_INIT, PDUR_E_INIT_FAILED);
         return;
     }
 
@@ -52,6 +53,7 @@ void PduR_Init(const PduR_PBConfigType* ConfigPtr)
         if (ConfigPtr->RxPaths[i].Dests == NULL || ConfigPtr->RxPaths[i].DestCount == 0)
         {
             DET_LOGE(TAG, "Init E: RxPath[%u] no dests", (unsigned)i);
+            Det_ReportError(PDUR_MODULE_ID, 0U, PDUR_API_ID_INIT, PDUR_E_INIT_FAILED);
             return;
         }
     }
@@ -83,14 +85,24 @@ void PduR_Init(const PduR_PBConfigType* ConfigPtr)
  *             #define エイリアスの PduR_CanIfRxIndication 経由で使用すること。
  *
  * \AUTOSARReq     {SWS_PduR_00362}
- * \ServiceID      {0x10}
+ * \ServiceID      {0x42}
  * \Reentrancy     {Reentrant}
  * \Synchronicity  {Synchronous}
  */
 void PduR_ComRxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
 {
-    if (PduR_ConfigPtr == NULL || PduInfoPtr == NULL || PduInfoPtr->SduDataPtr == NULL)
+    if (PduR_ConfigPtr == NULL)
+    {
+        Det_ReportError(PDUR_MODULE_ID, 0U, PDUR_API_ID_RX_INDICATION, PDUR_E_UNINIT);
         return;
+    }
+
+    if (PduInfoPtr == NULL || PduInfoPtr->SduDataPtr == NULL)
+    {
+        DET_LOGE(TAG, "RxInd E: PduInfoPtr NULL");
+        Det_ReportError(PDUR_MODULE_ID, 0U, PDUR_API_ID_RX_INDICATION, PDUR_E_PARAM_POINTER);
+        return;
+    }
 
     for (uint8 i = 0; i < PduR_ConfigPtr->RxPathCount; i++)
     {
@@ -114,6 +126,7 @@ void PduR_ComRxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
     }
 
     DET_LOGW(TAG, "RxInd no route src=%u", (unsigned)RxPduId);
+    Det_ReportError(PDUR_MODULE_ID, 0U, PDUR_API_ID_RX_INDICATION, PDUR_E_PDU_ID_INVALID);
 }
 
 /**
@@ -132,14 +145,17 @@ void PduR_ComRxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
  * \pre        PduR_Init() が正常に完了していること。
  *
  * \AUTOSARReq     {SWS_PduR_00365}
- * \ServiceID      {0x11}
+ * \ServiceID      {0x40}
  * \Reentrancy     {Reentrant}
  * \Synchronicity  {Synchronous}
  */
 void PduR_CanIfTxConfirmation(PduIdType TxPduId, Std_ReturnType result)
 {
     if (PduR_ConfigPtr == NULL)
+    {
+        Det_ReportError(PDUR_MODULE_ID, 0U, PDUR_API_ID_TX_CONFIRMATION, PDUR_E_UNINIT);
         return;
+    }
 
     for (uint8 i = 0; i < PduR_ConfigPtr->TxPathCount; i++)
     {
@@ -158,6 +174,7 @@ void PduR_CanIfTxConfirmation(PduIdType TxPduId, Std_ReturnType result)
     }
 
     DET_LOGW(TAG, "TxConf no route src=%u", (unsigned)TxPduId);
+    Det_ReportError(PDUR_MODULE_ID, 0U, PDUR_API_ID_TX_CONFIRMATION, PDUR_E_PDU_ID_INVALID);
 }
 
 /**
@@ -187,8 +204,18 @@ void PduR_CanIfTxConfirmation(PduIdType TxPduId, Std_ReturnType result)
  */
 Std_ReturnType PduR_Transmit(PduIdType SrcPduId, const PduInfoType* PduInfoPtr)
 {
-    if (PduR_ConfigPtr == NULL || PduInfoPtr == NULL)
+    if (PduR_ConfigPtr == NULL)
+    {
+        Det_ReportError(PDUR_MODULE_ID, 0U, PDUR_API_ID_TRANSMIT, PDUR_E_UNINIT);
         return E_NOT_OK;
+    }
+
+    if (PduInfoPtr == NULL)
+    {
+        DET_LOGE(TAG, "TX E: PduInfoPtr NULL");
+        Det_ReportError(PDUR_MODULE_ID, 0U, PDUR_API_ID_TRANSMIT, PDUR_E_PARAM_POINTER);
+        return E_NOT_OK;
+    }
 
     for (uint8 i = 0; i < PduR_ConfigPtr->TxPathCount; i++)
     {
@@ -211,6 +238,7 @@ Std_ReturnType PduR_Transmit(PduIdType SrcPduId, const PduInfoType* PduInfoPtr)
     }
 
     DET_LOGW(TAG, "TX no route src=%u", (unsigned)SrcPduId);
+    Det_ReportError(PDUR_MODULE_ID, 0U, PDUR_API_ID_TRANSMIT, PDUR_E_PDU_ID_INVALID);
     return E_NOT_OK;
 }
 
@@ -243,8 +271,18 @@ Std_ReturnType PduR_Transmit(PduIdType SrcPduId, const PduInfoType* PduInfoPtr)
  */
 Std_ReturnType PduR_SecOCTransmit(PduIdType SrcPduId, const PduInfoType* PduInfoPtr)
 {
-    if (PduR_ConfigPtr == NULL || PduInfoPtr == NULL)
+    if (PduR_ConfigPtr == NULL)
+    {
+        Det_ReportError(PDUR_MODULE_ID, 0U, PDUR_API_ID_SECOC_TRANSMIT, PDUR_E_UNINIT);
         return E_NOT_OK;
+    }
+
+    if (PduInfoPtr == NULL)
+    {
+        DET_LOGE(TAG, "TX(SecOC) E: PduInfoPtr NULL");
+        Det_ReportError(PDUR_MODULE_ID, 0U, PDUR_API_ID_SECOC_TRANSMIT, PDUR_E_PARAM_POINTER);
+        return E_NOT_OK;
+    }
 
     for (uint8 i = 0; i < PduR_ConfigPtr->TxPathCount; i++)
     {
@@ -260,5 +298,6 @@ Std_ReturnType PduR_SecOCTransmit(PduIdType SrcPduId, const PduInfoType* PduInfo
     }
 
     DET_LOGW(TAG, "TX(SecOC) no route src=%u", (unsigned)SrcPduId);
+    Det_ReportError(PDUR_MODULE_ID, 0U, PDUR_API_ID_SECOC_TRANSMIT, PDUR_E_PDU_ID_INVALID);
     return E_NOT_OK;
 }

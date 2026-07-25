@@ -47,6 +47,11 @@
 
 #define TAG "CanTp"
 
+/** [SWS_CanTp_00031] 用の初期化済みフラグ。本実装は CanTp_ConfigType を
+ *  保持しない簡略設計のため、他モジュールの ConfigPtr==NULL 相当として
+ *  このフラグを使う。 */
+static uint8 CanTp_Initialized = 0U;
+
 extern unsigned long millis(void);
 
 /* -----------------------------------------------------------------------
@@ -140,6 +145,7 @@ void CanTp_Init(void)
 {
     CanTp_Rx.state  = CANTP_RX_IDLE;
     CanTp_Tx.state  = CANTP_TX_IDLE;
+    CanTp_Initialized = 1U;
     DET_LOGI(TAG, "Init ok");
 }
 
@@ -300,10 +306,25 @@ static void CanTp_SendNextCF(void)
  */
 Std_ReturnType CanTp_Transmit(PduIdType TxSduId, const PduInfoType* PduInfoPtr)
 {
-    (void)TxSduId;
+    if (!CanTp_Initialized)
+    {
+        Det_ReportError(CANTP_MODULE_ID, 0U, CANTP_API_ID_TRANSMIT, CANTP_E_UNINIT);
+        return E_NOT_OK;
+    }
+
+    if (TxSduId != CANTP_TX_SDU_ID)
+    {
+        DET_LOGE(TAG, "TX E: invalid TxSduId=%u", (unsigned)TxSduId);
+        Det_ReportError(CANTP_MODULE_ID, 0U, CANTP_API_ID_TRANSMIT, CANTP_E_INVALID_TX_ID);
+        return E_NOT_OK;
+    }
 
     if (PduInfoPtr == NULL || PduInfoPtr->SduDataPtr == NULL)
+    {
+        DET_LOGE(TAG, "TX E: NULL PduInfoPtr");
+        Det_ReportError(CANTP_MODULE_ID, 0U, CANTP_API_ID_TRANSMIT, CANTP_E_PARAM_POINTER);
         return E_NOT_OK;
+    }
 
     uint16 msgLen = (uint16)PduInfoPtr->SduLength;
 
@@ -393,11 +414,28 @@ Std_ReturnType CanTp_Transmit(PduIdType TxSduId, const PduInfoType* PduInfoPtr)
  */
 void CanTp_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
 {
-    (void)RxPduId;
-
-    if (PduInfoPtr == NULL || PduInfoPtr->SduDataPtr == NULL
-        || PduInfoPtr->SduLength == 0U)
+    if (!CanTp_Initialized)
+    {
+        Det_ReportError(CANTP_MODULE_ID, 0U, CANTP_API_ID_RX_INDICATION, CANTP_E_UNINIT);
         return;
+    }
+
+    if (RxPduId != CANTP_RX_SDU_ID)
+    {
+        DET_LOGE(TAG, "RX E: invalid RxPduId=%u", (unsigned)RxPduId);
+        Det_ReportError(CANTP_MODULE_ID, 0U, CANTP_API_ID_RX_INDICATION, CANTP_E_INVALID_RX_ID);
+        return;
+    }
+
+    if (PduInfoPtr == NULL || PduInfoPtr->SduDataPtr == NULL)
+    {
+        DET_LOGE(TAG, "RX E: NULL PduInfoPtr");
+        Det_ReportError(CANTP_MODULE_ID, 0U, CANTP_API_ID_RX_INDICATION, CANTP_E_PARAM_POINTER);
+        return;
+    }
+
+    if (PduInfoPtr->SduLength == 0U)
+        return;  /* 空フレームは DET 対象外（NULL ポインタではないため） */
 
     const uint8* data      = PduInfoPtr->SduDataPtr;
     uint8        pci       = data[0];
@@ -602,12 +640,18 @@ void CanTp_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
  * \param[in]  result   送信結果 (未使用。上記理由により本経路では常に E_OK)。
  *
  * \AUTOSARReq     {SWS_CanTp_00236}
- * \ServiceID      {0x48}
+ * \ServiceID      {0x40}
  */
 void CanTp_TxConfirmation(PduIdType TxPduId, Std_ReturnType result)
 {
     (void)TxPduId;
     (void)result;
+
+    if (!CanTp_Initialized)
+    {
+        Det_ReportError(CANTP_MODULE_ID, 0U, CANTP_API_ID_TX_CONFIRMATION, CANTP_E_UNINIT);
+        return;
+    }
 }
 
 /* -----------------------------------------------------------------------
@@ -620,12 +664,18 @@ void CanTp_TxConfirmation(PduIdType TxPduId, Std_ReturnType result)
  * \details EcuM_MainFunction から毎ループ呼び出す。
  *
  * \AUTOSARReq     {SWS_CanTp_00236}
- * \ServiceID      {0x1B}
+ * \ServiceID      {0x06}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
  */
 void CanTp_MainFunction(void)
 {
+    if (!CanTp_Initialized)
+    {
+        Det_ReportError(CANTP_MODULE_ID, 0U, CANTP_API_ID_MAIN_FUNCTION, CANTP_E_UNINIT);
+        return;
+    }
+
     unsigned long now = millis();
 
     /* ---- TX: N_Bs タイムアウト (WAIT_FC) ---- */

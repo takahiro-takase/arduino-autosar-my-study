@@ -136,6 +136,7 @@ void SecOC_Init(const SecOC_ConfigType* config)
     if (config == NULL)
     {
         DET_LOGE(TAG, "Init E: config NULL");
+        Det_ReportError(SECOC_MODULE_ID, 0U, SECOC_API_ID_INIT, SECOC_E_PARAM_POINTER);
         return;
     }
     if (config->RxPduCount > SECOC_RX_PDU_COUNT)
@@ -170,14 +171,24 @@ void SecOC_Init(const SecOC_ConfigType* config)
 
 void SecOC_IfRxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
 {
-    if (SecOC_ConfigPtr == NULL || PduInfoPtr == NULL || PduInfoPtr->SduDataPtr == NULL)
+    if (SecOC_ConfigPtr == NULL)
+    {
+        Det_ReportError(SECOC_MODULE_ID, 0U, SECOC_API_ID_RX_INDICATION, SECOC_E_UNINIT);
         return;
+    }
+
+    if (PduInfoPtr == NULL || PduInfoPtr->SduDataPtr == NULL)
+    {
+        Det_ReportError(SECOC_MODULE_ID, 0U, SECOC_API_ID_RX_INDICATION, SECOC_E_PARAM_POINTER);
+        return;
+    }
 
     uint8 tableIndex = 0U;
     const SecOC_RxPduConfigType* cfg = SecOC_FindRxPdu(RxPduId, &tableIndex);
     if (cfg == NULL)
     {
         DET_LOGW(TAG, "RxInd W: no matching SecOC RX PDU for id=%u", (unsigned)RxPduId);
+        Det_ReportError(SECOC_MODULE_ID, 0U, SECOC_API_ID_RX_INDICATION, SECOC_E_INVALID_PDU_SDU_ID);
         return;
     }
 
@@ -267,14 +278,24 @@ void SecOC_IfRxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
 
 Std_ReturnType SecOC_IfTransmit(PduIdType TxPduId, const PduInfoType* PduInfoPtr)
 {
-    if (SecOC_ConfigPtr == NULL || PduInfoPtr == NULL || PduInfoPtr->SduDataPtr == NULL)
+    if (SecOC_ConfigPtr == NULL)
+    {
+        Det_ReportError(SECOC_MODULE_ID, 0U, SECOC_API_ID_IF_TRANSMIT, SECOC_E_UNINIT);
         return E_NOT_OK;
+    }
+
+    if (PduInfoPtr == NULL || PduInfoPtr->SduDataPtr == NULL)
+    {
+        Det_ReportError(SECOC_MODULE_ID, 0U, SECOC_API_ID_IF_TRANSMIT, SECOC_E_PARAM_POINTER);
+        return E_NOT_OK;
+    }
 
     uint8 tableIndex = 0U;
     const SecOC_TxPduConfigType* cfg = SecOC_FindTxPdu(TxPduId, &tableIndex);
     if (cfg == NULL)
     {
         DET_LOGW(TAG, "IfTransmit W: no matching SecOC TX PDU for id=%u", (unsigned)TxPduId);
+        Det_ReportError(SECOC_MODULE_ID, 0U, SECOC_API_ID_IF_TRANSMIT, SECOC_E_INVALID_PDU_SDU_ID);
         return E_NOT_OK;
     }
 
@@ -299,7 +320,10 @@ Std_ReturnType SecOC_IfTransmit(PduIdType TxPduId, const PduInfoType* PduInfoPtr
 void SecOC_MainFunction(void)
 {
     if (SecOC_ConfigPtr == NULL)
+    {
+        Det_ReportError(SECOC_MODULE_ID, 0U, SECOC_API_ID_MAIN_FUNCTION_TX, SECOC_E_UNINIT);
         return;
+    }
 
     for (uint8 t = 0U; t < SecOC_ConfigPtr->TxPduCount; t++)
     {

@@ -180,7 +180,7 @@ Std_ReturnType WdgM_CheckpointReached(WdgM_SupervisedEntityIdType SEID, uint8 Ch
  * \param[in]  SEID  エンティティ ID。
  * \return     WdgM_LocalStatusType 値。ID 不正の場合は DEACTIVATED。
  *
- * \ServiceID      {0x0B}
+ * \ServiceID      {0x0C}
  * \Reentrancy     {Reentrant}
  * \Synchronicity  {Synchronous}
  */
@@ -196,7 +196,7 @@ WdgM_LocalStatusType WdgM_GetLocalStatus(WdgM_SupervisedEntityIdType SEID);
  *          HW ウォッチドッグへの実際のリフレッシュはここでは行わない
  *          （WdgM_TriggerHwWatchdog が別周期で判定結果を見て行う）。
  *
- * \ServiceID      {0x01}
+ * \ServiceID      {0x08}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
  */

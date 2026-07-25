@@ -33,10 +33,21 @@ Std_ReturnType E2EXf_InverseTransform(const E2EXf_RxConfigType* Config, const ui
                                       E2E_P01StatusType* CheckStatus)
 {
     if (CheckStatus == NULL)
-        return E_NOT_OK;
-
-    if (!E2EXf_Initialized || Config == NULL || Buffer == NULL)
     {
+        Det_ReportError(E2EXF_MODULE_ID, 0U, E2EXF_API_ID_INVERSE_TRANSFORM, E2EXF_E_PARAM_POINTER);
+        return E_NOT_OK;
+    }
+
+    if (!E2EXf_Initialized)
+    {
+        Det_ReportError(E2EXF_MODULE_ID, 0U, E2EXF_API_ID_INVERSE_TRANSFORM, E2EXF_E_UNINIT);
+        *CheckStatus = E2E_P01STATUS_ERROR;
+        return E_NOT_OK;
+    }
+
+    if (Config == NULL || Buffer == NULL)
+    {
+        Det_ReportError(E2EXF_MODULE_ID, 0U, E2EXF_API_ID_INVERSE_TRANSFORM, E2EXF_E_PARAM_POINTER);
         *CheckStatus = E2E_P01STATUS_ERROR;
         return E_NOT_OK;
     }
@@ -61,10 +72,16 @@ Std_ReturnType E2EXf_InverseTransform(const E2EXf_RxConfigType* Config, const ui
 void E2EXf_Transform(const E2EXf_TxConfigType* Config, uint8* Buffer, uint8 Length)
 {
     if (!E2EXf_Initialized)
+    {
+        Det_ReportError(E2EXF_MODULE_ID, 0U, E2EXF_API_ID_TRANSFORM, E2EXF_E_UNINIT);
         return;
+    }
 
     if (Config == NULL || Buffer == NULL)
+    {
+        Det_ReportError(E2EXF_MODULE_ID, 0U, E2EXF_API_ID_TRANSFORM, E2EXF_E_PARAM_POINTER);
         return;
+    }
 
     E2E_P01Protect(Config->E2EConfig, Config->ProtectState, Buffer, Length);
 }

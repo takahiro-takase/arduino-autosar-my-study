@@ -181,16 +181,19 @@ void Com_Init(const Com_ConfigType* config)
     if (config == NULL)
     {
         DET_LOGE(TAG, "Init E: config NULL");
+        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_INIT, COM_E_PARAM_POINTER);
         return;
     }
     if (config->RxIPduCount > COM_RX_IPDU_MAX)
     {
         DET_LOGE(TAG, "Init E: RxIPduCount>max");
+        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_INIT, COM_E_INIT_FAILED);
         return;
     }
     if (config->TxIPduCount > COM_TX_IPDU_MAX)
     {
         DET_LOGE(TAG, "Init E: TxIPduCount>max");
+        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_INIT, COM_E_INIT_FAILED);
         return;
     }
 
@@ -293,8 +296,16 @@ void Com_Init(const Com_ConfigType* config)
  */
 void Com_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
 {
-    if (Com_ConfigPtr == NULL || PduInfoPtr == NULL || PduInfoPtr->SduDataPtr == NULL)
+    if (Com_ConfigPtr == NULL)
+    {
+        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_RX_INDICATION, COM_E_UNINIT);
         return;
+    }
+    if (PduInfoPtr == NULL || PduInfoPtr->SduDataPtr == NULL)
+    {
+        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_RX_INDICATION, COM_E_PARAM_POINTER);
+        return;
+    }
 
     if (Com_RxEnabled == 0U)
     {
@@ -824,8 +835,16 @@ static void Com_RequestTxOnChange(const Com_IPduConfigType* ipdu)
  */
 uint8 Com_ReceiveSignal(Com_SignalIdType SignalId, void* SignalDataPtr)
 {
-    if (Com_ConfigPtr == NULL || SignalDataPtr == NULL)
+    if (Com_ConfigPtr == NULL)
+    {
+        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_RECEIVE_SIGNAL, COM_E_UNINIT);
         return E_NOT_OK;
+    }
+    if (SignalDataPtr == NULL)
+    {
+        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_RECEIVE_SIGNAL, COM_E_PARAM_POINTER);
+        return E_NOT_OK;
+    }
 
     uint8* dataPtr = (uint8*)SignalDataPtr;
 
@@ -845,6 +864,7 @@ uint8 Com_ReceiveSignal(Com_SignalIdType SignalId, void* SignalDataPtr)
         {
             DET_LOGE(TAG, "ReceiveSignal E: sig=%u IPduId=%u out of range (max=%u)",
                      (unsigned)SignalId, (unsigned)sig->IPduId, (unsigned)COM_RX_IPDU_MAX);
+            Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_RECEIVE_SIGNAL, COM_E_PARAM);
             return E_NOT_OK;
         }
 
@@ -853,6 +873,7 @@ uint8 Com_ReceiveSignal(Com_SignalIdType SignalId, void* SignalDataPtr)
         {
             DET_LOGE(TAG, "ReceiveSignal E: sig=%u IPduId=%u not a registered RX I-PDU",
                      (unsigned)SignalId, (unsigned)sig->IPduId);
+            Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_RECEIVE_SIGNAL, COM_E_PARAM);
             return E_NOT_OK;
         }
 
@@ -998,7 +1019,10 @@ uint8 Com_ReceiveSignal(Com_SignalIdType SignalId, void* SignalDataPtr)
 Std_ReturnType Com_ReceiveSignalGroup(Com_IPduIdType GroupId)
 {
     if (Com_ConfigPtr == NULL)
+    {
+        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_RECEIVE_SIGNAL_GROUP, COM_E_UNINIT);
         return E_NOT_OK;
+    }
 
     /* 範囲チェック: GroupId をそのまま Com_RxBuffer[] 等の配列添字として
      * 使うため、RX I-PDU 設定テーブル自体に範囲外の IPduId が設定される
@@ -1008,6 +1032,7 @@ Std_ReturnType Com_ReceiveSignalGroup(Com_IPduIdType GroupId)
     {
         DET_LOGE(TAG, "ReceiveSignalGroup E: GroupId=%u out of range (max=%u)",
                  (unsigned)GroupId, (unsigned)COM_RX_IPDU_MAX);
+        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_RECEIVE_SIGNAL_GROUP, COM_E_PARAM);
         return E_NOT_OK;
     }
 
@@ -1065,8 +1090,16 @@ Std_ReturnType Com_ReceiveSignalGroup(Com_IPduIdType GroupId)
  */
 Std_ReturnType Com_ReceiveSignalGroupArray(Com_IPduIdType IPduId, uint8* DataPtr)
 {
-    if (Com_ConfigPtr == NULL || DataPtr == NULL)
+    if (Com_ConfigPtr == NULL)
+    {
+        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_RECEIVE_SIGNAL_GROUP_ARRAY, COM_E_UNINIT);
         return E_NOT_OK;
+    }
+    if (DataPtr == NULL)
+    {
+        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_RECEIVE_SIGNAL_GROUP_ARRAY, COM_E_PARAM_POINTER);
+        return E_NOT_OK;
+    }
 
     for (uint8 i = 0; i < Com_ConfigPtr->RxIPduCount; i++)
     {
@@ -1104,7 +1137,10 @@ Std_ReturnType Com_ReceiveSignalGroupArray(Com_IPduIdType IPduId, uint8* DataPtr
 uint8 Com_IsRxTimedOut(Com_IPduIdType IPduId)
 {
     if (IPduId >= COM_RX_IPDU_MAX)
+    {
+        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_IS_RX_TIMED_OUT, COM_E_PARAM);
         return 1U;
+    }
     return Com_RxTimedOut[IPduId];
 }
 
@@ -1156,8 +1192,16 @@ uint8 Com_IsRxTimedOut(Com_IPduIdType IPduId)
  */
 uint8 Com_SendSignal(Com_SignalIdType SignalId, const void* SignalDataPtr)
 {
-    if (Com_ConfigPtr == NULL || SignalDataPtr == NULL)
+    if (Com_ConfigPtr == NULL)
+    {
+        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_SEND_SIGNAL, COM_E_UNINIT);
         return E_NOT_OK;
+    }
+    if (SignalDataPtr == NULL)
+    {
+        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_SEND_SIGNAL, COM_E_PARAM_POINTER);
+        return E_NOT_OK;
+    }
 
     const uint8* dataPtr = (const uint8*)SignalDataPtr;
 
@@ -1178,6 +1222,7 @@ uint8 Com_SendSignal(Com_SignalIdType SignalId, const void* SignalDataPtr)
         {
             DET_LOGE(TAG, "SendSignal E: sig=%u IPduId=%u out of range (max=%u)",
                      (unsigned)SignalId, (unsigned)sig->IPduId, (unsigned)COM_TX_IPDU_MAX);
+            Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_SEND_SIGNAL, COM_E_PARAM);
             return E_NOT_OK;
         }
 
@@ -1186,6 +1231,7 @@ uint8 Com_SendSignal(Com_SignalIdType SignalId, const void* SignalDataPtr)
         {
             DET_LOGE(TAG, "SendSignal E: sig=%u IPduId=%u not a registered TX I-PDU",
                      (unsigned)SignalId, (unsigned)sig->IPduId);
+            Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_SEND_SIGNAL, COM_E_PARAM);
             return E_NOT_OK;
         }
 
@@ -1292,7 +1338,10 @@ uint8 Com_SendSignal(Com_SignalIdType SignalId, const void* SignalDataPtr)
 Std_ReturnType Com_SendSignalGroup(Com_IPduIdType GroupId)
 {
     if (Com_ConfigPtr == NULL)
+    {
+        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_SEND_SIGNAL_GROUP, COM_E_UNINIT);
         return E_NOT_OK;
+    }
 
     /* 範囲チェック: GroupId をそのまま Com_TxBuffer[] 等の配列添字として
      * 使うため、TX I-PDU 設定テーブル自体に範囲外の IPduId が設定される
@@ -1302,6 +1351,7 @@ Std_ReturnType Com_SendSignalGroup(Com_IPduIdType GroupId)
     {
         DET_LOGE(TAG, "SendSignalGroup E: GroupId=%u out of range (max=%u)",
                  (unsigned)GroupId, (unsigned)COM_TX_IPDU_MAX);
+        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_SEND_SIGNAL_GROUP, COM_E_PARAM);
         return E_NOT_OK;
     }
 
@@ -1397,8 +1447,13 @@ void Com_TxConfirmation(PduIdType TxPduId, Std_ReturnType result)
 {
     DET_LOGI(TAG, "TxConf id=%u", (unsigned)TxPduId);
 
-    if (result != E_OK || Com_ConfigPtr == NULL)
+    if (result != E_OK)
         return;
+    if (Com_ConfigPtr == NULL)
+    {
+        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_TX_CONFIRMATION, COM_E_UNINIT);
+        return;
+    }
 
     /* [SWS_Com_00800]: 停止中の I-PDU に対する送信確認は無視する。
      * TxPduId は Com の TX IPduId 空間（Com_FindTxIPdu() 参照）。 */
@@ -1511,7 +1566,10 @@ void Com_TxConfirmation(PduIdType TxPduId, Std_ReturnType result)
 void Com_MainFunction(void)
 {
     if (Com_ConfigPtr == NULL)
+    {
+        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_MAIN_FUNCTION, COM_E_UNINIT);
         return;
+    }
 
     const unsigned long now = millis();
 
@@ -1652,7 +1710,10 @@ void Com_SetCommunicationEnabled(uint8 RxEnabled, uint8 TxEnabled)
 void Com_IpduGroupStart(Com_IpduGroupIdType IpduGroupId, uint8 initialize)
 {
     if (Com_ConfigPtr == NULL)
+    {
+        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_IPDU_GROUP_START, COM_E_UNINIT);
         return;
+    }
 
     const unsigned long now = millis();
 
@@ -1733,7 +1794,10 @@ void Com_IpduGroupStart(Com_IpduGroupIdType IpduGroupId, uint8 initialize)
 void Com_IpduGroupStop(Com_IpduGroupIdType IpduGroupId)
 {
     if (Com_ConfigPtr == NULL)
+    {
+        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_IPDU_GROUP_STOP, COM_E_UNINIT);
         return;
+    }
 
     for (uint8 i = 0U; i < Com_ConfigPtr->RxIPduCount; i++)
     {

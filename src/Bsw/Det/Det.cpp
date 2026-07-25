@@ -60,6 +60,28 @@ void Log_Write(LogLevel lvl, PGM_P tag_P, PGM_P fmt_P, ...)
     Serial.println(buf);
 }
 
+Std_ReturnType Det_ReportError(uint16 ModuleId, uint8 InstanceId, uint8 ApiId, uint8 ErrorId)
+{
+    /* DET_LOG_LEVEL によるレベル抑制は行わない（開発エラーは常に最重要度）。
+     * DET_LOGE(...) と同じ書式のヘルパー（例: 2桁 0 埋め 16 進）を独自に持たず、
+     * Serial の HEX 出力（Print::print(v, HEX)）をそのまま使う。0x0 のような
+     * 1 桁出力になる場合があるが、ApiId/ErrorId は本プロジェクトの規模では
+     * いずれも 1 バイト範囲に収まるため実用上の判読性は損なわない。 */
+    Serial.print('[');
+    Serial.print(millis());
+    Serial.print(F("ms] DET M="));
+    Serial.print(ModuleId);
+    Serial.print(F(" I="));
+    Serial.print(InstanceId);
+    Serial.print(F(" API=0x"));
+    Serial.print(ApiId, HEX);
+    Serial.print(F(" ERR=0x"));
+    Serial.println(ErrorId, HEX);
+
+    /* [SWS_Det_00009]: 戻り値は互換性のためだけに存在し、実際には使われない。 */
+    return E_OK;
+}
+
 void Log_HexStr(char* dst, uint8_t dstSize,
                 const uint8_t* src, uint8_t srcLen)
 {

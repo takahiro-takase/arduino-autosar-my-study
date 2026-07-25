@@ -44,7 +44,7 @@ void Port_Init(void)
 /**
  * \brief   指定ピンの方向を動的に変更する。
  *
- * \ServiceID      {0x03}
+ * \ServiceID      {0x01}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
  */

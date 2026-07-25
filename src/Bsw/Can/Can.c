@@ -174,6 +174,13 @@ void Can_Init(const Can_ConfigType* Config)
 {
     DET_LOGI(TAG, "Init...");
 
+    if (Config == NULL)
+    {
+        DET_LOGE(TAG, "Init: NULL Config");
+        Det_ReportError(CAN_MODULE_ID, 0U, CAN_API_ID_INIT, CAN_E_PARAM_POINTER);
+        return;
+    }
+
     Can_ConfigPtr = Config;
     Can_TxConfHead = 0U;
     Can_TxConfTail = 0U;
@@ -232,8 +239,17 @@ void Can_Init(const Can_ConfigType* Config)
  */
 Can_ReturnType Can_SetControllerMode(uint8 Controller, Can_StateTransitionType Transition)
 {
-    if (Controller != 0U)
+    if (Can_ConfigPtr == NULL)
+    {
+        Det_ReportError(CAN_MODULE_ID, 0U, CAN_API_ID_SET_CONTROLLER_MODE, CAN_E_UNINIT);
         return CAN_NOT_OK;
+    }
+
+    if (Controller != 0U)
+    {
+        Det_ReportError(CAN_MODULE_ID, 0U, CAN_API_ID_SET_CONTROLLER_MODE, CAN_E_PARAM_CONTROLLER);
+        return CAN_NOT_OK;
+    }
 
     switch (Transition)
     {
@@ -255,6 +271,7 @@ Can_ReturnType Can_SetControllerMode(uint8 Controller, Can_StateTransitionType T
         CanState = CAN_CS_STOPPED;
         break;
     default:
+        Det_ReportError(CAN_MODULE_ID, 0U, CAN_API_ID_SET_CONTROLLER_MODE, CAN_E_TRANSITION);
         return CAN_NOT_OK;
     }
 
@@ -290,6 +307,19 @@ Can_ReturnType Can_SetControllerMode(uint8 Controller, Can_StateTransitionType T
 Can_ReturnType Can_Write(Can_HwHandleType Hth, const Can_PduType* PduInfo)
 {
     (void)Hth;
+
+    if (Can_ConfigPtr == NULL)
+    {
+        Det_ReportError(CAN_MODULE_ID, 0U, CAN_API_ID_WRITE, CAN_E_UNINIT);
+        return CAN_NOT_OK;
+    }
+
+    if (PduInfo == NULL || PduInfo->sdu == NULL)
+    {
+        DET_LOGE(TAG, "Write: NULL PduInfo/sdu");
+        Det_ReportError(CAN_MODULE_ID, 0U, CAN_API_ID_WRITE, CAN_E_PARAM_POINTER);
+        return CAN_NOT_OK;
+    }
 
     if (CanState != CAN_CS_STARTED)
         return CAN_NOT_OK;
@@ -345,12 +375,18 @@ Can_ReturnType Can_Write(Can_HwHandleType Hth, const Can_PduType* PduInfo)
  * \pre        Can_Init() が正常に完了していること。
  *
  * \AUTOSARReq     {SWS_Can_00016}
- * \ServiceID      {0x07}
+ * \ServiceID      {0x01}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
  */
 void Can_MainFunction_Write(void)
 {
+    if (Can_ConfigPtr == NULL)
+    {
+        Det_ReportError(CAN_MODULE_ID, 0U, CAN_API_ID_MAIN_FUNCTION_WRITE, CAN_E_UNINIT);
+        return;
+    }
+
     while (Can_TxConfLen > 0U)
     {
         PduIdType pduId = Can_TxConfQueue[Can_TxConfHead];
@@ -431,7 +467,13 @@ void Can_Isr(void)
  */
 void Can_MainFunction_Read(void)
 {
-    if (Can_ConfigPtr == NULL || CanState == CAN_CS_SLEEP)
+    if (Can_ConfigPtr == NULL)
+    {
+        Det_ReportError(CAN_MODULE_ID, 0U, CAN_API_ID_MAIN_FUNCTION_READ, CAN_E_UNINIT);
+        return;
+    }
+
+    if (CanState == CAN_CS_SLEEP)
         return;
 
     SchM_Enter_Can_IRQFLAG_EXCLUSIVE_AREA();
@@ -473,13 +515,19 @@ void Can_MainFunction_Read(void)
  * \pre        Can_Init() が正常に完了していること。
  *
  * \AUTOSARReq     {SWS_Can_00112, SWS_Can_00271}
- * \ServiceID      {0x09}
+ * \ServiceID      {0x0A}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
  */
 void Can_MainFunction_Wakeup(void)
 {
-    if (Can_ConfigPtr == NULL || CanState != CAN_CS_SLEEP)
+    if (Can_ConfigPtr == NULL)
+    {
+        Det_ReportError(CAN_MODULE_ID, 0U, CAN_API_ID_MAIN_FUNCTION_WAKEUP, CAN_E_UNINIT);
+        return;
+    }
+
+    if (CanState != CAN_CS_SLEEP)
         return;
 
     uint8 pending;
@@ -509,12 +557,18 @@ void Can_MainFunction_Wakeup(void)
  * \pre        Can_Init() が正常に完了していること。
  *
  * \AUTOSARReq     {SWS_Can_00109}
- * \ServiceID      {0x0B}
+ * \ServiceID      {0x09}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
  */
 void Can_MainFunction_BusOff(void)
 {
+    if (Can_ConfigPtr == NULL)
+    {
+        Det_ReportError(CAN_MODULE_ID, 0U, CAN_API_ID_MAIN_FUNCTION_BUSOFF, CAN_E_UNINIT);
+        return;
+    }
+
     if (CanState == CAN_CS_STARTED && Can_Hw_IsBusOff() == CAN_HW_OK)
     {
         CanIf_ControllerBusOff(0U);

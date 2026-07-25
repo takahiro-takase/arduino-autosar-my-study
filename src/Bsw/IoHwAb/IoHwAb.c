@@ -25,6 +25,28 @@
 
 #define TAG "IoHwAb"
 
+/* -----------------------------------------------------------------------
+ * DET（Default Error Tracer）関連定数
+ *
+ * SWS_IoHwAb_91001: IoHwAb の開発エラー分類は AUTOSAR 標準では規定されず、
+ * 「報告したいエラーの定義自体を実装者に一任する」("Up to the implementer")
+ * とされている。ModuleId のみ AUTOSAR_TR_BSWModuleList（Release 4.3.1、
+ * docs/ 配下）の「List of Basic Software Modules」表で IO Hardware
+ * Abstraction (IoHwAb) に割り当てられた固定値 254 を使う。エラーコード自体は
+ * 本プロジェクト独自に、Dio/Adc 経由の呼び出しで NULL 出力ポインタが渡された
+ * 場合のみを対象として定義する。
+ * ----------------------------------------------------------------------- */
+
+/** AUTOSAR IO Hardware Abstraction の ModuleId（AUTOSAR_TR_BSWModuleList 参照、固定値 254） */
+#define IOHWAB_MODULE_ID  254U
+
+/** 開発エラーコード（実装者定義。SWS の例示値 0x01 をそのまま踏襲） */
+#define IOHWAB_E_PARAM_POINTER  0x01U
+
+/** ApiId（既存の Doxygen \ServiceID タグと一致させる） */
+#define IOHWAB_API_ID_BUTTON_GET_LEVEL  0xC2U
+#define IOHWAB_API_ID_ADC_GET_VALUE_MV  0xC6U
+
 /** ボタン確定に必要な連続一致サンプル数 (4 × 10ms = 40ms) */
 #define IOHWAB_BUTTON_DEBOUNCE_COUNT  4U
 
@@ -211,6 +233,11 @@ void IoHwAb_MainFunction(void)
  */
 Std_ReturnType IoHwAb_Button_GetLevel(uint8* level)
 {
+    if (level == NULL)
+    {
+        Det_ReportError(IOHWAB_MODULE_ID, 0U, IOHWAB_API_ID_BUTTON_GET_LEVEL, IOHWAB_E_PARAM_POINTER);
+        return E_NOT_OK;
+    }
     *level = s_confirmedLevel;
     return E_OK;
 }
@@ -231,6 +258,11 @@ Std_ReturnType IoHwAb_Button_GetLevel(uint8* level)
  */
 Std_ReturnType IoHwAb_Adc_GetValue_mV(uint16* mv)
 {
+    if (mv == NULL)
+    {
+        Det_ReportError(IOHWAB_MODULE_ID, 0U, IOHWAB_API_ID_ADC_GET_VALUE_MV, IOHWAB_E_PARAM_POINTER);
+        return E_NOT_OK;
+    }
     *mv = s_adcMv;
     return E_OK;
 }

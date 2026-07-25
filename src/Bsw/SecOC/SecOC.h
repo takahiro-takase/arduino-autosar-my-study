@@ -26,6 +26,10 @@ extern "C" {
  *          テストベクタ）を実行し、結果をログ出力する。
  *
  * \param[in]  config  SecOC 設定構造体。NULL 禁止。
+ *
+ * \ServiceID      {0x01}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
  */
 void SecOC_Init(const SecOC_ConfigType* config);
 
@@ -48,6 +52,10 @@ void SecOC_Init(const SecOC_ConfigType* config);
  * \param[in]  RxPduId     検証対象の SecOC RX Secured I-PDU ID
  *                         （SecOC_RxPduConfigType.SecOCRxPduId と照合する）。
  * \param[in]  PduInfoPtr  受信した Secured I-PDU のデータと長さ。NULL 禁止。
+ *
+ * \ServiceID      {0x42}
+ * \Reentrancy     {Reentrant for different PduIds. Non reentrant for the same PduId.}
+ * \Synchronicity  {Synchronous}
  */
 void SecOC_IfRxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr);
 
@@ -72,6 +80,10 @@ void SecOC_IfRxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr);
  * \retval  E_OK      Authentic I-PDU を内部バッファへコピーした。
  * \retval  E_NOT_OK  SecOC 未初期化、PduInfoPtr が NULL、一致するエントリなし、
  *                    または SduLength が AuthenticPduLength と不一致。
+ *
+ * \ServiceID      {0x49}
+ * \Reentrancy     {Reentrant for different PduIds. Non reentrant for the same PduId.}
+ * \Synchronicity  {Synchronous}
  */
 Std_ReturnType SecOC_IfTransmit(PduIdType TxPduId, const PduInfoType* PduInfoPtr);
 
@@ -85,6 +97,10 @@ Std_ReturnType SecOC_IfTransmit(PduIdType TxPduId, const PduInfoType* PduInfoPtr
  *          なければ何もしない。
  *
  * \pre        SecOC_Init() が正常に完了していること。
+ *
+ * \ServiceID      {0x03}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
  */
 void SecOC_MainFunction(void);
 

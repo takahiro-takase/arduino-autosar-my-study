@@ -25,6 +25,29 @@
 #define BSWM_CFG_H
 
 /* -----------------------------------------------------------------------
+ * DET（Default Error Tracer）関連定数
+ *
+ * SWS_BswM 7.6.1 Development Errors 表（Table 3）に基づく開発エラーコード。
+ * ModuleId は SWS 本文には明記されないため、AUTOSAR_TR_BSWModuleList
+ * （Release 4.3.1、docs/ 配下）の「List of Basic Software Modules」表で
+ * BSW Mode Manager (BswM) に割り当てられた固定値 42 を使う。
+ * ----------------------------------------------------------------------- */
+
+/** AUTOSAR BSW Mode Manager の ModuleId（AUTOSAR_TR_BSWModuleList 参照、固定値 42） */
+#define BSWM_MODULE_ID  42U
+
+/** 開発エラーコード（SWS_BswM 7.6.1 表より、実際に使用する分のみ） */
+#define BSWM_E_NO_INIT               0x01U
+#define BSWM_E_REQ_MODE_OUT_OF_RANGE 0x05U
+#define BSWM_E_PARAM_CONFIG          0x06U
+
+/** ApiId（各関数の Doxygen \ServiceID タグと一致させること。値は SWS 8.x 章の
+ *  「Service ID[hex]」記載を実測して確認済み） */
+#define BSWM_API_ID_INIT                  0x00U
+#define BSWM_API_ID_ECUM_CURRENT_STATE    0x0FU
+#define BSWM_API_ID_COMM_CURRENT_MODE     0x0EU
+
+/* -----------------------------------------------------------------------
  * Os タスク ID (Os_PBCfg.c のインデックスと一致させること)
  * ----------------------------------------------------------------------- */
 #define BSWM_OS_TASK_CAN_READ       0U  /**< Can_MainFunction_Read (1 ms)   */

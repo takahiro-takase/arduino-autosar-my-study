@@ -106,6 +106,10 @@ static unsigned long           CanSM_BusOffTimerMs;   /* Bus-Off 検出時刻 (�
 static uint8                   CanSM_BusOffRetries;   /* 回復試行回数 (L1→L2 切替判定にも使う) */
 static unsigned long           CanSM_ValidationTimerMs; /* ウェイクアップ検証開始時刻 */
 
+/** [SWS_CanSM_00184/00188/00190] 用の初期化済みフラグ。CanSM_State の既定値
+ *  (CANSM_STATE_NO_COM=0) は「未初期化」と区別が付かないため別途持つ。 */
+static uint8 CanSM_Initialized = 0U;
+
 /**
  * \brief   CanSM モジュールを初期化する。
  *
@@ -119,6 +123,7 @@ void CanSM_Init(void)
     CanSM_BusOffTimerMs     = 0UL;
     CanSM_BusOffRetries     = 0U;
     CanSM_ValidationTimerMs = 0UL;
+    CanSM_Initialized       = 1U;
     DET_LOGI(TAG, "Init");
 }
 
@@ -133,8 +138,17 @@ void CanSM_Init(void)
  */
 Std_ReturnType CanSM_RequestComMode(CanSM_NetworkHandleType network, ComM_ModeType mode)
 {
-    if (network >= CANSM_CHANNEL_COUNT)
+    if (!CanSM_Initialized)
+    {
+        Det_ReportError(CANSM_MODULE_ID, 0U, CANSM_API_ID_REQUEST_COM_MODE, CANSM_E_UNINIT);
         return E_NOT_OK;
+    }
+
+    if (network >= CANSM_CHANNEL_COUNT)
+    {
+        Det_ReportError(CANSM_MODULE_ID, 0U, CANSM_API_ID_REQUEST_COM_MODE, CANSM_E_INVALID_NETWORK_HANDLE);
+        return E_NOT_OK;
+    }
 
     /* Bus-Off 回復中は上位からのモード変更を受け付けない */
     if (CanSM_State == CANSM_STATE_BUS_OFF)
@@ -192,8 +206,23 @@ Std_ReturnType CanSM_RequestComMode(CanSM_NetworkHandleType network, ComM_ModeTy
  */
 Std_ReturnType CanSM_GetCurrentComMode(CanSM_NetworkHandleType network, ComM_ModeType* mode)
 {
-    if (network >= CANSM_CHANNEL_COUNT || mode == NULL)
+    if (!CanSM_Initialized)
+    {
+        Det_ReportError(CANSM_MODULE_ID, 0U, CANSM_API_ID_GET_CURRENT_COM_MODE, CANSM_E_UNINIT);
         return E_NOT_OK;
+    }
+
+    if (network >= CANSM_CHANNEL_COUNT)
+    {
+        Det_ReportError(CANSM_MODULE_ID, 0U, CANSM_API_ID_GET_CURRENT_COM_MODE, CANSM_E_INVALID_NETWORK_HANDLE);
+        return E_NOT_OK;
+    }
+
+    if (mode == NULL)
+    {
+        Det_ReportError(CANSM_MODULE_ID, 0U, CANSM_API_ID_GET_CURRENT_COM_MODE, CANSM_E_PARAM_POINTER);
+        return E_NOT_OK;
+    }
 
     switch (CanSM_State)
     {
@@ -232,7 +261,17 @@ Std_ReturnType CanSM_GetCurrentComMode(CanSM_NetworkHandleType network, ComM_Mod
  */
 void CanSM_ControllerBusOff(uint8 ControllerId)
 {
-    (void)ControllerId;
+    if (!CanSM_Initialized)
+    {
+        Det_ReportError(CANSM_MODULE_ID, 0U, CANSM_API_ID_CONTROLLER_BUSOFF, CANSM_E_UNINIT);
+        return;
+    }
+
+    if (ControllerId != 0U)
+    {
+        Det_ReportError(CANSM_MODULE_ID, 0U, CANSM_API_ID_CONTROLLER_BUSOFF, CANSM_E_PARAM_CONTROLLER);
+        return;
+    }
 
     if (CanSM_State != CANSM_STATE_FULL_COM)
         return;

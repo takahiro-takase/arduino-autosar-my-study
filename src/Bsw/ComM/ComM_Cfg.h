@@ -11,6 +11,36 @@
 #ifndef COMM_CFG_H
 #define COMM_CFG_H
 
+/* -----------------------------------------------------------------------
+ * DET（Default Error Tracer）関連定数
+ *
+ * SWS_ComM_00234 (Table 4: Error classification) に基づく開発エラーコード。
+ * ModuleId は SWS 本文には明記されないため、AUTOSAR_TR_BSWModuleList
+ * （Release 4.3.1、docs/ 配下）の「List of Basic Software Modules」表で
+ * COM Manager (ComM) に割り当てられた固定値 12 を使う。
+ *
+ * [SWS_ComM_00612/00858]: ComM_Init/GetVersionInfo/GetStatus を除く全 API は、
+ * 未初期化状態で呼ばれた場合に COMM_E_UNINIT を報告しなければならない。
+ * 本実装は ComM_ConfigType を保持しない簡略設計のため、初期化済みかどうかを
+ * 示す専用フラグ（ComM_Initialized）を別途持つ。
+ * ----------------------------------------------------------------------- */
+
+/** AUTOSAR COM Manager の ModuleId（AUTOSAR_TR_BSWModuleList 参照、固定値 12） */
+#define COMM_MODULE_ID  12U
+
+/** 開発エラーコード（SWS_ComM_00234 表より、実際に使用する分のみ） */
+#define COMM_E_UNINIT             0x1U
+#define COMM_E_WRONG_PARAMETERS   0x2U
+#define COMM_E_PARAM_POINTER      0x3U
+
+/** ApiId（各関数の Doxygen \ServiceID タグと一致させること。値は SWS 8.x 章の
+ *  「Service ID[hex]」記載を実測して確認済み） */
+#define COMM_API_ID_INIT                    0x01U
+#define COMM_API_ID_REQUEST_COM_MODE        0x05U
+#define COMM_API_ID_GET_CURRENT_COM_MODE    0x08U
+#define COMM_API_ID_BUS_SM_MODE_INDICATION  0x33U
+#define COMM_API_ID_MAIN_FUNCTION           0x60U
+
 /** 管理チャネル数 */
 #define COMM_CHANNEL_COUNT  1U
 

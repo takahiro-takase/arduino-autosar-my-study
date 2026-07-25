@@ -49,6 +49,13 @@ static uint8 FiM_Permitted[FIM_FUNCTION_COUNT];
  */
 void FiM_Init(const FiM_ConfigType* ConfigPtr)
 {
+    if (ConfigPtr == NULL)
+    {
+        DET_LOGE(TAG, "Init: NULL ConfigPtr");
+        Det_ReportError(FIM_MODULE_ID, 0U, FIM_API_ID_INIT, FIM_E_PARAM_POINTER);
+        return;
+    }
+
     FiM_Cfg = ConfigPtr;
 
     for (uint8 i = 0U; i < ConfigPtr->FunctionCount; i++)
@@ -62,7 +69,7 @@ void FiM_Init(const FiM_ConfigType* ConfigPtr)
 /**
  * \brief   FiM 周期処理。各 FID の許可状態を再評価する。
  *
- * \ServiceID      {0x01}
+ * \ServiceID      {0x05}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
  */
@@ -97,18 +104,29 @@ void FiM_MainFunction(void)
 /**
  * \brief   指定 FID が現在許可されているかを取得する。
  *
- * \ServiceID      {0x02}
+ * \ServiceID      {0x01}
  * \Reentrancy     {Reentrant}
  * \Synchronicity  {Synchronous}
  */
 Std_ReturnType FiM_GetFunctionPermission(FiM_FunctionIdType FunctionId, uint8* Status)
 {
     if (Status == NULL)
+    {
+        Det_ReportError(FIM_MODULE_ID, 0U, FIM_API_ID_GET_FUNCTION_PERMISSION, FIM_E_PARAM_POINTER);
         return E_NOT_OK;
+    }
 
-    if (FiM_Cfg == NULL || FunctionId >= FiM_Cfg->FunctionCount)
+    if (FiM_Cfg == NULL)
+    {
+        *Status = 0U;  /* フェールセーフ: 未初期化中は抑止扱いとする */
+        Det_ReportError(FIM_MODULE_ID, 0U, FIM_API_ID_GET_FUNCTION_PERMISSION, FIM_E_UNINIT);
+        return E_NOT_OK;
+    }
+
+    if (FunctionId >= FiM_Cfg->FunctionCount)
     {
         *Status = 0U;  /* フェールセーフ: 不明な FID は抑止扱いとする */
+        Det_ReportError(FIM_MODULE_ID, 0U, FIM_API_ID_GET_FUNCTION_PERMISSION, FIM_E_FID_OUT_OF_RANGE);
         return E_NOT_OK;
     }
 

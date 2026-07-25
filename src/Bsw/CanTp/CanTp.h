@@ -96,7 +96,7 @@ void CanTp_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr);
  * \param[in]  result   送信結果 (E_OK / E_NOT_OK。上記理由により本経路では
  *                      実質的に常に E_OK)。
  *
- * \ServiceID      {0x48}
+ * \ServiceID      {0x40}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
  */
@@ -110,7 +110,7 @@ void CanTp_TxConfirmation(PduIdType TxPduId, Std_ReturnType result);
  *          - TX SEND_CF 状態: STmin 経過後に次の CF を送信
  *          - RX WAIT_CF 状態: N_Cr タイムアウト検出 → RX 中断
  *
- * \ServiceID      {0x1B}
+ * \ServiceID      {0x06}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
  */

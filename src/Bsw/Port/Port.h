@@ -58,7 +58,7 @@ void Port_Init(void);
  * \param[in]  Pin        変更対象のピン番号。
  * \param[in]  Direction  新しいピン方向 (PORT_PIN_IN / PORT_PIN_OUT)。
  *
- * \ServiceID      {0x03}
+ * \ServiceID      {0x01}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
  */

@@ -107,6 +107,13 @@ static void BswM_ExecuteRules(BswM_ModeSrcType src, uint8 newValue)
 
 void BswM_Init(const BswM_ConfigType* ConfigPtr)
 {
+    if (ConfigPtr == NULL)
+    {
+        DET_LOGE(TAG, "Init: NULL ConfigPtr");
+        Det_ReportError(BSWM_MODULE_ID, 0U, BSWM_API_ID_INIT, BSWM_E_PARAM_CONFIG);
+        return;
+    }
+
     BswM_Cfg       = ConfigPtr;
     BswM_EcuMState = ECUM_STATE_STARTUP;
     BswM_ComMMode  = COMM_NO_COMMUNICATION;
@@ -115,6 +122,19 @@ void BswM_Init(const BswM_ConfigType* ConfigPtr)
 
 void BswM_EcuM_CurrentState(EcuM_StateType state)
 {
+    if (BswM_Cfg == NULL)
+    {
+        Det_ReportError(BSWM_MODULE_ID, 0U, BSWM_API_ID_ECUM_CURRENT_STATE, BSWM_E_NO_INIT);
+        return;
+    }
+
+    if (state != ECUM_STATE_STARTUP && state != ECUM_STATE_RUN
+        && state != ECUM_STATE_POST_RUN && state != ECUM_STATE_SHUTDOWN)
+    {
+        Det_ReportError(BSWM_MODULE_ID, 0U, BSWM_API_ID_ECUM_CURRENT_STATE, BSWM_E_REQ_MODE_OUT_OF_RANGE);
+        return;
+    }
+
     if (BswM_EcuMState == state)
         return;
 
@@ -125,6 +145,18 @@ void BswM_EcuM_CurrentState(EcuM_StateType state)
 void BswM_ComM_CurrentMode(uint8 channel, ComM_ModeType mode)
 {
     (void)channel;
+
+    if (BswM_Cfg == NULL)
+    {
+        Det_ReportError(BSWM_MODULE_ID, 0U, BSWM_API_ID_COMM_CURRENT_MODE, BSWM_E_NO_INIT);
+        return;
+    }
+
+    if (mode > COMM_FULL_COMMUNICATION)
+    {
+        Det_ReportError(BSWM_MODULE_ID, 0U, BSWM_API_ID_COMM_CURRENT_MODE, BSWM_E_REQ_MODE_OUT_OF_RANGE);
+        return;
+    }
 
     if (BswM_ComMMode == mode)
         return;

@@ -33,6 +33,32 @@ extern "C" {
 #endif
 
 /* -----------------------------------------------------------------------
+ * DET（Default Error Tracer）関連定数
+ *
+ * SWS_E2EXf_00137 の Development Errors 表に基づく開発エラーコード。
+ * ModuleId は SWS 本文には明記されないため、AUTOSAR_TR_BSWModuleList
+ * （Release 4.3.1、docs/ 配下）の「List of Basic Software Modules」表で
+ * E2E Transformer (E2EXf) に割り当てられた固定値 176 を使う。
+ *
+ * E2EXf_Transform/E2EXf_InverseTransform は実際の generic API
+ * E2EXf_<transformerId>/E2EXf_Inv_<transformerId>（RTE 生成コードが
+ * トランスフォーマーごとに実体化する）に相当する、本プロジェクトの
+ * 静的に書き下したラッパー実装。
+ * ----------------------------------------------------------------------- */
+
+/** AUTOSAR E2E Transformer の ModuleId（AUTOSAR_TR_BSWModuleList 参照、固定値 176） */
+#define E2EXF_MODULE_ID  176U
+
+/** 開発エラーコード（SWS_E2EXf_00137 表より、実際に使用する分のみ） */
+#define E2EXF_E_UNINIT        0x01U
+#define E2EXF_E_PARAM_POINTER 0x04U
+
+/** ApiId（値は SWS 8.x 章の「Service ID[hex]」記載を実測して確認済み） */
+#define E2EXF_API_ID_INIT               0x01U
+#define E2EXF_API_ID_TRANSFORM          0x03U
+#define E2EXF_API_ID_INVERSE_TRANSFORM  0x04U
+
+/* -----------------------------------------------------------------------
  * RX 側（Inverse Transformer）設定
  * 1 I-PDU につき 1 インスタンス。DemEventId はどの Dem イベントへ結果を
  * 報告するかを設定側で決め、E2EXf.c 本体には IPduId のハードコード比較を
@@ -69,6 +95,10 @@ typedef struct
  *
  * \pre        EcuM_Init() から Com_Init() の後、フレーム受信・送信が
  *             始まる前に呼び出すこと。
+ *
+ * \ServiceID      {0x01}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
  */
 void E2EXf_Init(void);
 
@@ -97,6 +127,10 @@ void E2EXf_Init(void);
  *                    （SWS_E2EXf_00133 相当）。呼び出し元は Buffer の内容を
  *                    破棄すべき（前回の有効値を保持し続けるか、タイムアウト
  *                    経由でフェイルセーフへ移行する）。
+ *
+ * \ServiceID      {0x04}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
  */
 Std_ReturnType E2EXf_InverseTransform(const E2EXf_RxConfigType* Config, const uint8* Buffer, uint8 Length,
                                        E2E_P01StatusType* CheckStatus);
@@ -110,6 +144,10 @@ Std_ReturnType E2EXf_InverseTransform(const E2EXf_RxConfigType* Config, const ui
  * \param[in]     Config  TX 側設定。NULL 禁止。
  * \param[in,out] Buffer  変換対象の I-PDU バイト列（上書きされる）。NULL 禁止。
  * \param[in]     Length  Buffer のバイト数。
+ *
+ * \ServiceID      {0x03}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
  */
 void E2EXf_Transform(const E2EXf_TxConfigType* Config, uint8* Buffer, uint8 Length);
 

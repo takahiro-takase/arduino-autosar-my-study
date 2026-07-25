@@ -139,7 +139,7 @@ typedef struct
  *
  * \param[in]  ConfigPtr  ポストビルドコンフィグへのポインタ。NULL 禁止。
  *
- * \ServiceID      {0x06}
+ * \ServiceID      {0x00}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
  */
@@ -156,7 +156,7 @@ void NvM_Init(const NvM_ConfigType* ConfigPtr);
  * \retval  E_OK      正常完了。
  * \retval  E_NOT_OK  BlockId が範囲外、または NvM_DstPtr が NULL。
  *
- * \ServiceID      {0x16}
+ * \ServiceID      {0x06}
  * \Reentrancy     {Reentrant}
  * \Synchronicity  {Synchronous}
  */
@@ -181,7 +181,7 @@ Std_ReturnType NvM_ReadBlock(NvM_BlockIdType BlockId, void* NvM_DstPtr);
  * \retval  E_OK      ジョブを受け付けた（書き込み完了を意味しない）。
  * \retval  E_NOT_OK  BlockId が範囲外、または NvM_SrcPtr が NULL。
  *
- * \ServiceID      {0x0D}
+ * \ServiceID      {0x07}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Asynchronous}
  */
@@ -202,7 +202,7 @@ Std_ReturnType NvM_WriteBlock(NvM_BlockIdType BlockId, const void* NvM_SrcPtr);
  * \retval  E_OK      ジョブを受け付けた（書き込み完了を意味しない）。
  * \retval  E_NOT_OK  BlockId が範囲外。
  *
- * \ServiceID      {0x0F}
+ * \ServiceID      {0x08}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Asynchronous}
  */
@@ -223,7 +223,7 @@ Std_ReturnType NvM_RestoreBlockDefaults(NvM_BlockIdType BlockId);
  * \retval  NVM_REQ_PENDING  ジョブが保留中（キュー内、または処理中）。
  * \retval  NVM_REQ_NOT_OK   BlockId が範囲外。
  *
- * \ServiceID      {0x10}
+ * \ServiceID      {0x04}
  * \Reentrancy     {Reentrant}
  * \Synchronicity  {Synchronous}
  */
@@ -239,7 +239,7 @@ NvM_RequestResultType NvM_GetErrorStatus(NvM_BlockIdType BlockId);
  *          移る。1 回の呼び出しで実際にブロッキングするのは高々 1 バイト分の
  *          EEPROM 書き込み時間のみに抑えられる。
  *
- * \ServiceID      {0x11}
+ * \ServiceID      {0x0E}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
  */

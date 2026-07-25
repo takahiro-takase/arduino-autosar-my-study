@@ -28,6 +28,43 @@
 #include "Platform_Types.h"
 
 /* -----------------------------------------------------------------------
+ * DET（Default Error Tracer）関連定数
+ *
+ * [SWS_Com_00442]: 開発エラー検出時、以下を引数に Det_ReportError() を呼ぶ。
+ *   "50 as the AUTOSAR COM's ModuleId, 0 as InstanceId, the service ID of
+ *    the AUTOSAR COM module's API in which the error was detected as ApiId,
+ *    the error ID as defined in Chapter 7.12.1 as ErrorId"
+ *
+ * DET_LOGE(...)（呼び出し元固有の自由文字列、Serial ログ）とは独立した
+ * チャネルであり、両方を呼ぶ（詳細情報を失わずに標準準拠のエラー通知も
+ * 行うため）。詳細は Det.h の Det_ReportError() 宣言コメント参照。
+ * ----------------------------------------------------------------------- */
+
+/** AUTOSAR COM の ModuleId（[SWS_Com_00442] で固定値 50 と規定） */
+#define COM_MODULE_ID  50U
+
+/** 開発エラーコード（7.12.1 章 Development Errors） */
+#define COM_E_PARAM          0x01U  /* [SWS_Com_00803]: API に不正なパラメータで呼ばれた */
+#define COM_E_UNINIT         0x02U  /* [SWS_Com_00804]: Com_Init 前 / Com_Deinit 後に呼ばれた */
+#define COM_E_PARAM_POINTER  0x03U  /* [SWS_Com_00805]: NULL ポインタチェック */
+#define COM_E_INIT_FAILED    0x04U  /* [SWS_Com_00837]: 不正なコンフィグセット選択 */
+
+/** ApiId（各関数の Doxygen \ServiceID タグと一致させること） */
+#define COM_API_ID_INIT                        0x00U
+#define COM_API_ID_IPDU_GROUP_START             0x03U
+#define COM_API_ID_IPDU_GROUP_STOP              0x04U
+#define COM_API_ID_SEND_SIGNAL                  0x0AU
+#define COM_API_ID_RECEIVE_SIGNAL               0x0BU
+#define COM_API_ID_RX_INDICATION                0x10U
+#define COM_API_ID_TX_CONFIRMATION               0x11U
+#define COM_API_ID_SEND_SIGNAL_GROUP            0x18U
+#define COM_API_ID_RECEIVE_SIGNAL_GROUP         0x19U
+#define COM_API_ID_RECEIVE_SIGNAL_GROUP_ARRAY   0x1AU
+#define COM_API_ID_IS_RX_TIMED_OUT              0x1BU
+#define COM_API_ID_MAIN_FUNCTION                0x20U
+#define COM_API_ID_SET_COMMUNICATION_ENABLED    0x30U
+
+/* -----------------------------------------------------------------------
  * プリコンパイル設定定数
  * DaVinci: /ActiveEcuC/Com/ComConfig/ 配下の ComIPdu ノード数に相当
  * ----------------------------------------------------------------------- */

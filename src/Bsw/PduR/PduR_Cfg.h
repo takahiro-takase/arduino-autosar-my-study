@@ -19,6 +19,39 @@
 #include "Platform_Types.h"
 
 /* -----------------------------------------------------------------------
+ * DET（Default Error Tracer）関連定数
+ *
+ * SWS_PduR_00100 の Development Errors 表（7.8.1 章）に基づく開発エラー
+ * コード。ModuleId は SWS 本文には明記されないため、AUTOSAR_TR_BSWModuleList
+ * （Release 4.3.1、docs/ 配下）の「List of Basic Software Modules」表で
+ * PDU Router (PduR) に割り当てられた固定値 51 を使う。
+ *
+ * [SWS_PduR_00119]: PduR_Init/PduR_GetVersionInfo を除く全 API は、未初期化
+ * 状態で呼ばれた場合に PDUR_E_UNINIT を報告しなければならない（CanIf の
+ * 「黙って戻る」方式とは異なる点に注意）。
+ * ----------------------------------------------------------------------- */
+
+/** AUTOSAR PDU Router の ModuleId（AUTOSAR_TR_BSWModuleList 参照、固定値 51） */
+#define PDUR_MODULE_ID  51U
+
+/** 開発エラーコード（SWS_PduR_00100 表より、実際に使用する分のみ） */
+#define PDUR_E_INIT_FAILED  0x00U  /* 不正な設定ポインタ／設定内容 */
+#define PDUR_E_UNINIT       0x01U  /* [SWS_PduR_00119]: 未初期化時の API 呼び出し */
+#define PDUR_E_PDU_ID_INVALID 0x02U  /* [SWS_PduR_00221]: 一致するルーティングパスなし */
+#define PDUR_E_PARAM_POINTER  0x09U  /* NULL ポインタチェック */
+
+/** ApiId（各関数の Doxygen \ServiceID タグと一致させること。値は SWS 8.x 章の
+ *  「Service ID[hex]」記載を実測して確認済み） */
+#define PDUR_API_ID_INIT                0xF0U
+#define PDUR_API_ID_TRANSMIT            0x49U
+#define PDUR_API_ID_RX_INDICATION       0x42U
+#define PDUR_API_ID_TX_CONFIRMATION     0x40U
+/** SecOC 専用 TX エントリポイント（PduR_SecOCTransmit）。generic な
+ *  PduR_<User:Up>Transmit テンプレートの一種ではあるが、AUTOSAR 標準の
+ *  慣例に合わせ Up:Transmit 系の 0x49 に隣接する未使用値を割り当てる。 */
+#define PDUR_API_ID_SECOC_TRANSMIT      0x4AU
+
+/* -----------------------------------------------------------------------
  * プリコンパイル設定定数
  * ----------------------------------------------------------------------- */
 

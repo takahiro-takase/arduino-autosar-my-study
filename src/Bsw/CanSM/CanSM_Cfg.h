@@ -11,6 +11,35 @@
 #ifndef CANSM_CFG_H
 #define CANSM_CFG_H
 
+/* -----------------------------------------------------------------------
+ * DET（Default Error Tracer）関連定数
+ *
+ * SWS_CanSM_00654 の Development Errors 表に基づく開発エラーコード。
+ * ModuleId は SWS 本文には明記されないため、AUTOSAR_TR_BSWModuleList
+ * （Release 4.3.1、docs/ 配下）の「List of Basic Software Modules」表で
+ * CAN State Manager (CanSM) に割り当てられた固定値 140 を使う。
+ *
+ * 本実装は CanSM_ConfigType を保持しない簡略設計（CanSM_Init は実際の
+ * AUTOSAR 仕様では ConfigPtr を取るが、本プロジェクトは無引数）のため、
+ * 初期化済みかどうかを示す専用フラグ（CanSM_Initialized）を別途持つ。
+ * ----------------------------------------------------------------------- */
+
+/** AUTOSAR CAN State Manager の ModuleId（AUTOSAR_TR_BSWModuleList 参照、固定値 140） */
+#define CANSM_MODULE_ID  140U
+
+/** 開発エラーコード（SWS_CanSM_00654 表より、実際に使用する分のみ） */
+#define CANSM_E_UNINIT                   0x01U
+#define CANSM_E_PARAM_POINTER            0x02U
+#define CANSM_E_INVALID_NETWORK_HANDLE   0x03U
+#define CANSM_E_PARAM_CONTROLLER         0x04U
+
+/** ApiId（各関数の Doxygen \ServiceID タグと一致させること。値は SWS 8.x 章の
+ *  「Service ID[hex]」記載を実測して確認済み） */
+#define CANSM_API_ID_INIT                  0x00U
+#define CANSM_API_ID_REQUEST_COM_MODE       0x02U
+#define CANSM_API_ID_GET_CURRENT_COM_MODE  0x03U
+#define CANSM_API_ID_CONTROLLER_BUSOFF     0x04U
+
 /** 管理ネットワーク（チャネル）数 */
 #define CANSM_CHANNEL_COUNT        1U
 

@@ -128,7 +128,7 @@ static unsigned long   EcuM_PostRunTimerMs = 0UL;
  * \note       AUTOSAR EcuM では StartupOne (OS 起動前) と
  *             StartupTwo (OS 起動後) に分かれるが、本実装では一本化している。
  *
- * \ServiceID      {0x00}
+ * \ServiceID      {0x01}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
  */
@@ -225,7 +225,10 @@ EcuM_StateType EcuM_GetState(void)
 Std_ReturnType EcuM_RequestRUN(EcuM_UserType user)
 {
     if (user >= ECUM_USER_COUNT)
+    {
+        Det_ReportError(ECUM_MODULE_ID, 0U, ECUM_API_ID_REQUEST_RUN, ECUM_E_INVALID_PAR);
         return E_NOT_OK;
+    }
 
     const uint8 mask = (uint8)(1U << user);
 
@@ -233,12 +236,12 @@ Std_ReturnType EcuM_RequestRUN(EcuM_UserType user)
     {
         /* SWS_EcuM_04125: 同一ユーザからの要求はネストできない。既に
          * このユーザの RUN 要求が立っている状態での追加要求は DET
-         * (ECUM_E_MULTIPLE_RUN_REQUESTS 相当) へ報告し、E_NOT_OK を返す。
+         * (ECUM_E_MULTIPLE_RUN_REQUESTS) へ報告し、E_NOT_OK を返す。
          * 重複時点で EcuM_State は必ず RUN である（POST_RUN/SHUTDOWN は
          * 全ユーザ解放後にのみ到達するため、この分岐に来た時点で
          * user のビットが立っているなら状態遷移の余地はない）。 */
-        DET_LOGW(TAG, "RequestRUN E: multiple request user=%u (ECUM_E_MULTIPLE_RUN_REQUESTS)",
-                 (unsigned)user);
+        DET_LOGW(TAG, "RequestRUN E: multiple request user=%u", (unsigned)user);
+        Det_ReportError(ECUM_MODULE_ID, 0U, ECUM_API_ID_REQUEST_RUN, ECUM_E_MULTIPLE_RUN_REQUESTS);
         return E_NOT_OK;
     }
 
@@ -279,16 +282,19 @@ Std_ReturnType EcuM_RequestRUN(EcuM_UserType user)
 Std_ReturnType EcuM_ReleaseRUN(EcuM_UserType user)
 {
     if (user >= ECUM_USER_COUNT)
+    {
+        Det_ReportError(ECUM_MODULE_ID, 0U, ECUM_API_ID_RELEASE_RUN, ECUM_E_INVALID_PAR);
         return E_NOT_OK;
+    }
 
     const uint8 mask = (uint8)(1U << user);
 
     if ((EcuM_RunUsers & mask) == 0U)
     {
         /* SWS_EcuM_04127: 対応する要求なしの解放は DET
-         * (ECUM_E_MISMATCHED_RUN_RELEASE 相当) へ報告し、E_NOT_OK を返す。 */
-        DET_LOGW(TAG, "ReleaseRUN E: mismatched release user=%u (ECUM_E_MISMATCHED_RUN_RELEASE)",
-                 (unsigned)user);
+         * (ECUM_E_MISMATCHED_RUN_RELEASE) へ報告し、E_NOT_OK を返す。 */
+        DET_LOGW(TAG, "ReleaseRUN E: mismatched release user=%u", (unsigned)user);
+        Det_ReportError(ECUM_MODULE_ID, 0U, ECUM_API_ID_RELEASE_RUN, ECUM_E_MISMATCHED_RUN_RELEASE);
         return E_NOT_OK;
     }
 

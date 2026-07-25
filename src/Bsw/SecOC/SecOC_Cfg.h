@@ -13,6 +13,37 @@
 
 #include "Platform_Types.h"
 
+/* -----------------------------------------------------------------------
+ * DET（Default Error Tracer）関連定数
+ *
+ * SWS_SecOC 7.7.1 Development Errors 表（SWS_SecOC_00101）に基づく開発
+ * エラーコード。ModuleId は SWS 本文には明記されないため、
+ * AUTOSAR_TR_BSWModuleList（Release 4.3.1、docs/ 配下）の
+ * 「List of Basic Software Modules」表で Secure Onboard Communication
+ * (SecOC) に割り当てられた固定値 150 を使う。
+ *
+ * 本モジュールは AUTOSAR 標準の Doxygen \ServiceID タグを元々持たなかった
+ * ため、SWS 8.x 章の「Service ID[hex]」記載を実測して新規に付与する。
+ * SecOC_IfRxIndication は実際の SWS では SecOC_RxIndication（引数構成は
+ * 同一）という名前であり、本プロジェクトは SecOC_IfTransmit との対称性の
+ * ため独自に "If" を付けている。
+ * ----------------------------------------------------------------------- */
+
+/** AUTOSAR Secure Onboard Communication の ModuleId
+ *  （AUTOSAR_TR_BSWModuleList 参照、固定値 150） */
+#define SECOC_MODULE_ID  150U
+
+/** 開発エラーコード（SWS_SecOC 7.7.1 表より、実際に使用する分のみ） */
+#define SECOC_E_PARAM_POINTER      0x01U
+#define SECOC_E_UNINIT             0x02U
+#define SECOC_E_INVALID_PDU_SDU_ID 0x03U
+
+/** ApiId（値は SWS 8.x 章の「Service ID[hex]」記載を実測して確認済み） */
+#define SECOC_API_ID_INIT              0x01U
+#define SECOC_API_ID_RX_INDICATION     0x42U
+#define SECOC_API_ID_IF_TRANSMIT       0x49U
+#define SECOC_API_ID_MAIN_FUNCTION_TX  0x03U
+
 /** RX Secured I-PDU テーブルのエントリ数
  *  [0]=ImmobilizerCmd (CAN 0x120, KeyFobEcu からの想定) */
 #define SECOC_RX_PDU_COUNT  1U
