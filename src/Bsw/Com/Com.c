@@ -61,6 +61,16 @@ static uint8         Com_RxTimedOut[COM_RX_IPDU_MAX];  /* 1 = タイムアウト
  * 「初回は FirstTimeout、以降は Timeout」を受信デッドライン監視にも適用）。 */
 static uint8         Com_RxUsingFirstTimeout[COM_RX_IPDU_MAX];
 
+/* シグナル単位のデッドライン監視ラッチ（1 = このシグナルのタイムアウトを
+ * 検出済み）。Com_SignalConfigType.FirstTimeoutMs/TimeoutMs を設定した
+ * 非 Signal Group の RX シグナルにのみ意味を持つ（Signal Group メンバーは
+ * 引き続き Com_RxTimedOut/Com_RxShadowTimedOut（I-PDU/グループ単位）を使う
+ * ため、このシグナルについては本配列は常に 0 のまま参照されない）。
+ * タイマーの起点は所属 I-PDU の Com_RxLastMs[]・フェーズ判定は
+ * Com_RxUsingFirstTimeout[] を共有する（Com_SignalConfigType の
+ * FirstTimeoutMs/TimeoutMs 宣言コメント参照）。 */
+static uint8         Com_SigTimedOut[COM_SIGNAL_COUNT];
+
 /* -----------------------------------------------------------------------
  * RX Signal Group（ComIPduConfigType.IsSignalGroup = 1、RX I-PDU 側）関連の
  * 内部状態。TX 側のシャドウバッファ（Com_TxShadowBuffer 等、下記）の対称。
@@ -279,6 +289,7 @@ void Com_Init(const Com_ConfigType* config)
         Com_RxLastValidValue[s]        = 0U;
         Com_RxInvalidNotifyPending[s]  = 0U;
         Com_RxFilterRejectPending[s]   = 0U;
+        Com_SigTimedOut[s]             = 0U;
     }
 
     DET_LOGI(TAG, "Init ok RX=%u TX=%u sig=%u",
@@ -481,6 +492,19 @@ void Com_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
         Com_RxLastMs[ipdu->IPduId]  = millis();
         Com_RxTimedOut[ipdu->IPduId] = 0U;
         Com_RxUsingFirstTimeout[ipdu->IPduId] = 0U;
+
+        /* シグナル単位のデッドライン監視（非 Signal Group のみ意味を持つ）も
+         * 同じタイミングでリセットする。この I-PDU に属する全 RX シグナルが
+         * 対象（Signal Group メンバーも含めて回しておくが、そちらは
+         * Com_SigTimedOut を参照しないため実害はない）。 */
+        for (uint8 s = 0U; s < Com_ConfigPtr->SignalCount; s++)
+        {
+            if (Com_ConfigPtr->Signals[s].Direction == COM_SIGNAL_DIRECTION_RX
+                && Com_ConfigPtr->Signals[s].IPduId == ipdu->IPduId)
+            {
+                Com_SigTimedOut[s] = 0U;
+            }
+        }
 
         char hexbuf[25];
         Log_HexStr(hexbuf, sizeof(hexbuf), Com_RxBuffer[ipdu->IPduId], ipdu->DLC);
@@ -996,10 +1020,15 @@ uint8 Com_ReceiveSignal(Com_SignalIdType SignalId, void* SignalDataPtr)
         /* RX Signal Group メンバーは Com_ReceiveSignalGroup() が確定コピーした
          * シャドウバッファ・タイムアウトスナップショットを読む（Com_RxBuffer/
          * Com_RxTimedOut を直接見ない）。これにより、同じグループの複数
-         * メンバーを読む間に新しいフレームが届いても一貫した値が返る。 */
+         * メンバーを読む間に新しいフレームが届いても一貫した値が返る
+         * （[7.3.6] "handled like a signal" のとおり、グループはこの
+         * I-PDU/グループ単位の判定を使う）。
+         * 非 Signal Group のシグナルは、このシグナル自身の
+         * FirstTimeoutMs/TimeoutMs に基づく Com_SigTimedOut[]（シグナル単位、
+         * Com_MainFunction() 参照）を使う。 */
         const uint8 timedOut = (ipdu->IsSignalGroup != 0U)
                                ? Com_RxShadowTimedOut[sig->IPduId]
-                               : Com_RxTimedOut[sig->IPduId];
+                               : Com_SigTimedOut[s];
         const uint8* srcBuf  = (ipdu->IsSignalGroup != 0U)
                                ? Com_RxShadowBuffer[sig->IPduId]
                                : Com_RxBuffer[sig->IPduId];
@@ -1767,6 +1796,39 @@ void Com_MainFunction(void)
                          Com_RxUsingFirstTimeout[id] ? "first" : "steady");
             }
         }
+
+        /* シグナル単位のデッドライン監視（[7.3.6]、Com_SignalConfigType の
+         * FirstTimeoutMs/TimeoutMs 宣言コメント参照）。Signal Group メンバー
+         * は対象外（TimeoutMs=0 の既定のままのため、下の TimeoutMs==0 判定で
+         * 自然にスキップされる。グループの deadline は上の I-PDU 単位ループが
+         * 別途担う）。I-PDU Group 停止中は上と同じ理由でスキップする。 */
+        for (uint8 s = 0U; s < Com_ConfigPtr->SignalCount; s++)
+        {
+            const Com_SignalConfigType* sig = &Com_ConfigPtr->Signals[s];
+            if (sig->Direction != COM_SIGNAL_DIRECTION_RX || sig->TimeoutMs == 0U)
+                continue;  /* [SWS_Com_00333]: 監視無効（FirstTimeoutMs も無視） */
+
+            if (sig->IPduId >= COM_RX_IPDU_MAX || !Com_RxIPduStarted[sig->IPduId])
+                continue;
+
+            const uint16 sigThreshold = Com_RxUsingFirstTimeout[sig->IPduId]
+                                        ? sig->FirstTimeoutMs
+                                        : sig->TimeoutMs;
+            if (sigThreshold == 0U)
+                continue;  /* [SWS_Com_00716]: 初回受信までは監視しない */
+
+            if (!Com_SigTimedOut[s] &&
+                (now - Com_RxLastMs[sig->IPduId]) >= (unsigned long)sigThreshold)
+            {
+                Com_SigTimedOut[s] = 1U;
+                DET_LOGW(TAG, "RX timeout sig=%u iPdu=%u (%ums, %s)",
+                         (unsigned)sig->SignalId, (unsigned)sig->IPduId,
+                         (unsigned)sigThreshold,
+                         Com_RxUsingFirstTimeout[sig->IPduId] ? "first" : "steady");
+                if (sig->TimeoutNotificationCbk != NULL)
+                    sig->TimeoutNotificationCbk();
+            }
+        }
     }
     /* Com_RxEnabled==0 の間はデッドライン監視自体を無効化する
      * (SWS_Com_00684/00685)。TX 送信は Rx とは独立した機能のため、
@@ -1846,6 +1908,15 @@ void Com_SetCommunicationEnabled(uint8 RxEnabled, uint8 TxEnabled)
             Com_RxLastMs[id]   = now;
             Com_RxTimedOut[id] = 0U;
             Com_RxUsingFirstTimeout[id] = 1U;  /* 再開直後は ComFirstTimeout 相当から */
+
+            for (uint8 s = 0U; s < Com_ConfigPtr->SignalCount; s++)
+            {
+                if (Com_ConfigPtr->Signals[s].Direction == COM_SIGNAL_DIRECTION_RX
+                    && Com_ConfigPtr->Signals[s].IPduId == id)
+                {
+                    Com_SigTimedOut[s] = 0U;
+                }
+            }
         }
     }
 
@@ -1878,6 +1949,15 @@ void Com_IpduGroupStart(Com_IpduGroupIdType IpduGroupId, uint8 initialize)
         Com_RxLastMs[id]   = now;
         Com_RxTimedOut[id] = 0U;
         Com_RxUsingFirstTimeout[id] = 1U;
+
+        for (uint8 s = 0U; s < Com_ConfigPtr->SignalCount; s++)
+        {
+            if (Com_ConfigPtr->Signals[s].Direction == COM_SIGNAL_DIRECTION_RX
+                && Com_ConfigPtr->Signals[s].IPduId == id)
+            {
+                Com_SigTimedOut[s] = 0U;
+            }
+        }
 
         if (initialize != 0U)
         {

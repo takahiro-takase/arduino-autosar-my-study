@@ -394,8 +394,13 @@ static const Com_SignalConfigType Com_SignalConfigData[COM_SIGNAL_COUNT] = {
         .FilterMin       = 0U,                  /* DaVinci: ComFilterMin（下限、rpm） */
         .FilterMax       = 8000U,               /* DaVinci: ComFilterMax（上限、rpm。本プロジェクト想定
                                                  *          エンジンのレッドライン相当） */
-        .FilterRejectCbk = Rte_COMFilterReject_EngineSpeed /* DaVinci: ComNotification 相当
+        .FilterRejectCbk = Rte_COMFilterReject_EngineSpeed, /* DaVinci: ComNotification 相当
                                                  *          （フィルタで破棄された旨をログするだけの最小デモ） */
+        .FirstTimeoutMs = COM_TIMEOUT_ENGINE_INFO_MS, /* DaVinci: ComFirstTimeout（シグナル単位）
+                                                 *          非 Signal Group のためシグナル単位の監視が有効。
+                                                 *          所属 I-PDU（EngineInfo）の値と同じにして、
+                                                 *          このシグナル単独としては挙動を変えない */
+        .TimeoutMs      = COM_TIMEOUT_ENGINE_INFO_MS  /* DaVinci: ComTimeout（シグナル単位） */
     },
     {
         /* ---------------------------------------------------------------
@@ -422,7 +427,10 @@ static const Com_SignalConfigType Com_SignalConfigData[COM_SIGNAL_COUNT] = {
         .Endian      = COM_BIG_ENDIAN,          /* DaVinci: ComSignalEndianness = OPAQUE */
         .DataInvalidAction      = COM_DATA_INVALID_ACTION_NOTIFY, /* DaVinci: ComDataInvalidAction */
         .InvalidValue           = 0xFFU,                          /* DaVinci: ComSignalDataInvalidValue */
-        .InvalidNotificationCbk = Rte_COMInvalidNotify_CoolantTemp /* DaVinci: ComInvalidNotification */
+        .InvalidNotificationCbk = Rte_COMInvalidNotify_CoolantTemp, /* DaVinci: ComInvalidNotification */
+        .FirstTimeoutMs = COM_TIMEOUT_ENGINE_INFO_MS, /* DaVinci: ComFirstTimeout（シグナル単位）
+                                                 *          EngineSpeed と同じ理由・同じ値 */
+        .TimeoutMs      = COM_TIMEOUT_ENGINE_INFO_MS  /* DaVinci: ComTimeout（シグナル単位） */
     },
     {
         /* ---------------------------------------------------------------
@@ -434,7 +442,10 @@ static const Com_SignalConfigType Com_SignalConfigData[COM_SIGNAL_COUNT] = {
         .IPduId      = 0U,                        /* DaVinci: ComIPduRef → EngineInfo_Rx */
         .BitPosition = 40U,                       /* DaVinci: ComBitPosition    */
         .BitSize     = 1U,                        /* DaVinci: ComBitSize        */
-        .Endian      = COM_BIG_ENDIAN             /* DaVinci: ComSignalEndianness = OPAQUE */
+        .Endian      = COM_BIG_ENDIAN,            /* DaVinci: ComSignalEndianness = OPAQUE */
+        .FirstTimeoutMs = COM_TIMEOUT_ENGINE_INFO_MS, /* DaVinci: ComFirstTimeout（シグナル単位）
+                                                 *          EngineSpeed と同じ理由・同じ値 */
+        .TimeoutMs      = COM_TIMEOUT_ENGINE_INFO_MS  /* DaVinci: ComTimeout（シグナル単位） */
     },
     {
         /* ---------------------------------------------------------------
@@ -485,6 +496,13 @@ static const Com_SignalConfigType Com_SignalConfigData[COM_SIGNAL_COUNT] = {
          * を読む」という設計だからであり、ASW の呼び出しタイミングを変えた
          * だけでは解消しない構造的な性質である。動機は実利より仕様忠実性。
          * 詳細は README.md の「ComRxDataTimeoutAction」節を参照。
+         * FirstTimeoutMs/TimeoutMs（シグナル単位）は本メンバーおよび他の
+         * AbsInfo グループメンバーいずれも意図的に未設定（0）のままとする。
+         * [7.3.6] "handled like a signal" のとおり、Signal Group は個々の
+         * メンバーではなくグループ全体で 1 つのデッドラインとして扱われる
+         * ため、代わりに所属 I-PDU（AbsInfo）側の FirstTimeoutMs/TimeoutMs
+         * （Com_IPduConfigType 側、グループの deadline）が使われる
+         * （Com_Types.h の Com_SignalConfigType 宣言コメント参照）。
          * --------------------------------------------------------------- */
         .SignalId    = COM_SIGNAL_VEHICLE_SPEED, /* DaVinci: ComHandleId        */
         .Direction   = COM_SIGNAL_DIRECTION_RX,  /* 本プロジェクト独自拡張。Com_SignalDirectionType 参照 */

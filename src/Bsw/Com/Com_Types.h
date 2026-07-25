@@ -506,6 +506,34 @@ typedef enum
 //               COM_DATA_INVALID_ACTION_NOTIFY のときのみ InvalidValue /
 //               InvalidNotificationCbk を参照する。InvalidNotificationCbk は
 //               NULL 可（通知不要なら未設定でよい）。
+//   FirstTimeoutMs / TimeoutMs / TimeoutNotificationCbk : RX シグナルのみ
+//               使用（DaVinci: ComFirstTimeout / ComTimeout /
+//               ComTimeoutNotification、[7.3.6 Deadline Monitoring]）。
+//               AUTOSAR 本来はデッドライン監視をシグナル（本フィールド）と
+//               シグナルグループ（後述、Com_IPduConfigType 側）の単位で
+//               個別に設定できる。本プロジェクトでは：
+//                 - 非 Signal Group のシグナル（所属 I-PDU の
+//                   IsSignalGroup=0）: ここで設定した値を使い、
+//                   Com_SigTimedOut[]（シグナル単位）で判定する。
+//                 - Signal Group メンバー（IsSignalGroup=1）: 本フィールドは
+//                   未使用（0 のまま）。[7.3.6] の "In the context of
+//                   deadline monitoring for a signal group, it is handled
+//                   like a signal" のとおり、グループ全体で 1 つの
+//                   デッドラインとして扱われるため、代わりに所属 I-PDU の
+//                   FirstTimeoutMs/TimeoutMs（Com_IPduConfigType 側、
+//                   グループの deadline に相当）と Com_RxTimedOut/
+//                   Com_RxShadowTimedOut（I-PDU/グループ単位）を使う
+//                   （Com_ReceiveSignal() 参照。変更なし）。
+//               TimeoutMs=0（既定）はこのシグナル単位の監視を無効化する
+//               （[SWS_Com_00333]。FirstTimeoutMs も無視される）。
+//               FirstTimeoutMs（TimeoutMs が非 0 の場合のみ意味を持つ）が
+//               0 の場合は「初回受信までは監視しない」（[SWS_Com_00716]）。
+//               タイマーの起点は所属 I-PDU の Com_RxLastMs[IPduId] を共有
+//               する（同一 I-PDU 内のシグナルは必ず同時に更新されるため、
+//               シグナルごとに別の受信時刻を持つ必要はない）。
+//               TimeoutNotificationCbk は非 NULL ならこのシグナルの
+//               デッドライン超過を新規検出した瞬間に Com_MainFunction() から
+//               呼ばれる（Com_CbkTimeout 相当）。NULL 可（通知不要なら未設定）。
 //   TxAckCbk    : TX シグナルのみ使用。非 NULL なら、このシグナルが属する
 //               I-PDU の送信が成功するたびに Com_TxConfirmation() から
 //               呼ばれる（Com_CbkTxAck、SWS_Com_00468 相当）。このシグナル
@@ -541,6 +569,9 @@ typedef struct
     Com_DataInvalidActionType   DataInvalidAction;
     uint32                      InvalidValue;
     void (*InvalidNotificationCbk)(void);
+    uint16                      FirstTimeoutMs;
+    uint16                      TimeoutMs;
+    void (*TimeoutNotificationCbk)(void);
     void (*TxAckCbk)(void);
     void (*TxErrCbk)(void);
 } Com_SignalConfigType;
