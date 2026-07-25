@@ -109,6 +109,11 @@
  *   .BitPosition ←→ ComBitPosition       （PDU バッファ内のビット開始位置）
  *   .BitSize     ←→ ComBitSize           （シグナルのビット長）
  *   .Endian      ←→ ComSignalEndianness  （OPAQUE=BigEndian / INTEL=LittleEndian）
+ *   .InitValue   ←→ ComSignalInitValue   （シグナルの初期値。RX/TX 共通、既定 0。
+ *                    Com_Init()/Com_IpduGroupStart(initialize=true) 時のバッファ
+ *                    初期化、RxDataTimeoutAction=REPLACE、
+ *                    DataInvalidAction=REPLACE で使用。現状どのシグナルにも
+ *                    明示設定していない = 既定の 0）
  *   .FilterAlgorithm ←→ ComFilterAlgorithm （TX: 送信要否・TMS 評価。RX: NEW_IS_WITHIN のみ受信フィルタとして使用）
  *   .Mask            ←→ ComFilterMask
  *   .FilterMin / .FilterMax ←→ ComFilterMin / ComFilterMax （FilterAlgorithm=NEW_IS_WITHIN のみ使用、RX シグナルのみ）

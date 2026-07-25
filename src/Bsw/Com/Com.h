@@ -203,7 +203,8 @@ void Com_SetCommunicationEnabled(uint8 RxEnabled, uint8 TxEnabled);
  * \param[in]  IpduGroupId  起動する I-PDU Group の ID
  *                          （Com_Cfg.h の COM_IPDU_GROUP_* 参照）。
  * \param[in]  initialize   非 0 の場合、追加で I-PDU のデータ・Signal Group の
- *                          シャドウバッファをゼロ初期化する（[SWS_Com_00222]）。
+ *                          シャドウバッファ・フィルタ old_value を
+ *                          ComSignalInitValue で初期化する（[SWS_Com_00222]）。
  *                          0 の場合は直近の値を保持したまま起動する。
  *
  * \AUTOSARReq     {SWS_Com_91001, SWS_Com_00114, SWS_Com_00787, SWS_Com_00222,
