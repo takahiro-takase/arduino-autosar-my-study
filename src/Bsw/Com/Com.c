@@ -53,6 +53,14 @@ static uint8         Com_TxBuffer[COM_TX_IPDU_MAX][COM_IPDU_MAX_DLC];
 static unsigned long Com_RxLastMs[COM_RX_IPDU_MAX];   /* 最終受信時刻 [ms] */
 static uint8         Com_RxTimedOut[COM_RX_IPDU_MAX];  /* 1 = タイムアウト中 */
 
+/* 1 = Com_Init()/Com_IpduGroupStart()/Com_SetCommunicationEnabled() による
+ * 監視（再）開始以降、まだ一度も実受信していない（= デッドライン判定に
+ * ComFirstTimeout 相当の Com_IPduConfigType.FirstTimeoutMs を使うべき）状態。
+ * 0 = 既に 1 回以上受信済みで、以降は定常状態の TimeoutMs（ComTimeout 相当）
+ * を使う（[SWS_Com_00787] 項目2・[SWS_Com_00716]・[SWS_Com_00879] 相当の
+ * 「初回は FirstTimeout、以降は Timeout」を受信デッドライン監視にも適用）。 */
+static uint8         Com_RxUsingFirstTimeout[COM_RX_IPDU_MAX];
+
 /* -----------------------------------------------------------------------
  * RX Signal Group（ComIPduConfigType.IsSignalGroup = 1、RX I-PDU 側）関連の
  * 内部状態。TX 側のシャドウバッファ（Com_TxShadowBuffer 等、下記）の対称。
@@ -222,6 +230,7 @@ void Com_Init(const Com_ConfigType* config)
         }
         Com_RxLastMs[i]  = now;  /* タイムアウト計測を Init 時刻から開始 */
         Com_RxTimedOut[i] = 0U;
+        Com_RxUsingFirstTimeout[i] = 1U;  /* 起動直後は ComFirstTimeout 相当を使う */
         /* RX Signal Group 未コミット状態。Com_ReceiveSignalGroup() が一度も
          * 呼ばれていないグループメンバーを、ゼロクリアされたシャドウバッファ
          * を「正常な値」として誤って返さないよう、利用不可扱いにしておく。 */
@@ -467,9 +476,11 @@ void Com_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
         for (uint8 b = 0; b < ipdu->DLC; b++)
             Com_RxBuffer[ipdu->IPduId][b] = PduInfoPtr->SduDataPtr[b];
 
-        /* 受信成功 → タイムアウトタイマをリセット */
+        /* 受信成功 → タイムアウトタイマをリセットし、以降は定常状態の
+         * TimeoutMs（ComTimeout 相当）へ切り替える（[SWS_Com_00879] 相当）。 */
         Com_RxLastMs[ipdu->IPduId]  = millis();
         Com_RxTimedOut[ipdu->IPduId] = 0U;
+        Com_RxUsingFirstTimeout[ipdu->IPduId] = 0U;
 
         char hexbuf[25];
         Log_HexStr(hexbuf, sizeof(hexbuf), Com_RxBuffer[ipdu->IPduId], ipdu->DLC);
@@ -1725,7 +1736,7 @@ void Com_MainFunction(void)
         {
             const Com_IPduConfigType* ipdu = &Com_ConfigPtr->RxIPdus[i];
             if (ipdu->TimeoutMs == 0U)
-                continue;  /* 監視無効 */
+                continue;  /* [SWS_Com_00333]: 監視無効（FirstTimeoutMs も無視） */
 
             /* I-PDU Group が停止中はデッドライン監視自体を評価しない
              * （[SWS_Com_00685]。Com_RxEnabled==0 の場合と同じ理由：意図的に
@@ -1733,12 +1744,27 @@ void Com_MainFunction(void)
             if (!Com_RxIPduStarted[ipdu->IPduId])
                 continue;
 
-            if (!Com_RxTimedOut[ipdu->IPduId] &&
-                (now - Com_RxLastMs[ipdu->IPduId]) >= (unsigned long)ipdu->TimeoutMs)
+            const Com_IPduIdType id = ipdu->IPduId;
+
+            /* [SWS_Com_00787] 項目2/[SWS_Com_00716]/[SWS_Com_00879] 相当:
+             * 再始動以降まだ受信していない間は FirstTimeoutMs（ComFirstTimeout）、
+             * 1 回でも受信済みなら定常状態の TimeoutMs（ComTimeout）を使う。
+             * FirstTimeoutMs==0 は「初回受信までは監視しない」を意味する
+             * （[SWS_Com_00716]。TimeoutMs 自体は非 0 のためこの分岐にのみ
+             * 適用され、初回受信後の定常監視には影響しない）。 */
+            const uint16 threshold = Com_RxUsingFirstTimeout[id]
+                                     ? ipdu->FirstTimeoutMs
+                                     : ipdu->TimeoutMs;
+            if (threshold == 0U)
+                continue;
+
+            if (!Com_RxTimedOut[id] &&
+                (now - Com_RxLastMs[id]) >= (unsigned long)threshold)
             {
-                Com_RxTimedOut[ipdu->IPduId] = 1U;
-                DET_LOGW(TAG, "RX timeout iPdu=%u (%ums)",
-                         (unsigned)ipdu->IPduId, (unsigned)ipdu->TimeoutMs);
+                Com_RxTimedOut[id] = 1U;
+                DET_LOGW(TAG, "RX timeout iPdu=%u (%ums, %s)",
+                         (unsigned)id, (unsigned)threshold,
+                         Com_RxUsingFirstTimeout[id] ? "first" : "steady");
             }
         }
     }
@@ -1819,6 +1845,7 @@ void Com_SetCommunicationEnabled(uint8 RxEnabled, uint8 TxEnabled)
             const Com_IPduIdType id = Com_ConfigPtr->RxIPdus[i].IPduId;
             Com_RxLastMs[id]   = now;
             Com_RxTimedOut[id] = 0U;
+            Com_RxUsingFirstTimeout[id] = 1U;  /* 再開直後は ComFirstTimeout 相当から */
         }
     }
 
@@ -1846,9 +1873,11 @@ void Com_IpduGroupStart(Com_IpduGroupIdType IpduGroupId, uint8 initialize)
         Com_RxIPduStarted[id] = 1U;
 
         /* [SWS_Com_00787] 項目2: 受信デッドライン監視タイマを再始動する
-         * （Com_SetCommunicationEnabled() の再開時と同じ理由）。 */
+         * （Com_SetCommunicationEnabled() の再開時と同じ理由）。再始動直後は
+         * ComFirstTimeout 相当（FirstTimeoutMs）から監視を始める。 */
         Com_RxLastMs[id]   = now;
         Com_RxTimedOut[id] = 0U;
+        Com_RxUsingFirstTimeout[id] = 1U;
 
         if (initialize != 0U)
         {
