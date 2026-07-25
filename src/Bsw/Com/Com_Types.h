@@ -396,28 +396,39 @@ typedef enum
 //               （SWS_Com_00789: ComEnableMDTForCyclicTransmission が既定
 //               false の場合、MIXED の周期部分・PERIODIC には MDT タイマ
 //               自体を起動しない、という実 AUTOSAR の既定動作に合わせている）。
-//   UpdateBitPosition : Signal Group（IsSignalGroup=1）のみ使用（DaVinci:
-//               ComUpdateBitPosition、ECUC_Com_00257 相当）。この Signal
-//               Group 用 update-bit の I-PDU 内ビット位置（ネットワークビット
-//               順、Com_UnpackSignal/Com_PackSignal と同じ規約）。
+//   UpdateBitPosition : Signal Group（IsSignalGroup=1）・非 Signal Group の
+//               単一シグナル I-PDU（例: MeterStatus/EngineState）いずれでも
+//               使用可能（DaVinci: ComUpdateBitPosition、ECUC_Com_00257
+//               相当。実 AUTOSAR では ComSignal/ComSignalGroup 双方に
+//               同名パラメータが存在し、本フィールドはその簡略化として
+//               I-PDU 単位で 1 個のみ持たせている）。update-bit の I-PDU
+//               内ビット位置（ネットワークビット順、Com_UnpackSignal/
+//               Com_PackSignal と同じ規約）。
 //               0xFF = update-bit なし（既定。実 AUTOSAR の「省略時は
-//               update-bit なし」に対応）。
+//               update-bit なし」に対応）。update-bit を使わない I-PDU は
+//               必ずこの既定値を明示設定すること（Com_DoTransmit() が
+//               C の既定初期化 0 と区別できず、シグナル値を誤ってクリア
+//               してしまうため。詳細は Com_DoTransmit() コメント参照）。
 //
-//               update-bit（7.8 章、SWS_Com_00055 他）: 送信側が「このグループ
-//               の値を実際に更新して送った」ことを受信側へ伝える 1 ビット
-//               （値そのものとは独立。SWS_Com_00055: シグナル/グループの
-//               一部としてではなく Com 内部でのみ扱う）。
-//                 TX（送信側、SWS_Com_00801）: Com_SendSignalGroup() が呼ばれる
-//                   たびにこのビットを 1 にセットする。クリアタイミングは
-//                   実 AUTOSAR の ComTxIPduClearUpdateBit（Transmit/
-//                   Confirmation/TriggerTransmit の 3 択）のうち、本実装は
-//                   Transmit のみ実装する（SWS_Com_00062: PduR_ComTransmit
-//                   呼び出し直後にクリア。Confirmation/TriggerTransmit は
-//                   未実装。詳細は Com_DoTransmit() 参照）。
-//                 RX（受信側、SWS_Com_00324/00802）: Com_ReceiveSignalGroup()
-//                   はこのビットが 0 の場合、受信データを「破棄」する
-//                   （シャドウバッファ・タイムアウトスナップショットとも
-//                   直近の状態のまま更新しない）。1 の場合のみ通常どおり
+//               update-bit（7.8 章、SWS_Com_00055 他）: 送信側が「この
+//               シグナル/グループの値を実際に更新して送った」ことを受信側へ
+//               伝える 1 ビット（値そのものとは独立。SWS_Com_00055: シグナル/
+//               グループの一部としてではなく Com 内部でのみ扱う）。
+//                 TX（送信側）: 非 Signal Group では Com_SendSignal()
+//                   （SWS_Com_00061）、Signal Group では Com_SendSignalGroup()
+//                   （SWS_Com_00801）が呼ばれるたびにこのビットを 1 に
+//                   セットする（いずれも値が実際に変化したかどうかは問わない）。
+//                   クリアタイミングは実 AUTOSAR の ComTxIPduClearUpdateBit
+//                   （Transmit/Confirmation/TriggerTransmit の 3 択）のうち、
+//                   本実装は Transmit のみ実装する（SWS_Com_00062:
+//                   PduR_ComTransmit 呼び出し直後にクリア。Confirmation/
+//                   TriggerTransmit は未実装。詳細は Com_DoTransmit() 参照）。
+//                   クリア処理自体は Signal Group かどうかを区別しない。
+//                 RX（受信側、SWS_Com_00324/00802、Signal Group のみ）:
+//                   Com_ReceiveSignalGroup() はこのビットが 0 の場合、
+//                   受信データを「破棄」する（シャドウバッファ・タイムアウト
+//                   スナップショットとも直近の状態のまま更新しない）。
+//                   1 の場合のみ通常どおり
 //                   確定コピーする。
 //   IpduGroupId : この I-PDU が所属する I-PDU Group（DaVinci: ComIPduGroup
 //               への参照、7.3.5 章）。COM_IPDU_GROUP_NONE（既定）を設定すると

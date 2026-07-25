@@ -31,12 +31,14 @@
  *              Com_RxIndication() を直接呼んで Authentic Payload のみ渡す。
  *              詳細は src/Bsw/SecOC/ 参照)
  *              Signal 12: ImmobilizerCmd  8 bit  BitPos=0  BigEndian  0x00=LOCK/0x01=UNLOCK
- *            TX I-PDU 0 (IPduId=0): CAN ID 0x200, DLC=1  MeterStatus
+ *            TX I-PDU 0 (IPduId=0): CAN ID 0x200, DLC=2  MeterStatus
  *              (メータ ECU、E2E 保護なし、TxModeMode=MIXED。
  *              ComFilterAlgorithm=MASKED_NEW_DIFFERS_MASKED_OLD で値変化を
  *              検知すると次回 Com_MainFunction() で送信、変化がなくても
  *              Com_Cfg.h の COM_TX_PERIOD_METERSTATUS_FLOOR_MS 間隔で
- *              周期フロア送信する)
+ *              周期フロア送信する。byte[1] bit0 に非 Signal Group の
+ *              update-bit（UpdateBitPosition=8）を持ち、周期フロア再送と
+ *              値変化時送信を受信側が区別できる)
  *              Signal 3: EngineState    8 bit  BitPos= 0  BigEndian
  *                TxAckCbk=Rte_COMTxAck_EngineState（送信成功のたび呼ばれる）
  *            TX I-PDU 1 (IPduId=1): CAN ID 0x210, DLC=1  WarningStatus (メータ ECU、Signal Group)
@@ -94,7 +96,8 @@
  *                      有無で暗黙的に表現される）1 = Signal Group。
  *                      TX I-PDU では Com_SendSignalGroup()、RX I-PDU では
  *                      Com_ReceiveSignalGroup() で確定コミット/コピーする対象
- *   .UpdateBitPosition ←→ ComUpdateBitPosition （Signal Group のみ使用。
+ *   .UpdateBitPosition ←→ ComUpdateBitPosition （Signal Group・非 Signal Group
+ *                      の単一シグナル I-PDU いずれでも使用可（例: MeterStatus）。
  *                      0xFF = update-bit なし）
  *   .IpduGroupId ←→ ComIPduGroup への参照（7.3.5 章）。COM_IPDU_GROUP_NONE
  *                      = どの I-PDU Group にも属さない（常に有効、
@@ -255,13 +258,22 @@ static const Com_IPduConfigType Com_TxIPduConfigData[COM_TX_IPDU_COUNT] = {
          * MIXED: EngineState は他 ECU（盗難防止・ボディ制御等）が判断材料に
          * 使いうるため、変化時送信に加えて周期フロアで再送し続ける
          * （起動直後や瞬断復帰後の受信側が古い値のままにならないようにする）。
+         * update-bit（非 Signal Group、SWS_Com_00061/00062）: byte[1] bit0
+         * （ネットワークビット8）に、EngineState 単体の update-bit を持つ。
+         * Com_SendSignal() 呼び出しのたびに 1 にセットされ、実送信直後
+         * （PduR_Transmit() が E_OK を返した時点）にクリアされる。MIXED の
+         * 周期フロア再送（値変化なしの再送）ではセットされないため、受信側は
+         * このビットで「実際に値が更新された送信」と「周期フロアの単なる
+         * 再送」を区別できる（WarningStatus のグループ単位 update-bit との
+         * 対比用に、シグナル単位の実装例として追加した）。
          * --------------------------------------------------------------- */
         .IPduId    = 0U,  /* DaVinci: ComIPduHandleId  - I-PDU 識別番号 */
-        .DLC       = 1U,  /* DaVinci: ComIPduLength    - I-PDU バイト長（byte[0]=EngineState のみ） */
+        .DLC       = 2U,  /* DaVinci: ComIPduLength    - I-PDU バイト長
+                           *          byte[0]=EngineState、byte[1] bit0=update-bit（残り7bitは予約） */
         .PduRId    = 0U,  /* DaVinci: ComIPduPduRef    - PduR TX パス 0 へのリンク */
         .TimeoutMs = 0U,  /* TX I-PDU のため監視無効 */
         .IsSignalGroup = 0U, /* 直接送信（既存の挙動のまま） */
-        .UpdateBitPosition = 0xFFU, /* update-bit なし（Signal Group 専用機能のため未使用） */
+        .UpdateBitPosition = 8U, /* EngineState シグナル単体の update-bit（byte[1] bit0、ネットワークビット8） */
         .IpduGroupId = COM_IPDU_GROUP_NONE, /* I-PDU Group に属さない（常に有効） */
         .TxModeMode = COM_TX_MODE_MIXED, /* DaVinci: ComTxModeMode = MIXED
                                           *          (Com_SendSignal() が変化検知時に Com_TxPending を立て、

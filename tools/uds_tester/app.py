@@ -1061,7 +1061,14 @@ class App(tk.Tk):
                     decode = self._rx_monitor_decode.get(mon_idx, "")
                     if decode == "engine_state" and len(data) >= 1:
                         # byte[0]=EngineState（E2E保護なし）
+                        # byte[1] bit0（ネットワークビット8 = byte[1]のMSB）=
+                        # EngineState シグナル単体の update-bit（SWS_Com_00061/00062）。
+                        # 値変化時送信（Com_SendSignal 呼び出し）では 1、
+                        # MIXED の周期フロア再送（値変化なし）では 0 になる。
                         name = self._ENGINE_STATE_NAMES.get(data[0], f"0x{data[0]:02X}")
+                        if len(data) >= 2:
+                            upd = (data[1] >> 7) & 1
+                            name = f"{name} upd={upd}"
                         self._rx_monitor_name_vars[mon_idx].set(f"({name})")
                     elif decode == "nm_status" and len(data) >= 2:
                         # byte[0]=Control Bit Vector（本プロジェクトでは未使用）、

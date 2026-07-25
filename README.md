@@ -470,8 +470,9 @@ NOT_OK を返すまで継続する。MCP2515 の INT はレベル方式（未読
 
 | Tx/Rx | フレーム | CAN ID | DLC | ビット位置 | サイズ | シグナル | 単位・値域 |
 |-------|---------|--------|-----|-----------|--------|---------|----------|
-| Tx | MeterStatus | 0x200 | 1 | ↓ | ↓ | ↓ | ↓ |
+| Tx | MeterStatus | 0x200 | 2 | ↓ | ↓ | ↓ | ↓ |
 |  |  |  |  | 0–7 | 8 bit | EngineState | 0=OFF<br>1=STARTING<br>2=RUNNING<br>3=FAULT<br>（E2E 保護なし） |
+|  |  |  |  | 8 | 1 bit | (update-bit) | EngineState 単体の update-bit（SWS_Com_00061/00062）。値変化時送信=1、周期フロア再送=0 |
 | Tx | WarningStatus | 0x210 | 1 | ↓ | ↓ | ↓ | ↓ |
 |  |  |  |  | 0 | 1 bit | RunLamp | 0=消灯<br>1=点灯<br>（RUNNING LED D6 と同値） |
 |  |  |  |  | 1 | 1 bit | FaultLamp | 0=消灯<br>1=点灯<br>（FAULT LED D7 と同値、点滅中は 500ms ごとに反転） |
@@ -525,7 +526,7 @@ byte[0] byte[1] byte[2] byte[3] byte[4]
 
 ##### TX フレーム（Arduino → 外部）
 
-**MeterStatus（メータ ECU / CAN ID 0x200 / DLC=1 / E2E 保護なし / TxModeMode=MIXED）**
+**MeterStatus（メータ ECU / CAN ID 0x200 / DLC=2 / E2E 保護なし / TxModeMode=MIXED）**
 
 `App_EngineManager_Run()`（3000ms 周期）は `Rte_Write_EngineStatus_EngineState()` で
 値を書き込むだけで、送信自体は Com が判断します。`EngineState` が変化すると Com が
@@ -1117,49 +1118,54 @@ the message"）。`EngineState` が変化していなくても、`MeterStatus` �
 ログに `Com: TxConf id=0` の直後に `Rte: MeterStatus TX ack (EngineState)`
 が出力されることを実機で確認できます。
 
-#### Group Signal Update Bit（送信側が実際に更新したかを示す1ビット）
+#### Update Bit（送信側が実際に更新したかを示す1ビット）
 
 これまでの機能はいずれも「値そのもの」（無効値パターン、タイムアウト、送信成功）
 に関するものでした。update-bit（実 AUTOSAR 7.8 章）はこれらとは別の軸で、
-「送信側がこの Signal Group を実際に更新して送ったかどうか」を示す 1 ビットです
-（SWS_Com_00055: シグナル/グループの値そのものとは独立に、Com が内部でのみ
-扱う）。共有 I-PDU に複数の送信元・複数のシナリオが値を書き込みうる構成で、
-「このフィールドは今回のフレームで本当に新しい値が入っているか」を受信側が
-区別したい場合に使います。
+「送信側がこのシグナル/シグナルグループを実際に更新して送ったかどうか」を示す
+1 ビットです（SWS_Com_00055: シグナル/グループの値そのものとは独立に、Com が
+内部でのみ扱う）。共有 I-PDU に複数の送信元・複数のシナリオが値を書き込みうる
+構成や、周期送信と変化時送信を併用する MIXED モードで、「このフィールドは今回の
+フレームで本当に新しい値が入っているか」を受信側が区別したい場合に使います。
 
-本プロジェクトでは `Com_IPduConfigType.UpdateBitPosition` として、Signal Group
-全体に 1 ビットを割り当てる方式（SWS_Com_00801: `Com_SendSignalGroup` が
-呼ばれるたびにグループ全体の update-bit をセットする）を Com モジュールの
-機能としては実装しました。ただし、**現状の設定ではどの I-PDU にも適用して
-いません**（`WarningStatus`/`AbsInfo` とも `UpdateBitPosition = 0xFFU`）。
-検討はしましたが、いずれも実車での必然性に確信が持てなかったためです:
+実 AUTOSAR の `ComUpdateBitPosition`（ECUC_Com_00257）は `ComSignal`
+（非 Signal Group の単一シグナル、SWS_Com_00061）・`ComSignalGroup`
+（グループ全体、SWS_Com_00801）双方に同名パラメータとして存在します。本実装は
+これを `Com_IPduConfigType.UpdateBitPosition` という I-PDU 単位のフィールド 1 個に
+簡略化していますが、値のセット元が「非 Signal Group なら `Com_SendSignal()`
+（SWS_Com_00061）」「Signal Group なら `Com_SendSignalGroup()`（SWS_Com_00801）」の
+どちらであっても、クリア（`Com_DoTransmit()`）は同じコードで扱います。
 
-- `AbsInfo`（RX、ABS ECU からの車輪速/ABS 状態）: 実車のこの種のフレームは
-  安全上の理由から高頻度・固定周期で常に新鮮なセンサ値を送り続けるのが通常で、
-  「今回は更新データがない」という状況自体が起こりにくく、鮮度管理は既存の
-  受信デッドライン監視（タイムアウト）で十分カバーされます。update-bit を
-  使う動機が薄いと判断しました。
-- `WarningStatus`（TX、TMS 時に周期フロア再送あり）: 「今回の送信は実際の
-  状態変化によるものか、単なる定期再送か」を区別する用途としては一定の
-  必然性があると考えましたが、それを裏付ける実機での具体的な検証シナリオを
-  確信を持って組み立てられなかったため、今回は見送りました。
+現状の適用状況:
 
-そのため、以下のコード上の仕組み自体は実装・ビルド確認済みですが、
-**現状の設定では実際に経路を通ることがなく、実機で動作を検証できていません**
-（`TMS`/`MDT`/`ComTransferProperty` 等で「呼ばれるが実利は薄い」という限界を
-開示してきたのとは異なり、これは「呼ばれる経路そのものが現状存在しない」
-という、より踏み込んだ限界です）。
+- **`MeterStatus`/`EngineState`（TX、非 Signal Group）: 適用済み・実機検証可能**。
+  `UpdateBitPosition=8`（byte[1] bit0）を設定しています。`TxModeMode=MIXED`
+  のため、「今回の送信は実際の値変化によるものか、単なる周期フロア再送か」を
+  受信側が区別できる、という update-bit 本来の動機がそのまま当てはまる例です。
+- **`WarningStatus`/`AbsInfo`（Signal Group）: 未適用のまま**
+  （`UpdateBitPosition = 0xFFU`）。検討はしましたが、いずれも実車での必然性に
+  確信が持てなかったためです（`AbsInfo` は高頻度・固定周期の RX フレームで
+  鮮度管理は受信デッドライン監視で十分カバーされる、`WarningStatus` は具体的な
+  実機検証シナリオを確信を持って組み立てられなかった、という従来からの判断は
+  変わっていません）。したがって `Com_ReceiveSignalGroup()` 側の update-bit
+  「discard」ロジック（後述）は今のところ実機で経路を通りません。
 
 ```
-送信側（Com_SendSignalGroup）:
-  実バッファへコミット（既存処理）
-  UpdateBitPosition が 0xFF 以外なら、そのビットをセット（SWS_Com_00801）
-送信側（Com_DoTransmit、Com_MainFunction() から）:
+送信側 非 Signal Group（Com_SendSignal）:
+  実バッファへ反映（既存処理）
+  ComFilterAlgorithm が「変化あり」と判定した場合のみ、
+  UpdateBitPosition が 0xFF 以外ならそのビットをセット
+  （SWS_Com_00061。本実装独自の条件付け、詳細は次項）
+送信側 Signal Group（Com_SendSignalGroup）:
+  実バッファへ反映（既存処理）
+  UpdateBitPosition が 0xFF 以外なら、呼ばれるたびに無条件でそのビットをセット
+  （SWS_Com_00801 の原文どおり）
+送信側（Com_DoTransmit、Com_MainFunction() から。Signal Group かどうかを問わない）:
   PduR_Transmit() で実送信（この時点でビット=1 のまま送信される）
   ret==E_OK のときのみ、送信直後にビットをクリア
   （SWS_Com_00062: ComTxIPduClearUpdateBit=Transmit）
 
-受信側（Com_ReceiveSignalGroup）:
+受信側（Com_ReceiveSignalGroup、Signal Group のみ）:
   UpdateBitPosition が 0xFF 以外なら、I-PDU バッファの該当ビットを確認
     0（未更新）→ 何もせず E_OK で戻る（SWS_Com_00802: "discard"。
                   シャドウバッファ・タイムアウトスナップショットとも
@@ -1167,14 +1173,43 @@ the message"）。`EngineState` が変化していなくても、`MeterStatus` �
     1（更新済み）→ 通常どおり確定コピー（既存処理）
 ```
 
-**なぜ Signal Group 全体で 1 ビットにしたか**: 実 AUTOSAR の
-`ComUpdateBitPosition`（ECUC_Com_00257）はシグナル単位・シグナルグループ単位
-どちらにも設定できますが、本実装は Signal Group 単位のみをサポートします
-（SWS_Com_00801 の「`Com_SendSignalGroup` はグループ全体の update-bit をセット
-する」という記述が、既に実装済みの `Com_SendSignalGroup()`/
-`Com_ReceiveSignalGroup()` の確定コミット/コピー単位ときれいに対応するため）。
-シグナル単位の update-bit（`Com_SendSignal()` 呼び出しごとに個別のビットを
-セットする方式）は本実装では未対応です。
+**動作確認方法**: `uds_tester` の「EngineStatus (0x200)」rx_monitor ボタンに
+`upd=0/1` の表示を追加しました。ダッシュボードの RUNNING/STARTING/FAULT 等の
+状態遷移で `EngineState` が変化した直後は `upd=1`、その後
+`COM_TX_PERIOD_METERSTATUS_FLOOR_MS`（既定 9000ms）間隔で値が変化せずに再送
+される周期フロアフレームでは `upd=0` になることを確認できます。Cangaroo で
+CAN 0x200 の byte[1] bit0（生の 2 バイト目、MSB）を直接観察することでも同様に
+確認できます。
+
+**レビューで見つかった問題（非 Signal Group の update-bit が常に 1 のままだった）**:
+初期実装は SWS_Com_00061 の原文どおり「`Com_SendSignal()` が呼ばれるたびに
+無条件でセットする」としていましたが、実機検証で `upd` が常に `1` のままになる
+不具合が見つかりました。
+
+原因は ASW（`App_EngineManager_Run()`）の呼び出しパターンとの相互作用です。
+本プロジェクトの ASW は「値が変わったかどうか」を判定せず、毎サイクル無条件に
+`Rte_Write_EngineStatus_EngineState()`（→ `Com_SendSignal()`）を呼び、実際に
+送信するかどうかの判断は Com の `ComFilterAlgorithm` に完全に委ねる設計です
+（前述「責務分離の効果」）。SWS_Com_00061 を文字どおり実装すると、実送信
+（イベント駆動・周期フロアいずれも）から次の実送信までの間に、ASW が
+`Com_SendSignal()` を何度も（無変化のまま）呼び続けるため、`Com_DoTransmit()`
+がクリアした直後には必ず再セットされてしまい、update-bit が「実際に変化した
+かどうか」を一切表せなくなっていました。
+
+対策として、非 Signal Group の update-bit セットを `ComFilterAlgorithm` の
+「変化あり」判定（`passesFilter`、`Com_RequestTxOnChange()` を呼ぶかどうかと
+同じ判断軸）に条件づけました。ASW 側の「常に書き込む」設計はそのまま変えず、
+Com 側が既に持っている「これは実際の変化か」の判断をそのまま update-bit にも
+使い回す形です。これは SWS_Com_00061 の文字どおりの実装ではありませんが、
+本プロジェクトの ASW 呼び出し規約のもとで update-bit 本来の目的（実際に更新
+されたかどうかを示す）を満たすための意図的な調整です。
+
+なお Signal Group 側（`Com_SendSignalGroup()`）は SWS_Com_00801 の原文どおり
+無条件セットのまま変更していません。`WarningStatus`/`AbsInfo` は現状
+update-bit 未適用のため、今は問題が顕在化しませんが、`App_WarningIndicator_Run()`
+も毎サイクル無条件に `Rte_SendSignalGroup_WarningStatus()` を呼ぶ同種の設計
+のため、将来これらに update-bit を適用する際は同じ不具合を踏む可能性があります
+（`Com_SendSignalGroup()` のコード内注釈に詳細を残しています）。
 
 **なぜ ComTxIPduClearUpdateBit=Transmit のみか**: 実 AUTOSAR は Transmit
 （`PduR_ComTransmit` 呼び出し直後にクリア）/ Confirmation（送信確認後にクリア）/
@@ -1213,9 +1248,8 @@ sent out via PduR_ComTransmit **and PduR_ComTransmit returned E_OK**" であり�
 と正しく結果をチェックしており、この判定パターン自体は目新しいものでは
 ありませんでした。修正は `if (ret == E_OK && ...)` という条件の追加のみです。
 
-現時点でこのコードパス自体は「どの I-PDU にも適用していない」ため実機では
-通りません。将来 `UpdateBitPosition` を実際の I-PDU に設定する際は、この
-修正がそのまま活きます。
+この修正は `MeterStatus`（非 Signal Group）の送信経路でも共通に使われるため、
+Signal Group への適用有無に関わらず活きています。
 
 #### RX ComFilterAlgorithm（受信フィルタ、プラウジビリティチェック）
 
