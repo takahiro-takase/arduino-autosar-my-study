@@ -47,6 +47,11 @@ extern unsigned long millis(void);
  * 一致させられないための例外）。 */
 static void Com_GatewayRoute(Com_IPduIdType rxIPduId);
 
+/* Com_Init()/Com_IpduGroupStart() の I-PDU バッファ初期化（ComSignalInitValue
+ * のビット単位パック）で使うため、定義（Com_PackSignal より後）より前に
+ * 前方宣言する。Com_GatewayRoute と同じ理由の例外。 */
+static void Com_PackInitValues(uint8* buf, Com_IPduIdType id, Com_SignalDirectionType dir);
+
 static const Com_ConfigType* Com_ConfigPtr = NULL;
 static uint8         Com_RxBuffer[COM_RX_IPDU_MAX][COM_IPDU_MAX_DLC];
 static uint8         Com_TxBuffer[COM_TX_IPDU_MAX][COM_IPDU_MAX_DLC];
@@ -190,9 +195,14 @@ static uint8 Com_GroupTriggerPending[COM_TX_IPDU_MAX];
 /**
  * \brief   COM モジュールを初期化し、すべての I-PDU バッファをクリアする。
  *
- * \details 設定ポインタを保存し、RX/TX の全 I-PDU バッファをゼロクリアして
- *          シグナル設定テーブルをログ出力する。RX または TX の I-PDU 数が
- *          コンパイル時上限を超える場合は初期化を中断する。
+ * \details 設定ポインタを保存し、RX/TX の全 I-PDU バッファをまずゼロクリアし、
+ *          続けて各シグナルの ComSignalInitValue（Com_SignalConfigType.
+ *          InitValue）をビット単位でパックする（[SWS_Com_00217]/
+ *          [SWS_Com_00098]）。TX フィルタの old_value（Com_FilterLastValue）・
+ *          RX の「直近の合格値」（Com_RxLastValidValue）も同じ InitValue から
+ *          始める（[SWS_Com_00603]/[SWS_Com_00717]）。シグナル設定テーブルを
+ *          ログ出力する。RX または TX の I-PDU 数がコンパイル時上限を超える
+ *          場合は初期化を中断する。
  *
  * \param[in]  config  COM 設定構造体へのポインタ。NULL 禁止。
  *
@@ -200,7 +210,7 @@ static uint8 Com_GroupTriggerPending[COM_TX_IPDU_MAX];
  * \note       COM_RX_IPDU_MAX / COM_TX_IPDU_MAX はコンパイル時定数で 1 に固定。
  *             それを超える設定は拒否される。
  *
- * \AUTOSARReq     {SWS_Com_00432}
+ * \AUTOSARReq     {SWS_Com_00432, SWS_Com_00217, SWS_Com_00098, SWS_Com_00603}
  * \ServiceID      {0x00}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
@@ -283,10 +293,40 @@ void Com_Init(const Com_ConfigType* config)
             Com_TxIPduStarted[ipdu->IPduId] = 0U;
     }
 
-    for (uint8 s = 0; s < COM_SIGNAL_COUNT; s++)
+    /* [SWS_Com_00217]: 上のゼロクリアに続けて、I-PDU バッファをビット単位で
+     * 各シグナルの ComSignalInitValue（Com_SignalConfigType.InitValue）で
+     * 上書きする。既定（未設定）の InitValue=0 なら、直前のゼロクリアと
+     * 結果が変わらないため、既存の全シグナルの挙動には影響しない。
+     * Signal Group のシャドウバッファも同様に初期化するが、
+     * Com_RxShadowTimedOut=1U（上のループで既定設定済み）により
+     * Com_ReceiveSignal() から実際に読まれるのは Com_ReceiveSignalGroup() が
+     * 一度確定コピーした後のみである。 */
+    for (uint8 i = 0; i < config->RxIPduCount; i++)
     {
-        Com_FilterLastValue[s]         = 0U;
-        Com_RxLastValidValue[s]        = 0U;
+        const Com_IPduConfigType* ipdu = &config->RxIPdus[i];
+        Com_PackInitValues(Com_RxBuffer[ipdu->IPduId], ipdu->IPduId, COM_SIGNAL_DIRECTION_RX);
+        if (ipdu->IsSignalGroup != 0U)
+            Com_PackInitValues(Com_RxShadowBuffer[ipdu->IPduId], ipdu->IPduId, COM_SIGNAL_DIRECTION_RX);
+    }
+    for (uint8 i = 0; i < config->TxIPduCount; i++)
+    {
+        const Com_IPduConfigType* ipdu = &config->TxIPdus[i];
+        Com_PackInitValues(Com_TxBuffer[ipdu->IPduId], ipdu->IPduId, COM_SIGNAL_DIRECTION_TX);
+        if (ipdu->IsSignalGroup != 0U)
+            Com_PackInitValues(Com_TxShadowBuffer[ipdu->IPduId], ipdu->IPduId, COM_SIGNAL_DIRECTION_TX);
+    }
+
+    for (uint8 s = 0; s < config->SignalCount; s++)
+    {
+        /* [SWS_Com_00603]: フィルタ old_value の起動時初期値も InitValue に
+         * 揃える（COM_FILTER_MASKED_NEW_DIFFERS_MASKED_OLD が、起動直後に
+         * InitValue と同じ値を送っただけで誤って「変化あり」と判定しない
+         * ようにするため）。Com_RxLastValidValue も同じ理由（SWS_Com_00717/
+         * 00718: 「まだ一度も受信していない場合は InitValue を返す」）で
+         * InitValue から始める。 */
+        const uint32 initVal = config->Signals[s].InitValue;
+        Com_FilterLastValue[s]         = initVal;
+        Com_RxLastValidValue[s]        = initVal;
         Com_RxInvalidNotifyPending[s]  = 0U;
         Com_RxFilterRejectPending[s]   = 0U;
         Com_SigTimedOut[s]             = 0U;
@@ -602,6 +642,45 @@ static void Com_PackSignal(uint8* buf,
             buf[pos / 8U] |=  (uint8)(1U << shift);
         else
             buf[pos / 8U] &= (uint8)~(1U << shift);
+    }
+}
+
+/**
+ * \brief   指定 I-PDU バッファへ、所属する全シグナルの ComSignalInitValue を
+ *          ビット単位でパックする。
+ *
+ * \details [SWS_Com_00217]/[SWS_Com_00222] 項目1・2: I-PDU のデータ初期化は
+ *          まずバイト単位でゼロクリアし（ComTxIPduUnusedAreasDefault 相当、
+ *          本実装は常に 0）、その後ビット単位で各シグナルの InitValue を
+ *          上書きする、という 2 段階の手順で行う。本関数は後段（ビット単位
+ *          の上書き）のみを担う。呼び出し元が先にバイト単位のゼロクリアを
+ *          済ませておくこと。RX/TX 両方の I-PDU バッファ・シャドウバッファ
+ *          初期化（Com_Init()/Com_IpduGroupStart()）で共用する。
+ *
+ * \param[in,out] buf  初期化対象のバッファ（Com_RxBuffer[id] 等）。
+ *                      COM_IPDU_MAX_DLC バイト以上必要。
+ * \param[in]     id   対象 I-PDU の ID（dir 側の値空間、Com_SignalConfigType
+ *                      の IPduId と同じ規約）。
+ * \param[in]     dir  対象シグナルの方向（RX/TX）。この I-PDU 自体の
+ *                      RX/TX は呼び出し元が Com_RxBuffer/Com_TxBuffer の
+ *                      どちらを渡すかで決まるため、ここでは対象シグナルの
+ *                      絞り込みにのみ使う。
+ *
+ * \pre        Com_ConfigPtr が NULL でないこと。
+ *
+ * \ServiceID      {0xF6}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+static void Com_PackInitValues(uint8* buf, Com_IPduIdType id, Com_SignalDirectionType dir)
+{
+    for (uint8 s = 0U; s < Com_ConfigPtr->SignalCount; s++)
+    {
+        const Com_SignalConfigType* sig = &Com_ConfigPtr->Signals[s];
+        if (sig->Direction == dir && sig->IPduId == id)
+        {
+            Com_PackSignal(buf, sig->BitPosition, sig->BitSize, sig->Endian, sig->InitValue);
+        }
     }
 }
 
@@ -947,10 +1026,12 @@ static void Com_RequestTxOnChange(const Com_IPduConfigType* ipdu)
  * \retval  E_OK      シグナルが見つかり、SignalDataPtr へ値を書き込んだ
  *                    （実データ、当該 I-PDU がタイムアウト中かつ
  *                    RxDataTimeoutAction=SUBSTITUTE の場合は
- *                    TimeoutSubstitutionValue、受信値が InvalidValue と
- *                    一致し DataInvalidAction=NOTIFY の場合、または
- *                    FilterAlgorithm=NEW_IS_WITHIN の範囲外の場合は
- *                    直近の合格値）。
+ *                    TimeoutSubstitutionValue、RxDataTimeoutAction=REPLACE
+ *                    または受信値が InvalidValue と一致し
+ *                    DataInvalidAction=REPLACE の場合は InitValue、
+ *                    受信値が InvalidValue と一致し DataInvalidAction=NOTIFY
+ *                    の場合、または FilterAlgorithm=NEW_IS_WITHIN の範囲外の
+ *                    場合は直近の合格値）。
  * \retval  E_NOT_OK  COM 未初期化、SignalDataPtr が NULL、
  *                    シグナル設定テーブルに SignalId が存在しない、
  *                    または当該 I-PDU がタイムアウト中かつ
@@ -967,8 +1048,8 @@ static void Com_RequestTxOnChange(const Com_IPduConfigType* ipdu)
  *             RTE が使う Std_ReturnType と互換性がある。
  *
  * \AUTOSARReq     {SWS_Com_00198, SWS_Com_00500, SWS_Com_00875, SWS_Com_00876,
- *                  SWS_Com_00680, SWS_Com_00717, SWS_Com_00273, SWS_Com_00303,
- *                  SWS_Com_00695}
+ *                  SWS_Com_00470, SWS_Com_00680, SWS_Com_00681, SWS_Com_00717,
+ *                  SWS_Com_00273, SWS_Com_00303, SWS_Com_00695}
  * \ServiceID      {0x0B}
  * \Reentrancy     {Reentrant}
  * \Synchronicity  {Synchronous}
@@ -1042,39 +1123,64 @@ uint8 Com_ReceiveSignal(Com_SignalIdType SignalId, void* SignalDataPtr)
         if (timedOut)
         {
             /* ComRxDataTimeoutAction（Com_RxDataTimeoutActionType 参照）:
-             * SUBSTITUTE でなければ、値を書き込まず E_NOT_OK を返す
+             * NONE（既定）なら、値を書き込まず E_NOT_OK を返す
              * （呼び出し元の初期値=安全値を使用、既存の既定動作）。
              * SUBSTITUTE なら I-PDU バッファ/シャドウバッファは読まず、
              * 設定済みの TimeoutSubstitutionValue を代わりに書き込んで
-             * E_OK を返す（実データが古いまま返ることを防ぐ）。 */
-            if (sig->RxDataTimeoutAction != COM_RX_TIMEOUT_ACTION_SUBSTITUTE)
-                return E_NOT_OK;
-
-            for (uint8 b = 0U; b < byteCount; b++)
-                dataPtr[b] = (uint8)(sig->TimeoutSubstitutionValue >> (8U * b));
-            return E_OK;
+             * E_OK を返す（実データが古いまま返ることを防ぐ）。
+             * REPLACE なら同様にバッファは読まず、InitValue を書き込んで
+             * E_OK を返す（[SWS_Com_00470]）。あわせて Com_RxLastValidValue[s]
+             * も InitValue で上書きする（同要求の "the last received value is
+             * overwritten and gets lost" のとおり、新しい値を受信するまで
+             * InitValue を返し続けさせるため）。 */
+            if (sig->RxDataTimeoutAction == COM_RX_TIMEOUT_ACTION_SUBSTITUTE)
+            {
+                for (uint8 b = 0U; b < byteCount; b++)
+                    dataPtr[b] = (uint8)(sig->TimeoutSubstitutionValue >> (8U * b));
+                return E_OK;
+            }
+            if (sig->RxDataTimeoutAction == COM_RX_TIMEOUT_ACTION_REPLACE)
+            {
+                Com_RxLastValidValue[s] = sig->InitValue;
+                for (uint8 b = 0U; b < byteCount; b++)
+                    dataPtr[b] = (uint8)(sig->InitValue >> (8U * b));
+                return E_OK;
+            }
+            return E_NOT_OK;
         }
 
-        const uint32 value = Com_UnpackSignal(
+        uint32 value = Com_UnpackSignal(
             srcBuf,
             sig->BitPosition, sig->BitSize, sig->Endian);
 
         /* ComDataInvalidAction（Com_DataInvalidActionType 参照）: 受信値が
-         * InvalidValue と一致する場合、NOTIFY なら「シグナルオブジェクトへ
-         * 格納しない」（SWS_Com_00717）。すなわち Com_RxLastValidValue[s]
-         * を更新せず、直近の有効値をそのまま返す。通知コールバックの実呼び出し
-         * はここでは行わず、Com_RxInvalidNotifyPending[s] を立てるだけに留める
-         * （Com_MainFunction() へディスパッチする理由は
-         * Com_RxInvalidNotifyPending の宣言コメント参照）。 */
-        if (sig->DataInvalidAction == COM_DATA_INVALID_ACTION_NOTIFY
-            && value == sig->InvalidValue)
+         * InvalidValue と一致する場合の振る舞い。
+         * NOTIFY: 「シグナルオブジェクトへ格納しない」（SWS_Com_00717）。
+         * すなわち Com_RxLastValidValue[s] を更新せず、直近の有効値をそのまま
+         * 返す。通知コールバックの実呼び出しはここでは行わず、
+         * Com_RxInvalidNotifyPending[s] を立てるだけに留める（Com_MainFunction()
+         * へディスパッチする理由は Com_RxInvalidNotifyPending の宣言コメント
+         * 参照）。
+         * REPLACE: 受信値を InitValue に置き換えたうえで、以降の
+         * フィルタ処理・格納処理へそのまま合流させる（[SWS_Com_00681]:
+         * "the normal signal processing like filtering and notification
+         * shall take place as if the ComSignalInitValue would have been
+         * received"。NOTIFY と異なり InvalidNotificationCbk は呼ばない）。 */
+        if (value == sig->InvalidValue)
         {
-            Com_RxInvalidNotifyPending[s] = 1U;
+            if (sig->DataInvalidAction == COM_DATA_INVALID_ACTION_NOTIFY)
+            {
+                Com_RxInvalidNotifyPending[s] = 1U;
 
-            const uint32 lastValid = Com_RxLastValidValue[s];
-            for (uint8 b = 0U; b < byteCount; b++)
-                dataPtr[b] = (uint8)(lastValid >> (8U * b));
-            return E_OK;
+                const uint32 lastValid = Com_RxLastValidValue[s];
+                for (uint8 b = 0U; b < byteCount; b++)
+                    dataPtr[b] = (uint8)(lastValid >> (8U * b));
+                return E_OK;
+            }
+            if (sig->DataInvalidAction == COM_DATA_INVALID_ACTION_REPLACE)
+            {
+                value = sig->InitValue;
+            }
         }
 
         /* RX ComFilterAlgorithm（Com_FilterAlgorithmType の用途 (3) 参照）:
@@ -1961,15 +2067,30 @@ void Com_IpduGroupStart(Com_IpduGroupIdType IpduGroupId, uint8 initialize)
 
         if (initialize != 0U)
         {
-            /* [SWS_Com_00222] 項目1: I-PDU のデータを初期化する。 */
+            /* [SWS_Com_00222] 項目1: I-PDU のデータを ComSignalInitValue で
+             * 初期化する（Com_Init() と同じ手順: バイト単位ゼロクリア →
+             * ビット単位で InitValue 上書き。[SWS_Com_00217]）。 */
             for (uint8 b = 0U; b < COM_IPDU_MAX_DLC; b++)
                 Com_RxBuffer[id][b] = 0U;
+            Com_PackInitValues(Com_RxBuffer[id], id, COM_SIGNAL_DIRECTION_RX);
+
+            /* Com_RxLastValidValue も InitValue へ戻す（[SWS_Com_00228]:
+             * 起動時点でまだ実際に受信していないシグナルは InitValue を
+             * 返すべきという要求に対応。Com_Init() の該当コメント参照）。 */
+            for (uint8 s = 0U; s < Com_ConfigPtr->SignalCount; s++)
+            {
+                const Com_SignalConfigType* rsig = &Com_ConfigPtr->Signals[s];
+                if (rsig->Direction == COM_SIGNAL_DIRECTION_RX && rsig->IPduId == id)
+                    Com_RxLastValidValue[s] = rsig->InitValue;
+            }
+
             if (ipdu->IsSignalGroup != 0U)
             {
                 /* [SWS_Com_00222] 項目2: Signal Group のシャドウバッファも
-                 * 初期化する。未コミット状態（利用不可）へ戻す。 */
+                 * 同じ手順で初期化する。未コミット状態（利用不可）へ戻す。 */
                 for (uint8 b = 0U; b < COM_IPDU_MAX_DLC; b++)
                     Com_RxShadowBuffer[id][b] = 0U;
+                Com_PackInitValues(Com_RxShadowBuffer[id], id, COM_SIGNAL_DIRECTION_RX);
                 Com_RxShadowTimedOut[id] = 1U;
             }
         }
@@ -2002,13 +2123,28 @@ void Com_IpduGroupStart(Com_IpduGroupIdType IpduGroupId, uint8 initialize)
 
         if (initialize != 0U)
         {
-            /* [SWS_Com_00222] 項目1: I-PDU のデータを初期化する。 */
+            /* [SWS_Com_00222] 項目1: I-PDU のデータを ComSignalInitValue で
+             * 初期化する（RX 側と同じ手順）。 */
             for (uint8 b = 0U; b < COM_IPDU_MAX_DLC; b++)
                 Com_TxBuffer[id][b] = 0U;
+            Com_PackInitValues(Com_TxBuffer[id], id, COM_SIGNAL_DIRECTION_TX);
+
+            /* [SWS_Com_00222] 項目3: フィルタの old_value も InitValue へ戻す
+             * （Com_Init() の該当コメント参照。COM_FILTER_MASKED_NEW_DIFFERS_
+             * MASKED_OLD が、再起動直後に InitValue と同じ値を送っただけで
+             * 誤って「変化あり」と判定しないようにするため）。 */
+            for (uint8 s = 0U; s < Com_ConfigPtr->SignalCount; s++)
+            {
+                const Com_SignalConfigType* tsig = &Com_ConfigPtr->Signals[s];
+                if (tsig->Direction == COM_SIGNAL_DIRECTION_TX && tsig->IPduId == id)
+                    Com_FilterLastValue[s] = tsig->InitValue;
+            }
+
             if (ipdu->IsSignalGroup != 0U)
             {
                 for (uint8 b = 0U; b < COM_IPDU_MAX_DLC; b++)
                     Com_TxShadowBuffer[id][b] = 0U;
+                Com_PackInitValues(Com_TxShadowBuffer[id], id, COM_SIGNAL_DIRECTION_TX);
             }
         }
 

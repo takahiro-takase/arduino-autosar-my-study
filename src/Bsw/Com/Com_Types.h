@@ -202,19 +202,26 @@ typedef enum
 //       発生した瞬間ではなく「最後に Com_ReceiveSignalGroup() を呼んだ時点」
 //       の状態しか観測できない。
 //
-//   実 AUTOSAR にはもう 1 つ REPLACE（SWS_Com_00470: シグナルの
-//   ComSignalInitValue で置き換える）があるが、本実装は ComSignalInitValue
-//   という設定概念自体を持たない（RX バッファは Com_Init() で単純に
-//   ゼロクリアするのみ）。REPLACE は「タイムアウト時 = 起動直後と同じ
-//   初期値」を返すだけで、本物のゼロ値（例: 停車中の VehicleSpeed=0）との
-//   区別がつかない。一方 SUBSTITUTE は起動直後の初期値とは異なる、明確に
-//   「異常」とわかる値（例: VehicleSpeed に 0xFFFF）を設定できるため、
-//   本実装ではこちらのみを実装する。
+//   COM_RX_TIMEOUT_ACTION_REPLACE
+//     : タイムアウト中、Com_ReceiveSignal() はこのシグナルの
+//       `Com_SignalConfigType.InitValue`（ComSignalInitValue、ECUC_Com_00170
+//       相当）を書き込んで E_OK を返す（SWS_Com_00470: "the AUTOSAR COM
+//       module shall replace the signal's value by its ComSignalInitValue
+//       ... the AUTOSAR COM module returns the ComSignalInitValue for this
+//       signal until a new value is received"）。SUBSTITUTE
+//       （TimeoutSubstitutionValue）と異なり、置き換え後は「直近の受信値」
+//       自体が InitValue で上書きされて失われる（SWS_Com_00470 本文の
+//       とおり）ため、本実装は SUBSTITUTE と同じ Com_RxLastValidValue[] を
+//       InitValue で上書きすることで表現する。SUBSTITUTE との使い分けは
+//       設定者の意図次第: 起動直後の初期値をそのまま「異常時の代替値」と
+//       みなしてよいなら REPLACE、実データと区別がつく専用の異常値を
+//       明示したいなら SUBSTITUTE を使う。
 // -------------------------------------------------------
 typedef enum
 {
     COM_RX_TIMEOUT_ACTION_NONE       = 0,
-    COM_RX_TIMEOUT_ACTION_SUBSTITUTE = 1
+    COM_RX_TIMEOUT_ACTION_SUBSTITUTE = 1,
+    COM_RX_TIMEOUT_ACTION_REPLACE    = 2
 } Com_RxDataTimeoutActionType;
 
 // -------------------------------------------------------
@@ -247,15 +254,26 @@ typedef enum
 //       うるため。詳細は Com.c の Com_RxInvalidNotifyPending 宣言コメント
 //       参照）。
 //
-//   実 AUTOSAR にはもう 1 つ REPLACE（SWS_Com_00681: ComSignalInitValue で
-//   置き換えたうえで通常のシグナル処理を続行する）があるが、
-//   Com_RxDataTimeoutActionType の REPLACE を実装しなかった理由と同じく、
-//   本実装は ComSignalInitValue という設定概念自体を持たないため未実装。
+//   COM_DATA_INVALID_ACTION_REPLACE
+//     : 受信値が InvalidValue と一致した場合、その値をこのシグナルの
+//       `Com_SignalConfigType.InitValue`（ComSignalInitValue 相当）に
+//       置き換えたうえで、フィルタ処理・シグナルオブジェクトへの格納を
+//       含む通常のシグナル処理をそのまま続行する（SWS_Com_00681: "the
+//       AUTOSAR COM module shall replace the signal's value by its
+//       configured ComSignalInitValue. After the replacement, the normal
+//       signal processing like filtering and notification shall take
+//       place as if the ComSignalInitValue would have been received
+//       instead of the ComSignalDataInvalidValue"）。NOTIFY と異なり
+//       `InvalidNotificationCbk` は呼ばれない（SWS_Com_00680 が NOTIFY を
+//       "no other signal processing... shall take place" と規定するのに
+//       対し、REPLACE は「InitValue を受信したのと同じ通常処理」を行う、
+//       という別の意味論のため）。
 // -------------------------------------------------------
 typedef enum
 {
-    COM_DATA_INVALID_ACTION_NONE   = 0,
-    COM_DATA_INVALID_ACTION_NOTIFY = 1
+    COM_DATA_INVALID_ACTION_NONE    = 0,
+    COM_DATA_INVALID_ACTION_NOTIFY  = 1,
+    COM_DATA_INVALID_ACTION_REPLACE = 2
 } Com_DataInvalidActionType;
 
 // -------------------------------------------------------
@@ -477,6 +495,25 @@ typedef enum
 //                 little-endian → LSB のビット番号
 //   BitSize     : シグナルのビット長（1〜32）
 //   Endian      : ビットの詰め方向
+//   InitValue   : シグナルの初期値（ComSignalInitValue、ECUC_Com_00170 相当。
+//               RX/TX 両方のシグナルで使用）。下位 BitSize ビットのみ有効
+//               （[SWS_Com_00098]）。以下の場面で使われる:
+//                 - Com_Init() 時、I-PDU バッファ（Signal Group は
+//                   シャドウバッファも）へビット単位でパックされる
+//                   （[SWS_Com_00217]）。RxDataTimeoutAction/DataInvalidAction
+//                   が既定（NONE）のシグナルでも、実データを一度も受信して
+//                   いない間はこの値が Com_ReceiveSignal() から返る。
+//                 - TX フィルタ（COM_FILTER_MASKED_NEW_DIFFERS_MASKED_OLD）
+//                   の old_value の初期値としても使う（[SWS_Com_00603]）。
+//                   これにより、起動直後に InitValue と同じ値を
+//                   Com_SendSignal() しても「変化あり」と誤検出しない。
+//                 - Com_IpduGroupStart(initialize=true) 時、上記 2 つを
+//                   同じ規則で再初期化する（[SWS_Com_00222]）。
+//                 - RxDataTimeoutAction=REPLACE / DataInvalidAction=REPLACE
+//                   のシグナルでは、タイムアウト時／無効値受信時の置換先
+//                   としても使う（各型の宣言コメント参照）。
+//               既定は 0（本フィールドを省略した既存の全シグナルは、
+//               従来どおりバッファがゼロクリアされるのと同じ挙動になる）。
 //   FilterAlgorithm / Mask / FilterX : TX シグナルの送信要否フィルタ・TMS 評価
 //               フィルタ。FilterX は COM_FILTER_MASKED_NEW_DIFFERS_X 専用の
 //               比較値（MASKED_NEW_DIFFERS_MASKED_OLD では未使用）。
@@ -500,12 +537,16 @@ typedef enum
 //   RxDataTimeoutAction / TimeoutSubstitutionValue : RX シグナルのみ使用。
 //               詳細は Com_RxDataTimeoutActionType 参照。
 //               COM_RX_TIMEOUT_ACTION_SUBSTITUTE のときのみ
-//               TimeoutSubstitutionValue を参照する。
+//               TimeoutSubstitutionValue を参照する。REPLACE のときは
+//               TimeoutSubstitutionValue ではなく上記 InitValue を参照する。
 //   DataInvalidAction / InvalidValue / InvalidNotificationCbk : RX シグナル
 //               のみ使用。詳細は Com_DataInvalidActionType 参照。
 //               COM_DATA_INVALID_ACTION_NOTIFY のときのみ InvalidValue /
 //               InvalidNotificationCbk を参照する。InvalidNotificationCbk は
-//               NULL 可（通知不要なら未設定でよい）。
+//               NULL 可（通知不要なら未設定でよい）。REPLACE のときも
+//               InvalidValue（無効値の判定条件）は参照するが、置換先は
+//               InvalidNotificationCbk ではなく上記 InitValue であり、
+//               コールバックは呼ばれない。
 //   FirstTimeoutMs / TimeoutMs / TimeoutNotificationCbk : RX シグナルのみ
 //               使用（DaVinci: ComFirstTimeout / ComTimeout /
 //               ComTimeoutNotification、[7.3.6 Deadline Monitoring]）。
@@ -556,6 +597,7 @@ typedef struct
     uint8                       BitPosition;
     uint8                       BitSize;
     Com_SignalEndianType        Endian;
+    uint32                      InitValue;
     Com_FilterAlgorithmType     FilterAlgorithm;
     uint32                      Mask;
     uint32                      FilterX;
