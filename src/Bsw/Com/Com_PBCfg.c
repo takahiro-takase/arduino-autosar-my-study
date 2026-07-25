@@ -120,6 +120,9 @@
  *   .InvalidValue             ←→ ComSignalDataInvalidValue   （DataInvalidAction=NOTIFY のみ使用）
  *   .InvalidNotificationCbk   ←→ ComInvalidNotification      （DataInvalidAction=NOTIFY のみ使用）
  *   .TxAckCbk                 ←→ ComNotification              （TX シグナルのみ使用、Com_CbkTxAck 相当）
+ *   .TxErrCbk                 ←→ ComErrorNotification         （TX シグナルのみ使用、Com_CbkTxErr 相当。
+ *                                                              I-PDU Group が未確認のまま停止されたときのみ発火。
+ *                                                              現状どのシグナルにも設定していない = NULL）
  *
  * =====================================================================
  *

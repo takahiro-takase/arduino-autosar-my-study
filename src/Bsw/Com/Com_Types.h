@@ -480,6 +480,14 @@ typedef enum
 //               呼ばれる（Com_CbkTxAck、SWS_Com_00468 相当）。このシグナル
 //               自体の値がその送信で変化したかどうかは問わない。NULL 可
 //               （通知不要なら未設定でよい）。
+//   TxErrCbk    : TX シグナルのみ使用。非 NULL なら、このシグナルが属する
+//               I-PDU が「送信済み・未確認」（PduR_Transmit() には渡したが
+//               対応する Com_TxConfirmation() がまだ届いていない）状態のまま
+//               Com_IpduGroupStop() で停止されたときに呼ばれる
+//               （Com_CbkTxErr、SWS_Com_00491/SWS_Com_00479 相当。
+//               "called in case the transmission is not possible because
+//               the corresponding I-PDU group is stopped"）。NULL 可
+//               （通知不要なら未設定でよい）。
 // -------------------------------------------------------
 typedef struct
 {
@@ -503,6 +511,7 @@ typedef struct
     uint32                      InvalidValue;
     void (*InvalidNotificationCbk)(void);
     void (*TxAckCbk)(void);
+    void (*TxErrCbk)(void);
 } Com_SignalConfigType;
 
 // -------------------------------------------------------

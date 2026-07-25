@@ -135,6 +135,17 @@ static uint8 Com_RxFilterRejectPending[COM_SIGNAL_COUNT];
  * I-PDU では未使用（常に 0）。 */
 static uint8 Com_TxPending[COM_TX_IPDU_MAX];
 
+/* 「PduR_Transmit() には渡した（実送信済み）が、対応する Com_TxConfirmation()
+ * がまだ届いていない」ことを示すフラグ（TX I-PDU 単位）。Com_TxPending が
+ * 「まだ送信要求すら出していない」を表すのに対し、こちらは送信要求は完了して
+ * 確認応答だけを待っている状態を表す（両者は排他ではなく別軸）。
+ * Com_DoTransmit() が PduR_Transmit() 成功時にセットし、
+ * Com_TxConfirmation()（成功/失敗を問わず）が届いた時点でクリアする。
+ * [SWS_Com_00479]/[SWS_Com_00491]: Com_IpduGroupStop() 実行時にこのフラグが
+ * 立ったままの I-PDU があれば、確認されないまま停止されたとみなし
+ * TxErrCbk（Com_CbkTxErr 相当）を即座に呼んでからクリアする。 */
+static uint8 Com_TxConfPending[COM_TX_IPDU_MAX];
+
 /* TMS（Transmission Mode Selector）評価結果。1 = true（TxModeModeTrue/
  * TxPeriodMsTrue を使う）、0 = false（TxModeMode/TxPeriodMs を使う）。
  * Com_RecalcTms() が Com_SendSignal()/Com_SendSignalGroup() のたびに
@@ -229,6 +240,7 @@ void Com_Init(const Com_ConfigType* config)
         }
         Com_TxLastSentMs[i]      = now;  /* PERIODIC/MIXED の周期計測を Init 時刻から開始 */
         Com_TxPending[i]         = 0U;
+        Com_TxConfPending[i]     = 0U;
         Com_TmsState[i]          = 0U;   /* 既定 false（ゼロクリアされたバッファと整合） */
         Com_GroupTriggerPending[i] = 0U;
         Com_TxIPduStarted[i] = 1U;  /* 上と同じ理由 */
@@ -640,6 +652,13 @@ static Std_ReturnType Com_DoTransmit(const Com_IPduConfigType* ipdu)
         .SduLength  = ipdu->DLC
     };
     const Std_ReturnType ret = PduR_Transmit(ipdu->PduRId, &pduInfo);
+
+    /* [SWS_Com_00479]/[SWS_Com_00491]: PduR への引き渡しが成功した時点で
+     * 「送信済み・未確認」とマークする。対応する Com_TxConfirmation() が
+     * 届くまでの間に Com_IpduGroupStop() が呼ばれたら TxErrCbk の対象となる
+     * （詳細は Com_TxConfPending[] の宣言コメント参照）。 */
+    if (ret == E_OK)
+        Com_TxConfPending[ipdu->IPduId] = 1U;
 
     /* update-bit クリア（SWS_Com_00062: ComTxIPduClearUpdateBit=Transmit 相当。
      * Confirmation/TriggerTransmit の 2 択は未実装）。原文は "after this I-PDU
@@ -1427,9 +1446,16 @@ Std_ReturnType Com_SendSignalGroup(Com_IPduIdType GroupId)
  * \param[in]  TxPduId  送信が完了した TX I-PDU の PduR 層 PDU ID
  *                      （= Com_IPduIdType と同一の値空間）。
  * \param[in]  result   CanIf から転送された送信結果。
- *                      E_OK = 成功、E_NOT_OK = 失敗。
- *                      TX リトライやエラーカウンタ、Com_CbkTxErr
- *                      （SWS_Com_00491、失敗時通知）は実装しない。
+ *                      E_OK = 成功、E_NOT_OK = 失敗。成功/失敗いずれの場合も
+ *                      「送信済み・未確認」状態（Com_TxConfPending[]）は解除
+ *                      する（確認自体は届いたため）。TX リトライやエラー
+ *                      カウンタは実装しない。Com_CbkTxErr（SWS_Com_00491）は
+ *                      本関数ではなく Com_IpduGroupStop() 側で、確認が届く
+ *                      前に I-PDU Group が停止された場合にのみ呼ばれる
+ *                      （SWS_Com_00491 原文 "called in case the transmission
+ *                      is not possible because the corresponding I-PDU group
+ *                      is stopped" のとおり、result==E_NOT_OK 自体は
+ *                      Com_CbkTxErr の発火条件ではない）。
  *
  * \pre        Com_Init() が正常に完了していること。
  * \note       result が実際に E_NOT_OK になる経路は現状存在しない。呼び出し元の
@@ -1447,8 +1473,6 @@ void Com_TxConfirmation(PduIdType TxPduId, Std_ReturnType result)
 {
     DET_LOGI(TAG, "TxConf id=%u", (unsigned)TxPduId);
 
-    if (result != E_OK)
-        return;
     if (Com_ConfigPtr == NULL)
     {
         Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_TX_CONFIRMATION, COM_E_UNINIT);
@@ -1456,12 +1480,21 @@ void Com_TxConfirmation(PduIdType TxPduId, Std_ReturnType result)
     }
 
     /* [SWS_Com_00800]: 停止中の I-PDU に対する送信確認は無視する。
-     * TxPduId は Com の TX IPduId 空間（Com_FindTxIPdu() 参照）。 */
+     * TxPduId は Com の TX IPduId 空間（Com_FindTxIPdu() 参照）。
+     * Com_IpduGroupStop() が既に Com_TxConfPending[] をクリアして
+     * TxErrCbk 発火済みのため、ここでは重ねて処理しない。 */
     if (TxPduId < COM_TX_IPDU_MAX && !Com_TxIPduStarted[TxPduId])
     {
         DET_LOGD(TAG, "TxConf ignored (I-PDU Group stopped) iPdu=%u", (unsigned)TxPduId);
         return;
     }
+
+    /* 確認が到達した（成功/失敗を問わず）ため「送信済み・未確認」を解除する。 */
+    if (TxPduId < COM_TX_IPDU_MAX)
+        Com_TxConfPending[TxPduId] = 0U;
+
+    if (result != E_OK)
+        return;
 
     for (uint8 s = 0U; s < Com_ConfigPtr->SignalCount; s++)
     {
@@ -1764,6 +1797,9 @@ void Com_IpduGroupStart(Com_IpduGroupIdType IpduGroupId, uint8 initialize)
          * Com_SetCommunicationEnabled() の既存コメントと同じ考え方）。 */
         Com_TxLastSentMs[id] = now;
         Com_TxPending[id]    = 0U;
+        /* 起動直後は必ず「送信済み・未確認」状態もクリアしておく（前回の
+         * Stop() で既にクリア済みのはずだが、初回 Start() 時の保険）。 */
+        Com_TxConfPending[id] = 0U;
 
         /* [SWS_Com_00787] 項目4: update-bit をクリアする。 */
         if (ipdu->UpdateBitPosition != 0xFFU)
@@ -1822,6 +1858,32 @@ void Com_IpduGroupStop(Com_IpduGroupIdType IpduGroupId)
 
         const Com_IPduIdType id = ipdu->IPduId;
         Com_TxIPduStarted[id] = 0U;
+
+        /* [SWS_Com_00479]/[SWS_Com_00491]: PduR へは渡した（実送信済み）が
+         * 対応する Com_TxConfirmation() がまだ届いていない（＝未確認の）
+         * I-PDU がこの停止時点で存在すれば、そのシグナル/シグナルグループの
+         * TxErrCbk（Com_CbkTxErr 相当）を即座に呼ぶ。呼び出し後は確認待ちで
+         * なくなるためフラグをクリアする（後から届く Com_TxConfirmation() は
+         * Com_TxIPduStarted[id]==0 により無視される、上記参照）。 */
+        if (Com_TxConfPending[id])
+        {
+            for (uint8 s = 0U; s < Com_ConfigPtr->SignalCount; s++)
+            {
+                const Com_SignalConfigType* sig = &Com_ConfigPtr->Signals[s];
+                /* Com_TxConfirmation() の TxAckCbk ループと同じ理由で
+                 * Direction チェックが必須（RX/TX で IPduId 空間が別のため）。 */
+                if (sig->Direction == COM_SIGNAL_DIRECTION_TX
+                    && sig->TxErrCbk != NULL
+                    && sig->IPduId == id)
+                {
+                    sig->TxErrCbk();
+                }
+            }
+            Com_TxConfPending[id] = 0U;
+
+            DET_LOGW(TAG, "IpduGroupStop grp=%u iPdu=%u(TX) unconfirmed at stop -> TxErrCbk",
+                     (unsigned)IpduGroupId, (unsigned)id);
+        }
 
         /* [SWS_Com_00777]: 保留中の送信要求をキャンセルする。再開時に
          * 「停止中に溜まった分」が積み残しとして即座に送信されないようにする

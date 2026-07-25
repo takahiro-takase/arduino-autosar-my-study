@@ -171,13 +171,18 @@ void Com_IpduGroupStart(Com_IpduGroupIdType IpduGroupId, uint8 initialize);
  *          全 I-PDU（RX/TX 双方）を停止済み状態にする。RX I-PDU は受信処理・
  *          デッドライン監視を無効化する（[SWS_Com_00684]/[SWS_Com_00685]）。
  *          TX I-PDU は保留中の送信要求をキャンセルする（[SWS_Com_00777]）。
+ *          さらに、PduR へは引き渡し済み（実送信済み）だが対応する
+ *          `Com_TxConfirmation()` がまだ届いていない（未確認の）TX I-PDU が
+ *          あれば、そのシグナル/シグナルグループの `TxErrCbk`
+ *          （Com_CbkTxErr 相当）を即座に呼ぶ（[SWS_Com_00479]/
+ *          [SWS_Com_00491]）。
  *          `Com_SendSignal()`/`Com_ReceiveSignal()` 自体は停止中でも内部
  *          バッファを更新・参照できる（[SWS_Com_00334]）。
  *
  * \param[in]  IpduGroupId  停止する I-PDU Group の ID。
  *
  * \AUTOSARReq     {SWS_Com_91002, SWS_Com_00684, SWS_Com_00685, SWS_Com_00777,
- *                  SWS_Com_00800, SWS_Com_00334}
+ *                  SWS_Com_00800, SWS_Com_00334, SWS_Com_00479, SWS_Com_00491}
  * \ServiceID      {0x04}
  * \Reentrancy     {Reentrant for different I-PDU groups. Non reentrant for the same I-PDU group.}
  * \Synchronicity  {Synchronous}
