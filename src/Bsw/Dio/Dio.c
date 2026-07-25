@@ -23,7 +23,7 @@
  *
  * \pre        Dio_InitChannel() で対象チャネルを出力モードに設定済みであること。
  *
- * \ServiceID      {0xE1}
+ * \ServiceID      {0x01}
  * \Reentrancy     {Reentrant}
  * \Synchronicity  {Synchronous}
  */
@@ -41,7 +41,7 @@ void Dio_WriteChannel(Dio_ChannelType channelId, Dio_LevelType level)
  *
  * \pre        Port_Init() で対象チャネルを入力モードに設定済みであること。
  *
- * \ServiceID      {0xE2}
+ * \ServiceID      {0x00}
  * \Reentrancy     {Reentrant}
  * \Synchronicity  {Synchronous}
  */

@@ -60,7 +60,7 @@ void FiM_Init(const FiM_ConfigType* ConfigPtr);
  *          「抑止」、立っていなければ「許可」にする。許可状態が変化した
  *          瞬間にのみログを出力する。
  *
- * \ServiceID      {0x01}
+ * \ServiceID      {0x05}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
  */
@@ -77,7 +77,7 @@ void FiM_MainFunction(void);
  *                     （この場合 Status には安全側のフェールセーフとして
  *                       書き込み可能であれば 0 を設定する）。
  *
- * \ServiceID      {0x02}
+ * \ServiceID      {0x01}
  * \Reentrancy     {Reentrant}
  * \Synchronicity  {Synchronous}
  */

@@ -67,6 +67,40 @@
 #define DCM_CFG_H
 
 /* -----------------------------------------------------------------------
+ * DET（Default Error Tracer）関連定数
+ *
+ * SWS_Dcm 7.1.1 Development Errors 表に基づく開発エラーコード。
+ * ModuleId は SWS 本文には明記されないため、AUTOSAR_TR_BSWModuleList
+ * （Release 4.3.1、docs/ 配下）の「List of Basic Software Modules」表で
+ * Diagnostic Communication Manager (Dcm) に割り当てられた固定値 53 を使う。
+ *
+ * 本実装は実際の SWS_Dcm が定義する Dcm_TpRxIndication/StartOfReception/
+ * CopyRxData のようなストリーミング型 PduR-Dcm インタフェースではなく、
+ * CanTp が組み立て済みの UDS ペイロードを一括で渡す簡略設計
+ * （Dcm_ComIndication、AUTOSAR 標準に対応する単一関数が存在しない
+ * 本プロジェクト独自の拡張。ServiceID は既存の 0xF0 を踏襲）のため、
+ * 各 UDS サービスハンドラ（Dcm_HandleXxx 内部関数）は Dcm_ComIndication で
+ * 検証済みのデータのみを受け取り、個別の NULL/範囲チェックは対象外とする。
+ * また UDS 要求自体の長さ不正・不正な値は Det ではなく NRC（否定応答）で
+ * 表現するのが AUTOSAR の設計であり、本実装もその方針に従う。
+ * ----------------------------------------------------------------------- */
+
+/** AUTOSAR Diagnostic Communication Manager の ModuleId
+ *  （AUTOSAR_TR_BSWModuleList 参照、固定値 53） */
+#define DCM_MODULE_ID  53U
+
+/** 開発エラーコード（SWS_Dcm 7.1.1 表より、実際に使用する分のみ） */
+#define DCM_E_UNINIT        0x05U
+#define DCM_E_PARAM_POINTER 0x07U
+
+/** ApiId（Dcm_Init/Dcm_MainFunction は SWS 8.x 章の「Service ID[hex]」記載を
+ *  実測して確認済み。Dcm_ComIndication は AUTOSAR 標準の単一関数に対応しない
+ *  本プロジェクト独自のエントリポイントのため、既存の非標準値 0xF0 を踏襲する） */
+#define DCM_API_ID_INIT           0x01U
+#define DCM_API_ID_MAIN_FUNCTION  0x25U
+#define DCM_API_ID_COM_INDICATION 0xF0U
+
+/* -----------------------------------------------------------------------
  * UDS セッション識別子 (ISO 14229-1 Table 14)
  * ----------------------------------------------------------------------- */
 #define DCM_SESSION_DEFAULT   0x01U  /**< defaultSession          */

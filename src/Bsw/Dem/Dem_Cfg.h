@@ -52,6 +52,47 @@
 #define DEM_CFG_H
 
 /* -----------------------------------------------------------------------
+ * DET（Default Error Tracer）関連定数
+ *
+ * SWS_Dem 7.13.1 Development Errors 表（Table 7.7）に基づく開発エラーコード。
+ * ModuleId は SWS 本文には明記されないため、AUTOSAR_TR_BSWModuleList
+ * （Release 4.3.1、docs/ 配下）の「List of Basic Software Modules」表で
+ * Diagnostic Event Manager (Dem) に割り当てられた固定値 54 を使う。
+ *
+ * [SWS_Dem_00124]: Dem_SetEventStatus 相当（本プロジェクトの
+ * Dem_ReportErrorStatus）・Dem_ResetEventStatus・Dem_SetEventAvailable・
+ * Dem_ResetEventDebounceStatus・Dem_GetVersionInfo は明示的に未初期化チェック
+ * (DEM_E_UNINIT) の対象外と規定されている。モニタコンポーネントが起動シーケンス
+ * の初期に呼ぶ可能性があるための例外であり、本実装の Dem_ReportErrorStatus()
+ * もこの例外に該当するため UNINIT チェックを追加しない。
+ * ----------------------------------------------------------------------- */
+
+/** AUTOSAR Diagnostic Event Manager の ModuleId
+ *  （AUTOSAR_TR_BSWModuleList 参照、固定値 54） */
+#define DEM_MODULE_ID  54U
+
+/** 開発エラーコード（SWS_Dem 7.13.1 表より、実際に使用する分のみ） */
+#define DEM_E_WRONG_CONFIGURATION  0x10U  /* 設定に存在しない EventId 等 */
+#define DEM_E_PARAM_POINTER        0x11U  /* NULL ポインタチェック */
+#define DEM_E_PARAM_DATA           0x12U  /* 不正なパラメータ値（例: EventStatus） */
+#define DEM_E_UNINIT               0x20U  /* [SWS_Dem_00124]: 未初期化時の API 呼び出し */
+
+/** ApiId（各関数の Doxygen \ServiceID タグをそのまま使う。本モジュールは実際の
+ *  SWS_Dem の個々の関数シグネチャとは大きく異なる学習用簡略実装のため、
+ *  SWS 側の Service ID との照合は行わない） */
+#define DEM_API_ID_INIT                          0x01U
+#define DEM_API_ID_REPORT_ERROR_STATUS            0x0FU
+#define DEM_API_ID_GET_STATUS_OF_EVENT             0x19U
+#define DEM_API_ID_GET_DTC_OF_EVENT                0x1AU
+#define DEM_API_ID_CLEAR_ALL_DTCS                  0x23U
+#define DEM_API_ID_GET_ALL_DTCS                    0x24U
+#define DEM_API_ID_SET_FREEZE_FRAME_CONTEXT        0x25U
+#define DEM_API_ID_GET_FREEZE_FRAME_OF_EVENT        0x26U
+#define DEM_API_ID_GET_EVENT_ID_OF_DTC              0x27U
+#define DEM_API_ID_CLEAR_DTC                        0x28U
+#define DEM_API_ID_GET_OCCURRENCE_COUNTER_OF_EVENT  0x29U
+
+/* -----------------------------------------------------------------------
  * イベント ID 定義
  * App_EngineManager の状態ハンドラが Dem_ReportErrorStatus() に渡す。
  * ----------------------------------------------------------------------- */

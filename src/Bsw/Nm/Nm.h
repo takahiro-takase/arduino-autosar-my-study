@@ -43,7 +43,7 @@ void Nm_Init(void);
  *          NM フレームを送信する。NO_COM の間は送信しない
  *          （実車で NM フレームが止まるとバススリープへ向かうのと同じ意味）。
  *
- * \ServiceID      {0x01}
+ * \ServiceID      {0x13}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
  */

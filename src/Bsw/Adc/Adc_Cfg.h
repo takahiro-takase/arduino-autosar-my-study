@@ -14,6 +14,30 @@
 #ifndef ADC_CFG_H
 #define ADC_CFG_H
 
+/* -----------------------------------------------------------------------
+ * DET（Default Error Tracer）関連定数
+ *
+ * SWS_Adc 7.6.1 Development Error 表（Table 3）に基づく開発エラーコード。
+ * ModuleId は SWS 本文には明記されないため、AUTOSAR_TR_BSWModuleList
+ * （Release 4.3.1、docs/ 配下）の「List of Basic Software Modules」表で
+ * ADC Driver (Adc) に割り当てられた固定値 123 を使う。
+ *
+ * 本実装の Adc_ReadChannel() は実際の SWS_Adc（Adc_Init/Adc_ReadGroup 等の
+ * グループ・バッファベース API 群）には存在しない、本プロジェクト独自の
+ * 単一チャネル即時読み取り関数のため、個々の SWS 関数の ApiId とは対応
+ * しない。NULL ポインタチェックのエラーコードのみ、Adc_SetupResultBuffer
+ * 等の「バッファポインタ NULL」に対応する値 (0x14) を流用する。
+ * ----------------------------------------------------------------------- */
+
+/** AUTOSAR ADC Driver の ModuleId（AUTOSAR_TR_BSWModuleList 参照、固定値 123） */
+#define ADC_MODULE_ID  123U
+
+/** 開発エラーコード（SWS_Adc Table 3 より） */
+#define ADC_E_PARAM_POINTER  0x14U
+
+/** ApiId（既存の Doxygen \ServiceID タグと一致させる） */
+#define ADC_API_ID_READ_CHANNEL  0xD0U
+
 /**
  * Arduino UNO アナログ入力 A0。
  * 可変抵抗（ポテンショメータ）等を接続して電圧値を読み取る。

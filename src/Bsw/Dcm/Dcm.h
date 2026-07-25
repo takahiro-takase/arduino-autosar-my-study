@@ -41,7 +41,7 @@ void Dcm_Init(void);
  *          DCM_S3_TIMEOUT_MS 以上経過していれば defaultSession へ復帰させる。
  *          Os タスクテーブルから周期的に呼び出すこと。
  *
- * \ServiceID      {0x02}
+ * \ServiceID      {0x25}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
  */

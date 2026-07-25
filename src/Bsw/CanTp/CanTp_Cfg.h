@@ -23,6 +23,38 @@
 #include "Platform_Types.h"
 
 /* -----------------------------------------------------------------------
+ * DET（Default Error Tracer）関連定数
+ *
+ * SWS_CanTp 7.4.1 Development Errors 表（-table 抽出で確定した値）に基づく
+ * 開発エラーコード。ModuleId は SWS 本文には明記されないため、
+ * AUTOSAR_TR_BSWModuleList（Release 4.3.1、docs/ 配下）の
+ * 「List of Basic Software Modules」表で CAN Transport Layer (CanTp) に
+ * 割り当てられた固定値 35 を使う。
+ *
+ * [SWS_CanTp_00031]: CanTp_Init/GetVersionInfo を除く全 API は、未初期化
+ * 状態で呼ばれた場合に CANTP_E_UNINIT を報告しなければならない。本実装は
+ * CanTp_ConfigType を保持しない簡略設計のため、初期化済みかどうかを示す
+ * 専用フラグ（CanTp_Initialized）を別途持つ。
+ * ----------------------------------------------------------------------- */
+
+/** AUTOSAR CAN Transport Layer の ModuleId（AUTOSAR_TR_BSWModuleList 参照、固定値 35） */
+#define CANTP_MODULE_ID  35U
+
+/** 開発エラーコード（7.4.1 表より、実際に使用する分のみ） */
+#define CANTP_E_PARAM_POINTER   0x03U  /* [SWS_CanTp_00321 等]: NULL ポインタチェック */
+#define CANTP_E_UNINIT          0x20U  /* [SWS_CanTp_00031]: 未初期化時の API 呼び出し */
+#define CANTP_E_INVALID_TX_ID   0x30U  /* TxSduId が本実装の固定チャネル ID と不一致 */
+#define CANTP_E_INVALID_RX_ID   0x40U  /* RxPduId が本実装の固定チャネル ID と不一致 */
+
+/** ApiId（各関数の Doxygen \ServiceID タグと一致させること。値は SWS 8.x 章の
+ *  「Service ID[hex]」記載を実測して確認済み） */
+#define CANTP_API_ID_INIT              0x01U
+#define CANTP_API_ID_TRANSMIT          0x49U
+#define CANTP_API_ID_RX_INDICATION     0x42U
+#define CANTP_API_ID_TX_CONFIRMATION   0x40U
+#define CANTP_API_ID_MAIN_FUNCTION     0x06U
+
+/* -----------------------------------------------------------------------
  * バッファサイズ
  * ----------------------------------------------------------------------- */
 

@@ -230,6 +230,13 @@ static uint8 WdgM_GlobalStopped = 0U;
  */
 void WdgM_Init(const WdgM_ConfigType* ConfigPtr)
 {
+    if (ConfigPtr == NULL)
+    {
+        DET_LOGE(TAG, "Init: NULL ConfigPtr");
+        Det_ReportError(WDGM_MODULE_ID, 0U, WDGM_API_ID_INIT, WDGM_E_INV_POINTER);
+        return;
+    }
+
     WdgM_Cfg = ConfigPtr;
     for (uint8 i = 0U; i < ConfigPtr->EntityCount; i++)
     {
@@ -364,8 +371,17 @@ void WdgM_ResumeSupervision(void)
  */
 Std_ReturnType WdgM_CheckpointReached(WdgM_SupervisedEntityIdType SEID, uint8 CheckpointId)
 {
-    if (WdgM_Cfg == NULL || SEID >= WdgM_Cfg->EntityCount)
+    if (WdgM_Cfg == NULL)
+    {
+        Det_ReportError(WDGM_MODULE_ID, 0U, WDGM_API_ID_CHECKPOINT_REACHED, WDGM_E_NO_INIT);
         return E_NOT_OK;
+    }
+
+    if (SEID >= WdgM_Cfg->EntityCount)
+    {
+        Det_ReportError(WDGM_MODULE_ID, 0U, WDGM_API_ID_CHECKPOINT_REACHED, WDGM_E_PARAM_SEID);
+        return E_NOT_OK;
+    }
 
     WdgM_AliveCount[SEID]++;
 
@@ -427,14 +443,23 @@ Std_ReturnType WdgM_CheckpointReached(WdgM_SupervisedEntityIdType SEID, uint8 Ch
  *          (WdgM_LogicalStatus)・Deadline Supervision (WdgM_DeadlineStatus)
  *          のいずれか一つでも FAILED なら FAILED を返す。
  *
- * \ServiceID      {0x0B}
+ * \ServiceID      {0x0C}
  * \Reentrancy     {Reentrant}
  * \Synchronicity  {Synchronous}
  */
 WdgM_LocalStatusType WdgM_GetLocalStatus(WdgM_SupervisedEntityIdType SEID)
 {
-    if (WdgM_Cfg == NULL || SEID >= WdgM_Cfg->EntityCount)
+    if (WdgM_Cfg == NULL)
+    {
+        Det_ReportError(WDGM_MODULE_ID, 0U, WDGM_API_ID_GET_LOCAL_STATUS, WDGM_E_NO_INIT);
         return WDGM_LOCAL_STATUS_DEACTIVATED;
+    }
+
+    if (SEID >= WdgM_Cfg->EntityCount)
+    {
+        Det_ReportError(WDGM_MODULE_ID, 0U, WDGM_API_ID_GET_LOCAL_STATUS, WDGM_E_PARAM_SEID);
+        return WDGM_LOCAL_STATUS_DEACTIVATED;
+    }
     if (WdgM_AliveStatus[SEID]    != WDGM_LOCAL_STATUS_OK
         || WdgM_LogicalStatus[SEID]  != WDGM_LOCAL_STATUS_OK
         || WdgM_DeadlineStatus[SEID] != WDGM_LOCAL_STATUS_OK)
@@ -474,7 +499,7 @@ WdgM_LocalStatusType WdgM_GetLocalStatus(WdgM_SupervisedEntityIdType SEID)
  *          するだけで、蓄積は継続したまま次回（Os 自身の周期により確実に
  *          一定時間後となる）の判定へ持ち越されるため、実害はない。
  *
- * \ServiceID      {0x01}
+ * \ServiceID      {0x08}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
  */

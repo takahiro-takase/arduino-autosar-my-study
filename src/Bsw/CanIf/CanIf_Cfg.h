@@ -19,6 +19,40 @@
 #include "Platform_Types.h"
 
 /* -----------------------------------------------------------------------
+ * DET（Default Error Tracer）関連定数
+ *
+ * SWS_CANInterface 7.27.1 Development Errors 表に基づく開発エラーコード。
+ * ModuleId は SWS 本文には明記されないため、AUTOSAR_TR_BSWModuleList
+ * （Release 4.3.1、docs/ 配下）の「List of Basic Software Modules」表で
+ * CAN Interface (CanIf) に割り当てられた固定値 60 を使う。
+ *
+ * CanIf の「未初期化時」チェック（SWS_CANIF_00421/00412/00431 等）は、
+ * Com/Can と異なり Det_ReportError を要求していない（「実行せず黙って
+ * 戻る」とのみ規定）。そのため各関数の CanIf_ConfigPtr==NULL チェックは
+ * 既存どおり DET 報告なしの早期 return のままとし、以下のパラメータ
+ * 検証（範囲外 ID・NULL ポインタ）のみを Det_ReportError 対象とする。
+ * ----------------------------------------------------------------------- */
+
+/** AUTOSAR CAN Interface の ModuleId（AUTOSAR_TR_BSWModuleList 参照、固定値 60） */
+#define CANIF_MODULE_ID  60U
+
+/** 開発エラーコード（7.27.1 表より、実際に使用する分のみ） */
+#define CANIF_E_PARAM_CANID         10U  /* [SWS_CANIF_00417]: Hoh 一致だが Mailbox->CanId が不一致 */
+#define CANIF_E_PARAM_HOH           12U  /* [SWS_CANIF_00416]: Mailbox->Hoh に一致する設定なし */
+#define CANIF_E_PARAM_CONTROLLERID  15U  /* [SWS_CANIF_00429 等]: ControllerId が範囲外 */
+#define CANIF_E_PARAM_POINTER       20U  /* [SWS_CANIF_00320/00419 等]: NULL ポインタチェック */
+#define CANIF_E_PARAM_LPDU          13U  /* [SWS_CANIF_00410]: CanTxPduId が範囲外 */
+#define CANIF_E_INVALID_TXPDUID     50U  /* [SWS_CANIF_00319]: TxPduId が範囲外 */
+
+/** ApiId（各関数の Doxygen \ServiceID タグと一致させること。値は SWS 8.x 章の
+ *  「Service ID[hex]」記載を実測して確認済み） */
+#define CANIF_API_ID_INIT                0x01U
+#define CANIF_API_ID_TRANSMIT            0x49U
+#define CANIF_API_ID_TX_CONFIRMATION     0x13U
+#define CANIF_API_ID_RX_INDICATION       0x14U
+#define CANIF_API_ID_CONTROLLER_BUSOFF   0x16U
+
+/* -----------------------------------------------------------------------
  * プリコンパイル設定定数
  * ----------------------------------------------------------------------- */
 

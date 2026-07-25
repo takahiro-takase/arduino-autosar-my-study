@@ -39,6 +39,39 @@
 #define NVM_CFG_H
 
 /* -----------------------------------------------------------------------
+ * DET（Default Error Tracer）関連定数
+ *
+ * SWS_NvM 7.3.1 Development Errors 表に基づく開発エラーコード。
+ * ModuleId は SWS 本文には明記されないため、AUTOSAR_TR_BSWModuleList
+ * （Release 4.3.1、docs/ 配下）の「List of Basic Software Modules」表で
+ * NVRAM Manager (NvM) に割り当てられた固定値 20 を使う。
+ *
+ * NvM_ReadBlock/NvM_WriteBlock の NULL データポインタは SWS_NvM_00616/00622
+ * により NVM_E_PARAM_ADDRESS（NVM_E_PARAM_POINTER ではない）と規定されて
+ * いる点に注意。NVM_E_BLOCK_PENDING（処理中ブロックへの再要求）は本実装では
+ * 意図的にエラー扱いしない（NvM_WriteBlock の doxygen 参照: 進行中のジョブを
+ * 破棄して最新データで書き直す設計のため、対象外）。
+ * ----------------------------------------------------------------------- */
+
+/** AUTOSAR NVRAM Manager の ModuleId（AUTOSAR_TR_BSWModuleList 参照、固定値 20） */
+#define NVM_MODULE_ID  20U
+
+/** 開発エラーコード（SWS_NvM 7.3.1 表より、実際に使用する分のみ） */
+#define NVM_E_PARAM_BLOCK_ID    0x0AU
+#define NVM_E_PARAM_ADDRESS     0x0DU
+#define NVM_E_PARAM_POINTER     0x0FU
+#define NVM_E_NOT_INITIALIZED   0x14U
+
+/** ApiId（各関数の Doxygen \ServiceID タグと一致させること。値は SWS 8.x 章の
+ *  「Service ID[hex]」記載を実測して確認済み） */
+#define NVM_API_ID_INIT                     0x00U
+#define NVM_API_ID_GET_ERROR_STATUS         0x04U
+#define NVM_API_ID_READ_BLOCK               0x06U
+#define NVM_API_ID_WRITE_BLOCK              0x07U
+#define NVM_API_ID_RESTORE_BLOCK_DEFAULTS   0x08U
+#define NVM_API_ID_MAIN_FUNCTION            0x0EU
+
+/* -----------------------------------------------------------------------
  * ブロック ID
  * NvM_ReadBlock() / NvM_WriteBlock() の第 1 引数に渡す。
  * ----------------------------------------------------------------------- */

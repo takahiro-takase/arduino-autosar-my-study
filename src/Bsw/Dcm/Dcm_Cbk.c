@@ -162,6 +162,9 @@ extern unsigned long millis(void);
  * モジュール内部状態
  * ----------------------------------------------------------------------- */
 
+/** [SWS_Dcm 7.1.1] 用の初期化済みフラグ。 */
+static uint8 Dcm_Initialized;
+
 /** 現在の診断セッション (DCM_SESSION_DEFAULT / DCM_SESSION_EXTENDED) */
 static uint8 Dcm_CurrentSession;
 
@@ -322,6 +325,7 @@ void Dcm_Init(void)
 
     Dcm_TransferState = DCM_TRANSFER_STATE_IDLE;
 
+    Dcm_Initialized = 1U;
     DET_LOGI(TAG, "Init ok");
 }
 
@@ -332,12 +336,18 @@ void Dcm_Init(void)
  *          受信してから DCM_S3_TIMEOUT_MS 以上経過していれば
  *          defaultSession へ復帰させる (ISO 14229-1 の S3 タイマに相当)。
  *
- * \ServiceID      {0x02}
+ * \ServiceID      {0x25}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
  */
 void Dcm_MainFunction(void)
 {
+    if (!Dcm_Initialized)
+    {
+        Det_ReportError(DCM_MODULE_ID, 0U, DCM_API_ID_MAIN_FUNCTION, DCM_E_UNINIT);
+        return;
+    }
+
     /* RoutineControl (EngineHealthCheck): RUNNING 中は経過時間を監視し、
      * DCM_ROUTINE_DURATION_MS 経過したら合否を判定して COMPLETED へ遷移する。
      * RUNNING になれるのは extendedSession 限定のため、defaultSession 中に
@@ -2005,9 +2015,20 @@ void Dcm_ComIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
 {
     (void)RxPduId;
 
-    if (PduInfoPtr == NULL || PduInfoPtr->SduDataPtr == NULL
-        || PduInfoPtr->SduLength == 0U)
+    if (!Dcm_Initialized)
+    {
+        Det_ReportError(DCM_MODULE_ID, 0U, DCM_API_ID_COM_INDICATION, DCM_E_UNINIT);
         return;
+    }
+
+    if (PduInfoPtr == NULL || PduInfoPtr->SduDataPtr == NULL)
+    {
+        Det_ReportError(DCM_MODULE_ID, 0U, DCM_API_ID_COM_INDICATION, DCM_E_PARAM_POINTER);
+        return;
+    }
+
+    if (PduInfoPtr->SduLength == 0U)
+        return;  /* 空フレームは DET 対象外（NULL ポインタではないため） */
 
     /* CanTp が PCI を除去済み: 先頭バイトは UDS SID */
     const uint8* uds    = PduInfoPtr->SduDataPtr;

@@ -299,12 +299,19 @@ static void NvM_MarkPending(NvM_BlockIdType id)
  *          読み込み直後に各ブロックの CRC を検証し、不一致ならデフォルト値
  *          (NvM_ApplyDefaultSync()) で復元する。
  *
- * \ServiceID      {0x06}
+ * \ServiceID      {0x00}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
  */
 void NvM_Init(const NvM_ConfigType* ConfigPtr)
 {
+    if (ConfigPtr == NULL)
+    {
+        DET_LOGE(TAG, "Init: NULL ConfigPtr");
+        Det_ReportError(NVM_MODULE_ID, 0U, NVM_API_ID_INIT, NVM_E_PARAM_POINTER);
+        return;
+    }
+
     NvM_Cfg = ConfigPtr;
 
     for (uint8 i = 0U; i < ConfigPtr->NumBlocks && i < NVM_BLOCK_COUNT; i++)
@@ -331,14 +338,32 @@ void NvM_Init(const NvM_ConfigType* ConfigPtr)
  * \details EEPROM アクセスは発生しない。NvM_Init() 後であれば RAM ミラーは
  *          常に最新の EEPROM 値を保持している。
  *
- * \ServiceID      {0x16}
+ * \ServiceID      {0x06}
  * \Reentrancy     {Reentrant}
  * \Synchronicity  {Synchronous}
  */
 Std_ReturnType NvM_ReadBlock(NvM_BlockIdType BlockId, void* NvM_DstPtr)
 {
-    const NvM_BlockDescriptorType* blk = NvM_GetBlock(BlockId);
-    if (blk == NULL || NvM_DstPtr == NULL || blk->RamBlockDataAddress == NULL)
+    if (NvM_Cfg == NULL)
+    {
+        Det_ReportError(NVM_MODULE_ID, 0U, NVM_API_ID_READ_BLOCK, NVM_E_NOT_INITIALIZED);
+        return E_NOT_OK;
+    }
+
+    if (BlockId >= NvM_Cfg->NumBlocks)
+    {
+        Det_ReportError(NVM_MODULE_ID, 0U, NVM_API_ID_READ_BLOCK, NVM_E_PARAM_BLOCK_ID);
+        return E_NOT_OK;
+    }
+
+    if (NvM_DstPtr == NULL)
+    {
+        Det_ReportError(NVM_MODULE_ID, 0U, NVM_API_ID_READ_BLOCK, NVM_E_PARAM_ADDRESS);
+        return E_NOT_OK;
+    }
+
+    const NvM_BlockDescriptorType* blk = &NvM_Cfg->Blocks[BlockId];
+    if (blk->RamBlockDataAddress == NULL)
         return E_NOT_OK;
 
     memcpy(NvM_DstPtr, blk->RamBlockDataAddress, blk->NvMNvBlockLength);
@@ -353,14 +378,32 @@ Std_ReturnType NvM_ReadBlock(NvM_BlockIdType BlockId, void* NvM_DstPtr)
  *          NvM_MainFunction() が非同期に 1 バイトずつ行うため、ここでは
  *          ブロックしない（詳細はファイル冒頭のコメント参照）。
  *
- * \ServiceID      {0x0D}
+ * \ServiceID      {0x07}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Asynchronous}
  */
 Std_ReturnType NvM_WriteBlock(NvM_BlockIdType BlockId, const void* NvM_SrcPtr)
 {
-    const NvM_BlockDescriptorType* blk = NvM_GetBlock(BlockId);
-    if (blk == NULL || NvM_SrcPtr == NULL || blk->RamBlockDataAddress == NULL)
+    if (NvM_Cfg == NULL)
+    {
+        Det_ReportError(NVM_MODULE_ID, 0U, NVM_API_ID_WRITE_BLOCK, NVM_E_NOT_INITIALIZED);
+        return E_NOT_OK;
+    }
+
+    if (BlockId >= NvM_Cfg->NumBlocks)
+    {
+        Det_ReportError(NVM_MODULE_ID, 0U, NVM_API_ID_WRITE_BLOCK, NVM_E_PARAM_BLOCK_ID);
+        return E_NOT_OK;
+    }
+
+    if (NvM_SrcPtr == NULL)
+    {
+        Det_ReportError(NVM_MODULE_ID, 0U, NVM_API_ID_WRITE_BLOCK, NVM_E_PARAM_ADDRESS);
+        return E_NOT_OK;
+    }
+
+    const NvM_BlockDescriptorType* blk = &NvM_Cfg->Blocks[BlockId];
+    if (blk->RamBlockDataAddress == NULL)
         return E_NOT_OK;
 
     /* RAM ミラーを最新値で更新 (同期) */
@@ -378,14 +421,26 @@ Std_ReturnType NvM_WriteBlock(NvM_BlockIdType BlockId, const void* NvM_SrcPtr)
  * \details RAM ミラーの更新は同期的に行い、EEPROM への書き戻しは
  *          NvM_WriteBlock() と同じ非同期ジョブキュー経由で行う。
  *
- * \ServiceID      {0x0F}
+ * \ServiceID      {0x08}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Asynchronous}
  */
 Std_ReturnType NvM_RestoreBlockDefaults(NvM_BlockIdType BlockId)
 {
-    const NvM_BlockDescriptorType* blk = NvM_GetBlock(BlockId);
-    if (blk == NULL || blk->RamBlockDataAddress == NULL)
+    if (NvM_Cfg == NULL)
+    {
+        Det_ReportError(NVM_MODULE_ID, 0U, NVM_API_ID_RESTORE_BLOCK_DEFAULTS, NVM_E_NOT_INITIALIZED);
+        return E_NOT_OK;
+    }
+
+    if (BlockId >= NvM_Cfg->NumBlocks)
+    {
+        Det_ReportError(NVM_MODULE_ID, 0U, NVM_API_ID_RESTORE_BLOCK_DEFAULTS, NVM_E_PARAM_BLOCK_ID);
+        return E_NOT_OK;
+    }
+
+    const NvM_BlockDescriptorType* blk = &NvM_Cfg->Blocks[BlockId];
+    if (blk->RamBlockDataAddress == NULL)
         return E_NOT_OK;
 
     if (blk->RomBlockDataAddress != NULL)
@@ -404,14 +459,23 @@ Std_ReturnType NvM_RestoreBlockDefaults(NvM_BlockIdType BlockId)
 /**
  * \brief   ブロックの直近のジョブ結果を取得する。
  *
- * \ServiceID      {0x10}
+ * \ServiceID      {0x04}
  * \Reentrancy     {Reentrant}
  * \Synchronicity  {Synchronous}
  */
 NvM_RequestResultType NvM_GetErrorStatus(NvM_BlockIdType BlockId)
 {
-    if (BlockId >= NVM_BLOCK_COUNT)
+    if (NvM_Cfg == NULL)
+    {
+        Det_ReportError(NVM_MODULE_ID, 0U, NVM_API_ID_GET_ERROR_STATUS, NVM_E_NOT_INITIALIZED);
         return NVM_REQ_NOT_OK;
+    }
+
+    if (BlockId >= NVM_BLOCK_COUNT)
+    {
+        Det_ReportError(NVM_MODULE_ID, 0U, NVM_API_ID_GET_ERROR_STATUS, NVM_E_PARAM_BLOCK_ID);
+        return NVM_REQ_NOT_OK;
+    }
     return NvM_BlockResult[BlockId];
 }
 
@@ -424,14 +488,17 @@ NvM_RequestResultType NvM_GetErrorStatus(NvM_BlockIdType BlockId)
  *          CRC まで書き終えたらそのブロックの保留フラグを下ろし、
  *          ジョブ結果を NVM_REQ_OK にして次のブロックへ移る。
  *
- * \ServiceID      {0x11}
+ * \ServiceID      {0x0E}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
  */
 void NvM_MainFunction(void)
 {
     if (NvM_Cfg == NULL)
+    {
+        Det_ReportError(NVM_MODULE_ID, 0U, NVM_API_ID_MAIN_FUNCTION, NVM_E_NOT_INITIALIZED);
         return;
+    }
 
     if (NvM_ActiveBlockId >= NVM_BLOCK_COUNT)
     {

@@ -54,7 +54,7 @@ void BswM_Init(const BswM_ConfigType* ConfigPtr);
  *
  * \param[in]  state  新しい EcuM フェーズ (EcuM_StateType)。
  *
- * \ServiceID      {0x0E}
+ * \ServiceID      {0x0F}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
  */
@@ -71,7 +71,7 @@ void BswM_EcuM_CurrentState(EcuM_StateType state);
  * \param[in]  channel  CAN チャネル番号 (0 固定)。
  * \param[in]  mode     新しい通信モード (ComM_ModeType)。
  *
- * \ServiceID      {0x0F}
+ * \ServiceID      {0x0E}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
  */

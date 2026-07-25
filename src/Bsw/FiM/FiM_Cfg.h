@@ -27,6 +27,30 @@
 #define FIM_CFG_H
 
 /* -----------------------------------------------------------------------
+ * DET（Default Error Tracer）関連定数
+ *
+ * SWS_Fim 7.3.1 Development Errors 表（Table 7.1）に基づく開発エラーコード。
+ * ModuleId は SWS 本文には明記されないため、AUTOSAR_TR_BSWModuleList
+ * （Release 4.3.1、docs/ 配下）の「List of Basic Software Modules」表で
+ * Function Inhibition Manager (FiM) に割り当てられた固定値 11 を使う。
+ * ----------------------------------------------------------------------- */
+
+/** AUTOSAR Function Inhibition Manager の ModuleId
+ *  （AUTOSAR_TR_BSWModuleList 参照、固定値 11） */
+#define FIM_MODULE_ID  11U
+
+/** 開発エラーコード（SWS_Fim 7.3.1 表より、実際に使用する分のみ） */
+#define FIM_E_UNINIT           0x01U
+#define FIM_E_FID_OUT_OF_RANGE 0x02U
+#define FIM_E_PARAM_POINTER    0x04U
+
+/** ApiId（各関数の Doxygen \ServiceID タグと一致させること。値は SWS 8.x 章の
+ *  「Service ID[hex]」記載を実測して確認済み） */
+#define FIM_API_ID_INIT                     0x00U
+#define FIM_API_ID_GET_FUNCTION_PERMISSION  0x01U
+#define FIM_API_ID_MAIN_FUNCTION            0x05U
+
+/* -----------------------------------------------------------------------
  * 機能 ID (FID) 定義
  * ASW (App_EngineManager / App_WarningIndicator) が
  * Rte_Call_FiM_GetFunctionPermission() の引数として使用する。

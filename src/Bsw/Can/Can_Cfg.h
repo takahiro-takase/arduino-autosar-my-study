@@ -19,6 +19,36 @@
 #include "Platform_Types.h"
 
 /* -----------------------------------------------------------------------
+ * DET（Default Error Tracer）関連定数
+ *
+ * SWS_Can_00104 の Error Classification 表（7.11 Error classification 章）
+ * に基づく開発エラーコード。ModuleId は SWS_Can 本文には明記されないが
+ * （Com の SWS_Com_00442 のような明示規定が Can には存在しない）、
+ * AUTOSAR_TR_BSWModuleList（Release 4.3.1、docs/ 配下）の
+ * 「List of Basic Software Modules」表で CAN Driver (Can) に割り当てられた
+ * 固定値 80 を使う。
+ * ----------------------------------------------------------------------- */
+
+/** AUTOSAR CAN Driver の ModuleId（AUTOSAR_TR_BSWModuleList 参照、固定値 80） */
+#define CAN_MODULE_ID  80U
+
+/** 開発エラーコード（SWS_Can_00104 Error Classification 表より、実際に使用する分のみ） */
+#define CAN_E_PARAM_POINTER     0x01U  /* [SWS_Can_00175 等]: NULL ポインタチェック */
+#define CAN_E_PARAM_CONTROLLER  0x04U  /* [SWS_Can_00199 等]: Controller が範囲外 */
+#define CAN_E_UNINIT            0x05U  /* [SWS_Can_00198 等]: Can_Init 前に呼ばれた */
+#define CAN_E_TRANSITION        0x06U  /* [SWS_Can_00200 等]: 不正な状態遷移要求 */
+
+/** ApiId（各関数の Doxygen \ServiceID タグと一致させること。値は SWS 8.x 章の
+ *  「Service ID[hex]」記載を実測して確認済み） */
+#define CAN_API_ID_INIT                  0x00U
+#define CAN_API_ID_MAIN_FUNCTION_WRITE   0x01U
+#define CAN_API_ID_SET_CONTROLLER_MODE   0x03U
+#define CAN_API_ID_WRITE                 0x06U
+#define CAN_API_ID_MAIN_FUNCTION_READ    0x08U
+#define CAN_API_ID_MAIN_FUNCTION_BUSOFF  0x09U
+#define CAN_API_ID_MAIN_FUNCTION_WAKEUP  0x0AU
+
+/* -----------------------------------------------------------------------
  * プリコンパイル設定定数 (AUTOSAR SWS_Can_00413)
  * ----------------------------------------------------------------------- */
 
