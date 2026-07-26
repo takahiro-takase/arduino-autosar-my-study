@@ -21,6 +21,7 @@ extern "C" {
 #endif
 
 void           Can_Init(const Can_ConfigType* Config);
+void           Can_GetVersionInfo(Std_VersionInfoType* versioninfo);
 Can_ReturnType Can_SetControllerMode(uint8 Controller, Can_StateTransitionType Transition);
 Can_ReturnType Can_Write(Can_HwHandleType Hth, const Can_PduType* PduInfo);
 void           Can_MainFunction_Read(void);

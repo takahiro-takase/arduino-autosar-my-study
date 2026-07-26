@@ -95,6 +95,25 @@ void ComM_Init(void)
 }
 
 /**
+ * \brief   ComM モジュールを未初期化状態に戻す。
+ *
+ * \ServiceID      {0x02}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void ComM_DeInit(void)
+{
+    if (!ComM_Initialized)
+    {
+        Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_DEINIT, COMM_E_UNINIT);
+        return;
+    }
+
+    ComM_Initialized = 0U;
+    DET_LOGI(TAG, "DeInit ok");
+}
+
+/**
  * \brief   ユーザが通信モードを要求する。
  *
  * \details ユーザの要求を記録した後、全ユーザの要求のうち最も通信レベルの高い
@@ -276,4 +295,19 @@ void ComM_MainFunction(void)
         return;
     }
     /* NM / バス スリープ未対応のため NOP */
+}
+
+void ComM_GetVersionInfo(Std_VersionInfoType* Versioninfo)
+{
+    if (Versioninfo == NULL)
+    {
+        Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_GET_VERSION_INFO, COMM_E_PARAM_POINTER);
+        return;
+    }
+
+    Versioninfo->vendorID         = COMM_VENDOR_ID;
+    Versioninfo->moduleID         = COMM_MODULE_ID;
+    Versioninfo->sw_major_version = COMM_SW_MAJOR_VERSION;
+    Versioninfo->sw_minor_version = COMM_SW_MINOR_VERSION;
+    Versioninfo->sw_patch_version = COMM_SW_PATCH_VERSION;
 }

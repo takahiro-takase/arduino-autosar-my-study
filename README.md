@@ -198,7 +198,7 @@ Basic Software Modules」表）。詳細は「CAN 通信スタック」セクシ
 │   │   │   ├── E2E_P01.h         # 設定型・状態型・API 宣言（Check: E2E_P01Check/CheckInit、Protect: E2E_P01Protect/ProtectInit）
 │   │   │   └── E2E_P01.c         # CRC8 計算・受信検証（カウンタデルタ判定）・送信保護（Counter更新+CRC付加）実装
 │   │   ├── E2EXf/                # E2E Transformer（Com から E2E ロジックを切り離す統合層）
-│   │   │   ├── E2EXf.h           # 汎用 API 宣言（E2EXf_Init/E2EXf_InverseTransform/E2EXf_Transform、E2E_P01 への薄いラッパー）
+│   │   │   ├── E2EXf.h           # 汎用 API 宣言（E2EXf_Init/E2EXf_DeInit/E2EXf_InverseTransform/E2EXf_Transform/E2EXf_GetVersionInfo、E2E_P01 への薄いラッパー）
 │   │   │   ├── E2EXf.c           # 上記実装（Dem_ReportErrorStatus への報告・モジュール自身の初期化状態ガードも含む）
 │   │   │   ├── E2EXf_PBCfg.h     # ポストビルド設定宣言（E2EXf_*RxCfg/TxCfg、E2EXf_PBCfg_Init）
 │   │   │   └── E2EXf_PBCfg.c     # I-PDU ごとの E2E P01 設定/状態実体（EngineInfo/AbsInfo/E2EHealthStatus）

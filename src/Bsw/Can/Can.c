@@ -574,3 +574,31 @@ void Can_MainFunction_BusOff(void)
         CanIf_ControllerBusOff(0U);
     }
 }
+
+/**
+ * \brief   CAN ドライバのバージョン情報を取得する。
+ *
+ * \details Can_Init と並び、未初期化時でも CAN_E_UNINIT を報告しない例外 API
+ *          （他 BSW モジュールと共通の慣例）のため、初期化状態は確認せず
+ *          NULL ポインタチェックのみ行う。
+ *
+ * \param[out]  versioninfo  バージョン情報の格納先。NULL 禁止。
+ *
+ * \ServiceID      {0x07}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void Can_GetVersionInfo(Std_VersionInfoType* versioninfo)
+{
+    if (versioninfo == NULL)
+    {
+        Det_ReportError(CAN_MODULE_ID, 0U, CAN_API_ID_GET_VERSION_INFO, CAN_E_PARAM_POINTER);
+        return;
+    }
+
+    versioninfo->vendorID         = CAN_VENDOR_ID;
+    versioninfo->moduleID         = CAN_MODULE_ID;
+    versioninfo->sw_major_version = CAN_SW_MAJOR_VERSION;
+    versioninfo->sw_minor_version = CAN_SW_MINOR_VERSION;
+    versioninfo->sw_patch_version = CAN_SW_PATCH_VERSION;
+}

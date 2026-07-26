@@ -40,12 +40,20 @@
 #define BSWM_E_NO_INIT               0x01U
 #define BSWM_E_REQ_MODE_OUT_OF_RANGE 0x05U
 #define BSWM_E_PARAM_CONFIG          0x06U
+#define BSWM_E_PARAM_POINTER         0x07U
 
 /** ApiId（各関数の Doxygen \ServiceID タグと一致させること。値は SWS 8.x 章の
  *  「Service ID[hex]」記載を実測して確認済み） */
 #define BSWM_API_ID_INIT                  0x00U
+#define BSWM_API_ID_GET_VERSION_INFO      0x01U
 #define BSWM_API_ID_ECUM_CURRENT_STATE    0x0FU
 #define BSWM_API_ID_COMM_CURRENT_MODE     0x0EU
+
+/** バージョン情報（SWS_BswM_00003、Com/E2EXf/PduR 等の既存モジュールと同じ命名規則） */
+#define BSWM_VENDOR_ID          0U
+#define BSWM_SW_MAJOR_VERSION   1U
+#define BSWM_SW_MINOR_VERSION   0U
+#define BSWM_SW_PATCH_VERSION   0U
 
 /* -----------------------------------------------------------------------
  * Os タスク ID (Os_PBCfg.c のインデックスと一致させること)

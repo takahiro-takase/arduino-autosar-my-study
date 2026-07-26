@@ -46,6 +46,21 @@ extern "C" {
 void BswM_Init(const BswM_ConfigType* ConfigPtr);
 
 /**
+ * \brief   BswM モジュールのバージョン情報を取得する。
+ *
+ * \details SWS_BswM_00003。BswM_Init と並び、未初期化時でも BSWM_E_NO_INIT を
+ *          報告しない例外 API（他 BSW モジュールと共通の慣例）のため、
+ *          初期化状態は確認せず NULL ポインタチェックのみ行う。
+ *
+ * \param[out]  VersionInfo  バージョン情報の格納先。NULL 禁止。
+ *
+ * \ServiceID      {0x01}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void BswM_GetVersionInfo(Std_VersionInfoType* VersionInfo);
+
+/**
  * \brief   EcuM からのフェーズ変化通知コールバック。
  *
  * \details EcuM が状態遷移するたびに呼ぶ。前回と同じ状態なら何もしない。

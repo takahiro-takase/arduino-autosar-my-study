@@ -16,6 +16,7 @@
 #define DIO_H
 
 #include "Std_Types.h"
+#include "Dio_Cfg.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -59,6 +60,20 @@ void Dio_WriteChannel(Dio_ChannelType channelId, Dio_LevelType level);
  * \Synchronicity  {Synchronous}
  */
 Dio_LevelType Dio_ReadChannel(Dio_ChannelType channelId);
+
+/**
+ * \brief   DIO ドライバのバージョン情報を取得する。
+ *
+ * \details 本プロジェクトの Dio に初期化状態の概念はないため（実 SWS_Dio にも
+ *          Dio_Init は存在しない）、NULL ポインタチェックのみ行う。
+ *
+ * \param[out]  VersionInfo  バージョン情報の格納先。NULL 禁止。
+ *
+ * \ServiceID      {0x12}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void Dio_GetVersionInfo(Std_VersionInfoType* VersionInfo);
 
 #ifdef __cplusplus
 }

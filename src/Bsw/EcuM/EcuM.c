@@ -318,3 +318,18 @@ Std_ReturnType EcuM_ReleaseRUN(EcuM_UserType user)
     }
     return E_OK;
 }
+
+void EcuM_GetVersionInfo(Std_VersionInfoType* versioninfo)
+{
+    if (versioninfo == NULL)
+    {
+        Det_ReportError(ECUM_MODULE_ID, 0U, ECUM_API_ID_GET_VERSION_INFO, ECUM_E_NULL_POINTER);
+        return;
+    }
+
+    versioninfo->vendorID         = ECUM_VENDOR_ID;
+    versioninfo->moduleID         = ECUM_MODULE_ID;
+    versioninfo->sw_major_version = ECUM_SW_MAJOR_VERSION;
+    versioninfo->sw_minor_version = ECUM_SW_MINOR_VERSION;
+    versioninfo->sw_patch_version = ECUM_SW_PATCH_VERSION;
+}

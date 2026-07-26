@@ -20,6 +20,7 @@
 #define NM_H
 
 #include "Platform_Types.h"
+#include "Std_Types.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -35,6 +36,18 @@ extern "C" {
  * \Synchronicity  {Synchronous}
  */
 void Nm_Init(void);
+
+/**
+ * \brief   Nm モジュールを未初期化状態に戻す。
+ *
+ * \details 初期化済みフラグを未初期化に戻す。未初期化状態で呼ばれた場合は
+ *          NM_E_UNINIT を報告し何もしない。
+ *
+ * \ServiceID      {0x10}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void Nm_DeInit(void);
 
 /**
  * \brief   NM フレームを周期送信する。
@@ -62,6 +75,21 @@ void Nm_MainFunction(void);
  * \Synchronicity  {Synchronous}
  */
 void Nm_SetTxEnabled(uint8 Enabled);
+
+/**
+ * \brief   Nm モジュールのバージョン情報を取得する。
+ *
+ * \details Nm_Init と並び、未初期化時でも NM_E_UNINIT を報告しない例外 API
+ *          （他 BSW モジュールと共通の慣例）のため、初期化状態は確認せず
+ *          NULL ポインタチェックのみ行う。
+ *
+ * \param[out]  versioninfo  バージョン情報の格納先。NULL 禁止。
+ *
+ * \ServiceID      {0xF1}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void Nm_GetVersionInfo(Std_VersionInfoType* versioninfo);
 
 #ifdef __cplusplus
 }

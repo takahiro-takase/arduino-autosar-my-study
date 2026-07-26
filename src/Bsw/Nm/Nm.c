@@ -34,6 +34,18 @@ void Nm_Init(void)
     DET_LOGI(TAG, "Init ok node=0x%02X", (unsigned)NM_SOURCE_NODE_ID);
 }
 
+void Nm_DeInit(void)
+{
+    if (!Nm_Initialized)
+    {
+        Det_ReportError(NM_MODULE_ID, 0U, NM_API_ID_DEINIT, NM_E_UNINIT);
+        return;
+    }
+
+    Nm_Initialized = 0U;
+    DET_LOGI(TAG, "DeInit ok");
+}
+
 /**
  * \brief   ComM が FULL_COM の間、NM フレームを組み立てて CanIf_Transmit() へ渡す。
  *
@@ -81,4 +93,19 @@ void Nm_SetTxEnabled(uint8 Enabled)
     if (Nm_TxEnabled != Enabled)
         DET_LOGI(TAG, "CommunicationControl tx=%u->%u", (unsigned)Nm_TxEnabled, (unsigned)Enabled);
     Nm_TxEnabled = Enabled;
+}
+
+void Nm_GetVersionInfo(Std_VersionInfoType* versioninfo)
+{
+    if (versioninfo == NULL)
+    {
+        Det_ReportError(NM_MODULE_ID, 0U, NM_API_ID_GET_VERSION_INFO, NM_E_PARAM_POINTER);
+        return;
+    }
+
+    versioninfo->vendorID         = NM_VENDOR_ID;
+    versioninfo->moduleID         = NM_MODULE_ID;
+    versioninfo->sw_major_version = NM_SW_MAJOR_VERSION;
+    versioninfo->sw_minor_version = NM_SW_MINOR_VERSION;
+    versioninfo->sw_patch_version = NM_SW_PATCH_VERSION;
 }

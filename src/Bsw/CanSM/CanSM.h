@@ -53,6 +53,18 @@ typedef uint8 CanSM_NetworkHandleType;
 void CanSM_Init(void);
 
 /**
+ * \brief   CanSM モジュールを未初期化状態に戻す。
+ *
+ * \details 初期化済みフラグを未初期化に戻す。未初期化状態で呼ばれた場合は
+ *          CANSM_E_UNINIT を報告し何もしない。
+ *
+ * \ServiceID      {0x14}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void CanSM_DeInit(void);
+
+/**
  * \brief   ネットワークの通信モード遷移を要求する。
  *
  * \details ComM から呼び出され、要求モードに応じて
@@ -158,6 +170,21 @@ void CanSM_RxIndication(uint8 ControllerId);
  * \Synchronicity  {Synchronous}
  */
 void CanSM_MainFunction(void);
+
+/**
+ * \brief   CanSM モジュールのバージョン情報を取得する。
+ *
+ * \details CanSM_Init と並び、未初期化時でも CANSM_E_UNINIT を報告しない
+ *          例外 API（他 BSW モジュールと共通の慣例）のため、初期化状態は
+ *          確認せず NULL ポインタチェックのみ行う。
+ *
+ * \param[out]  VersionInfo  バージョン情報の格納先。NULL 禁止。
+ *
+ * \ServiceID      {0x01}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void CanSM_GetVersionInfo(Std_VersionInfoType* VersionInfo);
 
 #ifdef __cplusplus
 }

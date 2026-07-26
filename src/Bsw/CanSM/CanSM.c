@@ -127,6 +127,18 @@ void CanSM_Init(void)
     DET_LOGI(TAG, "Init");
 }
 
+void CanSM_DeInit(void)
+{
+    if (!CanSM_Initialized)
+    {
+        Det_ReportError(CANSM_MODULE_ID, 0U, CANSM_API_ID_DEINIT, CANSM_E_UNINIT);
+        return;
+    }
+
+    CanSM_Initialized = 0U;
+    DET_LOGI(TAG, "DeInit ok");
+}
+
 /**
  * \brief   ネットワークの通信モード遷移を要求する。
  *
@@ -450,4 +462,19 @@ void CanSM_MainFunction(void)
     /* 回復成功 → ComM に FULL_COM を通知 → EcuM_RequestRUN → RUN へ戻る */
     ComM_BusSMIndication(0U, COMM_FULL_COMMUNICATION);
     /* 再度 Bus-Off が発生すれば CanIf → CanSM_ControllerBusOff() が呼ばれる */
+}
+
+void CanSM_GetVersionInfo(Std_VersionInfoType* VersionInfo)
+{
+    if (VersionInfo == NULL)
+    {
+        Det_ReportError(CANSM_MODULE_ID, 0U, CANSM_API_ID_GET_VERSION_INFO, CANSM_E_PARAM_POINTER);
+        return;
+    }
+
+    VersionInfo->vendorID         = CANSM_VENDOR_ID;
+    VersionInfo->moduleID         = CANSM_MODULE_ID;
+    VersionInfo->sw_major_version = CANSM_SW_MAJOR_VERSION;
+    VersionInfo->sw_minor_version = CANSM_SW_MINOR_VERSION;
+    VersionInfo->sw_patch_version = CANSM_SW_PATCH_VERSION;
 }

@@ -99,6 +99,13 @@
 #define DCM_API_ID_INIT           0x01U
 #define DCM_API_ID_MAIN_FUNCTION  0x25U
 #define DCM_API_ID_COM_INDICATION 0xF0U
+#define DCM_API_ID_GET_VERSION_INFO 0x24U
+
+/** バージョン情報（SWS_Dcm、Com/E2EXf/PduR 等の既存モジュールと同じ命名規則） */
+#define DCM_VENDOR_ID          0U
+#define DCM_SW_MAJOR_VERSION   1U
+#define DCM_SW_MINOR_VERSION   0U
+#define DCM_SW_PATCH_VERSION   0U
 
 /* -----------------------------------------------------------------------
  * UDS セッション識別子 (ISO 14229-1 Table 14)

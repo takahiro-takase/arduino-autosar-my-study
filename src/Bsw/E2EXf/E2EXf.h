@@ -55,8 +55,16 @@ extern "C" {
 
 /** ApiId（値は SWS 8.x 章の「Service ID[hex]」記載を実測して確認済み） */
 #define E2EXF_API_ID_INIT               0x01U
+#define E2EXF_API_ID_DEINIT             0x02U
 #define E2EXF_API_ID_TRANSFORM          0x03U
 #define E2EXF_API_ID_INVERSE_TRANSFORM  0x04U
+#define E2EXF_API_ID_GET_VERSION_INFO   0x00U
+
+/** バージョン情報（SWS_E2EXf_00036、Com 等の既存モジュールと同じ命名規則） */
+#define E2EXF_VENDOR_ID          0U
+#define E2EXF_SW_MAJOR_VERSION   1U
+#define E2EXF_SW_MINOR_VERSION   0U
+#define E2EXF_SW_PATCH_VERSION   0U
 
 /* -----------------------------------------------------------------------
  * RX 側（Inverse Transformer）設定
@@ -101,6 +109,19 @@ typedef struct
  * \Synchronicity  {Synchronous}
  */
 void E2EXf_Init(void);
+
+/**
+ * \brief   E2EXf モジュールを未初期化状態に戻す。
+ *
+ * \details SWS_E2EXf_00148: モジュール初期化状態を FALSE に戻す。
+ *          SWS_E2EXf_00146: 未初期化状態で呼ばれた場合は何もせず、
+ *          E2EXF_E_UNINIT を Det_ReportError() へ報告する。
+ *
+ * \ServiceID      {0x02}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void E2EXf_DeInit(void);
 
 /**
  * \brief   RX I-PDU バイト列に対する E2E Inverse Transform（検証）を行う。
@@ -150,6 +171,24 @@ Std_ReturnType E2EXf_InverseTransform(const E2EXf_RxConfigType* Config, const ui
  * \Synchronicity  {Synchronous}
  */
 void E2EXf_Transform(const E2EXf_TxConfigType* Config, uint8* Buffer, uint8 Length);
+
+/**
+ * \brief   E2EXf モジュールのバージョン情報を取得する。
+ *
+ * \details SWS_E2EXf_00137 のエラー表が明記するとおり、GetVersionInfo は
+ *          「Init 未実行/DeInit 後でも E2EXF_E_UNINIT を報告しない」唯一の
+ *          例外 API である。そのため本関数は初期化状態を確認しない。
+ *
+ * \param[out]  versioninfo  バージョン情報の格納先。NULL 禁止。
+ *
+ * \retval  なし（SWS_E2EXf_00149: NULL の場合は E2EXF_E_PARAM_POINTER を報告
+ *          し、何も書き込まずに戻る）。
+ *
+ * \ServiceID      {0x00}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void E2EXf_GetVersionInfo(Std_VersionInfoType* versioninfo);
 
 #ifdef __cplusplus
 }

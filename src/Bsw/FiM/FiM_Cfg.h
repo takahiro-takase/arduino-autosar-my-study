@@ -49,6 +49,13 @@
 #define FIM_API_ID_INIT                     0x00U
 #define FIM_API_ID_GET_FUNCTION_PERMISSION  0x01U
 #define FIM_API_ID_MAIN_FUNCTION            0x05U
+#define FIM_API_ID_GET_VERSION_INFO         0x04U
+
+/** バージョン情報（SWS_Fim_GetVersionInfo、Com/E2EXf/PduR 等の既存モジュールと同じ命名規則） */
+#define FIM_VENDOR_ID          0U
+#define FIM_SW_MAJOR_VERSION   1U
+#define FIM_SW_MINOR_VERSION   0U
+#define FIM_SW_PATCH_VERSION   0U
 
 /* -----------------------------------------------------------------------
  * 機能 ID (FID) 定義

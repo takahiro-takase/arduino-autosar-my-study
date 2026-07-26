@@ -793,3 +793,18 @@ Std_ReturnType Dem_GetOccurrenceCounterOfEvent(Dem_EventIdType EventId, uint8* C
     *Counter = Dem_OccurrenceCounter[EventId];
     return E_OK;
 }
+
+void Dem_GetVersionInfo(Std_VersionInfoType* versioninfo)
+{
+    if (versioninfo == NULL)
+    {
+        Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_GET_VERSION_INFO, DEM_E_PARAM_POINTER);
+        return;
+    }
+
+    versioninfo->vendorID         = DEM_VENDOR_ID;
+    versioninfo->moduleID         = DEM_MODULE_ID;
+    versioninfo->sw_major_version = DEM_SW_MAJOR_VERSION;
+    versioninfo->sw_minor_version = DEM_SW_MINOR_VERSION;
+    versioninfo->sw_patch_version = DEM_SW_PATCH_VERSION;
+}

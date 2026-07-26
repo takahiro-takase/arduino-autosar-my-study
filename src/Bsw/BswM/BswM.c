@@ -120,6 +120,21 @@ void BswM_Init(const BswM_ConfigType* ConfigPtr)
     DET_LOGI(TAG, "Init ok rules=%u", (unsigned)ConfigPtr->RuleCount);
 }
 
+void BswM_GetVersionInfo(Std_VersionInfoType* VersionInfo)
+{
+    if (VersionInfo == NULL)
+    {
+        Det_ReportError(BSWM_MODULE_ID, 0U, BSWM_API_ID_GET_VERSION_INFO, BSWM_E_PARAM_POINTER);
+        return;
+    }
+
+    VersionInfo->vendorID         = BSWM_VENDOR_ID;
+    VersionInfo->moduleID         = BSWM_MODULE_ID;
+    VersionInfo->sw_major_version = BSWM_SW_MAJOR_VERSION;
+    VersionInfo->sw_minor_version = BSWM_SW_MINOR_VERSION;
+    VersionInfo->sw_patch_version = BSWM_SW_PATCH_VERSION;
+}
+
 void BswM_EcuM_CurrentState(EcuM_StateType state)
 {
     if (BswM_Cfg == NULL)

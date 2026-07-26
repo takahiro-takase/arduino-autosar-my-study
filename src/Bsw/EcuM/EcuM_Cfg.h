@@ -36,6 +36,7 @@
 
 /** 開発エラーコード（値は実装時割り当て。実際に使用する分のみ定義） */
 #define ECUM_E_INVALID_PAR              0x02U  /* 不正なパラメータ（user が範囲外 等） */
+#define ECUM_E_NULL_POINTER             0x03U  /* [Table 7]: NULL ポインタチェック（値は実装時割り当て） */
 #define ECUM_E_MULTIPLE_RUN_REQUESTS    0x20U  /* [SWS_EcuM_04125]: 同一ユーザの多重 RUN 要求 */
 #define ECUM_E_MISMATCHED_RUN_RELEASE   0x21U  /* [SWS_EcuM_04127]: 対応する要求のない解放 */
 
@@ -44,6 +45,13 @@
 #define ECUM_API_ID_INIT           0x01U
 #define ECUM_API_ID_REQUEST_RUN    0x03U
 #define ECUM_API_ID_RELEASE_RUN    0x04U
+#define ECUM_API_ID_GET_VERSION_INFO 0x00U
+
+/** バージョン情報（SWS_EcuM_GetVersionInfo、Com/E2EXf/PduR 等の既存モジュールと同じ命名規則） */
+#define ECUM_VENDOR_ID          0U
+#define ECUM_SW_MAJOR_VERSION   1U
+#define ECUM_SW_MINOR_VERSION   0U
+#define ECUM_SW_PATCH_VERSION   0U
 
 /** RUN 要求ユーザ総数 */
 #define ECUM_USER_COUNT              1U

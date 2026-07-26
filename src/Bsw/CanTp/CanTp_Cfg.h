@@ -53,6 +53,13 @@
 #define CANTP_API_ID_RX_INDICATION     0x42U
 #define CANTP_API_ID_TX_CONFIRMATION   0x40U
 #define CANTP_API_ID_MAIN_FUNCTION     0x06U
+#define CANTP_API_ID_GET_VERSION_INFO  0x07U
+
+/** バージョン情報（SWS_CanTp、Com/E2EXf/PduR 等の既存モジュールと同じ命名規則） */
+#define CANTP_VENDOR_ID          0U
+#define CANTP_SW_MAJOR_VERSION   1U
+#define CANTP_SW_MINOR_VERSION   0U
+#define CANTP_SW_PATCH_VERSION   0U
 
 /* -----------------------------------------------------------------------
  * バッファサイズ

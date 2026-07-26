@@ -97,6 +97,20 @@ typedef enum
 void WdgM_Init(const WdgM_ConfigType* ConfigPtr);
 
 /**
+ * \brief   WdgM モジュールを未初期化状態に戻す。
+ *
+ * \details 設定ポインタを NULL に戻す。未初期化状態で呼ばれた場合は
+ *          WDGM_E_NO_INIT を報告し何もしない。実 HW ウォッチドッグの有効/
+ *          無効化は行わない（WdgM_EnableHwWatchdog/DisableHwWatchdog は
+ *          本プロジェクト独自の別 API であり、本関数の責務ではない）。
+ *
+ * \ServiceID      {0x01}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void WdgM_DeInit(void);
+
+/**
  * \brief   AVR 実ハードウェアウォッチドッグを WDGM_HW_WATCHDOG_TIMEOUT_MS で有効化する。
  *
  * \details WdgM_Init() がこの関数を呼ぶ。また、EcuM が POST_RUN から RUN へ
@@ -221,6 +235,21 @@ void WdgM_MainFunction(void);
  * \Synchronicity  {Synchronous}
  */
 void WdgM_TriggerHwWatchdog(void);
+
+/**
+ * \brief   WdgM モジュールのバージョン情報を取得する。
+ *
+ * \details WdgM_Init と並び、未初期化時でも WDGM_E_NO_INIT を報告しない
+ *          例外 API（他 BSW モジュールと共通の慣例）のため、初期化状態は
+ *          確認せず NULL ポインタチェックのみ行う。
+ *
+ * \param[out]  VersionInfo  バージョン情報の格納先。NULL 禁止。
+ *
+ * \ServiceID      {0x02}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void WdgM_GetVersionInfo(Std_VersionInfoType* VersionInfo);
 
 #ifdef __cplusplus
 }

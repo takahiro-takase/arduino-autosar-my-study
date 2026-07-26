@@ -14,6 +14,7 @@
 
 #include "Dio.h"
 #include "Dio_Hw.h"
+#include "Det.h"
 
 /**
  * \brief   指定チャネルへ出力レベルを書き込む。
@@ -48,4 +49,19 @@ void Dio_WriteChannel(Dio_ChannelType channelId, Dio_LevelType level)
 Dio_LevelType Dio_ReadChannel(Dio_ChannelType channelId)
 {
     return Dio_Hw_ReadChannel(channelId);
+}
+
+void Dio_GetVersionInfo(Std_VersionInfoType* VersionInfo)
+{
+    if (VersionInfo == NULL)
+    {
+        Det_ReportError(DIO_MODULE_ID, 0U, DIO_API_ID_GET_VERSION_INFO, DIO_E_PARAM_POINTER);
+        return;
+    }
+
+    VersionInfo->vendorID         = DIO_VENDOR_ID;
+    VersionInfo->moduleID         = DIO_MODULE_ID;
+    VersionInfo->sw_major_version = DIO_SW_MAJOR_VERSION;
+    VersionInfo->sw_minor_version = DIO_SW_MINOR_VERSION;
+    VersionInfo->sw_patch_version = DIO_SW_PATCH_VERSION;
 }

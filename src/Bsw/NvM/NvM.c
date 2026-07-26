@@ -562,3 +562,18 @@ void NvM_MainFunction(void)
         NvM_ActiveCopyIsMirror = 0U;
     }
 }
+
+void NvM_GetVersionInfo(Std_VersionInfoType* versioninfo)
+{
+    if (versioninfo == NULL)
+    {
+        Det_ReportError(NVM_MODULE_ID, 0U, NVM_API_ID_GET_VERSION_INFO, NVM_E_PARAM_POINTER);
+        return;
+    }
+
+    versioninfo->vendorID         = NVM_VENDOR_ID;
+    versioninfo->moduleID         = NVM_MODULE_ID;
+    versioninfo->sw_major_version = NVM_SW_MAJOR_VERSION;
+    versioninfo->sw_minor_version = NVM_SW_MINOR_VERSION;
+    versioninfo->sw_patch_version = NVM_SW_PATCH_VERSION;
+}

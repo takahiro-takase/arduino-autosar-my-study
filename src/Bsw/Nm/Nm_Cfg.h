@@ -47,7 +47,8 @@
 #define NM_MODULE_ID  31U
 
 /** 開発エラーコード（SWS_CanNm 7.14.1 表より） */
-#define NM_E_UNINIT  0x01U  /* [SWS_CanNm_00002]: 未初期化時の API 呼び出し */
+#define NM_E_UNINIT         0x01U  /* [SWS_CanNm_00002]: 未初期化時の API 呼び出し */
+#define NM_E_PARAM_POINTER  0x12U  /* NULL ポインタチェック */
 
 /** ApiId（各関数の Doxygen \ServiceID タグと一致させること。Init/MainFunction は
  *  SWS 8.x 章の CanNm_Init/CanNm_MainFunction の「Service ID[hex]」記載を
@@ -57,6 +58,14 @@
 #define NM_API_ID_INIT               0x00U
 #define NM_API_ID_MAIN_FUNCTION      0x13U
 #define NM_API_ID_SET_TX_ENABLED     0x02U
+#define NM_API_ID_DEINIT             0x10U
+#define NM_API_ID_GET_VERSION_INFO   0xF1U
+
+/** バージョン情報（CanNm_GetVersionInfo、Com/E2EXf/PduR 等の既存モジュールと同じ命名規則） */
+#define NM_VENDOR_ID          0U
+#define NM_SW_MAJOR_VERSION   1U
+#define NM_SW_MINOR_VERSION   0U
+#define NM_SW_PATCH_VERSION   0U
 
 /** NM フレーム送信周期 [ms]
  *  MeterStatus (3000ms) より短い周期で、バス上の生存確認を高頻度に行う

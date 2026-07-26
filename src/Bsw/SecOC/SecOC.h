@@ -34,6 +34,18 @@ extern "C" {
 void SecOC_Init(const SecOC_ConfigType* config);
 
 /**
+ * \brief   SecOC モジュールを未初期化状態に戻す。
+ *
+ * \details 設定ポインタを NULL に戻す。未初期化状態で呼ばれた場合は
+ *          SECOC_E_UNINIT を報告し何もしない。
+ *
+ * \ServiceID      {0x05}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void SecOC_DeInit(void);
+
+/**
  * \brief   PduR から呼ばれる、Secured I-PDU 受信時の検証エントリポイント。
  *
  * \details `PduR_RxIndicationFctType` と同じシグネチャを持ち、PduR の
@@ -103,6 +115,21 @@ Std_ReturnType SecOC_IfTransmit(PduIdType TxPduId, const PduInfoType* PduInfoPtr
  * \Synchronicity  {Synchronous}
  */
 void SecOC_MainFunction(void);
+
+/**
+ * \brief   SecOC モジュールのバージョン情報を取得する。
+ *
+ * \details SecOC_Init と並び、未初期化時でも SECOC_E_UNINIT を報告しない
+ *          例外 API（他 BSW モジュールと共通の慣例）のため、初期化状態は
+ *          確認せず NULL ポインタチェックのみ行う。
+ *
+ * \param[out]  versioninfo  バージョン情報の格納先。NULL 禁止。
+ *
+ * \ServiceID      {0x02}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void SecOC_GetVersionInfo(Std_VersionInfoType* versioninfo);
 
 #ifdef __cplusplus
 }

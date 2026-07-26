@@ -24,3 +24,17 @@ Std_ReturnType Adc_ReadChannel(uint8 channel, uint16* raw)
     *raw = Adc_Hw_ReadChannel(channel);
     return E_OK;
 }
+
+void Adc_GetVersionInfo(Std_VersionInfoType* versioninfo)
+{
+    if (versioninfo == NULL) {
+        Det_ReportError(ADC_MODULE_ID, 0U, ADC_API_ID_GET_VERSION_INFO, ADC_E_PARAM_POINTER);
+        return;
+    }
+
+    versioninfo->vendorID         = ADC_VENDOR_ID;
+    versioninfo->moduleID         = ADC_MODULE_ID;
+    versioninfo->sw_major_version = ADC_SW_MAJOR_VERSION;
+    versioninfo->sw_minor_version = ADC_SW_MINOR_VERSION;
+    versioninfo->sw_patch_version = ADC_SW_PATCH_VERSION;
+}

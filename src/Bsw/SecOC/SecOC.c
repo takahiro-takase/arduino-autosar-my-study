@@ -169,6 +169,18 @@ void SecOC_Init(const SecOC_ConfigType* config)
     DET_LOGI(TAG, "Init ok RX=%u TX=%u", (unsigned)config->RxPduCount, (unsigned)config->TxPduCount);
 }
 
+void SecOC_DeInit(void)
+{
+    if (SecOC_ConfigPtr == NULL)
+    {
+        Det_ReportError(SECOC_MODULE_ID, 0U, SECOC_API_ID_DEINIT, SECOC_E_UNINIT);
+        return;
+    }
+
+    SecOC_ConfigPtr = NULL;
+    DET_LOGI(TAG, "DeInit ok");
+}
+
 void SecOC_IfRxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
 {
     if (SecOC_ConfigPtr == NULL)
@@ -385,4 +397,19 @@ void SecOC_MainFunction(void)
         };
         (void)PduR_SecOCTransmit(cfg->PduRSrcPduId, &securedPduInfo);
     }
+}
+
+void SecOC_GetVersionInfo(Std_VersionInfoType* versioninfo)
+{
+    if (versioninfo == NULL)
+    {
+        Det_ReportError(SECOC_MODULE_ID, 0U, SECOC_API_ID_GET_VERSION_INFO, SECOC_E_PARAM_POINTER);
+        return;
+    }
+
+    versioninfo->vendorID         = SECOC_VENDOR_ID;
+    versioninfo->moduleID         = SECOC_MODULE_ID;
+    versioninfo->sw_major_version = SECOC_SW_MAJOR_VERSION;
+    versioninfo->sw_minor_version = SECOC_SW_MINOR_VERSION;
+    versioninfo->sw_patch_version = SECOC_SW_PATCH_VERSION;
 }

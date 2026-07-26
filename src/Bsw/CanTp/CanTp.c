@@ -708,3 +708,18 @@ void CanTp_MainFunction(void)
         }
     }
 }
+
+void CanTp_GetVersionInfo(Std_VersionInfoType* versioninfo)
+{
+    if (versioninfo == NULL)
+    {
+        Det_ReportError(CANTP_MODULE_ID, 0U, CANTP_API_ID_GET_VERSION_INFO, CANTP_E_PARAM_POINTER);
+        return;
+    }
+
+    versioninfo->vendorID         = CANTP_VENDOR_ID;
+    versioninfo->moduleID         = CANTP_MODULE_ID;
+    versioninfo->sw_major_version = CANTP_SW_MAJOR_VERSION;
+    versioninfo->sw_minor_version = CANTP_SW_MINOR_VERSION;
+    versioninfo->sw_patch_version = CANTP_SW_PATCH_VERSION;
+}
