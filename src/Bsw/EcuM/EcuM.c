@@ -12,8 +12,13 @@
  *            3. Can_Init       — CAN コントローラ初期化（バスはまだ非アクティブ）
  *            3. CanIf_Init     — CAN インタフェース初期化
  *            4. PduR_Init      — PDU ルータ初期化
- *            4b. SecOC_Init    — セキュアオンボード通信初期化（AES-128 自己診断含む。
- *                                PduR の後・Com の前。PduR→SecOC→Com の依存順）
+ *            4a. Crypto_Init   — Crypto Driver 初期化（AES-128 自己診断を含む。
+ *                                Csm/CryIf/Crypto レイヤの最下層）
+ *            4b. CryIf_Init    — Crypto Interface 初期化
+ *            4c. Csm_Init      — Crypto Service Manager 初期化
+ *            4d. SecOC_Init    — セキュアオンボード通信初期化（PduR の後・Com の前。
+ *                                PduR→SecOC→Com の依存順。SecOC は Csm_MacGenerate/
+ *                                Csm_MacVerify のみを呼び、Crypto/CryIf の存在を知らない）
  *            5. Com_Init       — COM モジュール初期化
  *            5b. E2EXf_PBCfg_Init — E2E Check/Protect ステート初期化
  *                                （E2E Transformer 方式。Com は E2E を関知しないため
@@ -70,6 +75,9 @@
 #include "CanIf_PBCfg.h"
 #include "PduR.h"
 #include "PduR_PBCfg.h"
+#include "Crypto.h"
+#include "CryIf.h"
+#include "Csm.h"
 #include "SecOC.h"
 #include "SecOC_PBCfg.h"
 #include "Com.h"
@@ -139,6 +147,9 @@ void EcuM_Init(void)
     Can_Init(&Can_Config);          /* ハードウェア初期化（LISTEN_ONLY で待機） */
     CanIf_Init(&CanIf_Config);
     PduR_Init(&PduR_Config);
+    Crypto_Init();  /* Csm/CryIf/Crypto レイヤの最下層。AES-128 自己診断を含む */
+    CryIf_Init();
+    Csm_Init();
     SecOC_Init(&SecOC_Config); /* PduR の後、Com の前（PduR→SecOC→Com の依存順） */
     Com_Init(&Com_Config);
     E2EXf_PBCfg_Init();       /* E2E Check/Protect ステート初期化（Com は E2E を関知しないため） */
