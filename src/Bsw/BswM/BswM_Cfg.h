@@ -74,22 +74,26 @@
 #define BSWM_OS_TASK_CAN_TX_CONF    13U /**< Can_MainFunction_Write (1 ms)    */
 #define BSWM_OS_TASK_CAN_BUSOFF     14U /**< Can_MainFunction_BusOff (1 ms)   */
 #define BSWM_OS_TASK_CAN_WAKEUP     15U /**< Can_MainFunction_Wakeup (1 ms)   */
+#define BSWM_OS_TASK_SECOC_MAIN     16U /**< SecOC_MainFunction     (100 ms)  */
 
 /* -----------------------------------------------------------------------
  * タスクビットマスク (1ビット = 1タスク; ビット位置 = タスク ID)
- * タスク数が 8 を超えるため uint16 を使用する。
+ * タスク数が 16 を超えるため uint32 を使用する（BswM_PBCfg.h の
+ * BswM_RuleType.TaskMask 参照。Task 16 (SecOC_MainFunction) 追加時に
+ * uint16 では bit 16 を表現できず、いかなる BswM ルールからも制御不能に
+ * なっていたバグを修正した経緯がある）。
  * ----------------------------------------------------------------------- */
 
-/** 全タスク (bits 0〜15) */
-#define BSWM_TASK_MASK_ALL  0xFFFFU
+/** 全タスク (bits 0〜16) */
+#define BSWM_TASK_MASK_ALL  0x1FFFFUL
 
 /** アプリ Runnable タスク: RTE_ENGINE + RTE_WARNING
  *  POST_RUN 時に停止し、アプリロジックを凍結する */
-#define BSWM_TASK_MASK_APP  ((uint16)((1U << BSWM_OS_TASK_RTE_ENGINE) | \
-                                      (1U << BSWM_OS_TASK_RTE_WARNING)))
+#define BSWM_TASK_MASK_APP  ((uint32)((1UL << BSWM_OS_TASK_RTE_ENGINE) | \
+                                      (1UL << BSWM_OS_TASK_RTE_WARNING)))
 
 /** BSW タスク = ALL & ~APP (後処理・診断・CAN 受信を継続するため残す) */
-#define BSWM_TASK_MASK_BSW  ((uint16)(BSWM_TASK_MASK_ALL & (uint16)(~BSWM_TASK_MASK_APP)))
+#define BSWM_TASK_MASK_BSW  ((uint32)(BSWM_TASK_MASK_ALL & (uint32)(~BSWM_TASK_MASK_APP)))
 
 /**
  * SHUTDOWN 時に停止するタスク = ALL & ~WDGM_TRIGGER & ~CAN_READ & ~CAN_WAKEUP
@@ -127,13 +131,20 @@
  * 遷移する直前に Dem が新規 DTC を確定して NvM_WriteBlock() の書き込み
  * ジョブが保留中のまま残っている可能性があり、このタスクを止めてしまうと
  * 次に RUN へ戻るまで（あるいは戻らないまま）EEPROM への永続化が完了しない。
+ *
+ * SecOC_MainFunction はこの「動かし続ける」リストに含まれない
+ * （Com_MainFunction 等と同様、SHUTDOWN 中は停止してよいタスクの扱い。
+ * SHUTDOWN 中は Com_MainFunction 自体が停止して SecOC_TxPending[] を
+ * 誰も立てなくなるため送信要求は発生しないが、無効化しておくのが本来の
+ * 設計意図であり、BSWM_TASK_MASK_ALL に bit 16 を含めることで
+ * この無効化対象に含める）。
  */
-#define BSWM_TASK_MASK_SHUTDOWN  ((uint16)(BSWM_TASK_MASK_ALL \
-                                            & (uint16)(~((1U << BSWM_OS_TASK_WDGM_TRIGGER) \
-                                                        | (1U << BSWM_OS_TASK_CAN_READ) \
-                                                        | (1U << BSWM_OS_TASK_CAN_WAKEUP) \
-                                                        | (1U << BSWM_OS_TASK_CANSM_MAIN) \
-                                                        | (1U << BSWM_OS_TASK_NVM_MAIN)))))
+#define BSWM_TASK_MASK_SHUTDOWN  ((uint32)(BSWM_TASK_MASK_ALL \
+                                            & (uint32)(~((1UL << BSWM_OS_TASK_WDGM_TRIGGER) \
+                                                        | (1UL << BSWM_OS_TASK_CAN_READ) \
+                                                        | (1UL << BSWM_OS_TASK_CAN_WAKEUP) \
+                                                        | (1UL << BSWM_OS_TASK_CANSM_MAIN) \
+                                                        | (1UL << BSWM_OS_TASK_NVM_MAIN)))))
 
 /* -----------------------------------------------------------------------
  * ルール数
