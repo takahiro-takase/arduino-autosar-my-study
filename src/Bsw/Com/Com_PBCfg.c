@@ -49,6 +49,8 @@
  *                FaultLamp/AbsLamp のいずれかが点灯中（TMS true）は
  *                TxModeModeTrue=MIXED へ自動切り替えし、
  *                COM_TX_PERIOD_WARNINGSTATUS_TRUE_FLOOR_MS 間隔で周期フロア送信する。
+ *                byte[0] bit3 にグループ単位の update-bit（UpdateBitPosition=3）
+ *                を持ち、周期フロア再送か実際の変化かを受信側が区別できる。
  *              Signal 7: RunLamp        1 bit  BitPos= 0  BigEndian  TransferProperty=TRIGGERED_ON_CHANGE
  *              Signal 8: FaultLamp      1 bit  BitPos= 1  BigEndian  TmsContributor=1  TransferProperty=TRIGGERED_ON_CHANGE
  *              Signal 9: AbsLamp        1 bit  BitPos= 2  BigEndian  TmsContributor=1  TransferProperty=TRIGGERED_ON_CHANGE
@@ -298,21 +300,22 @@ static const Com_IPduConfigType Com_TxIPduConfigData[COM_TX_IPDU_COUNT] = {
          *   .TmsContributor=1 で設定する（RunLamp は寄与しない）。
          * MDT（ComMinimumDelayTime）: 変化時送信に最小送信間隔を設ける
          * バス輻輳保護。周期フロアには適用されない（Com.c 参照）。
-         * UpdateBitPosition は未使用（0xFF）。Com は update-bit 機構
-         * （SWS_Com_00801、Com_SendSignalGroup() 参照）自体を持ち、周期フロア
-         * 再送とイベント送信を区別する用途としては本 I-PDU にも一定の必然性が
-         * あると考えたが、実機検証可能な具体例として確信が持てなかったため
-         * 適用を見送った。詳細は README.md の「Group Signal Update Bit」節を
-         * 参照。
+         * update-bit（Signal Group 単位、SWS_Com_00801）: byte[0] bit3
+         * （RunLamp/FaultLamp/AbsLamp が使う bit0-2 の次の空きビット、DLC 拡張
+         * 不要）に配置。TMS=true 時の MIXED 周期フロア再送と、実際に警告灯が
+         * 変化したことによる送信とを受信側が区別できる（MeterStatus/
+         * EngineState の非 Signal Group 版と対になる、Signal Group 単位の
+         * 実装例）。詳細は README.md の「Update Bit」節を参照。
          * --------------------------------------------------------------- */
         .IPduId    = 1U,  /* DaVinci: ComIPduHandleId  - I-PDU 識別番号 */
-        .DLC       = 1U,  /* DaVinci: ComIPduLength    - I-PDU バイト長（3bit のみ使用） */
+        .DLC       = 1U,  /* DaVinci: ComIPduLength    - I-PDU バイト長
+                           *          （bit0-2=RunLamp/FaultLamp/AbsLamp、bit3=update-bit、残り4bitは予約） */
         .PduRId    = 2U,  /* DaVinci: ComIPduPduRef    - PduR TX パス 2 へのリンク
                            *          (PduR_Transmit の SrcPduId は COM/CanTp で共通の名前空間のため、
                            *          CanTp が使用する 1U と衝突しないよう 2U を割り当てる) */
         .TimeoutMs = 0U,  /* TX I-PDU のため監視無効 */
         .IsSignalGroup = 1U, /* Signal Group（Com_SendSignalGroup で確定コミット） */
-        .UpdateBitPosition = 0xFFU, /* update-bit なし（本 I-PDU には適用しない。上記コメント参照） */
+        .UpdateBitPosition = 3U, /* Signal Group 全体の update-bit（byte[0] bit3、ネットワークビット3） */
         .IpduGroupId = COM_IPDU_GROUP_NONE, /* I-PDU Group に属さない（常に有効） */
         .TxModeMode     = COM_TX_MODE_DIRECT, /* DaVinci: ComTxModeMode = ComTxModeFalse
                                                *          (TMS false: 通常時) */

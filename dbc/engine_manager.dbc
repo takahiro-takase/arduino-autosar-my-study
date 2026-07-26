@@ -23,9 +23,10 @@ BO_ 512 MeterStatus: 2 MeterEcu
  SG_ EngineStateUpdateBit : 15|1@0+ (1,0) [0|1] ""     DiagTool
 
 BO_ 528 WarningStatus: 1 MeterEcu
- SG_ RunLamp   : 7|1@0+ (1,0) [0|1] "" DiagTool
- SG_ FaultLamp : 6|1@0+ (1,0) [0|1] "" DiagTool
- SG_ AbsLamp   : 5|1@0+ (1,0) [0|1] "" DiagTool
+ SG_ RunLamp             : 7|1@0+ (1,0) [0|1] "" DiagTool
+ SG_ FaultLamp           : 6|1@0+ (1,0) [0|1] "" DiagTool
+ SG_ AbsLamp             : 5|1@0+ (1,0) [0|1] "" DiagTool
+ SG_ WarningStatusUpdateBit : 4|1@0+ (1,0) [0|1] "" DiagTool
 
 BO_ 544 E2EHealthStatus: 4 MeterEcu
  SG_ E2ECRC         : 7|8@0+  (1,0) [0|255] "" DiagTool

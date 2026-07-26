@@ -477,6 +477,7 @@ NOT_OK を返すまで継続する。MCP2515 の INT はレベル方式（未読
 |  |  |  |  | 0 | 1 bit | RunLamp | 0=消灯<br>1=点灯<br>（RUNNING LED D6 と同値） |
 |  |  |  |  | 1 | 1 bit | FaultLamp | 0=消灯<br>1=点灯<br>（FAULT LED D7 と同値、点滅中は 500ms ごとに反転） |
 |  |  |  |  | 2 | 1 bit | AbsLamp | 0=消灯<br>1=点灯<br>（ABS LED D8 と同値） |
+|  |  |  |  | 3 | 1 bit | (update-bit) | Signal Group 全体の update-bit（SWS_Com_00801）。値変化時送信=1、MIXED 周期フロア再送=0 |
 | Tx | E2EHealthStatus | 0x220 | 4 | ↓ | ↓ | ↓ | ↓ |
 |  |  |  |  | 0–7 | 8 bit | E2E CRC | CRC8 SAE J1850<br>（DataID=0x0220 + byte[1-3] を対象に計算。AUTOSAR 標準バリアント 1A 準拠でCRCは先頭バイト） |
 |  |  |  |  | 12–15 | 4 bit | E2E Counter | 0–15 のリングカウンタ（送信のたびに +1） |
@@ -1138,17 +1139,23 @@ the message"）。`EngineState` が変化していなくても、`MeterStatus` �
 
 現状の適用状況:
 
-- **`MeterStatus`/`EngineState`（TX、非 Signal Group）: 適用済み・実機検証可能**。
+- **`MeterStatus`/`EngineState`（TX、非 Signal Group）: 適用済み・実機検証済み**。
   `UpdateBitPosition=8`（byte[1] bit0）を設定しています。`TxModeMode=MIXED`
   のため、「今回の送信は実際の値変化によるものか、単なる周期フロア再送か」を
   受信側が区別できる、という update-bit 本来の動機がそのまま当てはまる例です。
-- **`WarningStatus`/`AbsInfo`（Signal Group）: 未適用のまま**
-  （`UpdateBitPosition = 0xFFU`）。検討はしましたが、いずれも実車での必然性に
-  確信が持てなかったためです（`AbsInfo` は高頻度・固定周期の RX フレームで
-  鮮度管理は受信デッドライン監視で十分カバーされる、`WarningStatus` は具体的な
-  実機検証シナリオを確信を持って組み立てられなかった、という従来からの判断は
-  変わっていません）。したがって `Com_ReceiveSignalGroup()` 側の update-bit
-  「discard」ロジック（後述）は今のところ実機で経路を通りません。
+- **`WarningStatus`（TX、Signal Group）: 適用済み・実機検証済み**。
+  `UpdateBitPosition=3`（byte[0] bit3。RunLamp/FaultLamp/AbsLamp が使う
+  bit0-2 の次の空きビットのため DLC 拡張は不要）を設定しています。
+  TMS=true（FAULT/ABS 点灯中）時の MIXED 周期フロア再送と、実際に警告灯が
+  変化したことによる送信とを区別できる、Signal Group 単位の実装例です。
+- **`AbsInfo`（RX、Signal Group）: 未適用のまま**（`UpdateBitPosition = 0xFFU`）。
+  実車のこの種のフレームは高頻度・固定周期で常に新鮮なセンサ値を送り続ける
+  のが通常で、鮮度管理は既存の受信デッドライン監視で十分カバーされるため、
+  update-bit を使う動機が薄いという従来からの判断は変わっていません。
+  したがって `Com_ReceiveSignalGroup()` 側の update-bit「discard」ロジック
+  （後述）は今のところ実機で経路を通りません（TX 側の
+  セット/クリアのみが `MeterStatus`/`WarningStatus` を通じて実機検証済みで、
+  RX 側の discard ロジックはコード上の実装のみに留まります）。
 
 ```
 送信側 非 Signal Group（Com_SendSignal）:
@@ -1158,8 +1165,9 @@ the message"）。`EngineState` が変化していなくても、`MeterStatus` �
   （SWS_Com_00061。本実装独自の条件付け、詳細は次項）
 送信側 Signal Group（Com_SendSignalGroup）:
   実バッファへ反映（既存処理）
-  UpdateBitPosition が 0xFF 以外なら、呼ばれるたびに無条件でそのビットをセット
-  （SWS_Com_00801 の原文どおり）
+  Com_GroupTriggerPending（TRIGGERED_ON_CHANGE メンバーが実際に変化したか）
+  が立った場合のみ、UpdateBitPosition が 0xFF 以外ならそのビットをセット
+  （SWS_Com_00801。こちらも本実装独自の条件付け、詳細は次項）
 送信側（Com_DoTransmit、Com_MainFunction() から。Signal Group かどうかを問わない）:
   PduR_Transmit() で実送信（この時点でビット=1 のまま送信される）
   ret==E_OK のときのみ、送信直後にビットをクリア
@@ -1177,9 +1185,12 @@ the message"）。`EngineState` が変化していなくても、`MeterStatus` �
 `upd=0/1` の表示を追加しました。ダッシュボードの RUNNING/STARTING/FAULT 等の
 状態遷移で `EngineState` が変化した直後は `upd=1`、その後
 `COM_TX_PERIOD_METERSTATUS_FLOOR_MS`（既定 9000ms）間隔で値が変化せずに再送
-される周期フロアフレームでは `upd=0` になることを確認できます。Cangaroo で
-CAN 0x200 の byte[1] bit0（生の 2 バイト目、MSB）を直接観察することでも同様に
-確認できます。
+される周期フロアフレームでは `upd=0` になることを確認できます。同様に
+「WarningStatus (0x210)」rx_monitor ボタンにも `upd=0/1` の表示を追加しました。
+FAULT/ABS 点灯による TMS=true（MIXED 切り替え）中、警告灯が実際に変化した
+送信は `upd=1`、`COM_TX_PERIOD_WARNINGSTATUS_TRUE_FLOOR_MS` 間隔の周期フロア
+再送は `upd=0` になります。Cangaroo で CAN 0x200 の byte[1] bit0（生の 2 バイト
+目、MSB）・CAN 0x210 の byte[0] bit4 を直接観察することでも同様に確認できます。
 
 **レビューで見つかった問題（非 Signal Group の update-bit が常に 1 のままだった）**:
 初期実装は SWS_Com_00061 の原文どおり「`Com_SendSignal()` が呼ばれるたびに
@@ -1204,12 +1215,17 @@ Com 側が既に持っている「これは実際の変化か」の判断をそ�
 本プロジェクトの ASW 呼び出し規約のもとで update-bit 本来の目的（実際に更新
 されたかどうかを示す）を満たすための意図的な調整です。
 
-なお Signal Group 側（`Com_SendSignalGroup()`）は SWS_Com_00801 の原文どおり
-無条件セットのまま変更していません。`WarningStatus`/`AbsInfo` は現状
-update-bit 未適用のため、今は問題が顕在化しませんが、`App_WarningIndicator_Run()`
-も毎サイクル無条件に `Rte_SendSignalGroup_WarningStatus()` を呼ぶ同種の設計
-のため、将来これらに update-bit を適用する際は同じ不具合を踏む可能性があります
-（`Com_SendSignalGroup()` のコード内注釈に詳細を残しています）。
+Signal Group 側（`Com_SendSignalGroup()`）も同種の問題を抱えていました。
+`App_WarningIndicator_Run()` も毎サイクル無条件に
+`Rte_SendSignalGroup_WarningStatus()`（→ `Com_SendSignalGroup()`）を呼ぶ同じ
+設計のため、`WarningStatus` に `UpdateBitPosition` を設定した時点で
+（非 Signal Group と同じ理由により）update-bit が常に 1 のままになることは
+実装前から予見できました。そのため `WarningStatus` へ update-bit を適用する
+のと同時に、`Com_SendSignalGroup()` 側も対策済みです: セットの条件を
+`Com_GroupTriggerPending`（`ComTransferProperty=TRIGGERED_ON_CHANGE` の
+メンバーが実際に変化したかどうか、`Com_RequestTxOnChange()` を呼ぶかどうかと
+同じ判断軸）に条件づけました。非 Signal Group 側の `passesFilter` と対になる
+考え方です。
 
 **なぜ ComTxIPduClearUpdateBit=Transmit のみか**: 実 AUTOSAR は Transmit
 （`PduR_ComTransmit` 呼び出し直後にクリア）/ Confirmation（送信確認後にクリア）/
