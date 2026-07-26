@@ -75,7 +75,6 @@ ARXML や設定ツールは使用せず、コードで階層構造・型定義�
   - [固定長バッファのサイズは設定定数から計算する](#fixed-buffer-size)
   - [RX/TX で対称な入力検証](#rx-tx-symmetry)
   - [設定テーブルの一元管理](#config-table-centralization)
-- [前提条件](#prerequisites)
 
 <a id="overview"></a>
 ## 概要
@@ -159,6 +158,7 @@ SW-C がピン番号などのハードウェア詳細を知ることなく警告
 | フレームワーク | Arduino |
 | 外部ライブラリ | coryjfowler/mcp_can @ ^1.5.1 |
 | CAN ボーレート | 500 kbps |
+| MCP2515 クリスタル | 8 MHz（`Can_CrystalFreqType` で変更可） |
 | シリアルモニタ | 115200 bps |
 
 <a id="build-and-flash"></a>
@@ -5629,9 +5629,3 @@ TX 側と同じ検証を RX の各層境界（CanIf → PduR → Com）にも追
 | ウェイクアップ検証タイムアウトの変更 | `CanSM_Cfg.h` の `CANSM_WAKEUP_VALIDATION_MS`（既定 2000ms） |
 | ボランタリスリープに入るまでのエンジン OFF 継続時間の変更 | `App_EngineManager.c` の `APP_ENGINE_SLEEP_OFF_CYCLES`（Run 周期3000ms×既定5=15秒） |
 
-<a id="prerequisites"></a>
-## 前提条件
-
-- ARXML や設定ツールは使用しません
-- MCP2515 クリスタルは 8 MHz を想定しています（`Can_CrystalFreqType` で変更可）
-- CAN バスには終端抵抗（120 Ω）を両端に取り付けてください
