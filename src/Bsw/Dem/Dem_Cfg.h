@@ -189,7 +189,7 @@
 #define DEM_STATUS_NOT_COMPLETED_THIS_CYCLE  0x40U  /**< bit6: testNotCompletedThisOperationCycle */
 
 /** SID 0x19 応答の statusAvailabilityMask: bits 0,2,3,4,5 をサポート */
-#define DEM_STATUS_AVAILABILITY_MASK         0x2DU
+#define DEM_STATUS_AVAILABILITY_MASK         0x3DU
 
 /* -----------------------------------------------------------------------
  * NvM 関連定数
