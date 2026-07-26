@@ -1671,26 +1671,6 @@ Std_ReturnType Com_SendSignalGroup(Com_IPduIdType GroupId)
         Com_TxBuffer[GroupId][b] = Com_TxShadowBuffer[GroupId][b];
     }
 
-    /* update-bit（SWS_Com_00801）: Com_SendSignalGroup() が呼ばれるたびに
-     * セットする。クリアは Com_DoTransmit() 側（ComTxIPduClearUpdateBit=
-     * Transmit 相当、SWS_Com_00062）で行う。
-     * 注意（将来この I-PDU に UpdateBitPosition を設定する場合に踏む可能性の
-     * ある落とし穴）: App_WarningIndicator_Run() は毎サイクル無条件に
-     * Rte_SendSignalGroup_WarningStatus()（→本関数）を呼ぶ設計（ASW は値を
-     * 書くだけ、Com が送信要否を判断する責務分離。README「責務分離の効果」
-     * 参照）。もし将来 WarningStatus に UpdateBitPosition を設定した場合、
-     * 本関数を無条件でセットする現在のロジックのままでは、次の実送信までの
-     * 間に必ず ASW が本関数を再度呼んでビットを再セットしてしまい、
-     * update-bit が常に 1 のままになる（MeterStatus/EngineState の
-     * Com_SendSignal() 側で実機確認済みの不具合と同種、詳細は
-     * Com_SendSignal() の同種コメント参照）。対策するなら
-     * Com_GroupTriggerPending[GroupId] が立った場合のみセットする、といった
-     * 変更が必要になる。 */
-    if (ipdu->UpdateBitPosition != 0xFFU)
-    {
-        Com_PackSignal(Com_TxBuffer[GroupId], ipdu->UpdateBitPosition, 1U, COM_BIG_ENDIAN, 1U);
-    }
-
     /* TMS 再評価（SWS_Com_00245）。Com_RequestTxOnChange() が
      * Com_EffectiveTxModeMode() 経由で Com_TmsState を参照するため、
      * その呼び出しより前に確定させる。TMS 寄与シグナルが PENDING の場合、
@@ -1707,6 +1687,24 @@ Std_ReturnType Com_SendSignalGroup(Com_IPduIdType GroupId)
     {
         Com_GroupTriggerPending[GroupId] = 0U;
         Com_RequestTxOnChange(ipdu);
+
+        /* update-bit セット（SWS_Com_00801 相当）。仕様原文は「
+         * Com_SendSignalGroup が呼ばれるたびに無条件でセットする」だが、
+         * MeterStatus/EngineState（Com_SendSignal 側）で実機確認済みの
+         * 不具合と同じ理由により、本実装では Com_GroupTriggerPending
+         * （＝ TRIGGERED_ON_CHANGE メンバーが実際に変化したかどうか、
+         * Com_RequestTxOnChange() を呼ぶかどうかと同じ判断軸）に条件づける。
+         * App_WarningIndicator_Run() は毎サイクル無条件に
+         * Rte_SendSignalGroup_WarningStatus()（→本関数）を呼ぶ設計（ASW は
+         * 値を書くだけ、Com が送信要否を判断する責務分離。README「責務分離
+         * の効果」参照）のため、無条件セットのままだと次の実送信までの間に
+         * 必ず ASW が本関数を再度呼んでビットを再セットしてしまい、
+         * update-bit が常に 1 のままになる。詳細は Com_SendSignal() の
+         * 同種コメント・README「Update Bit」節参照。 */
+        if (ipdu->UpdateBitPosition != 0xFFU)
+        {
+            Com_PackSignal(Com_TxBuffer[GroupId], ipdu->UpdateBitPosition, 1U, COM_BIG_ENDIAN, 1U);
+        }
     }
 
     return E_OK;

@@ -955,13 +955,16 @@ class App(tk.Tk):
 
     @staticmethod
     def _decode_warning_status(byte0: int) -> str:
-        """WarningStatus (CAN 0x210) byte[0] を RUN/FAULT/ABS の3ビットへデコードする。
-        Com Signal Group のビット配置: bit7=RunLamp, bit6=FaultLamp, bit5=AbsLamp
-        (Com_Cfg.h の BitPosition 0/1/2、ネットワークビット順)。"""
+        """WarningStatus (CAN 0x210) byte[0] を RUN/FAULT/ABS/upd の4ビットへデコードする。
+        Com Signal Group のビット配置: bit7=RunLamp, bit6=FaultLamp, bit5=AbsLamp,
+        bit4=update-bit (Com_Cfg.h の BitPosition 0/1/2/3、ネットワークビット順)。
+        upd はグループ単位の update-bit（SWS_Com_00801）: 実際に警告灯が変化した
+        送信では 1、TMS=true 時の MIXED 周期フロア再送（変化なし）では 0 になる。"""
         run = (byte0 >> 7) & 1
         fault = (byte0 >> 6) & 1
         abs_ = (byte0 >> 5) & 1
-        return f"(RUN:{run} FAULT:{fault} ABS:{abs_})"
+        upd = (byte0 >> 4) & 1
+        return f"(RUN:{run} FAULT:{fault} ABS:{abs_} upd={upd})"
 
     def _rx_monitor_worker(self, stop_ev: threading.Event):
         """bus_lock をノンブロッキングで取得し、rx_monitor CAN ID の受信フレームを表示する。
