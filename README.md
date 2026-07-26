@@ -4,6 +4,80 @@ Arduino UNO R4 WiFi + MCP2515 + TJA1050 を用いて
 AUTOSAR CP の BSW CAN スタックを学習目的で実装したプロジェクトです。
 ARXML や設定ツールは使用せず、コードで階層構造・型定義・設定テーブルを再現しています。
 
+## 目次
+
+- [概要](#overview)
+- [ハードウェア](#hardware)
+  - [ハードウェア構成](#hw-configuration)
+    - [配線図](#wiring-diagram)
+    - [MCP2515 接続（Arduino UNO）](#mcp2515-connection)
+  - [ビルド環境・設定](#build-environment)
+  - [ビルドと書き込み](#build-and-flash)
+- [ソフトウェア](#software)
+  - [アーキテクチャ](#architecture)
+    - [層構造](#layer-structure)
+    - [モジュール一覧](#module-list)
+  - [ディレクトリ構成](#directory-structure)
+  - [CAN 通信スタック（Can / CanIf / PduR / Com）](#can-stack)
+    - [データフロー図](#can-dataflow-diagram)
+    - [CAN フレーム仕様](#can-frame-spec)
+    - [Tx 処理（Com → PduR → CanIf → Can の順）](#tx-processing)
+    - [Rx 処理（Can → CanIf → PduR → Com の順）](#rx-processing)
+    - [DET 準拠（Det_ReportError による標準化エラー通知）](#det-compliance)
+  - [E2E P01 保護（EngineInfo/AbsInfo 受信 / E2EHealthStatus 送信）](#e2e-p01)
+    - [I-PDU Group（Com_IpduGroupStart/Stop、通信のライフサイクル制御）](#ipdu-group)
+    - [呼び出し元は BswM（実 AUTOSAR の標準構成）](#ipdu-group-caller)
+    - [Com_IpduGroupStart/Stop が実際に行うこと](#ipdu-group-behavior)
+    - [動作確認方法](#ipdu-group-verification)
+    - [E2E が保護する故障モデル](#e2e-fault-model)
+    - [受信側（Check）— EngineInfo / AbsInfo](#e2e-check-rx)
+    - [送信側（Protect）— E2EHealthStatus](#e2e-protect-tx)
+    - [E2EMon（ネットワーク健全性モニタ、独自 CDD 相当）](#e2emon)
+  - [SecOC（Secure Onboard Communication、メッセージ認証）](#secoc)
+    - [アーキテクチャ — E2E Transformer 方式とは異なる理由](#secoc-architecture)
+    - [Secured I-PDU バイトレイアウト（SecOC Profile 1 準拠）](#secoc-byte-layout)
+    - [明示する簡略化](#secoc-simplifications)
+    - [検証](#secoc-verification)
+    - [意図的に応用範囲を限定した理由](#secoc-scope-limitation)
+  - [Signal Gateway（Com_GatewayRoute、SWC を介さないシグナル転送）](#signal-gateway)
+    - [適用例 — ImmobilizerCmd（SecOC 検証済み）→ ImmobilizerStatus](#gateway-example)
+    - [RX 側処理段階と実装の対応](#gateway-rx-mapping)
+    - [明示する簡略化](#gateway-simplifications)
+    - [動作確認方法](#gateway-verification)
+  - [診断スタック（CanTp / Dcm / Dem / FiM / NvM）](#diag-stack)
+    - [UDS 診断通信（ISO 14229-1 / ISO 15765-2）](#uds-diag-comm)
+    - [CanTp（ISO 15765-2 トランスポートプロトコル）](#cantp)
+    - [NvM（Non-Volatile Memory Manager）](#nvm)
+    - [DEM 診断イベント管理（AUTOSAR SWS_DEM）](#dem)
+    - [FreezeFrame（故障時スナップショット）](#freezeframe)
+    - [ExtendedData（故障確定回数）](#extendeddata)
+    - [FiM（機能抑止マネージャ）](#fim)
+  - [ECU 管理層（EcuM / BswM / WdgM / ComM / CanSM / Nm）](#ecu-management)
+    - [EcuM（ECU ステートマネージャ）](#ecum)
+    - [BswM（BSW モードマネージャ）](#bswm)
+    - [ComM（通信マネージャ）](#comm)
+    - [WdgM（ウォッチドッグマネージャ）](#wdgm)
+    - [Nm（ネットワークマネジメント）](#nm)
+  - [IO スタック（IoHwAb / Dio / Port / Adc）](#io-stack)
+    - [チャネル割り当て（`Dio_Cfg.h`）](#channel-assignment)
+    - [デバウンス（積分カウンタ方式）](#debounce)
+    - [ボタン固着検出](#button-stuck)
+    - [ADC センサ電圧監視](#adc-monitoring)
+    - [IoHwAb API 一覧（`IoHwAb.h`）](#iohwab-api)
+  - [アプリケーション（App_EngineManager / App_WarningIndicator）](#application)
+    - [エンジン状態遷移](#engine-state-machine)
+    - [App_WarningIndicator（警告灯 SW-C）](#app-warning-indicator)
+- [シリアルモニタ出力例](#serial-log-example)
+- [設計上の注意点](#design-notes)
+  - [C / C++ 言語境界](#c-cpp-boundary)
+  - [AVR メモリ最適化](#avr-memory)
+  - [ログレベルの抑制 (Det_Cfg.h)](#log-level)
+  - [固定長バッファのサイズは設定定数から計算する](#fixed-buffer-size)
+  - [RX/TX で対称な入力検証](#rx-tx-symmetry)
+  - [設定テーブルの一元管理](#config-table-centralization)
+- [前提条件](#prerequisites)
+
+<a id="overview"></a>
 ## 概要
 
 本プロジェクトは、学習目的で AUTOSAR の ASW / RTE / BSW の 3 層アーキテクチャを
@@ -34,8 +108,10 @@ SW-C がピン番号などのハードウェア詳細を知ることなく警告
 - **警告確認ボタン（D9）**: FAULT 状態でボタンを押すと FAULT→OFF に遷移（ドライバーが警告を確認したことを通知）
 - **ボランタリスリープ/ウェイクアップ**: エンジン OFF が一定時間継続すると CAN バスを実際にスリープさせ、バス活動を検知すると自律的に復帰する
 
+<a id="hardware"></a>
 ## ハードウェア
 
+<a id="hw-configuration"></a>
 ### ハードウェア構成
 
 | 機器 | 用途 |
@@ -48,10 +124,12 @@ SW-C がピン番号などのハードウェア詳細を知ることなく警告
 | Cangaroo 等 | CAN フレーム送受信ツール |
 | tools/uds_tester（本リポジトリ同梱） | UDS コマンドのボタン送信・FC 自動応答（後述） |
 
+<a id="wiring-diagram"></a>
 #### 配線図
 
 ![Arduino UNO R4 WiFi + MCP2515+TJA1050 + USB-CAN 配線図](docs/images/wiring_diagram.svg)
 
+<a id="mcp2515-connection"></a>
 #### MCP2515 接続（Arduino UNO）
 
 | Arduino ピン | MCP2515 ピン | 備考 |
@@ -71,6 +149,7 @@ SW-C がピン番号などのハードウェア詳細を知ることなく警告
 
 > CAN バスには両端に終端抵抗（120 Ω）が必要です。
 
+<a id="build-environment"></a>
 ### ビルド環境・設定
 
 | 項目 | 値 |
@@ -82,6 +161,7 @@ SW-C がピン番号などのハードウェア詳細を知ることなく警告
 | CAN ボーレート | 500 kbps |
 | シリアルモニタ | 115200 bps |
 
+<a id="build-and-flash"></a>
 ### ビルドと書き込み
 
 ```bash
@@ -95,10 +175,13 @@ pio run --target upload
 pio device monitor
 ```
 
+<a id="software"></a>
 ## ソフトウェア
 
+<a id="architecture"></a>
 ### アーキテクチャ
 
+<a id="layer-structure"></a>
 #### 層構造
 
 ```
@@ -112,6 +195,7 @@ HAL ─── Can_Hw / Dio_Hw / Port_Hw / Adc_Hw / Mcu_Hw / NvM_Hw / WdgM_Hw（s
 
 各層は上位層のヘッダのみに依存し、下位層の実装詳細を知りません。
 
+<a id="module-list"></a>
 #### モジュール一覧
 
 | 層 | モジュール | ModuleId | AUTOSAR 仕様 | 本プロジェクトでの役割 |
@@ -163,6 +247,7 @@ Basic Software Modules」表）。詳細は「CAN 通信スタック」セクシ
 
 > 各モジュールの詳細（フレーム構造・状態マシン・設定値）は後続セクションを参照してください。
 
+<a id="directory-structure"></a>
 ### ディレクトリ構成
 
 ```
@@ -332,8 +417,10 @@ Basic Software Modules」表）。詳細は「CAN 通信スタック」セクシ
 └── platformio.ini
 ```
 
+<a id="can-stack"></a>
 ### CAN 通信スタック（Can / CanIf / PduR / Com）
 
+<a id="can-dataflow-diagram"></a>
 #### データフロー図
 
 CAN ドライバ（Can / Can_Hw）から CanIf・PduR を経由して COM モジュールへ至るデータパスを担うスタックです。
@@ -350,6 +437,7 @@ TX（Arduino → 外部、下り）
 モジュール順（Tx: Com → PduR → CanIf → Can、Rx: Can → CanIf → PduR → Com）で説明します。
 Can/CanIf/PduR/Com に限らず BSW 全体へ及ぶ DET 準拠（エラー通知の標準化）は最後にまとめます。
 
+<a id="can-frame-spec"></a>
 #### CAN フレーム仕様
 
 エンディアンはすべてビッグエンディアン（Motorola / CAN 標準）。
@@ -459,6 +547,7 @@ byte[0] byte[1] byte[2] byte[3] byte[4]
 > E2E Counter と CRC は uds_tester ツールが自動計算して付加します。
 > Cangaroo から手動送信する場合は byte[0]=CRC8 の計算値、byte[1]=Counter 値を手動で付加してください。
 
+<a id="tx-processing"></a>
 #### Tx 処理（Com → PduR → CanIf → Can の順）
 
 ##### 関数コールチェーン
@@ -983,6 +1072,7 @@ NvM の非同期ジョブキュー（1 呼び出し 1 バイトずつ）とは�
 体感できる動作変化はない（この経路は常に E_OK 固定でもある。詳細は CanTp
 セクションの N_As タイムアウトの説明を参照）。
 
+<a id="rx-processing"></a>
 #### Rx 処理（Can → CanIf → PduR → Com の順）
 
 ##### 関数コールチェーン
@@ -1481,6 +1571,7 @@ RX 側判定ロジック（discard）のみを説明します。
 実機で経路を通りません（TX 側のセット/クリアのみが `MeterStatus`/`WarningStatus`
 を通じて実機検証済みです）。
 
+<a id="det-compliance"></a>
 #### DET 準拠（Det_ReportError による標準化エラー通知）
 
 これまで Com モジュールの NULL チェック・範囲チェック・未初期化チェックは、
@@ -1601,6 +1692,7 @@ UDS/CAN フレーム経由で外部から誘発することはできず、`uds_t
 ビルド成功と、エラーコード・ModuleId の割り当てが対応する SWS PDF の原文と
 一致していることの確認に留めています）。
 
+<a id="e2e-p01"></a>
 ### E2E P01 保護（EngineInfo/AbsInfo 受信 / E2EHealthStatus 送信）
 
 AUTOSAR E2E (End-to-End) Profile 01 による保護です。CAN バスの電気的エラーでは検出できない
@@ -1642,6 +1734,7 @@ AUTOSAR E2E (End-to-End) Profile 01 による保護です。CAN バスの電気�
 > 付与されないことが多いため、素の（E2E 保護なしの）シグナル送信の実装例として
 > 意図的に残しています。
 
+<a id="ipdu-group"></a>
 #### I-PDU Group（Com_IpduGroupStart/Stop、通信のライフサイクル制御）
 
 これまで通信の有効/無効制御は、診断 `CommunicationControl`（UDS 0x28）が呼ぶ
@@ -1666,6 +1759,7 @@ MeterStatus/WarningStatus/ImmobilizerCmd）はどの I-PDU Group にも属させ
 診断監視用のネットワーク健全性テレメトリで、車両の基本動作には不要な「非重要」
 通信であるため、独立して停止できる対象として選びました。
 
+<a id="ipdu-group-caller"></a>
 #### 呼び出し元は BswM（実 AUTOSAR の標準構成）
 
 `docs/AUTOSAR_SWS_Com.pdf` [7.3.5.1] は次のように述べています。
@@ -1702,6 +1796,7 @@ Com_IpduGroupStop for each BswMDisabledPduGroupRef.
 既存ルールへの変更は一切ありません（`BswM_ExecuteRules()` は一致する全ルールを
 実行するため、Rule 0 と Rule 3 は RUN 遷移のたびに両方発火します）。
 
+<a id="ipdu-group-behavior"></a>
 #### Com_IpduGroupStart/Stop が実際に行うこと
 
 - **Start**（[SWS_Com_00787]）: RX は受信デッドライン監視タイマを再始動
@@ -1724,6 +1819,7 @@ Com_IpduGroupStop for each BswMDisabledPduGroupRef.
 有効な場合のみ（AND 条件）で、意図的に統合していません（本プロジェクトの
 UDS 0x28 実装は「全 I-PDU 一括」のままの方が既存のテストが安全に保たれるため）。
 
+<a id="ipdu-group-verification"></a>
 #### 動作確認方法
 
 実機ログで、EcuM が RUN → POST_RUN → SHUTDOWN → （ウェイクアップ）→ RUN と
@@ -1757,6 +1853,7 @@ UDS 0x28 実装は「全 I-PDU 一括」のままの方が既存のテストが�
 `act=2`=`BSWM_ACTION_PDU_GROUP_START`、`act=3`=`BSWM_ACTION_PDU_GROUP_STOP`、
 `mask=0x000` は PDU_GROUP 系アクションでは `TaskMask` を使わないため無意味な値です。）
 
+<a id="e2e-fault-model"></a>
 #### E2E が保護する故障モデル
 
 | 故障モデル | 検出方法 | 対応 E2E フィールド |
@@ -1766,6 +1863,7 @@ UDS 0x28 実装は「全 I-PDU 一括」のままの方が既存のテストが�
 | フレーム重複 | カウンタが前回と同じ | byte[1] 下位 4bit Counter |
 | 誤ルーティング（他 ECU のフレームが混入） | DataID が違うため CRC が一致しない | DataID（EngineInfo=0x0100 / AbsInfo=0x0110）を CRC 計算に含む |
 
+<a id="e2e-check-rx"></a>
 #### 受信側（Check）— EngineInfo / AbsInfo
 
 E2E チェックの仕組み自体は両フレームで完全に共通（`E2E_P01Check` の同一実装を
@@ -2024,6 +2122,7 @@ uds_tester は送信するたびに Counter を自動で +1 するため、通�
 これにより WRONGSEQUENCE → （以降 2 回連続正常送信で）SYNC × 2 回 → OK という
 一連の遷移を実機ログで確認できます（EngineInfo/AbsInfo いずれも同じ手順）。
 
+<a id="e2e-protect-tx"></a>
 #### 送信側（Protect）— E2EHealthStatus
 
 E2E 保護の対象は、実際にはエンジン状態フレーム（MeterStatus）ではなく、
@@ -2109,6 +2208,7 @@ Com_MainFunction()（PERIODIC モードの I-PDU。現状 IPduId=2 が対象）:
 [2019ms] INFO  Can_Hw: TX OK id=0x220 dlc=4 [YY 01 00 00]  ← Counter が 1 に進む
 ```
 
+<a id="e2emon"></a>
 #### E2EMon（ネットワーク健全性モニタ、独自 CDD 相当）
 
 `E2EXf_InverseTransform()`（本セクション前半）が検出した E2E エラーは、
@@ -2192,6 +2292,7 @@ uds_tester の受信モニター双方で 1 ずつ増えることが確認でき
 [13019ms] INFO  Com: TX iPdu=2 [ZZ 02 01 00]  # crcErr が 0→1 に増加
 ```
 
+<a id="secoc"></a>
 ### SecOC（Secure Onboard Communication、メッセージ認証）
 
 E2E（上記）は CRC・カウンタによる「意図しない通信エラー」の検出が目的で、
@@ -2204,6 +2305,7 @@ PDF（`docs/AUTOSAR_SWS_SecureOnboardCommunication.pdf`）を入手したため�
 これまでの Com 機能と同様、実 PDF から検証した要求番号を引用しながら実装
 しています。
 
+<a id="secoc-architecture"></a>
 #### アーキテクチャ — E2E Transformer 方式とは異なる理由
 
 E2E は「Com のコールバックフック（RxIndicationCbk/TxTransformCbk）経由で Rte 層が
@@ -2267,6 +2369,7 @@ Com/E2E は SecOC の存在を一切知りません（E2E Transformer 方式で 
 従来どおり 4byte の E2E 保護済みペイロードを扱うだけで、SecOC がその後ろに
 Freshness/MAC を継ぎ足して 8byte の Secured I-PDU にすることを一切意識しません。
 
+<a id="secoc-byte-layout"></a>
 #### Secured I-PDU バイトレイアウト（SecOC Profile 1 準拠）
 
 `docs/AUTOSAR_SWS_SecureOnboardCommunication.pdf` の **SecOC Profile 1
@@ -2307,6 +2410,7 @@ DLC が 4→8 バイトへ増える点は `CanIf_PBCfg.c` の当該 TxPdu の `.
 （Com は SecOC の存在を知らないため）。RX/TX で異なる鍵（用途・アセットが
 異なるため）を割り当てています。
 
+<a id="secoc-simplifications"></a>
 #### 明示する簡略化
 
 - **Freshness Value は 8bit 幅全体を送受信し、切り詰めを行いません**（Profile 1 の
@@ -2343,6 +2447,7 @@ DLC が 4→8 バイトへ増える点は `CanIf_PBCfg.c` の当該 TxPdu の `.
   従来どおり `PduR_CanIfTxConfirmation()` から直接 `Com_TxConfirmation()` へ
   届き、SecOC は一切関与しません）。
 
+<a id="secoc-verification"></a>
 #### 検証
 
 外部ライブラリに依存しない AES-128+CMAC の自前実装（`Crypto_Aes128.c`/
@@ -2395,6 +2500,7 @@ MAC と一致するかを毎回検証）。Arduino ログでも
 `Com_MainFunction()` の PERIODIC 送信に追従して `SecOC_MainFunction()` が
 検知した直後）で出力され続けることが確認できます。
 
+<a id="secoc-scope-limitation"></a>
 #### 意図的に応用範囲を限定した理由
 
 本モジュールは Com/SecOC/PduR のアーキテクチャ学習が主目的のため、ドア施錠制御
@@ -2403,6 +2509,7 @@ MAC と一致するかを毎回検証）。Arduino ログでも
 「実利より仕様忠実性」であったのに対し、この機能は EngineInfo/AbsInfo の
 E2E 検証と同じく、実際に受信経路を通り実機で検証可能です。
 
+<a id="signal-gateway"></a>
 ### Signal Gateway（Com_GatewayRoute、SWC を介さないシグナル転送）
 
 `docs/AUTOSAR_SWS_COM.pdf` 7.2.5/7.11 章が定義する **Signal Gateway** を実装しました。
@@ -2424,6 +2531,7 @@ sends it.
 （フィルタ・TMS・送信要否判定は `Com_SendSignal()` 既存のロジックがそのまま
 適用されるため、ゲートウェイ専用の特別なパス分岐は不要です）。
 
+<a id="gateway-example"></a>
 #### 適用例 — ImmobilizerCmd（SecOC 検証済み）→ ImmobilizerStatus
 
 SecOC 検証に成功した `ImmobilizerCmd`（RX、CAN 0x120、KeyFobEcu 想定）を、
@@ -2457,6 +2565,7 @@ ComDataInvalidAction 等のゲートを経由しなくても）安全です。�
 違いにより、EngineSpeed 等を同じ方式でゲートウェイすると **E2E 未検証の
 値を転送してしまう**リスクがあるため、今回は意図的に対象から外しています。）
 
+<a id="gateway-rx-mapping"></a>
 #### RX 側処理段階と実装の対応
 
 `[SWS_Com_00872]` が定義する RX 側処理段階（1: デッドライン監視タイマ再始動、
@@ -2473,6 +2582,7 @@ ComDataInvalidAction 等のゲートを経由しなくても）安全です。�
 整合します（本実装はフレーム受信直後の同期呼び出しのため、そもそも
 タイムアウト状態になり得ません）。
 
+<a id="gateway-simplifications"></a>
 #### 明示する簡略化
 
 - **非 Signal Group のシグナル同士（1:1）のみサポート**します。Signal Group の
@@ -2486,6 +2596,7 @@ ComDataInvalidAction 等のゲートを経由しなくても）安全です。�
   （内部バスの「素の」ブロードキャストという位置づけ。認証はゲートウェイの
   入力側で既に完了しているため）。
 
+<a id="gateway-verification"></a>
 #### 動作確認方法
 
 `uds_tester` で「ImmobilizerCmd」ボタンから UNLOCK/LOCK を送信すると、Arduino
@@ -2506,6 +2617,7 @@ ComDataInvalidAction 等のゲートを経由しなくても）安全です。�
 `(UNLOCK)`/`(LOCK)` を表示し、`ImmobilizerCmd` の送信直後に追従して更新される
 ことが確認できます。
 
+<a id="diag-stack"></a>
 ### 診断スタック（CanTp / Dcm / Dem / FiM / NvM）
 
 UDS 診断（ISO 14229-1）を処理するスタックです。
@@ -2514,6 +2626,7 @@ Dem は故障情報を DTC として管理し、NvM 経由で EEPROM に永続�
 FiM は Dem が確定した DTC をもとにアプリ機能の実行許可を判定します。
 診断フレームはアプリデータ（0x100 / 0x110 / 0x200）とは独立した CAN ID（0x7E0 / 0x7E8）で通信します。
 
+<a id="uds-diag-comm"></a>
 #### UDS 診断通信（ISO 14229-1 / ISO 15765-2）
 
 Dcm (Diagnostic Communication Manager) が UDS サービスを処理し、
@@ -3002,6 +3115,7 @@ SecurityAccess チェックは行わないため、extendedSession でありさ�
 新しいサービスにセッション制約を追加する場合は、ハンドラ内に判定を書き足すのではなく
 `Dcm_SidSessionTable[]` に行を追加するだけで済みます。
 
+<a id="cantp"></a>
 #### CanTp（ISO 15765-2 トランスポートプロトコル）
 
 CanTp モジュールが ISO 15765-2 のフレーム処理を担い、
@@ -3221,6 +3335,7 @@ python app.py
 追加するだけで行えます（本プロジェクトの `*_PBCfg.c` と同じ「コードと設定の分離」
 の考え方です）。
 
+<a id="nvm"></a>
 #### NvM（Non-Volatile Memory Manager）
 
 NvM は Dem が使う EEPROM ブロックを抽象化するモジュールです。
@@ -3432,6 +3547,7 @@ EEPROM.write(0x18U, EEPROM.read(0x18U) ^ 0xFFU);  // DEM_EXTENDED プライマ�
 - `NvM_Init()` 自体（起動時の EEPROM 読み込み・CRC 不一致時の復元）は
   Os スケジューラ開始前のため同期処理のまま（他タスクを巻き込まないため無害）
 
+<a id="dem"></a>
 #### DEM 診断イベント管理（AUTOSAR SWS_DEM）
 
 Dem (Diagnostic Event Manager) モジュールがエンジン管理の故障を DTC として管理します。
@@ -3764,6 +3880,7 @@ Dem は NvM_BlockIdType (NVM_BLOCK_ID_DEM_MAGIC / _DEM_STATUS / _DEM_AGING / _DE
 DEM_EXTENDED のみ冗長ブロック（2 面化）にしています。理由・仕組みは後述の
 「NvM（Non-Volatile Memory Manager）」の「冗長ブロック」参照。
 
+<a id="freezeframe"></a>
 #### FreezeFrame（故障時スナップショット）
 
 DTC が FAILED に遷移した瞬間の車両状態（EngineSpeed / CoolantTemp / EngineState）を Dem が記録し、
@@ -3820,6 +3937,7 @@ ENGINE_OVERHEAT（DTC 0x000101）が温度 101℃・回転数 1000rpm・RUNNING 
 未記録（一度も FAILED していない DTC）またはレコード番号不一致の場合は NRC 0x31
 （requestOutOfRange）で応答します。
 
+<a id="extendeddata"></a>
 #### ExtendedData（故障確定回数）
 
 FreezeFrame が「故障した瞬間の車両状態のスナップショット」（1 件のみ、上書きされる）
@@ -3866,6 +3984,7 @@ ENGINE_OVERHEAT（DTC 0x000101）がこれまでに 3 回確定 FAILED した場
 「未記録」という特別な NRC にはならない）またはレコード番号不一致の場合は NRC 0x31
 （requestOutOfRange）で応答します。
 
+<a id="fim"></a>
 #### FiM（機能抑止マネージャ）
 
 FiM (Function Inhibition Manager) は、Dem が確定（CONFIRMED）した DTC を根拠に、
@@ -3946,11 +4065,13 @@ if (Rte_Call_FiM_GetFunctionPermission(FIM_FID_BUTTON_ACK, &ackPermitted) != E_O
 「許可判定が確認できないときは許可しない」という既定値の選び方は、
 セキュリティ・機能安全の定石（fail-safe defaults）そのものです。
 
+<a id="ecu-management"></a>
 ### ECU 管理層（EcuM / BswM / WdgM / ComM / CanSM / Nm）
 
 ECU の起動・シャットダウンのライフサイクルと、タスク制御・ソフトウェア監視を担うモジュール群です。
 EcuM が状態遷移を決定し、BswM がその状態に応じたタスクの有効・無効を制御し、WdgM がタスク内部の動作を監視します。
 
+<a id="ecum"></a>
 #### EcuM（ECU ステートマネージャ）
 
 EcuM (ECU State Manager) は BSW スタック全体のライフサイクルを管理するモジュールです。
@@ -4082,6 +4203,7 @@ CanSM_MainFunction（10ms タスク、SHUTDOWN 中も動き続ける）
 | `ECUM_USER_COMM` | 0 | ComM のユーザ ID |
 | `ECUM_POST_RUN_TIMEOUT_MS` | 5000 ms | POST_RUN タイムアウト |
 
+<a id="bswm"></a>
 #### BswM（BSW モードマネージャ）
 
 BswM (BSW Mode Manager) は、EcuM や ComM からのモード変化通知を受け取り、
@@ -4350,6 +4472,7 @@ WARN CanSM: Wakeup validation timeout (2000ms, no confirmed RX) -> back to SLEEP
 | ルール追加（例: ComM モードに反応する） | `BswM_PBCfg.c` にルールを追記し `BSWM_RULE_COUNT` を更新 |
 | タスク追加 | `BswM_Cfg.h` に ID 定数を追加し `Os_PBCfg.c` にも追記 |
 
+<a id="comm"></a>
 #### ComM（通信マネージャ）
 
 ComM (Communication Manager) は、複数の「ユーザ」からの通信モード要求を集約し、
@@ -4441,6 +4564,7 @@ CanSM がウェイクアップ検証成功時に `ComM_BusSMIndication(FULL_COM)
 | `COMM_USER_0` | 0 | EcuM/App_EngineManager（エンジン運転中は FULL_COM、OFF 継続時は NO_COM を要求） |
 | `COMM_USER_1` | 1 | Dcm（extendedSession の間だけ FULL_COM を要求） |
 
+<a id="wdgm"></a>
 #### WdgM（ウォッチドッグマネージャ）
 
 WdgM (Watchdog Manager) は「ソフトウェアが本当に動いているか」を監視するモジュールです。
@@ -4900,6 +5024,7 @@ delay(1000);  /* 動作確認用: 500ms の許容上限を超えさせる */
 許可遷移グラフは `WdgM_PBCfg.c` の `WdgM_EngineTransitions[]`、Deadline 許容範囲テーブルは
 同ファイルの `WdgM_EngineDeadlines[]`（いずれもポストビルド設定）で管理します。
 
+<a id="nm"></a>
 #### Nm（ネットワークマネジメント）
 
 Nm (Network Management) は、実車の各 ECU がバス上に周期的な生存確認フレームを送信し、
@@ -4975,6 +5100,7 @@ CAN バスが正常な間（ComM が FULL_COM を維持している間）は 100
 （以降 Nm_MainFunction は ComM_GetCurrentComMode() が FULL_COM でないため何もしない）
 ```
 
+<a id="io-stack"></a>
 ### IO スタック（IoHwAb / Dio / Port / Adc）
 
 SW-C はピン番号を直接知りません。RTE の Client/Server ポートを通じて IoHwAb の論理 API を呼び出し、
@@ -4999,6 +5125,7 @@ Port_Init（起動時 1 回のみ）
      (A0 はアナログ専用ピンのため Port 設定不要)
 ```
 
+<a id="channel-assignment"></a>
 #### チャネル割り当て（`Dio_Cfg.h`）
 
 | 定数 | Dio チャネル | Arduino ピン | 機能 | Port 方向 |
@@ -5010,6 +5137,7 @@ Port_Init（起動時 1 回のみ）
 
 ピン番号の変更は `Dio_Cfg.h` の定数を変えるだけで完了します（IoHwAb や SW-C の変更不要）。
 
+<a id="debounce"></a>
 #### デバウンス（積分カウンタ方式）
 
 `IoHwAb_MainFunction` が 10ms 周期で `Dio_ReadChannel` を呼び出し、生レベルを積算します。
@@ -5035,6 +5163,7 @@ App_EngineManager_Run が読み取る:
 `Dio_ReadChannel` の呼び出しは `IoHwAb_MainFunction` に集中しているため、
 `IoHwAb_Button_GetLevel` は静的変数を返すだけです。
 
+<a id="button-stuck"></a>
 #### ボタン固着検出
 
 確定押下状態（`s_confirmedLevel == 1`）が 5000ms（= 500 × 10ms）継続すると Dem にエラーを報告します。
@@ -5057,6 +5186,7 @@ App_EngineManager_Run が読み取る:
 
 固着判定後にボタンを解放すると PASSED が報告され、TF ビットはクリアされます（CDTC は残る）。
 
+<a id="adc-monitoring"></a>
 #### ADC センサ電圧監視
 
 `IoHwAb_MainFunction` が 10ms 周期で `Adc_ReadChannel` を呼び出し、10-bit 生値を mV へ変換して
@@ -5094,6 +5224,7 @@ App_EngineManager_Run が読み取る:
 毎サイクル FAILED/PASSED いずれかを報告するため、Dem 側のデバウンス確定（カウンタ 2 回分）は
 電圧低下発生から数十 ms 以内に完了します。
 
+<a id="iohwab-api"></a>
 #### IoHwAb API 一覧（`IoHwAb.h`）
 
 | 関数 | 呼び出し元（RTE 経由） | 動作 |
@@ -5106,12 +5237,14 @@ App_EngineManager_Run が読み取る:
 | `IoHwAb_Button_GetLevel(&level)` | App_EngineManager | デバウンス済み押下状態を返す |
 | `IoHwAb_Adc_GetValue_mV(&mv)` | App_EngineManager | 変換済み ADC 電圧値 [mV] を返す |
 
+<a id="application"></a>
 ### アプリケーション（App_EngineManager / App_WarningIndicator）
 
 ASW（Application Software）層の SW-C（Software Component）2 つで構成されます。
 各 SW-C は RTE ポート経由でシグナルを受け取り、IoHwAb ポート経由で LED / ボタンを操作します。
 EcuM の POST_RUN 遷移時に Rte_Engine タスクと Rte_Warning タスクが停止し、SW-C も停止します。
 
+<a id="engine-state-machine"></a>
 #### エンジン状態遷移
 
 ```
@@ -5149,6 +5282,7 @@ EcuM の POST_RUN 遷移時に Rte_Engine タスクと Rte_Warning タスクが�
 | FAULT | EngineOnFlag = 0 | OFF |
 | FAULT | 警告確認ボタン押下（D9） | OFF（`FIM_FID_BUTTON_ACK` 抑止中は無視） |
 
+<a id="app-warning-indicator"></a>
 #### App_WarningIndicator（警告灯 SW-C）
 
 `Rte_ScheduleWarningIndicator` タスクが 500ms 周期で `App_WarningIndicator_Run` を起動します。
@@ -5163,6 +5297,7 @@ EcuM の POST_RUN 遷移時に Rte_Engine タスクと Rte_Warning タスクが�
 FAULT 中に AbsActive=1 のフレームを受信すると D7 が点滅しつつ D8 も同時に点灯します。
 POST_RUN 遷移後は Rte_Warning タスクが停止し、LED は消灯状態で固定されます。
 
+<a id="serial-log-example"></a>
 ## シリアルモニタ出力例
 
 出力フォーマット: `[<起動からの経過ms>ms] LEVEL TAG: メッセージ`
@@ -5375,8 +5510,10 @@ LEVEL は ERROR / WARN  / INFO  / DEBUG の 5 文字固定幅で列が揃いま�
 [25000ms] INFO  Dcm: S3 timeout -> session=Default  # 1000ms 周期の Dcm_MainFunction が検出
 ```
 
+<a id="design-notes"></a>
 ## 設計上の注意点
 
+<a id="c-cpp-boundary"></a>
 ### C / C++ 言語境界
 
 | ファイル | 言語 | 理由 |
@@ -5390,6 +5527,7 @@ LEVEL は ERROR / WARN  / INFO  / DEBUG の 5 文字固定幅で列が揃いま�
 
 C ファイルから C++ 関数を呼ぶすべてのヘッダに `extern "C"` ガードを設けています。
 
+<a id="avr-memory"></a>
 ### AVR メモリ最適化
 
 Arduino UNO の SRAM は 2 KB しかないため、文字列リテラルを Flash に配置します。
@@ -5404,6 +5542,7 @@ DET_LOGW(TAG, "RUNNING->FAULT overheat=%u", (unsigned)temp);
 
 `Det.cpp` が唯一 `Serial.print()` を呼ぶファイルです。他の `.c` ファイルは `DET_LOG*` マクロのみを使います。
 
+<a id="log-level"></a>
 ### ログレベルの抑制 (Det_Cfg.h)
 
 `Det_Cfg.h` の `DET_LOG_LEVEL`（既定値 `LOG_I`）以下の重要度のログのみ出力されます
@@ -5412,6 +5551,7 @@ DET_LOGW(TAG, "RUNNING->FAULT overheat=%u", (unsigned)temp);
 毎サイクル出力されうる詳細ログ）を抑制します。全レベル出力したい場合は
 `platformio.ini` の `build_flags` に `-D DET_LOG_LEVEL=LOG_D` を追加してください。
 
+<a id="fixed-buffer-size"></a>
 ### 固定長バッファのサイズは設定定数から計算する
 
 `Dcm_Cbk.c` の UDS 応答バッファ `Dcm_TxBuf` は、当初 `DEM_EVENT_COUNT`（その時点では 6）
@@ -5433,6 +5573,7 @@ static uint8 Dcm_TxBuf[DCM_TX_BUF_SIZE];
 書き込みループにも防御的な境界チェックを入れる（`Dcm_HandleReadDtcByMask()`
 参照）、という二重の対策にしています。
 
+<a id="rx-tx-symmetry"></a>
 ### RX/TX で対称な入力検証
 
 `CanIf_Transmit()`（TX）は `PduInfoPtr == NULL || PduInfoPtr->SduDataPtr == NULL`
@@ -5448,6 +5589,7 @@ TX 側と同じ検証を RX の各層境界（CanIf → PduR → Com）にも追
 「ドキュメントが約束している契約は、呼び出し元の現状に頼らず関数自身が
 保証する」という、FiM のフェールセーフ修正のときと同じ考え方を踏襲しています。
 
+<a id="config-table-centralization"></a>
 ### 設定テーブルの一元管理
 
 各モジュールの設定は対応する `*_PBCfg.c` ファイルで管理しています。
@@ -5487,6 +5629,7 @@ TX 側と同じ検証を RX の各層境界（CanIf → PduR → Com）にも追
 | ウェイクアップ検証タイムアウトの変更 | `CanSM_Cfg.h` の `CANSM_WAKEUP_VALIDATION_MS`（既定 2000ms） |
 | ボランタリスリープに入るまでのエンジン OFF 継続時間の変更 | `App_EngineManager.c` の `APP_ENGINE_SLEEP_OFF_CYCLES`（Run 周期3000ms×既定5=15秒） |
 
+<a id="prerequisites"></a>
 ## 前提条件
 
 - ARXML や設定ツールは使用しません
