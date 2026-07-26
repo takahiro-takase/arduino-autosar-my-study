@@ -902,12 +902,15 @@ static Std_ReturnType Com_DoTransmit(const Com_IPduConfigType* ipdu)
      * されうる）。PduR_Transmit() はこの呼び出し内で同期的に SPI 送信まで
      * 完了しているため、この時点で Com_TxBuffer を書き換えても既に送信済み
      * のバイト列には影響しない。
-     * IsSignalGroup のチェックが必須: この関数はすべての TX I-PDU に対して
-     * 呼ばれるため、Signal Group ではない I-PDU（UpdateBitPosition を明示
-     * 設定しておらず、C の既定初期化で 0 のままの I-PDU）まで対象にすると、
-     * その I-PDU のバッファ bit0（≠ 「update-bit なし」の 0xFF）を毎回誤って
-     * クリアし、シグナル値を破壊してしまう。 */
-    if (ret == E_OK && ipdu->IsSignalGroup != 0U && ipdu->UpdateBitPosition != 0xFFU)
+     * Signal Group（SWS_Com_00801）・非 Signal Group（SWS_Com_00061、
+     * Com_SendSignal() 参照）いずれの update-bit も、クリア自体は本関数で
+     * 同じ処理を行う（SWS_Com_00062 はどちらの場合も区別しない）。
+     * `UpdateBitPosition != 0xFFU` の判定のみで十分であり IsSignalGroup は
+     * 見ない。ただしこれは「update-bit を使わない I-PDU は必ず
+     * `.UpdateBitPosition = 0xFFU` を明示設定する」という Com_PBCfg.c 側の
+     * 規約が守られていることが前提（C の既定初期化 0 のまま放置すると、
+     * その I-PDU のバッファ bit0 を毎回誤ってクリアし、シグナル値を破壊する）。 */
+    if (ret == E_OK && ipdu->UpdateBitPosition != 0xFFU)
         Com_PackSignal(Com_TxBuffer[ipdu->IPduId], ipdu->UpdateBitPosition, 1U, COM_BIG_ENDIAN, 0U);
 
     return ret;
@@ -1468,7 +1471,7 @@ uint8 Com_IsRxTimedOut(Com_IPduIdType IPduId)
  * \note       戻り値型は仕様に従い uint8。E_OK / E_NOT_OK の値（0x00 / 0x01）は
  *             RTE が使う Std_ReturnType と互換性がある。
  *
- * \AUTOSARReq     {SWS_Com_00197, SWS_Com_00742, SWS_Com_00743}
+ * \AUTOSARReq     {SWS_Com_00197, SWS_Com_00742, SWS_Com_00743, SWS_Com_00061}
  * \ServiceID      {0x0A}
  * \Reentrancy     {Reentrant}
  * \Synchronicity  {Synchronous}
@@ -1576,7 +1579,25 @@ uint8 Com_SendSignal(Com_SignalIdType SignalId, const void* SignalDataPtr)
         Com_FilterLastValue[s] = value;
 
         if (passesFilter)
+        {
             Com_RequestTxOnChange(ipdu);
+
+            /* update-bit セット（SWS_Com_00061 相当）。仕様原文は「Com_SendSignal
+             * が呼ばれるたびに無条件でセットする」だが、本プロジェクトの ASW は
+             * 毎サイクル無条件に Com_SendSignal() を呼び、「値が実際に変化したか」
+             * の判定は Com の ComFilterAlgorithm に委ねる設計（README「責務分離の
+             * 効果」参照）。そのため文字どおり無条件にセットすると、次の実送信
+             * （周期フロア含む）までの間に必ず ASW が再度 Com_SendSignal() を
+             * 呼んでビットを再セットしてしまい、update-bit が常に 1 のまま
+             * 「実際に変化したか」を一切表せなくなる（2026-07 時点で実機確認済み
+             * の不具合）。そこで本実装は、このシグナルの送信要否判定
+             * （passesFilter、Com_RequestTxOnChange() と同じ判断軸）に合わせて
+             * セットする。ASW 側の「常に書き込む」設計を変えずに、update-bit
+             * 本来の目的（このシグナルが実際に更新されたかどうかを示す）を
+             * 満たすための、本プロジェクト固有の解釈である。 */
+            if (ipdu->UpdateBitPosition != 0xFFU)
+                Com_PackSignal(Com_TxBuffer[sig->IPduId], ipdu->UpdateBitPosition, 1U, COM_BIG_ENDIAN, 1U);
+        }
 
         return E_OK;
     }
@@ -1652,7 +1673,19 @@ Std_ReturnType Com_SendSignalGroup(Com_IPduIdType GroupId)
 
     /* update-bit（SWS_Com_00801）: Com_SendSignalGroup() が呼ばれるたびに
      * セットする。クリアは Com_DoTransmit() 側（ComTxIPduClearUpdateBit=
-     * Transmit 相当、SWS_Com_00062）で行う。 */
+     * Transmit 相当、SWS_Com_00062）で行う。
+     * 注意（将来この I-PDU に UpdateBitPosition を設定する場合に踏む可能性の
+     * ある落とし穴）: App_WarningIndicator_Run() は毎サイクル無条件に
+     * Rte_SendSignalGroup_WarningStatus()（→本関数）を呼ぶ設計（ASW は値を
+     * 書くだけ、Com が送信要否を判断する責務分離。README「責務分離の効果」
+     * 参照）。もし将来 WarningStatus に UpdateBitPosition を設定した場合、
+     * 本関数を無条件でセットする現在のロジックのままでは、次の実送信までの
+     * 間に必ず ASW が本関数を再度呼んでビットを再セットしてしまい、
+     * update-bit が常に 1 のままになる（MeterStatus/EngineState の
+     * Com_SendSignal() 側で実機確認済みの不具合と同種、詳細は
+     * Com_SendSignal() の同種コメント参照）。対策するなら
+     * Com_GroupTriggerPending[GroupId] が立った場合のみセットする、といった
+     * 変更が必要になる。 */
     if (ipdu->UpdateBitPosition != 0xFFU)
     {
         Com_PackSignal(Com_TxBuffer[GroupId], ipdu->UpdateBitPosition, 1U, COM_BIG_ENDIAN, 1U);

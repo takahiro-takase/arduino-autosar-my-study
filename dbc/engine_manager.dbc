@@ -18,8 +18,9 @@ BO_ 272 AbsInfo: 5 AbsEcu
  SG_ BrakeActive  : 39|1@0+  (1,0)    [0|1]      ""     MeterEcu
  SG_ AbsActive    : 38|1@0+  (1,0)    [0|1]      ""     MeterEcu
 
-BO_ 512 MeterStatus: 1 MeterEcu
- SG_ EngineState  : 7|8@0+ (1,0)    [0|3]      ""     DiagTool
+BO_ 512 MeterStatus: 2 MeterEcu
+ SG_ EngineState          : 7|8@0+  (1,0) [0|3] ""     DiagTool
+ SG_ EngineStateUpdateBit : 15|1@0+ (1,0) [0|1] ""     DiagTool
 
 BO_ 528 WarningStatus: 1 MeterEcu
  SG_ RunLamp   : 7|1@0+ (1,0) [0|1] "" DiagTool

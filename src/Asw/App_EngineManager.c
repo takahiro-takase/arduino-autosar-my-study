@@ -90,7 +90,9 @@ void App_EngineManager_Init(void)
  *
  * \details RTE から 3 つの RX シグナル（EngineSpeed / CoolantTemp /
  *          EngineOnFlag）を読み取り、現在の状態ハンドラへ委譲したのち、
- *          更新された EngineState シグナルを書き込む（CAN ID 0x200、DLC 1）。
+ *          更新された EngineState シグナルを書き込む（CAN ID 0x200、DLC 2。
+ *          byte[1] bit0 は EngineState 単体の update-bit、Com が自動管理する
+ *          ため本 Runnable は関知しない）。
  *          MeterStatus は TxModeMode=MIXED のため、値が変化していれば
  *          次回 Com_MainFunction()（Os の 100ms タスク）で Com が送信し、
  *          変化がなくても Com 自身の周期フロアで一定間隔ごとに再送される
