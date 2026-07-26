@@ -1245,6 +1245,9 @@ uint8 Com_ReceiveSignal(Com_SignalIdType SignalId, void* SignalDataPtr)
         }
         return E_OK;
     }
+
+    DET_LOGE(TAG, "ReceiveSignal E: sig=%u not found", (unsigned)SignalId);
+    Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_RECEIVE_SIGNAL, COM_E_PARAM);
     return E_NOT_OK;
 }
 
@@ -1324,7 +1327,12 @@ Std_ReturnType Com_ReceiveSignalGroup(Com_IPduIdType GroupId)
 
     const Com_IPduConfigType* ipdu = Com_FindRxIPdu(GroupId);
     if (ipdu == NULL || ipdu->IsSignalGroup == 0U)
+    {
+        DET_LOGE(TAG, "ReceiveSignalGroup E: GroupId=%u not found or not a Signal Group",
+                 (unsigned)GroupId);
+        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_RECEIVE_SIGNAL_GROUP, COM_E_PARAM);
         return E_NOT_OK;
+    }
 
     /* update-bit（SWS_Com_00324/00802）: 設定されており、かつ 0（未更新）の
      * 場合、受信データを破棄する。シャドウバッファ・タイムアウトスナップ
@@ -1397,6 +1405,9 @@ Std_ReturnType Com_ReceiveSignalGroupArray(Com_IPduIdType IPduId, uint8* DataPtr
             DataPtr[b] = Com_RxBuffer[IPduId][b];
         return E_OK;
     }
+
+    DET_LOGE(TAG, "ReceiveSignalGroupArray E: IPduId=%u not found", (unsigned)IPduId);
+    Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_RECEIVE_SIGNAL_GROUP_ARRAY, COM_E_PARAM);
     return E_NOT_OK;
 }
 
@@ -1601,6 +1612,9 @@ uint8 Com_SendSignal(Com_SignalIdType SignalId, const void* SignalDataPtr)
 
         return E_OK;
     }
+
+    DET_LOGE(TAG, "SendSignal E: sig=%u not found", (unsigned)SignalId);
+    Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_SEND_SIGNAL, COM_E_PARAM);
     return E_NOT_OK;
 }
 
@@ -1661,7 +1675,12 @@ Std_ReturnType Com_SendSignalGroup(Com_IPduIdType GroupId)
 
     const Com_IPduConfigType* ipdu = Com_FindTxIPdu(GroupId);
     if (ipdu == NULL || ipdu->IsSignalGroup == 0U)
+    {
+        DET_LOGE(TAG, "SendSignalGroup E: GroupId=%u not found or not a Signal Group",
+                 (unsigned)GroupId);
+        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_SEND_SIGNAL_GROUP, COM_E_PARAM);
         return E_NOT_OK;
+    }
 
     /* PENDING/TRIGGERED_ON_CHANGE を問わず、シャドウバッファの値はすべて
      * 実バッファへコピーする（SWS_Com_00743: PENDING メンバーも、他の
