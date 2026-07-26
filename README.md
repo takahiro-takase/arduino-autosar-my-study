@@ -461,6 +461,26 @@ byte[0] byte[1] byte[2] byte[3] byte[4]
 
 #### Tx 処理（Com → PduR → CanIf → Can の順）
 
+##### 関数コールチェーン
+
+```
+Com_SendSignal()/Com_SendSignalGroup()   ← ASW から呼ばれる。TX バッファへ pack するだけ
+  ┊  (Com_TxPending 経由。次回 Com_MainFunction() の 100ms tick まで非同期に待機)
+  ↓
+Com_MainFunction()                        ← ここから下は同期呼び出し連鎖
+  → TxTransformCbk があれば呼ぶ             ← Rte_COMTransform_*() → E2EXf_Transform() → E2E_P01Protect()
+  → PduR_Transmit()
+    → TransmitOverrideFct 未設定:
+        CanIf_Transmit() → Can_Write()（SPI 送信完了までここで同期完了）
+    → TransmitOverrideFct=SecOC_IfTransmit（E2EHealthStatus のみ）:
+        SecOC_IfTransmit()                ← Authentic I-PDU をバッファへコピーするだけ
+          ┊  (SecOC_TxPending 経由。次回 SecOC_MainFunction() の 100ms tick まで非同期に待機)
+          ↓
+        SecOC_MainFunction()              ← ここから下は同期呼び出し連鎖
+          → Csm_MacGenerate() で Secured I-PDU を組み立て
+            → PduR_SecOCTransmit() → CanIf_Transmit() → Can_Write()
+```
+
 ##### ComFilterAlgorithm と TxModeMode（送信要否・タイミングを Com 自身が判断する）
 
 実車の AUTOSAR Com は、ASW が値をセットする（`Com_SendSignal`）ことと、実際に CAN へ
@@ -964,6 +984,24 @@ NvM の非同期ジョブキュー（1 呼び出し 1 バイトずつ）とは�
 セクションの N_As タイムアウトの説明を参照）。
 
 #### Rx 処理（Can → CanIf → PduR → Com の順）
+
+##### 関数コールチェーン
+
+```
+Can_Isr()                        ← 真の割り込み。ペンディングフラグを立てるだけ
+  ┊  (Can_RxIrqPending 経由。次回 Os スケジューラ tick まで非同期に待機)
+  ↓
+Can_MainFunction_Read()          ← フラグをドレイン、SPI 読み出し（ここから下は同期呼び出し連鎖）
+  → CanIf_RxIndication()         ← CAN ID → PduId（論理 PDU）へ変換
+    → PduR_CanIfRxIndication() (= PduR_ComRxIndication())
+      → 宛先ごとにマルチキャスト:
+          Com_RxIndication()         ← EngineInfo/AbsInfo（RxIndicationCbk 経由）
+            → Rte_COMCbk_EngineInfo/AbsInfo()
+              → E2EXf_InverseTransform() → E2E_P01Check()
+          CanTp_RxIndication()       ← UDS 診断要求（複数フレーム対応）
+          SecOC_IfRxIndication()     ← ImmobilizerCmd
+            → Csm_MacVerify() で認証成功時のみ Com_RxIndication()
+```
 
 ##### RX の割り込み化（`Can_Isr` / `Can_MainFunction_Read/BusOff/Wakeup`）
 
