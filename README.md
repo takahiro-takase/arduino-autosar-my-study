@@ -316,154 +316,21 @@ Basic Software Modules」表）。詳細は「CAN 通信スタック」セクシ
 
 ### CAN 通信スタック（Can / CanIf / PduR / Com）
 
+#### データフロー図
+
 CAN ドライバ（Can / Can_Hw）から CanIf・PduR を経由して COM モジュールへ至るデータパスを担うスタックです。
-RX フレームは MCP2515 → Can_Hw → Can → CanIf → PduR → Com の順に上がり、TX フレームは逆順に下ります。
-
-**受信長チェックの多層防御**: 設定 DLC に満たない短小フレームは、まず `CanIf_RxIndication()`
-が棄却する（SWS_CANIF_00026 相当、本来この責務は CanIf 層にある）。仮に何らかの理由で
-ここを通過しても、`Com_RxIndication()`・`CanTp_RxIndication()`（SF/FF/CF/FC 各フレーム）
-がそれぞれ独立に自分の期待長を検証する。1 箇所だけに頼らず各層が自分の責務として
-検証するのは、本プロジェクトで実際に発生した「短いフレームで上位層バッファに
-新旧混在の破損データが残る」バグ（Com のシグナル固定長アクセス等）を踏まえた設計判断
-である。`Com_RxIndication()` の受信長チェックは AUTOSAR 本来の仕様（SWS_Com_00574/
-00575/00870）に準拠したシグナル単位の部分受理を実装している: Signal Group は
-一貫性のないスナップショットを公開しないため受信できたバイト数が DLC 未満なら
-グループ全体を棄却するが（SWS_Com_00575）、非 Signal Group の I-PDU は受信できた
-バイト範囲に収まるシグナルのみを部分的に受理し、範囲外のシグナルは前回受信値の
-まま据え置く（SWS_Com_00574/00870）。前述の「新旧混在の破損データ」バグは
-Com_ReceiveSignal/Com_SendSignal が BitSize に関わらず常に 4 バイト読み書きして
-呼び出し元のスタックを破壊していたことが根本原因であり、本対応（未受信バイトに
-触れず前回値をそのまま保持する）とは別の問題である（詳細は `Com.c` のコメント参照）。
-なお `CanIf_PBCfg.c` の各 RxPdu の `.Dlc` は現状 Com 側の `ipdu->DLC` と同じ値に
-設定されているため、`Com_RxIndication()` の部分受理パスは短小フレームが CanIf 層で
-先に棄却されることで実運用上到達しない（2026-07 時点で実機確認済み）。検証するには
-CanIf 側の `.Dlc` を一時的に緩める必要がある。
-
-##### TX 確認の非同期化（`Can_MainFunction_Write`）
-
-**なぜ非同期化したか**: AUTOSAR の仕様 [SWS_Can_00016] は、`CanIf_TxConfirmation()` を
-「TX 割り込みハンドラから」または「ポーリングモードでは `Can_MainFunction_Write()` の
-中から」呼ぶことを求めている。しかし当初の実装では、`Can_Write()` が送信成功直後、
-呼び出し元と同一スタックフレーム内でそのまま `CanIf_TxConfirmation()` を呼んでいた。
 
 ```
-（修正前）
-Com_MainFunction() → Com_DoTransmit() → PduR_Transmit() → CanIf_Transmit() → Can_Write()
-                                                                                → CanIf_TxConfirmation()
-                                                                                  → PduR_CanIfTxConfirmation()
-                                                                                    → Com_TxConfirmation()
-（すべて 1 回の呼び出しチェーン内で完結）
+RX（外部 → Arduino、上り）
+  MCP2515 → Can_Hw → Can → CanIf → PduR → Com
+
+TX（Arduino → 外部、下り）
+  Com → PduR → CanIf → Can → Can_Hw → MCP2515
 ```
 
-これ自体は現状害がないが、将来 `Com_TxConfirmation()` の延長線上（あるいは他の
-`TxConfirmFct`）に「送信失敗を検知したら即座に再送する」ような処理が足された場合、
-その再送呼び出しがそのまま `Can_Write()` の再帰呼び出しになってしまう。NvM の
-非同期書き込みジョブキュー（[DEVLOG参照](docs/DEVLOG.md#nvm-非同期書き込みジョブキューへの変更経緯)）
-と同じ「今は実害がないが将来の変更で踏み抜きやすいスタック深化の地雷」を避ける
-考え方で、この結合を断ち切った。
-
-**設計**:
-
-```
-Can_Write(Hth, PduInfo):
-  Can_Hw_Send() が成功したら、PduInfo->swPduHandle を TX 確認保留キューへ積むだけで
-  即座に E_OK 相当（CAN_OK）を返す（CanIf_TxConfirmation() はまだ呼ばない）
-
-Can_MainFunction_Write()（1ms 周期、Os_PBCfg.c Task 13）:
-  保留キューが空になるまで、投入順に CanIf_TxConfirmation() を呼び出す
-```
-
-NvM の非同期ジョブキュー（1 呼び出し 1 バイトずつ）とは異なり、こちらは
-`CanIf_TxConfirmation()` 自体がハードウェアをブロックしないソフトウェア的な
-コールバック転送のみのため、1 回の `Can_MainFunction_Write()` 呼び出しで
-保留分を全件処理してよい。
-
-**動作への影響**: `CanIf_TxConfirmation()` の呼び出しタイミングが `Can_Write()` から
-最大 1ms（Task 13 の周期）遅延するようになるが、`Com_TxConfirmation()`・
-`CanTp_TxConfirmation()` のいずれも受け取った結果を使わない no-op のため、
-体感できる動作変化はない（この経路は常に E_OK 固定でもある。詳細は CanTp
-セクションの N_As タイムアウトの説明を参照）。
-
-##### RX の割り込み化（`Can_Isr` / `Can_MainFunction_Read/BusOff/Wakeup`）
-
-**なぜ割り込み化したか**: 従来 `Can_Isr()` は Os スケジューラから 1ms ごとにポーリング
-呼び出しされる「疑似 ISR」で、INT ピンを `digitalRead()` で確認していた。これは
-「割り込み」と名乗りながら実態はポーリングであり、AUTOSAR OS が本来持つ「タスクと
-ISR は実際にプリエンプトし合う」という関係を体験できていなかった。また、SchM の
-排他エリアマクロ（`SchM_Enter_Com_SIGNAL_EXCLUSIVE_AREA()` 等）も「協調スケジューリング
-なので NOP でよい」という理由でずっと未使用のまま残っていた。
-
-本変更で `Can_Hw_AttachRxIsr()`（`Can_Init()` 内）が `attachInterrupt()` で INT ピンの
-立ち下がりエッジに `Can_Isr()` を真のハードウェア割り込みとして登録し、Os スケジューラの
-周期とは無関係に即座に起動されるようにした。
-
-**ISR を最小限に保つ設計判断**: 素直に実装するなら「ISR の中で `CanIf_RxIndication()` まで
-呼んでしまう」のが最も単純だが、本実装ではあえてそうしていない。`Can_Isr()` は
-ペンディングフラグ（`Can_RxIrqPending` / `Can_WakeupIrqPending`）を立てるだけに留め、
-SPI 通信・Serial ログ・CanIf 呼び出しは一切行わない。理由は 2 つ:
-
-1. **SPI バス排他**: MCP2515 は SPI 接続のため、CS ピン制御を伴う複数バイトの読み書きが
-   1 トランザクションとして完結する必要がある。メインループ側の `Can_Write()`（TX、SPI
-   経由）がトランザクション途中で割り込みにプリエンプトされ、割り込み側が同じ SPI バスへ
-   別トランザクションを割り込ませると、双方が破壊されうる。ISR 側で SPI を使わなければ
-   この競合はそもそも発生しない。
-2. **処理時間の上限**: `CanIf_RxIndication()` から先は PduR/Com/CanTp/Dcm まで連鎖し、
-   UDS SID 処理（RoutineControl 等）まで含まれ得る。これを割り込みハンドラの中で行うと、
-   ISR の実行時間が事実上無制限になりかねない（本 README で繰り返し出てくる「同期呼び出し
-   連鎖のスタック/ブロッキングリスク」と同種の問題）。
-
-実際の SPI 読み出しと `CanIf_RxIndication()` 呼び出しは、ペンディングフラグを見てメイン
-ループのタスクが行う（AUTOSAR `SWS_Can_00396`・`SWS_Can_00012` 参照:「呼び出しコンテキストが
-ISR か `Can_MainFunction_Read` かは実装依存であり、コールバックはいずれの場合も ISR から
-呼ばれたかのように実装してよい」）。これは TX 確認の非同期化（`Can_MainFunction_Write`）と
-対になる設計で、CAN モジュールの RX/TX 双方が「イベントは即座に検知するが、重い処理は
-専用タスクへ委譲する」という同じパターンに統一されたことになる。
-
-**関数の分離**: 旧 `Can_Isr()` は「RX ポーリング」「Bus-Off ポーリング」「SLEEP 中の
-ウェイクアップ検出」の 3 役を 1 つの関数にまとめていたが、AUTOSAR は元々これらを
-独立した `Can_MainFunction_xxx` として定義している。これに合わせて分離した。
-
-```
-Can_Isr()                     ← 真の割り込み。フラグを立てるだけ
-Can_MainFunction_Read()       ← Can_RxIrqPending をドレインし RX 処理 (SWS_Can_00108)
-Can_MainFunction_BusOff()     ← EFLG.TXBO を毎回ポーリング (SWS_Can_00109、割り込み非依存)
-Can_MainFunction_Wakeup()     ← Can_WakeupIrqPending をドレインしウェイクアップ通知 (SWS_Can_00112)
-```
-
-`Can_MainFunction_Read()` のドレインループはフラグではなく `Can_Hw_CheckReceive()` が
-NOT_OK を返すまで継続する。MCP2515 の INT はレベル方式（未読フレームが残る限り
-アサートされ続ける）ため、連続到着した 2 フレーム目には新たなエッジが立たないことが
-あるが、フラグは「立った」ことだけを覚えていれば十分で、実際に何件処理するかは
-ドレインループがハードウェアの状態から判断する。
-
-**SchM が初めて意味を持つ**: `Can_Isr()`（割り込みコンテキスト）と
-`Can_MainFunction_Read()`/`Can_MainFunction_Wakeup()`（メインループのタスク）は、
-ペンディングフラグを介して実際に競合しうる関係になった。フラグの読み出しとクリアを
-アトミックに行わないと、その間に割り込みが発生した場合にフラグのセットが失われ、
-受信フレーム・ウェイクアップ通知を取りこぼす。これを防ぐため `SchM.h` に新しい排他エリア
-`SchM_Enter/Exit_Can_IRQFLAG_EXCLUSIVE_AREA()` を追加し、実体を
-`SchM_Hw_EnterExclusiveArea()`/`ExitExclusiveArea()`（`src/Hal/SchM_Hw.cpp`、
-`noInterrupts()`/`interrupts()` を呼ぶだけ）とした。既存の `Rte_MIRROR`・`Com_SIGNAL`
-排他エリアも同じ実体を指すように変更し、NOP のままだった `SchM.h` が実際に機能するように
-なった（Com の RX/TX バッファ自体は現状 `Can_MainFunction_Read()` というメインループの
-タスクからのみ触られる設計にしたため、まだ割り込みと競合しないが、Rte 側と同様
-将来のための保険として Enter/Exit を残してある）。
-
-> **意図的な二重化**: `Can_MainFunction_Read()`/`Can_MainFunction_Wakeup()` は
-> 「割り込みが本当に発火するか」に正しさを依存させない設計にしている。
-> - `Can_MainFunction_Read()` は `Can_RxIrqPending` の有無に関わらず、毎回
->   無条件に `Can_Hw_CheckReceive()`（SPI 経由のステータスレジスタ読み出し。
->   INT ピンの実際の状態には依存しない）でドレインする。
-> - `Can_MainFunction_Wakeup()` は `Can_WakeupIrqPending` に加えて
->   `digitalRead(intPin)` の直接ポーリングも併用する（旧実装と同じ
->   フォールバック）。
->
-> `Can_Isr()`・ペンディングフラグ・`SchM_Enter/Exit_Can_IRQFLAG_EXCLUSIVE_AREA()`
-> の構造はそのまま残り、割り込みが発火すればより低遅延に反応できる
-> 「ボーナス経路」として機能するが、たとえ割り込みが何らかの理由で発火
-> しなくてもポーリング側だけで正しく動作する。単一の検出経路（割り込みのみ）に
-> 正しさを委ねず、独立したポーリングでも動作を保証する設計にした経緯は
-> [DEVLOG: Can RX 割り込み化の実機検証で得られた教訓](docs/DEVLOG.md#can-rx-割り込み化の実機検証で得られた教訓) を参照。
+以降、まず Tx/Rx 共通の CAN フレーム仕様を示し、続けて Tx 処理・Rx 処理をそれぞれ
+モジュール順（Tx: Com → PduR → CanIf → Can、Rx: Can → CanIf → PduR → Com）で説明します。
+Can/CanIf/PduR/Com に限らず BSW 全体へ及ぶ DET 準拠（エラー通知の標準化）は最後にまとめます。
 
 #### CAN フレーム仕様
 
@@ -500,35 +367,6 @@ NOT_OK を返すまで継続する。MCP2515 の INT はレベル方式（未読
 |  |  |  |  | 32 | 1 bit | BrakeActive | 0=解除 / 1=作動 |
 |  |  |  |  | 33 | 1 bit | AbsActive | 0=非作動 / 1=ABS 作動中 |
 
-##### RX フレーム（外部 → Arduino）
-
-**EngineInfo（エンジン ECU / CAN ID 0x100 / DLC=6 / AUTOSAR E2E Profile 01 保護）**
-
-**RUNNING 状態に入るフレーム例（Speed=500rpm, Temp=0℃, EngineOnFlag=1, Counter=0）：**
-```
-byte[0] byte[1] byte[2] byte[3] byte[4] byte[5]
-  XX      00      01      F4      00      80
-  │       │       └─────┘         └──┘   └──── EngineOnFlag=1（bit40 = byte[5] の MSB）
-  │       └─ Counter=0             Speed=500rpm    Temp=0℃
-  └───────── CRC8（XX は自動計算）
-```
-**AbsInfo（ABS ECU / CAN ID 0x110 / DLC=5）**
-
-**ABS 作動フレーム例（VehicleSpeed=100km/h, BrakeActive=1, AbsActive=1, Counter=0）：**
-```
-byte[0] byte[1] byte[2] byte[3] byte[4]
-  XX      00      27      10      C0
-  │       │       └─────┘         └──── BrakeActive=1（bit32）, AbsActive=1（bit33）
-  │       └─ Counter=0             Speed=10000 (0x2710) → 100.00 km/h
-  └───────── CRC8（XX は自動計算）
-```
-
-（AUTOSAR 標準バリアント 1A、SWS_E2E_00227 に準拠し、CRC を先頭バイト・Counter をそれに
-続く 1 バイトの下位 4bit に配置している）
-
-> E2E Counter と CRC は uds_tester ツールが自動計算して付加します。
-> Cangaroo から手動送信する場合は byte[0]=CRC8 の計算値、byte[1]=Counter 値を手動で付加してください。
-
 ##### TX フレーム（Arduino → 外部）
 
 **MeterStatus（メータ ECU / CAN ID 0x200 / DLC=2 / E2E 保護なし / TxModeMode=MIXED）**
@@ -538,7 +376,7 @@ byte[0] byte[1] byte[2] byte[3] byte[4]
 次回 `Com_MainFunction()`（Os の 100ms タスク）で送信し、変化がなくても一定間隔
 （周期フロア、後述）で再送し続けます。実際の CAN 送信（SPI 通信）は必ず
 `Com_MainFunction()` 側で行われるため、`App_EngineManager_Run()` 自身が SPI
-送信でブロッキングすることはありません（詳細は次項）。E2E 保護は
+送信でブロッキングすることはありません（詳細は「Tx 処理」の「ComFilterAlgorithm と TxModeMode」セクション参照）。E2E 保護は
 付与していません（EngineInfo/AbsInfo を Com が既に検証した**後**にメータ ECU 自身が
 導出する二次データであり、実車でも一次センサ値ほど厳密な保護が付与されないことが
 多いため、素の（E2E 保護なしの）シグナル送信の実装例として意図的に残しています。
@@ -573,6 +411,37 @@ Signal Group としてまとめて Com へコミットします。コミット�
 健全性テレメトリです。テレメトリ自体の破損を監視ツールが検出できるよう、AbsInfo と
 同じ構成（データ＋Counter＋CRC）で E2E 保護しています。詳細は「E2E P01 保護」
 セクションおよび「ECU 管理層」の E2EMon サブセクションを参照してください。
+
+##### RX フレーム（外部 → Arduino）
+
+**EngineInfo（エンジン ECU / CAN ID 0x100 / DLC=6 / AUTOSAR E2E Profile 01 保護）**
+
+**RUNNING 状態に入るフレーム例（Speed=500rpm, Temp=0℃, EngineOnFlag=1, Counter=0）：**
+```
+byte[0] byte[1] byte[2] byte[3] byte[4] byte[5]
+  XX      00      01      F4      00      80
+  │       │       └─────┘         └──┘   └──── EngineOnFlag=1（bit40 = byte[5] の MSB）
+  │       └─ Counter=0             Speed=500rpm    Temp=0℃
+  └───────── CRC8（XX は自動計算）
+```
+**AbsInfo（ABS ECU / CAN ID 0x110 / DLC=5）**
+
+**ABS 作動フレーム例（VehicleSpeed=100km/h, BrakeActive=1, AbsActive=1, Counter=0）：**
+```
+byte[0] byte[1] byte[2] byte[3] byte[4]
+  XX      00      27      10      C0
+  │       │       └─────┘         └──── BrakeActive=1（bit32）, AbsActive=1（bit33）
+  │       └─ Counter=0             Speed=10000 (0x2710) → 100.00 km/h
+  └───────── CRC8（XX は自動計算）
+```
+
+（AUTOSAR 標準バリアント 1A、SWS_E2E_00227 に準拠し、CRC を先頭バイト・Counter をそれに
+続く 1 バイトの下位 4bit に配置している）
+
+> E2E Counter と CRC は uds_tester ツールが自動計算して付加します。
+> Cangaroo から手動送信する場合は byte[0]=CRC8 の計算値、byte[1]=Counter 値を手動で付加してください。
+
+#### Tx 処理（Com → PduR → CanIf → Can の順）
 
 ##### ComFilterAlgorithm と TxModeMode（送信要否・タイミングを Com 自身が判断する）
 
@@ -776,7 +645,7 @@ SWS_Com_00495 相当の即時送信が「たまたま」成立しています。
                                                      # 以降は DIRECT に戻り、変化なしでは再送されない
 ```
 
-#### MDT（ComMinimumDelayTime、変化時送信の最小送信間隔）
+##### MDT（ComMinimumDelayTime、変化時送信の最小送信間隔）
 
 DIRECT/MIXED I-PDU は値が変化するたびに送信要求（`Com_TxPending[]`）が立ちますが、
 信号源が高頻度で変化し続けると、その分だけ CAN バスへの送信も連続してしまいます。
@@ -821,7 +690,367 @@ Com_MainFunction()（DIRECT/MIXED 共通、周期フロアには適用しない�
 の保留・次回満了時送信という一連の流れ）を確認する目的で、Com の標準機能として
 実装しています。
 
-#### RX Signal Group（複数シグナルの一貫したスナップショット読み出し）
+##### ComNotification拡張（Tx確定コールバック、Com_CbkTxAck）
+
+これまでの `Com_TxConfirmation()` は PduR から送信完了を受け取ってログ出力する
+だけで、それより上位（ASW/Rte）へは何も伝えていませんでした。実 AUTOSAR の
+Com は、I-PDU の送信が実際に成功した際、そこに含まれるシグナル/Signal Group
+ごとに個別のコールバック（`Com_CbkTxAck`、SWS_Com_00468。実車の RTE 生成名は
+`Rte_COMCbkTAck_<sn>`/`<sg>`）を呼び出せます。`ComRxDataTimeoutAction`/
+`ComDataInvalidAction` が RX 側の「値の異常」を扱う機能だったのに対し、これは
+TX 側の「送信できたことの確認」を扱う機能です。
+
+本プロジェクトでは `MeterStatus` の `EngineState` に `TxAckCbk` を設定しました。
+
+```
+Com_SignalConfigType (EngineState):
+  TxAckCbk = Rte_COMTxAck_EngineState
+
+Com_TxConfirmation(TxPduId=0/*MeterStatus*/, result=E_OK)  ← PduR から呼ばれる
+  Com_ConfigPtr->Signals[] を走査
+    sig->Direction==TX かつ sig->IPduId == TxPduId かつ sig->TxAckCbk != NULL
+    のものすべてについて sig->TxAckCbk() を呼ぶ  ← EngineState だけでなく、
+                          同じ I-PDU の全 TX シグナルが対象（本設定では
+                          EngineState のみ）
+```
+
+**シグナル単位に統一した理由**: 実 AUTOSAR は signal 単位・signal group 単位で
+別々のコールバック名を持てますが、本実装は `TmsContributor`/`TransferProperty`/
+`RxDataTimeoutAction` 等これまでのフィールドと同じく、シグナル単位の
+`TxAckCbk` のみで統一しています。Signal Group（`WarningStatus`）のメンバーに
+`TxAckCbk` を設定した場合も、`Com_ConfigPtr->Signals[]` を素直に走査するだけの
+実装なので、そのメンバー個別に呼ばれます（実 AUTOSAR の「signal group 全体で
+1 回」という意味論とは異なる簡略化です）。
+
+**レビューで見つかった問題（RX/TX の方向誤認）**: 初期実装は
+`sig->IPduId == TxPduId` だけで走査対象を絞っており、方向（RX/TX）を
+確認していませんでした。RX I-PDU と TX I-PDU の `IPduId` は別々の値空間で
+（どちらも 0 始まり）数値が重複します（例: RX の `EngineInfo=0` と TX の
+`MeterStatus=0`）。そのため `Com_TxConfirmation(TxPduId=0, ...)`
+（`MeterStatus` の送信確認）が呼ばれると、本来対象であるべき TX 側の
+`EngineState` だけでなく、たまたま `IPduId=0` である RX 側の
+`EngineInfo`（`EngineSpeed`/`CoolantTemp`/`EngineOnFlag`）まで走査対象に
+入ってしまいます。当時はどの RX シグナルにも `TxAckCbk` が設定されていな
+かったため実害はありませんでしたが、コード上は何も防いでおらず、将来
+誰かが（コピペ等で）RX シグナルに `TxAckCbk` を設定してしまうと、無関係な
+TX I-PDU の送信完了のたびにそのコールバックが静かに誤発火する
+（クラッシュも DET ログも出ないため発見しづらい）バグになり得ました。
+
+`Com_SendSignal()`/`Com_ReceiveSignal()` は `SignalId` で 1 エントリを検索
+してから `Com_FindTxIPdu()`/`Com_FindRxIPdu()` で方向を確認する設計のため
+この曖昧さの影響を受けませんが、`Com_TxConfirmation()` は逆に
+「`Signals[]` 全体を `IPduId` だけで検索する」という、本実装で初めて
+現れた走査パターンだったために問題が顕在化しました。
+
+修正として `Com_SignalConfigType` に `Direction`（`Com_SignalDirectionType`:
+`COM_SIGNAL_DIRECTION_RX`/`_TX`）フィールドを新設し、全 12 シグナルへ明示的に
+設定したうえで、`Com_TxConfirmation()` の走査条件に
+`sig->Direction == COM_SIGNAL_DIRECTION_TX` を追加しました。実 AUTOSAR には
+対応パラメータがありません（ComSignal は必ずどちらか一方の ComIPdu に構造的に
+含まれるため、そもそもこの曖昧さが発生しない）。本プロジェクトが RX/TX 共通の
+1 本の配列に平坦化した簡略設計を採用したことで生じた、本プロジェクト固有の
+補正です。
+
+**このコールバックはこの送信でシグナル自体が変化したかどうかを問わない**:
+`Com_CbkTxAck` は「I-PDU の送信が成功した」ことの通知であり、含まれる個々の
+シグナルの値がこの送信で変化したかどうかとは無関係です（SWS_Com_00468:
+"called immediately after successful transmission of the I-PDU containing
+the message"）。`EngineState` が変化していなくても、`MeterStatus` が周期
+フロア（MIXED モード）で再送されるたびに `Rte_COMTxAck_EngineState()` が
+呼ばれます。
+
+**割り込み安全性について（前節の教訓を踏まえた確認）**: `Com_TxConfirmation()`
+は `Can_MainFunction_Write()`（Os の 100ms タスク）→ `CanIf_TxConfirmation()`
+→ `PduR_CanIfTxConfirmation()` という経路で同期的に呼ばれます。前節の
+`ComInvalidNotification` とは異なり、この経路上には SchM 排他エリア
+（割り込み禁止区間）が存在しないことを実際にコードを辿って確認済みです。
+したがって `TxAckCbk` の中で `DET_LOGI` のような Serial 出力を行っても、
+前節の WDT リセット障害と同じ問題は起きません。
+
+**この機能は実際に発動するか**: 発動します。`MeterStatus` は `TxModeMode=MIXED`
+（値変化時の即時送信 + 周期フロア再送）のため、通常運用で確実に送信され続け、
+そのたびに `Com_TxConfirmation()` → `Rte_COMTxAck_EngineState()` が呼ばれます。
+ログに `Com: TxConf id=0` の直後に `Rte: MeterStatus TX ack (EngineState)`
+が出力されることを実機で確認できます。
+
+##### Update Bit（送信側が実際に更新したかを示す1ビット）
+
+これまでの機能はいずれも「値そのもの」（無効値パターン、タイムアウト、送信成功）
+に関するものでした。update-bit（実 AUTOSAR 7.8 章）はこれらとは別の軸で、
+「送信側がこのシグナル/シグナルグループを実際に更新して送ったかどうか」を示す
+1 ビットです（SWS_Com_00055: シグナル/グループの値そのものとは独立に、Com が
+内部でのみ扱う）。共有 I-PDU に複数の送信元・複数のシナリオが値を書き込みうる
+構成や、周期送信と変化時送信を併用する MIXED モードで、「このフィールドは今回の
+フレームで本当に新しい値が入っているか」を受信側が区別したい場合に使います。
+
+実 AUTOSAR の `ComUpdateBitPosition`（ECUC_Com_00257）は `ComSignal`
+（非 Signal Group の単一シグナル、SWS_Com_00061）・`ComSignalGroup`
+（グループ全体、SWS_Com_00801）双方に同名パラメータとして存在します。本実装は
+これを `Com_IPduConfigType.UpdateBitPosition` という I-PDU 単位のフィールド 1 個に
+簡略化していますが、値のセット元が「非 Signal Group なら `Com_SendSignal()`
+（SWS_Com_00061）」「Signal Group なら `Com_SendSignalGroup()`（SWS_Com_00801）」の
+どちらであっても、クリア（`Com_DoTransmit()`）は同じコードで扱います。
+
+現状の適用状況:
+
+- **`MeterStatus`/`EngineState`（TX、非 Signal Group）: 適用済み・実機検証済み**。
+  `UpdateBitPosition=8`（byte[1] bit0）を設定しています。`TxModeMode=MIXED`
+  のため、「今回の送信は実際の値変化によるものか、単なる周期フロア再送か」を
+  受信側が区別できる、という update-bit 本来の動機がそのまま当てはまる例です。
+- **`WarningStatus`（TX、Signal Group）: 適用済み・実機検証済み**。
+  `UpdateBitPosition=3`（byte[0] bit3。RunLamp/FaultLamp/AbsLamp が使う
+  bit0-2 の次の空きビットのため DLC 拡張は不要）を設定しています。
+  TMS=true（FAULT/ABS 点灯中）時の MIXED 周期フロア再送と、実際に警告灯が
+  変化したことによる送信とを区別できる、Signal Group 単位の実装例です。
+
+```
+送信側 非 Signal Group（Com_SendSignal）:
+  実バッファへ反映（既存処理）
+  ComFilterAlgorithm が「変化あり」と判定した場合のみ、
+  UpdateBitPosition が 0xFF 以外ならそのビットをセット
+  （SWS_Com_00061。本実装独自の条件付け、詳細は次項）
+送信側 Signal Group（Com_SendSignalGroup）:
+  実バッファへ反映（既存処理）
+  Com_GroupTriggerPending（TRIGGERED_ON_CHANGE メンバーが実際に変化したか）
+  が立った場合のみ、UpdateBitPosition が 0xFF 以外ならそのビットをセット
+  （SWS_Com_00801。こちらも本実装独自の条件付け、詳細は次項）
+送信側（Com_DoTransmit、Com_MainFunction() から。Signal Group かどうかを問わない）:
+  PduR_Transmit() で実送信（この時点でビット=1 のまま送信される）
+  ret==E_OK のときのみ、送信直後にビットをクリア
+  （SWS_Com_00062: ComTxIPduClearUpdateBit=Transmit）
+```
+
+**動作確認方法**: `uds_tester` の「EngineStatus (0x200)」rx_monitor ボタンに
+`upd=0/1` の表示を追加しました。ダッシュボードの RUNNING/STARTING/FAULT 等の
+状態遷移で `EngineState` が変化した直後は `upd=1`、その後
+`COM_TX_PERIOD_METERSTATUS_FLOOR_MS`（既定 9000ms）間隔で値が変化せずに再送
+される周期フロアフレームでは `upd=0` になることを確認できます。同様に
+「WarningStatus (0x210)」rx_monitor ボタンにも `upd=0/1` の表示を追加しました。
+FAULT/ABS 点灯による TMS=true（MIXED 切り替え）中、警告灯が実際に変化した
+送信は `upd=1`、`COM_TX_PERIOD_WARNINGSTATUS_TRUE_FLOOR_MS` 間隔の周期フロア
+再送は `upd=0` になります。Cangaroo で CAN 0x200 の byte[1] bit0（生の 2 バイト
+目、MSB）・CAN 0x210 の byte[0] bit4 を直接観察することでも同様に確認できます。
+
+**レビューで見つかった問題（非 Signal Group の update-bit が常に 1 のままだった）**:
+初期実装は SWS_Com_00061 の原文どおり「`Com_SendSignal()` が呼ばれるたびに
+無条件でセットする」としていましたが、実機検証で `upd` が常に `1` のままになる
+不具合が見つかりました。
+
+原因は ASW（`App_EngineManager_Run()`）の呼び出しパターンとの相互作用です。
+本プロジェクトの ASW は「値が変わったかどうか」を判定せず、毎サイクル無条件に
+`Rte_Write_EngineStatus_EngineState()`（→ `Com_SendSignal()`）を呼び、実際に
+送信するかどうかの判断は Com の `ComFilterAlgorithm` に完全に委ねる設計です
+（前述「責務分離の効果」）。SWS_Com_00061 を文字どおり実装すると、実送信
+（イベント駆動・周期フロアいずれも）から次の実送信までの間に、ASW が
+`Com_SendSignal()` を何度も（無変化のまま）呼び続けるため、`Com_DoTransmit()`
+がクリアした直後には必ず再セットされてしまい、update-bit が「実際に変化した
+かどうか」を一切表せなくなっていました。
+
+対策として、非 Signal Group の update-bit セットを `ComFilterAlgorithm` の
+「変化あり」判定（`passesFilter`、`Com_RequestTxOnChange()` を呼ぶかどうかと
+同じ判断軸）に条件づけました。ASW 側の「常に書き込む」設計はそのまま変えず、
+Com 側が既に持っている「これは実際の変化か」の判断をそのまま update-bit にも
+使い回す形です。これは SWS_Com_00061 の文字どおりの実装ではありませんが、
+本プロジェクトの ASW 呼び出し規約のもとで update-bit 本来の目的（実際に更新
+されたかどうかを示す）を満たすための意図的な調整です。
+
+Signal Group 側（`Com_SendSignalGroup()`）も同種の問題を抱えていました。
+`App_WarningIndicator_Run()` も毎サイクル無条件に
+`Rte_SendSignalGroup_WarningStatus()`（→ `Com_SendSignalGroup()`）を呼ぶ同じ
+設計のため、`WarningStatus` に `UpdateBitPosition` を設定した時点で
+（非 Signal Group と同じ理由により）update-bit が常に 1 のままになることは
+実装前から予見できました。そのため `WarningStatus` へ update-bit を適用する
+のと同時に、`Com_SendSignalGroup()` 側も対策済みです: セットの条件を
+`Com_GroupTriggerPending`（`ComTransferProperty=TRIGGERED_ON_CHANGE` の
+メンバーが実際に変化したかどうか、`Com_RequestTxOnChange()` を呼ぶかどうかと
+同じ判断軸）に条件づけました。非 Signal Group 側の `passesFilter` と対になる
+考え方です。
+
+**なぜ ComTxIPduClearUpdateBit=Transmit のみか**: 実 AUTOSAR は Transmit
+（`PduR_ComTransmit` 呼び出し直後にクリア）/ Confirmation（送信確認後にクリア）/
+TriggerTransmit（トリガ送信後にクリア）の 3 択ですが、本実装は Transmit のみ
+実装しています。本プロジェクトの送信経路は `Com_MainFunction()` →
+`Com_DoTransmit()` → `PduR_Transmit()` が同期的に SPI 送信まで完了する
+（実際の送信完了と `PduR_ComTransmit` 呼び出しの間に有意な時間差がない）ため、
+3 つのタイミングの違いを意味のある形で再現できないという判断です。
+
+**レビューで見つかった問題（update-bit クリアが送信結果を無視していた）**:
+このコード自体は、実際に `WarningStatus` へ試験的に適用していた開発中の段階で
+見つかった問題を修正済みです。初期実装は `Com_DoTransmit()` 内で
+`PduR_Transmit()` の戻り値 `ret` を見ずに update-bit を無条件でクリアして
+いました。しかし本節が引用する SWS_Com_00062 の原文は "after this I-PDU was
+sent out via PduR_ComTransmit **and PduR_ComTransmit returned E_OK**" であり、
+送信成功時のみクリアすべきと明記されています。当時のコードコメントは
+「戻り値によらず無条件でクリアする」と、この食い違いを自覚的に開示しないまま
+断定していました。
+
+具体的な失敗シナリオ（`WarningStatus` に適用していた場合を想定）: この I-PDU
+は `TxModeModeTrue=MIXED`（TMS=true 時に周期フロア再送あり）のため、
+(1) `FaultLamp` 点灯で `Com_SendSignalGroup()` が update-bit をセット、
+(2) バス輻輳等で最初の送信が失敗（`ret=E_NOT_OK`）しても update-bit だけが
+クリアされてしまう、(3) データ自体はバッファに残ったまま次の周期フロアで
+再送され、そちらは成功する——という流れになると、実際には初めて正常配信
+された新データにもかかわらず、受信側から見ると update-bit が 0（＝「未更新」）
+のフレームとして届いてしまいます。
+
+同じファイル内の `Com_TxConfirmation()` は `if (result != E_OK ...) return;`
+と正しく結果をチェックしており、この判定パターン自体は目新しいものでは
+ありませんでした。修正は `if (ret == E_OK && ...)` という条件の追加のみです。
+
+この修正は `MeterStatus`（非 Signal Group）の送信経路でも共通に使われるため、
+Signal Group への適用有無に関わらず活きています。
+
+##### TX 確認の非同期化（`Can_MainFunction_Write`）
+
+**なぜ非同期化したか**: AUTOSAR の仕様 [SWS_Can_00016] は、`CanIf_TxConfirmation()` を
+「TX 割り込みハンドラから」または「ポーリングモードでは `Can_MainFunction_Write()` の
+中から」呼ぶことを求めている。しかし当初の実装では、`Can_Write()` が送信成功直後、
+呼び出し元と同一スタックフレーム内でそのまま `CanIf_TxConfirmation()` を呼んでいた。
+
+```
+（修正前）
+Com_MainFunction() → Com_DoTransmit() → PduR_Transmit() → CanIf_Transmit() → Can_Write()
+                                                                                → CanIf_TxConfirmation()
+                                                                                  → PduR_CanIfTxConfirmation()
+                                                                                    → Com_TxConfirmation()
+（すべて 1 回の呼び出しチェーン内で完結）
+```
+
+これ自体は現状害がないが、将来 `Com_TxConfirmation()` の延長線上（あるいは他の
+`TxConfirmFct`）に「送信失敗を検知したら即座に再送する」ような処理が足された場合、
+その再送呼び出しがそのまま `Can_Write()` の再帰呼び出しになってしまう。NvM の
+非同期書き込みジョブキュー（[DEVLOG参照](docs/DEVLOG.md#nvm-非同期書き込みジョブキューへの変更経緯)）
+と同じ「今は実害がないが将来の変更で踏み抜きやすいスタック深化の地雷」を避ける
+考え方で、この結合を断ち切った。
+
+**設計**:
+
+```
+Can_Write(Hth, PduInfo):
+  Can_Hw_Send() が成功したら、PduInfo->swPduHandle を TX 確認保留キューへ積むだけで
+  即座に E_OK 相当（CAN_OK）を返す（CanIf_TxConfirmation() はまだ呼ばない）
+
+Can_MainFunction_Write()（1ms 周期、Os_PBCfg.c Task 13）:
+  保留キューが空になるまで、投入順に CanIf_TxConfirmation() を呼び出す
+```
+
+NvM の非同期ジョブキュー（1 呼び出し 1 バイトずつ）とは異なり、こちらは
+`CanIf_TxConfirmation()` 自体がハードウェアをブロックしないソフトウェア的な
+コールバック転送のみのため、1 回の `Can_MainFunction_Write()` 呼び出しで
+保留分を全件処理してよい。
+
+**動作への影響**: `CanIf_TxConfirmation()` の呼び出しタイミングが `Can_Write()` から
+最大 1ms（Task 13 の周期）遅延するようになるが、`Com_TxConfirmation()`・
+`CanTp_TxConfirmation()` のいずれも受け取った結果を使わない no-op のため、
+体感できる動作変化はない（この経路は常に E_OK 固定でもある。詳細は CanTp
+セクションの N_As タイムアウトの説明を参照）。
+
+#### Rx 処理（Can → CanIf → PduR → Com の順）
+
+##### RX の割り込み化（`Can_Isr` / `Can_MainFunction_Read/BusOff/Wakeup`）
+
+**なぜ割り込み化したか**: 従来 `Can_Isr()` は Os スケジューラから 1ms ごとにポーリング
+呼び出しされる「疑似 ISR」で、INT ピンを `digitalRead()` で確認していた。これは
+「割り込み」と名乗りながら実態はポーリングであり、AUTOSAR OS が本来持つ「タスクと
+ISR は実際にプリエンプトし合う」という関係を体験できていなかった。また、SchM の
+排他エリアマクロ（`SchM_Enter_Com_SIGNAL_EXCLUSIVE_AREA()` 等）も「協調スケジューリング
+なので NOP でよい」という理由でずっと未使用のまま残っていた。
+
+本変更で `Can_Hw_AttachRxIsr()`（`Can_Init()` 内）が `attachInterrupt()` で INT ピンの
+立ち下がりエッジに `Can_Isr()` を真のハードウェア割り込みとして登録し、Os スケジューラの
+周期とは無関係に即座に起動されるようにした。
+
+**ISR を最小限に保つ設計判断**: 素直に実装するなら「ISR の中で `CanIf_RxIndication()` まで
+呼んでしまう」のが最も単純だが、本実装ではあえてそうしていない。`Can_Isr()` は
+ペンディングフラグ（`Can_RxIrqPending` / `Can_WakeupIrqPending`）を立てるだけに留め、
+SPI 通信・Serial ログ・CanIf 呼び出しは一切行わない。理由は 2 つ:
+
+1. **SPI バス排他**: MCP2515 は SPI 接続のため、CS ピン制御を伴う複数バイトの読み書きが
+   1 トランザクションとして完結する必要がある。メインループ側の `Can_Write()`（TX、SPI
+   経由）がトランザクション途中で割り込みにプリエンプトされ、割り込み側が同じ SPI バスへ
+   別トランザクションを割り込ませると、双方が破壊されうる。ISR 側で SPI を使わなければ
+   この競合はそもそも発生しない。
+2. **処理時間の上限**: `CanIf_RxIndication()` から先は PduR/Com/CanTp/Dcm まで連鎖し、
+   UDS SID 処理（RoutineControl 等）まで含まれ得る。これを割り込みハンドラの中で行うと、
+   ISR の実行時間が事実上無制限になりかねない（本 README で繰り返し出てくる「同期呼び出し
+   連鎖のスタック/ブロッキングリスク」と同種の問題）。
+
+実際の SPI 読み出しと `CanIf_RxIndication()` 呼び出しは、ペンディングフラグを見てメイン
+ループのタスクが行う（AUTOSAR `SWS_Can_00396`・`SWS_Can_00012` 参照:「呼び出しコンテキストが
+ISR か `Can_MainFunction_Read` かは実装依存であり、コールバックはいずれの場合も ISR から
+呼ばれたかのように実装してよい」）。これは TX 確認の非同期化（`Can_MainFunction_Write`）と
+対になる設計で、CAN モジュールの RX/TX 双方が「イベントは即座に検知するが、重い処理は
+専用タスクへ委譲する」という同じパターンに統一されたことになる。
+
+**関数の分離**: 旧 `Can_Isr()` は「RX ポーリング」「Bus-Off ポーリング」「SLEEP 中の
+ウェイクアップ検出」の 3 役を 1 つの関数にまとめていたが、AUTOSAR は元々これらを
+独立した `Can_MainFunction_xxx` として定義している。これに合わせて分離した。
+
+```
+Can_Isr()                     ← 真の割り込み。フラグを立てるだけ
+Can_MainFunction_Read()       ← Can_RxIrqPending をドレインし RX 処理 (SWS_Can_00108)
+Can_MainFunction_BusOff()     ← EFLG.TXBO を毎回ポーリング (SWS_Can_00109、割り込み非依存)
+Can_MainFunction_Wakeup()     ← Can_WakeupIrqPending をドレインしウェイクアップ通知 (SWS_Can_00112)
+```
+
+`Can_MainFunction_Read()` のドレインループはフラグではなく `Can_Hw_CheckReceive()` が
+NOT_OK を返すまで継続する。MCP2515 の INT はレベル方式（未読フレームが残る限り
+アサートされ続ける）ため、連続到着した 2 フレーム目には新たなエッジが立たないことが
+あるが、フラグは「立った」ことだけを覚えていれば十分で、実際に何件処理するかは
+ドレインループがハードウェアの状態から判断する。
+
+**SchM が初めて意味を持つ**: `Can_Isr()`（割り込みコンテキスト）と
+`Can_MainFunction_Read()`/`Can_MainFunction_Wakeup()`（メインループのタスク）は、
+ペンディングフラグを介して実際に競合しうる関係になった。フラグの読み出しとクリアを
+アトミックに行わないと、その間に割り込みが発生した場合にフラグのセットが失われ、
+受信フレーム・ウェイクアップ通知を取りこぼす。これを防ぐため `SchM.h` に新しい排他エリア
+`SchM_Enter/Exit_Can_IRQFLAG_EXCLUSIVE_AREA()` を追加し、実体を
+`SchM_Hw_EnterExclusiveArea()`/`ExitExclusiveArea()`（`src/Hal/SchM_Hw.cpp`、
+`noInterrupts()`/`interrupts()` を呼ぶだけ）とした。既存の `Rte_MIRROR`・`Com_SIGNAL`
+排他エリアも同じ実体を指すように変更し、NOP のままだった `SchM.h` が実際に機能するように
+なった（Com の RX/TX バッファ自体は現状 `Can_MainFunction_Read()` というメインループの
+タスクからのみ触られる設計にしたため、まだ割り込みと競合しないが、Rte 側と同様
+将来のための保険として Enter/Exit を残してある）。
+
+> **意図的な二重化**: `Can_MainFunction_Read()`/`Can_MainFunction_Wakeup()` は
+> 「割り込みが本当に発火するか」に正しさを依存させない設計にしている。
+> - `Can_MainFunction_Read()` は `Can_RxIrqPending` の有無に関わらず、毎回
+>   無条件に `Can_Hw_CheckReceive()`（SPI 経由のステータスレジスタ読み出し。
+>   INT ピンの実際の状態には依存しない）でドレインする。
+> - `Can_MainFunction_Wakeup()` は `Can_WakeupIrqPending` に加えて
+>   `digitalRead(intPin)` の直接ポーリングも併用する（旧実装と同じ
+>   フォールバック）。
+>
+> `Can_Isr()`・ペンディングフラグ・`SchM_Enter/Exit_Can_IRQFLAG_EXCLUSIVE_AREA()`
+> の構造はそのまま残り、割り込みが発火すればより低遅延に反応できる
+> 「ボーナス経路」として機能するが、たとえ割り込みが何らかの理由で発火
+> しなくてもポーリング側だけで正しく動作する。単一の検出経路（割り込みのみ）に
+> 正しさを委ねず、独立したポーリングでも動作を保証する設計にした経緯は
+> [DEVLOG: Can RX 割り込み化の実機検証で得られた教訓](docs/DEVLOG.md#can-rx-割り込み化の実機検証で得られた教訓) を参照。
+
+##### 受信長チェックの多層防御
+
+**受信長チェックの多層防御**: 設定 DLC に満たない短小フレームは、まず `CanIf_RxIndication()`
+が棄却する（SWS_CANIF_00026 相当、本来この責務は CanIf 層にある）。仮に何らかの理由で
+ここを通過しても、`Com_RxIndication()`・`CanTp_RxIndication()`（SF/FF/CF/FC 各フレーム）
+がそれぞれ独立に自分の期待長を検証する。1 箇所だけに頼らず各層が自分の責務として
+検証するのは、本プロジェクトで実際に発生した「短いフレームで上位層バッファに
+新旧混在の破損データが残る」バグ（Com のシグナル固定長アクセス等）を踏まえた設計判断
+である。`Com_RxIndication()` の受信長チェックは AUTOSAR 本来の仕様（SWS_Com_00574/
+00575/00870）に準拠したシグナル単位の部分受理を実装している: Signal Group は
+一貫性のないスナップショットを公開しないため受信できたバイト数が DLC 未満なら
+グループ全体を棄却するが（SWS_Com_00575）、非 Signal Group の I-PDU は受信できた
+バイト範囲に収まるシグナルのみを部分的に受理し、範囲外のシグナルは前回受信値の
+まま据え置く（SWS_Com_00574/00870）。前述の「新旧混在の破損データ」バグは
+Com_ReceiveSignal/Com_SendSignal が BitSize に関わらず常に 4 バイト読み書きして
+呼び出し元のスタックを破壊していたことが根本原因であり、本対応（未受信バイトに
+触れず前回値をそのまま保持する）とは別の問題である（詳細は `Com.c` のコメント参照）。
+なお `CanIf_PBCfg.c` の各 RxPdu の `.Dlc` は現状 Com 側の `ipdu->DLC` と同じ値に
+設定されているため、`Com_RxIndication()` の部分受理パスは短小フレームが CanIf 層で
+先に棄却されることで実運用上到達しない（2026-07 時点で実機確認済み）。検証するには
+CanIf 側の `.Dlc` を一時的に緩める必要がある。
+
+##### RX Signal Group（複数シグナルの一貫したスナップショット読み出し）
 
 ここまでの Signal Group（`Com Signal Group`/`ComTransferProperty` 節）は TX 側の
 話でした。実 AUTOSAR の Com は RX 側にも対称の仕組みを持ちます:
@@ -882,7 +1111,7 @@ Signal Group という概念が送受信どちらの向きでも同じ形（ア�
 （本プロジェクトの E2E Transformer 方式とは異なり、RTE ミラーを経由しない構成）
 です。
 
-#### ComRxDataTimeoutAction（受信タイムアウト時のシグナル値の扱い）
+##### ComRxDataTimeoutAction（受信タイムアウト時のシグナル値の扱い）
 
 RX 受信デッドライン監視（次節）がタイムアウトを検出したあと、`Com_ReceiveSignal()`
 がそのシグナルに対してどう振る舞うかは、実 AUTOSAR では `ComRxDataTimeoutAction`
@@ -946,7 +1175,7 @@ SUBSTITUTE なら 0xFFFF のような、通常運用では絶対に出現しな�
 `TMS`/`MDT`/`ComTransferProperty`/RX Signal Group と同じく、動機は実利より
 仕様忠実性です。
 
-#### Rx無効値検知（ComSignalDataInvalidValue/ComDataInvalidAction）
+##### Rx無効値検知（ComSignalDataInvalidValue/ComDataInvalidAction）
 
 `ComRxDataTimeoutAction`（前節）が「一定時間フレームが来ない」という**時間ベース**
 の異常を扱うのに対し、こちらは「フレームは正常に届いているが、中身の値そのものが
@@ -1040,238 +1269,7 @@ WDT（ウォッチドッグタイマ）リセットが発生しました。
 ブロッキングする可能性のある処理（Serial 出力、長時間のループ等）を含めては
 ならない。**
 
-#### ComNotification拡張（Tx確定コールバック、Com_CbkTxAck）
-
-これまでの `Com_TxConfirmation()` は PduR から送信完了を受け取ってログ出力する
-だけで、それより上位（ASW/Rte）へは何も伝えていませんでした。実 AUTOSAR の
-Com は、I-PDU の送信が実際に成功した際、そこに含まれるシグナル/Signal Group
-ごとに個別のコールバック（`Com_CbkTxAck`、SWS_Com_00468。実車の RTE 生成名は
-`Rte_COMCbkTAck_<sn>`/`<sg>`）を呼び出せます。`ComRxDataTimeoutAction`/
-`ComDataInvalidAction` が RX 側の「値の異常」を扱う機能だったのに対し、これは
-TX 側の「送信できたことの確認」を扱う機能です。
-
-本プロジェクトでは `MeterStatus` の `EngineState` に `TxAckCbk` を設定しました。
-
-```
-Com_SignalConfigType (EngineState):
-  TxAckCbk = Rte_COMTxAck_EngineState
-
-Com_TxConfirmation(TxPduId=0/*MeterStatus*/, result=E_OK)  ← PduR から呼ばれる
-  Com_ConfigPtr->Signals[] を走査
-    sig->Direction==TX かつ sig->IPduId == TxPduId かつ sig->TxAckCbk != NULL
-    のものすべてについて sig->TxAckCbk() を呼ぶ  ← EngineState だけでなく、
-                          同じ I-PDU の全 TX シグナルが対象（本設定では
-                          EngineState のみ）
-```
-
-**シグナル単位に統一した理由**: 実 AUTOSAR は signal 単位・signal group 単位で
-別々のコールバック名を持てますが、本実装は `TmsContributor`/`TransferProperty`/
-`RxDataTimeoutAction` 等これまでのフィールドと同じく、シグナル単位の
-`TxAckCbk` のみで統一しています。Signal Group（`WarningStatus`）のメンバーに
-`TxAckCbk` を設定した場合も、`Com_ConfigPtr->Signals[]` を素直に走査するだけの
-実装なので、そのメンバー個別に呼ばれます（実 AUTOSAR の「signal group 全体で
-1 回」という意味論とは異なる簡略化です）。
-
-**レビューで見つかった問題（RX/TX の方向誤認）**: 初期実装は
-`sig->IPduId == TxPduId` だけで走査対象を絞っており、方向（RX/TX）を
-確認していませんでした。RX I-PDU と TX I-PDU の `IPduId` は別々の値空間で
-（どちらも 0 始まり）数値が重複します（例: RX の `EngineInfo=0` と TX の
-`MeterStatus=0`）。そのため `Com_TxConfirmation(TxPduId=0, ...)`
-（`MeterStatus` の送信確認）が呼ばれると、本来対象であるべき TX 側の
-`EngineState` だけでなく、たまたま `IPduId=0` である RX 側の
-`EngineInfo`（`EngineSpeed`/`CoolantTemp`/`EngineOnFlag`）まで走査対象に
-入ってしまいます。当時はどの RX シグナルにも `TxAckCbk` が設定されていな
-かったため実害はありませんでしたが、コード上は何も防いでおらず、将来
-誰かが（コピペ等で）RX シグナルに `TxAckCbk` を設定してしまうと、無関係な
-TX I-PDU の送信完了のたびにそのコールバックが静かに誤発火する
-（クラッシュも DET ログも出ないため発見しづらい）バグになり得ました。
-
-`Com_SendSignal()`/`Com_ReceiveSignal()` は `SignalId` で 1 エントリを検索
-してから `Com_FindTxIPdu()`/`Com_FindRxIPdu()` で方向を確認する設計のため
-この曖昧さの影響を受けませんが、`Com_TxConfirmation()` は逆に
-「`Signals[]` 全体を `IPduId` だけで検索する」という、本実装で初めて
-現れた走査パターンだったために問題が顕在化しました。
-
-修正として `Com_SignalConfigType` に `Direction`（`Com_SignalDirectionType`:
-`COM_SIGNAL_DIRECTION_RX`/`_TX`）フィールドを新設し、全 12 シグナルへ明示的に
-設定したうえで、`Com_TxConfirmation()` の走査条件に
-`sig->Direction == COM_SIGNAL_DIRECTION_TX` を追加しました。実 AUTOSAR には
-対応パラメータがありません（ComSignal は必ずどちらか一方の ComIPdu に構造的に
-含まれるため、そもそもこの曖昧さが発生しない）。本プロジェクトが RX/TX 共通の
-1 本の配列に平坦化した簡略設計を採用したことで生じた、本プロジェクト固有の
-補正です。
-
-**このコールバックはこの送信でシグナル自体が変化したかどうかを問わない**:
-`Com_CbkTxAck` は「I-PDU の送信が成功した」ことの通知であり、含まれる個々の
-シグナルの値がこの送信で変化したかどうかとは無関係です（SWS_Com_00468:
-"called immediately after successful transmission of the I-PDU containing
-the message"）。`EngineState` が変化していなくても、`MeterStatus` が周期
-フロア（MIXED モード）で再送されるたびに `Rte_COMTxAck_EngineState()` が
-呼ばれます。
-
-**割り込み安全性について（前節の教訓を踏まえた確認）**: `Com_TxConfirmation()`
-は `Can_MainFunction_Write()`（Os の 100ms タスク）→ `CanIf_TxConfirmation()`
-→ `PduR_CanIfTxConfirmation()` という経路で同期的に呼ばれます。前節の
-`ComInvalidNotification` とは異なり、この経路上には SchM 排他エリア
-（割り込み禁止区間）が存在しないことを実際にコードを辿って確認済みです。
-したがって `TxAckCbk` の中で `DET_LOGI` のような Serial 出力を行っても、
-前節の WDT リセット障害と同じ問題は起きません。
-
-**この機能は実際に発動するか**: 発動します。`MeterStatus` は `TxModeMode=MIXED`
-（値変化時の即時送信 + 周期フロア再送）のため、通常運用で確実に送信され続け、
-そのたびに `Com_TxConfirmation()` → `Rte_COMTxAck_EngineState()` が呼ばれます。
-ログに `Com: TxConf id=0` の直後に `Rte: MeterStatus TX ack (EngineState)`
-が出力されることを実機で確認できます。
-
-#### Update Bit（送信側が実際に更新したかを示す1ビット）
-
-これまでの機能はいずれも「値そのもの」（無効値パターン、タイムアウト、送信成功）
-に関するものでした。update-bit（実 AUTOSAR 7.8 章）はこれらとは別の軸で、
-「送信側がこのシグナル/シグナルグループを実際に更新して送ったかどうか」を示す
-1 ビットです（SWS_Com_00055: シグナル/グループの値そのものとは独立に、Com が
-内部でのみ扱う）。共有 I-PDU に複数の送信元・複数のシナリオが値を書き込みうる
-構成や、周期送信と変化時送信を併用する MIXED モードで、「このフィールドは今回の
-フレームで本当に新しい値が入っているか」を受信側が区別したい場合に使います。
-
-実 AUTOSAR の `ComUpdateBitPosition`（ECUC_Com_00257）は `ComSignal`
-（非 Signal Group の単一シグナル、SWS_Com_00061）・`ComSignalGroup`
-（グループ全体、SWS_Com_00801）双方に同名パラメータとして存在します。本実装は
-これを `Com_IPduConfigType.UpdateBitPosition` という I-PDU 単位のフィールド 1 個に
-簡略化していますが、値のセット元が「非 Signal Group なら `Com_SendSignal()`
-（SWS_Com_00061）」「Signal Group なら `Com_SendSignalGroup()`（SWS_Com_00801）」の
-どちらであっても、クリア（`Com_DoTransmit()`）は同じコードで扱います。
-
-現状の適用状況:
-
-- **`MeterStatus`/`EngineState`（TX、非 Signal Group）: 適用済み・実機検証済み**。
-  `UpdateBitPosition=8`（byte[1] bit0）を設定しています。`TxModeMode=MIXED`
-  のため、「今回の送信は実際の値変化によるものか、単なる周期フロア再送か」を
-  受信側が区別できる、という update-bit 本来の動機がそのまま当てはまる例です。
-- **`WarningStatus`（TX、Signal Group）: 適用済み・実機検証済み**。
-  `UpdateBitPosition=3`（byte[0] bit3。RunLamp/FaultLamp/AbsLamp が使う
-  bit0-2 の次の空きビットのため DLC 拡張は不要）を設定しています。
-  TMS=true（FAULT/ABS 点灯中）時の MIXED 周期フロア再送と、実際に警告灯が
-  変化したことによる送信とを区別できる、Signal Group 単位の実装例です。
-- **`AbsInfo`（RX、Signal Group）: 未適用のまま**（`UpdateBitPosition = 0xFFU`）。
-  実車のこの種のフレームは高頻度・固定周期で常に新鮮なセンサ値を送り続ける
-  のが通常で、鮮度管理は既存の受信デッドライン監視で十分カバーされるため、
-  update-bit を使う動機が薄いという従来からの判断は変わっていません。
-  したがって `Com_ReceiveSignalGroup()` 側の update-bit「discard」ロジック
-  （後述）は今のところ実機で経路を通りません（TX 側の
-  セット/クリアのみが `MeterStatus`/`WarningStatus` を通じて実機検証済みで、
-  RX 側の discard ロジックはコード上の実装のみに留まります）。
-
-```
-送信側 非 Signal Group（Com_SendSignal）:
-  実バッファへ反映（既存処理）
-  ComFilterAlgorithm が「変化あり」と判定した場合のみ、
-  UpdateBitPosition が 0xFF 以外ならそのビットをセット
-  （SWS_Com_00061。本実装独自の条件付け、詳細は次項）
-送信側 Signal Group（Com_SendSignalGroup）:
-  実バッファへ反映（既存処理）
-  Com_GroupTriggerPending（TRIGGERED_ON_CHANGE メンバーが実際に変化したか）
-  が立った場合のみ、UpdateBitPosition が 0xFF 以外ならそのビットをセット
-  （SWS_Com_00801。こちらも本実装独自の条件付け、詳細は次項）
-送信側（Com_DoTransmit、Com_MainFunction() から。Signal Group かどうかを問わない）:
-  PduR_Transmit() で実送信（この時点でビット=1 のまま送信される）
-  ret==E_OK のときのみ、送信直後にビットをクリア
-  （SWS_Com_00062: ComTxIPduClearUpdateBit=Transmit）
-
-受信側（Com_ReceiveSignalGroup、Signal Group のみ）:
-  UpdateBitPosition が 0xFF 以外なら、I-PDU バッファの該当ビットを確認
-    0（未更新）→ 何もせず E_OK で戻る（SWS_Com_00802: "discard"。
-                  シャドウバッファ・タイムアウトスナップショットとも
-                  直近の確定コピー内容のまま）
-    1（更新済み）→ 通常どおり確定コピー（既存処理）
-```
-
-**動作確認方法**: `uds_tester` の「EngineStatus (0x200)」rx_monitor ボタンに
-`upd=0/1` の表示を追加しました。ダッシュボードの RUNNING/STARTING/FAULT 等の
-状態遷移で `EngineState` が変化した直後は `upd=1`、その後
-`COM_TX_PERIOD_METERSTATUS_FLOOR_MS`（既定 9000ms）間隔で値が変化せずに再送
-される周期フロアフレームでは `upd=0` になることを確認できます。同様に
-「WarningStatus (0x210)」rx_monitor ボタンにも `upd=0/1` の表示を追加しました。
-FAULT/ABS 点灯による TMS=true（MIXED 切り替え）中、警告灯が実際に変化した
-送信は `upd=1`、`COM_TX_PERIOD_WARNINGSTATUS_TRUE_FLOOR_MS` 間隔の周期フロア
-再送は `upd=0` になります。Cangaroo で CAN 0x200 の byte[1] bit0（生の 2 バイト
-目、MSB）・CAN 0x210 の byte[0] bit4 を直接観察することでも同様に確認できます。
-
-**レビューで見つかった問題（非 Signal Group の update-bit が常に 1 のままだった）**:
-初期実装は SWS_Com_00061 の原文どおり「`Com_SendSignal()` が呼ばれるたびに
-無条件でセットする」としていましたが、実機検証で `upd` が常に `1` のままになる
-不具合が見つかりました。
-
-原因は ASW（`App_EngineManager_Run()`）の呼び出しパターンとの相互作用です。
-本プロジェクトの ASW は「値が変わったかどうか」を判定せず、毎サイクル無条件に
-`Rte_Write_EngineStatus_EngineState()`（→ `Com_SendSignal()`）を呼び、実際に
-送信するかどうかの判断は Com の `ComFilterAlgorithm` に完全に委ねる設計です
-（前述「責務分離の効果」）。SWS_Com_00061 を文字どおり実装すると、実送信
-（イベント駆動・周期フロアいずれも）から次の実送信までの間に、ASW が
-`Com_SendSignal()` を何度も（無変化のまま）呼び続けるため、`Com_DoTransmit()`
-がクリアした直後には必ず再セットされてしまい、update-bit が「実際に変化した
-かどうか」を一切表せなくなっていました。
-
-対策として、非 Signal Group の update-bit セットを `ComFilterAlgorithm` の
-「変化あり」判定（`passesFilter`、`Com_RequestTxOnChange()` を呼ぶかどうかと
-同じ判断軸）に条件づけました。ASW 側の「常に書き込む」設計はそのまま変えず、
-Com 側が既に持っている「これは実際の変化か」の判断をそのまま update-bit にも
-使い回す形です。これは SWS_Com_00061 の文字どおりの実装ではありませんが、
-本プロジェクトの ASW 呼び出し規約のもとで update-bit 本来の目的（実際に更新
-されたかどうかを示す）を満たすための意図的な調整です。
-
-Signal Group 側（`Com_SendSignalGroup()`）も同種の問題を抱えていました。
-`App_WarningIndicator_Run()` も毎サイクル無条件に
-`Rte_SendSignalGroup_WarningStatus()`（→ `Com_SendSignalGroup()`）を呼ぶ同じ
-設計のため、`WarningStatus` に `UpdateBitPosition` を設定した時点で
-（非 Signal Group と同じ理由により）update-bit が常に 1 のままになることは
-実装前から予見できました。そのため `WarningStatus` へ update-bit を適用する
-のと同時に、`Com_SendSignalGroup()` 側も対策済みです: セットの条件を
-`Com_GroupTriggerPending`（`ComTransferProperty=TRIGGERED_ON_CHANGE` の
-メンバーが実際に変化したかどうか、`Com_RequestTxOnChange()` を呼ぶかどうかと
-同じ判断軸）に条件づけました。非 Signal Group 側の `passesFilter` と対になる
-考え方です。
-
-**なぜ ComTxIPduClearUpdateBit=Transmit のみか**: 実 AUTOSAR は Transmit
-（`PduR_ComTransmit` 呼び出し直後にクリア）/ Confirmation（送信確認後にクリア）/
-TriggerTransmit（トリガ送信後にクリア）の 3 択ですが、本実装は Transmit のみ
-実装しています。本プロジェクトの送信経路は `Com_MainFunction()` →
-`Com_DoTransmit()` → `PduR_Transmit()` が同期的に SPI 送信まで完了する
-（実際の送信完了と `PduR_ComTransmit` 呼び出しの間に有意な時間差がない）ため、
-3 つのタイミングの違いを意味のある形で再現できないという判断です。
-
-**受信側の「discard」は E_NOT_OK ではなく E_OK を返す**: `Com_ReceiveSignalGroup()`
-は update-bit=0 の場合、何も更新せずに `E_OK` を返します。これは
-`ComDataInvalidAction=NOTIFY` の「無効値を検知しても直近の有効値を返して
-`E_OK`」という設計判断と揃えたものです（`E_NOT_OK` は「呼び出し自体が失敗した/
-現在タイムアウト中」を意味する既存の用法と一貫させるため）。
-
-**レビューで見つかった問題（update-bit クリアが送信結果を無視していた）**:
-このコード自体は、実際に `WarningStatus` へ試験的に適用していた開発中の段階で
-見つかった問題を修正済みです。初期実装は `Com_DoTransmit()` 内で
-`PduR_Transmit()` の戻り値 `ret` を見ずに update-bit を無条件でクリアして
-いました。しかし本節が引用する SWS_Com_00062 の原文は "after this I-PDU was
-sent out via PduR_ComTransmit **and PduR_ComTransmit returned E_OK**" であり、
-送信成功時のみクリアすべきと明記されています。当時のコードコメントは
-「戻り値によらず無条件でクリアする」と、この食い違いを自覚的に開示しないまま
-断定していました。
-
-具体的な失敗シナリオ（`WarningStatus` に適用していた場合を想定）: この I-PDU
-は `TxModeModeTrue=MIXED`（TMS=true 時に周期フロア再送あり）のため、
-(1) `FaultLamp` 点灯で `Com_SendSignalGroup()` が update-bit をセット、
-(2) バス輻輳等で最初の送信が失敗（`ret=E_NOT_OK`）しても update-bit だけが
-クリアされてしまう、(3) データ自体はバッファに残ったまま次の周期フロアで
-再送され、そちらは成功する——という流れになると、実際には初めて正常配信
-された新データにもかかわらず、受信側から見ると update-bit が 0（＝「未更新」）
-のフレームとして届いてしまいます。
-
-同じファイル内の `Com_TxConfirmation()` は `if (result != E_OK ...) return;`
-と正しく結果をチェックしており、この判定パターン自体は目新しいものでは
-ありませんでした。修正は `if (ret == E_OK && ...)` という条件の追加のみです。
-
-この修正は `MeterStatus`（非 Signal Group）の送信経路でも共通に使われるため、
-Signal Group への適用有無に関わらず活きています。
-
-#### RX ComFilterAlgorithm（受信フィルタ、プラウジビリティチェック）
+##### RX ComFilterAlgorithm（受信フィルタ、プラウジビリティチェック）
 
 `ComFilterAlgorithm` はこれまで TX シグナルの送信要否判定・TMS 評価にのみ
 使っていました（`COM_FILTER_MASKED_NEW_DIFFERS_MASKED_OLD`/
@@ -1294,7 +1292,7 @@ out signals on sender side. (SRS_Com_02083)
 本来の意味でのフィルタリングは未実装でした。この非対称性を解消する形で、
 RX シグナル向けに `COM_FILTER_NEW_IS_WITHIN` を追加しました。
 
-#### 適用例 — EngineSpeed のプラウジビリティチェック
+###### 適用例 — EngineSpeed のプラウジビリティチェック
 
 `EngineSpeed`（RX、非 Signal Group、CAN 0x100 経由）に
 `FilterAlgorithm=COM_FILTER_NEW_IS_WITHIN`、`FilterMin=0`、`FilterMax=8000`
@@ -1323,7 +1321,7 @@ discard that signal and shall not process it.
 内側から呼ばれるため、その場でコールバックを直接呼ぶと WDT リセットを
 引き起こしうる教訓を踏襲）。
 
-#### 明示する簡略化
+###### 明示する簡略化
 
 - 実 AUTOSAR には他に `NEW_IS_OUTSIDE`/`MASKED_NEW_EQUALS_X`/`NEVER`/
   `ONE_EVERY_N` もありますが、「物理的にあり得ない受信値を弾く」という
@@ -1338,7 +1336,7 @@ discard that signal and shall not process it.
   未実装です（動機は上記の通り、実際に効くシナリオが非グループシグナルに
   あったため）。
 
-#### 動作確認方法
+###### 動作確認方法
 
 `uds_tester` の EngineInfo ボタンに「回転数センサ異常 (65535rpm、RXフィルタ
 で拒否されるはず)」プリセットを追加しました。送信すると、Arduino ログに
@@ -1355,7 +1353,7 @@ discard that signal and shall not process it.
 `65535` は一切現れません（プリセットを正常値に戻して送信すれば、通常どおり
 即座に反映されます）。
 
-#### 受信デッドライン監視（COM Deadline Monitoring）
+##### 受信デッドライン監視（COM Deadline Monitoring）
 
 COM モジュールが各 RX I-PDU の受信間隔を監視し、設定タイムアウト内にフレームが届かない場合に
 上位層へエラーを通知します（AUTOSAR SWS_COM_00398 準拠）。
@@ -1382,14 +1380,14 @@ COM モジュールが各 RX I-PDU の受信間隔を監視し、設定タイム
       → LED 点滅（App_WarningIndicator がそのまま動く）
 ```
 
-##### タイムアウト設定値（`Com_Cfg.h`）
+###### タイムアウト設定値（`Com_Cfg.h`）
 
 | I-PDU | 定数 | 既定値 | フォールバック動作 |
 |-------|------|--------|-----------------|
 | EngineInfo (0x100) | `COM_TIMEOUT_ENGINE_INFO_MS` | 5000 ms | STARTING/RUNNING → FAULT |
 | AbsInfo (0x110) | `COM_TIMEOUT_ABS_INFO_MS` | 5000 ms | AbsActive が 0 に戻り ABS 警告消灯 |
 
-##### タイムアウト確認手順
+###### タイムアウト確認手順
 
 1. RUNNING 状態に遷移させてから EngineInfo の送信を止める
 2. 5 秒後：`WARN Com: RX timeout iPdu=0 (5000ms)` が出力される
@@ -1397,6 +1395,35 @@ COM モジュールが各 RX I-PDU の受信間隔を監視し、設定タイム
 4. LED が点滅に変わる
 5. UDS SID 0x19 で DTC 0x000105 (COMM_TIMEOUT) が取得できる
 6. EngineInfo を再送すると Com_RxTimedOut がリセットされ、次の Runnable サイクルで復帰する
+
+##### update-bit の受信側判定（discard）
+
+update-bit の概要、および TX 側（非 Signal Group・Signal Group）のセット/クリアの
+仕組みは「Tx 処理」の「Update Bit」を参照してください。ここでは Signal Group の
+RX 側判定ロジック（discard）のみを説明します。
+
+```
+受信側（Com_ReceiveSignalGroup、Signal Group のみ）:
+  UpdateBitPosition が 0xFF 以外なら、I-PDU バッファの該当ビットを確認
+    0（未更新）→ 何もせず E_OK で戻る（SWS_Com_00802: "discard"。
+                  シャドウバッファ・タイムアウトスナップショットとも
+                  直近の確定コピー内容のまま）
+    1（更新済み）→ 通常どおり確定コピー（既存処理）
+```
+
+**受信側の「discard」は E_NOT_OK ではなく E_OK を返す**: `Com_ReceiveSignalGroup()`
+は update-bit=0 の場合、何も更新せずに `E_OK` を返します。これは
+`ComDataInvalidAction=NOTIFY` の「無効値を検知しても直近の有効値を返して
+`E_OK`」という設計判断と揃えたものです（`E_NOT_OK` は「呼び出し自体が失敗した/
+現在タイムアウト中」を意味する既存の用法と一貫させるため）。
+
+**適用状況**: `AbsInfo`（RX、Signal Group）は現状
+`UpdateBitPosition = 0xFFU`（未適用）です。実車のこの種のフレームは高頻度・
+固定周期で常に新鮮なセンサ値を送り続けるのが通常で、鮮度管理は既存の受信
+デッドライン監視で十分カバーされるため、update-bit を使う動機が薄いという
+従来からの判断は変わっていません。したがって上記の discard ロジックは今のところ
+実機で経路を通りません（TX 側のセット/クリアのみが `MeterStatus`/`WarningStatus`
+を通じて実機検証済みです）。
 
 #### DET 準拠（Det_ReportError による標準化エラー通知）
 
