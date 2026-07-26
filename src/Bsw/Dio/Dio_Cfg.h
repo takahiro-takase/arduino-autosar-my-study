@@ -13,6 +13,30 @@
 #ifndef DIO_CFG_H
 #define DIO_CFG_H
 
+/* -----------------------------------------------------------------------
+ * DET（Default Error Tracer）関連定数
+ *
+ * ModuleId は SWS 本文には明記されないため、AUTOSAR_TR_BSWModuleList
+ * （Release 4.3.1、docs/ 配下）の「List of Basic Software Modules」表で
+ * DIO Driver (Dio) に割り当てられた固定値 120 を使う。
+ * ----------------------------------------------------------------------- */
+
+/** AUTOSAR DIO Driver の ModuleId（AUTOSAR_TR_BSWModuleList 参照、固定値 120） */
+#define DIO_MODULE_ID  120U
+
+/** 開発エラーコード（SWS_Dio_2078 等より、GetVersionInfo の NULL チェックのみ使用） */
+#define DIO_E_PARAM_POINTER  0x14U
+
+/** ApiId（各関数の Doxygen \ServiceID タグと一致させること。値は SWS 8.x 章の
+ *  「Service ID[hex]」記載を実測して確認済み） */
+#define DIO_API_ID_GET_VERSION_INFO  0x12U
+
+/** バージョン情報（SWS_Dio_GetVersionInfo、Com/E2EXf/PduR 等の既存モジュールと同じ命名規則） */
+#define DIO_VENDOR_ID          0U
+#define DIO_SW_MAJOR_VERSION   1U
+#define DIO_SW_MINOR_VERSION   0U
+#define DIO_SW_PATCH_VERSION   0U
+
 /**
  * Arduino UNO RUNNING LED (D6)。
  * エンジン正常稼働中（ENGINE_STATE_RUNNING）に点灯する。

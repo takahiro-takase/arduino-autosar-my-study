@@ -39,6 +39,14 @@
 #define CANSM_API_ID_REQUEST_COM_MODE       0x02U
 #define CANSM_API_ID_GET_CURRENT_COM_MODE  0x03U
 #define CANSM_API_ID_CONTROLLER_BUSOFF     0x04U
+#define CANSM_API_ID_DEINIT                 0x14U
+#define CANSM_API_ID_GET_VERSION_INFO       0x01U
+
+/** バージョン情報（SWS_CANStateManager、Com/E2EXf/PduR 等の既存モジュールと同じ命名規則） */
+#define CANSM_VENDOR_ID          0U
+#define CANSM_SW_MAJOR_VERSION   1U
+#define CANSM_SW_MINOR_VERSION   0U
+#define CANSM_SW_PATCH_VERSION   0U
 
 /** 管理ネットワーク（チャネル）数 */
 #define CANSM_CHANNEL_COUNT        1U

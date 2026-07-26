@@ -53,6 +53,24 @@ void CanIf_Init(const CanIf_ConfigType* ConfigPtr)
 }
 
 /**
+ * \brief   CAN インタフェースモジュールを未初期化状態に戻す。
+ *
+ * \details 設定ポインタを NULL に戻す。CanIf の他 API 同様、未初期化状態
+ *          チェックに Det_ReportError は用いない（本ファイル冒頭のコメント
+ *          参照）。
+ *
+ * \AUTOSARReq     {SWS_CANIF_00002}
+ * \ServiceID      {0x02}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void CanIf_DeInit(void)
+{
+    CanIf_ConfigPtr = NULL;
+    DET_LOGI(TAG, "DeInit ok");
+}
+
+/**
  * \brief   CAN ドライバ経由で PDU の送信を要求する。
  *
  * \details TxPduId で TX PDU 設定を検索し、PDU 長を設定 DLC と照合したうえで
@@ -290,4 +308,28 @@ void CanIf_ControllerWakeup(uint8 ControllerId)
 {
     DET_LOGI(TAG, "ControllerWakeup ch=%u", (unsigned)ControllerId);
     CanSM_ControllerWakeup(ControllerId);
+}
+
+/**
+ * \brief   CAN インタフェースモジュールのバージョン情報を取得する。
+ *
+ * \param[out]  versioninfo  バージョン情報の格納先。NULL 禁止。
+ *
+ * \ServiceID      {0x0B}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void CanIf_GetVersionInfo(Std_VersionInfoType* versioninfo)
+{
+    if (versioninfo == NULL)
+    {
+        Det_ReportError(CANIF_MODULE_ID, 0U, CANIF_API_ID_GET_VERSION_INFO, CANIF_E_PARAM_POINTER);
+        return;
+    }
+
+    versioninfo->vendorID         = CANIF_VENDOR_ID;
+    versioninfo->moduleID         = CANIF_MODULE_ID;
+    versioninfo->sw_major_version = CANIF_SW_MAJOR_VERSION;
+    versioninfo->sw_minor_version = CANIF_SW_MINOR_VERSION;
+    versioninfo->sw_patch_version = CANIF_SW_PATCH_VERSION;
 }

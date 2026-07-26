@@ -40,6 +40,14 @@
 #define COMM_API_ID_GET_CURRENT_COM_MODE    0x08U
 #define COMM_API_ID_BUS_SM_MODE_INDICATION  0x33U
 #define COMM_API_ID_MAIN_FUNCTION           0x60U
+#define COMM_API_ID_DEINIT                  0x02U
+#define COMM_API_ID_GET_VERSION_INFO        0x10U
+
+/** バージョン情報（SWS_ComM、Com/E2EXf/PduR 等の既存モジュールと同じ命名規則） */
+#define COMM_VENDOR_ID          0U
+#define COMM_SW_MAJOR_VERSION   1U
+#define COMM_SW_MINOR_VERSION   0U
+#define COMM_SW_PATCH_VERSION   0U
 
 /** 管理チャネル数 */
 #define COMM_CHANNEL_COUNT  1U

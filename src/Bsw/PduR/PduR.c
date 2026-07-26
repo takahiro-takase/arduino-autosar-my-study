@@ -301,3 +301,32 @@ Std_ReturnType PduR_SecOCTransmit(PduIdType SrcPduId, const PduInfoType* PduInfo
     Det_ReportError(PDUR_MODULE_ID, 0U, PDUR_API_ID_SECOC_TRANSMIT, PDUR_E_PDU_ID_INVALID);
     return E_NOT_OK;
 }
+
+/**
+ * \brief   PDU ルータモジュールのバージョン情報を取得する。
+ *
+ * \details [SWS_PduR_00119] が明記するとおり、PduR_Init と並び本関数だけは
+ *          未初期化状態で呼ばれても PDUR_E_UNINIT を報告しない例外 API である。
+ *          そのため PduR_ConfigPtr の状態は確認しない。
+ *
+ * \param[out]  versioninfo  バージョン情報の格納先。NULL 禁止。
+ *
+ * \AUTOSARReq     {SWS_PduR_00338}
+ * \ServiceID      {0xF1}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void PduR_GetVersionInfo(Std_VersionInfoType* versioninfo)
+{
+    if (versioninfo == NULL)
+    {
+        Det_ReportError(PDUR_MODULE_ID, 0U, PDUR_API_ID_GET_VERSION_INFO, PDUR_E_PARAM_POINTER);
+        return;
+    }
+
+    versioninfo->vendorID         = PDUR_VENDOR_ID;
+    versioninfo->moduleID         = PDUR_MODULE_ID;
+    versioninfo->sw_major_version = PDUR_SW_MAJOR_VERSION;
+    versioninfo->sw_minor_version = PDUR_SW_MINOR_VERSION;
+    versioninfo->sw_patch_version = PDUR_SW_PATCH_VERSION;
+}

@@ -39,6 +39,21 @@ extern "C" {
  */
 Std_ReturnType Adc_ReadChannel(uint8 channel, uint16* raw);
 
+/**
+ * \brief   ADC ドライバのバージョン情報を取得する。
+ *
+ * \details 本プロジェクトの Adc は Adc_Init を持たない単一チャネル即時読み取り
+ *          実装（Adc_Cfg.h 冒頭コメント参照）のため、初期化状態チェックは
+ *          行わず、NULL ポインタチェックのみ行う。
+ *
+ * \param[out]  versioninfo  バージョン情報の格納先。NULL 禁止。
+ *
+ * \ServiceID      {0x0A}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void Adc_GetVersionInfo(Std_VersionInfoType* versioninfo);
+
 #ifdef __cplusplus
 }
 #endif

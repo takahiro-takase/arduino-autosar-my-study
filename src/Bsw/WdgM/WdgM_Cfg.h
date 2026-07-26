@@ -82,6 +82,14 @@
 #define WDGM_API_ID_CHECKPOINT_REACHED   0x0EU
 #define WDGM_API_ID_GET_LOCAL_STATUS     0x0CU
 #define WDGM_API_ID_MAIN_FUNCTION        0x08U
+#define WDGM_API_ID_DEINIT               0x01U
+#define WDGM_API_ID_GET_VERSION_INFO     0x02U
+
+/** バージョン情報（SWS_WdgM、Com/E2EXf/PduR 等の既存モジュールと同じ命名規則） */
+#define WDGM_VENDOR_ID          0U
+#define WDGM_SW_MAJOR_VERSION   1U
+#define WDGM_SW_MINOR_VERSION   0U
+#define WDGM_SW_PATCH_VERSION   0U
 
 /** 監視対象エンティティ総数 */
 #define WDGM_SUPERVISED_ENTITY_COUNT     2U

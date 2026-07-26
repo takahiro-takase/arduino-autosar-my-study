@@ -50,6 +50,13 @@
  *  PduR_<User:Up>Transmit テンプレートの一種ではあるが、AUTOSAR 標準の
  *  慣例に合わせ Up:Transmit 系の 0x49 に隣接する未使用値を割り当てる。 */
 #define PDUR_API_ID_SECOC_TRANSMIT      0x4AU
+#define PDUR_API_ID_GET_VERSION_INFO    0xF1U
+
+/** バージョン情報（SWS_PduR_00338、Com/E2EXf 等の既存モジュールと同じ命名規則） */
+#define PDUR_VENDOR_ID          0U
+#define PDUR_SW_MAJOR_VERSION   1U
+#define PDUR_SW_MINOR_VERSION   0U
+#define PDUR_SW_PATCH_VERSION   0U
 
 /* -----------------------------------------------------------------------
  * プリコンパイル設定定数

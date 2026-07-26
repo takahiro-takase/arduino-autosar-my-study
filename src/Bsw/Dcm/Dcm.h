@@ -47,6 +47,21 @@ void Dcm_Init(void);
  */
 void Dcm_MainFunction(void);
 
+/**
+ * \brief   DCM モジュールのバージョン情報を取得する。
+ *
+ * \details Dcm_Init と並び、未初期化時でも DCM_E_UNINIT を報告しない
+ *          例外 API（他 BSW モジュールと共通の慣例）のため、初期化状態は
+ *          確認せず NULL ポインタチェックのみ行う。
+ *
+ * \param[out]  versioninfo  バージョン情報の格納先。NULL 禁止。
+ *
+ * \ServiceID      {0x24}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void Dcm_GetVersionInfo(Std_VersionInfoType* versioninfo);
+
 #ifdef __cplusplus
 }
 #endif

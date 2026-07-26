@@ -257,6 +257,21 @@ Std_ReturnType Dem_GetEventIdOfDTC(uint32 DTC, Dem_EventIdType* EventId);
  */
 Std_ReturnType Dem_GetOccurrenceCounterOfEvent(Dem_EventIdType EventId, uint8* Counter);
 
+/**
+ * \brief   Dem モジュールのバージョン情報を取得する。
+ *
+ * \details [SWS_Dem_00124] により Dem_GetVersionInfo は明示的に未初期化
+ *          チェック (DEM_E_UNINIT) の対象外と規定されているため、初期化状態は
+ *          確認せず NULL ポインタチェックのみ行う（Dem_Cfg.h 冒頭コメント参照）。
+ *
+ * \param[out]  versioninfo  バージョン情報の格納先。NULL 禁止。
+ *
+ * \ServiceID      {0x00}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void Dem_GetVersionInfo(Std_VersionInfoType* versioninfo);
+
 #ifdef __cplusplus
 }
 #endif

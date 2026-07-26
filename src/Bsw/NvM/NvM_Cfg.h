@@ -70,6 +70,13 @@
 #define NVM_API_ID_WRITE_BLOCK              0x07U
 #define NVM_API_ID_RESTORE_BLOCK_DEFAULTS   0x08U
 #define NVM_API_ID_MAIN_FUNCTION            0x0EU
+#define NVM_API_ID_GET_VERSION_INFO         0x0FU
+
+/** バージョン情報（SWS_NvM_00452、Com/E2EXf/PduR 等の既存モジュールと同じ命名規則） */
+#define NVM_VENDOR_ID          0U
+#define NVM_SW_MAJOR_VERSION   1U
+#define NVM_SW_MINOR_VERSION   0U
+#define NVM_SW_PATCH_VERSION   0U
 
 /* -----------------------------------------------------------------------
  * ブロック ID

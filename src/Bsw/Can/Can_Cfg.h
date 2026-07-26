@@ -47,6 +47,13 @@
 #define CAN_API_ID_MAIN_FUNCTION_READ    0x08U
 #define CAN_API_ID_MAIN_FUNCTION_BUSOFF  0x09U
 #define CAN_API_ID_MAIN_FUNCTION_WAKEUP  0x0AU
+#define CAN_API_ID_GET_VERSION_INFO      0x07U
+
+/** バージョン情報（SWS_Can_GetVersionInfo、Com/E2EXf/PduR 等の既存モジュールと同じ命名規則） */
+#define CAN_VENDOR_ID          0U
+#define CAN_SW_MAJOR_VERSION   1U
+#define CAN_SW_MINOR_VERSION   0U
+#define CAN_SW_PATCH_VERSION   0U
 
 /* -----------------------------------------------------------------------
  * プリコンパイル設定定数 (AUTOSAR SWS_Can_00413)

@@ -43,6 +43,14 @@
 #define SECOC_API_ID_RX_INDICATION     0x42U
 #define SECOC_API_ID_IF_TRANSMIT       0x49U
 #define SECOC_API_ID_MAIN_FUNCTION_TX  0x03U
+#define SECOC_API_ID_DEINIT            0x05U
+#define SECOC_API_ID_GET_VERSION_INFO  0x02U
+
+/** バージョン情報（SWS_SecOC、Com/E2EXf/PduR 等の既存モジュールと同じ命名規則） */
+#define SECOC_VENDOR_ID          0U
+#define SECOC_SW_MAJOR_VERSION   1U
+#define SECOC_SW_MINOR_VERSION   0U
+#define SECOC_SW_PATCH_VERSION   0U
 
 /** RX Secured I-PDU テーブルのエントリ数
  *  [0]=ImmobilizerCmd (CAN 0x120, KeyFobEcu からの想定) */

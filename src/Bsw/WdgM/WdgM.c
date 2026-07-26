@@ -256,6 +256,18 @@ void WdgM_Init(const WdgM_ConfigType* ConfigPtr)
     DET_LOGI(TAG, "Init ok entities=%u", (unsigned)ConfigPtr->EntityCount);
 }
 
+void WdgM_DeInit(void)
+{
+    if (WdgM_Cfg == NULL)
+    {
+        Det_ReportError(WDGM_MODULE_ID, 0U, WDGM_API_ID_DEINIT, WDGM_E_NO_INIT);
+        return;
+    }
+
+    WdgM_Cfg = NULL;
+    DET_LOGI(TAG, "DeInit ok");
+}
+
 /**
  * \brief   実 HW ウォッチドッグを WDGM_HW_WATCHDOG_TIMEOUT_MS (4000ms) で有効化する。
  *
@@ -641,4 +653,19 @@ void WdgM_TriggerHwWatchdog(void)
     {
         DET_LOGE(TAG, "HW watchdog NOT refreshed - reset imminent");
     }
+}
+
+void WdgM_GetVersionInfo(Std_VersionInfoType* VersionInfo)
+{
+    if (VersionInfo == NULL)
+    {
+        Det_ReportError(WDGM_MODULE_ID, 0U, WDGM_API_ID_GET_VERSION_INFO, WDGM_E_INV_POINTER);
+        return;
+    }
+
+    VersionInfo->vendorID         = WDGM_VENDOR_ID;
+    VersionInfo->moduleID         = WDGM_MODULE_ID;
+    VersionInfo->sw_major_version = WDGM_SW_MAJOR_VERSION;
+    VersionInfo->sw_minor_version = WDGM_SW_MINOR_VERSION;
+    VersionInfo->sw_patch_version = WDGM_SW_PATCH_VERSION;
 }

@@ -64,6 +64,21 @@ void Port_Init(void);
  */
 void Port_SetPinDirection(Port_PinType Pin, Port_PinDirectionType Direction);
 
+/**
+ * \brief   Port ドライバのバージョン情報を取得する。
+ *
+ * \details 他 BSW モジュールと共通の慣例により、未初期化時でもエラー報告
+ *          しない例外 API のため、初期化状態は確認せず NULL ポインタ
+ *          チェックのみ行う。
+ *
+ * \param[out]  versioninfo  バージョン情報の格納先。NULL 禁止。
+ *
+ * \ServiceID      {0x03}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void Port_GetVersionInfo(Std_VersionInfoType* versioninfo);
+
 #ifdef __cplusplus
 }
 #endif

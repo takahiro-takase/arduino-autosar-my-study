@@ -29,6 +29,19 @@ void E2EXf_Init(void)
     E2EXf_Initialized = 1U;
 }
 
+void E2EXf_DeInit(void)
+{
+    if (!E2EXf_Initialized)
+    {
+        Det_ReportError(E2EXF_MODULE_ID, 0U, E2EXF_API_ID_DEINIT, E2EXF_E_UNINIT);
+        return;
+    }
+
+    E2EXf_Initialized = 0U;
+
+    DET_LOGI(TAG, "DeInit ok");
+}
+
 Std_ReturnType E2EXf_InverseTransform(const E2EXf_RxConfigType* Config, const uint8* Buffer, uint8 Length,
                                       E2E_P01StatusType* CheckStatus)
 {
@@ -84,4 +97,19 @@ void E2EXf_Transform(const E2EXf_TxConfigType* Config, uint8* Buffer, uint8 Leng
     }
 
     E2E_P01Protect(Config->E2EConfig, Config->ProtectState, Buffer, Length);
+}
+
+void E2EXf_GetVersionInfo(Std_VersionInfoType* versioninfo)
+{
+    if (versioninfo == NULL)
+    {
+        Det_ReportError(E2EXF_MODULE_ID, 0U, E2EXF_API_ID_GET_VERSION_INFO, E2EXF_E_PARAM_POINTER);
+        return;
+    }
+
+    versioninfo->vendorID         = E2EXF_VENDOR_ID;
+    versioninfo->moduleID         = E2EXF_MODULE_ID;
+    versioninfo->sw_major_version = E2EXF_SW_MAJOR_VERSION;
+    versioninfo->sw_minor_version = E2EXF_SW_MINOR_VERSION;
+    versioninfo->sw_patch_version = E2EXF_SW_PATCH_VERSION;
 }

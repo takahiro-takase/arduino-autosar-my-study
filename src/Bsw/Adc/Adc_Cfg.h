@@ -37,6 +37,13 @@
 
 /** ApiId（既存の Doxygen \ServiceID タグと一致させる） */
 #define ADC_API_ID_READ_CHANNEL  0xD0U
+#define ADC_API_ID_GET_VERSION_INFO  0x0AU
+
+/** バージョン情報（SWS_Adc、Com/E2EXf/PduR 等の既存モジュールと同じ命名規則） */
+#define ADC_VENDOR_ID          0U
+#define ADC_SW_MAJOR_VERSION   1U
+#define ADC_SW_MINOR_VERSION   0U
+#define ADC_SW_PATCH_VERSION   0U
 
 /**
  * Arduino UNO アナログ入力 A0。

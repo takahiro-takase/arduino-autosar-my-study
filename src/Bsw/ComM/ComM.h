@@ -46,6 +46,18 @@ typedef uint8 ComM_ModeType;
 void ComM_Init(void);
 
 /**
+ * \brief   ComM モジュールを未初期化状態に戻す。
+ *
+ * \details 初期化済みフラグを未初期化に戻す。未初期化状態で呼ばれた場合は
+ *          COMM_E_UNINIT を報告し何もしない。
+ *
+ * \ServiceID      {0x02}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void ComM_DeInit(void);
+
+/**
  * \brief   ユーザが通信モードを要求する。
  *
  * \details 要求モードに応じてチャネルの状態遷移を行い、
@@ -124,6 +136,21 @@ void ComM_MainFunction(void);
  * \Synchronicity  {Synchronous}
  */
 void ComM_BusSMIndication(uint8 Network, ComM_ModeType Mode);
+
+/**
+ * \brief   ComM モジュールのバージョン情報を取得する。
+ *
+ * \details ComM_Init と並び、未初期化時でも COMM_E_UNINIT を報告しない
+ *          例外 API（他 BSW モジュールと共通の慣例）のため、初期化状態は
+ *          確認せず NULL ポインタチェックのみ行う。
+ *
+ * \param[out]  Versioninfo  バージョン情報の格納先。NULL 禁止。
+ *
+ * \ServiceID      {0x10}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void ComM_GetVersionInfo(Std_VersionInfoType* Versioninfo);
 
 #ifdef __cplusplus
 }

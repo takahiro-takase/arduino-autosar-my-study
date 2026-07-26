@@ -47,10 +47,18 @@
 /** ApiId（各関数の Doxygen \ServiceID タグと一致させること。値は SWS 8.x 章の
  *  「Service ID[hex]」記載を実測して確認済み） */
 #define CANIF_API_ID_INIT                0x01U
+#define CANIF_API_ID_DEINIT              0x02U
 #define CANIF_API_ID_TRANSMIT            0x49U
 #define CANIF_API_ID_TX_CONFIRMATION     0x13U
 #define CANIF_API_ID_RX_INDICATION       0x14U
 #define CANIF_API_ID_CONTROLLER_BUSOFF   0x16U
+#define CANIF_API_ID_GET_VERSION_INFO    0x0BU
+
+/** バージョン情報（SWS_CANInterface、Com/E2EXf/PduR 等の既存モジュールと同じ命名規則） */
+#define CANIF_VENDOR_ID          0U
+#define CANIF_SW_MAJOR_VERSION   1U
+#define CANIF_SW_MINOR_VERSION   0U
+#define CANIF_SW_PATCH_VERSION   0U
 
 /* -----------------------------------------------------------------------
  * プリコンパイル設定定数

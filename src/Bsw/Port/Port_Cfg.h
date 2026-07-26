@@ -17,6 +17,31 @@
 #ifndef PORT_CFG_H
 #define PORT_CFG_H
 
+/* -----------------------------------------------------------------------
+ * DET（Default Error Tracer）関連定数
+ *
+ * ModuleId は SWS 本文には明記されないため、AUTOSAR_TR_BSWModuleList
+ * （Release 4.3.1、docs/ 配下）の「List of Basic Software Modules」表で
+ * Port Driver (Port) に割り当てられた固定値 124 を使う。
+ * ----------------------------------------------------------------------- */
+
+/** AUTOSAR Port Driver の ModuleId（AUTOSAR_TR_BSWModuleList 参照、固定値 124） */
+#define PORT_MODULE_ID  124U
+
+/** 開発エラーコード（SWS_Port 7.x Development Error 表より、GetVersionInfo の
+ *  NULL チェックのみ使用） */
+#define PORT_E_PARAM_POINTER  0x10U
+
+/** ApiId（各関数の Doxygen \ServiceID タグと一致させること。値は SWS 8.x 章の
+ *  「Service ID[hex]」記載を実測して確認済み） */
+#define PORT_API_ID_GET_VERSION_INFO  0x03U
+
+/** バージョン情報（SWS_Port_GetVersionInfo、Com/E2EXf/PduR 等の既存モジュールと同じ命名規則） */
+#define PORT_VENDOR_ID          0U
+#define PORT_SW_MAJOR_VERSION   1U
+#define PORT_SW_MINOR_VERSION   0U
+#define PORT_SW_PATCH_VERSION   0U
+
 /** 管理ピン総数 */
 #define PORT_PIN_COUNT          4U
 

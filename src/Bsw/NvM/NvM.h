@@ -245,6 +245,22 @@ NvM_RequestResultType NvM_GetErrorStatus(NvM_BlockIdType BlockId);
  */
 void NvM_MainFunction(void);
 
+/**
+ * \brief   NvM モジュールのバージョン情報を取得する。
+ *
+ * \details 他 BSW モジュールと共通の慣例により、未初期化時でもエラー報告
+ *          しない例外 API のため、初期化状態は確認せず NULL ポインタ
+ *          チェックのみ行う。
+ *
+ * \param[out]  versioninfo  バージョン情報の格納先。NULL 禁止。
+ *
+ * \AUTOSARReq     {SWS_NvM_00452}
+ * \ServiceID      {0x0F}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void NvM_GetVersionInfo(Std_VersionInfoType* versioninfo);
+
 #ifdef __cplusplus
 }
 #endif

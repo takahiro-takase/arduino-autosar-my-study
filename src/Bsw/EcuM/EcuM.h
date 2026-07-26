@@ -156,6 +156,21 @@ Std_ReturnType EcuM_RequestRUN(EcuM_UserType user);
  */
 Std_ReturnType EcuM_ReleaseRUN(EcuM_UserType user);
 
+/**
+ * \brief   EcuM モジュールのバージョン情報を取得する。
+ *
+ * \details EcuM_Init と並び、未初期化時でもエラー報告しない例外 API
+ *          （他 BSW モジュールと共通の慣例）のため、初期化状態は確認せず
+ *          NULL ポインタチェックのみ行う。
+ *
+ * \param[out]  versioninfo  バージョン情報の格納先。NULL 禁止。
+ *
+ * \ServiceID      {0x00}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void EcuM_GetVersionInfo(Std_VersionInfoType* versioninfo);
+
 #ifdef __cplusplus
 }
 #endif

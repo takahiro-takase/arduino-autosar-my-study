@@ -330,6 +330,32 @@ void Dcm_Init(void)
 }
 
 /**
+ * \brief   DCM モジュールのバージョン情報を取得する。
+ *
+ * \details Dcm_Init と並び、未初期化時でも DCM_E_UNINIT を報告しない
+ *          例外 API（他 BSW モジュールと共通の慣例）のため、初期化状態は
+ *          確認せず NULL ポインタチェックのみ行う。
+ *
+ * \ServiceID      {0x24}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void Dcm_GetVersionInfo(Std_VersionInfoType* versioninfo)
+{
+    if (versioninfo == NULL)
+    {
+        Det_ReportError(DCM_MODULE_ID, 0U, DCM_API_ID_GET_VERSION_INFO, DCM_E_PARAM_POINTER);
+        return;
+    }
+
+    versioninfo->vendorID         = DCM_VENDOR_ID;
+    versioninfo->moduleID         = DCM_MODULE_ID;
+    versioninfo->sw_major_version = DCM_SW_MAJOR_VERSION;
+    versioninfo->sw_minor_version = DCM_SW_MINOR_VERSION;
+    versioninfo->sw_patch_version = DCM_SW_PATCH_VERSION;
+}
+
+/**
  * \brief   DCM 周期処理。S3 タイマ (セッションタイムアウト) を監視する。
  *
  * \details defaultSession 中は何もしない。それ以外の間、最後に診断要求を

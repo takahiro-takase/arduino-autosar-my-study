@@ -133,3 +133,18 @@ Std_ReturnType FiM_GetFunctionPermission(FiM_FunctionIdType FunctionId, uint8* S
     *Status = FiM_Permitted[FunctionId];
     return E_OK;
 }
+
+void FiM_GetVersionInfo(Std_VersionInfoType* versioninfo)
+{
+    if (versioninfo == NULL)
+    {
+        Det_ReportError(FIM_MODULE_ID, 0U, FIM_API_ID_GET_VERSION_INFO, FIM_E_PARAM_POINTER);
+        return;
+    }
+
+    versioninfo->vendorID         = FIM_VENDOR_ID;
+    versioninfo->moduleID         = FIM_MODULE_ID;
+    versioninfo->sw_major_version = FIM_SW_MAJOR_VERSION;
+    versioninfo->sw_minor_version = FIM_SW_MINOR_VERSION;
+    versioninfo->sw_patch_version = FIM_SW_PATCH_VERSION;
+}

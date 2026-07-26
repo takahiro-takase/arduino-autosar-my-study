@@ -52,3 +52,18 @@ void Port_SetPinDirection(Port_PinType Pin, Port_PinDirectionType Direction)
 {
     Port_Hw_SetPinDirection(Pin, Direction);
 }
+
+void Port_GetVersionInfo(Std_VersionInfoType* versioninfo)
+{
+    if (versioninfo == NULL)
+    {
+        Det_ReportError(PORT_MODULE_ID, 0U, PORT_API_ID_GET_VERSION_INFO, PORT_E_PARAM_POINTER);
+        return;
+    }
+
+    versioninfo->vendorID         = PORT_VENDOR_ID;
+    versioninfo->moduleID         = PORT_MODULE_ID;
+    versioninfo->sw_major_version = PORT_SW_MAJOR_VERSION;
+    versioninfo->sw_minor_version = PORT_SW_MINOR_VERSION;
+    versioninfo->sw_patch_version = PORT_SW_PATCH_VERSION;
+}
