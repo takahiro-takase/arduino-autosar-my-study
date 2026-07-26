@@ -32,6 +32,12 @@ typedef uint8 ComM_ModeType;
 #define COMM_SILENT_COMMUNICATION  1U  /**< 受信専用（TX 停止） */
 #define COMM_FULL_COMMUNICATION    2U  /**< 全二重通信（TX/RX 有効） */
 
+/** ComM モジュール自身の初期化状態型 (AUTOSAR ComM_InitStatusType) */
+typedef uint8 ComM_InitStatusType;
+
+#define COMM_UNINIT  0U  /**< ComM は未初期化（Init 前、または DeInit 後） */
+#define COMM_INIT    1U  /**< ComM は初期化済みで使用可能 */
+
 /**
  * \brief   ComM モジュールを初期化する。
  *
@@ -56,6 +62,26 @@ void ComM_Init(void);
  * \Synchronicity  {Synchronous}
  */
 void ComM_DeInit(void);
+
+/**
+ * \brief   ComM モジュールの初期化状態を取得する。
+ *
+ * \details [SWS_ComM_00612/00858] が明記するとおり、ComM_Init/GetVersionInfo と
+ *          並び、本関数だけは未初期化状態で呼ばれても COMM_E_UNINIT を報告
+ *          しない例外 API である。そのため初期化状態は確認せず、NULL
+ *          ポインタチェックのみ行う。
+ *
+ * \param[out]  Status  COMM_UNINIT/COMM_INIT の格納先。NULL 禁止。
+ *
+ * \retval  E_OK      正常に取得した。
+ * \retval  E_NOT_OK  Status が NULL。
+ *
+ * \AUTOSARReq     {SWS_ComM_00242}
+ * \ServiceID      {0x03}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType ComM_GetStatus(ComM_InitStatusType* Status);
 
 /**
  * \brief   ユーザが通信モードを要求する。

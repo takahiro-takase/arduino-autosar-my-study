@@ -46,10 +46,13 @@
 #define PDUR_API_ID_TRANSMIT            0x49U
 #define PDUR_API_ID_RX_INDICATION       0x42U
 #define PDUR_API_ID_TX_CONFIRMATION     0x40U
-/** SecOC 専用 TX エントリポイント（PduR_SecOCTransmit）。generic な
- *  PduR_<User:Up>Transmit テンプレートの一種ではあるが、AUTOSAR 標準の
- *  慣例に合わせ Up:Transmit 系の 0x49 に隣接する未使用値を割り当てる。 */
-#define PDUR_API_ID_SECOC_TRANSMIT      0x4AU
+/** SecOC 専用 TX エントリポイント（PduR_SecOCTransmit）。PduR 自身の SWS には
+ *  この名前の独立した API エントリは存在せず、generic な
+ *  PduR_<User:Up>Transmit テンプレート（Service ID 0x49）が SecOC 向けに
+ *  実体化されたインスタンスに相当するため、PDUR_API_ID_TRANSMIT と同じ値を
+ *  そのまま使う（0x4A は PduR_<User:Up>CancelTransmit の Service ID であり
+ *  「未使用の隣接値」ではないため、以前の割り当ては誤りだった）。 */
+#define PDUR_API_ID_SECOC_TRANSMIT      PDUR_API_ID_TRANSMIT
 #define PDUR_API_ID_GET_VERSION_INFO    0xF1U
 
 /** バージョン情報（SWS_PduR_00338、Com/E2EXf 等の既存モジュールと同じ命名規則） */

@@ -331,6 +331,12 @@ void CanSM_ControllerWakeup(uint8 ControllerId)
 {
     (void)ControllerId;
 
+    if (!CanSM_Initialized)
+    {
+        Det_ReportError(CANSM_MODULE_ID, 0U, CANSM_API_ID_CONTROLLER_WAKEUP, CANSM_E_UNINIT);
+        return;
+    }
+
     if (CanSM_State != CANSM_STATE_NO_COM)
     {
         /* 想定される呼び出し元は Can_MainFunction_Wakeup()（Can_Isr() の SLEEP
@@ -370,6 +376,12 @@ void CanSM_ControllerWakeup(uint8 ControllerId)
 void CanSM_RxIndication(uint8 ControllerId)
 {
     (void)ControllerId;
+
+    if (!CanSM_Initialized)
+    {
+        Det_ReportError(CANSM_MODULE_ID, 0U, CANSM_API_ID_RX_INDICATION, CANSM_E_UNINIT);
+        return;
+    }
 
     if (CanSM_State != CANSM_STATE_WAKEUP_VALIDATING)
         return;
@@ -415,6 +427,12 @@ void CanSM_RxIndication(uint8 ControllerId)
  */
 void CanSM_MainFunction(void)
 {
+    if (!CanSM_Initialized)
+    {
+        Det_ReportError(CANSM_MODULE_ID, 0U, CANSM_API_ID_MAIN_FUNCTION, CANSM_E_UNINIT);
+        return;
+    }
+
     if (CanSM_State == CANSM_STATE_WAKEUP_VALIDATING)
     {
         if ((millis() - CanSM_ValidationTimerMs) >= CANSM_WAKEUP_VALIDATION_MS)
