@@ -265,7 +265,7 @@ Std_ReturnType PduR_Transmit(PduIdType SrcPduId, const PduInfoType* PduInfoPtr)
  * \pre        PduR_Init() が正常に完了していること。
  *
  * \AUTOSARReq     {SWS_SecOC_00062}
- * \ServiceID      {0x4A}
+ * \ServiceID      {0x49}
  * \Reentrancy     {Reentrant}
  * \Synchronicity  {Synchronous}
  */

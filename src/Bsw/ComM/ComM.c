@@ -114,6 +114,25 @@ void ComM_DeInit(void)
 }
 
 /**
+ * \brief   ComM モジュールの初期化状態を取得する。
+ *
+ * \ServiceID      {0x03}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType ComM_GetStatus(ComM_InitStatusType* Status)
+{
+    if (Status == NULL)
+    {
+        Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_GET_STATUS, COMM_E_PARAM_POINTER);
+        return E_NOT_OK;
+    }
+
+    *Status = ComM_Initialized ? COMM_INIT : COMM_UNINIT;
+    return E_OK;
+}
+
+/**
  * \brief   ユーザが通信モードを要求する。
  *
  * \details ユーザの要求を記録した後、全ユーザの要求のうち最も通信レベルの高い
@@ -229,6 +248,11 @@ Std_ReturnType ComM_GetCurrentComMode(ComM_UserHandleType User, ComM_ModeType* C
  *          エンジン状態に基づいて改めて要求し直すまではこの値を使う。
  *          Dcm（COMM_USER_1）の要求はセッション状態に基づく独立した判断のため、
  *          ここでは同期しない。
+ *          注意: この再同期は COMM_SILENT_COMMUNICATION を対象にしていない
+ *          （CanSM_ControllerBusOff() が Bus-Off 検出時に本関数を SILENT_COM で
+ *          呼ぶ経路があるが、Bus-Off 回復中は CanSM_RequestComMode() 自体が
+ *          全ユーザ要求を拒否するため現状は無害。将来 SILENT_COM を能動的に
+ *          要求するユーザを追加する場合はこの非対称性に注意すること）。
  *
  * \ServiceID      {0x33}
  * \Reentrancy     {Non Reentrant}
