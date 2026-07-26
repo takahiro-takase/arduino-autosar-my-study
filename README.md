@@ -120,31 +120,31 @@ HAL ─── Can_Hw / Dio_Hw / Port_Hw / Adc_Hw / Mcu_Hw / NvM_Hw / WdgM_Hw（s
 |  | App_WarningIndicator | — | — | 3 LED 独立制御（D6=RUNNING / D7=FAULT 点滅 / D8=ABS） |
 | RTE | Rte | — | — | ポートベース S/R API。複数 SW-C が同一シグナルを独立ポートで受信。E2E Transformer を持つ Read ポートは `Std_ReturnType` ではなく `Rte_IStatusType` を返し、E2E チェック結果（OK/ハードエラー/ソフトエラー）と Com タイムアウトを区別して SWC へ伝える |
 | OS | Os | — | SWS_Os | タイムトリガスケジューラ。タスクごとに周期を設定し `Os_SchedulerStep()` で到来タスクを順次実行 |
-| BSW | EcuM | 10 | SWS_EcuStateManager | ECU ライフサイクルを STARTUP → RUN → POST_RUN → SHUTDOWN の状態マシンで管理。`EcuM_RequestRUN` / `EcuM_ReleaseRUN` で RUN フェーズを調停。SHUTDOWN は CAN バスのウェイクアップにより常に RUN へ復帰可能（実機リセットが必要な終端状態は存在しない） |
+| BSW | Adc | 123 | SWS_Adc | `Adc_ReadChannel` で 10-bit アナログ生値（0–1023）を読み取る MCAL |
 |  | BswM | 42 | SWS_BswM | EcuM / ComM のモード変化をルールテーブルで受け取り `Os_SetTaskActive()` でタスクを有効・無効化するルールエンジン。POST_RUN 中はアプリタスクのみ停止し BSW タスクは継続。`BswMPduGroupSwitch`（[SWS_BswM_00273]）相当のアクションも持ち、RUN/POST_RUN で Com の「テレメトリ」I-PDU Group（E2EHealthStatus）を起動/停止する |
-|  | WdgM | 13 | SWS_WdgM | Supervised Entity の Alive Supervision（呼び出し回数を6000msごとに評価）・Logical Supervision（チェックポイント順序）・Deadline Supervision（チェックポイント間の経過時間）を独立したステータスで管理。判定は6000ms周期、実HWウォッチドッグへのリフレッシュは別途1000ms周期（WdgM_TriggerHwWatchdog）で行い、異常時はリフレッシュを止めて実際にMCUをリセットする |
-|  | ComM | 12 | SWS_ComM | CAN バスの通信モード（NO_COM / SILENT_COM / FULL_COM）を管理し CanSM へ要求。`ComM_BusSMIndication` で EcuM の RUN 要求を操作。複数ユーザ（App_EngineManager=COMM_USER_0, Dcm=COMM_USER_1）の要求を最も通信レベルの高いモードへ集約する調停ロジックを持つ。両ユーザが NO_COM を要求したときのみ実際にボランタリスリープへ落ちる |
+|  | Can | 80 | SWS_Can | MCP2515 の送受信・Bus-Off 検出・CAN バス活動によるウェイクアップ検出を担う MCAL 最下層。HW を直接操作する唯一のモジュール |
+|  | CanIf | 60 | SWS_CanIf | CAN ID ↔ 論理 PDU のマッピング。上位層は CAN ID を知らず PDU ID で通信。設定 DLC 未満の受信 L-PDU は上位層へ渡さず棄却する（SWS_CANIF_00026 のデータ長チェック） |
 |  | CanSM | 140 | SWS_CanSM | Bus-Off 検出直後（回復試行の前）に `ComM_BusSMIndication(SILENT_COMMUNICATION)` を呼び、ComM のチャネル状態が回復完了まで FULL_COM のまま古い情報として残ることを防ぐ（SWS_CanSM_00521。SILENT_COM は EcuM の RUN を維持するため回復中も RUN は落ちない）。回復シーケンスは L1/L2 バックオフ（SWS_CanSM_00514/00515 準拠）で実施し、試行回数が `CANSM_BUSOFF_L1_TO_L2_COUNT` を超えるまでは短い周期（L1）でリトライし、超えたら Dem へ DTC を報告（limit=1 のため即座に確定）した上で長い周期（L2）へ切り替えて無期限にリトライを継続する（回復を諦めて停止する状態は存在しない）。再起動試行のたびに `ComM_BusSMIndication(FULL_COM)` を呼ぶ。ComM の NO_COM 要求によるボランタリスリープでは `Can_SetControllerMode(CAN_T_SLEEP)` で実 HW を実際にスリープさせ、`CanSM_ControllerWakeup()` による復帰経路を持つ。復帰は即座に確定せず、ウェイクアップ検証（Wakeup Validation Protocol 相当）により有効な CAN フレーム受信を確認してから FULL_COM へ確定する |
-|  | Nm | 31 | SWS_CANNM | ネットワークマネジメント。ComM が FULL_COM の間、1000ms 周期（MeterStatus の 3000ms より高頻度）で NM フレーム (CAN 0x400) を送信し生存を示す。PduR/Com を経由せず `CanIf_Transmit` を直接呼ぶ点が実車の CanNm と同じ。シグナル値を運ばないため E2E 保護は付与しない |
+|  | CanTp | 35 | SWS_CanTp | ISO 15765-2 のフレーム分割（FF/CF）と再組立。8 バイトを超える UDS 応答を実現 |
+|  | Com | 50 | SWS_Com | シグナルのビット単位パック／アンパックと受信デッドライン監視（タイムアウト検出）のみを担い、E2E には一切関知しない（E2E Transformer 方式）。I-PDU ごとの `RxIndicationCbk`/`TxTransformCbk`（`Com_IPduConfigType` の汎用フック、`Com_PBCfg.c` で設定）を通じて Rte 層のグルー関数を呼ぶだけで、中身が E2E であることも Com.c 本体には埋め込まれない。TX I-PDU ごとに `TxModeMode`（DIRECT/MIXED/PERIODIC）を設定でき、DIRECT/MIXED は `Com_SendSignal()`/`Com_SendSignalGroup()` が ComFilterAlgorithm を通過した変化を検知すると `Com_TxPending[]` を立てて次回 `Com_MainFunction()`（Os の 100ms タスク）で送信、MIXED はさらに変化がなくても一定間隔で再送する周期フロアを併せ持つ、PERIODIC は変化に関わらず `Com_MainFunction()` の中で実時間ベースに送信タイミングを判断する。実際に `PduR_Transmit()`（→ MCP2515 への SPI 送信）を呼ぶのは常に `Com_MainFunction()` のみであり、`Com_SendSignal()`/`Com_SendSignalGroup()` を呼ぶ ASW Runnable のスタックフレーム内で SPI 送信がブロッキングすることはない（バス輻輳時の送信遅延が WdgM の Deadline Supervision に影響しないようにするための設計）。いずれも ASW/CDD は値を更新するだけで送信タイミングには一切関与しない。WarningStatus (0x210) は Signal Group として複数シグナルを `Com_SendSignalGroup()` でシャドウバッファから一括コミットする。さらに I-PDU に固定の `TxModeMode` を 1 つ持たせるだけでなく、TMS（Transmission Mode Selector、`TmsContributor` シグナルの `COM_FILTER_MASKED_NEW_DIFFERS_X` 評価で真偽判定）により 2 組のモード（`TxModeMode`/`TxModeModeTrue`）を自動切り替えすることもできる（WarningStatus が使用：通常 DIRECT、FAULT/ABS 点灯中は MIXED）。DIRECT/MIXED の変化時送信には `MinDelayMs`（ComMinimumDelayTime、MDT）でバス負荷保護のための最小送信間隔も設定できる（MIXED の周期フロアには適用しない）。RX シグナルには `COM_FILTER_NEW_IS_WITHIN` による受信フィルタ（プラウジビリティチェック）も設定でき、範囲外の値を検知すると `Com_ReceiveSignal()` が直近の合格値を返し続ける（EngineSpeed に適用）。I-PDU は `Com_IpduGroupStart()`/`Com_IpduGroupStop()` で個別に起動/停止できる I-PDU Group にも所属でき（既定は `COM_IPDU_GROUP_NONE`=どの Group にも属さず常に有効）、`Com_SetCommunicationEnabled()`（診断 CommunicationControl 用の全 I-PDU 一括スイッチ）とは独立した抑制機構として働く。Signal Gateway（[SWS_Com_00357]、7.2.5/7.11 章）も内蔵し、RX シグナルを SWC/Rte を介さず直接 TX シグナルへ転送できる（`Com_GwMappingType`、ImmobilizerCmd→ImmobilizerStatus に適用） |
+|  | ComM | 12 | SWS_ComM | CAN バスの通信モード（NO_COM / SILENT_COM / FULL_COM）を管理し CanSM へ要求。`ComM_BusSMIndication` で EcuM の RUN 要求を操作。複数ユーザ（App_EngineManager=COMM_USER_0, Dcm=COMM_USER_1）の要求を最も通信レベルの高いモードへ集約する調停ロジックを持つ。両ユーザが NO_COM を要求したときのみ実際にボランタリスリープへ落ちる |
+|  | Dcm | 53 | SWS_Dcm | UDS 診断サービス処理（SID 0x10 / 0x11 / 0x14 / 0x19 / 0x22 / 0x27 / 0x28 / 0x2E / 0x2F / 0x31 / 0x3E）。S3 タイマでセッションを自動失効。SID×セッション許可テーブルで 0x14/0x27/0x28/0x2E/0x2F/0x31 を extendedSession 限定とし、SecurityAccess (0x27) でシード・キー認証保護。0x2E は要求が7バイト超のため CanTp の複数フレーム要求受信を実機検証。0x2F (IOControl) は Rte 層でランプ出力を ASW から奪って強制する診断専用オーバーライド。0x28 (CommunicationControl) は Com/Nm の送受信を個別に有効/無効化する |
+|  | Dem | 54 | SWS_Dem | 診断イベントを DTC として管理。カウンタベースのデバウンスで確定し、NvM 経由で EEPROM に永続化。デバウンス確定 FAILED 時に FreezeFrame（RAM のみ）を記録し、ExtendedData（故障確定回数、NvM 永続化）を+1。クリーンな操作サイクルを1回経過すると PendingDTC を自動解除し、再故障せず複数回の操作サイクルを経ると経年回復（Aging）で CONFIRMED を自動解除 |
+|  | Det | — | SWS_Det | `DET_LOG*` マクロ経由でタイムスタンプ付きログを Serial に出力するデバッグ用ブリッジ。加えて標準準拠の `Det_ReportError(ModuleId, InstanceId, ApiId, ErrorId)`（[SWS_Det_00009]）も実装し、全 BSW モジュールの開発エラー検出箇所（NULL/範囲/未初期化チェック）から `DET_LOGE` と並行して呼ばれる（詳細は「CAN 通信スタック」セクションの「DET 準拠」参照） |
+|  | Dio | — | SWS_Dio | `Dio_WriteChannel` / `Dio_ReadChannel` で GPIO 値を読み書きする MCAL |
 |  | E2E | — | SWS_E2E | AUTOSAR E2E Profile 01 保護の実処理。DataID・CRC8 (SAE J1850)・4bit カウンタの 3 要素で、`E2E_P01Check` はデータ破壊・フレーム脱落・重複・誤ルーティングを検出、`E2E_P01Protect` は Counter・CRC8 を付加。Com/Rte のどちらにも依存しない純粋な検証/付与ライブラリ |
 |  | E2EXf | 176 | SWS_E2ELibrary 12.4 (E2E Transformer) | Com と E2E の間を仲介する統合層。RX は `E2EXf_InverseTransform` が `E2E_P01Check` を呼び、EngineInfo (CAN 0x100)・AbsInfo (CAN 0x110) のデータ破壊・フレーム脱落・重複・誤ルーティングを検出して Dem へそれぞれ DTC 0x00010A・0x000109 を報告。TX は `E2EXf_Transform` が `E2E_P01Protect` を呼び、E2EHealthStatus (CAN 0x220、E2EMon が発行するネットワーク健全性テレメトリ) に Counter・CRC8 を付加。呼び出し元は Rte 層のグルー関数（`Rte_COMCbk_*`/`Rte_COMTransform_*`）で、Com 自身はこの層の存在を知らない |
 |  | E2EMon | — | — (独自 CDD 相当) | 標準 AUTOSAR モジュールには存在しない、実務でよく見る「独自 CDD」パターンの例。EngineInfo/AbsInfo の E2E 検証結果を `E2EMon_NotifyCheckResult()` 経由で購読し、CRC 不一致・シーケンス異常の累積回数（RAM のみ、0xFF 飽和）を集計して `Com_SendSignal()` で公開する。E2EXf/Rte/Com 自体は無改造のまま、標準モジュールの通知フック経由で配線するだけの独立モジュールとして実装している |
-|  | Com | 50 | SWS_Com | シグナルのビット単位パック／アンパックと受信デッドライン監視（タイムアウト検出）のみを担い、E2E には一切関知しない（E2E Transformer 方式）。I-PDU ごとの `RxIndicationCbk`/`TxTransformCbk`（`Com_IPduConfigType` の汎用フック、`Com_PBCfg.c` で設定）を通じて Rte 層のグルー関数を呼ぶだけで、中身が E2E であることも Com.c 本体には埋め込まれない。TX I-PDU ごとに `TxModeMode`（DIRECT/MIXED/PERIODIC）を設定でき、DIRECT/MIXED は `Com_SendSignal()`/`Com_SendSignalGroup()` が ComFilterAlgorithm を通過した変化を検知すると `Com_TxPending[]` を立てて次回 `Com_MainFunction()`（Os の 100ms タスク）で送信、MIXED はさらに変化がなくても一定間隔で再送する周期フロアを併せ持つ、PERIODIC は変化に関わらず `Com_MainFunction()` の中で実時間ベースに送信タイミングを判断する。実際に `PduR_Transmit()`（→ MCP2515 への SPI 送信）を呼ぶのは常に `Com_MainFunction()` のみであり、`Com_SendSignal()`/`Com_SendSignalGroup()` を呼ぶ ASW Runnable のスタックフレーム内で SPI 送信がブロッキングすることはない（バス輻輳時の送信遅延が WdgM の Deadline Supervision に影響しないようにするための設計）。いずれも ASW/CDD は値を更新するだけで送信タイミングには一切関与しない。WarningStatus (0x210) は Signal Group として複数シグナルを `Com_SendSignalGroup()` でシャドウバッファから一括コミットする。さらに I-PDU に固定の `TxModeMode` を 1 つ持たせるだけでなく、TMS（Transmission Mode Selector、`TmsContributor` シグナルの `COM_FILTER_MASKED_NEW_DIFFERS_X` 評価で真偽判定）により 2 組のモード（`TxModeMode`/`TxModeModeTrue`）を自動切り替えすることもできる（WarningStatus が使用：通常 DIRECT、FAULT/ABS 点灯中は MIXED）。DIRECT/MIXED の変化時送信には `MinDelayMs`（ComMinimumDelayTime、MDT）でバス負荷保護のための最小送信間隔も設定できる（MIXED の周期フロアには適用しない）。RX シグナルには `COM_FILTER_NEW_IS_WITHIN` による受信フィルタ（プラウジビリティチェック）も設定でき、範囲外の値を検知すると `Com_ReceiveSignal()` が直近の合格値を返し続ける（EngineSpeed に適用）。I-PDU は `Com_IpduGroupStart()`/`Com_IpduGroupStop()` で個別に起動/停止できる I-PDU Group にも所属でき（既定は `COM_IPDU_GROUP_NONE`=どの Group にも属さず常に有効）、`Com_SetCommunicationEnabled()`（診断 CommunicationControl 用の全 I-PDU 一括スイッチ）とは独立した抑制機構として働く。Signal Gateway（[SWS_Com_00357]、7.2.5/7.11 章）も内蔵し、RX シグナルを SWC/Rte を介さず直接 TX シグナルへ転送できる（`Com_GwMappingType`、ImmobilizerCmd→ImmobilizerStatus に適用） |
-|  | PduR | 51 | SWS_PduR | 受信 PDU を Com/CanTp/SecOC へ（1つの RxPduId から複数宛先への配信にも対応）、送信 PDU を CanIf へルーティング。通信スタックの配管役。TX 経路は既定では `CanIf_Transmit()` へ直接転送するが、`PduR_TxRoutingPathType.TransmitOverrideFct` が設定されている場合は中間モジュール（SecOC）へ委譲できるよう汎用化されている（既存の全 TX パスはこのフィールドを使わないため無変更） |
-|  | SecOC | 150 | SWS_SecureOnboardCommunication | メッセージ認証（AES-128-CMAC 自前実装）とフレッシュネス管理によるリプレイ対策。E2E とは異なる軸（E2E=意図しない誤り検出、SecOC=意図的な改ざん・なりすまし検出）で、PduR のルーティング経路上に中間モジュールとして挟まる。RX（ImmobilizerCmd、CAN 0x120）は `SecOC_IfRxIndication()` が PduR の RX 宛先として検証し、成功時のみ `Com_RxIndication()` へ転送。TX（E2EHealthStatus、CAN 0x220）は既に E2E 保護済みのペイロードをさらに認証する二重防御で、`SecOC_IfTransmit()`/`SecOC_MainFunction()` が Freshness+MAC を計算し `PduR_SecOCTransmit()` で CanIf まで送り届ける。Csm/CryIf/KeyM は分離実装せず、暗号計算・鍵管理を SecOC モジュール内に直接持つ簡略化 |
-|  | CanIf | 60 | SWS_CanIf | CAN ID ↔ 論理 PDU のマッピング。上位層は CAN ID を知らず PDU ID で通信。設定 DLC 未満の受信 L-PDU は上位層へ渡さず棄却する（SWS_CANIF_00026 のデータ長チェック） |
-|  | Can | 80 | SWS_Can | MCP2515 の送受信・Bus-Off 検出・CAN バス活動によるウェイクアップ検出を担う MCAL 最下層。HW を直接操作する唯一のモジュール |
-|  | CanTp | 35 | SWS_CanTp | ISO 15765-2 のフレーム分割（FF/CF）と再組立。8 バイトを超える UDS 応答を実現 |
-|  | Dcm | 53 | SWS_Dcm | UDS 診断サービス処理（SID 0x10 / 0x11 / 0x14 / 0x19 / 0x22 / 0x27 / 0x28 / 0x2E / 0x2F / 0x31 / 0x3E）。S3 タイマでセッションを自動失効。SID×セッション許可テーブルで 0x14/0x27/0x28/0x2E/0x2F/0x31 を extendedSession 限定とし、SecurityAccess (0x27) でシード・キー認証保護。0x2E は要求が7バイト超のため CanTp の複数フレーム要求受信を実機検証。0x2F (IOControl) は Rte 層でランプ出力を ASW から奪って強制する診断専用オーバーライド。0x28 (CommunicationControl) は Com/Nm の送受信を個別に有効/無効化する |
-|  | Dem | 54 | SWS_Dem | 診断イベントを DTC として管理。カウンタベースのデバウンスで確定し、NvM 経由で EEPROM に永続化。デバウンス確定 FAILED 時に FreezeFrame（RAM のみ）を記録し、ExtendedData（故障確定回数、NvM 永続化）を+1。クリーンな操作サイクルを1回経過すると PendingDTC を自動解除し、再故障せず複数回の操作サイクルを経ると経年回復（Aging）で CONFIRMED を自動解除 |
+|  | EcuM | 10 | SWS_EcuStateManager | ECU ライフサイクルを STARTUP → RUN → POST_RUN → SHUTDOWN の状態マシンで管理。`EcuM_RequestRUN` / `EcuM_ReleaseRUN` で RUN フェーズを調停。SHUTDOWN は CAN バスのウェイクアップにより常に RUN へ復帰可能（実機リセットが必要な終端状態は存在しない） |
 |  | FiM | 11 | SWS_FiM | Dem が確定（CONFIRMED）した DTC をもとにアプリ機能（FID）の実行許可を判定。100ms 周期で再評価し、結果を ASW へ `Rte_Call_FiM_GetFunctionPermission` で公開 |
-|  | NvM | 20 | SWS_NvM | EEPROM の読み書きを抽象化。Dem は EEPROM アドレスを直接知らない。各ブロックに CRC8 を付加して破損を検出し、不一致時は ROM デフォルト値（NvM_RestoreBlockDefaults）へ自動復元。ブロックごとに冗長化（`NvMBlockManagementType=NVM_BLOCK_REDUNDANT` 相当、`Redundant` フラグ）を選択でき、片面が破損してももう片面から自己修復できる（DEM_EXTENDED で使用） |
 |  | IoHwAb | 254 | AUTOSAR 抽象化層 | Dio チャネル番号を隠蔽し SW-C に論理的な LED / ボタン / ADC API を提供。10ms 周期でデバウンス（40ms 確定）・ボタン固着検出・ADC 電圧低下を Dem 報告 |
-|  | Dio | — | SWS_Dio | `Dio_WriteChannel` / `Dio_ReadChannel` で GPIO 値を読み書きする MCAL |
+|  | Nm | 31 | SWS_CANNM | ネットワークマネジメント。ComM が FULL_COM の間、1000ms 周期（MeterStatus の 3000ms より高頻度）で NM フレーム (CAN 0x400) を送信し生存を示す。PduR/Com を経由せず `CanIf_Transmit` を直接呼ぶ点が実車の CanNm と同じ。シグナル値を運ばないため E2E 保護は付与しない |
+|  | NvM | 20 | SWS_NvM | EEPROM の読み書きを抽象化。Dem は EEPROM アドレスを直接知らない。各ブロックに CRC8 を付加して破損を検出し、不一致時は ROM デフォルト値（NvM_RestoreBlockDefaults）へ自動復元。ブロックごとに冗長化（`NvMBlockManagementType=NVM_BLOCK_REDUNDANT` 相当、`Redundant` フラグ）を選択でき、片面が破損してももう片面から自己修復できる（DEM_EXTENDED で使用） |
+|  | PduR | 51 | SWS_PduR | 受信 PDU を Com/CanTp/SecOC へ（1つの RxPduId から複数宛先への配信にも対応）、送信 PDU を CanIf へルーティング。通信スタックの配管役。TX 経路は既定では `CanIf_Transmit()` へ直接転送するが、`PduR_TxRoutingPathType.TransmitOverrideFct` が設定されている場合は中間モジュール（SecOC）へ委譲できるよう汎用化されている（既存の全 TX パスはこのフィールドを使わないため無変更） |
 |  | Port | — | SWS_Port | `Port_Init` でピン方向（OUTPUT / INPUT_PULLUP）を設定する MCAL |
-|  | Adc | 123 | SWS_Adc | `Adc_ReadChannel` で 10-bit アナログ生値（0–1023）を読み取る MCAL |
 |  | SchM | — | SWS_SchM | 排他エリアマクロ（`SchM_Enter` / `SchM_Exit`）で共有リソースを保護。実体は `SchM_Hw`（`noInterrupts()`/`interrupts()`）で、Can の割り込みペンディングフラグを実際に保護する |
-|  | Det | — | SWS_Det | `DET_LOG*` マクロ経由でタイムスタンプ付きログを Serial に出力するデバッグ用ブリッジ。加えて標準準拠の `Det_ReportError(ModuleId, InstanceId, ApiId, ErrorId)`（[SWS_Det_00009]）も実装し、全 BSW モジュールの開発エラー検出箇所（NULL/範囲/未初期化チェック）から `DET_LOGE` と並行して呼ばれる（詳細は「CAN 通信スタック」セクションの「DET 準拠」参照） |
+|  | SecOC | 150 | SWS_SecureOnboardCommunication | メッセージ認証（AES-128-CMAC 自前実装）とフレッシュネス管理によるリプレイ対策。E2E とは異なる軸（E2E=意図しない誤り検出、SecOC=意図的な改ざん・なりすまし検出）で、PduR のルーティング経路上に中間モジュールとして挟まる。RX（ImmobilizerCmd、CAN 0x120）は `SecOC_IfRxIndication()` が PduR の RX 宛先として検証し、成功時のみ `Com_RxIndication()` へ転送。TX（E2EHealthStatus、CAN 0x220）は既に E2E 保護済みのペイロードをさらに認証する二重防御で、`SecOC_IfTransmit()`/`SecOC_MainFunction()` が Freshness+MAC を計算し `PduR_SecOCTransmit()` で CanIf まで送り届ける。Csm/CryIf/KeyM は分離実装せず、暗号計算・鍵管理を SecOC モジュール内に直接持つ簡略化 |
+|  | WdgM | 13 | SWS_WdgM | Supervised Entity の Alive Supervision（呼び出し回数を6000msごとに評価）・Logical Supervision（チェックポイント順序）・Deadline Supervision（チェックポイント間の経過時間）を独立したステータスで管理。判定は6000ms周期、実HWウォッチドッグへのリフレッシュは別途1000ms周期（WdgM_TriggerHwWatchdog）で行い、異常時はリフレッシュを止めて実際にMCUをリセットする |
 | HAL | Can_Hw | — | — | MCP2515 / mcp_can C++ ラッパー（RX 割り込み登録 `Can_Hw_AttachRxIsr` を含む） |
 |  | Dio_Hw | — | — | Arduino `digitalWrite` / `digitalRead` ラッパー |
 |  | Port_Hw | — | — | Arduino `pinMode` ラッパー |
@@ -180,6 +180,16 @@ Basic Software Modules」表）。詳細は「CAN 通信スタック」セクシ
 │   │   ├── Os_PBCfg.h
 │   │   └── Os_PBCfg.c            # タスクテーブル（周期・関数ポインタ）
 │   ├── Bsw/
+│   │   ├── Adc/                  # ADC ドライバ（AUTOSAR SWS_Adc 準拠 API）
+│   │   │   ├── Adc_Cfg.h         # チャネル定義・分解能・基準電圧
+│   │   │   ├── Adc.h             # 公開インタフェース（Adc_ReadChannel）
+│   │   │   └── Adc.c             # AUTOSAR Adc モジュール（純粋 C、Adc_Hw へ委譲。境界は src/Hal/Adc_Hw.h）
+│   │   ├── BswM/                 # BSW モードマネージャ（ルール駆動タスク制御）
+│   │   │   ├── BswM_Cfg.h        # タスク ID 定数・タスクマスク定義
+│   │   │   ├── BswM_PBCfg.h      # ルール構造体型定義・BswM_Config 宣言
+│   │   │   ├── BswM_PBCfg.c      # ルールテーブル実体（3 ルール）
+│   │   │   ├── BswM.h            # 公開インタフェース（Init / EcuM通知 / ComM通知）
+│   │   │   └── BswM.c            # ルールエンジン実装・Os_SetTaskActive 呼び出し
 │   │   ├── Can/                  # CAN ドライバ（AUTOSAR SWS_Can 準拠 API）
 │   │   │   ├── Can.h             # 公開インタフェース
 │   │   │   └── Can.c             # AUTOSAR Can モジュール（純粋 C、Can_Hw へ委譲。境界は src/Hal/Can_Hw.h）。Can_Isr は真の割り込みでペンディングフラグを立てるのみ、実処理は Can_MainFunction_Read/BusOff/Wakeup
@@ -190,10 +200,25 @@ Basic Software Modules」表）。詳細は「CAN 通信スタック」セクシ
 │   │   │   ├── CanIf_PBCfg.c     # TX/RX PDU ルーティングテーブル実体
 │   │   │   ├── CanIf.h           # 公開インタフェース（CanIf_Transmit / CanIf_RxIndication）
 │   │   │   └── CanIf.c           # CAN ID ↔ 論理 PDU マッピング・Can/PduR 間の仲介・ControllerBusOff/Wakeup 通知の中継・全受信フレームを CanSM_RxIndication へ転送（ウェイクアップ検証用）
+│   │   ├── CanSM/                # CAN ステートマネージャ（Bus-Off 回復シーケンス、L1/L2 バックオフ）
+│   │   │   ├── CanSM_Cfg.h       # L1/L2 回復待機時間・L1→L2 切替閾値
+│   │   │   ├── CanSM.h           # 公開インタフェース・CanSM_ControllerBusOff コールバック
+│   │   │   └── CanSM.c           # 状態機械・Bus-Off L1/L2 バックオフ回復タイマ管理・NO_COM要求時に CAN コントローラを実際にスリープ・ウェイクアップ検証（CanSM_ControllerWakeup/CanSM_RxIndication/検証タイムアウト）
 │   │   ├── CanTp/                # CAN トランスポートプロトコル（ISO 15765-2）
 │   │   │   ├── CanTp_Cfg.h       # ブロックサイズ・STmin・タイムアウト設定
 │   │   │   ├── CanTp.h           # 公開インタフェース（CanTp_Transmit / CanTp_RxIndication）
 │   │   │   └── CanTp.c           # SF/FF/CF/FC 状態機械・マルチフレーム組立分割
+│   │   ├── Com/                  # COM（シグナル管理、E2E には一切関知しない）
+│   │   │   ├── Com_Types.h       # 型定義（Com_SignalIdType / Com_IPduIdType / Com_IPduConfigType の RxIndicationCbk/TxTransformCbk 等）
+│   │   │   ├── Com_Cfg.h         # I-PDU・シグナル数定数・シグナル ID
+│   │   │   ├── Com_PBCfg.h       # ポストビルド設定宣言（Com_Config）
+│   │   │   ├── Com_PBCfg.c       # I-PDU/シグナルレイアウトテーブル実体（RxIndicationCbk/TxTransformCbk で Rte 層のグルー関数を紐付けるのみ、E2E の詳細は持たない）
+│   │   │   ├── Com.h             # 公開インタフェース（Com_SendSignal / Com_ReceiveSignal / Com_ReceiveSignalGroupArray / Com_IsRxTimedOut）
+│   │   │   └── Com.c             # シグナルパック/アンパック・受信デッドライン監視・ComFilterAlgorithm（送信要否判定）・Signal Group（Com_SendSignalGroup）
+│   │   ├── ComM/                 # 通信マネージャ（CAN バス通信モード管理）
+│   │   │   ├── ComM_Cfg.h        # チャネル数・ユーザ数定数
+│   │   │   ├── ComM.h            # 公開インタフェース（NO_COM/SILENT_COM/FULL_COM）
+│   │   │   └── ComM.c            # 複数ユーザ要求の集約（調停）・CanSM_RequestComMode へ委譲
 │   │   ├── E2E/                  # AUTOSAR E2E Profile 01 保護（CRC8 SAE J1850 + 4bit カウンタ）
 │   │   │   ├── E2E_P01.h         # 設定型・状態型・API 宣言（Check: E2E_P01Check/CheckInit、Protect: E2E_P01Protect/ProtectInit）
 │   │   │   └── E2E_P01.c         # CRC8 計算・受信検証（カウンタデルタ判定）・送信保護（Counter更新+CRC付加）実装
@@ -205,13 +230,42 @@ Basic Software Modules」表）。詳細は「CAN 通信スタック」セクシ
 │   │   ├── E2EMon/                # 独自 CDD 相当（標準 AUTOSAR モジュールではない、E2E 健全性監視の例）
 │   │   │   ├── E2EMon.h          # 公開インタフェース（E2EMon_Init/E2EMon_NotifyCheckResult）
 │   │   │   └── E2EMon.c          # E2E 検証結果の累積カウンタ・Com_SendSignal() での公開
-│   │   ├── Com/                  # COM（シグナル管理、E2E には一切関知しない）
-│   │   │   ├── Com_Types.h       # 型定義（Com_SignalIdType / Com_IPduIdType / Com_IPduConfigType の RxIndicationCbk/TxTransformCbk 等）
-│   │   │   ├── Com_Cfg.h         # I-PDU・シグナル数定数・シグナル ID
-│   │   │   ├── Com_PBCfg.h       # ポストビルド設定宣言（Com_Config）
-│   │   │   ├── Com_PBCfg.c       # I-PDU/シグナルレイアウトテーブル実体（RxIndicationCbk/TxTransformCbk で Rte 層のグルー関数を紐付けるのみ、E2E の詳細は持たない）
-│   │   │   ├── Com.h             # 公開インタフェース（Com_SendSignal / Com_ReceiveSignal / Com_ReceiveSignalGroupArray / Com_IsRxTimedOut）
-│   │   │   └── Com.c             # シグナルパック/アンパック・受信デッドライン監視・ComFilterAlgorithm（送信要否判定）・Signal Group（Com_SendSignalGroup）
+│   │   ├── EcuM/                 # ECU ステートマネージャ（ライフサイクル管理）
+│   │   │   ├── EcuM_Cfg.h        # RUN ユーザ定義・POST_RUN タイムアウト
+│   │   │   ├── EcuM.h            # 公開インタフェース・EcuM_StateType 定義
+│   │   │   └── EcuM.c            # 状態マシン・EcuM_RequestRUN / EcuM_ReleaseRUN（SHUTDOWN→RUNのCANウェイクアップ復帰対応）
+│   │   ├── Dcm/                  # 診断通信マネージャ（UDS ISO 14229-1）
+│   │   │   ├── Dcm_Cfg.h         # SID/NRC/DID 定数・セッション・S3 タイマ・SecurityAccess 設定
+│   │   │   ├── Dcm_Cbk.h         # PduR から呼ばれる受信コールバック宣言（Dcm_ComIndication）
+│   │   │   ├── Dcm.h             # 公開インタフェース（Dcm_Init / Dcm_MainFunction）
+│   │   │   └── Dcm_Cbk.c         # UDS サービスディスパッチ実装・S3 タイマ監視・SecurityAccess/RoutineControl 状態機械
+│   │   ├── Dem/                  # 診断イベントマネージャ（DTC 管理）
+│   │   │   ├── Dem_Cfg.h         # イベント ID・DTC コード・ステータスビットマスク・デバウンス閾値
+│   │   │   ├── Dem.h             # 公開インタフェース（ReportErrorStatus / GetAllDTCs / FreezeFrame）
+│   │   │   └── Dem.c             # DTC ライフサイクル・デバウンス・FreezeFrame 記録・NvM 永続化
+│   │   ├── Det/                  # Default Error Tracer（Serial ブリッジ）
+│   │   │   ├── Det.h             # ログマクロ定義（DET_LOGI/W/E/D）
+│   │   │   └── Det.cpp           # Arduino Serial 出力実装（Arduino API を呼ぶ唯一の場所）
+│   │   ├── Dio/                  # デジタル I/O 値読み書き（MCAL・方向設定は Port が担う）
+│   │   │   ├── Dio_Cfg.h         # チャネル ID 定義（D6=RUNNING / D7=FAULT / D8=ABS / D9=ボタン）
+│   │   │   ├── Dio.h             # 公開インタフェース（Dio_WriteChannel / Dio_ReadChannel）
+│   │   │   └── Dio.c             # AUTOSAR Dio モジュール（純粋 C、Dio_Hw へ委譲。境界は src/Hal/Dio_Hw.h）
+│   │   ├── FiM/                  # 機能抑止マネージャ（DTC→機能抑止）
+│   │   │   ├── FiM_Cfg.h         # 機能 ID (FID) 定義
+│   │   │   ├── FiM_PBCfg.h       # FID×イベント設定構造体型定義・FiM_Config 宣言
+│   │   │   ├── FiM_PBCfg.c       # FID×イベント対応テーブル実体
+│   │   │   ├── FiM.h             # 公開インタフェース（FiM_Init / FiM_MainFunction / GetFunctionPermission）
+│   │   │   └── FiM.c             # 許可状態の再評価・キャッシュ
+│   │   ├── Nm/                   # ネットワークマネジメント（NM フレーム送信）
+│   │   │   ├── Nm_Cfg.h          # NM フレーム周期・DLC・ノード ID 定数
+│   │   │   ├── Nm.h              # 公開インタフェース（Nm_Init / Nm_MainFunction）
+│   │   │   └── Nm.c              # ComM FULL_COM 中のみ CanIf_Transmit を直接呼び出す（PduR/Com 非経由）
+│   │   ├── NvM/                  # Non-Volatile Memory Manager（EEPROM 抽象化）
+│   │   │   ├── NvM_Cfg.h         # ブロック ID・EEPROM アドレス・ブロックサイズ定義
+│   │   │   ├── NvM_PBCfg.h       # ブロック設定構造体型定義・NvM_Config 宣言
+│   │   │   ├── NvM_PBCfg.c       # ブロック設定テーブル実体（DEM_MAGIC/STATUS/AGING/EXTENDED、EXTENDED は冗長ブロック）
+│   │   │   ├── NvM.h             # 公開インタフェース（NvM_ReadBlock / NvM_WriteBlock / NvM_MainFunction / NvM_GetErrorStatus）
+│   │   │   └── NvM.c             # RAM ミラー・非同期書き込みジョブキュー（1バイト/呼び出し。NvM_Hw へ委譲。境界は src/Hal/NvM_Hw.h）
 │   │   ├── PduR/                 # PDU ルーター
 │   │   │   ├── PduR_Types.h      # 型定義
 │   │   │   ├── PduR_Cfg.h        # RX/TX ルーティングパス数定数
@@ -231,75 +285,21 @@ Basic Software Modules」表）。詳細は「CAN 通信スタック」セクシ
 │   │   │   ├── SecOC.c           # MAC・フレッシュネス検証（RX）／計算・Secured I-PDU 組み立て（TX）
 │   │   │   ├── SecOC_Aes128.h/.c # AES-128 自前実装（FIPS-197 KAT セルフテスト付き）
 │   │   │   └── SecOC_Cmac.h/.c   # AES-CMAC 自前実装（NIST SP 800-38B、RFC 4493 で検証）
-│   │   ├── Det/                  # Default Error Tracer（Serial ブリッジ）
-│   │   │   ├── Det.h             # ログマクロ定義（DET_LOGI/W/E/D）
-│   │   │   └── Det.cpp           # Arduino Serial 出力実装（Arduino API を呼ぶ唯一の場所）
-│   │   ├── Dio/                  # デジタル I/O 値読み書き（MCAL・方向設定は Port が担う）
-│   │   │   ├── Dio_Cfg.h         # チャネル ID 定義（D6=RUNNING / D7=FAULT / D8=ABS / D9=ボタン）
-│   │   │   ├── Dio.h             # 公開インタフェース（Dio_WriteChannel / Dio_ReadChannel）
-│   │   │   └── Dio.c             # AUTOSAR Dio モジュール（純粋 C、Dio_Hw へ委譲。境界は src/Hal/Dio_Hw.h）
 │   │   ├── Port/                 # ピン方向設定（MCAL・Dio と責務を分離）
 │   │   │   ├── Port_Cfg.h        # ピン番号定義（D6/D7/D8 OUTPUT / D9 INPUT_PULLUP）
 │   │   │   ├── Port.h            # 公開インタフェース（Port_Init / Port_SetPinDirection）
 │   │   │   └── Port.c            # AUTOSAR Port モジュール（純粋 C、Port_Hw へ委譲。境界は src/Hal/Port_Hw.h）
-│   │   ├── Adc/                  # ADC ドライバ（AUTOSAR SWS_Adc 準拠 API）
-│   │   │   ├── Adc_Cfg.h         # チャネル定義・分解能・基準電圧
-│   │   │   ├── Adc.h             # 公開インタフェース（Adc_ReadChannel）
-│   │   │   └── Adc.c             # AUTOSAR Adc モジュール（純粋 C、Adc_Hw へ委譲。境界は src/Hal/Adc_Hw.h）
 │   │   ├── IoHwAb/               # I/O ハードウェア抽象化（MCAL と SW-C の境界）
 │   │   │   ├── IoHwAb.h          # 公開インタフェース（RTE が参照）
 │   │   │   └── IoHwAb.c          # Dio/Adc へ委譲・デバウンス（40ms）・固着検出・ADC 電圧低下検出（Dem 報告）
 │   │   ├── SchM/                 # スケジュールマネージャ（排他エリアマクロ）
 │   │   │   └── SchM.h            # SchM_Enter/Exit マクロ定義（全モジュール共通、実体は src/Hal/SchM_Hw.h）
-│   │   ├── EcuM/                 # ECU ステートマネージャ（ライフサイクル管理）
-│   │   │   ├── EcuM_Cfg.h        # RUN ユーザ定義・POST_RUN タイムアウト
-│   │   │   ├── EcuM.h            # 公開インタフェース・EcuM_StateType 定義
-│   │   │   └── EcuM.c            # 状態マシン・EcuM_RequestRUN / EcuM_ReleaseRUN（SHUTDOWN→RUNのCANウェイクアップ復帰対応）
-│   │   ├── BswM/                 # BSW モードマネージャ（ルール駆動タスク制御）
-│   │   │   ├── BswM_Cfg.h        # タスク ID 定数・タスクマスク定義
-│   │   │   ├── BswM_PBCfg.h      # ルール構造体型定義・BswM_Config 宣言
-│   │   │   ├── BswM_PBCfg.c      # ルールテーブル実体（3 ルール）
-│   │   │   ├── BswM.h            # 公開インタフェース（Init / EcuM通知 / ComM通知）
-│   │   │   └── BswM.c            # ルールエンジン実装・Os_SetTaskActive 呼び出し
-│   │   ├── WdgM/                 # ウォッチドッグマネージャ（Alive + Logical Supervision）
-│   │   │   ├── WdgM_Cfg.h        # エンティティ ID・チェックポイント ID・監視サイクル・期待回数定義
-│   │   │   ├── WdgM_PBCfg.h      # エンティティ/遷移設定構造体型定義・WdgM_Config 宣言
-│   │   │   ├── WdgM_PBCfg.c      # エンティティテーブル・許可遷移テーブル実体（App_EngineManager_Run / App_WarningIndicator_Run）
-│   │   │   ├── WdgM.h            # 公開インタフェース（Init / CheckpointReached / MainFunction）
-│   │   │   └── WdgM.c            # Alive/Logical/Deadline 判定(6000ms) + HW WDT trigger(1000ms、WdgM_Hw へ委譲。境界は src/Hal/WdgM_Hw.h)
-│   │   ├── ComM/                 # 通信マネージャ（CAN バス通信モード管理）
-│   │   │   ├── ComM_Cfg.h        # チャネル数・ユーザ数定数
-│   │   │   ├── ComM.h            # 公開インタフェース（NO_COM/SILENT_COM/FULL_COM）
-│   │   │   └── ComM.c            # 複数ユーザ要求の集約（調停）・CanSM_RequestComMode へ委譲
-│   │   ├── CanSM/                # CAN ステートマネージャ（Bus-Off 回復シーケンス、L1/L2 バックオフ）
-│   │   │   ├── CanSM_Cfg.h       # L1/L2 回復待機時間・L1→L2 切替閾値
-│   │   │   ├── CanSM.h           # 公開インタフェース・CanSM_ControllerBusOff コールバック
-│   │   │   └── CanSM.c           # 状態機械・Bus-Off L1/L2 バックオフ回復タイマ管理・NO_COM要求時に CAN コントローラを実際にスリープ・ウェイクアップ検証（CanSM_ControllerWakeup/CanSM_RxIndication/検証タイムアウト）
-│   │   ├── Nm/                   # ネットワークマネジメント（NM フレーム送信）
-│   │   │   ├── Nm_Cfg.h          # NM フレーム周期・DLC・ノード ID 定数
-│   │   │   ├── Nm.h              # 公開インタフェース（Nm_Init / Nm_MainFunction）
-│   │   │   └── Nm.c              # ComM FULL_COM 中のみ CanIf_Transmit を直接呼び出す（PduR/Com 非経由）
-│   │   ├── Dcm/                  # 診断通信マネージャ（UDS ISO 14229-1）
-│   │   │   ├── Dcm_Cfg.h         # SID/NRC/DID 定数・セッション・S3 タイマ・SecurityAccess 設定
-│   │   │   ├── Dcm_Cbk.h         # PduR から呼ばれる受信コールバック宣言（Dcm_ComIndication）
-│   │   │   ├── Dcm.h             # 公開インタフェース（Dcm_Init / Dcm_MainFunction）
-│   │   │   └── Dcm_Cbk.c         # UDS サービスディスパッチ実装・S3 タイマ監視・SecurityAccess/RoutineControl 状態機械
-│   │   ├── Dem/                  # 診断イベントマネージャ（DTC 管理）
-│   │   │   ├── Dem_Cfg.h         # イベント ID・DTC コード・ステータスビットマスク・デバウンス閾値
-│   │   │   ├── Dem.h             # 公開インタフェース（ReportErrorStatus / GetAllDTCs / FreezeFrame）
-│   │   │   └── Dem.c             # DTC ライフサイクル・デバウンス・FreezeFrame 記録・NvM 永続化
-│   │   ├── FiM/                  # 機能抑止マネージャ（DTC→機能抑止）
-│   │   │   ├── FiM_Cfg.h         # 機能 ID (FID) 定義
-│   │   │   ├── FiM_PBCfg.h       # FID×イベント設定構造体型定義・FiM_Config 宣言
-│   │   │   ├── FiM_PBCfg.c       # FID×イベント対応テーブル実体
-│   │   │   ├── FiM.h             # 公開インタフェース（FiM_Init / FiM_MainFunction / GetFunctionPermission）
-│   │   │   └── FiM.c             # 許可状態の再評価・キャッシュ
-│   │   └── NvM/                  # Non-Volatile Memory Manager（EEPROM 抽象化）
-│   │       ├── NvM_Cfg.h         # ブロック ID・EEPROM アドレス・ブロックサイズ定義
-│   │       ├── NvM_PBCfg.h       # ブロック設定構造体型定義・NvM_Config 宣言
-│   │       ├── NvM_PBCfg.c       # ブロック設定テーブル実体（DEM_MAGIC/STATUS/AGING/EXTENDED、EXTENDED は冗長ブロック）
-│   │       ├── NvM.h             # 公開インタフェース（NvM_ReadBlock / NvM_WriteBlock / NvM_MainFunction / NvM_GetErrorStatus）
-│   │       └── NvM.c             # RAM ミラー・非同期書き込みジョブキュー（1バイト/呼び出し。NvM_Hw へ委譲。境界は src/Hal/NvM_Hw.h）
+│   │   └── WdgM/                 # ウォッチドッグマネージャ（Alive + Logical Supervision）
+│   │       ├── WdgM_Cfg.h        # エンティティ ID・チェックポイント ID・監視サイクル・期待回数定義
+│   │       ├── WdgM_PBCfg.h      # エンティティ/遷移設定構造体型定義・WdgM_Config 宣言
+│   │       ├── WdgM_PBCfg.c      # エンティティテーブル・許可遷移テーブル実体（App_EngineManager_Run / App_WarningIndicator_Run）
+│   │       ├── WdgM.h            # 公開インタフェース（Init / CheckpointReached / MainFunction）
+│   │       └── WdgM.c            # Alive/Logical/Deadline 判定(6000ms) + HW WDT trigger(1000ms、WdgM_Hw へ委譲。境界は src/Hal/WdgM_Hw.h)
 │   └── Hal/                      # ハードウェア依存層（Bsw 各モジュールの純粋 C 実装から分離）
 │       ├── Can_Hw.h / Can_Hw.cpp        # MCP2515 / mcp_can C++ ラッパー（旧 Mcp2515_Wrapper.cpp）。SLEEP時にウェイクアップ割り込みを有効化
 │       ├── Dio_Hw.h / Dio_Hw.cpp        # Arduino digitalWrite / digitalRead ラッパー
