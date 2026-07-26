@@ -37,9 +37,14 @@
  *          鍵管理の簡略化: 実車は KeyM 等による鍵のプロビジョニング・保護
  *          （耐タンパ格納等）が必須だが、本実装は学習のため固定鍵を
  *          ソースコードへ直接埋め込む簡略化を行っている（本番運用では
- *          絶対に行ってはならない）。RX/TX で異なる鍵（異なる用途・異なる
- *          アセット）を使うことを示すため、E2EHealthStatus には
- *          ImmobilizerCmd とは別の鍵を割り当てている。
+ *          絶対に行ってはならない）。ただし本 PBCfg は「どの鍵を使うか」を
+ *          知らない（Csm/CryIf/Crypto レイヤ分離により、鍵バイト列の実体は
+ *          Crypto_PBCfg.c へ移設済み）。ここでは CsmJobId（Csm_PBCfg.c の
+ *          Csm_JobConfigData を検索するキー）のみを指定する。RX/TX で異なる
+ *          鍵（異なる用途・異なるアセット）を使うことは Csm 側の設定
+ *          （CSM_JOB_ID_IMMOBILIZER_CMD_VERIFY → CRYPTO_KEY_IMMOBILIZER_CMD、
+ *          CSM_JOB_ID_E2E_HEALTH_STATUS_GENERATE → CRYPTO_KEY_E2E_HEALTH_STATUS）
+ *          で表現している。
  *
  * \copyright  Copyright (c) 2025 T_T
  * \license    MIT License - 詳細は LICENSE ファイルを参照。
@@ -50,23 +55,7 @@
 
 #include "SecOC_PBCfg.h"
 #include "SecOC_Cfg.h"
-
-/* AES-128 鍵（16 バイト固定値、上記コメント参照）。
- * ASCII で "KeyFobSecret!!!!" と読める値にしてあり、デバッグ時に
- * ログ上のバイト列から鍵だと一目でわかるようにしている
- * （学習用の意図的な選択。実車の鍵は当然このような可読値にしない）。 */
-static const uint8 SecOC_Key_ImmobilizerCmd[SECOC_AES128_KEY_SIZE] = {
-    0x4BU,0x65U,0x79U,0x46U,0x6FU,0x62U,0x53U,0x65U,
-    0x63U,0x72U,0x65U,0x74U,0x21U,0x21U,0x21U,0x21U
-};
-
-/* AES-128 鍵（16 バイト固定値）。ASCII で "TelemetryKey!!!!" と読める値
- * （上記コメント参照。ImmobilizerCmd とは別の鍵であることを一目でわかる
- * ようにするための学習用の意図的な選択）。 */
-static const uint8 SecOC_Key_E2EHealthStatus[SECOC_AES128_KEY_SIZE] = {
-    0x54U,0x65U,0x6CU,0x65U,0x6DU,0x65U,0x74U,0x72U,
-    0x79U,0x4BU,0x65U,0x79U,0x21U,0x21U,0x21U,0x21U
-};
+#include "Csm_Cfg.h"
 
 static const SecOC_RxPduConfigType SecOC_RxPduConfigData[SECOC_RX_PDU_COUNT] = {
     {
@@ -83,7 +72,7 @@ static const SecOC_RxPduConfigType SecOC_RxPduConfigData[SECOC_RX_PDU_COUNT] = {
         .MacOffset          = 3U,
         .MacTxLength        = 3U,      /* 24bit（SecOC Profile 1） */
         .SecuredPduLength   = 6U,      /* 2 + 1 + 3 */
-        .Key                = SecOC_Key_ImmobilizerCmd,
+        .CsmJobId           = CSM_JOB_ID_IMMOBILIZER_CMD_VERIFY,
         .ComRxPduId         = 2U       /* Com RX IPduId=2 (SecureCommand_Rx) */
     }
 };
@@ -103,7 +92,7 @@ static const SecOC_TxPduConfigType SecOC_TxPduConfigData[SECOC_TX_PDU_COUNT] = {
         .MacOffset          = 5U,
         .MacTxLength        = 3U,      /* 24bit（SecOC Profile 1） */
         .SecuredPduLength   = 8U,      /* 4 + 1 + 3（CAN DLC 上限ちょうど） */
-        .Key                = SecOC_Key_E2EHealthStatus,
+        .CsmJobId           = CSM_JOB_ID_E2E_HEALTH_STATUS_GENERATE,
         .PduRSrcPduId       = 3U       /* PduR TX パス 3（CanIf TxPduId=4、CAN 0x220）と一致 */
     }
 };

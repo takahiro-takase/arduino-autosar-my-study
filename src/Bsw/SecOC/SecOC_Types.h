@@ -14,7 +14,6 @@
 #include "Platform_Types.h"
 #include "Std_Types.h"
 #include "ComStack_Types.h"
-#include "SecOC_Aes128.h"
 
 /* -----------------------------------------------------------------------
  * RX Secured I-PDU 設定（1 エントリ = 1 つの Secured I-PDU）
@@ -40,9 +39,10 @@
  *                           上位ビット）を使用する。
  *   SecuredPduLength      : Secured I-PDU 全体の期待バイト長
  *                           （= AuthenticPduLength + FreshnessLength + MacTxLength）。
- *   Key                   : 16 バイト AES-128 鍵へのポインタ（SecOC_PBCfg.c の
- *                           固定配列を指す。実車は KeyM 等による鍵管理が必要だが、
- *                           本実装は学習用に固定鍵で簡略化する）。
+ *   CsmJobId              : Csm_MacVerify() に渡すジョブ ID（CSM_JOB_ID_* 定数）。
+ *                           SecOC は鍵そのものへは一切アクセスしない
+ *                           （どの鍵を使うかは Csm/Crypto レイヤの設定が決める。
+ *                           Csm/CryIf/Crypto レイヤ分離の詳細は SecOC.c 参照）。
  *   ComRxPduId            : 検証成功時に Com_RxIndication() へ渡す Com RX I-PDU ID。
  * ----------------------------------------------------------------------- */
 typedef struct
@@ -57,7 +57,7 @@ typedef struct
     uint8        MacOffset;
     uint8        MacTxLength;
     uint8        SecuredPduLength;
-    const uint8* Key;
+    uint32       CsmJobId;
     PduIdType    ComRxPduId;
 } SecOC_RxPduConfigType;
 
@@ -75,8 +75,8 @@ typedef struct
  *   到達させる。
  *
  *   DataId/AuthenticPduLength/FreshnessOffset/FreshnessLength/MacOffset/
- *   MacTxLength/SecuredPduLength/Key の意味は SecOC_RxPduConfigType と同じ
- *   （対称の TX 版）。
+ *   MacTxLength/SecuredPduLength/CsmJobId の意味は SecOC_RxPduConfigType と
+ *   同じ（対称の TX 版。ただし CsmJobId は Csm_MacGenerate() 用のジョブを指す）。
  *   PduRSrcPduId : SecOC_MainFunction() が変換完了後に PduR_SecOCTransmit()
  *                  へ渡す、元の Authentic I-PDU の TX ルーティングパス ID
  *                  （PduR_TxRoutingPathType.SrcPduId と一致させる）。
@@ -91,7 +91,7 @@ typedef struct
     uint8        MacOffset;
     uint8        MacTxLength;
     uint8        SecuredPduLength;
-    const uint8* Key;
+    uint32       CsmJobId;
     PduIdType    PduRSrcPduId;
 } SecOC_TxPduConfigType;
 

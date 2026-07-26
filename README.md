@@ -105,7 +105,7 @@ pio device monitor
 ASW ─── App_EngineManager / App_WarningIndicator
 RTE ─── Rte（ポートベース S/R API + E2E Transformer 呼び出しグルー）
 OS  ─── Os（タイムトリガスケジューラ）
-BSW ─── EcuM / BswM / WdgM / ComM / CanSM / Nm / E2EXf / E2E / Com / PduR / CanIf / Can
+BSW ─── EcuM / BswM / WdgM / ComM / CanSM / Nm / E2EXf / E2E / Com / PduR / SecOC / Csm / CryIf / Crypto / CanIf / Can
         CanTp / Dcm / Dem / NvM / IoHwAb / Dio / Port / Adc / SchM / Det
 HAL ─── Can_Hw / Dio_Hw / Port_Hw / Adc_Hw / Mcu_Hw / NvM_Hw / WdgM_Hw（src/Hal/ に集約）
 ```
@@ -128,6 +128,9 @@ HAL ─── Can_Hw / Dio_Hw / Port_Hw / Adc_Hw / Mcu_Hw / NvM_Hw / WdgM_Hw（s
 |  | CanTp | 35 | SWS_CanTp | ISO 15765-2 のフレーム分割（FF/CF）と再組立。8 バイトを超える UDS 応答を実現 |
 |  | Com | 50 | SWS_Com | シグナルのビット単位パック／アンパックと受信デッドライン監視（タイムアウト検出）のみを担い、E2E には一切関知しない（E2E Transformer 方式）。I-PDU ごとの `RxIndicationCbk`/`TxTransformCbk`（`Com_IPduConfigType` の汎用フック、`Com_PBCfg.c` で設定）を通じて Rte 層のグルー関数を呼ぶだけで、中身が E2E であることも Com.c 本体には埋め込まれない。TX I-PDU ごとに `TxModeMode`（DIRECT/MIXED/PERIODIC）を設定でき、DIRECT/MIXED は `Com_SendSignal()`/`Com_SendSignalGroup()` が ComFilterAlgorithm を通過した変化を検知すると `Com_TxPending[]` を立てて次回 `Com_MainFunction()`（Os の 100ms タスク）で送信、MIXED はさらに変化がなくても一定間隔で再送する周期フロアを併せ持つ、PERIODIC は変化に関わらず `Com_MainFunction()` の中で実時間ベースに送信タイミングを判断する。実際に `PduR_Transmit()`（→ MCP2515 への SPI 送信）を呼ぶのは常に `Com_MainFunction()` のみであり、`Com_SendSignal()`/`Com_SendSignalGroup()` を呼ぶ ASW Runnable のスタックフレーム内で SPI 送信がブロッキングすることはない（バス輻輳時の送信遅延が WdgM の Deadline Supervision に影響しないようにするための設計）。いずれも ASW/CDD は値を更新するだけで送信タイミングには一切関与しない。WarningStatus (0x210) は Signal Group として複数シグナルを `Com_SendSignalGroup()` でシャドウバッファから一括コミットする。さらに I-PDU に固定の `TxModeMode` を 1 つ持たせるだけでなく、TMS（Transmission Mode Selector、`TmsContributor` シグナルの `COM_FILTER_MASKED_NEW_DIFFERS_X` 評価で真偽判定）により 2 組のモード（`TxModeMode`/`TxModeModeTrue`）を自動切り替えすることもできる（WarningStatus が使用：通常 DIRECT、FAULT/ABS 点灯中は MIXED）。DIRECT/MIXED の変化時送信には `MinDelayMs`（ComMinimumDelayTime、MDT）でバス負荷保護のための最小送信間隔も設定できる（MIXED の周期フロアには適用しない）。RX シグナルには `COM_FILTER_NEW_IS_WITHIN` による受信フィルタ（プラウジビリティチェック）も設定でき、範囲外の値を検知すると `Com_ReceiveSignal()` が直近の合格値を返し続ける（EngineSpeed に適用）。I-PDU は `Com_IpduGroupStart()`/`Com_IpduGroupStop()` で個別に起動/停止できる I-PDU Group にも所属でき（既定は `COM_IPDU_GROUP_NONE`=どの Group にも属さず常に有効）、`Com_SetCommunicationEnabled()`（診断 CommunicationControl 用の全 I-PDU 一括スイッチ）とは独立した抑制機構として働く。Signal Gateway（[SWS_Com_00357]、7.2.5/7.11 章）も内蔵し、RX シグナルを SWC/Rte を介さず直接 TX シグナルへ転送できる（`Com_GwMappingType`、ImmobilizerCmd→ImmobilizerStatus に適用） |
 |  | ComM | 12 | SWS_ComM | CAN バスの通信モード（NO_COM / SILENT_COM / FULL_COM）を管理し CanSM へ要求。`ComM_BusSMIndication` で EcuM の RUN 要求を操作。複数ユーザ（App_EngineManager=COMM_USER_0, Dcm=COMM_USER_1）の要求を最も通信レベルの高いモードへ集約する調停ロジックを持つ。両ユーザが NO_COM を要求したときのみ実際にボランタリスリープへ落ちる |
+|  | CryIf | 112 | SWS_CryptoInterface | Csm と Crypto Driver の間のルーティング層。`CryIf_ProcessJob()`（実 AUTOSAR は複数 Crypto Driver Object への振り分けを担う）は、本プロジェクトが Crypto Driver を1個しか持たないため実質パススルーで `Crypto_ProcessJob()` へ委譲する（CanIf が単一 CAN コントローラに固定しているのと同じ簡略化） |
+|  | Crypto | 114 | SWS_CryptoDriver | Csm/CryIf/Crypto レイヤの最下層。鍵テーブル（`Crypto_PBCfg.c`）と実際の暗号計算（AES-128-CMAC、自前実装）を保持する唯一のモジュール。`Crypto_ProcessJob()` がジョブの `service`（`CRYPTO_MACGENERATE`/`CRYPTO_MACVERIFY`）に応じて MAC を生成、または定数時間比較で検証する（MAC 検証のタイミングサイドチャネル対策はここに実装。旧実装では SecOC.c 内にあったロジックを責務として正しい層へ移設した） |
+|  | Csm | 110 | SWS_CryptoServiceManager | SecOC が唯一直接呼ぶ暗号スタックの入口。`Csm_MacGenerate()`/`Csm_MacVerify()` が `jobId`（`Csm_PBCfg.c` の `Csm_JobConfigData`）から実行すべきプリミティブ種別と鍵 ID を解決し、`Crypto_JobType` ジョブを組み立てて `CryIf_ProcessJob()` へ委譲する。`Csm_MacVerify()` の `macLength` はビット単位（[SWS_Csm_01050]）、`Csm_MacGenerate()` の `macLengthPtr` はバイト単位（[SWS_Csm_00982]）という実仕様の非対称性を踏襲し、Csm 内でビット→バイト変換する |
 |  | Dcm | 53 | SWS_Dcm | UDS 診断サービス処理（SID 0x10 / 0x11 / 0x14 / 0x19 / 0x22 / 0x27 / 0x28 / 0x2E / 0x2F / 0x31 / 0x3E）。S3 タイマでセッションを自動失効。SID×セッション許可テーブルで 0x14/0x27/0x28/0x2E/0x2F/0x31 を extendedSession 限定とし、SecurityAccess (0x27) でシード・キー認証保護。0x2E は要求が7バイト超のため CanTp の複数フレーム要求受信を実機検証。0x2F (IOControl) は Rte 層でランプ出力を ASW から奪って強制する診断専用オーバーライド。0x28 (CommunicationControl) は Com/Nm の送受信を個別に有効/無効化する |
 |  | Dem | 54 | SWS_Dem | 診断イベントを DTC として管理。カウンタベースのデバウンスで確定し、NvM 経由で EEPROM に永続化。デバウンス確定 FAILED 時に FreezeFrame（RAM のみ）を記録し、ExtendedData（故障確定回数、NvM 永続化）を+1。クリーンな操作サイクルを1回経過すると PendingDTC を自動解除し、再故障せず複数回の操作サイクルを経ると経年回復（Aging）で CONFIRMED を自動解除 |
 |  | Det | — | SWS_Det | `DET_LOG*` マクロ経由でタイムスタンプ付きログを Serial に出力するデバッグ用ブリッジ。加えて標準準拠の `Det_ReportError(ModuleId, InstanceId, ApiId, ErrorId)`（[SWS_Det_00009]）も実装し、全 BSW モジュールの開発エラー検出箇所（NULL/範囲/未初期化チェック）から `DET_LOGE` と並行して呼ばれる（詳細は「CAN 通信スタック」セクションの「DET 準拠」参照） |
@@ -143,7 +146,7 @@ HAL ─── Can_Hw / Dio_Hw / Port_Hw / Adc_Hw / Mcu_Hw / NvM_Hw / WdgM_Hw（s
 |  | PduR | 51 | SWS_PduR | 受信 PDU を Com/CanTp/SecOC へ（1つの RxPduId から複数宛先への配信にも対応）、送信 PDU を CanIf へルーティング。通信スタックの配管役。TX 経路は既定では `CanIf_Transmit()` へ直接転送するが、`PduR_TxRoutingPathType.TransmitOverrideFct` が設定されている場合は中間モジュール（SecOC）へ委譲できるよう汎用化されている（既存の全 TX パスはこのフィールドを使わないため無変更） |
 |  | Port | — | SWS_Port | `Port_Init` でピン方向（OUTPUT / INPUT_PULLUP）を設定する MCAL |
 |  | SchM | — | SWS_SchM | 排他エリアマクロ（`SchM_Enter` / `SchM_Exit`）で共有リソースを保護。実体は `SchM_Hw`（`noInterrupts()`/`interrupts()`）で、Can の割り込みペンディングフラグを実際に保護する |
-|  | SecOC | 150 | SWS_SecureOnboardCommunication | メッセージ認証（AES-128-CMAC 自前実装）とフレッシュネス管理によるリプレイ対策。E2E とは異なる軸（E2E=意図しない誤り検出、SecOC=意図的な改ざん・なりすまし検出）で、PduR のルーティング経路上に中間モジュールとして挟まる。RX（ImmobilizerCmd、CAN 0x120）は `SecOC_IfRxIndication()` が PduR の RX 宛先として検証し、成功時のみ `Com_RxIndication()` へ転送。TX（E2EHealthStatus、CAN 0x220）は既に E2E 保護済みのペイロードをさらに認証する二重防御で、`SecOC_IfTransmit()`/`SecOC_MainFunction()` が Freshness+MAC を計算し `PduR_SecOCTransmit()` で CanIf まで送り届ける。Csm/CryIf/KeyM は分離実装せず、暗号計算・鍵管理を SecOC モジュール内に直接持つ簡略化 |
+|  | SecOC | 150 | SWS_SecureOnboardCommunication | メッセージ認証（Csm_MacGenerate/Csm_MacVerify 経由の AES-128-CMAC）とフレッシュネス管理によるリプレイ対策。E2E とは異なる軸（E2E=意図しない誤り検出、SecOC=意図的な改ざん・なりすまし検出）で、PduR のルーティング経路上に中間モジュールとして挟まる。RX（ImmobilizerCmd、CAN 0x120）は `SecOC_IfRxIndication()` が PduR の RX 宛先として検証し、成功時のみ `Com_RxIndication()` へ転送。TX（E2EHealthStatus、CAN 0x220）は既に E2E 保護済みのペイロードをさらに認証する二重防御で、`SecOC_IfTransmit()`/`SecOC_MainFunction()` が Freshness+MAC を計算し `PduR_SecOCTransmit()` で CanIf まで送り届ける。SecOC は `CsmJobId`（ジョブ ID）しか知らず、鍵にも AES/CMAC の実装にも一切アクセスしない（Csm/CryIf/Crypto レイヤ分離、上記参照） |
 |  | WdgM | 13 | SWS_WdgM | Supervised Entity の Alive Supervision（呼び出し回数を6000msごとに評価）・Logical Supervision（チェックポイント順序）・Deadline Supervision（チェックポイント間の経過時間）を独立したステータスで管理。判定は6000ms周期、実HWウォッチドッグへのリフレッシュは別途1000ms周期（WdgM_TriggerHwWatchdog）で行い、異常時はリフレッシュを止めて実際にMCUをリセットする |
 | HAL | Can_Hw | — | — | MCP2515 / mcp_can C++ ラッパー（RX 割り込み登録 `Can_Hw_AttachRxIsr` を含む） |
 |  | Dio_Hw | — | — | Arduino `digitalWrite` / `digitalRead` ラッパー |
@@ -219,6 +222,23 @@ Basic Software Modules」表）。詳細は「CAN 通信スタック」セクシ
 │   │   │   ├── ComM_Cfg.h        # チャネル数・ユーザ数定数
 │   │   │   ├── ComM.h            # 公開インタフェース（NO_COM/SILENT_COM/FULL_COM）
 │   │   │   └── ComM.c            # 複数ユーザ要求の集約（調停）・CanSM_RequestComMode へ委譲
+│   │   ├── CryIf/                # Crypto Interface（Csm と Crypto Driver 間のルーティング層）
+│   │   │   ├── CryIf_Cfg.h       # DET 定数・CRYIF_CHANNEL_ID
+│   │   │   ├── CryIf.h           # 公開インタフェース（CryIf_ProcessJob）
+│   │   │   └── CryIf.c           # 本プロジェクトは Crypto Driver が1個のみのため実質パススルー
+│   │   ├── Crypto/                # Crypto Driver（Csm/CryIf/Crypto レイヤの最下層。鍵テーブルと実暗号計算を保持）
+│   │   │   ├── Crypto_Types.h    # Crypto_JobType（簡略化フラット版）・Crypto_ServiceInfoType 等
+│   │   │   ├── Crypto_Cfg.h      # DET 定数・CRYPTO_KEY_* 定数
+│   │   │   ├── Crypto_PBCfg.h/.c # 鍵テーブル実体（元 SecOC_PBCfg.c から移設）
+│   │   │   ├── Crypto.h          # 公開インタフェース（Crypto_ProcessJob）
+│   │   │   ├── Crypto.c          # MAC 生成/検証の実処理（定数時間比較はここに実装）
+│   │   │   ├── Crypto_Aes128.h/.c # AES-128 自前実装（FIPS-197 KAT セルフテスト付き。元 SecOC_Aes128.*）
+│   │   │   └── Crypto_Cmac.h/.c   # AES-CMAC 自前実装（NIST SP 800-38B。元 SecOC_Cmac.*）
+│   │   ├── Csm/                  # Crypto Service Manager（SecOC が唯一直接呼ぶ暗号スタックの入口）
+│   │   │   ├── Csm_Cfg.h         # DET 定数・CSM_JOB_ID_* 定数
+│   │   │   ├── Csm_PBCfg.h/.c    # CsmJob 設定テーブル（jobId → プリミティブ種別・鍵ID）
+│   │   │   ├── Csm.h             # 公開インタフェース（Csm_MacGenerate/Csm_MacVerify）
+│   │   │   └── Csm.c             # ジョブ解決 → Crypto_JobType 組み立て → CryIf_ProcessJob 委譲
 │   │   ├── E2E/                  # AUTOSAR E2E Profile 01 保護（CRC8 SAE J1850 + 4bit カウンタ）
 │   │   │   ├── E2E_P01.h         # 設定型・状態型・API 宣言（Check: E2E_P01Check/CheckInit、Protect: E2E_P01Protect/ProtectInit）
 │   │   │   └── E2E_P01.c         # CRC8 計算・受信検証（カウンタデルタ判定）・送信保護（Counter更新+CRC付加）実装
@@ -276,15 +296,13 @@ Basic Software Modules」表）。詳細は「CAN 通信スタック」セクシ
 │   │   │   ├── PduR_SecOC.h      # SecOC 向けインタフェース定義（PduR_SecOCTransmit）
 │   │   │   ├── PduR.h            # 公開インタフェース
 │   │   │   └── PduR.c            # PDU マルチキャスト配信・送信完了通知の転送・TX 経路の中間モジュール委譲（TransmitOverrideFct）
-│   │   ├── SecOC/                # メッセージ認証（AES-128-CMAC 自前実装、Csm/CryIf/KeyM は分離しない簡略化）
-│   │   │   ├── SecOC_Types.h     # 型定義（SecOC_RxPduConfigType/SecOC_TxPduConfigType）
+│   │   ├── SecOC/                # メッセージ認証（Csm_MacGenerate/Csm_MacVerify を呼ぶのみ。鍵/AES/CMAC は一切知らない）
+│   │   │   ├── SecOC_Types.h     # 型定義（SecOC_RxPduConfigType/SecOC_TxPduConfigType、Key ではなく CsmJobId を持つ）
 │   │   │   ├── SecOC_Cfg.h       # RX/TX Secured I-PDU 数定数
 │   │   │   ├── SecOC_PBCfg.h     # ポストビルド設定宣言（SecOC_Config）
-│   │   │   ├── SecOC_PBCfg.c     # RX/TX Secured I-PDU 設定実体（DataId/オフセット/鍵）
+│   │   │   ├── SecOC_PBCfg.c     # RX/TX Secured I-PDU 設定実体（DataId/オフセット/CsmJobId）
 │   │   │   ├── SecOC.h           # 公開インタフェース（SecOC_IfRxIndication/SecOC_IfTransmit/SecOC_MainFunction）
-│   │   │   ├── SecOC.c           # MAC・フレッシュネス検証（RX）／計算・Secured I-PDU 組み立て（TX）
-│   │   │   ├── SecOC_Aes128.h/.c # AES-128 自前実装（FIPS-197 KAT セルフテスト付き）
-│   │   │   └── SecOC_Cmac.h/.c   # AES-CMAC 自前実装（NIST SP 800-38B、RFC 4493 で検証）
+│   │   │   └── SecOC.c           # フレッシュネス検証（RX）／Secured I-PDU 組み立て（TX）。MAC 自体は Csm 経由
 │   │   ├── Port/                 # ピン方向設定（MCAL・Dio と責務を分離）
 │   │   │   ├── Port_Cfg.h        # ピン番号定義（D6/D7/D8 OUTPUT / D9 INPUT_PULLUP）
 │   │   │   ├── Port.h            # 公開インタフェース（Port_Init / Port_SetPinDirection）
@@ -2256,10 +2274,24 @@ DLC が 4→8 バイトへ増える点は `CanIf_PBCfg.c` の当該 TxPdu の `.
 - **Freshness Value は 8bit 幅全体を送受信し、切り詰めを行いません**（Profile 1 の
   `SecOCFreshnessValueTxLength=8` と一致させ、実車で必要な「送信されない上位
   ビットの推定復元」機構を回避する簡略化）。
-- **Csm/CryIf/KeyM は分離実装せず**、AES-128+CMAC を SecOC モジュール内
-  （`src/Bsw/SecOC/SecOC_Aes128.c`/`SecOC_Cmac.c`）に直接実装しています。
-- **鍵は `SecOC_PBCfg.c` の固定配列**です（実車は KeyM 等による鍵の
-  プロビジョニング・耐タンパ格納が必須で、固定鍵をソースコードへ埋め込むことは
+- **Csm(Crypto Service Manager)/CryIf(Crypto Interface)/Crypto(Crypto Driver)
+  の3層に分離しています**（`src/Bsw/Csm/`・`src/Bsw/CryIf/`・`src/Bsw/Crypto/`）。
+  SecOC は `Csm_MacGenerate()`/`Csm_MacVerify()` という抽象 API と `CsmJobId`
+  （SecOC_PBCfg.c）しか知らず、実際にどの鍵・どのアルゴリズムを使うかは
+  `Csm_PBCfg.c` の CsmJob 設定 → `Crypto_PBCfg.c` の鍵テーブルが決めます
+  （AES-128/CMAC の実装自体は `Crypto_Aes128.c`/`Crypto_Cmac.c`。元は
+  `SecOC_Aes128.c`/`SecOC_Cmac.c` として SecOC 内に直接持っていたものを移設）。
+  ただし **KeyM（鍵のプロビジョニング・耐タンパ格納・ライフサイクル管理）は
+  引き続き分離実装していません**。鍵は `Crypto_PBCfg.c` の固定配列のままで、
+  実車の KeyM が担う機能（鍵更新・証明書検証等）は対象外です。
+  また実 AUTOSAR の Csm/CryIf/Crypto はジョブベースの非同期処理
+  （`Crypto_JobType` の START/UPDATE/FINISH モード、ジョブキュー）が前提ですが、
+  本プロジェクトは全体が同期呼び出しのため常に `CRYPTO_OPERATIONMODE_SINGLECALL`
+  のみを使う同期実装です。`Crypto_JobType` 自体も実 AUTOSAR の4段階入れ子構造体
+  （`Crypto_JobPrimitiveInputOutputType` 等）ではなく、MAC 生成/検証の2用途に
+  必要なフィールドのみを持つ簡略化フラット構造体にしています。
+- **鍵バイト列そのものは `Crypto_PBCfg.c` の固定配列**です（実車は KeyM 等による
+  鍵のプロビジョニング・耐タンパ格納が必須で、固定鍵をソースコードへ埋め込むことは
   本番運用では絶対に行ってはなりません）。
 - **リプレイ判定（RX）は単調増加チェックのみ**（`(uint8)(received -
   lastAccepted) < 128` という折り返し許容の「半区間」判定）で、実車の
@@ -2275,11 +2307,12 @@ DLC が 4→8 バイトへ増える点は `CanIf_PBCfg.c` の当該 TxPdu の `.
 
 #### 検証
 
-外部ライブラリに依存しない AES-128+CMAC の自前実装（`SecOC_Aes128.c`/
-`SecOC_Cmac.c`）が正しいことを、以下の独立した手段で確認しています。
+外部ライブラリに依存しない AES-128+CMAC の自前実装（`Crypto_Aes128.c`/
+`Crypto_Cmac.c`、Csm/CryIf/Crypto レイヤの最下層）が正しいことを、以下の
+独立した手段で確認しています。
 
 1. **FIPS-197 Appendix B の公式 AES-128 テストベクタ**（既知の鍵・平文に対する
-   暗号文が一致するか）を `SecOC_Init()` 起動時セルフテストとして組み込み済み
+   暗号文が一致するか）を `Crypto_Init()` 起動時セルフテストとして組み込み済み
    （実機ログで毎回 PASS/FAIL を確認できます）。
 2. **RFC 4493 (The AES-CMAC Algorithm) の公式テストベクタ 4 件**（メッセージ長
    0/16/40/64 バイトの各ケース、パディングあり/なし・単一/複数ブロック連鎖の
@@ -2289,13 +2322,15 @@ DLC が 4→8 バイトへ増える点は `CanIf_PBCfg.c` の当該 TxPdu の `.
    （ホスト環境に C コンパイラが無く組込みコードを直接実行できなかったための
    代替検証手段。C コードとの対応は目視でも再確認済み）。
 3. `tools/uds_tester` の `_apply_secoc()`（Python、pycryptodome で本物の
-   AES-CMAC を計算）と、Arduino 側の `SecOC_IfRxIndication()`（同一の自前実装）
-   が同じ鍵・同じメッセージに対して同じ MAC を計算することを、バイトレイアウト
-   （DataId の Big Endian 連結順・切り詰め位置）も含めて突き合わせ済みです。
-4. TX 方向は `SecOC_MainFunction()`（RX と同一の `SecOC_Cmac_Calculate()` を
-   呼ぶ）が計算した MAC を、`tools/uds_tester` の `_verify_secoc()`（受信した
-   Secured I-PDU から MAC を再計算する、`_apply_secoc()` の逆方向）で
-   独立に再検証できます（下記「実機で検証可能」TX 項参照）。
+   AES-CMAC を計算）と、Arduino 側の `SecOC_IfRxIndication()` → `Csm_MacVerify()`
+   → `Crypto_ProcessJob()`（同一の自前実装）が同じ鍵・同じメッセージに対して
+   同じ MAC を計算することを、バイトレイアウト（DataId の Big Endian 連結順・
+   切り詰め位置）も含めて突き合わせ済みです。
+4. TX 方向は `SecOC_MainFunction()` が `Csm_MacGenerate()` 経由で呼ぶ
+   `Crypto_Cmac_Calculate()`（RX と同一実装）が計算した MAC を、
+   `tools/uds_tester` の `_verify_secoc()`（受信した Secured I-PDU から MAC を
+   再計算する、`_apply_secoc()` の逆方向）で独立に再検証できます（下記
+   「実機で検証可能」TX 項参照）。
 
 **実機で検証可能**: `tools/uds_tester/config.json` に「ImmobilizerCmd
 (0x120, KeyFobEcu)」ボタンを追加しました（UNLOCK/LOCK の 2 プリセット）。

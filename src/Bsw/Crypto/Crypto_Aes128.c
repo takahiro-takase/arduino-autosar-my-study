@@ -1,5 +1,5 @@
 /**
- * \file    SecOC_Aes128.c
+ * \file    Crypto_Aes128.c
  * \brief   AES-128 単一ブロック暗号 実装 (FIPS-197 準拠)
  * \details 鍵拡張（Key Expansion）とラウンド関数（SubBytes/ShiftRows/
  *          MixColumns/AddRoundKey）を素直に実装した教科書的な AES-128。
@@ -17,10 +17,10 @@
  * \note    本ファイルは AUTOSAR 4.3.1 仕様を参考にした学習用実装です。
  *          AUTOSAR 認証済み実装ではなく、製品への適用は想定していません。
  */
-#include "SecOC_Aes128.h"
+#include "Crypto_Aes128.h"
 #include "Det.h"
 
-#define TAG "SecOC_Aes"
+#define TAG "Crypto_Aes"
 
 #define AES128_NK   4U   /* 鍵長 [32bit word] */
 #define AES128_NB   4U   /* ブロック長 [32bit word]（AES は常に 4） */
@@ -28,7 +28,7 @@
 #define AES128_EXPANDED_KEY_SIZE  ((AES128_NR + 1U) * AES128_NB * 4U)  /* 176 byte */
 
 /* FIPS-197 Figure 7: AES S-box */
-static const uint8 SecOC_Aes128_Sbox[256] = {
+static const uint8 Crypto_Aes128_Sbox[256] = {
     0x63,0x7c,0x77,0x7b,0xf2,0x6b,0x6f,0xc5,0x30,0x01,0x67,0x2b,0xfe,0xd7,0xab,0x76,
     0xca,0x82,0xc9,0x7d,0xfa,0x59,0x47,0xf0,0xad,0xd4,0xa2,0xaf,0x9c,0xa4,0x72,0xc0,
     0xb7,0xfd,0x93,0x26,0x36,0x3f,0xf7,0xcc,0x34,0xa5,0xe5,0xf1,0x71,0xd8,0x31,0x15,
@@ -48,7 +48,7 @@ static const uint8 SecOC_Aes128_Sbox[256] = {
 };
 
 /* FIPS-197 5.2: AES-128 のラウンド定数 Rcon[1..10]（word の先頭バイトのみ非ゼロ） */
-static const uint8 SecOC_Aes128_Rcon[10] = {
+static const uint8 Crypto_Aes128_Rcon[10] = {
     0x01,0x02,0x04,0x08,0x10,0x20,0x40,0x80,0x1B,0x36
 };
 
@@ -62,7 +62,7 @@ static const uint8 SecOC_Aes128_Rcon[10] = {
  *          使わず素直に計算する（可読性優先。1 ブロックあたり最大 16 回×8bit
  *          ループなので RA4M1 では無視できるコスト）。
  */
-static uint8 SecOC_Aes128_GMul(uint8 a, uint8 b)
+static uint8 Crypto_Aes128_GMul(uint8 a, uint8 b)
 {
     uint8 p = 0U;
     for (uint8 i = 0U; i < 8U; i++)
@@ -82,8 +82,8 @@ static uint8 SecOC_Aes128_GMul(uint8 a, uint8 b)
  * 鍵拡張
  * ----------------------------------------------------------------------- */
 
-static void SecOC_Aes128_KeyExpansion(const uint8 key[SECOC_AES128_KEY_SIZE],
-                                       uint8 expandedKey[AES128_EXPANDED_KEY_SIZE])
+static void Crypto_Aes128_KeyExpansion(const uint8 key[CRYPTO_AES128_KEY_SIZE],
+                                        uint8 expandedKey[AES128_EXPANDED_KEY_SIZE])
 {
     uint8 temp[4];
 
@@ -109,12 +109,12 @@ static void SecOC_Aes128_KeyExpansion(const uint8 key[SECOC_AES128_KEY_SIZE],
             temp[3] = rotated0;
 
             /* SubWord: 各バイトへ S-box を適用 */
-            temp[0] = SecOC_Aes128_Sbox[temp[0]];
-            temp[1] = SecOC_Aes128_Sbox[temp[1]];
-            temp[2] = SecOC_Aes128_Sbox[temp[2]];
-            temp[3] = SecOC_Aes128_Sbox[temp[3]];
+            temp[0] = Crypto_Aes128_Sbox[temp[0]];
+            temp[1] = Crypto_Aes128_Sbox[temp[1]];
+            temp[2] = Crypto_Aes128_Sbox[temp[2]];
+            temp[3] = Crypto_Aes128_Sbox[temp[3]];
 
-            temp[0] ^= SecOC_Aes128_Rcon[(wordIdx / AES128_NK) - 1U];
+            temp[0] ^= Crypto_Aes128_Rcon[(wordIdx / AES128_NK) - 1U];
         }
 
         const uint16 curOffset  = (uint16)(wordIdx * 4U);
@@ -130,19 +130,19 @@ static void SecOC_Aes128_KeyExpansion(const uint8 key[SECOC_AES128_KEY_SIZE],
  * ラウンド関数（State[row + 4*col] の列優先レイアウト、FIPS-197 3.4 準拠）
  * ----------------------------------------------------------------------- */
 
-static void SecOC_Aes128_AddRoundKey(uint8 state[16], const uint8* roundKey)
+static void Crypto_Aes128_AddRoundKey(uint8 state[16], const uint8* roundKey)
 {
     for (uint8 i = 0U; i < 16U; i++)
         state[i] ^= roundKey[i];
 }
 
-static void SecOC_Aes128_SubBytes(uint8 state[16])
+static void Crypto_Aes128_SubBytes(uint8 state[16])
 {
     for (uint8 i = 0U; i < 16U; i++)
-        state[i] = SecOC_Aes128_Sbox[state[i]];
+        state[i] = Crypto_Aes128_Sbox[state[i]];
 }
 
-static void SecOC_Aes128_ShiftRows(uint8 state[16])
+static void Crypto_Aes128_ShiftRows(uint8 state[16])
 {
     uint8 tmp[16];
     for (uint8 row = 0U; row < 4U; row++)
@@ -157,7 +157,7 @@ static void SecOC_Aes128_ShiftRows(uint8 state[16])
         state[i] = tmp[i];
 }
 
-static void SecOC_Aes128_MixColumns(uint8 state[16])
+static void Crypto_Aes128_MixColumns(uint8 state[16])
 {
     for (uint8 col = 0U; col < 4U; col++)
     {
@@ -166,61 +166,61 @@ static void SecOC_Aes128_MixColumns(uint8 state[16])
         const uint8 s2 = state[4U * col + 2U];
         const uint8 s3 = state[4U * col + 3U];
 
-        state[4U * col + 0U] = (uint8)(SecOC_Aes128_GMul(s0, 2U) ^ SecOC_Aes128_GMul(s1, 3U) ^ s2 ^ s3);
-        state[4U * col + 1U] = (uint8)(s0 ^ SecOC_Aes128_GMul(s1, 2U) ^ SecOC_Aes128_GMul(s2, 3U) ^ s3);
-        state[4U * col + 2U] = (uint8)(s0 ^ s1 ^ SecOC_Aes128_GMul(s2, 2U) ^ SecOC_Aes128_GMul(s3, 3U));
-        state[4U * col + 3U] = (uint8)(SecOC_Aes128_GMul(s0, 3U) ^ s1 ^ s2 ^ SecOC_Aes128_GMul(s3, 2U));
+        state[4U * col + 0U] = (uint8)(Crypto_Aes128_GMul(s0, 2U) ^ Crypto_Aes128_GMul(s1, 3U) ^ s2 ^ s3);
+        state[4U * col + 1U] = (uint8)(s0 ^ Crypto_Aes128_GMul(s1, 2U) ^ Crypto_Aes128_GMul(s2, 3U) ^ s3);
+        state[4U * col + 2U] = (uint8)(s0 ^ s1 ^ Crypto_Aes128_GMul(s2, 2U) ^ Crypto_Aes128_GMul(s3, 3U));
+        state[4U * col + 3U] = (uint8)(Crypto_Aes128_GMul(s0, 3U) ^ s1 ^ s2 ^ Crypto_Aes128_GMul(s3, 2U));
     }
 }
 
-void SecOC_Aes128_EncryptBlock(const uint8 key[SECOC_AES128_KEY_SIZE],
-                                const uint8 plaintext[SECOC_AES128_BLOCK_SIZE],
-                                uint8 ciphertext[SECOC_AES128_BLOCK_SIZE])
+void Crypto_Aes128_EncryptBlock(const uint8 key[CRYPTO_AES128_KEY_SIZE],
+                                 const uint8 plaintext[CRYPTO_AES128_BLOCK_SIZE],
+                                 uint8 ciphertext[CRYPTO_AES128_BLOCK_SIZE])
 {
     uint8 expandedKey[AES128_EXPANDED_KEY_SIZE];
     uint8 state[16];
 
-    SecOC_Aes128_KeyExpansion(key, expandedKey);
+    Crypto_Aes128_KeyExpansion(key, expandedKey);
 
     for (uint8 i = 0U; i < 16U; i++)
         state[i] = plaintext[i];
 
-    SecOC_Aes128_AddRoundKey(state, &expandedKey[0]);
+    Crypto_Aes128_AddRoundKey(state, &expandedKey[0]);
 
     for (uint8 round = 1U; round < AES128_NR; round++)
     {
-        SecOC_Aes128_SubBytes(state);
-        SecOC_Aes128_ShiftRows(state);
-        SecOC_Aes128_MixColumns(state);
-        SecOC_Aes128_AddRoundKey(state, &expandedKey[round * 16U]);
+        Crypto_Aes128_SubBytes(state);
+        Crypto_Aes128_ShiftRows(state);
+        Crypto_Aes128_MixColumns(state);
+        Crypto_Aes128_AddRoundKey(state, &expandedKey[round * 16U]);
     }
 
     /* 最終ラウンド（AES-128 の 10 ラウンド目）は MixColumns を行わない */
-    SecOC_Aes128_SubBytes(state);
-    SecOC_Aes128_ShiftRows(state);
-    SecOC_Aes128_AddRoundKey(state, &expandedKey[AES128_NR * 16U]);
+    Crypto_Aes128_SubBytes(state);
+    Crypto_Aes128_ShiftRows(state);
+    Crypto_Aes128_AddRoundKey(state, &expandedKey[AES128_NR * 16U]);
 
     for (uint8 i = 0U; i < 16U; i++)
         ciphertext[i] = state[i];
 }
 
-Std_ReturnType SecOC_Aes128_SelfTest(void)
+Std_ReturnType Crypto_Aes128_SelfTest(void)
 {
     /* FIPS-197 Appendix B の公式既知テストベクタ (Known Answer Test) */
-    static const uint8 kKey[SECOC_AES128_KEY_SIZE] = {
+    static const uint8 kKey[CRYPTO_AES128_KEY_SIZE] = {
         0x00,0x01,0x02,0x03,0x04,0x05,0x06,0x07,0x08,0x09,0x0a,0x0b,0x0c,0x0d,0x0e,0x0f
     };
-    static const uint8 kPlaintext[SECOC_AES128_BLOCK_SIZE] = {
+    static const uint8 kPlaintext[CRYPTO_AES128_BLOCK_SIZE] = {
         0x00,0x11,0x22,0x33,0x44,0x55,0x66,0x77,0x88,0x99,0xaa,0xbb,0xcc,0xdd,0xee,0xff
     };
-    static const uint8 kExpectedCiphertext[SECOC_AES128_BLOCK_SIZE] = {
+    static const uint8 kExpectedCiphertext[CRYPTO_AES128_BLOCK_SIZE] = {
         0x69,0xc4,0xe0,0xd8,0x6a,0x7b,0x04,0x30,0xd8,0xcd,0xb7,0x80,0x70,0xb4,0xc5,0x5a
     };
 
-    uint8 actual[SECOC_AES128_BLOCK_SIZE];
-    SecOC_Aes128_EncryptBlock(kKey, kPlaintext, actual);
+    uint8 actual[CRYPTO_AES128_BLOCK_SIZE];
+    Crypto_Aes128_EncryptBlock(kKey, kPlaintext, actual);
 
-    for (uint8 i = 0U; i < SECOC_AES128_BLOCK_SIZE; i++)
+    for (uint8 i = 0U; i < CRYPTO_AES128_BLOCK_SIZE; i++)
     {
         if (actual[i] != kExpectedCiphertext[i])
         {

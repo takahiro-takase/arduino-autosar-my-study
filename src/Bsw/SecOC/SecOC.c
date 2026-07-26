@@ -10,9 +10,12 @@
  *          モジュールとして構成される）。
  *
  *          Secured I-PDU を受信すると、Authentic Payload / Freshness Value /
- *          切り詰め MAC に分離し、AES-128-CMAC（SecOC_Cmac.c、自前実装）で
- *          MAC を再計算して照合、続けてフレッシュネスの単調増加を確認する
- *          （リプレイ攻撃対策）。両方成功した場合のみ Authentic Payload を
+ *          切り詰め MAC に分離し、Csm_MacVerify()（Csm/CryIf/Crypto レイヤ
+ *          経由で AES-128-CMAC を再計算）で MAC が一致するか照合、続けて
+ *          フレッシュネスの単調増加を確認する（リプレイ攻撃対策）。
+ *          SecOC 自身は鍵にも AES/CMAC の実装にも一切アクセスしない
+ *          （Csm/CryIf/Crypto レイヤ分離の詳細は src/Bsw/Csm,CryIf,Crypto
+ *          配下を参照）。両方成功した場合のみ Authentic Payload を
  *          Com_RxIndication() へ転送する。検証に失敗したデータは Com へ
  *          一切渡さない。RX 専用フレーム（ImmobilizerCmd）は「外部の
  *          KeyFobEcu から受信する」想定で、送信側は uds_tester（Python、
@@ -36,7 +39,7 @@
  */
 #include "SecOC.h"
 #include "SecOC_Cfg.h"
-#include "SecOC_Cmac.h"
+#include "Csm.h"
 #include "Com.h"
 #include "PduR_SecOC.h"
 #include "Det.h"
@@ -164,8 +167,6 @@ void SecOC_Init(const SecOC_ConfigType* config)
         SecOC_TxFreshness[i]  = 0U;
     }
 
-    (void)SecOC_Aes128_SelfTest();
-
     DET_LOGI(TAG, "Init ok RX=%u TX=%u", (unsigned)config->RxPduCount, (unsigned)config->TxPduCount);
 }
 
@@ -233,21 +234,18 @@ void SecOC_IfRxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
     for (uint8 b = 0U; b < cfg->FreshnessLength; b++)
         authInput[2U + cfg->AuthenticPduLength + b] = secured[cfg->FreshnessOffset + b];
 
-    uint8 mac[SECOC_CMAC_SIZE];
-    SecOC_Cmac_Calculate(cfg->Key, authInput, authInputLen, mac);
-
     /* 切り詰め MAC は AES-CMAC 128bit 出力の上位（MSB側）MacTxLength バイトを
      * 比較する（[SWS_SecOC_00192]、Figure 5 "truncated down to the most
-     * significant bits"）。 */
-    /* 定数時間比較（早期breakしない）。MAC検証は認証機能の核であり、不一致バイト
-     * 位置に応じて処理時間が変わる実装は、攻撃者に偽MACをバイト単位で総当たり
-     * させる余地を与えるタイミングサイドチャネルになり得るため避ける。 */
-    uint8 macDiff = 0U;
-    for (uint8 b = 0U; b < cfg->MacTxLength; b++)
-    {
-        macDiff |= (uint8)(mac[b] ^ secured[cfg->MacOffset + b]);
-    }
-    if (macDiff != 0U)
+     * significant bits"）。実際の再計算・定数時間比較は Csm_MacVerify() →
+     * CryIf_ProcessJob() → Crypto_ProcessJob() が担う（SecOC は鍵にも
+     * AES/CMAC の実装にも一切アクセスしない）。macLength は Csm_MacVerify()
+     * の規約によりビット単位で渡す（Csm.c 参照）。 */
+    Crypto_VerifyResultType verifyResult = CRYPTO_E_VER_NOT_OK;
+    const Std_ReturnType csmRet = Csm_MacVerify(cfg->CsmJobId, CRYPTO_OPERATIONMODE_SINGLECALL,
+                                                 authInput, authInputLen,
+                                                 &secured[cfg->MacOffset], (uint32)cfg->MacTxLength * 8U,
+                                                 &verifyResult);
+    if (csmRet != E_OK || verifyResult != CRYPTO_E_VER_OK)
     {
         DET_LOGW(TAG, "RxInd W: iPdu=%u MAC verification failed (tampered or wrong key)",
                  (unsigned)RxPduId);
@@ -372,9 +370,6 @@ void SecOC_MainFunction(void)
         for (uint8 b = 0U; b < cfg->FreshnessLength; b++)
             authInput[2U + cfg->AuthenticPduLength + b] = freshness;
 
-        uint8 mac[SECOC_CMAC_SIZE];
-        SecOC_Cmac_Calculate(cfg->Key, authInput, authInputLen, mac);
-
         /* Secured I-PDU = Authentic Payload | Freshness Value | 切り詰め MAC
          * （SecOC_RxPduConfigType の FreshnessOffset/MacOffset と同じレイアウト
          * 規約。Authentic のすぐ後ろに Freshness、その後ろに MAC が続く）。 */
@@ -383,8 +378,14 @@ void SecOC_MainFunction(void)
             secured[b] = SecOC_TxAuthenticBuffer[t][b];
         for (uint8 b = 0U; b < cfg->FreshnessLength; b++)
             secured[cfg->FreshnessOffset + b] = freshness;
-        for (uint8 b = 0U; b < cfg->MacTxLength; b++)
-            secured[cfg->MacOffset + b] = mac[b];
+
+        /* Csm_MacGenerate() が AES-128-CMAC を計算し、切り詰め済み MAC を
+         * secured[MacOffset..] へ直接書き込む（Csm/CryIf/Crypto レイヤ経由。
+         * SecOC は鍵にも AES/CMAC の実装にも一切アクセスしない）。 */
+        uint32 macLen = (uint32)cfg->MacTxLength;
+        (void)Csm_MacGenerate(cfg->CsmJobId, CRYPTO_OPERATIONMODE_SINGLECALL,
+                               authInput, authInputLen,
+                               &secured[cfg->MacOffset], &macLen);
 
         SecOC_TxFreshness[t] = (uint8)(freshness + 1U);
 
