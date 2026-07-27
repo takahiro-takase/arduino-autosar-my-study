@@ -115,6 +115,47 @@ Std_ReturnType Csm_MacVerify(uint32 jobId, Crypto_OperationModeType mode,
                               const uint8* macPtr, uint32 macLength,
                               Crypto_VerifyResultType* verifyPtr);
 
+/**
+ * \brief   鍵要素（AES-128 鍵本体）を書き換える。
+ *
+ * \details KeyM の鍵更新セッション（KeyM_Update()）から呼ばれる想定。書き換え
+ *          直後は当該鍵が無効化され、`Csm_KeySetValid()` が呼ばれるまで
+ *          `Csm_MacGenerate()`/`Csm_MacVerify()` から使用できない
+ *          （[SWS_KeyM_00016]/[SWS_Csm_00957] 参照）。
+ *
+ * \param[in]  keyId         書き換える鍵の ID（CRYPTO_KEY_* 定数）。
+ * \param[in]  keyElementId  CRYPTO_KEY_ELEMENT_ID_CIPHER_KEY 固定。
+ * \param[in]  keyPtr        新しい鍵バイト列。NULL 禁止。
+ * \param[in]  keyLength     keyPtr のバイト長。CRYPTO_AES128_KEY_SIZE(16) 以外は拒否。
+ *
+ * \retval  E_OK      鍵を書き換えた。
+ * \retval  E_NOT_OK  未初期化、NULL、または下位層が失敗。
+ *
+ * \AUTOSARReq     {SWS_Csm_00957}
+ * \ServiceID      {0x78}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType Csm_KeyElementSet(uint32 keyId, uint32 keyElementId,
+                                  const uint8* keyPtr, uint32 keyLength);
+
+/**
+ * \brief   鍵を有効状態にする。
+ *
+ * \details KeyM の鍵更新セッション終了（KeyM_Finalize()）から呼ばれる想定。
+ *
+ * \param[in]  keyId  有効化する鍵の ID（CRYPTO_KEY_* 定数）。
+ *
+ * \retval  E_OK      有効化した。
+ * \retval  E_NOT_OK  未初期化、または下位層が失敗。
+ *
+ * \AUTOSARReq     {SWS_Csm_00958}
+ * \ServiceID      {0x67}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType Csm_KeySetValid(uint32 keyId);
+
 #ifdef __cplusplus
 }
 #endif

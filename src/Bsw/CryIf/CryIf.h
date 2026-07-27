@@ -69,6 +69,46 @@ void CryIf_GetVersionInfo(Std_VersionInfoType* versioninfo);
  */
 Std_ReturnType CryIf_ProcessJob(uint32 channelId, Crypto_JobType* job);
 
+/**
+ * \brief   鍵要素を対応する Crypto Driver Object へディスパッチする。
+ *
+ * \details 単一 Crypto Driver Object のみのため `Crypto_KeyElementSet()` への
+ *          実質パススルー（[SWS_CryIf_00055]）。
+ *
+ * \param[in]  cryIfKeyId    鍵 ID。Crypto Driver 側の cryptoKeyId へそのまま渡す。
+ * \param[in]  keyElementId  鍵要素 ID。
+ * \param[in]  keyPtr        新しい鍵バイト列。NULL 禁止。
+ * \param[in]  keyLength     keyPtr のバイト長。0 禁止。
+ *
+ * \retval  E_OK      鍵要素を書き換えた。
+ * \retval  E_NOT_OK  未初期化、NULL、keyLength=0、または下位層が失敗。
+ *
+ * \AUTOSARReq     {SWS_CryIf_91004}
+ * \ServiceID      {0x04}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType CryIf_KeyElementSet(uint32 cryIfKeyId, uint32 keyElementId,
+                                    const uint8* keyPtr, uint32 keyLength);
+
+/**
+ * \brief   鍵を対応する Crypto Driver Object 上で有効化する。
+ *
+ * \details 単一 Crypto Driver Object のみのため `Crypto_KeySetValid()` への
+ *          実質パススルー（[SWS_CryIf_00058]）。
+ *
+ * \param[in]  cryIfKeyId  有効化する鍵の ID。
+ *
+ * \retval  E_OK      有効化した。
+ * \retval  E_NOT_OK  未初期化、または下位層が失敗。
+ *
+ * \AUTOSARReq     {SWS_CryIf_91005}
+ * \ServiceID      {0x05}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType CryIf_KeySetValid(uint32 cryIfKeyId);
+
 #ifdef __cplusplus
 }
 #endif

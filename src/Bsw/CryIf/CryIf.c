@@ -68,3 +68,43 @@ Std_ReturnType CryIf_ProcessJob(uint32 channelId, Crypto_JobType* job)
      * CRYPTO_OBJECT_ID の 1 個のみのため固定で渡す。 */
     return Crypto_ProcessJob(CRYPTO_OBJECT_ID, job);
 }
+
+Std_ReturnType CryIf_KeyElementSet(uint32 cryIfKeyId, uint32 keyElementId,
+                                    const uint8* keyPtr, uint32 keyLength)
+{
+    if (!CryIf_Initialized)
+    {
+        Det_ReportError(CRYIF_MODULE_ID, 0U, CRYIF_API_ID_KEY_ELEMENT_SET, CRYIF_E_UNINIT);
+        return E_NOT_OK;
+    }
+
+    if (keyPtr == NULL)
+    {
+        Det_ReportError(CRYIF_MODULE_ID, 0U, CRYIF_API_ID_KEY_ELEMENT_SET, CRYIF_E_PARAM_POINTER);
+        return E_NOT_OK;
+    }
+
+    if (keyLength == 0U)
+    {
+        Det_ReportError(CRYIF_MODULE_ID, 0U, CRYIF_API_ID_KEY_ELEMENT_SET, CRYIF_E_PARAM_VALUE);
+        return E_NOT_OK;
+    }
+
+    /* [SWS_CryIf_00055]: 単一 Crypto Driver Object へのパススルーのため、
+     * cryIfKeyId/keyElementId の範囲チェックは Crypto_KeyElementSet() に委ねる
+     * （CryIf_ProcessJob() が job->cryptoKeyId の範囲チェックを Crypto 側に
+     * 委ねているのと同じ方針）。 */
+    return Crypto_KeyElementSet(cryIfKeyId, keyElementId, keyPtr, keyLength);
+}
+
+Std_ReturnType CryIf_KeySetValid(uint32 cryIfKeyId)
+{
+    if (!CryIf_Initialized)
+    {
+        Det_ReportError(CRYIF_MODULE_ID, 0U, CRYIF_API_ID_KEY_SET_VALID, CRYIF_E_UNINIT);
+        return E_NOT_OK;
+    }
+
+    /* [SWS_CryIf_00058]: 単一 Crypto Driver Object へのパススルー。 */
+    return Crypto_KeySetValid(cryIfKeyId);
+}

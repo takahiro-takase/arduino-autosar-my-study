@@ -188,7 +188,7 @@ pio device monitor
 ASW ─── App_EngineManager / App_WarningIndicator
 RTE ─── Rte（ポートベース S/R API + E2E Transformer 呼び出しグルー）
 OS  ─── Os（タイムトリガスケジューラ）
-BSW ─── EcuM / BswM / WdgM / ComM / CanSM / Nm / E2EXf / E2E / Com / PduR / SecOC / Csm / CryIf / Crypto / CanIf / Can
+BSW ─── EcuM / BswM / WdgM / ComM / CanSM / Nm / E2EXf / E2E / Com / PduR / SecOC / Csm / CryIf / Crypto / KeyM / CanIf / Can
         CanTp / Dcm / Dem / NvM / IoHwAb / Dio / Port / Adc / SchM / Det
 HAL ─── Can_Hw / Dio_Hw / Port_Hw / Adc_Hw / Mcu_Hw / NvM_Hw / WdgM_Hw（src/Hal/ に集約）
 ```
@@ -214,7 +214,7 @@ HAL ─── Can_Hw / Dio_Hw / Port_Hw / Adc_Hw / Mcu_Hw / NvM_Hw / WdgM_Hw（s
 |  | ComM | 12 | SWS_ComM | CAN バスの通信モード（NO_COM / SILENT_COM / FULL_COM）を管理し CanSM へ要求。`ComM_BusSMIndication` で EcuM の RUN 要求を操作。複数ユーザ（App_EngineManager=COMM_USER_0, Dcm=COMM_USER_1）の要求を最も通信レベルの高いモードへ集約する調停ロジックを持つ。両ユーザが NO_COM を要求したときのみ実際にボランタリスリープへ落ちる |
 |  | CryIf | 112 | SWS_CryptoInterface | Csm と Crypto Driver の間のルーティング層。`CryIf_ProcessJob()`（実 AUTOSAR は複数 Crypto Driver Object への振り分けを担う）は、本プロジェクトが Crypto Driver を1個しか持たないため実質パススルーで `Crypto_ProcessJob()` へ委譲する（CanIf が単一 CAN コントローラに固定しているのと同じ簡略化） |
 |  | Crypto | 114 | SWS_CryptoDriver | Csm/CryIf/Crypto レイヤの最下層。鍵テーブル（`Crypto_PBCfg.c`）と実際の暗号計算（AES-128-CMAC、自前実装）を保持する唯一のモジュール。`Crypto_ProcessJob()` がジョブの `service`（`CRYPTO_MACGENERATE`/`CRYPTO_MACVERIFY`）に応じて MAC を生成、または定数時間比較で検証する（MAC 検証のタイミングサイドチャネル対策はここに実装。旧実装では SecOC.c 内にあったロジックを責務として正しい層へ移設した） |
-|  | Csm | 110 | SWS_CryptoServiceManager | SecOC が唯一直接呼ぶ暗号スタックの入口。`Csm_MacGenerate()`/`Csm_MacVerify()` が `jobId`（`Csm_PBCfg.c` の `Csm_JobConfigData`）から実行すべきプリミティブ種別と鍵 ID を解決し、`Crypto_JobType` ジョブを組み立てて `CryIf_ProcessJob()` へ委譲する。`Csm_MacVerify()` の `macLength` はビット単位（[SWS_Csm_01050]）、`Csm_MacGenerate()` の `macLengthPtr` はバイト単位（[SWS_Csm_00982]）という実仕様の非対称性を踏襲し、Csm 内でビット→バイト変換する |
+|  | Csm | 110 | SWS_CryptoServiceManager | SecOC が唯一直接呼ぶ暗号スタックの入口。`Csm_MacGenerate()`/`Csm_MacVerify()` が `jobId`（`Csm_PBCfg.c` の `Csm_JobConfigData`）から実行すべきプリミティブ種別と鍵 ID を解決し、`Crypto_JobType` ジョブを組み立てて `CryIf_ProcessJob()` へ委譲する。`Csm_MacVerify()` の `macLength` はビット単位（[SWS_Csm_01050]）、`Csm_MacGenerate()` の `macLengthPtr` はバイト単位（[SWS_Csm_00982]）という実仕様の非対称性を踏襲し、Csm 内でビット→バイト変換する。`Csm_KeyElementSet()`/`Csm_KeySetValid()`（KeyM が呼ぶ鍵操作 API）は CryIf へのパススルー |
 |  | Dcm | 53 | SWS_Dcm | UDS 診断サービス処理（SID 0x10 / 0x11 / 0x14 / 0x19 / 0x22 / 0x27 / 0x28 / 0x2E / 0x2F / 0x31 / 0x3E）。S3 タイマでセッションを自動失効。SID×セッション許可テーブルで 0x14/0x27/0x28/0x2E/0x2F/0x31 を extendedSession 限定とし、SecurityAccess (0x27) でシード・キー認証保護。0x2E は要求が7バイト超のため CanTp の複数フレーム要求受信を実機検証。0x2F (IOControl) は Rte 層でランプ出力を ASW から奪って強制する診断専用オーバーライド。0x28 (CommunicationControl) は Com/Nm の送受信を個別に有効/無効化する |
 |  | Dem | 54 | SWS_Dem | 診断イベントを DTC として管理。カウンタベースのデバウンスで確定し、NvM 経由で EEPROM に永続化。デバウンス確定 FAILED 時に FreezeFrame（RAM のみ）を記録し、ExtendedData（故障確定回数、NvM 永続化）を+1。クリーンな操作サイクルを1回経過すると PendingDTC を自動解除し、再故障せず複数回の操作サイクルを経ると経年回復（Aging）で CONFIRMED を自動解除 |
 |  | Det | — | SWS_Det | `DET_LOG*` マクロ経由でタイムスタンプ付きログを Serial に出力するデバッグ用ブリッジ。加えて標準準拠の `Det_ReportError(ModuleId, InstanceId, ApiId, ErrorId)`（[SWS_Det_00009]）も実装し、全 BSW モジュールの開発エラー検出箇所（NULL/範囲/未初期化チェック）から `DET_LOGE` と並行して呼ばれる（詳細は「CAN 通信スタック」セクションの「DET 準拠」参照） |
@@ -225,6 +225,7 @@ HAL ─── Can_Hw / Dio_Hw / Port_Hw / Adc_Hw / Mcu_Hw / NvM_Hw / WdgM_Hw（s
 |  | EcuM | 10 | SWS_EcuStateManager | ECU ライフサイクルを STARTUP → RUN → POST_RUN → SHUTDOWN の状態マシンで管理。`EcuM_RequestRUN` / `EcuM_ReleaseRUN` で RUN フェーズを調停。SHUTDOWN は CAN バスのウェイクアップにより常に RUN へ復帰可能（実機リセットが必要な終端状態は存在しない） |
 |  | FiM | 11 | SWS_FiM | Dem が確定（CONFIRMED）した DTC をもとにアプリ機能（FID）の実行許可を判定。100ms 周期で再評価し、結果を ASW へ `Rte_Call_FiM_GetFunctionPermission` で公開 |
 |  | IoHwAb | 254 | AUTOSAR 抽象化層 | Dio チャネル番号を隠蔽し SW-C に論理的な LED / ボタン / ADC API を提供。10ms 周期でデバウンス（40ms 確定）・ボタン固着検出・ADC 電圧低下を Dem 報告 |
+|  | KeyM | 116（暫定値） | SWS_KeyManager (Release 4.4.0) | 鍵更新セッション（`KeyM_Start`→`KeyM_Update`→`KeyM_Finalize`）を管理する Key Manager。Dcm の WriteDataByIdentifier（DID 0x0108 CryptoKeyUpdate）が模擬鍵マスターとして駆動し、`Csm_KeyElementSet()`/`Csm_KeySetValid()` 経由で Crypto 層の RAM 鍵を書き換える。Certificate submodule・KeyM_Prepare/Verify・SHE 形式・KEYM_DERIVE_KEY は対応除外（詳細は下記「SecOC 詳細」節参照）。ModuleId は Release 4.3.1 の AUTOSAR_TR_BSWModuleList.pdf に KeyM 自体が未掲載のため未検証の暫定値 |
 |  | Nm | 31 | SWS_CANNM | ネットワークマネジメント。ComM が FULL_COM の間、1000ms 周期（MeterStatus の 3000ms より高頻度）で NM フレーム (CAN 0x400) を送信し生存を示す。PduR/Com を経由せず `CanIf_Transmit` を直接呼ぶ点が実車の CanNm と同じ。シグナル値を運ばないため E2E 保護は付与しない |
 |  | NvM | 20 | SWS_NvM | EEPROM の読み書きを抽象化。Dem は EEPROM アドレスを直接知らない。各ブロックに CRC8 を付加して破損を検出し、不一致時は ROM デフォルト値（NvM_RestoreBlockDefaults）へ自動復元。ブロックごとに冗長化（`NvMBlockManagementType=NVM_BLOCK_REDUNDANT` 相当、`Redundant` フラグ）を選択でき、片面が破損してももう片面から自己修復できる（DEM_EXTENDED で使用） |
 |  | PduR | 51 | SWS_PduR | 受信 PDU を Com/CanTp/SecOC へ（1つの RxPduId から複数宛先への配信にも対応）、送信 PDU を CanIf へルーティング。通信スタックの配管役。TX 経路は既定では `CanIf_Transmit()` へ直接転送するが、`PduR_TxRoutingPathType.TransmitOverrideFct` が設定されている場合は中間モジュール（SecOC）へ委譲できるよう汎用化されている（既存の全 TX パスはこのフィールドを使わないため無変更） |
@@ -322,8 +323,13 @@ Basic Software Modules」表）。詳細は「CAN 通信スタック」セクシ
 │   │   ├── Csm/                  # Crypto Service Manager（SecOC が唯一直接呼ぶ暗号スタックの入口）
 │   │   │   ├── Csm_Cfg.h         # DET 定数・CSM_JOB_ID_* 定数
 │   │   │   ├── Csm_PBCfg.h/.c    # CsmJob 設定テーブル（jobId → プリミティブ種別・鍵ID）
-│   │   │   ├── Csm.h             # 公開インタフェース（Csm_MacGenerate/Csm_MacVerify）
-│   │   │   └── Csm.c             # ジョブ解決 → Crypto_JobType 組み立て → CryIf_ProcessJob 委譲
+│   │   │   ├── Csm.h             # 公開インタフェース（Csm_MacGenerate/Csm_MacVerify、Csm_KeyElementSet/Csm_KeySetValid）
+│   │   │   └── Csm.c             # ジョブ解決 → Crypto_JobType 組み立て → CryIf_ProcessJob 委譲。鍵操作 API は CryIf へパススルー
+│   │   ├── KeyM/                 # Key Manager（鍵更新セッションを管理。Csm のみに依存）
+│   │   │   ├── KeyM_Cfg.h        # DET 定数・鍵名定数（KEYM_CRYPTO_KEY_NAME_*）
+│   │   │   ├── KeyM_PBCfg.h/.c   # 鍵名テーブル（鍵名 → Csm 側 keyId = CRYPTO_KEY_*）
+│   │   │   ├── KeyM.h            # 公開インタフェース（KeyM_Start/KeyM_Update/KeyM_Finalize）
+│   │   │   └── KeyM.c            # セッション状態管理 → 鍵名解決 → Csm_KeyElementSet/Csm_KeySetValid 呼び出し
 │   │   ├── E2E/                  # AUTOSAR E2E Profile 01 保護（CRC8 SAE J1850 + 4bit カウンタ）
 │   │   │   ├── E2E_P01.h         # 設定型・状態型・API 宣言（Check: E2E_P01Check/CheckInit、Protect: E2E_P01Protect/ProtectInit）
 │   │   │   └── E2E_P01.c         # CRC8 計算・受信検証（カウンタデルタ判定）・送信保護（Counter更新+CRC付加）実装
@@ -2423,18 +2429,27 @@ DLC が 4→8 バイトへ増える点は `CanIf_PBCfg.c` の当該 TxPdu の `.
   `Csm_PBCfg.c` の CsmJob 設定 → `Crypto_PBCfg.c` の鍵テーブルが決めます
   （AES-128/CMAC の実装自体は `Crypto_Aes128.c`/`Crypto_Cmac.c`。元は
   `SecOC_Aes128.c`/`SecOC_Cmac.c` として SecOC 内に直接持っていたものを移設）。
-  ただし **KeyM（鍵のプロビジョニング・耐タンパ格納・ライフサイクル管理）は
-  引き続き分離実装していません**。鍵は `Crypto_PBCfg.c` の固定配列のままで、
-  実車の KeyM が担う機能（鍵更新・証明書検証等）は対象外です。
   また実 AUTOSAR の Csm/CryIf/Crypto はジョブベースの非同期処理
   （`Crypto_JobType` の START/UPDATE/FINISH モード、ジョブキュー）が前提ですが、
   本プロジェクトは全体が同期呼び出しのため常に `CRYPTO_OPERATIONMODE_SINGLECALL`
   のみを使う同期実装です。`Crypto_JobType` 自体も実 AUTOSAR の4段階入れ子構造体
   （`Crypto_JobPrimitiveInputOutputType` 等）ではなく、MAC 生成/検証の2用途に
   必要なフィールドのみを持つ簡略化フラット構造体にしています。
-- **鍵バイト列そのものは `Crypto_PBCfg.c` の固定配列**です（実車は KeyM 等による
-  鍵のプロビジョニング・耐タンパ格納が必須で、固定鍵をソースコードへ埋め込むことは
-  本番運用では絶対に行ってはなりません）。
+- **鍵バイト列の初期値は `Crypto_PBCfg.c` の固定配列**です（`Crypto_Init()` が
+  起動時に RAM キースロットへコピーする。固定鍵をソースコードへ埋め込むことは
+  本番運用では絶対に行ってはなりません）。**KeyM（Key Manager）による鍵更新は
+  `src/Bsw/KeyM/` に実装済み**で、Dcm の WriteDataByIdentifier（DID
+  0x0108 CryptoKeyUpdate）が模擬鍵マスターとして `KeyM_Start()`→
+  `KeyM_Update()`→`KeyM_Finalize()` を1回の診断要求内で駆動し、
+  `Csm_KeyElementSet()`/`Csm_KeySetValid()` 経由で RAM 上の鍵を書き換えます
+  （更新直後は無効化され、Finalize されるまで MAC 生成/検証に使えません）。
+  ただし **実 AUTOSAR の KeyM が持つ Certificate submodule（X.509 証明書
+  チェーンの格納・検証）は完全に対応除外**（本プロジェクトに PKI の土台が
+  一切ないため）で、Crypto key submodule も `KeyM_Start`/`KeyM_Update`/
+  `KeyM_Finalize` の3 API のみに絞っています（`KeyM_Prepare`/`KeyM_Verify`、
+  SHE M1M2M3 形式の鍵更新、`KEYM_DERIVE_KEY` は未対応）。鍵材料は NVM に
+  永続化されないため、再起動すれば `Crypto_PBCfg.c` の初期値に戻ります
+  （詳細は `src/Bsw/KeyM/KeyM.h` 冒頭コメント参照）。
 - **リプレイ判定（RX）は単調増加チェックのみ**（`(uint8)(received -
   lastAccepted) < 128` という折り返し許容の「半区間」判定）で、実車の
   Freshness Manager（11 章、複数カウンタ・マスタースレーブ同期プロトコル）は
@@ -2685,7 +2700,7 @@ CAN 0x100（EngineInfo）・0x110（AbsInfo）・0x7E0（診断要求）は PduR
 | 0x22<br>ReadDataByIdentifier | ○ | ○ | — | `03 22 HH LL 00 00 00 00` | byte2-3=DID（0x0101/0x0102/0x0103/0x0104） |
 | 0x27<br>SecurityAccess | × | ○ | 0x01<br>(requestSeed) | `02 27 01 00 00 00 00 00` | seed 2 バイト |
 |  |  |  | 0x02<br>(sendKey) | `04 27 02 HH LL 00 00 00` | byte2-3=key（big-endian） |
-| 0x2E<br>WriteDataByIdentifier | × | ○ | — | FF+CF（後述、SF 不可） | DID=0x0104 (TestPattern) 固定 8 バイトのみ対応<br>**SecurityAccess Level1 必須**（未認証は NRC 0x33） |
+| 0x2E<br>WriteDataByIdentifier | × | ○ | — | FF+CF（後述、SF 不可） | DID=0x0104 (TestPattern) 固定 8 バイト、DID=0x0108 (CryptoKeyUpdate) keyName(1)+key(16)=17バイトのみ対応<br>**SecurityAccess Level1 必須**（未認証は NRC 0x33） |
 | 0x2F<br>InputOutputControlByIdentifier | × | ○ | 0x00-0x03<br>(controlOptionRecord) | `04 2F HH LL OO 00 00 00`<br>(shortTermAdjustment のみ `05 2F HH LL 03 SS 00 00`) | byte2-3=DID（0x0105/0x0106/0x0107）<br>byte4=controlOptionRecord<br>byte5=controlState（shortTermAdjustmentのみ、0/1）<br>**SecurityAccess 不要**（0x14/0x2E と異なり車両制御・NVM書換を伴わないため） |
 | 0x28<br>CommunicationControl | × | ○ | 0x00-0x03<br>(controlType) | `03 28 CC TT 00 00 00 00` | byte2=controlType（0x00 enableRxAndTx/0x01 enableRxAndDisableTx/0x02 disableRxAndEnableTx/0x03 disableRxAndTx）<br>byte3=communicationType（0x01 通常通信/0x02 NM通信/0x03 両方）<br>拡張アドレス指定(0x04/0x05)・サブネット指定は非対応<br>**SecurityAccess 不要**（0x2F と同じ理由） |
 | 0x31<br>RoutineControl | × | ○ | 0x01<br>(startRoutine) | `04 31 01 02 03 00 00 00` | RID=0x0203 (EngineHealthCheck) のみ対応<br>**SecurityAccess 不要**（センサ読み取りのみで車両制御・NVM書換を伴わないため） |
@@ -3296,6 +3311,29 @@ DID 0x0104 を読み出すことで読み戻し確認できます（読み出し
 
 実際の車両データではなく、CanTp のトランスポート層を実機で確かめるための
 学習用 DID です。
+
+##### 0x2E WriteDataByIdentifier — CryptoKeyUpdate (DID 0x0108) による鍵更新
+
+DID 0x0108 (CryptoKeyUpdate) は KeyM の鍵更新セッションを駆動する模擬鍵
+マスターです。要求ペイロードは `keyName(1) + 新しい鍵16バイト = 17バイト`
+（`SID(1)+DID(2)+17=20バイト`）で、TestPattern と同じく FF+CF の複数フレーム
+要求になります。
+
+```
+要求: [0x2E, 0x01, 0x08, keyName, key0..key15]  (20 バイト、SF 不可)
+応答: [0x6E, 0x01, 0x08]  (SF, 3 バイト)
+```
+
+`keyName` は `'1'`(0x31, ImmobilizerCmd 用) または `'2'`(0x32,
+E2EHealthStatus 用) のみ有効。ECU 内部では `Dcm_HandleWriteDataById()` が
+1回の呼び出し内で `KeyM_Start()`→`KeyM_Update()`→`KeyM_Finalize()` を実行し、
+`Csm_KeyElementSet()`/`Csm_KeySetValid()` 経由で `Crypto.c` の RAM 鍵テーブル
+を書き換えます。鍵は更新直後は無効化され、`KeyM_Finalize()`（＝この DID 書き込み
+の完了）まで MAC 生成/検証には使われません。鍵材料は RAM のみで NVM に
+永続化しないため、再起動すると `Crypto_PBCfg.c` の初期値に戻ります。
+
+extendedSession かつ SecurityAccess Level1 アンロック済みでなければ NRC 0x33。
+`keyName` 不一致・下位層の失敗時は NRC 0x31 (requestOutOfRange) を返します。
 
 ##### UDS ボタン送信ツール（tools/uds_tester）
 

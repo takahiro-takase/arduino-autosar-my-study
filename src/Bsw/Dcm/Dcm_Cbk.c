@@ -151,6 +151,7 @@
 #include "ComM.h"
 #include "Com.h"
 #include "Nm.h"
+#include "KeyM.h"
 #include "Det.h"
 
 /* millis() is declared in Arduino wiring.c with C linkage. */
@@ -1003,20 +1004,56 @@ static void Dcm_HandleReadDataById(const uint8* uds, uint8 udsLen)
  * ----------------------------------------------------------------------- */
 
 /**
+ * \brief   DCM_DID_CRYPTO_KEY_UPDATE の書き込みを処理する。
+ *
+ * \details KeyM の鍵更新セッション（Start→Update→Finalize）を1回の
+ *          WriteDataByIdentifier 呼び出し内で一括実行する「模擬鍵マスター」。
+ *          実車では複数回の診断サービス呼び出しに分かれるセッションだが、
+ *          本プロジェクトはこの DID 経由の呼び出し以外にセッションを開始する
+ *          経路がないため、Start/Finalize を毎回内部で完結させる簡略化を行う
+ *          （KeyM.h 冒頭コメント参照）。
+ *
+ * \param[in]  keyName  KEYM_CRYPTO_KEY_NAME_* の1バイト値。
+ * \param[in]  keyData  新しい鍵バイト列（16バイト、呼び出し元で長さ保証済み）。
+ *
+ * \retval  E_OK      鍵を更新し有効化した。
+ * \retval  E_NOT_OK  KeyM_Start/Update/Finalize のいずれかが失敗（鍵名不一致等）。
+ */
+static Std_ReturnType Dcm_UpdateCryptoKey(uint8 keyName, const uint8* keyData)
+{
+    Std_ReturnType ret = KeyM_Start(KEYM_START_WORKSHOPMODE, NULL, 0U, NULL, NULL);
+    if (ret != E_OK)
+        return E_NOT_OK;
+
+    ret = KeyM_Update(&keyName, 1U, keyData, DCM_DID_CRYPTO_KEY_UPDATE_LENGTH - 1U, NULL, 0U);
+    if (ret != E_OK)
+    {
+        /* [SWS_KeyM_00106] 相当: Update が失敗してもセッションは Finalize で
+         * 明示的に閉じる（Finalize は pending マーカーが無ければ何もせず
+         * E_OK を返すだけなので、ここで戻り値は無視してよい）。 */
+        (void)KeyM_Finalize(NULL, 0U, NULL, 0U);
+        return E_NOT_OK;
+    }
+
+    return KeyM_Finalize(NULL, 0U, NULL, 0U);
+}
+
+/**
  * \brief   UDS 0x2E WriteDataByIdentifier を処理する。
  *
  * \details DCM_DID_TEST_PATTERN (0x0104, 固定長 DCM_DID_TEST_PATTERN_LENGTH
- *          バイト) のみ書き込みに対応する。要求ペイロードは
- *          SID(1)+DID(2)+data(8)=11 バイトとなり CanTp の SF 上限 (7 バイト)
- *          を超えるため、CanTp_RxIndication() の FF+CF 受信パスが実際に
- *          動作する（これまで一度も実機を通っていなかったコードパスを
- *          検証する目的の学習用 DID。実際の車両データではない）。
+ *          バイト) と DCM_DID_CRYPTO_KEY_UPDATE (0x0108, 固定長
+ *          DCM_DID_CRYPTO_KEY_UPDATE_LENGTH バイト) のみ書き込みに対応する。
+ *          いずれも要求ペイロードが CanTp の SF 上限 (7 バイト) を超えるため、
+ *          CanTp_RxIndication() の FF+CF 受信パスを実機で検証する目的も兼ねる
+ *          学習用 DID（実際の車両データ・鍵配布プロトコルではない）。
  *          0x14 ClearDiagnosticInformation と同じ方針で、extendedSession
  *          （Dcm_SidSessionTable[] で判定）かつ SecurityAccess Level1
  *          アンロック済みでなければ NRC 0x33 を返す。
  *
- *          要求: [0x2E, DID_H, DID_L, data0..data7]
- *          応答: [0x6E, DID_H, DID_L]
+ *          TestPattern   要求: [0x2E, DID_H, DID_L, data0..data7]
+ *          CryptoKeyUpdate 要求: [0x2E, DID_H, DID_L, keyName, key0..key15]
+ *          応答（共通）: [0x6E, DID_H, DID_L]
  *
  * \param[in]  uds     UDS ペイロード先頭ポインタ (uds[0]=SID 0x2E)。
  * \param[in]  udsLen  UDS ペイロード長。
@@ -1037,24 +1074,45 @@ static void Dcm_HandleWriteDataById(const uint8* uds, uint8 udsLen)
 
     uint16 did = ((uint16)uds[1] << 8U) | (uint16)uds[2];
 
-    if (did != DCM_DID_TEST_PATTERN)
+    if (did == DCM_DID_TEST_PATTERN)
+    {
+        if (udsLen != (uint8)(3U + DCM_DID_TEST_PATTERN_LENGTH))
+        {
+            Dcm_SendNegativeResponse(DCM_SID_WRITE_DATA, DCM_NRC_INCORRECT_MESSAGE_LENGTH);
+            return;
+        }
+
+        uint8 i;
+        for (i = 0U; i < DCM_DID_TEST_PATTERN_LENGTH; i++)
+            Dcm_TestPattern[i] = uds[3U + i];
+
+        DET_LOGI(TAG, "2E did=0x%04X len=%u (multi-frame request)",
+                 (unsigned)did, (unsigned)DCM_DID_TEST_PATTERN_LENGTH);
+    }
+    else if (did == DCM_DID_CRYPTO_KEY_UPDATE)
+    {
+        if (udsLen != (uint8)(3U + DCM_DID_CRYPTO_KEY_UPDATE_LENGTH))
+        {
+            Dcm_SendNegativeResponse(DCM_SID_WRITE_DATA, DCM_NRC_INCORRECT_MESSAGE_LENGTH);
+            return;
+        }
+
+        uint8 keyName = uds[3];
+        if (Dcm_UpdateCryptoKey(keyName, &uds[4]) != E_OK)
+        {
+            DET_LOGW(TAG, "2E did=0x%04X keyName=0x%02X: KeyM update failed",
+                     (unsigned)did, (unsigned)keyName);
+            Dcm_SendNegativeResponse(DCM_SID_WRITE_DATA, DCM_NRC_REQUEST_OUT_OF_RANGE);
+            return;
+        }
+
+        DET_LOGI(TAG, "2E did=0x%04X keyName=0x%02X: key updated", (unsigned)did, (unsigned)keyName);
+    }
+    else
     {
         Dcm_SendNegativeResponse(DCM_SID_WRITE_DATA, DCM_NRC_REQUEST_OUT_OF_RANGE);
         return;
     }
-
-    if (udsLen != (uint8)(3U + DCM_DID_TEST_PATTERN_LENGTH))
-    {
-        Dcm_SendNegativeResponse(DCM_SID_WRITE_DATA, DCM_NRC_INCORRECT_MESSAGE_LENGTH);
-        return;
-    }
-
-    uint8 i;
-    for (i = 0U; i < DCM_DID_TEST_PATTERN_LENGTH; i++)
-        Dcm_TestPattern[i] = uds[3U + i];
-
-    DET_LOGI(TAG, "2E did=0x%04X len=%u (multi-frame request)",
-             (unsigned)did, (unsigned)DCM_DID_TEST_PATTERN_LENGTH);
 
     /* 正応答: [0x6E, DID_H, DID_L] */
     Dcm_TxBuf[0] = 0x6EU;               /* SID + 0x40 */
