@@ -41,6 +41,8 @@
 #define CSM_API_ID_GET_VERSION_INFO   0x3BU
 #define CSM_API_ID_MAC_GENERATE       0x60U
 #define CSM_API_ID_MAC_VERIFY         0x61U
+#define CSM_API_ID_KEY_SET_VALID      0x67U
+#define CSM_API_ID_KEY_ELEMENT_SET    0x78U
 
 /** バージョン情報（Com/E2EXf/PduR 等の既存モジュールと同じ命名規則） */
 #define CSM_VENDOR_ID          0U

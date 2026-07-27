@@ -13,10 +13,13 @@
  *            0x19 ReadDTCInformation (subFunc 0x01/0x02/0x04/0x06) — マルチフレーム対応
  *            0x22 ReadDataByIdentifier (DID 0x0101-0x0103, 0x0104)
  *            0x27 SecurityAccess (subFunc 0x01 requestSeed / 0x02 sendKey) — extendedSession 限定
- *            0x2E WriteDataByIdentifier (DID 0x0104 のみ) — extendedSession +
- *              SecurityAccess Level1 必須。要求が 11 バイトと SF の 7 バイト制限を
- *              超えるため CanTp の複数フレーム受信 (FF+CF) を実機検証する目的の DID
- *              （学習用。実際の車両データではない）
+ *            0x2E WriteDataByIdentifier (DID 0x0104 TestPattern、
+ *              DID 0x0108 CryptoKeyUpdate) — extendedSession + SecurityAccess
+ *              Level1 必須。要求が SF の 7 バイト制限を超えるため CanTp の
+ *              複数フレーム受信 (FF+CF) を実機検証する目的の DID
+ *              （学習用。実際の車両データではない）。CryptoKeyUpdate は
+ *              KeyM の鍵更新セッション（KeyM_Start→Update→Finalize）を
+ *              駆動する模擬鍵マスター（Csm/CryIf/Crypto レイヤ分離の続き）
  *            0x2F InputOutputControlByIdentifier (DID 0x0105-0x0107、
  *              RunLamp/FaultLamp/AbsLamp) — extendedSession 限定
  *              （SecurityAccess は要求しない。ダッシュボードランプの一時的な
@@ -240,6 +243,17 @@
 #define DCM_DID_RUN_LAMP     0x0105U
 #define DCM_DID_FAULT_LAMP   0x0106U
 #define DCM_DID_ABS_LAMP     0x0107U
+
+/** CryptoKeyUpdate: [keyName(1byte), keyData(16byte)]、書き込み専用 (0x2E のみ)。
+ *  KeyM の鍵更新セッション（Csm/CryIf/Crypto レイヤ分離の続き）を
+ *  模擬的な「鍵マスター」として駆動する学習用 DID。実際の鍵配布プロトコルでは
+ *  ないため、複数 ECU 間の鍵配布や NVM 永続化は行わない（Crypto_Init() が
+ *  Crypto_PBCfg.c の初期値から RAM へロードし直すだけで、再起動すれば元に戻る）。
+ *  要求ペイロードは SID(1)+DID(2)+keyName(1)+keyData(16)=20 バイトとなり
+ *  DCM_DID_TEST_PATTERN と同じく CanTp の複数フレーム受信を経由する。 */
+#define DCM_DID_CRYPTO_KEY_UPDATE          0x0108U
+/** keyName(1) + keyData(16, CRYPTO_AES128_KEY_SIZE と同値) */
+#define DCM_DID_CRYPTO_KEY_UPDATE_LENGTH   17U
 
 /* -----------------------------------------------------------------------
  * InputOutputControlByIdentifier (SID 0x2F) controlOptionRecord

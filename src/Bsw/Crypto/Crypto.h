@@ -85,6 +85,50 @@ void Crypto_GetVersionInfo(Std_VersionInfoType* versioninfo);
  */
 Std_ReturnType Crypto_ProcessJob(uint32 objectId, Crypto_JobType* job);
 
+/**
+ * \brief   鍵要素（AES-128 鍵本体）を書き換える。
+ *
+ * \details 書き換え直後は当該 `cryptoKeyId` の鍵を無効化し、`Crypto_KeySetValid()`
+ *          が呼ばれるまで `Crypto_ProcessJob()` での使用を拒否する
+ *          （[SWS_KeyM_00016]/[SWS_KeyM_00008] の「鍵更新セッションが Finalize
+ *          されるまで新しい鍵は使えない」という設計をそのまま反映）。
+ *          `keyElementId` は本プロジェクトが唯一持つ鍵要素
+ *          `CRYPTO_KEY_ELEMENT_ID_CIPHER_KEY`(=1) 以外を拒否する。
+ *
+ * \param[in]  cryptoKeyId    書き換える鍵の ID（CRYPTO_KEY_* 定数）。
+ * \param[in]  keyElementId   CRYPTO_KEY_ELEMENT_ID_CIPHER_KEY 固定。
+ * \param[in]  keyPtr         新しい鍵バイト列。NULL 禁止。
+ * \param[in]  keyLength      keyPtr のバイト長。CRYPTO_AES128_KEY_SIZE(16) 以外は拒否。
+ *
+ * \retval  E_OK      鍵を書き換えた（無効状態になる）。
+ * \retval  E_NOT_OK  未初期化、cryptoKeyId/keyElementId が不正、NULL、または長さ不一致。
+ *
+ * \AUTOSARReq     {SWS_Crypto_91004}
+ * \ServiceID      {0x04}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType Crypto_KeyElementSet(uint32 cryptoKeyId, uint32 keyElementId,
+                                     const uint8* keyPtr, uint32 keyLength);
+
+/**
+ * \brief   鍵を有効状態にする。
+ *
+ * \details `Crypto_KeyElementSet()` で書き換えた鍵を実際に使用可能にする。
+ *          KeyM の鍵更新セッション終了（Finalize）から呼ばれる想定。
+ *
+ * \param[in]  cryptoKeyId  有効化する鍵の ID（CRYPTO_KEY_* 定数）。
+ *
+ * \retval  E_OK      有効化した。
+ * \retval  E_NOT_OK  未初期化、または cryptoKeyId が範囲外。
+ *
+ * \AUTOSARReq     {SWS_Crypto_91014}
+ * \ServiceID      {0x05}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType Crypto_KeySetValid(uint32 cryptoKeyId);
+
 #ifdef __cplusplus
 }
 #endif

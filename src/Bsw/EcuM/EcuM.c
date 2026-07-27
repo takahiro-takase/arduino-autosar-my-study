@@ -16,6 +16,9 @@
  *                                Csm/CryIf/Crypto レイヤの最下層）
  *            4b. CryIf_Init    — Crypto Interface 初期化
  *            4c. Csm_Init      — Crypto Service Manager 初期化
+ *            4c2. KeyM_Init    — Key Manager 初期化（Csm の後。KeyM は
+ *                                Csm_KeyElementSet/Csm_KeySetValid のみを呼び、
+ *                                CryIf/Crypto の存在を知らない）
  *            4d. SecOC_Init    — セキュアオンボード通信初期化（PduR の後・Com の前。
  *                                PduR→SecOC→Com の依存順。SecOC は Csm_MacGenerate/
  *                                Csm_MacVerify のみを呼び、Crypto/CryIf の存在を知らない）
@@ -78,6 +81,7 @@
 #include "Crypto.h"
 #include "CryIf.h"
 #include "Csm.h"
+#include "KeyM.h"
 #include "SecOC.h"
 #include "SecOC_PBCfg.h"
 #include "Com.h"
@@ -150,6 +154,7 @@ void EcuM_Init(void)
     Crypto_Init();  /* Csm/CryIf/Crypto レイヤの最下層。AES-128 自己診断を含む */
     CryIf_Init();
     Csm_Init();
+    KeyM_Init(NULL); /* [SWS_KeyM_00158]: ConfigPtr は常に NULL_PTR */
     SecOC_Init(&SecOC_Config); /* PduR の後、Com の前（PduR→SecOC→Com の依存順） */
     Com_Init(&Com_Config);
     E2EXf_PBCfg_Init();       /* E2E Check/Protect ステート初期化（Com は E2E を関知しないため） */

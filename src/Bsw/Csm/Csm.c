@@ -157,3 +157,36 @@ Std_ReturnType Csm_MacVerify(uint32 jobId, Crypto_OperationModeType mode,
 
     return CryIf_ProcessJob(CRYIF_CHANNEL_ID, &job);
 }
+
+Std_ReturnType Csm_KeyElementSet(uint32 keyId, uint32 keyElementId,
+                                  const uint8* keyPtr, uint32 keyLength)
+{
+    if (!Csm_Initialized)
+    {
+        Det_ReportError(CSM_MODULE_ID, 0U, CSM_API_ID_KEY_ELEMENT_SET, CSM_E_UNINIT);
+        return E_NOT_OK;
+    }
+
+    if (keyPtr == NULL)
+    {
+        Det_ReportError(CSM_MODULE_ID, 0U, CSM_API_ID_KEY_ELEMENT_SET, CSM_E_PARAM_POINTER);
+        return E_NOT_OK;
+    }
+
+    /* [SWS_Csm_01002]: 単一 CryIf チャネルへの実質パススルー。keyId は
+     * CryIf 側の cryIfKeyId へそのまま渡す（本プロジェクトは Csm/CryIf/Crypto
+     * を通じて鍵 ID 空間を分割していない）。 */
+    return CryIf_KeyElementSet(keyId, keyElementId, keyPtr, keyLength);
+}
+
+Std_ReturnType Csm_KeySetValid(uint32 keyId)
+{
+    if (!Csm_Initialized)
+    {
+        Det_ReportError(CSM_MODULE_ID, 0U, CSM_API_ID_KEY_SET_VALID, CSM_E_UNINIT);
+        return E_NOT_OK;
+    }
+
+    /* [SWS_Csm_01003]: 単一 CryIf チャネルへの実質パススルー。 */
+    return CryIf_KeySetValid(keyId);
+}
