@@ -44,6 +44,12 @@
 #define CANSM_API_ID_MAIN_FUNCTION         0x05U
 #define CANSM_API_ID_DEINIT                 0x14U
 #define CANSM_API_ID_GET_VERSION_INFO       0x01U
+/** CanSM_NmBusSleepMode は本プロジェクト独自の連携関数（Nm が Bus-Sleep Mode
+ *  へ到達したことの通知を受け、実際に CAN コントローラをスリープさせる。
+ *  実 AUTOSAR では Nm_BusSleepMode の BSW Mode Switch Port 通知に相当するが、
+ *  本プロジェクトは RTE ポートを介さず直接呼び出す）ため、標準の Service ID
+ *  は存在しない。既存の値と衝突しない空き番号を割り当てる。 */
+#define CANSM_API_ID_NM_BUS_SLEEP_MODE       0x08U
 
 /** バージョン情報（SWS_CANStateManager、Com/E2EXf/PduR 等の既存モジュールと同じ命名規則） */
 #define CANSM_VENDOR_ID          0U

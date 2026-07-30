@@ -9,7 +9,7 @@
  *            Rule 1: EcuM → POST_RUN → アプリ Runnable のみ無効化 (BSW は継続)
  *            Rule 2: EcuM → SHUTDOWN → WdgM_TriggerHwWatchdog・Can_MainFunction_Read・
  *                                      Can_MainFunction_Wakeup・CanSM_MainFunction・
- *                                      NvM_MainFunction 以外を無効化
+ *                                      NvM_MainFunction・Nm_MainFunction 以外を無効化
  *            Rule 3: EcuM → RUN      → I-PDU Group「テレメトリ」(E2EHealthStatus) を起動
  *            Rule 4: EcuM → POST_RUN → I-PDU Group「テレメトリ」(E2EHealthStatus) を停止
  *
@@ -71,7 +71,8 @@ static const BswM_RuleType BswM_Rules[BSWM_RULE_COUNT] =
         BSWM_TASK_MASK_APP
     },
     /* Rule 2: EcuM → SHUTDOWN: WdgM_TriggerHwWatchdog・Can_MainFunction_Read・
-     * Can_MainFunction_Wakeup・CanSM_MainFunction・NvM_MainFunction 以外を無効化 */
+     * Can_MainFunction_Wakeup・CanSM_MainFunction・NvM_MainFunction・
+     * Nm_MainFunction 以外を無効化 */
     {
         BSWM_MODE_SRC_ECUM,
         (uint8)ECUM_STATE_SHUTDOWN,

@@ -78,7 +78,8 @@
  *  RxPduId=0: EngineInfo     (CAN 0x100, COM)   エンジン ECU
  *  RxPduId=1: UDS 診断要求   (CAN 0x7E0, DCM)   診断ツール
  *  RxPduId=2: AbsInfo        (CAN 0x110, COM)   ABS ECU
- *  RxPduId=3: ImmobilizerCmd (CAN 0x120, SecOC) KeyFobEcu 想定 */
-#define CANIF_RX_PDU_COUNT  4U
+ *  RxPduId=3: ImmobilizerCmd (CAN 0x120, SecOC) KeyFobEcu 想定
+ *  RxPduId=4: NM フレーム    (CAN 0x400, Nm。PduR/Com を経由せず直接呼び出す) */
+#define CANIF_RX_PDU_COUNT  5U
 
 #endif /* CANIF_CFG_H */
