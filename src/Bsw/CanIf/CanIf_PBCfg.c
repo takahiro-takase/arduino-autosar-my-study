@@ -28,6 +28,8 @@
  *              CanId=0x110, HRH=0 → PduR RxPduId=2 → COM IPduId=1
  *            RX PDU (RxPduId=3): ImmobilizerCmd (KeyFobEcu 想定、SecOC 保護)
  *              CanId=0x120, HRH=0 → PduR RxPduId=3 → SecOC → (検証成功時) COM IPduId=2
+ *            RX PDU (RxPduId=4): NM フレーム (仮想他 ECU、Nm。PduR/Com を経由せず直接呼び出す)
+ *              CanId=0x400, HRH=0 → Nm_RxIndication
  *
  * =====================================================================
  * DaVinci Configurator 対応表
@@ -60,6 +62,7 @@
 #include "CanIf_PBCfg.h"
 #include "CanIf_Cfg.h"
 #include "PduR_CanIf.h"
+#include "Nm.h"
 
 /* -----------------------------------------------------------------------
  * TX PDU ルーティングテーブル
@@ -101,7 +104,8 @@ static const CanIf_TxPduConfigType CanIf_TxPduConfigData[CANIF_TX_PDU_COUNT] = {
         .CanId             = 0x400U,      /* DaVinci: CanIfTxPduCanId */
         .Dlc               = 2U,          /* DaVinci: CanIfTxPduDlc (Control Bit Vector 1B + Source Node ID 1B) */
         .Hth               = 0U,          /* DaVinci: CanIfTxPduHthIdRef */
-        .TxConfirmFct      = NULL         /* DaVinci: CanIfTxPduUserTxConfirmationName = NULL */
+        .TxConfirmFct      = Nm_TxConfirmation /* DaVinci: CanIfTxPduUserTxConfirmationName
+                                                *          ([SWS_CanNm_00099] NM-Timeout Timer 再起動に使用) */
     },
     {
         /* ---------------------------------------------------------------
@@ -206,6 +210,21 @@ static const CanIf_RxPduConfigType CanIf_RxPduConfigData[CANIF_RX_PDU_COUNT] = {
         .Dlc               = 6U,          /* DaVinci: CanIfRxPduDataLength
                                            *          (Authentic 2B + Freshness 1B + 切り詰めMAC 3B) */
         .RxIndicationFct   = PduR_CanIfRxIndication  /* DaVinci: CanIfRxPduUserRxIndicationName */
+    },
+    {
+        /* ---------------------------------------------------------------
+         * RxPduId=4: NM フレーム (仮想他 ECU → メータ ECU)
+         * DaVinci: /ActiveEcuC/CanIf/CanIfInitCfg/CanIfRxPduCfg/Nm_Rx
+         * Nm.c は PduR/Com を経由せず CanIf から直接呼ばれる（実車の CanNm と
+         * 同様、TxPduId=2 の NM フレーム送信と対になる受信経路）。
+         * --------------------------------------------------------------- */
+        .CanId             = 0x400U,      /* DaVinci: CanIfRxPduCanId */
+        .Hrh               = 0U,          /* DaVinci: CanIfRxPduHrhIdRef */
+        .UpperLayerRxPduId = 4U,          /* DaVinci: CanIfRxPduUpperLayerPduId
+                                           *          (Nm_Cfg.h の NM_CANIF_RX_PDU_ID と一致させること。
+                                           *          単一チャネルのため Nm 側では実質未使用) */
+        .Dlc               = 2U,          /* DaVinci: CanIfRxPduDataLength (Control Bit Vector 1B + Source Node ID 1B) */
+        .RxIndicationFct   = Nm_RxIndication /* DaVinci: CanIfRxPduUserRxIndicationName */
     }
 };
 

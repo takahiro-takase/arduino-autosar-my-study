@@ -12,7 +12,8 @@
  *                                      (WdgM_TriggerHwWatchdog・
  *                                       Can_MainFunction_Read・
  *                                       Can_MainFunction_Wakeup・
- *                                       CanSM_MainFunction・NvM_MainFunction
+ *                                       CanSM_MainFunction・NvM_MainFunction・
+ *                                       Nm_MainFunction
  *                                       だけは除外)
  *
  * \copyright  Copyright (c) 2025 T_T
@@ -97,7 +98,7 @@
 
 /**
  * SHUTDOWN 時に停止するタスク = ALL & ~WDGM_TRIGGER & ~CAN_READ & ~CAN_WAKEUP
- *                                & ~CANSM_MAIN & ~NVM_MAIN。
+ *                                & ~CANSM_MAIN & ~NVM_MAIN & ~NM_MAIN。
  *
  * WdgM_TriggerHwWatchdog だけは SHUTDOWN 後も動かし続ける必要がある。
  * Renesas RA の IWDT は一度有効化すると無効化する手段がなく
@@ -132,6 +133,17 @@
  * ジョブが保留中のまま残っている可能性があり、このタスクを止めてしまうと
  * 次に RUN へ戻るまで（あるいは戻らないまま）EEPROM への永続化が完了しない。
  *
+ * Nm_MainFunction も SHUTDOWN 中動かし続ける必要がある。CanSM の実物理
+ * スリープ（Can_SetControllerMode(CAN_T_SLEEP)）は Nm が Bus-Sleep Mode へ
+ * 到達した通知（CanSM_NmBusSleepMode()）を受けて初めて行われる設計
+ * （協調スリープ、Nm.c/CanSM.c 参照）に変更したため、Nm の状態機械タイマ
+ * （Prepare Bus-Sleep Mode の Wait-Bus-Sleep Timer 等）がここで停止すると
+ * Nm が Bus-Sleep Mode へ二度と到達できず、CAN コントローラが永久に
+ * 物理スリープしなくなる。また Bus-Sleep/Prepare Bus-Sleep 中に他ノードの
+ * NM フレームを受信して Repeat Message State へ戻った場合も、その後の
+ * 周期送信・状態遷移判定は本タスクの中でしか行われないため、これを止めると
+ * Nm がその状態に永久に固着してしまう（実機で確認された不具合）。
+ *
  * SecOC_MainFunction はこの「動かし続ける」リストに含まれない
  * （Com_MainFunction 等と同様、SHUTDOWN 中は停止してよいタスクの扱い。
  * SHUTDOWN 中は Com_MainFunction 自体が停止して SecOC_TxPending[] を
@@ -144,7 +156,8 @@
                                                         | (1UL << BSWM_OS_TASK_CAN_READ) \
                                                         | (1UL << BSWM_OS_TASK_CAN_WAKEUP) \
                                                         | (1UL << BSWM_OS_TASK_CANSM_MAIN) \
-                                                        | (1UL << BSWM_OS_TASK_NVM_MAIN)))))
+                                                        | (1UL << BSWM_OS_TASK_NVM_MAIN) \
+                                                        | (1UL << BSWM_OS_TASK_NM_MAIN)))))
 
 /* -----------------------------------------------------------------------
  * ルール数

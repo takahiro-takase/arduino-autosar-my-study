@@ -27,6 +27,15 @@
 
         { "type": "group_header", "label": "周辺ECU" },
 
+        { "label": "NM 仮想他ECU\n(0x400, node=0x02)", "type": "can_frame", "can_id": "0x400",
+          "data": ["0x00", "0x02"],
+          "interval_ms": 1000,
+          "presets": [
+              { "label": "通常 (CBV=0x00, node=0x02)", "data": ["0x00", "0x02"] },
+              { "label": "Repeat Message Request (CBV bit0=1)", "data": ["0x01", "0x02"] }
+          ]
+        },
+
         { "label": "EngineInfo\n(0x100)", "type": "can_frame", "can_id": "0x100",
           "data": ["0x05", "0xDC", "0x50", "0x80"],
           "e2e": { "data_id": 256, "frame_length": 6, "crc_offset": 0, "counter_offset": 1, "payload_offset": 2 },

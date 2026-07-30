@@ -40,10 +40,15 @@
  *            （実機で確認された不具合。ウェイクアップの契機フレームが
  *            defaultSession への遷移だった場合に発生した）。
  *
+ *          Nm（CanNm）との連携:
+ *            チャネルモードが実際に FULL_COM/NO_COM へ変化するたびに（本関数、
+ *            ComM_BusSMIndication 参照）Nm_NetworkRequest()/Nm_NetworkRelease()
+ *            を呼ぶ。以降の実際の CAN コントローラの物理スリープは Nm の
+ *            状態機械が自律的に判断する（他ノードがまだ NM フレームを送信中
+ *            なら実際には眠らない、という協調スリープ。詳細は Nm.c/CanSM.c 参照）。
+ *
  *          本実装の簡略化:
  *            - 1 チャネル固定
- *            - NM（Network Manager）による複数 ECU 間の合意形成は未対応
- *              （バス スリープ/ウェイクアップ自体は対応済み。詳細は CanSM.c 参照）
  *
  * \copyright  Copyright (c) 2025 T_T
  * \license    MIT License - 詳細は LICENSE ファイルを参照。
@@ -56,6 +61,7 @@
 #include "CanSM.h"
 #include "EcuM.h"
 #include "BswM.h"
+#include "Nm.h"
 #include "Det.h"
 
 #define TAG "ComM"
@@ -291,13 +297,33 @@ void ComM_BusSMIndication(uint8 Network, ComM_ModeType Mode)
         if (Mode == COMM_FULL_COMMUNICATION)
         {
             (void)EcuM_RequestRUN(ECUM_USER_COMM);
+            (void)Nm_NetworkRequest();  /* 通信が必要になったことを Nm へ伝える */
         }
         else if (Mode == COMM_NO_COMMUNICATION)
         {
             (void)EcuM_ReleaseRUN(ECUM_USER_COMM);
+            (void)Nm_NetworkRelease();  /* 通信が不要になったことを Nm へ伝える。
+                                         * 実際の CAN コントローラの物理スリープは
+                                         * Nm が Bus-Sleep Mode へ到達してから
+                                         * CanSM_NmBusSleepMode() 経由で行われる
+                                         * （協調スリープ、CanSM.c 参照）。 */
+        }
+        else if (Mode == COMM_SILENT_COMMUNICATION)
+        {
+            /* Bus-Off 検出時に CanSM_ControllerBusOff() が CanSM_RequestComMode()
+             * を経由せず直接呼ぶ経路（CanSM.c 参照）。EcuM の RUN 状態は維持
+             * するが（下記コメント参照）、CAN コントローラは Can_T_STOP されて
+             * おり送信できないため、Nm にも通信不要を伝えて送信試行を止める。
+             * これを怠ると、Nm が NM-Timeout Timer 満了のたびに送信を再試行
+             * しては Can_Write() に拒否され、Bus-Off 回復完了まで（L2 バックオフ
+             * のため無期限になり得る）NM_E_NETWORK_TIMEOUT を報告し続ける
+             * （実機で確認された不具合）。回復成功時は CanSM が改めて
+             * ComM_BusSMIndication(FULL_COMMUNICATION) を呼ぶため、その際に
+             * 上の分岐で Nm_NetworkRequest() が呼ばれ自動的に再開する。 */
+            (void)Nm_NetworkRelease();
         }
     }
-    /* SILENT_COM: EcuM の RUN 状態は維持（受信専用でも ECU は動作継続） */
+    /* SILENT_COM: EcuM の RUN 状態は維持（受信専用でも ECU は動作継続）。 */
 
     BswM_ComM_CurrentMode(Network, Mode);  /* BswM へ ComM モード変化を通知 */
 }

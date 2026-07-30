@@ -208,7 +208,7 @@ HAL ─── Can_Hw / Dio_Hw / Port_Hw / Adc_Hw / Mcu_Hw / NvM_Hw / WdgM_Hw（s
 |  | BswM | 42 | SWS_BswM | EcuM / ComM のモード変化をルールテーブルで受け取り `Os_SetTaskActive()` でタスクを有効・無効化するルールエンジン。POST_RUN 中はアプリタスクのみ停止し BSW タスクは継続。`BswMPduGroupSwitch`（[SWS_BswM_00273]）相当のアクションも持ち、RUN/POST_RUN で Com の「テレメトリ」I-PDU Group（E2EHealthStatus）を起動/停止する |
 |  | Can | 80 | SWS_Can | MCP2515 の送受信・Bus-Off 検出・CAN バス活動によるウェイクアップ検出を担う MCAL 最下層。HW を直接操作する唯一のモジュール |
 |  | CanIf | 60 | SWS_CanIf | CAN ID ↔ 論理 PDU のマッピング。上位層は CAN ID を知らず PDU ID で通信。設定 DLC 未満の受信 L-PDU は上位層へ渡さず棄却する（SWS_CANIF_00026 のデータ長チェック） |
-|  | CanSM | 140 | SWS_CanSM | Bus-Off 検出直後（回復試行の前）に `ComM_BusSMIndication(SILENT_COMMUNICATION)` を呼び、ComM のチャネル状態が回復完了まで FULL_COM のまま古い情報として残ることを防ぐ（SWS_CanSM_00521。SILENT_COM は EcuM の RUN を維持するため回復中も RUN は落ちない）。回復シーケンスは L1/L2 バックオフ（SWS_CanSM_00514/00515 準拠）で実施し、試行回数が `CANSM_BUSOFF_L1_TO_L2_COUNT` を超えるまでは短い周期（L1）でリトライし、超えたら Dem へ DTC を報告（limit=1 のため即座に確定）した上で長い周期（L2）へ切り替えて無期限にリトライを継続する（回復を諦めて停止する状態は存在しない）。再起動試行のたびに `ComM_BusSMIndication(FULL_COM)` を呼ぶ。ComM の NO_COM 要求によるボランタリスリープでは `Can_SetControllerMode(CAN_T_SLEEP)` で実 HW を実際にスリープさせ、`CanSM_ControllerWakeup()` による復帰経路を持つ。復帰は即座に確定せず、ウェイクアップ検証（Wakeup Validation Protocol 相当）により有効な CAN フレーム受信を確認してから FULL_COM へ確定する |
+|  | CanSM | 140 | SWS_CanSM | Bus-Off 検出直後（回復試行の前）に `ComM_BusSMIndication(SILENT_COMMUNICATION)` を呼び、ComM のチャネル状態が回復完了まで FULL_COM のまま古い情報として残ることを防ぐ（SWS_CanSM_00521。SILENT_COM は EcuM の RUN を維持するため回復中も RUN は落ちない）。回復シーケンスは L1/L2 バックオフ（SWS_CanSM_00514/00515 準拠）で実施し、試行回数が `CANSM_BUSOFF_L1_TO_L2_COUNT` を超えるまでは短い周期（L1）でリトライし、超えたら Dem へ DTC を報告（limit=1 のため即座に確定）した上で長い周期（L2）へ切り替えて無期限にリトライを継続する（回復を諦めて停止する状態は存在しない）。再起動試行のたびに `ComM_BusSMIndication(FULL_COM)` を呼ぶ。ComM の NO_COM 要求によるボランタリスリープでは即座にはスリープせず、Nm（CanNm 状態機械）が Bus-Sleep Mode へ到達した通知（`CanSM_NmBusSleepMode()`）を受けてから `Can_SetControllerMode(CAN_T_SLEEP)` で実 HW を実際にスリープさせる（協調スリープ、詳細は Nm セクション参照）。`CanSM_ControllerWakeup()` による復帰経路を持ち、復帰は即座に確定せず、ウェイクアップ検証（Wakeup Validation Protocol 相当）により有効な CAN フレーム受信を確認してから FULL_COM へ確定する |
 |  | CanTp | 35 | SWS_CanTp | ISO 15765-2 のフレーム分割（FF/CF）と再組立。8 バイトを超える UDS 応答を実現 |
 |  | Com | 50 | SWS_Com | シグナルのビット単位パック／アンパックと送受信タイミング制御を担う（TxModeMode: DIRECT/MIXED/PERIODIC・TMS・MDT・受信フィルタ・I-PDU Group・Signal Gateway 等）。E2E には一切関知しない（E2E Transformer 方式、Com.c 本体に E2E は埋め込まれない）。詳細は下記「CAN 通信スタック（Can / CanIf / PduR / Com）」節を参照 |
 |  | ComM | 12 | SWS_ComM | CAN バスの通信モード（NO_COM / SILENT_COM / FULL_COM）を管理し CanSM へ要求。`ComM_BusSMIndication` で EcuM の RUN 要求を操作。複数ユーザ（App_EngineManager=COMM_USER_0, Dcm=COMM_USER_1）の要求を最も通信レベルの高いモードへ集約する調停ロジックを持つ。両ユーザが NO_COM を要求したときのみ実際にボランタリスリープへ落ちる |
@@ -226,7 +226,7 @@ HAL ─── Can_Hw / Dio_Hw / Port_Hw / Adc_Hw / Mcu_Hw / NvM_Hw / WdgM_Hw（s
 |  | FiM | 11 | SWS_FiM | Dem が確定（CONFIRMED）した DTC をもとにアプリ機能（FID）の実行許可を判定。100ms 周期で再評価し、結果を ASW へ `Rte_Call_FiM_GetFunctionPermission` で公開 |
 |  | IoHwAb | 254 | AUTOSAR 抽象化層 | Dio チャネル番号を隠蔽し SW-C に論理的な LED / ボタン / ADC API を提供。10ms 周期でデバウンス（40ms 確定）・ボタン固着検出・ADC 電圧低下を Dem 報告 |
 |  | KeyM | 116（暫定値） | SWS_KeyManager (Release 4.4.0) | 鍵更新セッション（`KeyM_Start`→`KeyM_Update`→`KeyM_Finalize`）を管理する Key Manager。Dcm の WriteDataByIdentifier（DID 0x0108 CryptoKeyUpdate）が模擬鍵マスターとして駆動し、`Csm_KeyElementSet()`/`Csm_KeySetValid()` 経由で Crypto 層の RAM 鍵を書き換える。Certificate submodule・KeyM_Prepare/Verify・SHE 形式・KEYM_DERIVE_KEY は対応除外（詳細は下記「SecOC 詳細」節参照）。ModuleId は Release 4.3.1 の AUTOSAR_TR_BSWModuleList.pdf に KeyM 自体が未掲載のため未検証の暫定値 |
-|  | Nm | 31 | SWS_CANNM | ネットワークマネジメント。ComM が FULL_COM の間、1000ms 周期（MeterStatus の 3000ms より高頻度）で NM フレーム (CAN 0x400) を送信し生存を示す。PduR/Com を経由せず `CanIf_Transmit` を直接呼ぶ点が実車の CanNm と同じ。シグナル値を運ばないため E2E 保護は付与しない |
+|  | Nm | 31 | SWS_CANNM | CanNm 状態機械（Network Mode の Repeat Message/Normal Operation/Ready Sleep の3内部状態、Prepare Bus-Sleep Mode、Bus-Sleep Mode）を実装。`ComM_BusSMIndication()` が呼ぶ `Nm_NetworkRequest()`/`Nm_NetworkRelease()` を契機に自律的に状態遷移し、NM-Timeout/Repeat Message/Wait-Bus-Sleep の3タイマで駆動する。Bus-Sleep Mode へ到達すると `CanSM_NmBusSleepMode()` を呼び、CanSM はこの通知を受けて初めて CAN コントローラを物理スリープさせる（協調スリープ。他ノードの NM フレーム受信が続く間は実際にはスリープしない）。PduR/Com を経由せず `CanIf_Transmit`/`CanIf_RxIndication` を直接やり取りする点が実車の CanNm と同じ。シグナル値を運ばないため E2E 保護は付与しない |
 |  | NvM | 20 | SWS_NvM | EEPROM の読み書きを抽象化。Dem は EEPROM アドレスを直接知らない。各ブロックに CRC8 を付加して破損を検出し、不一致時は ROM デフォルト値（NvM_RestoreBlockDefaults）へ自動復元。ブロックごとに冗長化（`NvMBlockManagementType=NVM_BLOCK_REDUNDANT` 相当、`Redundant` フラグ）を選択でき、片面が破損してももう片面から自己修復できる（DEM_EXTENDED で使用） |
 |  | PduR | 51 | SWS_PduR | 受信 PDU を Com/CanTp/SecOC へ（1つの RxPduId から複数宛先への配信にも対応）、送信 PDU を CanIf へルーティング。通信スタックの配管役。TX 経路は既定では `CanIf_Transmit()` へ直接転送するが、`PduR_TxRoutingPathType.TransmitOverrideFct` が設定されている場合は中間モジュール（SecOC）へ委譲できるよう汎用化されている（既存の全 TX パスはこのフィールドを使わないため無変更） |
 |  | Port | — | SWS_Port | `Port_Init` でピン方向（OUTPUT / INPUT_PULLUP）を設定する MCAL |
@@ -367,10 +367,10 @@ Basic Software Modules」表）。詳細は「CAN 通信スタック」セクシ
 │   │   │   ├── FiM_PBCfg.c       # FID×イベント対応テーブル実体
 │   │   │   ├── FiM.h             # 公開インタフェース（FiM_Init / FiM_MainFunction / GetFunctionPermission）
 │   │   │   └── FiM.c             # 許可状態の再評価・キャッシュ
-│   │   ├── Nm/                   # ネットワークマネジメント（NM フレーム送信）
-│   │   │   ├── Nm_Cfg.h          # NM フレーム周期・DLC・ノード ID 定数
-│   │   │   ├── Nm.h              # 公開インタフェース（Nm_Init / Nm_MainFunction）
-│   │   │   └── Nm.c              # ComM FULL_COM 中のみ CanIf_Transmit を直接呼び出す（PduR/Com 非経由）
+│   │   ├── Nm/                   # ネットワークマネジメント（CanNm 状態機械）
+│   │   │   ├── Nm_Cfg.h          # DET 定数・NM フレーム周期/DLC/ノードID・状態機械タイマ値
+│   │   │   ├── Nm.h              # 公開インタフェース（Nm_NetworkRequest/Release/RxIndication/TxConfirmation 等）
+│   │   │   └── Nm.c              # Network Mode(Repeat Message/Normal Operation/Ready Sleep)/Prepare Bus-Sleep/Bus-Sleep の状態機械。PduR/Com 非経由で CanIf と直接やり取り
 │   │   ├── NvM/                  # Non-Volatile Memory Manager（EEPROM 抽象化）
 │   │   │   ├── NvM_Cfg.h         # ブロック ID・EEPROM アドレス・ブロックサイズ定義
 │   │   │   ├── NvM_PBCfg.h       # ブロック設定構造体型定義・NvM_Config 宣言
@@ -4127,7 +4127,8 @@ STARTUP ──────────────────→ RUN ── 全
                                                                ↓
                                                            SHUTDOWN
                             (WdgM_TriggerHwWatchdog / Can_MainFunction_Read /
-                             Can_MainFunction_Wakeup / CanSM_MainFunction 以外は停止)
+                             Can_MainFunction_Wakeup / CanSM_MainFunction /
+                             NvM_MainFunction / Nm_MainFunction 以外は停止)
                              ↑                                  │
                     CAN バスのウェイクアップ ←──────────────────┘
                     (EcuM_RequestRUN 経由)
@@ -4138,7 +4139,7 @@ STARTUP ──────────────────→ RUN ── 全
 | STARTUP | 停止 | `EcuM_Init()` 末尾で RUN へ自動遷移 |
 | RUN | **実行** | 全 RUN ユーザが `EcuM_ReleaseRUN` → POST_RUN |
 | POST_RUN | **実行**（後処理継続） | タイムアウト → SHUTDOWN / `EcuM_RequestRUN` → RUN |
-| SHUTDOWN | **実行**（`WdgM_TriggerHwWatchdog` / `Can_MainFunction_Read` / `Can_MainFunction_Wakeup` / `CanSM_MainFunction` のみ有効） | Arduino では電源断不可のためアイドル待機するが、`EcuM_RequestRUN` が来れば RUN へ復帰できる（CAN バスのウェイクアップ経由）。`Os_SchedulerStep()` 自体は呼ばれ続けるが、BswM Rule 2 がこの 4 タスク以外を無効化するため実質アイドル。HW ウォッチドッグ維持のため `WdgM_TriggerHwWatchdog`、CAN ウェイクアップ検出・検証中フレーム処理のため `Can_MainFunction_Read`/`Can_MainFunction_Wakeup`、ウェイクアップ検証タイムアウト監視のため `CanSM_MainFunction` だけは動き続ける（CAN 受信自体は真のハードウェア割り込み `Can_Isr()` のため、この無効化に関わらず常に起動する） |
+| SHUTDOWN | **実行**（`WdgM_TriggerHwWatchdog` / `Can_MainFunction_Read` / `Can_MainFunction_Wakeup` / `CanSM_MainFunction` / `NvM_MainFunction` / `Nm_MainFunction` のみ有効） | Arduino では電源断不可のためアイドル待機するが、`EcuM_RequestRUN` が来れば RUN へ復帰できる（CAN バスのウェイクアップ経由）。`Os_SchedulerStep()` 自体は呼ばれ続けるが、BswM Rule 2 がこの 6 タスク以外を無効化するため実質アイドル。HW ウォッチドッグ維持のため `WdgM_TriggerHwWatchdog`、CAN ウェイクアップ検出・検証中フレーム処理のため `Can_MainFunction_Read`/`Can_MainFunction_Wakeup`、ウェイクアップ検証タイムアウト監視のため `CanSM_MainFunction`、保留中の DTC 永続化のため `NvM_MainFunction`、Nm 状態機械（Bus-Sleep Mode への到達判定・他ノードの NM フレーム受信によるスリープ延期の継続処理）のため `Nm_MainFunction` だけは動き続ける（CAN 受信自体は真のハードウェア割り込み `Can_Isr()` のため、この無効化に関わらず常に起動する） |
 
 SHUTDOWN は CAN バスのウェイクアップにより常に RUN へ復帰できます。実機リセットが
 必要な終端状態は存在しません（Bus-Off 回復は後述の通り L1/L2 バックオフで無期限に
@@ -4339,22 +4340,36 @@ POST_RUN 中に停止するタスク:
 
 ```
 ボランタリスリープ突入（エンジン OFF 継続）
-  CanSM → Can_SetControllerMode(CAN_T_SLEEP)  ← MCP2515 を実際にスリープさせる
+  CanSM: CANSM_STATE_NO_COM へ遷移（この時点ではまだ物理スリープしない）
        → ComM_BusSMIndication(NO_COM)
             ├→ EcuM_ReleaseRUN(ECUM_USER_COMM)
             │     └→ EcuM: RUN → POST_RUN
             │               └→ BswM_EcuM_CurrentState(POST_RUN)
             │                     └→ Rule 1 発火: Os_SetTaskActive(Rte_Engine, OFF)
             │                                     Os_SetTaskActive(Rte_Warning, OFF)
-            └→ BswM_ComM_CurrentMode(0, NO_COM)   ← ComM モード変化も通知（将来の拡張用）
+            ├→ BswM_ComM_CurrentMode(0, NO_COM)   ← ComM モード変化も通知（将来の拡張用）
+            └→ Nm_NetworkRelease()
+                  → Nm: Normal Operation → Ready Sleep State（送信停止）
+                  → NM-Timeout Timer 満了 → Prepare Bus-Sleep Mode
+                  → Wait-Bus-Sleep Timer 満了（他ノードからの NM フレーム受信が
+                    なければ）→ Bus-Sleep Mode へ到達
+                        → CanSM_NmBusSleepMode()
+                              → Can_SetControllerMode(CAN_T_SLEEP)  ← ここで初めて
+                                MCP2515 を実際にスリープさせる（詳細は後述
+                                「Nm（ネットワークマネジメント）」参照）
 
 POST_RUN 5秒後
   EcuM: POST_RUN → SHUTDOWN
     └→ BswM_EcuM_CurrentState(SHUTDOWN)
           └→ Rule 2 発火: Os_SetTaskActive(WdgM_TriggerHwWatchdog / Can_MainFunction_Read /
-                                          Can_MainFunction_Wakeup / CanSM_MainFunction 以外, OFF)
-                          （この 4 タスクだけは HW ウォッチドッグ維持 / CAN ウェイクアップ検出・
-                            検証中フレーム処理 / ウェイクアップ検証タイムアウト監視のため動き続ける）
+                                          Can_MainFunction_Wakeup / CanSM_MainFunction /
+                                          NvM_MainFunction / Nm_MainFunction 以外, OFF)
+                          （この 6 タスクだけは HW ウォッチドッグ維持 / CAN ウェイクアップ検出・
+                            検証中フレーム処理 / ウェイクアップ検証タイムアウト監視 /
+                            DTC永続化 / Nm状態機械継続のため動き続ける。特に Nm_MainFunction を
+                            止めてしまうと Nm が二度と Bus-Sleep Mode へ到達できず、CAN
+                            コントローラが永久に物理スリープしなくなる不具合があったため
+                            SHUTDOWN 中も継続するよう変更した）
 ```
 
 ##### CAN コントローラの実スリープ（`Can_SetControllerMode(CAN_T_SLEEP)`）
@@ -4362,19 +4377,20 @@ POST_RUN 5秒後
 `Can.c` には `CAN_T_SLEEP`/`CAN_T_WAKEUP` 遷移（MCP2515 を実際にスリープさせる
 `Can_Hw_SetMode(CAN_HW_MODE_SLEEP)`）が以前から実装されていましたが、当初は
 呼び出し元がなく死んだコードパスでした。現在は唯一の経路として、ComM の NO_COM
-要求によるボランタリスリープから実際にスリープします。
+要求に端を発する `Nm`（CanNm 状態機械）の協調スリープから実際にスリープします。
 
 `App_EngineManager_Run()` が `ENGINE_STATE_OFF` の継続を検知して
 `ComM_RequestComMode(COMM_USER_0, NO_COM)` を要求し、ComM の集約結果が実際に
-NO_COM になった場合（`Dcm` も extendedSession でないことが条件）にスリープします。
-MCP2515 の CAN バス活動によるウェイクアップ割り込み（`mcp_can` の
-`setSleepWakeup()`）を事前に有効化してからスリープするため、バス活動があれば
-自律的に起床できます。詳細は次項「ボランタリスリープとウェイクアップ」を
-参照してください。
-
-`Nm` モジュールが「`ComM` が `FULL_COM` の間だけ NM フレームを送信する」という形で
-実装した「通信が不要になったことを示す」判断を、ここでハードウェアの実際の
-低消費電力状態へと一段階進めた形になっています。
+NO_COM になった場合（`Dcm` も extendedSession でないことが条件）、
+`ComM_BusSMIndication()` が `Nm_NetworkRelease()` を呼びます。ここで CanSM は
+まだ物理スリープしません。`Nm` が Ready Sleep → Prepare Bus-Sleep → Bus-Sleep
+Mode と自律的に遷移し（他ノードからの NM フレーム受信があればその都度延期
+される）、実際に Bus-Sleep Mode へ到達した時点で `CanSM_NmBusSleepMode()` を
+呼んで初めて CanSM が実スリープを行います。MCP2515 の CAN バス活動による
+ウェイクアップ割り込み（`mcp_can` の `setSleepWakeup()`）を事前に有効化して
+からスリープするため、バス活動があれば自律的に起床できます。詳細は次項
+「ボランタリスリープとウェイクアップ」および後述「Nm（ネットワークマネジメント）」
+を参照してください。
 
 > Bus-Off 回復（後述の「Bus-Off 回復シーケンス」参照）は L1/L2 バックオフで
 > 無期限にリトライを継続する設計のため、CAN コントローラを実際にスリープさせる
@@ -5065,78 +5081,129 @@ delay(1000);  /* 動作確認用: 500ms の許容上限を超えさせる */
 <a id="nm"></a>
 #### Nm（ネットワークマネジメント）
 
-Nm (Network Management) は、実車の各 ECU がバス上に周期的な生存確認フレームを送信し、
-全 ECU が送信を止めたときにバススリープへ移行できる、という合意形成の仕組みです。
-本プロジェクトの `Nm.c` は「ComM が FULL_COM の間だけ生存を示し続ける」という
-役割のみを簡易的に再現しており、複数 ECU 間の合意形成（他 ECU の生存確認・
-Repeat Message Request 等）までは実装していません。バススリープ自体は
-CanSM（`CAN_SetControllerMode(CAN_T_SLEEP)`）が担い、App_EngineManager が
-「エンジン OFF 継続 = 通信不要」と判断したときに ComM 経由で実際にスリープします
-（詳細は「CAN 通信スタック」セクションの「ボランタリスリープとウェイクアップ」参照）。
+Nm (Network Management) は、実車の各 ECU がバス上に周期的な生存確認フレーム
+（NM フレーム）を送信し、クラスタ内の全 ECU が送信を止めたときにのみバス
+スリープへ移行できる、という合意形成（協調スリープ）の仕組みです。
+本プロジェクトの `Nm.c` は `docs/4.3.1/AUTOSAR_SWS_CANNetworkManagement.pdf`
+の CanNm 状態機械をほぼそのまま実装しており、他ノード（uds_tester が模擬する
+「仮想他ECU」）からの NM フレーム受信が自ノードのスリープ判断に反映される
+ことを実機で確認できます。
+
+##### 状態機械
+
+```
+Bus-Sleep Mode ─────────Nm_NetworkRequest()/RxIndication(Prepare Bus-Sleep中)──┐
+     ↑ Wait-Bus-Sleep Timer満了                                                │
+Prepare Bus-Sleep Mode                                                         │
+     ↑ NM-Timeout Timer満了(Ready Sleepから)                                   ▼
+Network Mode: Ready Sleep State ←─Nm_NetworkRelease()── Normal Operation State
+     │  (送信停止)                                              ↑ (送信継続)
+     └──────Repeat Message Time満了(要求あり=Normal Operationへ)─┘
+                        ↑
+              Repeat Message State（Network Mode への進入は必ずここを経由）
+```
+
+3つのタイマ（`Nm_Cfg.h`）で駆動します。
+
+| 定数 | 既定値 | 意味 |
+|------|--------|------|
+| `NM_TIMEOUT_MS` | 3000 ms | NM-Timeout Timer。送信成功確認/受信のたびに再起動される「他ノードを含め通信が生きているか」の監視タイマ。Ready Sleep State でこれが満了すると Prepare Bus-Sleep Mode へ遷移。Repeat Message/Normal Operation State での満了は本来 Bus-Off 等の異常時にのみ起こる想定（[SWS_CanNm_00193]/[SWS_CanNm_00194]。再送信は伴わず、タイマ再起動と DET 報告のみ） |
+| `NM_REPEAT_MESSAGE_MS` | 1500 ms | Repeat Message State の滞在時間 |
+| `NM_WAIT_BUS_SLEEP_MS` | 1500 ms | Prepare Bus-Sleep Mode の滞在時間 |
+| `NM_CYCLE_MS` | 1000 ms | `Nm_MainFunction()` の呼び出し周期。実 CanNm の Message Cycle Timer（`CanNmMsgCycleTime`、[SWS_CanNm_00032]/[SWS_CanNm_00040]。NM-Timeout Timer とは独立に Repeat Message/Normal Operation State の周期送信を駆動する専用タイマ）をこの呼び出し周期自体で兼用する簡略化 |
+
+Message Cycle Timer と NM-Timeout Timer は独立している点に注意してください。
+健全な通信中は毎周期の送信成功が NM-Timeout Timer を先回りして再起動し続ける
+ため、`NM_E_NETWORK_TIMEOUT` は通常発生しません（実装当初この分離を誤り、
+NM-Timeout Timer 満了そのものを再送信のトリガとしてしまっていたため、健全時
+でも約 `NM_TIMEOUT_MS`〜`NM_TIMEOUT_MS+NM_CYCLE_MS` ごとに誤って
+`NM_E_NETWORK_TIMEOUT` が発生し続け、かつそのせいで Ready Sleep State 進入
+時点でタイマが既に古くなっており Prepare Bus-Sleep Mode へ異常に早く遷移する、
+という2つの不具合が実機ログから見つかり修正した経緯があります）。
+
+**対応除外**（実 AUTOSAR CanNm が持つが本プロジェクトでは実装しない機能）:
+Partial Networking（7.11章）、NM Coordinator Sync（7.9.7章）、User Data
+（7.9.2章）、Remote Sleep Indication（`CanNm_CheckRemoteSleepIndication`、
+7.9.1章）、Passive Mode（7.9.3章）。
 
 ##### MeterStatus との違い（なぜ Com を経由しないか）
 
 `MeterStatus` は ASW → RTE → Com → PduR → CanIf → Can という
 通常のシグナル送信経路を通ります。一方 `Nm` はシグナル値を運ばず、実車の `CanNm` も
-Com スタックを経由せず直接 `CanIf_Transmit()` を呼ぶため、本プロジェクトの `Nm.c` も
-同じ構造にしています。
+Com スタックを経由せず直接 `CanIf_Transmit()`/`CanIf_RxIndication()` をやり取り
+するため、本プロジェクトの `Nm.c` も同じ構造にしています。
 
 ```
 MeterStatus: App_EngineManager → Com_SendSignal → Com_RequestTxOnChange（フラグのみ）
                … 次回 Com_MainFunction() → PduR_Transmit → CanIf_Transmit → Can_Write
 
-Nm:          Nm_MainFunction → CanIf_Transmit → Can_Write
-             （PduR・Com を経由しない）
+Nm(TX):      Nm_MainFunction/Nm_NetworkRequest等 → CanIf_Transmit → Can_Write
+Nm(RX):      Can_Isr → CanIf_RxIndication → Nm_RxIndication
+             （いずれも PduR・Com を経由しない）
 ```
 
 ##### フレームレイアウト（CAN ID 0x400 / DLC=2）
 
 ```
-byte[0] : Control Bit Vector（本プロジェクトでは未使用、常に 0x00）
+byte[0] : Control Bit Vector（Bit0=Repeat Message Request のみ使用。他ビットは
+          対応除外の機能に対応するため常に 0）
 byte[1] : Source Node Identifier（本 ECU は 0x01）
 ```
 
 シグナル値ではなく生存確認そのものが目的のため、E2E 保護は付与していません
 （実車でも NM フレームは通常 E2E 保護の対象にしません）。
 
-##### ComM との連携
+##### ComM との連携（エッジトリガ方式）
 
 ```
-Nm_MainFunction()（1000ms 周期）:
-  ComM_GetCurrentComMode(COMM_USER_0, &mode) を取得
-    mode == COMM_FULL_COMMUNICATION ?
-      YES → CanIf_Transmit() で NM フレーム送信
-      NO  → 何もしない（NO_COM の間は送信しない）
+ComM_BusSMIndication() がチャネルモードを確定させるたびに:
+  FULL_COM へ変化 → Nm_NetworkRequest()
+  NO_COM   へ変化 → Nm_NetworkRelease()
 ```
 
-CAN バスが正常な間（ComM が FULL_COM を維持している間）は 1000ms ごとに NM フレームが
-送信され続けます。ComM が NO_COM に落ちると（エンジン OFF 継続によるボランタリ
-スリープ突入時。Bus-Off は L1/L2 バックオフで無期限に回復を試みるため NO_COM には
-ならない）、NM フレームの送信も即座に止まります——実車で「もう通信を必要として
-いない」ことをバスに示すのと同じ意味です。
+以前は `Nm_MainFunction()` が毎周期 `ComM_GetCurrentComMode()` をポーリングして
+送信可否だけを判断する簡易設計でしたが、現在は ComM からのエッジトリガ通知を
+受けて Nm 自身が状態機械とタイマを自律的に管理します。これにより、通信解放後も
+すぐには送信を止めず（Ready Sleep State）、さらに NM-Timeout Timer +
+Wait-Bus-Sleep Timer の間は状態機械上の待機を続けるという、実車と同じ「猶予期間」
+が生まれます。
 
-##### Nm 設定（`Nm_Cfg.h`）
+##### CanSM との連携（協調スリープ）
 
-| 定数 | 既定値 | 意味 |
-|------|--------|------|
-| `NM_CYCLE_MS` | 1000 ms | NM フレーム送信周期（MeterStatus の 3000ms より高頻度。WdgM_TriggerHwWatchdog と同じ「中頻度の BSW ハウスキーピング」周期） |
-| `NM_DLC` | 2 | NM PDU のバイト長 |
-| `NM_SOURCE_NODE_ID` | 0x01 | 本 ECU（メータ ECU）の NM ノード識別子 |
-| `NM_CANIF_TX_PDU_ID` | 2 | `CanIf_PBCfg.c` の TxPduId と一致させる（CanIf_TxPduConfigData の配列インデックス） |
+Nm が実際に Bus-Sleep Mode へ到達すると `CanSM_NmBusSleepMode()` を呼びます。
+CanSM はこの通知を受けて初めて `Can_SetControllerMode(CAN_T_SLEEP)` を実行し、
+CAN コントローラを物理的にスリープさせます（以前は `ComM_RequestComMode(NO_COM)`
+の時点で即座にスリープしていましたが、Nm 導入に伴い変更しました）。
 
-##### ログ例
+途中で他ノード（仮想他ECU）から NM フレームを受信すると、Network Mode 中の
+NM-Timeout Timer が再起動される（実質的にスリープが延期される）ため、
+「他ノードがまだ通信中の間は実際にはスリープしない」という協調スリープの本質を
+実機で確認できます。
+
+##### ログ例（協調スリープにより物理スリープが延期される様子）
 
 ```
-[19ms]   INFO  Nm: Init ok node=0x01
-[1019ms] INFO  CanIf: TX id=2 can=0x400
-[1022ms] INFO  Can_Hw: TX OK id=0x400 dlc=2 [00 01]
-[1027ms] INFO  Can: TX id=0x400 [00 01]
-...（1000ms ごとに継続）
-
-# ボランタリスリープ突入（ComM が NO_COM へ）→ NM フレーム送信が止まる
-[30315ms] INFO  ComM: ch0 ->mode=0        # ComM_BusSMIndication(NO_COM)
-（以降 Nm_MainFunction は ComM_GetCurrentComMode() が FULL_COM でないため何もしない）
+[30315ms] INFO  ComM: ch0 ->mode=0                          # ComM_BusSMIndication(NO_COM)
+[30318ms] INFO  Nm: -> Network Mode: Ready Sleep State (tx stopped)
+[33320ms] INFO  Nm: -> Prepare Bus-Sleep Mode                # NM-Timeout Timer(3000ms)満了
+[33850ms] INFO  CanIf: RX can=0x400                          # 仮想他ECU(node=0x02)のNMフレーム受信
+[33853ms] INFO  Nm: RxIndication: node=0x02 woke us from Prepare Bus-Sleep
+[33854ms] INFO  Nm: -> Network Mode: Repeat Message State    # スリープ延期
+[35360ms] INFO  Nm: -> Network Mode: Ready Sleep State (tx stopped)
+[38362ms] INFO  Nm: -> Prepare Bus-Sleep Mode
+[39865ms] INFO  Nm: -> Bus-Sleep Mode                        # 今度は他ノードのNMフレームが来なかった
+[39866ms] INFO  CanSM: Nm reached Bus-Sleep Mode -> CAN controller SLEEP
 ```
+
+##### 実機検証（uds_tester）
+
+`tools/uds_tester` の「周辺ECU」グループに「NM 仮想他ECU (0x400, node=0x02)」
+ボタンがあります。「定期」送信を有効にした状態でエンジンを OFF のまま放置すると、
+本 ECU がスリープへ向かう途中で仮想他ECUの NM フレームを受信し続けるため、
+ログ上でスリープが延期され続けることを確認できます（周期送信を止めれば、
+その後の Wait-Bus-Sleep Timer 満了で通常どおり Bus-Sleep Mode に到達します）。
+「NM (0x400)」受信モニターで自ノード・仮想他ECU双方の NM フレーム（Repeat
+Message Request ビットの有無を含む）を観測できます。
 
 <a id="io-stack"></a>
 ### IO スタック（IoHwAb / Dio / Port / Adc）

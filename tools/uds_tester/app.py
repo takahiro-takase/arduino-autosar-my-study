@@ -951,7 +951,7 @@ class App(tk.Tk):
     # 受信モニター (rx_monitor)
     # ------------------------------------------------------------------
     _ENGINE_STATE_NAMES = {0: "OFF", 1: "STARTING", 2: "RUNNING", 3: "FAULT"}
-    _NM_SOURCE_NODE_NAMES = {1: "MeterEcu"}
+    _NM_SOURCE_NODE_NAMES = {1: "MeterEcu", 2: "VirtualPeerEcu"}
 
     @staticmethod
     def _decode_warning_status(byte0: int) -> str:
@@ -1074,10 +1074,12 @@ class App(tk.Tk):
                             name = f"{name} upd={upd}"
                         self._rx_monitor_name_vars[mon_idx].set(f"({name})")
                     elif decode == "nm_status" and len(data) >= 2:
-                        # byte[0]=Control Bit Vector（本プロジェクトでは未使用）、
+                        # byte[0]=Control Bit Vector（bit0=Repeat Message Request、
+                        # 他ビットは本プロジェクトでは未使用）、
                         # byte[1]=Source Node Identifier
                         name = self._NM_SOURCE_NODE_NAMES.get(data[1], f"node=0x{data[1]:02X}")
-                        self._rx_monitor_name_vars[mon_idx].set(f"(alive: {name})")
+                        repeat = " RepeatMsgReq" if (data[0] & 0x01) else ""
+                        self._rx_monitor_name_vars[mon_idx].set(f"(alive: {name}{repeat})")
                     elif decode == "immobilizer_status" and len(data) >= 1:
                         # byte[0]=ImmobilizerStatus（Com Signal Gateway が
                         # ImmobilizerCmd(RX, SecOC検証済み)から直接転送。
