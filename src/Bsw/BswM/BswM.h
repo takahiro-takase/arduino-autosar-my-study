@@ -79,9 +79,8 @@ void BswM_EcuM_CurrentState(EcuM_StateType state);
  * \brief   ComM からの通信モード変化通知コールバック。
  *
  * \details ComM_BusSMIndication() が呼ぶ。
- *          BswM は受け取ったモードに一致するルールを評価する。
- *          本プロジェクトの初期設定では ComM トリガのルールは未定義のため
- *          ルール評価は空振りするが、ルール追加で容易に機能拡張できる。
+ *          BswM は受け取ったモードを含む条件を持つ全ルール（単一条件・複合
+ *          条件いずれも）を評価する（BswM_PBCfg.c の Rule3/Rule5 参照）。
  *
  * \param[in]  channel  CAN チャネル番号 (0 固定)。
  * \param[in]  mode     新しい通信モード (ComM_ModeType)。
