@@ -12,15 +12,29 @@
  *            5. TaskMask のビットが立っているタスクに対して Os_SetTaskActive() を呼ぶ
  *
  *          AUTOSAR との主な違い (学習用簡略化):
- *            - 単一条件ルールのみ (AND/OR の LogicalExpression なし)
+ *            - 複合条件は AND/OR の2条件まで（[SWS_BswM_00808]
+ *              BswMLogicalExpression の簡略版。NAND/NOT/XOR、3条件以上、
+ *              LogicalExpression の入れ子は対応除外）
  *            - BswM_MainFunction なし (即時評価モードのみ)
  *            - ActionList は TaskActivation（本プロジェクト独自拡張）と
  *              PduGroupSwitch（[SWS_BswM_00273] 相当、Com_IpduGroupStart/Stop
  *              呼び出し）の 2 種類のみ (ModeSwitch / Timer 未実装)。
  *              1 ルール = 1 アクションの簡略化のため、実 AUTOSAR のように
  *              1 つのモード遷移で複数種のアクションを同時実行したい場合は
- *              同じ ModeSrc/ModeValue を持つルールを複数登録する
+ *              同じ条件を持つルールを複数登録する
  *              (BswM_ExecuteRules() は一致する全ルールを実行するため)。
+ *
+ *          複合条件ルールの評価方式:
+ *            各モードソース (ECUM/COMM) の現在値を BswM_ModeSrcCache[] に
+ *            キャッシュしておき、いずれかのソースが変化するたびに全ルールを
+ *            再評価する（複合条件の場合、他方の条件は BswM_ModeSrcCache[] の
+ *            キャッシュ値を参照するため、2つの条件がどちらの通知で最後に
+ *            真になっても正しく発火する。変化していないソースしか条件に
+ *            含まないルールは評価結果も変化しないため、下記の
+ *            BswM_RuleLastResult[] 比較で自然に Action 実行がスキップされる）。
+ *            各ルールの直近の評価結果を BswM_RuleLastResult[] に保持し、
+ *            Action は結果が false→true へ遷移したときのみ実行する
+ *            （true が続く間の重複実行や true→false への遷移では実行しない）。
  *
  * \copyright  Copyright (c) 2025 T_T
  * \license    MIT License - 詳細は LICENSE ファイルを参照。
@@ -44,15 +58,46 @@
 
 static const BswM_ConfigType* BswM_Cfg;
 
-/** BswM が認識している現在の EcuM フェーズ */
-static EcuM_StateType BswM_EcuMState = ECUM_STATE_STARTUP;
+/** 各モードソースの現在値キャッシュ（BswM_ModeSrcType の列挙値でインデックス）。
+ *  型が異なる複数のモードソース（EcuM_StateType/ComM_ModeType）を共通の
+ *  uint8 配列で一様に扱う。「今回変化していない方」の値を複合条件ルールが
+ *  参照する用途と、変化検出（早期リターン）の用途を兼ねる。 */
+static uint8 BswM_ModeSrcCache[BSWM_MODE_SRC_COUNT];
 
-/** BswM が認識している現在の ComM モード */
-static ComM_ModeType  BswM_ComMMode  = COMM_NO_COMMUNICATION;
+/** 各ルールの直近の評価結果 (0/1)。Action は結果が false→true へ遷移した
+ *  ときのみ実行する。 */
+static uint8 BswM_RuleLastResult[BSWM_RULE_COUNT];
 
 /* -----------------------------------------------------------------------
  * 内部関数
  * ----------------------------------------------------------------------- */
+
+/** 単一条件（ModeSrc の現在キャッシュ値が ModeValue と一致するか）を評価する。 */
+static uint8 BswM_EvaluateCondition(const BswM_ConditionType* cond)
+{
+    return (BswM_ModeSrcCache[cond->ModeSrc] == cond->ModeValue) ? 1U : 0U;
+}
+
+/**
+ * \brief   ルールの Condition[] を Operator で組み合わせて評価する。
+ *
+ * \details [SWS_BswM_00245]/[SWS_BswM_00247] のとおり、AND は全条件が真の
+ *          ときのみ真、OR はいずれか1つでも真なら真。ConditionCount=1 の
+ *          場合は Operator の値に関わらず単一条件の評価結果と等価になる
+ *          （[SWS_BswM_00814] の実測どおり）。OR は最初の true で、AND は
+ *          最初の false で短絡する対称性を利用し、単一ループで両方を表す。
+ */
+static uint8 BswM_EvaluateRule(const BswM_RuleType* rule)
+{
+    const uint8 isOr = (rule->Operator == BSWM_OP_OR) ? 1U : 0U;
+
+    for (uint8 c = 0U; c < rule->ConditionCount; c++)
+    {
+        if (BswM_EvaluateCondition(&rule->Condition[c]) == isOr)
+            return isOr;
+    }
+    return !isOr;
+}
 
 /**
  * \brief   モード変化をトリガとしてルールテーブルを評価し、アクションを実行する。
@@ -65,15 +110,27 @@ static void BswM_ExecuteRules(BswM_ModeSrcType src, uint8 newValue)
     if (BswM_Cfg == NULL)
         return;  /* BswM_Init() 未実行 (呼び出し順序の誤りに対する保険) */
 
+    /* 複合条件ルールが他方のソースの最新値を参照できるよう、ルール評価前に
+     * 必ずキャッシュを更新する。 */
+    BswM_ModeSrcCache[src] = newValue;
+
     for (uint8 i = 0U; i < BswM_Cfg->RuleCount; i++)
     {
         const BswM_RuleType* rule = &BswM_Cfg->Rules[i];
 
-        if ((rule->ModeSrc != src) || (rule->ModeValue != newValue))
-            continue;
+        /* src を条件に含まないルールは結果が変わらないため、下の
+         * result == BswM_RuleLastResult[i] で自然にスキップされる。 */
+        uint8 result = BswM_EvaluateRule(rule);
 
-        DET_LOGI(TAG, "Rule%u fired src=%u val=0x%02X act=%u mask=0x%05lX",
-                 (unsigned)i, (unsigned)src, (unsigned)newValue,
+        if (result == BswM_RuleLastResult[i])
+            continue;  /* 結果が変化していなければ Action を再実行しない */
+        BswM_RuleLastResult[i] = result;
+
+        if (!result)
+            continue;  /* false→true へ遷移したときのみ Action を実行する */
+
+        DET_LOGI(TAG, "Rule%u fired op=%u conds=%u act=%u mask=0x%05lX",
+                 (unsigned)i, (unsigned)rule->Operator, (unsigned)rule->ConditionCount,
                  (unsigned)rule->Action, (unsigned long)rule->TaskMask);
 
         if (rule->Action == BSWM_ACTION_ACTIVATE || rule->Action == BSWM_ACTION_DEACTIVATE)
@@ -114,9 +171,13 @@ void BswM_Init(const BswM_ConfigType* ConfigPtr)
         return;
     }
 
-    BswM_Cfg       = ConfigPtr;
-    BswM_EcuMState = ECUM_STATE_STARTUP;
-    BswM_ComMMode  = COMM_NO_COMMUNICATION;
+    BswM_Cfg = ConfigPtr;
+
+    BswM_ModeSrcCache[BSWM_MODE_SRC_ECUM] = (uint8)ECUM_STATE_STARTUP;
+    BswM_ModeSrcCache[BSWM_MODE_SRC_COMM] = (uint8)COMM_NO_COMMUNICATION;
+    for (uint8 i = 0U; i < ConfigPtr->RuleCount; i++)
+        BswM_RuleLastResult[i] = 0U;
+
     DET_LOGI(TAG, "Init ok rules=%u", (unsigned)ConfigPtr->RuleCount);
 }
 
@@ -150,10 +211,9 @@ void BswM_EcuM_CurrentState(EcuM_StateType state)
         return;
     }
 
-    if (BswM_EcuMState == state)
+    if (BswM_ModeSrcCache[BSWM_MODE_SRC_ECUM] == (uint8)state)
         return;
 
-    BswM_EcuMState = state;
     BswM_ExecuteRules(BSWM_MODE_SRC_ECUM, (uint8)state);
 }
 
@@ -173,9 +233,8 @@ void BswM_ComM_CurrentMode(uint8 channel, ComM_ModeType mode)
         return;
     }
 
-    if (BswM_ComMMode == mode)
+    if (BswM_ModeSrcCache[BSWM_MODE_SRC_COMM] == (uint8)mode)
         return;
 
-    BswM_ComMMode = mode;
     BswM_ExecuteRules(BSWM_MODE_SRC_COMM, (uint8)mode);
 }

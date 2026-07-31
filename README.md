@@ -205,7 +205,7 @@ HAL ─── Can_Hw / Dio_Hw / Port_Hw / Adc_Hw / Mcu_Hw / NvM_Hw / WdgM_Hw（s
 | RTE | Rte | — | — | ポートベース S/R API。複数 SW-C が同一シグナルを独立ポートで受信。E2E Transformer を持つ Read ポートは `Std_ReturnType` ではなく `Rte_IStatusType` を返し、E2E チェック結果（OK/ハードエラー/ソフトエラー）と Com タイムアウトを区別して SWC へ伝える |
 | OS | Os | — | SWS_Os | タイムトリガスケジューラ。タスクごとに周期を設定し `Os_SchedulerStep()` で到来タスクを順次実行 |
 | BSW | Adc | 123 | SWS_Adc | `Adc_ReadChannel` で 10-bit アナログ生値（0–1023）を読み取る MCAL |
-|  | BswM | 42 | SWS_BswM | EcuM / ComM のモード変化をルールテーブルで受け取り `Os_SetTaskActive()` でタスクを有効・無効化するルールエンジン。POST_RUN 中はアプリタスクのみ停止し BSW タスクは継続。`BswMPduGroupSwitch`（[SWS_BswM_00273]）相当のアクションも持ち、RUN/POST_RUN で Com の「テレメトリ」I-PDU Group（E2EHealthStatus）を起動/停止する |
+|  | BswM | 42 | SWS_BswM | EcuM / ComM のモード変化をルールテーブルで受け取り `Os_SetTaskActive()` でタスクを有効・無効化するルールエンジン。POST_RUN 中はアプリタスクのみ停止し BSW タスクは継続。`BswMPduGroupSwitch`（[SWS_BswM_00273]）相当のアクションも持ち、RUN/POST_RUN で Com の「テレメトリ」I-PDU Group（E2EHealthStatus）を起動/停止する。`BswMLogicalExpression`（[SWS_BswM_00808]）の簡略版として AND/OR の複合条件ルールにも対応し、「EcuM==RUN AND ComM==FULL_COMMUNICATION」でテレメトリ開始、「ComM==SILENT_COMMUNICATION OR ComM==NO_COMMUNICATION」で停止する |
 |  | Can | 80 | SWS_Can | MCP2515 の送受信・Bus-Off 検出・CAN バス活動によるウェイクアップ検出を担う MCAL 最下層。HW を直接操作する唯一のモジュール |
 |  | CanIf | 60 | SWS_CanIf | CAN ID ↔ 論理 PDU のマッピング。上位層は CAN ID を知らず PDU ID で通信。設定 DLC 未満の受信 L-PDU は上位層へ渡さず棄却する（SWS_CANIF_00026 のデータ長チェック） |
 |  | CanSM | 140 | SWS_CanSM | Bus-Off 検出直後（回復試行の前）に `ComM_BusSMIndication(SILENT_COMMUNICATION)` を呼び、ComM のチャネル状態が回復完了まで FULL_COM のまま古い情報として残ることを防ぐ（SWS_CanSM_00521。SILENT_COM は EcuM の RUN を維持するため回復中も RUN は落ちない）。回復シーケンスは L1/L2 バックオフ（SWS_CanSM_00514/00515 準拠）で実施し、試行回数が `CANSM_BUSOFF_L1_TO_L2_COUNT` を超えるまでは短い周期（L1）でリトライし、超えたら Dem へ DTC を報告（limit=1 のため即座に確定）した上で長い周期（L2）へ切り替えて無期限にリトライを継続する（回復を諦めて停止する状態は存在しない）。再起動試行のたびに `ComM_BusSMIndication(FULL_COM)` を呼ぶ。ComM の NO_COM 要求によるボランタリスリープでは即座にはスリープせず、Nm（CanNm 状態機械）が Bus-Sleep Mode へ到達した通知（`CanSM_NmBusSleepMode()`）を受けてから `Can_SetControllerMode(CAN_T_SLEEP)` で実 HW を実際にスリープさせる（協調スリープ、詳細は Nm セクション参照）。`CanSM_ControllerWakeup()` による復帰経路を持ち、復帰は即座に確定せず、ウェイクアップ検証（Wakeup Validation Protocol 相当）により有効な CAN フレーム受信を確認してから FULL_COM へ確定する |
@@ -276,7 +276,7 @@ Basic Software Modules」表）。詳細は「CAN 通信スタック」セクシ
 │   │   ├── BswM/                 # BSW モードマネージャ（ルール駆動タスク制御）
 │   │   │   ├── BswM_Cfg.h        # タスク ID 定数・タスクマスク定義
 │   │   │   ├── BswM_PBCfg.h      # ルール構造体型定義・BswM_Config 宣言
-│   │   │   ├── BswM_PBCfg.c      # ルールテーブル実体（3 ルール）
+│   │   │   ├── BswM_PBCfg.c      # ルールテーブル実体（6 ルール、うち2つは AND/OR 複合条件）
 │   │   │   ├── BswM.h            # 公開インタフェース（Init / EcuM通知 / ComM通知）
 │   │   │   └── BswM.c            # ルールエンジン実装・Os_SetTaskActive 呼び出し
 │   │   ├── Can/                  # CAN ドライバ（AUTOSAR SWS_Can 準拠 API）
@@ -1798,9 +1798,15 @@ Com_IpduGroupStop for each BswMDisabledPduGroupRef.
 | Rule 4 | EcuM → POST_RUN | `Com_IpduGroupStop(TELEMETRY)` |
 
 既存の Rule 0（RUN→全タスク有効化）・Rule 1（POST_RUN→アプリタスク無効化）と
-同じトリガ（同じ `ModeSrc`/`ModeValue`）で新しいルールを追加しただけなので、
+同じトリガ（同じ条件）で新しいルールを追加しただけなので、
 既存ルールへの変更は一切ありません（`BswM_ExecuteRules()` は一致する全ルールを
 実行するため、Rule 0 と Rule 3 は RUN 遷移のたびに両方発火します）。
+
+> **その後の変更**: Nm（CanNm 状態機械）導入に伴い、Rule 3 は単一条件
+> （EcuM==RUN）から複合条件（EcuM==RUN `AND` ComM==FULL_COMMUNICATION）へ、
+> Rule 4 と対になる停止条件として Rule 5（ComM==SILENT_COMMUNICATION `OR`
+> ComM==NO_COMMUNICATION）が追加されています。詳細は前述の「BswM（BSW
+> モードマネージャ）」セクションのルールテーブルを参照してください。
 
 <a id="ipdu-group-behavior"></a>
 #### Com_IpduGroupStart/Stop が実際に行うこと
@@ -4253,11 +4259,38 @@ EcuM が「今どのフェーズか」を決めるのに対し、BswM は「そ�
 
 ##### ルールテーブル（`BswM_PBCfg.c`）
 
-| No | モード源 | モード値 | アクション | 対象タスクマスク |
-|----|---------|---------|-----------|----------------|
-| 0 | EcuM | RUN | ACTIVATE | 全タスク（0xFFFF） |
-| 1 | EcuM | POST_RUN | DEACTIVATE | アプリタスクのみ（0x00C） |
-| 2 | EcuM | SHUTDOWN | DEACTIVATE | 全タスク中 WdgM_TriggerHwWatchdog・Can_MainFunction_Read・Can_MainFunction_Wakeup・CanSM_MainFunction・NvM_MainFunction を除く（0x6BEE） |
+| No | 条件（Operator） | アクション | 対象 |
+|----|------------------|-----------|------|
+| 0 | EcuM==RUN | ACTIVATE | 全タスク（`BSWM_TASK_MASK_ALL`） |
+| 1 | EcuM==POST_RUN | DEACTIVATE | アプリタスクのみ（`BSWM_TASK_MASK_APP`） |
+| 2 | EcuM==SHUTDOWN | DEACTIVATE | `BSWM_TASK_MASK_SHUTDOWN`（WdgM_TriggerHwWatchdog・Can_MainFunction_Read・Can_MainFunction_Wakeup・CanSM_MainFunction・NvM_MainFunction・Nm_MainFunction を除く） |
+| 3 | **EcuM==RUN `AND` ComM==FULL_COMMUNICATION** | PDU_GROUP_START | I-PDU Group「テレメトリ」(E2EHealthStatus) |
+| 4 | EcuM==POST_RUN | PDU_GROUP_STOP | I-PDU Group「テレメトリ」 |
+| 5 | **ComM==SILENT_COMMUNICATION `OR` ComM==NO_COMMUNICATION** | PDU_GROUP_STOP | I-PDU Group「テレメトリ」 |
+
+Rule 3/5 が複合条件（`BswM_ConditionType` の配列を `BswM_LogicalOperatorType`
+(`BSWM_OP_AND`/`BSWM_OP_OR`) で組み合わせる、[SWS_BswM_00808]
+BswMLogicalExpression の簡略版）を使う唯一の例です。以前は単一条件ルール
+しか組めない設計（AND/OR の LogicalExpression 相当が未実装）でしたが、
+Nm（CanNm 状態機械）導入により ComM のチャネルモードが EcuM の RUN/POST_RUN
+とは独立に変化しうるようになったため、「EcuM が RUN でも CAN チャネルが
+実際には使えない（Bus-Off 中の SILENT_COMMUNICATION 等）」場合を正しく
+扱うために複合条件対応を追加しました。Rule 3（AND、開始条件）と Rule 5
+（OR、停止条件）が対になっており、CAN チャネルが FULL_COMMUNICATION から
+離脱した瞬間（原因が Bus-Off でもボランタリスリープでも）に確実にテレメトリ
+送信を止めます。
+
+各ルールの Action は、条件の評価結果が **false→true へ遷移したときのみ**
+実行されます（`BswM_RuleLastResult[]` で直近の結果をキャッシュし、
+true が続く間の重複実行や true→false への遷移では実行しません）。複合条件
+ルールは、どちらの条件（ソース）が最後に変化しても正しく発火するよう、
+`BswM_ModeSrcCache[]` に両ソースの最新値を保持したうえで評価します
+（詳細は `BswM.c` の `BswM_ExecuteRules()`/`BswM_EvaluateRule()` 参照）。
+
+対応除外（実 AUTOSAR の BswMLogicalExpression と比べた簡略化）: NAND/NOT/XOR
+演算子、3条件以上、LogicalExpression の入れ子（木構造）。本プロジェクトの
+モードソースは EcuM/ComM の2つのみで、これらを使うルールの実績もないため
+対応除外としています。
 
 ##### タスク ID とマスク（`BswM_Cfg.h`）
 
@@ -4347,7 +4380,11 @@ POST_RUN 中に停止するタスク:
             │               └→ BswM_EcuM_CurrentState(POST_RUN)
             │                     └→ Rule 1 発火: Os_SetTaskActive(Rte_Engine, OFF)
             │                                     Os_SetTaskActive(Rte_Warning, OFF)
-            ├→ BswM_ComM_CurrentMode(0, NO_COM)   ← ComM モード変化も通知（将来の拡張用）
+            ├→ BswM_ComM_CurrentMode(0, NO_COM)
+            │     └→ Rule 5 発火（OR 条件、ComM==NO_COM）:
+            │           Com_IpduGroupStop(テレメトリ)  ← ComM==FULL_COM 前提の
+            │           Rule 3 (AND条件) が既に false になっているため
+            │           冪等（テレメトリが既に停止済みなら何もしない）
             └→ Nm_NetworkRelease()
                   → Nm: Normal Operation → Ready Sleep State（送信停止）
                   → NM-Timeout Timer 満了 → Prepare Bus-Sleep Mode
@@ -5427,7 +5464,7 @@ LEVEL は ERROR / WARN  / INFO  / DEBUG の 5 文字固定幅で列が揃いま�
 [14ms] INFO  AppEng: Init->OFF
 [15ms] INFO  IoHwAb: Init                 # LED 消灯（ピン方向は Port_Init 済み）
 [16ms] INFO  WarnInd: Init
-[17ms] INFO  BswM: Init ok rules=3        # ルールエンジン初期化
+[17ms] INFO  BswM: Init ok rules=6        # ルールエンジン初期化
 [18ms] INFO  WdgM: Init ok entities=2     # Alive Supervision 初期化（監視対象 2 エンティティ: ENGINE/WARNING）
 [18ms] INFO  WdgM: HW watchdog enabled (4000ms)  # 実ウォッチドッグ有効化（初期化完了後）
 [19ms] INFO  Os: Init ok tasks=16         # タスクスケジューラ起動（全モジュール初期化後）
