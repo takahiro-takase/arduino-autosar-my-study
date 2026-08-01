@@ -72,6 +72,18 @@ static ComM_ModeType ComM_ChannelMode[COMM_CHANNEL_COUNT];
 /* ユーザごとの要求モード（調停のために保持）*/
 static ComM_ModeType ComM_UserRequest[COMM_USER_COUNT];
 
+/** EcuM へ最後に伝えた RUN 要求状態（COMM_FULL_COMMUNICATION または
+ *  COMM_NO_COMMUNICATION のみを取る。COMM_SILENT_COMMUNICATION は EcuM の
+ *  RUN 状態に影響しないため対象外）。
+ *  ComM_ChannelMode（生のチャネルモード）とは別に持つ理由: Bus-Off 検出時に
+ *  CanSM が本関数を一時的に COMM_SILENT_COMMUNICATION で呼ぶ（ComM_ChannelMode
+ *  もこの値に変わる）ため、Bus-Off 前後で ComM_ChannelMode だけを見て
+ *  「モードが変化したか」を判定すると、SILENT_COM を経由しただけで実際には
+ *  EcuM の RUN 要求状態が変わっていないのに EcuM_RequestRUN()/EcuM_ReleaseRUN()
+ *  を再度呼んでしまい、SWS_EcuM_04125/04127 の重複要求/不整合解放エラーを
+ *  誤検知する（2026-08 のスペック監査で発見・修正）。 */
+static ComM_ModeType ComM_EcuMRunMode;
+
 /** [SWS_ComM_00612/00858] 用の初期化済みフラグ。ComM_ChannelMode/
  *  ComM_UserRequest の既定値 (COMM_NO_COMMUNICATION=0) は「未初期化」と
  *  区別が付かないため別途持つ。 */
@@ -96,6 +108,7 @@ void ComM_Init(void)
         ComM_ChannelMode[i] = COMM_NO_COMMUNICATION;
     for (i = 0U; i < COMM_USER_COUNT; i++)
         ComM_UserRequest[i] = COMM_NO_COMMUNICATION;
+    ComM_EcuMRunMode = COMM_NO_COMMUNICATION;
     ComM_Initialized = 1U;
     DET_LOGI(TAG, "Init ch=%u", (unsigned)COMM_CHANNEL_COUNT);
 }
@@ -288,20 +301,35 @@ void ComM_BusSMIndication(uint8 Network, ComM_ModeType Mode)
     }
 
     /* EcuM_RequestRUN()/EcuM_ReleaseRUN() は冪等呼び出しを避けるため、
-     * 実際にチャネルモードが変化した時のみ呼ぶ。CanSM の Bus-Off 回復
-     * （L1/L2 バックオフ）はリトライ成功のたびに本関数を COMM_FULL_COMMUNICATION
-     * で呼ぶため、モードの変化を見ずに毎回呼ぶと EcuM 側で「同一ユーザからの
-     * 重複要求」(SWS_EcuM_04125) が不必要に頻発してしまう。 */
+     * 実際に EcuM の RUN 要求状態（ComM_EcuMRunMode）が変化する時のみ呼ぶ。
+     * CanSM の Bus-Off 回復（L1/L2 バックオフ）はリトライ成功のたびに本関数を
+     * COMM_FULL_COMMUNICATION で呼ぶため、変化を見ずに毎回呼ぶと EcuM 側で
+     * 「同一ユーザからの重複要求」(SWS_EcuM_04125) が不必要に頻発してしまう。
+     * ここで生の prevMode（ComM_ChannelMode）ではなく専用の ComM_EcuMRunMode
+     * を比較対象にしているのは、Bus-Off 中に挟まる COMM_SILENT_COMMUNICATION
+     * （EcuM の RUN 状態には影響しない、下記コメント参照）を挟んだ前後で
+     * FULL⇔NO_COM が実際には変化していないのに変化したと誤判定するのを防ぐ
+     * ため（2026-08 のスペック監査で発見・修正。以前は SILENT_COM を経由した
+     * だけで EcuM_RequestRUN()/EcuM_ReleaseRUN() が二重に呼ばれ、
+     * SWS_EcuM_04125/04127 の誤検知を起こしていた）。 */
     if (Mode != prevMode)
     {
         if (Mode == COMM_FULL_COMMUNICATION)
         {
-            (void)EcuM_RequestRUN(ECUM_USER_COMM);
+            if (ComM_EcuMRunMode != COMM_FULL_COMMUNICATION)
+            {
+                (void)EcuM_RequestRUN(ECUM_USER_COMM);
+                ComM_EcuMRunMode = COMM_FULL_COMMUNICATION;
+            }
             (void)Nm_NetworkRequest();  /* 通信が必要になったことを Nm へ伝える */
         }
         else if (Mode == COMM_NO_COMMUNICATION)
         {
-            (void)EcuM_ReleaseRUN(ECUM_USER_COMM);
+            if (ComM_EcuMRunMode != COMM_NO_COMMUNICATION)
+            {
+                (void)EcuM_ReleaseRUN(ECUM_USER_COMM);
+                ComM_EcuMRunMode = COMM_NO_COMMUNICATION;
+            }
             (void)Nm_NetworkRelease();  /* 通信が不要になったことを Nm へ伝える。
                                          * 実際の CAN コントローラの物理スリープは
                                          * Nm が Bus-Sleep Mode へ到達してから
