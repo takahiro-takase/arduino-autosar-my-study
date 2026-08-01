@@ -94,10 +94,9 @@
 
 #define TAG "Can"
 
-/* Arduino wiring.c（C リンケージ）で定義。ウェイクアップ検出の
- * フォールバックポーリング（Can_MainFunction_Wakeup）専用に使用する。 */
-extern int digitalRead(uint8 pin);
-
+/* Can_Hw_AttachRxIsr() へ渡すコールバックとしてのみ参照される（Can.c 内で
+ * のみ使う内部関数のため Can.h には公開しない）。定義は本ファイル末尾。 */
+static void Can_Isr(void);
 
 static const Can_ConfigType*    Can_ConfigPtr  = NULL;
 /** Can_Isr()（真の割り込みコンテキスト）と Can_MainFunction_xxx()（メインループ）
@@ -258,17 +257,14 @@ Can_ReturnType Can_SetControllerMode(uint8 Controller, Can_StateTransitionType T
         //Can_Hw_SetMode(CAN_HW_MODE_LOOPBACK);  // ← 単体テスト用（通常はコメントアウト）
         CanState = CAN_CS_STARTED;
         break;
-    case CAN_T_STOP:
+    case CAN_T_STOP:    /* CAN_CS_STARTED → CAN_CS_STOPPED */
+    case CAN_T_WAKEUP:  /* CAN_CS_SLEEP   → CAN_CS_STOPPED（同じ受信専用モードへの遷移） */
         Can_Hw_SetMode(CAN_HW_MODE_LISTEN_ONLY);
         CanState = CAN_CS_STOPPED;
         break;
     case CAN_T_SLEEP:
         Can_Hw_SetMode(CAN_HW_MODE_SLEEP);
         CanState = CAN_CS_SLEEP;
-        break;
-    case CAN_T_WAKEUP:
-        Can_Hw_SetMode(CAN_HW_MODE_LISTEN_ONLY);
-        CanState = CAN_CS_STOPPED;
         break;
     default:
         Det_ReportError(CAN_MODULE_ID, 0U, CAN_API_ID_SET_CONTROLLER_MODE, CAN_E_TRANSITION);
@@ -426,7 +422,7 @@ void Can_MainFunction_Write(void)
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Asynchronous}
  */
-void Can_Isr(void)
+static void Can_Isr(void)
 {
     if (Can_ConfigPtr == NULL)
         return;
@@ -501,7 +497,8 @@ void Can_MainFunction_Read(void)
  * \details Can_Isr() が CAN_CS_SLEEP 中にセットする Can_WakeupIrqPending を
  *          確認するが、実機検証で attachInterrupt() が発火しないことが
  *          判明した（Can_MainFunction_Read() のコメント参照）ため、
- *          INT ピンの直接ポーリング（`digitalRead()`、旧実装と同じ方式）も
+ *          INT ピンの直接ポーリング（`Can_Hw_IsWakeupPending()`、旧実装と
+ *          同じ digitalRead() 方式を Can_Hw 層へ委譲したもの）も
  *          フォールバックとして併用する。いずれか一方でも検出できれば
  *          CanIf_ControllerWakeup() で上位層へ通知する。
  *
@@ -536,7 +533,7 @@ void Can_MainFunction_Wakeup(void)
     Can_WakeupIrqPending = 0U;
     SchM_Exit_Can_IRQFLAG_EXCLUSIVE_AREA();
 
-    if (!pending && !digitalRead(Can_ConfigPtr->intPin))
+    if (!pending && Can_Hw_IsWakeupPending() == CAN_HW_OK)
         pending = 1U;
 
     if (pending)

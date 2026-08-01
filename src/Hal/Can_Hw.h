@@ -42,6 +42,13 @@ Can_Hw_ReturnType Can_Hw_SetMode(Can_Hw_Mode mode);
 Can_Hw_ReturnType Can_Hw_CheckReceive(void);
 Can_Hw_ReturnType Can_Hw_IsBusOff(void);
 
+/** SLEEP 中の INT ピン（アクティブ LOW）を直接ポーリングし、ウェイクアップ
+ *  要因がまだアサートされているかを返す。Can_Hw_AttachRxIsr() が登録した
+ *  ピン番号を内部で覚えているため、呼び出し側はピン番号を意識しない。
+ *  \retval  CAN_HW_OK    INT ピンが LOW（ウェイクアップ要因がアサート中）
+ *  \retval  CAN_HW_FAIL  INT ピンが HIGH（アサートなし） */
+Can_Hw_ReturnType Can_Hw_IsWakeupPending(void);
+
 /** MCP2515 の INT ピンを立ち下がりエッジのハードウェア割り込みとして登録する。
  *  isr はこの登録以降、真の割り込みコンテキストで呼ばれる。 */
 Can_Hw_ReturnType Can_Hw_AttachRxIsr(uint8_t intPin, void (*isr)(void));
