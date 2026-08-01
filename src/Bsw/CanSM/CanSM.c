@@ -199,7 +199,20 @@ Std_ReturnType CanSM_RequestComMode(CanSM_NetworkHandleType network, ComM_ModeTy
     switch (mode)
     {
         case COMM_FULL_COMMUNICATION:
-            Can_SetControllerMode(0U, CAN_T_START);
+            if (Can_SetControllerMode(0U, CAN_T_START) != CAN_OK)
+            {
+                /* Can_SetControllerMode() は CanState==CAN_CS_SLEEP からの
+                 * CAN_T_START を拒否しうる（Can.c 参照）。現状の呼び出し
+                 * 経路ではこの分岐に到達しないはずだが、もし到達すれば
+                 * コントローラは実際にはまだ稼働していない。ここで
+                 * CanSM_State を FULL_COM に進めてしまうと、CanSM/ComM/EcuM
+                 * が「成功した」と誤認したまま MCP2515 は眠り続け、以降の
+                 * 送受信がハードリセットするまで静かに壊れる
+                 * （2026-08 のレビューで指摘）。実際に遷移が成功したときのみ
+                 * 状態を進める。 */
+                DET_LOGE(TAG, "RequestComMode E: Can_SetControllerMode(T_START) failed, state unchanged");
+                return E_NOT_OK;
+            }
             CanSM_State         = CANSM_STATE_FULL_COM;
             CanSM_BusOffRetries = 0U;
             DET_LOGI(TAG, "->FULL_COM");
@@ -219,7 +232,13 @@ Std_ReturnType CanSM_RequestComMode(CanSM_NetworkHandleType network, ComM_ModeTy
              * （2026-08 のスペック監査で、NO_COM_PENDING_SLEEP からの遷移が
              * 抜けていたことを発見・修正）。 */
             if (CanSM_State == CANSM_STATE_FULL_COM || CanSM_State == CANSM_STATE_NO_COM_PENDING_SLEEP)
-                Can_SetControllerMode(0U, CAN_T_STOP);
+            {
+                if (Can_SetControllerMode(0U, CAN_T_STOP) != CAN_OK)
+                {
+                    DET_LOGE(TAG, "RequestComMode E: Can_SetControllerMode(T_STOP) failed, state unchanged");
+                    return E_NOT_OK;
+                }
+            }
             CanSM_State = CANSM_STATE_SILENT_COM;
             DET_LOGI(TAG, "->SILENT_COM");
             ComM_BusSMIndication(network, COMM_SILENT_COMMUNICATION);
@@ -362,7 +381,19 @@ void CanSM_ControllerBusOff(uint8 ControllerId)
 
     CanSM_BusOffFromPendingSleep = (CanSM_State == CANSM_STATE_NO_COM_PENDING_SLEEP) ? 1U : 0U;
 
-    Can_SetControllerMode(0U, CAN_T_STOP);
+    if (Can_SetControllerMode(0U, CAN_T_STOP) != CAN_OK)
+    {
+        /* 到達しないはずの経路（CanIf_ControllerBusOff は Can 側が
+         * CanState==CAN_CS_STARTED のときしか呼ばないため、CAN_T_STOP が
+         * 拒否される SLEEP 中の到達は原理的にない。Can_MainFunction_BusOff()/
+         * Can_Write() 参照）。ただし CanIf からは実際に Bus-Off が発生した
+         * という事実は既に届いているため、ここで CanSM_State への反映を
+         * 諦めると「Bus-Off が起きたのに回復シーケンスが一切起動しない」
+         * という finding #1 と同じ症状に逆戻りしてしまう。矛盾を DET へ
+         * 記録した上で、届いた Bus-Off 通知の処理そのものは続行する
+         * （2026-08 のレビューで指摘）。 */
+        DET_LOGE(TAG, "ControllerBusOff E: Can_SetControllerMode(T_STOP) failed (state desync)");
+    }
 
     CanSM_State         = CANSM_STATE_BUS_OFF;
     CanSM_BusOffTimerMs = millis();
@@ -424,7 +455,17 @@ void CanSM_ControllerWakeup(uint8 ControllerId)
     }
 
     DET_LOGI(TAG, "Wakeup detected -> validating (Listen-Only, waiting for confirmed RX)");
-    Can_SetControllerMode(0U, CAN_T_WAKEUP);  /* CAN_CS_SLEEP -> CAN_CS_STOPPED (Listen-Only) */
+    if (Can_SetControllerMode(0U, CAN_T_WAKEUP) != CAN_OK)  /* CAN_CS_SLEEP -> CAN_CS_STOPPED (Listen-Only) */
+    {
+        /* 到達しないはずの経路（この分岐に来る時点で CanState==CAN_CS_SLEEP
+         * であることは呼び出し元 Can_MainFunction_Wakeup() 側で保証されて
+         * いる）。実際に失敗した場合、コントローラは Listen-Only へ遷移
+         * していないため、検証タイマだけ回して確定させるのは危険。
+         * CANSM_STATE_NO_COM のまま据え置き、次のウェイクアップ通知を
+         * 待つ（2026-08 のレビューで指摘）。 */
+        DET_LOGE(TAG, "ControllerWakeup E: Can_SetControllerMode(T_WAKEUP) failed, staying in NO_COM");
+        return;
+    }
     CanSM_State             = CANSM_STATE_WAKEUP_VALIDATING;
     CanSM_ValidationTimerMs = millis();
 }
@@ -461,7 +502,18 @@ void CanSM_RxIndication(uint8 ControllerId)
         return;
 
     DET_LOGI(TAG, "Wakeup validated (RX confirmed) -> FULL_COM");
-    Can_SetControllerMode(0U, CAN_T_START);   /* CAN_CS_STOPPED -> CAN_CS_STARTED */
+    if (Can_SetControllerMode(0U, CAN_T_START) != CAN_OK)   /* CAN_CS_STOPPED -> CAN_CS_STARTED */
+    {
+        /* 到達しないはずの経路（CANSM_STATE_WAKEUP_VALIDATING に入っている
+         * 時点で CanState==CAN_CS_STOPPED のはず）。失敗した場合に
+         * CanSM_State を FULL_COM へ進めてしまうと、CanSM/ComM/EcuM は
+         * 「成功した」と誤認したまま MCP2515 は Listen-Only のままで送信
+         * できず、実害が静かに進行する（レビュー指摘の症状そのもの）。
+         * WAKEUP_VALIDATING に留まり、タイムアウトで再スリープする
+         * 既存のフェイルセーフ（CanSM_MainFunction）に委ねる。 */
+        DET_LOGE(TAG, "RxIndication E: Can_SetControllerMode(T_START) failed, staying in WAKEUP_VALIDATING");
+        return;
+    }
     CanSM_State         = CANSM_STATE_FULL_COM;
     CanSM_BusOffRetries = 0U;
     Dem_ReportErrorStatus(DEM_EVENT_CAN_BUSOFF, DEM_EVENT_STATUS_PASSED);
@@ -484,7 +536,11 @@ void CanSM_NmBusSleepMode(void)
     if (CanSM_State != CANSM_STATE_NO_COM_PENDING_SLEEP)
         return;
 
-    Can_SetControllerMode(0U, CAN_T_SLEEP);
+    /* CAN_T_SLEEP は Can_SetControllerMode() 側で状態検証をしておらず
+     * （Can.c 参照。協調スリープ設計上 CAN_CS_STARTED/STOPPED どちらから
+     * 呼ばれても正当なため、この遷移に無効な遷移元状態は存在しない）、
+     * 戻り値は常に CAN_OK。明示的に無視する。 */
+    (void)Can_SetControllerMode(0U, CAN_T_SLEEP);
     CanSM_State = CANSM_STATE_NO_COM;
     DET_LOGI(TAG, "Nm reached Bus-Sleep Mode -> CAN controller SLEEP");
 }
@@ -534,7 +590,9 @@ void CanSM_MainFunction(void)
         {
             DET_LOGW(TAG, "Wakeup validation timeout (%lums, no confirmed RX) -> back to SLEEP",
                      (unsigned long)CANSM_WAKEUP_VALIDATION_MS);
-            Can_SetControllerMode(0U, CAN_T_SLEEP);  /* CAN_CS_STOPPED -> CAN_CS_SLEEP、ウェイクアップ割り込み再武装 */
+            /* CAN_T_SLEEP は失敗しない（上記 CanSM_NmBusSleepMode() のコメント
+             * 参照）。戻り値は明示的に無視する。 */
+            (void)Can_SetControllerMode(0U, CAN_T_SLEEP);  /* CAN_CS_STOPPED -> CAN_CS_SLEEP、ウェイクアップ割り込み再武装 */
             CanSM_State = CANSM_STATE_NO_COM;
         }
         return;
@@ -566,7 +624,18 @@ void CanSM_MainFunction(void)
     DET_LOGI(TAG, "BusOff: restart attempt %u (%s, next in %lums)",
              (unsigned)CanSM_BusOffRetries, inL2 ? "L2" : "L1", interval);
 
-    Can_SetControllerMode(0U, CAN_T_START);
+    if (Can_SetControllerMode(0U, CAN_T_START) != CAN_OK)
+    {
+        /* 到達しないはずの経路（BUS_OFF 中は CanState==CAN_CS_STOPPED の
+         * はず、CanSM_ControllerBusOff() が Bus-Off 検出時に CAN_T_STOP
+         * 済み）。失敗した場合に回復成功とみなして CanSM_State を進めると、
+         * CanSM/ComM/EcuM が「復帰した」と誤認したまま MCP2515 は止まった
+         * ままになる。CanSM_BusOffRetries は既にインクリメント済みのため、
+         * 状態は BUS_OFF のまま据え置き、次の L1/L2 周期で再試行させる
+         * （通常の回復失敗と同じ扱い。2026-08 のレビューで指摘）。 */
+        DET_LOGE(TAG, "MainFunction E: Can_SetControllerMode(T_START) failed during BusOff recovery, retry next cycle");
+        return;
+    }
     /* 回復成功を報告。デバウンス確定すれば CAN_BUSOFF の TF をクリアする
      * （CDTC/PDTC は上の FAILED 確定で既に立っていれば保持される。Dem.c の
      * PASSED デバウンス確定コメント参照）。 */
