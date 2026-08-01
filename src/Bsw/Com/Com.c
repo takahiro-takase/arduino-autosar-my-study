@@ -678,6 +678,24 @@ static void Com_PackSignal(uint8* buf,
 }
 
 /**
+ * \brief   value の下位 byteCount バイトを、リトルエンディアンで dataPtr へ書き出す。
+ *
+ * \details Com_ReceiveSignal() が呼び出し元の SignalDataPtr（BitSize に応じた
+ *          uint8/uint16/uint32 変数）へ値を返す際の共通処理。常に 4 バイト
+ *          書き込むと 8bit/16bit の呼び出し元でスタック上の隣接領域を
+ *          破壊するため、byteCount 分だけを書き込む。
+ *
+ * \param[out] dataPtr    書き込み先。byteCount バイト以上必要。
+ * \param[in]  byteCount  書き込むバイト数（1〜4）。
+ * \param[in]  value      書き込む値。
+ */
+static void Com_WriteSignalBytes(uint8* dataPtr, uint8 byteCount, uint32 value)
+{
+    for (uint8 b = 0U; b < byteCount; b++)
+        dataPtr[b] = (uint8)(value >> (8U * b));
+}
+
+/**
  * \brief   指定 I-PDU バッファへ、所属する全シグナルの ComSignalInitValue を
  *          ビット単位でパックする。
  *
@@ -714,6 +732,28 @@ static void Com_PackInitValues(uint8* buf, Com_IPduIdType id, Com_SignalDirectio
             Com_PackSignal(buf, sig->BitPosition, sig->BitSize, sig->Endian, sig->InitValue);
         }
     }
+}
+
+/**
+ * \brief   I-PDU バッファ 1 本を [SWS_Com_00217]/[SWS_Com_00222] 項目1・2の
+ *          2 段階手順（バイト単位ゼロクリア → Com_PackInitValues()）で
+ *          初期値へリセットする。
+ *
+ * \details Com_IpduGroupStart() が RX/TX バッファ・シャドウバッファの
+ *          計 4 箇所で共通して行う手順をまとめたもの。
+ *
+ * \param[in,out] buf  初期化対象のバッファ（Com_RxBuffer[id] 等）。
+ *                      COM_IPDU_MAX_DLC バイト以上必要。
+ * \param[in]     id   対象 I-PDU の ID。
+ * \param[in]     dir  対象シグナルの方向（RX/TX）。
+ *
+ * \pre        Com_ConfigPtr が NULL でないこと。
+ */
+static void Com_ResetBufferToInitValues(uint8* buf, Com_IPduIdType id, Com_SignalDirectionType dir)
+{
+    for (uint8 b = 0U; b < COM_IPDU_MAX_DLC; b++)
+        buf[b] = 0U;
+    Com_PackInitValues(buf, id, dir);
 }
 
 /**
@@ -833,6 +873,32 @@ static const Com_IPduConfigType* Com_FindRxIPdu(Com_IPduIdType IPduId)
             return &Com_ConfigPtr->RxIPdus[i];
     }
     return NULL;
+}
+
+/**
+ * \brief   シグナル設定テーブルから SignalId に一致するエントリの添字を検索する。
+ *
+ * \details Com_ReceiveSignal() / Com_SendSignal() が共通で使う、
+ *          Signals[] を SignalId で線形探索する処理をまとめたもの。
+ *          見つかった後の処理が Com_RxLastValidValue[s]/Com_FilterLastValue[s]
+ *          等、添字 s を要する並行配列を参照するため、ポインタではなく
+ *          添字を返す。
+ *
+ * \param[in]  SignalId  検索するシグナル ID。
+ *
+ * \return  一致するエントリの添字。見つからない場合は Com_ConfigPtr->SignalCount
+ *          （＝配列の範囲外を示す番兵値）。
+ *
+ * \pre        Com_ConfigPtr が NULL でないこと（呼び出し元で保証する）。
+ */
+static uint8 Com_FindSignalIndex(Com_SignalIdType SignalId)
+{
+    for (uint8 s = 0; s < Com_ConfigPtr->SignalCount; s++)
+    {
+        if (Com_ConfigPtr->Signals[s].SignalId == SignalId)
+            return s;
+    }
+    return Com_ConfigPtr->SignalCount;
 }
 
 /**
@@ -1104,11 +1170,10 @@ uint8 Com_ReceiveSignal(Com_SignalIdType SignalId, void* SignalDataPtr)
 
     uint8* dataPtr = (uint8*)SignalDataPtr;
 
-    for (uint8 s = 0; s < Com_ConfigPtr->SignalCount; s++)
+    const uint8 s = Com_FindSignalIndex(SignalId);
+    if (s < Com_ConfigPtr->SignalCount)
     {
         const Com_SignalConfigType* sig = &Com_ConfigPtr->Signals[s];
-        if (sig->SignalId != SignalId)
-            continue;
 
         /* 範囲チェック: Signal 設定テーブルの IPduId をそのまま Com_RxBuffer[]
          * 等の配列添字として使うため、設定ミス（存在しない I-PDU を指す
@@ -1170,15 +1235,13 @@ uint8 Com_ReceiveSignal(Com_SignalIdType SignalId, void* SignalDataPtr)
              * InitValue を返し続けさせるため）。 */
             if (sig->RxDataTimeoutAction == COM_RX_TIMEOUT_ACTION_SUBSTITUTE)
             {
-                for (uint8 b = 0U; b < byteCount; b++)
-                    dataPtr[b] = (uint8)(sig->TimeoutSubstitutionValue >> (8U * b));
+                Com_WriteSignalBytes(dataPtr, byteCount, sig->TimeoutSubstitutionValue);
                 return E_OK;
             }
             if (sig->RxDataTimeoutAction == COM_RX_TIMEOUT_ACTION_REPLACE)
             {
                 Com_RxLastValidValue[s] = sig->InitValue;
-                for (uint8 b = 0U; b < byteCount; b++)
-                    dataPtr[b] = (uint8)(sig->InitValue >> (8U * b));
+                Com_WriteSignalBytes(dataPtr, byteCount, sig->InitValue);
                 return E_OK;
             }
             return E_NOT_OK;
@@ -1207,9 +1270,7 @@ uint8 Com_ReceiveSignal(Com_SignalIdType SignalId, void* SignalDataPtr)
             {
                 Com_RxInvalidNotifyPending[s] = 1U;
 
-                const uint32 lastValid = Com_RxLastValidValue[s];
-                for (uint8 b = 0U; b < byteCount; b++)
-                    dataPtr[b] = (uint8)(lastValid >> (8U * b));
+                Com_WriteSignalBytes(dataPtr, byteCount, Com_RxLastValidValue[s]);
                 return E_OK;
             }
             if (sig->DataInvalidAction == COM_DATA_INVALID_ACTION_REPLACE)
@@ -1232,17 +1293,12 @@ uint8 Com_ReceiveSignal(Com_SignalIdType SignalId, void* SignalDataPtr)
         {
             Com_RxFilterRejectPending[s] = 1U;
 
-            const uint32 lastValid = Com_RxLastValidValue[s];
-            for (uint8 b = 0U; b < byteCount; b++)
-                dataPtr[b] = (uint8)(lastValid >> (8U * b));
+            Com_WriteSignalBytes(dataPtr, byteCount, Com_RxLastValidValue[s]);
             return E_OK;
         }
 
         Com_RxLastValidValue[s] = value;
-        for (uint8 b = 0U; b < byteCount; b++)
-        {
-            dataPtr[b] = (uint8)(value >> (8U * b));
-        }
+        Com_WriteSignalBytes(dataPtr, byteCount, value);
         return E_OK;
     }
 
@@ -1395,20 +1451,17 @@ Std_ReturnType Com_ReceiveSignalGroupArray(Com_IPduIdType IPduId, uint8* DataPtr
         return E_NOT_OK;
     }
 
-    for (uint8 i = 0; i < Com_ConfigPtr->RxIPduCount; i++)
+    const Com_IPduConfigType* ipdu = Com_FindRxIPdu(IPduId);
+    if (ipdu == NULL)
     {
-        const Com_IPduConfigType* ipdu = &Com_ConfigPtr->RxIPdus[i];
-        if (ipdu->IPduId != IPduId)
-            continue;
-
-        for (uint8 b = 0; b < ipdu->DLC; b++)
-            DataPtr[b] = Com_RxBuffer[IPduId][b];
-        return E_OK;
+        DET_LOGE(TAG, "ReceiveSignalGroupArray E: IPduId=%u not found", (unsigned)IPduId);
+        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_RECEIVE_SIGNAL_GROUP_ARRAY, COM_E_PARAM);
+        return E_NOT_OK;
     }
 
-    DET_LOGE(TAG, "ReceiveSignalGroupArray E: IPduId=%u not found", (unsigned)IPduId);
-    Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_RECEIVE_SIGNAL_GROUP_ARRAY, COM_E_PARAM);
-    return E_NOT_OK;
+    for (uint8 b = 0; b < ipdu->DLC; b++)
+        DataPtr[b] = Com_RxBuffer[IPduId][b];
+    return E_OK;
 }
 
 /**
@@ -1502,11 +1555,10 @@ uint8 Com_SendSignal(Com_SignalIdType SignalId, const void* SignalDataPtr)
 
     const uint8* dataPtr = (const uint8*)SignalDataPtr;
 
-    for (uint8 s = 0; s < Com_ConfigPtr->SignalCount; s++)
+    const uint8 s = Com_FindSignalIndex(SignalId);
+    if (s < Com_ConfigPtr->SignalCount)
     {
         const Com_SignalConfigType* sig = &Com_ConfigPtr->Signals[s];
-        if (sig->SignalId != SignalId)
-            continue;
 
         /* 範囲チェック + 登録確認: sig->IPduId をそのまま Com_TxBuffer[] 等の
          * 配列添字として使う前に、(1) 配列範囲内であること、
@@ -2043,15 +2095,16 @@ void Com_MainFunction(void)
         }
         else
         {
-            const uint8 floorDue = (mode == COM_TX_MODE_MIXED)
-                                    && ((now - Com_TxLastSentMs[id]) >= (unsigned long)period);
+            const unsigned long elapsed  = now - Com_TxLastSentMs[id];
+            const uint8         floorDue = (mode == COM_TX_MODE_MIXED)
+                                    && (elapsed >= (unsigned long)period);
             /* MDT（ComMinimumDelayTime）: 変化時送信（Com_TxPending 経由）にのみ
              * 適用し、MIXED の周期フロア（floorDue）には適用しない
              * （SWS_Com_00789 の既定動作。MinDelayMs=0 なら常に満了扱いのため
              * MDT 未設定の I-PDU では以前と同じ挙動になる）。満了前に変化検知が
              * あっても Com_TxPending は立てたまま保持し、破棄しない
              * （次回 Com_MainFunction() で再判定する）。 */
-            const uint8 mdtElapsed = (now - Com_TxLastSentMs[id]) >= (unsigned long)ipdu->MinDelayMs;
+            const uint8 mdtElapsed = elapsed >= (unsigned long)ipdu->MinDelayMs;
             const uint8 changeDue  = (Com_TxPending[id] != 0U) && mdtElapsed;
             due = changeDue || floorDue;
         }
@@ -2072,6 +2125,40 @@ void Com_MainFunction(void)
     }
 }
 
+/**
+ * \brief   RX I-PDU 1 本分のデッドライン監視タイマを再始動する。
+ *
+ * \details Com_SetCommunicationEnabled() の受信再開時と Com_IpduGroupStart() が
+ *          共通して行う手順（[SWS_Com_00787] 相当）をまとめたもの。
+ *          Com_RxLastMs を現在時刻へリセットしないと、TimeoutMs 以上の時間
+ *          受信を抑制していた場合、再有効化した直後（次の Com_MainFunction()
+ *          呼び出し）で古い Com_RxLastMs のまま即座にタイムアウト判定されて
+ *          しまう。既に立っていた Com_RxTimedOut/Com_SigTimedOut も、抑制中の
+ *          「経過時間」を理由に上位層へ通信異常と伝え続けないよう、あわせて
+ *          クリアする。再始動直後は ComFirstTimeout 相当（FirstTimeoutMs）
+ *          から監視を始める。
+ *
+ * \param[in]  id   対象 RX I-PDU の ID。
+ * \param[in]  now  基準時刻（millis()）。
+ *
+ * \pre        Com_ConfigPtr が NULL でないこと。
+ */
+static void Com_ResetRxDeadlineMonitoring(Com_IPduIdType id, unsigned long now)
+{
+    Com_RxLastMs[id]   = now;
+    Com_RxTimedOut[id] = 0U;
+    Com_RxUsingFirstTimeout[id] = 1U;
+
+    for (uint8 s = 0U; s < Com_ConfigPtr->SignalCount; s++)
+    {
+        if (Com_ConfigPtr->Signals[s].Direction == COM_SIGNAL_DIRECTION_RX
+            && Com_ConfigPtr->Signals[s].IPduId == id)
+        {
+            Com_SigTimedOut[s] = 0U;
+        }
+    }
+}
+
 void Com_SetCommunicationEnabled(uint8 RxEnabled, uint8 TxEnabled)
 {
     if (Com_RxEnabled != RxEnabled || Com_TxEnabled != TxEnabled)
@@ -2083,28 +2170,10 @@ void Com_SetCommunicationEnabled(uint8 RxEnabled, uint8 TxEnabled)
 
     if (Com_RxEnabled == 0U && RxEnabled != 0U && Com_ConfigPtr != NULL)
     {
-        /* SWS_Com_00787 相当: 受信再開時はデッドライン監視タイマを再始動する。
-         * Com_RxLastMs を現在時刻へリセットしないと、TimeoutMs 以上の時間
-         * 受信を抑制していた場合、再有効化した直後（次の Com_MainFunction()
-         * 呼び出し）で古い Com_RxLastMs のまま即座にタイムアウト判定されて
-         * しまう。既に立っていた Com_RxTimedOut も、抑制中の「経過時間」を
-         * 理由に上位層へ通信異常と伝え続けないよう、あわせてクリアする。 */
         const unsigned long now = millis();
         for (uint8 i = 0U; i < Com_ConfigPtr->RxIPduCount; i++)
         {
-            const Com_IPduIdType id = Com_ConfigPtr->RxIPdus[i].IPduId;
-            Com_RxLastMs[id]   = now;
-            Com_RxTimedOut[id] = 0U;
-            Com_RxUsingFirstTimeout[id] = 1U;  /* 再開直後は ComFirstTimeout 相当から */
-
-            for (uint8 s = 0U; s < Com_ConfigPtr->SignalCount; s++)
-            {
-                if (Com_ConfigPtr->Signals[s].Direction == COM_SIGNAL_DIRECTION_RX
-                    && Com_ConfigPtr->Signals[s].IPduId == id)
-                {
-                    Com_SigTimedOut[s] = 0U;
-                }
-            }
+            Com_ResetRxDeadlineMonitoring(Com_ConfigPtr->RxIPdus[i].IPduId, now);
         }
     }
 
@@ -2132,29 +2201,15 @@ void Com_IpduGroupStart(Com_IpduGroupIdType IpduGroupId, uint8 initialize)
         Com_RxIPduStarted[id] = 1U;
 
         /* [SWS_Com_00787] 項目2: 受信デッドライン監視タイマを再始動する
-         * （Com_SetCommunicationEnabled() の再開時と同じ理由）。再始動直後は
-         * ComFirstTimeout 相当（FirstTimeoutMs）から監視を始める。 */
-        Com_RxLastMs[id]   = now;
-        Com_RxTimedOut[id] = 0U;
-        Com_RxUsingFirstTimeout[id] = 1U;
-
-        for (uint8 s = 0U; s < Com_ConfigPtr->SignalCount; s++)
-        {
-            if (Com_ConfigPtr->Signals[s].Direction == COM_SIGNAL_DIRECTION_RX
-                && Com_ConfigPtr->Signals[s].IPduId == id)
-            {
-                Com_SigTimedOut[s] = 0U;
-            }
-        }
+         * （Com_SetCommunicationEnabled() の再開時と同じ理由）。 */
+        Com_ResetRxDeadlineMonitoring(id, now);
 
         if (initialize != 0U)
         {
             /* [SWS_Com_00222] 項目1: I-PDU のデータを ComSignalInitValue で
              * 初期化する（Com_Init() と同じ手順: バイト単位ゼロクリア →
              * ビット単位で InitValue 上書き。[SWS_Com_00217]）。 */
-            for (uint8 b = 0U; b < COM_IPDU_MAX_DLC; b++)
-                Com_RxBuffer[id][b] = 0U;
-            Com_PackInitValues(Com_RxBuffer[id], id, COM_SIGNAL_DIRECTION_RX);
+            Com_ResetBufferToInitValues(Com_RxBuffer[id], id, COM_SIGNAL_DIRECTION_RX);
 
             /* Com_RxLastValidValue も InitValue へ戻す（[SWS_Com_00228]:
              * 起動時点でまだ実際に受信していないシグナルは InitValue を
@@ -2170,9 +2225,7 @@ void Com_IpduGroupStart(Com_IpduGroupIdType IpduGroupId, uint8 initialize)
             {
                 /* [SWS_Com_00222] 項目2: Signal Group のシャドウバッファも
                  * 同じ手順で初期化する。未コミット状態（利用不可）へ戻す。 */
-                for (uint8 b = 0U; b < COM_IPDU_MAX_DLC; b++)
-                    Com_RxShadowBuffer[id][b] = 0U;
-                Com_PackInitValues(Com_RxShadowBuffer[id], id, COM_SIGNAL_DIRECTION_RX);
+                Com_ResetBufferToInitValues(Com_RxShadowBuffer[id], id, COM_SIGNAL_DIRECTION_RX);
                 Com_RxShadowTimedOut[id] = 1U;
             }
         }
@@ -2207,9 +2260,7 @@ void Com_IpduGroupStart(Com_IpduGroupIdType IpduGroupId, uint8 initialize)
         {
             /* [SWS_Com_00222] 項目1: I-PDU のデータを ComSignalInitValue で
              * 初期化する（RX 側と同じ手順）。 */
-            for (uint8 b = 0U; b < COM_IPDU_MAX_DLC; b++)
-                Com_TxBuffer[id][b] = 0U;
-            Com_PackInitValues(Com_TxBuffer[id], id, COM_SIGNAL_DIRECTION_TX);
+            Com_ResetBufferToInitValues(Com_TxBuffer[id], id, COM_SIGNAL_DIRECTION_TX);
 
             /* [SWS_Com_00222] 項目3: フィルタの old_value も InitValue へ戻す
              * （Com_Init() の該当コメント参照。COM_FILTER_MASKED_NEW_DIFFERS_
@@ -2224,9 +2275,7 @@ void Com_IpduGroupStart(Com_IpduGroupIdType IpduGroupId, uint8 initialize)
 
             if (ipdu->IsSignalGroup != 0U)
             {
-                for (uint8 b = 0U; b < COM_IPDU_MAX_DLC; b++)
-                    Com_TxShadowBuffer[id][b] = 0U;
-                Com_PackInitValues(Com_TxShadowBuffer[id], id, COM_SIGNAL_DIRECTION_TX);
+                Com_ResetBufferToInitValues(Com_TxShadowBuffer[id], id, COM_SIGNAL_DIRECTION_TX);
             }
         }
 
