@@ -214,14 +214,53 @@ void Can_Init(const Can_ConfigType* Config)
 }
 
 /**
+ * \brief   コントローラを受信専用モード（Listen-Only）へ遷移させる。
+ *
+ * \details CAN_T_STOP（CAN_CS_STARTED → CAN_CS_STOPPED）と CAN_T_WAKEUP
+ *          （CAN_CS_SLEEP → CAN_CS_STOPPED）は遷移元状態の妥当性チェックが
+ *          異なる（Can_SetControllerMode() 参照）が、実際に適用する HW モード
+ *          と CanState は同一のため、その部分だけを共通化する。
+ */
+static void Can_EnterListenOnly(void)
+{
+    Can_Hw_SetMode(CAN_HW_MODE_LISTEN_ONLY);
+    CanState = CAN_CS_STOPPED;
+}
+
+/**
  * \brief   CAN コントローラの状態遷移を要求する。
  *
  * \details AUTOSAR の状態遷移を対応する MCP2515 動作モードへ
- *          マッピングする。
- *          - CAN_T_START  : CAN_CS_STOPPED → CAN_CS_STARTED (通常モード)
+ *          マッピングする。標準の 4 遷移に加え、本プロジェクト固有の
+ *          協調スリープ（CanSM.c 参照）のための 5 番目の遷移を持つ。
+ *          - CAN_T_START  : CAN_CS_STOPPED → CAN_CS_STARTED (通常モード)。
+ *                           CAN_CS_STARTED から再度呼ばれた場合は冪等な
+ *                           no-op として許可する（CanSM がボランタリ
+ *                           スリープへの移行中に FULL_COM 要求を取り消す
+ *                           ケースで実際に発生する。CanSM_RequestComMode()
+ *                           参照）。
  *          - CAN_T_STOP   : CAN_CS_STARTED → CAN_CS_STOPPED (受信専用モード)
- *          - CAN_T_SLEEP  : CAN_CS_STOPPED → CAN_CS_SLEEP   (スリープモード)
+ *          - CAN_T_SLEEP  : CAN_CS_STOPPED → CAN_CS_SLEEP   (スリープモード)。
+ *                           CAN_CS_STARTED からの直接遷移も許可する
+ *                           （Nm 協調スリープ: CanSM は NO_COM_PENDING_SLEEP
+ *                           中コントローラを稼働させ続け、Nm が Bus-Sleep
+ *                           Mode へ到達した瞬間に CAN_T_STOP を経由せず直接
+ *                           SLEEP させる。CanSM_NmBusSleepMode() 参照。
+ *                           実 AUTOSAR の標準遷移図にはない本プロジェクト
+ *                           固有の拡張）。
  *          - CAN_T_WAKEUP : CAN_CS_SLEEP   → CAN_CS_STOPPED (受信専用モード)
+ *
+ *          上記のとおり CAN_T_START/CAN_T_STOP/CAN_T_SLEEP は複数の
+ *          遷移元状態を許容する設計だが、CAN_CS_SLEEP からの
+ *          CAN_T_START/CAN_T_STOP だけは、まず CAN_T_WAKEUP で
+ *          CAN_CS_STOPPED へ戻らないと到達できない状態であり、
+ *          どの呼び出し元もこの組み合わせを使わない。同様に CAN_T_WAKEUP
+ *          は CAN_CS_SLEEP 以外から呼ぶ意味がない。呼び出し元の実装ミスを
+ *          検出できるよう、この 2 点のみ状態を検証する（SWS_Can_00195/
+ *          00409-00412。2026-08 のスペック監査で「一切検証していない」
+ *          ことが判明したが、標準 4 遷移図をそのまま強制すると上記の
+ *          協調スリープ／ボランタリスリープ取り消しという実際に使われている
+ *          機能を壊すため、検証対象は安全に追加できる範囲に絞った）。
  *
  * \param[in]  Controller  CAN コントローラのインデックス。
  *                         本実装はコントローラ 0 のみ対応。
@@ -229,9 +268,11 @@ void Can_Init(const Can_ConfigType* Config)
  * \param[in]  Transition  要求する状態遷移 (Can_StateTransitionType)。
  *
  * \retval  CAN_OK      遷移が正常に適用された。
- * \retval  CAN_NOT_OK  Controller が無効、または未対応の Transition 値。
+ * \retval  CAN_NOT_OK  Controller が無効、未対応の Transition 値、または
+ *                       CAN_CS_SLEEP 中の CAN_T_START/CAN_T_STOP、
+ *                       CAN_CS_SLEEP 以外での CAN_T_WAKEUP。
  *
- * \AUTOSARReq     {SWS_Can_00017, SWS_Can_00230}
+ * \AUTOSARReq     {SWS_Can_00017, SWS_Can_00195, SWS_Can_00230}
  * \ServiceID      {0x03}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
@@ -253,14 +294,34 @@ Can_ReturnType Can_SetControllerMode(uint8 Controller, Can_StateTransitionType T
     switch (Transition)
     {
     case CAN_T_START:
+        if (CanState == CAN_CS_SLEEP)
+        {
+            DET_LOGE(TAG, "SetControllerMode E: T_START invalid from SLEEP (WAKEUP required first)");
+            Det_ReportError(CAN_MODULE_ID, 0U, CAN_API_ID_SET_CONTROLLER_MODE, CAN_E_TRANSITION);
+            return CAN_NOT_OK;
+        }
         Can_Hw_SetMode(CAN_HW_MODE_NORMAL);
         //Can_Hw_SetMode(CAN_HW_MODE_LOOPBACK);  // ← 単体テスト用（通常はコメントアウト）
         CanState = CAN_CS_STARTED;
         break;
     case CAN_T_STOP:    /* CAN_CS_STARTED → CAN_CS_STOPPED */
-    case CAN_T_WAKEUP:  /* CAN_CS_SLEEP   → CAN_CS_STOPPED（同じ受信専用モードへの遷移） */
-        Can_Hw_SetMode(CAN_HW_MODE_LISTEN_ONLY);
-        CanState = CAN_CS_STOPPED;
+        if (CanState == CAN_CS_SLEEP)
+        {
+            DET_LOGE(TAG, "SetControllerMode E: T_STOP invalid from SLEEP (WAKEUP required first)");
+            Det_ReportError(CAN_MODULE_ID, 0U, CAN_API_ID_SET_CONTROLLER_MODE, CAN_E_TRANSITION);
+            return CAN_NOT_OK;
+        }
+        Can_EnterListenOnly();
+        break;
+    case CAN_T_WAKEUP:  /* CAN_CS_SLEEP → CAN_CS_STOPPED（同じ受信専用モードへの遷移） */
+        if (CanState != CAN_CS_SLEEP)
+        {
+            DET_LOGE(TAG, "SetControllerMode E: T_WAKEUP invalid from state=%u (not SLEEP)",
+                     (unsigned)CanState);
+            Det_ReportError(CAN_MODULE_ID, 0U, CAN_API_ID_SET_CONTROLLER_MODE, CAN_E_TRANSITION);
+            return CAN_NOT_OK;
+        }
+        Can_EnterListenOnly();
         break;
     case CAN_T_SLEEP:
         Can_Hw_SetMode(CAN_HW_MODE_SLEEP);
