@@ -103,7 +103,7 @@
  *
  * WdgM_TriggerHwWatchdog だけは SHUTDOWN 後も動かし続ける必要がある。
  * Renesas RA の IWDT は一度有効化すると無効化する手段がなく
- * (WdgM_Hw.cpp 参照)、誰もリフレッシュしなければ SHUTDOWN 後も
+ * (Wdg_Hw.cpp 参照)、誰もリフレッシュしなければ SHUTDOWN 後も
  * HW タイムアウトで MCU がリセットされてしまう
  * (WdgM_SupervisionSuppressed が立っているため、Task 10 さえ動いていれば
  * 無条件にリフレッシュを継続し、実害なく HW を満たし続けられる)。

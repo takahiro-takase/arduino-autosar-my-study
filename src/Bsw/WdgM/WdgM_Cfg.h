@@ -156,8 +156,11 @@
 
 /**
  * HW ウォッチドッグのタイムアウト。
- * WdgM_Hw.cpp で WDT.begin(4000) として直接使用する（本ファイルを MCU 固有
- * ヘッダに依存させないため、列挙値はここでは定義しない）。
+ * Wdg_PBCfg.c がこの値を直接引用して Wdg_Config.DefaultTimeoutMs を
+ * 組み立て、WdgM_EnableHwWatchdog() → WdgIf_SetMode(WDGIF_FAST_MODE) →
+ * Wdg_SetMode() → Wdg_Hw_Enable(timeoutMs) の経路で実 HW へ渡る（以前は
+ * WdgM_Hw.cpp が WDT.begin(4000) と直接ハードコードし、この定数と手動で
+ * 一致させる必要があった。詳細は Wdg_PBCfg.c 冒頭のコメント参照）。
  *
  * WDGM_HW_TRIGGER_CYCLE_MS (1000ms) より十分長く設定し、trigger 呼び出しの
  * ジッタで誤ってタイムアウトしないマージンを持たせること。

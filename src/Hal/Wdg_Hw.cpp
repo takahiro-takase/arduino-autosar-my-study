@@ -1,16 +1,21 @@
 /**
- * \file    WdgM_Hw.cpp
- * \brief   WdgM ハードウェア依存層 実装 (Renesas RA WDT ライブラリ)
+ * \file    Wdg_Hw.cpp
+ * \brief   Wdg ハードウェア依存層 実装 (Renesas RA WDT ライブラリ)
  * \details 本プロジェクトが対応する MCU は Renesas RA (Arduino UNO R4) のみ
  *          （AVR/UNO 無印は初代のプログラムサイズ制限により移行済み。旧
  *          AVR (wdt_* / avr/wdt.h) 分岐は削除済み）。
- *          タイムアウト値は WdgM_Cfg.h の WDGM_HW_WATCHDOG_TIMEOUT_MS (4000ms) に
- *          対応する。設定を変更する場合は両方を一致させること。
+ *
+ *          旧 WdgM_Hw.cpp との違い: タイムアウト値がハードコード（
+ *          `WDT.begin(4000)`）ではなく Wdg_Hw_Enable() の引数として渡される
+ *          ようになった。以前は WdgM_Cfg.h の WDGM_HW_WATCHDOG_TIMEOUT_MS と
+ *          この 4000 を手動で一致させる必要があったが、Wdg_PBCfg.c が
+ *          WDGM_HW_WATCHDOG_TIMEOUT_MS を直接引用して Wdg_Config を組み立てる
+ *          ため、値の実体は 1 か所だけになった（詳細は Wdg_PBCfg.c 参照）。
  *
  *          本ファイルが .cpp である理由:
  *          RA の WDT ライブラリ (WDTimer クラス、グローバルインスタンス WDT) は
  *          C++ API のため、本ファイルは Can_Hw.cpp / Dio_Hw.cpp 等と同じ理由で
- *          C++ として実装する (WdgM.c からは WdgM_Hw.h の extern "C" 経由で
+ *          C++ として実装する (Wdg.c からは Wdg_Hw.h の extern "C" 経由で
  *          呼び出せる)。
  *
  *          Renesas RA4M1 の IWDT 制約:
@@ -27,28 +32,28 @@
  * \note    本ファイルは AUTOSAR 4.3.1 仕様を参考にした学習用実装です。
  *          AUTOSAR 認証済み実装ではなく、製品への適用は想定していません。
  */
-#include "WdgM_Hw.h"
+#include "Wdg_Hw.h"
 #include "Det.h"
 #include <WDT.h>
 
-#define TAG "WdgM_Hw"
+#define TAG "Wdg_Hw"
 
-void WdgM_Hw_Enable(void)
+void Wdg_Hw_Enable(uint16 timeoutMs)
 {
-    if (!WDT.begin(4000))
+    if (!WDT.begin(timeoutMs))
     {
         DET_LOGE(TAG, "WDT.begin failed - HW watchdog NOT active");
     }
 }
 
-void WdgM_Hw_Disable(void)
+void Wdg_Hw_Disable(void)
 {
     /* Renesas RA の IWDT は一度有効化すると FSP からの無効化手段がない。
-     * WdgM 側の WdgM_SupervisionSuppressed フラグで代替する
-     * (詳細は WdgM.c の HW ウォッチドッグ連携コメントを参照)。 */
+     * Wdg_SetMode(WDGIF_OFF_MODE) が E_NOT_OK を返すことで上位層へ伝える
+     * （詳細は Wdg.c の Wdg_SetMode() コメントを参照）。 */
 }
 
-void WdgM_Hw_Refresh(void)
+void Wdg_Hw_Refresh(void)
 {
     WDT.refresh();
 }
