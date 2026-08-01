@@ -24,6 +24,28 @@
 static const PduR_PBConfigType* PduR_ConfigPtr = NULL;
 
 /**
+ * \brief   SrcPduId に一致する TX ルーティングパスを検索する。
+ *
+ * \details PduR_CanIfTxConfirmation/PduR_Transmit/PduR_SecOCTransmit が
+ *          共通で行う「TxPaths を SrcPduId で線形探索する」処理をまとめたもの。
+ *
+ * \param[in]  SrcPduId  検索する送信元 PDU ID。
+ *
+ * \return  一致した TX ルーティングパスへのポインタ。一致なしなら NULL。
+ *
+ * \pre        PduR_ConfigPtr != NULL であること（呼び出し元で保証済み）。
+ */
+static const PduR_TxRoutingPathType* PduR_FindTxPath(PduIdType SrcPduId)
+{
+    for (uint8 i = 0; i < PduR_ConfigPtr->TxPathCount; i++)
+    {
+        if (PduR_ConfigPtr->TxPaths[i].SrcPduId == SrcPduId)
+            return &PduR_ConfigPtr->TxPaths[i];
+    }
+    return NULL;
+}
+
+/**
  * \brief   PDU ルータモジュールを初期化する。
  *
  * \details すべての RX ルーティングパスを検証し、ポストビルド設定ポインタを
@@ -157,24 +179,20 @@ void PduR_CanIfTxConfirmation(PduIdType TxPduId, Std_ReturnType result)
         return;
     }
 
-    for (uint8 i = 0; i < PduR_ConfigPtr->TxPathCount; i++)
+    const PduR_TxRoutingPathType* path = PduR_FindTxPath(TxPduId);
+
+    if (path == NULL)
     {
-        const PduR_TxRoutingPathType* path = &PduR_ConfigPtr->TxPaths[i];
-
-        if (path->SrcPduId != TxPduId)
-            continue;
-
-        DET_LOGI(TAG, "TxConf src=%u dst=%u",
-                 (unsigned)TxPduId, (unsigned)path->ConfDestPduId);
-
-        if (path->ConfFct != NULL)
-            path->ConfFct(path->ConfDestPduId, result);
-
+        DET_LOGW(TAG, "TxConf no route src=%u", (unsigned)TxPduId);
+        Det_ReportError(PDUR_MODULE_ID, 0U, PDUR_API_ID_TX_CONFIRMATION, PDUR_E_PDU_ID_INVALID);
         return;
     }
 
-    DET_LOGW(TAG, "TxConf no route src=%u", (unsigned)TxPduId);
-    Det_ReportError(PDUR_MODULE_ID, 0U, PDUR_API_ID_TX_CONFIRMATION, PDUR_E_PDU_ID_INVALID);
+    DET_LOGI(TAG, "TxConf src=%u dst=%u",
+             (unsigned)TxPduId, (unsigned)path->ConfDestPduId);
+
+    if (path->ConfFct != NULL)
+        path->ConfFct(path->ConfDestPduId, result);
 }
 
 /**
@@ -217,29 +235,26 @@ Std_ReturnType PduR_Transmit(PduIdType SrcPduId, const PduInfoType* PduInfoPtr)
         return E_NOT_OK;
     }
 
-    for (uint8 i = 0; i < PduR_ConfigPtr->TxPathCount; i++)
+    const PduR_TxRoutingPathType* path = PduR_FindTxPath(SrcPduId);
+
+    if (path == NULL)
     {
-        const PduR_TxRoutingPathType* path = &PduR_ConfigPtr->TxPaths[i];
-
-        if (path->SrcPduId != SrcPduId)
-            continue;
-
-        if (path->TransmitOverrideFct != NULL)
-        {
-            DET_LOGI(TAG, "TX src=%u -> override id=%u",
-                     (unsigned)SrcPduId, (unsigned)path->TransmitOverrideId);
-            return path->TransmitOverrideFct(path->TransmitOverrideId, PduInfoPtr);
-        }
-
-        DET_LOGI(TAG, "TX src=%u canif=%u",
-                 (unsigned)SrcPduId, (unsigned)path->CanIfTxPduId);
-
-        return CanIf_Transmit(path->CanIfTxPduId, PduInfoPtr);
+        DET_LOGW(TAG, "TX no route src=%u", (unsigned)SrcPduId);
+        Det_ReportError(PDUR_MODULE_ID, 0U, PDUR_API_ID_TRANSMIT, PDUR_E_PDU_ID_INVALID);
+        return E_NOT_OK;
     }
 
-    DET_LOGW(TAG, "TX no route src=%u", (unsigned)SrcPduId);
-    Det_ReportError(PDUR_MODULE_ID, 0U, PDUR_API_ID_TRANSMIT, PDUR_E_PDU_ID_INVALID);
-    return E_NOT_OK;
+    if (path->TransmitOverrideFct != NULL)
+    {
+        DET_LOGI(TAG, "TX src=%u -> override id=%u",
+                 (unsigned)SrcPduId, (unsigned)path->TransmitOverrideId);
+        return path->TransmitOverrideFct(path->TransmitOverrideId, PduInfoPtr);
+    }
+
+    DET_LOGI(TAG, "TX src=%u canif=%u",
+             (unsigned)SrcPduId, (unsigned)path->CanIfTxPduId);
+
+    return CanIf_Transmit(path->CanIfTxPduId, PduInfoPtr);
 }
 
 /**
@@ -284,22 +299,19 @@ Std_ReturnType PduR_SecOCTransmit(PduIdType SrcPduId, const PduInfoType* PduInfo
         return E_NOT_OK;
     }
 
-    for (uint8 i = 0; i < PduR_ConfigPtr->TxPathCount; i++)
+    const PduR_TxRoutingPathType* path = PduR_FindTxPath(SrcPduId);
+
+    if (path == NULL)
     {
-        const PduR_TxRoutingPathType* path = &PduR_ConfigPtr->TxPaths[i];
-
-        if (path->SrcPduId != SrcPduId)
-            continue;
-
-        DET_LOGI(TAG, "TX(SecOC) src=%u canif=%u",
-                 (unsigned)SrcPduId, (unsigned)path->CanIfTxPduId);
-
-        return CanIf_Transmit(path->CanIfTxPduId, PduInfoPtr);
+        DET_LOGW(TAG, "TX(SecOC) no route src=%u", (unsigned)SrcPduId);
+        Det_ReportError(PDUR_MODULE_ID, 0U, PDUR_API_ID_SECOC_TRANSMIT, PDUR_E_PDU_ID_INVALID);
+        return E_NOT_OK;
     }
 
-    DET_LOGW(TAG, "TX(SecOC) no route src=%u", (unsigned)SrcPduId);
-    Det_ReportError(PDUR_MODULE_ID, 0U, PDUR_API_ID_SECOC_TRANSMIT, PDUR_E_PDU_ID_INVALID);
-    return E_NOT_OK;
+    DET_LOGI(TAG, "TX(SecOC) src=%u canif=%u",
+             (unsigned)SrcPduId, (unsigned)path->CanIfTxPduId);
+
+    return CanIf_Transmit(path->CanIfTxPduId, PduInfoPtr);
 }
 
 /**
