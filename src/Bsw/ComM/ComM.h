@@ -139,9 +139,12 @@ void ComM_MainFunction(void);
  *          ComM はチャネル状態を更新し、EcuM_RequestRUN / EcuM_ReleaseRUN を通じて
  *          EcuM に RUN 要求の変化を伝える。ただし `EcuM_RequestRUN()`/
  *          `EcuM_ReleaseRUN()` は同一ユーザからの重複要求・対応しない解放を
- *          DET 相当で検知する（SWS_EcuM_04125/04127）ため、実際にチャネル
- *          モードが変化した時のみこれらを呼び出す（Bus-Off L1/L2 バックオフの
- *          リトライ成功のたびに本関数が FULL_COM で呼ばれても、モードが
+ *          DET 相当で検知する（SWS_EcuM_04125/04127）ため、実際に EcuM の
+ *          RUN 要求状態（内部変数 ComM_EcuMRunMode。生のチャネルモードとは
+ *          別に持つ理由は ComM.c 参照）が変化する時のみこれらを呼び出す
+ *          （Bus-Off L1/L2 バックオフのリトライ成功のたびに本関数が FULL_COM
+ *          で呼ばれても、また Bus-Off 検出〜回復の間に一時的な
+ *          COMM_SILENT_COMMUNICATION を挟んでも、EcuM の RUN 状態が実際には
  *          変化していなければ EcuM へは再通知しない）。
  *          あわせて `ComM_UserRequest[COMM_USER_0]`
  *          をこの Mode に同期させる（どのユーザの要求でもない自動的な状態変化を
@@ -150,8 +153,10 @@ void ComM_MainFunction(void);
  *
  *          呼び出しタイミング:
  *            - CanSM_RequestComMode 成功後 (FULL_COM / NO_COM への遷移時)
- *            - Bus-Off 回復試行時 (FULL_COM。L1/L2 バックオフで無期限に継続する
- *              ため、Bus-Off を理由に NO_COM が呼ばれることはない)
+ *            - Bus-Off 回復試行時 (通常は FULL_COM。ただし Bus-Off が
+ *              CANSM_STATE_NO_COM_PENDING_SLEEP 中に発生した場合は、回復後も
+ *              「通信不要」だった意図を上書きしないよう NO_COM で呼ばれる。
+ *              CanSM.c の CanSM_BusOffFromPendingSleep 参照)
  *            - ウェイクアップ検証成功時 (FULL_COM)
  *
  * \param[in]  Network  ネットワークハンドル (0 〜 COMM_CHANNEL_COUNT-1)。

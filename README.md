@@ -208,7 +208,7 @@ HAL ─── Can_Hw / Dio_Hw / Port_Hw / Adc_Hw / Mcu_Hw / Fee_Hw / Wdg_Hw（sr
 |  | BswM | 42 | SWS_BswM | EcuM / ComM のモード変化をルールテーブルで受け取り `Os_SetTaskActive()` でタスクを有効・無効化するルールエンジン。POST_RUN 中はアプリタスクのみ停止し BSW タスクは継続。`BswMPduGroupSwitch`（[SWS_BswM_00273]）相当のアクションも持ち、RUN/POST_RUN で Com の「テレメトリ」I-PDU Group（E2EHealthStatus）を起動/停止する。`BswMLogicalExpression`（[SWS_BswM_00808]）の簡略版として AND/OR の複合条件ルールにも対応し、「EcuM==RUN AND ComM==FULL_COMMUNICATION」でテレメトリ開始、「ComM==SILENT_COMMUNICATION OR ComM==NO_COMMUNICATION」で停止する |
 |  | Can | 80 | SWS_Can | MCP2515 の送受信・Bus-Off 検出・CAN バス活動によるウェイクアップ検出を担う MCAL 最下層。HW を直接操作する唯一のモジュール |
 |  | CanIf | 60 | SWS_CanIf | CAN ID ↔ 論理 PDU のマッピング。上位層は CAN ID を知らず PDU ID で通信。設定 DLC 未満の受信 L-PDU は上位層へ渡さず棄却する（SWS_CANIF_00026 のデータ長チェック） |
-|  | CanSM | 140 | SWS_CanSM | Bus-Off 検出直後（回復試行の前）に `ComM_BusSMIndication(SILENT_COMMUNICATION)` を呼び、ComM のチャネル状態が回復完了まで FULL_COM のまま古い情報として残ることを防ぐ（SWS_CanSM_00521。SILENT_COM は EcuM の RUN を維持するため回復中も RUN は落ちない）。回復シーケンスは L1/L2 バックオフ（SWS_CanSM_00514/00515 準拠）で実施し、試行回数が `CANSM_BUSOFF_L1_TO_L2_COUNT` を超えるまでは短い周期（L1）でリトライし、超えたら Dem へ DTC を報告（limit=1 のため即座に確定）した上で長い周期（L2）へ切り替えて無期限にリトライを継続する（回復を諦めて停止する状態は存在しない）。再起動試行のたびに `ComM_BusSMIndication(FULL_COM)` を呼ぶ。ComM の NO_COM 要求によるボランタリスリープでは即座にはスリープせず、Nm（CanNm 状態機械）が Bus-Sleep Mode へ到達した通知（`CanSM_NmBusSleepMode()`）を受けてから `Can_SetControllerMode(CAN_T_SLEEP)` で実 HW を実際にスリープさせる（協調スリープ、詳細は Nm セクション参照）。`CanSM_ControllerWakeup()` による復帰経路を持ち、復帰は即座に確定せず、ウェイクアップ検証（Wakeup Validation Protocol 相当）により有効な CAN フレーム受信を確認してから FULL_COM へ確定する |
+|  | CanSM | 140 | SWS_CanSM | Bus-Off 検出直後（回復試行の前）に `ComM_BusSMIndication(SILENT_COMMUNICATION)` を呼び、ComM のチャネル状態が回復完了まで FULL_COM のまま古い情報として残ることを防ぐ（SWS_CanSM_00521。SILENT_COM は EcuM の RUN を維持するため回復中も RUN は落ちない）。受け付ける Bus-Off はコントローラが物理的に稼働中の状態（FULL_COM、および Nm の Bus-Sleep Mode 到達待ちで HW が稼働継続する NO_COM_PENDING_SLEEP）のみで、回復シーケンスは L1/L2 バックオフ（SWS_CanSM_00514/00515 準拠）で実施し、試行回数が `CANSM_BUSOFF_L1_TO_L2_COUNT` を超えるまでは短い周期（L1）でリトライし、超えたら Dem へ DTC を報告（limit=1 のため即座に確定）した上で長い周期（L2）へ切り替えて無期限にリトライを継続する（回復を諦めて停止する状態は存在しない）。再起動試行のたびに、Bus-Off 発生時点の状態（FULL_COM か NO_COM_PENDING_SLEEP か）へ復帰させる（`CanSM_BusOffFromPendingSleep`、後者の場合は誤って FULL_COM へ戻さない）。ComM の NO_COM 要求によるボランタリスリープでは即座にはスリープせず、Nm（CanNm 状態機械）が Bus-Sleep Mode へ到達した通知（`CanSM_NmBusSleepMode()`）を受けてから `Can_SetControllerMode(CAN_T_SLEEP)` で実 HW を実際にスリープさせる（協調スリープ、詳細は Nm セクション参照）。`CanSM_ControllerWakeup()` による復帰経路を持ち、復帰は即座に確定せず、ウェイクアップ検証（Wakeup Validation Protocol 相当）により有効な CAN フレーム受信を確認してから FULL_COM へ確定する |
 |  | CanTp | 35 | SWS_CanTp | ISO 15765-2 のフレーム分割（FF/CF）と再組立。8 バイトを超える UDS 応答を実現 |
 |  | Com | 50 | SWS_Com | シグナルのビット単位パック／アンパックと送受信タイミング制御を担う（TxModeMode: DIRECT/MIXED/PERIODIC・TMS・MDT・受信フィルタ・I-PDU Group・Signal Gateway 等）。E2E には一切関知しない（E2E Transformer 方式、Com.c 本体に E2E は埋め込まれない）。詳細は下記「CAN 通信スタック（Can / CanIf / PduR / Com）」節を参照 |
 |  | ComM | 12 | SWS_ComM | CAN バスの通信モード（NO_COM / SILENT_COM / FULL_COM）を管理し CanSM へ要求。`ComM_BusSMIndication` で EcuM の RUN 要求を操作。複数ユーザ（App_EngineManager=COMM_USER_0, Dcm=COMM_USER_1）の要求を最も通信レベルの高いモードへ集約する調停ロジックを持つ。両ユーザが NO_COM を要求したときのみ実際にボランタリスリープへ落ちる |
@@ -4208,9 +4208,13 @@ STARTUP ──────────────────→ RUN ── 全
 | SHUTDOWN | **実行**（`WdgM_TriggerHwWatchdog` / `Can_MainFunction_Read` / `Can_MainFunction_Wakeup` / `CanSM_MainFunction` / `NvM_MainFunction` / `MemIf_MainFunction` / `Nm_MainFunction` のみ有効） | Arduino では電源断不可のためアイドル待機するが、`EcuM_RequestRUN` が来れば RUN へ復帰できる（CAN バスのウェイクアップ経由）。`Os_SchedulerStep()` 自体は呼ばれ続けるが、BswM Rule 2 がこの 7 タスク以外を無効化するため実質アイドル。HW ウォッチドッグ維持のため `WdgM_TriggerHwWatchdog`、CAN ウェイクアップ検出・検証中フレーム処理のため `Can_MainFunction_Read`/`Can_MainFunction_Wakeup`、ウェイクアップ検証タイムアウト監視のため `CanSM_MainFunction`、保留中の DTC 永続化のため `NvM_MainFunction`/`MemIf_MainFunction`（NvM がジョブを開始するだけの `NvM_MainFunction` だけを動かしても、物理バイト書き込みを進める `MemIf_MainFunction` を止めてしまうとジョブが永久に完了しない）、Nm 状態機械（Bus-Sleep Mode への到達判定・他ノードの NM フレーム受信によるスリープ延期の継続処理）のため `Nm_MainFunction` だけは動き続ける（CAN 受信自体は真のハードウェア割り込み `Can_Isr()` のため、この無効化に関わらず常に起動する） |
 
 SHUTDOWN は CAN バスのウェイクアップにより常に RUN へ復帰できます。実機リセットが
-必要な終端状態は存在しません（Bus-Off 回復は後述の通り L1/L2 バックオフで無期限に
-継続するため、Bus-Off が原因で ComM が NO_COM を通知することはなく、SHUTDOWN は
-ComM の NO_COM 要求による正常系（ボランタリ）スリープからのみ到達します）。
+必要な終端状態は存在しません。Bus-Off 回復は後述の通り L1/L2 バックオフで無期限に
+継続するため、Bus-Off の検出・回復だけを理由に新たに RUN が解放されて SHUTDOWN へ
+向かうことはなく、SHUTDOWN は ComM の NO_COM 要求による正常系（ボランタリ）スリープ
+からのみ到達します（NO_COM_PENDING_SLEEP 中に実際に Bus-Off が発生した場合、回復時に
+`ComM_BusSMIndication(NO_COM)` が呼ばれ直すことはありますが、RUN は既にボランタリ
+スリープ突入時点で解放済みのため、これによって新たに `EcuM_ReleaseRUN()` が呼ばれる
+ことはありません。詳細は CanSM.c の `CanSM_BusOffFromPendingSleep` 参照）。
 
 ##### RUN ユーザ
 
@@ -4219,7 +4223,7 @@ RUN フェーズを継続するために「誰かが使っている」ことを�
 
 | ユーザ | 定数 | `EcuM_RequestRUN` タイミング | `EcuM_ReleaseRUN` タイミング |
 |-------|------|--------------------------|--------------------------|
-| ComM | `ECUM_USER_COMM` | CAN バスが FULL_COM になったとき（起動時 / Bus-Off 回復試行時 / ボランタリスリープからのウェイクアップ時） | CAN バスが NO_COM になったとき（エンジン OFF 継続によるボランタリスリープ突入時。Bus-Off 回復は L1/L2 バックオフで無期限に継続するため NO_COM にはならない） |
+| ComM | `ECUM_USER_COMM` | CAN バスが FULL_COM になったとき（起動時 / Bus-Off 回復試行時 / ボランタリスリープからのウェイクアップ時） | CAN バスが NO_COM になったとき（エンジン OFF 継続によるボランタリスリープ突入時。NO_COM_PENDING_SLEEP 中に Bus-Off が発生し回復した場合も `ComM_BusSMIndication(NO_COM)` は呼ばれ直すが、RUN は既に解放済みのため `EcuM_ReleaseRUN()` が再度呼ばれることはない） |
 
 **重複要求・対応しない解放の検知（SWS_EcuM_04125/04127）:**
 `EcuM_RequestRUN()`/`EcuM_ReleaseRUN()` は、AUTOSAR の実 EcuM と同様に
@@ -4231,11 +4235,16 @@ RUN フェーズを継続するために「誰かが使っている」ことを�
 出力して `E_NOT_OK` を返します。呼び出し元は必ず `void` キャストで戻り値を
 捨てているため、この検知は実行時の挙動には影響しません（開発時の診断用途）。
 
-この検知の追加に伴い、`ComM_BusSMIndication()` 側も、実際にチャネルモードが
+この検知の追加に伴い、`ComM_BusSMIndication()` 側も、実際に EcuM の RUN 要求状態が
 変化した時のみ `EcuM_RequestRUN()`/`EcuM_ReleaseRUN()` を呼ぶよう変更しました。
-CanSM の Bus-Off L1/L2 バックオフはリトライ成功のたびに本関数を FULL_COM で
-呼びますが、モードが変化していなければ EcuM へは再通知しないため、通常の
-Bus-Off 回復中に重複要求のログが不必要に頻発することはありません。
+当初はチャネルモード（`ComM_ChannelMode`）そのものの変化で判定していましたが、
+Bus-Off 検出時に一時的に挟まる `COMM_SILENT_COMMUNICATION`（EcuM の RUN 状態には
+無関係）を経由すると、回復時の FULL_COM/NO_COM 通知が「SILENT_COM からの変化」として
+見えてしまい、EcuM 側で `ERR=0x20`（多重要求）/`ERR=0x21`（不整合解放）を誤検知する
+不具合があった（2026-08 発見・修正）。現在は `ComM_EcuMRunMode`（EcuM へ最後に伝えた
+FULL/NO_COM の別。SILENT_COM では更新しない）という専用の内部状態で判定しており、
+Bus-Off 回復中に SILENT_COM を何度挟んでも、EcuM への再通知は本当に FULL⇔NO_COM が
+変化したときだけに限られます。
 
 ##### コールチェーン（上下双方向）
 
@@ -4250,18 +4259,33 @@ EcuM_Init → ComM_RequestComMode(FULL_COM)   ← EcuM が ComM へ要求（上�
 
 【Bus-Off 検出時（回復試行の前、SWS_CanSM_00521）】
 CanIf_ControllerBusOff → CanSM_ControllerBusOff
+  受け付けるのは CANSM_STATE_FULL_COM と CANSM_STATE_NO_COM_PENDING_SLEEP
+  （Nm の Bus-Sleep Mode 到達待ちでコントローラがまだ稼働中の状態）の 2 つのみ
+  （2026-08 発見・修正: 以前は FULL_COM のみを受け付けており、
+   NO_COM_PENDING_SLEEP 中の実 Bus-Off は黙って無視され、回復シーケンスが
+   一切起動しないままコントローラが HW 的に Bus-Off し続ける不具合があった）
   └→ Can_SetControllerMode(CAN_T_STOP)
        └→ ComM_BusSMIndication(SILENT_COM)  ← CanSM が ComM へ通知（下→上）
             （SILENT_COM は EcuM_RequestRUN/ReleaseRUN いずれも呼ばない → RUN 維持）
 
-【Bus-Off 回復試行時（L1/L2 バックオフで無期限に継続、RUN 解放はしない）】
+【Bus-Off 回復試行時（L1/L2 バックオフで無期限に継続）】
 CanSM_MainFunction（10ms タスク）
   └→ Can_SetControllerMode(CAN_T_START) で再起動を試行
-       └→ ComM_BusSMIndication(FULL_COM)    ← CanSM が ComM へ通知（下→上）
-            └→ チャネルモードが直前と同じ FULL_COM なら EcuM_RequestRUN() は呼ばない
-               （直前が SILENT_COM 等から変化した場合のみ呼ぶ。SWS_EcuM_04125 の
-                「同一ユーザからの重複要求」を ComM 側で極力避けるため）
-  （L1 リトライ超過時は Dem へ FAILED を報告するのみで、RUN 解放は発生しない）
+       └→ 復帰先は Bus-Off 発生時点の状態で分岐する
+          （CanSM_BusOffFromPendingSleep フラグ、CanSM.c 参照）
+          ├─ 発生時 FULL_COM だった場合: CanSM state → FULL_COM
+          │    └→ ComM_BusSMIndication(FULL_COM)  ← CanSM が ComM へ通知（下→上）
+          │         └→ ComM_EcuMRunMode が既に FULL_COMMUNICATION のため
+          │            EcuM_RequestRUN() は呼ばない（RUN は Bus-Off 中も維持
+          │            されたまま）。Nm へは Nm_NetworkRequest() のみ送る
+          └─ 発生時 NO_COM_PENDING_SLEEP だった場合: CanSM state →
+               NO_COM_PENDING_SLEEP（FULL_COM へは戻さない。ComM は既に
+               NO_COM を要求済みで、戻すと誰も再要求せず取り残されるため）
+               └→ ComM_BusSMIndication(NO_COM)  ← CanSM が ComM へ通知（下→上）
+                    └→ ComM_EcuMRunMode が既に NO_COMMUNICATION のため
+                       EcuM_ReleaseRUN() は呼ばない（RUN は既にボランタリ
+                       スリープ突入時点で解放済み）
+  （L1 リトライ超過時は Dem へ FAILED を報告するのみで、RUN の状態には影響しない）
 
 【ボランタリスリープ突入時（エンジン OFF 継続、復帰経路あり）】
 App_EngineManager_Run（3000ms タスク、ENGINE_STATE_OFF が5周期継続）

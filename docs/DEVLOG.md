@@ -13,6 +13,7 @@ README は現在の仕様・実装を理解するためのドキュメントと�
 - [Dem: デバウンス閾値を単一値からイベントごとに変更した経緯](#dem-デバウンス閾値を単一値からイベントごとに変更した経緯)
 - [ComM: ウェイクアップ直後の再集約による即座の再スリープ](#comm-ウェイクアップ直後の再集約による即座の再スリープ)
 - [CanSM: Bus-Off 回復断念設計の撤去](#cansm-bus-off-回復断念設計の撤去)
+- [CanSM: NO_COM_PENDING_SLEEP 中の Bus-Off 見逃し](#cansm-no_com_pending_sleep-中の-bus-off-見逃し)
 - [NvM: 非同期書き込みジョブキューへの変更経緯](#nvm-非同期書き込みジョブキューへの変更経緯)
 - [WdgM: Deadline Supervision 上限緩和と Os_SchedulerStep のバグ](#wdgm-deadline-supervision-上限緩和と-os_schedulerstep-のバグ)
 - [WdgM: グローバル EXPIRED 許容サイクルの追加](#wdgm-グローバル-expired-許容サイクルの追加)
@@ -193,6 +194,60 @@ ComM のチャネル状態が回復完了まで FULL_COM のまま古い情報�
 変化した時のみ `EcuM_RequestRUN()`/`EcuM_ReleaseRUN()` を呼ぶよう修正した。
 
 （README 該当箇所: [CAN コントローラの実スリープ](../README.md#can-コントローラの実スリープcan_setcontrollermodecan_t_sleep)）
+
+---
+
+## CanSM: NO_COM_PENDING_SLEEP 中の Bus-Off 見逃し
+
+AUTOSAR 仕様書（SWS_CanSM）とのスペック監査で、`CanSM_ControllerBusOff()` が
+`CANSM_STATE_FULL_COM` からの Bus-Off しか受け付けていないことが判明した。
+Nm 協調スリープ導入時に追加された `CANSM_STATE_NO_COM_PENDING_SLEEP`（「もう
+通信は不要だが Nm が Bus-Sleep Mode へ到達するまでコントローラは稼働継続」する
+状態）は、コントローラが物理的に稼働中でありうる点で FULL_COM と同じなのに、
+このガードの対象に含まれていなかった。この状態中に実際に Bus-Off が発生すると、
+回復シーケンスが一切起動しないまま HW が Bus-Off し続ける不具合だった。
+
+単純にガードを緩めるだけでは別の不具合を誘発することも判明した。Bus-Off 回復
+（`CanSM_MainFunction()`）は無条件に `CANSM_STATE_FULL_COM` へ復帰させる実装
+だったため、NO_COM_PENDING_SLEEP 中に発生した Bus-Off から回復すると「もう
+通信不要」だった意図を上書きしてしまい、誰も再要求しないため二度と NO_COM
+（ボランタリスリープ）へ戻れず FULL_COM に取り残される。これを避けるため、
+Bus-Off 発生時点の状態を `CanSM_BusOffFromPendingSleep` フラグで記憶し、回復後
+も元の意図（FULL_COM か NO_COM_PENDING_SLEEP か）を復元するようにした。
+
+この修正の検証中、`ComM_BusSMIndication()` の重複呼び出し防止ロジック
+（`Mode != prevMode` 判定）にも別の潜在バグが見つかった。Bus-Off 検出時に
+一時的に挟まる `COMM_SILENT_COMMUNICATION`（EcuM の RUN 状態には無関係）を
+経由すると、回復時の FULL_COM/NO_COM 通知が「SILENT_COM からの変化」として
+見えてしまい、`EcuM_RequestRUN()`/`EcuM_ReleaseRUN()` が不要に再度呼ばれ、
+`ECUM_E_MULTIPLE_RUN_REQUESTS`/`ECUM_E_MISMATCHED_RUN_RELEASE` を誤検知する
+（FULL_COM 経由でも元々存在した不具合で、今回の修正は NO_COM_PENDING_SLEEP
+側にも同じクラスの問題を広げただけだった）。`ComM_EcuMRunMode` という専用の
+内部状態（EcuM へ最後に伝えた FULL/NO_COM の別。SILENT_COM では更新しない）
+で判定するよう修正し、あわせて解消した。
+
+さらに、`CanSM_ControllerBusOff()` のガードが `CANSM_STATE_SILENT_COM` を
+「コントローラは必ず停止済み」という前提で除外していたが、`CanSM_RequestComMode()`
+の SILENT_COMMUNICATION 分岐は元々 `CANSM_STATE_FULL_COM` からの遷移でしか
+コントローラを停止していなかった。NO_COM_PENDING_SLEEP から SILENT_COM への
+遷移が公開 API `ComM_RequestComMode()` 経由で到達可能な経路として残っていたため、
+この分岐も NO_COM_PENDING_SLEEP を含むよう修正し、不変条件を実際に成立させた
+（現状のアプリケーションコードはこの経路を使わないため潜在バグの段階だった）。
+
+**実機検証の顛末**: NO_COM_PENDING_SLEEP 中の Bus-Off パスは、狙って実機で
+直接再現させるのが難しかった。CAN-USB アダプタを物理的に外して相手ノードを
+完全に消しても Bus-Off が発生しなかった理由は、`Nm_MainFunction()` の
+`NM_STATE_READY_SLEEP` ケース（`Nm.c`）が送信を一切行わない設計（ログの
+"Ready Sleep State (tx stopped)" の通り）であり、かつ Com の TX I-PDU
+グループも `Com_IpduGroupStop()` で停止済みのため、NO_COM_PENDING_SLEEP から
+実際のスリープまでの数秒間はほぼ何も送信されないためだった。TX 連続失敗を
+トリガとする Bus-Off（一次検出の EFLG.TXBO も、送信しなければ TEC が上がら
+ないため同様）は、この区間内では構造的にほぼ発生しえない。最終的に、
+FULL_COM 経路（相手ノード不在による自然発生 Bus-Off、実機で 10 回以上反復
+実証済み。EcuM 側の DET 誤検知なしも確認）と同一のコードパスを通ることに
+よる間接的な検証と、コードレビューをもって十分と判断した。
+
+（README 該当箇所: [ECU 管理層（EcuM / BswM / WdgM / ComM / CanSM / Nm）](../README.md#ecu-management)）
 
 ---
 
