@@ -7,52 +7,56 @@
  *          ECU を起動・運転できるようにする。
  *
  *          起動シーケンス (EcuM_Init):
- *            1. NvM_Init       — EEPROM → RAM ミラー一括ロード (最初期)
- *            2. Port_Init      — ピン方向設定（Dio 操作より前に完了）
- *            3. Can_Init       — CAN コントローラ初期化（バスはまだ非アクティブ）
- *            4. CanIf_Init     — CAN インタフェース初期化
- *            5. PduR_Init      — PDU ルータ初期化
- *            6. Crypto_Init    — Crypto Driver 初期化（AES-128 自己診断を含む。
+ *            1. MemIf_Init     — Fee (Renesas RA) の EEPROM 抽象化層初期化
+ *                                (NvM_Init より前、最初期)。EcuM 自身は
+ *                                Fee という具体名を意識しない（詳細は
+ *                                MemIf.c 冒頭のコメント参照）
+ *            2. NvM_Init       — EEPROM → RAM ミラー一括ロード
+ *            3. Port_Init      — ピン方向設定（Dio 操作より前に完了）
+ *            4. Can_Init       — CAN コントローラ初期化（バスはまだ非アクティブ）
+ *            5. CanIf_Init     — CAN インタフェース初期化
+ *            6. PduR_Init      — PDU ルータ初期化
+ *            7. Crypto_Init    — Crypto Driver 初期化（AES-128 自己診断を含む。
  *                                Csm/CryIf/Crypto レイヤの最下層）
- *            7. CryIf_Init     — Crypto Interface 初期化
- *            8. Csm_Init       — Crypto Service Manager 初期化
- *            9. KeyM_Init      — Key Manager 初期化（Csm の後。KeyM は
+ *            8. CryIf_Init     — Crypto Interface 初期化
+ *            9. Csm_Init       — Crypto Service Manager 初期化
+ *           10. KeyM_Init      — Key Manager 初期化（Csm の後。KeyM は
  *                                Csm_KeyElementSet/Csm_KeySetValid のみを呼び、
  *                                CryIf/Crypto の存在を知らない）
- *           10. SecOC_Init     — セキュアオンボード通信初期化（PduR の後・Com の前。
+ *           11. SecOC_Init     — セキュアオンボード通信初期化（PduR の後・Com の前。
  *                                PduR→SecOC→Com の依存順。SecOC は Csm_MacGenerate/
  *                                Csm_MacVerify のみを呼び、Crypto/CryIf の存在を知らない）
- *           11. Com_Init       — COM モジュール初期化
- *           12. E2EXf_PBCfg_Init — E2E Check/Protect ステート初期化
+ *           12. Com_Init       — COM モジュール初期化
+ *           13. E2EXf_PBCfg_Init — E2E Check/Protect ステート初期化
  *                                （E2E Transformer 方式。Com は E2E を関知しないため
  *                                  Com_Init の直後にここで別途初期化する）
- *           13. CanTp_Init     — CAN トランスポートプロトコル初期化
- *           14. Dcm_Init       — 診断通信モジュール初期化
- *           15. Dem_Init       — NvM 経由で DTC ステータスを復元
- *           16. FiM_Init       — 機能抑止状態を初期化 (Dem_Init の後)
- *           17. BswM_Init      — ルールエンジン初期化。ComM_Init/ComM_RequestComMode
+ *           14. CanTp_Init     — CAN トランスポートプロトコル初期化
+ *           15. Dcm_Init       — 診断通信モジュール初期化
+ *           16. Dem_Init       — NvM 経由で DTC ステータスを復元
+ *           17. FiM_Init       — 機能抑止状態を初期化 (Dem_Init の後)
+ *           18. BswM_Init      — ルールエンジン初期化。ComM_Init/ComM_RequestComMode
  *                                より前が必須（下記参照）
- *           18. ComM_Init      — 通信マネージャ初期化 (NO_COM 状態)
- *           19. Nm_Init        — CanNm 状態機械初期化 (Bus-Sleep Mode で開始)。
+ *           19. ComM_Init      — 通信マネージャ初期化 (NO_COM 状態)
+ *           20. Nm_Init        — CanNm 状態機械初期化 (Bus-Sleep Mode で開始)。
  *                                ComM_RequestComMode(FULL_COM) より必ず前に置くこと。
  *                                同要求は同期的に CanSM_RequestComMode →
  *                                ComM_BusSMIndication(FULL_COM) → Nm_NetworkRequest()
  *                                まで連鎖するため、これより後だと Nm 未初期化のまま
  *                                呼ばれて失敗し、Nm が Bus-Sleep Mode に固着する
  *                                （実機で確認された不具合）
- *           20. ComM_RequestComMode(FULL_COM) — CAN バス通信開始
+ *           21. ComM_RequestComMode(FULL_COM) — CAN バス通信開始
  *                               （全上位層初期化後に開始することで
  *                                 フレーム到着時の未初期化アクセスを防ぐ。
  *                                 ComM_BusSMIndication 経由で BswM_ExecuteRules が
  *                                 同期的に呼ばれるため BswM_Init 済みである必要がある）
- *           21. App_EngineManager_Init — SW-C 初期化
- *           22. IoHwAb_Init    — I/O ハードウェア抽象化層初期化 (LED チャネル設定)
- *           23. App_WarningIndicator_Init — 警告灯 SW-C 初期化
- *           24. WdgM_Init      — Alive/Logical Supervision 初期化。
+ *           22. App_EngineManager_Init — SW-C 初期化
+ *           23. IoHwAb_Init    — I/O ハードウェア抽象化層初期化 (LED チャネル設定)
+ *           24. App_WarningIndicator_Init — 警告灯 SW-C 初期化
+ *           25. WdgM_Init      — Alive/Logical Supervision 初期化。
  *                                実 HW ウォッチドッグもここで有効化する
  *                                （他の全モジュール初期化完了後、最後に有効化することで
  *                                  初期化処理自体がタイムアウトの影響を受けないようにする）
- *           25. Os_Init        — タスクスケジューラ初期化 (全モジュール初期化後)
+ *           26. Os_Init        — タスクスケジューラ初期化 (全モジュール初期化後)
  *
  *          周期処理 (EcuM_MainFunction):
  *            Os_SchedulerStep() — タスクテーブルに従い周期到来タスクを実行
@@ -74,6 +78,7 @@
 #include "BswM_PBCfg.h"
 #include "WdgM.h"
 #include "WdgM_PBCfg.h"
+#include "MemIf.h"
 #include "NvM.h"
 #include "NvM_PBCfg.h"
 #include "Os.h"
@@ -132,6 +137,8 @@ static unsigned long   EcuM_PostRunTimerMs = 0UL;
  *
  * \details AUTOSAR の依存関係順（下位層から上位層）に各モジュールの
  *          _Init 関数を呼び出す。
+ *          - MemIf_Init: NvM_Init より前に、EEPROM 抽象化層 (Fee) を
+ *            初期化する。
  *          - NvM_Init: 全 NvM ブロックを EEPROM から RAM ミラーへ一括ロードする。
  *          - Can_Init: CAN コントローラを初期化する（LISTEN_ONLY 状態で待機）。
  *            CanIf/PduR/Com 等の上位層初期化前に CAN バスをアクティブにしないため、
@@ -152,6 +159,7 @@ static unsigned long   EcuM_PostRunTimerMs = 0UL;
  */
 void EcuM_Init(void)
 {
+    MemIf_Init();   /* NvM_Init より前: EEPROM 抽象化層 (Fee) を初期化 */
     NvM_Init(&NvM_Config);
     Port_Init();                    /* ピン方向設定（Dio 操作より前に完了）    */
     Can_Init(&Can_Config);          /* ハードウェア初期化（LISTEN_ONLY で待機） */

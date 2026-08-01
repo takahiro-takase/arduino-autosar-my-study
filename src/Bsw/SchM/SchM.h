@@ -20,7 +20,7 @@
  *            もう NOP では済まない。SchM_Hw_EnterExclusiveArea() /
  *            SchM_Hw_ExitExclusiveArea()（src/Hal/SchM_Hw.cpp）が実際に
  *            noInterrupts()/interrupts() を呼び出す。
- *            AVR・Renesas RA いずれも割り込み優先度は単一レベルのため、
+ *            Renesas RA の割り込み優先度は単一レベルのため、
  *            グローバル割り込み無効化 1 本で全排他エリアに対応できる
  *            （実車 AUTOSAR OS の SuspendAllInterrupts() と同じ考え方）。
  *

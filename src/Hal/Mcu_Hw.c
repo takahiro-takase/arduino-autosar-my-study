@@ -1,8 +1,9 @@
 /**
  * \file    Mcu_Hw.c
- * \brief   Mcu ハードウェア依存層 実装
- * \details AVR (MCUSR / wdt_disable) と Renesas RA (RSTSR0/RSTSR1 / WDT)
- *          の両方に対応する。ビルドターゲットに応じて自動的に切り替わる。
+ * \brief   Mcu ハードウェア依存層 実装 (Renesas RA)
+ * \details 本プロジェクトが対応する MCU は Renesas RA (Arduino UNO R4) のみ
+ *          （AVR/UNO 無印は初代のプログラムサイズ制限により移行済み。旧
+ *          AVR (MCUSR / wdt_disable) 分岐は削除済み）。
  *
  *          Renesas RA 側の制約 (現時点でハードウェア未検証):
  *            - RSTSR0/RSTSR1 の外部リセットピン専用フラグが無いため、
@@ -21,32 +22,6 @@
  *          AUTOSAR 認証済み実装ではなく、製品への適用は想定していません。
  */
 #include "Mcu_Hw.h"
-
-#if defined(__AVR__)
-
-#include <avr/io.h>
-#include <avr/wdt.h>
-
-Mcu_Hw_ResetReasonType Mcu_Hw_ReadAndClearResetReason(void)
-{
-    const uint8 resetFlags = MCUSR;
-    MCUSR = 0;
-
-    Mcu_Hw_ResetReasonType reason;
-    reason.Watchdog = (resetFlags >> 3) & 1U;  /* WDRF  */
-    reason.BrownOut = (resetFlags >> 2) & 1U;  /* BORF  */
-    reason.External = (resetFlags >> 1) & 1U;  /* EXTRF */
-    reason.PowerOn  = resetFlags & 1U;         /* PORF  */
-    return reason;
-}
-
-void Mcu_Hw_DisableWatchdogAtBoot(void)
-{
-    wdt_disable();
-}
-
-#else /* Renesas RA */
-
 #include "bsp_api.h"
 
 Mcu_Hw_ResetReasonType Mcu_Hw_ReadAndClearResetReason(void)
@@ -75,5 +50,3 @@ void Mcu_Hw_DisableWatchdogAtBoot(void)
     /* Renesas RA の WDT は WDTimer::begin() を呼ぶまで動作しないため、
      * 起動直後に無効化すべき有効な WDT が存在しない。 */
 }
-
-#endif

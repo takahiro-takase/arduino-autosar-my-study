@@ -13,7 +13,7 @@
  *                                       Can_MainFunction_Read・
  *                                       Can_MainFunction_Wakeup・
  *                                       CanSM_MainFunction・NvM_MainFunction・
- *                                       Nm_MainFunction
+ *                                       MemIf_MainFunction・Nm_MainFunction
  *                                       だけは除外)
  *
  * \copyright  Copyright (c) 2025 T_T
@@ -76,6 +76,7 @@
 #define BSWM_OS_TASK_CAN_BUSOFF     14U /**< Can_MainFunction_BusOff (1 ms)   */
 #define BSWM_OS_TASK_CAN_WAKEUP     15U /**< Can_MainFunction_Wakeup (1 ms)   */
 #define BSWM_OS_TASK_SECOC_MAIN     16U /**< SecOC_MainFunction     (100 ms)  */
+#define BSWM_OS_TASK_MEMIF_MAIN     17U /**< MemIf_MainFunction     (10 ms)   */
 
 /* -----------------------------------------------------------------------
  * タスクビットマスク (1ビット = 1タスク; ビット位置 = タスク ID)
@@ -85,8 +86,8 @@
  * なっていたバグを修正した経緯がある）。
  * ----------------------------------------------------------------------- */
 
-/** 全タスク (bits 0〜16) */
-#define BSWM_TASK_MASK_ALL  0x1FFFFUL
+/** 全タスク (bits 0〜17) */
+#define BSWM_TASK_MASK_ALL  0x3FFFFUL
 
 /** アプリ Runnable タスク: RTE_ENGINE + RTE_WARNING
  *  POST_RUN 時に停止し、アプリロジックを凍結する */
@@ -106,8 +107,6 @@
  * HW タイムアウトで MCU がリセットされてしまう
  * (WdgM_SupervisionSuppressed が立っているため、Task 10 さえ動いていれば
  * 無条件にリフレッシュを継続し、実害なく HW を満たし続けられる)。
- * AVR では wdt_disable() が実際に機能するため本来は不要だが、
- * MCU に依存せず SHUTDOWN を安定した終端状態にするため両方で同じ扱いとする。
  *
  * Can_MainFunction_Read・Can_MainFunction_Wakeup も同様に SHUTDOWN 中
  * 動かし続ける必要がある。CAN 受信自体は真のハードウェア割り込み
@@ -133,6 +132,13 @@
  * ジョブが保留中のまま残っている可能性があり、このタスクを止めてしまうと
  * 次に RUN へ戻るまで（あるいは戻らないまま）EEPROM への永続化が完了しない。
  *
+ * MemIf_MainFunction も同じ理由で動かし続ける必要がある。NvM_MainFunction は
+ * MemIf_Write() でジョブを「開始」するだけで、実際の物理バイト書き込みを
+ * 1 バイトずつ進めるのは MemIf_MainFunction（Fee 経由）である。
+ * NvM_MainFunction だけを SHUTDOWN 中も動かして MemIf_MainFunction を
+ * 止めてしまうと、NvM がジョブを開始したまま永久に MEMIF_JOB_PENDING を
+ * 待ち続け、EEPROM への永続化が完了しない（詳細は NvM.c / MemIf.c を参照）。
+ *
  * Nm_MainFunction も SHUTDOWN 中動かし続ける必要がある。CanSM の実物理
  * スリープ（Can_SetControllerMode(CAN_T_SLEEP)）は Nm が Bus-Sleep Mode へ
  * 到達した通知（CanSM_NmBusSleepMode()）を受けて初めて行われる設計
@@ -157,6 +163,7 @@
                                                         | (1UL << BSWM_OS_TASK_CAN_WAKEUP) \
                                                         | (1UL << BSWM_OS_TASK_CANSM_MAIN) \
                                                         | (1UL << BSWM_OS_TASK_NVM_MAIN) \
+                                                        | (1UL << BSWM_OS_TASK_MEMIF_MAIN) \
                                                         | (1UL << BSWM_OS_TASK_NM_MAIN)))))
 
 /* -----------------------------------------------------------------------

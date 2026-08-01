@@ -23,6 +23,7 @@
  *            Task 14: Can_MainFunction_BusOff       1 ms  — Bus-Off (EFLG.TXBO) ポーリング
  *            Task 15: Can_MainFunction_Wakeup       1 ms  — SLEEP 中のウェイクアップペンディングのドレイン
  *            Task 16: SecOC_MainFunction           100 ms  — TX Secured I-PDU の Freshness/MAC 計算・送信
+ *            Task 17: MemIf_MainFunction            10 ms  — 保留中 EEPROM 書き込みジョブを1バイトずつ処理 (Fee)
  *
  *          CAN 受信が真のハードウェア割り込み (Can_Isr(), INT ピン立ち下がりで
  *          attachInterrupt 起動) になったことに伴い、旧 Task 0 (Can_Isr の
@@ -49,10 +50,16 @@
  *            WdgM_TriggerHwWatchdog と同じ「中頻度の BSW ハウスキーピング」
  *            周期に揃えている（詳細は Nm_Cfg.h を参照）。
  *            NvM_MainFunction は CanSM_MainFunction / IoHwAb_MainFunction と同じ
- *            10 ms とする。1 ブロック最大 10 バイト（データ本体+CRC）を
- *            100ms 以内に書き終えられ、DTC 確定から永続化完了までの遅延を
- *            実用上問題ない範囲に抑えつつ、1 呼び出しあたりの処理は
- *            EEPROM 1 バイト分の書き込みのみに抑えられる（詳細は NvM.c を参照）。
+ *            10 ms とする（ブロック・CRC・冗長化のオーケストレーションのみで
+ *            EEPROM I/O は発生しないため軽量）。MemIf_MainFunction も同じ
+ *            10 ms とし、実際の物理バイト書き込み（Fee が 1 呼び出しあたり
+ *            1 バイトのみ）を進める。両タスクとも Task 12/17 として同一パス内
+ *            (インデックス昇順) で毎回実行されるため、NvM がジョブを開始した
+ *            ティックのうちに MemIf 側の最初の 1 バイトも書かれる。1 ブロック
+ *            最大 10 バイト（データ本体+CRC）を 100ms 以内に書き終えられ、
+ *            DTC 確定から永続化完了までの遅延を実用上問題ない範囲に抑えつつ、
+ *            1 呼び出しあたりの処理は EEPROM 1 バイト分の書き込みのみに
+ *            抑えられる（詳細は NvM.c / MemIf.c を参照）。
  *            Can_MainFunction_Write は Can_Isr / CanTp_MainFunction と同じ 1 ms
  *            とする。TX 確認 (CanIf_TxConfirmation) は元々 Can_Write() の
  *            呼び出しと同期していたため、遅延を体感できない範囲に抑える
@@ -91,6 +98,7 @@ extern void Can_MainFunction_Write(void);
 extern void Can_MainFunction_BusOff(void);
 extern void Can_MainFunction_Wakeup(void);
 extern void SecOC_MainFunction(void);
+extern void MemIf_MainFunction(void);
 
 /* -----------------------------------------------------------------------
  * タスクテーブル
@@ -115,7 +123,8 @@ static const Os_TaskType Os_TaskTable[OS_TASK_COUNT] =
     /* Task 13 */ { Can_MainFunction_Write,          1U  },  /* 1 ms    : 保留中 TX 確認をドレイン  */
     /* Task 14 */ { Can_MainFunction_BusOff,         1U  },  /* 1 ms    : Bus-Off ポーリング        */
     /* Task 15 */ { Can_MainFunction_Wakeup,         1U  },  /* 1 ms    : ウェイクアップペンディングのドレイン */
-    /* Task 16 */ { SecOC_MainFunction,            100U  }   /* 100 ms  : TX Secured I-PDU の Freshness/MAC 計算・送信 */
+    /* Task 16 */ { SecOC_MainFunction,            100U  },  /* 100 ms  : TX Secured I-PDU の Freshness/MAC 計算・送信 */
+    /* Task 17 */ { MemIf_MainFunction,             10U  }   /* 10 ms   : 保留中 EEPROM ジョブ処理 (Fee 物理バイト書き込み) */
 };
 
 /* -----------------------------------------------------------------------

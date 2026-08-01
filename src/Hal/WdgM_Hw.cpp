@@ -1,10 +1,13 @@
 /**
  * \file    WdgM_Hw.cpp
- * \brief   WdgM ハードウェア依存層 実装 (AVR wdt_* / Renesas RA WDT ライブラリ)
- * \details タイムアウト値は WdgM_Cfg.h の WDGM_HW_WATCHDOG_TIMEOUT_MS (4000ms) に
+ * \brief   WdgM ハードウェア依存層 実装 (Renesas RA WDT ライブラリ)
+ * \details 本プロジェクトが対応する MCU は Renesas RA (Arduino UNO R4) のみ
+ *          （AVR/UNO 無印は初代のプログラムサイズ制限により移行済み。旧
+ *          AVR (wdt_* / avr/wdt.h) 分岐は削除済み）。
+ *          タイムアウト値は WdgM_Cfg.h の WDGM_HW_WATCHDOG_TIMEOUT_MS (4000ms) に
  *          対応する。設定を変更する場合は両方を一致させること。
  *
- *          Renesas RA 側が .cpp である理由:
+ *          本ファイルが .cpp である理由:
  *          RA の WDT ライブラリ (WDTimer クラス、グローバルインスタンス WDT) は
  *          C++ API のため、本ファイルは Can_Hw.cpp / Dio_Hw.cpp 等と同じ理由で
  *          C++ として実装する (WdgM.c からは WdgM_Hw.h の extern "C" 経由で
@@ -26,31 +29,9 @@
  */
 #include "WdgM_Hw.h"
 #include "Det.h"
+#include <WDT.h>
 
 #define TAG "WdgM_Hw"
-
-#if defined(__AVR__)
-
-#include <avr/wdt.h>
-
-void WdgM_Hw_Enable(void)
-{
-    wdt_enable(WDTO_4S);
-}
-
-void WdgM_Hw_Disable(void)
-{
-    wdt_disable();
-}
-
-void WdgM_Hw_Refresh(void)
-{
-    wdt_reset();
-}
-
-#else /* Renesas RA */
-
-#include <WDT.h>
 
 void WdgM_Hw_Enable(void)
 {
@@ -71,5 +52,3 @@ void WdgM_Hw_Refresh(void)
 {
     WDT.refresh();
 }
-
-#endif

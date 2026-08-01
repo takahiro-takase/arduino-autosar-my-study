@@ -2,10 +2,9 @@
  * \file    SchM_Hw.cpp
  * \brief   SchM ハードウェア依存層 実装 (グローバル割り込み制御)
  * \details Arduino の noInterrupts()/interrupts() を直接呼び出す唯一のファイル。
- *          AVR では sei()/cli()、Renesas RA では __enable_irq()/__disable_irq()
- *          に展開されるマクロで、いずれもコアの単一割り込み優先度レベルを
- *          前提に「これ以上プリエンプトされない区間」を作る、最も単純な
- *          排他制御プリミティブ（実車 AUTOSAR OS の
+ *          Renesas RA では __enable_irq()/__disable_irq() に展開されるマクロで、
+ *          コアの単一割り込み優先度レベルを前提に「これ以上プリエンプトされない
+ *          区間」を作る、最も単純な排他制御プリミティブ（実車 AUTOSAR OS の
  *          SuspendAllInterrupts()/ResumeAllInterrupts() に相当）。
  *
  *          本プロジェクトで割り込みコンテキストとメインループの両方から
