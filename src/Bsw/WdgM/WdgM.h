@@ -23,8 +23,8 @@
  *            内部ステータスに保持し（AUTOSAR が個々のアルゴリズムごとに判定結果を
  *            保持するのと同じ考え方）、WdgM_GetLocalStatus() はいずれか一つでも
  *            FAILED ならローカルステータスとして FAILED を返す。
- *            実 HW ウォッチドッグ（WdgM_Hw 層。AVR は <avr/wdt.h>、Renesas RA は
- *            WDT ライブラリ）と連携している。判定は WdgM_MainFunction が
+ *            実 HW ウォッチドッグ（WdgM_Hw 層。Renesas RA の WDT ライブラリ）と
+ *            連携している。判定は WdgM_MainFunction が
  *            WDGM_SUPERVISION_CYCLE_MS ごとに行うが、HW ウォッチドッグへの実際の
  *            リフレッシュは WdgM_TriggerHwWatchdog が WDGM_HW_TRIGGER_CYCLE_MS
  *            ごとに、直近の判定結果を見て行う（周期を分離している理由は
@@ -84,7 +84,7 @@ typedef enum
  * \brief   WdgM モジュールを初期化する。
  *
  * \details 全エンティティの Alive カウンタとステータスを初期化し、
- *          WdgM_EnableHwWatchdog() で AVR 実ハードウェアウォッチドッグを
+ *          WdgM_EnableHwWatchdog() で実ハードウェアウォッチドッグを
  *          有効化する。EcuM_Init() の末尾、他の全 BSW モジュール初期化が
  *          完了した後（Os_Init より前）に呼び出すこと。
  *
@@ -111,7 +111,7 @@ void WdgM_Init(const WdgM_ConfigType* ConfigPtr);
 void WdgM_DeInit(void);
 
 /**
- * \brief   AVR 実ハードウェアウォッチドッグを WDGM_HW_WATCHDOG_TIMEOUT_MS で有効化する。
+ * \brief   実ハードウェアウォッチドッグを WDGM_HW_WATCHDOG_TIMEOUT_MS で有効化する。
  *
  * \details WdgM_Init() がこの関数を呼ぶ。また、EcuM が POST_RUN から RUN へ
  *          復帰する際にも、監視対象タスクが再開するのに合わせて再度呼び出す
@@ -124,7 +124,7 @@ void WdgM_DeInit(void);
 void WdgM_EnableHwWatchdog(void);
 
 /**
- * \brief   AVR 実ハードウェアウォッチドッグを無効化する。
+ * \brief   実ハードウェアウォッチドッグを無効化する。
  *
  * \details EcuM が POST_RUN へ遷移する際に呼び出す。POST_RUN では
  *          Rte_Engine タスク（WdgM の監視対象）が意図的に停止するため、

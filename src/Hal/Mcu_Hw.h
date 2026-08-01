@@ -2,10 +2,9 @@
  * \file    Mcu_Hw.h
  * \brief   Mcu ハードウェア依存層 内部インタフェース
  * \details main.cpp の起動シーケンス（リセット原因の取得・起動時 WDT 無効化）
- *          が MCU 種別に依存しないよう、MCU 固有 API をこの層の裏に隠す。
- *          リセット原因のビット配置は MCU ごとに全く異なる（AVR の MCUSR と
- *          Renesas RA の RSTSR0/RSTSR1 はビット位置に互換性がない）ため、
- *          生のレジスタ値ではなく、デコード済みの Mcu_Hw_ResetReasonType を返す。
+ *          が MCU 固有レジスタ（Renesas RA の RSTSR0/RSTSR1 等）を直接
+ *          知らずに済むよう、MCU 固有 API をこの層の裏に隠す。生のレジスタ値
+ *          ではなく、デコード済みの Mcu_Hw_ResetReasonType を返す。
  *          本ヘッダは main.cpp と Mcu_Hw.c 以外からインクルードしないこと。
  *
  * \copyright  Copyright (c) 2025 T_T

@@ -156,9 +156,8 @@
 
 /**
  * HW ウォッチドッグのタイムアウト。
- * WdgM_Hw.cpp で AVR は wdt_enable(WDTO_4S)、Renesas RA は WDT.begin(4000) として
- * 直接使用する（本ファイルを MCU 固有ヘッダに依存させないため、列挙値はここでは
- * 定義しない）。
+ * WdgM_Hw.cpp で WDT.begin(4000) として直接使用する（本ファイルを MCU 固有
+ * ヘッダに依存させないため、列挙値はここでは定義しない）。
  *
  * WDGM_HW_TRIGGER_CYCLE_MS (1000ms) より十分長く設定し、trigger 呼び出しの
  * ジッタで誤ってタイムアウトしないマージンを持たせること。

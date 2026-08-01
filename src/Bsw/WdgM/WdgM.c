@@ -219,7 +219,7 @@ static uint8 WdgM_GlobalStopped = 0U;
  * \brief   WdgM モジュールを初期化する。
  *
  * \details 全エンティティの Alive カウンタを 0、ステータスを OK にリセットし、
- *          WdgM_EnableHwWatchdog() で AVR 実ハードウェアウォッチドッグを
+ *          WdgM_EnableHwWatchdog() で実ハードウェアウォッチドッグを
  *          有効化する。他の全 BSW モジュール初期化が完了した後、Os_Init() の
  *          直前に呼び出すこと（初期化中の正常な処理時間では誤って時間切れに
  *          ならないように、初期化の最後に有効化する）。

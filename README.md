@@ -189,8 +189,8 @@ ASW ─── App_EngineManager / App_WarningIndicator
 RTE ─── Rte（ポートベース S/R API + E2E Transformer 呼び出しグルー）
 OS  ─── Os（タイムトリガスケジューラ）
 BSW ─── EcuM / BswM / WdgM / ComM / CanSM / Nm / E2EXf / E2E / Com / PduR / SecOC / Csm / CryIf / Crypto / KeyM / CanIf / Can
-        CanTp / Dcm / Dem / NvM / IoHwAb / Dio / Port / Adc / SchM / Det
-HAL ─── Can_Hw / Dio_Hw / Port_Hw / Adc_Hw / Mcu_Hw / NvM_Hw / WdgM_Hw（src/Hal/ に集約）
+        CanTp / Dcm / Dem / NvM / MemIf / Fee / IoHwAb / Dio / Port / Adc / SchM / Det
+HAL ─── Can_Hw / Dio_Hw / Port_Hw / Adc_Hw / Mcu_Hw / Fee_Hw / WdgM_Hw（src/Hal/ に集約）
 ```
 
 各層は上位層のヘッダのみに依存し、下位層の実装詳細を知りません。
@@ -223,11 +223,13 @@ HAL ─── Can_Hw / Dio_Hw / Port_Hw / Adc_Hw / Mcu_Hw / NvM_Hw / WdgM_Hw（s
 |  | E2EXf | 176 | SWS_E2ELibrary 12.4 (E2E Transformer) | Com と E2E の間を仲介する統合層。RX は `E2EXf_InverseTransform` が `E2E_P01Check` を呼び、EngineInfo (CAN 0x100)・AbsInfo (CAN 0x110) のデータ破壊・フレーム脱落・重複・誤ルーティングを検出して Dem へそれぞれ DTC 0x00010A・0x000109 を報告。TX は `E2EXf_Transform` が `E2E_P01Protect` を呼び、E2EHealthStatus (CAN 0x220、E2EMon が発行するネットワーク健全性テレメトリ) に Counter・CRC8 を付加。呼び出し元は Rte 層のグルー関数（`Rte_COMCbk_*`/`Rte_COMTransform_*`）で、Com 自身はこの層の存在を知らない |
 |  | E2EMon | — | — (独自 CDD 相当) | 標準 AUTOSAR モジュールには存在しない、実務でよく見る「独自 CDD」パターンの例。EngineInfo/AbsInfo の E2E 検証結果を `E2EMon_NotifyCheckResult()` 経由で購読し、CRC 不一致・シーケンス異常の累積回数（RAM のみ、0xFF 飽和）を集計して `Com_SendSignal()` で公開する。E2EXf/Rte/Com 自体は無改造のまま、標準モジュールの通知フック経由で配線するだけの独立モジュールとして実装している |
 |  | EcuM | 10 | SWS_EcuStateManager | ECU ライフサイクルを STARTUP → RUN → POST_RUN → SHUTDOWN の状態マシンで管理。`EcuM_RequestRUN` / `EcuM_ReleaseRUN` で RUN フェーズを調停。SHUTDOWN は CAN バスのウェイクアップにより常に RUN へ復帰可能（実機リセットが必要な終端状態は存在しない） |
+|  | Fee | 21 | SWS_Fee | フラッシュエミュレーション EEPROM（Renesas RA `EEPROM.h`）向けの下位ドライバ。`Fee_Write()` は物理アドレス・データ・長さを受け取ってジョブを開始するだけで即座に返り、実際の書き込みは `Fee_MainFunction()` が 1 回の呼び出しにつき 1 バイトだけ進める（消去・書き込みサイクルによるブロッキングで WdgM の Deadline Supervision を巻き込んだ実機不具合への対策）。MemIf 経由でのみ呼ばれ、NvM から直接見えることはない |
 |  | FiM | 11 | SWS_FiM | Dem が確定（CONFIRMED）した DTC をもとにアプリ機能（FID）の実行許可を判定。100ms 周期で再評価し、結果を ASW へ `Rte_Call_FiM_GetFunctionPermission` で公開 |
 |  | IoHwAb | 254 | AUTOSAR 抽象化層 | Dio チャネル番号を隠蔽し SW-C に論理的な LED / ボタン / ADC API を提供。10ms 周期でデバウンス（40ms 確定）・ボタン固着検出・ADC 電圧低下を Dem 報告 |
 |  | KeyM | 116（暫定値） | SWS_KeyManager (Release 4.4.0) | 鍵更新セッション（`KeyM_Start`→`KeyM_Update`→`KeyM_Finalize`）を管理する Key Manager。Dcm の WriteDataByIdentifier（DID 0x0108 CryptoKeyUpdate）が模擬鍵マスターとして駆動し、`Csm_KeyElementSet()`/`Csm_KeySetValid()` 経由で Crypto 層の RAM 鍵を書き換える。Certificate submodule・KeyM_Prepare/Verify・SHE 形式・KEYM_DERIVE_KEY は対応除外（詳細は下記「SecOC 詳細」節参照）。ModuleId は Release 4.3.1 の AUTOSAR_TR_BSWModuleList.pdf に KeyM 自体が未掲載のため未検証の暫定値 |
+|  | MemIf | 22 | SWS_MemIf | NvM（上位）と Fee（下位ドライバ）の間のディスパッチ層。実 AUTOSAR は Device 引数で複数の Fee/Ea インスタンスへ振り分けるが、本プロジェクトは下位ドライバが Fee 1 個のみのため実質パススルー（CryIf → Crypto の関係と同様）。`MemIf_Init`/`MemIf_MainFunction` は実 AUTOSAR の SWS_MemIf には存在しない（[SWS_MemIf_00019] により、ドライバが1個の構成では EcuM/Os が Fee_Init/Fee_MainFunction を直接呼んでよいと規定されている）本プロジェクト独自の拡張で、プラットフォーム分岐をこの層に閉じ込めるために追加した |
 |  | Nm | 31 | SWS_CANNM | CanNm 状態機械（Network Mode の Repeat Message/Normal Operation/Ready Sleep の3内部状態、Prepare Bus-Sleep Mode、Bus-Sleep Mode）を実装。`ComM_BusSMIndication()` が呼ぶ `Nm_NetworkRequest()`/`Nm_NetworkRelease()` を契機に自律的に状態遷移し、NM-Timeout/Repeat Message/Wait-Bus-Sleep の3タイマで駆動する。Bus-Sleep Mode へ到達すると `CanSM_NmBusSleepMode()` を呼び、CanSM はこの通知を受けて初めて CAN コントローラを物理スリープさせる（協調スリープ。他ノードの NM フレーム受信が続く間は実際にはスリープしない）。PduR/Com を経由せず `CanIf_Transmit`/`CanIf_RxIndication` を直接やり取りする点が実車の CanNm と同じ。シグナル値を運ばないため E2E 保護は付与しない |
-|  | NvM | 20 | SWS_NvM | EEPROM の読み書きを抽象化。Dem は EEPROM アドレスを直接知らない。各ブロックに CRC8 を付加して破損を検出し、不一致時は ROM デフォルト値（NvM_RestoreBlockDefaults）へ自動復元。ブロックごとに冗長化（`NvMBlockManagementType=NVM_BLOCK_REDUNDANT` 相当、`Redundant` フラグ）を選択でき、片面が破損してももう片面から自己修復できる（DEM_EXTENDED で使用） |
+|  | NvM | 20 | SWS_NvM | EEPROM の読み書きを抽象化。Dem は EEPROM アドレスを直接知らない。各ブロックに CRC8 を付加して破損を検出し、不一致時は ROM デフォルト値（NvM_RestoreBlockDefaults）へ自動復元。ブロックごとに冗長化（`NvMBlockManagementType=NVM_BLOCK_REDUNDANT` 相当、`Redundant` フラグ）を選択でき、片面が破損してももう片面から自己修復できる（DEM_EXTENDED で使用）。実際の物理バイト書き込みは MemIf 経由で Fee へ委譲し、NvM 自身はブロック・CRC・冗長化という「意味」のレイヤーのみを扱う（1バイトずつの非同期書き込み進行は Fee の責務） |
 |  | PduR | 51 | SWS_PduR | 受信 PDU を Com/CanTp/SecOC へ（1つの RxPduId から複数宛先への配信にも対応）、送信 PDU を CanIf へルーティング。通信スタックの配管役。TX 経路は既定では `CanIf_Transmit()` へ直接転送するが、`PduR_TxRoutingPathType.TransmitOverrideFct` が設定されている場合は中間モジュール（SecOC）へ委譲できるよう汎用化されている（既存の全 TX パスはこのフィールドを使わないため無変更） |
 |  | Port | — | SWS_Port | `Port_Init` でピン方向（OUTPUT / INPUT_PULLUP）を設定する MCAL |
 |  | SchM | — | SWS_SchM | 排他エリアマクロ（`SchM_Enter` / `SchM_Exit`）で共有リソースを保護。実体は `SchM_Hw`（`noInterrupts()`/`interrupts()`）で、Can の割り込みペンディングフラグを実際に保護する |
@@ -238,8 +240,8 @@ HAL ─── Can_Hw / Dio_Hw / Port_Hw / Adc_Hw / Mcu_Hw / NvM_Hw / WdgM_Hw（s
 |  | Port_Hw | — | — | Arduino `pinMode` ラッパー |
 |  | Adc_Hw | — | — | Arduino `analogRead` ラッパー |
 |  | SchM_Hw | — | — | Arduino `noInterrupts()`/`interrupts()` ラッパー |
-|  | Mcu_Hw | — | — | リセット要因の読み取り（AVR MCUSR / Renesas RA RSTSR0-1）・起動時ウォッチドッグ無効化 |
-|  | NvM_Hw | — | — | EEPROM 読み書き（AVR `avr/eeprom.h` / Renesas RA `EEPROM` ライブラリ）ラッパー |
+|  | Mcu_Hw | — | — | リセット要因の読み取り（Renesas RA RSTSR0-1）・起動時ウォッチドッグ無効化 |
+|  | Fee_Hw | — | — | フラッシュエミュレーション EEPROM 読み書き（Renesas RA `EEPROM` ライブラリ）ラッパー。Fee.c と Fee_Hw.cpp 以外からはインクルードしない内部境界 |
 |  | WdgM_Hw | — | — | 実 HW ウォッチドッグの Enable / Disable / Refresh ラッパー |
 
 ModuleId の出典は `docs/AUTOSAR_TR_BSWModuleList.pdf`（Release 4.3.1、「List of
@@ -376,7 +378,16 @@ Basic Software Modules」表）。詳細は「CAN 通信スタック」セクシ
 │   │   │   ├── NvM_PBCfg.h       # ブロック設定構造体型定義・NvM_Config 宣言
 │   │   │   ├── NvM_PBCfg.c       # ブロック設定テーブル実体（DEM_MAGIC/STATUS/AGING/EXTENDED、EXTENDED は冗長ブロック）
 │   │   │   ├── NvM.h             # 公開インタフェース（NvM_ReadBlock / NvM_WriteBlock / NvM_MainFunction / NvM_GetErrorStatus）
-│   │   │   └── NvM.c             # RAM ミラー・非同期書き込みジョブキュー（1バイト/呼び出し。NvM_Hw へ委譲。境界は src/Hal/NvM_Hw.h）
+│   │   │   └── NvM.c             # RAM ミラー・ブロック/CRC/冗長化のオーケストレーション。物理バイト書き込みの進行は持たず MemIf へ委譲（境界は src/Bsw/MemIf/MemIf.h）
+│   │   ├── MemIf/                # Memory Abstraction Interface（NvM と Fee の間のディスパッチ層）
+│   │   │   ├── MemIf_Types.h     # 共通型（MemIf_StatusType/MemIf_JobResultType/MemIf_DeviceType）
+│   │   │   ├── MemIf_Cfg.h       # DET 定数・ApiId（Fee_Cfg.h と共に SWS 実測値へ差し替え済み）
+│   │   │   ├── MemIf.h           # 公開インタフェース（MemIf_Read/Write/WriteImmediate/Cancel/GetStatus/GetJobResult/MainFunction）
+│   │   │   └── MemIf.c           # 唯一の下位ドライバ (Fee) へのディスパッチ。`#if defined(__AVR__)` 分岐は歴史的にこのファイルだけに置く設計（現在は Fee 固定）
+│   │   ├── Fee/                  # Flash EEPROM Emulation（Renesas RA フラッシュエミュレーション EEPROM 向け下位ドライバ）
+│   │   │   ├── Fee_Cfg.h         # DET 定数・ApiId（docs/4.3.1/AUTOSAR_SWS_FlashEEPROMEmulation.pdf を実測して確認済み）
+│   │   │   ├── Fee.h             # 公開インタフェース（Fee_Read/Write/WriteImmediate/Cancel/GetStatus/GetJobResult/MainFunction）
+│   │   │   └── Fee.c             # 非同期書き込みジョブ（Fee_Write は即座に返り、Fee_MainFunction が 1 呼び出し 1 バイトだけ進める。境界は src/Hal/Fee_Hw.h）
 │   │   ├── PduR/                 # PDU ルーター
 │   │   │   ├── PduR_Types.h      # 型定義
 │   │   │   ├── PduR_Cfg.h        # RX/TX ルーティングパス数定数
@@ -414,9 +425,9 @@ Basic Software Modules」表）。詳細は「CAN 通信スタック」セクシ
 │       ├── Dio_Hw.h / Dio_Hw.cpp        # Arduino digitalWrite / digitalRead ラッパー
 │       ├── Port_Hw.h / Port_Hw.cpp      # Arduino pinMode ラッパー
 │       ├── Adc_Hw.h / Adc_Hw.cpp        # Arduino analogRead ラッパー
-│       ├── Mcu_Hw.h / Mcu_Hw.c          # リセット要因読み取り（AVR MCUSR / RA RSTSR0-1）・起動時 WDT 無効化
-│       ├── NvM_Hw.h / NvM_Hw.cpp        # EEPROM 読み書き（AVR avr/eeprom.h / RA EEPROM.h）
-│       ├── WdgM_Hw.h / WdgM_Hw.cpp      # 実 HW ウォッチドッグ Enable / Disable / Refresh(AVR wdt_* / RA WDTライブラリ)
+│       ├── Mcu_Hw.h / Mcu_Hw.c          # リセット要因読み取り（RA RSTSR0-1）・起動時 WDT 無効化
+│       ├── Fee_Hw.h / Fee_Hw.cpp        # フラッシュエミュレーション EEPROM 読み書き（RA EEPROM.h）。Fee.c と Fee_Hw.cpp 以外からインクルードしない内部境界
+│       ├── WdgM_Hw.h / WdgM_Hw.cpp      # 実 HW ウォッチドッグ Enable / Disable / Refresh(RA WDTライブラリ)
 │       └── SchM_Hw.h / SchM_Hw.cpp      # noInterrupts()/interrupts() ラッパー（SchM 排他エリアの実体）
 ├── dbc/
 │   └── engine_manager.dbc        # CAN シグナル定義（Cangaroo 等で使用）
@@ -1644,10 +1655,10 @@ ApiId は各関数の Doxygen `\ServiceID` タグ（以前から記録されて�
 
 当初は Com モジュールのみの対応でしたが、その後全 BSW モジュール
 （Can, CanIf, PduR, CanTp, Dcm, Dem, FiM, NvM, EcuM, BswM, WdgM, ComM,
-CanSM, Nm, IoHwAb, Dio, Port, Adc, SecOC, E2E, E2EXf の 21 モジュール）へ
-同じ方針で展開しました。DET_LOGE で既に報告されていた箇所（NULL/範囲/
-未登録チェック）に加え、ログを一切出していなかった暗黙の NULL/未初期化
-チェックにも同じ基準で追加しています。
+CanSM, Nm, IoHwAb, Dio, Port, Adc, SecOC, E2E, E2EXf, Fee, MemIf の
+23 モジュール）へ同じ方針で展開しました。DET_LOGE で既に報告されていた
+箇所（NULL/範囲/未登録チェック）に加え、ログを一切出していなかった暗黙の
+NULL/未初期化チェックにも同じ基準で追加しています。
 
 **ModuleId の出典**: Com 以外のほとんどのモジュールは SWS 本文に
 ModuleId の固定値が明記されていません（Com の `[SWS_Com_00442]` は
@@ -3399,8 +3410,8 @@ EEPROM はビット化けや書き込み中の電源断で内容が壊れるこ�
 
 ```
 NvM_Init()（起動時、各ブロックごとに）:
-  EEPROM からデータ本体を RAM ミラーへロード
-  storedCrc = EEPROM[BaseNumber + Length] から読み出し
+  MemIf_Read() 経由（実体は Fee）でデータ本体を RAM ミラーへロード
+  storedCrc = MemIf_Read(BaseNumber + Length) から読み出し
   calcCrc   = RAM ミラーから再計算
   storedCrc == calcCrc ?
     YES → そのまま使用
@@ -3410,9 +3421,16 @@ NvM_WriteBlock() 呼び出し時:
   データを RAM ミラーへ即座に反映（同期）
   EEPROM への実書き込みは「保留」とマークするだけ（非同期、後述）
 
-NvM_MainFunction()（周期呼び出し、1 呼び出し 1 バイトずつ）:
-  保留中のデータ本体を 1 バイト書き込み → ... → 最後に CRC を 1 バイト書き込み
+NvM_MainFunction()（周期呼び出し。ブロック/CRC/冗長化のオーケストレーションのみ）:
+  保留中のブロックについて MemIf_Write() でジョブを開始 → MemIf_GetJobResult() で完了を待つ
+  → データ本体 → CRC の順で 2 ジョブ完了させるとその面（プライマリ/ミラー）が完了
+
+MemIf_MainFunction()（NvM_MainFunction とは独立に周期呼び出し。実体は Fee_MainFunction）:
+  MemIf_Write() で開始されたジョブの物理バイト書き込みを 1 呼び出しにつき 1 バイトだけ進める
 ```
+
+物理バイト単位の書き込みは NvM 自身ではなく MemIf（実体は Fee）の責務です。
+詳細は後述の「非同期書き込みジョブキュー」を参照してください。
 
 ##### NvM_RestoreBlockDefaults — デフォルト値への復元
 
@@ -3447,11 +3465,10 @@ DEM_STATUS のデフォルト値定義に `Dem_Cfg.h` の定数を使ってい�
 
 既存の UDS コマンドには EEPROM を直接破壊する手段がないため、`main.cpp` の
 `setup()` 冒頭（`EcuM_Init()` 呼び出しより前）に動作確認用のコードを
-一時的に追加します。本プロジェクトの実際のビルド対象（Renesas RA）は
-`avr/eeprom.h` を持たないため、`NvM_Hw.cpp` と同じ `EEPROM.h`（Arduino
-標準ライブラリ）の `EEPROM.write()`/`EEPROM.read()` を使います。
-現在値との XOR で反転させているのは、たまたま元の値と同じ値を書いてしまい
-「実は何も変化せず CRC 検査を素通りする」事故を避けるためです。
+一時的に追加します。本プロジェクトのビルド対象（Renesas RA）は `Fee_Hw.cpp`
+と同じ `EEPROM.h`（Arduino 標準ライブラリ）の `EEPROM.write()`/`EEPROM.read()`
+を使います。現在値との XOR で反転させているのは、たまたま元の値と同じ値を
+書いてしまい「実は何も変化せず CRC 検査を素通りする」事故を避けるためです。
 
 ```c
 #include <EEPROM.h>
@@ -3466,7 +3483,7 @@ EEPROM.write(0x0DU, EEPROM.read(0x0DU) ^ 0xFFU);  // DEM_AGING ブロックの�
 > してください（破壊用コードを有効なまま運用すると毎回 DEM_AGING が
 > リセットされてしまいます）。
 
-##### 非同期書き込みジョブキュー
+##### 非同期書き込みジョブキュー（NvM ↔ MemIf ↔ Fee の責務分担）
 
 **なぜ非同期化したか**: Renesas RA の EEPROM ライブラリ（内蔵フラッシュの
 エミュレーション）は 1 バイトの書き込みでも消去・書き込みサイクルを伴うため、
@@ -3475,8 +3492,13 @@ EEPROM.write(0x0DU, EEPROM.read(0x0DU) ^ 0xFFU);  // DEM_AGING ブロックの�
 が新規 DTC 確定のたびに WdgM の Deadline Supervision を巻き込んで HW
 ウォッチドッグリセットを引き起こしうるため（経緯は
 [DEVLOG](docs/DEVLOG.md#nvm-非同期書き込みジョブキューへの変更経緯) 参照）、
-ブロッキングそのものを解消する、実際の AUTOSAR NvM と同じ非同期ジョブキュー
-方式を採用しています。
+ブロッキングそのものを解消する非同期ジョブ方式を採用しています。
+
+**NvM と MemIf/Fee の責務分担（重要）**: 当初はこの「1 回の呼び出しにつき
+物理バイトを 1 個だけ書く」ジョブキューを NvM.c が自前で持っていましたが、
+これは本来 AUTOSAR では Fee（さらにその下の MemIf 経由）が担うべき責務です。
+NvM はブロック・CRC・冗長化という「意味」のレイヤーだけを扱い、実際の
+バイト単位の物理書き込みの進行は Fee（MemIf 経由）に委譲するよう分離しました。
 
 **設計**:
 
@@ -3486,27 +3508,36 @@ NvM_WriteBlock(id, data) / NvM_RestoreBlockDefaults(id):
   該当ブロックを「保留」としてマークする（NvM_BlockPending[id] = 1）
   → 即座に E_OK を返す（書き込み完了を意味しない）
 
-NvM_MainFunction()（10ms 周期、Os_PBCfg.c Task 12）:
+NvM_MainFunction()（10ms 周期、Os_PBCfg.c Task 12。ブロック単位のオーケストレーションのみ）:
   現在処理中のブロックがない ?
     YES → 保留中のブロックを FIFO キューの先頭から 1 つ取り出し処理開始
           （投入順。ブロック ID 昇順ではない — 下記参照）
     NO  → 処理を継続
-  1 回の呼び出しで書き込むのは 1 バイトだけ:
-    データ本体がまだ残っている → 次の 1 バイトを EEPROM へ書く
-    データ本体を書き終えた     → CRC を計算して 1 バイト書く
-    CRC も書き終えた           → このブロックの保留フラグを下ろし、次のブロックへ
+  現在のフェーズ（データ本体 / CRC）のジョブが未開始 ?
+    YES → MemIf_Write() でジョブを開始する（この呼び出し自体は即座に返る）
+    NO  → MemIf_GetJobResult() で完了を待つだけ（MEMIF_JOB_PENDING ならこの tick は何もしない）
+  データ本体ジョブが完了 → CRC ジョブを開始
+  CRC ジョブも完了       → このブロックの保留フラグを下ろし、次のブロックへ
+
+MemIf_MainFunction()（10ms 周期、Os_PBCfg.c Task 17。実体は Fee_MainFunction）:
+  NvM_MainFunction() が MemIf_Write() で開始したジョブについて、
+  1 回の呼び出しにつき未書き込みの 1 バイトだけを物理 EEPROM へ書く
 ```
 
-最大 11 バイト（データ本体 10 バイト + CRC 1 バイト）のブロックでも、
-1 回の `NvM_MainFunction()` 呼び出しでブロッキングするのは EEPROM 1 バイト分の
-書き込み時間のみです。DTC 確定から永続化完了までは最大 11 サイクル
-（10ms 周期なので 110ms 程度）かかりますが、Dem や呼び出し元は結果を待たない
-fire-and-forget 設計（`(void)NvM_WriteBlock(...)`）のため、この遅延は実用上
-問題になりません。
+Task 12（NvM）と Task 17（MemIf）はどちらも同じ 10ms 周期で、同一パス内を
+インデックス昇順で実行されるため、NvM がジョブを開始した tick のうちに
+MemIf 側の最初の 1 バイトも書かれます。最大 11 バイト（データ本体 10 バイト
++ CRC 1 バイト）のブロックでも、1 回の `MemIf_MainFunction()` 呼び出しで
+ブロッキングするのは EEPROM 1 バイト分の書き込み時間のみです。DTC 確定から
+永続化完了までは最大 11 サイクル（10ms 周期なので 110ms 程度、フェーズ切替
+待ちの分だけ数 tick 余分にかかることがあります）かかりますが、Dem や
+呼び出し元は結果を待たない fire-and-forget 設計（`(void)NvM_WriteBlock(...)`）
+のため、この遅延は実用上問題になりません。
 
 **ちぎれ書き対策**: 処理中のブロックに対して新たに `NvM_WriteBlock()` が
 呼ばれた場合（例: 短時間に連続して DTC が確定した場合）、RAM ミラーは
-最新値へ即座に上書きされる一方、書き込み位置は byte 0 へ巻き戻されます。
+最新値へ即座に上書きされる一方、`MemIf_Cancel()`（実体は `Fee_Cancel()`）で
+進行中のジョブを中断し、書き込み位置はデータ本体フェーズの先頭へ巻き戻されます。
 巻き戻さずに続行すると、EEPROM 上に「古いバイトと新しいバイトが混在した」
 不整合な内容が残ってしまうためです。
 
@@ -3537,7 +3568,7 @@ EEPROM アドレス（プライマリ／ミラー）に保持することで、�
 もう片方から復旧できるようにする機能です。
 
 ```
-書き込み（NvM_MainFunction、非同期ジョブキュー経由）:
+書き込み（NvM_MainFunction がオーケストレーションし、MemIf/Fee の非同期ジョブ経由で物理書き込み）:
   プライマリ面のデータ本体+CRC を完全に書き終える
     ↓（この時点で電源が落ちても、ミラー面はまだ触っていないので無傷）
   続けてミラー面のデータ本体+CRC を先頭から書く
@@ -3590,6 +3621,21 @@ EEPROM.write(0x18U, EEPROM.read(0x18U) ^ 0xFFU);  // DEM_EXTENDED プライマ�
 - ジョブは常に 1 個ずつ、投入順 (FIFO) に順次処理（優先度なし、複数ジョブの並行処理なし）
 - `NvM_Init()` 自体（起動時の EEPROM 読み込み・CRC 不一致時の復元）は
   Os スケジューラ開始前のため同期処理のまま（他タスクを巻き込まないため無害）
+- Fee は「論理ブロック番号 → 物理アドレス」を変換する FeeBlockConfiguration
+  テーブルを持たない（呼び出し元が NvM 1 個のみで、かつ NvM_PBCfg.c が既に
+  ブロックごとに一意な物理アドレスを静的に割り当てているため、追加の間接
+  テーブルを設けても学習効果が薄いと判断。かわりに呼び出し元が物理アドレスを
+  直接指定する）
+- `MemIf_Init()`/`MemIf_MainFunction()` は実 AUTOSAR の SWS_MemIf には存在
+  しない（[SWS_MemIf_00018]/[SWS_MemIf_00019] により、下位ドライバが 1 個
+  しか構成されない場合 MemIf は単なるマクロ集合でよく、EcuM/Os が
+  Fee_Init()/Fee_MainFunction() を直接呼ぶ設計になる）。本プロジェクトが
+  あえてこの 2 関数を追加しているのは、Fee/MemIf 分割時点では AVR (Ea) と
+  Renesas RA (Fee) の 2 プラットフォームに対応しており、プラットフォーム
+  分岐を MemIf.c 1 箇所に閉じ込める設計だったため（現在は AVR/Ea 対応を
+  削除し Renesas RA 専用だが、この構造はそのまま残している）
+- `Fee_WriteImmediate()`（実仕様の `FeeImmediateData` ブロック属性相当）も
+  同様に本プロジェクト独自の API
 
 <a id="dem"></a>
 #### DEM 診断イベント管理（AUTOSAR SWS_DEM）
@@ -4134,7 +4180,8 @@ STARTUP ──────────────────→ RUN ── 全
                                                            SHUTDOWN
                             (WdgM_TriggerHwWatchdog / Can_MainFunction_Read /
                              Can_MainFunction_Wakeup / CanSM_MainFunction /
-                             NvM_MainFunction / Nm_MainFunction 以外は停止)
+                             NvM_MainFunction / MemIf_MainFunction /
+                             Nm_MainFunction 以外は停止)
                              ↑                                  │
                     CAN バスのウェイクアップ ←──────────────────┘
                     (EcuM_RequestRUN 経由)
@@ -4145,7 +4192,7 @@ STARTUP ──────────────────→ RUN ── 全
 | STARTUP | 停止 | `EcuM_Init()` 末尾で RUN へ自動遷移 |
 | RUN | **実行** | 全 RUN ユーザが `EcuM_ReleaseRUN` → POST_RUN |
 | POST_RUN | **実行**（後処理継続） | タイムアウト → SHUTDOWN / `EcuM_RequestRUN` → RUN |
-| SHUTDOWN | **実行**（`WdgM_TriggerHwWatchdog` / `Can_MainFunction_Read` / `Can_MainFunction_Wakeup` / `CanSM_MainFunction` / `NvM_MainFunction` / `Nm_MainFunction` のみ有効） | Arduino では電源断不可のためアイドル待機するが、`EcuM_RequestRUN` が来れば RUN へ復帰できる（CAN バスのウェイクアップ経由）。`Os_SchedulerStep()` 自体は呼ばれ続けるが、BswM Rule 2 がこの 6 タスク以外を無効化するため実質アイドル。HW ウォッチドッグ維持のため `WdgM_TriggerHwWatchdog`、CAN ウェイクアップ検出・検証中フレーム処理のため `Can_MainFunction_Read`/`Can_MainFunction_Wakeup`、ウェイクアップ検証タイムアウト監視のため `CanSM_MainFunction`、保留中の DTC 永続化のため `NvM_MainFunction`、Nm 状態機械（Bus-Sleep Mode への到達判定・他ノードの NM フレーム受信によるスリープ延期の継続処理）のため `Nm_MainFunction` だけは動き続ける（CAN 受信自体は真のハードウェア割り込み `Can_Isr()` のため、この無効化に関わらず常に起動する） |
+| SHUTDOWN | **実行**（`WdgM_TriggerHwWatchdog` / `Can_MainFunction_Read` / `Can_MainFunction_Wakeup` / `CanSM_MainFunction` / `NvM_MainFunction` / `MemIf_MainFunction` / `Nm_MainFunction` のみ有効） | Arduino では電源断不可のためアイドル待機するが、`EcuM_RequestRUN` が来れば RUN へ復帰できる（CAN バスのウェイクアップ経由）。`Os_SchedulerStep()` 自体は呼ばれ続けるが、BswM Rule 2 がこの 7 タスク以外を無効化するため実質アイドル。HW ウォッチドッグ維持のため `WdgM_TriggerHwWatchdog`、CAN ウェイクアップ検出・検証中フレーム処理のため `Can_MainFunction_Read`/`Can_MainFunction_Wakeup`、ウェイクアップ検証タイムアウト監視のため `CanSM_MainFunction`、保留中の DTC 永続化のため `NvM_MainFunction`/`MemIf_MainFunction`（NvM がジョブを開始するだけの `NvM_MainFunction` だけを動かしても、物理バイト書き込みを進める `MemIf_MainFunction` を止めてしまうとジョブが永久に完了しない）、Nm 状態機械（Bus-Sleep Mode への到達判定・他ノードの NM フレーム受信によるスリープ延期の継続処理）のため `Nm_MainFunction` だけは動き続ける（CAN 受信自体は真のハードウェア割り込み `Can_Isr()` のため、この無効化に関わらず常に起動する） |
 
 SHUTDOWN は CAN バスのウェイクアップにより常に RUN へ復帰できます。実機リセットが
 必要な終端状態は存在しません（Bus-Off 回復は後述の通り L1/L2 バックオフで無期限に
@@ -4263,7 +4310,7 @@ EcuM が「今どのフェーズか」を決めるのに対し、BswM は「そ�
 |----|------------------|-----------|------|
 | 0 | EcuM==RUN | ACTIVATE | 全タスク（`BSWM_TASK_MASK_ALL`） |
 | 1 | EcuM==POST_RUN | DEACTIVATE | アプリタスクのみ（`BSWM_TASK_MASK_APP`） |
-| 2 | EcuM==SHUTDOWN | DEACTIVATE | `BSWM_TASK_MASK_SHUTDOWN`（WdgM_TriggerHwWatchdog・Can_MainFunction_Read・Can_MainFunction_Wakeup・CanSM_MainFunction・NvM_MainFunction・Nm_MainFunction を除く） |
+| 2 | EcuM==SHUTDOWN | DEACTIVATE | `BSWM_TASK_MASK_SHUTDOWN`（WdgM_TriggerHwWatchdog・Can_MainFunction_Read・Can_MainFunction_Wakeup・CanSM_MainFunction・NvM_MainFunction・MemIf_MainFunction・Nm_MainFunction を除く） |
 | 3 | **EcuM==RUN `AND` ComM==FULL_COMMUNICATION** | PDU_GROUP_START | I-PDU Group「テレメトリ」(E2EHealthStatus) |
 | 4 | EcuM==POST_RUN | PDU_GROUP_STOP | I-PDU Group「テレメトリ」 |
 | 5 | **ComM==SILENT_COMMUNICATION `OR` ComM==NO_COMMUNICATION** | PDU_GROUP_STOP | I-PDU Group「テレメトリ」 |
@@ -4294,7 +4341,7 @@ true が続く間の重複実行や true→false への遷移では実行しま�
 
 ##### タスク ID とマスク（`BswM_Cfg.h`）
 
-タスク数が 8 を超えるため、`TaskMask` は uint16（bits 0〜15）です。
+タスク数が 16 を超えるため、`TaskMask` は uint32（bits 0〜17）です。
 
 | タスク ID | 定数 | 対応関数 | 周期 |
 |---------|------|---------|------|
@@ -4314,23 +4361,28 @@ true が続く間の重複実行や true→false への遷移では実行しま�
 | 13 | `BSWM_OS_TASK_CAN_TX_CONF` | `Can_MainFunction_Write` | 1 ms |
 | 14 | `BSWM_OS_TASK_CAN_BUSOFF` | `Can_MainFunction_BusOff` | 1 ms |
 | 15 | `BSWM_OS_TASK_CAN_WAKEUP` | `Can_MainFunction_Wakeup` | 1 ms |
+| 16 | `BSWM_OS_TASK_SECOC_MAIN` | `SecOC_MainFunction` | 100 ms |
+| 17 | `BSWM_OS_TASK_MEMIF_MAIN` | `MemIf_MainFunction` | 10 ms |
 
 `BSWM_TASK_MASK_APP = 0x00C`（bit2=Rte_Engine, bit3=Rte_Warning）がアプリタスクマスクです。
-POST_RUN ではこの 2 タスクだけを停止し、BSW タスク（Can_MainFunction_Read/BusOff/Wakeup・CanTp・CanSM・Com・IoHwAb・WdgM・Dcm・FiM・WdgM_TriggerHwWatchdog・Nm・NvM・Can_MainFunction_Write）は継続させます。
+POST_RUN ではこの 2 タスクだけを停止し、BSW タスク（Can_MainFunction_Read/BusOff/Wakeup・CanTp・CanSM・Com・IoHwAb・WdgM・Dcm・FiM・WdgM_TriggerHwWatchdog・Nm・NvM・MemIf・SecOC・Can_MainFunction_Write）は継続させます。
 Dcm を継続させることで、POST_RUN 中も S3 タイマ監視（セッションの自動失効）が動作し続けます。
 Nm は POST_RUN 中も動き続けますが、POST_RUN へ遷移する経路（エンジン OFF 継続による
 ボランタリスリープ突入。Bus-Off は L1/L2 バックオフで無期限に回復を試みるため
 POST_RUN 遷移の原因にはならない）では ComM は既に NO_COM になっているため、
 実際には送信を行いません。
 
-`BSWM_TASK_MASK_SHUTDOWN = 0x6BEE`（`BSWM_TASK_MASK_ALL` から bit10=WdgM_TriggerHwWatchdog・
+`BSWM_TASK_MASK_SHUTDOWN = 0x163EE`（`BSWM_TASK_MASK_ALL` から bit10=WdgM_TriggerHwWatchdog・
 bit0=Can_MainFunction_Read・bit15=Can_MainFunction_Wakeup・bit4=CanSM_MainFunction・
-bit12=NvM_MainFunction を除いたもの）が SHUTDOWN 時の無効化対象マスクです。
-Can_MainFunction_Write（bit13）・Can_MainFunction_BusOff（bit14）はこの 5 タスクに
-含まれないため、他の通常タスクと同様に SHUTDOWN 中は停止します。BusOff ポーリングは
-`CanState==CAN_CS_STARTED` が条件のため SHUTDOWN 中（SLEEP か Listen-Only）はどのみち
-無意味であり、TX 確認も SHUTDOWN 中は新規送信が発生しないため停止して問題ありません
-（詳細は Can セクションの「TX 確認の非同期化」参照）。
+bit12=NvM_MainFunction・bit17=MemIf_MainFunction・bit11=Nm_MainFunction を除いたもの）が
+SHUTDOWN 時の無効化対象マスクです。SecOC_MainFunction（bit16）はこの除外リストに
+含まれないため（POST_RUN 中に Com_MainFunction が止まり SecOC の送信要求自体が
+発生しなくなるのと同じ理由で、無効化しておくのが本来の設計意図）、
+Can_MainFunction_Write（bit13）・Can_MainFunction_BusOff（bit14）と同様に
+SHUTDOWN 中は停止します。BusOff ポーリングは `CanState==CAN_CS_STARTED` が条件のため
+SHUTDOWN 中（SLEEP か Listen-Only）はどのみち無意味であり、TX 確認も SHUTDOWN 中は
+新規送信が発生しないため停止して問題ありません（詳細は Can セクションの
+「TX 確認の非同期化」参照）。
 WdgM_TriggerHwWatchdog は、Renesas RA の IWDT が一度有効化すると無効化する手段がないため、
 SHUTDOWN 後も動かし続けて `WdgM_SupervisionSuppressed` により無条件にリフレッシュを継続する
 必要があります（詳細は WdgM セクションの「HW ウォッチドッグ連携」を参照）。
@@ -4342,9 +4394,14 @@ Can_MainFunction_Read・Can_MainFunction_Wakeup は、CAN バスのボランタ�
 詳細は Can セクションの「RX の割り込み化」を参照）。CanSM_MainFunction は、ウェイクアップ検証（後述）の検証タイムアウトを
 監視するために SHUTDOWN 後も動かし続けます（詳細は後述の「CAN コントローラの実スリープ」参照）。
 NvM_MainFunction は、SHUTDOWN 直前に Dem が新規 DTC を確定して書き込みジョブが保留中の
-まま残る可能性があるため、SHUTDOWN 後も動かし続けて永続化を完了させます
+まま残る可能性があるため、SHUTDOWN 後も動かし続けて永続化を完了させます。
+MemIf_MainFunction も同じ理由で動かし続ける必要があります。NvM_MainFunction は
+MemIf_Write() でジョブを「開始」するだけで、実際の物理バイト書き込みを 1 バイトずつ
+進めるのは MemIf_MainFunction（実体は Fee_MainFunction）だからです。NvM_MainFunction
+だけを動かして MemIf_MainFunction を止めてしまうと、ジョブが開始されたまま永久に
+`MEMIF_JOB_PENDING` を待ち続け、EEPROM への永続化が完了しません
 （詳細は後述の「NvM（Non-Volatile Memory Manager）」の非同期書き込みジョブキュー参照）。
-この 5 タスクの存在により、SHUTDOWN は HW ウォッチドッグを維持しつつ CAN バス活動
+この 7 タスクの存在により、SHUTDOWN は HW ウォッチドッグを維持しつつ CAN バス活動
 （ボランタリスリープからのウェイクアップ）で常に RUN へ復帰できる状態になっています。
 
 ##### POST_RUN でアプリタスクのみ停止する理由
@@ -4400,13 +4457,15 @@ POST_RUN 5秒後
     └→ BswM_EcuM_CurrentState(SHUTDOWN)
           └→ Rule 2 発火: Os_SetTaskActive(WdgM_TriggerHwWatchdog / Can_MainFunction_Read /
                                           Can_MainFunction_Wakeup / CanSM_MainFunction /
-                                          NvM_MainFunction / Nm_MainFunction 以外, OFF)
-                          （この 6 タスクだけは HW ウォッチドッグ維持 / CAN ウェイクアップ検出・
+                                          NvM_MainFunction / MemIf_MainFunction /
+                                          Nm_MainFunction 以外, OFF)
+                          （この 7 タスクだけは HW ウォッチドッグ維持 / CAN ウェイクアップ検出・
                             検証中フレーム処理 / ウェイクアップ検証タイムアウト監視 /
-                            DTC永続化 / Nm状態機械継続のため動き続ける。特に Nm_MainFunction を
-                            止めてしまうと Nm が二度と Bus-Sleep Mode へ到達できず、CAN
-                            コントローラが永久に物理スリープしなくなる不具合があったため
-                            SHUTDOWN 中も継続するよう変更した）
+                            DTC永続化（ジョブ開始は NvM_MainFunction、物理バイト書き込みの
+                            進行は MemIf_MainFunction） / Nm状態機械継続のため動き続ける。特に
+                            Nm_MainFunction を止めてしまうと Nm が二度と Bus-Sleep Mode へ
+                            到達できず、CAN コントローラが永久に物理スリープしなくなる不具合が
+                            あったため SHUTDOWN 中も継続するよう変更した）
 ```
 
 ##### CAN コントローラの実スリープ（`Can_SetControllerMode(CAN_T_SLEEP)`）

@@ -39,15 +39,10 @@ void Log_Write(LogLevel lvl, PGM_P tag_P, PGM_P fmt_P, ...)
     char buf[LOG_BUF_SIZE];
     va_list args;
     va_start(args, fmt_P);
-#if defined(__AVR__)
-    vsnprintf_P(buf, sizeof(buf), fmt_P, args);
-#else
-    /* 非 AVR (例: Renesas RA, ARM Cortex-M) はフラッシュがメモリ空間に
-     * マップされており、PROGMEM ポインタを通常ポインタとして読める。
-     * vsnprintf_P 相当の可変引数版が無いコアもあるため、通常の
-     * vsnprintf にフォールバックする。 */
+    /* Renesas RA (ARM Cortex-M) はフラッシュがメモリ空間にマップされており、
+     * PROGMEM ポインタを通常ポインタとして読めるため、AVR 専用の
+     * vsnprintf_P ではなく通常の vsnprintf を使う。 */
     vsnprintf(buf, sizeof(buf), fmt_P, args);
-#endif
     va_end(args);
 
     Serial.print('[');
