@@ -334,6 +334,20 @@ Std_ReturnType CanTp_Transmit(PduIdType TxSduId, const PduInfoType* PduInfoPtr)
         return E_NOT_OK;
     }
 
+    /* [SWS_CanTp_00123]: TX チャネルがビジー（マルチフレーム送信が
+     * CANTP_TX_WAIT_FC/CANTP_TX_SEND_CF で進行中）なら、フレーム種別
+     * （SF/FF）に関わらず新規送信要求を拒否する。CanTp_TxFrameBuf は
+     * SF/FF/CF/FC 全てが共有する単一の送信バッファであり、ここで SF だけ
+     * チェックを素通りさせると、進行中の CF ストリームの最中に無関係な SF
+     * フレームがそのままバスへ出てしまい、受信側の再組み立てを破壊する
+     * （2026-08 のスペック監査で発見・修正。以前は FF 分岐にのみこの
+     * チェックがあった）。 */
+    if (CanTp_Tx.state != CANTP_TX_IDLE)
+    {
+        DET_LOGE(TAG, "TX E: busy");
+        return E_NOT_OK;
+    }
+
     if (msgLen <= (uint16)CANTP_SF_MAX_DATA)
     {
         /* ---- Single Frame ---- */
@@ -358,12 +372,6 @@ Std_ReturnType CanTp_Transmit(PduIdType TxSduId, const PduInfoType* PduInfoPtr)
     }
 
     /* ---- Multi Frame: First Frame ---- */
-    if (CanTp_Tx.state != CANTP_TX_IDLE)
-    {
-        DET_LOGE(TAG, "TX E: busy");
-        return E_NOT_OK;
-    }
-
     /* メッセージ全体を TX バッファへコピー */
     uint16 i;
     for (i = 0U; i < msgLen; i++)
