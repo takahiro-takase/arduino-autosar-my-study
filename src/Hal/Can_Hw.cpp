@@ -23,6 +23,7 @@
 
 static uint8_t  driverBuf[sizeof(MCP_CAN)];
 static MCP_CAN* driver = nullptr;
+static uint8_t  Can_Hw_IntPin = 0xFFU;  /**< Can_Hw_AttachRxIsr() が登録したピン番号 */
 
 Can_Hw_ReturnType Can_Hw_Init(uint8_t csPin, uint32_t baudrate, uint8_t crystalFreqMhz)
 {
@@ -176,6 +177,12 @@ Can_Hw_ReturnType Can_Hw_AttachRxIsr(uint8_t intPin, void (*isr)(void))
      * mcp_can ライブラリ自体は INT ピンの pinMode を設定しないため
      * （公式サンプルもスケッチ側で INPUT に設定する規約）、ここで行う。 */
     pinMode(intPin, INPUT);
+    Can_Hw_IntPin = intPin;
     attachInterrupt(digitalPinToInterrupt(intPin), isr, FALLING);
     return CAN_HW_OK;
+}
+
+Can_Hw_ReturnType Can_Hw_IsWakeupPending(void)
+{
+    return (digitalRead(Can_Hw_IntPin) == LOW) ? CAN_HW_OK : CAN_HW_FAIL;
 }
