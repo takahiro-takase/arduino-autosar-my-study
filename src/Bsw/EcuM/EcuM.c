@@ -52,11 +52,13 @@
  *           22. App_EngineManager_Init — SW-C 初期化
  *           23. IoHwAb_Init    — I/O ハードウェア抽象化層初期化 (LED チャネル設定)
  *           24. App_WarningIndicator_Init — 警告灯 SW-C 初期化
- *           25. WdgM_Init      — Alive/Logical Supervision 初期化。
+ *           25. Wdg_Init       — Watchdog Driver 初期化（WdgM_Init より前。
+ *                                コンフィグの記録のみ行い、HW はまだ有効化しない）
+ *           26. WdgM_Init      — Alive/Logical Supervision 初期化。
  *                                実 HW ウォッチドッグもここで有効化する
  *                                （他の全モジュール初期化完了後、最後に有効化することで
  *                                  初期化処理自体がタイムアウトの影響を受けないようにする）
- *           26. Os_Init        — タスクスケジューラ初期化 (全モジュール初期化後)
+ *           27. Os_Init        — タスクスケジューラ初期化 (全モジュール初期化後)
  *
  *          周期処理 (EcuM_MainFunction):
  *            Os_SchedulerStep() — タスクテーブルに従い周期到来タスクを実行
@@ -78,6 +80,8 @@
 #include "BswM_PBCfg.h"
 #include "WdgM.h"
 #include "WdgM_PBCfg.h"
+#include "Wdg.h"
+#include "Wdg_PBCfg.h"
 #include "MemIf.h"
 #include "NvM.h"
 #include "NvM_PBCfg.h"
@@ -196,6 +200,7 @@ void EcuM_Init(void)
     App_EngineManager_Init();
     IoHwAb_Init();
     App_WarningIndicator_Init();
+    Wdg_Init(&Wdg_Config);    /* WdgM_Init より前: Watchdog Driver 初期化 (HW はまだ有効化しない) */
     WdgM_Init(&WdgM_Config);  /* Alive Supervision 初期化 (Os_Init より前) */
     Os_Init(&Os_Config);      /* タスクテーブル初期化 (全タスク有効で起動) */
 

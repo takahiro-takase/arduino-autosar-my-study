@@ -79,9 +79,12 @@
  *            ことでこれを防ぐ（詳細は WdgM_MainFunction() 冒頭のコメント参照）。
  *
  *          HW ウォッチドッグ連携:
- *            WdgM_Init() で実ハードウェアウォッチドッグ (WdgM_Hw 層が
- *            MCU 固有 API をラップする) を WDGM_HW_WATCHDOG_TIMEOUT_MS
- *            (4000ms) で有効化する。
+ *            WdgM_Init() で実ハードウェアウォッチドッグを
+ *            WDGM_HW_WATCHDOG_TIMEOUT_MS (4000ms) で有効化する。WdgM は
+ *            WdgIf（ディスパッチ層）経由でのみ Wdg（下位ドライバ、実体は
+ *            Wdg_Hw 層が MCU 固有 API をラップする）を呼び、直接は呼ばない
+ *            （NvM → MemIf → Fee と同じ 3 層構成。詳細は WdgIf.c/Wdg.c
+ *            冒頭のコメント参照）。
  *            判定 (Alive/Logical/Deadline Supervision) は WdgM_MainFunction が
  *            WDGM_SUPERVISION_CYCLE_MS (6000ms) ごとに行うが、HW ウォッチドッグへの
  *            実際のリフレッシュは WdgM_TriggerHwWatchdog が
@@ -146,7 +149,7 @@
  */
 
 #include "WdgM.h"
-#include "WdgM_Hw.h"
+#include "WdgIf.h"
 #include "Det.h"
 
 /* millis() is declared in Arduino wiring.c with C linkage. */
@@ -277,7 +280,7 @@ void WdgM_DeInit(void)
  */
 void WdgM_EnableHwWatchdog(void)
 {
-    WdgM_Hw_Enable();  /* WDGM_HW_WATCHDOG_TIMEOUT_MS (4000ms) に対応 */
+    (void)WdgIf_SetMode(WDGIF_DEVICE_0, WDGIF_FAST_MODE);  /* WDGM_HW_WATCHDOG_TIMEOUT_MS (4000ms) に対応 */
     WdgM_SupervisionSuppressed = 0U;
     DET_LOGI(TAG, "HW watchdog enabled (4000ms)");
 }
@@ -291,7 +294,11 @@ void WdgM_EnableHwWatchdog(void)
  */
 void WdgM_DisableHwWatchdog(void)
 {
-    WdgM_Hw_Disable();
+    /* WdgIf_SetMode(OFF) は本プロジェクトの HW 制約により常に E_NOT_OK を
+     * 返す（Wdg.c の Wdg_SetMode() コメント参照）が、ここで行いたいのは
+     * 「WdgM が FAILED 判定の結果を無視する」ことであり、HW が物理的に
+     * 無効化されたかどうかには依存しないため、戻り値は無視してよい。 */
+    (void)WdgIf_SetMode(WDGIF_DEVICE_0, WDGIF_OFF_MODE);
     WdgM_SupervisionSuppressed = 1U;
     DET_LOGI(TAG, "HW watchdog disabled");
 }
@@ -622,7 +629,8 @@ void WdgM_MainFunction(void)
  *
  * \details WdgM_GlobalStopped が立っていない限り（または
  *          WdgM_SupervisionSuppressed による抑制中は無条件に）
- *          WdgM_Hw_Refresh() を呼ぶ。
+ *          WdgIf_SetTriggerCondition() を呼ぶ（実体は Wdg_SetTriggerCondition()
+ *          → Wdg_Hw_Refresh()）。
  *
  *          AUTOSAR SWS_WdgM_00119-00122 準拠: Global Supervision Status が
  *          OK・FAILED・EXPIRED のいずれであってもリフレッシュは継続する。
@@ -646,7 +654,7 @@ void WdgM_TriggerHwWatchdog(void)
 {
     if (!WdgM_GlobalStopped || WdgM_SupervisionSuppressed)
     {
-        WdgM_Hw_Refresh();
+        WdgIf_SetTriggerCondition(WDGIF_DEVICE_0, (uint16)WDGM_HW_WATCHDOG_TIMEOUT_MS);
         DET_LOGD(TAG, "HW watchdog refreshed");
     }
     else

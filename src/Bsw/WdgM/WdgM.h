@@ -23,8 +23,8 @@
  *            内部ステータスに保持し（AUTOSAR が個々のアルゴリズムごとに判定結果を
  *            保持するのと同じ考え方）、WdgM_GetLocalStatus() はいずれか一つでも
  *            FAILED ならローカルステータスとして FAILED を返す。
- *            実 HW ウォッチドッグ（WdgM_Hw 層。Renesas RA の WDT ライブラリ）と
- *            連携している。判定は WdgM_MainFunction が
+ *            実 HW ウォッチドッグ（WdgIf → Wdg → Wdg_Hw 層経由。Wdg_Hw の実体は
+ *            Renesas RA の WDT ライブラリ）と連携している。判定は WdgM_MainFunction が
  *            WDGM_SUPERVISION_CYCLE_MS ごとに行うが、HW ウォッチドッグへの実際の
  *            リフレッシュは WdgM_TriggerHwWatchdog が WDGM_HW_TRIGGER_CYCLE_MS
  *            ごとに、直近の判定結果を見て行う（周期を分離している理由は
@@ -222,8 +222,9 @@ void WdgM_MainFunction(void);
  * \details Os スケジューラから WDGM_HW_TRIGGER_CYCLE_MS ごとに呼ばれる。
  *          全エンティティの WdgM_GetLocalStatus() が OK（または
  *          WdgM_DisableHwWatchdog() による抑制中）の場合のみ
- *          WdgM_Hw_Refresh() を呼ぶ。1 つでも FAILED があれば呼ばないため、
- *          WDGM_HW_WATCHDOG_TIMEOUT_MS 後に実際に MCU がリセットされる。
+ *          WdgIf_SetTriggerCondition() を呼ぶ。1 つでも FAILED があれば
+ *          呼ばないため、WDGM_HW_WATCHDOG_TIMEOUT_MS 後に実際に MCU が
+ *          リセットされる。
  *
  *          WdgM_MainFunction（判定, 6000ms）と周期を分離しているのは、
  *          Renesas RA4M1 の IWDT 最大タイムアウト（約 5592ms）が判定サイクルより

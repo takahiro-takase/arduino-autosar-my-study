@@ -188,9 +188,9 @@ pio device monitor
 ASW ─── App_EngineManager / App_WarningIndicator
 RTE ─── Rte（ポートベース S/R API + E2E Transformer 呼び出しグルー）
 OS  ─── Os（タイムトリガスケジューラ）
-BSW ─── EcuM / BswM / WdgM / ComM / CanSM / Nm / E2EXf / E2E / Com / PduR / SecOC / Csm / CryIf / Crypto / KeyM / CanIf / Can
+BSW ─── EcuM / BswM / WdgM / WdgIf / Wdg / ComM / CanSM / Nm / E2EXf / E2E / Com / PduR / SecOC / Csm / CryIf / Crypto / KeyM / CanIf / Can
         CanTp / Dcm / Dem / NvM / MemIf / Fee / IoHwAb / Dio / Port / Adc / SchM / Det
-HAL ─── Can_Hw / Dio_Hw / Port_Hw / Adc_Hw / Mcu_Hw / Fee_Hw / WdgM_Hw（src/Hal/ に集約）
+HAL ─── Can_Hw / Dio_Hw / Port_Hw / Adc_Hw / Mcu_Hw / Fee_Hw / Wdg_Hw（src/Hal/ に集約）
 ```
 
 各層は上位層のヘッダのみに依存し、下位層の実装詳細を知りません。
@@ -234,7 +234,9 @@ HAL ─── Can_Hw / Dio_Hw / Port_Hw / Adc_Hw / Mcu_Hw / Fee_Hw / WdgM_Hw（s
 |  | Port | — | SWS_Port | `Port_Init` でピン方向（OUTPUT / INPUT_PULLUP）を設定する MCAL |
 |  | SchM | — | SWS_SchM | 排他エリアマクロ（`SchM_Enter` / `SchM_Exit`）で共有リソースを保護。実体は `SchM_Hw`（`noInterrupts()`/`interrupts()`）で、Can の割り込みペンディングフラグを実際に保護する |
 |  | SecOC | 150 | SWS_SecureOnboardCommunication | メッセージ認証（Csm_MacGenerate/Csm_MacVerify 経由の AES-128-CMAC）とフレッシュネス管理によるリプレイ対策。E2E とは異なる軸（E2E=意図しない誤り検出、SecOC=意図的な改ざん・なりすまし検出）で、PduR のルーティング経路上に中間モジュールとして挟まる。RX（ImmobilizerCmd、CAN 0x120）は `SecOC_IfRxIndication()` が PduR の RX 宛先として検証し、成功時のみ `Com_RxIndication()` へ転送。TX（E2EHealthStatus、CAN 0x220）は既に E2E 保護済みのペイロードをさらに認証する二重防御で、`SecOC_IfTransmit()`/`SecOC_MainFunction()` が Freshness+MAC を計算し `PduR_SecOCTransmit()` で CanIf まで送り届ける。SecOC は `CsmJobId`（ジョブ ID）しか知らず、鍵にも AES/CMAC の実装にも一切アクセスしない（Csm/CryIf/Crypto レイヤ分離、上記参照） |
-|  | WdgM | 13 | SWS_WdgM | Supervised Entity の Alive Supervision（呼び出し回数を6000msごとに評価）・Logical Supervision（チェックポイント順序）・Deadline Supervision（チェックポイント間の経過時間）を独立したステータスで管理。判定は6000ms周期、実HWウォッチドッグへのリフレッシュは別途1000ms周期（WdgM_TriggerHwWatchdog）で行い、異常時はリフレッシュを止めて実際にMCUをリセットする |
+|  | Wdg | 102 | SWS_Wdg | Renesas RA の実 HW ウォッチドッグ（IWDT、RA WDT ライブラリ経由）向け下位ドライバ。`Wdg_SetMode(WDGIF_FAST_MODE)` で 4000ms タイムアウトを有効化する。`Wdg_SetMode(WDGIF_OFF_MODE)` は常に `E_NOT_OK` を返す（IWDT は一度有効化すると無効化する手段がないため。実 AUTOSAR の拡張プロダクションエラー `WDG_E_DISABLE_REJECTED` に相当する状況）。WdgIf 経由でのみ呼ばれ、WdgM から直接見えることはない |
+|  | WdgIf | 43 | SWS_WdgIf | WdgM（上位）と Wdg（下位ドライバ）の間のディスパッチ層。実 AUTOSAR は Device 引数で複数の Wdg インスタンスへ振り分けるが、本プロジェクトは物理ウォッチドッグが Wdg 1 個のみのため実質パススルー（MemIf → Fee と同じ簡略化）。実 AUTOSAR の WdgIf に Init/MainFunction が存在しない（[SWS_WdgIf_00018] により、ドライバが1個の構成では WdgM が Wdg_Init() を直接呼んでよいと規定されている）点は MemIf と共通するが、WdgIf 自体には MemIf のような非標準の Init/MainFunction 拡張を追加していない（プラットフォーム分岐を隠す必要がないため） |
+|  | WdgM | 13 | SWS_WdgM | Supervised Entity の Alive Supervision（呼び出し回数を6000msごとに評価）・Logical Supervision（チェックポイント順序）・Deadline Supervision（チェックポイント間の経過時間）を独立したステータスで管理。判定は6000ms周期、実HWウォッチドッグへのリフレッシュは別途1000ms周期（WdgM_TriggerHwWatchdog）で行い、異常時はリフレッシュを止めて実際にMCUをリセットする。実際の HW 有効/無効/リフレッシュは WdgIf 経由で Wdg（下位ドライバ）に委譲し、WdgM 自身は判定ロジックのみを持つ |
 | HAL | Can_Hw | — | — | MCP2515 / mcp_can C++ ラッパー（RX 割り込み登録 `Can_Hw_AttachRxIsr` を含む） |
 |  | Dio_Hw | — | — | Arduino `digitalWrite` / `digitalRead` ラッパー |
 |  | Port_Hw | — | — | Arduino `pinMode` ラッパー |
@@ -242,7 +244,7 @@ HAL ─── Can_Hw / Dio_Hw / Port_Hw / Adc_Hw / Mcu_Hw / Fee_Hw / WdgM_Hw（s
 |  | SchM_Hw | — | — | Arduino `noInterrupts()`/`interrupts()` ラッパー |
 |  | Mcu_Hw | — | — | リセット要因の読み取り（Renesas RA RSTSR0-1）・起動時ウォッチドッグ無効化 |
 |  | Fee_Hw | — | — | フラッシュエミュレーション EEPROM 読み書き（Renesas RA `EEPROM` ライブラリ）ラッパー。Fee.c と Fee_Hw.cpp 以外からはインクルードしない内部境界 |
-|  | WdgM_Hw | — | — | 実 HW ウォッチドッグの Enable / Disable / Refresh ラッパー |
+|  | Wdg_Hw | — | — | 実 HW ウォッチドッグの Enable / Disable / Refresh ラッパー。Wdg.c と Wdg_Hw.cpp 以外からはインクルードしない内部境界 |
 
 ModuleId の出典は `docs/AUTOSAR_TR_BSWModuleList.pdf`（Release 4.3.1、「List of
 Basic Software Modules」表）。詳細は「CAN 通信スタック」セクションの「DET 準拠」
@@ -414,12 +416,23 @@ Basic Software Modules」表）。詳細は「CAN 通信スタック」セクシ
 │   │   │   └── IoHwAb.c          # Dio/Adc へ委譲・デバウンス（40ms）・固着検出・ADC 電圧低下検出（Dem 報告）
 │   │   ├── SchM/                 # スケジュールマネージャ（排他エリアマクロ）
 │   │   │   └── SchM.h            # SchM_Enter/Exit マクロ定義（全モジュール共通、実体は src/Hal/SchM_Hw.h）
+│   │   ├── Wdg/                  # Watchdog Driver（Renesas RA 実 HW ウォッチドッグ向け下位ドライバ）
+│   │   │   ├── Wdg_Cfg.h         # DET 定数・ApiId（docs/4.3.1/AUTOSAR_SWS_WatchdogDriver.pdf を実測して確認済み）
+│   │   │   ├── Wdg_PBCfg.h       # コンフィグ型定義・Wdg_Config 宣言
+│   │   │   ├── Wdg_PBCfg.c       # コンフィグ実体（WdgM_Cfg.h の WDGM_HW_WATCHDOG_TIMEOUT_MS を直接引用し二重管理を解消）
+│   │   │   ├── Wdg.h             # 公開インタフェース（Wdg_Init/Wdg_SetMode/Wdg_SetTriggerCondition）
+│   │   │   └── Wdg.c             # Wdg_SetMode(WDGIF_OFF_MODE) は HW 制約により常に E_NOT_OK。境界は src/Hal/Wdg_Hw.h
+│   │   ├── WdgIf/                # Watchdog Interface（WdgM と Wdg の間のディスパッチ層）
+│   │   │   ├── WdgIf_Types.h     # 共通型（WdgIf_ModeType/WdgIf_DeviceType）
+│   │   │   ├── WdgIf_Cfg.h       # DET 定数・ApiId（docs/4.3.1/AUTOSAR_SWS_WatchdogInterface.pdf を実測して確認済み）
+│   │   │   ├── WdgIf.h           # 公開インタフェース（WdgIf_SetMode/WdgIf_SetTriggerCondition）
+│   │   │   └── WdgIf.c           # 唯一の下位ドライバ (Wdg) へのディスパッチ
 │   │   └── WdgM/                 # ウォッチドッグマネージャ（Alive + Logical Supervision）
 │   │       ├── WdgM_Cfg.h        # エンティティ ID・チェックポイント ID・監視サイクル・期待回数定義
 │   │       ├── WdgM_PBCfg.h      # エンティティ/遷移設定構造体型定義・WdgM_Config 宣言
 │   │       ├── WdgM_PBCfg.c      # エンティティテーブル・許可遷移テーブル実体（App_EngineManager_Run / App_WarningIndicator_Run）
 │   │       ├── WdgM.h            # 公開インタフェース（Init / CheckpointReached / MainFunction）
-│   │       └── WdgM.c            # Alive/Logical/Deadline 判定(6000ms) + HW WDT trigger(1000ms、WdgM_Hw へ委譲。境界は src/Hal/WdgM_Hw.h)
+│   │       └── WdgM.c            # Alive/Logical/Deadline 判定(6000ms) + HW WDT trigger(1000ms、WdgIf 経由で Wdg へ委譲)
 │   └── Hal/                      # ハードウェア依存層（Bsw 各モジュールの純粋 C 実装から分離）
 │       ├── Can_Hw.h / Can_Hw.cpp        # MCP2515 / mcp_can C++ ラッパー（旧 Mcp2515_Wrapper.cpp）。SLEEP時にウェイクアップ割り込みを有効化
 │       ├── Dio_Hw.h / Dio_Hw.cpp        # Arduino digitalWrite / digitalRead ラッパー
@@ -427,7 +440,7 @@ Basic Software Modules」表）。詳細は「CAN 通信スタック」セクシ
 │       ├── Adc_Hw.h / Adc_Hw.cpp        # Arduino analogRead ラッパー
 │       ├── Mcu_Hw.h / Mcu_Hw.c          # リセット要因読み取り（RA RSTSR0-1）・起動時 WDT 無効化
 │       ├── Fee_Hw.h / Fee_Hw.cpp        # フラッシュエミュレーション EEPROM 読み書き（RA EEPROM.h）。Fee.c と Fee_Hw.cpp 以外からインクルードしない内部境界
-│       ├── WdgM_Hw.h / WdgM_Hw.cpp      # 実 HW ウォッチドッグ Enable / Disable / Refresh(RA WDTライブラリ)
+│       ├── Wdg_Hw.h / Wdg_Hw.cpp        # 実 HW ウォッチドッグ Enable / Disable / Refresh(RA WDTライブラリ)。Wdg.c と Wdg_Hw.cpp 以外からインクルードしない内部境界
 │       └── SchM_Hw.h / SchM_Hw.cpp      # noInterrupts()/interrupts() ラッパー（SchM 排他エリアの実体）
 ├── dbc/
 │   └── engine_manager.dbc        # CAN シグナル定義（Cangaroo 等で使用）
@@ -1654,9 +1667,9 @@ ApiId は各関数の Doxygen `\ServiceID` タグ（以前から記録されて�
 ##### 対応範囲：全 BSW モジュールへの展開
 
 当初は Com モジュールのみの対応でしたが、その後全 BSW モジュール
-（Can, CanIf, PduR, CanTp, Dcm, Dem, FiM, NvM, EcuM, BswM, WdgM, ComM,
-CanSM, Nm, IoHwAb, Dio, Port, Adc, SecOC, E2E, E2EXf, Fee, MemIf の
-23 モジュール）へ同じ方針で展開しました。DET_LOGE で既に報告されていた
+（Can, CanIf, PduR, CanTp, Dcm, Dem, FiM, NvM, EcuM, BswM, WdgM, WdgIf, Wdg,
+ComM, CanSM, Nm, IoHwAb, Dio, Port, Adc, SecOC, E2E, E2EXf, Fee, MemIf の
+25 モジュール）へ同じ方針で展開しました。DET_LOGE で既に報告されていた
 箇所（NULL/範囲/未登録チェック）に加え、ログを一切出していなかった暗黙の
 NULL/未初期化チェックにも同じ基準で追加しています。
 
@@ -4830,8 +4843,8 @@ WdgM_TriggerHwWatchdog()（1000ms 周期）:
     WdgM_GetLocalStatus(entity) != OK ?
       YES → allOk = false; break
   allOk == true ?
-    YES → WdgM_Hw_Refresh()   ← ENGINE・WARNING 両方が OK の場合のみリフレッシュ
-    NO  → 何もしない           ← どちらか一方でも FAILED ならリフレッシュを止める
+    YES → WdgIf_SetTriggerCondition()   ← ENGINE・WARNING 両方が OK の場合のみリフレッシュ
+    NO  → 何もしない                     ← どちらか一方でも FAILED ならリフレッシュを止める
 ```
 
 > **END→START の許容上限には他モジュール由来の遅延を見込んだ余裕がある**:
@@ -4856,16 +4869,28 @@ WdgM_TriggerHwWatchdog()（1000ms 周期）:
 
 ##### HW ウォッチドッグ連携（実際の MCU リセット）
 
-WdgM は実ハードウェアウォッチドッグ（`WdgM_Hw` 層。AVR は `<avr/wdt.h>`、
-Renesas RA は `WDT` ライブラリ）と連携しています。シミュレーションではなく、
-実機上で実際にリセットが発生します。
+WdgM は実ハードウェアウォッチドッグと連携していますが、直接は触れません。
+`WdgM → WdgIf（ディスパッチ層）→ Wdg（下位ドライバ）→ Wdg_Hw（Renesas RA
+の WDT ライブラリをラップする HAL 層）` という 4 層構成を経由します
+（NvM → MemIf → Fee → Fee_Hw と同じ構成。WdgIf は実 AUTOSAR 仕様上、
+下位ドライバが Wdg 1 個のみの構成では単なるパススルーでよいとされる
+（[SWS_WdgIf_00018]）が、MemIf と同じ理由でチェック自体は残している）。
+シミュレーションではなく、実機上で実際にリセットが発生します。
 
 判定（Alive/Logical/Deadline Supervision）とリフレッシュ（trigger）は
 **意図的に別々の周期**で動きます。
 
 ```
+EcuM_Init() 内、WdgM_Init() より前:
+  Wdg_Init(&Wdg_Config)   ← コンフィグ（タイムアウト値）を記録するのみ。
+                            HW にはまだ触れない（初期化処理自体が HW
+                            ウォッチドッグのタイムアウトに巻き込まれないため）
+
 WdgM_Init()（起動シーケンス末尾、Os_Init の直前）:
-  WdgM_Hw_Enable()   ← HW ウォッチドッグを 4000ms タイムアウトで有効化
+  WdgM_EnableHwWatchdog()
+    → WdgIf_SetMode(WDGIF_DEVICE_0, WDGIF_FAST_MODE)
+      → Wdg_SetMode(WDGIF_FAST_MODE)
+        → Wdg_Hw_Enable(timeoutMs)   ← HW ウォッチドッグを 4000ms タイムアウトで有効化
 
 WdgM_MainFunction()（6000ms 周期、判定のみ）:
   各エンティティの Alive/Logical/Deadline を評価し WdgM_AliveStatus 等に反映する。
@@ -4875,12 +4900,25 @@ WdgM_MainFunction()（6000ms 周期、判定のみ）:
 
 WdgM_TriggerHwWatchdog()（1000ms 周期、リフレッシュのみ）:
   WdgM_GlobalStopped が立っていない ?
-    YES → WdgM_Hw_Refresh()      ← リフレッシュ。タイマが 0 から再カウント開始
+    YES → WdgIf_SetTriggerCondition(WDGIF_DEVICE_0, WDGM_HW_WATCHDOG_TIMEOUT_MS)
+            → Wdg_SetTriggerCondition() → Wdg_Hw_Refresh()
+            ← リフレッシュ。タイマが 0 から再カウント開始
     NO  → 何もしない              ← リフレッシュされず、カウントが進み続ける
 
 リフレッシュされないまま 4000ms 経過 → HW が MCU を強制リセット
   → setup() から再起動（DET ログも最初から出力される）
 ```
+
+**Wdg_SetMode(WDGIF_OFF_MODE) は常に失敗する**: `WdgM_DisableHwWatchdog()`
+（POST_RUN 遷移時に呼ばれる）は内部で `WdgIf_SetMode(WDGIF_DEVICE_0,
+WDGIF_OFF_MODE)` を呼ぶが、Renesas RA4M1 の IWDT は一度有効化すると
+無効化する手段がないため、`Wdg_SetMode()` は常に `E_NOT_OK` を返す
+（実 AUTOSAR の拡張プロダクションエラー `WDG_E_DISABLE_REJECTED` に相当する
+状況。本プロジェクトはプロダクションエラーの仕組み自体を持たないため
+`DET_LOGW` のみで通知する）。`WdgM_DisableHwWatchdog()` はこの戻り値を
+無視し、`WdgM_SupervisionSuppressed` フラグを立てることで目的を達成する
+（HW が物理的に無効化されたかどうかには依存しない設計。詳細は WdgM.c の
+「HW ウォッチドッグ連携」コメント参照）。
 
 **なぜ判定サイクルとリフレッシュ周期を分けているか:**
 当初は AVR の `wdt_enable(WDTO_8S)`（8000ms）を前提に、`WdgM_MainFunction`
@@ -5169,7 +5207,7 @@ delay(1000);  /* 動作確認用: 500ms の許容上限を超えさせる */
 | `WDGM_WARNING_DEADLINE_END_TO_START_MIN_MS` / `_MAX_MS` | 300 / 1500 ms | WARNING の END→START 許容経過時間 |
 | `WDGM_EXPIRED_SUPERVISION_CYCLE_TOL` | 2 | グローバルレベルの連続 FAILED 判定サイクル許容回数（超過で `WdgM_GlobalStopped`） |
 | `WDGM_HW_TRIGGER_CYCLE_MS` | 1000 ms | HW ウォッチドッグへの実際のリフレッシュ周期（WdgM_TriggerHwWatchdog 周期と一致）。判定サイクル（`WDGM_SUPERVISION_CYCLE_MS`）とは意図的に分離 |
-| `WDGM_HW_WATCHDOG_TIMEOUT_MS` | 4000 ms | 実 HW ウォッチドッグのタイムアウト目安（AVR は `WDTO_4S`、Renesas RA は `WDT.begin(4000)` を `WdgM_Hw.cpp` で指定）。`WDGM_HW_TRIGGER_CYCLE_MS` より十分長く設定すること（RA4M1 の IWDT 最大タイムアウト ≒5592ms 未満という制約もある） |
+| `WDGM_HW_WATCHDOG_TIMEOUT_MS` | 4000 ms | 実 HW ウォッチドッグのタイムアウト。`Wdg_PBCfg.c` がこの値を直接引用して `Wdg_Config.DefaultTimeoutMs` を組み立て、`Wdg_Hw_Enable(timeoutMs)`（`Wdg_Hw.cpp`、`WDT.begin(timeoutMs)`）まで渡る。`WDGM_HW_TRIGGER_CYCLE_MS` より十分長く設定すること（RA4M1 の IWDT 最大タイムアウト ≒5592ms 未満という制約もある） |
 
 許可遷移グラフは `WdgM_PBCfg.c` の `WdgM_EngineTransitions[]`、Deadline 許容範囲テーブルは
 同ファイルの `WdgM_EngineDeadlines[]`（いずれもポストビルド設定）で管理します。
@@ -5723,7 +5761,7 @@ LEVEL は ERROR / WARN  / INFO  / DEBUG の 5 文字固定幅で列が揃いま�
 | `Det.cpp` | C++ | Arduino の `Serial` API を使用 |
 | `Dio_Hw.cpp` | C++ | Arduino の `digitalWrite` API を使用 |
 | `Port_Hw.cpp` | C++ | Arduino の `pinMode` API を使用 |
-| `WdgM_Hw.cpp` | C++ | Renesas RA の WDT ライブラリ（`WDTimer` クラス、グローバルインスタンス `WDT`）を使用 |
+| `Wdg_Hw.cpp` | C++ | Renesas RA の WDT ライブラリ（`WDTimer` クラス、グローバルインスタンス `WDT`）を使用 |
 | その他すべて | C | AUTOSAR CP の標準に準拠 |
 
 C ファイルから C++ 関数を呼ぶすべてのヘッダに `extern "C"` ガードを設けています。
