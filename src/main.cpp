@@ -10,13 +10,16 @@
  *
  *          HW ウォッチドッグ起因のブートループ対策:
  *            WdgM が実ハードウェアウォッチドッグを使用するため、
- *            setup() の最初に Mcu_Hw 経由でリセット原因取得 + WDT 無効化を行う
+ *            setup() の最初に Mcu_Init() 経由でリセット原因取得 + WDT 無効化を行う
  *            （Arduino の定番パターンを MCU 非依存の形でラップしたもの）。
  *            これを怠ると、短いタイムアウトで WDT が有効なまま再起動した場合に、
  *            ブートローダの待機中に再度タイムアウトしてスケッチに到達できない
  *            無限リセットに陥る恐れがある。リセット原因はクリア前の値を
  *            Serial 初期化後にログ出力する（バスオフ/WDT リセット調査用の診断ログ。
- *            project_busoff_watchdog_reset_bug 参照）。
+ *            project_busoff_watchdog_reset_bug 参照）。Mcu_Init() は Serial
+ *            初期化前に呼ぶため、DET_LOGx/Det_ReportError を一切呼ばない
+ *            （Serial.begin() 前の Serial.print() 系呼び出しがハングする
+ *            リスクを避けるため。Mcu.h 冒頭のコメント参照）。
  *
  * \copyright  Copyright (c) 2025 T_T
  * \license    MIT License - 詳細は LICENSE ファイルを参照。
@@ -27,6 +30,7 @@
 #include <Arduino.h>
 #include "EcuM.h"
 #include "Det.h"
+#include "Mcu.h"
 #include "Mcu_Hw.h"
 
 #define TAG "Main"
@@ -39,9 +43,11 @@ void setup()
     /* ブートローダ起因の WDT 無限リセットループを防ぐため、
      * 何よりも先にリセット原因を読み取り(レジスタはクリアされる)、WDT を
      * 無効化する。WdgM_Init() が後で必要なタイムアウトで再度有効化する。
-     * クリア前の値は Mcu_Hw_ReadAndClearResetReason() が返すので、
-     * Serial が使えるようになった後でログ出力する。 */
-    const Mcu_Hw_ResetReasonType resetReason = Mcu_Hw_ReadAndClearResetReason();
+     * リセット原因の読み取り+クリアは Mcu_Init() 内で 1 度だけ行われる
+     * (Mcu_Hw_ReadAndClearResetReason() は 1 起動につき 1 回しか呼べない
+     * ため、Mcu.h 冒頭のコメント参照)。クリア前の値は Mcu_GetResetRawValue()
+     * 経由で取得できるので、Serial が使えるようになった後でログ出力する。 */
+    Mcu_Init(&Mcu_Config);
     Mcu_Hw_DisableWatchdogAtBoot();
 
     Serial.begin(115200);
@@ -70,12 +76,15 @@ void setup()
     /* リセット原因の診断ログ (バスオフ/WDT リセット調査用)。
      * 複数同時に立つこともある（例: 電源投入直後は PowerOn のみが通常だが、
      * 環境によっては BrownOut も同時に立つことがある）。
-     * External は MCU によっては検出できない (Mcu_Hw.h 参照)。 */
+     * External は MCU によっては検出できない (Mcu_Hw.h 参照)。
+     * ビット割当は Mcu.h の MCU_RAW_RESET_*_BIT 参照（Mcu.c とこの呼び出し元
+     * の両方が同じ定義を共有するため、ビット位置のハードコード複製はしない）。 */
+    const Mcu_RawResetType rawReset = Mcu_GetResetRawValue();
     DET_LOGI(TAG, "ResetReason WDT=%u BOR=%u EXT=%u POR=%u",
-             (unsigned)resetReason.Watchdog,
-             (unsigned)resetReason.BrownOut,
-             (unsigned)resetReason.External,
-             (unsigned)resetReason.PowerOn);
+             (unsigned)((rawReset & MCU_RAW_RESET_WATCHDOG_BIT) != 0U),
+             (unsigned)((rawReset & MCU_RAW_RESET_BROWNOUT_BIT) != 0U),
+             (unsigned)((rawReset & MCU_RAW_RESET_EXTERNAL_BIT) != 0U),
+             (unsigned)((rawReset & MCU_RAW_RESET_POWERON_BIT) != 0U));
 
     EcuM_Init();
 }

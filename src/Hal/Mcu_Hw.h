@@ -5,7 +5,8 @@
  *          が MCU 固有レジスタ（Renesas RA の RSTSR0/RSTSR1 等）を直接
  *          知らずに済むよう、MCU 固有 API をこの層の裏に隠す。生のレジスタ値
  *          ではなく、デコード済みの Mcu_Hw_ResetReasonType を返す。
- *          本ヘッダは main.cpp と Mcu_Hw.c 以外からインクルードしないこと。
+ *          本ヘッダは main.cpp と Mcu_Hw.c、および Bsw 層で本 Hal を所有する
+ *          Mcu.c 以外からインクルードしないこと。
  *
  * \copyright  Copyright (c) 2025 T_T
  * \license    MIT License - 詳細は LICENSE ファイルを参照。

@@ -22,6 +22,7 @@ README は現在の仕様・実装を理解するためのドキュメントと�
 - [WdgM: POST_RUN→RUN 復帰時の Alive Supervision 誤検出](#wdgm-post_runrun-復帰時の-alive-supervision-誤検出)
 - [WdgM: 短時間 POST_RUN での Alive Supervision 誤検出](#wdgm-短時間-post_run-での-alive-supervision-誤検出)
 - [WdgM: Alive と Logical のステータス統合バグ](#wdgm-alive-と-logical-のステータス統合バグ)
+- [Mcu: Power-On Reset フラグ (PORF) が実機で検出されない（未解決）](#mcu-power-on-reset-フラグ-porf-が実機で検出されない未解決)
 
 ---
 
@@ -508,3 +509,33 @@ Logical Supervision が FAILED と判定した直後でも、次の `WdgM_MainFu
 ステータス配列のパターンをそのまま 3 つ目にも適用している。
 
 （README 該当箇所: [WdgM > 本プロジェクトでの失敗アクション](../README.md#本プロジェクトでの失敗アクション)）
+
+---
+
+## Mcu: Power-On Reset フラグ (PORF) が実機で検出されない（未解決）
+
+Mcu モジュール導入（`Mcu_Init()`/`Mcu_GetResetRawValue()`）の実機検証中、
+USB ケーブルの抜き差し（真の電源断→再投入）を行っても、診断ログ
+（`ResetReason WDT=%u BOR=%u EXT=%u POR=%u`）の POR が常に 0 のままである
+ことが判明した。この事象自体は Mcu モジュール導入以前から存在していた
+（本セッション最初期の検証ログの時点で既に `POR=0` だった）ため、
+Mcu.c/Mcu.h 側の新規ロジック（Mcu_Init() の呼び出し順序修正・
+MCU_RAW_RESET_*_BIT の一元化等）が原因ではなく、`src/Hal/Mcu_Hw.c` の
+`Mcu_Hw_ReadAndClearResetReason()`（`R_SYSTEM->RSTSR0_b.PORF` を読む）
+側の問題と考えられる。同ファイルは元々のコメントで「現時点でハードウェア
+未検証」と明記されており、今回はその未検証事項が実機で顕在化した形。
+
+有力な仮説（未検証）:
+  - UNO R4 の Arduino コアにはブートローダが組み込まれており、リセット
+    直後にまずこれが起動し「ダブルタップでブートローダモードへ入るか」
+    等の判定のためにリセット原因レジスタを参照・クリアする可能性がある。
+    その場合、スケッチの `setup()`（`Mcu_Init()`）に処理が渡る頃には
+    PORF が既に消費された後になる。
+  - あるいはボードの電源回路（レギュレータの保持容量等）により、USB
+    抜き差しでも RA4M1 の VCC が完全に 0V まで落ちきらず、ハードウェア
+    的に真の POR 条件を満たしていない可能性もある。
+
+対応は見送り、事象の記録のみ行う（2026-08）。原因調査（ブートローダの
+ソース確認、電源電圧の実測等）が必要であり、判明すれば別途対応する。
+
+（README 該当箇所: [MCU 一覧の Mcu 行](../README.md#module-list)）
