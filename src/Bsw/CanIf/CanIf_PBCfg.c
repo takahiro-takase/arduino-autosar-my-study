@@ -91,7 +91,13 @@ static const CanIf_TxPduConfigType CanIf_TxPduConfigData[CANIF_TX_PDU_COUNT] = {
         .CanId             = 0x7E8U,      /* DaVinci: CanIfTxPduCanId */
         .Dlc               = 8U,          /* DaVinci: CanIfTxPduDlc */
         .Hth               = 0U,          /* DaVinci: CanIfTxPduHthIdRef */
-        .TxConfirmFct      = NULL         /* DaVinci: CanIfTxPduUserTxConfirmationName = NULL */
+        .TxConfirmFct      = PduR_CanIfTxConfirmation /* DaVinci: CanIfTxPduUserTxConfirmationName。
+                                          * PduR_PBCfg.c の TX パス(SrcPduId=1)は
+                                          * ConfFct=CanTp_TxConfirmation を設定済みだが、
+                                          * 以前は本フィールドが NULL のため到達不能な配線に
+                                          * なっていた（CanTp_TxConfirmation 自体は意図的な
+                                          * no-op のため実害はなかったが、設定の一貫性として
+                                          * 修正。2026-08 のスペック監査で発見） */
     },
     {
         /* ---------------------------------------------------------------
