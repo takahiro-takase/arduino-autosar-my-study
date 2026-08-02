@@ -18,7 +18,8 @@ ARXML や設定ツールは使用せず、コードで階層構造・型定義�
     - [層構造](#layer-structure)
     - [モジュール一覧](#module-list)
   - [ディレクトリ構成](#directory-structure)
-  - [CAN 通信スタック（Can / CanIf / PduR / Com）](#can-stack)
+  - [CAN 通信スタック（Can_Hw / Can / CanIf / PduR / Com / E2E / E2EXf / E2EMon / Rte）](#can-stack)
+    - [関連モジュール](#can-stack-modules)
     - [データフロー図](#can-dataflow-diagram)
     - [CAN フレーム仕様](#can-frame-spec)
     - [Tx 処理（Com → PduR → CanIf → Can の順）](#tx-processing)
@@ -220,14 +221,14 @@ HAL ─── Can_Hw / Dio_Hw / Port_Hw / Adc_Hw / Mcu_Hw / Fee_Hw / Wdg_Hw / Gp
 |  | Det | — | SWS_Det | 主要機能実装<br>(一部意図的に簡略化) |
 |  | Dio | — | SWS_Dio | 主要機能実装<br>(一部意図的に簡略化) |
 |  | E2E | — | SWS_E2E | 主要機能実装<br>(一部意図的に簡略化) |
-|  | E2EXf | 176 | SWS_E2ELibrary 12.4 (E2E Transformer) | 主要機能実装<br>(一部意図的に簡略化) |
+|  | E2EXf | 176 | SWS_E2ELibrary 12.4<br>(E2E Transformer) | 主要機能実装<br>(一部意図的に簡略化) |
 |  | E2EMon | — | — (独自 CDD 相当) | — |
 |  | EcuM | 10 | SWS_EcuStateManager | 主要機能実装 |
 |  | Fee | 21 | SWS_Fee | 主要機能実装<br>(一部意図的に簡略化) |
 |  | FiM | 11 | SWS_FiM | 主要機能実装<br>(一部意図的に簡略化) |
 |  | Gpt | 100 | SWS_Gpt | 主要機能実装<br>(一部意図的に簡略化) |
 |  | IoHwAb | 254 | AUTOSAR 抽象化層 | — |
-|  | KeyM | 116（暫定値） | SWS_KeyManager (Release 4.4.0) | 主要機能実装<br>(一部意図的に簡略化) |
+|  | KeyM | 116<br>(暫定値) | SWS_KeyManager<br>(Release 4.4.0) | 主要機能実装<br>(一部意図的に簡略化) |
 |  | Mcu | 101 | SWS_Mcu | 主要機能実装<br>(一部意図的に簡略化) |
 |  | MemIf | 22 | SWS_MemIf | パススルー<br>(下位が1個のため) |
 |  | Nm | 31 | SWS_CANNM | 主要機能実装 |
@@ -250,6 +251,33 @@ HAL ─── Can_Hw / Dio_Hw / Port_Hw / Adc_Hw / Mcu_Hw / Fee_Hw / Wdg_Hw / Gp
 |  | Gpt_Hw | — | — | — |
 
 > 「仕様準拠度」の凡例: **主要機能実装**=対象 SWS 仕様の主要要求を実質的に満たす／**主要機能実装(一部意図的に簡略化)**=中核機能は実装済みだが特定の API・モードを対応除外／**パススルー**=下位ドライバが1個のみのため実質的に素通し／**—**=対応する AUTOSAR 仕様が無い（ASW・RTE・HAL 層、または独自 CDD 相当）。各モジュールの具体的な簡略化内容は下表または各モジュール詳細節を参照。
+
+「本プロジェクトでの役割」のうち、複数モジュールをまとめた詳細節（CAN 通信スタック／診断スタック／ECU 管理層／IO スタック／アプリケーション）を持つものは、その節の先頭に個別の表として移動しました。以下はそれ以外（詳細節を持たないモジュール）の一覧です。
+
+| モジュール | 本プロジェクトでの役割 |
+|---|---|
+| Os | タイムトリガスケジューラ。タスクごとに周期を設定し `Os_SchedulerStep()` で到来タスクを順次実行。時間源は Os 専用の Gpt チャネル（`GPT_CHANNEL_1`、詳細は [Os のスケジューラティック](#os-のスケジューラティックgpt-駆動) 参照） |
+| CryIf | Csm と Crypto Driver の間のルーティング層。`CryIf_ProcessJob()`（実 AUTOSAR は複数 Crypto Driver Object への振り分けを担う）は、本プロジェクトが Crypto Driver を1個しか持たないため実質パススルーで `Crypto_ProcessJob()` へ委譲する（CanIf が単一 CAN コントローラに固定しているのと同じ簡略化） |
+| Crypto | Csm/CryIf/Crypto レイヤの最下層。鍵テーブル（`Crypto_PBCfg.c`）と実際の暗号計算（AES-128-CMAC、自前実装）を保持する唯一のモジュール。`Crypto_ProcessJob()` がジョブの `service`（`CRYPTO_MACGENERATE`/`CRYPTO_MACVERIFY`）に応じて MAC を生成、または定数時間比較で検証する（MAC 検証のタイミングサイドチャネル対策はここに実装。旧実装では SecOC.c 内にあったロジックを責務として正しい層へ移設した） |
+| Csm | SecOC が唯一直接呼ぶ暗号スタックの入口。`Csm_MacGenerate()`/`Csm_MacVerify()` が `jobId`（`Csm_PBCfg.c` の `Csm_JobConfigData`）から実行すべきプリミティブ種別と鍵 ID を解決し、`Crypto_JobType` ジョブを組み立てて `CryIf_ProcessJob()` へ委譲する。`Csm_MacVerify()` の `macLength` はビット単位（[SWS_Csm_01050]）、`Csm_MacGenerate()` の `macLengthPtr` はバイト単位（[SWS_Csm_00982]）という実仕様の非対称性を踏襲し、Csm 内でビット→バイト変換する。`Csm_KeyElementSet()`/`Csm_KeySetValid()`（KeyM が呼ぶ鍵操作 API）は CryIf へのパススルー |
+| Det | `DET_LOG*` マクロ経由でタイムスタンプ付きログを Serial に出力するデバッグ用ブリッジ。加えて標準準拠の `Det_ReportError()`（[SWS_Det_00009]）も実装。詳細は下記「[DET 準拠](#det-compliance)」節を参照 |
+| Fee | フラッシュエミュレーション EEPROM（Renesas RA `EEPROM.h`）向けの下位ドライバ。`Fee_Write()` は物理アドレス・データ・長さを受け取ってジョブを開始するだけで即座に返り、実際の書き込みは `Fee_MainFunction()` が 1 回の呼び出しにつき 1 バイトだけ進める（消去・書き込みサイクルによるブロッキングで WdgM の Deadline Supervision を巻き込んだ実機不具合への対策）。MemIf 経由でのみ呼ばれ、NvM から直接見えることはない |
+| Gpt | HW タイマ（Renesas RA FspTimer）による周期割り込み駆動の General Purpose Timer Driver。目標時間到達判定は HW コンペアマッチではなく `Gpt_OnTick()` 内のソフトウェア比較で行い（`GetTimeElapsed`/`GetTimeRemaining` を単純な整数演算で正確に実現するため）、`Gpt_EnableNotification` された通知関数は ISR コンテキストから直接呼ばれる。2 チャネル構成: Channel 0 は `App_GptDemo` の動作確認用（1Hz Notification）、Channel 1 は Os 専用のスケジューラティック（Notification なし、`Os` が `Gpt_GetTimeElapsed()` をポーリング。[Os のスケジューラティック](#os-のスケジューラティックgpt-駆動) 参照）。`Gpt_SetMode`/`Gpt_EnableWakeup`/`Gpt_DisableWakeup`/`Gpt_CheckWakeup`/`Gpt_GetPredefTimerValue` は、EcuM が SLEEP モードを持たないため仕様上のプリコンパイル設定（`GptWakeupFunctionalityApi` 等）に沿って未実装 |
+| KeyM | 鍵更新セッション（`KeyM_Start`→`KeyM_Update`→`KeyM_Finalize`）を管理する Key Manager。Dcm の WriteDataByIdentifier（DID 0x0108 CryptoKeyUpdate、詳細は下記「[UDS 診断通信](#uds-diag-comm)」節参照）が模擬鍵マスターとして駆動する。Certificate submodule・SHE 形式等は対応除外（詳細は下記「[明示する簡略化](#secoc-simplifications)」節参照）。ModuleId は Release 4.3.1 の AUTOSAR_TR_BSWModuleList.pdf に KeyM 自体が未掲載のため未検証の暫定値 |
+| Mcu | `main.cpp` の `setup()` 冒頭（`Serial.begin()` より前）で `Mcu_Init()` を呼び、起動直後のリセット原因（Watchdog/BrownOut/External/PowerOn）を一度だけ読み取ってキャッシュする（Mcu_Hw のレジスタ読み取りは 1 起動につき 1 回しか呼べないため）。`Mcu_InitClock`/`Mcu_SetMode`/`Mcu_InitRamSection`/`Mcu_PerformReset` 等は Arduino フレームワークがクロック初期化を担い複数電源モードもモデル化しないため未実装。`Mcu_GetResetReason()`（単一の `Mcu_ResetType`）に加え、複数要因の同時検出を診断できるよう `Mcu_GetResetRawValue()`（4 フラグをビット詰めした本プロジェクト独自の生値）も提供する |
+| MemIf | NvM（上位）と Fee（下位ドライバ）の間のディスパッチ層。実 AUTOSAR は Device 引数で複数の Fee/Ea インスタンスへ振り分けるが、本プロジェクトは下位ドライバが Fee 1 個のみのため実質パススルー（CryIf → Crypto の関係と同様）。`MemIf_Init`/`MemIf_MainFunction` は実 AUTOSAR の SWS_MemIf には存在しない（[SWS_MemIf_00019] により、ドライバが1個の構成では EcuM/Os が Fee_Init/Fee_MainFunction を直接呼んでよいと規定されている）本プロジェクト独自の拡張で、プラットフォーム分岐をこの層に閉じ込めるために追加した |
+| SchM | 排他エリアマクロ（`SchM_Enter` / `SchM_Exit`）で共有リソースを保護。実体は `SchM_Hw`（`noInterrupts()`/`interrupts()`）で、Can の割り込みペンディングフラグ、および Gpt のチャネル状態機械（`Gpt_ChannelState`/`Gpt_ElapsedTicks`、実 HW 割り込みとメインループの両方から読み書きされる）を実際に保護する |
+| SecOC | メッセージ認証（AES-128-CMAC）とフレッシュネス管理によるリプレイ対策。E2E とは異なる軸（E2E=意図しない誤り検出、SecOC=意図的な改ざん・なりすまし検出）で、PduR のルーティング経路上に中間モジュールとして挟まる。詳細は下記「[SecOC](#secoc)」節を参照 |
+| Wdg | Renesas RA の実 HW ウォッチドッグ（IWDT、RA WDT ライブラリ経由）向け下位ドライバ。`Wdg_SetMode(WDGIF_FAST_MODE)` で 4000ms タイムアウトを有効化する。`Wdg_SetMode(WDGIF_OFF_MODE)` は常に `E_NOT_OK` を返す（IWDT は一度有効化すると無効化する手段がないため。実 AUTOSAR の拡張プロダクションエラー `WDG_E_DISABLE_REJECTED` に相当する状況）。WdgIf 経由でのみ呼ばれ、WdgM から直接見えることはない |
+| WdgIf | WdgM（上位）と Wdg（下位ドライバ）の間のディスパッチ層。実 AUTOSAR は Device 引数で複数の Wdg インスタンスへ振り分けるが、本プロジェクトは物理ウォッチドッグが Wdg 1 個のみのため実質パススルー（MemIf → Fee と同じ簡略化）。実 AUTOSAR の WdgIf に Init/MainFunction が存在しない（[SWS_WdgIf_00018] により、ドライバが1個の構成では WdgM が Wdg_Init() を直接呼んでよいと規定されている）点は MemIf と共通するが、WdgIf 自体には MemIf のような非標準の Init/MainFunction 拡張を追加していない（プラットフォーム分岐を隠す必要がないため） |
+| Dio_Hw | Arduino `digitalWrite` / `digitalRead` ラッパー |
+| Port_Hw | Arduino `pinMode` ラッパー |
+| Adc_Hw | Arduino `analogRead` ラッパー |
+| SchM_Hw | Arduino `noInterrupts()`/`interrupts()` ラッパー |
+| Mcu_Hw | リセット要因の読み取り（Renesas RA RSTSR0-1）・起動時ウォッチドッグ無効化 |
+| Fee_Hw | フラッシュエミュレーション EEPROM 読み書き（Renesas RA `EEPROM` ライブラリ）ラッパー。Fee.c と Fee_Hw.cpp 以外からはインクルードしない内部境界 |
+| Wdg_Hw | 実 HW ウォッチドッグの Enable / Disable / Refresh ラッパー。Wdg.c と Wdg_Hw.cpp 以外からはインクルードしない内部境界 |
+| Gpt_Hw | Renesas RA `FspTimer` ラッパー。`FspTimer::get_available_timer()` で AGT/GPT の空きチャネルを実行時に自動選択し、`setup_overflow_irq()` で周期割り込みを有効化する。Gpt.c と Gpt_Hw.cpp 以外からはインクルードしない内部境界 |
 
 ModuleId の出典は `docs/AUTOSAR_TR_BSWModuleList.pdf`（Release 4.3.1、「List of
 Basic Software Modules」表）。詳細は「CAN 通信スタック」セクションの「DET 準拠」
@@ -467,14 +495,22 @@ Basic Software Modules」表）。詳細は「CAN 通信スタック」セクシ
 ```
 
 <a id="can-stack"></a>
-### CAN 通信スタック（Can / CanIf / PduR / Com）
+### CAN 通信スタック（Can_Hw / Can / CanIf / PduR / Com / E2E / E2EXf / E2EMon / Rte）
 
-| モジュール | 本プロジェクトでの役割 |
-|---|---|
-| Can | MCP2515 の送受信・Bus-Off 検出・CAN バス活動によるウェイクアップ検出を担う MCAL 最下層。HW を直接操作する唯一のモジュール |
-| CanIf | CAN ID ↔ 論理 PDU のマッピング。上位層は CAN ID を知らず PDU ID で通信。設定 DLC 未満の受信 L-PDU は上位層へ渡さず棄却する（SWS_CANIF_00026 のデータ長チェック） |
-| PduR | 受信 PDU を Com/CanTp/SecOC へ（1つの RxPduId から複数宛先への配信にも対応）、送信 PDU を CanIf へルーティング。通信スタックの配管役。TX 経路は既定では `CanIf_Transmit()` へ直接転送するが、`PduR_TxRoutingPathType.TransmitOverrideFct` が設定されている場合は中間モジュール（SecOC）へ委譲できるよう汎用化されている（既存の全 TX パスはこのフィールドを使わないため無変更） |
-| Com | シグナルのビット単位パック／アンパックと送受信タイミング制御を担う（TxModeMode: DIRECT/MIXED/PERIODIC・TMS・MDT・受信フィルタ・I-PDU Group・Signal Gateway 等）。E2E には一切関知しない（E2E Transformer 方式、Com.c 本体に E2E は埋め込まれない） |
+<a id="can-stack-modules"></a>
+#### 関連モジュール
+
+| 層 | モジュール | 本プロジェクトでの役割 |
+|---|---|---|
+| HAL | Can_Hw | MCP2515 / mcp_can C++ ラッパー（RX 割り込み登録 `Can_Hw_AttachRxIsr` を含む） |
+| BSW | Can | MCP2515 の送受信・Bus-Off 検出・CAN バス活動によるウェイクアップ検出を担う MCAL 最下層。HW を直接操作する唯一のモジュール |
+|  | CanIf | CAN ID ↔ 論理 PDU のマッピング。上位層は CAN ID を知らず PDU ID で通信。設定 DLC 未満の受信 L-PDU は上位層へ渡さず棄却する（SWS_CANIF_00026 のデータ長チェック） |
+|  | PduR | 受信 PDU を Com/CanTp/SecOC へ（1つの RxPduId から複数宛先への配信にも対応）、送信 PDU を CanIf へルーティング。通信スタックの配管役。TX 経路は既定では `CanIf_Transmit()` へ直接転送するが、`PduR_TxRoutingPathType.TransmitOverrideFct` が設定されている場合は中間モジュール（SecOC）へ委譲できるよう汎用化されている（既存の全 TX パスはこのフィールドを使わないため無変更） |
+|  | Com | シグナルのビット単位パック／アンパックと送受信タイミング制御を担う（TxModeMode: DIRECT/MIXED/PERIODIC・TMS・MDT・受信フィルタ・I-PDU Group・Signal Gateway 等）。E2E には一切関知しない（E2E Transformer 方式、Com.c 本体に E2E は埋め込まれない） |
+|  | E2E | AUTOSAR E2E Profile 01 保護の実処理。DataID・CRC8 (SAE J1850)・4bit カウンタの 3 要素で、`E2E_P01Check` はデータ破壊・フレーム脱落・重複・誤ルーティングを検出、`E2E_P01Protect` は Counter・CRC8 を付加。Com/Rte のどちらにも依存しない純粋な検証/付与ライブラリ |
+|  | E2EXf | Com と E2E の間を仲介する統合層。RX は `E2E_P01Check` でデータ破壊・フレーム脱落・重複・誤ルーティングを検出して Dem へ報告、TX は `E2E_P01Protect` で Counter・CRC8 を付加する。Com 自身はこの層の存在を知らない。詳細は下記「[E2E P01 保護](#e2e-p01)」節を参照 |
+|  | E2EMon | 標準 AUTOSAR モジュールには存在しない、実務でよく見る「独自 CDD」パターンの例。EngineInfo/AbsInfo の E2E 検証結果を購読し、ネットワーク健全性テレメトリとして公開する。詳細は下記「[E2EMon](#e2emon)」節を参照 |
+| RTE | Rte | ポートベース S/R API。複数 SW-C が同一シグナルを独立ポートで受信。E2E Transformer を持つ Read ポートは `Std_ReturnType` ではなく `Rte_IStatusType` を返し、E2E チェック結果（OK/ハードエラー/ソフトエラー）と Com タイムアウトを区別して SWC へ伝える |
 
 <a id="can-dataflow-diagram"></a>
 #### データフロー図
@@ -483,10 +519,10 @@ CAN ドライバ（Can / Can_Hw）から CanIf・PduR を経由して COM モジ
 
 ```
 RX（外部 → Arduino、上り）
-  MCP2515 → Can_Hw → Can → CanIf → PduR → Com
+  MCP2515 → Can_Hw → Can → CanIf → PduR → Com → E2EXf(E2E,E2EMon) → Rte
 
 TX（Arduino → 外部、下り）
-  Com → PduR → CanIf → Can → Can_Hw → MCP2515
+  Rte → E2EXf(E2E) → Com → PduR → CanIf → Can → Can_Hw → MCP2515
 ```
 
 以降、まず Tx/Rx 共通の CAN フレーム仕様を示し、続けて Tx 処理・Rx 処理をそれぞれ
@@ -2697,13 +2733,13 @@ Dem は故障情報を DTC として管理し、NvM 経由で EEPROM に永続�
 FiM は Dem が確定した DTC をもとにアプリ機能の実行許可を判定します。
 診断フレームはアプリデータ（0x100 / 0x110 / 0x200）とは独立した CAN ID（0x7E0 / 0x7E8）で通信します。
 
-| モジュール | 本プロジェクトでの役割 |
-|---|---|
-| CanTp | ISO 15765-2 のフレーム分割（FF/CF）と再組立。8 バイトを超える UDS 応答を実現 |
-| Dcm | UDS 診断サービス処理（SID 0x10 / 0x11 / 0x14 / 0x19 / 0x22 / 0x27 / 0x28 / 0x2E / 0x2F / 0x31 / 0x3E）。S3 タイマでセッションを自動失効。SID×セッション許可テーブルで 0x14/0x27/0x28/0x2E/0x2F/0x31 を extendedSession 限定とし、SecurityAccess (0x27) でシード・キー認証保護。0x2E は要求が7バイト超のため CanTp の複数フレーム要求受信を実機検証。0x2F (IOControl) は Rte 層でランプ出力を ASW から奪って強制する診断専用オーバーライド。0x28 (CommunicationControl) は Com/Nm の送受信を個別に有効/無効化する |
-| Dem | 診断イベントを DTC として管理。カウンタベースのデバウンスで確定し、NvM 経由で EEPROM に永続化。デバウンス確定 FAILED 時に FreezeFrame（RAM のみ）を記録し、ExtendedData（故障確定回数、NvM 永続化）を+1。クリーンな操作サイクルを1回経過すると PendingDTC を自動解除し、再故障せず複数回の操作サイクルを経ると経年回復（Aging）で CONFIRMED を自動解除 |
-| FiM | Dem が確定（CONFIRMED）した DTC をもとにアプリ機能（FID）の実行許可を判定。100ms 周期で再評価し、結果を ASW へ `Rte_Call_FiM_GetFunctionPermission` で公開 |
-| NvM | EEPROM の読み書きを抽象化。Dem は EEPROM アドレスを直接知らない。各ブロックに CRC8 を付加して破損を検出し、不一致時は ROM デフォルト値（NvM_RestoreBlockDefaults）へ自動復元。ブロックごとに冗長化（`NvMBlockManagementType=NVM_BLOCK_REDUNDANT` 相当、`Redundant` フラグ）を選択でき、片面が破損してももう片面から自己修復できる（DEM_EXTENDED で使用）。実際の物理バイト書き込みは MemIf 経由で Fee へ委譲し、NvM 自身はブロック・CRC・冗長化という「意味」のレイヤーのみを扱う（1バイトずつの非同期書き込み進行は Fee の責務） |
+| 層 | モジュール | 本プロジェクトでの役割 |
+|---|---|---|
+| BSW | CanTp | ISO 15765-2 のフレーム分割（FF/CF）と再組立。8 バイトを超える UDS 応答を実現 |
+|  | Dcm | UDS 診断サービス処理（SID 0x10 / 0x11 / 0x14 / 0x19 / 0x22 / 0x27 / 0x28 / 0x2E / 0x2F / 0x31 / 0x3E）。S3 タイマでセッションを自動失効。SID×セッション許可テーブルで 0x14/0x27/0x28/0x2E/0x2F/0x31 を extendedSession 限定とし、SecurityAccess (0x27) でシード・キー認証保護。0x2E は要求が7バイト超のため CanTp の複数フレーム要求受信を実機検証。0x2F (IOControl) は Rte 層でランプ出力を ASW から奪って強制する診断専用オーバーライド。0x28 (CommunicationControl) は Com/Nm の送受信を個別に有効/無効化する |
+|  | Dem | 診断イベントを DTC として管理。カウンタベースのデバウンスで確定し、NvM 経由で EEPROM に永続化。デバウンス確定 FAILED 時に FreezeFrame（RAM のみ）を記録し、ExtendedData（故障確定回数、NvM 永続化）を+1。クリーンな操作サイクルを1回経過すると PendingDTC を自動解除し、再故障せず複数回の操作サイクルを経ると経年回復（Aging）で CONFIRMED を自動解除 |
+|  | FiM | Dem が確定（CONFIRMED）した DTC をもとにアプリ機能（FID）の実行許可を判定。100ms 周期で再評価し、結果を ASW へ `Rte_Call_FiM_GetFunctionPermission` で公開 |
+|  | NvM | EEPROM の読み書きを抽象化。Dem は EEPROM アドレスを直接知らない。各ブロックに CRC8 を付加して破損を検出し、不一致時は ROM デフォルト値（NvM_RestoreBlockDefaults）へ自動復元。ブロックごとに冗長化（`NvMBlockManagementType=NVM_BLOCK_REDUNDANT` 相当、`Redundant` フラグ）を選択でき、片面が破損してももう片面から自己修復できる（DEM_EXTENDED で使用）。実際の物理バイト書き込みは MemIf 経由で Fee へ委譲し、NvM 自身はブロック・CRC・冗長化という「意味」のレイヤーのみを扱う（1バイトずつの非同期書き込み進行は Fee の責務） |
 
 <a id="uds-diag-comm"></a>
 #### UDS 診断通信（ISO 14229-1 / ISO 15765-2）
@@ -4208,14 +4244,14 @@ if (Rte_Call_FiM_GetFunctionPermission(FIM_FID_BUTTON_ACK, &ackPermitted) != E_O
 ECU の起動・シャットダウンのライフサイクルと、タスク制御・ソフトウェア監視を担うモジュール群です。
 EcuM が状態遷移を決定し、BswM がその状態に応じたタスクの有効・無効を制御し、WdgM がタスク内部の動作を監視します。
 
-| モジュール | 本プロジェクトでの役割 |
-|---|---|
-| EcuM | ECU ライフサイクルを STARTUP → RUN → POST_RUN → SHUTDOWN の状態マシンで管理。`EcuM_RequestRUN` / `EcuM_ReleaseRUN` で RUN フェーズを調停。SHUTDOWN は CAN バスのウェイクアップにより常に RUN へ復帰可能（実機リセットが必要な終端状態は存在しない） |
-| BswM | EcuM / ComM のモード変化をルールテーブルで受け取り `Os_SetTaskActive()` でタスクを有効・無効化するルールエンジン。POST_RUN 中はアプリタスクのみ停止し BSW タスクは継続。`BswMPduGroupSwitch`（[SWS_BswM_00273]）相当のアクションも持ち、RUN/POST_RUN で Com の「テレメトリ」I-PDU Group（E2EHealthStatus）を起動/停止する。`BswMLogicalExpression`（[SWS_BswM_00808]）の簡略版として AND/OR の複合条件ルールにも対応し、「EcuM==RUN AND ComM==FULL_COMMUNICATION」でテレメトリ開始、「ComM==SILENT_COMMUNICATION OR ComM==NO_COMMUNICATION」で停止する |
-| WdgM | Supervised Entity の Alive Supervision（呼び出し回数を6000msごとに評価）・Logical Supervision（チェックポイント順序）・Deadline Supervision（チェックポイント間の経過時間）を独立したステータスで管理。判定は6000ms周期、実HWウォッチドッグへのリフレッシュは別途1000ms周期（WdgM_TriggerHwWatchdog）で行い、異常時はリフレッシュを止めて実際にMCUをリセットする。実際の HW 有効/無効/リフレッシュは WdgIf 経由で Wdg（下位ドライバ）に委譲し、WdgM 自身は判定ロジックのみを持つ |
-| ComM | CAN バスの通信モード（NO_COM / SILENT_COM / FULL_COM）を管理し CanSM へ要求。`ComM_BusSMIndication` で EcuM の RUN 要求を操作。複数ユーザ（App_EngineManager=COMM_USER_0, Dcm=COMM_USER_1）の要求を最も通信レベルの高いモードへ集約する調停ロジックを持つ。両ユーザが NO_COM を要求したときのみ実際にボランタリスリープへ落ちる |
-| CanSM | Bus-Off 検出直後（回復試行の前）に `ComM_BusSMIndication(SILENT_COMMUNICATION)` を呼び、ComM のチャネル状態が回復完了まで FULL_COM のまま古い情報として残ることを防ぐ（SWS_CanSM_00521。SILENT_COM は EcuM の RUN を維持するため回復中も RUN は落ちない）。受け付ける Bus-Off はコントローラが物理的に稼働中の状態（FULL_COM、および Nm の Bus-Sleep Mode 到達待ちで HW が稼働継続する NO_COM_PENDING_SLEEP）のみで、回復シーケンスは L1/L2 バックオフ（SWS_CanSM_00514/00515 準拠）で実施し、試行回数が `CANSM_BUSOFF_L1_TO_L2_COUNT` を超えるまでは短い周期（L1）でリトライし、超えたら Dem へ DTC を報告（limit=1 のため即座に確定）した上で長い周期（L2）へ切り替えて無期限にリトライを継続する（回復を諦めて停止する状態は存在しない）。再起動試行のたびに、Bus-Off 発生時点の状態（FULL_COM か NO_COM_PENDING_SLEEP か）へ復帰させる（`CanSM_BusOffFromPendingSleep`、後者の場合は誤って FULL_COM へ戻さない）。ComM の NO_COM 要求によるボランタリスリープでは即座にはスリープせず、Nm（CanNm 状態機械）が Bus-Sleep Mode へ到達した通知（`CanSM_NmBusSleepMode()`）を受けてから `Can_SetControllerMode(CAN_T_SLEEP)` で実 HW を実際にスリープさせる（協調スリープ、詳細は Nm セクション参照）。`CanSM_ControllerWakeup()` による復帰経路を持ち、復帰は即座に確定せず、ウェイクアップ検証（Wakeup Validation Protocol 相当）により有効な CAN フレーム受信を確認してから FULL_COM へ確定する |
-| Nm | CanNm 状態機械（Network Mode の Repeat Message/Normal Operation/Ready Sleep の3内部状態、Prepare Bus-Sleep Mode、Bus-Sleep Mode）を実装。`ComM_BusSMIndication()` が呼ぶ `Nm_NetworkRequest()`/`Nm_NetworkRelease()` を契機に自律的に状態遷移し、NM-Timeout/Repeat Message/Wait-Bus-Sleep の3タイマで駆動する。Bus-Sleep Mode へ到達すると `CanSM_NmBusSleepMode()` を呼び、CanSM はこの通知を受けて初めて CAN コントローラを物理スリープさせる（協調スリープ。他ノードの NM フレーム受信が続く間は実際にはスリープしない）。PduR/Com を経由せず `CanIf_Transmit`/`CanIf_RxIndication` を直接やり取りする点が実車の CanNm と同じ。シグナル値を運ばないため E2E 保護は付与しない |
+| 層 | モジュール | 本プロジェクトでの役割 |
+|---|---|---|
+| BSW | EcuM | ECU ライフサイクルを STARTUP → RUN → POST_RUN → SHUTDOWN の状態マシンで管理。`EcuM_RequestRUN` / `EcuM_ReleaseRUN` で RUN フェーズを調停。SHUTDOWN は CAN バスのウェイクアップにより常に RUN へ復帰可能（実機リセットが必要な終端状態は存在しない） |
+|  | BswM | EcuM / ComM のモード変化をルールテーブルで受け取り `Os_SetTaskActive()` でタスクを有効・無効化するルールエンジン。POST_RUN 中はアプリタスクのみ停止し BSW タスクは継続。`BswMPduGroupSwitch`（[SWS_BswM_00273]）相当のアクションも持ち、RUN/POST_RUN で Com の「テレメトリ」I-PDU Group（E2EHealthStatus）を起動/停止する。`BswMLogicalExpression`（[SWS_BswM_00808]）の簡略版として AND/OR の複合条件ルールにも対応し、「EcuM==RUN AND ComM==FULL_COMMUNICATION」でテレメトリ開始、「ComM==SILENT_COMMUNICATION OR ComM==NO_COMMUNICATION」で停止する |
+|  | WdgM | Supervised Entity の Alive Supervision（呼び出し回数を6000msごとに評価）・Logical Supervision（チェックポイント順序）・Deadline Supervision（チェックポイント間の経過時間）を独立したステータスで管理。判定は6000ms周期、実HWウォッチドッグへのリフレッシュは別途1000ms周期（WdgM_TriggerHwWatchdog）で行い、異常時はリフレッシュを止めて実際にMCUをリセットする。実際の HW 有効/無効/リフレッシュは WdgIf 経由で Wdg（下位ドライバ）に委譲し、WdgM 自身は判定ロジックのみを持つ |
+|  | ComM | CAN バスの通信モード（NO_COM / SILENT_COM / FULL_COM）を管理し CanSM へ要求。`ComM_BusSMIndication` で EcuM の RUN 要求を操作。複数ユーザ（App_EngineManager=COMM_USER_0, Dcm=COMM_USER_1）の要求を最も通信レベルの高いモードへ集約する調停ロジックを持つ。両ユーザが NO_COM を要求したときのみ実際にボランタリスリープへ落ちる |
+|  | CanSM | Bus-Off 検出直後（回復試行の前）に `ComM_BusSMIndication(SILENT_COMMUNICATION)` を呼び、ComM のチャネル状態が回復完了まで FULL_COM のまま古い情報として残ることを防ぐ（SWS_CanSM_00521。SILENT_COM は EcuM の RUN を維持するため回復中も RUN は落ちない）。受け付ける Bus-Off はコントローラが物理的に稼働中の状態（FULL_COM、および Nm の Bus-Sleep Mode 到達待ちで HW が稼働継続する NO_COM_PENDING_SLEEP）のみで、回復シーケンスは L1/L2 バックオフ（SWS_CanSM_00514/00515 準拠）で実施し、試行回数が `CANSM_BUSOFF_L1_TO_L2_COUNT` を超えるまでは短い周期（L1）でリトライし、超えたら Dem へ DTC を報告（limit=1 のため即座に確定）した上で長い周期（L2）へ切り替えて無期限にリトライを継続する（回復を諦めて停止する状態は存在しない）。再起動試行のたびに、Bus-Off 発生時点の状態（FULL_COM か NO_COM_PENDING_SLEEP か）へ復帰させる（`CanSM_BusOffFromPendingSleep`、後者の場合は誤って FULL_COM へ戻さない）。ComM の NO_COM 要求によるボランタリスリープでは即座にはスリープせず、Nm（CanNm 状態機械）が Bus-Sleep Mode へ到達した通知（`CanSM_NmBusSleepMode()`）を受けてから `Can_SetControllerMode(CAN_T_SLEEP)` で実 HW を実際にスリープさせる（協調スリープ、詳細は Nm セクション参照）。`CanSM_ControllerWakeup()` による復帰経路を持ち、復帰は即座に確定せず、ウェイクアップ検証（Wakeup Validation Protocol 相当）により有効な CAN フレーム受信を確認してから FULL_COM へ確定する |
+|  | Nm | CanNm 状態機械（Network Mode の Repeat Message/Normal Operation/Ready Sleep の3内部状態、Prepare Bus-Sleep Mode、Bus-Sleep Mode）を実装。`ComM_BusSMIndication()` が呼ぶ `Nm_NetworkRequest()`/`Nm_NetworkRelease()` を契機に自律的に状態遷移し、NM-Timeout/Repeat Message/Wait-Bus-Sleep の3タイマで駆動する。Bus-Sleep Mode へ到達すると `CanSM_NmBusSleepMode()` を呼び、CanSM はこの通知を受けて初めて CAN コントローラを物理スリープさせる（協調スリープ。他ノードの NM フレーム受信が続く間は実際にはスリープしない）。PduR/Com を経由せず `CanIf_Transmit`/`CanIf_RxIndication` を直接やり取りする点が実車の CanNm と同じ。シグナル値を運ばないため E2E 保護は付与しない |
 
 <a id="ecum"></a>
 #### EcuM（ECU ステートマネージャ）
@@ -5429,42 +5465,6 @@ NM-Timeout Timer が再起動される（実質的にスリープが延期され
 「他ノードがまだ通信中の間は実際にはスリープしない」という協調スリープの本質を
 実機で確認できます。
 
-### その他
-
-同じ順序で、各モジュールの「本プロジェクトでの役割」を以下にまとめます。
-
-| モジュール | 本プロジェクトでの役割 |
-|---|---|
-| App_EngineManager | エンジン状態遷移（OFF / STARTING / RUNNING / FAULT）・DTC 登録・CAN TX 要求。OFF 継続を検知して ComM へ通信不要（NO_COM）を要求するボランタリスリープ判断も担う |
-| App_WarningIndicator | 3 LED 独立制御（D6=RUNNING / D7=FAULT 点滅 / D8=ABS） |
-| Rte | ポートベース S/R API。複数 SW-C が同一シグナルを独立ポートで受信。E2E Transformer を持つ Read ポートは `Std_ReturnType` ではなく `Rte_IStatusType` を返し、E2E チェック結果（OK/ハードエラー/ソフトエラー）と Com タイムアウトを区別して SWC へ伝える |
-| Os | タイムトリガスケジューラ。タスクごとに周期を設定し `Os_SchedulerStep()` で到来タスクを順次実行。時間源は Os 専用の Gpt チャネル（`GPT_CHANNEL_1`、詳細は [Os のスケジューラティック](#os-のスケジューラティックgpt-駆動) 参照） |
-| CryIf | Csm と Crypto Driver の間のルーティング層。`CryIf_ProcessJob()`（実 AUTOSAR は複数 Crypto Driver Object への振り分けを担う）は、本プロジェクトが Crypto Driver を1個しか持たないため実質パススルーで `Crypto_ProcessJob()` へ委譲する（CanIf が単一 CAN コントローラに固定しているのと同じ簡略化） |
-| Crypto | Csm/CryIf/Crypto レイヤの最下層。鍵テーブル（`Crypto_PBCfg.c`）と実際の暗号計算（AES-128-CMAC、自前実装）を保持する唯一のモジュール。`Crypto_ProcessJob()` がジョブの `service`（`CRYPTO_MACGENERATE`/`CRYPTO_MACVERIFY`）に応じて MAC を生成、または定数時間比較で検証する（MAC 検証のタイミングサイドチャネル対策はここに実装。旧実装では SecOC.c 内にあったロジックを責務として正しい層へ移設した） |
-| Csm | SecOC が唯一直接呼ぶ暗号スタックの入口。`Csm_MacGenerate()`/`Csm_MacVerify()` が `jobId`（`Csm_PBCfg.c` の `Csm_JobConfigData`）から実行すべきプリミティブ種別と鍵 ID を解決し、`Crypto_JobType` ジョブを組み立てて `CryIf_ProcessJob()` へ委譲する。`Csm_MacVerify()` の `macLength` はビット単位（[SWS_Csm_01050]）、`Csm_MacGenerate()` の `macLengthPtr` はバイト単位（[SWS_Csm_00982]）という実仕様の非対称性を踏襲し、Csm 内でビット→バイト変換する。`Csm_KeyElementSet()`/`Csm_KeySetValid()`（KeyM が呼ぶ鍵操作 API）は CryIf へのパススルー |
-| Det | `DET_LOG*` マクロ経由でタイムスタンプ付きログを Serial に出力するデバッグ用ブリッジ。加えて標準準拠の `Det_ReportError()`（[SWS_Det_00009]）も実装。詳細は下記「[DET 準拠](#det-compliance)」節を参照 |
-| E2E | AUTOSAR E2E Profile 01 保護の実処理。DataID・CRC8 (SAE J1850)・4bit カウンタの 3 要素で、`E2E_P01Check` はデータ破壊・フレーム脱落・重複・誤ルーティングを検出、`E2E_P01Protect` は Counter・CRC8 を付加。Com/Rte のどちらにも依存しない純粋な検証/付与ライブラリ |
-| E2EXf | Com と E2E の間を仲介する統合層。RX は `E2E_P01Check` でデータ破壊・フレーム脱落・重複・誤ルーティングを検出して Dem へ報告、TX は `E2E_P01Protect` で Counter・CRC8 を付加する。Com 自身はこの層の存在を知らない。詳細は下記「[E2E P01 保護](#e2e-p01)」節を参照 |
-| E2EMon | 標準 AUTOSAR モジュールには存在しない、実務でよく見る「独自 CDD」パターンの例。EngineInfo/AbsInfo の E2E 検証結果を購読し、ネットワーク健全性テレメトリとして公開する。詳細は下記「[E2EMon](#e2emon)」節を参照 |
-| Fee | フラッシュエミュレーション EEPROM（Renesas RA `EEPROM.h`）向けの下位ドライバ。`Fee_Write()` は物理アドレス・データ・長さを受け取ってジョブを開始するだけで即座に返り、実際の書き込みは `Fee_MainFunction()` が 1 回の呼び出しにつき 1 バイトだけ進める（消去・書き込みサイクルによるブロッキングで WdgM の Deadline Supervision を巻き込んだ実機不具合への対策）。MemIf 経由でのみ呼ばれ、NvM から直接見えることはない |
-| Gpt | HW タイマ（Renesas RA FspTimer）による周期割り込み駆動の General Purpose Timer Driver。目標時間到達判定は HW コンペアマッチではなく `Gpt_OnTick()` 内のソフトウェア比較で行い（`GetTimeElapsed`/`GetTimeRemaining` を単純な整数演算で正確に実現するため）、`Gpt_EnableNotification` された通知関数は ISR コンテキストから直接呼ばれる。2 チャネル構成: Channel 0 は `App_GptDemo` の動作確認用（1Hz Notification）、Channel 1 は Os 専用のスケジューラティック（Notification なし、`Os` が `Gpt_GetTimeElapsed()` をポーリング。[Os のスケジューラティック](#os-のスケジューラティックgpt-駆動) 参照）。`Gpt_SetMode`/`Gpt_EnableWakeup`/`Gpt_DisableWakeup`/`Gpt_CheckWakeup`/`Gpt_GetPredefTimerValue` は、EcuM が SLEEP モードを持たないため仕様上のプリコンパイル設定（`GptWakeupFunctionalityApi` 等）に沿って未実装 |
-| KeyM | 鍵更新セッション（`KeyM_Start`→`KeyM_Update`→`KeyM_Finalize`）を管理する Key Manager。Dcm の WriteDataByIdentifier（DID 0x0108 CryptoKeyUpdate、詳細は下記「[UDS 診断通信](#uds-diag-comm)」節参照）が模擬鍵マスターとして駆動する。Certificate submodule・SHE 形式等は対応除外（詳細は下記「[明示する簡略化](#secoc-simplifications)」節参照）。ModuleId は Release 4.3.1 の AUTOSAR_TR_BSWModuleList.pdf に KeyM 自体が未掲載のため未検証の暫定値 |
-| Mcu | `main.cpp` の `setup()` 冒頭（`Serial.begin()` より前）で `Mcu_Init()` を呼び、起動直後のリセット原因（Watchdog/BrownOut/External/PowerOn）を一度だけ読み取ってキャッシュする（Mcu_Hw のレジスタ読み取りは 1 起動につき 1 回しか呼べないため）。`Mcu_InitClock`/`Mcu_SetMode`/`Mcu_InitRamSection`/`Mcu_PerformReset` 等は Arduino フレームワークがクロック初期化を担い複数電源モードもモデル化しないため未実装。`Mcu_GetResetReason()`（単一の `Mcu_ResetType`）に加え、複数要因の同時検出を診断できるよう `Mcu_GetResetRawValue()`（4 フラグをビット詰めした本プロジェクト独自の生値）も提供する |
-| MemIf | NvM（上位）と Fee（下位ドライバ）の間のディスパッチ層。実 AUTOSAR は Device 引数で複数の Fee/Ea インスタンスへ振り分けるが、本プロジェクトは下位ドライバが Fee 1 個のみのため実質パススルー（CryIf → Crypto の関係と同様）。`MemIf_Init`/`MemIf_MainFunction` は実 AUTOSAR の SWS_MemIf には存在しない（[SWS_MemIf_00019] により、ドライバが1個の構成では EcuM/Os が Fee_Init/Fee_MainFunction を直接呼んでよいと規定されている）本プロジェクト独自の拡張で、プラットフォーム分岐をこの層に閉じ込めるために追加した |
-| SchM | 排他エリアマクロ（`SchM_Enter` / `SchM_Exit`）で共有リソースを保護。実体は `SchM_Hw`（`noInterrupts()`/`interrupts()`）で、Can の割り込みペンディングフラグ、および Gpt のチャネル状態機械（`Gpt_ChannelState`/`Gpt_ElapsedTicks`、実 HW 割り込みとメインループの両方から読み書きされる）を実際に保護する |
-| SecOC | メッセージ認証（AES-128-CMAC）とフレッシュネス管理によるリプレイ対策。E2E とは異なる軸（E2E=意図しない誤り検出、SecOC=意図的な改ざん・なりすまし検出）で、PduR のルーティング経路上に中間モジュールとして挟まる。詳細は下記「[SecOC](#secoc)」節を参照 |
-| Wdg | Renesas RA の実 HW ウォッチドッグ（IWDT、RA WDT ライブラリ経由）向け下位ドライバ。`Wdg_SetMode(WDGIF_FAST_MODE)` で 4000ms タイムアウトを有効化する。`Wdg_SetMode(WDGIF_OFF_MODE)` は常に `E_NOT_OK` を返す（IWDT は一度有効化すると無効化する手段がないため。実 AUTOSAR の拡張プロダクションエラー `WDG_E_DISABLE_REJECTED` に相当する状況）。WdgIf 経由でのみ呼ばれ、WdgM から直接見えることはない |
-| WdgIf | WdgM（上位）と Wdg（下位ドライバ）の間のディスパッチ層。実 AUTOSAR は Device 引数で複数の Wdg インスタンスへ振り分けるが、本プロジェクトは物理ウォッチドッグが Wdg 1 個のみのため実質パススルー（MemIf → Fee と同じ簡略化）。実 AUTOSAR の WdgIf に Init/MainFunction が存在しない（[SWS_WdgIf_00018] により、ドライバが1個の構成では WdgM が Wdg_Init() を直接呼んでよいと規定されている）点は MemIf と共通するが、WdgIf 自体には MemIf のような非標準の Init/MainFunction 拡張を追加していない（プラットフォーム分岐を隠す必要がないため） |
-| Can_Hw | MCP2515 / mcp_can C++ ラッパー（RX 割り込み登録 `Can_Hw_AttachRxIsr` を含む） |
-| Dio_Hw | Arduino `digitalWrite` / `digitalRead` ラッパー |
-| Port_Hw | Arduino `pinMode` ラッパー |
-| Adc_Hw | Arduino `analogRead` ラッパー |
-| SchM_Hw | Arduino `noInterrupts()`/`interrupts()` ラッパー |
-| Mcu_Hw | リセット要因の読み取り（Renesas RA RSTSR0-1）・起動時ウォッチドッグ無効化 |
-| Fee_Hw | フラッシュエミュレーション EEPROM 読み書き（Renesas RA `EEPROM` ライブラリ）ラッパー。Fee.c と Fee_Hw.cpp 以外からはインクルードしない内部境界 |
-| Wdg_Hw | 実 HW ウォッチドッグの Enable / Disable / Refresh ラッパー。Wdg.c と Wdg_Hw.cpp 以外からはインクルードしない内部境界 |
-| Gpt_Hw | Renesas RA `FspTimer` ラッパー。`FspTimer::get_available_timer()` で AGT/GPT の空きチャネルを実行時に自動選択し、`setup_overflow_irq()` で周期割り込みを有効化する。Gpt.c と Gpt_Hw.cpp 以外からはインクルードしない内部境界 |
-
 ##### ログ例（協調スリープにより物理スリープが延期される様子）
 
 ```
@@ -5497,12 +5497,12 @@ SW-C はピン番号を直接知りません。RTE の Client/Server ポート�
 IoHwAb が Dio / Adc チャネルへ変換します。ピン方向の初期設定は Port が担い、Dio は値の読み書きのみ、
 Adc はアナログ入力の読み取りのみを行います。
 
-| モジュール | 本プロジェクトでの役割 |
-|---|---|
-| IoHwAb | Dio チャネル番号を隠蔽し SW-C に論理的な LED / ボタン / ADC API を提供。10ms 周期でデバウンス（40ms 確定）・ボタン固着検出・ADC 電圧低下を Dem 報告 |
-| Dio | `Dio_WriteChannel` / `Dio_ReadChannel` で GPIO 値を読み書きする MCAL |
-| Port | `Port_Init` でピン方向（OUTPUT / INPUT_PULLUP）を設定する MCAL |
-| Adc | `Adc_ReadChannel` で 10-bit アナログ生値（0–1023）を読み取る MCAL |
+| 層 | モジュール | 本プロジェクトでの役割 |
+|---|---|---|
+| BSW | IoHwAb | Dio チャネル番号を隠蔽し SW-C に論理的な LED / ボタン / ADC API を提供。10ms 周期でデバウンス（40ms 確定）・ボタン固着検出・ADC 電圧低下を Dem 報告 |
+|  | Dio | `Dio_WriteChannel` / `Dio_ReadChannel` で GPIO 値を読み書きする MCAL |
+|  | Port | `Port_Init` でピン方向（OUTPUT / INPUT_PULLUP）を設定する MCAL |
+|  | Adc | `Adc_ReadChannel` で 10-bit アナログ生値（0–1023）を読み取る MCAL |
 
 ```
 SW-C (App_EngineManager / App_WarningIndicator)
@@ -5640,6 +5640,11 @@ App_EngineManager_Run が読み取る:
 ASW（Application Software）層の SW-C（Software Component）2 つで構成されます。
 各 SW-C は RTE ポート経由でシグナルを受け取り、IoHwAb ポート経由で LED / ボタンを操作します。
 EcuM の POST_RUN 遷移時に Rte_Engine タスクと Rte_Warning タスクが停止し、SW-C も停止します。
+
+| 層 | モジュール | 本プロジェクトでの役割 |
+|---|---|---|
+| ASW | App_EngineManager | エンジン状態遷移（OFF / STARTING / RUNNING / FAULT）・DTC 登録・CAN TX 要求。OFF 継続を検知して ComM へ通信不要（NO_COM）を要求するボランタリスリープ判断も担う |
+|  | App_WarningIndicator | 3 LED 独立制御（D6=RUNNING / D7=FAULT 点滅 / D8=ABS） |
 
 <a id="engine-state-machine"></a>
 #### エンジン状態遷移
