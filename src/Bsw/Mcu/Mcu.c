@@ -41,7 +41,7 @@ void Mcu_Init(const Mcu_ConfigType* ConfigPtr)
     /* 本関数は Serial.begin() より前に呼ばれる設計のため（Mcu.h 冒頭の
      * コメント参照）、DET_LOGx/Det_ReportError は一切使わない。どちらも
      * 内部で Serial.print()/println() を無条件に（ログレベルによる抑制も
-     * 素通りして）呼ぶため（Det.cpp 参照）、begin() 前の Serial への
+     * 素通りして）呼ぶため（Det_Hw.cpp 参照）、begin() 前の Serial への
      * 呼び出しが Renesas RA の USB-CDC 実装でどう振る舞うか未検証であり、
      * 最悪の場合ここでハングすると、この直後に行うはずの
      * Mcu_Hw_DisableWatchdogAtBoot() に到達できず、本関数が本来防ぐべき
