@@ -352,8 +352,9 @@ Std_ReturnType EcuM_ReleaseRUN(EcuM_UserType user)
          * 無効化する。POST_RUN 中はタスクが意図的に停止しており、
          * 両エンティティとも Alive Supervision は必ず FAILED になるため、
          * SHUTDOWN 遷移（最大 ECUM_POST_RUN_TIMEOUT_MS 後）を待つと
-         * HW ウォッチドッグのタイムアウト（8000ms）より先に意図しないリセットが
-         * 発生し得る。POST_RUN への移行そのものを安全な無効化ポイントとする。 */
+         * HW ウォッチドッグのタイムアウト（WDGM_HW_WATCHDOG_TIMEOUT_MS=4000ms）
+         * より先に意図しないリセットが発生し得る。POST_RUN への移行そのものを
+         * 安全な無効化ポイントとする。 */
         WdgM_DisableHwWatchdog();
         BswM_EcuM_CurrentState(ECUM_STATE_POST_RUN);  /* Rule 1: アプリタスク無効化 */
     }
