@@ -70,7 +70,6 @@ ARXML や設定ツールは使用せず、コードで階層構造・型定義�
 - [シリアルモニタ出力例](#serial-log-example)
 - [設計上の注意点](#design-notes)
   - [C / C++ 言語境界](#c-cpp-boundary)
-  - [AVR メモリ最適化](#avr-memory)
   - [ログレベルの抑制 (Det_Cfg.h)](#log-level)
   - [固定長バッファのサイズは設定定数から計算する](#fixed-buffer-size)
   - [RX/TX で対称な入力検証](#rx-tx-symmetry)
@@ -361,7 +360,7 @@ Basic Software Modules」表）。詳細は「CAN 通信スタック」セクシ
 │   │   │   └── Dem.c             # DTC ライフサイクル・デバウンス・FreezeFrame 記録・NvM 永続化
 │   │   ├── Det/                  # Default Error Tracer（Serial ブリッジ）
 │   │   │   ├── Det.h             # ログマクロ定義（DET_LOGI/W/E/D）
-│   │   │   └── Det.cpp           # Arduino Serial 出力実装（Arduino API を呼ぶ唯一の場所）
+│   │   │   └── Det.c             # AUTOSAR Det モジュール（純粋 C、レベル判定・メッセージ整形。Det_Hw へ委譲。境界は src/Hal/Det_Hw.h）
 │   │   ├── Dio/                  # デジタル I/O 値読み書き（MCAL・方向設定は Port が担う）
 │   │   │   ├── Dio_Cfg.h         # チャネル ID 定義（D6=RUNNING / D7=FAULT / D8=ABS / D9=ボタン）
 │   │   │   ├── Dio.h             # 公開インタフェース（Dio_WriteChannel / Dio_ReadChannel）
@@ -445,6 +444,7 @@ Basic Software Modules」表）。詳細は「CAN 通信スタック」セクシ
 │       ├── Dio_Hw.h / Dio_Hw.cpp        # Arduino digitalWrite / digitalRead ラッパー
 │       ├── Port_Hw.h / Port_Hw.cpp      # Arduino pinMode ラッパー
 │       ├── Adc_Hw.h / Adc_Hw.cpp        # Arduino analogRead ラッパー
+│       ├── Det_Hw.h / Det_Hw.cpp        # Arduino Serial 出力実装（Arduino API を呼ぶ唯一の場所）。Det.c と Det_Hw.cpp 以外からインクルードしない内部境界
 │       ├── Mcu_Hw.h / Mcu_Hw.c          # リセット要因読み取り（RA RSTSR0-1）・起動時 WDT 無効化
 │       ├── Fee_Hw.h / Fee_Hw.cpp        # フラッシュエミュレーション EEPROM 読み書き（RA EEPROM.h）。Fee.c と Fee_Hw.cpp 以外からインクルードしない内部境界
 │       ├── Wdg_Hw.h / Wdg_Hw.cpp        # 実 HW ウォッチドッグ Enable / Disable / Refresh(RA WDTライブラリ)。Wdg.c と Wdg_Hw.cpp 以外からインクルードしない内部境界
@@ -1648,7 +1648,7 @@ if (config == NULL)
 }
 ```
 
-`Det_ReportError()` 自体は `Det.h`/`Det.cpp` に新規実装し、`DET_LOGE` とは
+`Det_ReportError()` 自体は `Det.h`/`Det.c` に新規実装し、`DET_LOGE` とは
 独立したチャネルとして `[<ms>ms] DET M=<ModuleId> I=<InstanceId> API=0x<ApiId>
 ERR=0x<ErrorId>` という 1 行を出力します（本実装は実 AUTOSAR のコールアウト
 フック登録・実行停止等の高度な機能は持たない学習用の簡略実装）。
@@ -5789,7 +5789,7 @@ LEVEL は ERROR / WARN  / INFO  / DEBUG の 5 文字固定幅で列が揃いま�
 | ファイル | 言語 | 理由 |
 |---------|------|------|
 | `Can_Hw.cpp` | C++ | MCP_CAN クラスのインスタンス化に placement new が必要 |
-| `Det.cpp` | C++ | Arduino の `Serial` API を使用 |
+| `Det_Hw.cpp` | C++ | Arduino の `Serial` API を使用 |
 | `Dio_Hw.cpp` | C++ | Arduino の `digitalWrite` API を使用 |
 | `Port_Hw.cpp` | C++ | Arduino の `pinMode` API を使用 |
 | `Wdg_Hw.cpp` | C++ | Renesas RA の WDT ライブラリ（`WDTimer` クラス、グローバルインスタンス `WDT`）を使用 |
@@ -5797,20 +5797,7 @@ LEVEL は ERROR / WARN  / INFO  / DEBUG の 5 文字固定幅で列が揃いま�
 
 C ファイルから C++ 関数を呼ぶすべてのヘッダに `extern "C"` ガードを設けています。
 
-<a id="avr-memory"></a>
-### AVR メモリ最適化
-
-Arduino UNO の SRAM は 2 KB しかないため、文字列リテラルを Flash に配置します。
-`DET_LOG*` マクロは `PSTR()` で文字列を Flash 領域に置き、`vsnprintf_P` で展開します。
-
-```c
-// TAG・フォーマット文字列は Flash に配置される（SRAM を消費しない）
-#define TAG "AppEng"
-DET_LOGI(TAG, "STARTING->RUNNING");
-DET_LOGW(TAG, "RUNNING->FAULT overheat=%u", (unsigned)temp);
-```
-
-`Det.cpp` が唯一 `Serial.print()` を呼ぶファイルです。他の `.c` ファイルは `DET_LOG*` マクロのみを使います。
+`Det_Hw.cpp` が唯一 `Serial.print()` を呼ぶファイルです。他の `.c` ファイルは `DET_LOG*` マクロのみを使います。
 
 <a id="log-level"></a>
 ### ログレベルの抑制 (Det_Cfg.h)

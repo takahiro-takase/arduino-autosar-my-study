@@ -2,7 +2,7 @@
  * \file    Port_Hw.cpp
  * \brief   Port ハードウェア依存層 実装 (Arduino GPIO ラッパー)
  * \details Arduino の pinMode を直接呼び出す唯一のファイル（ポート方向設定）。
- *          Det.cpp / Can_Hw.cpp / Dio_Hw.cpp と同じ方針で
+ *          Det_Hw.cpp / Can_Hw.cpp / Dio_Hw.cpp と同じ方針で
  *          C/C++ 境界を一箇所に集約する。
  *
  * \copyright  Copyright (c) 2025 T_T

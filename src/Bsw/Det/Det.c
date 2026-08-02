@@ -1,9 +1,9 @@
 /**
- * \file    Det.cpp
- * \brief   Default Error Tracer 実装 (Arduino Serial 出力)
+ * \file    Det.c
+ * \brief   Default Error Tracer 実装 (ログレベル判定・メッセージ整形)
  *
- * \details Arduino API を呼ぶ唯一の場所。BSW の .c ファイルは
- *          Arduino API を直接参照しない。
+ * \details 出力そのもの (Arduino Serial) は Hal/Det_Hw.cpp に委譲し、本ファイルは
+ *          Arduino API を一切参照しない（詳細は Det_Hw.h 参照）。
  *
  *          出力フォーマット:
  *            [<ms>ms] LEVEL TAG/func: message\r\n
@@ -15,22 +15,10 @@
  * \note    本ファイルは AUTOSAR 4.3.1 仕様を参考にした学習用実装です。
  *          AUTOSAR 認証済み実装ではなく、製品への適用は想定していません。
  */
-#include <Arduino.h>
 #include <stdarg.h>
+#include <stdio.h>
 #include "Det.h"
-
-extern unsigned long millis(void);
-
-static void Log_PrintLevel(LogLevel lvl)
-{
-    switch (lvl)
-    {
-        case LOG_E: Serial.print(F("ERROR")); break;
-        case LOG_W: Serial.print(F("WARN ")); break;
-        case LOG_I: Serial.print(F("INFO ")); break;
-        default:    Serial.print(F("DEBUG")); break;
-    }
-}
+#include "Det_Hw.h"
 
 void Log_Write(LogLevel lvl, PGM_P tag_P, PGM_P fmt_P, ...)
 {
@@ -45,14 +33,7 @@ void Log_Write(LogLevel lvl, PGM_P tag_P, PGM_P fmt_P, ...)
     vsnprintf(buf, sizeof(buf), fmt_P, args);
     va_end(args);
 
-    Serial.print('[');
-    Serial.print(millis());
-    Serial.print(F("ms] "));
-    Log_PrintLevel(lvl);
-    Serial.print(' ');
-    Serial.print((__FlashStringHelper*)tag_P);
-    Serial.print(F(": "));
-    Serial.println(buf);
+    Det_Hw_PrintLogLine(lvl, tag_P, buf);
 }
 
 Std_ReturnType Det_ReportError(uint16 ModuleId, uint8 InstanceId, uint8 ApiId, uint8 ErrorId)
@@ -62,16 +43,7 @@ Std_ReturnType Det_ReportError(uint16 ModuleId, uint8 InstanceId, uint8 ApiId, u
      * Serial の HEX 出力（Print::print(v, HEX)）をそのまま使う。0x0 のような
      * 1 桁出力になる場合があるが、ApiId/ErrorId は本プロジェクトの規模では
      * いずれも 1 バイト範囲に収まるため実用上の判読性は損なわない。 */
-    Serial.print('[');
-    Serial.print(millis());
-    Serial.print(F("ms] DET M="));
-    Serial.print(ModuleId);
-    Serial.print(F(" I="));
-    Serial.print(InstanceId);
-    Serial.print(F(" API=0x"));
-    Serial.print(ApiId, HEX);
-    Serial.print(F(" ERR=0x"));
-    Serial.println(ErrorId, HEX);
+    Det_Hw_PrintDetError(ModuleId, InstanceId, ApiId, ErrorId);
 
     /* [SWS_Det_00009]: 戻り値は互換性のためだけに存在し、実際には使われない。 */
     return E_OK;
