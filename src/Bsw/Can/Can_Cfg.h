@@ -34,9 +34,13 @@
 
 /** 開発エラーコード（SWS_Can_00104 Error Classification 表より、実際に使用する分のみ） */
 #define CAN_E_PARAM_POINTER     0x01U  /* [SWS_Can_00175 等]: NULL ポインタチェック */
+#define CAN_E_PARAM_DLC         0x03U  /* [SWS_Can_00218]: Can_Write の length が 8 バイト超過 */
 #define CAN_E_PARAM_CONTROLLER  0x04U  /* [SWS_Can_00199 等]: Controller が範囲外 */
 #define CAN_E_UNINIT            0x05U  /* [SWS_Can_00198 等]: Can_Init 前に呼ばれた */
 #define CAN_E_TRANSITION        0x06U  /* [SWS_Can_00200 等]: 不正な状態遷移要求 */
+
+/** クラシック CAN フレームの最大データ長（バイト）。SWS_Can_00218 参照。 */
+#define CAN_FRAME_MAX_DLC       8U
 
 /** ApiId（各関数の Doxygen \ServiceID タグと一致させること。値は SWS 8.x 章の
  *  「Service ID[hex]」記載を実測して確認済み） */

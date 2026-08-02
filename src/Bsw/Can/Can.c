@@ -345,15 +345,18 @@ Can_ReturnType Can_SetControllerMode(uint8 Controller, Can_StateTransitionType T
  *          フレーム内で上位層へ通知すると、将来 TxConfirmation 側に処理が
  *          足された際に Can_Write() を再帰呼び出しする経路になりうるため）。
  *          コントローラが CAN_CS_STARTED 状態でない場合は
- *          即座に CAN_NOT_OK を返す。
+ *          即座に CAN_NOT_OK を返す。PduInfo->length が 8 バイトを超える場合も
+ *          同様に拒否する（[SWS_Can_00218]、CAN_E_PARAM_DLC）。
  *
  * \param[in]  Hth      ハードウェア送信ハンドル。MCP2515 が TX バッファを
  *                      自動選択するため、この実装では使用しない。
  * \param[in]  PduInfo  送信する PDU へのポインタ。NULL 禁止。
  *                      使用メンバー: id, length, sdu, swPduHandle。
+ *                      length は 8 バイト以下であること。
  *
  * \retval  CAN_OK      フレームが受理され、送信に成功した。
- * \retval  CAN_NOT_OK  コントローラ未起動、または MCP2515 送信失敗。
+ * \retval  CAN_NOT_OK  コントローラ未起動、length が 8 バイト超過、
+ *                      または MCP2515 送信失敗。
  * \retval  CAN_BUSY    この実装では返さない（MCP2515 が自動リトライ）。
  *
  * \AUTOSARReq     {SWS_Can_00016}
@@ -375,6 +378,20 @@ Can_ReturnType Can_Write(Can_HwHandleType Hth, const Can_PduType* PduInfo)
     {
         DET_LOGE(TAG, "Write: NULL PduInfo/sdu");
         Det_ReportError(CAN_MODULE_ID, 0U, CAN_API_ID_WRITE, CAN_E_PARAM_POINTER);
+        return CAN_NOT_OK;
+    }
+
+    if (PduInfo->length > CAN_FRAME_MAX_DLC)
+    {
+        /* [SWS_Can_00218]: length が 8 バイトを超える場合は CAN_E_PARAM_DLC を
+         * 報告して拒否する。上位層（CanIf_Transmit）は設定 DLC（常に 8 以下）
+         * で既に SduLength を検証しているため、現状この分岐は到達しないはず
+         * だが、PduInfo->sdu は呼び出し元が length 分の実体を持つ保証がなく、
+         * ここでチェックせず Can_Hw_Send() まで渡すと sdu バッファのオーバー
+         * リードになりうる（2026-08 のスペック監査で指摘、安全網として追加）。 */
+        DET_LOGE(TAG, "Write E: length=%u exceeds %u bytes",
+                 (unsigned)PduInfo->length, (unsigned)CAN_FRAME_MAX_DLC);
+        Det_ReportError(CAN_MODULE_ID, 0U, CAN_API_ID_WRITE, CAN_E_PARAM_DLC);
         return CAN_NOT_OK;
     }
 
