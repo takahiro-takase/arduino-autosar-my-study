@@ -184,12 +184,12 @@ pio device monitor
 #### 層構造
 
 ```
-ASW ─── App_EngineManager / App_WarningIndicator
+ASW ─── App_EngineManager / App_WarningIndicator / App_GptDemo
 RTE ─── Rte（ポートベース S/R API + E2E Transformer 呼び出しグルー）
 OS  ─── Os（タイムトリガスケジューラ）
 BSW ─── EcuM / BswM / WdgM / WdgIf / Wdg / ComM / CanSM / Nm / E2EXf / E2E / Com / PduR / SecOC / Csm / CryIf / Crypto / KeyM / CanIf / Can
-        CanTp / Dcm / Dem / NvM / MemIf / Fee / IoHwAb / Dio / Port / Adc / SchM / Det / Mcu
-HAL ─── Can_Hw / Dio_Hw / Port_Hw / Adc_Hw / Mcu_Hw / Fee_Hw / Wdg_Hw（src/Hal/ に集約）
+        CanTp / Dcm / Dem / NvM / MemIf / Fee / IoHwAb / Dio / Port / Adc / SchM / Det / Mcu / Gpt
+HAL ─── Can_Hw / Dio_Hw / Port_Hw / Adc_Hw / Mcu_Hw / Fee_Hw / Wdg_Hw / Gpt_Hw（src/Hal/ に集約）
 ```
 
 各層は上位層のヘッダのみに依存し、下位層の実装詳細を知りません。
@@ -224,6 +224,7 @@ HAL ─── Can_Hw / Dio_Hw / Port_Hw / Adc_Hw / Mcu_Hw / Fee_Hw / Wdg_Hw（sr
 |  | EcuM | 10 | SWS_EcuStateManager | ECU ライフサイクルを STARTUP → RUN → POST_RUN → SHUTDOWN の状態マシンで管理。`EcuM_RequestRUN` / `EcuM_ReleaseRUN` で RUN フェーズを調停。SHUTDOWN は CAN バスのウェイクアップにより常に RUN へ復帰可能（実機リセットが必要な終端状態は存在しない） |
 |  | Fee | 21 | SWS_Fee | フラッシュエミュレーション EEPROM（Renesas RA `EEPROM.h`）向けの下位ドライバ。`Fee_Write()` は物理アドレス・データ・長さを受け取ってジョブを開始するだけで即座に返り、実際の書き込みは `Fee_MainFunction()` が 1 回の呼び出しにつき 1 バイトだけ進める（消去・書き込みサイクルによるブロッキングで WdgM の Deadline Supervision を巻き込んだ実機不具合への対策）。MemIf 経由でのみ呼ばれ、NvM から直接見えることはない |
 |  | FiM | 11 | SWS_FiM | Dem が確定（CONFIRMED）した DTC をもとにアプリ機能（FID）の実行許可を判定。100ms 周期で再評価し、結果を ASW へ `Rte_Call_FiM_GetFunctionPermission` で公開 |
+|  | Gpt | 100 | SWS_Gpt | HW タイマ（Renesas RA FspTimer）による周期割り込み駆動の General Purpose Timer Driver。目標時間到達判定は HW コンペアマッチではなく `Gpt_OnTick()` 内のソフトウェア比較で行い（`GetTimeElapsed`/`GetTimeRemaining` を単純な整数演算で正確に実現するため）、`Gpt_EnableNotification` された通知関数は ISR コンテキストから直接呼ばれる。`Gpt_SetMode`/`Gpt_EnableWakeup`/`Gpt_DisableWakeup`/`Gpt_CheckWakeup`/`Gpt_GetPredefTimerValue` は、EcuM が SLEEP モードを持たないため仕様上のプリコンパイル設定（`GptWakeupFunctionalityApi` 等）に沿って未実装 |
 |  | IoHwAb | 254 | AUTOSAR 抽象化層 | Dio チャネル番号を隠蔽し SW-C に論理的な LED / ボタン / ADC API を提供。10ms 周期でデバウンス（40ms 確定）・ボタン固着検出・ADC 電圧低下を Dem 報告 |
 |  | KeyM | 116（暫定値） | SWS_KeyManager (Release 4.4.0) | 鍵更新セッション（`KeyM_Start`→`KeyM_Update`→`KeyM_Finalize`）を管理する Key Manager。Dcm の WriteDataByIdentifier（DID 0x0108 CryptoKeyUpdate）が模擬鍵マスターとして駆動し、`Csm_KeyElementSet()`/`Csm_KeySetValid()` 経由で Crypto 層の RAM 鍵を書き換える。Certificate submodule・KeyM_Prepare/Verify・SHE 形式・KEYM_DERIVE_KEY は対応除外（詳細は下記「SecOC 詳細」節参照）。ModuleId は Release 4.3.1 の AUTOSAR_TR_BSWModuleList.pdf に KeyM 自体が未掲載のため未検証の暫定値 |
 |  | Mcu | 101 | SWS_Mcu | `main.cpp` の `setup()` 冒頭（`Serial.begin()` より前）で `Mcu_Init()` を呼び、起動直後のリセット原因（Watchdog/BrownOut/External/PowerOn）を一度だけ読み取ってキャッシュする（Mcu_Hw のレジスタ読み取りは 1 起動につき 1 回しか呼べないため）。`Mcu_InitClock`/`Mcu_SetMode`/`Mcu_InitRamSection`/`Mcu_PerformReset` 等は Arduino フレームワークがクロック初期化を担い複数電源モードもモデル化しないため未実装。`Mcu_GetResetReason()`（単一の `Mcu_ResetType`）に加え、複数要因の同時検出を診断できるよう `Mcu_GetResetRawValue()`（4 フラグをビット詰めした本プロジェクト独自の生値）も提供する |
@@ -232,7 +233,7 @@ HAL ─── Can_Hw / Dio_Hw / Port_Hw / Adc_Hw / Mcu_Hw / Fee_Hw / Wdg_Hw（sr
 |  | NvM | 20 | SWS_NvM | EEPROM の読み書きを抽象化。Dem は EEPROM アドレスを直接知らない。各ブロックに CRC8 を付加して破損を検出し、不一致時は ROM デフォルト値（NvM_RestoreBlockDefaults）へ自動復元。ブロックごとに冗長化（`NvMBlockManagementType=NVM_BLOCK_REDUNDANT` 相当、`Redundant` フラグ）を選択でき、片面が破損してももう片面から自己修復できる（DEM_EXTENDED で使用）。実際の物理バイト書き込みは MemIf 経由で Fee へ委譲し、NvM 自身はブロック・CRC・冗長化という「意味」のレイヤーのみを扱う（1バイトずつの非同期書き込み進行は Fee の責務） |
 |  | PduR | 51 | SWS_PduR | 受信 PDU を Com/CanTp/SecOC へ（1つの RxPduId から複数宛先への配信にも対応）、送信 PDU を CanIf へルーティング。通信スタックの配管役。TX 経路は既定では `CanIf_Transmit()` へ直接転送するが、`PduR_TxRoutingPathType.TransmitOverrideFct` が設定されている場合は中間モジュール（SecOC）へ委譲できるよう汎用化されている（既存の全 TX パスはこのフィールドを使わないため無変更） |
 |  | Port | — | SWS_Port | `Port_Init` でピン方向（OUTPUT / INPUT_PULLUP）を設定する MCAL |
-|  | SchM | — | SWS_SchM | 排他エリアマクロ（`SchM_Enter` / `SchM_Exit`）で共有リソースを保護。実体は `SchM_Hw`（`noInterrupts()`/`interrupts()`）で、Can の割り込みペンディングフラグを実際に保護する |
+|  | SchM | — | SWS_SchM | 排他エリアマクロ（`SchM_Enter` / `SchM_Exit`）で共有リソースを保護。実体は `SchM_Hw`（`noInterrupts()`/`interrupts()`）で、Can の割り込みペンディングフラグ、および Gpt のチャネル状態機械（`Gpt_ChannelState`/`Gpt_ElapsedTicks`、実 HW 割り込みとメインループの両方から読み書きされる）を実際に保護する |
 |  | SecOC | 150 | SWS_SecureOnboardCommunication | メッセージ認証（Csm_MacGenerate/Csm_MacVerify 経由の AES-128-CMAC）とフレッシュネス管理によるリプレイ対策。E2E とは異なる軸（E2E=意図しない誤り検出、SecOC=意図的な改ざん・なりすまし検出）で、PduR のルーティング経路上に中間モジュールとして挟まる。RX（ImmobilizerCmd、CAN 0x120）は `SecOC_IfRxIndication()` が PduR の RX 宛先として検証し、成功時のみ `Com_RxIndication()` へ転送。TX（E2EHealthStatus、CAN 0x220）は既に E2E 保護済みのペイロードをさらに認証する二重防御で、`SecOC_IfTransmit()`/`SecOC_MainFunction()` が Freshness+MAC を計算し `PduR_SecOCTransmit()` で CanIf まで送り届ける。SecOC は `CsmJobId`（ジョブ ID）しか知らず、鍵にも AES/CMAC の実装にも一切アクセスしない（Csm/CryIf/Crypto レイヤ分離、上記参照） |
 |  | Wdg | 102 | SWS_Wdg | Renesas RA の実 HW ウォッチドッグ（IWDT、RA WDT ライブラリ経由）向け下位ドライバ。`Wdg_SetMode(WDGIF_FAST_MODE)` で 4000ms タイムアウトを有効化する。`Wdg_SetMode(WDGIF_OFF_MODE)` は常に `E_NOT_OK` を返す（IWDT は一度有効化すると無効化する手段がないため。実 AUTOSAR の拡張プロダクションエラー `WDG_E_DISABLE_REJECTED` に相当する状況）。WdgIf 経由でのみ呼ばれ、WdgM から直接見えることはない |
 |  | WdgIf | 43 | SWS_WdgIf | WdgM（上位）と Wdg（下位ドライバ）の間のディスパッチ層。実 AUTOSAR は Device 引数で複数の Wdg インスタンスへ振り分けるが、本プロジェクトは物理ウォッチドッグが Wdg 1 個のみのため実質パススルー（MemIf → Fee と同じ簡略化）。実 AUTOSAR の WdgIf に Init/MainFunction が存在しない（[SWS_WdgIf_00018] により、ドライバが1個の構成では WdgM が Wdg_Init() を直接呼んでよいと規定されている）点は MemIf と共通するが、WdgIf 自体には MemIf のような非標準の Init/MainFunction 拡張を追加していない（プラットフォーム分岐を隠す必要がないため） |
@@ -245,6 +246,7 @@ HAL ─── Can_Hw / Dio_Hw / Port_Hw / Adc_Hw / Mcu_Hw / Fee_Hw / Wdg_Hw（sr
 |  | Mcu_Hw | — | — | リセット要因の読み取り（Renesas RA RSTSR0-1）・起動時ウォッチドッグ無効化 |
 |  | Fee_Hw | — | — | フラッシュエミュレーション EEPROM 読み書き（Renesas RA `EEPROM` ライブラリ）ラッパー。Fee.c と Fee_Hw.cpp 以外からはインクルードしない内部境界 |
 |  | Wdg_Hw | — | — | 実 HW ウォッチドッグの Enable / Disable / Refresh ラッパー。Wdg.c と Wdg_Hw.cpp 以外からはインクルードしない内部境界 |
+|  | Gpt_Hw | — | — | Renesas RA `FspTimer` ラッパー。`FspTimer::get_available_timer()` で AGT/GPT の空きチャネルを実行時に自動選択し、`setup_overflow_irq()` で周期割り込みを有効化する。Gpt.c と Gpt_Hw.cpp 以外からはインクルードしない内部境界 |
 
 ModuleId の出典は `docs/AUTOSAR_TR_BSWModuleList.pdf`（Release 4.3.1、「List of
 Basic Software Modules」表）。詳細は「CAN 通信スタック」セクションの「DET 準拠」
@@ -417,6 +419,12 @@ Basic Software Modules」表）。詳細は「CAN 通信スタック」セクシ
 │   │   │   ├── Port_Cfg.h        # ピン番号定義（D6/D7/D8 OUTPUT / D9 INPUT_PULLUP）
 │   │   │   ├── Port.h            # 公開インタフェース（Port_Init / Port_SetPinDirection）
 │   │   │   └── Port.c            # AUTOSAR Port モジュール（純粋 C、Port_Hw へ委譲。境界は src/Hal/Port_Hw.h）
+│   │   ├── Gpt/                  # General Purpose Timer Driver（Renesas RA FspTimer 向け HW タイマ抽象化）
+│   │   │   ├── Gpt_Cfg.h         # DET 定数・ApiId・基本型（Gpt_ChannelType 等。docs/4.3.1/AUTOSAR_SWS_GPTDriver.pdf を実測して確認済み）
+│   │   │   ├── Gpt_PBCfg.h       # チャネル設定構造体型定義・Gpt_Config 宣言
+│   │   │   ├── Gpt_PBCfg.c       # チャネルテーブル実体（Channel 0: 1000Hz tick、CONTINUOUS、App_GptDemo_OnTick 通知）
+│   │   │   ├── Gpt.h             # 公開インタフェース（Gpt_Init/StartTimer/StopTimer/GetTimeElapsed/GetTimeRemaining/Enable・DisableNotification）
+│   │   │   └── Gpt.c             # チャネル状態機械。目標時間到達判定は HW コンペアマッチではなく Gpt_OnTick() 内のソフトウェア比較。境界は src/Hal/Gpt_Hw.h
 │   │   ├── IoHwAb/               # I/O ハードウェア抽象化（MCAL と SW-C の境界）
 │   │   │   ├── IoHwAb.h          # 公開インタフェース（RTE が参照）
 │   │   │   └── IoHwAb.c          # Dio/Adc へ委譲・デバウンス（40ms）・固着検出・ADC 電圧低下検出（Dem 報告）
@@ -448,6 +456,7 @@ Basic Software Modules」表）。詳細は「CAN 通信スタック」セクシ
 │       ├── Mcu_Hw.h / Mcu_Hw.c          # リセット要因読み取り（RA RSTSR0-1）・起動時 WDT 無効化
 │       ├── Fee_Hw.h / Fee_Hw.cpp        # フラッシュエミュレーション EEPROM 読み書き（RA EEPROM.h）。Fee.c と Fee_Hw.cpp 以外からインクルードしない内部境界
 │       ├── Wdg_Hw.h / Wdg_Hw.cpp        # 実 HW ウォッチドッグ Enable / Disable / Refresh(RA WDTライブラリ)。Wdg.c と Wdg_Hw.cpp 以外からインクルードしない内部境界
+│       ├── Gpt_Hw.h / Gpt_Hw.cpp        # FspTimer による周期 HW 割り込み(AGT/GPT 空きチャネルを実行時に自動選択)。Gpt.c と Gpt_Hw.cpp 以外からインクルードしない内部境界
 │       └── SchM_Hw.h / SchM_Hw.cpp      # noInterrupts()/interrupts() ラッパー（SchM 排他エリアの実体）
 ├── dbc/
 │   └── engine_manager.dbc        # CAN シグナル定義（Cangaroo 等で使用）

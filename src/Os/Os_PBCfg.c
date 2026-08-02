@@ -24,6 +24,7 @@
  *            Task 15: Can_MainFunction_Wakeup       1 ms  — SLEEP 中のウェイクアップペンディングのドレイン
  *            Task 16: SecOC_MainFunction           100 ms  — TX Secured I-PDU の Freshness/MAC 計算・送信
  *            Task 17: MemIf_MainFunction            10 ms  — 保留中 EEPROM 書き込みジョブを1バイトずつ処理 (Fee)
+ *            Task 18: App_GptDemo_Run             2000 ms  — Gpt 実 HW タイマ通知カウンタのログ出力（動作確認用）
  *
  *          CAN 受信が真のハードウェア割り込み (Can_Isr(), INT ピン立ち下がりで
  *          attachInterrupt 起動) になったことに伴い、旧 Task 0 (Can_Isr の
@@ -68,6 +69,11 @@
  *            SecOC_IfTransmit() が Authentic I-PDU をバッファへコピーしてから
  *            実際に CAN へ送信されるまでの遅延を、E2EHealthStatus の PERIODIC
  *            送信周期 (6000ms) に対して無視できる範囲に抑える。
+ *            App_GptDemo_Run は Gpt Channel 0（1000ms 周期の HW タイマ割り込み）
+ *            が実際に発火しているかを DET ログで確認するための動作確認用タスク
+ *            であり、通知そのものより高頻度で読む必要はないため、Gpt Channel 0
+ *            の周期の倍の 2000 ms とし、複数回の通知を跨いでカウンタが
+ *            単調増加していることを目視確認しやすくしている。
  *
  * \copyright  Copyright (c) 2025 T_T
  * \license    MIT License - 詳細は LICENSE ファイルを参照。
@@ -99,6 +105,7 @@ extern void Can_MainFunction_BusOff(void);
 extern void Can_MainFunction_Wakeup(void);
 extern void SecOC_MainFunction(void);
 extern void MemIf_MainFunction(void);
+extern void App_GptDemo_Run(void);
 
 /* -----------------------------------------------------------------------
  * タスクテーブル
@@ -124,7 +131,8 @@ static const Os_TaskType Os_TaskTable[OS_TASK_COUNT] =
     /* Task 14 */ { Can_MainFunction_BusOff,         1U  },  /* 1 ms    : Bus-Off ポーリング        */
     /* Task 15 */ { Can_MainFunction_Wakeup,         1U  },  /* 1 ms    : ウェイクアップペンディングのドレイン */
     /* Task 16 */ { SecOC_MainFunction,            100U  },  /* 100 ms  : TX Secured I-PDU の Freshness/MAC 計算・送信 */
-    /* Task 17 */ { MemIf_MainFunction,             10U  }   /* 10 ms   : 保留中 EEPROM ジョブ処理 (Fee 物理バイト書き込み) */
+    /* Task 17 */ { MemIf_MainFunction,             10U  },  /* 10 ms   : 保留中 EEPROM ジョブ処理 (Fee 物理バイト書き込み) */
+    /* Task 18 */ { App_GptDemo_Run,              2000U  }   /* 2000 ms : Gpt 実 HW タイマ通知カウンタのログ出力 (動作確認用) */
 };
 
 /* -----------------------------------------------------------------------
