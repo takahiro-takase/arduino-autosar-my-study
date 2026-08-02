@@ -74,6 +74,7 @@ ARXML や設定ツールは使用せず、コードで階層構造・型定義�
   - [固定長バッファのサイズは設定定数から計算する](#fixed-buffer-size)
   - [RX/TX で対称な入力検証](#rx-tx-symmetry)
   - [設定テーブルの一元管理](#config-table-centralization)
+  - [単体テスト（ホスト上でのロジック検証）](#unit-test)
 
 <a id="overview"></a>
 ## 概要
@@ -5895,3 +5896,38 @@ TX 側と同じ検証を RX の各層境界（CanIf → PduR → Com）にも追
 | ウェイクアップ検証タイムアウトの変更 | `CanSM_Cfg.h` の `CANSM_WAKEUP_VALIDATION_MS`（既定 2000ms） |
 | ボランタリスリープに入るまでのエンジン OFF 継続時間の変更 | `App_EngineManager.c` の `APP_ENGINE_SLEEP_OFF_CYCLES`（Run 周期3000ms×既定5=15秒） |
 
+
+<a id="unit-test"></a>
+### 単体テスト（ホスト上でのロジック検証）
+
+実 HW（UNO R4）を使わず、Bsw モジュールのロジックだけをホスト PC 上で
+GoogleTest により検証する `[env:native]` 環境を用意している
+（`platformio.ini` 参照）。対象は `build_src_filter` で個別指定した
+モジュールのみで、現状は `src/Bsw/Gpt/Gpt.c` が対象（`test/test_gpt/`）。
+Hal/Det/SchM_Hw 等の実 HW 依存部分は `test/test_gpt/fake_*.c` の
+フェイク実装に差し替え、`Gpt_OnTick()`（本来 ISR から呼ばれる関数）を
+テストから直接呼ぶことで、実割り込みなしに状態機械を駆動している。
+
+```bash
+# ホスト上でビルド・実行（GoogleTest、実 HW 不要）
+pio test -e native
+```
+
+事前準備として、ホスト用の C++17 対応 MinGW-w64/GCC がインストールされ
+`g++` に PATH が通っている必要がある（`uno_r4` 環境のビルドとは別の
+ネイティブコンパイラ）。初回実行時に GoogleTest ライブラリと `native`
+プラットフォームを自動ダウンロードする。
+
+新しい Bsw モジュールのテストを追加する場合は `test/<module>/` を新設し、
+対象モジュールに応じて `[env:native]` の `build_src_filter` と `-I` を
+調整する（`test/test_gpt/` を雛形として流用できる）。
+
+> **Windows 環境固有の注意（MinGW-w64 のランタイム不整合）**:
+> 一部の MinGW-w64 配布物（msvcrt ランタイム版）では、GoogleTest の
+> death test 機構経由で `libmingw32.a` 内の UCRT 専用シンボル
+> (`__imp_quick_exit`/`__imp__Exit`) が要求され、
+> `undefined reference to __imp_quick_exit` 等でリンクに失敗することがある。
+> `test/test_gpt/win_quick_exit_stub.cpp` はこの環境向けの回避コード
+> （該当シンボルを `std::exit()` へ委譲する自前スタブで満たす）。
+> UCRT ランタイム版の MinGW-w64 を使っている場合は本来不要で、
+> `__imp_quick_exit`/`__imp__Exit` の多重定義エラーが出たら削除すること。
