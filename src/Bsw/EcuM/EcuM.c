@@ -109,6 +109,8 @@
 #include "FiM.h"
 #include "FiM_PBCfg.h"
 #include "Port.h"
+#include "Gpt.h"
+#include "Gpt_PBCfg.h"
 #include "CanSM.h"
 #include "ComM.h"
 #include "Nm.h"
@@ -116,6 +118,7 @@
 #include "IoHwAb.h"
 #include "App_EngineManager.h"
 #include "App_WarningIndicator.h"
+#include "App_GptDemo.h"
 #include "Det.h"
 
 #define TAG "EcuM"
@@ -166,6 +169,7 @@ void EcuM_Init(void)
     MemIf_Init();   /* NvM_Init より前: EEPROM 抽象化層 (Fee) を初期化 */
     NvM_Init(&NvM_Config);
     Port_Init();                    /* ピン方向設定（Dio 操作より前に完了）    */
+    Gpt_Init(&Gpt_Config);           /* HW タイマ準備（他モジュールに依存しない下位ドライバ） */
     Can_Init(&Can_Config);          /* ハードウェア初期化（LISTEN_ONLY で待機） */
     CanIf_Init(&CanIf_Config);
     PduR_Init(&PduR_Config);
@@ -200,6 +204,7 @@ void EcuM_Init(void)
     App_EngineManager_Init();
     IoHwAb_Init();
     App_WarningIndicator_Init();
+    App_GptDemo_Init();  /* Gpt_Init 済みが前提。実 HW タイマの動作確認用デモ */
     Wdg_Init(&Wdg_Config);    /* WdgM_Init より前: Watchdog Driver 初期化 (HW はまだ有効化しない) */
     WdgM_Init(&WdgM_Config);  /* Alive Supervision 初期化 (Os_Init より前) */
     Os_Init(&Os_Config);      /* タスクテーブル初期化 (全タスク有効で起動) */

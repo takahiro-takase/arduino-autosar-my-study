@@ -95,6 +95,29 @@ extern "C" {
 #define SchM_Enter_Can_IRQFLAG_EXCLUSIVE_AREA()  SchM_Hw_EnterExclusiveArea()
 #define SchM_Exit_Can_IRQFLAG_EXCLUSIVE_AREA()   SchM_Hw_ExitExclusiveArea()
 
+/* -----------------------------------------------------------------------
+ * Gpt モジュール — チャネル状態機械の保護
+ *
+ * 保護対象: Gpt_ChannelState / Gpt_ElapsedTicks (Gpt.c)
+ * 書き込み: Gpt_OnTick()（真のハードウェア割り込みコンテキスト、
+ *           Gpt_Hw.cpp の FspTimer 周期割り込みから TickFrequencyHz ごとに起動）
+ * 読み出し・書き換え: Gpt_GetTimeElapsed() / Gpt_GetTimeRemaining() / Gpt_StopTimer()
+ *           （メインループのタスク）
+ *
+ * Can の Can_RxIrqPending と同じく、本プロジェクトで実際にメインループと
+ * 割り込みが競合し得る排他エリア。状態 (Gpt_ChannelState) を見てから
+ * 対応する値 (Gpt_ElapsedTicks) を読む・書き換える一連の
+ * 操作を 1 つの排他エリアで囲わないと、その間に割り込みが発生した際に
+ * 状態と値の組み合わせが食い違った（裂けた）まま読めてしまう
+ * （詳細は Gpt.c の Gpt_GetTimeElapsed()/Gpt_GetTimeRemaining()/Gpt_StopTimer()
+ * を参照）。Gpt_OnTick() 自身は割り込みコンテキストであり、本 MCU は
+ * 割り込み優先度が単一レベルのため自己再入はなく、Enter/Exit で囲む
+ * 必要はない（メインループ側が Enter している間は物理的に割り込みが
+ * 保留されるため、書き込み側は保護不要）。
+ * ----------------------------------------------------------------------- */
+#define SchM_Enter_Gpt_CHANNEL_EXCLUSIVE_AREA()  SchM_Hw_EnterExclusiveArea()
+#define SchM_Exit_Gpt_CHANNEL_EXCLUSIVE_AREA()   SchM_Hw_ExitExclusiveArea()
+
 #ifdef __cplusplus
 }
 #endif
