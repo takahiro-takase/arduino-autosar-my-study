@@ -12,11 +12,14 @@
  *            - NvM_WriteBlock() / NvM_RestoreBlockDefaults() は呼び出し元の
  *              データを RAM ミラーへ即座に反映したのち、実際の EEPROM 書き込みは
  *              「ジョブ保留」としてマークするだけで、その場ではブロックしない
- *              (AUTOSAR SWS_NvM_00449 相当の非同期ジョブキュー)。
- *            - NvM_MainFunction() が周期的に、保留中のブロックのデータ本体+CRC を
- *              **1 呼び出しにつき 1 バイトずつ** EEPROM へ書き込む。1 ブロック分
+ *              ([SWS_NvM_00208] 相当の非同期ジョブキュー)。
+ *            - NvM_MainFunction() は保留中のブロックについて、データ本体・CRC の
+ *              順に MemIf_Write() ジョブを投げては完了を待つ（2 フェーズ）。
+ *              1 呼び出しにつき 1 バイトずつ書き込んでいるのは NvM 自身ではなく、
+ *              さらに下の Fee（MemIf_MainFunction() 経由）である。1 ブロック分
  *              (最大 10 バイト、冗長ブロックはプライマリ→ミラーの順で 2 面分)
- *              が完了すると次の保留ブロックへ移る。
+ *              が完了すると次の保留ブロックへ移る（詳細は下記「なぜ非同期化
+ *              したか」および NvM.c ファイル冒頭のコメント参照）。
  *            - 各ブロックのデータ本体直後に AUTOSAR Crc8 (SAE J1850) の CRC を
  *              1 バイト付加して保存する。NvM_Init() で検証し、不一致なら
  *              ROM デフォルト値（未設定なら全 0）へ自動復元する。
@@ -171,8 +174,8 @@ Std_ReturnType NvM_ReadBlock(NvM_BlockIdType BlockId, void* NvM_DstPtr);
  *
  * \details RAM ミラーの更新は同期的（呼び出し直後から NvM_ReadBlock() で
  *          新しい値が読める）。一方、実際の EEPROM 書き込みは
- *          NvM_MainFunction() が非同期に 1 バイトずつ行うため、本関数自体は
- *          即座に返る（AUTOSAR SWS_NvM_00449「WriteBlock はジョブを積むだけ」
+ *          NvM_MainFunction()/Fee が非同期に行うため、本関数自体は
+ *          即座に返る（[SWS_NvM_00208]「WriteBlock はジョブを積むだけ」
  *          に相当）。同じブロックに対する書き込みジョブが既に処理中だった
  *          場合は、進行中のジョブを破棄して最新データから書き直す
  *          （書きかけの古いデータと新しいデータが混在する「ちぎれ書き」を防ぐ）。
@@ -233,14 +236,17 @@ Std_ReturnType NvM_RestoreBlockDefaults(NvM_BlockIdType BlockId);
 NvM_RequestResultType NvM_GetErrorStatus(NvM_BlockIdType BlockId);
 
 /**
- * \brief   NvM 周期処理。保留中の書き込みジョブを 1 バイトずつ処理する。
+ * \brief   NvM 周期処理。保留中の書き込みジョブを進める。
  *
  * \details Os スケジューラから周期的に呼び出す。保留ジョブが無ければ
- *          何もしない。ジョブがあれば、対象ブロックのデータ本体または
- *          CRC のうち未書き込みの 1 バイトだけを EEPROM へ書き込み、
- *          ブロック全体（データ本体+CRC）を書き終えたら次の保留ブロックへ
- *          移る。1 回の呼び出しで実際にブロッキングするのは高々 1 バイト分の
- *          EEPROM 書き込み時間のみに抑えられる。
+ *          何もしない。ジョブがあれば、対象ブロックのデータ本体・CRC の順に
+ *          MemIf_Write() ジョブを開始しては完了を待ち（NVM_PHASE_BODY/
+ *          NVM_PHASE_CRC の 2 フェーズ）、ブロック全体を書き終えたら次の
+ *          保留ブロックへ移る。実際に EEPROM へ 1 バイトずつ書き込んでいるのは
+ *          本関数ではなく、さらに下の Fee（MemIf_MainFunction() 経由、Os
+ *          スケジューラから NvM_MainFunction() とは独立に呼ばれる）であり、
+ *          本関数自体はジョブの開始・完了確認のみでブロッキングしない
+ *          （詳細は NvM.c ファイル冒頭のコメント参照）。
  *
  * \ServiceID      {0x0E}
  * \Reentrancy     {Non Reentrant}
