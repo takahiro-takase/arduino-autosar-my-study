@@ -18,10 +18,15 @@
 #include "Gpt_Cfg.h"
 
 /** 管理チャネル総数 (Gpt_PBCfg.c の Gpt_ChannelTable 要素数と一致させること) */
-#define GPT_CHANNEL_COUNT  1U
+#define GPT_CHANNEL_COUNT  2U
 
 /** チャネル ID（Gpt_PBCfg.c の Gpt_ChannelTable 配列インデックスと一致させること） */
 #define GPT_CHANNEL_0  0U
+
+/** Channel 1: Os が自身のスケジューラ用ティックカウンタとして専有する
+ *  (src/Os/Os.c 参照)。Notification は使わず、Os は Gpt_GetTimeElapsed() を
+ *  ポーリングするだけなので、他モジュールはこのチャネルに触れないこと。 */
+#define GPT_CHANNEL_1  1U
 
 /**
  * \brief   GPT チャネル 1 本の設定（AUTOSAR GptChannelConfiguration コンテナ相当）。

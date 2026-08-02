@@ -203,7 +203,7 @@ HAL ─── Can_Hw / Dio_Hw / Port_Hw / Adc_Hw / Mcu_Hw / Fee_Hw / Wdg_Hw / Gp
 | ASW | App_EngineManager | — | — | エンジン状態遷移（OFF / STARTING / RUNNING / FAULT）・DTC 登録・CAN TX 要求。OFF 継続を検知して ComM へ通信不要（NO_COM）を要求するボランタリスリープ判断も担う |
 |  | App_WarningIndicator | — | — | 3 LED 独立制御（D6=RUNNING / D7=FAULT 点滅 / D8=ABS） |
 | RTE | Rte | — | — | ポートベース S/R API。複数 SW-C が同一シグナルを独立ポートで受信。E2E Transformer を持つ Read ポートは `Std_ReturnType` ではなく `Rte_IStatusType` を返し、E2E チェック結果（OK/ハードエラー/ソフトエラー）と Com タイムアウトを区別して SWC へ伝える |
-| OS | Os | — | SWS_Os | タイムトリガスケジューラ。タスクごとに周期を設定し `Os_SchedulerStep()` で到来タスクを順次実行 |
+| OS | Os | — | SWS_Os | タイムトリガスケジューラ。タスクごとに周期を設定し `Os_SchedulerStep()` で到来タスクを順次実行。時間源は Os 専用の Gpt チャネル（`GPT_CHANNEL_1`、詳細は [Os のスケジューラティック](#os-のスケジューラティックgpt-駆動) 参照） |
 | BSW | Adc | 123 | SWS_Adc | `Adc_ReadChannel` で 10-bit アナログ生値（0–1023）を読み取る MCAL |
 |  | BswM | 42 | SWS_BswM | EcuM / ComM のモード変化をルールテーブルで受け取り `Os_SetTaskActive()` でタスクを有効・無効化するルールエンジン。POST_RUN 中はアプリタスクのみ停止し BSW タスクは継続。`BswMPduGroupSwitch`（[SWS_BswM_00273]）相当のアクションも持ち、RUN/POST_RUN で Com の「テレメトリ」I-PDU Group（E2EHealthStatus）を起動/停止する。`BswMLogicalExpression`（[SWS_BswM_00808]）の簡略版として AND/OR の複合条件ルールにも対応し、「EcuM==RUN AND ComM==FULL_COMMUNICATION」でテレメトリ開始、「ComM==SILENT_COMMUNICATION OR ComM==NO_COMMUNICATION」で停止する |
 |  | Can | 80 | SWS_Can | MCP2515 の送受信・Bus-Off 検出・CAN バス活動によるウェイクアップ検出を担う MCAL 最下層。HW を直接操作する唯一のモジュール |
@@ -225,7 +225,7 @@ HAL ─── Can_Hw / Dio_Hw / Port_Hw / Adc_Hw / Mcu_Hw / Fee_Hw / Wdg_Hw / Gp
 |  | EcuM | 10 | SWS_EcuStateManager | ECU ライフサイクルを STARTUP → RUN → POST_RUN → SHUTDOWN の状態マシンで管理。`EcuM_RequestRUN` / `EcuM_ReleaseRUN` で RUN フェーズを調停。SHUTDOWN は CAN バスのウェイクアップにより常に RUN へ復帰可能（実機リセットが必要な終端状態は存在しない） |
 |  | Fee | 21 | SWS_Fee | フラッシュエミュレーション EEPROM（Renesas RA `EEPROM.h`）向けの下位ドライバ。`Fee_Write()` は物理アドレス・データ・長さを受け取ってジョブを開始するだけで即座に返り、実際の書き込みは `Fee_MainFunction()` が 1 回の呼び出しにつき 1 バイトだけ進める（消去・書き込みサイクルによるブロッキングで WdgM の Deadline Supervision を巻き込んだ実機不具合への対策）。MemIf 経由でのみ呼ばれ、NvM から直接見えることはない |
 |  | FiM | 11 | SWS_FiM | Dem が確定（CONFIRMED）した DTC をもとにアプリ機能（FID）の実行許可を判定。100ms 周期で再評価し、結果を ASW へ `Rte_Call_FiM_GetFunctionPermission` で公開 |
-|  | Gpt | 100 | SWS_Gpt | HW タイマ（Renesas RA FspTimer）による周期割り込み駆動の General Purpose Timer Driver。目標時間到達判定は HW コンペアマッチではなく `Gpt_OnTick()` 内のソフトウェア比較で行い（`GetTimeElapsed`/`GetTimeRemaining` を単純な整数演算で正確に実現するため）、`Gpt_EnableNotification` された通知関数は ISR コンテキストから直接呼ばれる。`Gpt_SetMode`/`Gpt_EnableWakeup`/`Gpt_DisableWakeup`/`Gpt_CheckWakeup`/`Gpt_GetPredefTimerValue` は、EcuM が SLEEP モードを持たないため仕様上のプリコンパイル設定（`GptWakeupFunctionalityApi` 等）に沿って未実装 |
+|  | Gpt | 100 | SWS_Gpt | HW タイマ（Renesas RA FspTimer）による周期割り込み駆動の General Purpose Timer Driver。目標時間到達判定は HW コンペアマッチではなく `Gpt_OnTick()` 内のソフトウェア比較で行い（`GetTimeElapsed`/`GetTimeRemaining` を単純な整数演算で正確に実現するため）、`Gpt_EnableNotification` された通知関数は ISR コンテキストから直接呼ばれる。2 チャネル構成: Channel 0 は `App_GptDemo` の動作確認用（1Hz Notification）、Channel 1 は Os 専用のスケジューラティック（Notification なし、`Os` が `Gpt_GetTimeElapsed()` をポーリング。[Os のスケジューラティック](#os-のスケジューラティックgpt-駆動) 参照）。`Gpt_SetMode`/`Gpt_EnableWakeup`/`Gpt_DisableWakeup`/`Gpt_CheckWakeup`/`Gpt_GetPredefTimerValue` は、EcuM が SLEEP モードを持たないため仕様上のプリコンパイル設定（`GptWakeupFunctionalityApi` 等）に沿って未実装 |
 |  | IoHwAb | 254 | AUTOSAR 抽象化層 | Dio チャネル番号を隠蔽し SW-C に論理的な LED / ボタン / ADC API を提供。10ms 周期でデバウンス（40ms 確定）・ボタン固着検出・ADC 電圧低下を Dem 報告 |
 |  | KeyM | 116（暫定値） | SWS_KeyManager (Release 4.4.0) | 鍵更新セッション（`KeyM_Start`→`KeyM_Update`→`KeyM_Finalize`）を管理する Key Manager。Dcm の WriteDataByIdentifier（DID 0x0108 CryptoKeyUpdate）が模擬鍵マスターとして駆動し、`Csm_KeyElementSet()`/`Csm_KeySetValid()` 経由で Crypto 層の RAM 鍵を書き換える。Certificate submodule・KeyM_Prepare/Verify・SHE 形式・KEYM_DERIVE_KEY は対応除外（詳細は下記「SecOC 詳細」節参照）。ModuleId は Release 4.3.1 の AUTOSAR_TR_BSWModuleList.pdf に KeyM 自体が未掲載のため未検証の暫定値 |
 |  | Mcu | 101 | SWS_Mcu | `main.cpp` の `setup()` 冒頭（`Serial.begin()` より前）で `Mcu_Init()` を呼び、起動直後のリセット原因（Watchdog/BrownOut/External/PowerOn）を一度だけ読み取ってキャッシュする（Mcu_Hw のレジスタ読み取りは 1 起動につき 1 回しか呼べないため）。`Mcu_InitClock`/`Mcu_SetMode`/`Mcu_InitRamSection`/`Mcu_PerformReset` 等は Arduino フレームワークがクロック初期化を担い複数電源モードもモデル化しないため未実装。`Mcu_GetResetReason()`（単一の `Mcu_ResetType`）に加え、複数要因の同時検出を診断できるよう `Mcu_GetResetRawValue()`（4 フラグをビット詰めした本プロジェクト独自の生値）も提供する |
@@ -272,7 +272,7 @@ Basic Software Modules」表）。詳細は「CAN 通信スタック」セクシ
 │   │   └── Rte.c                 # ポート API（周期管理は Os へ移管済み）・ランプ IOControl 調停・ComM_USER_0 要求ポート
 │   ├── Os/
 │   │   ├── Os_Cfg.h              # タスク数定数
-│   │   ├── Os.h / Os.c           # タイムトリガスケジューラ（Os_SchedulerStep）
+│   │   ├── Os.h / Os.c           # タイムトリガスケジューラ（Os_SchedulerStep）。時間源は専用 Gpt チャネル (GPT_CHANNEL_1)
 │   │   ├── Os_PBCfg.h
 │   │   └── Os_PBCfg.c            # タスクテーブル（周期・関数ポインタ）
 │   ├── Bsw/
@@ -423,7 +423,7 @@ Basic Software Modules」表）。詳細は「CAN 通信スタック」セクシ
 │   │   ├── Gpt/                  # General Purpose Timer Driver（Renesas RA FspTimer 向け HW タイマ抽象化）
 │   │   │   ├── Gpt_Cfg.h         # DET 定数・ApiId・基本型（Gpt_ChannelType 等。docs/4.3.1/AUTOSAR_SWS_GPTDriver.pdf を実測して確認済み）
 │   │   │   ├── Gpt_PBCfg.h       # チャネル設定構造体型定義・Gpt_Config 宣言
-│   │   │   ├── Gpt_PBCfg.c       # チャネルテーブル実体（Channel 0: 1000Hz tick、CONTINUOUS、App_GptDemo_OnTick 通知）
+│   │   │   ├── Gpt_PBCfg.c       # チャネルテーブル実体（Channel 0: 1000Hz tick・App_GptDemo_OnTick 通知、Channel 1: 1000Hz tick・Os 専用・Notification なし）
 │   │   │   ├── Gpt.h             # 公開インタフェース（Gpt_Init/StartTimer/StopTimer/GetTimeElapsed/GetTimeRemaining/Enable・DisableNotification）
 │   │   │   └── Gpt.c             # チャネル状態機械。目標時間到達判定は HW コンペアマッチではなく Gpt_OnTick() 内のソフトウェア比較。境界は src/Hal/Gpt_Hw.h
 │   │   ├── IoHwAb/               # I/O ハードウェア抽象化（MCAL と SW-C の境界）
@@ -4233,6 +4233,52 @@ SHUTDOWN は CAN バスのウェイクアップにより常に RUN へ復帰で�
 スリープ突入時点で解放済みのため、これによって新たに `EcuM_ReleaseRUN()` が呼ばれる
 ことはありません。詳細は CanSM.c の `CanSM_BusOffFromPendingSleep` 参照）。
 
+##### Os のスケジューラティック（Gpt 駆動）
+
+`Os_SchedulerStep()` の周期到来判定に使う時間源は、当初 Arduino コアの
+`millis()` でしたが、2026-08 に Os 専用の Gpt チャネル（`GPT_CHANNEL_1`、
+1000Hz=1ms 分解能、Notification なし）へ置き換えました。`Os_Init()` が
+自らこのチャネルを `Gpt_StartTimer()` で起動し、以後は
+`Gpt_GetTimeElapsed(GPT_CHANNEL_1)` を都度ポーリングします（本物の
+AUTOSAR OS の OsCounter が HW タイマ割り込みで駆動される構成に近づける
+ための変更。詳細は `src/Os/Os.c` 冒頭のコメント参照）。
+
+`loop()` は従来どおり `EcuM_MainFunction()` を busy-spin で呼び続けます。
+`Gpt_SetMode`/`Gpt_EnableWakeup` 系は本プロジェクトの EcuM が SLEEP モード
+を持たないため未実装であり（Gpt モジュールの節参照）、CPU を寝かせる余地が
+ないためです。つまりこの変更は「割り込みで CPU を起こす」設計ではなく、
+「経過時間の計算に使う時計を millis() から Gpt の ISR 駆動ティックへ
+差し替える」だけの、スコープを絞った変更です。
+
+**millis() をフォールバック用に残した理由:** [DEVLOG](docs/DEVLOG.md#can-rx-割り込み化の実機検証で得られた教訓)
+に記録のとおり、本プロジェクトは実機で割り込みが期待どおり発火しなかった
+事象を CAN RX 割り込み化の際に一度経験しています。Os の時間源はスケジューラ
+そのものであり、`WdgM_TriggerHwWatchdog` を含む全タスクの発火判定に使われる
+ため、ここが完全に停止すると実 HW ウォッチドッグ（`WDGM_HW_WATCHDOG_TIMEOUT_MS`=
+4000ms）でリセットされてしまいます。CAN フレーム 1 個の欠落よりも影響が
+大きいため、単に「検知してログを残す」だけでは不十分です（ログを残しても
+スケジューラ自体が止まったままでは結局リセットに至ってしまう）。
+
+`Os_CrossCheckTickSource()` は Gpt とは別系統の HW タイマで駆動している
+`millis()` との差分を `OS_TICK_CROSSCHECK_PERIOD_MS`（500ms、HW ウォッチドッグ
+タイムアウトの 4000ms に対して 8 倍のマージン）ごとに突き合わせ、Gpt ティック
+の進みが明らかに遅い（半分未満）場合は実際に時間源を `millis()` へ
+フォールバックします（ラッチ式。一度切り替えたらその起動中は millis() を
+使い続ける）。切り替える瞬間は全タスクの最終実行時刻を現在の `millis()` 値へ
+リセットします（`Os_SetTaskActive()` が休止タスクを再開する際に行うのと
+同じ考え方。リセットしないと基準時刻が「Gpt ティック（停止した値）」から
+「millis()（現在の実時刻）」へ飛び、ほぼ全タスクが「周期を大幅に超過している」
+と誤判定されて一斉に追いつき実行されてしまう。これは WdgM の Alive Supervision
+が過去に繰り返し踏んだ「監視対象タスクに実行機会がほとんどないまま判定される」
+誤検知と同種の事故になりうるため避けている）。
+
+初版（2026-08 最初のコミット）ではクロスチェック周期を 5000ms、フォールバック
+無しの「ログのみ」としていましたが、いずれも問題があるとレビューで指摘され
+修正しました。5000ms は 4000ms の HW ウォッチドッグタイムアウトより長く、
+最悪ケースでは診断ログさえリセット前に一度も出力されません。また「ログのみ」
+ではスケジューラが止まったまま復旧しないため、結局リセットに至ることに
+変わりありませんでした。
+
 ##### RUN ユーザ
 
 RUN フェーズを継続するために「誰かが使っている」ことを宣言するしくみです。
@@ -4898,10 +4944,12 @@ WdgM_TriggerHwWatchdog()（1000ms 周期）:
 > 間隔が短いため、この種の一時的なブロッキングの影響を相対的に受けやすい点に
 > 留意してください。
 >
-> `Os_SchedulerStep()` は各タスクの周期判定のたびに `millis()` を都度取得し
-> 直します（ループ先頭で 1 回だけ取得して使い回す実装だと、同一スキャン内で
-> 他タスクがブロッキングした際に後続タスクの `Os_LastRunMs[]` へ不正確な
-> 時刻が記録され、Deadline 判定を誤らせます）。また `Os_SetTaskActive()` は
+> `Os_SchedulerStep()` は各タスクの周期判定のたびに時間源（Os 専用の Gpt
+> チャネル、`Os_GetTimeMs()` 経由の `Gpt_GetTimeElapsed()`。2026-08 に
+> `millis()` から置き換え、詳細は下記「Os のスケジューラティック」参照）を
+> 都度取得し直します（ループ先頭で 1 回だけ取得して使い回す実装だと、同一
+> スキャン内で他タスクがブロッキングした際に後続タスクの `Os_LastRunMs[]`
+> へ不正確な時刻が記録され、Deadline 判定を誤らせます）。また `Os_SetTaskActive()` は
 > タスクを無効→有効へ切り替える瞬間に `Os_LastRunMs[]` を現在時刻へリセット
 > します。これにより、長時間無効化されていたどのタスク（SHUTDOWN 中に
 > 停止していた `WdgM_MainFunction` を含む）も、再開直後は必ずフルの周期を
