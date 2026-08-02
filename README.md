@@ -189,7 +189,7 @@ ASW ─── App_EngineManager / App_WarningIndicator
 RTE ─── Rte（ポートベース S/R API + E2E Transformer 呼び出しグルー）
 OS  ─── Os（タイムトリガスケジューラ）
 BSW ─── EcuM / BswM / WdgM / WdgIf / Wdg / ComM / CanSM / Nm / E2EXf / E2E / Com / PduR / SecOC / Csm / CryIf / Crypto / KeyM / CanIf / Can
-        CanTp / Dcm / Dem / NvM / MemIf / Fee / IoHwAb / Dio / Port / Adc / SchM / Det
+        CanTp / Dcm / Dem / NvM / MemIf / Fee / IoHwAb / Dio / Port / Adc / SchM / Det / Mcu
 HAL ─── Can_Hw / Dio_Hw / Port_Hw / Adc_Hw / Mcu_Hw / Fee_Hw / Wdg_Hw（src/Hal/ に集約）
 ```
 
@@ -227,6 +227,7 @@ HAL ─── Can_Hw / Dio_Hw / Port_Hw / Adc_Hw / Mcu_Hw / Fee_Hw / Wdg_Hw（sr
 |  | FiM | 11 | SWS_FiM | Dem が確定（CONFIRMED）した DTC をもとにアプリ機能（FID）の実行許可を判定。100ms 周期で再評価し、結果を ASW へ `Rte_Call_FiM_GetFunctionPermission` で公開 |
 |  | IoHwAb | 254 | AUTOSAR 抽象化層 | Dio チャネル番号を隠蔽し SW-C に論理的な LED / ボタン / ADC API を提供。10ms 周期でデバウンス（40ms 確定）・ボタン固着検出・ADC 電圧低下を Dem 報告 |
 |  | KeyM | 116（暫定値） | SWS_KeyManager (Release 4.4.0) | 鍵更新セッション（`KeyM_Start`→`KeyM_Update`→`KeyM_Finalize`）を管理する Key Manager。Dcm の WriteDataByIdentifier（DID 0x0108 CryptoKeyUpdate）が模擬鍵マスターとして駆動し、`Csm_KeyElementSet()`/`Csm_KeySetValid()` 経由で Crypto 層の RAM 鍵を書き換える。Certificate submodule・KeyM_Prepare/Verify・SHE 形式・KEYM_DERIVE_KEY は対応除外（詳細は下記「SecOC 詳細」節参照）。ModuleId は Release 4.3.1 の AUTOSAR_TR_BSWModuleList.pdf に KeyM 自体が未掲載のため未検証の暫定値 |
+|  | Mcu | 101 | SWS_Mcu | `main.cpp` の `setup()` 冒頭（`Serial.begin()` より前）で `Mcu_Init()` を呼び、起動直後のリセット原因（Watchdog/BrownOut/External/PowerOn）を一度だけ読み取ってキャッシュする（Mcu_Hw のレジスタ読み取りは 1 起動につき 1 回しか呼べないため）。`Mcu_InitClock`/`Mcu_SetMode`/`Mcu_InitRamSection`/`Mcu_PerformReset` 等は Arduino フレームワークがクロック初期化を担い複数電源モードもモデル化しないため未実装。`Mcu_GetResetReason()`（単一の `Mcu_ResetType`）に加え、複数要因の同時検出を診断できるよう `Mcu_GetResetRawValue()`（4 フラグをビット詰めした本プロジェクト独自の生値）も提供する |
 |  | MemIf | 22 | SWS_MemIf | NvM（上位）と Fee（下位ドライバ）の間のディスパッチ層。実 AUTOSAR は Device 引数で複数の Fee/Ea インスタンスへ振り分けるが、本プロジェクトは下位ドライバが Fee 1 個のみのため実質パススルー（CryIf → Crypto の関係と同様）。`MemIf_Init`/`MemIf_MainFunction` は実 AUTOSAR の SWS_MemIf には存在しない（[SWS_MemIf_00019] により、ドライバが1個の構成では EcuM/Os が Fee_Init/Fee_MainFunction を直接呼んでよいと規定されている）本プロジェクト独自の拡張で、プラットフォーム分岐をこの層に閉じ込めるために追加した |
 |  | Nm | 31 | SWS_CANNM | CanNm 状態機械（Network Mode の Repeat Message/Normal Operation/Ready Sleep の3内部状態、Prepare Bus-Sleep Mode、Bus-Sleep Mode）を実装。`ComM_BusSMIndication()` が呼ぶ `Nm_NetworkRequest()`/`Nm_NetworkRelease()` を契機に自律的に状態遷移し、NM-Timeout/Repeat Message/Wait-Bus-Sleep の3タイマで駆動する。Bus-Sleep Mode へ到達すると `CanSM_NmBusSleepMode()` を呼び、CanSM はこの通知を受けて初めて CAN コントローラを物理スリープさせる（協調スリープ。他ノードの NM フレーム受信が続く間は実際にはスリープしない）。PduR/Com を経由せず `CanIf_Transmit`/`CanIf_RxIndication` を直接やり取りする点が実車の CanNm と同じ。シグナル値を運ばないため E2E 保護は付与しない |
 |  | NvM | 20 | SWS_NvM | EEPROM の読み書きを抽象化。Dem は EEPROM アドレスを直接知らない。各ブロックに CRC8 を付加して破損を検出し、不一致時は ROM デフォルト値（NvM_RestoreBlockDefaults）へ自動復元。ブロックごとに冗長化（`NvMBlockManagementType=NVM_BLOCK_REDUNDANT` 相当、`Redundant` フラグ）を選択でき、片面が破損してももう片面から自己修復できる（DEM_EXTENDED で使用）。実際の物理バイト書き込みは MemIf 経由で Fee へ委譲し、NvM 自身はブロック・CRC・冗長化という「意味」のレイヤーのみを扱う（1バイトずつの非同期書き込み進行は Fee の責務） |
@@ -381,6 +382,12 @@ Basic Software Modules」表）。詳細は「CAN 通信スタック」セクシ
 │   │   │   ├── NvM_PBCfg.c       # ブロック設定テーブル実体（DEM_MAGIC/STATUS/AGING/EXTENDED、EXTENDED は冗長ブロック）
 │   │   │   ├── NvM.h             # 公開インタフェース（NvM_ReadBlock / NvM_WriteBlock / NvM_MainFunction / NvM_GetErrorStatus）
 │   │   │   └── NvM.c             # RAM ミラー・ブロック/CRC/冗長化のオーケストレーション。物理バイト書き込みの進行は持たず MemIf へ委譲（境界は src/Bsw/MemIf/MemIf.h）
+│   │   ├── Mcu/                  # MCU Driver（リセット原因の読み取り。クロック/RAMセクション初期化は未対応）
+│   │   │   ├── Mcu_Cfg.h         # DET 定数・ApiId（docs/4.3.1/AUTOSAR_SWS_MCUDriver.pdf を実測して確認済み）
+│   │   │   ├── Mcu_PBCfg.h       # コンフィグ型定義（プレースホルダ）・Mcu_Config 宣言
+│   │   │   ├── Mcu_PBCfg.c       # コンフィグ実体
+│   │   │   ├── Mcu.h             # 公開インタフェース（Mcu_Init/Mcu_GetResetReason/Mcu_GetResetRawValue）
+│   │   │   └── Mcu.c             # Mcu_Hw への委譲。Mcu_Init() が起動直後に一度だけリセット原因を読み取りキャッシュする
 │   │   ├── MemIf/                # Memory Abstraction Interface（NvM と Fee の間のディスパッチ層）
 │   │   │   ├── MemIf_Types.h     # 共通型（MemIf_StatusType/MemIf_JobResultType/MemIf_DeviceType）
 │   │   │   ├── MemIf_Cfg.h       # DET 定数・ApiId（Fee_Cfg.h と共に SWS 実測値へ差し替え済み）
