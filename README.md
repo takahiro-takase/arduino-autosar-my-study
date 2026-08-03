@@ -22,8 +22,11 @@ ARXML や設定ツールは使用せず、コードで階層構造・型定義�
     - [関連モジュール](#can-stack-modules)
     - [データフロー図](#can-dataflow-diagram)
     - [CAN フレーム仕様](#can-frame-spec)
-    - [Tx 処理（Com → PduR → CanIf → Can の順）](#tx-processing)
-    - [Rx 処理（Can → CanIf → PduR → Com の順）](#rx-processing)
+    - [処理の流れ（関数コールチェーンと多層防御）](#processing-flow)
+      - [Tx 処理（Com → PduR → CanIf → Can の順）](#tx-processing)
+      - [Rx 処理（Can → CanIf → PduR → Com の順）](#rx-processing)
+    - [Can](#can-module)
+    - [Com](#com-module)
     - [DET 準拠（Det_ReportError による標準化エラー通知）](#det-compliance)
   - [E2E P01 保護（EngineInfo/AbsInfo 受信 / E2EHealthStatus 送信）](#e2e-p01)
     - [I-PDU Group（Com_IpduGroupStart/Stop、通信のライフサイクル制御）](#ipdu-group)
@@ -50,21 +53,27 @@ ARXML や設定ツールは使用せず、コードで階層構造・型定義�
     - [CanTp（ISO 15765-2 トランスポートプロトコル）](#cantp)
     - [NvM（Non-Volatile Memory Manager）](#nvm)
     - [DEM 診断イベント管理（AUTOSAR SWS_DEM）](#dem)
-    - [FreezeFrame（故障時スナップショット）](#freezeframe)
-    - [ExtendedData（故障確定回数）](#extendeddata)
+      - [FreezeFrame（故障時スナップショット）](#freezeframe)
+      - [ExtendedData（故障確定回数）](#extendeddata)
     - [FiM（機能抑止マネージャ）](#fim)
   - [ECU 管理層（EcuM / BswM / WdgM / ComM / CanSM / Nm）](#ecu-management)
+    - [処理の流れ（コールチェーン）](#processing-flow-ecu)
     - [EcuM（ECU ステートマネージャ）](#ecum)
     - [BswM（BSW モードマネージャ）](#bswm)
     - [ComM（通信マネージャ）](#comm)
     - [WdgM（ウォッチドッグマネージャ）](#wdgm)
     - [Nm（ネットワークマネジメント）](#nm)
   - [IO スタック（IoHwAb / Dio / Port / Adc）](#io-stack)
-    - [チャネル割り当て（`Dio_Cfg.h`）](#channel-assignment)
-    - [デバウンス（積分カウンタ方式）](#debounce)
-    - [ボタン固着検出](#button-stuck)
-    - [ADC センサ電圧監視](#adc-monitoring)
-    - [IoHwAb API 一覧（`IoHwAb.h`）](#iohwab-api)
+    - [IoHwAb](#iohwab-module)
+      - [デバウンス（積分カウンタ方式）](#debounce)
+      - [ボタン固着検出](#button-stuck)
+      - [ADC センサ電圧監視](#adc-monitoring)
+      - [IoHwAb API 一覧（`IoHwAb.h`）](#iohwab-api)
+    - [Dio](#dio-module)
+      - [チャネル割り当て（`Dio_Cfg.h`）](#channel-assignment)
+    - [Port](#port-module)
+    - [Adc](#adc-module)
+      - [チャネル設定（`Adc_Cfg.h`）](#adc-channel-config)
   - [アプリケーション（App_EngineManager / App_WarningIndicator）](#application)
     - [エンジン状態遷移](#engine-state-machine)
     - [App_WarningIndicator（警告灯 SW-C）](#app-warning-indicator)
@@ -525,9 +534,11 @@ TX（Arduino → 外部、下り）
   Rte → E2EXf(E2E) → Com → PduR → CanIf → Can → Can_Hw → MCP2515
 ```
 
-以降、まず Tx/Rx 共通の CAN フレーム仕様を示し、続けて Tx 処理・Rx 処理をそれぞれ
-モジュール順（Tx: Com → PduR → CanIf → Can、Rx: Can → CanIf → PduR → Com）で説明します。
-Can/CanIf/PduR/Com に限らず BSW 全体へ及ぶ DET 準拠（エラー通知の標準化）は最後にまとめます。
+以降、まず Tx/Rx 共通の CAN フレーム仕様を示し、続けて Tx/Rx それぞれの関数コールチェーン
+（Tx: Com → PduR → CanIf → Can、Rx: Can → CanIf → PduR → Com）とレイヤ間の多層防御を
+モジュール横断の内容として説明します。そのあと Can・Com それぞれのモジュール内で閉じた
+詳細（実装判断の背景・設定・検証手順等）を章ごとにまとめます。Can/CanIf/PduR/Com に限らず
+BSW 全体へ及ぶ DET 準拠（エラー通知の標準化）は最後にまとめます。
 
 <a id="can-frame-spec"></a>
 #### CAN フレーム仕様
@@ -574,7 +585,7 @@ Can/CanIf/PduR/Com に限らず BSW 全体へ及ぶ DET 準拠（エラー通知
 次回 `Com_MainFunction()`（Os の 100ms タスク）で送信し、変化がなくても一定間隔
 （周期フロア、後述）で再送し続けます。実際の CAN 送信（SPI 通信）は必ず
 `Com_MainFunction()` 側で行われるため、`App_EngineManager_Run()` 自身が SPI
-送信でブロッキングすることはありません（詳細は「Tx 処理」の「ComFilterAlgorithm と TxModeMode」セクション参照）。E2E 保護は
+送信でブロッキングすることはありません（詳細は「Com」の「ComFilterAlgorithm と TxModeMode」セクション参照）。E2E 保護は
 付与していません（EngineInfo/AbsInfo を Com が既に検証した**後**にメータ ECU 自身が
 導出する二次データであり、実車でも一次センサ値ほど厳密な保護が付与されないことが
 多いため、素の（E2E 保護なしの）シグナル送信の実装例として意図的に残しています。
@@ -608,7 +619,7 @@ Signal Group としてまとめて Com へコミットします。コミット�
 集計し、Com の PERIODIC 送信モードにより 6000ms 周期で自動送信されるネットワーク
 健全性テレメトリです。テレメトリ自体の破損を監視ツールが検出できるよう、AbsInfo と
 同じ構成（データ＋Counter＋CRC）で E2E 保護しています。詳細は「E2E P01 保護」
-セクションおよび「ECU 管理層」の E2EMon サブセクションを参照してください。
+セクションの E2EMon サブセクションを参照してください。
 
 ##### RX フレーム（外部 → Arduino）
 
@@ -639,10 +650,11 @@ byte[0] byte[1] byte[2] byte[3] byte[4]
 > E2E Counter と CRC は uds_tester ツールが自動計算して付加します。
 > Cangaroo から手動送信する場合は byte[0]=CRC8 の計算値、byte[1]=Counter 値を手動で付加してください。
 
-<a id="tx-processing"></a>
-#### Tx 処理（Com → PduR → CanIf → Can の順）
+<a id="processing-flow"></a>
+#### 処理の流れ（関数コールチェーンと多層防御）
 
-##### 関数コールチェーン
+<a id="tx-processing"></a>
+##### Tx 処理（Com → PduR → CanIf → Can の順）
 
 ```
 Com_SendSignal()/Com_SendSignalGroup()   ← ASW から呼ばれる。TX バッファへ pack するだけ
@@ -661,6 +673,181 @@ Com_MainFunction()                        ← ここから下は同期呼び出�
           → Csm_MacGenerate() で Secured I-PDU を組み立て
             → PduR_SecOCTransmit() → CanIf_Transmit() → Can_Write()
 ```
+
+<a id="rx-processing"></a>
+##### Rx 処理（Can → CanIf → PduR → Com の順）
+
+```
+Can_Isr()                        ← 真の割り込み。ペンディングフラグを立てるだけ
+  ┊  (Can_RxIrqPending 経由。次回 Os スケジューラ tick まで非同期に待機)
+  ↓
+Can_MainFunction_Read()          ← フラグをドレイン、SPI 読み出し（ここから下は同期呼び出し連鎖）
+  → CanIf_RxIndication()         ← CAN ID → PduId（論理 PDU）へ変換
+    → PduR_CanIfRxIndication() (= PduR_ComRxIndication())
+      → 宛先ごとにマルチキャスト:
+          Com_RxIndication()         ← EngineInfo/AbsInfo（RxIndicationCbk 経由）
+            → Rte_COMCbk_EngineInfo/AbsInfo()
+              → E2EXf_InverseTransform() → E2E_P01Check()
+          CanTp_RxIndication()       ← UDS 診断要求（複数フレーム対応）
+          SecOC_IfRxIndication()     ← ImmobilizerCmd
+            → Csm_MacVerify() で認証成功時のみ Com_RxIndication()
+```
+
+##### 受信長チェックの多層防御
+
+**受信長チェックの多層防御**: 設定 DLC に満たない短小フレームは、まず `CanIf_RxIndication()`
+が棄却する（SWS_CANIF_00026 相当、本来この責務は CanIf 層にある）。仮に何らかの理由で
+ここを通過しても、`Com_RxIndication()`・`CanTp_RxIndication()`（SF/FF/CF/FC 各フレーム）
+がそれぞれ独立に自分の期待長を検証する。1 箇所だけに頼らず各層が自分の責務として
+検証するのは、本プロジェクトで実際に発生した「短いフレームで上位層バッファに
+新旧混在の破損データが残る」バグ（Com のシグナル固定長アクセス等）を踏まえた設計判断
+である。`Com_RxIndication()` の受信長チェックは AUTOSAR 本来の仕様（SWS_Com_00574/
+00575/00870）に準拠したシグナル単位の部分受理を実装している: Signal Group は
+一貫性のないスナップショットを公開しないため受信できたバイト数が DLC 未満なら
+グループ全体を棄却するが（SWS_Com_00575）、非 Signal Group の I-PDU は受信できた
+バイト範囲に収まるシグナルのみを部分的に受理し、範囲外のシグナルは前回受信値の
+まま据え置く（SWS_Com_00574/00870）。前述の「新旧混在の破損データ」バグは
+Com_ReceiveSignal/Com_SendSignal が BitSize に関わらず常に 4 バイト読み書きして
+呼び出し元のスタックを破壊していたことが根本原因であり、本対応（未受信バイトに
+触れず前回値をそのまま保持する）とは別の問題である（詳細は `Com.c` のコメント参照）。
+なお `CanIf_PBCfg.c` の各 RxPdu の `.Dlc` は現状 Com 側の `ipdu->DLC` と同じ値に
+設定されているため、`Com_RxIndication()` の部分受理パスは短小フレームが CanIf 層で
+先に棄却されることで実運用上到達しない（2026-07 時点で実機確認済み）。検証するには
+CanIf 側の `.Dlc` を一時的に緩める必要がある。
+
+<a id="can-module"></a>
+#### Can
+
+<a id="can-tx-async-confirm"></a>
+##### TX 確認の非同期化（`Can_MainFunction_Write`）
+
+**なぜ非同期化したか**: AUTOSAR の仕様 [SWS_Can_00016] は、`CanIf_TxConfirmation()` を
+「TX 割り込みハンドラから」または「ポーリングモードでは `Can_MainFunction_Write()` の
+中から」呼ぶことを求めている。しかし当初の実装では、`Can_Write()` が送信成功直後、
+呼び出し元と同一スタックフレーム内でそのまま `CanIf_TxConfirmation()` を呼んでいた。
+
+```
+（修正前）
+Com_MainFunction() → Com_DoTransmit() → PduR_Transmit() → CanIf_Transmit() → Can_Write()
+                                                                                → CanIf_TxConfirmation()
+                                                                                  → PduR_CanIfTxConfirmation()
+                                                                                    → Com_TxConfirmation()
+（すべて 1 回の呼び出しチェーン内で完結）
+```
+
+これ自体は現状害がないが、将来 `Com_TxConfirmation()` の延長線上（あるいは他の
+`TxConfirmFct`）に「送信失敗を検知したら即座に再送する」ような処理が足された場合、
+その再送呼び出しがそのまま `Can_Write()` の再帰呼び出しになってしまう。NvM の
+非同期書き込みジョブキュー（[DEVLOG参照](docs/DEVLOG.md#nvm-非同期書き込みジョブキューへの変更経緯)）
+と同じ「今は実害がないが将来の変更で踏み抜きやすいスタック深化の地雷」を避ける
+考え方で、この結合を断ち切った。
+
+**設計**:
+
+```
+Can_Write(Hth, PduInfo):
+  Can_Hw_Send() が成功したら、PduInfo->swPduHandle を TX 確認保留キューへ積むだけで
+  即座に E_OK 相当（CAN_OK）を返す（CanIf_TxConfirmation() はまだ呼ばない）
+
+Can_MainFunction_Write()（1ms 周期、Os_PBCfg.c Task 13）:
+  保留キューが空になるまで、投入順に CanIf_TxConfirmation() を呼び出す
+```
+
+NvM の非同期ジョブキュー（1 呼び出し 1 バイトずつ）とは異なり、こちらは
+`CanIf_TxConfirmation()` 自体がハードウェアをブロックしないソフトウェア的な
+コールバック転送のみのため、1 回の `Can_MainFunction_Write()` 呼び出しで
+保留分を全件処理してよい。
+
+**動作への影響**: `CanIf_TxConfirmation()` の呼び出しタイミングが `Can_Write()` から
+最大 1ms（Task 13 の周期）遅延するようになるが、`Com_TxConfirmation()`・
+`CanTp_TxConfirmation()` のいずれも受け取った結果を使わない no-op のため、
+体感できる動作変化はない（この経路は常に E_OK 固定でもある。詳細は CanTp
+セクションの N_As タイムアウトの説明を参照）。
+
+<a id="can-rx-interrupt"></a>
+##### RX の割り込み化（`Can_Isr` / `Can_MainFunction_Read/BusOff/Wakeup`）
+
+**なぜ割り込み化したか**: 従来 `Can_Isr()` は Os スケジューラから 1ms ごとにポーリング
+呼び出しされる「疑似 ISR」で、INT ピンを `digitalRead()` で確認していた。これは
+「割り込み」と名乗りながら実態はポーリングであり、AUTOSAR OS が本来持つ「タスクと
+ISR は実際にプリエンプトし合う」という関係を体験できていなかった。また、SchM の
+排他エリアマクロ（`SchM_Enter_Com_SIGNAL_EXCLUSIVE_AREA()` 等）も「協調スケジューリング
+なので NOP でよい」という理由でずっと未使用のまま残っていた。
+
+本変更で `Can_Hw_AttachRxIsr()`（`Can_Init()` 内）が `attachInterrupt()` で INT ピンの
+立ち下がりエッジに `Can_Isr()` を真のハードウェア割り込みとして登録し、Os スケジューラの
+周期とは無関係に即座に起動されるようにした。
+
+**ISR を最小限に保つ設計判断**: 素直に実装するなら「ISR の中で `CanIf_RxIndication()` まで
+呼んでしまう」のが最も単純だが、本実装ではあえてそうしていない。`Can_Isr()` は
+ペンディングフラグ（`Can_RxIrqPending` / `Can_WakeupIrqPending`）を立てるだけに留め、
+SPI 通信・Serial ログ・CanIf 呼び出しは一切行わない。理由は 2 つ:
+
+1. **SPI バス排他**: MCP2515 は SPI 接続のため、CS ピン制御を伴う複数バイトの読み書きが
+   1 トランザクションとして完結する必要がある。メインループ側の `Can_Write()`（TX、SPI
+   経由）がトランザクション途中で割り込みにプリエンプトされ、割り込み側が同じ SPI バスへ
+   別トランザクションを割り込ませると、双方が破壊されうる。ISR 側で SPI を使わなければ
+   この競合はそもそも発生しない。
+2. **処理時間の上限**: `CanIf_RxIndication()` から先は PduR/Com/CanTp/Dcm まで連鎖し、
+   UDS SID 処理（RoutineControl 等）まで含まれ得る。これを割り込みハンドラの中で行うと、
+   ISR の実行時間が事実上無制限になりかねない（本 README で繰り返し出てくる「同期呼び出し
+   連鎖のスタック/ブロッキングリスク」と同種の問題）。
+
+実際の SPI 読み出しと `CanIf_RxIndication()` 呼び出しは、ペンディングフラグを見てメイン
+ループのタスクが行う（AUTOSAR `SWS_Can_00396`・`SWS_Can_00012` 参照:「呼び出しコンテキストが
+ISR か `Can_MainFunction_Read` かは実装依存であり、コールバックはいずれの場合も ISR から
+呼ばれたかのように実装してよい」）。これは TX 確認の非同期化（`Can_MainFunction_Write`）と
+対になる設計で、CAN モジュールの RX/TX 双方が「イベントは即座に検知するが、重い処理は
+専用タスクへ委譲する」という同じパターンに統一されたことになる。
+
+**関数の分離**: 旧 `Can_Isr()` は「RX ポーリング」「Bus-Off ポーリング」「SLEEP 中の
+ウェイクアップ検出」の 3 役を 1 つの関数にまとめていたが、AUTOSAR は元々これらを
+独立した `Can_MainFunction_xxx` として定義している。これに合わせて分離した。
+
+```
+Can_Isr()                     ← 真の割り込み。フラグを立てるだけ
+Can_MainFunction_Read()       ← Can_RxIrqPending をドレインし RX 処理 (SWS_Can_00108)
+Can_MainFunction_BusOff()     ← EFLG.TXBO を毎回ポーリング (SWS_Can_00109、割り込み非依存)
+Can_MainFunction_Wakeup()     ← Can_WakeupIrqPending をドレインしウェイクアップ通知 (SWS_Can_00112)
+```
+
+`Can_MainFunction_Read()` のドレインループはフラグではなく `Can_Hw_CheckReceive()` が
+NOT_OK を返すまで継続する。MCP2515 の INT はレベル方式（未読フレームが残る限り
+アサートされ続ける）ため、連続到着した 2 フレーム目には新たなエッジが立たないことが
+あるが、フラグは「立った」ことだけを覚えていれば十分で、実際に何件処理するかは
+ドレインループがハードウェアの状態から判断する。
+
+**SchM が初めて意味を持つ**: `Can_Isr()`（割り込みコンテキスト）と
+`Can_MainFunction_Read()`/`Can_MainFunction_Wakeup()`（メインループのタスク）は、
+ペンディングフラグを介して実際に競合しうる関係になった。フラグの読み出しとクリアを
+アトミックに行わないと、その間に割り込みが発生した場合にフラグのセットが失われ、
+受信フレーム・ウェイクアップ通知を取りこぼす。これを防ぐため `SchM.h` に新しい排他エリア
+`SchM_Enter/Exit_Can_IRQFLAG_EXCLUSIVE_AREA()` を追加し、実体を
+`SchM_Hw_EnterExclusiveArea()`/`ExitExclusiveArea()`（`src/Hal/SchM_Hw.cpp`、
+`noInterrupts()`/`interrupts()` を呼ぶだけ）とした。既存の `Rte_MIRROR`・`Com_SIGNAL`
+排他エリアも同じ実体を指すように変更し、NOP のままだった `SchM.h` が実際に機能するように
+なった（Com の RX/TX バッファ自体は現状 `Can_MainFunction_Read()` というメインループの
+タスクからのみ触られる設計にしたため、まだ割り込みと競合しないが、Rte 側と同様
+将来のための保険として Enter/Exit を残してある）。
+
+> **意図的な二重化**: `Can_MainFunction_Read()`/`Can_MainFunction_Wakeup()` は
+> 「割り込みが本当に発火するか」に正しさを依存させない設計にしている。
+> - `Can_MainFunction_Read()` は `Can_RxIrqPending` の有無に関わらず、毎回
+>   無条件に `Can_Hw_CheckReceive()`（SPI 経由のステータスレジスタ読み出し。
+>   INT ピンの実際の状態には依存しない）でドレインする。
+> - `Can_MainFunction_Wakeup()` は `Can_WakeupIrqPending` に加えて
+>   `digitalRead(intPin)` の直接ポーリングも併用する（旧実装と同じ
+>   フォールバック）。
+>
+> `Can_Isr()`・ペンディングフラグ・`SchM_Enter/Exit_Can_IRQFLAG_EXCLUSIVE_AREA()`
+> の構造はそのまま残り、割り込みが発火すればより低遅延に反応できる
+> 「ボーナス経路」として機能するが、たとえ割り込みが何らかの理由で発火
+> しなくてもポーリング側だけで正しく動作する。単一の検出経路（割り込みのみ）に
+> 正しさを委ねず、独立したポーリングでも動作を保証する設計にした経緯は
+> [DEVLOG: Can RX 割り込み化の実機検証で得られた教訓](docs/DEVLOG.md#can-rx-割り込み化の実機検証で得られた教訓) を参照。
+
+<a id="com-module"></a>
+#### Com
 
 ##### ComFilterAlgorithm と TxModeMode（送信要否・タイミングを Com 自身が判断する）
 
@@ -1119,175 +1306,6 @@ sent out via PduR_ComTransmit **and PduR_ComTransmit returned E_OK**" であり�
 この修正は `MeterStatus`（非 Signal Group）の送信経路でも共通に使われるため、
 Signal Group への適用有無に関わらず活きています。
 
-##### TX 確認の非同期化（`Can_MainFunction_Write`）
-
-**なぜ非同期化したか**: AUTOSAR の仕様 [SWS_Can_00016] は、`CanIf_TxConfirmation()` を
-「TX 割り込みハンドラから」または「ポーリングモードでは `Can_MainFunction_Write()` の
-中から」呼ぶことを求めている。しかし当初の実装では、`Can_Write()` が送信成功直後、
-呼び出し元と同一スタックフレーム内でそのまま `CanIf_TxConfirmation()` を呼んでいた。
-
-```
-（修正前）
-Com_MainFunction() → Com_DoTransmit() → PduR_Transmit() → CanIf_Transmit() → Can_Write()
-                                                                                → CanIf_TxConfirmation()
-                                                                                  → PduR_CanIfTxConfirmation()
-                                                                                    → Com_TxConfirmation()
-（すべて 1 回の呼び出しチェーン内で完結）
-```
-
-これ自体は現状害がないが、将来 `Com_TxConfirmation()` の延長線上（あるいは他の
-`TxConfirmFct`）に「送信失敗を検知したら即座に再送する」ような処理が足された場合、
-その再送呼び出しがそのまま `Can_Write()` の再帰呼び出しになってしまう。NvM の
-非同期書き込みジョブキュー（[DEVLOG参照](docs/DEVLOG.md#nvm-非同期書き込みジョブキューへの変更経緯)）
-と同じ「今は実害がないが将来の変更で踏み抜きやすいスタック深化の地雷」を避ける
-考え方で、この結合を断ち切った。
-
-**設計**:
-
-```
-Can_Write(Hth, PduInfo):
-  Can_Hw_Send() が成功したら、PduInfo->swPduHandle を TX 確認保留キューへ積むだけで
-  即座に E_OK 相当（CAN_OK）を返す（CanIf_TxConfirmation() はまだ呼ばない）
-
-Can_MainFunction_Write()（1ms 周期、Os_PBCfg.c Task 13）:
-  保留キューが空になるまで、投入順に CanIf_TxConfirmation() を呼び出す
-```
-
-NvM の非同期ジョブキュー（1 呼び出し 1 バイトずつ）とは異なり、こちらは
-`CanIf_TxConfirmation()` 自体がハードウェアをブロックしないソフトウェア的な
-コールバック転送のみのため、1 回の `Can_MainFunction_Write()` 呼び出しで
-保留分を全件処理してよい。
-
-**動作への影響**: `CanIf_TxConfirmation()` の呼び出しタイミングが `Can_Write()` から
-最大 1ms（Task 13 の周期）遅延するようになるが、`Com_TxConfirmation()`・
-`CanTp_TxConfirmation()` のいずれも受け取った結果を使わない no-op のため、
-体感できる動作変化はない（この経路は常に E_OK 固定でもある。詳細は CanTp
-セクションの N_As タイムアウトの説明を参照）。
-
-<a id="rx-processing"></a>
-#### Rx 処理（Can → CanIf → PduR → Com の順）
-
-##### 関数コールチェーン
-
-```
-Can_Isr()                        ← 真の割り込み。ペンディングフラグを立てるだけ
-  ┊  (Can_RxIrqPending 経由。次回 Os スケジューラ tick まで非同期に待機)
-  ↓
-Can_MainFunction_Read()          ← フラグをドレイン、SPI 読み出し（ここから下は同期呼び出し連鎖）
-  → CanIf_RxIndication()         ← CAN ID → PduId（論理 PDU）へ変換
-    → PduR_CanIfRxIndication() (= PduR_ComRxIndication())
-      → 宛先ごとにマルチキャスト:
-          Com_RxIndication()         ← EngineInfo/AbsInfo（RxIndicationCbk 経由）
-            → Rte_COMCbk_EngineInfo/AbsInfo()
-              → E2EXf_InverseTransform() → E2E_P01Check()
-          CanTp_RxIndication()       ← UDS 診断要求（複数フレーム対応）
-          SecOC_IfRxIndication()     ← ImmobilizerCmd
-            → Csm_MacVerify() で認証成功時のみ Com_RxIndication()
-```
-
-##### RX の割り込み化（`Can_Isr` / `Can_MainFunction_Read/BusOff/Wakeup`）
-
-**なぜ割り込み化したか**: 従来 `Can_Isr()` は Os スケジューラから 1ms ごとにポーリング
-呼び出しされる「疑似 ISR」で、INT ピンを `digitalRead()` で確認していた。これは
-「割り込み」と名乗りながら実態はポーリングであり、AUTOSAR OS が本来持つ「タスクと
-ISR は実際にプリエンプトし合う」という関係を体験できていなかった。また、SchM の
-排他エリアマクロ（`SchM_Enter_Com_SIGNAL_EXCLUSIVE_AREA()` 等）も「協調スケジューリング
-なので NOP でよい」という理由でずっと未使用のまま残っていた。
-
-本変更で `Can_Hw_AttachRxIsr()`（`Can_Init()` 内）が `attachInterrupt()` で INT ピンの
-立ち下がりエッジに `Can_Isr()` を真のハードウェア割り込みとして登録し、Os スケジューラの
-周期とは無関係に即座に起動されるようにした。
-
-**ISR を最小限に保つ設計判断**: 素直に実装するなら「ISR の中で `CanIf_RxIndication()` まで
-呼んでしまう」のが最も単純だが、本実装ではあえてそうしていない。`Can_Isr()` は
-ペンディングフラグ（`Can_RxIrqPending` / `Can_WakeupIrqPending`）を立てるだけに留め、
-SPI 通信・Serial ログ・CanIf 呼び出しは一切行わない。理由は 2 つ:
-
-1. **SPI バス排他**: MCP2515 は SPI 接続のため、CS ピン制御を伴う複数バイトの読み書きが
-   1 トランザクションとして完結する必要がある。メインループ側の `Can_Write()`（TX、SPI
-   経由）がトランザクション途中で割り込みにプリエンプトされ、割り込み側が同じ SPI バスへ
-   別トランザクションを割り込ませると、双方が破壊されうる。ISR 側で SPI を使わなければ
-   この競合はそもそも発生しない。
-2. **処理時間の上限**: `CanIf_RxIndication()` から先は PduR/Com/CanTp/Dcm まで連鎖し、
-   UDS SID 処理（RoutineControl 等）まで含まれ得る。これを割り込みハンドラの中で行うと、
-   ISR の実行時間が事実上無制限になりかねない（本 README で繰り返し出てくる「同期呼び出し
-   連鎖のスタック/ブロッキングリスク」と同種の問題）。
-
-実際の SPI 読み出しと `CanIf_RxIndication()` 呼び出しは、ペンディングフラグを見てメイン
-ループのタスクが行う（AUTOSAR `SWS_Can_00396`・`SWS_Can_00012` 参照:「呼び出しコンテキストが
-ISR か `Can_MainFunction_Read` かは実装依存であり、コールバックはいずれの場合も ISR から
-呼ばれたかのように実装してよい」）。これは TX 確認の非同期化（`Can_MainFunction_Write`）と
-対になる設計で、CAN モジュールの RX/TX 双方が「イベントは即座に検知するが、重い処理は
-専用タスクへ委譲する」という同じパターンに統一されたことになる。
-
-**関数の分離**: 旧 `Can_Isr()` は「RX ポーリング」「Bus-Off ポーリング」「SLEEP 中の
-ウェイクアップ検出」の 3 役を 1 つの関数にまとめていたが、AUTOSAR は元々これらを
-独立した `Can_MainFunction_xxx` として定義している。これに合わせて分離した。
-
-```
-Can_Isr()                     ← 真の割り込み。フラグを立てるだけ
-Can_MainFunction_Read()       ← Can_RxIrqPending をドレインし RX 処理 (SWS_Can_00108)
-Can_MainFunction_BusOff()     ← EFLG.TXBO を毎回ポーリング (SWS_Can_00109、割り込み非依存)
-Can_MainFunction_Wakeup()     ← Can_WakeupIrqPending をドレインしウェイクアップ通知 (SWS_Can_00112)
-```
-
-`Can_MainFunction_Read()` のドレインループはフラグではなく `Can_Hw_CheckReceive()` が
-NOT_OK を返すまで継続する。MCP2515 の INT はレベル方式（未読フレームが残る限り
-アサートされ続ける）ため、連続到着した 2 フレーム目には新たなエッジが立たないことが
-あるが、フラグは「立った」ことだけを覚えていれば十分で、実際に何件処理するかは
-ドレインループがハードウェアの状態から判断する。
-
-**SchM が初めて意味を持つ**: `Can_Isr()`（割り込みコンテキスト）と
-`Can_MainFunction_Read()`/`Can_MainFunction_Wakeup()`（メインループのタスク）は、
-ペンディングフラグを介して実際に競合しうる関係になった。フラグの読み出しとクリアを
-アトミックに行わないと、その間に割り込みが発生した場合にフラグのセットが失われ、
-受信フレーム・ウェイクアップ通知を取りこぼす。これを防ぐため `SchM.h` に新しい排他エリア
-`SchM_Enter/Exit_Can_IRQFLAG_EXCLUSIVE_AREA()` を追加し、実体を
-`SchM_Hw_EnterExclusiveArea()`/`ExitExclusiveArea()`（`src/Hal/SchM_Hw.cpp`、
-`noInterrupts()`/`interrupts()` を呼ぶだけ）とした。既存の `Rte_MIRROR`・`Com_SIGNAL`
-排他エリアも同じ実体を指すように変更し、NOP のままだった `SchM.h` が実際に機能するように
-なった（Com の RX/TX バッファ自体は現状 `Can_MainFunction_Read()` というメインループの
-タスクからのみ触られる設計にしたため、まだ割り込みと競合しないが、Rte 側と同様
-将来のための保険として Enter/Exit を残してある）。
-
-> **意図的な二重化**: `Can_MainFunction_Read()`/`Can_MainFunction_Wakeup()` は
-> 「割り込みが本当に発火するか」に正しさを依存させない設計にしている。
-> - `Can_MainFunction_Read()` は `Can_RxIrqPending` の有無に関わらず、毎回
->   無条件に `Can_Hw_CheckReceive()`（SPI 経由のステータスレジスタ読み出し。
->   INT ピンの実際の状態には依存しない）でドレインする。
-> - `Can_MainFunction_Wakeup()` は `Can_WakeupIrqPending` に加えて
->   `digitalRead(intPin)` の直接ポーリングも併用する（旧実装と同じ
->   フォールバック）。
->
-> `Can_Isr()`・ペンディングフラグ・`SchM_Enter/Exit_Can_IRQFLAG_EXCLUSIVE_AREA()`
-> の構造はそのまま残り、割り込みが発火すればより低遅延に反応できる
-> 「ボーナス経路」として機能するが、たとえ割り込みが何らかの理由で発火
-> しなくてもポーリング側だけで正しく動作する。単一の検出経路（割り込みのみ）に
-> 正しさを委ねず、独立したポーリングでも動作を保証する設計にした経緯は
-> [DEVLOG: Can RX 割り込み化の実機検証で得られた教訓](docs/DEVLOG.md#can-rx-割り込み化の実機検証で得られた教訓) を参照。
-
-##### 受信長チェックの多層防御
-
-**受信長チェックの多層防御**: 設定 DLC に満たない短小フレームは、まず `CanIf_RxIndication()`
-が棄却する（SWS_CANIF_00026 相当、本来この責務は CanIf 層にある）。仮に何らかの理由で
-ここを通過しても、`Com_RxIndication()`・`CanTp_RxIndication()`（SF/FF/CF/FC 各フレーム）
-がそれぞれ独立に自分の期待長を検証する。1 箇所だけに頼らず各層が自分の責務として
-検証するのは、本プロジェクトで実際に発生した「短いフレームで上位層バッファに
-新旧混在の破損データが残る」バグ（Com のシグナル固定長アクセス等）を踏まえた設計判断
-である。`Com_RxIndication()` の受信長チェックは AUTOSAR 本来の仕様（SWS_Com_00574/
-00575/00870）に準拠したシグナル単位の部分受理を実装している: Signal Group は
-一貫性のないスナップショットを公開しないため受信できたバイト数が DLC 未満なら
-グループ全体を棄却するが（SWS_Com_00575）、非 Signal Group の I-PDU は受信できた
-バイト範囲に収まるシグナルのみを部分的に受理し、範囲外のシグナルは前回受信値の
-まま据え置く（SWS_Com_00574/00870）。前述の「新旧混在の破損データ」バグは
-Com_ReceiveSignal/Com_SendSignal が BitSize に関わらず常に 4 バイト読み書きして
-呼び出し元のスタックを破壊していたことが根本原因であり、本対応（未受信バイトに
-触れず前回値をそのまま保持する）とは別の問題である（詳細は `Com.c` のコメント参照）。
-なお `CanIf_PBCfg.c` の各 RxPdu の `.Dlc` は現状 Com 側の `ipdu->DLC` と同じ値に
-設定されているため、`Com_RxIndication()` の部分受理パスは短小フレームが CanIf 層で
-先に棄却されることで実運用上到達しない（2026-07 時点で実機確認済み）。検証するには
-CanIf 側の `.Dlc` を一時的に緩める必要がある。
-
 ##### RX Signal Group（複数シグナルの一貫したスナップショット読み出し）
 
 ここまでの Signal Group（`Com Signal Group`/`ComTransferProperty` 節）は TX 側の
@@ -1637,7 +1655,7 @@ COM モジュールが各 RX I-PDU の受信間隔を監視し、設定タイム
 ##### update-bit の受信側判定（discard）
 
 update-bit の概要、および TX 側（非 Signal Group・Signal Group）のセット/クリアの
-仕組みは「Tx 処理」の「Update Bit」を参照してください。ここでは Signal Group の
+仕組みは「Com」の「Update Bit」を参照してください。ここでは Signal Group の
 RX 側判定ロジック（discard）のみを説明します。
 
 ```
@@ -1816,7 +1834,7 @@ AUTOSAR E2E (End-to-End) Profile 01 による保護です。CAN バスの電気�
 - **AbsInfo（CAN 0x110、受信）**: ABS ECU から受信するフレームを`E2E_P01Check`で検証（本セクション前半）
 - **E2EHealthStatus（CAN 0x220、送信）**: 本 ECU（メータ ECU）が送信する、EngineInfo/AbsInfo
   受信側の E2E 検証エラー累積数を伝えるネットワーク健全性テレメトリに `E2E_P01Protect`で
-  Counter・CRC8 を付加（本セクション後半、詳細は「ECU 管理層」の E2EMon サブセクション参照）。
+  Counter・CRC8 を付加（本セクション後半の E2EMon サブセクション参照）。
   監視ツールがこのテレメトリ自体の破損を検出できるようにするためです
 
 > MeterStatus（CAN 0x200、送信）・WarningStatus（CAN 0x210、送信）には E2E 保護を
@@ -2724,6 +2742,7 @@ ComDataInvalidAction 等のゲートを経由しなくても）安全です。�
 `(UNLOCK)`/`(LOCK)` を表示し、`ImmobilizerCmd` の送信直後に追従して更新される
 ことが確認できます。
 
+---
 <a id="diag-stack"></a>
 ### 診断スタック（CanTp / Dcm / Dem / FiM / NvM）
 
@@ -4054,14 +4073,14 @@ DEM_EXTENDED のみ冗長ブロック（2 面化）にしています。理由�
 「NvM（Non-Volatile Memory Manager）」の「冗長ブロック」参照。
 
 <a id="freezeframe"></a>
-#### FreezeFrame（故障時スナップショット）
+##### FreezeFrame（故障時スナップショット）
 
 DTC が FAILED に遷移した瞬間の車両状態（EngineSpeed / CoolantTemp / EngineState）を Dem が記録し、
 UDS SID 0x19 subFunc 0x04（reportDTCSnapshotRecordByDTCNumber）で読み出せます。
 本実装は **RAM のみに保持**し EEPROM へは永続化しません（電源 OFF で消去される学習用簡略化）。
 イベントごとに保持するレコードは 1 件（recordNumber=0x01）のみです。
 
-##### 記録の仕組み
+###### 記録の仕組み
 
 ```
 App_EngineManager_Run（3000ms 周期、毎回呼ばれる）:
@@ -4082,7 +4101,7 @@ Dem_ReportErrorStatus(EventId, FAILED) が呼ばれ、ステータスが変化�
 これは実車 OBD-II の FreezeFrame が「DTC 固有のデータ」ではなく「DTC 検出時点の車両全体のスナップショット」を
 記録する考え方と同じです。
 
-##### フレーム例（SID 0x19/04）
+###### フレーム例（SID 0x19/04）
 
 ENGINE_OVERHEAT（DTC 0x000101）が温度 101℃・回転数 1000rpm・RUNNING 中に FAILED した場合:
 
@@ -4111,7 +4130,7 @@ ENGINE_OVERHEAT（DTC 0x000101）が温度 101℃・回転数 1000rpm・RUNNING 
 （requestOutOfRange）で応答します。
 
 <a id="extendeddata"></a>
-#### ExtendedData（故障確定回数）
+##### ExtendedData（故障確定回数）
 
 FreezeFrame が「故障した瞬間の車両状態のスナップショット」（1 件のみ、上書きされる）
 であるのに対し、ExtendedData は「これまでに何回確定 FAILED したか」を表す
@@ -4126,7 +4145,7 @@ FreezeFrame が「故障した瞬間の車両状態のスナップショット�
 | SID 0x14 クリア時 | 未記録状態に戻る | 0 にリセット（経年回復カウンタと同じ扱い） |
 | 応答サイズ | 18 バイト（CanTp が FF+CF に分割） | 8 バイト（SF で収まる） |
 
-##### 記録の仕組み
+###### 記録の仕組み
 
 ```
 Dem_ReportErrorStatus(EventId, FAILED) が呼ばれ、確定 FAILED に遷移した瞬間
@@ -4138,7 +4157,7 @@ SID 0x14（全クリア／DTC 指定クリア）で対象イベントの Dem_Occ
 （CDTC 自体や経年回復カウンタとは独立した値だが、クリア操作のタイミングは共通）。
 ```
 
-##### フレーム例（SID 0x19/06）
+###### フレーム例（SID 0x19/06）
 
 ENGINE_OVERHEAT（DTC 0x000101）がこれまでに 3 回確定 FAILED した場合:
 
@@ -4252,6 +4271,87 @@ EcuM が状態遷移を決定し、BswM がその状態に応じたタスクの�
 |  | ComM | CAN バスの通信モード（NO_COM / SILENT_COM / FULL_COM）を管理し CanSM へ要求。`ComM_BusSMIndication` で EcuM の RUN 要求を操作。複数ユーザ（App_EngineManager=COMM_USER_0, Dcm=COMM_USER_1）の要求を最も通信レベルの高いモードへ集約する調停ロジックを持つ。両ユーザが NO_COM を要求したときのみ実際にボランタリスリープへ落ちる |
 |  | CanSM | Bus-Off 検出直後（回復試行の前）に `ComM_BusSMIndication(SILENT_COMMUNICATION)` を呼び、ComM のチャネル状態が回復完了まで FULL_COM のまま古い情報として残ることを防ぐ（SWS_CanSM_00521。SILENT_COM は EcuM の RUN を維持するため回復中も RUN は落ちない）。受け付ける Bus-Off はコントローラが物理的に稼働中の状態（FULL_COM、および Nm の Bus-Sleep Mode 到達待ちで HW が稼働継続する NO_COM_PENDING_SLEEP）のみで、回復シーケンスは L1/L2 バックオフ（SWS_CanSM_00514/00515 準拠）で実施し、試行回数が `CANSM_BUSOFF_L1_TO_L2_COUNT` を超えるまでは短い周期（L1）でリトライし、超えたら Dem へ DTC を報告（limit=1 のため即座に確定）した上で長い周期（L2）へ切り替えて無期限にリトライを継続する（回復を諦めて停止する状態は存在しない）。再起動試行のたびに、Bus-Off 発生時点の状態（FULL_COM か NO_COM_PENDING_SLEEP か）へ復帰させる（`CanSM_BusOffFromPendingSleep`、後者の場合は誤って FULL_COM へ戻さない）。ComM の NO_COM 要求によるボランタリスリープでは即座にはスリープせず、Nm（CanNm 状態機械）が Bus-Sleep Mode へ到達した通知（`CanSM_NmBusSleepMode()`）を受けてから `Can_SetControllerMode(CAN_T_SLEEP)` で実 HW を実際にスリープさせる（協調スリープ、詳細は Nm セクション参照）。`CanSM_ControllerWakeup()` による復帰経路を持ち、復帰は即座に確定せず、ウェイクアップ検証（Wakeup Validation Protocol 相当）により有効な CAN フレーム受信を確認してから FULL_COM へ確定する |
 |  | Nm | CanNm 状態機械（Network Mode の Repeat Message/Normal Operation/Ready Sleep の3内部状態、Prepare Bus-Sleep Mode、Bus-Sleep Mode）を実装。`ComM_BusSMIndication()` が呼ぶ `Nm_NetworkRequest()`/`Nm_NetworkRelease()` を契機に自律的に状態遷移し、NM-Timeout/Repeat Message/Wait-Bus-Sleep の3タイマで駆動する。Bus-Sleep Mode へ到達すると `CanSM_NmBusSleepMode()` を呼び、CanSM はこの通知を受けて初めて CAN コントローラを物理スリープさせる（協調スリープ。他ノードの NM フレーム受信が続く間は実際にはスリープしない）。PduR/Com を経由せず `CanIf_Transmit`/`CanIf_RxIndication` を直接やり取りする点が実車の CanNm と同じ。シグナル値を運ばないため E2E 保護は付与しない |
+
+<a id="processing-flow-ecu"></a>
+#### 処理の流れ（コールチェーン）
+
+AUTOSAR では「上から下への要求 (Request)」と「下から上への通知 (Indication)」が分離されています。
+Bus-Off 回復・ウェイクアップ検証は CanSM が中心となって EcuM/ComM/Nm/Can と連携するため、
+特定の 1 モジュールに閉じた話ではなく、ここでモジュール横断のコールチェーンとしてまとめます。
+
+```
+【起動時】
+EcuM_Init → ComM_RequestComMode(FULL_COM)   ← EcuM が ComM へ要求（上→下）
+              └→ CanSM_RequestComMode(FULL_COM)
+                   └→ ComM_BusSMIndication(FULL_COM)  ← CanSM が ComM へ通知（下→上）
+                        └→ EcuM_RequestRUN(ECUM_USER_COMM)
+
+【Bus-Off 検出時（回復試行の前、SWS_CanSM_00521）】
+CanIf_ControllerBusOff → CanSM_ControllerBusOff
+  受け付けるのは CANSM_STATE_FULL_COM と CANSM_STATE_NO_COM_PENDING_SLEEP
+  （Nm の Bus-Sleep Mode 到達待ちでコントローラがまだ稼働中の状態）の 2 つのみ
+  （2026-08 発見・修正: 以前は FULL_COM のみを受け付けており、
+   NO_COM_PENDING_SLEEP 中の実 Bus-Off は黙って無視され、回復シーケンスが
+   一切起動しないままコントローラが HW 的に Bus-Off し続ける不具合があった）
+  └→ Can_SetControllerMode(CAN_T_STOP)
+       └→ ComM_BusSMIndication(SILENT_COM)  ← CanSM が ComM へ通知（下→上）
+            （SILENT_COM は EcuM_RequestRUN/ReleaseRUN いずれも呼ばない → RUN 維持）
+
+【Bus-Off 回復試行時（L1/L2 バックオフで無期限に継続）】
+CanSM_MainFunction（10ms タスク）
+  └→ Can_SetControllerMode(CAN_T_START) で再起動を試行
+       └→ 復帰先は Bus-Off 発生時点の状態で分岐する
+          （CanSM_BusOffFromPendingSleep フラグ、CanSM.c 参照）
+          ├─ 発生時 FULL_COM だった場合: CanSM state → FULL_COM
+          │    └→ ComM_BusSMIndication(FULL_COM)  ← CanSM が ComM へ通知（下→上）
+          │         └→ ComM_EcuMRunMode が既に FULL_COMMUNICATION のため
+          │            EcuM_RequestRUN() は呼ばない（RUN は Bus-Off 中も維持
+          │            されたまま）。Nm へは Nm_NetworkRequest() のみ送る
+          └─ 発生時 NO_COM_PENDING_SLEEP だった場合: CanSM state →
+               NO_COM_PENDING_SLEEP（FULL_COM へは戻さない。ComM は既に
+               NO_COM を要求済みで、戻すと誰も再要求せず取り残されるため）
+               └→ ComM_BusSMIndication(NO_COM)  ← CanSM が ComM へ通知（下→上）
+                    └→ ComM_EcuMRunMode が既に NO_COMMUNICATION のため
+                       EcuM_ReleaseRUN() は呼ばない（RUN は既にボランタリ
+                       スリープ突入時点で解放済み）
+  （L1 リトライ超過時は Dem へ FAILED を報告するのみで、RUN の状態には影響しない）
+
+【ボランタリスリープ突入時（エンジン OFF 継続、復帰経路あり）】
+App_EngineManager_Run（3000ms タスク、ENGINE_STATE_OFF が5周期継続）
+  └→ Rte_Call_ComM_RequestComMode(NO_COM)   ← ASW が ComM へ要求（上→下）
+       └→ ComM_RequestComMode(COMM_USER_0, NO_COM)
+            └→ 集約結果が NO_COM（Dcm も extendedSession でない場合のみ）
+                 └→ CanSM_RequestComMode(NO_COM) → Can_SetControllerMode(CAN_T_SLEEP)
+                      └→ ComM_BusSMIndication(NO_COM)
+                           └→ EcuM_ReleaseRUN(ECUM_USER_COMM)
+                                └→ EcuM: RUN → POST_RUN → (5秒後) → SHUTDOWN
+
+【ボランタリスリープからのウェイクアップ時 — 1st phase: 検知（CAN バス活動を検知）】
+Can_Isr（INT ピン立ち下がりの真のハードウェア割り込み。SHUTDOWN 中も常に有効）
+  └→ Can_WakeupIrqPending フラグをセットするのみ（SPI/Serial は行わない）
+       └→ Can_MainFunction_Wakeup（1ms タスク、SHUTDOWN 中もこのタスクだけは動き続ける）
+            がフラグをドレインし CanIf_ControllerWakeup(0)  ← Can が CanIf へ通知（下→上）
+                 └→ CanSM_ControllerWakeup(0)
+                      └→ Can_SetControllerMode(CAN_T_WAKEUP)   ← SLEEP→STOPPED (Listen-Only) のみ
+                           └→ CanSM: NO_COM → WAKEUP_VALIDATING（ComM/EcuM へはまだ何も通知しない）
+
+【2nd phase-a: 検証成功（検証タイマ内に有効な CAN フレームを受信）】
+Can_MainFunction_Read（Listen-Only になったため通常の RX ドレインが有効。
+                        SHUTDOWN 中もこのタスクだけは動き続ける）
+  └→ CanIf_RxIndication()                     ← 受信フレームを検出
+       └→ CanSM_RxIndication(0)                ← 全受信フレームで無条件に呼ばれる
+            └→ CanSM: WAKEUP_VALIDATING → FULL_COM（Can_SetControllerMode(CAN_T_START)）
+                 └→ ComM_BusSMIndication(FULL_COM)
+                      └→ EcuM_RequestRUN(ECUM_USER_COMM)
+                           └→ EcuM: SHUTDOWN → RUN（全タスク再有効化）
+       └→ （同じフレームがそのまま PduR/Com/Dcm 等へも配信される）
+
+【2nd phase-b: 検証失敗（検証タイマ超過、ノイズによる誤ウェイクアップ）】
+CanSM_MainFunction（10ms タスク、SHUTDOWN 中も動き続ける）
+  └→ CANSM_WAKEUP_VALIDATION_MS 超過を検出
+       └→ Can_SetControllerMode(CAN_T_SLEEP)   ← STOPPED→SLEEP、ウェイクアップ割り込み再武装
+            └→ CanSM: WAKEUP_VALIDATING → NO_COM（ComM/EcuM は一切関与せず、静かに再スリープ）
+```
 
 <a id="ecum"></a>
 #### EcuM（ECU ステートマネージャ）
@@ -4370,84 +4470,6 @@ Bus-Off 検出時に一時的に挟まる `COMM_SILENT_COMMUNICATION`（EcuM の
 FULL/NO_COM の別。SILENT_COM では更新しない）という専用の内部状態で判定しており、
 Bus-Off 回復中に SILENT_COM を何度挟んでも、EcuM への再通知は本当に FULL⇔NO_COM が
 変化したときだけに限られます。
-
-##### コールチェーン（上下双方向）
-
-AUTOSAR では「上から下への要求 (Request)」と「下から上への通知 (Indication)」が分離されています。
-
-```
-【起動時】
-EcuM_Init → ComM_RequestComMode(FULL_COM)   ← EcuM が ComM へ要求（上→下）
-              └→ CanSM_RequestComMode(FULL_COM)
-                   └→ ComM_BusSMIndication(FULL_COM)  ← CanSM が ComM へ通知（下→上）
-                        └→ EcuM_RequestRUN(ECUM_USER_COMM)
-
-【Bus-Off 検出時（回復試行の前、SWS_CanSM_00521）】
-CanIf_ControllerBusOff → CanSM_ControllerBusOff
-  受け付けるのは CANSM_STATE_FULL_COM と CANSM_STATE_NO_COM_PENDING_SLEEP
-  （Nm の Bus-Sleep Mode 到達待ちでコントローラがまだ稼働中の状態）の 2 つのみ
-  （2026-08 発見・修正: 以前は FULL_COM のみを受け付けており、
-   NO_COM_PENDING_SLEEP 中の実 Bus-Off は黙って無視され、回復シーケンスが
-   一切起動しないままコントローラが HW 的に Bus-Off し続ける不具合があった）
-  └→ Can_SetControllerMode(CAN_T_STOP)
-       └→ ComM_BusSMIndication(SILENT_COM)  ← CanSM が ComM へ通知（下→上）
-            （SILENT_COM は EcuM_RequestRUN/ReleaseRUN いずれも呼ばない → RUN 維持）
-
-【Bus-Off 回復試行時（L1/L2 バックオフで無期限に継続）】
-CanSM_MainFunction（10ms タスク）
-  └→ Can_SetControllerMode(CAN_T_START) で再起動を試行
-       └→ 復帰先は Bus-Off 発生時点の状態で分岐する
-          （CanSM_BusOffFromPendingSleep フラグ、CanSM.c 参照）
-          ├─ 発生時 FULL_COM だった場合: CanSM state → FULL_COM
-          │    └→ ComM_BusSMIndication(FULL_COM)  ← CanSM が ComM へ通知（下→上）
-          │         └→ ComM_EcuMRunMode が既に FULL_COMMUNICATION のため
-          │            EcuM_RequestRUN() は呼ばない（RUN は Bus-Off 中も維持
-          │            されたまま）。Nm へは Nm_NetworkRequest() のみ送る
-          └─ 発生時 NO_COM_PENDING_SLEEP だった場合: CanSM state →
-               NO_COM_PENDING_SLEEP（FULL_COM へは戻さない。ComM は既に
-               NO_COM を要求済みで、戻すと誰も再要求せず取り残されるため）
-               └→ ComM_BusSMIndication(NO_COM)  ← CanSM が ComM へ通知（下→上）
-                    └→ ComM_EcuMRunMode が既に NO_COMMUNICATION のため
-                       EcuM_ReleaseRUN() は呼ばない（RUN は既にボランタリ
-                       スリープ突入時点で解放済み）
-  （L1 リトライ超過時は Dem へ FAILED を報告するのみで、RUN の状態には影響しない）
-
-【ボランタリスリープ突入時（エンジン OFF 継続、復帰経路あり）】
-App_EngineManager_Run（3000ms タスク、ENGINE_STATE_OFF が5周期継続）
-  └→ Rte_Call_ComM_RequestComMode(NO_COM)   ← ASW が ComM へ要求（上→下）
-       └→ ComM_RequestComMode(COMM_USER_0, NO_COM)
-            └→ 集約結果が NO_COM（Dcm も extendedSession でない場合のみ）
-                 └→ CanSM_RequestComMode(NO_COM) → Can_SetControllerMode(CAN_T_SLEEP)
-                      └→ ComM_BusSMIndication(NO_COM)
-                           └→ EcuM_ReleaseRUN(ECUM_USER_COMM)
-                                └→ EcuM: RUN → POST_RUN → (5秒後) → SHUTDOWN
-
-【ボランタリスリープからのウェイクアップ時 — 1st phase: 検知（CAN バス活動を検知）】
-Can_Isr（INT ピン立ち下がりの真のハードウェア割り込み。SHUTDOWN 中も常に有効）
-  └→ Can_WakeupIrqPending フラグをセットするのみ（SPI/Serial は行わない）
-       └→ Can_MainFunction_Wakeup（1ms タスク、SHUTDOWN 中もこのタスクだけは動き続ける）
-            がフラグをドレインし CanIf_ControllerWakeup(0)  ← Can が CanIf へ通知（下→上）
-                 └→ CanSM_ControllerWakeup(0)
-                      └→ Can_SetControllerMode(CAN_T_WAKEUP)   ← SLEEP→STOPPED (Listen-Only) のみ
-                           └→ CanSM: NO_COM → WAKEUP_VALIDATING（ComM/EcuM へはまだ何も通知しない）
-
-【2nd phase-a: 検証成功（検証タイマ内に有効な CAN フレームを受信）】
-Can_MainFunction_Read（Listen-Only になったため通常の RX ドレインが有効。
-                        SHUTDOWN 中もこのタスクだけは動き続ける）
-  └→ CanIf_RxIndication()                     ← 受信フレームを検出
-       └→ CanSM_RxIndication(0)                ← 全受信フレームで無条件に呼ばれる
-            └→ CanSM: WAKEUP_VALIDATING → FULL_COM（Can_SetControllerMode(CAN_T_START)）
-                 └→ ComM_BusSMIndication(FULL_COM)
-                      └→ EcuM_RequestRUN(ECUM_USER_COMM)
-                           └→ EcuM: SHUTDOWN → RUN（全タスク再有効化）
-       └→ （同じフレームがそのまま PduR/Com/Dcm 等へも配信される）
-
-【2nd phase-b: 検証失敗（検証タイマ超過、ノイズによる誤ウェイクアップ）】
-CanSM_MainFunction（10ms タスク、SHUTDOWN 中も動き続ける）
-  └→ CANSM_WAKEUP_VALIDATION_MS 超過を検出
-       └→ Can_SetControllerMode(CAN_T_SLEEP)   ← STOPPED→SLEEP、ウェイクアップ割り込み再武装
-            └→ CanSM: WAKEUP_VALIDATING → NO_COM（ComM/EcuM は一切関与せず、静かに再スリープ）
-```
 
 ##### EcuM 設定（`EcuM_Cfg.h`）
 
@@ -5490,6 +5512,7 @@ NM-Timeout Timer が再起動される（実質的にスリープが延期され
 「NM (0x400)」受信モニターで自ノード・仮想他ECU双方の NM フレーム（Repeat
 Message Request ビットの有無を含む）を観測できます。
 
+---
 <a id="io-stack"></a>
 ### IO スタック（IoHwAb / Dio / Port / Adc）
 
@@ -5522,20 +5545,14 @@ Port_Init（起動時 1 回のみ）
      (A0 はアナログ専用ピンのため Port 設定不要)
 ```
 
-<a id="channel-assignment"></a>
-#### チャネル割り当て（`Dio_Cfg.h`）
+<a id="iohwab-module"></a>
+#### IoHwAb
 
-| 定数 | Dio チャネル | Arduino ピン | 機能 | Port 方向 |
-|------|------------|-------------|------|----------|
-| `DIO_CHANNEL_LED_RUNNING` | 6 | D6 | RUNNING 灯（RUNNING 中点灯） | OUTPUT |
-| `DIO_CHANNEL_LED_FAULT` | 7 | D7 | FAULT 灯（FAULT 中 500ms 点滅） | OUTPUT |
-| `DIO_CHANNEL_LED_WARNING` | 8 | D8 | ABS 警告灯（AbsActive=1 で点灯） | OUTPUT |
-| `DIO_CHANNEL_BUTTON` | 9 | D9 | 警告確認ボタン（FAULT→OFF 遷移） | INPUT_PULLUP |
-
-ピン番号の変更は `Dio_Cfg.h` の定数を変えるだけで完了します（IoHwAb や SW-C の変更不要）。
+`IoHwAb_MainFunction`（10ms 周期）が Dio / Adc の生値取得からデバウンス・固着検出・
+電圧監視までを一手に担い、SW-C へは確定済みの値だけを静的変数経由で返します。
 
 <a id="debounce"></a>
-#### デバウンス（積分カウンタ方式）
+##### デバウンス（積分カウンタ方式）
 
 `IoHwAb_MainFunction` が 10ms 周期で `Dio_ReadChannel` を呼び出し、生レベルを積算します。
 
@@ -5561,7 +5578,7 @@ App_EngineManager_Run が読み取る:
 `IoHwAb_Button_GetLevel` は静的変数を返すだけです。
 
 <a id="button-stuck"></a>
-#### ボタン固着検出
+##### ボタン固着検出
 
 確定押下状態（`s_confirmedLevel == 1`）が 5000ms（= 500 × 10ms）継続すると Dem にエラーを報告します。
 この 5 秒間の固着判定そのものが十分な持続性チェックのため、Dem 側は
@@ -5584,21 +5601,12 @@ App_EngineManager_Run が読み取る:
 固着判定後にボタンを解放すると PASSED が報告され、TF ビットはクリアされます（CDTC は残る）。
 
 <a id="adc-monitoring"></a>
-#### ADC センサ電圧監視
+##### ADC センサ電圧監視
 
 `IoHwAb_MainFunction` が 10ms 周期で `Adc_ReadChannel` を呼び出し、10-bit 生値を mV へ変換して
 電圧低下を Dem へ報告します。`Dio_ReadChannel` と同様に、ADC アクセスも `IoHwAb_MainFunction` に
-集約し、`IoHwAb_Adc_GetValue_mV` は変換済みの静的変数を返すだけにしています。
-
-##### チャネル設定（`Adc_Cfg.h`）
-
-| 定数 | 値 | 意味 |
-|------|-----|------|
-| `ADC_CHANNEL_SENSOR` | 0（A0） | アナログセンサ入力チャネル |
-| `ADC_RESOLUTION_MAX` | 1023 | 10-bit ADC の最大生値 |
-| `ADC_REF_VOLTAGE_MV` | 5000 | 基準電圧（5V） |
-
-##### スケーリングと電圧低下検出
+集約し、`IoHwAb_Adc_GetValue_mV` は変換済みの静的変数を返すだけにしています
+（チャネル設定は下記「[Adc](#adc-module)」章の `Adc_Cfg.h` 参照）。
 
 ```
 10ms ごとに (IoHwAb_MainFunction):
@@ -5622,7 +5630,7 @@ App_EngineManager_Run が読み取る:
 電圧低下発生から数十 ms 以内に完了します。
 
 <a id="iohwab-api"></a>
-#### IoHwAb API 一覧（`IoHwAb.h`）
+##### IoHwAb API 一覧（`IoHwAb.h`）
 
 | 関数 | 呼び出し元（RTE 経由） | 動作 |
 |------|----------------------|------|
@@ -5633,6 +5641,44 @@ App_EngineManager_Run が読み取る:
 | `IoHwAb_MainFunction()` | Os Task 6 (10ms) | デバウンスサンプリング・固着検出・ADC サンプリング |
 | `IoHwAb_Button_GetLevel(&level)` | App_EngineManager | デバウンス済み押下状態を返す |
 | `IoHwAb_Adc_GetValue_mV(&mv)` | App_EngineManager | 変換済み ADC 電圧値 [mV] を返す |
+
+<a id="dio-module"></a>
+#### Dio
+
+<a id="channel-assignment"></a>
+##### チャネル割り当て（`Dio_Cfg.h`）
+
+| 定数 | Dio チャネル | Arduino ピン | 機能 | Port 方向 |
+|------|------------|-------------|------|----------|
+| `DIO_CHANNEL_LED_RUNNING` | 6 | D6 | RUNNING 灯（RUNNING 中点灯） | OUTPUT |
+| `DIO_CHANNEL_LED_FAULT` | 7 | D7 | FAULT 灯（FAULT 中 500ms 点滅） | OUTPUT |
+| `DIO_CHANNEL_LED_WARNING` | 8 | D8 | ABS 警告灯（AbsActive=1 で点灯） | OUTPUT |
+| `DIO_CHANNEL_BUTTON` | 9 | D9 | 警告確認ボタン（FAULT→OFF 遷移） | INPUT_PULLUP |
+
+ピン番号の変更は `Dio_Cfg.h` の定数を変えるだけで完了します（IoHwAb や SW-C の変更不要）。
+
+<a id="port-module"></a>
+#### Port
+
+`Port_Init` が起動時に一度だけ、上記チャネル割り当て表の「Port 方向」列に従って
+D6/D7/D8 を OUTPUT、D9 を INPUT_PULLUP に設定します（A0 はアナログ専用ピンのため
+Port 設定不要）。以降 Port 自身が呼ばれることはありません。
+
+<a id="adc-module"></a>
+#### Adc
+
+<a id="adc-channel-config"></a>
+##### チャネル設定（`Adc_Cfg.h`）
+
+| 定数 | 値 | 意味 |
+|------|-----|------|
+| `ADC_CHANNEL_SENSOR` | 0（A0） | アナログセンサ入力チャネル |
+| `ADC_RESOLUTION_MAX` | 1023 | 10-bit ADC の最大生値 |
+| `ADC_REF_VOLTAGE_MV` | 5000 | 基準電圧（5V） |
+
+このチャネルを読み取り mV へスケーリングする処理（オーバーフロー対策込み）は
+`IoHwAb_MainFunction` が行います。詳細は上記「[IoHwAb](#iohwab-module)」章の
+ADC センサ電圧監視を参照してください。
 
 <a id="application"></a>
 ### アプリケーション（App_EngineManager / App_WarningIndicator）
