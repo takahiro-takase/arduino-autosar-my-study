@@ -19,8 +19,6 @@ ARXML や設定ツールは使用せず、コードで階層構造・型定義�
     - [モジュール一覧](#module-list)
   - [ディレクトリ構成](#directory-structure)
   - [CAN 通信スタック（Can_Hw / Can / CanIf / PduR / Com / E2E / E2EXf / E2EMon / Rte）](#can-stack)
-    - [関連モジュール](#can-stack-modules)
-    - [データフロー図](#can-dataflow-diagram)
     - [CAN フレーム仕様](#can-frame-spec)
     - [処理の流れ（関数コールチェーンと多層防御）](#processing-flow)
       - [Tx 処理（Com → PduR → CanIf → Can の順）](#tx-processing)
@@ -261,7 +259,7 @@ HAL ─── Can_Hw / Dio_Hw / Port_Hw / Adc_Hw / Mcu_Hw / Fee_Hw / Wdg_Hw / Gp
 
 > 「仕様準拠度」の凡例: **主要機能実装**=対象 SWS 仕様の主要要求を実質的に満たす／**主要機能実装(一部意図的に簡略化)**=中核機能は実装済みだが特定の API・モードを対応除外／**パススルー**=下位ドライバが1個のみのため実質的に素通し／**—**=対応する AUTOSAR 仕様が無い（ASW・RTE・HAL 層、または独自 CDD 相当）。各モジュールの具体的な簡略化内容は下表または各モジュール詳細節を参照。
 
-「本プロジェクトでの役割」のうち、複数モジュールをまとめた詳細節（CAN 通信スタック／診断スタック／ECU 管理層／IO スタック／アプリケーション）を持つものは、その節の先頭に個別の表として移動しました。以下はそれ以外（詳細節を持たないモジュール）の一覧です。
+「本プロジェクトでの役割」のうち、複数モジュールをまとめた詳細節（／診断スタック／ECU 管理層／IO スタック／アプリケーション）を持つものは、その節の先頭に個別の表として移動しました。以下はそれ以外（詳細節を持たないモジュール）の一覧です。
 
 | モジュール | 本プロジェクトでの役割 |
 |---|---|
@@ -503,36 +501,31 @@ Basic Software Modules」表）。詳細は「CAN 通信スタック」セクシ
 └── platformio.ini
 ```
 
+---
 <a id="can-stack"></a>
 ### CAN 通信スタック（Can_Hw / Can / CanIf / PduR / Com / E2E / E2EXf / E2EMon / Rte）
-
-<a id="can-stack-modules"></a>
-#### 関連モジュール
-
-| 層 | モジュール | 本プロジェクトでの役割 |
-|---|---|---|
-| HAL | Can_Hw | MCP2515 / mcp_can C++ ラッパー（RX 割り込み登録 `Can_Hw_AttachRxIsr` を含む） |
-| BSW | Can | MCP2515 の送受信・Bus-Off 検出・CAN バス活動によるウェイクアップ検出を担う MCAL 最下層。HW を直接操作する唯一のモジュール |
-|  | CanIf | CAN ID ↔ 論理 PDU のマッピング。上位層は CAN ID を知らず PDU ID で通信。設定 DLC 未満の受信 L-PDU は上位層へ渡さず棄却する（SWS_CANIF_00026 のデータ長チェック） |
-|  | PduR | 受信 PDU を Com/CanTp/SecOC へ（1つの RxPduId から複数宛先への配信にも対応）、送信 PDU を CanIf へルーティング。通信スタックの配管役。TX 経路は既定では `CanIf_Transmit()` へ直接転送するが、`PduR_TxRoutingPathType.TransmitOverrideFct` が設定されている場合は中間モジュール（SecOC）へ委譲できるよう汎用化されている（既存の全 TX パスはこのフィールドを使わないため無変更） |
-|  | Com | シグナルのビット単位パック／アンパックと送受信タイミング制御を担う（TxModeMode: DIRECT/MIXED/PERIODIC・TMS・MDT・受信フィルタ・I-PDU Group・Signal Gateway 等）。E2E には一切関知しない（E2E Transformer 方式、Com.c 本体に E2E は埋め込まれない） |
-|  | E2E | AUTOSAR E2E Profile 01 保護の実処理。DataID・CRC8 (SAE J1850)・4bit カウンタの 3 要素で、`E2E_P01Check` はデータ破壊・フレーム脱落・重複・誤ルーティングを検出、`E2E_P01Protect` は Counter・CRC8 を付加。Com/Rte のどちらにも依存しない純粋な検証/付与ライブラリ |
-|  | E2EXf | Com と E2E の間を仲介する統合層。RX は `E2E_P01Check` でデータ破壊・フレーム脱落・重複・誤ルーティングを検出して Dem へ報告、TX は `E2E_P01Protect` で Counter・CRC8 を付加する。Com 自身はこの層の存在を知らない。詳細は下記「[E2E P01 保護](#e2e-p01)」節を参照 |
-|  | E2EMon | 標準 AUTOSAR モジュールには存在しない、実務でよく見る「独自 CDD」パターンの例。EngineInfo/AbsInfo の E2E 検証結果を購読し、ネットワーク健全性テレメトリとして公開する。詳細は下記「[E2EMon](#e2emon)」節を参照 |
-| RTE | Rte | ポートベース S/R API。複数 SW-C が同一シグナルを独立ポートで受信。E2E Transformer を持つ Read ポートは `Std_ReturnType` ではなく `Rte_IStatusType` を返し、E2E チェック結果（OK/ハードエラー/ソフトエラー）と Com タイムアウトを区別して SWC へ伝える |
-
-<a id="can-dataflow-diagram"></a>
-#### データフロー図
 
 CAN ドライバ（Can / Can_Hw）から CanIf・PduR を経由して COM モジュールへ至るデータパスを担うスタックです。
 
 ```
-RX（外部 → Arduino、上り）
-  MCP2515 → Can_Hw → Can → CanIf → PduR → Com → E2EXf(E2E,E2EMon) → Rte
-
 TX（Arduino → 外部、下り）
-  Rte → E2EXf(E2E) → Com → PduR → CanIf → Can → Can_Hw → MCP2515
+  Rte → (E2EXf/E2E) → Com → PduR → CanIf → Can → Can_Hw → MCP2515
+
+RX（外部 → Arduino、上り）
+  MCP2515 → Can_Hw → Can → CanIf → PduR → Com → (E2EXf/E2E/E2EMon) → Rte
 ```
+
+| 層 | モジュール | 本プロジェクトでの役割 |
+|---|---|---|
+| RTE | Rte | ポートベース S/R API。複数 SW-C が同一シグナルを独立ポートで受信。E2E Transformer を持つ Read ポートは `Std_ReturnType` ではなく `Rte_IStatusType` を返し、E2E チェック結果（OK/ハードエラー/ソフトエラー）と Com タイムアウトを区別して SWC へ伝える |
+| BSW | E2EMon | 標準 AUTOSAR モジュールには存在しない、実務でよく見る「独自 CDD」パターンの例。EngineInfo/AbsInfo の E2E 検証結果を購読し、ネットワーク健全性テレメトリとして公開する。詳細は下記「[E2EMon](#e2emon)」節を参照 |
+|  | E2EXf | Com と E2E の間を仲介する統合層。RX は `E2E_P01Check` でデータ破壊・フレーム脱落・重複・誤ルーティングを検出して Dem へ報告、TX は `E2E_P01Protect` で Counter・CRC8 を付加する。Com 自身はこの層の存在を知らない。詳細は下記「[E2E P01 保護](#e2e-p01)」節を参照 |
+|  | E2E | AUTOSAR E2E Profile 01 保護の実処理。DataID・CRC8 (SAE J1850)・4bit カウンタの 3 要素で、`E2E_P01Check` はデータ破壊・フレーム脱落・重複・誤ルーティングを検出、`E2E_P01Protect` は Counter・CRC8 を付加。Com/Rte のどちらにも依存しない純粋な検証/付与ライブラリ |
+|  | Com | シグナルのビット単位パック／アンパックと送受信タイミング制御を担う（TxModeMode: DIRECT/MIXED/PERIODIC・TMS・MDT・受信フィルタ・I-PDU Group・Signal Gateway 等）。E2E には一切関知しない（E2E Transformer 方式、Com.c 本体に E2E は埋め込まれない） |
+|  | PduR | 受信 PDU を Com/CanTp/SecOC へ（1つの RxPduId から複数宛先への配信にも対応）、送信 PDU を CanIf へルーティング。通信スタックの配管役。TX 経路は既定では `CanIf_Transmit()` へ直接転送するが、`PduR_TxRoutingPathType.TransmitOverrideFct` が設定されている場合は中間モジュール（SecOC）へ委譲できるよう汎用化されている（既存の全 TX パスはこのフィールドを使わないため無変更） |
+|  | CanIf | CAN ID ↔ 論理 PDU のマッピング。上位層は CAN ID を知らず PDU ID で通信。設定 DLC 未満の受信 L-PDU は上位層へ渡さず棄却する（SWS_CANIF_00026 のデータ長チェック） |
+|  | Can | MCP2515 の送受信・Bus-Off 検出・CAN バス活動によるウェイクアップ検出を担う MCAL 最下層。HW を直接操作する唯一のモジュール |
+| HAL | Can_Hw | MCP2515 / mcp_can C++ ラッパー（RX 割り込み登録 `Can_Hw_AttachRxIsr` を含む） |
 
 以降、まず Tx/Rx 共通の CAN フレーム仕様を示し、続けて Tx/Rx それぞれの関数コールチェーン
 （Tx: Com → PduR → CanIf → Can、Rx: Can → CanIf → PduR → Com）とレイヤ間の多層防御を
