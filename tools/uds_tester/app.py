@@ -60,6 +60,12 @@ class App(tk.Tk):
         self._rx_monitor_stop = threading.Event()
         self.script_stop_event = threading.Event()
         self._script_thread: threading.Thread | None = None
+        # _rx_monitor_worker がバスの唯一の「常時ポーリングする」読み取り役であり、
+        # 受信した全フレームをここにも流す (ファンアウト)。capl_dsl.py の on message は
+        # 自前で bus.recv() せず、このキューから消費することで _rx_monitor_worker との
+        # フレーム奪い合いを避ける。maxsize は誰も消費していない間に無制限に溜め込まない
+        # ための保険 (満杯時は新しいフレームを黙って捨てる)。
+        self._message_dispatch_queue: "queue.Queue" = queue.Queue(maxsize=64)
 
         self._build_widgets()
         self.after(100, self._poll_queues)
@@ -1000,7 +1006,13 @@ class App(tk.Tk):
 
     def _rx_monitor_worker(self, stop_ev: threading.Event):
         """bus_lock をノンブロッキングで取得し、rx_monitor CAN ID の受信フレームを表示する。
-        UDS 処理中 (bus_lock 保持中) はスキップして干渉を避ける。"""
+        UDS 処理中 (bus_lock 保持中) はスキップして干渉を避ける。
+
+        このワーカーが「バスを常時ポーリングする」唯一の読み取り役であり、受信した
+        フレームは rx_monitor 表示用に使うだけでなく _message_dispatch_queue にも
+        流す (ファンアウト)。capl_dsl.py の on message ディスパッチ (CaplContext.try_recv())
+        はここへは自前で bus.recv() せずこのキューを消費する側に回ることで、両者が
+        同じフレームを奪い合ってどちらも取りこぼす、という競合を避けている。"""
         while not stop_ev.is_set():
             bus = self.bus
             if bus is None:
@@ -1009,16 +1021,31 @@ class App(tk.Tk):
             if not self.bus_lock.acquire(blocking=False):
                 stop_ev.wait(0.02)
                 continue
+            error: Exception | None = None
             try:
                 msg = bus.recv(timeout=0.05)
-            except Exception:  # noqa: BLE001
+            except Exception as exc:  # noqa: BLE001 - 実エラーはログに出してワーカーを止める (下記参照)
                 msg = None
+                error = exc
             finally:
                 self.bus_lock.release()
+            if error is not None:
+                # python-can の bus.recv() は仕様上タイムアウトでは None を返すだけで、
+                # 例外はアダプタ切断等の実エラー。以前はここで一律無視していたため、
+                # デッドなバスに対して無言で無限ポーリングし続けてしまっていた。
+                # send()/wait_response() 等と同様にエラーを可視化し、このワーカー自体を
+                # 停止する（GUI の Connected 表示自体は変えないが、以後 RX モニタ表示も
+                # on message へのフレーム供給も止まる）。
+                self.log_queue.put(f"[RXモニタ] 受信エラーのため監視を停止しました: {error}")
+                return
             if msg is None:
                 # フレーム未受信時は次の取得まで待機し、他スレッドがロックを取れる窓を設ける
                 stop_ev.wait(0.1)
                 continue
+            try:
+                self._message_dispatch_queue.put_nowait(msg)
+            except queue.Full:
+                pass  # 誰も消費していない (スクリプト未実行等) 場合は単に捨てる
             for idx, monitor_id in self._rx_monitor_ids.items():
                 if msg.arbitration_id == monitor_id:
                     self.state_queue.put(("rx_mon", (idx, bytes(msg.data))))
@@ -1071,6 +1098,18 @@ class App(tk.Tk):
             messagebox.showerror("読み込み失敗", str(exc))
             return
 
+        # _message_dispatch_queue は Connect 中ずっと _rx_monitor_worker が貯め続けている
+        # 共有キューなので、前のスクリプト実行や接続後のアイドル時間に溜まった「古い」
+        # フレームが残っている場合がある。ここで捨てておかないと、on message が今回の
+        # スクリプト開始より前に届いていたフレームをまとめて受け取ってしまい、
+        # 「開始直後にバックログが一気に発火し、その後は静かに見える」という
+        # 紛らわしい挙動になる。
+        while True:
+            try:
+                self._message_dispatch_queue.get_nowait()
+            except queue.Empty:
+                break
+
         self.script_stop_event.clear()
         self.script_status_var.set(f"実行中: {os.path.basename(path)}")
         self._script_thread = threading.Thread(
@@ -1094,7 +1133,7 @@ class App(tk.Tk):
             run(
                 source, path, lambda: self.bus, self.bus_lock,
                 lambda text: self.log_queue.put(f"[script:{label}] {text}"),
-                self.script_stop_event,
+                self.script_stop_event, self._message_dispatch_queue,
             )
             self.log_queue.put(f"[script:{label}] 完了")
         except capl_api.ScriptStopped:

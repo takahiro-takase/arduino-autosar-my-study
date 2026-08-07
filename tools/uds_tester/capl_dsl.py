@@ -12,7 +12,11 @@ UDS 送受信の実体は capl_api.CaplContext をそのままランタイム層
     on message <id> { ... }
 
 ブロック内は関数呼び出し文の並びのみ (if/while 等の制御構文、変数宣言はない)。
-利用できる関数は BUILTIN_NAMES を参照 (README.md にも一覧表がある)。
+利用できる関数は Interpreter._make_builtins() を参照 (README.md にも一覧表がある)。
+未知の関数呼び出しは Interpreter 構築時 (実行前) に全ブロックを走査して検出する
+(_validate_calls() 参照)。on start の実行後に初めて呼ばれる on timer/on message の
+中身でタイポがあっても、on start の副作用（セッション変更等）を実行してしまった
+後になって気付く、という事態を避けるため。
 
 `.py` の exec() ベースのスクリプト実行 (capl_api.run_script()) は本モジュールとは
 独立に残っており、app.py がファイル拡張子で自動的にどちらを使うか切り替える。
@@ -21,7 +25,7 @@ from __future__ import annotations
 
 import re
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Optional, Union
 
 import capl_api
@@ -232,6 +236,12 @@ class Interpreter:
         self._armed_timers: dict[str, float] = {}  # name -> 発火時刻 (time.monotonic())
         self._last_message: Optional[object] = None  # can.Message (on message ハンドラ内でのみ有効)
         self._builtins = self._make_builtins()
+        # on start だけでなく on timer/on message の中身も含め、実行前に全ブロックを
+        # 検証する。_call() 自身の遅延チェックだけだと、on timer/on message 内の
+        # タイポは実際にそのイベントが発火するまで検出されない。そうすると on start の
+        # 副作用のある処理 (セッション変更、SecurityAccess のアンロック等) を実行し
+        # 終えた後になってようやくタイポが判明する、という事態になりかねないため。
+        self._validate_calls()
 
     def _make_builtins(self) -> dict:
         ctx = self._ctx
@@ -248,7 +258,11 @@ class Interpreter:
                 nrc=self._to_int(args[0]) if args else None
             ),
             "security_unlock": lambda args: ctx.security_unlock(),
-            "wait": lambda args: ctx.wait(float(args[0])),
+            # ctx.wait() ではなく self.wait() (Interpreter 自身の待機ループ) を使う。
+            # ctx.wait() は Python 版 (@ctx.on_timer) の _timers しか見ておらず、DSL 側の
+            # _armed_timers(setTimer)/on_message ディスパッチとは無関係なため、そちらに
+            # 委譲すると wait() 中は setTimer タイマーも on message も止まってしまう。
+            "wait": lambda args: self.wait(float(args[0])),
             "log": lambda args: ctx.log(*args),
             "write": lambda args: ctx.log(*args),  # CAPL の write() 相当のエイリアス
             "setTimer": lambda args: self._set_timer(str(args[0]), float(args[1])),
@@ -287,17 +301,42 @@ class Interpreter:
     def _call(self, call: Call):
         fn = self._builtins.get(call.name)
         if fn is None:
-            raise DslSyntaxError(
-                f"{call.line}行目: 未知の関数 '{call.name}' "
-                "(send/send_can/wait_response/assert_positive/assert_negative/"
-                "security_unlock/wait/log/write/setTimer/cancelTimer/msgData/msgId/msgDlc のみ対応)"
-            )
+            # _validate_calls() が実行前に弾いているはずなので通常はここに来ないが、
+            # 保険として残しておく。
+            raise self._unknown_function_error(call)
         args = [self._eval(a) for a in call.args]
         return fn(args)
 
     def _run_block(self, stmts: list) -> None:
         for stmt in stmts:
             self._call(stmt)
+
+    def _unknown_function_error(self, call: Call) -> DslSyntaxError:
+        known = "/".join(sorted(self._builtins))
+        return DslSyntaxError(f"{call.line}行目: 未知の関数 '{call.name}' ({known} のみ対応)")
+
+    # ---- 実行前の静的検証 ----
+    def _validate_calls(self) -> None:
+        """self._builtins (実行時のディスパッチ表そのもの) を唯一の情報源として、
+        on start/on timer/on message の全ブロック (ネストした呼び出し引数も含む) を
+        走査し、未知の関数呼び出しがあれば実行前に DslSyntaxError を送出する。"""
+        for stmts in self._script.on_start:
+            self._validate_block(stmts)
+        for stmts in self._script.on_timer.values():
+            self._validate_block(stmts)
+        for stmts in self._script.on_message.values():
+            self._validate_block(stmts)
+
+    def _validate_block(self, stmts: list) -> None:
+        for stmt in stmts:
+            self._validate_call(stmt)
+
+    def _validate_call(self, call: Call) -> None:
+        if call.name not in self._builtins:
+            raise self._unknown_function_error(call)
+        for arg in call.args:
+            if isinstance(arg, Call):
+                self._validate_call(arg)
 
     # ---- 実行本体 ----
     def run(self) -> None:
@@ -313,15 +352,32 @@ class Interpreter:
         while True:
             if self._stop_event.is_set():
                 raise capl_api.ScriptStopped("スクリプトが停止されました")
-            self._poll_timers()
-            msg = self._ctx.try_recv(0.05)
-            if msg is not None:
-                self._last_message = msg
-                handler = self._script.on_message.get(msg.arbitration_id)
-                if handler is not None:
-                    self._run_block(handler)
-            else:
-                time.sleep(0.02)
+            self._poll_once(0.05)
+
+    def wait(self, seconds: float) -> None:
+        """DSL の `wait(seconds)` 文の実体。run() のイベントループと同じ _poll_once() を
+        使うことで、待機中も setTimer タイマーの発火・on message ディスパッチが
+        止まらないようにする (capl_api.CaplContext.wait() は Python 版専用の _timers
+        しか見ないため、ここでは委譲しない)。"""
+        deadline = time.monotonic() + seconds
+        while True:
+            if self._stop_event.is_set():
+                raise capl_api.ScriptStopped("スクリプトが停止されました")
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                return
+            self._poll_once(min(0.05, remaining))
+
+    def _poll_once(self, timeout: float) -> None:
+        """タイマーを1回分チェックし、フレームを1件だけ試験受信して on message に
+        ディスパッチする。run() と wait() の両方から共通で使う。"""
+        self._poll_timers()
+        msg = self._ctx.try_recv(timeout)
+        if msg is not None:
+            self._last_message = msg
+            handler = self._script.on_message.get(msg.arbitration_id)
+            if handler is not None:
+                self._run_block(handler)
 
     def _poll_timers(self) -> None:
         now = time.monotonic()
@@ -336,9 +392,14 @@ class Interpreter:
 
 
 def run_dsl_script(source: str, script_path: str, get_bus, bus_lock,
-                    log_func, stop_event) -> None:
+                    log_func, stop_event, message_queue=None) -> None:
     """`.capl` スクリプトを実行する。capl_api.run_script() の DSL 版で、app.py からは
-    ファイル拡張子で自動的にどちらを呼ぶか切り替えられる (同じ引数の並びにしてある)。"""
+    ファイル拡張子で自動的にどちらを呼ぶか切り替えられる (同じ引数の並びにしてある)。
+
+    message_queue は app.py の _rx_monitor_worker がファンアウトする共有キュー。
+    on message ディスパッチ (Interpreter.run() 内の ctx.try_recv()) はこのキューを
+    消費する側に回ることで、_rx_monitor_worker と bus.recv() を奪い合わないようにする
+    (capl_api.py モジュール冒頭の docstring 参照)。"""
     script = parse(source)  # DslSyntaxError は呼び出し側 (_script_worker) の except で表示される
-    ctx = capl_api.CaplContext(get_bus, bus_lock, log_func, stop_event)
+    ctx = capl_api.CaplContext(get_bus, bus_lock, log_func, stop_event, message_queue)
     Interpreter(script, ctx, stop_event).run()

@@ -3553,17 +3553,43 @@ on message 0x200
 | `send(b0, b1, ...)` / `send_can(can_id, b0, b1, ...)` | Python 版の `send()`/`send_can()` と同じ（バイトは可変長引数） |
 | `wait_response()` / `wait_response(timeout)` | Python 版と同じ |
 | `assert_positive()` / `assert_negative()` / `assert_negative(nrc)` | Python 版と同じ（`resp` 引数はなく常に直前の応答を見る） |
-| `security_unlock()` / `wait(seconds)` | Python 版と同じ |
+| `security_unlock()` | Python 版と同じ |
+| `wait(seconds)` | 指定秒数待機（Python 版と異なり、この待機中も `setTimer` タイマーの発火・`on message` ディスパッチは止まらず動き続ける） |
 | `log(...)` / `write(...)` | 同じ動作（`write` は CAPL の `write()` に合わせたエイリアス） |
 | `setTimer(name, ms)` / `cancelTimer(name)` | タイマーのアーム/解除 |
 | `msgData(n)` / `msgId()` / `msgDlc()` | `on message` ハンドラ内で、直近に受信したフレームの byte[n]/CAN ID/データ長を取得 |
 
+未知の関数名（タイポ等）は `on timer`/`on message` ブロックの中身であっても、
+スクリプト実行開始前（`on start` が走り出す前）に一括検出してエラーにします。
+そうしないと、`on timer`/`on message` 内のタイポは実際にそのイベントが発火するまで
+見つからず、`on start` でのセッション変更や SecurityAccess アンロックのような
+副作用のある処理を実行し終えた後になってようやく判明する、ということになるためです。
+
 `on start` の実行後、`on timer`/`on message` が1つでも定義されていれば「停止」
 ボタンが押されるまでイベント待受を続けます（何も定義されていなければ `on start`
-だけで完了します）。同じ CAN ID を `wait_response()` と `on message` の両方で待ち
-受けようとすると（例: UDS 応答 ID の 0x7E8）、フレームの奪い合いになり
-`on message` 側にはほとんど回ってきません。`on message` は UDS 応答以外の
-周期送信フレーム（EngineStatus 0x200 等）を監視する用途に向いています。
+だけで完了します）。`wait_response()`/`security_unlock()` が応答待ちでブロックして
+いる間に届いた（応答 ID 以外の）フレームは内部で一旦退避され、ブロックが終わった
+後に `on message` 側へきちんと配送されるため、EngineStatus (0x200) のような
+周期送信フレームの監視は取りこぼしなく行えます。ただし同じ CAN ID を
+`wait_response()` と `on message` の両方で待ち受けようとした場合（例: UDS 応答 ID
+の 0x7E8 を `on message 0x7E8` でも監視しようとした場合）は、その ID 宛のフレーム
+自体を `wait_response()` が応答として直接消費してしまうため、`on message` 側には
+回ってきません。`on message` は UDS 応答以外の周期送信フレーム（EngineStatus
+0x200 等）を監視する用途に向いています。
+
+（実装メモ）`on message` は自前で CAN バスを読みには行かず、GUI の RX モニタ表示を
+更新している `_rx_monitor_worker`（Connect 中ずっと動くバスの読み取り役）が受信した
+フレームを橋渡ししてもらう形にしてあります。両者が別々に受信しようとすると同じ
+フレームを奪い合ってどちらかが取りこぼす（`on message` が発火しない、または RX
+モニタ表示が更新されない）ため。CAN アダプタの切断等で `bus.recv()` が実エラーを
+送出した場合は（python-can の仕様上、単なる受信タイムアウトは例外ではなく `None`
+を返すだけなので、これは区別できる）、ログに出したうえで `_rx_monitor_worker`
+自体を停止します（デッドなバスに対して無言でポーリングし続けることはしません）。
+このファンアウト用のキューは Connect 中ずっと共有されているため、「スクリプト実行」
+ボタンを押した時点で溜まっていた古いフレームは、スクリプト開始前に捨てます
+（そうしないと `on message` がスクリプト開始より前に届いていたフレームをまとめて
+受け取ってしまい、開始直後にバックログが一気に発火してその後は静かに見える、という
+紛らわしい挙動になるため）。
 
 サンプルは `tools/uds_tester/scripts/example_session_check.capl` を参照してください。
 
