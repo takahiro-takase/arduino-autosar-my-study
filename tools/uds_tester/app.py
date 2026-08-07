@@ -13,16 +13,18 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import queue
 import threading
 import time
 import tkinter as tk
-from tkinter import messagebox, scrolledtext, ttk
+from tkinter import filedialog, messagebox, scrolledtext, ttk
 
 import can
 from Crypto.Cipher import AES
 from Crypto.Hash import CMAC
 
+import capl_api
 import uds_link
 
 
@@ -55,6 +57,8 @@ class App(tk.Tk):
         self._rx_monitor_secoc_verify: "dict[int, dict]" = {}
         self._rx_monitor_name_vars: "dict[int, tk.StringVar]" = {}
         self._rx_monitor_stop = threading.Event()
+        self.script_stop_event = threading.Event()
+        self._script_thread: threading.Thread | None = None
 
         self._build_widgets()
         self.after(100, self._poll_queues)
@@ -108,6 +112,17 @@ class App(tk.Tk):
             variable=self._log_visible,
             command=self._toggle_log,
         ).grid(row=0, column=3, padx=8, pady=4)
+
+        script = ttk.LabelFrame(self, text="スクリプト (CAPL風)")
+        script.pack(fill="x", padx=8, pady=4)
+
+        ttk.Button(script, text="スクリプト実行...", command=self._open_script).grid(
+            row=0, column=0, padx=8, pady=4)
+        ttk.Button(script, text="停止", command=self._stop_script).grid(
+            row=0, column=1, padx=8, pady=4)
+        self.script_status_var = tk.StringVar(value="")
+        ttk.Label(script, textvariable=self.script_status_var).grid(
+            row=0, column=2, padx=8, pady=4, sticky="w")
 
         body = ttk.Frame(self)
         body.pack(fill="both", expand=True, padx=8, pady=4)
@@ -573,6 +588,16 @@ class App(tk.Tk):
                          args=(self._rx_monitor_stop,), daemon=True).start()
 
     def _disconnect(self):
+        self.script_stop_event.set()
+        if self._script_thread is not None and self._script_thread.is_alive():
+            # スクリプトが送受信のブロッキング呼び出し中 (デフォルト timeout=2s 等) だと
+            # stop_event はすぐには効かないため、その呼び出しが終わって次の
+            # _check_stop() に到達するまで待つ。ここで待たずに bus を None にすると、
+            # スクリプト側が古い bus への呼び出しを続けたまま新しい Bus オブジェクトが
+            # 生成され、同一デバイスへの二重オープンが起こり得る。
+            self._script_thread.join(timeout=3.0)
+            if self._script_thread.is_alive():
+                self.log_queue.put("[script] 停止待ちタイムアウト (バックグラウンドで終了処理中)")
         self.tester_present_var.set(False)
         self.tester_present_stop.set()
         for pidx, stop_ev in self._periodic_stops.items():
@@ -595,9 +620,16 @@ class App(tk.Tk):
     # ------------------------------------------------------------------
     # ボタン送信 (バックグラウンドスレッドで実行し、結果は queue 経由で GUI に反映)
     # ------------------------------------------------------------------
-    def _on_send_click(self, btn_cfg, idx: int):
+    def _require_connected(self) -> bool:
+        """未接続なら警告を出して False を返す。GUI（メイン）スレッドの
+        クリックハンドラからのみ呼ぶこと（messagebox はメインスレッド専用）。"""
         if self.bus is None:
             messagebox.showwarning("未接続", "先に Connect してください")
+            return False
+        return True
+
+    def _on_send_click(self, btn_cfg, idx: int):
+        if not self._require_connected():
             return
         entry_data = {k: v.get() for k, v in self._entry_vars.get(idx, {}).items()}
         threading.Thread(
@@ -605,8 +637,7 @@ class App(tk.Tk):
         ).start()
 
     def _on_periodic_click(self, btn_cfg, idx: int):
-        if self.bus is None:
-            messagebox.showwarning("未接続", "先に Connect してください")
+        if not self._require_connected():
             return
         entry_data = {k: v.get() for k, v in self._entry_vars.get(idx, {}).items()}
         label = btn_cfg["label"].replace("\n", " ")
@@ -1013,6 +1044,57 @@ class App(tk.Tk):
                     pass
 
     # ------------------------------------------------------------------
+    # スクリプト実行 (CAPL風 API 、capl_api.py 参照)
+    # ------------------------------------------------------------------
+    def _open_script(self):
+        if not self._require_connected():
+            return
+        if self._script_thread is not None and self._script_thread.is_alive():
+            messagebox.showwarning("実行中", "スクリプトは既に実行中です")
+            return
+        path = filedialog.askopenfilename(
+            title="CAPL風スクリプトを選択",
+            filetypes=[("Python スクリプト", "*.py"), ("すべてのファイル", "*.*")],
+        )
+        if not path:
+            return
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                source = f.read()
+        except OSError as exc:
+            messagebox.showerror("読み込み失敗", str(exc))
+            return
+
+        self.script_stop_event.clear()
+        self.script_status_var.set(f"実行中: {os.path.basename(path)}")
+        self._script_thread = threading.Thread(
+            target=self._script_worker, args=(source, path), daemon=True
+        )
+        self._script_thread.start()
+
+    def _stop_script(self):
+        self.script_stop_event.set()
+
+    def _script_worker(self, source: str, path: str):
+        label = os.path.basename(path)
+        self.log_queue.put(f"[script:{label}] 開始")
+        try:
+            capl_api.run_script(
+                source, path, lambda: self.bus, self.bus_lock,
+                lambda text: self.log_queue.put(f"[script:{label}] {text}"),
+                self.script_stop_event,
+            )
+            self.log_queue.put(f"[script:{label}] 完了")
+        except capl_api.ScriptStopped:
+            self.log_queue.put(f"[script:{label}] 停止されました")
+        except capl_api.ScriptAbort as exc:
+            self.log_queue.put(f"[script:{label}] 中断: {exc}")
+        except Exception as exc:  # noqa: BLE001 - スクリプト内の想定外エラーもログに出して継続する
+            self.log_queue.put(f"[script:{label}] エラー: {exc}")
+        finally:
+            self.state_queue.put(("script_done", None))
+
+    # ------------------------------------------------------------------
     # ログ・状態表示の更新 (メインスレッドからのみ tkinter 変数を更新する)
     # ------------------------------------------------------------------
     def _log(self, text: str):
@@ -1052,6 +1134,8 @@ class App(tk.Tk):
                 ev = self._entry_vars.get(upd_idx, {})
                 if "data" in ev:
                     ev["data"].set(upd_text)
+            elif kind == "script_done":
+                self.script_status_var.set("")
             elif kind == "periodic_btn":
                 btn_idx, text = value
                 if btn_idx in self._periodic_btn_vars:

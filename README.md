@@ -3485,6 +3485,30 @@ python app.py
 追加するだけで行えます（本プロジェクトの `*_PBCfg.c` と同じ「コードと設定の分離」
 の考え方です）。
 
+###### CAPL 風スクリプト機能
+
+ボタンの単発送信だけでは「セッション遷移→SecurityAccess→DID 読み出し」のような
+複数手順の一連の操作や、応答内容による分岐を再現しにくいため、Vector CAPL に
+近い書き味で一連の手順をスクリプトとして書ける機能を用意しています。
+
+GUI の「スクリプト実行...」ボタンから `.py` ファイルを選択するとバックグラウンド
+スレッドで実行されます（Connect 済みの `bus` をそのまま使用）。「停止」ボタンで
+途中中断できます。スクリプトは Python 構文ですが、`tools/uds_tester/capl_api.py`
+が公開する以下の関数だけを使えば CAPL に近い書き味で書けます。
+
+| 関数 | 説明 |
+|------|------|
+| `send(payload)` | UDS 要求を送信（7 バイト以下は SF、超える場合は自動で FF+CF） |
+| `send_can(can_id, data)` | 任意 CAN ID への生フレーム送信（応答待ちなし） |
+| `wait_response(timeout=2.0)` | UDS 応答を待って返す（タイムアウト時はスクリプト中断） |
+| `assert_positive(resp=None)` / `assert_negative(resp=None, nrc=None)` | 応答を検証し、不一致ならスクリプトを中断（`resp` 省略時は直前の `wait_response()` の結果を使う） |
+| `security_unlock()` | SecurityAccess の seed→key 自動計算（ボタンの `security_access_auto` と同一処理） |
+| `wait(seconds)` | 指定秒数待機（`@ctx.on_timer` を登録済みならその間もポーリングして発火させる） |
+| `log(*args)` | GUI のログ欄に出力 |
+| `@ctx.on_timer(interval_s)` | interval_s 秒毎に呼ばれる関数を登録するデコレータ（`wait()` の実行中のみ発火） |
+
+サンプルは `tools/uds_tester/scripts/example_session_check.py` を参照してください。
+
 <a id="nvm"></a>
 #### NvM（Non-Volatile Memory Manager）
 
