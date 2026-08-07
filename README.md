@@ -3489,12 +3489,17 @@ python app.py
 
 ボタンの単発送信だけでは「セッション遷移→SecurityAccess→DID 読み出し」のような
 複数手順の一連の操作や、応答内容による分岐を再現しにくいため、Vector CAPL に
-近い書き味で一連の手順をスクリプトとして書ける機能を用意しています。
+近い書き味で一連の手順をスクリプトとして書ける機能を用意しています。GUI の
+「スクリプト実行...」ボタンからファイルを選択するとバックグラウンドスレッドで
+実行されます（Connect 済みの `bus` をそのまま使用）。「停止」ボタンで途中中断
+できます。拡張子で以下の2種類を自動判別します（どちらも `tools/uds_tester/capl_api.py`
+の `CaplContext` を実行時のランタイムとして共通で使うため、送受信の挙動は揃っています）。
 
-GUI の「スクリプト実行...」ボタンから `.py` ファイルを選択するとバックグラウンド
-スレッドで実行されます（Connect 済みの `bus` をそのまま使用）。「停止」ボタンで
-途中中断できます。スクリプトは Python 構文ですが、`tools/uds_tester/capl_api.py`
-が公開する以下の関数だけを使えば CAPL に近い書き味で書けます。
+**`.py`（Python 構文、`capl_api.py`）**
+
+ファイルの内容をそのまま `exec()` する方式。Python 構文ですが、
+`tools/uds_tester/capl_api.py` が公開する以下の関数だけを使えば CAPL に近い
+書き味で書けます。
 
 | 関数 | 説明 |
 |------|------|
@@ -3508,6 +3513,59 @@ GUI の「スクリプト実行...」ボタンから `.py` ファイルを選択
 | `@ctx.on_timer(interval_s)` | interval_s 秒毎に呼ばれる関数を登録するデコレータ（`wait()` の実行中のみ発火） |
 
 サンプルは `tools/uds_tester/scripts/example_session_check.py` を参照してください。
+Python の全機能（if/while/変数等）が使えるため、複雑な分岐が必要な場合はこちらが
+向いています。
+
+**`.capl`（CAPL 風の独自 DSL、`tools/uds_tester/capl_dsl.py`）**
+
+`on start`/`on timer`/`on message` という実際の CAPL に近いイベント構文を持つ、
+自作の字句解析・構文解析・インタプリタによるミニ言語です。対応するのは最小構成で、
+ブロック内は関数呼び出し文の並びのみ（if/while 等の制御構文、変数宣言はありません）。
+
+```
+on start
+{
+    write("start");
+    send(0x10, 0x03);      // ExtendedSession へ遷移
+    wait_response();
+    assert_positive();
+    setTimer(keepAlive, 1000);
+}
+
+on timer keepAlive
+{
+    send(0x3E, 0x00);      // TesterPresent
+    wait_response(1.0);
+    setTimer(keepAlive, 1000);  // 単発タイマーなので繰り返すには再度アームする
+}
+
+on message 0x200
+{
+    write("byte0=", msgData(0));
+}
+```
+
+| 構文/関数 | 説明 |
+|------|------|
+| `on start { ... }` | スクリプト開始時に1回実行 |
+| `on timer <name> { ... }` | `setTimer(<name>, ms)` でアームしたタイマーが満了した時に実行（**単発**。CAPL の `msTimer` と同様、繰り返すにはハンドラ内で再度 `setTimer()` を呼ぶ） |
+| `on message <id> { ... }` | 指定 CAN ID のフレームを受信した時に実行（`id` は `0x200` のような16進数か10進数） |
+| `send(b0, b1, ...)` / `send_can(can_id, b0, b1, ...)` | Python 版の `send()`/`send_can()` と同じ（バイトは可変長引数） |
+| `wait_response()` / `wait_response(timeout)` | Python 版と同じ |
+| `assert_positive()` / `assert_negative()` / `assert_negative(nrc)` | Python 版と同じ（`resp` 引数はなく常に直前の応答を見る） |
+| `security_unlock()` / `wait(seconds)` | Python 版と同じ |
+| `log(...)` / `write(...)` | 同じ動作（`write` は CAPL の `write()` に合わせたエイリアス） |
+| `setTimer(name, ms)` / `cancelTimer(name)` | タイマーのアーム/解除 |
+| `msgData(n)` / `msgId()` / `msgDlc()` | `on message` ハンドラ内で、直近に受信したフレームの byte[n]/CAN ID/データ長を取得 |
+
+`on start` の実行後、`on timer`/`on message` が1つでも定義されていれば「停止」
+ボタンが押されるまでイベント待受を続けます（何も定義されていなければ `on start`
+だけで完了します）。同じ CAN ID を `wait_response()` と `on message` の両方で待ち
+受けようとすると（例: UDS 応答 ID の 0x7E8）、フレームの奪い合いになり
+`on message` 側にはほとんど回ってきません。`on message` は UDS 応答以外の
+周期送信フレーム（EngineStatus 0x200 等）を監視する用途に向いています。
+
+サンプルは `tools/uds_tester/scripts/example_session_check.capl` を参照してください。
 
 <a id="nvm"></a>
 #### NvM（Non-Volatile Memory Manager）

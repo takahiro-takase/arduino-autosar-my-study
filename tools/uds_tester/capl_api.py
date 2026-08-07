@@ -95,6 +95,19 @@ class CaplContext:
         self._log("RX " + resp.describe())
         return resp
 
+    def try_recv(self, timeout: float = 0.05):
+        """1フレームを試験的に受信する (capl_dsl.py の `on message` ディスパッチ用)。
+        取得できなければ None。bus_lock を保持したまま受信するため、wait_response() 等
+        と同時には呼ばれない (どちらも同じ CAN キューから frame を奪い合う関係になる点は
+        呼び出し側の設計上の注意点であり、ここでは単に1回分の recv を行うだけ)。"""
+        self._check_stop()
+        with self._bus_lock:
+            bus = self.bus
+            try:
+                return bus.recv(timeout=timeout)
+            except Exception:  # noqa: BLE001 - ポーリング中の一時エラーは無視して継続する
+                return None
+
     # ---- アサーション ----
     def assert_positive(self, resp: Optional[uds_link.UdsResponse] = None) -> uds_link.UdsResponse:
         resp = resp if resp is not None else self._last_response

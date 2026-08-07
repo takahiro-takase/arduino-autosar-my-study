@@ -25,6 +25,7 @@ from Crypto.Cipher import AES
 from Crypto.Hash import CMAC
 
 import capl_api
+import capl_dsl
 import uds_link
 
 
@@ -1054,7 +1055,12 @@ class App(tk.Tk):
             return
         path = filedialog.askopenfilename(
             title="CAPL風スクリプトを選択",
-            filetypes=[("Python スクリプト", "*.py"), ("すべてのファイル", "*.*")],
+            filetypes=[
+                ("スクリプト", "*.py *.capl"),
+                ("Python スクリプト", "*.py"),
+                ("CAPL風 DSL スクリプト", "*.capl"),
+                ("すべてのファイル", "*.*"),
+            ],
         )
         if not path:
             return
@@ -1078,8 +1084,14 @@ class App(tk.Tk):
     def _script_worker(self, source: str, path: str):
         label = os.path.basename(path)
         self.log_queue.put(f"[script:{label}] 開始")
+        # 拡張子で Python (.py, exec() ベース) / CAPL 風 DSL (.capl, 自作パーサ+インタプリタ)
+        # を自動判別する。両者は run_script()/run_dsl_script() の引数の並びを揃えてあり、
+        # どちらも内部で capl_api.CaplContext をランタイムとして使うため、GUI 側はこの分岐
+        # だけで済む。
+        is_dsl = path.lower().endswith(".capl")
+        run = capl_dsl.run_dsl_script if is_dsl else capl_api.run_script
         try:
-            capl_api.run_script(
+            run(
                 source, path, lambda: self.bus, self.bus_lock,
                 lambda text: self.log_queue.put(f"[script:{label}] {text}"),
                 self.script_stop_event,
@@ -1089,6 +1101,8 @@ class App(tk.Tk):
             self.log_queue.put(f"[script:{label}] 停止されました")
         except capl_api.ScriptAbort as exc:
             self.log_queue.put(f"[script:{label}] 中断: {exc}")
+        except capl_dsl.DslSyntaxError as exc:
+            self.log_queue.put(f"[script:{label}] 構文エラー: {exc}")
         except Exception as exc:  # noqa: BLE001 - スクリプト内の想定外エラーもログに出して継続する
             self.log_queue.put(f"[script:{label}] エラー: {exc}")
         finally:
