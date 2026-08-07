@@ -7,13 +7,26 @@ Python API。実体は uds_link.py の低レベル送受信関数のラッパー
 これらの関数をそのまま公開する。スクリプト自体は Python 構文だが、
 これらの名前だけ使えば CAPL に近い書き味になる。
 
-イベント機構は現状 on_timer（時間駆動のポーリング）のみ。`on message`
-相当（受信フレームトリガ）を足す場合は、wait_response() が使っている
-bus_lock 経由の受信と衝突しないよう、フレーム受信経路そのものの設計から
-別途行う必要がある。
+イベント機構は on_timer（時間駆動のポーリング）に加え、capl_dsl.py の
+`on message`（受信フレームトリガ）が try_recv() を使う。wait_response() は
+内部で uds_link.receive_uds_response() のブロッキング受信ループを使っており、
+応答 ID 以外のフレームは本来そのループ内で読み捨てられてしまう。これだと
+wait_response() が待っている間に届いた `on message` 対象のフレームが
+ディスパッチされる前に失われるため、そうした「応答 ID 以外のフレーム」は
+_unclaimed_frames に退避してから try_recv() 側で拾えるようにしてある。
+
+try_recv() は自前で bus.recv() せず、app.py の _rx_monitor_worker がバスから
+読み取ったフレームをファンアウトする message_queue を消費する側に回っている。
+_rx_monitor_worker は Connect 中ずっと動き続ける GUI 側の RX モニタ表示用ワーカーで
+あり、これと try_recv() が両方とも独自に bus.recv() すると、同じフレームを
+奪い合ってどちらかが（あるいは両方が）取りこぼす競合状態になるため
+（bus_lock は排他は保証するが、フレームの「どちらが受け取るか」までは
+決めてくれない）。
 """
 from __future__ import annotations
 
+import collections
+import queue
 import threading
 import time
 from typing import Callable, Optional
@@ -37,13 +50,19 @@ class CaplContext:
     """スクリプト内から使う CAPL 風関数群。1回のスクリプト実行につき1つ生成する。"""
 
     def __init__(self, get_bus: Callable[[], Optional[object]], bus_lock: threading.Lock,
-                 log_func: Callable[[str], None], stop_event: threading.Event):
+                 log_func: Callable[[str], None], stop_event: threading.Event,
+                 message_queue: Optional["queue.Queue"] = None):
         self._get_bus = get_bus
         self._bus_lock = bus_lock
         self._log = log_func
         self._stop_event = stop_event
+        self._message_queue = message_queue
         self._timers: list[list] = []  # [interval_s, func, next_fire] （in-place 更新するため list）
         self._last_response: Optional[uds_link.UdsResponse] = None
+        # wait_response()/security_unlock() の受信ループが読み捨てた「応答 ID 以外」の
+        # フレームを一時退避するバッファ。try_recv() が優先的にここから取り出す。
+        # maxlen は on message 側が長時間ポーリングを止めても無限に溜め込まないための保険。
+        self._unclaimed_frames: "collections.deque" = collections.deque(maxlen=32)
 
     @property
     def bus(self):
@@ -83,17 +102,54 @@ class CaplContext:
 
     # ---- 受信 ----
     def wait_response(self, timeout: float = 2.0) -> uds_link.UdsResponse:
-        """UDS 応答を待って返す。タイムアウト時は ScriptAbort を送出する。"""
+        """UDS 応答を待って返す。タイムアウト時は ScriptAbort を送出する。
+        待っている間に届いた応答 ID 以外のフレームは _unclaimed_frames に退避し、
+        try_recv() (on message ディスパッチ) が後で拾えるようにする。"""
         self._check_stop()
         with self._bus_lock:
             try:
-                resp = uds_link.receive_uds_response(self.bus, timeout=timeout)
+                resp = uds_link.receive_uds_response(
+                    self.bus, timeout=timeout, on_other_frame=self._unclaimed_frames.append
+                )
             except uds_link.UdsTimeoutError as exc:
                 self._log(str(exc))
                 raise ScriptAbort(str(exc)) from exc
         self._last_response = resp
         self._log("RX " + resp.describe())
         return resp
+
+    def try_recv(self, timeout: float = 0.05):
+        """1フレームを試験的に受信する (capl_dsl.py の `on message` ディスパッチ用)。
+        フレームが届かなかった場合のみ None を返す。
+
+        優先順位:
+        1. wait_response() 等が退避しておいたフレーム (_unclaimed_frames)
+        2. message_queue (app.py の _rx_monitor_worker がファンアウトしたフレーム)
+
+        message_queue が渡されている場合、ここでは自前で bus.recv() しない。
+        _rx_monitor_worker と両方が独自に bus.recv() すると、同じフレームを
+        奪い合ってどちらかが取りこぼす競合状態になるため（モジュール冒頭の
+        docstring 参照）。message_queue が渡されていない場合 (直接 CaplContext を
+        使う場合等) のみ、フォールバックとして自前で bus.recv() する。
+
+        bus.recv() 自体は python-can の仕様上「タイムアウトなら None を返す」
+        （receive_uds_response() 等が None を timeout の意味で扱っているのと同じ）。
+        以前はここで例外まで一律 None に握りつぶしていたため、CAN アダプタが
+        切断された等の実エラーが send()/wait_response() と違ってログにも出ず、
+        デッドなバスに対して無限ポーリングし続けてしまっていた。例外は素通しし、
+        呼び出し元 (Interpreter → _script_worker の except Exception) で
+        他の失敗と同様に扱われるようにする。"""
+        self._check_stop()
+        if self._unclaimed_frames:
+            return self._unclaimed_frames.popleft()
+        if self._message_queue is not None:
+            try:
+                return self._message_queue.get(timeout=timeout)
+            except queue.Empty:
+                return None
+        with self._bus_lock:
+            bus = self.bus
+            return bus.recv(timeout=timeout)
 
     # ---- アサーション ----
     def assert_positive(self, resp: Optional[uds_link.UdsResponse] = None) -> uds_link.UdsResponse:
@@ -132,7 +188,9 @@ class CaplContext:
         self._check_stop()
         with self._bus_lock:
             try:
-                result = uds_link.security_access_auto(self.bus, key_mask, timeout)
+                result = uds_link.security_access_auto(
+                    self.bus, key_mask, timeout, on_other_frame=self._unclaimed_frames.append
+                )
             except uds_link.UdsTimeoutError as exc:
                 self._log(str(exc))
                 raise ScriptAbort(str(exc)) from exc
@@ -178,7 +236,8 @@ class CaplContext:
 
 def run_script(source: str, script_path: str, get_bus: Callable[[], Optional[object]],
                bus_lock: threading.Lock, log_func: Callable[[str], None],
-               stop_event: threading.Event) -> None:
+               stop_event: threading.Event,
+               message_queue: Optional["queue.Queue"] = None) -> None:
     """スクリプトファイルの内容 (source) を exec() する。
 
     get_bus は現在接続中の python-can Bus (未接続なら None) を返す呼び出し可能
@@ -186,12 +245,15 @@ def run_script(source: str, script_path: str, get_bus: Callable[[], Optional[obj
     スクリプト実行中に GUI 側で切断/再接続されても常に最新の bus を使わせるため
     (app.py の他ワーカーが self.bus を毎回読み直すのと同じ理由)。
 
+    message_queue は capl_dsl.run_dsl_script() と引数の並びを揃えるためのもので、
+    Python 版スクリプトでは `ctx.try_recv()` を明示的に呼ばない限り使われない。
+
     グローバル名前空間に CaplContext の主要メソッドを直接ぶら下げるため、
     スクリプト側は `ctx.send(...)` ではなく `send(...)` とだけ書ける
     （`on_timer` はデコレータ登録時に `ctx` 自体を束縛したいことが多いため、
     こちらは `ctx.on_timer(...)` の形のみ提供する）。
     """
-    ctx = CaplContext(get_bus, bus_lock, log_func, stop_event)
+    ctx = CaplContext(get_bus, bus_lock, log_func, stop_event, message_queue)
     script_globals = {
         "__name__": "__capl_script__",
         "__file__": script_path,

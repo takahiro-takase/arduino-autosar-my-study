@@ -3489,12 +3489,17 @@ python app.py
 
 ボタンの単発送信だけでは「セッション遷移→SecurityAccess→DID 読み出し」のような
 複数手順の一連の操作や、応答内容による分岐を再現しにくいため、Vector CAPL に
-近い書き味で一連の手順をスクリプトとして書ける機能を用意しています。
+近い書き味で一連の手順をスクリプトとして書ける機能を用意しています。GUI の
+「スクリプト実行...」ボタンからファイルを選択するとバックグラウンドスレッドで
+実行されます（Connect 済みの `bus` をそのまま使用）。「停止」ボタンで途中中断
+できます。拡張子で以下の2種類を自動判別します（どちらも `tools/uds_tester/capl_api.py`
+の `CaplContext` を実行時のランタイムとして共通で使うため、送受信の挙動は揃っています）。
 
-GUI の「スクリプト実行...」ボタンから `.py` ファイルを選択するとバックグラウンド
-スレッドで実行されます（Connect 済みの `bus` をそのまま使用）。「停止」ボタンで
-途中中断できます。スクリプトは Python 構文ですが、`tools/uds_tester/capl_api.py`
-が公開する以下の関数だけを使えば CAPL に近い書き味で書けます。
+**`.py`（Python 構文、`capl_api.py`）**
+
+ファイルの内容をそのまま `exec()` する方式。Python 構文ですが、
+`tools/uds_tester/capl_api.py` が公開する以下の関数だけを使えば CAPL に近い
+書き味で書けます。
 
 | 関数 | 説明 |
 |------|------|
@@ -3508,6 +3513,85 @@ GUI の「スクリプト実行...」ボタンから `.py` ファイルを選択
 | `@ctx.on_timer(interval_s)` | interval_s 秒毎に呼ばれる関数を登録するデコレータ（`wait()` の実行中のみ発火） |
 
 サンプルは `tools/uds_tester/scripts/example_session_check.py` を参照してください。
+Python の全機能（if/while/変数等）が使えるため、複雑な分岐が必要な場合はこちらが
+向いています。
+
+**`.capl`（CAPL 風の独自 DSL、`tools/uds_tester/capl_dsl.py`）**
+
+`on start`/`on timer`/`on message` という実際の CAPL に近いイベント構文を持つ、
+自作の字句解析・構文解析・インタプリタによるミニ言語です。対応するのは最小構成で、
+ブロック内は関数呼び出し文の並びのみ（if/while 等の制御構文、変数宣言はありません）。
+
+```
+on start
+{
+    write("start");
+    send(0x10, 0x03);      // ExtendedSession へ遷移
+    wait_response();
+    assert_positive();
+    setTimer(keepAlive, 1000);
+}
+
+on timer keepAlive
+{
+    send(0x3E, 0x00);      // TesterPresent
+    wait_response(1.0);
+    setTimer(keepAlive, 1000);  // 単発タイマーなので繰り返すには再度アームする
+}
+
+on message 0x200
+{
+    write("byte0=", msgData(0));
+}
+```
+
+| 構文/関数 | 説明 |
+|------|------|
+| `on start { ... }` | スクリプト開始時に1回実行 |
+| `on timer <name> { ... }` | `setTimer(<name>, ms)` でアームしたタイマーが満了した時に実行（**単発**。CAPL の `msTimer` と同様、繰り返すにはハンドラ内で再度 `setTimer()` を呼ぶ） |
+| `on message <id> { ... }` | 指定 CAN ID のフレームを受信した時に実行（`id` は `0x200` のような16進数か10進数） |
+| `send(b0, b1, ...)` / `send_can(can_id, b0, b1, ...)` | Python 版の `send()`/`send_can()` と同じ（バイトは可変長引数） |
+| `wait_response()` / `wait_response(timeout)` | Python 版と同じ |
+| `assert_positive()` / `assert_negative()` / `assert_negative(nrc)` | Python 版と同じ（`resp` 引数はなく常に直前の応答を見る） |
+| `security_unlock()` | Python 版と同じ |
+| `wait(seconds)` | 指定秒数待機（Python 版と異なり、この待機中も `setTimer` タイマーの発火・`on message` ディスパッチは止まらず動き続ける） |
+| `log(...)` / `write(...)` | 同じ動作（`write` は CAPL の `write()` に合わせたエイリアス） |
+| `setTimer(name, ms)` / `cancelTimer(name)` | タイマーのアーム/解除 |
+| `msgData(n)` / `msgId()` / `msgDlc()` | `on message` ハンドラ内で、直近に受信したフレームの byte[n]/CAN ID/データ長を取得 |
+
+未知の関数名（タイポ等）は `on timer`/`on message` ブロックの中身であっても、
+スクリプト実行開始前（`on start` が走り出す前）に一括検出してエラーにします。
+そうしないと、`on timer`/`on message` 内のタイポは実際にそのイベントが発火するまで
+見つからず、`on start` でのセッション変更や SecurityAccess アンロックのような
+副作用のある処理を実行し終えた後になってようやく判明する、ということになるためです。
+
+`on start` の実行後、`on timer`/`on message` が1つでも定義されていれば「停止」
+ボタンが押されるまでイベント待受を続けます（何も定義されていなければ `on start`
+だけで完了します）。`wait_response()`/`security_unlock()` が応答待ちでブロックして
+いる間に届いた（応答 ID 以外の）フレームは内部で一旦退避され、ブロックが終わった
+後に `on message` 側へきちんと配送されるため、EngineStatus (0x200) のような
+周期送信フレームの監視は取りこぼしなく行えます。ただし同じ CAN ID を
+`wait_response()` と `on message` の両方で待ち受けようとした場合（例: UDS 応答 ID
+の 0x7E8 を `on message 0x7E8` でも監視しようとした場合）は、その ID 宛のフレーム
+自体を `wait_response()` が応答として直接消費してしまうため、`on message` 側には
+回ってきません。`on message` は UDS 応答以外の周期送信フレーム（EngineStatus
+0x200 等）を監視する用途に向いています。
+
+（実装メモ）`on message` は自前で CAN バスを読みには行かず、GUI の RX モニタ表示を
+更新している `_rx_monitor_worker`（Connect 中ずっと動くバスの読み取り役）が受信した
+フレームを橋渡ししてもらう形にしてあります。両者が別々に受信しようとすると同じ
+フレームを奪い合ってどちらかが取りこぼす（`on message` が発火しない、または RX
+モニタ表示が更新されない）ため。CAN アダプタの切断等で `bus.recv()` が実エラーを
+送出した場合は（python-can の仕様上、単なる受信タイムアウトは例外ではなく `None`
+を返すだけなので、これは区別できる）、ログに出したうえで `_rx_monitor_worker`
+自体を停止します（デッドなバスに対して無言でポーリングし続けることはしません）。
+このファンアウト用のキューは Connect 中ずっと共有されているため、「スクリプト実行」
+ボタンを押した時点で溜まっていた古いフレームは、スクリプト開始前に捨てます
+（そうしないと `on message` がスクリプト開始より前に届いていたフレームをまとめて
+受け取ってしまい、開始直後にバックログが一気に発火してその後は静かに見える、という
+紛らわしい挙動になるため）。
+
+サンプルは `tools/uds_tester/scripts/example_session_check.capl` を参照してください。
 
 <a id="nvm"></a>
 #### NvM（Non-Volatile Memory Manager）

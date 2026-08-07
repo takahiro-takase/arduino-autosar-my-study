@@ -1,0 +1,47 @@
+// CAPL 風 DSL のサンプル (.capl)。
+// 「スクリプト実行...」ボタンから選択すると、拡張子 .capl から自動判別され
+// capl_dsl.py の自作パーサ/インタプリタで実行される。
+//
+// 対応構文は最小構成: on start / on timer <name> / on message <id> の
+// 3種類のイベントブロックのみで、ブロック内は関数呼び出し文の並びだけ
+// (if/while 等の制御構文、変数宣言はない)。使える関数は README.md の
+// 「CAPL 風スクリプト機能」を参照。
+//
+// example_session_check.py (Python版) と同じ手順に加えて、on timer による
+// TesterPresent の定期送信と、on message による EngineStatus (0x200、ECUが
+// 周期送信するブロードキャストフレーム) の受信監視を行う。
+// 0x7E8 (UDS応答) を on message の対象にしないのは、wait_response() が同じ
+// フレームを直接消費してしまい on message 側にはほぼ回ってこないため。
+
+on start
+{
+    write("=== DefaultSession -> ExtendedSession -> SecurityAccess の確認 ===");
+
+    send(0x10, 0x03);
+    wait_response();
+    assert_positive();
+    write("ExtendedSession OK");
+
+    security_unlock();
+
+    send(0x22, 0x01, 0x01);
+    wait_response();
+    assert_positive();
+    write("EngineSpeed 読み出し成功");
+
+    write("TesterPresent を1秒毎に送信しつつ EngineStatus(0x200) 受信も監視します。");
+    write("停止するには GUI の「停止」ボタンを押してください。");
+    setTimer(keepAlive, 1000);
+}
+
+on timer keepAlive
+{
+    send(0x3E, 0x00);
+    wait_response(1.0);
+    setTimer(keepAlive, 1000);  // CAPL の msTimer と同じく単発なので、繰り返すには再度アームする
+}
+
+on message 0x200
+{
+    write("RX EngineStatus(0x200) byte0(EngineState)=", msgData(0));
+}

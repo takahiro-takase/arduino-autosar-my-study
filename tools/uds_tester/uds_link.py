@@ -246,10 +246,16 @@ def receive_uds_response(
     timeout: float = 2.0,
     response_id: int = RESPONSE_ID,
     request_id: int = REQUEST_ID,
+    on_other_frame=None,
 ) -> UdsResponse:
     """ISO-TP の SF/FF/CF を再結合して UDS ペイロードを返す。
     マルチフレーム受信時は FF を受け取った直後に FC を自動送信する
-    （本ツール最大の目的: Cangaroo での FC 手動送信を不要にする）。"""
+    （本ツール最大の目的: Cangaroo での FC 手動送信を不要にする）。
+
+    response_id 以外の frame はここで読み捨てるが、on_other_frame が指定されていれば
+    捨てる前に呼び出す（capl_dsl.py の `on message` ハンドラ向け。wait_response() が
+    ブロックしている間に届いた応答 ID 以外のフレームがそのまま失われてしまうのを防ぐため、
+    CaplContext 側でバッファに退避させてから on message ディスパッチに回している）。"""
     deadline = time.monotonic() + timeout
     payload = bytearray()
     expected_len = None
@@ -263,6 +269,8 @@ def receive_uds_response(
         if msg is None:
             raise UdsTimeoutError(f"応答タイムアウト ({timeout}s)")
         if msg.arbitration_id != response_id or not msg.data:
+            if on_other_frame is not None and msg.arbitration_id != response_id:
+                on_other_frame(msg)
             continue
 
         pci = msg.data[0]
@@ -318,11 +326,13 @@ def security_access_auto(
     timeout: float = 2.0,
     request_id: int = REQUEST_ID,
     response_id: int = RESPONSE_ID,
+    on_other_frame=None,
 ) -> str:
     """SID 0x27 requestSeed → key 計算 (seed XOR key_mask) → sendKey を
-    1 アクションで実行する。Dcm_ComputeSecurityKey() と同一の計算式。"""
+    1 アクションで実行する。Dcm_ComputeSecurityKey() と同一の計算式。
+    on_other_frame は receive_uds_response() にそのまま渡す (説明はそちらを参照)。"""
     send_raw(bus, bytes([0x02, 0x27, 0x01]), request_id)
-    resp = receive_uds_response(bus, timeout, response_id, request_id)
+    resp = receive_uds_response(bus, timeout, response_id, request_id, on_other_frame=on_other_frame)
     if resp.is_negative:
         return f"requestSeed 拒否: {resp.describe()}"
     if len(resp.raw) < 4 or resp.raw[0] != 0x67:
@@ -338,7 +348,7 @@ def security_access_auto(
         bytes([0x04, 0x27, 0x02, (key >> 8) & 0xFF, key & 0xFF]),
         request_id,
     )
-    resp2 = receive_uds_response(bus, timeout, response_id, request_id)
+    resp2 = receive_uds_response(bus, timeout, response_id, request_id, on_other_frame=on_other_frame)
     if resp2.is_negative:
         return f"seed=0x{seed:04X} key=0x{key:04X} -> sendKey 拒否: {resp2.describe()}"
     if len(resp2.raw) >= 1 and resp2.raw[0] == 0x67:
