@@ -3518,11 +3518,18 @@ Python の全機能（if/while/変数等）が使えるため、複雑な分岐�
 
 **`.capl`（CAPL 風の独自 DSL、`tools/uds_tester/capl_dsl.py`）**
 
-`on start`/`on timer`/`on message` という実際の CAPL に近いイベント構文を持つ、
-自作の字句解析・構文解析・インタプリタによるミニ言語です。対応するのは最小構成で、
-ブロック内は関数呼び出し文の並びのみ（if/while 等の制御構文、変数宣言はありません）。
+`on start`/`on timer`/`on message` という実際の CAPL に近いイベント構文に加えて、
+`variables { }` での変数宣言・`if`/`else`/`while`・四則演算/比較/論理演算子にも
+対応した、自作の字句解析・構文解析・インタプリタによるミニ言語です
+（対応していないもの: `for` 文、配列・構造体、ユーザー定義関数）。
 
 ```
+variables
+{
+    int i;
+    int engineStatusCount;
+}
+
 on start
 {
     write("start");
@@ -3530,6 +3537,13 @@ on start
     wait_response();
     assert_positive();
     setTimer(keepAlive, 1000);
+
+    i = 0;
+    while (i < 3)
+    {
+        write("loop ", i);
+        i = i + 1;
+    }
 }
 
 on timer keepAlive
@@ -3541,23 +3555,42 @@ on timer keepAlive
 
 on message 0x200
 {
-    write("byte0=", msgData(0));
+    engineStatusCount = engineStatusCount + 1;
+    if (msgData(0) == 0)
+    {
+        write("OFF (", engineStatusCount, "回目)");
+    }
+    else if (msgData(0) == 2)
+    {
+        write("RUNNING (", engineStatusCount, "回目)");
+    }
+    else
+    {
+        write("state=", msgData(0));
+    }
 }
 ```
 
 | 構文/関数 | 説明 |
 |------|------|
+| `variables { int x; float y = 1.5; }` | ファイル冒頭に1つだけ書ける変数宣言ブロック（省略可）。型は `int`/`float` のみ。初期値省略時は `0`/`0.0`。初期値式は定数式のみ（`send()` 等の関数呼び出しは不可。実行前検証が完了する前に副作用のある呼び出しが走ってしまうのを防ぐため）で、前方の宣言を参照することはできる（例: `int b = a * 10;`） |
 | `on start { ... }` | スクリプト開始時に1回実行 |
-| `on timer <name> { ... }` | `setTimer(<name>, ms)` でアームしたタイマーが満了した時に実行（**単発**。CAPL の `msTimer` と同様、繰り返すにはハンドラ内で再度 `setTimer()` を呼ぶ） |
+| `on timer <name> { ... }` | `setTimer(<name>, ms)` でアームしたタイマーが満了した時に実行（**単発**。CAPL の `msTimer` と同様、繰り返すにはハンドラ内で再度 `setTimer()` を呼ぶ）。タイマー名は `variables{}` での宣言は不要（後述） |
 | `on message <id> { ... }` | 指定 CAN ID のフレームを受信した時に実行（`id` は `0x200` のような16進数か10進数） |
+| `x = expr;` | 代入文（`x` は `variables{}` で宣言済みであること）。C/CAPL の代入と同様、`x` の宣言型 (`int`/`float`) に変換してから代入する（`int` 変数への代入は 0 方向へ切り捨て） |
+| `if (expr) { ... } else if (expr) { ... } else { ... }` | 条件分岐（`else if`/`else` は省略可、いくつでも連結可） |
+| `while (expr) { ... }` | 条件が真の間繰り返す（「停止」ボタンでの中断はループの各周回でチェックされる） |
+| `+ - * / %`、`== != < > <= >=`、`&& \|\| !`、`( )` | 四則演算・比較・論理演算子（`&&`/`\|\|` は短絡評価）。比較・論理式の結果は `0`/`1` の `int`。`/`・`%` は両辺が `int` の場合は C/CAPL と同じ 0 方向への切り捨て演算（`-7 / 2` は `-3`、Python の `//` のような床方向の丸めにはならない）、どちらかが `float` なら通常の除算・剰余になる。ゼロ除算はスクリプト中断（`wait_response()` のタイムアウト等と同じ扱い） |
 | `send(b0, b1, ...)` / `send_can(can_id, b0, b1, ...)` | Python 版の `send()`/`send_can()` と同じ（バイトは可変長引数） |
 | `wait_response()` / `wait_response(timeout)` | Python 版と同じ |
 | `assert_positive()` / `assert_negative()` / `assert_negative(nrc)` | Python 版と同じ（`resp` 引数はなく常に直前の応答を見る） |
 | `security_unlock()` | Python 版と同じ |
 | `wait(seconds)` | 指定秒数待機（Python 版と異なり、この待機中も `setTimer` タイマーの発火・`on message` ディスパッチは止まらず動き続ける） |
 | `log(...)` / `write(...)` | 同じ動作（`write` は CAPL の `write()` に合わせたエイリアス） |
-| `setTimer(name, ms)` / `cancelTimer(name)` | タイマーのアーム/解除 |
+| `setTimer(name, ms)` / `cancelTimer(name)` | タイマーのアーム/解除。`name` は識別子そのもの（実際の CAPL の `msTimer` 変数と違い、`variables{}` での事前宣言は不要） |
 | `msgData(n)` / `msgId()` / `msgDlc()` | `on message` ハンドラ内で、直近に受信したフレームの byte[n]/CAN ID/データ長を取得 |
+
+未宣言の変数への代入・参照も、未知の関数名と同様にスクリプト実行開始前に検出します。
 
 未知の関数名（タイポ等）は `on timer`/`on message` ブロックの中身であっても、
 スクリプト実行開始前（`on start` が走り出す前）に一括検出してエラーにします。
@@ -3591,7 +3624,9 @@ on message 0x200
 受け取ってしまい、開始直後にバックログが一気に発火してその後は静かに見える、という
 紛らわしい挙動になるため）。
 
-サンプルは `tools/uds_tester/scripts/example_session_check.capl` を参照してください。
+サンプルは `tools/uds_tester/scripts/example_session_check.capl`（最小構成）と
+`tools/uds_tester/scripts/example_variables_control_flow.capl`（変数宣言・
+`if`/`else`/`while` を使った例）を参照してください。
 
 <a id="nvm"></a>
 #### NvM（Non-Volatile Memory Manager）
