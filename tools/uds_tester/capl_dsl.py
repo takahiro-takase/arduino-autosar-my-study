@@ -5,18 +5,35 @@ capl_api.py の Python API 層 (中間案) に対する「本格対応」案。�
 UDS 送受信の実体は capl_api.CaplContext をそのままランタイム層として再利用する
 (パーサが構文木を解釈して最終的に呼ぶのが CaplContext のメソッドになる)。
 
-対応する構文は最小構成:
+対応する構文:
 
+    variables { int x; float y = 1.5; }   // 省略可。1ファイルに1つまで、on start/
+                                           // on timer/on message より前に書くこと
     on start { ... }
     on timer <name> { ... }
     on message <id> { ... }
 
-ブロック内は関数呼び出し文の並びのみ (if/while 等の制御構文、変数宣言はない)。
+ブロック内は以下の文が書ける:
+    - 関数呼び出し文: send(...); / write(...); など
+    - 代入文: x = x + 1;  （x は variables{} で宣言済みであること）
+    - if (expr) { ... } [else if (expr) { ... }]* [else { ... }]
+    - while (expr) { ... }
+
+式は四則演算 (+ - * / %)・比較 (== != < > <= >=)・論理 (&& || !)・丸括弧・
+関数呼び出し・変数参照・数値/文字列リテラルに対応する（if/while の演算だけを
+サポートし、for 文や配列、構造体、ユーザー定義関数は対象外）。
+
 利用できる関数は Interpreter._make_builtins() を参照 (README.md にも一覧表がある)。
-未知の関数呼び出しは Interpreter 構築時 (実行前) に全ブロックを走査して検出する
-(_validate_calls() 参照)。on start の実行後に初めて呼ばれる on timer/on message の
-中身でタイポがあっても、on start の副作用（セッション変更等）を実行してしまった
-後になって気付く、という事態を避けるため。
+未知の関数呼び出し・未宣言の変数参照は Interpreter 構築時 (実行前) に全ブロックを
+走査して検出する (_validate() 参照)。on start の実行後に初めて呼ばれる on timer/
+on message の中身でタイポがあっても、on start の副作用（セッション変更等）を実行
+してしまった後になって気付く、という事態を避けるため。
+
+setTimer(name, ms)/cancelTimer(name) の第1引数 (タイマー名) は特別扱いする。
+CAPL の msTimer 変数と違い、本 DSL では variables{} での事前宣言を要求せず、
+識別子の綴りそのものをタイマー名として使う（on timer <name> ブロックとの対応も
+同じ綴りで取る）。real な変数参照 (int/float) と紛れないよう、Interpreter 側で
+setTimer/cancelTimer の第1引数だけは評価も宣言チェックもしない。
 
 `.py` の exec() ベースのスクリプト実行 (capl_api.run_script()) は本モジュールとは
 独立に残っており、app.py がファイル拡張子で自動的にどちらを使うか切り替える。
@@ -34,7 +51,7 @@ ArgValue = Union[int, float, str]
 
 
 class DslSyntaxError(Exception):
-    """DSL のパースエラー。可能な限り行番号を含める。"""
+    """DSL のパースエラー・実行前検証エラー。可能な限り行番号を含める。"""
 
 
 # ---------------------------------------------------------------------------
@@ -50,6 +67,22 @@ _TOKEN_SPEC = [
     ("INT", r"\d+"),
     ("STRING", r'"(?:[^"\\]|\\.)*"'),
     ("IDENT", r"[A-Za-z_][A-Za-z0-9_]*"),
+    # 2文字演算子は対応する1文字演算子より前に置くこと (先勝ちマッチのため)。
+    ("EQ", r"=="),
+    ("NEQ", r"!="),
+    ("LE", r"<="),
+    ("GE", r">="),
+    ("AND", r"&&"),
+    ("OR", r"\|\|"),
+    ("ASSIGN", r"="),
+    ("NOT", r"!"),
+    ("LT", r"<"),
+    ("GT", r">"),
+    ("PLUS", r"\+"),
+    ("MINUS", r"-"),
+    ("STAR", r"\*"),
+    ("SLASH", r"/"),
+    ("PERCENT", r"%"),
     ("LBRACE", r"\{"),
     ("RBRACE", r"\}"),
     ("LPAREN", r"\("),
@@ -91,21 +124,98 @@ def tokenize(source: str) -> list[Token]:
 
 
 # ---------------------------------------------------------------------------
-# 構文解析 (AST は関数呼び出し文の並びのみ)
+# 構文解析
 # ---------------------------------------------------------------------------
+
+_VAR_TYPES = ("int", "float")
+_COMPARISON_TOKENS = {"LT": "<", "GT": ">", "LE": "<=", "GE": ">="}
+_ADDITIVE_TOKENS = {"PLUS": "+", "MINUS": "-"}
+_MULTIPLICATIVE_TOKENS = {"STAR": "*", "SLASH": "/", "PERCENT": "%"}
+
+# setTimer(name, ms)/cancelTimer(name) の第1引数 (タイマー名) は特別扱いする。パーサーが
+# ここでその判断を一箇所に集約し、専用の TimerName ノードを作る (下記参照)。こうする
+# ことで、インタプリタ側の _call()/_validate_expr() は「この関数の第1引数だけ特別扱い」
+# という条件を各所で再判定する必要がなく、単に isinstance(node, TimerName) を見るだけで
+# 済む (以前は同じ条件が _call() と _validate_expr() の2箇所にコピーされており、
+# 片方だけ更新されるとズレる保守リスクがあった)。
+_TIMER_NAME_FUNCS = ("setTimer", "cancelTimer")
+
 
 @dataclass
 class Call:
     name: str
-    args: list  # list[ArgValue | Call]
+    args: list  # list[Expr]
+    line: int
+
+
+@dataclass
+class Var:
+    """変数参照式 (int/float、variables{} での宣言が必要)。"""
+    name: str
+    line: int
+
+
+@dataclass
+class TimerName:
+    """setTimer(name, ms)/cancelTimer(name) の第1引数専用のノード。CAPL の msTimer 型
+    変数と違い、識別子の綴りそのものがタイマー名になる (on timer <name> ブロックとの
+    対応もこの綴りで取る)。int/float 変数のように宣言して値を持つものではないため、
+    Var とは別の型にして混同を防ぐ。"""
+    name: str
+    line: int
+
+
+@dataclass
+class BinOp:
+    op: str  # "+" "-" "*" "/" "%" "==" "!=" "<" ">" "<=" ">=" "&&" "||"
+    left: object  # Expr
+    right: object  # Expr
+    line: int
+
+
+@dataclass
+class UnaryOp:
+    op: str  # "-" "!"
+    operand: object  # Expr
+    line: int
+
+
+@dataclass
+class VarDecl:
+    type_name: str  # "int" | "float"
+    name: str
+    init: object  # Expr | None
+    line: int
+
+
+@dataclass
+class Assign:
+    name: str
+    expr: object  # Expr
+    line: int
+
+
+@dataclass
+class If:
+    cond: object  # Expr
+    then_block: list  # list[Stmt]
+    else_block: Optional[list]  # else if は [If(...)] という1要素のリストで表現する
+    line: int
+
+
+@dataclass
+class While:
+    cond: object  # Expr
+    body: list  # list[Stmt]
     line: int
 
 
 @dataclass
 class Script:
-    on_start: list  # list[list[Call]]  (複数の `on start` は順に実行)
-    on_timer: dict  # name(str) -> list[Call]
-    on_message: dict  # can_id(int) -> list[Call]
+    variables: list  # list[VarDecl]  (`variables { ... }` ブロック。無ければ空)
+    on_start: list  # list[list[Stmt]]  (複数の `on start` は順に実行)
+    on_timer: dict  # name(str) -> list[Stmt]
+    on_message: dict  # can_id(int) -> list[Stmt]
 
 
 class _Parser:
@@ -138,11 +248,36 @@ class _Parser:
             )
         return self._advance()
 
+    def _at_ident(self, value: str) -> bool:
+        tok = self._peek()
+        return tok.kind == "IDENT" and tok.value == value
+
+    # ---- トップレベル ----
     def parse(self) -> Script:
+        variables: list = []
+        var_block_seen = False
+        on_block_seen = False
         on_start: list = []
         on_timer: dict = {}
         on_message: dict = {}
         while self._peek().kind != "EOF":
+            if self._at_ident("variables"):
+                tok = self._peek()
+                if var_block_seen:
+                    raise DslSyntaxError(
+                        f"{tok.line}行目: variables ブロックは1ファイルに1つまでです"
+                    )
+                if on_block_seen:
+                    raise DslSyntaxError(
+                        f"{tok.line}行目: variables ブロックは on start/on timer/"
+                        "on message より前に書いてください"
+                    )
+                var_block_seen = True
+                self._advance()
+                variables.extend(self._parse_var_block())
+                continue
+
+            on_block_seen = True
             self._expect_ident("on")
             kind_tok = self._advance()
             if kind_tok.kind != "IDENT":
@@ -167,8 +302,33 @@ class _Parser:
                     f"{kind_tok.line}行目: 未対応のイベント種別 '{kind_tok.value}' "
                     "(start/timer/message のみ対応)"
                 )
-        return Script(on_start, on_timer, on_message)
+        return Script(variables, on_start, on_timer, on_message)
 
+    def _parse_var_block(self) -> list:
+        self._expect("LBRACE")
+        decls = []
+        while self._peek().kind != "RBRACE":
+            decls.append(self._parse_var_decl())
+        self._expect("RBRACE")
+        return decls
+
+    def _parse_var_decl(self) -> VarDecl:
+        type_tok = self._peek()
+        if type_tok.kind != "IDENT" or type_tok.value not in _VAR_TYPES:
+            raise DslSyntaxError(
+                f"{type_tok.line}行目: 変数の型 (int/float) を期待しましたが "
+                f"'{type_tok.value}' でした"
+            )
+        self._advance()
+        name_tok = self._expect("IDENT")
+        init = None
+        if self._peek().kind == "ASSIGN":
+            self._advance()
+            init = self._parse_expr()
+        self._expect("SEMI")
+        return VarDecl(type_tok.value, name_tok.value, init, name_tok.line)
+
+    # ---- 文 ----
     def _parse_block(self) -> list:
         self._expect("LBRACE")
         stmts = []
@@ -177,24 +337,141 @@ class _Parser:
         self._expect("RBRACE")
         return stmts
 
-    def _parse_statement(self) -> Call:
-        call = self._parse_call()
+    def _parse_statement(self):
+        if self._at_ident("if"):
+            return self._parse_if()
+        if self._at_ident("while"):
+            return self._parse_while()
+        tok = self._peek()
+        if tok.kind == "IDENT" and self._peek(1).kind == "ASSIGN":
+            return self._parse_assignment()
+        if tok.kind == "IDENT" and self._peek(1).kind == "LPAREN":
+            call = self._parse_call()
+            self._expect("SEMI")
+            return call
+        raise DslSyntaxError(f"{tok.line}行目: 文として不正なトークン '{tok.value}'")
+
+    def _parse_if(self) -> If:
+        if_tok = self._expect_ident("if")
+        self._expect("LPAREN")
+        cond = self._parse_expr()
+        self._expect("RPAREN")
+        then_block = self._parse_block()
+        else_block = None
+        if self._at_ident("else"):
+            self._advance()
+            if self._at_ident("if"):
+                else_block = [self._parse_if()]
+            else:
+                else_block = self._parse_block()
+        return If(cond, then_block, else_block, if_tok.line)
+
+    def _parse_while(self) -> While:
+        while_tok = self._expect_ident("while")
+        self._expect("LPAREN")
+        cond = self._parse_expr()
+        self._expect("RPAREN")
+        body = self._parse_block()
+        return While(cond, body, while_tok.line)
+
+    def _parse_assignment(self) -> Assign:
+        name_tok = self._expect("IDENT")
+        self._expect("ASSIGN")
+        expr = self._parse_expr()
         self._expect("SEMI")
-        return call
+        return Assign(name_tok.value, expr, name_tok.line)
 
     def _parse_call(self) -> Call:
         name_tok = self._expect("IDENT")
         self._expect("LPAREN")
         args = []
         if self._peek().kind != "RPAREN":
-            args.append(self._parse_arg())
+            args.append(self._parse_call_arg(name_tok.value, is_first=True))
             while self._peek().kind == "COMMA":
                 self._advance()
-                args.append(self._parse_arg())
+                args.append(self._parse_call_arg(name_tok.value, is_first=False))
         self._expect("RPAREN")
         return Call(name_tok.value, args, name_tok.line)
 
-    def _parse_arg(self):
+    def _parse_call_arg(self, func_name: str, is_first: bool):
+        """通常は式として引数を読むが、setTimer/cancelTimer の第1引数が裸の識別子
+        (関数呼び出しではない) の場合だけ TimerName ノードにする。この特別扱いを
+        パーサーのここ1箇所に閉じ込めることで、インタプリタ側は isinstance 判定だけで
+        済み、「setTimer/cancelTimer かつ第1引数かどうか」を各所で再判定しなくてよい。"""
+        if (
+            is_first
+            and func_name in _TIMER_NAME_FUNCS
+            and self._peek().kind == "IDENT"
+            and self._peek(1).kind != "LPAREN"
+        ):
+            tok = self._advance()
+            return TimerName(tok.value, tok.line)
+        return self._parse_expr()
+
+    # ---- 式 (優先順位: || > && > ==,!= > <,>,<=,>= > +,- > *,/,% > 単項 > 一次) ----
+    def _parse_expr(self):
+        return self._parse_or()
+
+    def _parse_or(self):
+        left = self._parse_and()
+        while self._peek().kind == "OR":
+            op_tok = self._advance()
+            right = self._parse_and()
+            left = BinOp("||", left, right, op_tok.line)
+        return left
+
+    def _parse_and(self):
+        left = self._parse_equality()
+        while self._peek().kind == "AND":
+            op_tok = self._advance()
+            right = self._parse_equality()
+            left = BinOp("&&", left, right, op_tok.line)
+        return left
+
+    def _parse_equality(self):
+        left = self._parse_comparison()
+        while self._peek().kind in ("EQ", "NEQ"):
+            op_tok = self._advance()
+            op = "==" if op_tok.kind == "EQ" else "!="
+            right = self._parse_comparison()
+            left = BinOp(op, left, right, op_tok.line)
+        return left
+
+    def _parse_comparison(self):
+        left = self._parse_additive()
+        while self._peek().kind in _COMPARISON_TOKENS:
+            op_tok = self._advance()
+            right = self._parse_additive()
+            left = BinOp(_COMPARISON_TOKENS[op_tok.kind], left, right, op_tok.line)
+        return left
+
+    def _parse_additive(self):
+        left = self._parse_multiplicative()
+        while self._peek().kind in _ADDITIVE_TOKENS:
+            op_tok = self._advance()
+            right = self._parse_multiplicative()
+            left = BinOp(_ADDITIVE_TOKENS[op_tok.kind], left, right, op_tok.line)
+        return left
+
+    def _parse_multiplicative(self):
+        left = self._parse_unary()
+        while self._peek().kind in _MULTIPLICATIVE_TOKENS:
+            op_tok = self._advance()
+            right = self._parse_unary()
+            left = BinOp(_MULTIPLICATIVE_TOKENS[op_tok.kind], left, right, op_tok.line)
+        return left
+
+    def _parse_unary(self):
+        tok = self._peek()
+        if tok.kind == "MINUS":
+            self._advance()
+            return UnaryOp("-", self._parse_unary(), tok.line)
+        if tok.kind == "NOT":
+            self._advance()
+            return UnaryOp("!", self._parse_unary(), tok.line)
+        return self._parse_primary()
+
+    def _parse_primary(self):
         tok = self._peek()
         if tok.kind == "HEXNUM":
             self._advance()
@@ -208,14 +485,17 @@ class _Parser:
         if tok.kind == "STRING":
             self._advance()
             return tok.value[1:-1].replace('\\"', '"').replace("\\\\", "\\")
+        if tok.kind == "LPAREN":
+            self._advance()
+            expr = self._parse_expr()
+            self._expect("RPAREN")
+            return expr
         if tok.kind == "IDENT":
-            # 次が '(' ならネストした関数呼び出し (例: log("byte0=", msgData(0)))。
-            # そうでなければ setTimer(myTimer, 1000) の myTimer のような裸の識別子 (名前) として扱う。
             if self._peek(1).kind == "LPAREN":
                 return self._parse_call()
             self._advance()
-            return tok.value
-        raise DslSyntaxError(f"{tok.line}行目: 引数として不正なトークン '{tok.value}'")
+            return Var(tok.value, tok.line)
+        raise DslSyntaxError(f"{tok.line}行目: 式として不正なトークン '{tok.value}'")
 
 
 def parse(source: str) -> Script:
@@ -226,6 +506,27 @@ def parse(source: str) -> Script:
 # インタプリタ
 # ---------------------------------------------------------------------------
 
+
+def _iter_child_exprs(node):
+    """BinOp/UnaryOp の子ノード (部分式) を列挙する。Call/Var/TimerName/リテラルは
+    子を持たないので空を返す。_reject_calls()/_validate_expr() の再帰下降で
+    「BinOp なら left/right、UnaryOp なら operand を辿る」という同じ形の走査を
+    2箇所に個別に書かないよう、ここに1本化する。"""
+    if isinstance(node, BinOp):
+        return (node.left, node.right)
+    if isinstance(node, UnaryOp):
+        return (node.operand,)
+    return ()
+
+
+@dataclass
+class _Variable:
+    """宣言済み変数の実行時状態。型 (代入時の型変換に使う) と現在値を1つにまとめて
+    持つ (別々の dict で持つと書き込み箇所ごとに2つの dict を同期させる必要がある)。"""
+    type_name: str  # "int" | "float"
+    value: object
+
+
 class Interpreter:
     """パース済み Script を実行する。UDS 送受信は capl_api.CaplContext に委譲する。"""
 
@@ -235,13 +536,23 @@ class Interpreter:
         self._stop_event = stop_event
         self._armed_timers: dict[str, float] = {}  # name -> 発火時刻 (time.monotonic())
         self._last_message: Optional[object] = None  # can.Message (on message ハンドラ内でのみ有効)
+        self._vars: dict[str, _Variable] = {}
         self._builtins = self._make_builtins()
+        # variables{} の宣言を先に検証・評価してから、on start/on timer/on message を
+        # 検証する (代入・変数参照が「宣言済みかどうか」を検証する際に self._vars が要る
+        # ため)。_init_variables() 内で、初期値式に関数呼び出しが含まれていないことを
+        # 確認してから評価するので (variables{} の初期値式は定数式のみ許可、実際の CAPL の
+        # variables{} も定数式のみ)、ここでの評価に副作用はない。関数呼び出しを許してしまうと、
+        # on start/on timer/on message 側の検証が完了する前に (例えば send() のような)
+        # 副作用のある呼び出しが実行されてしまい、"検証完了前は何も実行しない" という
+        # _validate() の前提が崩れてしまう。
+        self._init_variables()
         # on start だけでなく on timer/on message の中身も含め、実行前に全ブロックを
-        # 検証する。_call() 自身の遅延チェックだけだと、on timer/on message 内の
-        # タイポは実際にそのイベントが発火するまで検出されない。そうすると on start の
-        # 副作用のある処理 (セッション変更、SecurityAccess のアンロック等) を実行し
-        # 終えた後になってようやくタイポが判明する、という事態になりかねないため。
-        self._validate_calls()
+        # 検証する。実行時の遅延チェックだけだと、on timer/on message 内のタイポ・
+        # 未宣言変数は実際にそのイベントが発火するまで検出されない。そうすると on start
+        # の副作用のある処理 (セッション変更、SecurityAccess のアンロック等) を実行し
+        # 終えた後になってようやく判明する、という事態になりかねないため。
+        self._validate()
 
     def _make_builtins(self) -> dict:
         ctx = self._ctx
@@ -284,6 +595,10 @@ class Interpreter:
     def _to_byte(value: ArgValue) -> int:
         return int(value) & 0xFF
 
+    @staticmethod
+    def _truthy(value) -> bool:
+        return bool(value)
+
     def _msg_data(self, index: int) -> int:
         if self._last_message is None or index >= len(self._last_message.data):
             return 0
@@ -292,34 +607,179 @@ class Interpreter:
     def _set_timer(self, name: str, ms: float) -> None:
         self._armed_timers[name] = time.monotonic() + ms / 1000.0
 
-    # ---- 式/文の評価 ----
+    # ---- variables{} の初期値式の検証・初期化 ----
+    def _reject_calls(self, node) -> None:
+        """variables{} の初期値式に関数呼び出しが含まれていないか再帰的に確認する。
+        変数参照 (Var) は副作用がないので許可する (前方の宣言を参照できる)。"""
+        if isinstance(node, Call):
+            raise DslSyntaxError(
+                f"{node.line}行目: variables の初期値に関数呼び出し '{node.name}(...)' は"
+                "使えません (定数式のみ)"
+            )
+        for child in _iter_child_exprs(node):
+            self._reject_calls(child)
+
+    def _init_variables(self) -> None:
+        """宣言順に初期値式を検証・評価して self._vars に格納する。後続の宣言の初期値式が
+        先に宣言した変数を参照することもできる（宣言済みかどうかは self._vars への
+        追加順でそのまま決まる）。"""
+        for decl in self._script.variables:
+            if decl.name in self._vars:
+                raise DslSyntaxError(f"{decl.line}行目: 変数 '{decl.name}' は既に宣言されています")
+            if decl.init is not None:
+                self._reject_calls(decl.init)
+                value = self._eval(decl.init)
+            else:
+                value = 0 if decl.type_name == "int" else 0.0
+            self._vars[decl.name] = _Variable(decl.type_name, self._coerce(value, decl.type_name))
+
+    @staticmethod
+    def _coerce(value, type_name: str):
+        """代入・初期化のたびに宣言型 (int/float) への変換を行う。C/CAPL の代入と同様、
+        float を int 変数に代入すると 0 方向へ切り捨てられる (Python の int() は
+        int(2.9)==2, int(-2.9)==-2 と C の (int) キャストと同じ丸め方向なのでそのまま使える)。
+        これをやらないと `int half; half = 10 / 4;` が 2 ではなく 2.5 のまま half に
+        入ってしまい、int 変数のつもりで書いた比較・分岐が期待通りに動かなくなる。"""
+        if type_name == "int":
+            return int(value)
+        if type_name == "float":
+            return float(value)
+        return value
+
+    # ---- 式の評価 ----
     def _eval(self, node):
         if isinstance(node, Call):
             return self._call(node)
-        return node  # リテラル (int/float/str) はそのまま
+        if isinstance(node, Var):
+            if node.name not in self._vars:
+                raise DslSyntaxError(f"{node.line}行目: 未宣言の変数 '{node.name}'")
+            return self._vars[node.name].value
+        if isinstance(node, TimerName):
+            return node.name  # 識別子の綴りそのものがタイマー名
+        if isinstance(node, BinOp):
+            return self._eval_binop(node)
+        if isinstance(node, UnaryOp):
+            return self._eval_unaryop(node)
+        return node  # リテラル (int/float/str)
+
+    @staticmethod
+    def _int_div(left: int, right: int) -> int:
+        """C/CAPL の int 同士の割り算と同じ、0 方向への切り捨て除算。
+        Python の `//` は負数で床方向 (負の無限大方向) に丸めるため単純に流用できない
+        (例: -7 // 2 は Python では -4 だが C/CAPL では -3)。right==0 の場合は Python の
+        ZeroDivisionError がそのまま送出される (他の実行時エラーと同様、特別なガードは
+        入れず素通しする方針)。"""
+        q = abs(left) // abs(right)
+        return -q if (left < 0) != (right < 0) else q
+
+    @staticmethod
+    def _int_mod(left: int, right: int) -> int:
+        """C/CAPL の int 同士の剰余と同じ、剰余の符号を被除数 (left) 側に揃える
+        (Python の `%` は除数側の符号に揃うため、例えば -7 % 2 は Python では 1 だが
+        C/CAPL では -1)。"""
+        r = abs(left) % abs(right)
+        return -r if left < 0 else r
+
+    def _eval_binop(self, node: BinOp):
+        if node.op == "&&":
+            if not self._truthy(self._eval(node.left)):
+                return 0
+            return 1 if self._truthy(self._eval(node.right)) else 0
+        if node.op == "||":
+            if self._truthy(self._eval(node.left)):
+                return 1
+            return 1 if self._truthy(self._eval(node.right)) else 0
+
+        left = self._eval(node.left)
+        right = self._eval(node.right)
+        if node.op == "+":
+            return left + right
+        if node.op == "-":
+            return left - right
+        if node.op == "*":
+            return left * right
+        if node.op == "/":
+            try:
+                if isinstance(left, int) and isinstance(right, int):
+                    return self._int_div(left, right)
+                return left / right
+            except ZeroDivisionError as exc:
+                # 生の ZeroDivisionError を素通しすると行番号のない未構造化な
+                # 「エラー: division by zero」表示になり、他のランタイムエラー
+                # (assert_positive 失敗・wait_response タイムアウト等が ScriptAbort に
+                # 変換されて「中断:」表示になるの) と非対称になってしまう。
+                raise capl_api.ScriptAbort(f"{node.line}行目: ゼロ除算です") from exc
+        if node.op == "%":
+            try:
+                if isinstance(left, int) and isinstance(right, int):
+                    return self._int_mod(left, right)
+                return left % right
+            except ZeroDivisionError as exc:
+                raise capl_api.ScriptAbort(f"{node.line}行目: ゼロ除算です") from exc
+        if node.op == "==":
+            return 1 if left == right else 0
+        if node.op == "!=":
+            return 1 if left != right else 0
+        if node.op == "<":
+            return 1 if left < right else 0
+        if node.op == ">":
+            return 1 if left > right else 0
+        if node.op == "<=":
+            return 1 if left <= right else 0
+        if node.op == ">=":
+            return 1 if left >= right else 0
+        raise DslSyntaxError(f"{node.line}行目: 未対応の演算子 '{node.op}'")
+
+    def _eval_unaryop(self, node: UnaryOp):
+        value = self._eval(node.operand)
+        if node.op == "-":
+            return -value
+        if node.op == "!":
+            return 0 if self._truthy(value) else 1
+        raise DslSyntaxError(f"{node.line}行目: 未対応の単項演算子 '{node.op}'")
 
     def _call(self, call: Call):
         fn = self._builtins.get(call.name)
         if fn is None:
-            # _validate_calls() が実行前に弾いているはずなので通常はここに来ないが、
-            # 保険として残しておく。
             raise self._unknown_function_error(call)
+        # setTimer/cancelTimer の第1引数 (TimerName) も _eval() が name をそのまま
+        # 返すので、ここで関数名による特別扱いは不要 (パーサーの _parse_call_arg() 参照)。
         args = [self._eval(a) for a in call.args]
         return fn(args)
-
-    def _run_block(self, stmts: list) -> None:
-        for stmt in stmts:
-            self._call(stmt)
 
     def _unknown_function_error(self, call: Call) -> DslSyntaxError:
         known = "/".join(sorted(self._builtins))
         return DslSyntaxError(f"{call.line}行目: 未知の関数 '{call.name}' ({known} のみ対応)")
 
+    # ---- 文の実行 ----
+    def _exec_stmt(self, stmt) -> None:
+        if isinstance(stmt, Call):
+            self._call(stmt)
+        elif isinstance(stmt, Assign):
+            var = self._vars[stmt.name]
+            var.value = self._coerce(self._eval(stmt.expr), var.type_name)
+        elif isinstance(stmt, If):
+            if self._truthy(self._eval(stmt.cond)):
+                self._run_block(stmt.then_block)
+            elif stmt.else_block is not None:
+                self._run_block(stmt.else_block)
+        elif isinstance(stmt, While):
+            while self._truthy(self._eval(stmt.cond)):
+                if self._stop_event.is_set():
+                    raise capl_api.ScriptStopped("スクリプトが停止されました")
+                self._run_block(stmt.body)
+        else:
+            raise DslSyntaxError(f"未対応の文です: {stmt!r}")
+
+    def _run_block(self, stmts: list) -> None:
+        for stmt in stmts:
+            self._exec_stmt(stmt)
+
     # ---- 実行前の静的検証 ----
-    def _validate_calls(self) -> None:
-        """self._builtins (実行時のディスパッチ表そのもの) を唯一の情報源として、
-        on start/on timer/on message の全ブロック (ネストした呼び出し引数も含む) を
-        走査し、未知の関数呼び出しがあれば実行前に DslSyntaxError を送出する。"""
+    def _validate(self) -> None:
+        """self._builtins/self._vars (実行時の状態そのもの、別リストとして二重管理
+        しない) を情報源として、on start/on timer/on message の全ブロックを走査し、
+        未知の関数呼び出し・未宣言の変数参照があれば実行前に DslSyntaxError を送出する。"""
         for stmts in self._script.on_start:
             self._validate_block(stmts)
         for stmts in self._script.on_timer.values():
@@ -329,14 +789,48 @@ class Interpreter:
 
     def _validate_block(self, stmts: list) -> None:
         for stmt in stmts:
-            self._validate_call(stmt)
+            self._validate_stmt(stmt)
 
-    def _validate_call(self, call: Call) -> None:
-        if call.name not in self._builtins:
-            raise self._unknown_function_error(call)
-        for arg in call.args:
-            if isinstance(arg, Call):
-                self._validate_call(arg)
+    def _validate_stmt(self, stmt) -> None:
+        if isinstance(stmt, Call):
+            self._validate_expr(stmt)
+        elif isinstance(stmt, Assign):
+            if stmt.name not in self._vars:
+                raise DslSyntaxError(
+                    f"{stmt.line}行目: 未宣言の変数 '{stmt.name}' への代入です "
+                    "(variables { int/float ...; } で宣言してください)"
+                )
+            self._validate_expr(stmt.expr)
+        elif isinstance(stmt, If):
+            self._validate_expr(stmt.cond)
+            self._validate_block(stmt.then_block)
+            if stmt.else_block is not None:
+                self._validate_block(stmt.else_block)
+        elif isinstance(stmt, While):
+            self._validate_expr(stmt.cond)
+            self._validate_block(stmt.body)
+        else:
+            raise DslSyntaxError(f"未対応の文です: {stmt!r}")
+
+    def _validate_expr(self, node) -> None:
+        if isinstance(node, Call):
+            if node.name not in self._builtins:
+                raise self._unknown_function_error(node)
+            for arg in node.args:
+                self._validate_expr(arg)
+            return
+        if isinstance(node, Var):
+            if node.name not in self._vars:
+                raise DslSyntaxError(
+                    f"{node.line}行目: 未宣言の変数 '{node.name}' "
+                    "(variables { int/float ...; } で宣言してください)"
+                )
+            return
+        if isinstance(node, TimerName):
+            return  # タイマー名は識別子そのものなので、宣言済み変数チェックの対象外
+        for child in _iter_child_exprs(node):
+            self._validate_expr(child)
+        # リテラル (int/float/str) は子を持たないため何もしない
 
     # ---- 実行本体 ----
     def run(self) -> None:
