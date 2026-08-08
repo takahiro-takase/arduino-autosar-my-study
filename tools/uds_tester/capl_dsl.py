@@ -7,8 +7,8 @@ UDS 送受信の実体は capl_api.CaplContext をそのままランタイム層
 
 対応する構文:
 
-    variables { int x; float y = 1.5; byte data[8]; }   // 省略可。1ファイルに1つまで、
-                                           // on start/on timer/on message より前に書くこと
+    variables { int x; float y = 1.5; byte data[8]; message 0x123 msg; }
+        // 省略可。1ファイルに1つまで、on start/on timer/on message より前に書くこと
     on start { ... }
     on timer <name> { ... }
     on message <id> { ... }
@@ -19,8 +19,10 @@ UDS 送受信の実体は capl_api.CaplContext をそのままランタイム層
       あること。複合代入 (+= -= *= /= %=) とインクリメント/デクリメント (++/--、
       後置のみ) はパーサーが x = x <op> 1 の代入文に脱糖する。式の中では使えず、
       文として、または for の初期化/更新句としてのみ使える）
-    - 配列要素への代入文: data[i] = expr;  （data は variables{} で byte 配列として
-      宣言済みであること）
+    - 配列要素への代入文: data[i] = expr;  （data は variables{} で配列として
+      宣言済みであること。要素型は byte/int/float のいずれか）
+    - message 変数のフィールドへの代入文: msg.dlc = expr; / msg.byte(n) = expr;
+      （msg.id への代入は不可、読み取り専用。下記参照）
     - if (expr) { ... } [else if (expr) { ... }]* [else { ... }]
     - while (expr) { ... }
     - for (x = 0; x < 10; x++) { ... }  （初期化/条件/更新はいずれも省略可）
@@ -29,18 +31,41 @@ UDS 送受信の実体は capl_api.CaplContext をそのままランタイム層
     - switch (expr) { case N: ... break; case M: ... default: ... }  （C/CAPL と
       同じフォールスルー動作。case の値は整数定数のみ）
     - return; / return expr;  （ユーザー定義関数の中でのみ使える。下記参照）
-    - ローカル変数宣言: int x; / int x = expr; / byte data[n];  （ユーザー定義関数の
-      **直接の本体でのみ** 書ける。if/while/for/switch の中には書けない
-      (パース時にエラー)。variables{} と同じ書き方だが `variables { }` では
+    - ローカル宣言: int x; / int x = expr; / byte data[n]; / message <id> m;
+      （ユーザー定義関数の**直接の本体でのみ** 書ける。if/while/for/switch の中には
+      書けない (パース時にエラー)。variables{} と同じ書き方だが `variables { }` では
       包まない。下記「ユーザー定義関数」参照）
 
 式は四則演算 (+ - * / %)・比較 (== != < > <= >=)・論理 (&& || !)・丸括弧・
-関数呼び出し・変数参照・配列要素参照 (data[i])・数値/文字列リテラル・
-this.byte(n)/this.id/this.dlc (on message ハンドラ内限定、下記参照) に対応する
-（構造体は対象外）。配列を添字なしでそのまま参照すると (例: send(data)) 全要素の
-コピーを返す。send()/send_can() はこれを検出して配列の全バイトをペイロードに
-展開するので、CAPL の byte 配列をメッセージのペイロードとして丸ごと送る書き方に
-近い形で使える (_flatten_bytes() 参照)。
+関数呼び出し・変数参照・配列要素参照 (data[i])・message 変数のフィールド読み取り
+(msg.dlc/msg.byte(n)/msg.id)・数値/文字列リテラル・this.byte(n)/this.id/this.dlc
+(on message ハンドラ内限定、下記参照) に対応する（構造体は対象外）。配列を
+添字なしでそのまま参照すると (例: send(data)) 全要素のコピーを返す。send()/
+send_can() はこれを検出して配列の全バイトをペイロードに展開するので、CAPL の
+byte 配列をメッセージのペイロードとして丸ごと送る書き方に近い形で使える
+(_flatten_bytes() 参照)。同様に message 変数を添字なしでそのまま参照できるのは
+output(...) の直接の引数としてのみで、output(msg) が msg.dlc バイト分を生の CAN
+フレームとして送る (_output_message() 参照。UDS 応答待ちの無い send_can() と同じ
+「投げっぱなし」送信)。
+
+message 変数 (`message <id> name;`):
+
+    variables { message 0x123 msg; }
+    on start {
+        msg.byte(0) = 0x10;
+        msg.dlc = 1;
+        output(msg);
+    }
+
+実際の CAPL の message 型に近い書き味で、CAN フレームを組み立てて送る用途に使う
+(byte 配列 + send_can() よりも「1つの送信メッセージ」という単位がはっきりする
+書き方)。can_id は宣言時に固定 (後から書き換える機能は対象外)。dlc は既定 8、
+data (8バイト、全て0) を持つ。フィールドは msg.dlc (0-8、範囲外は実行時に
+スクリプト中断)・msg.byte(n) (0-7、範囲外は実行時にスクリプト中断)・msg.id
+(読み取り専用) の3つのみ。variables{} のグローバル宣言、またはユーザー定義関数の
+直接の本体でのローカル宣言として使える (byte 配列と同じ制約: if/while/for/switch
+の中には書けない、理由も同じ。関数内でローカル宣言した場合は呼び出しごとに独立した
+新しい message になる)。
 
 ユーザー定義関数:
 
@@ -206,9 +231,14 @@ def tokenize(source: str) -> list[Token]:
 # 構文解析
 # ---------------------------------------------------------------------------
 
-_VAR_TYPES = ("int", "float")
-_ARRAY_TYPES = ("byte",)  # 配列として宣言できる型 (byte[固定長] のみ対応)
-_DECL_TYPES = _VAR_TYPES + _ARRAY_TYPES  # 変数宣言 (variables{}・ローカル共通) で使える型
+_VAR_TYPES = ("int", "float")  # スカラー変数・仮引数・戻り値に使える型
+_ARRAY_ELEMENT_TYPES = _VAR_TYPES + ("byte",)  # 配列の要素型として使える型 (int[]/float[]/byte[])
+_DECL_TYPES = _ARRAY_ELEMENT_TYPES  # 変数宣言 (variables{}・ローカル共通) の先頭に来る型キーワード
+# 宣言文の先頭に来うるキーワード全体 (int/float/byte の VarDecl/ArrayDecl に加え、
+# message <id> name; の MessageDecl も同じ位置に書けるため)。_parse_statement() が
+# ローカル宣言文の受理判定に使う (_parse_decl_stmt() 自体は _at_ident("message") で
+# 自己判定するので、こちらは「関数の直接の本体でだけ許可する」判定専用)。
+_DECL_START_KEYWORDS = _DECL_TYPES + ("message",)
 _FUNC_RETURN_TYPES = ("void",) + _VAR_TYPES  # 関数の戻り値の型 (void/int/float。配列は返せない)
 _COMPARISON_TOKENS = {"LT": "<", "GT": ">", "LE": "<=", "GE": ">="}
 _ADDITIVE_TOKENS = {"PLUS": "+", "MINUS": "-"}
@@ -323,9 +353,11 @@ class For:
 
 @dataclass
 class ArrayDecl:
-    """`byte name[size];` / `byte name[size] = {v0, v1, ...};` の配列宣言。
-    size は初期化リストがあればその長さを、無ければ明示された添字の値を使う
-    (両方指定時は初期化リストが size を超えていないことをパース時に確認する)。"""
+    """`byte name[size];` / `int name[size] = {v0, v1, ...};` / `float name[n];` の
+    配列宣言。type_name は要素型 ("byte"|"int"|"float")。size は初期化リストが
+    あればその長さを、無ければ明示された添字の値を使う (両方指定時は初期化リストが
+    size を超えていないことをパース時に確認する)。"""
+    type_name: str  # "byte" | "int" | "float" (配列の要素型)
     name: str
     size: int
     init: Optional[list]  # list[Expr] | None (定数式のみ、VarDecl.init と同じ制約)
@@ -345,6 +377,44 @@ class IndexAssign:
     """配列要素への代入文 `name[expr] = expr;`。"""
     name: str
     index: object  # Expr
+    expr: object  # Expr
+    line: int
+
+
+@dataclass
+class MessageDecl:
+    """`message <id> name;` の宣言。実際の CAPL の message 型に近い書き味で、
+    CAN フレームを組み立てて output() で送る用途に使う (byte 配列 + send()/
+    send_can() よりも「1つの送信メッセージ」という単位がはっきりする書き方)。
+    can_id は宣言時に固定 (CAPL 同様、後から書き換える機能は対象外)。dlc は
+    既定 8、data (8バイト、全て0) と合わせて Interpreter 側で _MessageValue として
+    実体化する (_make_message_value() 参照)。variables{} のグローバル宣言、または
+    関数の直接の本体でのローカル宣言として使える (ArrayDecl と同じ制約: if/while/
+    for/switch の中には書けない、_parse_nested_block() 参照。理由も同じ)。"""
+    can_id: int
+    name: str
+    line: int
+
+
+@dataclass
+class MemberAccess:
+    """`name.dlc` / `name.byte(n)` / `name.id` の読み取り式。message 変数専用
+    (this.byte(n) 等とは別物: this は on message ハンドラの「直近受信フレーム」用、
+    こちらは名前付きの message 変数のフィールドを読む)。member は "dlc"/"byte"/"id"、
+    args は byte(n) の n (dlc/id は空リスト)。"""
+    name: str
+    member: str
+    args: list  # list[Expr]
+    line: int
+
+
+@dataclass
+class MemberAssign:
+    """`name.dlc = expr;` / `name.byte(n) = expr;` の代入文。member は "dlc"/"byte"
+    のみ (id は読み取り専用、_validate_stmt() が弾く)。"""
+    name: str
+    member: str
+    args: list  # list[Expr]
     expr: object  # Expr
     line: int
 
@@ -434,7 +504,7 @@ class Return:
 
 @dataclass
 class Script:
-    variables: list  # list[VarDecl | ArrayDecl]  (`variables { ... }` ブロック。無ければ空)
+    variables: list  # list[VarDecl | ArrayDecl | MessageDecl]  (`variables { ... }` ブロック。無ければ空)
     on_start: list  # list[list[Stmt]]  (複数の `on start` は順に実行)
     on_timer: dict  # name(str) -> list[Stmt]
     on_message: dict  # can_id(int) -> list[Stmt]
@@ -584,9 +654,28 @@ class _Parser:
         self._expect("LBRACE")
         decls = []
         while self._peek().kind != "RBRACE":
-            decls.append(self._parse_var_decl())
+            decls.append(self._parse_decl_stmt())
         self._expect("RBRACE")
         return decls
+
+    def _parse_decl_stmt(self):
+        """変数宣言 (VarDecl/ArrayDecl、_parse_var_decl() 参照) と message 宣言
+        (MessageDecl、_parse_message_decl() 参照) をまとめて解釈する共通エントリ
+        ポイント。variables{} ブロック (_parse_var_block()) と、関数の直接の本体
+        でのローカル宣言 (_parse_statement()) の両方から使う。"""
+        if self._at_ident("message"):
+            return self._parse_message_decl()
+        return self._parse_var_decl()
+
+    def _parse_message_decl(self) -> MessageDecl:
+        msg_tok = self._expect_ident("message")
+        id_tok = self._advance()
+        if id_tok.kind not in ("HEXNUM", "INT"):
+            raise DslSyntaxError(f"{id_tok.line}行目: message の後には CAN ID (数値) が必要です")
+        can_id = int(id_tok.value, 0)
+        name_tok = self._expect("IDENT")
+        self._expect("SEMI")
+        return MessageDecl(can_id, name_tok.value, msg_tok.line)
 
     def _parse_var_decl(self):
         type_tok = self._peek()
@@ -599,10 +688,10 @@ class _Parser:
         name_tok = self._expect("IDENT")
         if self._peek().kind == "LBRACKET":
             return self._parse_array_decl(type_tok, name_tok)
-        if type_tok.value in _ARRAY_TYPES:
+        if type_tok.value == "byte":
             raise DslSyntaxError(
-                f"{type_tok.line}行目: '{type_tok.value}' は配列専用の型です "
-                f"('{type_tok.value} {name_tok.value}[size];' の形式で宣言してください。"
+                f"{type_tok.line}行目: 'byte' は配列専用の型です "
+                f"('byte {name_tok.value}[size];' の形式で宣言してください。"
                 "スカラー変数は int/float のみ対応)"
             )
         init = None
@@ -613,11 +702,11 @@ class _Parser:
         return VarDecl(type_tok.value, name_tok.value, init, name_tok.line)
 
     def _parse_array_decl(self, type_tok: Token, name_tok: Token) -> ArrayDecl:
-        """`byte name[size];` / `byte name[size] = {v0, v1, ...};` / `byte name[] = {...};`
-        (size 省略時は初期化リストの長さを使う)。int/float は配列として宣言できない
-        (実運用上、配列を使うのは送受信ペイロード = byte 列を組み立てる用途に限られるため)。"""
-        if type_tok.value not in _ARRAY_TYPES:
-            raise DslSyntaxError(f"{type_tok.line}行目: 配列は byte 型のみ対応しています")
+        """`byte name[size];` / `int name[size] = {v0, v1, ...};` / `float name[] = {...};`
+        (size 省略時は初期化リストの長さを使う)。要素型は byte/int/float いずれも
+        使える (_ARRAY_ELEMENT_TYPES 参照。呼び出し元の _parse_var_decl() が既に
+        type_tok.value in _DECL_TYPES であることを確認済みなので、ここで型を
+        再チェックする必要はない)。"""
         self._expect("LBRACKET")
         size = None
         if self._peek().kind != "RBRACKET":
@@ -646,7 +735,7 @@ class _Parser:
             )
         if size is None:
             size = len(init)
-        return ArrayDecl(name_tok.value, size, init, name_tok.line)
+        return ArrayDecl(type_tok.value, name_tok.value, size, init, name_tok.line)
 
     # ---- 文 ----
     def _parse_block(self) -> list:
@@ -718,12 +807,24 @@ class _Parser:
                 expr = self._parse_expr()
             self._expect("SEMI")
             return Return(expr, tok.line)
-        # 関数の直接の本体の中でだけ、int x; / byte data[n]; のようなローカル変数宣言を
-        # 文として書ける (_parse_var_decl() は variables{} ブロックの中でも使う
-        # 共通のパーサーで、VarDecl/ArrayDecl を返して末尾のセミコロンまで読み切る)。
-        if self._peek().kind == "IDENT" and self._peek().value in _DECL_TYPES:
+        # 関数の直接の本体の中でだけ、int x; / byte data[n]; / message <id> m; のような
+        # ローカル宣言を文として書ける (_parse_decl_stmt() は variables{} ブロックの
+        # 中でも使う共通のパーサーで、VarDecl/ArrayDecl/MessageDecl を返して末尾の
+        # セミコロンまで読み切る)。
+        #
+        # "message" は int/float/byte と違って、宣言の先頭以外の位置では普通の識別子
+        # (message 型変数の名前) としても現れうる (int/float/byte は型キーワードとして
+        # 常に予約されているため変数名になり得ないが、message にはその制約が無い)。
+        # そのため `message.dlc = 1;` (message という名前の変数へのメンバー代入) や
+        # `message[0] = 1;` を、`message <id> name;` の宣言と混同しないよう、
+        # 「次のトークンが CAN ID (HEXNUM/INT) かどうか」で判別する (実際の宣言文法上、
+        # message の直後には必ず CAN ID が来るため)。int/float/byte はこの追加判定の
+        # 対象外 (常に宣言の先頭として扱う、従来通りの挙動)。
+        decl_tok = self._peek()
+        looks_like_message_decl = decl_tok.value != "message" or self._peek(1).kind in ("HEXNUM", "INT")
+        if decl_tok.kind == "IDENT" and decl_tok.value in _DECL_START_KEYWORDS and looks_like_message_decl:
             if self._local_decl_scope is True:
-                return self._parse_var_decl()
+                return self._parse_decl_stmt()
             if self._local_decl_scope is False:
                 # 関数の中ではあるが if/while/for/switch でネストしすぎている
                 # (_suspend_local_decls() 参照)。生の「文として不正なトークン」より
@@ -738,6 +839,8 @@ class _Parser:
         tok = self._peek()
         if tok.kind == "IDENT" and self._peek(1).kind == "LBRACKET":
             return self._parse_index_assignment()
+        if tok.kind == "IDENT" and self._peek(1).kind == "DOT":
+            return self._parse_member_assignment()
         if tok.kind == "IDENT" and self._peek(1).kind in self._ASSIGN_START_TOKENS:
             return self._parse_assignment()
         if tok.kind == "IDENT" and self._peek(1).kind == "LPAREN":
@@ -1021,6 +1124,8 @@ class _Parser:
                 return self._parse_call()
             if self._peek(1).kind == "LBRACKET":
                 return self._parse_index()
+            if self._peek(1).kind == "DOT":
+                return self._parse_member_access()
             self._advance()
             return Var(tok.value, tok.line)
         raise DslSyntaxError(f"{tok.line}行目: 式として不正なトークン '{tok.value}'")
@@ -1050,6 +1155,33 @@ class _Parser:
             self._expect("RPAREN")
         return ThisAccess(member_tok.value, args, this_tok.line)
 
+    def _parse_member_access(self) -> MemberAccess:
+        """`name.dlc` / `name.byte(n)` / `name.id` (message 変数のフィールド読み取り)。
+        `this.xxx` (_parse_this_access()) とは別物: this は識別子そのものが特別な
+        キーワードだが、こちらは通常の識別子 (message 変数名) に対する `.member` な
+        ので、name も読む。式としての読み取り (_parse_primary()) と、代入文の
+        左辺 (_parse_member_assignment()) の両方から使う。"""
+        name_tok = self._expect("IDENT")
+        self._expect("DOT")
+        member_tok = self._expect("IDENT")
+        args = []
+        if self._peek().kind == "LPAREN":
+            self._advance()
+            args = self._parse_arg_list(lambda i: self._parse_expr())
+            self._expect("RPAREN")
+        return MemberAccess(name_tok.value, member_tok.value, args, name_tok.line)
+
+    def _parse_member_assignment(self) -> MemberAssign:
+        """`name.dlc = expr;` / `name.byte(n) = expr;`。左辺の読み方は
+        _parse_member_access() と共通なので、それを再利用してから `= expr;` を
+        追加で読む (id への代入等、代入できないメンバへの代入は _validate_stmt()
+        が実行前に弾く。パーサーはメンバ名の意味を判定しない)。"""
+        access = self._parse_member_access()
+        self._expect("ASSIGN")
+        expr = self._parse_expr()
+        self._expect("SEMI")
+        return MemberAssign(access.name, access.member, access.args, expr, access.line)
+
 
 def parse(source: str) -> Script:
     return _Parser(tokenize(source)).parse()
@@ -1061,9 +1193,9 @@ def parse(source: str) -> Script:
 
 
 def _iter_child_exprs(node):
-    """BinOp/UnaryOp/ThisAccess/Index の子ノード (部分式) を列挙する。Call/Var/
-    TimerName/リテラルは子を持たないので空を返す (Call は _validate_expr() 側で
-    個別に引数を辿るため、ここには含めない)。_reject_calls()/_validate_expr() の
+    """BinOp/UnaryOp/ThisAccess/Index/MemberAccess の子ノード (部分式) を列挙する。
+    Call/Var/TimerName/リテラルは子を持たないので空を返す (Call は _validate_expr()
+    側で個別に引数を辿るため、ここには含めない)。_reject_calls()/_validate_expr() の
     再帰下降で同じ形の走査を2箇所に個別に書かないよう、ここに1本化する。"""
     if isinstance(node, BinOp):
         return (node.left, node.right)
@@ -1073,6 +1205,8 @@ def _iter_child_exprs(node):
         return tuple(node.args)
     if isinstance(node, Index):
         return (node.index,)
+    if isinstance(node, MemberAccess):
+        return tuple(node.args)
     return ()
 
 
@@ -1100,20 +1234,32 @@ class _ReturnSignal(Exception):
 
 
 @dataclass
-class _Variable:
-    """宣言済み変数 (スカラーも配列も) の実行時状態。type_name は "int"/"float" なら
-    スカラー、_ARRAY_TYPES に含まれる ("byte") なら配列を表し、value はそれぞれ
-    スカラー値 / list[int] を持つ。スカラーと配列を別々の dict (self._vars/
-    self._arrays) で持つと、「この名前は宣言済みか」「スカラーか配列か」を毎回
-    2つの dict のメンバーシップを OR して求める羽目になり、判定漏れの温床になる
-    (実際、配列サポート追加時にこのパターンが複数箇所で発生した)。type_name が
-    スカラー/配列のどちらかを表す唯一の情報源になるようにして、1つの dict に統一する。"""
-    type_name: str  # "int" | "float" | "byte" (byte なら配列)
-    value: object  # int | float | list[int]
+class _MessageValue:
+    """message 変数 (MessageDecl) の実行時状態。can_id は宣言時に固定 (CAPL の
+    message 型と同じ、後から書き換える機能は対象外)。data は常に8要素の
+    list[int] (0-255) を持ち、dlc (0-8) が output() で実際に送る先頭バイト数を
+    決める (dlc を8未満にしても data の残りは保持される。CAPL の message 型と
+    同じ考え方)。"""
+    can_id: int
+    dlc: int
+    data: list  # 常に8要素、byte (0-255)
 
-    @property
-    def is_array(self) -> bool:
-        return self.type_name in _ARRAY_TYPES
+
+@dataclass
+class _Variable:
+    """宣言済み変数 (スカラーも配列も message も) の実行時状態。is_array で
+    スカラーと配列を区別する (以前は type_name が "byte" かどうかで判定していたが、
+    int/float 配列に対応するとスカラー int/float と配列 int/float の type_name が
+    同じ文字列になってしまい判定できなくなったため、明示的なフィールドにした)。
+    type_name は配列なら要素型 ("byte"/"int"/"float")、message 変数なら "message"
+    固定 (is_array=False)。value はスカラーなら int/float、配列なら list、message
+    なら _MessageValue を持つ。スカラー・配列・message を別々の dict (self._vars/
+    self._arrays 等) で持つと、「この名前は宣言済みか」「何者か」を毎回複数の dict の
+    メンバーシップを OR して求める羽目になり判定漏れの温床になる (実際、配列サポート
+    追加時にこのパターンが複数箇所で発生した) ため、1つの dict に統一している。"""
+    type_name: str  # "int" | "float" | "byte" | "message"
+    is_array: bool
+    value: object  # int | float | list | _MessageValue
 
 
 class Interpreter:
@@ -1137,6 +1283,7 @@ class Interpreter:
         self._current_locals: Optional[dict] = None
         self._builtins = self._make_builtins()
         self._this_members = self._make_this_members()
+        self._message_members = self._make_message_members()
         self._register_functions()
         # variables{} の宣言を先に検証・評価してから、on start/on timer/on message を
         # 検証する (代入・変数参照が「宣言済みかどうか」を検証する際に self._vars が要る
@@ -1160,7 +1307,21 @@ class Interpreter:
     # ここに載せずに素通しすると、ユーザー定義 void 関数と全く同じ理由で
     # _coerce(None, 'int'/'float') が未処理の TypeError になる
     # (例: `x = cancelTimer(未アームのタイマー);`)。
-    _VOID_BUILTINS = frozenset({"send", "send_can", "wait", "log", "write", "setTimer", "cancelTimer"})
+    _VOID_BUILTINS = frozenset({
+        "send", "send_can", "wait", "log", "write", "setTimer", "cancelTimer", "output",
+    })
+
+    # 配列/message 変数を裸で (添字/フィールドアクセス無しで) 直接の引数として渡せる
+    # 組み込み関数名。_validate_expr() の Call 処理がこの集合に載っていない関数への
+    # 裸参照を通常の Var チェックまで通す (弾く) ようにするためのもの。ここに
+    # 載っていない関数 (例: wait_response()/log()) に配列/message を渡すと、実装が
+    # その値を int/float 変換しようとして未処理の TypeError になりうる
+    # (例: wait_response(msg) は float(msg_value) をタイムアウト秒数として呼ぼうと
+    # してクラッシュする)。あらゆる組み込み関数に一律で裸参照を許してしまうと、
+    # 「配列/message は send()/send_can()/output() の直接の引数としてのみ使える」
+    # という README/docstring の主張自体が嘘になってしまうため、関数ごとに絞る。
+    _ARRAY_ARG_BUILTINS = frozenset({"send", "send_can"})
+    _MESSAGE_ARG_BUILTINS = frozenset({"output"})
 
     def _make_builtins(self) -> dict:
         """関数名 -> (最小引数数, 実装) の辞書。最小引数数を実装と同じ場所で宣言する
@@ -1205,6 +1366,10 @@ class Interpreter:
             "respNrc": (0, lambda args: self._resp_nrc()),
             "respByte": (1, lambda args: self._resp_byte(self._to_int(args[0]))),
             "respIsNegative": (0, lambda args: self._resp_is_negative()),
+            # message 変数 (MessageDecl) を丸ごと渡して生の CAN フレームとして送る。
+            # 引数が実際に message 変数かどうかは _validate_expr() の output 専用
+            # チェックが実行前に保証する (_output_message() 参照)。
+            "output": (1, lambda args: self._output_message(args[0])),
         }
 
     def _make_this_members(self) -> dict:
@@ -1365,15 +1530,25 @@ class Interpreter:
                     f"{node.line}行目: variables の初期値で配列 '{node.name}' 全体は参照できません "
                     f"(要素を使うには '{node.name}[0]' のように添字を指定してください)"
                 )
+            if var is not None and var.type_name == "message":
+                # 配列と同じ理由 (上のコメント参照)。message 変数は _MessageValue
+                # オブジェクトを持つため、そのまま int/float の初期値に流れ込むと
+                # _coerce() が未処理の TypeError になる。
+                raise DslSyntaxError(
+                    f"{node.line}行目: variables の初期値で message 変数 '{node.name}' "
+                    f"全体は参照できません (フィールドは '{node.name}.dlc'/"
+                    f"'{node.name}.byte(n)' で読み取ってください)"
+                )
         for child in _iter_child_exprs(node):
             self._reject_calls(child)
 
     def _init_variables(self) -> None:
         """宣言順に初期値式を検証・評価して self._vars に格納する。後続の宣言の初期値式が
         先に宣言した変数を参照することもできる（宣言済みかどうかは self._vars への
-        追加順でそのまま決まる）。スカラー変数 (VarDecl) も配列 (ArrayDecl) も同じ
-        self._vars に入れる (_Variable.is_array 参照) ので、名前空間は自然に共有され、
-        同名の scalar と配列を両方宣言しようとすると通常の重複宣言チェックに引っかかる。"""
+        追加順でそのまま決まる）。スカラー変数 (VarDecl)・配列 (ArrayDecl)・message
+        変数 (MessageDecl) いずれも同じ self._vars に入れる (_Variable.is_array/
+        type_name=="message" 参照) ので、名前空間は自然に共有され、同名の重複宣言は
+        種類を問わず通常の重複宣言チェックに引っかかる。"""
         for decl in self._script.variables:
             if decl.name in self._vars:
                 raise DslSyntaxError(f"{decl.line}行目: 変数 '{decl.name}' は既に宣言されています")
@@ -1381,35 +1556,49 @@ class Interpreter:
                 if decl.init is not None:
                     for item in decl.init:
                         self._reject_calls(item)
-                self._vars[decl.name] = _Variable("byte", self._eval_array_values(decl.init, decl.size))
+                values = self._eval_array_values(decl.init, decl.size, decl.type_name)
+                self._vars[decl.name] = _Variable(decl.type_name, True, values)
+                continue
+            if isinstance(decl, MessageDecl):
+                self._vars[decl.name] = _Variable("message", False, self._make_message_value(decl.can_id))
                 continue
             if decl.init is not None:
                 self._reject_calls(decl.init)
                 value = self._eval(decl.init)
             else:
                 value = self._default_value(decl.type_name)
-            self._vars[decl.name] = _Variable(decl.type_name, self._coerce(value, decl.type_name))
+            self._vars[decl.name] = _Variable(decl.type_name, False, self._coerce(value, decl.type_name))
 
-    def _eval_array_values(self, init: Optional[list], size: int) -> list:
+    def _eval_array_values(self, init: Optional[list], size: int, elem_type: str) -> list:
         """ArrayDecl (variables{} のトップレベル配列宣言、および関数内のローカル配列宣言
-        _exec_stmt() の ArrayDecl 分岐参照) の初期化リストを評価し、サイズ分だけ0埋めした
-        list[int] を返す共通ロジック。初期化式に関数呼び出しを許すかどうか
-        (_reject_calls の要否) は呼び出し元ごとに事情が異なる (variables{} は
-        Interpreter 構築中に評価されるため不可、ローカル宣言は run() 開始後にしか
-        実行されないため可、_validate_stmt() 参照) ので、ここでは扱わない。"""
+        _exec_stmt() の ArrayDecl 分岐参照) の初期化リストを評価し、サイズ分だけ
+        既定値で埋めた list を返す共通ロジック。要素の型変換は elem_type に応じて
+        _coerce_array_element() に委ねる (byte は 0-255 マスク、int/float はスカラーと
+        同じ _coerce())。初期化式に関数呼び出しを許すかどうか (_reject_calls の要否) は
+        呼び出し元ごとに事情が異なる (variables{} は Interpreter 構築中に評価される
+        ため不可、ローカル宣言は run() 開始後にしか実行されないため可、
+        _validate_stmt() 参照) ので、ここでは扱わない。"""
         if init is not None:
-            values = [self._to_byte(self._eval(item)) for item in init]
+            values = [self._coerce_array_element(self._eval(item), elem_type) for item in init]
         else:
             values = []
-        values.extend([0] * (size - len(values)))
+        values.extend([self._default_value(elem_type)] * (size - len(values)))
         return values
 
     @staticmethod
+    def _make_message_value(can_id: int) -> _MessageValue:
+        """MessageDecl から実行時の _MessageValue を作る (variables{} のグローバル
+        宣言・関数内のローカル宣言・_validate_stmt() でのプレースホルダ生成の
+        いずれからも使う共通ロジック)。dlc は既定 8、data は8バイト全て0。"""
+        return _MessageValue(can_id, 8, [0] * 8)
+
+    @staticmethod
     def _default_value(type_name: str):
-        """初期化式を省略したスカラー変数、および _validate_function() が仮引数を
-        検証用に一時束縛する際のプレースホルダ値に使う、型ごとの既定値 (int なら 0、
-        float なら 0.0)。両者で同じ int/float 判定を別々に書かないよう1箇所にまとめる。"""
-        return 0 if type_name == "int" else 0.0
+        """初期化式を省略したスカラー変数・配列要素、および _validate_function() が
+        仮引数を検証用に一時束縛する際のプレースホルダ値に使う、型ごとの既定値
+        (float なら 0.0、それ以外〈int/byte〉は 0)。あちこちで同じ判定を別々に
+        書かないよう1箇所にまとめる。"""
+        return 0.0 if type_name == "float" else 0
 
     @staticmethod
     def _coerce(value, type_name: str):
@@ -1423,6 +1612,15 @@ class Interpreter:
         if type_name == "float":
             return float(value)
         return value
+
+    def _coerce_array_element(self, value, elem_type: str):
+        """配列要素への値の型変換。byte は 0-255 にマスクする (_to_byte())。int/float は
+        スカラー変数と同じ _coerce() (int は 0 方向へ切り捨て、float はそのまま)。
+        配列の読み書き (初期化リスト・IndexAssign・ローカル配列宣言) 全てがここを
+        通ることで、要素型ごとの変換ロジックを1箇所にまとめる。"""
+        if elem_type == "byte":
+            return self._to_byte(value)
+        return self._coerce(value, elem_type)
 
     # ---- 式の評価 ----
     def _eval(self, node):
@@ -1441,6 +1639,8 @@ class Interpreter:
             return var.value
         if isinstance(node, Index):
             return self._eval_index(node)
+        if isinstance(node, MemberAccess):
+            return self._eval_member_access(node)
         if isinstance(node, TimerName):
             return node.name  # 識別子の綴りそのものがタイマー名
         if isinstance(node, ThisAccess):
@@ -1453,10 +1653,12 @@ class Interpreter:
 
     def _resolve_array_index(self, name: str, index_node, line: int):
         """配列要素の読み取り (_eval_index) と書き込み (IndexAssign の実行) の両方が使う
-        共通ヘルパー。宣言済みの配列本体 (list) と、範囲チェック済みの添字を返す
-        (範囲外は capl_api.ScriptAbort、ゼロ除算等と同じ「スクリプト中断」扱い)。
-        読み書きで同じチェックを別々に手書きすると、将来どちらか片方だけ修正されて
-        挙動が食い違う保守リスクになるため、ここに1本化する。"""
+        共通ヘルパー。宣言済みの配列の _Variable 本体 (list ではなく _Variable を返す
+        のは、書き込み側が要素型ごとの変換 (_coerce_array_element()) に var.type_name
+        を必要とするため) と、範囲チェック済みの添字を返す (範囲外は
+        capl_api.ScriptAbort、ゼロ除算等と同じ「スクリプト中断」扱い)。読み書きで
+        同じ範囲チェックを別々に手書きすると、将来どちらか片方だけ修正されて挙動が
+        食い違う保守リスクになるため、ここに1本化する。"""
         var = self._vars.get(name)
         if var is None or not var.is_array:
             raise DslSyntaxError(f"{line}行目: 未宣言の配列 '{name}'")
@@ -1465,11 +1667,112 @@ class Interpreter:
             raise capl_api.ScriptAbort(
                 f"{line}行目: 配列 '{name}' の添字 {idx} が範囲外です (サイズ {len(var.value)})"
             )
-        return var.value, idx
+        return var, idx
 
     def _eval_index(self, node: Index) -> int:
-        arr, idx = self._resolve_array_index(node.name, node.index, node.line)
-        return arr[idx]
+        var, idx = self._resolve_array_index(node.name, node.index, node.line)
+        return var.value[idx]
+
+    def _make_message_members(self) -> dict:
+        """<message変数>.<member> の (必要な引数の個数, 読み取り実装, 書き込み実装) の
+        辞書。_make_this_members()/_make_builtins() と同じ理由で、アリティ専用の別
+        テーブルを持たない (別テーブルだと実装だけ引数を変えて片方の更新を忘れる、
+        という保守リスクになるため)。書き込み不可のメンバ (id は読み取り専用) は
+        書き込み実装を None にし、_exec_member_assign()/_validate_stmt() の
+        MemberAssign 分岐がそのまま「代入できません」の判定に使う。読み取り・書き込み
+        とも (msg, args, name, line) を受け取る形に揃えてあるのは、byte(n) の範囲外
+        エラーメッセージに変数名・行番号が要るため。"""
+        def read_byte(msg, args, name, line):
+            idx = self._resolve_message_byte_index(msg, args, name, line)
+            return msg.data[idx]
+
+        def write_byte(msg, args, value, name, line):
+            idx = self._resolve_message_byte_index(msg, args, name, line)
+            msg.data[idx] = self._to_byte(value)
+
+        def write_dlc(msg, args, value, name, line):
+            dlc = self._to_int(value)
+            if not (0 <= dlc <= 8):
+                raise capl_api.ScriptAbort(
+                    f"{line}行目: message '{name}' の dlc は0〜8の範囲である必要があります ({dlc})"
+                )
+            msg.dlc = dlc
+
+        return {
+            "id": (0, lambda msg, args, name, line: msg.can_id, None),
+            "dlc": (0, lambda msg, args, name, line: msg.dlc, write_dlc),
+            "byte": (1, read_byte, write_byte),
+        }
+
+    def _message_value(self, name: str, line: int) -> _MessageValue:
+        """message 変数の値 (_MessageValue) を取り出す (MemberAccess/MemberAssign の
+        両方が使う)。型・宣言済みかどうかは _validate_expr()/_validate_stmt() が
+        実行前に検証済みなので通常はここに来ないが、_eval_this_access() 等と同じ
+        考え方で保険として残しておく。"""
+        var = self._vars.get(name)
+        if var is None or var.type_name != "message":
+            raise DslSyntaxError(f"{line}行目: 未宣言の message 変数 '{name}'")
+        return var.value
+
+    def _resolve_message_byte_index(self, msg: _MessageValue, args: list, name: str, line: int) -> int:
+        """message 変数の byte(n) の添字を範囲チェックする、読み取り・書き込み双方が
+        使う共通ヘルパー。配列の _resolve_array_index() と同じ理由 (読み書きで別々に
+        手書きすると片方だけ直されて食い違う保守リスクになる) で1本化する。"""
+        idx = self._to_int(self._eval(args[0]))
+        if not (0 <= idx < len(msg.data)):
+            raise capl_api.ScriptAbort(
+                f"{line}行目: message '{name}' の byte({idx}) が範囲外です (0-{len(msg.data) - 1})"
+            )
+        return idx
+
+    def _unknown_message_member_error(self, var_name: str, member: str, line: int) -> DslSyntaxError:
+        known = "/".join(sorted(self._message_members))
+        return DslSyntaxError(
+            f"{line}行目: 未知の message メンバ '{var_name}.{member}' ({known} のみ対応)"
+        )
+
+    def _validate_message_member_arity(self, member: str, args: list, line: int, var_name: str) -> None:
+        """message 変数の `.dlc`/`.byte(n)`/`.id` の引数個数を検証する
+        (_validate_expr() の MemberAccess 分岐、_validate_stmt() の MemberAssign
+        分岐の両方から使う)。未知のメンバ名もここで検出する。"""
+        entry = self._message_members.get(member)
+        if entry is None:
+            raise self._unknown_message_member_error(var_name, member, line)
+        expected, _read_fn, _write_fn = entry
+        if len(args) != expected:
+            raise DslSyntaxError(
+                f"{line}行目: {var_name}.{member} には{expected}個の引数が必要です "
+                f"({len(args)}個指定されています)"
+            )
+
+    def _eval_member_access(self, node: MemberAccess):
+        # メンバ名・引数個数とも _validate_expr() が実行前に検証済みなので、通常は
+        # ここに来ないが保険として残しておく (_call() の entry is None チェックと
+        # 同じ考え方)。
+        msg = self._message_value(node.name, node.line)
+        entry = self._message_members.get(node.member)
+        if entry is None:
+            raise self._unknown_message_member_error(node.name, node.member, node.line)
+        _arity, read_fn, _write_fn = entry
+        return read_fn(msg, node.args, node.name, node.line)
+
+    def _exec_member_assign(self, stmt: MemberAssign) -> None:
+        # 書き込み可能なメンバかどうかも _validate_stmt() が実行前に検証済みなので、
+        # 通常はここに来ないが保険として残しておく。
+        msg = self._message_value(stmt.name, stmt.line)
+        entry = self._message_members.get(stmt.member)
+        if entry is None or entry[2] is None:
+            raise self._unknown_message_member_error(stmt.name, stmt.member, stmt.line)
+        _arity, _read_fn, write_fn = entry
+        value = self._eval(stmt.expr)
+        write_fn(msg, stmt.args, value, stmt.name, stmt.line)
+
+    def _output_message(self, msg_value: _MessageValue) -> None:
+        """output(msg) の実装。message 変数の現在の内容を dlc 分だけ生の CAN
+        フレームとして送る (UDS 応答待ちの無い send_can() と同じ「投げっぱなし」
+        送信)。引数が実際に message 変数であることは _validate_expr() の output
+        専用チェックが実行前に保証している。"""
+        self._ctx.send_can(msg_value.can_id, msg_value.data[:msg_value.dlc])
 
     def _eval_this_access(self, node: ThisAccess):
         # member・引数個数とも _validate_expr() が実行前に検証済みなので、通常は
@@ -1605,7 +1908,7 @@ class Interpreter:
         for param, value in zip(params, values):
             if param.name not in saved:
                 saved[param.name] = self._vars.get(param.name)
-            self._vars[param.name] = _Variable(param.type_name, value)
+            self._vars[param.name] = _Variable(param.type_name, False, value)
         outer_locals = self._current_locals
         self._current_locals = saved
         try:
@@ -1650,26 +1953,26 @@ class Interpreter:
         known = "/".join(sorted(list(self._builtins) + list(self._functions)))
         return DslSyntaxError(f"{call.line}行目: 未知の関数 '{call.name}' ({known} のみ対応)")
 
-    def _declare_local(self, name: str, type_name: str, value) -> None:
-        """関数の直接の本体中のローカル変数宣言文 (`int x;`/`byte data[n];` が
-        VarDecl/ArrayDecl として通常の文に混ざって現れたもの) を実行/検証する
-        共通処理。パーサーが if/while/for/switch の中では宣言文を許さない
-        (_parse_nested_block() 参照) ため、ここは必ず「その関数の直接の本体を
-        1回だけ順に辿る」呼び出し元 (_run_block(func.body)/_validate_block(func.body,...))
-        からしか呼ばれない。現在の呼び出しフレームの退避辞書 (self._current_locals、
-        _bound_params() が管理) に「シャドーイング前の値」を初出のときだけ記録してから
-        self._vars を束縛し直す (_bound_params() の仮引数束縛と全く同じガード。
-        同名の宣言文が万一同じ本体に複数回書かれていても、2回目以降に「今の値」を
-        誤って元の値として記録してしまわないための保険)。self._current_locals は
-        関数の中でしか None にならない (VarDecl/ArrayDecl を文として解析できるのは
-        パーサーが関数の直接の本体を読んでいる間だけ) ので、ここが None のまま
-        呼ばれることは無い前提で書いている。"""
+    def _declare_local(self, name: str, type_name: str, is_array: bool, value) -> None:
+        """関数の直接の本体中のローカル変数宣言文 (`int x;`/`byte data[n];`/
+        `message <id> m;` が VarDecl/ArrayDecl/MessageDecl として通常の文に混ざって
+        現れたもの) を実行/検証する共通処理。パーサーが if/while/for/switch の中では
+        宣言文を許さない (_parse_nested_block() 参照) ため、ここは必ず「その関数の
+        直接の本体を1回だけ順に辿る」呼び出し元 (_run_block(func.body)/
+        _validate_block(func.body,...)) からしか呼ばれない。現在の呼び出しフレームの
+        退避辞書 (self._current_locals、_bound_params() が管理) に「シャドーイング前の
+        値」を初出のときだけ記録してから self._vars を束縛し直す (_bound_params() の
+        仮引数束縛と全く同じガード。同名の宣言文が万一同じ本体に複数回書かれていても、
+        2回目以降に「今の値」を誤って元の値として記録してしまわないための保険)。
+        self._current_locals は関数の中でしか None にならない (VarDecl/ArrayDecl/
+        MessageDecl を文として解析できるのはパーサーが関数の直接の本体を読んでいる
+        間だけ) ので、ここが None のまま呼ばれることは無い前提で書いている。"""
         if name not in self._current_locals:
             self._current_locals[name] = self._vars.get(name)
-        self._vars[name] = _Variable(type_name, value)
+        self._vars[name] = _Variable(type_name, is_array, value)
 
     def _check_local_not_declared(self, name: str, line: int) -> None:
-        """ローカル変数宣言文 (VarDecl/ArrayDecl) を検証する際、同じ名前が既に
+        """ローカル宣言文 (VarDecl/ArrayDecl/MessageDecl) を検証する際、同じ名前が既に
         仮引数またはこの関数内の別のローカル変数として使われていないか確認する
         (_validate_stmt() の VarDecl/ArrayDecl 分岐から使う)。self._current_locals は
         _bound_params() が仮引数で事前に埋め、_declare_local() がローカル宣言のたびに
@@ -1694,13 +1997,18 @@ class Interpreter:
             var = self._vars[stmt.name]
             var.value = self._coerce(self._eval(stmt.expr), var.type_name)
         elif isinstance(stmt, IndexAssign):
-            arr, idx = self._resolve_array_index(stmt.name, stmt.index, stmt.line)
-            arr[idx] = self._to_byte(self._eval(stmt.expr))
+            var, idx = self._resolve_array_index(stmt.name, stmt.index, stmt.line)
+            var.value[idx] = self._coerce_array_element(self._eval(stmt.expr), var.type_name)
         elif isinstance(stmt, VarDecl):
             value = self._eval(stmt.init) if stmt.init is not None else self._default_value(stmt.type_name)
-            self._declare_local(stmt.name, stmt.type_name, self._coerce(value, stmt.type_name))
+            self._declare_local(stmt.name, stmt.type_name, False, self._coerce(value, stmt.type_name))
         elif isinstance(stmt, ArrayDecl):
-            self._declare_local(stmt.name, "byte", self._eval_array_values(stmt.init, stmt.size))
+            values = self._eval_array_values(stmt.init, stmt.size, stmt.type_name)
+            self._declare_local(stmt.name, stmt.type_name, True, values)
+        elif isinstance(stmt, MessageDecl):
+            self._declare_local(stmt.name, "message", False, self._make_message_value(stmt.can_id))
+        elif isinstance(stmt, MemberAssign):
+            self._exec_member_assign(stmt)
         elif isinstance(stmt, If):
             if self._truthy(self._eval(stmt.cond)):
                 self._run_block(stmt.then_block)
@@ -1827,6 +2135,12 @@ class Interpreter:
                     f"{stmt.line}行目: 配列 '{stmt.name}' へ直接代入することはできません "
                     f"(要素ごとに '{stmt.name}[i] = ...;' の形で代入してください)"
                 )
+            if var is not None and var.type_name == "message":
+                raise DslSyntaxError(
+                    f"{stmt.line}行目: message 変数 '{stmt.name}' へ直接代入することは"
+                    f"できません (フィールドごとに '{stmt.name}.dlc = ...;'/"
+                    f"'{stmt.name}.byte(n) = ...;' の形で代入してください)"
+                )
             if var is None:
                 raise DslSyntaxError(
                     f"{stmt.line}行目: 未宣言の変数 '{stmt.name}' への代入です "
@@ -1851,13 +2165,32 @@ class Interpreter:
             self._check_local_not_declared(stmt.name, stmt.line)
             if stmt.init is not None:
                 self._validate_expr(stmt.init)
-            self._declare_local(stmt.name, stmt.type_name, self._default_value(stmt.type_name))
+            self._declare_local(stmt.name, stmt.type_name, False, self._default_value(stmt.type_name))
         elif isinstance(stmt, ArrayDecl):
             self._check_local_not_declared(stmt.name, stmt.line)
             if stmt.init is not None:
                 for item in stmt.init:
                     self._validate_expr(item)
-            self._declare_local(stmt.name, "byte", [0] * stmt.size)
+            self._declare_local(stmt.name, stmt.type_name, True, [self._default_value(stmt.type_name)] * stmt.size)
+        elif isinstance(stmt, MessageDecl):
+            self._check_local_not_declared(stmt.name, stmt.line)
+            self._declare_local(stmt.name, "message", False, self._make_message_value(stmt.can_id))
+        elif isinstance(stmt, MemberAssign):
+            var = self._vars.get(stmt.name)
+            if var is None or var.type_name != "message":
+                raise DslSyntaxError(
+                    f"{stmt.line}行目: 未宣言の message 変数 '{stmt.name}' への代入です "
+                    f"(variables {{ message <id> {stmt.name}; }} で宣言してください)"
+                )
+            self._validate_message_member_arity(stmt.member, stmt.args, stmt.line, stmt.name)
+            if self._message_members[stmt.member][2] is None:
+                raise DslSyntaxError(
+                    f"{stmt.line}行目: message の '{stmt.member}' には代入できません "
+                    "('dlc'/'byte(n)' のみ代入可能。'id' は読み取り専用です)"
+                )
+            for arg in stmt.args:
+                self._validate_expr(arg)
+            self._validate_expr(stmt.expr)
         elif isinstance(stmt, If):
             self._validate_expr(stmt.cond)
             self._validate_block(stmt.then_block, in_loop, in_switch, return_type)
@@ -1931,16 +2264,36 @@ class Interpreter:
                     raise DslSyntaxError(
                         f"{node.line}行目: '{node.name}' の戻り値は式の中では使えません"
                     )
+                if node.name == "output":
+                    # output() は message 変数を丸ごと渡す専用の関数で、配列や
+                    # スカラーを渡しても _output_message() が msg_value.can_id 等の
+                    # 属性アクセスで未処理の AttributeError を起こしてしまう。
+                    # 「直接の引数なら array/message どちらでも許可」という下の
+                    # 汎用チェックだけでは配列を弾けないため、ここで専用に絞り込む。
+                    arg = node.args[0] if node.args else None
+                    arg_var = self._vars.get(arg.name) if isinstance(arg, Var) else None
+                    if not isinstance(arg, Var) or arg_var is None or arg_var.type_name != "message":
+                        raise DslSyntaxError(
+                            f"{node.line}行目: output() には message 変数を渡してください"
+                        )
                 for arg in node.args:
-                    # 配列を丸ごと関数に渡す (send(data) 等) のは、直接の引数としてだけ許可する
-                    # (_flatten_bytes() が list をそのまま展開できるのはここだけ)。
-                    # data + 1 や total = data のように配列がネストした式・代入に紛れ込むと
-                    # list に対して算術・比較・型変換が走って TypeError や意味のない False
-                    # 判定になってしまうため、直接引数以外は下の Var の通常チェックで弾く。
+                    # 配列・message 変数を丸ごと関数に渡す (send(data)/output(msg) 等) のは、
+                    # _ARRAY_ARG_BUILTINS/_MESSAGE_ARG_BUILTINS に載っている関数への
+                    # 直接の引数としてだけ許可する (_flatten_bytes() が list をそのまま
+                    # 展開できる、_output_message() が _MessageValue をそのまま扱えるのは
+                    # send()/send_can()/output() だけ)。他の組み込み関数 (wait_response()/
+                    # log() 等) に配列/message をそのまま渡すと、実装がその値を int/float
+                    # 変換しようとして未処理の TypeError になりうるため、関数名で絞らずに
+                    # 一律で許可してはいけない。data + 1 や total = data のように配列/
+                    # message がネストした式・代入に紛れ込む場合も同様に、直接引数以外は
+                    # 下の Var の通常チェックで弾く。
                     if isinstance(arg, Var):
                         arg_var = self._vars.get(arg.name)
-                        if arg_var is not None and arg_var.is_array:
-                            continue
+                        if arg_var is not None:
+                            if arg_var.is_array and node.name in self._ARRAY_ARG_BUILTINS:
+                                continue
+                            if arg_var.type_name == "message" and node.name in self._MESSAGE_ARG_BUILTINS:
+                                continue
                     self._validate_expr(arg)
                 return
             func = self._functions.get(node.name)
@@ -1972,6 +2325,12 @@ class Interpreter:
                     f"(要素参照は '{node.name}[i]'、配列全体を渡すのは send(...) 等の"
                     "関数呼び出しの直接の引数としてのみ使えます)"
                 )
+            if var.type_name == "message":
+                raise DslSyntaxError(
+                    f"{node.line}行目: message 変数 '{node.name}' は単体の式としては"
+                    f"使えません (フィールドは '{node.name}.dlc'/'{node.name}.byte(n)' で"
+                    "読み取り、送信は output(...) の直接の引数として渡してください)"
+                )
             return
         if isinstance(node, Index):
             var = self._vars.get(node.name)
@@ -1982,6 +2341,15 @@ class Interpreter:
                 )
             self._validate_expr(node.index)
             return
+        if isinstance(node, MemberAccess):
+            var = self._vars.get(node.name)
+            if var is None or var.type_name != "message":
+                raise DslSyntaxError(
+                    f"{node.line}行目: 未宣言の message 変数 '{node.name}' "
+                    f"(variables {{ message <id> {node.name}; }} で宣言してください)"
+                )
+            self._validate_message_member_arity(node.member, node.args, node.line, node.name)
+            # 子ノード (byte(n) の n 等) の走査は下の共通ループにフォールスルーさせる
         if isinstance(node, TimerName):
             return  # タイマー名は識別子そのものなので、宣言済み変数チェックの対象外
         if isinstance(node, ThisAccess):
