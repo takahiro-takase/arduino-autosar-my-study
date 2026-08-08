@@ -18,16 +18,29 @@ UDS 送受信の実体は capl_api.CaplContext をそのままランタイム層
     - 代入文: x = x + 1;  （x は variables{} で宣言済みであること）
     - if (expr) { ... } [else if (expr) { ... }]* [else { ... }]
     - while (expr) { ... }
+    - for (x = 0; x < 10; x = x + 1) { ... }  （初期化/条件/更新はいずれも省略可。
+      i++ 等のインクリメント演算子はないので x = x + 1 の形で書く）
 
 式は四則演算 (+ - * / %)・比較 (== != < > <= >=)・論理 (&& || !)・丸括弧・
-関数呼び出し・変数参照・数値/文字列リテラルに対応する（if/while の演算だけを
-サポートし、for 文や配列、構造体、ユーザー定義関数は対象外）。
+関数呼び出し・変数参照・数値/文字列リテラル・this.byte(n)/this.id/this.dlc
+(on message ハンドラ内限定、下記参照) に対応する（配列、構造体、ユーザー定義関数は
+対象外）。
 
 利用できる関数は Interpreter._make_builtins() を参照 (README.md にも一覧表がある)。
-未知の関数呼び出し・未宣言の変数参照は Interpreter 構築時 (実行前) に全ブロックを
-走査して検出する (_validate() 参照)。on start の実行後に初めて呼ばれる on timer/
-on message の中身でタイポがあっても、on start の副作用（セッション変更等）を実行
-してしまった後になって気付く、という事態を避けるため。
+write(fmt, ...)/log(fmt, ...) は、第1引数が '%' を含む文字列かつ他に引数がある場合、
+CAPL の write() と同様 printf 風の書式文字列 (%d/%f/%s/%x/%X/%%) として扱う。それ以外
+(引数1つだけ、または '%' を含まない) は従来通りスペース区切りで連結する。
+
+this.byte(n)/this.id/this.dlc は on message ハンドラ内限定で、直近に受信したフレームの
+byte[n]/CAN ID/データ長を返す。既存の msgData(n)/msgId()/msgDlc() 関数と同じ内容を返す
+プロパティ風の書き方で、実際の CAPL の on message ハンドラでの書き方に近い
+(msgData 等の関数は互換性のため残してあり、on message ハンドラ外でも呼べる)。
+
+未知の関数呼び出し・未宣言の変数参照・on message ハンドラ外での this 使用は、
+Interpreter 構築時 (実行前) に全ブロックを走査して検出する (_validate() 参照)。
+on start の実行後に初めて呼ばれる on timer/on message の中身でタイポがあっても、
+on start の副作用（セッション変更等）を実行してしまった後になって気付く、という
+事態を避けるため。
 
 setTimer(name, ms)/cancelTimer(name) の第1引数 (タイマー名) は特別扱いする。
 CAPL の msTimer 変数と違い、本 DSL では variables{} での事前宣言を要求せず、
@@ -89,6 +102,7 @@ _TOKEN_SPEC = [
     ("RPAREN", r"\)"),
     ("COMMA", r","),
     ("SEMI", r";"),
+    ("DOT", r"\."),  # this.byte(n) 等のメンバアクセス用 (FLOAT の \d+\.\d+ より後ろなので数値は奪われない)
 ]
 _MASTER_RE = re.compile(
     "|".join(f"(?P<{name}>{pattern})" for name, pattern in _TOKEN_SPEC), re.DOTALL
@@ -166,6 +180,17 @@ class TimerName:
 
 
 @dataclass
+class ThisAccess:
+    """this.byte(n)/this.id/this.dlc の式ノード。member は "byte"/"id"/"dlc"、
+    args は byte(n) の n のような引数 (id/dlc は空リスト)。on message ハンドラの
+    外で使うと _validate_expr() が実行前に弾く (実際の CAPL でも this は message
+    ハンドラの外では使えない)。"""
+    member: str
+    args: list  # list[Expr]
+    line: int
+
+
+@dataclass
 class BinOp:
     op: str  # "+" "-" "*" "/" "%" "==" "!=" "<" ">" "<=" ">=" "&&" "||"
     left: object  # Expr
@@ -206,6 +231,18 @@ class If:
 @dataclass
 class While:
     cond: object  # Expr
+    body: list  # list[Stmt]
+    line: int
+
+
+@dataclass
+class For:
+    """for (init; cond; update) { body }。init/cond/update はいずれも省略可
+    (C の for(;;) と同様)。init/update は Assign 文のみ (i++ 等の増分演算子はない
+    ので x = x + 1 の形で書く)。"""
+    init: Optional[object]  # Assign | None
+    cond: object  # Expr | None (省略時は常に真とみなす)
+    update: Optional[object]  # Assign | None
     body: list  # list[Stmt]
     line: int
 
@@ -341,6 +378,8 @@ class _Parser:
             return self._parse_if()
         if self._at_ident("while"):
             return self._parse_while()
+        if self._at_ident("for"):
+            return self._parse_for()
         tok = self._peek()
         if tok.kind == "IDENT" and self._peek(1).kind == "ASSIGN":
             return self._parse_assignment()
@@ -373,22 +412,58 @@ class _Parser:
         body = self._parse_block()
         return While(cond, body, while_tok.line)
 
-    def _parse_assignment(self) -> Assign:
+    def _parse_for(self) -> For:
+        for_tok = self._expect_ident("for")
+        self._expect("LPAREN")
+        init = None
+        if self._peek().kind != "SEMI":
+            init = self._parse_assignment_expr()
+        self._expect("SEMI")
+        cond = None
+        if self._peek().kind != "SEMI":
+            cond = self._parse_expr()
+        self._expect("SEMI")
+        update = None
+        if self._peek().kind != "RPAREN":
+            update = self._parse_assignment_expr()
+        self._expect("RPAREN")
+        body = self._parse_block()
+        return For(init, cond, update, body, for_tok.line)
+
+    def _parse_assignment_expr(self) -> Assign:
+        """`x = expr` の代入式本体 (末尾のセミコロンは呼び出し側の責任)。文としての
+        代入 (_parse_assignment、セミコロンを伴う) と、for 文の初期化/更新句
+        (セミコロンを伴わない) の両方から使う。"""
         name_tok = self._expect("IDENT")
         self._expect("ASSIGN")
         expr = self._parse_expr()
-        self._expect("SEMI")
         return Assign(name_tok.value, expr, name_tok.line)
+
+    def _parse_assignment(self) -> Assign:
+        assign = self._parse_assignment_expr()
+        self._expect("SEMI")
+        return assign
+
+    def _parse_arg_list(self, parse_arg) -> list:
+        """LPAREN は呼び出し側で読了済みの前提で、RPAREN までのカンマ区切り引数列を
+        読む。parse_arg(index) は index 番目 (0始まり) の引数の読み方 (_parse_call と
+        _parse_this_access の両方から使うので、引数の読み方自体は呼び出し側に委ねる)。"""
+        args = []
+        if self._peek().kind != "RPAREN":
+            args.append(parse_arg(0))
+            i = 1
+            while self._peek().kind == "COMMA":
+                self._advance()
+                args.append(parse_arg(i))
+                i += 1
+        return args
 
     def _parse_call(self) -> Call:
         name_tok = self._expect("IDENT")
         self._expect("LPAREN")
-        args = []
-        if self._peek().kind != "RPAREN":
-            args.append(self._parse_call_arg(name_tok.value, is_first=True))
-            while self._peek().kind == "COMMA":
-                self._advance()
-                args.append(self._parse_call_arg(name_tok.value, is_first=False))
+        args = self._parse_arg_list(
+            lambda i: self._parse_call_arg(name_tok.value, is_first=(i == 0))
+        )
         self._expect("RPAREN")
         return Call(name_tok.value, args, name_tok.line)
 
@@ -491,11 +566,24 @@ class _Parser:
             self._expect("RPAREN")
             return expr
         if tok.kind == "IDENT":
+            if tok.value == "this":
+                return self._parse_this_access()
             if self._peek(1).kind == "LPAREN":
                 return self._parse_call()
             self._advance()
             return Var(tok.value, tok.line)
         raise DslSyntaxError(f"{tok.line}行目: 式として不正なトークン '{tok.value}'")
+
+    def _parse_this_access(self) -> ThisAccess:
+        this_tok = self._advance()  # "this"
+        self._expect("DOT")
+        member_tok = self._expect("IDENT")
+        args = []
+        if self._peek().kind == "LPAREN":
+            self._advance()
+            args = self._parse_arg_list(lambda i: self._parse_expr())
+            self._expect("RPAREN")
+        return ThisAccess(member_tok.value, args, this_tok.line)
 
 
 def parse(source: str) -> Script:
@@ -508,14 +596,16 @@ def parse(source: str) -> Script:
 
 
 def _iter_child_exprs(node):
-    """BinOp/UnaryOp の子ノード (部分式) を列挙する。Call/Var/TimerName/リテラルは
-    子を持たないので空を返す。_reject_calls()/_validate_expr() の再帰下降で
-    「BinOp なら left/right、UnaryOp なら operand を辿る」という同じ形の走査を
-    2箇所に個別に書かないよう、ここに1本化する。"""
+    """BinOp/UnaryOp/ThisAccess の子ノード (部分式) を列挙する。Call/Var/TimerName/
+    リテラルは子を持たないので空を返す (Call は _validate_expr() 側で個別に
+    引数を辿るため、ここには含めない)。_reject_calls()/_validate_expr() の再帰下降で
+    同じ形の走査を2箇所に個別に書かないよう、ここに1本化する。"""
     if isinstance(node, BinOp):
         return (node.left, node.right)
     if isinstance(node, UnaryOp):
         return (node.operand,)
+    if isinstance(node, ThisAccess):
+        return tuple(node.args)
     return ()
 
 
@@ -538,6 +628,7 @@ class Interpreter:
         self._last_message: Optional[object] = None  # can.Message (on message ハンドラ内でのみ有効)
         self._vars: dict[str, _Variable] = {}
         self._builtins = self._make_builtins()
+        self._this_members = self._make_this_members()
         # variables{} の宣言を先に検証・評価してから、on start/on timer/on message を
         # 検証する (代入・変数参照が「宣言済みかどうか」を検証する際に self._vars が要る
         # ため)。_init_variables() 内で、初期値式に関数呼び出しが含まれていないことを
@@ -555,36 +646,49 @@ class Interpreter:
         self._validate()
 
     def _make_builtins(self) -> dict:
+        """関数名 -> (最小引数数, 実装) の辞書。最小引数数を実装と同じ場所で宣言する
+        ことで、_validate_expr() の事前チェックと実際の実装が食い違わないようにする
+        (別のテーブルで二重管理すると、実装だけ引数を増やして片方の更新を忘れる、
+        という保守リスクになるため)。可変長引数を取る send()/send_can() のデータ
+        バイト部分等、"最低いくつ必要か" 以上のことは表現しない。"""
         ctx = self._ctx
         return {
-            "send": lambda args: ctx.send([self._to_byte(a) for a in args]),
-            "send_can": lambda args: ctx.send_can(
+            "send": (0, lambda args: ctx.send([self._to_byte(a) for a in args])),
+            "send_can": (1, lambda args: ctx.send_can(
                 self._to_int(args[0]), [self._to_byte(a) for a in args[1:]]
-            ),
-            "wait_response": lambda args: ctx.wait_response(
+            )),
+            "wait_response": (0, lambda args: ctx.wait_response(
                 float(args[0]) if args else 2.0
-            ),
-            "assert_positive": lambda args: ctx.assert_positive(),
-            "assert_negative": lambda args: ctx.assert_negative(
+            )),
+            "assert_positive": (0, lambda args: ctx.assert_positive()),
+            "assert_negative": (0, lambda args: ctx.assert_negative(
                 nrc=self._to_int(args[0]) if args else None
-            ),
-            "security_unlock": lambda args: ctx.security_unlock(),
+            )),
+            "security_unlock": (0, lambda args: ctx.security_unlock()),
             # ctx.wait() ではなく self.wait() (Interpreter 自身の待機ループ) を使う。
             # ctx.wait() は Python 版 (@ctx.on_timer) の _timers しか見ておらず、DSL 側の
             # _armed_timers(setTimer)/on_message ディスパッチとは無関係なため、そちらに
             # 委譲すると wait() 中は setTimer タイマーも on message も止まってしまう。
-            "wait": lambda args: self.wait(float(args[0])),
-            "log": lambda args: ctx.log(*args),
-            "write": lambda args: ctx.log(*args),  # CAPL の write() 相当のエイリアス
-            "setTimer": lambda args: self._set_timer(str(args[0]), float(args[1])),
-            "cancelTimer": lambda args: self._armed_timers.pop(str(args[0]), None),
-            "msgData": lambda args: self._msg_data(self._to_int(args[0])),
-            "msgId": lambda args: (
-                self._last_message.arbitration_id if self._last_message else 0
-            ),
-            "msgDlc": lambda args: (
-                len(self._last_message.data) if self._last_message else 0
-            ),
+            "wait": (1, lambda args: self.wait(float(args[0]))),
+            "log": (0, lambda args: ctx.log(self._format_write_args(args))),
+            "write": (0, lambda args: ctx.log(self._format_write_args(args))),  # CAPL の write() 相当のエイリアス
+            "setTimer": (2, lambda args: self._set_timer(str(args[0]), float(args[1]))),
+            "cancelTimer": (1, lambda args: self._armed_timers.pop(str(args[0]), None)),
+            "msgData": (1, lambda args: self._msg_data(self._to_int(args[0]))),
+            "msgId": (0, lambda args: self._msg_id()),
+            "msgDlc": (0, lambda args: self._msg_dlc()),
+        }
+
+    def _make_this_members(self) -> dict:
+        """this.<member> の (必要な引数の個数, 実装) の辞書。_make_builtins() と同じ
+        理由で、アリティ専用の別テーブルを持たない (別テーブルだと実装だけ引数を
+        変えて片方の更新を忘れる、という保守リスクになるため)。id/dlc は
+        msgId()/msgDlc() ビルトインと同じ _msg_id()/_msg_dlc() を呼ぶ (「直近メッセージ
+        が無い場合」のデフォルト値ロジックを2箇所に複製しない)。"""
+        return {
+            "byte": (1, lambda args: self._msg_data(self._to_int(args[0]))),
+            "id": (0, lambda args: self._msg_id()),
+            "dlc": (0, lambda args: self._msg_dlc()),
         }
 
     @staticmethod
@@ -604,17 +708,56 @@ class Interpreter:
             return 0
         return self._last_message.data[index]
 
+    def _msg_id(self) -> int:
+        return self._last_message.arbitration_id if self._last_message else 0
+
+    def _msg_dlc(self) -> int:
+        return len(self._last_message.data) if self._last_message else 0
+
+    @staticmethod
+    def _format_write_args(args) -> str:
+        """write()/log() の引数を1つの文字列に組み立てる。第1引数が文字列で '%' を
+        含み、かつ他に引数がある場合は CAPL の write() と同様 printf 風の書式文字列
+        (%d/%f/%s/%x/%X/%% 等) として扱い、Python の % 演算子で残りの引数を埋め込む。
+        それ以外 (引数が1つだけ、または '%' を含まない) は従来通りスペース区切りで
+        連結する。引数が1つだけの場合に printf 扱いしないのは、`write("50% done")`
+        のような '%' を含む単なるテキストが (書式指定漏れとして) 例外にならないよう
+        にするため。書式と引数の数が合わない場合は ScriptAbort にする
+        (他のランタイムエラーと同様、行番号は付かないが assert_positive() の失敗
+        メッセージ等も同様に付いていない)。"""
+        if len(args) >= 2 and isinstance(args[0], str) and "%" in args[0]:
+            fmt, rest = args[0], tuple(args[1:])
+            try:
+                return fmt % rest
+            except (TypeError, ValueError) as exc:
+                raise capl_api.ScriptAbort(
+                    f"write()/log() の書式文字列が不正です: {exc}"
+                ) from exc
+        return " ".join(str(a) for a in args)
+
     def _set_timer(self, name: str, ms: float) -> None:
         self._armed_timers[name] = time.monotonic() + ms / 1000.0
 
     # ---- variables{} の初期値式の検証・初期化 ----
     def _reject_calls(self, node) -> None:
-        """variables{} の初期値式に関数呼び出しが含まれていないか再帰的に確認する。
-        変数参照 (Var) は副作用がないので許可する (前方の宣言を参照できる)。"""
+        """variables{} の初期値式に関数呼び出し・this 使用が含まれていないか再帰的に
+        確認する。変数参照 (Var) は副作用がないので許可する (前方の宣言を参照できる)。
+
+        this も on message ハンドラの外なので使えない (variables{} の初期値式は
+        Interpreter 構築中、on message が一度も発火する前に評価されるため
+        self._last_message は常に None で、this.id 等は黙って既定値 0 を返して
+        しまう。on start/on timer で this を使うと _validate() が弾くのと同じ
+        扱いにしないと、ここだけ「エラーにならず意味のない既定値で通る」という
+        抜け道になってしまう)。"""
         if isinstance(node, Call):
             raise DslSyntaxError(
                 f"{node.line}行目: variables の初期値に関数呼び出し '{node.name}(...)' は"
                 "使えません (定数式のみ)"
+            )
+        if isinstance(node, ThisAccess):
+            raise DslSyntaxError(
+                f"{node.line}行目: variables の初期値で this は使えません "
+                "(on message ブロック内でのみ使用可能)"
             )
         for child in _iter_child_exprs(node):
             self._reject_calls(child)
@@ -656,11 +799,28 @@ class Interpreter:
             return self._vars[node.name].value
         if isinstance(node, TimerName):
             return node.name  # 識別子の綴りそのものがタイマー名
+        if isinstance(node, ThisAccess):
+            return self._eval_this_access(node)
         if isinstance(node, BinOp):
             return self._eval_binop(node)
         if isinstance(node, UnaryOp):
             return self._eval_unaryop(node)
         return node  # リテラル (int/float/str)
+
+    def _eval_this_access(self, node: ThisAccess):
+        # member・引数個数とも _validate_expr() が実行前に検証済みなので、通常は
+        # ここに来ないが保険として残しておく (_call() の entry is None チェックと
+        # 同じ考え方)。
+        entry = self._this_members.get(node.member)
+        if entry is None:
+            raise self._unknown_this_member_error(node)
+        _arity, fn = entry
+        args = [self._eval(a) for a in node.args]
+        return fn(args)
+
+    def _unknown_this_member_error(self, node: ThisAccess) -> DslSyntaxError:
+        known = "/".join(sorted(self._this_members))
+        return DslSyntaxError(f"{node.line}行目: 未知の this.{node.member} ({known} のみ対応)")
 
     @staticmethod
     def _int_div(left: int, right: int) -> int:
@@ -739,9 +899,10 @@ class Interpreter:
         raise DslSyntaxError(f"{node.line}行目: 未対応の単項演算子 '{node.op}'")
 
     def _call(self, call: Call):
-        fn = self._builtins.get(call.name)
-        if fn is None:
+        entry = self._builtins.get(call.name)
+        if entry is None:
             raise self._unknown_function_error(call)
+        _min_args, fn = entry
         # setTimer/cancelTimer の第1引数 (TimerName) も _eval() が name をそのまま
         # 返すので、ここで関数名による特別扱いは不要 (パーサーの _parse_call_arg() 参照)。
         args = [self._eval(a) for a in call.args]
@@ -768,6 +929,15 @@ class Interpreter:
                 if self._stop_event.is_set():
                     raise capl_api.ScriptStopped("スクリプトが停止されました")
                 self._run_block(stmt.body)
+        elif isinstance(stmt, For):
+            if stmt.init is not None:
+                self._exec_stmt(stmt.init)
+            while stmt.cond is None or self._truthy(self._eval(stmt.cond)):
+                if self._stop_event.is_set():
+                    raise capl_api.ScriptStopped("スクリプトが停止されました")
+                self._run_block(stmt.body)
+                if stmt.update is not None:
+                    self._exec_stmt(stmt.update)
         else:
             raise DslSyntaxError(f"未対応の文です: {stmt!r}")
 
@@ -779,12 +949,17 @@ class Interpreter:
     def _validate(self) -> None:
         """self._builtins/self._vars (実行時の状態そのもの、別リストとして二重管理
         しない) を情報源として、on start/on timer/on message の全ブロックを走査し、
-        未知の関数呼び出し・未宣言の変数参照があれば実行前に DslSyntaxError を送出する。"""
-
+        未知の関数呼び出し・未宣言の変数参照・on message ハンドラ外での this 使用が
+        あれば実行前に DslSyntaxError を送出する。self._in_message_handler は on
+        message ブロック内かどうかを表し、this.byte(n) 等が使えるかの判定に使う
+        (_validate() は構築時に1回しか呼ばれない非再入の走査なので、全ての検証
+        メソッドにパラメータとして引き回す代わりにインスタンス属性で持たせる)。"""
+        self._in_message_handler = False
         for stmts in self._script.on_start:
             self._validate_block(stmts)
         for stmts in self._script.on_timer.values():
             self._validate_block(stmts)
+        self._in_message_handler = True
         for stmts in self._script.on_message.values():
             self._validate_block(stmts)
 
@@ -810,13 +985,28 @@ class Interpreter:
         elif isinstance(stmt, While):
             self._validate_expr(stmt.cond)
             self._validate_block(stmt.body)
+        elif isinstance(stmt, For):
+            if stmt.init is not None:
+                self._validate_stmt(stmt.init)
+            if stmt.cond is not None:
+                self._validate_expr(stmt.cond)
+            self._validate_block(stmt.body)
+            if stmt.update is not None:
+                self._validate_stmt(stmt.update)
         else:
             raise DslSyntaxError(f"未対応の文です: {stmt!r}")
 
     def _validate_expr(self, node) -> None:
         if isinstance(node, Call):
-            if node.name not in self._builtins:
+            entry = self._builtins.get(node.name)
+            if entry is None:
                 raise self._unknown_function_error(node)
+            min_args, _fn = entry
+            if len(node.args) < min_args:
+                raise DslSyntaxError(
+                    f"{node.line}行目: '{node.name}' には少なくとも{min_args}個の引数が"
+                    f"必要です ({len(node.args)}個指定されています)"
+                )
             for arg in node.args:
                 self._validate_expr(arg)
             return
@@ -829,6 +1019,21 @@ class Interpreter:
             return
         if isinstance(node, TimerName):
             return  # タイマー名は識別子そのものなので、宣言済み変数チェックの対象外
+        if isinstance(node, ThisAccess):
+            if not self._in_message_handler:
+                raise DslSyntaxError(
+                    f"{node.line}行目: this は on message ブロック内でのみ使えます"
+                )
+            entry = self._this_members.get(node.member)
+            if entry is None:
+                raise self._unknown_this_member_error(node)
+            expected, _fn = entry
+            if len(node.args) != expected:
+                raise DslSyntaxError(
+                    f"{node.line}行目: this.{node.member} には{expected}個の引数が"
+                    f"必要です ({len(node.args)}個指定されています)"
+                )
+            # 子ノード (引数式) の走査は下の共通ループにフォールスルーさせる
         for child in _iter_child_exprs(node):
             self._validate_expr(child)
         # リテラル (int/float/str) は子を持たないため何もしない
