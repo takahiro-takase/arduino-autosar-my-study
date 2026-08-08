@@ -1,0 +1,74 @@
+// CAPL 風 DSL の switch/case・break/continue・byte 配列・複合代入/++/-- のサンプル (.capl)。
+//
+// example_session_check.capl (最小構成) → example_variables_control_flow.capl
+// (variables{}/if/while) → example_for_this_printf.capl (for/this構文/printf) に
+// 続く第4段。文法の詳細は README.md の「CAPL 風スクリプト機能」を参照。
+
+variables
+{
+    byte readDidRequest[3] = {0x22, 0xF1, 0x90};  // ReadDataByIdentifier (VIN, 0xF190)
+    int i;
+    int retryCount = 0;
+}
+
+on start
+{
+    write("=== switch/byte配列/複合代入のサンプル ===");
+
+    send(0x10, 0x03);      // ExtendedSession へ遷移
+    wait_response();
+    assert_positive();
+    write("ExtendedSession OK");
+
+    // byte 配列を組み立てて丸ごと送信 (send(配列) は配列の全要素を展開して送る)
+    send(readDidRequest);
+    wait_response();
+
+    // switch で NRC ごとに分岐 (CAPL と同じフォールスルー動作)
+    // respSid()/respNrc() は直近の wait_response() の応答 SID/NRC を読む (msgData() 等は
+    // on message で受信した生 CAN フレーム用で、wait_response() の応答フレームはそちらには
+    // 流れてこないので使えない。README「CAPL 風スクリプト機能」参照)。
+    switch (respSid())
+    {
+        case 0x62:
+            write("ReadDataByIdentifier OK");
+            break;
+        case 0x7F:
+            switch (respNrc())
+            {
+                case 0x33:
+                    write("NRC=0x33 (SecurityAccessDenied) -> SecurityAccess してから再試行");
+                    security_unlock();
+                    break;
+                case 0x78:
+                    write("NRC=0x78 (RequestCorrectlyReceived-ResponsePending)");
+                    break;
+                default:
+                    write("NRC=0x%x (未対応)", respNrc());
+            }
+            break;
+        default:
+            write("想定外の応答 SID=0x%x", respSid());
+    }
+
+    // TesterPresent をリトライ付きで送信 (複合代入/++/-- を使用)
+    for (i = 0; i < 5; i++)
+    {
+        send(0x3E, 0x00);
+        wait_response(1.0);
+        if (respSid() == 0x7E)
+        {
+            write("TesterPresent OK (%d回目)", i + 1);
+            break;   // 応答が来たらリトライループを抜ける
+        }
+        retryCount += 1;
+        if (retryCount >= 3)
+        {
+            write("リトライ上限に達しました");
+            continue;   // このスクリプトでは continue しても for 条件により結局抜ける
+        }
+        wait(0.5);
+    }
+
+    write("retryCount=%d", retryCount);
+}

@@ -3519,10 +3519,11 @@ Python の全機能（if/while/変数等）が使えるため、複雑な分岐�
 **`.capl`（CAPL 風の独自 DSL、`tools/uds_tester/capl_dsl.py`）**
 
 `on start`/`on timer`/`on message` という実際の CAPL に近いイベント構文に加えて、
-`variables { }` での変数宣言・`if`/`else`/`while`/`for`・四則演算/比較/論理演算子・
-`this.byte(n)`/`this.id`/`this.dlc`・`write()` の printf 風フォーマットにも対応した、
-自作の字句解析・構文解析・インタプリタによるミニ言語です
-（対応していないもの: 配列・構造体、ユーザー定義関数）。
+`variables { }` での変数宣言 (`byte` 配列を含む)・`if`/`else`/`while`/`for`/
+`switch`/`break`/`continue`・四則演算/比較/論理演算子・複合代入 (`+=` 等)・
+`++`/`--`・`this.byte(n)`/`this.id`/`this.dlc`・`write()` の printf 風フォーマット
+にも対応した、自作の字句解析・構文解析・インタプリタによるミニ言語です
+（対応していないもの: 構造体、ユーザー定義関数）。
 
 ```
 variables
@@ -3539,11 +3540,9 @@ on start
     assert_positive();
     setTimer(keepAlive, 1000);
 
-    i = 0;
-    while (i < 3)
+    for (i = 0; i < 3; i++)
     {
         write("loop ", i);
-        i = i + 1;
     }
 }
 
@@ -3556,36 +3555,40 @@ on timer keepAlive
 
 on message 0x200
 {
-    engineStatusCount = engineStatusCount + 1;
-    if (msgData(0) == 0)
+    engineStatusCount++;
+    switch (msgData(0))
     {
-        write("OFF (", engineStatusCount, "回目)");
-    }
-    else if (msgData(0) == 2)
-    {
-        write("RUNNING (", engineStatusCount, "回目)");
-    }
-    else
-    {
-        write("state=", msgData(0));
+        case 0:
+            write("OFF (", engineStatusCount, "回目)");
+            break;
+        case 2:
+            write("RUNNING (", engineStatusCount, "回目)");
+            break;
+        default:
+            write("state=", msgData(0));
     }
 }
 ```
 
 | 構文/関数 | 説明 |
 |------|------|
-| `variables { int x; float y = 1.5; }` | ファイル冒頭に1つだけ書ける変数宣言ブロック（省略可）。型は `int`/`float` のみ。初期値省略時は `0`/`0.0`。初期値式は定数式のみ（`send()` 等の関数呼び出しは不可。実行前検証が完了する前に副作用のある呼び出しが走ってしまうのを防ぐため）で、前方の宣言を参照することはできる（例: `int b = a * 10;`） |
+| `variables { int x; float y = 1.5; byte data[8]; }` | ファイル冒頭に1つだけ書ける変数宣言ブロック（省略可）。スカラー型は `int`/`float` のみ。初期値省略時は `0`/`0.0`。初期値式は定数式のみ（`send()` 等の関数呼び出しは不可。実行前検証が完了する前に副作用のある呼び出しが走ってしまうのを防ぐため）で、前方の宣言を参照することはできる（例: `int b = a * 10;`）。配列宣言は下記参照 |
+| `byte name[size];` / `byte name[size] = {v0, v1, ...};` / `byte name[] = {v0, ...};` | 固定長 `byte` 配列（`variables{}` の中でのみ宣言可。`byte` は配列専用の型で、角括弧の無いスカラー宣言 `byte x;` はエラーになる）。要素は暗黙に `0`〜`255` に丸められる（`& 0xFF`）。サイズ省略時は初期化リストの長さになる。初期化リストがサイズより短い場合は残りが `0` で埋まる。配列名を添字なしで直接式に書けるのは `send()`/`send_can()` 等の関数呼び出しの直接の引数として渡す場合のみ（下記参照）で、`total = data;` のような代入・`data + 1` のような算術・`data == 0` のような比較には使えない（実行前検証でエラーになる。配列全体への代入もできない（`data = ...;` はエラー）ので、要素ごとに `data[i] = ...;` と書く） |
 | `on start { ... }` | スクリプト開始時に1回実行 |
 | `on timer <name> { ... }` | `setTimer(<name>, ms)` でアームしたタイマーが満了した時に実行（**単発**。CAPL の `msTimer` と同様、繰り返すにはハンドラ内で再度 `setTimer()` を呼ぶ）。タイマー名は `variables{}` での宣言は不要（後述） |
 | `on message <id> { ... }` | 指定 CAN ID のフレームを受信した時に実行（`id` は `0x200` のような16進数か10進数） |
-| `x = expr;` | 代入文（`x` は `variables{}` で宣言済みであること）。C/CAPL の代入と同様、`x` の宣言型 (`int`/`float`) に変換してから代入する（`int` 変数への代入は 0 方向へ切り捨て） |
+| `x = expr;` / `x += expr;` `x -= expr;` `x *= expr;` `x /= expr;` `x %= expr;` / `x++;` `x--;` | 代入文（`x` は `variables{}` で宣言済みであること）。複合代入・インクリメント/デクリメント（後置のみ）は `x = x <op> expr` の代入に脱糖される。C/CAPL の代入と同様、`x` の宣言型 (`int`/`float`) に変換してから代入する（`int` 変数への代入は 0 方向へ切り捨て） |
+| `name[expr] = expr;` | 配列要素への代入文（`name` は `variables{}` で `byte` 配列として宣言済みであること）。添字が範囲外の場合はスクリプト中断（ゼロ除算等と同じ扱い） |
 | `if (expr) { ... } else if (expr) { ... } else { ... }` | 条件分岐（`else if`/`else` は省略可、いくつでも連結可） |
 | `while (expr) { ... }` | 条件が真の間繰り返す（「停止」ボタンでの中断はループの各周回でチェックされる） |
-| `for (init; cond; update) { ... }` | C の `for` と同じ（`init`/`cond`/`update` はいずれも省略可、`for (;;) { ... }` も可）。`init`/`update` は代入文のみ（`i++` 等のインクリメント演算子はないので `i = i + 1` と書く） |
+| `for (init; cond; update) { ... }` | C の `for` と同じ（`init`/`cond`/`update` はいずれも省略可、`for (;;) { ... }` も可）。`init`/`update` には代入・複合代入・`i++`/`i--` のいずれも書ける（例: `for (i = 0; i < 10; i++) { ... }`） |
+| `break;` / `continue;` | `break` は `while`/`for`/`switch` の中でのみ使用可、最も内側のものを抜ける。`continue` は `while`/`for` の中でのみ使用可（`switch` の中に書いた場合は `switch` を素通りして外側の `while`/`for` に効く）。ループ・`switch` の外で使うと実行前検証でエラーになる |
+| `switch (expr) { case N: ... break; case M: case K: ... default: ... }` | C/CAPL と同じフォールスルー動作の多分岐（`break` が無いと次の `case`/`default` に実行が流れ込む）。`case` の値は整数定数のみ（変数・式は不可）。同じ値の `case` の重複、`default` の複数指定はパース時にエラーになる |
 | `+ - * / %`、`== != < > <= >=`、`&& \|\| !`、`( )` | 四則演算・比較・論理演算子（`&&`/`\|\|` は短絡評価）。比較・論理式の結果は `0`/`1` の `int`。`/`・`%` は両辺が `int` の場合は C/CAPL と同じ 0 方向への切り捨て演算（`-7 / 2` は `-3`、Python の `//` のような床方向の丸めにはならない）、どちらかが `float` なら通常の除算・剰余になる。ゼロ除算はスクリプト中断（`wait_response()` のタイムアウト等と同じ扱い） |
-| `send(b0, b1, ...)` / `send_can(can_id, b0, b1, ...)` | Python 版の `send()`/`send_can()` と同じ（バイトは可変長引数） |
+| `send(b0, b1, ...)` / `send_can(can_id, b0, b1, ...)` | Python 版の `send()`/`send_can()` と同じ（バイトは可変長引数）。引数に `byte` 配列を添字なしで渡すと（例: `send(data)`）、配列の全要素を展開してペイロードに含める。個別バイトと配列は混在させられる（例: `send_can(0x100, 0x01, data)`） |
 | `wait_response()` / `wait_response(timeout)` | Python 版と同じ |
 | `assert_positive()` / `assert_negative()` / `assert_negative(nrc)` | Python 版と同じ（`resp` 引数はなく常に直前の応答を見る） |
+| `respSid()` / `respNrc()` / `respByte(n)` / `respIsNegative()` | 直近の `wait_response()`/`security_unlock()` が受信した UDS 応答の SID（正応答なら要求 SID+0x40、負応答なら常に `0x7F`）/NRC（負応答でなければ `0`）/`n` バイト目/負応答かどうか（`0`/`1`）を取得。応答が無ければいずれも `0` を返す。**`msgData(n)`/`this.byte(n)` 等とは別物**で、`wait_response()` の応答フレームは受信ループが直接消費するため `on message`/`msgData()` 側には流れてこない（応答 SID・NRC で分岐したい場合は `switch (respNrc()) { ... }` のようにこちらを使う） |
 | `security_unlock()` | Python 版と同じ |
 | `wait(seconds)` | 指定秒数待機（Python 版と異なり、この待機中も `setTimer` タイマーの発火・`on message` ディスパッチは止まらず動き続ける） |
 | `log(fmt, ...)` / `write(fmt, ...)` | 同じ動作（`write` は CAPL の `write()` に合わせたエイリアス）。第1引数が `%` を含む文字列で、かつ他に引数がある場合は CAPL の `write()` と同様 printf 風の書式文字列（`%d`/`%f`/`%s`/`%x`/`%X`/`%%` 等、Python の `%` 演算子と同じ書式）として扱う。それ以外（引数1つだけ、または `%` を含まない）は従来通りスペース区切りで連結するので、`write("50% 完了")` のような `%` を含む単なるテキストはそのまま出力される |
@@ -3636,8 +3639,10 @@ on message 0x200
 `tools/uds_tester/scripts/example_variables_control_flow.capl`（変数宣言・
 `if`/`else`/`while` を使った例）、
 `tools/uds_tester/scripts/example_for_this_printf.capl`（`for`・
-`this.byte(n)`/`this.id`/`this.dlc`・printf 風フォーマットを使った例）を
-参照してください。
+`this.byte(n)`/`this.id`/`this.dlc`・printf 風フォーマットを使った例）、
+`tools/uds_tester/scripts/example_switch_array.capl`（`switch`/`case`・
+`break`/`continue`・`byte` 配列・複合代入/`++`/`--`・`respSid()`/`respNrc()`
+による UDS 応答の NRC 分岐を使った例）を参照してください。
 
 <a id="nvm"></a>
 #### NvM（Non-Volatile Memory Manager）
