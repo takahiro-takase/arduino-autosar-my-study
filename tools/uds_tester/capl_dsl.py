@@ -217,7 +217,6 @@ class Script:
     on_timer: dict  # name(str) -> list[Stmt]
     on_message: dict  # can_id(int) -> list[Stmt]
 
-
 class _Parser:
     def __init__(self, tokens: list[Token]):
         self._tokens = tokens
@@ -472,6 +471,7 @@ class _Parser:
         return self._parse_primary()
 
     def _parse_primary(self):
+
         tok = self._peek()
         if tok.kind == "HEXNUM":
             self._advance()
@@ -780,6 +780,7 @@ class Interpreter:
         """self._builtins/self._vars (実行時の状態そのもの、別リストとして二重管理
         しない) を情報源として、on start/on timer/on message の全ブロックを走査し、
         未知の関数呼び出し・未宣言の変数参照があれば実行前に DslSyntaxError を送出する。"""
+
         for stmts in self._script.on_start:
             self._validate_block(stmts)
         for stmts in self._script.on_timer.values():
