@@ -1,0 +1,54 @@
+// CAPL 風 DSL の int/float 配列・message 変数のサンプル (.capl)。
+//
+// example_session_check.capl (最小構成) → ... → example_functions.capl
+// (ユーザー定義関数・関数内ローカル変数) に続く第6段。文法の詳細は README.md の
+// 「CAPL 風スクリプト機能」を参照。
+
+variables
+{
+    int dids[3] = {0xF190, 0xF187, 0xF18C};  // 読み出す DID のリスト
+    int i;
+    int okCount;
+    message 0x300 statusMsg;                 // 自作の状態通知フレームを組み立てて送る
+}
+
+// int 配列の要素 (DID) を1つ ReadDataByIdentifier で読み出す。1なら成功。
+// この DSL にはビット演算子 (>>, &) が無いので、上位/下位バイトは
+// 整数除算・剰余 (/, %) で取り出す (did は 0〜0xFFFF の範囲を想定)。
+int readDid(int did)
+{
+    send(0x22, did / 256, did % 256);
+    wait_response();
+    if (respSid() == 0x62)
+    {
+        write("DID 0x%x OK", did);
+        return 1;
+    }
+    write("DID 0x%x NG (NRC=0x%x)", did, respNrc());
+    return 0;
+}
+
+on start
+{
+    write("=== int/float 配列・message のサンプル ===");
+
+    send(0x10, 0x03);      // ExtendedSession へ遷移
+    wait_response();
+    assert_positive();
+    write("ExtendedSession OK");
+
+    for (i = 0; i < 3; i++)
+    {
+        okCount += readDid(dids[i]);
+    }
+    write("読み出し成功 %d/3 件", okCount);
+
+    // message 変数を組み立てて、自作の状態通知フレーム (0x300) を送信する
+    // (output() は send_can() と同様、応答待ちをしない「投げっぱなし」送信)
+    statusMsg.byte(0) = 0x01;   // 例: ステータスコード
+    statusMsg.byte(1) = okCount;
+    statusMsg.dlc = 2;
+    output(statusMsg);
+    write("status frame sent: id=0x%x dlc=%d byte0=0x%x byte1=%d",
+          statusMsg.id, statusMsg.dlc, statusMsg.byte(0), statusMsg.byte(1));
+}
