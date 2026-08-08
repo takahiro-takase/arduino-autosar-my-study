@@ -13,11 +13,10 @@ variables
 }
 
 // int 配列の要素 (DID) を1つ ReadDataByIdentifier で読み出す。1なら成功。
-// この DSL にはビット演算子 (>>, &) が無いので、上位/下位バイトは
-// 整数除算・剰余 (/, %) で取り出す (did は 0〜0xFFFF の範囲を想定)。
+// ビット演算子で上位/下位バイトを取り出す (did は 0〜0xFFFF の範囲を想定)。
 int readDid(int did)
 {
-    send(0x22, did / 256, did % 256);
+    send(0x22, (did >> 8) & 0xFF, did & 0xFF);
     wait_response();
     if (respSid() == 0x62)
     {
