@@ -3521,9 +3521,9 @@ Python の全機能（if/while/変数等）が使えるため、複雑な分岐�
 `on start`/`on timer`/`on message` という実際の CAPL に近いイベント構文に加えて、
 `variables { }` での変数宣言 (`byte` 配列を含む)・`if`/`else`/`while`/`for`/
 `switch`/`break`/`continue`・四則演算/比較/論理演算子・複合代入 (`+=` 等)・
-`++`/`--`・`this.byte(n)`/`this.id`/`this.dlc`・`write()` の printf 風フォーマット
-にも対応した、自作の字句解析・構文解析・インタプリタによるミニ言語です
-（対応していないもの: 構造体、ユーザー定義関数）。
+`++`/`--`・ユーザー定義関数・`this.byte(n)`/`this.id`/`this.dlc`・`write()` の
+printf 風フォーマットにも対応した、自作の字句解析・構文解析・インタプリタによる
+ミニ言語です（対応していないもの: 構造体）。
 
 ```
 variables
@@ -3584,6 +3584,8 @@ on message 0x200
 | `for (init; cond; update) { ... }` | C の `for` と同じ（`init`/`cond`/`update` はいずれも省略可、`for (;;) { ... }` も可）。`init`/`update` には代入・複合代入・`i++`/`i--` のいずれも書ける（例: `for (i = 0; i < 10; i++) { ... }`） |
 | `break;` / `continue;` | `break` は `while`/`for`/`switch` の中でのみ使用可、最も内側のものを抜ける。`continue` は `while`/`for` の中でのみ使用可（`switch` の中に書いた場合は `switch` を素通りして外側の `while`/`for` に効く）。ループ・`switch` の外で使うと実行前検証でエラーになる |
 | `switch (expr) { case N: ... break; case M: case K: ... default: ... }` | C/CAPL と同じフォールスルー動作の多分岐（`break` が無いと次の `case`/`default` に実行が流れ込む）。`case` の値は整数定数のみ（変数・式は不可）。同じ値の `case` の重複、`default` の複数指定はパース時にエラーになる |
+| `int name(int a, float b) { ... }` / `void name(...) { ... }` | ユーザー定義関数。`variables{}`/`on ...` と同じトップレベルにいくつでも書ける。戻り値・仮引数の型は `int`/`float` のみ（`void` は戻り値にのみ使え、配列は仮引数・戻り値どちらにもできない）。定義順に関係なく呼び出せる（前方参照・相互再帰も可）。呼び出しは `add(1, 2)` のように式の中でも `logMsg("x");` のように文としても書ける。組み込み関数と同名の定義、関数名の重複定義はパース/検証時にエラーになる。**ローカル変数は持てない**（仮引数以外の識別子は常にグローバルの `variables{}` を指す。ループカウンタ等が必要なら専用のグローバル変数を用意するか仮引数を使い回す。同じグローバル変数をループカウンタに使う関数同士が互いを呼び出すと内側の呼び出しが外側のカウンタを上書きしてしまうため注意）。仮引数は呼び出し中だけ同名のグローバル変数をシャドーイングし、呼び出しから戻ると元の値に復元される（再帰呼び出しでも正しく退避・復元される） |
+| `return;` / `return expr;` | 関数の中でのみ使える（関数の外で使うと実行前検証でエラー）。`void` 関数は `return;`（または何も `return` せず本体の最後まで到達）のみ可、`int`/`float` 関数は `return expr;` が必須（値なしの `return;` は実行前検証でエラー）。`int`/`float` 関数が分岐によって一度も `return` を実行せずに本体の最後まで到達した場合は（全分岐が `return` するかどうかまでは静的検証しない）、実行時にスクリプト中断になる。void 関数の戻り値を式の中で使おうとする（例: `x = voidFunc();`）のも実行前検証でエラーになる |
 | `+ - * / %`、`== != < > <= >=`、`&& \|\| !`、`( )` | 四則演算・比較・論理演算子（`&&`/`\|\|` は短絡評価）。比較・論理式の結果は `0`/`1` の `int`。`/`・`%` は両辺が `int` の場合は C/CAPL と同じ 0 方向への切り捨て演算（`-7 / 2` は `-3`、Python の `//` のような床方向の丸めにはならない）、どちらかが `float` なら通常の除算・剰余になる。ゼロ除算はスクリプト中断（`wait_response()` のタイムアウト等と同じ扱い） |
 | `send(b0, b1, ...)` / `send_can(can_id, b0, b1, ...)` | Python 版の `send()`/`send_can()` と同じ（バイトは可変長引数）。引数に `byte` 配列を添字なしで渡すと（例: `send(data)`）、配列の全要素を展開してペイロードに含める。個別バイトと配列は混在させられる（例: `send_can(0x100, 0x01, data)`） |
 | `wait_response()` / `wait_response(timeout)` | Python 版と同じ |
@@ -3642,7 +3644,10 @@ on message 0x200
 `this.byte(n)`/`this.id`/`this.dlc`・printf 風フォーマットを使った例）、
 `tools/uds_tester/scripts/example_switch_array.capl`（`switch`/`case`・
 `break`/`continue`・`byte` 配列・複合代入/`++`/`--`・`respSid()`/`respNrc()`
-による UDS 応答の NRC 分岐を使った例）を参照してください。
+による UDS 応答の NRC 分岐を使った例）、
+`tools/uds_tester/scripts/example_functions.capl`（`int`/`void` のユーザー定義
+関数で TesterPresent 送信・DID 読み出しの共通処理を関数化した例）を
+参照してください。
 
 <a id="nvm"></a>
 #### NvM（Non-Volatile Memory Manager）

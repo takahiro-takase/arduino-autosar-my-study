@@ -28,14 +28,39 @@ UDS 送受信の実体は capl_api.CaplContext をそのままランタイム層
       の中でのみ使える。continue は switch を素通りして外側の while/for に効く）
     - switch (expr) { case N: ... break; case M: ... default: ... }  （C/CAPL と
       同じフォールスルー動作。case の値は整数定数のみ）
+    - return; / return expr;  （ユーザー定義関数の中でのみ使える。下記参照）
 
 式は四則演算 (+ - * / %)・比較 (== != < > <= >=)・論理 (&& || !)・丸括弧・
 関数呼び出し・変数参照・配列要素参照 (data[i])・数値/文字列リテラル・
 this.byte(n)/this.id/this.dlc (on message ハンドラ内限定、下記参照) に対応する
-（構造体・ユーザー定義関数は対象外）。配列を添字なしでそのまま参照すると
-(例: send(data)) 全要素のコピーを返す。send()/send_can() はこれを検出して
-配列の全バイトをペイロードに展開するので、CAPL の byte 配列をメッセージの
-ペイロードとして丸ごと送る書き方に近い形で使える (_flatten_bytes() 参照)。
+（構造体は対象外）。配列を添字なしでそのまま参照すると (例: send(data)) 全要素の
+コピーを返す。send()/send_can() はこれを検出して配列の全バイトをペイロードに
+展開するので、CAPL の byte 配列をメッセージのペイロードとして丸ごと送る書き方に
+近い形で使える (_flatten_bytes() 参照)。
+
+ユーザー定義関数:
+
+    int add(int a, int b) { return a + b; }
+    void logRetry(int n) { ... }   // void 関数は return; か何も return せず終了
+
+トップレベル (variables{}/on ... と同じ階層) にいくつでも書ける。型は戻り値・
+仮引数とも int/float のみ (void は戻り値にのみ使え、配列は戻り値にも仮引数にも
+できない)。定義順に関係なく呼び出せる (前方参照・相互再帰も可。全関数の名前を
+実行前に一括登録してから各ブロック・各関数本体を検証する)。void 関数の戻り値を
+式の中で使おうとする (例: `x = voidFunc();`) のは実行前検証でエラーになる。
+int/float 関数が return を一度も実行せずに本体の最後まで到達した場合は (これは
+静的には検出しない。分岐を網羅する制御フロー解析はしていないため) 実行時に
+capl_api.ScriptAbort で中断する。
+
+関数はローカル変数を持てない (仮引数以外の識別子は常にグローバルの variables{}
+を指す)。ループカウンタ等の作業用変数が要る場合は専用のグローバル変数を使うか
+仮引数を使い回す。**同じグローバル変数をループカウンタに使う関数同士が互いを
+呼び出す (直接・間接の再帰を含む) と、内側の呼び出しが外側のループカウンタを
+上書きしてしまう** ため、そのような関数には別々の名前のグローバル変数を割り当てる
+こと (このミニ言語がブロックスコープのローカル変数を持たないことによる制約)。
+仮引数はその関数の中でだけ同名のグローバル変数をシャドーイングし、呼び出しから
+戻ると元の値に復元される (再帰呼び出しでも Python の呼び出しスタックを使って
+正しく退避・復元される、_call_user_function() 参照)。
 
 利用できる関数は Interpreter._make_builtins() を参照 (README.md にも一覧表がある)。
 write(fmt, ...)/log(fmt, ...) は、第1引数が '%' を含む文字列かつ他に引数がある場合、
@@ -66,6 +91,7 @@ from __future__ import annotations
 
 import re
 import time
+from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Optional, Union
 
@@ -167,6 +193,7 @@ def tokenize(source: str) -> list[Token]:
 
 _VAR_TYPES = ("int", "float")
 _ARRAY_TYPES = ("byte",)  # 配列として宣言できる型 (byte[固定長] のみ対応)
+_FUNC_RETURN_TYPES = ("void",) + _VAR_TYPES  # 関数の戻り値の型 (void/int/float。配列は返せない)
 _COMPARISON_TOKENS = {"LT": "<", "GT": ">", "LE": "<=", "GE": ">="}
 _ADDITIVE_TOKENS = {"PLUS": "+", "MINUS": "-"}
 _MULTIPLICATIVE_TOKENS = {"STAR": "*", "SLASH": "/", "PERCENT": "%"}
@@ -347,11 +374,46 @@ class Switch:
 
 
 @dataclass
+class Param:
+    """ユーザー定義関数の仮引数。型は int/float のみ (byte 配列は仮引数にできない。
+    配列は variables{} のグローバル宣言のみが唯一の置き場所、という既存の制約と
+    揃えてある)。"""
+    type_name: str  # "int" | "float"
+    name: str
+    line: int
+
+
+@dataclass
+class FuncDecl:
+    """`void name(int a, float b) { ... }` のようなユーザー定義関数の宣言。
+    return_type は "void"/"int"/"float"。関数はトップレベル (variables{}/on ... と
+    同じ階層) にいくつでも書け、on start/on timer/on message や他の関数から
+    呼び出せる (前方参照・相互再帰も可、_functions は実行前に一括登録するため)。
+    ローカル変数宣言には対応しない (仮引数のみがその関数内で使えるローカルな名前で、
+    それ以外の識別子は常にグローバルの variables{} を指す。関数内で作業用の変数が
+    要る場合はグローバル変数を使うか、仮引数をワークエリアとして使う)。"""
+    return_type: str  # "void" | "int" | "float"
+    name: str
+    params: list  # list[Param]
+    body: list  # list[Stmt]
+    line: int
+
+
+@dataclass
+class Return:
+    """`return;` (void 関数用) / `return expr;` (int/float 関数用)。関数の外
+    (on start/on timer/on message) では使えない (_validate_stmt() 参照)。"""
+    expr: object  # Expr | None
+    line: int
+
+
+@dataclass
 class Script:
     variables: list  # list[VarDecl | ArrayDecl]  (`variables { ... }` ブロック。無ければ空)
     on_start: list  # list[list[Stmt]]  (複数の `on start` は順に実行)
     on_timer: dict  # name(str) -> list[Stmt]
     on_message: dict  # can_id(int) -> list[Stmt]
+    functions: list  # list[FuncDecl]  (トップレベルのユーザー定義関数。無ければ空)
 
 
 class _Parser:
@@ -396,6 +458,7 @@ class _Parser:
         on_start: list = []
         on_timer: dict = {}
         on_message: dict = {}
+        functions: list = []
         while self._peek().kind != "EOF":
             if self._at_ident("variables"):
                 tok = self._peek()
@@ -406,11 +469,20 @@ class _Parser:
                 if on_block_seen:
                     raise DslSyntaxError(
                         f"{tok.line}行目: variables ブロックは on start/on timer/"
-                        "on message より前に書いてください"
+                        "on message・関数定義より前に書いてください"
                     )
                 var_block_seen = True
                 self._advance()
                 variables.extend(self._parse_var_block())
+                continue
+
+            if self._peek().kind == "IDENT" and self._peek().value in _FUNC_RETURN_TYPES:
+                # 関数の呼び出し元は on start 等だけでなく他の関数からもあるため、宣言順に
+                # 制約は課さない (前方参照・相互再帰も可。_register_functions() が実行前に
+                # 全関数を一括登録してから各ブロックを検証するため)。variables{} との
+                # 前後関係だけは on ブロックと同様の制約を課す (on_block_seen を流用)。
+                on_block_seen = True
+                functions.append(self._parse_func_decl())
                 continue
 
             on_block_seen = True
@@ -438,7 +510,27 @@ class _Parser:
                     f"{kind_tok.line}行目: 未対応のイベント種別 '{kind_tok.value}' "
                     "(start/timer/message のみ対応)"
                 )
-        return Script(variables, on_start, on_timer, on_message)
+        return Script(variables, on_start, on_timer, on_message, functions)
+
+    def _parse_func_decl(self) -> FuncDecl:
+        type_tok = self._advance()  # void/int/float (呼び出し元で確認済み)
+        name_tok = self._expect("IDENT")
+        self._expect("LPAREN")
+        params = self._parse_arg_list(lambda i: self._parse_param())
+        self._expect("RPAREN")
+        body = self._parse_block()
+        return FuncDecl(type_tok.value, name_tok.value, params, body, type_tok.line)
+
+    def _parse_param(self) -> Param:
+        type_tok = self._peek()
+        if type_tok.kind != "IDENT" or type_tok.value not in _VAR_TYPES:
+            raise DslSyntaxError(
+                f"{type_tok.line}行目: 引数の型 (int/float) を期待しましたが "
+                f"'{type_tok.value}' でした"
+            )
+        self._advance()
+        name_tok = self._expect("IDENT")
+        return Param(type_tok.value, name_tok.value, name_tok.line)
 
     def _parse_var_block(self) -> list:
         self._expect("LBRACE")
@@ -538,6 +630,13 @@ class _Parser:
             tok = self._advance()
             self._expect("SEMI")
             return Continue(tok.line)
+        if self._at_ident("return"):
+            tok = self._advance()
+            expr = None
+            if self._peek().kind != "SEMI":
+                expr = self._parse_expr()
+            self._expect("SEMI")
+            return Return(expr, tok.line)
         tok = self._peek()
         if tok.kind == "IDENT" and self._peek(1).kind == "LBRACKET":
             return self._parse_index_assignment()
@@ -886,6 +985,17 @@ class _ContinueSignal(Exception):
     同じく switch は continue に対しては透過的なため)。"""
 
 
+class _ReturnSignal(Exception):
+    """return; / return expr; の実行時信号。関数本体の実行 (Interpreter._call_user_function())
+    がこれを捕捉して呼び出し元へ戻り値を渡す。while/for/switch はこれを捕捉しない
+    (_BreakSignal/_ContinueSignal と違って個別の except 節を追加していない) ので、
+    ネストしたループ・switch の中から return しても素通りしてそのまま関数の外まで
+    伝播する (C/CAPL の return と同じ、ループ途中からの即時関数脱出)。"""
+    def __init__(self, value):
+        super().__init__()
+        self.value = value
+
+
 @dataclass
 class _Variable:
     """宣言済み変数 (スカラーも配列も) の実行時状態。type_name は "int"/"float" なら
@@ -915,6 +1025,7 @@ class Interpreter:
         self._vars: dict[str, _Variable] = {}  # スカラー・配列とも (_Variable.is_array 参照)
         self._builtins = self._make_builtins()
         self._this_members = self._make_this_members()
+        self._register_functions()
         # variables{} の宣言を先に検証・評価してから、on start/on timer/on message を
         # 検証する (代入・変数参照が「宣言済みかどうか」を検証する際に self._vars が要る
         # ため)。_init_variables() 内で、初期値式に関数呼び出しが含まれていないことを
@@ -931,12 +1042,22 @@ class Interpreter:
         # 終えた後になってようやく判明する、という事態になりかねないため。
         self._validate()
 
+    # 戻り値を式の中で使わせない (require_value=True の文脈で拒否する) 組み込み関数名。
+    # 実装が Python の None を返しうるもの (send()/send_can() 等は常に None、
+    # cancelTimer() はタイマーが未アームだと dict.pop() の既定値 None) が対象。
+    # ここに載せずに素通しすると、ユーザー定義 void 関数と全く同じ理由で
+    # _coerce(None, 'int'/'float') が未処理の TypeError になる
+    # (例: `x = cancelTimer(未アームのタイマー);`)。
+    _VOID_BUILTINS = frozenset({"send", "send_can", "wait", "log", "write", "setTimer", "cancelTimer"})
+
     def _make_builtins(self) -> dict:
         """関数名 -> (最小引数数, 実装) の辞書。最小引数数を実装と同じ場所で宣言する
         ことで、_validate_expr() の事前チェックと実際の実装が食い違わないようにする
         (別のテーブルで二重管理すると、実装だけ引数を増やして片方の更新を忘れる、
         という保守リスクになるため)。可変長引数を取る send()/send_can() のデータ
-        バイト部分等、"最低いくつ必要か" 以上のことは表現しない。"""
+        バイト部分等、"最低いくつ必要か" 以上のことは表現しない。戻り値が式の中で
+        使えるかどうかは実装から独立して _VOID_BUILTINS で管理する (関数名の集合を
+        見るだけで済み、各エントリのタプルの形を増やさずに済むため)。"""
         ctx = self._ctx
         return {
             "send": (0, lambda args: ctx.send(self._flatten_bytes(args))),
@@ -985,6 +1106,34 @@ class Interpreter:
             "id": (0, lambda args: self._msg_id()),
             "dlc": (0, lambda args: self._msg_dlc()),
         }
+
+    def _register_functions(self) -> None:
+        """トップレベルのユーザー定義関数を名前で引けるようにする。on start 等の
+        検証・実行が始まる前に全関数を一括登録しておくことで、定義順に関係なく
+        呼び出せる (前方参照・相互再帰も可)。組み込み関数と同名の定義・関数名の
+        重複・仮引数名の重複はここで実行前に弾く。仮引数名の重複を許すと、
+        _bound_params() が同じ名前を2回束縛しようとして「1個目の仮引数が束縛した
+        直後の値」を「シャドーイング前の元の値」として誤って退避してしまい、
+        関数呼び出し後 (検証時点でも!) にグローバル変数を恒久的に壊してしまうため
+        (どちらにせよ同名の仮引数が複数あると値が一意に決まらず意味を持たない)。"""
+        self._functions: dict[str, FuncDecl] = {}
+        for func in self._script.functions:
+            if func.name in self._builtins:
+                raise DslSyntaxError(
+                    f"{func.line}行目: 関数 '{func.name}' は組み込み関数と同名のため"
+                    "定義できません"
+                )
+            if func.name in self._functions:
+                raise DslSyntaxError(f"{func.line}行目: 関数 '{func.name}' は既に定義されています")
+            seen_params: set = set()
+            for param in func.params:
+                if param.name in seen_params:
+                    raise DslSyntaxError(
+                        f"{param.line}行目: 関数 '{func.name}' の仮引数 '{param.name}' が"
+                        "重複しています"
+                    )
+                seen_params.add(param.name)
+            self._functions[func.name] = func
 
     @staticmethod
     def _to_int(value: ArgValue) -> int:
@@ -1130,8 +1279,15 @@ class Interpreter:
                 self._reject_calls(decl.init)
                 value = self._eval(decl.init)
             else:
-                value = 0 if decl.type_name == "int" else 0.0
+                value = self._default_value(decl.type_name)
             self._vars[decl.name] = _Variable(decl.type_name, self._coerce(value, decl.type_name))
+
+    @staticmethod
+    def _default_value(type_name: str):
+        """初期化式を省略したスカラー変数、および _validate_function() が仮引数を
+        検証用に一時束縛する際のプレースホルダ値に使う、型ごとの既定値 (int なら 0、
+        float なら 0.0)。両者で同じ int/float 判定を別々に書かないよう1箇所にまとめる。"""
+        return 0 if type_name == "int" else 0.0
 
     @staticmethod
     def _coerce(value, type_name: str):
@@ -1286,16 +1442,78 @@ class Interpreter:
 
     def _call(self, call: Call):
         entry = self._builtins.get(call.name)
-        if entry is None:
-            raise self._unknown_function_error(call)
-        _min_args, fn = entry
-        # setTimer/cancelTimer の第1引数 (TimerName) も _eval() が name をそのまま
-        # 返すので、ここで関数名による特別扱いは不要 (パーサーの _parse_call_arg() 参照)。
-        args = [self._eval(a) for a in call.args]
-        return fn(args)
+        if entry is not None:
+            _min_args, fn = entry
+            # setTimer/cancelTimer の第1引数 (TimerName) も _eval() が name をそのまま
+            # 返すので、ここで関数名による特別扱いは不要 (パーサーの _parse_call_arg() 参照)。
+            args = [self._eval(a) for a in call.args]
+            return fn(args)
+        func = self._functions.get(call.name)
+        if func is not None:
+            arg_values = [self._eval(a) for a in call.args]
+            return self._call_user_function(func, arg_values)
+        raise self._unknown_function_error(call)
+
+    @contextmanager
+    def _bound_params(self, params: list, values: list):
+        """仮引数を self._vars に一時的に束縛するコンテキストマネージャ。with を抜ける際
+        (正常終了・return・例外いずれでも) に、シャドーイングした元の値へ確実に戻す。
+        _call_user_function() (実行時、values は実引数を型変換済みのもの) と
+        _validate_function() (検証時、values は型のプレースホルダ) の両方から使う
+        共通ロジック (退避・復元をそれぞれ別々に実装すると、修正が片方だけに適用されて
+        食い違う保守リスクになるため統一する。with にすることで、呼び出し側が
+        finally での復元を書き忘れる心配もなくなる)。
+
+        同じ名前が複数回渡された場合 (通常は _register_functions() が仮引数名の
+        重複を実行前に拒否するので起きないはずだが、万一のための保険として) は、
+        最初の出現でのみ元の値を退避する。ここを `saved[param.name] = ...` のように
+        無条件に上書きしてしまうと、2回目の退避が「1回目の束縛で書き換わった後の
+        値」を「シャドーイング前の元の値」として誤って記録してしまい、関数呼び出し
+        (や検証) の後にグローバル変数が恒久的に壊れてしまう。"""
+        saved: dict = {}
+        for param, value in zip(params, values):
+            if param.name not in saved:
+                saved[param.name] = self._vars.get(param.name)
+            self._vars[param.name] = _Variable(param.type_name, value)
+        try:
+            yield
+        finally:
+            for name, old in saved.items():
+                if old is None:
+                    self._vars.pop(name, None)
+                else:
+                    self._vars[name] = old
+
+    def _call_user_function(self, func: FuncDecl, arg_values: list):
+        """ユーザー定義関数を呼び出す。仮引数を self._vars に一時的に束縛して本体を
+        実行し、呼び出し前の値に戻す (関数呼び出しは再帰・ネストしうるため、Python の
+        呼び出しスタック自体を使って退避・復元する。再帰呼び出しでも with (try/finally)
+        が LIFO で対応するので、各フレームの仮引数の値は正しく独立する)。仮引数名が
+        たまたまグローバル変数と同じ場合はその関数の中でだけシャドーイングされる。
+        戻り値は _ReturnSignal で受け取る。void 関数は None を返す。int/float 関数が
+        return 文を1度も実行せずに本体の最後まで到達した場合は (return 漏れは静的には
+        検出しない方針、下記 _validate_stmt の Return 検証コメント参照)、
+        capl_api.ScriptAbort で中断する (漏れたまま無意味な既定値で処理が進むよりは、
+        他のランタイムエラーと同様にその場で中断させる方が安全)。"""
+        bound_values = [
+            self._coerce(value, param.type_name) for param, value in zip(func.params, arg_values)
+        ]
+        with self._bound_params(func.params, bound_values):
+            try:
+                self._run_block(func.body)
+                return_value = None
+            except _ReturnSignal as sig:
+                return_value = sig.value
+        if func.return_type == "void":
+            return None
+        if return_value is None:
+            raise capl_api.ScriptAbort(
+                f"関数 '{func.name}' が値を return せずに終了しました"
+            )
+        return self._coerce(return_value, func.return_type)
 
     def _unknown_function_error(self, call: Call) -> DslSyntaxError:
-        known = "/".join(sorted(self._builtins))
+        known = "/".join(sorted(list(self._builtins) + list(self._functions)))
         return DslSyntaxError(f"{call.line}行目: 未知の関数 '{call.name}' ({known} のみ対応)")
 
     # ---- 文の実行 ----
@@ -1343,6 +1561,8 @@ class Interpreter:
             raise _BreakSignal()
         elif isinstance(stmt, Continue):
             raise _ContinueSignal()
+        elif isinstance(stmt, Return):
+            raise _ReturnSignal(self._eval(stmt.expr) if stmt.expr is not None else None)
         else:
             raise DslSyntaxError(f"未対応の文です: {stmt!r}")
 
@@ -1375,37 +1595,56 @@ class Interpreter:
 
     # ---- 実行前の静的検証 ----
     def _validate(self) -> None:
-        """self._builtins/self._vars (実行時の状態そのもの、別リストとして二重管理
-        しない) を情報源として、on start/on timer/on message の全ブロックを走査し、
-        未知の関数呼び出し・未宣言の変数参照・on message ハンドラ外での this 使用が
-        あれば実行前に DslSyntaxError を送出する。self._in_message_handler は on
-        message ブロック内かどうかを表し、this.byte(n) 等が使えるかの判定に使う
+        """self._builtins/self._vars/self._functions (実行時の状態そのもの、別リストとして
+        二重管理しない) を情報源として、on start/on timer/on message・全関数本体の
+        ブロックを走査し、未知の関数呼び出し・未宣言の変数参照・on message ハンドラ外での
+        this 使用があれば実行前に DslSyntaxError を送出する。self._in_message_handler は
+        on message ブロック内かどうかを表し、this.byte(n) 等が使えるかの判定に使う
         (_validate() は構築時に1回しか呼ばれない非再入の走査なので、全ての検証
         メソッドにパラメータとして引き回す代わりにインスタンス属性で持たせる)。"""
         self._in_message_handler = False
         for stmts in self._script.on_start:
-            self._validate_block(stmts, in_loop=False, in_switch=False)
+            self._validate_block(stmts, in_loop=False, in_switch=False, return_type=None)
         for stmts in self._script.on_timer.values():
-            self._validate_block(stmts, in_loop=False, in_switch=False)
+            self._validate_block(stmts, in_loop=False, in_switch=False, return_type=None)
         self._in_message_handler = True
         for stmts in self._script.on_message.values():
-            self._validate_block(stmts, in_loop=False, in_switch=False)
+            self._validate_block(stmts, in_loop=False, in_switch=False, return_type=None)
+        self._in_message_handler = False
+        for func in self._functions.values():
+            self._validate_function(func)
 
-    def _validate_block(self, stmts: list, in_loop: bool, in_switch: bool) -> None:
+    def _validate_function(self, func: FuncDecl) -> None:
+        """関数本体を検証する。仮引数を self._vars に一時的に束縛してから
+        (シャドーイングされる可能性のある同名グローバルは _bound_params() で
+        退避・復元する。_call_user_function() の実行時の退避・復元と共通のロジック)
+        通常のブロック検証に委譲し、return_type=func.return_type を渡すことで本体中の
+        return 文の型チェックが効くようにする。this は関数の中では使えない
+        (on message ハンドラ内で直接使う場合のみを想定した機能で、そこから呼ばれる
+        関数の中まで自動的に有効になるわけではない。呼び出し元の文脈を追跡していないため)。"""
+        placeholders = [self._default_value(param.type_name) for param in func.params]
+        with self._bound_params(func.params, placeholders):
+            self._validate_block(func.body, in_loop=False, in_switch=False, return_type=func.return_type)
+
+    def _validate_block(self, stmts: list, in_loop: bool, in_switch: bool, return_type) -> None:
         for stmt in stmts:
-            self._validate_stmt(stmt, in_loop, in_switch)
+            self._validate_stmt(stmt, in_loop, in_switch, return_type)
 
-    def _validate_stmt(self, stmt, in_loop: bool, in_switch: bool) -> None:
+    def _validate_stmt(self, stmt, in_loop: bool, in_switch: bool, return_type) -> None:
         """in_loop/in_switch は break/continue が使える文脈にいるかを表す
         (break は while/for/switch の中、continue は while/for の中でのみ有効。
         break は最も内側の while/for/switch に、continue は switch を素通りして
         最も内側の while/for に効くという C/CAPL のスコープ規則を、While/For/Switch
         に入るたびにこの2フラグをどう更新して子ブロックへ渡すかで表現している。
+        return_type は現在いる関数の戻り値の型 ("void"/"int"/"float")、on start/
+        on timer/on message の直下では None (return 文自体が使えない文脈)。
+        While/For/Switch のネストでは変わらないのでそのまま子ブロックへ引き継ぐ
+        (関数本体に入るときだけ _validate_function() が新しい値を渡す)。
         _validate() は構築時に1回しか呼ばれない非再入の走査なので、他の検証と違い
-        インスタンス属性ではなく引数で持ち回る (ループ/switch のネストで値が変わる
-        ため、インスタンス属性だと再帰から戻った時に元の文脈に戻す処理が要る)。"""
+        インスタンス属性ではなく引数で持ち回る (ループ/switch/関数のネストで値が
+        変わるため、インスタンス属性だと再帰から戻った時に元の文脈に戻す処理が要る)。"""
         if isinstance(stmt, Call):
-            self._validate_expr(stmt)
+            self._validate_expr(stmt, require_value=False)
         elif isinstance(stmt, Assign):
             var = self._vars.get(stmt.name)
             if var is not None and var.is_array:
@@ -1430,20 +1669,20 @@ class Interpreter:
             self._validate_expr(stmt.expr)
         elif isinstance(stmt, If):
             self._validate_expr(stmt.cond)
-            self._validate_block(stmt.then_block, in_loop, in_switch)
+            self._validate_block(stmt.then_block, in_loop, in_switch, return_type)
             if stmt.else_block is not None:
-                self._validate_block(stmt.else_block, in_loop, in_switch)
+                self._validate_block(stmt.else_block, in_loop, in_switch, return_type)
         elif isinstance(stmt, While):
             self._validate_expr(stmt.cond)
-            self._validate_block(stmt.body, in_loop=True, in_switch=False)
+            self._validate_block(stmt.body, in_loop=True, in_switch=False, return_type=return_type)
         elif isinstance(stmt, For):
             if stmt.init is not None:
-                self._validate_stmt(stmt.init, in_loop, in_switch)
+                self._validate_stmt(stmt.init, in_loop, in_switch, return_type)
             if stmt.cond is not None:
                 self._validate_expr(stmt.cond)
-            self._validate_block(stmt.body, in_loop=True, in_switch=False)
+            self._validate_block(stmt.body, in_loop=True, in_switch=False, return_type=return_type)
             if stmt.update is not None:
-                self._validate_stmt(stmt.update, in_loop, in_switch)
+                self._validate_stmt(stmt.update, in_loop, in_switch, return_type)
         elif isinstance(stmt, Switch):
             self._validate_expr(stmt.expr)
             # continue は switch を素通りして外側の while/for に効くため in_loop は
@@ -1451,7 +1690,22 @@ class Interpreter:
             for entry in stmt.body:
                 if isinstance(entry, CaseLabel):
                     continue
-                self._validate_stmt(entry, in_loop, True)
+                self._validate_stmt(entry, in_loop, True, return_type)
+        elif isinstance(stmt, Return):
+            if return_type is None:
+                raise DslSyntaxError(f"{stmt.line}行目: return は関数の中でのみ使えます")
+            if return_type == "void":
+                if stmt.expr is not None:
+                    raise DslSyntaxError(
+                        f"{stmt.line}行目: void 関数の return に値を付けることはできません"
+                    )
+            else:
+                if stmt.expr is None:
+                    raise DslSyntaxError(
+                        f"{stmt.line}行目: '{return_type}' を返す関数の return には"
+                        "値が必要です"
+                    )
+                self._validate_expr(stmt.expr)
         elif isinstance(stmt, Break):
             if not (in_loop or in_switch):
                 raise DslSyntaxError(
@@ -1465,29 +1719,55 @@ class Interpreter:
         else:
             raise DslSyntaxError(f"未対応の文です: {stmt!r}")
 
-    def _validate_expr(self, node) -> None:
+    def _validate_expr(self, node, require_value: bool = True) -> None:
+        """require_value=False は「この Call は文として呼ばれていて、戻り値を捨てる」
+        ことを表す (_validate_stmt() の Call 分岐からのみ渡される)。それ以外の全ての
+        呼び出し元 (デフォルト True) は戻り値を実際に使う文脈 (代入の右辺・条件式・
+        他の呼び出しの引数等) なので、void 関数をそこで呼ぶのは実行前検証で弾く
+        (void 関数は _call_user_function() が None を返すため、そのまま数値扱いされると
+        _coerce() の int(None) が未処理の TypeError になってしまう。配列の裸参照を
+        値文脈で弾いたのと同じ理由・同じパターン)。"""
         if isinstance(node, Call):
             entry = self._builtins.get(node.name)
-            if entry is None:
-                raise self._unknown_function_error(node)
-            min_args, _fn = entry
-            if len(node.args) < min_args:
-                raise DslSyntaxError(
-                    f"{node.line}行目: '{node.name}' には少なくとも{min_args}個の引数が"
-                    f"必要です ({len(node.args)}個指定されています)"
-                )
-            for arg in node.args:
-                # 配列を丸ごと関数に渡す (send(data) 等) のは、直接の引数としてだけ許可する
-                # (_flatten_bytes() が list をそのまま展開できるのはここだけ)。
-                # data + 1 や total = data のように配列がネストした式・代入に紛れ込むと
-                # list に対して算術・比較・型変換が走って TypeError や意味のない False 判定に
-                # なってしまうため、直接引数以外は下の Var の通常チェックで弾く。
-                if isinstance(arg, Var):
-                    arg_var = self._vars.get(arg.name)
-                    if arg_var is not None and arg_var.is_array:
-                        continue
-                self._validate_expr(arg)
-            return
+            if entry is not None:
+                min_args, _fn = entry
+                if len(node.args) < min_args:
+                    raise DslSyntaxError(
+                        f"{node.line}行目: '{node.name}' には少なくとも{min_args}個の引数が"
+                        f"必要です ({len(node.args)}個指定されています)"
+                    )
+                if require_value and node.name in self._VOID_BUILTINS:
+                    raise DslSyntaxError(
+                        f"{node.line}行目: '{node.name}' の戻り値は式の中では使えません"
+                    )
+                for arg in node.args:
+                    # 配列を丸ごと関数に渡す (send(data) 等) のは、直接の引数としてだけ許可する
+                    # (_flatten_bytes() が list をそのまま展開できるのはここだけ)。
+                    # data + 1 や total = data のように配列がネストした式・代入に紛れ込むと
+                    # list に対して算術・比較・型変換が走って TypeError や意味のない False
+                    # 判定になってしまうため、直接引数以外は下の Var の通常チェックで弾く。
+                    if isinstance(arg, Var):
+                        arg_var = self._vars.get(arg.name)
+                        if arg_var is not None and arg_var.is_array:
+                            continue
+                    self._validate_expr(arg)
+                return
+            func = self._functions.get(node.name)
+            if func is not None:
+                if len(node.args) != len(func.params):
+                    raise DslSyntaxError(
+                        f"{node.line}行目: 関数 '{node.name}' には{len(func.params)}個の"
+                        f"引数が必要です ({len(node.args)}個指定されています)"
+                    )
+                if require_value and func.return_type == "void":
+                    raise DslSyntaxError(
+                        f"{node.line}行目: void 関数 '{node.name}' の戻り値は"
+                        "式の中では使えません"
+                    )
+                for arg in node.args:
+                    self._validate_expr(arg)
+                return
+            raise self._unknown_function_error(node)
         if isinstance(node, Var):
             var = self._vars.get(node.name)
             if var is None:
