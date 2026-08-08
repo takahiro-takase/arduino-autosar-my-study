@@ -65,6 +65,16 @@ class CaplContext:
         self._unclaimed_frames: "collections.deque" = collections.deque(maxlen=32)
 
     @property
+    def last_response(self) -> Optional[uds_link.UdsResponse]:
+        """直近の wait_response()/security_unlock() が受信した UDS 応答 (無ければ None)。
+        `.py` スクリプトは wait_response() の戻り値をそのまま Python オブジェクトとして
+        受け取れるので不要だが、`.capl` DSL には式の中で NRC 等を読む手段が無いため
+        (assert_positive()/assert_negative() は成否判定して中断するだけで、値を読んで
+        分岐する用途には使えない)、capl_dsl.py の respSid()/respNrc()/respByte(n) 等の
+        ビルトインがここ経由で読む。"""
+        return self._last_response
+
+    @property
     def bus(self):
         """現在接続中の python-can Bus。app.py の他ワーカー (_periodic_can_worker 等)
         と同じく、呼ぶたびに GUI 側の self.bus を読み直すことで切断/再接続に追従する
