@@ -29,6 +29,10 @@ UDS 送受信の実体は capl_api.CaplContext をそのままランタイム層
     - switch (expr) { case N: ... break; case M: ... default: ... }  （C/CAPL と
       同じフォールスルー動作。case の値は整数定数のみ）
     - return; / return expr;  （ユーザー定義関数の中でのみ使える。下記参照）
+    - ローカル変数宣言: int x; / int x = expr; / byte data[n];  （ユーザー定義関数の
+      **直接の本体でのみ** 書ける。if/while/for/switch の中には書けない
+      (パース時にエラー)。variables{} と同じ書き方だが `variables { }` では
+      包まない。下記「ユーザー定義関数」参照）
 
 式は四則演算 (+ - * / %)・比較 (== != < > <= >=)・論理 (&& || !)・丸括弧・
 関数呼び出し・変数参照・配列要素参照 (data[i])・数値/文字列リテラル・
@@ -52,15 +56,26 @@ int/float 関数が return を一度も実行せずに本体の最後まで到�
 静的には検出しない。分岐を網羅する制御フロー解析はしていないため) 実行時に
 capl_api.ScriptAbort で中断する。
 
-関数はローカル変数を持てない (仮引数以外の識別子は常にグローバルの variables{}
-を指す)。ループカウンタ等の作業用変数が要る場合は専用のグローバル変数を使うか
-仮引数を使い回す。**同じグローバル変数をループカウンタに使う関数同士が互いを
-呼び出す (直接・間接の再帰を含む) と、内側の呼び出しが外側のループカウンタを
-上書きしてしまう** ため、そのような関数には別々の名前のグローバル変数を割り当てる
-こと (このミニ言語がブロックスコープのローカル変数を持たないことによる制約)。
-仮引数はその関数の中でだけ同名のグローバル変数をシャドーイングし、呼び出しから
-戻ると元の値に復元される (再帰呼び出しでも Python の呼び出しスタックを使って
-正しく退避・復元される、_call_user_function() 参照)。
+関数本体では、仮引数に加えて `int x;`/`byte data[n];` のようなローカル変数宣言も
+文として (variables{} で包まずに直接) 書ける。ローカル変数は**関数スコープ**
+(ブロックスコープではない): 宣言した位置から関数の終わりまでどこからでも参照できる。
+ただし**宣言できるのは関数の直接の本体だけ**で、if/while/for/switch の中には
+書けない (パース時にエラーになる)。これは意図的な制約: `_validate_stmt()` は
+if/while/for/switch の全分岐を無条件に (実際にその回の呼び出しで実行されるか
+どうかに関わらず) 辿って検証するのに対し、`_exec_stmt()` はその回の呼び出しで
+実際にその分岐が実行された場合にしかローカル変数を束縛しない。もし分岐の中での
+宣言を許すと、宣言している分岐が実行されない呼び出しに限って、検証は通るのに
+実行時にクラッシュする (未宣言の変数エラー、最悪 KeyError) という、
+"副作用が起きる前に全て検証する" という設計の目的を無効化する失敗パターンに
+なってしまう。関数の直接の本体は (前方に return 等の早期脱出が無い限り) 常に
+同じ順序で無条件に実行されるので、宣言を常にそこに限定すればこの食い違いは
+構造的に起こり得ない。ループ内で毎回リセットしたい作業用変数は、ループの外
+(関数の直接の本体) で宣言してからループの中で代入する。仮引数・ローカル変数とも、
+その関数の中でだけ同名のグローバル変数をシャドーイングし、呼び出しから戻ると
+元の値に復元される (再帰呼び出しでも Python の呼び出しスタックを使って各呼び出し
+フレームが独立して正しく退避・復元される、Interpreter._bound_params()/
+_declare_local() 参照)。仮引数・ローカル変数とも on start/on timer/on message や
+variables{} の中では書けない (関数の中限定)。
 
 利用できる関数は Interpreter._make_builtins() を参照 (README.md にも一覧表がある)。
 write(fmt, ...)/log(fmt, ...) は、第1引数が '%' を含む文字列かつ他に引数がある場合、
@@ -193,6 +208,7 @@ def tokenize(source: str) -> list[Token]:
 
 _VAR_TYPES = ("int", "float")
 _ARRAY_TYPES = ("byte",)  # 配列として宣言できる型 (byte[固定長] のみ対応)
+_DECL_TYPES = _VAR_TYPES + _ARRAY_TYPES  # 変数宣言 (variables{}・ローカル共通) で使える型
 _FUNC_RETURN_TYPES = ("void",) + _VAR_TYPES  # 関数の戻り値の型 (void/int/float。配列は返せない)
 _COMPARISON_TOKENS = {"LT": "<", "GT": ">", "LE": "<=", "GE": ">="}
 _ADDITIVE_TOKENS = {"PLUS": "+", "MINUS": "-"}
@@ -389,13 +405,22 @@ class FuncDecl:
     return_type は "void"/"int"/"float"。関数はトップレベル (variables{}/on ... と
     同じ階層) にいくつでも書け、on start/on timer/on message や他の関数から
     呼び出せる (前方参照・相互再帰も可、_functions は実行前に一括登録するため)。
-    ローカル変数宣言には対応しない (仮引数のみがその関数内で使えるローカルな名前で、
-    それ以外の識別子は常にグローバルの variables{} を指す。関数内で作業用の変数が
-    要る場合はグローバル変数を使うか、仮引数をワークエリアとして使う)。"""
+    仮引数に加えて、body の直接の要素として `int x;`/`byte data[n];` のようなローカル
+    変数宣言 (VarDecl/ArrayDecl) も混ぜて書ける。ローカル変数はブロックスコープでは
+    なく関数スコープ (宣言した位置から関数の終わりまでどこからでも参照できる) だが、
+    宣言できるのは body の直接の要素としてのみで、if/while/for/switch の中には
+    書けない (パーサーが _parse_nested_block() でこれを強制する)。理由: 検証
+    (_validate_stmt()) は条件分岐の全枝を無条件に辿るが、実行 (_exec_stmt()) は
+    実際に実行された枝でしかローカル変数を束縛しないため、分岐の中だけで宣言を
+    許すと検証は通るのに実行時にクラッシュしうる。body が常に無条件・同じ順序で
+    実行されることを保証することで、この食い違いを構造的に防ぐ。仮引数・ローカル
+    変数とも on start/on timer/on message や variables{} の中では書けない
+    (関数の中限定)。"""
     return_type: str  # "void" | "int" | "float"
     name: str
     params: list  # list[Param]
-    body: list  # list[Stmt]
+    body: list  # list[Stmt]  (VarDecl/ArrayDecl が body の直接の要素として混在しうる。
+                 # if/while/for/switch の内側には混在しない、_parse_nested_block() 参照)
     line: int
 
 
@@ -420,6 +445,21 @@ class _Parser:
     def __init__(self, tokens: list[Token]):
         self._tokens = tokens
         self._pos = 0
+        # ローカル変数宣言文 (`int x;` 等) が今どこまで書けるかを表す3値の状態。
+        # None: 関数の外 (variables{}/on start 等)。ローカル宣言は使えず、下の
+        #       _parse_statement() では「文として不正なトークン」の通常のエラーになる。
+        # True: 関数の「直接の」本体。ローカル宣言を文として受け付ける。
+        # False: 関数の中だが if/while/for/switch でネストした本体
+        #        (_suspend_local_decls() 参照)。「関数の中だがネストが深すぎる」という
+        #        より具体的なエラーを出すために、「そもそも関数の外」(None) と区別する。
+        #
+        # ローカル宣言を関数の直接の本体だけに限定するのは意図的な制約: 条件分岐の中
+        # だけで宣言を許すと、全分岐を無条件に辿る検証と、その回に実際に実行された
+        # 分岐でしか束縛しない実行との間で食い違いが起き、検証を通っても実行時に
+        # 未束縛エラーになりうる (_suspend_local_decls() のコメント参照)。関数はネストして
+        # 定義できない文法 (トップレベルにしか書けない) なので、スタックではなく
+        # 単純な1つの状態で足りる。
+        self._local_decl_scope: Optional[bool] = None
 
     def _peek(self, offset: int = 0) -> Token:
         idx = min(self._pos + offset, len(self._tokens) - 1)
@@ -518,7 +558,15 @@ class _Parser:
         self._expect("LPAREN")
         params = self._parse_arg_list(lambda i: self._parse_param())
         self._expect("RPAREN")
-        body = self._parse_block()
+        # 本体の解析中だけ _local_decl_scope=True にして、int x; のようなローカル変数
+        # 宣言文を _parse_statement() が受け付けられるようにする (関数はネストして
+        # 定義できないので、単純に立てて finally で戻すだけでよい。ネストした
+        # if/while/for/switch の中は _suspend_local_decls() が一時的に False にする)。
+        self._local_decl_scope = True
+        try:
+            body = self._parse_block()
+        finally:
+            self._local_decl_scope = None
         return FuncDecl(type_tok.value, name_tok.value, params, body, type_tok.line)
 
     def _parse_param(self) -> Param:
@@ -542,7 +590,7 @@ class _Parser:
 
     def _parse_var_decl(self):
         type_tok = self._peek()
-        if type_tok.kind != "IDENT" or type_tok.value not in (_VAR_TYPES + _ARRAY_TYPES):
+        if type_tok.kind != "IDENT" or type_tok.value not in _DECL_TYPES:
             raise DslSyntaxError(
                 f"{type_tok.line}行目: 変数の型 (int/float/byte) を期待しましたが "
                 f"'{type_tok.value}' でした"
@@ -609,6 +657,39 @@ class _Parser:
         self._expect("RBRACE")
         return stmts
 
+    @contextmanager
+    def _suspend_local_decls(self):
+        """if/while/for/switch の本体のように、関数の直接の本体ではないブロックを解析する
+        間だけ、ローカル変数宣言文 (int x; 等) を一時的に禁止する (_local_decl_scope 参照)。
+        理由: _validate_stmt() は if/while/for/switch の全分岐を無条件に (実際にその回の
+        呼び出しで実行されるかどうかに関わらず) 辿って VarDecl/ArrayDecl を self._vars に
+        登録するのに対し、_exec_stmt() はその回の呼び出しで実際にその分岐が実行された
+        場合にしか束縛しない。条件分岐の中でだけ宣言されたローカル変数を分岐の外や
+        後続で参照すると、検証 (全分岐を無条件に辿るので登録済みに見える) は通るのに
+        実行時に「未宣言の変数」(読み取り) や KeyError (代入) でクラッシュしうる ──
+        まさに _validate() が実行前に防ごうとしている失敗パターンそのものになって
+        しまう。ローカル宣言を関数の直接の本体 (常に無条件に実行される) だけに限定
+        すれば、検証も実行も同じ本体リストを同じ順序で辿るだけなので、この食い違いは
+        構造的に起こり得ない。
+
+        現在の状態 (外側が「関数の外」(None) でも「関数の直接の本体」(True) でも)
+        をどちらも一律 False (ネスト中) に変え、with を抜けたら元に戻す (else if の
+        連鎖等、任意の深さのネストでも安全に動く)。_parse_nested_block()/_parse_switch()
+        の両方から使う (switch は CaseLabel の混在があり _parse_block() をそのまま
+        使えないため、_parse_nested_block() 経由にできず個別に with で包む)。"""
+        outer = self._local_decl_scope
+        self._local_decl_scope = False
+        try:
+            yield
+        finally:
+            self._local_decl_scope = outer
+
+    def _parse_nested_block(self) -> list:
+        """if/while/for の本体のように、関数の直接の本体ではないブロックを解析する
+        (ローカル変数宣言文を一時的に禁止する理由は _suspend_local_decls() 参照)。"""
+        with self._suspend_local_decls():
+            return self._parse_block()
+
     # 代入文の先頭 (IDENT の次) に来うるトークン。単純代入 (=) に加え、複合代入・
     # インクリメント/デクリメントも _parse_assignment_expr() 側で1箇所にまとめて処理する。
     _ASSIGN_START_TOKENS = ("ASSIGN", "INC", "DEC") + tuple(_COMPOUND_ASSIGN_TOKENS)
@@ -637,6 +718,23 @@ class _Parser:
                 expr = self._parse_expr()
             self._expect("SEMI")
             return Return(expr, tok.line)
+        # 関数の直接の本体の中でだけ、int x; / byte data[n]; のようなローカル変数宣言を
+        # 文として書ける (_parse_var_decl() は variables{} ブロックの中でも使う
+        # 共通のパーサーで、VarDecl/ArrayDecl を返して末尾のセミコロンまで読み切る)。
+        if self._peek().kind == "IDENT" and self._peek().value in _DECL_TYPES:
+            if self._local_decl_scope is True:
+                return self._parse_var_decl()
+            if self._local_decl_scope is False:
+                # 関数の中ではあるが if/while/for/switch でネストしすぎている
+                # (_suspend_local_decls() 参照)。生の「文として不正なトークン」より
+                # 具体的な理由を示す。self._local_decl_scope is None (そもそも関数の外)
+                # のときはこの分岐に入らず、下の通常の「文として不正なトークン」に落ちる。
+                tok = self._peek()
+                raise DslSyntaxError(
+                    f"{tok.line}行目: ローカル変数宣言は関数の直接の本体でのみ書けます "
+                    "(if/while/for/switch の中には書けません。関数の先頭付近で"
+                    "宣言してください)"
+                )
         tok = self._peek()
         if tok.kind == "IDENT" and self._peek(1).kind == "LBRACKET":
             return self._parse_index_assignment()
@@ -653,14 +751,14 @@ class _Parser:
         self._expect("LPAREN")
         cond = self._parse_expr()
         self._expect("RPAREN")
-        then_block = self._parse_block()
+        then_block = self._parse_nested_block()
         else_block = None
         if self._at_ident("else"):
             self._advance()
             if self._at_ident("if"):
                 else_block = [self._parse_if()]
             else:
-                else_block = self._parse_block()
+                else_block = self._parse_nested_block()
         return If(cond, then_block, else_block, if_tok.line)
 
     def _parse_while(self) -> While:
@@ -668,7 +766,7 @@ class _Parser:
         self._expect("LPAREN")
         cond = self._parse_expr()
         self._expect("RPAREN")
-        body = self._parse_block()
+        body = self._parse_nested_block()
         return While(cond, body, while_tok.line)
 
     def _parse_for(self) -> For:
@@ -686,7 +784,7 @@ class _Parser:
         if self._peek().kind != "RPAREN":
             update = self._parse_assignment_expr()
         self._expect("RPAREN")
-        body = self._parse_block()
+        body = self._parse_nested_block()
         return For(init, cond, update, body, for_tok.line)
 
     def _parse_assignment_expr(self) -> Assign:
@@ -748,26 +846,31 @@ class _Parser:
         body = []
         case_index: dict = {}
         default_index = None
-        while self._peek().kind != "RBRACE":
-            if self._at_ident("case"):
-                case_tok = self._advance()
-                value = self._parse_case_value()
-                self._expect("COLON")
-                if value in case_index:
-                    raise DslSyntaxError(
-                        f"{case_tok.line}行目: case {value} が重複しています"
-                    )
-                case_index[value] = len(body)
-                body.append(CaseLabel(value, case_tok.line))
-            elif self._at_ident("default"):
-                default_tok = self._advance()
-                self._expect("COLON")
-                if default_index is not None:
-                    raise DslSyntaxError(f"{default_tok.line}行目: default が重複しています")
-                default_index = len(body)
-                body.append(CaseLabel(None, default_tok.line))
-            else:
-                body.append(self._parse_statement())
+        # switch 本体も if/while/for の本体と同じ「関数の直接の本体ではないブロック」
+        # なので、ローカル変数宣言文は許可しない (_suspend_local_decls() 参照。switch は
+        # CaseLabel の混在があり _parse_block() をそのまま使えないため、
+        # _parse_nested_block() を経由できず個別に with で包む)。
+        with self._suspend_local_decls():
+            while self._peek().kind != "RBRACE":
+                if self._at_ident("case"):
+                    case_tok = self._advance()
+                    value = self._parse_case_value()
+                    self._expect("COLON")
+                    if value in case_index:
+                        raise DslSyntaxError(
+                            f"{case_tok.line}行目: case {value} が重複しています"
+                        )
+                    case_index[value] = len(body)
+                    body.append(CaseLabel(value, case_tok.line))
+                elif self._at_ident("default"):
+                    default_tok = self._advance()
+                    self._expect("COLON")
+                    if default_index is not None:
+                        raise DslSyntaxError(f"{default_tok.line}行目: default が重複しています")
+                    default_index = len(body)
+                    body.append(CaseLabel(None, default_tok.line))
+                else:
+                    body.append(self._parse_statement())
         self._expect("RBRACE")
         return Switch(expr, body, case_index, default_index, switch_tok.line)
 
@@ -1023,6 +1126,15 @@ class Interpreter:
         self._armed_timers: dict[str, float] = {}  # name -> 発火時刻 (time.monotonic())
         self._last_message: Optional[object] = None  # can.Message (on message ハンドラ内でのみ有効)
         self._vars: dict[str, _Variable] = {}  # スカラー・配列とも (_Variable.is_array 参照)
+        # 現在実行/検証中の関数呼び出しフレームの退避辞書 (_bound_params() が内部で
+        # 管理する saved と同じもの。関数の外では None)。仮引数の束縛だけでなく、
+        # 関数本体中のローカル変数宣言文 (int x; 等、_exec_stmt()/_validate_stmt() の
+        # VarDecl/ArrayDecl 分岐参照) もこの辞書に「シャドーイング前の値」を書き足して
+        # いく。関数呼び出しは再帰・ネストしうるため、_bound_params() が with ブロックの
+        # 前後でこの属性自体を退避・復元することで、Python の呼び出しスタックに乗せて
+        # スタックのように振る舞わせている (インスタンス属性1つで済ませられるのは、
+        # 検証は非再入・実行はネストのたびに正しく退避復元するため)。
+        self._current_locals: Optional[dict] = None
         self._builtins = self._make_builtins()
         self._this_members = self._make_this_members()
         self._register_functions()
@@ -1269,11 +1381,7 @@ class Interpreter:
                 if decl.init is not None:
                     for item in decl.init:
                         self._reject_calls(item)
-                    values = [self._to_byte(self._eval(item)) for item in decl.init]
-                else:
-                    values = []
-                values.extend([0] * (decl.size - len(values)))
-                self._vars[decl.name] = _Variable("byte", values)
+                self._vars[decl.name] = _Variable("byte", self._eval_array_values(decl.init, decl.size))
                 continue
             if decl.init is not None:
                 self._reject_calls(decl.init)
@@ -1281,6 +1389,20 @@ class Interpreter:
             else:
                 value = self._default_value(decl.type_name)
             self._vars[decl.name] = _Variable(decl.type_name, self._coerce(value, decl.type_name))
+
+    def _eval_array_values(self, init: Optional[list], size: int) -> list:
+        """ArrayDecl (variables{} のトップレベル配列宣言、および関数内のローカル配列宣言
+        _exec_stmt() の ArrayDecl 分岐参照) の初期化リストを評価し、サイズ分だけ0埋めした
+        list[int] を返す共通ロジック。初期化式に関数呼び出しを許すかどうか
+        (_reject_calls の要否) は呼び出し元ごとに事情が異なる (variables{} は
+        Interpreter 構築中に評価されるため不可、ローカル宣言は run() 開始後にしか
+        実行されないため可、_validate_stmt() 参照) ので、ここでは扱わない。"""
+        if init is not None:
+            values = [self._to_byte(self._eval(item)) for item in init]
+        else:
+            values = []
+        values.extend([0] * (size - len(values)))
+        return values
 
     @staticmethod
     def _default_value(type_name: str):
@@ -1469,15 +1591,27 @@ class Interpreter:
         最初の出現でのみ元の値を退避する。ここを `saved[param.name] = ...` のように
         無条件に上書きしてしまうと、2回目の退避が「1回目の束縛で書き換わった後の
         値」を「シャドーイング前の元の値」として誤って記録してしまい、関数呼び出し
-        (や検証) の後にグローバル変数が恒久的に壊れてしまう。"""
+        (や検証) の後にグローバル変数が恒久的に壊れてしまう。
+
+        併せて self._current_locals をこの with ブロックの間だけ saved に向ける
+        (呼び出し元は退避辞書の存在を意識しなくてよい)。関数本体中のローカル変数
+        宣言文 (int x; 等) は実行/検証されるたびに同じ saved へ「シャドーイング前の
+        値」を書き足していく (_exec_stmt()/_validate_stmt() の VarDecl/ArrayDecl 分岐
+        参照) ので、仮引数もローカル変数も1つの退避辞書・1回の with で一括して
+        束縛・復元できる。ネスト (関数呼び出しの再帰) しても、with を抜ける際に
+        self._current_locals を外側の値へ戻すので、Python の呼び出しスタックに
+        乗って正しく独立する。"""
         saved: dict = {}
         for param, value in zip(params, values):
             if param.name not in saved:
                 saved[param.name] = self._vars.get(param.name)
             self._vars[param.name] = _Variable(param.type_name, value)
+        outer_locals = self._current_locals
+        self._current_locals = saved
         try:
             yield
         finally:
+            self._current_locals = outer_locals
             for name, old in saved.items():
                 if old is None:
                     self._vars.pop(name, None)
@@ -1516,6 +1650,42 @@ class Interpreter:
         known = "/".join(sorted(list(self._builtins) + list(self._functions)))
         return DslSyntaxError(f"{call.line}行目: 未知の関数 '{call.name}' ({known} のみ対応)")
 
+    def _declare_local(self, name: str, type_name: str, value) -> None:
+        """関数の直接の本体中のローカル変数宣言文 (`int x;`/`byte data[n];` が
+        VarDecl/ArrayDecl として通常の文に混ざって現れたもの) を実行/検証する
+        共通処理。パーサーが if/while/for/switch の中では宣言文を許さない
+        (_parse_nested_block() 参照) ため、ここは必ず「その関数の直接の本体を
+        1回だけ順に辿る」呼び出し元 (_run_block(func.body)/_validate_block(func.body,...))
+        からしか呼ばれない。現在の呼び出しフレームの退避辞書 (self._current_locals、
+        _bound_params() が管理) に「シャドーイング前の値」を初出のときだけ記録してから
+        self._vars を束縛し直す (_bound_params() の仮引数束縛と全く同じガード。
+        同名の宣言文が万一同じ本体に複数回書かれていても、2回目以降に「今の値」を
+        誤って元の値として記録してしまわないための保険)。self._current_locals は
+        関数の中でしか None にならない (VarDecl/ArrayDecl を文として解析できるのは
+        パーサーが関数の直接の本体を読んでいる間だけ) ので、ここが None のまま
+        呼ばれることは無い前提で書いている。"""
+        if name not in self._current_locals:
+            self._current_locals[name] = self._vars.get(name)
+        self._vars[name] = _Variable(type_name, value)
+
+    def _check_local_not_declared(self, name: str, line: int) -> None:
+        """ローカル変数宣言文 (VarDecl/ArrayDecl) を検証する際、同じ名前が既に
+        仮引数またはこの関数内の別のローカル変数として使われていないか確認する
+        (_validate_stmt() の VarDecl/ArrayDecl 分岐から使う)。self._current_locals は
+        _bound_params() が仮引数で事前に埋め、_declare_local() がローカル宣言のたびに
+        追記していく退避辞書なので、そのキーに含まれているかどうかがそのまま
+        「この関数のスコープで既に使われている名前かどうか」になる (グローバル変数を
+        シャドーイングするだけの新規宣言は許可したいので、self._vars 全体ではなく
+        self._current_locals だけを見る)。トップレベルの variables{} 宣言の重複を
+        _init_variables() が、仮引数の重複を _register_functions() が、それぞれ実行前に
+        弾いているのと同じ理由 (このチェックが無いと、コピペミスによる同名の重複宣言が
+        黙って上書き・シャドーイングされてしまい、片方の宣言が意味を持たなくなる)。"""
+        if name in self._current_locals:
+            raise DslSyntaxError(
+                f"{line}行目: ローカル変数 '{name}' は仮引数または既存のローカル変数と"
+                "名前が重複しています"
+            )
+
     # ---- 文の実行 ----
     def _exec_stmt(self, stmt) -> None:
         if isinstance(stmt, Call):
@@ -1526,6 +1696,11 @@ class Interpreter:
         elif isinstance(stmt, IndexAssign):
             arr, idx = self._resolve_array_index(stmt.name, stmt.index, stmt.line)
             arr[idx] = self._to_byte(self._eval(stmt.expr))
+        elif isinstance(stmt, VarDecl):
+            value = self._eval(stmt.init) if stmt.init is not None else self._default_value(stmt.type_name)
+            self._declare_local(stmt.name, stmt.type_name, self._coerce(value, stmt.type_name))
+        elif isinstance(stmt, ArrayDecl):
+            self._declare_local(stmt.name, "byte", self._eval_array_values(stmt.init, stmt.size))
         elif isinstance(stmt, If):
             if self._truthy(self._eval(stmt.cond)):
                 self._run_block(stmt.then_block)
@@ -1667,6 +1842,22 @@ class Interpreter:
                 )
             self._validate_expr(stmt.index)
             self._validate_expr(stmt.expr)
+        elif isinstance(stmt, VarDecl):
+            # ローカル変数の初期値式は (variables{} のグローバル初期値式と違い) 定数式に
+            # 制限しない。関数本体はスクリプト全体の検証が完了してから初めて実行される
+            # ため (_call_user_function() は run() 開始後にしか呼ばれない)、
+            # 副作用のある呼び出しをここで許しても "検証完了前は何も実行しない" という
+            # 前提は崩れない (_reject_calls() が variables{} 側だけに要る理由の裏返し)。
+            self._check_local_not_declared(stmt.name, stmt.line)
+            if stmt.init is not None:
+                self._validate_expr(stmt.init)
+            self._declare_local(stmt.name, stmt.type_name, self._default_value(stmt.type_name))
+        elif isinstance(stmt, ArrayDecl):
+            self._check_local_not_declared(stmt.name, stmt.line)
+            if stmt.init is not None:
+                for item in stmt.init:
+                    self._validate_expr(item)
+            self._declare_local(stmt.name, "byte", [0] * stmt.size)
         elif isinstance(stmt, If):
             self._validate_expr(stmt.cond)
             self._validate_block(stmt.then_block, in_loop, in_switch, return_type)

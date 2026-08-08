@@ -1,19 +1,11 @@
-// CAPL 風 DSL のユーザー定義関数のサンプル (.capl)。
+// CAPL 風 DSL のユーザー定義関数・関数内ローカル変数のサンプル (.capl)。
 //
 // example_session_check.capl (最小構成) → example_variables_control_flow.capl
 // (variables{}/if/while) → example_for_this_printf.capl (for/this構文/printf) →
 // example_switch_array.capl (switch/配列) に続く第5段。文法の詳細は README.md の
 // 「CAPL 風スクリプト機能」を参照。
 
-variables
-{
-    int i;
-    int okCount;
-}
-
 // int 関数: TesterPresent を1回送って応答有無を 1/0 で返す。
-// 関数はローカル変数を持てないので、作業用に仮引数以外の変数は使わない
-// (ここでは仮引数も無し。応答内容の判定は respSid() で行う)。
 int testerPresentOnce()
 {
     send(0x3E, 0x00);
@@ -23,6 +15,25 @@ int testerPresentOnce()
         return 1;
     }
     return 0;
+}
+
+// int 関数 + ローカル変数: TesterPresent を3回送って成功回数を返す。
+// successCount/i は variables{} に置かず、この関数の中だけで使うローカル変数として
+// 宣言している (`variables { }` で包む必要はない)。呼び出しが終わるとこの2つの
+// 名前は忘れられ、他の関数やグローバルの同名変数と干渉しない。
+int testerPresentRetries()
+{
+    int successCount;
+    int i;
+    for (i = 0; i < 3; i++)
+    {
+        if (testerPresentOnce())
+        {
+            successCount++;
+        }
+        wait(0.5);
+    }
+    return successCount;
 }
 
 // void 関数: DID 読み出し+結果ログ出力という一連の処理をまとめる。
@@ -43,22 +54,14 @@ void readDid(int didHigh, int didLow)
 
 on start
 {
-    write("=== ユーザー定義関数のサンプル ===");
+    write("=== ユーザー定義関数・ローカル変数のサンプル ===");
 
     send(0x10, 0x03);      // ExtendedSession へ遷移
     wait_response();
     assert_positive();
     write("ExtendedSession OK");
 
-    for (i = 0; i < 3; i++)
-    {
-        if (testerPresentOnce())   // int 関数の戻り値をそのまま条件式に使える
-        {
-            okCount++;
-        }
-        wait(0.5);
-    }
-    write("TesterPresent 成功 %d/3 回", okCount);
+    write("TesterPresent 成功 %d/3 回", testerPresentRetries());
 
     readDid(0xF1, 0x90);   // VIN
     readDid(0xF1, 0x87);   // 例: 別の DID (未実装なら NRC 分岐側のログが出る)
