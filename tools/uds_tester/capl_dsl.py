@@ -254,6 +254,68 @@ class Script:
     on_timer: dict  # name(str) -> list[Stmt]
     on_message: dict  # can_id(int) -> list[Stmt]
 
+@dataclass
+class TimerName:
+    """setTimer(name, ms)/cancelTimer(name) の第1引数専用のノード。CAPL の msTimer 型
+    変数と違い、識別子の綴りそのものがタイマー名になる (on timer <name> ブロックとの
+    対応もこの綴りで取る)。int/float 変数のように宣言して値を持つものではないため、
+    Var とは別の型にして混同を防ぐ。"""
+    name: str
+    line: int
+
+
+@dataclass
+class BinOp:
+    op: str  # "+" "-" "*" "/" "%" "==" "!=" "<" ">" "<=" ">=" "&&" "||"
+    left: object  # Expr
+    right: object  # Expr
+    line: int
+
+
+@dataclass
+class UnaryOp:
+    op: str  # "-" "!"
+    operand: object  # Expr
+    line: int
+
+
+@dataclass
+class VarDecl:
+    type_name: str  # "int" | "float"
+    name: str
+    init: object  # Expr | None
+    line: int
+
+
+@dataclass
+class Assign:
+    name: str
+    expr: object  # Expr
+    line: int
+
+
+@dataclass
+class If:
+    cond: object  # Expr
+    then_block: list  # list[Stmt]
+    else_block: Optional[list]  # else if は [If(...)] という1要素のリストで表現する
+    line: int
+
+
+@dataclass
+class While:
+    cond: object  # Expr
+    body: list  # list[Stmt]
+    line: int
+
+
+@dataclass
+class Script:
+    variables: list  # list[VarDecl]  (`variables { ... }` ブロック。無ければ空)
+    on_start: list  # list[list[Stmt]]  (複数の `on start` は順に実行)
+    on_timer: dict  # name(str) -> list[Stmt]
+    on_message: dict  # can_id(int) -> list[Stmt]
+
 class _Parser:
     def __init__(self, tokens: list[Token]):
         self._tokens = tokens
