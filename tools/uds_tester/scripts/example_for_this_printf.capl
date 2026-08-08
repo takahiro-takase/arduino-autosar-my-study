@@ -1,0 +1,45 @@
+// CAPL 風 DSL の for文・this.byte(n)/this.id/this.dlc・printf風フォーマットのサンプル (.capl)。
+//
+// example_session_check.capl (最小構成) → example_variables_control_flow.capl
+// (variables{}/if/while) に続く第3段。文法の詳細は README.md の
+// 「CAPL 風スクリプト機能」を参照。
+
+variables
+{
+    int i;
+    int engineStatusCount;
+}
+
+on start
+{
+    write("=== for文・this構文・printf風フォーマットのサンプル ===");
+
+    send(0x10, 0x03);      // ExtendedSession へ遷移
+    wait_response();
+    assert_positive();
+    write("ExtendedSession OK");
+
+    // for 文で TesterPresent を3回送る (example_variables_control_flow.capl の
+    // while 版と同じ内容だが、初期化/条件/更新を1箇所にまとめて書ける)
+    for (i = 0; i < 3; i = i + 1)
+    {
+        send(0x3E, 0x00);
+        wait_response(1.0);
+        write("TesterPresent %d/3 送信", i + 1);   // printf 風フォーマット (%d)
+        wait(1.0);
+    }
+
+    write("EngineStatus (0x200) の受信回数を数えます (このスクリプトの実行中ずっと)。");
+    write("停止するには「停止」ボタンを押してください。");
+}
+
+on message 0x200
+{
+    engineStatusCount = engineStatusCount + 1;
+
+    // this.id/this.byte(n)/this.dlc: msgId()/msgData(n)/msgDlc() と同じ内容を返す、
+    // 実際の CAPL の on message ハンドラでの書き方に近いプロパティ風の構文。
+    // printf 風フォーマットで CAN ID を16進数 (%x)、EngineState を10進数 (%d) で表示する。
+    write("RX id=0x%x dlc=%d byte0=%d (#%d)",
+          this.id, this.dlc, this.byte(0), engineStatusCount);
+}

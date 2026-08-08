@@ -3519,9 +3519,10 @@ Python の全機能（if/while/変数等）が使えるため、複雑な分岐�
 **`.capl`（CAPL 風の独自 DSL、`tools/uds_tester/capl_dsl.py`）**
 
 `on start`/`on timer`/`on message` という実際の CAPL に近いイベント構文に加えて、
-`variables { }` での変数宣言・`if`/`else`/`while`・四則演算/比較/論理演算子にも
-対応した、自作の字句解析・構文解析・インタプリタによるミニ言語です
-（対応していないもの: `for` 文、配列・構造体、ユーザー定義関数）。
+`variables { }` での変数宣言・`if`/`else`/`while`/`for`・四則演算/比較/論理演算子・
+`this.byte(n)`/`this.id`/`this.dlc`・`write()` の printf 風フォーマットにも対応した、
+自作の字句解析・構文解析・インタプリタによるミニ言語です
+（対応していないもの: 配列・構造体、ユーザー定義関数）。
 
 ```
 variables
@@ -3580,15 +3581,22 @@ on message 0x200
 | `x = expr;` | 代入文（`x` は `variables{}` で宣言済みであること）。C/CAPL の代入と同様、`x` の宣言型 (`int`/`float`) に変換してから代入する（`int` 変数への代入は 0 方向へ切り捨て） |
 | `if (expr) { ... } else if (expr) { ... } else { ... }` | 条件分岐（`else if`/`else` は省略可、いくつでも連結可） |
 | `while (expr) { ... }` | 条件が真の間繰り返す（「停止」ボタンでの中断はループの各周回でチェックされる） |
+| `for (init; cond; update) { ... }` | C の `for` と同じ（`init`/`cond`/`update` はいずれも省略可、`for (;;) { ... }` も可）。`init`/`update` は代入文のみ（`i++` 等のインクリメント演算子はないので `i = i + 1` と書く） |
 | `+ - * / %`、`== != < > <= >=`、`&& \|\| !`、`( )` | 四則演算・比較・論理演算子（`&&`/`\|\|` は短絡評価）。比較・論理式の結果は `0`/`1` の `int`。`/`・`%` は両辺が `int` の場合は C/CAPL と同じ 0 方向への切り捨て演算（`-7 / 2` は `-3`、Python の `//` のような床方向の丸めにはならない）、どちらかが `float` なら通常の除算・剰余になる。ゼロ除算はスクリプト中断（`wait_response()` のタイムアウト等と同じ扱い） |
 | `send(b0, b1, ...)` / `send_can(can_id, b0, b1, ...)` | Python 版の `send()`/`send_can()` と同じ（バイトは可変長引数） |
 | `wait_response()` / `wait_response(timeout)` | Python 版と同じ |
 | `assert_positive()` / `assert_negative()` / `assert_negative(nrc)` | Python 版と同じ（`resp` 引数はなく常に直前の応答を見る） |
 | `security_unlock()` | Python 版と同じ |
 | `wait(seconds)` | 指定秒数待機（Python 版と異なり、この待機中も `setTimer` タイマーの発火・`on message` ディスパッチは止まらず動き続ける） |
-| `log(...)` / `write(...)` | 同じ動作（`write` は CAPL の `write()` に合わせたエイリアス） |
+| `log(fmt, ...)` / `write(fmt, ...)` | 同じ動作（`write` は CAPL の `write()` に合わせたエイリアス）。第1引数が `%` を含む文字列で、かつ他に引数がある場合は CAPL の `write()` と同様 printf 風の書式文字列（`%d`/`%f`/`%s`/`%x`/`%X`/`%%` 等、Python の `%` 演算子と同じ書式）として扱う。それ以外（引数1つだけ、または `%` を含まない）は従来通りスペース区切りで連結するので、`write("50% 完了")` のような `%` を含む単なるテキストはそのまま出力される |
 | `setTimer(name, ms)` / `cancelTimer(name)` | タイマーのアーム/解除。`name` は識別子そのもの（実際の CAPL の `msTimer` 変数と違い、`variables{}` での事前宣言は不要） |
-| `msgData(n)` / `msgId()` / `msgDlc()` | `on message` ハンドラ内で、直近に受信したフレームの byte[n]/CAN ID/データ長を取得 |
+| `msgData(n)` / `msgId()` / `msgDlc()` | `on message` ハンドラ内で、直近に受信したフレームの byte[n]/CAN ID/データ長を取得（`on message` ハンドラ外でも呼べ、その場合は `0` を返す） |
+| `this.byte(n)` / `this.id` / `this.dlc` | 上記と同じ内容を返す、実際の CAPL の `on message` ハンドラでの書き方に近いプロパティ風の構文。**`on message` ハンドラ内でのみ使用可**（ハンドラ外で使うと実行前検証でエラーになる。実際の CAPL でも `this` は message ハンドラの外では使えない） |
+
+未宣言の変数への代入・参照、関数/`this.byte(n)`等の引数の個数が足りない・多すぎる場合も、
+未知の関数名と同様にスクリプト実行開始前に検出します（例: `this.byte` や `msgData()` の
+ように引数を書き忘れた場合も、実際にメッセージが届くまで待たされることなく、`on start`
+の副作用が走る前にエラーになります）。
 
 未宣言の変数への代入・参照も、未知の関数名と同様にスクリプト実行開始前に検出します。
 
@@ -3624,9 +3632,12 @@ on message 0x200
 受け取ってしまい、開始直後にバックログが一気に発火してその後は静かに見える、という
 紛らわしい挙動になるため）。
 
-サンプルは `tools/uds_tester/scripts/example_session_check.capl`（最小構成）と
+サンプルは `tools/uds_tester/scripts/example_session_check.capl`（最小構成）、
 `tools/uds_tester/scripts/example_variables_control_flow.capl`（変数宣言・
-`if`/`else`/`while` を使った例）を参照してください。
+`if`/`else`/`while` を使った例）、
+`tools/uds_tester/scripts/example_for_this_printf.capl`（`for`・
+`this.byte(n)`/`this.id`/`this.dlc`・printf 風フォーマットを使った例）を
+参照してください。
 
 <a id="nvm"></a>
 #### NvM（Non-Volatile Memory Manager）
