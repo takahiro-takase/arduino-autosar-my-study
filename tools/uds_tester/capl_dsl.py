@@ -488,13 +488,21 @@ class Switch:
 
 @dataclass
 class Param:
-    """ユーザー定義関数の仮引数。型は int/float/byte のスカラーのみ (配列は仮引数
-    にできない。配列は variables{} のグローバル宣言か、関数の直接の本体での
-    ローカル宣言のみが置き場所、という制約と揃えてある)。byte 仮引数は _coerce()
-    により呼び出しのたびに 0-255 にマスクされる (byte スカラー変数と同じ)。"""
-    type_name: str  # "int" | "float" | "byte"
+    """ユーザー定義関数の仮引数。型は int/float/byte で、スカラーまたは配列
+    (`byte data[]` のようにサイズ指定なしの `[]` で配列であることを示す)。
+    byte スカラー仮引数は _coerce() により呼び出しのたびに 0-255 にマスクされる
+    (byte スカラー変数と同じ)。配列仮引数も同様に、呼び出しのたびに要素ごと
+    _coerce_array_element() で仮引数の宣言型へ変換し直す (_call_user_function()
+    参照)。呼び出し元の配列がその宣言型と異なっていても (例: int 配列を byte
+    仮引数に渡す)、スカラー仮引数と同じ「呼び出しのたびに宣言型へ変換」という
+    不変条件を配列要素についても保つ。呼び出し側は対応する実引数として「配列
+    変数を裸で渡す」ことのみ許され (_validate_expr() の Call 分岐参照)、
+    呼び出しのたびにその配列のコピーが束縛される (_eval(Var) が配列に対して
+    常にコピーを返すのと同じ、send(data) 等と共通の挙動)。"""
+    type_name: str  # "int" | "float" | "byte" (配列の場合は要素型)
     name: str
     line: int
+    is_array: bool = False
 
 
 @dataclass
@@ -676,7 +684,19 @@ class _Parser:
             )
         self._advance()
         name_tok = self._expect("IDENT")
-        return Param(type_tok.value, name_tok.value, name_tok.line)
+        is_array = False
+        if self._peek().kind == "LBRACKET":
+            self._advance()
+            # 配列仮引数はサイズを書かない (呼び出し時に渡された配列のサイズが
+            # そのまま使われるため、`byte data[8]` のような固定サイズ指定は無意味)。
+            if self._peek().kind != "RBRACKET":
+                raise DslSyntaxError(
+                    f"{self._peek().line}行目: 配列仮引数にはサイズを指定できません "
+                    f"('{name_tok.value}[]' の形で書いてください)"
+                )
+            self._advance()
+            is_array = True
+        return Param(type_tok.value, name_tok.value, name_tok.line, is_array)
 
     def _parse_var_block(self) -> list:
         self._expect("LBRACE")
@@ -1710,6 +1730,19 @@ class Interpreter:
         要素型ごとの変換ロジックを1箇所にまとめる。"""
         return self._coerce(value, elem_type)
 
+    def _coerce_arg(self, value, param: Param):
+        """関数呼び出しの実引数を仮引数の宣言型へ変換する (_call_user_function() から
+        呼ぶ)。配列仮引数は要素ごとに _coerce_array_element() で変換する。呼び出し元の
+        配列は _eval(Var) が既に新しい list として渡してきたもの (Param のdocstring
+        参照。配列仮引数には裸の配列変数しか渡せない、という検証済みの前提があるため、
+        value が他から参照されているコピーでないことが保証されている) なので、
+        新しい list を確保せずその場で要素を書き換える。"""
+        if param.is_array:
+            for i, elem in enumerate(value):
+                value[i] = self._coerce_array_element(elem, param.type_name)
+            return value
+        return self._coerce(value, param.type_name)
+
     # ---- 式の評価 ----
     def _eval(self, node):
         if isinstance(node, Call):
@@ -2014,7 +2047,7 @@ class Interpreter:
         for param, value in zip(params, values):
             if param.name not in saved:
                 saved[param.name] = self._vars.get(param.name)
-            self._vars[param.name] = _Variable(param.type_name, False, value)
+            self._vars[param.name] = _Variable(param.type_name, param.is_array, value)
         outer_locals = self._current_locals
         self._current_locals = saved
         try:
@@ -2039,7 +2072,7 @@ class Interpreter:
         capl_api.ScriptAbort で中断する (漏れたまま無意味な既定値で処理が進むよりは、
         他のランタイムエラーと同様にその場で中断させる方が安全)。"""
         bound_values = [
-            self._coerce(value, param.type_name) for param, value in zip(func.params, arg_values)
+            self._coerce_arg(value, param) for param, value in zip(func.params, arg_values)
         ]
         with self._bound_params(func.params, bound_values):
             try:
@@ -2211,7 +2244,10 @@ class Interpreter:
         return 文の型チェックが効くようにする。this は関数の中では使えない
         (on message ハンドラ内で直接使う場合のみを想定した機能で、そこから呼ばれる
         関数の中まで自動的に有効になるわけではない。呼び出し元の文脈を追跡していないため)。"""
-        placeholders = [self._default_value(param.type_name) for param in func.params]
+        placeholders = [
+            [] if param.is_array else self._default_value(param.type_name)
+            for param in func.params
+        ]
         with self._bound_params(func.params, placeholders):
             self._validate_block(func.body, in_loop=False, in_switch=False, return_type=func.return_type)
 
@@ -2349,6 +2385,19 @@ class Interpreter:
         else:
             raise DslSyntaxError(f"未対応の文です: {stmt!r}")
 
+    def _bare_var(self, arg) -> Optional["_Variable"]:
+        """arg が変数名の裸参照 (Var ノード、添字・算術・関数呼び出し等を含まない) で
+        あれば、その宣言済み _Variable を返す (arg が Var でない、または未宣言なら
+        None)。配列・message 変数を「直接の引数としてのみ丸ごと渡せる」という
+        各所のチェック (output() 専用チェック・ビルトインの _ARRAY_ARG_BUILTINS/
+        _MESSAGE_ARG_BUILTINS 分岐・ユーザー定義関数の配列仮引数分岐) が、
+        `isinstance(arg, Var)` → `self._vars.get(arg.name)` という同じ2手順を
+        別々に書いていたのをここに統一する (将来どちらか片方だけ修正されて
+        食い違う保守リスクを避けるため、_resolve_array_index() 等と同じ考え方)。"""
+        if not isinstance(arg, Var):
+            return None
+        return self._vars.get(arg.name)
+
     def _validate_expr(self, node, require_value: bool = True) -> None:
         """require_value=False は「この Call は文として呼ばれていて、戻り値を捨てる」
         ことを表す (_validate_stmt() の Call 分岐からのみ渡される)。それ以外の全ての
@@ -2377,8 +2426,8 @@ class Interpreter:
                     # 「直接の引数なら array/message どちらでも許可」という下の
                     # 汎用チェックだけでは配列を弾けないため、ここで専用に絞り込む。
                     arg = node.args[0] if node.args else None
-                    arg_var = self._vars.get(arg.name) if isinstance(arg, Var) else None
-                    if not isinstance(arg, Var) or arg_var is None or arg_var.type_name != "message":
+                    arg_var = self._bare_var(arg)
+                    if arg_var is None or arg_var.type_name != "message":
                         raise DslSyntaxError(
                             f"{node.line}行目: output() には message 変数を渡してください"
                         )
@@ -2393,13 +2442,12 @@ class Interpreter:
                     # 一律で許可してはいけない。data + 1 や total = data のように配列/
                     # message がネストした式・代入に紛れ込む場合も同様に、直接引数以外は
                     # 下の Var の通常チェックで弾く。
-                    if isinstance(arg, Var):
-                        arg_var = self._vars.get(arg.name)
-                        if arg_var is not None:
-                            if arg_var.is_array and node.name in self._ARRAY_ARG_BUILTINS:
-                                continue
-                            if arg_var.type_name == "message" and node.name in self._MESSAGE_ARG_BUILTINS:
-                                continue
+                    arg_var = self._bare_var(arg)
+                    if arg_var is not None:
+                        if arg_var.is_array and node.name in self._ARRAY_ARG_BUILTINS:
+                            continue
+                        if arg_var.type_name == "message" and node.name in self._MESSAGE_ARG_BUILTINS:
+                            continue
                     self._validate_expr(arg)
                 return
             func = self._functions.get(node.name)
@@ -2414,7 +2462,20 @@ class Interpreter:
                         f"{node.line}行目: void 関数 '{node.name}' の戻り値は"
                         "式の中では使えません"
                     )
-                for arg in node.args:
+                for param, arg in zip(func.params, node.args):
+                    # 配列仮引数 (byte data[] 等) には、配列変数を裸で渡す場合のみ
+                    # 通常の Var チェック (単体の式としては使えない、という下の
+                    # 一般ルール) をバイパスする。send()/send_can() の
+                    # _ARRAY_ARG_BUILTINS と同じ考え方 (直接引数としてのみ許可)。
+                    if param.is_array:
+                        arg_var = self._bare_var(arg)
+                        if arg_var is None or not arg_var.is_array:
+                            raise DslSyntaxError(
+                                f"{arg.line if hasattr(arg, 'line') else node.line}行目: "
+                                f"関数 '{node.name}' の引数 '{param.name}' には配列変数を"
+                                "そのまま渡してください (要素参照や式は不可)"
+                            )
+                        continue
                     self._validate_expr(arg)
                 return
             raise self._unknown_function_error(node)

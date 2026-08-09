@@ -1,0 +1,147 @@
+// CAPL 風 DSL の for文・this.byte(n)/this.id/this.dlc・printf風フォーマットのサンプル (.capl)。
+//
+// example_session_check.capl (最小構成) → example_variables_control_flow.capl
+// (variables{}/if/while) に続く第3段。文法の詳細は README.md の
+// 「CAPL 風スクリプト機能」を参照。
+
+variables
+{
+    int i;
+    int engineStatusCount;
+
+    // E2EProfile01 CRC 検証 (on message 0x220) 用のワーク変数。
+    // on message ハンドラの本体にはローカル変数を宣言できない (ローカル宣言は
+    // ユーザー定義関数の直接の本体でのみ可能、README「CAPL風スクリプト機能」
+    // 参照) ため、グローバル変数として持ち、ハンドラの先頭で毎回リセットする。
+    byte e2eIndex;
+    byte e2eData[32];
+    byte e2eDataLen;
+    byte e2eCrc;
+    byte e2eCnt;
+}
+
+on start
+{
+    write("=== for文・this構文・printf風フォーマットのサンプル ===");
+
+    send(0x10, 0x03);      // ExtendedSession へ遷移
+    wait_response();
+    assert_positive();
+    write("ExtendedSession OK");
+
+    // for 文で TesterPresent を3回送る (example_variables_control_flow.capl の
+    // while 版と同じ内容だが、初期化/条件/更新を1箇所にまとめて書ける)
+    for (i = 0; i < 3; i = i + 1)
+    {
+        send(0x3E, 0x00);
+        wait_response(1.0);
+        write("TesterPresent %d/3 送信", i + 1);   // printf 風フォーマット (%d)
+        wait(1.0);
+    }
+
+    write("EngineStatus (0x200) の受信回数を数えます (このスクリプトの実行中ずっと)。");
+    write("停止するには「停止」ボタンを押してください。");
+}
+
+on message 0x200
+{
+    engineStatusCount = engineStatusCount + 1;
+
+    // this.id/this.byte(n)/this.dlc: msgId()/msgData(n)/msgDlc() と同じ内容を返す、
+    // 実際の CAPL の on message ハンドラでの書き方に近いプロパティ風の構文。
+    // printf 風フォーマットで CAN ID を16進数 (%x)、EngineState を10進数 (%d) で表示する。
+    write("RX id=0x%x dlc=%d byte0=%d (#%d)",
+          this.id, this.dlc, this.byte(0), engineStatusCount);
+}
+
+// -----------------------------------------------------------------------------
+// E2EHealthStatus
+// -----------------------------------------------------------------------------
+on message 0x220
+{
+    // この CAN フレームは E2E (先頭4バイト: CRC/Counter/CrcErrCount/SeqErrCount)
+    // をさらに SecOC (byte[4]=Freshness、byte[5-7]=MAC) で保護した Secured I-PDU
+    // (src/Bsw/SecOC/SecOC_PBCfg.c の E2EHealthStatus 設定参照) なので dlc は 8 だが、
+    // E2E の CRC 計算対象は Com/E2E 自身が知る 4 バイト (SecOC の Freshness/MAC は
+    // 含まない) に限定する。
+    e2eDataLen = 0;
+
+    for (e2eIndex = 1; e2eIndex < 4; e2eIndex++)
+    {
+        e2eData[e2eDataLen] = this.byte(e2eIndex);
+        e2eDataLen++;
+    }
+    e2eCrc = CalcE2EProfile01CRC(0x02, 0x20, e2eDataLen, e2eData);
+    if (this.byte(0) == e2eCrc)
+    {
+        if (this.byte(1) - e2eCnt == 1)
+        {
+            write("RX id=0x%x dlc=%d CRC:OK CNT:OK(0x%x))", this.id, this.dlc, this.byte(1));
+        }
+        else
+        {
+            write("RX id=0x%x dlc=%d CRC:OK CNT:NG(0x%x))", this.id, this.dlc, this.byte(1));
+        }
+    }
+    else
+    {
+        write("RX id=0x%x dlc=%d CRC:NG)", this.id, this.dlc);
+    }
+    e2eCnt = this.byte(1);
+}
+
+// -----------------------------------------------------------------------------
+// E2EProfile01
+// -----------------------------------------------------------------------------
+byte CalcE2EProfile01CRC(byte dataIdHigh, byte dataIdLow, byte len, byte data[])
+{
+    // 開始値は 0x00 (SWS_E2E_00083、src/Bsw/E2E/E2E_P01.c の E2E_CalcCrc8() と同じ)。
+    // 0xFF ではない (実CRC-8-SAE-J1850の一般的な初期値とは異なる、本プロジェクト
+    // 固有の採用バリアント)。
+    byte crc = 0x00;
+    byte poly = 0x1D;
+    byte index = 0;
+    int b;
+
+    // DataID の 2 バイトを CRC に投入 (下位バイトを先に、上位バイトを後に、
+    // src/Bsw/E2E/E2E_P01.c の E2E_P01Check()/E2E_P01Protect() と同じ順序)
+    byte idBytes[2];
+    idBytes[0] = dataIdLow;
+    idBytes[1] = dataIdHigh;
+
+    for (index = 0; index < 2; index++)
+    {
+        crc = crc ^ idBytes[index];
+        for (b = 0; b < 8; b++)
+        {
+            if (crc & 0x80)
+            {
+                crc = (crc << 1) ^ poly;
+            }
+            else
+            {
+                crc = crc << 1;
+            }
+        }
+    }
+
+    // データ本体を CRC に投入
+    for (index = 0; index < len; index++)
+    {
+        crc = crc ^ data[index];
+        for (b = 0; b < 8; b++)
+        {
+            if (crc & 0x80)
+            {
+                crc = (crc << 1) ^ poly;
+            }
+            else
+            {
+                crc = crc << 1;
+            }
+        }
+    }
+
+    return crc;
+}
+
