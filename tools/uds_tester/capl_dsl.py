@@ -75,13 +75,13 @@ data (8バイト、全て0) を持つ。フィールドは msg.dlc (0-8、範囲
     void logRetry(int n) { ... }   // void 関数は return; か何も return せず終了
 
 トップレベル (variables{}/on ... と同じ階層) にいくつでも書ける。型は戻り値・
-仮引数とも int/float のみ (void は戻り値にのみ使え、配列は戻り値にも仮引数にも
-できない)。定義順に関係なく呼び出せる (前方参照・相互再帰も可。全関数の名前を
-実行前に一括登録してから各ブロック・各関数本体を検証する)。void 関数の戻り値を
-式の中で使おうとする (例: `x = voidFunc();`) のは実行前検証でエラーになる。
-int/float 関数が return を一度も実行せずに本体の最後まで到達した場合は (これは
-静的には検出しない。分岐を網羅する制御フロー解析はしていないため) 実行時に
-capl_api.ScriptAbort で中断する。
+仮引数とも int/float/byte のみ (void は戻り値にのみ使える。配列は戻り値にも
+仮引数にもできない、byte スカラーは可)。定義順に関係なく呼び出せる (前方参照・
+相互再帰も可。全関数の名前を実行前に一括登録してから各ブロック・各関数本体を
+検証する)。void 関数の戻り値を式の中で使おうとする (例: `x = voidFunc();`) のは
+実行前検証でエラーになる。int/float/byte を返す関数が return を一度も実行せずに
+本体の最後まで到達した場合は (これは静的には検出しない。分岐を網羅する制御
+フロー解析はしていないため) 実行時に capl_api.ScriptAbort で中断する。
 
 関数本体では、仮引数に加えて `int x;`/`byte data[n];` のようなローカル変数宣言も
 文として (variables{} で包まずに直接) 書ける。ローカル変数は**関数スコープ**
@@ -244,15 +244,20 @@ def tokenize(source: str) -> list[Token]:
 # 構文解析
 # ---------------------------------------------------------------------------
 
-_VAR_TYPES = ("int", "float")  # スカラー変数・仮引数・戻り値に使える型
-_ARRAY_ELEMENT_TYPES = _VAR_TYPES + ("byte",)  # 配列の要素型として使える型 (int[]/float[]/byte[])
+_VAR_TYPES = ("int", "float", "byte")  # スカラー変数・仮引数・戻り値に使える型
+# byte はスカラーでも配列 (byte[固定長]) でも使えるので、両者の型キーワード集合は
+# 完全に一致する (int/float/byte のどれも両方の書き方ができる)。以前は byte が
+# 配列専用だったため別々の定数だったが、byte をスカラーにも開放したことで
+# 区別する意味が無くなった。_ARRAY_ELEMENT_TYPES という名前は既存コードとの
+# 互換のため残す。
+_ARRAY_ELEMENT_TYPES = _VAR_TYPES  # 配列の要素型として使える型 (int[]/float[]/byte[])
 _DECL_TYPES = _ARRAY_ELEMENT_TYPES  # 変数宣言 (variables{}・ローカル共通) の先頭に来る型キーワード
 # 宣言文の先頭に来うるキーワード全体 (int/float/byte の VarDecl/ArrayDecl に加え、
 # message <id> name; の MessageDecl も同じ位置に書けるため)。_parse_statement() が
 # ローカル宣言文の受理判定に使う (_parse_decl_stmt() 自体は _at_ident("message") で
 # 自己判定するので、こちらは「関数の直接の本体でだけ許可する」判定専用)。
 _DECL_START_KEYWORDS = _DECL_TYPES + ("message",)
-_FUNC_RETURN_TYPES = ("void",) + _VAR_TYPES  # 関数の戻り値の型 (void/int/float。配列は返せない)
+_FUNC_RETURN_TYPES = ("void",) + _VAR_TYPES  # 関数の戻り値の型 (void/int/float/byte。配列は返せない)
 _COMPARISON_TOKENS = {"LT": "<", "GT": ">", "LE": "<=", "GE": ">="}
 _SHIFT_TOKENS = {"LSHIFT": "<<", "RSHIFT": ">>"}
 _ADDITIVE_TOKENS = {"PLUS": "+", "MINUS": "-"}
@@ -290,7 +295,7 @@ class Call:
 
 @dataclass
 class Var:
-    """変数参照式 (int/float、variables{} での宣言が必要)。"""
+    """変数参照式 (int/float/byte、variables{} での宣言が必要)。"""
     name: str
     line: int
 
@@ -333,7 +338,7 @@ class UnaryOp:
 
 @dataclass
 class VarDecl:
-    type_name: str  # "int" | "float"
+    type_name: str  # "int" | "float" | "byte"
     name: str
     init: object  # Expr | None
     line: int
@@ -483,10 +488,11 @@ class Switch:
 
 @dataclass
 class Param:
-    """ユーザー定義関数の仮引数。型は int/float のみ (byte 配列は仮引数にできない。
-    配列は variables{} のグローバル宣言のみが唯一の置き場所、という既存の制約と
-    揃えてある)。"""
-    type_name: str  # "int" | "float"
+    """ユーザー定義関数の仮引数。型は int/float/byte のスカラーのみ (配列は仮引数
+    にできない。配列は variables{} のグローバル宣言か、関数の直接の本体での
+    ローカル宣言のみが置き場所、という制約と揃えてある)。byte 仮引数は _coerce()
+    により呼び出しのたびに 0-255 にマスクされる (byte スカラー変数と同じ)。"""
+    type_name: str  # "int" | "float" | "byte"
     name: str
     line: int
 
@@ -494,7 +500,7 @@ class Param:
 @dataclass
 class FuncDecl:
     """`void name(int a, float b) { ... }` のようなユーザー定義関数の宣言。
-    return_type は "void"/"int"/"float"。関数はトップレベル (variables{}/on ... と
+    return_type は "void"/"int"/"float"/"byte"。関数はトップレベル (variables{}/on ... と
     同じ階層) にいくつでも書け、on start/on timer/on message や他の関数から
     呼び出せる (前方参照・相互再帰も可、_functions は実行前に一括登録するため)。
     仮引数に加えて、body の直接の要素として `int x;`/`byte data[n];` のようなローカル
@@ -508,7 +514,7 @@ class FuncDecl:
     実行されることを保証することで、この食い違いを構造的に防ぐ。仮引数・ローカル
     変数とも on start/on timer/on message や variables{} の中では書けない
     (関数の中限定)。"""
-    return_type: str  # "void" | "int" | "float"
+    return_type: str  # "void" | "int" | "float" | "byte"
     name: str
     params: list  # list[Param]
     body: list  # list[Stmt]  (VarDecl/ArrayDecl が body の直接の要素として混在しうる。
@@ -518,8 +524,8 @@ class FuncDecl:
 
 @dataclass
 class Return:
-    """`return;` (void 関数用) / `return expr;` (int/float 関数用)。関数の外
-    (on start/on timer/on message) では使えない (_validate_stmt() 参照)。"""
+    """`return;` (void 関数用) / `return expr;` (int/float/byte を返す関数用)。
+    関数の外 (on start/on timer/on message) では使えない (_validate_stmt() 参照)。"""
     expr: object  # Expr | None
     line: int
 
@@ -645,7 +651,7 @@ class _Parser:
         return Script(variables, on_start, on_timer, on_message, functions)
 
     def _parse_func_decl(self) -> FuncDecl:
-        type_tok = self._advance()  # void/int/float (呼び出し元で確認済み)
+        type_tok = self._advance()  # void/int/float/byte (呼び出し元で確認済み)
         name_tok = self._expect("IDENT")
         self._expect("LPAREN")
         params = self._parse_arg_list(lambda i: self._parse_param())
@@ -665,7 +671,7 @@ class _Parser:
         type_tok = self._peek()
         if type_tok.kind != "IDENT" or type_tok.value not in _VAR_TYPES:
             raise DslSyntaxError(
-                f"{type_tok.line}行目: 引数の型 (int/float) を期待しましたが "
+                f"{type_tok.line}行目: 引数の型 (int/float/byte) を期待しましたが "
                 f"'{type_tok.value}' でした"
             )
         self._advance()
@@ -710,12 +716,6 @@ class _Parser:
         name_tok = self._expect("IDENT")
         if self._peek().kind == "LBRACKET":
             return self._parse_array_decl(type_tok, name_tok)
-        if type_tok.value == "byte":
-            raise DslSyntaxError(
-                f"{type_tok.line}行目: 'byte' は配列専用の型です "
-                f"('byte {name_tok.value}[size];' の形式で宣言してください。"
-                "スカラー変数は int/float のみ対応)"
-            )
         init = None
         if self._peek().kind == "ASSIGN":
             self._advance()
@@ -1310,8 +1310,8 @@ class _Variable:
     int/float 配列に対応するとスカラー int/float と配列 int/float の type_name が
     同じ文字列になってしまい判定できなくなったため、明示的なフィールドにした)。
     type_name は配列なら要素型 ("byte"/"int"/"float")、message 変数なら "message"
-    固定 (is_array=False)。value はスカラーなら int/float、配列なら list、message
-    なら _MessageValue を持つ。スカラー・配列・message を別々の dict (self._vars/
+    固定 (is_array=False)。value はスカラーなら int/float/byte、配列なら list、
+    message なら _MessageValue を持つ。スカラー・配列・message を別々の dict (self._vars/
     self._arrays 等) で持つと、「この名前は宣言済みか」「何者か」を毎回複数の dict の
     メンバーシップを OR して求める羽目になり判定漏れの温床になる (実際、配列サポート
     追加時にこのパターンが複数箇所で発生した) ため、1つの dict に統一している。"""
@@ -1650,8 +1650,8 @@ class Interpreter:
         """ArrayDecl (variables{} のトップレベル配列宣言、および関数内のローカル配列宣言
         _exec_stmt() の ArrayDecl 分岐参照) の初期化リストを評価し、サイズ分だけ
         既定値で埋めた list を返す共通ロジック。要素の型変換は elem_type に応じて
-        _coerce_array_element() に委ねる (byte は 0-255 マスク、int/float はスカラーと
-        同じ _coerce())。初期化式に関数呼び出しを許すかどうか (_reject_calls の要否) は
+        _coerce_array_element() (実体はスカラーと同じ _coerce()、byte なら 0-255
+        マスク) に委ねる。初期化式に関数呼び出しを許すかどうか (_reject_calls の要否) は
         呼び出し元ごとに事情が異なる (variables{} は Interpreter 構築中に評価される
         ため不可、ローカル宣言は run() 開始後にしか実行されないため可、
         _validate_stmt() 参照) ので、ここでは扱わない。"""
@@ -1679,24 +1679,35 @@ class Interpreter:
 
     @staticmethod
     def _coerce(value, type_name: str):
-        """代入・初期化のたびに宣言型 (int/float) への変換を行う。C/CAPL の代入と同様、
-        float を int 変数に代入すると 0 方向へ切り捨てられる (Python の int() は
+        """代入・初期化のたびに宣言型 (int/float/byte) への変換を行う。C/CAPL の代入と
+        同様、float を int 変数に代入すると 0 方向へ切り捨てられる (Python の int() は
         int(2.9)==2, int(-2.9)==-2 と C の (int) キャストと同じ丸め方向なのでそのまま使える)。
         これをやらないと `int half; half = 10 / 4;` が 2 ではなく 2.5 のまま half に
-        入ってしまい、int 変数のつもりで書いた比較・分岐が期待通りに動かなくなる。"""
+        入ってしまい、int 変数のつもりで書いた比較・分岐が期待通りに動かなくなる。
+
+        byte は 0-255 に丸めるマスク (`& 0xFF`、_to_byte() と同じ処理) をかける。
+        代入のたびにここを通るので、CAPL の byte/word/long のような固定幅整数型の
+        ラップアラウンド (`byte b; b = 300;` が 44 になる、`b = -1;` が 255 になる
+        等) を、byte 型に限って再現できる (Python の int 自体は多倍長で自然には
+        ラップアラウンドしないため、この明示的なマスクが無いと際限なく増減する)。
+        int/float は元々 CAPL の型ほど幅を持たない値を想定しているため、意図的に
+        ラップアラウンドさせていない (16bit/32bit 固定幅にすると、DID 等
+        0xFFFF を超える値を int で扱っている既存スクリプトが壊れてしまうため)。"""
         if type_name == "int":
             return int(value)
         if type_name == "float":
             return float(value)
+        if type_name == "byte":
+            return int(value) & 0xFF
         return value
 
     def _coerce_array_element(self, value, elem_type: str):
-        """配列要素への値の型変換。byte は 0-255 にマスクする (_to_byte())。int/float は
-        スカラー変数と同じ _coerce() (int は 0 方向へ切り捨て、float はそのまま)。
-        配列の読み書き (初期化リスト・IndexAssign・ローカル配列宣言) 全てがここを
-        通ることで、要素型ごとの変換ロジックを1箇所にまとめる。"""
-        if elem_type == "byte":
-            return self._to_byte(value)
+        """配列要素への値の型変換。_coerce() が byte/int/float いずれの要素型も
+        扱えるので、スカラー変数と全く同じ変換ロジックにそのまま委譲する
+        (以前は byte だけ _to_byte() を個別に呼ぶ特別扱いだったが、_coerce() 自身が
+        byte のマスク処理を持つようになったので不要になった)。配列の読み書き
+        (初期化リスト・IndexAssign・ローカル配列宣言) 全てがここを通ることで、
+        要素型ごとの変換ロジックを1箇所にまとめる。"""
         return self._coerce(value, elem_type)
 
     # ---- 式の評価 ----
@@ -2022,8 +2033,8 @@ class Interpreter:
         呼び出しスタック自体を使って退避・復元する。再帰呼び出しでも with (try/finally)
         が LIFO で対応するので、各フレームの仮引数の値は正しく独立する)。仮引数名が
         たまたまグローバル変数と同じ場合はその関数の中でだけシャドーイングされる。
-        戻り値は _ReturnSignal で受け取る。void 関数は None を返す。int/float 関数が
-        return 文を1度も実行せずに本体の最後まで到達した場合は (return 漏れは静的には
+        戻り値は _ReturnSignal で受け取る。void 関数は None を返す。int/float/byte を
+        返す関数が return 文を1度も実行せずに本体の最後まで到達した場合は (return 漏れは静的には
         検出しない方針、下記 _validate_stmt の Return 検証コメント参照)、
         capl_api.ScriptAbort で中断する (漏れたまま無意味な既定値で処理が進むよりは、
         他のランタイムエラーと同様にその場で中断させる方が安全)。"""
@@ -2239,7 +2250,7 @@ class Interpreter:
             if var is None:
                 raise DslSyntaxError(
                     f"{stmt.line}行目: 未宣言の変数 '{stmt.name}' への代入です "
-                    "(variables { int/float ...; } で宣言してください)"
+                    "(variables { int/float/byte ...; } で宣言してください)"
                 )
             self._validate_expr(stmt.expr)
         elif isinstance(stmt, IndexAssign):
