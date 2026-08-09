@@ -81,6 +81,37 @@ typedef struct
 } E2EXf_RxConfigType;
 
 /* -----------------------------------------------------------------------
+ * RX 側（Inverse Transformer）設定 — E2E Profile 05
+ * EngineInfo(CAN 0x100)/AbsInfo(CAN 0x110) が使用する。Profile 01 版とは
+ * 別の専用型・専用関数 (E2EXf_InverseTransformP05()) にしている理由は
+ * E2EXf_TxConfigTypeP05 の注記と同じ（実 AUTOSAR のプロファイルごとの
+ * 生成コード方式に倣う）。
+ *
+ * \note  WaitForFirstData: 公式の E2E_P05CheckStateType には Profile01 の
+ *        WaitForFirstData/INITIAL に相当するフィールドが無い（E2E_P05.c は
+ *        意図的にこれを実装しない、仕様に忠実なライブラリとして維持している。
+ *        test/test_e2e_p05/ の
+ *        FirstCheckAfterInitIsRepeatedBecauseBothStartAtCounterZero テスト
+ *        参照）。しかし実運用では、起動直後に送信元 ECU が既に稼働中で
+ *        Counter が 0 以外から始まっていることが十分あり得るため、E2E_P05.c
+ *        をそのまま繋ぐと起動直後の最初の（CRC は正しい）フレームが
+ *        REPEATED/WRONGSEQUENCE と誤判定され、DEM_DEBOUNCE_LIMIT=1 の設定と
+ *        相まって即座に誤った DTC が確定してしまう。そのため Profile01 の
+ *        WaitForFirstData 相当の「初回受信の特別扱い」を、ライブラリ本体
+ *        ではなく統合層であるこの E2EXf 層で補う
+ *        （`E2EXf_InverseTransformP05()` 参照）。NULL の場合はこの特別扱いを
+ *        行わない（EngineHealthStatus 用など、将来 Check を使うが初回受信の
+ *        意味を持たないインスタンスのため）。
+ * ----------------------------------------------------------------------- */
+typedef struct
+{
+    const E2E_P05ConfigType* E2EConfig;
+    E2E_P05CheckStateType*   CheckState;
+    Dem_EventIdType          DemEventId;
+    uint8*                   WaitForFirstData;
+} E2EXf_RxConfigTypeP05;
+
+/* -----------------------------------------------------------------------
  * TX 側（Transformer）設定 — E2E Profile 01
  *
  * \note  本プロジェクトで現在このインスタンスを実際に使う PDU は無い
@@ -178,6 +209,45 @@ void E2EXf_DeInit(void);
  */
 Std_ReturnType E2EXf_InverseTransform(const E2EXf_RxConfigType* Config, const uint8* Buffer, uint8 Length,
                                        E2E_P01StatusType* CheckStatus);
+
+/**
+ * \brief   RX I-PDU バイト列に対する E2E Profile 05 の Inverse Transform（検証）を行う。
+ *
+ * \details E2E_P05Check() を呼び、結果を Dem_ReportErrorStatus() で
+ *          Config->DemEventId へ報告する。P05 には Profile01 の
+ *          INITIAL/SYNC に相当する状態が無いため、OK/OKSOMELOST の2状態
+ *          のみ E_OK（データ自体は信頼できる）。REPEATED・WRONGSEQUENCE・
+ *          ERROR は E_NOT_OK。
+ *
+ *          `Config->WaitForFirstData` が非 NULL かつ真の場合、CRC が正しい
+ *          （ERROR 以外の）最初の呼び出しに限り、生の判定結果に関わらず
+ *          OK として扱い（`*CheckStatus` も OK に書き換える）、フラグを
+ *          落とす。これは Profile01 の WaitForFirstData/INITIAL に相当する
+ *          初回受信の特別扱いを E2EXf 層で補うもの（E2EXf_RxConfigTypeP05
+ *          の宣言コメント参照）。E2E_P05Check() 自身は内部で
+ *          `State->Counter` を受信値へ同期済みのため、2回目以降の呼び出しは
+ *          通常の delta 判定に自然に戻る。
+ *
+ * \param[in]  Config       RX 側設定（Profile 05）。NULL 禁止。
+ * \param[in]  Buffer       検証対象の I-PDU バイト列。NULL 禁止。
+ * \param[in]  Length       Buffer のバイト数。
+ * \param[out] CheckStatus  E2E_P05Check() の生の 6 状態を受け取る。NULL 禁止。
+ *                          呼び出し元（Rte.c）が Rte_IStatusType へマッピング
+ *                          し直すための詳細情報で、Dem への報告方針（PASSED/
+ *                          FAILED の 2値化）には影響しない。
+ *
+ * \retval  E_OK      検証に合格した。呼び出し元は Buffer の内容を使ってよい。
+ * \retval  E_NOT_OK  検証に失敗した、または E2EXf_Init() 未呼び出し
+ *                    （SWS_E2EXf_00133 相当）。呼び出し元は Buffer の内容を
+ *                    破棄すべき（前回の有効値を保持し続けるか、タイムアウト
+ *                    経由でフェイルセーフへ移行する）。
+ *
+ * \ServiceID      {0x04}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType E2EXf_InverseTransformP05(const E2EXf_RxConfigTypeP05* Config, const uint8* Buffer, uint8 Length,
+                                          E2E_P05StatusType* CheckStatus);
 
 /**
  * \brief   TX I-PDU バイト列に対する E2E Transform（Counter/CRC 付与）を行う。

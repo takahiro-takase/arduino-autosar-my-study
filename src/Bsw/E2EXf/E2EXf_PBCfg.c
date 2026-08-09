@@ -2,8 +2,12 @@
  * \file    E2EXf_PBCfg.c
  * \brief   E2E Transformer ポストビルド設定データ
  *
- * \details E2E Profile 01 の設定・ステートを I-PDU 単位で定義し、
- *          E2EXf_RxConfigType/E2EXf_TxConfigType としてまとめる。
+ * \details E2E Profile 01/05 の設定・ステートを I-PDU 単位で定義し、
+ *          E2EXf_RxConfigType(P01)/E2EXf_RxConfigTypeP05/E2EXf_TxConfigTypeP05
+ *          としてまとめる。EngineInfo/AbsInfo(RX)/E2EHealthStatus(TX)は
+ *          いずれも Profile05 を使用しており、E2EXf_RxConfigType(P01)自体は
+ *          呼び出し元ゼロの参考実装として残している（E2EXf_TxConfigType と
+ *          同じ理由）。
  *          以前は Com_PBCfg.c が Com_IPduConfigType の E2EConfig/
  *          E2ECheckState/E2EProtectState/E2EDemEventId フィールドとして
  *          直接保持していたが、E2E Transformer 方式への移行に伴い
@@ -25,41 +29,49 @@
  * EngineSpeed（回転数）は実車ではメータ表示だけでなく変速制御・トラクション
  * コントロール・オーバーレブ保護等、複数の機能が参照しうる値のため、
  * 一般的なエンジン ECU の周期送信フレームを模して E2E 保護を付与する。
+ * 以前は E2E Profile01(CRC8+4bitカウンタ、DLC=6) だったが、CRC 検出能力を
+ * 高めるため E2E Profile05(CRC16+8bitカウンタ、DLC=7) へ切り替えた
+ * （EngineHealthStatus の TX 側と同じ理由）。
  * ----------------------------------------------------------------------- */
-static const E2E_P01ConfigType E2EXf_EngineInfoCfg = {
+static const E2E_P05ConfigType E2EXf_EngineInfoCfgP05 = {
     0x0100U,  /* DataID          : PDU 識別子 (CAN ID と一致させるのが一般的) */
-    6U,       /* DataLength      : PDU 全体バイト数 (CRC 1B + Counter 1B + シグナル 4B) */
+    7U,       /* DataLength      : PDU 全体バイト数 (CRC16 2B + Counter 1B + シグナル 4B) */
     1U,       /* MaxDeltaCounter : 許容カウンタ飛び幅 (1=連続受信を前提) */
-    1U,       /* CounterOffset   : byte[1] 下位 4bit がカウンタ (AUTOSAR 標準バリアント 1A) */
-    0U,       /* CRCOffset       : byte[0] が CRC8 (AUTOSAR 標準バリアント 1A、SWS_E2E_00227) */
-    2U        /* SyncCounterInit : WRONGSEQUENCE 検知後、OK へ戻るまでに必要な連続正常受信回数 */
+    0U        /* Offset          : E2E ヘッダ(CRC16+Counter)は PDU 先頭 */
 };
-static E2E_P01CheckStateType E2EXf_EngineInfoState;
+static E2E_P05CheckStateType E2EXf_EngineInfoStateP05;
+/* Profile05にはINITIAL相当が無いため、E2EXf層で初回受信の特別扱いを行う
+ * ためのフラグ(E2EXf_RxConfigTypeP05.WaitForFirstData 宣言コメント参照)。 */
+static uint8 E2EXf_EngineInfoWaitForFirstDataP05;
 
-const E2EXf_RxConfigType E2EXf_EngineInfoRxCfg = {
-    .E2EConfig  = &E2EXf_EngineInfoCfg,
-    .CheckState = &E2EXf_EngineInfoState,
-    .DemEventId = DEM_EVENT_E2E_ENGINEINFO
+const E2EXf_RxConfigTypeP05 E2EXf_EngineInfoRxCfg = {
+    .E2EConfig        = &E2EXf_EngineInfoCfgP05,
+    .CheckState       = &E2EXf_EngineInfoStateP05,
+    .DemEventId       = DEM_EVENT_E2E_ENGINEINFO,
+    .WaitForFirstData = &E2EXf_EngineInfoWaitForFirstDataP05
 };
 
 /* -----------------------------------------------------------------------
  * AbsInfo (RX IPduId=1, CAN 0x110)
  * DaVinci: /ActiveEcuC/E2EXf/AbsInfo_Rx_E2EXf
+ * 以前は E2E Profile01(CRC8+4bitカウンタ、DLC=5) だったが、EngineInfo と
+ * 同じ理由で E2E Profile05(CRC16+8bitカウンタ、DLC=6) へ切り替えた。
  * ----------------------------------------------------------------------- */
-static const E2E_P01ConfigType E2EXf_AbsInfoCfg = {
+static const E2E_P05ConfigType E2EXf_AbsInfoCfgP05 = {
     0x0110U,  /* DataID          : PDU 識別子 (CAN ID と一致させるのが一般的) */
-    5U,       /* DataLength      : PDU 全体バイト数 (CRC 1B + Counter 1B + シグナル 3B) */
+    6U,       /* DataLength      : PDU 全体バイト数 (CRC16 2B + Counter 1B + シグナル 3B) */
     1U,       /* MaxDeltaCounter : 許容カウンタ飛び幅 (1=連続受信を前提) */
-    1U,       /* CounterOffset   : byte[1] 下位 4bit がカウンタ (AUTOSAR 標準バリアント 1A) */
-    0U,       /* CRCOffset       : byte[0] が CRC8 (AUTOSAR 標準バリアント 1A、SWS_E2E_00227) */
-    2U        /* SyncCounterInit : WRONGSEQUENCE 検知後、OK へ戻るまでに必要な連続正常受信回数 */
+    0U        /* Offset          : E2E ヘッダ(CRC16+Counter)は PDU 先頭 */
 };
-static E2E_P01CheckStateType E2EXf_AbsInfoState;
+static E2E_P05CheckStateType E2EXf_AbsInfoStateP05;
+/* EngineInfo と同じ理由(E2EXf_EngineInfoWaitForFirstDataP05 参照)。 */
+static uint8 E2EXf_AbsInfoWaitForFirstDataP05;
 
-const E2EXf_RxConfigType E2EXf_AbsInfoRxCfg = {
-    .E2EConfig  = &E2EXf_AbsInfoCfg,
-    .CheckState = &E2EXf_AbsInfoState,
-    .DemEventId = DEM_EVENT_E2E_ABSINFO
+const E2EXf_RxConfigTypeP05 E2EXf_AbsInfoRxCfg = {
+    .E2EConfig        = &E2EXf_AbsInfoCfgP05,
+    .CheckState       = &E2EXf_AbsInfoStateP05,
+    .DemEventId       = DEM_EVENT_E2E_ABSINFO,
+    .WaitForFirstData = &E2EXf_AbsInfoWaitForFirstDataP05
 };
 
 /* -----------------------------------------------------------------------
@@ -86,8 +98,10 @@ const E2EXf_TxConfigTypeP05 E2EXf_E2EHealthStatusTxCfgP05 = {
 
 void E2EXf_PBCfg_Init(void)
 {
-    E2E_P01CheckInit(&E2EXf_EngineInfoState);
-    E2E_P01CheckInit(&E2EXf_AbsInfoState);
+    E2E_P05CheckInit(&E2EXf_EngineInfoStateP05);
+    E2E_P05CheckInit(&E2EXf_AbsInfoStateP05);
+    E2EXf_EngineInfoWaitForFirstDataP05 = 1U;
+    E2EXf_AbsInfoWaitForFirstDataP05    = 1U;
     E2E_P05ProtectInit(&E2EXf_E2EHealthStatusStateP05);
 
     /* 各 State の初期化が完了した最後に、E2EXf モジュール自身の初期化状態

@@ -26,6 +26,7 @@
 
 #include "Std_Types.h"
 #include "E2E_P01.h"
+#include "E2E_P05.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -66,11 +67,40 @@ void E2EMon_Init(void);
  *
  * \param[in]  status  E2E_P01Check() の生の検証結果（8 状態）。
  *
+ * \note    現在 EngineInfo/AbsInfo はいずれも E2E Profile05 へ移行済みのため、
+ *          実際の呼び出し元は無い（下記 E2EMon_NotifyCheckResultP05() を
+ *          参照）。Profile01 版の分類ロジック自体は参考実装として残している。
+ *
  * \ServiceID      {0x01}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
  */
 void E2EMon_NotifyCheckResult(E2E_P01StatusType status);
+
+/**
+ * \brief   E2E Profile05 のチェック結果を通知する。
+ *
+ * \details EngineInfo/AbsInfo（いずれも E2E Profile05、Rte.c の
+ *          Rte_COMCbk_EngineInfo()/AbsInfo() から E2EXf_InverseTransformP05()
+ *          呼び出し直後に呼ばれる）向け。P05 には Profile01 の WRONGCRC に
+ *          相当する単独状態が無く、CRC 不一致は ERROR（NULL/長さ不正とも
+ *          共用）にまとまる（E2E_P05.c 参照）ため、ERROR を CRC 不一致
+ *          カウンタの契機として扱う。
+ *
+ *          `E2E_P05STATUS_ERROR` は CRC 不一致累積カウンタを、
+ *          `E2E_P05STATUS_WRONGSEQUENCE`/`E2E_P05STATUS_REPEATED` は
+ *          シーケンス異常累積カウンタをそれぞれ +1 する（0xFF で飽和）。
+ *          その他の状態（OK/OKSOMELOST/NONEWDATA）はどちらのカウンタも
+ *          変化させない。カウンタは E2EMon_NotifyCheckResult() と共用
+ *          （EngineInfo/AbsInfo いずれの通知でも合算する）。
+ *
+ * \param[in]  status  E2E_P05Check() の生の検証結果（6 状態）。
+ *
+ * \ServiceID      {0x02}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void E2EMon_NotifyCheckResultP05(E2E_P05StatusType status);
 
 #ifdef __cplusplus
 }

@@ -52,10 +52,10 @@ static EngineState_t Rte_EngineStateMirror = ENGINE_STATE_OFF;
  *
  * E2E Transformer 方式では、Com はペイロードの妥当性を一切検証しない
  * （Com_Types.h の RxIndicationCbk 説明参照）。かわりに、フレーム受信の
- * 都度呼ばれる Rte_COMCbk_*() が E2EXf_InverseTransform() で検証し、
- * 合格した場合のみここのミラーを更新する。Rte_Read_*() はタイムアウト
- * 判定 (Com_IsRxTimedOut()) だけを Com に問い合わせ、値自体はこのミラー
- * から返す。
+ * 都度呼ばれる Rte_COMCbk_*() が E2EXf_InverseTransformP05()（EngineInfo/
+ * AbsInfo とも E2E Profile05 使用）で検証し、合格した場合のみここのミラーを
+ * 更新する。Rte_Read_*() はタイムアウト判定 (Com_IsRxTimedOut()) だけを
+ * Com に問い合わせ、値自体はこのミラーから返す。
  *
  * E2E チェックが失敗しても Com のタイムアウトタイマ自体はフレーム到達で
  * リセットされる（Com は妥当性を関知しないため）。よってこのミラーの
@@ -64,9 +64,14 @@ static EngineState_t Rte_EngineStateMirror = ENGINE_STATE_OFF;
  * 途絶えた場合にのみ発火する別軸の保護）。
  *
  * Rte_EngineInfoStatus / Rte_AbsInfoStatus（Rte_IStatusType）:
- * 上記のミラー更新可否とは別に、直近の E2E_P01Check() 結果を
+ * 上記のミラー更新可否とは別に、直近の E2E_P05Check() 結果を
  * RTE_E_OK / RTE_E_SOFT_TRANSFORMER_ERROR（OKSOMELOST）/
- * RTE_E_HARD_TRANSFORMER_ERROR（それ以外の異常）へ分類して保持する。
+ * RTE_E_HARD_TRANSFORMER_ERROR（それ以外の異常）へ分類して保持する
+ * （Profile05 には Profile01 の SYNC/INITIAL に相当する状態が無いため、
+ * OK に分類されるのは E2E_P05STATUS_OK 単独。ただし起動直後の最初の
+ * フレームは E2EXf_InverseTransformP05() 側で OK に格上げされるため
+ * ここでは通常の OK と区別されない。詳細は E2EXf_RxConfigTypeP05 の
+ * WaitForFirstData 宣言コメント参照）。
  * Rte_Read_*() はこれを Com_IsRxTimedOut() と合成し、SWC が「タイムアウト
  * なのか」「E2E で弾かれたのか（データは信頼できないので前回値のまま）」
  * 「E2E 上は使用可だが一部フレーム消失があったのか」を区別できるようにする
@@ -139,16 +144,38 @@ static Rte_IStatusType Rte_MapE2EStatus(E2E_P01StatusType status)
 }
 
 /**
+ * \brief   E2E_P05StatusType（6状態）を Rte_IStatusType（3値+OK）へ写像する。
+ *
+ * \details Rte_MapE2EStatus() の Profile05 版。P05 には INITIAL/SYNC に
+ *          相当する状態が無いため、CRC正・データ信頼可の判定は OK 単独で
+ *          行う。OKSOMELOST/それ以外の扱いは Rte_MapE2EStatus() と同じ。
+ */
+static Rte_IStatusType Rte_MapE2EStatusP05(E2E_P05StatusType status)
+{
+    switch (status)
+    {
+        case E2E_P05STATUS_OK:
+            return RTE_E_OK;
+        case E2E_P05STATUS_OKSOMELOST:
+            return RTE_E_SOFT_TRANSFORMER_ERROR;
+        default:
+            return RTE_E_HARD_TRANSFORMER_ERROR;
+    }
+}
+
+/**
  * \brief   EngineInfo (RX IPduId=0) フレーム受信の都度呼ばれる E2E Transformer フック。
  *
  * \details Com_PBCfg.c の RxIndicationCbk として登録される。
- *          E2EXf_InverseTransform() が失敗した場合はミラーを更新せず、
+ *          E2EXf_InverseTransformP05() が失敗した場合はミラーを更新せず、
  *          前回の有効値をそのまま使い続けさせる。E2E チェックの生の結果は
- *          `E2EMon_NotifyCheckResult()`（CDD 相当の独立モジュール、
+ *          `E2EMon_NotifyCheckResultP05()`（CDD 相当の独立モジュール、
  *          src/Bsw/E2EMon/）へも通知する。これは実 AUTOSAR で言う
  *          「ARXML で設定した OnDataReceived 通知フックが RTE から生成され、
  *          独自 CDD の関数を呼ぶ」という接続方式を模したもの（本プロジェクトは
  *          RTE ジェネレータが無いため Rte.c が手書きでこの呼び出しを担う）。
+ *          以前は E2E Profile01 だったが、CRC 検出能力を高めるため
+ *          Profile05(CRC16+8bitカウンタ、DLC=7) へ切り替えた。
  *
  * \note    Com_PBCfg.c から extern 宣言経由で RxIndicationCbk として
  *          参照されるため non-static。Rte.h には公開しない（RTE の
@@ -156,14 +183,14 @@ static Rte_IStatusType Rte_MapE2EStatus(E2E_P01StatusType status)
  */
 void Rte_COMCbk_EngineInfo(void)
 {
-    uint8 buf[6];
+    uint8 buf[7];
     if (Com_ReceiveSignalGroupArray(0U, buf) != E_OK)
         return;
 
-    E2E_P01StatusType checkStatus;
-    const Std_ReturnType ret = E2EXf_InverseTransform(&E2EXf_EngineInfoRxCfg, buf, 6U, &checkStatus);
-    Rte_EngineInfoStatus = Rte_MapE2EStatus(checkStatus);
-    E2EMon_NotifyCheckResult(checkStatus);
+    E2E_P05StatusType checkStatus;
+    const Std_ReturnType ret = E2EXf_InverseTransformP05(&E2EXf_EngineInfoRxCfg, buf, 7U, &checkStatus);
+    Rte_EngineInfoStatus = Rte_MapE2EStatusP05(checkStatus);
+    E2EMon_NotifyCheckResultP05(checkStatus);
     if (ret != E_OK)
         return;
 
@@ -295,18 +322,20 @@ void Rte_COMCbk_SecureCommand(void)
  *          直後であるため）。TMS/MDT/ComTransferProperty と同じく、動機は
  *          実利より仕様忠実性（SWS_Com_00201/00051/00638 相当）。
  *
- * \note    Rte_COMCbk_EngineInfo() と同じ理由で non-static。
+ * \note    Rte_COMCbk_EngineInfo() と同じ理由で non-static。以前は E2E
+ *          Profile01 だったが、EngineInfo と同じ理由で Profile05
+ *          (CRC16+8bitカウンタ、DLC=6) へ切り替えた。
  */
 void Rte_COMCbk_AbsInfo(void)
 {
-    uint8 buf[5];
+    uint8 buf[6];
     if (Com_ReceiveSignalGroupArray(1U, buf) != E_OK)
         return;
 
-    E2E_P01StatusType checkStatus;
-    const Std_ReturnType ret = E2EXf_InverseTransform(&E2EXf_AbsInfoRxCfg, buf, 5U, &checkStatus);
-    Rte_AbsInfoStatus = Rte_MapE2EStatus(checkStatus);
-    E2EMon_NotifyCheckResult(checkStatus);
+    E2E_P05StatusType checkStatus;
+    const Std_ReturnType ret = E2EXf_InverseTransformP05(&E2EXf_AbsInfoRxCfg, buf, 6U, &checkStatus);
+    Rte_AbsInfoStatus = Rte_MapE2EStatusP05(checkStatus);
+    E2EMon_NotifyCheckResultP05(checkStatus);
     if (ret != E_OK)
         return;
 

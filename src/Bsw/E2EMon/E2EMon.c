@@ -28,22 +28,30 @@ void E2EMon_Init(void)
     DET_LOGI(TAG, "Init ok");
 }
 
-void E2EMon_NotifyCheckResult(E2E_P01StatusType status)
+/* CRC 不一致・シーケンス異常それぞれの累積カウンタを更新し（0xFF で飽和）、
+ * 両カウンタを Com シグナルへ反映する。Profile01/05 で共通の後段処理。 */
+static void E2EMon_Publish(uint8 crcErr, uint8 seqErr)
 {
-    if (status == E2E_P01STATUS_WRONGCRC)
-    {
-        if (E2EMon_CrcErrorCount < 0xFFU)
-            E2EMon_CrcErrorCount++;
-    }
-    else if ((status == E2E_P01STATUS_WRONGSEQUENCE) || (status == E2E_P01STATUS_REPEATED))
-    {
-        if (E2EMon_SequenceErrorCount < 0xFFU)
-            E2EMon_SequenceErrorCount++;
-    }
+    if (crcErr && (E2EMon_CrcErrorCount < 0xFFU))
+        E2EMon_CrcErrorCount++;
+    if (seqErr && (E2EMon_SequenceErrorCount < 0xFFU))
+        E2EMon_SequenceErrorCount++;
 
     /* 値をセットするだけで、送信タイミングには一切関与しない。実際に
      * CAN へ送信するかどうか・いつ送信するかは Com 自身の PERIODIC
      * モード（Com_MainFunction()）が独立に判断する。 */
     (void)Com_SendSignal(COM_SIGNAL_E2E_CRC_ERR_COUNT, &E2EMon_CrcErrorCount);
     (void)Com_SendSignal(COM_SIGNAL_E2E_SEQ_ERR_COUNT, &E2EMon_SequenceErrorCount);
+}
+
+void E2EMon_NotifyCheckResult(E2E_P01StatusType status)
+{
+    E2EMon_Publish(status == E2E_P01STATUS_WRONGCRC,
+                   (status == E2E_P01STATUS_WRONGSEQUENCE) || (status == E2E_P01STATUS_REPEATED));
+}
+
+void E2EMon_NotifyCheckResultP05(E2E_P05StatusType status)
+{
+    E2EMon_Publish(status == E2E_P05STATUS_ERROR,
+                   (status == E2E_P05STATUS_WRONGSEQUENCE) || (status == E2E_P05STATUS_REPEATED));
 }

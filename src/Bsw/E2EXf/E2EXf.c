@@ -82,6 +82,59 @@ Std_ReturnType E2EXf_InverseTransform(const E2EXf_RxConfigType* Config, const ui
     return acceptable ? E_OK : E_NOT_OK;
 }
 
+Std_ReturnType E2EXf_InverseTransformP05(const E2EXf_RxConfigTypeP05* Config, const uint8* Buffer, uint8 Length,
+                                          E2E_P05StatusType* CheckStatus)
+{
+    if (CheckStatus == NULL)
+    {
+        Det_ReportError(E2EXF_MODULE_ID, 0U, E2EXF_API_ID_INVERSE_TRANSFORM, E2EXF_E_PARAM_POINTER);
+        return E_NOT_OK;
+    }
+
+    if (!E2EXf_Initialized)
+    {
+        Det_ReportError(E2EXF_MODULE_ID, 0U, E2EXF_API_ID_INVERSE_TRANSFORM, E2EXF_E_UNINIT);
+        *CheckStatus = E2E_P05STATUS_ERROR;
+        return E_NOT_OK;
+    }
+
+    if (Config == NULL || Buffer == NULL)
+    {
+        Det_ReportError(E2EXF_MODULE_ID, 0U, E2EXF_API_ID_INVERSE_TRANSFORM, E2EXF_E_PARAM_POINTER);
+        *CheckStatus = E2E_P05STATUS_ERROR;
+        return E_NOT_OK;
+    }
+
+    E2E_P05StatusType status = E2E_P05Check(Config->E2EConfig, Config->CheckState, Buffer, Length);
+
+    /* Profile05にはProfile01のWaitForFirstData/INITIAL相当の初回受信の特別扱いが
+     * 無い(E2E_P05.c は仕様に忠実な実装として意図的にこれを持たない)。しかし
+     * 実運用では起動直後、送信元ECUが既に稼働中でCounterが0以外から始まっている
+     * ことが十分あり得るため、そのまま繋ぐと最初のフレーム(CRCは正しい)が
+     * REPEATED/WRONGSEQUENCEと誤判定され、DEM_DEBOUNCE_LIMIT=1の設定と相まって
+     * 即座に誤ったDTCが確定してしまう。CRCさえ正しければ「通信路そのものは
+     * 正常」と判断し、最初の1回に限りOKへ格上げする(E2E_P05Check()側は既に
+     * 内部でCounterを受信値へ同期済みのため、2回目以降は通常のdelta判定に
+     * 自然に戻る)。EngineHealthStatus 用など WaitForFirstData が NULL の
+     * インスタンスにはこの特別扱いを適用しない。 */
+    if ((Config->WaitForFirstData != NULL) && (*Config->WaitForFirstData != 0U) && (status != E2E_P05STATUS_ERROR))
+    {
+        status = E2E_P05STATUS_OK;
+        *Config->WaitForFirstData = 0U;
+    }
+
+    *CheckStatus = status;
+
+    const uint8 acceptable = (status == E2E_P05STATUS_OK) || (status == E2E_P05STATUS_OKSOMELOST);
+
+    if (!acceptable)
+        DET_LOGW(TAG, "InverseTransformP05 NG DemEvent=%u st=%u", (unsigned)Config->DemEventId, (unsigned)status);
+
+    Dem_ReportErrorStatus(Config->DemEventId, acceptable ? DEM_EVENT_STATUS_PASSED : DEM_EVENT_STATUS_FAILED);
+
+    return acceptable ? E_OK : E_NOT_OK;
+}
+
 void E2EXf_Transform(const E2EXf_TxConfigType* Config, uint8* Buffer, uint8 Length)
 {
     if (!E2EXf_Initialized)

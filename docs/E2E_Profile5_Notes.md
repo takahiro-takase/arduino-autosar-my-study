@@ -150,12 +150,32 @@ Profile01 (`E2E_P01StatusType`) とはビットパターンが異なる点に注
 
 ## 8. 本実装での設計判断メモ
 
-- **Check側は本プロジェクト内に呼び出し元が無い**（`EngineHealthStatus` は TX の
-  み）。対称性のため Profile01 と同じ構成で実装したが、実機で一度も呼ばれない
-  ため、正しさは `test/test_e2e_p05/test_e2e_p05.cpp`（GoogleTest、`env:native_e2e_p05`）
-  のホストテストでのみ検証されている。将来 Profile05 で保護された PDU を受信する
-  ようになった場合は、実機での相互検証（送信側 `E2E_P05Protect` が書いたフレームを
-  実際に `E2E_P05Check` が正しく判定するか）を追加で行うこと。
+- **Check側は当初(EngineHealthStatus TX単体の時期)は本プロジェクト内に呼び出し元が
+  無かった**。対称性のため Protect と同じ構成で先に実装し、正しさは
+  `test/test_e2e_p05/test_e2e_p05.cpp`（GoogleTest、`env:native_e2e_p05`）の
+  ホストテストのみで検証していた。その後 2026-08 に EngineInfo(RX,0x100)/
+  AbsInfo(RX,0x110) を Profile01 から Profile05 へ移行し、`E2EXf_InverseTransformP05()`
+  （`src/Bsw/E2EXf/E2EXf.c`）経由で `E2E_P05Check()` の実際の呼び出し元になった
+  （`src/Rte/Rte.c` の `Rte_COMCbk_EngineInfo()`/`Rte_COMCbk_AbsInfo()`）。
+  次に検証結果を確認する場合は、送信側（他 ECU 役の uds_tester/CAPL スクリプト）が
+  `E2E_P05Protect` と同じ CRC16/カウンタ計算で組み立てたフレームを、実機の
+  `E2E_P05Check` が正しく判定するかを実機ログで確認すること。
+- **起動直後の初回受信を E2EXf 層で救済（コードレビューで発見・修正済み）**:
+  `E2E_P05Check()` は本章 5 節の通り Profile01 の `WaitForFirstData`/`INITIAL`
+  相当の初回受信の特別扱いを持たない（仕様通り、意図的）。EngineInfo/AbsInfo
+  の送信元 ECU は本 ECU より先に起動して Counter が 0 以外から始まっている
+  ことが普通にあり得るため、そのまま繋ぐと起動直後の最初の（CRC は正しい）
+  フレームが `REPEATED`/`WRONGSEQUENCE` と誤判定され、
+  `DEM_DEBOUNCE_LIMIT_E2E_ENGINEINFO`/`_ABSINFO`（`Dem_Cfg.h`、いずれも 1 = 即確定）
+  と相まって毎回の電源投入直後に誤った DTC が確定してしまう。`E2E_P05.c`
+  自体は仕様に忠実なまま変更せず（`test/test_e2e_p05/` の
+  `FirstCheckAfterInitIsRepeatedBecauseBothStartAtCounterZero` が反する変更を
+  検出する）、統合層である `E2EXf_RxConfigTypeP05.WaitForFirstData` フラグと
+  `E2EXf_InverseTransformP05()` 側の格上げ処理で対処した。CRC が正しい最初の
+  1 フレームに限り判定結果を `OK` に格上げして Dem/E2EMon/Rte ステータスの
+  いずれにも誤検出が伝播しないようにし、2 フレーム目以降は
+  `E2E_P05Check()` が内部で `State->Counter` を受信値へ同期済みのため通常の
+  delta 判定にそのまま戻る。
 - **E2EXf層の統合方式**: `E2EXf_TxConfigType`（Profile01専用）は削除せず、
   `E2EXf_TxConfigTypeP05`/`E2EXf_TransformP05()` を並行して追加する形にした。
   実 AUTOSAR の E2E Transformer は ARXML 設定から RTE 生成コードが
