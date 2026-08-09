@@ -1,0 +1,77 @@
+// CAPL 風 DSL の do-while 文のサンプル (.capl)。
+//
+// 他の example_*.capl に続くサンプル。文法の詳細は README.md の
+// 「CAPL 風スクリプト機能」を参照。
+//
+// do-while は while と違い、条件を最初に評価する前に本体を必ず1回実行する
+// (C/CAPL と同じ)。「とりあえず1回試してから、成功するまで/上限回数まで
+// リトライする」という処理と相性がよい。
+
+variables
+{
+    byte retryCount;
+    byte maxRetries;
+    byte succeeded;
+}
+
+on start
+{
+    write("=== do-while のサンプル ===");
+
+    // 1. 基本動作の確認: while と違い、条件が最初から偽でも本体は必ず1回実行される
+    //    (byte は 0-255 の範囲しか取らないので retryCount < 0 は常に偽)。
+    retryCount = 0;
+    do
+    {
+        write("do-while 本体を実行 (retryCount=%d)", retryCount);
+        retryCount++;
+    } while (retryCount < 0);
+    write("条件が最初から偽でも1回は実行された (retryCount=%d)", retryCount);
+
+    // 2. break の確認: while/for と同じく、do-while の中でも break でループを
+    //    途中で抜けられる。
+    retryCount = 0;
+    do
+    {
+        retryCount++;
+        if (retryCount == 2)
+        {
+            write("retryCount=%d で break", retryCount);
+            break;
+        }
+        write("retryCount=%d (break していない)", retryCount);
+    } while (retryCount < 5);
+    write("break 後の retryCount=%d (5にはならない)", retryCount);
+
+    // 3. 実用例: TesterPresent を、成功する(正応答が返る)か上限回数に達するまで
+    //    送信する。「まず1回送ってみて、ダメなら条件を見てリトライ」という
+    //    書き方が while より自然に表現できる典型例。
+    send(0x10, 0x03);      // ExtendedSession へ遷移 (TesterPresent が意味を持つ前提)
+    wait_response();
+    assert_positive();
+    write("ExtendedSession OK");
+
+    retryCount = 0;
+    maxRetries = 3;
+    succeeded = 0;
+    do
+    {
+        retryCount++;
+        write("TesterPresent 送信 (%d/%d 回目)", retryCount, maxRetries);
+        send(0x3E, 0x00);
+        wait_response(1.0);
+        if (respSid() == 0x7E)
+        {
+            succeeded = 1;
+        }
+    } while (!succeeded && retryCount < maxRetries);
+
+    if (succeeded)
+    {
+        write("TesterPresent 成功 (%d 回目で応答あり)", retryCount);
+    }
+    else
+    {
+        write("TesterPresent 失敗 (%d 回とも応答なし)", retryCount);
+    }
+}
