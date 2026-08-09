@@ -36,8 +36,10 @@ UDS 送受信の実体は capl_api.CaplContext をそのままランタイム層
       書けない (パース時にエラー)。variables{} と同じ書き方だが `variables { }` では
       包まない。下記「ユーザー定義関数」参照）
 
-式は四則演算 (+ - * / %)・比較 (== != < > <= >=)・論理 (&& || !)・丸括弧・
-関数呼び出し・変数参照・配列要素参照 (data[i])・message 変数のフィールド読み取り
+式は四則演算 (+ - * / %)・比較 (== != < > <= >=)・論理 (&& || !)・
+ビット演算 (& | ^ ~ << >>、C/CAPL と同じ優先順位。複合代入 &=/|=/^=/<<=/>>= は
+非対応、`x = x & y;` のように書く)・丸括弧・関数呼び出し・変数参照・
+配列要素参照 (data[i])・message 変数のフィールド読み取り
 (msg.dlc/msg.byte(n)/msg.id)・数値/文字列リテラル・this.byte(n)/this.id/this.dlc
 (on message ハンドラ内限定、下記参照) に対応する（構造体は対象外）。配列を
 添字なしでそのまま参照すると (例: send(data)) 全要素のコピーを返す。send()/
@@ -164,6 +166,10 @@ _TOKEN_SPEC = [
     ("GE", r">="),
     ("AND", r"&&"),
     ("OR", r"\|\|"),
+    # ビットシフトも同じ理由で LT/GT より前に置く (先に置かないと "<<" が LT,LT の
+    # 2トークンに割れてしまう)。
+    ("LSHIFT", r"<<"),
+    ("RSHIFT", r">>"),
     # 複合代入・インクリメント/デクリメントは対応する1文字演算子より前に置くこと
     # (先勝ちマッチのため。例えば PLUSEQ を PLUS より後ろに置くと "+=" が
     # PLUS,ASSIGN の2トークンに割れてしまう)。
@@ -183,6 +189,13 @@ _TOKEN_SPEC = [
     ("STAR", r"\*"),
     ("SLASH", r"/"),
     ("PERCENT", r"%"),
+    # ビット単項/2項演算子。AMP/PIPE は AND(&&)/OR(||) より後ろ (& が && の後半を
+    # 食わないように、&& を先に判定させる)。CARET/TILDE は他と衝突しないので
+    # 順序は問わない。
+    ("AMP", r"&"),
+    ("PIPE", r"\|"),
+    ("CARET", r"\^"),
+    ("TILDE", r"~"),
     ("LBRACE", r"\{"),
     ("RBRACE", r"\}"),
     ("LBRACKET", r"\["),
@@ -241,8 +254,17 @@ _DECL_TYPES = _ARRAY_ELEMENT_TYPES  # 変数宣言 (variables{}・ローカル�
 _DECL_START_KEYWORDS = _DECL_TYPES + ("message",)
 _FUNC_RETURN_TYPES = ("void",) + _VAR_TYPES  # 関数の戻り値の型 (void/int/float。配列は返せない)
 _COMPARISON_TOKENS = {"LT": "<", "GT": ">", "LE": "<=", "GE": ">="}
+_SHIFT_TOKENS = {"LSHIFT": "<<", "RSHIFT": ">>"}
 _ADDITIVE_TOKENS = {"PLUS": "+", "MINUS": "-"}
 _MULTIPLICATIVE_TOKENS = {"STAR": "*", "SLASH": "/", "PERCENT": "%"}
+# Interpreter._eval_binop() が使う、演算子文字列 -> 実装関数の辞書 (& | ^ は
+# 「int に変換してから Python の演算子を適用する」以外の差が無いので、if を
+# 3つ並べて演算子だけ変える代わりに1つの辞書引きにまとめる)。
+_BITWISE_BINOPS = {
+    "&": lambda a, b: a & b,
+    "|": lambda a, b: a | b,
+    "^": lambda a, b: a ^ b,
+}
 # 複合代入 (x += expr 等) はパーサーが `x = x <op> expr` の Assign/BinOp に脱糖する
 # (下記 _parse_assignment_expr 参照)。インタプリタ・検証系に新しいノード種別を
 # 増やさずに済み、代入の型変換ロジックも Assign 実行の1箇所のままで済む。
@@ -296,7 +318,7 @@ class ThisAccess:
 
 @dataclass
 class BinOp:
-    op: str  # "+" "-" "*" "/" "%" "==" "!=" "<" ">" "<=" ">=" "&&" "||"
+    op: str  # "+" "-" "*" "/" "%" "==" "!=" "<" ">" "<=" ">=" "&&" "||" "&" "|" "^" "<<" ">>"
     left: object  # Expr
     right: object  # Expr
     line: int
@@ -304,7 +326,7 @@ class BinOp:
 
 @dataclass
 class UnaryOp:
-    op: str  # "-" "!"
+    op: str  # "-" "!" "~"
     operand: object  # Expr
     line: int
 
@@ -1034,7 +1056,8 @@ class _Parser:
             return TimerName(tok.value, tok.line)
         return self._parse_expr()
 
-    # ---- 式 (優先順位: || > && > ==,!= > <,>,<=,>= > +,- > *,/,% > 単項 > 一次) ----
+    # ---- 式 (優先順位: || > && > | > ^ > & > ==,!= > <,>,<=,>= > <<,>> > +,- >
+    #        *,/,% > 単項 > 一次。C/CAPL と同じ優先順位) ----
     def _parse_expr(self):
         return self._parse_or()
 
@@ -1047,11 +1070,35 @@ class _Parser:
         return left
 
     def _parse_and(self):
-        left = self._parse_equality()
+        left = self._parse_bitor()
         while self._peek().kind == "AND":
             op_tok = self._advance()
-            right = self._parse_equality()
+            right = self._parse_bitor()
             left = BinOp("&&", left, right, op_tok.line)
+        return left
+
+    def _parse_bitor(self):
+        left = self._parse_bitxor()
+        while self._peek().kind == "PIPE":
+            op_tok = self._advance()
+            right = self._parse_bitxor()
+            left = BinOp("|", left, right, op_tok.line)
+        return left
+
+    def _parse_bitxor(self):
+        left = self._parse_bitand()
+        while self._peek().kind == "CARET":
+            op_tok = self._advance()
+            right = self._parse_bitand()
+            left = BinOp("^", left, right, op_tok.line)
+        return left
+
+    def _parse_bitand(self):
+        left = self._parse_equality()
+        while self._peek().kind == "AMP":
+            op_tok = self._advance()
+            right = self._parse_equality()
+            left = BinOp("&", left, right, op_tok.line)
         return left
 
     def _parse_equality(self):
@@ -1064,11 +1111,19 @@ class _Parser:
         return left
 
     def _parse_comparison(self):
-        left = self._parse_additive()
+        left = self._parse_shift()
         while self._peek().kind in _COMPARISON_TOKENS:
             op_tok = self._advance()
-            right = self._parse_additive()
+            right = self._parse_shift()
             left = BinOp(_COMPARISON_TOKENS[op_tok.kind], left, right, op_tok.line)
+        return left
+
+    def _parse_shift(self):
+        left = self._parse_additive()
+        while self._peek().kind in _SHIFT_TOKENS:
+            op_tok = self._advance()
+            right = self._parse_additive()
+            left = BinOp(_SHIFT_TOKENS[op_tok.kind], left, right, op_tok.line)
         return left
 
     def _parse_additive(self):
@@ -1095,6 +1150,9 @@ class _Parser:
         if tok.kind == "NOT":
             self._advance()
             return UnaryOp("!", self._parse_unary(), tok.line)
+        if tok.kind == "TILDE":
+            self._advance()
+            return UnaryOp("~", self._parse_unary(), tok.line)
         return self._parse_primary()
 
     def _parse_primary(self):
@@ -1415,6 +1473,25 @@ class Interpreter:
     @staticmethod
     def _to_int(value: ArgValue) -> int:
         return int(value)
+
+    def _to_int_checked(self, value, line: int, what: str) -> int:
+        """ビット演算子 (&/|/^/~/<</>>) から使う、行番号・文脈付きの int() 変換。
+        float が NaN/±inf だと Python の int() は ValueError/OverflowError を送出する
+        (通常の float 演算はオーバーフローしても例外を出さず黙って inf/nan になる
+        ため、例えば float を15回自乗するだけで到達しうる)。他のランタイムエラー
+        (ゼロ除算等) と同様、未処理のまま app.py の汎用 except まで飛ばすと行番号も
+        文脈も無い生のメッセージになってしまうため、ここで capl_api.ScriptAbort に
+        変換する。what は「どちらのオペランドの変換に失敗したか」をエラーメッセージに
+        含めるための説明 (例: "左辺"/"右辺"/"シフト量")。<</>> の左辺・右辺・
+        シフト量負チェックをまとめて1つの except で処理すると、実際には左辺
+        (シフト量ではない) が原因の場合でも「シフト量が負です」という誤診断に
+        なってしまうため、呼び出し側でオペランドごとに個別に呼ぶこと。"""
+        try:
+            return int(value)
+        except (ValueError, OverflowError) as exc:
+            raise capl_api.ScriptAbort(
+                f"{line}行目: {what}を整数に変換できません ({value})"
+            ) from exc
 
     @staticmethod
     def _to_byte(value: ArgValue) -> int:
@@ -1855,6 +1932,22 @@ class Interpreter:
             return 1 if left <= right else 0
         if node.op == ">=":
             return 1 if left >= right else 0
+        if node.op in _BITWISE_BINOPS:
+            return _BITWISE_BINOPS[node.op](
+                self._to_int_checked(left, node.line, "左辺"),
+                self._to_int_checked(right, node.line, "右辺"),
+            )
+        if node.op in ("<<", ">>"):
+            # 左辺・右辺 (シフト量) は別々に _to_int_checked() を呼ぶ (まとめて1つの
+            # try/except で捕捉すると、実際には左辺の変換失敗でも「シフト量が原因」と
+            # 誤診断してしまうため)。シフト量が負かどうかも Python の << 自体の
+            # ValueError に頼らず、変換が成功した後に明示的にチェックする (こうすると
+            # 「変換できない」と「シフト量が負」を別のエラーとしてはっきり区別できる)。
+            left_i = self._to_int_checked(left, node.line, "左辺")
+            right_i = self._to_int_checked(right, node.line, "シフト量")
+            if right_i < 0:
+                raise capl_api.ScriptAbort(f"{node.line}行目: {node.op} のシフト量が負です")
+            return left_i << right_i if node.op == "<<" else left_i >> right_i
         raise DslSyntaxError(f"{node.line}行目: 未対応の演算子 '{node.op}'")
 
     def _eval_unaryop(self, node: UnaryOp):
@@ -1863,6 +1956,8 @@ class Interpreter:
             return -value
         if node.op == "!":
             return 0 if self._truthy(value) else 1
+        if node.op == "~":
+            return ~self._to_int_checked(value, node.line, "オペランド")
         raise DslSyntaxError(f"{node.line}行目: 未対応の単項演算子 '{node.op}'")
 
     def _call(self, call: Call):
