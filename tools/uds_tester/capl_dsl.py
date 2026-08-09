@@ -7,7 +7,7 @@ UDS 送受信の実体は capl_api.CaplContext をそのままランタイム層
 
 対応する構文:
 
-    variables { int x; float y = 1.5; byte data[8]; message 0x123 msg; }
+    variables { int x; float y = 1.5; byte data[8]; word w; message 0x123 msg; }
         // 省略可。1ファイルに1つまで、on start/on timer/on message より前に書くこと
     on start { ... }
     on timer <name> { ... }
@@ -15,19 +15,23 @@ UDS 送受信の実体は capl_api.CaplContext をそのままランタイム層
 
 ブロック内は以下の文が書ける:
     - 関数呼び出し文: send(...); / write(...); など
-    - 代入文: x = x + 1; / x += 1; / x++; / x--;  （x は variables{} で宣言済みで
-      あること。複合代入 (+= -= *= /= %=) とインクリメント/デクリメント (++/--、
-      後置のみ) はパーサーが x = x <op> 1 の代入文に脱糖する。式の中では使えず、
-      文として、または for の初期化/更新句としてのみ使える）
+    - 代入文: x = x + 1; / x += 1; / x &= 0x0F; / x++; / x--;  （x は variables{} で
+      宣言済みであること。複合代入 (算術系 += -= *= /= %=、ビット演算系
+      &= |= ^= <<= >>=) とインクリメント/デクリメント (++/--、後置のみ) はパーサーが
+      x = x <op> 1 の代入文に脱糖する。式の中では使えず、文として、または for の
+      初期化/更新句としてのみ使える）
     - 配列要素への代入文: data[i] = expr;  （data は variables{} で配列として
       宣言済みであること。要素型は byte/int/float のいずれか）
     - message 変数のフィールドへの代入文: msg.dlc = expr; / msg.byte(n) = expr;
       （msg.id への代入は不可、読み取り専用。下記参照）
     - if (expr) { ... } [else if (expr) { ... }]* [else { ... }]
     - while (expr) { ... }
+    - do { ... } while (expr);  （while と違い body を必ず1回実行してから cond を
+      評価する。break/continue は while と同じ扱い）
     - for (x = 0; x < 10; x++) { ... }  （初期化/条件/更新はいずれも省略可）
-    - break; / continue;  （break は while/for/switch の中、continue は while/for
-      の中でのみ使える。continue は switch を素通りして外側の while/for に効く）
+    - break; / continue;  （break は while/do-while/for/switch の中、continue は
+      while/do-while/for の中でのみ使える。continue は switch を素通りして
+      外側の while/do-while/for に効く）
     - switch (expr) { case N: ... break; case M: ... default: ... }  （C/CAPL と
       同じフォールスルー動作。case の値は整数定数のみ）
     - return; / return expr;  （ユーザー定義関数の中でのみ使える。下記参照）
@@ -37,8 +41,8 @@ UDS 送受信の実体は capl_api.CaplContext をそのままランタイム層
       包まない。下記「ユーザー定義関数」参照）
 
 式は四則演算 (+ - * / %)・比較 (== != < > <= >=)・論理 (&& || !)・
-ビット演算 (& | ^ ~ << >>、C/CAPL と同じ優先順位。複合代入 &=/|=/^=/<<=/>>= は
-非対応、`x = x & y;` のように書く)・丸括弧・関数呼び出し・変数参照・
+ビット演算 (& | ^ ~ << >>、C/CAPL と同じ優先順位。複合代入 &=/|=/^=/<<=/>>= にも
+対応)・丸括弧・関数呼び出し・変数参照・
 配列要素参照 (data[i])・message 変数のフィールド読み取り
 (msg.dlc/msg.byte(n)/msg.id)・数値/文字列リテラル・this.byte(n)/this.id/this.dlc
 (on message ハンドラ内限定、下記参照) に対応する（構造体は対象外）。配列を
@@ -74,14 +78,16 @@ data (8バイト、全て0) を持つ。フィールドは msg.dlc (0-8、範囲
     int add(int a, int b) { return a + b; }
     void logRetry(int n) { ... }   // void 関数は return; か何も return せず終了
 
-トップレベル (variables{}/on ... と同じ階層) にいくつでも書ける。型は戻り値・
-仮引数とも int/float/byte のみ (void は戻り値にのみ使える。配列は戻り値にも
-仮引数にもできない、byte スカラーは可)。定義順に関係なく呼び出せる (前方参照・
-相互再帰も可。全関数の名前を実行前に一括登録してから各ブロック・各関数本体を
-検証する)。void 関数の戻り値を式の中で使おうとする (例: `x = voidFunc();`) のは
-実行前検証でエラーになる。int/float/byte を返す関数が return を一度も実行せずに
-本体の最後まで到達した場合は (これは静的には検出しない。分岐を網羅する制御
-フロー解析はしていないため) 実行時に capl_api.ScriptAbort で中断する。
+トップレベル (variables{}/on ... と同じ階層) にいくつでも書ける。戻り値の型は
+int/float/byte/word のスカラーのみ (void は戻り値専用、配列は戻り値にできない)。
+仮引数は int/float/byte/word のスカラーに加え、`byte data[]` のようにサイズ指定
+なしの配列も使える (配列を渡せる実引数は「配列変数を裸で渡す」場合のみ、詳細は
+Param のdocstring参照)。定義順に関係なく呼び出せる (前方参照・相互再帰も可。
+全関数の名前を実行前に一括登録してから各ブロック・各関数本体を検証する)。void
+関数の戻り値を式の中で使おうとする (例: `x = voidFunc();`) のは実行前検証で
+エラーになる。int/float/byte/word を返す関数が return を一度も実行せずに本体の
+最後まで到達した場合は (これは静的には検出しない。分岐を網羅する制御フロー解析は
+していないため) 実行時に capl_api.ScriptAbort で中断する。
 
 関数本体では、仮引数に加えて `int x;`/`byte data[n];` のようなローカル変数宣言も
 文として (variables{} で包まずに直接) 書ける。ローカル変数は**関数スコープ**
@@ -167,7 +173,11 @@ _TOKEN_SPEC = [
     ("AND", r"&&"),
     ("OR", r"\|\|"),
     # ビットシフトも同じ理由で LT/GT より前に置く (先に置かないと "<<" が LT,LT の
-    # 2トークンに割れてしまう)。
+    # 2トークンに割れてしまう)。シフトの複合代入 (3文字) は無印シフト (2文字) より
+    # さらに前に置くこと (同じ先勝ちマッチの理由で、先に置かないと "<<=" が
+    # LSHIFT,ASSIGN の2トークンに割れてしまう)。
+    ("LSHIFTEQ", r"<<="),
+    ("RSHIFTEQ", r">>="),
     ("LSHIFT", r"<<"),
     ("RSHIFT", r">>"),
     # 複合代入・インクリメント/デクリメントは対応する1文字演算子より前に置くこと
@@ -191,7 +201,11 @@ _TOKEN_SPEC = [
     ("PERCENT", r"%"),
     # ビット単項/2項演算子。AMP/PIPE は AND(&&)/OR(||) より後ろ (& が && の後半を
     # 食わないように、&& を先に判定させる)。CARET/TILDE は他と衝突しないので
-    # 順序は問わない。
+    # 順序は問わない。AMPEQ/PIPEEQ/CARETEQ (複合代入) は無印の AMP/PIPE/CARET より
+    # 前に置くこと (先勝ちマッチのため)。
+    ("AMPEQ", r"&="),
+    ("PIPEEQ", r"\|="),
+    ("CARETEQ", r"\^="),
     ("AMP", r"&"),
     ("PIPE", r"\|"),
     ("CARET", r"\^"),
@@ -244,20 +258,20 @@ def tokenize(source: str) -> list[Token]:
 # 構文解析
 # ---------------------------------------------------------------------------
 
-_VAR_TYPES = ("int", "float", "byte")  # スカラー変数・仮引数・戻り値に使える型
-# byte はスカラーでも配列 (byte[固定長]) でも使えるので、両者の型キーワード集合は
-# 完全に一致する (int/float/byte のどれも両方の書き方ができる)。以前は byte が
-# 配列専用だったため別々の定数だったが、byte をスカラーにも開放したことで
-# 区別する意味が無くなった。_ARRAY_ELEMENT_TYPES という名前は既存コードとの
+_VAR_TYPES = ("int", "float", "byte", "word")  # スカラー変数・仮引数・戻り値に使える型
+# byte/word はスカラーでも配列 (byte[固定長]/word[固定長]) でも使えるので、両者の型
+# キーワード集合は完全に一致する (int/float/byte/word のどれも両方の書き方ができる)。
+# 以前は byte が配列専用だったため別々の定数だったが、byte をスカラーにも開放した
+# ことで区別する意味が無くなった。_ARRAY_ELEMENT_TYPES という名前は既存コードとの
 # 互換のため残す。
-_ARRAY_ELEMENT_TYPES = _VAR_TYPES  # 配列の要素型として使える型 (int[]/float[]/byte[])
+_ARRAY_ELEMENT_TYPES = _VAR_TYPES  # 配列の要素型として使える型 (int[]/float[]/byte[]/word[])
 _DECL_TYPES = _ARRAY_ELEMENT_TYPES  # 変数宣言 (variables{}・ローカル共通) の先頭に来る型キーワード
-# 宣言文の先頭に来うるキーワード全体 (int/float/byte の VarDecl/ArrayDecl に加え、
+# 宣言文の先頭に来うるキーワード全体 (int/float/byte/word の VarDecl/ArrayDecl に加え、
 # message <id> name; の MessageDecl も同じ位置に書けるため)。_parse_statement() が
 # ローカル宣言文の受理判定に使う (_parse_decl_stmt() 自体は _at_ident("message") で
 # 自己判定するので、こちらは「関数の直接の本体でだけ許可する」判定専用)。
 _DECL_START_KEYWORDS = _DECL_TYPES + ("message",)
-_FUNC_RETURN_TYPES = ("void",) + _VAR_TYPES  # 関数の戻り値の型 (void/int/float/byte。配列は返せない)
+_FUNC_RETURN_TYPES = ("void",) + _VAR_TYPES  # 関数の戻り値の型 (void/int/float/byte/word。配列は返せない)
 _COMPARISON_TOKENS = {"LT": "<", "GT": ">", "LE": "<=", "GE": ">="}
 _SHIFT_TOKENS = {"LSHIFT": "<<", "RSHIFT": ">>"}
 _ADDITIVE_TOKENS = {"PLUS": "+", "MINUS": "-"}
@@ -273,8 +287,12 @@ _BITWISE_BINOPS = {
 # 複合代入 (x += expr 等) はパーサーが `x = x <op> expr` の Assign/BinOp に脱糖する
 # (下記 _parse_assignment_expr 参照)。インタプリタ・検証系に新しいノード種別を
 # 増やさずに済み、代入の型変換ロジックも Assign 実行の1箇所のままで済む。
+# ビット演算の複合代入 (&=/|=/^=/<<=/>>=) も算術系と全く同じ脱糖の仕組みに乗るだけ
+# (BinOp が既に "&"/"|"/"^"/"<<"/">>" を演算子として扱えるため、ここに追加するだけで
+# パーサー・インタプリタとも他の変更は不要)。
 _COMPOUND_ASSIGN_TOKENS = {
     "PLUSEQ": "+", "MINUSEQ": "-", "STAREQ": "*", "SLASHEQ": "/", "PERCENTEQ": "%",
+    "AMPEQ": "&", "PIPEEQ": "|", "CARETEQ": "^", "LSHIFTEQ": "<<", "RSHIFTEQ": ">>",
 }
 
 # setTimer(name, ms)/cancelTimer(name) の第1引数 (タイマー名) は特別扱いする。パーサーが
@@ -295,7 +313,7 @@ class Call:
 
 @dataclass
 class Var:
-    """変数参照式 (int/float/byte、variables{} での宣言が必要)。"""
+    """変数参照式 (int/float/byte/word、variables{} での宣言が必要)。"""
     name: str
     line: int
 
@@ -338,7 +356,7 @@ class UnaryOp:
 
 @dataclass
 class VarDecl:
-    type_name: str  # "int" | "float" | "byte"
+    type_name: str  # "int" | "float" | "byte" | "word"
     name: str
     init: object  # Expr | None
     line: int
@@ -367,6 +385,16 @@ class While:
 
 
 @dataclass
+class DoWhile:
+    """`do { ... } while (cond);`。While と違い、cond を最初に評価する前に body を
+    必ず1回実行する (C/CAPL と同じ)。break/continue の扱いは While と同じ (どちらも
+    このループを対象にする)。"""
+    body: list  # list[Stmt]
+    cond: object  # Expr
+    line: int
+
+
+@dataclass
 class For:
     """for (init; cond; update) { body }。init/cond/update はいずれも省略可
     (C の for(;;) と同様)。init/update は Assign 文のみ (i++ 等の増分演算子はない
@@ -381,10 +409,10 @@ class For:
 @dataclass
 class ArrayDecl:
     """`byte name[size];` / `int name[size] = {v0, v1, ...};` / `float name[n];` の
-    配列宣言。type_name は要素型 ("byte"|"int"|"float")。size は初期化リストが
+    配列宣言。type_name は要素型 ("byte"|"int"|"float"|"word")。size は初期化リストが
     あればその長さを、無ければ明示された添字の値を使う (両方指定時は初期化リストが
     size を超えていないことをパース時に確認する)。"""
-    type_name: str  # "byte" | "int" | "float" (配列の要素型)
+    type_name: str  # "byte" | "int" | "float" | "word" (配列の要素型)
     name: str
     size: int
     init: Optional[list]  # list[Expr] | None (定数式のみ、VarDecl.init と同じ制約)
@@ -488,18 +516,18 @@ class Switch:
 
 @dataclass
 class Param:
-    """ユーザー定義関数の仮引数。型は int/float/byte で、スカラーまたは配列
+    """ユーザー定義関数の仮引数。型は int/float/byte/word で、スカラーまたは配列
     (`byte data[]` のようにサイズ指定なしの `[]` で配列であることを示す)。
-    byte スカラー仮引数は _coerce() により呼び出しのたびに 0-255 にマスクされる
-    (byte スカラー変数と同じ)。配列仮引数も同様に、呼び出しのたびに要素ごと
-    _coerce_array_element() で仮引数の宣言型へ変換し直す (_call_user_function()
-    参照)。呼び出し元の配列がその宣言型と異なっていても (例: int 配列を byte
-    仮引数に渡す)、スカラー仮引数と同じ「呼び出しのたびに宣言型へ変換」という
-    不変条件を配列要素についても保つ。呼び出し側は対応する実引数として「配列
-    変数を裸で渡す」ことのみ許され (_validate_expr() の Call 分岐参照)、
-    呼び出しのたびにその配列のコピーが束縛される (_eval(Var) が配列に対して
-    常にコピーを返すのと同じ、send(data) 等と共通の挙動)。"""
-    type_name: str  # "int" | "float" | "byte" (配列の場合は要素型)
+    byte/word スカラー仮引数は _coerce() により呼び出しのたびに 0-255/0-65535 に
+    マスクされる (byte/word スカラー変数と同じ)。配列仮引数も同様に、呼び出しの
+    たびに要素ごと _coerce_array_element() で仮引数の宣言型へ変換し直す
+    (_call_user_function() 参照)。呼び出し元の配列がその宣言型と異なっていても
+    (例: int 配列を byte 仮引数に渡す)、スカラー仮引数と同じ「呼び出しのたびに
+    宣言型へ変換」という不変条件を配列要素についても保つ。呼び出し側は対応する
+    実引数として「配列変数を裸で渡す」ことのみ許され (_validate_expr() の Call
+    分岐参照)、呼び出しのたびにその配列のコピーが束縛される (_eval(Var) が配列に
+    対して常にコピーを返すのと同じ、send(data) 等と共通の挙動)。"""
+    type_name: str  # "int" | "float" | "byte" | "word" (配列の場合は要素型)
     name: str
     line: int
     is_array: bool = False
@@ -508,7 +536,7 @@ class Param:
 @dataclass
 class FuncDecl:
     """`void name(int a, float b) { ... }` のようなユーザー定義関数の宣言。
-    return_type は "void"/"int"/"float"/"byte"。関数はトップレベル (variables{}/on ... と
+    return_type は "void"/"int"/"float"/"byte"/"word"。関数はトップレベル (variables{}/on ... と
     同じ階層) にいくつでも書け、on start/on timer/on message や他の関数から
     呼び出せる (前方参照・相互再帰も可、_functions は実行前に一括登録するため)。
     仮引数に加えて、body の直接の要素として `int x;`/`byte data[n];` のようなローカル
@@ -522,7 +550,7 @@ class FuncDecl:
     実行されることを保証することで、この食い違いを構造的に防ぐ。仮引数・ローカル
     変数とも on start/on timer/on message や variables{} の中では書けない
     (関数の中限定)。"""
-    return_type: str  # "void" | "int" | "float" | "byte"
+    return_type: str  # "void" | "int" | "float" | "byte" | "word"
     name: str
     params: list  # list[Param]
     body: list  # list[Stmt]  (VarDecl/ArrayDecl が body の直接の要素として混在しうる。
@@ -532,7 +560,7 @@ class FuncDecl:
 
 @dataclass
 class Return:
-    """`return;` (void 関数用) / `return expr;` (int/float/byte を返す関数用)。
+    """`return;` (void 関数用) / `return expr;` (int/float/byte/word を返す関数用)。
     関数の外 (on start/on timer/on message) では使えない (_validate_stmt() 参照)。"""
     expr: object  # Expr | None
     line: int
@@ -659,7 +687,7 @@ class _Parser:
         return Script(variables, on_start, on_timer, on_message, functions)
 
     def _parse_func_decl(self) -> FuncDecl:
-        type_tok = self._advance()  # void/int/float/byte (呼び出し元で確認済み)
+        type_tok = self._advance()  # void/int/float/byte/word (呼び出し元で確認済み)
         name_tok = self._expect("IDENT")
         self._expect("LPAREN")
         params = self._parse_arg_list(lambda i: self._parse_param())
@@ -679,7 +707,7 @@ class _Parser:
         type_tok = self._peek()
         if type_tok.kind != "IDENT" or type_tok.value not in _VAR_TYPES:
             raise DslSyntaxError(
-                f"{type_tok.line}行目: 引数の型 (int/float/byte) を期待しましたが "
+                f"{type_tok.line}行目: 引数の型 (int/float/byte/word) を期待しましたが "
                 f"'{type_tok.value}' でした"
             )
         self._advance()
@@ -729,7 +757,7 @@ class _Parser:
         type_tok = self._peek()
         if type_tok.kind != "IDENT" or type_tok.value not in _DECL_TYPES:
             raise DslSyntaxError(
-                f"{type_tok.line}行目: 変数の型 (int/float/byte) を期待しましたが "
+                f"{type_tok.line}行目: 変数の型 (int/float/byte/word) を期待しましたが "
                 f"'{type_tok.value}' でした"
             )
         self._advance()
@@ -830,6 +858,8 @@ class _Parser:
             return self._parse_if()
         if self._at_ident("while"):
             return self._parse_while()
+        if self._at_ident("do"):
+            return self._parse_do_while()
         if self._at_ident("for"):
             return self._parse_for()
         if self._at_ident("switch"):
@@ -854,14 +884,15 @@ class _Parser:
         # 中でも使う共通のパーサーで、VarDecl/ArrayDecl/MessageDecl を返して末尾の
         # セミコロンまで読み切る)。
         #
-        # "message" は int/float/byte と違って、宣言の先頭以外の位置では普通の識別子
-        # (message 型変数の名前) としても現れうる (int/float/byte は型キーワードとして
-        # 常に予約されているため変数名になり得ないが、message にはその制約が無い)。
-        # そのため `message.dlc = 1;` (message という名前の変数へのメンバー代入) や
-        # `message[0] = 1;` を、`message <id> name;` の宣言と混同しないよう、
-        # 「次のトークンが CAN ID (HEXNUM/INT) かどうか」で判別する (実際の宣言文法上、
-        # message の直後には必ず CAN ID が来るため)。int/float/byte はこの追加判定の
-        # 対象外 (常に宣言の先頭として扱う、従来通りの挙動)。
+        # "message" は int/float/byte/word と違って、宣言の先頭以外の位置では普通の
+        # 識別子 (message 型変数の名前) としても現れうる (int/float/byte/word は型
+        # キーワードとして常に予約されているため変数名になり得ないが、message には
+        # その制約が無い)。そのため `message.dlc = 1;` (message という名前の変数への
+        # メンバー代入) や `message[0] = 1;` を、`message <id> name;` の宣言と混同
+        # しないよう、「次のトークンが CAN ID (HEXNUM/INT) かどうか」で判別する
+        # (実際の宣言文法上、message の直後には必ず CAN ID が来るため)。
+        # int/float/byte/word はこの追加判定の対象外 (常に宣言の先頭として扱う、
+        # 従来通りの挙動)。
         decl_tok = self._peek()
         looks_like_message_decl = decl_tok.value != "message" or self._peek(1).kind in ("HEXNUM", "INT")
         if decl_tok.kind == "IDENT" and decl_tok.value in _DECL_START_KEYWORDS and looks_like_message_decl:
@@ -913,6 +944,16 @@ class _Parser:
         self._expect("RPAREN")
         body = self._parse_nested_block()
         return While(cond, body, while_tok.line)
+
+    def _parse_do_while(self) -> DoWhile:
+        do_tok = self._expect_ident("do")
+        body = self._parse_nested_block()
+        self._expect_ident("while")
+        self._expect("LPAREN")
+        cond = self._parse_expr()
+        self._expect("RPAREN")
+        self._expect("SEMI")
+        return DoWhile(body, cond, do_tok.line)
 
     def _parse_for(self) -> For:
         for_tok = self._expect_ident("for")
@@ -1329,13 +1370,13 @@ class _Variable:
     スカラーと配列を区別する (以前は type_name が "byte" かどうかで判定していたが、
     int/float 配列に対応するとスカラー int/float と配列 int/float の type_name が
     同じ文字列になってしまい判定できなくなったため、明示的なフィールドにした)。
-    type_name は配列なら要素型 ("byte"/"int"/"float")、message 変数なら "message"
-    固定 (is_array=False)。value はスカラーなら int/float/byte、配列なら list、
+    type_name は配列なら要素型 ("byte"/"int"/"float"/"word")、message 変数なら
+    "message" 固定 (is_array=False)。value はスカラーなら int/float、配列なら list、
     message なら _MessageValue を持つ。スカラー・配列・message を別々の dict (self._vars/
     self._arrays 等) で持つと、「この名前は宣言済みか」「何者か」を毎回複数の dict の
     メンバーシップを OR して求める羽目になり判定漏れの温床になる (実際、配列サポート
     追加時にこのパターンが複数箇所で発生した) ため、1つの dict に統一している。"""
-    type_name: str  # "int" | "float" | "byte" | "message"
+    type_name: str  # "int" | "float" | "byte" | "word" | "message"
     is_array: bool
     value: object  # int | float | list | _MessageValue
 
@@ -1699,26 +1740,29 @@ class Interpreter:
 
     @staticmethod
     def _coerce(value, type_name: str):
-        """代入・初期化のたびに宣言型 (int/float/byte) への変換を行う。C/CAPL の代入と
+        """代入・初期化のたびに宣言型 (int/float/byte/word) への変換を行う。C/CAPL の代入と
         同様、float を int 変数に代入すると 0 方向へ切り捨てられる (Python の int() は
         int(2.9)==2, int(-2.9)==-2 と C の (int) キャストと同じ丸め方向なのでそのまま使える)。
         これをやらないと `int half; half = 10 / 4;` が 2 ではなく 2.5 のまま half に
         入ってしまい、int 変数のつもりで書いた比較・分岐が期待通りに動かなくなる。
 
-        byte は 0-255 に丸めるマスク (`& 0xFF`、_to_byte() と同じ処理) をかける。
+        byte は 0-255 (`& 0xFF`)、word は 0-65535 (`& 0xFFFF`) に丸めるマスクをかける。
         代入のたびにここを通るので、CAPL の byte/word/long のような固定幅整数型の
-        ラップアラウンド (`byte b; b = 300;` が 44 になる、`b = -1;` が 255 になる
-        等) を、byte 型に限って再現できる (Python の int 自体は多倍長で自然には
-        ラップアラウンドしないため、この明示的なマスクが無いと際限なく増減する)。
-        int/float は元々 CAPL の型ほど幅を持たない値を想定しているため、意図的に
-        ラップアラウンドさせていない (16bit/32bit 固定幅にすると、DID 等
-        0xFFFF を超える値を int で扱っている既存スクリプトが壊れてしまうため)。"""
+        ラップアラウンド (`byte b; b = 300;` が 44 になる、`b = -1;` が 255 になる、
+        `word w; w = 70000;` が 4464 になる等) を、byte/word 型に限って再現できる
+        (Python の int 自体は多倍長で自然にはラップアラウンドしないため、この明示的な
+        マスクが無いと際限なく増減する)。int/float は元々 CAPL の型ほど幅を持たない
+        値を想定しているため、意図的にラップアラウンドさせていない (32bit 固定幅に
+        すると、DID 等 0xFFFF を超える値を int で扱っている既存スクリプトが
+        壊れてしまうため)。"""
         if type_name == "int":
             return int(value)
         if type_name == "float":
             return float(value)
         if type_name == "byte":
             return int(value) & 0xFF
+        if type_name == "word":
+            return int(value) & 0xFFFF
         return value
 
     def _coerce_array_element(self, value, elem_type: str):
@@ -2066,7 +2110,7 @@ class Interpreter:
         呼び出しスタック自体を使って退避・復元する。再帰呼び出しでも with (try/finally)
         が LIFO で対応するので、各フレームの仮引数の値は正しく独立する)。仮引数名が
         たまたまグローバル変数と同じ場合はその関数の中でだけシャドーイングされる。
-        戻り値は _ReturnSignal で受け取る。void 関数は None を返す。int/float/byte を
+        戻り値は _ReturnSignal で受け取る。void 関数は None を返す。int/float/byte/word を
         返す関数が return 文を1度も実行せずに本体の最後まで到達した場合は (return 漏れは静的には
         検出しない方針、下記 _validate_stmt の Return 検証コメント参照)、
         capl_api.ScriptAbort で中断する (漏れたまま無意味な既定値で処理が進むよりは、
@@ -2163,6 +2207,18 @@ class Interpreter:
                     break
                 except _ContinueSignal:
                     continue
+        elif isinstance(stmt, DoWhile):
+            while True:
+                if self._stop_event.is_set():
+                    raise capl_api.ScriptStopped("スクリプトが停止されました")
+                try:
+                    self._run_block(stmt.body)
+                except _BreakSignal:
+                    break
+                except _ContinueSignal:
+                    pass  # continue は while と同様、cond の再評価へ進む
+                if not self._truthy(self._eval(stmt.cond)):
+                    break
         elif isinstance(stmt, For):
             if stmt.init is not None:
                 self._exec_stmt(stmt.init)
@@ -2257,10 +2313,11 @@ class Interpreter:
 
     def _validate_stmt(self, stmt, in_loop: bool, in_switch: bool, return_type) -> None:
         """in_loop/in_switch は break/continue が使える文脈にいるかを表す
-        (break は while/for/switch の中、continue は while/for の中でのみ有効。
-        break は最も内側の while/for/switch に、continue は switch を素通りして
-        最も内側の while/for に効くという C/CAPL のスコープ規則を、While/For/Switch
-        に入るたびにこの2フラグをどう更新して子ブロックへ渡すかで表現している。
+        (break は while/do-while/for/switch の中、continue は while/do-while/for の
+        中でのみ有効。break は最も内側の while/do-while/for/switch に、continue は
+        switch を素通りして最も内側の while/do-while/for に効くという C/CAPL の
+        スコープ規則を、While/DoWhile/For/Switch に入るたびにこの2フラグをどう
+        更新して子ブロックへ渡すかで表現している。
         return_type は現在いる関数の戻り値の型 ("void"/"int"/"float")、on start/
         on timer/on message の直下では None (return 文自体が使えない文脈)。
         While/For/Switch のネストでは変わらないのでそのまま子ブロックへ引き継ぐ
@@ -2286,7 +2343,7 @@ class Interpreter:
             if var is None:
                 raise DslSyntaxError(
                     f"{stmt.line}行目: 未宣言の変数 '{stmt.name}' への代入です "
-                    "(variables { int/float/byte ...; } で宣言してください)"
+                    "(variables { int/float/byte/word ...; } で宣言してください)"
                 )
             self._validate_expr(stmt.expr)
         elif isinstance(stmt, IndexAssign):
@@ -2341,6 +2398,9 @@ class Interpreter:
         elif isinstance(stmt, While):
             self._validate_expr(stmt.cond)
             self._validate_block(stmt.body, in_loop=True, in_switch=False, return_type=return_type)
+        elif isinstance(stmt, DoWhile):
+            self._validate_block(stmt.body, in_loop=True, in_switch=False, return_type=return_type)
+            self._validate_expr(stmt.cond)
         elif isinstance(stmt, For):
             if stmt.init is not None:
                 self._validate_stmt(stmt.init, in_loop, in_switch, return_type)
@@ -2375,12 +2435,12 @@ class Interpreter:
         elif isinstance(stmt, Break):
             if not (in_loop or in_switch):
                 raise DslSyntaxError(
-                    f"{stmt.line}行目: break は while/for/switch の中でのみ使えます"
+                    f"{stmt.line}行目: break は while/do-while/for/switch の中でのみ使えます"
                 )
         elif isinstance(stmt, Continue):
             if not in_loop:
                 raise DslSyntaxError(
-                    f"{stmt.line}行目: continue は while/for の中でのみ使えます"
+                    f"{stmt.line}行目: continue は while/do-while/for の中でのみ使えます"
                 )
         else:
             raise DslSyntaxError(f"未対応の文です: {stmt!r}")
@@ -2484,7 +2544,7 @@ class Interpreter:
             if var is None:
                 raise DslSyntaxError(
                     f"{node.line}行目: 未宣言の変数 '{node.name}' "
-                    "(variables { int/float/byte ...; } で宣言してください)"
+                    "(variables { int/float/byte/word ...; } で宣言してください)"
                 )
             if var.is_array:
                 raise DslSyntaxError(
