@@ -1229,24 +1229,17 @@ class App(tk.Tk):
                         self._rx_monitor_name_vars[mon_idx].set(
                             self._decode_warning_status(data[0])
                         )
-                    elif decode == "e2e_health" and len(data) >= 4:
-                        # byte[0]=CRC8 (E2E), byte[1]=Counter (E2E)
-                        # (AUTOSAR 標準バリアント 1A レイアウト、SWS_E2E_00227)
-                        # byte[2]=E2E CRCエラー累積数, byte[3]=E2E シーケンスエラー累積数
+                    elif decode == "e2e_health" and len(data) >= 5:
+                        # byte[0-1]=CRC16 (E2E Profile05、リトルエンディアン),
+                        # byte[2]=Counter (E2E Profile05、8bitフル値)
+                        # byte[3]=E2E CRCエラー累積数, byte[4]=E2E シーケンスエラー累積数
                         # (EngineInfo/AbsInfo 受信側の合算、0-255で飽和。E2EMon CDD相当モジュールが
                         #  Com経由でPERIODIC送信するネットワーク健全性テレメトリ。テレメトリ自体も
                         #  E2E保護されている)
-                        # byte[4]=SecOC Freshness, byte[5-7]=SecOC 切り詰めMAC
-                        # (E2E保護済みのbyte[0-3]全体をさらにSecOCで認証。Arduino側
-                        #  SecOC_MainFunction()が計算したMACをpycryptodomeで独立に
-                        #  再計算し、一致するか確認する)
-                        secoc_cfg = self._rx_monitor_secoc_verify.get(mon_idx)
-                        secoc_str = ""
-                        if secoc_cfg and len(data) >= 8:
-                            ok = App._verify_secoc(data, secoc_cfg)
-                            secoc_str = " SecOC:OK" if ok else " SecOC:NG"
+                        # 以前は E2E Profile01+SecOC の二重保護(DLC=8)だったが、SecOC は撤去し
+                        # E2E Profile05 単体保護(DLC=5)に切り替えた。
                         self._rx_monitor_name_vars[mon_idx].set(
-                            f"(crcErr={data[2]} seqErr={data[3]}{secoc_str})"
+                            f"(crcErr={data[3]} seqErr={data[4]})"
                         )
                     elif mon_idx in self._rx_monitor_name_vars:
                         self._rx_monitor_name_vars[mon_idx].set("")

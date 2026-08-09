@@ -65,10 +65,19 @@
  *            とする。TX 確認 (CanIf_TxConfirmation) は元々 Can_Write() の
  *            呼び出しと同期していたため、遅延を体感できない範囲に抑える
  *            （詳細は Can.c ファイル冒頭のコメントを参照）。
- *            SecOC_MainFunction は Com_MainFunction と同じ 100 ms とする。
- *            SecOC_IfTransmit() が Authentic I-PDU をバッファへコピーしてから
- *            実際に CAN へ送信されるまでの遅延を、E2EHealthStatus の PERIODIC
- *            送信周期 (6000ms) に対して無視できる範囲に抑える。
+ *            SecOC_MainFunction は Com_MainFunction と同じ 100 ms とする
+ *            （周期自体は RX 方向の SecOC_IfRxIndication() とは無関係で、
+ *            TX 方向専用のタスク。現在 TX 方向で SecOC を使う PDU は無い
+ *            〈SECOC_TX_PDU_COUNT=0、SecOC.c 冒頭コメント参照〉ため、
+ *            毎回 0 回実行で終わる no-op になっている）。
+ *            この 100ms という値自体は、以前 E2EHealthStatus（PERIODIC
+ *            送信周期 6000ms）を TX 方向で SecOC 保護していた際に、
+ *            SecOC_IfTransmit() が Authentic I-PDU をバッファへコピーして
+ *            から実際に CAN へ送信されるまでの遅延を無視できる範囲に抑える
+ *            目的で選んだもの。E2EHealthStatus は E2E Profile05 単体保護へ
+ *            切り替えた際に SecOC を撤去したため、この根拠は現在は当てはまら
+ *            ない（将来 TX 方向で SecOC を使う PDU が追加された時点で、その
+ *            PDU の送信周期を基準に周期を選び直すこと）。
  *            App_GptDemo_Run は Gpt Channel 0（1000ms 周期の HW タイマ割り込み）
  *            が実際に発火しているかを DET ログで確認するための動作確認用タスク
  *            であり、通知そのものより高頻度で読む必要はないため、Gpt Channel 0

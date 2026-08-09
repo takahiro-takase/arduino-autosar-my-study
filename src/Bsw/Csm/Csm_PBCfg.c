@@ -20,10 +20,5 @@ const Csm_JobConfigType Csm_JobConfigData[CSM_JOB_COUNT] = {
         .JobId       = CSM_JOB_ID_IMMOBILIZER_CMD_VERIFY,
         .Service     = CRYPTO_MACVERIFY,
         .CryptoKeyId = CRYPTO_KEY_IMMOBILIZER_CMD
-    },
-    {
-        .JobId       = CSM_JOB_ID_E2E_HEALTH_STATUS_GENERATE,
-        .Service     = CRYPTO_MACGENERATE,
-        .CryptoKeyId = CRYPTO_KEY_E2E_HEALTH_STATUS
     }
 };

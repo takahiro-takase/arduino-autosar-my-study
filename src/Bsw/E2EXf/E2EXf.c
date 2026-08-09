@@ -99,6 +99,23 @@ void E2EXf_Transform(const E2EXf_TxConfigType* Config, uint8* Buffer, uint8 Leng
     E2E_P01Protect(Config->E2EConfig, Config->ProtectState, Buffer, Length);
 }
 
+void E2EXf_TransformP05(const E2EXf_TxConfigTypeP05* Config, uint8* Buffer, uint8 Length)
+{
+    if (!E2EXf_Initialized)
+    {
+        Det_ReportError(E2EXF_MODULE_ID, 0U, E2EXF_API_ID_TRANSFORM, E2EXF_E_UNINIT);
+        return;
+    }
+
+    if (Config == NULL || Buffer == NULL)
+    {
+        Det_ReportError(E2EXF_MODULE_ID, 0U, E2EXF_API_ID_TRANSFORM, E2EXF_E_PARAM_POINTER);
+        return;
+    }
+
+    E2E_P05Protect(Config->E2EConfig, Config->ProtectState, Buffer, Length);
+}
+
 void E2EXf_GetVersionInfo(Std_VersionInfoType* versioninfo)
 {
     if (versioninfo == NULL)

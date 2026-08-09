@@ -67,27 +67,28 @@ const E2EXf_RxConfigType E2EXf_AbsInfoRxCfg = {
  * DaVinci: /ActiveEcuC/E2EXf/E2EHealthStatus_Tx_E2EXf
  * E2EMon（CDD 相当）が発行するネットワーク健全性テレメトリ自体も、
  * 監視ツールが誤ったカウンタ値を信用してしまわないよう E2E 保護を付与する。
+ * 以前は E2E Profile01(+SecOC 二重保護、DLC=8) だったが、CRC 検出能力を
+ * 高めるため E2E Profile05(CRC16、DLC=5) 単体に切り替えた。SecOC は撤去
+ * した(PduR_PBCfg.c のパス3、SecOC_PBCfg.c 参照)。
  * ----------------------------------------------------------------------- */
-static const E2E_P01ConfigType E2EXf_E2EHealthStatusCfg = {
+static const E2E_P05ConfigType E2EXf_E2EHealthStatusCfgP05 = {
     0x0220U,  /* DataID          : PDU 識別子 (CAN ID と一致させるのが一般的) */
-    4U,       /* DataLength      : PDU 全体バイト数 (CRC 1B + Counter 1B + シグナル 2B) */
+    5U,       /* DataLength      : PDU 全体バイト数 (CRC16 2B + Counter 1B + シグナル 2B) */
     0U,       /* MaxDeltaCounter : Protect 側では未使用 */
-    1U,       /* CounterOffset   : byte[1] 下位 4bit がカウンタ (AUTOSAR 標準バリアント 1A) */
-    0U,       /* CRCOffset       : byte[0] が CRC8 (AUTOSAR 標準バリアント 1A、SWS_E2E_00227) */
-    0U        /* SyncCounterInit : Protect 側では未使用 */
+    0U        /* Offset          : E2E ヘッダ(CRC16+Counter)は PDU 先頭 */
 };
-static E2E_P01ProtectStateType E2EXf_E2EHealthStatusState;
+static E2E_P05ProtectStateType E2EXf_E2EHealthStatusStateP05;
 
-const E2EXf_TxConfigType E2EXf_E2EHealthStatusTxCfg = {
-    .E2EConfig    = &E2EXf_E2EHealthStatusCfg,
-    .ProtectState = &E2EXf_E2EHealthStatusState
+const E2EXf_TxConfigTypeP05 E2EXf_E2EHealthStatusTxCfgP05 = {
+    .E2EConfig    = &E2EXf_E2EHealthStatusCfgP05,
+    .ProtectState = &E2EXf_E2EHealthStatusStateP05
 };
 
 void E2EXf_PBCfg_Init(void)
 {
     E2E_P01CheckInit(&E2EXf_EngineInfoState);
     E2E_P01CheckInit(&E2EXf_AbsInfoState);
-    E2E_P01ProtectInit(&E2EXf_E2EHealthStatusState);
+    E2E_P05ProtectInit(&E2EXf_E2EHealthStatusStateP05);
 
     /* 各 State の初期化が完了した最後に、E2EXf モジュール自身の初期化状態
      * (SWS_E2EXf_00130) を TRUE にする。E2EXf_InverseTransform()/

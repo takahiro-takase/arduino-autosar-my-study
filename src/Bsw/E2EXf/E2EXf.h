@@ -26,6 +26,7 @@
 
 #include "Std_Types.h"
 #include "E2E_P01.h"
+#include "E2E_P05.h"
 #include "Dem.h"
 
 #ifdef __cplusplus
@@ -80,13 +81,35 @@ typedef struct
 } E2EXf_RxConfigType;
 
 /* -----------------------------------------------------------------------
- * TX 側（Transformer）設定
+ * TX 側（Transformer）設定 — E2E Profile 01
+ *
+ * \note  本プロジェクトで現在このインスタンスを実際に使う PDU は無い
+ *        （EngineHealthStatus が E2E Profile 05 へ移行したため）。実
+ *        AUTOSAR の E2E Transformer は ARXML 設定から RTE 生成コードが
+ *        「トランスフォーマーインスタンスごとに専用コード」を生成する方式
+ *        であり、プロファイルをまたいだ汎用的な切り替え機構を持たない
+ *        （E2EXf.h 冒頭コメント参照）。そのためこの Profile 01 専用の型・
+ *        関数は削除せず、学習用リファレンス実装として維持している
+ *        （E2E_P01.c 自体が Check/Protect 対称なライブラリとして完結して
+ *        いる価値を優先した設計判断）。
  * ----------------------------------------------------------------------- */
 typedef struct
 {
     const E2E_P01ConfigType* E2EConfig;
     E2E_P01ProtectStateType* ProtectState;
 } E2EXf_TxConfigType;
+
+/* -----------------------------------------------------------------------
+ * TX 側（Transformer）設定 — E2E Profile 05
+ * EngineHealthStatus (CAN 0x220) が使用する。Profile 01 版とは別の専用型・
+ * 専用関数 (E2EXf_TransformP05()) にしている理由は上記 E2EXf_TxConfigType の
+ * 注記と同じ（実 AUTOSAR のプロファイルごとの生成コード方式に倣う）。
+ * ----------------------------------------------------------------------- */
+typedef struct
+{
+    const E2E_P05ConfigType* E2EConfig;
+    E2E_P05ProtectStateType* ProtectState;
+} E2EXf_TxConfigTypeP05;
 
 /**
  * \brief   E2EXf モジュール自身を初期化済み状態にする。
@@ -171,6 +194,25 @@ Std_ReturnType E2EXf_InverseTransform(const E2EXf_RxConfigType* Config, const ui
  * \Synchronicity  {Synchronous}
  */
 void E2EXf_Transform(const E2EXf_TxConfigType* Config, uint8* Buffer, uint8 Length);
+
+/**
+ * \brief   TX I-PDU バイト列に対する E2E Profile 05 の Transform（Counter/CRC16 付与）を行う。
+ *
+ * \details E2E_P05Protect() を呼び、Buffer へ Counter・CRC16 を書き込む。
+ *          E2EXf_Init() 未呼び出しの場合は何もしない（SWS_E2EXf_00133 相当、
+ *          E2EXf_Initialized フラグは Profile 01/05 で共用する。実 AUTOSAR でも
+ *          E2E Transformer モジュール自身の初期化状態はプロファイル非依存で
+ *          モジュール単位のため）。
+ *
+ * \param[in]     Config  TX 側設定（Profile 05）。NULL 禁止。
+ * \param[in,out] Buffer  変換対象の I-PDU バイト列（上書きされる）。NULL 禁止。
+ * \param[in]     Length  Buffer のバイト数。
+ *
+ * \ServiceID      {0x03}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void E2EXf_TransformP05(const E2EXf_TxConfigTypeP05* Config, uint8* Buffer, uint8 Length);
 
 /**
  * \brief   E2EXf モジュールのバージョン情報を取得する。

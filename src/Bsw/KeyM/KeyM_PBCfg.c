@@ -18,9 +18,7 @@ const KeyM_CryptoKeyConfigType KeyM_CryptoKeyConfigData[KEYM_CRYPTO_KEY_COUNT] =
     {
         .KeyName         = KEYM_CRYPTO_KEY_NAME_IMMOBILIZER_CMD,
         .CsmKeyTargetRef = CRYPTO_KEY_IMMOBILIZER_CMD
-    },
-    {
-        .KeyName         = KEYM_CRYPTO_KEY_NAME_E2E_HEALTH_STATUS,
-        .CsmKeyTargetRef = CRYPTO_KEY_E2E_HEALTH_STATUS
     }
+    /* KEYM_CRYPTO_KEY_NAME_E2E_HEALTH_STATUS は E2EHealthStatus の SecOC 撤去に
+     * 伴い削除済み（対応する CRYPTO_KEY_E2E_HEALTH_STATUS が無くなったため）。 */
 };

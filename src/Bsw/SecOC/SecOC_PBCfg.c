@@ -18,21 +18,13 @@
  *              Com_RxIndication(ComRxPduId=2) へ転送する
  *              （Com は Freshness/MAC の存在を一切知らない）。
  *
- *            TX Secured I-PDU 0: E2EHealthStatus (CAN ID 0x220, DLC=8,
- *              E2E P01 で保護済みのペイロード自体をさらに認証する。
- *              内側=E2E（意図しない誤り検出）、外側=SecOC（意図的な改ざん・
- *              なりすまし検出）という二重防御の実例)
- *              SecOC Profile 1 準拠:
- *                byte[0]   : E2E CRC8       (Authentic payload)
- *                byte[1]   : E2E Counter    (Authentic payload、下位4bit)
- *                byte[2]   : E2ECrcErrCount (Authentic payload)
- *                byte[3]   : E2ESeqErrCount (Authentic payload)
- *                byte[4]   : Freshness Value (8bit、切り詰めなし)
- *                byte[5-7] : 切り詰め MAC (AES-128-CMAC 128bit 出力の上位24bit)
- *              PduR の TX 経路（PduR_TxRoutingPathType.TransmitOverrideFct）に
- *              中間モジュールとして挟まる。Com/E2E は SecOC の存在を一切知らず、
- *              従来どおり 4byte の E2E 保護済みペイロードを PduR_Transmit() へ
- *              渡すだけでよい（詳細は SecOC.c ファイル冒頭コメント参照）。
+ *            TX Secured I-PDU: 現在無し (SECOC_TX_PDU_COUNT=0)。
+ *              以前は E2EHealthStatus (CAN ID 0x220) を「内側=E2E（意図しない
+ *              誤り検出）、外側=SecOC（意図的な改ざん・なりすまし検出）」という
+ *              二重防御で保護していたが、E2E の検出能力を高めるため
+ *              Profile01(CRC8)→Profile05(CRC16) へ切り替えるにあたり、
+ *              classic CAN の DLC=8 上限に収まらなくなったため SecOC 側を撤去し
+ *              E2E Profile05 単体保護とした（E2EXf_PBCfg.c/PduR_PBCfg.c 参照）。
  *
  *          鍵管理の簡略化: 実車は KeyM 等による鍵のプロビジョニング・保護
  *          （耐タンパ格納等）が必須だが、本実装は学習のため固定鍵を
@@ -40,10 +32,9 @@
  *          絶対に行ってはならない）。ただし本 PBCfg は「どの鍵を使うか」を
  *          知らない（Csm/CryIf/Crypto レイヤ分離により、鍵バイト列の実体は
  *          Crypto_PBCfg.c へ移設済み）。ここでは CsmJobId（Csm_PBCfg.c の
- *          Csm_JobConfigData を検索するキー）のみを指定する。RX/TX で異なる
- *          鍵（異なる用途・異なるアセット）を使うことは Csm 側の設定
- *          （CSM_JOB_ID_IMMOBILIZER_CMD_VERIFY → CRYPTO_KEY_IMMOBILIZER_CMD、
- *          CSM_JOB_ID_E2E_HEALTH_STATUS_GENERATE → CRYPTO_KEY_E2E_HEALTH_STATUS）
+ *          Csm_JobConfigData を検索するキー）のみを指定する。現状 RX の
+ *          ImmobilizerCmd のみが SecOC を使うため、鍵は Csm 側の設定
+ *          （CSM_JOB_ID_IMMOBILIZER_CMD_VERIFY → CRYPTO_KEY_IMMOBILIZER_CMD）
  *          で表現している。
  *
  * \copyright  Copyright (c) 2025 T_T
@@ -77,29 +68,15 @@ static const SecOC_RxPduConfigType SecOC_RxPduConfigData[SECOC_RX_PDU_COUNT] = {
     }
 };
 
-static const SecOC_TxPduConfigType SecOC_TxPduConfigData[SECOC_TX_PDU_COUNT] = {
-    {
-        /* ---------------------------------------------------------------
-         * TX Secured I-PDU 0: E2EHealthStatus
-         * --------------------------------------------------------------- */
-        .SecOCTxPduId       = 0U,      /* PduR_PBCfg.c の該当 TxPath.TransmitOverrideId と一致 */
-        .DataId             = 0x0220U, /* CAN ID と同値（RX と同じ方針） */
-        .AuthenticPduLength = 4U,      /* byte[0-3] = E2E CRC/Counter/CrcErrCount/SeqErrCount
-                                        * （Com TX IPduId=2 の DLC と同じ。Com/E2E は SecOC の
-                                        * 存在を知らないためこの 4byte のみを PduR_Transmit() へ渡す） */
-        .FreshnessOffset    = 4U,
-        .FreshnessLength    = 1U,      /* 8bit、切り詰めなし（RX と同じ簡略化） */
-        .MacOffset          = 5U,
-        .MacTxLength        = 3U,      /* 24bit（SecOC Profile 1） */
-        .SecuredPduLength   = 8U,      /* 4 + 1 + 3（CAN DLC 上限ちょうど） */
-        .CsmJobId           = CSM_JOB_ID_E2E_HEALTH_STATUS_GENERATE,
-        .PduRSrcPduId       = 3U       /* PduR TX パス 3（CanIf TxPduId=4、CAN 0x220）と一致 */
-    }
-};
-
+/* TX 方向で SecOC を使う PDU は現在無い (SECOC_TX_PDU_COUNT=0、SecOC_Cfg.h 参照)。
+ * サイズ0の配列宣言 (`T arr[0]`) は ISO C が認めていない GNU 拡張であり、
+ * 空初期化子 `={}` はさらに C23 相当で、より厳格な C dialect や別コンパイラでの
+ * ビルドに対して脆い。配列自体を宣言せず、ポインタを NULL・件数を 0 にする
+ * （SecOC.c 側は TxPduCount を上限にループするため NULL を参照することはない）。
+ * TX PDU が実際に追加された時点で、配列宣言とこの初期化子を書き戻すこと。 */
 const SecOC_ConfigType SecOC_Config = {
     .RxPdus     = SecOC_RxPduConfigData,
     .RxPduCount = SECOC_RX_PDU_COUNT,
-    .TxPdus     = SecOC_TxPduConfigData,
+    .TxPdus     = NULL,
     .TxPduCount = SECOC_TX_PDU_COUNT
 };
