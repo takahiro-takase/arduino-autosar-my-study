@@ -26,14 +26,14 @@ ARXML や設定ツールは使用せず、コードで階層構造・型定義�
     - [Can](#can-module)
     - [Com](#com-module)
     - [DET 準拠（Det_ReportError による標準化エラー通知）](#det-compliance)
-  - [E2E P01 保護（EngineInfo/AbsInfo 受信 / E2EHealthStatus 送信）](#e2e-p01)
+  - [E2E 保護（EngineInfo/AbsInfo 受信は Profile01 / E2EHealthStatus 送信は Profile05）](#e2e-p01)
     - [I-PDU Group（Com_IpduGroupStart/Stop、通信のライフサイクル制御）](#ipdu-group)
     - [呼び出し元は BswM（実 AUTOSAR の標準構成）](#ipdu-group-caller)
     - [Com_IpduGroupStart/Stop が実際に行うこと](#ipdu-group-behavior)
     - [動作確認方法](#ipdu-group-verification)
     - [E2E が保護する故障モデル](#e2e-fault-model)
-    - [受信側（Check）— EngineInfo / AbsInfo](#e2e-check-rx)
-    - [送信側（Protect）— E2EHealthStatus](#e2e-protect-tx)
+    - [受信側（Check）— EngineInfo / AbsInfo（E2E Profile01）](#e2e-check-rx)
+    - [送信側（Protect）— E2EHealthStatus（E2E Profile05）](#e2e-protect-tx)
     - [E2EMon（ネットワーク健全性モニタ、独自 CDD 相当）](#e2emon)
   - [SecOC（Secure Onboard Communication、メッセージ認証）](#secoc)
     - [アーキテクチャ — E2E Transformer 方式とは異なる理由](#secoc-architecture)
@@ -106,7 +106,7 @@ SW-C がピン番号などのハードウェア詳細を知ることなく警告
 - **RX（CAN ID 0x110）**: ABS ECU から車速・ブレーキ作動・ABS 作動フラグを受信
 - **TX（CAN ID 0x200）**: エンジン状態（OFF / STARTING / RUNNING / FAULT）を変化時送信＋周期フロア（ComFilterAlgorithm、E2E 保護なし）
 - **TX（CAN ID 0x210）**: 3 本の警告灯状態（RUNNING/FAULT/ABS）を Com Signal Group として一括送信
-- **TX（CAN ID 0x220）**: E2E 検証エラーの累積カウンタ（CRC不一致/シーケンス異常）を Com の PERIODIC 送信モードで 6000ms 周期送信（E2EMon、独自 CDD 相当、AUTOSAR E2E Profile 01 保護付き）
+- **TX（CAN ID 0x220）**: E2E 検証エラーの累積カウンタ（CRC不一致/シーケンス異常）を Com の PERIODIC 送信モードで 6000ms 周期送信（E2EMon、独自 CDD 相当、AUTOSAR E2E Profile 05 保護付き）
 - **診断 RX（CAN ID 0x7E0）**: UDS 診断要求を受信（ISO 14229-1 / ISO 15765-2）
 - **診断 TX（CAN ID 0x7E8）**: UDS 診断応答を送信（マルチフレーム対応）
 - **RUNNING LED（D6）**: ENGINE_STATE_RUNNING のとき点灯
@@ -374,14 +374,15 @@ Basic Software Modules」表）。詳細は「CAN 通信スタック」セクシ
 │   │   │   ├── KeyM_PBCfg.h/.c   # 鍵名テーブル（鍵名 → Csm 側 keyId = CRYPTO_KEY_*）
 │   │   │   ├── KeyM.h            # 公開インタフェース（KeyM_Start/KeyM_Update/KeyM_Finalize）
 │   │   │   └── KeyM.c            # セッション状態管理 → 鍵名解決 → Csm_KeyElementSet/Csm_KeySetValid 呼び出し
-│   │   ├── E2E/                  # AUTOSAR E2E Profile 01 保護（CRC8 SAE J1850 + 4bit カウンタ）
-│   │   │   ├── E2E_P01.h         # 設定型・状態型・API 宣言（Check: E2E_P01Check/CheckInit、Protect: E2E_P01Protect/ProtectInit）
-│   │   │   └── E2E_P01.c         # CRC8 計算・受信検証（カウンタデルタ判定）・送信保護（Counter更新+CRC付加）実装
+│   │   ├── E2E/                  # AUTOSAR E2E 保護ライブラリ（Profile01: CRC8+4bitカウンタ、Profile05: CRC16+8bitカウンタ）
+│   │   │   ├── E2E_P01.h/.c      # Profile01（Check: E2E_P01Check/CheckInit、Protect: E2E_P01Protect/ProtectInit）。EngineInfo/AbsInfo(RX)が使用
+│   │   │   └── E2E_P05.h/.c      # Profile05（Check: E2E_P05Check/CheckInit、Protect: E2E_P05Protect/ProtectInit）。EngineHealthStatus(TX)が使用
+│   │   │                          （Check側は本プロジェクト内に呼び出し元が無く、test/test_e2e_p05/ のホストテストでのみ検証）
 │   │   ├── E2EXf/                # E2E Transformer（Com から E2E ロジックを切り離す統合層）
-│   │   │   ├── E2EXf.h           # 汎用 API 宣言（E2EXf_Init/E2EXf_DeInit/E2EXf_InverseTransform/E2EXf_Transform/E2EXf_GetVersionInfo、E2E_P01 への薄いラッパー）
+│   │   │   ├── E2EXf.h           # 汎用 API 宣言（E2EXf_Init/E2EXf_DeInit/E2EXf_InverseTransform/E2EXf_Transform/E2EXf_TransformP05/E2EXf_GetVersionInfo。E2E_P01/E2E_P05 それぞれへの薄いラッパー）
 │   │   │   ├── E2EXf.c           # 上記実装（Dem_ReportErrorStatus への報告・モジュール自身の初期化状態ガードも含む）
-│   │   │   ├── E2EXf_PBCfg.h     # ポストビルド設定宣言（E2EXf_*RxCfg/TxCfg、E2EXf_PBCfg_Init）
-│   │   │   └── E2EXf_PBCfg.c     # I-PDU ごとの E2E P01 設定/状態実体（EngineInfo/AbsInfo/E2EHealthStatus）
+│   │   │   ├── E2EXf_PBCfg.h     # ポストビルド設定宣言（E2EXf_*RxCfg/TxCfgP05、E2EXf_PBCfg_Init）
+│   │   │   └── E2EXf_PBCfg.c     # I-PDU ごとの E2E 設定/状態実体（EngineInfo/AbsInfo は Profile01、E2EHealthStatus は Profile05）
 │   │   ├── E2EMon/                # 独自 CDD 相当（標準 AUTOSAR モジュールではない、E2E 健全性監視の例）
 │   │   │   ├── E2EMon.h          # 公開インタフェース（E2EMon_Init/E2EMon_NotifyCheckResult）
 │   │   │   └── E2EMon.c          # E2E 検証結果の累積カウンタ・Com_SendSignal() での公開
@@ -551,11 +552,11 @@ BSW 全体へ及ぶ DET 準拠（エラー通知の標準化）は最後にま�
 |  |  |  |  | 1 | 1 bit | FaultLamp | 0=消灯<br>1=点灯<br>（FAULT LED D7 と同値、点滅中は 500ms ごとに反転） |
 |  |  |  |  | 2 | 1 bit | AbsLamp | 0=消灯<br>1=点灯<br>（ABS LED D8 と同値） |
 |  |  |  |  | 3 | 1 bit | (update-bit) | Signal Group 全体の update-bit（SWS_Com_00801）。値変化時送信=1、MIXED 周期フロア再送=0 |
-| Tx | E2EHealthStatus | 0x220 | 4 | ↓ | ↓ | ↓ | ↓ |
-|  |  |  |  | 0–7 | 8 bit | E2E CRC | CRC8 SAE J1850<br>（DataID=0x0220 + byte[1-3] を対象に計算。AUTOSAR 標準バリアント 1A 準拠でCRCは先頭バイト） |
-|  |  |  |  | 12–15 | 4 bit | E2E Counter | 0–15 のリングカウンタ（送信のたびに +1） |
-|  |  |  |  | 16–23 | 8 bit | E2ECrcErrCount | 0–255（飽和）<br>EngineInfo/AbsInfo受信のE2E CRC不一致累積数 |
-|  |  |  |  | 24–31 | 8 bit | E2ESeqErrCount | 0–255（飽和）<br>EngineInfo/AbsInfo受信のE2Eシーケンス異常累積数 |
+| Tx | E2EHealthStatus | 0x220 | 5 | ↓ | ↓ | ↓ | ↓ |
+|  |  |  |  | 0–15 | 16 bit | E2E CRC | CRC16（多項式0x1021、E2E Profile05）<br>（Counterバイト+byte[3-4] → DataID=0x0220の順で計算。リトルエンディアンでbyte[0-1]に格納） |
+|  |  |  |  | 16–23 | 8 bit | E2E Counter | 0–255 のリングカウンタ（送信のたびに +1、予約値なし） |
+|  |  |  |  | 24–31 | 8 bit | E2ECrcErrCount | 0–255（飽和）<br>EngineInfo/AbsInfo受信のE2E CRC不一致累積数 |
+|  |  |  |  | 32–39 | 8 bit | E2ESeqErrCount | 0–255（飽和）<br>EngineInfo/AbsInfo受信のE2Eシーケンス異常累積数 |
 | Rx | EngineInfo | 0x100 | 6 | ↓ | ↓ | ↓ | ↓ |
 |  |  |  |  | 0–7 | 8 bit | E2E CRC | CRC8 SAE J1850<br>（DataID=0x0100 + byte[1-5] を対象に計算。AUTOSAR 標準バリアント 1A 準拠でCRCは先頭バイト） |
 |  |  |  |  | 12–15 | 4 bit | E2E Counter | 0–15 のリングカウンタ（フレーム脱落・重複検出用） |
@@ -606,13 +607,14 @@ Signal Group としてまとめて Com へコミットします。コミット�
 データの役割の違いに応じて異なる `TxModeMode` 戦略を選んでいる点が
 実務的な設計判断の例です。
 
-**E2EHealthStatus（メータ ECU / CAN ID 0x220 / DLC=4 / AUTOSAR E2E Profile 01 保護 / PERIODIC）**
+**E2EHealthStatus（メータ ECU / CAN ID 0x220 / DLC=5 / AUTOSAR E2E Profile 05 保護 / PERIODIC）**
 
 `E2EMon`（CDD 相当モジュール）が EngineInfo/AbsInfo 受信側の E2E 検証エラー累積数を
 集計し、Com の PERIODIC 送信モードにより 6000ms 周期で自動送信されるネットワーク
-健全性テレメトリです。テレメトリ自体の破損を監視ツールが検出できるよう、AbsInfo と
-同じ構成（データ＋Counter＋CRC）で E2E 保護しています。詳細は「E2E P01 保護」
-セクションの E2EMon サブセクションを参照してください。
+健全性テレメトリです。テレメトリ自体の破損を監視ツールが検出できるよう、CRC16 ベースの
+E2E Profile05 で保護しています（データ＋8bit Counter＋16bit CRC。EngineInfo/AbsInfo が
+使う Profile01 とは異なるプロファイル）。詳細は「E2E 保護」セクションの
+E2EMon サブセクションを参照してください。
 
 ##### RX フレーム（外部 → Arduino）
 
@@ -654,18 +656,22 @@ Com_SendSignal()/Com_SendSignalGroup()   ← ASW から呼ばれる。TX バッ�
   ┊  (Com_TxPending 経由。次回 Com_MainFunction() の 100ms tick まで非同期に待機)
   ↓
 Com_MainFunction()                        ← ここから下は同期呼び出し連鎖
-  → TxTransformCbk があれば呼ぶ             ← Rte_COMTransform_*() → E2EXf_Transform() → E2E_P01Protect()
+  → TxTransformCbk があれば呼ぶ             ← Rte_COMTransform_E2EHealthStatus()
+                                              → E2EXf_TransformP05() → E2E_P05Protect()
+                                              （TxTransformCbk を使う TX I-PDU は現状これのみ）
   → PduR_Transmit()
-    → TransmitOverrideFct 未設定:
+    → TransmitOverrideFct 未設定（現状の全 TX I-PDU、E2EHealthStatus 含む）:
         CanIf_Transmit() → Can_Write()（SPI 送信完了までここで同期完了）
-    → TransmitOverrideFct=SecOC_IfTransmit（E2EHealthStatus のみ）:
-        SecOC_IfTransmit()                ← Authentic I-PDU をバッファへコピーするだけ
-          ┊  (SecOC_TxPending 経由。次回 SecOC_MainFunction() の 100ms tick まで非同期に待機)
-          ↓
-        SecOC_MainFunction()              ← ここから下は同期呼び出し連鎖
-          → Csm_MacGenerate() で Secured I-PDU を組み立て
-            → PduR_SecOCTransmit() → CanIf_Transmit() → Can_Write()
 ```
+
+> `TransmitOverrideFct`（PduR の TX 経路に SecOC 等の中間モジュールを挟む機構）
+> 自体は削除していない。以前は E2EHealthStatus が
+> `TransmitOverrideFct=SecOC_IfTransmit` 経由で SecOC → Csm_MacGenerate() →
+> Secured I-PDU 組み立てという二重防御構成だったが、E2E を Profile05（CRC16）へ
+> 強化するにあたり DLC が classic CAN の 8byte 上限を超えるため SecOC を撤去した
+> （詳細は「E2E 保護」「SecOC」の各セクション参照）。現在この機構を使う TX I-PDU
+> は無いが、`PduR_TxRoutingPathType.TransmitOverrideFct` フィールド・
+> `SecOC_IfTransmit()` 自体は学習用リファレンス実装として残している。
 
 <a id="rx-processing"></a>
 ##### Rx 処理（Can → CanIf → PduR → Com の順）
@@ -1796,11 +1802,14 @@ UDS/CAN フレーム経由で外部から誘発することはできず、`uds_t
 一致していることの確認に留めています）。
 
 <a id="e2e-p01"></a>
-### E2E P01 保護（EngineInfo/AbsInfo 受信 / E2EHealthStatus 送信）
+### E2E 保護（EngineInfo/AbsInfo 受信は Profile01 / E2EHealthStatus 送信は Profile05）
 
-AUTOSAR E2E (End-to-End) Profile 01 による保護です。CAN バスの電気的エラーでは検出できない
+AUTOSAR E2E (End-to-End) による保護です。CAN バスの電気的エラーでは検出できない
 **データ破壊・フレーム脱落・フレーム重複・誤ルーティング**を、CRC と送信カウンタの 2 種類の
-保護要素で検出します。本プロジェクトでは 3 方向に適用しています。
+保護要素で検出します。本プロジェクトでは 3 方向に適用しており、EngineInfo/AbsInfo の受信
+（`src/Bsw/E2E/E2E_P01.c`）は CRC8+4bit カウンタの **Profile01**、E2EHealthStatus の送信
+（`src/Bsw/E2E/E2E_P05.c`）は CRC16+8bit カウンタの **Profile05** と、2 つの異なる
+プロファイルを使い分けています（後述）。
 
 > **統合方式（E2E Transformer）:** Com は E2E の存在を一切関知しません。AUTOSAR が定義する
 > 3 通りの E2E 統合方式のうち「E2E Transformer」（`docs/AUTOSAR_SWS_E2ELibrary.pdf` 12.4 節、
@@ -1826,9 +1835,11 @@ AUTOSAR E2E (End-to-End) Profile 01 による保護です。CAN バスの電気�
   一般的なエンジン ECU の周期送信フレームを模して保護を付与しています
 - **AbsInfo（CAN 0x110、受信）**: ABS ECU から受信するフレームを`E2E_P01Check`で検証（本セクション前半）
 - **E2EHealthStatus（CAN 0x220、送信）**: 本 ECU（メータ ECU）が送信する、EngineInfo/AbsInfo
-  受信側の E2E 検証エラー累積数を伝えるネットワーク健全性テレメトリに `E2E_P01Protect`で
-  Counter・CRC8 を付加（本セクション後半の E2EMon サブセクション参照）。
-  監視ツールがこのテレメトリ自体の破損を検出できるようにするためです
+  受信側の E2E 検証エラー累積数を伝えるネットワーク健全性テレメトリに `E2E_P05Protect`で
+  Counter・CRC16 を付加（本セクション後半の E2EMon サブセクション参照）。
+  監視ツールがこのテレメトリ自体の破損を検出できるようにするためです。以前は
+  Profile01+SecOC の二重保護でしたが、E2E の検出能力を高めるため Profile05 単体保護に
+  切り替えました（詳細は「送信側（Protect）— E2EHealthStatus」参照）
 
 > MeterStatus（CAN 0x200、送信）・WarningStatus（CAN 0x210、送信）には E2E 保護を
 > 付与していません。MeterStatus は EngineInfo/AbsInfo を Com が既に検証した**後**に
@@ -1940,7 +1951,7 @@ UDS 0x28 実装は「全 I-PDU 一括」のままの方が既存のテストが�
 [1163ms]  INFO  BswM: Rule3 fired src=0 val=0x10 act=2 mask=0x000
 [1164ms]  INFO  Com: IpduGroupStart grp=0 iPdu=2(TX) init=0
 ...
-[7138ms]  INFO  Com: TX iPdu=2 [E6 00 00 00]        # テレメトリ、通常どおり送信される
+[7138ms]  INFO  Com: TX iPdu=2 [E6 3D 00 00 00]      # テレメトリ、通常どおり送信される
 
 # ボランタリスリープで POST_RUN へ入った直後
 [16395ms] INFO  EcuM: ->POST_RUN timeout=5000ms
@@ -2155,9 +2166,10 @@ Rte_Read_SpeedSensor_EngineSpeed() 等（Rte.c）:
 
 ##### E2E モジュール設定（`src/Bsw/E2EXf/E2EXf_PBCfg.c` の E2E 設定テーブル）
 
-E2E P01 の設定・状態実体は Com から独立し、`E2EXf_PBCfg.c` で保持しています
-（`E2EXf_EngineInfoRxCfg` / `E2EXf_AbsInfoRxCfg` / `E2EXf_E2EHealthStatusTxCfg` として
-`E2EXf_RxConfigType`/`E2EXf_TxConfigType` にまとめ、`Rte.c` のグルー関数から参照）。
+E2E の設定・状態実体は Com から独立し、`E2EXf_PBCfg.c` で保持しています
+（`E2EXf_EngineInfoRxCfg` / `E2EXf_AbsInfoRxCfg`（Profile01、`E2EXf_RxConfigType`）/
+`E2EXf_E2EHealthStatusTxCfgP05`（Profile05、`E2EXf_TxConfigTypeP05`）として
+まとめ、`Rte.c` のグルー関数から参照）。
 
 **EngineInfo（`E2EXf_EngineInfoRxCfg`）:**
 
@@ -2240,36 +2252,40 @@ E2E 保護の対象は、実際にはエンジン状態フレーム（MeterStatu
 自体の破損を検出できるようにする狙いで、MeterStatus ではなくこちらへ E2E 保護を
 適用しています（MeterStatus は E2E 保護なしの単純な直接送信に単純化しています）。
 
+E2EHealthStatus は以前 E2E Profile01（CRC8）+ SecOC の二重保護でしたが、E2E 単体の
+検出能力を高めるため **E2E Profile05（CRC16、`docs/AUTOSAR_SWS_E2ELibrary.pdf` 7.6節）**
+に切り替え、SecOC は撤去しました（Profile05 はヘッダが CRC16(2byte)+Counter(1byte)=
+3byte で、Profile01(2byte 相当)より1byte 増えるため、classic CAN の DLC=8 上限内に
+SecOC のFreshness/MAC 分の余地が無くなったのが理由。詳細は「SecOC」セクション参照）。
+
 ##### フレームレイアウト
 
 ```
-byte[0]   : CRC8 SAE J1850（多項式 0x1D、初期値 0x00、最終 XOR 0x00、SWS_E2E_00083 準拠）
-            計算対象: DataID_low(0x00), DataID_high(0x20), byte[1], byte[2], byte[3]
-            （CRC バイト自身を除く全バイト。CRC バイトより前の区間は 0 バイト）
-byte[1]   : 上位 4bit=未使用、下位 4bit=Counter（0→1→…→14→0 のリングカウンタ、15 はスキップ）
-byte[2]   : シグナルデータ（E2ECrcErrCount）
-byte[3]   : シグナルデータ（E2ESeqErrCount）
+byte[0-1] : CRC16（多項式 0x1021、開始値 0xFFFF、SWS_E2E_00400/00406 準拠、リトルエンディアン）
+            計算対象: byte[2](Counter), byte[3], byte[4],
+                      DataID_low(0x20), DataID_high(0x02)
+            （CRC バイト自身[byte0-1]を除き、Counter →データ→ DataID の順。
+            Profile01 とは異なり DataID は「データの後」に投入する、SWS_E2E_00399/00406）
+byte[2]   : Counter（8bit フル値、0→1→…→255→0 のリングカウンタ、予約値なし）
+byte[3]   : シグナルデータ（E2ECrcErrCount）
+byte[4]   : シグナルデータ（E2ESeqErrCount）
 ```
 
-AbsInfo（受信）と同じ「CRC→Counter→データ」の並びを踏襲しています
-（AUTOSAR 標準バリアント 1A、SWS_E2E_00227 準拠）。
+##### エンコード処理（`E2E_P05Protect`）
 
-##### エンコード処理（`E2E_P01Protect`）
-
-`E2E_P01Check`（受信検証）と対になる、送信側のエンコード処理です。検証すべき前回値がないため、
-状態は次に送信する Counter 値だけを保持します。
+`E2E_P05Check`（受信検証、本プロジェクトには呼び出し元が無くホストテストのみで検証）と
+対になる、送信側のエンコード処理です。検証すべき前回値がないため、状態は次に送信する
+Counter 値だけを保持します。
 
 ```
-E2E_P01Protect() 呼び出しごと:
-  1. Data[CounterOffset] = 現在の Counter（下位 4bit）を書き込む
-  2. Counter = (Counter >= 14) ? 0 : Counter + 1   ← 次回送信用に進める（15 はスキップ、SWS_E2E_00075）
-  3. DataID_low, DataID_high,
-     Data[0..CRCOffset-1]（CRC より前、CRC が先頭なら 0 バイト）,
-     Data[CRCOffset+1..DataLength-1]（CRC より後）
-     から CRC8 を計算し Data[CRCOffset] へ書き込む
+E2E_P05Protect() 呼び出しごと（SWS_E2E_00405/00406/00407/00409 準拠）:
+  1. Data[Offset+2] = 現在の Counter（8bit フル値）を書き込む
+  2. Data[Offset+2..DataLength-1]（Counter+データ）→ DataID_low → DataID_high
+     の順で CRC16（開始値 0xFFFF）を計算し、Data[Offset..Offset+1] へリトルエンディアンで書き込む
+  3. Counter++   ← 次回送信用に進める（uint8 の自然なラップアラウンド、0xFF の次は 0）
 ```
 
-Counter は `E2E_P01ProtectInit()` で 0 に初期化されるため、起動後最初に送信される
+Counter は `E2E_P05ProtectInit()` で 0 に初期化されるため、起動後最初に送信される
 E2EHealthStatus フレームは Counter=0 です。
 
 ##### Com モジュールとの統合（E2E Transformer 方式）
@@ -2281,8 +2297,11 @@ Com は E2EHealthStatus のペイロードにも一切関知しません。E2EHe
 長さ付きで呼び出すだけです（DIRECT/MIXED I-PDU の変化時送信も同じ
 `Com_MainFunction()` から呼ばれるため、「送信直前の最終変換」の仕組みを
 そのまま再利用しています）。実際に Counter・
-CRC8 を書き込むのは `Rte_COMTransform_E2EHealthStatus()`（`src/Rte/Rte.c`）で、
-中身は `E2EXf_Transform()`（`E2E_P01Protect()` への薄いラッパー）を呼ぶだけです。
+CRC16 を書き込むのは `Rte_COMTransform_E2EHealthStatus()`（`src/Rte/Rte.c`）で、
+中身は `E2EXf_TransformP05()`（`E2E_P05Protect()` への薄いラッパー。E2EXf.h には
+Profile01 用の `E2EXf_Transform()` と並行して Profile05 専用の型・関数を追加している。
+実 AUTOSAR の E2E Transformer が ARXML からプロファイルごとに専用コードを生成する
+方式に倣ったもので、汎用的なプロファイル切り替え機構は導入していない）を呼ぶだけです。
 AbsInfo の Check とは逆に、失敗や再送は発生しません（送信側なので検証すべき
 前提がないため）。E2EMon（データの生産者）はこの E2E 保護の存在を一切知りません。
 
@@ -2290,31 +2309,30 @@ AbsInfo の Check とは逆に、失敗や再送は発生しません（送信�
 Com_MainFunction()（PERIODIC モードの I-PDU。現状 IPduId=2 が対象）:
   TxTransformCbk(Com_TxBuffer[PduId], DLC) を呼び出す
     = Rte_COMTransform_E2EHealthStatus() （Rte.c）
-        E2EXf_Transform() を呼び出す
-          → E2E_P01Protect() を実行
-            Counter を書き込み +1、CRC8 を計算して書き込む
-  PduR_Transmit() で送信
+        E2EXf_TransformP05() を呼び出す
+          → E2E_P05Protect() を実行
+            Counter を書き込み +1、CRC16 を計算して書き込む
+  PduR_Transmit() で送信（SecOC 等の中間モジュールは挟まらず CanIf へ直結）
 ```
 
-##### E2E モジュール設定（`src/Bsw/E2EXf/E2EXf_PBCfg.c` の `E2EXf_E2EHealthStatusTxCfg`）
+##### E2E モジュール設定（`src/Bsw/E2EXf/E2EXf_PBCfg.c` の `E2EXf_E2EHealthStatusTxCfgP05`）
 
 | 設定 | 値 | 意味 |
 |------|----|------|
 | DataID | 0x0220 | CRC 計算に含む ID（CAN ID と一致） |
-| DataLength | 4 | フレーム全体のバイト長 |
+| DataLength | 5 | フレーム全体のバイト長（CRC16 2byte 含む） |
 | MaxDeltaCounter | 0 | Protect 側では未使用 |
-| CounterOffset | 1 | Counter を格納する byte インデックス |
-| CRCOffset | 0 | CRC を格納する byte インデックス（AUTOSAR 標準バリアント 1A） |
+| Offset | 0 | E2E ヘッダ（CRC16+Counter の3byte）が始まる byte インデックス |
 
 ##### ログ例
 
 ```
-[1019ms] INFO  Can_Hw: TX OK id=0x220 dlc=4 [XX 00 00 00]
-                                              └┘  └┘ └┘ └┘ └── E2ESeqErrCount=0
-                                              │   │  └──────── E2ECrcErrCount=0
-                                              │   └─────────── Counter=0（初回送信）
-                                              └─────────────── CRC8（自動計算）
-[2019ms] INFO  Can_Hw: TX OK id=0x220 dlc=4 [YY 01 00 00]  ← Counter が 1 に進む
+[1019ms] INFO  Can_Hw: TX OK id=0x220 dlc=5 [XX XX 00 00 00]
+                                              └───┘  └┘ └┘ └┘ └── E2ESeqErrCount=0
+                                              │      │  └──────── E2ECrcErrCount=0
+                                              │      └─────────── Counter=0（初回送信）
+                                              └────────────────── CRC16（自動計算、リトルエンディアン2byte）
+[2019ms] INFO  Can_Hw: TX OK id=0x220 dlc=5 [YY YY 01 00 00]  ← Counter が 1 に進む
 ```
 
 <a id="e2emon"></a>
@@ -2364,7 +2382,7 @@ I-PDU（`E2EHealthStatus`、CAN ID 0x220）として分離しました。Com に
 E2EMon は `Com_SendSignal()` を呼ぶだけで、送信タイミングには一切関与しません
 （詳細は「CAN 通信スタック」セクションの Com モジュール説明を参照）。
 テレメトリ自体の破損を監視ツールが検出できるよう、この `E2EHealthStatus` には
-E2E P01 保護を付与しています（詳細は前項「送信側（Protect）— E2EHealthStatus」参照。
+E2E Profile05 保護を付与しています（詳細は前項「送信側（Protect）— E2EHealthStatus」参照。
 E2EMon 自身は E2E 保護の存在を一切知りません）。
 
 **Dem の ExtendedData（故障確定回数）との違い**: Dem の ExtendedData
@@ -2374,31 +2392,31 @@ E2EMon 自身は E2E 保護の存在を一切知りません）。
 そのまま数えており、UDS でポーリングせずとも CAN バス上の他 ECU・監視ツールが
 `E2EHealthStatus` を受信するだけでリアルタイムに観測できる、という違いがあります。
 
-##### E2EHealthStatus フレームレイアウト（CAN ID 0x220 / DLC=4 / PERIODIC / E2E P01 保護）
+##### E2EHealthStatus フレームレイアウト（CAN ID 0x220 / DLC=5 / PERIODIC / E2E Profile05 保護）
 
 ```
-byte[0] : E2E CRC8（AUTOSAR 標準バリアント 1A、SWS_E2E_00227 準拠）
-byte[1] : E2E Counter（下位 4bit）
-byte[2] : E2ECrcErrCount（EngineInfo/AbsInfo 受信の E2E CRC 不一致累積数、0-255 で飽和）
-byte[3] : E2ESeqErrCount（EngineInfo/AbsInfo 受信の E2E シーケンス異常累積数、0-255 で飽和）
+byte[0-1] : E2E CRC16（多項式 0x1021、リトルエンディアン、SWS_E2E_00400/00406 準拠）
+byte[2]   : E2E Counter（8bit フル値）
+byte[3]   : E2ECrcErrCount（EngineInfo/AbsInfo 受信の E2E CRC 不一致累積数、0-255 で飽和）
+byte[4]   : E2ESeqErrCount（EngineInfo/AbsInfo 受信の E2E シーケンス異常累積数、0-255 で飽和）
 ```
 
 **動作確認方法**: uds_tester で EngineInfo/AbsInfo の byte[0]（CRC）を意図的に
-誤った値にして送信すると、`E2EHealthStatus` の byte[2]（crcErr）が実機ログ・
+誤った値にして送信すると、`E2EHealthStatus` の byte[3]（crcErr）が実機ログ・
 uds_tester の受信モニター双方で 1 ずつ増えることが確認できます（uds_tester の
 「E2EHealthStatus (0x220)」受信モニターは `crcErr=N seqErr=M` の形式で表示します）。
-カウンタ飛びを起こすと byte[3]（seqErr）が増えます。6000ms 周期で自動送信される
+カウンタ飛びを起こすと byte[4]（seqErr）が増えます。6000ms 周期で自動送信される
 ため、値が変化していなくても定期的にフレームが流れ続けることも確認できます
 （1000ms だとシリアルログの出力量が多く流れてしまうため 6000ms を既定値としています）。
 
 ```
-[1019ms] INFO  Com: TX iPdu=2 [XX 00 00 00]  # E2EHealthStatus、6000ms 周期で自動送信
-[7019ms] INFO  Com: TX iPdu=2 [YY 01 00 00]  # Counter が 1 に進む
+[1019ms] INFO  Com: TX iPdu=2 [XX XX 00 00 00]  # E2EHealthStatus、6000ms 周期で自動送信
+[7019ms] INFO  Com: TX iPdu=2 [YY YY 01 00 00]  # Counter が 1 に進む
 
 # EngineInfo の CRC を意図的に誤らせて送信した直後
 [8501ms] WARN  E2EXf: InverseTransform NG DemEvent=9 st=2  ← st=2: WRONGCRC
 [8502ms] INFO  E2EMon: (内部カウンタ更新、次回 PERIODIC 送信まではログなし)
-[13019ms] INFO  Com: TX iPdu=2 [ZZ 02 01 00]  # crcErr が 0→1 に増加
+[13019ms] INFO  Com: TX iPdu=2 [ZZ ZZ 02 01 00]  # crcErr が 0→1 に増加
 ```
 
 <a id="secoc"></a>
@@ -2440,19 +2458,18 @@ E2E は「Com のコールバックフック（RxIndicationCbk/TxTransformCbk）
           NG → ログのみ、Com へは一切転送しない
       → Com_ReceiveSignal(IMMOBILIZER_CMD) → Rte_COMCbk_SecureCommand()（ログのみ）
 
-【TX】Arduino (MeterEcu、E2EHealthStatus):
-  E2EMon → Com_SendSignal() → Com_MainFunction()（PERIODIC、6000ms周期）
-    → TxTransformCbk（E2EXf、E2E CRC/Counter を書き込む）
-    → PduR_Transmit(SrcPduId=3, 4byte)
-        → TransmitOverrideFct=SecOC_IfTransmit()（Authentic I-PDU を内部
-          バッファへコピーし即座に E_OK を返す。[SWS_SecOC_00058]）
-    → 次回 SecOC_MainFunction()（100ms周期）:
-        Freshness（自身の単調増加カウンタ）+ AES-128-CMAC を計算
-        Secured I-PDU（8byte）を組み立て
-        → PduR_SecOCTransmit(SrcPduId=3, 8byte) → CanIf_Transmit() → CAN 0x220 送信
-
-  uds_tester (Python、受信モニター):
-    受信した 8byte から MAC を pycryptodome で再計算し検証（下記「検証」節）
+【TX】現在 SecOC を使う TX I-PDU は無い（後述）。以前は E2EHealthStatus
+  （CAN 0x220）が以下の経路で SecOC 保護されていたが、E2E を Profile05（CRC16）
+  へ強化した際に DLC が classic CAN の 8byte 上限を超えるため撤去した:
+    E2EMon → Com_SendSignal() → Com_MainFunction()（PERIODIC、6000ms周期）
+      → TxTransformCbk（E2EXf、E2E CRC/Counter を書き込む）
+      → PduR_Transmit(SrcPduId=3, 4byte)
+          → TransmitOverrideFct=SecOC_IfTransmit()（Authentic I-PDU を内部
+            バッファへコピーし即座に E_OK を返す。[SWS_SecOC_00058]）
+      → 次回 SecOC_MainFunction()（100ms周期）:
+          Freshness（自身の単調増加カウンタ）+ AES-128-CMAC を計算
+          Secured I-PDU（8byte）を組み立て
+          → PduR_SecOCTransmit(SrcPduId=3, 8byte) → CanIf_Transmit() → CAN 0x220 送信
 ```
 
 PduR の RX 振り分け機構（`PduR_RxDestType`）は元々、1 つの受信 PDU を複数の
@@ -2471,12 +2488,15 @@ transmission"）に忠実な形で追加しました。実装当初の RX 専用
 一般化しました（既存の全 TX パスはこのフィールドを設定しないため無変更・無
 リグレッションです）。中間モジュールは変換完了後、`PduR_Transmit()` とは別の
 `PduR_SecOCTransmit()`（`TransmitOverrideFct` を再評価しない）を呼んで
-`CanIf_Transmit()` まで到達させます。
+`CanIf_Transmit()` まで到達させます（`TransmitOverrideFct`/`TransmitOverrideId`
+という機構自体は、現在これを使う TX I-PDU が無くなった後も学習用リファレンス
+実装として残している）。
 
 Com/E2E は SecOC の存在を一切知りません（E2E Transformer 方式で Com が E2E の
 存在を知らないのと同じ設計思想）。`Com_SendSignal()`/`TxTransformCbk` は
-従来どおり 4byte の E2E 保護済みペイロードを扱うだけで、SecOC がその後ろに
-Freshness/MAC を継ぎ足して 8byte の Secured I-PDU にすることを一切意識しません。
+E2E 保護済みペイロードを扱うだけで、SecOC の有無を一切意識しない設計に
+なっています（TX 方向で実際に SecOC を使っていた頃も、E2EHealthStatus を
+Profile05 へ切り替えた現在も、この点は変わりません）。
 
 <a id="secoc-byte-layout"></a>
 #### Secured I-PDU バイトレイアウト（SecOC Profile 1 準拠）
@@ -2500,9 +2520,10 @@ Value"）: `DataId(2byte, Big Endian, =0x0120) | AuthenticPayload(2byte) |
 FreshnessValue(1byte)` の 5 バイトを AES-128-CMAC へ入力します（Big Endian は
 `[SWS_SecOC_00011]`）。
 
-TX 対象フレーム「E2EHealthStatus」（CAN ID 0x220）は、既に E2E P01 保護済みの
-4byte ペイロード全体を Authentic I-PDU として扱い、SecOC で外側からさらに
-保護します（内側=E2E で意図しない誤りを検出、外側=SecOC で意図的な改ざん・
+**TX 方向: 現在 SecOC で保護している I-PDU は無い**（`SECOC_TX_PDU_COUNT=0`）。
+以前は「E2EHealthStatus」（CAN ID 0x220）を、E2E Profile01 保護済みの 4byte
+ペイロード全体を Authentic I-PDU として扱い、SecOC で外側からさらに保護する
+構成でした（内側=E2E で意図しない誤りを検出、外側=SecOC で意図的な改ざん・
 なりすましを検出、という二重防御の実例）:
 
 | byte | 内容 | サイズ |
@@ -2514,10 +2535,13 @@ TX 対象フレーム「E2EHealthStatus」（CAN ID 0x220）は、既に E2E P01
 | 4 | Freshness Value（8bit、切り詰めなし） | 1 |
 | 5-7 | 切り詰め MAC（AES-128-CMAC 128bit 出力の上位24bit） | 3 |
 
-DLC が 4→8 バイトへ増える点は `CanIf_PBCfg.c` の当該 TxPdu の `.Dlc` のみを
-変更しており、Com/E2E 側の DLC（4byte のまま）には一切手を入れていません
-（Com は SecOC の存在を知らないため）。RX/TX で異なる鍵（用途・アセットが
-異なるため）を割り当てています。
+E2EHealthStatus の E2E を Profile01（CRC8、ヘッダ2byte 相当）から Profile05
+（CRC16、ヘッダ3byte）へ強化するにあたり、上記 SecOC 分（Freshness1byte+MAC3byte）
+を足すと classic CAN の DLC=8 上限を超えてしまうため、SecOC 側を撤去し
+E2E Profile05 単体保護に切り替えました（`E2EXf_PBCfg.c`/`SecOC_PBCfg.c`/
+`Csm_PBCfg.c`/`Crypto_PBCfg.c`/`KeyM_PBCfg.c` から関連設定・鍵を削除済み）。
+`TransmitOverrideFct`/`SecOC_IfTransmit()` 等の機構自体は削除せず、学習用
+リファレンス実装として残しています。
 
 <a id="secoc-simplifications"></a>
 #### 明示する簡略化
@@ -2587,11 +2611,13 @@ DLC が 4→8 バイトへ増える点は `CanIf_PBCfg.c` の当該 TxPdu の `.
    → `Crypto_ProcessJob()`（同一の自前実装）が同じ鍵・同じメッセージに対して
    同じ MAC を計算することを、バイトレイアウト（DataId の Big Endian 連結順・
    切り詰め位置）も含めて突き合わせ済みです。
-4. TX 方向は `SecOC_MainFunction()` が `Csm_MacGenerate()` 経由で呼ぶ
-   `Crypto_Cmac_Calculate()`（RX と同一実装）が計算した MAC を、
-   `tools/uds_tester` の `_verify_secoc()`（受信した Secured I-PDU から MAC を
-   再計算する、`_apply_secoc()` の逆方向）で独立に再検証できます（下記
-   「実機で検証可能」TX 項参照）。
+4. （履歴）以前 TX 方向で SecOC を使っていた際は、`SecOC_MainFunction()` が
+   `Csm_MacGenerate()` 経由で呼ぶ `Crypto_Cmac_Calculate()`（RX と同一実装）が
+   計算した MAC を、`tools/uds_tester` の `_verify_secoc()`（受信した
+   Secured I-PDU から MAC を再計算する、`_apply_secoc()` の逆方向）で
+   独立に再検証できていました。現在は TX 方向で SecOC を使う I-PDU が無いため
+   （E2EHealthStatus を E2E Profile05 単体保護へ切り替えたため）この経路は
+   動作していませんが、`_verify_secoc()` 自体は汎用実装なので残しています。
 
 **実機で検証可能**: `tools/uds_tester/config.json` に「ImmobilizerCmd
 (0x120, KeyFobEcu)」ボタンを追加しました（UNLOCK/LOCK の 2 プリセット）。
@@ -2610,13 +2636,13 @@ DLC が 4→8 バイトへ増える点は `CanIf_PBCfg.c` の当該 TxPdu の `.
   MAC は依然として正しいにもかかわらず `SecOC: RxInd W: ... freshness check
   failed (replay or stale)` が出力され、拒否されることが確認できます。
 
-**TX 方向の実機確認**: `tools/uds_tester` の「E2EHealthStatus (0x220)」受信
-モニターが、`crcErr=N seqErr=M` に加えて `SecOC:OK`/`SecOC:NG` を表示します
-（受信した 8byte から Python 側で MAC を独立に再計算し、Arduino が計算した
-MAC と一致するかを毎回検証）。Arduino ログでも
-`SecOC: MainFunction: iPdu=0 secured OK (freshness=N)` が 6000ms 周期（
-`Com_MainFunction()` の PERIODIC 送信に追従して `SecOC_MainFunction()` が
-検知した直後）で出力され続けることが確認できます。
+**TX 方向（履歴）**: 以前は `tools/uds_tester` の「E2EHealthStatus (0x220)」
+受信モニターが、`crcErr=N seqErr=M` に加えて `SecOC:OK`/`SecOC:NG` を表示し、
+Arduino ログにも `SecOC: MainFunction: iPdu=0 secured OK (freshness=N)` が
+6000ms 周期で出力されていました。E2EHealthStatus を E2E Profile05 単体保護へ
+切り替えた際に SecOC を撤去したため、現在はこの表示・ログは出力されません
+（TX 方向で SecOC を使う I-PDU が無いため、`SecOC_MainFunction()` の
+TX ループは毎回 0 回実行で終わります）。
 
 <a id="secoc-scope-limitation"></a>
 #### 意図的に応用範囲を限定した理由
@@ -3436,8 +3462,9 @@ DID 0x0108 (CryptoKeyUpdate) は KeyM の鍵更新セッションを駆動する
 応答: [0x6E, 0x01, 0x08]  (SF, 3 バイト)
 ```
 
-`keyName` は `'1'`(0x31, ImmobilizerCmd 用) または `'2'`(0x32,
-E2EHealthStatus 用) のみ有効。ECU 内部では `Dcm_HandleWriteDataById()` が
+`keyName` は `'1'`(0x31, ImmobilizerCmd 用) のみ有効（以前は `'2'`(0x32,
+E2EHealthStatus 用) も使えたが、E2EHealthStatus の SecOC 撤去に伴い削除済み）。
+ECU 内部では `Dcm_HandleWriteDataById()` が
 1回の呼び出し内で `KeyM_Start()`→`KeyM_Update()`→`KeyM_Finalize()` を実行し、
 `Csm_KeyElementSet()`/`Csm_KeySetValid()` 経由で `Crypto.c` の RAM 鍵テーブル
 を書き換えます。鍵は更新直後は無効化され、`KeyM_Finalize()`（＝この DID 書き込み

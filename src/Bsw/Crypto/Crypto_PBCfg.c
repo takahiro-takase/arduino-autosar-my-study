@@ -26,12 +26,7 @@ const uint8 Crypto_KeyTable[CRYPTO_KEY_COUNT][CRYPTO_AES128_KEY_SIZE] = {
     {
         0x4BU,0x65U,0x79U,0x46U,0x6FU,0x62U,0x53U,0x65U,
         0x63U,0x72U,0x65U,0x74U,0x21U,0x21U,0x21U,0x21U
-    },
-    /* CRYPTO_KEY_E2E_HEALTH_STATUS: ASCII で "TelemetryKey!!!!" と読める値
-     * （上記コメント参照。ImmobilizerCmd とは別の鍵であることを一目でわかる
-     * ようにするための学習用の意図的な選択）。 */
-    {
-        0x54U,0x65U,0x6CU,0x65U,0x6DU,0x65U,0x74U,0x72U,
-        0x79U,0x4BU,0x65U,0x79U,0x21U,0x21U,0x21U,0x21U
     }
+    /* CRYPTO_KEY_E2E_HEALTH_STATUS ("TelemetryKey!!!!") は E2EHealthStatus の
+     * SecOC 撤去に伴い削除済み（E2E Profile05 単体保護へ切り替えたため）。 */
 };

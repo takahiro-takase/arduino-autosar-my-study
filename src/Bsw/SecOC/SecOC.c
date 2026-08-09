@@ -21,10 +21,17 @@
  *          KeyFobEcu から受信する」想定で、送信側は uds_tester（Python、
  *          pycryptodome で本物の AES-CMAC を計算する）が模擬する。
  *
- *          TX（自ら Secured I-PDU を生成して送信する）方向は E2EHealthStatus
- *          に対して実装している。RX とは異なり PduR の TX 経路
+ *          TX（自ら Secured I-PDU を生成して送信する）方向の機構自体も実装して
+ *          いるが、現在これを使う PDU は無い（SECOC_TX_PDU_COUNT=0、
+ *          SecOC_Cfg.h/SecOC_PBCfg.c 参照）。以前は E2EHealthStatus（CAN 0x220）
+ *          がこの経路で保護されていたが、E2E を Profile01（CRC8）から
+ *          Profile05（CRC16）へ強化した際に DLC が classic CAN の 8byte 上限を
+ *          超えるため撤去した（詳細は README.md「SecOC」セクション、
+ *          docs/E2E_Profile5_Notes.md 参照）。TX Pdu が実際に追加されるまで、
+ *          `SecOC_MainFunction()` の TX ループは毎回 0 回実行で終わる。
+ *          RX とは異なり PduR の TX 経路
  *          （PduR_TxRoutingPathType.TransmitOverrideFct）に中間モジュールとして
- *          挟まる（[7.4.1] "Authentication during direct transmission"）。
+ *          挟まる構成（[7.4.1] "Authentication during direct transmission"）。
  *          Com が PduR_Transmit() を呼ぶと SecOC_IfTransmit() が Authentic
  *          I-PDU を内部バッファへコピーして即座に返り（[SWS_SecOC_00058]）、
  *          次回 SecOC_MainFunction() で Freshness/MAC を計算して Secured
@@ -53,9 +60,10 @@
 #define SECOC_AUTH_INPUT_MAX  16U
 
 /* TX Authentic I-PDU を保持するバッファの上限。CAN DLC 上限 8 バイトから
- * Freshness(最低1B)+MAC(最低1B) を除いた分以下に収まる。本プロジェクトの
- * E2EHealthStatus（Authentic 4byte）を超える将来の TX Pdu を見越して余裕を
- * 持たせる。 */
+ * Freshness(最低1B)+MAC(最低1B) を除いた分以下に収まる。現在 TX 方向で
+ * SecOC を使う PDU は無い（上記ファイル冒頭コメント参照）が、将来 TX Pdu が
+ * 追加された際にも対応できるよう CAN DLC 上限ベースの余裕を持たせたまま
+ * 残している。 */
 #define SECOC_TX_AUTH_BUF_MAX  8U
 
 static const SecOC_ConfigType* SecOC_ConfigPtr = NULL;
@@ -79,10 +87,18 @@ static uint8 SecOC_HasBaseline[SECOC_RX_PDU_COUNT];
  *                           という仕様上のタイミングそのものを再現するために
  *                           あえて遅延させる）。
  * SecOC_TxFreshness       : 送信側が保持する単調増加カウンタ（次回送信に使う
- *                           値）。8bit で折り返す。 */
-static uint8 SecOC_TxAuthenticBuffer[SECOC_TX_PDU_COUNT][SECOC_TX_AUTH_BUF_MAX];
-static uint8 SecOC_TxPending[SECOC_TX_PDU_COUNT];
-static uint8 SecOC_TxFreshness[SECOC_TX_PDU_COUNT];
+ *                           値）。8bit で折り返す。
+ *
+ * 現在 SECOC_TX_PDU_COUNT は 0（TX 方向で SecOC を使う PDU が無い）。
+ * サイズ0の配列宣言 (`T arr[0]`) は ISO C が認めていない GNU 拡張のため、
+ * 下記 3 配列は SECOC_TX_STATE_STORAGE_COUNT（最低 1）で確保する。実際の
+ * 有効要素数は変わらず SECOC_TX_PDU_COUNT のままで、全ループがこれを上限に
+ * するため、確保だけされた添字0は SECOC_TX_PDU_COUNT>0 になるまで一切
+ * 参照されない（無害）。 */
+#define SECOC_TX_STATE_STORAGE_COUNT  ((SECOC_TX_PDU_COUNT) > 0U ? (SECOC_TX_PDU_COUNT) : 1U)
+static uint8 SecOC_TxAuthenticBuffer[SECOC_TX_STATE_STORAGE_COUNT][SECOC_TX_AUTH_BUF_MAX];
+static uint8 SecOC_TxPending[SECOC_TX_STATE_STORAGE_COUNT];
+static uint8 SecOC_TxFreshness[SECOC_TX_STATE_STORAGE_COUNT];
 
 /**
  * \brief   SecOC_RxPduConfigType テーブルから SecOCRxPduId に一致するエントリを検索する。

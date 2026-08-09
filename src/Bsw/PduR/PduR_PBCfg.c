@@ -24,8 +24,9 @@
  *            TX パス 2 (SrcPduId=2):
  *              CanIf TxPduId=3 → CAN 0x210, TxConfirmation → Com_TxConfirmation
  *            TX パス 3 (SrcPduId=3):
- *              COM → SecOC（TransmitOverrideFct）→ CanIf TxPduId=4 → CAN 0x220,
- *              TxConfirmation → Com_TxConfirmation（SecOC は経由しない）
+ *              CanIf TxPduId=4 → CAN 0x220 (E2EHealthStatus、E2E Profile05
+ *              保護のみ。以前は SecOC を経由していたが撤去済み),
+ *              TxConfirmation → Com_TxConfirmation
  *            TX パス 4 (SrcPduId=4):
  *              CanIf TxPduId=5 → CAN 0x230 (ImmobilizerStatus、Com の Signal
  *              Gateway が ImmobilizerCmd(RX) から転送), TxConfirmation →
@@ -185,25 +186,17 @@ static const PduR_TxRoutingPathType PduR_TxPaths[PDUR_TX_PATH_COUNT] = {
         .ConfFct       = Com_TxConfirmation
     },
     {
-        /* パス 3: COM (SrcPduId=3) → SecOC → CanIf TxPduId=4 (CAN 0x220, E2EHealthStatus)
+        /* パス 3: COM (SrcPduId=3) → CanIf TxPduId=4 (CAN 0x220, E2EHealthStatus)
          * DaVinci: PduRRoutingPath/E2EHealthStatus_Tx
          * COM の 3 番目の TX I-PDU には SrcPduId=3 を割り当てる。
-         * TransmitOverrideFct=SecOC_IfTransmit: Com が PduR_Transmit(3, ...) を
-         * 呼ぶと、CanIf_Transmit() へ直接転送せず SecOC へ委譲する。SecOC が
-         * Freshness/MAC を計算して Secured I-PDU を組み立てた後、
-         * PduR_SecOCTransmit(3, ...) を呼んで初めて CanIf_Transmit() まで
-         * 到達する（この 2 番目の呼び出しでは TransmitOverrideFct を再評価
-         * しないため無限ループしない。詳細は PduR.c 参照）。
-         * ConfFct（Com_TxConfirmation）は SecOC を経由せず今までどおり
-         * CanIf の TxConfirmation から直接呼ばれる（本実装は SecOC 側で
-         * 動的バッファを持たないため、確認経路の横取りが不要な簡略化。
-         * 詳細は SecOC.c ファイル冒頭コメント参照）。 */
-        .SrcPduId            = 3U,
-        .CanIfTxPduId        = 4U,
-        .ConfDestPduId       = 2U,
-        .ConfFct             = Com_TxConfirmation,
-        .TransmitOverrideFct = SecOC_IfTransmit,
-        .TransmitOverrideId  = 0U /* SecOC_PBCfg.c の該当 TxPdu.SecOCTxPduId と一致 */
+         * 以前は SecOC（TransmitOverrideFct=SecOC_IfTransmit）を経由する
+         * 二重保護構成だったが、E2E Profile05 単体保護へ切り替えたため撤去し、
+         * パス4（ImmobilizerStatus）と同じ COM→CanIf 直結パターンにした
+         * （TransmitOverrideFct 未設定）。 */
+        .SrcPduId      = 3U,
+        .CanIfTxPduId  = 4U,
+        .ConfDestPduId = 2U,
+        .ConfFct       = Com_TxConfirmation
     },
     {
         /* パス 4: COM (SrcPduId=4) → CanIf TxPduId=5 (CAN 0x230, ImmobilizerStatus)

@@ -60,10 +60,11 @@
 /** RX Secured I-PDU「ImmobilizerCmd」の MAC 検証ジョブ */
 #define CSM_JOB_ID_IMMOBILIZER_CMD_VERIFY     0U
 
-/** TX Secured I-PDU「E2EHealthStatus」の MAC 生成ジョブ */
-#define CSM_JOB_ID_E2E_HEALTH_STATUS_GENERATE 1U
+/* CSM_JOB_ID_E2E_HEALTH_STATUS_GENERATE は E2EHealthStatus の SecOC 撤去に
+ * 伴い削除済み（E2E Profile05 単体保護へ切り替えたため、TX 方向で SecOC/Csm
+ * の MAC 生成ジョブを使う PDU が現在無い）。 */
 
 /** ジョブテーブルの総数 */
-#define CSM_JOB_COUNT  2U
+#define CSM_JOB_COUNT  1U
 
 #endif /* CSM_CFG_H */

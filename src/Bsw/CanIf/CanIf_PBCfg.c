@@ -16,8 +16,8 @@
  *              CanId=0x400, DLC=2, HTH=0
  *            TX PDU (TxPduId=3): WarningStatus (COM Signal Group)
  *              CanId=0x210, DLC=1, HTH=0
- *            TX PDU (TxPduId=4): E2EHealthStatus (COM PERIODIC、E2E P01 保護)
- *              CanId=0x220, DLC=4, HTH=0
+ *            TX PDU (TxPduId=4): E2EHealthStatus (COM PERIODIC、E2E Profile05 保護)
+ *              CanId=0x220, DLC=5, HTH=0
  *            TX PDU (TxPduId=5): ImmobilizerStatus (COM DIRECT、Signal Gateway 転送先)
  *              CanId=0x230, DLC=1, HTH=0
  *            RX PDU (RxPduId=0): EngineInfo  (エンジン ECU)
@@ -131,18 +131,17 @@ static const CanIf_TxPduConfigType CanIf_TxPduConfigData[CANIF_TX_PDU_COUNT] = {
     },
     {
         /* ---------------------------------------------------------------
-         * TxPduId=4: E2EHealthStatus フレーム (COM PERIODIC、SecOC 保護)
+         * TxPduId=4: E2EHealthStatus フレーム (COM PERIODIC、E2E Profile05 保護のみ)
          * DaVinci: /ActiveEcuC/CanIf/CanIfInitCfg/CanIfTxPduCfg/E2EHealthStatus_Tx
          * --------------------------------------------------------------- */
         .UpperLayerTxPduId = 3U,          /* DaVinci: CanIfTxPduId。PduR_PBCfg.c の
                                           *          E2EHealthStatus パスの SrcPduId(=3) と一致させる */
         .CanId             = 0x220U,      /* DaVinci: CanIfTxPduCanId */
-        .Dlc               = 8U,          /* DaVinci: CanIfTxPduDlc (E2E P01 保護: CRC1B+Counter1B
-                                            *          + CrcErrCount1B + SeqErrCount1B の 4byte を、
-                                            *          SecOC がさらに Freshness1B+MAC3B で保護した
-                                            *          Secured I-PDU 全体の長さ。Com 自身が知る DLC は
-                                            *          従来どおり 4byte のまま — SecOC は PduR の TX 経路
-                                            *          上に挟まる中間モジュールであり、Com は関知しない） */
+        .Dlc               = 5U,          /* DaVinci: CanIfTxPduDlc (E2E Profile05 保護: CRC16 2B +
+                                            *          Counter 1B + CrcErrCount 1B + SeqErrCount 1B の
+                                            *          5byte。以前は E2E P01(4byte)+SecOC の
+                                            *          Freshness1B+MAC3B で DLC=8 だったが、SecOC は
+                                            *          撤去し Com 自身が知る DLC とそのまま一致させている） */
         .Hth               = 0U,          /* DaVinci: CanIfTxPduHthIdRef */
         .TxConfirmFct      = PduR_CanIfTxConfirmation /* DaVinci: CanIfTxPduUserTxConfirmationName */
     },

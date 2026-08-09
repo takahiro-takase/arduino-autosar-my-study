@@ -72,10 +72,10 @@
 /** RX Secured I-PDU「ImmobilizerCmd」検証用の鍵（KeyFobEcu と共有） */
 #define CRYPTO_KEY_IMMOBILIZER_CMD    0U
 
-/** TX Secured I-PDU「E2EHealthStatus」生成用の鍵 */
-#define CRYPTO_KEY_E2E_HEALTH_STATUS  1U
+/* CRYPTO_KEY_E2E_HEALTH_STATUS は E2EHealthStatus の SecOC 撤去に伴い削除済み
+ * （E2E Profile05 単体保護へ切り替えたため、この鍵を使う PDU が無くなった）。 */
 
 /** 鍵テーブルの総数 */
-#define CRYPTO_KEY_COUNT  2U
+#define CRYPTO_KEY_COUNT  1U
 
 #endif /* CRYPTO_CFG_H */

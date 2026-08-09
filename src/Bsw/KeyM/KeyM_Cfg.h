@@ -72,10 +72,10 @@
 /** RX Secured I-PDU「ImmobilizerCmd」の鍵名 */
 #define KEYM_CRYPTO_KEY_NAME_IMMOBILIZER_CMD    '1'
 
-/** TX Secured I-PDU「E2EHealthStatus」の鍵名 */
-#define KEYM_CRYPTO_KEY_NAME_E2E_HEALTH_STATUS  '2'
+/* KEYM_CRYPTO_KEY_NAME_E2E_HEALTH_STATUS ('2') は E2EHealthStatus の SecOC
+ * 撤去に伴い削除済み（E2E Profile05 単体保護へ切り替えたため）。 */
 
 /** 鍵名テーブルの総数 */
-#define KEYM_CRYPTO_KEY_COUNT  2U
+#define KEYM_CRYPTO_KEY_COUNT  1U
 
 #endif /* KEYM_CFG_H */

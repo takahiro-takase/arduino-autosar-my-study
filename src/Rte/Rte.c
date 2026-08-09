@@ -325,15 +325,17 @@ void Rte_COMCbk_AbsInfo(void)
  *          のため、Com_MainFunction() が自分の周期タイマで送信を決定した際に
  *          このフックが呼ばれる（DIRECT/MIXED I-PDU のイベント駆動送信と
  *          同じ「送信直前の最終変換」の仕組みをそのまま再利用している）。
- *          実 TX バッファへ Counter・CRC8 を書き込む。E2EMon（CDD 相当）は
- *          Com_SendSignal() で値をセットするだけで、この E2E 保護の存在自体を
- *          一切知らない（MeterStatus における App_EngineManager と同じ関係）。
+ *          実 TX バッファへ Counter・CRC16 を書き込む（E2E Profile05、
+ *          以前は Profile01+SecOC の二重保護だったが SecOC は撤去済み）。
+ *          E2EMon（CDD 相当）は Com_SendSignal() で値をセットするだけで、
+ *          この E2E 保護の存在自体を一切知らない（MeterStatus における
+ *          App_EngineManager と同じ関係）。
  *
  * \note    Rte_COMCbk_EngineInfo() と同じ理由で non-static。
  */
 void Rte_COMTransform_E2EHealthStatus(uint8* Data, uint8 Length)
 {
-    E2EXf_Transform(&E2EXf_E2EHealthStatusTxCfg, Data, Length);
+    E2EXf_TransformP05(&E2EXf_E2EHealthStatusTxCfgP05, Data, Length);
 }
 
 /* -----------------------------------------------------------------------

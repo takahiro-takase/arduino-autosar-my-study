@@ -56,8 +56,9 @@
  *  [0]=ImmobilizerCmd (CAN 0x120, KeyFobEcu からの想定) */
 #define SECOC_RX_PDU_COUNT  1U
 
-/** TX Secured I-PDU テーブルのエントリ数
- *  [0]=E2EHealthStatus (CAN 0x220、E2E 保護済みペイロードをさらに認証) */
-#define SECOC_TX_PDU_COUNT  1U
+/** TX Secured I-PDU テーブルのエントリ数。現在 TX 方向で SecOC を使う PDU は
+ *  無い（以前は E2EHealthStatus (CAN 0x220) を保護していたが、E2E Profile05
+ *  単体保護へ切り替えて撤去した）。RX 方向 (ImmobilizerCmd) は引き続き使用中。 */
+#define SECOC_TX_PDU_COUNT  0U
 
 #endif /* SECOC_CFG_H */

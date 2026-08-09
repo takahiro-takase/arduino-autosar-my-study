@@ -23,7 +23,7 @@ extern "C" {
 
 extern const E2EXf_RxConfigType E2EXf_EngineInfoRxCfg;
 extern const E2EXf_RxConfigType E2EXf_AbsInfoRxCfg;
-extern const E2EXf_TxConfigType E2EXf_E2EHealthStatusTxCfg;
+extern const E2EXf_TxConfigTypeP05 E2EXf_E2EHealthStatusTxCfgP05;
 
 /**
  * \brief   E2EXf の全 Check/Protect ステートを初期化し、E2EXf モジュール
