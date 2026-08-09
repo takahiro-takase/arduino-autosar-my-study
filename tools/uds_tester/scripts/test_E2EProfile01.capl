@@ -6,6 +6,12 @@
 
 variables
 {
+    message 0x100 engineInfoMsg;
+    byte e2eCnt_0x100;
+    byte e2eCnt_0x220;
+    byte e2eCrcErrCount;
+    byte e2eSeqErrCount;
+
     int  msgIndex;
     byte msgData[32];
 
@@ -16,12 +22,67 @@ variables
     // ために前回値を残しておく必要があるので、e2eCnt だけはグローバルに置く
     // (e2eIndex/e2eData/e2eDataLen/e2eCrc は毎回作り直せばよいので
     // ReceiveE2EHealthStatus() のローカル変数のままでよい)。
-    byte e2eCnt;
 }
 
 on start
 {
+    e2eCnt_0x100   = 0x00;
+    e2eCnt_0x220   = 0x00;
+    e2eCrcErrCount = 0xFF;
+    e2eSeqErrCount = 0xFF;
+
     write("停止するには「停止」ボタンを押してください。");
+    setTimer(TimeoutA, 6000);
+}
+
+on timer TimeoutA
+{
+    SendMessage_EngineInfo(0, 0 ,1, 1);
+    setTimer(TimeoutB, 6000);  // CAPL の msTimer と同じく単発なので、繰り返すには再度アームする
+}
+
+on timer TimeoutB
+{
+    SendMessage_EngineInfo(0, 0 ,1, 2);
+//    setTimer(TimeoutC, 6000);  // CAPL の msTimer と同じく単発なので、繰り返すには再度アームする
+}
+
+// -----------------------------------------------------------------------------
+// EngineInfo
+// -----------------------------------------------------------------------------
+void SendMessage_EngineInfo(word speed, byte coolant, byte onFlag, byte errorFlag)
+{
+    byte data[5];
+
+    if (errorFlag == 2)
+    {
+        // CNT異常
+        e2eCnt_0x100 = (e2eCnt_0x100 + 3) % 15;
+    }
+
+    data[0] = e2eCnt_0x100;
+    data[1] = (speed >> 8) & 0xFF;
+    data[2] = speed & 0xFF;
+    data[3] = coolant;
+    data[4] = (onFlag & 0x01) << 7;
+
+    engineInfoMsg.dlc = 6;
+    engineInfoMsg.byte(0) = CalcE2EProfile01CRC(0x0100, 5, data);
+    engineInfoMsg.byte(1) = data[0];
+    engineInfoMsg.byte(2) = data[1];
+    engineInfoMsg.byte(3) = data[2];
+    engineInfoMsg.byte(4) = data[3];
+    engineInfoMsg.byte(5) = data[4];
+
+    if (errorFlag == 1)
+    {
+        // CRC異常
+        engineInfoMsg.byte(0) = 0;
+    }
+
+    output(engineInfoMsg);
+
+    e2eCnt_0x100 = (e2eCnt_0x100 + 1) % 15;
 }
 
 // -----------------------------------------------------------------------------
@@ -33,10 +94,10 @@ on message 0x220
     {
         msgData[msgIndex] = this.byte(msgIndex);
     }
-    ReceiveE2EHealthStatus(this.id, this.dlc, msgData);
+    ReceiveMessage_E2EHealthStatus(this.id, this.dlc, msgData);
 }
 
-void ReceiveE2EHealthStatus(word id, byte dlc, byte data[])
+void ReceiveMessage_E2EHealthStatus(word id, byte dlc, byte data[])
 {
     // e2eIndex/e2eData/e2eDataLen/e2eCrc は呼び出しのたびに作り直す作業変数
     // なのでローカルのままでよい。e2eCnt (前回受信カウンタ) だけは呼び出しを
@@ -47,7 +108,11 @@ void ReceiveE2EHealthStatus(word id, byte dlc, byte data[])
     byte e2eData[32];
     byte e2eDataLen;
     byte e2eCrc;
+    byte received;
+    byte delta;
 //  byte e2eCnt;
+//  byte e2eCrcErrCount;
+//  byte e2eSeqErrCount;
     // この CAN フレームは E2E (先頭4バイト: CRC/Counter/CrcErrCount/SeqErrCount)
     // をさらに SecOC (byte[4]=Freshness、byte[5-7]=MAC) で保護した Secured I-PDU
     // (src/Bsw/SecOC/SecOC_PBCfg.c の E2EHealthStatus 設定参照) なので dlc は 8 だが、
@@ -62,20 +127,49 @@ void ReceiveE2EHealthStatus(word id, byte dlc, byte data[])
     e2eCrc = CalcE2EProfile01CRC(0x0220, e2eDataLen, e2eData);
     if (data[0] == e2eCrc)
     {
-        if (data[1] - e2eCnt == 1)
+        // E2E Profile1 の Counter は byte[1] の下位4bitのみが有効(0〜14の15値循環、
+        // 15は予約値でスキップ)。E2E_P01.c の E2E_P01Check() と同じ mod-15
+        // ラップアラウンド計算 (14 の次に 0 が来ても正常、という判定をするために必要)。
+        received = data[1] & 0x0F;
+        if (received >= e2eCnt_0x220)
         {
-            write("RX id=0x%x dlc=%d CRC:OK CNT:OK(0x%x))", id, dlc, data[1]);
+            delta = received - e2eCnt_0x220;
         }
         else
         {
-            write("RX id=0x%x dlc=%d CRC:OK CNT:NG(0x%x))", id, dlc, data[1]);
+            delta = (15 + received) - e2eCnt_0x220;
         }
+
+        if (delta == 1)
+        {
+            if ( (data[2] == e2eCrcErrCount) &&
+                 (data[3] == e2eSeqErrCount) )
+            {
+                // 変化なし
+                //write("RX id=0x%x dlc=%d CRC:OK CNT:OK(0x%02x) CrcErrCNT:0x%02x SeqErrCNT:0x%02x)", id, dlc, data[1], data[2], data[3]);
+            }
+            else
+            {
+                write("RX id=0x%x dlc=%d CRC:OK CNT:OK(0x%02x) CrcErrCNT:0x%02x SeqErrCNT:0x%02x)", id, dlc, data[1], data[2], data[3]);
+            }
+        }
+        else
+        {
+            write("RX id=0x%x dlc=%d CRC:OK CNT:NG(0x%02x) CrcErrCNT:0x%02x SeqErrCNT:0x%02x)", id, dlc, data[1], data[2], data[3]);
+        }
+
+        // Counter/エラーカウンタの状態は CRC が正しかった時だけ更新する
+        // (E2E_P01Check() と同じ「CRC 不一致時は状態を一切変更しない」挙動。
+        // 次に CRC が正しいフレームが来た時点で、その前の正常な状態を基準に
+        // 通常通り判定できるようにするため)。
+        e2eCnt_0x220   = received;
+        e2eCrcErrCount = data[2];
+        e2eSeqErrCount = data[3];
     }
     else
     {
-        write("RX id=0x%x dlc=%d CRC:NG CNT:--(0x--))", id, dlc, data[1]);
+        write("RX id=0x%x dlc=%d CRC:NG CNT:--(0x%02x))", id, dlc, data[1]);
     }
-    e2eCnt = data[1];
 }
 
 // -----------------------------------------------------------------------------
