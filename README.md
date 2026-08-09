@@ -206,47 +206,47 @@ HAL ─── Can_Hw / Dio_Hw / Port_Hw / Adc_Hw / Mcu_Hw / Fee_Hw / Wdg_Hw / Gp
 <a id="module-list"></a>
 #### モジュール一覧
 
-| 層 | モジュール | ModuleId | AUTOSAR 仕様 | 仕様準拠度 |
+| 層 | モジュール | ModuleId | AUTOSAR 仕様<br>仕様準拠度 | 概要 |
 |---|---|---|---|---|
 | ASW | App_EngineManager | — | — | — |
 |  | App_WarningIndicator | — | — | — |
 | RTE | Rte | — | — | — |
-| OS | Os | — | SWS_Os | 主要機能実装<br>(一部意図的に簡略化) |
-| BSW | Adc | 123 | SWS_Adc | 主要機能実装<br>(一部意図的に簡略化) |
-|  | BswM | 42 | SWS_BswM | 主要機能実装<br>(一部意図的に簡略化) |
-|  | Can | 80 | SWS_Can | 主要機能実装 |
-|  | CanIf | 60 | SWS_CanIf | 主要機能実装 |
-|  | CanSM | 140 | SWS_CanSM | 主要機能実装 |
-|  | CanTp | 35 | SWS_CanTp | 主要機能実装<br>(一部意図的に簡略化) |
-|  | Com | 50 | SWS_Com | 主要機能実装 |
-|  | ComM | 12 | SWS_ComM | 主要機能実装 |
-|  | CryIf | 112 | SWS_CryptoInterface | パススルー<br>(下位が1個のため) |
-|  | Crypto | 114 | SWS_CryptoDriver | 主要機能実装<br>(一部意図的に簡略化) |
-|  | Csm | 110 | SWS_CryptoServiceManager | 主要機能実装<br>(一部意図的に簡略化) |
-|  | Dcm | 53 | SWS_Dcm | 主要機能実装<br>(一部意図的に簡略化) |
-|  | Dem | 54 | SWS_Dem | 主要機能実装 |
-|  | Det | — | SWS_Det | 主要機能実装<br>(一部意図的に簡略化) |
-|  | Dio | — | SWS_Dio | 主要機能実装<br>(一部意図的に簡略化) |
-|  | E2E | — | SWS_E2E | 主要機能実装<br>(一部意図的に簡略化) |
-|  | E2EXf | 176 | SWS_E2ELibrary 12.4<br>(E2E Transformer) | 主要機能実装<br>(一部意図的に簡略化) |
+| OS | Os | — | SWS_Os<br>主要機能実装(一部簡略化) |  |
+| BSW | Adc | 123 | SWS_Adc<br>主要機能実装(一部簡略化) |  |
+|  | BswM | 42 | SWS_BswM<br>主要機能実装(一部簡略化) |  |
+|  | Can | 80 | SWS_Can<br>主要機能実装 |  |
+|  | CanIf | 60 | SWS_CanIf<br>主要機能実装 |  |
+|  | CanSM | 140 | SWS_CanSM<br>主要機能実装 |  |
+|  | CanTp | 35 | SWS_CanTp<br>主要機能実装(一部簡略化) |  |
+|  | Com | 50 | SWS_Com<br>主要機能実装 |  |
+|  | ComM | 12 | SWS_ComM<br>主要機能実装 |  |
+|  | CryIf | 112 | SWS_CryptoInterface<br>パススルー(下位が1個のため) |  |
+|  | Crypto | 114 | SWS_CryptoDriver<br>主要機能実装(一部簡略化) |  |
+|  | Csm | 110 | SWS_CryptoServiceManager<br>主要機能実装(一部簡略化) |  |
+|  | Dcm | 53 | SWS_Dcm<br>主要機能実装(一部簡略化) |  |
+|  | Dem | 54 | SWS_Dem<br>主要機能実装 |  |
+|  | Det | — | SWS_Det<br>主要機能実装(一部簡略化) |  |
+|  | Dio | — | SWS_Dio<br>主要機能実装(一部簡略化) |  |
+|  | E2E | — | SWS_E2E<br>主要機能実装(一部簡略化) |  |
+|  | E2EXf | 176 | SWS_E2ELibrary 12.4<br>(E2E Transformer)<br>主要機能実装(一部簡略化) |  |
 |  | E2EMon | — | — (独自 CDD 相当) | — |
-|  | EcuM | 10 | SWS_EcuStateManager | 主要機能実装 |
-|  | Fee | 21 | SWS_Fee | 主要機能実装<br>(一部意図的に簡略化) |
-|  | FiM | 11 | SWS_FiM | 主要機能実装<br>(一部意図的に簡略化) |
-|  | Gpt | 100 | SWS_Gpt | 主要機能実装<br>(一部意図的に簡略化) |
+|  | EcuM | 10 | SWS_EcuStateManager<br>主要機能実装 |  |
+|  | Fee | 21 | SWS_Fee<br>主要機能実装(一部簡略化) |  |
+|  | FiM | 11 | SWS_FiM<br>主要機能実装(一部簡略化) |  |
+|  | Gpt | 100 | SWS_Gpt<br>主要機能実装(一部簡略化) |  |
 |  | IoHwAb | 254 | AUTOSAR 抽象化層 | — |
-|  | KeyM | 116<br>(暫定値) | SWS_KeyManager<br>(Release 4.4.0) | 主要機能実装<br>(一部意図的に簡略化) |
-|  | Mcu | 101 | SWS_Mcu | 主要機能実装<br>(一部意図的に簡略化) |
-|  | MemIf | 22 | SWS_MemIf | パススルー<br>(下位が1個のため) |
-|  | Nm | 31 | SWS_CANNM | 主要機能実装 |
-|  | NvM | 20 | SWS_NvM | 主要機能実装<br>(一部意図的に簡略化) |
-|  | PduR | 51 | SWS_PduR | 主要機能実装<br>(一部意図的に簡略化) |
-|  | Port | — | SWS_Port | 主要機能実装<br>(一部意図的に簡略化) |
-|  | SchM | — | SWS_SchM | 主要機能実装<br>(一部意図的に簡略化) |
-|  | SecOC | 150 | SWS_SecureOnboardCommunication | 主要機能実装<br>(一部意図的に簡略化) |
-|  | Wdg | 102 | SWS_Wdg | 主要機能実装<br>(一部意図的に簡略化) |
-|  | WdgIf | 43 | SWS_WdgIf | パススルー<br>(下位が1個のため) |
-|  | WdgM | 13 | SWS_WdgM | 主要機能実装 |
+|  | KeyM | 116<br>(暫定値) | SWS_KeyManager(Release 4.4.0)<br>主要機能実装(一部簡略化) |  |
+|  | Mcu | 101 | SWS_Mcu<br>主要機能実装(一部簡略化) |  |
+|  | MemIf | 22 | SWS_MemIf<br>パススルー(下位が1個のため) |  |
+|  | Nm | 31 | SWS_CANNM<br>主要機能実装 |  |
+|  | NvM | 20 | SWS_NvM<br>主要機能実装(一部簡略化) |  |
+|  | PduR | 51 | SWS_PduR<br>主要機能実装(一部簡略化) |  |
+|  | Port | — | SWS_Port<br>主要機能実装(一部簡略化) |  |
+|  | SchM | — | SWS_SchM<br>主要機能実装(一部簡略化) |  |
+|  | SecOC | 150 | SWS_SecureOnboardCommunication<br>主要機能実装(一部簡略化) |  |
+|  | Wdg | 102 | SWS_Wdg<br>主要機能実装(一部簡略化) |  |
+|  | WdgIf | 43 | SWS_WdgIf<br>パススルー(下位が1個のため) |  |
+|  | WdgM | 13 | SWS_WdgM<br>主要機能実装 |  |
 | HAL | Can_Hw | — | — | — |
 |  | Dio_Hw | — | — | — |
 |  | Port_Hw | — | — | — |
