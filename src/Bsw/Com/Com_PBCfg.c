@@ -6,25 +6,27 @@
  *          相当し、I-PDU / シグナルのレイアウト情報を実装コードから分離して管理する。
  *
  *          本プロジェクトの設定（メータ ECU 想定）:
- *            RX I-PDU 0 (IPduId=0): CAN ID 0x100, DLC=6  EngineInfo  (エンジン ECU、E2E P01 保護)
- *              byte[0]: E2E CRC8 / byte[1]: E2E Counter (下位4bit)
- *              （AUTOSAR 標準バリアント 1A、SWS_E2E_00227 準拠のレイアウト）
- *              Signal 0: EngineSpeed   16 bit  BitPos=16  BigEndian
+ *            RX I-PDU 0 (IPduId=0): CAN ID 0x100, DLC=7  EngineInfo  (エンジン ECU、E2E P05 保護)
+ *              byte[0-1]: E2E CRC16 (リトルエンディアン) / byte[2]: E2E Counter (8bit)
+ *              （以前は E2E P01(CRC8+4bitカウンタ、DLC=6) だったが、CRC 検出能力を
+ *              高めるため E2E Profile05 へ切り替えた）
+ *              Signal 0: EngineSpeed   16 bit  BitPos=24  BigEndian
  *                FilterAlgorithm=NEW_IS_WITHIN（[0, 8000] rpm 範囲外は破棄。
  *                実車ではありえない値をプラウジビリティチェックで弾く）
- *              Signal 1: CoolantTemp    8 bit  BitPos=32  BigEndian
+ *              Signal 1: CoolantTemp    8 bit  BitPos=40  BigEndian
  *                DataInvalidAction=NOTIFY（受信値 0xFF はセンサ異常マーカー）
- *              Signal 2: EngineOnFlag   1 bit  BitPos=40  BigEndian
- *            RX I-PDU 1 (IPduId=1): CAN ID 0x110, DLC=5  AbsInfo     (ABS ECU, E2E P01 保護)
- *              byte[0]: E2E CRC8 / byte[1]: E2E Counter (下位4bit)
- *              （AUTOSAR 標準バリアント 1A、SWS_E2E_00227 準拠のレイアウト）
+ *              Signal 2: EngineOnFlag   1 bit  BitPos=48  BigEndian
+ *            RX I-PDU 1 (IPduId=1): CAN ID 0x110, DLC=6  AbsInfo     (ABS ECU, E2E P05 保護)
+ *              byte[0-1]: E2E CRC16 (リトルエンディアン) / byte[2]: E2E Counter (8bit)
+ *              （以前は E2E P01(CRC8+4bitカウンタ、DLC=5) だったが、EngineInfo と
+ *              同じ理由で E2E Profile05 へ切り替えた）
  *              IsSignalGroup=1（RX Signal Group、Com_ReceiveSignalGroup で
  *              3 信号を一括して一貫したスナップショットとして読む。
  *              Rte_COMCbk_AbsInfo が RxIndicationCbk として確定コピーする）
- *              Signal 4: VehicleSpeed  16 bit  BitPos=16  BigEndian  0.01 km/h
+ *              Signal 4: VehicleSpeed  16 bit  BitPos=24  BigEndian  0.01 km/h
  *                RxDataTimeoutAction=SUBSTITUTE（タイムアウト中は 0xFFFF を返す）
- *              Signal 5: BrakeActive    1 bit  BitPos=32  BigEndian  0=解除/1=作動
- *              Signal 6: AbsActive      1 bit  BitPos=33  BigEndian  0=非作動/1=作動
+ *              Signal 5: BrakeActive    1 bit  BitPos=40  BigEndian  0=解除/1=作動
+ *              Signal 6: AbsActive      1 bit  BitPos=41  BigEndian  0=非作動/1=作動
  *            RX I-PDU 2 (IPduId=2): CAN ID 0x120, DLC=2  SecureCommand
  *              (KeyFobEcu 想定送信、SecOC Profile 1 保護。Com はこの I-PDU の
  *              生の Secured I-PDU を一切見ず、SecOC が検証成功後に
@@ -81,7 +83,7 @@
  *              認証は入力側で完了済みのため、このフレームを受信する内部 ECU は
  *              SecOC を実装する必要がない。
  *
- *          E2E P01 の設定・ステート実体（DataID/Counter・CRC オフセット等）は
+ *          E2E（Profile01/05）の設定・ステート実体（DataID/Counter・CRC オフセット等）は
  *          E2E Transformer 方式への移行に伴い src/Bsw/E2EXf/E2EXf_PBCfg.c へ
  *          移設した。ここでは RxIndicationCbk/TxTransformCbk 経由で Rte 層の
  *          グルー関数（Rte_COMCbk_EngineInfo 等）を紐付けるのみで、
@@ -166,12 +168,12 @@ extern void Rte_COMCbk_SecureCommand(void);
 static const Com_IPduConfigType Com_RxIPduConfigData[COM_RX_IPDU_COUNT] = {
     {
         /* ---------------------------------------------------------------
-         * RX IPduId=0: EngineInfo フレーム (エンジン ECU 送信、E2E P01 保護)
+         * RX IPduId=0: EngineInfo フレーム (エンジン ECU 送信、E2E P05 保護)
          * DaVinci: /ActiveEcuC/Com/ComConfig/EngineInfo_Rx
          * --------------------------------------------------------------- */
         .IPduId    = 0U,                        /* DaVinci: ComIPduHandleId  - I-PDU 識別番号 */
-        .DLC       = 6U,                        /* DaVinci: ComIPduLength    - I-PDU バイト長
-                                                 *          byte[0]=E2E CRC, byte[1]=E2E Counter, byte[2-5]=シグナル */
+        .DLC       = 7U,                        /* DaVinci: ComIPduLength    - I-PDU バイト長
+                                                 *          byte[0-1]=E2E CRC16(LE), byte[2]=E2E Counter, byte[3-6]=シグナル */
         .PduRId    = 0U,                        /* DaVinci: ComIPduPduRef    - PduR が Com_RxIndication へ渡す DestPduId
                                                  *          (PduR_PBCfg.c PduR_RxDests_Path0[0].DestPduId と一致させること) */
         .FirstTimeoutMs = COM_TIMEOUT_ENGINE_INFO_MS,/* DaVinci: ComFirstTimeout
@@ -187,7 +189,7 @@ static const Com_IPduConfigType Com_RxIPduConfigData[COM_RX_IPDU_COUNT] = {
     },
     {
         /* ---------------------------------------------------------------
-         * RX IPduId=1: AbsInfo フレーム (ABS ECU 送信、E2E P01 保護)
+         * RX IPduId=1: AbsInfo フレーム (ABS ECU 送信、E2E P05 保護)
          * DaVinci: /ActiveEcuC/Com/ComConfig/AbsInfo_Rx
          * IsSignalGroup=1（RX Signal Group）: VehicleSpeed/BrakeActive/AbsActive
          * の 3 シグナルを Com_ReceiveSignalGroup() 経由で一括して一貫したスナップ
@@ -202,8 +204,8 @@ static const Com_IPduConfigType Com_RxIPduConfigData[COM_RX_IPDU_COUNT] = {
          * 「Group Signal Update Bit」節を参照。
          * --------------------------------------------------------------- */
         .IPduId    = 1U,                       /* DaVinci: ComIPduHandleId  - I-PDU 識別番号 */
-        .DLC       = 5U,                       /* DaVinci: ComIPduLength    - I-PDU バイト長
-                                                *          byte[0]=E2E CRC, byte[1]=E2E Counter, byte[2-4]=シグナル */
+        .DLC       = 6U,                       /* DaVinci: ComIPduLength    - I-PDU バイト長
+                                                *          byte[0-1]=E2E CRC16(LE), byte[2]=E2E Counter, byte[3-5]=シグナル */
         .PduRId    = 1U,                       /* DaVinci: ComIPduPduRef    - PduR が Com_RxIndication へ渡す DestPduId
                                                 *          (PduR_PBCfg.c PduR_RxDests_Path2[0].DestPduId と一致させること) */
         .FirstTimeoutMs = COM_TIMEOUT_ABS_INFO_MS,/* DaVinci: ComFirstTimeout
@@ -396,15 +398,15 @@ static const Com_IPduConfigType Com_TxIPduConfigData[COM_TX_IPDU_COUNT] = {
 static const Com_SignalConfigType Com_SignalConfigData[COM_SIGNAL_COUNT] = {
     {
         /* ---------------------------------------------------------------
-         * Signal 0: EngineSpeed  RX 16bit  CAN 0x100 byte[2-3]
-         * （byte[0]=E2E CRC8, byte[1]=E2E Counter を先頭に配置する
-         *   AUTOSAR 標準バリアント 1A レイアウトのため、シグナルは byte[2] から）
+         * Signal 0: EngineSpeed  RX 16bit  CAN 0x100 byte[3-4]
+         * （byte[0-1]=E2E CRC16, byte[2]=E2E Counter を先頭に配置する
+         *   E2E Profile05 のヘッダレイアウトのため、シグナルは byte[3] から）
          * DaVinci: /ActiveEcuC/Com/ComConfig/EngineSpeed_Rx
          * --------------------------------------------------------------- */
         .SignalId    = COM_SIGNAL_ENGINE_SPEED, /* DaVinci: ComHandleId         */
         .Direction   = COM_SIGNAL_DIRECTION_RX, /* 本プロジェクト独自拡張。Com_SignalDirectionType 参照 */
         .IPduId      = 0U,                      /* DaVinci: ComIPduRef → EngineInfo_Rx */
-        .BitPosition = 16U,                     /* DaVinci: ComBitPosition      */
+        .BitPosition = 24U,                     /* DaVinci: ComBitPosition      */
         .BitSize     = 16U,                     /* DaVinci: ComBitSize          */
         .Endian      = COM_BIG_ENDIAN,          /* DaVinci: ComSignalEndianness = OPAQUE */
         .FilterAlgorithm = COM_FILTER_NEW_IS_WITHIN, /* DaVinci: ComFilterAlgorithm（RX 受信フィルタ）
@@ -427,7 +429,7 @@ static const Com_SignalConfigType Com_SignalConfigData[COM_SIGNAL_COUNT] = {
     },
     {
         /* ---------------------------------------------------------------
-         * Signal 1: CoolantTemp  RX 8bit  CAN 0x100 byte[4]
+         * Signal 1: CoolantTemp  RX 8bit  CAN 0x100 byte[5]
          * DaVinci: /ActiveEcuC/Com/ComConfig/CoolantTemp_Rx
          * DataInvalidAction=NOTIFY（SWS_Com_00680/00717）: 0xFF は水温センサの
          * 断線/異常を示す送信元の意図的な無効値マーカー（実車でも一般的な
@@ -445,7 +447,7 @@ static const Com_SignalConfigType Com_SignalConfigData[COM_SIGNAL_COUNT] = {
         .SignalId    = COM_SIGNAL_COOLANT_TEMP, /* DaVinci: ComHandleId         */
         .Direction   = COM_SIGNAL_DIRECTION_RX, /* 本プロジェクト独自拡張。Com_SignalDirectionType 参照 */
         .IPduId      = 0U,                      /* DaVinci: ComIPduRef → EngineInfo_Rx */
-        .BitPosition = 32U,                     /* DaVinci: ComBitPosition      */
+        .BitPosition = 40U,                     /* DaVinci: ComBitPosition      */
         .BitSize     = 8U,                      /* DaVinci: ComBitSize          */
         .Endian      = COM_BIG_ENDIAN,          /* DaVinci: ComSignalEndianness = OPAQUE */
         .DataInvalidAction      = COM_DATA_INVALID_ACTION_NOTIFY, /* DaVinci: ComDataInvalidAction */
@@ -457,13 +459,13 @@ static const Com_SignalConfigType Com_SignalConfigData[COM_SIGNAL_COUNT] = {
     },
     {
         /* ---------------------------------------------------------------
-         * Signal 2: EngineOnFlag  RX 1bit  CAN 0x100 byte[5] bit7
+         * Signal 2: EngineOnFlag  RX 1bit  CAN 0x100 byte[6] bit7
          * DaVinci: /ActiveEcuC/Com/ComConfig/EngineOnFlag_Rx
          * --------------------------------------------------------------- */
         .SignalId    = COM_SIGNAL_ENGINE_ON_FLAG, /* DaVinci: ComHandleId       */
         .Direction   = COM_SIGNAL_DIRECTION_RX,   /* 本プロジェクト独自拡張。Com_SignalDirectionType 参照 */
         .IPduId      = 0U,                        /* DaVinci: ComIPduRef → EngineInfo_Rx */
-        .BitPosition = 40U,                       /* DaVinci: ComBitPosition    */
+        .BitPosition = 48U,                       /* DaVinci: ComBitPosition    */
         .BitSize     = 1U,                        /* DaVinci: ComBitSize        */
         .Endian      = COM_BIG_ENDIAN,            /* DaVinci: ComSignalEndianness = OPAQUE */
         .FirstTimeoutMs = COM_TIMEOUT_ENGINE_INFO_MS, /* DaVinci: ComFirstTimeout（シグナル単位）
@@ -492,9 +494,9 @@ static const Com_SignalConfigType Com_SignalConfigData[COM_SIGNAL_COUNT] = {
     },
     {
         /* ---------------------------------------------------------------
-         * Signal 4: VehicleSpeed  RX 16bit  CAN 0x110 byte[2-3]  0.01 km/h
-         * （byte[0]=E2E CRC8, byte[1]=E2E Counter を先頭に配置する
-         *   AUTOSAR 標準バリアント 1A レイアウトのため、シグナルは byte[2] から）
+         * Signal 4: VehicleSpeed  RX 16bit  CAN 0x110 byte[3-4]  0.01 km/h
+         * （byte[0-1]=E2E CRC16, byte[2]=E2E Counter を先頭に配置する
+         *   E2E Profile05 のヘッダレイアウトのため、シグナルは byte[3] から）
          * DaVinci: /ActiveEcuC/Com/ComConfig/VehicleSpeed_Rx
          * RX Signal Group（AbsInfo_Rx）メンバー。Com_ReceiveSignalGroup(1U) 経由
          * でのみ最新化される（Rte_COMCbk_AbsInfo 参照）。
@@ -530,7 +532,7 @@ static const Com_SignalConfigType Com_SignalConfigData[COM_SIGNAL_COUNT] = {
         .SignalId    = COM_SIGNAL_VEHICLE_SPEED, /* DaVinci: ComHandleId        */
         .Direction   = COM_SIGNAL_DIRECTION_RX,  /* 本プロジェクト独自拡張。Com_SignalDirectionType 参照 */
         .IPduId      = 1U,                       /* DaVinci: ComIPduRef → AbsInfo_Rx */
-        .BitPosition = 16U,                      /* DaVinci: ComBitPosition     */
+        .BitPosition = 24U,                      /* DaVinci: ComBitPosition     */
         .BitSize     = 16U,                      /* DaVinci: ComBitSize         */
         .Endian      = COM_BIG_ENDIAN,           /* DaVinci: ComSignalEndianness = OPAQUE */
         .RxDataTimeoutAction     = COM_RX_TIMEOUT_ACTION_SUBSTITUTE, /* DaVinci: ComRxDataTimeoutAction */
@@ -538,7 +540,7 @@ static const Com_SignalConfigType Com_SignalConfigData[COM_SIGNAL_COUNT] = {
     },
     {
         /* ---------------------------------------------------------------
-         * Signal 5: BrakeActive  RX 1bit  CAN 0x110 byte[4] bit7
+         * Signal 5: BrakeActive  RX 1bit  CAN 0x110 byte[5] bit7
          *   0=ブレーキ解除, 1=ブレーキ作動
          * DaVinci: /ActiveEcuC/Com/ComConfig/BrakeActive_Rx
          * RX Signal Group（AbsInfo_Rx）メンバー。VehicleSpeed と同様。
@@ -546,13 +548,13 @@ static const Com_SignalConfigType Com_SignalConfigData[COM_SIGNAL_COUNT] = {
         .SignalId    = COM_SIGNAL_BRAKE_ACTIVE, /* DaVinci: ComHandleId          */
         .Direction   = COM_SIGNAL_DIRECTION_RX, /* 本プロジェクト独自拡張。Com_SignalDirectionType 参照 */
         .IPduId      = 1U,                      /* DaVinci: ComIPduRef → AbsInfo_Rx */
-        .BitPosition = 32U,                     /* DaVinci: ComBitPosition       */
+        .BitPosition = 40U,                     /* DaVinci: ComBitPosition       */
         .BitSize     = 1U,                      /* DaVinci: ComBitSize           */
         .Endian      = COM_BIG_ENDIAN           /* DaVinci: ComSignalEndianness = OPAQUE */
     },
     {
         /* ---------------------------------------------------------------
-         * Signal 6: AbsActive  RX 1bit  CAN 0x110 byte[4] bit6
+         * Signal 6: AbsActive  RX 1bit  CAN 0x110 byte[5] bit6
          *   0=ABS 非作動, 1=ABS 作動中
          * DaVinci: /ActiveEcuC/Com/ComConfig/AbsActive_Rx
          * RX Signal Group（AbsInfo_Rx）メンバー。VehicleSpeed と同様。
@@ -560,7 +562,7 @@ static const Com_SignalConfigType Com_SignalConfigData[COM_SIGNAL_COUNT] = {
         .SignalId    = COM_SIGNAL_ABS_ACTIVE,   /* DaVinci: ComHandleId          */
         .Direction   = COM_SIGNAL_DIRECTION_RX, /* 本プロジェクト独自拡張。Com_SignalDirectionType 参照 */
         .IPduId      = 1U,                      /* DaVinci: ComIPduRef → AbsInfo_Rx */
-        .BitPosition = 33U,                     /* DaVinci: ComBitPosition       */
+        .BitPosition = 41U,                     /* DaVinci: ComBitPosition       */
         .BitSize     = 1U,                      /* DaVinci: ComBitSize           */
         .Endian      = COM_BIG_ENDIAN           /* DaVinci: ComSignalEndianness = OPAQUE */
     },

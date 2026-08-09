@@ -360,8 +360,7 @@ class App(tk.Tk):
                             except ValueError:
                                 cur = b""
                             if ecfg:
-                                co = ecfg["counter_offset"]
-                                counter = (cur[co] & 0x0F) if len(cur) > co else 0
+                                counter = App._read_e2e_counter(cur, ecfg)
                                 _pb = parse_payload(vals)
                                 var.set(" ".join(
                                     f"{b:02X}" for b in App._apply_e2e(_pb, ecfg, counter)
@@ -414,7 +413,12 @@ class App(tk.Tk):
             self.log_frame.pack_forget()
 
     # ------------------------------------------------------------------
-    # E2E P01 送信サポート
+    # E2E P01/P05 送信サポート
+    #
+    # config.json の "e2e" ブロックに "profile": "p05" があれば Profile05
+    # (CRC16+8bitカウンタ)、無ければ既定で Profile01 (CRC8+4bitカウンタ) を
+    # 適用する。EngineInfo/AbsInfo は Profile05 へ移行済み
+    # (src/Bsw/E2EXf/E2EXf_PBCfg.c 参照)。
     # ------------------------------------------------------------------
     @staticmethod
     def _crc8_sae_j1850(data: bytes) -> int:
@@ -429,21 +433,79 @@ class App(tk.Tk):
         return crc
 
     @staticmethod
-    def _next_e2e_counter(counter: int) -> int:
-        """E2E P01 Counter の次回送信値を返す。
-        SWS_E2E_00075: 14 (0xE) に達したら次は 0 に戻る（15=0xF はスキップ、予約値）。
+    def _crc16_e2e_p05(data: bytes, crc: int = 0xFFFF) -> int:
+        """CRC16 (poly=0x1021, MSB-first、開始値0xFFFF、最終補正なし)。
+        SWS_E2E_00406 の擬似コードと同一のアルゴリズム
+        (E2E_P05.c の E2E_CalcCrc16() 参照)。"""
+        for b in data:
+            crc ^= (b << 8) & 0xFFFF
+            for _ in range(8):
+                crc = ((crc << 1) ^ 0x1021) & 0xFFFF if (crc & 0x8000) else (crc << 1) & 0xFFFF
+        return crc
+
+    @staticmethod
+    def _next_e2e_counter(counter: int, e2e_cfg: dict | None = None) -> int:
+        """E2E Counter の次回送信値を返す。
+        Profile05 (e2e_cfg["profile"]=="p05") は 8bit フルレンジ、予約値なしの
+        単純なラップアラウンド。Profile01 (既定) は SWS_E2E_00075 により
+        14 (0xE) に達したら次は 0 に戻る（15=0xF はスキップ、予約値）。
         単純な mod-16 (`(counter + 1) & 0x0F`) では 15 を経由してしまい仕様違反になる。"""
+        if e2e_cfg and e2e_cfg.get("profile") == "p05":
+            return (counter + 1) & 0xFF
         return 0 if counter >= 14 else counter + 1
 
     @staticmethod
+    def _read_e2e_counter(frame: bytes, e2e_cfg: dict) -> int:
+        """既存フレームから現在の E2E Counter 値を読み出す。
+        Profile01 は counter_offset バイトの下位4bitのみ、Profile05 は
+        counter_offset バイト全体がカウンタ値（フル0-255）。"""
+        co = e2e_cfg["counter_offset"]
+        if len(frame) <= co:
+            return 0
+        if e2e_cfg.get("profile") == "p05":
+            return frame[co]
+        return frame[co] & 0x0F
+
+    @staticmethod
+    def _apply_e2e_p05(payload: bytes, e2e_cfg: dict, counter: int) -> bytes:
+        """E2E Profile05 保護バイト (Counter 1byte フル値 + CRC16 2byte LE) を
+        付加した完全フレームを返す。payload はシグナルバイト列のみ
+        (Counter/CRC 未付加)。
+
+        frame_length / counter_offset / crc_offset / payload_offset は
+        _apply_e2e() と同じ意味（付加後の完全フレーム上の位置）。CRC16 は
+        Counter を含みユーザーデータ末尾までの範囲 → DataID（下位→上位バイト
+        の順）の順で計算する（Profile01 と異なり DataID は「データの後」に
+        投入する。E2E_P05.c の E2E_CalcCrc16Body() と同一のアルゴリズム）。"""
+        data_id: int = e2e_cfg["data_id"]
+        frame_length: int = e2e_cfg["frame_length"]
+        counter_offset: int = e2e_cfg["counter_offset"]
+        crc_offset: int = e2e_cfg["crc_offset"]
+        payload_offset: int = e2e_cfg["payload_offset"]
+        frame = bytearray(frame_length)
+        frame[payload_offset:payload_offset + len(payload)] = payload
+        frame[counter_offset] = counter & 0xFF
+        crc_input = bytes(frame[counter_offset:])
+        crc_input += bytes([data_id & 0xFF, (data_id >> 8) & 0xFF])
+        crc = App._crc16_e2e_p05(crc_input)
+        frame[crc_offset] = crc & 0xFF
+        frame[crc_offset + 1] = (crc >> 8) & 0xFF
+        return bytes(frame)
+
+    @staticmethod
     def _apply_e2e(payload: bytes, e2e_cfg: dict, counter: int) -> bytes:
-        """E2E P01 保護バイト (Counter + CRC) を付加した完全フレームを返す。
-        payload はシグナルバイト列のみ (Counter/CRC 未付加)。
+        """E2E 保護バイトを付加した完全フレームを返す。e2e_cfg["profile"]=="p05" なら
+        _apply_e2e_p05() (Profile05: CRC16+8bitカウンタ) へ委譲し、それ以外
+        (既定) は以下の Profile01 (CRC8+4bitカウンタ) を適用する。
+
+        Profile01: payload はシグナルバイト列のみ (Counter/CRC 未付加)。
         frame_length / counter_offset / crc_offset / payload_offset は
         付加後の完全フレーム上の位置（AUTOSAR 標準バリアント1A、SWS_E2E_00227:
         CRC=byte0, Counter=byte1 下位4bit。シグナルは payload_offset から）。
         CRC は DataID に続けて、CRC バイト自身を除く全バイト（CRC より前 + 後の
         2 区間）を対象に計算する（E2E_P01.c の実装と同一のアルゴリズム）。"""
+        if e2e_cfg.get("profile") == "p05":
+            return App._apply_e2e_p05(payload, e2e_cfg, counter)
         data_id: int = e2e_cfg["data_id"]
         frame_length: int = e2e_cfg["frame_length"]
         counter_offset: int = e2e_cfg["counter_offset"]
@@ -782,9 +844,8 @@ class App(tk.Tk):
                     # 手入力して検証失敗・リプレイ検知を試すことも今回の送信内容には
                     # 影響しない）。
                     if e2e_cfg:
-                        co = e2e_cfg["counter_offset"]
                         po = e2e_cfg["payload_offset"]
-                        next_counter = App._next_e2e_counter(data[co] & 0x0F) if len(data) > co else 0
+                        next_counter = App._next_e2e_counter(App._read_e2e_counter(data, e2e_cfg), e2e_cfg)
                         next_frame = self._apply_e2e(data[po:], e2e_cfg, next_counter)
                         self.state_queue.put(
                             ("entry_update", (idx, " ".join(f"{b:02X}" for b in next_frame)))
@@ -961,7 +1022,8 @@ class App(tk.Tk):
         ECU 側のタイムアウトは発生しない。
 
         e2e_cfg が指定された場合は送信ごとにカウンタをインクリメントして
-        E2E P01 保護バイト (Counter + CRC) を付加する。"""
+        E2E 保護バイト (Counter + CRC) を付加する
+        (Profile01/05 いずれも e2e_cfg["profile"] に応じて自動判別)。"""
         e2e_counter = 0
         secoc_freshness = 0
         while True:
@@ -970,7 +1032,7 @@ class App(tk.Tk):
                     try:
                         if e2e_cfg:
                             send_data = self._apply_e2e(data, e2e_cfg, e2e_counter)
-                            e2e_counter = App._next_e2e_counter(e2e_counter)
+                            e2e_counter = App._next_e2e_counter(e2e_counter, e2e_cfg)
                         elif secoc_cfg:
                             send_data = self._apply_secoc(data, secoc_cfg, secoc_freshness)
                             secoc_freshness = (secoc_freshness + 1) & 0xFF

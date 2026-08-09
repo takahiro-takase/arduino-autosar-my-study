@@ -26,13 +26,13 @@ ARXML や設定ツールは使用せず、コードで階層構造・型定義�
     - [Can](#can-module)
     - [Com](#com-module)
     - [DET 準拠（Det_ReportError による標準化エラー通知）](#det-compliance)
-  - [E2E 保護（EngineInfo/AbsInfo 受信は Profile01 / E2EHealthStatus 送信は Profile05）](#e2e-p01)
+  - [E2E 保護（EngineInfo/AbsInfo 受信・E2EHealthStatus 送信ともに Profile05）](#e2e-p01)
     - [I-PDU Group（Com_IpduGroupStart/Stop、通信のライフサイクル制御）](#ipdu-group)
     - [呼び出し元は BswM（実 AUTOSAR の標準構成）](#ipdu-group-caller)
     - [Com_IpduGroupStart/Stop が実際に行うこと](#ipdu-group-behavior)
     - [動作確認方法](#ipdu-group-verification)
     - [E2E が保護する故障モデル](#e2e-fault-model)
-    - [受信側（Check）— EngineInfo / AbsInfo（E2E Profile01）](#e2e-check-rx)
+    - [受信側（Check）— EngineInfo / AbsInfo（E2E Profile05）](#e2e-check-rx)
     - [送信側（Protect）— E2EHealthStatus（E2E Profile05）](#e2e-protect-tx)
     - [E2EMon（ネットワーク健全性モニタ、独自 CDD 相当）](#e2emon)
   - [SecOC（Secure Onboard Communication、メッセージ認証）](#secoc)
@@ -102,7 +102,7 @@ SW-C がピン番号などのハードウェア詳細を知ることなく警告
 「CAN 受信（複数 ECU）→ 状態判定 → 優先度付き警告灯制御」
 という典型的な処理フローを、Arduino 上で簡易的に再現します。
 
-- **RX（CAN ID 0x100）**: エンジン ECU から回転数・水温・ON フラグを受信（AUTOSAR E2E Profile 01 保護付き）
+- **RX（CAN ID 0x100）**: エンジン ECU から回転数・水温・ON フラグを受信（AUTOSAR E2E Profile 05 保護付き）
 - **RX（CAN ID 0x110）**: ABS ECU から車速・ブレーキ作動・ABS 作動フラグを受信
 - **TX（CAN ID 0x200）**: エンジン状態（OFF / STARTING / RUNNING / FAULT）を変化時送信＋周期フロア（ComFilterAlgorithm、E2E 保護なし）
 - **TX（CAN ID 0x210）**: 3 本の警告灯状態（RUNNING/FAULT/ABS）を Com Signal Group として一括送信
@@ -375,16 +375,15 @@ Basic Software Modules」表）。詳細は「CAN 通信スタック」セクシ
 │   │   │   ├── KeyM.h            # 公開インタフェース（KeyM_Start/KeyM_Update/KeyM_Finalize）
 │   │   │   └── KeyM.c            # セッション状態管理 → 鍵名解決 → Csm_KeyElementSet/Csm_KeySetValid 呼び出し
 │   │   ├── E2E/                  # AUTOSAR E2E 保護ライブラリ（Profile01: CRC8+4bitカウンタ、Profile05: CRC16+8bitカウンタ）
-│   │   │   ├── E2E_P01.h/.c      # Profile01（Check: E2E_P01Check/CheckInit、Protect: E2E_P01Protect/ProtectInit）。EngineInfo/AbsInfo(RX)が使用
-│   │   │   └── E2E_P05.h/.c      # Profile05（Check: E2E_P05Check/CheckInit、Protect: E2E_P05Protect/ProtectInit）。EngineHealthStatus(TX)が使用
-│   │   │                          （Check側は本プロジェクト内に呼び出し元が無く、test/test_e2e_p05/ のホストテストでのみ検証）
+│   │   │   ├── E2E_P01.h/.c      # Profile01（Check: E2E_P01Check/CheckInit、Protect: E2E_P01Protect/ProtectInit）。呼び出し元ゼロの参考実装として維持
+│   │   │   └── E2E_P05.h/.c      # Profile05（Check: E2E_P05Check/CheckInit、Protect: E2E_P05Protect/ProtectInit）。EngineInfo/AbsInfo(RX)・EngineHealthStatus(TX)いずれも使用
 │   │   ├── E2EXf/                # E2E Transformer（Com から E2E ロジックを切り離す統合層）
-│   │   │   ├── E2EXf.h           # 汎用 API 宣言（E2EXf_Init/E2EXf_DeInit/E2EXf_InverseTransform/E2EXf_Transform/E2EXf_TransformP05/E2EXf_GetVersionInfo。E2E_P01/E2E_P05 それぞれへの薄いラッパー）
+│   │   │   ├── E2EXf.h           # 汎用 API 宣言（E2EXf_Init/E2EXf_DeInit/E2EXf_InverseTransform/E2EXf_InverseTransformP05/E2EXf_Transform/E2EXf_TransformP05/E2EXf_GetVersionInfo。E2E_P01/E2E_P05 それぞれへの薄いラッパー）
 │   │   │   ├── E2EXf.c           # 上記実装（Dem_ReportErrorStatus への報告・モジュール自身の初期化状態ガードも含む）
 │   │   │   ├── E2EXf_PBCfg.h     # ポストビルド設定宣言（E2EXf_*RxCfg/TxCfgP05、E2EXf_PBCfg_Init）
-│   │   │   └── E2EXf_PBCfg.c     # I-PDU ごとの E2E 設定/状態実体（EngineInfo/AbsInfo は Profile01、E2EHealthStatus は Profile05）
+│   │   │   └── E2EXf_PBCfg.c     # I-PDU ごとの E2E 設定/状態実体（EngineInfo/AbsInfo/E2EHealthStatus いずれも Profile05）
 │   │   ├── E2EMon/                # 独自 CDD 相当（標準 AUTOSAR モジュールではない、E2E 健全性監視の例）
-│   │   │   ├── E2EMon.h          # 公開インタフェース（E2EMon_Init/E2EMon_NotifyCheckResult）
+│   │   │   ├── E2EMon.h          # 公開インタフェース（E2EMon_Init/E2EMon_NotifyCheckResult(P01)/E2EMon_NotifyCheckResultP05）
 │   │   │   └── E2EMon.c          # E2E 検証結果の累積カウンタ・Com_SendSignal() での公開
 │   │   ├── EcuM/                 # ECU ステートマネージャ（ライフサイクル管理）
 │   │   │   ├── EcuM_Cfg.h        # RUN ユーザ定義・POST_RUN タイムアウト
@@ -520,8 +519,8 @@ RX（外部 → Arduino、上り）
 |---|---|---|
 | RTE | Rte | ポートベース S/R API。複数 SW-C が同一シグナルを独立ポートで受信。E2E Transformer を持つ Read ポートは `Std_ReturnType` ではなく `Rte_IStatusType` を返し、E2E チェック結果（OK/ハードエラー/ソフトエラー）と Com タイムアウトを区別して SWC へ伝える |
 | BSW | E2EMon | 標準 AUTOSAR モジュールには存在しない、実務でよく見る「独自 CDD」パターンの例。EngineInfo/AbsInfo の E2E 検証結果を購読し、ネットワーク健全性テレメトリとして公開する。詳細は下記「[E2EMon](#e2emon)」節を参照 |
-|  | E2EXf | Com と E2E の間を仲介する統合層。RX は `E2E_P01Check` でデータ破壊・フレーム脱落・重複・誤ルーティングを検出して Dem へ報告、TX は `E2E_P01Protect` で Counter・CRC8 を付加する。Com 自身はこの層の存在を知らない。詳細は下記「[E2E P01 保護](#e2e-p01)」節を参照 |
-|  | E2E | AUTOSAR E2E Profile 01 保護の実処理。DataID・CRC8 (SAE J1850)・4bit カウンタの 3 要素で、`E2E_P01Check` はデータ破壊・フレーム脱落・重複・誤ルーティングを検出、`E2E_P01Protect` は Counter・CRC8 を付加。Com/Rte のどちらにも依存しない純粋な検証/付与ライブラリ |
+|  | E2EXf | Com と E2E の間を仲介する統合層。RX は `E2E_P05Check` でデータ破壊・フレーム脱落・重複・誤ルーティングを検出して Dem へ報告、TX は `E2E_P05Protect` で Counter・CRC16 を付加する。Com 自身はこの層の存在を知らない。詳細は下記「[E2E 保護](#e2e-p01)」節を参照 |
+|  | E2E | AUTOSAR E2E Profile 05 保護の実処理。DataID・CRC16 (多項式0x1021)・8bit カウンタの 3 要素で、`E2E_P05Check` はデータ破壊・フレーム脱落・重複・誤ルーティングを検出、`E2E_P05Protect` は Counter・CRC16 を付加。Com/Rte のどちらにも依存しない純粋な検証/付与ライブラリ（Profile01 版の `E2E_P01.c` も参考実装として残っている） |
 |  | Com | シグナルのビット単位パック／アンパックと送受信タイミング制御を担う（TxModeMode: DIRECT/MIXED/PERIODIC・TMS・MDT・受信フィルタ・I-PDU Group・Signal Gateway 等）。E2E には一切関知しない（E2E Transformer 方式、Com.c 本体に E2E は埋め込まれない） |
 |  | PduR | 受信 PDU を Com/CanTp/SecOC へ（1つの RxPduId から複数宛先への配信にも対応）、送信 PDU を CanIf へルーティング。通信スタックの配管役。TX 経路は既定では `CanIf_Transmit()` へ直接転送するが、`PduR_TxRoutingPathType.TransmitOverrideFct` が設定されている場合は中間モジュール（SecOC）へ委譲できるよう汎用化されている（既存の全 TX パスはこのフィールドを使わないため無変更） |
 |  | CanIf | CAN ID ↔ 論理 PDU のマッピング。上位層は CAN ID を知らず PDU ID で通信。設定 DLC 未満の受信 L-PDU は上位層へ渡さず棄却する（SWS_CANIF_00026 のデータ長チェック） |
@@ -557,18 +556,18 @@ BSW 全体へ及ぶ DET 準拠（エラー通知の標準化）は最後にま�
 |  |  |  |  | 16–23 | 8 bit | E2E Counter | 0–255 のリングカウンタ（送信のたびに +1、予約値なし） |
 |  |  |  |  | 24–31 | 8 bit | E2ECrcErrCount | 0–255（飽和）<br>EngineInfo/AbsInfo受信のE2E CRC不一致累積数 |
 |  |  |  |  | 32–39 | 8 bit | E2ESeqErrCount | 0–255（飽和）<br>EngineInfo/AbsInfo受信のE2Eシーケンス異常累積数 |
-| Rx | EngineInfo | 0x100 | 6 | ↓ | ↓ | ↓ | ↓ |
-|  |  |  |  | 0–7 | 8 bit | E2E CRC | CRC8 SAE J1850<br>（DataID=0x0100 + byte[1-5] を対象に計算。AUTOSAR 標準バリアント 1A 準拠でCRCは先頭バイト） |
-|  |  |  |  | 12–15 | 4 bit | E2E Counter | 0–15 のリングカウンタ（フレーム脱落・重複検出用） |
-|  |  |  |  | 16–31 | 16 bit | EngineSpeed | rpm（0–15000） |
-|  |  |  |  | 32–39 | 8 bit | CoolantTemp | ℃（0–255） |
-|  |  |  |  | 40 | 1 bit | EngineOnFlag | 0=OFF / 1=ON |
-| Rx | AbsInfo | 0x110 | 5 | ↓ | ↓ | ↓ | ↓ |
-|  |  |  |  | 0–7 | 8 bit | E2E CRC | CRC8 SAE J1850<br>（DataID=0x0110 + byte[1-4] を対象に計算。AUTOSAR 標準バリアント 1A 準拠でCRCは先頭バイト） |
-|  |  |  |  | 12–15 | 4 bit | E2E Counter | 0–15 のリングカウンタ<br>（フレーム脱落・重複検出用） |
-|  |  |  |  | 16–31 | 16 bit | VehicleSpeed | 0.01 km/h（raw 0x0064 = 1.00 km/h） |
-|  |  |  |  | 32 | 1 bit | BrakeActive | 0=解除 / 1=作動 |
-|  |  |  |  | 33 | 1 bit | AbsActive | 0=非作動 / 1=ABS 作動中 |
+| Rx | EngineInfo | 0x100 | 7 | ↓ | ↓ | ↓ | ↓ |
+|  |  |  |  | 0–15 | 16 bit | E2E CRC | CRC16（多項式0x1021、E2E Profile05）<br>（Counterバイト+byte[3-6] → DataID=0x0100の順で計算。リトルエンディアンでbyte[0-1]に格納） |
+|  |  |  |  | 16–23 | 8 bit | E2E Counter | 0–255 のリングカウンタ（フレーム脱落・重複検出用、予約値なし） |
+|  |  |  |  | 24–39 | 16 bit | EngineSpeed | rpm（0–15000） |
+|  |  |  |  | 40–47 | 8 bit | CoolantTemp | ℃（0–255） |
+|  |  |  |  | 48 | 1 bit | EngineOnFlag | 0=OFF / 1=ON |
+| Rx | AbsInfo | 0x110 | 6 | ↓ | ↓ | ↓ | ↓ |
+|  |  |  |  | 0–15 | 16 bit | E2E CRC | CRC16（多項式0x1021、E2E Profile05）<br>（Counterバイト+byte[3-5] → DataID=0x0110の順で計算。リトルエンディアンでbyte[0-1]に格納） |
+|  |  |  |  | 16–23 | 8 bit | E2E Counter | 0–255 のリングカウンタ<br>（フレーム脱落・重複検出用、予約値なし） |
+|  |  |  |  | 24–39 | 16 bit | VehicleSpeed | 0.01 km/h（raw 0x0064 = 1.00 km/h） |
+|  |  |  |  | 40 | 1 bit | BrakeActive | 0=解除 / 1=作動 |
+|  |  |  |  | 41 | 1 bit | AbsActive | 0=非作動 / 1=ABS 作動中 |
 
 ##### TX フレーム（Arduino → 外部）
 
@@ -612,38 +611,39 @@ Signal Group としてまとめて Com へコミットします。コミット�
 `E2EMon`（CDD 相当モジュール）が EngineInfo/AbsInfo 受信側の E2E 検証エラー累積数を
 集計し、Com の PERIODIC 送信モードにより 6000ms 周期で自動送信されるネットワーク
 健全性テレメトリです。テレメトリ自体の破損を監視ツールが検出できるよう、CRC16 ベースの
-E2E Profile05 で保護しています（データ＋8bit Counter＋16bit CRC。EngineInfo/AbsInfo が
-使う Profile01 とは異なるプロファイル）。詳細は「E2E 保護」セクションの
+E2E Profile05 で保護しています（データ＋8bit Counter＋16bit CRC。EngineInfo/AbsInfo の
+受信保護と同じプロファイル）。詳細は「E2E 保護」セクションの
 E2EMon サブセクションを参照してください。
 
 ##### RX フレーム（外部 → Arduino）
 
-**EngineInfo（エンジン ECU / CAN ID 0x100 / DLC=6 / AUTOSAR E2E Profile 01 保護）**
+**EngineInfo（エンジン ECU / CAN ID 0x100 / DLC=7 / AUTOSAR E2E Profile 05 保護）**
 
 **RUNNING 状態に入るフレーム例（Speed=500rpm, Temp=0℃, EngineOnFlag=1, Counter=0）：**
 ```
-byte[0] byte[1] byte[2] byte[3] byte[4] byte[5]
-  XX      00      01      F4      00      80
-  │       │       └─────┘         └──┘   └──── EngineOnFlag=1（bit40 = byte[5] の MSB）
-  │       └─ Counter=0             Speed=500rpm    Temp=0℃
-  └───────── CRC8（XX は自動計算）
+byte[0] byte[1] byte[2] byte[3] byte[4] byte[5] byte[6]
+  XX      XX      00      01      F4      00      80
+  │       │       │       └─────┘         └──┘   └──── EngineOnFlag=1（bit48 = byte[6] の MSB）
+  │       │       └─ Counter=0             Speed=500rpm    Temp=0℃
+  └───────┴─────── CRC16（リトルエンディアン、XX XX は自動計算）
 ```
-**AbsInfo（ABS ECU / CAN ID 0x110 / DLC=5）**
+**AbsInfo（ABS ECU / CAN ID 0x110 / DLC=6 / AUTOSAR E2E Profile 05 保護）**
 
 **ABS 作動フレーム例（VehicleSpeed=100km/h, BrakeActive=1, AbsActive=1, Counter=0）：**
 ```
-byte[0] byte[1] byte[2] byte[3] byte[4]
-  XX      00      27      10      C0
-  │       │       └─────┘         └──── BrakeActive=1（bit32）, AbsActive=1（bit33）
-  │       └─ Counter=0             Speed=10000 (0x2710) → 100.00 km/h
-  └───────── CRC8（XX は自動計算）
+byte[0] byte[1] byte[2] byte[3] byte[4] byte[5]
+  XX      XX      00      27      10      C0
+  │       │       │       └─────┘         └──── BrakeActive=1（bit40）, AbsActive=1（bit41）
+  │       │       └─ Counter=0             Speed=10000 (0x2710) → 100.00 km/h
+  └───────┴─────── CRC16（リトルエンディアン、XX XX は自動計算）
 ```
 
-（AUTOSAR 標準バリアント 1A、SWS_E2E_00227 に準拠し、CRC を先頭バイト・Counter をそれに
-続く 1 バイトの下位 4bit に配置している）
+（SWS_E2E_00397/00405 に準拠し、CRC16 を先頭2バイト・Counter をそれに続く1バイト全体に
+配置している）
 
 > E2E Counter と CRC は uds_tester ツールが自動計算して付加します。
-> Cangaroo から手動送信する場合は byte[0]=CRC8 の計算値、byte[1]=Counter 値を手動で付加してください。
+> Cangaroo から手動送信する場合は byte[0-1]=CRC16 の計算値（リトルエンディアン）、
+> byte[2]=Counter 値を手動で付加してください。
 
 <a id="processing-flow"></a>
 #### 処理の流れ（関数コールチェーンと多層防御）
@@ -1802,14 +1802,23 @@ UDS/CAN フレーム経由で外部から誘発することはできず、`uds_t
 一致していることの確認に留めています）。
 
 <a id="e2e-p01"></a>
-### E2E 保護（EngineInfo/AbsInfo 受信は Profile01 / E2EHealthStatus 送信は Profile05）
+### E2E 保護（EngineInfo/AbsInfo 受信・E2EHealthStatus 送信ともに Profile05）
 
 AUTOSAR E2E (End-to-End) による保護です。CAN バスの電気的エラーでは検出できない
 **データ破壊・フレーム脱落・フレーム重複・誤ルーティング**を、CRC と送信カウンタの 2 種類の
-保護要素で検出します。本プロジェクトでは 3 方向に適用しており、EngineInfo/AbsInfo の受信
-（`src/Bsw/E2E/E2E_P01.c`）は CRC8+4bit カウンタの **Profile01**、E2EHealthStatus の送信
-（`src/Bsw/E2E/E2E_P05.c`）は CRC16+8bit カウンタの **Profile05** と、2 つの異なる
-プロファイルを使い分けています（後述）。
+保護要素で検出します。本プロジェクトでは 3 方向に適用しており、EngineInfo/AbsInfo の受信・
+E2EHealthStatus の送信いずれも `src/Bsw/E2E/E2E_P05.c` の CRC16+8bit カウンタ
+**Profile05** を使用します。
+
+> **移行の経緯**: 当初 EngineInfo/AbsInfo は CRC8+4bit カウンタの **Profile01**
+> （`src/Bsw/E2E/E2E_P01.c`）で保護していました。E2EHealthStatus を Profile01+SecOC の
+> 二重保護から Profile05 単体へ切り替えた際に `E2E_P05Check()`（受信検証側）を
+> 対称性のために実装したものの、当時は呼び出し元が無い状態でした。その後
+> EngineInfo/AbsInfo 側も CRC 検出能力を高めるため Profile05 へ移行し、
+> `E2E_P05Check()` の実際の呼び出し元になっています。Profile01 用の
+> `E2E_P01.c`/`E2EXf_RxConfigType`/`E2EXf_InverseTransform()`/
+> `E2EMon_NotifyCheckResult()`/`Rte_MapE2EStatus()` は削除せず、学習用
+> リファレンス実装として意図的に残しています（現在は呼び出し元がゼロ）。
 
 > **統合方式（E2E Transformer）:** Com は E2E の存在を一切関知しません。AUTOSAR が定義する
 > 3 通りの E2E 統合方式のうち「E2E Transformer」（`docs/AUTOSAR_SWS_E2ELibrary.pdf` 12.4 節、
@@ -1829,11 +1838,11 @@ AUTOSAR E2E (End-to-End) による保護です。CAN バスの電気的エラー
 > フレーム受信経路が有効になっても、未初期化 State（ゼロクリアされた BSS のまま）
 > を使って誤判定することがありません。
 
-- **EngineInfo（CAN 0x100、受信）**: エンジン ECU から受信するフレームを`E2E_P01Check`で検証
+- **EngineInfo（CAN 0x100、受信）**: エンジン ECU から受信するフレームを`E2E_P05Check`で検証
   （本セクション前半）。EngineSpeed（回転数）は実車ではメータ表示だけでなく変速制御・
   トラクションコントロール・オーバーレブ保護等、複数の機能が参照しうる値のため、
   一般的なエンジン ECU の周期送信フレームを模して保護を付与しています
-- **AbsInfo（CAN 0x110、受信）**: ABS ECU から受信するフレームを`E2E_P01Check`で検証（本セクション前半）
+- **AbsInfo（CAN 0x110、受信）**: ABS ECU から受信するフレームを`E2E_P05Check`で検証（本セクション前半）
 - **E2EHealthStatus（CAN 0x220、送信）**: 本 ECU（メータ ECU）が送信する、EngineInfo/AbsInfo
   受信側の E2E 検証エラー累積数を伝えるネットワーク健全性テレメトリに `E2E_P05Protect`で
   Counter・CRC16 を付加（本セクション後半の E2EMon サブセクション参照）。
@@ -1978,76 +1987,76 @@ UDS 0x28 実装は「全 I-PDU 一括」のままの方が既存のテストが�
 
 | 故障モデル | 検出方法 | 対応 E2E フィールド |
 |-----------|---------|------------------|
-| データ破壊（ビット化け等） | 受信 CRC ≠ 計算 CRC | byte[0] CRC8 |
-| フレーム脱落 | カウンタが 2 以上飛ぶ | byte[1] 下位 4bit Counter |
-| フレーム重複 | カウンタが前回と同じ | byte[1] 下位 4bit Counter |
+| データ破壊（ビット化け等） | 受信 CRC ≠ 計算 CRC | byte[0-1] CRC16 |
+| フレーム脱落 | カウンタが 2 以上飛ぶ | byte[2] Counter（フル値） |
+| フレーム重複 | カウンタが前回と同じ | byte[2] Counter（フル値） |
 | 誤ルーティング（他 ECU のフレームが混入） | DataID が違うため CRC が一致しない | DataID（EngineInfo=0x0100 / AbsInfo=0x0110）を CRC 計算に含む |
 
 <a id="e2e-check-rx"></a>
 #### 受信側（Check）— EngineInfo / AbsInfo
 
-E2E チェックの仕組み自体は両フレームで完全に共通（`E2E_P01Check` の同一実装を
+E2E チェックの仕組み自体は両フレームで完全に共通（`E2E_P05Check` の同一実装を
 設定テーブルだけ変えて使い回す）のため、以下では区別せず一つの仕組みとして説明し、
-フレームレイアウトと設定値のみ個別に示します。
+フレームレイアウトと設定値のみ個別に示します。2026-08 に Profile01(CRC8+4bitカウンタ)
+から Profile05(CRC16+8bitカウンタ) へ移行しました（Profile01 用の設定・実装は
+`E2E_P01.c`/`E2EXf_RxConfigType` として参考実装のまま残っています）。
 
 ##### フレームレイアウト
 
 **EngineInfo（CAN 0x100）:**
 ```
-byte[0]   : CRC8 SAE J1850（多項式 0x1D、初期値 0x00、最終 XOR 0x00、SWS_E2E_00083 準拠）
-            計算対象: DataID_low(0x00), DataID_high(0x01), byte[1], byte[2], byte[3], byte[4], byte[5]
-            （CRC バイト自身を除く全バイト。CRC バイトより前の区間は 0 バイト）
-byte[1]   : 上位 4bit=未使用、下位 4bit=Counter（0→1→…→14→0 のリングカウンタ、15 はスキップ）
-byte[2-5] : シグナルデータ（EngineSpeed / CoolantTemp / EngineOnFlag）
+byte[0-1] : CRC16（多項式 0x1021、開始値 0xFFFF、SWS_E2E_00400/00406 準拠、リトルエンディアン）
+            計算対象: byte[2](Counter), byte[3], byte[4], byte[5], byte[6],
+                      DataID_low(0x00), DataID_high(0x01)
+            （CRC バイト自身[byte0-1]を除き、Counter →データ→ DataID の順）
+byte[2]   : Counter（8bit フル値、0→1→…→255→0 のリングカウンタ、予約値なし）
+byte[3-6] : シグナルデータ（EngineSpeed / CoolantTemp / EngineOnFlag）
 ```
 
 **AbsInfo（CAN 0x110）:**
 ```
-byte[0]   : CRC8 SAE J1850（多項式 0x1D、初期値 0x00、最終 XOR 0x00、SWS_E2E_00083 準拠）
-            計算対象: DataID_low(0x10), DataID_high(0x01), byte[1], byte[2], byte[3], byte[4]
-            （CRC バイト自身を除く全バイト。CRC バイトより前の区間は 0 バイト）
-byte[1]   : 上位 4bit=未使用、下位 4bit=Counter（0→1→…→14→0 のリングカウンタ、15 はスキップ）
-byte[2-4] : シグナルデータ（VehicleSpeed / BrakeActive / AbsActive）
+byte[0-1] : CRC16（多項式 0x1021、開始値 0xFFFF、SWS_E2E_00400/00406 準拠、リトルエンディアン）
+            計算対象: byte[2](Counter), byte[3], byte[4], byte[5],
+                      DataID_low(0x10), DataID_high(0x01)
+            （CRC バイト自身[byte0-1]を除き、Counter →データ→ DataID の順）
+byte[2]   : Counter（8bit フル値、0→1→…→255→0 のリングカウンタ、予約値なし）
+byte[3-5] : シグナルデータ（VehicleSpeed / BrakeActive / AbsActive）
 ```
 
-CRC を先頭バイト・Counter をそれに続く 1 バイトの下位 4bit に配置するこのレイアウトは、
-AUTOSAR 標準バリアント 1A（SWS_E2E_00227）にそのまま準拠している
-（詳細は [`docs/E2E_Profile1_Notes.md`](docs/E2E_Profile1_Notes.md) 参照）。
+CRC16 を先頭2バイト・Counter をそれに続く1バイト全体に配置するこのヘッダレイアウトは
+SWS_E2E_00397/00405 にそのまま準拠している（詳細は
+[`docs/E2E_Profile5_Notes.md`](docs/E2E_Profile5_Notes.md) 参照）。
 
-##### カウンタデルタ判定と 8 状態フル state machine（`E2E_P01Check`）
+##### カウンタデルタ判定と 6 状態 state machine（`E2E_P05Check`）
 
-受信カウンタと前回有効カウンタの差分 `delta` を軸に、AUTOSAR `E2E_P01CheckStatusType`
-（SWS_E2E_00022）準拠の 8 状態で判定します。Profile 1 のカウンタは 0〜14 の 15 値を
-循環する（15=0xF は予約値でスキップ、SWS_E2E_00075）ため、折り返しの補正は
-`received >= lastValid ? received - lastValid : 15 + received - lastValid`
-という mod-15 の式（E2ELibrary Figure 7-7）で計算します。
-例: received=0, lastValid=14（カウンタが 0 に折り返した直後）→ `15 + 0 - 14 = 1`（正常）。
-（`& 0x0F` によるビットマスク＝mod-16 の補正は Profile 2 側の式であり、Profile 1 に
-適用すると折り返しのたびに delta を 1 大きく誤算出してしまうため使用しない）。
+受信カウンタと前回有効カウンタの差分 `delta` を軸に、AUTOSAR `E2E_P05CheckStatusType`
+（8.2.4.4節、Figure 8-8）準拠の 6 状態で判定します。Profile05 のカウンタは 0〜255 の
+フルレンジを予約値なしで循環するため、折り返しの補正は uint8 の自然なラップアラウンド
+（`(uint8)(received - lastValid)`）がそのまま mod-256 補正になり、Profile01 のような
+mod-15 の特別な式は不要です。
 
 ```
-CRC 不一致                          → WRONGCRC（Counter 側は判定しない）
-初回受信                            → INITIAL（カウンタ基準を確立）
-delta == 0                          → REPEATED（フレーム重複）
-delta > MaxDeltaCounter             → WRONGSEQUENCE（許容超過。再ロック開始、SyncCounter = SyncCounterInit）
-0 < delta <= MaxDeltaCounter かつ
-  SyncCounter > 0（再ロック中）      → SYNC（CRC/Counter は正常範囲内だが継続性未確定。SyncCounter--）
-delta == 1 かつ SyncCounter == 0    → OK（正常）
-1 < delta <= MaxDeltaCounter かつ
-  SyncCounter == 0                  → OKSOMELOST（正常だが一部消失、許容範囲内）
+CRC 不一致                → ERROR（Counter 側は判定しない。NULL/長さ不正とも共用の値）
+delta == 0                → REPEATED（フレーム重複）
+delta > MaxDeltaCounter   → WRONGSEQUENCE（許容超過）
+delta == 1                → OK（正常）
+1 < delta <= MaxDeltaCounter → OKSOMELOST（正常だが一部消失、許容範囲内）
 ```
 
-**SyncCounter による再ロック機構**（`E2E_P01CheckStateType.SyncCounter`）:
-一度 WRONGSEQUENCE（カウンタ飛びが許容超過）を検知すると、すぐに「正常」へ復帰するのではなく、
-`SyncCounterInit` 回分（EngineInfo/AbsInfo とも 2 回）連続して正常範囲内のカウンタを受信するまで
-状態を SYNC として報告し続けます。「異常を検知したら即座に信用を回復しない」という
-安全側の設計です。SYNC 中の各フレーム自体は CRC・カウンタとも正常範囲内なので、
-データそのものは使用可能と判断し Com バッファは更新します（後述）。
+**Profile01 との構造的な違い: INITIAL/SYNC 状態・SyncCounter 再ロック機構が無い**
+（詳細は [`docs/E2E_Profile5_Notes.md`](docs/E2E_Profile5_Notes.md) 参照）。
+Profile01 は初回受信を `INITIAL` として特別扱いし、`WRONGSEQUENCE` 検知後は
+`SyncCounterInit` 回分連続して正常受信するまで `SYNC` として再ロックする機構を
+持っていましたが、公式の `E2E_P05CheckStateType`/`E2E_P05ConfigType` にはこれらに
+相当するフィールドが無く、初回の `E2E_P05Check()` 呼び出しも他の呼び出しと全く同じ
+delta 計算にそのまま乗ります（`ProtectState`/`CheckState` とも初期値は `Counter=0`
+なので、起動直後の最初のフレーム（Counter=0）を初回 Check（State も Counter=0）
+すると `delta=0` となり `REPEATED` 判定になります。「異常」ではなく Profile05の
+仕様どおりの挙動です）。
 
 ※ 公式仕様にはこのほか `NONEWDATA`（前回呼び出し以降、新規データなし）がありますが、
-本実装は `Com_RxIndication()` からフレーム受信時にのみ `E2E_P01Check` を呼び出す設計のため、
-「呼ばれたが新規データがない」状況が発生せず、この状態は実装していません
-（詳細は [`docs/E2E_Profile1_Notes.md`](docs/E2E_Profile1_Notes.md) 参照）。
+本実装は `Com_RxIndication()` からフレーム受信時にのみ `E2E_P05Check` を呼び出す設計のため、
+「呼ばれたが新規データがない」状況が発生せず、この状態は実装していません。
 
 ##### Com モジュールとの統合（E2E Transformer 方式）
 
@@ -2058,8 +2067,8 @@ Com は EngineInfo/AbsInfo のペイロード内容を一切検証しません�
 
 実際の検証は `Rte` 層に置かれたグルー関数（`Rte_COMCbk_EngineInfo()` /
 `Rte_COMCbk_AbsInfo()`、`src/Rte/Rte.c`）が担い、`Com_ReceiveSignalGroupArray()` で
-I-PDU の生バイト列を取得した上で `E2EXf_InverseTransform()`（`src/Bsw/E2EXf/E2EXf.c`、
-中身は `E2E_P01Check()` への薄いラッパー）へ渡します。検証に合格した場合のみ、Rte 内部の
+I-PDU の生バイト列を取得した上で `E2EXf_InverseTransformP05()`（`src/Bsw/E2EXf/E2EXf.c`、
+中身は `E2E_P05Check()` への薄いラッパー）へ渡します。検証に合格した場合のみ、Rte 内部の
 ミラー変数（`Rte_EngineInfoMirror` / `Rte_AbsInfoMirror`）へ最新値を反映します。
 検証に失敗した場合はミラーを更新せず、直前の正常値がシグナルとして残り続けます
 （＝これが E2E 違反時のフェイルセーフの実体）。
@@ -2070,24 +2079,24 @@ Com_RxIndication() (RxIndicationCbk が設定された I-PDU。現状 IPduId=0/1
   RxIndicationCbk() を呼び出す
     = Rte_COMCbk_EngineInfo() / Rte_COMCbk_AbsInfo() （Rte.c）
         Com_ReceiveSignalGroupArray() で生バイト列を取得
-        E2EXf_InverseTransform() を呼び出す（CheckStatus 出力引数で生の8状態も受け取る）
-          → E2E_P01Check() を実行
-            OK / OKSOMELOST / SYNC / INITIAL
+        E2EXf_InverseTransformP05() を呼び出す（CheckStatus 出力引数で生の6状態も受け取る）
+          → E2E_P05Check() を実行
+            OK / OKSOMELOST
                       → Dem_ReportErrorStatus(DemEventId, PASSED)
                         E_OK を返す → Rte ミラーを更新
-            REPEATED / WRONGCRC / WRONGSEQUENCE / ERROR
-                      → DET_LOGW(TAG="E2EXf", "InverseTransform NG DemEvent=%u st=%u")
+            REPEATED / WRONGSEQUENCE / ERROR
+                      → DET_LOGW(TAG="E2EXf", "InverseTransformP05 NG DemEvent=%u st=%u")
                         Dem_ReportErrorStatus(DemEventId, FAILED)
                         E_NOT_OK を返す → Rte ミラー非更新（前回値を維持）
-        CheckStatus を Rte_MapE2EStatus() で Rte_IStatusType へ写像し
+        CheckStatus を Rte_MapE2EStatusP05() で Rte_IStatusType へ写像し
         Rte_EngineInfoStatus / Rte_AbsInfoStatus（静的変数）へ保存
           → 次回以降の Rte_Read_*() 呼び出しがこれを返す（詳細は次項）
 ```
 
-OK/OKSOMELOST/SYNC/INITIAL はいずれも CRC が正しく検証されているため「データとしては信頼できる」
-と判断し受理します。SYNC は再ロック中でシーケンスの継続性こそ未確定ですが、個々のフレームの
-CRC・カウンタ自体は正常範囲内のため、ミラーは更新します。
-E2E エラー（REPEATED/WRONGCRC/WRONGSEQUENCE/ERROR）時はミラーを更新しないため、
+OK/OKSOMELOST はいずれも CRC が正しく検証されているため「データとしては信頼できる」
+と判断し受理します（Profile05 には Profile01 の SYNC/INITIAL に相当する状態が無いため、
+判定は OK 単独で行います）。
+E2E エラー（REPEATED/WRONGSEQUENCE/ERROR）時はミラーを更新しないため、
 直前の正常値がシグナルとして残り続けます。一方、Com 側のタイムアウトタイマは
 （Com が E2E を関知しないため）フレーム到達だけでリセットされ続けます。したがって
 E2E 違反が続く間の古い値保持は「E2E フェイルセーフ」（Rte ミラー非更新）が担い、
@@ -2121,11 +2130,11 @@ E2E 違反が続く間の古い値保持は「E2E フェイルセーフ」（Rte
 （`Rte_Read_SpeedSensor_EngineSpeed` 等）がこれを返すようにしています。
 
 ```
-E2E_P01Check() の8状態          Rte_MapE2EStatus() による分類    Rte_IStatusType
-OK / INITIAL / SYNC        ─────────────────────────────→  RTE_E_OK
+E2E_P05Check() の6状態          Rte_MapE2EStatusP05() による分類  Rte_IStatusType
+OK                         ─────────────────────────────→  RTE_E_OK
 OKSOMELOST                 ─────────────────────────────→  RTE_E_SOFT_TRANSFORMER_ERROR
-REPEATED / WRONGCRC /
-WRONGSEQUENCE / ERROR      ─────────────────────────────→  RTE_E_HARD_TRANSFORMER_ERROR
+REPEATED / WRONGSEQUENCE /
+ERROR                      ─────────────────────────────→  RTE_E_HARD_TRANSFORMER_ERROR
 
 Rte_Read_SpeedSensor_EngineSpeed() 等（Rte.c）:
   *data は常に Rte_EngineInfoMirror の現在値を書き込む（戻り値に関わらず）
@@ -2167,7 +2176,7 @@ Rte_Read_SpeedSensor_EngineSpeed() 等（Rte.c）:
 ##### E2E モジュール設定（`src/Bsw/E2EXf/E2EXf_PBCfg.c` の E2E 設定テーブル）
 
 E2E の設定・状態実体は Com から独立し、`E2EXf_PBCfg.c` で保持しています
-（`E2EXf_EngineInfoRxCfg` / `E2EXf_AbsInfoRxCfg`（Profile01、`E2EXf_RxConfigType`）/
+（`E2EXf_EngineInfoRxCfg` / `E2EXf_AbsInfoRxCfg`（Profile05、`E2EXf_RxConfigTypeP05`）/
 `E2EXf_E2EHealthStatusTxCfgP05`（Profile05、`E2EXf_TxConfigTypeP05`）として
 まとめ、`Rte.c` のグルー関数から参照）。
 
@@ -2176,72 +2185,67 @@ E2E の設定・状態実体は Com から独立し、`E2EXf_PBCfg.c` で保持�
 | 設定 | 値 | 意味 |
 |------|----|------|
 | DataID | 0x0100 | CRC 計算に含む ID（誤ルーティング検出） |
-| DataLength | 6 | フレーム全体のバイト長 |
+| DataLength | 7 | フレーム全体のバイト長（CRC16 2B + Counter 1B + シグナル 4B） |
 | MaxDeltaCounter | 1 | 許容する最大カウンタ飛び量 |
-| CounterOffset | 1 | Counter を格納する byte インデックス |
-| CRCOffset | 0 | CRC を格納する byte インデックス（AUTOSAR 標準バリアント 1A） |
-| SyncCounterInit | 2 | WRONGSEQUENCE 検知後、OK へ戻るまでに必要な連続正常受信回数 |
+| Offset | 0 | E2E ヘッダ(CRC16+Counter)が始まる byte インデックス |
 
 **AbsInfo（`E2EXf_AbsInfoRxCfg`）:**
 
 | 設定 | 値 | 意味 |
 |------|----|------|
 | DataID | 0x0110 | CRC 計算に含む ID（誤ルーティング検出） |
-| DataLength | 5 | フレーム全体のバイト長 |
+| DataLength | 6 | フレーム全体のバイト長（CRC16 2B + Counter 1B + シグナル 3B） |
 | MaxDeltaCounter | 1 | 許容する最大カウンタ飛び量 |
-| CounterOffset | 1 | Counter を格納する byte インデックス |
-| CRCOffset | 0 | CRC を格納する byte インデックス（AUTOSAR 標準バリアント 1A） |
-| SyncCounterInit | 2 | WRONGSEQUENCE 検知後、OK へ戻るまでに必要な連続正常受信回数 |
+| Offset | 0 | E2E ヘッダ(CRC16+Counter)が始まる byte インデックス |
 
 ##### ログ例
 
-**正常受信時（初回は INITIAL、以降は OK）:**
+**正常受信時:**
 ```
 （E2E 正常時はログなし — バッファが静かに更新される）
 ```
 
 **CRC 不一致発生時（AbsInfo）:**
 ```
-[7001ms] WARN  E2EXf: InverseTransform NG DemEvent=8 st=2  ← st=2: WRONGCRC（CRC 不一致）
+[7001ms] WARN  E2EXf: InverseTransformP05 NG DemEvent=8 st=7  ← st=7: ERROR（CRC 不一致）
 [7002ms] DEBUG Dem: ev=8 debounce=1 (PREFAILED)  ← limit=1 のため次回確定
 [7003ms] WARN  Dem: FAILED ev=8 dtc=0x000109     ← 即座に確定・EEPROM に保存
 ```
 
 **CRC 不一致発生時（EngineInfo）:**
 ```
-[8001ms] WARN  E2EXf: InverseTransform NG DemEvent=9 st=2  ← st=2: WRONGCRC（CRC 不一致）
+[8001ms] WARN  E2EXf: InverseTransformP05 NG DemEvent=9 st=7  ← st=7: ERROR（CRC 不一致）
 [8002ms] DEBUG Dem: ev=9 debounce=1 (PREFAILED)  ← limit=1 のため次回確定
 [8003ms] WARN  Dem: FAILED ev=9 dtc=0x00010A     ← 即座に確定・EEPROM に保存
 ```
 
-**カウンタ飛び超過 → SYNC 再ロック → OK 復帰の一連の流れ（実機ログ、uds_tester で意図的にカウンタを飛ばして送信）:**
+**カウンタ飛び超過（WRONGSEQUENCE）検知の様子（実機ログ、uds_tester で意図的にカウンタを飛ばして送信）:**
 
-`E2E_P01.c`の`SyncCounter > 0`分岐に`DET_LOGW(TAG, "st=%u sync=%u", ...)`を追加することで、
-ログレベルを変更せずに常時 SyncCounter の遷移を観測できるようにしている
-（`E2E_P01STATUS_OK`は意図的に無ログのままなので、ログが出ないこと自体が「静かに OK へ復帰した」証拠になる）。
+Profile05 には Profile01 の SyncCounter 再ロック機構が無いため、カウンタ飛びを
+検知した次のフレームが正常な delta（==1）でさえあれば、それだけで即座に OK へ戻ります
+（SYNC 状態を経由した複数フレームの再ロック待ちは発生しません）。
 
 ```
-[30824ms] WARN  E2EXf: InverseTransform NG DemEvent=8 st=64  ← WRONGSEQUENCE（カウンタ飛び検知、SyncCounter=2 セット）
+[30824ms] WARN  E2EXf: InverseTransformP05 NG DemEvent=8 st=64  ← WRONGSEQUENCE（カウンタ飛び検知）
 [30827ms] WARN  Dem: FAILED ev=8 dtc=0x000109      ← このフレームは不採用（ミラー非更新）
-[33038ms] WARN  E2E_P01: st=3 sync=1       ← 1回目の正常カウンタ受信、再ロック中（SyncCounter 2→1）
-[34205ms] WARN  E2E_P01: st=3 sync=0       ← 2回目の正常カウンタ受信、再ロック完了直前（SyncCounter 1→0）
-                                            ← 3回目の正常カウンタ受信は無ログ = OK に復帰
+[31038ms]                                          ← 次のフレームが delta==1 なら無ログ = 即座に OK 復帰
 ```
 
 **動作確認方法（意図的な E2E エラー）:**
 
-uds_tester ツールの EngineInfo/AbsInfo データ入力欄で byte[0]（CRC バイト）を誤った値に
+uds_tester ツールの EngineInfo/AbsInfo データ入力欄で byte[0-1]（CRC16 バイト）を誤った値に
 書き換えてから送信ボタンを押すと、Rte 層の E2E Transformer フックが CRC エラーを検出して
 それぞれ DEM_EVENT_E2E_ENGINEINFO / DEM_EVENT_E2E_ABSINFO が報告されます。
 
-**動作確認方法（WRONGSEQUENCE → SYNC 再ロック → OK 復帰）:**
+**動作確認方法（WRONGSEQUENCE → OK 復帰）:**
 
 uds_tester は送信するたびに Counter を自動で +1 するため、通常操作では delta は常に 1 に
-なり WRONGSEQUENCE は発生しません。意図的にカウンタを飛ばすには、データ入力欄の byte[1]
-下位 4bit（Counter）を手動で前回送信値+2 以上の値へ書き換えてから送信します
+なり WRONGSEQUENCE は発生しません。意図的にカウンタを飛ばすには、データ入力欄の byte[2]
+（Counter、フル値）を手動で前回送信値+2 以上の値へ書き換えてから送信します
 （CRC は送信直前に自動再計算されるため、Counter だけを書き換えれば十分です）。
-これにより WRONGSEQUENCE → （以降 2 回連続正常送信で）SYNC × 2 回 → OK という
-一連の遷移を実機ログで確認できます（EngineInfo/AbsInfo いずれも同じ手順）。
+これにより WRONGSEQUENCE → （次の1回の正常送信で即座に）OK 復帰という一連の遷移を
+実機ログで確認できます（EngineInfo/AbsInfo いずれも同じ手順。Profile01 の SyncCounter
+再ロックのような複数フレームの待ちは Profile05 には無いため、1 フレームで復帰します）。
 
 <a id="e2e-protect-tx"></a>
 #### 送信側（Protect）— E2EHealthStatus
@@ -3484,7 +3488,7 @@ extendedSession かつ SecurityAccess Level1 アンロック済みでなけれ�
 | 機能 | 説明 |
 |------|------|
 | ボタン送信 | `config.json` に定義した SF フレームをそのまま送信 |
-| E2E P01 自動付加 | `config.json` の `"e2e"` フィールドを持つボタン（AbsInfo 等）は、Counter（0–15 のリングカウンタ）と CRC8 SAE J1850 を自動計算して付加。Counter は送信のたびにインクリメントされ、データ入力欄にもリアルタイム反映。入力欄の値を手動編集してから送信した場合はその値をそのまま送信（E2E バイトを上書きして送信 = 意図的な E2E エラーテストが可能） |
+| E2E 自動付加 | `config.json` の `"e2e"` フィールドを持つボタン（EngineInfo/AbsInfo 等）は、Counter と CRC を自動計算して付加。`"profile": "p05"` を指定したボタン（EngineInfo/AbsInfo）は Counter（0–255 のフルレンジ、予約値なし）と CRC16（多項式0x1021、E2E Profile05）、未指定（既定）のボタンは Counter（0–15 のリングカウンタ）と CRC8 SAE J1850（E2E Profile01）を使う。Counter は送信のたびにインクリメントされ、データ入力欄にもリアルタイム反映。入力欄の値を手動編集してから送信した場合はその値をそのまま送信（E2E バイトを上書きして送信 = 意図的な E2E エラーテストが可能） |
 | 複数フレーム要求の送信 | `type: "multiframe"` のボタンは FF 送信 → ECU からの FC(CTS) 待ち → CF 送信、という ISO-TP 送信側を自前で実装（0x2E WriteDataByIdentifier 用） |
 | 複数フレーム応答の自動 FC | 応答が FF で始まったら `30 00 00 00 00 00 00 00` を自動送信し、CF を再結合（上記の Cangaroo 手動 FC 送信が不要になる） |
 | SecurityAccess Level1 自動実行 | requestSeed → `key = seed XOR 0xA55A`（`Dcm_ComputeSecurityKey()` と同一式）を計算 → sendKey を 1 クリックで実行 |
@@ -4053,8 +4057,8 @@ counter == -limit に達した瞬間のみ → 確定 PASSED（TF クリア。CD
 
 RUNNING 状態で以下の AbsInfo フレームを 0x110 で送信して LED 動作を確認します。
 
-AbsInfo は E2E P01 保護付きのため、**Counter（byte[3] 下位 4bit）と CRC8（byte[4]）を正しく付加**しないと
-Com が E2E エラーと判定してフレームを破棄し、LED は反応しません。
+AbsInfo は E2E Profile05 保護付きのため、**Counter（byte[2]、フル値）と CRC16（byte[0-1]）を
+正しく付加**しないと Com が E2E エラーと判定してフレームを破棄し、LED は反応しません。
 uds_tester の「AbsInfo (0x110)」ボタンは Counter と CRC を自動計算して送信します。
 
 | シグナル設定 | AbsActive | BrakeActive | D6 RUNNING | D7 FAULT | D8 ABS |

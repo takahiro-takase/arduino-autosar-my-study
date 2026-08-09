@@ -21,8 +21,8 @@
 extern "C" {
 #endif
 
-extern const E2EXf_RxConfigType E2EXf_EngineInfoRxCfg;
-extern const E2EXf_RxConfigType E2EXf_AbsInfoRxCfg;
+extern const E2EXf_RxConfigTypeP05 E2EXf_EngineInfoRxCfg;
+extern const E2EXf_RxConfigTypeP05 E2EXf_AbsInfoRxCfg;
 extern const E2EXf_TxConfigTypeP05 E2EXf_E2EHealthStatusTxCfgP05;
 
 /**

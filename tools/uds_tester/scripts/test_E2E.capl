@@ -1,0 +1,287 @@
+// CAPL 風 DSL の for文・this.byte(n)/this.id/this.dlc・printf風フォーマットのサンプル (.capl)。
+//
+// example_session_check.capl (最小構成) → example_variables_control_flow.capl
+// (variables{}/if/while) に続く第3段。文法の詳細は README.md の
+// 「CAPL 風スクリプト機能」を参照。
+
+variables
+{
+    message 0x100 engineInfoMsg;
+    byte e2eCnt_0x100;
+    byte e2eCnt_0x220;
+    byte e2eCrcErrCount;
+    byte e2eSeqErrCount;
+
+    int  msgIndex;
+    byte msgData[32];
+
+    // E2EProfile05 CRC 検証 (ReceiveMessage_E2EHealthStatus()) 用の前回カウンタ値。
+    // このDSLの関数ローカル変数は (実CAPLの「static相当・呼び出しをまたいで
+    // 値を保持する」ローカル変数とは違い) 呼び出しのたびに再初期化され、
+    // 呼び出しが終わると値も消える。次に届いたフレームのカウンタと比較する
+    // ために前回値を残しておく必要があるので、e2eCnt だけはグローバルに置く
+    // (e2eIndex/e2eData/e2eDataLen/e2eCrc は毎回作り直せばよいので
+    // ReceiveE2EHealthStatus() のローカル変数のままでよい)。
+}
+
+on start
+{
+    e2eCnt_0x100   = 0x00;
+    e2eCnt_0x220   = 0x00;
+    e2eCrcErrCount = 0xFF;
+    e2eSeqErrCount = 0xFF;
+
+    write("停止するには「停止」ボタンを押してください。");
+    setTimer(TimeoutA, 6000);
+}
+
+on timer TimeoutA
+{
+    SendMessage_EngineInfo(0, 0 ,1, 1);
+    setTimer(TimeoutB, 6000);  // CAPL の msTimer と同じく単発なので、繰り返すには再度アームする
+}
+
+on timer TimeoutB
+{
+    SendMessage_EngineInfo(0, 0 ,1, 2);
+//    setTimer(TimeoutC, 6000);  // CAPL の msTimer と同じく単発なので、繰り返すには再度アームする
+}
+
+// -----------------------------------------------------------------------------
+// EngineInfo
+//
+// 2026-08 に E2E Profile01(CRC8+4bitカウンタ、DLC=6) から Profile05
+// (CRC16+8bitカウンタ、DLC=7) へ移行した(src/Bsw/E2EXf/E2EXf_PBCfg.c 参照)。
+// byte[0-1]=CRC16(リトルエンディアン) / byte[2]=Counter(フル値) /
+// byte[3-6]=シグナル、という新レイアウトで送信する。
+// -----------------------------------------------------------------------------
+void SendMessage_EngineInfo(word speed, byte coolant, byte onFlag, byte errorFlag)
+{
+    // data[0]=Counter, data[1-4]=シグナル (CalcE2EProfile05CRC() へそのまま渡す
+    // CRC計算対象と同じ並び: Counterを含みユーザーデータまで)
+    byte data[5];
+    word crc16;
+
+    if (errorFlag == 2)
+    {
+        // CNT異常。Profile05はフルレンジ(0-255)・予約値なしのため、byte型の
+        // 自然なラップアラウンドがそのまま仕様通りの折返しになる(mod演算不要)。
+        e2eCnt_0x100 = e2eCnt_0x100 + 3;
+    }
+
+    data[0] = e2eCnt_0x100;
+    data[1] = (speed >> 8) & 0xFF;
+    data[2] = speed & 0xFF;
+    data[3] = coolant;
+    data[4] = (onFlag & 0x01) << 7;
+
+    engineInfoMsg.dlc = 7;
+    engineInfoMsg.byte(2) = data[0];
+    engineInfoMsg.byte(3) = data[1];
+    engineInfoMsg.byte(4) = data[2];
+    engineInfoMsg.byte(5) = data[3];
+    engineInfoMsg.byte(6) = data[4];
+
+    crc16 = CalcE2EProfile05CRC(0x0100, 5, data);
+    engineInfoMsg.byte(0) = crc16 & 0xFF;
+    engineInfoMsg.byte(1) = (crc16 >> 8) & 0xFF;
+
+    if (errorFlag == 1)
+    {
+        // CRC異常
+        engineInfoMsg.byte(0) = 0;
+        engineInfoMsg.byte(1) = 0;
+    }
+
+    output(engineInfoMsg);
+
+    e2eCnt_0x100 = e2eCnt_0x100 + 1;
+}
+
+// -----------------------------------------------------------------------------
+// E2EHealthStatus
+// -----------------------------------------------------------------------------
+on message 0x220
+{
+    for (msgIndex = 0; msgIndex < this.dlc; msgIndex++)
+    {
+        msgData[msgIndex] = this.byte(msgIndex);
+    }
+    ReceiveMessage_E2EHealthStatus(this.id, this.dlc, msgData);
+}
+
+void ReceiveMessage_E2EHealthStatus(word id, byte dlc, byte data[])
+{
+    // e2eIndex/e2eData/e2eDataLen/e2eCrc/receivedCrc は呼び出しのたびに作り直す
+    // 作業変数なのでローカルのままでよい。e2eCnt (前回受信カウンタ) だけは
+    // 呼び出しをまたいで値を保持する必要があるため variables{} のグローバルに
+    // 置いてある(このDSLの関数ローカル変数は呼び出しのたびに再初期化される。
+    // 実CAPLの「static相当」ローカル変数とは異なる点、詳細は variables{} 側の
+    // コメント参照)。
+    byte e2eIndex;
+    byte e2eData[32];
+    byte e2eDataLen;
+    word e2eCrc;
+    word receivedCrc;
+    byte received;
+    byte delta;
+//  byte e2eCnt;
+//  byte e2eCrcErrCount;
+//  byte e2eSeqErrCount;
+    // 2026-08 に E2E Profile01+SecOC(先頭4バイトE2E+Freshness1B+MAC3B、DLC=8)
+    // から E2E Profile05 単体(DLC=5、SecOC撤去)へ移行した
+    // (src/Bsw/E2EXf/E2EXf_PBCfg.c の E2EHealthStatus 設定参照)。
+    // byte[0-1]=CRC16(リトルエンディアン) / byte[2]=Counter(フル値) /
+    // byte[3]=CrcErrCount / byte[4]=SeqErrCount。CRC の計算対象は
+    // byte[2]以降(Counterを含みユーザーデータまで)。
+    e2eDataLen = 0;
+    for (e2eIndex = 2; e2eIndex < dlc; e2eIndex++)
+    {
+        e2eData[e2eDataLen] = data[e2eIndex];
+        e2eDataLen++;
+    }
+    e2eCrc = CalcE2EProfile05CRC(0x0220, e2eDataLen, e2eData);
+    receivedCrc = data[0] | (data[1] << 8);
+
+    if (receivedCrc == e2eCrc)
+    {
+        // E2E Profile05 の Counter はフル8bit(0-255循環、予約値なし)。byte型の
+        // 自然なラップアラウンドがそのまま E2E_P05Check() と同じ mod-256
+        // 補正になる(Profile01のmod-15補正のような特別扱いは不要)。
+        received = data[2];
+        delta = received - e2eCnt_0x220;
+
+        if (delta == 1)
+        {
+            if ( (data[3] == e2eCrcErrCount) &&
+                 (data[4] == e2eSeqErrCount) )
+            {
+                // 変化なし
+                //write("RX id=0x%x dlc=%d CRC:OK CNT:OK(0x%02x) CrcErrCNT:0x%02x SeqErrCNT:0x%02x)", id, dlc, data[2], data[3], data[4]);
+            }
+            else
+            {
+                write("RX id=0x%x dlc=%d CRC:OK CNT:OK(0x%02x) CrcErrCNT:0x%02x SeqErrCNT:0x%02x)", id, dlc, data[2], data[3], data[4]);
+            }
+        }
+        else
+        {
+            write("RX id=0x%x dlc=%d CRC:OK CNT:NG(0x%02x) CrcErrCNT:0x%02x SeqErrCNT:0x%02x)", id, dlc, data[2], data[3], data[4]);
+        }
+
+        // Counter/エラーカウンタの状態は CRC が正しかった時だけ更新する
+        // (E2E_P05Check() と同じ「CRC 不一致時は状態を一切変更しない」挙動。
+        // 次に CRC が正しいフレームが来た時点で、その前の正常な状態を基準に
+        // 通常通り判定できるようにするため)。
+        e2eCnt_0x220   = received;
+        e2eCrcErrCount = data[3];
+        e2eSeqErrCount = data[4];
+    }
+    else
+    {
+        write("RX id=0x%x dlc=%d CRC:NG CNT:--(0x%02x))", id, dlc, data[2]);
+    }
+}
+
+// -----------------------------------------------------------------------------
+// E2EProfile01
+// -----------------------------------------------------------------------------
+
+// CRC8 (poly=0x1D) へ1バイト分を投入する。DataID・データ本体どちらの投入も
+// 中身は同じなので、CalcE2EProfile01CRC() から2箇所で共用する (小さなヘルパー
+// 関数に切り出すことで、8bit シフトループを2重に持たずに済む)。
+byte UpdateCrc8(byte crc, byte b)
+{
+    byte poly = 0x1D;
+    int i;
+
+    crc ^= b;
+    for (i = 0; i < 8; i++)
+    {
+        if (crc & 0x80)
+        {
+            crc = (crc << 1) ^ poly;
+        }
+        else
+        {
+            crc <<= 1;
+        }
+    }
+    return crc;
+}
+
+byte CalcE2EProfile01CRC(word dataId, byte len, byte data[])
+{
+    // 開始値は 0x00 (SWS_E2E_00083、src/Bsw/E2E/E2E_P01.c の E2E_CalcCrc8() と同じ)。
+    // 0xFF ではない (実CRC-8-SAE-J1850の一般的な初期値とは異なる、本プロジェクト
+    // 固有の採用バリアント)。
+    byte crc = 0x00;
+    byte index;
+
+    // DataID (word、実機の E2E_P01ConfigType.DataID と同じ16bit1個の値) を
+    // 下位バイト→上位バイトの順に CRC へ投入する (src/Bsw/E2E/E2E_P01.c の
+    // E2E_P01Check()/E2E_P01Protect() と同じ順序・同じ分解)。
+    crc = UpdateCrc8(crc, dataId & 0xFF);
+    crc = UpdateCrc8(crc, (dataId >> 8) & 0xFF);
+
+    // データ本体を CRC に投入
+    for (index = 0; index < len; index++)
+    {
+        crc = UpdateCrc8(crc, data[index]);
+    }
+
+    return crc;
+}
+
+// -----------------------------------------------------------------------------
+// E2EProfile05
+//
+// EngineInfo(0x100)/E2EHealthStatus(0x220 受信検証)いずれも 2026-08 に
+// Profile01 から Profile05 へ移行したため、こちらの CRC16 版を使う。
+// CalcE2EProfile01CRC()/UpdateCrc8() は Profile01 の参考実装として残す。
+// -----------------------------------------------------------------------------
+
+// CRC16 (poly=0x1021、MSB first、非反転) へ1バイト分を投入する。UpdateCrc8() と
+// 同じ理由で CalcE2EProfile05CRC() から共用するヘルパー関数に切り出す。
+word UpdateCrc16(word crc, byte b)
+{
+    word poly = 0x1021;
+    int i;
+
+    crc ^= (b << 8);
+    for (i = 0; i < 8; i++)
+    {
+        if (crc & 0x8000)
+        {
+            crc = (crc << 1) ^ poly;
+        }
+        else
+        {
+            crc <<= 1;
+        }
+    }
+    return crc;
+}
+
+word CalcE2EProfile05CRC(word dataId, byte len, byte data[])
+{
+    // 開始値は 0xFFFF (SWS_E2E_00406、src/Bsw/E2E/E2E_P05.c の
+    // E2E_CalcCrc16Body() と同じ)。Profile01 の 0x00 開始とは異なる。
+    word crc = 0xFFFF;
+    byte index;
+
+    // data[] (Counter を含みユーザーデータまで) を先に CRC へ投入し、
+    // DataID (下位バイト→上位バイトの順) を最後に投入する。Profile01 の
+    // 「DataID がデータの前」とは投入順序が逆になる点に注意
+    // (SWS_E2E_00399/00406、E2E_P05.c の E2E_CalcCrc16Body() と同じ)。
+    for (index = 0; index < len; index++)
+    {
+        crc = UpdateCrc16(crc, data[index]);
+    }
+
+    crc = UpdateCrc16(crc, dataId & 0xFF);
+    crc = UpdateCrc16(crc, (dataId >> 8) & 0xFF);
+
+    return crc;
+}
+

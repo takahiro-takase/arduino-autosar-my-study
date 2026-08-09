@@ -27,9 +27,20 @@
  *              byte[0-1] : CRC16 (リトルエンディアン)
  *              byte[2]   : Counter (8bit フル値)
  *              byte[3-4] : 元データ (CrcErrCount, SeqErrCount)
- *          Check() はプロジェクト内に現時点で呼び出し元が無い(対称性のために
- *          実装のみ行っている)。ホスト単体テスト (test/test_e2e_p05/) でのみ
- *          検証されている点に注意。
+ *            EngineInfo (CAN ID 0x100, DLC=7, 受信側で Check)
+ *            AbsInfo    (CAN ID 0x110, DLC=6, 受信側で Check)
+ *          Check() は 2026-08 に EngineInfo/AbsInfo の受信検証で実配線された
+ *          （`src/Bsw/E2EXf/E2EXf.c` の `E2EXf_InverseTransformP05()` 経由、
+ *          呼び出し元は `src/Rte/Rte.c` の `Rte_COMCbk_EngineInfo()`/
+ *          `Rte_COMCbk_AbsInfo()`）。EngineHealthStatus 自体は TX のみのため
+ *          Check() の呼び出し元にはならない。
+ *
+ *          本ファイルが実装する Check() 自体は INITIAL 相当の初回受信の
+ *          特別扱いを持たない仕様に忠実な実装のままだが（下記 5 章）、
+ *          実運用ではそれが原因で起動直後の最初のフレームが誤判定されうる
+ *          （送信元 ECU のカウンタが 0 から始まっているとは限らないため）。
+ *          このギャップは本ライブラリではなく E2EXf 層
+ *          （`E2EXf_RxConfigTypeP05.WaitForFirstData`）で補っている。
  *
  *          CRC16 の開始値について: AUTOSAR SWS_E2ELibrary 本文(7.6.5節)は
  *          「開始値・XOR値は CRC Library 仕様書を参照」としか書いておらず、

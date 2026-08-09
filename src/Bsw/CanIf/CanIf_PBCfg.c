@@ -174,7 +174,7 @@ static const CanIf_RxPduConfigType CanIf_RxPduConfigData[CANIF_RX_PDU_COUNT] = {
         .Hrh               = 0U,          /* DaVinci: CanIfRxPduHrhIdRef */
         .UpperLayerRxPduId = 0U,          /* DaVinci: CanIfRxPduUpperLayerPduId
                                            *          → PduR RX パス 0 へのリンク */
-        .Dlc               = 6U,          /* DaVinci: CanIfRxPduDataLength (E2E P01 保護: CRC1B+Counter1B+シグナル4B) */
+        .Dlc               = 7U,          /* DaVinci: CanIfRxPduDataLength (E2E P05 保護: CRC16(2B)+Counter1B+シグナル4B) */
         .RxIndicationFct   = PduR_CanIfRxIndication /* DaVinci: CanIfRxPduUserRxIndicationName */
     },
     {
@@ -198,7 +198,7 @@ static const CanIf_RxPduConfigType CanIf_RxPduConfigData[CANIF_RX_PDU_COUNT] = {
         .Hrh               = 0U,          /* DaVinci: CanIfRxPduHrhIdRef */
         .UpperLayerRxPduId = 2U,          /* DaVinci: CanIfRxPduUpperLayerPduId
                                            *          → PduR RX パス 2 へのリンク */
-        .Dlc               = 5U,          /* DaVinci: CanIfRxPduDataLength (E2E P01 保護: CRC1B+Counter1B+シグナル3B) */
+        .Dlc               = 6U,          /* DaVinci: CanIfRxPduDataLength (E2E P05 保護: CRC16(2B)+Counter1B+シグナル3B) */
         .RxIndicationFct   = PduR_CanIfRxIndication  /* DaVinci: CanIfRxPduUserRxIndicationName */
     },
     {
