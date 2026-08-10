@@ -2,9 +2,11 @@
 
 > [README](../../README.md) の「[ECU 管理層](../../README.md#ecu-management)」節から分離。
 
-EcuM (ECU State Manager) は BSW スタック全体のライフサイクルを管理するモジュールです。
-`main.cpp` は `EcuM_Init()` と `EcuM_MainFunction()` を呼ぶだけでよく、
-個々の BSW モジュールを直接参照しません。
+EcuM (ECU State Manager) は BSW スタック全体のライフサイクル（STARTUP/RUN/POST_RUN/
+SHUTDOWN）を管理するモジュールです。`main.cpp` は `EcuM_Init()` と
+`EcuM_MainFunction()` を呼ぶだけでよく、個々の BSW モジュールを直接参照しません。
+状態マシン・Os スケジューラティック（Gpt 駆動）・RUN ユーザ管理の詳細を
+以下にまとめます。
 
 ## EcuM 状態マシン
 

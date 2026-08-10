@@ -7,6 +7,7 @@ FiM (Function Inhibition Manager) は、Dem が確定（CONFIRMED）した DTC �
 「DTC を記録する」（Dem の責務）と「DTC を理由に機能を止める」（FiM の責務）を
 分離するのが AUTOSAR の設計思想で、ASW は Dem の内部実装を一切知らずに
 `Rte_Call_FiM_GetFunctionPermission()` だけで「この機能は今実行してよいか」を判定できます。
+FID↔イベント対応表・判定フロー・フェールセーフ既定値の詳細を以下にまとめます。
 
 ## 機能 ID (FID) とイベントの対応
 

@@ -3,7 +3,10 @@
 > [README](../../README.md) の「[CAN 通信スタック](../../README.md#can-stack)」節から分離。
 
 MCP2515 の送受信・Bus-Off 検出・CAN バス活動によるウェイクアップ検出を担う
-MCAL 最下層。HW を直接操作する唯一のモジュール。
+MCAL 最下層。HW を直接操作する唯一のモジュール。TX 確認の非同期化
+（`Can_MainFunction_Write` によるポーリングモード準拠）、および RX の割り込み化
+（`Can_Isr` によるハードウェア割り込み化と、割り込み非依存のポーリング二重化）を
+中心に、以下で実装判断の背景をまとめます。
 
 <a id="can-tx-async-confirm"></a>
 ## TX 確認の非同期化（`Can_MainFunction_Write`）

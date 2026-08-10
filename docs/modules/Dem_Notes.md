@@ -6,6 +6,8 @@ Dem (Diagnostic Event Manager) モジュールがエンジン管理の故障を 
 DTC の永続化は NvM (Non-Volatile Memory Manager) 経由で行い、
 Dem は EEPROM アドレスを直接知りません（NvM_WriteBlock / NvM_ReadBlock のみ使用）。
 電源オフ後もクリア操作（SID 0x14）が行われない限り DTC が保持されます。
+イベント/DTC コード一覧、デバウンス、DTC ライフサイクル、経年回復（Aging）、
+FreezeFrame、ExtendedData、EEPROM レイアウトの詳細を以下にまとめます。
 
 ## イベントと DTC コード
 

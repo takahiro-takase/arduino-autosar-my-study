@@ -4,6 +4,9 @@
 
 Dcm (Diagnostic Communication Manager) が UDS サービスを処理し、
 CanTp (CAN Transport Protocol) が ISO 15765-2 のフレーム分割・組立を担います。
+対応 SID 一覧・DID 一覧・IOControl 調停方式・CommunicationControl・
+RoutineControl・RequestDownload 等のシーケンス・S3 タイマ・SecurityAccess の
+詳細を以下にまとめます。
 
 ## 診断フレームルーティング
 

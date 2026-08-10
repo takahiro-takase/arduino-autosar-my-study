@@ -5,6 +5,8 @@
 ComM (Communication Manager) は、複数の「ユーザ」からの通信モード要求を集約し、
 CAN バスの通信モード（NO_COM / SILENT_COM / FULL_COM）を決定するモジュールです。
 実際の CAN コントローラ操作は CanSM (`CanSM_RequestComMode`) に委譲します。
+調停ロジック・Dcm セッション連携・ボランタリスリープ連携・ウェイクアップ時の
+再同期の詳細を以下にまとめます。
 
 ## 複数ユーザの調停（AUTOSAR SWS_ComM_00069）
 

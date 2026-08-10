@@ -6,6 +6,9 @@ WdgM (Watchdog Manager) は「ソフトウェアが本当に動いているか�
 EcuM や BswM がフェーズ管理・タスク制御を担うのに対し、WdgM はタスク内部の実行を監視します。
 
 CAN バスが正常でも、タスクが無限ループやスタック破壊で停止することがあります。
+Alive/Logical/Deadline Supervision の各アルゴリズム、複数 Supervised Entity
+構成、HW ウォッチドッグ連携、resume 時の扱い、設定値一覧などの詳細を
+以下にまとめます。
 WdgM は監視対象（Supervised Entity）に「生存報告」を埋め込み、報告が途絶えたとき（Alive Supervision）、
 報告が想定外の順序で来たとき（Logical Supervision）、報告の間隔が異常に長い・短いとき
 （Deadline Supervision）に異常と判断します。AUTOSAR が定める 3 つの監視アルゴリズムです。

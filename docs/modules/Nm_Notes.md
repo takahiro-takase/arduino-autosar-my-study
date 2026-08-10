@@ -5,6 +5,9 @@
 Nm (Network Management) は、実車の各 ECU がバス上に周期的な生存確認フレーム
 （NM フレーム）を送信し、クラスタ内の全 ECU が送信を止めたときにのみバス
 スリープへ移行できる、という合意形成（協調スリープ）の仕組みです。
+CanNm 状態機械（Repeat Message/Normal Operation/Ready Sleep/Prepare
+Bus-Sleep/Bus-Sleep）の状態機械図・タイマ設定・ComM/CanSM との連携・ログ例の
+詳細を以下にまとめます。
 本プロジェクトの `Nm.c` は `docs/4.3.1/AUTOSAR_SWS_CANNetworkManagement.pdf`
 の CanNm 状態機械をほぼそのまま実装しており、他ノード（uds_tester が模擬する
 「仮想他ECU」）からの NM フレーム受信が自ノードのスリープ判断に反映される
