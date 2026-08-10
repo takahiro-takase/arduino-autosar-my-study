@@ -2,6 +2,10 @@
 
 > [README](../../README.md) の「[CAN 通信スタック](../../README.md#can-stack)」節から分離。
 
+シグナルのビット単位パック／アンパックと送受信タイミング制御を担う（TxModeMode:
+DIRECT/MIXED/PERIODIC・TMS・MDT・受信フィルタ・I-PDU Group・Signal Gateway 等）。
+E2E には一切関知しない（E2E Transformer 方式、`Com.c` 本体に E2E は埋め込まれない）。
+
 ## ComFilterAlgorithm と TxModeMode（送信要否・タイミングを Com 自身が判断する）
 
 実車の AUTOSAR Com は、ASW が値をセットする（`Com_SendSignal`）ことと、実際に CAN へ

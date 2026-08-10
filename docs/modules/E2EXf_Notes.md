@@ -7,6 +7,10 @@
 > このファイルは EngineInfo/AbsInfo(RX)・E2EHealthStatus(TX) への実際の適用と
 > Rte/Com/Dem との統合について扱います。
 
+Com と E2E の間を仲介する統合層。RX は `E2E_P05Check` でデータ破壊・フレーム
+脱落・重複・誤ルーティングを検出して Dem へ報告し、TX は `E2E_P05Protect` で
+Counter・CRC16 を付加する。Com 自身はこの層の存在を知らない。
+
 ## E2E が保護する故障モデル
 
 | 故障モデル | 検出方法 | 対応 E2E フィールド |
