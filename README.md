@@ -193,13 +193,13 @@ HAL ─── Can_Hw / Dio_Hw / Port_Hw / Adc_Hw / Mcu_Hw / Fee_Hw / Wdg_Hw / Gp
 |---|---|---|---|---|
 | ASW | App_<br>EngineManager | — | — | エンジン状態遷移 SWC (RUNNING/FAULT 等)<br>（[詳細](docs/modules/App_EngineManager_Notes.md)） |
 |  | App_<br>WarningIndicator | — | — | 警告灯制御 SWC (LED 3灯)<br>（[詳細](docs/modules/App_WarningIndicator_Notes.md)） |
-| RTE | Rte | — | — | SWC 間シグナル仲介 (RTE ミラー) |
+| RTE | Rte | — | — | SWC 間シグナル仲介 (RTE ミラー)<br>（[詳細](docs/modules/Rte_Notes.md)） |
 | OS | Os | — | SWS_Os<br>主要機能実装<br>(一部意図的に簡略化) | タイムトリガスケジューラ<br>（[詳細](docs/modules/Os_Notes.md)） |
 | BSW | Adc | 123 | SWS_Adc<br>主要機能実装<br>(一部意図的に簡略化) | アナログ入力ドライバ<br>（[詳細](docs/modules/Adc_Notes.md)） |
 |  | BswM | 42 | SWS_BswM<br>主要機能実装<br>(一部意図的に簡略化) | BSW モード管理・状態遷移の一元制御<br>（[詳細](docs/modules/BswM_Notes.md)） |
 |  | Can | 80 | SWS_Can<br>主要機能実装 | CAN コントローラドライバ (MCP2515)<br>（[詳細](docs/modules/Can_Notes.md)） |
-|  | CanIf | 60 | SWS_CanIf<br>主要機能実装 | CAN コントローラ抽象化層 |
-|  | CanSM | 140 | SWS_CanSM<br>主要機能実装 | CAN ネットワーク状態管理 (Bus-Off 回復・Nm 連携) |
+|  | CanIf | 60 | SWS_CanIf<br>主要機能実装 | CAN コントローラ抽象化層<br>（[詳細](docs/modules/CanIf_Notes.md)） |
+|  | CanSM | 140 | SWS_CanSM<br>主要機能実装 | CAN ネットワーク状態管理 (Bus-Off 回復・Nm 連携)<br>（[詳細](docs/modules/CanSM_Notes.md)） |
 |  | CanTp | 35 | SWS_CanTp<br>主要機能実装<br>(一部意図的に簡略化) | ISO 15765-2 トランスポートプロトコル<br>（[詳細](docs/modules/CanTp_Notes.md)） |
 |  | Com | 50 | SWS_Com<br>主要機能実装 | シグナルベース通信管理<br>（[詳細](docs/modules/Com_Notes.md)） |
 |  | ComM | 12 | SWS_ComM<br>主要機能実装 | 通信マネージャ (チャネル状態集約)<br>（[詳細](docs/modules/ComM_Notes.md)） |
@@ -210,7 +210,7 @@ HAL ─── Can_Hw / Dio_Hw / Port_Hw / Adc_Hw / Mcu_Hw / Fee_Hw / Wdg_Hw / Gp
 |  | Dem | 54 | SWS_Dem<br>主要機能実装 | 診断イベント管理 (DTC)<br>（[詳細](docs/modules/Dem_Notes.md)） |
 |  | Det | — | SWS_Det<br>主要機能実装<br>(一部意図的に簡略化) | 開発時エラー検出・ロギング<br>（[詳細](docs/modules/Det_Notes.md)） |
 |  | Dio | — | SWS_Dio<br>主要機能実装<br>(一部意図的に簡略化) | デジタル入出力ドライバ<br>（[詳細](docs/modules/Dio_Notes.md)） |
-|  | E2E | — | SWS_E2E<br>主要機能実装<br>(一部意図的に簡略化) | エンドツーエンド保護ライブラリ (Profile01/05) |
+|  | E2E | — | SWS_E2E<br>主要機能実装<br>(一部意図的に簡略化) | エンドツーエンド保護ライブラリ (Profile01/05)<br>（[詳細](docs/modules/E2E_Notes.md)） |
 |  | E2EXf | 176 | SWS_E2ELibrary 12.4<br>(E2E Transformer)<br>主要機能実装<br>(一部意図的に簡略化) | E2E トランスフォーマ (Rte⇔E2E ライブラリ統合)<br>（[詳細](docs/modules/E2EXf_Notes.md)） |
 |  | E2EMon | — | — (独自 CDD 相当) | ネットワーク健全性モニタ (独自 CDD)<br>（[詳細](docs/modules/E2EMon_Notes.md)） |
 |  | EcuM | 10 | SWS_EcuStateManager<br>主要機能実装 | ECU ステートマネージャ (起動・シャットダウン制御)<br>（[詳細](docs/modules/EcuM_Notes.md)） |
@@ -223,14 +223,14 @@ HAL ─── Can_Hw / Dio_Hw / Port_Hw / Adc_Hw / Mcu_Hw / Fee_Hw / Wdg_Hw / Gp
 |  | MemIf | 22 | SWS_MemIf<br>パススルー<br>(下位が1個のため) | 不揮発メモリ抽象化層<br>（[詳細](docs/modules/MemIf_Notes.md)） |
 |  | Nm | 31 | SWS_CANNM<br>主要機能実装 | ネットワークマネジメント (CAN NM)<br>（[詳細](docs/modules/Nm_Notes.md)） |
 |  | NvM | 20 | SWS_NvM<br>主要機能実装<br>(一部意図的に簡略化) | 不揮発メモリマネージャ<br>（[詳細](docs/modules/NvM_Notes.md)） |
-|  | PduR | 51 | SWS_PduR<br>主要機能実装<br>(一部意図的に簡略化) | PDU ルーティング層 |
+|  | PduR | 51 | SWS_PduR<br>主要機能実装<br>(一部意図的に簡略化) | PDU ルーティング層<br>（[詳細](docs/modules/PduR_Notes.md)） |
 |  | Port | — | SWS_Port<br>主要機能実装<br>(一部意図的に簡略化) | ピン設定管理<br>（[詳細](docs/modules/Port_Notes.md)） |
 |  | SchM | — | SWS_SchM<br>主要機能実装<br>(一部意図的に簡略化) | 排他制御 (スケジューラマネージャ)<br>（[詳細](docs/modules/SchM_Notes.md)） |
 |  | SecOC | 150 | SWS_SecureOnboard<br>Communication<br>主要機能実装<br>(一部意図的に簡略化) | メッセージ認証 (改ざん・なりすまし対策)<br>（[詳細](docs/modules/SecOC_Notes.md)） |
 |  | Wdg | 102 | SWS_Wdg<br>主要機能実装<br>(一部意図的に簡略化) | ウォッチドッグドライバ<br>（[詳細](docs/modules/Wdg_Notes.md)） |
 |  | WdgIf | 43 | SWS_WdgIf<br>パススルー<br>(下位が1個のため) | ウォッチドッグ抽象化層<br>（[詳細](docs/modules/WdgIf_Notes.md)） |
 |  | WdgM | 13 | SWS_WdgM<br>主要機能実装 | ウォッチドッグマネージャ (生存監視)<br>（[詳細](docs/modules/WdgM_Notes.md)） |
-| HAL | Can_Hw | — | — | MCP2515 SPI ドライバ |
+| HAL | Can_Hw | — | — | MCP2515 SPI ドライバ<br>（[詳細](docs/modules/Can_Notes.md)） |
 |  | Dio_Hw | — | — | Arduino `digitalWrite`/`digitalRead` ラッパー |
 |  | Port_Hw | — | — | Arduino `pinMode` ラッパー |
 |  | Adc_Hw | — | — | Arduino `analogRead` ラッパー |
@@ -476,17 +476,9 @@ RX（外部 → Arduino、上り）
   MCP2515 → Can_Hw → Can → CanIf → PduR → Com → (E2EXf/E2E/E2EMon) → Rte
 ```
 
-| 層 | モジュール | 本プロジェクトでの役割 |
-|---|---|---|
-| RTE | Rte | ポートベース S/R API。複数 SW-C が同一シグナルを独立ポートで受信。E2E Transformer を持つ Read ポートは `Std_ReturnType` ではなく `Rte_IStatusType` を返し、E2E チェック結果（OK/ハードエラー/ソフトエラー）と Com タイムアウトを区別して SWC へ伝える |
-| BSW | E2EMon | 標準 AUTOSAR モジュールには存在しない、実務でよく見る「独自 CDD」パターンの例。EngineInfo/AbsInfo の E2E 検証結果を購読し、ネットワーク健全性テレメトリとして公開する。詳細は下記「[E2EMon](#e2emon)」節を参照 |
-|  | E2EXf | Com と E2E の間を仲介する統合層。RX は `E2E_P05Check` でデータ破壊・フレーム脱落・重複・誤ルーティングを検出して Dem へ報告、TX は `E2E_P05Protect` で Counter・CRC16 を付加する。Com 自身はこの層の存在を知らない。詳細は下記「[E2E 保護](#e2e-p01)」節を参照 |
-|  | E2E | AUTOSAR E2E Profile 05 保護の実処理。DataID・CRC16 (多項式0x1021)・8bit カウンタの 3 要素で、`E2E_P05Check` はデータ破壊・フレーム脱落・重複・誤ルーティングを検出、`E2E_P05Protect` は Counter・CRC16 を付加。Com/Rte のどちらにも依存しない純粋な検証/付与ライブラリ（Profile01 版の `E2E_P01.c` も参考実装として残っている） |
-|  | Com | シグナルのビット単位パック／アンパックと送受信タイミング制御を担う（TxModeMode: DIRECT/MIXED/PERIODIC・TMS・MDT・受信フィルタ・I-PDU Group・Signal Gateway 等）。E2E には一切関知しない（E2E Transformer 方式、Com.c 本体に E2E は埋め込まれない） |
-|  | PduR | 受信 PDU を Com/CanTp/SecOC へ（1つの RxPduId から複数宛先への配信にも対応）、送信 PDU を CanIf へルーティング。通信スタックの配管役。TX 経路は既定では `CanIf_Transmit()` へ直接転送するが、`PduR_TxRoutingPathType.TransmitOverrideFct` が設定されている場合は中間モジュール（SecOC）へ委譲できるよう汎用化されている（既存の全 TX パスはこのフィールドを使わないため無変更） |
-|  | CanIf | CAN ID ↔ 論理 PDU のマッピング。上位層は CAN ID を知らず PDU ID で通信。設定 DLC 未満の受信 L-PDU は上位層へ渡さず棄却する（SWS_CANIF_00026 のデータ長チェック） |
-|  | Can | MCP2515 の送受信・Bus-Off 検出・CAN バス活動によるウェイクアップ検出を担う MCAL 最下層。HW を直接操作する唯一のモジュール |
-| HAL | Can_Hw | MCP2515 / mcp_can C++ ラッパー（RX 割り込み登録 `Can_Hw_AttachRxIsr` を含む） |
+このスタックを構成する各モジュール（Rte/E2EMon/E2EXf/E2E/Com/PduR/CanIf/Can/Can_Hw）の
+本プロジェクトでの役割は、上記「[モジュール一覧](#module-list)」表の「概要」列（リンク先の
+`docs/modules/` 配下の個別ノート）を参照してください。
 
 以降、まず Tx/Rx 共通の CAN フレーム仕様を示し、続けて Tx/Rx それぞれの関数コールチェーン
 （Tx: Com → PduR → CanIf → Can、Rx: Can → CanIf → PduR → Com）とレイヤ間の多層防御を
@@ -1035,13 +1027,9 @@ Dem は故障情報を DTC として管理し、NvM 経由で EEPROM に永続�
 FiM は Dem が確定した DTC をもとにアプリ機能の実行許可を判定します。
 診断フレームはアプリデータ（0x100 / 0x110 / 0x200）とは独立した CAN ID（0x7E0 / 0x7E8）で通信します。
 
-| 層 | モジュール | 本プロジェクトでの役割 |
-|---|---|---|
-| BSW | CanTp | ISO 15765-2 のフレーム分割（FF/CF）と再組立。8 バイトを超える UDS 応答を実現 |
-|  | Dcm | UDS 診断サービス処理（SID 0x10 / 0x11 / 0x14 / 0x19 / 0x22 / 0x27 / 0x28 / 0x2E / 0x2F / 0x31 / 0x3E）。S3 タイマでセッションを自動失効。SID×セッション許可テーブルで 0x14/0x27/0x28/0x2E/0x2F/0x31 を extendedSession 限定とし、SecurityAccess (0x27) でシード・キー認証保護。0x2E は要求が7バイト超のため CanTp の複数フレーム要求受信を実機検証。0x2F (IOControl) は Rte 層でランプ出力を ASW から奪って強制する診断専用オーバーライド。0x28 (CommunicationControl) は Com/Nm の送受信を個別に有効/無効化する |
-|  | Dem | 診断イベントを DTC として管理。カウンタベースのデバウンスで確定し、NvM 経由で EEPROM に永続化。デバウンス確定 FAILED 時に FreezeFrame（RAM のみ）を記録し、ExtendedData（故障確定回数、NvM 永続化）を+1。クリーンな操作サイクルを1回経過すると PendingDTC を自動解除し、再故障せず複数回の操作サイクルを経ると経年回復（Aging）で CONFIRMED を自動解除 |
-|  | FiM | Dem が確定（CONFIRMED）した DTC をもとにアプリ機能（FID）の実行許可を判定。100ms 周期で再評価し、結果を ASW へ `Rte_Call_FiM_GetFunctionPermission` で公開 |
-|  | NvM | EEPROM の読み書きを抽象化。Dem は EEPROM アドレスを直接知らない。各ブロックに CRC8 を付加して破損を検出し、不一致時は ROM デフォルト値（NvM_RestoreBlockDefaults）へ自動復元。ブロックごとに冗長化（`NvMBlockManagementType=NVM_BLOCK_REDUNDANT` 相当、`Redundant` フラグ）を選択でき、片面が破損してももう片面から自己修復できる（DEM_EXTENDED で使用）。実際の物理バイト書き込みは MemIf 経由で Fee へ委譲し、NvM 自身はブロック・CRC・冗長化という「意味」のレイヤーのみを扱う（1バイトずつの非同期書き込み進行は Fee の責務） |
+このスタックを構成する各モジュール（CanTp/Dcm/Dem/FiM/NvM）の本プロジェクトでの役割は、
+上記「[モジュール一覧](#module-list)」表の「概要」列（リンク先の `docs/modules/` 配下の
+個別ノート）を参照してください。
 
 <a id="uds-diag-comm"></a>
 #### UDS 診断通信（ISO 14229-1 / ISO 15765-2）
@@ -1304,14 +1292,9 @@ FID↔イベント対応表・判定フロー・フェールセーフ既定値�
 ECU の起動・シャットダウンのライフサイクルと、タスク制御・ソフトウェア監視を担うモジュール群です。
 EcuM が状態遷移を決定し、BswM がその状態に応じたタスクの有効・無効を制御し、WdgM がタスク内部の動作を監視します。
 
-| 層 | モジュール | 本プロジェクトでの役割 |
-|---|---|---|
-| BSW | EcuM | ECU ライフサイクルを STARTUP → RUN → POST_RUN → SHUTDOWN の状態マシンで管理。`EcuM_RequestRUN` / `EcuM_ReleaseRUN` で RUN フェーズを調停。SHUTDOWN は CAN バスのウェイクアップにより常に RUN へ復帰可能（実機リセットが必要な終端状態は存在しない） |
-|  | BswM | EcuM / ComM のモード変化をルールテーブルで受け取り `Os_SetTaskActive()` でタスクを有効・無効化するルールエンジン。POST_RUN 中はアプリタスクのみ停止し BSW タスクは継続。`BswMPduGroupSwitch`（[SWS_BswM_00273]）相当のアクションも持ち、RUN/POST_RUN で Com の「テレメトリ」I-PDU Group（E2EHealthStatus）を起動/停止する。`BswMLogicalExpression`（[SWS_BswM_00808]）の簡略版として AND/OR の複合条件ルールにも対応し、「EcuM==RUN AND ComM==FULL_COMMUNICATION」でテレメトリ開始、「ComM==SILENT_COMMUNICATION OR ComM==NO_COMMUNICATION」で停止する |
-|  | WdgM | Supervised Entity の Alive Supervision（呼び出し回数を6000msごとに評価）・Logical Supervision（チェックポイント順序）・Deadline Supervision（チェックポイント間の経過時間）を独立したステータスで管理。判定は6000ms周期、実HWウォッチドッグへのリフレッシュは別途1000ms周期（WdgM_TriggerHwWatchdog）で行い、異常時はリフレッシュを止めて実際にMCUをリセットする。実際の HW 有効/無効/リフレッシュは WdgIf 経由で Wdg（下位ドライバ）に委譲し、WdgM 自身は判定ロジックのみを持つ |
-|  | ComM | CAN バスの通信モード（NO_COM / SILENT_COM / FULL_COM）を管理し CanSM へ要求。`ComM_BusSMIndication` で EcuM の RUN 要求を操作。複数ユーザ（App_EngineManager=COMM_USER_0, Dcm=COMM_USER_1）の要求を最も通信レベルの高いモードへ集約する調停ロジックを持つ。両ユーザが NO_COM を要求したときのみ実際にボランタリスリープへ落ちる |
-|  | CanSM | Bus-Off 検出直後（回復試行の前）に `ComM_BusSMIndication(SILENT_COMMUNICATION)` を呼び、ComM のチャネル状態が回復完了まで FULL_COM のまま古い情報として残ることを防ぐ（SWS_CanSM_00521。SILENT_COM は EcuM の RUN を維持するため回復中も RUN は落ちない）。受け付ける Bus-Off はコントローラが物理的に稼働中の状態（FULL_COM、および Nm の Bus-Sleep Mode 到達待ちで HW が稼働継続する NO_COM_PENDING_SLEEP）のみで、回復シーケンスは L1/L2 バックオフ（SWS_CanSM_00514/00515 準拠）で実施し、試行回数が `CANSM_BUSOFF_L1_TO_L2_COUNT` を超えるまでは短い周期（L1）でリトライし、超えたら Dem へ DTC を報告（limit=1 のため即座に確定）した上で長い周期（L2）へ切り替えて無期限にリトライを継続する（回復を諦めて停止する状態は存在しない）。再起動試行のたびに、Bus-Off 発生時点の状態（FULL_COM か NO_COM_PENDING_SLEEP か）へ復帰させる（`CanSM_BusOffFromPendingSleep`、後者の場合は誤って FULL_COM へ戻さない）。ComM の NO_COM 要求によるボランタリスリープでは即座にはスリープせず、Nm（CanNm 状態機械）が Bus-Sleep Mode へ到達した通知（`CanSM_NmBusSleepMode()`）を受けてから `Can_SetControllerMode(CAN_T_SLEEP)` で実 HW を実際にスリープさせる（協調スリープ、詳細は Nm セクション参照）。`CanSM_ControllerWakeup()` による復帰経路を持ち、復帰は即座に確定せず、ウェイクアップ検証（Wakeup Validation Protocol 相当）により有効な CAN フレーム受信を確認してから FULL_COM へ確定する |
-|  | Nm | CanNm 状態機械（Network Mode の Repeat Message/Normal Operation/Ready Sleep の3内部状態、Prepare Bus-Sleep Mode、Bus-Sleep Mode）を実装。`ComM_BusSMIndication()` が呼ぶ `Nm_NetworkRequest()`/`Nm_NetworkRelease()` を契機に自律的に状態遷移し、NM-Timeout/Repeat Message/Wait-Bus-Sleep の3タイマで駆動する。Bus-Sleep Mode へ到達すると `CanSM_NmBusSleepMode()` を呼び、CanSM はこの通知を受けて初めて CAN コントローラを物理スリープさせる（協調スリープ。他ノードの NM フレーム受信が続く間は実際にはスリープしない）。PduR/Com を経由せず `CanIf_Transmit`/`CanIf_RxIndication` を直接やり取りする点が実車の CanNm と同じ。シグナル値を運ばないため E2E 保護は付与しない |
+このスタックを構成する各モジュール（EcuM/BswM/WdgM/ComM/CanSM/Nm）の本プロジェクトでの
+役割は、上記「[モジュール一覧](#module-list)」表の「概要」列（リンク先の `docs/modules/`
+配下の個別ノート）を参照してください。
 
 <a id="processing-flow-ecu"></a>
 #### 処理の流れ（コールチェーン）
@@ -1586,12 +1569,9 @@ SW-C はピン番号を直接知りません。RTE の Client/Server ポート�
 IoHwAb が Dio / Adc チャネルへ変換します。ピン方向の初期設定は Port が担い、Dio は値の読み書きのみ、
 Adc はアナログ入力の読み取りのみを行います。
 
-| 層 | モジュール | 本プロジェクトでの役割 |
-|---|---|---|
-| BSW | IoHwAb | Dio チャネル番号を隠蔽し SW-C に論理的な LED / ボタン / ADC API を提供。10ms 周期でデバウンス（40ms 確定）・ボタン固着検出・ADC 電圧低下を Dem 報告 |
-|  | Dio | `Dio_WriteChannel` / `Dio_ReadChannel` で GPIO 値を読み書きする MCAL |
-|  | Port | `Port_Init` でピン方向（OUTPUT / INPUT_PULLUP）を設定する MCAL |
-|  | Adc | `Adc_ReadChannel` で 10-bit アナログ生値（0–1023）を読み取る MCAL |
+このスタックを構成する各モジュール（IoHwAb/Dio/Port/Adc）の本プロジェクトでの役割は、
+上記「[モジュール一覧](#module-list)」表の「概要」列（リンク先の `docs/modules/` 配下の
+個別ノート）を参照してください。
 
 ```
 SW-C (App_EngineManager / App_WarningIndicator)
@@ -1639,10 +1619,9 @@ ASW（Application Software）層の SW-C（Software Component）2 つで構成�
 各 SW-C は RTE ポート経由でシグナルを受け取り、IoHwAb ポート経由で LED / ボタンを操作します。
 EcuM の POST_RUN 遷移時に Rte_Engine タスクと Rte_Warning タスクが停止し、SW-C も停止します。
 
-| 層 | モジュール | 本プロジェクトでの役割 |
-|---|---|---|
-| ASW | App_EngineManager | エンジン状態遷移（OFF / STARTING / RUNNING / FAULT）・DTC 登録・CAN TX 要求。OFF 継続を検知して ComM へ通信不要（NO_COM）を要求するボランタリスリープ判断も担う |
-|  | App_WarningIndicator | 3 LED 独立制御（D6=RUNNING / D7=FAULT 点滅 / D8=ABS） |
+このスタックを構成する各モジュール（App_EngineManager/App_WarningIndicator）の本プロジェクト
+での役割は、上記「[モジュール一覧](#module-list)」表の「概要」列（リンク先の `docs/modules/`
+配下の個別ノート）を参照してください。
 
 <a id="engine-state-machine"></a>
 #### エンジン状態遷移

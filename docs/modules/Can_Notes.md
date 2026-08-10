@@ -2,6 +2,9 @@
 
 > [README](../../README.md) の「[CAN 通信スタック](../../README.md#can-stack)」節から分離。
 
+MCP2515 の送受信・Bus-Off 検出・CAN バス活動によるウェイクアップ検出を担う
+MCAL 最下層。HW を直接操作する唯一のモジュール。
+
 <a id="can-tx-async-confirm"></a>
 ## TX 確認の非同期化（`Can_MainFunction_Write`）
 
@@ -129,3 +132,7 @@ NOT_OK を返すまで継続する。MCP2515 の INT はレベル方式（未読
 > しなくてもポーリング側だけで正しく動作する。単一の検出経路（割り込みのみ）に
 > 正しさを委ねず、独立したポーリングでも動作を保証する設計にした経緯は
 > [DEVLOG: Can RX 割り込み化の実機検証で得られた教訓](../DEVLOG.md#can-rx-割り込み化の実機検証で得られた教訓) を参照。
+
+## Can_Hw（下位ドライバ実装）
+
+MCP2515 / `mcp_can` C++ ラッパー（RX 割り込み登録 `Can_Hw_AttachRxIsr` を含む）。
