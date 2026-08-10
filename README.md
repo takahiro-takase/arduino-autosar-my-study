@@ -218,7 +218,7 @@ HAL ─── Can_Hw / Dio_Hw / Port_Hw / Adc_Hw / Mcu_Hw / Fee_Hw / Wdg_Hw / Gp
 |  | FiM | 11 | SWS_FiM<br>主要機能実装<br>(一部簡略化) |  |
 |  | Gpt | 100 | SWS_Gpt<br>主要機能実装<br>(一部簡略化) |  |
 |  | IoHwAb | 254 | AUTOSAR 抽象化層 | — |
-|  | KeyM | 116<br>(仮) | SWS_KeyManager(Release 4.4.0)<br>主要機能実装<br>(一部簡略化) |  |
+|  | KeyM | 116<br>(仮) | SWS_KeyManager<br>(Release 4.4.0)<br>主要機能実装<br>(一部簡略化) |  |
 |  | Mcu | 101 | SWS_Mcu<br>主要機能実装<br>(一部簡略化) |  |
 |  | MemIf | 22 | SWS_MemIf<br>パススルー<br>(下位が1個のため) |  |
 |  | Nm | 31 | SWS_CANNM<br>主要機能実装 |  |
