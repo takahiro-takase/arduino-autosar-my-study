@@ -102,8 +102,9 @@ EEPROM.write(0x0DU, EEPROM.read(0x0DU) ^ 0xFFU);  // DEM_AGING ブロックの�
 協調スケジューラ全体が停止します。この停止を放置すると `Dem_ReportErrorStatus()`
 が新規 DTC 確定のたびに WdgM の Deadline Supervision を巻き込んで HW
 ウォッチドッグリセットを引き起こしうるため（経緯は
-[DEVLOG](../DEVLOG.md#nvm-非同期書き込みジョブキューへの変更経緯) 参照）、
-ブロッキングそのものを解消する非同期ジョブ方式を採用しています。
+後述の「[開発の経緯](#非同期書き込みジョブキューへの変更経緯)」、および
+[`WdgM_Notes.md`](./WdgM_Notes.md#deadline-supervision-上限緩和と-os_schedulerstep-のバグ)
+参照）、ブロッキングそのものを解消する非同期ジョブ方式を採用しています。
 
 **NvM と MemIf/Fee の責務分担（重要）**: 当初はこの「1 回の呼び出しにつき
 物理バイトを 1 個だけ書く」ジョブキューを NvM.c が自前で持っていましたが、
@@ -247,3 +248,25 @@ EEPROM.write(0x18U, EEPROM.read(0x18U) ^ 0xFFU);  // DEM_EXTENDED プライマ�
   削除し Renesas RA 専用だが、この構造はそのまま残している）
 - `Fee_WriteImmediate()`（実仕様の `FeeImmediateData` ブロック属性相当）も
   同様に本プロジェクト独自の API
+
+## 開発の経緯（実機で見つかった不具合・設計変更）
+
+> 現在の仕様を理解するだけなら読む必要はありません。実機検証で見つかった
+> 不具合や、その結果としての設計変更の経緯を時系列でまとめています。
+
+### 非同期書き込みジョブキューへの変更経緯
+
+当初 `NvM_WriteBlock()` は EEPROM への書き込みも含めて完全に同期処理だった。
+Renesas RA の EEPROM ライブラリ（内蔵フラッシュのエミュレーション）は
+1 バイトの書き込みでも消去・書き込みサイクルを伴うため、9 バイト超のブロック
+（DEM_STATUS 等）をまとめて同期的に書くと数百 ms 協調スケジューラ全体が
+停止することが実機で判明した。この停止は `Dem_ReportErrorStatus()` が
+新規 DTC 確定のたびに発生し、WdgM の Deadline Supervision を巻き込んで
+実際に HW ウォッチドッグリセットを引き起こしていた（詳細は
+[`WdgM_Notes.md`](./WdgM_Notes.md#deadline-supervision-上限緩和と-os_schedulerstep-のバグ)
+参照）。
+
+閾値を広げる対症療法ではなく、ブロッキングそのものを解消するため、実際の
+AUTOSAR NvM と同じ非同期ジョブキュー方式（1 回の呼び出しで 1 バイトだけ書く、
+10ms 周期の `NvM_MainFunction()`）へ変更した。同じ考え方は CAN の TX 確認
+（`Can_MainFunction_Write`）の非同期化にも踏襲されている。

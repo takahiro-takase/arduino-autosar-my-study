@@ -7,8 +7,8 @@
 
 # AUTOSAR specification documents (copyright - do not redistribute)
 docs/*.pdf
-docs/4.3.1/*.pdf
-docs/4.4.0/*.pdf
+docs/autosar/4.3.1/*.pdf
+docs/autosar/4.4.0/*.pdf
 
 # Python
 __pycache__/

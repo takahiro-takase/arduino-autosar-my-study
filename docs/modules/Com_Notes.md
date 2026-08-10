@@ -943,6 +943,44 @@ ComDataInvalidAction 等のゲートを経由しなくても）安全です。�
 [NNNNms] INFO  Can_Hw: TX OK id=0x230 dlc=1 [01]
 ```
 
+## 開発の経緯（実機で見つかった不具合・設計変更）
+
+> 現在の仕様を理解するだけなら読む必要はありません。実機検証で見つかった
+> 不具合や、その結果としての設計変更の経緯を時系列でまとめています。
+
+### CommunicationControl 実装時の仕様不整合
+
+UDS CommunicationControl (SID 0x28) の実装時、2 つの仕様不整合が見つかった
+（現在の仕様は [`Dcm_Notes.md`](./Dcm_Notes.md#communicationcontrolsid-0x28) 参照）。
+
+**Rx 無効中の受信デッドライン監視**: 当初、`Com_MainFunction()`（受信デッドライン
+監視、100ms 周期）は `Com_RxEnabled` を一切参照していなかった。SWS_Com_00684/
+SWS_Com_00685（`Com_IpduGroupStop` により I-PDU が止められた間は受信処理だけでなく
+デッドライン監視自体も無効化することを要求）に反しており、意図的に
+CommunicationControl で受信を止めているだけなのに、`TimeoutMs` を超えて
+無効化し続けると `Com_RxTimedOut` が誤って立ち、上位層（RTE/ASW）へ
+「通信異常」として伝わってしまっていた。`Com_MainFunction()` は
+`Com_RxEnabled==0` の間は監視自体を評価しないよう修正した。
+
+あわせて、再度有効化（`RxEnabled` が 0→1）した瞬間に全 RX I-PDU の
+`Com_RxLastMs`（最終受信時刻）と `Com_RxTimedOut` をリセットするようにした
+（SWS_Com_00787: `Com_IpduGroupStart` 時にデッドライン監視タイマを
+再始動する要求に対応）。これをしないと、`TimeoutMs`（EngineInfo/AbsInfo
+とも 5000ms）以上の時間受信を無効化していた場合、再有効化した直後の
+`Com_MainFunction()` 呼び出しで「無効化前の古い `Com_RxLastMs`」のまま
+即座にタイムアウト判定されてしまう（実際にはまだ新しいフレームを
+1 つも受信できていない段階で）。
+
+**Tx 無効中の送信トリガー保持**: 当初、`Com_TriggerIPDUSend()` は Tx 抑制中も
+`Com_TxUpdatePending`・周期フロアのカウンタをあえて保持し、「再度有効化された
+瞬間に無効化中の更新が送信される」設計にしていた（コメント上は意図的な設計と
+していたが、仕様とは逆方向の判断だった）。しかし SWS_Com_00777「停止中の
+I-PDU の送信要求はキャンセルしなければならない」、および SWS_Com_00334 の
+説明文「停止中に発生した送信トリガーは保持されず、再開しても古いトリガーで
+即座に送信されることはない」に反していた。`Com_TriggerIPDUSend()` は
+Tx 抑制中を検出した時点で `Com_TxUpdatePending`/`Com_TxCyclesSinceSent` を
+破棄するよう修正した。
+
 `uds_tester` の「ImmobilizerStatus (0x230, Signal Gateway)」受信モニターも
 `(UNLOCK)`/`(LOCK)` を表示し、`ImmobilizerCmd` の送信直後に追従して更新される
 ことが確認できます。

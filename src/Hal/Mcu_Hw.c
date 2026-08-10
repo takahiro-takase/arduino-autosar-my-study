@@ -10,9 +10,9 @@
  *              Mcu_Hw_ResetReasonType.External は常に 0 を返す。
  *            - PORF（Power-On Reset フラグ）が実機で USB 抜き差し後も
  *              常に 0 を返す事象を確認済み・原因未特定（ブートローダが
- *              先にレジスタを消費している可能性等。詳細は docs/DEVLOG.md
- *              の「Mcu: Power-On Reset フラグ (PORF) が実機で検出されない」
- *              参照）。
+ *              先にレジスタを消費している可能性等。詳細は
+ *              docs/modules/Mcu_Notes.md の「Power-On Reset フラグ (PORF)
+ *              が実機で検出されない」参照）。
  *            - 各フラグのクリア手順 (1 であることを確認して 0 を書く) は
  *              デバイスヘッダのレジスタコメントに基づく。PRCR (レジスタ
  *              保護) のロック対象にはリセットステータスレジスタは含まれて

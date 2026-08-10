@@ -11,7 +11,7 @@
  *            AUTOSAR の実機 OS は OsCounter を HW タイマ割り込みで駆動する
  *            のが本来の姿であるため、Os 専用の Gpt チャネルを新設し
  *            Gpt_GetTimeElapsed(OS_GPT_CHANNEL) を時間源とする。ただし
- *            docs/DEVLOG.md「Can: RX 割り込み化の実機検証で得られた教訓」の
+ *            docs/modules/Can_Notes.md「RX 割り込み化の実機検証で得られた教訓」の
  *            とおり、本プロジェクトでは実機で割り込みが期待どおり発火しない
  *            事象を一度経験している。Os の時間源が完全に止まると
  *            WdgM_TriggerHwWatchdog を含む全タスクが二度と発火しなくなり、
@@ -110,8 +110,8 @@ static unsigned long Os_GetTimeMs(void)
  * \details OS_TICK_CROSSCHECK_PERIOD_MS ごとに、その期間中の Gpt ティック
  *          進み幅と millis() 進み幅を比較する。millis() は Arduino コアが
  *          Gpt とは別系統の HW タイマ割り込みで駆動しており、Gpt 側の
- *          割り込みだけが停止する事象（docs/DEVLOG.md の CAN RX 割り込みの
- *          教訓と同種。Gpt_Init() 済みのはずの Os 専用チャネルが
+ *          割り込みだけが停止する事象（docs/modules/Can_Notes.md の CAN RX
+ *          割り込みの教訓と同種。Gpt_Init() 済みのはずの Os 専用チャネルが
  *          Gpt_StartTimer() 時点で HW タイマを確保できず起動に失敗した
  *          場合も、Gpt ティックが最初から一切進まないため同じ経路で
  *          検知される）を検出するための、独立した参照時計として使う。

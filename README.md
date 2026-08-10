@@ -1306,7 +1306,7 @@ Mode と自律的に遷移し（他ノードからの NM フレーム受信が�
 > ことはありません（`Can_T_STOP`/`Can_T_START` の間を往復するのみ）。AUTOSAR
 > 仕様（SWS_CanSM_00514/00515/00636）には「回復を諦めて二度と復帰しない」状態は
 > 存在せず、この無期限リトライ設計に至った経緯は
-> [DEVLOG](docs/DEVLOG.md#cansm-bus-off-回復断念設計の撤去) を参照してください。
+> [`CanSM_Notes.md`](docs/modules/CanSM_Notes.md#bus-off-回復断念設計の撤去) を参照してください。
 
 ##### ボランタリスリープとウェイクアップ
 
