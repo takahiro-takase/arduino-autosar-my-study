@@ -194,7 +194,7 @@ HAL ─── Can_Hw / Dio_Hw / Port_Hw / Adc_Hw / Mcu_Hw / Fee_Hw / Wdg_Hw / Gp
 | ASW | App_<br>EngineManager | — | — | エンジン状態遷移 SWC (RUNNING/FAULT 等) |
 |  | App_<br>WarningIndicator | — | — | 警告灯制御 SWC (LED 3灯) |
 | RTE | Rte | — | — | SWC 間シグナル仲介 (RTE ミラー) |
-| OS | Os | — | SWS_Os<br>主要機能実装<br>(一部意図的に簡略化) | タイムトリガスケジューラ |
+| OS | Os | — | SWS_Os<br>主要機能実装<br>(一部意図的に簡略化) | タイムトリガスケジューラ<br>（[詳細](docs/modules/Os_Notes.md)） |
 | BSW | Adc | 123 | SWS_Adc<br>主要機能実装<br>(一部意図的に簡略化) | アナログ入力ドライバ |
 |  | BswM | 42 | SWS_BswM<br>主要機能実装<br>(一部意図的に簡略化) | BSW モード管理・状態遷移の一元制御 |
 |  | Can | 80 | SWS_Can<br>主要機能実装 | CAN コントローラドライバ (MCP2515) |
@@ -203,32 +203,32 @@ HAL ─── Can_Hw / Dio_Hw / Port_Hw / Adc_Hw / Mcu_Hw / Fee_Hw / Wdg_Hw / Gp
 |  | CanTp | 35 | SWS_CanTp<br>主要機能実装<br>(一部意図的に簡略化) | ISO 15765-2 トランスポートプロトコル |
 |  | Com | 50 | SWS_Com<br>主要機能実装 | シグナルベース通信管理 |
 |  | ComM | 12 | SWS_ComM<br>主要機能実装 | 通信マネージャ (チャネル状態集約) |
-|  | CryIf | 112 | SWS_CryptoInterface<br>パススルー<br>(下位が1個のため) | 暗号ドライバへのルーティング層 |
-|  | Crypto | 114 | SWS_CryptoDriver<br>主要機能実装<br>(一部意図的に簡略化) | 暗号処理ドライバ (AES-128-CMAC) |
-|  | Csm | 110 | SWS_CryptoServiceManager<br>主要機能実装<br>(一部意図的に簡略化) | 暗号サービスマネージャ |
+|  | CryIf | 112 | SWS_CryptoInterface<br>パススルー<br>(下位が1個のため) | 暗号ドライバへのルーティング層<br>（[詳細](docs/modules/CryIf_Notes.md)） |
+|  | Crypto | 114 | SWS_CryptoDriver<br>主要機能実装<br>(一部意図的に簡略化) | 暗号処理ドライバ (AES-128-CMAC)<br>（[詳細](docs/modules/Crypto_Notes.md)） |
+|  | Csm | 110 | SWS_CryptoServiceManager<br>主要機能実装<br>(一部意図的に簡略化) | 暗号サービスマネージャ<br>（[詳細](docs/modules/Csm_Notes.md)） |
 |  | Dcm | 53 | SWS_Dcm<br>主要機能実装<br>(一部意図的に簡略化) | UDS 診断通信マネージャ |
 |  | Dem | 54 | SWS_Dem<br>主要機能実装 | 診断イベント管理 (DTC) |
-|  | Det | — | SWS_Det<br>主要機能実装<br>(一部意図的に簡略化) | 開発時エラー検出・ロギング |
+|  | Det | — | SWS_Det<br>主要機能実装<br>(一部意図的に簡略化) | 開発時エラー検出・ロギング<br>（[詳細](docs/modules/Det_Notes.md)） |
 |  | Dio | — | SWS_Dio<br>主要機能実装<br>(一部意図的に簡略化) | デジタル入出力ドライバ |
 |  | E2E | — | SWS_E2E<br>主要機能実装<br>(一部意図的に簡略化) | エンドツーエンド保護ライブラリ (Profile01/05) |
 |  | E2EXf | 176 | SWS_E2ELibrary 12.4<br>(E2E Transformer)<br>主要機能実装<br>(一部意図的に簡略化) | E2E トランスフォーマ (Rte⇔E2E ライブラリ統合) |
 |  | E2EMon | — | — (独自 CDD 相当) | ネットワーク健全性モニタ (独自 CDD) |
 |  | EcuM | 10 | SWS_EcuStateManager<br>主要機能実装 | ECU ステートマネージャ (起動・シャットダウン制御) |
-|  | Fee | 21 | SWS_Fee<br>主要機能実装<br>(一部意図的に簡略化) | フラッシュエミュレーション EEPROM ドライバ |
+|  | Fee | 21 | SWS_Fee<br>主要機能実装<br>(一部意図的に簡略化) | フラッシュエミュレーション EEPROM ドライバ<br>（[詳細](docs/modules/Fee_Notes.md)） |
 |  | FiM | 11 | SWS_FiM<br>主要機能実装<br>(一部意図的に簡略化) | 機能抑止マネージャ |
-|  | Gpt | 100 | SWS_Gpt<br>主要機能実装<br>(一部意図的に簡略化) | 汎用タイマドライバ |
+|  | Gpt | 100 | SWS_Gpt<br>主要機能実装<br>(一部意図的に簡略化) | 汎用タイマドライバ<br>（[詳細](docs/modules/Gpt_Notes.md)） |
 |  | IoHwAb | 254 | AUTOSAR 抽象化層 | ボタン入力・センサ電圧のハードウェア抽象化 |
-|  | KeyM | 116<br>(仮) | SWS_KeyManager<br>(Release 4.4.0)<br>主要機能実装<br>(一部意図的に簡略化) | 鍵管理マネージャ |
-|  | Mcu | 101 | SWS_Mcu<br>主要機能実装<br>(一部意図的に簡略化) | マイコン初期化・リセット要因管理 |
-|  | MemIf | 22 | SWS_MemIf<br>パススルー<br>(下位が1個のため) | 不揮発メモリ抽象化層 |
+|  | KeyM | 116<br>(仮) | SWS_KeyManager<br>(Release 4.4.0)<br>主要機能実装<br>(一部意図的に簡略化) | 鍵管理マネージャ<br>（[詳細](docs/modules/KeyM_Notes.md)） |
+|  | Mcu | 101 | SWS_Mcu<br>主要機能実装<br>(一部意図的に簡略化) | マイコン初期化・リセット要因管理<br>（[詳細](docs/modules/Mcu_Notes.md)） |
+|  | MemIf | 22 | SWS_MemIf<br>パススルー<br>(下位が1個のため) | 不揮発メモリ抽象化層<br>（[詳細](docs/modules/MemIf_Notes.md)） |
 |  | Nm | 31 | SWS_CANNM<br>主要機能実装 | ネットワークマネジメント (CAN NM) |
 |  | NvM | 20 | SWS_NvM<br>主要機能実装<br>(一部意図的に簡略化) | 不揮発メモリマネージャ |
 |  | PduR | 51 | SWS_PduR<br>主要機能実装<br>(一部意図的に簡略化) | PDU ルーティング層 |
 |  | Port | — | SWS_Port<br>主要機能実装<br>(一部意図的に簡略化) | ピン設定管理 |
-|  | SchM | — | SWS_SchM<br>主要機能実装<br>(一部意図的に簡略化) | 排他制御 (スケジューラマネージャ) |
-|  | SecOC | 150 | SWS_SecureOnboard<br>Communication<br>主要機能実装<br>(一部意図的に簡略化) | メッセージ認証 (改ざん・なりすまし対策) |
-|  | Wdg | 102 | SWS_Wdg<br>主要機能実装<br>(一部意図的に簡略化) | ウォッチドッグドライバ |
-|  | WdgIf | 43 | SWS_WdgIf<br>パススルー<br>(下位が1個のため) | ウォッチドッグ抽象化層 |
+|  | SchM | — | SWS_SchM<br>主要機能実装<br>(一部意図的に簡略化) | 排他制御 (スケジューラマネージャ)<br>（[詳細](docs/modules/SchM_Notes.md)） |
+|  | SecOC | 150 | SWS_SecureOnboard<br>Communication<br>主要機能実装<br>(一部意図的に簡略化) | メッセージ認証 (改ざん・なりすまし対策)<br>（[詳細](docs/modules/SecOC_Notes.md)） |
+|  | Wdg | 102 | SWS_Wdg<br>主要機能実装<br>(一部意図的に簡略化) | ウォッチドッグドライバ<br>（[詳細](docs/modules/Wdg_Notes.md)） |
+|  | WdgIf | 43 | SWS_WdgIf<br>パススルー<br>(下位が1個のため) | ウォッチドッグ抽象化層<br>（[詳細](docs/modules/WdgIf_Notes.md)） |
 |  | WdgM | 13 | SWS_WdgM<br>主要機能実装 | ウォッチドッグマネージャ (生存監視) |
 | HAL | Can_Hw | — | — | MCP2515 SPI ドライバ |
 |  | Dio_Hw | — | — | Arduino `digitalWrite`/`digitalRead` ラッパー |
@@ -240,34 +240,12 @@ HAL ─── Can_Hw / Dio_Hw / Port_Hw / Adc_Hw / Mcu_Hw / Fee_Hw / Wdg_Hw / Gp
 |  | Wdg_Hw | — | — | 実 HW ウォッチドッグ制御 |
 |  | Gpt_Hw | — | — | Renesas RA `FspTimer` ラッパー |
 
-> 「仕様準拠度」の凡例: **主要機能実装**=対象 SWS 仕様の主要要求を実質的に満たす／**主要機能実装(一部意図的に簡略化)**=中核機能は実装済みだが特定の API・モードを対応除外／**パススルー**=下位ドライバが1個のみのため実質的に素通し／**—**=対応する AUTOSAR 仕様が無い（ASW・RTE・HAL 層、または独自 CDD 相当）。各モジュールの具体的な簡略化内容は下表または各モジュール詳細節を参照。
+> 「仕様準拠度」の凡例: **主要機能実装**=対象 SWS 仕様の主要要求を実質的に満たす／**主要機能実装(一部意図的に簡略化)**=中核機能は実装済みだが特定の API・モードを対応除外／**パススルー**=下位ドライバが1個のみのため実質的に素通し／**—**=対応する AUTOSAR 仕様が無い（ASW・RTE・HAL 層、または独自 CDD 相当）。各モジュールの具体的な簡略化内容は上表「概要」列のリンク先または各モジュール詳細節を参照。
 
-「本プロジェクトでの役割」のうち、複数モジュールをまとめた詳細節（／診断スタック／ECU 管理層／IO スタック／アプリケーション）を持つものは、その節の先頭に個別の表として移動しました。以下はそれ以外（詳細節を持たないモジュール）の一覧です。
-
-| モジュール | 本プロジェクトでの役割 |
-|---|---|
-| Os | タイムトリガスケジューラ。タスクごとに周期を設定し `Os_SchedulerStep()` で到来タスクを順次実行。時間源は Os 専用の Gpt チャネル（`GPT_CHANNEL_1`、詳細は [`docs/modules/EcuM_Notes.md`](docs/modules/EcuM_Notes.md) の「Os のスケジューラティック」参照） |
-| CryIf | Csm と Crypto Driver の間のルーティング層。`CryIf_ProcessJob()`（実 AUTOSAR は複数 Crypto Driver Object への振り分けを担う）は、本プロジェクトが Crypto Driver を1個しか持たないため実質パススルーで `Crypto_ProcessJob()` へ委譲する（CanIf が単一 CAN コントローラに固定しているのと同じ簡略化） |
-| Crypto | Csm/CryIf/Crypto レイヤの最下層。鍵テーブル（`Crypto_PBCfg.c`）と実際の暗号計算（AES-128-CMAC、自前実装）を保持する唯一のモジュール。`Crypto_ProcessJob()` がジョブの `service`（`CRYPTO_MACGENERATE`/`CRYPTO_MACVERIFY`）に応じて MAC を生成、または定数時間比較で検証する（MAC 検証のタイミングサイドチャネル対策はここに実装。旧実装では SecOC.c 内にあったロジックを責務として正しい層へ移設した） |
-| Csm | SecOC が唯一直接呼ぶ暗号スタックの入口。`Csm_MacGenerate()`/`Csm_MacVerify()` が `jobId`（`Csm_PBCfg.c` の `Csm_JobConfigData`）から実行すべきプリミティブ種別と鍵 ID を解決し、`Crypto_JobType` ジョブを組み立てて `CryIf_ProcessJob()` へ委譲する。`Csm_MacVerify()` の `macLength` はビット単位（[SWS_Csm_01050]）、`Csm_MacGenerate()` の `macLengthPtr` はバイト単位（[SWS_Csm_00982]）という実仕様の非対称性を踏襲し、Csm 内でビット→バイト変換する。`Csm_KeyElementSet()`/`Csm_KeySetValid()`（KeyM が呼ぶ鍵操作 API）は CryIf へのパススルー |
-| Det | `DET_LOG*` マクロ経由でタイムスタンプ付きログを Serial に出力するデバッグ用ブリッジ。加えて標準準拠の `Det_ReportError()`（[SWS_Det_00009]）も実装。詳細は下記「[DET 準拠](#det-compliance)」節を参照 |
-| Fee | フラッシュエミュレーション EEPROM（Renesas RA `EEPROM.h`）向けの下位ドライバ。`Fee_Write()` は物理アドレス・データ・長さを受け取ってジョブを開始するだけで即座に返り、実際の書き込みは `Fee_MainFunction()` が 1 回の呼び出しにつき 1 バイトだけ進める（消去・書き込みサイクルによるブロッキングで WdgM の Deadline Supervision を巻き込んだ実機不具合への対策）。MemIf 経由でのみ呼ばれ、NvM から直接見えることはない |
-| Gpt | HW タイマ（Renesas RA FspTimer）による周期割り込み駆動の General Purpose Timer Driver。目標時間到達判定は HW コンペアマッチではなく `Gpt_OnTick()` 内のソフトウェア比較で行い（`GetTimeElapsed`/`GetTimeRemaining` を単純な整数演算で正確に実現するため）、`Gpt_EnableNotification` された通知関数は ISR コンテキストから直接呼ばれる。2 チャネル構成: Channel 0 は `App_GptDemo` の動作確認用（1Hz Notification）、Channel 1 は Os 専用のスケジューラティック（Notification なし、`Os` が `Gpt_GetTimeElapsed()` をポーリング。詳細は [`docs/modules/EcuM_Notes.md`](docs/modules/EcuM_Notes.md) の「Os のスケジューラティック」参照）。`Gpt_SetMode`/`Gpt_EnableWakeup`/`Gpt_DisableWakeup`/`Gpt_CheckWakeup`/`Gpt_GetPredefTimerValue` は、EcuM が SLEEP モードを持たないため仕様上のプリコンパイル設定（`GptWakeupFunctionalityApi` 等）に沿って未実装 |
-| KeyM | 鍵更新セッション（`KeyM_Start`→`KeyM_Update`→`KeyM_Finalize`）を管理する Key Manager。Dcm の WriteDataByIdentifier（DID 0x0108 CryptoKeyUpdate、詳細は下記「[UDS 診断通信](#uds-diag-comm)」節参照）が模擬鍵マスターとして駆動する。Certificate submodule・SHE 形式等は対応除外（詳細は [`docs/modules/SecOC_Notes.md`](docs/modules/SecOC_Notes.md) の「明示する簡略化」節参照）。ModuleId は Release 4.3.1 の AUTOSAR_TR_BSWModuleList.pdf に KeyM 自体が未掲載のため未検証の暫定値 |
-| Mcu | `main.cpp` の `setup()` 冒頭（`Serial.begin()` より前）で `Mcu_Init()` を呼び、起動直後のリセット原因（Watchdog/BrownOut/External/PowerOn）を一度だけ読み取ってキャッシュする（Mcu_Hw のレジスタ読み取りは 1 起動につき 1 回しか呼べないため）。`Mcu_InitClock`/`Mcu_SetMode`/`Mcu_InitRamSection`/`Mcu_PerformReset` 等は Arduino フレームワークがクロック初期化を担い複数電源モードもモデル化しないため未実装。`Mcu_GetResetReason()`（単一の `Mcu_ResetType`）に加え、複数要因の同時検出を診断できるよう `Mcu_GetResetRawValue()`（4 フラグをビット詰めした本プロジェクト独自の生値）も提供する |
-| MemIf | NvM（上位）と Fee（下位ドライバ）の間のディスパッチ層。実 AUTOSAR は Device 引数で複数の Fee/Ea インスタンスへ振り分けるが、本プロジェクトは下位ドライバが Fee 1 個のみのため実質パススルー（CryIf → Crypto の関係と同様）。`MemIf_Init`/`MemIf_MainFunction` は実 AUTOSAR の SWS_MemIf には存在しない（[SWS_MemIf_00019] により、ドライバが1個の構成では EcuM/Os が Fee_Init/Fee_MainFunction を直接呼んでよいと規定されている）本プロジェクト独自の拡張で、プラットフォーム分岐をこの層に閉じ込めるために追加した |
-| SchM | 排他エリアマクロ（`SchM_Enter` / `SchM_Exit`）で共有リソースを保護。実体は `SchM_Hw`（`noInterrupts()`/`interrupts()`）で、Can の割り込みペンディングフラグ、および Gpt のチャネル状態機械（`Gpt_ChannelState`/`Gpt_ElapsedTicks`、実 HW 割り込みとメインループの両方から読み書きされる）を実際に保護する |
-| SecOC | メッセージ認証（AES-128-CMAC）とフレッシュネス管理によるリプレイ対策。E2E とは異なる軸（E2E=意図しない誤り検出、SecOC=意図的な改ざん・なりすまし検出）で、PduR のルーティング経路上に中間モジュールとして挟まる。詳細は下記「[SecOC](#secoc)」節を参照 |
-| Wdg | Renesas RA の実 HW ウォッチドッグ（IWDT、RA WDT ライブラリ経由）向け下位ドライバ。`Wdg_SetMode(WDGIF_FAST_MODE)` で 4000ms タイムアウトを有効化する。`Wdg_SetMode(WDGIF_OFF_MODE)` は常に `E_NOT_OK` を返す（IWDT は一度有効化すると無効化する手段がないため。実 AUTOSAR の拡張プロダクションエラー `WDG_E_DISABLE_REJECTED` に相当する状況）。WdgIf 経由でのみ呼ばれ、WdgM から直接見えることはない |
-| WdgIf | WdgM（上位）と Wdg（下位ドライバ）の間のディスパッチ層。実 AUTOSAR は Device 引数で複数の Wdg インスタンスへ振り分けるが、本プロジェクトは物理ウォッチドッグが Wdg 1 個のみのため実質パススルー（MemIf → Fee と同じ簡略化）。実 AUTOSAR の WdgIf に Init/MainFunction が存在しない（[SWS_WdgIf_00018] により、ドライバが1個の構成では WdgM が Wdg_Init() を直接呼んでよいと規定されている）点は MemIf と共通するが、WdgIf 自体には MemIf のような非標準の Init/MainFunction 拡張を追加していない（プラットフォーム分岐を隠す必要がないため） |
-| Dio_Hw | Arduino `digitalWrite` / `digitalRead` ラッパー |
-| Port_Hw | Arduino `pinMode` ラッパー |
-| Adc_Hw | Arduino `analogRead` ラッパー |
-| SchM_Hw | Arduino `noInterrupts()`/`interrupts()` ラッパー |
-| Mcu_Hw | リセット要因の読み取り（Renesas RA RSTSR0-1）・起動時ウォッチドッグ無効化 |
-| Fee_Hw | フラッシュエミュレーション EEPROM 読み書き（Renesas RA `EEPROM` ライブラリ）ラッパー。Fee.c と Fee_Hw.cpp 以外からはインクルードしない内部境界 |
-| Wdg_Hw | 実 HW ウォッチドッグの Enable / Disable / Refresh ラッパー。Wdg.c と Wdg_Hw.cpp 以外からはインクルードしない内部境界 |
-| Gpt_Hw | Renesas RA `FspTimer` ラッパー。`FspTimer::get_available_timer()` で AGT/GPT の空きチャネルを実行時に自動選択し、`setup_overflow_irq()` で周期割り込みを有効化する。Gpt.c と Gpt_Hw.cpp 以外からはインクルードしない内部境界 |
+複数モジュールをまとめた詳細節（診断スタック／ECU 管理層／IO スタック／アプリケーション）を
+持つモジュールは、その節の先頭に個別の表を用意しています。それ以外のモジュールも含め、
+モジュール単体で完結する解説はすべて上表「概要」列のリンク先（`docs/modules/` 配下の
+個別ノート）に分離済みです。
 
 ModuleId の出典は `docs/AUTOSAR_TR_BSWModuleList.pdf`（Release 4.3.1、「List of
 Basic Software Modules」表）。詳細は「CAN 通信スタック」セクションの「DET 準拠」
