@@ -191,45 +191,45 @@ HAL ─── Can_Hw / Dio_Hw / Port_Hw / Adc_Hw / Mcu_Hw / Fee_Hw / Wdg_Hw / Gp
 
 | 層 | モジュール | Id | AUTOSAR 仕様<br>仕様準拠度 | 概要 |
 |---|---|---|---|---|
-| ASW | App_<br>EngineManager | — | — | エンジン状態遷移 SWC (RUNNING/FAULT 等) |
-|  | App_<br>WarningIndicator | — | — | 警告灯制御 SWC (LED 3灯) |
+| ASW | App_<br>EngineManager | — | — | エンジン状態遷移 SWC (RUNNING/FAULT 等)<br>（[詳細](docs/modules/App_EngineManager_Notes.md)） |
+|  | App_<br>WarningIndicator | — | — | 警告灯制御 SWC (LED 3灯)<br>（[詳細](docs/modules/App_WarningIndicator_Notes.md)） |
 | RTE | Rte | — | — | SWC 間シグナル仲介 (RTE ミラー) |
 | OS | Os | — | SWS_Os<br>主要機能実装<br>(一部意図的に簡略化) | タイムトリガスケジューラ<br>（[詳細](docs/modules/Os_Notes.md)） |
-| BSW | Adc | 123 | SWS_Adc<br>主要機能実装<br>(一部意図的に簡略化) | アナログ入力ドライバ |
-|  | BswM | 42 | SWS_BswM<br>主要機能実装<br>(一部意図的に簡略化) | BSW モード管理・状態遷移の一元制御 |
-|  | Can | 80 | SWS_Can<br>主要機能実装 | CAN コントローラドライバ (MCP2515) |
+| BSW | Adc | 123 | SWS_Adc<br>主要機能実装<br>(一部意図的に簡略化) | アナログ入力ドライバ<br>（[詳細](docs/modules/Adc_Notes.md)） |
+|  | BswM | 42 | SWS_BswM<br>主要機能実装<br>(一部意図的に簡略化) | BSW モード管理・状態遷移の一元制御<br>（[詳細](docs/modules/BswM_Notes.md)） |
+|  | Can | 80 | SWS_Can<br>主要機能実装 | CAN コントローラドライバ (MCP2515)<br>（[詳細](docs/modules/Can_Notes.md)） |
 |  | CanIf | 60 | SWS_CanIf<br>主要機能実装 | CAN コントローラ抽象化層 |
 |  | CanSM | 140 | SWS_CanSM<br>主要機能実装 | CAN ネットワーク状態管理 (Bus-Off 回復・Nm 連携) |
-|  | CanTp | 35 | SWS_CanTp<br>主要機能実装<br>(一部意図的に簡略化) | ISO 15765-2 トランスポートプロトコル |
-|  | Com | 50 | SWS_Com<br>主要機能実装 | シグナルベース通信管理 |
-|  | ComM | 12 | SWS_ComM<br>主要機能実装 | 通信マネージャ (チャネル状態集約) |
+|  | CanTp | 35 | SWS_CanTp<br>主要機能実装<br>(一部意図的に簡略化) | ISO 15765-2 トランスポートプロトコル<br>（[詳細](docs/modules/CanTp_Notes.md)） |
+|  | Com | 50 | SWS_Com<br>主要機能実装 | シグナルベース通信管理<br>（[詳細](docs/modules/Com_Notes.md)） |
+|  | ComM | 12 | SWS_ComM<br>主要機能実装 | 通信マネージャ (チャネル状態集約)<br>（[詳細](docs/modules/ComM_Notes.md)） |
 |  | CryIf | 112 | SWS_CryptoInterface<br>パススルー<br>(下位が1個のため) | 暗号ドライバへのルーティング層<br>（[詳細](docs/modules/CryIf_Notes.md)） |
 |  | Crypto | 114 | SWS_CryptoDriver<br>主要機能実装<br>(一部意図的に簡略化) | 暗号処理ドライバ (AES-128-CMAC)<br>（[詳細](docs/modules/Crypto_Notes.md)） |
 |  | Csm | 110 | SWS_CryptoServiceManager<br>主要機能実装<br>(一部意図的に簡略化) | 暗号サービスマネージャ<br>（[詳細](docs/modules/Csm_Notes.md)） |
-|  | Dcm | 53 | SWS_Dcm<br>主要機能実装<br>(一部意図的に簡略化) | UDS 診断通信マネージャ |
-|  | Dem | 54 | SWS_Dem<br>主要機能実装 | 診断イベント管理 (DTC) |
+|  | Dcm | 53 | SWS_Dcm<br>主要機能実装<br>(一部意図的に簡略化) | UDS 診断通信マネージャ<br>（[詳細](docs/modules/Dcm_Notes.md)） |
+|  | Dem | 54 | SWS_Dem<br>主要機能実装 | 診断イベント管理 (DTC)<br>（[詳細](docs/modules/Dem_Notes.md)） |
 |  | Det | — | SWS_Det<br>主要機能実装<br>(一部意図的に簡略化) | 開発時エラー検出・ロギング<br>（[詳細](docs/modules/Det_Notes.md)） |
-|  | Dio | — | SWS_Dio<br>主要機能実装<br>(一部意図的に簡略化) | デジタル入出力ドライバ |
+|  | Dio | — | SWS_Dio<br>主要機能実装<br>(一部意図的に簡略化) | デジタル入出力ドライバ<br>（[詳細](docs/modules/Dio_Notes.md)） |
 |  | E2E | — | SWS_E2E<br>主要機能実装<br>(一部意図的に簡略化) | エンドツーエンド保護ライブラリ (Profile01/05) |
-|  | E2EXf | 176 | SWS_E2ELibrary 12.4<br>(E2E Transformer)<br>主要機能実装<br>(一部意図的に簡略化) | E2E トランスフォーマ (Rte⇔E2E ライブラリ統合) |
-|  | E2EMon | — | — (独自 CDD 相当) | ネットワーク健全性モニタ (独自 CDD) |
-|  | EcuM | 10 | SWS_EcuStateManager<br>主要機能実装 | ECU ステートマネージャ (起動・シャットダウン制御) |
+|  | E2EXf | 176 | SWS_E2ELibrary 12.4<br>(E2E Transformer)<br>主要機能実装<br>(一部意図的に簡略化) | E2E トランスフォーマ (Rte⇔E2E ライブラリ統合)<br>（[詳細](docs/modules/E2EXf_Notes.md)） |
+|  | E2EMon | — | — (独自 CDD 相当) | ネットワーク健全性モニタ (独自 CDD)<br>（[詳細](docs/modules/E2EMon_Notes.md)） |
+|  | EcuM | 10 | SWS_EcuStateManager<br>主要機能実装 | ECU ステートマネージャ (起動・シャットダウン制御)<br>（[詳細](docs/modules/EcuM_Notes.md)） |
 |  | Fee | 21 | SWS_Fee<br>主要機能実装<br>(一部意図的に簡略化) | フラッシュエミュレーション EEPROM ドライバ<br>（[詳細](docs/modules/Fee_Notes.md)） |
-|  | FiM | 11 | SWS_FiM<br>主要機能実装<br>(一部意図的に簡略化) | 機能抑止マネージャ |
+|  | FiM | 11 | SWS_FiM<br>主要機能実装<br>(一部意図的に簡略化) | 機能抑止マネージャ<br>（[詳細](docs/modules/FiM_Notes.md)） |
 |  | Gpt | 100 | SWS_Gpt<br>主要機能実装<br>(一部意図的に簡略化) | 汎用タイマドライバ<br>（[詳細](docs/modules/Gpt_Notes.md)） |
-|  | IoHwAb | 254 | AUTOSAR 抽象化層 | ボタン入力・センサ電圧のハードウェア抽象化 |
+|  | IoHwAb | 254 | AUTOSAR 抽象化層 | ボタン入力・センサ電圧のハードウェア抽象化<br>（[詳細](docs/modules/IoHwAb_Notes.md)） |
 |  | KeyM | 116<br>(仮) | SWS_KeyManager<br>(Release 4.4.0)<br>主要機能実装<br>(一部意図的に簡略化) | 鍵管理マネージャ<br>（[詳細](docs/modules/KeyM_Notes.md)） |
 |  | Mcu | 101 | SWS_Mcu<br>主要機能実装<br>(一部意図的に簡略化) | マイコン初期化・リセット要因管理<br>（[詳細](docs/modules/Mcu_Notes.md)） |
 |  | MemIf | 22 | SWS_MemIf<br>パススルー<br>(下位が1個のため) | 不揮発メモリ抽象化層<br>（[詳細](docs/modules/MemIf_Notes.md)） |
-|  | Nm | 31 | SWS_CANNM<br>主要機能実装 | ネットワークマネジメント (CAN NM) |
-|  | NvM | 20 | SWS_NvM<br>主要機能実装<br>(一部意図的に簡略化) | 不揮発メモリマネージャ |
+|  | Nm | 31 | SWS_CANNM<br>主要機能実装 | ネットワークマネジメント (CAN NM)<br>（[詳細](docs/modules/Nm_Notes.md)） |
+|  | NvM | 20 | SWS_NvM<br>主要機能実装<br>(一部意図的に簡略化) | 不揮発メモリマネージャ<br>（[詳細](docs/modules/NvM_Notes.md)） |
 |  | PduR | 51 | SWS_PduR<br>主要機能実装<br>(一部意図的に簡略化) | PDU ルーティング層 |
-|  | Port | — | SWS_Port<br>主要機能実装<br>(一部意図的に簡略化) | ピン設定管理 |
+|  | Port | — | SWS_Port<br>主要機能実装<br>(一部意図的に簡略化) | ピン設定管理<br>（[詳細](docs/modules/Port_Notes.md)） |
 |  | SchM | — | SWS_SchM<br>主要機能実装<br>(一部意図的に簡略化) | 排他制御 (スケジューラマネージャ)<br>（[詳細](docs/modules/SchM_Notes.md)） |
 |  | SecOC | 150 | SWS_SecureOnboard<br>Communication<br>主要機能実装<br>(一部意図的に簡略化) | メッセージ認証 (改ざん・なりすまし対策)<br>（[詳細](docs/modules/SecOC_Notes.md)） |
 |  | Wdg | 102 | SWS_Wdg<br>主要機能実装<br>(一部意図的に簡略化) | ウォッチドッグドライバ<br>（[詳細](docs/modules/Wdg_Notes.md)） |
 |  | WdgIf | 43 | SWS_WdgIf<br>パススルー<br>(下位が1個のため) | ウォッチドッグ抽象化層<br>（[詳細](docs/modules/WdgIf_Notes.md)） |
-|  | WdgM | 13 | SWS_WdgM<br>主要機能実装 | ウォッチドッグマネージャ (生存監視) |
+|  | WdgM | 13 | SWS_WdgM<br>主要機能実装 | ウォッチドッグマネージャ (生存監視)<br>（[詳細](docs/modules/WdgM_Notes.md)） |
 | HAL | Can_Hw | — | — | MCP2515 SPI ドライバ |
 |  | Dio_Hw | — | — | Arduino `digitalWrite`/`digitalRead` ラッパー |
 |  | Port_Hw | — | — | Arduino `pinMode` ラッパー |
