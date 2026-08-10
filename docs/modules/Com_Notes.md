@@ -5,6 +5,12 @@
 シグナルのビット単位パック／アンパックと送受信タイミング制御を担う（TxModeMode:
 DIRECT/MIXED/PERIODIC・TMS・MDT・受信フィルタ・I-PDU Group・Signal Gateway 等）。
 E2E には一切関知しない（E2E Transformer 方式、`Com.c` 本体に E2E は埋め込まれない）。
+ComFilterAlgorithm/TxModeMode によるシグナルの送信要否判定、Signal Group と
+ComTransferProperty、TMS（Transmission Mode Selector）、MDT、Tx確定コールバック
+（Com_CbkTxAck）、Update Bit、RX Signal Group、ComRxDataTimeoutAction、Rx無効値検知
+（ComDataInvalidAction）、RX ComFilterAlgorithm によるプラウジビリティチェック、
+受信デッドライン監視、Signal Gateway（Com_GatewayRoute）など、Com モジュール単体で
+完結する実装詳細を以下にまとめます。
 
 ## ComFilterAlgorithm と TxModeMode（送信要否・タイミングを Com 自身が判断する）
 

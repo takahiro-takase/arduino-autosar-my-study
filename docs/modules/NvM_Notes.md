@@ -5,6 +5,8 @@
 NvM は Dem が使う EEPROM ブロックを抽象化するモジュールです。
 Dem は EEPROM アドレスを一切知らず、`NvM_BlockIdType`（NVM_BLOCK_ID_*）でのみ
 ブロックを指定して `NvM_ReadBlock()` / `NvM_WriteBlock()` を呼び出します。
+CRC による破損検出・デフォルト値復元・非同期書き込みジョブキュー
+（NvM↔MemIf↔Fee 責務分担）・冗長ブロックの詳細を以下にまとめます。
 
 ## CRC によるデータ破損検出
 

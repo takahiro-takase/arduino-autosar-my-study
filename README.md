@@ -23,41 +23,19 @@ ARXML や設定ツールは使用せず、コードで階層構造・型定義�
     - [処理の流れ（関数コールチェーンと多層防御）](#processing-flow)
       - [Tx 処理（Com → PduR → CanIf → Can の順）](#tx-processing)
       - [Rx 処理（Can → CanIf → PduR → Com の順）](#rx-processing)
-    - [Can](#can-module)
-    - [Com](#com-module)
     - [DET 準拠（Det_ReportError による標準化エラー通知）](#det-compliance)
   - [E2E 保護（EngineInfo/AbsInfo 受信・E2EHealthStatus 送信ともに Profile05）](#e2e-p01)
     - [I-PDU Group（Com_IpduGroupStart/Stop、通信のライフサイクル制御）](#ipdu-group)
     - [呼び出し元は BswM（実 AUTOSAR の標準構成）](#ipdu-group-caller)
     - [Com_IpduGroupStart/Stop が実際に行うこと](#ipdu-group-behavior)
     - [動作確認方法](#ipdu-group-verification)
-    - [E2E が保護する故障モデル](#e2e-fault-model)
-    - [受信側（Check）— EngineInfo / AbsInfo（E2E Profile05）](#e2e-check-rx)
-    - [送信側（Protect）— E2EHealthStatus（E2E Profile05）](#e2e-protect-tx)
-    - [E2EMon（ネットワーク健全性モニタ、独自 CDD 相当）](#e2emon)
-  - [SecOC（Secure Onboard Communication、メッセージ認証）](#secoc)
-  - [Signal Gateway（Com_GatewayRoute、SWC を介さないシグナル転送）](#signal-gateway)
   - [診断スタック（CanTp / Dcm / Dem / FiM / NvM）](#diag-stack)
-    - [UDS 診断通信（ISO 14229-1 / ISO 15765-2）](#uds-diag-comm)
-    - [CanTp（ISO 15765-2 トランスポートプロトコル）](#cantp)
-    - [NvM（Non-Volatile Memory Manager）](#nvm)
-    - [DEM 診断イベント管理（AUTOSAR SWS_DEM）](#dem)
-    - [FiM（機能抑止マネージャ）](#fim)
+    - [UDS ボタン送信ツール（tools/uds_tester）](#uds-tester-tool)
   - [ECU 管理層（EcuM / BswM / WdgM / ComM / CanSM / Nm）](#ecu-management)
     - [処理の流れ（コールチェーン）](#processing-flow-ecu)
-    - [EcuM（ECU ステートマネージャ）](#ecum)
-    - [BswM（BSW モードマネージャ）](#bswm)
-    - [ComM（通信マネージャ）](#comm)
-    - [WdgM（ウォッチドッグマネージャ）](#wdgm)
-    - [Nm（ネットワークマネジメント）](#nm)
+    - [CAN コントローラのスリープ制御（Can / CanSM / Nm / BswM 横断）](#bswm-controller-sleep)
   - [IO スタック（IoHwAb / Dio / Port / Adc）](#io-stack)
-    - [IoHwAb](#iohwab-module)
-    - [Dio](#dio-module)
-    - [Port](#port-module)
-    - [Adc](#adc-module)
   - [アプリケーション（App_EngineManager / App_WarningIndicator）](#application)
-    - [エンジン状態遷移](#engine-state-machine)
-    - [App_WarningIndicator（警告灯 SW-C）](#app-warning-indicator)
 - [シリアルモニタ出力例](#serial-log-example)
 - [設計上の注意点](#design-notes)
   - [C / C++ 言語境界](#c-cpp-boundary)
@@ -667,24 +645,6 @@ Com_ReceiveSignal/Com_SendSignal が BitSize に関わらず常に 4 バイト�
 先に棄却されることで実運用上到達しない（2026-07 時点で実機確認済み）。検証するには
 CanIf 側の `.Dlc` を一時的に緩める必要がある。
 
-<a id="can-module"></a>
-#### Can
-
-TX 確認の非同期化（`Can_MainFunction_Write` によるポーリングモード準拠）、および
-RX の割り込み化（`Can_Isr` によるハードウェア割り込み化と、割り込み非依存の
-ポーリング二重化）は [`docs/modules/Can_Notes.md`](docs/modules/Can_Notes.md) に
-分離しました。
-
-<a id="com-module"></a>
-#### Com
-
-ComFilterAlgorithm/TxModeMode によるシグナルの送信要否判定、Signal Group と
-ComTransferProperty、TMS（Transmission Mode Selector）、MDT、Tx確定コールバック
-（Com_CbkTxAck）、Update Bit、RX Signal Group、ComRxDataTimeoutAction、Rx無効値検知
-（ComDataInvalidAction）、RX ComFilterAlgorithm によるプラウジビリティチェック、
-受信デッドライン監視、Signal Gateway（Com_GatewayRoute）など、Com モジュール単体で
-完結する実装詳細は [`docs/modules/Com_Notes.md`](docs/modules/Com_Notes.md) に分離しました。
-
 <a id="det-compliance"></a>
 #### DET 準拠（Det_ReportError による標準化エラー通知）
 
@@ -987,37 +947,6 @@ UDS 0x28 実装は「全 I-PDU 一括」のままの方が既存のテストが�
 `act=2`=`BSWM_ACTION_PDU_GROUP_START`、`act=3`=`BSWM_ACTION_PDU_GROUP_STOP`、
 `mask=0x000` は PDU_GROUP 系アクションでは `TaskMask` を使わないため無意味な値です。）
 
-<a id="e2e-fault-model"></a>
-<a id="e2e-check-rx"></a>
-<a id="e2e-protect-tx"></a>
-#### E2E が保護する故障モデル／受信側（Check）／送信側（Protect）
-
-E2E_P05Check/Protectの適用詳細（フレームレイアウト・6状態ステートマシン・
-Rte/Com/Dem統合・E2EXfモジュール設定・動作確認方法）は
-[`docs/modules/E2EXf_Notes.md`](docs/modules/E2EXf_Notes.md) を参照してください。
-
-<a id="e2emon"></a>
-#### E2EMon（ネットワーク健全性モニタ、独自 CDD 相当）
-
-標準AUTOSARモジュールには存在しない独自CDD。EngineInfo/AbsInfoのE2E検証結果を
-集計しE2EHealthStatus(CAN 0x220)としてブロードキャストする。詳細・フレーム
-レイアウト・動作確認方法は [`docs/modules/E2EMon_Notes.md`](docs/modules/E2EMon_Notes.md) 参照。
-
-<a id="secoc"></a>
-### SecOC（Secure Onboard Communication、メッセージ認証）
-
-秘密鍵ベースのMAC（AES-128-CMAC）とフレッシュネス値でリプレイ・改ざんを検出する
-モジュール。E2E Transformer方式との違い・Secured I-PDUバイトレイアウト・
-Csm/CryIf/Crypto/KeyMとの連携・検証方法の詳細は
-[`docs/modules/SecOC_Notes.md`](docs/modules/SecOC_Notes.md) 参照。
-
-<a id="signal-gateway"></a>
-### Signal Gateway（Com_GatewayRoute、SWC を介さないシグナル転送）
-
-Com内部でRXシグナルをSWC/Rteを介さず直接TXシグナルへ転送する機能
-（`Com_GatewayRoute()`）。適用例(ImmobilizerCmd→ImmobilizerStatus)・
-RX処理段階との対応・簡略化点の詳細は [`docs/modules/Com_Notes.md`](docs/modules/Com_Notes.md) 参照。
-
 <a id="diag-stack"></a>
 ### 診断スタック（CanTp / Dcm / Dem / FiM / NvM）
 
@@ -1031,21 +960,8 @@ FiM は Dem が確定した DTC をもとにアプリ機能の実行許可を判
 上記「[モジュール一覧](#module-list)」表の「概要」列（リンク先の `docs/modules/` 配下の
 個別ノート）を参照してください。
 
-<a id="uds-diag-comm"></a>
-#### UDS 診断通信（ISO 14229-1 / ISO 15765-2）
-
-Dcmが処理するUDSサービス群。対応SID一覧・DID一覧・IOControl調停方式・
-CommunicationControl・RoutineControl・RequestDownload等のシーケンス・
-S3タイマ・SecurityAccessの詳細は [`docs/modules/Dcm_Notes.md`](docs/modules/Dcm_Notes.md) 参照。
-
-<a id="cantp"></a>
-#### CanTp（ISO 15765-2 トランスポートプロトコル）
-
-ISO 15765-2（SF/FF/CF/FC）のフレーム処理を担うモジュール。RX/TX状態機械・
-BS/STmin・マルチフレーム応答例・0x2E複数フレーム要求の実機検証詳細は
-[`docs/modules/CanTp_Notes.md`](docs/modules/CanTp_Notes.md) 参照。
-
-##### UDS ボタン送信ツール（tools/uds_tester）
+<a id="uds-tester-tool"></a>
+#### UDS ボタン送信ツール（tools/uds_tester）
 
 セッション制御・SecurityAccess・複数フレーム応答の FC 送信など、手動操作する
 項目が増えて Cangaroo での都度のフレーム手入力が煩雑になってきたため、
@@ -1083,7 +999,7 @@ python app.py
 追加するだけで行えます（本プロジェクトの `*_PBCfg.c` と同じ「コードと設定の分離」
 の考え方です）。
 
-###### CAPL 風スクリプト機能
+##### CAPL 風スクリプト機能
 
 ボタンの単発送信だけでは「セッション遷移→SecurityAccess→DID 読み出し」のような
 複数手順の一連の操作や、応答内容による分岐を再現しにくいため、Vector CAPL に
@@ -1265,27 +1181,6 @@ on message 0x200
 TesterPresent を成功する/上限回数に達するまで送信するリトライ処理での
 実用例）を参照してください。
 
-<a id="nvm"></a>
-#### NvM（Non-Volatile Memory Manager）
-
-Dem が使う EEPROM ブロックを抽象化するモジュール。CRCによる破損検出・
-デフォルト値復元・非同期書き込みジョブキュー（NvM↔MemIf↔Fee責務分担）・
-冗長ブロックの詳細は [`docs/modules/NvM_Notes.md`](docs/modules/NvM_Notes.md) 参照。
-
-<a id="dem"></a>
-#### DEM 診断イベント管理（AUTOSAR SWS_DEM）
-
-DTC管理モジュール。イベント/DTCコード一覧、デバウンス、DTCライフサイクル、
-経年回復（Aging）、FreezeFrame、ExtendedData、EEPROMレイアウトの詳細は
-[`docs/modules/Dem_Notes.md`](docs/modules/Dem_Notes.md) 参照。
-
-<a id="fim"></a>
-#### FiM（機能抑止マネージャ）
-
-Dem が確定した DTC を根拠にアプリ機能の実行を抑止するルールエンジン。
-FID↔イベント対応表・判定フロー・フェールセーフ既定値の詳細は
-[`docs/modules/FiM_Notes.md`](docs/modules/FiM_Notes.md) 参照。
-
 <a id="ecu-management"></a>
 ### ECU 管理層（EcuM / BswM / WdgM / ComM / CanSM / Nm）
 
@@ -1377,21 +1272,14 @@ CanSM_MainFunction（10ms タスク、SHUTDOWN 中も動き続ける）
             └→ CanSM: WAKEUP_VALIDATING → NO_COM（ComM/EcuM は一切関与せず、静かに再スリープ）
 ```
 
-<a id="ecum"></a>
-#### EcuM（ECU ステートマネージャ）
+<a id="bswm-controller-sleep"></a>
+#### CAN コントローラのスリープ制御（Can / CanSM / Nm / BswM 横断）
 
-BSW スタック全体のライフサイクル（STARTUP/RUN/POST_RUN/SHUTDOWN）を管理するモジュール。
-状態マシン・Osスケジューラティック(Gpt駆動)・RUNユーザ管理の詳細は
-[`docs/modules/EcuM_Notes.md`](docs/modules/EcuM_Notes.md) 参照。
-
-<a id="bswm"></a>
-#### BswM（BSW モードマネージャ）
-
-EcuM/ComM のモード変化に応じて Os タスクの有効・無効を切り替えるルールエンジン。
-ルールテーブル・タスクID/マスク・POST_RUN/SHUTDOWNでのタスク継続理由・通知チェーン・
-設定変更方法の詳細は [`docs/modules/BswM_Notes.md`](docs/modules/BswM_Notes.md) 参照。
-以下の2節（CANコントローラの実スリープ・ボランタリスリープとウェイクアップ）は
-実質的に Can/CanSM/Nm 横断の内容のためこのまま README に残します。
+EcuM/BswM/ComM/WdgM/Nm 各モジュールの本プロジェクトでの役割は、上記
+「[モジュール一覧](#module-list)」表の「概要」列（リンク先の `docs/modules/`
+配下の個別ノート）を参照してください。以下の2節（CAN コントローラの実スリープ・
+ボランタリスリープとウェイクアップ）は実質的に Can/CanSM/Nm 横断の内容のため
+このまま README に残します。
 
 ##### CAN コントローラの実スリープ（`Can_SetControllerMode(CAN_T_SLEEP)`）
 
@@ -1539,28 +1427,6 @@ WARN CanSM: Wakeup validation timeout (2000ms, no confirmed RX) -> back to SLEEP
 （ComM/EcuM には何も通知されないため、SHUTDOWN 状態はそのまま維持される）
 ```
 
-<a id="comm"></a>
-#### ComM（通信マネージャ）
-
-複数ユーザ（EcuM/App_EngineManager・Dcm）からの通信モード要求を集約するモジュール。
-調停ロジック・Dcmセッション連携・ボランタリスリープ連携・ウェイクアップ時の再同期の
-詳細は [`docs/modules/ComM_Notes.md`](docs/modules/ComM_Notes.md) 参照。
-
-<a id="wdgm"></a>
-#### WdgM（ウォッチドッグマネージャ）
-
-WdgM (Watchdog Manager) は「ソフトウェアが本当に動いているか」を監視するモジュールです。
-Alive/Logical/Deadline Supervision の各アルゴリズム、複数 Supervised Entity 構成、
-HW ウォッチドッグ連携、resume時の扱い、設定値一覧などの詳細は
-[`docs/modules/WdgM_Notes.md`](docs/modules/WdgM_Notes.md) 参照。
-
-<a id="nm"></a>
-#### Nm（ネットワークマネジメント）
-
-CanNm 状態機械（Repeat Message/Normal Operation/Ready Sleep/Prepare Bus-Sleep/
-Bus-Sleep）による協調スリープの実装。詳細・状態機械図・タイマ設定・ComM/CanSM
-との連携・ログ例は [`docs/modules/Nm_Notes.md`](docs/modules/Nm_Notes.md) 参照。
-
 ---
 <a id="io-stack"></a>
 ### IO スタック（IoHwAb / Dio / Port / Adc）
@@ -1591,27 +1457,6 @@ Port_Init（起動時 1 回のみ）
      (A0 はアナログ専用ピンのため Port 設定不要)
 ```
 
-<a id="iohwab-module"></a>
-#### IoHwAb
-
-デバウンス・ボタン固着検出・ADC電圧監視・API一覧は
-[`docs/modules/IoHwAb_Notes.md`](docs/modules/IoHwAb_Notes.md) 参照。
-
-<a id="dio-module"></a>
-#### Dio
-
-チャネル割り当て表は [`docs/modules/Dio_Notes.md`](docs/modules/Dio_Notes.md) 参照。
-
-<a id="port-module"></a>
-#### Port
-
-ピン方向初期化の詳細は [`docs/modules/Port_Notes.md`](docs/modules/Port_Notes.md) 参照。
-
-<a id="adc-module"></a>
-#### Adc
-
-チャネル設定は [`docs/modules/Adc_Notes.md`](docs/modules/Adc_Notes.md) 参照。
-
 <a id="application"></a>
 ### アプリケーション（App_EngineManager / App_WarningIndicator）
 
@@ -1622,18 +1467,6 @@ EcuM の POST_RUN 遷移時に Rte_Engine タスクと Rte_Warning タスクが�
 このスタックを構成する各モジュール（App_EngineManager/App_WarningIndicator）の本プロジェクト
 での役割は、上記「[モジュール一覧](#module-list)」表の「概要」列（リンク先の `docs/modules/`
 配下の個別ノート）を参照してください。
-
-<a id="engine-state-machine"></a>
-#### エンジン状態遷移
-
-OFF/STARTING/RUNNING/FAULT の状態機械、遷移条件表は
-[`docs/modules/App_EngineManager_Notes.md`](docs/modules/App_EngineManager_Notes.md) 参照。
-
-<a id="app-warning-indicator"></a>
-#### App_WarningIndicator（警告灯 SW-C）
-
-3 LED（RUNNING/FAULT/ABS）独立制御の詳細は
-[`docs/modules/App_WarningIndicator_Notes.md`](docs/modules/App_WarningIndicator_Notes.md) 参照。
 
 <a id="serial-log-example"></a>
 ## シリアルモニタ出力例
