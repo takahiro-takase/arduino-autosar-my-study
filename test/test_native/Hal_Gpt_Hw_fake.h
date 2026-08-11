@@ -1,5 +1,5 @@
 /**
- * \file    fake_gpt_hw.h
+ * \file    Hal_Gpt_Hw_fake.h
  * \brief   Gpt_Hw.h（Renesas RA FspTimer 境界）のテスト用フェイク実装の宣言
  * \details Gpt.c のロジックだけを検証したいので、実 HW（FspTimer）は使わず、
  *          呼び出し回数・引数を記録するだけのフェイクに差し替える。
@@ -8,8 +8,8 @@
  *          する。Gpt.c が Gpt_OnTick() を普通の呼び出し可能関数として公開して
  *          いる設計のおかげで、実割り込みなしに状態機械を駆動できる）。
  */
-#ifndef FAKE_GPT_HW_H
-#define FAKE_GPT_HW_H
+#ifndef HAL_GPT_HW_FAKE_H
+#define HAL_GPT_HW_FAKE_H
 
 #include "Gpt_PBCfg.h"
 
@@ -33,4 +33,4 @@ void FakeGptHw_Reset(void);
 }
 #endif
 
-#endif /* FAKE_GPT_HW_H */
+#endif /* HAL_GPT_HW_FAKE_H */

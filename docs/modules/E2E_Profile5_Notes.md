@@ -118,7 +118,7 @@ Profile01 の `E2E_P01CheckStateType` は `WaitForFirstData`（初回受信の�
   初回フレーム（Counter=0）を初回 Check（State->Counter も 0）すると
   `delta=0` となり **`REPEATED` と判定される**（`OK` にはならない）。
   これは Profile05 の仕様上正しい挙動であり、バグではない
-  （`test/test_e2e_p05/test_e2e_p05.cpp` の
+  （`test/test_native/Bsw_E2E_test.cpp` の
   `FirstCheckAfterInitIsRepeatedBecauseBothStartAtCounterZero` で確認済み）。
 - `WRONGSEQUENCE` 検知後も、Profile01 のような「SyncCounterInit 回分は
   `SYNC` を返し続ける再ロック期間」は無く、次のフレームで `delta` が
@@ -152,7 +152,7 @@ Profile01 (`E2E_P01StatusType`) とはビットパターンが異なる点に注
 
 - **Check側は当初(EngineHealthStatus TX単体の時期)は本プロジェクト内に呼び出し元が
   無かった**。対称性のため Protect と同じ構成で先に実装し、正しさは
-  `test/test_e2e_p05/test_e2e_p05.cpp`（GoogleTest、`env:native_e2e_p05`）の
+  `test/test_native/Bsw_E2E_test.cpp`（GoogleTest、`env:native`）の
   ホストテストのみで検証していた。その後 2026-08 に EngineInfo(RX,0x100)/
   AbsInfo(RX,0x110) を Profile01 から Profile05 へ移行し、`E2EXf_InverseTransformP05()`
   （`src/Bsw/E2EXf/E2EXf.c`）経由で `E2E_P05Check()` の実際の呼び出し元になった
@@ -168,7 +168,7 @@ Profile01 (`E2E_P01StatusType`) とはビットパターンが異なる点に注
   フレームが `REPEATED`/`WRONGSEQUENCE` と誤判定され、
   `DEM_DEBOUNCE_LIMIT_E2E_ENGINEINFO`/`_ABSINFO`（`Dem_Cfg.h`、いずれも 1 = 即確定）
   と相まって毎回の電源投入直後に誤った DTC が確定してしまう。`E2E_P05.c`
-  自体は仕様に忠実なまま変更せず（`test/test_e2e_p05/` の
+  自体は仕様に忠実なまま変更せず（`test/test_native/Bsw_E2E_test.cpp` の
   `FirstCheckAfterInitIsRepeatedBecauseBothStartAtCounterZero` が反する変更を
   検出する）、統合層である `E2EXf_RxConfigTypeP05.WaitForFirstData` フラグと
   `E2EXf_InverseTransformP05()` 側の格上げ処理で対処した。CRC が正しい最初の
@@ -192,4 +192,4 @@ Profile01 (`E2E_P01StatusType`) とはビットパターンが異なる点に注
 - [`docs/E2E_Profile1_Notes.md`](./E2E_Profile1_Notes.md) — Profile01 の学習ノート（対の関係）
 - [`docs/REFERENCES.md`](./REFERENCES.md) — 本プロジェクトが参照する AUTOSAR 仕様書の入手先一覧
 - `docs/AUTOSAR_SWS_E2ELibrary.pdf` — 本ノートの一次資料（ローカルのみ、gitignore 対象）
-- `test/test_e2e_p05/test_e2e_p05.cpp` — CRC16・Protect/Check のホストテスト
+- `test/test_native/Bsw_E2E_test.cpp` — CRC16・Protect/Check のホストテスト

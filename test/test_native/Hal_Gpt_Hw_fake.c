@@ -1,9 +1,9 @@
 /**
- * \file    fake_gpt_hw.c
+ * \file    Hal_Gpt_Hw_fake.c
  * \brief   Gpt_Hw.h のテスト用フェイク実装
- * \details fake_gpt_hw.h 冒頭のコメント参照。
+ * \details Hal_Gpt_Hw_fake.h 冒頭のコメント参照。
  */
-#include "fake_gpt_hw.h"
+#include "Hal_Gpt_Hw_fake.h"
 #include "Gpt_Hw.h"
 
 uint32          FakeGptHw_StartCount          = 0U;

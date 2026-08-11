@@ -1,9 +1,10 @@
 /**
- * \file    test_gpt.cpp
+ * \file    Bsw_Gpt_test.cpp
  * \brief   Gpt.c（src/Bsw/Gpt/Gpt.c）の単体テスト（GoogleTest / PlatformIO native環境）
- * \details 実 HW（Gpt_Hw / FspTimer）・実 Det（Serial出力）は fake_gpt_hw.c /
- *          fake_det.c / fake_schm_hw.c に差し替え、Gpt.c のロジックのみを
- *          ホスト上で検証する。実 HW 割り込みは Gpt_OnTick() を直接呼ぶことで
+ * \details 実 HW 依存部分（Gpt_Hw / FspTimer、Det_Hw / Serial出力、SchM_Hw /
+ *          割り込み制御）のみを Hal_Gpt_Hw_fake.c / Hal_Det_Hw_fake.c /
+ *          Hal_SchM_Hw_fake.c に差し替え、Gpt.c・Det.c 自体は実物をリンクして
+ *          ロジックを検証する。実 HW 割り込みは Gpt_OnTick() を直接呼ぶことで
  *          模擬する（Gpt.c がこの関数を素の呼び出し可能関数として公開する
  *          設計になっているため、モックの割り込みコントローラ等は不要）。
  *
@@ -12,6 +13,9 @@
  *          そのため各テストの TearDown で必ず Gpt_StopTimer()+Gpt_DeInit() を
  *          呼び、次のテストが「未初期化」から始められるようにしている
  *          （C言語のグローバル状態を持つモジュールをテストする際の定石）。
+ *
+ *          GoogleTest の main() は test_main.cpp に集約しているため、
+ *          本ファイルでは定義しない。
  */
 #include <gtest/gtest.h>
 
@@ -19,8 +23,8 @@ extern "C" {
 #include "Gpt.h"
 #include "Gpt_PBCfg.h"
 #include "Gpt_Hw.h"  /* Gpt_OnTick() — テストから ISR tick を模擬するために呼ぶ */
-#include "fake_gpt_hw.h"
-#include "fake_det.h"
+#include "Hal_Gpt_Hw_fake.h"
+#include "Hal_Det_Hw_fake.h"
 }
 
 namespace
@@ -42,7 +46,7 @@ protected:
     void SetUp() override
     {
         FakeGptHw_Reset();
-        FakeDet_Reset();
+        FakeDetHw_Reset();
         g_notifyCount = 0U;
 
         channels[0].ChannelId       = GPT_CHANNEL_0;
@@ -66,33 +70,33 @@ TEST_F(GptTest, InitSucceedsWithValidConfig)
 {
     Gpt_Init(&config);
 
-    EXPECT_EQ(FakeDet_ReportCount, 0U);
+    EXPECT_EQ(FakeDetHw_ReportCount, 0U);
 }
 
 TEST_F(GptTest, InitRejectsNullConfig)
 {
     Gpt_Init(NULL);
 
-    EXPECT_EQ(FakeDet_LastErrorId, GPT_E_PARAM_POINTER);
+    EXPECT_EQ(FakeDetHw_LastErrorId, GPT_E_PARAM_POINTER);
 }
 
 TEST_F(GptTest, InitTwiceReportsAlreadyInitialized)
 {
     Gpt_Init(&config);
-    FakeDet_Reset();
+    FakeDetHw_Reset();
 
     Gpt_Init(&config);
 
-    EXPECT_EQ(FakeDet_LastErrorId, GPT_E_ALREADY_INITIALIZED);
+    EXPECT_EQ(FakeDetHw_LastErrorId, GPT_E_ALREADY_INITIALIZED);
 }
 
 TEST_F(GptTest, ApiCallsBeforeInitReportUninit)
 {
     EXPECT_EQ(Gpt_GetTimeElapsed(GPT_CHANNEL_0), 0U);
-    EXPECT_EQ(FakeDet_LastErrorId, GPT_E_UNINIT);
+    EXPECT_EQ(FakeDetHw_LastErrorId, GPT_E_UNINIT);
 
     Gpt_StartTimer(GPT_CHANNEL_0, 1000U);
-    EXPECT_EQ(FakeDet_LastErrorId, GPT_E_UNINIT);
+    EXPECT_EQ(FakeDetHw_LastErrorId, GPT_E_UNINIT);
 }
 
 TEST_F(GptTest, StartTimerRejectsZeroValue)
@@ -101,7 +105,7 @@ TEST_F(GptTest, StartTimerRejectsZeroValue)
 
     Gpt_StartTimer(GPT_CHANNEL_0, 0U);
 
-    EXPECT_EQ(FakeDet_LastErrorId, GPT_E_PARAM_VALUE);
+    EXPECT_EQ(FakeDetHw_LastErrorId, GPT_E_PARAM_VALUE);
     EXPECT_EQ(FakeGptHw_StartCount, 0U);
 }
 
@@ -112,7 +116,7 @@ TEST_F(GptTest, StartTimerRejectsValueAboveTickValueMax)
 
     Gpt_StartTimer(GPT_CHANNEL_0, 101U);
 
-    EXPECT_EQ(FakeDet_LastErrorId, GPT_E_PARAM_VALUE);
+    EXPECT_EQ(FakeDetHw_LastErrorId, GPT_E_PARAM_VALUE);
     EXPECT_EQ(FakeGptHw_StartCount, 0U);
 }
 
@@ -122,7 +126,7 @@ TEST_F(GptTest, StartTimerRejectsInvalidChannel)
 
     Gpt_StartTimer((Gpt_ChannelType)1U, 1000U);
 
-    EXPECT_EQ(FakeDet_LastErrorId, GPT_E_PARAM_CHANNEL);
+    EXPECT_EQ(FakeDetHw_LastErrorId, GPT_E_PARAM_CHANNEL);
 }
 
 TEST_F(GptTest, StartTimerSucceedsAndDelegatesToHw)
@@ -131,7 +135,7 @@ TEST_F(GptTest, StartTimerSucceedsAndDelegatesToHw)
 
     Gpt_StartTimer(GPT_CHANNEL_0, 1000U);
 
-    EXPECT_EQ(FakeDet_ReportCount, 0U);
+    EXPECT_EQ(FakeDetHw_ReportCount, 0U);
     EXPECT_EQ(FakeGptHw_StartCount, 1U);
     EXPECT_EQ(FakeGptHw_LastStartChannel, GPT_CHANNEL_0);
     EXPECT_EQ(FakeGptHw_LastTickFrequencyHz, 1000U);
@@ -143,11 +147,11 @@ TEST_F(GptTest, StartTimerWhileRunningReportsBusy)
 {
     Gpt_Init(&config);
     Gpt_StartTimer(GPT_CHANNEL_0, 1000U);
-    FakeDet_Reset();
+    FakeDetHw_Reset();
 
     Gpt_StartTimer(GPT_CHANNEL_0, 500U);
 
-    EXPECT_EQ(FakeDet_LastErrorId, GPT_E_BUSY);
+    EXPECT_EQ(FakeDetHw_LastErrorId, GPT_E_BUSY);
     EXPECT_EQ(FakeGptHw_StartCount, 1U);  /* 2 回目は Hw まで到達しない */
 }
 
@@ -162,7 +166,7 @@ TEST_F(GptTest, StartTimerRollsBackStateWhenHwFails)
      * （BUSY にならないことで "stopped" 相当へロールバックしたことを確認）。 */
     FakeGptHw_StartShouldFail = 0U;
     Gpt_StartTimer(GPT_CHANNEL_0, 1000U);
-    EXPECT_NE(FakeDet_LastErrorId, GPT_E_BUSY);
+    EXPECT_NE(FakeDetHw_LastErrorId, GPT_E_BUSY);
     EXPECT_EQ(FakeGptHw_StartCount, 2U);
 }
 
@@ -233,24 +237,24 @@ TEST_F(GptTest, StopTimerFreezesElapsedAndIsIdempotent)
      * Hw 側も再度は呼ばれない。 */
     Gpt_StopTimer(GPT_CHANNEL_0);
     EXPECT_EQ(FakeGptHw_StopCount, 1U);
-    EXPECT_EQ(FakeDet_ReportCount, 0U);
+    EXPECT_EQ(FakeDetHw_ReportCount, 0U);
 }
 
 TEST_F(GptTest, DeInitWhileRunningReportsBusyAndStaysInitialized)
 {
     Gpt_Init(&config);
     Gpt_StartTimer(GPT_CHANNEL_0, 1000U);
-    FakeDet_Reset();
+    FakeDetHw_Reset();
 
     Gpt_DeInit();
 
-    EXPECT_EQ(FakeDet_LastErrorId, GPT_E_BUSY);
+    EXPECT_EQ(FakeDetHw_LastErrorId, GPT_E_BUSY);
 
     /* DeInit が実行されず初期化状態のままなら、running チャネルへの
      * StartTimer は (UNINIT ではなく) BUSY になるはず。 */
-    FakeDet_Reset();
+    FakeDetHw_Reset();
     Gpt_StartTimer(GPT_CHANNEL_0, 1000U);
-    EXPECT_EQ(FakeDet_LastErrorId, GPT_E_BUSY);
+    EXPECT_EQ(FakeDetHw_LastErrorId, GPT_E_BUSY);
 }
 
 TEST_F(GptTest, NotificationFiresOnlyWhileEnabled)
@@ -286,14 +290,14 @@ TEST_F(GptTest, EnableNotificationRejectsChannelWithoutNotificationConfigured)
 
     Gpt_EnableNotification(GPT_CHANNEL_0);
 
-    EXPECT_EQ(FakeDet_LastErrorId, GPT_E_PARAM_CHANNEL);
+    EXPECT_EQ(FakeDetHw_LastErrorId, GPT_E_PARAM_CHANNEL);
 }
 
 TEST_F(GptTest, GetVersionInfoRejectsNullPointer)
 {
     Gpt_GetVersionInfo(NULL);
 
-    EXPECT_EQ(FakeDet_LastErrorId, GPT_E_PARAM_POINTER);
+    EXPECT_EQ(FakeDetHw_LastErrorId, GPT_E_PARAM_POINTER);
 }
 
 TEST_F(GptTest, GetVersionInfoFillsExpectedModuleId)
@@ -306,9 +310,3 @@ TEST_F(GptTest, GetVersionInfoFillsExpectedModuleId)
 }
 
 }  // namespace
-
-int main(int argc, char** argv)
-{
-    ::testing::InitGoogleTest(&argc, argv);
-    return RUN_ALL_TESTS();
-}

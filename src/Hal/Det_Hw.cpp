@@ -6,9 +6,8 @@
  *          Serial に触れる）。
  *
  *          本ファイルが .cpp である理由:
- *          Serial / F() / (__FlashStringHelper*) キャストなど Arduino の
- *          出力 API が C++ のため、Can_Hw.cpp / Wdg_Hw.cpp 等と同じ理由で
- *          C++ として実装する。
+ *          Serial / F() など Arduino の出力 API が C++ のため、
+ *          Can_Hw.cpp / Wdg_Hw.cpp 等と同じ理由で C++ として実装する。
  *
  * \copyright  Copyright (c) 2025 T_T
  * \license    MIT License - 詳細は LICENSE ファイルを参照。
@@ -30,14 +29,14 @@ static void Det_Hw_PrintLevel(LogLevel lvl)
     }
 }
 
-void Det_Hw_PrintLogLine(LogLevel lvl, PGM_P tag_P, const char* msg)
+void Det_Hw_PrintLogLine(LogLevel lvl, const char* tag, const char* msg)
 {
     Serial.print('[');
     Serial.print(millis());
     Serial.print(F("ms] "));
     Det_Hw_PrintLevel(lvl);
     Serial.print(' ');
-    Serial.print((__FlashStringHelper*)tag_P);
+    Serial.print(tag);
     Serial.print(F(": "));
     Serial.println(msg);
 }
