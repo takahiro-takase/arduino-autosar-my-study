@@ -1,0 +1,238 @@
+// 本物のエンジン ECU / ABS ECU が送信しているように見せるデモ用スクリプト。
+// README.md の仮想メータ表示 (uds_tester) 紹介用 GIF 撮影のために作成した。
+//
+// test_E2E.capl の SendMessage_EngineInfo()/CalcE2EProfile05CRC() と同じ
+// E2E Profile05 (CRC16+8bitカウンタ) でフレームを組むため、Arduino 側
+// (App_EngineManager, E2EXf_PBCfg.c の EngineInfo/AbsInfo 設定) の E2E 検証を
+// 正規に通過する。速度・水温・ブレーキ/ABS 作動状態は固定値ではなく毎 tick
+// 変化させ、実エンジン・実 ABS ECU の挙動を模したカーブにする
+// (src/Asw/App_EngineManager.c の状態遷移閾値: ENGINE_SPEED_RUNNING_THRESHOLD=500,
+// ENGINE_SPEED_STALL_THRESHOLD=100, COOLANT_OVERHEAT_THRESHOLD=100°C と
+// 整合させ、意図せず FAULT に落ちないようにしている)。
+
+variables
+{
+    message 0x100 engineInfoMsg;
+    byte e2eCnt;
+
+    word rpm;
+    byte coolant;
+    byte rpmRising;  // 1=アイドル→レブへ加速中, 0=レブ→アイドルへ減速中
+
+    // AbsInfo (CAN 0x110) 側。ブレーキ/ABS 作動を 12 秒サイクル (60 tick x 200ms)
+    // で繰り返す: 巡航(0-19)→ブレーキング+ABS作動(20-39)→リリース(40-59)。
+    message 0x110 absInfoMsg;
+    byte e2eCntAbs;
+    word vehicleSpeed;
+    byte brakeActive;
+    byte absActive;
+    word demoTick;
+}
+
+on start
+{
+    e2eCnt    = 0x00;
+    rpm       = 300;   // クランキング開始（起動フラグ=1 と合わせて STARTING へ遷移）
+    coolant   = 20;    // 冷間始動
+    rpmRising = 1;
+
+    e2eCntAbs    = 0x00;
+    vehicleSpeed = 6000;  // 60.00 km/h で巡航中
+    brakeActive  = 0;
+    absActive    = 0;
+    demoTick     = 0;
+
+    write("エンジン+ABS始動シミュレーションを開始します（停止するには「停止」ボタンを押してください）");
+    setTimer(Tick, 200);
+}
+
+on timer Tick
+{
+    if (rpm < 900)
+    {
+        // クランキング〜アイドルまでは滑らかに立ち上げる
+        // (500 を跨いだ時点で App_EngineManager が STARTING->RUNNING へ遷移する)
+        rpm = rpm + 60;
+    }
+    else if (rpmRising == 1)
+    {
+        // アイドルからアクセルを踏み込んでいく想定でレブアップ
+        rpm = rpm + 120;
+        if (rpm >= 3500)
+        {
+            rpmRising = 0;
+        }
+    }
+    else
+    {
+        // アクセルを戻してアイドルへ戻る想定でレブダウン
+        rpm = rpm - 120;
+        if (rpm <= 900)
+        {
+            rpmRising = 1;
+        }
+    }
+
+    if (coolant < 90)
+    {
+        // 水温はゆっくり上昇し、90°C で飽和させる
+        // (COOLANT_OVERHEAT_THRESHOLD=100°C を超えて FAULT に落ちないようにする)
+        coolant = coolant + 1;
+    }
+
+    SendMessage_EngineInfo(rpm, coolant, 1, 0);
+
+    // ---------------------------------------------------------------
+    // AbsInfo: 巡航(0-19)→ブレーキング(20-39、25-34の間だけABS作動)→リリース(40-59)
+    // ---------------------------------------------------------------
+    if (demoTick < 20)
+    {
+        brakeActive = 0;
+        absActive   = 0;
+    }
+    else if (demoTick < 40)
+    {
+        brakeActive = 1;
+        if (demoTick >= 25 && demoTick < 35)
+        {
+            // 減速の中盤で車輪ロックを検知し ABS が作動する想定
+            absActive = 1;
+        }
+        else
+        {
+            absActive = 0;
+        }
+        if (vehicleSpeed >= 150)
+        {
+            vehicleSpeed = vehicleSpeed - 150;  // 急減速
+        }
+        else
+        {
+            vehicleSpeed = 0;
+        }
+    }
+    else
+    {
+        brakeActive = 0;
+        absActive   = 0;
+    }
+
+    SendMessage_AbsInfo(vehicleSpeed, brakeActive, absActive, 0);
+
+    demoTick = demoTick + 1;
+    if (demoTick >= 60)
+    {
+        demoTick     = 0;
+        vehicleSpeed = 6000;  // 次サイクルに向けて巡航速度へ復帰
+    }
+
+    setTimer(Tick, 200);  // CAPL の msTimer と同じく単発なので、繰り返すには再度アームする
+}
+
+// -----------------------------------------------------------------------------
+// EngineInfo (CAN 0x100, E2E Profile05)
+// byte[0-1]=CRC16(リトルエンディアン) / byte[2]=Counter(フル値) /
+// byte[3-4]=EngineSpeed(ビッグエンディアン16bit) / byte[5]=CoolantTemp /
+// byte[6] bit7=EngineOnFlag。test_E2E.capl の SendMessage_EngineInfo() と同じ
+// レイアウト・CRC 計算 (src/Bsw/E2EXf/E2EXf_PBCfg.c 参照)。
+// -----------------------------------------------------------------------------
+void SendMessage_EngineInfo(word speed, byte coolantTemp, byte onFlag, byte errorFlag)
+{
+    byte data[5];
+    word crc16;
+
+    data[0] = e2eCnt;
+    data[1] = (speed >> 8) & 0xFF;
+    data[2] = speed & 0xFF;
+    data[3] = coolantTemp;
+    data[4] = (onFlag & 0x01) << 7;
+
+    engineInfoMsg.dlc = 7;
+    engineInfoMsg.byte(2) = data[0];
+    engineInfoMsg.byte(3) = data[1];
+    engineInfoMsg.byte(4) = data[2];
+    engineInfoMsg.byte(5) = data[3];
+    engineInfoMsg.byte(6) = data[4];
+
+    crc16 = CalcE2EProfile05CRC(0x0100, 5, data);
+    engineInfoMsg.byte(0) = crc16 & 0xFF;
+    engineInfoMsg.byte(1) = (crc16 >> 8) & 0xFF;
+
+    output(engineInfoMsg);
+
+    e2eCnt = e2eCnt + 1;
+}
+
+// -----------------------------------------------------------------------------
+// AbsInfo (CAN 0x110, E2E Profile05)
+// byte[0-1]=CRC16(リトルエンディアン) / byte[2]=Counter(フル値) /
+// byte[3-4]=VehicleSpeed(ビッグエンディアン16bit、0.01km/h) /
+// byte[5] bit7=BrakeActive・bit6=AbsActive (src/Bsw/Com/Com_PBCfg.c の
+// BitPosition=40/41、src/Bsw/E2EXf/E2EXf_PBCfg.c の AbsInfo 設定 DataID=0x0110
+// DataLength=6 参照)。SendMessage_EngineInfo() と同じ CRC 計算方式。
+// -----------------------------------------------------------------------------
+void SendMessage_AbsInfo(word speed, byte brake, byte absFlag, byte errorFlag)
+{
+    byte data[4];
+    word crc16;
+
+    data[0] = e2eCntAbs;
+    data[1] = (speed >> 8) & 0xFF;
+    data[2] = speed & 0xFF;
+    data[3] = ((brake & 0x01) << 7) | ((absFlag & 0x01) << 6);
+
+    absInfoMsg.dlc = 6;
+    absInfoMsg.byte(2) = data[0];
+    absInfoMsg.byte(3) = data[1];
+    absInfoMsg.byte(4) = data[2];
+    absInfoMsg.byte(5) = data[3];
+
+    crc16 = CalcE2EProfile05CRC(0x0110, 4, data);
+    absInfoMsg.byte(0) = crc16 & 0xFF;
+    absInfoMsg.byte(1) = (crc16 >> 8) & 0xFF;
+
+    output(absInfoMsg);
+
+    e2eCntAbs = e2eCntAbs + 1;
+}
+
+// CRC16 (poly=0x1021、MSB first、非反転)。test_E2E.capl の
+// UpdateCrc16()/CalcE2EProfile05CRC() と同一実装。
+word UpdateCrc16(word crc, byte b)
+{
+    word poly = 0x1021;
+    int i;
+
+    crc ^= (b << 8);
+    for (i = 0; i < 8; i++)
+    {
+        if (crc & 0x8000)
+        {
+            crc = (crc << 1) ^ poly;
+        }
+        else
+        {
+            crc <<= 1;
+        }
+    }
+    return crc;
+}
+
+word CalcE2EProfile05CRC(word dataId, byte len, byte data[])
+{
+    // 開始値 0xFFFF (SWS_E2E_00406)。data[](Counter含む) を先に投入し、
+    // DataID を下位バイト→上位バイトの順で最後に投入する
+    // (SWS_E2E_00399/00406、src/Bsw/E2E/E2E_P05.c の E2E_CalcCrc16Body() と同じ)。
+    word crc = 0xFFFF;
+    byte index;
+
+    for (index = 0; index < len; index++)
+    {
+        crc = UpdateCrc16(crc, data[index]);
+    }
+
+    crc = UpdateCrc16(crc, dataId & 0xFF);
+    crc = UpdateCrc16(crc, (dataId >> 8) & 0xFF);
+
+    return crc;
+}
