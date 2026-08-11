@@ -29,6 +29,26 @@ void           Can_MainFunction_Write(void);
 void           Can_MainFunction_BusOff(void);
 void           Can_MainFunction_Wakeup(void);
 
+#ifdef CAN_UNIT_TEST
+/**
+ * \brief   [テスト専用] 内部状態 CanState を取得する。
+ *
+ * \details native 環境のホストテスト（`test/test_native/`）からのみ使用する
+ *          アクセサ。`CAN_UNIT_TEST` は `[env:native]` の `build_flags` でのみ
+ *          定義され、実機ビルド（`uno_r4`）では定義されないため、実機の
+ *          `Can.h`/`Can.c` には一切含まれない（AUTOSAR 標準外の関数）。
+ */
+Can_ControllerStateType Can_Test_GetControllerState(void);
+void Can_Test_SetControllerState(Can_ControllerStateType state);
+void Can_Test_SetConfigPtr(Can_ConfigType* config);
+
+/** [テスト専用] ソフトウェア bus-off フォールバックカウンタ Can_TxErrCount の
+ *  取得・リセット。Can_Init() ではリセットされない（実装参照）ため、テストの
+ *  SetUp() で毎回明示的にリセットしないとテストケースをまたいで値が持ち越される。 */
+uint8 Can_Test_GetTxErrCount(void);
+void  Can_Test_ResetTxErrCount(void);
+#endif
+
 #ifdef __cplusplus
 }
 #endif
