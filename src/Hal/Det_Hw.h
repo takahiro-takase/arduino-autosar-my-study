@@ -24,11 +24,11 @@ extern "C" {
 /**
  * \brief   "[<ms>ms] LEVEL TAG: msg\r\n" 形式で 1 行出力する。
  *
- * \param[in]  lvl    ログレベル（出力する文字列 ERROR/WARN /INFO /DEBUG の選択に使う）。
- * \param[in]  tag_P  PROGMEM ポインタ（RAM へコピーせず直接出力する）。
- * \param[in]  msg    整形済みメッセージ本文（Det.c 側で vsnprintf 済み）。
+ * \param[in]  lvl  ログレベル（出力する文字列 ERROR/WARN /INFO /DEBUG の選択に使う）。
+ * \param[in]  tag  呼び出し元が定義したタグ文字列。
+ * \param[in]  msg  整形済みメッセージ本文（Det.c 側で vsnprintf 済み）。
  */
-void Det_Hw_PrintLogLine(LogLevel lvl, PGM_P tag_P, const char* msg);
+void Det_Hw_PrintLogLine(LogLevel lvl, const char* tag, const char* msg);
 
 /** \brief  "[<ms>ms] DET M=.. I=.. API=0x.. ERR=0x.." 形式で 1 行出力する。 */
 void Det_Hw_PrintDetError(uint16 ModuleId, uint8 InstanceId, uint8 ApiId, uint8 ErrorId);

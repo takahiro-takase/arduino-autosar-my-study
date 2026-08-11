@@ -20,20 +20,17 @@
 #include "Det.h"
 #include "Det_Hw.h"
 
-void Log_Write(LogLevel lvl, PGM_P tag_P, PGM_P fmt_P, ...)
+void Log_Write(LogLevel lvl, const char* tag, const char* fmt, ...)
 {
     if (lvl > DET_LOG_LEVEL) return;  /* DET_LOG_LEVEL より重要度が低いログは抑制 */
 
     char buf[LOG_BUF_SIZE];
     va_list args;
-    va_start(args, fmt_P);
-    /* Renesas RA (ARM Cortex-M) はフラッシュがメモリ空間にマップされており、
-     * PROGMEM ポインタを通常ポインタとして読めるため、AVR 専用の
-     * vsnprintf_P ではなく通常の vsnprintf を使う。 */
-    vsnprintf(buf, sizeof(buf), fmt_P, args);
+    va_start(args, fmt);
+    vsnprintf(buf, sizeof(buf), fmt, args);
     va_end(args);
 
-    Det_Hw_PrintLogLine(lvl, tag_P, buf);
+    Det_Hw_PrintLogLine(lvl, tag, buf);
 }
 
 Std_ReturnType Det_ReportError(uint16 ModuleId, uint8 InstanceId, uint8 ApiId, uint8 ErrorId)

@@ -1,5 +1,5 @@
 /**
- * \file    test_e2e_p05.cpp
+ * \file    Bsw_E2E_test.cpp
  * \brief   E2E_P05.c（src/Bsw/E2E/E2E_P05.c）の単体テスト（GoogleTest / PlatformIO native環境）
  * \details E2E_P05.c は実 HW 依存の無い自己完結したロジックのため、フェイク
  *          実装は不要で公開 API (E2E_P05Protect/E2E_P05Check とその Init) を
@@ -12,6 +12,13 @@
  *          E2E_P05Check() はこのプロジェクト内に実行時の呼び出し元が無い
  *          (EngineHealthStatus は TX のみ) ため、正しさを検証できるのは
  *          このホストテストだけである。
+ *
+ *          E2E_P01.c のテストを追加する場合も、モジュール概念上は E2E
+ *          ディレクトリで1つのため本ファイルに TEST_F(E2EP01Test, ...) を
+ *          追加する形でまとめる（別ファイルに分けない）。
+ *
+ *          GoogleTest の main() は test_main.cpp に集約しているため、
+ *          本ファイルでは定義しない。
  */
 #include <gtest/gtest.h>
 
@@ -194,9 +201,3 @@ TEST_F(E2EP05Test, CrcMismatchReturnsErrorAndDoesNotUpdateState)
 }
 
 }  // namespace
-
-int main(int argc, char** argv)
-{
-    ::testing::InitGoogleTest(&argc, argv);
-    return RUN_ALL_TESTS();
-}

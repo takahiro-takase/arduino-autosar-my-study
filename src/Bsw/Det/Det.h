@@ -23,7 +23,6 @@
 #define DET_H
 
 #include <stdint.h>
-#include <avr/pgmspace.h>
 #include "Platform_Types.h"
 #include "Std_Types.h"
 
@@ -59,10 +58,9 @@ typedef enum
 
 /**
  * "[<ms>ms] LEVEL TAG: msg\r\n" を 1 行出力する。
- * tag_P / fmt_P は PROGMEM ポインタ (マクロが PSTR でラップ)。
- * msg は printf 形式の可変長引数。
+ * fmt は printf 形式の可変長引数。
  */
-void Log_Write(LogLevel lvl, PGM_P tag_P, PGM_P fmt_P, ...);
+void Log_Write(LogLevel lvl, const char* tag, const char* fmt, ...);
 
 /**
  * バイト列 src を "XX XX XX ..." 形式の hex 文字列として dst に書き込む。
@@ -75,10 +73,10 @@ void Log_HexStr(char* dst, uint8_t dstSize,
  * 便利マクロ
  * ----------------------------------------------------------------------- */
 
-#define DET_LOGE(tag, fmt, ...)  Log_Write(LOG_E, PSTR(tag), PSTR(fmt), ##__VA_ARGS__)
-#define DET_LOGW(tag, fmt, ...)  Log_Write(LOG_W, PSTR(tag), PSTR(fmt), ##__VA_ARGS__)
-#define DET_LOGI(tag, fmt, ...)  Log_Write(LOG_I, PSTR(tag), PSTR(fmt), ##__VA_ARGS__)
-#define DET_LOGD(tag, fmt, ...)  Log_Write(LOG_D, PSTR(tag), PSTR(fmt), ##__VA_ARGS__)
+#define DET_LOGE(tag, fmt, ...)  Log_Write(LOG_E, tag, fmt, ##__VA_ARGS__)
+#define DET_LOGW(tag, fmt, ...)  Log_Write(LOG_W, tag, fmt, ##__VA_ARGS__)
+#define DET_LOGI(tag, fmt, ...)  Log_Write(LOG_I, tag, fmt, ##__VA_ARGS__)
+#define DET_LOGD(tag, fmt, ...)  Log_Write(LOG_D, tag, fmt, ##__VA_ARGS__)
 
 /**
  * \brief   開発エラーを標準化された形式で通知する（AUTOSAR Det_ReportError 準拠）。

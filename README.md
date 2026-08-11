@@ -1786,11 +1786,16 @@ TX 側と同じ検証を RX の各層境界（CanIf → PduR → Com）にも追
 
 実 HW（UNO R4）を使わず、Bsw モジュールのロジックだけをホスト PC 上で
 GoogleTest により検証する `[env:native]` 環境を用意している
-（`platformio.ini` 参照）。対象は `build_src_filter` で個別指定した
-モジュールのみで、現状は `src/Bsw/Gpt/Gpt.c` が対象（`test/test_gpt/`）。
-Hal/Det/SchM_Hw 等の実 HW 依存部分は `test/test_gpt/fake_*.c` の
-フェイク実装に差し替え、`Gpt_OnTick()`（本来 ISR から呼ばれる関数）を
-テストから直接呼ぶことで、実割り込みなしに状態機械を駆動している。
+（`platformio.ini` 参照）。全モジュールのテストは `test/test_native/`
+1 フォルダに集約し、HAL 層（`*_Hw` ファイル）だけをフェイクに差し替えて、
+その上位の実モジュールは依存関係の下位から順に `build_src_filter` へ
+積み上げていく方式を取っている（現状は `src/Bsw/Gpt/Gpt.c` と
+`src/Bsw/E2E/E2E_P05.c` が対象）。ファイル名は `{層}_{モジュール}_{test|fake}`
+（実ファイル名が `<Module>_Hw` の場合はそれも含める。例: `Bsw_Gpt_test.cpp`、
+`Hal_Gpt_Hw_fake.c`）で統一し、フォルダを分けなくてもどの層・モジュールの
+ファイルかが名前だけで分かるようにしている。
+`Gpt_OnTick()`（本来 ISR から呼ばれる関数）はテストから直接呼ぶことで、
+実割り込みなしに状態機械を駆動している。
 
 ```bash
 # ホスト上でビルド・実行（GoogleTest、実 HW 不要）
@@ -1802,16 +1807,18 @@ pio test -e native
 ネイティブコンパイラ）。初回実行時に GoogleTest ライブラリと `native`
 プラットフォームを自動ダウンロードする。
 
-新しい Bsw モジュールのテストを追加する場合は `test/<module>/` を新設し、
-対象モジュールに応じて `[env:native]` の `build_src_filter` と `-I` を
-調整する（`test/test_gpt/` を雛形として流用できる）。
+新しい Bsw モジュールのテストを追加する場合は `test/test_native/` に
+`{層}_{モジュール}_test.cpp`（および必要なら `{層}_{モジュール}_fake.c`）を
+追加し、`[env:native]` の `build_src_filter` と `-I` にその実ソースを積み
+増す（GoogleTest の `main()` は `test_main.cpp` に集約しているため、新規
+テストファイルには `int main()` を書かないこと）。
 
 > **Windows 環境固有の注意（MinGW-w64 のランタイム不整合）**:
 > 一部の MinGW-w64 配布物（msvcrt ランタイム版）では、GoogleTest の
 > death test 機構経由で `libmingw32.a` 内の UCRT 専用シンボル
 > (`__imp_quick_exit`/`__imp__Exit`) が要求され、
 > `undefined reference to __imp_quick_exit` 等でリンクに失敗することがある。
-> `test/test_gpt/win_quick_exit_stub.cpp` はこの環境向けの回避コード
+> `test/test_native/win_quick_exit_stub.cpp` はこの環境向けの回避コード
 > （該当シンボルを `std::exit()` へ委譲する自前スタブで満たす）。
 > UCRT ランタイム版の MinGW-w64 を使っている場合は本来不要で、
 > `__imp_quick_exit`/`__imp__Exit` の多重定義エラーが出たら削除すること。
