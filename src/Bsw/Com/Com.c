@@ -1658,7 +1658,14 @@ uint8 Com_SendSignal(Com_SignalIdType SignalId, const void* SignalDataPtr)
              * セットする。ASW 側の「常に書き込む」設計を変えずに、update-bit
              * 本来の目的（このシグナルが実際に更新されたかどうかを示す）を
              * 満たすための、本プロジェクト固有の解釈である。 */
-            if (ipdu->UpdateBitPosition != 0xFFU)
+            /* UpdateBitContributor（Com_Types.h 参照）: I-PDU に複数の非 Signal
+             * Group TX シグナルが同居する場合、update-bit を「このシグナルの
+             * 変化」専用に保つため、寄与するシグナルのみに絞る（TmsContributor
+             * と同じパターン。2026-08 コードレビューで、MeterStatus に
+             * EngineSpeed/RunLamp 等のミラーシグナルを追加した際、それらの
+             * 変化だけで EngineState 用の update-bit が誤って立つ不具合が
+             * 見つかり対応した）。 */
+            if (ipdu->UpdateBitPosition != 0xFFU && sig->UpdateBitContributor == 1U)
                 Com_PackSignal(Com_TxBuffer[sig->IPduId], ipdu->UpdateBitPosition, 1U, COM_BIG_ENDIAN, 1U);
         }
 

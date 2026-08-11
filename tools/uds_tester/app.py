@@ -12,6 +12,7 @@ Control 送信、SecurityAccess の seed->key 計算も自動化する。
 from __future__ import annotations
 
 import argparse
+import gc
 import json
 import os
 import queue
@@ -58,6 +59,7 @@ class App(tk.Tk):
         self._rx_monitor_secoc_verify: "dict[int, dict]" = {}
         self._rx_monitor_name_vars: "dict[int, tk.StringVar]" = {}
         self._rx_monitor_stop = threading.Event()
+        self._rx_monitor_thread: "threading.Thread | None" = None
         self.script_stop_event = threading.Event()
         self._script_thread: threading.Thread | None = None
         # _rx_monitor_worker がバスの唯一の「常時ポーリングする」読み取り役であり、
@@ -119,6 +121,33 @@ class App(tk.Tk):
             variable=self._log_visible,
             command=self._toggle_log,
         ).grid(row=0, column=3, padx=8, pady=4)
+
+        meter = ttk.LabelFrame(
+            self, text="仮想メータ表示（MeterStatus 0x200、実機に物理表示器が無いための可視化）")
+        meter.pack(fill="x", padx=8, pady=4)
+
+        ttk.Label(meter, text="RPM").grid(row=0, column=0, padx=8, pady=4)
+        self.meter_rpm_bar = ttk.Progressbar(
+            meter, orient="horizontal", length=300, maximum=8000, mode="determinate")
+        self.meter_rpm_bar.grid(row=0, column=1, padx=4, pady=4)
+        self.meter_rpm_var = tk.StringVar(value="---- rpm")
+        ttk.Label(meter, textvariable=self.meter_rpm_var, width=10).grid(
+            row=0, column=2, padx=8, pady=4)
+
+        self.meter_run_var = tk.StringVar(value="RUN")
+        self.meter_run_lbl = tk.Label(
+            meter, textvariable=self.meter_run_var, width=8, relief="raised", bg="gray85")
+        self.meter_run_lbl.grid(row=0, column=3, padx=4, pady=4)
+
+        self.meter_fault_var = tk.StringVar(value="FAULT")
+        self.meter_fault_lbl = tk.Label(
+            meter, textvariable=self.meter_fault_var, width=8, relief="raised", bg="gray85")
+        self.meter_fault_lbl.grid(row=0, column=4, padx=4, pady=4)
+
+        self.meter_abs_var = tk.StringVar(value="ABS")
+        self.meter_abs_lbl = tk.Label(
+            meter, textvariable=self.meter_abs_var, width=8, relief="raised", bg="gray85")
+        self.meter_abs_lbl.grid(row=0, column=5, padx=4, pady=4)
 
         script = ttk.LabelFrame(self, text="スクリプト (CAPL風)")
         script.pack(fill="x", padx=8, pady=4)
@@ -653,8 +682,10 @@ class App(tk.Tk):
         self.connect_btn.configure(text="Disconnect")
         self._log("接続しました")
         self._rx_monitor_stop.clear()
-        threading.Thread(target=self._rx_monitor_worker,
-                         args=(self._rx_monitor_stop,), daemon=True).start()
+        self._rx_monitor_thread = threading.Thread(
+            target=self._rx_monitor_worker,
+            args=(self._rx_monitor_stop,), daemon=True)
+        self._rx_monitor_thread.start()
 
     def _disconnect(self):
         self.script_stop_event.set()
@@ -680,7 +711,28 @@ class App(tk.Tk):
         # 参照を破棄するだけにし、後始末は BusABC.__del__ の best-effort
         # 処理（例外を抑制しつつ shutdown を1回だけ試みる）に委ねる。
         self._rx_monitor_stop.set()
+        # _rx_monitor_worker はループ先頭で bus = self.bus をローカル変数に
+        # キャプチャしてから bus.recv(timeout=0.05) をブロッキング呼び出しする
+        # ため、self.bus = None にした直後でもワーカースレッドがまだ古い
+        # GsUsbBus を参照し続けている可能性がある。その状態で gc.collect() を
+        # 呼んでも古いオブジェクトは回収されない（参照が生きているため）ので、
+        # _script_thread と同様にワーカースレッドの終了を待ってから
+        # bus 参照を破棄する。
+        if self._rx_monitor_thread is not None and self._rx_monitor_thread.is_alive():
+            self._rx_monitor_thread.join(timeout=1.0)
+            if self._rx_monitor_thread.is_alive():
+                self.log_queue.put("[RXモニタ] 停止待ちタイムアウト (バックグラウンドで終了処理中)")
+        self._rx_monitor_thread = None
         self.bus = None
+        # 参照を破棄しただけでは GC 実行タイミングが不定で、古い GsUsbBus が
+        # USB デバイスを掴んだままの状態が続くことがある（すぐ Connect
+        # し直すと「Entity not found」で失敗する原因になりうる）。shutdown()
+        # を直接呼ぶのは上記コメントの通り access violation リスクがあるため
+        # 避け、代わりに gc.collect() で GC を即座に走らせることで、
+        # BusABC.__del__ の best-effort shutdown をこの場で確定的に
+        # 発生させる。ワーカースレッドを join 済みなので、ここに来た時点で
+        # 古い bus への参照はこのメソッドのローカル変数以外に残っていない。
+        gc.collect()
         self.status_var.set("● Disconnected")
         self.status_label.configure(foreground="red")
         self.connect_btn.configure(text="Connect")
@@ -1066,6 +1118,23 @@ class App(tk.Tk):
         upd = (byte0 >> 4) & 1
         return f"(RUN:{run} FAULT:{fault} ABS:{abs_} upd={upd})"
 
+    def _update_virtual_meter(self, data: bytes) -> None:
+        """MeterStatus (CAN 0x200, DLC=5) の byte[2]=警告灯3bitミラー・
+        byte[3-4]=EngineSpeedミラーから仮想メータ表示を更新する。
+        ビット配置は WarningStatus と同じ MSB 起点（bit0=MSB）:
+        byte[2] bit0=RunLamp, bit1=FaultLamp, bit2=AbsLamp。
+        byte[3-4] はビッグエンディアン 16bit（EngineInfo の EngineSpeed と同じ単位・rpm）。"""
+        run = (data[2] >> 7) & 1
+        fault = (data[2] >> 6) & 1
+        abs_ = (data[2] >> 5) & 1
+        rpm = (data[3] << 8) | data[4]
+
+        self.meter_rpm_bar["value"] = min(rpm, 8000)
+        self.meter_rpm_var.set(f"{rpm} rpm")
+        self.meter_run_lbl.configure(bg="green" if run else "gray85")
+        self.meter_fault_lbl.configure(bg="red" if fault else "gray85")
+        self.meter_abs_lbl.configure(bg="orange" if abs_ else "gray85")
+
     def _rx_monitor_worker(self, stop_ev: threading.Event):
         """bus_lock をノンブロッキングで取得し、rx_monitor CAN ID の受信フレームを表示する。
         UDS 処理中 (bus_lock 保持中) はスキップして干渉を避ける。
@@ -1272,6 +1341,12 @@ class App(tk.Tk):
                             upd = (data[1] >> 7) & 1
                             name = f"{name} upd={upd}"
                         self._rx_monitor_name_vars[mon_idx].set(f"({name})")
+                        if len(data) >= 5:
+                            # byte[2] bit0-2 = RunLamp/FaultLamp/AbsLamp ミラー（本プロジェクト
+                            # 独自拡張。WarningStatus(0x210) と同値）、byte[3-4] = EngineSpeed
+                            # ミラー（ビッグエンディアン、EngineInfo(0x100) の検証済み値と同値）。
+                            # 実機に物理表示器が無いための仮想メータ表示。
+                            self._update_virtual_meter(data)
                     elif decode == "nm_status" and len(data) >= 2:
                         # byte[0]=Control Bit Vector（bit0=Repeat Message Request、
                         # 他ビットは本プロジェクトでは未使用）、

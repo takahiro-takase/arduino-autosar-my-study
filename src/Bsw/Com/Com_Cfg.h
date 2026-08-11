@@ -120,7 +120,9 @@
 
 /** TX I-PDU テーブルのエントリ数
  *  DaVinci: /ActiveEcuC/Com/ComConfig/ 内 Direction=SEND の ComIPdu 数
- *  [0]=MeterStatus 0x200 (MIXED: 変化時送信 + 周期フロア)、
+ *  [0]=MeterStatus 0x200 (MIXED: 変化時送信 + 周期フロア。DLC=5、
+ *  byte[0]=EngineState、byte[1]=update-bit、byte[2]=警告灯3bit、
+ *  byte[3-4]=EngineSpeedミラー)、
  *  [1]=WarningStatus 0x210 (Signal Group, DIRECT: 変化時のみ送信)、
  *  [2]=E2EHealthStatus 0x220 (PERIODIC、E2EMon CDD 相当が発行するネットワーク
  *  健全性テレメトリ。詳細は src/Bsw/E2EMon/E2EMon.c 参照)、
@@ -175,7 +177,7 @@
 
 /** シグナルテーブルのエントリ数（RX + TX の合計）
  *  DaVinci: /ActiveEcuC/Com/ComConfig/ 内 ComSignal ノード数の合計 */
-#define COM_SIGNAL_COUNT    14U
+#define COM_SIGNAL_COUNT    18U
 
 /** Signal Gateway ルーティングテーブルのエントリ数
  *  DaVinci: /ActiveEcuC/Com/ComConfig/[ComGwMapping] ノード数
@@ -200,6 +202,28 @@
 
 /** TX: エンジン状態シグナル (8 bit, CAN ID 0x200, byte[0]) */
 #define COM_SIGNAL_ENGINE_STATE    3U
+
+/* -----------------------------------------------------------------------
+ * MeterStatus 拡張シグナル (CAN ID 0x200, TX)
+ * uds_tester の仮想メータ表示タブが1フレームで完結してデコードできるよう、
+ * EngineInfo(RX)のEngineSpeed検証済み値と、WarningStatus(0x210)と同じ値の
+ * 警告灯3本を、App_EngineManager/App_WarningIndicator からミラー送信する
+ * （値の重複はWarningStatusとの間で許容している。詳細はdocs/modules/
+ * Com_Notes.md参照）。
+ * ----------------------------------------------------------------------- */
+
+/** TX: エンジン回転数ミラー (16 bit, CAN ID 0x200, byte[3-4]、EngineInfoの
+ *  検証済みEngineSpeedと同一値・同一単位) */
+#define COM_SIGNAL_METER_ENGINE_SPEED  14U
+
+/** TX: RUNNING LED 状態ミラー (1 bit, CAN ID 0x200, byte[2] bit0) */
+#define COM_SIGNAL_METER_RUN_LAMP      15U
+
+/** TX: FAULT LED 状態ミラー (1 bit, CAN ID 0x200, byte[2] bit1) */
+#define COM_SIGNAL_METER_FAULT_LAMP    16U
+
+/** TX: ABS LED 状態ミラー (1 bit, CAN ID 0x200, byte[2] bit2) */
+#define COM_SIGNAL_METER_ABS_LAMP      17U
 
 /* -----------------------------------------------------------------------
  * ABS ECU シグナル (CAN ID 0x110 AbsInfo フレーム)
