@@ -33,7 +33,7 @@
  *              Com_RxIndication() を直接呼んで Authentic Payload のみ渡す。
  *              詳細は src/Bsw/SecOC/ 参照)
  *              Signal 12: ImmobilizerCmd  8 bit  BitPos=0  BigEndian  0x00=LOCK/0x01=UNLOCK
- *            TX I-PDU 0 (IPduId=0): CAN ID 0x200, DLC=2  MeterStatus
+ *            TX I-PDU 0 (IPduId=0): CAN ID 0x200, DLC=5  MeterStatus
  *              (メータ ECU、E2E 保護なし、TxModeMode=MIXED。
  *              ComFilterAlgorithm=MASKED_NEW_DIFFERS_MASKED_OLD で値変化を
  *              検知すると次回 Com_MainFunction() で送信、変化がなくても
@@ -43,6 +43,14 @@
  *              値変化時送信を受信側が区別できる)
  *              Signal 3: EngineState    8 bit  BitPos= 0  BigEndian
  *                TxAckCbk=Rte_COMTxAck_EngineState（送信成功のたび呼ばれる）
+ *              byte[2]: 警告灯3bit（WarningStatusと同じ値のミラー。uds_tester
+ *              の仮想メータ表示タブが1フレームで完結してデコードできるように
+ *              追加。詳細は下記 Signal 15-17 参照）
+ *              Signal 15: RunLamp(mirror)   1 bit  BitPos=16  BigEndian
+ *              Signal 16: FaultLamp(mirror) 1 bit  BitPos=17  BigEndian
+ *              Signal 17: AbsLamp(mirror)   1 bit  BitPos=18  BigEndian
+ *              byte[3-4]: EngineSpeedミラー（EngineInfoの検証済み値と同一）
+ *              Signal 14: EngineSpeed(mirror) 16 bit  BitPos=24  BigEndian
  *            TX I-PDU 1 (IPduId=1): CAN ID 0x210, DLC=1  WarningStatus (メータ ECU、Signal Group)
  *              TMS（Transmission Mode Selector）を持つ I-PDU:
  *                通常（FaultLamp/AbsLamp 消灯 = TMS false）は TxModeMode=DIRECT。
@@ -273,8 +281,10 @@ static const Com_IPduConfigType Com_TxIPduConfigData[COM_TX_IPDU_COUNT] = {
          * 対比用に、シグナル単位の実装例として追加した）。
          * --------------------------------------------------------------- */
         .IPduId    = 0U,  /* DaVinci: ComIPduHandleId  - I-PDU 識別番号 */
-        .DLC       = 2U,  /* DaVinci: ComIPduLength    - I-PDU バイト長
-                           *          byte[0]=EngineState、byte[1] bit0=update-bit（残り7bitは予約） */
+        .DLC       = 5U,  /* DaVinci: ComIPduLength    - I-PDU バイト長
+                           *          byte[0]=EngineState、byte[1] bit0=update-bit（残り7bitは予約）、
+                           *          byte[2] bit0-2=警告灯3bit（残り5bitは予約）、
+                           *          byte[3-4]=EngineSpeedミラー（16bit） */
         .PduRId    = 0U,  /* DaVinci: ComIPduPduRef    - PduR TX パス 0 へのリンク */
         .TimeoutMs = 0U,  /* TX I-PDU のため監視無効 */
         .IsSignalGroup = 0U, /* 直接送信（既存の挙動のまま） */
@@ -490,6 +500,10 @@ static const Com_SignalConfigType Com_SignalConfigData[COM_SIGNAL_COUNT] = {
         .FilterAlgorithm = COM_FILTER_MASKED_NEW_DIFFERS_MASKED_OLD, /* DaVinci: ComFilterAlgorithm
                                                  *          値が変化したときだけ送信要求とみなす */
         .Mask            = 0xFFU,               /* DaVinci: ComFilterNewValue/ComFilterMask 相当（8bit 全体を比較） */
+        .UpdateBitContributor = 1U,              /* 本プロジェクト独自拡張。MeterStatus の
+                                                 *          update-bit（byte[1] bit0）はこの
+                                                 *          シグナルの変化のみを反映する
+                                                 *          （Signal 14-17 のミラーは寄与しない） */
         .TxAckCbk        = Rte_COMTxAck_EngineState /* DaVinci: ComNotification */
     },
     {
@@ -680,6 +694,81 @@ static const Com_SignalConfigType Com_SignalConfigData[COM_SIGNAL_COUNT] = {
                                                         *          値が変化したときだけ送信要求とみなす
                                                         *          （EngineState と同じパターン） */
         .Mask            = 0xFFU                      /* DaVinci: ComFilterNewValue/ComFilterMask 相当 */
+    },
+    {
+        /* ---------------------------------------------------------------
+         * Signal 14: EngineSpeed(mirror)  TX 16bit  CAN 0x200 byte[3-4]
+         * DaVinci: /ActiveEcuC/Com/ComConfig/MeterStatus_EngineSpeedMirror_Tx
+         * App_EngineManager が EngineInfo(RX) の検証済み EngineSpeed を
+         * そのままミラー送信する（uds_tester の仮想メータ表示タブ向け）。
+         * --------------------------------------------------------------- */
+        .SignalId    = COM_SIGNAL_METER_ENGINE_SPEED, /* DaVinci: ComHandleId */
+        .Direction   = COM_SIGNAL_DIRECTION_TX,       /* 本プロジェクト独自拡張 */
+        .IPduId      = 0U,                            /* DaVinci: ComIPduRef → MeterStatus_Tx */
+        .BitPosition = 24U,                           /* DaVinci: ComBitPosition (byte[3]) */
+        .BitSize     = 16U,                           /* DaVinci: ComBitSize     */
+        .Endian      = COM_BIG_ENDIAN,                /* DaVinci: ComSignalEndianness = OPAQUE */
+        .FilterAlgorithm = COM_FILTER_MASKED_NEW_DIFFERS_MASKED_OLD, /* DaVinci: ComFilterAlgorithm
+                                                        *          値が変化したときだけ送信要求とみなす */
+        .Mask            = 0xFFFFU,                   /* DaVinci: ComFilterNewValue/ComFilterMask 相当（16bit全体） */
+        .UpdateBitContributor = 0U                    /* MeterStatus の update-bit は EngineState
+                                                        *          専用（Signal 3 参照）。このミラーは
+                                                        *          頻繁に変化するため寄与させない
+                                                        *          （2026-08 コードレビューで対応） */
+    },
+    {
+        /* ---------------------------------------------------------------
+         * Signal 15: RunLamp(mirror)  TX 1bit  CAN 0x200 byte[2] bit0
+         * DaVinci: /ActiveEcuC/Com/ComConfig/MeterStatus_RunLampMirror_Tx
+         * WarningStatus の Signal 7(RunLamp) と同じ値を App_WarningIndicator
+         * がミラー送信する（uds_tester の仮想メータ表示タブ向け）。
+         * --------------------------------------------------------------- */
+        .SignalId    = COM_SIGNAL_METER_RUN_LAMP,     /* DaVinci: ComHandleId */
+        .Direction   = COM_SIGNAL_DIRECTION_TX,       /* 本プロジェクト独自拡張 */
+        .IPduId      = 0U,                            /* DaVinci: ComIPduRef → MeterStatus_Tx */
+        .BitPosition = 16U,                           /* DaVinci: ComBitPosition (byte[2] bit0) */
+        .BitSize     = 1U,                            /* DaVinci: ComBitSize     */
+        .Endian      = COM_BIG_ENDIAN,                /* DaVinci: ComSignalEndianness = OPAQUE */
+        .FilterAlgorithm = COM_FILTER_MASKED_NEW_DIFFERS_MASKED_OLD, /* DaVinci: ComFilterAlgorithm */
+        .Mask            = 0x01U,                     /* DaVinci: ComFilterNewValue/ComFilterMask 相当 */
+        .UpdateBitContributor = 0U                    /* MeterStatus の update-bit は EngineState 専用
+                                                        *          （2026-08 コードレビューで対応） */
+    },
+    {
+        /* ---------------------------------------------------------------
+         * Signal 16: FaultLamp(mirror)  TX 1bit  CAN 0x200 byte[2] bit1
+         * DaVinci: /ActiveEcuC/Com/ComConfig/MeterStatus_FaultLampMirror_Tx
+         * WarningStatus の Signal 8(FaultLamp) と同じ値のミラー。
+         * --------------------------------------------------------------- */
+        .SignalId    = COM_SIGNAL_METER_FAULT_LAMP,   /* DaVinci: ComHandleId */
+        .Direction   = COM_SIGNAL_DIRECTION_TX,       /* 本プロジェクト独自拡張 */
+        .IPduId      = 0U,                            /* DaVinci: ComIPduRef → MeterStatus_Tx */
+        .BitPosition = 17U,                           /* DaVinci: ComBitPosition (byte[2] bit1) */
+        .BitSize     = 1U,                            /* DaVinci: ComBitSize     */
+        .Endian      = COM_BIG_ENDIAN,                /* DaVinci: ComSignalEndianness = OPAQUE */
+        .FilterAlgorithm = COM_FILTER_MASKED_NEW_DIFFERS_MASKED_OLD, /* DaVinci: ComFilterAlgorithm */
+        .Mask            = 0x01U,                     /* DaVinci: ComFilterNewValue/ComFilterMask 相当 */
+        .UpdateBitContributor = 0U                    /* MeterStatus の update-bit は EngineState 専用。
+                                                        *          FaultLamp は FAULT 中 500ms ごとに変化
+                                                        *          するため、寄与させないことが特に重要
+                                                        *          （2026-08 コードレビューで対応） */
+    },
+    {
+        /* ---------------------------------------------------------------
+         * Signal 17: AbsLamp(mirror)  TX 1bit  CAN 0x200 byte[2] bit2
+         * DaVinci: /ActiveEcuC/Com/ComConfig/MeterStatus_AbsLampMirror_Tx
+         * WarningStatus の Signal 9(AbsLamp) と同じ値のミラー。
+         * --------------------------------------------------------------- */
+        .SignalId    = COM_SIGNAL_METER_ABS_LAMP,     /* DaVinci: ComHandleId */
+        .Direction   = COM_SIGNAL_DIRECTION_TX,       /* 本プロジェクト独自拡張 */
+        .IPduId      = 0U,                            /* DaVinci: ComIPduRef → MeterStatus_Tx */
+        .BitPosition = 18U,                           /* DaVinci: ComBitPosition (byte[2] bit2) */
+        .BitSize     = 1U,                            /* DaVinci: ComBitSize     */
+        .Endian      = COM_BIG_ENDIAN,                /* DaVinci: ComSignalEndianness = OPAQUE */
+        .FilterAlgorithm = COM_FILTER_MASKED_NEW_DIFFERS_MASKED_OLD, /* DaVinci: ComFilterAlgorithm */
+        .Mask            = 0x01U,                     /* DaVinci: ComFilterNewValue/ComFilterMask 相当 */
+        .UpdateBitContributor = 0U                    /* MeterStatus の update-bit は EngineState 専用
+                                                        *          （2026-08 コードレビューで対応） */
     }
 };
 

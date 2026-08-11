@@ -135,6 +135,14 @@ void App_WarningIndicator_Run(void)
     (void)Rte_Write_WarningStatus_AbsLamp(absLevel);
     (void)Rte_SendSignalGroup_WarningStatus();
 
+    /* MeterStatus(CAN 0x200) へも同じ値をミラー送信する（uds_tester の
+     * 仮想メータ表示タブ向け、本プロジェクト独自拡張）。非 Signal Group の
+     * ため WarningStatus のようなシャドウバッファ経由のコミットは不要で、
+     * Com_SendSignal() のみで完結する。 */
+    (void)Rte_Write_MeterStatus_RunLamp(runLevel);
+    (void)Rte_Write_MeterStatus_FaultLamp(faultLevel);
+    (void)Rte_Write_MeterStatus_AbsLamp(absLevel);
+
     /* Runnable 実行完了を WdgM へ報告 (Alive + Logical Supervision チェックポイント) */
     (void)WdgM_CheckpointReached(WDGM_ENTITY_WARNING, WDGM_CP_WARNING_END);
 }

@@ -1072,6 +1072,101 @@ Std_ReturnType Rte_SendSignalGroup_WarningStatus(void)
 }
 
 /**
+ * \brief   MeterStatus 提供ポートへ EngineSpeed ミラーシグナルを書き込む。
+ *
+ * \details App_EngineManager が EngineInfo(RX) から検証済みで受け取った
+ *          EngineSpeed を、そのまま MeterStatus(CAN 0x200) へミラー送信する
+ *          （uds_tester の仮想メータ表示タブが 1 フレームだけで RPM を
+ *          デコードできるようにするための、本プロジェクト独自の拡張）。
+ *          非 Signal Group のためシャドウバッファを経由せず、
+ *          Com_SendSignal() 呼び出しの都度、値変化があれば次回
+ *          Com_MainFunction() で送信される。
+ *
+ * \param[in]  speed  エンジン回転数 [rpm]。
+ *
+ * \retval  E_OK      COM の実 TX バッファへ正常にパックした。
+ * \retval  E_NOT_OK  COM 未初期化またはシグナル ID が見つからない。
+ *
+ * \pre        Com_Init() が正常に完了していること。
+ *
+ * \note       AUTOSAR 標準外の API（本プロジェクト独自拡張）。
+ * \ServiceID      {0xEB}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType Rte_Write_MeterStatus_EngineSpeed(EngineSpeed_t speed)
+{
+    return Com_SendSignal(COM_SIGNAL_METER_ENGINE_SPEED, &speed);
+}
+
+/**
+ * \brief   MeterStatus 提供ポートへ RunLamp ミラーシグナルを書き込む。
+ *
+ * \details App_WarningIndicator が WarningStatus(CAN 0x210) の RunLamp と
+ *          同じ値を、MeterStatus(CAN 0x200) へもミラー送信する。
+ *
+ * \param[in]  level  出力レベル。0 = 消灯、1 = 点灯。
+ *
+ * \retval  E_OK      COM の実 TX バッファへ正常にパックした。
+ * \retval  E_NOT_OK  COM 未初期化またはシグナル ID が見つからない。
+ *
+ * \pre        Com_Init() が正常に完了していること。
+ *
+ * \note       AUTOSAR 標準外の API（本プロジェクト独自拡張）。
+ * \ServiceID      {0xEC}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType Rte_Write_MeterStatus_RunLamp(uint8 level)
+{
+    return Com_SendSignal(COM_SIGNAL_METER_RUN_LAMP, &level);
+}
+
+/**
+ * \brief   MeterStatus 提供ポートへ FaultLamp ミラーシグナルを書き込む。
+ *
+ * \details Rte_Write_MeterStatus_RunLamp() と同様。詳細はそちらを参照。
+ *
+ * \param[in]  level  出力レベル。0 = 消灯、1 = 点灯。
+ *
+ * \retval  E_OK      COM の実 TX バッファへ正常にパックした。
+ * \retval  E_NOT_OK  COM 未初期化またはシグナル ID が見つからない。
+ *
+ * \pre        Com_Init() が正常に完了していること。
+ *
+ * \note       AUTOSAR 標準外の API（本プロジェクト独自拡張）。
+ * \ServiceID      {0xED}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType Rte_Write_MeterStatus_FaultLamp(uint8 level)
+{
+    return Com_SendSignal(COM_SIGNAL_METER_FAULT_LAMP, &level);
+}
+
+/**
+ * \brief   MeterStatus 提供ポートへ AbsLamp ミラーシグナルを書き込む。
+ *
+ * \details Rte_Write_MeterStatus_RunLamp() と同様。詳細はそちらを参照。
+ *
+ * \param[in]  level  出力レベル。0 = 消灯、1 = 点灯。
+ *
+ * \retval  E_OK      COM の実 TX バッファへ正常にパックした。
+ * \retval  E_NOT_OK  COM 未初期化またはシグナル ID が見つからない。
+ *
+ * \pre        Com_Init() が正常に完了していること。
+ *
+ * \note       AUTOSAR 標準外の API（本プロジェクト独自拡張）。
+ * \ServiceID      {0xEE}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType Rte_Write_MeterStatus_AbsLamp(uint8 level)
+{
+    return Com_SendSignal(COM_SIGNAL_METER_ABS_LAMP, &level);
+}
+
+/**
  * \brief   通信モード要求の Client/Server ポート（ComM_USER_0 として要求）。
  *
  * \details SW-C (App_EngineManager) から呼び出され、

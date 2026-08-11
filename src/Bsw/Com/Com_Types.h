@@ -616,6 +616,16 @@ typedef struct
     uint32                      FilterMax;
     void (*FilterRejectCbk)(void);
     uint8                       TmsContributor;
+    /* 非 Signal Group の TX シグナル専用。1 = このシグナルの送信要否判定
+     * （passesFilter、Com_RequestTxOnChange() と同じ判断軸）が、所属 I-PDU の
+     * ipdu->UpdateBitPosition（I-PDU に 1 つしかない）をセットする対象になる。
+     * TmsContributor と同じ「複数シグナルが共有する I-PDU レベルの派生状態に、
+     * どのシグナルが寄与するかを個別に選べる」パターン。update-bit は元々
+     * 単一シグナル I-PDU（MeterStatus の EngineState のみ）を前提にしていたため
+     * 省略されていたが、同じ I-PDU に複数の TX シグナルを持たせる場合は、
+     * 意図しないシグナル（例: 頻繁に変化するミラー値）の変化で update-bit が
+     * 誤って 1 になるのを防ぐため、対象シグナルにのみ明示的に 1 を設定すること。 */
+    uint8                       UpdateBitContributor;
     Com_TransferPropertyType    TransferProperty;
     Com_RxDataTimeoutActionType RxDataTimeoutAction;
     uint32                      TimeoutSubstitutionValue;

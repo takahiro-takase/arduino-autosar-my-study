@@ -462,9 +462,13 @@ RX（外部 → Arduino、上り）
 
 | Tx/Rx | フレーム | CAN ID | DLC | ビット位置 | サイズ | シグナル | 単位・値域 |
 |-------|---------|--------|-----|-----------|--------|---------|----------|
-| Tx | MeterStatus | 0x200 | 2 | ↓ | ↓ | ↓ | ↓ |
+| Tx | MeterStatus | 0x200 | 5 | ↓ | ↓ | ↓ | ↓ |
 |  |  |  |  | 0–7 | 8 bit | EngineState | 0=OFF<br>1=STARTING<br>2=RUNNING<br>3=FAULT<br>（E2E 保護なし） |
 |  |  |  |  | 8 | 1 bit | (update-bit) | EngineState 単体の update-bit（SWS_Com_00061/00062）。値変化時送信=1、周期フロア再送=0 |
+|  |  |  |  | 16 | 1 bit | RunLamp (mirror) | WarningStatus.RunLampと同値のミラー（uds_tester仮想メータ表示用、本プロジェクト独自拡張） |
+|  |  |  |  | 17 | 1 bit | FaultLamp (mirror) | WarningStatus.FaultLampと同値のミラー |
+|  |  |  |  | 18 | 1 bit | AbsLamp (mirror) | WarningStatus.AbsLampと同値のミラー |
+|  |  |  |  | 24–39 | 16 bit | EngineSpeed (mirror) | rpm（0–15000）。EngineInfoの検証済み値のミラー |
 | Tx | WarningStatus | 0x210 | 1 | ↓ | ↓ | ↓ | ↓ |
 |  |  |  |  | 0 | 1 bit | RunLamp | 0=消灯<br>1=点灯<br>（RUNNING LED D6 と同値） |
 |  |  |  |  | 1 | 1 bit | FaultLamp | 0=消灯<br>1=点灯<br>（FAULT LED D7 と同値、点滅中は 500ms ごとに反転） |
@@ -490,7 +494,13 @@ RX（外部 → Arduino、上り）
 
 ##### TX フレーム（Arduino → 外部）
 
-**MeterStatus（メータ ECU / CAN ID 0x200 / DLC=2 / E2E 保護なし / TxModeMode=MIXED）**
+**MeterStatus（メータ ECU / CAN ID 0x200 / DLC=5 / E2E 保護なし / TxModeMode=MIXED）**
+
+byte[2] の警告灯3bitと byte[3-4] の EngineSpeed は、`uds_tester` の仮想メータ表示
+タブが1フレームだけで RPM・警告灯をデコードできるよう、`App_EngineManager`/
+`App_WarningIndicator` がそれぞれ `WarningStatus`/`EngineInfo` と同じ値をミラー
+送信する本プロジェクト独自の拡張です（詳細は
+[`docs/modules/Com_Notes.md`](docs/modules/Com_Notes.md) 参照）。
 
 `App_EngineManager_Run()`（3000ms 周期）は `Rte_Write_EngineStatus_EngineState()` で
 値を書き込むだけで、送信自体は Com が判断します。`EngineState` が変化すると Com が

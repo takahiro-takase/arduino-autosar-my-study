@@ -99,6 +99,15 @@ Std_ReturnType Rte_Write_WarningStatus_AbsLamp(uint8 level);
 /* WarningStatus Signal Group の確定コミット (Com_SendSignalGroup へ委譲) */
 Std_ReturnType Rte_SendSignalGroup_WarningStatus(void);
 
+/* MeterStatus 拡張シグナル書き込みポート (CAN 0x200、uds_tester の仮想メータ
+ * 表示タブ向けミラー。EngineSpeed は App_EngineManager が EngineInfo(RX) の
+ * 検証済み値を、RunLamp/FaultLamp/AbsLamp は App_WarningIndicator が
+ * WarningStatus と同じ値をそれぞれ書き込む） */
+Std_ReturnType Rte_Write_MeterStatus_EngineSpeed(EngineSpeed_t speed);
+Std_ReturnType Rte_Write_MeterStatus_RunLamp(uint8 level);
+Std_ReturnType Rte_Write_MeterStatus_FaultLamp(uint8 level);
+Std_ReturnType Rte_Write_MeterStatus_AbsLamp(uint8 level);
+
 /* Client/Server ポート — ComM_RequestComMode(COMM_USER_0, mode) へ委譲。
  * App_EngineManager が「エンジン OFF が一定サイクル継続 = 通信不要」と
  * 判断したときの通信モード要求（ボランタリスリープ）に使う。 */
