@@ -48,32 +48,22 @@ ARXML や設定ツールは使用せず、コードで階層構造・型定義�
 ## 概要
 
 本プロジェクトは、学習目的で AUTOSAR の ASW / RTE / BSW の 3 層アーキテクチャを
-Arduino UNO 上に最小構成で再現し、その上でメータ ECU（インストルメントクラスタ）相当の
-アプリケーションを動作させることを目的としています。
+Arduino UNO 上に最小構成で再現しています。
+その上でメータ ECU（インストルメントクラスタ）相当のアプリケーションを動作させることを目的としています。
 
-システムは、エンジン ECU（CAN 0x100）と ABS ECU（CAN 0x110）の 2 つの周辺 ECU から
-CAN バス経由でデータを受信し、BSW（CanDrv / CanIf / PduR / Com）が信号を抽象化します。
+![仮想メータ表示（uds_tester）でエンジン回転数・RUN/FAULT/ABS 警告灯の動作を確認する様子](docs/images/MeterEcuAnimation.gif)
 
-抽象化されたデータは RTE を介して 2 つの ASW SW-Component に提供されます。
-SW-C は RTE の Client/Server ポート経由で IoHwAb（I/O Hardware Abstraction）を呼び出し、
-SW-C がピン番号などのハードウェア詳細を知ることなく警告灯（LED）を制御します。
+> 上記は `tools/uds_tester` の仮想メータ表示タブで、PC から CAN 経由で送信した
+> EngineInfo/AbsInfo（本物の周辺 ECU が送信しているように E2E Profile05 で保護した
+> フレーム）を Arduino が受信し、RPM・RUN/ABS 警告灯へ反映している様子です
+> （[デモ用スクリプト](tools/uds_tester/capl_scripts/demo_realistic_engine.capl)）。
 
-これにより、実車のメータ ECU が持つ
-「CAN 受信（複数 ECU）→ 状態判定 → 優先度付き警告灯制御」
-という典型的な処理フローを、Arduino 上で簡易的に再現します。
+CAN 経由で受信するエンジン ECU（0x100）・ABS ECU（0x110）からの情報を警告灯制御へ
+反映する、以下の入出力を持つメータ ECU です。
 
 - **RX（CAN ID 0x100）**: エンジン ECU から回転数・水温・ON フラグを受信（AUTOSAR E2E Profile 05 保護付き）
 - **RX（CAN ID 0x110）**: ABS ECU から車速・ブレーキ作動・ABS 作動フラグを受信
-- **TX（CAN ID 0x200）**: エンジン状態（OFF / STARTING / RUNNING / FAULT）を変化時送信＋周期フロア（ComFilterAlgorithm、E2E 保護なし）
-- **TX（CAN ID 0x210）**: 3 本の警告灯状態（RUNNING/FAULT/ABS）を Com Signal Group として一括送信
-- **TX（CAN ID 0x220）**: E2E 検証エラーの累積カウンタ（CRC不一致/シーケンス異常）を Com の PERIODIC 送信モードで 6000ms 周期送信（E2EMon、独自 CDD 相当、AUTOSAR E2E Profile 05 保護付き）
-- **診断 RX（CAN ID 0x7E0）**: UDS 診断要求を受信（ISO 14229-1 / ISO 15765-2）
-- **診断 TX（CAN ID 0x7E8）**: UDS 診断応答を送信（マルチフレーム対応）
-- **RUNNING LED（D6）**: ENGINE_STATE_RUNNING のとき点灯
-- **FAULT LED（D7）**: ENGINE_STATE_FAULT のとき 500ms 周期で点滅
-- **ABS LED（D8）**: ABS 作動（AbsActive=1）のとき点灯
-- **警告確認ボタン（D9）**: FAULT 状態でボタンを押すと FAULT→OFF に遷移（ドライバーが警告を確認したことを通知）
-- **ボランタリスリープ/ウェイクアップ**: エンジン OFF が一定時間継続すると CAN バスを実際にスリープさせ、バス活動を検知すると自律的に復帰する
+- **TX（CAN ID 0x200）**: エンジン状態（OFF / STARTING / RUNNING / FAULT）・回転数・3 本の警告灯状態（RUNNING/FAULT/ABS）を変化時送信＋周期フロア（ComFilterAlgorithm、E2E 保護なし）
 
 <a id="hardware"></a>
 ## ハードウェア
@@ -861,8 +851,12 @@ FiM は Dem が確定した DTC をもとにアプリ機能の実行許可を判
 ```
 cd tools/uds_tester
 pip install -r requirements.txt
-python app.py
+python src/app.py
 ```
+
+Windows で `pip install` 済みなら `tools/uds_tester/run.bat` をダブルクリックしても
+起動できます（内部で自分自身のディレクトリへ `cd` してから `python src\app.py` を
+実行するだけの薄いランチャーです）。
 
 接続先は GUI 上の `interface` / `channel` / `bitrate` で指定します
 （既定値は `config.json` の `can` セクション）。CANable / candleLight 互換
@@ -883,13 +877,13 @@ python app.py
 近い書き味で一連の手順をスクリプトとして書ける機能を用意しています。GUI の
 「スクリプト実行...」ボタンからファイルを選択するとバックグラウンドスレッドで
 実行されます（Connect 済みの `bus` をそのまま使用）。「停止」ボタンで途中中断
-できます。拡張子で以下の2種類を自動判別します（どちらも `tools/uds_tester/capl_api.py`
+できます。拡張子で以下の2種類を自動判別します（どちらも `tools/uds_tester/src/capl_api.py`
 の `CaplContext` を実行時のランタイムとして共通で使うため、送受信の挙動は揃っています）。
 
 **`.py`（Python 構文、`capl_api.py`）**
 
 ファイルの内容をそのまま `exec()` する方式。Python 構文ですが、
-`tools/uds_tester/capl_api.py` が公開する以下の関数だけを使えば CAPL に近い
+`tools/uds_tester/src/capl_api.py` が公開する以下の関数だけを使えば CAPL に近い
 書き味で書けます。
 
 | 関数 | 説明 |
@@ -903,11 +897,11 @@ python app.py
 | `log(*args)` | GUI のログ欄に出力 |
 | `@ctx.on_timer(interval_s)` | interval_s 秒毎に呼ばれる関数を登録するデコレータ（`wait()` の実行中のみ発火） |
 
-サンプルは `tools/uds_tester/scripts/example_session_check.py` を参照してください。
+サンプルは `tools/uds_tester/capl_scripts/example_session_check.py` を参照してください。
 Python の全機能（if/while/変数等）が使えるため、複雑な分岐が必要な場合はこちらが
 向いています。
 
-**`.capl`（CAPL 風の独自 DSL、`tools/uds_tester/capl_dsl.py`）**
+**`.capl`（CAPL 風の独自 DSL、`tools/uds_tester/src/capl_dsl.py`）**
 
 `on start`/`on timer`/`on message` という実際の CAPL に近いイベント構文に加えて、
 `variables { }` での変数宣言 (`byte`/`int`/`float`/`word` 配列、`byte`/`word` スカラーの
@@ -1036,24 +1030,24 @@ on message 0x200
 受け取ってしまい、開始直後にバックログが一気に発火してその後は静かに見える、という
 紛らわしい挙動になるため）。
 
-サンプルは `tools/uds_tester/scripts/example_session_check.capl`（最小構成）、
-`tools/uds_tester/scripts/example_variables_control_flow.capl`（変数宣言・
+サンプルは `tools/uds_tester/capl_scripts/example_session_check.capl`（最小構成）、
+`tools/uds_tester/capl_scripts/example_variables_control_flow.capl`（変数宣言・
 `if`/`else`/`while` を使った例）、
-`tools/uds_tester/scripts/example_for_this_printf.capl`（`for`・
+`tools/uds_tester/capl_scripts/example_for_this_printf.capl`（`for`・
 `this.byte(n)`/`this.id`/`this.dlc`・printf 風フォーマットを使った例）、
-`tools/uds_tester/scripts/example_switch_array.capl`（`switch`/`case`・
+`tools/uds_tester/capl_scripts/example_switch_array.capl`（`switch`/`case`・
 `break`/`continue`・`byte` 配列・複合代入/`++`/`--`・`respSid()`/`respNrc()`
 による UDS 応答の NRC 分岐を使った例）、
-`tools/uds_tester/scripts/example_functions.capl`（`int`/`void` のユーザー定義
+`tools/uds_tester/capl_scripts/example_functions.capl`（`int`/`void` のユーザー定義
 関数で TesterPresent 送信・DID 読み出しの共通処理を関数化し、関数内ローカル変数
 (ループカウンタ等) も使った例）、
-`tools/uds_tester/scripts/example_message.capl`（`int`/`float` 配列、`message`
+`tools/uds_tester/capl_scripts/example_message.capl`（`int`/`float` 配列、`message`
 変数の宣言・`.dlc`/`.byte(n)` フィールドの読み書き・`output()` による送信、
 ビット演算子 (`>>`/`&`) による DID の上位/下位バイト分解を使った例）、
-`tools/uds_tester/scripts/example_byte_wraparound.capl`（`byte` スカラー変数の
+`tools/uds_tester/capl_scripts/example_byte_wraparound.capl`（`byte` スカラー変数の
 0〜255 ラップアラウンド、`byte` 仮引数/戻り値/ローカル変数を使ったチェックサム
 計算・8bit カウンタ信号のラップアラウンドをシミュレートする例）、
-`tools/uds_tester/scripts/example_do_while.capl`（`do`-`while` が条件を最初に
+`tools/uds_tester/capl_scripts/example_do_while.capl`（`do`-`while` が条件を最初に
 評価する前に本体を必ず1回実行すること、`break` で途中脱出できること、
 TesterPresent を成功する/上限回数に達するまで送信するリトライ処理での
 実用例）を参照してください。

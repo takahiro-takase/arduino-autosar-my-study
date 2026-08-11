@@ -62,7 +62,7 @@ AbsInfo/EngineInfo とも `MaxDeltaCounter=1` のため、データ欠落が実�
 でも数式上エラーにはならないため気づきにくいが、予約値 15 を実際に送信
 してしまうこと自体が仕様違反であり、他の準拠実装との相互接続では
 問題になり得る。`E2E_P01Protect()`（`src/Bsw/E2E/E2E_P01.c`）と
-`tools/uds_tester/app.py` の両方のカウンタ増分を
+`tools/uds_tester/src/app.py` の両方のカウンタ増分を
 `(Counter >= 14) ? 0 : Counter + 1` に修正した。
 
 ## 3. Data ID の4つの包含モード（SWS_E2E_00163）
@@ -96,7 +96,7 @@ check=0x37）とは異なる、CRC カタログ上明確に別物のバリアン
 渡すだけで SWS_E2E_00083 の要求と一致する。Protect/Check は互いに自己整合していた
 ため単体では正常動作していたが、外部の本物の AUTOSAR E2E Profile 1 実装や公式
 テストベクタとは異なる CRC 値になり相互接続性が失われる状態だった。
-`E2E_P01.c` に加え、同じ誤ったパラメータを使っていた `tools/uds_tester/app.py` の
+`E2E_P01.c` に加え、同じ誤ったパラメータを使っていた `tools/uds_tester/src/app.py` の
 `_crc8_sae_j1850()` も合わせて修正した。
 
 ## 5. 標準バリアント 1A/1B/1C（SWS_E2E_00227 / SWS_E2E_00228 / SWS_E2E_00307）
