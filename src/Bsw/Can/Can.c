@@ -677,3 +677,26 @@ void Can_GetVersionInfo(Std_VersionInfoType* versioninfo)
     versioninfo->sw_minor_version = CAN_SW_MINOR_VERSION;
     versioninfo->sw_patch_version = CAN_SW_PATCH_VERSION;
 }
+
+#ifdef CAN_UNIT_TEST
+Can_ControllerStateType Can_Test_GetControllerState(void)
+{
+    return CanState;
+}
+void Can_Test_SetControllerState(Can_ControllerStateType state)
+{
+    CanState = state;
+}
+void Can_Test_SetConfigPtr(Can_ConfigType* config)
+{
+    Can_ConfigPtr = config;
+}
+uint8 Can_Test_GetTxErrCount(void)
+{
+    return Can_TxErrCount;
+}
+void Can_Test_ResetTxErrCount(void)
+{
+    Can_TxErrCount = 0U;
+}
+#endif
