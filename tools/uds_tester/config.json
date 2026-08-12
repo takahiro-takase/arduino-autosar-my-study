@@ -10,7 +10,7 @@
         { "label": "NM\n(0x400)", "type": "rx_monitor",
           "can_id": "0x400", "decode": "nm_status" },
 
-        { "label": "EngineStatus\n(0x200)", "type": "rx_monitor",
+        { "label": "MeterStatus\n(0x200)", "type": "rx_monitor",
           "can_id": "0x200", "decode": "engine_state" },
 
         { "label": "WarningStatus\n(0x210)", "type": "rx_monitor",

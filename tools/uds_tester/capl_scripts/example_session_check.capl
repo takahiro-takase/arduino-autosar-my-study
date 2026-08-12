@@ -8,7 +8,7 @@
 // 「CAPL 風スクリプト機能」を参照。
 //
 // example_session_check.py (Python版) と同じ手順に加えて、on timer による
-// TesterPresent の定期送信と、on message による EngineStatus (0x200、ECUが
+// TesterPresent の定期送信と、on message による MeterStatus (0x200、ECUが
 // 周期送信するブロードキャストフレーム) の受信監視を行う。
 // 0x7E8 (UDS応答) を on message の対象にしないのは、wait_response() が同じ
 // フレームを直接消費してしまい on message 側にはほぼ回ってこないため。
@@ -29,7 +29,7 @@ on start
     assert_positive();
     write("EngineSpeed 読み出し成功");
 
-    write("TesterPresent を1秒毎に送信しつつ EngineStatus(0x200) 受信も監視します。");
+    write("TesterPresent を1秒毎に送信しつつ MeterStatus(0x200) 受信も監視します。");
     write("停止するには GUI の「停止」ボタンを押してください。");
     setTimer(keepAlive, 1000);
 }
@@ -43,5 +43,5 @@ on timer keepAlive
 
 on message 0x200
 {
-    write("RX EngineStatus(0x200) byte0(EngineState)=", msgData(0));
+    write("RX MeterStatus(0x200) byte0(EngineState)=", msgData(0));
 }

@@ -846,8 +846,7 @@ FiM は Dem が確定した DTC をもとにアプリ機能の実行許可を判
 | 応答の簡易デコード | 0x22 の DID 値、0x19 の DTC 名・FreezeFrame、0x2F の controlOptionRecord 名・適用後レベル、0x31 の routineStatusRecord（実行中/PASS/FAIL）、0x7F の NRC 名を人間が読める形式で表示 |
 | ランプ IOControl (0x2F) | RunLamp/FaultLamp/AbsLamp ごとに returnControlToECU / resetToDefault / freezeCurrentState / shortTermAdjustment(ON/OFF) をプリセットから送信 |
 | RoutineControl (0x31) | EngineHealthCheck (RID 0203) の startRoutine / requestRoutineResults / stopRoutine をプリセットから送信 |
-| Tester Present 自動送信 | チェックボックスで 2 秒毎に送信し S3 タイマ（60 秒）を維持 |
-| Session/Security 状態の参考表示 | 送受信したフレームから推測した現在のセッション・ロック状態を表示（ECU 内部の正式な状態ではない点に注意） |
+| 周期送信 + 周期(ms)入力欄 | コマンド一覧の各ボタン（`can_frame`型・`raw`型（UDS）とも）に「定期」トグルボタンと周期(ms)の編集可能な入力欄を用意。Tester Present もこの仕組みで周期送信する（既定2000ms） |
 
 ```
 cd tools/uds_tester
@@ -1009,7 +1008,7 @@ on message 0x200
 ボタンが押されるまでイベント待受を続けます（何も定義されていなければ `on start`
 だけで完了します）。`wait_response()`/`security_unlock()` が応答待ちでブロックして
 いる間に届いた（応答 ID 以外の）フレームは内部で一旦退避され、ブロックが終わった
-後に `on message` 側へきちんと配送されるため、EngineStatus (0x200) のような
+後に `on message` 側へきちんと配送されるため、MeterStatus (0x200) のような
 周期送信フレームの監視は取りこぼしなく行えます。ただし同じ CAN ID を
 `wait_response()` と `on message` の両方で待ち受けようとした場合（例: UDS 応答 ID
 の 0x7E8 を `on message 0x7E8` でも監視しようとした場合）は、その ID 宛のフレーム
