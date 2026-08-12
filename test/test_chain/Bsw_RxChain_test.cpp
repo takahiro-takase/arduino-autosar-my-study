@@ -38,6 +38,14 @@
  *          `*_PBCfg.c` は使わず、1シグナル・1 I-PDU のみのテスト専用設定を
  *          本ファイル内で定義する）。CanTp_RxIndication/SecOC_IfRxIndication
  *          へのマルチキャストは対象外（Com_RxIndication のみを転送先とする）。
+ *
+ *          `CanIf_RxIndication()` は無条件に `CanSM_RxIndication()` を呼ぶ
+ *          （CanIf.c 参照）。同じ `[env:native_chain]` は CanSM.c の実体を
+ *          リンクしている（Bsw_SleepChain_test.cpp / Bsw_WakeupChain_test.cpp
+ *          参照）ため、本テストの SetUp()/TearDown() でも CanSM_Init()/
+ *          CanSM_DeInit() を呼ぶ（呼ばないと毎回 DET_E_UNINIT が報告される）。
+ *          本テストは CanSM_State を WAKEUP_VALIDATING にしないため、
+ *          CanSM_RxIndication() 自体は何もしない no-op として通過するだけ。
  */
 #include <gtest/gtest.h>
 
@@ -45,6 +53,7 @@ extern "C" {
 #include "Com.h"
 #include "PduR.h"
 #include "CanIf.h"
+#include "CanSM.h"
 #include "Can.h"
 #include "Can_Hw.h"
 #include "Hal_Can_Hw_fake.h"
@@ -173,6 +182,12 @@ protected:
         CanIf_Init(&kTestCanIfRxConfig);
         PduR_Init(&kTestPduRRxConfig);
         Com_Init(&kTestComRxConfig);
+        // CanIf_RxIndication() は無条件に CanSM_RxIndication() を呼ぶため
+        // （CanIf.c 参照）、CanSM 未初期化のままだと毎回 DET_E_UNINIT が
+        // 報告されてしまう。本テストは CanSM_State を FULL_COM/NO_COM のまま
+        // （WAKEUP_VALIDATING にしない）保つため、CanSM 自体は何もしない
+        // no-op として通過するだけになる。
+        CanSM_Init();
 
         FakeDetHw_LogSuppressed = 0U;  // ここから各 TEST_F の実行(Act)区間
     }
@@ -180,6 +195,7 @@ protected:
     void TearDown() override
     {
         FakeDetHw_LogSuppressed = 1U;  // DeInit() のログを抑制
+        CanSM_DeInit();
         Com_DeInit();
         CanIf_DeInit();
     }

@@ -43,10 +43,14 @@
  *          （`pio test -e native_chain`）。
  *
  *          CanIf.c は CanSM_RxIndication()/ControllerBusOff()/
- *          ControllerWakeup() をハードコードで呼ぶため、
- *          `Bsw_CanSM_fake.c`（no-op スタブ）でリンクを満たしている
- *          （CanSM 自身のロジックは README「ECU管理層」の別のコールチェーン
- *          であり、本テストの対象外）。
+ *          ControllerWakeup() をハードコードで呼ぶため、同じ `[env:native_chain]`
+ *          は CanSM.c の実体もリンクしている（README「CAN コントローラの
+ *          スリープ制御」のコールチェーンを検証する Bsw_SleepChain_test.cpp /
+ *          Bsw_WakeupChain_test.cpp と同一バイナリ。CanSM が呼び返す
+ *          ComM/Dem は境界としてフェイクに差し替える、Bsw_ComM_fake.h /
+ *          Bsw_Dem_fake.h 冒頭コメント参照）。本ファイルの TX チェーンは
+ *          CanSM の状態遷移に一切関与しないため、CanSM_Init() すら呼ばない
+ *          （Com_MainFunction() は CanIf_RxIndication() を経由しないため）。
  */
 #include <gtest/gtest.h>
 
