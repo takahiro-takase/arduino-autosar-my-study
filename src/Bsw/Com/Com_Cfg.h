@@ -120,9 +120,9 @@
 
 /** TX I-PDU テーブルのエントリ数
  *  DaVinci: /ActiveEcuC/Com/ComConfig/ 内 Direction=SEND の ComIPdu 数
- *  [0]=MeterStatus 0x200 (MIXED: 変化時送信 + 周期フロア。DLC=5、
+ *  [0]=MeterStatus 0x200 (MIXED: 変化時送信 + 周期フロア。DLC=6、
  *  byte[0]=EngineState、byte[1]=update-bit、byte[2]=警告灯3bit、
- *  byte[3-4]=EngineSpeedミラー)、
+ *  byte[3-4]=EngineSpeedミラー、byte[5]=CoolantTempミラー)、
  *  [1]=WarningStatus 0x210 (Signal Group, DIRECT: 変化時のみ送信)、
  *  [2]=E2EHealthStatus 0x220 (PERIODIC、E2EMon CDD 相当が発行するネットワーク
  *  健全性テレメトリ。詳細は src/Bsw/E2EMon/E2EMon.c 参照)、
@@ -177,7 +177,7 @@
 
 /** シグナルテーブルのエントリ数（RX + TX の合計）
  *  DaVinci: /ActiveEcuC/Com/ComConfig/ 内 ComSignal ノード数の合計 */
-#define COM_SIGNAL_COUNT    18U
+#define COM_SIGNAL_COUNT    19U
 
 /** Signal Gateway ルーティングテーブルのエントリ数
  *  DaVinci: /ActiveEcuC/Com/ComConfig/[ComGwMapping] ノード数
@@ -224,6 +224,10 @@
 
 /** TX: ABS LED 状態ミラー (1 bit, CAN ID 0x200, byte[2] bit2) */
 #define COM_SIGNAL_METER_ABS_LAMP      17U
+
+/** TX: 冷却水温ミラー (8 bit, CAN ID 0x200, byte[5]、EngineInfoの
+ *  検証済みCoolantTempと同一値・同一単位) */
+#define COM_SIGNAL_METER_COOLANT_TEMP  18U
 
 /* -----------------------------------------------------------------------
  * ABS ECU シグナル (CAN ID 0x110 AbsInfo フレーム)

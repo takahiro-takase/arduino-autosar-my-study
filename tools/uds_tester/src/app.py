@@ -149,6 +149,11 @@ class App(tk.Tk):
             meter, textvariable=self.meter_abs_var, width=8, relief="raised", bg="gray85")
         self.meter_abs_lbl.grid(row=0, column=5, padx=4, pady=4)
 
+        ttk.Label(meter, text="水温").grid(row=0, column=6, padx=8, pady=4)
+        self.meter_coolant_var = tk.StringVar(value="-- °C")
+        ttk.Label(meter, textvariable=self.meter_coolant_var, width=8).grid(
+            row=0, column=7, padx=4, pady=4)
+
         script = ttk.LabelFrame(self, text="スクリプト (CAPL風)")
         script.pack(fill="x", padx=8, pady=4)
 
@@ -1119,11 +1124,12 @@ class App(tk.Tk):
         return f"(RUN:{run} FAULT:{fault} ABS:{abs_} upd={upd})"
 
     def _update_virtual_meter(self, data: bytes) -> None:
-        """MeterStatus (CAN 0x200, DLC=5) の byte[2]=警告灯3bitミラー・
-        byte[3-4]=EngineSpeedミラーから仮想メータ表示を更新する。
-        ビット配置は WarningStatus と同じ MSB 起点（bit0=MSB）:
+        """MeterStatus (CAN 0x200, DLC=6) の byte[2]=警告灯3bitミラー・
+        byte[3-4]=EngineSpeedミラー・byte[5]=CoolantTempミラーから仮想メータ
+        表示を更新する。ビット配置は WarningStatus と同じ MSB 起点（bit0=MSB）:
         byte[2] bit0=RunLamp, bit1=FaultLamp, bit2=AbsLamp。
-        byte[3-4] はビッグエンディアン 16bit（EngineInfo の EngineSpeed と同じ単位・rpm）。"""
+        byte[3-4] はビッグエンディアン 16bit（EngineInfo の EngineSpeed と同じ単位・rpm）。
+        byte[5] は EngineInfo の CoolantTemp と同じ単位（°C）。"""
         run = (data[2] >> 7) & 1
         fault = (data[2] >> 6) & 1
         abs_ = (data[2] >> 5) & 1
@@ -1134,6 +1140,7 @@ class App(tk.Tk):
         self.meter_run_lbl.configure(bg="green" if run else "gray85")
         self.meter_fault_lbl.configure(bg="red" if fault else "gray85")
         self.meter_abs_lbl.configure(bg="orange" if abs_ else "gray85")
+        self.meter_coolant_var.set(f"{data[5]} °C")
 
     def _rx_monitor_worker(self, stop_ev: threading.Event):
         """bus_lock をノンブロッキングで取得し、rx_monitor CAN ID の受信フレームを表示する。
@@ -1341,11 +1348,12 @@ class App(tk.Tk):
                             upd = (data[1] >> 7) & 1
                             name = f"{name} upd={upd}"
                         self._rx_monitor_name_vars[mon_idx].set(f"({name})")
-                        if len(data) >= 5:
+                        if len(data) >= 6:
                             # byte[2] bit0-2 = RunLamp/FaultLamp/AbsLamp ミラー（本プロジェクト
                             # 独自拡張。WarningStatus(0x210) と同値）、byte[3-4] = EngineSpeed
-                            # ミラー（ビッグエンディアン、EngineInfo(0x100) の検証済み値と同値）。
-                            # 実機に物理表示器が無いための仮想メータ表示。
+                            # ミラー（ビッグエンディアン、EngineInfo(0x100) の検証済み値と同値）、
+                            # byte[5] = CoolantTemp ミラー。実機に物理表示器が無いための
+                            # 仮想メータ表示。
                             self._update_virtual_meter(data)
                     elif decode == "nm_status" and len(data) >= 2:
                         # byte[0]=Control Bit Vector（bit0=Repeat Message Request、

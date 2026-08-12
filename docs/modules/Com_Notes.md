@@ -13,16 +13,17 @@ ComTransferProperty、TMS（Transmission Mode Selector）、MDT、Tx確定コー
 完結する実装詳細を以下にまとめます。
 
 **MeterStatus（CAN 0x200）の可視化用ミラー拡張（本プロジェクト独自）**: 実機に
-RPM・警告灯の物理表示器が無いため、`uds_tester` の仮想メータ表示タブが
+RPM・水温・警告灯の物理表示器が無いため、`uds_tester` の仮想メータ表示タブが
 `MeterStatus` 1 フレームだけをデコードすれば済むよう、`byte[2]` に
 `WarningStatus`（CAN 0x210）と同値の警告灯 3bit、`byte[3-4]` に `EngineInfo`
-（CAN 0x100）の検証済み `EngineSpeed` と同値の 16bit をそれぞれミラー追加した
-（DLC 2→5）。`App_EngineManager`/`App_WarningIndicator` が
-`Rte_Write_MeterStatus_EngineSpeed()`/`Rte_Write_MeterStatus_RunLamp()` 等の
-専用ポート経由で書き込む（`Com_SendSignal()` を直接呼ばない、既存の
-`EngineState`/`RunLamp` 等と同じ RTE 経由の作法）。値が `WarningStatus`/
-`EngineInfo` と重複することは、1 フレーム完結という可視化ツール側の要件を
-優先した意図的なトレードオフ。
+（CAN 0x100）の検証済み `EngineSpeed` と同値の 16bit、`byte[5]` に同じく
+`EngineInfo` の検証済み `CoolantTemp` と同値の 8bit をそれぞれミラー追加した
+（DLC 2→5→6）。`App_EngineManager`/`App_WarningIndicator` が
+`Rte_Write_MeterStatus_EngineSpeed()`/`Rte_Write_MeterStatus_CoolantTemp()`/
+`Rte_Write_MeterStatus_RunLamp()` 等の専用ポート経由で書き込む
+（`Com_SendSignal()` を直接呼ばない、既存の `EngineState`/`RunLamp` 等と同じ
+RTE 経由の作法）。値が `WarningStatus`/`EngineInfo` と重複することは、1 フレーム
+完結という可視化ツール側の要件を優先した意図的なトレードオフ。
 
 ## ComFilterAlgorithm と TxModeMode（送信要否・タイミングを Com 自身が判断する）
 

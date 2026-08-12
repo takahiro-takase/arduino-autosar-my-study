@@ -8,8 +8,9 @@
  *
  *          本プロジェクトの設定（メータ ECU 想定）:
  *            TX PDU (TxPduId=0): MeterStatus
- *              CanId=0x200, DLC=5 (E2E 保護なし。byte[1] bit0=EngineState 単体の
- *              update-bit、byte[2]=警告灯3bitミラー、byte[3-4]=EngineSpeedミラー), HTH=0
+ *              CanId=0x200, DLC=6 (E2E 保護なし。byte[1] bit0=EngineState 単体の
+ *              update-bit、byte[2]=警告灯3bitミラー、byte[3-4]=EngineSpeedミラー、
+ *              byte[5]=CoolantTempミラー), HTH=0
  *            TX PDU (TxPduId=1): UDS 診断応答
  *              CanId=0x7E8, DLC=8, HTH=0
  *            TX PDU (TxPduId=2): NM フレーム (Nm、PduR/Com を経由せず直接呼び出す)
@@ -77,9 +78,10 @@ static const CanIf_TxPduConfigType CanIf_TxPduConfigData[CANIF_TX_PDU_COUNT] = {
          * --------------------------------------------------------------- */
         .UpperLayerTxPduId = 0U,          /* DaVinci: CanIfTxPduId（上位層の PDU ID） */
         .CanId             = 0x200U,      /* DaVinci: CanIfTxPduCanId */
-        .Dlc               = 5U,          /* DaVinci: CanIfTxPduDlc (E2E 保護なし。byte[0]=EngineState、
+        .Dlc               = 6U,          /* DaVinci: CanIfTxPduDlc (E2E 保護なし。byte[0]=EngineState、
                                            *          byte[1] bit0=update-bit、byte[2]=警告灯3bit、
-                                           *          byte[3-4]=EngineSpeedミラー) */
+                                           *          byte[3-4]=EngineSpeedミラー、byte[5]=CoolantTemp
+                                           *          ミラー) */
         .Hth               = 0U,          /* DaVinci: CanIfTxPduHthIdRef */
         .TxConfirmFct      = PduR_CanIfTxConfirmation /* DaVinci: CanIfTxPduUserTxConfirmationName */
     },
