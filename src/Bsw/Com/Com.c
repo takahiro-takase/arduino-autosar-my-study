@@ -2363,3 +2363,19 @@ void Com_IpduGroupStop(Com_IpduGroupIdType IpduGroupId)
                  (unsigned)IpduGroupId, (unsigned)id);
     }
 }
+
+#ifdef COM_UNIT_TEST
+uint8 Com_Test_GetTxPending(Com_IPduIdType ipduId)
+{
+    if (ipduId >= COM_TX_IPDU_MAX)
+        return 0U;
+    return Com_TxPending[ipduId];
+}
+
+const uint8* Com_Test_GetTxBuffer(Com_IPduIdType ipduId)
+{
+    if (ipduId >= COM_TX_IPDU_MAX)
+        return NULL;
+    return Com_TxBuffer[ipduId];
+}
+#endif

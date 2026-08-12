@@ -240,6 +240,25 @@ void Com_IpduGroupStart(Com_IpduGroupIdType IpduGroupId, uint8 initialize);
  */
 void Com_IpduGroupStop(Com_IpduGroupIdType IpduGroupId);
 
+#ifdef COM_UNIT_TEST
+/**
+ * \brief   [テスト専用] TX I-PDU の Com_TxPending（変化時送信の保留フラグ）を取得する。
+ *
+ * \details native 環境のホストテスト（`test/test_native/`）からのみ使用する
+ *          アクセサ。`COM_UNIT_TEST` は `[env:native]` の `build_flags` でのみ
+ *          定義され、実機ビルド（`uno_r4`）では定義されないため、実機の
+ *          `Com.h`/`Com.c` には一切含まれない（AUTOSAR 標準外の関数、
+ *          `Can.h` の `CAN_UNIT_TEST`/`Can_Test_GetControllerState()` と
+ *          同じ運用）。範囲外の `ipduId` は 0 を返す。
+ */
+uint8 Com_Test_GetTxPending(Com_IPduIdType ipduId);
+
+/** [テスト専用] TX I-PDU の内部バッファ（Com_TxBuffer[ipduId]）先頭ポインタを
+ *  取得する。範囲外の `ipduId` は NULL を返す。呼び出し側は当該 I-PDU の
+ *  DLC バイト分のみ読むこと（バッファ自体は COM_IPDU_MAX_DLC バイト確保）。 */
+const uint8* Com_Test_GetTxBuffer(Com_IPduIdType ipduId);
+#endif
+
 #ifdef __cplusplus
 }
 #endif

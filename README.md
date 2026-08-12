@@ -618,8 +618,14 @@ Can_MainFunction_Read()          ← フラグをドレイン、SPI 読み出し
               → E2EXf_InverseTransform() → E2E_P01Check()
           CanTp_RxIndication()       ← UDS 診断要求（複数フレーム対応）
           SecOC_IfRxIndication()     ← ImmobilizerCmd
-            → Csm_MacVerify() で認証成功時のみ Com_RxIndication()
+            → Csm_MacVerify() → Com_RxIndication()
 ```
+
+> `SecOC_IfRxIndication()` → `Com_RxIndication()` は常に到達するわけではなく、
+> `Csm_MacVerify()` による認証成功時のみ呼ばれる（失敗時はログのみで Com へは
+> 転送しない）。この認証ゲート自体の詳細は
+> [`docs/modules/SecOC_Notes.md`](docs/modules/SecOC_Notes.md#アーキテクチャ--e2e-transformer-方式とは異なる理由)
+> を参照。
 
 ##### 受信長チェックの多層防御
 
@@ -1684,9 +1690,45 @@ GoogleTest により検証する `[env:native]` 環境を用意している
 `Gpt_OnTick()`（本来 ISR から呼ばれる関数）はテストから直接呼ぶことで、
 実割り込みなしに状態機械を駆動している。
 
+`Bsw_Can_test.cpp`（`src/Bsw/Can/Can.c` 単体、CanIf は上位層通知4関数
+（TxConfirmation/ControllerBusOff/RxIndication/ControllerWakeup）だけをフェイク
+に差し替えて隔離）のような単一モジュールのテストとは別に、
+[「Tx 処理」コールチェーン](#tx-processing)（`Com_SendSignal()` → …
+→ `Com_MainFunction()` → `PduR_Transmit()` → `CanIf_Transmit()` →
+`Can_Write()`）を複数モジュールにわたって実体（Com.c/PduR.c/CanIf.c/Can.c）で
+リンクし、そのまま検証する `Bsw_TxChain_test.cpp` を `test/test_chain/`
+（`[env:native_chain]`）という別のテスト環境に用意している
+（`Com.c`/`PduR.c`/`CanIf.c` それぞれ単体のテストではなく、README の
+コールチェーン図そのものを実行して理解・確認するのが主目的）。
+`[env:native]`（`test/test_native/`）は Can.c 単体を CanIf フェイクで
+隔離して検証しており、同じバイナリに CanIf.c の本物を混在させるとシンボル
+多重定義になるため、env（＝ビルドディレクトリ・バイナリ）そのものを
+分けて共存させている。コールチェーン図に明示されている非同期の切れ目
+（`Com_TxPending` というキュー経由で次回 `Com_MainFunction()` まで待機する
+箇所）でテストを2つのセグメントに分け、それぞれを個別に実行可能な
+`TEST_F` ケースとしている（`--gtest_filter=Bsw_TxChain_Test.ComSendSignal_*` 等で
+絞り込み可）。フェイクは最下層の `Can_Hw` のみ（`test/test_chain/
+Hal_Can_Hw_fake.c`）で、CanIf.c が呼ぶ `CanSM_RxIndication()` 等は
+`Bsw_CanSM_fake.c`（no-op スタブ、CanSM 自身のロジックは README
+「ECU管理層」の別のコールチェーンのため対象外）で満たしている。
+
+同じ `test/test_chain/` に、[「Rx 処理」コールチェーン](#rx-processing)
+（`Can_MainFunction_Read()` → `CanIf_RxIndication()` →
+`PduR_CanIfRxIndication()`（`PduR_ComRxIndication()` の `#define` エイリアス）→
+`Com_RxIndication()`）を検証する `Bsw_RxChain_test.cpp` もある。Tx処理と異なり
+1セグメントにまとめている理由がある: 図中の非同期境界を担う `Can_Isr()` は
+`Can.c` 内の `static` 関数でテストから直接呼べず、かつ `Can_MainFunction_Read()`
+自身も `Can_RxIrqPending` フラグの有無に関わらず無条件にポーリングする設計
+（実機で `attachInterrupt` が初回発火しなかった経緯を踏まえた意図的な
+二重防御、`Can.c` 冒頭のコメント参照）のため、フラグは `Com_TxPending` の
+ような「後続処理の前提条件」ではない。したがって `Can_MainFunction_Read()` を
+起点とする1つのコールチェーンとして検証している（詳細は
+`Bsw_RxChain_test.cpp` 冒頭のコメント参照）。
+
 ```bash
 # ホスト上でビルド・実行（GoogleTest、実 HW 不要）
-pio test -e native
+pio test -e native      # Gpt/E2E_P05/Can 単体
+pio test -e native_chain  # Tx/Rx処理コールチェーン
 ```
 
 事前準備として、ホスト用の C++17 対応 MinGW-w64/GCC がインストールされ

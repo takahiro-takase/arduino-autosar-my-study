@@ -2,8 +2,8 @@
 
 > [README](../../README.md) の「[CAN 通信スタック](../../README.md#can-stack)」節から分離。
 > CRC/カウンタアルゴリズム自体の学習ノートは
-> [`docs/E2E_Profile1_Notes.md`](../E2E_Profile1_Notes.md) /
-> [`docs/E2E_Profile5_Notes.md`](../E2E_Profile5_Notes.md) を参照。
+> [`docs/E2E_Profile1_Notes.md`](./E2E_Profile1_Notes.md) /
+> [`docs/E2E_Profile5_Notes.md`](./E2E_Profile5_Notes.md) を参照。
 > Com/Rte への実際の適用は [`E2EXf_Notes.md`](./E2EXf_Notes.md) を参照。
 
 AUTOSAR E2E Profile 05 保護の実処理。DataID・CRC16（多項式 0x1021）・8bit

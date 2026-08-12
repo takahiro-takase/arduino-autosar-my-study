@@ -37,7 +37,7 @@ PDF ファイルは著作権により再配布禁止のため git 管理外（`.
 | SWS CAN Transport Layer | `AUTOSAR_SWS_CANTransportLayer.pdf` | ISO 15765-2 フレーム分割・組立（CanTp） |
 | SWS CAN State Manager | `AUTOSAR_SWS_CANStateManager.pdf` | CanSM の Bus-Off 回復シーケンス |
 | SWS COM Manager | `AUTOSAR_SWS_COMManager.pdf` | ComM の通信モード管理（NO_COM / FULL_COM） |
-| SWS E2E Library | `AUTOSAR_SWS_E2ELibrary.pdf` | E2E Profile 1/5 の CRC/カウンタ/状態機械。要約は [`E2E_Profile1_Notes.md`](./E2E_Profile1_Notes.md) / [`E2E_Profile5_Notes.md`](./E2E_Profile5_Notes.md) 参照 |
+| SWS E2E Library | `AUTOSAR_SWS_E2ELibrary.pdf` | E2E Profile 1/5 の CRC/カウンタ/状態機械。要約は [`E2E_Profile1_Notes.md`](../modules/E2E_Profile1_Notes.md) / [`E2E_Profile5_Notes.md`](../modules/E2E_Profile5_Notes.md) 参照 |
 | SRS E2E | `AUTOSAR_SRS_E2E.pdf` | E2E の上位要求仕様（脅威モデル・なぜ E2E が必要か） |
 
 ---

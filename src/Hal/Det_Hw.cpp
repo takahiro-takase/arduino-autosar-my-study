@@ -29,7 +29,7 @@ static void Det_Hw_PrintLevel(LogLevel lvl)
     }
 }
 
-void Det_Hw_PrintLogLine(LogLevel lvl, const char* tag, const char* msg)
+void Det_Hw_PrintLogLine(LogLevel lvl, const char* tag, const char* func, const char* msg)
 {
     Serial.print('[');
     Serial.print(millis());
@@ -37,6 +37,8 @@ void Det_Hw_PrintLogLine(LogLevel lvl, const char* tag, const char* msg)
     Det_Hw_PrintLevel(lvl);
     Serial.print(' ');
     Serial.print(tag);
+    Serial.print(': ');
+    Serial.print(func);
     Serial.print(F(": "));
     Serial.println(msg);
 }
