@@ -29,6 +29,7 @@ static uint8 KeyM_PendingValidate[KEYM_CRYPTO_KEY_COUNT];
 
 static const KeyM_CryptoKeyConfigType* KeyM_FindKeyByName(const uint8* keyNamePtr, uint16 keyNameLength)
 {
+    DET_LOGT(TAG, "called");
     if (keyNameLength != 1U)
         return NULL;
 
@@ -42,6 +43,7 @@ static const KeyM_CryptoKeyConfigType* KeyM_FindKeyByName(const uint8* keyNamePt
 
 void KeyM_Init(const KeyM_ConfigType* ConfigPtr)
 {
+    DET_LOGT(TAG, "called");
     (void)ConfigPtr; /* [SWS_KeyM_00158]: 常に NULL_PTR の想定。内容は使わない。 */
 
     KeyM_SessionOpen = 0U;
@@ -54,6 +56,7 @@ void KeyM_Init(const KeyM_ConfigType* ConfigPtr)
 
 void KeyM_Deinit(void)
 {
+    DET_LOGT(TAG, "called");
     /* [SWS_KeyM_00048]: 実車では RAM 上の鍵材料を消去するが、本プロジェクトの
      * 簡略化では KeyM は鍵材料そのものを保持しない（Crypto 層が保持）ため、
      * ここではセッション状態のリセットのみ行う（スコープ外、本ファイル冒頭
@@ -68,6 +71,7 @@ void KeyM_Deinit(void)
 
 void KeyM_GetVersionInfo(Std_VersionInfoType* versioninfo)
 {
+    DET_LOGT(TAG, "called");
     if (!KeyM_Initialized)
     {
         Det_ReportError(KEYM_MODULE_ID, 0U, KEYM_API_ID_GET_VERSION_INFO, KEYM_E_UNINIT);
@@ -91,6 +95,7 @@ Std_ReturnType KeyM_Start(KeyM_StartType StartType,
                           const uint8* RequestData, uint16 RequestDataLength,
                           uint8* ResponseData, uint16* ResponseDataLength)
 {
+    DET_LOGT(TAG, "called");
     (void)RequestData;
     (void)RequestDataLength;
     (void)ResponseData;
@@ -112,6 +117,7 @@ Std_ReturnType KeyM_Update(const uint8* KeyNamePtr, uint16 KeyNameLength,
                            const uint8* RequestDataPtr, uint16 RequestDataLength,
                            uint8* ResultDataPtr, uint16 ResultDataMaxLength)
 {
+    DET_LOGT(TAG, "called");
     (void)ResultDataPtr;
     (void)ResultDataMaxLength;
 
@@ -171,6 +177,7 @@ Std_ReturnType KeyM_Update(const uint8* KeyNamePtr, uint16 KeyNameLength,
 Std_ReturnType KeyM_Finalize(const uint8* RequestDataPtr, uint16 RequestDataLength,
                              uint8* ResponseDataPtr, uint16 ResponseMaxDataLength)
 {
+    DET_LOGT(TAG, "called");
     (void)RequestDataPtr;
     (void)RequestDataLength;
     (void)ResponseDataPtr;

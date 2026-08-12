@@ -48,6 +48,7 @@ static uint8 s_blinkState = 0U;
  */
 void App_WarningIndicator_Init(void)
 {
+    DET_LOGT(TAG, "called");
     (void)Rte_Call_LedRunning_SetLevel(0U);
     (void)Rte_Call_LedFault_SetLevel(0U);
     (void)Rte_Call_Led_SetLevel(0U);
@@ -85,6 +86,7 @@ void App_WarningIndicator_Init(void)
  */
 void App_WarningIndicator_Run(void)
 {
+    DET_LOGT(TAG, "called");
     EngineState_t state;
     AbsActive_t   absActive = 0U;
 

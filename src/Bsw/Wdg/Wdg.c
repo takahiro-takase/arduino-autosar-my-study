@@ -23,6 +23,7 @@ static uint16 Wdg_ConfiguredTimeoutMs = 0U;
 
 void Wdg_Init(const Wdg_ConfigType* ConfigPtr)
 {
+    DET_LOGT(TAG, "called");
     if (ConfigPtr == NULL)
     {
         DET_LOGE(TAG, "Init: NULL ConfigPtr");
@@ -38,6 +39,7 @@ void Wdg_Init(const Wdg_ConfigType* ConfigPtr)
 
 Std_ReturnType Wdg_SetMode(WdgIf_ModeType Mode)
 {
+    DET_LOGT(TAG, "called");
     if (!Wdg_Initialized)
     {
         Det_ReportError(WDG_MODULE_ID, 0U, WDG_API_ID_SET_MODE, WDG_E_DRIVER_STATE);
@@ -70,6 +72,7 @@ Std_ReturnType Wdg_SetMode(WdgIf_ModeType Mode)
 
 void Wdg_SetTriggerCondition(uint16 timeout)
 {
+    DET_LOGT(TAG, "called");
     if (!Wdg_Initialized)
     {
         Det_ReportError(WDG_MODULE_ID, 0U, WDG_API_ID_SET_TRIGGER_CONDITION, WDG_E_DRIVER_STATE);
@@ -92,6 +95,7 @@ void Wdg_SetTriggerCondition(uint16 timeout)
 
 void Wdg_GetVersionInfo(Std_VersionInfoType* versioninfo)
 {
+    DET_LOGT(TAG, "called");
     if (versioninfo == NULL)
     {
         Det_ReportError(WDG_MODULE_ID, 0U, WDG_API_ID_GET_VERSION_INFO, WDG_E_PARAM_POINTER);

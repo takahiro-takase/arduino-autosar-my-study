@@ -98,6 +98,7 @@ static uint8 Os_UseMillisFallback = 0U;
  */
 static unsigned long Os_GetTimeMs(void)
 {
+    DET_LOGT(TAG, "called");
     if (Os_UseMillisFallback != 0U)
         return millis();
     return (unsigned long)Gpt_GetTimeElapsed(OS_GPT_CHANNEL);
@@ -132,6 +133,7 @@ static unsigned long Os_GetTimeMs(void)
  */
 static void Os_CrossCheckTickSource(void)
 {
+    DET_LOGT(TAG, "called");
     if (Os_UseMillisFallback != 0U)
         return;  /* 既にフォールバック済み: これ以上チェックする意味がない */
 
@@ -182,6 +184,7 @@ static void Os_CrossCheckTickSource(void)
  */
 void Os_Init(const Os_ConfigType* ConfigPtr)
 {
+    DET_LOGT(TAG, "called");
     Os_Cfg = ConfigPtr;
 
     /* Value は 32-bit フルレンジ (millis() と同じラップアラウンド周期)。
@@ -228,6 +231,7 @@ void Os_Init(const Os_ConfigType* ConfigPtr)
  */
 void Os_SchedulerStep(void)
 {
+    DET_LOGT(TAG, "called");
     for (uint8 i = 0U; i < Os_Cfg->TaskCount; i++)
     {
         if (Os_TaskActive[i] == 0U)
@@ -268,6 +272,7 @@ void Os_SchedulerStep(void)
  */
 void Os_SetTaskActive(uint8 TaskId, uint8 Active)
 {
+    DET_LOGT(TAG, "called");
     if (Os_Cfg == NULL || TaskId >= Os_Cfg->TaskCount)
         return;  /* Os_Init() 未実行 (呼び出し順序の誤りに対する保険) */
 

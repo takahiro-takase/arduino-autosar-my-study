@@ -35,6 +35,7 @@ static const char* FakeDetHw_LevelName(LogLevel lvl)
         case LOG_E: return "ERROR";
         case LOG_W: return "WARN ";
         case LOG_I: return "INFO ";
+        case LOG_T: return "TRACE";
         default:    return "DEBUG";
     }
 }

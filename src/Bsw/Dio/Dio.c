@@ -16,6 +16,8 @@
 #include "Dio_Hw.h"
 #include "Det.h"
 
+#define TAG "Dio"
+
 /**
  * \brief   指定チャネルへ出力レベルを書き込む。
  *
@@ -30,6 +32,7 @@
  */
 void Dio_WriteChannel(Dio_ChannelType channelId, Dio_LevelType level)
 {
+    DET_LOGT(TAG, "called");
     Dio_Hw_WriteChannel(channelId, level);
 }
 
@@ -48,11 +51,13 @@ void Dio_WriteChannel(Dio_ChannelType channelId, Dio_LevelType level)
  */
 Dio_LevelType Dio_ReadChannel(Dio_ChannelType channelId)
 {
+    DET_LOGT(TAG, "called");
     return Dio_Hw_ReadChannel(channelId);
 }
 
 void Dio_GetVersionInfo(Std_VersionInfoType* VersionInfo)
 {
+    DET_LOGT(TAG, "called");
     if (VersionInfo == NULL)
     {
         Det_ReportError(DIO_MODULE_ID, 0U, DIO_API_ID_GET_VERSION_INFO, DIO_E_PARAM_POINTER);

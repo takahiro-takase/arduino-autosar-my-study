@@ -40,6 +40,8 @@ static const CanIf_ConfigType* CanIf_ConfigPtr = NULL;
  */
 void CanIf_Init(const CanIf_ConfigType* ConfigPtr)
 {
+    DET_LOGT(TAG, "called");
+
     if (ConfigPtr == NULL)
     {
         DET_LOGE(TAG, "Init: NULL ConfigPtr");
@@ -95,6 +97,8 @@ void CanIf_DeInit(void)
  */
 Std_ReturnType CanIf_Transmit(PduIdType TxPduId, const PduInfoType* PduInfoPtr)
 {
+    DET_LOGT(TAG, "called");
+
     if (CanIf_ConfigPtr == NULL)
         return E_NOT_OK;
 
@@ -169,6 +173,8 @@ Std_ReturnType CanIf_Transmit(PduIdType TxPduId, const PduInfoType* PduInfoPtr)
  */
 void CanIf_RxIndication(const Can_HwType* Mailbox, const PduInfoType* PduInfoPtr)
 {
+    DET_LOGT(TAG, "called");
+
     if (CanIf_ConfigPtr == NULL)
         return;  /* [SWS_CANIF_00421]: 未初期化時は黙って何もしない（DET 報告なし） */
 
@@ -248,6 +254,8 @@ void CanIf_RxIndication(const Can_HwType* Mailbox, const PduInfoType* PduInfoPtr
  */
 void CanIf_TxConfirmation(PduIdType CanTxPduId)
 {
+    DET_LOGT(TAG, "called");
+
     if (CanIf_ConfigPtr == NULL)
         return;
 
@@ -280,6 +288,8 @@ void CanIf_TxConfirmation(PduIdType CanTxPduId)
  */
 void CanIf_ControllerBusOff(uint8 ControllerId)
 {
+    DET_LOGT(TAG, "called");
+
     if (ControllerId != 0U)
     {
         Det_ReportError(CANIF_MODULE_ID, 0U, CANIF_API_ID_CONTROLLER_BUSOFF, CANIF_E_PARAM_CONTROLLERID);
@@ -321,6 +331,8 @@ void CanIf_ControllerWakeup(uint8 ControllerId)
  */
 void CanIf_GetVersionInfo(Std_VersionInfoType* versioninfo)
 {
+    DET_LOGT(TAG, "called");
+
     if (versioninfo == NULL)
     {
         Det_ReportError(CANIF_MODULE_ID, 0U, CANIF_API_ID_GET_VERSION_INFO, CANIF_E_PARAM_POINTER);

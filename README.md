@@ -70,9 +70,11 @@ Arduino UNO 上に最小構成で再現しています。
 CAN 経由で受信するエンジン ECU（0x100）・ABS ECU（0x110）からの情報を警告灯制御へ
 反映する、以下の入出力を持つメータ ECU です。
 
-- **RX（CAN ID 0x100）**: エンジン ECU から回転数・水温・ON フラグを受信（AUTOSAR E2E Profile 05 保護付き）
-- **RX（CAN ID 0x110）**: ABS ECU から車速・ブレーキ作動・ABS 作動フラグを受信
-- **TX（CAN ID 0x200）**: エンジン状態（OFF / STARTING / RUNNING / FAULT）・回転数・3 本の警告灯状態（RUNNING/FAULT/ABS）を変化時送信＋周期フロア（ComFilterAlgorithm、E2E 保護なし）
+| フレーム | CAN ID | Tx<br>Rx | 内容 |
+|---------|--------|----------|------|
+| EngineInfo | 0x100 | Rx | エンジン ECU から回転数・水温・ON フラグを受信<br>（AUTOSAR E2E Profile 05 保護付き） |
+| AbsInfo | 0x110 | Rx | ABS ECU から車速・ブレーキ作動・ABS 作動フラグを受信<br>（AUTOSAR E2E Profile 05 保護付き） |
+| MeterStatus | 0x200 | Tx | エンジン状態（OFF / STARTING / RUNNING / FAULT）・回転数・3 本の警告灯状態（RUNNING/FAULT/ABS）を変化時送信＋周期フロア（ComFilterAlgorithm）<br>（AUTOSAR E2E 保護なし） |
 
 <a id="hardware"></a>
 ## ハードウェア

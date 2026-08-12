@@ -174,6 +174,7 @@ static unsigned long   EcuM_PostRunTimerMs = 0UL;
  */
 void EcuM_Init(void)
 {
+    DET_LOGT(TAG, "called");
     MemIf_Init();   /* NvM_Init より前: EEPROM 抽象化層 (Fee) を初期化 */
     NvM_Init(&NvM_Config);
     Port_Init();                    /* ピン方向設定（Dio 操作より前に完了）    */
@@ -241,6 +242,7 @@ void EcuM_Init(void)
  */
 void EcuM_MainFunction(void)
 {
+    DET_LOGT(TAG, "called");
     switch (EcuM_State)
     {
         case ECUM_STATE_RUN:
@@ -274,11 +276,13 @@ void EcuM_MainFunction(void)
 
 EcuM_StateType EcuM_GetState(void)
 {
+    DET_LOGT(TAG, "called");
     return EcuM_State;
 }
 
 Std_ReturnType EcuM_RequestRUN(EcuM_UserType user)
 {
+    DET_LOGT(TAG, "called");
     if (user >= ECUM_USER_COUNT)
     {
         Det_ReportError(ECUM_MODULE_ID, 0U, ECUM_API_ID_REQUEST_RUN, ECUM_E_INVALID_PAR);
@@ -336,6 +340,7 @@ Std_ReturnType EcuM_RequestRUN(EcuM_UserType user)
 
 Std_ReturnType EcuM_ReleaseRUN(EcuM_UserType user)
 {
+    DET_LOGT(TAG, "called");
     if (user >= ECUM_USER_COUNT)
     {
         Det_ReportError(ECUM_MODULE_ID, 0U, ECUM_API_ID_RELEASE_RUN, ECUM_E_INVALID_PAR);
@@ -377,6 +382,7 @@ Std_ReturnType EcuM_ReleaseRUN(EcuM_UserType user)
 
 void EcuM_GetVersionInfo(Std_VersionInfoType* versioninfo)
 {
+    DET_LOGT(TAG, "called");
     if (versioninfo == NULL)
     {
         Det_ReportError(ECUM_MODULE_ID, 0U, ECUM_API_ID_GET_VERSION_INFO, ECUM_E_NULL_POINTER);

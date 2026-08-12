@@ -37,6 +37,7 @@ static const PduR_PBConfigType* PduR_ConfigPtr = NULL;
  */
 static const PduR_TxRoutingPathType* PduR_FindTxPath(PduIdType SrcPduId)
 {
+    DET_LOGT(TAG, "called");
     for (uint8 i = 0; i < PduR_ConfigPtr->TxPathCount; i++)
     {
         if (PduR_ConfigPtr->TxPaths[i].SrcPduId == SrcPduId)
@@ -63,6 +64,8 @@ static const PduR_TxRoutingPathType* PduR_FindTxPath(PduIdType SrcPduId)
  */
 void PduR_Init(const PduR_PBConfigType* ConfigPtr)
 {
+    DET_LOGT(TAG, "called");
+
     if (ConfigPtr == NULL)
     {
         DET_LOGE(TAG, "Init E: config NULL");
@@ -113,6 +116,8 @@ void PduR_Init(const PduR_PBConfigType* ConfigPtr)
  */
 void PduR_ComRxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
 {
+    DET_LOGT(TAG, "called");
+
     if (PduR_ConfigPtr == NULL)
     {
         Det_ReportError(PDUR_MODULE_ID, 0U, PDUR_API_ID_RX_INDICATION, PDUR_E_UNINIT);
@@ -173,6 +178,8 @@ void PduR_ComRxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
  */
 void PduR_CanIfTxConfirmation(PduIdType TxPduId, Std_ReturnType result)
 {
+    DET_LOGT(TAG, "called");
+
     if (PduR_ConfigPtr == NULL)
     {
         Det_ReportError(PDUR_MODULE_ID, 0U, PDUR_API_ID_TX_CONFIRMATION, PDUR_E_UNINIT);
@@ -222,6 +229,8 @@ void PduR_CanIfTxConfirmation(PduIdType TxPduId, Std_ReturnType result)
  */
 Std_ReturnType PduR_Transmit(PduIdType SrcPduId, const PduInfoType* PduInfoPtr)
 {
+    DET_LOGT(TAG, "called");
+
     if (PduR_ConfigPtr == NULL)
     {
         Det_ReportError(PDUR_MODULE_ID, 0U, PDUR_API_ID_TRANSMIT, PDUR_E_UNINIT);
@@ -286,6 +295,8 @@ Std_ReturnType PduR_Transmit(PduIdType SrcPduId, const PduInfoType* PduInfoPtr)
  */
 Std_ReturnType PduR_SecOCTransmit(PduIdType SrcPduId, const PduInfoType* PduInfoPtr)
 {
+    DET_LOGT(TAG, "called");
+
     if (PduR_ConfigPtr == NULL)
     {
         Det_ReportError(PDUR_MODULE_ID, 0U, PDUR_API_ID_SECOC_TRANSMIT, PDUR_E_UNINIT);
@@ -330,6 +341,8 @@ Std_ReturnType PduR_SecOCTransmit(PduIdType SrcPduId, const PduInfoType* PduInfo
  */
 void PduR_GetVersionInfo(Std_VersionInfoType* versioninfo)
 {
+    DET_LOGT(TAG, "called");
+
     if (versioninfo == NULL)
     {
         Det_ReportError(PDUR_MODULE_ID, 0U, PDUR_API_ID_GET_VERSION_INFO, PDUR_E_PARAM_POINTER);

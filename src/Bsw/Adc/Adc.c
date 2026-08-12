@@ -15,8 +15,11 @@
 #include "Adc_Hw.h"
 #include "Det.h"
 
+#define TAG "Adc"
+
 Std_ReturnType Adc_ReadChannel(uint8 channel, uint16* raw)
 {
+    DET_LOGT(TAG, "called");
     if (raw == NULL) {
         Det_ReportError(ADC_MODULE_ID, 0U, ADC_API_ID_READ_CHANNEL, ADC_E_PARAM_POINTER);
         return E_NOT_OK;
@@ -27,6 +30,7 @@ Std_ReturnType Adc_ReadChannel(uint8 channel, uint16* raw)
 
 void Adc_GetVersionInfo(Std_VersionInfoType* versioninfo)
 {
+    DET_LOGT(TAG, "called");
     if (versioninfo == NULL) {
         Det_ReportError(ADC_MODULE_ID, 0U, ADC_API_ID_GET_VERSION_INFO, ADC_E_PARAM_POINTER);
         return;

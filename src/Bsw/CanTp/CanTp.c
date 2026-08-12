@@ -143,6 +143,7 @@ static uint8 CanTp_DecodeStMin(uint8 raw);
  */
 void CanTp_Init(void)
 {
+    DET_LOGT(TAG, "called");
     CanTp_Rx.state  = CANTP_RX_IDLE;
     CanTp_Tx.state  = CANTP_TX_IDLE;
     CanTp_Initialized = 1U;
@@ -158,6 +159,7 @@ void CanTp_Init(void)
  *  \retval E_NOT_OK PduR / CanIf / Can_Write が失敗（TX バッファビジー等）。 */
 static Std_ReturnType CanTp_SendFrame(void)
 {
+    DET_LOGT(TAG, "called");
     static PduInfoType pdu;
     pdu.SduDataPtr = CanTp_TxFrameBuf;
     pdu.SduLength  = 8U;
@@ -179,6 +181,7 @@ static Std_ReturnType CanTp_SendFrame(void)
  */
 static uint8 CanTp_DecodeStMin(uint8 raw)
 {
+    DET_LOGT(TAG, "called");
     if (raw <= 0x7FU)
         return raw;
 
@@ -198,6 +201,7 @@ static uint8 CanTp_DecodeStMin(uint8 raw)
  */
 static void CanTp_SendFlowControl(uint8 fs, uint8 bs, uint8 stMin)
 {
+    DET_LOGT(TAG, "called");
     CanTp_TxFrameBuf[0] = (uint8)(0x30U | (fs & 0x0FU));
     CanTp_TxFrameBuf[1] = bs;
     CanTp_TxFrameBuf[2] = stMin;
@@ -227,6 +231,7 @@ static void CanTp_SendFlowControl(uint8 fs, uint8 bs, uint8 stMin)
  */
 static void CanTp_SendNextCF(void)
 {
+    DET_LOGT(TAG, "called");
     uint16 remaining = CanTp_Tx.msgLen - CanTp_Tx.pos;
     uint8  copyLen   = (remaining > (uint16)CANTP_CF_DATA)
                        ? CANTP_CF_DATA : (uint8)remaining;
@@ -306,6 +311,7 @@ static void CanTp_SendNextCF(void)
  */
 Std_ReturnType CanTp_Transmit(PduIdType TxSduId, const PduInfoType* PduInfoPtr)
 {
+    DET_LOGT(TAG, "called");
     if (!CanTp_Initialized)
     {
         Det_ReportError(CANTP_MODULE_ID, 0U, CANTP_API_ID_TRANSMIT, CANTP_E_UNINIT);
@@ -422,6 +428,7 @@ Std_ReturnType CanTp_Transmit(PduIdType TxSduId, const PduInfoType* PduInfoPtr)
  */
 void CanTp_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
 {
+    DET_LOGT(TAG, "called");
     if (!CanTp_Initialized)
     {
         Det_ReportError(CANTP_MODULE_ID, 0U, CANTP_API_ID_RX_INDICATION, CANTP_E_UNINIT);
@@ -652,6 +659,7 @@ void CanTp_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
  */
 void CanTp_TxConfirmation(PduIdType TxPduId, Std_ReturnType result)
 {
+    DET_LOGT(TAG, "called");
     (void)TxPduId;
     (void)result;
 
@@ -678,6 +686,7 @@ void CanTp_TxConfirmation(PduIdType TxPduId, Std_ReturnType result)
  */
 void CanTp_MainFunction(void)
 {
+    DET_LOGT(TAG, "called");
     if (!CanTp_Initialized)
     {
         Det_ReportError(CANTP_MODULE_ID, 0U, CANTP_API_ID_MAIN_FUNCTION, CANTP_E_UNINIT);
@@ -719,6 +728,7 @@ void CanTp_MainFunction(void)
 
 void CanTp_GetVersionInfo(Std_VersionInfoType* versioninfo)
 {
+    DET_LOGT(TAG, "called");
     if (versioninfo == NULL)
     {
         Det_ReportError(CANTP_MODULE_ID, 0U, CANTP_API_ID_GET_VERSION_INFO, CANTP_E_PARAM_POINTER);

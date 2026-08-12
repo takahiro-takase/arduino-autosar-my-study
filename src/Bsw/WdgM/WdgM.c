@@ -233,6 +233,7 @@ static uint8 WdgM_GlobalStopped = 0U;
  */
 void WdgM_Init(const WdgM_ConfigType* ConfigPtr)
 {
+    DET_LOGT(TAG, "called");
     if (ConfigPtr == NULL)
     {
         DET_LOGE(TAG, "Init: NULL ConfigPtr");
@@ -261,6 +262,7 @@ void WdgM_Init(const WdgM_ConfigType* ConfigPtr)
 
 void WdgM_DeInit(void)
 {
+    DET_LOGT(TAG, "called");
     if (WdgM_Cfg == NULL)
     {
         Det_ReportError(WDGM_MODULE_ID, 0U, WDGM_API_ID_DEINIT, WDGM_E_NO_INIT);
@@ -280,6 +282,7 @@ void WdgM_DeInit(void)
  */
 void WdgM_EnableHwWatchdog(void)
 {
+    DET_LOGT(TAG, "called");
     (void)WdgIf_SetMode(WDGIF_DEVICE_0, WDGIF_FAST_MODE);  /* WDGM_HW_WATCHDOG_TIMEOUT_MS (4000ms) に対応 */
     WdgM_SupervisionSuppressed = 0U;
     DET_LOGI(TAG, "HW watchdog enabled (4000ms)");
@@ -294,6 +297,7 @@ void WdgM_EnableHwWatchdog(void)
  */
 void WdgM_DisableHwWatchdog(void)
 {
+    DET_LOGT(TAG, "called");
     /* WdgIf_SetMode(OFF) は本プロジェクトの HW 制約により常に E_NOT_OK を
      * 返す（Wdg.c の Wdg_SetMode() コメント参照）が、ここで行いたいのは
      * 「WdgM が FAILED 判定の結果を無視する」ことであり、HW が物理的に
@@ -357,6 +361,7 @@ void WdgM_DisableHwWatchdog(void)
  */
 void WdgM_ResumeSupervision(void)
 {
+    DET_LOGT(TAG, "called");
     if (WdgM_Cfg == NULL)
         return;
 
@@ -390,6 +395,7 @@ void WdgM_ResumeSupervision(void)
  */
 Std_ReturnType WdgM_CheckpointReached(WdgM_SupervisedEntityIdType SEID, uint8 CheckpointId)
 {
+    DET_LOGT(TAG, "called");
     if (WdgM_Cfg == NULL)
     {
         Det_ReportError(WDGM_MODULE_ID, 0U, WDGM_API_ID_CHECKPOINT_REACHED, WDGM_E_NO_INIT);
@@ -468,6 +474,7 @@ Std_ReturnType WdgM_CheckpointReached(WdgM_SupervisedEntityIdType SEID, uint8 Ch
  */
 WdgM_LocalStatusType WdgM_GetLocalStatus(WdgM_SupervisedEntityIdType SEID)
 {
+    DET_LOGT(TAG, "called");
     if (WdgM_Cfg == NULL)
     {
         Det_ReportError(WDGM_MODULE_ID, 0U, WDGM_API_ID_GET_LOCAL_STATUS, WDGM_E_NO_INIT);
@@ -524,6 +531,7 @@ WdgM_LocalStatusType WdgM_GetLocalStatus(WdgM_SupervisedEntityIdType SEID)
  */
 void WdgM_MainFunction(void)
 {
+    DET_LOGT(TAG, "called");
     if (WdgM_Cfg == NULL)
         return;
 
@@ -652,6 +660,7 @@ void WdgM_MainFunction(void)
  */
 void WdgM_TriggerHwWatchdog(void)
 {
+    DET_LOGT(TAG, "called");
     if (!WdgM_GlobalStopped || WdgM_SupervisionSuppressed)
     {
         WdgIf_SetTriggerCondition(WDGIF_DEVICE_0, (uint16)WDGM_HW_WATCHDOG_TIMEOUT_MS);
@@ -665,6 +674,7 @@ void WdgM_TriggerHwWatchdog(void)
 
 void WdgM_GetVersionInfo(Std_VersionInfoType* VersionInfo)
 {
+    DET_LOGT(TAG, "called");
     if (VersionInfo == NULL)
     {
         Det_ReportError(WDGM_MODULE_ID, 0U, WDGM_API_ID_GET_VERSION_INFO, WDGM_E_INV_POINTER);

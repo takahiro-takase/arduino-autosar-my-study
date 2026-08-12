@@ -64,6 +64,7 @@ static const uint8 Crypto_Aes128_Rcon[10] = {
  */
 static uint8 Crypto_Aes128_GMul(uint8 a, uint8 b)
 {
+    DET_LOGT(TAG, "called");
     uint8 p = 0U;
     for (uint8 i = 0U; i < 8U; i++)
     {
@@ -85,6 +86,7 @@ static uint8 Crypto_Aes128_GMul(uint8 a, uint8 b)
 static void Crypto_Aes128_KeyExpansion(const uint8 key[CRYPTO_AES128_KEY_SIZE],
                                         uint8 expandedKey[AES128_EXPANDED_KEY_SIZE])
 {
+    DET_LOGT(TAG, "called");
     uint8 temp[4];
 
     /* 先頭 Nk word はそのまま鍵をコピー */
@@ -132,18 +134,21 @@ static void Crypto_Aes128_KeyExpansion(const uint8 key[CRYPTO_AES128_KEY_SIZE],
 
 static void Crypto_Aes128_AddRoundKey(uint8 state[16], const uint8* roundKey)
 {
+    DET_LOGT(TAG, "called");
     for (uint8 i = 0U; i < 16U; i++)
         state[i] ^= roundKey[i];
 }
 
 static void Crypto_Aes128_SubBytes(uint8 state[16])
 {
+    DET_LOGT(TAG, "called");
     for (uint8 i = 0U; i < 16U; i++)
         state[i] = Crypto_Aes128_Sbox[state[i]];
 }
 
 static void Crypto_Aes128_ShiftRows(uint8 state[16])
 {
+    DET_LOGT(TAG, "called");
     uint8 tmp[16];
     for (uint8 row = 0U; row < 4U; row++)
     {
@@ -159,6 +164,7 @@ static void Crypto_Aes128_ShiftRows(uint8 state[16])
 
 static void Crypto_Aes128_MixColumns(uint8 state[16])
 {
+    DET_LOGT(TAG, "called");
     for (uint8 col = 0U; col < 4U; col++)
     {
         const uint8 s0 = state[4U * col + 0U];
@@ -177,6 +183,7 @@ void Crypto_Aes128_EncryptBlock(const uint8 key[CRYPTO_AES128_KEY_SIZE],
                                  const uint8 plaintext[CRYPTO_AES128_BLOCK_SIZE],
                                  uint8 ciphertext[CRYPTO_AES128_BLOCK_SIZE])
 {
+    DET_LOGT(TAG, "called");
     uint8 expandedKey[AES128_EXPANDED_KEY_SIZE];
     uint8 state[16];
 
@@ -206,6 +213,7 @@ void Crypto_Aes128_EncryptBlock(const uint8 key[CRYPTO_AES128_KEY_SIZE],
 
 Std_ReturnType Crypto_Aes128_SelfTest(void)
 {
+    DET_LOGT(TAG, "called");
     /* FIPS-197 Appendix B の公式既知テストベクタ (Known Answer Test) */
     static const uint8 kKey[CRYPTO_AES128_KEY_SIZE] = {
         0x00,0x01,0x02,0x03,0x04,0x05,0x06,0x07,0x08,0x09,0x0a,0x0b,0x0c,0x0d,0x0e,0x0f

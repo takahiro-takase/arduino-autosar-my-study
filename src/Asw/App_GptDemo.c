@@ -27,6 +27,7 @@ static volatile uint32 s_TickCount = 0U;
 
 void App_GptDemo_Init(void)
 {
+    DET_LOGT(TAG, "called");
     Gpt_StartTimer(GPT_CHANNEL_0, 1000U);
     Gpt_EnableNotification(GPT_CHANNEL_0);
 

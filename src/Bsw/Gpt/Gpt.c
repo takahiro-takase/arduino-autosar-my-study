@@ -62,6 +62,7 @@ static volatile Gpt_ValueType        Gpt_ElapsedTicks[GPT_CHANNEL_COUNT];
 
 static uint8 Gpt_IsValidChannel(Gpt_ChannelType Channel)
 {
+    DET_LOGT(TAG, "called");
     return (Gpt_Cfg != NULL) && (Channel < Gpt_Cfg->ChannelCount);
 }
 
@@ -112,6 +113,7 @@ void Gpt_OnTick(Gpt_ChannelType Channel)
 
 void Gpt_Init(const Gpt_ConfigType* ConfigPtr)
 {
+    DET_LOGT(TAG, "called");
     if (ConfigPtr == NULL)
     {
         DET_LOGE(TAG, "Init: NULL ConfigPtr");
@@ -154,6 +156,7 @@ void Gpt_Init(const Gpt_ConfigType* ConfigPtr)
 
 void Gpt_DeInit(void)
 {
+    DET_LOGT(TAG, "called");
     if (Gpt_Cfg == NULL)
     {
         Det_ReportError(GPT_MODULE_ID, 0U, GPT_API_ID_DE_INIT, GPT_E_UNINIT);
@@ -177,6 +180,7 @@ void Gpt_DeInit(void)
 
 Gpt_ValueType Gpt_GetTimeElapsed(Gpt_ChannelType Channel)
 {
+    DET_LOGT(TAG, "called");
     if (Gpt_Cfg == NULL)
     {
         Det_ReportError(GPT_MODULE_ID, 0U, GPT_API_ID_GET_TIME_ELAPSED, GPT_E_UNINIT);
@@ -202,6 +206,7 @@ Gpt_ValueType Gpt_GetTimeElapsed(Gpt_ChannelType Channel)
 
 Gpt_ValueType Gpt_GetTimeRemaining(Gpt_ChannelType Channel)
 {
+    DET_LOGT(TAG, "called");
     if (Gpt_Cfg == NULL)
     {
         Det_ReportError(GPT_MODULE_ID, 0U, GPT_API_ID_GET_TIME_REMAINING, GPT_E_UNINIT);
@@ -226,6 +231,7 @@ Gpt_ValueType Gpt_GetTimeRemaining(Gpt_ChannelType Channel)
 
 void Gpt_StartTimer(Gpt_ChannelType Channel, Gpt_ValueType Value)
 {
+    DET_LOGT(TAG, "called");
     if (Gpt_Cfg == NULL)
     {
         Det_ReportError(GPT_MODULE_ID, 0U, GPT_API_ID_START_TIMER, GPT_E_UNINIT);
@@ -285,6 +291,7 @@ void Gpt_StartTimer(Gpt_ChannelType Channel, Gpt_ValueType Value)
 
 void Gpt_StopTimer(Gpt_ChannelType Channel)
 {
+    DET_LOGT(TAG, "called");
     if (Gpt_Cfg == NULL)
     {
         Det_ReportError(GPT_MODULE_ID, 0U, GPT_API_ID_STOP_TIMER, GPT_E_UNINIT);
@@ -320,6 +327,7 @@ void Gpt_StopTimer(Gpt_ChannelType Channel)
 
 void Gpt_EnableNotification(Gpt_ChannelType Channel)
 {
+    DET_LOGT(TAG, "called");
     if (Gpt_Cfg == NULL)
     {
         Det_ReportError(GPT_MODULE_ID, 0U, GPT_API_ID_ENABLE_NOTIFICATION, GPT_E_UNINIT);
@@ -336,6 +344,7 @@ void Gpt_EnableNotification(Gpt_ChannelType Channel)
 
 void Gpt_DisableNotification(Gpt_ChannelType Channel)
 {
+    DET_LOGT(TAG, "called");
     if (Gpt_Cfg == NULL)
     {
         Det_ReportError(GPT_MODULE_ID, 0U, GPT_API_ID_DISABLE_NOTIFICATION, GPT_E_UNINIT);
@@ -352,6 +361,7 @@ void Gpt_DisableNotification(Gpt_ChannelType Channel)
 
 void Gpt_GetVersionInfo(Std_VersionInfoType* versioninfo)
 {
+    DET_LOGT(TAG, "called");
     if (versioninfo == NULL)
     {
         Det_ReportError(GPT_MODULE_ID, 0U, GPT_API_ID_GET_VERSION_INFO, GPT_E_PARAM_POINTER);

@@ -15,6 +15,9 @@
  */
 
 #include "E2E_P05.h"
+#include "Det.h"
+
+#define TAG "E2E_P05"
 
 /* -----------------------------------------------------------------------
  * 内部ヘルパー
@@ -32,6 +35,7 @@
  */
 static uint16 E2E_CalcCrc16(uint16 crc, const uint8 *data, uint8 len)
 {
+    DET_LOGT(TAG, "called");
     uint8 i;
     uint8 bit;
     for (i = 0U; i < len; i++)
@@ -63,6 +67,7 @@ static uint16 E2E_CalcCrc16(uint16 crc, const uint8 *data, uint8 len)
  */
 static uint16 E2E_CalcCrc16Body(const uint8 *Data, uint8 DataLength, uint8 Offset, uint16 DataID)
 {
+    DET_LOGT(TAG, "called");
     uint16 crc = 0xFFFFU; /* SWS_E2E_00406: Crc_StartValue16: 0xFFFF */
 
     crc = E2E_CalcCrc16(crc, &Data[Offset + 2U], (uint8)(DataLength - Offset - 2U));
@@ -81,6 +86,7 @@ static uint16 E2E_CalcCrc16Body(const uint8 *Data, uint8 DataLength, uint8 Offse
 
 void E2E_P05ProtectInit(E2E_P05ProtectStateType *State)
 {
+    DET_LOGT(TAG, "called");
     if (State == NULL)
         return;
     State->Counter = 0U;
@@ -92,6 +98,7 @@ void E2E_P05Protect(
     uint8                   *Data,
     uint8                    Length)
 {
+    DET_LOGT(TAG, "called");
     if (Config == NULL || State == NULL || Data == NULL)
         return;
 
@@ -116,6 +123,7 @@ void E2E_P05Protect(
 
 void E2E_P05CheckInit(E2E_P05CheckStateType *State)
 {
+    DET_LOGT(TAG, "called");
     if (State == NULL)
         return;
     State->Counter = 0U;
@@ -128,6 +136,7 @@ E2E_P05StatusType E2E_P05Check(
     const uint8              *Data,
     uint8                     Length)
 {
+    DET_LOGT(TAG, "called");
     if (Config == NULL || State == NULL)
         return E2E_P05STATUS_ERROR;
 

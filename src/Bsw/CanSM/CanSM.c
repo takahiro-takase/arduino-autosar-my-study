@@ -156,6 +156,8 @@ void CanSM_Init(void)
 
 void CanSM_DeInit(void)
 {
+    DET_LOGT(TAG, "called");
+
     if (!CanSM_Initialized)
     {
         Det_ReportError(CANSM_MODULE_ID, 0U, CANSM_API_ID_DEINIT, CANSM_E_UNINIT);
@@ -177,6 +179,8 @@ void CanSM_DeInit(void)
  */
 Std_ReturnType CanSM_RequestComMode(CanSM_NetworkHandleType network, ComM_ModeType mode)
 {
+    DET_LOGT(TAG, "called");
+
     if (!CanSM_Initialized)
     {
         Det_ReportError(CANSM_MODULE_ID, 0U, CANSM_API_ID_REQUEST_COM_MODE, CANSM_E_UNINIT);
@@ -283,6 +287,8 @@ Std_ReturnType CanSM_RequestComMode(CanSM_NetworkHandleType network, ComM_ModeTy
  */
 Std_ReturnType CanSM_GetCurrentComMode(CanSM_NetworkHandleType network, ComM_ModeType* mode)
 {
+    DET_LOGT(TAG, "called");
+
     if (!CanSM_Initialized)
     {
         Det_ReportError(CANSM_MODULE_ID, 0U, CANSM_API_ID_GET_CURRENT_COM_MODE, CANSM_E_UNINIT);
@@ -364,6 +370,8 @@ Std_ReturnType CanSM_GetCurrentComMode(CanSM_NetworkHandleType network, ComM_Mod
  */
 void CanSM_ControllerBusOff(uint8 ControllerId)
 {
+    DET_LOGT(TAG, "called");
+
     if (!CanSM_Initialized)
     {
         Det_ReportError(CANSM_MODULE_ID, 0U, CANSM_API_ID_CONTROLLER_BUSOFF, CANSM_E_UNINIT);
@@ -436,6 +444,8 @@ void CanSM_ControllerWakeup(uint8 ControllerId)
 {
     (void)ControllerId;
 
+    DET_LOGT(TAG, "called");
+
     if (!CanSM_Initialized)
     {
         Det_ReportError(CANSM_MODULE_ID, 0U, CANSM_API_ID_CONTROLLER_WAKEUP, CANSM_E_UNINIT);
@@ -492,6 +502,8 @@ void CanSM_RxIndication(uint8 ControllerId)
 {
     (void)ControllerId;
 
+    DET_LOGT(TAG, "called");
+
     if (!CanSM_Initialized)
     {
         Det_ReportError(CANSM_MODULE_ID, 0U, CANSM_API_ID_RX_INDICATION, CANSM_E_UNINIT);
@@ -522,6 +534,8 @@ void CanSM_RxIndication(uint8 ControllerId)
 
 void CanSM_NmBusSleepMode(void)
 {
+    DET_LOGT(TAG, "called");
+
     if (!CanSM_Initialized)
     {
         Det_ReportError(CANSM_MODULE_ID, 0U, CANSM_API_ID_NM_BUS_SLEEP_MODE, CANSM_E_UNINIT);
@@ -578,6 +592,8 @@ void CanSM_NmBusSleepMode(void)
  */
 void CanSM_MainFunction(void)
 {
+    DET_LOGT(TAG, "called");
+
     if (!CanSM_Initialized)
     {
         Det_ReportError(CANSM_MODULE_ID, 0U, CANSM_API_ID_MAIN_FUNCTION, CANSM_E_UNINIT);
@@ -664,6 +680,8 @@ void CanSM_MainFunction(void)
 
 void CanSM_GetVersionInfo(Std_VersionInfoType* VersionInfo)
 {
+    DET_LOGT(TAG, "called");
+
     if (VersionInfo == NULL)
     {
         Det_ReportError(CANSM_MODULE_ID, 0U, CANSM_API_ID_GET_VERSION_INFO, CANSM_E_PARAM_POINTER);
