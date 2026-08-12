@@ -103,6 +103,7 @@ static uint8 ComM_Initialized = 0U;
  */
 void ComM_Init(void)
 {
+    DET_LOGT(TAG, "called");
     uint8 i;
     for (i = 0U; i < COMM_CHANNEL_COUNT; i++)
         ComM_ChannelMode[i] = COMM_NO_COMMUNICATION;
@@ -122,6 +123,7 @@ void ComM_Init(void)
  */
 void ComM_DeInit(void)
 {
+    DET_LOGT(TAG, "called");
     if (!ComM_Initialized)
     {
         Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_DEINIT, COMM_E_UNINIT);
@@ -141,6 +143,7 @@ void ComM_DeInit(void)
  */
 Std_ReturnType ComM_GetStatus(ComM_InitStatusType* Status)
 {
+    DET_LOGT(TAG, "called");
     if (Status == NULL)
     {
         Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_GET_STATUS, COMM_E_PARAM_POINTER);
@@ -175,6 +178,7 @@ Std_ReturnType ComM_GetStatus(ComM_InitStatusType* Status)
  */
 Std_ReturnType ComM_RequestComMode(ComM_UserHandleType User, ComM_ModeType ComMode)
 {
+    DET_LOGT(TAG, "called");
     if (!ComM_Initialized)
     {
         Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_REQUEST_COM_MODE, COMM_E_UNINIT);
@@ -224,6 +228,7 @@ Std_ReturnType ComM_RequestComMode(ComM_UserHandleType User, ComM_ModeType ComMo
  */
 Std_ReturnType ComM_GetCurrentComMode(ComM_UserHandleType User, ComM_ModeType* ComMode)
 {
+    DET_LOGT(TAG, "called");
     if (!ComM_Initialized)
     {
         Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_GET_CURRENT_COM_MODE, COMM_E_UNINIT);
@@ -279,6 +284,7 @@ Std_ReturnType ComM_GetCurrentComMode(ComM_UserHandleType User, ComM_ModeType* C
  */
 void ComM_BusSMIndication(uint8 Network, ComM_ModeType Mode)
 {
+    DET_LOGT(TAG, "called");
     if (!ComM_Initialized)
     {
         Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_BUS_SM_MODE_INDICATION, COMM_E_UNINIT);
@@ -367,6 +373,7 @@ void ComM_BusSMIndication(uint8 Network, ComM_ModeType Mode)
  */
 void ComM_MainFunction(void)
 {
+    DET_LOGT(TAG, "called");
     if (!ComM_Initialized)
     {
         Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_MAIN_FUNCTION, COMM_E_UNINIT);
@@ -377,6 +384,7 @@ void ComM_MainFunction(void)
 
 void ComM_GetVersionInfo(Std_VersionInfoType* Versioninfo)
 {
+    DET_LOGT(TAG, "called");
     if (Versioninfo == NULL)
     {
         Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_GET_VERSION_INFO, COMM_E_PARAM_POINTER);

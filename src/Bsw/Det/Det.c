@@ -7,7 +7,7 @@
  *
  *          出力フォーマット:
  *            [<ms>ms] LEVEL TAG/func: message\r\n
- *            LEVEL は 5 文字固定 (ERROR/WARN /INFO /DEBUG) で列が揃う。
+ *            LEVEL は 5 文字固定 (ERROR/WARN /INFO /TRACE/DEBUG) で列が揃う。
  *
  * \copyright  Copyright (c) 2025 T_T
  * \license    MIT License - 詳細は LICENSE ファイルを参照。

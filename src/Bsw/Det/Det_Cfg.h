@@ -6,7 +6,8 @@
  *          DET_LOG_LEVEL 以下の数値 (＝同等以上に重要) のログのみ出力する。
  *
  *          例: DET_LOG_LEVEL を LOG_I にすると ERROR/WARN/INFO のみ出力し、
- *              DEBUG は抑制する。
+ *              TRACE/DEBUG は抑制する。LOG_T にすると TRACE（関数コールチェーン
+ *              確認専用）まで出力するが DEBUG（詳細ログ）は抑制したままにできる。
  *
  * \copyright  Copyright (c) 2025 T_T
  * \license    MIT License - 詳細は LICENSE ファイルを参照。
@@ -18,7 +19,7 @@
 #define DET_CFG_H
 
 #ifndef DET_LOG_LEVEL
-#  define DET_LOG_LEVEL  LOG_I  /**< 既定値: ERROR/WARN/INFO を出力、DEBUG を抑制 */
+#  define DET_LOG_LEVEL  LOG_I  /**< 既定値: ERROR/WARN/INFO を出力、TRACE/DEBUG を抑制 */
 #endif
 
 #endif /* DET_CFG_H */

@@ -170,6 +170,7 @@ static uint8 Dem_Initialized = 0U;
  */
 static void Dem_EvaluateAging(Dem_EventIdType EventId)
 {
+    DET_LOGT(TAG, "called");
     const uint8 status    = Dem_StatusTable[EventId];
     const uint8 threshold = Dem_AgingThresholdTable[EventId];
 
@@ -228,6 +229,7 @@ static void Dem_EvaluateAging(Dem_EventIdType EventId)
  */
 static void Dem_EvaluatePendingClear(Dem_EventIdType EventId)
 {
+    DET_LOGT(TAG, "called");
     const uint8 status = Dem_StatusTable[EventId];
 
     if ((status & DEM_STATUS_PENDING) == 0U)
@@ -266,6 +268,7 @@ static void Dem_EvaluatePendingClear(Dem_EventIdType EventId)
  */
 void Dem_Init(void)
 {
+    DET_LOGT(TAG, "called");
     uint8 magic = 0U;
     (void)NvM_ReadBlock(NVM_BLOCK_ID_DEM_MAGIC, &magic);
 
@@ -355,6 +358,7 @@ void Dem_Init(void)
 void Dem_ReportErrorStatus(Dem_EventIdType EventId,
                             Dem_EventStatusType EventStatus)
 {
+    DET_LOGT(TAG, "called");
     /* [SWS_Dem_00124]: Dem_SetEventStatus 相当のため未初期化チェック対象外。 */
 
     if (EventId >= DEM_EVENT_COUNT)
@@ -489,6 +493,7 @@ void Dem_ReportErrorStatus(Dem_EventIdType EventId,
  */
 uint8 Dem_GetStatusOfEvent(Dem_EventIdType EventId)
 {
+    DET_LOGT(TAG, "called");
     if (!Dem_Initialized)
     {
         Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_GET_STATUS_OF_EVENT, DEM_E_UNINIT);
@@ -518,6 +523,7 @@ uint8 Dem_GetStatusOfEvent(Dem_EventIdType EventId)
  */
 Std_ReturnType Dem_GetDTCOfEvent(Dem_EventIdType EventId, uint32* DTC)
 {
+    DET_LOGT(TAG, "called");
     if (!Dem_Initialized)
     {
         Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_GET_DTC_OF_EVENT, DEM_E_UNINIT);
@@ -548,6 +554,7 @@ Std_ReturnType Dem_GetDTCOfEvent(Dem_EventIdType EventId, uint32* DTC)
  */
 static void Dem_ClearOne(Dem_EventIdType EventId)
 {
+    DET_LOGT(TAG, "called");
     Dem_StatusTable[EventId] = DEM_STATUS_NOT_COMPLETED_SINCE_CLEAR
                              | DEM_STATUS_NOT_COMPLETED_THIS_CYCLE;
     Dem_DebounceCounter[EventId]    = 0;
@@ -571,6 +578,7 @@ static void Dem_ClearOne(Dem_EventIdType EventId)
  */
 Std_ReturnType Dem_ClearAllDTCs(void)
 {
+    DET_LOGT(TAG, "called");
     if (!Dem_Initialized)
     {
         Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_CLEAR_ALL_DTCS, DEM_E_UNINIT);
@@ -607,6 +615,7 @@ Std_ReturnType Dem_ClearAllDTCs(void)
  */
 Std_ReturnType Dem_ClearDTC(Dem_EventIdType EventId)
 {
+    DET_LOGT(TAG, "called");
     if (!Dem_Initialized)
     {
         Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_CLEAR_DTC, DEM_E_UNINIT);
@@ -646,6 +655,7 @@ Std_ReturnType Dem_ClearDTC(Dem_EventIdType EventId)
 void Dem_GetAllDTCs(uint32* dtcBuf, uint8* statusBuf,
                      uint8* count, uint8 statusMask)
 {
+    DET_LOGT(TAG, "called");
     if (!Dem_Initialized)
     {
         Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_GET_ALL_DTCS, DEM_E_UNINIT);
@@ -683,6 +693,7 @@ void Dem_GetAllDTCs(uint32* dtcBuf, uint8* statusBuf,
  */
 void Dem_SetFreezeFrameContext(uint16 EngineSpeed, uint8 CoolantTemp, uint8 EngineState)
 {
+    DET_LOGT(TAG, "called");
     if (!Dem_Initialized)
     {
         Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_SET_FREEZE_FRAME_CONTEXT, DEM_E_UNINIT);
@@ -703,6 +714,7 @@ void Dem_SetFreezeFrameContext(uint16 EngineSpeed, uint8 CoolantTemp, uint8 Engi
  */
 Std_ReturnType Dem_GetFreezeFrameOfEvent(Dem_EventIdType EventId, Dem_FreezeFrameType* Frame)
 {
+    DET_LOGT(TAG, "called");
     if (!Dem_Initialized)
     {
         Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_GET_FREEZE_FRAME_OF_EVENT, DEM_E_UNINIT);
@@ -737,6 +749,7 @@ Std_ReturnType Dem_GetFreezeFrameOfEvent(Dem_EventIdType EventId, Dem_FreezeFram
  */
 Std_ReturnType Dem_GetEventIdOfDTC(uint32 DTC, Dem_EventIdType* EventId)
 {
+    DET_LOGT(TAG, "called");
     if (!Dem_Initialized)
     {
         Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_GET_EVENT_ID_OF_DTC, DEM_E_UNINIT);
@@ -772,6 +785,7 @@ Std_ReturnType Dem_GetEventIdOfDTC(uint32 DTC, Dem_EventIdType* EventId)
  */
 Std_ReturnType Dem_GetOccurrenceCounterOfEvent(Dem_EventIdType EventId, uint8* Counter)
 {
+    DET_LOGT(TAG, "called");
     if (!Dem_Initialized)
     {
         Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_GET_OCCURRENCE_COUNTER_OF_EVENT, DEM_E_UNINIT);
@@ -796,6 +810,7 @@ Std_ReturnType Dem_GetOccurrenceCounterOfEvent(Dem_EventIdType EventId, uint8* C
 
 void Dem_GetVersionInfo(Std_VersionInfoType* versioninfo)
 {
+    DET_LOGT(TAG, "called");
     if (versioninfo == NULL)
     {
         Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_GET_VERSION_INFO, DEM_E_PARAM_POINTER);

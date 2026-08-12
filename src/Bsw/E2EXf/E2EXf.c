@@ -26,11 +26,13 @@ static uint8 E2EXf_Initialized = 0U;
 
 void E2EXf_Init(void)
 {
+    DET_LOGT(TAG, "called");
     E2EXf_Initialized = 1U;
 }
 
 void E2EXf_DeInit(void)
 {
+    DET_LOGT(TAG, "called");
     if (!E2EXf_Initialized)
     {
         Det_ReportError(E2EXF_MODULE_ID, 0U, E2EXF_API_ID_DEINIT, E2EXF_E_UNINIT);
@@ -45,6 +47,7 @@ void E2EXf_DeInit(void)
 Std_ReturnType E2EXf_InverseTransform(const E2EXf_RxConfigType* Config, const uint8* Buffer, uint8 Length,
                                       E2E_P01StatusType* CheckStatus)
 {
+    DET_LOGT(TAG, "called");
     if (CheckStatus == NULL)
     {
         Det_ReportError(E2EXF_MODULE_ID, 0U, E2EXF_API_ID_INVERSE_TRANSFORM, E2EXF_E_PARAM_POINTER);
@@ -85,6 +88,7 @@ Std_ReturnType E2EXf_InverseTransform(const E2EXf_RxConfigType* Config, const ui
 Std_ReturnType E2EXf_InverseTransformP05(const E2EXf_RxConfigTypeP05* Config, const uint8* Buffer, uint8 Length,
                                           E2E_P05StatusType* CheckStatus)
 {
+    DET_LOGT(TAG, "called");
     if (CheckStatus == NULL)
     {
         Det_ReportError(E2EXF_MODULE_ID, 0U, E2EXF_API_ID_INVERSE_TRANSFORM, E2EXF_E_PARAM_POINTER);
@@ -137,6 +141,7 @@ Std_ReturnType E2EXf_InverseTransformP05(const E2EXf_RxConfigTypeP05* Config, co
 
 void E2EXf_Transform(const E2EXf_TxConfigType* Config, uint8* Buffer, uint8 Length)
 {
+    DET_LOGT(TAG, "called");
     if (!E2EXf_Initialized)
     {
         Det_ReportError(E2EXF_MODULE_ID, 0U, E2EXF_API_ID_TRANSFORM, E2EXF_E_UNINIT);
@@ -154,6 +159,7 @@ void E2EXf_Transform(const E2EXf_TxConfigType* Config, uint8* Buffer, uint8 Leng
 
 void E2EXf_TransformP05(const E2EXf_TxConfigTypeP05* Config, uint8* Buffer, uint8 Length)
 {
+    DET_LOGT(TAG, "called");
     if (!E2EXf_Initialized)
     {
         Det_ReportError(E2EXF_MODULE_ID, 0U, E2EXF_API_ID_TRANSFORM, E2EXF_E_UNINIT);
@@ -171,6 +177,7 @@ void E2EXf_TransformP05(const E2EXf_TxConfigTypeP05* Config, uint8* Buffer, uint
 
 void E2EXf_GetVersionInfo(Std_VersionInfoType* versioninfo)
 {
+    DET_LOGT(TAG, "called");
     if (versioninfo == NULL)
     {
         Det_ReportError(E2EXF_MODULE_ID, 0U, E2EXF_API_ID_GET_VERSION_INFO, E2EXF_E_PARAM_POINTER);

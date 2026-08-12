@@ -135,6 +135,7 @@ static uint8 NvM_QueueLen  = 0U;  /**< キュー内の有効エントリ数     
 
 static const NvM_BlockDescriptorType* NvM_GetBlock(NvM_BlockIdType id)
 {
+    DET_LOGT(TAG, "called");
     if (NvM_Cfg == NULL || id >= NvM_Cfg->NumBlocks)
         return NULL;
     return &NvM_Cfg->Blocks[id];
@@ -149,6 +150,7 @@ static const NvM_BlockDescriptorType* NvM_GetBlock(NvM_BlockIdType id)
  */
 static uint8 NvM_CalcCrc8(const uint8* data, uint16 length)
 {
+    DET_LOGT(TAG, "called");
     uint8 crc = NVM_CRC8_INITIAL;
     uint16 i;
     for (i = 0U; i < length; i++)
@@ -169,6 +171,7 @@ static uint8 NvM_CalcCrc8(const uint8* data, uint16 length)
  *  冗長ブロックはプライマリ／ミラーそれぞれのベースアドレスに対して呼ぶ。 */
 static uint16 NvM_CrcAddressForBase(uint16 base, uint16 length)
 {
+    DET_LOGT(TAG, "called");
     return (uint16)(base + length);
 }
 
@@ -183,6 +186,7 @@ static uint16 NvM_CrcAddressForBase(uint16 base, uint16 length)
  */
 static void NvM_WriteCopySync(uint16 base, const void* data, uint16 length)
 {
+    DET_LOGT(TAG, "called");
     (void)MemIf_WriteImmediate(MEMIF_DEVICE_0, base, (const uint8*)data, length);
     uint8 crc = NvM_CalcCrc8((const uint8*)data, length);
     (void)MemIf_WriteImmediate(MEMIF_DEVICE_0, NvM_CrcAddressForBase(base, length), &crc, 1U);
@@ -203,6 +207,7 @@ static void NvM_WriteCopySync(uint16 base, const void* data, uint16 length)
  */
 static void NvM_ApplyDefaultSync(NvM_BlockIdType id, const NvM_BlockDescriptorType* blk)
 {
+    DET_LOGT(TAG, "called");
     if (blk->RomBlockDataAddress != NULL)
         memcpy(blk->RamBlockDataAddress, blk->RomBlockDataAddress, blk->NvMNvBlockLength);
     else
@@ -237,6 +242,7 @@ static void NvM_ApplyDefaultSync(NvM_BlockIdType id, const NvM_BlockDescriptorTy
  */
 static void NvM_LoadAndVerifyBlock(NvM_BlockIdType id, const NvM_BlockDescriptorType* blk)
 {
+    DET_LOGT(TAG, "called");
     if (blk->RamBlockDataAddress == NULL)
         return;
 
@@ -310,6 +316,7 @@ static void NvM_LoadAndVerifyBlock(NvM_BlockIdType id, const NvM_BlockDescriptor
  */
 static void NvM_MarkPending(NvM_BlockIdType id)
 {
+    DET_LOGT(TAG, "called");
     if (NvM_BlockPending[id] == 0U)
     {
         NvM_PendingQueue[NvM_QueueTail] = id;
@@ -348,6 +355,7 @@ static void NvM_MarkPending(NvM_BlockIdType id)
  */
 void NvM_Init(const NvM_ConfigType* ConfigPtr)
 {
+    DET_LOGT(TAG, "called");
     if (ConfigPtr == NULL)
     {
         DET_LOGE(TAG, "Init: NULL ConfigPtr");
@@ -387,6 +395,7 @@ void NvM_Init(const NvM_ConfigType* ConfigPtr)
  */
 Std_ReturnType NvM_ReadBlock(NvM_BlockIdType BlockId, void* NvM_DstPtr)
 {
+    DET_LOGT(TAG, "called");
     if (NvM_Cfg == NULL)
     {
         Det_ReportError(NVM_MODULE_ID, 0U, NVM_API_ID_READ_BLOCK, NVM_E_NOT_INITIALIZED);
@@ -427,6 +436,7 @@ Std_ReturnType NvM_ReadBlock(NvM_BlockIdType BlockId, void* NvM_DstPtr)
  */
 Std_ReturnType NvM_WriteBlock(NvM_BlockIdType BlockId, const void* NvM_SrcPtr)
 {
+    DET_LOGT(TAG, "called");
     if (NvM_Cfg == NULL)
     {
         Det_ReportError(NVM_MODULE_ID, 0U, NVM_API_ID_WRITE_BLOCK, NVM_E_NOT_INITIALIZED);
@@ -470,6 +480,7 @@ Std_ReturnType NvM_WriteBlock(NvM_BlockIdType BlockId, const void* NvM_SrcPtr)
  */
 Std_ReturnType NvM_RestoreBlockDefaults(NvM_BlockIdType BlockId)
 {
+    DET_LOGT(TAG, "called");
     if (NvM_Cfg == NULL)
     {
         Det_ReportError(NVM_MODULE_ID, 0U, NVM_API_ID_RESTORE_BLOCK_DEFAULTS, NVM_E_NOT_INITIALIZED);
@@ -508,6 +519,7 @@ Std_ReturnType NvM_RestoreBlockDefaults(NvM_BlockIdType BlockId)
  */
 NvM_RequestResultType NvM_GetErrorStatus(NvM_BlockIdType BlockId)
 {
+    DET_LOGT(TAG, "called");
     if (NvM_Cfg == NULL)
     {
         Det_ReportError(NVM_MODULE_ID, 0U, NVM_API_ID_GET_ERROR_STATUS, NVM_E_NOT_INITIALIZED);
@@ -541,6 +553,7 @@ NvM_RequestResultType NvM_GetErrorStatus(NvM_BlockIdType BlockId)
  */
 void NvM_MainFunction(void)
 {
+    DET_LOGT(TAG, "called");
     if (NvM_Cfg == NULL)
     {
         Det_ReportError(NVM_MODULE_ID, 0U, NVM_API_ID_MAIN_FUNCTION, NVM_E_NOT_INITIALIZED);
@@ -649,6 +662,7 @@ void NvM_MainFunction(void)
 
 void NvM_GetVersionInfo(Std_VersionInfoType* versioninfo)
 {
+    DET_LOGT(TAG, "called");
     if (versioninfo == NULL)
     {
         Det_ReportError(NVM_MODULE_ID, 0U, NVM_API_ID_GET_VERSION_INFO, NVM_E_PARAM_POINTER);

@@ -77,6 +77,7 @@ static uint16 s_adcMv           = 0U;  /* ADC 変換済み電圧値 [mV] */
  */
 void IoHwAb_Init(void)
 {
+    DET_LOGT(TAG, "called");
     Dio_WriteChannel(DIO_CHANNEL_LED_RUNNING, DIO_LOW);  /* 消灯状態で起動 */
     Dio_WriteChannel(DIO_CHANNEL_LED_FAULT,   DIO_LOW);  /* 消灯状態で起動 */
     Dio_WriteChannel(DIO_CHANNEL_LED_WARNING,  DIO_LOW);  /* 消灯状態で起動 */
@@ -103,6 +104,7 @@ void IoHwAb_Init(void)
  */
 Std_ReturnType IoHwAb_Led_SetLevel(uint8 level)
 {
+    DET_LOGT(TAG, "called");
     Dio_WriteChannel(DIO_CHANNEL_LED_WARNING, (Dio_LevelType)level);
     return E_OK;
 }
@@ -120,6 +122,7 @@ Std_ReturnType IoHwAb_Led_SetLevel(uint8 level)
  */
 Std_ReturnType IoHwAb_LedRunning_SetLevel(uint8 level)
 {
+    DET_LOGT(TAG, "called");
     Dio_WriteChannel(DIO_CHANNEL_LED_RUNNING, (Dio_LevelType)level);
     return E_OK;
 }
@@ -137,6 +140,7 @@ Std_ReturnType IoHwAb_LedRunning_SetLevel(uint8 level)
  */
 Std_ReturnType IoHwAb_LedFault_SetLevel(uint8 level)
 {
+    DET_LOGT(TAG, "called");
     Dio_WriteChannel(DIO_CHANNEL_LED_FAULT, (Dio_LevelType)level);
     return E_OK;
 }
@@ -157,6 +161,7 @@ Std_ReturnType IoHwAb_LedFault_SetLevel(uint8 level)
  */
 void IoHwAb_MainFunction(void)
 {
+    DET_LOGT(TAG, "called");
     /* INPUT_PULLUP: LOW = 押下（GND接続）、HIGH = 解放（プルアップ電位）*/
     const uint8 rawLevel = (Dio_ReadChannel(DIO_CHANNEL_BUTTON) == DIO_LOW) ? 1U : 0U;
 
@@ -233,6 +238,7 @@ void IoHwAb_MainFunction(void)
  */
 Std_ReturnType IoHwAb_Button_GetLevel(uint8* level)
 {
+    DET_LOGT(TAG, "called");
     if (level == NULL)
     {
         Det_ReportError(IOHWAB_MODULE_ID, 0U, IOHWAB_API_ID_BUTTON_GET_LEVEL, IOHWAB_E_PARAM_POINTER);
@@ -258,6 +264,7 @@ Std_ReturnType IoHwAb_Button_GetLevel(uint8* level)
  */
 Std_ReturnType IoHwAb_Adc_GetValue_mV(uint16* mv)
 {
+    DET_LOGT(TAG, "called");
     if (mv == NULL)
     {
         Det_ReportError(IOHWAB_MODULE_ID, 0U, IOHWAB_API_ID_ADC_GET_VALUE_MV, IOHWAB_E_PARAM_POINTER);

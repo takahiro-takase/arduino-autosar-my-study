@@ -68,6 +68,7 @@
  */
 static uint8 E2E_CalcCrc8(uint8 crc, const uint8 *data, uint8 len)
 {
+    DET_LOGT(TAG, "called");
     uint8 i;
     uint8 bit;
     for (i = 0U; i < len; i++)
@@ -103,6 +104,7 @@ static uint8 E2E_CalcCrc8(uint8 crc, const uint8 *data, uint8 len)
 static uint8 E2E_CalcCrc8OverDataExcludingCrcByte(
     uint8 crc, const uint8 *Data, uint8 DataLength, uint8 CRCOffset)
 {
+    DET_LOGT(TAG, "called");
     if (CRCOffset > 0U)
         crc = E2E_CalcCrc8(crc, Data, CRCOffset);
 
@@ -119,6 +121,7 @@ static uint8 E2E_CalcCrc8OverDataExcludingCrcByte(
 
 void E2E_P01CheckInit(E2E_P01CheckStateType *State)
 {
+    DET_LOGT(TAG, "called");
     if (State == NULL)
         return;
     State->LastValidCounter = 0U;
@@ -133,6 +136,7 @@ E2E_P01StatusType E2E_P01Check(
     const uint8             *Data,
     uint8                    Length)
 {
+    DET_LOGT(TAG, "called");
     if (Config == NULL || State == NULL || Data == NULL)
         return E2E_P01STATUS_ERROR;
 
@@ -245,6 +249,7 @@ E2E_P01StatusType E2E_P01Check(
 
 void E2E_P01ProtectInit(E2E_P01ProtectStateType *State)
 {
+    DET_LOGT(TAG, "called");
     if (State == NULL)
         return;
     State->Counter = 0U;
@@ -256,6 +261,7 @@ void E2E_P01Protect(
     uint8                   *Data,
     uint8                    Length)
 {
+    DET_LOGT(TAG, "called");
     if (Config == NULL || State == NULL || Data == NULL)
         return;
 

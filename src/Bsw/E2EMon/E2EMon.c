@@ -23,6 +23,7 @@ static uint8 E2EMon_SequenceErrorCount = 0U;
 
 void E2EMon_Init(void)
 {
+    DET_LOGT(TAG, "called");
     E2EMon_CrcErrorCount      = 0U;
     E2EMon_SequenceErrorCount = 0U;
     DET_LOGI(TAG, "Init ok");
@@ -32,6 +33,7 @@ void E2EMon_Init(void)
  * 両カウンタを Com シグナルへ反映する。Profile01/05 で共通の後段処理。 */
 static void E2EMon_Publish(uint8 crcErr, uint8 seqErr)
 {
+    DET_LOGT(TAG, "called");
     if (crcErr && (E2EMon_CrcErrorCount < 0xFFU))
         E2EMon_CrcErrorCount++;
     if (seqErr && (E2EMon_SequenceErrorCount < 0xFFU))
@@ -46,12 +48,14 @@ static void E2EMon_Publish(uint8 crcErr, uint8 seqErr)
 
 void E2EMon_NotifyCheckResult(E2E_P01StatusType status)
 {
+    DET_LOGT(TAG, "called");
     E2EMon_Publish(status == E2E_P01STATUS_WRONGCRC,
                    (status == E2E_P01STATUS_WRONGSEQUENCE) || (status == E2E_P01STATUS_REPEATED));
 }
 
 void E2EMon_NotifyCheckResultP05(E2E_P05StatusType status)
 {
+    DET_LOGT(TAG, "called");
     E2EMon_Publish(status == E2E_P05STATUS_ERROR,
                    (status == E2E_P05STATUS_WRONGSEQUENCE) || (status == E2E_P05STATUS_REPEATED));
 }

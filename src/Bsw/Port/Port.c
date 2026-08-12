@@ -34,6 +34,7 @@
  */
 void Port_Init(void)
 {
+    DET_LOGT(TAG, "called");
     Port_Hw_SetPinDirection(PORT_PIN_LED_RUNNING, PORT_PIN_OUT);
     Port_Hw_SetPinDirection(PORT_PIN_LED_FAULT,   PORT_PIN_OUT);
     Port_Hw_SetPinDirection(PORT_PIN_LED_WARNING,  PORT_PIN_OUT);
@@ -50,11 +51,13 @@ void Port_Init(void)
  */
 void Port_SetPinDirection(Port_PinType Pin, Port_PinDirectionType Direction)
 {
+    DET_LOGT(TAG, "called");
     Port_Hw_SetPinDirection(Pin, Direction);
 }
 
 void Port_GetVersionInfo(Std_VersionInfoType* versioninfo)
 {
+    DET_LOGT(TAG, "called");
     if (versioninfo == NULL)
     {
         Det_ReportError(PORT_MODULE_ID, 0U, PORT_API_ID_GET_VERSION_INFO, PORT_E_PARAM_POINTER);

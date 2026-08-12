@@ -55,6 +55,7 @@ void Fee_Init(void)
 
 void Fee_GetVersionInfo(Std_VersionInfoType* versioninfo)
 {
+    DET_LOGT(TAG, "called");
     if (versioninfo == NULL)
     {
         Det_ReportError(FEE_MODULE_ID, 0U, FEE_API_ID_GET_VERSION_INFO, FEE_E_PARAM_POINTER);
@@ -70,6 +71,7 @@ void Fee_GetVersionInfo(Std_VersionInfoType* versioninfo)
 
 Std_ReturnType Fee_Read(uint16 Address, uint8* DataBufferPtr, uint16 Length)
 {
+    DET_LOGT(TAG, "called");
     if (!Fee_Initialized)
     {
         Det_ReportError(FEE_MODULE_ID, 0U, FEE_API_ID_READ, FEE_E_UNINIT);
@@ -92,6 +94,7 @@ Std_ReturnType Fee_Read(uint16 Address, uint8* DataBufferPtr, uint16 Length)
 
 Std_ReturnType Fee_Write(uint16 Address, const uint8* DataBufferPtr, uint16 Length)
 {
+    DET_LOGT(TAG, "called");
     if (!Fee_Initialized)
     {
         Det_ReportError(FEE_MODULE_ID, 0U, FEE_API_ID_WRITE, FEE_E_UNINIT);
@@ -124,6 +127,7 @@ Std_ReturnType Fee_Write(uint16 Address, const uint8* DataBufferPtr, uint16 Leng
 
 Std_ReturnType Fee_WriteImmediate(uint16 Address, const uint8* DataBufferPtr, uint16 Length)
 {
+    DET_LOGT(TAG, "called");
     if (!Fee_Initialized)
     {
         Det_ReportError(FEE_MODULE_ID, 0U, FEE_API_ID_WRITE_IMMEDIATE, FEE_E_UNINIT);
@@ -155,6 +159,7 @@ Std_ReturnType Fee_WriteImmediate(uint16 Address, const uint8* DataBufferPtr, ui
 
 Std_ReturnType Fee_Cancel(void)
 {
+    DET_LOGT(TAG, "called");
     Fee_Job.Active = 0U;
     Fee_LastResult = MEMIF_JOB_CANCELED;
     return E_OK;
@@ -162,6 +167,7 @@ Std_ReturnType Fee_Cancel(void)
 
 MemIf_StatusType Fee_GetStatus(void)
 {
+    DET_LOGT(TAG, "called");
     if (!Fee_Initialized)
         return MEMIF_UNINIT;
     return Fee_Job.Active ? MEMIF_BUSY : MEMIF_IDLE;
@@ -169,11 +175,13 @@ MemIf_StatusType Fee_GetStatus(void)
 
 MemIf_JobResultType Fee_GetJobResult(void)
 {
+    DET_LOGT(TAG, "called");
     return Fee_LastResult;
 }
 
 void Fee_MainFunction(void)
 {
+    DET_LOGT(TAG, "called");
     if (!Fee_Initialized || !Fee_Job.Active)
         return;
 

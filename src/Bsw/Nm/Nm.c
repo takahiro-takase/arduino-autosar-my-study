@@ -66,6 +66,7 @@ static void Nm_EnterBusSleep(void);
 
 void Nm_Init(void)
 {
+    DET_LOGT(TAG, "called");
     Nm_State               = NM_STATE_BUS_SLEEP;
     Nm_NetworkRequested     = 0U;
     Nm_TxEnabled            = 1U;
@@ -78,6 +79,7 @@ void Nm_Init(void)
 
 void Nm_DeInit(void)
 {
+    DET_LOGT(TAG, "called");
     if (!Nm_Initialized)
     {
         Det_ReportError(NM_MODULE_ID, 0U, NM_API_ID_DEINIT, NM_E_UNINIT);
@@ -103,6 +105,7 @@ void Nm_DeInit(void)
  */
 static void Nm_TransmitPdu(void)
 {
+    DET_LOGT(TAG, "called");
     uint8 pdu[NM_DLC];
     pdu[0] = Nm_RepeatMessageBitSet ? NM_CBV_BIT_REPEAT_MESSAGE_REQUEST : 0x00U;
     pdu[1] = NM_SOURCE_NODE_ID;
@@ -124,6 +127,7 @@ static void Nm_TransmitPdu(void)
  */
 static void Nm_EnterRepeatMessage(void)
 {
+    DET_LOGT(TAG, "called");
     Nm_State          = NM_STATE_REPEAT_MESSAGE;
     Nm_StateTimerMs    = millis();
     Nm_TimeoutTimerMs  = millis();
@@ -145,6 +149,7 @@ static void Nm_EnterRepeatMessage(void)
  */
 static void Nm_EnterNormalOperation(void)
 {
+    DET_LOGT(TAG, "called");
     Nm_State          = NM_STATE_NORMAL_OPERATION;
     Nm_TimeoutTimerMs  = millis();
     DET_LOGI(TAG, "-> Network Mode: Normal Operation State");
@@ -158,6 +163,7 @@ static void Nm_EnterNormalOperation(void)
  *  （以降 Nm_TransmitPdu() を呼ばないだけで実現する）。 */
 static void Nm_EnterReadySleep(void)
 {
+    DET_LOGT(TAG, "called");
     Nm_State = NM_STATE_READY_SLEEP;
     DET_LOGI(TAG, "-> Network Mode: Ready Sleep State (tx stopped)");
 }
@@ -165,6 +171,7 @@ static void Nm_EnterReadySleep(void)
 /** Ready Sleep State から Prepare Bus-Sleep Mode へ入る（[SWS_CanNm_00109]）。 */
 static void Nm_EnterPrepareBusSleep(void)
 {
+    DET_LOGT(TAG, "called");
     Nm_State       = NM_STATE_PREPARE_BUS_SLEEP;
     Nm_StateTimerMs = millis();
     DET_LOGI(TAG, "-> Prepare Bus-Sleep Mode");
@@ -180,6 +187,7 @@ static void Nm_EnterPrepareBusSleep(void)
  */
 static void Nm_EnterBusSleep(void)
 {
+    DET_LOGT(TAG, "called");
     Nm_State = NM_STATE_BUS_SLEEP;
     DET_LOGI(TAG, "-> Bus-Sleep Mode");
     CanSM_NmBusSleepMode();
@@ -187,6 +195,7 @@ static void Nm_EnterBusSleep(void)
 
 Std_ReturnType Nm_NetworkRequest(void)
 {
+    DET_LOGT(TAG, "called");
     if (!Nm_Initialized)
     {
         Det_ReportError(NM_MODULE_ID, 0U, NM_API_ID_NETWORK_REQUEST, NM_E_UNINIT);
@@ -220,6 +229,7 @@ Std_ReturnType Nm_NetworkRequest(void)
 
 Std_ReturnType Nm_NetworkRelease(void)
 {
+    DET_LOGT(TAG, "called");
     if (!Nm_Initialized)
     {
         Det_ReportError(NM_MODULE_ID, 0U, NM_API_ID_NETWORK_RELEASE, NM_E_UNINIT);
@@ -237,6 +247,7 @@ Std_ReturnType Nm_NetworkRelease(void)
 
 Std_ReturnType Nm_RepeatMessageRequest(void)
 {
+    DET_LOGT(TAG, "called");
     if (!Nm_Initialized)
     {
         Det_ReportError(NM_MODULE_ID, 0U, NM_API_ID_REPEAT_MESSAGE_REQUEST, NM_E_UNINIT);
@@ -260,6 +271,7 @@ Std_ReturnType Nm_RepeatMessageRequest(void)
 
 void Nm_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
 {
+    DET_LOGT(TAG, "called");
     (void)RxPduId;
 
     if (!Nm_Initialized)
@@ -318,6 +330,7 @@ void Nm_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
 
 void Nm_TxConfirmation(PduIdType TxPduId, Std_ReturnType result)
 {
+    DET_LOGT(TAG, "called");
     (void)TxPduId;
 
     if (!Nm_Initialized || result != E_OK)
@@ -332,6 +345,7 @@ void Nm_TxConfirmation(PduIdType TxPduId, Std_ReturnType result)
 
 void Nm_MainFunction(void)
 {
+    DET_LOGT(TAG, "called");
     if (!Nm_Initialized)
     {
         Det_ReportError(NM_MODULE_ID, 0U, NM_API_ID_MAIN_FUNCTION, NM_E_UNINIT);
@@ -408,6 +422,7 @@ void Nm_MainFunction(void)
 
 void Nm_SetTxEnabled(uint8 Enabled)
 {
+    DET_LOGT(TAG, "called");
     if (!Nm_Initialized)
     {
         Det_ReportError(NM_MODULE_ID, 0U, NM_API_ID_SET_TX_ENABLED, NM_E_UNINIT);
@@ -421,6 +436,7 @@ void Nm_SetTxEnabled(uint8 Enabled)
 
 Std_ReturnType Nm_GetState(Nm_StateType* StatePtr, Nm_ModeType* ModePtr)
 {
+    DET_LOGT(TAG, "called");
     if (!Nm_Initialized)
     {
         Det_ReportError(NM_MODULE_ID, 0U, NM_API_ID_GET_STATE, NM_E_UNINIT);
@@ -445,6 +461,7 @@ Std_ReturnType Nm_GetState(Nm_StateType* StatePtr, Nm_ModeType* ModePtr)
 
 void Nm_GetVersionInfo(Std_VersionInfoType* versioninfo)
 {
+    DET_LOGT(TAG, "called");
     if (versioninfo == NULL)
     {
         Det_ReportError(NM_MODULE_ID, 0U, NM_API_ID_GET_VERSION_INFO, NM_E_PARAM_POINTER);

@@ -25,6 +25,7 @@ static void Det_Hw_PrintLevel(LogLevel lvl)
         case LOG_E: Serial.print(F("ERROR")); break;
         case LOG_W: Serial.print(F("WARN ")); break;
         case LOG_I: Serial.print(F("INFO ")); break;
+        case LOG_T: Serial.print(F("TRACE")); break;
         default:    Serial.print(F("DEBUG")); break;
     }
 }

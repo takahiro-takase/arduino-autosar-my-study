@@ -75,6 +75,7 @@ static uint8 BswM_RuleLastResult[BSWM_RULE_COUNT];
 /** 単一条件（ModeSrc の現在キャッシュ値が ModeValue と一致するか）を評価する。 */
 static uint8 BswM_EvaluateCondition(const BswM_ConditionType* cond)
 {
+    DET_LOGT(TAG, "called");
     return (BswM_ModeSrcCache[cond->ModeSrc] == cond->ModeValue) ? 1U : 0U;
 }
 
@@ -89,6 +90,7 @@ static uint8 BswM_EvaluateCondition(const BswM_ConditionType* cond)
  */
 static uint8 BswM_EvaluateRule(const BswM_RuleType* rule)
 {
+    DET_LOGT(TAG, "called");
     const uint8 isOr = (rule->Operator == BSWM_OP_OR) ? 1U : 0U;
 
     for (uint8 c = 0U; c < rule->ConditionCount; c++)
@@ -107,6 +109,7 @@ static uint8 BswM_EvaluateRule(const BswM_RuleType* rule)
  */
 static void BswM_ExecuteRules(BswM_ModeSrcType src, uint8 newValue)
 {
+    DET_LOGT(TAG, "called");
     if (BswM_Cfg == NULL)
         return;  /* BswM_Init() 未実行 (呼び出し順序の誤りに対する保険) */
 
@@ -164,6 +167,7 @@ static void BswM_ExecuteRules(BswM_ModeSrcType src, uint8 newValue)
 
 void BswM_Init(const BswM_ConfigType* ConfigPtr)
 {
+    DET_LOGT(TAG, "called");
     if (ConfigPtr == NULL)
     {
         DET_LOGE(TAG, "Init: NULL ConfigPtr");
@@ -183,6 +187,7 @@ void BswM_Init(const BswM_ConfigType* ConfigPtr)
 
 void BswM_GetVersionInfo(Std_VersionInfoType* VersionInfo)
 {
+    DET_LOGT(TAG, "called");
     if (VersionInfo == NULL)
     {
         Det_ReportError(BSWM_MODULE_ID, 0U, BSWM_API_ID_GET_VERSION_INFO, BSWM_E_PARAM_POINTER);
@@ -198,6 +203,7 @@ void BswM_GetVersionInfo(Std_VersionInfoType* VersionInfo)
 
 void BswM_EcuM_CurrentState(EcuM_StateType state)
 {
+    DET_LOGT(TAG, "called");
     if (BswM_Cfg == NULL)
     {
         Det_ReportError(BSWM_MODULE_ID, 0U, BSWM_API_ID_ECUM_CURRENT_STATE, BSWM_E_NO_INIT);
@@ -219,6 +225,7 @@ void BswM_EcuM_CurrentState(EcuM_StateType state)
 
 void BswM_ComM_CurrentMode(uint8 channel, ComM_ModeType mode)
 {
+    DET_LOGT(TAG, "called");
     (void)channel;
 
     if (BswM_Cfg == NULL)

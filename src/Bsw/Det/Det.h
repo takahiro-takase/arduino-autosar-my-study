@@ -6,7 +6,16 @@
  *            [<ms>ms] ERROR <TAG>: message
  *            [<ms>ms] WARN  <TAG>: message
  *            [<ms>ms] INFO  <TAG>: message
+ *            [<ms>ms] TRACE <TAG>: message
  *            [<ms>ms] DEBUG <TAG>: message
+ *
+ *          TRACE は関数コールチェーンの確認専用（関数先頭に機械的に置く、
+ *          AUTOSAR 仕様書記載 I/F 関数・内部関数を問わない）。INFO と DEBUG の
+ *          間に位置させ、DET_LOG_LEVEL を TRACE にすれば DEBUG の詳細ログ
+ *          （フレームデータ等）を混ぜずにコールチェーンだけを追える。既定
+ *          （DET_LOG_LEVEL=LOG_I）の実機では出力されず、ホストテスト環境
+ *          （[env:native]/[env:native_chain]、DET_LOG_LEVEL=LOG_T）でのみ
+ *          DET_LOG_VERBOSE=1 と併用して確認する（Det_Cfg.h 参照）。
  *
  *          各ソースファイルで TAG を定義して使用する:
  *            #define TAG "Can"
@@ -39,6 +48,7 @@ typedef enum
     LOG_E = 0,  /**< Error   — エラー (abort / NRC / NULL ptr) */
     LOG_W,      /**< Warning — 警告  (BUSY / no route)         */
     LOG_I,      /**< Info    — 通常情報 (Init / 状態遷移)      */
+    LOG_T,      /**< Trace   — 関数コールチェーンの確認専用（関数先頭で機械的に出す） */
     LOG_D       /**< Debug   — 詳細  (フレームデータ等)        */
 } LogLevel;
 
@@ -77,6 +87,7 @@ void Log_HexStr(char* dst, uint8_t dstSize,
 #define DET_LOGE(tag, fmt, ...)  Log_Write(LOG_E, tag, __func__, fmt, ##__VA_ARGS__)
 #define DET_LOGW(tag, fmt, ...)  Log_Write(LOG_W, tag, __func__, fmt, ##__VA_ARGS__)
 #define DET_LOGI(tag, fmt, ...)  Log_Write(LOG_I, tag, __func__, fmt, ##__VA_ARGS__)
+#define DET_LOGT(tag, fmt, ...)  Log_Write(LOG_T, tag, __func__, fmt, ##__VA_ARGS__)
 #define DET_LOGD(tag, fmt, ...)  Log_Write(LOG_D, tag, __func__, fmt, ##__VA_ARGS__)
 
 /**

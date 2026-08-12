@@ -217,6 +217,8 @@ static uint8 Com_GroupTriggerPending[COM_TX_IPDU_MAX];
  */
 void Com_Init(const Com_ConfigType* config)
 {
+    DET_LOGT(TAG, "called");
+
     if (config == NULL)
     {
         DET_LOGE(TAG, "Init E: config NULL");
@@ -359,6 +361,8 @@ void Com_Init(const Com_ConfigType* config)
  */
 void Com_DeInit(void)
 {
+    DET_LOGT(TAG, "called");
+
     if (Com_ConfigPtr == NULL)
     {
         Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_DEINIT, COM_E_UNINIT);
@@ -390,6 +394,7 @@ void Com_DeInit(void)
  */
 Com_StatusType Com_GetStatus(void)
 {
+    DET_LOGT(TAG, "called");
     return (Com_ConfigPtr != NULL) ? COM_INIT : COM_UNINIT;
 }
 
@@ -405,6 +410,8 @@ Com_StatusType Com_GetStatus(void)
  */
 void Com_GetVersionInfo(Std_VersionInfoType* versioninfo)
 {
+    DET_LOGT(TAG, "called");
+
     if (Com_ConfigPtr == NULL)
     {
         Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_GET_VERSION_INFO, COM_E_UNINIT);
@@ -472,6 +479,8 @@ void Com_GetVersionInfo(Std_VersionInfoType* versioninfo)
  */
 void Com_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
 {
+    DET_LOGT(TAG, "called");
+
     if (Com_ConfigPtr == NULL)
     {
         Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_RX_INDICATION, COM_E_UNINIT);
@@ -627,6 +636,7 @@ static uint32 Com_UnpackSignal(const uint8* buf,
                                 uint8 bitSize,
                                 Com_SignalEndianType endian)
 {
+    DET_LOGT(TAG, "called");
     uint32 value = 0U;
     for (uint8 i = 0; i < bitSize; i++)
     {
@@ -663,6 +673,7 @@ static void Com_PackSignal(uint8* buf,
                             Com_SignalEndianType endian,
                             uint32 value)
 {
+    DET_LOGT(TAG, "called");
     for (uint8 i = 0; i < bitSize; i++)
     {
         const uint8 bit   = (endian == COM_BIG_ENDIAN)
@@ -691,6 +702,7 @@ static void Com_PackSignal(uint8* buf,
  */
 static void Com_WriteSignalBytes(uint8* dataPtr, uint8 byteCount, uint32 value)
 {
+    DET_LOGT(TAG, "called");
     for (uint8 b = 0U; b < byteCount; b++)
         dataPtr[b] = (uint8)(value >> (8U * b));
 }
@@ -724,6 +736,7 @@ static void Com_WriteSignalBytes(uint8* dataPtr, uint8 byteCount, uint32 value)
  */
 static void Com_PackInitValues(uint8* buf, Com_IPduIdType id, Com_SignalDirectionType dir)
 {
+    DET_LOGT(TAG, "called");
     for (uint8 s = 0U; s < Com_ConfigPtr->SignalCount; s++)
     {
         const Com_SignalConfigType* sig = &Com_ConfigPtr->Signals[s];
@@ -751,6 +764,7 @@ static void Com_PackInitValues(uint8* buf, Com_IPduIdType id, Com_SignalDirectio
  */
 static void Com_ResetBufferToInitValues(uint8* buf, Com_IPduIdType id, Com_SignalDirectionType dir)
 {
+    DET_LOGT(TAG, "called");
     for (uint8 b = 0U; b < COM_IPDU_MAX_DLC; b++)
         buf[b] = 0U;
     Com_PackInitValues(buf, id, dir);
@@ -783,6 +797,7 @@ static void Com_ResetBufferToInitValues(uint8* buf, Com_IPduIdType id, Com_Signa
  */
 static void Com_GatewayRoute(Com_IPduIdType rxIPduId)
 {
+    DET_LOGT(TAG, "called");
     for (uint8 g = 0U; g < Com_ConfigPtr->GwMappingCount; g++)
     {
         const Com_GwMappingType* gw = &Com_ConfigPtr->GwMappings[g];
@@ -840,6 +855,7 @@ static void Com_GatewayRoute(Com_IPduIdType rxIPduId)
  */
 static const Com_IPduConfigType* Com_FindTxIPdu(Com_IPduIdType IPduId)
 {
+    DET_LOGT(TAG, "called");
     for (uint8 i = 0; i < Com_ConfigPtr->TxIPduCount; i++)
     {
         if (Com_ConfigPtr->TxIPdus[i].IPduId == IPduId)
@@ -867,6 +883,7 @@ static const Com_IPduConfigType* Com_FindTxIPdu(Com_IPduIdType IPduId)
  */
 static const Com_IPduConfigType* Com_FindRxIPdu(Com_IPduIdType IPduId)
 {
+    DET_LOGT(TAG, "called");
     for (uint8 i = 0; i < Com_ConfigPtr->RxIPduCount; i++)
     {
         if (Com_ConfigPtr->RxIPdus[i].IPduId == IPduId)
@@ -893,6 +910,7 @@ static const Com_IPduConfigType* Com_FindRxIPdu(Com_IPduIdType IPduId)
  */
 static uint8 Com_FindSignalIndex(Com_SignalIdType SignalId)
 {
+    DET_LOGT(TAG, "called");
     for (uint8 s = 0; s < Com_ConfigPtr->SignalCount; s++)
     {
         if (Com_ConfigPtr->Signals[s].SignalId == SignalId)
@@ -1001,6 +1019,7 @@ static Std_ReturnType Com_DoTransmit(const Com_IPduConfigType* ipdu)
  */
 static Com_TxModeModeType Com_EffectiveTxModeMode(const Com_IPduConfigType* ipdu)
 {
+    DET_LOGT(TAG, "called");
     return Com_TmsState[ipdu->IPduId] ? ipdu->TxModeModeTrue : ipdu->TxModeMode;
 }
 
@@ -1019,6 +1038,7 @@ static Com_TxModeModeType Com_EffectiveTxModeMode(const Com_IPduConfigType* ipdu
  */
 static uint16 Com_EffectiveTxPeriodMs(const Com_IPduConfigType* ipdu)
 {
+    DET_LOGT(TAG, "called");
     return Com_TmsState[ipdu->IPduId] ? ipdu->TxPeriodMsTrue : ipdu->TxPeriodMs;
 }
 
@@ -1049,6 +1069,7 @@ static uint16 Com_EffectiveTxPeriodMs(const Com_IPduConfigType* ipdu)
  */
 static void Com_RecalcTms(Com_IPduIdType ipduId)
 {
+    DET_LOGT(TAG, "called");
     uint8 tmsTrue = 0U;
 
     for (uint8 s = 0; s < Com_ConfigPtr->SignalCount; s++)
@@ -1103,6 +1124,7 @@ static void Com_RecalcTms(Com_IPduIdType ipduId)
  */
 static void Com_RequestTxOnChange(const Com_IPduConfigType* ipdu)
 {
+    DET_LOGT(TAG, "called");
     if (Com_EffectiveTxModeMode(ipdu) == COM_TX_MODE_PERIODIC)
         return;
 
@@ -1157,6 +1179,8 @@ static void Com_RequestTxOnChange(const Com_IPduConfigType* ipdu)
  */
 uint8 Com_ReceiveSignal(Com_SignalIdType SignalId, void* SignalDataPtr)
 {
+    DET_LOGT(TAG, "called");
+
     if (Com_ConfigPtr == NULL)
     {
         Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_RECEIVE_SIGNAL, COM_E_UNINIT);
@@ -1363,6 +1387,8 @@ uint8 Com_ReceiveSignal(Com_SignalIdType SignalId, void* SignalDataPtr)
  */
 Std_ReturnType Com_ReceiveSignalGroup(Com_IPduIdType GroupId)
 {
+    DET_LOGT(TAG, "called");
+
     if (Com_ConfigPtr == NULL)
     {
         Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_RECEIVE_SIGNAL_GROUP, COM_E_UNINIT);
@@ -1440,6 +1466,8 @@ Std_ReturnType Com_ReceiveSignalGroup(Com_IPduIdType GroupId)
  */
 Std_ReturnType Com_ReceiveSignalGroupArray(Com_IPduIdType IPduId, uint8* DataPtr)
 {
+    DET_LOGT(TAG, "called");
+
     if (Com_ConfigPtr == NULL)
     {
         Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_RECEIVE_SIGNAL_GROUP_ARRAY, COM_E_UNINIT);
@@ -1486,6 +1514,8 @@ Std_ReturnType Com_ReceiveSignalGroupArray(Com_IPduIdType IPduId, uint8* DataPtr
  */
 uint8 Com_IsRxTimedOut(Com_IPduIdType IPduId)
 {
+    DET_LOGT(TAG, "called");
+
     if (IPduId >= COM_RX_IPDU_MAX)
     {
         Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_IS_RX_TIMED_OUT, COM_E_PARAM);
@@ -1542,6 +1572,8 @@ uint8 Com_IsRxTimedOut(Com_IPduIdType IPduId)
  */
 uint8 Com_SendSignal(Com_SignalIdType SignalId, const void* SignalDataPtr)
 {
+    DET_LOGT(TAG, "called");
+
     if (Com_ConfigPtr == NULL)
     {
         Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_SEND_SIGNAL, COM_E_UNINIT);
@@ -1714,6 +1746,8 @@ uint8 Com_SendSignal(Com_SignalIdType SignalId, const void* SignalDataPtr)
  */
 Std_ReturnType Com_SendSignalGroup(Com_IPduIdType GroupId)
 {
+    DET_LOGT(TAG, "called");
+
     if (Com_ConfigPtr == NULL)
     {
         Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_SEND_SIGNAL_GROUP, COM_E_UNINIT);
@@ -1971,6 +2005,8 @@ void Com_TxConfirmation(PduIdType TxPduId, Std_ReturnType result)
  */
 void Com_MainFunction(void)
 {
+    DET_LOGT(TAG, "called");
+
     if (Com_ConfigPtr == NULL)
     {
         Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_MAIN_FUNCTION, COM_E_UNINIT);
@@ -2152,6 +2188,7 @@ void Com_MainFunction(void)
  */
 static void Com_ResetRxDeadlineMonitoring(Com_IPduIdType id, unsigned long now)
 {
+    DET_LOGT(TAG, "called");
     Com_RxLastMs[id]   = now;
     Com_RxTimedOut[id] = 0U;
     Com_RxUsingFirstTimeout[id] = 1U;
@@ -2168,6 +2205,8 @@ static void Com_ResetRxDeadlineMonitoring(Com_IPduIdType id, unsigned long now)
 
 void Com_SetCommunicationEnabled(uint8 RxEnabled, uint8 TxEnabled)
 {
+    DET_LOGT(TAG, "called");
+
     if (Com_RxEnabled != RxEnabled || Com_TxEnabled != TxEnabled)
     {
         DET_LOGI(TAG, "CommunicationControl rx=%u->%u tx=%u->%u",
@@ -2190,6 +2229,8 @@ void Com_SetCommunicationEnabled(uint8 RxEnabled, uint8 TxEnabled)
 
 void Com_IpduGroupStart(Com_IpduGroupIdType IpduGroupId, uint8 initialize)
 {
+    DET_LOGT(TAG, "called");
+
     if (Com_ConfigPtr == NULL)
     {
         Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_IPDU_GROUP_START, COM_E_UNINIT);
@@ -2298,6 +2339,8 @@ void Com_IpduGroupStart(Com_IpduGroupIdType IpduGroupId, uint8 initialize)
 
 void Com_IpduGroupStop(Com_IpduGroupIdType IpduGroupId)
 {
+    DET_LOGT(TAG, "called");
+
     if (Com_ConfigPtr == NULL)
     {
         Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_IPDU_GROUP_STOP, COM_E_UNINIT);

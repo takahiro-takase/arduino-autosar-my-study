@@ -223,6 +223,7 @@ void Can_Init(const Can_ConfigType* Config)
  */
 static void Can_EnterListenOnly(void)
 {
+    DET_LOGT(TAG, "called");
     Can_Hw_SetMode(CAN_HW_MODE_LISTEN_ONLY);
     CanState = CAN_CS_STOPPED;
 }
@@ -279,6 +280,8 @@ static void Can_EnterListenOnly(void)
  */
 Can_ReturnType Can_SetControllerMode(uint8 Controller, Can_StateTransitionType Transition)
 {
+    DET_LOGT(TAG, "called");
+
     if (Can_ConfigPtr == NULL)
     {
         Det_ReportError(CAN_MODULE_ID, 0U, CAN_API_ID_SET_CONTROLLER_MODE, CAN_E_UNINIT);
@@ -368,6 +371,8 @@ Can_ReturnType Can_Write(Can_HwHandleType Hth, const Can_PduType* PduInfo)
 {
     (void)Hth;
 
+    DET_LOGT(TAG, "called");
+
     if (Can_ConfigPtr == NULL)
     {
         Det_ReportError(CAN_MODULE_ID, 0U, CAN_API_ID_WRITE, CAN_E_UNINIT);
@@ -455,6 +460,8 @@ Can_ReturnType Can_Write(Can_HwHandleType Hth, const Can_PduType* PduInfo)
  */
 void Can_MainFunction_Write(void)
 {
+    DET_LOGT(TAG, "called");
+
     if (Can_ConfigPtr == NULL)
     {
         Det_ReportError(CAN_MODULE_ID, 0U, CAN_API_ID_MAIN_FUNCTION_WRITE, CAN_E_UNINIT);
@@ -541,6 +548,8 @@ static void Can_Isr(void)
  */
 void Can_MainFunction_Read(void)
 {
+    DET_LOGT(TAG, "called");
+
     if (Can_ConfigPtr == NULL)
     {
         Det_ReportError(CAN_MODULE_ID, 0U, CAN_API_ID_MAIN_FUNCTION_READ, CAN_E_UNINIT);
@@ -596,6 +605,8 @@ void Can_MainFunction_Read(void)
  */
 void Can_MainFunction_Wakeup(void)
 {
+    DET_LOGT(TAG, "called");
+
     if (Can_ConfigPtr == NULL)
     {
         Det_ReportError(CAN_MODULE_ID, 0U, CAN_API_ID_MAIN_FUNCTION_WAKEUP, CAN_E_UNINIT);
@@ -638,6 +649,8 @@ void Can_MainFunction_Wakeup(void)
  */
 void Can_MainFunction_BusOff(void)
 {
+    DET_LOGT(TAG, "called");
+
     if (Can_ConfigPtr == NULL)
     {
         Det_ReportError(CAN_MODULE_ID, 0U, CAN_API_ID_MAIN_FUNCTION_BUSOFF, CAN_E_UNINIT);
@@ -665,6 +678,8 @@ void Can_MainFunction_BusOff(void)
  */
 void Can_GetVersionInfo(Std_VersionInfoType* versioninfo)
 {
+    DET_LOGT(TAG, "called");
+
     if (versioninfo == NULL)
     {
         Det_ReportError(CAN_MODULE_ID, 0U, CAN_API_ID_GET_VERSION_INFO, CAN_E_PARAM_POINTER);
