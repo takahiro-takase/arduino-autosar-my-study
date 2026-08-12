@@ -6,6 +6,7 @@ ARXML や設定ツールは使用せず、コードで階層構造・型定義�
 
 ## 目次
 
+- [前文](#motivation)
 - [概要](#overview)
 - [ハードウェア](#hardware)
   - [ハードウェア構成](#hw-configuration)
@@ -43,6 +44,14 @@ ARXML や設定ツールは使用せず、コードで階層構造・型定義�
   - [RX/TX で対称な入力検証](#rx-tx-symmetry)
   - [設定テーブルの一元管理](#config-table-centralization)
   - [単体テスト（ホスト上でのロジック検証）](#unit-test)
+
+<a id="motivation"></a>
+## 前文
+
+日本語話者が AUTOSAR Classic Platform を学ぼうとすると、
+商用ツールの価格や学習環境の制約から、個人が実際に手を動かして理解することが難しい場面が多くあります。
+本プロジェクトは、そうした学習コストを少しでも下げ、
+安価なハードウェアで AUTOSAR CP の構造と CAN 通信を体験できる環境を提供するために作成しました。
 
 <a id="overview"></a>
 ## 概要
