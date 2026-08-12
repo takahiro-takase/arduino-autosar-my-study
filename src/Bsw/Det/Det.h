@@ -57,10 +57,11 @@ typedef enum
  * ----------------------------------------------------------------------- */
 
 /**
- * "[<ms>ms] LEVEL TAG: msg\r\n" を 1 行出力する。
- * fmt は printf 形式の可変長引数。
+ * "[<ms>ms] LEVEL TAG/func: msg\r\n" を 1 行出力する。
+ * func は呼び出し元の関数名（DET_LOGx マクロが __func__ を自動的に渡す。
+ * 呼び出し元で明示的に指定する必要はない）。fmt は printf 形式の可変長引数。
  */
-void Log_Write(LogLevel lvl, const char* tag, const char* fmt, ...);
+void Log_Write(LogLevel lvl, const char* tag, const char* func, const char* fmt, ...);
 
 /**
  * バイト列 src を "XX XX XX ..." 形式の hex 文字列として dst に書き込む。
@@ -73,10 +74,10 @@ void Log_HexStr(char* dst, uint8_t dstSize,
  * 便利マクロ
  * ----------------------------------------------------------------------- */
 
-#define DET_LOGE(tag, fmt, ...)  Log_Write(LOG_E, tag, fmt, ##__VA_ARGS__)
-#define DET_LOGW(tag, fmt, ...)  Log_Write(LOG_W, tag, fmt, ##__VA_ARGS__)
-#define DET_LOGI(tag, fmt, ...)  Log_Write(LOG_I, tag, fmt, ##__VA_ARGS__)
-#define DET_LOGD(tag, fmt, ...)  Log_Write(LOG_D, tag, fmt, ##__VA_ARGS__)
+#define DET_LOGE(tag, fmt, ...)  Log_Write(LOG_E, tag, __func__, fmt, ##__VA_ARGS__)
+#define DET_LOGW(tag, fmt, ...)  Log_Write(LOG_W, tag, __func__, fmt, ##__VA_ARGS__)
+#define DET_LOGI(tag, fmt, ...)  Log_Write(LOG_I, tag, __func__, fmt, ##__VA_ARGS__)
+#define DET_LOGD(tag, fmt, ...)  Log_Write(LOG_D, tag, __func__, fmt, ##__VA_ARGS__)
 
 /**
  * \brief   開発エラーを標準化された形式で通知する（AUTOSAR Det_ReportError 準拠）。

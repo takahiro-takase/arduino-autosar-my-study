@@ -20,7 +20,7 @@
 #include "Det.h"
 #include "Det_Hw.h"
 
-void Log_Write(LogLevel lvl, const char* tag, const char* fmt, ...)
+void Log_Write(LogLevel lvl, const char* tag, const char* func, const char* fmt, ...)
 {
     if (lvl > DET_LOG_LEVEL) return;  /* DET_LOG_LEVEL より重要度が低いログは抑制 */
 
@@ -30,7 +30,7 @@ void Log_Write(LogLevel lvl, const char* tag, const char* fmt, ...)
     vsnprintf(buf, sizeof(buf), fmt, args);
     va_end(args);
 
-    Det_Hw_PrintLogLine(lvl, tag, buf);
+    Det_Hw_PrintLogLine(lvl, tag, func, buf);
 }
 
 Std_ReturnType Det_ReportError(uint16 ModuleId, uint8 InstanceId, uint8 ApiId, uint8 ErrorId)

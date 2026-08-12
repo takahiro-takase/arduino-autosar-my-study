@@ -2,8 +2,8 @@
 
 > [README](../../README.md) の「[E2E 保護](../../README.md#e2e-p01)」節から分離。
 > E2E Profile01/05 のCRC/カウンタアルゴリズム自体の学習ノートは
-> [`docs/E2E_Profile1_Notes.md`](../E2E_Profile1_Notes.md) /
-> [`docs/E2E_Profile5_Notes.md`](../E2E_Profile5_Notes.md) を参照してください。
+> [`docs/E2E_Profile1_Notes.md`](./E2E_Profile1_Notes.md) /
+> [`docs/E2E_Profile5_Notes.md`](./E2E_Profile5_Notes.md) を参照してください。
 > このファイルは EngineInfo/AbsInfo(RX)・E2EHealthStatus(TX) への実際の適用と
 > Rte/Com/Dem との統合について扱います。
 
@@ -52,7 +52,7 @@ byte[3-5] : シグナルデータ（VehicleSpeed / BrakeActive / AbsActive）
 
 CRC16 を先頭2バイト・Counter をそれに続く1バイト全体に配置するこのヘッダレイアウトは
 SWS_E2E_00397/00405 にそのまま準拠している（詳細は
-[`docs/E2E_Profile5_Notes.md`](../E2E_Profile5_Notes.md) 参照）。
+[`docs/E2E_Profile5_Notes.md`](./E2E_Profile5_Notes.md) 参照）。
 
 ### カウンタデルタ判定と 6 状態 state machine（`E2E_P05Check`）
 
@@ -71,7 +71,7 @@ delta == 1                → OK（正常）
 ```
 
 **Profile01 との構造的な違い: INITIAL/SYNC 状態・SyncCounter 再ロック機構が無い**
-（詳細は [`docs/E2E_Profile5_Notes.md`](../E2E_Profile5_Notes.md) 参照）。
+（詳細は [`docs/E2E_Profile5_Notes.md`](./E2E_Profile5_Notes.md) 参照）。
 Profile01 は初回受信を `INITIAL` として特別扱いし、`WRONGSEQUENCE` 検知後は
 `SyncCounterInit` 回分連続して正常受信するまで `SYNC` として再ロックする機構を
 持っていましたが、公式の `E2E_P05CheckStateType`/`E2E_P05ConfigType` にはこれらに

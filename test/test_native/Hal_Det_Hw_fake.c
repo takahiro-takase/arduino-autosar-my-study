@@ -19,12 +19,13 @@ void FakeDetHw_Reset(void)
     FakeDetHw_ReportCount  = 0U;
 }
 
-void Det_Hw_PrintLogLine(LogLevel lvl, const char* tag, const char* msg)
+void Det_Hw_PrintLogLine(LogLevel lvl, const char* tag, const char* func, const char* msg)
 {
     /* テスト実行のノイズになるため標準出力へは書かない。DET_LOGx はここへ
      * 到達するだけで、内容の検証は Det_Hw_PrintDetError() 側のスパイで行う。 */
     (void)lvl;
     (void)tag;
+    (void)func;
     (void)msg;
 }
 

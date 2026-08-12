@@ -7,6 +7,14 @@
  *          同じ考え方で、Can.c が実際に呼ぶこの 4 関数だけを呼び出し記録付き
  *          のフェイクに差し替える（CanIf_Init/DeInit/Transmit/GetVersionInfo
  *          は Can.c から呼ばれないため未実装）。
+ *
+ *          Com→PduR→CanIf→Can のコールチェーンを CanIf の CanId/Dlc/Hth
+ *          変換まで含めて検証したい場合は、CanIf の実体をリンクする必要が
+ *          あり、この フェイクとシンボルが多重定義になるため両立できない
+ *          （1 native バイナリに CanIf の実装を2種類同時に持てない）。
+ *          そのようなテストは `test/test_chain/`（`[env:native_chain]`）という
+ *          別のテスト環境・別バイナリに分離してある（`Bsw_TxChain_test.cpp`
+ *          参照）。
  */
 #ifndef BSW_CANIF_FAKE_H
 #define BSW_CANIF_FAKE_H

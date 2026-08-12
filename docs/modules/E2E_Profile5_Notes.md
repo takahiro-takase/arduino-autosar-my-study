@@ -190,6 +190,6 @@ Profile01 (`E2E_P01StatusType`) とはビットパターンが異なる点に注
 ## 関連資料
 
 - [`docs/E2E_Profile1_Notes.md`](./E2E_Profile1_Notes.md) — Profile01 の学習ノート（対の関係）
-- [`docs/REFERENCES.md`](./REFERENCES.md) — 本プロジェクトが参照する AUTOSAR 仕様書の入手先一覧
+- [`docs/REFERENCES.md`](../autosar/REFERENCES.md) — 本プロジェクトが参照する AUTOSAR 仕様書の入手先一覧
 - `docs/AUTOSAR_SWS_E2ELibrary.pdf` — 本ノートの一次資料（ローカルのみ、gitignore 対象）
 - `test/test_native/Bsw_E2E_test.cpp` — CRC16・Protect/Check のホストテスト
