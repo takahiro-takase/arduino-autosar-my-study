@@ -8,7 +8,7 @@
 variables
 {
     int i;              // while ループのカウンタ
-    int engineStatusCount;  // on message で受信するたびに増やすカウンタ
+    int meterStatusCount;  // on message で受信するたびに増やすカウンタ
 }
 
 on start
@@ -16,11 +16,11 @@ on start
     write("=== 変数・制御構文のサンプル ===");
 
     // on message はインタプリタ構築直後からずっと有効で、wait() 呼び出し中も止まらない。
-    // そのため EngineStatus(0x200) はこの下の while ループの中 (TesterPresent 送信間の
+    // そのため MeterStatus(0x200) はこの下の while ループの中 (TesterPresent 送信間の
     // wait(1.0)) で届いても数えられる。「ここから数え始める」という区切りは無いので、
-    // 途中で engineStatusCount を 0 に戻すような書き方はしない (既にカウント済みの
+    // 途中で meterStatusCount を 0 に戻すような書き方はしない (既にカウント済みの
     // 受信を握りつぶしてしまうため)。
-    write("EngineStatus (0x200) の受信回数を数えます (このスクリプトの実行中ずっと)。");
+    write("MeterStatus (0x200) の受信回数を数えます (このスクリプトの実行中ずっと)。");
 
     send(0x10, 0x03);      // ExtendedSession へ遷移
     wait_response();
@@ -43,19 +43,19 @@ on start
 
 on message 0x200
 {
-    engineStatusCount = engineStatusCount + 1;
+    meterStatusCount = meterStatusCount + 1;
 
     // if / else if / else と比較演算子の例
     if (msgData(0) == 0)
     {
-        write("EngineStatus #", engineStatusCount, ": OFF");
+        write("MeterStatus #", meterStatusCount, ": OFF");
     }
     else if (msgData(0) == 2)
     {
-        write("EngineStatus #", engineStatusCount, ": RUNNING");
+        write("MeterStatus #", meterStatusCount, ": RUNNING");
     }
     else
     {
-        write("EngineStatus #", engineStatusCount, ": state=", msgData(0));
+        write("MeterStatus #", meterStatusCount, ": state=", msgData(0));
     }
 }

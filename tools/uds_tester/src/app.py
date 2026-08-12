@@ -14,6 +14,7 @@ from __future__ import annotations
 import argparse
 import gc
 import json
+import math
 import os
 import queue
 import threading
@@ -47,7 +48,6 @@ class App(tk.Tk):
         self.bus_lock = threading.Lock()
         self.log_queue: "queue.Queue[str]" = queue.Queue()
         self.state_queue: "queue.Queue[tuple]" = queue.Queue()
-        self.tester_present_stop = threading.Event()
         self._periodic_stops: "dict[int, threading.Event]" = {}
         self._entry_vars: "dict[int, dict[str, tk.StringVar]]" = {}
         self._response_vars: "dict[int, tk.StringVar]" = {}
@@ -98,72 +98,80 @@ class App(tk.Tk):
         self.status_label = ttk.Label(conn, textvariable=self.status_var, foreground="red")
         self.status_label.grid(row=0, column=7, padx=8)
 
-        state = ttk.LabelFrame(self, text="トラッキング状態（本ツールが応答から推測した参考表示）")
-        state.pack(fill="x", padx=8, pady=4)
-
-        self.session_var = tk.StringVar(value="Session: unknown")
-        ttk.Label(state, textvariable=self.session_var).grid(row=0, column=0, padx=8, pady=4)
-
-        self.security_var = tk.StringVar(value="Security: unknown")
-        ttk.Label(state, textvariable=self.security_var).grid(row=0, column=1, padx=8, pady=4)
-
-        self.tester_present_var = tk.BooleanVar(value=False)
+        # 「ログ」表示切替は接続状態や応答からの推測値ではなくGUI自体の表示設定
+        # のため、トラッキング状態ではなく接続パネル側に置く。
         ttk.Checkbutton(
-            state,
-            text="Tester Present 自動送信 (2秒毎、S3タイマ維持)",
-            variable=self.tester_present_var,
-            command=self._toggle_tester_present,
-        ).grid(row=0, column=2, padx=8, pady=4)
-
-        ttk.Checkbutton(
-            state,
+            conn,
             text="ログ",
             variable=self._log_visible,
             command=self._toggle_log,
-        ).grid(row=0, column=3, padx=8, pady=4)
+        ).grid(row=0, column=8, padx=8)
+
+        # CAPL風スクリプトの実行/停止も、コマンド一覧のボタンやトラッキング状態
+        # とは性質が異なる常設の操作のため、接続パネル側に置く（ログと同じ理由）。
+        ttk.Button(conn, text="スクリプト実行...", command=self._open_script).grid(
+            row=0, column=9, padx=(8, 2))
+        ttk.Button(conn, text="停止", command=self._stop_script).grid(
+            row=0, column=10, padx=(2, 8))
+        self.script_status_var = tk.StringVar(value="")
+        ttk.Label(conn, textvariable=self.script_status_var).grid(
+            row=0, column=11, padx=(0, 8), sticky="w")
 
         meter = ttk.LabelFrame(
             self, text="仮想メータ表示（MeterStatus 0x200、実機に物理表示器が無いための可視化）")
         meter.pack(fill="x", padx=8, pady=4)
 
-        ttk.Label(meter, text="RPM").grid(row=0, column=0, padx=8, pady=4)
-        self.meter_rpm_bar = ttk.Progressbar(
-            meter, orient="horizontal", length=300, maximum=8000, mode="determinate")
-        self.meter_rpm_bar.grid(row=0, column=1, padx=4, pady=4)
-        self.meter_rpm_var = tk.StringVar(value="---- rpm")
-        ttk.Label(meter, textvariable=self.meter_rpm_var, width=10).grid(
-            row=0, column=2, padx=8, pady=4)
+        # タコメータ風の円形ゲージ（実車寄りの240°弧、8時位置=0rpm～12時位置～
+        # 4時位置=meter_rpm_max を時計回りにスイープ）。tkinter標準のCanvasのみで
+        # 描画し、matplotlib等の追加依存は増やさない（フレーム受信毎の高頻度更新でも
+        # 軽い。static部分は _draw_tacho_gauge_static() で一度だけ描き、rpm更新時は
+        # _update_tacho_needle() が針の座標と数値表示だけ更新する）。
+        self.meter_rpm_max = 8000
+        self._tacho_cx, self._tacho_cy, self._tacho_r = 75, 68, 55
+        self.meter_tacho_canvas = tk.Canvas(
+            meter, width=150, height=120, highlightthickness=0)
+        self.meter_tacho_canvas.grid(row=0, column=0, columnspan=2, padx=8, pady=4)
+        self.meter_tacho_needle = None
+        self.meter_tacho_rpm_text = None
+        self._draw_tacho_gauge_static()
+        self._update_tacho_needle(0)
 
+        # 水温ゲージ（タコメータと同じ240°の丸形メータ。実車でも水温計はタコ/
+        # スピードと同じ丸形で配置されることが多く、この形自体は不自然ではない。
+        # タコメータより小さいサイズにして「主/副」の見た目の違いを付けている）。
+        # タコメータの直後（列2）に置き、2つの丸形ゲージを隣り合わせにする。
+        self.meter_coolant_max = 120
+        self._coolant_cx, self._coolant_cy, self._coolant_r = 45, 42, 32
+        self.meter_coolant_canvas = tk.Canvas(
+            meter, width=95, height=80, highlightthickness=0)
+        self.meter_coolant_canvas.grid(row=0, column=2, padx=8, pady=4)
+        self.meter_coolant_needle = None
+        self.meter_coolant_gauge_text = None
+        self._draw_coolant_gauge_static()
+        self._update_coolant_needle(0)
+
+        # 警告灯（テルテール）。実車のクラスタは縦積みではなく、メータ盤の下に
+        # 横一列の帯として配置されることが多いため、2つの丸ゲージの下の行
+        # （row=1、ゲージと同じ列0-2）に、平坦な小型ランプとして並べる
+        # （実車のテルテールはボタンではなくフラットな点灯/消灯ランプのため、
+        # relief="raised" は使わない）。
         self.meter_run_var = tk.StringVar(value="RUN")
         self.meter_run_lbl = tk.Label(
-            meter, textvariable=self.meter_run_var, width=8, relief="raised", bg="gray85")
-        self.meter_run_lbl.grid(row=0, column=3, padx=4, pady=4)
+            meter, textvariable=self.meter_run_var, width=6, relief="flat",
+            borderwidth=1, bg="gray85")
+        self.meter_run_lbl.grid(row=1, column=0, padx=4, pady=(0, 6))
 
         self.meter_fault_var = tk.StringVar(value="FAULT")
         self.meter_fault_lbl = tk.Label(
-            meter, textvariable=self.meter_fault_var, width=8, relief="raised", bg="gray85")
-        self.meter_fault_lbl.grid(row=0, column=4, padx=4, pady=4)
+            meter, textvariable=self.meter_fault_var, width=6, relief="flat",
+            borderwidth=1, bg="gray85")
+        self.meter_fault_lbl.grid(row=1, column=1, padx=4, pady=(0, 6))
 
         self.meter_abs_var = tk.StringVar(value="ABS")
         self.meter_abs_lbl = tk.Label(
-            meter, textvariable=self.meter_abs_var, width=8, relief="raised", bg="gray85")
-        self.meter_abs_lbl.grid(row=0, column=5, padx=4, pady=4)
-
-        ttk.Label(meter, text="水温").grid(row=0, column=6, padx=8, pady=4)
-        self.meter_coolant_var = tk.StringVar(value="-- °C")
-        ttk.Label(meter, textvariable=self.meter_coolant_var, width=8).grid(
-            row=0, column=7, padx=4, pady=4)
-
-        script = ttk.LabelFrame(self, text="スクリプト (CAPL風)")
-        script.pack(fill="x", padx=8, pady=4)
-
-        ttk.Button(script, text="スクリプト実行...", command=self._open_script).grid(
-            row=0, column=0, padx=8, pady=4)
-        ttk.Button(script, text="停止", command=self._stop_script).grid(
-            row=0, column=1, padx=8, pady=4)
-        self.script_status_var = tk.StringVar(value="")
-        ttk.Label(script, textvariable=self.script_status_var).grid(
-            row=0, column=2, padx=8, pady=4, sticky="w")
+            meter, textvariable=self.meter_abs_var, width=6, relief="flat",
+            borderwidth=1, bg="gray85")
+        self.meter_abs_lbl.grid(row=1, column=2, padx=4, pady=(0, 6))
 
         body = ttk.Frame(self)
         body.pack(fill="both", expand=True, padx=8, pady=4)
@@ -205,8 +213,10 @@ class App(tk.Tk):
             row=0, column=3, padx=(4, 4), pady=(4, 1), sticky="w")
         ttk.Label(inner, text="定期", font=("", 9, "bold")).grid(
             row=0, column=4, padx=(4, 4), pady=(4, 1), sticky="w")
+        ttk.Label(inner, text="周期(ms)", font=("", 9, "bold")).grid(
+            row=0, column=5, padx=(2, 4), pady=(4, 1), sticky="w")
         ttk.Separator(inner, orient="horizontal").grid(
-            row=1, column=0, columnspan=5, sticky="ew", padx=4, pady=(0, 2))
+            row=1, column=0, columnspan=6, sticky="ew", padx=4, pady=(0, 2))
 
         def _hex_str(items) -> str:
             return " ".join(
@@ -221,7 +231,7 @@ class App(tk.Tk):
             if t == "group_header":
                 sep = ttk.Label(inner, text=f"── {btn_cfg['label']} {'─' * 40}",
                                 font=("", 9, "bold"), foreground="#555555", anchor="w")
-                sep.grid(row=row, column=0, columnspan=5,
+                sep.grid(row=row, column=0, columnspan=6,
                          padx=(4, 4), pady=(6, 2), sticky="ew")
                 sep.bind("<MouseWheel>", _scroll)
                 current_row += 1
@@ -251,7 +261,7 @@ class App(tk.Tk):
                 rx_lbl.bind("<MouseWheel>", _scroll)
                 name_lbl = ttk.Label(cell, textvariable=name_var,
                                      font=("", 9), foreground="#2a7a2a",
-                                     anchor="w", width=40)
+                                     anchor="w", width=60)
                 name_lbl.pack(side="left", padx=(4, 0))
                 name_lbl.bind("<MouseWheel>", _scroll)
                 self._rx_monitor_vars[i] = rx_var
@@ -335,6 +345,30 @@ class App(tk.Tk):
                 send_btn.grid(row=row, column=3, rowspan=2,
                               padx=(4, 4), pady=2, sticky="nsew")
                 send_btn.bind("<MouseWheel>", _scroll)
+
+                if t == "raw":
+                    # 定期送信ボタン (col 4, rowspan=2)。Tester Present 等、状態を
+                    # 持たない単純な UDS request のみサポートする（multiframe/
+                    # security_* は対象外。_on_periodic_click() 参照）。
+                    periodic_var = tk.StringVar(value="定期")
+                    periodic_btn = ttk.Button(
+                        inner, textvariable=periodic_var, width=5,
+                        command=lambda c=btn_cfg, idx=i: self._on_periodic_click(c, idx),
+                    )
+                    periodic_btn.grid(row=row, column=4, rowspan=2,
+                                      padx=(2, 4), pady=2, sticky="nsew")
+                    periodic_btn.bind("<MouseWheel>", _scroll)
+                    self._periodic_btn_vars[i] = periodic_var
+
+                    # 周期(ms) 入力欄 (col 5, rowspan=2)。既定 2000ms
+                    # （旧 Tester Present 自動送信チェックボックスの 2 秒毎と同じ）。
+                    interval_var = tk.StringVar(value=str(btn_cfg.get("interval_ms", 2000)))
+                    interval_entry = ttk.Entry(inner, textvariable=interval_var, width=6,
+                                               font=("Consolas", 9))
+                    interval_entry.grid(row=row, column=5, rowspan=2,
+                                        padx=(2, 4), pady=2, sticky="ns")
+                    interval_entry.bind("<MouseWheel>", _scroll)
+                    self._entry_vars.setdefault(i, {})["interval_ms"] = interval_var
 
                 current_row += 2
             else:
@@ -429,6 +463,15 @@ class App(tk.Tk):
                 periodic_btn.grid(row=row, column=4, padx=(2, 4), pady=2)
                 periodic_btn.bind("<MouseWheel>", _scroll)
                 self._periodic_btn_vars[i] = periodic_var
+
+                # 周期(ms) 入力欄 (col 5)。config.json の interval_ms（既定100ms）を
+                # 初期値にしつつ、実行時に変更できる。
+                interval_var = tk.StringVar(value=str(btn_cfg.get("interval_ms", 100)))
+                interval_entry = ttk.Entry(inner, textvariable=interval_var, width=6,
+                                           font=("Consolas", 9))
+                interval_entry.grid(row=row, column=5, padx=(2, 4), pady=2)
+                interval_entry.bind("<MouseWheel>", _scroll)
+                self._entry_vars.setdefault(i, {})["interval_ms"] = interval_var
 
                 current_row += 1
         # ---- ログ ----
@@ -703,8 +746,6 @@ class App(tk.Tk):
             self._script_thread.join(timeout=3.0)
             if self._script_thread.is_alive():
                 self.log_queue.put("[script] 停止待ちタイムアウト (バックグラウンドで終了処理中)")
-        self.tester_present_var.set(False)
-        self.tester_present_stop.set()
         for pidx, stop_ev in self._periodic_stops.items():
             stop_ev.set()
             if pidx in self._periodic_btn_vars:
@@ -763,15 +804,28 @@ class App(tk.Tk):
         ).start()
 
     def _on_periodic_click(self, btn_cfg, idx: int):
+        """定期送信ボタンのトグル判定は GUI(Tk) メインスレッドの command
+        コールバックからここで直接（バックグラウンドスレッドを介さず）行う。
+        以前はここを threading.Thread でラップしていたが、Tk のボタン
+        ダブルクリック等で _on_periodic_click が短時間に2回呼ばれると、
+        2つのスレッドが self._periodic_stops.get(idx) をどちらも書き込み前に
+        読んでしまい、両方が「未起動」と誤判定してワーカーを二重起動する
+        競合があった（2番目の self._periodic_stops[idx] 書き込みが1番目を
+        上書きし、1番目の stop_ev が孤立して二度と停止できなくなる）。
+        このトグル判定自体（辞書の読み書き・Event生成・スレッド起動）は
+        CAN送受信のような時間のかかるI/Oを一切行わないため、Tkのイベント
+        ディスパッチ（シングルスレッドで直列化される）に乗せてしまうのが
+        最も簡単で確実な排他になる。実際の周期送信ループ（_periodic_can_worker/
+        _periodic_uds_worker）は引き続き別スレッドで動くため、GUIは
+        ブロックされない。"""
         if not self._require_connected():
             return
         entry_data = {k: v.get() for k, v in self._entry_vars.get(idx, {}).items()}
         label = btn_cfg["label"].replace("\n", " ")
-        threading.Thread(
-            target=self._handle_periodic_can_toggle,
-            args=(btn_cfg, idx, label, entry_data),
-            daemon=True,
-        ).start()
+        if btn_cfg["type"] == "raw":
+            self._handle_periodic_uds_toggle(btn_cfg, idx, label, entry_data)
+        else:
+            self._handle_periodic_can_toggle(btn_cfg, idx, label, entry_data)
 
     def _send_worker(self, btn_cfg, entry_data: dict, idx: int):
         """entry_data: GUI スレッドで読み取った入力フィールドの文字列 {"data": "...", "can_id": "..."}"""
@@ -807,8 +861,6 @@ class App(tk.Tk):
                     result = uds_link.security_access_auto(self.bus)
                     self.log_queue.put(f"[{label}] {result}")
                     self.state_queue.put(("resp", (idx, result)))
-                    if "成功" in result or "済み" in result:
-                        self.state_queue.put(("security", "Security: Unlocked"))
                 elif btn_cfg["type"] == "security_seed":
                     payload = get_payload("payload")
                     if payload is None:
@@ -856,11 +908,6 @@ class App(tk.Tk):
                     decoded = self._decode_response(payload, resp)
                     self.log_queue.put(f"[{label}] RX " + decoded)
                     self.state_queue.put(("resp", (idx, self._rx_display(resp))))
-                    self._queue_tracking_update(payload, resp)
-                    if (btn_cfg["type"] == "security_key"
-                            and not resp.is_negative
-                            and len(resp.raw) >= 2 and resp.raw[0] == 0x67):
-                        self.state_queue.put(("security", "Security: Unlocked"))
                 elif btn_cfg["type"] == "multiframe":
                     uds_payload = get_payload("payload")
                     if uds_payload is None:
@@ -876,7 +923,6 @@ class App(tk.Tk):
                     decoded = self._decode_response(sent, resp)
                     self.log_queue.put(f"[{label}] RX " + decoded)
                     self.state_queue.put(("resp", (idx, self._rx_display(resp))))
-                    self._queue_tracking_update(sent, resp)
                 elif btn_cfg["type"] == "can_frame":
                     can_id = get_can_id()
                     data = get_payload("data")
@@ -987,38 +1033,74 @@ class App(tk.Tk):
             return f"ExtendedData {uds_link.dtc_name(dtc)} record={raw[5]} occurrence={raw[7]}"
         return " ".join(f"{b:02X}" for b in raw)
 
-    def _queue_tracking_update(self, sent: bytes, resp: uds_link.UdsResponse):
-        """Session/Security の参考表示を更新する。あくまで本ツールが送受信した
-        フレームから推測したものであり、ECU 内部の正式な状態ではない
-        （例: ECUReset は応答有無に関わらずリセットされるとみなして即時反映する）。"""
-        if len(sent) < 2:
-            return
-        sid = sent[1]
-        if sid == 0x11:
-            self.state_queue.put(("session", "Session: Default (reset)"))
-            self.state_queue.put(("security", "Security: Locked (reset)"))
-            return
-        if resp.is_negative:
-            return
-        if sid == 0x10 and len(resp.raw) >= 1 and resp.raw[0] == 0x50:
-            sub = sent[2] if len(sent) > 2 else 0
-            label = "Extended" if sub == 0x03 else "Default"
-            self.state_queue.put(("session", f"Session: {label}"))
+    def _parse_interval_ms(self, entry_data: dict, btn_cfg, label: str,
+                           default: int) -> "int | None":
+        """周期(ms)入力欄の値を解釈する。GUI の Entry（entry_data["interval_ms"]）を
+        優先し、未入力/パース不能なら btn_cfg の interval_ms、なければ default を使う。
+        0 以下や非数値はエラーとしてログへ出し None を返す（呼び出し側は送信開始を
+        中止すること）。"""
+        raw = entry_data.get("interval_ms")
+        if raw is None or raw == "":
+            return btn_cfg.get("interval_ms", default)
+        try:
+            interval_ms = int(raw)
+            if interval_ms <= 0:
+                raise ValueError
+        except ValueError:
+            self.log_queue.put(f"[{label}] 周期(ms)の形式エラー: {raw!r}（正の整数を入力してください）")
+            return None
+        return interval_ms
 
     # ------------------------------------------------------------------
-    # 周期 CAN フレーム送信 (can_frame + interval_ms)
+    # 周期送信の開始/停止トグル（can_frame / raw(UDS) 共通）
     # ------------------------------------------------------------------
-    def _handle_periodic_can_toggle(self, btn_cfg, idx: int, label: str, entry_data: dict):
-        """周期送信の開始/停止をトグルする。バスロック不要のためスレッドで直接呼ぶ。"""
+    def _toggle_periodic(self, idx: int, label: str, build_worker) -> None:
+        """定期送信ボタンの開始/停止判定・_periodic_stops の読み書き・ログ出力・
+        ボタン表示更新を1箇所にまとめた共通処理（_handle_periodic_can_toggle/
+        _handle_periodic_uds_toggle 双方から呼ぶ）。以前はこの判定ロジックを
+        それぞれの関数が個別に実装しており、修正時に片方へだけ適用してしまう
+        リスクがあった（コードレビューで指摘）。
+
+        build_worker() は「これから開始する」場合のみ呼ばれ、
+        (worker_target, worker_args, start_log_text) を返す。入力エラー等で
+        開始できない場合は None を返す（build_worker 内でログ済みのこと）。
+        worker_target は最後の引数として stop_ev (threading.Event) を受け取る
+        呼び出し規約とする（_periodic_can_worker/_periodic_uds_worker 参照）。
+
+        呼び出し元は GUI(Tk) メインスレッドから直接呼ぶこと（_on_periodic_click
+        参照）。バックグラウンドスレッド経由で呼ぶと、ダブルクリック等で
+        self._periodic_stops.get(idx) をどちらの呼び出しも書き込み前に読んで
+        しまい、両方が「未起動」と誤判定してワーカーを二重起動する競合が
+        発生する（2番目の書き込みが1番目を上書きし、1番目の stop_ev が孤立して
+        二度と停止できなくなる）。"""
         stop_ev = self._periodic_stops.get(idx)
         if stop_ev is not None and not stop_ev.is_set():
             stop_ev.set()
             self.log_queue.put(f"[{label}] 周期送信 停止")
             self.state_queue.put(("periodic_btn", (idx, "定期")))
-        else:
+            return
+        built = build_worker()
+        if built is None:
+            return
+        worker_target, worker_args, start_log_text = built
+        new_stop = threading.Event()
+        self._periodic_stops[idx] = new_stop
+        self.state_queue.put(("periodic_btn", (idx, "停止")))
+        self.log_queue.put(start_log_text)
+        threading.Thread(
+            target=worker_target,
+            args=(*worker_args, new_stop),
+            daemon=True,
+        ).start()
+
+    # ------------------------------------------------------------------
+    # 周期 CAN フレーム送信 (can_frame + interval_ms)
+    # ------------------------------------------------------------------
+    def _handle_periodic_can_toggle(self, btn_cfg, idx: int, label: str, entry_data: dict):
+        def build_worker():
             if self.bus is None:
                 self.log_queue.put(f"[{label}] 未接続")
-                return
+                return None
             try:
                 if "can_id" in entry_data:
                     can_id = self._parse_can_id(entry_data["can_id"])
@@ -1031,7 +1113,7 @@ class App(tk.Tk):
                     data = parse_payload(btn_cfg["data"])
             except ValueError as exc:
                 self.log_queue.put(f"[{label}] 入力エラー: {exc}")
-                return
+                return None
             e2e_cfg_p = btn_cfg.get("e2e")
             secoc_cfg_p = btn_cfg.get("secoc")
             if e2e_cfg_p:
@@ -1042,25 +1124,23 @@ class App(tk.Tk):
                 # SecOC も同様に、定期送信では Freshness Value を毎回進めるため
                 # Authentic Payload 部分のみ抽出する。
                 data = data[:secoc_cfg_p["auth_len"]]
-            interval_ms = btn_cfg.get("interval_ms", 100)
-            new_stop = threading.Event()
-            self._periodic_stops[idx] = new_stop
-            self.state_queue.put(("periodic_btn", (idx, "停止")))
-            self.log_queue.put(
+            interval_ms = self._parse_interval_ms(entry_data, btn_cfg, label, default=100)
+            if interval_ms is None:
+                return None
+            log_text = (
                 f"[{label}] 周期送信 開始 ({interval_ms}ms 間隔)"
                 f"  ID=0x{can_id:03X} DATA=" + " ".join(f"{b:02X}" for b in data)
             )
-            threading.Thread(
-                target=self._periodic_can_worker,
-                args=(label, can_id, data, interval_ms / 1000.0, new_stop, e2e_cfg_p, secoc_cfg_p),
-                daemon=True,
-            ).start()
+            return (self._periodic_can_worker,
+                    (label, can_id, data, interval_ms / 1000.0, e2e_cfg_p, secoc_cfg_p),
+                    log_text)
+        self._toggle_periodic(idx, label, build_worker)
 
     # 送信直後に UDS が続いても間隔を保てるよう、送信後にロックを保持する時間 (秒)
     _PERIODIC_POST_SEND_HOLD_S = 0.010  # 10ms
 
-    def _periodic_can_worker(self, label, can_id, data, interval_s, stop_ev,
-                              e2e_cfg=None, secoc_cfg=None):
+    def _periodic_can_worker(self, label, can_id, data, interval_s,
+                              e2e_cfg, secoc_cfg, stop_ev):
         """interval_s ごとに CAN フレームを送り続ける。stop_ev がセットされたら終了。
 
         bus_lock をノンブロッキングで取得し、送信後 _PERIODIC_POST_SEND_HOLD_S (10ms)
@@ -1105,6 +1185,55 @@ class App(tk.Tk):
                 break
 
     # ------------------------------------------------------------------
+    # 周期 UDS request 送信 (raw タイプ、Tester Present 等)
+    # ------------------------------------------------------------------
+    def _handle_periodic_uds_toggle(self, btn_cfg, idx: int, label: str, entry_data: dict):
+        """UDS raw タイプボタン用の周期送信トグル。Tester Present はこの仕組みに
+        統合されており、専用のチェックボックスは持たない（コマンド一覧の他の
+        ボタンと同じ「定期」トグル+周期(ms)入力欄に一本化した、2026-08）。
+        E2E/SecOC カウンタのような複雑な状態は持たない単純な UDS request の
+        周期送信専用（multiframe/security_* には使わない）。"""
+        def build_worker():
+            if self.bus is None:
+                self.log_queue.put(f"[{label}] 未接続")
+                return None
+            try:
+                if "data" in entry_data:
+                    payload = self._parse_hex_bytes(entry_data["data"])
+                else:
+                    payload = parse_payload(btn_cfg.get("payload", []))
+            except ValueError as exc:
+                self.log_queue.put(f"[{label}] 入力エラー: {exc}")
+                return None
+            interval_ms = self._parse_interval_ms(entry_data, btn_cfg, label, default=2000)
+            if interval_ms is None:
+                return None
+            log_text = (
+                f"[{label}] 周期送信 開始 ({interval_ms}ms 間隔)"
+                f"  DATA=" + " ".join(f"{b:02X}" for b in payload)
+            )
+            return self._periodic_uds_worker, (payload, interval_ms / 1000.0), log_text
+        self._toggle_periodic(idx, label, build_worker)
+
+    def _periodic_uds_worker(self, payload: bytes, interval_s: float,
+                              stop_ev: threading.Event) -> None:
+        """interval_s ごとに UDS request を送り応答を読み捨て続ける
+        （_periodic_can_worker() と同じ send-then-wait の順序）。
+        _periodic_can_worker() と異なり bus_lock を完全に取得してブロッキングで
+        送信+応答受信する（低頻度前提のため非blocking排他は不要で、応答を
+        受信/破棄しておくことで他の RX 処理と取りこぼしを起こさない）。"""
+        while True:
+            if self.bus is not None:
+                with self.bus_lock:
+                    try:
+                        uds_link.send_raw(self.bus, payload)
+                        uds_link.receive_uds_response(self.bus, timeout=1.0)
+                    except Exception:  # noqa: BLE001 - 周期送信中の一時エラーは無視して継続する
+                        pass
+            if stop_ev.wait(interval_s):
+                break
+
+    # ------------------------------------------------------------------
     # 受信モニター (rx_monitor)
     # ------------------------------------------------------------------
     _ENGINE_STATE_NAMES = {0: "OFF", 1: "STARTING", 2: "RUNNING", 3: "FAULT"}
@@ -1123,6 +1252,99 @@ class App(tk.Tk):
         upd = (byte0 >> 4) & 1
         return f"(RUN:{run} FAULT:{fault} ABS:{abs_} upd={upd})"
 
+    @staticmethod
+    def _draw_round_gauge_face(canvas: tk.Canvas, cx: float, cy: float, r: float) -> None:
+        """円形ゲージの固定部分（円弧＋目盛り＋ピボット）を一度だけ描く汎用ヘルパー
+        （タコメータ・水温ゲージで共通）。
+
+        実車の多くのアナログ式メータ（タコ/スピード/水温いずれも）は、半円(180°)でも
+        全円(360°)でもなく、文字盤下寄りに軸(ピボット)を置いた240°程度の弧
+        （時計の8時位置=最小値 → 12時位置=中間値 → 4時位置=最大値、と時計回りに
+        上を通ってスイープする）が一般的（全円だと最小値と最大値が隣接して見分け
+        づらくなるため、ニードル式では基本的に採用されない。水温計は実車でも
+        タコ/スピードと同じ丸形メータとして配置されることが多く、この形自体は
+        不自然ではない）。本実装も同じ配置にし、8時位置から4時位置まで240°の弧を
+        描く。
+
+        数学角度（反時計回り、東=0°、y上向き）では 8時位置=210°、12時位置=90°、
+        4時位置=-30° に対応する。tkinter の create_arc は start/extent を見た目の
+        反時計回り角度として扱う（内部の y 下向き座標系との差はキャンバス自身が
+        吸収する）ため、start=-30, extent=240 とすれば 4時位置から反時計回りに
+        （見た目は3,2,1,12,11,10,9時の順に）210°(8時位置)まで弧が続く
+        （弧そのものは対称なので、どちらの端を start にしても同じ弧になる）。
+        針や目盛りは create_line で座標を直接計算するため、y だけ符号を反転して
+        数学角度→キャンバス座標に変換する必要がある（_gauge_needle_endpoint() も
+        同じ変換を使う）。"""
+        canvas.create_arc(cx - r, cy - r, cx + r, cy + r, start=-30, extent=240,
+                           style="arc", width=8, outline="#333333")
+        for i in range(9):
+            theta = math.radians(210 - i * 30)
+            x0 = cx + (r - 10) * math.cos(theta)
+            y0 = cy - (r - 10) * math.sin(theta)
+            x1 = cx + r * math.cos(theta)
+            y1 = cy - r * math.sin(theta)
+            canvas.create_line(x0, y0, x1, y1, fill="#333333", width=2)
+        canvas.create_oval(cx - 4, cy - 4, cx + 4, cy + 4, fill="#333333", outline="")
+
+    @staticmethod
+    def _gauge_needle_endpoint(cx: float, cy: float, length: float,
+                                value: float, value_max: float) -> tuple[float, float]:
+        """value(0～value_max)に対応する針の先端座標を返す。
+        _draw_round_gauge_face() と同じ配置（210°=最小値(8時位置) ～
+        -30°=最大値(4時位置)、時計回りに12時位置を通ってスイープ＝画面上は
+        左から右へ移動して見える）。value は呼び出し側で 0～value_max に
+        クランプ済みであること。"""
+        theta = math.radians(210 - (value / value_max) * 240)
+        return cx + length * math.cos(theta), cy - length * math.sin(theta)
+
+    def _draw_tacho_gauge_static(self) -> None:
+        """タコメータ用ゲージの固定部分を描き、数値表示テキスト項目を作成する。"""
+        cx, cy, r = self._tacho_cx, self._tacho_cy, self._tacho_r
+        c = self.meter_tacho_canvas
+        self._draw_round_gauge_face(c, cx, cy, r)
+        # 数値表示（実車の多くのアナログメータが文字盤内の下寄りにデジタル/文字
+        # 表示を持つのに合わせ、ピボット直下・弧が開いている領域に置く）。
+        self.meter_tacho_rpm_text = c.create_text(
+            cx, cy + r * 0.55, text="---- rpm", font=("", 11, "bold"), fill="#222222")
+
+    def _update_tacho_needle(self, rpm: int) -> None:
+        """rpm(0～meter_rpm_max)に応じて針の先端座標と中央下の数値表示を更新する
+        （弧・目盛りは再描画しない）。数値表示は針のクランプ前の実際の rpm を
+        示す（針の位置だけ範囲外をクランプする）。"""
+        rpm_clamped = max(0, min(rpm, self.meter_rpm_max))
+        cx, cy, r = self._tacho_cx, self._tacho_cy, self._tacho_r
+        x1, y1 = self._gauge_needle_endpoint(cx, cy, r - 12, rpm_clamped, self.meter_rpm_max)
+        c = self.meter_tacho_canvas
+        if self.meter_tacho_needle is None:
+            self.meter_tacho_needle = c.create_line(cx, cy, x1, y1, fill="red", width=3)
+        else:
+            c.coords(self.meter_tacho_needle, cx, cy, x1, y1)
+        if self.meter_tacho_rpm_text is not None:
+            c.itemconfig(self.meter_tacho_rpm_text, text=f"{rpm} rpm")
+
+    def _draw_coolant_gauge_static(self) -> None:
+        """水温ゲージ用の固定部分を描き、数値表示テキスト項目を作成する
+        （_draw_tacho_gauge_static() と同じ構成、タコメータより小さいゲージ）。"""
+        cx, cy, r = self._coolant_cx, self._coolant_cy, self._coolant_r
+        c = self.meter_coolant_canvas
+        self._draw_round_gauge_face(c, cx, cy, r)
+        self.meter_coolant_gauge_text = c.create_text(
+            cx, cy + r * 0.55, text="-- °C", font=("", 10, "bold"), fill="#222222")
+
+    def _update_coolant_needle(self, temp: int) -> None:
+        """temp(0～meter_coolant_max)に応じて水温ゲージの針と数値表示を更新する
+        （_update_tacho_needle() と同じ考え方）。"""
+        temp_clamped = max(0, min(temp, self.meter_coolant_max))
+        cx, cy, r = self._coolant_cx, self._coolant_cy, self._coolant_r
+        x1, y1 = self._gauge_needle_endpoint(cx, cy, r - 8, temp_clamped, self.meter_coolant_max)
+        c = self.meter_coolant_canvas
+        if self.meter_coolant_needle is None:
+            self.meter_coolant_needle = c.create_line(cx, cy, x1, y1, fill="red", width=2)
+        else:
+            c.coords(self.meter_coolant_needle, cx, cy, x1, y1)
+        if self.meter_coolant_gauge_text is not None:
+            c.itemconfig(self.meter_coolant_gauge_text, text=f"{temp} °C")
+
     def _update_virtual_meter(self, data: bytes) -> None:
         """MeterStatus (CAN 0x200, DLC=6) の byte[2]=警告灯3bitミラー・
         byte[3-4]=EngineSpeedミラー・byte[5]=CoolantTempミラーから仮想メータ
@@ -1135,12 +1357,11 @@ class App(tk.Tk):
         abs_ = (data[2] >> 5) & 1
         rpm = (data[3] << 8) | data[4]
 
-        self.meter_rpm_bar["value"] = min(rpm, 8000)
-        self.meter_rpm_var.set(f"{rpm} rpm")
+        self._update_tacho_needle(rpm)
         self.meter_run_lbl.configure(bg="green" if run else "gray85")
         self.meter_fault_lbl.configure(bg="red" if fault else "gray85")
         self.meter_abs_lbl.configure(bg="orange" if abs_ else "gray85")
-        self.meter_coolant_var.set(f"{data[5]} °C")
+        self._update_coolant_needle(data[5])
 
     def _rx_monitor_worker(self, stop_ev: threading.Event):
         """bus_lock をノンブロッキングで取得し、rx_monitor CAN ID の受信フレームを表示する。
@@ -1187,27 +1408,6 @@ class App(tk.Tk):
             for idx, monitor_id in self._rx_monitor_ids.items():
                 if msg.arbitration_id == monitor_id:
                     self.state_queue.put(("rx_mon", (idx, bytes(msg.data))))
-
-    # ------------------------------------------------------------------
-    # Tester Present 自動送信
-    # ------------------------------------------------------------------
-    def _toggle_tester_present(self):
-        if self.tester_present_var.get():
-            self.tester_present_stop.clear()
-            threading.Thread(target=self._tester_present_loop, daemon=True).start()
-        else:
-            self.tester_present_stop.set()
-
-    def _tester_present_loop(self):
-        while not self.tester_present_stop.wait(2.0):
-            if self.bus is None:
-                continue
-            with self.bus_lock:
-                try:
-                    uds_link.send_raw(self.bus, bytes([0x02, 0x3E, 0x00]))
-                    uds_link.receive_uds_response(self.bus, timeout=1.0)
-                except Exception:  # noqa: BLE001 - バックグラウンド送信の失敗は致命的でない
-                    pass
 
     # ------------------------------------------------------------------
     # スクリプト実行 (CAPL風 API 、capl_api.py 参照)
@@ -1307,11 +1507,7 @@ class App(tk.Tk):
                 kind, value = self.state_queue.get_nowait()
             except queue.Empty:
                 break
-            if kind == "session":
-                self.session_var.set(value)
-            elif kind == "security":
-                self.security_var.set(value)
-            elif kind == "resp":
+            if kind == "resp":
                 resp_idx, resp_text = value
                 if resp_idx in self._response_vars:
                     self._response_vars[resp_idx].set(resp_text)
@@ -1347,14 +1543,21 @@ class App(tk.Tk):
                         if len(data) >= 2:
                             upd = (data[1] >> 7) & 1
                             name = f"{name} upd={upd}"
-                        self._rx_monitor_name_vars[mon_idx].set(f"({name})")
                         if len(data) >= 6:
                             # byte[2] bit0-2 = RunLamp/FaultLamp/AbsLamp ミラー（本プロジェクト
                             # 独自拡張。WarningStatus(0x210) と同値）、byte[3-4] = EngineSpeed
                             # ミラー（ビッグエンディアン、EngineInfo(0x100) の検証済み値と同値）、
-                            # byte[5] = CoolantTemp ミラー。実機に物理表示器が無いための
-                            # 仮想メータ表示。
+                            # byte[5] = CoolantTemp ミラー。仮想メータ表示（丸ゲージ）と同じ値を
+                            # ここにも文字列で出しておくことで、コマンド一覧をスクロールで見ている
+                            # だけでも数値が分かるようにする。
+                            run = (data[2] >> 7) & 1
+                            fault = (data[2] >> 6) & 1
+                            abs_ = (data[2] >> 5) & 1
+                            rpm = (data[3] << 8) | data[4]
+                            name = (f"{name} RPM={rpm} Temp={data[5]}°C"
+                                    f" RUN:{run} FAULT:{fault} ABS:{abs_}")
                             self._update_virtual_meter(data)
+                        self._rx_monitor_name_vars[mon_idx].set(f"({name})")
                     elif decode == "nm_status" and len(data) >= 2:
                         # byte[0]=Control Bit Vector（bit0=Repeat Message Request、
                         # 他ビットは本プロジェクトでは未使用）、
