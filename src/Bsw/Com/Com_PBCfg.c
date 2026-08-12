@@ -33,7 +33,7 @@
  *              Com_RxIndication() を直接呼んで Authentic Payload のみ渡す。
  *              詳細は src/Bsw/SecOC/ 参照)
  *              Signal 12: ImmobilizerCmd  8 bit  BitPos=0  BigEndian  0x00=LOCK/0x01=UNLOCK
- *            TX I-PDU 0 (IPduId=0): CAN ID 0x200, DLC=5  MeterStatus
+ *            TX I-PDU 0 (IPduId=0): CAN ID 0x200, DLC=6  MeterStatus
  *              (メータ ECU、E2E 保護なし、TxModeMode=MIXED。
  *              ComFilterAlgorithm=MASKED_NEW_DIFFERS_MASKED_OLD で値変化を
  *              検知すると次回 Com_MainFunction() で送信、変化がなくても
@@ -51,6 +51,8 @@
  *              Signal 17: AbsLamp(mirror)   1 bit  BitPos=18  BigEndian
  *              byte[3-4]: EngineSpeedミラー（EngineInfoの検証済み値と同一）
  *              Signal 14: EngineSpeed(mirror) 16 bit  BitPos=24  BigEndian
+ *              byte[5]: CoolantTempミラー（EngineInfoの検証済み値と同一）
+ *              Signal 18: CoolantTemp(mirror) 8 bit  BitPos=40  BigEndian
  *            TX I-PDU 1 (IPduId=1): CAN ID 0x210, DLC=1  WarningStatus (メータ ECU、Signal Group)
  *              TMS（Transmission Mode Selector）を持つ I-PDU:
  *                通常（FaultLamp/AbsLamp 消灯 = TMS false）は TxModeMode=DIRECT。
@@ -281,10 +283,11 @@ static const Com_IPduConfigType Com_TxIPduConfigData[COM_TX_IPDU_COUNT] = {
          * 対比用に、シグナル単位の実装例として追加した）。
          * --------------------------------------------------------------- */
         .IPduId    = 0U,  /* DaVinci: ComIPduHandleId  - I-PDU 識別番号 */
-        .DLC       = 5U,  /* DaVinci: ComIPduLength    - I-PDU バイト長
+        .DLC       = 6U,  /* DaVinci: ComIPduLength    - I-PDU バイト長
                            *          byte[0]=EngineState、byte[1] bit0=update-bit（残り7bitは予約）、
                            *          byte[2] bit0-2=警告灯3bit（残り5bitは予約）、
-                           *          byte[3-4]=EngineSpeedミラー（16bit） */
+                           *          byte[3-4]=EngineSpeedミラー（16bit）、
+                           *          byte[5]=CoolantTempミラー（8bit） */
         .PduRId    = 0U,  /* DaVinci: ComIPduPduRef    - PduR TX パス 0 へのリンク */
         .TimeoutMs = 0U,  /* TX I-PDU のため監視無効 */
         .IsSignalGroup = 0U, /* 直接送信（既存の挙動のまま） */
@@ -769,6 +772,28 @@ static const Com_SignalConfigType Com_SignalConfigData[COM_SIGNAL_COUNT] = {
         .Mask            = 0x01U,                     /* DaVinci: ComFilterNewValue/ComFilterMask 相当 */
         .UpdateBitContributor = 0U                    /* MeterStatus の update-bit は EngineState 専用
                                                         *          （2026-08 コードレビューで対応） */
+    },
+    {
+        /* ---------------------------------------------------------------
+         * Signal 18: CoolantTemp(mirror)  TX 8bit  CAN 0x200 byte[5]
+         * DaVinci: /ActiveEcuC/Com/ComConfig/MeterStatus_CoolantTempMirror_Tx
+         * App_EngineManager が EngineInfo(RX) の検証済み CoolantTemp を
+         * そのままミラー送信する（uds_tester の仮想メータ表示タブ向け、
+         * EngineSpeed(Signal 14) と同じ設計）。
+         * --------------------------------------------------------------- */
+        .SignalId    = COM_SIGNAL_METER_COOLANT_TEMP, /* DaVinci: ComHandleId */
+        .Direction   = COM_SIGNAL_DIRECTION_TX,       /* 本プロジェクト独自拡張 */
+        .IPduId      = 0U,                            /* DaVinci: ComIPduRef → MeterStatus_Tx */
+        .BitPosition = 40U,                           /* DaVinci: ComBitPosition (byte[5]) */
+        .BitSize     = 8U,                            /* DaVinci: ComBitSize     */
+        .Endian      = COM_BIG_ENDIAN,                /* DaVinci: ComSignalEndianness = OPAQUE */
+        .FilterAlgorithm = COM_FILTER_MASKED_NEW_DIFFERS_MASKED_OLD, /* DaVinci: ComFilterAlgorithm
+                                                        *          値が変化したときだけ送信要求とみなす */
+        .Mask            = 0xFFU,                     /* DaVinci: ComFilterNewValue/ComFilterMask 相当 */
+        .UpdateBitContributor = 0U                    /* MeterStatus の update-bit は EngineState 専用
+                                                        *          （EngineSpeed/警告灯ミラーと同じ理由。
+                                                        *          2026-08 コードレビューで対応した
+                                                        *          パターンを新規シグナルにも適用） */
     }
 };
 

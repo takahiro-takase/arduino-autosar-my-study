@@ -267,11 +267,13 @@ void App_EngineManager_Run(void)
 
     (void)Rte_Write_EngineStatus_EngineState(s_state);
 
-    /* MeterStatus(CAN 0x200) へ EngineSpeed をミラー送信する（uds_tester の
-     * 仮想メータ表示タブ向け、本プロジェクト独自拡張）。EngineInfo タイムアウト
-     * 中でも speed は最後に検証できた値を保持したままなので、そのまま送信して
-     * よい（Dem_SetFreezeFrameContext() と同じ考え方）。 */
+    /* MeterStatus(CAN 0x200) へ EngineSpeed/CoolantTemp をミラー送信する
+     * （uds_tester の仮想メータ表示タブ向け、本プロジェクト独自拡張）。
+     * EngineInfo タイムアウト中でも speed/temp は最後に検証できた値を
+     * 保持したままなので、そのまま送信してよい（Dem_SetFreezeFrameContext()
+     * と同じ考え方）。 */
     (void)Rte_Write_MeterStatus_EngineSpeed(speed);
+    (void)Rte_Write_MeterStatus_CoolantTemp(temp);
 
     /* ADC センサ電圧読み取り（ローカル電圧モニタ：参考値ログ出力） */
     {
