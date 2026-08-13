@@ -22,7 +22,11 @@ ARXML や設定ツールは使用せず、コードで階層構造・型定義�
   - [CAN 通信スタック（Can_Hw / Can / CanIf / PduR / Com / E2E / E2EXf / E2EMon / Rte）](#can-stack)
     - [処理の流れ（コールチェーン）](#processing-flow)
       - [Tx 処理（Com → PduR → CanIf → Can の順）](#tx-processing)
+        - [通常（E2E なし）](#tx-processing-normal)
+        - [E2E（E2EHealthStatus 送信）](#tx-processing-e2e)
       - [Rx 処理（Can → CanIf → PduR → Com の順）](#rx-processing)
+        - [通常（E2E なし）](#rx-processing-normal)
+        - [E2E（EngineInfo/AbsInfo 受信）](#rx-processing-e2e)
     - [E2E 保護（EngineInfo/AbsInfo 受信・E2EHealthStatus 送信ともに Profile05）](#e2e-p01)
       - [I-PDU Group（Com_IpduGroupStart/Stop、通信のライフサイクル制御）](#ipdu-group)
       - [呼び出し元は BswM（実 AUTOSAR の標準構成）](#ipdu-group-caller)
@@ -467,16 +471,16 @@ Tx（Com → PduR → CanIf → Can）と Rx（Can → CanIf → PduR → Com）
 <a id="tx-processing"></a>
 ##### Tx 処理（Com → PduR → CanIf → Can の順）
 
+<a id="tx-processing-normal"></a>
+###### 通常（E2E なし）
+
 ```
 Com_SendSignal()/Com_SendSignalGroup()   ← ASW から呼ばれる。TX バッファへ pack するだけ
   ┊  (Com_TxPending 経由。次回 Com_MainFunction() の 100ms tick まで非同期に待機)
   ↓
 Com_MainFunction()                        ← ここから下は同期呼び出し連鎖
-  → TxTransformCbk があれば呼ぶ             ← Rte_COMTransform_E2EHealthStatus()
-                                              → E2EXf_TransformP05() → E2E_P05Protect()
-                                              （TxTransformCbk を使う TX I-PDU は現状これのみ）
   → PduR_Transmit()
-    → TransmitOverrideFct 未設定（現状の全 TX I-PDU、E2EHealthStatus 含む）:
+    → TransmitOverrideFct 未設定（現状の全 TX I-PDU）:
         CanIf_Transmit() → Can_Write()（SPI 送信完了までここで同期完了）
 ```
 
@@ -489,8 +493,25 @@ Com_MainFunction()                        ← ここから下は同期呼び出�
 > は無いが、`PduR_TxRoutingPathType.TransmitOverrideFct` フィールド・
 > `SecOC_IfTransmit()` 自体は学習用リファレンス実装として残している。
 
+<a id="tx-processing-e2e"></a>
+###### E2E（E2EHealthStatus 送信）
+
+`Com_MainFunction()` の TxTransformCbk フック（[E2E 保護](#e2e-p01) 参照）を経由して、
+Protect 処理が通常のチェーンへ割り込みます。TxTransformCbk を使う TX I-PDU は
+現状 E2EHealthStatus のみです。
+
+```
+Com_MainFunction()
+  → TxTransformCbk があれば呼ぶ    ← Rte_COMTransform_E2EHealthStatus()
+                                     → E2EXf_TransformP05() → E2E_P05Protect()
+  → PduR_Transmit() → CanIf_Transmit() → Can_Write()   （以降は「通常」と同じ）
+```
+
 <a id="rx-processing"></a>
 ##### Rx 処理（Can → CanIf → PduR → Com の順）
+
+<a id="rx-processing-normal"></a>
+###### 通常（E2E なし）
 
 ```
 Can_Isr()                        ← 真の割り込み。ペンディングフラグを立てるだけ
@@ -500,9 +521,7 @@ Can_MainFunction_Read()          ← フラグをドレイン、SPI 読み出し
   → CanIf_RxIndication()         ← CAN ID → PduId（論理 PDU）へ変換
     → PduR_CanIfRxIndication() (= PduR_ComRxIndication())
       → 宛先ごとにマルチキャスト:
-          Com_RxIndication()         ← EngineInfo/AbsInfo（RxIndicationCbk 経由）
-            → Rte_COMCbk_EngineInfo/AbsInfo()
-              → E2EXf_InverseTransform() → E2E_P01Check()
+          Com_RxIndication()         ← EngineInfo/AbsInfo（RxIndicationCbk 経由で E2E 検証、後述）
           CanTp_RxIndication()       ← UDS 診断要求（複数フレーム対応）
           SecOC_IfRxIndication()     ← ImmobilizerCmd
             → Csm_MacVerify() → Com_RxIndication()
@@ -513,6 +532,18 @@ Can_MainFunction_Read()          ← フラグをドレイン、SPI 読み出し
 > 転送しない）。この認証ゲート自体の詳細は
 > [`docs/modules/SecOC_Notes.md`](docs/modules/SecOC_Notes.md#アーキテクチャ--e2e-transformer-方式とは異なる理由)
 > を参照。
+
+<a id="rx-processing-e2e"></a>
+###### E2E（EngineInfo/AbsInfo 受信）
+
+`Com_RxIndication()` の RxIndicationCbk フック（[E2E 保護](#e2e-p01) 参照）を経由して、
+Check 処理が通常のチェーンへ割り込みます。EngineInfo/AbsInfo いずれも Profile05 です。
+
+```
+Com_RxIndication()                 ← EngineInfo/AbsInfo（RxIndicationCbk 経由）
+  → Rte_COMCbk_EngineInfo/AbsInfo()
+    → E2EXf_InverseTransformP05() → E2E_P05Check()
+```
 
 ##### 受信長チェックの多層防御
 
@@ -1086,7 +1117,7 @@ EcuM の POST_RUN 遷移時に Rte_Engine タスクと Rte_Warning タスクが�
 ```bash
 # ホスト上でビルド・実行（GoogleTest、実 HW 不要）
 pio test -e native      # Gpt/E2E_P05/Can 単体
-pio test -e native_chain  # Tx/Rx処理コールチェーン
+pio test -e native_chain  # Tx/Rx処理コールチェーン（通常/E2E とも）
 $env:DET_LOG_VERBOSE = "1"; pio test -e native_chain -v # TRACE ログ出力
 ```
 
@@ -1126,6 +1157,15 @@ Hal_Can_Hw_fake.c`）で、CanIf.c が呼ぶ `CanSM_RxIndication()` 等は
 `Bsw_CanSM_fake.c`（no-op スタブ、CanSM 自身のロジックは README
 「ECU管理層」の別のコールチェーンのため対象外）で満たしている。
 
+[「Tx 処理」の「E2E」](#tx-processing-e2e)（`Com_MainFunction()` →
+TxTransformCbk → `E2EXf_TransformP05()` → `E2E_P05Protect()`）は
+`Bsw_TxE2EChain_test.cpp` で別途検証している。本番の TxTransformCbk
+（`Rte_COMTransform_E2EHealthStatus()`）は `Rte.c` にあるが、`Rte.c` 自体は
+IoHwAb/FiM/App_EngineManager/App_WarningIndicator まで巨大な依存グラフを
+引き込むためリンクせず、本番と同じ1行の委譲呼び出しをテスト専用の
+TxTransformCbk として定義し、そこから先（E2EXf.c/E2EXf_PBCfg.c/E2E_P05.c）は
+実体をそのまま検証する（詳細は `Bsw_TxE2EChain_test.cpp` 冒頭のコメント参照）。
+
 <a id="unit-test-rx"></a>
 ##### Rx 処理（Can → CanIf → PduR → Com の順）
 
@@ -1141,6 +1181,15 @@ Hal_Can_Hw_fake.c`）で、CanIf.c が呼ぶ `CanSM_RxIndication()` 等は
 ような「後続処理の前提条件」ではない。したがって `Can_MainFunction_Read()` を
 起点とする1つのコールチェーンとして検証している（詳細は
 `Bsw_RxChain_test.cpp` 冒頭のコメント参照）。
+
+[「Rx 処理」の「E2E」](#rx-processing-e2e)（`Com_RxIndication()` →
+RxIndicationCbk → `E2EXf_InverseTransformP05()` → `E2E_P05Check()`）は
+`Bsw_RxE2EChain_test.cpp` で別途検証している。`Com_RxIndication()` を直接
+呼ぶところから始め（README の図もこの粒度で揃えている）、Tx 側と同じ理由で
+`Rte.c` はリンクせず、本番の RxIndicationCbk（`Rte_COMCbk_EngineInfo()`）と
+同じ処理をテスト専用の RxIndicationCbk として定義している。CRC 破損時に
+`E2E_P05STATUS_ERROR` になることも含めて検証する（詳細は
+`Bsw_RxE2EChain_test.cpp` 冒頭のコメント参照）。
 
 <a id="unit-test-single"></a>
 #### 単一モジュールのテスト（`[env:native]`）
