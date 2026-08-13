@@ -38,6 +38,10 @@ ARXML や設定ツールは使用せず、コードで階層構造・型定義�
   - [アプリケーション（App_EngineManager / App_WarningIndicator）](#application)
 - [テスト（動作確認）](#testing)
   - [単体テスト（ホスト上でのロジック検証）](#unit-test)
+    - [コールチェーンのテスト（`[env:native_chain]`）](#unit-test-chain)
+      - [Tx 処理（Com → PduR → CanIf → Can の順）](#unit-test-tx)
+      - [Rx 処理（Can → CanIf → PduR → Com の順）](#unit-test-rx)
+    - [単一モジュールのテスト（`[env:native]`）](#unit-test-single)
   - [CAPL 風スクリプト機能（tools/uds_tester）](#capl-scripting)
   - [シリアルモニタ出力例](#serial-log-example)
 - [補足](#appendix)
@@ -1074,33 +1078,46 @@ EcuM の POST_RUN 遷移時に Rte_Engine タスクと Rte_Warning タスクが�
 <a id="unit-test"></a>
 ### 単体テスト（ホスト上でのロジック検証）
 
-実 HW（UNO R4）を使わず、Bsw モジュールのロジックだけをホスト PC 上で
-GoogleTest により検証する `[env:native]` 環境を用意している
-（`platformio.ini` 参照）。全モジュールのテストは `test/test_native/`
-1 フォルダに集約し、HAL 層（`*_Hw` ファイル）だけをフェイクに差し替えて、
-その上位の実モジュールは依存関係の下位から順に `build_src_filter` へ
-積み上げていく方式を取っている（現状は `src/Bsw/Gpt/Gpt.c` と
-`src/Bsw/E2E/E2E_P05.c` が対象）。ファイル名は `{層}_{モジュール}_{test|fake}`
-（実ファイル名が `<Module>_Hw` の場合はそれも含める。例: `Bsw_Gpt_test.cpp`、
-`Hal_Gpt_Hw_fake.c`）で統一し、フォルダを分けなくてもどの層・モジュールの
-ファイルかが名前だけで分かるようにしている。
-`Gpt_OnTick()`（本来 ISR から呼ばれる関数）はテストから直接呼ぶことで、
-実割り込みなしに状態機械を駆動している。
+実 HW（UNO R4）を使わず、Bsw モジュールのロジックだけをホスト PC 上で GoogleTest
+により検証します。単一モジュールを対象にした `[env:native]` と、複数モジュールに
+またがる関数コールチェーンをそのまま検証する `[env:native_chain]` の 2 つの環境を
+用意しています（`platformio.ini` 参照）。
 
-`Bsw_Can_test.cpp`（`src/Bsw/Can/Can.c` 単体、CanIf は上位層通知4関数
-（TxConfirmation/ControllerBusOff/RxIndication/ControllerWakeup）だけをフェイク
-に差し替えて隔離）のような単一モジュールのテストとは別に、
+```bash
+# ホスト上でビルド・実行（GoogleTest、実 HW 不要）
+pio test -e native      # Gpt/E2E_P05/Can 単体
+pio test -e native_chain  # Tx/Rx処理コールチェーン
+$env:DET_LOG_VERBOSE = "1"; pio test -e native_chain -v # TRACE ログ出力
+```
+
+事前準備として、ホスト用の C++17 対応 MinGW-w64/GCC がインストールされ
+`g++` に PATH が通っている必要がある（`uno_r4` 環境のビルドとは別の
+ネイティブコンパイラ）。初回実行時に GoogleTest ライブラリと `native`
+プラットフォームを自動ダウンロードする。
+
+> **Windows 環境固有の注意（MinGW-w64 のランタイム不整合）**:
+> 一部の MinGW-w64 配布物（msvcrt ランタイム版）では、GoogleTest の
+> death test 機構経由で `libmingw32.a` 内の UCRT 専用シンボル
+> (`__imp_quick_exit`/`__imp__Exit`) が要求され、
+> `undefined reference to __imp_quick_exit` 等でリンクに失敗することがある。
+> `test/test_native/win_quick_exit_stub.cpp` はこの環境向けの回避コード
+> （該当シンボルを `std::exit()` へ委譲する自前スタブで満たす）。
+> UCRT ランタイム版の MinGW-w64 を使っている場合は本来不要で、
+> `__imp_quick_exit`/`__imp__Exit` の多重定義エラーが出たら削除すること。
+
+<a id="unit-test-chain"></a>
+#### コールチェーンのテスト（`[env:native_chain]`）
+
+<a id="unit-test-tx"></a>
+##### Tx 処理（Com → PduR → CanIf → Can の順）
+
 [「Tx 処理」コールチェーン](#tx-processing)（`Com_SendSignal()` → …
 → `Com_MainFunction()` → `PduR_Transmit()` → `CanIf_Transmit()` →
 `Can_Write()`）を複数モジュールにわたって実体（Com.c/PduR.c/CanIf.c/Can.c）で
-リンクし、そのまま検証する `Bsw_TxChain_test.cpp` を `test/test_chain/`
-（`[env:native_chain]`）という別のテスト環境に用意している
-（`Com.c`/`PduR.c`/`CanIf.c` それぞれ単体のテストではなく、README の
+リンクし、そのまま検証する `Bsw_TxChain_test.cpp` を `test/test_chain/` に
+用意しています（`Com.c`/`PduR.c`/`CanIf.c` それぞれ単体のテストではなく、README の
 コールチェーン図そのものを実行して理解・確認するのが主目的）。
-`[env:native]`（`test/test_native/`）は Can.c 単体を CanIf フェイクで
-隔離して検証しており、同じバイナリに CanIf.c の本物を混在させるとシンボル
-多重定義になるため、env（＝ビルドディレクトリ・バイナリ）そのものを
-分けて共存させている。コールチェーン図に明示されている非同期の切れ目
+コールチェーン図に明示されている非同期の切れ目
 （`Com_TxPending` というキュー経由で次回 `Com_MainFunction()` まで待機する
 箇所）でテストを2つのセグメントに分け、それぞれを個別に実行可能な
 `TEST_F` ケースとしている（`--gtest_filter=Bsw_TxChain_Test.ComSendSignal_*` 等で
@@ -1108,6 +1125,9 @@ GoogleTest により検証する `[env:native]` 環境を用意している
 Hal_Can_Hw_fake.c`）で、CanIf.c が呼ぶ `CanSM_RxIndication()` 等は
 `Bsw_CanSM_fake.c`（no-op スタブ、CanSM 自身のロジックは README
 「ECU管理層」の別のコールチェーンのため対象外）で満たしている。
+
+<a id="unit-test-rx"></a>
+##### Rx 処理（Can → CanIf → PduR → Com の順）
 
 同じ `test/test_chain/` に、[「Rx 処理」コールチェーン](#rx-processing)
 （`Can_MainFunction_Read()` → `CanIf_RxIndication()` →
@@ -1122,32 +1142,29 @@ Hal_Can_Hw_fake.c`）で、CanIf.c が呼ぶ `CanSM_RxIndication()` 等は
 起点とする1つのコールチェーンとして検証している（詳細は
 `Bsw_RxChain_test.cpp` 冒頭のコメント参照）。
 
-```bash
-# ホスト上でビルド・実行（GoogleTest、実 HW 不要）
-pio test -e native      # Gpt/E2E_P05/Can 単体
-pio test -e native_chain  # Tx/Rx処理コールチェーン
-```
+<a id="unit-test-single"></a>
+#### 単一モジュールのテスト（`[env:native]`）
 
-事前準備として、ホスト用の C++17 対応 MinGW-w64/GCC がインストールされ
-`g++` に PATH が通っている必要がある（`uno_r4` 環境のビルドとは別の
-ネイティブコンパイラ）。初回実行時に GoogleTest ライブラリと `native`
-プラットフォームを自動ダウンロードする。
+全モジュールのテストは `test/test_native/` 1 フォルダに集約し、HAL 層
+（`*_Hw` ファイル）だけをフェイクに差し替えて、その上位の実モジュールは
+依存関係の下位から順に `build_src_filter` へ積み上げていく方式を取っている
+（現状は `src/Bsw/Gpt/Gpt.c` と `src/Bsw/E2E/E2E_P05.c` が対象）。ファイル名は
+`{層}_{モジュール}_{test|fake}`（実ファイル名が `<Module>_Hw` の場合はそれも
+含める。例: `Bsw_Gpt_test.cpp`、`Hal_Gpt_Hw_fake.c`）で統一し、フォルダを
+分けなくてもどの層・モジュールのファイルかが名前だけで分かるようにしている。
+`Gpt_OnTick()`（本来 ISR から呼ばれる関数）はテストから直接呼ぶことで、
+実割り込みなしに状態機械を駆動している。
+
+`Bsw_Can_test.cpp`（`src/Bsw/Can/Can.c` 単体、CanIf は上位層通知4関数
+（TxConfirmation/ControllerBusOff/RxIndication/ControllerWakeup）だけをフェイク
+に差し替えて隔離）はこの方式の一例です（[コールチェーンのテスト](#unit-test-chain)
+の env と分離している理由は前節参照）。
 
 新しい Bsw モジュールのテストを追加する場合は `test/test_native/` に
 `{層}_{モジュール}_test.cpp`（および必要なら `{層}_{モジュール}_fake.c`）を
 追加し、`[env:native]` の `build_src_filter` と `-I` にその実ソースを積み
 増す（GoogleTest の `main()` は `test_main.cpp` に集約しているため、新規
 テストファイルには `int main()` を書かないこと）。
-
-> **Windows 環境固有の注意（MinGW-w64 のランタイム不整合）**:
-> 一部の MinGW-w64 配布物（msvcrt ランタイム版）では、GoogleTest の
-> death test 機構経由で `libmingw32.a` 内の UCRT 専用シンボル
-> (`__imp_quick_exit`/`__imp__Exit`) が要求され、
-> `undefined reference to __imp_quick_exit` 等でリンクに失敗することがある。
-> `test/test_native/win_quick_exit_stub.cpp` はこの環境向けの回避コード
-> （該当シンボルを `std::exit()` へ委譲する自前スタブで満たす）。
-> UCRT ランタイム版の MinGW-w64 を使っている場合は本来不要で、
-> `__imp_quick_exit`/`__imp__Exit` の多重定義エラーが出たら削除すること。
 
 <a id="capl-scripting"></a>
 ### CAPL 風スクリプト機能（tools/uds_tester）
