@@ -33,11 +33,12 @@ ARXML や設定ツールは使用せず、コードで階層構造・型定義�
       - [呼び出し元は BswM（実 AUTOSAR の標準構成）](#ipdu-group-caller)
       - [Com_IpduGroupStart/Stop が実際に行うこと](#ipdu-group-behavior)
       - [動作確認方法](#ipdu-group-verification)
+    - [CAN 通信状態管理（ComM / CanSM / Nm）](#can-comm-management)
+      - [処理の流れ（コールチェーン）](#processing-flow-comm)
+      - [CAN コントローラのスリープ制御（Can / CanSM / Nm 横断）](#can-controller-sleep)
   - [診断スタック（CanTp / Dcm / Dem / FiM / NvM）](#diag-stack)
     - [UDS ボタン送信ツール（tools/uds_tester）](#uds-tester-tool)
-  - [ECU 管理層（EcuM / BswM / WdgM / ComM / CanSM / Nm）](#ecu-management)
-    - [処理の流れ（コールチェーン）](#processing-flow-ecu)
-    - [CAN コントローラのスリープ制御（Can / CanSM / Nm / BswM 横断）](#bswm-controller-sleep)
+  - [ECU 管理層（EcuM / BswM / WdgM）](#ecu-management)
   - [IO スタック（IoHwAb / Dio / Port / Adc）](#io-stack)
     - [処理の流れ（コールチェーン）](#processing-flow-io)
   - [アプリケーション（App_EngineManager / App_WarningIndicator）](#application)
@@ -779,81 +780,26 @@ UDS 0x28 実装は「全 I-PDU 一括」のままの方が既存のテストが�
 `act=2`=`BSWM_ACTION_PDU_GROUP_START`、`act=3`=`BSWM_ACTION_PDU_GROUP_STOP`、
 `mask=0x000` は PDU_GROUP 系アクションでは `TaskMask` を使わないため無意味な値です。）
 
-<a id="diag-stack"></a>
-### 診断スタック（CanTp / Dcm / Dem / FiM / NvM）
+<a id="can-comm-management"></a>
+#### CAN 通信状態管理（ComM / CanSM / Nm）
 
-UDS 診断（ISO 14229-1）を処理するスタックです。
-CanTp が ISO 15765-2 のフレーム分割・組立を担い、Dcm が UDS サービスを処理します。
-Dem は故障情報を DTC として管理し、NvM 経由で EEPROM に永続化します。
-FiM は Dem が確定した DTC をもとにアプリ機能の実行許可を判定します。
-診断フレームはアプリデータ（0x100 / 0x110 / 0x200）とは独立した CAN ID（0x7E0 / 0x7E8）で通信します。
+CAN バス通信の有効・無効（NO_COM/FULL_COM）を管理する ComM、CAN コントローラの
+状態遷移（Bus-Off 回復・スリープ/ウェイクアップ）を担う CanSM、ネットワーク
+マネジメント（CanNm 相当）を担う Nm の3モジュールをまとめます。実 AUTOSAR でも
+これらは Com/PduR と同じ「Communication Services」クラスタに属し、EcuM/BswM/WdgM
+（System Services、[ECU 管理層](#ecu-management)参照）とは別グループです。
 
-このスタックを構成する各モジュール（CanTp/Dcm/Dem/FiM/NvM）の本プロジェクトでの役割は、
-上記「[モジュール一覧](#module-list)」表の「概要」列（リンク先の `docs/modules/` 配下の
-個別ノート）を参照してください。
-
-<a id="uds-tester-tool"></a>
-#### UDS ボタン送信ツール（tools/uds_tester）
-
-セッション制御・SecurityAccess・複数フレーム応答の FC 送信など、手動操作する
-項目が増えて Cangaroo での都度のフレーム手入力が煩雑になってきたため、
-よく使う UDS コマンドをボタン 1 つで送信できる Python/Tkinter 製の補助ツールを
-`tools/uds_tester/` に用意しています。
-
-| 機能 | 説明 |
-|------|------|
-| ボタン送信 | `config.json` に定義した SF フレームをそのまま送信 |
-| E2E 自動付加 | `config.json` の `"e2e"` フィールドを持つボタン（EngineInfo/AbsInfo 等）は、Counter と CRC を自動計算して付加。`"profile": "p05"` を指定したボタン（EngineInfo/AbsInfo）は Counter（0–255 のフルレンジ、予約値なし）と CRC16（多項式0x1021、E2E Profile05）、未指定（既定）のボタンは Counter（0–15 のリングカウンタ）と CRC8 SAE J1850（E2E Profile01）を使う。Counter は送信のたびにインクリメントされ、データ入力欄にもリアルタイム反映。入力欄の値を手動編集してから送信した場合はその値をそのまま送信（E2E バイトを上書きして送信 = 意図的な E2E エラーテストが可能） |
-| 複数フレーム要求の送信 | `type: "multiframe"` のボタンは FF 送信 → ECU からの FC(CTS) 待ち → CF 送信、という ISO-TP 送信側を自前で実装（0x2E WriteDataByIdentifier 用） |
-| 複数フレーム応答の自動 FC | 応答が FF で始まったら `30 00 00 00 00 00 00 00` を自動送信し、CF を再結合（上記の Cangaroo 手動 FC 送信が不要になる） |
-| SecurityAccess Level1 自動実行 | requestSeed → `key = seed XOR 0xA55A`（`Dcm_ComputeSecurityKey()` と同一式）を計算 → sendKey を 1 クリックで実行 |
-| 応答の簡易デコード | 0x22 の DID 値、0x19 の DTC 名・FreezeFrame、0x2F の controlOptionRecord 名・適用後レベル、0x31 の routineStatusRecord（実行中/PASS/FAIL）、0x7F の NRC 名を人間が読める形式で表示 |
-| ランプ IOControl (0x2F) | RunLamp/FaultLamp/AbsLamp ごとに returnControlToECU / resetToDefault / freezeCurrentState / shortTermAdjustment(ON/OFF) をプリセットから送信 |
-| RoutineControl (0x31) | EngineHealthCheck (RID 0203) の startRoutine / requestRoutineResults / stopRoutine をプリセットから送信 |
-| 周期送信 + 周期(ms)入力欄 | コマンド一覧の各ボタン（`can_frame`型・`raw`型（UDS）とも）に「定期」トグルボタンと周期(ms)の編集可能な入力欄を用意。Tester Present もこの仕組みで周期送信する（既定2000ms） |
-
-```
-cd tools/uds_tester
-pip install -r requirements.txt
-python src/app.py
-```
-
-Windows で `pip install` 済みなら `tools/uds_tester/run.bat` をダブルクリックしても
-起動できます（内部で自分自身のディレクトリへ `cd` してから `python src\app.py` を
-実行するだけの薄いランチャーです）。
-
-接続先は GUI 上の `interface` / `channel` / `bitrate` で指定します
-（既定値は `config.json` の `can` セクション）。CANable / candleLight 互換
-アダプタの場合は `interface=gs_usb`, `channel=0`。SLCAN 系の COM ポートアダプタ
-の場合は `interface=slcan`, `channel=COM3` のように変更してください。
-
-> **Cangaroo と同時に同じアダプタへ接続することはできません。** 干渉する場合は
-> どちらか一方を切断してください。
-
-ボタンの追加・変更はコードを触らず `config.json` の `buttons` 配列に項目を
-追加するだけで行えます（本プロジェクトの `*_PBCfg.c` と同じ「コードと設定の分離」
-の考え方です）。
-
-GUI のボタン送信に加え、複数手順を一連の操作としてスクリプト化できる CAPL 風の
-スクリプト機能も用意しています。詳細は「[CAPL 風スクリプト機能](#capl-scripting)」
-（テスト章）を参照してください。
-
-<a id="ecu-management"></a>
-### ECU 管理層（EcuM / BswM / WdgM / ComM / CanSM / Nm）
-
-ECU の起動・シャットダウンのライフサイクルと、タスク制御・ソフトウェア監視を担うモジュール群です。
-EcuM が状態遷移を決定し、BswM がその状態に応じたタスクの有効・無効を制御し、WdgM がタスク内部の動作を監視します。
-
-このスタックを構成する各モジュール（EcuM/BswM/WdgM/ComM/CanSM/Nm）の本プロジェクトでの
-役割は、上記「[モジュール一覧](#module-list)」表の「概要」列（リンク先の `docs/modules/`
+このスタックを構成する各モジュール（ComM/CanSM/Nm）の本プロジェクトでの役割は、
+上記「[モジュール一覧](#module-list)」表の「概要」列（リンク先の `docs/modules/`
 配下の個別ノート）を参照してください。
 
-<a id="processing-flow-ecu"></a>
-#### 処理の流れ（コールチェーン）
+<a id="processing-flow-comm"></a>
+##### 処理の流れ（コールチェーン）
 
 AUTOSAR では「上から下への要求 (Request)」と「下から上への通知 (Indication)」が分離されています。
 Bus-Off 回復・ウェイクアップ検証は CanSM が中心となって EcuM/ComM/Nm/Can と連携するため、
 特定の 1 モジュールに閉じた話ではなく、ここでモジュール横断のコールチェーンとしてまとめます。
+EcuM/BswM が関わる箇所は「← EcuM が ComM へ要求」のように図中に個別注釈しています。
 
 ```
 【起動時】
@@ -929,16 +875,18 @@ CanSM_MainFunction（10ms タスク、SHUTDOWN 中も動き続ける）
             └→ CanSM: WAKEUP_VALIDATING → NO_COM（ComM/EcuM は一切関与せず、静かに再スリープ）
 ```
 
-<a id="bswm-controller-sleep"></a>
-#### CAN コントローラのスリープ制御（Can / CanSM / Nm / BswM 横断）
+<a id="can-controller-sleep"></a>
+##### CAN コントローラのスリープ制御（Can / CanSM / Nm 横断）
 
-EcuM/BswM/ComM/WdgM/Nm 各モジュールの本プロジェクトでの役割は、上記
+ComM/CanSM/Nm 各モジュールの本プロジェクトでの役割は、上記
 「[モジュール一覧](#module-list)」表の「概要」列（リンク先の `docs/modules/`
 配下の個別ノート）を参照してください。以下の2節（CAN コントローラの実スリープ・
-ボランタリスリープとウェイクアップ）は実質的に Can/CanSM/Nm 横断の内容のため
-このまま README に残します。
+ボランタリスリープとウェイクアップ）は Can/CanSM/Nm 横断の内容ですが、
+スリープ判断の起点（`App_EngineManager_Run()` → `ComM_RequestComMode`）や
+ウェイクアップ成功時の `EcuM_RequestRUN()` など、EcuM/BswM が関わる箇所は
+以下のコールチェーン図中に個別に注釈しています。
 
-##### CAN コントローラの実スリープ（`Can_SetControllerMode(CAN_T_SLEEP)`）
+###### CAN コントローラの実スリープ（`Can_SetControllerMode(CAN_T_SLEEP)`）
 
 `Can.c` には `CAN_T_SLEEP`/`CAN_T_WAKEUP` 遷移（MCP2515 を実際にスリープさせる
 `Can_Hw_SetMode(CAN_HW_MODE_SLEEP)`）が以前から実装されていましたが、当初は
@@ -965,7 +913,7 @@ Mode と自律的に遷移し（他ノードからの NM フレーム受信が�
 > 存在せず、この無期限リトライ設計に至った経緯は
 > [`CanSM_Notes.md`](docs/modules/CanSM_Notes.md#bus-off-回復断念設計の撤去) を参照してください。
 
-##### ボランタリスリープとウェイクアップ
+###### ボランタリスリープとウェイクアップ
 
 CAN コントローラを実際にスリープさせる唯一の経路（ボランタリスリープ）について、
 スリープ判断からウェイクアップまでの一連の流れを詳しく説明します。
@@ -1083,6 +1031,86 @@ INFO CanSM: Wakeup detected -> validating (Listen-Only, waiting for confirmed RX
 WARN CanSM: Wakeup validation timeout (2000ms, no confirmed RX) -> back to SLEEP
 （ComM/EcuM には何も通知されないため、SHUTDOWN 状態はそのまま維持される）
 ```
+
+<a id="diag-stack"></a>
+### 診断スタック（CanTp / Dcm / Dem / FiM / NvM）
+
+UDS 診断（ISO 14229-1）を処理するスタックです。
+CanTp が ISO 15765-2 のフレーム分割・組立を担い、Dcm が UDS サービスを処理します。
+Dem は故障情報を DTC として管理し、NvM 経由で EEPROM に永続化します。
+FiM は Dem が確定した DTC をもとにアプリ機能の実行許可を判定します。
+診断フレームはアプリデータ（0x100 / 0x110 / 0x200）とは独立した CAN ID（0x7E0 / 0x7E8）で通信します。
+
+このスタックを構成する各モジュール（CanTp/Dcm/Dem/FiM/NvM）の本プロジェクトでの役割は、
+上記「[モジュール一覧](#module-list)」表の「概要」列（リンク先の `docs/modules/` 配下の
+個別ノート）を参照してください。
+
+<a id="uds-tester-tool"></a>
+#### UDS ボタン送信ツール（tools/uds_tester）
+
+セッション制御・SecurityAccess・複数フレーム応答の FC 送信など、手動操作する
+項目が増えて Cangaroo での都度のフレーム手入力が煩雑になってきたため、
+よく使う UDS コマンドをボタン 1 つで送信できる Python/Tkinter 製の補助ツールを
+`tools/uds_tester/` に用意しています。
+
+| 機能 | 説明 |
+|------|------|
+| ボタン送信 | `config.json` に定義した SF フレームをそのまま送信 |
+| E2E 自動付加 | `config.json` の `"e2e"` フィールドを持つボタン（EngineInfo/AbsInfo 等）は、Counter と CRC を自動計算して付加。`"profile": "p05"` を指定したボタン（EngineInfo/AbsInfo）は Counter（0–255 のフルレンジ、予約値なし）と CRC16（多項式0x1021、E2E Profile05）、未指定（既定）のボタンは Counter（0–15 のリングカウンタ）と CRC8 SAE J1850（E2E Profile01）を使う。Counter は送信のたびにインクリメントされ、データ入力欄にもリアルタイム反映。入力欄の値を手動編集してから送信した場合はその値をそのまま送信（E2E バイトを上書きして送信 = 意図的な E2E エラーテストが可能） |
+| 複数フレーム要求の送信 | `type: "multiframe"` のボタンは FF 送信 → ECU からの FC(CTS) 待ち → CF 送信、という ISO-TP 送信側を自前で実装（0x2E WriteDataByIdentifier 用） |
+| 複数フレーム応答の自動 FC | 応答が FF で始まったら `30 00 00 00 00 00 00 00` を自動送信し、CF を再結合（上記の Cangaroo 手動 FC 送信が不要になる） |
+| SecurityAccess Level1 自動実行 | requestSeed → `key = seed XOR 0xA55A`（`Dcm_ComputeSecurityKey()` と同一式）を計算 → sendKey を 1 クリックで実行 |
+| 応答の簡易デコード | 0x22 の DID 値、0x19 の DTC 名・FreezeFrame、0x2F の controlOptionRecord 名・適用後レベル、0x31 の routineStatusRecord（実行中/PASS/FAIL）、0x7F の NRC 名を人間が読める形式で表示 |
+| ランプ IOControl (0x2F) | RunLamp/FaultLamp/AbsLamp ごとに returnControlToECU / resetToDefault / freezeCurrentState / shortTermAdjustment(ON/OFF) をプリセットから送信 |
+| RoutineControl (0x31) | EngineHealthCheck (RID 0203) の startRoutine / requestRoutineResults / stopRoutine をプリセットから送信 |
+| 周期送信 + 周期(ms)入力欄 | コマンド一覧の各ボタン（`can_frame`型・`raw`型（UDS）とも）に「定期」トグルボタンと周期(ms)の編集可能な入力欄を用意。Tester Present もこの仕組みで周期送信する（既定2000ms） |
+
+```
+cd tools/uds_tester
+pip install -r requirements.txt
+python src/app.py
+```
+
+Windows で `pip install` 済みなら `tools/uds_tester/run.bat` をダブルクリックしても
+起動できます（内部で自分自身のディレクトリへ `cd` してから `python src\app.py` を
+実行するだけの薄いランチャーです）。
+
+接続先は GUI 上の `interface` / `channel` / `bitrate` で指定します
+（既定値は `config.json` の `can` セクション）。CANable / candleLight 互換
+アダプタの場合は `interface=gs_usb`, `channel=0`。SLCAN 系の COM ポートアダプタ
+の場合は `interface=slcan`, `channel=COM3` のように変更してください。
+
+> **Cangaroo と同時に同じアダプタへ接続することはできません。** 干渉する場合は
+> どちらか一方を切断してください。
+
+ボタンの追加・変更はコードを触らず `config.json` の `buttons` 配列に項目を
+追加するだけで行えます（本プロジェクトの `*_PBCfg.c` と同じ「コードと設定の分離」
+の考え方です）。
+
+GUI のボタン送信に加え、複数手順を一連の操作としてスクリプト化できる CAPL 風の
+スクリプト機能も用意しています。詳細は「[CAPL 風スクリプト機能](#capl-scripting)」
+（テスト章）を参照してください。
+
+<a id="ecu-management"></a>
+### ECU 管理層（EcuM / BswM / WdgM）
+
+ECU の起動・シャットダウンのライフサイクルと、タスク制御・ソフトウェア監視を担うモジュール群です。
+EcuM が状態遷移を決定し、BswM がその状態に応じたタスクの有効・無効を制御し、WdgM がタスク内部の動作を監視します。
+
+このスタックを構成する各モジュール（EcuM/BswM/WdgM）の本プロジェクトでの役割は、上記
+「[モジュール一覧](#module-list)」表の「概要」列（リンク先の `docs/modules/` 配下の
+個別ノート）を参照してください。
+
+> CAN バス通信の有効・無効（NO_COM/FULL_COM）を管理する ComM・CAN コントローラの
+> 状態遷移（Bus-Off 回復・スリープ/ウェイクアップ）を担う CanSM・ネットワーク
+> マネジメントを担う Nm は、実 AUTOSAR では EcuM/BswM/WdgM（System Services）とは
+> 別クラスタ（Communication Services、Com/PduR と同じ側）に属します。本プロジェクトの
+> 実装でも、`BswM.c` は `BswM_ComM_CurrentMode()` という受動的なコールバックのみで
+> ComM/CanSM を呼ばず、`WdgM.c` は ComM/CanSM と一切無関係、`EcuM.c` からの呼び出しも
+> Init 時と `ComM_RequestComMode()` の2箇所に限られます。実際のコールグラフの密度は
+> CanIf/Can 側にあるため、ComM/CanSM/Nm は
+> 「[CAN 通信状態管理](#can-comm-management)」として CAN 通信スタック側にまとめ、
+> EcuM/BswM が関わる箇所はそちらのコールチェーン図中に個別に注釈しています。
 
 ---
 <a id="io-stack"></a>

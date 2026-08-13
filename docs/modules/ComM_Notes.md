@@ -1,6 +1,8 @@
 # ComM（通信マネージャ）
 
-> [README](../../README.md) の「[ECU 管理層](../../README.md#ecu-management)」節から分離。
+> [README](../../README.md) の「[CAN 通信状態管理](../../README.md#can-comm-management)」節から分離
+> （旧「ECU 管理層」節から移動。実 AUTOSAR では EcuM/BswM/WdgM とは別クラスタ
+> [Communication Services] に属するため）。
 
 ComM (Communication Manager) は、複数の「ユーザ」からの通信モード要求を集約し、
 CAN バスの通信モード（NO_COM / SILENT_COM / FULL_COM）を決定するモジュールです。
