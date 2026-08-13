@@ -22,6 +22,43 @@ Nm（CanNm 状態機械）が Bus-Sleep Mode へ到達した通知（`CanSM_NmBu
 による復帰経路を持ち、復帰は即座に確定せず、ウェイクアップ検証（Wakeup Validation
 Protocol 相当）により有効な CAN フレーム受信を確認してから FULL_COM へ確定する。
 
+## 状態遷移
+
+`CanSM_InternalStateType`（`CanSM.c`）が持つ6状態と、実装済みの遷移を全て図示します。
+`NO_COM` と `NO_COM_PENDING_SLEEP` は見た目が近いですが別状態です。前者は
+コントローラが物理的にスリープ済み（または未起動）、後者は NO_COM 要求済みだが
+Nm が Bus-Sleep Mode に到達するまでコントローラが稼働継続中、という違いがあります
+（詳細は上記本文および [`Nm_Notes.md`](./Nm_Notes.md) 参照）。`BUS_OFF` 中は
+`CanSM_RequestComMode()` 冒頭のガードにより ComM からの要求を一切受け付けません
+（`RequestComMode` からの遷移元に `BUS_OFF` が登場しないのはそのため）。
+
+```mermaid
+stateDiagram-v2
+    [*] --> NO_COM
+
+    NO_COM --> FULL_COM: RequestComMode(FULL_COM)
+    NO_COM --> SILENT_COM: RequestComMode(SILENT_COM)
+    NO_COM --> WAKEUP_VALIDATING: ControllerWakeup()
+
+    NO_COM_PENDING_SLEEP --> FULL_COM: RequestComMode(FULL_COM)
+    NO_COM_PENDING_SLEEP --> SILENT_COM: RequestComMode(SILENT_COM)
+    NO_COM_PENDING_SLEEP --> NO_COM: NmBusSleepMode()\n(Nm が Bus-Sleep Mode 到達、物理スリープ)
+    NO_COM_PENDING_SLEEP --> BUS_OFF: ControllerBusOff()
+
+    SILENT_COM --> FULL_COM: RequestComMode(FULL_COM)
+    SILENT_COM --> NO_COM: RequestComMode(NO_COM)
+
+    FULL_COM --> NO_COM_PENDING_SLEEP: RequestComMode(NO_COM)
+    FULL_COM --> SILENT_COM: RequestComMode(SILENT_COM)
+    FULL_COM --> BUS_OFF: ControllerBusOff()
+
+    BUS_OFF --> FULL_COM: MainFunction()\nL1/L2 回復成功（Bus-Off 発生時 FULL_COM）
+    BUS_OFF --> NO_COM_PENDING_SLEEP: MainFunction()\nL1/L2 回復成功（Bus-Off 発生時 NO_COM_PENDING_SLEEP）
+
+    WAKEUP_VALIDATING --> FULL_COM: RxIndication()\n(有効フレーム受信、検証成功)
+    WAKEUP_VALIDATING --> NO_COM: MainFunction()\n(検証タイムアウト、再スリープ)
+```
+
 ## 開発の経緯（実機で見つかった不具合・設計変更）
 
 > 現在の仕様を理解するだけなら読む必要はありません。実機検証で見つかった
