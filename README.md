@@ -20,14 +20,14 @@ ARXML や設定ツールは使用せず、コードで階層構造・型定義�
     - [モジュール一覧](#module-list)
     - [ディレクトリ構成](#directory-structure)
   - [CAN 通信スタック（Can_Hw / Can / CanIf / PduR / Com / E2E / E2EXf / E2EMon / Rte）](#can-stack)
-    - [処理の流れ（コールチェーン）](#processing-flow)
-      - [Tx 処理（Com → PduR → CanIf → Can の順）](#tx-processing)
-        - [通常（E2E なし）](#tx-processing-normal)
-        - [E2E（E2EHealthStatus 送信）](#tx-processing-e2e)
-      - [Rx 処理（Can → CanIf → PduR → Com の順）](#rx-processing)
-        - [通常（E2E なし）](#rx-processing-normal)
-        - [E2E（EngineInfo/AbsInfo 受信）](#rx-processing-e2e)
-        - [デッドライン監視（受信タイムアウト）](#rx-processing-timeout)
+    - [Tx 処理（Com → PduR → CanIf → Can の順）](#tx-processing)
+      - [通常（E2E なし）](#tx-processing-normal)
+      - [E2E（E2EHealthStatus 送信）](#tx-processing-e2e)
+    - [Rx 処理（Can → CanIf → PduR → Com の順）](#rx-processing)
+      - [通常（E2E なし）](#rx-processing-normal)
+      - [E2E（EngineInfo/AbsInfo 受信）](#rx-processing-e2e)
+      - [デッドライン監視（受信タイムアウト）](#rx-processing-timeout)
+      - [受信長チェックの多層防御](#rx-processing-length-check)
     - [E2E 保護（EngineInfo/AbsInfo 受信・E2EHealthStatus 送信ともに Profile05）](#e2e-p01)
       - [I-PDU Group（Com_IpduGroupStart/Stop、通信のライフサイクル制御）](#ipdu-group)
       - [呼び出し元は BswM（実 AUTOSAR の標準構成）](#ipdu-group-caller)
@@ -461,20 +461,14 @@ RX（外部 → Arduino、上り）
 
 このスタックを構成する各モジュール（Rte/E2EMon/E2EXf/E2E/Com/PduR/CanIf/Can/Can_Hw）の
 本プロジェクトでの役割は、上記「[モジュール一覧](#module-list)」表の「概要」列（リンク先の
-`docs/modules/` 配下の個別ノート）を参照してください。
-
-<a id="processing-flow"></a>
-#### 処理の流れ（コールチェーン）
-
-Tx（Com → PduR → CanIf → Can）と Rx（Can → CanIf → PduR → Com）それぞれの関数コールチェーンと、
-レイヤ間の多層防御をモジュール横断の内容としてまとめます。CAN フレームのバイトレイアウトは
+`docs/modules/` 配下の個別ノート）を参照してください。CAN フレームのバイトレイアウトは
 「[CAN フレーム仕様](#can-frame-spec)」（補足）を参照してください。
 
 <a id="tx-processing"></a>
-##### Tx 処理（Com → PduR → CanIf → Can の順）
+#### Tx 処理（Com → PduR → CanIf → Can の順）
 
 <a id="tx-processing-normal"></a>
-###### 通常（E2E なし）
+##### 通常（E2E なし）
 
 ```
 Com_SendSignal()/Com_SendSignalGroup()   ← ASW から呼ばれる。TX バッファへ pack するだけ
@@ -486,17 +480,15 @@ Com_MainFunction()                        ← ここから下は同期呼び出�
         CanIf_Transmit() → Can_Write()（SPI 送信完了までここで同期完了）
 ```
 
-> `TransmitOverrideFct`（PduR の TX 経路に SecOC 等の中間モジュールを挟む機構）
-> 自体は削除していない。以前は E2EHealthStatus が
-> `TransmitOverrideFct=SecOC_IfTransmit` 経由で SecOC → Csm_MacGenerate() →
-> Secured I-PDU 組み立てという二重防御構成だったが、E2E を Profile05（CRC16）へ
-> 強化するにあたり DLC が classic CAN の 8byte 上限を超えるため SecOC を撤去した
-> （詳細は「E2E 保護」「SecOC」の各セクション参照）。現在この機構を使う TX I-PDU
-> は無いが、`PduR_TxRoutingPathType.TransmitOverrideFct` フィールド・
-> `SecOC_IfTransmit()` 自体は学習用リファレンス実装として残している。
+> `TransmitOverrideFct`（PduR の TX 経路に SecOC 等の中間モジュールを挟む機構）を
+> 使う TX I-PDU は現状ない。E2EHealthStatus は Profile05（CRC16）保護により DLC が
+> classic CAN の 8byte 上限を超えるため、SecOC を介在させる余地がない（詳細は
+> 「E2E 保護」「SecOC」の各セクション参照）。それでも `PduR_TxRoutingPathType.
+> TransmitOverrideFct` フィールド・`SecOC_IfTransmit()` 自体は削除せず、
+> 学習用リファレンス実装として残している。
 
 <a id="tx-processing-e2e"></a>
-###### E2E（E2EHealthStatus 送信）
+##### E2E（E2EHealthStatus 送信）
 
 `Com_MainFunction()` の TxTransformCbk フック（[E2E 保護](#e2e-p01) 参照）を経由して、
 Protect 処理が通常のチェーンへ割り込みます。TxTransformCbk を使う TX I-PDU は
@@ -510,10 +502,10 @@ Com_MainFunction()
 ```
 
 <a id="rx-processing"></a>
-##### Rx 処理（Can → CanIf → PduR → Com の順）
+#### Rx 処理（Can → CanIf → PduR → Com の順）
 
 <a id="rx-processing-normal"></a>
-###### 通常（E2E なし）
+##### 通常（E2E なし）
 
 ```
 Can_Isr()                        ← 真の割り込み。ペンディングフラグを立てるだけ
@@ -536,7 +528,7 @@ Can_MainFunction_Read()          ← フラグをドレイン、SPI 読み出し
 > を参照。
 
 <a id="rx-processing-e2e"></a>
-###### E2E（EngineInfo/AbsInfo 受信）
+##### E2E（EngineInfo/AbsInfo 受信）
 
 `Com_RxIndication()` の RxIndicationCbk フック（[E2E 保護](#e2e-p01) 参照）を経由して、
 Check 処理が通常のチェーンへ割り込みます。EngineInfo/AbsInfo いずれも Profile05 です。
@@ -548,7 +540,7 @@ Com_RxIndication()                 ← EngineInfo/AbsInfo（RxIndicationCbk 経�
 ```
 
 <a id="rx-processing-timeout"></a>
-###### デッドライン監視（受信タイムアウト）
+##### デッドライン監視（受信タイムアウト）
 
 上記2つは「フレームが届いた」ときのチェーンだが、こちらは逆に「フレームが
 届かなくなった」ことを検知するチェーン（`AUTOSAR_SWS_COM.pdf` 7.3.6
@@ -577,9 +569,10 @@ TX 処理の `Com_TxPending`（`Com_SendSignal()` が立てて `Com_MainFunction
 超過を確認するだけで、しきい値ちょうどの瞬間に発火する割り込みではない
 （検知は最大約100ms 遅れうる）。
 
+<a id="rx-processing-length-check"></a>
 ##### 受信長チェックの多層防御
 
-**受信長チェックの多層防御**: 設定 DLC に満たない短小フレームは、まず `CanIf_RxIndication()`
+設定 DLC に満たない短小フレームは、まず `CanIf_RxIndication()`
 が棄却する（SWS_CANIF_00026 相当、本来この責務は CanIf 層にある）。仮に何らかの理由で
 ここを通過しても、`Com_RxIndication()`・`CanTp_RxIndication()`（SF/FF/CF/FC 各フレーム）
 がそれぞれ独立に自分の期待長を検証する。1 箇所だけに頼らず各層が自分の責務として
@@ -621,9 +614,8 @@ E2EHealthStatus の送信いずれも `src/Bsw/E2E/E2E_P05.c` の CRC16+8bit カ
 > **統合方式（E2E Transformer）:** Com は E2E の存在を一切関知しません。AUTOSAR が定義する
 > 3 通りの E2E 統合方式のうち「E2E Transformer」（`docs/AUTOSAR_SWS_E2ELibrary.pdf` 12.4 節、
 > R4.2.1 以降）を模しており、CRC/Counter の検証・付与は Com の外側（`Rte` 層 +
-> `src/Bsw/E2EXf/`）が担います。以前は Com 自身が I-PDU ごとに E2E ロジックを直接埋め込む
-> 「COM E2E Callout」に近い設計でしたが、Com から BSW 層をまたいだ責務を切り離すために
-> 移行しました（詳細は本セクション内の「Com モジュールとの統合」を参照）。
+> `src/Bsw/E2EXf/`）が担います。Com から BSW 層をまたいだ責務を切り離す設計です
+> （詳細は本セクション内の「Com モジュールとの統合」を参照）。
 >
 > **E2EXf 自身の初期化状態ガード（SWS_E2EXf_00130/00133/00151）:** E2EXf は下位の
 > `E2E_P01CheckStateType`/`E2E_P01ProtectStateType`（フレームごとの Check/Protect 状態）
@@ -644,9 +636,8 @@ E2EHealthStatus の送信いずれも `src/Bsw/E2E/E2E_P05.c` の CRC16+8bit カ
 - **E2EHealthStatus（CAN 0x220、送信）**: 本 ECU（メータ ECU）が送信する、EngineInfo/AbsInfo
   受信側の E2E 検証エラー累積数を伝えるネットワーク健全性テレメトリに `E2E_P05Protect`で
   Counter・CRC16 を付加（本セクション後半の E2EMon サブセクション参照）。
-  監視ツールがこのテレメトリ自体の破損を検出できるようにするためです。以前は
-  Profile01+SecOC の二重保護でしたが、E2E の検出能力を高めるため Profile05 単体保護に
-  切り替えました（詳細は「送信側（Protect）— E2EHealthStatus」参照）
+  監視ツールがこのテレメトリ自体の破損を検出できるようにするため、検出能力の高い
+  Profile05 単体保護を採用しています（詳細は「送信側（Protect）— E2EHealthStatus」参照）
 
 > MeterStatus（CAN 0x200、送信）・WarningStatus（CAN 0x210、送信）には E2E 保護を
 > 付与していません。MeterStatus は EngineInfo/AbsInfo を Com が既に検証した**後**に
@@ -750,35 +741,9 @@ UDS 0x28 実装は「全 I-PDU 一括」のままの方が既存のテストが�
 ##### 動作確認方法
 
 実機ログで、EcuM が RUN → POST_RUN → SHUTDOWN → （ウェイクアップ）→ RUN と
-遷移する様子を観察すると、以下が確認できます。
-
-```
-[1159ms]  INFO  EcuM: ->RUN
-[1162ms]  INFO  BswM: Rule0 fired src=0 val=0x10 act=0 mask=0xFFFF
-[1163ms]  INFO  BswM: Rule3 fired src=0 val=0x10 act=2 mask=0x000
-[1164ms]  INFO  Com: IpduGroupStart grp=0 iPdu=2(TX) init=0
-...
-[7138ms]  INFO  Com: TX iPdu=2 [E6 3D 00 00 00]      # テレメトリ、通常どおり送信される
-
-# ボランタリスリープで POST_RUN へ入った直後
-[16395ms] INFO  EcuM: ->POST_RUN timeout=5000ms
-[16396ms] INFO  BswM: Rule1 fired src=0 val=0x20 act=1 mask=0x00C
-[16397ms] INFO  BswM: Rule4 fired src=0 val=0x20 act=3 mask=0x000
-[16398ms] INFO  Com: IpduGroupStop grp=0 iPdu=2(TX)
-# 以降、EcuM: ->SHUTDOWN まで "Com: TX iPdu=2" が一切出力されなくなる
-# （EngineInfo の受信・MeterStatus 等の送信は Rule1 の対象外なので継続する）
-
-# CAN バスのウェイクアップで RUN へ復帰
-[80647ms] INFO  EcuM: SHUTDOWN ->RUN (wakeup) user=0
-[80648ms] INFO  BswM: Rule0 fired src=0 val=0x10 act=0 mask=0xFFFF
-[80649ms] INFO  BswM: Rule3 fired src=0 val=0x10 act=2 mask=0x000
-[80650ms] INFO  Com: IpduGroupStart grp=0 iPdu=2(TX) init=0
-# 以降、E2EHealthStatus の PERIODIC 送信が再開する
-```
-
-（ログの正確なタイムスタンプ・`act=`/`mask=` の値は実機で確認してください。
-`act=2`=`BSWM_ACTION_PDU_GROUP_START`、`act=3`=`BSWM_ACTION_PDU_GROUP_STOP`、
-`mask=0x000` は PDU_GROUP 系アクションでは `TaskMask` を使わないため無意味な値です。）
+遷移する際、I-PDU Group の開始/停止が連動する様子が確認できます。ログ例は
+「[シリアルモニタ出力例](#serial-log-example)」の
+「I-PDU Group 開始/停止（RUN/POST_RUN/SHUTDOWN 連動）」を参照してください。
 
 <a id="can-comm-management"></a>
 #### CAN 通信状態管理（ComM / CanSM / Nm）
@@ -791,7 +756,9 @@ CAN バス通信の有効・無効（NO_COM/FULL_COM）を管理する ComM、CA
 
 このスタックを構成する各モジュール（ComM/CanSM/Nm）の本プロジェクトでの役割は、
 上記「[モジュール一覧](#module-list)」表の「概要」列（リンク先の `docs/modules/`
-配下の個別ノート）を参照してください。
+配下の個別ノート）を参照してください。CanSM は6状態・多数の条件分岐を持つ
+状態機械のため、状態遷移図を
+[`CanSM_Notes.md`（状態遷移）](docs/modules/CanSM_Notes.md#状態遷移)に用意しています。
 
 <a id="processing-flow-comm"></a>
 ##### 処理の流れ（コールチェーン）
@@ -812,9 +779,9 @@ EcuM_Init → ComM_RequestComMode(FULL_COM)   ← EcuM が ComM へ要求（上�
 CanIf_ControllerBusOff → CanSM_ControllerBusOff
   受け付けるのは CANSM_STATE_FULL_COM と CANSM_STATE_NO_COM_PENDING_SLEEP
   （Nm の Bus-Sleep Mode 到達待ちでコントローラがまだ稼働中の状態）の 2 つのみ
-  （2026-08 発見・修正: 以前は FULL_COM のみを受け付けており、
-   NO_COM_PENDING_SLEEP 中の実 Bus-Off は黙って無視され、回復シーケンスが
-   一切起動しないままコントローラが HW 的に Bus-Off し続ける不具合があった）
+  （NO_COM_PENDING_SLEEP 中もコントローラは稼働中で Bus-Off が発生しうるため、
+   FULL_COM だけを受け付ける設計では回復シーケンスが一切起動せず、
+   コントローラが HW 的に Bus-Off し続けてしまう）
   └→ Can_SetControllerMode(CAN_T_STOP)
        └→ ComM_BusSMIndication(SILENT_COM)  ← CanSM が ComM へ通知（下→上）
             （SILENT_COM は EcuM_RequestRUN/ReleaseRUN いずれも呼ばない → RUN 維持）
@@ -888,9 +855,8 @@ ComM/CanSM/Nm 各モジュールの本プロジェクトでの役割は、上記
 
 ###### CAN コントローラの実スリープ（`Can_SetControllerMode(CAN_T_SLEEP)`）
 
-`Can.c` には `CAN_T_SLEEP`/`CAN_T_WAKEUP` 遷移（MCP2515 を実際にスリープさせる
-`Can_Hw_SetMode(CAN_HW_MODE_SLEEP)`）が以前から実装されていましたが、当初は
-呼び出し元がなく死んだコードパスでした。現在は唯一の経路として、ComM の NO_COM
+`Can.c` の `CAN_T_SLEEP`/`CAN_T_WAKEUP` 遷移（MCP2515 を実際にスリープさせる
+`Can_Hw_SetMode(CAN_HW_MODE_SLEEP)`）は、唯一の経路として ComM の NO_COM
 要求に端を発する `Nm`（CanNm 状態機械）の協調スリープから実際にスリープします。
 
 `App_EngineManager_Run()` が `ENGINE_STATE_OFF` の継続を検知して
@@ -981,56 +947,13 @@ CanIf が受信したフレーム**すべて**について（特定の PDU に�
 受信できた」こと自体が、直前のウェイクアップが本物のバス活動だった証拠になる
 という考え方です。
 
-**旧設計からの改善: ウェイクアップ契機フレームの取りこぼしが解消された**
+検証成功の判定に使われたフレーム自体も失われません。`CanSM_RxIndication()` の
+直後に続く `CanIf_RxIndication()` の通常の PDU 振り分け処理でそのまま
+PduR/Com/Dcm 等へ配信されます。
 
-検証前の実装では、ウェイクアップ検出と同じ `Can_Isr()` 呼び出しの中で即座に
-`CAN_T_START` まで遷移させていたため、ウェイクアップの引き金になった
-フレーム自体は正しく受信される保証がありませんでした。今回、検証成功の
-判定を「実際に受信できたフレーム」に基づかせる設計に変更したことで、
-検証を成功させたフレームは `CanSM_RxIndication()` の直後に続く
-`CanIf_RxIndication()` の通常の PDU 振り分け処理でそのまま PduR/Com/Dcm 等へ
-配信されます。ウェイクアップの契機になったフレームが失われるという制約は
-この設計変更で解消されました。
-
-**想定されるログ例（スリープ突入 → ウェイクアップ検証成功）**
-
-以下は設計上想定される一連のログです（実機での確認結果ではなく、コードから
-導かれる期待値である点に注意してください）。
-
-```
-[エンジン OFF が15秒 (5周期) 継続]
-INFO AppEng: OFF continued 5 cycles -> release COMM_USER_0 (voluntary sleep)
-INFO ComM: User0 req=0 -> aggregated=0 (channel=2)
-INFO CanSM: ->NO_COM (CAN controller SLEEP)
-INFO ComM: ch0 ->mode=0
-INFO EcuM: ->POST_RUN timeout=5000ms
-INFO EcuM: ->SHUTDOWN
-
-[CAN バスに何らかのフレームが送信される（INT アサート検出）]
-INFO Can: Wakeup detected (INT asserted during SLEEP)
-INFO CanIf: ControllerWakeup ch=0
-INFO CanSM: Wakeup detected -> validating (Listen-Only, waiting for confirmed RX)
-
-[検証タイマ内 (既定2000ms) に実際にフレームを受信 → 検証成功]
-INFO CanSM: Wakeup validated (RX confirmed) -> FULL_COM
-INFO ComM: ch0 ->mode=2
-INFO EcuM: SHUTDOWN ->RUN (wakeup) user=0
-
-[App_EngineManager_Run が再開（最大3000ms後）]
-INFO AppEng: ComM FULL_COM resumed -> sleep countdown reset (grace cycle)
-```
-
-**想定されるログ例（ノイズによる誤ウェイクアップ、検証失敗）**
-
-```
-INFO Can: Wakeup detected (INT asserted during SLEEP)
-INFO CanIf: ControllerWakeup ch=0
-INFO CanSM: Wakeup detected -> validating (Listen-Only, waiting for confirmed RX)
-
-[検証タイマ超過、有効なフレームを1つも受信できなかった]
-WARN CanSM: Wakeup validation timeout (2000ms, no confirmed RX) -> back to SLEEP
-（ComM/EcuM には何も通知されないため、SHUTDOWN 状態はそのまま維持される）
-```
+想定されるログ例（スリープ突入 → ウェイクアップ検証成功・ノイズによる誤ウェイクアップ）は
+「[シリアルモニタ出力例](#serial-log-example)」の
+「スリープ / ウェイクアップ（想定されるログ例、実機未検証）」を参照してください。
 
 <a id="diag-stack"></a>
 ### 診断スタック（CanTp / Dcm / Dem / FiM / NvM）
@@ -1685,6 +1608,83 @@ LEVEL は ERROR / WARN  / INFO  / DEBUG の 5 文字固定幅で列が揃いま�
 # S3 タイマ: ExtendedDiagnosticSession へ切替後、5 秒以上どの要求も来なかった場合
 [20000ms] INFO  Dcm: 10 session=0x03             # ExtendedDiagnosticSession へ切替（S3 タイマ起動）
 [25000ms] INFO  Dcm: S3 timeout -> session=Default  # 1000ms 周期の Dcm_MainFunction が検出
+```
+
+#### I-PDU Group 開始/停止（RUN/POST_RUN/SHUTDOWN 連動）
+
+実機ログで、EcuM が RUN → POST_RUN → SHUTDOWN → （ウェイクアップ）→ RUN と
+遷移する様子を観察すると、以下が確認できます（[I-PDU Group](#ipdu-group)参照）。
+
+```
+[1159ms]  INFO  EcuM: ->RUN
+[1162ms]  INFO  BswM: Rule0 fired src=0 val=0x10 act=0 mask=0xFFFF
+[1163ms]  INFO  BswM: Rule3 fired src=0 val=0x10 act=2 mask=0x000
+[1164ms]  INFO  Com: IpduGroupStart grp=0 iPdu=2(TX) init=0
+...
+[7138ms]  INFO  Com: TX iPdu=2 [E6 3D 00 00 00]      # テレメトリ、通常どおり送信される
+
+# ボランタリスリープで POST_RUN へ入った直後
+[16395ms] INFO  EcuM: ->POST_RUN timeout=5000ms
+[16396ms] INFO  BswM: Rule1 fired src=0 val=0x20 act=1 mask=0x00C
+[16397ms] INFO  BswM: Rule4 fired src=0 val=0x20 act=3 mask=0x000
+[16398ms] INFO  Com: IpduGroupStop grp=0 iPdu=2(TX)
+# 以降、EcuM: ->SHUTDOWN まで "Com: TX iPdu=2" が一切出力されなくなる
+# （EngineInfo の受信・MeterStatus 等の送信は Rule1 の対象外なので継続する）
+
+# CAN バスのウェイクアップで RUN へ復帰
+[80647ms] INFO  EcuM: SHUTDOWN ->RUN (wakeup) user=0
+[80648ms] INFO  BswM: Rule0 fired src=0 val=0x10 act=0 mask=0xFFFF
+[80649ms] INFO  BswM: Rule3 fired src=0 val=0x10 act=2 mask=0x000
+[80650ms] INFO  Com: IpduGroupStart grp=0 iPdu=2(TX) init=0
+# 以降、E2EHealthStatus の PERIODIC 送信が再開する
+```
+
+（ログの正確なタイムスタンプ・`act=`/`mask=` の値は実機で確認してください。
+`act=2`=`BSWM_ACTION_PDU_GROUP_START`、`act=3`=`BSWM_ACTION_PDU_GROUP_STOP`、
+`mask=0x000` は PDU_GROUP 系アクションでは `TaskMask` を使わないため無意味な値です。）
+
+#### スリープ / ウェイクアップ（想定されるログ例、実機未検証）
+
+以下は設計上想定される一連のログです（実機での確認結果ではなく、コードから
+導かれる期待値である点に注意してください）。「[CAN コントローラのスリープ制御](#can-controller-sleep)」
+（ボランタリスリープとウェイクアップ）で説明している検証プロトコルの、成功時・失敗時
+それぞれのログ例です。
+
+**スリープ突入 → ウェイクアップ検証成功**
+
+```
+[エンジン OFF が15秒 (5周期) 継続]
+INFO AppEng: OFF continued 5 cycles -> release COMM_USER_0 (voluntary sleep)
+INFO ComM: User0 req=0 -> aggregated=0 (channel=2)
+INFO CanSM: ->NO_COM (CAN controller SLEEP)
+INFO ComM: ch0 ->mode=0
+INFO EcuM: ->POST_RUN timeout=5000ms
+INFO EcuM: ->SHUTDOWN
+
+[CAN バスに何らかのフレームが送信される（INT アサート検出）]
+INFO Can: Wakeup detected (INT asserted during SLEEP)
+INFO CanIf: ControllerWakeup ch=0
+INFO CanSM: Wakeup detected -> validating (Listen-Only, waiting for confirmed RX)
+
+[検証タイマ内 (既定2000ms) に実際にフレームを受信 → 検証成功]
+INFO CanSM: Wakeup validated (RX confirmed) -> FULL_COM
+INFO ComM: ch0 ->mode=2
+INFO EcuM: SHUTDOWN ->RUN (wakeup) user=0
+
+[App_EngineManager_Run が再開（最大3000ms後）]
+INFO AppEng: ComM FULL_COM resumed -> sleep countdown reset (grace cycle)
+```
+
+**ノイズによる誤ウェイクアップ、検証失敗**
+
+```
+INFO Can: Wakeup detected (INT asserted during SLEEP)
+INFO CanIf: ControllerWakeup ch=0
+INFO CanSM: Wakeup detected -> validating (Listen-Only, waiting for confirmed RX)
+
+[検証タイマ超過、有効なフレームを1つも受信できなかった]
+WARN CanSM: Wakeup validation timeout (2000ms, no confirmed RX) -> back to SLEEP
+（ComM/EcuM には何も通知されないため、SHUTDOWN 状態はそのまま維持される）
 ```
 <a id="appendix"></a>
 ## 補足
