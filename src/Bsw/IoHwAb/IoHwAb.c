@@ -75,9 +75,10 @@ static uint16 s_adcMv           = 0U;  /* ADC 変換済み電圧値 [mV] */
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
  */
-void IoHwAb_Init(void)
+void IoHwAb_Init(const IoHwAb_ConfigType* ConfigPtr)
 {
     DET_LOGT(TAG, "called");
+    (void)ConfigPtr; /* 本プロジェクトは post-build 設定を持たない（IoHwAb.h 参照） */
     Dio_WriteChannel(DIO_CHANNEL_LED_RUNNING, DIO_LOW);  /* 消灯状態で起動 */
     Dio_WriteChannel(DIO_CHANNEL_LED_FAULT,   DIO_LOW);  /* 消灯状態で起動 */
     Dio_WriteChannel(DIO_CHANNEL_LED_WARNING,  DIO_LOW);  /* 消灯状態で起動 */

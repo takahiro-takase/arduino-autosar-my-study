@@ -67,7 +67,7 @@ protected:
         canConfig.crystalFreq     = CAN_CRYSTAL_16MHZ;
 
         Can_Init(&canConfig);
-        CanSM_Init();
+        CanSM_Init(NULL);
         // Can_Init() 自体が Can_Hw_SetMode(LISTEN_ONLY) を1回呼ぶため、
         // 各テストの Act 区間の SetMode 呼び出し回数を 0 から数えられるよう
         // ここでリセットする。

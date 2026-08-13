@@ -41,16 +41,31 @@ extern "C" {
 typedef uint8 CanSM_NetworkHandleType;
 
 /**
+ * \brief   CanSM_Init() の設定引数型（不透明型）。
+ *
+ * \details SWS_CanSM_00023 は post-build パラメータへのポインタを要求するが、
+ *          本プロジェクトは単一 ECU 構成で post-build バリアント切替を持たない
+ *          ため、中身を定義しない不透明型とし、ポインタとしてのみ扱う
+ *          （`KeyM_ConfigType` と同じ簡略化パターン。KeyM.h 冒頭コメント参照）。
+ */
+typedef struct CanSM_ConfigType_Tag CanSM_ConfigType;
+
+/**
  * \brief   CanSM モジュールを初期化する。
  *
  * \details 全ネットワークを COMM_NO_COMMUNICATION 状態に設定する。
  *          EcuM_Init() から ComM_Init() より先に呼び出すこと。
  *
+ * \param[in]  ConfigPtr  常に NULL を渡すこと（本プロジェクトは post-build 設定を
+ *                        持たないため。実 AUTOSAR 仕様は SWS_CanSM_00023 で
+ *                        post-build パラメータへのポインタを要求する）。
+ *
+ * \AUTOSARReq     {SWS_CanSM_00023}
  * \ServiceID      {0x00}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
  */
-void CanSM_Init(void);
+void CanSM_Init(const CanSM_ConfigType* ConfigPtr);
 
 /**
  * \brief   CanSM モジュールを未初期化状態に戻す。

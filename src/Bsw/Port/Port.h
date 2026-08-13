@@ -36,18 +36,34 @@ typedef uint8 Port_PinDirectionType;
 #define PORT_PIN_IN_PULLUP   2U  /**< 入力方向（内部プルアップ有効）ボタン等に使用 */
 
 /**
+ * \brief   Port_Init() の設定引数型（不透明型）。
+ *
+ * \details SWS_Port_00140 は post-build 設定データ（各ピンの方向等）への
+ *          ポインタを要求する。本プロジェクトはそのデータを `Port_Cfg.h` の
+ *          静的テーブルとして直接参照する簡略設計のため（注入されたポインタ
+ *          経由では読まない）、中身を定義しない不透明型とし、ポインタとしてのみ
+ *          扱う（`KeyM_ConfigType` と同じパターン。KeyM.h 冒頭コメント参照）。
+ */
+typedef struct Port_ConfigType_Tag Port_ConfigType;
+
+/**
  * \brief   Port モジュールを初期化する。
  *
  * \details Port_Cfg.h で定義されたすべてのピンを設定方向に初期化する。
  *          EcuM_Init() の最初期（Dio 操作より前）に呼び出すこと。
  *
+ * \param[in]  ConfigPtr  常に NULL を渡すこと（本プロジェクトは Port_Cfg.h の
+ *                        静的テーブルを直接参照するため、注入された設定は
+ *                        使わない）。
+ *
  * \pre        Arduino ランタイムが初期化済みであること。
  *
+ * \AUTOSARReq     {SWS_Port_00140}
  * \ServiceID      {0x00}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
  */
-void Port_Init(void);
+void Port_Init(const Port_ConfigType* ConfigPtr);
 
 /**
  * \brief   指定ピンの方向を動的に変更する。

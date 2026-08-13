@@ -32,16 +32,30 @@ extern "C" {
 #endif
 
 /**
+ * \brief   CanTp_Init() の設定引数型（不透明型）。
+ *
+ * \details SWS_CanTp_00208 は post-build 設定データへのポインタを要求するが、
+ *          本プロジェクトは単一 ECU 構成で post-build バリアント切替を持たない
+ *          ため、中身を定義しない不透明型とし、ポインタとしてのみ扱う
+ *          （`KeyM_ConfigType` と同じ簡略化パターン。KeyM.h 冒頭コメント参照）。
+ */
+typedef struct CanTp_ConfigType_Tag CanTp_ConfigType;
+
+/**
  * \brief   CanTp モジュールを初期化する。
  *
  * \details RX/TX チャネルの状態を IDLE にリセットする (SWS_CanTp_00208)。
  *          EcuM_Init() から PduR_Init() の後に呼び出すこと。
  *
+ * \param[in]  CfgPtr  常に NULL を渡すこと（本プロジェクトは post-build 設定を
+ *                     持たないため）。
+ *
+ * \AUTOSARReq     {SWS_CanTp_00208}
  * \ServiceID      {0x01}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
  */
-void CanTp_Init(void);
+void CanTp_Init(const CanTp_ConfigType* CfgPtr);
 
 /**
  * \brief   DCM からの UDS ペイロードを CAN トランスポートフレームに分割して送信する。

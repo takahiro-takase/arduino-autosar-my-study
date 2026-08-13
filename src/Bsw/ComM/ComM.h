@@ -39,17 +39,31 @@ typedef uint8 ComM_InitStatusType;
 #define COMM_INIT    1U  /**< ComM は初期化済みで使用可能 */
 
 /**
+ * \brief   ComM_Init() の設定引数型（不透明型）。
+ *
+ * \details SWS_ComM_00146 は post-build 設定データへのポインタを要求するが、
+ *          本プロジェクトは単一 ECU 構成で post-build バリアント切替を持たない
+ *          ため、中身を定義しない不透明型とし、ポインタとしてのみ扱う
+ *          （`KeyM_ConfigType` と同じ簡略化パターン。KeyM.h 冒頭コメント参照）。
+ */
+typedef struct ComM_ConfigType_Tag ComM_ConfigType;
+
+/**
  * \brief   ComM モジュールを初期化する。
  *
  * \details 全チャネルを COMM_NO_COMMUNICATION 状態に設定する。
  *          CAN バスはまだアクティブにならない。
  *          EcuM_Init() から Can_Init() の後に呼び出すこと。
  *
+ * \param[in]  ConfigPtr  常に NULL を渡すこと（本プロジェクトは post-build 設定を
+ *                        持たないため）。
+ *
+ * \AUTOSARReq     {SWS_ComM_00146}
  * \ServiceID      {0x01}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
  */
-void ComM_Init(void);
+void ComM_Init(const ComM_ConfigType* ConfigPtr);
 
 /**
  * \brief   ComM モジュールを未初期化状態に戻す。

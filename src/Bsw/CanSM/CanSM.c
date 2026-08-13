@@ -143,8 +143,9 @@ static uint8 CanSM_Initialized = 0U;
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
  */
-void CanSM_Init(void)
+void CanSM_Init(const CanSM_ConfigType* ConfigPtr)
 {
+    (void)ConfigPtr; /* 本プロジェクトは post-build 設定を持たない（CanSM.h 参照） */
     CanSM_State                  = CANSM_STATE_NO_COM;
     CanSM_BusOffTimerMs          = 0UL;
     CanSM_BusOffRetries          = 0U;

@@ -310,9 +310,10 @@ static void Dcm_TransferAbort(void);
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
  */
-void Dcm_Init(void)
+void Dcm_Init(const Dcm_ConfigType* ConfigPtr)
 {
     DET_LOGT(TAG, "called");
+    (void)ConfigPtr; /* 本プロジェクトは post-build 設定を持たない（Dcm.h 参照） */
     Dcm_CurrentSession   = DCM_SESSION_DEFAULT;
     Dcm_TxPdu.SduDataPtr = Dcm_TxBuf;
     Dcm_TxPdu.SduLength  = 0U;   /* 各ハンドラで送信長を設定する */

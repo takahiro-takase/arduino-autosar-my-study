@@ -266,9 +266,10 @@ static void Dem_EvaluatePendingClear(Dem_EventIdType EventId)
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
  */
-void Dem_Init(void)
+void Dem_Init(const Dem_ConfigType* ConfigPtr)
 {
     DET_LOGT(TAG, "called");
+    (void)ConfigPtr; /* 本プロジェクトは post-build 設定を持たない（Dem.h 参照） */
     uint8 magic = 0U;
     (void)NvM_ReadBlock(NVM_BLOCK_ID_DEM_MAGIC, &magic);
 
