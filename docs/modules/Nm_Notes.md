@@ -1,6 +1,8 @@
 # Nm（ネットワークマネジメント）
 
-> [README](../../README.md) の「[ECU 管理層](../../README.md#ecu-management)」節から分離。
+> [README](../../README.md) の「[CAN 通信状態管理](../../README.md#can-comm-management)」節から分離
+> （旧「ECU 管理層」節から移動。実 AUTOSAR では EcuM/BswM/WdgM とは別クラスタ
+> [Communication Services] に属するため）。
 
 Nm (Network Management) は、実車の各 ECU がバス上に周期的な生存確認フレーム
 （NM フレーム）を送信し、クラスタ内の全 ECU が送信を止めたときにのみバス

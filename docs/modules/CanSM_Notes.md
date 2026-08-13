@@ -1,6 +1,8 @@
 # CanSM
 
-> [README](../../README.md) の「[ECU 管理層](../../README.md#ecu-management)」節から分離。
+> [README](../../README.md) の「[CAN 通信状態管理](../../README.md#can-comm-management)」節から分離
+> （旧「ECU 管理層」節から移動。実 AUTOSAR では EcuM/BswM/WdgM とは別クラスタ
+> [Communication Services] に属するため）。
 
 Bus-Off 検出直後（回復試行の前）に `ComM_BusSMIndication(SILENT_COMMUNICATION)` を
 呼び、ComM のチャネル状態が回復完了まで FULL_COM のまま古い情報として残ることを
@@ -101,4 +103,4 @@ FULL_COM 経路（相手ノード不在による自然発生 Bus-Off、実機で
 実証済み。EcuM 側の DET 誤検知なしも確認）と同一のコードパスを通ることに
 よる間接的な検証と、コードレビューをもって十分と判断した。
 
-（README 該当箇所: [ECU 管理層（EcuM / BswM / WdgM / ComM / CanSM / Nm）](../../README.md#ecu-management)）
+（README 該当箇所: [CAN 通信状態管理（ComM / CanSM / Nm）](../../README.md#can-comm-management)）

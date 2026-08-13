@@ -75,19 +75,19 @@ CanSM/CanTp/ComM/Dcm/Dem/Fee/Port/IoHwAb の8モジュールについて、`KeyM
 `test/test_chain/` の `CanSM_Init()` 呼び出し3箇所（Bsw_RxChain_test.cpp/
 Bsw_SleepChain_test.cpp/Bsw_WakeupChain_test.cpp）も追随済み。
 `pio test -e native`(62件)/`pio test -e native_chain`(19件)/`pio run -e uno_r4`
-いずれも成功を確認済み（2026-08-13 時点でコミット前のため、以下の SHA は未反映。
-コミット後に `git log -1 --format=%h -- <Module>.h` で更新すること）。
+いずれも成功を確認済み。コミット `444b7a0`（"modified: init function parameter"）で
+確定（`docs: modified README.md` 等とは別コミット）。
 
-| モジュール | 仕様根拠 |
-|---|---|
-| CanSM | SWS_CanSM_00023: `CanSM_Init(const CanSM_ConfigType* ConfigPtr)` |
-| CanTp | SWS_CanTp_00208: `CanTp_Init(const CanTp_ConfigType* CfgPtr)` |
-| ComM | SWS_ComM_00146: `ComM_Init(const ComM_ConfigType* ConfigPtr)` |
-| Dcm | SWS_Dcm_00037: `Dcm_Init(const Dcm_ConfigType* ConfigPtr)`（実装は `Dcm_Cbk.c`） |
-| Dem | SWS_Dem_00181: `Dem_Init(const Dem_ConfigType* ConfigPtr)` |
-| Fee | SWS_Fee_00085: `Fee_Init(const Fee_ConfigType* ConfigPtr)` |
-| Port | SWS_Port_00140: `Port_Init(const Port_ConfigType* ConfigPtr)`（既存の `Port_Cfg.h` 静的テーブル参照はそのまま維持、注入ポインタは未使用） |
-| IoHwAb | SWS_IoHwAb_00119: `IoHwAb_Init<Id>(const IoHwAb..._ConfigType* ConfigPtr)` |
+| モジュール | .h SHA | .c SHA | 仕様根拠 |
+|---|---|---|---|
+| CanSM | 444b7a0 | 444b7a0 | SWS_CanSM_00023: `CanSM_Init(const CanSM_ConfigType* ConfigPtr)` |
+| CanTp | 444b7a0 | 444b7a0 | SWS_CanTp_00208: `CanTp_Init(const CanTp_ConfigType* CfgPtr)` |
+| ComM | 444b7a0 | 444b7a0 | SWS_ComM_00146: `ComM_Init(const ComM_ConfigType* ConfigPtr)` |
+| Dcm | 444b7a0 | 444b7a0 | SWS_Dcm_00037: `Dcm_Init(const Dcm_ConfigType* ConfigPtr)`（実装は `Dcm_Cbk.c`） |
+| Dem | 444b7a0 | 444b7a0 | SWS_Dem_00181: `Dem_Init(const Dem_ConfigType* ConfigPtr)` |
+| Fee | 444b7a0 | 444b7a0 | SWS_Fee_00085: `Fee_Init(const Fee_ConfigType* ConfigPtr)` |
+| Port | 444b7a0 | 444b7a0 | SWS_Port_00140: `Port_Init(const Port_ConfigType* ConfigPtr)`（既存の `Port_Cfg.h` 静的テーブル参照はそのまま維持、注入ポインタは未使用） |
+| IoHwAb | 444b7a0 | 444b7a0 | SWS_IoHwAb_00119: `IoHwAb_Init<Id>(const IoHwAb..._ConfigType* ConfigPtr)` |
 
 ### 対応済み（2026-08-13追加、Adc: ヘッダコメントの「対象外」判定を誤って鵜呑みにしていた見落とし修正）
 
@@ -106,9 +106,9 @@ grep したが SWS 文書中に0件で、こちらは確かに仕様上 Init を
 ヘッダコメントを再度疑う必要はない。教訓: 既存コードのコメント（「〜を持たない」等の
 断定）も、それ自体が過去のレビューの結論を記録したものでない限り検証対象にすること。
 
-| モジュール | 仕様根拠 |
-|---|---|
-| Adc | SWS_Adc_00365: `Adc_Init(const Adc_ConfigType* ConfigPtr)`。本実装はハードウェア初期化状態を持たないためシグネチャ適合のみ（実処理なし） |
+| モジュール | .h SHA | .c SHA | 仕様根拠 |
+|---|---|---|---|
+| Adc | 444b7a0 | 444b7a0 | SWS_Adc_00365: `Adc_Init(const Adc_ConfigType* ConfigPtr)`。本実装はハードウェア初期化状態を持たないためシグネチャ適合のみ（実処理なし） |
 
 ### 未対応（本プロジェクト独自モジュールのため対象外）
 
