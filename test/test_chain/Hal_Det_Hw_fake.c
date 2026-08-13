@@ -53,7 +53,7 @@ void Det_Hw_PrintLogLine(LogLevel lvl, const char* tag, const char* func, const 
 {
     if (FakeDetHw_IsVerbose())
     {
-        printf("[%lums] %s %s/%s: %s\n", FakeMillis_Value, FakeDetHw_LevelName(lvl), tag, func, msg);
+        printf("[%lums] %s %s: %s: %s\n", FakeMillis_Value, FakeDetHw_LevelName(lvl), tag, func, msg);
     }
 }
 

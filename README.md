@@ -27,6 +27,7 @@ ARXML や設定ツールは使用せず、コードで階層構造・型定義�
       - [Rx 処理（Can → CanIf → PduR → Com の順）](#rx-processing)
         - [通常（E2E なし）](#rx-processing-normal)
         - [E2E（EngineInfo/AbsInfo 受信）](#rx-processing-e2e)
+        - [デッドライン監視（受信タイムアウト）](#rx-processing-timeout)
     - [E2E 保護（EngineInfo/AbsInfo 受信・E2EHealthStatus 送信ともに Profile05）](#e2e-p01)
       - [I-PDU Group（Com_IpduGroupStart/Stop、通信のライフサイクル制御）](#ipdu-group)
       - [呼び出し元は BswM（実 AUTOSAR の標準構成）](#ipdu-group-caller)
@@ -544,6 +545,36 @@ Com_RxIndication()                 ← EngineInfo/AbsInfo（RxIndicationCbk 経�
   → Rte_COMCbk_EngineInfo/AbsInfo()
     → E2EXf_InverseTransformP05() → E2E_P05Check()
 ```
+
+<a id="rx-processing-timeout"></a>
+###### デッドライン監視（受信タイムアウト）
+
+上記2つは「フレームが届いた」ときのチェーンだが、こちらは逆に「フレームが
+届かなくなった」ことを検知するチェーン（`AUTOSAR_SWS_COM.pdf` 7.3.6
+「Deadline Monitoring」相当）。100ms 周期タスクが検知し、実際に値が
+置き換わるのは次に `Com_ReceiveSignal()` が呼ばれたとき、という2段階に
+なっている。
+
+```
+[100ms 周期タスク] Os_SchedulerStep() → Com_MainFunction()
+  → (now - Com_RxLastMs[iPdu]) がしきい値（ComTimeout/ComFirstTimeout）以上なら
+      Com_SigTimedOut[signal] を立てる（WARN ログ、ここが検知点）
+  ┊  (Com_SigTimedOut というフラグ経由。次に Com_ReceiveSignal() が
+  ┊   呼ばれるまで非同期に待機)
+  ↓
+Com_ReceiveSignal()                ← Rte 等から呼ばれる（同期）
+  → ComRxDataTimeoutAction に応じて返す値を決定:
+      SUBSTITUTE : ComTimeoutSubstitutionValue で置換（例: VehicleSpeed→0xFFFF）
+      REPLACE    : ComInitValue で置換
+      NONE（既定）: E_NOT_OK（呼び出し元は自分の初期値を使う）
+```
+
+TX 処理の `Com_TxPending`（`Com_SendSignal()` が立てて `Com_MainFunction()` が
+読む）と同じ「立てる側／読む側が別々のタイミングで動く」非同期境界だが、
+向きが逆になっている点に注意（こちらは周期タスクが立てて、on-demand 呼び出し
+が読む）。`Com_MainFunction()` はあくまで 100ms ごとのポーリングでしきい値
+超過を確認するだけで、しきい値ちょうどの瞬間に発火する割り込みではない
+（検知は最大約100ms 遅れうる）。
 
 ##### 受信長チェックの多層防御
 
@@ -1117,7 +1148,7 @@ EcuM の POST_RUN 遷移時に Rte_Engine タスクと Rte_Warning タスクが�
 ```bash
 # ホスト上でビルド・実行（GoogleTest、実 HW 不要）
 pio test -e native      # Gpt/E2E_P05/Can 単体
-pio test -e native_chain  # Tx/Rx処理コールチェーン（通常/E2E とも）
+pio test -e native_chain  # Tx/Rx処理コールチェーン（通常/E2E/デッドライン監視とも）
 $env:DET_LOG_VERBOSE = "1"; pio test -e native_chain -v # TRACE ログ出力
 ```
 
@@ -1190,6 +1221,19 @@ RxIndicationCbk → `E2EXf_InverseTransformP05()` → `E2E_P05Check()`）は
 同じ処理をテスト専用の RxIndicationCbk として定義している。CRC 破損時に
 `E2E_P05STATUS_ERROR` になることも含めて検証する（詳細は
 `Bsw_RxE2EChain_test.cpp` 冒頭のコメント参照）。
+
+[「Rx 処理」の「デッドライン監視」](#rx-processing-timeout)（`Com_MainFunction()`
+がしきい値超過を検知 → `Com_SigTimedOut` フラグ経由 → `Com_ReceiveSignal()` が
+`ComRxDataTimeoutAction` を適用）は `Bsw_RxTimeoutChain_test.cpp` で別途検証
+している。この非同期境界は Tx 処理の `Com_TxPending` と構造が同じだが、
+「立てる側／読む側」が逆（周期タスクが立てて on-demand 呼び出しが読む）ため、
+PduR/CanIf/Can/CanSM を一切経由せず Com.c 単体で完結する。フェイクは
+`millis()`（`test/test_chain/Hal_Millis_fake.c`）のみで、`Com_RxIndication()`を
+直接呼んで「受信していたが途絶えた」状態を作り、`FakeMillis_Value` を
+しきい値超過まで進めてから検証する。Tx チェーンと同じくフラグの前後で
+2セグメントに分け、フラグの状態自体はテスト専用アクセサ
+`Com_Test_GetSigTimedOut()`（`COM_UNIT_TEST` 定義時のみ）で直接観測する
+（詳細は `Bsw_RxTimeoutChain_test.cpp` 冒頭のコメント参照）。
 
 <a id="unit-test-single"></a>
 #### 単一モジュールのテスト（`[env:native]`）

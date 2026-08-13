@@ -2421,4 +2421,19 @@ const uint8* Com_Test_GetTxBuffer(Com_IPduIdType ipduId)
         return NULL;
     return Com_TxBuffer[ipduId];
 }
+
+uint8 Com_Test_GetSigTimedOut(Com_SignalIdType SignalId)
+{
+    /* Com_SigTimedOut[] は SignalId ではなく Com_ConfigPtr->Signals[] 上の
+     * 位置で添字付けされている（Com_ReceiveSignal() と同じく
+     * Com_FindSignalIndex() で変換が必要。Com_Test_GetTxPending() 等の
+     * IPduId 直接添字とは事情が異なる。IPduId は Com_TxBuffer[] 等の
+     * 添字として直接使う設計だが、SignalId は配列内位置とは無関係な ID）。 */
+    if (Com_ConfigPtr == NULL)
+        return 0U;
+    const uint8 s = Com_FindSignalIndex(SignalId);
+    if (s >= Com_ConfigPtr->SignalCount)
+        return 0U;
+    return Com_SigTimedOut[s];
+}
 #endif
