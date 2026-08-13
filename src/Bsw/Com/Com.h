@@ -244,12 +244,13 @@ void Com_IpduGroupStop(Com_IpduGroupIdType IpduGroupId);
 /**
  * \brief   [テスト専用] TX I-PDU の Com_TxPending（変化時送信の保留フラグ）を取得する。
  *
- * \details native 環境のホストテスト（`test/test_native/`）からのみ使用する
- *          アクセサ。`COM_UNIT_TEST` は `[env:native]` の `build_flags` でのみ
- *          定義され、実機ビルド（`uno_r4`）では定義されないため、実機の
- *          `Com.h`/`Com.c` には一切含まれない（AUTOSAR 標準外の関数、
- *          `Can.h` の `CAN_UNIT_TEST`/`Can_Test_GetControllerState()` と
- *          同じ運用）。範囲外の `ipduId` は 0 を返す。
+ * \details `test/test_chain/` のコールチェーンテストからのみ使用するアクセサ。
+ *          `COM_UNIT_TEST` は `[env:native_chain]` の `build_flags` でのみ
+ *          定義され、実機ビルド（`uno_r4`）や単一モジュールテスト
+ *          （`[env:native]`）では定義されないため、実機の `Com.h`/`Com.c` には
+ *          一切含まれない（AUTOSAR 標準外の関数、`Can.h` の
+ *          `CAN_UNIT_TEST`/`Can_Test_GetControllerState()` と同じ運用）。
+ *          範囲外の `ipduId` は 0 を返す。
  */
 uint8 Com_Test_GetTxPending(Com_IPduIdType ipduId);
 
@@ -257,6 +258,13 @@ uint8 Com_Test_GetTxPending(Com_IPduIdType ipduId);
  *  取得する。範囲外の `ipduId` は NULL を返す。呼び出し側は当該 I-PDU の
  *  DLC バイト分のみ読むこと（バッファ自体は COM_IPDU_MAX_DLC バイト確保）。 */
 const uint8* Com_Test_GetTxBuffer(Com_IPduIdType ipduId);
+
+/** [テスト専用] RX シグナルの Com_SigTimedOut（デッドライン監視のタイムアウト
+ *  検知フラグ）を取得する。`Com_MainFunction()` がしきい値超過を検知した後、
+ *  `Com_ReceiveSignal()` が `RxDataTimeoutAction` を適用して消費するまでの間
+ *  立っている（[「Rx 処理」の「デッドライン監視」](../../README.md#rx-processing-timeout)
+ *  参照）。範囲外の `SignalId` は 0 を返す。 */
+uint8 Com_Test_GetSigTimedOut(Com_SignalIdType SignalId);
 #endif
 
 #ifdef __cplusplus
