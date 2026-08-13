@@ -49,14 +49,29 @@ extern "C" {
 #endif
 
 /**
+ * \brief   Fee_Init() の設定引数型（不透明型）。
+ *
+ * \details SWS_Fee_00085 は post-build 設定データ（FeeBlockConfiguration 等）への
+ *          ポインタを要求するが、本ファイル冒頭コメントのとおり本プロジェクトは
+ *          このテーブル自体を持たない簡略設計のため、中身を定義しない不透明型とし、
+ *          ポインタとしてのみ扱う（`KeyM_ConfigType` と同じパターン。KeyM.h
+ *          冒頭コメント参照）。
+ */
+typedef struct Fee_ConfigType_Tag Fee_ConfigType;
+
+/**
  * \brief   Fee モジュールを初期化する。
  * \details ジョブ状態を IDLE にリセットする。
  *
+ * \param[in]  ConfigPtr  常に NULL を渡すこと（本プロジェクトは post-build 設定を
+ *                        持たないため）。
+ *
+ * \AUTOSARReq     {SWS_Fee_00085}
  * \ServiceID      {0x00}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
  */
-void Fee_Init(void);
+void Fee_Init(const Fee_ConfigType* ConfigPtr);
 
 /**
  * \brief   Fee モジュールのバージョン情報を取得する。

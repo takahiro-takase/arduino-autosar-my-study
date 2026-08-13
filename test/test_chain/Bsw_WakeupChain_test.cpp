@@ -83,7 +83,7 @@ protected:
 
         Can_Init(&canConfig);
         CanIf_Init(&kTestCanIfConfig);
-        CanSM_Init();
+        CanSM_Init(NULL);
 
         // ボランタリスリープ済みの状態を Arrange する（README のとおり、
         // ウェイクアップ検証は CANSM_STATE_NO_COM からの起床のみを受け付ける）。

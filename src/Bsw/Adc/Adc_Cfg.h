@@ -22,7 +22,8 @@
  * （Release 4.3.1、docs/ 配下）の「List of Basic Software Modules」表で
  * ADC Driver (Adc) に割り当てられた固定値 123 を使う。
  *
- * 本実装の Adc_ReadChannel() は実際の SWS_Adc（Adc_Init/Adc_ReadGroup 等の
+ * Adc_Init は [SWS_Adc_00365] のシグネチャ（ConfigPtr 引数）に準拠させて
+ * いるが、本実装の Adc_ReadChannel() は実際の SWS_Adc（Adc_ReadGroup 等の
  * グループ・バッファベース API 群）には存在しない、本プロジェクト独自の
  * 単一チャネル即時読み取り関数のため、個々の SWS 関数の ApiId とは対応
  * しない。NULL ポインタチェックのエラーコードのみ、Adc_SetupResultBuffer
@@ -36,6 +37,7 @@
 #define ADC_E_PARAM_POINTER  0x14U
 
 /** ApiId（既存の Doxygen \ServiceID タグと一致させる） */
+#define ADC_API_ID_INIT  0x00U          /**< [SWS_Adc_00365] Adc_Init と同じ ServiceID */
 #define ADC_API_ID_READ_CHANNEL  0xD0U
 #define ADC_API_ID_GET_VERSION_INFO  0x0AU
 

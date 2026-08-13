@@ -141,9 +141,10 @@ static uint8 CanTp_DecodeStMin(uint8 raw);
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
  */
-void CanTp_Init(void)
+void CanTp_Init(const CanTp_ConfigType* CfgPtr)
 {
     DET_LOGT(TAG, "called");
+    (void)CfgPtr; /* 本プロジェクトは post-build 設定を持たない（CanTp.h 参照） */
     CanTp_Rx.state  = CANTP_RX_IDLE;
     CanTp_Tx.state  = CANTP_TX_IDLE;
     CanTp_Initialized = 1U;

@@ -17,6 +17,13 @@
 
 #define TAG "Adc"
 
+void Adc_Init(const Adc_ConfigType* ConfigPtr)
+{
+    (void)ConfigPtr; /* 本プロジェクトは post-build 設定を持たない（Adc.h 参照） */
+    DET_LOGT(TAG, "called");
+    DET_LOGI(TAG, "Init ok");
+}
+
 Std_ReturnType Adc_ReadChannel(uint8 channel, uint16* raw)
 {
     DET_LOGT(TAG, "called");

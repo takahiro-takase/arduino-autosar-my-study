@@ -101,9 +101,10 @@ static uint8 ComM_Initialized = 0U;
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
  */
-void ComM_Init(void)
+void ComM_Init(const ComM_ConfigType* ConfigPtr)
 {
     DET_LOGT(TAG, "called");
+    (void)ConfigPtr; /* 本プロジェクトは post-build 設定を持たない（ComM.h 参照） */
     uint8 i;
     for (i = 0U; i < COMM_CHANNEL_COUNT; i++)
         ComM_ChannelMode[i] = COMM_NO_COMMUNICATION;

@@ -22,6 +22,35 @@ extern "C" {
 #endif
 
 /**
+ * \brief   Adc_Init() の設定引数型（不透明型）。
+ *
+ * \details SWS_Adc_00365 は post-build 設定データへのポインタを要求する。
+ *          本プロジェクトは単一チャネル・即時読み取りの簡略実装で
+ *          post-build バリアント切替を持たないため、中身を定義しない
+ *          不透明型とし、ポインタとしてのみ扱う（`KeyM_ConfigType` と
+ *          同じパターン。KeyM.h 冒頭コメント参照）。
+ */
+typedef struct Adc_ConfigType_Tag Adc_ConfigType;
+
+/**
+ * \brief   ADC ドライバを初期化する。
+ *
+ * \details 本実装はハードウェア初期化状態を持たない（Adc_Hw_ReadChannel は
+ *          Arduino analogRead() を都度呼ぶだけで、事前初期化を必要としない）
+ *          ため、実処理は行わない。シグネチャを [SWS_Adc_00365] に合わせる
+ *          ことが目的。
+ *
+ * \param[in]  ConfigPtr  常に NULL を渡すこと（本プロジェクトは post-build 設定を
+ *                        持たないため）。
+ *
+ * \AUTOSARReq     {SWS_Adc_00365}
+ * \ServiceID      {0x00}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void Adc_Init(const Adc_ConfigType* ConfigPtr);
+
+/**
  * \brief   指定チャネルのアナログ生値を読み取る。
  *
  * \details Adc_Hw_ReadChannel() へ委譲し、10-bit の ADC 生値を返す。
@@ -42,9 +71,9 @@ Std_ReturnType Adc_ReadChannel(uint8 channel, uint16* raw);
 /**
  * \brief   ADC ドライバのバージョン情報を取得する。
  *
- * \details 本プロジェクトの Adc は Adc_Init を持たない単一チャネル即時読み取り
- *          実装（Adc_Cfg.h 冒頭コメント参照）のため、初期化状態チェックは
- *          行わず、NULL ポインタチェックのみ行う。
+ * \details 本プロジェクトの Adc_Init はハードウェア初期化状態を持たない
+ *          単一チャネル即時読み取り実装（Adc_Cfg.h 冒頭コメント参照）のため、
+ *          初期化状態チェックは行わず、NULL ポインタチェックのみ行う。
  *
  * \param[out]  versioninfo  バージョン情報の格納先。NULL 禁止。
  *

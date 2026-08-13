@@ -32,9 +32,10 @@
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
  */
-void Port_Init(void)
+void Port_Init(const Port_ConfigType* ConfigPtr)
 {
     DET_LOGT(TAG, "called");
+    (void)ConfigPtr; /* 本プロジェクトは Port_Cfg.h の静的テーブルを直接参照する（Port.h 参照） */
     Port_Hw_SetPinDirection(PORT_PIN_LED_RUNNING, PORT_PIN_OUT);
     Port_Hw_SetPinDirection(PORT_PIN_LED_FAULT,   PORT_PIN_OUT);
     Port_Hw_SetPinDirection(PORT_PIN_LED_WARNING,  PORT_PIN_OUT);

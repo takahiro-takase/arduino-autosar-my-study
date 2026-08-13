@@ -46,7 +46,7 @@ static uint8 MemIf_CheckDevice(MemIf_DeviceType Device, uint8 ApiId)
 
 void MemIf_Init(void)
 {
-    Fee_Init();
+    Fee_Init(NULL);
     DET_LOGI(TAG, "Init ok");
 }
 

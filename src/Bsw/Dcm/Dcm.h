@@ -20,19 +20,33 @@ extern "C" {
 #endif
 
 /**
+ * \brief   Dcm_Init() の設定引数型（不透明型）。
+ *
+ * \details SWS_Dcm_00037 は post-build 設定データへのポインタを要求するが、
+ *          本プロジェクトは単一 ECU 構成で post-build バリアント切替を持たない
+ *          ため、中身を定義しない不透明型とし、ポインタとしてのみ扱う
+ *          （`KeyM_ConfigType` と同じ簡略化パターン。KeyM.h 冒頭コメント参照）。
+ */
+typedef struct Dcm_ConfigType_Tag Dcm_ConfigType;
+
+/**
  * \brief   DCM モジュールを初期化する。
  *
  * \details セッション状態を Default Session にリセットする
  *          (AUTOSAR SWS_Dcm_00769)。
  *          EcuM_Init() から Com_Init() の後に呼び出すこと。
  *
+ * \param[in]  ConfigPtr  常に NULL を渡すこと（本プロジェクトは post-build 設定を
+ *                        持たないため）。
+ *
  * \pre        PduR_Init() が正常に完了していること。
  *
+ * \AUTOSARReq     {SWS_Dcm_00037}
  * \ServiceID      {0x01}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
  */
-void Dcm_Init(void);
+void Dcm_Init(const Dcm_ConfigType* ConfigPtr);
 
 /**
  * \brief   DCM 周期処理。S3 タイマ (セッションタイムアウト) を監視する。

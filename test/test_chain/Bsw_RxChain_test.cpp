@@ -187,7 +187,7 @@ protected:
         // 報告されてしまう。本テストは CanSM_State を FULL_COM/NO_COM のまま
         // （WAKEUP_VALIDATING にしない）保つため、CanSM 自体は何もしない
         // no-op として通過するだけになる。
-        CanSM_Init();
+        CanSM_Init(NULL);
 
         FakeDetHw_LogSuppressed = 0U;  // ここから各 TEST_F の実行(Act)区間
     }

@@ -76,17 +76,31 @@ typedef struct
  * ----------------------------------------------------------------------- */
 
 /**
+ * \brief   Dem_Init() の設定引数型（不透明型）。
+ *
+ * \details SWS_Dem_00181 は post-build 設定データへのポインタを要求するが、
+ *          本プロジェクトは単一 ECU 構成で post-build バリアント切替を持たない
+ *          ため、中身を定義しない不透明型とし、ポインタとしてのみ扱う
+ *          （`KeyM_ConfigType` と同じ簡略化パターン。KeyM.h 冒頭コメント参照）。
+ */
+typedef struct Dem_ConfigType_Tag Dem_ConfigType;
+
+/**
  * \brief   DEM を初期化する。
  * \details EEPROM のマジックバイトを確認し、有効なら前回の DTC ステータスを
  *          復元する。初回起動時は全イベントを初期状態にして EEPROM を書き込む。
  *
+ * \param[in]  ConfigPtr  常に NULL を渡すこと（本プロジェクトは post-build 設定を
+ *                        持たないため）。
+ *
  * \pre        EcuM_Init() から、Com_Init() の後に呼び出すこと。
  *
+ * \AUTOSARReq     {SWS_Dem_00181}
  * \ServiceID      {0x01}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
  */
-void Dem_Init(void);
+void Dem_Init(const Dem_ConfigType* ConfigPtr);
 
 /**
  * \brief   イベントの発生/消滅を DEM に通知する (モニタからの生のテスト結果)。

@@ -45,8 +45,9 @@ static Fee_JobType Fee_Job;
  *  Fee_Cancel() で MEMIF_JOB_CANCELED になる。 */
 static MemIf_JobResultType Fee_LastResult = MEMIF_JOB_OK;
 
-void Fee_Init(void)
+void Fee_Init(const Fee_ConfigType* ConfigPtr)
 {
+    (void)ConfigPtr; /* 本プロジェクトは post-build 設定を持たない（Fee.h 参照） */
     Fee_Job.Active = 0U;
     Fee_LastResult = MEMIF_JOB_OK;
     Fee_Initialized = 1U;

@@ -22,17 +22,33 @@ extern "C" {
 #endif
 
 /**
+ * \brief   IoHwAb_Init() の設定引数型（不透明型）。
+ *
+ * \details SWS_IoHwAb_00119 は `IoHwAb_Init<Init_Id>` に post-build 設定データ
+ *          へのポインタを要求する（本プロジェクトはインスタンスが1つのため
+ *          Init_Id を付けず `IoHwAb_Init` とする）。本プロジェクトは単一 ECU
+ *          構成で post-build バリアント切替を持たないため、中身を定義しない
+ *          不透明型とし、ポインタとしてのみ扱う（`KeyM_ConfigType` と同じ
+ *          パターン。KeyM.h 冒頭コメント参照）。
+ */
+typedef struct IoHwAb_ConfigType_Tag IoHwAb_ConfigType;
+
+/**
  * \brief   IoHwAb モジュールを初期化する。
  *
  * \details 管理するすべての I/O チャネルを出力モードに設定し、
  *          初期レベルを LOW（消灯）にする。
  *          EcuM_Init() から ASW 初期化より前に呼び出すこと。
  *
+ * \param[in]  ConfigPtr  常に NULL を渡すこと（本プロジェクトは post-build 設定を
+ *                        持たないため）。
+ *
+ * \AUTOSARReq     {SWS_IoHwAb_00119}
  * \ServiceID      {0xC0}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
  */
-void IoHwAb_Init(void);
+void IoHwAb_Init(const IoHwAb_ConfigType* ConfigPtr);
 
 /**
  * \brief   警告灯 LED の出力レベルを設定する。
