@@ -22,7 +22,9 @@
  *            │  (受信専用: Can_SetControllerMode(CAN_T_STOP))    │
  *            └──────────────────────────────────────────────────┘
  *
- *          複数ユーザの調停 (AUTOSAR SWS_ComM_00069):
+ *          複数ユーザの調停 (SWS_ComM_00686: 複数ユーザの要求のうち最も高い
+ *          Communication Mode を採用する "highest wins" 戦略。SWS_ComM_00500:
+ *          要求はキューイングせず、同じユーザの新しい要求が古い要求を上書きする):
  *            ComM_UserRequest[] にユーザごとの要求を記録し、
  *            COMM_FULL_COMMUNICATION(2) > COMM_SILENT_COMMUNICATION(1) >
  *            COMM_NO_COMMUNICATION(0) の優先順位で最大値を集約してチャネルへ反映する。
@@ -172,7 +174,7 @@ Std_ReturnType ComM_GetStatus(ComM_InitStatusType* Status)
  * \retval  E_NOT_OK  User が範囲外、ComMode が不正、または CanSM への転送が失敗した
  *                    （Bus-Off 回復中等）。
  *
- * \AUTOSARReq     {SWS_ComM_00069}
+ * \AUTOSARReq     {SWS_ComM_00686, SWS_ComM_00500, SWS_ComM_00069}
  * \ServiceID      {0x05}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
