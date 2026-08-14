@@ -24,7 +24,8 @@ Protocol 相当）により有効な CAN フレーム受信を確認してから
 
 ## 状態遷移
 
-`CanSM_InternalStateType`（`CanSM.c`）が持つ6状態と、実装済みの遷移を全て図示します。
+`CanSM_InternalStateType`（`CanSM.c`）が持つ6状態と、意図された遷移を図示します
+（実装上到達可能な、図にない遷移が1点あります。図の直後の注記を参照）。
 `NO_COM` と `NO_COM_PENDING_SLEEP` は見た目が近いですが別状態です。前者は
 コントローラが物理的にスリープ済み（または未起動）、後者は NO_COM 要求済みだが
 Nm が Bus-Sleep Mode に到達するまでコントローラが稼働継続中、という違いがあります
@@ -58,6 +59,20 @@ stateDiagram-v2
     WAKEUP_VALIDATING --> FULL_COM: RxIndication()\n(有効フレーム受信、検証成功)
     WAKEUP_VALIDATING --> NO_COM: MainFunction()\n(検証タイムアウト、再スリープ)
 ```
+
+> **図にない遷移（`WAKEUP_VALIDATING` からの `RequestComMode()`）**: `CanSM_RequestComMode()`
+> 冒頭のガードは `BUS_OFF` しかチェックしておらず、`WAKEUP_VALIDATING` 中に呼ばれても
+> 素通りする。`RequestComMode(FULL_COM)` は `CanSM_RxIndication()` による検証を経ずに
+> 直接 `FULL_COM` へ、`RequestComMode(NO_COM)` は `Can_SetControllerMode(CAN_T_SLEEP)`
+> を呼ばないまま状態だけ `NO_COM` にしてしまい、コントローラが Listen-Only
+> （`CAN_CS_STOPPED`）のまま起きた状態で残る（`NO_COM` の「物理的にスリープ済み」
+> という不変条件と矛盾する）。ただし `ComM_RequestComMode()` の呼び出し元
+> （`App_EngineManager.c`/`Dcm_Cbk.c`）はいずれも `BswM_Cfg.h` の
+> `BSWM_TASK_MASK_SHUTDOWN` により SHUTDOWN 中（`WAKEUP_VALIDATING` が
+> 発生しうる唯一の期間）は駆動タスクごと無効化されるため、現状この経路は
+> 実機到達不能である（2026-08 のレビューで発見。コード側のガードは、この
+> 到達不能性が CanSM 自身の設計ではなく BswM 側のスケジューリングという
+> 別モジュールの都合に依存しているため、あえて追加していない）。
 
 ## 開発の経緯（実機で見つかった不具合・設計変更）
 
