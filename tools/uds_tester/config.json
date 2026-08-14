@@ -4,6 +4,9 @@
         "channel": 0,
         "bitrate": 500000
     },
+    "serial": {
+        "baudrate": 115200
+    },
     "buttons": [
         { "type": "group_header", "label": "メータECU" },
 

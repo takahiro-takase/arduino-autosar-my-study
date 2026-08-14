@@ -17,12 +17,15 @@ import json
 import math
 import os
 import queue
+import re
 import threading
 import time
 import tkinter as tk
 from tkinter import filedialog, messagebox, scrolledtext, ttk
 
 import can
+import serial
+import serial.tools.list_ports
 from Crypto.Cipher import AES
 from Crypto.Hash import CMAC
 
@@ -62,6 +65,21 @@ class App(tk.Tk):
         self._rx_monitor_thread: "threading.Thread | None" = None
         self.script_stop_event = threading.Event()
         self._script_thread: threading.Thread | None = None
+        # Arduino の USB シリアルデバッグログ (Serial.println、Det_Hw.cpp 参照) を
+        # 読むための接続。CAN 接続 (self.bus) とは完全に独立しており、
+        # 別デバイス（同じ USB ケーブルの COM ポート）・別スレッド・別キューで扱う。
+        self.serial_port: "serial.Serial | None" = None
+        self._serial_stop = threading.Event()
+        self._serial_thread: threading.Thread | None = None
+        self.serial_log_queue: "queue.Queue[str]" = queue.Queue()
+        self._serial_log_visible = tk.BooleanVar(value=False)
+        # CanSM/EcuM の最新状態表示用 StringVar（ログ行から正規表現で抽出、
+        # _parse_serial_state 参照）。tk.StringVar は Tk ルート作成後にしか
+        # 生成できないためインスタンス属性だが、キー・表示順・ラベルは
+        # クラス属性 _STATE_DEFS（下記 _parse_serial_state 付近）が単一の情報源。
+        self._serial_state_vars = {
+            tag: tk.StringVar(value="?") for tag, _label, _rules in self._STATE_DEFS
+        }
         # _rx_monitor_worker がバスの唯一の「常時ポーリングする」読み取り役であり、
         # 受信した全フレームをここにも流す (ファンアウト)。capl_dsl.py の on message は
         # 自前で bus.recv() せず、このキューから消費することで _rx_monitor_worker との
@@ -76,7 +94,10 @@ class App(tk.Tk):
     # UI 構築
     # ------------------------------------------------------------------
     def _build_widgets(self):
-        conn = ttk.LabelFrame(self, text="接続")
+        # CAN 接続と Serial 接続は完全に独立した別デバイス（self.bus / self.serial_port）
+        # への接続のため、別パネルに分ける（1つの「接続」パネルに両方を詰め込むと
+        # どちらの設定/ボタンか分かりにくいため）。
+        conn = ttk.LabelFrame(self, text="CAN 接続")
         conn.pack(fill="x", padx=8, pady=4)
 
         ttk.Label(conn, text="interface").grid(row=0, column=0, padx=4, pady=4)
@@ -98,17 +119,18 @@ class App(tk.Tk):
         self.status_label = ttk.Label(conn, textvariable=self.status_var, foreground="red")
         self.status_label.grid(row=0, column=7, padx=8)
 
-        # 「ログ」表示切替は接続状態や応答からの推測値ではなくGUI自体の表示設定
+        # 「CANログ」表示切替は接続状態や応答からの推測値ではなくGUI自体の表示設定
         # のため、トラッキング状態ではなく接続パネル側に置く。
         ttk.Checkbutton(
             conn,
-            text="ログ",
+            text="CANログ",
             variable=self._log_visible,
-            command=self._toggle_log,
+            command=lambda: self._toggle_panel(self.log_frame, self._log_visible),
         ).grid(row=0, column=8, padx=8)
 
-        # CAPL風スクリプトの実行/停止も、コマンド一覧のボタンやトラッキング状態
-        # とは性質が異なる常設の操作のため、接続パネル側に置く（ログと同じ理由）。
+        # CAPL風スクリプトの実行/停止（CAN 送信操作）も、コマンド一覧のボタンや
+        # トラッキング状態とは性質が異なる常設の操作のため、CAN 接続パネル側に
+        # 置く（ログと同じ理由）。
         ttk.Button(conn, text="スクリプト実行...", command=self._open_script).grid(
             row=0, column=9, padx=(8, 2))
         ttk.Button(conn, text="停止", command=self._stop_script).grid(
@@ -116,6 +138,60 @@ class App(tk.Tk):
         self.script_status_var = tk.StringVar(value="")
         ttk.Label(conn, textvariable=self.script_status_var).grid(
             row=0, column=11, padx=(0, 8), sticky="w")
+
+        # ---- Serial 接続（CAN 接続 self.bus とは別の独立した接続。実体は Arduino
+        # だが、シリアルログ読み取り自体は特定デバイスに依存しない汎用機能のため
+        # 「Arduino」ではなく「Serial」と呼ぶ） ----
+        conn_serial = ttk.LabelFrame(self, text="Serial 接続")
+        conn_serial.pack(fill="x", padx=8, pady=4)
+
+        ttk.Label(conn_serial, text="port").grid(row=0, column=0, padx=4, pady=4)
+        self.serial_port_var = tk.StringVar(value="")
+        self.serial_port_combo = ttk.Combobox(
+            conn_serial, textvariable=self.serial_port_var, width=10, state="readonly")
+        self.serial_port_combo.grid(row=0, column=1)
+        self._refresh_serial_ports()
+
+        ttk.Button(conn_serial, text="更新", command=self._refresh_serial_ports).grid(
+            row=0, column=2, padx=4)
+
+        ttk.Label(conn_serial, text="baud").grid(row=0, column=3, padx=4)
+        self.serial_baud_var = tk.StringVar(
+            value=str(self.cfg.get("serial", {}).get("baudrate", 115200)))
+        ttk.Entry(conn_serial, textvariable=self.serial_baud_var, width=8).grid(row=0, column=4)
+
+        self.serial_connect_btn = ttk.Button(
+            conn_serial, text="Connect", command=self._toggle_serial_connect)
+        self.serial_connect_btn.grid(row=0, column=6, padx=8)
+
+        self.serial_status_var = tk.StringVar(value="● Disconnected")
+        self.serial_status_label = ttk.Label(
+            conn_serial, textvariable=self.serial_status_var, foreground="red")
+        self.serial_status_label.grid(row=0, column=7, padx=8)
+
+        # 「CANログ」と同じ理由（GUI 表示設定であって接続状態からの推測値ではない）
+        # で Serial 接続パネル側に置く。
+        ttk.Checkbutton(
+            conn_serial,
+            text="Serialログ",
+            variable=self._serial_log_visible,
+            command=lambda: self._toggle_panel(self.serial_log_frame, self._serial_log_visible),
+        ).grid(row=0, column=8, padx=8)
+
+        # ---- ECU 状態（シリアルログから抽出。接続パネルとは別枠にする理由:
+        # 旧「トラッキング状態」パネル（CAN 送受信の観測からの推測値、S3 タイマ等で
+        # サイレントに古くなりうるため撤去済み）と違い、ここは ECU 自身のログという
+        # 一次情報源に基づく値。接続の可否とは別の関心事であり、今後 Dcm セッション/
+        # SecurityAccess レベル等を追加しやすいよう、専用パネルとして独立させる） ----
+        state_frame = ttk.LabelFrame(self, text="ECU 状態（シリアルログより）")
+        state_frame.pack(fill="x", padx=8, pady=4)
+        for tag, label, _rules in self._STATE_DEFS:
+            ttk.Label(state_frame, text=f"{label}:",
+                      font=("", 9, "bold")).pack(side="left", padx=(8, 2), pady=4)
+            ttk.Label(state_frame, textvariable=self._serial_state_vars[tag],
+                      foreground="#2a7a2a", font=("Consolas", 9, "bold"),
+                      width=self._STATE_VALUE_WIDTH,
+                      anchor="w").pack(side="left", padx=(0, 12), pady=4)
 
         meter = ttk.LabelFrame(
             self, text="仮想メータ表示（MeterStatus 0x200、実機に物理表示器が無いための可視化）")
@@ -476,18 +552,39 @@ class App(tk.Tk):
                 current_row += 1
         # ---- ログ ----
         self.log_frame = ttk.LabelFrame(body, text="ログ")
-        # initially hidden; shown by _toggle_log when checkbox is checked
+        # initially hidden; shown by _toggle_panel when checkbox is checked
 
         self.log_text = scrolledtext.ScrolledText(
             self.log_frame, font=("Consolas", 10), state="disabled", wrap="word"
         )
         self.log_text.pack(fill="both", expand=True)
 
-    def _toggle_log(self):
-        if self._log_visible.get():
-            self.log_frame.pack(side="left", fill="both", expand=True)
+        # ---- Serial ログ（Serial.println 出力。上記「CANログ」＝ツール自身の
+        # CAN 送受信ログとは別物のため、別パネルとして分ける） ----
+        self.serial_log_frame = ttk.LabelFrame(body, text="Serialログ")
+        # initially hidden; shown by _toggle_panel when checkbox is checked
+        # CanSM/EcuM の状態表示は専用の「ECU 状態」パネルに常設したため、ここには
+        # 置かない（_serial_state_vars の Label は state_frame 側を参照）。
+
+        self.serial_log_text = scrolledtext.ScrolledText(
+            self.serial_log_frame, font=("Consolas", 9), state="disabled", wrap="word"
+        )
+        self.serial_log_text.pack(fill="both", expand=True, padx=4, pady=4)
+
+    @staticmethod
+    def _toggle_panel(frame, visible_var):
+        """チェックボックス連動で LabelFrame の表示/非表示を切り替える共通処理
+        （「ログ」「Serialログ」パネルで同一の4行を2回書いていたのを統合）。"""
+        if visible_var.get():
+            frame.pack(side="left", fill="both", expand=True)
         else:
-            self.log_frame.pack_forget()
+            frame.pack_forget()
+
+    def _refresh_serial_ports(self):
+        ports = [p.device for p in serial.tools.list_ports.comports()]
+        self.serial_port_combo["values"] = ports
+        if ports and self.serial_port_var.get() not in ports:
+            self.serial_port_var.set(ports[0])
 
     # ------------------------------------------------------------------
     # E2E P01/P05 送信サポート
@@ -783,6 +880,172 @@ class App(tk.Tk):
         self.status_label.configure(foreground="red")
         self.connect_btn.configure(text="Connect")
         self._log("切断しました")
+
+    # ------------------------------------------------------------------
+    # Serial 接続（CAN 接続とは独立。pyserial で COM ポートを開き、
+    # Serial.println() の出力を行単位で読む。gs_usb と異なり明示 close() で
+    # 素直に解放できるため、CAN 側のような gc.collect() 越しの後始末は不要）
+    # ------------------------------------------------------------------
+    def _toggle_serial_connect(self):
+        if self.serial_port is None:
+            self._serial_connect()
+        else:
+            self._serial_disconnect()
+
+    def _serial_connect(self):
+        port = self.serial_port_var.get()
+        if not port:
+            messagebox.showerror("接続失敗", "COM ポートを選択してください")
+            return
+        try:
+            baud = int(self.serial_baud_var.get())
+        except ValueError:
+            messagebox.showerror("接続失敗", f"baud の形式エラー: {self.serial_baud_var.get()!r}")
+            return
+        try:
+            ser = serial.Serial(port, baud, timeout=0.2)
+        except Exception as exc:  # noqa: BLE001 - 接続失敗内容をそのままユーザーに見せる
+            messagebox.showerror("接続失敗", str(exc))
+            return
+        self.serial_port = ser
+        self.serial_status_var.set("● Connected")
+        self.serial_status_label.configure(foreground="green")
+        self.serial_connect_btn.configure(text="Disconnect")
+        self.serial_log_queue.put(f"接続しました ({port} @ {baud}bps)")
+        self._serial_stop.clear()
+        self._serial_thread = threading.Thread(
+            target=self._serial_reader_worker, args=(ser, self._serial_stop), daemon=True)
+        self._serial_thread.start()
+
+    def _serial_disconnect(self):
+        self._serial_stop.set()
+        if self._serial_thread is not None and self._serial_thread.is_alive():
+            self._serial_thread.join(timeout=1.0)
+        self._serial_thread = None
+        self._serial_mark_disconnected()
+        self.serial_log_queue.put("切断しました")
+
+    def _serial_mark_disconnected(self):
+        """serial_port を close して GUI を切断状態に戻す（表示のリセットのみ、
+        メインスレッドから呼ぶこと）。ユーザーの Disconnect クリック
+        （_serial_disconnect）と、ワーカースレッドの受信エラー通知
+        （_poll_queues の "serial_error" ハンドラ）の両方から使う共通処理。
+        後者を追加した理由: 以前はエラー時にログへ1行出すだけで self.serial_port/
+        ステータス表示/Connect ボタンをリセットしておらず、USB 切断等で
+        ワーカーが static に終了した後も GUI が「● Connected」のまま固着し、
+        ECU 状態パネルも直前の値が更新されず古いまま残り続けるバグがあった
+        （2026-08 のレビューで発見）。"""
+        if self.serial_port is not None:
+            try:
+                self.serial_port.close()
+            except Exception:  # noqa: BLE001 - 切断処理は best-effort
+                pass
+        self.serial_port = None
+        self.serial_status_var.set("● Disconnected")
+        self.serial_status_label.configure(foreground="red")
+        self.serial_connect_btn.configure(text="Connect")
+
+    def _serial_reader_worker(self, ser: "serial.Serial", stop_ev: threading.Event):
+        """シリアルログを行単位で読み、生ログは serial_log_queue へ、
+        CanSM/EcuM の状態変化は state_queue へ流す。timeout=0.2s で定期的に
+        stop_ev を確認することで、切断時に確実に終了する
+        （_rx_monitor_worker と同じ設計、bus_lock 相当の排他は不要
+        ―― CAN と違い他のワーカーとこのシリアルポートを取り合わないため）。
+
+        ser.readline() を使わず read() + 手動でのバッファリングにしているのは、
+        readline() だと 1 行の送信が timeout（0.2s）より長くかかった場合に
+        改行未到達のまま打ち切られ、分断された断片をそれぞれ別の「1行」として
+        扱ってしまう（ログが文字化けし、分断点が状態判定キーワードにかかると
+        _parse_serial_state が遷移を見逃す）ため。バッファに溜めて実際に
+        改行が見つかった分だけを1行として確定させれば、この問題は原理的に
+        起こらない（2026-08 のレビューで発見・対応）。"""
+        buffer = b""
+        while not stop_ev.is_set():
+            try:
+                chunk = ser.read(max(1, ser.in_waiting))
+            except Exception as exc:  # noqa: BLE001 - 実エラーはログに出してワーカーを止める
+                self.serial_log_queue.put(f"[Serialログ] 受信エラーのため監視を停止しました: {exc}")
+                self.state_queue.put(("serial_error", None))
+                return
+            if not chunk:
+                continue  # timeout（0.2s）。何も届かなかっただけ。
+            buffer += chunk
+            while True:
+                raw_line, sep, buffer = buffer.partition(b"\n")
+                if not sep:
+                    buffer = raw_line  # 改行未到達分。次の read() 分と合わせて再試行
+                    break
+                line = raw_line.decode("utf-8", errors="replace").rstrip("\r")
+                if not line:
+                    continue
+                self.serial_log_queue.put(line)
+                parsed = self._parse_serial_state(line)
+                if parsed is not None:
+                    self.state_queue.put(("serial_state", parsed))
+
+    # ログ行 "[<ms>ms] LEVEL TAG: func: message" から TAG と残りを取り出す
+    # （Det_Hw.cpp の出力フォーマット。README「シリアルモニタ出力例」参照）。
+    _SERIAL_LOG_RE = re.compile(r"^\[\d+ms\]\s+\S+\s+(\w+):\s+(.*)$")
+
+    # CanSM/EcuM の状態遷移ログに現れる部分文字列 → 表示する状態名。
+    # 上から順に最初に一致したものを採用するため、より具体的な文字列
+    # （例: "awaiting Nm Bus-Sleep Mode" を含む NO_COM_PENDING_SLEEP 用の行は
+    # 素の "->NO_COM" も含んでしまう）を先に置く。CanSM.c/EcuM.c の
+    # DET_LOGI/DET_LOGW 呼び出し文字列と対応（docs/modules/CanSM_Notes.md
+    # 「状態遷移」の Mermaid 図と同じ6状態）。
+    _CANSM_STATE_RULES = (
+        ("awaiting Nm Bus-Sleep Mode", "NO_COM_PENDING_SLEEP"),
+        ("->FULL_COM", "FULL_COM"),
+        ("->SILENT_COM", "SILENT_COM"),
+        ("Bus-Sleep Mode -> CAN controller SLEEP", "NO_COM"),
+        ("->NO_COM", "NO_COM"),
+        ("Wakeup detected -> validating", "WAKEUP_VALIDATING"),
+        ("back to SLEEP", "NO_COM"),
+        ("BusOff detected", "BUS_OFF"),
+    )
+    _ECUM_STATE_RULES = (
+        ("->RUN", "RUN"),
+        ("->POST_RUN", "POST_RUN"),
+        ("->SHUTDOWN", "SHUTDOWN"),
+    )
+
+    # 「ECU 状態」パネルの単一の情報源: (ログの TAG 文字列, 表示ラベル, 判定ルール)。
+    # ウィジェットの並び順（EcuM を左・CanSM を右）・表示ラベル文字列・ログ判定
+    # ルールを、ここ1箇所にまとめる（以前は3つの辞書に分散しており、新しい
+    # TAG を追加する際に更新箇所を3つ揃える必要があった）。EcuM は AUTOSAR の
+    # 公式型 EcuM_StateType（SWS 本文でも "ECU state" と呼ばれる）に合わせて
+    # 「ECU State」と表示する。CanSM は ComM_ModeType（NO_COM 等）と CanSM
+    # 独自の内部状態（BUS_OFF 等、AUTOSAR 仕様上の公式型がない）が混在するため、
+    # 対応する正式名称が定まらず「CanSM」のまま（要検討）。
+    _STATE_DEFS = (
+        ("EcuM", "ECU State", _ECUM_STATE_RULES),
+        ("CanSM", "CanSM", _CANSM_STATE_RULES),
+    )
+    _TAG_STATE_RULES = {tag: rules for tag, _label, rules in _STATE_DEFS}
+    # 値の表示幅（文字数）。実行中に値が変わっても左右の他要素の位置が動かない
+    # よう固定する。両状態を通じて最長の値は "NO_COM_PENDING_SLEEP"（20文字）。
+    _STATE_VALUE_WIDTH = 20
+
+    @classmethod
+    def _parse_serial_state(cls, line: str):
+        """ログ1行から CanSM/EcuM の状態遷移を抽出する。
+        該当なしなら None、該当すれば (tag, state) を返す。
+        完全な状態機械の再現ではなく、DET_LOGI/DET_LOGW に実際に出てくる
+        文字列だけを頼りにしたベストエフォートの表示用。Bus-Off 回復成功時
+        （CanSM_MainFunction() の復帰分岐、CanSM.c 参照）のように、その場では
+        専用の状態変化ログを出さない遷移もあり、その場合は次に別の遷移ログが
+        出るまで表示が古いままになる。"""
+        m = cls._SERIAL_LOG_RE.match(line)
+        if not m:
+            return None
+        tag, rest = m.group(1), m.group(2)
+        rules = cls._TAG_STATE_RULES.get(tag)
+        if rules is None:
+            return None
+        for substr, state in rules:
+            if substr in rest:
+                return (tag, state)
+        return None
 
     # ------------------------------------------------------------------
     # ボタン送信 (バックグラウンドスレッドで実行し、結果は queue 経由で GUI に反映)
@@ -1502,6 +1765,22 @@ class App(tk.Tk):
             self.log_text.see("end")
             self.log_text.configure(state="disabled")
 
+        serial_lines = []
+        while True:
+            try:
+                serial_lines.append(self.serial_log_queue.get_nowait())
+            except queue.Empty:
+                break
+        if serial_lines:
+            # Arduino 側が既に [<ms>ms] 形式のタイムスタンプを付けているため、
+            # 上記「ログ」（ツール自身の送受信ログ）と違い PC 側の時刻は付けない。
+            # まとめて1回で insert することで、Arduino起動時の大量ログ等
+            # バーストで届いた場合に Tk ウィジェット操作を行単位で繰り返さない。
+            self.serial_log_text.configure(state="normal")
+            self.serial_log_text.insert("end", "\n".join(serial_lines) + "\n")
+            self.serial_log_text.see("end")
+            self.serial_log_text.configure(state="disabled")
+
         while True:
             try:
                 kind, value = self.state_queue.get_nowait()
@@ -1527,6 +1806,18 @@ class App(tk.Tk):
                 btn_idx, text = value
                 if btn_idx in self._periodic_btn_vars:
                     self._periodic_btn_vars[btn_idx].set(text)
+            elif kind == "serial_state":
+                tag, state = value
+                if tag in self._serial_state_vars:
+                    self._serial_state_vars[tag].set(state)
+            elif kind == "serial_error":
+                # ワーカースレッド自身は Tk ウィジェットに触れないため、
+                # GUI リセットはここ（メインスレッド）でまとめて行う
+                # （_serial_mark_disconnected 参照）。ECU 状態パネルの値は
+                # 「最後に確認できていた状態」として意図的にそのまま残す
+                # （切断自体はステータス表示の赤/Connect ボタンで分かるため）。
+                self._serial_thread = None
+                self._serial_mark_disconnected()
             elif kind == "rx_mon":
                 mon_idx, data = value
                 if mon_idx in self._rx_monitor_vars:
