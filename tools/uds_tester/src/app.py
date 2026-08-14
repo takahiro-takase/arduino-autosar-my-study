@@ -1009,26 +1009,38 @@ class App(tk.Tk):
         ("->SHUTDOWN", "SHUTDOWN"),
     )
 
+    # ComM.c の ComM_BusSMIndication() が CanSM からのモード変化通知を受けるたびに
+    # 必ず出す "ch%u ->mode=%u" ログ（ComM.c 参照）から ComM_ModeType を判定する。
+    # ComM_ModeType は 0/1/2 の3値しか取らない（ComM.h 参照）ため、CanSM/EcuM と
+    # 同じ部分文字列一致ルールで表現でき、専用の正規表現・分岐は不要。
+    _COMM_STATE_RULES = (
+        ("->mode=0", "NO_COM"),
+        ("->mode=1", "SILENT_COM"),
+        ("->mode=2", "FULL_COM"),
+    )
+
     # 「ECU 状態」パネルの単一の情報源: (ログの TAG 文字列, 表示ラベル, 判定ルール)。
-    # ウィジェットの並び順（EcuM を左・CanSM を右）・表示ラベル文字列・ログ判定
-    # ルールを、ここ1箇所にまとめる（以前は3つの辞書に分散しており、新しい
-    # TAG を追加する際に更新箇所を3つ揃える必要があった）。EcuM は AUTOSAR の
-    # 公式型 EcuM_StateType（SWS 本文でも "ECU state" と呼ばれる）に合わせて
-    # 「ECU State」と表示する。CanSM は ComM_ModeType（NO_COM 等）と CanSM
-    # 独自の内部状態（BUS_OFF 等、AUTOSAR 仕様上の公式型がない）が混在するため、
-    # 対応する正式名称が定まらず「CanSM」のまま（要検討）。
+    # ウィジェットの並び順（EcuM → ComM → CanSM の、上位から下位への順）・表示
+    # ラベル文字列・ログ判定ルールを、ここ1箇所にまとめる（以前は3つの辞書に
+    # 分散しており、新しい TAG を追加する際に更新箇所を3つ揃える必要があった）。
+    #
+    # 表示ラベルは対応する AUTOSAR の公式型がある場合はそれに合わせる（EcuM→
+    # "ECU State"、ComM→"Comm Mode"）。CanSM だけ公式型がなく「CanSM」のまま
+    # な理由は README「UDS ボタン送信ツール」節の該当パラグラフを参照。
+    #
     _STATE_DEFS = (
         ("EcuM", "ECU State", _ECUM_STATE_RULES),
+        ("ComM", "Comm Mode", _COMM_STATE_RULES),
         ("CanSM", "CanSM", _CANSM_STATE_RULES),
     )
     _TAG_STATE_RULES = {tag: rules for tag, _label, rules in _STATE_DEFS}
     # 値の表示幅（文字数）。実行中に値が変わっても左右の他要素の位置が動かない
-    # よう固定する。両状態を通じて最長の値は "NO_COM_PENDING_SLEEP"（20文字）。
+    # よう固定する。全状態を通じて最長の値は "NO_COM_PENDING_SLEEP"（20文字）。
     _STATE_VALUE_WIDTH = 20
 
     @classmethod
     def _parse_serial_state(cls, line: str):
-        """ログ1行から CanSM/EcuM の状態遷移を抽出する。
+        """ログ1行から EcuM/ComM/CanSM の状態遷移を抽出する。
         該当なしなら None、該当すれば (tag, state) を返す。
         完全な状態機械の再現ではなく、DET_LOGI/DET_LOGW に実際に出てくる
         文字列だけを頼りにしたベストエフォートの表示用。Bus-Off 回復成功時
