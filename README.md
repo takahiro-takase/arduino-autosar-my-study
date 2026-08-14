@@ -976,6 +976,7 @@ FiM は Dem が確定した DTC をもとにアプリ機能の実行許可を判
 | ランプ IOControl (0x2F) | RunLamp/FaultLamp/AbsLamp ごとに returnControlToECU / resetToDefault / freezeCurrentState / shortTermAdjustment(ON/OFF) をプリセットから送信 |
 | RoutineControl (0x31) | EngineHealthCheck (RID 0203) の startRoutine / requestRoutineResults / stopRoutine をプリセットから送信 |
 | 周期送信 + 周期(ms)入力欄 | コマンド一覧の各ボタン（`can_frame`型・`raw`型（UDS）とも）に「定期」トグルボタンと周期(ms)の編集可能な入力欄を用意。Tester Present もこの仕組みで周期送信する（既定2000ms） |
+| Serial ログ表示 | `Serial.println()` のデバッグログ（`[ms] LEVEL TAG: message`）を USB シリアル経由で表示。CAN 接続とは独立した別の COM ポート接続（Serial 接続パネル）で、EcuM/CanSM の状態遷移（RUN/SHUTDOWN、FULL_COM/NO_COM 等）をログから抽出してリアルタイム表示 |
 
 ```
 cd tools/uds_tester
@@ -987,13 +988,34 @@ Windows で `pip install` 済みなら `tools/uds_tester/run.bat` をダブル�
 起動できます（内部で自分自身のディレクトリへ `cd` してから `python src\app.py` を
 実行するだけの薄いランチャーです）。
 
-接続先は GUI 上の `interface` / `channel` / `bitrate` で指定します
+接続先は「CAN 接続」パネルの `interface` / `channel` / `bitrate` で指定します
 （既定値は `config.json` の `can` セクション）。CANable / candleLight 互換
 アダプタの場合は `interface=gs_usb`, `channel=0`。SLCAN 系の COM ポートアダプタ
 の場合は `interface=slcan`, `channel=COM3` のように変更してください。
 
 > **Cangaroo と同時に同じアダプタへ接続することはできません。** 干渉する場合は
 > どちらか一方を切断してください。
+
+デバッグログ（`Serial.println()`、`[ms] LEVEL TAG: message` 形式。
+「[シリアルモニタ出力例](#serial-log-example)」参照）を見るには、「Serial 接続」
+パネルで COM ポート（`platformio.ini` の `monitor_speed=115200` と同じ既定
+baud）を選んで Connect してください。CAN 接続とは完全に独立した別デバイス接続の
+ため、両方同時に接続できます（ただし PlatformIO のシリアルモニタ自体とは同じ COM
+ポートを同時に掴めないため、どちらか一方のみ）。EcuM（`ECU State`表示。
+`ECUM_STATE_RUN`等の`EcuM_StateType`に対応）/CanSM の最新状態（`->FULL_COM`等の
+ログ行から正規表現で抽出、`docs/modules/CanSM_Notes.md`「状態遷移」参照）は
+「ECU 状態」パネルに左から EcuM・CanSM の順、値は表示位置がずれないよう固定幅で
+常時表示され、「Serialログ」チェックボックスでログパネルを開かなくても確認できます。
+CanSM 側の表示ラベルは、`ComM_ModeType`（NO_COM 等）と CanSM 独自の内部状態
+（BUS_OFF 等、AUTOSAR 仕様上の公式型がない）が混在するため、対応する正式名称が
+定まらず「CanSM」のまま（検討中）。専用パネルにしているのは、
+CAN 送受信の観測からの推測値だったため撤去した旧「トラッキング状態」パネルとは
+異なり、ECU 自身のログという一次情報源に基づく値であり、接続の可否とは別の
+関心事のため（今後 Dcm セッション/SecurityAccess レベル等の追加も想定）。生ログ
+自体は「Serialログ」チェックボックスで表示/非表示を切り替えます。抽出はログ
+文字列に依存したベストエフォートのため、Bus-Off 回復成功時のように専用の状態
+変化ログを出さない遷移では、次に別の遷移ログが出るまで表示が古いままになる
+ことがあります。
 
 ボタンの追加・変更はコードを触らず `config.json` の `buttons` 配列に項目を
 追加するだけで行えます（本プロジェクトの `*_PBCfg.c` と同じ「コードと設定の分離」
