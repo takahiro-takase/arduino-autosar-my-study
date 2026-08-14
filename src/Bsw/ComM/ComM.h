@@ -103,7 +103,7 @@ Std_ReturnType ComM_GetStatus(ComM_InitStatusType* Status);
  * \details 要求モードに応じてチャネルの状態遷移を行い、
  *          Can_SetControllerMode() でハードウェアを制御する。
  *          複数ユーザからの要求は最高優先モードに調停する
- *          (AUTOSAR SWS_ComM_00069)。
+ *          (AUTOSAR SWS_ComM_00686、"highest wins" 戦略)。
  *
  * \param[in]  User     要求するユーザ ID (COMM_USER_0 等)。
  * \param[in]  ComMode  要求する通信モード

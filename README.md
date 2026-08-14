@@ -976,7 +976,7 @@ FiM は Dem が確定した DTC をもとにアプリ機能の実行許可を判
 | ランプ IOControl (0x2F) | RunLamp/FaultLamp/AbsLamp ごとに returnControlToECU / resetToDefault / freezeCurrentState / shortTermAdjustment(ON/OFF) をプリセットから送信 |
 | RoutineControl (0x31) | EngineHealthCheck (RID 0203) の startRoutine / requestRoutineResults / stopRoutine をプリセットから送信 |
 | 周期送信 + 周期(ms)入力欄 | コマンド一覧の各ボタン（`can_frame`型・`raw`型（UDS）とも）に「定期」トグルボタンと周期(ms)の編集可能な入力欄を用意。Tester Present もこの仕組みで周期送信する（既定2000ms） |
-| Serial ログ表示 | `Serial.println()` のデバッグログ（`[ms] LEVEL TAG: message`）を USB シリアル経由で表示。CAN 接続とは独立した別の COM ポート接続（Serial 接続パネル）で、EcuM/CanSM の状態遷移（RUN/SHUTDOWN、FULL_COM/NO_COM 等）をログから抽出してリアルタイム表示 |
+| Serial ログ表示 | `Serial.println()` のデバッグログ（`[ms] LEVEL TAG: message`）を USB シリアル経由で表示。CAN 接続とは独立した別の COM ポート接続（Serial 接続パネル）で、EcuM/ComM/CanSM の状態遷移（RUN/SHUTDOWN、FULL_COM/NO_COM、CanSM 独自状態 等）をログから抽出してリアルタイム表示 |
 
 ```
 cd tools/uds_tester
@@ -1002,13 +1002,17 @@ Windows で `pip install` 済みなら `tools/uds_tester/run.bat` をダブル�
 baud）を選んで Connect してください。CAN 接続とは完全に独立した別デバイス接続の
 ため、両方同時に接続できます（ただし PlatformIO のシリアルモニタ自体とは同じ COM
 ポートを同時に掴めないため、どちらか一方のみ）。EcuM（`ECU State`表示。
-`ECUM_STATE_RUN`等の`EcuM_StateType`に対応）/CanSM の最新状態（`->FULL_COM`等の
-ログ行から正規表現で抽出、`docs/modules/CanSM_Notes.md`「状態遷移」参照）は
-「ECU 状態」パネルに左から EcuM・CanSM の順、値は表示位置がずれないよう固定幅で
-常時表示され、「Serialログ」チェックボックスでログパネルを開かなくても確認できます。
-CanSM 側の表示ラベルは、`ComM_ModeType`（NO_COM 等）と CanSM 独自の内部状態
-（BUS_OFF 等、AUTOSAR 仕様上の公式型がない）が混在するため、対応する正式名称が
-定まらず「CanSM」のまま（検討中）。専用パネルにしているのは、
+`ECUM_STATE_RUN`等の`EcuM_StateType`に対応）/ComM（`Comm Mode`表示。
+`ComM.c`の`ComM_BusSMIndication()`が出す`"ch%u ->mode=%u"`ログから数値を抽出し、
+`ComM_ModeType`（NO_COM/SILENT_COM/FULL_COM）へ変換）/CanSM（`->FULL_COM`等の
+ログ行から正規表現で抽出、`docs/modules/CanSM_Notes.md`「状態遷移」参照）の
+最新状態は「ECU 状態」パネルに左から EcuM・ComM・CanSM の順、値は表示位置が
+ずれないよう固定幅で常時表示され、「Serialログ」チェックボックスでログパネルを
+開かなくても確認できます。CanSM 側の表示ラベルだけは、対応する AUTOSAR 公式型が
+ないため（`CanSM_InternalStateType`はこのプロジェクト独自の内部表現で、
+`ComM_ModeType`相当の3状態とCanSM固有の3状態[BUS_OFF等]が混在する）、
+「CanSM」のままとしている（ComM 列を独立させたことで、CanSM 列と
+ComM_ModeType が重複して見える問題は解消済み）。専用パネルにしているのは、
 CAN 送受信の観測からの推測値だったため撤去した旧「トラッキング状態」パネルとは
 異なり、ECU 自身のログという一次情報源に基づく値であり、接続の可否とは別の
 関心事のため（今後 Dcm セッション/SecurityAccess レベル等の追加も想定）。生ログ

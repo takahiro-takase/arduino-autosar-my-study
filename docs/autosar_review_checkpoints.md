@@ -135,6 +135,23 @@ grep したが SWS 文書中に0件で、こちらは確かに仕様上 Init を
 | KeyM | 914c041 | 仕様通り。引用要求（SWS_KeyM_00158/00086/00103/00106/00013 等）の内容を実際の SWS_KeyManager.pdf（4.4.0）で確認、記載・実装とも正確。スコープ縮小（証明書 submodule 除外、Start/Update/Finalize のみ実装等）はヘッダに明記済み |
 | WdgIf | 914c041 | 仕様通り。ServiceID(0x01/0x02/0x03)・引用要求(SWS_WdgIf_00042/00044/00046/00018)とも SWS_WatchdogInterface.pdf と一致。`WdgIf_Init`が無いことも仕様通り（そもそも定義されていない） |
 
+## 台帳: CanSM / ComM 状態遷移レビュー
+
+**観点**: CanSM/ComM の状態遷移の挙動（Bus-Off 回復シーケンス、複数ユーザ調停、
+DET_E_UNINIT ガード等）と、引用している `\AUTOSARReq`/コメント中の SWS 番号の
+正確性を SWS_CANStateManager.pdf / SWS_COMManager.pdf と突き合わせ。
+**対象ファイル**: `<Module>.h` + `<Module>.c`。**確認日**: 2026-08-14。
+
+| モジュール | SHA | 結果 |
+|---|---|---|
+| CanSM | 444b7a0 | 挙動は仕様通り。Bus-Off L1/L2 バックオフのタイミング・閾値ロジックは SWS_CanSM_00514/00515 と完全一致、DET_E_UNINIT ガード（SWS_CanSM_00184/00188/00190）も正確。SWS_CanSM_00636 の引用はやや不正確（00636 は `CanSMEnableBusOffDelay=TRUE` 時のみの要求だが、本実装は FALSE 相当。直後に「FALSE 相当」と注記済みのため実害は軽微、未修正） |
+| ComM | 未反映（コミット前） | **修正済み**: `ComM_RequestComMode()` の複数ユーザ調停ロジックが `SWS_ComM_00069`（実際は「FULL_COM 突入時に Bus State Manager へ転送する」ことのみを規定）を誤って引用していた。正しくは調停の "highest wins" 戦略を規定する `SWS_ComM_00686`、および「キューイングせず最新要求で上書き」を規定する `SWS_ComM_00500`。`ComM.c`/`ComM.h` のコメント・`\AUTOSARReq` タグを修正済み（コミット後に SHA 更新要）。他の引用（00612/00858/00242）は正確 |
+
+（`ComM_RequestComMode()` の引数バリデーションが `COMM_SILENT_COMMUNICATION`
+（SWS_ComM_00151/00868 によりユーザーが直接要求できないはずの値）を弾いていない
+という防御的ギャップも発見。実際の呼び出し元は全て NO_COM/FULL_COM のみを渡して
+おり現状は到達しないため、未対応のまま記録のみ。）
+
 ## 経緯（Why）
 
 2026-08-13、「プロジェクト全体をレビューしてほしい」→「BSW スタック全体のアーキテクチャ・
