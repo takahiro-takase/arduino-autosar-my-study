@@ -601,15 +601,10 @@ AUTOSAR E2E (End-to-End) による保護です。CAN バスの電気的エラー
 E2EHealthStatus の送信いずれも `src/Bsw/E2E/E2E_P05.c` の CRC16+8bit カウンタ
 **Profile05** を使用します。
 
-> **移行の経緯**: 当初 EngineInfo/AbsInfo は CRC8+4bit カウンタの **Profile01**
-> （`src/Bsw/E2E/E2E_P01.c`）で保護していました。E2EHealthStatus を Profile01+SecOC の
-> 二重保護から Profile05 単体へ切り替えた際に `E2E_P05Check()`（受信検証側）を
-> 対称性のために実装したものの、当時は呼び出し元が無い状態でした。その後
-> EngineInfo/AbsInfo 側も CRC 検出能力を高めるため Profile05 へ移行し、
-> `E2E_P05Check()` の実際の呼び出し元になっています。Profile01 用の
-> `E2E_P01.c`/`E2EXf_RxConfigType`/`E2EXf_InverseTransform()`/
-> `E2EMon_NotifyCheckResult()`/`Rte_MapE2EStatus()` は削除せず、学習用
-> リファレンス実装として意図的に残しています（現在は呼び出し元がゼロ）。
+> CRC8+4bit カウンタの **Profile01**（`src/Bsw/E2E/E2E_P01.c`）用の
+> `E2EXf_RxConfigType`/`E2EXf_InverseTransform()`/`E2EMon_NotifyCheckResult()`/
+> `Rte_MapE2EStatus()` は削除せず、学習用リファレンス実装として意図的に
+> 残しています（現在は呼び出し元がゼロ）。
 
 > **統合方式（E2E Transformer）:** Com は E2E の存在を一切関知しません。AUTOSAR が定義する
 > 3 通りの E2E 統合方式のうち「E2E Transformer」（`docs/AUTOSAR_SWS_E2ELibrary.pdf` 12.4 節、
@@ -649,13 +644,7 @@ E2EHealthStatus の送信いずれも `src/Bsw/E2E/E2E_P05.c` の CRC16+8bit カ
 <a id="ipdu-group"></a>
 ##### I-PDU Group（Com_IpduGroupStart/Stop、通信のライフサイクル制御）
 
-これまで通信の有効/無効制御は、診断 `CommunicationControl`（UDS 0x28）が呼ぶ
-`Com_SetCommunicationEnabled()`（全 I-PDU 一括の ON/OFF スイッチ）のみでした。
-実 AUTOSAR の `Com_IpduGroupStart()`/`Com_IpduGroupStop()`（`Com_IPduConfigType`
-の設計コメント・`Com.h` の `Com_SetCommunicationEnabled()` ドキュメントに、
-「本来は I-PDU Group 単位だが、本プロジェクトには I-PDU Group という設定概念が
-ないため簡略化している」と以前から明記されていたギャップです）を実装し、
-**個別の I-PDU 単位**で起動/停止できるようにしました。
+**個別の I-PDU 単位**で起動/停止できます。
 
 ```
 [SWS_Com_00444] 既定では全 I-PDU Group は停止状態
@@ -665,10 +654,11 @@ E2EHealthStatus の送信いずれも `src/Bsw/E2E/E2E_P05.c` の CRC16+8bit カ
 
 `Com_IPduConfigType.IpduGroupId`（既定値 `COM_IPDU_GROUP_NONE`）で所属を設定します。
 本プロジェクトでは **E2EHealthStatus のみ**を「テレメトリ」I-PDU Group
-（`COM_IPDU_GROUP_TELEMETRY`）に所属させ、他の全 I-PDU（EngineInfo/AbsInfo/
-MeterStatus/WarningStatus/ImmobilizerCmd）はどの I-PDU Group にも属させていません
-（＝常に有効、`Com_IpduGroupStart/Stop()` の影響を受けない）。E2EHealthStatus は
-診断監視用のネットワーク健全性テレメトリで、車両の基本動作には不要な「非重要」
+（`COM_IPDU_GROUP_TELEMETRY`）に所属させています。
+その他の全 I-PDU（EngineInfo/AbsInfo/MeterStatus/WarningStatus/ImmobilizerCmd）は
+どの I-PDU Group にも属させていません（＝常に有効、`Com_IpduGroupStart/Stop()` の影響を受けない）。
+
+E2EHealthStatus は、診断監視用のネットワーク健全性テレメトリで、車両の基本動作には不要な「非重要」
 通信であるため、独立して停止できる対象として選びました。
 
 <a id="ipdu-group-caller"></a>
@@ -693,26 +683,25 @@ shall call Com_IpduGroupStart for each BswMEnabledPduGroupRef, and call
 Com_IpduGroupStop for each BswMDisabledPduGroupRef.
 ```
 
-これに倣い、`BswM_ActionType` に `BSWM_ACTION_PDU_GROUP_START`/`_STOP` を追加し
-（既存の `BSWM_ACTION_ACTIVATE`/`_DEACTIVATE`——Os タスクの有効/無効化——とは別の、
-2 つ目のアクション種別として）、以下の 2 ルールを追加しました
-（`src/Bsw/BswM/BswM_PBCfg.c`）。
+これに倣い、`BswM_ActionType` に `BSWM_ACTION_PDU_GROUP_START`/`_STOP`
+（既存の `BSWM_ACTION_ACTIVATE`/`_DEACTIVATE`——Os タスクの有効/無効化——とは別の
+アクション種別）を用意し、以下のルールで I-PDU Group「テレメトリ」
+（E2EHealthStatus）を制御しています（`src/Bsw/BswM/BswM_PBCfg.c`）。
 
 | Rule | トリガ | アクション |
 |---|---|---|
-| Rule 3 | EcuM → RUN | `Com_IpduGroupStart(TELEMETRY, initialize=false)` |
+| Rule 3 | EcuM==RUN `AND` ComM==FULL_COMMUNICATION | `Com_IpduGroupStart(TELEMETRY, initialize=false)` |
 | Rule 4 | EcuM → POST_RUN | `Com_IpduGroupStop(TELEMETRY)` |
+| Rule 5 | ComM==SILENT_COMMUNICATION `OR` ComM==NO_COMMUNICATION | `Com_IpduGroupStop(TELEMETRY)` |
 
-既存の Rule 0（RUN→全タスク有効化）・Rule 1（POST_RUN→アプリタスク無効化）と
-同じトリガ（同じ条件）で新しいルールを追加しただけなので、
-既存ルールへの変更は一切ありません（`BswM_ExecuteRules()` は一致する全ルールを
-実行するため、Rule 0 と Rule 3 は RUN 遷移のたびに両方発火します）。
-
-> **その後の変更**: Nm（CanNm 状態機械）導入に伴い、Rule 3 は単一条件
-> （EcuM==RUN）から複合条件（EcuM==RUN `AND` ComM==FULL_COMMUNICATION）へ、
-> Rule 4 と対になる停止条件として Rule 5（ComM==SILENT_COMMUNICATION `OR`
-> ComM==NO_COMMUNICATION）が追加されています。詳細は前述の「BswM（BSW
-> モードマネージャ）」セクションのルールテーブルを参照してください。
+既存の Rule 0（RUN→全タスク有効化）・Rule 1（POST_RUN→アプリタスク無効化）への
+変更はありません（`BswM_ExecuteRules()` は条件を満たす全ルールを実行するため、
+Rule 0 と Rule 3 は RUN 遷移のたびに両方発火します）。Rule 3 が単一条件ではなく
+AND 複合条件なのは、ComM のチャネルモードが EcuM の RUN/POST_RUN とは独立して
+変化しうるため（Bus-Off 中の SILENT_COMMUNICATION 等）、CAN チャネルが実際に
+FULL_COMMUNICATION でなければ E2EHealthStatus を送信してもバスに届かないから
+です。Rule 5 はその対になる停止条件（ComM がチャネルを離脱したら即座にテレメトリ
+を止める）です。
 
 <a id="ipdu-group-behavior"></a>
 ##### Com_IpduGroupStart/Stop が実際に行うこと
