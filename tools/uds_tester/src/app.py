@@ -573,9 +573,24 @@ class App(tk.Tk):
                 periodic_btn.bind("<MouseWheel>", _scroll)
                 self._periodic_btn_vars[i] = periodic_var
 
-                # 周期(ms) 入力欄 (col 5)。config.json の interval_ms（既定100ms）を
-                # 初期値にしつつ、実行時に変更できる。
-                interval_var = tk.StringVar(value=str(btn_cfg.get("interval_ms", 100)))
+                # 周期(ms) 入力欄 (col 5)。優先順位: config.json の interval_ms
+                # （明示指定）→ data/can_signals.json の txPeriodMs（この can_id を
+                # 持つ RX/TX-RX 方向のフレーム定義があれば、そこに記録された送信
+                # 周期。can_frame ボタンは基本的に外部ECUからの受信を模擬する用途
+                # のため、対応するRXフレームの txPeriodMs がそのまま「相手ECUが
+                # 送るべき周期」の妥当な初期値になる。direction=TX のフレーム
+                # （メータECU自身が送るMeterStatus等）の txPeriodMs はメータECU
+                # 自身の送信周期であり「相手ECUが送るべき周期」ではないため、
+                # ここでは対象外にする）→ 既定100ms、の順で決める。実行時には
+                # この Entry の値を変更できる。
+                _default_interval = btn_cfg.get("interval_ms")
+                if _default_interval is None:
+                    _frame_def = self.signal_defs.get(can_id_val)
+                    if _frame_def is not None and _frame_def.get("direction") in ("RX", "TX/RX"):
+                        _default_interval = _frame_def.get("txPeriodMs")
+                if _default_interval is None:
+                    _default_interval = 100
+                interval_var = tk.StringVar(value=str(_default_interval))
                 interval_entry = ttk.Entry(inner, textvariable=interval_var, width=6,
                                            font=("Consolas", 9))
                 interval_entry.grid(row=row, column=5, padx=(2, 4), pady=2)
