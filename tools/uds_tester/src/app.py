@@ -38,7 +38,42 @@ def parse_payload(items) -> bytes:
     return bytes(int(x, 16) if isinstance(x, str) else int(x) for x in items)
 
 
+# data/can_signals.json（CANフレームのビットレイアウト定義。tools/can_signal_editor/
+# 参照）へのパス。__file__ は tools/uds_tester/src/app.py なので、3階層上が
+# リポジトリルート（tools/can_signal_editor/src/app.py の DEFAULT_DATA_PATH と同じ規約）。
+DEFAULT_SIGNAL_DEFS_PATH = os.path.normpath(
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "data", "can_signals.json")
+)
+
+
 class App(tk.Tk):
+    def _load_signal_defs(self, path: str) -> "dict[int, dict]":
+        """data/can_signals.json を読み込み、{CAN ID(int): フレーム定義} の辞書を返す。
+        RXモニタのデコードはこの辞書を情報源にする（tools/can_signal_editor/ で
+        編集した内容がそのまま反映される）。ファイル自体が無い・JSONとして壊れて
+        いる場合は空辞書にフォールバックする（全フレーム分のデコードが無効化
+        されるのは避けられない）。一方、canId が数値型・null 等でフレーム1件
+        だけが壊れている場合は、そのフレームだけをスキップし他の正常なフレームは
+        引き続き使えるようにする（1件の入力ミスで全フレームのデコードが
+        道連れで無効化されるのを避けるため）。UDS診断というこのツール本来の
+        機能はどちらのケースでも止めない。"""
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except (OSError, ValueError) as exc:
+            self.log_queue.put(f"[起動] {path} の読み込みに失敗しました（RXモニタのデコードは無効化されます）: {exc}")
+            return {}
+
+        result: "dict[int, dict]" = {}
+        for fr in data.get("frames", []):
+            try:
+                result[int(fr["canId"], 0)] = fr
+            except Exception as exc:  # noqa: BLE001 - フレーム1件分の壊れ方は事前に列挙しきれない
+                self.log_queue.put(
+                    f"[起動] {path} のフレーム定義 {fr.get('name', '?')!r} を読み飛ばしました: {exc}"
+                )
+        return result
+
     def __init__(self, config_path: str):
         super().__init__()
         self.title("UDS Button Tester")
@@ -51,6 +86,7 @@ class App(tk.Tk):
         self.bus_lock = threading.Lock()
         self.log_queue: "queue.Queue[str]" = queue.Queue()
         self.state_queue: "queue.Queue[tuple]" = queue.Queue()
+        self.signal_defs = self._load_signal_defs(DEFAULT_SIGNAL_DEFS_PATH)
         self._periodic_stops: "dict[int, threading.Event]" = {}
         self._entry_vars: "dict[int, dict[str, tk.StringVar]]" = {}
         self._response_vars: "dict[int, tk.StringVar]" = {}
@@ -58,7 +94,6 @@ class App(tk.Tk):
         self._log_visible = tk.BooleanVar(value=False)
         self._rx_monitor_vars: "dict[int, tk.StringVar]" = {}
         self._rx_monitor_ids: "dict[int, int]" = {}
-        self._rx_monitor_decode: "dict[int, str]" = {}
         self._rx_monitor_secoc_verify: "dict[int, dict]" = {}
         self._rx_monitor_name_vars: "dict[int, tk.StringVar]" = {}
         self._rx_monitor_stop = threading.Event()
@@ -343,8 +378,6 @@ class App(tk.Tk):
                 self._rx_monitor_vars[i] = rx_var
                 self._rx_monitor_name_vars[i] = name_var
                 self._rx_monitor_ids[i] = can_id_int
-                if btn_cfg.get("decode"):
-                    self._rx_monitor_decode[i] = btn_cfg["decode"]
                 if btn_cfg.get("secoc_verify"):
                     self._rx_monitor_secoc_verify[i] = btn_cfg["secoc_verify"]
                 current_row += 1
@@ -1510,22 +1543,70 @@ class App(tk.Tk):
 
     # ------------------------------------------------------------------
     # 受信モニター (rx_monitor)
+    #
+    # デコードは data/can_signals.json（tools/can_signal_editor/ で編集する、
+    # CANフレームのビットレイアウト定義）を情報源にする。以前はフレームごとに
+    # 手書きのビット演算デコード関数を持っていたが、フレーム追加のたびに
+    # ここへも手を入れる必要があった。can_signals.json に定義さえあれば
+    # 自動でデコードされるようにし、その二重管理を無くす。
     # ------------------------------------------------------------------
-    _ENGINE_STATE_NAMES = {0: "OFF", 1: "STARTING", 2: "RUNNING", 3: "FAULT"}
-    _NM_SOURCE_NODE_NAMES = {1: "MeterEcu", 2: "VirtualPeerEcu"}
+    @staticmethod
+    def _extract_bits(data: bytes, bit_position: int, bit_size: int) -> int:
+        """can_signals.json のビット位置規約（ビット0=byte[0]のMSB、AUTOSAR Com の
+        ビッグエンディアン規約と同じ）で data から bit_size 分を抽出する。
+        バイト境界をまたぐフィールド（16bit のシグナル等）にも対応する。"""
+        value = 0
+        for i in range(bit_size):
+            byte_idx, bit_in_byte = divmod(bit_position + i, 8)
+            if byte_idx >= len(data):
+                break
+            value = (value << 1) | ((data[byte_idx] >> (7 - bit_in_byte)) & 1)
+        return value
+
+    # can_signals.json 上でプロトコルオーバーヘッド（アプリケーションデータでは
+    # ない）として扱う型。raw hex 表示（呼び出し元が別途出す）だけで十分なため
+    # _decode_frame_generic() では除外する。ここに無い型（"number" は当然、
+    # 将来 tools/can_signal_editor/ の TYPE_SCHEMA に新しい型が増えた場合も
+    # 含む）は、専用の表示ロジックが無くても生値だけは出す（下記フォール
+    # バック）。allowlist（既知の型だけ表示）にすると、新しい型が増えるたびに
+    # ここも直さない限りサイレントに何も表示されなくなり、まさにこの統合が
+    # 解消しようとした「2箇所を手で同期させる」問題が型の次元で再発するため。
+    _HIDDEN_FIELD_TYPES = frozenset({"e2e_crc", "e2e_counter", "secoc_freshness", "secoc_mac"})
 
     @staticmethod
-    def _decode_warning_status(byte0: int) -> str:
-        """WarningStatus (CAN 0x210) byte[0] を RUN/FAULT/ABS/upd の4ビットへデコードする。
-        Com Signal Group のビット配置: bit7=RunLamp, bit6=FaultLamp, bit5=AbsLamp,
-        bit4=update-bit (Com_Cfg.h の BitPosition 0/1/2/3、ネットワークビット順)。
-        upd はグループ単位の update-bit（SWS_Com_00801）: 実際に警告灯が変化した
-        送信では 1、TMS=true 時の MIXED 周期フロア再送（変化なし）では 0 になる。"""
-        run = (byte0 >> 7) & 1
-        fault = (byte0 >> 6) & 1
-        abs_ = (byte0 >> 5) & 1
-        upd = (byte0 >> 4) & 1
-        return f"(RUN:{run} FAULT:{fault} ABS:{abs_} upd={upd})"
+    def _decode_frame_generic(frame_def: dict, data: bytes) -> str:
+        """can_signals.json のフレーム定義1件から、_HIDDEN_FIELD_TYPES 以外の
+        フィールドを "name=値" の列挙文字列にデコードする。
+
+        data がフレーム定義の DLC より短い（バス上の異常・誤配線等でフレームが
+        欠落/切り詰められた）場合、_extract_bits() は範囲外のバイトを単に
+        シフトしないため、欠けたフィールドはあたかも 0 が届いたかのような
+        値になってしまう（例: 本来のエラーカウンタが実は届いていないのに
+        "0件" と表示され、バスの異常自体を見えなくしてしまう）。それを避けるため、
+        (1) フレーム全体の長さが DLC 未満なら先頭にその旨を明示し、
+        (2) 個々のフィールドも data に収まりきらない場合はデコードせず省く
+        （0 埋めで存在するかのような値を返さない）。"""
+        parts = []
+        expected_dlc = frame_def.get("dlc")
+        if isinstance(expected_dlc, int) and len(data) < expected_dlc:
+            parts.append(f"!DLC不足 期待={expected_dlc}byte 実際={len(data)}byte!")
+        for f in frame_def.get("fields", []):
+            t = f.get("type")
+            if t in App._HIDDEN_FIELD_TYPES:
+                continue
+            bit_position, bit_size = f["bitPosition"], f["bitSize"]
+            if bit_position + bit_size > len(data) * 8:
+                continue  # data がここまで届いていない（0埋めで偽の値を出さない）
+            raw = App._extract_bits(data, bit_position, bit_size)
+            if t == "enum":
+                label = next((e["label"] for e in f.get("enum", []) if e["value"] == raw), f"0x{raw:X}")
+                parts.append(f"{f['name']}={label}")
+            else:
+                # "number" 型、および未知の型（将来 TYPE_SCHEMA が増えた場合）の
+                # フォールバック。:g で末尾の ".0" だけ落とす（int/float どちらでも動く）。
+                val = raw * (f.get("scale") or 1)
+                parts.append(f"{f['name']}={val:g}{f.get('unit', '')}")
+        return "(" + " ".join(parts) + ")" if parts else ""
 
     @staticmethod
     def _draw_round_gauge_face(canvas: tk.Canvas, cx: float, cy: float, r: float) -> None:
@@ -1833,67 +1914,25 @@ class App(tk.Tk):
             elif kind == "rx_mon":
                 mon_idx, data = value
                 if mon_idx in self._rx_monitor_vars:
+                    # _rx_monitor_vars/_rx_monitor_name_vars/_rx_monitor_ids は
+                    # ボタン構築時（_build_widgets 内、rx_monitor 種別）に同じ
+                    # インデックスへ常に3つ揃って登録される（別々に存在することは
+                    # ない）ため、ここに来た時点で他の2つの存在確認は不要。
                     raw_hex = " ".join(f"{b:02X}" for b in data)
                     self._rx_monitor_vars[mon_idx].set(raw_hex)
-                    decode = self._rx_monitor_decode.get(mon_idx, "")
-                    if decode == "engine_state" and len(data) >= 1:
-                        # byte[0]=EngineState（E2E保護なし）
-                        # byte[1] bit0（ネットワークビット8 = byte[1]のMSB）=
-                        # EngineState シグナル単体の update-bit（SWS_Com_00061/00062）。
-                        # 値変化時送信（Com_SendSignal 呼び出し）では 1、
-                        # MIXED の周期フロア再送（値変化なし）では 0 になる。
-                        name = self._ENGINE_STATE_NAMES.get(data[0], f"0x{data[0]:02X}")
-                        if len(data) >= 2:
-                            upd = (data[1] >> 7) & 1
-                            name = f"{name} upd={upd}"
-                        if len(data) >= 6:
-                            # byte[2] bit0-2 = RunLamp/FaultLamp/AbsLamp ミラー（本プロジェクト
-                            # 独自拡張。WarningStatus(0x210) と同値）、byte[3-4] = EngineSpeed
-                            # ミラー（ビッグエンディアン、EngineInfo(0x100) の検証済み値と同値）、
-                            # byte[5] = CoolantTemp ミラー。仮想メータ表示（丸ゲージ）と同じ値を
-                            # ここにも文字列で出しておくことで、コマンド一覧をスクロールで見ている
-                            # だけでも数値が分かるようにする。
-                            run = (data[2] >> 7) & 1
-                            fault = (data[2] >> 6) & 1
-                            abs_ = (data[2] >> 5) & 1
-                            rpm = (data[3] << 8) | data[4]
-                            name = (f"{name} RPM={rpm} Temp={data[5]}°C"
-                                    f" RUN:{run} FAULT:{fault} ABS:{abs_}")
-                            self._update_virtual_meter(data)
-                        self._rx_monitor_name_vars[mon_idx].set(f"({name})")
-                    elif decode == "nm_status" and len(data) >= 2:
-                        # byte[0]=Control Bit Vector（bit0=Repeat Message Request、
-                        # 他ビットは本プロジェクトでは未使用）、
-                        # byte[1]=Source Node Identifier
-                        name = self._NM_SOURCE_NODE_NAMES.get(data[1], f"node=0x{data[1]:02X}")
-                        repeat = " RepeatMsgReq" if (data[0] & 0x01) else ""
-                        self._rx_monitor_name_vars[mon_idx].set(f"(alive: {name}{repeat})")
-                    elif decode == "immobilizer_status" and len(data) >= 1:
-                        # byte[0]=ImmobilizerStatus（Com Signal Gateway が
-                        # ImmobilizerCmd(RX, SecOC検証済み)から直接転送。
-                        # 0x00=LOCK, 0x01=UNLOCK。ImmobilizerCmd ボタンで
-                        # UNLOCK/LOCK を送信した直後にここが追従して更新される
-                        # ことを確認できる）
-                        name = "UNLOCK" if data[0] == 0x01 else "LOCK"
-                        self._rx_monitor_name_vars[mon_idx].set(f"({name})")
-                    elif decode == "warning_status" and len(data) >= 1:
-                        self._rx_monitor_name_vars[mon_idx].set(
-                            self._decode_warning_status(data[0])
-                        )
-                    elif decode == "e2e_health" and len(data) >= 5:
-                        # byte[0-1]=CRC16 (E2E Profile05、リトルエンディアン),
-                        # byte[2]=Counter (E2E Profile05、8bitフル値)
-                        # byte[3]=E2E CRCエラー累積数, byte[4]=E2E シーケンスエラー累積数
-                        # (EngineInfo/AbsInfo 受信側の合算、0-255で飽和。E2EMon CDD相当モジュールが
-                        #  Com経由でPERIODIC送信するネットワーク健全性テレメトリ。テレメトリ自体も
-                        #  E2E保護されている)
-                        # 以前は E2E Profile01+SecOC の二重保護(DLC=8)だったが、SecOC は撤去し
-                        # E2E Profile05 単体保護(DLC=5)に切り替えた。
-                        self._rx_monitor_name_vars[mon_idx].set(
-                            f"(crcErr={data[3]} seqErr={data[4]})"
-                        )
-                    elif mon_idx in self._rx_monitor_name_vars:
-                        self._rx_monitor_name_vars[mon_idx].set("")
+                    can_id = self._rx_monitor_ids[mon_idx]
+                    frame_def = self.signal_defs.get(can_id)
+                    self._rx_monitor_name_vars[mon_idx].set(
+                        self._decode_frame_generic(frame_def, data) if frame_def is not None else ""
+                    )
+                    # MeterStatus (CAN 0x200) の仮想メータ（丸ゲージ）表示だけは
+                    # can_signals.json 上の汎用デコードとは別物（テキストではなく
+                    # 針の描画）で、この機能自体は元々 JSON に依存していなかった。
+                    # signal_defs の読み込み成否（上の if/elif）とは独立に判定する
+                    # ことで、can_signals.json が読めない/MeterStatus定義が
+                    # 一時的に無い場合でもゲージ表示だけは動き続けるようにする。
+                    if can_id == 0x200 and len(data) >= 6:
+                        self._update_virtual_meter(data)
 
         self.after(100, self._poll_queues)
 

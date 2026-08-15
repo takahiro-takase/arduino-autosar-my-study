@@ -11,19 +11,19 @@
         { "type": "group_header", "label": "メータECU" },
 
         { "label": "NM\n(0x400)", "type": "rx_monitor",
-          "can_id": "0x400", "decode": "nm_status" },
+          "can_id": "0x400" },
 
         { "label": "MeterStatus\n(0x200)", "type": "rx_monitor",
-          "can_id": "0x200", "decode": "engine_state" },
+          "can_id": "0x200" },
 
         { "label": "WarningStatus\n(0x210)", "type": "rx_monitor",
-          "can_id": "0x210", "decode": "warning_status" },
+          "can_id": "0x210" },
 
         { "label": "E2EHealthStatus\n(0x220)", "type": "rx_monitor",
-          "can_id": "0x220", "decode": "e2e_health" },
+          "can_id": "0x220" },
 
         { "label": "ImmobilizerStatus\n(0x230, Signal Gateway)", "type": "rx_monitor",
-          "can_id": "0x230", "decode": "immobilizer_status" },
+          "can_id": "0x230" },
 
         { "type": "group_header", "label": "周辺ECU" },
 
