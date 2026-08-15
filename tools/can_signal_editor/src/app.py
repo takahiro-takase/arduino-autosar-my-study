@@ -38,9 +38,29 @@ DEFAULT_DATA_PATH = os.path.normpath(
 # 3つのdict/tupleを個別に手で同期させない。
 FRAME_COLUMNS_DEF = [
     ("name", "Frame", 160), ("direction", "Dir", 50),
-    ("canId", "CAN ID", 70), ("dlc", "DLC", 40), ("note", "Note", 400),
+    ("canId", "CAN ID", 70), ("dlc", "DLC", 40),
+    ("txPeriodMs", "TxPeriod(ms)", 90), ("rxTimeoutMs", "RxTimeout(ms)", 100),
+    ("note", "Note", 400),
 ]
 FRAME_COLUMNS = tuple(key for key, _, _ in FRAME_COLUMNS_DEF)
+
+# フレーム一覧の数値系列の検証方法（FRAME_COLUMNS_DEF と同じく、ここが唯一の
+# 情報源。ここに無い列（name/direction/canId/note）はプレーンな文字列として
+# そのまま扱う）。
+#   "int"          : 必須の整数（dlc。空欄は不可、負値チェックは無い＝既存挙動のまま）
+#   "optional_int" : 任意の非負整数（txPeriodMs/rxTimeoutMs）。空欄にした場合は
+#                    0 や null ではなくキー自体を削除する（欠落 = このフレームには
+#                    周期/タイムアウトの概念が無い、という意図的な未設定。
+#                    data/can_signals.json の $note 参照）。
+# 以前は dlc 用の素の if 文と、txPeriodMs/rxTimeoutMs 用の frozenset 判定という
+# 独立した2つの仕組みがあった。数値系の列が増えるたびにどちらに追加すべきか
+# 迷い、書き忘れると無検証のプレーン文字列として扱われてしまう（silent
+# fallthrough）ため、1つの表に統合する。
+FRAME_COLUMN_KINDS = {
+    "dlc": "int",
+    "txPeriodMs": "optional_int",
+    "rxTimeoutMs": "optional_int",
+}
 
 FIELD_COLUMNS_DEF = [
     ("name", "Signal", 160), ("bitPosition", "Bit", 40), ("bitSize", "Size", 40),
@@ -443,22 +463,40 @@ class App(tk.Tk):
         self.frame_tree.delete(*self.frame_tree.get_children())
         for i, fr in enumerate(self.data["frames"]):
             iid = str(i)
-            self.frame_tree.insert("", tk.END, iid=iid, values=(
-                fr.get("name", ""), fr.get("direction", ""), fr.get("canId", ""),
-                fr.get("dlc", ""), fr.get("note", ""),
-            ))
+            self.frame_tree.insert("", tk.END, iid=iid,
+                                    values=tuple(fr.get(col, "") for col in FRAME_COLUMNS))
 
     def _on_frame_cell_commit(self, row_id: str, col_name: str, value: str) -> None:
         fr = self.data["frames"][int(row_id)]
-        if col_name == "dlc":
+        kind = FRAME_COLUMN_KINDS.get(col_name)
+        if kind == "optional_int" and value.strip() == "":
+            # 空欄 = このフレームには周期/タイムアウトの概念が無い、を意味する。
+            # 0 を書き込むのではなくキー自体を削除する（欠落 = 意図的な未設定、
+            # という data/can_signals.json の既存の表現に合わせる）。
+            fr.pop(col_name, None)
+            self._mark_dirty()
+            self.frame_tree.set(row_id, col_name, "")
+            if row_id == self.current_frame_id:
+                self._refresh_problems()
+            return
+        if kind is not None:
             try:
                 value = int(value)
+                if kind == "optional_int" and value < 0:
+                    raise ValueError
             except ValueError:
-                messagebox.showerror("エラー", "dlc は整数で入力してください")
+                hint = "0以上の整数、または空欄（値なし）" if kind == "optional_int" else "整数"
+                messagebox.showerror("エラー", f"{col_name} は{hint}で入力してください")
                 self._refresh_frame_tree()
                 return
         fr[col_name] = value
         self._mark_dirty()
+        # EditableTreeview._commit_edit は on_commit 呼び出し前に「入力された
+        # 生の文字列」をセルへ書き込んでいる（前後の空白・先頭ゼロ・"-0" 等が
+        # そのまま残る）。int系の列（FRAME_COLUMN_KINDS 参照）は int() で正規化
+        # した値を fr に格納するため、セル表示もその正規化後の値に上書きし直して
+        # 一致させる（name/direction/canId/note は正規化しないため実質 no-op）。
+        self.frame_tree.set(row_id, col_name, value)
         if row_id == self.current_frame_id:
             self._refresh_problems()
 
