@@ -28,9 +28,11 @@
 /* -----------------------------------------------------------------------
  * DET（Default Error Tracer）関連定数
  *
- * SWS_IoHwAb_91001: IoHwAb の開発エラー分類は AUTOSAR 標準では規定されず、
- * 「報告したいエラーの定義自体を実装者に一任する」("Up to the implementer")
- * とされている。ModuleId のみ AUTOSAR_TR_BSWModuleList（Release 4.3.1、
+ * AUTOSAR_SWS_IOHardwareAbstraction.pdf 7.6.1 Development Errors 章:
+ * IoHwAb の開発エラー分類は AUTOSAR 標準では規定されず、「報告したいエラーの
+ * 定義自体を実装者に一任する」("Up to the implementer to define error he
+ * wants to report") とされている（この記述自体に SWS 番号は付与されて
+ * いない）。ModuleId のみ AUTOSAR_TR_BSWModuleList（Release 4.3.1、
  * docs/ 配下）の「List of Basic Software Modules」表で IO Hardware
  * Abstraction (IoHwAb) に割り当てられた固定値 254 を使う。エラーコード自体は
  * 本プロジェクト独自に、Dio/Adc 経由の呼び出しで NULL 出力ポインタが渡された
@@ -71,7 +73,10 @@ static uint16 s_adcMv           = 0U;  /* ADC 変換済み電圧値 [mV] */
  *
  * \pre        Port_Init() が正常完了していること。
  *
- * \ServiceID      {0xC0}
+ * \ServiceID      {0x01}（[SWS_IoHwAb_00119] の Service ID[hex] と一致。
+ *                 他の I/O 個別関数 (Led_SetLevel 等) は仕様に対応する
+ *                 API 定義自体が無いため、0xC1〜0xC6 を本プロジェクト
+ *                 独自に割り当てている）
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
  */

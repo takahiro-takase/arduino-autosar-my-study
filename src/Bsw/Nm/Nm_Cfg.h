@@ -97,8 +97,11 @@
 #define NM_CYCLE_MS  1000UL
 
 /** NM PDU のバイト長。byte[0]=Control Bit Vector, byte[1]=Source Node Identifier
- *  （[SWS_CanNm_00074]/[SWS_CanNm_00075] のデフォルト配置。User Data は
- *  本プロジェクトでは対応除外のため0バイト）。 */
+ *  （[SWS_CanNm_00074]/[SWS_CanNm_00075] で言うCanNmPduNidPosition/
+ *  CanNmPduCbvPositionが実際に配置可能な2値。ただし仕様のデフォルトは
+ *  逆順（NidPosition=Byte0/CbvPosition=Byte1）であり、本プロジェクトは
+ *  それとは異なる配置を選択している。User Data は本プロジェクトでは
+ *  対応除外のため0バイト）。 */
 #define NM_DLC  2U
 
 /** 本 ECU（メータ ECU）の NM ノード識別子 */

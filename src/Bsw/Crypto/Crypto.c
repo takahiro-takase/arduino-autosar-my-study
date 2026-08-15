@@ -93,8 +93,9 @@ Std_ReturnType Crypto_ProcessJob(uint32 objectId, Crypto_JobType* job)
 
     if (!Crypto_KeyValid[job->cryptoKeyId])
     {
-        /* [SWS_Crypto_00194] CRYPTO_E_KEY_NOT_VALID は Runtime Error（Development
-         * Error とは別チャネル）のため Det_ReportError() は呼ばない。 */
+        /* [SWS_Crypto_00043] CRYPTO_E_KEY_NOT_VALID は Std_ReturnType の拡張値
+         * （DET の Development/Runtime Error のいずれでもない）のため
+         * Det_ReportError() は呼ばない。 */
         DET_LOGW(TAG, "ProcessJob W: cryptoKeyId=%u not valid (pending KeySetValid)",
                  (unsigned)job->cryptoKeyId);
         return E_NOT_OK;

@@ -1049,8 +1049,24 @@ static uint16 Com_EffectiveTxPeriodMs(const Com_IPduConfigType* ipdu)
  *          `Com_TxBuffer[ipduId]` から現在値をアンパックし、
  *          `(値 & Mask) != FilterX` を TMC（Transmission Mode Condition）として
  *          評価する。1 つでも真なら TMS = true（SWS_Com_00678）、
- *          TmsContributor が 1 つも無い、またはどれも偽なら TMS = false
- *          （SWS_Com_00679）。結果を `Com_TmsState[ipduId]` へ保存する。
+ *          寄与するシグナルは存在するがどれも偽なら TMS = false
+ *          （SWS_Com_00679）。
+ *
+ *          仕様との既知の相違点（意図的、未修正）: 寄与するシグナルが
+ *          1 つも無い I-PDU について、仕様は TMS = true と規定する
+ *          （SWS_Com_00677）が、本実装は false のまま（tmsTrue の初期値
+ *          0 が変化しない）とする。これは、本プロジェクトの `Com_PBCfg.c`
+ *          が「TmsContributor を持たない I-PDU では TxModeModeTrue/
+ *          TxPeriodMsTrue を設定しない（0 のまま）」という前提で
+ *          `TxModeMode`/`TxPeriodMs` 側のみを実際の意図した値に設定して
+ *          いるため（例: E2EHealthStatus は PERIODIC、ImmobilizerStatus は
+ *          DIRECT）、仕様どおり TMS=true にすると `Com_EffectiveTxModeMode()`/
+ *          `Com_EffectiveTxPeriodMs()` が未設定（0 = MIXED/0ms）の True 側
+ *          フィールドを返してしまい、実際に意図した送信モードが壊れる。
+ *          TMS の True/False 切り替えを実際に使う I-PDU
+ *          （WarningStatus、FaultLamp/AbsLamp が TmsContributor）は
+ *          TxModeModeTrue/TxPeriodMsTrue を明示的に設定済みのため、この
+ *          相違の影響を受けない。結果を `Com_TmsState[ipduId]` へ保存する。
  *
  *          Com_SendSignal()（Signal Group でない場合）と
  *          Com_SendSignalGroup() の確定コミット後、いずれも実バッファへの

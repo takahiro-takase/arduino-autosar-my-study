@@ -66,7 +66,7 @@ typedef struct
     PduIdType                 TransmitOverrideId;
 } PduR_TxRoutingPathType;
 
-/* SWS_PduR_00328: post-build configuration type */
+/* SWS_PduR_00241: post-build configuration type (PduR_PBConfigType) */
 typedef struct
 {
     const PduR_RxRoutingPathType* RxPaths;

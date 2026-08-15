@@ -59,6 +59,14 @@ static uint16 E2E_CalcCrc16(uint16 crc, const uint8 *data, uint8 len)
  *         → DataID 上位バイトの順で 1 回の呼び出しにまとめる (Protect/Check
  *         の両方が同じ計算をするため共通化する)。
  *
+ * \note   SWS_E2E_00406 の擬似コードは本来 `Config->Offset > 0` の場合、
+ *         上記に先立って Data[0..Offset-1]（E2E ヘッダより前のバイト）も
+ *         CRC 計算に含める分岐を持つが、本実装はこの分岐を持たない
+ *         （常に Offset==0 側の経路のみを実装）。本プロジェクトの3用途
+ *         (EngineHealthStatus/EngineInfo/AbsInfo、E2EXf_PBCfg.c 参照) は
+ *         いずれも E2E ヘッダを PDU 先頭に置き Offset=0 固定のため実害は
+ *         ないが、Offset>0 の構成を追加する場合はこの関数の拡張が必要。
+ *
  * \param[in] Data        対象 PDU バッファ。
  * \param[in] DataLength  PDU 全体バイト数 (CRC16 バイトを含む)。
  * \param[in] Offset      E2E ヘッダの PDU 内バイトオフセット。

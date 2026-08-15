@@ -12,8 +12,8 @@
  *            5. TaskMask のビットが立っているタスクに対して Os_SetTaskActive() を呼ぶ
  *
  *          AUTOSAR との主な違い (学習用簡略化):
- *            - 複合条件は AND/OR の2条件まで（[SWS_BswM_00808]
- *              BswMLogicalExpression の簡略版。NAND/NOT/XOR、3条件以上、
+ *            - 複合条件は AND/OR の2条件まで（BswMArgumentRef [ECUC_BswM_00820]
+ *              が表す BswMLogicalExpression の簡略版。NAND/NOT/XOR、3条件以上、
  *              LogicalExpression の入れ子は対応除外）
  *            - BswM_MainFunction なし (即時評価モードのみ)
  *            - ActionList は TaskActivation（本プロジェクト独自拡張）と
@@ -85,8 +85,10 @@ static uint8 BswM_EvaluateCondition(const BswM_ConditionType* cond)
  * \details [SWS_BswM_00245]/[SWS_BswM_00247] のとおり、AND は全条件が真の
  *          ときのみ真、OR はいずれか1つでも真なら真。ConditionCount=1 の
  *          場合は Operator の値に関わらず単一条件の評価結果と等価になる
- *          （[SWS_BswM_00814] の実測どおり）。OR は最初の true で、AND は
- *          最初の false で短絡する対称性を利用し、単一ループで両方を表す。
+ *          （BswMLogicalOperator [ECUC_BswM_00814] に「論理演算子が BSWM_NOT
+ *          以外で条件が1つしかない場合、この演算子は無効」と明記されている
+ *          とおり）。OR は最初の true で、AND は最初の false で短絡する
+ *          対称性を利用し、単一ループで両方を表す。
  */
 static uint8 BswM_EvaluateRule(const BswM_RuleType* rule)
 {

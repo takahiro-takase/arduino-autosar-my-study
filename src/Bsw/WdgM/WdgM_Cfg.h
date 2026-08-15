@@ -73,7 +73,7 @@
 
 /** 開発エラーコード（SWS_WdgM 7.6.1 表より、実際に使用する分のみ） */
 #define WDGM_E_NO_INIT       0x10U  /* [SWS_WdgM_00389 等]: 未初期化時の API 呼び出し */
-#define WDGM_E_PARAM_SEID    0x13U  /* [SWS_WdgM_00xxx]: SEID が範囲外 */
+#define WDGM_E_PARAM_SEID    0x13U  /* [SWS_WdgM_00278/00172 等]: SEID が範囲外 */
 #define WDGM_E_INV_POINTER   0x14U  /* NULL ポインタチェック */
 
 /** ApiId（各関数の Doxygen \ServiceID タグと一致させること。値は SWS 8.x 章の

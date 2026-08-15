@@ -33,7 +33,7 @@ typedef struct Dcm_ConfigType_Tag Dcm_ConfigType;
  * \brief   DCM モジュールを初期化する。
  *
  * \details セッション状態を Default Session にリセットする
- *          (AUTOSAR SWS_Dcm_00769)。
+ *          (AUTOSAR SWS_Dcm_00034)。
  *          EcuM_Init() から Com_Init() の後に呼び出すこと。
  *
  * \param[in]  ConfigPtr  常に NULL を渡すこと（本プロジェクトは post-build 設定を

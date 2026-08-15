@@ -370,8 +370,8 @@ Std_ReturnType CanTp_Transmit(PduIdType TxSduId, const PduInfoType* PduInfoPtr)
         if (CanTp_SendFrame() != E_OK)
         {
             /* FF 分岐と同様に送信失敗を呼び出し元(Dcm)へ伝える
-             * (SWS_CanTp_00075 相当: 送信できなかったことは即座に判明するため、
-             * ここで無条件に E_OK を返してはならない)。 */
+             * (SWS_CanTp_00212 の定義どおり、要求が受理されなかった場合は
+             * E_NOT_OK を返す。無条件に E_OK を返してはならない)。 */
             DET_LOGE(TAG, "TX SF FAIL");
             return E_NOT_OK;
         }
@@ -655,7 +655,7 @@ void CanTp_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
  * \param[in]  TxPduId  完了した PDU ID (未使用)。
  * \param[in]  result   送信結果 (未使用。上記理由により本経路では常に E_OK)。
  *
- * \AUTOSARReq     {SWS_CanTp_00236}
+ * \AUTOSARReq     {SWS_CanTp_00215}
  * \ServiceID      {0x40}
  */
 void CanTp_TxConfirmation(PduIdType TxPduId, Std_ReturnType result)
@@ -680,7 +680,7 @@ void CanTp_TxConfirmation(PduIdType TxPduId, Std_ReturnType result)
  *
  * \details EcuM_MainFunction から毎ループ呼び出す。
  *
- * \AUTOSARReq     {SWS_CanTp_00236}
+ * \AUTOSARReq     {SWS_CanTp_00213}
  * \ServiceID      {0x06}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}

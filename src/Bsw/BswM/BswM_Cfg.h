@@ -175,8 +175,8 @@
  *  モードキャッシュ配列 BswM_ModeSrcCache[] のサイズに使う）。 */
 #define BSWM_MODE_SRC_COUNT  2U
 
-/** 1 ルールが持てる条件数の上限（[SWS_BswM_00808] の BswMArgumentRef は
- *  実 AUTOSAR では 1..* だが、本プロジェクトは AND/OR 2 条件までの
+/** 1 ルールが持てる条件数の上限（BswMArgumentRef [ECUC_BswM_00820] は
+ *  実 AUTOSAR では Multiplicity=1..* だが、本プロジェクトは AND/OR 2 条件までの
  *  簡略化とする（本プロジェクトが持つモードソースが ECUM/COMM の 2 つ
  *  だけであり、それ以上の条件数を要する使用実績がないため）。 */
 #define BSWM_RULE_MAX_CONDITIONS  2U

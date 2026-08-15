@@ -59,12 +59,12 @@ typedef enum
 } BswM_ModeSrcType;
 
 /**
- * \brief   ルール条件の論理演算子（[SWS_BswM_00814] BswMLogicalOperator の実測）。
+ * \brief   ルール条件の論理演算子（BswMLogicalOperator [ECUC_BswM_00814] の実測）。
  *
  * \details 実 AUTOSAR は BSWM_AND/BSWM_NAND/BSWM_NOT/BSWM_OR/BSWM_XOR の5種を
  *          定義するが、本プロジェクトは AND/OR のみ対応する（学習用簡略化。
  *          NAND/NOT/XOR は本プロジェクトのルールで使用実績がないため対応除外）。
- *          [SWS_BswM_00814] に「論理演算子が BSWM_NOT 以外で条件が1つしかない
+ *          [ECUC_BswM_00814] に「論理演算子が BSWM_NOT 以外で条件が1つしかない
  *          場合、この演算子は無効（単一条件と同じ）」と明記されている実測結果
  *          どおり、単一条件ルールも BSWM_OP_AND（ConditionCount=1）で表現する
  *          （従来の「単一条件専用の型」を別途持たない）。
@@ -76,7 +76,7 @@ typedef enum
 } BswM_LogicalOperatorType;
 
 /**
- * \brief   単一のモード条件（[SWS_BswM_00807] BswMModeCondition の簡略版）。
+ * \brief   単一のモード条件（BswMModeCondition [ECUC_BswM_00807] の簡略版）。
  *
  * \details 実 AUTOSAR の BswMModeCondition は BSWM_EQUALS/BSWM_EQUALS_NOT や
  *          イベントポートの SET/CLEARED も表現できるが、本プロジェクトは
@@ -94,7 +94,7 @@ typedef struct
  *
  * \details 「IF (Condition[0] Operator Condition[1] ... ) が真になったら、
  *            TaskMask で指定したタスクに対して Action を実行する」という
- *          複合条件ルールを表す（[SWS_BswM_00808] BswMLogicalExpression の
+ *          複合条件ルールを表す（BswMLogicalExpression [ECUC_BswM_00808] の
  *          簡略版。条件数は BSWM_RULE_MAX_CONDITIONS(=2) までで、任意の木構造
  *          （LogicalExpression の入れ子）ではなくフラットな配列とする）。
  *          Action は条件の評価結果が false→true へ遷移したときのみ実行する

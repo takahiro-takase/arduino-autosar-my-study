@@ -100,7 +100,7 @@ void Nm_DeInit(void);
  * \retval  E_OK      要求を受理した。
  * \retval  E_NOT_OK  未初期化。
  *
- * \AUTOSARReq     {SWS_CanNm_00208}
+ * \AUTOSARReq     {SWS_CanNm_00213}
  * \ServiceID      {0x02}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
@@ -147,7 +147,7 @@ Std_ReturnType Nm_RepeatMessageRequest(void);
  *          （[SWS_CanNm_00098]）。Prepare Bus-Sleep Mode 中は Network Mode
  *          （Repeat Message State）へ自動遷移する（[SWS_CanNm_00124]）。
  *          Bus-Sleep Mode 中は状態遷移せず NM_E_NET_START_IND を DET へ
- *          報告するのみ（[SWS_CanNm_00126]/[SWS_CanNm_00336]。実際に
+ *          報告するのみ（[SWS_CanNm_00127]/[SWS_CanNm_00336]。実際に
  *          ネットワークへ復帰するかどうかは上位層（本プロジェクトでは
  *          CanSM のウェイクアップ検証経由）が別途 Nm_NetworkRequest() を
  *          呼んで決める）。
