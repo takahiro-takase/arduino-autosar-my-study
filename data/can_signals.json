@@ -1,0 +1,377 @@
+{
+  "$note": "README.md の「CAN フレーム仕様」表を一元管理するための情報源。src/Bsw/Com/Com_PBCfg.c 等の実装と2026-08-15に突き合わせ確認済み。将来的にコンフィグソース生成・uds_testerの情報源として使う想定。",
+  "version": 1,
+  "byteOrder": "big-endian (Motorola / CAN標準)。ビット0 = byte[0]のMSB、ビット7 = byte[0]のLSB",
+  "frames": [
+    {
+      "name": "MeterStatus",
+      "direction": "TX",
+      "canId": "0x200",
+      "dlc": 6,
+      "note": "メータECU送信。E2E保護なし。TxModeMode=MIXED",
+      "fields": [
+        {
+          "name": "EngineState",
+          "bitPosition": 0,
+          "bitSize": 8,
+          "type": "enum",
+          "enum": [
+            { "value": 0, "label": "OFF" },
+            { "value": 1, "label": "STARTING" },
+            { "value": 2, "label": "RUNNING" },
+            { "value": 3, "label": "FAULT" }
+          ],
+          "note": "E2E保護なし"
+        },
+        {
+          "name": "(update-bit)",
+          "bitPosition": 8,
+          "bitSize": 1,
+          "type": "enum",
+          "enum": [
+            { "value": 0, "label": "周期フロア再送" },
+            { "value": 1, "label": "値変化時送信" }
+          ],
+          "note": "EngineState単体のupdate-bit（SWS_Com_00061/00062）"
+        },
+        {
+          "name": "RunLamp (mirror)",
+          "bitPosition": 16,
+          "bitSize": 1,
+          "type": "enum",
+          "enum": [
+            { "value": 0, "label": "消灯" },
+            { "value": 1, "label": "点灯" }
+          ],
+          "note": "WarningStatus.RunLampと同値のミラー（uds_tester仮想メータ表示用、本プロジェクト独自拡張）"
+        },
+        {
+          "name": "FaultLamp (mirror)",
+          "bitPosition": 17,
+          "bitSize": 1,
+          "type": "enum",
+          "enum": [
+            { "value": 0, "label": "消灯" },
+            { "value": 1, "label": "点灯" }
+          ],
+          "note": "WarningStatus.FaultLampと同値のミラー"
+        },
+        {
+          "name": "AbsLamp (mirror)",
+          "bitPosition": 18,
+          "bitSize": 1,
+          "type": "enum",
+          "enum": [
+            { "value": 0, "label": "消灯" },
+            { "value": 1, "label": "点灯" }
+          ],
+          "note": "WarningStatus.AbsLampと同値のミラー"
+        },
+        {
+          "name": "EngineSpeed (mirror)",
+          "bitPosition": 24,
+          "bitSize": 16,
+          "type": "number",
+          "unit": "rpm",
+          "range": { "min": 0, "max": 15000 },
+          "note": "EngineInfoの検証済み値のミラー"
+        },
+        {
+          "name": "CoolantTemp (mirror)",
+          "bitPosition": 40,
+          "bitSize": 8,
+          "type": "number",
+          "unit": "℃",
+          "range": { "min": 0, "max": 255 },
+          "note": "EngineInfoの検証済み値のミラー"
+        }
+      ]
+    },
+    {
+      "name": "WarningStatus",
+      "direction": "TX",
+      "canId": "0x210",
+      "dlc": 1,
+      "note": "メータECU送信。Com Signal Group、TMS付きDIRECT⇔MIXED",
+      "fields": [
+        {
+          "name": "RunLamp",
+          "bitPosition": 0,
+          "bitSize": 1,
+          "type": "enum",
+          "enum": [
+            { "value": 0, "label": "消灯" },
+            { "value": 1, "label": "点灯" }
+          ],
+          "note": "RUNNING LED D6と同値"
+        },
+        {
+          "name": "FaultLamp",
+          "bitPosition": 1,
+          "bitSize": 1,
+          "type": "enum",
+          "enum": [
+            { "value": 0, "label": "消灯" },
+            { "value": 1, "label": "点灯" }
+          ],
+          "note": "FAULT LED D7と同値、点滅中は500msごとに反転"
+        },
+        {
+          "name": "AbsLamp",
+          "bitPosition": 2,
+          "bitSize": 1,
+          "type": "enum",
+          "enum": [
+            { "value": 0, "label": "消灯" },
+            { "value": 1, "label": "点灯" }
+          ],
+          "note": "ABS LED D8と同値"
+        },
+        {
+          "name": "(update-bit)",
+          "bitPosition": 3,
+          "bitSize": 1,
+          "type": "enum",
+          "enum": [
+            { "value": 0, "label": "MIXED周期フロア再送" },
+            { "value": 1, "label": "値変化時送信" }
+          ],
+          "note": "Signal Group全体のupdate-bit（SWS_Com_00801）"
+        }
+      ]
+    },
+    {
+      "name": "E2EHealthStatus",
+      "direction": "TX",
+      "canId": "0x220",
+      "dlc": 5,
+      "note": "メータECU送信。AUTOSAR E2E Profile05保護。TxModeMode=PERIODIC（6000ms）",
+      "fields": [
+        {
+          "name": "E2E CRC",
+          "bitPosition": 0,
+          "bitSize": 16,
+          "type": "e2e_crc",
+          "note": "CRC16（多項式0x1021、E2E Profile05）。Counterバイト+byte[3-4]→DataID=0x0220の順で計算。リトルエンディアンでbyte[0-1]に格納"
+        },
+        {
+          "name": "E2E Counter",
+          "bitPosition": 16,
+          "bitSize": 8,
+          "type": "e2e_counter",
+          "note": "0-255のリングカウンタ（送信のたびに+1、予約値なし）"
+        },
+        {
+          "name": "E2ECrcErrCount",
+          "bitPosition": 24,
+          "bitSize": 8,
+          "type": "number",
+          "unit": "count",
+          "range": { "min": 0, "max": 255 },
+          "note": "飽和カウンタ。EngineInfo/AbsInfo受信のE2E CRC不一致累積数"
+        },
+        {
+          "name": "E2ESeqErrCount",
+          "bitPosition": 32,
+          "bitSize": 8,
+          "type": "number",
+          "unit": "count",
+          "range": { "min": 0, "max": 255 },
+          "note": "飽和カウンタ。EngineInfo/AbsInfo受信のE2Eシーケンス異常累積数"
+        }
+      ]
+    },
+    {
+      "name": "EngineInfo",
+      "direction": "RX",
+      "canId": "0x100",
+      "dlc": 7,
+      "note": "エンジンECU送信。AUTOSAR E2E Profile05保護",
+      "fields": [
+        {
+          "name": "E2E CRC",
+          "bitPosition": 0,
+          "bitSize": 16,
+          "type": "e2e_crc",
+          "note": "CRC16（多項式0x1021、E2E Profile05）。Counterバイト+byte[3-6]→DataID=0x0100の順で計算。リトルエンディアンでbyte[0-1]に格納"
+        },
+        {
+          "name": "E2E Counter",
+          "bitPosition": 16,
+          "bitSize": 8,
+          "type": "e2e_counter",
+          "note": "0-255のリングカウンタ（フレーム脱落・重複検出用、予約値なし）"
+        },
+        {
+          "name": "EngineSpeed",
+          "bitPosition": 24,
+          "bitSize": 16,
+          "type": "number",
+          "unit": "rpm",
+          "range": { "min": 0, "max": 15000 },
+          "note": "受信フィルタ（NEW_IS_WITHIN）で[0,8000]rpm範囲外は破棄（プラウジビリティチェック）"
+        },
+        {
+          "name": "CoolantTemp",
+          "bitPosition": 40,
+          "bitSize": 8,
+          "type": "number",
+          "unit": "℃",
+          "range": { "min": 0, "max": 255 },
+          "note": "0xFFはセンサ異常マーカー（DataInvalidAction=NOTIFY）"
+        },
+        {
+          "name": "EngineOnFlag",
+          "bitPosition": 48,
+          "bitSize": 1,
+          "type": "enum",
+          "enum": [
+            { "value": 0, "label": "OFF" },
+            { "value": 1, "label": "ON" }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "AbsInfo",
+      "direction": "RX",
+      "canId": "0x110",
+      "dlc": 6,
+      "note": "ABS ECU送信。AUTOSAR E2E Profile05保護。RX Signal Group",
+      "fields": [
+        {
+          "name": "E2E CRC",
+          "bitPosition": 0,
+          "bitSize": 16,
+          "type": "e2e_crc",
+          "note": "CRC16（多項式0x1021、E2E Profile05）。Counterバイト+byte[3-5]→DataID=0x0110の順で計算。リトルエンディアンでbyte[0-1]に格納"
+        },
+        {
+          "name": "E2E Counter",
+          "bitPosition": 16,
+          "bitSize": 8,
+          "type": "e2e_counter",
+          "note": "0-255のリングカウンタ（フレーム脱落・重複検出用、予約値なし）"
+        },
+        {
+          "name": "VehicleSpeed",
+          "bitPosition": 24,
+          "bitSize": 16,
+          "type": "number",
+          "unit": "km/h",
+          "scale": 0.01,
+          "range": { "min": 0, "max": 655.35 },
+          "note": "raw 0x0064 = 1.00 km/h。RxDataTimeoutAction=SUBSTITUTE（タイムアウト中は0xFFFFを返す）"
+        },
+        {
+          "name": "BrakeActive",
+          "bitPosition": 40,
+          "bitSize": 1,
+          "type": "enum",
+          "enum": [
+            { "value": 0, "label": "解除" },
+            { "value": 1, "label": "作動" }
+          ]
+        },
+        {
+          "name": "AbsActive",
+          "bitPosition": 41,
+          "bitSize": 1,
+          "type": "enum",
+          "enum": [
+            { "value": 0, "label": "非作動" },
+            { "value": 1, "label": "ABS作動中" }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Nm",
+      "direction": "TX/RX",
+      "canId": "0x400",
+      "dlc": 2,
+      "note": "CAN Network Management（CanNm相当）。本ECU送信時・他ノード（仮想他ECU）受信時とも同一CAN ID/DLC。PduR/Comを経由せずCanIf_Transmit()/Nm_RxIndication()で直接やり取りする。src/Bsw/Nm/参照",
+      "fields": [
+        {
+          "name": "RepeatMessageRequest",
+          "bitPosition": 7,
+          "bitSize": 1,
+          "type": "enum",
+          "enum": [
+            { "value": 0, "label": "要求なし" },
+            { "value": 1, "label": "Repeat Message State再アナウンス要求" }
+          ],
+          "note": "Control Bit Vector bit0（NM_CBV_BIT_REPEAT_MESSAGE_REQUEST）。他ノードのRepeat Message Request検知によるnode detectionに使用"
+        },
+        {
+          "name": "SourceNodeId",
+          "bitPosition": 8,
+          "bitSize": 8,
+          "type": "number",
+          "note": "送信ノードの識別ID。本ECUはNM_SOURCE_NODE_ID=0x01固定"
+        }
+      ]
+    },
+    {
+      "name": "SecureCommand (ImmobilizerCmd)",
+      "direction": "RX",
+      "canId": "0x120",
+      "dlc": 6,
+      "note": "KeyFobEcu想定送信。SecOC Profile1（24Bit-CMAC-8Bit-FV）保護。物理フレームは6byte（Authentic Payload 2byte + Freshness 1byte + 切り詰めMAC 3byte）。SecOC検証成功時、byte[0-1]（Authentic Payload）のみがCom_RxIndication(IPduId=2, SecureCommand)へ転送される（Comはbyte[2-5]の存在を一切知らない）。src/Bsw/SecOC/SecOC_PBCfg.c参照",
+      "fields": [
+        {
+          "name": "ImmobilizerCmd",
+          "bitPosition": 0,
+          "bitSize": 8,
+          "type": "enum",
+          "enum": [
+            { "value": 0, "label": "LOCK" },
+            { "value": 1, "label": "UNLOCK" }
+          ],
+          "note": "Authentic Payload"
+        },
+        {
+          "name": "Reserved",
+          "bitPosition": 8,
+          "bitSize": 8,
+          "type": "number",
+          "note": "Authentic Payload。常に0x00（将来の鍵ID等を想定）"
+        },
+        {
+          "name": "SecOC Freshness Value",
+          "bitPosition": 16,
+          "bitSize": 8,
+          "type": "secoc_freshness",
+          "note": "8bit、切り詰めなし"
+        },
+        {
+          "name": "SecOC MAC",
+          "bitPosition": 24,
+          "bitSize": 24,
+          "type": "secoc_mac",
+          "note": "AES-128-CMAC 128bit出力の上位24bitに切り詰め（SecOC Profile1）"
+        }
+      ]
+    },
+    {
+      "name": "ImmobilizerStatus",
+      "direction": "TX",
+      "canId": "0x230",
+      "dlc": 1,
+      "note": "メータECU送信。TxModeMode=DIRECT、保護なし。Signal GatewayがSecureCommand(RX、SecOC検証済み)のImmobilizerCmdをSWC/Rteを介さず直接転送する（認証はゲートウェイ入力側=SecureCommandで完了済みのため、この転送自体には保護を付与しない）",
+      "fields": [
+        {
+          "name": "ImmobilizerStatus",
+          "bitPosition": 0,
+          "bitSize": 8,
+          "type": "enum",
+          "enum": [
+            { "value": 0, "label": "LOCK" },
+            { "value": 1, "label": "UNLOCK" }
+          ],
+          "note": "SecureCommand.ImmobilizerCmdのゲートウェイ転送値（Com_GwMappingData参照）"
+        }
+      ]
+    }
+  ]
+}
