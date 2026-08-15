@@ -15,6 +15,7 @@ import json
 import os
 import tkinter as tk
 from tkinter import messagebox, ttk
+from typing import Callable
 
 # type ごとに保持しうる専用キー。field_detail_text()/_edit_field_detail()/
 # _on_field_cell_commit() の型変更クリーンアップが、この1箇所を共通の情報源とする。
@@ -145,7 +146,7 @@ def bit_range_conflicts(fields: list[dict], dlc: int) -> list[str]:
 class EnumEditorDialog(tk.Toplevel):
     """enum フィールドの value/label 一覧を編集するモーダルダイアログ。"""
 
-    def __init__(self, parent: tk.Tk, enum_list: list[dict]):
+    def __init__(self, parent: tk.Misc, enum_list: list[dict]):
         super().__init__(parent)
         self.title("enum を編集")
         self.resizable(False, False)
@@ -198,7 +199,7 @@ class EnumEditorDialog(tk.Toplevel):
 class NumberDetailDialog(tk.Toplevel):
     """number フィールドの unit/scale/range を編集するモーダルダイアログ。"""
 
-    def __init__(self, parent: tk.Tk, field: dict):
+    def __init__(self, parent: tk.Misc, field: dict):
         super().__init__(parent)
         self.title("number 詳細を編集")
         self.resizable(False, False)
@@ -332,12 +333,18 @@ class EditableTreeview(ttk.Treeview):
             self._editing = None
 
 
-class App(tk.Tk):
-    def __init__(self, data_path: str):
-        super().__init__()
+class CanSignalEditorFrame(ttk.Frame):
+    """CAN信号定義エディタ本体。単体起動（main()）でも、他ツールとの統合
+    ランチャー（tools/can_tool/）のNotebookタブとしても埋め込める、
+    tk.Tkに依存しない ttk.Frame。ウィンドウ全体を閉じる判断
+    （タイトルバー表示・WM_DELETE_WINDOW）は呼び出し元の責務とし、
+    このクラスは on_title_change コールバックと confirm_close() のみを提供する。"""
+
+    def __init__(self, master: tk.Misc, data_path: str,
+                 on_title_change: Callable[[str], None] | None = None):
+        super().__init__(master)
         self.data_path = data_path
-        self.title("CAN Signal Editor")
-        self.geometry("1200x720")
+        self._on_title_change = on_title_change or (lambda _title: None)
 
         self.data = self._load()
         self.dirty = False
@@ -345,7 +352,14 @@ class App(tk.Tk):
 
         self._build_ui()
         self._refresh_frame_tree()
-        self.protocol("WM_DELETE_WINDOW", self._on_close)
+        # __init__ の完了直後に _update_title() を同期呼び出しすると、
+        # on_title_change コールバックがこのFrame自身（呼び出し元の代入文の
+        # 左辺）を参照する場合に、代入完了前に呼ばれて NameError になる
+        # （統合ランチャー tools/can_tool/ の
+        # `editor_frame = CanSignalEditorFrame(..., on_title_change=lambda t: notebook.tab(editor_frame, ...))`
+        # がまさにこの形）。after_idle で Tk のイベントループ開始後に遅延させれば、
+        # その時点では呼び出し元の代入は既に完了しているため安全に呼べる。
+        self.after_idle(self._update_title)
 
     # ------------------------------------------------------------------
     # データ入出力
@@ -366,16 +380,23 @@ class App(tk.Tk):
         self.dirty = True
         self._update_title()
 
+    def _on_ctrl_s(self, event: tk.Event) -> None:
+        if self.winfo_ismapped():
+            self._save()
+
     def _update_title(self) -> None:
         mark = "*" if self.dirty else ""
-        self.title(f"CAN Signal Editor{mark} - {os.path.basename(self.data_path)}")
+        self._on_title_change(f"CAN Signal Editor{mark} - {os.path.basename(self.data_path)}")
 
-    def _on_close(self) -> None:
+    def confirm_close(self) -> bool:
+        """未保存の変更があれば確認し、閉じてよいかを返す。ウィンドウを実際に
+        破棄する（root.destroy()等）のは呼び出し元の責務（単体起動のmain()、
+        または統合ランチャーのroot close handler）。"""
         if self.dirty and not messagebox.askyesno(
             "確認", "未保存の変更があります。保存せずに終了しますか？"
         ):
-            return
-        self.destroy()
+            return False
+        return True
 
     # ------------------------------------------------------------------
     # UI構築
@@ -385,7 +406,11 @@ class App(tk.Tk):
         toolbar.pack(fill=tk.X)
         ttk.Button(toolbar, text="保存 (Ctrl+S)", command=self._save).pack(side=tk.LEFT)
         ttk.Button(toolbar, text="再読み込み", command=self._reload).pack(side=tk.LEFT, padx=4)
-        self.bind_all("<Control-s>", lambda e: self._save())
+        # bind_all はアプリ全体（プロセス内の全ウィジェット）に効くため、
+        # 統合ランチャーで他タブが選択されている間にCtrl+Sを押してもこの
+        # タブを保存してしまわないよう、自分がmapped（=表示中のタブ）である
+        # 場合のみ発火させる。単体起動時は常にmappedなので挙動は変わらない。
+        self.bind_all("<Control-s>", self._on_ctrl_s)
 
         self.status_var = tk.StringVar(value="")
         ttk.Label(toolbar, textvariable=self.status_var, foreground="#666").pack(side=tk.LEFT, padx=12)
@@ -669,8 +694,18 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--data", default=DEFAULT_DATA_PATH)
     args = parser.parse_args()
-    app = App(args.data)
-    app.mainloop()
+
+    root = tk.Tk()
+    root.geometry("1200x720")
+    frame = CanSignalEditorFrame(root, args.data, on_title_change=root.title)
+    frame.pack(fill=tk.BOTH, expand=True)
+
+    def _on_close() -> None:
+        if frame.confirm_close():
+            root.destroy()
+
+    root.protocol("WM_DELETE_WINDOW", _on_close)
+    root.mainloop()
 
 
 if __name__ == "__main__":

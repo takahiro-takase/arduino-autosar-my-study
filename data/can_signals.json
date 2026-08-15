@@ -18,10 +18,22 @@
           "bitSize": 8,
           "type": "enum",
           "enum": [
-            { "value": 0, "label": "OFF" },
-            { "value": 1, "label": "STARTING" },
-            { "value": 2, "label": "RUNNING" },
-            { "value": 3, "label": "FAULT" }
+            {
+              "value": 0,
+              "label": "OFF"
+            },
+            {
+              "value": 1,
+              "label": "STARTING"
+            },
+            {
+              "value": 2,
+              "label": "RUNNING"
+            },
+            {
+              "value": 3,
+              "label": "FAULT"
+            }
           ],
           "note": "E2E保護なし"
         },
@@ -31,8 +43,14 @@
           "bitSize": 1,
           "type": "enum",
           "enum": [
-            { "value": 0, "label": "周期フロア再送" },
-            { "value": 1, "label": "値変化時送信" }
+            {
+              "value": 0,
+              "label": "周期フロア再送"
+            },
+            {
+              "value": 1,
+              "label": "値変化時送信"
+            }
           ],
           "note": "EngineState単体のupdate-bit（SWS_Com_00061/00062）"
         },
@@ -42,8 +60,14 @@
           "bitSize": 1,
           "type": "enum",
           "enum": [
-            { "value": 0, "label": "消灯" },
-            { "value": 1, "label": "点灯" }
+            {
+              "value": 0,
+              "label": "消灯"
+            },
+            {
+              "value": 1,
+              "label": "点灯"
+            }
           ],
           "note": "WarningStatus.RunLampと同値のミラー（uds_tester仮想メータ表示用、本プロジェクト独自拡張）"
         },
@@ -53,8 +77,14 @@
           "bitSize": 1,
           "type": "enum",
           "enum": [
-            { "value": 0, "label": "消灯" },
-            { "value": 1, "label": "点灯" }
+            {
+              "value": 0,
+              "label": "消灯"
+            },
+            {
+              "value": 1,
+              "label": "点灯"
+            }
           ],
           "note": "WarningStatus.FaultLampと同値のミラー"
         },
@@ -64,8 +94,14 @@
           "bitSize": 1,
           "type": "enum",
           "enum": [
-            { "value": 0, "label": "消灯" },
-            { "value": 1, "label": "点灯" }
+            {
+              "value": 0,
+              "label": "消灯"
+            },
+            {
+              "value": 1,
+              "label": "点灯"
+            }
           ],
           "note": "WarningStatus.AbsLampと同値のミラー"
         },
@@ -75,7 +111,10 @@
           "bitSize": 16,
           "type": "number",
           "unit": "rpm",
-          "range": { "min": 0, "max": 15000 },
+          "range": {
+            "min": 0,
+            "max": 15000
+          },
           "note": "EngineInfoの検証済み値のミラー"
         },
         {
@@ -84,7 +123,10 @@
           "bitSize": 8,
           "type": "number",
           "unit": "℃",
-          "range": { "min": 0, "max": 255 },
+          "range": {
+            "min": 0,
+            "max": 255
+          },
           "note": "EngineInfoの検証済み値のミラー"
         }
       ]
@@ -104,8 +146,14 @@
           "bitSize": 1,
           "type": "enum",
           "enum": [
-            { "value": 0, "label": "消灯" },
-            { "value": 1, "label": "点灯" }
+            {
+              "value": 0,
+              "label": "消灯"
+            },
+            {
+              "value": 1,
+              "label": "点灯"
+            }
           ],
           "note": "RUNNING LED D6と同値"
         },
@@ -115,8 +163,14 @@
           "bitSize": 1,
           "type": "enum",
           "enum": [
-            { "value": 0, "label": "消灯" },
-            { "value": 1, "label": "点灯" }
+            {
+              "value": 0,
+              "label": "消灯"
+            },
+            {
+              "value": 1,
+              "label": "点灯"
+            }
           ],
           "note": "FAULT LED D7と同値、点滅中は500msごとに反転"
         },
@@ -126,8 +180,14 @@
           "bitSize": 1,
           "type": "enum",
           "enum": [
-            { "value": 0, "label": "消灯" },
-            { "value": 1, "label": "点灯" }
+            {
+              "value": 0,
+              "label": "消灯"
+            },
+            {
+              "value": 1,
+              "label": "点灯"
+            }
           ],
           "note": "ABS LED D8と同値"
         },
@@ -137,8 +197,14 @@
           "bitSize": 1,
           "type": "enum",
           "enum": [
-            { "value": 0, "label": "MIXED周期フロア再送" },
-            { "value": 1, "label": "値変化時送信" }
+            {
+              "value": 0,
+              "label": "MIXED周期フロア再送"
+            },
+            {
+              "value": 1,
+              "label": "値変化時送信"
+            }
           ],
           "note": "Signal Group全体のupdate-bit（SWS_Com_00801）"
         }
@@ -173,7 +239,10 @@
           "bitSize": 8,
           "type": "number",
           "unit": "count",
-          "range": { "min": 0, "max": 255 },
+          "range": {
+            "min": 0,
+            "max": 255
+          },
           "note": "飽和カウンタ。EngineInfo/AbsInfo受信のE2E CRC不一致累積数"
         },
         {
@@ -182,7 +251,10 @@
           "bitSize": 8,
           "type": "number",
           "unit": "count",
-          "range": { "min": 0, "max": 255 },
+          "range": {
+            "min": 0,
+            "max": 255
+          },
           "note": "飽和カウンタ。EngineInfo/AbsInfo受信のE2Eシーケンス異常累積数"
         }
       ]
@@ -192,8 +264,8 @@
       "direction": "RX",
       "canId": "0x100",
       "dlc": 7,
-      "txPeriodMs": 1667,
-      "rxTimeoutMs": 5000,
+      "txPeriodMs": 1000,
+      "rxTimeoutMs": 3000,
       "note": "エンジンECU送信。AUTOSAR E2E Profile05保護。rxTimeoutMs=COM_TIMEOUT_ENGINE_INFO_MSの実測値（txPeriodMsの導出根拠は先頭$note参照）",
       "fields": [
         {
@@ -216,7 +288,10 @@
           "bitSize": 16,
           "type": "number",
           "unit": "rpm",
-          "range": { "min": 0, "max": 15000 },
+          "range": {
+            "min": 0,
+            "max": 15000
+          },
           "note": "受信フィルタ（NEW_IS_WITHIN）で[0,8000]rpm範囲外は破棄（プラウジビリティチェック）"
         },
         {
@@ -225,7 +300,10 @@
           "bitSize": 8,
           "type": "number",
           "unit": "℃",
-          "range": { "min": 0, "max": 255 },
+          "range": {
+            "min": 0,
+            "max": 255
+          },
           "note": "0xFFはセンサ異常マーカー（DataInvalidAction=NOTIFY）"
         },
         {
@@ -234,8 +312,14 @@
           "bitSize": 1,
           "type": "enum",
           "enum": [
-            { "value": 0, "label": "OFF" },
-            { "value": 1, "label": "ON" }
+            {
+              "value": 0,
+              "label": "OFF"
+            },
+            {
+              "value": 1,
+              "label": "ON"
+            }
           ]
         }
       ]
@@ -245,8 +329,8 @@
       "direction": "RX",
       "canId": "0x110",
       "dlc": 6,
-      "txPeriodMs": 1667,
-      "rxTimeoutMs": 5000,
+      "txPeriodMs": 1000,
+      "rxTimeoutMs": 3000,
       "note": "ABS ECU送信。AUTOSAR E2E Profile05保護。RX Signal Group。rxTimeoutMs=COM_TIMEOUT_ABS_INFO_MSの実測値（txPeriodMsの導出根拠は先頭$note参照）",
       "fields": [
         {
@@ -270,7 +354,10 @@
           "type": "number",
           "unit": "km/h",
           "scale": 0.01,
-          "range": { "min": 0, "max": 655.35 },
+          "range": {
+            "min": 0,
+            "max": 655.35
+          },
           "note": "raw 0x0064 = 1.00 km/h。RxDataTimeoutAction=SUBSTITUTE（タイムアウト中は0xFFFFを返す）"
         },
         {
@@ -279,8 +366,14 @@
           "bitSize": 1,
           "type": "enum",
           "enum": [
-            { "value": 0, "label": "解除" },
-            { "value": 1, "label": "作動" }
+            {
+              "value": 0,
+              "label": "解除"
+            },
+            {
+              "value": 1,
+              "label": "作動"
+            }
           ]
         },
         {
@@ -289,8 +382,14 @@
           "bitSize": 1,
           "type": "enum",
           "enum": [
-            { "value": 0, "label": "非作動" },
-            { "value": 1, "label": "ABS作動中" }
+            {
+              "value": 0,
+              "label": "非作動"
+            },
+            {
+              "value": 1,
+              "label": "ABS作動中"
+            }
           ]
         }
       ]
@@ -310,8 +409,14 @@
           "bitSize": 1,
           "type": "enum",
           "enum": [
-            { "value": 0, "label": "要求なし" },
-            { "value": 1, "label": "Repeat Message State再アナウンス要求" }
+            {
+              "value": 0,
+              "label": "要求なし"
+            },
+            {
+              "value": 1,
+              "label": "Repeat Message State再アナウンス要求"
+            }
           ],
           "note": "Control Bit Vector bit0（NM_CBV_BIT_REPEAT_MESSAGE_REQUEST）。他ノードのRepeat Message Request検知によるnode detectionに使用"
         },
@@ -337,8 +442,14 @@
           "bitSize": 8,
           "type": "enum",
           "enum": [
-            { "value": 0, "label": "LOCK" },
-            { "value": 1, "label": "UNLOCK" }
+            {
+              "value": 0,
+              "label": "LOCK"
+            },
+            {
+              "value": 1,
+              "label": "UNLOCK"
+            }
           ],
           "note": "Authentic Payload"
         },
@@ -378,8 +489,14 @@
           "bitSize": 8,
           "type": "enum",
           "enum": [
-            { "value": 0, "label": "LOCK" },
-            { "value": 1, "label": "UNLOCK" }
+            {
+              "value": 0,
+              "label": "LOCK"
+            },
+            {
+              "value": 1,
+              "label": "UNLOCK"
+            }
           ],
           "note": "SecureCommand.ImmobilizerCmdのゲートウェイ転送値（Com_GwMappingData参照）"
         }

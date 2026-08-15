@@ -38,15 +38,24 @@ def parse_payload(items) -> bytes:
     return bytes(int(x, 16) if isinstance(x, str) else int(x) for x in items)
 
 
+# tools/uds_tester/src の絶対パス。__file__ は tools/uds_tester/src/app.py。
+_THIS_DIR = os.path.dirname(os.path.abspath(__file__))
+
 # data/can_signals.json（CANフレームのビットレイアウト定義。tools/can_signal_editor/
-# 参照）へのパス。__file__ は tools/uds_tester/src/app.py なので、3階層上が
-# リポジトリルート（tools/can_signal_editor/src/app.py の DEFAULT_DATA_PATH と同じ規約）。
+# 参照）へのパス。3階層上がリポジトリルート
+# （tools/can_signal_editor/src/app.py の DEFAULT_DATA_PATH と同じ規約）。
 DEFAULT_SIGNAL_DEFS_PATH = os.path.normpath(
-    os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "data", "can_signals.json")
+    os.path.join(_THIS_DIR, "..", "..", "..", "data", "can_signals.json")
 )
 
+# config.json（このツール自身の設定）へのパス。以前は cwd 相対の "config.json" が
+# 既定値で、run.bat の cd /d "%~dp0" に解決を頼っていた。tools/can_tool/（統合
+# ランチャー）は tools/uds_tester/ へ cd しないため、DEFAULT_SIGNAL_DEFS_PATH と
+# 同じ __file__ 基準の絶対パス規約に揃える（単体起動時の挙動は変わらない）。
+DEFAULT_CONFIG_PATH = os.path.normpath(os.path.join(_THIS_DIR, "..", "config.json"))
 
-class App(tk.Tk):
+
+class UdsTesterFrame(ttk.Frame):
     def _load_signal_defs(self, path: str) -> "dict[int, dict]":
         """data/can_signals.json を読み込み、{CAN ID(int): フレーム定義} の辞書を返す。
         RXモニタのデコードはこの辞書を情報源にする（tools/can_signal_editor/ で
@@ -74,10 +83,8 @@ class App(tk.Tk):
                 )
         return result
 
-    def __init__(self, config_path: str):
-        super().__init__()
-        self.title("UDS Button Tester")
-        self.geometry("1100x650")
+    def __init__(self, master: tk.Misc, config_path: str):
+        super().__init__(master)
 
         with open(config_path, "r", encoding="utf-8") as f:
             self.cfg = json.load(f)
@@ -496,12 +503,12 @@ class App(tk.Tk):
                 if _e2e_cfg_btn:
                     _raw_bytes = parse_payload(btn_cfg.get("data", []))
                     default_hex = " ".join(
-                        f"{b:02X}" for b in App._apply_e2e(_raw_bytes, _e2e_cfg_btn, 0)
+                        f"{b:02X}" for b in UdsTesterFrame._apply_e2e(_raw_bytes, _e2e_cfg_btn, 0)
                     )
                 elif _secoc_cfg_btn:
                     _raw_bytes = parse_payload(btn_cfg.get("data", []))
                     default_hex = " ".join(
-                        f"{b:02X}" for b in App._apply_secoc(_raw_bytes, _secoc_cfg_btn, 0)
+                        f"{b:02X}" for b in UdsTesterFrame._apply_secoc(_raw_bytes, _secoc_cfg_btn, 0)
                     )
                 else:
                     default_hex = _hex_str(btn_cfg.get("data", []))
@@ -533,21 +540,21 @@ class App(tk.Tk):
                             # （SecOC の単調増加チェック、E2E の Counter 不整合検知
                             # いずれも直前値との連続性を見ているため）。
                             try:
-                                cur = App._parse_hex_bytes(var.get())
+                                cur = UdsTesterFrame._parse_hex_bytes(var.get())
                             except ValueError:
                                 cur = b""
                             if ecfg:
-                                counter = App._read_e2e_counter(cur, ecfg)
+                                counter = UdsTesterFrame._read_e2e_counter(cur, ecfg)
                                 _pb = parse_payload(vals)
                                 var.set(" ".join(
-                                    f"{b:02X}" for b in App._apply_e2e(_pb, ecfg, counter)
+                                    f"{b:02X}" for b in UdsTesterFrame._apply_e2e(_pb, ecfg, counter)
                                 ))
                             elif scfg:
                                 fo = scfg["freshness_offset"]
                                 freshness = cur[fo] if len(cur) > fo else 0
                                 _pb = parse_payload(vals)
                                 var.set(" ".join(
-                                    f"{b:02X}" for b in App._apply_secoc(_pb, scfg, freshness)
+                                    f"{b:02X}" for b in UdsTesterFrame._apply_secoc(_pb, scfg, freshness)
                                 ))
                             else:
                                 var.set(_hex_str(vals))
@@ -709,7 +716,7 @@ class App(tk.Tk):
         frame[counter_offset] = counter & 0xFF
         crc_input = bytes(frame[counter_offset:])
         crc_input += bytes([data_id & 0xFF, (data_id >> 8) & 0xFF])
-        crc = App._crc16_e2e_p05(crc_input)
+        crc = UdsTesterFrame._crc16_e2e_p05(crc_input)
         frame[crc_offset] = crc & 0xFF
         frame[crc_offset + 1] = (crc >> 8) & 0xFF
         return bytes(frame)
@@ -727,7 +734,7 @@ class App(tk.Tk):
         CRC は DataID に続けて、CRC バイト自身を除く全バイト（CRC より前 + 後の
         2 区間）を対象に計算する（E2E_P01.c の実装と同一のアルゴリズム）。"""
         if e2e_cfg.get("profile") == "p05":
-            return App._apply_e2e_p05(payload, e2e_cfg, counter)
+            return UdsTesterFrame._apply_e2e_p05(payload, e2e_cfg, counter)
         data_id: int = e2e_cfg["data_id"]
         frame_length: int = e2e_cfg["frame_length"]
         counter_offset: int = e2e_cfg["counter_offset"]
@@ -739,7 +746,7 @@ class App(tk.Tk):
         crc_input = bytearray([data_id & 0xFF, (data_id >> 8) & 0xFF])
         crc_input += frame[:crc_offset]
         crc_input += frame[crc_offset + 1:]
-        frame[crc_offset] = App._crc8_sae_j1850(bytes(crc_input))
+        frame[crc_offset] = UdsTesterFrame._crc8_sae_j1850(bytes(crc_input))
         return bytes(frame)
 
     # ------------------------------------------------------------------
@@ -787,7 +794,7 @@ class App(tk.Tk):
         auth_input += frame[0:auth_len]
         auth_input += bytes([frame[freshness_offset]])
 
-        mac = App._secoc_cmac_truncated(key, bytes(auth_input), mac_len)
+        mac = UdsTesterFrame._secoc_cmac_truncated(key, bytes(auth_input), mac_len)
         frame[mac_offset:mac_offset + mac_len] = mac
         return bytes(frame)
 
@@ -808,7 +815,7 @@ class App(tk.Tk):
         auth_input = bytearray([(data_id >> 8) & 0xFF, data_id & 0xFF])
         auth_input += data[0:auth_len]
         auth_input += bytes([data[freshness_offset]])
-        expected = App._secoc_cmac_truncated(key, bytes(auth_input), mac_len)
+        expected = UdsTesterFrame._secoc_cmac_truncated(key, bytes(auth_input), mac_len)
         return expected == data[mac_offset:mac_offset + mac_len]
 
     @staticmethod
@@ -1271,7 +1278,7 @@ class App(tk.Tk):
                     # 影響しない）。
                     if e2e_cfg:
                         po = e2e_cfg["payload_offset"]
-                        next_counter = App._next_e2e_counter(App._read_e2e_counter(data, e2e_cfg), e2e_cfg)
+                        next_counter = UdsTesterFrame._next_e2e_counter(UdsTesterFrame._read_e2e_counter(data, e2e_cfg), e2e_cfg)
                         next_frame = self._apply_e2e(data[po:], e2e_cfg, next_counter)
                         self.state_queue.put(
                             ("entry_update", (idx, " ".join(f"{b:02X}" for b in next_frame)))
@@ -1492,7 +1499,7 @@ class App(tk.Tk):
                     try:
                         if e2e_cfg:
                             send_data = self._apply_e2e(data, e2e_cfg, e2e_counter)
-                            e2e_counter = App._next_e2e_counter(e2e_counter, e2e_cfg)
+                            e2e_counter = UdsTesterFrame._next_e2e_counter(e2e_counter, e2e_cfg)
                         elif secoc_cfg:
                             send_data = self._apply_secoc(data, secoc_cfg, secoc_freshness)
                             secoc_freshness = (secoc_freshness + 1) & 0xFF
@@ -1607,12 +1614,12 @@ class App(tk.Tk):
             parts.append(f"!DLC不足 期待={expected_dlc}byte 実際={len(data)}byte!")
         for f in frame_def.get("fields", []):
             t = f.get("type")
-            if t in App._HIDDEN_FIELD_TYPES:
+            if t in UdsTesterFrame._HIDDEN_FIELD_TYPES:
                 continue
             bit_position, bit_size = f["bitPosition"], f["bitSize"]
             if bit_position + bit_size > len(data) * 8:
                 continue  # data がここまで届いていない（0埋めで偽の値を出さない）
-            raw = App._extract_bits(data, bit_position, bit_size)
+            raw = UdsTesterFrame._extract_bits(data, bit_position, bit_size)
             if t == "enum":
                 label = next((e["label"] for e in f.get("enum", []) if e["value"] == raw), f"0x{raw:X}")
                 parts.append(f"{f['name']}={label}")
@@ -1954,9 +1961,15 @@ class App(tk.Tk):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config", default="config.json")
+    parser.add_argument("--config", default=DEFAULT_CONFIG_PATH)
     args = parser.parse_args()
-    App(args.config).mainloop()
+
+    root = tk.Tk()
+    root.title("UDS Button Tester")
+    root.geometry("1100x650")
+    frame = UdsTesterFrame(root, args.config)
+    frame.pack(fill=tk.BOTH, expand=True)
+    root.mainloop()
 
 
 if __name__ == "__main__":
