@@ -73,7 +73,7 @@ typedef enum
 {
     WDGM_LOCAL_STATUS_OK          = 0x00U,  /**< 正常: Checkpoint が期待回数以上届いた */
     WDGM_LOCAL_STATUS_FAILED      = 0x01U,  /**< 失敗: Checkpoint 不足 */
-    WDGM_LOCAL_STATUS_DEACTIVATED = 0x0FU   /**< 無効: 初期化前または ID 不正 */
+    WDGM_LOCAL_STATUS_DEACTIVATED = 0x04U   /**< 無効: 初期化前または ID 不正 (SWS_WdgM_00359) */
 } WdgM_LocalStatusType;
 
 /* -----------------------------------------------------------------------

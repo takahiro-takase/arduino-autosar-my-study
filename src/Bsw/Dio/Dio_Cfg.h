@@ -24,8 +24,10 @@
 /** AUTOSAR DIO Driver の ModuleId（AUTOSAR_TR_BSWModuleList 参照、固定値 120） */
 #define DIO_MODULE_ID  120U
 
-/** 開発エラーコード（SWS_Dio_2078 等より、GetVersionInfo の NULL チェックのみ使用） */
-#define DIO_E_PARAM_POINTER  0x14U
+/** 開発エラーコード（[SWS_Dio_00188]/[SWS_Dio_00189] より、GetVersionInfo の
+ *  NULL チェックのみ使用。0x14 は本来 DIO_E_PARAM_INVALID_PORT_ID の値であり、
+ *  DIO_E_PARAM_POINTER の値は 0x20 が正しい） */
+#define DIO_E_PARAM_POINTER  0x20U
 
 /** ApiId（各関数の Doxygen \ServiceID タグと一致させること。値は SWS 8.x 章の
  *  「Service ID[hex]」記載を実測して確認済み） */

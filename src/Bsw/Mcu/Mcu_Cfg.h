@@ -26,10 +26,13 @@
  * Mcu_DistributePllClock() を実装しない（Arduino フレームワークが
  * クロック初期化を担い、RAM セクション初期化・複数電源モードを
  * モデル化しないため。Mcu.h 冒頭のコメント参照）ため未使用。
- * MCU_E_PARAM_CONFIG は Mcu_Init() の NULL ConfigPtr チェックに使う
+ * MCU_E_PARAM_CONFIG は本来 Mcu_Init() の NULL ConfigPtr チェック用
  * （[SWS_Mcu_00012] の表には載るが、この用途を明示する個別の "shall"
  * 要求は本書には存在しない。他モジュールの ConfigPtr NULL チェックと
- * 同じ扱いとして採用）。
+ * 同じ扱いとして採用）だが、Mcu_Init() は Serial.begin() より前に呼ばれる
+ * ため DET_LOGx/Det_ReportError を一切呼ばない設計（Mcu.c の Mcu_Init()
+ * 冒頭コメント参照）。そのため本コードは定義のみで実際には報告されない
+ * （NULL ConfigPtr は黙って早期 return するのみ）。
  * ----------------------------------------------------------------------- */
 
 /** AUTOSAR MCU Driver の ModuleId（AUTOSAR_TR_BSWModuleList 参照、固定値 101） */

@@ -60,9 +60,9 @@ void CanTp_Init(const CanTp_ConfigType* CfgPtr);
 /**
  * \brief   DCM からの UDS ペイロードを CAN トランスポートフレームに分割して送信する。
  *
- * \details PduInfoPtr の SduLength <= 7 なら Single Frame として送信。
- *          8 バイト以上なら First Frame + Consecutive Frame に分割し、
- *          Flow Control 受信後に CF を順次送信する (SWS_CanTp_00218)。
+ * \details PduInfoPtr の SduLength <= 7 なら Single Frame として送信
+ *          (SWS_CanTp_00231)。8 バイト以上なら First Frame + Consecutive Frame
+ *          に分割し (SWS_CanTp_00232)、Flow Control 受信後に CF を順次送信する。
  *
  * \param[in]  TxSduId     TX N-SDU ID (CANTP_TX_SDU_ID)。本実装は 1 チャネル固定。
  * \param[in]  PduInfoPtr  送信する UDS ペイロード (PCI バイトを含まない生データ)。

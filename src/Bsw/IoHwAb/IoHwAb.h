@@ -44,7 +44,7 @@ typedef struct IoHwAb_ConfigType_Tag IoHwAb_ConfigType;
  *                        持たないため）。
  *
  * \AUTOSARReq     {SWS_IoHwAb_00119}
- * \ServiceID      {0xC0}
+ * \ServiceID      {0x01}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
  */

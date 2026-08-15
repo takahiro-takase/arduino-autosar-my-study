@@ -257,7 +257,7 @@ static void Can_EnterListenOnly(void)
  *          CAN_CS_STOPPED へ戻らないと到達できない状態であり、
  *          どの呼び出し元もこの組み合わせを使わない。同様に CAN_T_WAKEUP
  *          は CAN_CS_SLEEP 以外から呼ぶ意味がない。呼び出し元の実装ミスを
- *          検出できるよう、この 2 点のみ状態を検証する（SWS_Can_00195/
+ *          検出できるよう、この 2 点のみ状態を検証する（SWS_Can_00200/
  *          00409-00412。2026-08 のスペック監査で「一切検証していない」
  *          ことが判明したが、標準 4 遷移図をそのまま強制すると上記の
  *          協調スリープ／ボランタリスリープ取り消しという実際に使われている
@@ -273,7 +273,7 @@ static void Can_EnterListenOnly(void)
  *                       CAN_CS_SLEEP 中の CAN_T_START/CAN_T_STOP、
  *                       CAN_CS_SLEEP 以外での CAN_T_WAKEUP。
  *
- * \AUTOSARReq     {SWS_Can_00017, SWS_Can_00195, SWS_Can_00230}
+ * \AUTOSARReq     {SWS_Can_00017, SWS_Can_00200, SWS_Can_00230}
  * \ServiceID      {0x03}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
@@ -501,6 +501,8 @@ void Can_MainFunction_Write(void)
  * \pre        Can_Init() が正常に完了していること。
  * \note       AUTOSAR 標準外の API。INT ピン番号は Can_ConfigType::intPin
  *             から取得し、Can_Hw_AttachRxIsr() へ渡す。
+ * \note       SWS_Can_00271 が規定する通知先（EcuM_CheckWakeup()）との相違点は
+ *             Can_MainFunction_Wakeup() の doc コメントを参照。
  *
  * \AUTOSARReq     {SWS_Can_00396, SWS_Can_00271}
  * \ServiceID      {0xF0}
@@ -595,6 +597,15 @@ void Can_MainFunction_Read(void)
  *          詳細は BswM_Cfg.h の BSWM_TASK_MASK_SHUTDOWN を参照）。実機の割り込みが
  *          CPU のスリープからの復帰トリガそのものであるのと同じ理由で、この
  *          タスクもウェイクアップ検出のためだけには動き続ける必要がある。
+ *
+ *          仕様との既知の相違点: SWS_Can_00271 が規定する通知先は本来
+ *          EcuM_CheckWakeup() （ECU State Manager を直接呼ぶ）だが、本プロジェクトは
+ *          EcuM のウェイクアップソース管理を実装しておらず、CanIf 経由で
+ *          CanSM_ControllerWakeup() （AUTOSAR EcuM Wakeup Validation Protocol 相当を
+ *          CanSM 側で模した検証シーケンス、CanSM.c 参照）へ委譲する設計を
+ *          一貫して採る。00271 の引用は「ISR または Can_MainFunction_Wakeup の
+ *          いずれかの文脈で通知する」というタイミング要件の部分のみ有効で、
+ *          通知先の関数名までは仕様どおりではない。
  *
  * \pre        Can_Init() が正常に完了していること。
  *

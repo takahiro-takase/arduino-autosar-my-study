@@ -80,7 +80,7 @@ void SecOC_IfRxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr);
  *          （[7.4.1] "Authentication during direct transmission" の ad-hoc
  *          transmission フロー相当）。Authentic I-PDU を内部バッファへ
  *          コピーするだけで、Freshness/MAC の計算は一切行わず即座に E_OK を
- *          返す（[SWS_SecOC_00057]〜[SWS_SecOC_00059]）。実際の Secured I-PDU
+ *          返す（[SWS_SecOC_00057]/[SWS_SecOC_00058]）。実際の Secured I-PDU
  *          組み立ては次回 SecOC_MainFunction() で行う（[SWS_SecOC_00060]〜
  *          [SWS_SecOC_00062]）。
  *

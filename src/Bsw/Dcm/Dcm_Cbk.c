@@ -305,7 +305,7 @@ static void Dcm_TransferAbort(void);
  * \details セッション状態を defaultSession にリセットし、
  *          TX バッファポインタを設定する。
  *
- * \AUTOSARReq     {SWS_Dcm_00769}
+ * \AUTOSARReq     {SWS_Dcm_00034}
  * \ServiceID      {0x01}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}

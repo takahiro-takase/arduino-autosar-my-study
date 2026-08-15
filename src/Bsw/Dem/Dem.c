@@ -72,6 +72,13 @@
  *              (実車は明示的な OperationCycle Start/End API を持つ)
  *            - FreezeFrame は RAM のみに保持 (EEPROM 非永続化、電源 OFF で消去)
  *            - ExtendedData はカウンタ 1 種類のみ（実車は OperationCycle 情報等も持てる）
+ *            - CONFIRMED (bit3) はデバウンス確定 FAILED の瞬間に即座に立てる。
+ *              仕様の Figure 7.20 (SWS_Dem_00391) は本来これとは別に、複数の操作
+ *              サイクルにまたがる "failure counter" と DemEventFailureCycleCounter
+ *              Threshold（PENDING が何サイクル連続で FAILED になったら CONFIRMED に
+ *              昇格させるか）を持つが、本実装はこの多サイクル成熟過程を持たない。
+ *              挙動としては同閾値を 1（=最初の確定 FAILED で即昇格）に設定した場合と
+ *              等価であり、仕様上有効な設定値の一つなので不整合ではない
  *
  * \copyright  Copyright (c) 2025 T_T
  * \license    MIT License - 詳細は LICENSE ファイルを参照。
@@ -347,7 +354,11 @@ void Dem_Init(const Dem_ConfigType* ConfigPtr)
  *          まだ閾値に達していない間 (PRE-FAILED / PRE-PASSED) は
  *          DTC ステータスビットを変更しない。
  *          DEM_EVENT_STATUS_PREPASSED / PREFAILED はモニタからの入力としては
- *          受け付けない（Dem が内部カウンタから導出する値のため）。
+ *          受け付けない。これは AUTOSAR 仕様上の制約ではなく（仕様では逆にこれらが
+ *          段階的 debounce 入力として正当。SWS_Dem_00418/00419、Dem.h の
+ *          Dem_EventStatusType コメント参照）、本実装が「モニタは毎回 FAILED/PASSED
+ *          の生の単発判定を報告し、Dem が報告回数を数えて閾値到達で確定する」という
+ *          学習用簡略方式を採用しているための制約。
  *
  * \param[in]  EventId      イベント ID (DEM_EVENT_* 定数)。
  * \param[in]  EventStatus  DEM_EVENT_STATUS_FAILED または DEM_EVENT_STATUS_PASSED。

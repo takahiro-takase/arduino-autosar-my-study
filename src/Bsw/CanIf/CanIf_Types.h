@@ -16,7 +16,7 @@
 #include "ComStack_Types.h"
 #include "Can_GeneralTypes.h"
 
-/* SWS_CANIF_00056: upper-layer RX indication callback. */
+/* SWS_CANIF_00012: <User_RxIndication>, upper-layer RX indication callback. */
 typedef void (*CanIf_RxIndicationFctType)(PduIdType RxPduId, const PduInfoType* PduInfoPtr);
 
 /* SWS_CANIF_00011: upper-layer TX confirmation callback.

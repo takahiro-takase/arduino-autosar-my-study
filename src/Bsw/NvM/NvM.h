@@ -81,7 +81,7 @@ typedef uint8 NvM_BlockIdType;
 
 /**
  * \brief   ブロックの直近のジョブ結果。
- * \details AUTOSAR NvM_RequestResultType (SWS_NvM_00426) の一部に相当する。
+ * \details AUTOSAR NvM_RequestResultType (SWS_NvM_00470) の一部に相当する。
  *          本実装で使用するのは以下の 3 値のみ（学習用簡略化）。
  */
 typedef enum
@@ -217,7 +217,7 @@ Std_ReturnType NvM_RestoreBlockDefaults(NvM_BlockIdType BlockId);
 /**
  * \brief   ブロックの直近のジョブ結果を取得する。
  *
- * \details AUTOSAR NvM_GetErrorStatus() (SWS_NvM_00426) 相当。
+ * \details AUTOSAR NvM_GetErrorStatus() (SWS_NvM_00451) 相当。
  *          NvM_WriteBlock() / NvM_RestoreBlockDefaults() の完了を
  *          明示的に確認したい場合に使う（本プロジェクトの既存呼び出し元は
  *          いずれも fire-and-forget で戻り値を確認しないが、API としては

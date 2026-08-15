@@ -40,12 +40,23 @@ extern "C" {
 typedef uint8 Dem_EventIdType;
 
 /**
- * \brief   イベントステータス型 (AUTOSAR SWS_Dem_00926)
+ * \brief   イベントステータス型 (Dem_EventStatusType は AUTOSAR SWS_Dem_00926 で定義)
  *
- * モニタ（呼び出し元）は PASSED / FAILED の生のテスト結果のみを報告する。
- * PREPASSED / PREFAILED は Dem 内部のデバウンスカウンタが未確定の間の状態を表す
- * 値であり、Dem_ReportErrorStatus() への入力としては受け付けない
- * （Dem が内部で導出し、ログ出力にのみ使用する）。
+ * \details 本実装は counter-based debouncing の学習用簡略版。AUTOSAR 仕様では
+ *          PREPASSED/PREFAILED もモニタが報告してよい正当な入力であり
+ *          （SWS_Dem_00418/00419: 報告のたびにカウンタを step-size 分だけ増減させる、
+ *          段階的な debounce 進行を表す値）、逆に本来の FAILED/PASSED
+ *          （SWS_Dem_00420/00421）は「モニタ側で既に確定した単発の結果」を意味し、
+ *          報告されるとカウンタを閾値へ直接ジャンプさせて即座に確定させる
+ *          （繰り返し報告してカウントする値ではない）。
+ *
+ *          本実装はこれと異なり、モニタが毎回 FAILED/PASSED（1 周期分の生の判定）を
+ *          報告し、Dem 側がその報告回数をカウントして閾値到達時に確定するという、
+ *          仕様上は PREFAILED/PREPASSED に割り当てられた段階的カウント挙動に近い方式を
+ *          FAILED/PASSED の名前のまま採用している。PREPASSED/PREFAILED 自体は
+ *          Dem_ReportErrorStatus() への入力として受け付けない
+ *          （AUTOSAR がこれらを入力不可と規定しているのではなく、本プロジェクト独自の
+ *          簡略化。詳細は Dem.c の実装コメント参照）。
  */
 typedef enum
 {

@@ -264,8 +264,8 @@ Std_ReturnType Nm_RepeatMessageRequest(void)
         return E_NOT_OK;
     }
 
-    Nm_RepeatMessageBitSet = 1U;  /* [SWS_CanNm_00121] */
-    Nm_EnterRepeatMessage();      /* [SWS_CanNm_00119]/[SWS_CanNm_00120] */
+    Nm_RepeatMessageBitSet = 1U;  /* [SWS_CanNm_00113]（Ready Sleepから）/[SWS_CanNm_00121]（Normal Operationから） */
+    Nm_EnterRepeatMessage();      /* [SWS_CanNm_00112]（Ready Sleepから）/[SWS_CanNm_00120]（Normal Operationから） */
     return E_OK;
 }
 
@@ -292,7 +292,7 @@ void Nm_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
     switch (Nm_State)
     {
         case NM_STATE_BUS_SLEEP:
-            /* [SWS_CanNm_00126]/[SWS_CanNm_00127]/[SWS_CanNm_00336]: 状態遷移
+            /* [SWS_CanNm_00127]/[SWS_CanNm_00336]: 状態遷移
              * はせず DET へ通知するのみ。実際にネットワークへ復帰するか
              * どうかは上位層（本プロジェクトでは CanSM のウェイクアップ
              * 検証経由の ComM）が別途 Nm_NetworkRequest() を呼んで決める。 */

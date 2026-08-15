@@ -33,10 +33,12 @@
 #define CRYPTO_E_PARAM_HANDLE  0x04U  /* [SWS_Crypto_00058 等]: objectId/cryptoKeyId が範囲外 */
 #define CRYPTO_E_PARAM_VALUE   0x05U  /* [SWS_Crypto_00079 等]: keyLength=0 等の不正値 */
 
-/** ランタイムエラー（[SWS_Crypto_00194] 実測。Development Error とは別チャネルで、
- *  本プロジェクトは Dem 未接続のため Det_ReportError は呼ばず DET_LOGW のみ行う）。
- *  実車の値は 9（Runtime Error Types 表内の通し番号）だが、DET ログ上の
- *  区別用としてこのファイル内でのみ意味を持つ値として定義する。 */
+/** Std_ReturnType の拡張値（[SWS_Crypto_00043]。DET の Development/Runtime
+ *  Error とは別物 — サービス関数がジョブ失敗を呼び出し元へ伝える戻り値の
+ *  拡張レンジであり、Det_ReportError の対象ではない）。実車の値は 9
+ *  （[SWS_Crypto_00043] のレンジ表内の値）だが、本実装は同期処理のみで
+ *  この拡張戻り値自体を使わず、DET_LOGW のログメッセージ識別用としてのみ
+ *  このファイル内で値を流用する。 */
 #define CRYPTO_E_KEY_NOT_VALID  9U
 
 /** ApiId（値は docs/AUTOSAR_SWS_CryptoDriver.pdf の「Service ID[hex]」記載を

@@ -92,7 +92,8 @@
  *  パス 0: COM   → CanIf TxPduId=0 (CAN 0x200, EngineState)
  *  パス 1: CanTp → CanIf TxPduId=1 (CAN 0x7E8, UDS 診断応答)
  *  パス 2: COM   → CanIf TxPduId=3 (CAN 0x210, WarningStatus Signal Group)
- *  パス 3: COM   → SecOC → CanIf TxPduId=4 (CAN 0x220, E2EHealthStatus PERIODIC)
+ *  パス 3: COM   → CanIf TxPduId=4 (CAN 0x220, E2EHealthStatus PERIODIC。
+ *          E2E Profile05 保護のみ。以前は SecOC を経由していたが撤去済み)
  *  パス 4: COM   → CanIf TxPduId=5 (CAN 0x230, ImmobilizerStatus。
  *          Signal Gateway の転送先。DIRECT)
  *  SrcPduId は COM と CanTp が共通の名前空間として PduR_Transmit() へ渡すため、

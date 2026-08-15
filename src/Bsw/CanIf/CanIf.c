@@ -61,7 +61,7 @@ void CanIf_Init(const CanIf_ConfigType* ConfigPtr)
  *          チェックに Det_ReportError は用いない（本ファイル冒頭のコメント
  *          参照）。
  *
- * \AUTOSARReq     {SWS_CANIF_00002}
+ * \AUTOSARReq     {SWS_CANIF_91002}
  * \ServiceID      {0x02}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}

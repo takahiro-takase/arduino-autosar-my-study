@@ -83,9 +83,9 @@
  * NvM_ReadBlock() / NvM_WriteBlock() の第 1 引数に渡す。
  * ----------------------------------------------------------------------- */
 #define NVM_BLOCK_ID_DEM_MAGIC    0U  /**< DEM 有効マーカー (1 byte)         */
-#define NVM_BLOCK_ID_DEM_STATUS   1U  /**< DEM イベントステータス (9 bytes)   */
-#define NVM_BLOCK_ID_DEM_AGING    2U  /**< DEM 経年回復(Aging)カウンタ (9 bytes) */
-#define NVM_BLOCK_ID_DEM_EXTENDED 3U  /**< DEM 故障確定回数 ExtendedData (9 bytes) */
+#define NVM_BLOCK_ID_DEM_STATUS   1U  /**< DEM イベントステータス (10 bytes)  */
+#define NVM_BLOCK_ID_DEM_AGING    2U  /**< DEM 経年回復(Aging)カウンタ (10 bytes) */
+#define NVM_BLOCK_ID_DEM_EXTENDED 3U  /**< DEM 故障確定回数 ExtendedData (10 bytes) */
 #define NVM_BLOCK_COUNT           4U  /**< 管理ブロック総数                   */
 
 /* -----------------------------------------------------------------------
