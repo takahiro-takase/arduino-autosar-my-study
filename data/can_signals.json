@@ -1,5 +1,5 @@
 {
-  "$note": "README.md の「CAN フレーム仕様」表を一元管理するための情報源。src/Bsw/Com/Com_PBCfg.c 等の実装と2026-08-15に突き合わせ確認済み。将来的にコンフィグソース生成・uds_testerの情報源として使う想定。",
+  "$note": "README.md の「CAN フレーム仕様」表を一元管理するための情報源。src/Bsw/Com/Com_PBCfg.c 等の実装と2026-08-15に突き合わせ確認済み。将来的にコンフィグソース生成・uds_testerの情報源として使う想定。txPeriodMs（送信周期）/rxTimeoutMs（受信タイムアウト）は、TXフレームは周期を実測でき（コンフィグソース側にTxPeriodMs等がある）タイムアウトは実測できず（受信側=他ECUの設定はこのプロジェクトに存在しない）、RXフレームは逆にタイムアウトのみ実測できるという非対称な制約があるため、片方しか実測できないフレームはもう片方を「タイムアウト = 周期 × 3」（Nm: NM_CYCLE_MS=1000/NM_TIMEOUT_MS=3000 の実測比率を踏襲。約2周期分の取りこぼしまで許容する一般的な経験則でもある）で算出した参考値とし、note にその旨を明記する。両方とも実測できない（イベント駆動で周期という概念自体がない）フレームは、どちらのフィールドも設定しない。",
   "version": 1,
   "byteOrder": "big-endian (Motorola / CAN標準)。ビット0 = byte[0]のMSB、ビット7 = byte[0]のLSB",
   "frames": [
@@ -8,7 +8,9 @@
       "direction": "TX",
       "canId": "0x200",
       "dlc": 6,
-      "note": "メータECU送信。E2E保護なし。TxModeMode=MIXED",
+      "txPeriodMs": 9000,
+      "rxTimeoutMs": 27000,
+      "note": "メータECU送信。E2E保護なし。TxModeMode=MIXED。txPeriodMs=COM_TX_PERIOD_METERSTATUS_FLOOR_MSの実測値（rxTimeoutMsの導出根拠は先頭$note参照）",
       "fields": [
         {
           "name": "EngineState",
@@ -92,7 +94,9 @@
       "direction": "TX",
       "canId": "0x210",
       "dlc": 1,
-      "note": "メータECU送信。Com Signal Group、TMS付きDIRECT⇔MIXED",
+      "txPeriodMs": 2000,
+      "rxTimeoutMs": 6000,
+      "note": "メータECU送信。Com Signal Group、TMS付きDIRECT⇔MIXED。txPeriodMs=COM_TX_PERIOD_WARNINGSTATUS_TRUE_FLOOR_MSの実測値だが、これはTMS=true（FaultLamp/AbsLamp点灯中）でMIXEDに切り替わった時のみの周期フロアであり、通常のDIRECT状態では周期送信自体が無い（イベント駆動のみ）点に注意（rxTimeoutMsの導出根拠は先頭$note参照）",
       "fields": [
         {
           "name": "RunLamp",
@@ -145,7 +149,9 @@
       "direction": "TX",
       "canId": "0x220",
       "dlc": 5,
-      "note": "メータECU送信。AUTOSAR E2E Profile05保護。TxModeMode=PERIODIC（6000ms）",
+      "txPeriodMs": 6000,
+      "rxTimeoutMs": 18000,
+      "note": "メータECU送信。AUTOSAR E2E Profile05保護。TxModeMode=PERIODIC。txPeriodMs=COM_TX_PERIOD_E2EHEALTH_MSの実測値（rxTimeoutMsの導出根拠は先頭$note参照）",
       "fields": [
         {
           "name": "E2E CRC",
@@ -186,7 +192,9 @@
       "direction": "RX",
       "canId": "0x100",
       "dlc": 7,
-      "note": "エンジンECU送信。AUTOSAR E2E Profile05保護",
+      "txPeriodMs": 1667,
+      "rxTimeoutMs": 5000,
+      "note": "エンジンECU送信。AUTOSAR E2E Profile05保護。rxTimeoutMs=COM_TIMEOUT_ENGINE_INFO_MSの実測値（txPeriodMsの導出根拠は先頭$note参照）",
       "fields": [
         {
           "name": "E2E CRC",
@@ -237,7 +245,9 @@
       "direction": "RX",
       "canId": "0x110",
       "dlc": 6,
-      "note": "ABS ECU送信。AUTOSAR E2E Profile05保護。RX Signal Group",
+      "txPeriodMs": 1667,
+      "rxTimeoutMs": 5000,
+      "note": "ABS ECU送信。AUTOSAR E2E Profile05保護。RX Signal Group。rxTimeoutMs=COM_TIMEOUT_ABS_INFO_MSの実測値（txPeriodMsの導出根拠は先頭$note参照）",
       "fields": [
         {
           "name": "E2E CRC",
@@ -290,7 +300,9 @@
       "direction": "TX/RX",
       "canId": "0x400",
       "dlc": 2,
-      "note": "CAN Network Management（CanNm相当）。本ECU送信時・他ノード（仮想他ECU）受信時とも同一CAN ID/DLC。PduR/Comを経由せずCanIf_Transmit()/Nm_RxIndication()で直接やり取りする。src/Bsw/Nm/参照",
+      "txPeriodMs": 1000,
+      "rxTimeoutMs": 3000,
+      "note": "CAN Network Management（CanNm相当）。本ECU送信時・他ノード（仮想他ECU）受信時とも同一CAN ID/DLC。PduR/Comを経由せずCanIf_Transmit()/Nm_RxIndication()で直接やり取りする。src/Bsw/Nm/参照。txPeriodMs=NM_CYCLE_MS、rxTimeoutMs=NM_TIMEOUT_MSともNm_Cfg.hの実測値（本モジュールは唯一、送信周期・タイムアウトの両方が実測できるフレーム。ちょうど3倍の関係になっている）",
       "fields": [
         {
           "name": "RepeatMessageRequest",
@@ -317,7 +329,7 @@
       "direction": "RX",
       "canId": "0x120",
       "dlc": 6,
-      "note": "KeyFobEcu想定送信。SecOC Profile1（24Bit-CMAC-8Bit-FV）保護。物理フレームは6byte（Authentic Payload 2byte + Freshness 1byte + 切り詰めMAC 3byte）。SecOC検証成功時、byte[0-1]（Authentic Payload）のみがCom_RxIndication(IPduId=2, SecureCommand)へ転送される（Comはbyte[2-5]の存在を一切知らない）。src/Bsw/SecOC/SecOC_PBCfg.c参照",
+      "note": "KeyFobEcu想定送信。SecOC Profile1（24Bit-CMAC-8Bit-FV）保護。物理フレームは6byte（Authentic Payload 2byte + Freshness 1byte + 切り詰めMAC 3byte）。SecOC検証成功時、byte[0-1]（Authentic Payload）のみがCom_RxIndication(IPduId=2, SecureCommand)へ転送される（Comはbyte[2-5]の存在を一切知らない）。src/Bsw/SecOC/SecOC_PBCfg.c参照。txPeriodMs/rxTimeoutMsは意図的に未設定: Com_PBCfg.cで本I-PDUのTimeoutMs=0（監視無効）と明記されており、イベント駆動のコマンドフレームのため周期・タイムアウトいずれも定義しない",
       "fields": [
         {
           "name": "ImmobilizerCmd",
@@ -358,7 +370,7 @@
       "direction": "TX",
       "canId": "0x230",
       "dlc": 1,
-      "note": "メータECU送信。TxModeMode=DIRECT、保護なし。Signal GatewayがSecureCommand(RX、SecOC検証済み)のImmobilizerCmdをSWC/Rteを介さず直接転送する（認証はゲートウェイ入力側=SecureCommandで完了済みのため、この転送自体には保護を付与しない）",
+      "note": "メータECU送信。TxModeMode=DIRECT、保護なし。Signal GatewayがSecureCommand(RX、SecOC検証済み)のImmobilizerCmdをSWC/Rteを介さず直接転送する（認証はゲートウェイ入力側=SecureCommandで完了済みのため、この転送自体には保護を付与しない）。txPeriodMs/rxTimeoutMsは意図的に未設定: Com_PBCfg.cでTxPeriodMs自体が設定されておらず（DIRECT、イベント駆動のみ）、周期という概念が存在しないため",
       "fields": [
         {
           "name": "ImmobilizerStatus",
