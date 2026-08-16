@@ -243,10 +243,11 @@ static void Can_EnterListenOnly(void)
  *          - CAN_T_STOP   : CAN_CS_STARTED → CAN_CS_STOPPED (受信専用モード)
  *          - CAN_T_SLEEP  : CAN_CS_STOPPED → CAN_CS_SLEEP   (スリープモード)。
  *                           CAN_CS_STARTED からの直接遷移も許可する
- *                           （Nm 協調スリープ: CanSM は NO_COM_PENDING_SLEEP
- *                           中コントローラを稼働させ続け、Nm が Bus-Sleep
- *                           Mode へ到達した瞬間に CAN_T_STOP を経由せず直接
- *                           SLEEP させる。CanSM_NmBusSleepMode() 参照。
+ *                           （Nm 協調スリープ: ComM は Nm が実際に Bus-Sleep
+ *                           Mode へ到達するまで CanSM へ NO_COM を伝えず
+ *                           コントローラを稼働させ続け、到達した瞬間に
+ *                           CanSM_RequestComMode(NO_COM) 経由で CAN_T_STOP を
+ *                           経由せず直接 SLEEP させる。ComM.c/CanSM.c 参照。
  *                           実 AUTOSAR の標準遷移図にはない本プロジェクト
  *                           固有の拡張）。
  *          - CAN_T_WAKEUP : CAN_CS_SLEEP   → CAN_CS_STOPPED (受信専用モード)
