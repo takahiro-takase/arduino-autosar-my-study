@@ -100,17 +100,23 @@ Std_ReturnType ComM_GetStatus(ComM_InitStatusType* Status);
 /**
  * \brief   ユーザが通信モードを要求する。
  *
- * \details 要求モードに応じてチャネルの状態遷移を行い、
- *          Can_SetControllerMode() でハードウェアを制御する。
- *          複数ユーザからの要求は最高優先モードに調停する
- *          (AUTOSAR SWS_ComM_00686、"highest wins" 戦略)。
+ * \details 要求モードに応じてチャネルの状態遷移を行う。複数ユーザからの要求は
+ *          最高優先モードに調停する (AUTOSAR SWS_ComM_00686、"highest wins" 戦略)。
+ *
+ *          FULL_COM -> NO_COM の場合のみ特別扱いする（[SWS_ComM_00133]）:
+ *          Can_SetControllerMode() は呼ばず、Nm_NetworkRelease() のみを送って
+ *          即座に E_OK を返す。実際の CanSM_RequestComMode() 呼び出しと
+ *          ComM_ChannelMode の更新は、Nm が協調スリープを完了して
+ *          ComM_Nm_BusSleepMode() を呼ぶまで遅延する（ComM.c ファイル冒頭
+ *          コメント参照）。それ以外の遷移（NO_COM -> FULL_COM 等）は従来どおり
+ *          即座に CanSM_RequestComMode() へ転送する。
  *
  * \param[in]  User     要求するユーザ ID (COMM_USER_0 等)。
  * \param[in]  ComMode  要求する通信モード
  *                      (COMM_NO_COMMUNICATION / COMM_SILENT_COMMUNICATION /
  *                       COMM_FULL_COMMUNICATION)。
  *
- * \retval  E_OK      モード遷移を受理した。
+ * \retval  E_OK      モード遷移（または Nm への解放要求送信）を受理した。
  * \retval  E_NOT_OK  User が範囲外、または不正な ComMode。
  *
  * \ServiceID      {0x05}
@@ -169,12 +175,17 @@ void ComM_MainFunction(void);
  *          User0 の要求として扱うことで、次回の集約計算に古い要求が
  *          残らないようにするため。詳細は ComM.c の実装コメントを参照）。
  *
+ *          FULL_COM 通知時、`ComM_NmReleasePending[]` が立っていれば
+ *          （Nm 協調スリープ待ちの最中に Bus-Off が発生し、回復して CanSM が
+ *          FULL_COM へ戻ってきたケース）Nm_NetworkRequest() は呼ばず、
+ *          代わりに CanSM_RequestComMode(NO_COM) を再度呼んで解放を
+ *          仕切り直す（詳細は ComM.c の実装コメント参照）。
+ *
  *          呼び出しタイミング:
- *            - CanSM_RequestComMode 成功後 (FULL_COM / NO_COM への遷移時)
- *            - Bus-Off 回復試行時 (通常は FULL_COM。ただし Bus-Off が
- *              CANSM_STATE_NO_COM_PENDING_SLEEP 中に発生した場合は、回復後も
- *              「通信不要」だった意図を上書きしないよう NO_COM で呼ばれる。
- *              CanSM.c の CanSM_BusOffFromPendingSleep 参照)
+ *            - CanSM_RequestComMode 成功後 (NO_COM -> FULL_COM 遷移時、および
+ *              Nm が協調スリープを完了して ComM_Nm_BusSleepMode() 経由で
+ *              呼ばれた NO_COM 確定時)
+ *            - Bus-Off 検出時・回復試行時 (SILENT_COMMUNICATION / FULL_COMMUNICATION)
  *            - ウェイクアップ検証成功時 (FULL_COM)
  *
  * \param[in]  Network  ネットワークハンドル (0 〜 COMM_CHANNEL_COUNT-1)。
@@ -185,6 +196,25 @@ void ComM_MainFunction(void);
  * \Synchronicity  {Synchronous}
  */
 void ComM_BusSMIndication(uint8 Network, ComM_ModeType Mode);
+
+/**
+ * \brief   Nm が Bus-Sleep Mode へ到達したことの通知（Nm から呼び出される）。
+ *
+ * \details [SWS_ComM_00392]。ComM_RequestComMode() が FULL_COM -> NO_COM の
+ *          要求時に送った Nm_NetworkRelease() を受けて Nm が協調スリープ
+ *          （Repeat Message → Ready Sleep → Prepare Bus-Sleep → Bus-Sleep Mode）
+ *          を完了したときに呼ばれる。ここで初めて CanSM_RequestComMode(NO_COM)
+ *          を呼び、物理スリープと ComM_ChannelMode の更新を行う
+ *          （[SWS_ComM_00637]。詳細は ComM.c ファイル冒頭コメント参照）。
+ *
+ * \param[in]  Network  ネットワークハンドル（0 〜 COMM_CHANNEL_COUNT-1）。
+ *
+ * \AUTOSARReq     {SWS_ComM_00392, SWS_ComM_00637}
+ * \ServiceID      {0x1a}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void ComM_Nm_BusSleepMode(uint8 Network);
 
 /**
  * \brief   ComM モジュールのバージョン情報を取得する。

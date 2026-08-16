@@ -25,7 +25,7 @@
 #include "Nm.h"
 #include "Nm_Cfg.h"
 #include "CanIf.h"
-#include "CanSM.h"
+#include "ComM.h"
 #include "Det.h"
 
 #define TAG "Nm"
@@ -180,17 +180,19 @@ static void Nm_EnterPrepareBusSleep(void)
 /**
  * \brief   Prepare Bus-Sleep Mode から Bus-Sleep Mode へ入る（[SWS_CanNm_00115]）。
  *
- * \details [SWS_CanNm_00126]: 上位層（本プロジェクトでは CanSM）への通知
- *          相当として CanSM_NmBusSleepMode() を直接呼ぶ。CanSM はこれを
- *          受けて初めて CAN コントローラを実際にスリープさせる
- *          （協調スリープ。詳細は CanSM.c 参照）。
+ * \details [SWS_CanNm_00126]: 上位層（本プロジェクトでは ComM）への通知として
+ *          ComM_Nm_BusSleepMode()（[SWS_ComM_00392]）を呼ぶ。ComM は
+ *          ComM_RequestComMode(FULL_COM->NO_COM) の時点では Nm_NetworkRelease()
+ *          を送るのみでチャネルを FULL_COM のまま据え置いており（協調スリープの
+ *          起点、ComM.c ファイル冒頭コメント参照）、この通知を受けて初めて
+ *          CanSM へ NO_COM を伝え、CAN コントローラを実際にスリープさせる。
  */
 static void Nm_EnterBusSleep(void)
 {
     DET_LOGT(TAG, "called");
     Nm_State = NM_STATE_BUS_SLEEP;
     DET_LOGI(TAG, "-> Bus-Sleep Mode");
-    CanSM_NmBusSleepMode();
+    ComM_Nm_BusSleepMode(0U);
 }
 
 Std_ReturnType Nm_NetworkRequest(void)

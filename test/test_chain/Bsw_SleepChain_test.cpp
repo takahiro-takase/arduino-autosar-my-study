@@ -8,18 +8,19 @@
  *              CanSM_RequestComMode(NO_COM)   ← ComM から呼ばれる（本テストでは
  *                                                 ComM 自体はフェイクに差し替え、
  *                                                 直接呼び出す）
- *                → CanSM_State: FULL_COM → NO_COM_PENDING_SLEEP
- *                  （ここではまだ Can_SetControllerMode(CAN_T_SLEEP) を呼ばない。
- *                   Nm が Bus-Sleep Mode へ到達するまで HW は稼働継続する）
- *                ┊  (Nm の協調スリープ待ち。本テストでは Nm 自体を対象にせず、
- *                ┊   「Nm が Bus-Sleep Mode へ到達した」ことを CanSM_NmBusSleepMode()
- *                ┊   の直接呼び出しで模擬する)
- *              CanSM_NmBusSleepMode()
  *                → Can_SetControllerMode(CAN_T_SLEEP) → CanSM_State: NO_COM
  *
- *          「┊」（Nm の協調スリープという非同期の切れ目）を境に、Bsw_TxChain_test.cpp
- *          と同じ発想でテストを分けている。Nm 自身の状態機械（Ready Sleep →
- *          Prepare Bus-Sleep → Bus-Sleep Mode、Nm.c 参照）はここでは対象外。
+ *          2026-08 の設計変更（Nm↔CanSM↔ComM 協調スリープ通知を ComM 経由へ
+ *          移管）により、CanSM が NO_COM を受け取るのは「ComM が Nm の協調
+ *          スリープ完了（Bus-Sleep Mode 到達）を確認した後」の 1 回だけになった。
+ *          そのため CanSM 自身はもう「解放要求はされたがまだ寝てはいけない」
+ *          という中間状態を持たず、FULL_COM から物理スリープまで一気に遷移する
+ *          （旧テストにあった CanSM_NmBusSleepMode() 経由の 2 段階シーケンスは
+ *          廃止された）。ComM 側の新しい協調スリープロジック
+ *          （Nm_NetworkRelease() の遅延送信、再要求キャンセル、
+ *          ComM_Nm_BusSleepMode()、Bus-Off 中の解放ペンディング処理）は
+ *          `[env:native_sleep_chain]` の Bsw_SleepCoordination_test.cpp が
+ *          ComM.c/Nm.c/CanSM.c 実体を使って検証する（そちらを参照）。
  *
  *          ComM（CanSM_RequestComMode の呼び出し元、CanSM が呼び返す
  *          ComM_BusSMIndication の宛先）と Dem（Bus-Off 通信路の PASSED/FAILED
@@ -96,62 +97,22 @@ protected:
     Can_ConfigType canConfig;
 };
 
-// ------------------------------------------------------------
-// セグメント①: CanSM_RequestComMode(NO_COM) ─ Nm 協調スリープ待ちで切れるまで
-// ------------------------------------------------------------
-TEST_F(Bsw_SleepChain_Test, RequestComMode_NoCom_OK_TransitionsToPendingSleepWithoutPhysicalSleep)
+TEST_F(Bsw_SleepChain_Test, RequestComMode_NoCom_OK_PutsControllerToPhysicalSleepImmediately)
 {
-    /* 準備 (Arrange): FULL_COM から開始する（CanSM_RequestComMode(NO_COM)が
-     * NO_COM_PENDING_SLEEP へ遷移するのは FULL_COM 発の場合のみ） */
+    /* 準備 (Arrange): FULL_COM から開始する */
     ArrangeFullCom();
 
     /* 実行 (Act) */
     Std_ReturnType ret = CanSM_RequestComMode(0U, COMM_NO_COMMUNICATION);
 
-    /* 評価 (Assert) */
+    /* 評価 (Assert): 中間状態を経ず、この1回の呼び出しで物理スリープまで完了する
+     * （ComM は Nm の協調スリープ完了を確認済みでここへ辿り着く前提のため）。 */
     EXPECT_EQ(ret, E_OK);
-    // 物理スリープはまだ行わない（Nm が Bus-Sleep Mode へ到達するまで HW 稼働継続）
-    EXPECT_EQ(Can_Test_GetControllerState(), CAN_CS_STARTED);
-    EXPECT_EQ(FakeCanHw_SetModeCount, 0U);
-    // ComM へは NO_COMMUNICATION を通知済み
+    EXPECT_EQ(Can_Test_GetControllerState(), CAN_CS_SLEEP);
+    EXPECT_EQ(FakeCanHw_LastMode, CAN_HW_MODE_SLEEP);
     EXPECT_EQ(FakeComM_BusSMIndicationCount, 1U);
     EXPECT_EQ(FakeComM_LastNetwork, 0U);
     EXPECT_EQ(FakeComM_LastMode, static_cast<ComM_ModeType>(COMM_NO_COMMUNICATION));
-}
-
-// ------------------------------------------------------------
-// セグメント②: CanSM_NmBusSleepMode() ─ Nm 到達通知から実スリープまで
-// ------------------------------------------------------------
-TEST_F(Bsw_SleepChain_Test, NmBusSleepMode_OK_PutsControllerToPhysicalSleep)
-{
-    /* 準備 (Arrange): セグメント①の終端状態（NO_COM_PENDING_SLEEP）を用意する */
-    ArrangeFullCom();
-    ASSERT_EQ(CanSM_RequestComMode(0U, COMM_NO_COMMUNICATION), E_OK);
-    ASSERT_EQ(Can_Test_GetControllerState(), CAN_CS_STARTED);
-    FakeComM_Reset();
-    FakeDem_Reset();
-
-    /* 実行 (Act): Nm が Bus-Sleep Mode へ到達したことを模擬する */
-    CanSM_NmBusSleepMode();
-
-    /* 評価 (Assert) */
-    EXPECT_EQ(Can_Test_GetControllerState(), CAN_CS_SLEEP);
-    EXPECT_EQ(FakeCanHw_LastMode, CAN_HW_MODE_SLEEP);
-    // CanSM_NmBusSleepMode() 自体は ComM/Dem のいずれも呼ばない
-    EXPECT_EQ(FakeComM_BusSMIndicationCount, 0U);
-    EXPECT_EQ(FakeDem_ReportErrorStatusCount, 0U);
-}
-
-TEST_F(Bsw_SleepChain_Test, NmBusSleepMode_NG_IgnoredWhenNotPendingSleep)
-{
-    /* 準備 (Arrange): NO_COM_PENDING_SLEEP を経ていない（起動直後の NO_COM のまま） */
-
-    /* 実行 (Act) */
-    CanSM_NmBusSleepMode();
-
-    /* 評価 (Assert): 物理スリープへは遷移しない（Can_SetControllerMode すら呼ばれない） */
-    EXPECT_EQ(FakeCanHw_SetModeCount, 0U);
-    EXPECT_EQ(FakeComM_BusSMIndicationCount, 0U);
 }
 
 }  // namespace

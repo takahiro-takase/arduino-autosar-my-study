@@ -141,8 +141,9 @@
  *
  * Nm_MainFunction も SHUTDOWN 中動かし続ける必要がある。CanSM の実物理
  * スリープ（Can_SetControllerMode(CAN_T_SLEEP)）は Nm が Bus-Sleep Mode へ
- * 到達した通知（CanSM_NmBusSleepMode()）を受けて初めて行われる設計
- * （協調スリープ、Nm.c/CanSM.c 参照）に変更したため、Nm の状態機械タイマ
+ * 到達した通知（ComM_Nm_BusSleepMode() 経由で CanSM_RequestComMode(NO_COM)
+ * が呼ばれる）を受けて初めて行われる設計（協調スリープ、Nm.c/ComM.c/
+ * CanSM.c 参照）に変更したため、Nm の状態機械タイマ
  * （Prepare Bus-Sleep Mode の Wait-Bus-Sleep Timer 等）がここで停止すると
  * Nm が Bus-Sleep Mode へ二度と到達できず、CAN コントローラが永久に
  * 物理スリープしなくなる。また Bus-Sleep/Prepare Bus-Sleep 中に他ノードの

@@ -9,18 +9,23 @@
  *          PduR/Com を介さない。
  *
  *          呼び出し関係（ComM が「通信の要否」を Nm に伝える）:
- *            ComM_BusSMIndication() がチャネルモードを FULL_COM/NO_COM へ
- *            確定させるたびに、Nm_NetworkRequest()/Nm_NetworkRelease() を
- *            呼ぶ。以降の実際の送受信・タイマ管理・状態遷移は本モジュールが
+ *            NO_COM 方向: ComM_RequestComMode() がユーザ要求を FULL_COM から
+ *            NO_COM へ集約した「その場で」Nm_NetworkRelease() を呼ぶ
+ *            （[SWS_ComM_00133] 準拠。ComM のチャネルモードはこの時点では
+ *            まだ FULL_COM のまま。ComM.c ファイル冒頭コメント参照）。
+ *            FULL_COM 方向: ComM_BusSMIndication() がチャネルモードを
+ *            FULL_COM へ確定させたときに Nm_NetworkRequest() を呼ぶ。
+ *            以降の実際の送受信・タイマ管理・状態遷移は本モジュールが
  *            自律的に行う（ComM は毎周期ポーリングしない）。
  *
  *          Bus-Sleep Mode への到達通知（協調スリープの要）:
- *            Nm が実際に Bus-Sleep Mode へ遷移した瞬間、CanSM_NmBusSleepMode()
- *            を直接呼ぶ。CanSM はこの通知を受けて初めて
+ *            Nm が実際に Bus-Sleep Mode へ遷移した瞬間、ComM_Nm_BusSleepMode()
+ *            （[SWS_ComM_00392]）を呼ぶ。ComM はこれを受けて初めて
+ *            CanSM_RequestComMode(NO_COM) を呼び、CanSM が
  *            Can_SetControllerMode(CAN_T_SLEEP) で実際に CAN コントローラを
- *            スリープさせる（CanSM.c 参照）。これにより、他ノード（仮想他ECU）
- *            が NM フレームを送信し続けている間は本 ECU が実際にはスリープ
- *            しないことを実機で確認できる。
+ *            スリープさせる（ComM.c/CanSM.c 参照）。これにより、他ノード
+ *            （仮想他ECU）が NM フレームを送信し続けている間は本 ECU が
+ *            実際にはスリープしないことを実機で確認できる。
  *
  *          使い方:
  *            1. EcuM_Init 内で Nm_Init() を呼ぶ（ComM_Init 完了後）。

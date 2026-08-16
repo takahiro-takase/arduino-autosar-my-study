@@ -172,29 +172,6 @@ void CanSM_ControllerWakeup(uint8 ControllerId);
 void CanSM_RxIndication(uint8 ControllerId);
 
 /**
- * \brief   Nm が Bus-Sleep Mode へ到達したことの通知（Nm から呼び出される）。
- *
- * \details ComM が NO_COM を要求した時点では実際には CAN コントローラを
- *          スリープさせず（CanSM_RequestComMode() 参照）、Nm の状態機械が
- *          NM-Timeout Time + Wait-Bus-Sleep Time の経過（＝他ノードからの
- *          NM フレーム受信が一定時間なかったこと）を確認して実際に
- *          Bus-Sleep Mode へ到達したときに初めて呼ばれる。
- *          これにより「他ノードがまだ通信中の間は実際にはスリープしない」
- *          という協調スリープを実現する。
- *
- *          CANSM_STATE_NO_COM から遷移した際に限り（[RequestComMode] 参照）
- *          物理スリープが必要だった場合のみ実際に
- *          Can_SetControllerMode(CAN_T_SLEEP) を実行する。それ以外の状態
- *          （既に FULL_COM に復帰済み等）で呼ばれた場合は何もしない
- *          （呼び出し順序の入れ替わりに対する防御）。
- *
- * \ServiceID      {0x08}
- * \Reentrancy     {Non Reentrant}
- * \Synchronicity  {Synchronous}
- */
-void CanSM_NmBusSleepMode(void);
-
-/**
  * \brief   CanSM 周期処理（Bus-Off 回復タイマ・ウェイクアップ検証タイマ管理）。
  *
  * \details OS タスク (10 ms 周期、SHUTDOWN 中も動作) から呼び出される。

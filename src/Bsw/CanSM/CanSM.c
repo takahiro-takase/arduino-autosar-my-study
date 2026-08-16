@@ -8,23 +8,25 @@
  *            CANSM_STATE_NO_COM ──────────────────────────────┐
  *              ↓ RequestComMode(FULL_COM) → CAN_T_START        │ ウェイクアップ
  *            CANSM_STATE_FULL_COM  ←────────────────────────┐  │ (バス活動検知)
- *              ↓ RequestComMode(NO_COM)                      │ │
- *              │ (Nm が Bus-Sleep Mode へ到達するまで          │ │
- *              │  実際のスリープは保留。CanSM_NmBusSleepMode() │ │
- *              │  経由で CAN_T_SLEEP)                          │ │
+ *              ↓ RequestComMode(NO_COM) → CAN_T_SLEEP         │ │
  *              └───────────────────────────────────────────────┘
  *              ↓ CanSM_ControllerBusOff()                    │ 回復成功
  *            CANSM_STATE_BUS_OFF                             │
  *              ↓ L1/L2 周期経過 (MainFunction)                │
  *              → Can_SetControllerMode(CAN_T_START) ─────────┘
  *              （回復に失敗すれば CanSM_ControllerBusOff() が再度呼ばれ、
- *                リトライを継続する。無期限に諦めない）
+ *                リトライを継続する。無期限に諦めない。回復成功時は常に
+ *                CANSM_STATE_FULL_COM へ戻る）
  *
- *          CanSM_ControllerBusOff() は CANSM_STATE_NO_COM_PENDING_SLEEP
- *          （↑図中、FULL_COM→NO_COM の途中、Nm の Bus-Sleep Mode 待ちで
- *          HW はまだ稼働中の区間）からも受け付ける。この場合の回復成功時は
- *          FULL_COM ではなく NO_COM_PENDING_SLEEP へ戻す（ComM が既に NO_COM
- *          を要求済みのため、FULL_COM へ戻すと誰も再要求せず取り残される）。
+ *          RequestComMode(NO_COM) が CanSM へ届く時点で、上位層（ComM）は
+ *          既に Nm の協調スリープ完了を確認済みである（[SWS_ComM_00133]/
+ *          [SWS_ComM_00392] 準拠、ComM.c 参照）。そのため CanSM 自身は
+ *          「解放要求はされたがまだ寝てはいけない」という中間状態を持たず、
+ *          FULL_COM から物理スリープまで一気に遷移する（以前あった
+ *          CANSM_STATE_NO_COM_PENDING_SLEEP という中間状態は、ComM が
+ *          Nm の完了を待たず早期に NO_COM を通知していた旧設計の名残で、
+ *          この設計では不要になったため削除した。詳細は ComM.c ファイル
+ *          冒頭コメント参照）。
  *
  *          Bus-Off 回復シーケンス（SWS_CanSM_00514/00515/00636 準拠、
  *          CanSMEnableBusOffDelay=FALSE 相当の L1/L2 バックオフ）:
@@ -46,19 +48,17 @@
  *            App_EngineManager が「エンジン OFF が一定サイクル継続 = 通信不要」と
  *            判断すると ComM_RequestComMode(COMM_USER_0, NO_COM) を要求する。
  *            Dcm（COMM_USER_1）も extendedSession でなければ ComM の集約結果が
- *            NO_COM になり、CanSM_RequestComMode(NO_COM) が呼ばれて
- *            CANSM_STATE_NO_COM へ遷移する。ただしこの時点では実際には
- *            スリープしない（以前の実装は即座に Can_SetControllerMode
- *            (CAN_T_SLEEP) していたが、Nm（CanNm 状態機械、Nm.c 参照）を
- *            導入したことで、ComM_BusSMIndication() が呼ぶ
- *            Nm_NetworkRelease() を契機に Nm 自身が Ready Sleep → Prepare
- *            Bus-Sleep → Bus-Sleep Mode と自律的に遷移し、他ノード（仮想他ECU）
- *            からの NM フレーム受信が一定時間 (NM_TIMEOUT_MS+NM_WAIT_BUS_SLEEP_MS)
- *            なかったことを確認してから CanSM_NmBusSleepMode() を呼ぶように
- *            変更した。CanSM はこの通知を受けて初めて
- *            Can_SetControllerMode(CAN_T_SLEEP) で MCP2515 を実際にスリープ
- *            させる。これにより「他ノードがまだ通信中の間は実際にはスリープ
- *            しない」という NM 本来の協調スリープを実機で確認できる。
+ *            NO_COM になるが、ComM はこの時点では CanSM を一切呼ばず
+ *            Nm_NetworkRelease() のみを Nm（CanNm 状態機械、Nm.c 参照）へ送る
+ *            （[SWS_ComM_00133]、詳細は ComM.c ファイル冒頭コメント参照）。
+ *            Nm 自身が Ready Sleep → Prepare Bus-Sleep → Bus-Sleep Mode と
+ *            自律的に遷移し、他ノード（仮想他ECU）からの NM フレーム受信が
+ *            一定時間 (NM_TIMEOUT_MS+NM_WAIT_BUS_SLEEP_MS) なかったことを
+ *            確認してから ComM_Nm_BusSleepMode() を呼ぶ（[SWS_ComM_00392]）。
+ *            ComM はこれを受けて初めて CanSM_RequestComMode(NO_COM) を呼び、
+ *            CanSM が Can_SetControllerMode(CAN_T_SLEEP) で MCP2515 を実際に
+ *            スリープさせる。これにより「他ノードがまだ通信中の間は実際には
+ *            スリープしない」という NM 本来の協調スリープを実機で確認できる。
  *            CANSM_STATE_BUS_OFF は実 HW をスリープさせないため、これが
  *            本モジュールで唯一 HW を実際にスリープさせる経路である。
  *
@@ -110,9 +110,7 @@ extern unsigned long millis(void);
  * ----------------------------------------------------------------------- */
 typedef enum
 {
-    CANSM_STATE_NO_COM,               /* 通信停止・HW も実際にスリープ済み（または未起動） */
-    CANSM_STATE_NO_COM_PENDING_SLEEP, /* NO_COM 要求済みだが Nm が Bus-Sleep Mode へ
-                                        * 到達するまで HW はまだ稼働中（物理スリープ保留） */
+    CANSM_STATE_NO_COM,              /* 通信停止・HW も実際にスリープ済み（または未起動） */
     CANSM_STATE_SILENT_COM,          /* 受信専用 */
     CANSM_STATE_FULL_COM,            /* 全二重通信（正常動作） */
     CANSM_STATE_BUS_OFF,             /* Bus-Off 回復中 */
@@ -126,11 +124,6 @@ static CanSM_InternalStateType CanSM_State;
 static unsigned long           CanSM_BusOffTimerMs;   /* Bus-Off 検出時刻 (直近のリトライ基準点) */
 static uint8                   CanSM_BusOffRetries;   /* 回復試行回数 (L1→L2 切替判定にも使う) */
 static unsigned long           CanSM_ValidationTimerMs; /* ウェイクアップ検証開始時刻 */
-
-/** 1 = Bus-Off 検出時点の状態が CANSM_STATE_NO_COM_PENDING_SLEEP だった
- *  （回復後は CANSM_STATE_FULL_COM ではなく CANSM_STATE_NO_COM_PENDING_SLEEP へ
- *  戻す。CanSM_ControllerBusOff()/CanSM_MainFunction() 参照）。 */
-static uint8 CanSM_BusOffFromPendingSleep;
 
 /** [SWS_CanSM_00184/00188/00190] 用の初期化済みフラグ。CanSM_State の既定値
  *  (CANSM_STATE_NO_COM=0) は「未初期化」と区別が付かないため別途持つ。 */
@@ -146,12 +139,11 @@ static uint8 CanSM_Initialized = 0U;
 void CanSM_Init(const CanSM_ConfigType* ConfigPtr)
 {
     (void)ConfigPtr; /* 本プロジェクトは post-build 設定を持たない（CanSM.h 参照） */
-    CanSM_State                  = CANSM_STATE_NO_COM;
-    CanSM_BusOffTimerMs          = 0UL;
-    CanSM_BusOffRetries          = 0U;
-    CanSM_ValidationTimerMs      = 0UL;
-    CanSM_BusOffFromPendingSleep = 0U;
-    CanSM_Initialized            = 1U;
+    CanSM_State              = CANSM_STATE_NO_COM;
+    CanSM_BusOffTimerMs      = 0UL;
+    CanSM_BusOffRetries      = 0U;
+    CanSM_ValidationTimerMs  = 0UL;
+    CanSM_Initialized        = 1U;
     DET_LOGI(TAG, "Init");
 }
 
@@ -230,13 +222,10 @@ Std_ReturnType CanSM_RequestComMode(CanSM_NetworkHandleType network, ComM_ModeTy
             /* CANSM_STATE_SILENT_COM は「コントローラは停止済み」という不変条件を
              * 持つ（CanSM_ControllerBusOff() のガードがこれを前提に SILENT_COM を
              * 除外している）。この不変条件を保つため、コントローラが物理的に
-             * 稼働中でありうる状態（FULL_COM、および Nm 協調スリープ待ちで
-             * CAN_T_START のまま稼働継続する NO_COM_PENDING_SLEEP）から遷移する
-             * 場合は必ず停止させる。それ以外（NO_COM/WAKEUP_VALIDATING 等）は
-             * 既にコントローラが停止済みのため何もしなくてよい
-             * （2026-08 のスペック監査で、NO_COM_PENDING_SLEEP からの遷移が
-             * 抜けていたことを発見・修正）。 */
-            if (CanSM_State == CANSM_STATE_FULL_COM || CanSM_State == CANSM_STATE_NO_COM_PENDING_SLEEP)
+             * 稼働中でありうる状態（FULL_COM）から遷移する場合は必ず停止させる。
+             * それ以外（NO_COM/WAKEUP_VALIDATING 等）は既にコントローラが
+             * 停止済みのため何もしなくてよい。 */
+            if (CanSM_State == CANSM_STATE_FULL_COM)
             {
                 if (Can_SetControllerMode(0U, CAN_T_STOP) != CAN_OK)
                 {
@@ -250,23 +239,20 @@ Std_ReturnType CanSM_RequestComMode(CanSM_NetworkHandleType network, ComM_ModeTy
             break;
 
         case COMM_NO_COMMUNICATION:
-            /* NO_COM は「もう通信が不要」であることを意味するが、実際の
-             * 物理スリープ (CAN_T_SLEEP) はここでは行わない。Nm（CanNm 状態
-             * 機械）が Bus-Sleep Mode へ到達したときに CanSM_NmBusSleepMode()
-             * を呼ぶので、そこで初めてスリープさせる（協調スリープ。
-             * 本ファイル冒頭コメント参照）。以前は CANSM_STATE_FULL_COM から
-             * の遷移時のみ実際にスリープしていたため、その場合だけ物理
-             * スリープ保留状態（HW はまだ稼働中）へ遷移する。 */
-            if (CanSM_State == CANSM_STATE_FULL_COM)
-            {
-                CanSM_State = CANSM_STATE_NO_COM_PENDING_SLEEP;
-                DET_LOGI(TAG, "->NO_COM (awaiting Nm Bus-Sleep Mode for physical sleep)");
-            }
-            else
-            {
-                CanSM_State = CANSM_STATE_NO_COM;
-                DET_LOGI(TAG, "->NO_COM");
-            }
+            /* ComM は Nm が実際に Bus-Sleep Mode へ到達してから初めて本関数を
+             * COMM_NO_COMMUNICATION で呼ぶ（ComM_Nm_BusSleepMode() 経由。
+             * [SWS_ComM_00133]/[SWS_ComM_00392]、詳細は ComM.c および本ファイル
+             * 冒頭コメント参照）。そのため呼ばれた時点で「もう眠ってよい」ことが
+             * 確定しており、CANSM_STATE_FULL_COM から物理スリープまで一気に
+             * 遷移してよい（以前あった「解放要求はされたがまだ寝てはいけない」
+             * という中間状態 CANSM_STATE_NO_COM_PENDING_SLEEP は、この設計では
+             * 不要になったため削除した）。
+             * CAN_T_SLEEP は Can_SetControllerMode() 側で状態検証をしておらず
+             * （CAN_CS_STARTED/STOPPED いずれから呼ばれても正当なため）、
+             * 戻り値は常に CAN_OK。明示的に無視する。 */
+            (void)Can_SetControllerMode(0U, CAN_T_SLEEP);
+            CanSM_State = CANSM_STATE_NO_COM;
+            DET_LOGI(TAG, "->NO_COM (physical sleep)");
             ComM_BusSMIndication(network, COMM_NO_COMMUNICATION);
             break;
 
@@ -324,16 +310,12 @@ Std_ReturnType CanSM_GetCurrentComMode(CanSM_NetworkHandleType network, ComM_Mod
  *          コントローラを即座に停止し、T_REC タイマを起動する。
  *          CanSM_MainFunction が T_REC ms 後にコントローラの再起動を試みる。
  *
- *          受け付けるのは CANSM_STATE_FULL_COM と CANSM_STATE_NO_COM_PENDING_SLEEP
- *          の 2 状態のみ。どちらもコントローラが物理的に稼働中（CAN_T_START 済み）
- *          であり、実際に Bus-Off しうる。NO_COM_PENDING_SLEEP は「もう通信は
- *          不要だが Nm が Bus-Sleep Mode に到達するまでは HW を稼働させ続ける」
- *          状態であり（本ファイル冒頭コメント参照）、この間の Bus-Off を無視すると
- *          回復シーケンスが一切起動せず、コントローラがハードウェア的に Bus-Off
- *          のまま放置されてしまう（2026-08 のスペック監査で発見・修正）。
- *          それ以外の状態（NO_COM/SILENT_COM=HW 停止中または未起動、BUS_OFF=
- *          回復試行中で二重に入る必要がない、WAKEUP_VALIDATING=Listen-Only で
- *          送信しないため原理的に Bus-Off しない）は無視する。
+ *          受け付けるのは CANSM_STATE_FULL_COM のみ。コントローラが物理的に
+ *          稼働中（CAN_T_START 済み）であり実際に Bus-Off しうるのはこの状態
+ *          だけである。それ以外の状態（NO_COM/SILENT_COM=HW 停止中または
+ *          未起動、BUS_OFF=回復試行中で二重に入る必要がない、
+ *          WAKEUP_VALIDATING=Listen-Only で送信しないため原理的に Bus-Off
+ *          しない）は無視する。
  *
  *          SWS_CanSM_00521: 検出直後（回復試行の前）に
  *          `ComM_BusSMIndication(Network, COMM_SILENT_COMMUNICATION)` を呼び、
@@ -350,20 +332,17 @@ Std_ReturnType CanSM_GetCurrentComMode(CanSM_NetworkHandleType network, ComM_Mod
  *          即座に DTC が確定してしまい、「L1 リトライの間は一時的障害として
  *          確定を待つ」という設計（CanSM_MainFunction 参照）と矛盾するため。
  *
- *          実機検証メモ（2026-08）: NO_COM_PENDING_SLEEP 経路は FULL_COM 経路
- *          （相手ノード不在による自然発生 Bus-Off、繰り返し実機で確認済み）と
- *          同一のコードを通るため間接的には検証済みだが、この分岐そのものを
- *          実機で直接踏ませるのは意図的に難しい。Nm_MainFunction() の
- *          NM_STATE_READY_SLEEP ケース（Nm.c 参照）は送信を一切行わないため
- *          （ログの "Ready Sleep State (tx stopped)" のとおり）、また Com の
- *          TX I-PDU グループも Com_IpduGroupStop() で停止済みのため、
- *          NO_COM_PENDING_SLEEP から実際のスリープ（CanSM_NmBusSleepMode()）
- *          までの数秒間はほぼ何も送信されない。Can_Write() の連続失敗を
- *          トリガとする Bus-Off（一次検出の EFLG.TXBO も同様、送信しなければ
- *          TEC が上がらない）は、相手ノードを完全に外してもこの区間内では
- *          事実上発生しない。この分岐の正しさは、FULL_COM 経路での反復実証
- *          （L1/L2 双方、EcuM 側の DET 誤検知なし）とコードレビューをもって
- *          十分とみなした。
+ *          Nm 協調スリープ待ち中（ComM が Nm_NetworkRelease() を送信済みだが
+ *          Nm がまだ Bus-Sleep Mode へ到達していない期間、ComM.c の
+ *          ComM_NmReleasePending 参照）に Bus-Off が発生しても、CanSM の
+ *          視点では CanSM_State は引き続き CANSM_STATE_FULL_COM のままのため
+ *          （このプロジェクトの設計では ComM が Nm の完了確認を待ってから
+ *          しか CanSM へ NO_COM を伝えない）、上記の通常の FULL_COM 経路が
+ *          そのまま処理する。回復成功時は常に FULL_COM へ戻すが、Nm 自身は
+ *          Bus-Off 中も独立したタイマで動作し続けているため、既に
+ *          Bus-Sleep Mode へ到達済みの可能性がある。この場合に Nm を誤って
+ *          再起床させないためのガードは ComM 側
+ *          （`ComM_BusSMIndication()` の FULL_COM 分岐）に実装している。
  *
  * \ServiceID      {0x04}
  * \Reentrancy     {Non Reentrant}
@@ -385,10 +364,8 @@ void CanSM_ControllerBusOff(uint8 ControllerId)
         return;
     }
 
-    if (CanSM_State != CANSM_STATE_FULL_COM && CanSM_State != CANSM_STATE_NO_COM_PENDING_SLEEP)
+    if (CanSM_State != CANSM_STATE_FULL_COM)
         return;
-
-    CanSM_BusOffFromPendingSleep = (CanSM_State == CANSM_STATE_NO_COM_PENDING_SLEEP) ? 1U : 0U;
 
     if (Can_SetControllerMode(0U, CAN_T_STOP) != CAN_OK)
     {
@@ -533,33 +510,6 @@ void CanSM_RxIndication(uint8 ControllerId)
     ComM_BusSMIndication(0U, COMM_FULL_COMMUNICATION);
 }
 
-void CanSM_NmBusSleepMode(void)
-{
-    DET_LOGT(TAG, "called");
-
-    if (!CanSM_Initialized)
-    {
-        Det_ReportError(CANSM_MODULE_ID, 0U, CANSM_API_ID_NM_BUS_SLEEP_MODE, CANSM_E_UNINIT);
-        return;
-    }
-
-    /* 呼び出し順序の入れ替わりへの防御: NO_COM 要求後に別要因（ウェイクアップ、
-     * 新たな FULL_COM 要求等）で既に状態が変わっていれば何もしない。物理
-     * スリープが必要なのは CANSM_STATE_NO_COM_PENDING_SLEEP のときだけ
-     * （元々 FULL_COM からの遷移ではなかった場合は、以前の実装と同じく
-     * 物理スリープ不要。CanSM_c 冒頭コメント参照）。 */
-    if (CanSM_State != CANSM_STATE_NO_COM_PENDING_SLEEP)
-        return;
-
-    /* CAN_T_SLEEP は Can_SetControllerMode() 側で状態検証をしておらず
-     * （Can.c 参照。協調スリープ設計上 CAN_CS_STARTED/STOPPED どちらから
-     * 呼ばれても正当なため、この遷移に無効な遷移元状態は存在しない）、
-     * 戻り値は常に CAN_OK。明示的に無視する。 */
-    (void)Can_SetControllerMode(0U, CAN_T_SLEEP);
-    CanSM_State = CANSM_STATE_NO_COM;
-    DET_LOGI(TAG, "Nm reached Bus-Sleep Mode -> CAN controller SLEEP");
-}
-
 /**
  * \brief   CanSM 周期処理（Bus-Off 回復タイマ管理）。
  *
@@ -607,8 +557,8 @@ void CanSM_MainFunction(void)
         {
             DET_LOGW(TAG, "Wakeup validation timeout (%lums, no confirmed RX) -> back to SLEEP",
                      (unsigned long)CANSM_WAKEUP_VALIDATION_MS);
-            /* CAN_T_SLEEP は失敗しない（上記 CanSM_NmBusSleepMode() のコメント
-             * 参照）。戻り値は明示的に無視する。 */
+            /* CAN_T_SLEEP は失敗しない（CanSM_RequestComMode() の
+             * COMM_NO_COMMUNICATION 分岐のコメント参照）。戻り値は明示的に無視する。 */
             (void)Can_SetControllerMode(0U, CAN_T_SLEEP);  /* CAN_CS_STOPPED -> CAN_CS_SLEEP、ウェイクアップ割り込み再武装 */
             CanSM_State = CANSM_STATE_NO_COM;
         }
@@ -658,24 +608,16 @@ void CanSM_MainFunction(void)
      * PASSED デバウンス確定コメント参照）。 */
     Dem_ReportErrorStatus(DEM_EVENT_CAN_BUSOFF, DEM_EVENT_STATUS_PASSED);
 
-    if (CanSM_BusOffFromPendingSleep)
-    {
-        /* Bus-Off 発生時点で「通信不要、Nm の Bus-Sleep Mode 到達待ち」
-         * だった場合、回復後も CANSM_STATE_FULL_COM へ引き戻してはならない。
-         * ComM は既に NO_COM を要求済みで、誰も再要求しないため FULL_COM に
-         * 戻すと二度と NO_COM_PENDING_SLEEP へ戻れず取り残されてしまう。
-         * コントローラ自体は CAN_T_START のまま（Nm が引き続きバス活動を
-         * 監視できるようにするため）、CanSM の状態と ComM への通知だけを
-         * 元の意図どおり NO_COM_PENDING_SLEEP/NO_COMMUNICATION へ戻す。 */
-        CanSM_State = CANSM_STATE_NO_COM_PENDING_SLEEP;
-        ComM_BusSMIndication(0U, COMM_NO_COMMUNICATION);
-    }
-    else
-    {
-        CanSM_State = CANSM_STATE_FULL_COM;
-        /* 回復成功 → ComM に FULL_COM を通知 → EcuM_RequestRUN → RUN へ戻る */
-        ComM_BusSMIndication(0U, COMM_FULL_COMMUNICATION);
-    }
+    /* Bus-Off は CANSM_STATE_FULL_COM からしか受け付けないため（本ファイル
+     * 冒頭コメント参照）、回復成功時は常に FULL_COM へ戻す。Bus-Off 発生時点で
+     * ComM が既に Nm へ解放を送信済み（ComM_NmReleasePending、ComM.c 参照）
+     * だった場合の「誤って Nm を再起床させない」ためのガードは ComM 側
+     * （ComM_BusSMIndication() の FULL_COM 分岐）に実装している。 */
+    CanSM_State = CANSM_STATE_FULL_COM;
+    /* 回復成功 → ComM に FULL_COM を通知 → EcuM_RequestRUN → RUN へ戻る
+     * （ただし上記の Nm 解放ペンディング中だった場合は、ComM 側が代わりに
+     * CanSM_RequestComMode(NO_COM) を呼び返して仕切り直す）。 */
+    ComM_BusSMIndication(0U, COMM_FULL_COMMUNICATION);
     /* 再度 Bus-Off が発生すれば CanIf → CanSM_ControllerBusOff() が呼ばれる */
 }
 
