@@ -368,8 +368,23 @@ void ComM_BusSMIndication(uint8 Network, ComM_ModeType Mode)
 /**
  * \brief   ComM 周期処理。
  *
- * \details 本実装はスタブ。NM 連携・バス スリープは未対応。
+ * \details 本実装は意図的な NOP。ComMTMinFullComModeDuration（ECUC_ComM_00557、
+ *          FULL_COM 要求解放を一定時間遅らせて要求のチャタリングを防ぐ
+ *          ヒステリシスタイマ）は、[SWS_ComM_00888] のとおり
+ *          `ComMNmVariant=FULL` の構成では不要（Rationale 原文: "No timer
+ *          needed if AUTOSAR NM is used. This avoids redundant functionality
+ *          because AUTOSAR NM also ensures this functionality."）。本プロジェクトは
+ *          `Nm_NetworkRequest()`/`Nm_NetworkRelease()` を能動的に呼び、CanNm の
+ *          協調スリープ（Repeat Message Time → Ready Sleep Time → Prepare
+ *          Bus-Sleep、Nm.c 参照）が同じチャタリング防止の役目を既に果たして
+ *          いるため、この `ComMNmVariant=FULL` に該当する。そのため本関数で
+ *          追加のタイマ処理は行わない（2026-08 のスペック監査で確認・
+ *          Os_PBCfg.c への MainFunction 登録漏れも同時に修正済み）。
+ *          `ComM_MainFunction()` 自体は AUTOSAR が要求する周期関数のため、
+ *          将来 DCM ActiveDiagnostic 監視等の別用途が生じた際に流用できるよう
+ *          スケジューラへの登録（Task 19、Os_PBCfg.c 参照）だけは行っている。
  *
+ * \AUTOSARReq     {SWS_ComM_00888}
  * \ServiceID      {0x60}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
@@ -382,7 +397,7 @@ void ComM_MainFunction(void)
         Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_MAIN_FUNCTION, COMM_E_UNINIT);
         return;
     }
-    /* NM / バス スリープ未対応のため NOP */
+    /* NOP（理由は上記 \details 参照）。 */
 }
 
 void ComM_GetVersionInfo(Std_VersionInfoType* Versioninfo)

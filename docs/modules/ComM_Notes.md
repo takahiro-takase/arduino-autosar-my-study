@@ -95,6 +95,29 @@ CanSM がウェイクアップ検証成功時に `ComM_BusSMIndication(FULL_COM)
 | `COMM_USER_0` | 0 | EcuM/App_EngineManager（エンジン運転中は FULL_COM、OFF 継続時は NO_COM を要求） |
 | `COMM_USER_1` | 1 | Dcm（extendedSession の間だけ FULL_COM を要求） |
 
+## ComM_MainFunction が NOP である理由
+
+`ComM_MainFunction()` は現状 NOP です。実 AUTOSAR の `ComMTMinFullComModeDuration`
+（ECUC_ComM_00557。FULL_COM 要求解放を一定時間遅らせて要求のチャタリングを防ぐ
+ヒステリシスタイマ）は、`[SWS_ComM_00888]` のとおり `ComMNmVariant=FULL` の構成
+では不要と明記されています（Rationale 原文: *"No timer needed if AUTOSAR NM is
+used. This avoids redundant functionality because AUTOSAR NM also ensures this
+functionality."*）。
+
+本プロジェクトは `Nm_NetworkRequest()`/`Nm_NetworkRelease()` を能動的に呼び、
+CanNm の協調スリープ（Repeat Message Time → Ready Sleep Time → Prepare
+Bus-Sleep、[Nm_Notes.md](Nm_Notes.md) 参照）が同じチャタリング防止の役目を
+既に果たしているため、この `ComMNmVariant=FULL` に該当します。そのため
+ヒステリシスタイマの追加は見送り、`ComM_MainFunction()` は NOP のままとしました
+（2026-08、実装前にヒステリシス追加を検討したが、仕様書確認の結果、追加すると
+むしろ仕様書が「冗長」と明記する機能を足すことになると判明したため）。
+
+ただし `ComM_MainFunction()` 自体は AUTOSAR が要求する周期関数であり、かつ
+以前はスケジューラに未登録で一度も呼ばれていなかった（2026-08 のスペック監査で
+発見）ため、`Os_PBCfg.c` の Task 19 として 100ms 周期で登録するところまでは
+修正しました。周期自体は Com_MainFunction 等と同じ「100ms ティア」に揃えた
+だけで、NOP である以上この値に現状の意味はありません。
+
 ## 開発の経緯（実機で見つかった不具合・設計変更）
 
 > 現在の仕様を理解するだけなら読む必要はありません。実機検証で見つかった

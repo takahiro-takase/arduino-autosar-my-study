@@ -25,6 +25,9 @@
  *            Task 16: SecOC_MainFunction           100 ms  — TX Secured I-PDU の Freshness/MAC 計算・送信
  *            Task 17: MemIf_MainFunction            10 ms  — 保留中 EEPROM 書き込みジョブを1バイトずつ処理 (Fee)
  *            Task 18: App_GptDemo_Run             2000 ms  — Gpt 実 HW タイマ通知カウンタのログ出力（動作確認用）
+ *            Task 19: ComM_MainFunction            100 ms  — 現状 NOP（ComMNmVariant=FULL では
+ *                                                             [SWS_ComM_00888] によりヒステリシス
+ *                                                             タイマ不要。ComM.c 参照）
  *
  *          CAN 受信が真のハードウェア割り込み (Can_Isr(), INT ピン立ち下がりで
  *          attachInterrupt 起動) になったことに伴い、旧 Task 0 (Can_Isr の
@@ -83,6 +86,17 @@
  *            であり、通知そのものより高頻度で読む必要はないため、Gpt Channel 0
  *            の周期の倍の 2000 ms とし、複数回の通知を跨いでカウンタが
  *            単調増加していることを目視確認しやすくしている。
+ *            ComM_MainFunction は以前スケジューラに未登録で一度も呼ばれて
+ *            いなかった（2026-08 のスペック監査で発見）。現状は
+ *            Com_MainFunction/FiM_MainFunction/SecOC_MainFunction と同じ
+ *            100 ms ティアに揃えているが、[SWS_ComM_00888] のとおり本プロジェクトの
+ *            構成（ComMNmVariant=FULL 相当）では中身は NOP のため、この周期
+ *            自体に現状意味はない（詳細は ComM.c 参照）。BswM のタスク
+ *            有効/無効制御（BswM_Cfg.h の BSWM_TASK_MASK_*）には含めていない
+ *            （Task 18: App_GptDemo_Run と同じ扱い。NOP である以上、RUN/
+ *            SHUTDOWN いずれの状態でも動いていて実害が無いため、既存の
+ *            BSWM_TASK_MASK_ALL 等のビットマスクを手計算で拡張するリスクを
+ *            負う理由がない）。
  *
  * \copyright  Copyright (c) 2025 T_T
  * \license    MIT License - 詳細は LICENSE ファイルを参照。
@@ -115,6 +129,7 @@ extern void Can_MainFunction_Wakeup(void);
 extern void SecOC_MainFunction(void);
 extern void MemIf_MainFunction(void);
 extern void App_GptDemo_Run(void);
+extern void ComM_MainFunction(void);
 
 /* -----------------------------------------------------------------------
  * タスクテーブル
@@ -141,7 +156,8 @@ static const Os_TaskType Os_TaskTable[OS_TASK_COUNT] =
     /* Task 15 */ { Can_MainFunction_Wakeup,         1U  },  /* 1 ms    : ウェイクアップペンディングのドレイン */
     /* Task 16 */ { SecOC_MainFunction,            100U  },  /* 100 ms  : TX Secured I-PDU の Freshness/MAC 計算・送信 */
     /* Task 17 */ { MemIf_MainFunction,             10U  },  /* 10 ms   : 保留中 EEPROM ジョブ処理 (Fee 物理バイト書き込み) */
-    /* Task 18 */ { App_GptDemo_Run,              2000U  }   /* 2000 ms : Gpt 実 HW タイマ通知カウンタのログ出力 (動作確認用) */
+    /* Task 18 */ { App_GptDemo_Run,              2000U  },  /* 2000 ms : Gpt 実 HW タイマ通知カウンタのログ出力 (動作確認用) */
+    /* Task 19 */ { ComM_MainFunction,             100U  }   /* 100 ms  : 現状 NOP（SWS_ComM_00888、ComM.c 参照） */
 };
 
 /* -----------------------------------------------------------------------

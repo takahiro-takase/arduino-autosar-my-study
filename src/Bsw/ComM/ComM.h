@@ -137,9 +137,13 @@ Std_ReturnType ComM_GetCurrentComMode(ComM_UserHandleType User, ComM_ModeType* C
 /**
  * \brief   ComM 周期処理（バス通信状態の監視）。
  *
- * \details 本実装ではパッシブウェイクアップ・バススリープは未対応のためスタブ。
- *          AUTOSAR 準拠実装では NM（Network Manager）連携を行う。
+ * \details 意図的な NOP。[SWS_ComM_00888] のとおり `ComMNmVariant=FULL`
+ *          （本プロジェクトのように Nm_NetworkRequest()/Nm_NetworkRelease() を
+ *          能動的に呼び、CanNm の協調スリープでチャタリングを防止する構成）
+ *          では ComMTMinFullComModeDuration ヒステリシスタイマは不要と
+ *          明記されている。詳細な根拠は ComM.c の実装コメント参照。
  *
+ * \AUTOSARReq     {SWS_ComM_00888}
  * \ServiceID      {0x60}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
