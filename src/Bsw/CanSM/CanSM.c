@@ -52,15 +52,32 @@
  *            Nm_NetworkRelease() のみを Nm（CanNm 状態機械、Nm.c 参照）へ送る
  *            （[SWS_ComM_00133]、詳細は ComM.c ファイル冒頭コメント参照）。
  *            Nm 自身が Ready Sleep → Prepare Bus-Sleep → Bus-Sleep Mode と
- *            自律的に遷移し、他ノード（仮想他ECU）からの NM フレーム受信が
- *            一定時間 (NM_TIMEOUT_MS+NM_WAIT_BUS_SLEEP_MS) なかったことを
- *            確認してから ComM_Nm_BusSleepMode() を呼ぶ（[SWS_ComM_00392]）。
- *            ComM はこれを受けて初めて CanSM_RequestComMode(NO_COM) を呼び、
- *            CanSM が Can_SetControllerMode(CAN_T_SLEEP) で MCP2515 を実際に
+ *            自律的に遷移する。Prepare Bus-Sleep Mode へ入った時点で
+ *            ComM_Nm_PrepareBusSleepMode()（[SWS_ComM_00826]）経由で
+ *            CanSM_RequestComMode(SILENT_COM) が呼ばれ、CANSM_STATE_SILENT_COM
+ *            （受信専用、Can_SetControllerMode(CAN_T_STOP)）へ遷移する
+ *            （2026-08 追加。これにより本状態が初めて実際の呼び出し元を持つ。
+ *            以前は Bus-Off 検出時に ComM_BusSMIndication() を直接
+ *            SILENT_COMMUNICATION で呼ぶだけで、CanSM_State 自体は
+ *            CANSM_STATE_BUS_OFF のままだった）。この間に他ノードの NM
+ *            フレーム受信が一定時間 (NM_TIMEOUT_MS+NM_WAIT_BUS_SLEEP_MS)
+ *            なかったことを確認してから ComM_Nm_BusSleepMode() を呼ぶ
+ *            （[SWS_ComM_00392]）。ComM はこれを受けて初めて
+ *            CanSM_RequestComMode(NO_COM) を呼び、CanSM が
+ *            Can_SetControllerMode(CAN_T_SLEEP) で MCP2515 を実際に
  *            スリープさせる。これにより「他ノードがまだ通信中の間は実際には
  *            スリープしない」という NM 本来の協調スリープを実機で確認できる。
  *            CANSM_STATE_BUS_OFF は実 HW をスリープさせないため、これが
  *            本モジュールで唯一 HW を実際にスリープさせる経路である。
+ *            なお CANSM_STATE_BUS_OFF/CANSM_STATE_SILENT_COM はいずれも
+ *            CAN_CS_STOPPED（受信は継続）扱いのため、Bus-Off 回復待ち中でも
+ *            CanSM_RxIndication()/Nm_RxIndication() は普通に発火しうる
+ *            （Can_MainFunction_Read() が RX ドレインをスキップするのは
+ *            CanState==CAN_CS_SLEEP のときのみ）。Nm がこれを受けて Prepare
+ *            Bus-Sleep Mode から Network Mode へ自律復帰した場合の扱いは
+ *            ComM.c の ComM_Nm_NetworkMode() の doc コメントを参照
+ *            （CanSM_RequestComMode(FULL_COM) は Bus-Off 中は拒否されるが、
+ *            それでも安全に収束するよう ComM 側で設計されている）。
  *
  *          ウェイクアップ検証（Wakeup Validation、AUTOSAR EcuM の
  *          Wakeup Validation Protocol に相当）:

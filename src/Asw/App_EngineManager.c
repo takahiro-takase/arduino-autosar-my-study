@@ -138,12 +138,28 @@ void App_EngineManager_Run(void)
      * EngineInfo を拾えていない可能性があり（ウェイクアップ契機となった
      * フレーム自体は取りこぼされうる、Can_Isr() のコメント参照）、
      * 古いバッファ値のまま再び OFF と判断して即座にスリープへ戻ってしまう
-     * 「ウェイクしてすぐ再スリープ」を防ぐため。 */
+     * 「ウェイクしてすぐ再スリープ」を防ぐため。
+     *
+     * s_lastComMode との比較は「直前が NO_COM だったか」で厳密に判定する
+     * こと（COMM_FULL_COMMUNICATION 以外すべて、ではない）。
+     * COMM_SILENT_COMMUNICATION は本プロジェクトの実装では受信専用
+     * （Can_T_STOP は Listen-Only で RX は止まらない、CanSM.c 参照）のため、
+     * SILENT_COM → FULL_COM の変化は EngineInfo 受信が途切れていた証拠には
+     * ならず、猶予サイクルを与える理由がない。この区別を怠ると、Nm の
+     * Prepare Bus-Sleep Mode 中（[SWS_ComM_00826] で SILENT_COM になる区間）
+     * に他ノードの NM フレームを受信して Nm が自律的に Network Mode へ
+     * 復帰する（ComM_Nm_NetworkMode()、[SWS_ComM_00296]）たびに、誰も
+     * FULL_COM を要求していないのに justResumed が誤発火し、
+     * s_offCycles が 0 にリセットされて OFF 継続判定が
+     * APP_ENGINE_SLEEP_OFF_CYCLES(5)×3000ms=15秒 分先送りされてしまう
+     * （2026-08 の /code-review で指摘・確認。実は Bus-Off 回復時も同じ
+     * SILENT_COM→FULL_COM 経路を通るため以前から潜在していたが、通常の
+     * ボランタリスリープでは今回の Nm 連携拡張まで到達しなかった経路）。 */
     uint8 justResumed = 0U;
     {
         ComM_ModeType comModeNow = COMM_NO_COMMUNICATION;
         (void)Rte_Call_ComM_GetCurrentComMode(&comModeNow);
-        if (comModeNow == COMM_FULL_COMMUNICATION && s_lastComMode != COMM_FULL_COMMUNICATION)
+        if (comModeNow == COMM_FULL_COMMUNICATION && s_lastComMode == COMM_NO_COMMUNICATION)
         {
             justResumed = 1U;
             DET_LOGI(TAG, "ComM FULL_COM resumed -> sleep countdown reset (grace cycle)");
