@@ -1,7 +1,7 @@
 /**
  * \file    Bsw_SleepCoordination_test.cpp
  * \brief   Nm↔CanSM↔ComM 協調スリープ通知（2026-08、CanSM仲介からComM経由への
- *          移管）の単体テスト（GoogleTest / PlatformIO `[env:native_sleep_chain]`）。
+ *          移管）の単体テスト（GoogleTest / PlatformIO `[env:native_chain]`）。
  *
  * \details ComM.c/CanSM.c/Nm.c の実体をリンクし、以下を検証する:
  *
@@ -28,10 +28,16 @@
  *
  *          EcuM（ComM の RUN 要求先）と BswM（ComM のモード通知先）は境界として
  *          フェイクに差し替える（Bsw_EcuM_fake.h/Bsw_BswM_fake.h 冒頭コメント
- *          参照。Bsw_ComM_fake.h と同じ考え方）。CanIf は Nm が
- *          CanIf_Transmit() を直接呼ぶために実体でリンクするが、TxPduCount=0
- *          の空設定を渡す（Bsw_WakeupChain_test.cpp の kTestCanIfConfig と
- *          同じパターン）ため送信は毎回 E_NOT_OK で終わり、Com/PduR は不要。
+ *          参照）。CanIf は Nm が CanIf_Transmit() を直接呼ぶために実体で
+ *          リンクするが、TxPduCount=0 の空設定を渡す（Bsw_WakeupChain_test.cpp
+ *          の kTestCanIfConfig と同じパターン）ため送信は毎回 E_NOT_OK で
+ *          終わり、Com/PduR は不要。
+ *
+ *          本ファイルは当初 `[env:native_sleep_chain]` という別envに分離して
+ *          いたが（協調スリープ移管作業のリスクを既存チェーンテストから
+ *          切り離すため）、実機検証まで完了し安定したため `[env:native_chain]`
+ *          へ統合した（Bsw_TxChain_test.cpp/Bsw_WakeupChain_test.cpp 等と
+ *          CanSM.c/ComM.c/Nm.c の実体を共有する）。
  */
 #include <gtest/gtest.h>
 
