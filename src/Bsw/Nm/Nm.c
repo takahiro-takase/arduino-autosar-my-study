@@ -124,6 +124,22 @@ static void Nm_TransmitPdu(void)
  *
  * \details [SWS_CanNm_00096]: Network Mode 進入時に NM-Timeout Timer を起動。
  *          [SWS_CanNm_00100]: 送信有効なら NM フレームの (再)送信を開始する。
+ *
+ *          上位層（本プロジェクトでは ComM）への通知として
+ *          ComM_Nm_NetworkMode()（[SWS_ComM_00296]）を呼ぶ。呼び出す順序が
+ *          2 つの理由で重要（変更する場合は両方を再検証すること）:
+ *            1. 送信の正しさ: ComM_Nm_NetworkMode() は CanSM_RequestComMode()
+ *               経由で同期的に物理コントローラを再起動しうる（Prepare
+ *               Bus-Sleep Mode 中で SILENT_COM だった場合）。下の
+ *               Nm_TransmitPdu() より後に置くと、この直後の
+ *               (再)アナウンスフレームの送信が（コントローラがまだ
+ *               Listen-Only のため）静かに失敗する。
+ *            2. 再入安全性: ComM_Nm_NetworkMode() → CanSM_RequestComMode()
+ *               → ComM_BusSMIndication() → Nm_NetworkRequest() という経路で
+ *               本ファイルへ同期的に再入しうる。Nm_State を先に
+ *               NM_STATE_REPEAT_MESSAGE へ更新済みだからこそ、再入した
+ *               Nm_NetworkRequest() は「既に要求済み」の default 分岐に
+ *               落ちて Nm_EnterRepeatMessage() への再帰を起こさない。
  */
 static void Nm_EnterRepeatMessage(void)
 {
@@ -132,6 +148,8 @@ static void Nm_EnterRepeatMessage(void)
     Nm_StateTimerMs    = millis();
     Nm_TimeoutTimerMs  = millis();
     DET_LOGI(TAG, "-> Network Mode: Repeat Message State");
+
+    ComM_Nm_NetworkMode(0U);
 
     if (Nm_TxEnabled)
         Nm_TransmitPdu();
@@ -168,13 +186,22 @@ static void Nm_EnterReadySleep(void)
     DET_LOGI(TAG, "-> Network Mode: Ready Sleep State (tx stopped)");
 }
 
-/** Ready Sleep State から Prepare Bus-Sleep Mode へ入る（[SWS_CanNm_00109]）。 */
+/**
+ * \brief   Ready Sleep State から Prepare Bus-Sleep Mode へ入る（[SWS_CanNm_00109]）。
+ *
+ * \details 上位層（本プロジェクトでは ComM）への通知として
+ *          ComM_Nm_PrepareBusSleepMode()（[SWS_ComM_00826]）を呼ぶ。ComM は
+ *          これを受けて CanSM_RequestComMode(SILENT_COM) を呼び、CAN
+ *          コントローラを受信専用（Listen-Only）へ切り替える（ComM.c ファイル
+ *          冒頭コメント参照）。
+ */
 static void Nm_EnterPrepareBusSleep(void)
 {
     DET_LOGT(TAG, "called");
     Nm_State       = NM_STATE_PREPARE_BUS_SLEEP;
     Nm_StateTimerMs = millis();
     DET_LOGI(TAG, "-> Prepare Bus-Sleep Mode");
+    ComM_Nm_PrepareBusSleepMode(0U);
 }
 
 /**

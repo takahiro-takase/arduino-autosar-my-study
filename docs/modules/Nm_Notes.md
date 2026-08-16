@@ -94,17 +94,27 @@ ComM_BusSMIndication() がチャネルモードを確定させるたびに:
 Wait-Bus-Sleep Timer の間は状態機械上の待機を続けるという、実車と同じ「猶予期間」
 が生まれます。
 
-## CanSM との連携（協調スリープ）
+## ComM との連携（Prepare Bus-Sleep/Bus-Sleep、協調スリープ）
 
-Nm が実際に Bus-Sleep Mode へ到達すると `CanSM_NmBusSleepMode()` を呼びます。
-CanSM はこの通知を受けて初めて `Can_SetControllerMode(CAN_T_SLEEP)` を実行し、
-CAN コントローラを物理的にスリープさせます（以前は `ComM_RequestComMode(NO_COM)`
-の時点で即座にスリープしていましたが、Nm 導入に伴い変更しました）。
+Nm が Prepare Bus-Sleep Mode へ入ると `ComM_Nm_PrepareBusSleepMode()`
+（`[SWS_ComM_00826]`、2026-08 追加）を呼びます。ComM はこれを受けて
+`CanSM_RequestComMode(SILENT_COM)` を呼び、CAN コントローラを受信専用
+（Listen-Only）へ切り替えます（まだ物理スリープはしない）。
+
+Nm が実際に Bus-Sleep Mode へ到達すると `ComM_Nm_BusSleepMode()`
+（`[SWS_ComM_00392]`）を呼びます。CanSM はこの通知を受けて初めて
+`Can_SetControllerMode(CAN_T_SLEEP)` を実行し、CAN コントローラを物理的に
+スリープさせます（以前は `ComM_RequestComMode(NO_COM)` の時点で即座に
+スリープしていましたが、Nm 導入に伴い変更しました）。
 
 途中で他ノード（仮想他ECU）から NM フレームを受信すると、Network Mode 中の
 NM-Timeout Timer が再起動される（実質的にスリープが延期される）ため、
 「他ノードがまだ通信中の間は実際にはスリープしない」という協調スリープの本質を
-実機で確認できます。
+実機で確認できます。Prepare Bus-Sleep Mode（＝上記の受信専用状態）中に
+他ノードの NM フレームを受信した場合は、Nm が自律的に Repeat Message State へ
+復帰すると同時に `ComM_Nm_NetworkMode()`（`[SWS_ComM_00296]`、2026-08 追加）が
+呼ばれ、`CanSM_RequestComMode(FULL_COM)` でコントローラを送受信可能な状態へ
+戻します。
 
 ## ログ例（協調スリープにより物理スリープが延期される様子）
 
@@ -112,13 +122,16 @@ NM-Timeout Timer が再起動される（実質的にスリープが延期され
 [30315ms] INFO  ComM: ch0 ->mode=0                          # ComM_BusSMIndication(NO_COM)
 [30318ms] INFO  Nm: -> Network Mode: Ready Sleep State (tx stopped)
 [33320ms] INFO  Nm: -> Prepare Bus-Sleep Mode                # NM-Timeout Timer(3000ms)満了
+[33320ms] INFO  CanSM: ->SILENT_COM                          # ComM_Nm_PrepareBusSleepMode() 経由
 [33850ms] INFO  CanIf: RX can=0x400                          # 仮想他ECU(node=0x02)のNMフレーム受信
 [33853ms] INFO  Nm: RxIndication: node=0x02 woke us from Prepare Bus-Sleep
 [33854ms] INFO  Nm: -> Network Mode: Repeat Message State    # スリープ延期
+[33854ms] INFO  CanSM: ->FULL_COM                            # ComM_Nm_NetworkMode() 経由で復帰
 [35360ms] INFO  Nm: -> Network Mode: Ready Sleep State (tx stopped)
 [38362ms] INFO  Nm: -> Prepare Bus-Sleep Mode
+[38362ms] INFO  CanSM: ->SILENT_COM
 [39865ms] INFO  Nm: -> Bus-Sleep Mode                        # 今度は他ノードのNMフレームが来なかった
-[39866ms] INFO  CanSM: Nm reached Bus-Sleep Mode -> CAN controller SLEEP
+[39866ms] INFO  CanSM: ->NO_COM (physical sleep)             # ComM_Nm_BusSleepMode() 経由
 ```
 
 ## 実機検証（uds_tester）

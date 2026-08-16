@@ -108,8 +108,12 @@ Std_ReturnType ComM_GetStatus(ComM_InitStatusType* Status);
  *          即座に E_OK を返す。実際の CanSM_RequestComMode() 呼び出しと
  *          ComM_ChannelMode の更新は、Nm が協調スリープを完了して
  *          ComM_Nm_BusSleepMode() を呼ぶまで遅延する（ComM.c ファイル冒頭
- *          コメント参照）。それ以外の遷移（NO_COM -> FULL_COM 等）は従来どおり
- *          即座に CanSM_RequestComMode() へ転送する。
+ *          コメント参照）。SILENT_COM 中（Nm が既に Prepare Bus-Sleep Mode
+ *          へ到達済み）に NO_COM が再要求された場合も同様に何もしない
+ *          （CanSM へ素通りさせると Nm 未到達のまま物理スリープしてしまう
+ *          回帰があったため、2026-08 に修正。ComM.c 参照）。それ以外の遷移
+ *          （NO_COM -> FULL_COM 等）は従来どおり即座に CanSM_RequestComMode()
+ *          へ転送する。
  *
  * \param[in]  User     要求するユーザ ID (COMM_USER_0 等)。
  * \param[in]  ComMode  要求する通信モード
@@ -196,6 +200,44 @@ void ComM_MainFunction(void);
  * \Synchronicity  {Synchronous}
  */
 void ComM_BusSMIndication(uint8 Network, ComM_ModeType Mode);
+
+/**
+ * \brief   Nm が Prepare Bus-Sleep Mode へ入ったことの通知（Nm から呼び出される）。
+ *
+ * \details [SWS_ComM_00826]。COMM_FULL_COMMUNICATION 中に呼ばれた場合のみ
+ *          CanSM_RequestComMode(Network, COMM_SILENT_COMMUNICATION) を呼び、
+ *          チャネルを受信専用へ切り替える（既に FULL_COM でない、例えば
+ *          Bus-Off 中は no-op）。詳細は ComM.c ファイル冒頭コメント参照。
+ *
+ * \param[in]  Network  ネットワークハンドル（0 〜 COMM_CHANNEL_COUNT-1）。
+ *
+ * \AUTOSARReq     {SWS_ComM_00391, SWS_ComM_00826}
+ * \ServiceID      {0x19}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void ComM_Nm_PrepareBusSleepMode(uint8 Network);
+
+/**
+ * \brief   Nm が Network Mode へ（再）入ったことの通知（Nm から呼び出される）。
+ *
+ * \details [SWS_ComM_00296]。典型的には、Prepare Bus-Sleep Mode 中に他ノードの
+ *          NM フレームを受信して Nm が自律的にスリープを取りやめたケース
+ *          （[SWS_CanNm_00124]）。COMM_FULL_COMMUNICATION でない場合、
+ *          CanSM_RequestComMode(Network, COMM_FULL_COMMUNICATION) を呼ぶ
+ *          **前に** ComM_NmReleasePending[Network] を **無条件で**（この
+ *          呼び出しの成否に関わらず）クリアする。この無条件クリア自体が
+ *          安全性の根拠のため、「成功時のみクリア」には変更しないこと
+ *          （理由の詳細は ComM.c ファイル冒頭コメント参照）。
+ *
+ * \param[in]  Network  ネットワークハンドル（0 〜 COMM_CHANNEL_COUNT-1）。
+ *
+ * \AUTOSARReq     {SWS_ComM_00390, SWS_ComM_00296}
+ * \ServiceID      {0x18}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void ComM_Nm_NetworkMode(uint8 Network);
 
 /**
  * \brief   Nm が Bus-Sleep Mode へ到達したことの通知（Nm から呼び出される）。
