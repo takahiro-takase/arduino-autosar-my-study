@@ -30,10 +30,15 @@
  *          本番の `Com_PBCfg.c` 等は TxAckCbk/TxTransformCbk が `Rte_*` 関数を
  *          直接参照するため、リンクすると Rte.c 経由で Dem/WdgM/FiM... まで
  *          巨大な依存グラフを引き込んでしまう。ここではコールチェーンという
- *          「機構」の理解・検証に絞るため、1シグナル・1 I-PDU のみを持つ
- *          テスト専用の最小 Com/PduR/CanIf 設定を本ファイル内で定義し、
- *          Com.c/PduR.c/CanIf.c/Can.c は実体をリンクする（フェイクは
- *          `Can_Hw` 層のみ、`test/test_chain/Hal_Can_Hw_fake.c` を使う）。
+ *          「機構」の理解・検証に絞るため、テスト専用の最小 Com/PduR/CanIf
+ *          設定を本ファイル内で定義し、Com.c/PduR.c/CanIf.c/Can.c は実体を
+ *          リンクする（フェイクは `Can_Hw` 層のみ、
+ *          `test/test_chain/Hal_Can_Hw_fake.c` を使う）。中心となる
+ *          セグメント①②はコールチェーン全体を貫く IPduId=0（16bit シグナル
+ *          1本）のみを使う。IPduId=1/2 は SWS_Com_00495（TMS 遷移時の
+ *          無条件即時送信）専用の追加 I-PDU で、Com_MainFunction() より前の
+ *          Com_SendSignal()/Com_SendSignalGroup() の境界内で完結する
+ *          （PduR/CanIf 側にルーティングは設定していない）。
  *
  *          [env:native]（test/test_native/）は Can.c 単体を CanIf フェイクで
  *          隔離して検証しており、同じバイナリに CanIf.c の本物を混在させると
@@ -122,13 +127,171 @@ const Com_IPduConfigType kTestTxIPdu = {
     /* TxTransformCbk */   NULL
 };
 
+// -----------------------------------------------------------------------
+// SWS_Com_00495（TMS 遷移時の無条件即時送信）検証用の 2 本目の I-PDU。
+// SignalId=1 を持つ Signal Group（IPduId=1）で、唯一のメンバーは
+// TmsContributor=1 かつ TransferProperty=PENDING（TMS には寄与するが、
+// 単独では通常の送信トリガー Com_GroupTriggerPending を立てない）。
+// WarningStatus の FaultLamp/AbsLamp（実運用設定、TmsContributor=1 かつ
+// TRIGGERED_ON_CHANGE）とはあえて異なる組み合わせにすることで、「通常の
+// 送信トリガー」を経由せずに「TMS 遷移そのもの」だけで送信が引き起こされる
+// ことを検証する（Com_Notes.md「TMS 変化時の即時送信について」参照）。
+// -----------------------------------------------------------------------
+const Com_SignalConfigType kTestTmsPendingSignal = {
+    /* SignalId */                1U,
+    /* Direction */                COM_SIGNAL_DIRECTION_TX,
+    /* IPduId */                   1U,
+    /* BitPosition */              0U,
+    /* BitSize */                  1U,
+    /* Endian */                   COM_BIG_ENDIAN,
+    /* InitValue */                0U,
+    /* FilterAlgorithm */          COM_FILTER_ALWAYS,  // Signal Group メンバーのため未評価（Com_SendSignal() 参照）
+    /* Mask */                     0x01U,
+    /* FilterX */                  0U,
+    /* FilterMin */                0U,
+    /* FilterMax */                0U,
+    /* FilterRejectCbk */          NULL,
+    /* TmsContributor */           1U,
+    /* UpdateBitContributor */     0U,
+    /* TransferProperty */         COM_TRANSFER_PROPERTY_PENDING,
+    /* RxDataTimeoutAction */      COM_RX_TIMEOUT_ACTION_NONE,
+    /* TimeoutSubstitutionValue */ 0U,
+    /* DataInvalidAction */        COM_DATA_INVALID_ACTION_NONE,
+    /* InvalidValue */             0U,
+    /* InvalidNotificationCbk */   NULL,
+    /* FirstTimeoutMs */           0U,
+    /* TimeoutMs */                0U,
+    /* TimeoutNotificationCbk */   NULL,
+    /* TxAckCbk */                 NULL,
+    /* TxErrCbk */                 NULL
+};
+
+const Com_IPduConfigType kTestTmsGroupIPdu = {
+    /* IPduId */           1U,
+    /* DLC */              1U,
+    /* PduRId */           1U,   // 本テストは Com_MainFunction()/PduR まで進めないため未使用
+    /* FirstTimeoutMs */   0U,
+    /* TimeoutMs */        0U,
+    /* IsSignalGroup */    1U,
+    /* TxModeMode */       COM_TX_MODE_DIRECT,
+    /* TxPeriodMs */       0U,
+    /* TxModeModeTrue */   COM_TX_MODE_DIRECT,
+    /* TxPeriodMsTrue */   0U,
+    /* MinDelayMs */       0U,
+    /* UpdateBitPosition */ 7U,  // bit0 は kTestTmsPendingSignal が使うため独立したビットにする
+    /* IpduGroupId */      COM_IPDU_GROUP_NONE,
+    /* RxIndicationCbk */  NULL,
+    /* TxTransformCbk */   NULL
+};
+
+// -----------------------------------------------------------------------
+// SWS_Com_00495 の非 Signal Group 側経路（Com_SendSignal() 内の tmsChanged
+// 分岐）用。本番の Com_PBCfg.c では非 Signal Group シグナルに
+// TmsContributor=1 を設定した例が無く未検証のままだったため
+// （/code-review で指摘）、MeterStatus のように複数シグナルが 1 つの
+// 非 Signal Group I-PDU を共有する構成を模した最小ケースを追加する。
+//
+// SignalId=4（TmsContributor=1、InitValue=1）は TMS の条件を初期値から
+// 満たしているが、Com_Init() は Com_TmsState[] を一律 0 にするだけで
+// Com_RecalcTms() を呼ばない（Com_IpduGroupStart() とは異なる）ため、
+// バッファ内容（TMS=true 相当）と Com_TmsState（false のまま）が
+// Init 直後から乖離している。SignalId=5（TmsContributor=0、他方の
+// シグナル）を送ると、Com_RecalcTms() は「呼ばれたシグナル」ではなく
+// 「そのシグナルが属する I-PDU 全体」を毎回スキャンするため、この乖離が
+// そこで初めて検出されて tmsChanged=true になる——という経路を使うことで、
+// SignalId=5 自身の ComFilterAlgorithm 判定（passesFilter）を独立に
+// false にしたまま、OR 経路（SWS_Com_00495）だけで送信要求が立つことを
+// 検証できる。
+// -----------------------------------------------------------------------
+const Com_SignalConfigType kTestNonGroupTmsContributorSignal = {
+    /* SignalId */                4U,
+    /* Direction */                COM_SIGNAL_DIRECTION_TX,
+    /* IPduId */                   2U,
+    /* BitPosition */              0U,
+    /* BitSize */                  1U,
+    /* Endian */                   COM_BIG_ENDIAN,
+    /* InitValue */                1U,  // TMS 条件 (value & Mask) != FilterX を起動時から満たす
+    /* FilterAlgorithm */          COM_FILTER_ALWAYS,
+    /* Mask */                     0x01U,
+    /* FilterX */                  0U,
+    /* FilterMin */                0U,
+    /* FilterMax */                0U,
+    /* FilterRejectCbk */          NULL,
+    /* TmsContributor */           1U,
+    /* UpdateBitContributor */     0U,
+    /* TransferProperty */         COM_TRANSFER_PROPERTY_PENDING,
+    /* RxDataTimeoutAction */      COM_RX_TIMEOUT_ACTION_NONE,
+    /* TimeoutSubstitutionValue */ 0U,
+    /* DataInvalidAction */        COM_DATA_INVALID_ACTION_NONE,
+    /* InvalidValue */             0U,
+    /* InvalidNotificationCbk */   NULL,
+    /* FirstTimeoutMs */           0U,
+    /* TimeoutMs */                0U,
+    /* TimeoutNotificationCbk */   NULL,
+    /* TxAckCbk */                 NULL,
+    /* TxErrCbk */                 NULL
+};
+
+const Com_SignalConfigType kTestNonGroupTmsCalledSignal = {
+    /* SignalId */                5U,
+    /* Direction */                COM_SIGNAL_DIRECTION_TX,
+    /* IPduId */                   2U,
+    /* BitPosition */              1U,  // kTestNonGroupTmsContributorSignal の bit0 とは別ビット
+    /* BitSize */                  1U,
+    /* Endian */                   COM_BIG_ENDIAN,
+    /* InitValue */                0U,
+    /* FilterAlgorithm */          COM_FILTER_MASKED_NEW_DIFFERS_MASKED_OLD,
+    /* Mask */                     0x01U,
+    /* FilterX */                  0U,
+    /* FilterMin */                0U,
+    /* FilterMax */                0U,
+    /* FilterRejectCbk */          NULL,
+    /* TmsContributor */           0U,  // TMS には寄与しない（呼び出し対象のシグナルのみ）
+    /* UpdateBitContributor */     0U,
+    /* TransferProperty */         COM_TRANSFER_PROPERTY_PENDING,
+    /* RxDataTimeoutAction */      COM_RX_TIMEOUT_ACTION_NONE,
+    /* TimeoutSubstitutionValue */ 0U,
+    /* DataInvalidAction */        COM_DATA_INVALID_ACTION_NONE,
+    /* InvalidValue */             0U,
+    /* InvalidNotificationCbk */   NULL,
+    /* FirstTimeoutMs */           0U,
+    /* TimeoutMs */                0U,
+    /* TimeoutNotificationCbk */   NULL,
+    /* TxAckCbk */                 NULL,
+    /* TxErrCbk */                 NULL
+};
+
+const Com_IPduConfigType kTestNonGroupTmsIPdu = {
+    /* IPduId */           2U,
+    /* DLC */              1U,
+    /* PduRId */           2U,   // 本テストは Com_MainFunction()/PduR まで進めないため未使用
+    /* FirstTimeoutMs */   0U,
+    /* TimeoutMs */        0U,
+    /* IsSignalGroup */    0U,
+    /* TxModeMode */       COM_TX_MODE_DIRECT,
+    /* TxPeriodMs */       0U,
+    /* TxModeModeTrue */   COM_TX_MODE_DIRECT,
+    /* TxPeriodMsTrue */   0U,
+    /* MinDelayMs */       0U,
+    /* UpdateBitPosition */ 0xFFU,
+    /* IpduGroupId */      COM_IPDU_GROUP_NONE,
+    /* RxIndicationCbk */  NULL,
+    /* TxTransformCbk */   NULL
+};
+
+const Com_SignalConfigType kTestSignals[] = {
+    kTestSignal, kTestTmsPendingSignal,
+    kTestNonGroupTmsContributorSignal, kTestNonGroupTmsCalledSignal
+};
+const Com_IPduConfigType   kTestTxIPdus[] = { kTestTxIPdu, kTestTmsGroupIPdu, kTestNonGroupTmsIPdu };
+
 const Com_ConfigType kTestComConfig = {
     /* RxIPdus */       NULL,
     /* RxIPduCount */   0U,
-    /* TxIPdus */       &kTestTxIPdu,
-    /* TxIPduCount */   1U,
-    /* Signals */       &kTestSignal,
-    /* SignalCount */   1U,
+    /* TxIPdus */       kTestTxIPdus,
+    /* TxIPduCount */   3U,
+    /* Signals */       kTestSignals,
+    /* SignalCount */   4U,
     /* GwMappings */    NULL,
     /* GwMappingCount */ 0U
 };
@@ -229,6 +392,92 @@ TEST_F(Bsw_TxChain_Test, ComSendSignal_NG_UnknownSignalId_DoesNotSetPending)
     /* 評価 (Assert) */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(Com_Test_GetTxPending(0U), 0U);
+}
+
+// ------------------------------------------------------------
+// SWS_Com_00495: TMS 遷移時の無条件即時送信（Com_TmsState[] の変化）が、
+// 通常の送信トリガー（ComTransferProperty=TRIGGERED_ON_CHANGE 由来の
+// Com_GroupTriggerPending）を経由しなくても Com_TxPending を立てることを
+// 検証する。kTestTmsPendingSignal は TmsContributor=1 かつ
+// TransferProperty=PENDING のため、これ単体の変化は通常のトリガーには
+// ならない（このテストの Arrange 部分自体が、対応前の実装ではここで失敗する
+// ことを示す回帰テスト）。
+// ------------------------------------------------------------
+TEST_F(Bsw_TxChain_Test, TmsTransition_OK_TriggersImmediateSendWithoutGroupTrigger)
+{
+    /* 準備 (Arrange): TMS 寄与シグナルを 0(false)→1(true) へ変化させる。
+     * TransferProperty=PENDING のため、この変化だけでは
+     * Com_GroupTriggerPending は立たない。 */
+    uint8_t value = 1U;
+    Com_SendSignal(1U, &value);
+
+    /* 実行 (Act): シャドウバッファを確定コミットし、TMS を再評価させる */
+    Std_ReturnType ret = Com_SendSignalGroup(1U);
+
+    /* 評価 (Assert) */
+    EXPECT_EQ(ret, E_OK);
+    EXPECT_EQ(Com_Test_GetTxPending(1U), 1U);  // TMS 遷移のみで即時送信要求が立つ
+
+    /* update-bit（bit7）は「値が実際に更新されたか」を示すものであり、
+     * TMS 遷移そのもの（PENDING メンバーの変化）とは独立した判断軸のため、
+     * このケースではセットされない。
+     * ビット番号はネットワーク順（bit0 = byte[0] の MSB=0x80、
+     * bit7 = byte[0] の LSB=0x01。Com_PackSignal() 参照）。 */
+    const uint8* buf = Com_Test_GetTxBuffer(1U);
+    ASSERT_NE(buf, nullptr);
+    EXPECT_EQ(buf[0] & 0x80U, 0x80U);  // シグナル値自体（bit0）はコミットされている
+    EXPECT_EQ(buf[0] & 0x01U, 0x00U);  // update-bit (bit7) は立たない
+}
+
+TEST_F(Bsw_TxChain_Test, TmsUnchanged_OK_DoesNotTriggerSendWithoutGroupTrigger)
+{
+    /* 準備 (Arrange): 初期状態（TMS=false）から変化させない
+     * （0 のままシグナルグループをコミットする） */
+    uint8_t value = 0U;
+    Com_SendSignal(1U, &value);
+
+    /* 実行 (Act) */
+    Std_ReturnType ret = Com_SendSignalGroup(1U);
+
+    /* 評価 (Assert): TMS が変化せず、通常トリガーも立たないため送信要求は立たない */
+    EXPECT_EQ(ret, E_OK);
+    EXPECT_EQ(Com_Test_GetTxPending(1U), 0U);
+}
+
+// ------------------------------------------------------------
+// SWS_Com_00495: 非 Signal Group 側（Com_SendSignal() 内の tmsChanged 分岐）
+// の回帰テスト。上の2件は Signal Group 側（Com_SendSignalGroup()）のみを
+// 検証しており、非 Signal Group 側は /code-review で「本番設定に
+// TmsContributor=1 の非 Signal Group シグナルが無く未検証」と指摘された
+// ギャップだった（コードコメント上は「現状の設定ではこの経路は通らない」と
+// 正直に開示されていたが、テストでは未確認だった）。
+//
+// kTestNonGroupTmsContributorSignal（SignalId=4）は InitValue の時点で既に
+// TMS 条件を満たしているが、Com_Init() は Com_TmsState[] を一律 0 にする
+// だけで Com_RecalcTms() を呼ばないため、バッファ内容と Com_TmsState が
+// Init 直後から乖離している。この乖離は、同じ I-PDU を共有する別の
+// シグナル（SignalId=5、TMS には寄与しない）を送った瞬間に
+// Com_RecalcTms()（呼ばれたシグナルではなく I-PDU 全体をスキャンする）に
+// よって検出される。SignalId=5 自身の ComFilterAlgorithm 判定
+// （passesFilter）は独立に false にしてあるため、送信要求が立つとすれば
+// それは OR 経路（tmsChanged）だけによるものだと確実に切り分けられる。
+// ------------------------------------------------------------
+TEST_F(Bsw_TxChain_Test, NonGroupTmsTransition_OK_TriggersImmediateSendEvenWhenCalledSignalFilterFails)
+{
+    /* 準備 (Arrange): 追加の準備は不要。SetUp() 内の Com_Init() の時点で
+     * 既に上記の乖離状態（バッファ上は TMS=true 相当、Com_TmsState は
+     * false のまま）が成立している。 */
+
+    /* 実行 (Act): SignalId=5 へ InitValue と同じ値を送る
+     * （自身の ComFilterAlgorithm=MASKED_NEW_DIFFERS_MASKED_OLD により
+     * passesFilter は false になる）。 */
+    uint8_t value = 0U;
+    Com_SendSignal(5U, &value);
+
+    /* 評価 (Assert): SignalId=5 自身は「送信不要」と判定されたにも
+     * かかわらず、SignalId=4 由来の TMS 遷移検出（tmsChanged）により
+     * 送信要求が立つ。 */
+    EXPECT_EQ(Com_Test_GetTxPending(2U), 1U);
 }
 
 // ------------------------------------------------------------

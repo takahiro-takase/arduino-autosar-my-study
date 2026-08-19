@@ -197,24 +197,25 @@ AbsLamp は点滅せず点灯しっぱなしになります。TMS が無けれ�
 （FaultLamp は 500ms 点滅中でありバイト自体が毎周期変化するため、この効果は
 主に AbsLamp 単独点灯時に意味を持ちます）。
 
-**TMS 変化時の即時送信について**: 実 AUTOSAR は「TMS の変化によりモードが
-切り替わったら、その変化を起こしたシグナルの ComTransferProperty によらず
-無条件に即座に送信する」ことを要求します（SWS_Com_00495）。本実装はこの
-特別扱いを独立には実装していません。現状 `FaultLamp`/`AbsLamp` は TMS 寄与
-シグナル（`TmsContributor=1`）であると同時に `ComTransferProperty=
-TRIGGERED_ON_CHANGE` でもあるため、TMS を変化させる値変化は同じタイミングで
-`Com_GroupTriggerPending` も立てる通常の送信トリガーに該当し、結果として
-SWS_Com_00495 相当の即時送信が「たまたま」成立しています。
+**TMS 変化時の即時送信について（2026-08 対応済み）**: 実 AUTOSAR は「TMS の
+変化によりモードが切り替わったら、その変化を起こしたシグナルの
+ComTransferProperty によらず無条件に即座に送信する」ことを要求します
+（SWS_Com_00495）。当初この特別扱いは独立には実装しておらず、`FaultLamp`/
+`AbsLamp` が TMS 寄与シグナル（`TmsContributor=1`）であると同時に
+`ComTransferProperty=TRIGGERED_ON_CHANGE` でもあるという設定の偶然の一致に
+よって、たまたま結果的に満たされているだけの状態でした（もし将来 TMS 寄与
+シグナルを `PENDING` に設定した場合、そのシグナル単体の変化は
+`Com_GroupTriggerPending` を立てないため、TMS だけが切り替わって送信が
+起きない、という潜在バグになり得ました）。
 
-これは偶然の一致であり、一般には成立しません。もし将来 TMS 寄与シグナルを
-`ComTransferProperty=PENDING` に設定した場合、そのシグナル単体の変化は
-`Com_GroupTriggerPending` を立てないため、他の TRIGGERED_ON_CHANGE メンバーの
-変化が同時に起きない限り、TMS だけが切り替わって送信は起きません
-（SWS_Com_00495 の要求を満たさない状態になり得ます）。この限界は
-`Com.c` の `Com_SendSignalGroup()` 内コメントにも明記しています。SWS_Com_00495
-を厳密に満たすには、TMS 遷移（`Com_TmsState[]` の値そのものの変化）を検出して
-`ComTransferProperty` の値によらず無条件に `Com_RequestTxOnChange()` を呼ぶ、
-独立した経路が別途必要です。
+これを是正し、`Com_RecalcTms()` が「今回の呼び出しで `Com_TmsState[]` が
+変化したか」を戻り値で返すようにしたうえで、`Com_SendSignal()`（非 Signal
+Group）・`Com_SendSignalGroup()` の両方で、通常の送信トリガー
+（`passesFilter`/`Com_GroupTriggerPending`）と TMS 遷移（戻り値）を独立した
+OR 条件として合成し、どちらか一方でも成立すれば `Com_RequestTxOnChange()` を
+呼ぶように変更しました。update-bit のセット条件はこれとは切り離したまま
+（TMS 遷移そのものはシグナル値の更新を意味しないため、`passesFilter`/
+`Com_GroupTriggerPending` のみで判定する）です。
 
 **ログ例**:
 ```
