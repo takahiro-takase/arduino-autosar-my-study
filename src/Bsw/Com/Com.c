@@ -1073,17 +1073,26 @@ static uint16 Com_EffectiveTxPeriodMs(const Com_IPduConfigType* ipdu)
  *          反映が完了した時点で呼ぶこと（SWS_Com_00245: 値の更新のたびに
  *          TMS を再計算する）。
  *
+ *          戻り値は「この呼び出しで Com_TmsState[ipduId] が変化したか」。
+ *          SWS_Com_00495（TMS の遷移によってモードが切り替わったら、その
+ *          変化を起こしたシグナルの ComTransferProperty によらず無条件に
+ *          即座に送信しなければならない）を呼び出し元が実装するために使う。
+ *
  * \param[in]  ipduId  再評価する TX I-PDU の ID。
+ *
+ * \retval  1  Com_TmsState[ipduId] が今回の呼び出しで変化した（true⇔false）。
+ * \retval  0  変化しなかった。
  *
  * \pre        Com_ConfigPtr が NULL でないこと（呼び出し元で保証する）。
  * \pre        `Com_TxBuffer[ipduId]` が最新値へ更新済みであること。
  *
- * \AUTOSARReq     {SWS_Com_00245, SWS_Com_00676, SWS_Com_00677, SWS_Com_00678, SWS_Com_00679}
+ * \AUTOSARReq     {SWS_Com_00245, SWS_Com_00495, SWS_Com_00676, SWS_Com_00677,
+ *                  SWS_Com_00678, SWS_Com_00679}
  * \ServiceID      {0x1E}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
  */
-static void Com_RecalcTms(Com_IPduIdType ipduId)
+static uint8 Com_RecalcTms(Com_IPduIdType ipduId)
 {
     DET_LOGT(TAG, "called");
     uint8 tmsTrue = 0U;
@@ -1100,7 +1109,9 @@ static void Com_RecalcTms(Com_IPduIdType ipduId)
             tmsTrue = 1U;
     }
 
+    const uint8 changed = (Com_TmsState[ipduId] != tmsTrue) ? 1U : 0U;
     Com_TmsState[ipduId] = tmsTrue;
+    return changed;
 }
 
 /**
@@ -1566,7 +1577,11 @@ uint8 Com_IsRxTimedOut(Com_IPduIdType IPduId)
  *          なら (新値 & Mask) が前回のフィルタ比較値と異なる場合のみ、
  *          「送信すべき変化あり」とみなして Com_RequestTxOnChange() を呼ぶ
  *          （TxModeMode が DIRECT/MIXED の I-PDU なら次回 Com_MainFunction()
- *          で送信される。本関数自体は PduR_Transmit() を呼ばない）。
+ *          で送信される。本関数自体は PduR_Transmit() を呼ばない）。これとは
+ *          独立に、Com_RecalcTms() が TMS の遷移を検出した場合も
+ *          ComFilterAlgorithm の判定結果によらず Com_RequestTxOnChange() を
+ *          呼ぶ（SWS_Com_00495。非 Signal Group のシグナルに TmsContributor=1
+ *          を設定した場合に備える。現状の設定ではこの経路は通らない）。
  *
  *          Signal Group（詳細は Com_SendSignalGroup() の \AUTOSARReq 参照）:
  *          所属する I-PDU が IsSignalGroup=1 の場合、値は実 TX バッファ
@@ -1581,7 +1596,8 @@ uint8 Com_IsRxTimedOut(Com_IPduIdType IPduId)
  * \note       戻り値型は仕様に従い uint8。E_OK / E_NOT_OK の値（0x00 / 0x01）は
  *             RTE が使う Std_ReturnType と互換性がある。
  *
- * \AUTOSARReq     {SWS_Com_00197, SWS_Com_00742, SWS_Com_00743, SWS_Com_00061}
+ * \AUTOSARReq     {SWS_Com_00197, SWS_Com_00742, SWS_Com_00743, SWS_Com_00061,
+ *                  SWS_Com_00495}
  * \ServiceID      {0x0A}
  * \Reentrancy     {Reentrant}
  * \Synchronicity  {Synchronous}
@@ -1677,8 +1693,9 @@ uint8 Com_SendSignal(Com_SignalIdType SignalId, const void* SignalDataPtr)
          * が Com_EffectiveTxModeMode() 経由で Com_TmsState を参照するため）。
          * 現状 TmsContributor=1 を設定しているシグナルは Signal Group
          * （WarningStatus）にしか存在しないためこの呼び出しがなくても実害はないが、
-         * 非 Signal Group のシグナルに TmsContributor=1 を設定した場合に備える。 */
-        Com_RecalcTms(sig->IPduId);
+         * 非 Signal Group のシグナルに TmsContributor=1 を設定した場合に備える。
+         * 戻り値（TMS が今回変化したか）は下記 SWS_Com_00495 対応で使う。 */
+        const uint8 tmsChanged = Com_RecalcTms(sig->IPduId);
 
         /* ComFilterAlgorithm 評価: 送信すべき更新かどうかは Com 自身が判断する
          * (ASW は値をセットするだけで、送信要否には関与しない) */
@@ -1689,33 +1706,39 @@ uint8 Com_SendSignal(Com_SignalIdType SignalId, const void* SignalDataPtr)
         }
         Com_FilterLastValue[s] = value;
 
-        if (passesFilter)
+        /* SWS_Com_00495: TMS の遷移によって送信モードが切り替わった場合は、
+         * この変化を起こしたシグナルの ComFilterAlgorithm 判定によらず無条件に
+         * 即座に送信しなければならない。passesFilter とは独立の判断軸として
+         * OR で合成する（詳細は Com_RecalcTms() のドキュメント参照）。 */
+        if (passesFilter || tmsChanged)
         {
             Com_RequestTxOnChange(ipdu);
-
-            /* update-bit セット（SWS_Com_00061 相当）。仕様原文は「Com_SendSignal
-             * が呼ばれるたびに無条件でセットする」だが、本プロジェクトの ASW は
-             * 毎サイクル無条件に Com_SendSignal() を呼び、「値が実際に変化したか」
-             * の判定は Com の ComFilterAlgorithm に委ねる設計（README「責務分離の
-             * 効果」参照）。そのため文字どおり無条件にセットすると、次の実送信
-             * （周期フロア含む）までの間に必ず ASW が再度 Com_SendSignal() を
-             * 呼んでビットを再セットしてしまい、update-bit が常に 1 のまま
-             * 「実際に変化したか」を一切表せなくなる（2026-07 時点で実機確認済み
-             * の不具合）。そこで本実装は、このシグナルの送信要否判定
-             * （passesFilter、Com_RequestTxOnChange() と同じ判断軸）に合わせて
-             * セットする。ASW 側の「常に書き込む」設計を変えずに、update-bit
-             * 本来の目的（このシグナルが実際に更新されたかどうかを示す）を
-             * 満たすための、本プロジェクト固有の解釈である。 */
-            /* UpdateBitContributor（Com_Types.h 参照）: I-PDU に複数の非 Signal
-             * Group TX シグナルが同居する場合、update-bit を「このシグナルの
-             * 変化」専用に保つため、寄与するシグナルのみに絞る（TmsContributor
-             * と同じパターン。2026-08 コードレビューで、MeterStatus に
-             * EngineSpeed/RunLamp 等のミラーシグナルを追加した際、それらの
-             * 変化だけで EngineState 用の update-bit が誤って立つ不具合が
-             * 見つかり対応した）。 */
-            if (ipdu->UpdateBitPosition != 0xFFU && sig->UpdateBitContributor == 1U)
-                Com_PackSignal(Com_TxBuffer[sig->IPduId], ipdu->UpdateBitPosition, 1U, COM_BIG_ENDIAN, 1U);
         }
+
+        /* update-bit セット（SWS_Com_00061 相当）。仕様原文は「Com_SendSignal
+         * が呼ばれるたびに無条件でセットする」だが、本プロジェクトの ASW は
+         * 毎サイクル無条件に Com_SendSignal() を呼び、「値が実際に変化したか」
+         * の判定は Com の ComFilterAlgorithm に委ねる設計（README「責務分離の
+         * 効果」参照）。そのため文字どおり無条件にセットすると、次の実送信
+         * （周期フロア含む）までの間に必ず ASW が再度 Com_SendSignal() を
+         * 呼んでビットを再セットしてしまい、update-bit が常に 1 のまま
+         * 「実際に変化したか」を一切表せなくなる（2026-07 時点で実機確認済み
+         * の不具合）。そこで本実装は、このシグナルの送信要否判定
+         * （passesFilter、Com_RequestTxOnChange() と同じ判断軸）に合わせて
+         * セットする。ASW 側の「常に書き込む」設計を変えずに、update-bit
+         * 本来の目的（このシグナルが実際に更新されたかどうかを示す）を
+         * 満たすための、本プロジェクト固有の解釈である。TMS 遷移のみによる
+         * 即時送信（tmsChanged）はこのシグナル自体の値更新を意味しないため、
+         * update-bit の条件には含めない（passesFilter のみで判定する）。 */
+        /* UpdateBitContributor（Com_Types.h 参照）: I-PDU に複数の非 Signal
+         * Group TX シグナルが同居する場合、update-bit を「このシグナルの
+         * 変化」専用に保つため、寄与するシグナルのみに絞る（TmsContributor
+         * と同じパターン。2026-08 コードレビューで、MeterStatus に
+         * EngineSpeed/RunLamp 等のミラーシグナルを追加した際、それらの
+         * 変化だけで EngineState 用の update-bit が誤って立つ不具合が
+         * 見つかり対応した）。 */
+        if (passesFilter && ipdu->UpdateBitPosition != 0xFFU && sig->UpdateBitContributor == 1U)
+            Com_PackSignal(Com_TxBuffer[sig->IPduId], ipdu->UpdateBitPosition, 1U, COM_BIG_ENDIAN, 1U);
 
         return E_OK;
     }
@@ -1738,6 +1761,12 @@ uint8 Com_SendSignal(Com_SignalIdType SignalId, const void* SignalDataPtr)
  *          際に立てるフラグ。Com_TransferPropertyType 参照）で判定する。
  *          立っていれば Com_RequestTxOnChange() を呼ぶ（TxModeMode が
  *          DIRECT/MIXED の I-PDU なら次回 Com_MainFunction() で送信される）。
+ *          これとは独立に、Com_RecalcTms() が TMS（Transmission Mode
+ *          Selector）の遷移（true⇔false）を検出した場合も、
+ *          Com_GroupTriggerPending の状態によらず Com_RequestTxOnChange() を
+ *          呼ぶ（SWS_Com_00495: TMS 遷移によるモード切り替えは、それを
+ *          起こしたシグナルの ComTransferProperty によらず無条件に即座に
+ *          送信しなければならない）。
  *
  *          update-bit（IPduId->UpdateBitPosition が 0xFF 以外の場合、
  *          SWS_Com_00801）: 呼ばれるたびに無条件でこのビットをセットする
@@ -1755,7 +1784,7 @@ uint8 Com_SendSignal(Com_SignalIdType SignalId, const void* SignalDataPtr)
  *             Com_SendSignal() で設定しておくこと。
  *
  * \AUTOSARReq     {SWS_Com_00200, SWS_Com_00050, SWS_Com_00742, SWS_Com_00743,
- *                  SWS_Com_00801, SWS_Com_00055}
+ *                  SWS_Com_00801, SWS_Com_00055, SWS_Com_00495}
  * \ServiceID      {0x18}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
@@ -1804,35 +1833,47 @@ Std_ReturnType Com_SendSignalGroup(Com_IPduIdType GroupId)
      * その呼び出しより前に確定させる。TMS 寄与シグナルが PENDING の場合、
      * 「送信は引き起こさないが TMS だけは変化する」こともあり得るが、
      * これは仕様上の矛盾ではない（TMS は「次に送信するときどのモードを
-     * 使うか」を決めるだけで、それ自体が送信のトリガーではないため）。 */
-    Com_RecalcTms(GroupId);
+     * 使うか」を決めるだけで、それ自体が送信のトリガーではないため）。
+     * 戻り値（TMS が今回変化したか）は下記 SWS_Com_00495 対応で使う。 */
+    const uint8 tmsChanged = Com_RecalcTms(GroupId);
 
     /* 送信を引き起こすかどうかは、ComTransferProperty=TRIGGERED_ON_CHANGE の
      * メンバーが Com_SendSignal() 内で変化検知して立てたフラグのみで判定する
      * （バイト単位の生比較はしない。PENDING メンバーだけが変化した場合は
      * このフラグは立たず、コミットはされても送信は引き起こされない）。 */
-    if (Com_GroupTriggerPending[GroupId])
-    {
-        Com_GroupTriggerPending[GroupId] = 0U;
-        Com_RequestTxOnChange(ipdu);
+    const uint8 groupTriggered = Com_GroupTriggerPending[GroupId];
+    Com_GroupTriggerPending[GroupId] = 0U;
 
-        /* update-bit セット（SWS_Com_00801 相当）。仕様原文は「
-         * Com_SendSignalGroup が呼ばれるたびに無条件でセットする」だが、
-         * MeterStatus/EngineState（Com_SendSignal 側）で実機確認済みの
-         * 不具合と同じ理由により、本実装では Com_GroupTriggerPending
-         * （＝ TRIGGERED_ON_CHANGE メンバーが実際に変化したかどうか、
-         * Com_RequestTxOnChange() を呼ぶかどうかと同じ判断軸）に条件づける。
-         * App_WarningIndicator_Run() は毎サイクル無条件に
-         * Rte_SendSignalGroup_WarningStatus()（→本関数）を呼ぶ設計（ASW は
-         * 値を書くだけ、Com が送信要否を判断する責務分離。README「責務分離
-         * の効果」参照）のため、無条件セットのままだと次の実送信までの間に
-         * 必ず ASW が本関数を再度呼んでビットを再セットしてしまい、
-         * update-bit が常に 1 のままになる。詳細は Com_SendSignal() の
-         * 同種コメント・README「Update Bit」節参照。 */
-        if (ipdu->UpdateBitPosition != 0xFFU)
-        {
-            Com_PackSignal(Com_TxBuffer[GroupId], ipdu->UpdateBitPosition, 1U, COM_BIG_ENDIAN, 1U);
-        }
+    /* SWS_Com_00495: TMS の遷移によって送信モードが切り替わった場合は、
+     * その変化を起こしたシグナルの ComTransferProperty（TRIGGERED_ON_CHANGE/
+     * PENDING）によらず無条件に即座に送信しなければならない。groupTriggered
+     * （通常のトリガー）とは独立の判断軸として OR で合成する。これにより、
+     * TMS 寄与シグナルが PENDING のみで構成される場合でも（groupTriggered が
+     * 立たないため）TMS 遷移そのものが確実に送信を引き起こすようになる
+     * （詳細は Com_RecalcTms() のドキュメント参照）。 */
+    if (groupTriggered || tmsChanged)
+    {
+        Com_RequestTxOnChange(ipdu);
+    }
+
+    /* update-bit セット（SWS_Com_00801 相当）。仕様原文は「
+     * Com_SendSignalGroup が呼ばれるたびに無条件でセットする」だが、
+     * MeterStatus/EngineState（Com_SendSignal 側）で実機確認済みの
+     * 不具合と同じ理由により、本実装では Com_GroupTriggerPending
+     * （＝ TRIGGERED_ON_CHANGE メンバーが実際に変化したかどうか、
+     * Com_RequestTxOnChange() を呼ぶかどうかと同じ判断軸）に条件づける。
+     * App_WarningIndicator_Run() は毎サイクル無条件に
+     * Rte_SendSignalGroup_WarningStatus()（→本関数）を呼ぶ設計（ASW は
+     * 値を書くだけ、Com が送信要否を判断する責務分離。README「責務分離
+     * の効果」参照）のため、無条件セットのままだと次の実送信までの間に
+     * 必ず ASW が本関数を再度呼んでビットを再セットしてしまい、
+     * update-bit が常に 1 のままになる。詳細は Com_SendSignal() の
+     * 同種コメント・README「Update Bit」節参照。TMS 遷移のみによる即時送信
+     * （tmsChanged）はグループメンバーの値更新を意味しないため、update-bit
+     * の条件には含めない（groupTriggered のみで判定する）。 */
+    if (groupTriggered && ipdu->UpdateBitPosition != 0xFFU)
+    {
+        Com_PackSignal(Com_TxBuffer[GroupId], ipdu->UpdateBitPosition, 1U, COM_BIG_ENDIAN, 1U);
     }
 
     return E_OK;
@@ -2345,8 +2386,9 @@ void Com_IpduGroupStart(Com_IpduGroupIdType IpduGroupId, uint8 initialize)
 
         /* [SWS_Com_00223] I-PDU 起動時、現在のデータ内容から TMS を再評価する
          * （initialize の有無に関わらず。ゼロ初期化直後でも、TmsContributor
-         * シグナルの初期値に基づいて正しく再評価される）。 */
-        Com_RecalcTms(id);
+         * シグナルの初期値に基づいて正しく再評価される）。起動時の再評価は
+         * SWS_Com_00495（送信トリガー）の対象ではないため戻り値は使わない。 */
+        (void)Com_RecalcTms(id);
 
         DET_LOGI(TAG, "IpduGroupStart grp=%u iPdu=%u(TX) init=%u",
                  (unsigned)IpduGroupId, (unsigned)id, (unsigned)initialize);
