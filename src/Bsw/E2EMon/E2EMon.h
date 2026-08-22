@@ -51,7 +51,7 @@ void E2EMon_Init(void);
  * \brief   E2E チェック結果を通知する。
  *
  * \details EngineInfo/AbsInfo いずれの E2E 検証結果でも、フレーム受信の都度
- *          呼び出される想定（Rte.c の Rte_COMCbk_EngineInfo()/AbsInfo() から
+ *          呼び出される想定（Rte.c の Rte_COMRxInd_EngineInfo()/AbsInfo() から
  *          呼ばれる。実 AUTOSAR で言う「ARXML で設定した OnDataReceived
  *          通知フックが RTE から生成され、独自 CDD の関数を呼ぶ」という
  *          接続方式を模したもの）。
@@ -81,7 +81,7 @@ void E2EMon_NotifyCheckResult(E2E_P01StatusType status);
  * \brief   E2E Profile05 のチェック結果を通知する。
  *
  * \details EngineInfo/AbsInfo（いずれも E2E Profile05、Rte.c の
- *          Rte_COMCbk_EngineInfo()/AbsInfo() から E2EXf_InverseTransformP05()
+ *          Rte_COMRxInd_EngineInfo()/AbsInfo() から E2EXf_InverseTransformP05()
  *          呼び出し直後に呼ばれる）向け。P05 には Profile01 の WRONGCRC に
  *          相当する単独状態が無く、CRC 不一致は ERROR（NULL/長さ不正とも
  *          共用）にまとまる（E2E_P05.c 参照）ため、ERROR を CRC 不一致

@@ -183,7 +183,7 @@ static Rte_IStatusType Rte_MapE2EStatusP05(E2E_P05StatusType status)
  *          参照されるため non-static。Rte.h には公開しない（RTE の
  *          公式 API ではなく、Com→Rte 間の内部グルーのため）。
  */
-void Rte_COMCbk_EngineInfo(void)
+void Rte_COMRxInd_EngineInfo(void)
 {
     DET_LOGT(TAG, "called");
     uint8 buf[7];
@@ -270,7 +270,7 @@ void Rte_COMFilterReject_EngineSpeed(void)
  *          non-static。Rte.h には公開しない（他の Rte_COM* グルーと同じ
  *          理由）。
  */
-void Rte_COMTxAck_EngineState(void)
+void Rte_COMCbkTAck_EngineState(void)
 {
     DET_LOGI(TAG, "MeterStatus TX ack (EngineState)");
 }
@@ -289,14 +289,14 @@ void Rte_COMTxAck_EngineState(void)
  *          CanIf_Transmit()→Can_Write() は同期的に完結し、Bus-Off 中は
  *          Can_Write() が「送信済み・未確認」状態自体を作らずに即座に
  *          失敗するため（詳細は docs/modules/Com_Notes.md「TX 送信デッド
- *          ライン監視」参照）。Rte_COMTxAck_EngineState() と対になる、
+ *          ライン監視」参照）。Rte_COMCbkTAck_EngineState() と対になる、
  *          仕様忠実性のためのユニットテスト検証専用の実装。
  *
  * \note    Com_PBCfg.c から extern 宣言経由で TxTOutCbk として参照されるため
  *          non-static。Rte.h には公開しない（他の Rte_COM* グルーと同じ
  *          理由）。
  */
-void Rte_COMTxTOut_EngineState(void)
+void Rte_COMCbkTxTOut_EngineState(void)
 {
     DET_LOGI(TAG, "MeterStatus TX confirmation timeout (EngineState)");
 }
@@ -311,10 +311,10 @@ void Rte_COMTxTOut_EngineState(void)
  *          signal groups. Com_CbkTxAck corresponds to Rte_COMCbkTAck_<sn>
  *          or Rte_COMCbkTAck_<sg> respectively."）。RunLamp/FaultLamp/
  *          AbsLamp のどれが変化して送信を引き起こしたかは問わず、グループ
- *          全体で 1 回だけ呼ばれる（`Rte_COMTxAck_EngineState()` と対になる、
+ *          全体で 1 回だけ呼ばれる（`Rte_COMCbkTAck_EngineState()` と対になる、
  *          Signal Group 単位の実装例）。
  *
- *          `Rte_COMTxAck_EngineState()` と同じ呼び出しチェーン
+ *          `Rte_COMCbkTAck_EngineState()` と同じ呼び出しチェーン
  *          （Can_MainFunction_Write() → ... → Com_TxConfirmation()）を経由
  *          するため、割り込み禁止区間の外で呼ばれることも同様に確認済み。
  *
@@ -322,7 +322,7 @@ void Rte_COMTxTOut_EngineState(void)
  *          non-static。Rte.h には公開しない（他の Rte_COM* グルーと同じ
  *          理由）。
  */
-void Rte_COMTxAck_WarningStatus(void)
+void Rte_COMCbkTAck_WarningStatus(void)
 {
     DET_LOGI(TAG, "WarningStatus TX ack (group)");
 }
@@ -334,17 +334,17 @@ void Rte_COMTxAck_WarningStatus(void)
  *          RxAckCbk）から登録される。Com_RxIndication() がこのシグナルの
  *          全ビット範囲を受信バッファへ格納した直後に呼ばれる
  *          （Com_CbkRxAck、SWS_Com_00555）。E2E 検証
- *          （Rte_COMCbk_EngineInfo、RxIndicationCbk）より前に呼ばれるため、
+ *          （Rte_COMRxInd_EngineInfo、RxIndicationCbk）より前に呼ばれるため、
  *          このログはペイロードの妥当性とは無関係に「バイト列が届いた」
  *          ことのみを意味する（E2E CRC が壊れているフレームでも出力される）。
  *
  * \note    Com_PBCfg.c から extern 宣言経由で RxAckCbk として参照されるため
  *          non-static。Rte.h には公開しない（他の Rte_COM* グルーと同じ
- *          理由）。呼び出しコンテキストは Rte_COMTxAck_EngineState() と
+ *          理由）。呼び出しコンテキストは Rte_COMCbkTAck_EngineState() と
  *          同じく割り込み禁止区間の外（Com_RxIndication() 自体がそこから
  *          呼ばれることはない）。
  */
-void Rte_COMRxAck_EngineOnFlag(void)
+void Rte_COMCbk_EngineOnFlag(void)
 {
     DET_LOGI(TAG, "EngineInfo RX ack (EngineOnFlag)");
 }
@@ -355,15 +355,15 @@ void Rte_COMRxAck_EngineOnFlag(void)
  * \details Com_PBCfg.c の AbsInfo I-PDU 設定（Com_IPduConfigType.RxAckCbk）
  *          から登録される。VehicleSpeed/BrakeActive/AbsActive のどのメンバー
  *          が変化したかは問わず、グループ全体で 1 回だけ呼ばれる
- *          （Com_CbkRxAck、SWS_Com_00555。TX 側 Rte_COMTxAck_WarningStatus()
+ *          （Com_CbkRxAck、SWS_Com_00555。TX 側 Rte_COMCbkTAck_WarningStatus()
  *          と対になる、Signal Group 単位の RX 実装例）。E2E 検証・
- *          Com_ReceiveSignalGroup() コミット（Rte_COMCbk_AbsInfo）より前に
+ *          Com_ReceiveSignalGroup() コミット（Rte_COMRxInd_AbsInfo）より前に
  *          呼ばれるため、E2E 検証に失敗したフレームでもこのログは出力される。
  *
  * \note    Com_PBCfg.c から extern 宣言経由で RxAckCbk として参照されるため
  *          non-static。Rte.h には公開しない。
  */
-void Rte_COMRxAck_AbsInfo(void)
+void Rte_COMCbk_AbsInfo(void)
 {
     DET_LOGI(TAG, "AbsInfo RX ack (group)");
 }
@@ -377,7 +377,7 @@ void Rte_COMRxAck_AbsInfo(void)
  *          （検証に失敗したデータは Com へ一切渡らないため、このコールバック
  *          自体が呼ばれない。SecOC_IfRxIndication() 参照）。すなわちこのログが
  *          出力されること自体が「認証済みコマンドである」ことを意味する。
- *          `Rte_COMTxAck_EngineState()` と同じ理由で、ここで Serial 出力
+ *          `Rte_COMCbkTAck_EngineState()` と同じ理由で、ここで Serial 出力
  *          （DET_LOGW）を直接行っても安全（この呼び出しチェーン
  *          Can_MainFunction_Read → ... → SecOC_IfRxIndication →
  *          Com_RxIndication → このコールバック、の間に割り込み禁止区間は
@@ -392,7 +392,7 @@ void Rte_COMRxAck_AbsInfo(void)
  *          参照されるため non-static。Rte.h には公開しない（他の Rte_COM*
  *          グルーと同じ理由）。
  */
-void Rte_COMCbk_SecureCommand(void)
+void Rte_COMRxInd_SecureCommand(void)
 {
     DET_LOGT(TAG, "called");
     uint8 cmd = 0U;
@@ -421,11 +421,11 @@ void Rte_COMCbk_SecureCommand(void)
  *          直後であるため）。TMS/MDT/ComTransferProperty と同じく、動機は
  *          実利より仕様忠実性（SWS_Com_00201/00051/00638 相当）。
  *
- * \note    Rte_COMCbk_EngineInfo() と同じ理由で non-static。以前は E2E
+ * \note    Rte_COMRxInd_EngineInfo() と同じ理由で non-static。以前は E2E
  *          Profile01 だったが、EngineInfo と同じ理由で Profile05
  *          (CRC16+8bitカウンタ、DLC=6) へ切り替えた。
  */
-void Rte_COMCbk_AbsInfo(void)
+void Rte_COMRxInd_AbsInfo(void)
 {
     DET_LOGT(TAG, "called");
     uint8 buf[6];
@@ -460,7 +460,7 @@ void Rte_COMCbk_AbsInfo(void)
  *          この E2E 保護の存在自体を一切知らない（MeterStatus における
  *          App_EngineManager と同じ関係）。
  *
- * \note    Rte_COMCbk_EngineInfo() と同じ理由で non-static。
+ * \note    Rte_COMRxInd_EngineInfo() と同じ理由で non-static。
  */
 void Rte_COMTransform_E2EHealthStatus(uint8* Data, uint8 Length)
 {
@@ -543,7 +543,7 @@ static Std_ReturnType Rte_Lamp_ForceAndWrite(Rte_LampIdType lamp, uint8 level)
 /**
  * \brief   SpeedSensor 要求ポートから EngineSpeed シグナルを読み取る。
  *
- * \details E2E Transformer 方式（Rte_COMCbk_EngineInfo() 参照）。
+ * \details E2E Transformer 方式（Rte_COMRxInd_EngineInfo() 参照）。
  *          Com_ReceiveSignal() は経由せず、値自体は Rte_EngineInfoMirror
  *          （E2E 検証済みデータのみが反映される）から返す。*data は
  *          いずれの戻り値でも「読める最善の値」（前回の正常値、または
@@ -580,7 +580,7 @@ Rte_IStatusType Rte_Read_SpeedSensor_EngineSpeed(EngineSpeed_t* data)
 /**
  * \brief   TempSensor 要求ポートから CoolantTemp シグナルを読み取る。
  *
- * \details E2E Transformer 方式（Rte_COMCbk_EngineInfo() 参照）。
+ * \details E2E Transformer 方式（Rte_COMRxInd_EngineInfo() 参照）。
  *          Rte_Read_SpeedSensor_EngineSpeed() と同じ設計。
  *
  * \param[out] data  冷却水温を受け取る変数へのポインタ。NULL 禁止。
@@ -609,7 +609,7 @@ Rte_IStatusType Rte_Read_TempSensor_CoolantTemp(CoolantTemp_t* data)
 /**
  * \brief   EngineStatus 要求ポートから EngineOnFlag シグナルを読み取る。
  *
- * \details E2E Transformer 方式（Rte_COMCbk_EngineInfo() 参照）。
+ * \details E2E Transformer 方式（Rte_COMRxInd_EngineInfo() 参照）。
  *          Rte_Read_SpeedSensor_EngineSpeed() と同じ設計。
  *
  * \param[out] data  エンジン起動フラグを受け取る変数へのポインタ
@@ -1019,7 +1019,7 @@ Std_ReturnType Rte_Call_FiM_GetFunctionPermission(uint8 functionId, uint8* statu
 /**
  * \brief   VehicleSensor 要求ポートから VehicleSpeed シグナルを読み取る。
  *
- * \details E2E Transformer 方式（Rte_COMCbk_AbsInfo() 参照）。
+ * \details E2E Transformer 方式（Rte_COMRxInd_AbsInfo() 参照）。
  *          Com_ReceiveSignal() は経由せず、値自体は Rte_AbsInfoMirror
  *          （E2E 検証済みデータのみが反映される、0.01 km/h 単位）から返す。
  *          シグナルの発信元は ABS ECU (CAN ID 0x110)。
@@ -1048,7 +1048,7 @@ Rte_IStatusType Rte_Read_VehicleSensor_VehicleSpeed(VehicleSpeed_t* data)
 /**
  * \brief   BrakeSensor 要求ポートから BrakeActive シグナルを読み取る。
  *
- * \details E2E Transformer 方式（Rte_COMCbk_AbsInfo() 参照）。
+ * \details E2E Transformer 方式（Rte_COMRxInd_AbsInfo() 参照）。
  *          Rte_Read_VehicleSensor_VehicleSpeed() と同じ設計
  *          （0=解除 / 1=作動）。シグナルの発信元は ABS ECU (CAN ID 0x110)。
  *
@@ -1076,7 +1076,7 @@ Rte_IStatusType Rte_Read_BrakeSensor_BrakeActive(BrakeActive_t* data)
 /**
  * \brief   AbsSensor 要求ポートから AbsActive シグナルを読み取る。
  *
- * \details E2E Transformer 方式（Rte_COMCbk_AbsInfo() 参照）。
+ * \details E2E Transformer 方式（Rte_COMRxInd_AbsInfo() 参照）。
  *          Rte_Read_VehicleSensor_VehicleSpeed() と同じ設計
  *          （0=非作動 / 1=ABS 作動中）。シグナルの発信元は ABS ECU (CAN ID 0x110)。
  *

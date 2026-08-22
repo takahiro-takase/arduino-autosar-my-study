@@ -136,7 +136,7 @@ static uint32 Com_RxLastValidValue[COM_SIGNAL_COUNT];
  * 理由（実機で確認済みの障害）: Com_ReceiveSignal() は Rte 層の
  * SchM_Enter/Exit_Rte_MIRROR_EXCLUSIVE_AREA()（実体は noInterrupts()/
  * interrupts()、グローバル割り込み禁止）の内側から呼ばれることがある
- * （Rte_COMCbk_EngineInfo() 等）。この区間内でコールバックを直接呼び、
+ * （Rte_COMRxInd_EngineInfo() 等）。この区間内でコールバックを直接呼び、
  * コールバックが Serial 出力のような割り込み駆動の I/O を行うと、
  * 割り込み禁止中は UART TX バッファが空かず実質無限ループとなり、
  * WDT リセットを引き起こす。Com_TxPending と同じ設計思想（実処理を

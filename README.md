@@ -535,7 +535,7 @@ Check 処理が通常のチェーンへ割り込みます。EngineInfo/AbsInfo �
 
 ```
 Com_RxIndication()                 ← EngineInfo/AbsInfo（RxIndicationCbk 経由）
-  → Rte_COMCbk_EngineInfo/AbsInfo()
+  → Rte_COMRxInd_EngineInfo/AbsInfo()
     → E2EXf_InverseTransformP05() → E2E_P05Check()
 ```
 
@@ -1183,7 +1183,7 @@ TxTransformCbk として定義し、そこから先（E2EXf.c/E2EXf_PBCfg.c/E2E_
 RxIndicationCbk → `E2EXf_InverseTransformP05()` → `E2E_P05Check()`）は
 `Bsw_RxE2EChain_test.cpp` で別途検証している。`Com_RxIndication()` を直接
 呼ぶところから始め（README の図もこの粒度で揃えている）、Tx 側と同じ理由で
-`Rte.c` はリンクせず、本番の RxIndicationCbk（`Rte_COMCbk_EngineInfo()`）と
+`Rte.c` はリンクせず、本番の RxIndicationCbk（`Rte_COMRxInd_EngineInfo()`）と
 同じ処理をテスト専用の RxIndicationCbk として定義している。CRC 破損時に
 `E2E_P05STATUS_ERROR` になることも含めて検証する（詳細は
 `Bsw_RxE2EChain_test.cpp` 冒頭のコメント参照）。

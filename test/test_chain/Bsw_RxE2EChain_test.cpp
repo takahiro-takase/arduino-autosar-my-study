@@ -6,7 +6,7 @@
  * \details README の該当コールチェーン図：
  *
  *              Com_RxIndication()                 ← EngineInfo/AbsInfo（RxIndicationCbk 経由）
- *                → Rte_COMCbk_EngineInfo/AbsInfo()
+ *                → Rte_COMRxInd_EngineInfo/AbsInfo()
  *                  → E2EXf_InverseTransformP05() → E2E_P05Check()
  *
  *          「通常」の Rx チェーン（Can_Isr() → … → Com_RxIndication()）は
@@ -16,11 +16,11 @@
  *          `Com_RxIndication()` を直接呼ぶところから始める
  *          （README の図もこの粒度で揃えている）。
  *
- *          本番の RxIndicationCbk（`Rte_COMCbk_EngineInfo()`）は `Rte.c` に
+ *          本番の RxIndicationCbk（`Rte_COMRxInd_EngineInfo()`）は `Rte.c` に
  *          あるが、`Rte.c` 自体は IoHwAb/FiM/App_EngineManager/
  *          App_WarningIndicator まで巨大な依存グラフを引き込むため
  *          （Bsw_TxChain_test.cpp 冒頭コメントと同じ理由）リンクしない。
- *          本ファイル内に、本番の Rte_COMCbk_EngineInfo() と同じ処理
+ *          本ファイル内に、本番の Rte_COMRxInd_EngineInfo() と同じ処理
  *          （Com_ReceiveSignalGroupArray() で生バイト列を取得し
  *          E2EXf_InverseTransformP05() へ渡す）をテスト専用の
  *          RxIndicationCbk として定義し、そこから先（E2EXf.c/
@@ -51,7 +51,7 @@ namespace
 {
 
 // -----------------------------------------------------------------------
-// テスト専用の RxIndicationCbk。本番の Rte_COMCbk_EngineInfo() と同じ処理
+// テスト専用の RxIndicationCbk。本番の Rte_COMRxInd_EngineInfo() と同じ処理
 // （ファイル冒頭コメント参照）。呼び出し回数・直近の検証結果を記録する。
 // -----------------------------------------------------------------------
 uint32             g_CallbackCallCount = 0U;

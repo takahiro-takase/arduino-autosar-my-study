@@ -31,8 +31,8 @@
  *            AbsInfo    (CAN ID 0x110, DLC=6, 受信側で Check)
  *          Check() は 2026-08 に EngineInfo/AbsInfo の受信検証で実配線された
  *          （`src/Bsw/E2EXf/E2EXf.c` の `E2EXf_InverseTransformP05()` 経由、
- *          呼び出し元は `src/Rte/Rte.c` の `Rte_COMCbk_EngineInfo()`/
- *          `Rte_COMCbk_AbsInfo()`）。EngineHealthStatus 自体は TX のみのため
+ *          呼び出し元は `src/Rte/Rte.c` の `Rte_COMRxInd_EngineInfo()`/
+ *          `Rte_COMRxInd_AbsInfo()`）。EngineHealthStatus 自体は TX のみのため
  *          Check() の呼び出し元にはならない。
  *
  *          本ファイルが実装する Check() 自体は INITIAL 相当の初回受信の

@@ -20,7 +20,7 @@ E2E Transformer（E2EXf）はいずれも ARXML 設定からコード生成ツ�
 すら改変せず、独立した CDD 相当のモジュールとして追加しています。
 
 ```
-Rte_COMCbk_EngineInfo()/AbsInfo()（Rte.c、E2EXf_InverseTransformP05() 呼び出し直後）:
+Rte_COMRxInd_EngineInfo()/AbsInfo()（Rte.c、E2EXf_InverseTransformP05() 呼び出し直後）:
   E2EMon_NotifyCheckResultP05(checkStatus) を呼ぶ
     ← 実 AUTOSAR で言う「ARXML で設定した OnDataReceived 通知フックが RTE から
        生成され、独自 CDD の関数を呼ぶ」という接続方式を模したもの

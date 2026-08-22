@@ -156,7 +156,7 @@ Profile01 (`E2E_P01StatusType`) とはビットパターンが異なる点に注
   ホストテストのみで検証していた。その後 2026-08 に EngineInfo(RX,0x100)/
   AbsInfo(RX,0x110) を Profile01 から Profile05 へ移行し、`E2EXf_InverseTransformP05()`
   （`src/Bsw/E2EXf/E2EXf.c`）経由で `E2E_P05Check()` の実際の呼び出し元になった
-  （`src/Rte/Rte.c` の `Rte_COMCbk_EngineInfo()`/`Rte_COMCbk_AbsInfo()`）。
+  （`src/Rte/Rte.c` の `Rte_COMRxInd_EngineInfo()`/`Rte_COMRxInd_AbsInfo()`）。
   次に検証結果を確認する場合は、送信側（他 ECU 役の uds_tester/CAPL スクリプト）が
   `E2E_P05Protect` と同じ CRC16/カウンタ計算で組み立てたフレームを、実機の
   `E2E_P05Check` が正しく判定するかを実機ログで確認すること。

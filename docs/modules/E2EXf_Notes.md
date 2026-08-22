@@ -95,8 +95,8 @@ Com は EngineInfo/AbsInfo のペイロード内容を一切検証しません�
 更新した上で、`Com_IPduConfigType.RxIndicationCbk`（I-PDU ごとに `Com_PBCfg.c` で設定する
 汎用フック、Com 本体は中身を関知しない）を呼び出すだけです。
 
-実際の検証は `Rte` 層に置かれたグルー関数（`Rte_COMCbk_EngineInfo()` /
-`Rte_COMCbk_AbsInfo()`、`src/Rte/Rte.c`）が担い、`Com_ReceiveSignalGroupArray()` で
+実際の検証は `Rte` 層に置かれたグルー関数（`Rte_COMRxInd_EngineInfo()` /
+`Rte_COMRxInd_AbsInfo()`、`src/Rte/Rte.c`）が担い、`Com_ReceiveSignalGroupArray()` で
 I-PDU の生バイト列を取得した上で `E2EXf_InverseTransformP05()`（`src/Bsw/E2EXf/E2EXf.c`、
 中身は `E2E_P05Check()` への薄いラッパー）へ渡します。検証に合格した場合のみ、Rte 内部の
 ミラー変数（`Rte_EngineInfoMirror` / `Rte_AbsInfoMirror`）へ最新値を反映します。
@@ -107,7 +107,7 @@ I-PDU の生バイト列を取得した上で `E2EXf_InverseTransformP05()`（`s
 Com_RxIndication() (RxIndicationCbk が設定された I-PDU。現状 IPduId=0/1 が対象):
   RX バッファ・タイムアウトタイマを無条件に更新（Com は E2E を関知しない）
   RxIndicationCbk() を呼び出す
-    = Rte_COMCbk_EngineInfo() / Rte_COMCbk_AbsInfo() （Rte.c）
+    = Rte_COMRxInd_EngineInfo() / Rte_COMRxInd_AbsInfo() （Rte.c）
         Com_ReceiveSignalGroupArray() で生バイト列を取得
         E2EXf_InverseTransformP05() を呼び出す（CheckStatus 出力引数で生の6状態も受け取る）
           → E2E_P05Check() を実行

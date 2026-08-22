@@ -432,7 +432,7 @@ TX 側の「送信できたことの確認」を扱う機能です。
 
 ```
 Com_SignalConfigType (EngineState):
-  TxAckCbk = Rte_COMTxAck_EngineState
+  TxAckCbk = Rte_COMCbkTAck_EngineState
 
 Com_TxConfirmation(TxPduId=0/*MeterStatus*/, result=E_OK)  ← PduR から呼ばれる
   IsSignalGroup==0 のため、Com_ConfigPtr->Signals[] を走査
@@ -442,11 +442,11 @@ Com_TxConfirmation(TxPduId=0/*MeterStatus*/, result=E_OK)  ← PduR から呼ば
                           EngineState のみ）
 
 Com_IPduConfigType (WarningStatus_Tx):
-  TxAckCbk = Rte_COMTxAck_WarningStatus
+  TxAckCbk = Rte_COMCbkTAck_WarningStatus
 
 Com_TxConfirmation(TxPduId=1/*WarningStatus*/, result=E_OK)
   IsSignalGroup==1 のため、Signals[] は走査せず
-  ipdu->TxAckCbk（Rte_COMTxAck_WarningStatus）をグループ単位で 1 回だけ呼ぶ
+  ipdu->TxAckCbk（Rte_COMCbkTAck_WarningStatus）をグループ単位で 1 回だけ呼ぶ
   （RunLamp/FaultLamp/AbsLamp のどのメンバーが送信を引き起こしたかは問わない）
 ```
 
@@ -466,8 +466,8 @@ Signal Group（`WarningStatus`）のメンバーに `TxAckCbk` を設定した�
 `TxAckCbk` フィールドを新設し、`Com_TxConfirmation()` を「I-PDU が
 Signal Group なら `Com_IPduConfigType.TxAckCbk` をグループ単位で 1 回、
 そうでなければ従来どおりシグナル単位で走査」という分岐に是正しました。
-あわせて `WarningStatus` に `Rte_COMTxAck_WarningStatus`（`MeterStatus`/
-`EngineState` の `Rte_COMTxAck_EngineState` と対になる、Signal Group 単位の
+あわせて `WarningStatus` に `Rte_COMCbkTAck_WarningStatus`（`MeterStatus`/
+`EngineState` の `Rte_COMCbkTAck_EngineState` と対になる、Signal Group 単位の
 実装例）を追加し、この経路が実際に発動することを実機で確認できるようにして
 います。
 
@@ -505,7 +505,7 @@ TX I-PDU の送信完了のたびにそのコールバックが静かに誤発�
 シグナルの値がこの送信で変化したかどうかとは無関係です（SWS_Com_00468:
 "called immediately after successful transmission of the I-PDU containing
 the message"）。`EngineState` が変化していなくても、`MeterStatus` が周期
-フロア（MIXED モード）で再送されるたびに `Rte_COMTxAck_EngineState()` が
+フロア（MIXED モード）で再送されるたびに `Rte_COMCbkTAck_EngineState()` が
 呼ばれます。
 
 **割り込み安全性について（前節の教訓を踏まえた確認）**: `Com_TxConfirmation()`
@@ -518,7 +518,7 @@ the message"）。`EngineState` が変化していなくても、`MeterStatus` �
 
 **この機能は実際に発動するか**: 発動します。`MeterStatus` は `TxModeMode=MIXED`
 （値変化時の即時送信 + 周期フロア再送）のため、通常運用で確実に送信され続け、
-そのたびに `Com_TxConfirmation()` → `Rte_COMTxAck_EngineState()` が呼ばれます。
+そのたびに `Com_TxConfirmation()` → `Rte_COMCbkTAck_EngineState()` が呼ばれます。
 ログに `Com: TxConf id=0` の直後に `Rte: MeterStatus TX ack (EngineState)`
 が出力されることを実機で確認できます。`WarningStatus` も RunLamp（エンジン
 稼働中は常時 1）の変化だけで通常運用中に送信され続けるため同様に発動し、
@@ -607,7 +607,7 @@ Group）の両方に `RxAckCbk` を設定しました。
 
 ```
 Com_SignalConfigType (EngineOnFlag):
-  RxAckCbk = Rte_COMRxAck_EngineOnFlag
+  RxAckCbk = Rte_COMCbk_EngineOnFlag
 
 Com_RxIndication(RxPduId=0/*EngineInfo*/, ...)  ← PduR から呼ばれる
   バッファ格納後、シグナル単位デッドライン監視リセットループの中で
@@ -618,17 +618,17 @@ Com_RxIndication(RxPduId=0/*EngineInfo*/, ...)  ← PduR から呼ばれる
     のものすべてについて sig->RxAckCbk() を呼ぶ
 
 Com_IPduConfigType (AbsInfo_Rx):
-  RxAckCbk = Rte_COMRxAck_AbsInfo
+  RxAckCbk = Rte_COMCbk_AbsInfo
 
 Com_RxIndication(RxPduId=1/*AbsInfo*/, ...)
   IsSignalGroup==1 のため、シグナルループへ入る前に
-  ipdu->RxAckCbk（Rte_COMRxAck_AbsInfo）をグループ単位で 1 回だけ呼ぶ
+  ipdu->RxAckCbk（Rte_COMCbk_AbsInfo）をグループ単位で 1 回だけ呼ぶ
   （VehicleSpeed/BrakeActive/AbsActive のどれが変化したかは問わない）
 ```
 
 **なぜ `Com_RxIndication()` 内、`RxIndicationCbk` より前に発火させるか**:
 `AbsInfo` のような RX Signal Group では、シャドウバッファへの確定コピーを
-行う `Com_ReceiveSignalGroup()` は `RxIndicationCbk`（`Rte_COMCbk_AbsInfo()`）
+行う `Com_ReceiveSignalGroup()` は `RxIndicationCbk`（`Rte_COMRxInd_AbsInfo()`）
 の内部から、**E2E 検証成功後にのみ**呼ばれます。つまり E2E 検証に失敗した
 フレームでは一度も呼ばれません。ここに `Com_CbkRxAck` を紐付けると、
 「バッファに格納した」という Com 自身の事実と無関係に、上位層（E2E）の
@@ -641,16 +641,28 @@ Signal Group は短フレーム破棄（[SWS_Com_00575]、受信長が DLC 未�
 この発火時点に到達していれば必ずグループ全体が格納済みであり、
 グループレベルでの発火に曖昧さはありません。
 
-**命名の衝突と `Rte_COMRxAck_*` を選んだ理由**: 実 AUTOSAR が生成する RTE
-関数名は `Rte_COMCbk_<sn>`/`<sg>` ですが、本プロジェクトは**この名前を
-既に `RxIndicationCbk` 向けに使っています**（`Rte_COMCbk_EngineInfo`/
-`Rte_COMCbk_AbsInfo`/`Rte_COMCbk_SecureCommand`、いずれも E2E 検証等を行う
-別の汎用フック）。そのまま実 AUTOSAR の命名規則に従うと、全く別の意味を持つ
-2 つのコールバックが同じ関数名を要求することになり衝突します。TX 側で
-`TxAckCbk` を実 AUTOSAR の `Rte_COMCbkTAck_<sn>/<sg>` ではなく本プロジェクト
-独自の `Rte_COMTxAck_*` と命名した前例に倣い、RX 側も `Rte_COMRxAck_<name>`
-を用いています。実 AUTOSAR の生成規則からの意図的な逸脱であり、
-仕様（SWS_Com_00555 の動作要求）からの逸脱ではありません。
+**命名の衝突と解消（2026-08 是正）**: 実 AUTOSAR が生成する RTE 関数名は
+`Rte_COMCbk_<sn>`/`<sg>` ですが、当初この名前は既に `RxIndicationCbk`
+向けに使われていました（旧 `Rte_COMCbk_EngineInfo`/`Rte_COMCbk_AbsInfo`/
+`Rte_COMCbk_SecureCommand`、いずれも E2E 検証等を行う別の汎用フック）。
+そのまま実 AUTOSAR の命名規則に従うと、`AbsInfo` のように Signal Group 名と
+I-PDU 名が一致するケースで、全く別の意味を持つ 2 つのコールバックが同じ
+関数名を要求することになり衝突します。当初はこれを避けるため `TxAckCbk`
+（`Rte_COMCbkTAck_<sn>/<sg>` の代わりに `Rte_COMTxAck_*`）と同じ発想で、
+RX 側も `Rte_COMRxAck_<name>` という独自命名で回避していました。
+
+これは AUTOSAR IF のシグネチャ（関数名）を仕様書に一致させたいという方針の
+もとで是正しました。衝突の根本原因は `RxIndicationCbk` 側が
+`Com_CbkRxAck`/`Com_CbkTxAck` 等とは異なり実 AUTOSAR の標準コールバックでは
+ない（本プロジェクト独自の I-PDU 単位汎用フック）ことなので、**衝突を
+避けるために名前を変えるべきは `RxIndicationCbk` 側**と判断し、こちらを
+`Rte_COMRxInd_<name>`（`Rte_COMRxInd_EngineInfo`/`Rte_COMRxInd_AbsInfo`/
+`Rte_COMRxInd_SecureCommand`）へ改名しました。これにより空いた
+`Rte_COMCbk_<sn>`/`<sg>` を `Com_CbkRxAck` 側が仕様どおりに使えるように
+なり（`Rte_COMCbk_EngineOnFlag`/`Rte_COMCbk_AbsInfo`）、あわせて
+`TxAckCbk`/`TxTOutCbk` も仕様どおりの `Rte_COMCbkTAck_<sn>/<sg>`/
+`Rte_COMCbkTxTOut_<sn>/<sg>` へ改名しています（詳細・全対応表は本節末尾の
+「AUTOSAR IF シグネチャ整合（2026-08）」参照）。
 
 **部分受信時のゲーティング**: 非 Signal Group シグナルの `RxAckCbk` は、
 そのシグナルの全ビット範囲が実際に受信できたバイト数（`recvLen`）以内に
@@ -846,9 +858,9 @@ Signal Group への適用有無に関わらず活きています。
 ```
 Com_RxIndication(AbsInfo)  ← CAN フレーム受信のたびに呼ばれる
   Com_RxBuffer[1] を更新、Com_RxTimedOut[1] = 0 にリセット
-  RxIndicationCbk（Rte_COMCbk_AbsInfo）を呼ぶ
+  RxIndicationCbk（Rte_COMRxInd_AbsInfo）を呼ぶ
 
-Rte_COMCbk_AbsInfo()
+Rte_COMRxInd_AbsInfo()
   Com_ReceiveSignalGroupArray(1, buf) で生バイト列を取得 → E2E 検証
   検証 OK なら:
     Com_ReceiveSignalGroup(1U)
@@ -878,7 +890,7 @@ Signal Group という概念が送受信どちらの向きでも同じ形（ア�
 
 **この実装で実際に不整合が起きる場面はあるか**: 正直に言うと、現状はありません。
 `Com_ReceiveSignalGroup(1U)` の呼び出しと、それに続く 3 回の `Com_ReceiveSignal()`
-呼び出しはすべて `Rte_COMCbk_AbsInfo()` という 1 つの同期呼び出し列の中で行われ、
+呼び出しはすべて `Rte_COMRxInd_AbsInfo()` という 1 つの同期呼び出し列の中で行われ、
 かつこの関数自体が `Com_RxIndication()` からフレーム受信直後・`Com_RxTimedOut`
 リセット直後に呼ばれます。したがってこのシーケンスの実行中にタイムアウトが
 新規発生することはなく（本実装は非プリエンプティブなため、他のタスクがこの間に
@@ -925,7 +937,7 @@ SUBSTITUTE なら 0xFFFF のような、通常運用では絶対に出現しな�
 
 **この実装で実際に SUBSTITUTE が発動する場面はあるか**: 正直に言うと、
 現状はありません。`VehicleSpeed` を読む `Com_ReceiveSignal()` 呼び出しは
-`Rte_COMCbk_AbsInfo()` の中の 1 箇所のみで、これは `Com_RxIndication()` から
+`Rte_COMRxInd_AbsInfo()` の中の 1 箇所のみで、これは `Com_RxIndication()` から
 フレーム受信直後・`Com_RxTimedOut` リセット直後に同期的に呼ばれるため
 （RX Signal Group 節で述べた理由と全く同じ）、この呼び出し自体がタイムアウト中に
 実行されることはありません。加えて、この経路はそもそも E2E 検証済みの値を
@@ -1006,7 +1018,7 @@ REPLACE を実装しなかった理由と全く同じです。実 AUTOSAR の RE
 
 **この機能は実際に発動するか**: これまでの `SUBSTITUTE`/RX Signal Group とは
 違い、正直に言うと **これは実際に発動します**。`CoolantTemp` を読む
-`Com_ReceiveSignal()` は `Rte_COMCbk_EngineInfo()`（RxIndicationCbk）内で、
+`Com_ReceiveSignal()` は `Rte_COMRxInd_EngineInfo()`（RxIndicationCbk）内で、
 E2E 検証に成功した**すべての** `EngineInfo` フレームに対して毎回呼ばれます。
 すなわち、送信元が `CoolantTemp=0xFF` を含む（E2E CRC/Counter は正しい）
 フレームを送信しさえすれば、この無効値検知ロジックは通常運用の経路で確実に
@@ -1025,7 +1037,7 @@ EngineInfo プリセットに「水温センサ異常 (0xFF)」を追加済み�
 WDT（ウォッチドッグタイマ）リセットが発生しました。
 
 原因は次の通りです。`CoolantTemp` を読む `Com_ReceiveSignal()` の呼び出しは、
-`Rte_COMCbk_EngineInfo()` 内の `SchM_Enter_Rte_MIRROR_EXCLUSIVE_AREA()` /
+`Rte_COMRxInd_EngineInfo()` 内の `SchM_Enter_Rte_MIRROR_EXCLUSIVE_AREA()` /
 `SchM_Exit_Rte_MIRROR_EXCLUSIVE_AREA()` の間（`Rte_EngineInfoMirror` を
 `Rte_Read_*` との競合から守るための排他区間）で行われます。この排他エリアの
 実体は Arduino の `noInterrupts()`/`interrupts()`、すなわち**グローバル割り込み
@@ -1077,10 +1089,10 @@ RX シグナル向けに `COM_FILTER_NEW_IS_WITHIN` を追加しました。
 （本プロジェクト想定エンジンのレッドライン相当 rpm）を設定しました。
 `VehicleSpeed`（`ComRxDataTimeoutAction`節で既出）ではなくこちらを選んだ
 理由は、`VehicleSpeed` は RX Signal Group メンバーで `Com_ReceiveSignal()`
-が `Rte_COMCbk_AbsInfo()`（フレーム受信直後の 1 箇所）でしか実際には
+が `Rte_COMRxInd_AbsInfo()`（フレーム受信直後の 1 箇所）でしか実際には
 呼ばれず、既に「SUBSTITUTE は現状のアーキテクチャでは実際には発動しない」
 という限界が記録済みだったのに対し、`EngineSpeed` は非グループシグナルで
-`Rte_COMCbk_EngineInfo()` から毎フレーム実際に `Com_ReceiveSignal()` が
+`Rte_COMRxInd_EngineInfo()` から毎フレーム実際に `Com_ReceiveSignal()` が
 呼ばれるため、このフィルタが確実に効くからです。
 
 ```c
@@ -1095,7 +1107,7 @@ discard that signal and shall not process it.
 （`FilterRejectCbk`、実 AUTOSAR の `ComNotification` 相当）の実呼び出しは、
 `ComDataInvalidAction`/`InvalidNotificationCbk` と全く同じ理由・同じ仕組みで
 次回 `Com_MainFunction()` まで遅延します（`Com_ReceiveSignal()` は
-`Rte_COMCbk_EngineInfo()` の `SchM_Enter/Exit_Rte_MIRROR_EXCLUSIVE_AREA()`
+`Rte_COMRxInd_EngineInfo()` の `SchM_Enter/Exit_Rte_MIRROR_EXCLUSIVE_AREA()`
 内側から呼ばれるため、その場でコールバックを直接呼ぶと WDT リセットを
 引き起こしうる教訓を踏襲）。
 
@@ -1267,6 +1279,40 @@ dispatch/confirmation の同期性に依存しない設計にしている**: `Ca
 同じ位置づけ——仕様忠実性とユニットテストによる検証を目的とした実装であり、
 実機での動作確認は行っていません。
 
+## AUTOSAR IF シグネチャ整合（2026-08）
+
+`Com_CbkTxAck`/`Com_CbkTxErr`/`Com_CbkTxTOut`/`Com_CbkRxAck` の4系統は、
+過去のセッションで RTE 生成名を実 AUTOSAR の命名規則から意図的にずらして
+実装していました（`TxAckCbk`/`TxTOutCbk` は「本プロジェクト独自の短縮形に
+揃える」、`RxAckCbk` は「`RxIndicationCbk` が既に `Rte_COMCbk_<name>` を
+使っていたための衝突回避」）。ユーザーから「AUTOSAR IF のシグネチャは
+仕様書と一致させたい」という方針が示されたため、ローカルの
+`docs/autosar/4.3.1/AUTOSAR_SWS_COM.pdf`（`pdftotext` で全文抽出し各 SWS 項番を
+直接確認）を典拠に、全 RTE 生成名を仕様どおりへ是正しました。
+
+| コールバック | SWS 項番 | 仕様書が定める RTE 名 | 旧実装名 | 新実装名 |
+|---|---|---|---|---|
+| `Com_CbkTxAck` | [SWS_Com_00468] | `Rte_COMCbkTAck_<sn>`/`<sg>` | `Rte_COMTxAck_*` | `Rte_COMCbkTAck_*`（仕様どおり） |
+| `Com_CbkTxErr` | [SWS_Com_00491] | `Rte_COMCbkTErr_<sn>`/`<sg>` | （本番未使用） | （変更なし、本番未使用のまま） |
+| `Com_CbkTxTOut` | [SWS_Com_00554] | `Rte_COMCbkTxTOut_<sn>`/`<sg>` | `Rte_COMTxTOut_*` | `Rte_COMCbkTxTOut_*`（仕様どおり） |
+| `Com_CbkRxAck` | [SWS_Com_00555] | `Rte_COMCbk_<sn>`/`<sg>` | `Rte_COMRxAck_*` | `Rte_COMCbk_*`（仕様どおり） |
+
+`Com_CbkRxAck` が仕様どおりの `Rte_COMCbk_<sn>/<sg>` を名乗るには、その名前を
+先に使っていた `RxIndicationCbk`（実 AUTOSAR の標準コールバックではない、
+本プロジェクト独自の I-PDU 単位汎用フック）側を退避させる必要がありました。
+`RxIndicationCbk` は仕様上の命名規則を持たない独自フックなので、衝突を
+避けるための改名はこちら側が担うのが筋と判断し、`Rte_COMRxInd_<name>`
+（`Rte_COMRxInd_EngineInfo`/`Rte_COMRxInd_AbsInfo`/`Rte_COMRxInd_SecureCommand`）
+へ改名しました。
+
+**副産物として見つかった未実装のコールバック**: この調査で `Com_CbkRxTOut`
+（[SWS_Com_00556]、RX 側デッドライン監視のタイムアウト通知、RTE 名
+`Rte_COMCbkRxTOut_<sn>/<sg>`）という、`Com_CbkTxTOut` と対をなす仕様上の
+コールバックが未実装であることも判明しました。現状の受信デッドライン監視
+（`Com_RxTimedOut[]`）は内部フラグを立てて `Com_ReceiveSignal()` が
+`E_NOT_OK` を返すのみで、明示的なコールバック通知は行っていません。
+命名整合とは独立した機能ギャップのため、対応するかどうかは別途判断します。
+
 ## update-bit の受信側判定（discard）
 
 update-bit の概要、および TX 側（非 Signal Group・Signal Group）のセット/クリアの
@@ -1324,7 +1370,7 @@ SecOC 検証に成功した `ImmobilizerCmd`（RX、CAN 0x120、KeyFobEcu 想定
 
 ```
 KeyFobEcu → SecOC（MAC・フレッシュネス検証） → Com_RxIndication(ComRxIPduId=2)
-  → Rte_COMCbk_SecureCommand()（ログのみ、既存のデモ用グルー）
+  → Rte_COMRxInd_SecureCommand()（ログのみ、既存のデモ用グルー）
   → Com_GatewayRoute()（新規）
       RX バッファから ImmobilizerCmd の生値をアンパック
       → Com_SendSignal(COM_SIGNAL_IMMOBILIZER_STATUS, &value)
@@ -1345,7 +1391,7 @@ ComDataInvalidAction 等のゲートを経由しなくても）安全です。�
 構成を体現しています。
 
 （対照的に `EngineInfo`/`AbsInfo` は E2E 保護されていますが、E2E 検証は
-`RxIndicationCbk`（`Rte_COMCbk_EngineInfo` 等）側の責務であり、`Com_RxBuffer`
+`RxIndicationCbk`（`Rte_COMRxInd_EngineInfo` 等）側の責務であり、`Com_RxBuffer`
 自体は E2E 検証の成否に関わらず常に最新の受信バイト列を保持します。この
 違いにより、EngineSpeed 等を同じ方式でゲートウェイすると **E2E 未検証の
 値を転送してしまう**リスクがあるため、今回は意図的に対象から外しています。）
