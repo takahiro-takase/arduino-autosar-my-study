@@ -456,6 +456,17 @@ typedef enum
 //               コンテナとして存在する）。非 Signal Group の I-PDU では未使用
 //               （Com_SignalConfigType.TxAckCbk 側のシグナル単位コールバックを
 //               使うこと）。NULL 可（通知不要なら未設定でよい）。
+//   TxErrCbk    : Signal Group（IsSignalGroup=1）専用。TxAckCbk と対になる
+//               エラー通知（Com_CbkTxErr、SWS_Com_00491: "This callback
+//               function corresponds to Rte_COMCbkTErr_<sn> or
+//               Rte_COMCbkTErr_<sg> respectively."）。非 NULL なら、
+//               この I-PDU が「送信済み・未確認」のまま Com_IpduGroupStop()
+//               で停止されたとき、グループ単位で 1 回だけ呼ばれる
+//               （ECUC_Com_00499 ComErrorNotification も ComNotification と
+//               同様 ComSignal・ComSignalGroup 双方に独立して存在する）。
+//               非 Signal Group の I-PDU では未使用（Com_SignalConfigType.
+//               TxErrCbk 側のシグナル単位コールバックを使うこと）。NULL 可
+//               （通知不要なら未設定でよい）。
 // -------------------------------------------------------
 typedef struct
 {
@@ -475,6 +486,7 @@ typedef struct
     void (*RxIndicationCbk)(void);
     void (*TxTransformCbk)(uint8* Data, uint8 Length);
     void (*TxAckCbk)(void);
+    void (*TxErrCbk)(void);
 } Com_IPduConfigType;
 
 // -------------------------------------------------------
@@ -606,9 +618,14 @@ typedef enum
 //               たびに Com_TxConfirmation() から呼ばれる（Com_CbkTxAck、
 //               SWS_Com_00468 相当）。このシグナル自体の値がその送信で
 //               変化したかどうかは問わない。NULL 可（通知不要なら未設定）。
-//   TxErrCbk    : TX シグナルのみ使用。非 NULL なら、このシグナルが属する
-//               I-PDU が「送信済み・未確認」（PduR_Transmit() には渡したが
-//               対応する Com_TxConfirmation() がまだ届いていない）状態のまま
+//   TxErrCbk    : 非 Signal Group の TX シグナルのみ使用（所属 I-PDU の
+//               IsSignalGroup=0 の場合のみ Com_IpduGroupStop() が参照する。
+//               Signal Group メンバーに設定しても呼ばれない——グループの
+//               通知は Com_IPduConfigType.TxErrCbk 側でグループ単位に 1 回だけ
+//               行う。2026-08 対応、TxAckCbk と同時に是正。詳細は同フィールドの
+//               コメント参照）。非 NULL なら、このシグナルが属する I-PDU が
+//               「送信済み・未確認」（PduR_Transmit() には渡したが対応する
+//               Com_TxConfirmation() がまだ届いていない）状態のまま
 //               Com_IpduGroupStop() で停止されたときに呼ばれる
 //               （Com_CbkTxErr、SWS_Com_00491/SWS_Com_00479 相当。
 //               "called in case the transmission is not possible because

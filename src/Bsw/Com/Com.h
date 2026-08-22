@@ -224,9 +224,15 @@ void Com_IpduGroupStart(Com_IpduGroupIdType IpduGroupId, uint8 initialize);
  *          TX I-PDU は保留中の送信要求をキャンセルする（[SWS_Com_00777]）。
  *          さらに、PduR へは引き渡し済み（実送信済み）だが対応する
  *          `Com_TxConfirmation()` がまだ届いていない（未確認の）TX I-PDU が
- *          あれば、そのシグナル/シグナルグループの `TxErrCbk`
- *          （Com_CbkTxErr 相当）を即座に呼ぶ（[SWS_Com_00479]/
- *          [SWS_Com_00491]）。
+ *          あれば、その `TxErrCbk`（Com_CbkTxErr 相当）を即座に呼ぶ
+ *          （[SWS_Com_00479]/[SWS_Com_00491]）。実 AUTOSAR は signal 単位/
+ *          signal group 単位で別々のコールバック名（Rte_COMCbkTErr_<sn>/<sg>）
+ *          を持てるため（SWS_Com_00491 "corresponds to Rte_COMCbkTErr_<sn>
+ *          or Rte_COMCbkTErr_<sg> respectively"）、Signal Group なら
+ *          `Com_IPduConfigType.TxErrCbk` をグループ単位で 1 回、非 Signal
+ *          Group なら従来どおり `Com_SignalConfigType.TxErrCbk` をシグナル
+ *          単位で呼ぶ（TxAckCbk/Com_TxConfirmation() と同じ区別。詳細は
+ *          Com.c の Com_IpduGroupStop() 実装コメント参照）。
  *          `Com_SendSignal()`/`Com_ReceiveSignal()` 自体は停止中でも内部
  *          バッファを更新・参照できる（[SWS_Com_00334]）。
  *
@@ -265,6 +271,15 @@ const uint8* Com_Test_GetTxBuffer(Com_IPduIdType ipduId);
  *  立っている（[「Rx 処理」の「デッドライン監視」](../../README.md#rx-processing-timeout)
  *  参照）。範囲外の `SignalId` は 0 を返す。 */
 uint8 Com_Test_GetSigTimedOut(Com_SignalIdType SignalId);
+
+/** [テスト専用] TX I-PDU の「送信済み・未確認」フラグ（Com_TxConfPending
+ *  [ipduId]）を直接セットする。Com_IpduGroupStop() の TxErrCbk（グループ単位
+ *  是正、SWS_Com_00491）を検証するには、実際に PduR_Transmit() 成功後・
+ *  Com_TxConfirmation() 到達前という狭い区間を作り出す必要があるが、
+ *  Signal Group の PduR/CanIf ルーティングをテスト専用に用意するのは
+ *  過剰なため、この内部フラグを直接操作できるようにする。範囲外の
+ *  `ipduId` は無視する。 */
+void Com_Test_SetTxConfPending(Com_IPduIdType ipduId, uint8 value);
 #endif
 
 #ifdef __cplusplus
