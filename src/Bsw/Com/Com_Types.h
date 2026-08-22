@@ -446,6 +446,16 @@ typedef enum
 //               （[SWS_Com_00777]）。Com_SendSignal()/Com_ReceiveSignal() 自体は
 //               停止中でも内部バッファを更新・参照できる（[SWS_Com_00334]、
 //               「値のセット」と「送信/受信タイミング」は独立した責務のため）。
+//   TxAckCbk    : Signal Group（IsSignalGroup=1）専用。非 NULL なら、この
+//               I-PDU の送信が成功するたびに Com_TxConfirmation() から
+//               グループ単位で 1 回だけ呼ばれる（Com_CbkTxAck、
+//               SWS_Com_00468: "It can be configured for signals and signal
+//               groups. Com_CbkTxAck corresponds to Rte_COMCbkTAck_<sn> or
+//               Rte_COMCbkTAck_<sg> respectively."。ECUC_Com_00498
+//               ComNotification は ComSignal・ComSignalGroup 双方に独立した
+//               コンテナとして存在する）。非 Signal Group の I-PDU では未使用
+//               （Com_SignalConfigType.TxAckCbk 側のシグナル単位コールバックを
+//               使うこと）。NULL 可（通知不要なら未設定でよい）。
 // -------------------------------------------------------
 typedef struct
 {
@@ -464,6 +474,7 @@ typedef struct
     Com_IpduGroupIdType IpduGroupId;
     void (*RxIndicationCbk)(void);
     void (*TxTransformCbk)(uint8* Data, uint8 Length);
+    void (*TxAckCbk)(void);
 } Com_IPduConfigType;
 
 // -------------------------------------------------------
@@ -586,11 +597,15 @@ typedef enum
 //               TimeoutNotificationCbk は非 NULL ならこのシグナルの
 //               デッドライン超過を新規検出した瞬間に Com_MainFunction() から
 //               呼ばれる（Com_CbkTimeout 相当）。NULL 可（通知不要なら未設定）。
-//   TxAckCbk    : TX シグナルのみ使用。非 NULL なら、このシグナルが属する
-//               I-PDU の送信が成功するたびに Com_TxConfirmation() から
-//               呼ばれる（Com_CbkTxAck、SWS_Com_00468 相当）。このシグナル
-//               自体の値がその送信で変化したかどうかは問わない。NULL 可
-//               （通知不要なら未設定でよい）。
+//   TxAckCbk    : 非 Signal Group の TX シグナルのみ使用（所属 I-PDU の
+//               IsSignalGroup=0 の場合のみ Com_TxConfirmation() が参照する。
+//               Signal Group メンバーに設定しても呼ばれない——グループの
+//               通知は Com_IPduConfigType.TxAckCbk 側でグループ単位に 1 回だけ
+//               行う。2026-08 対応、詳細は同フィールドのコメント参照）。
+//               非 NULL なら、このシグナルが属する I-PDU の送信が成功する
+//               たびに Com_TxConfirmation() から呼ばれる（Com_CbkTxAck、
+//               SWS_Com_00468 相当）。このシグナル自体の値がその送信で
+//               変化したかどうかは問わない。NULL 可（通知不要なら未設定）。
 //   TxErrCbk    : TX シグナルのみ使用。非 NULL なら、このシグナルが属する
 //               I-PDU が「送信済み・未確認」（PduR_Transmit() には渡したが
 //               対応する Com_TxConfirmation() がまだ届いていない）状態のまま

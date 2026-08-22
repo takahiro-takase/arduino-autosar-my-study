@@ -63,6 +63,8 @@
  *                COM_TX_PERIOD_WARNINGSTATUS_TRUE_FLOOR_MS 間隔で周期フロア送信する。
  *                byte[0] bit3 にグループ単位の update-bit（UpdateBitPosition=3）
  *                を持ち、周期フロア再送か実際の変化かを受信側が区別できる。
+ *                TxAckCbk=Rte_COMTxAck_WarningStatus（Signal Group 単位、
+ *                送信成功のたびグループ全体で 1 回だけ呼ばれる）
  *              Signal 7: RunLamp        1 bit  BitPos= 0  BigEndian  TransferProperty=TRIGGERED_ON_CHANGE
  *              Signal 8: FaultLamp      1 bit  BitPos= 1  BigEndian  TmsContributor=1  TransferProperty=TRIGGERED_ON_CHANGE
  *              Signal 9: AbsLamp        1 bit  BitPos= 2  BigEndian  TmsContributor=1  TransferProperty=TRIGGERED_ON_CHANGE
@@ -168,6 +170,7 @@ extern void Rte_COMTransform_E2EHealthStatus(uint8* Data, uint8 Length);
 extern void Rte_COMInvalidNotify_CoolantTemp(void);
 extern void Rte_COMFilterReject_EngineSpeed(void);
 extern void Rte_COMTxAck_EngineState(void);
+extern void Rte_COMTxAck_WarningStatus(void);
 extern void Rte_COMCbk_SecureCommand(void);
 
 /* -----------------------------------------------------------------------
@@ -322,6 +325,10 @@ static const Com_IPduConfigType Com_TxIPduConfigData[COM_TX_IPDU_COUNT] = {
          * 変化したことによる送信とを受信側が区別できる（MeterStatus/
          * EngineState の非 Signal Group 版と対になる、Signal Group 単位の
          * 実装例）。詳細は README.md の「Update Bit」節を参照。
+         * TxAckCbk（Signal Group 単位、SWS_Com_00468）: Rte_COMTxAck_WarningStatus
+         * を設定し、グループ全体の送信成功をまとめて 1 回通知する
+         * （MeterStatus/EngineState の TxAckCbk と対になる、Signal Group
+         * 単位の実装例。2026-08 追加）。
          * --------------------------------------------------------------- */
         .IPduId    = 1U,  /* DaVinci: ComIPduHandleId  - I-PDU 識別番号 */
         .DLC       = 1U,  /* DaVinci: ComIPduLength    - I-PDU バイト長
@@ -338,7 +345,8 @@ static const Com_IPduConfigType Com_TxIPduConfigData[COM_TX_IPDU_COUNT] = {
         .TxModeModeTrue = COM_TX_MODE_MIXED,  /* DaVinci: ComTxModeTrue
                                                *          (TMS true: FAULT/ABS 点灯中) */
         .TxPeriodMsTrue = COM_TX_PERIOD_WARNINGSTATUS_TRUE_FLOOR_MS,
-        .MinDelayMs     = COM_TX_MIN_DELAY_WARNINGSTATUS_MS /* DaVinci: ComMinimumDelayTime */
+        .MinDelayMs     = COM_TX_MIN_DELAY_WARNINGSTATUS_MS, /* DaVinci: ComMinimumDelayTime */
+        .TxAckCbk       = Rte_COMTxAck_WarningStatus /* DaVinci: ComNotification (ComSignalGroup) */
     },
     {
         /* ---------------------------------------------------------------
