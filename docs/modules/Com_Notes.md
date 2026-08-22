@@ -381,6 +381,41 @@ the message"）。`EngineState` が変化していなくても、`MeterStatus` �
 `Com: TxConf id=1` の直後に `Rte: WarningStatus TX ack (group)` が
 （RunLamp/FaultLamp/AbsLamp どれが変化したかによらず）1 回だけ出力されます。
 
+**対になる `TxErrCbk`（Com_CbkTxErr）も同時に是正（2026-08）**: `Com_CbkTxAck`
+と全く同じ理由で、`Com_CbkTxErr`（SWS_Com_00491: "corresponds to
+Rte_COMCbkTErr_<sn> or Rte_COMCbkTErr_<sg> respectively"）も signal 単位/
+signal group 単位で別名を持てます。`Com_IpduGroupStop()`（送信済み・未確認の
+まま I-PDU Group が停止された場合に発火、[SWS_Com_00479]/[SWS_Com_00491]）も
+`TxAckCbk`と同じくメンバーシグナル単位で走査する簡略実装だったため、
+`Com_IPduConfigType` にグループ単位の `TxErrCbk` を追加し、`TxAckCbk` と同じ
+`IsSignalGroup` 分岐で是正しました。
+
+**この機能は実際に発動するか**: 発動しません。`Com_IpduGroupStop()` の対象に
+なるのは `IpduGroupId != COM_IPDU_GROUP_NONE` の I-PDU のみですが、本設定で
+実際に I-PDU Group（`COM_IPDU_GROUP_TELEMETRY`）に所属するのは
+`E2EHealthStatus`（非 Signal Group）だけで、唯一の Signal Group である
+`WarningStatus` は `IpduGroupId=COM_IPDU_GROUP_NONE`（常時有効）です。
+つまり本プロジェクトの現在の構成では、Signal Group の `TxErrCbk` が実際に
+呼ばれる経路が構造的に存在しません（`WarningStatus` を停止可能な I-PDU
+Group へ所属させる設定変更が必要ですが、それ自体が「常時有効なダッシュボード
+表示」という意図と反するため見送っています）。`ComRxDataTimeoutAction` の
+REPLACE 等と同じく、動機は実利より仕様忠実性であり、修正の正しさは
+`test/test_chain/Bsw_TxChain_test.cpp` のユニットテスト（Signal Group 用の
+I-PDU Group を持つテスト専用設定で `Com_IpduGroupStop()` を直接呼ぶ）でのみ
+検証しています。
+
+**共通配送ロジックへの集約（2026-08、`/code-review` 指摘）**: `TxAckCbk`
+（`Com_TxConfirmation()`）と `TxErrCbk`（`Com_IpduGroupStop()`）は「Signal
+Group ならグループ単位で 1 回、そうでなければ TX シグナル単位で走査」という
+配送ロジックが完全に同型であるにもかかわらず、対応する 2 つの関数へ別々に
+実装していました。レビューで「将来 3 つ目の類似コールバックを追加する際、
+片方だけ修正して他方を直し忘れるリスクがある」と指摘され、`Com.c` 内の
+`Com_InvokeTxNotification()` ヘルパーへ集約しました。呼び出し元は「グループ
+単位のコールバック値」と「シグナルから対象コールバックを取り出す 1 行の
+アクセサ関数（`Com_GetSignalTxAckCbk`/`Com_GetSignalTxErrCbk`）」を渡すだけ
+になり、配送ロジック自体は 1 箇所のみで保守します（挙動そのものは変わって
+いません）。
+
 ## Update Bit（送信側が実際に更新したかを示す1ビット）
 
 これまでの機能はいずれも「値そのもの」（無効値パターン、タイムアウト、送信成功）

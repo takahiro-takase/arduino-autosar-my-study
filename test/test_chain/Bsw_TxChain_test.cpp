@@ -285,17 +285,51 @@ const Com_IPduConfigType kTestNonGroupTmsIPdu = {
     /* TxTransformCbk */   NULL
 };
 
+// -----------------------------------------------------------------------
+// SWS_Com_00491（Signal Group の TxErrCbk はグループ単位で 1 回だけ呼ばれる）
+// 検証用。Com_IpduGroupStop() が TxErrCbk を発火するのは「送信済み・未確認の
+// まま所属 I-PDU Group が停止された」場合のみのため、COM_IPDU_GROUP_NONE
+// ではなく実際に停止可能なテスト専用 IpduGroupId を割り当てる
+// （kTestStoppableGroupId、本番の Com_Cfg.h の値とは無関係なテストローカル値）。
+// -----------------------------------------------------------------------
+static const Com_IpduGroupIdType kTestStoppableGroupId = 5U;
+
+static uint8_t s_groupTxErrCount = 0U;
+static void TestGroupTxErrCbk(void) { s_groupTxErrCount++; }
+
+const Com_IPduConfigType kTestErrGroupIPdu = {
+    /* IPduId */           3U,
+    /* DLC */              1U,
+    /* PduRId */           3U,   // 本テストは Com_MainFunction()/PduR まで進めないため未使用
+    /* FirstTimeoutMs */   0U,
+    /* TimeoutMs */        0U,
+    /* IsSignalGroup */    1U,
+    /* TxModeMode */       COM_TX_MODE_DIRECT,
+    /* TxPeriodMs */       0U,
+    /* TxModeModeTrue */   COM_TX_MODE_DIRECT,
+    /* TxPeriodMsTrue */   0U,
+    /* MinDelayMs */       0U,
+    /* UpdateBitPosition */ 0xFFU,
+    /* IpduGroupId */      kTestStoppableGroupId,
+    /* RxIndicationCbk */  NULL,
+    /* TxTransformCbk */   NULL,
+    /* TxAckCbk */         NULL,
+    /* TxErrCbk */         TestGroupTxErrCbk
+};
+
 const Com_SignalConfigType kTestSignals[] = {
     kTestSignal, kTestTmsPendingSignal,
     kTestNonGroupTmsContributorSignal, kTestNonGroupTmsCalledSignal
 };
-const Com_IPduConfigType   kTestTxIPdus[] = { kTestTxIPdu, kTestTmsGroupIPdu, kTestNonGroupTmsIPdu };
+const Com_IPduConfigType   kTestTxIPdus[] = {
+    kTestTxIPdu, kTestTmsGroupIPdu, kTestNonGroupTmsIPdu, kTestErrGroupIPdu
+};
 
 const Com_ConfigType kTestComConfig = {
     /* RxIPdus */       NULL,
     /* RxIPduCount */   0U,
     /* TxIPdus */       kTestTxIPdus,
-    /* TxIPduCount */   3U,
+    /* TxIPduCount */   4U,
     /* Signals */       kTestSignals,
     /* SignalCount */   4U,
     /* GwMappings */    NULL,
@@ -354,6 +388,7 @@ protected:
         PduR_Init(&kTestPduRConfig);
         Com_Init(&kTestComConfig);
         s_groupTxAckCount = 0U;
+        s_groupTxErrCount = 0U;
 
         FakeDetHw_LogSuppressed = 0U;  // ここから各 TEST_F の実行(Act)区間
     }
@@ -517,6 +552,42 @@ TEST_F(Bsw_TxChain_Test, TxConfirmation_NG_NonGroupIPduDoesNotCallGroupAckCbk)
 
     /* 評価 (Assert): 無関係な Signal Group（IPduId=1）の TxAckCbk は呼ばれない */
     EXPECT_EQ(s_groupTxAckCount, 0U);
+}
+
+// ------------------------------------------------------------
+// SWS_Com_00491: Signal Group の TxErrCbk はグループ単位で 1 回だけ呼ばれる
+// （Rte_COMCbkTErr_<sg> 相当）ことの回帰テスト。TxAckCbk と全く同じ理由で
+// 当初はメンバーシグナル単位の走査だった。本番の Com_PBCfg.c では
+// WarningStatus（唯一の Signal Group）が IpduGroupId=COM_IPDU_GROUP_NONE
+// （常時有効）のため Com_IpduGroupStop() の対象にならず、実機では発動しない
+// （docs/modules/Com_Notes.md 参照）。このユニットテストのみが検証手段となる。
+// ------------------------------------------------------------
+TEST_F(Bsw_TxChain_Test, IpduGroupStop_OK_CallsSignalGroupErrCbkExactlyOnceWhenUnconfirmed)
+{
+    /* 準備 (Arrange): 「PduR へは渡した（実送信済み）が Com_TxConfirmation()
+     * がまだ届いていない」状態を直接作る（Com_MainFunction()/PduR を経由
+     * しないための test-only setter、Com.h 参照）。 */
+    Com_Test_SetTxConfPending(3U, 1U);
+
+    /* 実行 (Act): kTestErrGroupIPdu（IPduId=3）が所属する I-PDU Group を
+     * 未確認のまま停止する。 */
+    Com_IpduGroupStop(kTestStoppableGroupId);
+
+    /* 評価 (Assert): メンバー数に関わらず、グループ単位で厳密に 1 回だけ
+     * 呼ばれる。 */
+    EXPECT_EQ(s_groupTxErrCount, 1U);
+}
+
+TEST_F(Bsw_TxChain_Test, IpduGroupStop_NG_DoesNotCallErrCbkWhenAlreadyConfirmed)
+{
+    /* 準備 (Arrange): 不要。「送信済み・未確認」状態を一切作らない
+     * （Com_TxConfPending は Com_Init() で 0 のまま）。 */
+
+    /* 実行 (Act) */
+    Com_IpduGroupStop(kTestStoppableGroupId);
+
+    /* 評価 (Assert): 未確認の送信が無いため TxErrCbk は呼ばれない。 */
+    EXPECT_EQ(s_groupTxErrCount, 0U);
 }
 
 // ------------------------------------------------------------

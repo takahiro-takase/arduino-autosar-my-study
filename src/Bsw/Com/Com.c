@@ -1879,6 +1879,76 @@ Std_ReturnType Com_SendSignalGroup(Com_IPduIdType GroupId)
     return E_OK;
 }
 
+typedef void (*Com_VoidCbkType)(void);
+
+/* Com_InvokeTxNotification() が「TxAckCbk と TxErrCbk のどちらを配送するか」
+ * を選ぶための判別子。本ファイルの他の箇所（Com_EffectiveTxModeMode() の
+ * Com_TmsState[] 三項演算子等）と同じく、関数ポインタ経由の間接呼び出しでは
+ * なく直接フィールドアクセス＋三項演算子で選ぶ（呼び出し先が 2 種類しかない
+ * ため、関数ポインタによる抽象化は過剰という 2026-08 レビュー指摘を反映）。 */
+typedef enum
+{
+    COM_TX_NOTIFY_ACK = 0,
+    COM_TX_NOTIFY_ERR = 1
+} Com_TxNotifyKindType;
+
+/**
+ * \brief   TxAckCbk/TxErrCbk（Com_CbkTxAck/Com_CbkTxErr、SWS_Com_00468/
+ *          SWS_Com_00491）共通の配送ロジック。
+ *
+ * \details 実 AUTOSAR は両コールバックとも signal 単位/signal group 単位で
+ *          別々のコールバック名（`Rte_COMCbkTAck_<sn>`/`<sg>`、
+ *          `Rte_COMCbkTErr_<sn>`/`<sg>`）を持てる。`Com_TxConfirmation()`
+ *          （TxAckCbk 側）と `Com_IpduGroupStop()`（TxErrCbk 側）は
+ *          「どちらのコールバックか」以外は完全に同じ配送ロジック（Signal
+ *          Group ならグループ単位で 1 回、そうでなければこの I-PDU に属する
+ *          TX シグナルのうち該当コールバックが設定されているものすべてを
+ *          呼ぶ）のため、2026-08 のレビューで指摘された重複をここへ集約した。
+ *
+ * \param[in]  ipdu   対象 TX I-PDU 設定。NULL 可（NULL は「Signal Group では
+ *                    ない」扱いとし、下記シグナル走査へ進む。Com_FindTxIPdu()
+ *                    が見つけられなかった場合に備える、Com_TxConfirmation()
+ *                    参照）。
+ * \param[in]  TxPduId 対象 TX I-PDU の ID（シグナル走査時の `sig->IPduId`
+ *                    一致判定に使う）。
+ * \param[in]  kind   配送するコールバックの種別（TxAckCbk か TxErrCbk か）。
+ *
+ * \pre        Com_ConfigPtr が NULL でないこと（呼び出し元で保証する）。
+ *
+ * \ServiceID      {0xF2}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+static void Com_InvokeTxNotification(const Com_IPduConfigType* ipdu,
+                                      Com_IPduIdType TxPduId,
+                                      Com_TxNotifyKindType kind)
+{
+    DET_LOGT(TAG, "called");
+
+    if (ipdu != NULL && ipdu->IsSignalGroup != 0U)
+    {
+        const Com_VoidCbkType groupCbk = (kind == COM_TX_NOTIFY_ACK) ? ipdu->TxAckCbk : ipdu->TxErrCbk;
+        if (groupCbk != NULL)
+            groupCbk();
+        return;
+    }
+
+    for (uint8 s = 0U; s < Com_ConfigPtr->SignalCount; s++)
+    {
+        const Com_SignalConfigType* sig = &Com_ConfigPtr->Signals[s];
+        /* Direction のチェックが必須: RX I-PDU と TX I-PDU の IPduId は
+         * 別々の値空間（どちらも 0 始まり）のため、IPduId の一致だけでは
+         * 方向を判別できない（例: RX の EngineInfo=0 と TX の
+         * MeterStatus=0）。詳細は Com_SignalDirectionType の宣言コメント参照。 */
+        if (sig->Direction != COM_SIGNAL_DIRECTION_TX || sig->IPduId != TxPduId)
+            continue;
+
+        const Com_VoidCbkType cbk = (kind == COM_TX_NOTIFY_ACK) ? sig->TxAckCbk : sig->TxErrCbk;
+        if (cbk != NULL)
+            cbk();
+    }
+}
+
 /**
  * \brief   TX I-PDU の送信完了を COM へ通知し、ComNotification（TxAck）を配送する。
  *
@@ -1891,27 +1961,14 @@ Std_ReturnType Com_SendSignalGroup(Com_IPduIdType GroupId)
  *
  *          実 AUTOSAR は signal 単位/signal group 単位で別々のコールバック名
  *          （Rte_COMCbkTAck_<sn>/<sg>）を持てる（SWS_Com_00468 "It can be
- *          configured for signals and signal groups"、ECUC_Com_00498 は
- *          ComSignal・ComSignalGroup 双方に独立して存在）。本実装もこれに
- *          倣い、I-PDU が Signal Group（IsSignalGroup=1）なら
- *          `Com_IPduConfigType.TxAckCbk` をグループ単位で 1 回だけ呼び、
- *          非 Signal Group なら従来どおり、この I-PDU に属する TX シグナル
- *          （Direction==COM_SIGNAL_DIRECTION_TX。RX I-PDU と TX I-PDU の
- *          IPduId は別値空間で数値が重複しうるため、この Direction チェックが
- *          方向誤認を防ぐために必須。Com_SignalDirectionType 参照）のうち
- *          `Com_SignalConfigType.TxAckCbk` が設定されているものすべてを
- *          呼び出す（1 I-PDU に複数の非 Signal Group TX シグナルが同居する
- *          構成（MeterStatus 等）を想定し、シグナル単位のまま）。いずれの
- *          場合も、値がこの送信で実際に変化したかどうかは問わない（I-PDU が
- *          送信されたという事実だけで通知する）。
- *
- *          2026-08 まではこの区別をせず、Signal Group メンバーの
- *          `Com_SignalConfigType.TxAckCbk` をメンバー単位に呼ぶ簡略実装
- *          だった（1 グループ 1 回のはずが N 回呼ばれていた）。/code-review
- *          で「本番設定に Signal Group の TxAckCbk 実利用例が無く未検証」と
- *          指摘され、SWS_Com_00468 の原文どおりグループ単位に是正した
- *          （WarningStatus に実利用例を追加、Rte_COMTxAck_WarningStatus
- *          参照）。
+ *          configured for signals and signal groups"）。この区別（Signal
+ *          Group ならグループ単位で 1 回、そうでなければ TX シグナル単位で
+ *          走査）の実体は `Com_IpduGroupStop()` の TxErrCbk 配送と共通の
+ *          `Com_InvokeTxNotification()` に集約されている（詳細は同関数の
+ *          コメント参照。2026-08 に個別実装→統一実装→共通ヘルパー化と
+ *          段階的に是正した経緯は docs/modules/Com_Notes.md 参照）。
+ *          いずれの場合も、値がこの送信で実際に変化したかどうかは問わない
+ *          （I-PDU が送信されたという事実だけで通知する）。
  *
  *          呼び出しコンテキストについて（Rx 無効値検知の実機障害を踏まえた
  *          確認事項）: この関数は Can_MainFunction_Write()（Os の 100ms
@@ -1976,32 +2033,7 @@ void Com_TxConfirmation(PduIdType TxPduId, Std_ReturnType result)
         return;
 
     const Com_IPduConfigType* ipdu = Com_FindTxIPdu(TxPduId);
-    if (ipdu != NULL && ipdu->IsSignalGroup != 0U)
-    {
-        /* Signal Group: グループ単位で 1 回だけ（詳細は上記関数コメント）。 */
-        if (ipdu->TxAckCbk != NULL)
-            ipdu->TxAckCbk();
-        return;
-    }
-
-    for (uint8 s = 0U; s < Com_ConfigPtr->SignalCount; s++)
-    {
-        const Com_SignalConfigType* sig = &Com_ConfigPtr->Signals[s];
-        /* Direction のチェックが必須: RX I-PDU と TX I-PDU の IPduId は
-         * 別々の値空間（どちらも 0 始まり）のため、IPduId の一致だけでは
-         * 方向を判別できない（例: RX の EngineInfo=0 と TX の
-         * MeterStatus=0）。Direction を見ずに sig->IPduId == TxPduId だけで
-         * 判定すると、EngineInfo（RX）に属する EngineSpeed 等が
-         * MeterStatus（TX）の送信確認のたびに誤って候補に入ってしまう
-         * （TxAckCbk が NULL でない限り誤発火する）。詳細は
-         * Com_SignalDirectionType の宣言コメント参照。 */
-        if (sig->Direction == COM_SIGNAL_DIRECTION_TX
-            && sig->TxAckCbk != NULL
-            && sig->IPduId == TxPduId)
-        {
-            sig->TxAckCbk();
-        }
-    }
+    Com_InvokeTxNotification(ipdu, TxPduId, COM_TX_NOTIFY_ACK);
 }
 
 /**
@@ -2455,24 +2487,15 @@ void Com_IpduGroupStop(Com_IpduGroupIdType IpduGroupId)
 
         /* [SWS_Com_00479]/[SWS_Com_00491]: PduR へは渡した（実送信済み）が
          * 対応する Com_TxConfirmation() がまだ届いていない（＝未確認の）
-         * I-PDU がこの停止時点で存在すれば、そのシグナル/シグナルグループの
-         * TxErrCbk（Com_CbkTxErr 相当）を即座に呼ぶ。呼び出し後は確認待ちで
-         * なくなるためフラグをクリアする（後から届く Com_TxConfirmation() は
-         * Com_TxIPduStarted[id]==0 により無視される、上記参照）。 */
+         * I-PDU がこの停止時点で存在すれば、TxErrCbk（Com_CbkTxErr 相当）を
+         * 即座に呼ぶ（signal/signal group 単位の配送は Com_TxConfirmation()
+         * の TxAckCbk と共通の Com_InvokeTxNotification() を使う、同関数の
+         * コメント参照）。呼び出し後は確認待ちでなくなるためフラグをクリア
+         * する（後から届く Com_TxConfirmation() は Com_TxIPduStarted[id]==0
+         * により無視される、上記参照）。 */
         if (Com_TxConfPending[id])
         {
-            for (uint8 s = 0U; s < Com_ConfigPtr->SignalCount; s++)
-            {
-                const Com_SignalConfigType* sig = &Com_ConfigPtr->Signals[s];
-                /* Com_TxConfirmation() の TxAckCbk ループと同じ理由で
-                 * Direction チェックが必須（RX/TX で IPduId 空間が別のため）。 */
-                if (sig->Direction == COM_SIGNAL_DIRECTION_TX
-                    && sig->TxErrCbk != NULL
-                    && sig->IPduId == id)
-                {
-                    sig->TxErrCbk();
-                }
-            }
+            Com_InvokeTxNotification(ipdu, id, COM_TX_NOTIFY_ERR);
             Com_TxConfPending[id] = 0U;
 
             DET_LOGW(TAG, "IpduGroupStop grp=%u iPdu=%u(TX) unconfirmed at stop -> TxErrCbk",
@@ -2517,5 +2540,12 @@ uint8 Com_Test_GetSigTimedOut(Com_SignalIdType SignalId)
     if (s >= Com_ConfigPtr->SignalCount)
         return 0U;
     return Com_SigTimedOut[s];
+}
+
+void Com_Test_SetTxConfPending(Com_IPduIdType ipduId, uint8 value)
+{
+    if (ipduId >= COM_TX_IPDU_MAX)
+        return;
+    Com_TxConfPending[ipduId] = value;
 }
 #endif
