@@ -166,6 +166,11 @@ const Com_SignalConfigType kTestTmsPendingSignal = {
     /* TxErrCbk */                 NULL
 };
 
+// SWS_Com_00468（Signal Group の TxAckCbk はグループ単位で 1 回だけ呼ばれる）
+// 検証用のカウンタ付きコールバック。kTestTmsGroupIPdu に設定する。
+static uint8_t s_groupTxAckCount = 0U;
+static void TestGroupTxAckCbk(void) { s_groupTxAckCount++; }
+
 const Com_IPduConfigType kTestTmsGroupIPdu = {
     /* IPduId */           1U,
     /* DLC */              1U,
@@ -181,7 +186,8 @@ const Com_IPduConfigType kTestTmsGroupIPdu = {
     /* UpdateBitPosition */ 7U,  // bit0 は kTestTmsPendingSignal が使うため独立したビットにする
     /* IpduGroupId */      COM_IPDU_GROUP_NONE,
     /* RxIndicationCbk */  NULL,
-    /* TxTransformCbk */   NULL
+    /* TxTransformCbk */   NULL,
+    /* TxAckCbk */         TestGroupTxAckCbk
 };
 
 // -----------------------------------------------------------------------
@@ -347,6 +353,7 @@ protected:
         CanIf_Init(&kTestCanIfConfig);
         PduR_Init(&kTestPduRConfig);
         Com_Init(&kTestComConfig);
+        s_groupTxAckCount = 0U;
 
         FakeDetHw_LogSuppressed = 0U;  // ここから各 TEST_F の実行(Act)区間
     }
@@ -478,6 +485,38 @@ TEST_F(Bsw_TxChain_Test, NonGroupTmsTransition_OK_TriggersImmediateSendEvenWhenC
      * かかわらず、SignalId=4 由来の TMS 遷移検出（tmsChanged）により
      * 送信要求が立つ。 */
     EXPECT_EQ(Com_Test_GetTxPending(2U), 1U);
+}
+
+// ------------------------------------------------------------
+// SWS_Com_00468: Signal Group の TxAckCbk はグループ単位で 1 回だけ呼ばれる
+// （Rte_COMCbkTAck_<sg> 相当）ことの回帰テスト。当初の実装はメンバーシグナル
+// 単位で走査していたため、WarningStatus のような 3 メンバー構成では最大 3 回
+// 呼ばれてしまう簡略化だった。kTestTmsGroupIPdu（IPduId=1、Signal Group、
+// TxAckCbk=TestGroupTxAckCbk）に対して Com_TxConfirmation() を直接呼び、
+// カウンタが厳密に 1 であることを確認する（本テストは Com_MainFunction()/
+// PduR を経由しないため、Com_TxConfirmation() を直接呼ぶ形で検証する）。
+// ------------------------------------------------------------
+TEST_F(Bsw_TxChain_Test, TxConfirmation_OK_CallsSignalGroupAckCbkExactlyOnce)
+{
+    /* 準備 (Arrange): 不要（SetUp() で s_groupTxAckCount は 0 にリセット済み） */
+
+    /* 実行 (Act): IPduId=1（Signal Group）の送信成功を通知する */
+    Com_TxConfirmation(1U, E_OK);
+
+    /* 評価 (Assert): メンバー数（このテストでは 1）に関わらず、
+     * グループ単位で厳密に 1 回だけ呼ばれる */
+    EXPECT_EQ(s_groupTxAckCount, 1U);
+}
+
+TEST_F(Bsw_TxChain_Test, TxConfirmation_NG_NonGroupIPduDoesNotCallGroupAckCbk)
+{
+    /* 準備 (Arrange): 不要。IPduId=0 は非 Signal Group（kTestTxIPdu） */
+
+    /* 実行 (Act) */
+    Com_TxConfirmation(0U, E_OK);
+
+    /* 評価 (Assert): 無関係な Signal Group（IPduId=1）の TxAckCbk は呼ばれない */
+    EXPECT_EQ(s_groupTxAckCount, 0U);
 }
 
 // ------------------------------------------------------------

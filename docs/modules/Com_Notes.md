@@ -283,27 +283,49 @@ Com は、I-PDU の送信が実際に成功した際、そこに含まれるシ�
 `ComDataInvalidAction` が RX 側の「値の異常」を扱う機能だったのに対し、これは
 TX 側の「送信できたことの確認」を扱う機能です。
 
-本プロジェクトでは `MeterStatus` の `EngineState` に `TxAckCbk` を設定しました。
+本プロジェクトでは `MeterStatus` の `EngineState`（非 Signal Group）と
+`WarningStatus`（Signal Group）の両方に `TxAckCbk` を設定しました。
 
 ```
 Com_SignalConfigType (EngineState):
   TxAckCbk = Rte_COMTxAck_EngineState
 
 Com_TxConfirmation(TxPduId=0/*MeterStatus*/, result=E_OK)  ← PduR から呼ばれる
-  Com_ConfigPtr->Signals[] を走査
+  IsSignalGroup==0 のため、Com_ConfigPtr->Signals[] を走査
     sig->Direction==TX かつ sig->IPduId == TxPduId かつ sig->TxAckCbk != NULL
     のものすべてについて sig->TxAckCbk() を呼ぶ  ← EngineState だけでなく、
                           同じ I-PDU の全 TX シグナルが対象（本設定では
                           EngineState のみ）
+
+Com_IPduConfigType (WarningStatus_Tx):
+  TxAckCbk = Rte_COMTxAck_WarningStatus
+
+Com_TxConfirmation(TxPduId=1/*WarningStatus*/, result=E_OK)
+  IsSignalGroup==1 のため、Signals[] は走査せず
+  ipdu->TxAckCbk（Rte_COMTxAck_WarningStatus）をグループ単位で 1 回だけ呼ぶ
+  （RunLamp/FaultLamp/AbsLamp のどのメンバーが送信を引き起こしたかは問わない）
 ```
 
-**シグナル単位に統一した理由**: 実 AUTOSAR は signal 単位・signal group 単位で
-別々のコールバック名を持てますが、本実装は `TmsContributor`/`TransferProperty`/
-`RxDataTimeoutAction` 等これまでのフィールドと同じく、シグナル単位の
-`TxAckCbk` のみで統一しています。Signal Group（`WarningStatus`）のメンバーに
-`TxAckCbk` を設定した場合も、`Com_ConfigPtr->Signals[]` を素直に走査するだけの
-実装なので、そのメンバー個別に呼ばれます（実 AUTOSAR の「signal group 全体で
-1 回」という意味論とは異なる簡略化です）。
+**シグナル単位への統一を是正（2026-08）**: 実 AUTOSAR は signal 単位・signal
+group 単位で別々のコールバック名（`Rte_COMCbkTAck_<sn>`/`<sg>`）を持てます
+（SWS_Com_00468: "It can be configured for signals and signal groups"、
+`ComNotification` = ECUC_Com_00498 は `ComSignal`・`ComSignalGroup` 双方に
+独立したコンテナとして存在することを仕様書で確認済み）。当初の実装は
+`TmsContributor`/`TransferProperty`/`RxDataTimeoutAction` 等これまでの
+フィールドと同じ発想で、シグナル単位の `TxAckCbk` のみに統一していました。
+Signal Group（`WarningStatus`）のメンバーに `TxAckCbk` を設定した場合、
+`Com_ConfigPtr->Signals[]` を素直に走査するだけの実装だったため、そのメンバー
+個別に（本来 1 回のはずが最大メンバー数回）呼ばれてしまう簡略化でした。
+
+`/code-review` で「本番設定に Signal Group の `TxAckCbk` の実利用例が無く
+未検証のまま」と指摘されたのを機に、`Com_IPduConfigType` にグループ単位の
+`TxAckCbk` フィールドを新設し、`Com_TxConfirmation()` を「I-PDU が
+Signal Group なら `Com_IPduConfigType.TxAckCbk` をグループ単位で 1 回、
+そうでなければ従来どおりシグナル単位で走査」という分岐に是正しました。
+あわせて `WarningStatus` に `Rte_COMTxAck_WarningStatus`（`MeterStatus`/
+`EngineState` の `Rte_COMTxAck_EngineState` と対になる、Signal Group 単位の
+実装例）を追加し、この経路が実際に発動することを実機で確認できるようにして
+います。
 
 **レビューで見つかった問題（RX/TX の方向誤認）**: 初期実装は
 `sig->IPduId == TxPduId` だけで走査対象を絞っており、方向（RX/TX）を
@@ -354,7 +376,10 @@ the message"）。`EngineState` が変化していなくても、`MeterStatus` �
 （値変化時の即時送信 + 周期フロア再送）のため、通常運用で確実に送信され続け、
 そのたびに `Com_TxConfirmation()` → `Rte_COMTxAck_EngineState()` が呼ばれます。
 ログに `Com: TxConf id=0` の直後に `Rte: MeterStatus TX ack (EngineState)`
-が出力されることを実機で確認できます。
+が出力されることを実機で確認できます。`WarningStatus` も RunLamp（エンジン
+稼働中は常時 1）の変化だけで通常運用中に送信され続けるため同様に発動し、
+`Com: TxConf id=1` の直後に `Rte: WarningStatus TX ack (group)` が
+（RunLamp/FaultLamp/AbsLamp どれが変化したかによらず）1 回だけ出力されます。
 
 ## Update Bit（送信側が実際に更新したかを示す1ビット）
 

@@ -1885,18 +1885,33 @@ Std_ReturnType Com_SendSignalGroup(Com_IPduIdType GroupId)
  * \details CAN フレームの送信完了後に PduR から呼び出される。まずログ出力を
  *          行い、result==E_OK（送信成功）であれば、この I-PDU（TxPduId、
  *          Com_IPduIdType と同一の値空間。PduR_PBCfg.c の ConfDestPduId 参照）
- *          に属する TX シグナル（Direction==COM_SIGNAL_DIRECTION_TX。RX I-PDU
- *          と TX I-PDU の IPduId は別値空間で数値が重複しうるため、この
- *          Direction チェックが方向誤認を防ぐために必須。Com_SignalDirectionType
- *          参照）のうち `TxAckCbk` が設定されているものすべてを呼び出す
- *          （Com_CbkTxAck、SWS_Com_00468: "called immediately after
- *          successful transmission of the I-PDU containing the message"）。
- *          Signal Group のメンバーかどうかは問わず、シグナル単位に統一して
- *          扱う（実 AUTOSAR は signal 単位/signal group 単位で別々の
- *          コールバック名 Rte_COMCbkTAck_<sn>/<sg> を持てるが、本実装は
- *          シグナル単位の TxAckCbk のみのシンプルな簡略版）。値がこの送信で
- *          実際に変化したかどうかは問わない（I-PDU が送信されたという事実
- *          だけで、含まれる全シグナルの TxAckCbk が呼ばれる）。
+ *          の TxAck 通知を行う（Com_CbkTxAck、SWS_Com_00468: "called
+ *          immediately after successful transmission of the I-PDU
+ *          containing the message"）。
+ *
+ *          実 AUTOSAR は signal 単位/signal group 単位で別々のコールバック名
+ *          （Rte_COMCbkTAck_<sn>/<sg>）を持てる（SWS_Com_00468 "It can be
+ *          configured for signals and signal groups"、ECUC_Com_00498 は
+ *          ComSignal・ComSignalGroup 双方に独立して存在）。本実装もこれに
+ *          倣い、I-PDU が Signal Group（IsSignalGroup=1）なら
+ *          `Com_IPduConfigType.TxAckCbk` をグループ単位で 1 回だけ呼び、
+ *          非 Signal Group なら従来どおり、この I-PDU に属する TX シグナル
+ *          （Direction==COM_SIGNAL_DIRECTION_TX。RX I-PDU と TX I-PDU の
+ *          IPduId は別値空間で数値が重複しうるため、この Direction チェックが
+ *          方向誤認を防ぐために必須。Com_SignalDirectionType 参照）のうち
+ *          `Com_SignalConfigType.TxAckCbk` が設定されているものすべてを
+ *          呼び出す（1 I-PDU に複数の非 Signal Group TX シグナルが同居する
+ *          構成（MeterStatus 等）を想定し、シグナル単位のまま）。いずれの
+ *          場合も、値がこの送信で実際に変化したかどうかは問わない（I-PDU が
+ *          送信されたという事実だけで通知する）。
+ *
+ *          2026-08 まではこの区別をせず、Signal Group メンバーの
+ *          `Com_SignalConfigType.TxAckCbk` をメンバー単位に呼ぶ簡略実装
+ *          だった（1 グループ 1 回のはずが N 回呼ばれていた）。/code-review
+ *          で「本番設定に Signal Group の TxAckCbk 実利用例が無く未検証」と
+ *          指摘され、SWS_Com_00468 の原文どおりグループ単位に是正した
+ *          （WarningStatus に実利用例を追加、Rte_COMTxAck_WarningStatus
+ *          参照）。
  *
  *          呼び出しコンテキストについて（Rx 無効値検知の実機障害を踏まえた
  *          確認事項）: この関数は Can_MainFunction_Write()（Os の 100ms
@@ -1959,6 +1974,15 @@ void Com_TxConfirmation(PduIdType TxPduId, Std_ReturnType result)
 
     if (result != E_OK)
         return;
+
+    const Com_IPduConfigType* ipdu = Com_FindTxIPdu(TxPduId);
+    if (ipdu != NULL && ipdu->IsSignalGroup != 0U)
+    {
+        /* Signal Group: グループ単位で 1 回だけ（詳細は上記関数コメント）。 */
+        if (ipdu->TxAckCbk != NULL)
+            ipdu->TxAckCbk();
+        return;
+    }
 
     for (uint8 s = 0U; s < Com_ConfigPtr->SignalCount; s++)
     {

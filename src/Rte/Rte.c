@@ -276,6 +276,32 @@ void Rte_COMTxAck_EngineState(void)
 }
 
 /**
+ * \brief   WarningStatus フレームの送信成功を通知する（Signal Group 単位）。
+ *
+ * \details Com_PBCfg.c の WarningStatus I-PDU 設定（Com_IPduConfigType.
+ *          TxAckCbk）から登録される。呼ばれるのは Com_TxConfirmation() が
+ *          WarningStatus（TX IPduId=1、Signal Group）の送信成功を検出した
+ *          直後（SWS_Com_00468: "It can be configured for signals and
+ *          signal groups. Com_CbkTxAck corresponds to Rte_COMCbkTAck_<sn>
+ *          or Rte_COMCbkTAck_<sg> respectively."）。RunLamp/FaultLamp/
+ *          AbsLamp のどれが変化して送信を引き起こしたかは問わず、グループ
+ *          全体で 1 回だけ呼ばれる（`Rte_COMTxAck_EngineState()` と対になる、
+ *          Signal Group 単位の実装例）。
+ *
+ *          `Rte_COMTxAck_EngineState()` と同じ呼び出しチェーン
+ *          （Can_MainFunction_Write() → ... → Com_TxConfirmation()）を経由
+ *          するため、割り込み禁止区間の外で呼ばれることも同様に確認済み。
+ *
+ * \note    Com_PBCfg.c から extern 宣言経由で TxAckCbk として参照されるため
+ *          non-static。Rte.h には公開しない（他の Rte_COM* グルーと同じ
+ *          理由）。
+ */
+void Rte_COMTxAck_WarningStatus(void)
+{
+    DET_LOGI(TAG, "WarningStatus TX ack (group)");
+}
+
+/**
  * \brief   SecureCommand (RX IPduId=2) 受信の都度呼ばれる。
  *
  * \details Com_PBCfg.c の ImmobilizerCmd シグナル設定（RxIndicationCbk）から
