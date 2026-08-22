@@ -302,6 +302,47 @@ void Rte_COMTxAck_WarningStatus(void)
 }
 
 /**
+ * \brief   EngineInfo フレームの受信バッファ格納完了を通知する（非 Signal Group）。
+ *
+ * \details Com_PBCfg.c の EngineOnFlag シグナル設定（Com_SignalConfigType.
+ *          RxAckCbk）から登録される。Com_RxIndication() がこのシグナルの
+ *          全ビット範囲を受信バッファへ格納した直後に呼ばれる
+ *          （Com_CbkRxAck、SWS_Com_00555）。E2E 検証
+ *          （Rte_COMCbk_EngineInfo、RxIndicationCbk）より前に呼ばれるため、
+ *          このログはペイロードの妥当性とは無関係に「バイト列が届いた」
+ *          ことのみを意味する（E2E CRC が壊れているフレームでも出力される）。
+ *
+ * \note    Com_PBCfg.c から extern 宣言経由で RxAckCbk として参照されるため
+ *          non-static。Rte.h には公開しない（他の Rte_COM* グルーと同じ
+ *          理由）。呼び出しコンテキストは Rte_COMTxAck_EngineState() と
+ *          同じく割り込み禁止区間の外（Com_RxIndication() 自体がそこから
+ *          呼ばれることはない）。
+ */
+void Rte_COMRxAck_EngineOnFlag(void)
+{
+    DET_LOGI(TAG, "EngineInfo RX ack (EngineOnFlag)");
+}
+
+/**
+ * \brief   AbsInfo フレームの受信バッファ格納完了を通知する（Signal Group 単位）。
+ *
+ * \details Com_PBCfg.c の AbsInfo I-PDU 設定（Com_IPduConfigType.RxAckCbk）
+ *          から登録される。VehicleSpeed/BrakeActive/AbsActive のどのメンバー
+ *          が変化したかは問わず、グループ全体で 1 回だけ呼ばれる
+ *          （Com_CbkRxAck、SWS_Com_00555。TX 側 Rte_COMTxAck_WarningStatus()
+ *          と対になる、Signal Group 単位の RX 実装例）。E2E 検証・
+ *          Com_ReceiveSignalGroup() コミット（Rte_COMCbk_AbsInfo）より前に
+ *          呼ばれるため、E2E 検証に失敗したフレームでもこのログは出力される。
+ *
+ * \note    Com_PBCfg.c から extern 宣言経由で RxAckCbk として参照されるため
+ *          non-static。Rte.h には公開しない。
+ */
+void Rte_COMRxAck_AbsInfo(void)
+{
+    DET_LOGI(TAG, "AbsInfo RX ack (group)");
+}
+
+/**
  * \brief   SecureCommand (RX IPduId=2) 受信の都度呼ばれる。
  *
  * \details Com_PBCfg.c の ImmobilizerCmd シグナル設定（RxIndicationCbk）から

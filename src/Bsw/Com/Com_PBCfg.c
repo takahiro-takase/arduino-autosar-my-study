@@ -16,6 +16,8 @@
  *              Signal 1: CoolantTemp    8 bit  BitPos=40  BigEndian
  *                DataInvalidAction=NOTIFY（受信値 0xFF はセンサ異常マーカー）
  *              Signal 2: EngineOnFlag   1 bit  BitPos=48  BigEndian
+ *                RxAckCbk=Rte_COMRxAck_EngineOnFlag（SWS_Com_00555 Com_CbkRxAck、
+ *                非 Signal Group 実装例。RxIndicationCbk より前に呼ばれる）
  *            RX I-PDU 1 (IPduId=1): CAN ID 0x110, DLC=6  AbsInfo     (ABS ECU, E2E P05 保護)
  *              byte[0-1]: E2E CRC16 (リトルエンディアン) / byte[2]: E2E Counter (8bit)
  *              （以前は E2E P01(CRC8+4bitカウンタ、DLC=5) だったが、EngineInfo と
@@ -23,6 +25,8 @@
  *              IsSignalGroup=1（RX Signal Group、Com_ReceiveSignalGroup で
  *              3 信号を一括して一貫したスナップショットとして読む。
  *              Rte_COMCbk_AbsInfo が RxIndicationCbk として確定コピーする）
+ *              RxAckCbk=Rte_COMRxAck_AbsInfo（SWS_Com_00555 Com_CbkRxAck、
+ *              グループ単位。WarningStatus の TxAckCbk と対称）
  *              Signal 4: VehicleSpeed  16 bit  BitPos=24  BigEndian  0.01 km/h
  *                RxDataTimeoutAction=SUBSTITUTE（タイムアウト中は 0xFFFF を返す）
  *              Signal 5: BrakeActive    1 bit  BitPos=40  BigEndian  0=解除/1=作動
@@ -148,6 +152,8 @@
  *   .TxErrCbk                 ←→ ComErrorNotification         （TX シグナルのみ使用、Com_CbkTxErr 相当。
  *                                                              I-PDU Group が未確認のまま停止されたときのみ発火。
  *                                                              現状どのシグナルにも設定していない = NULL）
+ *   .RxAckCbk                 ←→ ComNotification              （RX シグナルのみ使用、Com_CbkRxAck 相当。
+ *                                                              受信バッファ格納直後、RxIndicationCbk より前に発火）
  *
  * =====================================================================
  *
@@ -171,6 +177,8 @@ extern void Rte_COMInvalidNotify_CoolantTemp(void);
 extern void Rte_COMFilterReject_EngineSpeed(void);
 extern void Rte_COMTxAck_EngineState(void);
 extern void Rte_COMTxAck_WarningStatus(void);
+extern void Rte_COMRxAck_EngineOnFlag(void);
+extern void Rte_COMRxAck_AbsInfo(void);
 extern void Rte_COMCbk_SecureCommand(void);
 
 /* -----------------------------------------------------------------------
@@ -228,8 +236,12 @@ static const Com_IPduConfigType Com_RxIPduConfigData[COM_RX_IPDU_COUNT] = {
         .IsSignalGroup = 1U,                   /* RX Signal Group（Com_ReceiveSignalGroup で確定コピー） */
         .UpdateBitPosition = 0xFFU,            /* update-bit なし（本 I-PDU には適用しない。上記コメント参照） */
         .IpduGroupId = COM_IPDU_GROUP_NONE,    /* I-PDU Group に属さない（常に有効） */
-        .RxIndicationCbk = Rte_COMCbk_AbsInfo  /* DaVinci: /ActiveEcuC/E2EXf/AbsInfo_Rx_E2EXf
+        .RxIndicationCbk = Rte_COMCbk_AbsInfo, /* DaVinci: /ActiveEcuC/E2EXf/AbsInfo_Rx_E2EXf
                                                 *          （E2E Transformer 呼び出しは Rte 層が担う） */
+        .RxAckCbk = Rte_COMRxAck_AbsInfo       /* SWS_Com_00555 (Com_CbkRxAck)、
+                                                *          Signal Group 単位（WarningStatus の
+                                                *          TxAckCbk と対称。RxIndicationCbk より前に
+                                                *          呼ばれる） */
     },
     {
         /* ---------------------------------------------------------------
@@ -482,6 +494,11 @@ static const Com_SignalConfigType Com_SignalConfigData[COM_SIGNAL_COUNT] = {
         /* ---------------------------------------------------------------
          * Signal 2: EngineOnFlag  RX 1bit  CAN 0x100 byte[6] bit7
          * DaVinci: /ActiveEcuC/Com/ComConfig/EngineOnFlag_Rx
+         * RxAckCbk=Rte_COMRxAck_EngineOnFlag（SWS_Com_00555、ComNotification/
+         * Com_CbkRxAck 相当）: EngineInfo フレームの受信バッファ格納が
+         * 完了するたびに呼ばれる（RxIndicationCbk による E2E 検証より前。
+         * 他の特殊フィールドを持たない「素の」シグナルのため、非 Signal
+         * Group 実装例として選定した）。
          * --------------------------------------------------------------- */
         .SignalId    = COM_SIGNAL_ENGINE_ON_FLAG, /* DaVinci: ComHandleId       */
         .Direction   = COM_SIGNAL_DIRECTION_RX,   /* 本プロジェクト独自拡張。Com_SignalDirectionType 参照 */
@@ -491,7 +508,8 @@ static const Com_SignalConfigType Com_SignalConfigData[COM_SIGNAL_COUNT] = {
         .Endian      = COM_BIG_ENDIAN,            /* DaVinci: ComSignalEndianness = OPAQUE */
         .FirstTimeoutMs = COM_TIMEOUT_ENGINE_INFO_MS, /* DaVinci: ComFirstTimeout（シグナル単位）
                                                  *          EngineSpeed と同じ理由・同じ値 */
-        .TimeoutMs      = COM_TIMEOUT_ENGINE_INFO_MS  /* DaVinci: ComTimeout（シグナル単位） */
+        .TimeoutMs      = COM_TIMEOUT_ENGINE_INFO_MS, /* DaVinci: ComTimeout（シグナル単位） */
+        .RxAckCbk       = Rte_COMRxAck_EngineOnFlag
     },
     {
         /* ---------------------------------------------------------------

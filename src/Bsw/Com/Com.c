@@ -472,7 +472,8 @@ void Com_GetVersionInfo(Std_VersionInfoType* versioninfo)
  *
  * \pre        Com_Init() が正常に完了していること。
  *
- * \AUTOSARReq     {SWS_Com_00123, SWS_Com_00574, SWS_Com_00575, SWS_Com_00870}
+ * \AUTOSARReq     {SWS_Com_00123, SWS_Com_00574, SWS_Com_00575, SWS_Com_00870,
+ *                  SWS_Com_00555}
  * \ServiceID      {0x10}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
@@ -569,13 +570,24 @@ void Com_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
         Com_RxTimedOut[ipdu->IPduId] = 0U;
         Com_RxUsingFirstTimeout[ipdu->IPduId] = 0U;
 
+        /* Com_CbkRxAck（SWS_Com_00555）: Signal Group はメンバー単位ではなく
+         * グループ単位で 1 回だけ呼ぶ（詳細は docs/modules/Com_Notes.md 参照）。
+         * 短フレーム破棄（[SWS_Com_00575]、上の return）を通過していれば
+         * 必ずグループ全体が格納済みのため、ここで無条件に呼んでよい。 */
+        if (ipdu->IsSignalGroup != 0U && ipdu->RxAckCbk != NULL)
+            ipdu->RxAckCbk();
+
         /* シグナル単位のデッドライン監視（非 Signal Group のみ意味を持つ）は、
          * このシグナルの全ビット範囲が recvLen バイト以内に収まっている
          * 場合のみリセットする（[SWS_Com_00574]: 完全に受信できたシグナルの
          * みを「受信した」とみなす）。範囲外のシグナルには新しいデータが
          * 届いていないので、前回のタイムアウト状態のまま据え置く（Signal
          * Group メンバーは Com_SigTimedOut を参照しないため、ここで一律に
-         * 回しても実害はない）。 */
+         * 回しても実害はない）。Com_CbkRxAck（SWS_Com_00555、非 Signal Group
+         * のみ）も「recvLen 以内に収まっているか」という全く同じ判定を使う
+         * ため、同じループ内でまとめて処理する（2026-08 の /code-review で、
+         * 別関数に分離した初期実装がこの判定を重複計算していたと指摘され、
+         * 統合した）。 */
         for (uint8 s = 0U; s < Com_ConfigPtr->SignalCount; s++)
         {
             const Com_SignalConfigType* sig = &Com_ConfigPtr->Signals[s];
@@ -584,7 +596,11 @@ void Com_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
 
             const uint8 lastByte = (uint8)((sig->BitPosition + sig->BitSize + 7U) / 8U);
             if (lastByte <= recvLen)
+            {
                 Com_SigTimedOut[s] = 0U;
+                if (ipdu->IsSignalGroup == 0U && sig->RxAckCbk != NULL)
+                    sig->RxAckCbk();
+            }
         }
 
         char hexbuf[25];
