@@ -111,7 +111,7 @@ const Com_SignalConfigType kTestRxSignal = {
     /* InvalidNotificationCbk */   NULL,
     /* FirstTimeoutMs */           0U,
     /* TimeoutMs */                0U,
-    /* TimeoutNotificationCbk */   NULL,
+    /* RxTOutCbk */                NULL,
     /* TxAckCbk */                 NULL,
     /* TxErrCbk */                 NULL,
     /* RxAckCbk */                 TestRxAckCbk
@@ -164,7 +164,7 @@ const Com_SignalConfigType kTestRxGroupSignalA = {
     /* InvalidNotificationCbk */   NULL,
     /* FirstTimeoutMs */           0U,
     /* TimeoutMs */                0U,
-    /* TimeoutNotificationCbk */   NULL,
+    /* RxTOutCbk */                NULL,
     /* TxAckCbk */                 NULL,
     /* TxErrCbk */                 NULL,
     /* RxAckCbk */                 NULL  // Signal Group メンバーには設定しない（呼ばれないことの裏付け）
@@ -194,7 +194,7 @@ const Com_SignalConfigType kTestRxGroupSignalB = {
     /* InvalidNotificationCbk */   NULL,
     /* FirstTimeoutMs */           0U,
     /* TimeoutMs */                0U,
-    /* TimeoutNotificationCbk */   NULL,
+    /* RxTOutCbk */                NULL,
     /* TxAckCbk */                 NULL,
     /* TxErrCbk */                 NULL,
     /* RxAckCbk */                 NULL
@@ -253,7 +253,7 @@ const Com_SignalConfigType kTestPartialSignalByte0 = {
     /* InvalidNotificationCbk */   NULL,
     /* FirstTimeoutMs */           0U,
     /* TimeoutMs */                0U,
-    /* TimeoutNotificationCbk */   NULL,
+    /* RxTOutCbk */                NULL,
     /* TxAckCbk */                 NULL,
     /* TxErrCbk */                 NULL,
     /* RxAckCbk */                 TestPartialAckCbk0
@@ -283,7 +283,7 @@ const Com_SignalConfigType kTestPartialSignalByte1 = {
     /* InvalidNotificationCbk */   NULL,
     /* FirstTimeoutMs */           0U,
     /* TimeoutMs */                0U,
-    /* TimeoutNotificationCbk */   NULL,
+    /* RxTOutCbk */                NULL,
     /* TxAckCbk */                 NULL,
     /* TxErrCbk */                 NULL,
     /* RxAckCbk */                 TestPartialAckCbk1

@@ -116,7 +116,7 @@ const Com_SignalConfigType kTestSignal = {
     /* InvalidNotificationCbk */   NULL,
     /* FirstTimeoutMs */           0U,
     /* TimeoutMs */                0U,
-    /* TimeoutNotificationCbk */   NULL,
+    /* RxTOutCbk */                NULL,
     /* TxAckCbk */                 NULL,
     /* TxErrCbk */                 NULL,
     /* RxAckCbk */                 NULL,
@@ -184,7 +184,7 @@ const Com_SignalConfigType kTestTmsPendingSignal = {
     /* InvalidNotificationCbk */   NULL,
     /* FirstTimeoutMs */           0U,
     /* TimeoutMs */                0U,
-    /* TimeoutNotificationCbk */   NULL,
+    /* RxTOutCbk */                NULL,
     /* TxAckCbk */                 NULL,
     /* TxErrCbk */                 NULL
 };
@@ -256,7 +256,7 @@ const Com_SignalConfigType kTestNonGroupTmsContributorSignal = {
     /* InvalidNotificationCbk */   NULL,
     /* FirstTimeoutMs */           0U,
     /* TimeoutMs */                0U,
-    /* TimeoutNotificationCbk */   NULL,
+    /* RxTOutCbk */                NULL,
     /* TxAckCbk */                 NULL,
     /* TxErrCbk */                 NULL
 };
@@ -285,7 +285,7 @@ const Com_SignalConfigType kTestNonGroupTmsCalledSignal = {
     /* InvalidNotificationCbk */   NULL,
     /* FirstTimeoutMs */           0U,
     /* TimeoutMs */                0U,
-    /* TimeoutNotificationCbk */   NULL,
+    /* RxTOutCbk */                NULL,
     /* TxAckCbk */                 NULL,
     /* TxErrCbk */                 NULL
 };

@@ -369,6 +369,47 @@ void Rte_COMCbk_AbsInfo(void)
 }
 
 /**
+ * \brief   EngineInfo フレームの受信デッドライン超過を通知する（EngineOnFlag のRxTOut）。
+ *
+ * \details Com_PBCfg.c の EngineOnFlag シグナル設定（Com_SignalConfigType.
+ *          RxTOutCbk）から登録される。呼ばれるのは Com_MainFunction() が
+ *          このシグナルの FirstTimeoutMs/TimeoutMs（EngineInfo と同値）
+ *          超過を新規検出した直後（Com_CbkRxTOut、SWS_Com_00536/00556）。
+ *          既存の受信デッドライン監視（`Com: RX timeout sig=...` ログ、
+ *          `docs/modules/Com_Notes.md` の「受信デッドライン監視」節）が
+ *          検出はしていたが通知先を持たなかった箇所に、正式な RTE
+ *          コールバックとして接続したもの。EngineInfo 送信元（エンジン
+ *          ECU シミュレータ）を止めるだけで実機で確実に発動する。
+ *
+ * \note    Com_PBCfg.c から extern 宣言経由で RxTOutCbk として参照されるため
+ *          non-static。Rte.h には公開しない。呼び出しコンテキストは
+ *          Rte_COMCbkTAck_EngineState() と同じく Com_MainFunction()
+ *          （割り込み禁止区間の外）のため Serial 出力も安全。
+ */
+void Rte_COMCbkRxTOut_EngineOnFlag(void)
+{
+    DET_LOGW(TAG, "EngineInfo RX deadline timeout (EngineOnFlag)");
+}
+
+/**
+ * \brief   AbsInfo フレームの受信デッドライン超過を通知する（Signal Group 単位）。
+ *
+ * \details Com_PBCfg.c の AbsInfo I-PDU 設定（Com_IPduConfigType.RxTOutCbk）
+ *          から登録される。VehicleSpeed/BrakeActive/AbsActive のどのメンバー
+ *          かは問わず、グループ全体で 1 回だけ呼ばれる（Com_CbkRxTOut、
+ *          SWS_Com_00536/00556。`Rte_COMCbkRxTOut_EngineOnFlag()` のシグナル
+ *          単位版と対になる、Signal Group 単位の実装例）。
+ *
+ * \note    Com_PBCfg.c から extern 宣言経由で RxTOutCbk として参照されるため
+ *          non-static。Rte.h には公開しない。呼び出しコンテキストは
+ *          `Rte_COMCbkRxTOut_EngineOnFlag()` と同じ。
+ */
+void Rte_COMCbkRxTOut_AbsInfo(void)
+{
+    DET_LOGW(TAG, "AbsInfo RX deadline timeout (group)");
+}
+
+/**
  * \brief   SecureCommand (RX IPduId=2) 受信の都度呼ばれる。
  *
  * \details Com_PBCfg.c の ImmobilizerCmd シグナル設定（RxIndicationCbk）から
