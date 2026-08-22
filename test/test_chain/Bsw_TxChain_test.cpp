@@ -85,6 +85,13 @@ namespace
 // CAN ID=0x100, DLC=2 で Can_Write(Hth=0, ...) を呼ぶ。
 // -----------------------------------------------------------------------
 
+// SWS_Com_00878（TX 送信デッドライン監視、Com_CbkTxTOut）検証用のカウンタ
+// 付きコールバック。kTestSignal（非 Signal Group、IPduId=0）に設定する
+// （Com_InvokeTxNotification() は非 Signal Group の I-PDU ではシグナル単位の
+// TxTOutCbk を配送する。Com_IPduConfigType.TxTOutCbk は Signal Group 専用）。
+static uint8_t s_txTOutCount = 0U;
+static void TestTxTOutCbk(void) { s_txTOutCount++; }
+
 const Com_SignalConfigType kTestSignal = {
     /* SignalId */                0U,
     /* Direction */                COM_SIGNAL_DIRECTION_TX,
@@ -111,7 +118,9 @@ const Com_SignalConfigType kTestSignal = {
     /* TimeoutMs */                0U,
     /* TimeoutNotificationCbk */   NULL,
     /* TxAckCbk */                 NULL,
-    /* TxErrCbk */                 NULL
+    /* TxErrCbk */                 NULL,
+    /* RxAckCbk */                 NULL,
+    /* TxTOutCbk */                TestTxTOutCbk
 };
 
 const Com_IPduConfigType kTestTxIPdu = {
@@ -133,8 +142,12 @@ const Com_IPduConfigType kTestTxIPdu = {
     /* TxAckCbk */         NULL,
     /* TxErrCbk */         NULL,
     /* RxAckCbk */         NULL,
-    /* NumberOfRepetitions */ 2U,  // ComTxModeNumberOfRepetitions（SWS_Com_00305）検証用
-    /* RepetitionPeriodMs */  50U  // ComTxModeRepetitionPeriod
+    /* NumberOfRepetitions */ 2U,   // ComTxModeNumberOfRepetitions（SWS_Com_00305）検証用
+    /* RepetitionPeriodMs */  50U,  // ComTxModeRepetitionPeriod
+    /* TxFirstTimeoutMs */    1000U, // Com_CbkTxTOut（SWS_Com_00878）検証用
+    /* TxTimeoutMs */         500U
+    /* TxTOutCbk */           // 非 Signal Group のため未使用（NULL）。
+                              // 実際のコールバックは kTestSignal.TxTOutCbk 側
 };
 
 // -----------------------------------------------------------------------
@@ -307,6 +320,12 @@ static const Com_IpduGroupIdType kTestStoppableGroupId = 5U;
 static uint8_t s_groupTxErrCount = 0U;
 static void TestGroupTxErrCbk(void) { s_groupTxErrCount++; }
 
+// SWS_Com_00878（TX 送信デッドライン監視）のグループ単位発火・
+// Com_IpduGroupStop() との二重発火防止を検証するためのカウンタ付き
+// コールバック。kTestErrGroupIPdu（Signal Group、停止可能グループ）に設定する。
+static uint8_t s_groupTxTOutCount = 0U;
+static void TestGroupTxTOutCbk(void) { s_groupTxTOutCount++; }
+
 const Com_IPduConfigType kTestErrGroupIPdu = {
     /* IPduId */           3U,
     /* DLC */              1U,
@@ -324,7 +343,13 @@ const Com_IPduConfigType kTestErrGroupIPdu = {
     /* RxIndicationCbk */  NULL,
     /* TxTransformCbk */   NULL,
     /* TxAckCbk */         NULL,
-    /* TxErrCbk */         TestGroupTxErrCbk
+    /* TxErrCbk */         TestGroupTxErrCbk,
+    /* RxAckCbk */         NULL,
+    /* NumberOfRepetitions */ 0U,
+    /* RepetitionPeriodMs */  0U,
+    /* TxFirstTimeoutMs */    100U,  // Com_CbkTxTOut（SWS_Com_00878）検証用
+    /* TxTimeoutMs */          50U,
+    /* TxTOutCbk */           TestGroupTxTOutCbk
 };
 
 const Com_SignalConfigType kTestSignals[] = {
@@ -403,6 +428,8 @@ protected:
         Com_Init(&kTestComConfig);
         s_groupTxAckCount = 0U;
         s_groupTxErrCount = 0U;
+        s_txTOutCount      = 0U;
+        s_groupTxTOutCount = 0U;
 
         FakeDetHw_LogSuppressed = 0U;  // ここから各 TEST_F の実行(Act)区間
     }
@@ -793,6 +820,145 @@ TEST_F(Bsw_TxChain_Test, IpduGroupStop_OK_ClearsRepeatsRemaining)
 
     /* 評価 (Assert) */
     EXPECT_EQ(Com_Test_GetTxRepeatsRemaining(3U), 0U);
+}
+
+// ------------------------------------------------------------
+// SWS_Com_00878/00879/00880/00304/00554: TX 送信デッドライン監視
+// （Com_CbkTxTOut）。kTestTxIPdu（IPduId=0）は TxFirstTimeoutMs=1000U/
+// TxTimeoutMs=500U を持つ。実際のディスパッチ（Com_MainFunction() 経由）が
+// タイマをアームするため、Com_TxConfirmation() を直接呼ぶ場合を除き
+// Com_MainFunction() を通して検証する。
+// ------------------------------------------------------------
+TEST_F(Bsw_TxChain_Test, TxTOut_OK_FiresAfterFirstTimeoutWhenArmedAndUnconfirmed)
+{
+    /* 準備 (Arrange): 送信し、確認を一切与えない（アームしたまま放置） */
+    uint16_t value = 0x1234U;
+    Com_SendSignal(0U, &value);
+    Com_MainFunction();  // t=0: 実送信、Com_TxConfPendingSinceMs[0]=0 でアーム
+    ASSERT_EQ(Com_Test_GetTxConfPending(0U), 1U);
+
+    /* 実行 (Act) + 評価 (Assert): TxFirstTimeoutMs(1000) 未満ではまだ発火しない */
+    FakeMillis_Value += 999U;
+    Com_MainFunction();
+    EXPECT_EQ(Com_Test_GetTxTimedOut(0U), 0U);
+    EXPECT_EQ(s_txTOutCount, 0U);
+
+    /* TxFirstTimeoutMs(1000) 超過で発火する */
+    FakeMillis_Value += 2U;
+    Com_MainFunction();
+    EXPECT_EQ(Com_Test_GetTxTimedOut(0U), 1U);
+    EXPECT_EQ(s_txTOutCount, 1U);
+}
+
+TEST_F(Bsw_TxChain_Test, TxTOut_OK_RepeatsDoNotRestartOrExtendDeadline)
+{
+    /* 準備 (Arrange): 初回送信 + ComTxModeNumberOfRepetitions による再送
+     * （t=50/100、計3回送信）が進行する間、デッドラインタイマは最初の
+     * アーム時刻（t=0）を基準にしたままであることを確認する
+     * （[SWS_Com_00878] "unless already running"）。 */
+    uint16_t value = 0x1234U;
+    Com_SendSignal(0U, &value);
+    Com_MainFunction();  // t=0: 初回送信、アーム
+    FakeMillis_Value += 50U;
+    Com_MainFunction();  // t=50: 再送1回目（Com_TxConfPending は既に1のまま）
+    FakeMillis_Value += 50U;
+    Com_MainFunction();  // t=100: 再送2回目（NumberOfRepetitions を使い切る）
+    FakeMillis_Value += 50U;
+    Com_MainFunction();  // t=150: 再送なし
+
+    /* 実行 (Act): t=0 基準で TxFirstTimeoutMs(1000) を超過させる
+     * （t=150 + 851 = 1001。再送のたびにタイマが延命されていれば
+     * t=100+1000=1100 まで発火しないはずだが、そうならないことを確認する） */
+    FakeMillis_Value += 851U;
+    Com_MainFunction();
+
+    /* 評価 (Assert) */
+    EXPECT_EQ(Com_Test_GetTxTimedOut(0U), 1U);
+    EXPECT_EQ(s_txTOutCount, 1U);
+}
+
+TEST_F(Bsw_TxChain_Test, TxTOut_OK_ConfirmationBeforeDeadlineCancelsIt)
+{
+    /* 準備 (Arrange): 送信後、TxFirstTimeoutMs(1000) 未満のうちに確認する */
+    uint16_t value = 0x1234U;
+    Com_SendSignal(0U, &value);
+    Com_MainFunction();  // t=0: 送信、アーム
+    FakeMillis_Value += 400U;
+    Com_TxConfirmation(0U, E_OK);  // t=400: 確認到達、タイマ解除
+    ASSERT_EQ(Com_Test_GetTxConfPending(0U), 0U);
+
+    /* 実行 (Act): TxFirstTimeoutMs を優に超える時間が経過しても、
+     * 既に確認済み（Com_TxConfPending==0）のため監視対象外のまま */
+    FakeMillis_Value += 700U;
+    Com_MainFunction();
+
+    /* 評価 (Assert) */
+    EXPECT_EQ(Com_Test_GetTxTimedOut(0U), 0U);
+    EXPECT_EQ(s_txTOutCount, 0U);
+}
+
+TEST_F(Bsw_TxChain_Test, TxTOut_OK_UsesSteadyTimeoutAfterFirstConfirmedCycle)
+{
+    /* 準備 (Arrange): 1 サイクル分、送信→確認を完了させる
+     * （Com_TxUsingFirstTimeout を false へ倒す） */
+    uint16_t value = 0x1234U;
+    Com_SendSignal(0U, &value);
+    Com_MainFunction();
+    Com_TxConfirmation(0U, E_OK);
+    ASSERT_EQ(Com_Test_GetTxConfPending(0U), 0U);
+
+    /* 実行 (Act): 新たな送信要求で再アームする（steady TxTimeoutMs=500 を
+     * 使うはずで、TxFirstTimeoutMs=1000 は使わない） */
+    uint16_t value2 = 0x5678U;
+    Com_SendSignal(0U, &value2);
+    Com_MainFunction();
+    ASSERT_EQ(Com_Test_GetTxConfPending(0U), 1U);
+
+    FakeMillis_Value += 500U;
+    Com_MainFunction();
+
+    /* 評価 (Assert): TxFirstTimeoutMs(1000) ではなく TxTimeoutMs(500) で
+     * 発火している */
+    EXPECT_EQ(Com_Test_GetTxTimedOut(0U), 1U);
+    EXPECT_EQ(s_txTOutCount, 1U);
+}
+
+TEST_F(Bsw_TxChain_Test, TxTOut_OK_GroupLevelFiresWhenStartedAndOverdue)
+{
+    /* 準備 (Arrange): kTestErrGroupIPdu（IPduId=3、Signal Group、
+     * TxFirstTimeoutMs=100U）を起動し、test-only setter で
+     * 「送信済み・未確認」状態を直接注入する（実際に Com_MainFunction()/PduR
+     * を経由させる配線は用意していないため）。 */
+    Com_IpduGroupStart(kTestStoppableGroupId, 0U);
+    Com_Test_SetTxConfPending(3U, 1U);
+    Com_Test_SetTxConfPendingSinceMs(3U, FakeMillis_Value);
+
+    /* 実行 (Act): TxFirstTimeoutMs(100) を超過させる */
+    FakeMillis_Value += 101U;
+    Com_MainFunction();
+
+    /* 評価 (Assert): グループ単位で発火する。TxErrCbk とは無関係 */
+    EXPECT_EQ(s_groupTxTOutCount, 1U);
+    EXPECT_EQ(s_groupTxErrCount, 0U);
+}
+
+TEST_F(Bsw_TxChain_Test, IpduGroupStop_OK_PreventsTxTOutDoubleFireWithTxErrCbk)
+{
+    /* 準備 (Arrange): TxTOut_OK_GroupLevelFiresWhenStartedAndOverdue と同じ
+     * 「送信済み・未確認のまま閾値超過」状態を作るが、Com_MainFunction() で
+     * 評価される前に Com_IpduGroupStop() を先に呼ぶ。 */
+    Com_IpduGroupStart(kTestStoppableGroupId, 0U);
+    Com_Test_SetTxConfPending(3U, 1U);
+    Com_Test_SetTxConfPendingSinceMs(3U, FakeMillis_Value);
+    FakeMillis_Value += 101U;
+
+    /* 実行 (Act) */
+    Com_IpduGroupStop(kTestStoppableGroupId);  // TxErrCbk が発火、Started=0 に
+    Com_MainFunction();  // Com_TxIPduStarted[3]==0 のため監視ループ自体が対象外
+
+    /* 評価 (Assert): TxErrCbk は発火するが、TxTOutCbk とは二重発火しない */
+    EXPECT_EQ(s_groupTxErrCount, 1U);
+    EXPECT_EQ(s_groupTxTOutCount, 0U);
 }
 
 }  // namespace

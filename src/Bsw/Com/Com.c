@@ -169,6 +169,17 @@ static uint8 Com_TxPending[COM_TX_IPDU_MAX];
  * TxErrCbk（Com_CbkTxErr 相当）を即座に呼んでからクリアする。 */
 static uint8 Com_TxConfPending[COM_TX_IPDU_MAX];
 
+/* TX 送信デッドライン監視（Com_CbkTxTOut、SWS_Com_00878/00879/00880/00304/
+ * 00554）用の状態。Com_TxConfPendingSinceMs は Com_TxConfPending が 0→1 に
+ * 遷移した時刻（Com_DoTransmit() が記録）。Com_TxTimedOut はエッジラッチ
+ * （Com_RxTimedOut と同じく、タイムアウト検出のたびに 1 回だけ通知する）。
+ * Com_TxUsingFirstTimeout は 1 = 再始動後まだ一度も Com_TxConfirmation()
+ * が届いていない（TxFirstTimeoutMs を使う）、Com_TxConfirmation() 到達で
+ * 0 へ（以降は steady TxTimeoutMs を使う、Com_RxUsingFirstTimeout と対称）。 */
+static unsigned long Com_TxConfPendingSinceMs[COM_TX_IPDU_MAX];
+static uint8         Com_TxTimedOut[COM_TX_IPDU_MAX];
+static uint8         Com_TxUsingFirstTimeout[COM_TX_IPDU_MAX];
+
 /* TMS（Transmission Mode Selector）評価結果。1 = true（TxModeModeTrue/
  * TxPeriodMsTrue を使う）、0 = false（TxModeMode/TxPeriodMs を使う）。
  * Com_RecalcTms() が Com_SendSignal()/Com_SendSignalGroup() のたびに
@@ -283,6 +294,9 @@ void Com_Init(const Com_ConfigType* config)
         Com_TxConfPending[i]     = 0U;
         Com_TmsState[i]          = 0U;   /* 既定 false（ゼロクリアされたバッファと整合） */
         Com_TxRepeatsRemaining[i] = 0U;
+        Com_TxConfPendingSinceMs[i] = now;
+        Com_TxTimedOut[i]           = 0U;
+        Com_TxUsingFirstTimeout[i]  = 1U;
         Com_GroupTriggerPending[i] = 0U;
         Com_TxIPduStarted[i] = 1U;  /* 上と同じ理由 */
     }
@@ -971,16 +985,19 @@ static uint8 Com_FindSignalIndex(Com_SignalIdType SignalId)
  *          update-bit ごと正しく伝わるようにする。
  *
  * \param[in]  ipdu  送信する TX I-PDU 設定。NULL 禁止（呼び出し元で保証する）。
+ * \param[in]  now   Com_MainFunction() が計算済みの現在時刻 [ms]（millis()
+ *                   を再度呼ばず再利用する。TX 送信デッドライン監視の
+ *                   アーム時刻記録に使う）。
  *
  * \retval  E_OK      PduR_Transmit() が成功した。
  * \retval  E_NOT_OK  PduR_Transmit() が失敗した。
  *
- * \AUTOSARReq     {SWS_Com_00062}
+ * \AUTOSARReq     {SWS_Com_00062, SWS_Com_00878}
  * \ServiceID      {0xF3}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
  */
-static Std_ReturnType Com_DoTransmit(const Com_IPduConfigType* ipdu)
+static Std_ReturnType Com_DoTransmit(const Com_IPduConfigType* ipdu, unsigned long now)
 {
     if (ipdu->TxTransformCbk != NULL)
         ipdu->TxTransformCbk(Com_TxBuffer[ipdu->IPduId], ipdu->DLC);
@@ -998,9 +1015,17 @@ static Std_ReturnType Com_DoTransmit(const Com_IPduConfigType* ipdu)
     /* [SWS_Com_00479]/[SWS_Com_00491]: PduR への引き渡しが成功した時点で
      * 「送信済み・未確認」とマークする。対応する Com_TxConfirmation() が
      * 届くまでの間に Com_IpduGroupStop() が呼ばれたら TxErrCbk の対象となる
-     * （詳細は Com_TxConfPending[] の宣言コメント参照）。 */
+     * （詳細は Com_TxConfPending[] の宣言コメント参照）。
+     * [SWS_Com_00878] "unless already running": TX 送信デッドライン監視の
+     * アーム時刻は 0→1 遷移の瞬間のみ記録する。MIXED 周期フロアや再送
+     * （NumberOfRepetitions）による同一 I-PDU の重複ディスパッチ（既に
+     * Com_TxConfPending==1）はタイマを延命しない。 */
     if (ret == E_OK)
+    {
+        if (Com_TxConfPending[ipdu->IPduId] == 0U)
+            Com_TxConfPendingSinceMs[ipdu->IPduId] = now;
         Com_TxConfPending[ipdu->IPduId] = 1U;
+    }
 
     /* update-bit クリア（SWS_Com_00062: ComTxIPduClearUpdateBit=Transmit 相当。
      * Confirmation/TriggerTransmit の 2 択は未実装）。原文は "after this I-PDU
@@ -1090,6 +1115,31 @@ static uint16 Com_EffectiveTxPeriodMs(const Com_IPduConfigType* ipdu)
 static uint8 Com_TxRepeatApplicable(Com_TxModeModeType mode)
 {
     return (mode == COM_TX_MODE_DIRECT) ? 1U : 0U;
+}
+
+/**
+ * \brief   デッドライン監視の「初回猶予期間か定常状態か」に応じて閾値を選ぶ。
+ *
+ * \details RX I-PDU 単位・RX シグナル単位・TX（Com_CbkTxTOut）の3箇所が
+ *          同じ形の判定（`usingFirst ? firstMs : steadyMs`）を必要とするため
+ *          共通化した（/code-review で重複を指摘）。呼び出し元ごとに対象と
+ *          なる配列・フィールドが異なる（Com_RxUsingFirstTimeout[]/
+ *          Com_TxUsingFirstTimeout[]、FirstTimeoutMs/TxFirstTimeoutMs 等）
+ *          ため、値だけを受け取る薄いヘルパーとする。
+ *
+ * \param[in]  usingFirst  1 = 初回猶予期間中（firstMs を使う）。
+ * \param[in]  firstMs     初回猶予期間の閾値 [ms]。
+ * \param[in]  steadyMs    定常状態の閾値 [ms]。
+ *
+ * \return  適用すべき閾値 [ms]。
+ *
+ * \ServiceID      {0x21}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+static uint16 Com_SelectTimeoutThreshold(uint8 usingFirst, uint16 firstMs, uint16 steadyMs)
+{
+    return usingFirst ? firstMs : steadyMs;
 }
 
 /**
@@ -1943,29 +1993,35 @@ Std_ReturnType Com_SendSignalGroup(Com_IPduIdType GroupId)
 
 typedef void (*Com_VoidCbkType)(void);
 
-/* Com_InvokeTxNotification() が「TxAckCbk と TxErrCbk のどちらを配送するか」
- * を選ぶための判別子。本ファイルの他の箇所（Com_EffectiveTxModeMode() の
- * Com_TmsState[] 三項演算子等）と同じく、関数ポインタ経由の間接呼び出しでは
- * なく直接フィールドアクセス＋三項演算子で選ぶ（呼び出し先が 2 種類しかない
- * ため、関数ポインタによる抽象化は過剰という 2026-08 レビュー指摘を反映）。 */
+/* Com_InvokeTxNotification() が「TxAckCbk・TxErrCbk・TxTOutCbk のどれを
+ * 配送するか」を選ぶための判別子。2026-08 のレビューでは「呼び出し先が
+ * 2 種類しかないため三項演算子で十分、関数ポインタテーブルは過剰な抽象化」
+ * と判断したが、Com_CbkTxTOut（TX 送信デッドライン監視）追加で 3 種類に
+ * なった。3 種とも呼び出し側がコンパイル時に知っている固定種別のままで
+ * あることは変わらないため、関数ポインタテーブルへは寄せず、三項演算子を
+ * switch 文に置き換えるだけで対応する（同じ判断基準の延長）。 */
 typedef enum
 {
-    COM_TX_NOTIFY_ACK = 0,
-    COM_TX_NOTIFY_ERR = 1
+    COM_TX_NOTIFY_ACK  = 0,
+    COM_TX_NOTIFY_ERR  = 1,
+    COM_TX_NOTIFY_TOUT = 2
 } Com_TxNotifyKindType;
 
 /**
- * \brief   TxAckCbk/TxErrCbk（Com_CbkTxAck/Com_CbkTxErr、SWS_Com_00468/
- *          SWS_Com_00491）共通の配送ロジック。
+ * \brief   TxAckCbk/TxErrCbk/TxTOutCbk（Com_CbkTxAck/Com_CbkTxErr/
+ *          Com_CbkTxTOut、SWS_Com_00468/SWS_Com_00491/SWS_Com_00554）
+ *          共通の配送ロジック。
  *
- * \details 実 AUTOSAR は両コールバックとも signal 単位/signal group 単位で
- *          別々のコールバック名（`Rte_COMCbkTAck_<sn>`/`<sg>`、
- *          `Rte_COMCbkTErr_<sn>`/`<sg>`）を持てる。`Com_TxConfirmation()`
- *          （TxAckCbk 側）と `Com_IpduGroupStop()`（TxErrCbk 側）は
- *          「どちらのコールバックか」以外は完全に同じ配送ロジック（Signal
- *          Group ならグループ単位で 1 回、そうでなければこの I-PDU に属する
- *          TX シグナルのうち該当コールバックが設定されているものすべてを
- *          呼ぶ）のため、2026-08 のレビューで指摘された重複をここへ集約した。
+ * \details 実 AUTOSAR はいずれのコールバックも signal 単位/signal group
+ *          単位で別々のコールバック名（`Rte_COMCbkTAck_<sn>`/`<sg>`、
+ *          `Rte_COMCbkTErr_<sn>`/`<sg>`、`Rte_COMCbkTxTOut_<sn>`/`<sg>`）を
+ *          持てる。`Com_TxConfirmation()`（TxAckCbk/TxTOutCbk 解除側）・
+ *          `Com_IpduGroupStop()`（TxErrCbk 側）・`Com_MainFunction()`
+ *          （TxTOutCbk 発火側）は「どのコールバックか」以外は完全に同じ
+ *          配送ロジック（Signal Group ならグループ単位で 1 回、そうでなければ
+ *          この I-PDU に属する TX シグナルのうち該当コールバックが設定
+ *          されているものすべてを呼ぶ）のため、2026-08 のレビューで指摘
+ *          された重複をここへ集約した。
  *
  * \param[in]  ipdu   対象 TX I-PDU 設定。NULL 可（NULL は「Signal Group では
  *                    ない」扱いとし、下記シグナル走査へ進む。Com_FindTxIPdu()
@@ -1973,7 +2029,7 @@ typedef enum
  *                    参照）。
  * \param[in]  TxPduId 対象 TX I-PDU の ID（シグナル走査時の `sig->IPduId`
  *                    一致判定に使う）。
- * \param[in]  kind   配送するコールバックの種別（TxAckCbk か TxErrCbk か）。
+ * \param[in]  kind   配送するコールバックの種別。
  *
  * \pre        Com_ConfigPtr が NULL でないこと（呼び出し元で保証する）。
  *
@@ -1989,7 +2045,13 @@ static void Com_InvokeTxNotification(const Com_IPduConfigType* ipdu,
 
     if (ipdu != NULL && ipdu->IsSignalGroup != 0U)
     {
-        const Com_VoidCbkType groupCbk = (kind == COM_TX_NOTIFY_ACK) ? ipdu->TxAckCbk : ipdu->TxErrCbk;
+        Com_VoidCbkType groupCbk = NULL;
+        switch (kind)
+        {
+        case COM_TX_NOTIFY_ACK:  groupCbk = ipdu->TxAckCbk;  break;
+        case COM_TX_NOTIFY_ERR:  groupCbk = ipdu->TxErrCbk;  break;
+        case COM_TX_NOTIFY_TOUT: groupCbk = ipdu->TxTOutCbk; break;
+        }
         if (groupCbk != NULL)
             groupCbk();
         return;
@@ -2005,7 +2067,13 @@ static void Com_InvokeTxNotification(const Com_IPduConfigType* ipdu,
         if (sig->Direction != COM_SIGNAL_DIRECTION_TX || sig->IPduId != TxPduId)
             continue;
 
-        const Com_VoidCbkType cbk = (kind == COM_TX_NOTIFY_ACK) ? sig->TxAckCbk : sig->TxErrCbk;
+        Com_VoidCbkType cbk = NULL;
+        switch (kind)
+        {
+        case COM_TX_NOTIFY_ACK:  cbk = sig->TxAckCbk;  break;
+        case COM_TX_NOTIFY_ERR:  cbk = sig->TxErrCbk;  break;
+        case COM_TX_NOTIFY_TOUT: cbk = sig->TxTOutCbk; break;
+        }
         if (cbk != NULL)
             cbk();
     }
@@ -2065,7 +2133,7 @@ static void Com_InvokeTxNotification(const Com_IPduConfigType* ipdu,
  *             Can_Write() は送信成功時のみ CanIf_TxConfirmation() を呼ぶ。
  *             MCP2515 との SPI 通信が同期的なため）。
  *
- * \AUTOSARReq     {SWS_Com_00124, SWS_Com_00468}
+ * \AUTOSARReq     {SWS_Com_00124, SWS_Com_00468, SWS_Com_00880}
  * \ServiceID      {0x11}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
@@ -2090,9 +2158,18 @@ void Com_TxConfirmation(PduIdType TxPduId, Std_ReturnType result)
         return;
     }
 
-    /* 確認が到達した（成功/失敗を問わず）ため「送信済み・未確認」を解除する。 */
+    /* 確認が到達した（成功/失敗を問わず）ため「送信済み・未確認」を解除する。
+     * [SWS_Com_00880]: 確認到達時は TX 送信デッドライン監視タイマも解除する
+     * （成功/失敗を問わない、原文に「成功時のみ」という限定は無い）。
+     * Com_TxUsingFirstTimeout も同時に false へ倒す（確認到達＝1サイクル
+     * 完了とみなし、以降は steady TxTimeoutMs を使う。
+     * Com_RxIndication() 側の Com_RxUsingFirstTimeout クリアと対称）。 */
     if (TxPduId < COM_TX_IPDU_MAX)
-        Com_TxConfPending[TxPduId] = 0U;
+    {
+        Com_TxConfPending[TxPduId]       = 0U;
+        Com_TxTimedOut[TxPduId]          = 0U;
+        Com_TxUsingFirstTimeout[TxPduId] = 0U;
+    }
 
     if (result != E_OK)
         return;
@@ -2182,10 +2259,18 @@ void Com_TxConfirmation(PduIdType TxPduId, Std_ReturnType result)
  *          いつ・どう減らすかの詳細（オフバイワン対策・CommunicationControl
  *          無効中の扱い）は下の実装コメント・docs/modules/Com_Notes.md 参照。
  *
+ *          TX 送信デッドライン監視（`ipdu->TxFirstTimeoutMs`/`TxTimeoutMs`/
+ *          `TxTOutCbk`、Com_CbkTxTOut、SWS_Com_00878/00879/00880/00304/
+ *          00554）: TX ディスパッチループの後段で、`Com_TxConfPending[]`が
+ *          立ったまま`TxTimeoutMs`（初回は`TxFirstTimeoutMs`）を超えた
+ *          I-PDU を検出し`TxTOutCbk`を発火する。実機では発動しない
+ *          （理由は docs/modules/Com_Notes.md 参照）。
+ *
  * \AUTOSARReq     {SWS_Com_00398, SWS_Com_00684, SWS_Com_00685, SWS_Com_00734,
  *                  SWS_Com_00742, SWS_Com_00743, SWS_Com_00777, SWS_Com_00032,
  *                  SWS_Com_00799, SWS_Com_00471, SWS_Com_00698, SWS_Com_00789,
- *                  SWS_Com_00305, SWS_Com_00467, SWS_Com_00392}
+ *                  SWS_Com_00305, SWS_Com_00467, SWS_Com_00392, SWS_Com_00878,
+ *                  SWS_Com_00879, SWS_Com_00880, SWS_Com_00304, SWS_Com_00554}
  * \ServiceID      {0x20}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
@@ -2251,9 +2336,8 @@ void Com_MainFunction(void)
              * FirstTimeoutMs==0 は「初回受信までは監視しない」を意味する
              * （[SWS_Com_00716]。TimeoutMs 自体は非 0 のためこの分岐にのみ
              * 適用され、初回受信後の定常監視には影響しない）。 */
-            const uint16 threshold = Com_RxUsingFirstTimeout[id]
-                                     ? ipdu->FirstTimeoutMs
-                                     : ipdu->TimeoutMs;
+            const uint16 threshold = Com_SelectTimeoutThreshold(
+                Com_RxUsingFirstTimeout[id], ipdu->FirstTimeoutMs, ipdu->TimeoutMs);
             if (threshold == 0U)
                 continue;
 
@@ -2281,9 +2365,8 @@ void Com_MainFunction(void)
             if (sig->IPduId >= COM_RX_IPDU_MAX || !Com_RxIPduStarted[sig->IPduId])
                 continue;
 
-            const uint16 sigThreshold = Com_RxUsingFirstTimeout[sig->IPduId]
-                                        ? sig->FirstTimeoutMs
-                                        : sig->TimeoutMs;
+            const uint16 sigThreshold = Com_SelectTimeoutThreshold(
+                Com_RxUsingFirstTimeout[sig->IPduId], sig->FirstTimeoutMs, sig->TimeoutMs);
             if (sigThreshold == 0U)
                 continue;  /* [SWS_Com_00716]: 初回受信までは監視しない */
 
@@ -2377,7 +2460,44 @@ void Com_MainFunction(void)
         if (repeatDue && !changeDue)
             Com_TxRepeatsRemaining[id]--;
 
-        (void)Com_DoTransmit(ipdu);
+        (void)Com_DoTransmit(ipdu, now);
+    }
+
+    /* TX 送信デッドライン監視（Com_CbkTxTOut）。ディスパッチループの後段に
+     * 置くのは、この呼び出し内でそのループが今まさに作った
+     * Com_TxConfPending/Com_TxConfPendingSinceMs を読むため。
+     * Com_TxIPduStarted[id] のチェックは「停止中のグループを評価しない」
+     * という RX 側と同じ目的で、TxErrCbk との二重発火防止そのものは
+     * Com_IpduGroupStop() 側が Com_TxConfPending を無条件クリアすることで
+     * 担っている（同関数のコメント参照）。設計の詳細・SWS 引用・
+     * Com_TxEnabled ゲートの経緯は docs/modules/Com_Notes.md 参照。 */
+    if (Com_TxEnabled != 0U)
+    {
+        for (uint8 i = 0; i < Com_ConfigPtr->TxIPduCount; i++)
+        {
+            const Com_IPduConfigType* ipdu = &Com_ConfigPtr->TxIPdus[i];
+            if (ipdu->TxTimeoutMs == 0U)
+                continue;
+
+            const Com_IPduIdType id = ipdu->IPduId;
+            if (!Com_TxIPduStarted[id] || Com_TxConfPending[id] == 0U)
+                continue;  /* 未送信、または既に確認済みの I-PDU は対象外 */
+
+            const uint16 threshold = Com_SelectTimeoutThreshold(
+                Com_TxUsingFirstTimeout[id], ipdu->TxFirstTimeoutMs, ipdu->TxTimeoutMs);
+            if (threshold == 0U)
+                continue;
+
+            if (!Com_TxTimedOut[id] &&
+                (now - Com_TxConfPendingSinceMs[id]) >= (unsigned long)threshold)
+            {
+                Com_TxTimedOut[id] = 1U;
+                DET_LOGW(TAG, "TX confirmation timeout iPdu=%u (%ums, %s)",
+                         (unsigned)id, (unsigned)threshold,
+                         Com_TxUsingFirstTimeout[id] ? "first" : "steady");
+                Com_InvokeTxNotification(ipdu, id, COM_TX_NOTIFY_TOUT);
+            }
+        }
     }
 }
 
@@ -2515,6 +2635,11 @@ void Com_IpduGroupStart(Com_IpduGroupIdType IpduGroupId, uint8 initialize)
         /* ComTxModeNumberOfRepetitions（SWS_Com_00305）の残り再送回数も同様に
          * クリアする（前回 Stop() 時点の再送シーケンスを持ち越さない）。 */
         Com_TxRepeatsRemaining[id] = 0U;
+        /* TX 送信デッドライン監視（SWS_Com_00878 等）も同様に再初期化する
+         * （Com_ResetRxDeadlineMonitoring() の RX 側と対称）。 */
+        Com_TxConfPendingSinceMs[id] = now;
+        Com_TxTimedOut[id]           = 0U;
+        Com_TxUsingFirstTimeout[id]  = 1U;
 
         /* [SWS_Com_00787] 項目4: update-bit をクリアする。 */
         if (ipdu->UpdateBitPosition != 0xFFU)
@@ -2604,6 +2729,17 @@ void Com_IpduGroupStop(Com_IpduGroupIdType IpduGroupId)
             DET_LOGW(TAG, "IpduGroupStop grp=%u iPdu=%u(TX) unconfirmed at stop -> TxErrCbk",
                      (unsigned)IpduGroupId, (unsigned)id);
         }
+        /* Com_TxTimedOut/Com_TxUsingFirstTimeout/Com_TxConfPendingSinceMs
+         * （TX 送信デッドライン監視）は意図的にクリアしない（上の RX 側
+         * Com_RxTimedOut と同じ理由: Started==0 の間は Com_MainFunction()
+         * 側の監視ループ自体が評価しないため値は参照されず、再開時は
+         * Com_IpduGroupStart() が無条件で再初期化する）。この停止時点で
+         * 確認待ちだった I-PDU が TxTOutCbk と二重発火しないのは、直上で
+         * Com_TxConfPending[id] を無条件でクリアしているため（TX 監視
+         * ループは Com_TxConfPending[id]==0 を見た時点でこの I-PDU を
+         * 対象外にする、Com_MainFunction() 参照）。Com_TxIPduStarted[id]==0
+         * はあくまで「停止中は評価しない」という独立した目的であり、この
+         * 二重発火防止自体の担い手ではない。 */
 
         /* [SWS_Com_00777]: 保留中の送信要求をキャンセルする。再開時に
          * 「停止中に溜まった分」が積み残しとして即座に送信されないようにする
@@ -2670,5 +2806,26 @@ void Com_Test_SetTxRepeatsRemaining(Com_IPduIdType ipduId, uint8 value)
     if (ipduId >= COM_TX_IPDU_MAX)
         return;
     Com_TxRepeatsRemaining[ipduId] = value;
+}
+
+uint8 Com_Test_GetTxTimedOut(Com_IPduIdType ipduId)
+{
+    if (ipduId >= COM_TX_IPDU_MAX)
+        return 0U;
+    return Com_TxTimedOut[ipduId];
+}
+
+uint8 Com_Test_GetTxConfPending(Com_IPduIdType ipduId)
+{
+    if (ipduId >= COM_TX_IPDU_MAX)
+        return 0U;
+    return Com_TxConfPending[ipduId];
+}
+
+void Com_Test_SetTxConfPendingSinceMs(Com_IPduIdType ipduId, unsigned long value)
+{
+    if (ipduId >= COM_TX_IPDU_MAX)
+        return;
+    Com_TxConfPendingSinceMs[ipduId] = value;
 }
 #endif

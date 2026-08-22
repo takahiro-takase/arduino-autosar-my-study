@@ -47,6 +47,9 @@
  *              値変化時送信を受信側が区別できる)
  *              Signal 3: EngineState    8 bit  BitPos= 0  BigEndian
  *                TxAckCbk=Rte_COMTxAck_EngineState（送信成功のたび呼ばれる）
+ *                TxTOutCbk=Rte_COMTxTOut_EngineState（送信確認が
+ *                COM_TX_TIMEOUT_METERSTATUS_MS 以内に届かないと呼ばれる。
+ *                実機で発動する経路は無い）
  *              byte[2]: 警告灯3bit（WarningStatusと同じ値のミラー。uds_tester
  *              の仮想メータ表示タブが1フレームで完結してデコードできるように
  *              追加。詳細は下記 Signal 15-17 参照）
@@ -179,6 +182,7 @@ extern void Rte_COMTransform_E2EHealthStatus(uint8* Data, uint8 Length);
 extern void Rte_COMInvalidNotify_CoolantTemp(void);
 extern void Rte_COMFilterReject_EngineSpeed(void);
 extern void Rte_COMTxAck_EngineState(void);
+extern void Rte_COMTxTOut_EngineState(void);
 extern void Rte_COMTxAck_WarningStatus(void);
 extern void Rte_COMRxAck_EngineOnFlag(void);
 extern void Rte_COMRxAck_AbsInfo(void);
@@ -314,7 +318,9 @@ static const Com_IPduConfigType Com_TxIPduConfigData[COM_TX_IPDU_COUNT] = {
         .TxModeMode = COM_TX_MODE_MIXED, /* DaVinci: ComTxModeMode = MIXED
                                           *          (Com_SendSignal() が変化検知時に Com_TxPending を立て、
                                           *          次回 Com_MainFunction() で送信) */
-        .TxPeriodMs = COM_TX_PERIOD_METERSTATUS_FLOOR_MS /* DaVinci: ComTxModeTimePeriodFactor（周期フロア間隔） */
+        .TxPeriodMs = COM_TX_PERIOD_METERSTATUS_FLOOR_MS, /* DaVinci: ComTxModeTimePeriodFactor（周期フロア間隔） */
+        .TxFirstTimeoutMs = COM_TX_TIMEOUT_METERSTATUS_MS, /* DaVinci: ComTransmissionDeadlineMonitoring/ComFirstTimeout */
+        .TxTimeoutMs      = COM_TX_TIMEOUT_METERSTATUS_MS  /* DaVinci: ComTransmissionDeadlineMonitoring/ComTimeout */
     },
     {
         /* ---------------------------------------------------------------
@@ -526,6 +532,10 @@ static const Com_SignalConfigType Com_SignalConfigData[COM_SIGNAL_COUNT] = {
          * TxAckCbk=Rte_COMTxAck_EngineState（SWS_Com_00468、ComNotification/
          * Com_CbkTxAck 相当）: MeterStatus フレームが実際に送信されるたびに
          * 呼ばれる（この送信で EngineState 自体が変化したかどうかは問わない）。
+         * TxTOutCbk=Rte_COMTxTOut_EngineState（SWS_Com_00554、Com_CbkTxTOut
+         * 相当）: MeterStatus の送信確認が COM_TX_TIMEOUT_METERSTATUS_MS 以内
+         * に届かなかった場合に呼ばれる。実機で発動する経路は無い
+         * （docs/modules/Com_Notes.md 参照）。
          * --------------------------------------------------------------- */
         .SignalId    = COM_SIGNAL_ENGINE_STATE, /* DaVinci: ComHandleId         */
         .Direction   = COM_SIGNAL_DIRECTION_TX, /* 本プロジェクト独自拡張。Com_SignalDirectionType 参照 */
@@ -540,7 +550,8 @@ static const Com_SignalConfigType Com_SignalConfigData[COM_SIGNAL_COUNT] = {
                                                  *          update-bit（byte[1] bit0）はこの
                                                  *          シグナルの変化のみを反映する
                                                  *          （Signal 14-17 のミラーは寄与しない） */
-        .TxAckCbk        = Rte_COMTxAck_EngineState /* DaVinci: ComNotification */
+        .TxAckCbk        = Rte_COMTxAck_EngineState, /* DaVinci: ComNotification */
+        .TxTOutCbk       = Rte_COMTxTOut_EngineState  /* DaVinci: ComTransmissionDeadlineMonitoring */
     },
     {
         /* ---------------------------------------------------------------

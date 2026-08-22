@@ -500,6 +500,20 @@ typedef enum
 //               無い）。Com_TxRepeatApplicable()（Com.c）が対象範囲
 //               （TxModeMode==DIRECT のみ）を判定する。実装の詳細（残り回数を
 //               いつ減らすか等）は Com.c・docs/modules/Com_Notes.md 参照。
+//   TxFirstTimeoutMs, TxTimeoutMs, TxTOutCbk :
+//               TX 送信デッドライン監視（Com_CbkTxTOut、SWS_Com_00878/00879/
+//               00880/00304/00554）。PduR_Transmit() へ渡した（＝
+//               Com_TxConfPending が 0→1 に遷移した）時点でタイマを開始し、
+//               Com_TxConfirmation() が届く前に TxTimeoutMs（初回は
+//               TxFirstTimeoutMs）を超えると TxTOutCbk を呼ぶ。上の
+//               FirstTimeoutMs/TimeoutMs（RX 専用、TX I-PDU では 0 を設定）
+//               とは別軸の TX 専用フィールドであり、紛れないよう Tx 接頭辞を
+//               付けている。ComTxIPdu 単位のみ（Com_TxConfPending 自体が
+//               I-PDU 単位管理のため、シグナル単位の期間は持たない）。
+//               コールバック自体は Com_SignalConfigType.TxTOutCbk 側の
+//               シグナル単位版と対になる（TxAckCbk/TxErrCbk と同じ
+//               二重化）。TxTimeoutMs=0 で機能無効。詳細は
+//               docs/modules/Com_Notes.md 参照。
 // -------------------------------------------------------
 typedef struct
 {
@@ -523,6 +537,9 @@ typedef struct
     void (*RxAckCbk)(void);
     uint8              NumberOfRepetitions;
     uint16             RepetitionPeriodMs;
+    uint16             TxFirstTimeoutMs;
+    uint16             TxTimeoutMs;
+    void (*TxTOutCbk)(void);
 } Com_IPduConfigType;
 
 // -------------------------------------------------------
@@ -677,6 +694,11 @@ typedef enum
 //               部分受信で範囲外だったシグナルは「受信した」とみなさない、
 //               Com_RxIndication() 側の Com_SigTimedOut リセット判定と
 //               全く同じ基準）。NULL 可（通知不要なら未設定でよい）。
+//   TxTOutCbk : TX 送信デッドライン監視（Com_CbkTxTOut）の非 Signal Group
+//               用シグナル単位コールバック。タイミング等の詳細は
+//               Com_IPduConfigType.TxFirstTimeoutMs 側のコメント参照。
+//               Signal Group の I-PDU では未使用（Com_IPduConfigType.
+//               TxTOutCbk 側のグループ単位コールバックを使うこと）。NULL 可。
 // -------------------------------------------------------
 typedef struct
 {
@@ -716,6 +738,7 @@ typedef struct
     void (*TxAckCbk)(void);
     void (*TxErrCbk)(void);
     void (*RxAckCbk)(void);
+    void (*TxTOutCbk)(void);
 } Com_SignalConfigType;
 
 // -------------------------------------------------------

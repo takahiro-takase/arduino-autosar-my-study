@@ -571,6 +571,15 @@ Group ならグループ単位で 1 回、そうでなければ TX シグナル�
 場合にのみ正当化されるのであって、単に「2 択を 1 箇所にまとめたい」だけなら
 過剰である、という教訓です。
 
+**追記（TX 送信デッドライン監視、後述）**: 上で予告した「将来3つ目の類似
+コールバックを追加する際」が実際に起きました。`Com_CbkTxTOut`
+（`TxTOutCbk`）の追加に伴い `Com_TxNotifyKindType` へ `COM_TX_NOTIFY_TOUT`
+を加え、`Com_InvokeTxNotification()` 内の三項演算子2箇所を switch 文へ
+書き換えています。3種とも呼び出し側がコンパイル時に知っている固定種別で
+あることは変わらないため、関数ポインタテーブルのような抽象化は依然として
+過剰と判断し、switch 文への置き換えに留めました（上記の教訓の延長）。
+詳細は「TX 送信デッドライン監視」節参照。
+
 ## ComNotification拡張（Rx確定コールバック、Com_CbkRxAck）
 
 `Com_CbkTxAck`/`Com_CbkTxErr` が TX 側の「送信できたこと/できなかったこと」の
@@ -1164,6 +1173,99 @@ COM モジュールが各 RX I-PDU の受信間隔を監視し、設定タイム
 4. LED が点滅に変わる
 5. UDS SID 0x19 で DTC 0x000105 (COMM_TIMEOUT) が取得できる
 6. EngineInfo を再送すると Com_RxTimedOut がリセットされ、次の Runnable サイクルで復帰する
+
+## TX 送信デッドライン監視（Com_CbkTxTOut）
+
+RX 側の受信デッドライン監視（上記）と対をなす、TX 側の送信確認デッドライン
+監視です。`PduR_Transmit()` へ送信を渡した後、対応する `Com_TxConfirmation()`
+が一定時間内に届かなければ `Com_CbkTxTOut`（`TxTOutCbk`）を発火します。
+
+```
+[SWS_Com_00878] "The AUTOSAR COM shall start a configured transmission
+deadline monitoring timer of a signal (group) if it is sent (within an
+I-PDU) to the lower layer, unless the timer is already running."
+[SWS_Com_00879] 初回は ComFirstTimeout、以降（1 サイクル完了後）は
+ComTimeout でタイマを始動する（RX 側の First/Timeout 分離と対称）。
+[SWS_Com_00880] "When the AUTOSAR COM receives a transmit confirmation for
+an I-PDU, it shall cancel all running transmission deadline monitoring
+timers"（成功/失敗を問わない）。
+[SWS_Com_00554]（Com_CbkTxTOut 定義）"called immediately after a message
+transmission error has been detected by the deadline monitoring
+mechanism ... called on sender side only. It can be configured for
+signals and signal groups."
+```
+
+これまでの `Com_IPduConfigType.FirstTimeoutMs`/`TimeoutMs` は明示的に RX 専用
+と文書化されており（TX I-PDU では 0 を設定する規約）、TX 側の時間ベース監視は
+一切実装されていませんでした。あったのは `Com_IpduGroupStop()` 契機の
+`TxErrCbk`（送信済み・未確認のまま I-PDU Group が停止された場合のみ発火）
+だけで、「確認が一定時間届かない」という時間ベースの検出手段は存在しません
+でした。今回、RX 専用の `FirstTimeoutMs`/`TimeoutMs` とは別軸の
+`TxFirstTimeoutMs`/`TxTimeoutMs`/`TxTOutCbk` を新設し、`MeterStatus`
+（TX IPduId=0）に適用しました。
+
+```
+MeterStatus (IPduId=0):
+  TxFirstTimeoutMs = TxTimeoutMs = COM_TX_TIMEOUT_METERSTATUS_MS（既定 2000ms）
+
+Com_DoTransmit()（PduR_Transmit() が E_OK を返した場合のみ）:
+  Com_TxConfPending[0] が 0→1 に遷移する瞬間だけ
+  Com_TxConfPendingSinceMs[0] = now（[SWS_Com_00878] "unless already running"。
+  MIXED 周期フロアや NumberOfRepetitions による再送で Com_DoTransmit() が
+  重複して呼ばれても、既に確認待ちならタイマは延命しない）
+
+Com_MainFunction()（TX ディスパッチループの後段）:
+  Com_TxEnabled（CommunicationControl 有効中）かつ Com_TxIPduStarted[0]
+  かつ Com_TxConfPending[0] のときのみ評価（RX 監視の Com_RxEnabled ゲートと
+  同じ理由。当初は TX 側にこのゲートが無く、/code-review で指摘・是正した）
+  threshold = Com_TxUsingFirstTimeout[0] ? TxFirstTimeoutMs : TxTimeoutMs
+  (now - Com_TxConfPendingSinceMs[0]) >= threshold かつ未発火なら:
+    Com_TxTimedOut[0] = 1; TxTOutCbk() を呼ぶ（EngineState シグナル単位）
+
+Com_TxConfirmation()（成功/失敗を問わず、確認到達のたび）:
+  Com_TxConfPending[0] = 0; Com_TxTimedOut[0] = 0
+  Com_TxUsingFirstTimeout[0] = 0（以降は steady TxTimeoutMs を使う）
+```
+
+**残り再送回数のデクリメント（前節）と同じ理由で、タイマの発火判定は
+dispatch/confirmation の同期性に依存しない設計にしている**: `Can_Write()`
+は TX 確認を即座には呼ばず、`swPduHandle` を保留キューへ積むだけで、実際の
+`CanIf_TxConfirmation()` 呼び出しは**別タスク** `Can_MainFunction_Write()`
+（1ms 周期）がキューをドレインするタイミングで行われます（`Can.c` 冒頭
+コメント参照）。`Com_MainFunction()` は 100ms 周期の別タスクのため、両者は
+非同期です。このタイマ機構はそもそも「確認が届くまで待つ」ことを目的とした
+仕組みなので、この非同期性自体は問題になりません（`Com_TxConfPendingSinceMs`
+というタイムスタンプで経過時間を測るだけで、確認の到着タイミングに依存しない）。
+
+**`Com_InvokeTxNotification()` への3つ目のコールバック種別追加**:
+`TxAckCbk`/`TxErrCbk` の共通配送ロジックへの集約を説明した節で「将来3つ目の
+類似コールバックを追加する際、片方だけ修正して他方を直し忘れるリスクが
+ある」と予告していた通りの状況になりました。`Com_TxNotifyKindType` に
+`COM_TX_NOTIFY_TOUT` を追加し、`Com_InvokeTxNotification()` 内の2箇所の
+三項演算子（「呼び出し先が2種類しかないため三項演算子で十分」という
+2026-08 レビュー時点の判断根拠）を switch 文へ変更しました。3種とも
+呼び出し側がコンパイル時に知っている固定種別のままであることは変わらない
+ため、関数ポインタテーブルのような抽象化へは寄せていません（同じ判断基準の
+延長）。
+
+**この機能は実際に発動するか**: **発動しません。** `Com_DoTransmit()` →
+`PduR_Transmit()` → `CanIf_Transmit()` → `Can_Write()` は同期的に完結し
+（SPI 送信自体は MCP2515 とのブロッキング通信）、Bus-Off 中は `Can_Write()`
+が `CanState != CAN_CS_STARTED` により**送信そのものを同期的に失敗**させます
+（`Can.c:404-405`）。つまり Bus-Off 中は `Com_DoTransmit()` の `ret` が
+`E_NOT_OK` となり、`Com_TxConfPending[]` はそもそもセットされず、「送信済み・
+未確認」という監視対象状態自体が発生しません。当初「Bus-Off 中に確認が
+届かなくなるため実機で発火しうる」と考えてこの機能を選定しましたが、
+実装前にコールチェーンを直接追跡した結果この前提が誤りだったと判明し、
+ユーザーと合意の上でこの結論を受け入れて実装を継続しました。唯一の理論上の
+発火経路は、TX 確認キュー `Can_TxConfQueue`（`CAN_TX_CONF_QUEUE_SIZE=4`）が
+溢れて確認通知だけが握りつぶされるケース（`Can_Write()` の既存コメント
+「万一キューが満杯の場合は、この確認通知だけを諦める」参照）ですが、
+`Can_MainFunction_Write()` が 1ms 周期でこのキューをドレインしており、
+本プロジェクトの実際の送信頻度（最速でも Nm フレームの 1000ms 間隔）では
+天文学的に起こりにくく、事実上到達不能です。`Com_CbkTxErr`（TxErrCbk）と
+同じ位置づけ——仕様忠実性とユニットテストによる検証を目的とした実装であり、
+実機での動作確認は行っていません。
 
 ## update-bit の受信側判定（discard）
 
