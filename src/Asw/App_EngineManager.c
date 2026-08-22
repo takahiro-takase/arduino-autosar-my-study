@@ -183,7 +183,7 @@ void App_EngineManager_Run(void)
 
     /* E2E ハードエラー時の観測ログ（AUTOSAR Rte_IStatusType の
      * RTE_E_HARD_TRANSFORMER_ERROR に相当）。DTC 報告自体は E2EXf/
-     * Rte_COMCbk_EngineInfo が DEM_EVENT_E2E_ENGINEINFO へ直接行うため
+     * Rte_COMRxInd_EngineInfo が DEM_EVENT_E2E_ENGINEINFO へ直接行うため
      * ここでは行わない。SWC（本 Runnable）が Rte 経由で E2E の異常を
      * 直接観測できることを示す目的のログ。 */
     if (speedRet == RTE_E_HARD_TRANSFORMER_ERROR || tempRet == RTE_E_HARD_TRANSFORMER_ERROR

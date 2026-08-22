@@ -484,10 +484,10 @@ typedef enum
 //               呼び出し箇所コメント・docs/modules/Com_Notes.md 参照）。
 //               非 Signal Group の I-PDU では未使用（Com_SignalConfigType.
 //               RxAckCbk 側のシグナル単位コールバックを使うこと）。NULL 可
-//               （通知不要なら未設定でよい）。実装（Rte_COMRxAck_<name>、
-//               実 AUTOSAR の生成名 Rte_COMCbk_<sn>/<sg> とは異なる命名を
-//               あえて使う理由）は Com_PBCfg.c・docs/modules/Com_Notes.md
-//               参照。
+//               （通知不要なら未設定でよい）。実装は仕様どおり
+//               Rte_COMCbk_<sn>/<sg> を使う（RxIndicationCbk 側を
+//               Rte_COMRxInd_<name> へ改名して名前衝突を解消した経緯は
+//               Com_PBCfg.c・docs/modules/Com_Notes.md 参照）。
 //   NumberOfRepetitions, RepetitionPeriodMs :
 //               ComTxModeNumberOfRepetitions / ComTxModeRepetitionPeriod
 //               （ECUC_Com_00281/00282、SWS_Com_00305/00467/00279/00392:

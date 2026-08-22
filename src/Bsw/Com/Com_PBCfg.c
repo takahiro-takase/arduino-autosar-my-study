@@ -16,7 +16,7 @@
  *              Signal 1: CoolantTemp    8 bit  BitPos=40  BigEndian
  *                DataInvalidAction=NOTIFY（受信値 0xFF はセンサ異常マーカー）
  *              Signal 2: EngineOnFlag   1 bit  BitPos=48  BigEndian
- *                RxAckCbk=Rte_COMRxAck_EngineOnFlag（SWS_Com_00555 Com_CbkRxAck、
+ *                RxAckCbk=Rte_COMCbk_EngineOnFlag（SWS_Com_00555 Com_CbkRxAck、
  *                非 Signal Group 実装例。RxIndicationCbk より前に呼ばれる）
  *            RX I-PDU 1 (IPduId=1): CAN ID 0x110, DLC=6  AbsInfo     (ABS ECU, E2E P05 保護)
  *              byte[0-1]: E2E CRC16 (リトルエンディアン) / byte[2]: E2E Counter (8bit)
@@ -24,8 +24,8 @@
  *              同じ理由で E2E Profile05 へ切り替えた）
  *              IsSignalGroup=1（RX Signal Group、Com_ReceiveSignalGroup で
  *              3 信号を一括して一貫したスナップショットとして読む。
- *              Rte_COMCbk_AbsInfo が RxIndicationCbk として確定コピーする）
- *              RxAckCbk=Rte_COMRxAck_AbsInfo（SWS_Com_00555 Com_CbkRxAck、
+ *              Rte_COMRxInd_AbsInfo が RxIndicationCbk として確定コピーする）
+ *              RxAckCbk=Rte_COMCbk_AbsInfo（SWS_Com_00555 Com_CbkRxAck、
  *              グループ単位。WarningStatus の TxAckCbk と対称）
  *              Signal 4: VehicleSpeed  16 bit  BitPos=24  BigEndian  0.01 km/h
  *                RxDataTimeoutAction=SUBSTITUTE（タイムアウト中は 0xFFFF を返す）
@@ -46,8 +46,8 @@
  *              update-bit（UpdateBitPosition=8）を持ち、周期フロア再送と
  *              値変化時送信を受信側が区別できる)
  *              Signal 3: EngineState    8 bit  BitPos= 0  BigEndian
- *                TxAckCbk=Rte_COMTxAck_EngineState（送信成功のたび呼ばれる）
- *                TxTOutCbk=Rte_COMTxTOut_EngineState（送信確認が
+ *                TxAckCbk=Rte_COMCbkTAck_EngineState（送信成功のたび呼ばれる）
+ *                TxTOutCbk=Rte_COMCbkTxTOut_EngineState（送信確認が
  *                COM_TX_TIMEOUT_METERSTATUS_MS 以内に届かないと呼ばれる。
  *                実機で発動する経路は無い）
  *              byte[2]: 警告灯3bit（WarningStatusと同じ値のミラー。uds_tester
@@ -70,7 +70,7 @@
  *                COM_TX_PERIOD_WARNINGSTATUS_TRUE_FLOOR_MS 間隔で周期フロア送信する。
  *                byte[0] bit3 にグループ単位の update-bit（UpdateBitPosition=3）
  *                を持ち、周期フロア再送か実際の変化かを受信側が区別できる。
- *                TxAckCbk=Rte_COMTxAck_WarningStatus（Signal Group 単位、
+ *                TxAckCbk=Rte_COMCbkTAck_WarningStatus（Signal Group 単位、
  *                送信成功のたびグループ全体で 1 回だけ呼ばれる）
  *              Signal 7: RunLamp        1 bit  BitPos= 0  BigEndian  TransferProperty=TRIGGERED_ON_CHANGE
  *              Signal 8: FaultLamp      1 bit  BitPos= 1  BigEndian  TmsContributor=1  TransferProperty=TRIGGERED_ON_CHANGE
@@ -108,7 +108,7 @@
  *          E2E（Profile01/05）の設定・ステート実体（DataID/Counter・CRC オフセット等）は
  *          E2E Transformer 方式への移行に伴い src/Bsw/E2EXf/E2EXf_PBCfg.c へ
  *          移設した。ここでは RxIndicationCbk/TxTransformCbk 経由で Rte 層の
- *          グルー関数（Rte_COMCbk_EngineInfo 等）を紐付けるのみで、
+ *          グルー関数（Rte_COMRxInd_EngineInfo 等）を紐付けるのみで、
  *          Com_PBCfg.c 自体は E2E の詳細を一切保持しない。
  *
  * =====================================================================
@@ -176,17 +176,17 @@
 /* Rte 層の E2E Transformer 呼び出しグルー関数（Rte.c で定義）。
  * Os_PBCfg.c 等と同じく、レイヤ違反（Com が Rte.h を include する）を
  * 避けるためローカル extern 宣言で参照する。 */
-extern void Rte_COMCbk_EngineInfo(void);
-extern void Rte_COMCbk_AbsInfo(void);
+extern void Rte_COMRxInd_EngineInfo(void);
+extern void Rte_COMRxInd_AbsInfo(void);
 extern void Rte_COMTransform_E2EHealthStatus(uint8* Data, uint8 Length);
 extern void Rte_COMInvalidNotify_CoolantTemp(void);
 extern void Rte_COMFilterReject_EngineSpeed(void);
-extern void Rte_COMTxAck_EngineState(void);
-extern void Rte_COMTxTOut_EngineState(void);
-extern void Rte_COMTxAck_WarningStatus(void);
-extern void Rte_COMRxAck_EngineOnFlag(void);
-extern void Rte_COMRxAck_AbsInfo(void);
-extern void Rte_COMCbk_SecureCommand(void);
+extern void Rte_COMCbkTAck_EngineState(void);
+extern void Rte_COMCbkTxTOut_EngineState(void);
+extern void Rte_COMCbkTAck_WarningStatus(void);
+extern void Rte_COMCbk_EngineOnFlag(void);
+extern void Rte_COMCbk_AbsInfo(void);
+extern void Rte_COMRxInd_SecureCommand(void);
 
 /* -----------------------------------------------------------------------
  * RX I-PDU テーブル
@@ -212,7 +212,7 @@ static const Com_IPduConfigType Com_RxIPduConfigData[COM_RX_IPDU_COUNT] = {
                                                  *          判断するまでの時間 */
         .UpdateBitPosition = 0xFFU,             /* update-bit なし（Signal Group 専用機能のため未使用） */
         .IpduGroupId = COM_IPDU_GROUP_NONE,     /* I-PDU Group に属さない（常に有効） */
-        .RxIndicationCbk = Rte_COMCbk_EngineInfo /* DaVinci: /ActiveEcuC/E2EXf/EngineInfo_Rx_E2EXf
+        .RxIndicationCbk = Rte_COMRxInd_EngineInfo /* DaVinci: /ActiveEcuC/E2EXf/EngineInfo_Rx_E2EXf
                                                  *          （E2E Transformer 呼び出しは Rte 層が担う） */
     },
     {
@@ -221,7 +221,7 @@ static const Com_IPduConfigType Com_RxIPduConfigData[COM_RX_IPDU_COUNT] = {
          * DaVinci: /ActiveEcuC/Com/ComConfig/AbsInfo_Rx
          * IsSignalGroup=1（RX Signal Group）: VehicleSpeed/BrakeActive/AbsActive
          * の 3 シグナルを Com_ReceiveSignalGroup() 経由で一括して一貫したスナップ
-         * ショットとして読む。Rte_COMCbk_AbsInfo() が RxIndicationCbk として
+         * ショットとして読む。Rte_COMRxInd_AbsInfo() が RxIndicationCbk として
          * フレーム受信の都度呼ばれ、その中で確定コピーする。
          * UpdateBitPosition は未使用（0xFF）。Com は update-bit 機構
          * （SWS_Com_00324/00802、Com_ReceiveSignalGroup() 参照）自体を持つが、
@@ -243,9 +243,9 @@ static const Com_IPduConfigType Com_RxIPduConfigData[COM_RX_IPDU_COUNT] = {
         .IsSignalGroup = 1U,                   /* RX Signal Group（Com_ReceiveSignalGroup で確定コピー） */
         .UpdateBitPosition = 0xFFU,            /* update-bit なし（本 I-PDU には適用しない。上記コメント参照） */
         .IpduGroupId = COM_IPDU_GROUP_NONE,    /* I-PDU Group に属さない（常に有効） */
-        .RxIndicationCbk = Rte_COMCbk_AbsInfo, /* DaVinci: /ActiveEcuC/E2EXf/AbsInfo_Rx_E2EXf
+        .RxIndicationCbk = Rte_COMRxInd_AbsInfo, /* DaVinci: /ActiveEcuC/E2EXf/AbsInfo_Rx_E2EXf
                                                 *          （E2E Transformer 呼び出しは Rte 層が担う） */
-        .RxAckCbk = Rte_COMRxAck_AbsInfo       /* SWS_Com_00555 (Com_CbkRxAck)、
+        .RxAckCbk = Rte_COMCbk_AbsInfo       /* SWS_Com_00555 (Com_CbkRxAck)、
                                                 *          Signal Group 単位（WarningStatus の
                                                 *          TxAckCbk と対称。RxIndicationCbk より前に
                                                 *          呼ばれる） */
@@ -276,7 +276,7 @@ static const Com_IPduConfigType Com_RxIPduConfigData[COM_RX_IPDU_COUNT] = {
         .TimeoutMs = 0U,                       /* 監視無効（上記コメント参照） */
         .UpdateBitPosition = 0xFFU,            /* update-bit なし（Signal Group 専用機能のため未使用） */
         .IpduGroupId = COM_IPDU_GROUP_NONE,    /* I-PDU Group に属さない（常に有効） */
-        .RxIndicationCbk = Rte_COMCbk_SecureCommand /* ログ出力のみの最小デモ
+        .RxIndicationCbk = Rte_COMRxInd_SecureCommand /* ログ出力のみの最小デモ
                                                 *   （Rte_COMInvalidNotify_CoolantTemp と同じパターン） */
     }
 };
@@ -346,7 +346,7 @@ static const Com_IPduConfigType Com_TxIPduConfigData[COM_TX_IPDU_COUNT] = {
          * 変化したことによる送信とを受信側が区別できる（MeterStatus/
          * EngineState の非 Signal Group 版と対になる、Signal Group 単位の
          * 実装例）。詳細は README.md の「Update Bit」節を参照。
-         * TxAckCbk（Signal Group 単位、SWS_Com_00468）: Rte_COMTxAck_WarningStatus
+         * TxAckCbk（Signal Group 単位、SWS_Com_00468）: Rte_COMCbkTAck_WarningStatus
          * を設定し、グループ全体の送信成功をまとめて 1 回通知する
          * （MeterStatus/EngineState の TxAckCbk と対になる、Signal Group
          * 単位の実装例。2026-08 追加）。
@@ -367,7 +367,7 @@ static const Com_IPduConfigType Com_TxIPduConfigData[COM_TX_IPDU_COUNT] = {
                                                *          (TMS true: FAULT/ABS 点灯中) */
         .TxPeriodMsTrue = COM_TX_PERIOD_WARNINGSTATUS_TRUE_FLOOR_MS,
         .MinDelayMs     = COM_TX_MIN_DELAY_WARNINGSTATUS_MS, /* DaVinci: ComMinimumDelayTime */
-        .TxAckCbk       = Rte_COMTxAck_WarningStatus /* DaVinci: ComNotification (ComSignalGroup) */
+        .TxAckCbk       = Rte_COMCbkTAck_WarningStatus /* DaVinci: ComNotification (ComSignalGroup) */
     },
     {
         /* ---------------------------------------------------------------
@@ -482,7 +482,7 @@ static const Com_SignalConfigType Com_SignalConfigData[COM_SIGNAL_COUNT] = {
          * 8bit センサ値の慣習）。0xFF を受信しても Rte_EngineInfoMirror.temp
          * は直近の有効値のまま更新されない。ComRxDataTimeoutAction（時間ベース
          * の異常）とは異なり、これはフレームの中身そのものに基づく異常検知で
-         * あり、Rte_COMCbk_EngineInfo() 経由で毎回のフレーム受信時に実際に
+         * あり、Rte_COMRxInd_EngineInfo() 経由で毎回のフレーム受信時に実際に
          * 評価される（他の SUBSTITUTE/RX Signal Group 系の機能と異なり、
          * uds_tester で CoolantTemp=0xFF のフレームを送れば実機で検証できる）。
          * Rte_COMInvalidNotify_CoolantTemp() の実呼び出しは次回
@@ -507,7 +507,7 @@ static const Com_SignalConfigType Com_SignalConfigData[COM_SIGNAL_COUNT] = {
         /* ---------------------------------------------------------------
          * Signal 2: EngineOnFlag  RX 1bit  CAN 0x100 byte[6] bit7
          * DaVinci: /ActiveEcuC/Com/ComConfig/EngineOnFlag_Rx
-         * RxAckCbk=Rte_COMRxAck_EngineOnFlag（SWS_Com_00555、ComNotification/
+         * RxAckCbk=Rte_COMCbk_EngineOnFlag（SWS_Com_00555、ComNotification/
          * Com_CbkRxAck 相当）: EngineInfo フレームの受信バッファ格納が
          * 完了するたびに呼ばれる（RxIndicationCbk による E2E 検証より前。
          * 他の特殊フィールドを持たない「素の」シグナルのため、非 Signal
@@ -522,17 +522,17 @@ static const Com_SignalConfigType Com_SignalConfigData[COM_SIGNAL_COUNT] = {
         .FirstTimeoutMs = COM_TIMEOUT_ENGINE_INFO_MS, /* DaVinci: ComFirstTimeout（シグナル単位）
                                                  *          EngineSpeed と同じ理由・同じ値 */
         .TimeoutMs      = COM_TIMEOUT_ENGINE_INFO_MS, /* DaVinci: ComTimeout（シグナル単位） */
-        .RxAckCbk       = Rte_COMRxAck_EngineOnFlag
+        .RxAckCbk       = Rte_COMCbk_EngineOnFlag
     },
     {
         /* ---------------------------------------------------------------
          * Signal 3: EngineState  TX 8bit  CAN 0x200 byte[0]
          * （E2E 保護なしのため、シグナルは byte[0] から始まる）
          * DaVinci: /ActiveEcuC/Com/ComConfig/EngineState_Tx
-         * TxAckCbk=Rte_COMTxAck_EngineState（SWS_Com_00468、ComNotification/
+         * TxAckCbk=Rte_COMCbkTAck_EngineState（SWS_Com_00468、ComNotification/
          * Com_CbkTxAck 相当）: MeterStatus フレームが実際に送信されるたびに
          * 呼ばれる（この送信で EngineState 自体が変化したかどうかは問わない）。
-         * TxTOutCbk=Rte_COMTxTOut_EngineState（SWS_Com_00554、Com_CbkTxTOut
+         * TxTOutCbk=Rte_COMCbkTxTOut_EngineState（SWS_Com_00554、Com_CbkTxTOut
          * 相当）: MeterStatus の送信確認が COM_TX_TIMEOUT_METERSTATUS_MS 以内
          * に届かなかった場合に呼ばれる。実機で発動する経路は無い
          * （docs/modules/Com_Notes.md 参照）。
@@ -550,8 +550,8 @@ static const Com_SignalConfigType Com_SignalConfigData[COM_SIGNAL_COUNT] = {
                                                  *          update-bit（byte[1] bit0）はこの
                                                  *          シグナルの変化のみを反映する
                                                  *          （Signal 14-17 のミラーは寄与しない） */
-        .TxAckCbk        = Rte_COMTxAck_EngineState, /* DaVinci: ComNotification */
-        .TxTOutCbk       = Rte_COMTxTOut_EngineState  /* DaVinci: ComTransmissionDeadlineMonitoring */
+        .TxAckCbk        = Rte_COMCbkTAck_EngineState, /* DaVinci: ComNotification */
+        .TxTOutCbk       = Rte_COMCbkTxTOut_EngineState  /* DaVinci: ComTransmissionDeadlineMonitoring */
     },
     {
         /* ---------------------------------------------------------------
@@ -560,7 +560,7 @@ static const Com_SignalConfigType Com_SignalConfigData[COM_SIGNAL_COUNT] = {
          *   E2E Profile05 のヘッダレイアウトのため、シグナルは byte[3] から）
          * DaVinci: /ActiveEcuC/Com/ComConfig/VehicleSpeed_Rx
          * RX Signal Group（AbsInfo_Rx）メンバー。Com_ReceiveSignalGroup(1U) 経由
-         * でのみ最新化される（Rte_COMCbk_AbsInfo 参照）。
+         * でのみ最新化される（Rte_COMRxInd_AbsInfo 参照）。
          * RxDataTimeoutAction=SUBSTITUTE（SWS_Com_00876: VehicleSpeed は
          * Signal Group メンバーのため、非グループ用の SWS_Com_00875 ではなく
          * こちらが根拠要求）: タイムアウト中は 0xFFFF（655.35 km/h 相当、
@@ -568,7 +568,7 @@ static const Com_SignalConfigType Com_SignalConfigData[COM_SIGNAL_COUNT] = {
          * 「値不明」を明確に区別するため（既定の NONE のままだと E_NOT_OK に
          * なるだけで、速度そのものは返らない）。
          * 注意 (1): この VehicleSpeed を読む Com_ReceiveSignal() は
-         * Rte_COMCbk_AbsInfo()（RxIndicationCbk）内の 1 箇所のみで、
+         * Rte_COMRxInd_AbsInfo()（RxIndicationCbk）内の 1 箇所のみで、
          * フレーム受信・E2E 検証成功直後にしか呼ばれないため、この
          * SUBSTITUTE 分岐は現状のアーキテクチャでは実際には発動しない
          * （実際のフェイルセーフは Rte_Read_* 側の Com_IsRxTimedOut() が

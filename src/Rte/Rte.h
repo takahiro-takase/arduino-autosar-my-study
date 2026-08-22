@@ -23,7 +23,7 @@ extern "C" {
 /* EngineInfo (CAN 0x100) 由来の Read ポート。E2E Transformer 経由のため
  * Rte_IStatusType を返す（RTE_E_OK / RTE_E_COM_STOPPED /
  * RTE_E_HARD_TRANSFORMER_ERROR / RTE_E_SOFT_TRANSFORMER_ERROR。詳細は
- * Rte_Type.h と Rte.c の Rte_COMCbk_EngineInfo() を参照）。*data は
+ * Rte_Type.h と Rte.c の Rte_COMRxInd_EngineInfo() を参照）。*data は
  * いずれのケースでも最後の正常値が書き込まれる（本実装の意図的な簡略化。
  * 詳細は Rte.c 冒頭のコメント参照）。 */
 Rte_IStatusType Rte_Read_SpeedSensor_EngineSpeed(EngineSpeed_t* data);

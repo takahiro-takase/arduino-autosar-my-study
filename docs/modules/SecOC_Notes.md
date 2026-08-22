@@ -35,7 +35,7 @@ E2E は「Com のコールバックフック（RxIndicationCbk/TxTransformCbk）
           Freshness（8bit、単調増加）を検証（リプレイ検知）
           両方 OK → Com_RxIndication(ComRxIPduId=2, AuthenticPayload) を直接呼ぶ
           NG → ログのみ、Com へは一切転送しない
-      → Com_ReceiveSignal(IMMOBILIZER_CMD) → Rte_COMCbk_SecureCommand()（ログのみ）
+      → Com_ReceiveSignal(IMMOBILIZER_CMD) → Rte_COMRxInd_SecureCommand()（ログのみ）
 
 【TX】現在 SecOC を使う TX I-PDU は無い（後述）。以前は E2EHealthStatus
   （CAN 0x220）が以下の経路で SecOC 保護されていたが、E2E を Profile05（CRC16）
@@ -203,7 +203,7 @@ E2E Profile05 単体保護に切り替えました（`E2EXf_PBCfg.c`/`SecOC_PBCf
   `Rte: ImmobilizerCmd: UNLOCK (authenticated via SecOC)` が出力されます。
 - **改ざん検知**: 送信前に Entry 欄の MAC バイト（末尾 3 バイト）を手入力で
   1 桁変更してから送信すると、`SecOC: RxInd W: ... MAC verification failed`
-  が出力され、`Rte_COMCbk_SecureCommand()` は一切呼ばれません（E2E の
+  が出力され、`Rte_COMRxInd_SecureCommand()` は一切呼ばれません（E2E の
   WRONGCRC 検証と同じ「Entry を手入力で改ざんしてから送信する」方式。
   送信ボタンは常に Entry の内容をそのまま送るため、意図的な改ざんテストが
   行えます）。
@@ -223,7 +223,7 @@ TX ループは毎回 0 回実行で終わります）。
 ## 意図的に応用範囲を限定した理由
 
 本モジュールは Com/SecOC/PduR のアーキテクチャ学習が主目的のため、ドア施錠制御
-等の実ハードウェア反応までは作り込んでいません（`Rte_COMCbk_SecureCommand()`
+等の実ハードウェア反応までは作り込んでいません（`Rte_COMRxInd_SecureCommand()`
 はログ出力のみ）。他の多くの Com 機能（`ComRxDataTimeoutAction` 等）が
 「実利より仕様忠実性」であったのに対し、この機能は EngineInfo/AbsInfo の
 E2E 検証と同じく、実際に受信経路を通り実機で検証可能です。

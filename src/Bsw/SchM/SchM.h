@@ -46,7 +46,7 @@ extern "C" {
  *           Rte_EngineInfoMirror / Rte_AbsInfoMirror
  *           （E2E Transformer 方式の RX ミラー。Rte.c 参照）
  * 書き込み: Rte_Write_EngineStatus_EngineState() — Task 2 (3000 ms)
- *           Rte_COMCbk_EngineInfo() / Rte_COMCbk_AbsInfo()
+ *           Rte_COMRxInd_EngineInfo() / Rte_COMRxInd_AbsInfo()
  *           — Can_MainFunction_Read() 経由（メインループのタスク）
  * 読み出し: Rte_Read_EngineStatus_EngineState()  — Task 3 (500 ms) / DCM
  *           Rte_Read_SpeedSensor_EngineSpeed() 等 — 各タスク
