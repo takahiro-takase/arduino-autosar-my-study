@@ -276,6 +276,32 @@ void Rte_COMTxAck_EngineState(void)
 }
 
 /**
+ * \brief   MeterStatus フレームの送信確認タイムアウトを通知する
+ *          （EngineState の TxTOut）。
+ *
+ * \details Com_PBCfg.c の EngineState シグナル設定（TxTOutCbk）から登録
+ *          される（実 AUTOSAR の Com_CbkTxTOut、SWS_Com_00878/00879/00880/
+ *          00304/00554 相当）。呼ばれるのは Com_MainFunction() が MeterStatus
+ *          （TX IPduId=0）の送信確認が COM_TX_TIMEOUT_METERSTATUS_MS 以内に
+ *          届かなかったことを検出した直後。
+ *
+ * \note    実機では発動しない: Com_DoTransmit()→PduR_Transmit()→
+ *          CanIf_Transmit()→Can_Write() は同期的に完結し、Bus-Off 中は
+ *          Can_Write() が「送信済み・未確認」状態自体を作らずに即座に
+ *          失敗するため（詳細は docs/modules/Com_Notes.md「TX 送信デッド
+ *          ライン監視」参照）。Rte_COMTxAck_EngineState() と対になる、
+ *          仕様忠実性のためのユニットテスト検証専用の実装。
+ *
+ * \note    Com_PBCfg.c から extern 宣言経由で TxTOutCbk として参照されるため
+ *          non-static。Rte.h には公開しない（他の Rte_COM* グルーと同じ
+ *          理由）。
+ */
+void Rte_COMTxTOut_EngineState(void)
+{
+    DET_LOGI(TAG, "MeterStatus TX confirmation timeout (EngineState)");
+}
+
+/**
  * \brief   WarningStatus フレームの送信成功を通知する（Signal Group 単位）。
  *
  * \details Com_PBCfg.c の WarningStatus I-PDU 設定（Com_IPduConfigType.

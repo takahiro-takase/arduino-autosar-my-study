@@ -149,6 +149,21 @@
 #define COM_TX_PERIOD_METERSTATUS_FLOOR_MS  9000U
 
 /**
+ * MeterStatus (0x200) の TX 送信デッドライン監視（Com_CbkTxTOut、
+ * SWS_Com_00878/00879/00880/00304/00554）の閾値 [ms]
+ * DaVinci: /ActiveEcuC/Com/ComConfig/[ComIPdu]/ComTransmissionDeadlineMonitoring/
+ *          ComFirstTimeout・ComTimeout
+ *
+ * PduR_Transmit() へ渡してから Com_TxConfirmation() が届くまでの許容時間。
+ * 実送信間隔（COM_TX_PERIOD_METERSTATUS_FLOOR_MS=9000ms）より十分短く、
+ * 現実的な確認応答遅延より十分長い値とし、First/Timeout 共通で使う
+ * （EngineInfo の COM_TIMEOUT_ENGINE_INFO_MS と同じ流儀）。実機で発動する
+ * 経路は無い（docs/modules/Com_Notes.md 参照）——仕様忠実性のための実装で、
+ * Com_CbkTxErr と同じ位置づけ。
+ */
+#define COM_TX_TIMEOUT_METERSTATUS_MS  2000U
+
+/**
  * WarningStatus (0x210) の TMS（Transmission Mode Selector）が true と
  * 評価された（FaultLamp/AbsLamp のいずれかが点灯中の）ときに使う
  * MIXED 送信モードの周期フロア間隔 [ms]

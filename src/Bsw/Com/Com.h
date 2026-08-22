@@ -292,6 +292,23 @@ uint8 Com_Test_GetTxRepeatsRemaining(Com_IPduIdType ipduId);
  *  を新規に用意しなくても、既存の停止可能グループの I-PDU に対して内部
  *  カウンタを直接注入できるようにする。範囲外の `ipduId` は無視する。 */
 void Com_Test_SetTxRepeatsRemaining(Com_IPduIdType ipduId, uint8 value);
+
+/** [テスト専用] TX 送信デッドライン監視（Com_CbkTxTOut、SWS_Com_00878等）の
+ *  タイムアウト検出ラッチ（Com_TxTimedOut[ipduId]）を取得する。範囲外の
+ *  `ipduId` は 0 を返す。 */
+uint8 Com_Test_GetTxTimedOut(Com_IPduIdType ipduId);
+
+/** [テスト専用] TX I-PDU の「送信済み・未確認」フラグ（Com_TxConfPending
+ *  [ipduId]）を取得する。範囲外の `ipduId` は 0 を返す（Setter は既存の
+ *  Com_Test_SetTxConfPending 参照）。 */
+uint8 Com_Test_GetTxConfPending(Com_IPduIdType ipduId);
+
+/** [テスト専用] TX 送信デッドライン監視のアーム時刻
+ *  （Com_TxConfPendingSinceMs[ipduId]）を直接セットする。実際に
+ *  Com_MainFunction() 経由でディスパッチさせなくても、「以前のある時刻から
+ *  確認待ちである」状態を直接注入できるようにする（Com_IpduGroupStop() に
+ *  よるキャンセル検証など）。範囲外の `ipduId` は無視する。 */
+void Com_Test_SetTxConfPendingSinceMs(Com_IPduIdType ipduId, unsigned long value);
 #endif
 
 #ifdef __cplusplus
