@@ -410,11 +410,143 @@ Group ならグループ単位で 1 回、そうでなければ TX シグナル�
 配送ロジックが完全に同型であるにもかかわらず、対応する 2 つの関数へ別々に
 実装していました。レビューで「将来 3 つ目の類似コールバックを追加する際、
 片方だけ修正して他方を直し忘れるリスクがある」と指摘され、`Com.c` 内の
-`Com_InvokeTxNotification()` ヘルパーへ集約しました。呼び出し元は「グループ
-単位のコールバック値」と「シグナルから対象コールバックを取り出す 1 行の
-アクセサ関数（`Com_GetSignalTxAckCbk`/`Com_GetSignalTxErrCbk`）」を渡すだけ
+`Com_InvokeTxNotification()` ヘルパーへ集約しました。呼び出し元は
+`COM_TX_NOTIFY_ACK`/`COM_TX_NOTIFY_ERR`（`Com_TxNotifyKindType`）を渡すだけ
 になり、配送ロジック自体は 1 箇所のみで保守します（挙動そのものは変わって
 いません）。
+
+当初は「シグナルから対象コールバックを取り出す」役割を関数ポインタ経由の
+アクセサ（`Com_GetSignalTxAckCbk`/`Com_GetSignalTxErrCbk`）で抽象化していま
+したが、`/simplify` の Altitude/Simplification 両観点から独立に「呼び出し
+箇所 2 つ・選択肢 2 つの重複解消にしては過剰で、本ファイルの他の箇所
+（`Com_TmsState[ipduId] ? ipdu->TxModeModeTrue : ipdu->TxModeMode` 等）が
+使う直接フィールドアクセス＋三項演算子という既存スタイルと不整合」と指摘
+され、`Com_TxNotifyKindType` 列挙型＋三項演算子（`(kind==COM_TX_NOTIFY_ACK)
+? sig->TxAckCbk : sig->TxErrCbk`）の形へ整理しました。関数ポインタ抽象化は
+「選択肢が実際に複数種類あり、かつ呼び出し側が種類を知らないまま扱いたい」
+場合にのみ正当化されるのであって、単に「2 択を 1 箇所にまとめたい」だけなら
+過剰である、という教訓です。
+
+## ComNotification拡張（Rx確定コールバック、Com_CbkRxAck）
+
+`Com_CbkTxAck`/`Com_CbkTxErr` が TX 側の「送信できたこと/できなかったこと」の
+通知だったのに対し、RX 側にも対になる通知があります。`Com_CbkRxAck`
+（SWS_Com_00555: "This callback represents notification class 1 ... It is
+called immediately after the message has been stored in the receiving
+message object. ... It can be configured for signals and signal groups.
+Com_CbkRxAck corresponds to Rte_COMCbk_<sn> or Rte_COMCbk_<sg>
+respectively."）は、Com が受信バッファへバイト列を格納した直後に呼ばれる
+通知で、`ComNotification`（ECUC_Com_00498）は TX 側と同じ設定コンテナが
+`ComSignal`・`ComSignalGroup` 双方に独立して存在します。
+
+本プロジェクトは 2026-08 の TxAckCbk/TxErrCbk 是正の後にこちらを調査し、
+**シグナル単位・シグナルグループ単位いずれの `Com_CbkRxAck` も一切実装
+していなかった**ことが判明しました（既存の `Com_IPduConfigType.
+RxIndicationCbk` は E2E 検証・SecOC 連携・Signal Gateway 起点として使う
+本プロジェクト独自の I-PDU 単位汎用フックであり、実 AUTOSAR の
+`Com_RxIpduCallout`（真偽値を返し受理/拒否できる別機構、`ComIPduCallout`）
+とも `Com_CbkRxAck` とも異なるものです）。TX 側は既存のシグナル単位
+`TxAckCbk` にグループ単位を追加しただけでしたが、RX 側はシグナル単位・
+グループ単位とも新設しています。
+
+`EngineInfo` の `EngineOnFlag`（非 Signal Group）と `AbsInfo`（Signal
+Group）の両方に `RxAckCbk` を設定しました。
+
+```
+Com_SignalConfigType (EngineOnFlag):
+  RxAckCbk = Rte_COMRxAck_EngineOnFlag
+
+Com_RxIndication(RxPduId=0/*EngineInfo*/, ...)  ← PduR から呼ばれる
+  バッファ格納後、シグナル単位デッドライン監視リセットループの中で
+  （下記「共通配送ロジックへの統合を見送った理由」参照）
+    sig->Direction==RX かつ sig->IPduId==0 かつ
+    このシグナルの全ビット範囲が recvLen 以内（Com_SigTimedOut リセットと
+    同じ条件） かつ ipdu->IsSignalGroup==0 かつ sig->RxAckCbk != NULL
+    のものすべてについて sig->RxAckCbk() を呼ぶ
+
+Com_IPduConfigType (AbsInfo_Rx):
+  RxAckCbk = Rte_COMRxAck_AbsInfo
+
+Com_RxIndication(RxPduId=1/*AbsInfo*/, ...)
+  IsSignalGroup==1 のため、シグナルループへ入る前に
+  ipdu->RxAckCbk（Rte_COMRxAck_AbsInfo）をグループ単位で 1 回だけ呼ぶ
+  （VehicleSpeed/BrakeActive/AbsActive のどれが変化したかは問わない）
+```
+
+**なぜ `Com_RxIndication()` 内、`RxIndicationCbk` より前に発火させるか**:
+`AbsInfo` のような RX Signal Group では、シャドウバッファへの確定コピーを
+行う `Com_ReceiveSignalGroup()` は `RxIndicationCbk`（`Rte_COMCbk_AbsInfo()`）
+の内部から、**E2E 検証成功後にのみ**呼ばれます。つまり E2E 検証に失敗した
+フレームでは一度も呼ばれません。ここに `Com_CbkRxAck` を紐付けると、
+「バッファに格納した」という Com 自身の事実と無関係に、上位層（E2E）の
+都合で通知が抑制されてしまい、SWS_Com_00555 の原文
+（"immediately after the message has been stored"）に反します。そのため
+`Com_RxIndication()` 自身の生バッファ書き込み（`Com_RxBuffer` への
+コピー）を根拠にし、`RxIndicationCbk` より前の時点で発火させています。
+Signal Group は短フレーム破棄（[SWS_Com_00575]、受信長が DLC 未満なら
+グループ全体を丸ごと不採用）が生バッファ書き込みより前に判定されるため、
+この発火時点に到達していれば必ずグループ全体が格納済みであり、
+グループレベルでの発火に曖昧さはありません。
+
+**命名の衝突と `Rte_COMRxAck_*` を選んだ理由**: 実 AUTOSAR が生成する RTE
+関数名は `Rte_COMCbk_<sn>`/`<sg>` ですが、本プロジェクトは**この名前を
+既に `RxIndicationCbk` 向けに使っています**（`Rte_COMCbk_EngineInfo`/
+`Rte_COMCbk_AbsInfo`/`Rte_COMCbk_SecureCommand`、いずれも E2E 検証等を行う
+別の汎用フック）。そのまま実 AUTOSAR の命名規則に従うと、全く別の意味を持つ
+2 つのコールバックが同じ関数名を要求することになり衝突します。TX 側で
+`TxAckCbk` を実 AUTOSAR の `Rte_COMCbkTAck_<sn>/<sg>` ではなく本プロジェクト
+独自の `Rte_COMTxAck_*` と命名した前例に倣い、RX 側も `Rte_COMRxAck_<name>`
+を用いています。実 AUTOSAR の生成規則からの意図的な逸脱であり、
+仕様（SWS_Com_00555 の動作要求）からの逸脱ではありません。
+
+**部分受信時のゲーティング**: 非 Signal Group シグナルの `RxAckCbk` は、
+そのシグナルの全ビット範囲が実際に受信できたバイト数（`recvLen`）以内に
+収まっている場合のみ呼ばれます（[SWS_Com_00574]、`Com_RxIndication()` 内の
+`Com_SigTimedOut` リセット判定と全く同じ `lastByte <= recvLen` 判定式を
+共有）。範囲外だったシグナルは「受信した」とみなさないという既存の基準を
+そのまま踏襲しています。部分受信自体は、`CanIf` の設定 DLC が本プロジェクト
+の全 RX I-PDU で Com の設定 DLC と常に一致しているため、実機では到達しない
+経路です（`Com_RxIndication()` の doc コメント参照）。この機能に固有の
+ロジック（`lastByte <= recvLen` によるゲーティング）は、`Com_RxIndication()`
+を直接呼ぶユニットテストでのみ検証しています（詳細は下記）。
+
+**この機能は実際に発動するか**: 発動します（`TxErrCbk` とは異なります）。
+`EngineInfo`/`AbsInfo` はいずれも通常運用で継続的に受信されるデッドライン
+監視対象の RX I-PDU のため、フレームを受信するたびに確実に発火します。
+ログに `Com: RX iPdu=0 [...]` の直後に `Rte: EngineInfo RX ack
+(EngineOnFlag)`、`Com: RX iPdu=1 [...]` の直後に `Rte: AbsInfo RX ack
+(group)` が出力されることを実機で確認できます。`RxIndicationCbk` より前に
+呼ばれるため、E2E CRC が壊れているフレームでもこれらのログは出力されます
+（続く E2E 検証ログとセットで見ることで、「バイト列は届いたが妥当性検証は
+別軸」という設計を実機ログ上でも確認できます）。
+
+**共通配送ロジックへの統合を見送った理由**: TX 側の
+`Com_InvokeTxNotification()`（`Com_TxNotifyKindType` で ACK/ERR を判別する
+共通ヘルパー）とは統合していません。RX 側には呼び出し元が
+`Com_RxIndication()` の 1 箇所のみ、通知の種類も `RxAckCbk` のみで、
+判別すべき「2 択」がそもそも存在しないためです。
+
+**専用ヘルパー関数として独立させることも見送った経緯（2026-08、
+`/code-review` 指摘）**: 当初の実装は `Com_InvokeRxAck()` という専用の
+static 関数を新設し、`Com_RxIndication()` から `RxIndicationCbk` の直前で
+呼ぶ形にしていました。しかしこの関数の非 Signal Group 分岐は、
+`Com_RxIndication()` 側に既にある「シグナル単位デッドライン監視リセット」
+ループ（`Com_SigTimedOut[s]=0U` を `lastByte <= recvLen` の条件で行う
+ループ）と、フィルタ条件（`Direction==RX && IPduId==ipdu->IPduId`）も
+`lastByte` の計算式も完全に同一の、**2 本目の全シグナル走査**でした。
+CAN RX フレームを受信するたびに `Signals[]` を 2 回走査することになり、
+かつ「完全に受信できたか」（SWS_Com_00574）という同じ判定ロジックが
+2 箇所に存在するため、将来どちらか一方だけを修正すると
+`Com_SigTimedOut` リセットと `RxAckCbk` 発火の基準が静かにずれる、という
+指摘を受けました。
+
+対応として `Com_InvokeRxAck()` を廃止し、その処理を
+「Signal Group ならループに入る前にグループ単位で 1 回呼ぶ」＋
+「シグナル単位デッドライン監視リセットループ自体に `RxAckCbk` 呼び出しを
+組み込む（`lastByte <= recvLen` の判定を使い回す）」という形で
+`Com_RxIndication()` 本体へ統合しました。これにより全シグナル走査は
+1 回のみになり、「完全に受信できたか」の判定ロジックも 1 箇所に
+一本化されています。
 
 ## Update Bit（送信側が実際に更新したかを示す1ビット）
 

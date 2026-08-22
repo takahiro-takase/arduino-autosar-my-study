@@ -467,6 +467,27 @@ typedef enum
 //               非 Signal Group の I-PDU では未使用（Com_SignalConfigType.
 //               TxErrCbk 側のシグナル単位コールバックを使うこと）。NULL 可
 //               （通知不要なら未設定でよい）。
+//   RxAckCbk    : Signal Group（IsSignalGroup=1）専用。非 NULL なら、この
+//               I-PDU の受信バッファへの格納が成功するたびに
+//               Com_RxIndication() からグループ単位で 1 回だけ呼ばれる
+//               （Com_CbkRxAck、SWS_Com_00555: "This callback represents
+//               notification class 1 ... called immediately after the
+//               message has been stored in the receiving message object.
+//               ... It can be configured for signals and signal groups.
+//               Com_CbkRxAck corresponds to Rte_COMCbk_<sn> or
+//               Rte_COMCbk_<sg> respectively."）。ECUC_Com_00498
+//               ComNotification は ComSignal・ComSignalGroup 双方に独立した
+//               コンテナとして存在する（TxAckCbk と同じ根拠）。E2E 等の
+//               妥当性検証とは無関係な、Com 自身の「バイト列を格納した」と
+//               いう事実のみの通知であり、RxIndicationCbk（E2E 検証等の
+//               汎用フック）より前に呼ばれる（詳細は Com_RxIndication() の
+//               呼び出し箇所コメント・docs/modules/Com_Notes.md 参照）。
+//               非 Signal Group の I-PDU では未使用（Com_SignalConfigType.
+//               RxAckCbk 側のシグナル単位コールバックを使うこと）。NULL 可
+//               （通知不要なら未設定でよい）。実装（Rte_COMRxAck_<name>、
+//               実 AUTOSAR の生成名 Rte_COMCbk_<sn>/<sg> とは異なる命名を
+//               あえて使う理由）は Com_PBCfg.c・docs/modules/Com_Notes.md
+//               参照。
 // -------------------------------------------------------
 typedef struct
 {
@@ -487,6 +508,7 @@ typedef struct
     void (*TxTransformCbk)(uint8* Data, uint8 Length);
     void (*TxAckCbk)(void);
     void (*TxErrCbk)(void);
+    void (*RxAckCbk)(void);
 } Com_IPduConfigType;
 
 // -------------------------------------------------------
@@ -631,6 +653,16 @@ typedef enum
 //               "called in case the transmission is not possible because
 //               the corresponding I-PDU group is stopped"）。NULL 可
 //               （通知不要なら未設定でよい）。
+//   RxAckCbk    : 非 Signal Group の RX シグナルのみ使用（所属 I-PDU の
+//               IsSignalGroup=0 の場合のみ Com_RxIndication() が参照する。
+//               Signal Group メンバーに設定しても呼ばれない——グループの
+//               通知は Com_IPduConfigType.RxAckCbk 側でグループ単位に 1 回
+//               だけ行う。TxAckCbk/TxErrCbk と同じ設計）。非 NULL なら、
+//               このシグナルの全ビット範囲が実際に受信できたバイト数
+//               （recvLen）以内に収まって初めて呼ばれる（[SWS_Com_00574]:
+//               部分受信で範囲外だったシグナルは「受信した」とみなさない、
+//               Com_RxIndication() 側の Com_SigTimedOut リセット判定と
+//               全く同じ基準）。NULL 可（通知不要なら未設定でよい）。
 // -------------------------------------------------------
 typedef struct
 {
@@ -669,6 +701,7 @@ typedef struct
     void (*TimeoutNotificationCbk)(void);
     void (*TxAckCbk)(void);
     void (*TxErrCbk)(void);
+    void (*RxAckCbk)(void);
 } Com_SignalConfigType;
 
 // -------------------------------------------------------
