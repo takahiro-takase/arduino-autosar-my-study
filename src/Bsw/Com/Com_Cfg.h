@@ -175,6 +175,20 @@
  */
 #define COM_TX_MIN_DELAY_WARNINGSTATUS_MS  100U
 
+/**
+ * ImmobilizerStatus (0x230) の ComTxModeNumberOfRepetitions 再送間隔
+ * （ComTxModeRepetitionPeriod）[ms]
+ * DaVinci: /ActiveEcuC/Com/ComConfig/[ComIPdu]/ComTxModeRepetitionPeriod
+ *
+ * DIRECT モードの変化時送信をトリガーした後、Com_TxConfirmation() による
+ * 確認が N+1 回（ComTxModeNumberOfRepetitions+1）届くまでこの間隔で再送する
+ * （[SWS_Com_00305]）。イモビライザー状態のような安全上重要な通知を、
+ * 単発の CAN フレーム紛失（バス過渡輻輳等）で見逃さないための冗長送信。
+ * NumberOfRepetitions 自体（回数）は Com_PBCfg.c にインラインリテラルで書く
+ * （DLC 等と同じ「単純な回数は名前を付けない」慣習）。
+ */
+#define COM_TX_REPETITION_PERIOD_IMMOBILIZERSTATUS_MS  100U
+
 /** シグナルテーブルのエントリ数（RX + TX の合計）
  *  DaVinci: /ActiveEcuC/Com/ComConfig/ 内 ComSignal ノード数の合計 */
 #define COM_SIGNAL_COUNT    19U

@@ -98,6 +98,9 @@
  *              ImmobilizerCmd（SecOC 検証済み）から SWC を介さず直接転送する。
  *              認証は入力側で完了済みのため、このフレームを受信する内部 ECU は
  *              SecOC を実装する必要がない。
+ *              ComTxModeNumberOfRepetitions=2, ComTxModeRepetitionPeriod=100ms
+ *              （[SWS_Com_00305]）: 施錠/解錠状態の変化を単発フレーム紛失で
+ *              見逃さないよう、初回送信+100ms間隔で2回再送（計3回）する。
  *
  *          E2E（Profile01/05）の設定・ステート実体（DataID/Counter・CRC オフセット等）は
  *          E2E Transformer 方式への移行に伴い src/Bsw/E2EXf/E2EXf_PBCfg.c へ
@@ -411,10 +414,14 @@ static const Com_IPduConfigType Com_TxIPduConfigData[COM_TX_IPDU_COUNT] = {
         .IsSignalGroup = 0U, /* 直接送信 */
         .UpdateBitPosition = 0xFFU, /* update-bit なし（Signal Group 専用機能のため未使用） */
         .IpduGroupId = COM_IPDU_GROUP_NONE, /* I-PDU Group に属さない（常に有効） */
-        .TxModeMode = COM_TX_MODE_DIRECT   /* DaVinci: ComTxModeMode = DIRECT
+        .TxModeMode = COM_TX_MODE_DIRECT,  /* DaVinci: ComTxModeMode = DIRECT
                                             *          （ComFilterAlgorithm を通過した変化を
                                             *          検知すると次回 Com_MainFunction() で送信。
                                             *          周期フロアなし） */
+        .NumberOfRepetitions = 2U,   /* DaVinci: ComTxModeNumberOfRepetitions
+                                      *          初回送信 + 再送2回 = 計3回（[SWS_Com_00305]） */
+        .RepetitionPeriodMs  = COM_TX_REPETITION_PERIOD_IMMOBILIZERSTATUS_MS
+                                     /* DaVinci: ComTxModeRepetitionPeriod */
     }
 };
 

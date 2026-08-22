@@ -177,6 +177,15 @@ static uint8 Com_TxConfPending[COM_TX_IPDU_MAX];
  * 単一モード I-PDU と同じ挙動）。 */
 static uint8 Com_TmsState[COM_TX_IPDU_MAX];
 
+/* ComTxModeNumberOfRepetitions（SWS_Com_00305）の残り再送回数。
+ * Com_RequestTxOnChange() が新規要求のたびに ipdu->NumberOfRepetitions で
+ * 上書き、Com_MainFunction() が実際の再送 dispatch のたびに 1 減らす
+ * （確認 (Com_TxConfirmation) 到達時ではなく dispatch 時点で減らす理由は
+ * Com_MainFunction() のコメント・docs/modules/Com_Notes.md 参照）。0 なら
+ * 再送なし。Com_IpduGroupStart()/Com_IpduGroupStop() でも Com_TxPending
+ * 同様にゼロへリセットする（[SWS_Com_00392]）。 */
+static uint8 Com_TxRepeatsRemaining[COM_TX_IPDU_MAX];
+
 /* -----------------------------------------------------------------------
  * Signal Group（ComIPduConfigType.IsSignalGroup = 1）関連の内部状態
  * Com_SendSignal() は Signal Group メンバーをここへ書き込み、実バッファ
@@ -273,6 +282,7 @@ void Com_Init(const Com_ConfigType* config)
         Com_TxPending[i]         = 0U;
         Com_TxConfPending[i]     = 0U;
         Com_TmsState[i]          = 0U;   /* 既定 false（ゼロクリアされたバッファと整合） */
+        Com_TxRepeatsRemaining[i] = 0U;
         Com_GroupTriggerPending[i] = 0U;
         Com_TxIPduStarted[i] = 1U;  /* 上と同じ理由 */
     }
@@ -1059,6 +1069,30 @@ static uint16 Com_EffectiveTxPeriodMs(const Com_IPduConfigType* ipdu)
 }
 
 /**
+ * \brief   ComTxModeNumberOfRepetitions（SWS_Com_00305）が現在の実効モードで
+ *          適用対象かどうかを返す。
+ *
+ * \details TxModeMode==DIRECT の I-PDU のみを対象とする。MIXED の周期フロアや
+ *          TMS との相互作用を避けるための設計上の制約であり、
+ *          Com_RequestTxOnChange()（残り回数のセット/クリア）と
+ *          Com_MainFunction()（repeatDue 判定）の両方から同一の predicate を
+ *          呼ぶことで、判定条件が2箇所で食い違わないようにする（詳細は
+ *          docs/modules/Com_Notes.md 参照）。
+ *
+ * \param[in]  mode  Com_EffectiveTxModeMode() が返した実効 TxModeMode。
+ *
+ * \return  1 = 対象（DIRECT）、0 = 対象外。
+ *
+ * \ServiceID      {0x1F}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+static uint8 Com_TxRepeatApplicable(Com_TxModeModeType mode)
+{
+    return (mode == COM_TX_MODE_DIRECT) ? 1U : 0U;
+}
+
+/**
  * \brief   TMS（Transmission Mode Selector）を再評価する。
  *
  * \details 指定 I-PDU に属するシグナルのうち `TmsContributor=1` のものについて、
@@ -1160,7 +1194,12 @@ static uint8 Com_RecalcTms(Com_IPduIdType ipduId)
  *
  * \param[in]  ipdu  対象 TX I-PDU 設定。NULL 禁止（呼び出し元で保証する）。
  *
- * \AUTOSARReq     {SWS_Com_00734, SWS_Com_00742, SWS_Com_00743}
+ *          あわせて ComTxModeNumberOfRepetitions（SWS_Com_00305）の残り
+ *          再送回数を ipdu->NumberOfRepetitions で無条件上書きする
+ *          （[SWS_Com_00279]: 新規送信要求は進行中の再送をキャンセルして
+ *          再スタートする）。
+ *
+ * \AUTOSARReq     {SWS_Com_00734, SWS_Com_00742, SWS_Com_00743, SWS_Com_00279}
  * \ServiceID      {0x17}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
@@ -1168,10 +1207,17 @@ static uint8 Com_RecalcTms(Com_IPduIdType ipduId)
 static void Com_RequestTxOnChange(const Com_IPduConfigType* ipdu)
 {
     DET_LOGT(TAG, "called");
-    if (Com_EffectiveTxModeMode(ipdu) == COM_TX_MODE_PERIODIC)
+    const Com_TxModeModeType mode = Com_EffectiveTxModeMode(ipdu);
+    if (mode == COM_TX_MODE_PERIODIC)
         return;
 
     Com_TxPending[ipdu->IPduId] = 1U;
+    /* [SWS_Com_00279]: 新規送信要求は進行中の再送シーケンスをキャンセルして
+     * 再スタートする（NumberOfRepetitions=0 の I-PDU では no-op）。DIRECT
+     * 以外では明示的に 0 へクリアする（Com_TxRepeatApplicable() 参照。MIXED
+     * の間の古い残り回数が、後で TMS が DIRECT へ戻った際に不意の再送として
+     * 復活するのを防ぐ）。 */
+    Com_TxRepeatsRemaining[ipdu->IPduId] = Com_TxRepeatApplicable(mode) ? ipdu->NumberOfRepetitions : 0U;
 }
 
 /**
@@ -2001,7 +2047,10 @@ static void Com_InvokeTxNotification(const Com_IPduConfigType* ipdu,
  *                      E_OK = 成功、E_NOT_OK = 失敗。成功/失敗いずれの場合も
  *                      「送信済み・未確認」状態（Com_TxConfPending[]）は解除
  *                      する（確認自体は届いたため）。TX リトライやエラー
- *                      カウンタは実装しない。Com_CbkTxErr（SWS_Com_00491）は
+ *                      カウンタは実装しない。ComTxModeNumberOfRepetitions
+ *                      （SWS_Com_00305）の残り再送回数は本関数ではなく
+ *                      Com_MainFunction() が dispatch 時点で減らす（理由は
+ *                      同関数のコメント参照）。Com_CbkTxErr（SWS_Com_00491）は
  *                      本関数ではなく Com_IpduGroupStop() 側で、確認が届く
  *                      前に I-PDU Group が停止された場合にのみ呼ばれる
  *                      （SWS_Com_00491 原文 "called in case the transmission
@@ -2125,9 +2174,18 @@ void Com_TxConfirmation(PduIdType TxPduId, Std_ReturnType result)
  *          「抑制中に溜まった分」を connectivity 復帰の合図として即座に
  *          送ってしまわないようにするため）。
  *
+ *          ComTxModeNumberOfRepetitions（`ipdu->NumberOfRepetitions`/
+ *          `RepetitionPeriodMs`、SWS_Com_00305）: Com_TxRepeatApplicable() が
+ *          真の I-PDU のみ対象。残り再送回数（`Com_TxRepeatsRemaining[]`）が
+ *          0 より大きく、かつ直近送信から RepetitionPeriodMs 以上経過して
+ *          いれば再送する（repeatDue、changeDue/floorDue と OR）。残り回数を
+ *          いつ・どう減らすかの詳細（オフバイワン対策・CommunicationControl
+ *          無効中の扱い）は下の実装コメント・docs/modules/Com_Notes.md 参照。
+ *
  * \AUTOSARReq     {SWS_Com_00398, SWS_Com_00684, SWS_Com_00685, SWS_Com_00734,
  *                  SWS_Com_00742, SWS_Com_00743, SWS_Com_00777, SWS_Com_00032,
- *                  SWS_Com_00799, SWS_Com_00471, SWS_Com_00698, SWS_Com_00789}
+ *                  SWS_Com_00799, SWS_Com_00471, SWS_Com_00698, SWS_Com_00789,
+ *                  SWS_Com_00305, SWS_Com_00467, SWS_Com_00392}
  * \ServiceID      {0x20}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
@@ -2261,6 +2319,11 @@ void Com_MainFunction(void)
         const uint16              period = Com_EffectiveTxPeriodMs(ipdu);
 
         uint8 due;
+        /* ComTxModeNumberOfRepetitions（SWS_Com_00305）用。この due 判定が
+         * changeDue/repeatDue どちらに由来するかを、下の dispatch 後の
+         * 残り回数デクリメント判定で使うため if/else の外に出しておく。 */
+        uint8 changeDue = 0U;
+        uint8 repeatDue = 0U;
         if (mode == COM_TX_MODE_PERIODIC)
         {
             due = ((now - Com_TxLastSentMs[id]) >= (unsigned long)period) ? 1U : 0U;
@@ -2277,8 +2340,14 @@ void Com_MainFunction(void)
              * あっても Com_TxPending は立てたまま保持し、破棄しない
              * （次回 Com_MainFunction() で再判定する）。 */
             const uint8 mdtElapsed = elapsed >= (unsigned long)ipdu->MinDelayMs;
-            const uint8 changeDue  = (Com_TxPending[id] != 0U) && mdtElapsed;
-            due = changeDue || floorDue;
+            changeDue = (Com_TxPending[id] != 0U) && mdtElapsed;
+            /* ComTxModeNumberOfRepetitions（SWS_Com_00305）。再送専用の
+             * タイマーは持たず、changeDue/floorDue と同じ Com_TxLastSentMs/
+             * elapsed を流用する。減算条件の詳細は下のコメント参照。 */
+            repeatDue = Com_TxRepeatApplicable(mode)
+                        && (Com_TxRepeatsRemaining[id] > 0U)
+                        && (elapsed >= (unsigned long)ipdu->RepetitionPeriodMs);
+            due = changeDue || floorDue || repeatDue;
         }
 
         if (!due)
@@ -2292,6 +2361,21 @@ void Com_MainFunction(void)
             DET_LOGD(TAG, "TX skip iPdu=%u (CommunicationControl disabled)", (unsigned)id);
             continue;
         }
+
+        /* [SWS_Com_00305] 残り再送回数のデクリメント。dispatch 直前（＝実際に
+         * Com_DoTransmit() を呼ぶ場合）のみ行う: CommunicationControl 無効中
+         * （上で continue した場合）に空費すると、再開後に本来送るべき再送が
+         * 残っていない事態になりかねない（/code-review で指摘）。
+         *
+         * `repeatDue && !changeDue` の `!changeDue` も /code-review で指摘
+         * されたオフバイワン対策: elapsed（直近の実送信からの経過時間）は
+         * 新規送信要求の時刻ではリセットしないため、前回の実送信から
+         * RepetitionPeriodMs 以上経ってから新しい変化が来ると、その「初回」
+         * 送信の時点で偶然 repeatDue も真になりうる（changeDue と同時に真）。
+         * これを再送1回分と誤カウントすると、計 N+1 回ではなく N 回で
+         * 止まってしまう。 */
+        if (repeatDue && !changeDue)
+            Com_TxRepeatsRemaining[id]--;
 
         (void)Com_DoTransmit(ipdu);
     }
@@ -2428,6 +2512,9 @@ void Com_IpduGroupStart(Com_IpduGroupIdType IpduGroupId, uint8 initialize)
         /* 起動直後は必ず「送信済み・未確認」状態もクリアしておく（前回の
          * Stop() で既にクリア済みのはずだが、初回 Start() 時の保険）。 */
         Com_TxConfPending[id] = 0U;
+        /* ComTxModeNumberOfRepetitions（SWS_Com_00305）の残り再送回数も同様に
+         * クリアする（前回 Stop() 時点の再送シーケンスを持ち越さない）。 */
+        Com_TxRepeatsRemaining[id] = 0U;
 
         /* [SWS_Com_00787] 項目4: update-bit をクリアする。 */
         if (ipdu->UpdateBitPosition != 0xFFU)
@@ -2523,6 +2610,12 @@ void Com_IpduGroupStop(Com_IpduGroupIdType IpduGroupId)
          * （Com_SetCommunicationEnabled() の既存コメントと同じ考え方）。 */
         Com_TxPending[id] = 0U;
 
+        /* [SWS_Com_00392]: I-PDU Group の停止は ComTxModeNumberOfRepetitions
+         * の再送シーケンスもキャンセルする。本番設定では対象 I-PDU
+         * （ImmobilizerStatus）が IpduGroupId=COM_IPDU_GROUP_NONE のため
+         * このパスは実機では到達しないが、防御的にクリアしておく。 */
+        Com_TxRepeatsRemaining[id] = 0U;
+
         DET_LOGI(TAG, "IpduGroupStop grp=%u iPdu=%u(TX)",
                  (unsigned)IpduGroupId, (unsigned)id);
     }
@@ -2563,5 +2656,19 @@ void Com_Test_SetTxConfPending(Com_IPduIdType ipduId, uint8 value)
     if (ipduId >= COM_TX_IPDU_MAX)
         return;
     Com_TxConfPending[ipduId] = value;
+}
+
+uint8 Com_Test_GetTxRepeatsRemaining(Com_IPduIdType ipduId)
+{
+    if (ipduId >= COM_TX_IPDU_MAX)
+        return 0U;
+    return Com_TxRepeatsRemaining[ipduId];
+}
+
+void Com_Test_SetTxRepeatsRemaining(Com_IPduIdType ipduId, uint8 value)
+{
+    if (ipduId >= COM_TX_IPDU_MAX)
+        return;
+    Com_TxRepeatsRemaining[ipduId] = value;
 }
 #endif

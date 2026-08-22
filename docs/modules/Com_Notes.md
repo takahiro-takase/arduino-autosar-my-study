@@ -273,6 +273,150 @@ Com_MainFunction()（DIRECT/MIXED 共通、周期フロアには適用しない�
 の保留・次回満了時送信という一連の流れ）を確認する目的で、Com の標準機能として
 実装しています。
 
+## ComTxModeNumberOfRepetitions（変化時送信の冗長再送）
+
+DIRECT モードの I-PDU は、値が変化した瞬間に1回だけ送信します。しかし実
+AUTOSAR の Com は、送信1回だけでは CAN バスの過渡的な輻輳やノイズでフレームを
+1本丸ごと失うリスクがあると考え、`ComTxModeNumberOfRepetitions`
+（`ComTxModeRepetitionPeriod` と対）という冗長送信の仕組みを用意しています
+（[SWS_Com_00305]: "If `ComTxModeNumberOfRepetitions` is configured to a value
+greater than 0 the Com module shall call `PduR_ComTransmit` ... in a cycle time
+of `ComTxModeRepetitionPeriod` until `ComTxModeNumberOfRepetitions`+1 successful
+confirmations have been received."）。`0`（既定）なら通常どおり1回だけ送信し
+ます（[SWS_Com_00467]）。新たな送信要求は進行中の再送シーケンスをキャンセル
+して再スタートし（[SWS_Com_00279]）、I-PDU Group の停止も再送シーケンスを
+キャンセルします（[SWS_Com_00392]）。
+
+これまでの `Com_IPduConfigType`/`Com.c` にはこの機構が一切存在せず、
+`Com_MainFunction()` の DIRECT/MIXED 送信判定は「変化トリガー || MIXED
+周期フロア」のみでした。今回、`ImmobilizerStatus`（IPduId=3、CAN 0x230）に
+適用しました。
+
+```
+ImmobilizerStatus (IPduId=3):
+  NumberOfRepetitions = 2U
+  RepetitionPeriodMs  = COM_TX_REPETITION_PERIOD_IMMOBILIZERSTATUS_MS（既定 100ms）
+
+Com_RequestTxOnChange()（Com_SendSignal()/Com_SendSignalGroup() 共通の
+送信要求トリガー、Signal Gateway が ImmobilizerCmd 受信のたびに呼ぶ）:
+  Com_TxPending[ImmobilizerStatus] = 1
+  Com_TxRepeatsRemaining[ImmobilizerStatus] = NumberOfRepetitions（無条件上書き）
+
+Com_MainFunction()（100ms 周期）:
+  changeDue = Com_TxPending[...] && mdtElapsed
+  repeatDue = (TxModeMode==DIRECT) && (Com_TxRepeatsRemaining[...] > 0)
+              && (経過時間 >= RepetitionPeriodMs)
+  due       = changeDue || floorDue || repeatDue
+
+  due なら:
+    Com_TxPending[...] = 0; Com_TxLastSentMs[...] = now
+    TxEnabled==0 なら Com_DoTransmit() を呼ばずに次の I-PDU へ
+    （このとき Com_TxRepeatsRemaining は減らさない）
+    repeatDue && !changeDue のときのみ Com_TxRepeatsRemaining[...] -= 1
+    Com_DoTransmit()（実送信）
+
+結果: t=0（変化検知）で初回送信、t=100ms/200ms で再送、
+      計3回（NumberOfRepetitions+1）送信して停止する。
+```
+
+**DIRECT モード限定にした理由**: MIXED の周期フロア（`floorDue`）や TMS
+（`TxModeModeTrue`/`TxPeriodMsTrue`）との相互作用を避けるためです。仮に
+`WarningStatus`（DIRECT だが TMS で MIXED へ遷移しうる）に誤って
+`NumberOfRepetitions` を設定してしまうと、TMS 中の周期フロアと再送タイマーが
+同じ `Com_TxLastSentMs` を取り合いながら無調整で二重に発火しかねません。
+これを設定規約だけに頼らず、`Com_MainFunction()` 側で
+`mode == COM_TX_MODE_DIRECT` の実行時ガードとしてコードにも担保しています
+（`Com.c` の `Com_CbkRxAck`（[SWS_Com_00555]）実装にある
+`ipdu->IsSignalGroup != 0U` という「設定判別フィールドに対する実行時ガード」
+と同じ考え方です）。
+
+**残り再送回数のデクリメントを、確認 (Com_TxConfirmation) ではなく
+Com_MainFunction() の dispatch 時点で行う理由**: [SWS_Com_00305] の原文は
+「確認 (`Com_TxConfirmation`) が `NumberOfRepetitions`+1 回届くまで」再送する、
+という書き方です。しかし本コードベースでは `Can_Write()` は TX 確認を
+即座には呼ばず、`swPduHandle` を保留キューへ積むだけで、実際の
+`CanIf_TxConfirmation()` 呼び出しは **別タスク** `Can_MainFunction_Write()`
+（1ms 周期）がキューをドレインするタイミングで行われます（`Can.c` 冒頭コメント
+参照）。`Com_MainFunction()` は 100ms 周期の別タスクのため、「確認が届くまで
+待つ」ロジックを `Com_MainFunction()` 単独では組めません。また、確認到達の
+たびに単純にデクリメントする素朴な実装は、初回送信の確認も1回としてカウント
+してしまうため、`NumberOfRepetitions+1` 回ではなく `NumberOfRepetitions` 回
+しか送信されずに止まってしまうオフバイワンの不具合になります。そのため、
+`Com_MainFunction()` が実際に `Com_DoTransmit()` を呼んだ時点で
+`Com_TxRepeatsRemaining[]` を減らす設計にしています。本コードベースでは
+送信失敗（`E_NOT_OK`）の経路が実質存在しない（Com_TxConfirmation() の
+`\note` 参照）ため、この簡略化による実質的な挙動差はありません。
+
+**dispatch 時点デクリメントに残っていた2つの不具合（`/code-review` で発見・
+是正、実装直後のセッションで修正）**:
+
+1. **オフバイワン（初回送信が再送1回分として誤カウントされる）**:
+   `repeatDue` は `changeDue`/`floorDue` と同じ `Com_TxLastSentMs`（直近の
+   *実送信* からの経過時間）を基準にしています。新規送信要求
+   （`Com_RequestTxOnChange()`）が来た時点ではこのタイムスタンプをリセット
+   しない（MDT がここと同じ基準を使っており、要求時刻起点にすると MDT の
+   意味が変わってしまうため）。そのため、前回の実送信から
+   `RepetitionPeriodMs` 以上経ってから新しい変化が来ると——`ImmobilizerStatus`
+   のようにまばらにしか変化しない I-PDU では通常の状況——その「初回」送信の
+   時点で `changeDue` と `repeatDue` が偶然同時に真になり、単純に
+   `repeatDue` だけを条件にデクリメントすると初回送信が再送1回分として
+   誤って消費されてしまいます。結果、計3回ではなく2回で止まってしまい、
+   `/simplify` 時点で追加したテストは `FakeMillis_Reset()` 直後に送信する
+   （経過時間が常に 0）ケースしか検証していなかったため検出できませんでした。
+   **対応**: デクリメント条件を `repeatDue && !changeDue`（純粋に再送だけが
+   理由で dispatch した場合に限る）へ変更。回帰テスト
+   `RepetitionSequence_OK_InitialSendDoesNotConsumeRepeatBudgetEvenWhenElapsedAlreadyExceedsPeriod`
+   を追加。
+2. **CommunicationControl 無効中に残り回数を空費する**: `Com_TxLastSentMs`
+   の更新は `Com_TxEnabled==0` でも行われる（既存の SWS_Com_00777 対応と
+   同じ扱い）ため、送信抑制中も `repeatDue` は周期的に真になり得ますが、
+   `Com_DoTransmit()` 自体は呼ばれません。当初の実装はデクリメントを
+   `Com_TxEnabled` チェックより前に置いていたため、抑制中に
+   `Com_TxRepeatsRemaining` だけが空費され、抑制解除後に本来送るべき冗長
+   送信が1本も残っていない、という事態になり得ました。安全上重要な通知を
+   確実に届けるための機能が、診断ツールによる一時的な送信抑制で無力化されて
+   しまっては本末転倒です。**対応**: デクリメントを `Com_TxEnabled==0` の
+   早期 `continue` より後（＝実際に `Com_DoTransmit()` を呼ぶ直前）へ移動。
+   回帰テスト
+   `RepetitionSequence_OK_DoesNotConsumeBudgetWhileCommunicationControlDisabled`
+   を追加。
+
+上記2件はどちらも `Com_TxRepeatsRemaining[]` を「いつ減らすか」の条件だけの
+問題で、`due` 自体の判定ロジックや `Com_RequestTxOnChange()` 側のリセット
+ロジックには変更はありません。
+
+**`Com_RequestTxOnChange()` 側のガード（もう1件の指摘）**: 上記とは別に、
+`Com_RequestTxOnChange()` は当初 `mode != PERIODIC` であれば
+（＝MIXED でも）`Com_TxRepeatsRemaining` を無条件にセットしていました。
+消費側（`Com_MainFunction()` の `repeatDue`）は `TxModeMode==DIRECT` に
+限定しているため、設定側だけがガードされておらず、「仮に TMS 対応の
+I-PDU に誤って `NumberOfRepetitions` を設定してしまうと、MIXED の間に
+セットされた残り回数が古いまま残り、後で TMS が DIRECT へ遷移した際に
+古いタイマー基準で不意に再送が復活しかねない」という理論上の隙が
+ありました。`Com_RequestTxOnChange()` 側も `mode == COM_TX_MODE_DIRECT`
+のときのみセットし、それ以外では明示的に 0 へクリアするよう是正しました
+（`Com_MainFunction()` 側のガードと対称）。`ImmobilizerStatus` は
+`TmsContributor` を持つシグナルが無く本番では TMS 自体が起きないため、
+これは本番設定では到達しない防御的な修正です（既存のTX I-PDU4本すべてが
+既にこの防御を試験する専用フィクスチャの余地を使い切っているため
+（`COM_TX_IPDU_MAX=4`）、専用の回帰テストは追加していません）。
+
+**この機能は実際に発動するか**: 発動します。`ImmobilizerStatus` は Signal
+Gateway 経由（RX `ImmobilizerCmd` の LOCK/UNLOCK）で送信要求が立つため、
+UDS ツールで `ImmobilizerCmd` を送るたびに、CAN ID 0x230 のフレームが約
+100ms 間隔で3回（初回+再送2回）送信されるのを CAN スニファ（Cangaroo 等）
+や `uds_tester` の rx_monitor、既存の `Com_DoTransmit()` デバッグログ
+（`TX iPdu=... [...]`）で確認できます。
+
+**`Com_IpduGroupStop()` によるキャンセルは実機で発動するか**: 発動しません。
+`ImmobilizerStatus` は `IpduGroupId=COM_IPDU_GROUP_NONE`（どの I-PDU Group にも
+属さず常時有効）のため、`Com_IpduGroupStop()` の対象になることが構造的に
+ありません（`WarningStatus` の `TxErrCbk` と同じパターン、上記参照）。
+[SWS_Com_00392] への準拠自体は `Com_IpduGroupStop()` 内に実装済みで、
+ユニットテスト（test-only setter `Com_Test_SetTxRepeatsRemaining()` を使い、
+実際に `NumberOfRepetitions` を設定した停止可能グループの I-PDU を新規に
+用意しなくても内部カウンタを直接注入して検証）のみが検証手段です。
+
 ## ComNotification拡張（Tx確定コールバック、Com_CbkTxAck）
 
 これまでの `Com_TxConfirmation()` は PduR から送信完了を受け取ってログ出力する

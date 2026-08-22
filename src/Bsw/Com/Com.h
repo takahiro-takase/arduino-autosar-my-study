@@ -280,6 +280,18 @@ uint8 Com_Test_GetSigTimedOut(Com_SignalIdType SignalId);
  *  過剰なため、この内部フラグを直接操作できるようにする。範囲外の
  *  `ipduId` は無視する。 */
 void Com_Test_SetTxConfPending(Com_IPduIdType ipduId, uint8 value);
+
+/** [テスト専用] ComTxModeNumberOfRepetitions（SWS_Com_00305）の残り再送回数
+ *  （Com_TxRepeatsRemaining[ipduId]）を取得する。範囲外の `ipduId` は 0 を
+ *  返す。 */
+uint8 Com_Test_GetTxRepeatsRemaining(Com_IPduIdType ipduId);
+
+/** [テスト専用] Com_TxRepeatsRemaining[ipduId] を直接セットする。
+ *  Com_IpduGroupStop() によるキャンセル（SWS_Com_00392 相当）を検証する
+ *  ために、実際に NumberOfRepetitions を設定した停止可能グループの I-PDU
+ *  を新規に用意しなくても、既存の停止可能グループの I-PDU に対して内部
+ *  カウンタを直接注入できるようにする。範囲外の `ipduId` は無視する。 */
+void Com_Test_SetTxRepeatsRemaining(Com_IPduIdType ipduId, uint8 value);
 #endif
 
 #ifdef __cplusplus
