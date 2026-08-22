@@ -38,7 +38,11 @@
  *          1本）のみを使う。IPduId=1/2 は SWS_Com_00495（TMS 遷移時の
  *          無条件即時送信）専用の追加 I-PDU で、Com_MainFunction() より前の
  *          Com_SendSignal()/Com_SendSignalGroup() の境界内で完結する
- *          （PduR/CanIf 側にルーティングは設定していない）。
+ *          （PduR/CanIf 側にルーティングは設定していない）。IPduId=0
+ *          （kTestTxIPdu）は ComTxModeNumberOfRepetitions（SWS_Com_00305）の
+ *          検証も兼ねる（NumberOfRepetitions=2U/RepetitionPeriodMs=50U）。
+ *          そのため本ファイルは `Hal_Millis_fake.h` で `millis()` を決定的に
+ *          進められるようにしている（`SetUp()` で `FakeMillis_Reset()`）。
  *
  *          [env:native]（test/test_native/）は Can.c 単体を CanIf フェイクで
  *          隔離して検証しており、同じバイナリに CanIf.c の本物を混在させると
@@ -67,6 +71,7 @@ extern "C" {
 #include "Can_Hw.h"
 #include "Hal_Can_Hw_fake.h"
 #include "Hal_Det_Hw_fake.h"
+#include "Hal_Millis_fake.h"
 }
 
 namespace
@@ -124,7 +129,12 @@ const Com_IPduConfigType kTestTxIPdu = {
     /* UpdateBitPosition */ 0xFFU,
     /* IpduGroupId */      COM_IPDU_GROUP_NONE,
     /* RxIndicationCbk */  NULL,
-    /* TxTransformCbk */   NULL
+    /* TxTransformCbk */   NULL,
+    /* TxAckCbk */         NULL,
+    /* TxErrCbk */         NULL,
+    /* RxAckCbk */         NULL,
+    /* NumberOfRepetitions */ 2U,  // ComTxModeNumberOfRepetitions（SWS_Com_00305）検証用
+    /* RepetitionPeriodMs */  50U  // ComTxModeRepetitionPeriod
 };
 
 // -----------------------------------------------------------------------
@@ -372,6 +382,10 @@ class Bsw_TxChain_Test : public ::testing::Test
 protected:
     void SetUp() override
     {
+        FakeMillis_Reset();  // Com_Init() が millis() を Com_TxLastSentMs[] へ
+                              // 取り込むため、Com_Init() より前にリセットする
+                              // （ComTxModeNumberOfRepetitions テストで
+                              // FakeMillis_Value を進めて決定的に検証するため）
         FakeCanHw_Reset();
         FakeDetHw_LogSuppressed = 1U;  // Init() のログはノイズになるため抑制
 
@@ -621,6 +635,164 @@ TEST_F(Bsw_TxChain_Test, ComMainFunction_NG_NothingPending_DoesNotReachCanHw)
 
     /* 評価 (Assert) */
     EXPECT_EQ(FakeCanHw_SendCount, 0U);
+}
+
+// ------------------------------------------------------------
+// SWS_Com_00305: ComTxModeNumberOfRepetitions（変化時送信の冗長再送）。
+// kTestTxIPdu（IPduId=0）は NumberOfRepetitions=2U/RepetitionPeriodMs=50U を
+// 持つため、初回送信 + 2 回の再送 = 計3回送信されて止まることを検証する。
+// 残り回数の減算は Com_TxConfirmation() 到達時ではなく Com_MainFunction() の
+// dispatch 時点で行う設計のため（Com.c のコメント参照。TX 確認は
+// Can_MainFunction_Write() という別タスク経由で非同期に届き、
+// Com_MainFunction() 単独では待てないため）、これらのテストは
+// Com_TxConfirmation() を一切呼ばない。
+// ------------------------------------------------------------
+TEST_F(Bsw_TxChain_Test, RepetitionSequence_OK_FiresConfiguredNumberOfRepeatsThenStops)
+{
+    /* 準備 (Arrange) */
+    uint16_t value = 0x1234U;
+    Com_SendSignal(0U, &value);
+
+    /* 実行 (Act) + 評価 (Assert): 初回送信 */
+    Com_MainFunction();
+    EXPECT_EQ(FakeCanHw_SendCount, 1U);
+    EXPECT_EQ(Com_Test_GetTxRepeatsRemaining(0U), 2U);  // 初回はまだ減らない
+
+    /* 1 回目の再送（RepetitionPeriodMs=50 経過後） */
+    FakeMillis_Value += 50U;
+    Com_MainFunction();
+    EXPECT_EQ(FakeCanHw_SendCount, 2U);
+    EXPECT_EQ(Com_Test_GetTxRepeatsRemaining(0U), 1U);
+
+    /* 2 回目の再送（NumberOfRepetitions=2 を使い切る） */
+    FakeMillis_Value += 50U;
+    Com_MainFunction();
+    EXPECT_EQ(FakeCanHw_SendCount, 3U);
+    EXPECT_EQ(Com_Test_GetTxRepeatsRemaining(0U), 0U);
+
+    /* 再送を使い切った後は、さらに周期が経過しても送信されない */
+    FakeMillis_Value += 50U;
+    Com_MainFunction();
+    EXPECT_EQ(FakeCanHw_SendCount, 3U);
+}
+
+// /code-review で指摘されたオフバイワンの回帰テスト: Com_Init() 時点の
+// Com_TxLastSentMs（=0）から、RepetitionPeriodMs(50) を優に超える時間が
+// 経過してから初めて変化イベントが来ると（実機でも、起動直後よりだいぶ
+// 後になって初めて変化が来れば必ず起こるごく普通の状況）、その「初回」
+// 送信の時点で偶然 repeatDue も真になり得る。これを再送1回分として
+// 誤カウントすると、計3回ではなく2回で止まってしまう不具合があった
+// （上のテストは FakeMillis_Reset() 直後に送信するため elapsed=0 の
+// ケースしか通らず、この不具合を検出できていなかった）。
+TEST_F(Bsw_TxChain_Test, RepetitionSequence_OK_InitialSendDoesNotConsumeRepeatBudgetEvenWhenElapsedAlreadyExceedsPeriod)
+{
+    /* 準備 (Arrange): RepetitionPeriodMs(50) を優に超える時間が経過した
+     * 状態を作ってから、初めて送信要求を出す。 */
+    FakeMillis_Value = 10000U;
+    uint16_t value = 0x1234U;
+    Com_SendSignal(0U, &value);
+
+    /* 実行 (Act) + 評価 (Assert): 初回送信では残り回数が減らない
+     * （elapsed が RepetitionPeriodMs を超えていても、changeDue 由来の
+     * 送信は再送としてカウントしない）。計3回まで正常に続くことは
+     * RepetitionSequence_OK_FiresConfiguredNumberOfRepeatsThenStops が
+     * 既に検証しているため、ここでは初回分の回帰確認に絞る。 */
+    Com_MainFunction();
+    EXPECT_EQ(FakeCanHw_SendCount, 1U);
+    EXPECT_EQ(Com_Test_GetTxRepeatsRemaining(0U), 2U);
+
+    /* 以降も正常に再送が続くことだけ 1 回分だけ確認する */
+    FakeMillis_Value += 50U;
+    Com_MainFunction();
+    EXPECT_EQ(FakeCanHw_SendCount, 2U);
+    EXPECT_EQ(Com_Test_GetTxRepeatsRemaining(0U), 1U);
+}
+
+// CommunicationControl (UDS 0x28) による送信抑制中は、残り再送回数を
+// 空費させない（/code-review で指摘: 抑制中も Com_TxLastSentMs が更新され
+// 続けるため、抑制解除を待たずに repeatDue が周期的に真になり得るが、
+// Com_DoTransmit() 自体は呼ばれない。ここで残り回数まで減らしてしまうと、
+// 抑制解除後に本来送るべき再送が1本も残っていない、という事態になりかねない）。
+TEST_F(Bsw_TxChain_Test, RepetitionSequence_OK_DoesNotConsumeBudgetWhileCommunicationControlDisabled)
+{
+    /* 準備 (Arrange): 初回送信を済ませたうえで送信を抑制する */
+    uint16_t value = 0x1234U;
+    Com_SendSignal(0U, &value);
+    Com_MainFunction();
+    ASSERT_EQ(FakeCanHw_SendCount, 1U);
+    ASSERT_EQ(Com_Test_GetTxRepeatsRemaining(0U), 2U);
+    Com_SetCommunicationEnabled(1U, 0U);  // RxEnabled=1, TxEnabled=0
+
+    /* 実行 (Act): 抑制中に RepetitionPeriodMs を複数回分経過させる
+     * （repeatDue 自体は周期的に真になり得るが、Com_TxEnabled==0 のため
+     * Com_DoTransmit() には到達しない） */
+    FakeMillis_Value += 50U;
+    Com_MainFunction();
+    FakeMillis_Value += 50U;
+    Com_MainFunction();
+
+    /* 評価 (Assert): 送信は1本も増えておらず、残り回数も空費されていない */
+    EXPECT_EQ(FakeCanHw_SendCount, 1U);
+    EXPECT_EQ(Com_Test_GetTxRepeatsRemaining(0U), 2U);
+
+    /* 抑制解除後は、通常どおり残っていた再送が送信される */
+    Com_SetCommunicationEnabled(1U, 1U);
+    FakeMillis_Value += 50U;
+    Com_MainFunction();
+    EXPECT_EQ(FakeCanHw_SendCount, 2U);
+    EXPECT_EQ(Com_Test_GetTxRepeatsRemaining(0U), 1U);
+}
+
+TEST_F(Bsw_TxChain_Test, RepetitionSequence_NG_DoesNotFireBeforePeriodElapsed)
+{
+    /* 準備 (Arrange): 初回送信を済ませておく */
+    uint16_t value = 0x1234U;
+    Com_SendSignal(0U, &value);
+    Com_MainFunction();
+    ASSERT_EQ(FakeCanHw_SendCount, 1U);
+
+    /* 実行 (Act): RepetitionPeriodMs(50) 未満しか経過していない */
+    FakeMillis_Value += 49U;
+    Com_MainFunction();
+
+    /* 評価 (Assert): 再送されない。残り回数も減らない */
+    EXPECT_EQ(FakeCanHw_SendCount, 1U);
+    EXPECT_EQ(Com_Test_GetTxRepeatsRemaining(0U), 2U);
+}
+
+TEST_F(Bsw_TxChain_Test, RepetitionSequence_OK_NewSendSignalRestartsSequence)
+{
+    /* 準備 (Arrange): 初回送信 + 1 回の再送を消費させる */
+    uint16_t value = 0x1234U;
+    Com_SendSignal(0U, &value);
+    Com_MainFunction();
+    FakeMillis_Value += 50U;
+    Com_MainFunction();
+    ASSERT_EQ(Com_Test_GetTxRepeatsRemaining(0U), 1U);
+
+    /* 実行 (Act): 新たな送信要求（[SWS_Com_00279]、kTestSignal は
+     * FilterAlgorithm=ALWAYS のため値の異同を問わず要求が通る） */
+    uint16_t newValue = 0x5678U;
+    Com_SendSignal(0U, &newValue);
+
+    /* 評価 (Assert): 残り回数が NumberOfRepetitions=2 へ戻る
+     * （進行中の再送シーケンスをキャンセルして再スタート） */
+    EXPECT_EQ(Com_Test_GetTxRepeatsRemaining(0U), 2U);
+}
+
+TEST_F(Bsw_TxChain_Test, IpduGroupStop_OK_ClearsRepeatsRemaining)
+{
+    /* 準備 (Arrange): 再送シーケンス進行中の状態を、実際に NumberOfRepetitions
+     * を設定した停止可能グループの I-PDU を新規に用意しなくても、test-only
+     * setter で直接作る（kTestErrGroupIPdu/kTestStoppableGroupId を流用）。 */
+    Com_Test_SetTxRepeatsRemaining(3U, 2U);
+
+    /* 実行 (Act): [SWS_Com_00392] I-PDU Group の停止は再送シーケンスも
+     * キャンセルする */
+    Com_IpduGroupStop(kTestStoppableGroupId);
+
+    /* 評価 (Assert) */
+    EXPECT_EQ(Com_Test_GetTxRepeatsRemaining(3U), 0U);
 }
 
 }  // namespace

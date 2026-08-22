@@ -488,6 +488,18 @@ typedef enum
 //               実 AUTOSAR の生成名 Rte_COMCbk_<sn>/<sg> とは異なる命名を
 //               あえて使う理由）は Com_PBCfg.c・docs/modules/Com_Notes.md
 //               参照。
+//   NumberOfRepetitions, RepetitionPeriodMs :
+//               ComTxModeNumberOfRepetitions / ComTxModeRepetitionPeriod
+//               （ECUC_Com_00281/00282、SWS_Com_00305/00467/00279/00392:
+//               変化時送信を RepetitionPeriodMs 間隔で NumberOfRepetitions+1
+//               回届くまで再送する。新規送信要求・I-PDU Group 停止はいずれも
+//               進行中の再送をキャンセルする）。NumberOfRepetitions=0 で
+//               機能無効（RepetitionPeriodMs は無意味）。ComTxIPdu 単位の
+//               パラメータのため Com_SignalConfigType 側の対応は不要
+//               （TxAck/TxErr/RxAck と異なりシグナル/グループ単位の二重化は
+//               無い）。Com_TxRepeatApplicable()（Com.c）が対象範囲
+//               （TxModeMode==DIRECT のみ）を判定する。実装の詳細（残り回数を
+//               いつ減らすか等）は Com.c・docs/modules/Com_Notes.md 参照。
 // -------------------------------------------------------
 typedef struct
 {
@@ -509,6 +521,8 @@ typedef struct
     void (*TxAckCbk)(void);
     void (*TxErrCbk)(void);
     void (*RxAckCbk)(void);
+    uint8              NumberOfRepetitions;
+    uint16             RepetitionPeriodMs;
 } Com_IPduConfigType;
 
 // -------------------------------------------------------
