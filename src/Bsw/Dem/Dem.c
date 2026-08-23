@@ -694,6 +694,45 @@ void Dem_GetAllDTCs(uint32* dtcBuf, uint8* statusBuf,
 }
 
 /**
+ * \brief   ステータスに関わらず、本 ECU が対応する全 DTC を列挙する。
+ *
+ * \details `Dem_GetAllDTCs()` の絞り込み（`(status & statusMask) != 0`）を
+ *          一切行わず、`Dem_DtcTable[]` の全件（`DEM_EVENT_COUNT` 件）を
+ *          無条件に返す。DCM SID 0x19 サブ機能 0x0A reportSupportedDTC から
+ *          呼び出す。
+ *
+ * \param[out]  dtcBuf     DTC コード (24-bit) の格納先。DEM_EVENT_COUNT 要素以上。
+ * \param[out]  statusBuf  DTC ステータスバイトの格納先。同サイズ。
+ * \param[out]  count      列挙した DTC 数（常に DEM_EVENT_COUNT）。
+ *
+ * \ServiceID      {0x2A}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void Dem_GetSupportedDTCs(uint32* dtcBuf, uint8* statusBuf, uint8* count)
+{
+    DET_LOGT(TAG, "called");
+    if (!Dem_Initialized)
+    {
+        Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_GET_SUPPORTED_DTCS, DEM_E_UNINIT);
+        return;
+    }
+
+    if (dtcBuf == NULL || statusBuf == NULL || count == NULL)
+    {
+        Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_GET_SUPPORTED_DTCS, DEM_E_PARAM_POINTER);
+        return;
+    }
+
+    for (uint8 i = 0U; i < DEM_EVENT_COUNT; i++)
+    {
+        dtcBuf[i]    = Dem_DtcTable[i];
+        statusBuf[i] = Dem_StatusTable[i] & DEM_STATUS_AVAILABILITY_MASK;
+    }
+    *count = DEM_EVENT_COUNT;
+}
+
+/**
  * \brief   FreezeFrame として保存する現在値を更新する。
  *
  * \details Dem_ReportErrorStatus() が参照する「現在値」を上書きするだけで、

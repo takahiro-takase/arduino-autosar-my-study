@@ -206,6 +206,27 @@ Std_ReturnType Dem_ClearDTC(Dem_EventIdType EventId);
 void Dem_GetAllDTCs(uint32* dtcBuf, uint8* statusBuf, uint8* count, uint8 statusMask);
 
 /**
+ * \brief   ステータスに関わらず、本 ECU が対応する全 DTC を列挙する。
+ *
+ * \details `Dem_GetAllDTCs()` はステータスバイトが `statusMask` と一致した
+ *          DTC のみを返すため、一度も FAILED になっていない（status=0x00）
+ *          DTC はどんな `statusMask` を渡しても列挙できない
+ *          （`(status & statusMask)` は status=0 なら常に 0 のため）。
+ *          UDS SID 0x19 サブ機能 0x0A reportSupportedDTC は「ステータスに
+ *          関わらず本 ECU がサポートする DTC 一覧」を返す要求のため、
+ *          この関数は絞り込みを一切行わず `Dem_DtcTable[]` の全件を返す。
+ *
+ * \param[out]  dtcBuf     DTC コード (24-bit) の格納先。DEM_EVENT_COUNT 要素以上。
+ * \param[out]  statusBuf  DTC ステータスバイトの格納先。同サイズ。
+ * \param[out]  count      列挙した DTC 数（常に DEM_EVENT_COUNT）。
+ *
+ * \ServiceID      {0x2A}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void Dem_GetSupportedDTCs(uint32* dtcBuf, uint8* statusBuf, uint8* count);
+
+/**
  * \brief   FreezeFrame として保存する現在値を更新する。
  *
  * \details SW-C (App_EngineManager) が周期 Runnable の先頭で毎回呼び出し、

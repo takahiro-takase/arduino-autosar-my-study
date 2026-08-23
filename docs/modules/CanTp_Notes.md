@@ -101,6 +101,56 @@ ISO 15765-2 の規約に従いデコードする。0x00-0x7F はそのまま ms�
 CF1 と CF2 の間に追加 FC を送る必要はありません。
 FC が 1 回届いた時点で「最後の CF まで送ってよい」という許可が出ているためです。
 
+## TX バッファサイズと上位層(Dcm)のペイロード長の不整合（実機ログで発覚、2026-08）
+
+`CanTp_Transmit()` は `PduInfoPtr->SduLength > CANTP_TX_BUFFER_SIZE` を
+「invalid len」として即座に拒否する（`CanTp.c` 参照）。この定数は
+`CanTp_Cfg.h` で固定値 32 バイトとして設定していたが、Dcm 側の
+`Dcm_TxBuf`（`DCM_TX_BUF_SIZE = 3 + DEM_EVENT_COUNT*4`）は
+`DEM_EVENT_COUNT` の変化に自動追従するよう既に修正済み（過去に
+5→8 に増えた際、固定値 32 のバッファがオーバーフローしたバグの教訓から）
+だった一方、CanTp 側の 32 バイトはこれと連動しておらず、独立した
+固定値のまま取り残されていた。
+
+UDS 0x19 subFunc 0x0A（reportSupportedDTC、statusMask による絞り込みを
+行わず `DEM_EVENT_COUNT` 件を無条件に返す）を追加した際、
+`DEM_EVENT_COUNT=10` での応答長は `3+10*4=43` バイトとなり、
+32 バイトの `CANTP_TX_BUFFER_SIZE` を常に超えるため、実機で
+subFunc 0x0A を送るたびに以下のように応答が一切送信されない状態に
+なっていた（ユニットテストでは検出できなかった。`[env:native_dcm]` は
+`CanTp_fake.c` で長さチェックを行わないため）:
+
+```
+受信 → 0x7E0: [02 19 0A 00 00 00 00 00]
+[Dcm] Dcm_HandleReadDtcSupported: 19/0A supported=10
+[CanTp] CanTp_Transmit: TX E: invalid len   ← 応答が送信されない
+```
+
+**対応**: `CANTP_TX_BUFFER_SIZE` を 48 バイトに引き上げ、`Dcm_Cbk.c` の
+`DCM_TX_BUF_SIZE`（43バイト）を上回るようにした。48 は FF(6) + CF×6(7×6)
+という ISO-TP のフレーム境界にちょうど一致する値で、最後の CF に
+パディングの無駄が出ない。43 への最小限の対応（44 等）ではなく、
+`DEM_EVENT_COUNT` が今後 11 に増えても（3+11*4=47 バイト）このバッファを
+再度触らずに済む余裕を持たせた（`CanTp_Cfg.h` のコメントに、大きく
+変更する場合はこの値も再確認する旨を明記）。
+
+**教訓**: 新しい RX/TX パスを追加する際は、直接呼び出す層だけでなく、
+その先の隣接レイヤ（本件では Dcm → CanTp）が独自に持つ同種の
+サイズ/状態ガードで到達不能・拒否されないかも確認する必要がある
+（`Dcm_TxBuf` 自身のオーバーフローは対策済みだったが、CanTp 側の
+バッファは見落としていた）。
+
+**実機再検証（修正後）**: `CANTP_TX_BUFFER_SIZE=44`（後に48へ再調整、下記参照）適用後、subFunc 0x0A
+を再送信したところ FF（`len=43`）が受理され、CF sn=1〜6 まで送信完了
+（`CanTp_SendNextCF: TX done`）。応答バイト列を手動デコードし、
+`DEM_EVENT_COUNT=10` 件の DTC レコード（[SID,subFunc,availMask] +
+4バイト×10）が正しい順序・内容で組み立てられていることを確認した。
+
+なお同じログ中、直後に届いた同一リクエストの重複（`uds_tester` 側の
+既知の現象）に対しては `CanTp_Transmit: TX E: busy`（FF+CF 送信中の
+チャネルビジー判定、[SWS_CanTp_00123]）で正しく拒否されており、
+これは新しい問題ではなく想定通りの排他動作。
+
 ## マルチフレーム応答例（2 DTC の場合）
 
 2 件以上の DTC が一致すると応答が 8 バイトを超え、FF + CF に分割されます。

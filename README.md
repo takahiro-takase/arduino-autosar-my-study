@@ -1107,14 +1107,16 @@ EcuM の POST_RUN 遷移時に Rte_Engine タスクと Rte_Warning タスクが�
 ### 単体テスト（ホスト上でのロジック検証）
 
 実 HW（UNO R4）を使わず、Bsw モジュールのロジックだけをホスト PC 上で GoogleTest
-により検証します。単一モジュールを対象にした `[env:native]` と、複数モジュールに
-またがる関数コールチェーンをそのまま検証する `[env:native_chain]` の 2 つの環境を
-用意しています（`platformio.ini` 参照）。
+により検証します。単一モジュールを対象にした `[env:native]`、複数モジュールに
+またがる関数コールチェーンをそのまま検証する `[env:native_chain]`、Dcm/Dem
+（診断・故障記憶）専用の `[env:native_dcm]` の 3 つの環境を用意しています
+（`platformio.ini` 参照）。
 
 ```bash
 # ホスト上でビルド・実行（GoogleTest、実 HW 不要）
 pio test -e native      # Gpt/E2E_P05/Can 単体
 pio test -e native_chain  # Tx/Rx処理コールチェーン（通常/E2E/デッドライン監視とも）
+pio test -e native_dcm  # Dcm_Cbk.c/Dem.c（UDS SID 0x19 ReadDTCInformation 中心）
 $env:DET_LOG_VERBOSE = "1"; pio test -e native_chain -v # TRACE ログ出力
 ```
 

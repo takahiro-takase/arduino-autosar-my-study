@@ -102,6 +102,67 @@ IOCTRL_OPTION_NAMES = {
     0x03: "shortTermAdjustment",
 }
 
+# 送信データボックスのライブ説明表示 (app.py::_decode_request) 用の名称テーブル。
+# config.json に現れる SID/subFunc のみをカバーする（網羅的なUDSデコーダではない）。
+SID_NAMES = {
+    0x10: "DiagnosticSessionControl",
+    0x11: "ECUReset",
+    0x14: "ClearDiagnosticInformation",
+    0x19: "ReadDTCInformation",
+    0x22: "ReadDataByIdentifier",
+    0x27: "SecurityAccess",
+    0x28: "CommunicationControl",
+    0x2E: "WriteDataByIdentifier",
+    0x2F: "InputOutputControlByIdentifier",
+    0x31: "RoutineControl",
+    0x34: "RequestDownload",
+    0x36: "TransferData",
+    0x37: "RequestTransferExit",
+    0x3E: "TesterPresent",
+}
+
+SESSION_NAMES = {
+    0x01: "defaultSession",
+    0x02: "programmingSession",
+    0x03: "extendedDiagnosticSession",
+}
+
+RESET_TYPE_NAMES = {
+    0x01: "hardReset",
+    0x02: "keyOffOnReset",
+    0x03: "softReset",
+}
+
+# SID 0x28 CommunicationControl の controlType (ISO 14229-1 Table 46)
+COMM_CONTROL_TYPE_NAMES = {
+    0x00: "enableRxAndTx",
+    0x01: "enableRxAndDisableTx",
+    0x02: "disableRxAndEnableTx",
+    0x03: "disableRxAndTx",
+}
+
+# SID 0x28 CommunicationControl の communicationType (ISO 14229-1 Table 45 のうち本ECUが使う値)
+COMM_TYPE_NAMES = {
+    0x01: "normal",
+    0x03: "normal+NM",
+}
+
+# SID 0x19 ReadDTCInformation の subFunction
+DTC_SUBFUNC_NAMES = {
+    0x01: "reportNumberOfDTCByStatusMask",
+    0x02: "reportDTCByStatusMask",
+    0x04: "reportDTCSnapshotRecordByDTCNumber",
+    0x06: "reportExtendedDataRecordByDTCNumber",
+    0x0A: "reportSupportedDTC",
+}
+
+# SID 0x31 RoutineControl の subFunction
+ROUTINE_SUBFUNC_NAMES = {
+    0x01: "startRoutine",
+    0x02: "stopRoutine",
+    0x03: "requestRoutineResults",
+}
+
 
 class UdsTimeoutError(Exception):
     pass

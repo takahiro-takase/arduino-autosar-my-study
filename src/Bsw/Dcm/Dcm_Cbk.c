@@ -9,7 +9,7 @@
  *            0x11 ECUReset               — hardReset / softReset (応答後セッションリセット)
  *            0x14 ClearDiagnosticInformation — 全 DTC クリア／DTC 指定で 1 件クリア
  *                                              (SecurityAccess Level1 必須)
- *            0x19 ReadDTCInformation     — subFunc 0x01/0x02/0x04/0x06
+ *            0x19 ReadDTCInformation     — subFunc 0x01/0x02/0x04/0x06/0x0A
  *            0x22 ReadDataByIdentifier   — DID 0x0101/0x0102/0x0103/0x0104
  *            0x27 SecurityAccess         — subFunc 0x01 requestSeed / 0x02 sendKey
  *            0x2E WriteDataByIdentifier  — DID 0x0104 (TestPattern) のみ。
@@ -693,6 +693,44 @@ static void Dcm_HandleReadDtcCount(const uint8* uds, uint8 udsLen)
 }
 
 /**
+ * \brief   subFunc 0x02/0x0A で共通の DTC 一覧応答パッキング処理。
+ *
+ * \details Dcm_TxBuf[0..2]（応答 SID/subFunc/statusAvailMask）は呼び出し元が
+ *          設定済みである前提で、[3] 以降に (DTC_H, DTC_M, DTC_L, status) の
+ *          4 バイト組を count 件分書き込み、Dcm_TxPdu.SduLength を確定させて
+ *          送信する。
+ *
+ * \param[in]  subFunc    ログ表示用のサブ機能値（0x02 or 0x0A）。
+ * \param[in]  dtcBuf     DTC 番号配列（24bit 値、上位バイトはゼロ）。
+ * \param[in]  statusBuf  DTC ステータス配列（dtcBuf と同じ添字）。
+ * \param[in]  count      件数。
+ */
+static void Dcm_SendDtcList(uint8 subFunc, const uint32* dtcBuf, const uint8* statusBuf, uint8 count)
+{
+    uint8 offset = 3U;
+    uint8 i;
+    for (i = 0U; i < count; i++)
+    {
+        if ((offset + 4U) > DCM_TX_BUF_SIZE)
+        {
+            /* DEM_EVENT_COUNT に対して DCM_TX_BUF_SIZE を正しく計算しているため
+             * 通常は到達しないが、将来の設定変更で再びサイズ計算がずれた場合に
+             * メモリ破壊ではなく安全な切り詰めで応答するための防御的チェック。 */
+            DET_LOGE(TAG, "19/%02X TxBuf full, truncating at %u/%u DTCs",
+                     (unsigned)subFunc, (unsigned)i, (unsigned)count);
+            break;
+        }
+        Dcm_TxBuf[offset++] = (uint8)(dtcBuf[i] >> 16U);   /* DTC 上位バイト */
+        Dcm_TxBuf[offset++] = (uint8)(dtcBuf[i] >>  8U);   /* DTC 中位バイト */
+        Dcm_TxBuf[offset++] = (uint8)(dtcBuf[i]);           /* DTC 下位バイト */
+        Dcm_TxBuf[offset++] = statusBuf[i];                 /* DTC ステータス */
+    }
+    Dcm_TxPdu.SduLength = (PduLengthType)offset;
+
+    Dcm_Transmit();
+}
+
+/**
  * \brief   SID 0x19 subFunc 0x02 reportDTCByStatusMask を処理する。
  *
  * \details statusMask に一致する DTC をすべて返す。
@@ -727,27 +765,45 @@ static void Dcm_HandleReadDtcByMask(const uint8* uds, uint8 udsLen)
     Dcm_TxBuf[1] = DCM_DTC_SUBFUNC_REPORT_BY_MASK;
     Dcm_TxBuf[2] = DEM_STATUS_AVAILABILITY_MASK;
 
-    uint8 offset = 3U;
-    uint8 i;
-    for (i = 0U; i < count; i++)
-    {
-        if ((offset + 4U) > DCM_TX_BUF_SIZE)
-        {
-            /* DEM_EVENT_COUNT に対して DCM_TX_BUF_SIZE を正しく計算しているため
-             * 通常は到達しないが、将来の設定変更で再びサイズ計算がずれた場合に
-             * メモリ破壊ではなく安全な切り詰めで応答するための防御的チェック。 */
-            DET_LOGE(TAG, "19/02 TxBuf full, truncating at %u/%u DTCs",
-                     (unsigned)i, (unsigned)count);
-            break;
-        }
-        Dcm_TxBuf[offset++] = (uint8)(dtcBuf[i] >> 16U);   /* DTC 上位バイト */
-        Dcm_TxBuf[offset++] = (uint8)(dtcBuf[i] >>  8U);   /* DTC 中位バイト */
-        Dcm_TxBuf[offset++] = (uint8)(dtcBuf[i]);           /* DTC 下位バイト */
-        Dcm_TxBuf[offset++] = statusBuf[i];                 /* DTC ステータス */
-    }
-    Dcm_TxPdu.SduLength = (PduLengthType)offset;
+    Dcm_SendDtcList(DCM_DTC_SUBFUNC_REPORT_BY_MASK, dtcBuf, statusBuf, count);
+}
 
-    Dcm_Transmit();
+/**
+ * \brief   SID 0x19 subFunc 0x0A reportSupportedDTC を処理する。
+ *
+ * \details ステータスに関わらず、本 ECU が対応する DTC を全件返す（[19]
+ *          ISO 14229-1: "the server shall report ... regardless of their
+ *          status"）。subFunc 0x02 reportDTCByStatusMask と応答フォーマットは
+ *          同じだが、`statusMask` によるフィルタリングを一切行わない点が
+ *          異なる（`Dem_GetSupportedDTCs()` 参照）。要求パラメータは無し
+ *          （[0x19, 0x0A] のみ）。
+ *          応答 (n 件、n = DEM_EVENT_COUNT): [0x59, 0x0A, statusAvailMask,
+ *                        DTC1_H, DTC1_M, DTC1_L, S1,
+ *                        DTC2_H, DTC2_M, DTC2_L, S2, ...]
+ *
+ * \param[in]  uds     UDS ペイロード先頭ポインタ。
+ * \param[in]  udsLen  UDS ペイロード長。
+ */
+static void Dcm_HandleReadDtcSupported(const uint8* uds, uint8 udsLen)
+{
+    DET_LOGT(TAG, "called");
+    (void)uds;
+    (void)udsLen;  /* 追加パラメータなし。長さチェックは呼び出し元
+                    * Dcm_HandleReadDtcInfo() が既に udsLen < 2U で行っている */
+
+    uint32 dtcBuf[DEM_EVENT_COUNT];
+    uint8  statusBuf[DEM_EVENT_COUNT];
+    uint8  count = 0U;
+
+    Dem_GetSupportedDTCs(dtcBuf, statusBuf, &count);
+
+    DET_LOGI(TAG, "19/0A supported=%u", (unsigned)count);
+
+    Dcm_TxBuf[0] = 0x59U;
+    Dcm_TxBuf[1] = DCM_DTC_SUBFUNC_REPORT_SUPPORTED;
+    Dcm_TxBuf[2] = DEM_STATUS_AVAILABILITY_MASK;
+
+    Dcm_SendDtcList(DCM_DTC_SUBFUNC_REPORT_SUPPORTED, dtcBuf, statusBuf, count);
 }
 
 /**
@@ -879,6 +935,7 @@ static void Dcm_HandleReadDtcExtendedData(const uint8* uds, uint8 udsLen)
  *            0x02 reportDTCByStatusMask                 → Dcm_HandleReadDtcByMask()
  *            0x04 reportDTCSnapshotRecordByDTCNumber    → Dcm_HandleReadDtcSnapshot()
  *            0x06 reportExtendedDataRecordByDTCNumber   → Dcm_HandleReadDtcExtendedData()
+ *            0x0A reportSupportedDTC                    → Dcm_HandleReadDtcSupported()
  *
  * \param[in]  uds     UDS ペイロード先頭ポインタ。
  * \param[in]  udsLen  UDS ペイロード長。
@@ -907,6 +964,9 @@ static void Dcm_HandleReadDtcInfo(const uint8* uds, uint8 udsLen)
         break;
     case DCM_DTC_SUBFUNC_REPORT_EXTDATA:
         Dcm_HandleReadDtcExtendedData(uds, udsLen);
+        break;
+    case DCM_DTC_SUBFUNC_REPORT_SUPPORTED:
+        Dcm_HandleReadDtcSupported(uds, udsLen);
         break;
     default:
         Dcm_SendNegativeResponse(DCM_SID_READ_DTC_INFO, DCM_NRC_SUB_FUNC_NOT_SUPPORTED);
