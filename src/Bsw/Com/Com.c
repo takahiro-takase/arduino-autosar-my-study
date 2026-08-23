@@ -2066,6 +2066,128 @@ Std_ReturnType Com_SendSignalGroup(Com_IPduIdType GroupId)
     return E_OK;
 }
 
+/**
+ * \brief   TX I-PDU へ生バイト列をそのままコミットする（Signal Group 単位）。
+ *
+ * \details Com_SendSignal() を1本ずつ呼んでシャドウバッファ (Com_TxShadowBuffer)
+ *          へ書き込み、Com_SendSignalGroup() でまとめてコミットする通常経路の
+ *          代わりに、I-PDU 全体のバイト列を1回で TX バッファ (Com_TxBuffer) へ
+ *          直接書き込む（実 AUTOSAR の Com_SendSignalGroupArray に相当する
+ *          簡略版。Com_ReceiveSignalGroupArray と対称——あちらは I-PDU から
+ *          呼び出し元へ、こちらは呼び出し元から I-PDU への一括コピー）。
+ *
+ *          Com_SendSignalGroup() と異なりシャドウバッファへの書き込みは
+ *          経由しないが、以降に通常経路（Com_SendSignal()+
+ *          Com_SendSignalGroup()）と混在して使われた場合に古い状態で
+ *          上書きされないよう、シャドウバッファ・Com_GroupTriggerPending・
+ *          各メンバーの変化検知ベースライン（Com_FilterLastValue）は
+ *          いずれも今回の書き込み内容に同期する（/code-review で
+ *          指摘: 同期しないと、後で Com_SendSignalGroup() が呼ばれた際に
+ *          古いシャドウバッファ内容で今回のコミットを黙って巻き戻す、
+ *          または古い Com_GroupTriggerPending が残ったまま次回変化なしで
+ *          誤発火する、といった状態不整合が起こり得た）。
+ *          TMS 再評価（Com_RecalcTms()）は Com_TxBuffer から直接読むため、
+ *          この直接書き込みでも正しく動作する（Com.c 該当関数参照）。
+ *
+ *          個々のシグナル単位の変化検知（Com_GroupTriggerPending、
+ *          ComTransferProperty=TRIGGERED_ON_CHANGE のメンバーが
+ *          Com_SendSignal() 内で検知するもの）を経由しないため、本関数は
+ *          呼ばれるたびに常に「新しいデータがある」ものとして扱い、無条件で
+ *          送信要求（Com_RequestTxOnChange()）・update-bit セットを行う
+ *          （[SWS_Com_00801] 原文どおり「呼ばれるたびに無条件でセットする」
+ *          という素直な実装。Com_SendSignal()/Com_SendSignalGroup() 側で
+ *          これを Com_GroupTriggerPending に条件づけているのは、ASW が
+ *          毎サイクル無条件に呼ぶ既存の呼び出しパターン（App_WarningIndicator_Run
+ *          等）に合わせた対策であり、本関数は呼び出し側が明示的に「新しい
+ *          データがある」ときのみ呼ぶ想定の別 API のため、その対策は不要）。
+ *
+ * \param[in]  GroupId  コミットする Signal Group（TX I-PDU）の ID。
+ * \param[in]  DataPtr  書き込む生バイト列。ipdu->DLC バイト以上必要。NULL 禁止。
+ *
+ * \retval  E_OK      GroupId が見つかり、書き込み・コミット処理を行った。
+ * \retval  E_NOT_OK  COM 未初期化、DataPtr が NULL、GroupId が TX I-PDU 設定
+ *                    テーブルに存在しない、または IsSignalGroup=0 の I-PDU
+ *                    を指定した。
+ *
+ * \pre        Com_Init() が正常に完了していること。
+ *
+ * \AUTOSARReq     {SWS_Com_00851, SWS_Com_00852, SWS_Com_00853}
+ * \ServiceID      {0x23}
+ * \Reentrancy     {Non Reentrant for the same signal group. Reentrant for
+ *                  different signal groups.}
+ * \Synchronicity  {Asynchronous}
+ */
+Std_ReturnType Com_SendSignalGroupArray(Com_IPduIdType GroupId, const uint8* DataPtr)
+{
+    DET_LOGT(TAG, "called");
+
+    if (Com_ConfigPtr == NULL)
+    {
+        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_SEND_SIGNAL_GROUP_ARRAY, COM_E_UNINIT);
+        return E_NOT_OK;
+    }
+    if (DataPtr == NULL)
+    {
+        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_SEND_SIGNAL_GROUP_ARRAY, COM_E_PARAM_POINTER);
+        return E_NOT_OK;
+    }
+
+    /* 範囲チェック: GroupId をそのまま Com_TxBuffer[] 等の配列添字として使う
+     * ため、TX I-PDU 設定テーブル自体に範囲外の IPduId が設定される事態に
+     * 備えて明示的に検査する（Com_SendSignalGroup() と同じ方針）。 */
+    if (GroupId >= COM_TX_IPDU_MAX)
+    {
+        DET_LOGE(TAG, "SendSignalGroupArray E: GroupId=%u out of range (max=%u)",
+                 (unsigned)GroupId, (unsigned)COM_TX_IPDU_MAX);
+        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_SEND_SIGNAL_GROUP_ARRAY, COM_E_PARAM);
+        return E_NOT_OK;
+    }
+
+    const Com_IPduConfigType* ipdu = Com_FindTxIPdu(GroupId);
+    if (ipdu == NULL || ipdu->IsSignalGroup == 0U)
+    {
+        DET_LOGE(TAG, "SendSignalGroupArray E: GroupId=%u not found or not a Signal Group",
+                 (unsigned)GroupId);
+        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_SEND_SIGNAL_GROUP_ARRAY, COM_E_PARAM);
+        return E_NOT_OK;
+    }
+
+    /* シャドウバッファ・保留フラグ・変化検知ベースラインの同期理由は
+     * 上の \details 参照。 */
+    for (uint8 b = 0U; b < ipdu->DLC; b++)
+    {
+        Com_TxBuffer[GroupId][b]       = DataPtr[b];
+        Com_TxShadowBuffer[GroupId][b] = DataPtr[b];
+    }
+
+    Com_GroupTriggerPending[GroupId] = 0U;
+
+    for (uint8 s = 0U; s < Com_ConfigPtr->SignalCount; s++)
+    {
+        const Com_SignalConfigType* sig = &Com_ConfigPtr->Signals[s];
+        if (sig->Direction == COM_SIGNAL_DIRECTION_TX && sig->IPduId == GroupId)
+        {
+            Com_FilterLastValue[s] = Com_UnpackSignal(Com_TxBuffer[GroupId],
+                                                        sig->BitPosition, sig->BitSize, sig->Endian);
+        }
+    }
+
+    /* TMS 再評価（SWS_Com_00245、本関数でも正しく動く理由は上の \details
+     * 参照）。戻り値（TMS が今回変化したか）は使わない: 本関数は常に無条件で
+     * 送信要求するため、TMS 遷移かどうかで分岐する必要がない
+     * （SWS_Com_00495 が要求する「TMS 遷移は無条件で即座に送信」も、
+     * この無条件送信要求に自然に含まれる）。 */
+    (void)Com_RecalcTms(GroupId);
+    Com_RequestTxOnChange(ipdu);
+
+    if (ipdu->UpdateBitPosition != 0xFFU)
+    {
+        Com_PackSignal(Com_TxBuffer[GroupId], ipdu->UpdateBitPosition, 1U, COM_BIG_ENDIAN, 1U);
+    }
+
+    return E_OK;
+}
+
 typedef void (*Com_VoidCbkType)(void);
 
 /* Com_InvokeTxNotification() が「TxAckCbk・TxErrCbk・TxTOutCbk のどれを

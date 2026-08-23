@@ -146,6 +146,29 @@ uint8 Com_IsRxTimedOut(Com_IPduIdType IPduId);
 uint8 Com_SendSignal(Com_SignalIdType SignalId, const void* SignalDataPtr);
 /* SWS_Com_00200: Signal Group メンバーをシャドウバッファへまとめて確定コミットする */
 Std_ReturnType Com_SendSignalGroup(Com_IPduIdType GroupId);
+
+/**
+ * \brief   TX I-PDU へ生バイト列をそのままコミットする（Signal Group 単位）。
+ *
+ * \details Com_SendSignal() を1本ずつ呼んでシャドウバッファへ書き込み、
+ *          Com_SendSignalGroup() でコミットする代わりに、I-PDU 全体の
+ *          バイト列を1回で TX バッファへ直接書き込む（実 AUTOSAR の
+ *          Com_SendSignalGroupArray に相当する簡略版。Com_ReceiveSignalGroupArray
+ *          と対称）。
+ *
+ * \param[in]  GroupId  コミットする Signal Group（TX I-PDU）の ID。
+ * \param[in]  DataPtr  書き込む生バイト列。ipdu->DLC バイト以上必要。NULL 禁止。
+ *
+ * \retval  E_OK      GroupId が見つかり、書き込み・コミット処理を行った。
+ * \retval  E_NOT_OK  COM 未初期化、DataPtr が NULL、GroupId が TX I-PDU 設定
+ *                    テーブルに存在しない、または IsSignalGroup=0 の I-PDU
+ *                    を指定した。
+ *
+ * \ServiceID      {0x23}
+ * \Reentrancy     {Non Reentrant for the same signal group}
+ * \Synchronicity  {Asynchronous}
+ */
+Std_ReturnType Com_SendSignalGroupArray(Com_IPduIdType GroupId, const uint8* DataPtr);
 /* SWS_Com_00124 */
 void Com_TxConfirmation(PduIdType TxPduId, Std_ReturnType result);
 /* SWS_Com_00398: 受信デッドライン監視タイムアウト検出。Os の 100ms タスクから呼び出す */

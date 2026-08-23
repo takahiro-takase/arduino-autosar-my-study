@@ -547,6 +547,98 @@ TEST_F(Bsw_TxChain_Test, TmsUnchanged_OK_DoesNotTriggerSendWithoutGroupTrigger)
 }
 
 // ------------------------------------------------------------
+// Com_SendSignalGroupArray（SWS_Com_00851/00852、Com_ReceiveSignalGroupArray
+// の送信側対）。kTestTmsGroupIPdu（IPduId=1、DLC=1、TMSシグナル=bit0、
+// update-bit=bit7）を流用する。Com_SendSignal()/Com_SendSignalGroup() を
+// 経由しない一括書き込みでも、TMS 再評価（Com_TxBuffer から直接読む）・
+// update-bit セット・送信要求が正しく動くことを検証する。
+// ------------------------------------------------------------
+TEST_F(Bsw_TxChain_Test, SendSignalGroupArray_OK_WritesBufferTriggersSendAndSetsUpdateBit)
+{
+    /* 準備 (Arrange): TMS ビット(bit0=0x80)を立てた生バイト列 */
+    uint8_t raw = 0x80U;
+
+    /* 実行 (Act) */
+    Std_ReturnType ret = Com_SendSignalGroupArray(1U, &raw);
+
+    /* 評価 (Assert): 個々の Com_SendSignal() を経由しなくても
+     * Com_RecalcTms() が Com_TxBuffer を直接読むため TMS 遷移が検出され、
+     * 無条件で送信要求・update-bit セットが行われる
+     * （Com_SendSignalGroup() は Com_GroupTriggerPending が立っていないと
+     * update-bit をセットしないが、本関数は常にセットする——ドキュメント
+     * コメント参照）。 */
+    EXPECT_EQ(ret, E_OK);
+    EXPECT_EQ(Com_Test_GetTxPending(1U), 1U);
+    const uint8* buf = Com_Test_GetTxBuffer(1U);
+    ASSERT_NE(buf, nullptr);
+    EXPECT_EQ(buf[0], 0x81U);  // bit0(TMS, 書き込んだ値) + bit7(update-bit, 自動セット)
+}
+
+TEST_F(Bsw_TxChain_Test, SendSignalGroupArray_OK_AlwaysTriggersEvenWithoutChange)
+{
+    /* 準備 (Arrange): Init 直後の値（0x00、TMS=false のまま）と全く同じ
+     * 内容を書き込む。上の TmsUnchanged_OK_DoesNotTriggerSendWithoutGroupTrigger
+     * （通常経路 Com_SendSignal()+Com_SendSignalGroup()）では、この
+     * 「変化なし」ケースは送信要求を立てない。 */
+    uint8_t raw = 0x00U;
+
+    /* 実行 (Act) */
+    Std_ReturnType ret = Com_SendSignalGroupArray(1U, &raw);
+
+    /* 評価 (Assert): 本関数は個々のシグナルの変化検知を経由しないため、
+     * 値が変化していなくても常に送信要求が立つ（ドキュメントコメント
+     * 「呼ばれるたびに常に『新しいデータがある』ものとして扱う」の
+     * とおり。通常経路との対比が本テストの主張）。 */
+    EXPECT_EQ(ret, E_OK);
+    EXPECT_EQ(Com_Test_GetTxPending(1U), 1U);
+}
+
+TEST_F(Bsw_TxChain_Test, SendSignalGroupArray_NG_NullDataPtrReturnsError)
+{
+    /* 実行 (Act) + 評価 (Assert) */
+    EXPECT_EQ(Com_SendSignalGroupArray(1U, NULL), E_NOT_OK);
+    EXPECT_EQ(Com_Test_GetTxPending(1U), 0U);  // 何も変化しない
+}
+
+TEST_F(Bsw_TxChain_Test, SendSignalGroupArray_NG_NonSignalGroupIPduReturnsError)
+{
+    /* 準備 (Arrange): kTestTxIPdu（IPduId=0）は IsSignalGroup=0 */
+    uint8_t raw[2] = { 0x12U, 0x34U };
+
+    /* 実行 (Act) + 評価 (Assert) */
+    EXPECT_EQ(Com_SendSignalGroupArray(0U, raw), E_NOT_OK);
+    EXPECT_EQ(Com_Test_GetTxPending(0U), 0U);
+}
+
+// /code-review で指摘された状態不整合（シャドウバッファ・
+// Com_GroupTriggerPending・Com_FilterLastValue が同期されず、通常経路と
+// 混在させると黙って巻き戻る）の是正確認。この修正が無ければ、本テストは
+// 「Com_SendSignalGroup() が Com_Init() 直後の古いシャドウ内容(0x00)で
+// せっかくコミットした 0x81 を上書きしてしまう」形で失敗していたはず。
+TEST_F(Bsw_TxChain_Test, SendSignalGroupArray_OK_SyncsShadowBufferPreventingStaleOverwrite)
+{
+    /* 準備 (Arrange): 配列APIで一括コミット（個々の Com_SendSignal() は
+     * 一切呼ばない） */
+    uint8_t raw = 0x80U;  // TMS ビット(bit0)のみ
+    ASSERT_EQ(Com_SendSignalGroupArray(1U, &raw), E_OK);
+    const uint8* bufAfterArray = Com_Test_GetTxBuffer(1U);
+    ASSERT_NE(bufAfterArray, nullptr);
+    ASSERT_EQ(bufAfterArray[0], 0x81U);  // TMS ビット + update-bit(自動セット)
+
+    /* 実行 (Act): 通常経路のコミット関数を、個別の Com_SendSignal() を
+     * 挟まずそのまま呼ぶ（呼び出し側が API を混在させた状況を再現）。 */
+    Std_ReturnType ret = Com_SendSignalGroup(1U);
+
+    /* 評価 (Assert): シャドウバッファが Com_SendSignalGroupArray() 内で
+     * 既に同期済みのため、Com_SendSignalGroup() は同じ内容をそのまま
+     * 再コミットするだけになり、TMS ビットの値（bit0）が保持される。 */
+    EXPECT_EQ(ret, E_OK);
+    const uint8* bufAfterGroup = Com_Test_GetTxBuffer(1U);
+    ASSERT_NE(bufAfterGroup, nullptr);
+    EXPECT_EQ(bufAfterGroup[0] & 0x80U, 0x80U);
+}
+
+// ------------------------------------------------------------
 // SWS_Com_00495: 非 Signal Group 側（Com_SendSignal() 内の tmsChanged 分岐）
 // の回帰テスト。上の2件は Signal Group 側（Com_SendSignalGroup()）のみを
 // 検証しており、非 Signal Group 側は /code-review で「本番設定に
