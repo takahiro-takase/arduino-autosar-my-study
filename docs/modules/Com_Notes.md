@@ -901,6 +901,69 @@ Signal Group という概念が送受信どちらの向きでも同じ形（ア�
 （本プロジェクトの E2E Transformer 方式とは異なり、RTE ミラーを経由しない構成）
 です。
 
+## Com_SendSignalGroupArray（生バイト列による一括送信コミット、2026-08 追加）
+
+`Com_ReceiveSignalGroupArray`（上記）の送信側対です。実 AUTOSAR の
+`Com_SendSignalGroupArray`（[SWS_Com_00851]/[SWS_Com_00852]、
+`ComEnableSignalGroupArrayApi` で有効化するオプション API）に相当する
+簡略版で、`Com_SendSignal()` を1本ずつ呼んでシャドウバッファへ書き込み
+`Com_SendSignalGroup()` でコミットする通常経路の代わりに、I-PDU 全体の
+バイト列を1回で TX バッファへ直接書き込みます。
+
+```
+Com_SendSignalGroupArray(GroupId, DataPtr)
+  Com_TxBuffer[GroupId][0..DLC-1]       = DataPtr[0..DLC-1]  ← 直接コピー
+  Com_TxShadowBuffer[GroupId][0..DLC-1] = DataPtr[0..DLC-1]  ← シャドウも同期
+  Com_GroupTriggerPending[GroupId] = 0                       ← 保留フラグなし
+  各メンバーの Com_FilterLastValue を今回の値へ更新           ← 変化検知の基準も同期
+  Com_RecalcTms(GroupId)     ← Com_TxBuffer から直接読むため正しく動く
+  Com_RequestTxOnChange()    ← 常に無条件で呼ぶ
+  update-bit セット           ← 常に無条件でセット
+```
+
+**シャドウバッファ等も同期する理由（/code-review で発見・是正）**: 実装
+当初はこれらを一切更新しておらず、本関数と通常経路
+（`Com_SendSignal()`+`Com_SendSignalGroup()`）を同じ `GroupId` に混在
+させると、古いシャドウバッファ内容で今回のコミットが黙って巻き戻る等の
+サイレントなデータ破損が起こり得た（DET エラーを伴わないため気付き
+にくい）。詳細な失敗シナリオは `Com.c` の `Com_SendSignalGroupArray()`
+の Doxygen コメント参照。
+
+**なぜ「常に無条件」か**: 本関数は個々のシグナル単位の変化検知
+（`Com_GroupTriggerPending`、`ComTransferProperty=TRIGGERED_ON_CHANGE` の
+メンバーが `Com_SendSignal()` 内で検知するもの）を一切経由しません。
+判定材料そのものが無いため、呼ばれるたびに「新しいデータがある」ものと
+みなして無条件に送信要求・update-bit セットを行います。これは
+[SWS_Com_00801]（update-bit）の原文「呼ばれるたびに無条件でセットする」に
+最も忠実な挙動でもあります（`Com_SendSignal()`/`Com_SendSignalGroup()` 側が
+これを条件付きにしているのは、ASW Runnable が毎サイクル無条件に呼ぶ
+既存の呼び出しパターンに合わせた個別対策であり、本関数の想定呼び出し方
+（値の変化があったときだけ明示的に呼ぶ）には不要です）。
+
+**本番の `WarningStatus` へは適用していません（意図的）**: `WarningStatus`
+は `App_WarningIndicator_Run()` が毎サイクル無条件に
+`Com_SendSignal()`×3 → `Com_SendSignalGroup()` を呼ぶ設計です（値が
+変化した場合のみ実送信されるのは、`Com_SendSignal()` 内の
+`ComFilterAlgorithm` 判定と `Com_GroupTriggerPending` のおかげ）。
+もしこの経路を `Com_SendSignalGroupArray()` に置き換えると、上記の
+「常に無条件」という性質により、値が変化していなくても毎サイクル
+送信要求が立ってしまい、DIRECT モードの `WarningStatus` が周期送信の
+ように常時送信され続けるという実害のある回帰になります（本セッションで
+`COM_IPDU_GROUP_SENSOR_RX` の際に見つけた「TX 側の挙動をそのまま流用して
+RX 側で新しい問題を作った」のと同種の落とし穴）。そのため本番コードへの
+配線はあえて行わず、ユニットテストでのみ検証しています。
+
+**この機能は実際に発動するか**: 実機での動作確認は未実施です（上記の
+理由により、本番の呼び出し元が存在しないため）。回帰テストとして
+`test/test_chain/Bsw_TxChain_test.cpp` の
+`SendSignalGroupArray_OK_WritesBufferTriggersSendAndSetsUpdateBit`/
+`SendSignalGroupArray_OK_AlwaysTriggersEvenWithoutChange`/
+`SendSignalGroupArray_NG_NullDataPtrReturnsError`/
+`SendSignalGroupArray_NG_NonSignalGroupIPduReturnsError`/
+`SendSignalGroupArray_OK_SyncsShadowBufferPreventingStaleOverwrite`
+（上記の状態同期の是正確認）を追加し、既存の TMS 用 Signal Group
+（`kTestTmsGroupIPdu`、IPduId=1）を流用して検証しています。
+
 ## ComRxDataTimeoutAction（受信タイムアウト時のシグナル値の扱い）
 
 RX 受信デッドライン監視（次節）がタイムアウトを検出したあと、`Com_ReceiveSignal()`

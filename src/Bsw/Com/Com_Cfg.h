@@ -62,6 +62,9 @@
 #define COM_API_ID_RECEIVE_SIGNAL_GROUP_ARRAY   0x1AU
 #define COM_API_ID_IS_RX_TIMED_OUT              0x1BU
 #define COM_API_ID_MAIN_FUNCTION                0x20U
+#define COM_API_ID_SEND_SIGNAL_GROUP_ARRAY      0x23U  /* 実 AUTOSAR の Service ID と一致させている
+                                                         * ため昇順から外れる（0x1B の直後ではなく
+                                                         * ここに置く） */
 #define COM_API_ID_SET_COMMUNICATION_ENABLED    0x30U
 #define COM_API_ID_DEINIT                       0x02U
 #define COM_API_ID_GET_STATUS                   0x07U
