@@ -1492,13 +1492,87 @@ Com_RxIndication(RxPduId=2, ...)  ← SecOC が MAC・フレッシュネス検�
 
 ### 明示する簡略化（Com_RxIpduCallout）
 
-- `Com_TxIpduCallout`（送信側、[SWS_Com_00346]）は未実装です。本実装の
-  TX I-PDU はいずれも Com 自身が生成する内部状態（シグナル値）をそのまま
-  送るだけで、送信直前に外部から生バイト列を検査/差し替えたい具体的な
-  シナリオが無いためです。
+- 送信側対の `Com_TxIpduCallout`（[SWS_Com_00346]）は実装済みです。詳細は
+  次節「Com_TxIpduCallout」を参照してください。
 - 戻り値の型は AUTOSAR の `boolean` ではなく、本プロジェクトの他の 1/0
   フラグ群と同じ `uint8` を使っています（`Platform_Types.h` に `boolean`
   型自体を持たない、本プロジェクト全体の簡略化）。
+
+## Com_TxIpduCallout（送信I-PDU単位のフィルタリングフック、2026-08 追加）
+
+`Com_RxIpduCallout`（前節）の送信側対です。RX 側は「バッファへ格納する前に
+拒否できる唯一の層」でしたが、TX 側は「PduR へ渡す前に送信を止められる
+唯一の層」という同じ位置づけになります。
+
+```
+[SWS_Com_00346] The I-PDU callout on sender side can be configured for
+example to implement user-defined transmission filtering or user-defined
+pre-transmission-processing of the outgoing I-PDU.
+[SWS_Com_00719] the AUTOSAR COM module shall invoke this I-PDU callout
+diretly before the I-PDU is transmitted via PduR_ComTransmit.
+（戻り値 false: "I-PDU will not be processed any further"）
+```
+
+`Com_DoTransmit()` 内、`TxTransformCbk`（E2E/CRC 等の送信直前変換）適用後・
+`PduR_Transmit()` 呼び出し直前に、実際に送信される最終バイト列を渡して
+呼びます（RX 側が「PduR から渡された生バイト列」を見るのと対称に、TX 側は
+「PduR へこれから渡す最終バイト列」を見ます）。
+
+**適用先: `ImmobilizerStatus`（TX IPduId=3）**。Signal Gateway
+（`Com_GwMappingData`）が SecOC 検証済みの `ImmobilizerCmd`（RX、
+`SecureCommand` フレーム）を SWC/Rte を介さず直接転送する専用フレームです。
+`Rte_COMRxIpduCallout_SecureCommand`（RX 側の既存ゲート）は byte[1]
+（Reserved）しか検証せず、`ImmobilizerCmd` 本体（byte[0]）が定義済みの値域
+（`0x00`=LOCK / `0x01`=UNLOCK）に収まっているかまでは見ていません。SecOC の
+MAC 検証を通過した送信元が実装バグ等で `0x00`/`0x01` 以外の値を送っても、
+これまでは何の検査も経ないままゲートウェイが他 ECU へブロードキャスト
+していました。`Rte_COMTxIpduCallout_ImmobilizerStatus` を送信直前に置くことで、
+この抜け穴を塞いでいます。
+
+```
+ImmobilizerStatus (IPduId=3):
+  TxIpduCalloutCbk = Rte_COMTxIpduCallout_ImmobilizerStatus
+
+Com_DoTransmit(ipdu=3, ...)  ← Com_MainFunction() の TX ディスパッチから呼ぶ
+  TxTransformCbk は未設定のためスキップ
+  TxIpduCalloutCbk(Com_TxBuffer[3], DLC=1) を呼ぶ（PduR_Transmit() 直前）
+    byte[0] が 0x00/0x01 以外 → 0（false）を返す
+      → Com_DoTransmit() が E_NOT_OK で即 return
+        （PduR_Transmit() 自体を呼ばない。Com_TxConfPending もセット
+          しない＝TX 送信デッドライン監視の誤発火を防ぐ。update-bit も
+          クリアしない＝次回の実送信で改めて「更新あり」を伝える）
+    0x00/0x01 → 1（true）を返す → 通常どおり PduR_Transmit() へ進む
+```
+
+**RX 側との非対称性（1点）**: RX 側は拒否されてもデッドライン監視タイマの
+リセット（[SWS_Com_00872] 段階1）だけは必ず行う（「フレームは物理的に
+届いた」という事実は取り消さない）設計でした。TX 側にこれと対称な概念は
+存在しません——そもそも「実際には送信していない」ため、TX 送信デッドライン
+監視（`Com_CbkTxTOut`）のタイマを起動する理由自体がなく、`Com_TxConfPending`
+を意図的にセットしないことで自然に「監視対象外」となります（RX のように
+「タイマだけは動かし続ける」特別扱いが不要）。
+
+**この機能は実際に発動するか**: 実機での確認は未実施です（`ImmobilizerCmd`
+の送信元となる別 ECU が無く、正規の SecOC 鍵で `0x00`/`0x01` 以外の値を
+意図的に送る手段が `uds_tester` 側に無いため）。回帰テスト
+（`Bsw_TxChain_test.cpp` の `ComMainFunction_OK_AcceptedByTxIpduCalloutTransmitsNormally`/
+`ComMainFunction_NG_RejectedByTxIpduCalloutDiscardsTransmission`）でのみ
+検証済みです。
+
+**既知の制約: 拒否が続くと最終的に静かになる（/code-review で指摘）**:
+`ImmobilizerStatus` は `TxModeMode=DIRECT`（変化検知のみで送信）+
+`NumberOfRepetitions=2`（初回+再送2回=計3回）という設定です。同一の異常値
+（例: `0x05`）が繰り返し届いても、2回目以降は `Com_SendSignal()` の変化検知
+フィルタ（`COM_FILTER_MASKED_NEW_DIFFERS_MASKED_OLD`）が「値は変化していない」
+と判定するため `Com_TxPending`/`Com_TxRepeatsRemaining` は再アームされません。
+つまり最初の約 `RepetitionPeriodMs × NumberOfRepetitions` の間だけ拒否ログ
+（`Rte_COMTxIpduCallout_ImmobilizerStatus` の WARN）が3回出た後、同じ異常値が
+たとえ届き続けても以降は一切ログが出ません。これは `TxIpduCalloutCbk` 自体の
+問題ではなく、DIRECT モード+変化検知フィルタという既存の一般的な仕組みの
+性質です（`TxErrCbk` 等の「拒否され続けている」ことを継続的に知らせる仕組みは
+本 I-PDU には設定していません）。実機で `ImmobilizerCmd` を送れる送信元が
+存在しない現状では実害はありませんが、将来この構成を流用する場合は
+注意してください。
 
 ## update-bit の受信側判定（discard）
 

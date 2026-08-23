@@ -498,6 +498,49 @@ uint8 Rte_COMRxIpduCallout_SecureCommand(const uint8* SduDataPtr, uint8 SduLengt
 }
 
 /**
+ * \brief   ImmobilizerStatus (TX IPduId=3) の送信可否を判定する（値域検査）。
+ *
+ * \details Com_PBCfg.c の ImmobilizerStatus I-PDU 設定（Com_IPduConfigType.
+ *          TxIpduCalloutCbk）から登録される（Com_TxIpduCallout、
+ *          SWS_Com_00346/00719）。Com_DoTransmit() 内、PduR_Transmit()
+ *          呼び出し直前に呼ばれる。RxIpduCalloutCbk の送信側対
+ *          （Rte_COMRxIpduCallout_SecureCommand）。
+ *          Signal Gateway（Com_GwMappingData）が SecOC 検証済みの
+ *          ImmobilizerCmd を SWC/Rte を介さず直接転送する専用フレームだが、
+ *          SecOC は MAC・フレッシュネスの真正性のみを保証し、
+ *          ImmobilizerCmd 本体が定義済みの値域（0x00=LOCK/0x01=UNLOCK）に
+ *          収まっているかまでは検証しない。RX 側の
+ *          Rte_COMRxIpduCallout_SecureCommand も byte[1]（Reserved）しか
+ *          見ないため、byte[0]（ImmobilizerCmd）自体の値域はどこでも
+ *          検証されないまま素通りしてしまう。送信直前のこの層で最終防衛し、
+ *          他 ECU へ意味不明な値をブロードキャストしないようにする。
+ *
+ * \param[in]  SduDataPtr  送信直前の TX バッファ（TxTransformCbk 適用後）。
+ * \param[in]  SduLength   その長さ（本 I-PDU は DLC=1U 固定）。
+ *
+ * \retval  1  受理する（byte[0]==0x00 または 0x01）。
+ * \retval  0  拒否する（それ以外の値）。
+ *
+ * \note    Com_PBCfg.c から extern 宣言経由で TxIpduCalloutCbk として
+ *          参照されるため non-static。Rte.h には公開しない。
+ */
+uint8 Rte_COMTxIpduCallout_ImmobilizerStatus(const uint8* SduDataPtr, uint8 SduLength)
+{
+    (void)SduLength;  /* TX 呼び出しは常に IPdu の DLC 固定長（=1）で呼ばれる
+                        * ため長さチェックは不要（RX の RxIpduCalloutCbk とは
+                        * 異なり、実際に届いた可変長を心配する必要がない） */
+    if (SduDataPtr[0] > 0x01U)  /* uint8 は負値を取らないため 0x00U/0x01U 以外
+                                  * を1回の比較で判定できる（[0x00,0x01] の
+                                  * 範囲チェック） */
+    {
+        DET_LOGW(TAG, "ImmobilizerStatus rejected by TxIpduCallout (value=0x%02X)",
+                 (unsigned)SduDataPtr[0]);
+        return 0U;
+    }
+    return 1U;
+}
+
+/**
  * \brief   AbsInfo (RX IPduId=1) フレーム受信の都度呼ばれる E2E Transformer フック。
  *
  * \details Com_PBCfg.c の RxIndicationCbk として登録される。
