@@ -40,6 +40,8 @@
  *              生の Secured I-PDU を一切見ず、SecOC が検証成功後に
  *              Com_RxIndication() を直接呼んで Authentic Payload のみ渡す。
  *              詳細は src/Bsw/SecOC/ 参照)
+ *              RxIpduCalloutCbk=Rte_COMRxIpduCallout_SecureCommand（SWS_Com_00700
+ *              Com_RxIpduCallout、byte[1]=Reserved が非0なら受理しない）
  *              Signal 12: ImmobilizerCmd  8 bit  BitPos=0  BigEndian  0x00=LOCK/0x01=UNLOCK
  *            TX I-PDU 0 (IPduId=0): CAN ID 0x200, DLC=6  MeterStatus
  *              (メータ ECU、E2E 保護なし、TxModeMode=MIXED。
@@ -193,6 +195,7 @@ extern void Rte_COMCbk_AbsInfo(void);
 extern void Rte_COMRxInd_SecureCommand(void);
 extern void Rte_COMCbkRxTOut_EngineOnFlag(void);
 extern void Rte_COMCbkRxTOut_AbsInfo(void);
+extern uint8 Rte_COMRxIpduCallout_SecureCommand(const uint8* SduDataPtr, uint8 SduLength);
 
 /* -----------------------------------------------------------------------
  * RX I-PDU テーブル
@@ -276,6 +279,11 @@ static const Com_IPduConfigType Com_RxIPduConfigData[COM_RX_IPDU_COUNT] = {
          * 「最終受信からの経過時間」による受信デッドライン監視は本来の意味を
          * 持たない（実車ならコマンド送達を別途確認する仕組みが必要になるが、
          * 本実装はスコープ外とする）。
+         * RxIpduCalloutCbk=Rte_COMRxIpduCallout_SecureCommand（SWS_Com_00700
+         * Com_RxIpduCallout）: byte[1]（Reserved）が 0x00 以外なら受理しない。
+         * SecOC は MAC・フレッシュネスの真正性のみを保証し、ペイロードの
+         * 業務レベルの妥当性（Reserved 予約領域が本当に 0 か）までは検証
+         * しないため、Com 側でこの層を担う。
          * --------------------------------------------------------------- */
         .IPduId    = 2U,                       /* DaVinci: ComIPduHandleId  - I-PDU 識別番号 */
         .DLC       = 2U,                       /* DaVinci: ComIPduLength    - Authentic Payload のみ
@@ -286,8 +294,9 @@ static const Com_IPduConfigType Com_RxIPduConfigData[COM_RX_IPDU_COUNT] = {
         .TimeoutMs = 0U,                       /* 監視無効（上記コメント参照） */
         .UpdateBitPosition = 0xFFU,            /* update-bit なし（Signal Group 専用機能のため未使用） */
         .IpduGroupId = COM_IPDU_GROUP_NONE,    /* I-PDU Group に属さない（常に有効） */
-        .RxIndicationCbk = Rte_COMRxInd_SecureCommand /* ログ出力のみの最小デモ
+        .RxIndicationCbk = Rte_COMRxInd_SecureCommand, /* ログ出力のみの最小デモ
                                                 *   （Rte_COMInvalidNotify_CoolantTemp と同じパターン） */
+        .RxIpduCalloutCbk = Rte_COMRxIpduCallout_SecureCommand
     }
 };
 

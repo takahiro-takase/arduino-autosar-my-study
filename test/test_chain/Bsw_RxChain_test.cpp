@@ -87,6 +87,19 @@ static void TestPartialAckCbk0(void) { s_partialAckCount0++; }
 static uint8_t s_partialAckCount1 = 0U;
 static void TestPartialAckCbk1(void) { s_partialAckCount1++; }
 
+// SWS_Com_00700/00816 (Com_RxIpduCallout) 検証用。s_calloutAccept で
+// 各テストから戻り値を制御し、s_calloutInvokeCount で呼び出し回数・
+// s_calloutLastByte1 で受け取った生バイト列を確認する。
+static uint8_t s_calloutAccept = 1U;
+static uint8_t s_calloutInvokeCount = 0U;
+static uint8_t s_calloutLastByte1 = 0U;
+static uint8 TestRxIpduCallout(const uint8* SduDataPtr, uint8 SduLength)
+{
+    s_calloutInvokeCount++;
+    s_calloutLastByte1 = (SduLength > 1U) ? SduDataPtr[1] : 0xFFU;
+    return s_calloutAccept;
+}
+
 const Com_SignalConfigType kTestRxSignal = {
     /* SignalId */                0U,
     /* Direction */                COM_SIGNAL_DIRECTION_RX,
@@ -132,7 +145,17 @@ const Com_IPduConfigType kTestRxIPdu = {
     /* UpdateBitPosition */ 0xFFU,
     /* IpduGroupId */      COM_IPDU_GROUP_NONE,
     /* RxIndicationCbk */  NULL,
-    /* TxTransformCbk */   NULL
+    /* TxTransformCbk */   NULL,
+    /* TxAckCbk */         NULL,
+    /* TxErrCbk */         NULL,
+    /* RxAckCbk */         NULL,
+    /* NumberOfRepetitions */ 0U,
+    /* RepetitionPeriodMs */  0U,
+    /* TxFirstTimeoutMs */    0U,
+    /* TxTimeoutMs */         0U,
+    /* TxTOutCbk */           NULL,
+    /* RxTOutCbk */           NULL,
+    /* RxIpduCalloutCbk */    TestRxIpduCallout
 };
 
 // -----------------------------------------------------------------------
@@ -382,6 +405,9 @@ protected:
         s_groupRxAckCount = 0U;
         s_partialAckCount0 = 0U;
         s_partialAckCount1 = 0U;
+        s_calloutAccept = 1U;
+        s_calloutInvokeCount = 0U;
+        s_calloutLastByte1 = 0U;
         // CanIf_RxIndication() は無条件に CanSM_RxIndication() を呼ぶため
         // （CanIf.c 参照）、CanSM 未初期化のままだと毎回 DET_E_UNINIT が
         // 報告されてしまう。本テストは CanSM_State を FULL_COM/NO_COM のまま
@@ -441,6 +467,48 @@ TEST_F(Bsw_RxChain_Test, CanMainFunctionRead_NG_NothingReceived_LeavesInitValue)
     uint8 ret = Com_ReceiveSignal(0U, &value);
     EXPECT_EQ(ret, E_OK);
     EXPECT_EQ(value, 0U);
+}
+
+// ------------------------------------------------------------
+// SWS_Com_00700/00816（Com_RxIpduCallout）の回帰テスト。
+// ------------------------------------------------------------
+TEST_F(Bsw_RxChain_Test, ComRxIndication_OK_AcceptedByCalloutProcessesNormally)
+{
+    /* 準備 (Arrange): コールバックは受理（既定の s_calloutAccept=1U） */
+    uint8 buf[2] = { 0x12U, 0x34U };
+    PduInfoType pduInfo = { buf, 2U };
+
+    /* 実行 (Act) */
+    Com_RxIndication(0U, &pduInfo);
+
+    /* 評価 (Assert): コールアウトは1回、生バイト列そのまま呼ばれ、
+     * 通常どおりバッファへ格納され RxAckCbk も発火する */
+    EXPECT_EQ(s_calloutInvokeCount, 1U);
+    EXPECT_EQ(s_calloutLastByte1, 0x34U);
+    EXPECT_EQ(s_rxAckCount, 1U);
+    uint16_t value = 0U;
+    EXPECT_EQ(Com_ReceiveSignal(0U, &value), E_OK);
+    EXPECT_EQ(value, 0x1234U);
+}
+
+TEST_F(Bsw_RxChain_Test, ComRxIndication_NG_RejectedByCalloutDiscardsFrameEntirely)
+{
+    /* 準備 (Arrange): コールバックが拒否する設定にする */
+    s_calloutAccept = 0U;
+    uint8 buf[2] = { 0x12U, 0x34U };
+    PduInfoType pduInfo = { buf, 2U };
+
+    /* 実行 (Act) */
+    Com_RxIndication(0U, &pduInfo);
+
+    /* 評価 (Assert): [SWS_Com_00700] "false: I-PDU will not be processed any
+     * further" のとおり、バッファは更新されず（InitValue のまま）、
+     * RxAckCbk（バッファ格納後の通知）も発火しない */
+    EXPECT_EQ(s_calloutInvokeCount, 1U);
+    EXPECT_EQ(s_rxAckCount, 0U);
+    uint16_t value = 0xFFFFU;
+    EXPECT_EQ(Com_ReceiveSignal(0U, &value), E_OK);
+    EXPECT_EQ(value, 0U);  // InitValue のまま（部分受信ではなく完全な不採用）
 }
 
 // ------------------------------------------------------------

@@ -485,6 +485,11 @@ void Com_GetVersionInfo(Std_VersionInfoType* versioninfo)
  *          DLC を超える分（CAN フレームが 8 バイト固定でパディングされている
  *          場合の末尾バイト等）は許容し、先頭 DLC バイトのみを読み取る。
  *
+ *          上記のいずれよりも前に、`ipdu->RxIpduCalloutCbk` が設定されていれば
+ *          Com_RxIpduCallout（[SWS_Com_00700]）としてまず呼ばれる。0 を返せば
+ *          この受信は以降一切処理しない（詳細は Com_Types.h の
+ *          RxIpduCalloutCbk コメント参照）。
+ *
  *          注意（実機非到達の既知の制約）: 本プロジェクトは「多層防御」として
  *          CanIf_RxIndication() 自身も独立した受信長チェックを持ち
  *          （CanIf.c 参照、SWS_CANIF_00026/00168 相当）、CanIf_PBCfg.c の
@@ -506,7 +511,7 @@ void Com_GetVersionInfo(Std_VersionInfoType* versioninfo)
  * \pre        Com_Init() が正常に完了していること。
  *
  * \AUTOSARReq     {SWS_Com_00123, SWS_Com_00574, SWS_Com_00575, SWS_Com_00870,
- *                  SWS_Com_00555}
+ *                  SWS_Com_00555, SWS_Com_00700, SWS_Com_00816}
  * \ServiceID      {0x10}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
@@ -547,6 +552,22 @@ void Com_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
         if (!Com_RxIPduStarted[ipdu->IPduId])
         {
             DET_LOGD(TAG, "RX suppressed (I-PDU Group stopped) iPdu=%u", (unsigned)ipdu->IPduId);
+            return;
+        }
+
+        /* [SWS_Com_00700]/[SWS_Com_00816] (Com_RxIpduCallout): バッファ書き込み・
+         * デッドライン監視タイマのリセット・RxAckCbk/RxIndicationCbk のいずれ
+         * よりも前に、PduR から渡された生バイト列をそのまま渡して呼ぶ。0
+         * （false 相当）を返したら、この受信は以降一切処理しない。 */
+        if (ipdu->RxIpduCalloutCbk != NULL &&
+            ipdu->RxIpduCalloutCbk(PduInfoPtr->SduDataPtr, (uint8)PduInfoPtr->SduLength) == 0U)
+        {
+            /* 具体的な拒否理由は RxIpduCalloutCbk 自身が WARN で既に出力
+             * 済みのはず（Rte_COMRxIpduCallout_SecureCommand 等）。ここでは
+             * 二重の WARN ログを避け、フレームワーク側の通過点としてのみ
+             * DEBUG で記録する（Com_RxEnabled==0 等、他の「抑制」経路と
+             * 同じ扱い）。 */
+            DET_LOGD(TAG, "RX iPdu=%u rejected by RxIpduCallout", (unsigned)ipdu->IPduId);
             return;
         }
 

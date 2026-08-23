@@ -446,6 +446,57 @@ void Rte_COMRxInd_SecureCommand(void)
         DET_LOGW(TAG, "ImmobilizerCmd: LOCK (authenticated via SecOC)");
 }
 
+/* SecureCommand (RX IPduId=2) の Reserved バイト位置。Com_PBCfg.c の
+ * IPduId=2 エントリの .DLC=2U、SecOC_PBCfg.c の .AuthenticPduLength=2U と
+ * 一致させること（レイアウトを変える場合はこの3箇所を連動して直す）。 */
+#define SECURECOMMAND_RESERVED_BYTE_OFFSET 1U
+
+/**
+ * \brief   SecureCommand (RX IPduId=2) の受理可否を判定する（Reserved バイト検査）。
+ *
+ * \details Com_PBCfg.c の SecureCommand I-PDU 設定（Com_IPduConfigType.
+ *          RxIpduCalloutCbk）から登録される（Com_RxIpduCallout、
+ *          SWS_Com_00700/00816）。`Com_RxIndication(2, ...)` の冒頭、
+ *          バッファ格納・`Rte_COMRxInd_SecureCommand()` のいずれよりも前に
+ *          呼ばれる。SecOC は MAC・フレッシュネスの真正性のみを保証し、
+ *          ペイロードの業務レベルの妥当性までは検証しないため、byte[1]
+ *          （Reserved、本来は常に 0x00）が非 0 なら受理しない。
+ *
+ * \param[in]  SduDataPtr  PduR から渡された生バイト列（DLC によるクランプ前）。
+ * \param[in]  SduLength   その長さ。
+ *
+ * \retval  1  受理する（Reserved==0x00）。
+ * \retval  0  拒否する（Reserved!=0x00、または Reserved バイトを読める長さが
+ *             無い）。長さ不足を fail-open（受理）にしないのは、非
+ *             Signal Group の SecureCommand には [SWS_Com_00575] の短小
+ *             フレーム破棄（IsSignalGroup 専用）が適用されず、代わりに
+ *             部分受理パス（byte[0] のみ書き込み）へ進んでしまうと、
+ *             この検査自体が一度も評価されないまま「検査済み」として
+ *             通過してしまうため（/code-review で指摘・是正）。
+ *
+ * \note    Com_PBCfg.c から extern 宣言経由で RxIpduCalloutCbk として
+ *          参照されるため non-static。Rte.h には公開しない。呼び出し
+ *          コンテキストは `Rte_COMRxInd_SecureCommand()` と同じ
+ *          （割り込み禁止区間の外）。
+ */
+uint8 Rte_COMRxIpduCallout_SecureCommand(const uint8* SduDataPtr, uint8 SduLength)
+{
+    if (SduLength <= SECURECOMMAND_RESERVED_BYTE_OFFSET)
+    {
+        DET_LOGW(TAG, "SecureCommand rejected by RxIpduCallout (len=%u too short)",
+                 (unsigned)SduLength);
+        return 0U;
+    }
+
+    if (SduDataPtr[SECURECOMMAND_RESERVED_BYTE_OFFSET] != 0x00U)
+    {
+        DET_LOGW(TAG, "SecureCommand rejected by RxIpduCallout (Reserved=0x%02X)",
+                 (unsigned)SduDataPtr[SECURECOMMAND_RESERVED_BYTE_OFFSET]);
+        return 0U;
+    }
+    return 1U;
+}
+
 /**
  * \brief   AbsInfo (RX IPduId=1) フレーム受信の都度呼ばれる E2E Transformer フック。
  *

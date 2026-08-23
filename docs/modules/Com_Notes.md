@@ -1375,6 +1375,99 @@ dispatch/confirmation の同期性に依存しない設計にしている**: `Ca
 だったため対応を見送っていましたが、直後のラウンドで実装しました
 （詳細は「受信デッドライン監視」節の「Com_CbkRxTOut」小節参照）。
 
+## Com_RxIpduCallout（受信I-PDU単位のフィルタリングフック）
+
+これまでの RX 側ゲートは、いずれも**バッファへ格納した後**（`RxIndicationCbk`/
+`Com_CbkRxAck`/`ComFilterAlgorithm(NEW_IS_WITHIN)`/`ComDataInvalidAction`）か、
+**アンパック済みのシグナル値**（後2者）に対するものでした。実 AUTOSAR の
+Com には、これらより手前——PduR から渡された生バイト列そのもの、バッファ
+書き込み前——で受理/拒否を判定できる `Com_RxIpduCallout` という機構があります。
+
+```
+[SWS_Com_00700] The I-PDU callout on receiver side can be configured to
+implement user-defined receive filtering mechanisms.
+[SWS_Com_00816] The AUTOSAR COM module shall forward all data of the
+received I-PDU (i.e. the complete I-PDU as provided by the PduR) in the
+Com_RxIpduCallout.
+（戻り値 false: "I-PDU will not be processed any further"）
+```
+
+Signal Gateway 節で `[SWS_Com_00872]` の RX 処理段階（1: デッドライン監視
+タイマ再始動、2: I-PDU callout、3: update-bit 確認、4: エンディアン変換）を
+引用した際、段階2は「`Com_RxIndication()` の既存処理が概念上占めている」と
+説明していましたが、実際に `Com_RxIpduCallout` 相当の機構自体は存在して
+いませんでした。今回、`SecureCommand`（RX IPduId=2、`ImmobilizerCmd`）に
+これを適用しました。
+
+**段階の実行順について（仕様の列挙順とは異なる、/code-review で指摘）**:
+`[SWS_Com_00872]` は段階1（タイマ再始動）→段階2（callout）の順で列挙して
+いますが、本実装は逆に **callout を最初に評価し、拒否された場合はタイマ
+再始動を含めて一切処理しません**（`Com_RxIndication()` 内、callout の
+`return` はバッファ書き込みより前）。これは新たに導入した挙動ではなく、
+既存の Signal Group 短小フレーム破棄（`[SWS_Com_00575]`、同じく
+バッファ書き込み・タイマ再始動のいずれよりも前で `return` する）と
+同じ既存の設計方針を踏襲したものです。「フレーム受信自体は物理的に成立した
+が、内容が信頼できないため何も処理しない」という一貫した扱いであり、
+デッドライン監視タイマの意味を「フレームが物理的に届いたか」ではなく
+「信頼できる形で処理できたか」で統一しています。
+
+トレードオフとして、`RxIpduCalloutCbk` を将来デッドライン監視が有効
+（`TimeoutMs>0`）な I-PDU に付け、かつ送信元が確実に送信し続けているのに
+毎回 callout に拒否され続けるような構成にすると、実際にはバスは正常でも
+デッドライン監視が誤ってタイムアウト扱いにしてしまいます。現状唯一の
+適用先である `SecureCommand` は `TimeoutMs=0`（監視無効、上記コメント
+参照）のためこの懸念は顕在化しません。
+
+```
+SecureCommand (IPduId=2):
+  RxIpduCalloutCbk = Rte_COMRxIpduCallout_SecureCommand
+
+Com_RxIndication(RxPduId=2, ...)  ← SecOC が MAC・フレッシュネス検証成功後に呼ぶ
+  Com_RxIPduStarted チェックの直後、バッファ書き込み・デッドライン監視
+  タイマリセット・RxAckCbk/RxIndicationCbk のいずれよりも前に
+    RxIpduCalloutCbk(SduDataPtr, SduLength) を呼ぶ
+      byte[1]（Reserved、本来常に 0x00）が非0 → 0（false）を返す
+        → Com_RxIndication() が即座に return（以降一切処理しない）
+      0x00 → 1（true）を返す → 通常どおり処理を続行
+```
+
+**なぜ SecOC 検証済みのフレームにさらにこの層が必要か**: SecOC が保証する
+のは「送信元の真正性」と「再送でないこと」（MAC・フレッシュネス）のみで、
+ペイロードの業務レベルの妥当性（Reserved 領域が本当に規約どおり 0 か）は
+関知しません。認証済みだが壊れた/仕様違反のペイロードを送ってくる KeyFobEcu
+（実装バグ、あるいは意図的な攻撃）を想定すると、認証と業務バリデーションは
+独立した層であるべきという設計です。
+
+**既存のゲートとの違い（唯一「格納そのものを拒否できる」層）**: `RxIndicationCbk`/
+`Com_CbkRxAck` はバッファ格納**後**の通知のため、格納自体は止められません。
+`ComFilterAlgorithm(NEW_IS_WITHIN)`/`ComDataInvalidAction` は個々のシグナル
+単位で「直近の有効値を返す」という代替であり、I-PDU 全体の受理そのものを
+拒否するわけではありません。`Com_RxIpduCallout` だけが、デッドライン監視
+タイマのリセットも含め「このフレームを受信したという事実そのもの」を
+なかったことにできます。
+
+**この機能は実際に発動するか**: **発動します**。SecOC の MAC・フレッシュネス
+検証は「送信元が正しい鍵を持っているか」「再送でないか」だけを見ており、
+ペイロードの中身までは検証しないため、`uds_tester` の「ImmobilizerCmd」プリセット
+に追加した「Reserved異常」（`data=[0x01, 0xFF]`）を送信すると、SecOC 認証は
+正常に通過した上で `Com_RxIpduCallout` に拒否されることを実機で確認できます。
+ログに `SecOC: RxInd: iPdu=0 verified OK` の直後、通常の
+`Com: RX iPdu=2 [...]` ログが出ないまま
+`Rte: SecureCommand rejected by RxIpduCallout (Reserved=0xFF)` が出力され、
+`ImmobilizerStatus`（Signal Gateway 転送先）も更新されないことで、
+「認証は通ったが業務バリデーションで拒否された」という2層の防御が実際に
+機能していることが確認できます。
+
+### 明示する簡略化（Com_RxIpduCallout）
+
+- `Com_TxIpduCallout`（送信側、[SWS_Com_00346]）は未実装です。本実装の
+  TX I-PDU はいずれも Com 自身が生成する内部状態（シグナル値）をそのまま
+  送るだけで、送信直前に外部から生バイト列を検査/差し替えたい具体的な
+  シナリオが無いためです。
+- 戻り値の型は AUTOSAR の `boolean` ではなく、本プロジェクトの他の 1/0
+  フラグ群と同じ `uint8` を使っています（`Platform_Types.h` に `boolean`
+  型自体を持たない、本プロジェクト全体の簡略化）。
+
 ## update-bit の受信側判定（discard）
 
 update-bit の概要、および TX 側（非 Signal Group・Signal Group）のセット/クリアの
@@ -1466,6 +1559,12 @@ ComDataInvalidAction 等のゲートを経由しなくても）安全です。�
 担い、`Com_GatewayRoute()` はその直後（4 のエンディアン変換に相当する
 アンパック）から始まります。3（update-bit 確認）は本実装の適用対象
 （非 Signal Group シグナル同士）には存在しないため該当しません。
+（2026-08 追記: 執筆時点では段階2は概念上の対応付けに過ぎず、`Com_RxIpduCallout`
+自体は未実装でした。直後のラウンドで実装したため、現在は文字どおり
+段階2を担う実装が存在します。詳細は後述の「Com_RxIpduCallout」節参照。
+Signal Gateway 自体（`ImmobilizerCmd`→`ImmobilizerStatus`）は `SecureCommand`
+に対する `RxIpduCalloutCbk` の拒否判定より後段のため、拒否された場合は
+ゲートウェイも動作しません。）
 
 `Com_ReceiveSignal()` が経由する `ComRxDataTimeoutAction`/`ComDataInvalidAction`/
 `ComFilterAlgorithm(NEW_IS_WITHIN)` はいずれも `[SWS_Com_00872]` の処理段階に
