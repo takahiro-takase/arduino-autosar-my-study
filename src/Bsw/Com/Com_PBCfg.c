@@ -20,6 +20,8 @@
  *                非 Signal Group 実装例。RxIndicationCbk より前に呼ばれる）
  *                RxTOutCbk=Rte_COMCbkRxTOut_EngineOnFlag（SWS_Com_00536/00556
  *                Com_CbkRxTOut、シグナル単位デッドライン監視の通知）
+ *              IpduGroupId=COM_IPDU_GROUP_SENSOR_RX（Com_Cfg.h参照。Bus-Sleep中の
+ *              誤ったRXタイムアウト検知を防ぐため2026-08にCOM_IPDU_GROUP_NONEから変更）
  *            RX I-PDU 1 (IPduId=1): CAN ID 0x110, DLC=6  AbsInfo     (ABS ECU, E2E P05 保護)
  *              byte[0-1]: E2E CRC16 (リトルエンディアン) / byte[2]: E2E Counter (8bit)
  *              （以前は E2E P01(CRC8+4bitカウンタ、DLC=5) だったが、EngineInfo と
@@ -35,6 +37,7 @@
  *                RxDataTimeoutAction=SUBSTITUTE（タイムアウト中は 0xFFFF を返す）
  *              Signal 5: BrakeActive    1 bit  BitPos=40  BigEndian  0=解除/1=作動
  *              Signal 6: AbsActive      1 bit  BitPos=41  BigEndian  0=非作動/1=作動
+ *              IpduGroupId=COM_IPDU_GROUP_SENSOR_RX（EngineInfoと同じ、2026-08追加）
  *            RX I-PDU 2 (IPduId=2): CAN ID 0x120, DLC=2  SecureCommand
  *              (KeyFobEcu 想定送信、SecOC Profile 1 保護。Com はこの I-PDU の
  *              生の Secured I-PDU を一切見ず、SecOC が検証成功後に
@@ -208,6 +211,9 @@ static const Com_IPduConfigType Com_RxIPduConfigData[COM_RX_IPDU_COUNT] = {
         /* ---------------------------------------------------------------
          * RX IPduId=0: EngineInfo フレーム (エンジン ECU 送信、E2E P05 保護)
          * DaVinci: /ActiveEcuC/Com/ComConfig/EngineInfo_Rx
+         * IpduGroupId=COM_IPDU_GROUP_SENSOR_RX（2026-08、COM_IPDU_GROUP_NONE
+         * から変更。Bus-Sleep 中の誤ったRXタイムアウト検知を防ぐため）。
+         * 詳細は Com_Cfg.h の COM_IPDU_GROUP_SENSOR_RX コメント参照。
          * --------------------------------------------------------------- */
         .IPduId    = 0U,                        /* DaVinci: ComIPduHandleId  - I-PDU 識別番号 */
         .DLC       = 7U,                        /* DaVinci: ComIPduLength    - I-PDU バイト長
@@ -221,7 +227,7 @@ static const Com_IPduConfigType Com_RxIPduConfigData[COM_RX_IPDU_COUNT] = {
                                                  *          初回受信後、以降のエンジン ECU からの受信が途絶えたと
                                                  *          判断するまでの時間 */
         .UpdateBitPosition = 0xFFU,             /* update-bit なし（Signal Group 専用機能のため未使用） */
-        .IpduGroupId = COM_IPDU_GROUP_NONE,     /* I-PDU Group に属さない（常に有効） */
+        .IpduGroupId = COM_IPDU_GROUP_SENSOR_RX,/* BswM が FULL_COM 到達で Start・NO_COMMUNICATION で Stop を呼ぶ */
         .RxIndicationCbk = Rte_COMRxInd_EngineInfo /* DaVinci: /ActiveEcuC/E2EXf/EngineInfo_Rx_E2EXf
                                                  *          （E2E Transformer 呼び出しは Rte 層が担う） */
     },
@@ -252,7 +258,7 @@ static const Com_IPduConfigType Com_RxIPduConfigData[COM_RX_IPDU_COUNT] = {
                                                 *          初回受信後、ABS ECU からの受信が途絶えたと判断するまでの時間 */
         .IsSignalGroup = 1U,                   /* RX Signal Group（Com_ReceiveSignalGroup で確定コピー） */
         .UpdateBitPosition = 0xFFU,            /* update-bit なし（本 I-PDU には適用しない。上記コメント参照） */
-        .IpduGroupId = COM_IPDU_GROUP_NONE,    /* I-PDU Group に属さない（常に有効） */
+        .IpduGroupId = COM_IPDU_GROUP_SENSOR_RX,/* EngineInfo と同じ理由でグループへ移行（Com_Cfg.h 参照） */
         .RxIndicationCbk = Rte_COMRxInd_AbsInfo, /* DaVinci: /ActiveEcuC/E2EXf/AbsInfo_Rx_E2EXf
                                                 *          （E2E Transformer 呼び出しは Rte 層が担う） */
         .RxAckCbk = Rte_COMCbk_AbsInfo,      /* SWS_Com_00555 (Com_CbkRxAck)、

@@ -653,13 +653,19 @@ E2EHealthStatus の送信いずれも `src/Bsw/E2E/E2E_P05.c` の CRC16+8bit カ
 ```
 
 `Com_IPduConfigType.IpduGroupId`（既定値 `COM_IPDU_GROUP_NONE`）で所属を設定します。
-本プロジェクトでは **E2EHealthStatus のみ**を「テレメトリ」I-PDU Group
-（`COM_IPDU_GROUP_TELEMETRY`）に所属させています。
-その他の全 I-PDU（EngineInfo/AbsInfo/MeterStatus/WarningStatus/ImmobilizerCmd）は
+本プロジェクトでは **E2EHealthStatus（TX）**を「テレメトリ」I-PDU Group
+（`COM_IPDU_GROUP_TELEMETRY`）に、**EngineInfo/AbsInfo（RX）**を「センサーRX」
+I-PDU Group（`COM_IPDU_GROUP_SENSOR_RX`、2026-08 追加）に所属させています。
+その他の I-PDU（MeterStatus/WarningStatus/ImmobilizerCmd/ImmobilizerStatus）は
 どの I-PDU Group にも属させていません（＝常に有効、`Com_IpduGroupStart/Stop()` の影響を受けない）。
 
 E2EHealthStatus は、診断監視用のネットワーク健全性テレメトリで、車両の基本動作には不要な「非重要」
-通信であるため、独立して停止できる対象として選びました。
+通信であるため、独立して停止できる対象として選びました。EngineInfo/AbsInfo は、Bus-Sleep
+（ComM が NO_COMMUNICATION へ離脱する真の物理スリープ）中も受信デッドライン監視が止まらず、
+意図的な通信断のたびに「RX timeout」警告 + Dem FAILED DTC が誤って記録される問題があったため、
+BswM が FULL_COM 到達で起動・NO_COMMUNICATION 到達で停止するよう分離しました
+（SILENT_COMMUNICATION 中は受信自体が生きているため停止対象に含めていません。詳細は
+[`Com_Notes.md`](docs/modules/Com_Notes.md) 参照）。
 
 <a id="ipdu-group-caller"></a>
 ##### 呼び出し元は BswM（実 AUTOSAR の標準構成）

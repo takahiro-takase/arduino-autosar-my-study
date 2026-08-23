@@ -16,6 +16,10 @@
  *            Rule 4: EcuM → POST_RUN → I-PDU Group「テレメトリ」(E2EHealthStatus) を停止
  *            Rule 5: ComM==SILENT_COMMUNICATION OR ComM==NO_COMMUNICATION
  *                                    → I-PDU Group「テレメトリ」(E2EHealthStatus) を停止
+ *            Rule 6: EcuM==RUN AND ComM==FULL_COMMUNICATION
+ *                                    → I-PDU Group「センサーRX」(EngineInfo/AbsInfo) を起動
+ *            Rule 7: ComM==NO_COMMUNICATION（真の物理スリープのみ）
+ *                                    → I-PDU Group「センサーRX」(EngineInfo/AbsInfo) を停止
  *
  *          Rule 3/4/5 の狙い: E2EHealthStatus は診断監視用のネットワーク健全性
  *          テレメトリであり、車両の基本動作には不要な「非重要」通信である。
@@ -24,10 +28,32 @@
  *          Com_IpduGroupStart/Stop の典型的な呼び出し元として BswM が
  *          明記されている、[7.3.5.1] "it is expected that the complete state
  *          handling of I-PDU groups is done ... within the Basic Software Mode
- *          Manager" のとおりの構成）。EngineInfo/AbsInfo/MeterStatus/
- *          WarningStatus/ImmobilizerCmd はどの I-PDU Group にも属さないため
- *          （Com_PBCfg.c 参照）、POST_RUN 中も引き続き送受信される
- *          （Rule 1 で BSW タスク自体は継続する設計と整合）。
+ *          Manager" のとおりの構成）。MeterStatus/WarningStatus/
+ *          ImmobilizerCmd/ImmobilizerStatus はどの I-PDU Group にも属さない
+ *          ため（Com_PBCfg.c 参照）、POST_RUN 中も引き続き送受信される
+ *          （Rule 1 で BSW タスク自体は継続する設計と整合）。EngineInfo/
+ *          AbsInfo（RX）も COM_IPDU_GROUP_SENSOR_RX に属してはいるが、
+ *          POST_RUN で止める Rule（Rule 4 相当）はあえて追加していない
+ *          （Rule 6/7 のコメント参照）ため、この2本も同様に POST_RUN 中
+ *          引き続き受信・デッドライン監視される。
+ *
+ *          Rule 6/7 の狙い（2026-08 追加）: EngineInfo/AbsInfo（RX）は
+ *          元々 COM_IPDU_GROUP_NONE（常に有効）だったため、Bus-Sleep
+ *          （ComM が NO_COMMUNICATION へ離脱、真の物理スリープ）中も受信
+ *          デッドライン監視が止まらず、意図的な通信断のたびに「RX
+ *          timeout」警告 + Dem FAILED DTC が誤って記録される問題があった
+ *          （相手も送信を止めるスリープ中は 5000ms 以上の無通信が珍しく
+ *          ない）。Rule 3/4/5（テレメトリ、TX）とは条件が異なる点に注意
+ *          （/code-review で指摘・是正）: TX は SILENT_COMMUNICATION
+ *          （Bus-Off 等による受信専用モード）でも送信できないため Rule 5
+ *          の OR 条件で正しいが、RX は SILENT_COMMUNICATION 中も受信自体は
+ *          生きているため、これを含めると実際に届いているフレームを
+ *          誤って捨ててしまう。そのため Rule 7 の停止条件は
+ *          NO_COMMUNICATION のみに絞り、POST_RUN 相当のルール（Rule 4）も
+ *          追加しない（「POST_RUN 中も COM デッドライン監視を最後まで
+ *          実行する」という既存の設計意図——下記参照——を踏襲するため）。
+ *          詳細は Com_Cfg.h の COM_IPDU_GROUP_SENSOR_RX コメント・
+ *          docs/modules/Com_Notes.md 参照。
  *
  *          Rule 3 が単一条件（EcuM==RUN のみ）ではなく AND 複合条件になった
  *          理由: Nm（CanNm 状態機械）導入後、ComM のチャネルモードは EcuM の
@@ -130,6 +156,30 @@ static const BswM_RuleType BswM_Rules[BSWM_RULE_COUNT] =
         .ConditionCount = 2U,
         .Action         = BSWM_ACTION_PDU_GROUP_STOP,
         .IpduGroupId    = COM_IPDU_GROUP_TELEMETRY
+    },
+    /* Rule 6/7: I-PDU Group「センサーRX」(EngineInfo/AbsInfo) の起動/停止
+     * （2026-08 追加）。狙い・Rule 3/4/5（テレメトリ、TX）との条件の違い
+     * （SILENT_COMMUNICATION/POST_RUN を対象外にした理由）は、本ファイル
+     * 冒頭の「Rule 6/7 の狙い」コメント参照。 */
+    {
+        /* Rule 6: EcuM==RUN AND ComM==FULL_COMMUNICATION: I-PDU Group「センサーRX」を起動 */
+        .Operator       = BSWM_OP_AND,
+        .Condition       = {{ BSWM_MODE_SRC_ECUM, (uint8)ECUM_STATE_RUN },
+                             { BSWM_MODE_SRC_COMM, (uint8)COMM_FULL_COMMUNICATION }},
+        .ConditionCount = 2U,
+        .Action         = BSWM_ACTION_PDU_GROUP_START,
+        .IpduGroupId    = COM_IPDU_GROUP_SENSOR_RX,
+        .Initialize     = 0U
+    },
+    {
+        /* Rule 7: ComM==NO_COMMUNICATION（真の物理スリープのみ。
+         * SILENT_COMMUNICATION は対象外——上のコメント参照）:
+         * I-PDU Group「センサーRX」を停止 */
+        .Operator       = BSWM_OP_AND,
+        .Condition       = {{ BSWM_MODE_SRC_COMM, (uint8)COMM_NO_COMMUNICATION }},
+        .ConditionCount = 1U,
+        .Action         = BSWM_ACTION_PDU_GROUP_STOP,
+        .IpduGroupId    = COM_IPDU_GROUP_SENSOR_RX
     }
 };
 

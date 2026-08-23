@@ -1246,6 +1246,93 @@ I-PDU 単位ループがシグナル単位ループより先に実行される�
 失敗させるため「送信済み・未確認」状態自体が生まれないのに対し、RX 側は
 単に「相手が送ってこない」だけで確実に成立するシナリオのため）。
 
+### Bus-Sleep 中の誤検知バグと COM_IPDU_GROUP_SENSOR_RX（2026-08）
+
+上記の「実機で確実に発動する」という性質が、実は**意図的な通信断
+（Bus-Sleep）のたびにも成立してしまう**という副作用がありました。
+`EngineInfo`/`AbsInfo` は元々 `COM_IPDU_GROUP_NONE`（[SWS_Com_00840]:
+どの I-PDU Group にも属さない I-PDU は常に起動済み）だったため、ComM が
+`FULL_COMMUNICATION` から `NO_COMMUNICATION`（Nm 協調スリープによる
+意図的な Bus-Sleep、真の物理スリープ）へ離脱しても受信デッドライン監視が
+止まりませんでした。相手 ECU もスリープ中は送信を止めるため、
+`FirstTimeoutMs`/`TimeoutMs`（5000ms）を超えるスリープは全く珍しくなく、
+**意図的なスリープに入るたびに「RX timeout」警告 + Dem の FAILED DTC が
+誤って記録されていた**ことになります（TX 側は `Com_IpduGroupStop` で
+スリープ前に明示的に送信を止めているのに、RX 側の監視だけ止める仕組みが
+無いという非対称性が原因）。
+
+**対応**: 新しい RX 専用 I-PDU Group `COM_IPDU_GROUP_SENSOR_RX`
+（`Com_Cfg.h`）を新設して `EngineInfo`/`AbsInfo` をこれに割り当てました。
+BswM に Rule6（`EcuM==RUN AND ComM==FULL_COMMUNICATION` で起動）/
+Rule7（`ComM==NO_COMMUNICATION` で停止）を追加し、`Com_IpduGroupStart`/
+`Com_IpduGroupStop` を呼びます（`BswM_PBCfg.c` 参照）。
+
+**TX 側テレメトリグループ（Rule3/4/5）とは条件が異なる（/code-review で
+指摘・是正）**: 実装当初は Rule3/4/5 と全く同じ構造（`SILENT_COMMUNICATION`
+も停止条件に含める・POST_RUN でも停止する）で機械的に対称化していました。
+しかし `CanSM.c` を確認すると、`SILENT_COMMUNICATION`（Bus-Off 等）は
+「受信専用モード」（`Can_SetControllerMode(CAN_T_STOP)`、送信のみ禁止）
+であり、`EngineInfo`/`AbsInfo` の受信自体は生きたまま続きます。TX は
+送信できないため `SILENT_COMMUNICATION` でも停止して正しいのに対し、
+RX 側で同じ条件を流用すると、**実際に届いているフレームを
+`Com_RxIndication()` が黙って捨ててしまう**という新たなバグになります。
+さらに `App_EngineManager.c` は「`NO_COMMUNICATION` からの復帰時のみ
+古いデータとして扱う（`justResumed`）」という、`SILENT_COMMUNICATION` は
+受信を妨げないという既存の前提の上に成り立っており、この前提を破ると
+Bus-Off 復帰直後に古いセンサ値を新鮮な値として誤用してしまう回帰を
+生みます。同様に POST_RUN でも、この 2 本は元々「監視を最後まで続ける」
+設計だった（`BswM_PBCfg.c` の Rule1 節参照）ため、テレメトリと同列に
+POST_RUN で停止するのも既存の設計意図に反します。そのため Rule7 の停止
+条件は `NO_COMMUNICATION`（真の物理スリープ）のみに絞り、POST_RUN 相当の
+ルールは追加していません。
+
+当初検討したのは AUTOSAR が別途定義する `Com_EnableReceptionDM`/
+`Com_DisableReceptionDM`（[7.3.6.1.1]、デッドライン監視だけを狭く
+ON/OFF する専用 API）でしたが、実装を進める過程で以下の理由から見送り、
+既存の `Com_IpduGroupStart`/`Com_IpduGroupStop` を流用する方針へ変更
+しました:
+- 実際の AUTOSAR 仕様では `Com_EnableReceptionDM`/`Com_DisableReceptionDM`
+  も個別の I-PDU ID ではなく I-PDU Group ID を引数に取り、
+  [SWS_Com_00534] は「TX I-PDU を含むグループへの呼び出しは無視する」と
+  規定している。本プロジェクトの `COM_IPDU_GROUP_NONE` は RX/TX 混在の
+  「グループに属さない」ための独自拡張であり、これをそのまま対象には
+  できない。
+- 結局のところ専用の RX 専用グループを新設する必要がある点は
+  `Com_IpduGroupStart`/`Stop` 方式と同じだが、「受信処理は常時有効の
+  ままデッドライン監視だけ止める」という狭い制御を実現するには
+  `Com_Init()` がそのグループを自前で起動する等、実際の AUTOSAR の
+  責務分担（BswM/EcuM が起動する）から外れた設計が必要になる。
+- 一方 `NO_COMMUNICATION`（真の物理スリープ）中は物理的にフレームが
+  一切届かないため、「受信処理は有効のまま監視だけ止める」という狭い
+  制御と「受信処理ごと止める」という広い制御（`Com_IpduGroupStop`）とで
+  実質的な差が無い（`SILENT_COMMUNICATION` は対象外にしたため、この
+  同値性が壊れる心配もない）。だとすれば、既に実績のある
+  `Com_IpduGroupStart`/`Stop` を流用する方が、コードパスを増やさず・
+  BswM の責務分担にも忠実な選択になる。
+
+この変更に伴い、`EngineInfo`/`AbsInfo` の受信処理開始タイミングが
+「`Com_Init()` 直後（起動直後、ComM の状態を問わない）」から
+「BswM が FULL_COM 到達を検知した時点」に変わりました。本プロジェクトの
+実機ログでは ComM が起動後まもなく FULL_COM に達するため、体感できる
+差はごくわずかです。
+
+**この機能は実際に発動するか**: 実機での再確認は未実施です（`NO_COMMUNICATION`
+への Bus-Sleep 自体は既に何度も実機確認済みの経路のため新規リスクは低いと
+判断）。`Com_IpduGroupStart`/`Stop` の RX 側コード自体は既存の共通実装
+（元々 TX 専用グループでのみ実運用されていた）を流用しており、
+`Com.c` 側の変更は一切ありません。回帰テストとして
+`test/test_chain/Bsw_RxTimeoutChain_test.cpp` の
+`Bsw_RxIpduGroupChain_Test` フィクスチャ（`ComMainFunction_NG_
+StoppedGroupedIPduNeverTimesOutRegardlessOfElapsed`/
+`ComIpduGroupStart_OK_GroupedIPduBeginsMonitoringAfterExplicitStart`/
+`ComIpduGroupStop_OK_StoppingAgainSuppressesTimeoutEvenAfterElapsed`）
+を新設し、「停止中は経過時間に関わらずタイムアウトしない」
+「開始後は通常どおり監視される」「開始後に再度停止すると再びタイムアウト
+しなくなる」の3点を確認しています（`COM_IPDU_GROUP_SENSOR_RX` の
+値そのものを直接使うことで、本番設定と食い違わないようにしています）。
+`SILENT_COMMUNICATION` 中に受信が継続することの回帰テストは未追加です
+（BswM レベルの結合テストが本プロジェクトに存在しないため）。
+
 ## TX 送信デッドライン監視（Com_CbkTxTOut）
 
 RX 側の受信デッドライン監視（上記）と対をなす、TX 側の送信確認デッドライン
@@ -1758,3 +1845,41 @@ Tx 抑制中を検出した時点で `Com_TxUpdatePending`/`Com_TxCyclesSinceSen
 `uds_tester` の「ImmobilizerStatus (0x230, Signal Gateway)」受信モニターも
 `(UNLOCK)`/`(LOCK)` を表示し、`ImmobilizerCmd` の送信直後に追従して更新される
 ことが確認できます。
+
+### Bus-Sleep 中の受信デッドライン監視誤検知（2026-08）
+
+上記「CommunicationControl 実装時の仕様不整合」と**全く同じ種類のバグ**が、
+きっかけを変えて再発した。CommunicationControl（UDS 0x28）は
+`Com_RxEnabled` という単一フラグで「意図的な受信無効化」を表現していたが、
+今回問題になった Bus-Sleep（Nm 協調スリープによる ComM の
+NO_COMMUNICATION 遷移、真の物理スリープ）は、`EngineInfo`/`AbsInfo`
+がそもそも `COM_IPDU_GROUP_NONE`（常に有効）だったため、意図的な受信断
+であるにもかかわらずそれを表現する状態そのものが存在しなかった。結果、
+Bus-Sleep のたびに受信デッドライン監視が「相手が沈黙している」と誤検知し、
+「RX timeout」警告 + Dem の FAILED DTC が記録され続けていた。
+
+対応は CommunicationControl のときとは異なるアプローチを採った:
+`Com_RxEnabled` のようなグローバルフラグを増やすのではなく、TX 側の
+`COM_IPDU_GROUP_TELEMETRY` と同様「専用の I-PDU Group を作り BswM が
+起動/停止する」という既に実績のある仕組みへ `EngineInfo`/`AbsInfo` を
+合流させた（新設した `COM_IPDU_GROUP_SENSOR_RX`。詳細は「Bus-Sleep 中の
+誤検知バグと COM_IPDU_GROUP_SENSOR_RX」節参照）。
+
+**この対応自体にも一度バグが混入した（/code-review で発見・即日是正）**:
+最初の実装では TX 側の起動/停止条件（`SILENT_COMMUNICATION` も含める・
+POST_RUN でも停止する）を機械的にそのまま流用した。しかし
+`SILENT_COMMUNICATION`（Bus-Off 等）は受信専用モードであり
+`EngineInfo`/`AbsInfo` の受信は継続するため、これを停止条件に含めると
+「実際に届いているフレームを黙って捨てる」という、直そうとしていたのとは
+別種の新しいバグを埋め込んでしまっていた。TX と RX で「通信断とみなすべき
+条件」が異なるという非対称性を、コピー元のルールをそのまま複製する際に
+見落としたのが原因。教訓: 既存のルール/コードパスを別の対象へ「そっくり
+複製」する際は、複製元と複製先で暗黙に成立している前提（ここでは「TX不可
+＝停止して良い」）が複製先でも本当に成り立つかを個別に確認する必要がある
+（構造が同じであることと、意味的に正しいことは別問題）。
+
+より根本的な教訓（再確認）: 「意図的な通信断」を検出・尊重すべき箇所は
+CommunicationControl 以外にも存在しうるため、新しい RX/TX I-PDU を
+追加する際は、その I-PDU が沈黙しうる正当な理由（診断による無効化・
+Bus-Sleep・その他）をすべてデッドライン監視が正しく認識できるかを
+都度確認する必要がある。
