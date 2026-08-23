@@ -108,6 +108,9 @@ Std_ReturnType Rte_Write_MeterStatus_RunLamp(uint8 level);
 Std_ReturnType Rte_Write_MeterStatus_FaultLamp(uint8 level);
 Std_ReturnType Rte_Write_MeterStatus_AbsLamp(uint8 level);
 Std_ReturnType Rte_Write_MeterStatus_CoolantTemp(CoolantTemp_t temp);
+/* CoolantTemp ミラーの無効化ポート (Com_InvalidateSignal へ委譲。
+ * Rte_COMInvalidNotify_CoolantTemp() から呼ばれる) */
+uint8 Rte_Invalidate_MeterStatus_CoolantTemp(void);
 
 /* Client/Server ポート — ComM_RequestComMode(COMM_USER_0, mode) へ委譲。
  * App_EngineManager が「エンジン OFF が一定サイクル継続 = 通信不要」と

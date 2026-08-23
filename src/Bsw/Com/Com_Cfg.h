@@ -55,20 +55,34 @@
 #define COM_API_ID_IPDU_GROUP_STOP              0x04U
 #define COM_API_ID_SEND_SIGNAL                  0x0AU
 #define COM_API_ID_RECEIVE_SIGNAL               0x0BU
-#define COM_API_ID_RX_INDICATION                0x10U
-#define COM_API_ID_TX_CONFIRMATION               0x11U
+/* [SWS_Com_00099]/[SWS_Com_00642]/[SWS_Com_00643] Com_InvalidateSignal の
+ * 実 Service ID。旧 COM_API_ID_RX_INDICATION がここ（0x10）に誤って
+ * 割り当てられていたため、下記の是正と合わせて空けている。 */
+#define COM_API_ID_INVALIDATE_SIGNAL            0x10U
 #define COM_API_ID_SEND_SIGNAL_GROUP            0x18U
 #define COM_API_ID_RECEIVE_SIGNAL_GROUP         0x19U
 #define COM_API_ID_RECEIVE_SIGNAL_GROUP_ARRAY   0x1AU
-#define COM_API_ID_IS_RX_TIMED_OUT              0x1BU
+/* [SWS_Com_00557]/[SWS_Com_00645] Com_InvalidateSignalGroup の実 Service ID。
+ * 旧 COM_API_ID_IS_RX_TIMED_OUT（本プロジェクト独自 API）がここ（0x1B）を
+ * 占有していたため、下記の通り 0xF0 へ退避させて空けている。 */
+#define COM_API_ID_INVALIDATE_SIGNAL_GROUP      0x1BU
 #define COM_API_ID_MAIN_FUNCTION                0x20U
 #define COM_API_ID_SEND_SIGNAL_GROUP_ARRAY      0x23U  /* 実 AUTOSAR の Service ID と一致させている
                                                          * ため昇順から外れる（0x1B の直後ではなく
                                                          * ここに置く） */
 #define COM_API_ID_SET_COMMUNICATION_ENABLED    0x30U
+/* Com_TxConfirmation/Com_RxIndication の実 Service ID は 0x40/0x42（SWS 本文の
+ * "Service ID[hex]" 記載を実測して確認済み）。旧実装は 0x11/0x10 という誤った
+ * 値を使っていた（0x10 は Com_InvalidateSignal の実 ID と衝突していた）。 */
+#define COM_API_ID_TX_CONFIRMATION               0x40U
+#define COM_API_ID_RX_INDICATION                0x42U
 #define COM_API_ID_DEINIT                       0x02U
 #define COM_API_ID_GET_STATUS                   0x07U
 #define COM_API_ID_GET_VERSION_INFO             0x09U
+/* 本プロジェクト独自 API（実 AUTOSAR に対応関数なし）。Dcm_Cfg.h の同種
+ * エントリに倣い、非標準値 0xF0 を踏襲する（旧値 0x1B は上記の通り
+ * Com_InvalidateSignalGroup の実 ID と衝突していたため退避）。 */
+#define COM_API_ID_IS_RX_TIMED_OUT               0xF0U
 
 /* -----------------------------------------------------------------------
  * Com_GetVersionInfo() が返す固定値

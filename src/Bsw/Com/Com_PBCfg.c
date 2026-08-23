@@ -863,6 +863,12 @@ static const Com_SignalConfigType Com_SignalConfigData[COM_SIGNAL_COUNT] = {
          * App_EngineManager が EngineInfo(RX) の検証済み CoolantTemp を
          * そのままミラー送信する（uds_tester の仮想メータ表示タブ向け、
          * EngineSpeed(Signal 14) と同じ設計）。
+         * InvalidValue/InvalidValueConfigured（2026-08 Com_InvalidateSignal 対応）:
+         * Rte_COMInvalidNotify_CoolantTemp() が EngineInfo 側の 0xFF 無効値
+         * マーカーを検知した際、この TX シグナル自体を Com_InvalidateSignal()
+         * で無効化するために使う（Rte.c 参照。同じ 0xFF マーカーを RX/TX
+         * 双方で使うことで、メータ側も「センサ値が信頼できない」ことを
+         * 上位（uds_tester 等）へそのまま伝播できる）。
          * --------------------------------------------------------------- */
         .SignalId    = COM_SIGNAL_METER_COOLANT_TEMP, /* DaVinci: ComHandleId */
         .Direction   = COM_SIGNAL_DIRECTION_TX,       /* 本プロジェクト独自拡張 */
@@ -873,10 +879,13 @@ static const Com_SignalConfigType Com_SignalConfigData[COM_SIGNAL_COUNT] = {
         .FilterAlgorithm = COM_FILTER_MASKED_NEW_DIFFERS_MASKED_OLD, /* DaVinci: ComFilterAlgorithm
                                                         *          値が変化したときだけ送信要求とみなす */
         .Mask            = 0xFFU,                     /* DaVinci: ComFilterNewValue/ComFilterMask 相当 */
-        .UpdateBitContributor = 0U                    /* MeterStatus の update-bit は EngineState 専用
+        .UpdateBitContributor = 0U,                   /* MeterStatus の update-bit は EngineState 専用
                                                         *          （EngineSpeed/警告灯ミラーと同じ理由。
                                                         *          2026-08 コードレビューで対応した
                                                         *          パターンを新規シグナルにも適用） */
+        .InvalidValue           = 0xFFU,              /* DaVinci: ComSignalDataInvalidValue。RX 側の
+                                                        *          CoolantTemp（Signal 1）と同じマーカー値 */
+        .InvalidValueConfigured = 1U
     }
 };
 
