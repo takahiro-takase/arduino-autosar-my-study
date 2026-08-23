@@ -62,7 +62,8 @@
                      "key": "4b6579466f6253656372657421212121" },
           "presets": [
               { "label": "UNLOCK (正常、SecOC認証あり)", "data": ["0x01", "0x00"] },
-              { "label": "LOCK (正常、SecOC認証あり)",   "data": ["0x00", "0x00"] }
+              { "label": "LOCK (正常、SecOC認証あり)",   "data": ["0x00", "0x00"] },
+              { "label": "Reserved異常 (SecOC認証は通るがRxIpduCalloutで拒否されるはず)", "data": ["0x01", "0xFF"] }
           ]
         },
 

@@ -523,6 +523,23 @@ typedef enum
 //               非 Signal Group の I-PDU では未使用（Com_SignalConfigType.
 //               RxTOutCbk 側のシグナル単位コールバックを使うこと）。NULL 可
 //               （通知不要なら未設定でよい）。
+//   RxIpduCalloutCbk : RX I-PDU 単位のフィルタリングフック（Com_RxIpduCallout、
+//               [SWS_Com_00700]: "The I-PDU callout on receiver side can be
+//               configured to implement user-defined receive filtering
+//               mechanisms."。ECUC_Com_00387 ComIPduCallout）。
+//               Com_RxIndication() の冒頭、バッファ書き込み・デッドライン
+//               監視タイマのリセット・RxAckCbk/RxIndicationCbk のいずれよりも
+//               前に、PduR から渡された生バイト列（DLC によるクランプ前、
+//               [SWS_Com_00816]: "shall forward all data of the received
+//               I-PDU"）をそのまま渡して呼ぶ。戻り値 0（false 相当。本
+//               プロジェクトは AUTOSAR の boolean 型を持たないため、他の
+//               1/0 フラグ群と同じ uint8 で代用）ならこの受信は以降一切
+//               処理しない（[SWS_Com_00700] "false: I-PDU will not be
+//               processed any further"）。RxIndicationCbk（バッファ格納後の
+//               本プロジェクト独自フック）・RxAckCbk/RxTOutCbk（同じく格納後
+//               の通知）とは異なり、これは唯一「格納そのものを拒否できる」層
+//               であることに注意。NULL 可（フィルタ不要なら未設定でよい）。
+//               TX I-PDU では未使用（Com_TxIpduCallout は本実装では未対応）。
 // -------------------------------------------------------
 typedef struct
 {
@@ -550,6 +567,7 @@ typedef struct
     uint16             TxTimeoutMs;
     void (*TxTOutCbk)(void);
     void (*RxTOutCbk)(void);
+    uint8 (*RxIpduCalloutCbk)(const uint8* SduDataPtr, uint8 SduLength);
 } Com_IPduConfigType;
 
 // -------------------------------------------------------
