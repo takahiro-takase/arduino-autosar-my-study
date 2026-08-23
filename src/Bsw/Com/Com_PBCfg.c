@@ -196,6 +196,7 @@ extern void Rte_COMRxInd_SecureCommand(void);
 extern void Rte_COMCbkRxTOut_EngineOnFlag(void);
 extern void Rte_COMCbkRxTOut_AbsInfo(void);
 extern uint8 Rte_COMRxIpduCallout_SecureCommand(const uint8* SduDataPtr, uint8 SduLength);
+extern uint8 Rte_COMTxIpduCallout_ImmobilizerStatus(const uint8* SduDataPtr, uint8 SduLength);
 
 /* -----------------------------------------------------------------------
  * RX I-PDU テーブル
@@ -431,6 +432,14 @@ static const Com_IPduConfigType Com_TxIPduConfigData[COM_TX_IPDU_COUNT] = {
          * という位置づけ。認証はゲートウェイの入力側=ImmobilizerCmd で既に
          * 完了しているため、これを受け取る内部 ECU は SecOC/AES-CMAC を
          * 実装する必要がない）。
+         * TxIpduCalloutCbk=Rte_COMTxIpduCallout_ImmobilizerStatus（SWS_Com_00346
+         * Com_TxIpduCallout）: 送信直前のバイト値が 0x00(LOCK)/0x01(UNLOCK) 以外
+         * なら送信しない。RX 側の RxIpduCalloutCbk（SecureCommand の Reserved
+         * バイト検証）は真正性・予約領域のみを見ており、ImmobilizerCmd 本体の
+         * 値域（0x00/0x01 以外はそもそも未定義）までは検証しない。SecOC の
+         * MAC 検証を通過した送信元が誤ってそれ以外の値を送った場合でも、
+         * ゲートウェイが他 ECU へ意味不明な値をブロードキャストしないよう、
+         * 送信直前のこの層で最終防衛する（多層防御の一例）。
          * --------------------------------------------------------------- */
         .IPduId     = 3U,    /* DaVinci: ComIPduHandleId  - I-PDU 識別番号 */
         .DLC        = 1U,    /* DaVinci: ComIPduLength    - byte[0]=ImmobilizerStatus のみ */
@@ -445,8 +454,9 @@ static const Com_IPduConfigType Com_TxIPduConfigData[COM_TX_IPDU_COUNT] = {
                                             *          周期フロアなし） */
         .NumberOfRepetitions = 2U,   /* DaVinci: ComTxModeNumberOfRepetitions
                                       *          初回送信 + 再送2回 = 計3回（[SWS_Com_00305]） */
-        .RepetitionPeriodMs  = COM_TX_REPETITION_PERIOD_IMMOBILIZERSTATUS_MS
+        .RepetitionPeriodMs  = COM_TX_REPETITION_PERIOD_IMMOBILIZERSTATUS_MS,
                                      /* DaVinci: ComTxModeRepetitionPeriod */
+        .TxIpduCalloutCbk    = Rte_COMTxIpduCallout_ImmobilizerStatus
     }
 };
 

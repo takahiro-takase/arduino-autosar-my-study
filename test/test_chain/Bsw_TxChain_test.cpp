@@ -92,6 +92,19 @@ namespace
 static uint8_t s_txTOutCount = 0U;
 static void TestTxTOutCbk(void) { s_txTOutCount++; }
 
+// Com_TxIpduCallout（SWS_Com_00346、TX I-PDU 単位のフィルタリングフック）
+// 検証用。kTestTxIPdu（IPduId=0）に設定する。s_txCalloutAccept で戻り値を
+// 切り替えられるトグル式（Bsw_RxChain_test.cpp の TestRxIpduCallout と対称）。
+static uint8_t s_txCalloutAccept      = 1U;
+static uint8_t s_txCalloutInvokeCount = 0U;
+static uint8_t s_txCalloutLastByte0   = 0U;
+static uint8_t TestTxIpduCallout(const uint8* SduDataPtr, uint8 SduLength)
+{
+    s_txCalloutInvokeCount++;
+    s_txCalloutLastByte0 = (SduLength >= 1U) ? SduDataPtr[0] : 0xFFU;
+    return s_txCalloutAccept;
+}
+
 const Com_SignalConfigType kTestSignal = {
     /* SignalId */                0U,
     /* Direction */                COM_SIGNAL_DIRECTION_TX,
@@ -145,9 +158,12 @@ const Com_IPduConfigType kTestTxIPdu = {
     /* NumberOfRepetitions */ 2U,   // ComTxModeNumberOfRepetitions（SWS_Com_00305）検証用
     /* RepetitionPeriodMs */  50U,  // ComTxModeRepetitionPeriod
     /* TxFirstTimeoutMs */    1000U, // Com_CbkTxTOut（SWS_Com_00878）検証用
-    /* TxTimeoutMs */         500U
-    /* TxTOutCbk */           // 非 Signal Group のため未使用（NULL）。
+    /* TxTimeoutMs */         500U,
+    /* TxTOutCbk */           NULL, // 非 Signal Group のため未使用。
                               // 実際のコールバックは kTestSignal.TxTOutCbk 側
+    /* RxTOutCbk */           NULL, // Signal Group 専用のため未使用
+    /* RxIpduCalloutCbk */    NULL, // RX 専用のため未使用
+    /* TxIpduCalloutCbk */    TestTxIpduCallout // SWS_Com_00346 検証用
 };
 
 // -----------------------------------------------------------------------
@@ -430,6 +446,9 @@ protected:
         s_groupTxErrCount = 0U;
         s_txTOutCount      = 0U;
         s_groupTxTOutCount = 0U;
+        s_txCalloutAccept      = 1U;
+        s_txCalloutInvokeCount = 0U;
+        s_txCalloutLastByte0   = 0U;
 
         FakeDetHw_LogSuppressed = 0U;  // ここから各 TEST_F の実行(Act)区間
     }
@@ -662,6 +681,50 @@ TEST_F(Bsw_TxChain_Test, ComMainFunction_NG_NothingPending_DoesNotReachCanHw)
 
     /* 評価 (Assert) */
     EXPECT_EQ(FakeCanHw_SendCount, 0U);
+}
+
+// ------------------------------------------------------------
+// Com_TxIpduCallout（SWS_Com_00346、TX I-PDU 単位のフィルタリングフック）。
+// Bsw_RxChain_test.cpp の Com_RxIpduCallout テストと対になる、送信側の検証。
+// kTestTxIPdu（IPduId=0）に TestTxIpduCallout を設定済み。Com_DoTransmit()
+// 内で TxTransformCbk 適用後・PduR_Transmit() 呼び出し直前に呼ばれることを、
+// Can_Hw まで到達するかどうかで確認する。
+// ------------------------------------------------------------
+TEST_F(Bsw_TxChain_Test, ComMainFunction_OK_AcceptedByTxIpduCalloutTransmitsNormally)
+{
+    /* 準備 (Arrange): s_txCalloutAccept は SetUp() で 1（既定）にリセット済み */
+    uint16_t value = 0x1234U;
+    Com_SendSignal(0U, &value);
+
+    /* 実行 (Act) */
+    Com_MainFunction();
+
+    /* 評価 (Assert): callout は送信直前の最終バイト列で 1 回呼ばれ、
+     * 通常どおり Can_Hw まで到達する。実際に PduR へ渡したため
+     * Com_TxConfPending もセットされる。 */
+    EXPECT_EQ(s_txCalloutInvokeCount, 1U);
+    EXPECT_EQ(s_txCalloutLastByte0, 0x12U);
+    EXPECT_EQ(FakeCanHw_SendCount, 1U);
+    EXPECT_EQ(Com_Test_GetTxConfPending(0U), 1U);
+}
+
+TEST_F(Bsw_TxChain_Test, ComMainFunction_NG_RejectedByTxIpduCalloutDiscardsTransmission)
+{
+    /* 準備 (Arrange) */
+    s_txCalloutAccept = 0U;
+    uint16_t value = 0x1234U;
+    Com_SendSignal(0U, &value);
+
+    /* 実行 (Act) */
+    Com_MainFunction();
+
+    /* 評価 (Assert): [SWS_Com_00346] false のため PduR_Transmit() 以降
+     * （CanIf/Can/Can_Hw）に一切到達しない。実際には送信していないため
+     * Com_TxConfPending もセットされない（TX 送信デッドライン監視タイマも
+     * 起動しない）。 */
+    EXPECT_EQ(s_txCalloutInvokeCount, 1U);
+    EXPECT_EQ(FakeCanHw_SendCount, 0U);
+    EXPECT_EQ(Com_Test_GetTxConfPending(0U), 0U);
 }
 
 // ------------------------------------------------------------
