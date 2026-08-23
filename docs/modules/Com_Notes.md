@@ -1122,6 +1122,99 @@ WDT（ウォッチドッグタイマ）リセットが発生しました。
 ブロッキングする可能性のある処理（Serial 出力、長時間のループ等）を含めては
 ならない。**
 
+## Com_InvalidateSignal / Com_InvalidateSignalGroup（送信側の無効値マーキング、2026-08 追加）
+
+上の「Rx無効値検知」が**受信側**が「届いた値が無効マーカーである」ことを
+検知する仕組みなのに対し、こちらは**送信側**が「これから送る値が無効である」
+ことを能動的にマークする仕組みです。実 AUTOSAR は `Com_InvalidateSignal`
+（[SWS_Com_00099]/[SWS_Com_00642]/[SWS_Com_00643]）と
+`Com_InvalidateSignalGroup`（[SWS_Com_00557]/[SWS_Com_00645]）を提供します。
+どちらも「設定済みの `ComSignalDataInvalidValue` で `Com_SendSignal`
+（グループ版は各メンバーへ、続けて `Com_SendSignalGroup`）を内部的に呼ぶ」
+という薄いラッパーで、独自の送信ロジックは持ちません。
+
+```
+Com_InvalidateSignal(SignalId)
+  InvalidValueConfigured[SignalId] を確認
+    0（未設定） → E_NOT_OK（副作用なし）                    [SWS_Com_00643]
+    1（設定済み）→ Com_SendSignal(SignalId, &InvalidValue)   [SWS_Com_00642]
+
+Com_InvalidateSignalGroup(SignalGroupId)
+  全メンバーの InvalidValueConfigured を先に確認（副作用を起こす前）
+    1本でも 0（未設定）→ E_NOT_OK（all-or-nothing、一切書き込まない） [SWS_Com_00557]
+    全メンバー設定済み → 各メンバーへ Com_SendSignal(member, &member.InvalidValue)
+                          → Com_SendSignalGroup(SignalGroupId) でコミット [SWS_Com_00645]
+```
+
+**なぜ新しい `InvalidValueConfigured` フラグを追加したか**: `InvalidValue`
+の既定値 0 だけでは「意図的に 0 を設定した」のか「そもそも未設定」なのか
+区別できないためです。詳細な根拠（[SWS_Com_00643]/[SWS_Com_00557] の
+Return value 表の記述）は `Com_Types.h` の `InvalidValueConfigured` フィールド
+コメント参照。
+
+**Signal Group メンバーでも `Com_InvalidateSignal` がそのまま使える理由**:
+[7.4.2] 章に「`Com_SendSignal`/`Com_InvalidateSignal` が Signal Group の
+メンバーに対して呼ばれた場合、シャドウバッファを更新するだけで、それ以上の
+I-PDU 処理（TMS 評価等）は行わない」と明記されています。`Com_SendSignal()`
+自身が `ipdu->IsSignalGroup` を見て分岐する既存ロジックをそのまま持つため、
+`Com_InvalidateSignal()` 側で Signal Group か否かを判定する必要は
+ありません（実装は単に `Com_SendSignal(SignalId, &InvalidValue)` を
+呼ぶだけです）。
+
+**適用例 — `MeterStatus.CoolantTemp`（メータ表示ミラー）の無効化**:
+`EngineInfo.CoolantTemp`（RX）が 0xFF（無効値マーカー）で届いたことは
+既に `Rte_COMInvalidNotify_CoolantTemp()` が検知していました（前節）が、
+従来はログ出力のみで、メータ表示側の `MeterStatus.CoolantTemp`
+（TX、`COM_SIGNAL_METER_COOLANT_TEMP`）は「直近の有効値をミラーし続ける」
+だけで、無効という事実そのものは下流（`uds_tester` 等）に伝わりません
+でした。`Com_InvalidateSignal` 追加を機に、同じコールバックから
+`MeterStatus.CoolantTemp` 自体も無効化するようにしました。
+
+```
+Com_PBCfg.c（MeterStatus.CoolantTemp、TX、Signal 18）
+  InvalidValue           = 0xFF   （RX 側 CoolantTemp と同じマーカー値）
+  InvalidValueConfigured = 1
+
+Rte_COMInvalidNotify_CoolantTemp()  ← EngineInfo.CoolantTemp=0xFF 検知時
+  DET_LOGW(...)                                    ← 既存のログ出力
+  Rte_Invalidate_MeterStatus_CoolantTemp()  ← 新規追加。他の
+    Rte_Write_<Port>_<Signal>() と同じポートラッパー規約に揃え、
+    内部で Com_InvalidateSignal(COM_SIGNAL_METER_COOLANT_TEMP) へ委譲
+```
+
+ただしこれは「無効を検知した瞬間」の単発パルスであり、継続的な無効状態
+フラグではありません。`App_EngineManager_Run()` は毎サイクル
+`Rte_EngineInfoMirror.temp`（DataInvalidAction=NOTIFY のため、無効値受信時も
+直近の有効値のまま）をそのままミラー送信し続けるため、ここで無効化した
+0xFF は次の周期送信で直近の有効値に上書きされます。連続的な「現在無効かどうか」
+の表現が必要ならフラグ管理を別途持つ必要がありますが、今回は「無効化が
+起きたことを 1 フレームだけ伝える」という Com_InvalidateSignal 自体の
+デモとして最小限の配線にとどめています。
+
+**実 Service ID の是正**: `Com_InvalidateSignal`/`Com_InvalidateSignalGroup`
+の実 Service ID（`0x10`/`0x1B`）を割り当てる過程で、本プロジェクトが以前
+から `COM_API_ID_RX_INDICATION`/`COM_API_ID_TX_CONFIRMATION`/
+`COM_API_ID_IS_RX_TIMED_OUT` に誤った値を割り当てていたことが判明し、
+併せて是正しました。詳細（正しい値・是正理由）は `Com_Cfg.h` の該当箇所の
+コメント参照。
+
+**この機能は実際に発動するか**: `Com_InvalidateSignal` 経由の
+`MeterStatus.CoolantTemp` 無効化は、`Rx無効値検知`節と同じ理由で実際に
+発動します——E2E 検証に成功したすべての `EngineInfo` フレームに対して
+`Rte_COMInvalidNotify_CoolantTemp()` が呼ばれる経路自体は既に実機検証済み
+であり、今回追加したのはその中の 1 行だけです。`Com_InvalidateSignalGroup`
+（Signal Group 版）は本番設定では未使用（本プロジェクトの唯一の TX Signal
+Group である `WarningStatus` に `ComSignalDataInvalidValue` を設定した
+シグナルが無いため）で、ユニットテストのみで検証しています。回帰テストは
+`test/test_chain/Bsw_TxChain_test.cpp` の
+`InvalidateSignal_OK_WritesConfiguredInvalidValueToBuffer`/
+`InvalidateSignal_NG_UnconfiguredInvalidValueReturnsErrorWithoutWriting`/
+`InvalidateSignal_NG_UnknownSignalIdReturnsError`/
+`InvalidateSignal_NG_RxSignalReturnsErrorWithoutReachingSendSignal`/
+`InvalidateSignalGroup_OK_WritesMemberInvalidValueAndCommitsToBuffer`/
+`InvalidateSignalGroup_NG_AnyMemberUnconfiguredReturnsErrorWithoutPartialCommit`
+参照。
+
 ## RX ComFilterAlgorithm（受信フィルタ、プラウジビリティチェック）
 
 `ComFilterAlgorithm` はこれまで TX シグナルの送信要否判定・TMS 評価にのみ

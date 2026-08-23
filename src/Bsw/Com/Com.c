@@ -516,7 +516,7 @@ void Com_GetVersionInfo(Std_VersionInfoType* versioninfo)
  * \AUTOSARReq     {SWS_Com_00123, SWS_Com_00574, SWS_Com_00575, SWS_Com_00870,
  *                  SWS_Com_00555, SWS_Com_00700, SWS_Com_00816, SWS_Com_00872,
  *                  SWS_Com_00715, SWS_Com_00738}
- * \ServiceID      {0x10}
+ * \ServiceID      {0x42}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
  */
@@ -1722,7 +1722,10 @@ Std_ReturnType Com_ReceiveSignalGroupArray(Com_IPduIdType IPduId, uint8* DataPtr
  *
  * \pre        Com_Init() が正常に完了していること。
  *
- * \ServiceID      {0x1B}
+ * \note    本プロジェクト独自 API（実 AUTOSAR に対応関数なし）のため、
+ *          ServiceID は Dcm_ComIndication 等と同じ非標準値 0xF0 を踏襲する
+ *          （Com_Cfg.h 参照）。
+ * \ServiceID      {0xF0}
  * \Reentrancy     {Reentrant}
  * \Synchronicity  {Synchronous}
  */
@@ -2188,6 +2191,159 @@ Std_ReturnType Com_SendSignalGroupArray(Com_IPduIdType GroupId, const uint8* Dat
     return E_OK;
 }
 
+/**
+ * \brief   シグナルを、設定済みの ComSignalDataInvalidValue で無効化する。
+ *
+ * \details [SWS_Com_00099]/[SWS_Com_00642]: 内部的に Com_SendSignal() を
+ *          InvalidValue で呼ぶだけであり、独自の送信ロジックは持たない。
+ *          SignalId が Signal Group メンバーであっても Com_SendSignal()
+ *          自身がシャドウバッファへの書き込みに正しく分岐するため
+ *          （7.4.2 章）、本関数側で Signal Group か否かを判定する必要はない。
+ *
+ *          [SWS_Com_00643]: ComSignalDataInvalidValue が未設定
+ *          （Com_SignalConfigType.InvalidValueConfigured=0）の場合は
+ *          COM_SERVICE_NOT_AVAILABLE 相当として拒否する。この条件は仕様上
+ *          「開発エラーによる失敗」とは別区分のため、Det_ReportError() は
+ *          呼ばない（DET ログのみ）。
+ *
+ * \param[in]  SignalId  無効化する TX シグナルの ID。
+ *
+ * \retval  E_OK      SignalId が見つかり、InvalidValue が設定済みで、
+ *                    Com_SendSignal() が成功した。
+ * \retval  E_NOT_OK  COM 未初期化、SignalId が存在しない、SignalId が TX
+ *                    シグナルでない、ComSignalDataInvalidValue が未設定、
+ *                    または内部の Com_SendSignal() が失敗した。
+ *
+ * \AUTOSARReq     {SWS_Com_00099, SWS_Com_00642, SWS_Com_00643}
+ * \ServiceID      {0x10}
+ * \Reentrancy     {Non Reentrant for the same signal. Reentrant for different signals.}
+ * \Synchronicity  {Asynchronous}
+ */
+uint8 Com_InvalidateSignal(Com_SignalIdType SignalId)
+{
+    DET_LOGT(TAG, "called");
+
+    if (Com_ConfigPtr == NULL)
+    {
+        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_INVALIDATE_SIGNAL, COM_E_UNINIT);
+        return E_NOT_OK;
+    }
+
+    const uint8 s = Com_FindSignalIndex(SignalId);
+    if (s >= Com_ConfigPtr->SignalCount)
+    {
+        /* 未知の SignalId。下の InvalidValueConfigured 確認のためにここで
+         * シグナルを解決する必要があり、Com_SendSignal() 側の同種チェックを
+         * 先取りする形になる（DET 報告の内容は Com_SendSignal() と同じ）。 */
+        DET_LOGE(TAG, "InvalidateSignal E: sig=%u not found", (unsigned)SignalId);
+        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_INVALIDATE_SIGNAL, COM_E_PARAM);
+        return E_NOT_OK;
+    }
+
+    const Com_SignalConfigType* sig = &Com_ConfigPtr->Signals[s];
+    if (sig->Direction != COM_SIGNAL_DIRECTION_TX)
+    {
+        /* RX/TX の IPduId は別々の配列だが同じ数値空間を共有するため
+         * （Com_FindTxIPdu() は数値が一致する限り RX シグナルの IPduId とも
+         * 偶然マッチしてしまいうる）、Direction を明示的に確認しないまま
+         * Com_SendSignal() に委譲すると、誤って RX シグナルに
+         * InvalidValueConfigured=1 を設定した場合に無関係な TX I-PDU を
+         * 静かに破壊しかねない（DET エラーなし）。Com_InvalidateSignalGroup()
+         * 側は元々メンバー走査時に Direction==TX で絞っているため、この
+         * チェックはそちらと対称にするための是正（/code-review 指摘）。 */
+        DET_LOGE(TAG, "InvalidateSignal E: sig=%u is not a TX signal", (unsigned)SignalId);
+        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_INVALIDATE_SIGNAL, COM_E_PARAM);
+        return E_NOT_OK;
+    }
+    if (sig->InvalidValueConfigured == 0U)
+    {
+        DET_LOGW(TAG, "InvalidateSignal: sig=%u has no ComSignalDataInvalidValue configured",
+                 (unsigned)SignalId);
+        return E_NOT_OK;
+    }
+
+    return Com_SendSignal(SignalId, &sig->InvalidValue);
+}
+
+/**
+ * \brief   Signal Group の全メンバーを、各々の ComSignalDataInvalidValue で無効化する。
+ *
+ * \details [SWS_Com_00557]: グループメンバーのいずれか 1 つでも
+ *          ComSignalDataInvalidValue が未設定なら、書き込みを一切行わず
+ *          全体を E_NOT_OK とする（all-or-nothing。副作用を起こす前に
+ *          全メンバーを検証してから実際の書き込みへ進む）。
+ *
+ *          [SWS_Com_00099]/[SWS_Com_00645]: 各メンバーごとに
+ *          Com_SendSignal() を InvalidValue で呼んでシャドウバッファへ
+ *          書き込んだのち、内部的に Com_SendSignalGroup() を呼んで実
+ *          バッファへ確定コミットする（Com_InvalidateSignal() と同じ
+ *          「内部的に対応する送信 API を呼ぶ」構造の Signal Group 版）。
+ *
+ * \param[in]  SignalGroupId  無効化する Signal Group（TX I-PDU）の ID。
+ *
+ * \retval  E_OK      全メンバーの InvalidValue が設定済みで、コミットまで成功した。
+ * \retval  E_NOT_OK  COM 未初期化、SignalGroupId が TX I-PDU 設定テーブルに
+ *                    存在しない、IsSignalGroup=0 の I-PDU を指定した、
+ *                    またはいずれかのメンバーの ComSignalDataInvalidValue が
+ *                    未設定。
+ *
+ * \AUTOSARReq     {SWS_Com_00557, SWS_Com_00645}
+ * \ServiceID      {0x1B}
+ * \Reentrancy     {Non Reentrant for the same signal group. Reentrant for different signal groups.}
+ * \Synchronicity  {Asynchronous}
+ */
+uint8 Com_InvalidateSignalGroup(Com_IPduIdType SignalGroupId)
+{
+    DET_LOGT(TAG, "called");
+
+    if (Com_ConfigPtr == NULL)
+    {
+        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_INVALIDATE_SIGNAL_GROUP, COM_E_UNINIT);
+        return E_NOT_OK;
+    }
+
+    if (SignalGroupId >= COM_TX_IPDU_MAX)
+    {
+        DET_LOGE(TAG, "InvalidateSignalGroup E: SignalGroupId=%u out of range (max=%u)",
+                 (unsigned)SignalGroupId, (unsigned)COM_TX_IPDU_MAX);
+        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_INVALIDATE_SIGNAL_GROUP, COM_E_PARAM);
+        return E_NOT_OK;
+    }
+
+    const Com_IPduConfigType* ipdu = Com_FindTxIPdu(SignalGroupId);
+    if (ipdu == NULL || ipdu->IsSignalGroup == 0U)
+    {
+        DET_LOGE(TAG, "InvalidateSignalGroup E: SignalGroupId=%u not found or not a Signal Group",
+                 (unsigned)SignalGroupId);
+        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_INVALIDATE_SIGNAL_GROUP, COM_E_PARAM);
+        return E_NOT_OK;
+    }
+
+    for (uint8 s = 0U; s < Com_ConfigPtr->SignalCount; s++)
+    {
+        const Com_SignalConfigType* sig = &Com_ConfigPtr->Signals[s];
+        if (sig->Direction == COM_SIGNAL_DIRECTION_TX && sig->IPduId == SignalGroupId
+            && sig->InvalidValueConfigured == 0U)
+        {
+            DET_LOGW(TAG, "InvalidateSignalGroup: SignalGroupId=%u member sig=%u has no "
+                     "ComSignalDataInvalidValue configured",
+                     (unsigned)SignalGroupId, (unsigned)sig->SignalId);
+            return E_NOT_OK;
+        }
+    }
+
+    for (uint8 s = 0U; s < Com_ConfigPtr->SignalCount; s++)
+    {
+        const Com_SignalConfigType* sig = &Com_ConfigPtr->Signals[s];
+        if (sig->Direction == COM_SIGNAL_DIRECTION_TX && sig->IPduId == SignalGroupId)
+        {
+            (void)Com_SendSignal(sig->SignalId, &sig->InvalidValue);
+        }
+    }
+
+    return Com_SendSignalGroup(SignalGroupId);
+}
+
 typedef void (*Com_VoidCbkType)(void);
 
 /* Com_InvokeTxNotification() が「TxAckCbk・TxErrCbk・TxTOutCbk のどれを
@@ -2331,7 +2487,7 @@ static void Com_InvokeTxNotification(const Com_IPduConfigType* ipdu,
  *             MCP2515 との SPI 通信が同期的なため）。
  *
  * \AUTOSARReq     {SWS_Com_00124, SWS_Com_00468, SWS_Com_00880}
- * \ServiceID      {0x11}
+ * \ServiceID      {0x40}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
  */

@@ -695,14 +695,29 @@ typedef enum
 //               COM_RX_TIMEOUT_ACTION_SUBSTITUTE のときのみ
 //               TimeoutSubstitutionValue を参照する。REPLACE のときは
 //               TimeoutSubstitutionValue ではなく上記 InitValue を参照する。
-//   DataInvalidAction / InvalidValue / InvalidNotificationCbk : RX シグナル
-//               のみ使用。詳細は Com_DataInvalidActionType 参照。
-//               COM_DATA_INVALID_ACTION_NOTIFY のときのみ InvalidValue /
+//   DataInvalidAction / InvalidValue / InvalidNotificationCbk : DataInvalidAction
+//               自体は RX シグナルのみ使用。詳細は Com_DataInvalidActionType
+//               参照。COM_DATA_INVALID_ACTION_NOTIFY のときのみ InvalidValue /
 //               InvalidNotificationCbk を参照する。InvalidNotificationCbk は
 //               NULL 可（通知不要なら未設定でよい）。REPLACE のときも
 //               InvalidValue（無効値の判定条件）は参照するが、置換先は
 //               InvalidNotificationCbk ではなく上記 InitValue であり、
 //               コールバックは呼ばれない。
+//               InvalidValue フィールド自体は TX シグナルでも共用する
+//               （2026-08 Com_InvalidateSignal 対応、[SWS_Com_00099]
+//               ComSignalDataInvalidValue）: Com_InvalidateSignal()/
+//               Com_InvalidateSignalGroup() が Com_SendSignal() へ渡す値として
+//               参照する。1シグナルは RX か TX のどちらか一方にしかなり得ない
+//               （Direction フィールド）ため、共用しても意味は混ざらない。
+//   InvalidValueConfigured : TX シグナルのみ使用。1 = InvalidValue が
+//               ComSignalDataInvalidValue として明示的に設定済み。既定は 0
+//               （未設定）。InvalidValue の既定値 0 だけでは「無効値として
+//               意図的に 0 を設定した」のか「そもそも無効値を設定していない」
+//               のかを区別できないため、専用フラグとして分離した。
+//               Com_InvalidateSignal()/Com_InvalidateSignalGroup() は
+//               このフラグが 0 のシグナルに対して E_NOT_OK を返す
+//               （[SWS_Com_00643]/[SWS_Com_00557]）。詳細は Com.c の
+//               各関数の Doxygen コメント参照。
 //   FirstTimeoutMs / TimeoutMs / RxTOutCbk : RX シグナルのみ
 //               使用（DaVinci: ComFirstTimeout / ComTimeout /
 //               ComTimeoutNotification、[7.3.6 Deadline Monitoring]）。
@@ -814,6 +829,7 @@ typedef struct
     void (*TxErrCbk)(void);
     void (*RxAckCbk)(void);
     void (*TxTOutCbk)(void);
+    uint8                       InvalidValueConfigured;
 } Com_SignalConfigType;
 
 // -------------------------------------------------------

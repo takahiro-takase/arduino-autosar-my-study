@@ -136,7 +136,10 @@ Std_ReturnType Com_ReceiveSignalGroupArray(Com_IPduIdType IPduId, uint8* DataPtr
  * \retval  1  タイムアウト中（IPduId が範囲外の場合も安全側でこちらを返す）。
  * \retval  0  タイムアウトしていない。
  *
- * \ServiceID      {0x1B}
+ * \note    本プロジェクト独自 API（実 AUTOSAR に対応関数なし）のため、
+ *          ServiceID は Dcm_ComIndication 等と同じ非標準値 0xF0 を踏襲する
+ *          （Com_Cfg.h 参照）。
+ * \ServiceID      {0xF0}
  * \Reentrancy     {Reentrant}
  * \Synchronicity  {Synchronous}
  */
@@ -169,6 +172,48 @@ Std_ReturnType Com_SendSignalGroup(Com_IPduIdType GroupId);
  * \Synchronicity  {Asynchronous}
  */
 Std_ReturnType Com_SendSignalGroupArray(Com_IPduIdType GroupId, const uint8* DataPtr);
+
+/**
+ * \brief   シグナルを、設定済みの ComSignalDataInvalidValue で無効化する。
+ *
+ * \details 内部的に Com_SendSignal() を InvalidValue で呼ぶ
+ *          （[SWS_Com_00099]/[SWS_Com_00642]）。詳細な拒否条件は Com.c の
+ *          実装コメント参照。
+ *
+ * \param[in]  SignalId  無効化する TX シグナルの ID。
+ *
+ * \retval  E_OK      成功。
+ * \retval  E_NOT_OK  COM 未初期化、SignalId が存在しない、または
+ *                    ComSignalDataInvalidValue が未設定。
+ *
+ * \ServiceID      {0x10}
+ * \Reentrancy     {Non Reentrant for the same signal. Reentrant for different signals.}
+ * \Synchronicity  {Asynchronous}
+ */
+uint8 Com_InvalidateSignal(Com_SignalIdType SignalId);
+
+/**
+ * \brief   Signal Group の全メンバーを、各々の ComSignalDataInvalidValue で無効化する。
+ *
+ * \details 各メンバーへ Com_SendSignal() を呼んだのち、内部的に
+ *          Com_SendSignalGroup() でコミットする（[SWS_Com_00099]/
+ *          [SWS_Com_00557]/[SWS_Com_00645]）。詳細な拒否条件は Com.c の
+ *          実装コメント参照。
+ *
+ * \param[in]  SignalGroupId  無効化する Signal Group（TX I-PDU）の ID。
+ *
+ * \retval  E_OK      成功。
+ * \retval  E_NOT_OK  COM 未初期化、SignalGroupId が TX I-PDU 設定テーブルに
+ *                    存在しない、IsSignalGroup=0 の I-PDU を指定した、
+ *                    またはいずれかのメンバーの ComSignalDataInvalidValue が
+ *                    未設定。
+ *
+ * \ServiceID      {0x1B}
+ * \Reentrancy     {Non Reentrant for the same signal group. Reentrant for different signal groups.}
+ * \Synchronicity  {Asynchronous}
+ */
+uint8 Com_InvalidateSignalGroup(Com_IPduIdType SignalGroupId);
+
 /* SWS_Com_00124 */
 void Com_TxConfirmation(PduIdType TxPduId, Std_ReturnType result);
 /* SWS_Com_00398: 受信デッドライン監視タイムアウト検出。Os の 100ms タスクから呼び出す */

@@ -125,7 +125,7 @@ const Com_SignalConfigType kTestSignal = {
     /* RxDataTimeoutAction */      COM_RX_TIMEOUT_ACTION_NONE,
     /* TimeoutSubstitutionValue */ 0U,
     /* DataInvalidAction */        COM_DATA_INVALID_ACTION_NONE,
-    /* InvalidValue */             0U,
+    /* InvalidValue */             0xBEEFU, // Com_InvalidateSignal（SWS_Com_00099）検証用
     /* InvalidNotificationCbk */   NULL,
     /* FirstTimeoutMs */           0U,
     /* TimeoutMs */                0U,
@@ -133,7 +133,8 @@ const Com_SignalConfigType kTestSignal = {
     /* TxAckCbk */                 NULL,
     /* TxErrCbk */                 NULL,
     /* RxAckCbk */                 NULL,
-    /* TxTOutCbk */                TestTxTOutCbk
+    /* TxTOutCbk */                TestTxTOutCbk,
+    /* InvalidValueConfigured */   1U
 };
 
 const Com_IPduConfigType kTestTxIPdu = {
@@ -196,13 +197,16 @@ const Com_SignalConfigType kTestTmsPendingSignal = {
     /* RxDataTimeoutAction */      COM_RX_TIMEOUT_ACTION_NONE,
     /* TimeoutSubstitutionValue */ 0U,
     /* DataInvalidAction */        COM_DATA_INVALID_ACTION_NONE,
-    /* InvalidValue */             0U,
+    /* InvalidValue */             1U, // Com_InvalidateSignalGroup（SWS_Com_00557）検証用
     /* InvalidNotificationCbk */   NULL,
     /* FirstTimeoutMs */           0U,
     /* TimeoutMs */                0U,
     /* RxTOutCbk */                NULL,
     /* TxAckCbk */                 NULL,
-    /* TxErrCbk */                 NULL
+    /* TxErrCbk */                 NULL,
+    /* RxAckCbk */                 NULL,
+    /* TxTOutCbk */                NULL,
+    /* InvalidValueConfigured */   1U
 };
 
 // SWS_Com_00468（Signal Group の TxAckCbk はグループ単位で 1 回だけ呼ばれる）
@@ -368,9 +372,122 @@ const Com_IPduConfigType kTestErrGroupIPdu = {
     /* TxTOutCbk */           TestGroupTxTOutCbk
 };
 
+// -----------------------------------------------------------------------
+// Com_InvalidateSignal/Com_InvalidateSignalGroup（SWS_Com_00099/SWS_Com_00557
+// 等、2026-08 追加）の Com_InvalidateSignalGroup 側 all-or-nothing 検証用。
+// kTestErrGroupIPdu（IPduId=3、Signal Group）に新規メンバーを 2 本追加する
+// （既存メンバーなしの I-PDU だったため、新規 I-PDU を増やさずに済む——
+// COM_TX_IPDU_MAX は本ファイルの 4 本で既に上限のため、テスト用にこれ以上
+// I-PDU を増やしてはいけない。feedback_test_chain_ipdu_id_ceiling 参照）。
+// SignalId=6 は InvalidValueConfigured=1（設定済み）、SignalId=7 はあえて
+// 未設定のままにし、「1本でも未設定なら全体を E_NOT_OK とする」ことの検証に使う。
+// -----------------------------------------------------------------------
+const Com_SignalConfigType kTestInvalidateGroupMemberA = {
+    /* SignalId */                6U,
+    /* Direction */                COM_SIGNAL_DIRECTION_TX,
+    /* IPduId */                   3U,
+    /* BitPosition */              0U,
+    /* BitSize */                  1U,
+    /* Endian */                   COM_BIG_ENDIAN,
+    /* InitValue */                0U,
+    /* FilterAlgorithm */          COM_FILTER_ALWAYS,
+    /* Mask */                     0U,
+    /* FilterX */                  0U,
+    /* FilterMin */                0U,
+    /* FilterMax */                0U,
+    /* FilterRejectCbk */          NULL,
+    /* TmsContributor */           0U,
+    /* UpdateBitContributor */     0U,
+    /* TransferProperty */         COM_TRANSFER_PROPERTY_PENDING,
+    /* RxDataTimeoutAction */      COM_RX_TIMEOUT_ACTION_NONE,
+    /* TimeoutSubstitutionValue */ 0U,
+    /* DataInvalidAction */        COM_DATA_INVALID_ACTION_NONE,
+    /* InvalidValue */             1U,
+    /* InvalidNotificationCbk */   NULL,
+    /* FirstTimeoutMs */           0U,
+    /* TimeoutMs */                0U,
+    /* RxTOutCbk */                NULL,
+    /* TxAckCbk */                 NULL,
+    /* TxErrCbk */                 NULL,
+    /* RxAckCbk */                 NULL,
+    /* TxTOutCbk */                NULL,
+    /* InvalidValueConfigured */   1U
+};
+
+const Com_SignalConfigType kTestInvalidateGroupMemberB = {
+    /* SignalId */                7U,
+    /* Direction */                COM_SIGNAL_DIRECTION_TX,
+    /* IPduId */                   3U,
+    /* BitPosition */              1U,
+    /* BitSize */                  1U,
+    /* Endian */                   COM_BIG_ENDIAN,
+    /* InitValue */                0U,
+    /* FilterAlgorithm */          COM_FILTER_ALWAYS,
+    /* Mask */                     0U,
+    /* FilterX */                  0U,
+    /* FilterMin */                0U,
+    /* FilterMax */                0U,
+    /* FilterRejectCbk */          NULL,
+    /* TmsContributor */           0U,
+    /* UpdateBitContributor */     0U,
+    /* TransferProperty */         COM_TRANSFER_PROPERTY_PENDING,
+    /* RxDataTimeoutAction */      COM_RX_TIMEOUT_ACTION_NONE,
+    /* TimeoutSubstitutionValue */ 0U,
+    /* DataInvalidAction */        COM_DATA_INVALID_ACTION_NONE,
+    /* InvalidValue */             0U,
+    /* InvalidNotificationCbk */   NULL,
+    /* FirstTimeoutMs */           0U,
+    /* TimeoutMs */                0U,
+    /* RxTOutCbk */                NULL,
+    /* TxAckCbk */                 NULL,
+    /* TxErrCbk */                 NULL,
+    /* RxAckCbk */                 NULL,
+    /* TxTOutCbk */                NULL,
+    /* InvalidValueConfigured */   0U  // あえて未設定のまま（all-or-nothing 検証用）
+};
+
+// Com_InvalidateSignal() の Direction==TX ガード（/code-review 指摘、
+// Com_InvalidateSignalGroup() 側は元々メンバー走査で Direction==TX を
+// 見ていたことに対する非対称の是正）検証用。InvalidValueConfigured=1 を
+// 誤って設定された RX シグナルという想定で、Direction チェックのみで
+// Com_SendSignal() に到達せず拒否されることを確認する。
+const Com_SignalConfigType kTestInvalidateRxSignal = {
+    /* SignalId */                8U,
+    /* Direction */                COM_SIGNAL_DIRECTION_RX,
+    /* IPduId */                   0U,
+    /* BitPosition */              0U,
+    /* BitSize */                  1U,
+    /* Endian */                   COM_BIG_ENDIAN,
+    /* InitValue */                0U,
+    /* FilterAlgorithm */          COM_FILTER_ALWAYS,
+    /* Mask */                     0U,
+    /* FilterX */                  0U,
+    /* FilterMin */                0U,
+    /* FilterMax */                0U,
+    /* FilterRejectCbk */          NULL,
+    /* TmsContributor */           0U,
+    /* UpdateBitContributor */     0U,
+    /* TransferProperty */         COM_TRANSFER_PROPERTY_PENDING,
+    /* RxDataTimeoutAction */      COM_RX_TIMEOUT_ACTION_NONE,
+    /* TimeoutSubstitutionValue */ 0U,
+    /* DataInvalidAction */        COM_DATA_INVALID_ACTION_NONE,
+    /* InvalidValue */             0U,
+    /* InvalidNotificationCbk */   NULL,
+    /* FirstTimeoutMs */           0U,
+    /* TimeoutMs */                0U,
+    /* RxTOutCbk */                NULL,
+    /* TxAckCbk */                 NULL,
+    /* TxErrCbk */                 NULL,
+    /* RxAckCbk */                 NULL,
+    /* TxTOutCbk */                NULL,
+    /* InvalidValueConfigured */   1U  // 誤設定を想定（Direction チェックが先に効くことの検証）
+};
+
 const Com_SignalConfigType kTestSignals[] = {
     kTestSignal, kTestTmsPendingSignal,
-    kTestNonGroupTmsContributorSignal, kTestNonGroupTmsCalledSignal
+    kTestNonGroupTmsContributorSignal, kTestNonGroupTmsCalledSignal,
+    kTestInvalidateGroupMemberA, kTestInvalidateGroupMemberB,
+    kTestInvalidateRxSignal
 };
 const Com_IPduConfigType   kTestTxIPdus[] = {
     kTestTxIPdu, kTestTmsGroupIPdu, kTestNonGroupTmsIPdu, kTestErrGroupIPdu
@@ -382,7 +499,7 @@ const Com_ConfigType kTestComConfig = {
     /* TxIPdus */       kTestTxIPdus,
     /* TxIPduCount */   4U,
     /* Signals */       kTestSignals,
-    /* SignalCount */   4U,
+    /* SignalCount */   7U,
     /* GwMappings */    NULL,
     /* GwMappingCount */ 0U
 };
@@ -1114,6 +1231,101 @@ TEST_F(Bsw_TxChain_Test, IpduGroupStop_OK_PreventsTxTOutDoubleFireWithTxErrCbk)
     /* 評価 (Assert): TxErrCbk は発火するが、TxTOutCbk とは二重発火しない */
     EXPECT_EQ(s_groupTxErrCount, 1U);
     EXPECT_EQ(s_groupTxTOutCount, 0U);
+}
+
+// ------------------------------------------------------------
+// Com_InvalidateSignal（SWS_Com_00099/SWS_Com_00642/SWS_Com_00643、2026-08
+// 追加）。kTestSignal（非 Signal Group、IPduId=0、16bit BigEndian、
+// InvalidValue=0xBEEF・InvalidValueConfigured=1）を流用する。
+// ------------------------------------------------------------
+TEST_F(Bsw_TxChain_Test, InvalidateSignal_OK_WritesConfiguredInvalidValueToBuffer)
+{
+    /* 実行 (Act) */
+    uint8 ret = Com_InvalidateSignal(0U);
+
+    /* 評価 (Assert): [SWS_Com_00642] 内部で Com_SendSignal() が呼ばれ、
+     * ComSignalDataInvalidValue (0xBEEF) がそのまま TX バッファへ反映される。 */
+    EXPECT_EQ(ret, E_OK);
+    const uint8* buf = Com_Test_GetTxBuffer(0U);
+    ASSERT_NE(buf, nullptr);
+    EXPECT_EQ(buf[0], 0xBEU);
+    EXPECT_EQ(buf[1], 0xEFU);
+}
+
+TEST_F(Bsw_TxChain_Test, InvalidateSignal_NG_UnconfiguredInvalidValueReturnsErrorWithoutWriting)
+{
+    /* 準備 (Arrange): kTestNonGroupTmsCalledSignal（SignalId=5、IPduId=2）は
+     * InvalidValueConfigured が既定の 0（未設定）のまま。 */
+
+    /* 実行 (Act) */
+    uint8 ret = Com_InvalidateSignal(5U);
+
+    /* 評価 (Assert): [SWS_Com_00643] ComSignalDataInvalidValue 未設定のため
+     * E_NOT_OK。副作用（バッファ書き込み）も一切起きない。 */
+    EXPECT_EQ(ret, E_NOT_OK);
+    const uint8* buf = Com_Test_GetTxBuffer(2U);
+    ASSERT_NE(buf, nullptr);
+    // bit0 は kTestNonGroupTmsContributorSignal（SignalId=4、InitValue=1）が
+    // Com_Init() 時点で既にパック済み（0x80）。SignalId=5（bit1）側は
+    // 今回の呼び出しが失敗したので変化しない。
+    EXPECT_EQ(buf[0], 0x80U);
+}
+
+TEST_F(Bsw_TxChain_Test, InvalidateSignal_NG_UnknownSignalIdReturnsError)
+{
+    /* 実行 (Act) + 評価 (Assert) */
+    EXPECT_EQ(Com_InvalidateSignal(255U), E_NOT_OK);
+}
+
+TEST_F(Bsw_TxChain_Test, InvalidateSignal_NG_RxSignalReturnsErrorWithoutReachingSendSignal)
+{
+    /* 準備 (Arrange): kTestInvalidateRxSignal（SignalId=8、Direction=RX）は
+     * InvalidValueConfigured=1（誤設定された想定）だが、RX/TX の IPduId が
+     * 数値空間を共有するため、Direction チェックが無いと Com_SendSignal()
+     * 側で偶然一致する TX I-PDU を静かに書き換えかねない（/code-review 指摘）。 */
+
+    /* 実行 (Act) + 評価 (Assert): Direction チェックのみで拒否される */
+    EXPECT_EQ(Com_InvalidateSignal(8U), E_NOT_OK);
+}
+
+// ------------------------------------------------------------
+// Com_InvalidateSignalGroup（SWS_Com_00557/SWS_Com_00645、2026-08 追加）。
+// ------------------------------------------------------------
+TEST_F(Bsw_TxChain_Test, InvalidateSignalGroup_OK_WritesMemberInvalidValueAndCommitsToBuffer)
+{
+    /* 準備 (Arrange): kTestTmsGroupIPdu（IPduId=1）の唯一のメンバー
+     * kTestTmsPendingSignal（SignalId=1、BitPosition=0、BigEndian 1bit＝
+     * 0x80）は InvalidValue=1・InvalidValueConfigured=1。 */
+
+    /* 実行 (Act) */
+    uint8 ret = Com_InvalidateSignalGroup(1U);
+
+    /* 評価 (Assert): [SWS_Com_00645] 内部で Com_SendSignal()（シャドウ
+     * バッファへ書き込み）→ Com_SendSignalGroup()（実バッファへコミット）
+     * の順に呼ばれ、メンバーの InvalidValue が実バッファへ反映される。 */
+    EXPECT_EQ(ret, E_OK);
+    const uint8* buf = Com_Test_GetTxBuffer(1U);
+    ASSERT_NE(buf, nullptr);
+    EXPECT_EQ(buf[0] & 0x80U, 0x80U);
+}
+
+TEST_F(Bsw_TxChain_Test, InvalidateSignalGroup_NG_AnyMemberUnconfiguredReturnsErrorWithoutPartialCommit)
+{
+    /* 準備 (Arrange): kTestErrGroupIPdu（IPduId=3）に、InvalidValueConfigured=1
+     * の SignalId=6 と、あえて未設定のままの SignalId=7 の 2 メンバーを設定
+     * 済み（ファイル冒頭のシグナル定義参照）。 */
+
+    /* 実行 (Act) */
+    uint8 ret = Com_InvalidateSignalGroup(3U);
+
+    /* 評価 (Assert): [SWS_Com_00557] "no ComSignalDataInvalidValue is
+     * configured for any of the group signals" に該当するため、1本でも
+     * 未設定なら all-or-nothing で全体を E_NOT_OK とし、設定済みの
+     * SignalId=6 側も含めて一切バッファへ書き込まない。 */
+    EXPECT_EQ(ret, E_NOT_OK);
+    const uint8* buf = Com_Test_GetTxBuffer(3U);
+    ASSERT_NE(buf, nullptr);
+    EXPECT_EQ(buf[0], 0x00U);
 }
 
 }  // namespace

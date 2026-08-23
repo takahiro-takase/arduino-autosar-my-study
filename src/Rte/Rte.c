@@ -216,9 +216,21 @@ void Rte_COMRxInd_EngineInfo(void)
  *          Com.c の Com_RxInvalidNotifyPending 宣言コメント参照 — この関数が
  *          行う Serial 出力は、Com_ReceiveSignal() の呼び出し元によっては
  *          割り込み禁止区間内で実行されると WDT リセットを引き起こしうる
- *          ため）。この関数自体は「異常が起きたことをログへ残す」以上のことは
- *          行わない（ログ出力のみの CDD 相当。E2EMon のように独自カウンタを
- *          持って TX シグナルへ反映するような発展はスコープ外）。
+ *          ため）。ログ出力に加え、Rte_Invalidate_MeterStatus_CoolantTemp()
+ *          （Com_InvalidateSignal() へ委譲、2026-08 追加、
+ *          SWS_Com_00099/SWS_Com_00642）でメータ表示ミラー自体も無効化する。
+ *          同じ 0xFF マーカーを RX/TX 双方の ComSignalDataInvalidValue に
+ *          設定しているため（Com_PBCfg.c 参照）、uds_tester 側でも同じ意味の
+ *          無効値として扱える。
+ *
+ *          \note   これは「無効を検知した瞬間」の単発通知であり、継続的な
+ *          無効状態のフラグではない。App_EngineManager_Run() は毎サイクル
+ *          `Rte_EngineInfoMirror.temp`（DataInvalidAction=NOTIFY により、
+ *          無効値受信時も直近の有効値のまま更新されない）を
+ *          Rte_Write_MeterStatus_CoolantTemp() でそのままミラー送信し続ける
+ *          ため、ここで無効化した値は次の周期送信で上書きされる
+ *          （TX シグナル自体は変化検知フィルタ付きのため、値が同じなら
+ *          再送信は起きないが、無効化パルスとしての意味は保たれる）。
  *
  * \note    Com_PBCfg.c から extern 宣言経由で InvalidNotificationCbk として
  *          参照されるため non-static。Rte.h には公開しない（Rte_COMCbk_*
@@ -228,6 +240,7 @@ void Rte_COMInvalidNotify_CoolantTemp(void)
 {
     DET_LOGT(TAG, "called");
     DET_LOGW(TAG, "CoolantTemp invalid value received (sensor fault pattern)");
+    (void)Rte_Invalidate_MeterStatus_CoolantTemp();
 }
 
 /**
@@ -1458,6 +1471,31 @@ Std_ReturnType Rte_Write_MeterStatus_CoolantTemp(CoolantTemp_t temp)
 {
     DET_LOGT(TAG, "called");
     return Com_SendSignal(COM_SIGNAL_METER_COOLANT_TEMP, &temp);
+}
+
+/**
+ * \brief   MeterStatus 提供ポートの CoolantTemp ミラーシグナルを無効化する。
+ *
+ * \details Rte_Write_MeterStatus_CoolantTemp() と対になる無効化版
+ *          （Com_InvalidateSignal() へ委譲、2026-08 追加）。
+ *          Rte_COMInvalidNotify_CoolantTemp() から呼ばれる（同関数の
+ *          Doxygen コメント参照）。他の Rte_Write_<Port>_<Signal>() と同じく、
+ *          呼び出し元が生の COM_SIGNAL_* 定数を直接扱わずに済むようにする。
+ *
+ * \retval  E_OK      COM の実 TX バッファへ無効値を正常に反映した。
+ * \retval  E_NOT_OK  COM 未初期化、シグナル ID が見つからない、または
+ *                    ComSignalDataInvalidValue が未設定。
+ *
+ * \pre        Com_Init() が正常に完了していること。
+ *
+ * \note       AUTOSAR 標準外の API（本プロジェクト独自拡張）。
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+uint8 Rte_Invalidate_MeterStatus_CoolantTemp(void)
+{
+    DET_LOGT(TAG, "called");
+    return Com_InvalidateSignal(COM_SIGNAL_METER_COOLANT_TEMP);
 }
 
 /**
