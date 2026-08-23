@@ -195,14 +195,61 @@ const Com_IPduConfigType kTestRxTimeoutGroupIPdu = {
     /* RxTOutCbk */           TestGroupRxTOutCbk
 };
 
+// IPduId=2: [SWS_Com_00872] 段階順の回帰テスト用。RxIpduCalloutCbk が
+// 必ず拒否する（＝バッファ・通知はいずれも動かない）設定でも、デッドライン
+// 監視タイマ（段階1）だけは reject の前に既にリセットされていることを
+// 検証する（/code-review で見つかった「本来タイムアウトしないはずの状況で
+// タイムアウトしてしまう」問題の是正）。
+static uint8_t s_rejectCalloutInvokeCount = 0U;
+static uint8 TestAlwaysRejectCallout(const uint8* SduDataPtr, uint8 SduLength)
+{
+    (void)SduDataPtr;
+    (void)SduLength;
+    s_rejectCalloutInvokeCount++;
+    return 0U;
+}
+
+const Com_IPduConfigType kTestRxTimeoutRejectedIPdu = {
+    /* IPduId */           2U,
+    /* DLC */              1U,
+    /* PduRId */           2U,
+    /* FirstTimeoutMs */   1000U,  /* TimeoutMs と意図的に異なる値にして、
+                                    * reject されても First→steady 状態
+                                    * 遷移が起きることを検証できるようにする
+                                    * （下記回帰テスト参照）。 */
+    /* TimeoutMs */        500U,
+    /* IsSignalGroup */    0U,
+    /* TxModeMode */       COM_TX_MODE_DIRECT,  /* RX I-PDU では未使用 */
+    /* TxPeriodMs */       0U,
+    /* TxModeModeTrue */   COM_TX_MODE_DIRECT,
+    /* TxPeriodMsTrue */   0U,
+    /* MinDelayMs */       0U,
+    /* UpdateBitPosition */ 0xFFU,
+    /* IpduGroupId */      COM_IPDU_GROUP_NONE,
+    /* RxIndicationCbk */  NULL,
+    /* TxTransformCbk */   NULL,
+    /* TxAckCbk */         NULL,
+    /* TxErrCbk */         NULL,
+    /* RxAckCbk */         NULL,
+    /* NumberOfRepetitions */ 0U,
+    /* RepetitionPeriodMs */  0U,
+    /* TxFirstTimeoutMs */    0U,
+    /* TxTimeoutMs */         0U,
+    /* TxTOutCbk */           NULL,
+    /* RxTOutCbk */           NULL,
+    /* RxIpduCalloutCbk */    TestAlwaysRejectCallout
+};
+
 const Com_SignalConfigType kTestRxTimeoutSignals[] = {
     kTestRxTimeoutSignal, kTestRxTimeoutGroupSignal
 };
-const Com_IPduConfigType kTestRxTimeoutIPdus[] = { kTestRxTimeoutIPdu, kTestRxTimeoutGroupIPdu };
+const Com_IPduConfigType kTestRxTimeoutIPdus[] = {
+    kTestRxTimeoutIPdu, kTestRxTimeoutGroupIPdu, kTestRxTimeoutRejectedIPdu
+};
 
 const Com_ConfigType kTestComRxTimeoutConfig = {
     /* RxIPdus */       kTestRxTimeoutIPdus,
-    /* RxIPduCount */   2U,
+    /* RxIPduCount */   3U,
     /* TxIPdus */       NULL,
     /* TxIPduCount */   0U,
     /* Signals */       kTestRxTimeoutSignals,
@@ -223,6 +270,7 @@ protected:
         s_sigRxTOutCount = 0U;
         s_groupRxTOutCount = 0U;
         s_misconfiguredGroupMemberRxTOutCount = 0U;
+        s_rejectCalloutInvokeCount = 0U;
 
         FakeDetHw_LogSuppressed = 0U;  // ここから各 TEST_F の実行(Act)区間
     }
@@ -249,6 +297,23 @@ protected:
     {
         uint8 data[1] = { 0x00U };
         PduInfoType pdu = { data, 1U };
+        Com_RxIndication(1U, &pdu);
+    }
+
+    /** ReceiveOnce() の RxIpduCalloutCbk が必ず拒否する I-PDU（IPduId=2）版。 */
+    void ReceiveOnceRejected(void)
+    {
+        uint8 data[1] = { 0x00U };
+        PduInfoType pdu = { data, 1U };
+        Com_RxIndication(2U, &pdu);
+    }
+
+    /** ReceiveOnceGroup() の短小フレーム版（SduLength=0 < DLC=1）。
+     *  [SWS_Com_00575] によりグループ全体が不採用になる。 */
+    void ReceiveOnceGroupShort(void)
+    {
+        uint8 data[1] = { 0x00U };
+        PduInfoType pdu = { data, 0U };
         Com_RxIndication(1U, &pdu);
     }
 };
@@ -300,6 +365,81 @@ TEST_F(Bsw_RxTimeoutChain_Test, ComMainFunction_OK_SigRxTOutCbkFiresOnlyOnceAcro
 
     /* 評価 (Assert): 新規検出時のみ発火するため回数は増えない */
     EXPECT_EQ(s_sigRxTOutCount, 1U);
+}
+
+// ------------------------------------------------------------
+// [SWS_Com_00872] 段階順の回帰テスト（/code-review 指摘の是正確認）。
+// RxIpduCalloutCbk に拒否されても、デッドライン監視タイマ（段階1）は
+// callout（段階2）より先にリセットされているはず。
+// ------------------------------------------------------------
+TEST_F(Bsw_RxTimeoutChain_Test, ComMainFunction_NG_RejectedFrameStillResetsDeadlineTimer)
+{
+    /* 準備 (Arrange): t=300ms でフレーム到着→callout に拒否される。
+     * もしタイマがリセットされていなければ、Com_Init() 時点(t=0)を
+     * 起点に t=600ms で 500ms しきい値を超えてタイムアウトしてしまう。
+     * タイマが正しくリセットされていれば、拒否された t=300ms を起点に
+     * t=600ms 時点ではまだ 300ms しか経過しておらず、タイムアウトしない。 */
+    FakeMillis_Value = 300UL;
+    ReceiveOnceRejected();
+    ASSERT_EQ(s_rejectCalloutInvokeCount, 1U);  // 拒否経路を通ったことの裏付け
+
+    /* 実行 (Act) */
+    FakeMillis_Value = 600UL;
+    Com_MainFunction();
+
+    /* 評価 (Assert): 実 AUTOSAR ならタイムアウトしない状況
+     * （バスは正常、ペイロードが拒否されただけ）で、実際にタイムアウト
+     * しないことを確認する。 */
+    EXPECT_EQ(Com_IsRxTimedOut(2U), 0U);
+}
+
+TEST_F(Bsw_RxTimeoutChain_Test, ComMainFunction_OK_RejectedFrameStillTransitionsToSteadyTimeout)
+{
+    /* 準備 (Arrange): IPduId=2 の初回受信（t=300ms）が callout に拒否される。
+     * [SWS_Com_00715]（Com_RxIndication 呼び出し自体でタイマ再始動）と
+     * [SWS_Com_00738]（シグナル値を考慮しない）により、拒否されても
+     * First→steady の状態遷移自体は起きるはず。しきい値を FirstTimeoutMs
+     * (1000ms) ではなく steady の TimeoutMs (500ms) に切り替えさせて
+     * 検証する。 */
+    FakeMillis_Value = 300UL;
+    ReceiveOnceRejected();
+    ASSERT_EQ(s_rejectCalloutInvokeCount, 1U);
+
+    /* t=750ms（拒否からの経過 450ms）: steady(500ms) 未満のためまだ
+     * タイムアウトしない */
+    FakeMillis_Value = 750UL;
+    Com_MainFunction();
+    ASSERT_EQ(Com_IsRxTimedOut(2U), 0U);
+
+    /* 実行 (Act): t=850ms（拒否からの経過 550ms） */
+    FakeMillis_Value = 850UL;
+    Com_MainFunction();
+
+    /* 評価 (Assert): steady の 500ms は超えているためタイムアウトする。
+     * もし拒否によって First(1000ms) のまま据え置かれていたら、
+     * 550ms < 1000ms でタイムアウトしないはずなので、この違いで
+     * 状態遷移の有無を判別できる。 */
+    EXPECT_EQ(Com_IsRxTimedOut(2U), 1U);
+}
+
+TEST_F(Bsw_RxTimeoutChain_Test, ComMainFunction_NG_GroupShortFrameDiscardStillResetsDeadlineTimer)
+{
+    /* 準備 (Arrange): t=300ms で IPduId=1（グループ）へ短小フレームが届き
+     * [SWS_Com_00575] によりグループ全体が不採用になる。もしタイマが
+     * リセットされていなければ、Com_Init() 時点(t=0)を起点に t=600ms で
+     * 500ms しきい値を超えてタイムアウトしてしまう。 */
+    FakeMillis_Value = 300UL;
+    ReceiveOnceGroupShort();
+
+    /* 実行 (Act) */
+    FakeMillis_Value = 600UL;
+    Com_MainFunction();
+
+    /* 評価 (Assert): [SWS_Com_00738]（無効なシグナルグループ受信時も
+     * タイマは再始動される）どおり、拒否された t=300ms を起点にまだ
+     * 300ms しか経過しておらず、タイムアウトしない。 */
+    EXPECT_EQ(Com_IsRxTimedOut(1U), 0U);
+    EXPECT_EQ(s_groupRxTOutCount, 0U);
 }
 
 // ------------------------------------------------------------

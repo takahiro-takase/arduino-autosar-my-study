@@ -485,10 +485,13 @@ void Com_GetVersionInfo(Std_VersionInfoType* versioninfo)
  *          DLC を超える分（CAN フレームが 8 バイト固定でパディングされている
  *          場合の末尾バイト等）は許容し、先頭 DLC バイトのみを読み取る。
  *
- *          上記のいずれよりも前に、`ipdu->RxIpduCalloutCbk` が設定されていれば
- *          Com_RxIpduCallout（[SWS_Com_00700]）としてまず呼ばれる。0 を返せば
- *          この受信は以降一切処理しない（詳細は Com_Types.h の
- *          RxIpduCalloutCbk コメント参照）。
+ *          上記のいずれよりも前に、受信デッドライン監視タイマ（Com_RxLastMs
+ *          等）をまずリセットする（[SWS_Com_00872] 段階1）。続けて
+ *          `ipdu->RxIpduCalloutCbk` が設定されていれば Com_RxIpduCallout
+ *          （[SWS_Com_00700]、段階2）が呼ばれる。0 を返せばこの受信は
+ *          以降一切処理しない（バッファ更新・通知は行わないが、タイマは
+ *          既にリセット済みのまま——詳細は Com_Types.h の RxIpduCalloutCbk
+ *          コメント参照）。
  *
  *          注意（実機非到達の既知の制約）: 本プロジェクトは「多層防御」として
  *          CanIf_RxIndication() 自身も独立した受信長チェックを持ち
@@ -511,7 +514,8 @@ void Com_GetVersionInfo(Std_VersionInfoType* versioninfo)
  * \pre        Com_Init() が正常に完了していること。
  *
  * \AUTOSARReq     {SWS_Com_00123, SWS_Com_00574, SWS_Com_00575, SWS_Com_00870,
- *                  SWS_Com_00555, SWS_Com_00700, SWS_Com_00816}
+ *                  SWS_Com_00555, SWS_Com_00700, SWS_Com_00816, SWS_Com_00872,
+ *                  SWS_Com_00715, SWS_Com_00738}
  * \ServiceID      {0x10}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
@@ -555,10 +559,37 @@ void Com_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
             return;
         }
 
+        /* [SWS_Com_00872] 段階1（デッドライン監視タイマ再始動）を、段階2
+         * （I-PDU callout、下記）や短小フレーム破棄より先に行う。
+         * [SWS_Com_00715]: "the AUTOSAR COM module shall reset the
+         * reception deadline monitoring timer ... at invocation of the
+         * function Com_RxIndication"——つまりリセットは Com_RxIndication()
+         * が呼ばれたという事実だけに懸かり、中身の受理可否には懸からない。
+         * [SWS_Com_00738]: "shall not take the values of the signals into
+         * account"（無効なシグナル/シグナルグループ受信時もタイマは
+         * 再始動される、と明記）。以前はこの後段の callout/短小フレーム
+         * 破棄より後ろでリセットしていたが、/code-review で「実 AUTOSAR
+         * ならタイムアウトしない状況でタイムアウトしてしまう」と指摘され
+         * 是正した（詳細は docs/modules/Com_Notes.md 参照）。この是正は
+         * 副次的に2つの挙動変化を伴う（いずれも上記2つの SWS 要求に
+         * 沿った、意図した変化——回帰テスト参照）:
+         *   (1) 下記 [SWS_Com_00575] 短小フレーム破棄（Signal Group）も
+         *       今後はタイマをリセットする（従来は破棄側が先に return する
+         *       ため素通りしていた）。
+         *   (2) reject/破棄された受信であっても Com_RxUsingFirstTimeout は
+         *       steady 状態へ遷移する（初回受信の定義がバッファ格納の成否
+         *       ではなく「Com_RxIndication() が呼ばれたこと」であるため）。
+         * バッファの更新はここでは行わない（＝「受信の事実」と「値の反映」
+         * は別軸）。 */
+        Com_RxLastMs[ipdu->IPduId]  = millis();
+        Com_RxTimedOut[ipdu->IPduId] = 0U;
+        Com_RxUsingFirstTimeout[ipdu->IPduId] = 0U;
+
         /* [SWS_Com_00700]/[SWS_Com_00816] (Com_RxIpduCallout): バッファ書き込み・
-         * デッドライン監視タイマのリセット・RxAckCbk/RxIndicationCbk のいずれ
-         * よりも前に、PduR から渡された生バイト列をそのまま渡して呼ぶ。0
-         * （false 相当）を返したら、この受信は以降一切処理しない。 */
+         * RxAckCbk/RxIndicationCbk のいずれよりも前に、PduR から渡された
+         * 生バイト列をそのまま渡して呼ぶ。0（false 相当）を返したら、
+         * この受信は以降一切処理しない（デッドライン監視タイマは上で
+         * 既にリセット済みのため、これ以降の reject では巻き戻さない）。 */
         if (ipdu->RxIpduCalloutCbk != NULL &&
             ipdu->RxIpduCalloutCbk(PduInfoPtr->SduDataPtr, (uint8)PduInfoPtr->SduLength) == 0U)
         {
@@ -573,8 +604,10 @@ void Com_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
 
         /* [SWS_Com_00575]: Signal Group は受信できたバイト数が DLC に満たない
          * 場合、グループ全体（含まれる全メンバー）を丸ごと不採用にする。
-         * バッファ・タイムアウトタイマのいずれも更新しない。これは
-         * 「一部のメンバーだけ新しい値、残りは古い値」という一貫性のない
+         * バッファは更新しない。デッドライン監視タイマは上で既にリセット
+         * 済み（[SWS_Com_00738]: 無効なシグナル/シグナルグループ受信時も
+         * タイマは再始動される、という要求どおり）。これは「一部の
+         * メンバーだけ新しい値、残りは古い値」という一貫性のない
          * スナップショットを公開しないための要求であり、非 Signal Group の
          * 部分受理（下記）とは意図的に異なる扱いとなる。 */
         if (ipdu->IsSignalGroup != 0U && PduInfoPtr->SduLength < ipdu->DLC)
@@ -602,27 +635,19 @@ void Com_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
                      (unsigned)ipdu->DLC);
         }
 
-        /* Com は E2E 等のペイロード内容には一切関知せず、無条件にバッファ・
-         * タイムアウトタイマを更新する（E2E Transformer 方式。Com_Types.h の
-         * RxIndicationCbk 説明参照）。ペイロードの妥当性検証・破棄判断は
-         * すべて RxIndicationCbk 側（例: RTE 経由の E2EXf_InverseTransform）
-         * の責務であり、Com はそれがあることすら知らない。E2E 保護された
-         * I-PDU では、部分受信で新旧バイトが混在した内容はほぼ確実に CRC
-         * 不一致となり、E2EXf 側で別途棄却される。Com 層の部分受理（本要求）
-         * と E2E 層の整合性検証は独立した層であり、両者が別々の役割を担う
-         * 構造は実 AUTOSAR と同じである。 */
+        /* Com は E2E 等のペイロード内容には一切関知せず、無条件にバッファを
+         * 更新する（E2E Transformer 方式。Com_Types.h の RxIndicationCbk
+         * 説明参照）。デッドライン監視タイマは本関数の冒頭で既にリセット
+         * 済み（[SWS_Com_00872] 段階1、上記参照）。ペイロードの妥当性検証・
+         * 破棄判断はすべて RxIndicationCbk 側（例: RTE 経由の
+         * E2EXf_InverseTransform）の責務であり、Com はそれがあることすら
+         * 知らない。E2E 保護された I-PDU では、部分受信で新旧バイトが
+         * 混在した内容はほぼ確実に CRC 不一致となり、E2EXf 側で別途
+         * 棄却される。Com 層の部分受理（本要求）と E2E 層の整合性検証は
+         * 独立した層であり、両者が別々の役割を担う構造は実 AUTOSAR と
+         * 同じである。 */
         for (uint8 b = 0; b < recvLen; b++)
             Com_RxBuffer[ipdu->IPduId][b] = PduInfoPtr->SduDataPtr[b];
-
-        /* 受信成功 → タイムアウトタイマをリセットし、以降は定常状態の
-         * TimeoutMs（ComTimeout 相当）へ切り替える（[SWS_Com_00879] 相当）。
-         * 部分受信でも「フレーム自体は届いた」という事実は変わらないため、
-         * I-PDU 単位のタイマは無条件でリセットする（[SWS_Com_00738]: 無効な
-         * シグナル/シグナルグループ受信時もデッドライン監視タイマは再始動
-         * される、という考え方を踏襲）。 */
-        Com_RxLastMs[ipdu->IPduId]  = millis();
-        Com_RxTimedOut[ipdu->IPduId] = 0U;
-        Com_RxUsingFirstTimeout[ipdu->IPduId] = 0U;
 
         /* Com_CbkRxAck（SWS_Com_00555）: Signal Group はメンバー単位ではなく
          * グループ単位で 1 回だけ呼ぶ（詳細は docs/modules/Com_Notes.md 参照）。

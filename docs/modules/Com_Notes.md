@@ -1399,35 +1399,66 @@ Signal Gateway 節で `[SWS_Com_00872]` の RX 処理段階（1: デッドライ
 いませんでした。今回、`SecureCommand`（RX IPduId=2、`ImmobilizerCmd`）に
 これを適用しました。
 
-**段階の実行順について（仕様の列挙順とは異なる、/code-review で指摘）**:
-`[SWS_Com_00872]` は段階1（タイマ再始動）→段階2（callout）の順で列挙して
-いますが、本実装は逆に **callout を最初に評価し、拒否された場合はタイマ
-再始動を含めて一切処理しません**（`Com_RxIndication()` 内、callout の
-`return` はバッファ書き込みより前）。これは新たに導入した挙動ではなく、
-既存の Signal Group 短小フレーム破棄（`[SWS_Com_00575]`、同じく
-バッファ書き込み・タイマ再始動のいずれよりも前で `return` する）と
-同じ既存の設計方針を踏襲したものです。「フレーム受信自体は物理的に成立した
-が、内容が信頼できないため何も処理しない」という一貫した扱いであり、
-デッドライン監視タイマの意味を「フレームが物理的に届いたか」ではなく
-「信頼できる形で処理できたか」で統一しています。
+**段階の実行順について（実装当初の逆順を /code-review で発見・是正、
+2026-08）**: `[SWS_Com_00872]` は段階1（タイマ再始動）→段階2（callout）の
+順で列挙しています。実装当初はこれを逆にしていました——callout を最初に
+評価し、拒否された場合はタイマ再始動を含めて一切処理しない、という形で、
+既存の Signal Group 短小フレーム破棄（`[SWS_Com_00575]`）と同じ「拒否＝
+一切処理しない」という一貫した扱いに見えました。しかしこれは実 AUTOSAR の
+意図とは逆で、**実機ログで実際に問題が顕在化しました**: `RxIpduCalloutCbk`
+が同じフレームを繰り返し拒否し続ける状況（`uds_tester` で「Reserved異常」
+プリセットを送り続けた場合）で、物理的にはバスもフレーム到着も正常なのに、
+デッドライン監視が「相手が沈黙している」と誤ってタイムアウト扱いにして
+しまうことが分かりました（ユーザーからの指摘: 「実Autosarだとタイムアウト
+しないけど、このプログラムだとタイムアウトする」）。
 
-トレードオフとして、`RxIpduCalloutCbk` を将来デッドライン監視が有効
-（`TimeoutMs>0`）な I-PDU に付け、かつ送信元が確実に送信し続けているのに
-毎回 callout に拒否され続けるような構成にすると、実際にはバスは正常でも
-デッドライン監視が誤ってタイムアウト扱いにしてしまいます。現状唯一の
-適用先である `SecureCommand` は `TimeoutMs=0`（監視無効、上記コメント
-参照）のためこの懸念は顕在化しません。
+是正として、デッドライン監視タイマのリセット（段階1）を `Com_RxIndication()`
+の冒頭、callout（段階2）や `[SWS_Com_00575]` 短小フレーム破棄より前へ
+移動しました。根拠は `[SWS_Com_00715]`（"the AUTOSAR COM module shall
+reset the reception deadline monitoring timer ... at invocation of the
+function Com_RxIndication" — リセットは `Com_RxIndication()` が呼ばれた
+という事実だけに懸かる）と `[SWS_Com_00738]`（"shall not take the values
+of the signals into account"、無効なシグナル/シグナルグループ受信時も
+タイマは再始動されると明記）です。「フレームが物理的に届いた」という
+事実（タイマの役割）と「中身が受理可能か」（callout/短小フレーム破棄の
+役割）を独立させ、実 AUTOSAR の段階順と一致させています。バッファの
+更新自体は従来どおり callout/短小フレーム破棄で止まります（＝「受信の
+事実」と「値の反映」を分離）。
+
+**この是正が副次的に伴う2つの挙動変化（/code-review で指摘、いずれも
+上記2つの SWS 要求に沿った意図した変化）**:
+
+1. `[SWS_Com_00575]` の Signal Group 短小フレーム破棄も、今後はタイマを
+   リセットするようになりました。従来は「破棄側が先に `return` する」
+   ため、この破棄パスはタイマリセットのコードへ一度も到達していません
+   でした（コード自体は `[SWS_Com_00738]` を引用しつつ、実際には
+   Signal Group の破棄には適用されていなかった、という食い違いが
+   存在していました）。回帰テスト
+   `ComMainFunction_NG_GroupShortFrameDiscardStillResetsDeadlineTimer`
+   で検証済みです。
+2. `RxIpduCalloutCbk` に拒否された受信であっても、`Com_RxUsingFirstTimeout`
+   は steady 状態へ遷移するようになりました。「初回受信」の定義が
+   「バッファへ格納できたか」ではなく「`Com_RxIndication()` が呼ばれた
+   こと」であるためです。`FirstTimeoutMs`（起動直後の猶予）と
+   `TimeoutMs`（定常状態）に異なる値を設定した I-PDU で、拒否され
+   続ける callout を持たせると、2回目以降は `TimeoutMs` 側のしきい値が
+   使われます。回帰テスト
+   `ComMainFunction_OK_RejectedFrameStillTransitionsToSteadyTimeout`
+   で検証済みです。
 
 ```
 SecureCommand (IPduId=2):
   RxIpduCalloutCbk = Rte_COMRxIpduCallout_SecureCommand
 
 Com_RxIndication(RxPduId=2, ...)  ← SecOC が MAC・フレッシュネス検証成功後に呼ぶ
-  Com_RxIPduStarted チェックの直後、バッファ書き込み・デッドライン監視
-  タイマリセット・RxAckCbk/RxIndicationCbk のいずれよりも前に
-    RxIpduCalloutCbk(SduDataPtr, SduLength) を呼ぶ
+  Com_RxIPduStarted チェックの直後、まずデッドライン監視タイマを
+  リセットする（[SWS_Com_00872] 段階1。以降 RxIpduCalloutCbk が拒否
+  しても巻き戻さない）
+  続けて RxAckCbk/RxIndicationCbk のいずれよりも前に
+    RxIpduCalloutCbk(SduDataPtr, SduLength) を呼ぶ（段階2）
       byte[1]（Reserved、本来常に 0x00）が非0 → 0（false）を返す
-        → Com_RxIndication() が即座に return（以降一切処理しない）
+        → Com_RxIndication() が即座に return（バッファ・通知は処理
+          しないが、タイマは既にリセット済みのまま）
       0x00 → 1（true）を返す → 通常どおり処理を続行
 ```
 
@@ -1442,9 +1473,10 @@ Com_RxIndication(RxPduId=2, ...)  ← SecOC が MAC・フレッシュネス検�
 `Com_CbkRxAck` はバッファ格納**後**の通知のため、格納自体は止められません。
 `ComFilterAlgorithm(NEW_IS_WITHIN)`/`ComDataInvalidAction` は個々のシグナル
 単位で「直近の有効値を返す」という代替であり、I-PDU 全体の受理そのものを
-拒否するわけではありません。`Com_RxIpduCallout` だけが、デッドライン監視
-タイマのリセットも含め「このフレームを受信したという事実そのもの」を
-なかったことにできます。
+拒否するわけではありません。`Com_RxIpduCallout` だけが、バッファ格納・
+`RxAckCbk`/`RxIndicationCbk` 通知を丸ごと止められます（ただしデッドライン
+監視タイマのリセットは上記のとおり段階1で既に完了しているため対象外——
+「フレームは物理的に届いた」という事実自体はなかったことにしません）。
 
 **この機能は実際に発動するか**: **発動します**。SecOC の MAC・フレッシュネス
 検証は「送信元が正しい鍵を持っているか」「再送でないか」だけを見ており、
