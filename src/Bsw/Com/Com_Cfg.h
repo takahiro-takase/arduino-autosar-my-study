@@ -92,11 +92,31 @@
 /** テレメトリ I-PDU Group（E2EHealthStatus のみ）。
  *  診断監視用のネットワーク健全性テレメトリであり、車両の基本動作には
  *  不要なため、独立して停止/再開できる I-PDU Group として分離している
- *  （EngineInfo/AbsInfo/MeterStatus/WarningStatus/ImmobilizerCmd は
+ *  （MeterStatus/WarningStatus/ImmobilizerCmd/ImmobilizerStatus は
  *  どの I-PDU Group にも属さず、常に有効。BswM が EcuM の POST_RUN/RUN
  *  遷移に応じて Com_IpduGroupStop/Start を呼ぶ。詳細は
  *  src/Bsw/BswM/BswM_PBCfg.c 参照） */
 #define COM_IPDU_GROUP_TELEMETRY  0U
+
+/** センサー RX I-PDU Group（EngineInfo/AbsInfo のみ、2026-08 追加）。
+ *  この 2 本は元々 COM_IPDU_GROUP_NONE（常に有効）だったが、Bus-Sleep
+ *  （ComM が NO_COMMUNICATION へ離脱、真の物理スリープ）中も受信
+ *  デッドライン監視が止まらず、意図的な通信断（スリープ）のたびに
+ *  「RX timeout」警告 + Dem の FAILED DTC が誤って記録される問題が
+ *  あった（Bus-Sleep中は相手も送信を止めるため、5000ms 以上のスリープは
+ *  珍しくない）。BswM が FULL_COM 到達で Com_IpduGroupStart・
+ *  NO_COMMUNICATION 到達で Com_IpduGroupStop を呼ぶことで、意図的な
+ *  物理スリープの間は受信処理・デッドライン監視とも評価対象から外れる
+ *  ようにした（[SWS_Com_00684]/[SWS_Com_00685]）。
+ *  TX 側の COM_IPDU_GROUP_TELEMETRY とは停止条件が異なる点に注意:
+ *  TX は SILENT_COMMUNICATION（Bus-Off 等による受信専用モード）でも
+ *  送信できないため停止して正しいが、RX は SILENT_COMMUNICATION 中も
+ *  受信自体は生きているため、これを停止条件に含めると実際に届いている
+ *  フレームを誤って捨ててしまう（/code-review で指摘・是正）。同じ理由で
+ *  POST_RUN でも停止しない（EngineInfo/AbsInfo は元々 POST_RUN 中も
+ *  監視を続ける設計だった）。詳細は
+ *  src/Bsw/BswM/BswM_PBCfg.c・docs/modules/Com_Notes.md 参照。 */
+#define COM_IPDU_GROUP_SENSOR_RX  1U
 
 /** RX I-PDU テーブルのエントリ数
  *  DaVinci: /ActiveEcuC/Com/ComConfig/ 内 Direction=RECEIVE の ComIPdu 数 */

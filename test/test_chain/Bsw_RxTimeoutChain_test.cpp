@@ -535,4 +535,262 @@ TEST_F(Bsw_RxTimeoutChain_Test, ComReceiveSignal_NG_BeforeTimeout_ReturnsLastRec
     EXPECT_EQ(value, 0x1234U);
 }
 
+// -----------------------------------------------------------------------
+// Com_IpduGroupStart/Stop の RX 側検証（本番 EngineInfo/AbsInfo が
+// COM_IPDU_GROUP_NONE から実グループ COM_IPDU_GROUP_SENSOR_RX へ移行した
+// ことに伴う回帰、2026-08）。専用の最小 Com 設定・フィクスチャを別に用意
+// する（上の kTestComRxTimeoutConfig は COM_RX_IPDU_MAX いっぱいの3本を
+// 既に使い切っており、COM_RX_IPDU_MAX は Com.c が Com_Cfg.h の
+// COM_RX_IPDU_COUNT（本番値、native_chain 環境全体で共有される固定サイズ）
+// にそのまま連動しているため、4本目を追加すると Com_RxLastMs[] 等の
+// 内部状態配列に範囲外アクセスしてしまう。IPduId=0 を再利用するのは
+// 別の Com_Init() 呼び出し（このフィクスチャの SetUp()）で毎回状態が
+// 作り直されるため安全）。
+// -----------------------------------------------------------------------
+namespace rx_ipdu_group
+{
+
+static uint8_t s_groupedRxTOutCount = 0U;
+static void TestGroupedRxTOutCbk(void) { s_groupedRxTOutCount++; }
+
+// 本番の COM_IPDU_GROUP_SENSOR_RX（Com_Cfg.h、Com.h 経由で可視）を直接
+// 使う（独自のローカル定数を別途定義すると、値がたまたま一致しているだけの
+// 見せかけの回帰テストになり、本番側の値が変わっても追従できず静かに
+// ズレてしまうため。/code-review で指摘）。
+const Com_IPduConfigType kTestRxGroupedIPdu = {
+    /* IPduId */           0U,
+    /* DLC */              1U,
+    /* PduRId */           0U,
+    /* FirstTimeoutMs */   500U,
+    /* TimeoutMs */        500U,
+    /* IsSignalGroup */    1U,  // I-PDU 単位の RxTOutCbk は Signal Group 専用
+    /* TxModeMode */       COM_TX_MODE_DIRECT,  /* RX I-PDU では未使用 */
+    /* TxPeriodMs */       0U,
+    /* TxModeModeTrue */   COM_TX_MODE_DIRECT,
+    /* TxPeriodMsTrue */   0U,
+    /* MinDelayMs */       0U,
+    /* UpdateBitPosition */ 0xFFU,
+    /* IpduGroupId */      COM_IPDU_GROUP_SENSOR_RX,
+    /* RxIndicationCbk */  NULL,
+    /* TxTransformCbk */   NULL,
+    /* TxAckCbk */         NULL,
+    /* TxErrCbk */         NULL,
+    /* RxAckCbk */         NULL,
+    /* NumberOfRepetitions */ 0U,
+    /* RepetitionPeriodMs */  0U,
+    /* TxFirstTimeoutMs */    0U,
+    /* TxTimeoutMs */         0U,
+    /* TxTOutCbk */           NULL,
+    /* RxTOutCbk */           TestGroupedRxTOutCbk
+    // RxTOutCbk より後ろ（RxIpduCalloutCbk/TxIpduCalloutCbk）は未使用のため
+    // 省略（C の集成体初期化で NULL 埋め）。RxTOutCbk 自体は非デフォルト値
+    // が必要なため、それより手前の未使用フィールド（TxTransformCbk〜
+    // TxTOutCbk）は kTestRxGroupedNonGroupIPdu のように省略できない
+    // （位置初期化では途中のフィールドだけ飛ばせないため）。
+};
+
+// IPduId=1: 本番 EngineInfo と同じ形（非 Signal Group、シグナル単位の
+// RxDataTimeoutAction=SUBSTITUTE + RxTOutCbk）を再現する。上の
+// kTestRxGroupedIPdu（IPduId=0、Signal Group、I-PDU 単位 RxTOutCbk）だけでは
+// AbsInfo 寄りの経路しか検証できておらず、Com_MainFunction() のシグナル単位
+// ループ（Com.c）・Com_ReceiveSignal() の SUBSTITUTE 分岐がグループ停止中に
+// 正しく抑制されることを検証できていなかった（/code-review で指摘）。
+static uint8_t s_nonGroupRxTOutCount = 0U;
+static void TestNonGroupRxTOutCbk(void) { s_nonGroupRxTOutCount++; }
+
+const Com_SignalConfigType kTestRxGroupedNonGroupSignal = {
+    /* SignalId */                0U,
+    /* Direction */                COM_SIGNAL_DIRECTION_RX,
+    /* IPduId */                   1U,
+    /* BitPosition */              0U,
+    /* BitSize */                  16U,
+    /* Endian */                   COM_BIG_ENDIAN,
+    /* InitValue */                0xAAAAU,
+    /* FilterAlgorithm */          COM_FILTER_ALWAYS,
+    /* Mask */                     0U,
+    /* FilterX */                  0U,
+    /* FilterMin */                0U,
+    /* FilterMax */                0U,
+    /* FilterRejectCbk */          NULL,
+    /* TmsContributor */           0U,
+    /* UpdateBitContributor */     0U,
+    /* TransferProperty */         COM_TRANSFER_PROPERTY_PENDING,
+    /* RxDataTimeoutAction */      COM_RX_TIMEOUT_ACTION_SUBSTITUTE,
+    /* TimeoutSubstitutionValue */ 0xFFFFU,
+    /* DataInvalidAction */        COM_DATA_INVALID_ACTION_NONE,
+    /* InvalidValue */             0U,
+    /* InvalidNotificationCbk */   NULL,
+    /* FirstTimeoutMs */           500U,
+    /* TimeoutMs */                500U,
+    /* RxTOutCbk */                TestNonGroupRxTOutCbk,
+    /* TxAckCbk */                 NULL,
+    /* TxErrCbk */                 NULL
+};
+
+const Com_IPduConfigType kTestRxGroupedNonGroupIPdu = {
+    /* IPduId */           1U,
+    /* DLC */              2U,
+    /* PduRId */           1U,
+    /* FirstTimeoutMs */   0U,  /* I-PDU 単位の監視は無効化（シグナル単位のみ対象） */
+    /* TimeoutMs */        0U,
+    /* IsSignalGroup */    0U,  // 本番 EngineInfo と同じ非 Signal Group
+    /* TxModeMode */       COM_TX_MODE_DIRECT,  /* RX I-PDU では未使用 */
+    /* TxPeriodMs */       0U,
+    /* TxModeModeTrue */   COM_TX_MODE_DIRECT,
+    /* TxPeriodMsTrue */   0U,
+    /* MinDelayMs */       0U,
+    /* UpdateBitPosition */ 0xFFU,
+    /* IpduGroupId */      COM_IPDU_GROUP_SENSOR_RX
+};
+
+const Com_IPduConfigType kTestRxIpduGroupIPdus[] = { kTestRxGroupedIPdu, kTestRxGroupedNonGroupIPdu };
+const Com_SignalConfigType kTestRxIpduGroupSignals[] = { kTestRxGroupedNonGroupSignal };
+
+const Com_ConfigType kTestRxIpduGroupConfig = {
+    /* RxIPdus */       kTestRxIpduGroupIPdus,
+    /* RxIPduCount */   2U,
+    /* TxIPdus */       NULL,
+    /* TxIPduCount */   0U,
+    /* Signals */       kTestRxIpduGroupSignals,
+    /* SignalCount */   1U,
+    /* GwMappings */    NULL,
+    /* GwMappingCount */ 0U
+};
+
+class Bsw_RxIpduGroupChain_Test : public ::testing::Test
+{
+protected:
+    void SetUp() override
+    {
+        FakeMillis_Reset();
+        FakeDetHw_LogSuppressed = 1U;
+        Com_Init(&kTestRxIpduGroupConfig);
+        s_groupedRxTOutCount = 0U;
+        s_nonGroupRxTOutCount = 0U;
+        FakeDetHw_LogSuppressed = 0U;
+    }
+
+    void TearDown() override
+    {
+        FakeDetHw_LogSuppressed = 1U;
+        Com_DeInit();
+    }
+
+    /** IPduId=1（非 Signal Group）へ実データを1回受信させるヘルパー。 */
+    void ReceiveOnceNonGroup(uint16_t value)
+    {
+        uint8 data[2] = { (uint8)(value >> 8), (uint8)(value & 0xFFU) };
+        PduInfoType pdu = { data, 2U };
+        Com_RxIndication(1U, &pdu);
+    }
+};
+
+TEST_F(Bsw_RxIpduGroupChain_Test, ComMainFunction_NG_StoppedGroupedIPduNeverTimesOutRegardlessOfElapsed)
+{
+    /* 準備 (Arrange): Com_IpduGroupStart() を一度も呼ばない
+     * （[SWS_Com_00444]: I-PDU Group は既定で停止状態） */
+
+    /* 実行 (Act): TimeoutMs(500ms) を大幅に超えて経過させる */
+    FakeMillis_Value += 5000U;
+    Com_MainFunction();
+
+    /* 評価 (Assert): 停止中はデッドライン監視自体が評価されないため
+     * （[SWS_Com_00685]）、いくら経過しても RxTOutCbk は発火しない
+     * （本番の Bus-Sleep 中に EngineInfo/AbsInfo の RX タイムアウトが
+     * 誤って発火しないことの裏付け）。 */
+    EXPECT_EQ(s_groupedRxTOutCount, 0U);
+}
+
+TEST_F(Bsw_RxIpduGroupChain_Test, ComIpduGroupStart_OK_GroupedIPduBeginsMonitoringAfterExplicitStart)
+{
+    /* 準備 (Arrange): 明示的に開始する（BswM の FULL_COM 遷移ルート相当） */
+    Com_IpduGroupStart(COM_IPDU_GROUP_SENSOR_RX, 0U);
+
+    /* 実行 (Act): TimeoutMs(500ms) 経過 */
+    FakeMillis_Value += 500U;
+    Com_MainFunction();
+
+    /* 評価 (Assert): 開始後は通常どおり監視が働き、タイムアウトが発火する */
+    EXPECT_EQ(s_groupedRxTOutCount, 1U);
+}
+
+TEST_F(Bsw_RxIpduGroupChain_Test, ComIpduGroupStop_OK_StoppingAgainSuppressesTimeoutEvenAfterElapsed)
+{
+    /* 準備 (Arrange): 一度開始してから、しきい値に達する前に停止する
+     * （本番の Bus-Sleep 遷移相当: FULL_COM → NO_COMMUNICATION）。 */
+    Com_IpduGroupStart(COM_IPDU_GROUP_SENSOR_RX, 0U);
+    FakeMillis_Value += 100U;
+    Com_MainFunction();
+    ASSERT_EQ(s_groupedRxTOutCount, 0U);  // まだしきい値未満
+
+    Com_IpduGroupStop(COM_IPDU_GROUP_SENSOR_RX);
+
+    /* 実行 (Act): 停止中にしきい値を大幅に超えて経過させる */
+    FakeMillis_Value += 5000U;
+    Com_MainFunction();
+
+    /* 評価 (Assert): 停止中は評価されないため発火しない
+     * （意図的なスリープのたびに誤って RX timeout が記録されていた
+     * 問題が解消されていることの直接的な裏付け）。 */
+    EXPECT_EQ(s_groupedRxTOutCount, 0U);
+}
+
+// ------------------------------------------------------------
+// 上の3件は IPduId=0（Signal Group、I-PDU 単位 RxTOutCbk、AbsInfo 寄りの形）
+// のみを検証していた。本番 EngineInfo と同じ形（非 Signal Group、シグナル
+// 単位の RxDataTimeoutAction=SUBSTITUTE + RxTOutCbk）である IPduId=1 でも
+// 同じ抑制が効くことを確認する（/code-review で指摘されたカバレッジの
+// 隙間の是正）。
+// ------------------------------------------------------------
+TEST_F(Bsw_RxIpduGroupChain_Test, ComIpduGroupStop_OK_NonGroupSignalFreezesInsteadOfSubstitutingWhileStopped)
+{
+    /* 準備 (Arrange): 開始→実受信→しきい値未満で停止
+     * （本番の Bus-Sleep 遷移相当: FULL_COM → NO_COMMUNICATION）。 */
+    Com_IpduGroupStart(COM_IPDU_GROUP_SENSOR_RX, 0U);
+    ReceiveOnceNonGroup(0x1234U);
+    FakeMillis_Value += 100U;
+    Com_MainFunction();
+    ASSERT_EQ(s_nonGroupRxTOutCount, 0U);  // まだしきい値未満
+
+    Com_IpduGroupStop(COM_IPDU_GROUP_SENSOR_RX);
+
+    /* 実行 (Act): 停止中にしきい値を大幅に超えて経過させる */
+    FakeMillis_Value += 5000U;
+    Com_MainFunction();
+
+    /* 評価 (Assert): 停止中はシグナル単位ループも評価されないため
+     * RxTOutCbk は発火しない。Com_ReceiveSignal() も SUBSTITUTE
+     * （0xFFFF）へ切り替わらず、停止直前の実受信値（0x1234）が
+     * 凍結されたまま返り続ける。これが本来の目的（Bus-Sleep 中に
+     * 「通信異常」として誤って上位層へ伝わらないようにする）だが、
+     * 裏を返せば「本当に通信異常が起きても、再開までは検知されない」
+     * ことも意味する（意図的な停止期間中は当然の仕様）。 */
+    EXPECT_EQ(s_nonGroupRxTOutCount, 0U);
+    uint16_t value = 0U;
+    uint8 ret = Com_ReceiveSignal(0U, &value);
+    EXPECT_EQ(ret, E_OK);
+    EXPECT_EQ(value, 0x1234U);  // SUBSTITUTE(0xFFFF) にはならない
+}
+
+TEST_F(Bsw_RxIpduGroupChain_Test, ComIpduGroupStart_OK_NonGroupSignalTimesOutAndSubstitutesAfterExplicitStart)
+{
+    /* 準備 (Arrange): 明示的に開始してから実受信させる */
+    Com_IpduGroupStart(COM_IPDU_GROUP_SENSOR_RX, 0U);
+    ReceiveOnceNonGroup(0x1234U);
+
+    /* 実行 (Act): TimeoutMs(500ms) 経過 */
+    FakeMillis_Value += 500U;
+    Com_MainFunction();
+
+    /* 評価 (Assert): 開始後は通常どおり監視が働き、RxTOutCbk が発火し
+     * Com_ReceiveSignal() も SUBSTITUTE 値を返すようになる。 */
+    EXPECT_EQ(s_nonGroupRxTOutCount, 1U);
+    uint16_t value = 0U;
+    uint8 ret = Com_ReceiveSignal(0U, &value);
+    EXPECT_EQ(ret, E_OK);
+    EXPECT_EQ(value, 0xFFFFU);
+}
+
+}  // namespace rx_ipdu_group
+
 }  // namespace
