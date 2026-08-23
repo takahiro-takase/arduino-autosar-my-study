@@ -65,7 +65,26 @@ namespace
 // （Com_ReceiveSignal() は非 Signal Group シグナルに対して Com_SigTimedOut[]
 // のみを見るため、この単純化で本チェーンの検証は完結する。Com.c 該当コメント
 // 参照）。
+//
+// IPduId=1 は SWS_Com_00536/00556（Com_CbkRxTOut）のグループ単位経路専用の
+// 追加 I-PDU（IsSignalGroup=1、メンバー1本）。IPduId=0 側とは独立に
+// I-PDU 単位の FirstTimeoutMs/TimeoutMs を持たせ、Com_MainFunction() の
+// I-PDU 単位ループ（本ファイル冒頭のコールチェーン図のうち、シグナル単位
+// ループとは別の分岐）を検証する。
 // -----------------------------------------------------------------------
+
+// SWS_Com_00536/00556（Com_CbkRxTOut）検証用カウンタ・コールバック。
+static uint8_t s_sigRxTOutCount = 0U;
+static void TestSigRxTOutCbk(void) { s_sigRxTOutCount++; }
+
+static uint8_t s_groupRxTOutCount = 0U;
+static void TestGroupRxTOutCbk(void) { s_groupRxTOutCount++; }
+
+// /code-review で指摘された「Signal Group メンバーの除外は設定規約のみに
+// 依存し、コードで担保していない」の回帰テスト用。誤って非 Signal Group
+// シグナルのようにコピペ設定してしまった場合を模したカウンタ。
+static uint8_t s_misconfiguredGroupMemberRxTOutCount = 0U;
+static void TestMisconfiguredGroupMemberRxTOutCbk(void) { s_misconfiguredGroupMemberRxTOutCount++; }
 
 const Com_SignalConfigType kTestRxTimeoutSignal = {
     /* SignalId */                0U,
@@ -91,7 +110,7 @@ const Com_SignalConfigType kTestRxTimeoutSignal = {
     /* InvalidNotificationCbk */   NULL,
     /* FirstTimeoutMs */           500U,
     /* TimeoutMs */                500U,
-    /* TimeoutNotificationCbk */   NULL,
+    /* RxTOutCbk */                TestSigRxTOutCbk,
     /* TxAckCbk */                 NULL,
     /* TxErrCbk */                 NULL
 };
@@ -114,13 +133,80 @@ const Com_IPduConfigType kTestRxTimeoutIPdu = {
     /* TxTransformCbk */   NULL
 };
 
+// IPduId=1: グループ単位 Com_CbkRxTOut 検証用（IsSignalGroup=1、メンバー1本）。
+const Com_SignalConfigType kTestRxTimeoutGroupSignal = {
+    /* SignalId */                1U,
+    /* Direction */                COM_SIGNAL_DIRECTION_RX,
+    /* IPduId */                   1U,
+    /* BitPosition */              0U,
+    /* BitSize */                  1U,
+    /* Endian */                   COM_BIG_ENDIAN,
+    /* InitValue */                0U,
+    /* FilterAlgorithm */          COM_FILTER_ALWAYS,
+    /* Mask */                     0U,
+    /* FilterX */                  0U,
+    /* FilterMin */                0U,
+    /* FilterMax */                0U,
+    /* FilterRejectCbk */          NULL,
+    /* TmsContributor */           0U,
+    /* UpdateBitContributor */     0U,
+    /* TransferProperty */         COM_TRANSFER_PROPERTY_PENDING,
+    /* RxDataTimeoutAction */      COM_RX_TIMEOUT_ACTION_NONE,
+    /* TimeoutSubstitutionValue */ 0U,
+    /* DataInvalidAction */        COM_DATA_INVALID_ACTION_NONE,
+    /* InvalidValue */             0U,
+    /* InvalidNotificationCbk */   NULL,
+    /* FirstTimeoutMs */           500U,  /* Signal Group メンバーへの誤設定を意図的に再現
+                                            * （本来は未使用=0 にすべき値。Com_Types.h 参照）。
+                                            * ipdu->IsSignalGroup のランタイムガードが
+                                            * 効いていれば、この誤設定があっても
+                                            * TestMisconfiguredGroupMemberRxTOutCbk は
+                                            * 発火しないはず（下記回帰テスト参照）。 */
+    /* TimeoutMs */                500U,
+    /* RxTOutCbk */                TestMisconfiguredGroupMemberRxTOutCbk,
+    /* TxAckCbk */                 NULL,
+    /* TxErrCbk */                 NULL
+};
+
+const Com_IPduConfigType kTestRxTimeoutGroupIPdu = {
+    /* IPduId */           1U,
+    /* DLC */              1U,
+    /* PduRId */           1U,
+    /* FirstTimeoutMs */   500U,
+    /* TimeoutMs */        500U,
+    /* IsSignalGroup */    1U,
+    /* TxModeMode */       COM_TX_MODE_DIRECT,  /* RX I-PDU では未使用 */
+    /* TxPeriodMs */       0U,
+    /* TxModeModeTrue */   COM_TX_MODE_DIRECT,
+    /* TxPeriodMsTrue */   0U,
+    /* MinDelayMs */       0U,
+    /* UpdateBitPosition */ 0xFFU,
+    /* IpduGroupId */      COM_IPDU_GROUP_NONE,
+    /* RxIndicationCbk */  NULL,
+    /* TxTransformCbk */   NULL,
+    /* TxAckCbk */         NULL,
+    /* TxErrCbk */         NULL,
+    /* RxAckCbk */         NULL,
+    /* NumberOfRepetitions */ 0U,
+    /* RepetitionPeriodMs */  0U,
+    /* TxFirstTimeoutMs */    0U,
+    /* TxTimeoutMs */         0U,
+    /* TxTOutCbk */           NULL,
+    /* RxTOutCbk */           TestGroupRxTOutCbk
+};
+
+const Com_SignalConfigType kTestRxTimeoutSignals[] = {
+    kTestRxTimeoutSignal, kTestRxTimeoutGroupSignal
+};
+const Com_IPduConfigType kTestRxTimeoutIPdus[] = { kTestRxTimeoutIPdu, kTestRxTimeoutGroupIPdu };
+
 const Com_ConfigType kTestComRxTimeoutConfig = {
-    /* RxIPdus */       &kTestRxTimeoutIPdu,
-    /* RxIPduCount */   1U,
+    /* RxIPdus */       kTestRxTimeoutIPdus,
+    /* RxIPduCount */   2U,
     /* TxIPdus */       NULL,
     /* TxIPduCount */   0U,
-    /* Signals */       &kTestRxTimeoutSignal,
-    /* SignalCount */   1U,
+    /* Signals */       kTestRxTimeoutSignals,
+    /* SignalCount */   2U,
     /* GwMappings */    NULL,
     /* GwMappingCount */ 0U
 };
@@ -134,6 +220,9 @@ protected:
         FakeDetHw_LogSuppressed = 1U;  // Init() のログはノイズになるため抑制
 
         Com_Init(&kTestComRxTimeoutConfig);
+        s_sigRxTOutCount = 0U;
+        s_groupRxTOutCount = 0U;
+        s_misconfiguredGroupMemberRxTOutCount = 0U;
 
         FakeDetHw_LogSuppressed = 0U;  // ここから各 TEST_F の実行(Act)区間
     }
@@ -154,6 +243,14 @@ protected:
         PduInfoType pdu = { data, 2U };
         Com_RxIndication(0U, &pdu);
     }
+
+    /** ReceiveOnce() のグループ I-PDU（IPduId=1）版。 */
+    void ReceiveOnceGroup(void)
+    {
+        uint8 data[1] = { 0x00U };
+        PduInfoType pdu = { data, 1U };
+        Com_RxIndication(1U, &pdu);
+    }
 };
 
 // ------------------------------------------------------------
@@ -168,8 +265,10 @@ TEST_F(Bsw_RxTimeoutChain_Test, ComMainFunction_OK_DetectsTimeoutAfterThresholdE
     /* 実行 (Act) */
     Com_MainFunction();
 
-    /* 評価 (Assert) */
+    /* 評価 (Assert): フラグに加えて SWS_Com_00536/00556 (Com_CbkRxTOut) の
+     * シグナル単位コールバックも新規検出の瞬間に1回だけ呼ばれる */
     EXPECT_EQ(Com_Test_GetSigTimedOut(0U), 1U);
+    EXPECT_EQ(s_sigRxTOutCount, 1U);
 }
 
 TEST_F(Bsw_RxTimeoutChain_Test, ComMainFunction_NG_BeforeThreshold_LeavesSigTimedOutClear)
@@ -181,8 +280,82 @@ TEST_F(Bsw_RxTimeoutChain_Test, ComMainFunction_NG_BeforeThreshold_LeavesSigTime
     /* 実行 (Act) */
     Com_MainFunction();
 
-    /* 評価 (Assert): まだ検知しない */
+    /* 評価 (Assert): まだ検知しない。コールバックも呼ばれない */
     EXPECT_EQ(Com_Test_GetSigTimedOut(0U), 0U);
+    EXPECT_EQ(s_sigRxTOutCount, 0U);
+}
+
+TEST_F(Bsw_RxTimeoutChain_Test, ComMainFunction_OK_SigRxTOutCbkFiresOnlyOnceAcrossRepeatedCalls)
+{
+    /* 準備 (Arrange): しきい値超過を検出させたあと、時間をさらに進めて
+     * Com_MainFunction() を再度呼ぶ（エッジトリガのため2回目は発火しない） */
+    ReceiveOnce(0x1234U);
+    FakeMillis_Value = 600UL;
+    Com_MainFunction();
+    ASSERT_EQ(s_sigRxTOutCount, 1U);
+
+    /* 実行 (Act) */
+    FakeMillis_Value = 700UL;
+    Com_MainFunction();
+
+    /* 評価 (Assert): 新規検出時のみ発火するため回数は増えない */
+    EXPECT_EQ(s_sigRxTOutCount, 1U);
+}
+
+// ------------------------------------------------------------
+// SWS_Com_00536/00556（Com_CbkRxTOut）のグループ単位経路
+// （Com_MainFunction() の I-PDU 単位ループ、IPduId=1）
+// ------------------------------------------------------------
+TEST_F(Bsw_RxTimeoutChain_Test, ComMainFunction_OK_GroupRxTOutFiresAfterThresholdElapsed)
+{
+    /* 準備 (Arrange) */
+    ReceiveOnceGroup();
+    FakeMillis_Value = 600UL;
+
+    /* 実行 (Act) */
+    Com_MainFunction();
+
+    /* 評価 (Assert): グループ単位のコールバックが発火する。IPduId=0 側の
+     * シグナル単位監視は本テストでは検証対象外（同じ 500ms しきい値かつ
+     * 一度も受信させていないため Com_Init() 起点で同時に満了し、
+     * s_sigRxTOutCount 側も独立に発火しうる——これは IPduId=0/1 が別々の
+     * I-PDU である以上正しい挙動であり、本テストの主張ではない） */
+    EXPECT_EQ(Com_IsRxTimedOut(1U), 1U);
+    EXPECT_EQ(s_groupRxTOutCount, 1U);
+}
+
+TEST_F(Bsw_RxTimeoutChain_Test, ComMainFunction_NG_GroupBeforeThreshold_DoesNotFire)
+{
+    /* 準備 (Arrange) */
+    ReceiveOnceGroup();
+    FakeMillis_Value = 400UL;
+
+    /* 実行 (Act) */
+    Com_MainFunction();
+
+    /* 評価 (Assert) */
+    EXPECT_EQ(Com_IsRxTimedOut(1U), 0U);
+    EXPECT_EQ(s_groupRxTOutCount, 0U);
+}
+
+TEST_F(Bsw_RxTimeoutChain_Test, ComMainFunction_NG_MisconfiguredGroupMemberDoesNotDoubleFire)
+{
+    /* 準備 (Arrange): kTestRxTimeoutGroupSignal は Signal Group メンバー
+     * （IPduId=1、IsSignalGroup=1）でありながら、非 Signal Group シグナルの
+     * ようにコピペ設定されてしまった状態（FirstTimeoutMs/TimeoutMs/RxTOutCbk
+     * が設定済み）を模している。ipdu->IsSignalGroup のランタイムガードが
+     * 無ければ、シグナル単位ループでもこのメンバーの RxTOutCbk が誤って
+     * 発火してしまう（/code-review で指摘された二重発火シナリオ）。 */
+    ReceiveOnceGroup();
+    FakeMillis_Value = 600UL;
+
+    /* 実行 (Act) */
+    Com_MainFunction();
+
+    /* 評価 (Assert): グループ単位のコールバックは正しく1回発火するが、
+     * 誤設定されたメンバー側のシグナル単位コールバックは発火しない */
+    EXPECT_EQ(s_groupRxTOutCount, 1U);
+    EXPECT_EQ(s_misconfiguredGroupMemberRxTOutCount, 0U);
 }
 
 // ------------------------------------------------------------

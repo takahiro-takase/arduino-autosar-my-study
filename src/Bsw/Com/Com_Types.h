@@ -514,6 +514,15 @@ typedef enum
 //               シグナル単位版と対になる（TxAckCbk/TxErrCbk と同じ
 //               二重化）。TxTimeoutMs=0 で機能無効。詳細は
 //               docs/modules/Com_Notes.md 参照。
+//   RxTOutCbk : Signal Group（IsSignalGroup=1）専用。RX 受信デッドライン
+//               監視（既存の FirstTimeoutMs/TimeoutMs/Com_RxTimedOut、
+//               上記）がこの I-PDU（グループ全体で 1 つのデッドラインとして
+//               扱われる、[7.3.6]）のタイムアウトを新規検出した瞬間に
+//               Com_MainFunction() から呼ばれる（Com_CbkRxTOut、
+//               SWS_Com_00536/00556。RTE 生成名は Rte_COMCbkRxTOut_<sg>）。
+//               非 Signal Group の I-PDU では未使用（Com_SignalConfigType.
+//               RxTOutCbk 側のシグナル単位コールバックを使うこと）。NULL 可
+//               （通知不要なら未設定でよい）。
 // -------------------------------------------------------
 typedef struct
 {
@@ -540,6 +549,7 @@ typedef struct
     uint16             TxFirstTimeoutMs;
     uint16             TxTimeoutMs;
     void (*TxTOutCbk)(void);
+    void (*RxTOutCbk)(void);
 } Com_IPduConfigType;
 
 // -------------------------------------------------------
@@ -634,7 +644,7 @@ typedef enum
 //               InvalidValue（無効値の判定条件）は参照するが、置換先は
 //               InvalidNotificationCbk ではなく上記 InitValue であり、
 //               コールバックは呼ばれない。
-//   FirstTimeoutMs / TimeoutMs / TimeoutNotificationCbk : RX シグナルのみ
+//   FirstTimeoutMs / TimeoutMs / RxTOutCbk : RX シグナルのみ
 //               使用（DaVinci: ComFirstTimeout / ComTimeout /
 //               ComTimeoutNotification、[7.3.6 Deadline Monitoring]）。
 //               AUTOSAR 本来はデッドライン監視をシグナル（本フィールド）と
@@ -659,9 +669,15 @@ typedef enum
 //               タイマーの起点は所属 I-PDU の Com_RxLastMs[IPduId] を共有
 //               する（同一 I-PDU 内のシグナルは必ず同時に更新されるため、
 //               シグナルごとに別の受信時刻を持つ必要はない）。
-//               TimeoutNotificationCbk は非 NULL ならこのシグナルの
-//               デッドライン超過を新規検出した瞬間に Com_MainFunction() から
-//               呼ばれる（Com_CbkTimeout 相当）。NULL 可（通知不要なら未設定）。
+//               RxTOutCbk は非 NULL ならこのシグナルのデッドライン超過を
+//               新規検出した瞬間に Com_MainFunction() から呼ばれる
+//               （Com_CbkRxTOut、SWS_Com_00536/00556。RTE 生成名は
+//               Rte_COMCbkRxTOut_<sn>、Com_CbkTxTOut と対になる、
+//               ComTimeoutNotification=ECUC_Com_00552 を共有する RX 側）。
+//               NULL 可（通知不要なら未設定）。Signal Group メンバーには
+//               設定しても呼ばれない（上記のとおり本フィールド自体が
+//               Signal Group では未使用。グループ単位の通知は
+//               Com_IPduConfigType.RxTOutCbk 側で行う）。
 //   TxAckCbk    : 非 Signal Group の TX シグナルのみ使用（所属 I-PDU の
 //               IsSignalGroup=0 の場合のみ Com_TxConfirmation() が参照する。
 //               Signal Group メンバーに設定しても呼ばれない——グループの
@@ -734,7 +750,7 @@ typedef struct
     void (*InvalidNotificationCbk)(void);
     uint16                      FirstTimeoutMs;
     uint16                      TimeoutMs;
-    void (*TimeoutNotificationCbk)(void);
+    void (*RxTOutCbk)(void);
     void (*TxAckCbk)(void);
     void (*TxErrCbk)(void);
     void (*RxAckCbk)(void);

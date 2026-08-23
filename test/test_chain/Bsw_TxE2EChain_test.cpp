@@ -97,7 +97,7 @@ const Com_SignalConfigType kTestSignal = {
     /* InvalidNotificationCbk */   NULL,
     /* FirstTimeoutMs */           0U,
     /* TimeoutMs */                0U,
-    /* TimeoutNotificationCbk */   NULL,
+    /* RxTOutCbk */                NULL,
     /* TxAckCbk */                 NULL,
     /* TxErrCbk */                 NULL
 };

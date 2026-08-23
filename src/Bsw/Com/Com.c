@@ -117,6 +117,13 @@ static uint8 Com_TxEnabled = 1U;
 static uint8 Com_RxIPduStarted[COM_RX_IPDU_MAX];
 static uint8 Com_TxIPduStarted[COM_TX_IPDU_MAX];
 
+/* Com_ConfigPtr->RxIPdus[].IsSignalGroup を IPduId 添字で引けるようにした
+ * キャッシュ（Com_Init() で一度だけ設定、以降不変。/simplify で指摘された
+ * 「Com_MainFunction() のシグナル単位ループが、直前の I-PDU 単位ループで
+ * 既に読んだ IsSignalGroup を、毎 tick Com_FindRxIPdu() の線形探索で
+ * 再導出していた」重複を解消するために追加）。 */
+static uint8 Com_RxIPduIsGroup[COM_RX_IPDU_MAX];
+
 /* -----------------------------------------------------------------------
  * TX シグナルフィルタ（ComFilterAlgorithm）関連の内部状態
  * ----------------------------------------------------------------------- */
@@ -280,6 +287,7 @@ void Com_Init(const Com_ConfigType* config)
         Com_RxIPduStarted[i] = 1U;  /* IPduId 範囲外の添字保護のため、まず全域を
                                      * 起動済みにしておき、下の実ループで
                                      * I-PDU Group 所属分のみ上書きする */
+        Com_RxIPduIsGroup[i] = 0U;  /* 同上、下の実ループで実際の値を設定する */
     }
 
     for (uint8 i = 0; i < COM_TX_IPDU_MAX; i++)
@@ -311,6 +319,7 @@ void Com_Init(const Com_ConfigType* config)
         const Com_IPduConfigType* ipdu = &config->RxIPdus[i];
         if (ipdu->IpduGroupId != COM_IPDU_GROUP_NONE)
             Com_RxIPduStarted[ipdu->IPduId] = 0U;
+        Com_RxIPduIsGroup[ipdu->IPduId] = ipdu->IsSignalGroup;
     }
     for (uint8 i = 0; i < config->TxIPduCount; i++)
     {
@@ -2348,14 +2357,26 @@ void Com_MainFunction(void)
                 DET_LOGW(TAG, "RX timeout iPdu=%u (%ums, %s)",
                          (unsigned)id, (unsigned)threshold,
                          Com_RxUsingFirstTimeout[id] ? "first" : "steady");
+
+                /* [SWS_Com_00536]/[SWS_Com_00556] (Com_CbkRxTOut)、Signal
+                 * Group 単位のみ（[7.3.6]: グループ全体で1つのデッドライン
+                 * として扱われるため、このI-PDU単位ループがグループの
+                 * 発火点になる。非 Signal Group の発火は下のシグナル単位
+                 * ループが別途担う）。 */
+                if (ipdu->IsSignalGroup != 0U && ipdu->RxTOutCbk != NULL)
+                    ipdu->RxTOutCbk();
             }
         }
 
         /* シグナル単位のデッドライン監視（[7.3.6]、Com_SignalConfigType の
          * FirstTimeoutMs/TimeoutMs 宣言コメント参照）。Signal Group メンバー
-         * は対象外（TimeoutMs=0 の既定のままのため、下の TimeoutMs==0 判定で
-         * 自然にスキップされる。グループの deadline は上の I-PDU 単位ループが
-         * 別途担う）。I-PDU Group 停止中は上と同じ理由でスキップする。 */
+         * は対象外（設定上は TimeoutMs=0 の既定のままにする規約だが、それ
+         * だけに頼らず Com_RxIPduIsGroup[] をランタイムガードとしても
+         * 確認する——Com_CbkRxAck の ipdu->IsSignalGroup チェックや
+         * NumberOfRepetitions の TxModeMode==DIRECT チェックと同じ「設定
+         * 判別フィールドに対する実行時ガード」の考え方。グループの
+         * deadline は上の I-PDU 単位ループが別途担う）。I-PDU Group 停止中は
+         * 上と同じ理由でスキップする。 */
         for (uint8 s = 0U; s < Com_ConfigPtr->SignalCount; s++)
         {
             const Com_SignalConfigType* sig = &Com_ConfigPtr->Signals[s];
@@ -2364,6 +2385,9 @@ void Com_MainFunction(void)
 
             if (sig->IPduId >= COM_RX_IPDU_MAX || !Com_RxIPduStarted[sig->IPduId])
                 continue;
+
+            if (Com_RxIPduIsGroup[sig->IPduId] != 0U)
+                continue;  /* Signal Group メンバーは対象外（上記コメント参照） */
 
             const uint16 sigThreshold = Com_SelectTimeoutThreshold(
                 Com_RxUsingFirstTimeout[sig->IPduId], sig->FirstTimeoutMs, sig->TimeoutMs);
@@ -2378,8 +2402,10 @@ void Com_MainFunction(void)
                          (unsigned)sig->SignalId, (unsigned)sig->IPduId,
                          (unsigned)sigThreshold,
                          Com_RxUsingFirstTimeout[sig->IPduId] ? "first" : "steady");
-                if (sig->TimeoutNotificationCbk != NULL)
-                    sig->TimeoutNotificationCbk();
+                /* [SWS_Com_00536]/[SWS_Com_00556] (Com_CbkRxTOut)、非 Signal
+                 * Group のシグナル単位。 */
+                if (sig->RxTOutCbk != NULL)
+                    sig->RxTOutCbk();
             }
         }
     }

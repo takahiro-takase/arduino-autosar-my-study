@@ -18,6 +18,8 @@
  *              Signal 2: EngineOnFlag   1 bit  BitPos=48  BigEndian
  *                RxAckCbk=Rte_COMCbk_EngineOnFlag（SWS_Com_00555 Com_CbkRxAck、
  *                非 Signal Group 実装例。RxIndicationCbk より前に呼ばれる）
+ *                RxTOutCbk=Rte_COMCbkRxTOut_EngineOnFlag（SWS_Com_00536/00556
+ *                Com_CbkRxTOut、シグナル単位デッドライン監視の通知）
  *            RX I-PDU 1 (IPduId=1): CAN ID 0x110, DLC=6  AbsInfo     (ABS ECU, E2E P05 保護)
  *              byte[0-1]: E2E CRC16 (リトルエンディアン) / byte[2]: E2E Counter (8bit)
  *              （以前は E2E P01(CRC8+4bitカウンタ、DLC=5) だったが、EngineInfo と
@@ -27,6 +29,8 @@
  *              Rte_COMRxInd_AbsInfo が RxIndicationCbk として確定コピーする）
  *              RxAckCbk=Rte_COMCbk_AbsInfo（SWS_Com_00555 Com_CbkRxAck、
  *              グループ単位。WarningStatus の TxAckCbk と対称）
+ *              RxTOutCbk=Rte_COMCbkRxTOut_AbsInfo（SWS_Com_00536/00556
+ *              Com_CbkRxTOut、グループ単位のデッドライン監視通知）
  *              Signal 4: VehicleSpeed  16 bit  BitPos=24  BigEndian  0.01 km/h
  *                RxDataTimeoutAction=SUBSTITUTE（タイムアウト中は 0xFFFF を返す）
  *              Signal 5: BrakeActive    1 bit  BitPos=40  BigEndian  0=解除/1=作動
@@ -187,6 +191,8 @@ extern void Rte_COMCbkTAck_WarningStatus(void);
 extern void Rte_COMCbk_EngineOnFlag(void);
 extern void Rte_COMCbk_AbsInfo(void);
 extern void Rte_COMRxInd_SecureCommand(void);
+extern void Rte_COMCbkRxTOut_EngineOnFlag(void);
+extern void Rte_COMCbkRxTOut_AbsInfo(void);
 
 /* -----------------------------------------------------------------------
  * RX I-PDU テーブル
@@ -245,10 +251,14 @@ static const Com_IPduConfigType Com_RxIPduConfigData[COM_RX_IPDU_COUNT] = {
         .IpduGroupId = COM_IPDU_GROUP_NONE,    /* I-PDU Group に属さない（常に有効） */
         .RxIndicationCbk = Rte_COMRxInd_AbsInfo, /* DaVinci: /ActiveEcuC/E2EXf/AbsInfo_Rx_E2EXf
                                                 *          （E2E Transformer 呼び出しは Rte 層が担う） */
-        .RxAckCbk = Rte_COMCbk_AbsInfo       /* SWS_Com_00555 (Com_CbkRxAck)、
+        .RxAckCbk = Rte_COMCbk_AbsInfo,      /* SWS_Com_00555 (Com_CbkRxAck)、
                                                 *          Signal Group 単位（WarningStatus の
                                                 *          TxAckCbk と対称。RxIndicationCbk より前に
                                                 *          呼ばれる） */
+        .RxTOutCbk = Rte_COMCbkRxTOut_AbsInfo /* SWS_Com_00536/00556 (Com_CbkRxTOut)、
+                                                *          Signal Group 単位。上の FirstTimeoutMs/
+                                                *          TimeoutMs を新規に超過した瞬間に1回だけ
+                                                *          呼ばれる（EngineOnFlag のシグナル単位版と対称）。 */
     },
     {
         /* ---------------------------------------------------------------
@@ -512,6 +522,9 @@ static const Com_SignalConfigType Com_SignalConfigData[COM_SIGNAL_COUNT] = {
          * 完了するたびに呼ばれる（RxIndicationCbk による E2E 検証より前。
          * 他の特殊フィールドを持たない「素の」シグナルのため、非 Signal
          * Group 実装例として選定した）。
+         * RxTOutCbk=Rte_COMCbkRxTOut_EngineOnFlag（SWS_Com_00536/00556、
+         * Com_CbkRxTOut 相当）: 上の FirstTimeoutMs/TimeoutMs（シグナル
+         * 単位、EngineInfo と同値）を新規に超過した瞬間に1回だけ呼ばれる。
          * --------------------------------------------------------------- */
         .SignalId    = COM_SIGNAL_ENGINE_ON_FLAG, /* DaVinci: ComHandleId       */
         .Direction   = COM_SIGNAL_DIRECTION_RX,   /* 本プロジェクト独自拡張。Com_SignalDirectionType 参照 */
@@ -522,7 +535,8 @@ static const Com_SignalConfigType Com_SignalConfigData[COM_SIGNAL_COUNT] = {
         .FirstTimeoutMs = COM_TIMEOUT_ENGINE_INFO_MS, /* DaVinci: ComFirstTimeout（シグナル単位）
                                                  *          EngineSpeed と同じ理由・同じ値 */
         .TimeoutMs      = COM_TIMEOUT_ENGINE_INFO_MS, /* DaVinci: ComTimeout（シグナル単位） */
-        .RxAckCbk       = Rte_COMCbk_EngineOnFlag
+        .RxAckCbk       = Rte_COMCbk_EngineOnFlag,
+        .RxTOutCbk      = Rte_COMCbkRxTOut_EngineOnFlag
     },
     {
         /* ---------------------------------------------------------------

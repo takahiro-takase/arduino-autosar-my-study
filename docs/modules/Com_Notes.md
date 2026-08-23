@@ -1186,6 +1186,66 @@ COM モジュールが各 RX I-PDU の受信間隔を監視し、設定タイム
 5. UDS SID 0x19 で DTC 0x000105 (COMM_TIMEOUT) が取得できる
 6. EngineInfo を再送すると Com_RxTimedOut がリセットされ、次の Runnable サイクルで復帰する
 
+### Com_CbkRxTOut（デッドライン検出の RTE 通知、2026-08 対応）
+
+上記の検出ロジック自体（`Com_RxTimedOut[]`/`Com_SigTimedOut[]`、`Com_ReceiveSignal()`
+が `E_NOT_OK` を返す経路）は当初から実装済みでしたが、検出した「瞬間」を
+上位層へ明示的に通知する RTE コールバック（実 AUTOSAR の `Com_CbkRxTOut`、
+[SWS_Com_00536]/[SWS_Com_00556]: "called immediately after a message
+reception error has been detected by the deadline monitoring mechanism"。
+RTE 生成名 `Rte_COMCbkRxTOut_<sn>`/`<sg>`、`Com_CbkTxTOut` と同じ
+`ComTimeoutNotification`=ECUC_Com_00552 を共有する RX 側）は、実は
+**シグナル単位の骨格だけ既に実装されていて、コールバックが本番設定で
+一切配線されていなかった**ことが分かりました（旧 `Com_SignalConfigType.
+TimeoutNotificationCbk`、`EngineSpeed`/`CoolantTemp`/`EngineOnFlag` 全てで
+`FirstTimeoutMs`/`TimeoutMs` は既に設定済みで実際に `Com_SigTimedOut[]` を
+立てていたが、コールバック自体は全設定で `NULL`）。加えてグループ単位
+（AUTOSAR 本来は非 Signal Group が signal 単位、Signal Group はグループ
+単位で発火——上の「タイムアウト設定値」表の `Com_RxTimedOut[]` 系）は
+コールバックのフィールド自体が存在しませんでした。
+
+これを是正し、シグナル単位のフィールドを `TimeoutNotificationCbk` から
+`RxTOutCbk`（`TxTOutCbk` 等と同じ命名規則）へ改名した上で、
+`Com_IPduConfigType` にグループ単位の `RxTOutCbk` を新設しました
+（`TxTOutCbk` のシグナル単位/グループ単位の二重化と対称）。
+
+```
+EngineOnFlag（非 Signal Group、シグナル単位）:
+  RxTOutCbk = Rte_COMCbkRxTOut_EngineOnFlag
+  Com_MainFunction() のシグナル単位ループが Com_SigTimedOut[s] を
+  新規に立てた瞬間、1回だけ呼ぶ
+
+AbsInfo（Signal Group、グループ単位）:
+  RxTOutCbk = Rte_COMCbkRxTOut_AbsInfo
+  Com_MainFunction() の I-PDU 単位ループが Com_RxTimedOut[id] を
+  新規に立てた瞬間、ipdu->IsSignalGroup!=0 を条件に1回だけ呼ぶ
+```
+
+**この機能は実際に発動するか**: **発動します（実機検証済み）**。`EngineInfo`/
+`AbsInfo` いずれも本番で継続的に受信されるデッドライン監視対象であり、
+「タイムアウト確認手順」節の手順（送信元シミュレータを止める）を
+そのまま踏襲するだけで実機で確実に発動します。既存の
+`WARN Com: RX timeout sig=... iPdu=...`/`WARN Com: RX timeout iPdu=...`
+ログの直後に、それぞれ `Rte: EngineInfo RX deadline timeout
+(EngineOnFlag)`/`Rte: AbsInfo RX deadline timeout (group)` が出力される
+ことを確認できます。実機ログ抜粋:
+```
+[6157ms] WARN  Com: Com_MainFunction: RX timeout iPdu=0 (5000ms, first)
+[6163ms] WARN  Com: Com_MainFunction: RX timeout iPdu=1 (5000ms, first)
+[6169ms] WARN  Rte: Rte_COMCbkRxTOut_AbsInfo: AbsInfo RX deadline timeout (group)
+[6177ms] WARN  Com: Com_MainFunction: RX timeout sig=0 iPdu=0 (5000ms, first)
+[6183ms] WARN  Com: Com_MainFunction: RX timeout sig=1 iPdu=0 (5000ms, first)
+[6190ms] WARN  Com: Com_MainFunction: RX timeout sig=2 iPdu=0 (5000ms, first)
+[6197ms] WARN  Rte: Rte_COMCbkRxTOut_EngineOnFlag: EngineInfo RX deadline timeout (EngineOnFlag)
+```
+I-PDU 単位ループがシグナル単位ループより先に実行されるため、グループ単位
+（`AbsInfo`）の通知がシグナル単位（`EngineOnFlag`）の通知より先に出力される
+（`Com_MainFunction()` 内のループ順序どおり）。`Com_CbkTxTOut`（発動しない）とは対照的に、TX/RX
+両方の送受信デッドライン監視コールバックのうち、実機で実際に発動するのは
+こちら側のみです（理由: TX 側は Bus-Off が `Can_Write()` を同期的に
+失敗させるため「送信済み・未確認」状態自体が生まれないのに対し、RX 側は
+単に「相手が送ってこない」だけで確実に成立するシナリオのため）。
+
 ## TX 送信デッドライン監視（Com_CbkTxTOut）
 
 RX 側の受信デッドライン監視（上記）と対をなす、TX 側の送信確認デッドライン
@@ -1305,13 +1365,15 @@ dispatch/confirmation の同期性に依存しない設計にしている**: `Ca
 （`Rte_COMRxInd_EngineInfo`/`Rte_COMRxInd_AbsInfo`/`Rte_COMRxInd_SecureCommand`）
 へ改名しました。
 
-**副産物として見つかった未実装のコールバック**: この調査で `Com_CbkRxTOut`
-（[SWS_Com_00556]、RX 側デッドライン監視のタイムアウト通知、RTE 名
-`Rte_COMCbkRxTOut_<sn>/<sg>`）という、`Com_CbkTxTOut` と対をなす仕様上の
-コールバックが未実装であることも判明しました。現状の受信デッドライン監視
-（`Com_RxTimedOut[]`）は内部フラグを立てて `Com_ReceiveSignal()` が
-`E_NOT_OK` を返すのみで、明示的なコールバック通知は行っていません。
-命名整合とは独立した機能ギャップのため、対応するかどうかは別途判断します。
+**副産物として見つかった未実装のコールバック（2026-08、別ラウンドで対応済み）**:
+この調査で `Com_CbkRxTOut`（[SWS_Com_00556]、RX 側デッドライン監視の
+タイムアウト通知、RTE 名 `Rte_COMCbkRxTOut_<sn>/<sg>`）という、
+`Com_CbkTxTOut` と対をなす仕様上のコールバックが未実装であることも
+判明しました。当時の受信デッドライン監視（`Com_RxTimedOut[]`）は内部
+フラグを立てて `Com_ReceiveSignal()` が `E_NOT_OK` を返すのみで、明示的な
+コールバック通知は行っていませんでした。命名整合とは独立した機能ギャップ
+だったため対応を見送っていましたが、直後のラウンドで実装しました
+（詳細は「受信デッドライン監視」節の「Com_CbkRxTOut」小節参照）。
 
 ## update-bit の受信側判定（discard）
 
