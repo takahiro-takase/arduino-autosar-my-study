@@ -91,6 +91,7 @@
 #define DEM_API_ID_GET_EVENT_ID_OF_DTC              0x27U
 #define DEM_API_ID_CLEAR_DTC                        0x28U
 #define DEM_API_ID_GET_OCCURRENCE_COUNTER_OF_EVENT  0x29U
+#define DEM_API_ID_GET_SUPPORTED_DTCS               0x2AU
 #define DEM_API_ID_GET_VERSION_INFO                 0x00U
 
 /** バージョン情報（SWS_Dem、Com/E2EXf/PduR 等の既存モジュールと同じ命名規則） */

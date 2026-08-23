@@ -112,6 +112,8 @@
               { "label": "Active only (0x08)", "payload": ["0x03", "0x19", "0x02", "0x08"] }
           ]
         },
+        { "label": "対応DTC全件取得\n(0x19/0A)", "type": "raw",
+          "payload": ["0x02", "0x19", "0x0A"] },
         { "label": "FreezeFrame取得\n(0x19/04)", "type": "raw",
           "payload": ["0x06", "0x19", "0x04", "0x00", "0x01", "0x01", "0x01"] },
         { "label": "ExtendedData取得\n(0x19/06)", "type": "raw",

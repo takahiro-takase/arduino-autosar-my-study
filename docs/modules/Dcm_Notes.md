@@ -58,6 +58,7 @@ CAN 0x100（EngineInfo）・0x110（AbsInfo）・0x7E0（診断要求）は PduR
 |  |  |  | 0x02<br>(DTC一覧取得) | `03 19 02 MM 00 00 00 00` | byte3=statusMask |
 |  |  |  | 0x04<br>(FreezeFrame取得) | `06 19 04 HH MM LL RR 00` | byte3-5=DTCコード<br>byte6=recordNumber（固定0x01） |
 |  |  |  | 0x06<br>(ExtendedData取得) | `06 19 06 HH MM LL RR 00` | byte3-5=DTCコード<br>byte6=recordNumber（固定0x01） |
+|  |  |  | 0x0A<br>(サポートDTC一覧取得) | `02 19 0A 00 00 00 00 00` | 追加パラメータなし。statusMask による絞り込みを一切行わず、本 ECU が対応する DEM_EVENT_COUNT 件全てを返す（後述） |
 | 0x22<br>ReadDataByIdentifier | ○ | ○ | — | `03 22 HH LL 00 00 00 00` | byte2-3=DID（0x0101/0x0102/0x0103/0x0104） |
 | 0x27<br>SecurityAccess | × | ○ | 0x01<br>(requestSeed) | `02 27 01 00 00 00 00 00` | seed 2 バイト |
 |  |  |  | 0x02<br>(sendKey) | `04 27 02 HH LL 00 00 00` | byte2-3=key（big-endian） |
@@ -79,6 +80,59 @@ Def/Ext 列は `Dcm_SidSessionTable[]`（Dcm_Cbk.c）の設定そのもので、
 statusMask の代表値: `0x08`=confirmedDTC のみ / `0xFF`=全件。
 0x19/04 の応答は 18 バイトと SF の 7 バイト制限を超えるため CanTp が FF+CF に分割します
 （詳細は [`Dem_Notes.md`](./Dem_Notes.md) の「FreezeFrame」節）。0x19/02 も 2 件以上ヒットすると同様にマルチフレームになります。
+
+### 0x19/0A reportSupportedDTC（2026-08 追加、GitHub Issue #122）
+
+外部の方から「0x19 の subFunc 0x0A も対応してほしい」という要望
+（Issue #122）を受けて追加しました。ISO 14229-1 の定義上、0x0A は
+0x02（reportDTCByStatusMask）と応答フォーマットは同じですが、
+**statusMask による絞り込みを一切行わない**点が異なります
+（"the server shall report ... regardless of their status"）。
+
+`Dem_GetAllDTCs()`（0x01/0x02 が使う既存関数）はステータスバイトと
+`statusMask` の AND が非ゼロの DTC のみを返すため、一度も故障判定が
+完了していない（`DEM_STATUS_NOT_COMPLETED_SINCE_CLEAR` 以外のビットが
+すべて 0 の）DTC は、どんな `statusMask` を渡しても列挙できません
+（`(status & statusMask)` は該当ビットが 0 なら常に 0 のため）。
+「本 ECU がそもそもどの DTC に対応しているか」を問う 0x0A の要求には
+これでは応えられないため、絞り込みを一切行わず `Dem_DtcTable[]` の
+全件（`DEM_EVENT_COUNT` 件）を無条件に返す `Dem_GetSupportedDTCs()`
+を新設し、`Dcm_HandleReadDtcSupported()` から呼んでいます
+（詳細は `Dem.h`/`Dem.c` の該当コメント参照）。
+
+**ユニットテストについて**: 本プロジェクトは従来、Dcm/Dem を実機 +
+`uds_tester` の手動検証のみで確認しており、ユニットテストが存在
+しませんでした（Com/Can とは異なる扱い）。今回、この状況を変えて
+`[env:native_dcm]`（`platformio.ini`・`test/test_dcm/` 参照）を新設し、
+`Dcm_ComIndication()` に生の UDS バイト列を渡して `CanTp_Transmit()`
+（フェイクでキャプチャ）の応答を検証する形で 0x19 の主要 subFunc を
+カバーしました。実機での動作確認はこれとは別に行います。
+
+**uds_tester での動作確認**: `config.json` に「対応DTC全件取得 (0x19/0A)」
+ボタン（`02 19 0A`）を追加しました。応答デコード実装
+（`app.py::_decode_dtc_response`）で 0x02 と共通のDTCリスト解析ロジックを
+使うようにした際、既存の 0x02 側にも「statusAvailMask バイトを1件目の
+DTCの先頭バイトとして誤読する」1バイトのオフセットずれが見つかったため、
+あわせて修正しています（0x02 は DTC 0 件の応答が多く、これまで実害が
+表面化していませんでした）。
+
+**実機ログで発覚したバグ（CanTp 側のバッファサイズ）**: 実機検証で
+subFunc 0x0A の応答が一切送信されない不具合が見つかりました。
+`Dcm_TxBuf` は `DEM_EVENT_COUNT` 変化に自動追従するサイズだった一方、
+下流の `CanTp_Transmit()` が独自に持つ TX バッファ上限（固定値 32 バイト）
+が連動しておらず、`DEM_EVENT_COUNT=10` での 0x0A 応答（43 バイト）を
+常に「invalid len」で拒否していました。`[env:native_dcm]` のユニット
+テストは `CanTp_fake.c` を使うためこの層のチェックを再現しておらず、
+検出できませんでした。詳細と修正内容は
+[`CanTp_Notes.md`](./CanTp_Notes.md) の該当節を参照してください。
+
+`CANTP_TX_BUFFER_SIZE` を修正後（最終的に48バイト。ISO-TPのフレーム境界に
+一致し、`DEM_EVENT_COUNT` の今後の増加にも余裕を持たせた値。詳細は
+[`CanTp_Notes.md`](./CanTp_Notes.md) 参照）、実機で再検証済みです。
+FF（len=43）が受理され、CF×6（sn=1〜6）まで正しく送信完了
+（`CanTp_SendNextCF: TX done`）し、応答バイト列を手動デコードすると
+`DEM_EVENT_COUNT=10` 件全ての DTC レコードが正しい順序で組み立てられて
+いることを確認しました。
 
 ## DID 一覧（0x22 ReadDataByIdentifier）
 

@@ -10,7 +10,7 @@
  *            0x11 ECUReset (hardReset / softReset)
  *            0x14 ClearDiagnosticInformation (groupOfDTC=0xFFFFFF で全クリア、
  *              特定 DTC コード指定で 1 件クリア) — extendedSession + SecurityAccess Level1 必須
- *            0x19 ReadDTCInformation (subFunc 0x01/0x02/0x04/0x06) — マルチフレーム対応
+ *            0x19 ReadDTCInformation (subFunc 0x01/0x02/0x04/0x06/0x0A) — マルチフレーム対応
  *            0x22 ReadDataByIdentifier (DID 0x0101-0x0103, 0x0104)
  *            0x27 SecurityAccess (subFunc 0x01 requestSeed / 0x02 sendKey) — extendedSession 限定
  *            0x2E WriteDataByIdentifier (DID 0x0104 TestPattern、
@@ -174,6 +174,7 @@
 #define DCM_DTC_SUBFUNC_REPORT_BY_MASK   0x02U  /**< reportDTCByStatusMask         */
 #define DCM_DTC_SUBFUNC_REPORT_SNAPSHOT  0x04U  /**< reportDTCSnapshotRecordByDTCNumber */
 #define DCM_DTC_SUBFUNC_REPORT_EXTDATA   0x06U  /**< reportExtendedDataRecordByDTCNumber */
+#define DCM_DTC_SUBFUNC_REPORT_SUPPORTED 0x0AU  /**< reportSupportedDTC            */
 
 /** ISO 14229-1 DTC フォーマット識別子 (0x01 = ISO 15031-6 / SAE J2012) */
 #define DCM_DTC_FORMAT_ISO15031         0x01U

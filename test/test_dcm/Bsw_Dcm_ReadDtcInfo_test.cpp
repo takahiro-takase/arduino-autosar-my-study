@@ -1,0 +1,186 @@
+/**
+ * \file    Bsw_Dcm_ReadDtcInfo_test.cpp
+ * \brief   UDS SID 0x19 ReadDTCInformation の単体テスト（GoogleTest /
+ *          PlatformIO `[env:native_dcm]`）。
+ *
+ * \details 本プロジェクトで Dcm_Cbk.c/Dem.c を対象とする初めてのユニット
+ *          テスト（platformio.ini `[env:native_dcm]` 冒頭のコメント参照）。
+ *          GitHub Issue #122（subFunc 0x0A reportSupportedDTC の追加要望）
+ *          への対応をきっかけに新設した。
+ *
+ *          `Dcm_ComIndication()` に生の UDS バイト列を直接渡し、
+ *          `CanTp_Transmit()`（`CanTp_fake.h` でキャプチャ）へ渡された応答を
+ *          検証する、という「入口と出口だけを見る」ブラックボックステスト。
+ *          CanTp/PduR/CanIf/Can は経由しない（`Dcm_ComIndication()` 自体が
+ *          「CanTp が組み立てた生 UDS ペイロードを受け取る」入口のため）。
+ *
+ *          既存 subFunc（0x01/0x02/0x04/0x06）は今回追加した 0x0A との
+ *          対比・将来の回帰検知のため最小限のみカバーする。全 UDS サービス
+ *          の網羅は本ファイルのスコープ外。
+ */
+#include <gtest/gtest.h>
+
+extern "C" {
+#include "Dcm.h"
+#include "Dcm_Cfg.h"
+#include "Dem.h"
+#include "CanTp_fake.h"
+#include "Hal_Millis_fake.h"
+#include "Hal_Det_Hw_fake.h"
+}
+
+namespace
+{
+
+class Bsw_Dcm_ReadDtcInfo_Test : public ::testing::Test
+{
+protected:
+    void SetUp() override
+    {
+        FakeMillis_Reset();
+        FakeCanTp_Reset();
+        FakeDetHw_LogSuppressed = 1U;  // Init() のログはノイズになるため抑制
+
+        Dem_Init(NULL);
+        Dcm_Init(NULL);
+
+        FakeDetHw_LogSuppressed = 0U;  // ここから各 TEST_F の実行(Act)区間
+    }
+
+    void TearDown() override
+    {
+        FakeDetHw_LogSuppressed = 1U;
+    }
+
+    /** [0x19, subFunc, ...] を組み立てて Dcm_ComIndication() へ直接渡す。 */
+    void SendReadDtcInfo(const uint8* payload, uint8 len)
+    {
+        PduInfoType pdu = { const_cast<uint8*>(payload), len };
+        Dcm_ComIndication(0U, &pdu);
+    }
+};
+
+// ------------------------------------------------------------
+// subFunc 0x0A reportSupportedDTC（今回の追加分、GitHub Issue #122）
+// ------------------------------------------------------------
+
+TEST_F(Bsw_Dcm_ReadDtcInfo_Test, ReadDtcSupported_OK_ReturnsAllConfiguredDtcsRegardlessOfStatus)
+{
+    /* 準備 (Arrange): [0x19, 0x0A]（追加パラメータなし） */
+    uint8 req[2] = { DCM_SID_READ_DTC_INFO, DCM_DTC_SUBFUNC_REPORT_SUPPORTED };
+
+    /* 実行 (Act) */
+    SendReadDtcInfo(req, sizeof(req));
+
+    /* 評価 (Assert): [0x59, 0x0A, availMask, (DTC_H,DTC_M,DTC_L,status) x DEM_EVENT_COUNT]
+     * を、Dem_Init() 直後の状態（1件も FAILED になっていない）でも
+     * DEM_EVENT_COUNT 件全て返す（reportDTCByStatusMask との違いそのもの）。 */
+    ASSERT_EQ(FakeCanTp_TransmitCount, 1U);
+    ASSERT_EQ(FakeCanTp_TxLength, (uint8)(3U + DEM_EVENT_COUNT * 4U));
+    EXPECT_EQ(FakeCanTp_TxBuf[0], 0x59U);
+    EXPECT_EQ(FakeCanTp_TxBuf[1], DCM_DTC_SUBFUNC_REPORT_SUPPORTED);
+    EXPECT_EQ(FakeCanTp_TxBuf[2], DEM_STATUS_AVAILABILITY_MASK);
+}
+
+TEST_F(Bsw_Dcm_ReadDtcInfo_Test, ReadDtcSupported_OK_DiffersFromReportByStatusMaskWithImpossibleMask)
+{
+    /* 準備 (Arrange): reportDTCByStatusMask (0x02) を、どの DTC のステータス
+     * とも一致しないマスク (0x00) で送る。AND 演算の定義上、0x00 マスクは
+     * 何にも一致しないため 0 件になるはず。 */
+    uint8 reqByMask[3] = { DCM_SID_READ_DTC_INFO, DCM_DTC_SUBFUNC_REPORT_BY_MASK, 0x00U };
+    SendReadDtcInfo(reqByMask, sizeof(reqByMask));
+    ASSERT_EQ(FakeCanTp_TransmitCount, 1U);
+    /* 応答: [0x59, 0x02, availMask] のみ（0 件時は DTC 列挙部分が無い） */
+    ASSERT_EQ(FakeCanTp_TxLength, 3U);
+
+    /* 実行 (Act): 同じ Dem 状態のまま reportSupportedDTC (0x0A) を送る */
+    FakeCanTp_Reset();
+    uint8 reqSupported[2] = { DCM_SID_READ_DTC_INFO, DCM_DTC_SUBFUNC_REPORT_SUPPORTED };
+    SendReadDtcInfo(reqSupported, sizeof(reqSupported));
+
+    /* 評価 (Assert): マスクによる絞り込みを一切行わないため、0x02/mask=0x00 が
+     * 0 件だったのと対照的に DEM_EVENT_COUNT 件全て返る。これが
+     * reportSupportedDTC の存在意義そのもの（Dem_GetSupportedDTCs() の
+     * 実装コメント参照）。 */
+    ASSERT_EQ(FakeCanTp_TransmitCount, 1U);
+    EXPECT_EQ(FakeCanTp_TxLength, (uint8)(3U + DEM_EVENT_COUNT * 4U));
+}
+
+// ------------------------------------------------------------
+// 既存 subFunc の最小回帰（0x0A 追加による既存ディスパッチへの影響がないこと）
+// ------------------------------------------------------------
+
+TEST_F(Bsw_Dcm_ReadDtcInfo_Test, ReadDtcCount_OK_ReturnsZeroFailedWhenNothingFailedYet)
+{
+    /* 準備 (Arrange): [0x19, 0x01, statusMask=DEM_STATUS_TEST_FAILED]。
+     * Dem_Init() 直後は DEM_STATUS_NOT_COMPLETED_SINCE_CLEAR ビットが全
+     * イベントで立っている（まだ一度もテストが完了していないため）ので、
+     * statusMask=0xFF だと全件ヒットしてしまう。「実際に FAILED した
+     * DTC の件数」を問うテストにするため、testFailed ビットのみを
+     * マスクに使う。 */
+    uint8 req[3] = { DCM_SID_READ_DTC_INFO, DCM_DTC_SUBFUNC_REPORT_COUNT, DEM_STATUS_TEST_FAILED };
+
+    /* 実行 (Act) */
+    SendReadDtcInfo(req, sizeof(req));
+
+    /* 評価 (Assert): [0x59, 0x01, availMask, format, countH, countL]。
+     * Dem_Init() 直後は 1 件も FAILED になっていないため countL=0。 */
+    ASSERT_EQ(FakeCanTp_TransmitCount, 1U);
+    ASSERT_EQ(FakeCanTp_TxLength, 6U);
+    EXPECT_EQ(FakeCanTp_TxBuf[0], 0x59U);
+    EXPECT_EQ(FakeCanTp_TxBuf[1], DCM_DTC_SUBFUNC_REPORT_COUNT);
+    EXPECT_EQ(FakeCanTp_TxBuf[5], 0U);  // countL
+}
+
+TEST_F(Bsw_Dcm_ReadDtcInfo_Test, ReadDtcCount_OK_StatusMask0xFFMatchesNotCompletedSinceClear)
+{
+    /* 準備 (Arrange): [0x19, 0x01, statusMask=0xFF]。上のテストとの対比
+     * （0x0A reportSupportedDTC が「ステータスに関わらず全件」を返すのとは
+     * 異なり、0x01/0x02 はあくまでステータスマスクによる絞り込みである
+     * ことを裏付ける）。 */
+    uint8 req[3] = { DCM_SID_READ_DTC_INFO, DCM_DTC_SUBFUNC_REPORT_COUNT, 0xFFU };
+
+    /* 実行 (Act) */
+    SendReadDtcInfo(req, sizeof(req));
+
+    /* 評価 (Assert): DEM_STATUS_NOT_COMPLETED_SINCE_CLEAR ビットが
+     * DEM_STATUS_AVAILABILITY_MASK に含まれるため、Dem_Init() 直後の
+     * 全イベントがこのビットを立てており、0xFF マスクには全件ヒットする。 */
+    ASSERT_EQ(FakeCanTp_TransmitCount, 1U);
+    ASSERT_EQ(FakeCanTp_TxLength, 6U);
+    EXPECT_EQ(FakeCanTp_TxBuf[5], (uint8)DEM_EVENT_COUNT);  // countL
+}
+
+TEST_F(Bsw_Dcm_ReadDtcInfo_Test, ReadDtcInfo_NG_UnsupportedSubFuncReturnsNegativeResponse)
+{
+    /* 準備 (Arrange): 未対応の subFunc（0x0A と離れた値を使い、将来 0x0B 等が
+     * 追加されても意図せず衝突しないようにする） */
+    uint8 req[2] = { DCM_SID_READ_DTC_INFO, 0x55U };
+
+    /* 実行 (Act) */
+    SendReadDtcInfo(req, sizeof(req));
+
+    /* 評価 (Assert): [0x7F, 0x19, 0x12 subFunctionNotSupported] */
+    ASSERT_EQ(FakeCanTp_TransmitCount, 1U);
+    ASSERT_EQ(FakeCanTp_TxLength, 3U);
+    EXPECT_EQ(FakeCanTp_TxBuf[0], DCM_SID_NEGATIVE_RESP);
+    EXPECT_EQ(FakeCanTp_TxBuf[1], DCM_SID_READ_DTC_INFO);
+    EXPECT_EQ(FakeCanTp_TxBuf[2], DCM_NRC_SUB_FUNC_NOT_SUPPORTED);
+}
+
+TEST_F(Bsw_Dcm_ReadDtcInfo_Test, ReadDtcInfo_NG_TooShortRequestReturnsNegativeResponse)
+{
+    /* 準備 (Arrange): SID のみ（subFunc すら無い） */
+    uint8 req[1] = { DCM_SID_READ_DTC_INFO };
+
+    /* 実行 (Act) */
+    SendReadDtcInfo(req, sizeof(req));
+
+    /* 評価 (Assert): [0x7F, 0x19, 0x22 conditionsNotCorrect] */
+    ASSERT_EQ(FakeCanTp_TransmitCount, 1U);
+    ASSERT_EQ(FakeCanTp_TxLength, 3U);
+    EXPECT_EQ(FakeCanTp_TxBuf[0], DCM_SID_NEGATIVE_RESP);
+    EXPECT_EQ(FakeCanTp_TxBuf[2], DCM_NRC_CONDITIONS_NOT_CORRECT);
+}
+
+}  // namespace

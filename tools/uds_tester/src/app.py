@@ -420,24 +420,52 @@ class UdsTesterFrame(ttk.Frame):
                     cell = ttk.Frame(inner)
                     cell.grid(row=row, column=2, padx=(0, 4), pady=(3, 1), sticky="w")
                     cell.bind("<MouseWheel>", _scroll)
-                    data_entry = ttk.Entry(cell, textvariable=data_var, width=30,
-                                           font=("Consolas", 9))
-                    data_entry.pack(side="left")
-                    data_entry.bind("<MouseWheel>", _scroll)
-                    combo_vals = [p["label"] for p in presets] if presets else ["-"]
-                    combo = ttk.Combobox(cell, values=combo_vals,
-                                         state="readonly", width=40, font=("", 9))
-                    combo.pack(side="left", padx=(4, 0))
-                    combo.bind("<MouseWheel>", _scroll)
+                    # 送信データ入力欄: Entry+読み取り専用Comboboxだったものを、
+                    # 直接編集も▼からのプリセット選択も両方できる1つの
+                    # editable Combobox に統合（state を指定しない = 既定 "normal"）。
+                    combo_vals = [p["label"] for p in presets]
+                    data_combo = ttk.Combobox(cell, textvariable=data_var,
+                                              values=combo_vals, width=30,
+                                              font=("Consolas", 9))
+                    data_combo.pack(side="left")
+                    data_combo.bind("<MouseWheel>", _scroll)
                     if presets:
-                        def _on_preset(event, var=data_var, ps=presets, cb=combo):
+                        def _on_preset(event, var=data_var, ps=presets, cb=data_combo):
                             sel = cb.current()
                             if sel >= 0:
                                 vals = ps[sel].get("payload") or ps[sel].get("data") or []
                                 var.set(_hex_str(vals))
                             cb.selection_clear()
-                        combo.bind("<<ComboboxSelected>>", _on_preset)
+                        data_combo.bind("<<ComboboxSelected>>", _on_preset)
                     self._entry_vars.setdefault(i, {})["data"] = data_var
+
+                    # 送信データのライブ説明（旧: 読み取り専用Comboboxがあった場所）。
+                    # 受信データ説明 (_decode_response) と対になる送信側表示。
+                    # multiframe は PCIバイトを持たない生UDSバイト列（send_multiframe_
+                    # request() 参照）、それ以外(raw/security_*)は byte0=PCI。
+                    has_pci = t != "multiframe"
+                    tx_desc_var = tk.StringVar(value="")
+                    tx_desc_lbl = ttk.Label(cell, textvariable=tx_desc_var,
+                                            font=("Consolas", 9),
+                                            foreground="#3a7ebf", width=40, anchor="w")
+                    tx_desc_lbl.pack(side="left", padx=(6, 0))
+                    tx_desc_lbl.bind("<MouseWheel>", _scroll)
+
+                    def _update_tx_desc(*_args, var=data_var, dvar=tx_desc_var,
+                                        has_pci=has_pci):
+                        try:
+                            payload = self._parse_hex_bytes(var.get())
+                        except ValueError:
+                            dvar.set("")
+                            return
+                        uds = payload[1:] if has_pci else payload
+                        try:
+                            dvar.set(self._decode_request(uds))
+                        except (IndexError, ValueError):
+                            dvar.set("")
+
+                    data_var.trace_add("write", _update_tx_desc)
+                    _update_tx_desc()
 
                 # RX 行 (下段): CAN ID=0x7E8 + 受信データ(自動更新)
                 rx_id = ttk.Label(inner, text="0x7E8", font=("Consolas", 9),
@@ -517,17 +545,17 @@ class UdsTesterFrame(ttk.Frame):
                 cell = ttk.Frame(inner)
                 cell.grid(row=row, column=2, padx=(0, 4), pady=2, sticky="w")
                 cell.bind("<MouseWheel>", _scroll)
-                data_entry = ttk.Entry(cell, textvariable=data_var, width=30,
-                                       font=("Consolas", 9))
-                data_entry.pack(side="left")
-                data_entry.bind("<MouseWheel>", _scroll)
-                combo_vals = [p["label"] for p in presets] if presets else ["-"]
-                combo = ttk.Combobox(cell, values=combo_vals,
-                                     state="readonly", width=40, font=("", 9))
-                combo.pack(side="left", padx=(4, 0))
-                combo.bind("<MouseWheel>", _scroll)
+                # 送信データ入力欄: Entry+読み取り専用Comboboxだったものを、
+                # 直接編集も▼からのプリセット選択も両方できる1つの
+                # editable Combobox に統合（state を指定しない = 既定 "normal"）。
+                combo_vals = [p["label"] for p in presets]
+                data_combo = ttk.Combobox(cell, textvariable=data_var,
+                                          values=combo_vals, width=30,
+                                          font=("Consolas", 9))
+                data_combo.pack(side="left")
+                data_combo.bind("<MouseWheel>", _scroll)
                 if presets:
-                    def _on_preset(event, var=data_var, ps=presets, cb=combo,
+                    def _on_preset(event, var=data_var, ps=presets, cb=data_combo,
                                    ecfg=_e2e_cfg_btn, scfg=_secoc_cfg_btn):
                         sel = cb.current()
                         if sel >= 0:
@@ -559,7 +587,7 @@ class UdsTesterFrame(ttk.Frame):
                             else:
                                 var.set(_hex_str(vals))
                         cb.selection_clear()
-                    combo.bind("<<ComboboxSelected>>", _on_preset)
+                    data_combo.bind("<<ComboboxSelected>>", _on_preset)
                 self._entry_vars.setdefault(i, {})["data"] = data_var
 
                 # 送信ボタン (col 3)
@@ -1345,15 +1373,19 @@ class UdsTesterFrame(ttk.Frame):
         sub = raw[1]
         if sub == 0x01 and len(raw) >= 3:
             return f"DTC count = {raw[2]}"
-        if sub == 0x02:
+        if sub in (0x02, 0x0A):
+            # 応答: [0x59, subFunc, statusAvailMask, (DTC_H,DTC_M,DTC_L,status) x N]
+            # DTCレコードは raw[3] から始まる（raw[2] は statusAvailMask であり
+            # DTCの一部ではない。以前は raw[2] から読んでおり1バイトずれていた）。
             entries = []
-            i = 2
+            i = 3
             while i + 4 <= len(raw):
                 dtc = (raw[i] << 16) | (raw[i + 1] << 8) | raw[i + 2]
                 status = raw[i + 3]
                 entries.append(f"{uds_link.dtc_name(dtc)} (status=0x{status:02X})")
                 i += 4
-            return "; ".join(entries) if entries else "(no DTC)"
+            label = "no supported DTC" if sub == 0x0A else "no DTC"
+            return "; ".join(entries) if entries else f"({label})"
         if sub == 0x04 and len(raw) >= 7:
             dtc = (raw[2] << 16) | (raw[3] << 8) | raw[4]
             data = " ".join(f"{b:02X}" for b in raw[6:])
@@ -1362,6 +1394,69 @@ class UdsTesterFrame(ttk.Frame):
             dtc = (raw[2] << 16) | (raw[3] << 8) | raw[4]
             return f"ExtendedData {uds_link.dtc_name(dtc)} record={raw[5]} occurrence={raw[7]}"
         return " ".join(f"{b:02X}" for b in raw)
+
+    def _decode_request(self, uds: bytes) -> str:
+        """送信データボックスの内容（PCIバイトを除いた UDS ペイロード、
+        uds[0]=SID）を、_decode_response と対になる簡易説明文へ変換する
+        （送信データボックス脇のライブ表示用）。config.json に現れる
+        SID/subFunc のみ対応する網羅的でないデコーダで、対応外は
+        SID名（不明なら "SID 0xXX"）のみを返す。"""
+        if not uds:
+            return ""
+        sid = uds[0]
+        name = uds_link.SID_NAMES.get(sid, f"SID 0x{sid:02X}")
+        if sid == 0x10 and len(uds) >= 2:
+            return f"{name}: {uds_link.SESSION_NAMES.get(uds[1], f'0x{uds[1]:02X}')}"
+        if sid == 0x11 and len(uds) >= 2:
+            return f"{name}: {uds_link.RESET_TYPE_NAMES.get(uds[1], f'0x{uds[1]:02X}')}"
+        if sid == 0x14 and len(uds) >= 4:
+            grp = (uds[1] << 16) | (uds[2] << 8) | uds[3]
+            suffix = " (all)" if grp == 0xFFFFFF else ""
+            return f"{name}: group=0x{grp:06X}{suffix}"
+        if sid == 0x19 and len(uds) >= 2:
+            return self._decode_dtc_request(uds)
+        if sid == 0x22 and len(uds) >= 3:
+            did = (uds[1] << 8) | uds[2]
+            return f"{name}: {uds_link.DID_NAMES.get(did, f'DID 0x{did:04X}')}"
+        if sid == 0x27 and len(uds) >= 2:
+            sub_names = {0x01: "requestSeed", 0x02: "sendKey"}
+            sub_name = sub_names.get(uds[1], f"0x{uds[1]:02X}")
+            extra = ""
+            if uds[1] == 0x02 and len(uds) >= 4:
+                extra = f" key=0x{(uds[2] << 8) | uds[3]:04X}"
+            return f"{name}: {sub_name}{extra}"
+        if sid == 0x28 and len(uds) >= 3:
+            ctrl = uds_link.COMM_CONTROL_TYPE_NAMES.get(uds[1], f"0x{uds[1]:02X}")
+            comm = uds_link.COMM_TYPE_NAMES.get(uds[2], f"0x{uds[2]:02X}")
+            return f"{name}: {ctrl} / {comm}"
+        if sid == 0x2E and len(uds) >= 3:
+            did = (uds[1] << 8) | uds[2]
+            # WriteDataByIdentifier の要求値は ReadDataByIdentifier 応答と
+            # 同じ DID→表示ロジック（uds_link.decode_did_value）を流用できる。
+            return uds_link.decode_did_value(did, uds[3:])
+        if sid == 0x2F and len(uds) >= 4:
+            did = (uds[1] << 8) | uds[2]
+            did_name = uds_link.DID_NAMES.get(did, f"DID 0x{did:04X}")
+            opt_name = uds_link.IOCTRL_OPTION_NAMES.get(uds[3], f"0x{uds[3]:02X}")
+            level = f" level={uds[4]}" if len(uds) >= 5 else ""
+            return f"{did_name} {opt_name}{level}"
+        if sid == 0x31 and len(uds) >= 4:
+            sub_name = uds_link.ROUTINE_SUBFUNC_NAMES.get(uds[1], f"0x{uds[1]:02X}")
+            rid = (uds[2] << 8) | uds[3]
+            return f"{sub_name} RID={rid:04X}"
+        if sid == 0x36 and len(uds) >= 2:
+            return f"{name}: counter={uds[1]} data={len(uds) - 2}byte"
+        return name
+
+    def _decode_dtc_request(self, uds: bytes) -> str:
+        sub = uds[1]
+        sub_name = uds_link.DTC_SUBFUNC_NAMES.get(sub, f"0x{sub:02X}")
+        if sub in (0x01, 0x02) and len(uds) >= 3:
+            return f"ReadDTCInformation: {sub_name} mask=0x{uds[2]:02X}"
+        if sub in (0x04, 0x06) and len(uds) >= 6:
+            dtc = (uds[2] << 16) | (uds[3] << 8) | uds[4]
+            return f"ReadDTCInformation: {sub_name} {uds_link.dtc_name(dtc)} record={uds[5]}"
+        return f"ReadDTCInformation: {sub_name}"
 
     def _parse_interval_ms(self, entry_data: dict, btn_cfg, label: str,
                            default: int) -> "int | None":
