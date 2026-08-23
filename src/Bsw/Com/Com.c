@@ -1039,15 +1039,25 @@ static uint8 Com_FindSignalIndex(Com_SignalIdType SignalId)
  *          returned E_OK" のとおり）。失敗時はクリアせず、次回の再送で
  *          update-bit ごと正しく伝わるようにする。
  *
+ *          TxIpduCalloutCbk（[SWS_Com_00346]/[SWS_Com_00719]）: TxTransformCbk
+ *          適用後・PduR_Transmit() 呼び出し直前に、実際に送信される最終
+ *          バイト列を渡して呼ぶ。戻り値 0（false）ならこの送信は行わず
+ *          即座に E_NOT_OK を返す。「実際には PduR へ渡していない」ため、
+ *          PduR_Transmit() 自体が失敗した場合と同様に Com_TxConfPending は
+ *          セットしない・update-bit もクリアしない（詳細は下記コメント・
+ *          Com_Types.h の TxIpduCalloutCbk 参照）。
+ *
  * \param[in]  ipdu  送信する TX I-PDU 設定。NULL 禁止（呼び出し元で保証する）。
  * \param[in]  now   Com_MainFunction() が計算済みの現在時刻 [ms]（millis()
  *                   を再度呼ばず再利用する。TX 送信デッドライン監視の
  *                   アーム時刻記録に使う）。
  *
  * \retval  E_OK      PduR_Transmit() が成功した。
- * \retval  E_NOT_OK  PduR_Transmit() が失敗した。
+ * \retval  E_NOT_OK  PduR_Transmit() が失敗した、または TxIpduCalloutCbk が
+ *                     送信を拒否した（この場合 PduR_Transmit() 自体を呼ばない）。
  *
- * \AUTOSARReq     {SWS_Com_00062, SWS_Com_00878}
+ * \AUTOSARReq     {SWS_Com_00062, SWS_Com_00878, SWS_Com_00346, SWS_Com_00719,
+ *                   SWS_Com_00381}
  * \ServiceID      {0xF3}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
@@ -1056,6 +1066,16 @@ static Std_ReturnType Com_DoTransmit(const Com_IPduConfigType* ipdu, unsigned lo
 {
     if (ipdu->TxTransformCbk != NULL)
         ipdu->TxTransformCbk(Com_TxBuffer[ipdu->IPduId], ipdu->DLC);
+
+    if (ipdu->TxIpduCalloutCbk != NULL &&
+        ipdu->TxIpduCalloutCbk(Com_TxBuffer[ipdu->IPduId], ipdu->DLC) == 0U)
+    {
+        /* [SWS_Com_00346] false: 送信そのものを行わない。具体的な拒否理由は
+         * TxIpduCalloutCbk 自身が WARN で既に出力している想定のため、ここは
+         * DET_LOGD に留める（RxIpduCalloutCbk と同じ二重ログ回避の方針）。 */
+        DET_LOGD(TAG, "TX iPdu=%u rejected by TxIpduCallout", (unsigned)ipdu->IPduId);
+        return E_NOT_OK;
+    }
 
     char hexbuf[25];
     Log_HexStr(hexbuf, sizeof(hexbuf), Com_TxBuffer[ipdu->IPduId], ipdu->DLC);

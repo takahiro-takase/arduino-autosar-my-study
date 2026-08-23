@@ -539,7 +539,47 @@ typedef enum
 //               本プロジェクト独自フック）・RxAckCbk/RxTOutCbk（同じく格納後
 //               の通知）とは異なり、これは唯一「格納そのものを拒否できる」層
 //               であることに注意。NULL 可（フィルタ不要なら未設定でよい）。
-//               TX I-PDU では未使用（Com_TxIpduCallout は本実装では未対応）。
+//               TX I-PDU では未使用（TX 側の対になるフックは下記
+//               TxIpduCalloutCbk を参照）。
+//   TxIpduCalloutCbk : TX I-PDU 単位のフィルタリングフック（Com_TxIpduCallout、
+//               [SWS_Com_00346]: "The I-PDU callout on sender side can be
+//               configured ... to implement user-defined transmission
+//               filtering or user-defined pre-transmission-processing of
+//               the outgoing I-PDU."。ECUC_Com_00387 ComIPduCallout）。
+//               RxIpduCalloutCbk の送信側対（上記）。Com_DoTransmit() 内、
+//               TxTransformCbk（E2E/CRC 等の送信直前変換）適用後・
+//               PduR_Transmit() 呼び出し直前に、実際に送信される最終バイト列
+//               を渡して呼ぶ（[SWS_Com_00719]: "the AUTOSAR COM module shall
+//               invoke this I-PDU callout directly before the I-PDU is
+//               transmitted via PduR_ComTransmit"）。戻り値 0（false 相当）
+//               ならこの送信は行わない（[SWS_Com_00346] "false: I-PDU will
+//               not be processed any further"）。この場合 Com_TxConfPending
+//               はセットしない（実際には PduR へ渡していないため、届くはず
+//               のない Com_TxConfirmation() を待ってしまう＝TX 送信デッド
+//               ライン監視の誤発火を防ぐ）。update-bit もクリアしない
+//               （次回の実送信でも「値の更新あり」を正しく伝えるため。詳細は
+//               Com_DoTransmit() 内のコメント参照）。[SWS_Com_00381]
+//               （callout 内から呼んでよい Com API は Com_TriggerIPDUSend/
+//               Com_TriggerIPDUSendWithMetaData/Com_SendSignal/
+//               Com_SendSignalGroup のみ）は本実装では Com_TriggerIPDUSend
+//               系を未実装のため実質的な制約にならない。NULL 可（フィルタ
+//               不要なら未設定でよい）。RX I-PDU では未使用（RxIpduCalloutCbk
+//               側の RX 専用フックを使うこと）。
+//               既知の制約（/code-review で指摘、現状は未到達だが将来
+//               TxTransformCbk と同一 I-PDU で併用する場合は要注意）:
+//               TxTransformCbk は本コールバックより前に適用されるため、
+//               TxTransformCbk がバッファへ副作用（例: E2E Counter の単調
+//               増加）を持つ場合、その副作用はこのコールバックが送信を
+//               拒否した後も巻き戻らない（実際には送信されないのに
+//               Counter だけ進んでしまい、次に実際に送信されたフレームの
+//               Counter が受信側の期待値から飛ぶ）。[SWS_Com_00719] が
+//               「実際に送信される最終バイト列」を見せる規定である以上、
+//               順序自体は正しい（TxTransformCbk 適用前のバイト列を見せると
+//               規定に反する）。対応するなら副作用のない TxTransformCbk と
+//               組み合わせるか、システム統合者の責任で回避すること
+//               （[SWS_Com_00381] 直後の原文 "It is solely in the
+//               responsibility of the implementer of an I-PDU callout and
+//               the system integrator" と同じ考え方）。
 // -------------------------------------------------------
 typedef struct
 {
@@ -568,6 +608,7 @@ typedef struct
     void (*TxTOutCbk)(void);
     void (*RxTOutCbk)(void);
     uint8 (*RxIpduCalloutCbk)(const uint8* SduDataPtr, uint8 SduLength);
+    uint8 (*TxIpduCalloutCbk)(const uint8* SduDataPtr, uint8 SduLength);
 } Com_IPduConfigType;
 
 // -------------------------------------------------------
