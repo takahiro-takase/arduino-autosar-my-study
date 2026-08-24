@@ -193,6 +193,7 @@ extern void Rte_COMFilterReject_EngineSpeed(void);
 extern void Rte_COMCbkTAck_EngineState(void);
 extern void Rte_COMCbkTxTOut_EngineState(void);
 extern void Rte_COMCbkTAck_WarningStatus(void);
+extern void Rte_COMCbkTxTOut_WarningStatus(void);
 extern void Rte_COMCbk_EngineOnFlag(void);
 extern void Rte_COMCbk_AbsInfo(void);
 extern void Rte_COMRxInd_SecureCommand(void);
@@ -376,6 +377,10 @@ static const Com_IPduConfigType Com_TxIPduConfigData[COM_TX_IPDU_COUNT] = {
          * を設定し、グループ全体の送信成功をまとめて 1 回通知する
          * （MeterStatus/EngineState の TxAckCbk と対になる、Signal Group
          * 単位の実装例。2026-08 追加）。
+         * TxFirstTimeoutMs/TxTimeoutMs/TxTOutCbk（TX 送信デッドライン監視、
+         * SWS_Com_00878 等、2026-08 追加）: MeterStatus/EngineState と同じ
+         * 監視を Signal Group 単位で配線する。詳細は
+         * docs/modules/Com_Notes.md「TX 送信デッドライン監視」参照。
          * --------------------------------------------------------------- */
         .IPduId    = 1U,  /* DaVinci: ComIPduHandleId  - I-PDU 識別番号 */
         .DLC       = 1U,  /* DaVinci: ComIPduLength    - I-PDU バイト長
@@ -393,7 +398,10 @@ static const Com_IPduConfigType Com_TxIPduConfigData[COM_TX_IPDU_COUNT] = {
                                                *          (TMS true: FAULT/ABS 点灯中) */
         .TxPeriodMsTrue = COM_TX_PERIOD_WARNINGSTATUS_TRUE_FLOOR_MS,
         .MinDelayMs     = COM_TX_MIN_DELAY_WARNINGSTATUS_MS, /* DaVinci: ComMinimumDelayTime */
-        .TxAckCbk       = Rte_COMCbkTAck_WarningStatus /* DaVinci: ComNotification (ComSignalGroup) */
+        .TxAckCbk       = Rte_COMCbkTAck_WarningStatus, /* DaVinci: ComNotification (ComSignalGroup) */
+        .TxFirstTimeoutMs = COM_TX_TIMEOUT_WARNINGSTATUS_MS, /* DaVinci: ComTransmissionDeadlineMonitoring/ComFirstTimeout */
+        .TxTimeoutMs      = COM_TX_TIMEOUT_WARNINGSTATUS_MS, /* DaVinci: ComTransmissionDeadlineMonitoring/ComTimeout */
+        .TxTOutCbk        = Rte_COMCbkTxTOut_WarningStatus  /* DaVinci: ComTransmissionDeadlineMonitoring (ComSignalGroup) */
     },
     {
         /* ---------------------------------------------------------------

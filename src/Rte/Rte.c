@@ -341,6 +341,33 @@ void Rte_COMCbkTAck_WarningStatus(void)
 }
 
 /**
+ * \brief   WarningStatus フレームの送信確認タイムアウトを通知する
+ *          （Signal Group 単位）。
+ *
+ * \details Com_PBCfg.c の WarningStatus I-PDU 設定（Com_IPduConfigType.
+ *          TxTOutCbk）から登録される（実 AUTOSAR の Com_CbkTxTOut、
+ *          SWS_Com_00878/00879/00880/00304/00554 相当。SWS_Com_00554の
+ *          "Rte_COMCbkTAck_<sn> or Rte_COMCbkTAck_<sg> respectively" と
+ *          同じ区別が TxTOut にも適用される）。呼ばれるのは
+ *          Com_MainFunction() が WarningStatus（TX IPduId=1、Signal Group）
+ *          の送信確認が COM_TX_TIMEOUT_WARNINGSTATUS_MS 以内に届かなかった
+ *          ことを検出した直後。`Rte_COMCbkTAck_WarningStatus()` と対になる、
+ *          Signal Group 単位の実装例（`Rte_COMCbkTxTOut_EngineState()` の
+ *          Signal Group 版）。
+ *
+ * \note    実機では発動しない: 上記 `Rte_COMCbkTxTOut_EngineState()` と
+ *          同じ理由（同関数の Doxygen コメント参照）。
+ *
+ * \note    Com_PBCfg.c から extern 宣言経由で TxTOutCbk として参照されるため
+ *          non-static。Rte.h には公開しない（他の Rte_COM* グルーと同じ
+ *          理由）。
+ */
+void Rte_COMCbkTxTOut_WarningStatus(void)
+{
+    DET_LOGI(TAG, "WarningStatus TX confirmation timeout (group)");
+}
+
+/**
  * \brief   EngineInfo フレームの受信バッファ格納完了を通知する（非 Signal Group）。
  *
  * \details Com_PBCfg.c の EngineOnFlag シグナル設定（Com_SignalConfigType.

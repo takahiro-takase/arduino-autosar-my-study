@@ -228,6 +228,20 @@
 #define COM_TX_MIN_DELAY_WARNINGSTATUS_MS  100U
 
 /**
+ * WarningStatus (0x210) の TX 送信デッドライン監視（Com_CbkTxTOut、
+ * SWS_Com_00878 等）用の First/Timeout 共通値 [ms]
+ * DaVinci: /ActiveEcuC/Com/ComConfig/[ComIPdu]/ComTransmissionDeadlineMonitoring
+ *
+ * MeterStatus の COM_TX_TIMEOUT_METERSTATUS_MS と同じ流儀（First/Timeout
+ * 共通で使う）。WarningStatus は DIRECT モード（TMS=false）中は周期送信を
+ * 持たないが、TMS=true 中の MIXED 周期フロア
+ * （COM_TX_PERIOD_WARNINGSTATUS_TRUE_FLOOR_MS=2000ms）と同じ桁に揃える。
+ * 背景・実機での発動可否は docs/modules/Com_Notes.md「TX 送信デッドライン
+ * 監視」参照。
+ */
+#define COM_TX_TIMEOUT_WARNINGSTATUS_MS  2000U
+
+/**
  * ImmobilizerStatus (0x230) の ComTxModeNumberOfRepetitions 再送間隔
  * （ComTxModeRepetitionPeriod）[ms]
  * DaVinci: /ActiveEcuC/Com/ComConfig/[ComIPdu]/ComTxModeRepetitionPeriod
