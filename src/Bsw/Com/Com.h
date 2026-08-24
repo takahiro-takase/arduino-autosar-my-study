@@ -235,6 +235,27 @@ uint8 Com_InvalidateSignalGroup(Com_IPduIdType SignalGroupId);
  */
 Std_ReturnType Com_TriggerIPDUSend(Com_IPduIdType PduId);
 
+/**
+ * \brief   TX I-PDU の TMS（Transmission Mode Selector）状態を明示的に切り替える。
+ *
+ * \details シグナル値に基づく自動評価（Com_RecalcTms()）とは独立した、
+ *          もう一つの TMS 変更経路。要求済みの Mode が既に現在の状態と
+ *          同じ場合は何もしない。実際に変化した場合、遷移後が DIRECT/MIXED
+ *          なら Com_SendSignal()/Com_SendSignalGroup() 側の tmsChanged
+ *          （[SWS_Com_00495]）と同じ経路で次回 Com_MainFunction() までに
+ *          即時送信される。PERIODIC の場合は即時送信は発生しないが、周期
+ *          タイマは再始動する（[SWS_Com_00244]）。詳細は Com.c の実装
+ *          コメント参照。
+ *
+ * \param[in]  PduId  TMS 状態を切り替える TX I-PDU の ID。
+ * \param[in]  Mode   新しい TMS 状態（0=false/1=true）。
+ *
+ * \ServiceID      {0x27}
+ * \Reentrancy     {Reentrant for different PduIds. Non reentrant for the same PduId.}
+ * \Synchronicity  {Synchronous}
+ */
+void Com_SwitchIpduTxMode(Com_IPduIdType PduId, uint8 Mode);
+
 /* SWS_Com_00124 */
 void Com_TxConfirmation(PduIdType TxPduId, Std_ReturnType result);
 /* SWS_Com_00398: 受信デッドライン監視タイムアウト検出。Os の 100ms タスクから呼び出す */
@@ -352,6 +373,10 @@ uint8 Com_Test_GetTxPending(Com_IPduIdType ipduId);
 /** [テスト専用] Com_TriggerIPDUSend() 用の Com_TxTriggerPending[ipduId] を
  *  取得する。運用・範囲外の扱いは Com_Test_GetTxPending() と同じ。 */
 uint8 Com_Test_GetTxTriggerPending(Com_IPduIdType ipduId);
+
+/** [テスト専用] TMS（Transmission Mode Selector）状態 Com_TmsState[ipduId]
+ *  を取得する。運用・範囲外の扱いは Com_Test_GetTxPending() と同じ。 */
+uint8 Com_Test_GetTmsState(Com_IPduIdType ipduId);
 
 /** [テスト専用] TX I-PDU の内部バッファ（Com_TxBuffer[ipduId]）先頭ポインタを
  *  取得する。範囲外の `ipduId` は NULL を返す。呼び出し側は当該 I-PDU の

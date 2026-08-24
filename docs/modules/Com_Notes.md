@@ -228,6 +228,55 @@ OR 条件として合成し、どちらか一方でも成立すれば `Com_Reque
                                                      # 以降は DIRECT に戻り、変化なしでは再送されない
 ```
 
+## Com_SwitchIpduTxMode（TMS の明示的な手動切り替え、2026-08 追加）
+
+上記の TMS 自動評価（`Com_RecalcTms()`、`ComFilterAlgorithm` によるシグナル値
+ベースの判定）とは別に、実 AUTOSAR は SWC が TMS 状態を直接指定できる
+`Com_SwitchIpduTxMode`（[SWS_Com_00881]）も提供します。`Com_TmsState[PduId]`
+を直接書き換えるだけの薄い API で、実際に状態が変化し、かつ遷移後が
+DIRECT/MIXED の場合は `Com_SendSignal()`/`Com_SendSignalGroup()` 側の
+tmsChanged 処理（[SWS_Com_00495]、上記参照）と全く同じ
+`Com_RequestTxOnChange()` 経由で即座に送信要求を立てます——TMS 遷移の
+「即時送信」自体は 1 つの仕組みしか持たず、それをどちらの経路（シグナル値の
+自動評価／本 API の明示的指定）が起動したかを区別しません。
+
+```
+Com_SwitchIpduTxMode(PduId, Mode)
+  Mode が Com_TmsState[PduId] と同じ → 何もしない（spec 原文
+    "the call will have no effect"）
+  異なる場合:
+    Com_TmsState[PduId] = Mode
+    遷移後の実効 TxModeMode が PERIODIC か？
+      No（DIRECT/MIXED）: Com_RequestTxOnChange(ipdu)  ← [SWS_Com_00239]/
+        [SWS_Com_00495] 相当。次回 Com_MainFunction() までに即時送信、
+        その際 Com_TxLastSentMs の更新を介して周期タイマも自然に再始動する
+      Yes（PERIODIC）: Com_RequestTxOnChange() は PERIODIC I-PDU に対して
+        何もしない設計（値の変化自体が送信タイミングに影響しないのと
+        同じ理由。TMS 遷移でも変わらない）ため即時送信は発生しないが、
+        [SWS_Com_00244] の「周期タイマ再始動」だけは本関数が直接
+        Com_TxLastSentMs を更新して満たす（当初この分岐がなく
+        /code-review で指摘・是正した）
+```
+
+**自動評価と混在させる場合の注意（spec 原文の警告をそのまま踏襲）**: 同じ
+I-PDU に対して自動評価（`Com_SendSignal`/`Com_SendSignalGroup` 経由）と本 API
+を両方使うと、次に自動評価側が呼ばれた時点で手動設定が上書きされ得ます。
+本プロジェクトはこれを防ぐ追加のガードは設けていません（実 AUTOSAR 自身が
+"must be carefully designed, if used at all" としているとおり、呼び出し側の
+設計責任とする仕様に忠実な実装です）。
+
+**`ComTxModeTimeOffset` は未実装**: 実 AUTOSAR では `Com_IpduGroupStart`/
+`Com_SwitchIpduTxMode` による明示的な切り替え時のみ、初回の周期送信を
+`ComTxModeTimeOffset` 分だけ遅らせる設定ができますが、本プロジェクトは
+他の DaVinci 専用パラメータと同じ理由でこの概念自体を持ちません。
+
+**この機能は実際に発動するか**: 本番設定への配線は行っていません
+（`WarningStatus` の TMS は現状 `FaultLamp`/`AbsLamp` の自動評価のみで
+運用されており、手動切り替えが必要な具体的なユースケースが本プロジェクトの
+アプリケーション側に無いため）。ユニットテストでのみ検証しています
+（`test/test_chain/Bsw_TxChain_test.cpp` の `SwitchIpduTxMode_*`、
+`kTestTmsGroupIPdu` を流用）。
+
 ## MDT（ComMinimumDelayTime、変化時送信の最小送信間隔）
 
 DIRECT/MIXED I-PDU は値が変化するたびに送信要求（`Com_TxPending[]`）が立ちますが、

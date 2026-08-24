@@ -74,6 +74,8 @@
 #define COM_API_ID_SEND_SIGNAL_GROUP_ARRAY      0x23U  /* 実 AUTOSAR の Service ID と一致させている
                                                          * ため昇順から外れる（0x1B の直後ではなく
                                                          * ここに置く） */
+/* [SWS_Com_00881] Com_SwitchIpduTxMode の実 Service ID。 */
+#define COM_API_ID_SWITCH_IPDU_TX_MODE          0x27U
 #define COM_API_ID_SET_COMMUNICATION_ENABLED    0x30U
 /* Com_TxConfirmation/Com_RxIndication の実 Service ID は 0x40/0x42（SWS 本文の
  * "Service ID[hex]" 記載を実測して確認済み）。旧実装は 0x11/0x10 という誤った

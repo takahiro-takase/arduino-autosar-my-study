@@ -2446,6 +2446,76 @@ Std_ReturnType Com_TriggerIPDUSend(Com_IPduIdType PduId)
     return E_OK;
 }
 
+/**
+ * \brief   TX I-PDU の TMS（Transmission Mode Selector）状態を明示的に切り替える。
+ *
+ * \details `Com_TmsState[PduId]` を直接書き換える、シグナル値に基づく自動
+ *          評価（`Com_RecalcTms()`）とは独立したもう一つの TMS 変更経路。
+ *          要求済みの Mode が既に現在の状態と同じ場合は何もしない（spec 原文
+ *          "the call will have no effect"）。DIRECT/MIXED/PERIODIC 遷移ごとの
+ *          即時送信・周期タイマ再始動の詳細、自動評価と混在させる場合の注意、
+ *          `ComTxModeTimeOffset` 省略の理由は
+ *          docs/modules/Com_Notes.md「Com_SwitchIpduTxMode」参照。
+ *
+ * \param[in]  PduId  TMS 状態を切り替える TX I-PDU の ID。
+ * \param[in]  Mode   新しい TMS 状態（0=false/1=true。実 AUTOSAR の
+ *                    `boolean` に相当。本プロジェクトは `boolean` 型を
+ *                    持たないため `Com_IpduGroupStart()` の `initialize`
+ *                    引数と同じ規約で `uint8` を使う）。
+ *
+ * \AUTOSARReq     {SWS_Com_00881, SWS_Com_00239, SWS_Com_00244}
+ * \ServiceID      {0x27}
+ * \Reentrancy     {Reentrant for different PduIds. Non reentrant for the same PduId.}
+ * \Synchronicity  {Synchronous}
+ */
+void Com_SwitchIpduTxMode(Com_IPduIdType PduId, uint8 Mode)
+{
+    DET_LOGT(TAG, "called");
+
+    if (Com_ConfigPtr == NULL)
+    {
+        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_SWITCH_IPDU_TX_MODE, COM_E_UNINIT);
+        return;
+    }
+
+    if (PduId >= COM_TX_IPDU_MAX)
+    {
+        DET_LOGE(TAG, "SwitchIpduTxMode E: PduId=%u out of range (max=%u)",
+                 (unsigned)PduId, (unsigned)COM_TX_IPDU_MAX);
+        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_SWITCH_IPDU_TX_MODE, COM_E_PARAM);
+        return;
+    }
+
+    const Com_IPduConfigType* ipdu = Com_FindTxIPdu(PduId);
+    if (ipdu == NULL)
+    {
+        DET_LOGE(TAG, "SwitchIpduTxMode E: PduId=%u not a registered TX I-PDU", (unsigned)PduId);
+        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_SWITCH_IPDU_TX_MODE, COM_E_PARAM);
+        return;
+    }
+
+    const uint8 newState = (Mode != 0U) ? 1U : 0U;
+    if (Com_TmsState[PduId] == newState)
+        return;  /* spec 原文: "the call will have no effect" */
+
+    Com_TmsState[PduId] = newState;
+
+    /* [SWS_Com_00244] 周期タイマ再始動。PERIODIC のみここで直接
+     * Com_TxLastSentMs を更新する理由は docs/modules/Com_Notes.md
+     * 「Com_SwitchIpduTxMode」参照。DIRECT/MIXED 側で触らない理由（非自明）:
+     * MinDelayMs>0 の I-PDU では、ここでリセットすると直後の
+     * Com_RequestTxOnChange() による「即時」送信要求が MDT 未経過と
+     * 誤判定されて遅延してしまうため。 */
+    if (Com_EffectiveTxModeMode(ipdu) == COM_TX_MODE_PERIODIC)
+    {
+        Com_TxLastSentMs[PduId] = millis();
+    }
+    else
+    {
+        Com_RequestTxOnChange(ipdu);
+    }
+}
+
 typedef void (*Com_VoidCbkType)(void);
 
 /* Com_InvokeTxNotification() が「TxAckCbk・TxErrCbk・TxTOutCbk のどれを
@@ -3260,6 +3330,13 @@ uint8 Com_Test_GetTxTriggerPending(Com_IPduIdType ipduId)
     if (ipduId >= COM_TX_IPDU_MAX)
         return 0U;
     return Com_TxTriggerPending[ipduId];
+}
+
+uint8 Com_Test_GetTmsState(Com_IPduIdType ipduId)
+{
+    if (ipduId >= COM_TX_IPDU_MAX)
+        return 0U;
+    return Com_TmsState[ipduId];
 }
 
 const uint8* Com_Test_GetTxBuffer(Com_IPduIdType ipduId)
