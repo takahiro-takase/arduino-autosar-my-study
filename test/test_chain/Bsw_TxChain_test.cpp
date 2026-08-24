@@ -1429,6 +1429,65 @@ TEST_F(Bsw_TxChain_Test, TriggerIPDUSend_OK_DoesNotConsumeNumberOfRepetitionsBud
 }
 
 // ------------------------------------------------------------
+// Com_SwitchIpduTxMode（SWS_Com_00881/SWS_Com_00239/SWS_Com_00244、2026-08
+// 追加）。kTestTmsGroupIPdu（IPduId=1、Signal Group、既定 Com_TmsState=0）
+// を流用する。
+// ------------------------------------------------------------
+TEST_F(Bsw_TxChain_Test, SwitchIpduTxMode_OK_FlipsStateAndTriggersImmediateSend)
+{
+    /* 準備 (Arrange): Com_Init() 直後は Com_TmsState[1]==0（既定 false）。 */
+    ASSERT_EQ(Com_Test_GetTmsState(1U), 0U);
+
+    /* 実行 (Act) */
+    Com_SwitchIpduTxMode(1U, 1U);
+
+    /* 評価 (Assert): [SWS_Com_00881] 状態が切り替わり、[SWS_Com_00239]/
+     * [SWS_Com_00495] と同じ経路（Com_RequestTxOnChange()）で次回
+     * Com_MainFunction() 向けの送信要求が立つ。 */
+    EXPECT_EQ(Com_Test_GetTmsState(1U), 1U);
+    EXPECT_EQ(Com_Test_GetTxPending(1U), 1U);
+}
+
+TEST_F(Bsw_TxChain_Test, SwitchIpduTxMode_NG_NoEffectWhenModeAlreadyActive)
+{
+    /* 準備 (Arrange): 既定状態(false)と同じ Mode=0 を明示的に要求する。 */
+
+    /* 実行 (Act) */
+    Com_SwitchIpduTxMode(1U, 0U);
+
+    /* 評価 (Assert): spec 原文 "the call will have no effect"。送信要求も
+     * 立たない（状態が変化していないため Com_RequestTxOnChange() は
+     * 呼ばれない）。 */
+    EXPECT_EQ(Com_Test_GetTmsState(1U), 0U);
+    EXPECT_EQ(Com_Test_GetTxPending(1U), 0U);
+}
+
+TEST_F(Bsw_TxChain_Test, SwitchIpduTxMode_OK_TogglingBackTriggersAnotherSend)
+{
+    /* 準備 (Arrange): 一旦 true へ切り替え、Com_MainFunction() で
+     * 送信要求を消費させておく。 */
+    Com_SwitchIpduTxMode(1U, 1U);
+    Com_MainFunction();
+    ASSERT_EQ(Com_Test_GetTxPending(1U), 0U);
+
+    /* 実行 (Act): false へ戻す（再び実際の変化） */
+    Com_SwitchIpduTxMode(1U, 0U);
+
+    /* 評価 (Assert): 戻すのも「変化」であるため、再度送信要求が立つ */
+    EXPECT_EQ(Com_Test_GetTmsState(1U), 0U);
+    EXPECT_EQ(Com_Test_GetTxPending(1U), 1U);
+}
+
+TEST_F(Bsw_TxChain_Test, SwitchIpduTxMode_NG_UnknownPduIdHasNoEffect)
+{
+    /* 実行 (Act) + 評価 (Assert): 戻り値が無い（void）API のため、
+     * クラッシュしないこと・既存の状態に影響しないことを確認する。 */
+    Com_SwitchIpduTxMode(99U, 1U);
+    EXPECT_EQ(Com_Test_GetTmsState(1U), 0U);
+    EXPECT_EQ(Com_Test_GetTxPending(1U), 0U);
+}
+
+// ------------------------------------------------------------
 // Com_TriggerIPDUSend の COM_TX_MODE_PERIODIC 分岐専用の独立したフィクスチャ。
 // Bsw_TxChain_Test（上記）は TX I-PDU 4 本（COM_TX_IPDU_MAX と同数）を
 // 既に使い切っており、新たに PERIODIC I-PDU を追加できない
@@ -1446,7 +1505,33 @@ TEST_F(Bsw_TxChain_Test, TriggerIPDUSend_OK_DoesNotConsumeNumberOfRepetitionsBud
 // クリアは due=true になった時点で無条件に行われる、Com.c 参照）。
 // PduR_ConfigPtr が NULL のままでも PduR_Transmit() は安全に E_NOT_OK を
 // 返すため（PduR.c 参照）、実際の CAN 送信まで配線しなくても検証できる。
+//
+// このパターンの SetUp()/TearDown() 自体は本ファイル内で 2 回目の登場のため
+// （tx_switch_periodic 名前空間も同じ構成を使う）、共通基底クラスへ切り出す
+// （/code-review 指摘、rule of three）。派生側は対象の Com_ConfigType への
+// ポインタを返す GetComConfig() だけを実装する。
 // ------------------------------------------------------------
+class IsolatedComTxFixtureBase : public ::testing::Test
+{
+protected:
+    virtual const Com_ConfigType* GetComConfig() const = 0;
+
+    void SetUp() override
+    {
+        FakeMillis_Reset();
+        FakeCanHw_Reset();
+        FakeDetHw_LogSuppressed = 1U;
+        Com_Init(GetComConfig());
+        FakeDetHw_LogSuppressed = 0U;
+    }
+
+    void TearDown() override
+    {
+        FakeDetHw_LogSuppressed = 1U;
+        Com_DeInit();
+    }
+};
+
 namespace tx_trigger_periodic
 {
 
@@ -1480,23 +1565,10 @@ const Com_ConfigType kTestComConfig = {
     /* GwMappingCount */ 0U
 };
 
-class Bsw_TxTriggerPeriodicChain_Test : public ::testing::Test
+class Bsw_TxTriggerPeriodicChain_Test : public IsolatedComTxFixtureBase
 {
 protected:
-    void SetUp() override
-    {
-        FakeMillis_Reset();
-        FakeCanHw_Reset();
-        FakeDetHw_LogSuppressed = 1U;
-        Com_Init(&kTestComConfig);
-        FakeDetHw_LogSuppressed = 0U;
-    }
-
-    void TearDown() override
-    {
-        FakeDetHw_LogSuppressed = 1U;
-        Com_DeInit();
-    }
+    const Com_ConfigType* GetComConfig() const override { return &kTestComConfig; }
 };
 
 TEST_F(Bsw_TxTriggerPeriodicChain_Test, TriggerIPDUSend_OK_FiresBetweenPeriodsOnceMdtElapses)
@@ -1534,5 +1606,83 @@ TEST_F(Bsw_TxTriggerPeriodicChain_Test, ComMainFunction_NG_DoesNotFireBeforePeri
 }
 
 }  // namespace tx_trigger_periodic
+
+// ------------------------------------------------------------
+// Com_SwitchIpduTxMode が遷移後の実効 TxModeMode を PERIODIC にする場合の
+// 周期タイマ再始動（[SWS_Com_00244]）専用の独立したフィクスチャ。
+// tx_trigger_periodic の kTestPeriodicIPdu は既定状態（TMS=false）自体が
+// PERIODIC であり、他の2件のテストがそれに依存しているため流用できない
+// （このシナリオが必要とするのは「既定は DIRECT で、TMS=true になった
+// 瞬間に初めて PERIODIC へ切り替わる」逆方向の構成）。COM_TX_IPDU_MAX の
+// 制約により本ファイルの他のフィクスチャとは独立した最小 Com_ConfigType を
+// 別途用意する（tx_trigger_periodic と同じ手法。共通の SetUp()/TearDown() は
+// IsolatedComTxFixtureBase を継承して再利用する）。
+// ------------------------------------------------------------
+namespace tx_switch_periodic
+{
+
+const Com_IPduConfigType kTestTmsPeriodicIPdu = {
+    /* IPduId */           0U,
+    /* DLC */              1U,
+    /* PduRId */           0U,   // PduR_Init() を呼ばないため未登録のまま
+    /* FirstTimeoutMs */   0U,
+    /* TimeoutMs */        0U,
+    /* IsSignalGroup */    0U,
+    /* TxModeMode */       COM_TX_MODE_DIRECT,    // TMS=false（既定）
+    /* TxPeriodMs */       0U,
+    /* TxModeModeTrue */   COM_TX_MODE_PERIODIC,  // TMS=true で PERIODIC へ
+    /* TxPeriodMsTrue */   1000U,
+    /* MinDelayMs */       0U,
+    /* UpdateBitPosition */ 0xFFU,
+    /* IpduGroupId */      COM_IPDU_GROUP_NONE
+};
+
+const Com_IPduConfigType kTestTxIPdus[] = { kTestTmsPeriodicIPdu };
+
+const Com_ConfigType kTestComConfig = {
+    /* RxIPdus */       NULL,
+    /* RxIPduCount */   0U,
+    /* TxIPdus */       kTestTxIPdus,
+    /* TxIPduCount */   1U,
+    /* Signals */       NULL,
+    /* SignalCount */   0U,
+    /* GwMappings */    NULL,
+    /* GwMappingCount */ 0U
+};
+
+class Bsw_TxSwitchPeriodicChain_Test : public IsolatedComTxFixtureBase
+{
+protected:
+    const Com_ConfigType* GetComConfig() const override { return &kTestComConfig; }
+};
+
+TEST_F(Bsw_TxSwitchPeriodicChain_Test, SwitchIpduTxMode_OK_RestartsPeriodicTimerOnTransitionIntoPeriodic)
+{
+    /* 準備 (Arrange): Com_Init() から 700ms 経過させてから切り替える
+     * （「タイマが Init 時点のままか、切り替え時点で再始動されたか」を
+     * 後段で区別できるようにするため）。 */
+    FakeMillis_Value += 700U;
+
+    /* 実行 (Act 1): TMS を true へ切り替える。実効 TxModeMode は
+     * DIRECT→PERIODIC へ変化するため、Com_RequestTxOnChange() 経由の
+     * 即時送信は発生しない（PERIODIC の設計どおり）。 */
+    Com_SwitchIpduTxMode(0U, 1U);
+    EXPECT_EQ(Com_Test_GetTmsState(0U), 1U);
+    EXPECT_EQ(FakeCanHw_SendCount, 0U);  // PERIODIC への遷移自体は即時送信しない
+
+    /* 実行 (Act 2): 切り替え時点から 350ms だけ経過させる（Init 時点からは
+     * 1050ms、TxPeriodMsTrue(1000ms) 以上）。 */
+    FakeMillis_Value += 350U;
+    Com_MainFunction();
+
+    /* 評価 (Assert): [SWS_Com_00244] 周期タイマが切り替え時点で再始動されて
+     * いれば、切り替えからまだ 350ms しか経っていないため送信されない。
+     * 再始動されていなければ（是正前のバグ）、Com_TxLastSentMs が
+     * Com_Init() 時点のまま残り、経過 1050ms >= 1000ms と誤判定されて
+     * 送信されてしまう。 */
+    EXPECT_EQ(FakeCanHw_SendCount, 0U);
+}
+
+}  // namespace tx_switch_periodic
 
 }  // namespace
