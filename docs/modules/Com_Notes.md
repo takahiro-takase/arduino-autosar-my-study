@@ -1542,6 +1542,18 @@ Com_TxConfirmation()（成功/失敗を問わず、確認到達のたび）:
   Com_TxUsingFirstTimeout[0] = 0（以降は steady TxTimeoutMs を使う）
 ```
 
+**Signal Group への配線漏れの是正（2026-08 追加）**: 上記は当初 `MeterStatus`
+（非 Signal Group）にのみ適用しており、本プロジェクト唯一の TX Signal Group
+である `WarningStatus`（TX IPduId=1）には `TxFirstTimeoutMs`/`TxTimeoutMs`/
+`TxTOutCbk` が未設定のままでした。`Com_MainFunction()` の TX 監視ループも
+`Com_DoTransmit()` のタイマ起動処理も Signal Group か否かを区別しない設計
+（`kTestErrGroupIPdu` 向けのユニットテストで Signal Group 単位の動作は既に
+検証済み）だったため、これはエンジンの未実装ではなく単なる config 配線漏れ
+でした。`WarningStatus` にも `COM_TX_TIMEOUT_WARNINGSTATUS_MS`（既定
+2000ms）で同じ監視を配線し、`TxTOutCbk` はグループ単位で `Rte_COMCbkTxTOut_
+WarningStatus()`（`Rte_COMCbkTAck_WarningStatus()` と対になる、Signal Group
+単位の実装例）を呼びます。
+
 **残り再送回数のデクリメント（前節）と同じ理由で、タイマの発火判定は
 dispatch/confirmation の同期性に依存しない設計にしている**: `Can_Write()`
 は TX 確認を即座には呼ばず、`swPduHandle` を保留キューへ積むだけで、実際の
@@ -1580,7 +1592,8 @@ dispatch/confirmation の同期性に依存しない設計にしている**: `Ca
 本プロジェクトの実際の送信頻度（最速でも Nm フレームの 1000ms 間隔）では
 天文学的に起こりにくく、事実上到達不能です。`Com_CbkTxErr`（TxErrCbk）と
 同じ位置づけ——仕様忠実性とユニットテストによる検証を目的とした実装であり、
-実機での動作確認は行っていません。
+実機での動作確認は行っていません。この結論は `WarningStatus`（Signal Group）
+側の配線にもそのまま当てはまります（同じ `Com_DoTransmit()` 経路を通るため）。
 
 ## AUTOSAR IF シグネチャ整合（2026-08）
 
