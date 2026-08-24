@@ -165,6 +165,20 @@ static uint8 Com_RxFilterRejectPending[COM_SIGNAL_COUNT];
  * I-PDU では未使用（常に 0）。 */
 static uint8 Com_TxPending[COM_TX_IPDU_MAX];
 
+/* Com_TriggerIPDUSend()（SWS_Com_00861/00388、2026-08 追加）専用のフラグ。
+ * Com_TxPending とは別軸で持つ理由: Com_TxPending は COM_TX_MODE_PERIODIC の
+ * I-PDU では一切参照されない（Com_RequestTxOnChange() が PERIODIC I-PDU に
+ * 対して早期 return するため、上記コメント参照）。しかし
+ * Com_TriggerIPDUSend は「I-PDU が started であれば TxModeMode によらず
+ * 送信をトリガーする」仕様（[SWS_Com_00861] に TxModeMode による除外の
+ * 記述はない）のため、PERIODIC I-PDU に対しても効かせる必要がある。
+ * Com_MainFunction() の due 判定に、Com_TxPending とは独立した OR 項として
+ * 追加する（[SWS_Com_00388]: MDT のみ尊重し、ComTxModeNumberOfRepetitions
+ * 等の他の TxMode パラメータは考慮しない——そのため
+ * ComTxModeNumberOfRepetitions の残り再送回数デクリメント判定
+ * （`repeatDue && !changeDue`）にはあえて混ぜていない）。 */
+static uint8 Com_TxTriggerPending[COM_TX_IPDU_MAX];
+
 /* 「PduR_Transmit() には渡した（実送信済み）が、対応する Com_TxConfirmation()
  * がまだ届いていない」ことを示すフラグ（TX I-PDU 単位）。Com_TxPending が
  * 「まだ送信要求すら出していない」を表すのに対し、こちらは送信要求は完了して
@@ -299,6 +313,7 @@ void Com_Init(const Com_ConfigType* config)
         }
         Com_TxLastSentMs[i]      = now;  /* PERIODIC/MIXED の周期計測を Init 時刻から開始 */
         Com_TxPending[i]         = 0U;
+        Com_TxTriggerPending[i]  = 0U;
         Com_TxConfPending[i]     = 0U;
         Com_TmsState[i]          = 0U;   /* 既定 false（ゼロクリアされたバッファと整合） */
         Com_TxRepeatsRemaining[i] = 0U;
@@ -1324,10 +1339,14 @@ static uint8 Com_RecalcTms(Com_IPduIdType ipduId)
  *          （[SWS_Com_00279]: 新規送信要求は進行中の再送をキャンセルして
  *          再スタートする）。
  *
+ *          \note   本関数は static な内部ヘルパーであり、Det_ReportError() を
+ *          直接呼ぶ公開 API ではないため、他の静的ヘルパー（Com_FindSignalIndex
+ *          等）と同様に \ServiceID/\Reentrancy/\Synchronicity タグは付与しない
+ *          （旧コメントには誤って \ServiceID{0x17} が付いていたが、これは
+ *          本来 Com_TriggerIPDUSend の実 Service ID であり、本関数のものでは
+ *          ない。2026-08 の Com_TriggerIPDUSend 追加を機に是正した）。
+ *
  * \AUTOSARReq     {SWS_Com_00734, SWS_Com_00742, SWS_Com_00743, SWS_Com_00279}
- * \ServiceID      {0x17}
- * \Reentrancy     {Non Reentrant}
- * \Synchronicity  {Synchronous}
  */
 static void Com_RequestTxOnChange(const Com_IPduConfigType* ipdu)
 {
@@ -2344,6 +2363,89 @@ uint8 Com_InvalidateSignalGroup(Com_IPduIdType SignalGroupId)
     return Com_SendSignalGroup(SignalGroupId);
 }
 
+/**
+ * \brief   TX I-PDU を、値の変化や送信モードに関わらず今すぐ送信要求する。
+ *
+ * \details [SWS_Com_00861]: 対象 I-PDU が started の場合のみトリガーする。
+ *          stopped の場合は E_NOT_OK を返すのみで、後で started になっても
+ *          自動的には実行されない（トリガー自体を憶えておく仕組みはない）。
+ *
+ *          [SWS_Com_00388]: MDT（`ipdu->MinDelayMs`）のみを尊重し、
+ *          `ComTxModeNumberOfRepetitions` 等、他の TxMode 関連パラメータは
+ *          考慮しない。実際の送信は本関数内では行わず、既存の
+ *          `Com_TxTriggerPending[]` フラグを立てるだけで
+ *          `Com_MainFunction()` のディスパッチへ委ねる（`Com_SendSignal()`
+ *          が `Com_TxPending[]` を立てるのと同じ設計——実送信を ASW の
+ *          呼び出しスタックから切り離し、WdgM の Deadline Supervision から
+ *          保護するため。Com_MainFunction() の Doxygen コメント参照）。
+ *          `Com_TxTriggerPending[]` は `Com_TxPending[]` と異なり
+ *          COM_TX_MODE_PERIODIC の I-PDU でも効く（詳細は同フラグの宣言
+ *          コメント参照）。
+ *
+ *          [SWS_Com_00492]: 設定済みの TxIpduCalloutCbk は、既存の
+ *          `Com_DoTransmit()` が呼ぶため、本関数側で別途呼ぶ必要はない。
+ *
+ * \note    診断 CommunicationControl (UDS 0x28) による送信抑制中
+ *          （`Com_TxEnabled==0`）に due 判定を満たしても、
+ *          `Com_MainFunction()` はトリガーを消費するだけで実送信は行わない
+ *          （`Com_TxPending[]` の既存挙動と同じ。SWS_Com_00777/
+ *          SWS_Com_00334: 抑制解除後に「溜まった分」を即座に送らないため）。
+ *          この場合本関数の戻り値自体は E_OK のままであり、トリガーが
+ *          後で自動的に再送されることもない——呼び出し元が抑制解除後に
+ *          必要なら改めて呼び直すこと（/code-review 指摘）。
+ *
+ * \param[in]  PduId  即時送信をトリガーする TX I-PDU の ID。
+ *
+ * \retval  E_OK      I-PDU が見つかり、started であり、トリガーを受け付けた
+ *                    （実際に送信されるとは限らない。上記 \note 参照）。
+ * \retval  E_NOT_OK  COM 未初期化、PduId が TX I-PDU 設定テーブルに
+ *                    存在しない、または I-PDU が stopped。
+ *
+ * \AUTOSARReq     {SWS_Com_00861, SWS_Com_00388, SWS_Com_00492}
+ * \ServiceID      {0x17}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType Com_TriggerIPDUSend(Com_IPduIdType PduId)
+{
+    DET_LOGT(TAG, "called");
+
+    if (Com_ConfigPtr == NULL)
+    {
+        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_TRIGGER_IPDU_SEND, COM_E_UNINIT);
+        return E_NOT_OK;
+    }
+
+    if (PduId >= COM_TX_IPDU_MAX)
+    {
+        DET_LOGE(TAG, "TriggerIPDUSend E: PduId=%u out of range (max=%u)",
+                 (unsigned)PduId, (unsigned)COM_TX_IPDU_MAX);
+        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_TRIGGER_IPDU_SEND, COM_E_PARAM);
+        return E_NOT_OK;
+    }
+
+    const Com_IPduConfigType* ipdu = Com_FindTxIPdu(PduId);
+    if (ipdu == NULL)
+    {
+        DET_LOGE(TAG, "TriggerIPDUSend E: PduId=%u not a registered TX I-PDU", (unsigned)PduId);
+        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_TRIGGER_IPDU_SEND, COM_E_PARAM);
+        return E_NOT_OK;
+    }
+
+    if (!Com_TxIPduStarted[PduId])
+    {
+        /* [SWS_Com_00861]: stopped I-PDU は単に E_NOT_OK。開発エラーによる
+         * 失敗とは別区分のため Det_ReportError() は呼ばない（DET ログのみ、
+         * Com_InvalidateSignal() の InvalidValueConfigured==0 判定と同じ
+         * 方針）。 */
+        DET_LOGW(TAG, "TriggerIPDUSend: PduId=%u is stopped", (unsigned)PduId);
+        return E_NOT_OK;
+    }
+
+    Com_TxTriggerPending[PduId] = 1U;
+    return E_OK;
+}
+
 typedef void (*Com_VoidCbkType)(void);
 
 /* Com_InvokeTxNotification() が「TxAckCbk・TxErrCbk・TxTOutCbk のどれを
@@ -2579,6 +2681,10 @@ void Com_TxConfirmation(PduIdType TxPduId, Std_ReturnType result)
  *                          を超えたら送信（周期フロアには MDT を適用しない）
  *            - PERIODIC : 経過時間が実効 TxPeriodMs を超えたら常に送信
  *                          （Com_TxPending[]・MDT のいずれも使用しない）
+ *          上記いずれのモードでも、`Com_TriggerIPDUSend()` が立てた
+ *          `Com_TxTriggerPending[]`（MDT のみ尊重、[SWS_Com_00861]/
+ *          [SWS_Com_00388]）が独立した OR 項として効く（詳細は同フラグの
+ *          宣言コメント参照）。
  *
  *          MDT（`ipdu->MinDelayMs`、DaVinci: ComMinimumDelayTime）: DIRECT/
  *          MIXED I-PDU の変化時送信について、直近の実送信から MinDelayMs
@@ -2623,7 +2729,8 @@ void Com_TxConfirmation(PduIdType TxPduId, Std_ReturnType result)
  *                  SWS_Com_00742, SWS_Com_00743, SWS_Com_00777, SWS_Com_00032,
  *                  SWS_Com_00799, SWS_Com_00471, SWS_Com_00698, SWS_Com_00789,
  *                  SWS_Com_00305, SWS_Com_00467, SWS_Com_00392, SWS_Com_00878,
- *                  SWS_Com_00879, SWS_Com_00880, SWS_Com_00304, SWS_Com_00554}
+ *                  SWS_Com_00879, SWS_Com_00880, SWS_Com_00304, SWS_Com_00554,
+ *                  SWS_Com_00861, SWS_Com_00388}
  * \ServiceID      {0x20}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
@@ -2779,7 +2886,14 @@ void Com_MainFunction(void)
         uint8 repeatDue = 0U;
         if (mode == COM_TX_MODE_PERIODIC)
         {
-            due = ((now - Com_TxLastSentMs[id]) >= (unsigned long)period) ? 1U : 0U;
+            const unsigned long elapsed = now - Com_TxLastSentMs[id];
+            /* Com_TriggerIPDUSend()（[SWS_Com_00861]/[SWS_Com_00388]）は
+             * TxModeMode によらず効く必要があるため、PERIODIC I-PDU でも
+             * MDT のみ尊重して OR する（Com_TxTriggerPending 宣言コメント
+             * 参照）。 */
+            const uint8 triggerDue = Com_TxTriggerPending[id]
+                                      && (elapsed >= (unsigned long)ipdu->MinDelayMs);
+            due = (elapsed >= (unsigned long)period) || triggerDue;
         }
         else
         {
@@ -2800,13 +2914,17 @@ void Com_MainFunction(void)
             repeatDue = Com_TxRepeatApplicable(mode)
                         && (Com_TxRepeatsRemaining[id] > 0U)
                         && (elapsed >= (unsigned long)ipdu->RepetitionPeriodMs);
-            due = changeDue || floorDue || repeatDue;
+            /* changeDue には混ぜない — 宣言コメント（本ファイル冒頭の
+             * Com_TxTriggerPending）の repeatDue/changeDue 分離理由を参照。 */
+            const uint8 triggerDue = Com_TxTriggerPending[id] && mdtElapsed;
+            due = changeDue || floorDue || repeatDue || triggerDue;
         }
 
         if (!due)
             continue;
 
         Com_TxPending[id]    = 0U;
+        Com_TxTriggerPending[id] = 0U;
         Com_TxLastSentMs[id] = now;
 
         if (Com_TxEnabled == 0U)
@@ -2999,6 +3117,7 @@ void Com_IpduGroupStart(Com_IpduGroupIdType IpduGroupId, uint8 initialize)
          * Com_SetCommunicationEnabled() の既存コメントと同じ考え方）。 */
         Com_TxLastSentMs[id] = now;
         Com_TxPending[id]    = 0U;
+        Com_TxTriggerPending[id] = 0U;
         /* 起動直後は必ず「送信済み・未確認」状態もクリアしておく（前回の
          * Stop() で既にクリア済みのはずだが、初回 Start() 時の保険）。 */
         Com_TxConfPending[id] = 0U;
@@ -3115,6 +3234,7 @@ void Com_IpduGroupStop(Com_IpduGroupIdType IpduGroupId)
          * 「停止中に溜まった分」が積み残しとして即座に送信されないようにする
          * （Com_SetCommunicationEnabled() の既存コメントと同じ考え方）。 */
         Com_TxPending[id] = 0U;
+        Com_TxTriggerPending[id] = 0U;
 
         /* [SWS_Com_00392]: I-PDU Group の停止は ComTxModeNumberOfRepetitions
          * の再送シーケンスもキャンセルする。本番設定では対象 I-PDU
@@ -3133,6 +3253,13 @@ uint8 Com_Test_GetTxPending(Com_IPduIdType ipduId)
     if (ipduId >= COM_TX_IPDU_MAX)
         return 0U;
     return Com_TxPending[ipduId];
+}
+
+uint8 Com_Test_GetTxTriggerPending(Com_IPduIdType ipduId)
+{
+    if (ipduId >= COM_TX_IPDU_MAX)
+        return 0U;
+    return Com_TxTriggerPending[ipduId];
 }
 
 const uint8* Com_Test_GetTxBuffer(Com_IPduIdType ipduId)
