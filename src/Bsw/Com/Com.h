@@ -214,6 +214,27 @@ uint8 Com_InvalidateSignal(Com_SignalIdType SignalId);
  */
 uint8 Com_InvalidateSignalGroup(Com_IPduIdType SignalGroupId);
 
+/**
+ * \brief   TX I-PDU を、値の変化や送信モードに関わらず今すぐ送信要求する。
+ *
+ * \details MDT（ComMinimumDelayTime）のみを尊重し、
+ *          ComTxModeNumberOfRepetitions 等の他の TxMode パラメータは考慮
+ *          しない（[SWS_Com_00861]/[SWS_Com_00388]）。実送信は
+ *          Com_MainFunction() へ委ねる。診断 CommunicationControl による
+ *          送信抑制中は、トリガーを受け付けても実送信されないまま消費
+ *          される点に注意（詳細は Com.c の実装コメント参照）。
+ *
+ * \param[in]  PduId  即時送信をトリガーする TX I-PDU の ID。
+ *
+ * \retval  E_OK      トリガーを受け付けた（実際に送信されるとは限らない）。
+ * \retval  E_NOT_OK  COM 未初期化、PduId が存在しない、または I-PDU が stopped。
+ *
+ * \ServiceID      {0x17}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType Com_TriggerIPDUSend(Com_IPduIdType PduId);
+
 /* SWS_Com_00124 */
 void Com_TxConfirmation(PduIdType TxPduId, Std_ReturnType result);
 /* SWS_Com_00398: 受信デッドライン監視タイムアウト検出。Os の 100ms タスクから呼び出す */
@@ -327,6 +348,10 @@ void Com_IpduGroupStop(Com_IpduGroupIdType IpduGroupId);
  *          範囲外の `ipduId` は 0 を返す。
  */
 uint8 Com_Test_GetTxPending(Com_IPduIdType ipduId);
+
+/** [テスト専用] Com_TriggerIPDUSend() 用の Com_TxTriggerPending[ipduId] を
+ *  取得する。運用・範囲外の扱いは Com_Test_GetTxPending() と同じ。 */
+uint8 Com_Test_GetTxTriggerPending(Com_IPduIdType ipduId);
 
 /** [テスト専用] TX I-PDU の内部バッファ（Com_TxBuffer[ipduId]）先頭ポインタを
  *  取得する。範囲外の `ipduId` は NULL を返す。呼び出し側は当該 I-PDU の

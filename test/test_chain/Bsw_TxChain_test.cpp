@@ -349,7 +349,10 @@ static void TestGroupTxTOutCbk(void) { s_groupTxTOutCount++; }
 const Com_IPduConfigType kTestErrGroupIPdu = {
     /* IPduId */           3U,
     /* DLC */              1U,
-    /* PduRId */           3U,   // 本テストは Com_MainFunction()/PduR まで進めないため未使用
+    /* PduRId */           3U,   // kTestPduRConfig に対応する経路を登録していないため
+                                 // 未登録（PduR_Transmit は経路なしで安全に E_NOT_OK を
+                                 // 返す。Com_TriggerIPDUSend の MDT 検証用に実際に
+                                 // ディスパッチさせるが、実 CAN 送信までは進めない）
     /* FirstTimeoutMs */   0U,
     /* TimeoutMs */        0U,
     /* IsSignalGroup */    1U,
@@ -357,7 +360,7 @@ const Com_IPduConfigType kTestErrGroupIPdu = {
     /* TxPeriodMs */       0U,
     /* TxModeModeTrue */   COM_TX_MODE_DIRECT,
     /* TxPeriodMsTrue */   0U,
-    /* MinDelayMs */       0U,
+    /* MinDelayMs */       100U,  // Com_TriggerIPDUSend の MDT 尊重（SWS_Com_00388）検証用
     /* UpdateBitPosition */ 0xFFU,
     /* IpduGroupId */      kTestStoppableGroupId,
     /* RxIndicationCbk */  NULL,
@@ -1327,5 +1330,209 @@ TEST_F(Bsw_TxChain_Test, InvalidateSignalGroup_NG_AnyMemberUnconfiguredReturnsEr
     ASSERT_NE(buf, nullptr);
     EXPECT_EQ(buf[0], 0x00U);
 }
+
+// ------------------------------------------------------------
+// Com_TriggerIPDUSend（SWS_Com_00861/SWS_Com_00388/SWS_Com_00492、2026-08
+// 追加）。DIRECT/MIXED 分岐の検証。PERIODIC モードの分岐は、本ファイルの
+// TX I-PDU 4 本（COM_TX_IPDU_MAX と同数、これ以上増やせない）がいずれも
+// DIRECT/MIXED のため、ファイル末尾の独立した名前空間
+// `tx_trigger_periodic`（専用の最小 Com_ConfigType、IPduId=0 を再利用）で
+// 別途検証する（/code-review 指摘: 当初は「コード構造上の対称性」のみを
+// 根拠にテストを省略していたが、実際にテストを追加した）。
+// ------------------------------------------------------------
+TEST_F(Bsw_TxChain_Test, TriggerIPDUSend_OK_ForcesDispatchWithoutValueChange)
+{
+    /* 準備 (Arrange): kTestTxIPdu（IPduId=0、DIRECT）へ一切 Com_SendSignal()
+     * を呼ばない（値の変化なし、Com_TxPending は立てない）。 */
+
+    /* 実行 (Act) */
+    uint8 ret = Com_TriggerIPDUSend(0U);
+    ASSERT_EQ(ret, E_OK);
+    Com_MainFunction();
+
+    /* 評価 (Assert): 値の変化が一切無くても送信される（[SWS_Com_00861]）。
+     * バッファ内容自体は InitValue のまま（トリガーは中身を変えない）。 */
+    EXPECT_EQ(Com_Test_GetTxTriggerPending(0U), 0U);
+    EXPECT_EQ(FakeCanHw_SendCount, 1U);
+    EXPECT_EQ(FakeCanHw_LastSendId, 0x100U);
+    EXPECT_EQ(FakeCanHw_LastSendDlc, 2U);
+    EXPECT_EQ(FakeCanHw_LastSendData[0], 0x00U);
+    EXPECT_EQ(FakeCanHw_LastSendData[1], 0x00U);
+}
+
+TEST_F(Bsw_TxChain_Test, TriggerIPDUSend_NG_UnknownPduIdReturnsError)
+{
+    /* 実行 (Act) + 評価 (Assert) */
+    EXPECT_EQ(Com_TriggerIPDUSend(99U), E_NOT_OK);
+}
+
+TEST_F(Bsw_TxChain_Test, TriggerIPDUSend_NG_StoppedIpduReturnsErrorWithoutTriggering)
+{
+    /* 準備 (Arrange): kTestErrGroupIPdu（IPduId=3）は IpduGroupId=
+     * kTestStoppableGroupId を持つため、Com_Init() 直後は既定で停止状態
+     * （[SWS_Com_00444]/[SWS_Com_00840]）。Com_IpduGroupStart() を一度も
+     * 呼ばないことで「起動されたことがない」状態を明示的に表す
+     * （念のため Com_IpduGroupStop() も呼び、Start 後に Stop された場合と
+     * 同じ経路であることも合わせて確認する）。 */
+    Com_IpduGroupStop(kTestStoppableGroupId);
+
+    /* 実行 (Act) + 評価 (Assert): [SWS_Com_00861] stopped I-PDU は E_NOT_OK。
+     * トリガー自体も記録されない（後で started になっても自動実行されない）。 */
+    EXPECT_EQ(Com_TriggerIPDUSend(3U), E_NOT_OK);
+    EXPECT_EQ(Com_Test_GetTxTriggerPending(3U), 0U);
+}
+
+TEST_F(Bsw_TxChain_Test, TriggerIPDUSend_OK_RespectsMinDelayTimeAndDispatchesOnceElapsed)
+{
+    /* 準備 (Arrange): kTestErrGroupIPdu（IPduId=3）は IpduGroupId=
+     * kTestStoppableGroupId を持つため、Com_Init() 直後は既定で停止状態
+     * （[SWS_Com_00444]/[SWS_Com_00840]、Com_Init() の実装コメント参照）。
+     * 明示的に起動してから使う（TxTOut_OK_GroupLevelFiresWhenStartedAndOverdue
+     * と同じ手順）。MinDelayMs=100U。Com_IpduGroupStart() が
+     * Com_TxLastSentMs[3] を現在時刻にリセットするため、経過時間はここから
+     * 0 スタートになる。 */
+    Com_IpduGroupStart(kTestStoppableGroupId, 0U);
+
+    /* 実行 (Act 1): トリガーは受け付けるが、MDT 未経過のため今回は送信しない
+     * （[SWS_Com_00388] "shall postpone transmissions if necessary"）。 */
+    ASSERT_EQ(Com_TriggerIPDUSend(3U), E_OK);
+    Com_MainFunction();
+
+    /* 評価 (Assert 1): トリガーは破棄されず、次回以降のために保持される */
+    EXPECT_EQ(Com_Test_GetTxTriggerPending(3U), 1U);
+
+    /* 実行 (Act 2): MDT 経過後に再度 Com_MainFunction() を呼ぶ */
+    FakeMillis_Value += 100U;
+    Com_MainFunction();
+
+    /* 評価 (Assert 2): MDT 経過により消費される（実際の PduR ルートは
+     * 未登録のため CAN 送信までは進まないが、ディスパッチ自体は試行される
+     * ことをフラグのクリアで確認する） */
+    EXPECT_EQ(Com_Test_GetTxTriggerPending(3U), 0U);
+}
+
+TEST_F(Bsw_TxChain_Test, TriggerIPDUSend_OK_DoesNotConsumeNumberOfRepetitionsBudget)
+{
+    /* 準備 (Arrange): kTestTxIPdu（IPduId=0、NumberOfRepetitions=2U）の
+     * 残り再送回数を明示的にセットしておく。 */
+    Com_Test_SetTxRepeatsRemaining(0U, 2U);
+
+    /* 実行 (Act) */
+    ASSERT_EQ(Com_TriggerIPDUSend(0U), E_OK);
+    Com_MainFunction();
+
+    /* 評価 (Assert): [SWS_Com_00388] "shall not take into account ...
+     * ComTxModeNumberOfRepetitions" のとおり、残り回数は変化しない
+     * （通常の repeatDue によるデクリメントとは独立した OR 項のため）。 */
+    EXPECT_EQ(FakeCanHw_SendCount, 1U);  // トリガー自体は送信を引き起こす
+    EXPECT_EQ(Com_Test_GetTxRepeatsRemaining(0U), 2U);
+}
+
+// ------------------------------------------------------------
+// Com_TriggerIPDUSend の COM_TX_MODE_PERIODIC 分岐専用の独立したフィクスチャ。
+// Bsw_TxChain_Test（上記）は TX I-PDU 4 本（COM_TX_IPDU_MAX と同数）を
+// 既に使い切っており、新たに PERIODIC I-PDU を追加できない
+// （feedback_test_chain_ipdu_id_ceiling: COM_RX/TX_IPDU_MAX は
+// native_chain バイナリ全体で共有される固定サイズ配列であり、超過は
+// 範囲外書き込みによる無関係なテストの原因不明なハングを引き起こす）。
+// そのため Bsw_RxTimeoutChain_test.cpp の `rx_ipdu_group` 名前空間と同じ
+// 手法（専用の最小 Com_ConfigType、IPduId=0 を再利用した独立した
+// Com_Init() サイクル）で分離する。
+//
+// PduR_Init()/CanIf_Init() はあえて呼ばない: このフィクスチャの関心は
+// 「Com_TxTriggerPending が PERIODIC I-PDU でも period 判定と独立した OR 項
+// として効くか」のみであり、それは Com_MainFunction() 内で
+// PduR_Transmit() を呼ぶ前に確定する（Com_TxTriggerPending[id]=0 の
+// クリアは due=true になった時点で無条件に行われる、Com.c 参照）。
+// PduR_ConfigPtr が NULL のままでも PduR_Transmit() は安全に E_NOT_OK を
+// 返すため（PduR.c 参照）、実際の CAN 送信まで配線しなくても検証できる。
+// ------------------------------------------------------------
+namespace tx_trigger_periodic
+{
+
+const Com_IPduConfigType kTestPeriodicIPdu = {
+    /* IPduId */           0U,
+    /* DLC */              1U,
+    /* PduRId */           0U,   // PduR_Init() を呼ばないため未登録のまま
+                                 // （上記名前空間コメント参照）
+    /* FirstTimeoutMs */   0U,
+    /* TimeoutMs */        0U,
+    /* IsSignalGroup */    0U,
+    /* TxModeMode */       COM_TX_MODE_PERIODIC,
+    /* TxPeriodMs */       1000U,
+    /* TxModeModeTrue */   COM_TX_MODE_PERIODIC,
+    /* TxPeriodMsTrue */   1000U,
+    /* MinDelayMs */       50U,  // Com_TriggerIPDUSend の MDT 尊重（SWS_Com_00388）検証用
+    /* UpdateBitPosition */ 0xFFU,
+    /* IpduGroupId */      COM_IPDU_GROUP_NONE
+};
+
+const Com_IPduConfigType kTestTxIPdus[] = { kTestPeriodicIPdu };
+
+const Com_ConfigType kTestComConfig = {
+    /* RxIPdus */       NULL,
+    /* RxIPduCount */   0U,
+    /* TxIPdus */       kTestTxIPdus,
+    /* TxIPduCount */   1U,
+    /* Signals */       NULL,
+    /* SignalCount */   0U,
+    /* GwMappings */    NULL,
+    /* GwMappingCount */ 0U
+};
+
+class Bsw_TxTriggerPeriodicChain_Test : public ::testing::Test
+{
+protected:
+    void SetUp() override
+    {
+        FakeMillis_Reset();
+        FakeCanHw_Reset();
+        FakeDetHw_LogSuppressed = 1U;
+        Com_Init(&kTestComConfig);
+        FakeDetHw_LogSuppressed = 0U;
+    }
+
+    void TearDown() override
+    {
+        FakeDetHw_LogSuppressed = 1U;
+        Com_DeInit();
+    }
+};
+
+TEST_F(Bsw_TxTriggerPeriodicChain_Test, TriggerIPDUSend_OK_FiresBetweenPeriodsOnceMdtElapses)
+{
+    /* 準備 (Arrange): kTestPeriodicIPdu は IpduGroupId=COM_IPDU_GROUP_NONE の
+     * ため Com_Init() 直後から起動済み。TxPeriodMs=1000U だが、経過時間は
+     * まだ 0 のため自然な周期発火は起こらない。 */
+
+    /* 実行 (Act 1): トリガー直後、MDT(50ms)未経過ではまだ消費されない */
+    ASSERT_EQ(Com_TriggerIPDUSend(0U), E_OK);
+    Com_MainFunction();
+    EXPECT_EQ(Com_Test_GetTxTriggerPending(0U), 1U);
+
+    /* 実行 (Act 2): MDT 経過後は、TxPeriodMs(1000ms) にまだ遠く及ばなくても
+     * トリガーにより送信が試行される（[SWS_Com_00861]/[SWS_Com_00388]:
+     * PERIODIC I-PDU でも TxModeMode によらず効く。Com_TxTriggerPending の
+     * 宣言コメント参照）。 */
+    FakeMillis_Value += 50U;
+    Com_MainFunction();
+    EXPECT_EQ(Com_Test_GetTxTriggerPending(0U), 0U);
+}
+
+TEST_F(Bsw_TxTriggerPeriodicChain_Test, ComMainFunction_NG_DoesNotFireBeforePeriodElapsedWithoutTrigger)
+{
+    /* 準備 (Arrange): トリガーを一切呼ばない（回帰確認: 本変更が既存の
+     * PERIODIC 判定そのものを壊していないこと）。 */
+
+    /* 実行 (Act): TxPeriodMs(1000ms) 未満だけ経過させる */
+    FakeMillis_Value += 999U;
+    Com_MainFunction();
+
+    /* 評価 (Assert): トリガーが無い限り、period 未経過では送信されない */
+    EXPECT_EQ(Com_Test_GetTxTriggerPending(0U), 0U);
+    EXPECT_EQ(FakeCanHw_SendCount, 0U);
+}
+
+}  // namespace tx_trigger_periodic
 
 }  // namespace

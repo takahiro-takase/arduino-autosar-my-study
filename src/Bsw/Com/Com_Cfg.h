@@ -59,6 +59,10 @@
  * 実 Service ID。旧 COM_API_ID_RX_INDICATION がここ（0x10）に誤って
  * 割り当てられていたため、下記の是正と合わせて空けている。 */
 #define COM_API_ID_INVALIDATE_SIGNAL            0x10U
+/* [SWS_Com_00861]/[SWS_Com_00388] Com_TriggerIPDUSend の実 Service ID。
+ * 静的ヘルパー Com_RequestTxOnChange() が誤ってこの値をコメントに持って
+ * いたが、実装追加を機に是正した（同関数のコメント参照）。 */
+#define COM_API_ID_TRIGGER_IPDU_SEND            0x17U
 #define COM_API_ID_SEND_SIGNAL_GROUP            0x18U
 #define COM_API_ID_RECEIVE_SIGNAL_GROUP         0x19U
 #define COM_API_ID_RECEIVE_SIGNAL_GROUP_ARRAY   0x1AU
