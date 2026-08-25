@@ -45,7 +45,19 @@ typedef struct
  *
  * Dlc: 期待するデータ長 (SWS_CANIF_00026 の CanIfRxPduDataLength に相当)。
  *      CanIf_RxIndication() が SduLength < Dlc の L-PDU を上位層へ渡さず
- *      棄却する (SWS_CANIF_00168 の CANIF_E_INVALID_DATA_LENGTH 相当)。 */
+ *      棄却する (SWS_CANIF_00168 の CANIF_E_INVALID_DATA_LENGTH 相当)。
+ *
+ * ReadRxPduDataEnabled: CanIf_ReadRxPduData()（[SWS_CANIF_00194]、
+ *      2026-08 追加）用のオプトインフラグ（実 AUTOSAR の
+ *      CANIF_READRXPDU_DATA、ECUC_CanIf_00600 に相当）。1 のときのみ
+ *      CanIf_RxIndication() がこの RX PDU の受信データを内部バッファへ
+ *      複製し、CanIf_ReadRxPduData() でポーリング取得できるようにする
+ *      （既定 0＝バッファリングなし。全 RX PDU を無条件にバッファすると
+ *      Arduino の RAM 予算を無駄に消費するため、実 AUTOSAR と同じく
+ *      per-PDU の明示的な opt-in とした）。末尾に追加したのは、既存の
+ *      位置初期化（designated でない集成体初期化）を使うテストファイルで
+ *      この 1 行を書き足す必要が無いようにするため（末尾省略はゼロ初期化
+ *      される、Com_SignalConfigType 等と同じ規約）。 */
 typedef struct
 {
     Can_IdType                CanId;              // マッチさせる CAN ID
@@ -53,6 +65,7 @@ typedef struct
     PduIdType                 UpperLayerRxPduId; // 上位層に渡す受信 PDU ID
     uint8                     Dlc;               // 期待するデータ長（これ未満は棄却）
     CanIf_RxIndicationFctType RxIndicationFct;   // 受信時に呼ぶ上位層コールバック
+    uint8                     ReadRxPduDataEnabled; // CanIf_ReadRxPduData() 用の opt-in
 } CanIf_RxPduConfigType;
 
 // -------------------------------------------------------

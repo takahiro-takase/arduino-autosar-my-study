@@ -43,6 +43,12 @@
 #define CANIF_E_PARAM_POINTER       20U  /* [SWS_CANIF_00320/00419 等]: NULL ポインタチェック */
 #define CANIF_E_PARAM_LPDU          13U  /* [SWS_CANIF_00410]: CanTxPduId が範囲外 */
 #define CANIF_E_INVALID_TXPDUID     50U  /* [SWS_CANIF_00319]: TxPduId が範囲外 */
+#define CANIF_E_INVALID_RXPDUID     60U  /* [SWS_CANIF_00325]: CanIfRxSduId が範囲外、または
+                                          *   CANIF_READRXPDU_DATA（ReadRxPduDataEnabled）未設定 */
+#define CANIF_E_INIT_FAILED         80U  /* CAN Interface initialisation failed。
+                                          *   RxPduCount/TxPduCount がコンパイル時上限
+                                          *   （CANIF_RX_PDU_MAX 等）を超える設定を拒否する際に使う
+                                          *   （Com_Cfg.h の COM_E_INIT_FAILED と同じ位置づけ）。 */
 
 /** ApiId（各関数の Doxygen \ServiceID タグと一致させること。値は SWS 8.x 章の
  *  「Service ID[hex]」記載を実測して確認済み） */
@@ -53,6 +59,7 @@
 #define CANIF_API_ID_RX_INDICATION       0x14U
 #define CANIF_API_ID_CONTROLLER_BUSOFF   0x16U
 #define CANIF_API_ID_GET_VERSION_INFO    0x0BU
+#define CANIF_API_ID_READ_RX_PDU_DATA    0x06U
 
 /** バージョン情報（SWS_CANInterface、Com/E2EXf/PduR 等の既存モジュールと同じ命名規則） */
 #define CANIF_VENDOR_ID          0U
@@ -81,5 +88,18 @@
  *  RxPduId=3: ImmobilizerCmd (CAN 0x120, SecOC) KeyFobEcu 想定
  *  RxPduId=4: NM フレーム    (CAN 0x400, Nm。PduR/Com を経由せず直接呼び出す) */
 #define CANIF_RX_PDU_COUNT  5U
+
+/** CanIf_ReadRxPduData()（2026-08 追加）の内部バッファ配列サイズ。
+ *  Com_Cfg.h の COM_RX_IPDU_MAX と同じ規約（CANIF_RX_PDU_COUNT に連動）。
+ *  この配列は native_chain バイナリ全体で共有される固定サイズのため、
+ *  テストローカルの CanIf_ConfigType.RxPduCount がこれを超えないこと
+ *  （feedback_test_chain_ipdu_id_ceiling 参照。超過は範囲外書き込みによる
+ *  無関係なテストの原因不明なハングを引き起こす）。 */
+#define CANIF_RX_PDU_MAX    CANIF_RX_PDU_COUNT
+
+/** CAN classic の最大データ長 [byte]（CAN FD は本プロジェクト未対応、
+ *  project_can_fd_postponed 参照）。CanIf_ReadRxPduData() の内部バッファ
+ *  1 エントリのサイズに使う。 */
+#define CANIF_MAX_DLC        8U
 
 #endif /* CANIF_CFG_H */

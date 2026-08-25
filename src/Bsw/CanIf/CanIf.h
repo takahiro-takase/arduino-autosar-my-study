@@ -22,6 +22,7 @@ void           CanIf_Init(const CanIf_ConfigType* ConfigPtr);
 void           CanIf_DeInit(void);
 Std_ReturnType CanIf_Transmit(PduIdType TxPduId, const PduInfoType* PduInfoPtr);
 void           CanIf_RxIndication(const Can_HwType* Mailbox, const PduInfoType* PduInfoPtr);
+Std_ReturnType CanIf_ReadRxPduData(PduIdType CanIfRxSduId, PduInfoType* CanIfRxInfoPtr);
 void           CanIf_TxConfirmation(PduIdType CanTxPduId);
 void           CanIf_ControllerBusOff(uint8 ControllerId);
 void           CanIf_ControllerWakeup(uint8 ControllerId);

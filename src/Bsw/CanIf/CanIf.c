@@ -22,6 +22,16 @@
 
 static const CanIf_ConfigType* CanIf_ConfigPtr = NULL;
 
+/* CanIf_ReadRxPduData()（[SWS_CANIF_00194]、2026-08 追加）用の内部バッファ。
+ * CanIf_RxPduConfigType.ReadRxPduDataEnabled=1 の RX PDU についてのみ、
+ * CanIf_RxIndication() が受信データをここへ複製する。添字は
+ * CanIf_ConfigPtr->RxPduConfig[] 上の位置（CanIfRxSduId、実 AUTOSAR の
+ * CanIf 内部ハンドルに相当）であり、UpperLayerRxPduId とは別の名前空間
+ * （Com_RxBuffer[] 等が Com の IPduId 空間を使うのと同じ考え方）。 */
+static uint8 CanIf_RxPduDataBuffer[CANIF_RX_PDU_MAX][CANIF_MAX_DLC];
+static uint8 CanIf_RxPduDataLength[CANIF_RX_PDU_MAX];
+static uint8 CanIf_RxPduDataValid[CANIF_RX_PDU_MAX];  /* 一度でも受信したか */
+
 /**
  * \brief   CAN インタフェースモジュールを初期化する。
  *
@@ -49,7 +59,32 @@ void CanIf_Init(const CanIf_ConfigType* ConfigPtr)
         return;
     }
 
+    /* CanIf_RxPduDataBuffer[]/Length[]/Valid[] は CANIF_RX_PDU_MAX
+     * （native_chain バイナリ全体で共有される固定サイズ）でしか確保されて
+     * いない。ConfigPtr->RxPduCount がこれを超えると
+     * CanIf_RxIndication()/CanIf_ReadRxPduData() が範囲外書き込み/読み出しを
+     * 起こしうるため、Com_Init() の RxIPduCount/TxIPduCount ガードと同じ
+     * 方針で初期化自体を拒否する（/code-review・/simplify 双方の指摘で
+     * 発覚: この配列は元々存在せず、本チェックも今回追加するまで無かった）。 */
+    if (ConfigPtr->RxPduCount > CANIF_RX_PDU_MAX)
+    {
+        DET_LOGE(TAG, "Init E: RxPduCount>max");
+        Det_ReportError(CANIF_MODULE_ID, 0U, CANIF_API_ID_INIT, CANIF_E_INIT_FAILED);
+        return;
+    }
+
     CanIf_ConfigPtr = ConfigPtr;
+
+    /* CanIf_ReadRxPduData() 用バッファの初期化（[SWS_CANIF_00194]）。
+     * CanIf_RxPduDataValid をクリアすることが本質で、Buffer/Length は
+     * Valid=0 の間は参照されないため実際にはゼロクリア不要だが、
+     * Com_Init() の同種ループと同じく再初期化を明示しておく。 */
+    for (uint8 i = 0U; i < CANIF_RX_PDU_MAX; i++)
+    {
+        CanIf_RxPduDataLength[i] = 0U;
+        CanIf_RxPduDataValid[i]  = 0U;
+    }
+
     DET_LOGI(TAG, "Init ok TX=%u RX=%u",
              (unsigned)ConfigPtr->TxPduCount, (unsigned)ConfigPtr->RxPduCount);
 }
@@ -157,6 +192,10 @@ Std_ReturnType CanIf_Transmit(PduIdType TxPduId, const PduInfoType* PduInfoPtr)
  *          無害だが、ウェイクアップ検証中はこれが検証成功の唯一の合図になる
  *          （詳細は CanSM_RxIndication() を参照）。
  *
+ *          `ReadRxPduDataEnabled=1` の RX PDU では、上位層コールバックの
+ *          呼び出しに加えて内部バッファも更新し、`CanIf_ReadRxPduData()`
+ *          （[SWS_CANIF_00194]）でのポーリング取得に備える。
+ *
  * \param[in]  Mailbox     受信 CAN ID・HOH・コントローラ ID を格納した
  *                         ハードウェアメールボックス記述子へのポインタ。
  *                         NULL 禁止。
@@ -221,6 +260,26 @@ void CanIf_RxIndication(const Can_HwType* Mailbox, const PduInfoType* PduInfoPtr
                  (unsigned long)Mailbox->CanId,
                  (unsigned)rxCfg->UpperLayerRxPduId);
 
+        /* CanIf_ReadRxPduData() 用バッファ更新（[SWS_CANIF_00194]、
+         * ReadRxPduDataEnabled=1 の RX PDU のみ）。上のデータ長チェックは
+         * SduLength < rxCfg->Dlc（不足）のみを棄却し、超過は素通りするため、
+         * ここでは rxCfg->Dlc（この PDU 自身の設定値）でクランプする
+         * （CANIF_MAX_DLC ではない——CanIf_ReadRxPduData() の呼び出し元が
+         * 「この PDU の設定 Dlc 分だけ確保すれば十分」と信頼できるように
+         * するため。/code-review 指摘: 当初 CANIF_MAX_DLC でクランプしており、
+         * Dlc より大きい異常フレームを受けた場合に契約を超えるデータ長を
+         * 返しうる状態だった）。 */
+        if (rxCfg->ReadRxPduDataEnabled != 0U)
+        {
+            const uint8 copyLen = (PduInfoPtr->SduLength <= rxCfg->Dlc)
+                                       ? (uint8)PduInfoPtr->SduLength
+                                       : rxCfg->Dlc;
+            for (uint8 b = 0U; b < copyLen; b++)
+                CanIf_RxPduDataBuffer[i][b] = PduInfoPtr->SduDataPtr[b];
+            CanIf_RxPduDataLength[i] = copyLen;
+            CanIf_RxPduDataValid[i]  = 1U;
+        }
+
         if (rxCfg->RxIndicationFct != NULL)
             rxCfg->RxIndicationFct(rxCfg->UpperLayerRxPduId, PduInfoPtr);
 
@@ -232,6 +291,109 @@ void CanIf_RxIndication(const Can_HwType* Mailbox, const PduInfoType* PduInfoPtr
         Det_ReportError(CANIF_MODULE_ID, 0U, CANIF_API_ID_RX_INDICATION, CANIF_E_PARAM_CANID);
     else
         Det_ReportError(CANIF_MODULE_ID, 0U, CANIF_API_ID_RX_INDICATION, CANIF_E_PARAM_HOH);
+}
+
+/**
+ * \brief   RX PDU の直近受信データをポーリングで取得する。
+ *
+ * \details `CanIf_RxIndication()` が上位層コールバックへプッシュ配送する
+ *          経路とは独立した、ポーリングによる受信データ取得経路
+ *          （実 AUTOSAR の I-PDU callout 等とも異なる、CanIf 自身が保持する
+ *          内部バッファへのアクセサ）。対象 RX PDU は
+ *          `CanIf_RxPduConfigType.ReadRxPduDataEnabled=1` で事前に
+ *          opt-in されている必要がある（[SWS_CANIF_00325]、既定は 0
+ *          ＝バッファリングなし）。
+ *
+ *          `CanIfRxSduId` は `CanIf_ConfigPtr->RxPduConfig[]` 上の位置
+ *          （`CanIf_RxIndication()` のループ添字 `i` と同じ名前空間）であり、
+ *          上位層へ渡す `UpperLayerRxPduId` とは別の ID 空間である点に注意
+ *          （実 AUTOSAR の "CanIf 内部ハンドル" に相当）。
+ *
+ * \note    本プロジェクトは [SWS_CANIF_00324]（コントローラが
+ *          CAN_CS_STARTED かつ受信パスが online でなければ E_NOT_OK）は
+ *          実装しない。CanIf 自身はコントローラ状態を一切追跡しておらず
+ *          （Can_MainFunction_Read() から渡されたフレームをそのまま
+ *          振り分けるだけの設計）、この状態管理は CanSM の責務のため
+ *          スコープ外とする。「一度も受信していない PDU は E_NOT_OK」
+ *          （spec 原文 "No valid data has been received"）のみ実装する。
+ *
+ * \param[in]   CanIfRxSduId    データを取得する RX PDU の ID
+ *                              （`CanIf_ConfigPtr->RxPduConfig[]` の添字）。
+ * \param[out]  CanIfRxInfoPtr  取得したデータの格納先。`SduDataPtr` は
+ *                              対象 PDU の設定 `Dlc` バイト分確保しておけば
+ *                              十分（バッファ自体の格納長も `Dlc` でクランプ
+ *                              される。詳細は `CanIf_RxIndication()` の
+ *                              実装コメント参照）。NULL 禁止。
+ *
+ * \retval  E_OK      データを `CanIfRxInfoPtr` へ格納した。
+ * \retval  E_NOT_OK  CanIf 未初期化、CanIfRxSduId が範囲外、対象 PDU が
+ *                    `ReadRxPduDataEnabled=0`、`CanIfRxInfoPtr`/
+ *                    `SduDataPtr` が NULL、またはこの PDU をまだ一度も
+ *                    受信していない。
+ *
+ * \pre        CanIf_Init() が正常に完了していること。
+ *
+ * \note    本プロジェクトは単一の協調的スーパーループ（Os の各タスクが
+ *          プリエンプションなしで順次実行される、`Os_PBCfg.c` 参照）で
+ *          動作するため、`CanIf_RxIndication()`（Reentrant）と本関数
+ *          （Non Reentrant）が実際に競合して同じ `CanIf_RxPduDataBuffer[]`
+ *          要素を同時に読み書きすることはない（`CanIf_RxIndication()` 自体
+ *          も真の割り込みコンテキストではなく `Can_MainFunction_Read()`
+ *          からポーリングで呼ばれる、本ファイル冒頭の
+ *          `CanIf_RxIndication()` の Doxygen コメント参照）。マルチコア化
+ *          等でこの前提が崩れる場合は、Rte.c の
+ *          `SchM_Enter/Exit_Rte_MIRROR_EXCLUSIVE_AREA()` と同様の排他区間が
+ *          必要になる（/code-review 指摘）。
+ *
+ * \AUTOSARReq     {SWS_CANIF_00194, SWS_CANIF_00325, SWS_CANIF_00326}
+ * \ServiceID      {0x06}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType CanIf_ReadRxPduData(PduIdType CanIfRxSduId, PduInfoType* CanIfRxInfoPtr)
+{
+    DET_LOGT(TAG, "called");
+
+    if (CanIf_ConfigPtr == NULL)
+        return E_NOT_OK;  /* CanIf の他 API と同じ方針、CanIf_Cfg.h 冒頭コメント参照 */
+
+    if (CanIfRxSduId >= CanIf_ConfigPtr->RxPduCount)
+    {
+        DET_LOGE(TAG, "ReadRxPduData E: invalid CanIfRxSduId");
+        Det_ReportError(CANIF_MODULE_ID, 0U, CANIF_API_ID_READ_RX_PDU_DATA, CANIF_E_INVALID_RXPDUID);
+        return E_NOT_OK;
+    }
+
+    if (CanIfRxInfoPtr == NULL || CanIfRxInfoPtr->SduDataPtr == NULL)
+    {
+        DET_LOGE(TAG, "ReadRxPduData E: NULL CanIfRxInfoPtr");
+        Det_ReportError(CANIF_MODULE_ID, 0U, CANIF_API_ID_READ_RX_PDU_DATA, CANIF_E_PARAM_POINTER);
+        return E_NOT_OK;
+    }
+
+    const CanIf_RxPduConfigType* rxCfg = &CanIf_ConfigPtr->RxPduConfig[CanIfRxSduId];
+    if (rxCfg->ReadRxPduDataEnabled == 0U)
+    {
+        /* [SWS_CANIF_00325]: opt-in されていない PDU の要求も開発エラー */
+        DET_LOGE(TAG, "ReadRxPduData E: CanIfRxSduId=%u not configured for buffering",
+                 (unsigned)CanIfRxSduId);
+        Det_ReportError(CANIF_MODULE_ID, 0U, CANIF_API_ID_READ_RX_PDU_DATA, CANIF_E_INVALID_RXPDUID);
+        return E_NOT_OK;
+    }
+
+    if (CanIf_RxPduDataValid[CanIfRxSduId] == 0U)
+    {
+        /* spec 原文: "E_NOT_OK: No valid data has been received"。まだ一度も
+         * 受信していないだけの正常な状態のため Det_ReportError() は呼ばない。 */
+        return E_NOT_OK;
+    }
+
+    const uint8 len = CanIf_RxPduDataLength[CanIfRxSduId];
+    for (uint8 b = 0U; b < len; b++)
+        CanIfRxInfoPtr->SduDataPtr[b] = CanIf_RxPduDataBuffer[CanIfRxSduId][b];
+    CanIfRxInfoPtr->SduLength = len;
+
+    return E_OK;
 }
 
 /**

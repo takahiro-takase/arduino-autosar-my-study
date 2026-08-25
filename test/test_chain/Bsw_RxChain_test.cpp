@@ -367,18 +367,51 @@ const PduR_PBConfigType kTestPduRRxConfig = {
 };
 
 const CanIf_RxPduConfigType kTestCanIfRxPdu = {
-    /* CanId */             0x100U,
-    /* Hrh */               0U,  /* Can_MainFunction_Read() が構築する Mailbox は常に Hoh=0 */
-    /* UpperLayerRxPduId */ 0U,
-    /* Dlc */               2U,
-    /* RxIndicationFct */   PduR_ComRxIndication  /* = PduR_CanIfRxIndication（#define エイリアス） */
+    /* CanId */                0x100U,
+    /* Hrh */                  0U,  /* Can_MainFunction_Read() が構築する Mailbox は常に Hoh=0 */
+    /* UpperLayerRxPduId */    0U,
+    /* Dlc */                  2U,
+    /* RxIndicationFct */      PduR_ComRxIndication,  /* = PduR_CanIfRxIndication（#define エイリアス） */
+    /* ReadRxPduDataEnabled */ 1U  // CanIf_ReadRxPduData（SWS_CANIF_00194）検証用
+};
+
+// CanIf_ReadRxPduData()（SWS_CANIF_00194、2026-08 追加）の opt-in ゲート
+// （ReadRxPduDataEnabled=0）検証用。実際に受信させても、この PDU 自体は
+// バッファリング対象外のままであることを確認する。上位層ルーティングは
+// 不要（RxIndicationFct=NULL）なため Com/PduR 側の設定は増やさない。
+const CanIf_RxPduConfigType kTestCanIfRxPduNoBuffer = {
+    /* CanId */                0x101U,
+    /* Hrh */                  0U,
+    /* UpperLayerRxPduId */    1U,
+    /* Dlc */                  2U,
+    /* RxIndicationFct */      NULL,
+    /* ReadRxPduDataEnabled */ 0U
+};
+
+// CanIf_ReadRxPduData() のバッファ長クランプ検証用（/code-review 指摘の
+// 是正確認）。CanIf_RxIndication() の既存の長さチェックは SduLength <
+// Dlc（不足）のみを棄却し、超過は素通りするため、Dlc(2) より長い
+// フレーム（8byte）を受けたときにバッファ長がこの PDU 自身の Dlc(2) で
+// クランプされ、モジュール共通の CANIF_MAX_DLC(8) まで届かないことを
+// 確認する。上位層ルーティングは不要。
+const CanIf_RxPduConfigType kTestCanIfRxPduSmallDlc = {
+    /* CanId */                0x102U,
+    /* Hrh */                  0U,
+    /* UpperLayerRxPduId */    2U,
+    /* Dlc */                  2U,
+    /* RxIndicationFct */      NULL,
+    /* ReadRxPduDataEnabled */ 1U
+};
+
+const CanIf_RxPduConfigType kTestCanIfRxPdus[] = {
+    kTestCanIfRxPdu, kTestCanIfRxPduNoBuffer, kTestCanIfRxPduSmallDlc
 };
 
 const CanIf_ConfigType kTestCanIfRxConfig = {
     /* TxPduConfig */ NULL,
     /* TxPduCount */  0U,
-    /* RxPduConfig */ &kTestCanIfRxPdu,
-    /* RxPduCount */  1U
+    /* RxPduConfig */ kTestCanIfRxPdus,
+    /* RxPduCount */  3U
 };
 
 class Bsw_RxChain_Test : public ::testing::Test
@@ -467,6 +500,136 @@ TEST_F(Bsw_RxChain_Test, CanMainFunctionRead_NG_NothingReceived_LeavesInitValue)
     uint8 ret = Com_ReceiveSignal(0U, &value);
     EXPECT_EQ(ret, E_OK);
     EXPECT_EQ(value, 0U);
+}
+
+// ------------------------------------------------------------
+// CanIf_ReadRxPduData（SWS_CANIF_00194、2026-08 追加）。
+// kTestCanIfRxPdu（CanIfRxSduId=0、ReadRxPduDataEnabled=1）を流用する。
+// ------------------------------------------------------------
+TEST_F(Bsw_RxChain_Test, CanIfReadRxPduData_OK_ReturnsBufferedDataAfterReceive)
+{
+    /* 準備 (Arrange): CanMainFunctionRead_OK_DrivesChainToComReceiveSignal と
+     * 同じ手順で実際に1フレーム受信させる（CanIf_RxIndication() の内部で
+     * バッファへ複製される）。 */
+    FakeCanHw_RxPendingCount = 1U;
+    FakeCanHw_RxId  = 0x100U;
+    FakeCanHw_RxDlc = 2U;
+    FakeCanHw_RxData[0] = 0x56U;
+    FakeCanHw_RxData[1] = 0x78U;
+    Can_MainFunction_Read();
+
+    /* 実行 (Act) */
+    uint8 buf[CANIF_MAX_DLC] = {0U};
+    PduInfoType info = { buf, 0U };
+    Std_ReturnType ret = CanIf_ReadRxPduData(0U, &info);
+
+    /* 評価 (Assert) */
+    EXPECT_EQ(ret, E_OK);
+    ASSERT_EQ(info.SduLength, 2U);
+    EXPECT_EQ(buf[0], 0x56U);
+    EXPECT_EQ(buf[1], 0x78U);
+}
+
+TEST_F(Bsw_RxChain_Test, CanIfReadRxPduData_NG_ReturnsErrorBeforeAnyReceive)
+{
+    /* 準備 (Arrange): 一切受信させない */
+
+    /* 実行 (Act) + 評価 (Assert): spec 原文 "No valid data has been received" */
+    uint8 buf[CANIF_MAX_DLC] = {0U};
+    PduInfoType info = { buf, 0U };
+    EXPECT_EQ(CanIf_ReadRxPduData(0U, &info), E_NOT_OK);
+}
+
+TEST_F(Bsw_RxChain_Test, CanIfReadRxPduData_NG_NotOptedInReturnsErrorEvenAfterReceive)
+{
+    /* 準備 (Arrange): kTestCanIfRxPduNoBuffer（CanIfRxSduId=1、CAN 0x101、
+     * ReadRxPduDataEnabled=0）を実際に受信させる。 */
+    FakeCanHw_RxPendingCount = 1U;
+    FakeCanHw_RxId  = 0x101U;
+    FakeCanHw_RxDlc = 2U;
+    FakeCanHw_RxData[0] = 0xAAU;
+    FakeCanHw_RxData[1] = 0xBBU;
+    Can_MainFunction_Read();
+
+    /* 実行 (Act) + 評価 (Assert): [SWS_CANIF_00325] opt-in されていない
+     * PDU への要求は E_NOT_OK（受信済みかどうかによらない）。 */
+    uint8 buf[CANIF_MAX_DLC] = {0U};
+    PduInfoType info = { buf, 0U };
+    EXPECT_EQ(CanIf_ReadRxPduData(1U, &info), E_NOT_OK);
+}
+
+TEST_F(Bsw_RxChain_Test, CanIfReadRxPduData_NG_UnknownPduIdReturnsError)
+{
+    /* 実行 (Act) + 評価 (Assert) */
+    uint8 buf[CANIF_MAX_DLC] = {0U};
+    PduInfoType info = { buf, 0U };
+    EXPECT_EQ(CanIf_ReadRxPduData(99U, &info), E_NOT_OK);
+}
+
+TEST_F(Bsw_RxChain_Test, CanIfReadRxPduData_NG_NullPointerReturnsError)
+{
+    /* 実行 (Act) + 評価 (Assert) */
+    EXPECT_EQ(CanIf_ReadRxPduData(0U, NULL), E_NOT_OK);
+}
+
+TEST_F(Bsw_RxChain_Test, CanIfReadRxPduData_OK_ClampsBufferedLengthToPduDlcNotModuleMax)
+{
+    /* 準備 (Arrange): kTestCanIfRxPduSmallDlc（CanIfRxSduId=2、Dlc=2）に対し、
+     * 設定 Dlc(2) より長い 8byte フレームを受信させる。既存の長さチェックは
+     * 不足のみ棄却するため、この受信自体は素通りする。 */
+    FakeCanHw_RxPendingCount = 1U;
+    FakeCanHw_RxId  = 0x102U;
+    FakeCanHw_RxDlc = 8U;
+    for (uint8_t b = 0U; b < 8U; b++)
+        FakeCanHw_RxData[b] = (uint8_t)(0xC0U + b);
+    Can_MainFunction_Read();
+
+    /* 実行 (Act) */
+    uint8 buf[CANIF_MAX_DLC] = {0U};
+    PduInfoType info = { buf, 0U };
+    Std_ReturnType ret = CanIf_ReadRxPduData(2U, &info);
+
+    /* 評価 (Assert): /code-review 指摘の是正確認。バッファ長はこの PDU
+     * 自身の設定 Dlc(2) でクランプされ、モジュール共通の CANIF_MAX_DLC(8)
+     * までは届かない——CanIfRxSduId=2 の呼び出し元が Dlc(2) 分だけ確保した
+     * バッファでも安全であることの検証。 */
+    EXPECT_EQ(ret, E_OK);
+    ASSERT_EQ(info.SduLength, 2U);
+    EXPECT_EQ(buf[0], 0xC0U);
+    EXPECT_EQ(buf[1], 0xC1U);
+}
+
+TEST_F(Bsw_RxChain_Test, CanIfInit_NG_RejectsConfigWithRxPduCountAboveMaxWithoutActivating)
+{
+    /* 準備 (Arrange): CanIf_RxPduDataBuffer[]/Length[]/Valid[] は
+     * CANIF_RX_PDU_MAX（native_chain バイナリ全体で共有される固定サイズ）
+     * でしか確保されていない（/code-review・/simplify 指摘）。それを超える
+     * RxPduCount を渡した場合に初期化自体が拒否されることを確認する。
+     * RxPduConfig 自体は CanIf_Init() 内で走査されないため NULL のままでよい
+     * （範囲チェックのみで早期 return するため、その後の配列アクセスは
+     * 一切発生しない）。まず SetUp() が設定した有効な状態を DeInit() で
+     * クリアしておく。 */
+    CanIf_DeInit();
+    const CanIf_ConfigType kOversizedConfig = {
+        /* TxPduConfig */ NULL,
+        /* TxPduCount */  0U,
+        /* RxPduConfig */ NULL,
+        /* RxPduCount */  (uint8_t)(CANIF_RX_PDU_MAX + 1U)
+    };
+
+    /* 実行 (Act) */
+    CanIf_Init(&kOversizedConfig);
+
+    /* 評価 (Assert): 拒否されて未初期化のままのため、他の API は
+     * CanIf_ConfigPtr==NULL の早期 return 経路（DET 報告なし）を通り、
+     * E_NOT_OK を返す。 */
+    uint8 buf[CANIF_MAX_DLC] = {0U};
+    PduInfoType info = { buf, 0U };
+    EXPECT_EQ(CanIf_ReadRxPduData(0U, &info), E_NOT_OK);
+
+    /* 後始末 (Cleanup): TearDown() が CanIf_DeInit() を呼ぶだけなので、
+     * kTestCanIfRxConfig で再度有効化しておく必要はない
+     * （DeInit は未初期化状態への遷移で、既に未初期化のため冪等）。 */
 }
 
 // ------------------------------------------------------------
