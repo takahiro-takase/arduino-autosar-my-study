@@ -32,6 +32,15 @@ static uint8 CanIf_RxPduDataBuffer[CANIF_RX_PDU_MAX][CANIF_MAX_DLC];
 static uint8 CanIf_RxPduDataLength[CANIF_RX_PDU_MAX];
 static uint8 CanIf_RxPduDataValid[CANIF_RX_PDU_MAX];  /* 一度でも受信したか */
 
+/* CanIf_SetPduMode()/CanIf_GetPduMode()（[SWS_CANIF_00137]、2026-08 追加）の
+ * コントローラ単位の状態。CanIf_Transmit() はここが CANIF_ONLINE のときのみ
+ * Can_Write() まで到達させる。RX 側（CanIf_RxIndication() の上位層通知）は
+ * 意図的にこの状態でゲートしない: 本プロジェクトが必要とする唯一の用途
+ * （CanSM の SILENT_COMMUNICATION、Nm/Com の受信処理は継続させたい）では
+ * CANIF_OFFLINE を実際には使わないため（CanIf_RxIndication() の doc コメント
+ * 参照）。 */
+static CanIf_PduModeType CanIf_ControllerPduMode[CANIF_CONTROLLER_MAX];
+
 /**
  * \brief   CAN インタフェースモジュールを初期化する。
  *
@@ -85,6 +94,13 @@ void CanIf_Init(const CanIf_ConfigType* ConfigPtr)
         CanIf_RxPduDataValid[i]  = 0U;
     }
 
+    /* [SWS_CANIF_00137] の初期値: Init 直後は配下のコントローラもまだ
+     * 起動していない（CanIf_Init() の Note 参照）ため CANIF_OFFLINE とする。
+     * 実際に FULL_COM へ遷移する際に CanSM が CanIf_SetPduMode(CANIF_ONLINE)
+     * を呼ぶ。 */
+    for (uint8 i = 0U; i < CANIF_CONTROLLER_MAX; i++)
+        CanIf_ControllerPduMode[i] = CANIF_OFFLINE;
+
     DET_LOGI(TAG, "Init ok TX=%u RX=%u",
              (unsigned)ConfigPtr->TxPduCount, (unsigned)ConfigPtr->RxPduCount);
 }
@@ -120,7 +136,9 @@ void CanIf_DeInit(void)
  *
  * \retval  E_OK      PDU が Can_Write() に正常に渡された。
  * \retval  E_NOT_OK  CanIf 未初期化、TxPduId 不正、NULL ポインタ、
- *                    SduLength が設定 DLC を超過、または Can_Write() 失敗。
+ *                    SduLength が設定 DLC を超過、PDU チャネルが
+ *                    CANIF_ONLINE でない（CanIf_SetPduMode() 参照）、
+ *                    または Can_Write() 失敗。
  *
  * \pre        CanIf_Init() が正常に完了していること。
  * \pre        CAN コントローラが CAN_CS_STARTED 状態であること。
@@ -156,6 +174,17 @@ Std_ReturnType CanIf_Transmit(PduIdType TxPduId, const PduInfoType* PduInfoPtr)
     if (PduInfoPtr->SduLength > txCfg->Dlc)
     {
         DET_LOGE(TAG, "TX E: SduLength>DLC");
+        return E_NOT_OK;
+    }
+
+    /* [SWS_CANIF_00137]/[SWS_CANIF_00074] 相当: PDU チャネルが CANIF_ONLINE
+     * でなければ送信しない（CANIF_OFFLINE/CANIF_TX_OFFLINE いずれも TX 禁止）。
+     * 本プロジェクトは単一コントローラのため添字は固定で 0。DET は報告しない
+     * （TxIpduCalloutCbk による拒否と同じ扱い、呼び出し元の CanSM が既に
+     * 意図して TX_OFFLINE にしている想定のため）。 */
+    if (CanIf_ControllerPduMode[0] != CANIF_ONLINE)
+    {
+        DET_LOGD(TAG, "TX iPdu=%u rejected: PduMode not ONLINE", (unsigned)TxPduId);
         return E_NOT_OK;
     }
 
@@ -480,6 +509,97 @@ void CanIf_ControllerWakeup(uint8 ControllerId)
 {
     DET_LOGI(TAG, "ControllerWakeup ch=%u", (unsigned)ControllerId);
     CanSM_ControllerWakeup(ControllerId);
+}
+
+/**
+ * \brief   PDU チャネル（コントローラ単位）の送受信有効/無効状態を設定する。
+ *
+ * \details 実 AUTOSAR の主な用途は CanSM が SILENT_COMMUNICATION 等の
+ *          通信モードを実現するための下位レイヤ操作。`CANIF_TX_OFFLINE`
+ *          にすると、以後 `CanIf_Transmit()` は `E_NOT_OK` を返し
+ *          `Can_Write()` まで到達しなくなる（コントローラ自体は
+ *          `CAN_CS_STARTED` のまま、送信のみを禁止する）。
+ *
+ *          [SWS_CANIF_00874] は「対象コントローラが `CAN_CS_STARTED` でない
+ *          場合は `E_NOT_OK`」と規定するが、本プロジェクトの CanIf は
+ *          コントローラ状態を一切追跡しない既存方針（`CanIf_ReadRxPduData()`
+ *          の doc コメント参照）のため、このチェックは実装しない。
+ *
+ *          RX 側（`CanIf_RxIndication()` の上位層通知抑制）は本 API では
+ *          制御しない（本ファイル冒頭の `CanIf_ControllerPduMode` 宣言コメント
+ *          参照）。
+ *
+ * \param[in]  ControllerId    対象コントローラの ID。
+ * \param[in]  PduModeRequest  要求する PDU モード。
+ *
+ * \retval  E_OK      要求を受け付けた。
+ * \retval  E_NOT_OK  ControllerId が範囲外、または PduModeRequest が
+ *                     `CanIf_PduModeType` の定義値以外。
+ *
+ * \AUTOSARReq     {SWS_CANIF_00137, SWS_CANIF_00341, SWS_CANIF_00860}
+ * \ServiceID      {0x03}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType CanIf_SetPduMode(uint8 ControllerId, CanIf_PduModeType PduModeRequest)
+{
+    DET_LOGT(TAG, "called");
+
+    if (CanIf_ConfigPtr == NULL)
+        return E_NOT_OK;
+
+    if (ControllerId >= CANIF_CONTROLLER_MAX)
+    {
+        Det_ReportError(CANIF_MODULE_ID, 0U, CANIF_API_ID_SET_PDU_MODE, CANIF_E_PARAM_CONTROLLERID);
+        return E_NOT_OK;
+    }
+
+    if (PduModeRequest != CANIF_OFFLINE && PduModeRequest != CANIF_TX_OFFLINE && PduModeRequest != CANIF_ONLINE)
+    {
+        Det_ReportError(CANIF_MODULE_ID, 0U, CANIF_API_ID_SET_PDU_MODE, CANIF_E_PARAM_PDU_MODE);
+        return E_NOT_OK;
+    }
+
+    DET_LOGI(TAG, "SetPduMode ch=%u mode=%u", (unsigned)ControllerId, (unsigned)PduModeRequest);
+    CanIf_ControllerPduMode[ControllerId] = PduModeRequest;
+    return E_OK;
+}
+
+/**
+ * \brief   PDU チャネル（コントローラ単位）の現在の送受信有効/無効状態を取得する。
+ *
+ * \param[in]   ControllerId  対象コントローラの ID。
+ * \param[out]  PduModePtr    現在の PDU モードの格納先。NULL 禁止。
+ *
+ * \retval  E_OK      PduModePtr へ格納した。
+ * \retval  E_NOT_OK  ControllerId が範囲外、または PduModePtr が NULL。
+ *
+ * \AUTOSARReq     {SWS_CANIF_00009, SWS_CANIF_00346, SWS_CANIF_00657}
+ * \ServiceID      {0x0A}
+ * \Reentrancy     {Reentrant (Not for the same channel)}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType CanIf_GetPduMode(uint8 ControllerId, CanIf_PduModeType* PduModePtr)
+{
+    DET_LOGT(TAG, "called");
+
+    if (CanIf_ConfigPtr == NULL)
+        return E_NOT_OK;
+
+    if (ControllerId >= CANIF_CONTROLLER_MAX)
+    {
+        Det_ReportError(CANIF_MODULE_ID, 0U, CANIF_API_ID_GET_PDU_MODE, CANIF_E_PARAM_CONTROLLERID);
+        return E_NOT_OK;
+    }
+
+    if (PduModePtr == NULL)
+    {
+        Det_ReportError(CANIF_MODULE_ID, 0U, CANIF_API_ID_GET_PDU_MODE, CANIF_E_PARAM_POINTER);
+        return E_NOT_OK;
+    }
+
+    *PduModePtr = CanIf_ControllerPduMode[ControllerId];
+    return E_OK;
 }
 
 /**

@@ -83,4 +83,18 @@ typedef struct
     uint8                        RxPduCount;  // RX エントリ数
 } CanIf_ConfigType;
 
+/* [SWS_CANIF_00137]: PDU チャネル（本プロジェクトは単一コントローラのため
+ * 実質コントローラ単位）の送受信有効/無効状態。CanIf_SetPduMode()/
+ * CanIf_GetPduMode() で操作する。
+ * CANIF_TX_OFFLINE_ACTIVE(0x02) は CanIfTxOfflineActiveSupport=TRUE 前提の
+ * オプション機能（Offline時も一定間隔でウェイクアップ用フレームを送信する
+ * モード）で、本プロジェクトの用途（SILENT_COMMUNICATION の TX 抑制のみ）
+ * には不要なため未実装（見送り）。 */
+typedef enum
+{
+    CANIF_OFFLINE    = 0x00,  /* TX/RX 双方禁止（初期化直後の既定） */
+    CANIF_TX_OFFLINE = 0x01,  /* TX 禁止・RX は継続（SILENT_COMMUNICATION） */
+    CANIF_ONLINE     = 0x03   /* 通常動作（TX/RX 双方有効） */
+} CanIf_PduModeType;
+
 #endif
