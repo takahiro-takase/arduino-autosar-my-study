@@ -53,6 +53,13 @@
  *             ComM_NmReleasePending の無条件クリアにより最終的に FULL_COM
  *             へ正しく収束すること。
  *
+ *          9. BusOffDuringSilentCom_OK_RestoresSilentComAfterRecovery
+ *             （2026-08 追加、SILENT_COMMUNICATION を
+ *             CanIf_SetPduMode(CANIF_TX_OFFLINE) ベースへ移行した際の回帰
+ *             テスト）: コントローラが CAN_CS_STARTED のまま維持される本当の
+ *             SILENT_COM 中に Bus-Off が発生しても無視されず処理され、回復後は
+ *             FULL_COM ではなく元の SILENT_COM へ正しく戻ること。
+ *
  *          EcuM（ComM の RUN 要求先）と BswM（ComM のモード通知先）は境界として
  *          フェイクに差し替える（Bsw_EcuM_fake.h/Bsw_BswM_fake.h 冒頭コメント
  *          参照）。CanIf は Nm が CanIf_Transmit() を直接呼ぶために実体で
@@ -185,7 +192,10 @@ protected:
         ComM_ModeType mode = COMM_FULL_COMMUNICATION;
         ASSERT_EQ(ComM_GetCurrentComMode(COMM_USER_0, &mode), E_OK);
         ASSERT_EQ(mode, static_cast<ComM_ModeType>(COMM_SILENT_COMMUNICATION));
-        ASSERT_EQ(Can_Test_GetControllerState(), CAN_CS_STOPPED);
+        /* 2026-08 変更: SILENT_COM は CanIf_SetPduMode(CANIF_TX_OFFLINE) で
+         * TX のみ抑制する方式になったため、コントローラ自体は CAN_CS_STARTED
+         * のまま（旧: Can_T_STOP による Listen-Only、CAN_CS_STOPPED）。 */
+        ASSERT_EQ(Can_Test_GetControllerState(), CAN_CS_STARTED);
     }
 
     /** 他ノード(node=0x02)の NM フレーム受信を模擬する。 */
@@ -477,8 +487,10 @@ TEST_F(Bsw_SleepCoordination_Test, RedundantNoComRequestDuringSilentCom_OK_DoesN
     ASSERT_EQ(ComM_RequestComMode(COMM_USER_0, COMM_NO_COMMUNICATION), E_OK);
 
     /* 評価 (Assert): まだ物理スリープしていない。Nm もまだ Prepare Bus-Sleep
-     * Mode のまま（他ノードの NM フレームによるキャンセルをまだ待てる）。 */
-    EXPECT_EQ(Can_Test_GetControllerState(), CAN_CS_STOPPED);
+     * Mode のまま（他ノードの NM フレームによるキャンセルをまだ待てる）。
+     * SILENT_COM 中はコントローラ自体は CAN_CS_STARTED のまま
+     * （CanIf_SetPduMode(CANIF_TX_OFFLINE) で TX のみ抑制、2026-08 変更）。 */
+    EXPECT_EQ(Can_Test_GetControllerState(), CAN_CS_STARTED);
     ComM_ModeType mode = COMM_FULL_COMMUNICATION;
     ASSERT_EQ(ComM_GetCurrentComMode(COMM_USER_0, &mode), E_OK);
     EXPECT_EQ(mode, static_cast<ComM_ModeType>(COMM_SILENT_COMMUNICATION));
@@ -552,6 +564,104 @@ TEST_F(Bsw_SleepCoordination_Test, BusOffDuringRxCancelledPrepareBusSleep_OK_Con
     ASSERT_EQ(Nm_GetState(&state, &nmMode), E_OK);
     EXPECT_EQ(nmMode, NM_MODE_NETWORK);
     EXPECT_NE(state, NM_STATE_BUS_SLEEP);
+}
+
+/**
+ * \brief   2026-08 追加（CanSM の SILENT_COMMUNICATION を
+ *          CanIf_SetPduMode(CANIF_TX_OFFLINE) ベースへ移行した際の回帰テスト）:
+ *          コントローラが CAN_CS_STARTED のまま維持される本当の
+ *          CANSM_STATE_SILENT_COM の最中に Bus-Off が発生した場合、
+ *          CanSM_ControllerBusOff() のガードに無視されず正しく BUS_OFF へ
+ *          遷移すること。旧設計（Listen-Only で Bus-Off しない）ではこの経路
+ *          自体が存在しなかった。回復後は FULL_COM ではなく、Bus-Off 発生
+ *          直前の SILENT_COM へ戻ること（CanSM_PreBusOffState 参照）。
+ *
+ *          Nm 協調スリープ経由（ArrangeSilentComAtPrepareBusSleep()）ではなく
+ *          CanSM_RequestComMode(SILENT_COM) を直接呼んで SILENT_COM へ到達
+ *          させる。前者は必ず ComM_NmReleasePending を立てた状態になり、
+ *          回復時に ComM 側の別のリトライ（Nm の解放要求の仕切り直し、
+ *          BusOffDuringSilentCom_OK_ConvergesToNoComWhenNmReachesBusSleep
+ *          DuringOutage 参照）が働いて最終的に NO_COM まで収束してしまうため、
+ *          「CanSM が Bus-Off 発生直前の状態そのものへ戻る」という本テストの
+ *          関心事（ComM 側のポリシーとは独立した CanSM 単体の性質）を
+ *          NmReleasePending の影響を受けずに検証するため。
+ */
+TEST_F(Bsw_SleepCoordination_Test, BusOffDuringSilentCom_OK_RestoresSilentComAfterRecovery)
+{
+    ArrangeFullCom();
+    ASSERT_EQ(CanSM_RequestComMode(0U, COMM_SILENT_COMMUNICATION), E_OK);
+    ASSERT_EQ(Can_Test_GetControllerState(), CAN_CS_STARTED);
+
+    /* 実行 (Act): 本当に SILENT_COM 状態（コントローラ CAN_CS_STARTED）の
+     * 最中に Bus-Off が発生する。 */
+    CanSM_ControllerBusOff(0U);
+
+    /* 評価 (Assert): 無視されず処理され、コントローラは Listen-Only
+     * (CAN_CS_STOPPED) へ落ちる。SILENT_COM 自体は Can_SetControllerMode()
+     * を一切呼ばない設計のため、ここで STOPPED になったことは Bus-Off が
+     * 正しく処理された証拠になる（ガードで無視されていれば STARTED のまま）。 */
+    EXPECT_EQ(Can_Test_GetControllerState(), CAN_CS_STOPPED);
+    ComM_ModeType mode = COMM_FULL_COMMUNICATION;
+    ASSERT_EQ(ComM_GetCurrentComMode(COMM_USER_0, &mode), E_OK);
+    EXPECT_EQ(mode, static_cast<ComM_ModeType>(COMM_SILENT_COMMUNICATION));
+
+    /* 実行 (Act): Bus-Off から回復させる（L1 周期経過） */
+    FakeMillis_Value += CANSM_BUSOFF_RECOVERY_L1_MS + 1UL;
+    CanSM_MainFunction();
+
+    /* 評価 (Assert): FULL_COM ではなく、Bus-Off 発生直前の SILENT_COM へ
+     * 戻ること。コントローラは CAN_CS_STARTED（TX は CanIf 側で抑制されたまま）。 */
+    ASSERT_EQ(ComM_GetCurrentComMode(COMM_USER_0, &mode), E_OK);
+    EXPECT_EQ(mode, static_cast<ComM_ModeType>(COMM_SILENT_COMMUNICATION));
+    EXPECT_EQ(Can_Test_GetControllerState(), CAN_CS_STARTED);
+
+    /* 評価 (Assert): CanIf 側の PDU モードは Bus-Off 中も再設定不要で
+     * CANIF_TX_OFFLINE のまま保持されていること（設計の核心）。 */
+    CanIf_PduModeType pduMode = CANIF_ONLINE;
+    ASSERT_EQ(CanIf_GetPduMode(0U, &pduMode), E_OK);
+    EXPECT_EQ(pduMode, CANIF_TX_OFFLINE);
+}
+
+/**
+ * \brief   2026-08 追加（/code-review で発見した回帰の防止、最重要）:
+ *          本当の SILENT_COM 中に Bus-Off が発生し、その最中に Nm が
+ *          （Bus-Off とは無関係に独立したタイマで）Bus-Sleep Mode へ到達した
+ *          場合、ComM_Nm_BusSleepMode() 経由の CanSM_RequestComMode(NO_COM)
+ *          は CanSM が Bus-Off 回復中のため一旦拒否される。Nm 側はこの一発勝負
+ *          の通知を再送しないため、Bus-Off 回復後に ComM が自ら
+ *          ComM_NmReleasePending を見てリトライしない限り、チャネルは
+ *          SILENT_COM のまま永久に取り残され、ECU は二度と物理スリープしない
+ *          （ComM_BusSMIndication() の COMM_SILENT_COMMUNICATION 分岐に
+ *          追加したリトライで対応、ComM.c 参照）。
+ */
+TEST_F(Bsw_SleepCoordination_Test, BusOffDuringSilentCom_OK_ConvergesToNoComWhenNmReachesBusSleepDuringOutage)
+{
+    ArrangeFullCom();
+    ArrangeSilentComAtPrepareBusSleep();
+
+    /* 実行 (Act): 本当に SILENT_COM 状態の最中に Bus-Off が発生する。 */
+    CanSM_ControllerBusOff(0U);
+    ASSERT_EQ(Can_Test_GetControllerState(), CAN_CS_STOPPED);
+
+    /* Nm は Bus-Off とは無関係に独立して Bus-Sleep Mode へ到達する。この
+     * 通知（ComM_Nm_BusSleepMode() 経由の CanSM_RequestComMode(NO_COM)）は
+     * CanSM が Bus-Off 回復中のため、この時点では拒否される。 */
+    DriveNmUntil(NM_STATE_BUS_SLEEP);
+    ComM_ModeType mode = COMM_FULL_COMMUNICATION;
+    ASSERT_EQ(ComM_GetCurrentComMode(COMM_USER_0, &mode), E_OK);
+    EXPECT_EQ(mode, static_cast<ComM_ModeType>(COMM_SILENT_COMMUNICATION));  // まだ収束していない
+
+    /* 実行 (Act): Bus-Off から回復させる（L1 周期経過） */
+    FakeMillis_Value += CANSM_BUSOFF_RECOVERY_L1_MS + 1UL;
+    CanSM_MainFunction();
+
+    /* 評価 (Assert): CanSM は Bus-Off 発生直前の SILENT_COM へ復帰するが、
+     * ComM 側のリトライにより Nm の解放要求が仕切り直され、最終的に
+     * NO_COM（物理スリープ）へ正しく収束する。取り残されない。 */
+    ASSERT_EQ(ComM_GetCurrentComMode(COMM_USER_0, &mode), E_OK);
+    EXPECT_EQ(mode, static_cast<ComM_ModeType>(COMM_NO_COMMUNICATION));
+    EXPECT_EQ(Can_Test_GetControllerState(), CAN_CS_SLEEP);
+    EXPECT_EQ(FakeEcuM_ReleaseRUNCount, 1U);
 }
 
 }  // namespace

@@ -560,6 +560,12 @@ protected:
         Can_Init(&canConfig);
         Can_SetControllerMode(0U, CAN_T_START);
         CanIf_Init(&kTestCanIfConfig);
+        /* 本テストは CanSM を経由しない（CanSM_Init() を呼ばない）ため、
+         * CanIf_Init() 直後の既定値 CANIF_OFFLINE のままでは CanIf_Transmit()
+         * が常に E_NOT_OK になってしまう。CanSM が FULL_COM 確立時に行う
+         * CanIf_SetPduMode(CANIF_ONLINE) を代わりにここで行う
+         * （2026-08 追加、CanIf.c 参照）。 */
+        CanIf_SetPduMode(0U, CANIF_ONLINE);
         PduR_Init(&kTestPduRConfig);
         Com_Init(&kTestComConfig);
         s_groupTxAckCount = 0U;

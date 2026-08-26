@@ -55,11 +55,16 @@
  *            自律的に遷移する。Prepare Bus-Sleep Mode へ入った時点で
  *            ComM_Nm_PrepareBusSleepMode()（[SWS_ComM_00826]）経由で
  *            CanSM_RequestComMode(SILENT_COM) が呼ばれ、CANSM_STATE_SILENT_COM
- *            （受信専用、Can_SetControllerMode(CAN_T_STOP)）へ遷移する
- *            （2026-08 追加。これにより本状態が初めて実際の呼び出し元を持つ。
- *            以前は Bus-Off 検出時に ComM_BusSMIndication() を直接
- *            SILENT_COMMUNICATION で呼ぶだけで、CanSM_State 自体は
- *            CANSM_STATE_BUS_OFF のままだった）。この間に他ノードの NM
+ *            （受信専用）へ遷移する（2026-08 追加。これにより本状態が
+ *            初めて実際の呼び出し元を持つ。以前は Bus-Off 検出時に
+ *            ComM_BusSMIndication() を直接 SILENT_COMMUNICATION で呼ぶだけで、
+ *            CanSM_State 自体は CANSM_STATE_BUS_OFF のままだった）。
+ *            SILENT_COM の実現方式は 2026-08 に再度変更した:
+ *            当初は Can_SetControllerMode(CAN_T_STOP) でコントローラ全体を
+ *            Listen-Only へ落としていたが、実 AUTOSAR の SILENT_COMMUNICATION
+ *            は PDU チャネル単位の TX 抑制（CanIf_SetPduMode(CANIF_TX_OFFLINE)、
+ *            [SWS_CANIF_00137]）で実現するものであり、コントローラ自体は
+ *            CAN_CS_STARTED のまま維持する方式へ置き換えた。この間に他ノードの NM
  *            フレーム受信が一定時間 (NM_TIMEOUT_MS+NM_WAIT_BUS_SLEEP_MS)
  *            なかったことを確認してから ComM_Nm_BusSleepMode() を呼ぶ
  *            （[SWS_ComM_00392]）。ComM はこれを受けて初めて
@@ -69,11 +74,19 @@
  *            スリープしない」という NM 本来の協調スリープを実機で確認できる。
  *            CANSM_STATE_BUS_OFF は実 HW をスリープさせないため、これが
  *            本モジュールで唯一 HW を実際にスリープさせる経路である。
- *            なお CANSM_STATE_BUS_OFF/CANSM_STATE_SILENT_COM はいずれも
- *            CAN_CS_STOPPED（受信は継続）扱いのため、Bus-Off 回復待ち中でも
- *            CanSM_RxIndication()/Nm_RxIndication() は普通に発火しうる
- *            （Can_MainFunction_Read() が RX ドレインをスキップするのは
- *            CanState==CAN_CS_SLEEP のときのみ）。Nm がこれを受けて Prepare
+ *            なお CANSM_STATE_BUS_OFF は CAN_CS_STOPPED（受信は継続）扱いの
+ *            ため、Bus-Off 回復待ち中でも CanSM_RxIndication()/
+ *            Nm_RxIndication() は普通に発火しうる（Can_MainFunction_Read()
+ *            が RX ドレインをスキップするのは CanState==CAN_CS_SLEEP の
+ *            ときのみ）。CANSM_STATE_SILENT_COM は 2026-08 の変更後は
+ *            CAN_CS_STARTED のまま（CanIf_SetPduMode(CANIF_TX_OFFLINE) で
+ *            TX のみ抑制）のため、受信が継続する理由は BUS_OFF とは異なる
+ *            （そもそもコントローラが止まっていない）が、結果として
+ *            SILENT_COM 中も受信は同様に継続する。またこの変更により、
+ *            SILENT_COM 中に Bus-Off が発生することも起こりうるようになった
+ *            （CanSM_ControllerBusOff()/CanSM_PreBusOffState 参照。回復成功時は
+ *            元が SILENT_COM だったか FULL_COM だったかに応じて正しい状態へ
+ *            戻す）。Nm がこれを受けて Prepare
  *            Bus-Sleep Mode から Network Mode へ自律復帰した場合の扱いは
  *            ComM.c の ComM_Nm_NetworkMode() の doc コメントを参照
  *            （CanSM_RequestComMode(FULL_COM) は Bus-Off 中は拒否されるが、
@@ -114,6 +127,7 @@
 
 #include "CanSM.h"
 #include "Can.h"
+#include "CanIf.h"
 #include "Dem.h"
 #include "Det.h"
 
@@ -142,6 +156,14 @@ static unsigned long           CanSM_BusOffTimerMs;   /* Bus-Off 検出時刻 (�
 static uint8                   CanSM_BusOffRetries;   /* 回復試行回数 (L1→L2 切替判定にも使う) */
 static unsigned long           CanSM_ValidationTimerMs; /* ウェイクアップ検証開始時刻 */
 
+/** Bus-Off 検出直前の CanSM_State（CANSM_STATE_FULL_COM または
+ *  CANSM_STATE_SILENT_COM のいずれか）。2026-08 追加: SILENT_COMMUNICATION
+ *  が CanIf_SetPduMode(CANIF_TX_OFFLINE) ベースになりコントローラを
+ *  CAN_CS_STARTED のまま維持するようになったため、SILENT_COM 中でも本当に
+ *  Bus-Off しうるようになった。回復成功時にどちらへ戻すか
+ *  （CanSM_MainFunction() 参照）を判断するために使う。 */
+static CanSM_InternalStateType CanSM_PreBusOffState;
+
 /** [SWS_CanSM_00184/00188/00190] 用の初期化済みフラグ。CanSM_State の既定値
  *  (CANSM_STATE_NO_COM=0) は「未初期化」と区別が付かないため別途持つ。 */
 static uint8 CanSM_Initialized = 0U;
@@ -160,6 +182,7 @@ void CanSM_Init(const CanSM_ConfigType* ConfigPtr)
     CanSM_BusOffTimerMs      = 0UL;
     CanSM_BusOffRetries      = 0U;
     CanSM_ValidationTimerMs  = 0UL;
+    CanSM_PreBusOffState     = CANSM_STATE_NO_COM;
     CanSM_Initialized        = 1U;
     DET_LOGI(TAG, "Init");
 }
@@ -176,6 +199,30 @@ void CanSM_DeInit(void)
 
     CanSM_Initialized = 0U;
     DET_LOGI(TAG, "DeInit ok");
+}
+
+/**
+ * \brief   FULL_COM 確定直前に CanIf の PDU モードを CANIF_ONLINE へ戻す
+ *          （ベストエフォート）。
+ *
+ * \details CanIf_SetPduMode() は本プロジェクトでは ControllerId=0/
+ *          CANIF_ONLINE のいずれも常に妥当なため実質失敗しない（到達しない
+ *          はず）。万一失敗しても、呼び出し元は既にコントローラが物理的に
+ *          稼働していることを確認済みの状態でこれを呼ぶため、ここで状態遷移
+ *          そのものを諦めると CanSM/ComM/EcuM が「まだ FULL_COM でない」と
+ *          誤認したまま実際には動いているコントローラを放置することになり、
+ *          かえって実害が大きい。DET のみ記録して呼び出し元は続行する
+ *          （2026-08 のレビュー方針を踏襲。CanSM_RequestComMode()/
+ *          CanSM_RxIndication()/CanSM_MainFunction() の 3 箇所から呼ぶ）。
+ *
+ * \param[in]  callerTag  DET ログに残す呼び出し元の名前（例: "RequestComMode"）。
+ */
+static void CanSM_SetPduModeOnlineBestEffort(const char* callerTag)
+{
+    if (CanIf_SetPduMode(0U, CANIF_ONLINE) != E_OK)
+    {
+        DET_LOGE(TAG, "%s E: CanIf_SetPduMode(ONLINE) failed, proceeding anyway", callerTag);
+    }
 }
 
 /**
@@ -227,6 +274,12 @@ Std_ReturnType CanSM_RequestComMode(CanSM_NetworkHandleType network, ComM_ModeTy
                 DET_LOGE(TAG, "RequestComMode E: Can_SetControllerMode(T_START) failed, state unchanged");
                 return E_NOT_OK;
             }
+            /* [SWS_CANIF_00137]: SILENT_COM から戻る場合に備え、PDU チャネルを
+             * CANIF_ONLINE へ戻す（TX 抑制解除）。NO_COM/WAKEUP_VALIDATING から
+             * 来た場合も無条件で ONLINE にしてよい（Init 直後の既定
+             * CANIF_OFFLINE、または以前 SILENT_COM だった名残のいずれでも、
+             * FULL_COM では常に TX 有効であるべきため）。 */
+            CanSM_SetPduModeOnlineBestEffort("RequestComMode");
             CanSM_State         = CANSM_STATE_FULL_COM;
             CanSM_BusOffRetries = 0U;
             DET_LOGI(TAG, "->FULL_COM");
@@ -236,17 +289,26 @@ Std_ReturnType CanSM_RequestComMode(CanSM_NetworkHandleType network, ComM_ModeTy
             break;
 
         case COMM_SILENT_COMMUNICATION:
-            /* CANSM_STATE_SILENT_COM は「コントローラは停止済み」という不変条件を
-             * 持つ（CanSM_ControllerBusOff() のガードがこれを前提に SILENT_COM を
-             * 除外している）。この不変条件を保つため、コントローラが物理的に
-             * 稼働中でありうる状態（FULL_COM）から遷移する場合は必ず停止させる。
-             * それ以外（NO_COM/WAKEUP_VALIDATING 等）は既にコントローラが
-             * 停止済みのため何もしなくてよい。 */
+            /* 2026-08 変更: 以前はコントローラ全体を Can_SetControllerMode
+             * (CAN_T_STOP) で Listen-Only へ落としていたが、実 AUTOSAR の
+             * SILENT_COMMUNICATION は PDU チャネル単位の TX 抑制
+             * （CanIf_SetPduMode(CANIF_TX_OFFLINE)、[SWS_CANIF_00137]）で
+             * 実現するものであり、コントローラ自体は CAN_CS_STARTED の
+             * ままでよい（むしろそうあるべき）。そのためコントローラは
+             * 一切操作しない。FULL_COM から遷移する場合のみ
+             * CanIf_SetPduMode() を呼ぶ（それ以外＝NO_COM/WAKEUP_VALIDATING
+             * は既にコントローラ未起動のため、PDU モードは Init 直後の
+             * CANIF_OFFLINE のままで構わない）。
+             *
+             * この変更により CANSM_STATE_SILENT_COM は「コントローラは
+             * CAN_CS_STARTED のまま」という新しい不変条件を持つようになり、
+             * SILENT_COM 中でも本当に Bus-Off しうる（CanSM_ControllerBusOff()
+             * のガード拡張・CanSM_PreBusOffState 参照）。 */
             if (CanSM_State == CANSM_STATE_FULL_COM)
             {
-                if (Can_SetControllerMode(0U, CAN_T_STOP) != CAN_OK)
+                if (CanIf_SetPduMode(0U, CANIF_TX_OFFLINE) != E_OK)
                 {
-                    DET_LOGE(TAG, "RequestComMode E: Can_SetControllerMode(T_STOP) failed, state unchanged");
+                    DET_LOGE(TAG, "RequestComMode E: CanIf_SetPduMode(TX_OFFLINE) failed, state unchanged");
                     return E_NOT_OK;
                 }
             }
@@ -327,12 +389,19 @@ Std_ReturnType CanSM_GetCurrentComMode(CanSM_NetworkHandleType network, ComM_Mod
  *          コントローラを即座に停止し、T_REC タイマを起動する。
  *          CanSM_MainFunction が T_REC ms 後にコントローラの再起動を試みる。
  *
- *          受け付けるのは CANSM_STATE_FULL_COM のみ。コントローラが物理的に
- *          稼働中（CAN_T_START 済み）であり実際に Bus-Off しうるのはこの状態
- *          だけである。それ以外の状態（NO_COM/SILENT_COM=HW 停止中または
- *          未起動、BUS_OFF=回復試行中で二重に入る必要がない、
- *          WAKEUP_VALIDATING=Listen-Only で送信しないため原理的に Bus-Off
- *          しない）は無視する。
+ *          受け付けるのは CANSM_STATE_FULL_COM と CANSM_STATE_SILENT_COM の
+ *          2 状態（2026-08 変更）。いずれもコントローラが物理的に稼働中
+ *          （CAN_CS_STARTED）であり、実際に Bus-Off しうる。SILENT_COM は
+ *          CanIf_SetPduMode(CANIF_TX_OFFLINE) で上位層からの新規送信こそ
+ *          止めているが、コントローラ自体は通常どおりバスに参加している
+ *          （ACK・エラーフレームは出しうる）ため、Bus-Off が起こりえないと
+ *          みなすのは誤り（旧: Can_T_STOP による Listen-Only は物理的に
+ *          送信しないため Bus-Off しなかったが、この前提が崩れた）。
+ *          どちらから来たかは `CanSM_PreBusOffState` に記録し、回復成功時
+ *          （CanSM_MainFunction() 参照）に同じ状態へ戻す。
+ *          それ以外の状態（NO_COM=未起動、BUS_OFF=回復試行中で二重に入る
+ *          必要がない、WAKEUP_VALIDATING=Listen-Only で送信しないため
+ *          原理的に Bus-Off しない）は無視する。
  *
  *          SWS_CanSM_00521: 検出直後（回復試行の前）に
  *          `ComM_BusSMIndication(Network, COMM_SILENT_COMMUNICATION)` を呼び、
@@ -381,8 +450,15 @@ void CanSM_ControllerBusOff(uint8 ControllerId)
         return;
     }
 
-    if (CanSM_State != CANSM_STATE_FULL_COM)
+    if (CanSM_State != CANSM_STATE_FULL_COM && CanSM_State != CANSM_STATE_SILENT_COM)
         return;
+
+    /* 回復成功時にどちらへ戻すかの記録（CanSM_MainFunction() 参照）。
+     * SILENT_COM 由来の場合、CanIf 側の PDU モード（CANIF_TX_OFFLINE）は
+     * ここでは一切触らない。Can_Write() 自体がこの後コントローラ停止で
+     * 拒否するため、TX 抑制の二重化は不要かつ、回復時にわざわざ
+     * 再設定しなくて済む（下記コメント・CanSM_MainFunction() 参照）。 */
+    CanSM_PreBusOffState = CanSM_State;
 
     if (Can_SetControllerMode(0U, CAN_T_STOP) != CAN_OK)
     {
@@ -521,6 +597,12 @@ void CanSM_RxIndication(uint8 ControllerId)
         DET_LOGE(TAG, "RxIndication E: Can_SetControllerMode(T_START) failed, staying in WAKEUP_VALIDATING");
         return;
     }
+    /* WAKEUP_VALIDATING に入る直前の状態が SILENT_COM だった場合（眠る前に
+     * TX を抑制していた）、CanIf の PDU モードは CANIF_TX_OFFLINE のまま
+     * 変化していない。ここで明示的に CANIF_ONLINE へ戻さないと、起床後
+     * FULL_COM に確定したのに TX だけ永久に塞がったままという静かなバグに
+     * なる（2026-08 のレビュー方針同様、失敗しても DET のみで続行）。 */
+    CanSM_SetPduModeOnlineBestEffort("RxIndication");
     CanSM_State         = CANSM_STATE_FULL_COM;
     CanSM_BusOffRetries = 0U;
     Dem_ReportErrorStatus(DEM_EVENT_CAN_BUSOFF, DEM_EVENT_STATUS_PASSED);
@@ -625,16 +707,31 @@ void CanSM_MainFunction(void)
      * PASSED デバウンス確定コメント参照）。 */
     Dem_ReportErrorStatus(DEM_EVENT_CAN_BUSOFF, DEM_EVENT_STATUS_PASSED);
 
-    /* Bus-Off は CANSM_STATE_FULL_COM からしか受け付けないため（本ファイル
-     * 冒頭コメント参照）、回復成功時は常に FULL_COM へ戻す。Bus-Off 発生時点で
-     * ComM が既に Nm へ解放を送信済み（ComM_NmReleasePending、ComM.c 参照）
-     * だった場合の「誤って Nm を再起床させない」ためのガードは ComM 側
+    /* 2026-08 変更: Bus-Off は CANSM_STATE_FULL_COM だけでなく
+     * CANSM_STATE_SILENT_COM からも起こりうるようになったため
+     * （CanSM_ControllerBusOff() 参照）、回復成功時は Bus-Off 発生直前の
+     * 状態（CanSM_PreBusOffState）へ戻す。Bus-Off 発生時点で ComM が既に
+     * Nm へ解放を送信済み（ComM_NmReleasePending、ComM.c 参照）だった場合の
+     * 「誤って Nm を再起床させない」ためのガードは ComM 側
      * （ComM_BusSMIndication() の FULL_COM 分岐）に実装している。 */
-    CanSM_State = CANSM_STATE_FULL_COM;
-    /* 回復成功 → ComM に FULL_COM を通知 → EcuM_RequestRUN → RUN へ戻る
-     * （ただし上記の Nm 解放ペンディング中だった場合は、ComM 側が代わりに
-     * CanSM_RequestComMode(NO_COM) を呼び返して仕切り直す）。 */
-    ComM_BusSMIndication(0U, COMM_FULL_COMMUNICATION);
+    if (CanSM_PreBusOffState == CANSM_STATE_SILENT_COM)
+    {
+        /* CanIf の PDU モードは Bus-Off 中も CANIF_TX_OFFLINE のまま
+         * 触っていない（CanSM_ControllerBusOff() 参照）ため、再設定不要で
+         * そのまま SILENT_COM へ戻ってよい。 */
+        CanSM_State = CANSM_STATE_SILENT_COM;
+        DET_LOGI(TAG, "BusOff recovered -> SILENT_COM (was silent before BusOff)");
+        ComM_BusSMIndication(0U, COMM_SILENT_COMMUNICATION);
+    }
+    else
+    {
+        CanSM_SetPduModeOnlineBestEffort("MainFunction");
+        CanSM_State = CANSM_STATE_FULL_COM;
+        /* 回復成功 → ComM に FULL_COM を通知 → EcuM_RequestRUN → RUN へ戻る
+         * （ただし上記の Nm 解放ペンディング中だった場合は、ComM 側が代わりに
+         * CanSM_RequestComMode(NO_COM) を呼び返して仕切り直す）。 */
+        ComM_BusSMIndication(0U, COMM_FULL_COMMUNICATION);
+    }
     /* 再度 Bus-Off が発生すれば CanIf → CanSM_ControllerBusOff() が呼ばれる */
 }
 

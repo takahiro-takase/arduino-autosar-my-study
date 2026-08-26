@@ -384,6 +384,45 @@ Std_ReturnType ComM_GetCurrentComMode(ComM_UserHandleType User, ComM_ModeType* C
 }
 
 /**
+ * \brief   Bus-Off 回復エコー時に Nm 協調スリープの解放要求を仕切り直す。
+ *
+ * \details Bus-Off が Nm 協調スリープ待ち（ComM_NmReleasePending が立っている）
+ *          の最中に発生すると、Nm は Bus-Off とは無関係に独立したタイマで
+ *          動作し続け、既に Bus-Sleep Mode へ到達して
+ *          ComM_Nm_BusSleepMode() 経由の CanSM_RequestComMode(NO_COM) を
+ *          試みている可能性があるが、その時点では CanSM が Bus-Off 回復中の
+ *          ため拒否されている（一発勝負の通知であり、Nm 側は再送しない）。
+ *          放置すると ComM_NmReleasePending が永久に残り、チャネルは
+ *          二度と NO_COM（物理スリープ）へ収束しない。CanSM が Bus-Off から
+ *          回復し、以前のモード（FULL_COM または SILENT_COM）を改めて通知
+ *          してきたこのタイミングでなら CanSM_RequestComMode(NO_COM) は
+ *          受理されるはずなので、解放を仕切り直す。この再帰呼び出しが
+ *          ComM_BusSMIndication(NO_COM) を呼び返し、ComM_ChannelMode/
+ *          ComM_NmReleasePending は最終的にそちらの分岐で正しい値へ収束する
+ *          （BswM への通知もそちらに任せるため、呼び出し元は本関数の後
+ *          return すること）。
+ *
+ *          ComM_BusSMIndication() の COMM_FULL_COMMUNICATION 分岐
+ *          （Bus-Off が FULL_COM から発生したケース）と
+ *          COMM_SILENT_COMMUNICATION 分岐（2026-08 追加。CanSM の
+ *          SILENT_COMMUNICATION が CanIf_SetPduMode(CANIF_TX_OFFLINE)
+ *          ベースへ移行しコントローラが CAN_CS_STARTED のまま維持される
+ *          ようになったことで、SILENT_COM 中にも本当に Bus-Off しうるように
+ *          なった経路。CanSM_ControllerBusOff()/CanSM_PreBusOffState 参照）
+ *          の両方から共有する。
+ *
+ * \param[in]  Network    対象ネットワークハンドル。
+ * \param[in]  modeLabel  DET ログに残す、再通知された通信モードの名前
+ *                         （例: "FULL_COM"）。
+ */
+static void ComM_RetryNmReleaseAfterBusOff(uint8 Network, const char* modeLabel)
+{
+    DET_LOGW(TAG, "%s notified while Nm release still pending "
+                  "(likely BusOff recovery mid-winddown) -> retry release", modeLabel);
+    (void)CanSM_RequestComMode(Network, COMM_NO_COMMUNICATION);
+}
+
+/**
  * \brief   CanSM からの通信モード変化通知コールバック（下位層 → 上位層）。
  *
  * \details CanSM が実際の CAN バス状態を変化させた後に呼ぶ。
@@ -455,29 +494,14 @@ void ComM_BusSMIndication(uint8 Network, ComM_ModeType Mode)
         {
             if (ComM_NmReleasePending[Network])
             {
-                /* Nm 協調スリープ待ち（ComM_RequestComMode() が Nm_NetworkRelease()
-                 * を送信済み、Bus-Sleep Mode 到達待ち）の最中に、CanSM が
-                 * COMM_FULL_COMMUNICATION を通知してきたケース。誰かが FULL_COM を
-                 * 再要求したのであれば、その再要求は ComM_RequestComMode() の
-                 * 「集約結果が現状と同じ」早期returnパスが既に処理し
-                 * ComM_NmReleasePending をクリア済みのはず。したがってここへ
-                 * 到達するのは、Bus-Off が協調スリープ待ちの最中に発生し
-                 * （CanSM_ControllerBusOff() は ComM_BusSMIndication を
-                 * SILENT_COMMUNICATION で呼ぶ）、回復した CanSM が改めて
-                 * FULL_COMMUNICATION を通知してきた場合のみ。Nm は Bus-Off 中も
-                 * 独立したタイマで動き続けており、既に Bus-Sleep Mode へ到達して
-                 * いる可能性がある。ここで無条件に Nm_NetworkRequest() すると、
-                 * 誰も再要求していないのに Nm を誤って再起床させてしまう
-                 * （設計時レビューで発見）。CanSM が FULL_COM へ戻った今なら
-                 * CanSM_RequestComMode(NO_COM) は受理されるはずなので、解放を
-                 * 仕切り直す。この再帰呼び出しが ComM_BusSMIndication(NO_COM) を
-                 * 呼び返し、ComM_ChannelMode/ComM_UserRequest[0]/
-                 * ComM_NmReleasePending は最終的にそちらの分岐で正しい値へ
-                 * 収束する（BswM への通知もそちらに任せるため、本分岐では
-                 * ファイル末尾の BswM_ComM_CurrentMode() へは進まず return する）。 */
-                DET_LOGW(TAG, "FULL_COM notified while Nm release still pending "
-                              "(likely BusOff recovery mid-winddown) -> retry release");
-                (void)CanSM_RequestComMode(Network, COMM_NO_COMMUNICATION);
+                /* Nm 協調スリープ待ちの最中に Bus-Off が発生し、回復した CanSM が
+                 * 改めて FULL_COMMUNICATION を通知してきたケース（誰かが
+                 * FULL_COM を能動的に再要求したのであれば、その再要求は
+                 * ComM_RequestComMode() の「集約結果が現状と同じ」早期return
+                 * パスが既に処理し ComM_NmReleasePending をクリア済みのはず
+                 * なので、ここへ到達するのは Bus-Off 由来のみ）。詳細は
+                 * ComM_RetryNmReleaseAfterBusOff() 参照。 */
+                ComM_RetryNmReleaseAfterBusOff(Network, "FULL_COM");
                 return;
             }
             if (ComM_EcuMRunMode != COMM_FULL_COMMUNICATION)
@@ -517,6 +541,16 @@ void ComM_BusSMIndication(uint8 Network, ComM_ModeType Mode)
              * Nm_NetworkRequest() が呼ばれ自動的に再開する。 */
             (void)Nm_NetworkRelease();
         }
+    }
+    else if (Mode == COMM_SILENT_COMMUNICATION && ComM_NmReleasePending[Network])
+    {
+        /* 2026-08 追加: Mode==prevMode==COMM_SILENT_COMMUNICATION（上の
+         * `if (Mode != prevMode)` では捕捉できない再通知）で、かつ Nm 協調
+         * スリープ待ちが残っているケース。SILENT_COM 中にも本当に Bus-Off
+         * しうるようになったことで生まれた、上の FULL_COM 分岐と対称の経路
+         * （詳細は ComM_RetryNmReleaseAfterBusOff() 参照）。 */
+        ComM_RetryNmReleaseAfterBusOff(Network, "SILENT_COM");
+        return;
     }
     /* SILENT_COM: EcuM の RUN 状態は維持（受信専用でも ECU は動作継続）。 */
 
@@ -576,7 +610,7 @@ void ComM_Nm_PrepareBusSleepMode(uint8 Network)
  *          物理的に排他だから安全」ではない）: CANSM_STATE_BUS_OFF 中も
  *          コントローラは受信を継続する（Can_MainFunction_Read() が RX
  *          ドレインをスキップするのは CanState==CAN_CS_SLEEP のときのみで、
- *          SILENT_COM/BUS_OFF はいずれも CAN_CS_STOPPED）ため、Bus-Off の
+ *          BUS_OFF は CAN_CS_STOPPED）ため、Bus-Off の
  *          最中でも Nm_RxIndication() は普通に発火しうる。つまり本関数が
  *          CanSM_State==CANSM_STATE_BUS_OFF の最中に呼ばれ、
  *          CanSM_RequestComMode() が拒否されるケースは実在する。もしここで

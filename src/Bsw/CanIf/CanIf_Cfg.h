@@ -49,6 +49,9 @@
                                           *   RxPduCount/TxPduCount がコンパイル時上限
                                           *   （CANIF_RX_PDU_MAX 等）を超える設定を拒否する際に使う
                                           *   （Com_Cfg.h の COM_E_INIT_FAILED と同じ位置づけ）。 */
+#define CANIF_E_PARAM_PDU_MODE      22U  /* [SWS_CANIF_00860]: CanIf_SetPduMode() の
+                                          *   PduModeRequest が CanIf_PduModeType の
+                                          *   定義値以外 */
 
 /** ApiId（各関数の Doxygen \ServiceID タグと一致させること。値は SWS 8.x 章の
  *  「Service ID[hex]」記載を実測して確認済み） */
@@ -60,6 +63,8 @@
 #define CANIF_API_ID_CONTROLLER_BUSOFF   0x16U
 #define CANIF_API_ID_GET_VERSION_INFO    0x0BU
 #define CANIF_API_ID_READ_RX_PDU_DATA    0x06U
+#define CANIF_API_ID_SET_PDU_MODE        0x03U
+#define CANIF_API_ID_GET_PDU_MODE        0x0AU
 
 /** バージョン情報（SWS_CANInterface、Com/E2EXf/PduR 等の既存モジュールと同じ命名規則） */
 #define CANIF_VENDOR_ID          0U
@@ -101,5 +106,11 @@
  *  project_can_fd_postponed 参照）。CanIf_ReadRxPduData() の内部バッファ
  *  1 エントリのサイズに使う。 */
 #define CANIF_MAX_DLC        8U
+
+/** CanIf_SetPduMode()/CanIf_GetPduMode()（2026-08 追加）の内部状態配列
+ *  CanIf_ControllerPduMode[] のサイズ。Can_Cfg.h の CAN_CONTROLLER_COUNT と
+ *  同じ値（本プロジェクトは単一コントローラ構成のため 1）。CanIf は
+ *  Can_Cfg.h に依存しない既存方針のため、値を複製する形で独立して持つ。 */
+#define CANIF_CONTROLLER_MAX 1U
 
 #endif /* CANIF_CFG_H */
