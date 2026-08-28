@@ -53,6 +53,8 @@
 #define COM_API_ID_INIT                        0x00U
 #define COM_API_ID_IPDU_GROUP_START             0x03U
 #define COM_API_ID_IPDU_GROUP_STOP              0x04U
+#define COM_API_ID_DISABLE_RECEPTION_DM         0x05U
+#define COM_API_ID_ENABLE_RECEPTION_DM          0x06U
 #define COM_API_ID_SEND_SIGNAL                  0x0AU
 #define COM_API_ID_RECEIVE_SIGNAL               0x0BU
 /* [SWS_Com_00099]/[SWS_Com_00642]/[SWS_Com_00643] Com_InvalidateSignal の

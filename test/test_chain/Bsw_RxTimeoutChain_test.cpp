@@ -643,14 +643,54 @@ const Com_IPduConfigType kTestRxGroupedNonGroupIPdu = {
     /* IpduGroupId */      COM_IPDU_GROUP_SENSOR_RX
 };
 
-const Com_IPduConfigType kTestRxIpduGroupIPdus[] = { kTestRxGroupedIPdu, kTestRxGroupedNonGroupIPdu };
+// IPduId=2(RX)・IPduId=0(TX) は Com_EnableReceptionDM/Com_DisableReceptionDM
+// （[SWS_Com_00534]）専用: 本番の COM_IPDU_GROUP_NONE が実際に RX/TX 混在
+// グループであること（Com_PBCfg.c 参照: RX 1本・TX 3本が同じ
+// COM_IPDU_GROUP_NONE に属する）を再現し、「TX I-PDU を含むグループへの
+// 呼び出しは要求全体を無視しなければならない」ことを検証する。
+const Com_IPduConfigType kTestRxMixedGroupIPdu = {
+    /* IPduId */           2U,
+    /* DLC */              1U,
+    /* PduRId */           2U,
+    /* FirstTimeoutMs */   0U,
+    /* TimeoutMs */        0U,
+    /* IsSignalGroup */    0U,
+    /* TxModeMode */       COM_TX_MODE_DIRECT,  /* RX I-PDU では未使用 */
+    /* TxPeriodMs */       0U,
+    /* TxModeModeTrue */   COM_TX_MODE_DIRECT,
+    /* TxPeriodMsTrue */   0U,
+    /* MinDelayMs */       0U,
+    /* UpdateBitPosition */ 0xFFU,
+    /* IpduGroupId */      COM_IPDU_GROUP_NONE
+};
+
+const Com_IPduConfigType kTestTxMixedGroupIPdu = {
+    /* IPduId */           0U,
+    /* DLC */              1U,
+    /* PduRId */           0U,
+    /* FirstTimeoutMs */   0U,
+    /* TimeoutMs */        0U,
+    /* IsSignalGroup */    0U,
+    /* TxModeMode */       COM_TX_MODE_DIRECT,
+    /* TxPeriodMs */       0U,
+    /* TxModeModeTrue */   COM_TX_MODE_DIRECT,
+    /* TxPeriodMsTrue */   0U,
+    /* MinDelayMs */       0U,
+    /* UpdateBitPosition */ 0xFFU,
+    /* IpduGroupId */      COM_IPDU_GROUP_NONE
+};
+
+const Com_IPduConfigType kTestRxIpduGroupIPdus[] = {
+    kTestRxGroupedIPdu, kTestRxGroupedNonGroupIPdu, kTestRxMixedGroupIPdu
+};
+const Com_IPduConfigType kTestTxIpduGroupIPdus[] = { kTestTxMixedGroupIPdu };
 const Com_SignalConfigType kTestRxIpduGroupSignals[] = { kTestRxGroupedNonGroupSignal };
 
 const Com_ConfigType kTestRxIpduGroupConfig = {
     /* RxIPdus */       kTestRxIpduGroupIPdus,
-    /* RxIPduCount */   2U,
-    /* TxIPdus */       NULL,
-    /* TxIPduCount */   0U,
+    /* RxIPduCount */   3U,
+    /* TxIPdus */       kTestTxIpduGroupIPdus,
+    /* TxIPduCount */   1U,
     /* Signals */       kTestRxIpduGroupSignals,
     /* SignalCount */   1U,
     /* GwMappings */    NULL,
@@ -789,6 +829,129 @@ TEST_F(Bsw_RxIpduGroupChain_Test, ComIpduGroupStart_OK_NonGroupSignalTimesOutAnd
     uint8 ret = Com_ReceiveSignal(0U, &value);
     EXPECT_EQ(ret, E_OK);
     EXPECT_EQ(value, 0xFFFFU);
+}
+
+// ------------------------------------------------------------
+// Com_EnableReceptionDM/Com_DisableReceptionDM（SRS_Com_00192、2026-08 追加）。
+// Com_IpduGroupStart/Stop（上記）とは独立した、より細かい制御軸である
+// ことが本節の主張の核心: I-PDU Group 自体は起動済みのまま
+// （Com_RxIndication() による受信処理・バッファ更新は継続する）、
+// デッドライン監視の評価だけを個別に止められること。
+// ------------------------------------------------------------
+TEST_F(Bsw_RxIpduGroupChain_Test, ComEnableDisableReceptionDM_OK_TogglesFlagForMatchingGroupIPdusOnly)
+{
+    /* 評価 (Assert): Com_Init() 直後は既定で有効 */
+    EXPECT_EQ(Com_Test_GetRxDmEnabled(0U), 1U);
+    EXPECT_EQ(Com_Test_GetRxDmEnabled(1U), 1U);
+
+    /* 実行 (Act) + 評価 (Assert): 無効化すると両方とも 0 になる
+     * （IPduId=0/1 いずれも COM_IPDU_GROUP_SENSOR_RX 所属） */
+    Com_DisableReceptionDM(COM_IPDU_GROUP_SENSOR_RX);
+    EXPECT_EQ(Com_Test_GetRxDmEnabled(0U), 0U);
+    EXPECT_EQ(Com_Test_GetRxDmEnabled(1U), 0U);
+
+    /* 実行 (Act) + 評価 (Assert): 再度有効化すると両方とも 1 に戻る */
+    Com_EnableReceptionDM(COM_IPDU_GROUP_SENSOR_RX);
+    EXPECT_EQ(Com_Test_GetRxDmEnabled(0U), 1U);
+    EXPECT_EQ(Com_Test_GetRxDmEnabled(1U), 1U);
+}
+
+TEST_F(Bsw_RxIpduGroupChain_Test, DisableReceptionDM_OK_SuppressesGroupTimeoutWhileIpduGroupStaysStarted)
+{
+    /* 準備 (Arrange): 開始してからデッドライン監視のみ無効化する
+     * （Com_IpduGroupStop() とは異なり、I-PDU Group 自体は起動済みのまま）。 */
+    Com_IpduGroupStart(COM_IPDU_GROUP_SENSOR_RX, 0U);
+    Com_DisableReceptionDM(COM_IPDU_GROUP_SENSOR_RX);
+
+    /* 実行 (Act): しきい値(500ms)を大幅に超えて経過させる */
+    FakeMillis_Value += 5000U;
+    Com_MainFunction();
+
+    /* 評価 (Assert): デッドライン監視のみ抑制され、RxTOutCbk は発火しない */
+    EXPECT_EQ(s_groupedRxTOutCount, 0U);
+
+    /* 評価 (Assert): Com_IpduGroupStop() と違い、受信処理自体は継続している
+     * ことを確認する（IPduId=1、非 Signal Group側で実際に受信させ、
+     * Com_ReceiveSignal() が新しい値を返すことで検証）。 */
+    ReceiveOnceNonGroup(0x5678U);
+    uint16_t value = 0U;
+    uint8 ret = Com_ReceiveSignal(0U, &value);
+    EXPECT_EQ(ret, E_OK);
+    EXPECT_EQ(value, 0x5678U);
+}
+
+TEST_F(Bsw_RxIpduGroupChain_Test, EnableReceptionDM_OK_ResetsTimerAndResumesDetectionWithoutImmediateFalseTimeout)
+{
+    /* 準備 (Arrange): 開始→実受信→デッドライン監視を無効化したまま
+     * しきい値を大幅に超えて放置する。 */
+    Com_IpduGroupStart(COM_IPDU_GROUP_SENSOR_RX, 0U);
+    ReceiveOnceNonGroup(0x1234U);
+    Com_DisableReceptionDM(COM_IPDU_GROUP_SENSOR_RX);
+    FakeMillis_Value += 5000U;
+    Com_MainFunction();
+    ASSERT_EQ(s_nonGroupRxTOutCount, 0U);  // 無効化中は評価されない
+
+    /* 実行 (Act): 再度有効化した直後に Com_MainFunction() を呼ぶ */
+    Com_EnableReceptionDM(COM_IPDU_GROUP_SENSOR_RX);
+    Com_MainFunction();
+
+    /* 評価 (Assert): タイマが再始動されているため、無効化中に「経過して
+     * いた」5000ms を理由に即座にタイムアウト判定されない
+     * （Com_IpduGroupStart() の [SWS_Com_00787] 項目2と同じ理由）。 */
+    EXPECT_EQ(s_nonGroupRxTOutCount, 0U);
+
+    /* 実行 (Act): 再有効化後、改めて TimeoutMs(500ms) 経過させる */
+    FakeMillis_Value += 500U;
+    Com_MainFunction();
+
+    /* 評価 (Assert): 通常どおり監視が再開されていること */
+    EXPECT_EQ(s_nonGroupRxTOutCount, 1U);
+}
+
+TEST_F(Bsw_RxIpduGroupChain_Test, DisableReceptionDM_NG_UnknownIpduGroupIdHasNoEffect)
+{
+    /* 準備 (Arrange): 不要。既定で有効なまま */
+
+    /* 実行 (Act): どの I-PDU にも一致しない IpduGroupId を指定する */
+    Com_DisableReceptionDM(static_cast<Com_IpduGroupIdType>(0xAAU));
+
+    /* 評価 (Assert): 何も変化しない */
+    EXPECT_EQ(Com_Test_GetRxDmEnabled(0U), 1U);
+    EXPECT_EQ(Com_Test_GetRxDmEnabled(1U), 1U);
+}
+
+// ------------------------------------------------------------
+// [SWS_Com_00534]（/code-review で発見）: 対象 I-PDU Group が1本でも
+// TX I-PDU を含む場合、要求全体を黙って無視しなければならない。本番の
+// COM_IPDU_GROUP_NONE は実際に RX/TX 混在グループ（Com_PBCfg.c 参照）の
+// ため、これは仮説上の懸念ではなく実際に到達しうる呼び出しである。
+// kTestRxMixedGroupIPdu(RX, IPduId=2)/kTestTxMixedGroupIPdu(TX, IPduId=0)
+// が同じ COM_IPDU_GROUP_NONE に属する構成で検証する。
+// ------------------------------------------------------------
+TEST_F(Bsw_RxIpduGroupChain_Test, DisableReceptionDM_NG_MixedRxTxGroupIsIgnoredEntirely)
+{
+    /* 準備 (Arrange): 不要。既定で有効なまま */
+    ASSERT_EQ(Com_Test_GetRxDmEnabled(2U), 1U);
+
+    /* 実行 (Act): RX/TX 混在グループ（COM_IPDU_GROUP_NONE）を指定する */
+    Com_DisableReceptionDM(COM_IPDU_GROUP_NONE);
+
+    /* 評価 (Assert): 要求全体が無視され、RX メンバー（IPduId=2）のフラグも
+     * 変化しない。 */
+    EXPECT_EQ(Com_Test_GetRxDmEnabled(2U), 1U);
+}
+
+TEST_F(Bsw_RxIpduGroupChain_Test, EnableReceptionDM_NG_MixedRxTxGroupIsIgnoredEntirely)
+{
+    /* 準備 (Arrange): 不要。既定で有効なため Enable 側だけでは差が出ない。
+     * Disable 側が [SWS_Com_00534] のガードにより無視されて 1 のままである
+     * こと自体は上のテストで確認済みのため、ここでは Enable 単体を呼んでも
+     * DET_LOGW 以外の副作用が無い（クラッシュ・範囲外アクセスしない）ことを
+     * 確認する（境界条件としての最小限の呼び出し安全性の検証）。 */
+
+    /* 実行 (Act) + 評価 (Assert) */
+    Com_EnableReceptionDM(COM_IPDU_GROUP_NONE);
+    EXPECT_EQ(Com_Test_GetRxDmEnabled(2U), 1U);
 }
 
 }  // namespace rx_ipdu_group

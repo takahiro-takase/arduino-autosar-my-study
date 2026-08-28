@@ -117,6 +117,12 @@ static uint8 Com_TxEnabled = 1U;
 static uint8 Com_RxIPduStarted[COM_RX_IPDU_MAX];
 static uint8 Com_TxIPduStarted[COM_TX_IPDU_MAX];
 
+/* Com_EnableReceptionDM()/Com_DisableReceptionDM()（SRS_Com_00192、2026-08
+ * 追加）用。Com_RxIPduStarted とは独立した軸で、I-PDU Group の起動/停止
+ * （送受信処理そのもの）とは別に、受信デッドライン監視の評価だけを
+ * 個別に止められるようにする。既定は 1（有効、Com_Init() 参照）。 */
+static uint8 Com_RxDmEnabled[COM_RX_IPDU_MAX];
+
 /* Com_ConfigPtr->RxIPdus[].IsSignalGroup を IPduId 添字で引けるようにした
  * キャッシュ（Com_Init() で一度だけ設定、以降不変。/simplify で指摘された
  * 「Com_MainFunction() のシグナル単位ループが、直前の I-PDU 単位ループで
@@ -302,6 +308,9 @@ void Com_Init(const Com_ConfigType* config)
                                      * 起動済みにしておき、下の実ループで
                                      * I-PDU Group 所属分のみ上書きする */
         Com_RxIPduIsGroup[i] = 0U;  /* 同上、下の実ループで実際の値を設定する */
+        Com_RxDmEnabled[i]   = 1U;  /* デッドライン監視は既定で有効
+                                     * （Com_DisableReceptionDM() を明示的に
+                                     * 呼ぶまで無効化されない） */
     }
 
     for (uint8 i = 0; i < COM_TX_IPDU_MAX; i++)
@@ -2854,8 +2863,10 @@ void Com_MainFunction(void)
 
             /* I-PDU Group が停止中はデッドライン監視自体を評価しない
              * （[SWS_Com_00685]。Com_RxEnabled==0 の場合と同じ理由：意図的に
-             * 止めているだけの通信を「通信異常」として誤って伝えないため）。 */
-            if (!Com_RxIPduStarted[ipdu->IPduId])
+             * 止めているだけの通信を「通信異常」として誤って伝えないため）。
+             * Com_DisableReceptionDM() による個別無効化も同じ扱い
+             * （SRS_Com_00192、2026-08 追加）。 */
+            if (!Com_RxIPduStarted[ipdu->IPduId] || !Com_RxDmEnabled[ipdu->IPduId])
                 continue;
 
             const Com_IPduIdType id = ipdu->IPduId;
@@ -2904,7 +2915,8 @@ void Com_MainFunction(void)
             if (sig->Direction != COM_SIGNAL_DIRECTION_RX || sig->TimeoutMs == 0U)
                 continue;  /* [SWS_Com_00333]: 監視無効（FirstTimeoutMs も無視） */
 
-            if (sig->IPduId >= COM_RX_IPDU_MAX || !Com_RxIPduStarted[sig->IPduId])
+            if (sig->IPduId >= COM_RX_IPDU_MAX || !Com_RxIPduStarted[sig->IPduId]
+                || !Com_RxDmEnabled[sig->IPduId])
                 continue;
 
             if (Com_RxIPduIsGroup[sig->IPduId] != 0U)
@@ -3317,6 +3329,103 @@ void Com_IpduGroupStop(Com_IpduGroupIdType IpduGroupId)
     }
 }
 
+/**
+ * \brief   指定した I-PDU Group に TX I-PDU が1本でも含まれるか判定する。
+ *
+ * \details [SWS_Com_00534]: `Com_EnableReceptionDM()`/`Com_DisableReceptionDM()`
+ *          は、対象 I-PDU Group が1本でも TX I-PDU を含む場合、要求全体を
+ *          黙って無視しなければならない（RX/TX が混在するグループへ「受信」
+ *          デッドライン監視の有効/無効化を適用することは意味を持たないため）。
+ *          本プロジェクトの `COM_IPDU_GROUP_NONE` は実際に RX/TX 混在グループ
+ *          （Com_PBCfg.c 参照: RX 1本・TX 3本が同じ `COM_IPDU_GROUP_NONE` に
+ *          属する）であり、この要求は現実に到達しうる。
+ *
+ * \param[in]  IpduGroupId  判定対象の I-PDU Group の ID。
+ *
+ * \retval  1  1本でも所属 TX I-PDU があった。
+ * \retval  0  所属 TX I-PDU が無かった。
+ *
+ * \pre        Com_ConfigPtr が NULL でないこと。
+ */
+static uint8 Com_IpduGroupHasTxMember(Com_IpduGroupIdType IpduGroupId)
+{
+    for (uint8 i = 0U; i < Com_ConfigPtr->TxIPduCount; i++)
+    {
+        if (Com_ConfigPtr->TxIPdus[i].IpduGroupId == IpduGroupId)
+            return 1U;
+    }
+    return 0U;
+}
+
+void Com_EnableReceptionDM(Com_IpduGroupIdType IpduGroupId)
+{
+    DET_LOGT(TAG, "called");
+
+    if (Com_ConfigPtr == NULL)
+    {
+        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_ENABLE_RECEPTION_DM, COM_E_UNINIT);
+        return;
+    }
+
+    if (Com_IpduGroupHasTxMember(IpduGroupId))
+    {
+        /* [SWS_Com_00534]: 要求全体を無視する（RX 側も一切変更しない）。 */
+        DET_LOGW(TAG, "EnableReceptionDM grp=%u ignored: group contains TX I-PDU(s)",
+                 (unsigned)IpduGroupId);
+        return;
+    }
+
+    const unsigned long now = millis();
+
+    for (uint8 i = 0U; i < Com_ConfigPtr->RxIPduCount; i++)
+    {
+        const Com_IPduConfigType* ipdu = &Com_ConfigPtr->RxIPdus[i];
+        if (ipdu->IpduGroupId != IpduGroupId)
+            continue;
+
+        Com_RxDmEnabled[ipdu->IPduId] = 1U;
+
+        /* Com_IpduGroupStart() の [SWS_Com_00787] 項目2と同じ理由:
+         * 無効化していた間の経過時間を理由に、再有効化した直後で即座に
+         * タイムアウト判定されてしまうのを防ぐ。 */
+        Com_ResetRxDeadlineMonitoring(ipdu->IPduId, now);
+
+        DET_LOGI(TAG, "EnableReceptionDM grp=%u iPdu=%u",
+                 (unsigned)IpduGroupId, (unsigned)ipdu->IPduId);
+    }
+}
+
+void Com_DisableReceptionDM(Com_IpduGroupIdType IpduGroupId)
+{
+    DET_LOGT(TAG, "called");
+
+    if (Com_ConfigPtr == NULL)
+    {
+        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_DISABLE_RECEPTION_DM, COM_E_UNINIT);
+        return;
+    }
+
+    if (Com_IpduGroupHasTxMember(IpduGroupId))
+    {
+        /* [SWS_Com_00534]: 要求全体を無視する（RX 側も一切変更しない）。 */
+        DET_LOGW(TAG, "DisableReceptionDM grp=%u ignored: group contains TX I-PDU(s)",
+                 (unsigned)IpduGroupId);
+        return;
+    }
+
+    for (uint8 i = 0U; i < Com_ConfigPtr->RxIPduCount; i++)
+    {
+        const Com_IPduConfigType* ipdu = &Com_ConfigPtr->RxIPdus[i];
+        if (ipdu->IpduGroupId != IpduGroupId)
+            continue;
+
+        Com_RxDmEnabled[ipdu->IPduId] = 0U;
+
+        DET_LOGI(TAG, "DisableReceptionDM grp=%u iPdu=%u",
+                 (unsigned)IpduGroupId, (unsigned)ipdu->IPduId);
+    }
+}
+
 #ifdef COM_UNIT_TEST
 uint8 Com_Test_GetTxPending(Com_IPduIdType ipduId)
 {
@@ -3401,5 +3510,12 @@ void Com_Test_SetTxConfPendingSinceMs(Com_IPduIdType ipduId, unsigned long value
     if (ipduId >= COM_TX_IPDU_MAX)
         return;
     Com_TxConfPendingSinceMs[ipduId] = value;
+}
+
+uint8 Com_Test_GetRxDmEnabled(Com_IPduIdType ipduId)
+{
+    if (ipduId >= COM_RX_IPDU_MAX)
+        return 0U;
+    return Com_RxDmEnabled[ipduId];
 }
 #endif
