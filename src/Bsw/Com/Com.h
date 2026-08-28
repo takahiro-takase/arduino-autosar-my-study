@@ -356,6 +356,59 @@ void Com_IpduGroupStart(Com_IpduGroupIdType IpduGroupId, uint8 initialize);
  */
 void Com_IpduGroupStop(Com_IpduGroupIdType IpduGroupId);
 
+/**
+ * \brief   指定した I-PDU Group に属する RX I-PDU の受信デッドライン監視を有効化する。
+ *
+ * \details `Com_IpduGroupStart()`/`Com_IpduGroupStop()`（I-PDU の送受信処理
+ *          自体の起動/停止）とは独立した、より細かい制御軸である
+ *          （SRS_Com_00192）。I-PDU Group 自体は起動済みのまま、デッドライン
+ *          監視（タイムアウト判定・`RxDataTimeoutAction`・`Com_CbkRxTOut`）
+ *          だけを一時的に止めたい診断・キャリブレーション用途を想定する。
+ *          既定では全 RX I-PDU のデッドライン監視は有効（`Com_Init()` 時点）
+ *          であり、本 API は `Com_DisableReceptionDM()` で無効化した後に
+ *          再度有効化する場合にのみ意味を持つ。
+ *
+ *          有効化すると、対象 I-PDU のデッドライン監視タイマを再始動する
+ *          （`Com_ResetRxDeadlineMonitoring()`、`Com_IpduGroupStart()`の
+ *          [SWS_Com_00787]項目2と同じ理由: 無効化していた間の経過時間を
+ *          理由に再開直後で即座にタイムアウト判定されるのを防ぐ）。
+ *
+ *          [SWS_Com_00534]: `IpduGroupId` が1本でも TX I-PDU を含む場合、
+ *          要求全体を黙って無視する（RX 側も一切変更しない）。本プロジェクトの
+ *          `COM_IPDU_GROUP_NONE` は RX/TX 混在グループの実例であり、この
+ *          無視が実際に発動しうる（Com_PBCfg.c 参照）。
+ *
+ * \param[in]  IpduGroupId  対象の I-PDU Group の ID。
+ *
+ * \AUTOSARReq     {SWS_Com_91001の対、SRS_Com_00192, SWS_Com_00534}
+ * \ServiceID      {0x06}
+ * \Reentrancy     {Reentrant for different I-PDU groups. Non reentrant for the same I-PDU group.}
+ * \Synchronicity  {Synchronous}
+ */
+void Com_EnableReceptionDM(Com_IpduGroupIdType IpduGroupId);
+
+/**
+ * \brief   指定した I-PDU Group に属する RX I-PDU の受信デッドライン監視を無効化する。
+ *
+ * \details `Com_EnableReceptionDM()` の対。I-PDU Group 自体の起動状態には
+ *          影響しない（`Com_RxIndication()` による受信処理・バッファ更新は
+ *          継続する）。無効化中にラッチ済みのタイムアウト状態
+ *          （`Com_RxTimedOut`/`Com_SigTimedOut`）は意図的にクリアしない
+ *          （`Com_IpduGroupStop()` と同じ理由: 無効化中は
+ *          `Com_MainFunction()` 側の評価自体を止めるため値は参照されない）。
+ *
+ *          [SWS_Com_00534]: `IpduGroupId` が1本でも TX I-PDU を含む場合、
+ *          要求全体を黙って無視する（`Com_EnableReceptionDM()` 参照）。
+ *
+ * \param[in]  IpduGroupId  対象の I-PDU Group の ID。
+ *
+ * \AUTOSARReq     {SWS_Com_91003の対、SRS_Com_00192, SWS_Com_00534}
+ * \ServiceID      {0x05}
+ * \Reentrancy     {Reentrant for different I-PDU groups. Non reentrant for the same I-PDU group.}
+ * \Synchronicity  {Synchronous}
+ */
+void Com_DisableReceptionDM(Com_IpduGroupIdType IpduGroupId);
+
 #ifdef COM_UNIT_TEST
 /**
  * \brief   [テスト専用] TX I-PDU の Com_TxPending（変化時送信の保留フラグ）を取得する。
@@ -427,6 +480,11 @@ uint8 Com_Test_GetTxConfPending(Com_IPduIdType ipduId);
  *  確認待ちである」状態を直接注入できるようにする（Com_IpduGroupStop() に
  *  よるキャンセル検証など）。範囲外の `ipduId` は無視する。 */
 void Com_Test_SetTxConfPendingSinceMs(Com_IPduIdType ipduId, unsigned long value);
+
+/** [テスト専用] RX I-PDU のデッドライン監視有効/無効フラグ
+ *  （Com_RxDmEnabled[ipduId]、Com_EnableReceptionDM()/Com_DisableReceptionDM()
+ *  参照）を取得する。範囲外の `ipduId` は 0 を返す。 */
+uint8 Com_Test_GetRxDmEnabled(Com_IPduIdType ipduId);
 #endif
 
 #ifdef __cplusplus
