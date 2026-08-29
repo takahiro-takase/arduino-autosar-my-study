@@ -203,16 +203,23 @@ Std_ReturnType NvM_WriteBlock(NvM_BlockIdType BlockId, const void* NvM_SrcPtr);
  *          実行中に明示的に呼び出すことを想定した
  *          AUTOSAR の NvM_RestoreBlockDefaults() 相当の API。
  *
- * \param[in]  BlockId  ブロック ID (NVM_BLOCK_ID_* 定数)。
+ * \param[in]   BlockId      ブロック ID (NVM_BLOCK_ID_* 定数)。
+ * \param[out]  NvM_DestPtr  復元したデフォルト値の追加コピー先。NULL 可。
+ *
+ * \note       NvM_DestPtr が非 NULL の場合は RAM ミラー更新に加えて
+ *             追加でコピーするだけで、仕様の either/or ([SWS_NvM_00435]) は
+ *             未実装。
  *
  * \retval  E_OK      ジョブを受け付けた（書き込み完了を意味しない）。
  * \retval  E_NOT_OK  BlockId が範囲外。
  *
+ * \AUTOSARReq     {SWS_NvM_00456, SWS_NvM_00012, SWS_NvM_00224, SWS_NvM_00267,
+ *                  SWS_NvM_00902}
  * \ServiceID      {0x08}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Asynchronous}
  */
-Std_ReturnType NvM_RestoreBlockDefaults(NvM_BlockIdType BlockId);
+Std_ReturnType NvM_RestoreBlockDefaults(NvM_BlockIdType BlockId, void* NvM_DestPtr);
 
 /**
  * \brief   ブロックの直近のジョブ結果を取得する。

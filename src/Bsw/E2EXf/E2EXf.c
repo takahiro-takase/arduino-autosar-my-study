@@ -24,9 +24,16 @@
  * 「未初期化アクセスを防ぐ」方針に合わせている。 */
 static uint8 E2EXf_Initialized = 0U;
 
-void E2EXf_Init(void)
+/**
+ * \AUTOSARReq     {SWS_E2EXf_00035}
+ * \ServiceID      {0x01}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void E2EXf_Init(const E2EXf_ConfigType* ConfigPtr)
 {
     DET_LOGT(TAG, "called");
+    (void)ConfigPtr;  /* 常に NULL（post-build 設定を持たないため。E2EXf.h 参照） */
     E2EXf_Initialized = 1U;
 }
 

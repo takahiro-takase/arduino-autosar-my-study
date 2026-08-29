@@ -122,7 +122,7 @@ grep したが SWS 文書中に0件で、こちらは確かに仕様上 Init を
 
 | モジュール | 備考 |
 |---|---|
-| Nm | 本プロジェクト独自の簡略 Nm。仕様上対応する CanNm は SWS_CanNm_00208 で ConfigPtr 必須だが、Nm 自体が実 AUTOSAR の正式なモジュールではないため今回のスコープ外 |
+| Nm | 2026-08-30 対応済み。`Nm_Init`/`NetworkRequest`/`NetworkRelease`/`RepeatMessageRequest`/`GetState` の5関数に SWS_CanNm_00208/00213/00214/00221/00223 準拠の ConfigPtr/NetworkHandleType 引数を追加（`NM_MAIN_NETWORK_HANDLE`、`NM_E_INVALID_CHANNEL` [SWS_CanNm_00192] による範囲チェック含む）。「Nm自体が実AUTOSARの正式なモジュールではないため対象外」という旧判断を、IFシグネチャは仕様準拠という方針のもとで上書きした |
 
 ### 対象外（仕様上 Init を持たない、または意図的簡略化として既にヘッダに明記済み）
 

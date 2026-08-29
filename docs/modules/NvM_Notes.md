@@ -49,8 +49,9 @@ CRC 不一致を検出すると、ブロックごとに設定された **ROM デ
 （`NvM_PBCfg.c` の `NvM_BlockDescriptorType.RomBlockDataAddress`、未設定なら
 全 0）を RAM ミラーへコピーし、CRC を付け直して EEPROM へ書き戻します。
 この処理は `NvM_Init()` が破損検出時に内部的に呼ぶほか、
-`NvM_RestoreBlockDefaults(BlockId)` として明示的にも呼び出せます
-（AUTOSAR の `NvM_RestoreBlockDefaults()` 相当）。
+`NvM_RestoreBlockDefaults(BlockId, NvM_DestPtr)` として明示的にも呼び出せます
+（SWS_NvM_00451 準拠の2引数形式。`NvM_DestPtr` は NULL 可で、非 NULL の場合
+復元したデフォルト値がそこへも追加でコピーされます）。
 
 | ブロック | デフォルト値 | 理由 |
 |---|---|---|

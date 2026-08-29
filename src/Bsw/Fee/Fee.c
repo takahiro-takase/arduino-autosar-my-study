@@ -158,12 +158,11 @@ Std_ReturnType Fee_WriteImmediate(uint16 Address, const uint8* DataBufferPtr, ui
     return E_OK;
 }
 
-Std_ReturnType Fee_Cancel(void)
+void Fee_Cancel(void)
 {
     DET_LOGT(TAG, "called");
     Fee_Job.Active = 0U;
     Fee_LastResult = MEMIF_JOB_CANCELED;
-    return E_OK;
 }
 
 MemIf_StatusType Fee_GetStatus(void)

@@ -287,7 +287,7 @@ Std_ReturnType ComM_RequestComMode(ComM_UserHandleType User, ComM_ModeType ComMo
     if (aggregated == COMM_FULL_COMMUNICATION && ComM_NmReleasePending[0U])
     {
         ComM_NmReleasePending[0U] = 0U;
-        (void)Nm_NetworkRequest();
+        (void)Nm_NetworkRequest(NM_MAIN_NETWORK_HANDLE);
         DET_LOGI(TAG, "FULL_COM re-requested during Nm release wait -> cancelled");
         /* ComM_ChannelMode が既に FULL_COM へ更新済み（上記コメントの通常
          * ケース）か、まだ Bus-Off 回復待ち中で FULL_COM でないか、いずれの
@@ -339,7 +339,7 @@ Std_ReturnType ComM_RequestComMode(ComM_UserHandleType User, ComM_ModeType ComMo
     if (ComM_ChannelMode[0U] == COMM_FULL_COMMUNICATION && aggregated == COMM_NO_COMMUNICATION)
     {
         ComM_NmReleasePending[0U] = 1U;
-        (void)Nm_NetworkRelease();
+        (void)Nm_NetworkRelease(NM_MAIN_NETWORK_HANDLE);
         DET_LOGI(TAG, "FULL_COM -> NO_COM requested: Nm_NetworkRelease() sent, awaiting Bus-Sleep Mode");
         return E_OK;
     }
@@ -509,7 +509,7 @@ void ComM_BusSMIndication(uint8 Network, ComM_ModeType Mode)
                 (void)EcuM_RequestRUN(ECUM_USER_COMM);
                 ComM_EcuMRunMode = COMM_FULL_COMMUNICATION;
             }
-            (void)Nm_NetworkRequest();  /* 通信が必要になったことを Nm へ伝える */
+            (void)Nm_NetworkRequest(NM_MAIN_NETWORK_HANDLE);  /* 通信が必要になったことを Nm へ伝える */
         }
         else if (Mode == COMM_NO_COMMUNICATION)
         {
@@ -539,7 +539,7 @@ void ComM_BusSMIndication(uint8 Network, ComM_ModeType Mode)
              * ComM_BusSMIndication(FULL_COMMUNICATION) を呼ぶため、その際に
              * 上の分岐（ComM_NmReleasePending が立っていなければ）で
              * Nm_NetworkRequest() が呼ばれ自動的に再開する。 */
-            (void)Nm_NetworkRelease();
+            (void)Nm_NetworkRelease(NM_MAIN_NETWORK_HANDLE);
         }
     }
     else if (Mode == COMM_SILENT_COMMUNICATION && ComM_NmReleasePending[Network])

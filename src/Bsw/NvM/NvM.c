@@ -329,7 +329,7 @@ static void NvM_MarkPending(NvM_BlockIdType id)
 
     if (NvM_ActiveBlockId == id)
     {
-        (void)MemIf_Cancel(MEMIF_DEVICE_0);
+        MemIf_Cancel(MEMIF_DEVICE_0);
         NvM_ActivePhase        = NVM_PHASE_NONE;
         NvM_ActiveCopyIsMirror = 0U;
     }
@@ -473,12 +473,16 @@ Std_ReturnType NvM_WriteBlock(NvM_BlockIdType BlockId, const void* NvM_SrcPtr)
  *
  * \details RAM ミラーの更新は同期的に行い、EEPROM への書き戻しは
  *          NvM_WriteBlock() と同じ非同期ジョブキュー経由で行う。
+ *          NvM_DestPtr の扱い（常に RAM ミラーを更新し、非 NULL なら
+ *          追加でコピーするだけの簡略化）は NvM.h の doc コメント参照。
  *
+ * \AUTOSARReq     {SWS_NvM_00456, SWS_NvM_00012, SWS_NvM_00224, SWS_NvM_00267,
+ *                  SWS_NvM_00902}
  * \ServiceID      {0x08}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Asynchronous}
  */
-Std_ReturnType NvM_RestoreBlockDefaults(NvM_BlockIdType BlockId)
+Std_ReturnType NvM_RestoreBlockDefaults(NvM_BlockIdType BlockId, void* NvM_DestPtr)
 {
     DET_LOGT(TAG, "called");
     if (NvM_Cfg == NULL)
@@ -501,6 +505,12 @@ Std_ReturnType NvM_RestoreBlockDefaults(NvM_BlockIdType BlockId)
         memcpy(blk->RamBlockDataAddress, blk->RomBlockDataAddress, blk->NvMNvBlockLength);
     else
         memset(blk->RamBlockDataAddress, 0, blk->NvMNvBlockLength);
+
+    /* [SWS_NvM_00435]: 呼び出し元が RAM ブロックアドレスを指定した場合は、
+     * それも使う（本実装では常時保持している RAM ミラーへの反映に加えて、
+     * 呼び出し元バッファへも同じ内容をコピーする形で対応する）。 */
+    if (NvM_DestPtr != NULL)
+        memcpy(NvM_DestPtr, blk->RamBlockDataAddress, blk->NvMNvBlockLength);
 
     DET_LOGW(TAG, "block=%u defaults restored (%s), write queued", (unsigned)BlockId,
              (blk->RomBlockDataAddress != NULL) ? "ROM default" : "zero-fill");

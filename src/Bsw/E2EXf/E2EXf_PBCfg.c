@@ -107,5 +107,5 @@ void E2EXf_PBCfg_Init(void)
     /* 各 State の初期化が完了した最後に、E2EXf モジュール自身の初期化状態
      * (SWS_E2EXf_00130) を TRUE にする。E2EXf_InverseTransform()/
      * E2EXf_Transform() はこれより前に呼ばれても安全側で早期 return する。 */
-    E2EXf_Init();
+    E2EXf_Init(NULL);
 }

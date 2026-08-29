@@ -33,6 +33,17 @@
 extern "C" {
 #endif
 
+/**
+ * \brief   E2EXf_Init() の設定引数型（不透明型）。
+ *
+ * \details SWS_E2EXf_00035 は post-build 設定構造体へのポインタ（post-build
+ *          selectable の場合）または NULL（link-time の場合）を要求する。
+ *          本プロジェクトは単一 ECU 構成で post-build バリアント切替を
+ *          持たないため、中身を定義しない不透明型とし、ポインタとしてのみ
+ *          扱う（`CanSM_ConfigType`/`KeyM_ConfigType` と同じ簡略化パターン）。
+ */
+typedef struct E2EXf_ConfigType_Tag E2EXf_ConfigType;
+
 /* -----------------------------------------------------------------------
  * DET（Default Error Tracer）関連定数
  *
@@ -158,11 +169,18 @@ typedef struct
  * \pre        EcuM_Init() から Com_Init() の後、フレーム受信・送信が
  *             始まる前に呼び出すこと。
  *
+ * \param[in]  ConfigPtr  常に NULL を渡すこと（本プロジェクトは post-build
+ *                        設定を持たないため。実 AUTOSAR 仕様は
+ *                        SWS_E2EXf_00035 で post-build selectable の場合の
+ *                        設定構造体ポインタを要求するが、link-time variant
+ *                        の場合は NULL でよいと明記されている）。
+ *
+ * \AUTOSARReq     {SWS_E2EXf_00035}
  * \ServiceID      {0x01}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
  */
-void E2EXf_Init(void);
+void E2EXf_Init(const E2EXf_ConfigType* ConfigPtr);
 
 /**
  * \brief   E2EXf モジュールを未初期化状態に戻す。
