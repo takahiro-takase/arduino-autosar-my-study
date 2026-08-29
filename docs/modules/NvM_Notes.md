@@ -163,10 +163,11 @@ STATUS→AGING→EXTENDED→MAGIC の順。有効性マーカーである MAGIC 
 この整合性設計が壊れてしまう。そのため保留ブロックは ID 順ではなく、
 投入順を記録した FIFO キューから取り出す。
 
-**完了確認 API**: `NvM_GetErrorStatus(BlockId)` で `NVM_REQ_OK` /
-`NVM_REQ_PENDING` / `NVM_REQ_NOT_OK` を取得できます（AUTOSAR
-`NvM_GetErrorStatus()` 相当）。現状の呼び出し元はいずれも結果を確認しない
-fire-and-forget ですが、API としては提供しています。
+**完了確認 API**: `NvM_GetErrorStatus(BlockId, &result)`（SWS_NvM_00451
+準拠の OUT パラメータ形式。戻り値 `Std_ReturnType` は成否のみを示し、
+ジョブ結果本体は `result` に `NVM_REQ_OK`/`NVM_REQ_PENDING`/
+`NVM_REQ_NOT_OK` として書き込まれる）で確認できます。現状の呼び出し元は
+いずれも結果を確認しない fire-and-forget ですが、API としては提供しています。
 
 ## 冗長ブロック（Redundant Block）
 

@@ -513,25 +513,36 @@ Std_ReturnType NvM_RestoreBlockDefaults(NvM_BlockIdType BlockId)
 /**
  * \brief   ブロックの直近のジョブ結果を取得する。
  *
+ * \AUTOSARReq     {SWS_NvM_00451, SWS_NvM_00610, SWS_NvM_00611, SWS_NvM_00612}
  * \ServiceID      {0x04}
  * \Reentrancy     {Reentrant}
  * \Synchronicity  {Synchronous}
  */
-NvM_RequestResultType NvM_GetErrorStatus(NvM_BlockIdType BlockId)
+Std_ReturnType NvM_GetErrorStatus(NvM_BlockIdType BlockId, NvM_RequestResultType* RequestResultPtr)
 {
     DET_LOGT(TAG, "called");
+    if (RequestResultPtr == NULL)
+    {
+        Det_ReportError(NVM_MODULE_ID, 0U, NVM_API_ID_GET_ERROR_STATUS, NVM_E_PARAM_DATA);
+        return E_NOT_OK;
+    }
+
     if (NvM_Cfg == NULL)
     {
         Det_ReportError(NVM_MODULE_ID, 0U, NVM_API_ID_GET_ERROR_STATUS, NVM_E_NOT_INITIALIZED);
-        return NVM_REQ_NOT_OK;
+        *RequestResultPtr = NVM_REQ_NOT_OK;
+        return E_NOT_OK;
     }
 
     if (BlockId >= NVM_BLOCK_COUNT)
     {
         Det_ReportError(NVM_MODULE_ID, 0U, NVM_API_ID_GET_ERROR_STATUS, NVM_E_PARAM_BLOCK_ID);
-        return NVM_REQ_NOT_OK;
+        *RequestResultPtr = NVM_REQ_NOT_OK;
+        return E_NOT_OK;
     }
-    return NvM_BlockResult[BlockId];
+
+    *RequestResultPtr = NvM_BlockResult[BlockId];
+    return E_OK;
 }
 
 /**
