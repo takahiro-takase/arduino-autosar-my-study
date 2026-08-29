@@ -261,7 +261,7 @@ AUTOSAR SWS_Dcm はこれを深く再規定していないため、手元の SWS
 
 | 対象ファイル | SHA（変更前） | 結果 |
 |---|---|---|
-| WdgM.h | 914c041 | **修正済み**: `WdgM_LocalStatusType` の `WDGM_LOCAL_STATUS_DEACTIVATED` が `0x0FU` だったが、`SWS_WdgM_00359`（`WdgM_LocalStatusType` の Implementation Data Type 定義）では `WDGM_LOCAL_STATUS_DEACTIVATED = 4` と規定されている。本実装は WdgM_GetLocalStatus() の戻り値としてのみ使う内部限定の値でワイヤフォーマット等の外部依存はないが、仕様の数値と異なっていたため `0x04U` へ修正（コミット後に SHA 更新要） |
+| WdgM.h | 914c041 | **修正済み**: `WdgM_LocalStatusType` の `WDGM_LOCAL_STATUS_DEACTIVATED` が `0x0FU` だったが、`SWS_WdgM_00359`（`WdgM_LocalStatusType` の Implementation Data Type 定義）では `WDGM_LOCAL_STATUS_DEACTIVATED = 4` と規定されている。本実装は WdgM_GetLocalStatus() が返す内部限定の値でワイヤフォーマット等の外部依存はないが、仕様の数値と異なっていたため `0x04U` へ修正（コミット後に SHA 更新要）。**2026-08-30 追記**: 当時 `WdgM_GetLocalStatus()` は `WdgM_LocalStatusType` を直接返す簡略シグネチャだったため「戻り値としてのみ使う」としていたが、その後 `Std_ReturnType WdgM_GetLocalStatus(SEID, WdgM_LocalStatusType* Status)`（SWS_WdgM_00169 準拠の OUT パラメータ形式）へ修正済み。DEACTIVATED は現在 `*Status` に書き込まれる値であり、戻り値（`Std_ReturnType`）ではない |
 | WdgM.c | 914c041 | 問題なし。`SWS_WdgM_00119`〜`00122`（Global Supervision Status が OK/FAILED/EXPIRED のいずれでも WdgIf_SetTriggerCondition によるリフレッシュを継続し、STOPPED でのみ停止する）の引用は本文と完全一致。グローバル猶予カウンタ (`WdgM_ExpiredCycleCount`/`WdgM_GlobalStopped`) の実装、および `WdgM_ResumeSupervision()` がこのカウンタを意図的にリセットしない設計（ラッチ経由のフェイルセーフを壊さないため）は仕様の趣旨と整合 |
 | WdgM_Cfg.h | 914c041 | **修正済み**: `WDGM_E_PARAM_SEID` のコメントが未解決のプレースホルダ `[SWS_WdgM_00xxx]` のままだった。`WdgM_CheckpointReached`/`WdgM_GetLocalStatus` それぞれの SEId 範囲チェック要求である `SWS_WdgM_00278`/`SWS_WdgM_00172` に修正。`WDGM_E_NO_INIT [SWS_WdgM_00389等]`・`ECUC_WdgM_00329`（WdgMExpiredSupervisionCycleTol）は正確（コミット後に SHA 更新要） |
 | WdgM_PBCfg.h/.c | 914c041 | 該当する SWS/ECUC 番号引用なし（コンテナ名の言及のみ、数値照合の対象外） |

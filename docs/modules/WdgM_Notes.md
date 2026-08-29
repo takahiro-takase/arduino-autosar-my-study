@@ -113,13 +113,19 @@ Alive/Logical/Deadline Supervision が FAILED になっても、もう一方の�
 リフレッシュするかどうか）は両エンティティの結果を集約します。
 
 ```
-WdgM_TriggerHwWatchdog()（1000ms 周期）:
+WdgM_MainFunction()（6000ms 判定サイクル）:
   for each entity (ENGINE, WARNING):
-    WdgM_GetLocalStatus(entity) != OK ?
-      YES → allOk = false; break
-  allOk == true ?
-    YES → WdgIf_SetTriggerCondition()   ← ENGINE・WARNING 両方が OK の場合のみリフレッシュ
-    NO  → 何もしない                     ← どちらか一方でも FAILED ならリフレッシュを止める
+    WdgM_GetLocalStatus(entity, &status);   ← SWS_WdgM_00169 準拠の OUT パラメータ形式
+    status != OK ? anyNotOk = true
+  anyNotOk == false ?
+    YES → ExpiredCycleCount/GlobalStopped をクリア（全エンティティ OK に回復）
+    NO  → ExpiredCycleCount をインクリメント。WDGM_EXPIRED_SUPERVISION_CYCLE_TOL を
+          超えて初めて GlobalStopped = true（グローバル猶予機構、下記参照）
+
+WdgM_TriggerHwWatchdog()（1000ms 周期）:
+  !GlobalStopped || SupervisionSuppressed ?
+    YES → WdgIf_SetTriggerCondition()   ← OK/FAILED/EXPIRED のいずれでもリフレッシュ継続
+    NO  → 何もしない                     ← GlobalStopped（STOPPED）到達時のみリフレッシュを止める
 ```
 
 > **END→START の許容上限には他モジュール由来の遅延を見込んだ余裕がある**:
