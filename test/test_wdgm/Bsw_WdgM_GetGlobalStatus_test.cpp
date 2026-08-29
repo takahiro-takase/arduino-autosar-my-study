@@ -157,8 +157,12 @@ TEST_F(Bsw_WdgM_GetGlobalStatus_Test,
      * OK に戻る。これによりグローバル猶予カウンタと STOPPED フラグの両方が
      * クリアされ、OK に回復する。 */
     WdgM_MainFunction();
-    EXPECT_EQ(WdgM_GetLocalStatus(WDGM_ENTITY_ENGINE), WDGM_LOCAL_STATUS_OK);
-    EXPECT_EQ(WdgM_GetLocalStatus(WDGM_ENTITY_WARNING), WDGM_LOCAL_STATUS_OK);
+    WdgM_LocalStatusType engineStatus;
+    WdgM_LocalStatusType warningStatus;
+    ASSERT_EQ(WdgM_GetLocalStatus(WDGM_ENTITY_ENGINE, &engineStatus), E_OK);
+    ASSERT_EQ(WdgM_GetLocalStatus(WDGM_ENTITY_WARNING, &warningStatus), E_OK);
+    EXPECT_EQ(engineStatus, WDGM_LOCAL_STATUS_OK);
+    EXPECT_EQ(warningStatus, WDGM_LOCAL_STATUS_OK);
 
     WdgM_GlobalStatusType status;
     ASSERT_EQ(WdgM_GetGlobalStatus(&status), E_OK);

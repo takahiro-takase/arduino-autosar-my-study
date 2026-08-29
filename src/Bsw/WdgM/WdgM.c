@@ -480,35 +480,45 @@ Std_ReturnType WdgM_CheckpointReached(WdgM_SupervisedEntityIdType SEID, uint8 Ch
  *          (WdgM_LogicalStatus)・Deadline Supervision (WdgM_DeadlineStatus)
  *          のいずれか一つでも FAILED なら FAILED を返す。
  *
- * \note       実 AUTOSAR の WdgM_GetLocalStatus は
- *             `Std_ReturnType WdgM_GetLocalStatus(SEID, WdgM_LocalStatusType*
- *             Status)`（[SWS_WdgM_00169]）という OUT パラメータ形式だが、本実装は
- *             呼び出し側の簡潔さを優先し `WdgM_LocalStatusType` を直接返す形に
- *             簡略化している（エラー時は戻り値の DEACTIVATED で表現）。
- * \AUTOSARReq     {SWS_WdgM_00169, SWS_WdgM_00171, SWS_WdgM_00172, SWS_WdgM_00173}
+ * \warning    戻り値 (Std_ReturnType: E_OK=0/E_NOT_OK=1) と *Status
+ *             (WdgM_LocalStatusType: OK=0/FAILED=1) は数値がたまたま重なる。
+ *             戻り値と *Status の型を混同して比較しないこと。
+ * \AUTOSARReq     {SWS_WdgM_00169, SWS_WdgM_00171, SWS_WdgM_00172,
+ *                  SWS_WdgM_00173, SWS_WdgM_00257}
  * \ServiceID      {0x0C}
  * \Reentrancy     {Reentrant}
  * \Synchronicity  {Synchronous}
  */
-WdgM_LocalStatusType WdgM_GetLocalStatus(WdgM_SupervisedEntityIdType SEID)
+Std_ReturnType WdgM_GetLocalStatus(WdgM_SupervisedEntityIdType SEID, WdgM_LocalStatusType* Status)
 {
     DET_LOGT(TAG, "called");
+    if (Status == NULL)
+    {
+        Det_ReportError(WDGM_MODULE_ID, 0U, WDGM_API_ID_GET_LOCAL_STATUS, WDGM_E_INV_POINTER);
+        return E_NOT_OK;
+    }
+
     if (WdgM_Cfg == NULL)
     {
         Det_ReportError(WDGM_MODULE_ID, 0U, WDGM_API_ID_GET_LOCAL_STATUS, WDGM_E_NO_INIT);
-        return WDGM_LOCAL_STATUS_DEACTIVATED;
+        *Status = WDGM_LOCAL_STATUS_DEACTIVATED;
+        return E_NOT_OK;
     }
 
     if (SEID >= WdgM_Cfg->EntityCount)
     {
         Det_ReportError(WDGM_MODULE_ID, 0U, WDGM_API_ID_GET_LOCAL_STATUS, WDGM_E_PARAM_SEID);
-        return WDGM_LOCAL_STATUS_DEACTIVATED;
+        *Status = WDGM_LOCAL_STATUS_DEACTIVATED;
+        return E_NOT_OK;
     }
+
     if (WdgM_AliveStatus[SEID]    != WDGM_LOCAL_STATUS_OK
         || WdgM_LogicalStatus[SEID]  != WDGM_LOCAL_STATUS_OK
         || WdgM_DeadlineStatus[SEID] != WDGM_LOCAL_STATUS_OK)
-        return WDGM_LOCAL_STATUS_FAILED;
-    return WDGM_LOCAL_STATUS_OK;
+        *Status = WDGM_LOCAL_STATUS_FAILED;
+    else
+        *Status = WDGM_LOCAL_STATUS_OK;
+    return E_OK;
 }
 
 /**
@@ -518,13 +528,17 @@ WdgM_LocalStatusType WdgM_GetLocalStatus(WdgM_SupervisedEntityIdType SEID)
  * \details WdgM_MainFunction()（グローバル猶予サイクルの判定）と
  *          WdgM_GetGlobalStatus()（グローバルステータスの導出）の両方から
  *          共通で使う集約ロジックを 1 か所にまとめたもの。
- *          呼び出し前に WdgM_Cfg != NULL であることを保証すること。
+ *          呼び出し前に WdgM_Cfg != NULL であることを保証すること
+ *          （呼び出し元 2 箇所とも保証済み。ここでは念のため
+ *          WdgM_GetLocalStatus() の戻り値 (Std_ReturnType) も確認し、
+ *          万一 E_NOT_OK であれば安全側に倒して「OK でない」扱いとする）。
  */
 static uint8 WdgM_AnyEntityNotOk(void)
 {
     for (uint8 i = 0U; i < WdgM_Cfg->EntityCount; i++)
     {
-        if (WdgM_GetLocalStatus(i) != WDGM_LOCAL_STATUS_OK)
+        WdgM_LocalStatusType status;
+        if (WdgM_GetLocalStatus(i, &status) != E_OK || status != WDGM_LOCAL_STATUS_OK)
             return 1U;
     }
     return 0U;

@@ -227,20 +227,24 @@ Std_ReturnType WdgM_CheckpointReached(WdgM_SupervisedEntityIdType SEID, uint8 Ch
  *          なら FAILED を返す（AUTOSAR の「全アルゴリズムの結果の最悪値」と
  *          同じ考え方）。
  *
- * \param[in]  SEID  エンティティ ID。
- * \return     WdgM_LocalStatusType 値。ID 不正の場合は DEACTIVATED。
+ * \param[in]   SEID    エンティティ ID。
+ * \param[out]  Status  ローカルステータスの格納先。NULL 禁止。
+ * \return      E_OK: 正常取得。E_NOT_OK: NULL ポインタ・未初期化・SEID 不正
+ *              (この場合 *Status は WDGM_LOCAL_STATUS_DEACTIVATED)。
  *
- * \note       実 AUTOSAR の WdgM_GetLocalStatus は
- *             `Std_ReturnType WdgM_GetLocalStatus(SEID, WdgM_LocalStatusType*
- *             Status)`（[SWS_WdgM_00169]）という OUT パラメータ形式だが、本実装は
- *             呼び出し側の簡潔さを優先し `WdgM_LocalStatusType` を直接返す形に
- *             簡略化している（エラー時は戻り値の DEACTIVATED で表現）。
- * \AUTOSARReq     {SWS_WdgM_00169, SWS_WdgM_00171, SWS_WdgM_00172, SWS_WdgM_00173}
+ * \warning    戻り値 (Std_ReturnType: E_OK=0/E_NOT_OK=1) と *Status
+ *             (WdgM_LocalStatusType: OK=0/FAILED=1) は数値がたまたま重なる。
+ *             `WdgM_GetLocalStatus(seid, &status) == WDGM_LOCAL_STATUS_FAILED`
+ *             のように戻り値と *Status の型を混同して比較しないこと
+ *             （それは常に false になり、本来検出したい FAILED を
+ *             見逃す）。必ず戻り値で成否を確認した上で *Status を見ること。
+ * \AUTOSARReq     {SWS_WdgM_00169, SWS_WdgM_00171, SWS_WdgM_00172,
+ *                  SWS_WdgM_00173, SWS_WdgM_00257}
  * \ServiceID      {0x0C}
  * \Reentrancy     {Reentrant}
  * \Synchronicity  {Synchronous}
  */
-WdgM_LocalStatusType WdgM_GetLocalStatus(WdgM_SupervisedEntityIdType SEID);
+Std_ReturnType WdgM_GetLocalStatus(WdgM_SupervisedEntityIdType SEID, WdgM_LocalStatusType* Status);
 
 /**
  * \brief   WdgM 全体のグローバル supervision ステータスを取得する。
@@ -296,11 +300,13 @@ void WdgM_MainFunction(void);
  * \brief   HW ウォッチドッグの trigger（リフレッシュ）処理。
  *
  * \details Os スケジューラから WDGM_HW_TRIGGER_CYCLE_MS ごとに呼ばれる。
- *          全エンティティの WdgM_GetLocalStatus() が OK（または
- *          WdgM_DisableHwWatchdog() による抑制中）の場合のみ
- *          WdgIf_SetTriggerCondition() を呼ぶ。1 つでも FAILED があれば
- *          呼ばないため、WDGM_HW_WATCHDOG_TIMEOUT_MS 後に実際に MCU が
- *          リセットされる。
+ *          WdgM_GlobalStopped が立っていない（または WdgM_DisableHwWatchdog()
+ *          による抑制中）場合のみ WdgIf_SetTriggerCondition() を呼ぶ。
+ *          WdgM_GlobalStopped は WdgM_MainFunction() がグローバル猶予サイクル
+ *          (WDGM_EXPIRED_SUPERVISION_CYCLE_TOL) を使い切って初めて立てる
+ *          （1 つのエンティティが FAILED になった瞬間に即座に呼ばなくなる
+ *          わけではない）ため、それが続いた場合に最終的に
+ *          WDGM_HW_WATCHDOG_TIMEOUT_MS 後に実際に MCU がリセットされる。
  *
  *          WdgM_MainFunction（判定, 6000ms）と周期を分離しているのは、
  *          Renesas RA4M1 の IWDT 最大タイムアウト（約 5592ms）が判定サイクルより
