@@ -164,6 +164,11 @@ static uint8 Dem_OccurrenceCounter[DEM_EVENT_COUNT];
  *  (Dem_SetEventStatus) は明示的に未初期化チェック対象外のため参照しない。 */
 static uint8 Dem_Initialized = 0U;
 
+/** DTC の記録が有効か（1=有効、0=無効）。Dem_EnableDTCSetting()/
+ *  Dem_DisableDTCSetting()（Dcm UDS SID 0x85 ControlDTCSetting 用）で操作する。
+ *  既定で有効。無効化中は Dem_ReportErrorStatus() を丸ごと無視する。 */
+static uint8 Dem_DTCSettingEnabled = 1U;
+
 /**
  * \brief   経年回復 (Aging) を判定する。
  *
@@ -339,6 +344,8 @@ void Dem_Init(const Dem_ConfigType* ConfigPtr)
     Dem_CurrentContext.CoolantTemp = 0U;
     Dem_CurrentContext.EngineState = 0U;
 
+    Dem_DTCSettingEnabled = 1U;
+
     Dem_Initialized = 1U;
 }
 
@@ -381,6 +388,16 @@ void Dem_ReportErrorStatus(Dem_EventIdType EventId,
     if (EventStatus != DEM_EVENT_STATUS_FAILED && EventStatus != DEM_EVENT_STATUS_PASSED)
     {
         Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_REPORT_ERROR_STATUS, DEM_E_PARAM_DATA);
+        return;
+    }
+
+    if (!Dem_DTCSettingEnabled)
+    {
+        /* Dem_DisableDTCSetting() 中（Dcm UDS SID 0x85 ControlDTCSetting off）:
+         * 報告そのものを丸ごと無視する。デバウンスカウンタも進めない
+         * （再有効化した瞬間に、無効化中に蓄積した中途半端なカウントで
+         * 誤確定させないため）。 */
+        DET_LOGD(TAG, "ev=%u report ignored: DTC setting disabled", (unsigned)EventId);
         return;
     }
 
@@ -857,6 +874,32 @@ Std_ReturnType Dem_GetOccurrenceCounterOfEvent(Dem_EventIdType EventId, uint8* C
 
     *Counter = Dem_OccurrenceCounter[EventId];
     return E_OK;
+}
+
+void Dem_EnableDTCSetting(void)
+{
+    DET_LOGT(TAG, "called");
+    if (!Dem_Initialized)
+    {
+        Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_ENABLE_DTC_SETTING, DEM_E_UNINIT);
+        return;
+    }
+
+    Dem_DTCSettingEnabled = 1U;
+    DET_LOGI(TAG, "DTC setting enabled");
+}
+
+void Dem_DisableDTCSetting(void)
+{
+    DET_LOGT(TAG, "called");
+    if (!Dem_Initialized)
+    {
+        Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_DISABLE_DTC_SETTING, DEM_E_UNINIT);
+        return;
+    }
+
+    Dem_DTCSettingEnabled = 0U;
+    DET_LOGI(TAG, "DTC setting disabled");
 }
 
 void Dem_GetVersionInfo(Std_VersionInfoType* versioninfo)

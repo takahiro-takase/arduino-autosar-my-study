@@ -115,7 +115,7 @@
  *          SID × セッション許可 (Dcm_SidSessionTable[], AUTOSAR DcmDspSessionRow 相当):
  *            Dcm_ComIndication() が SID ディスパッチの前に全 SID 共通で判定する。
  *            テーブルに掲載のない SID はセッション制約なし。現在は
- *            0x14・0x27・0x2E・0x2F・0x31・0x34・0x36・0x37
+ *            0x14・0x27・0x2E・0x2F・0x31・0x34・0x36・0x37・0x85
  *            のみ extendedSession 限定とし、defaultSession では NRC 0x7F
  *            serviceNotSupportedInActiveSession で拒否する。各ハンドラ個別に
  *            セッション判定を埋め込むのではなく、一元管理することで
@@ -192,6 +192,11 @@ static uint8 Dcm_SecurityLockoutActive;
 
 /** ロックアウト開始時刻 [ms] */
 static unsigned long Dcm_SecurityLockoutStartMs;
+
+/** UDS SID 0x85 ControlDTCSetting で DTC 記録を無効化した状態か（1=無効化中）。
+ *  defaultSession へ遷移すると自動的に再有効化する
+ *  （[SWS_Dcm_00751]、Dcm_DTCSettingReset() 参照）。 */
+static uint8 Dcm_DTCSettingDisabled;
 
 /* -----------------------------------------------------------------------
  * RoutineControl (SID 0x31) 状態
@@ -276,6 +281,8 @@ static void Dcm_HandleWriteDataById(const uint8* uds, uint8 udsLen);
 static void Dcm_HandleIoControl(const uint8* uds, uint8 udsLen);
 static void Dcm_HandleCommunicationControl(const uint8* uds, uint8 udsLen);
 static void Dcm_CommControlReset(void);
+static void Dcm_HandleControlDTCSetting(const uint8* uds, uint8 udsLen);
+static void Dcm_DTCSettingReset(void);
 static Std_ReturnType Dcm_LampIdOfDid(uint16 did, Rte_LampIdType* lamp);
 static void Dcm_UpdateComMRequest(uint8 session);
 static void Dcm_HandleSecurityAccess(const uint8* uds, uint8 udsLen);
@@ -327,6 +334,8 @@ void Dcm_Init(const Dcm_ConfigType* ConfigPtr)
     Dcm_RoutineState = DCM_ROUTINE_STATE_IDLE;
 
     Dcm_TransferState = DCM_TRANSFER_STATE_IDLE;
+
+    Dcm_DTCSettingDisabled = 0U;
 
     Dcm_Initialized = 1U;
     DET_LOGI(TAG, "Init ok");
@@ -411,6 +420,7 @@ void Dcm_MainFunction(void)
         Dcm_RoutineAbort();
         Dcm_TransferAbort();
         Dcm_CommControlReset();
+        Dcm_DTCSettingReset();
         Dcm_UpdateComMRequest(DCM_SESSION_DEFAULT);
     }
 }
@@ -510,6 +520,7 @@ static void Dcm_HandleSessionControl(const uint8* uds, uint8 udsLen)
         Dcm_RoutineAbort();
         Dcm_TransferAbort();
         Dcm_CommControlReset();
+        Dcm_DTCSettingReset();
     }
 
     Dcm_UpdateComMRequest(subFunc);
@@ -579,6 +590,7 @@ static void Dcm_HandleEcuReset(const uint8* uds, uint8 udsLen)
     Dcm_RoutineAbort();
     Dcm_TransferAbort();
     Dcm_CommControlReset();
+    Dcm_DTCSettingReset();
     Dcm_UpdateComMRequest(DCM_SESSION_DEFAULT);
     DET_LOGI(TAG, "11 session->Default");
 }
@@ -1445,6 +1457,101 @@ static void Dcm_HandleCommunicationControl(const uint8* uds, uint8 udsLen)
 }
 
 /* -----------------------------------------------------------------------
+ * 0x85 ControlDTCSetting
+ * ----------------------------------------------------------------------- */
+
+/**
+ * \brief   defaultSession への遷移時、無効化中の DTC 記録を自動的に再有効化する。
+ *
+ * \details [SWS_Dcm_00751]: DTCSetting が無効化された状態で defaultSession へ
+ *          遷移した場合、Dcm は Dem_EnableDTCSetting() を呼び直さなければ
+ *          ならない。本プロジェクトの UDS 0x85 は extendedSession 限定
+ *          （Dcm_SidSessionTable[] 参照）のため、defaultSession は常に
+ *          「0x85 が使えないセッション」でもあり、[SWS_Dcm_00751] が本来
+ *          区別する2つの条件（defaultSession への遷移／0x85 をサポートしない
+ *          セッションへの遷移）が本実装では同一の1条件に一致する。
+ *          Dcm_CommControlReset() と同じく、defaultSession への全ての遷移経路
+ *          （明示的な 0x10 要求・S3 タイムアウト・0x11 ECUReset 後のリセット）
+ *          から呼ぶこと。
+ */
+static void Dcm_DTCSettingReset(void)
+{
+    DET_LOGT(TAG, "called");
+    if (Dcm_DTCSettingDisabled)
+    {
+        Dem_EnableDTCSetting();
+        Dcm_DTCSettingDisabled = 0U;
+        DET_LOGI(TAG, "85 DTC setting auto re-enabled (default session)");
+    }
+}
+
+/**
+ * \brief   UDS 0x85 ControlDTCSetting を処理する。
+ *
+ * \details サブ機能 0x01 (on) / 0x02 (off) のみサポートする（ISO 14229-1 Table 60、
+ *          [SWS_Dcm_00249] 直前の本文参照）。[SWS_Dcm_01399] は
+ *          DTCSettingControlOptionRecord != 0xFFFFFF を NRC 0x31 requestOutOfRange
+ *          とするよう規定するが、本実装は optionRecord 自体を受け付けない
+ *          設計のため、udsLen の長さチェックで同等の効果を実現する
+ *          （optionRecord 付き要求は udsLen が 2 を超えるため、その場合は
+ *          NRC 0x13 incorrectMessageLength で弾く）。
+ *
+ *          on 受信で Dem_EnableDTCSetting()（[SWS_Dcm_01063]）、
+ *          off 受信で Dem_DisableDTCSetting()（[SWS_Dcm_00406]）を呼ぶ。
+ *          off の間に defaultSession へ戻ると自動的に on へ復帰する
+ *          （[SWS_Dcm_00751]、Dcm_DTCSettingReset() 参照）。
+ *
+ *          セキュリティ方針: 0x28/0x2F/0x31 と同様、車両制御や NVM 書き換えを
+ *          伴わないため SecurityAccess は要求しないが、DTC 記録という
+ *          診断上重要な機能への操作的な影響から extendedSession 限定とする
+ *          （Dcm_SidSessionTable[] 参照）。
+ *
+ *          要求: [0x85, DTCSettingType]
+ *          応答: [0xC5, DTCSettingType]
+ *
+ * \param[in]  uds     UDS ペイロード先頭ポインタ (uds[0]=SID 0x85)。
+ * \param[in]  udsLen  UDS ペイロード長。
+ */
+static void Dcm_HandleControlDTCSetting(const uint8* uds, uint8 udsLen)
+{
+    DET_LOGT(TAG, "called");
+    if (udsLen != 2U)
+    {
+        Dcm_SendNegativeResponse(DCM_SID_CONTROL_DTC_SETTING, DCM_NRC_INCORRECT_MESSAGE_LENGTH);
+        return;
+    }
+
+    /* bit7: suppressPosRspMsgIndicationBit (本実装では無視。0x10/0x28 と同じ方針) */
+    uint8 subFunc = uds[1] & 0x7FU;
+
+    if (subFunc != DCM_DTCSETTING_ON && subFunc != DCM_DTCSETTING_OFF)
+    {
+        Dcm_SendNegativeResponse(DCM_SID_CONTROL_DTC_SETTING, DCM_NRC_SUB_FUNC_NOT_SUPPORTED);
+        return;
+    }
+
+    if (subFunc == DCM_DTCSETTING_ON)
+    {
+        Dem_EnableDTCSetting();
+        Dcm_DTCSettingDisabled = 0U;
+    }
+    else
+    {
+        Dem_DisableDTCSetting();
+        Dcm_DTCSettingDisabled = 1U;
+    }
+
+    DET_LOGI(TAG, "85 subFunc=0x%02X", (unsigned)subFunc);
+
+    /* 正応答: [0xC5, subFunc] */
+    Dcm_TxBuf[0] = 0xC5U;               /* SID + 0x40 */
+    Dcm_TxBuf[1] = subFunc;
+    Dcm_TxPdu.SduLength = 2U;
+
+    Dcm_Transmit();
+}
+
+/* -----------------------------------------------------------------------
  * 0x27 SecurityAccess
  * ----------------------------------------------------------------------- */
 
@@ -2128,6 +2235,10 @@ typedef struct
  *  0x14/0x2E と同じ「誤操作・悪用の影響が大きい」保護レベルのため
  *  extendedSession 限定とする（SecurityAccess は 0x34 のみで判定する。
  *  Dcm_Cbk.c 冒頭のコメント参照）。
+ *  0x85 (ControlDTCSetting) も 0x28/0x2F/0x31 と同じ保護レベル
+ *  （DTC 記録という診断上重要な機能への操作的な影響はあるが、車両制御や
+ *  NVM 書き換えは伴わないため SecurityAccess までは要求しない）で
+ *  extendedSession 限定とする。
  *  実際の AUTOSAR では DcmDspSessionRow がサービス・サブ機能単位で
  *  この表をコンフィギュレーションツールから生成する。 */
 static const Dcm_SidSessionRowType Dcm_SidSessionTable[] =
@@ -2141,6 +2252,7 @@ static const Dcm_SidSessionRowType Dcm_SidSessionTable[] =
     { DCM_SID_REQUEST_DOWNLOAD,      DCM_SESSION_MASK_EXTENDED },
     { DCM_SID_TRANSFER_DATA,         DCM_SESSION_MASK_EXTENDED },
     { DCM_SID_REQUEST_TRANSFER_EXIT, DCM_SESSION_MASK_EXTENDED },
+    { DCM_SID_CONTROL_DTC_SETTING,   DCM_SESSION_MASK_EXTENDED },
 };
 
 /**
@@ -2276,6 +2388,9 @@ void Dcm_ComIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
         break;
     case DCM_SID_TESTER_PRESENT:
         Dcm_HandleTesterPresent(uds, udsLen);
+        break;
+    case DCM_SID_CONTROL_DTC_SETTING:
+        Dcm_HandleControlDTCSetting(uds, udsLen);
         break;
     default:
         Dcm_SendNegativeResponse(sid, DCM_NRC_SERVICE_NOT_SUPPORTED);

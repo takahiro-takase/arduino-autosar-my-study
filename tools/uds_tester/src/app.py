@@ -1446,6 +1446,8 @@ class UdsTesterFrame(ttk.Frame):
             return f"{sub_name} RID={rid:04X}"
         if sid == 0x36 and len(uds) >= 2:
             return f"{name}: counter={uds[1]} data={len(uds) - 2}byte"
+        if sid == 0x85 and len(uds) >= 2:
+            return f"{name}: {uds_link.DTC_SETTING_TYPE_NAMES.get(uds[1], f'0x{uds[1]:02X}')}"
         return name
 
     def _decode_dtc_request(self, uds: bytes) -> str:

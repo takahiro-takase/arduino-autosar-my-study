@@ -147,7 +147,16 @@
 #define DCM_SID_TRANSFER_DATA         0x36U  /**< TransferData            */
 #define DCM_SID_REQUEST_TRANSFER_EXIT 0x37U  /**< RequestTransferExit     */
 #define DCM_SID_TESTER_PRESENT  0x3EU  /**< TesterPresent                 */
+#define DCM_SID_CONTROL_DTC_SETTING 0x85U  /**< ControlDTCSetting         */
 #define DCM_SID_NEGATIVE_RESP   0x7FU  /**< NegativeResponse              */
+
+/* -----------------------------------------------------------------------
+ * ControlDTCSetting (SID 0x85) サブ機能 (ISO 14229-1 Table 60)
+ * サブ機能 0x01/0x02 のみサポート（[SWS_Dcm_00249] 直前の本文が明記する
+ * とおり、これ以外のサブ機能は仕様上定義されていない）。
+ * ----------------------------------------------------------------------- */
+#define DCM_DTCSETTING_ON   0x01U  /**< DTCSettingType "on"  (記録を有効化)  */
+#define DCM_DTCSETTING_OFF  0x02U  /**< DTCSettingType "off" (記録を無効化) */
 
 /* -----------------------------------------------------------------------
  * SecurityAccess (SID 0x27) サブ機能 (ISO 14229-1 Table 44; Level1 のみ対応)
