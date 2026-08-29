@@ -48,8 +48,10 @@
  *
  * NvM_ReadBlock/NvM_WriteBlock の NULL データポインタは SWS_NvM_00616/00622
  * により NVM_E_PARAM_ADDRESS（NVM_E_PARAM_POINTER ではない）と規定されて
- * いる点に注意。NVM_E_BLOCK_PENDING（処理中ブロックへの再要求）は本実装では
- * 意図的にエラー扱いしない（NvM_WriteBlock の doxygen 参照: 進行中のジョブを
+ * いる点に注意。NvM_GetErrorStatus の NULL RequestResultPtr は
+ * SWS_NvM_00612 により NVM_E_PARAM_DATA と規定されている。
+ * NVM_E_BLOCK_PENDING（処理中ブロックへの再要求）は本実装では意図的に
+ * エラー扱いしない（NvM_WriteBlock の doxygen 参照: 進行中のジョブを
  * 破棄して最新データで書き直す設計のため、対象外）。
  * ----------------------------------------------------------------------- */
 
@@ -59,6 +61,7 @@
 /** 開発エラーコード（SWS_NvM 7.3.1 表より、実際に使用する分のみ） */
 #define NVM_E_PARAM_BLOCK_ID    0x0AU
 #define NVM_E_PARAM_ADDRESS     0x0DU
+#define NVM_E_PARAM_DATA        0x0EU
 #define NVM_E_PARAM_POINTER     0x0FU
 #define NVM_E_NOT_INITIALIZED   0x14U
 

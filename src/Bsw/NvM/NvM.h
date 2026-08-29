@@ -217,23 +217,28 @@ Std_ReturnType NvM_RestoreBlockDefaults(NvM_BlockIdType BlockId);
 /**
  * \brief   ブロックの直近のジョブ結果を取得する。
  *
- * \details AUTOSAR NvM_GetErrorStatus() (SWS_NvM_00451) 相当。
- *          NvM_WriteBlock() / NvM_RestoreBlockDefaults() の完了を
+ * \details NvM_WriteBlock() / NvM_RestoreBlockDefaults() の完了を
  *          明示的に確認したい場合に使う（本プロジェクトの既存呼び出し元は
  *          いずれも fire-and-forget で戻り値を確認しないが、API としては
  *          提供する）。
  *
- * \param[in]  BlockId  ブロック ID (NVM_BLOCK_ID_* 定数)。
+ * \param[in]   BlockId           ブロック ID (NVM_BLOCK_ID_* 定数)。
+ * \param[out]  RequestResultPtr  ジョブ結果の格納先。NULL 禁止。
  *
- * \retval  NVM_REQ_OK       直近のジョブが完了済み。
- * \retval  NVM_REQ_PENDING  ジョブが保留中（キュー内、または処理中）。
- * \retval  NVM_REQ_NOT_OK   BlockId が範囲外。
+ * \retval  E_OK      正常取得。
+ * \retval  E_NOT_OK  RequestResultPtr が NULL、未初期化、または BlockId が
+ *                    範囲外（NULL の場合を除き *RequestResultPtr は
+ *                    NVM_REQ_NOT_OK）。
  *
+ * \note       戻り値の Std_ReturnType と *RequestResultPtr の
+ *             NvM_RequestResultType は別の enum。混同して比較しないこと。
+ *
+ * \AUTOSARReq     {SWS_NvM_00451, SWS_NvM_00610, SWS_NvM_00611, SWS_NvM_00612}
  * \ServiceID      {0x04}
  * \Reentrancy     {Reentrant}
  * \Synchronicity  {Synchronous}
  */
-NvM_RequestResultType NvM_GetErrorStatus(NvM_BlockIdType BlockId);
+Std_ReturnType NvM_GetErrorStatus(NvM_BlockIdType BlockId, NvM_RequestResultType* RequestResultPtr);
 
 /**
  * \brief   NvM 周期処理。保留中の書き込みジョブを進める。
