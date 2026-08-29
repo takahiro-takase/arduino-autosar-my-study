@@ -98,26 +98,25 @@
           "payload": ["0x04", "0x27", "0x02", "0x00", "0x00"] },
         { "label": "Clear All DTC\n(0x14)", "type": "raw",
           "payload": ["0x04", "0x14", "0xFF", "0xFF", "0xFF"] },
-        { "label": "DTC 件数取得\n(0x19/01)", "type": "raw",
+        { "label": "ControlDTCSetting\n(0x85)", "type": "raw",
+          "payload": ["0x02", "0x85", "0x01"],
+          "presets": [
+              { "label": "on  (0x01, DTC記録を再開)", "payload": ["0x02", "0x85", "0x01"] },
+              { "label": "off (0x02, DTC記録を停止)", "payload": ["0x02", "0x85", "0x02"] }
+          ]
+        },
+        { "label": "ReadDTCInformation\n(0x19)", "type": "raw",
           "payload": ["0x03", "0x19", "0x01", "0xFF"],
           "presets": [
-              { "label": "全件 (0xFF)", "payload": ["0x03", "0x19", "0x01", "0xFF"] },
-              { "label": "Active only (0x08)", "payload": ["0x03", "0x19", "0x01", "0x08"] }
+              { "label": "件数取得 全件 (01/FF)",          "payload": ["0x03", "0x19", "0x01", "0xFF"] },
+              { "label": "件数取得 Active only (01/08)",   "payload": ["0x03", "0x19", "0x01", "0x08"] },
+              { "label": "DTC一覧取得 全件 (02/FF)",        "payload": ["0x03", "0x19", "0x02", "0xFF"] },
+              { "label": "DTC一覧取得 Active only (02/08)", "payload": ["0x03", "0x19", "0x02", "0x08"] },
+              { "label": "対応DTC全件取得 (0A)",            "payload": ["0x02", "0x19", "0x0A"] },
+              { "label": "FreezeFrame取得 (04)",           "payload": ["0x06", "0x19", "0x04", "0x00", "0x01", "0x01", "0x01"] },
+              { "label": "ExtendedData取得 (06)",          "payload": ["0x06", "0x19", "0x06", "0x00", "0x01", "0x01", "0x01"] }
           ]
         },
-        { "label": "DTC 一覧取得\n(0x19/02)", "type": "raw",
-          "payload": ["0x03", "0x19", "0x02", "0xFF"],
-          "presets": [
-              { "label": "全件 (0xFF)", "payload": ["0x03", "0x19", "0x02", "0xFF"] },
-              { "label": "Active only (0x08)", "payload": ["0x03", "0x19", "0x02", "0x08"] }
-          ]
-        },
-        { "label": "対応DTC全件取得\n(0x19/0A)", "type": "raw",
-          "payload": ["0x02", "0x19", "0x0A"] },
-        { "label": "FreezeFrame取得\n(0x19/04)", "type": "raw",
-          "payload": ["0x06", "0x19", "0x04", "0x00", "0x01", "0x01", "0x01"] },
-        { "label": "ExtendedData取得\n(0x19/06)", "type": "raw",
-          "payload": ["0x06", "0x19", "0x06", "0x00", "0x01", "0x01", "0x01"] },
         { "label": "Read DID\n(0x22)", "type": "raw",
           "payload": ["0x03", "0x22", "0x01", "0x01"],
           "presets": [

@@ -119,6 +119,7 @@ SID_NAMES = {
     0x36: "TransferData",
     0x37: "RequestTransferExit",
     0x3E: "TesterPresent",
+    0x85: "ControlDTCSetting",
 }
 
 SESSION_NAMES = {
@@ -131,6 +132,12 @@ RESET_TYPE_NAMES = {
     0x01: "hardReset",
     0x02: "keyOffOnReset",
     0x03: "softReset",
+}
+
+# SID 0x85 ControlDTCSetting の DTCSettingType (ISO 14229-1 Table 60)
+DTC_SETTING_TYPE_NAMES = {
+    0x01: "on",
+    0x02: "off",
 }
 
 # SID 0x28 CommunicationControl の controlType (ISO 14229-1 Table 46)

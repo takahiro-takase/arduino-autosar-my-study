@@ -304,6 +304,40 @@ Std_ReturnType Dem_GetEventIdOfDTC(uint32 DTC, Dem_EventIdType* EventId);
 Std_ReturnType Dem_GetOccurrenceCounterOfEvent(Dem_EventIdType EventId, uint8* Counter);
 
 /**
+ * \brief   DTC の記録（error memory への反映）を有効化する。
+ *
+ * \details Dcm UDS SID 0x85 ControlDTCSetting のサブ機能 0x01 (on) から呼び出す
+ *          （[SWS_Dcm_01063]）。既定で有効。無効化中に Dem_ReportErrorStatus()
+ *          が呼ばれても、本関数で再度有効化するまでデバウンス・DTC ステータス
+ *          ともに一切変化しない（Dem_DisableDTCSetting() 参照）。
+ *
+ * \note    本プロジェクトは単一 ECU・単一診断クライアント構成のため、
+ *          実 AUTOSAR の `ClientId` 引数（DcmDemClientRef、複数 Dcm インスタンス
+ *          識別用）は持たない（Dem_Cfg.h 冒頭の「SWS_Dem の個々の関数シグネチャ
+ *          とは大きく異なる学習用簡略実装」という既存方針を踏襲）。
+ *
+ * \ServiceID      {0x2B}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void Dem_EnableDTCSetting(void);
+
+/**
+ * \brief   DTC の記録（error memory への反映）を無効化する。
+ *
+ * \details Dcm UDS SID 0x85 ControlDTCSetting のサブ機能 0x02 (off) から呼び出す
+ *          （[SWS_Dcm_00406]）。無効化中は Dem_ReportErrorStatus() への報告を
+ *          すべて無視する（デバウンスカウンタも進めない）。IOControl/
+ *          RoutineControl でアクチュエータを意図的に操作するテスト中に、
+ *          その副作用で誤った DTC が記録されるのを防ぐ用途を想定する。
+ *
+ * \ServiceID      {0x2C}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void Dem_DisableDTCSetting(void);
+
+/**
  * \brief   Dem モジュールのバージョン情報を取得する。
  *
  * \details [SWS_Dem_00124] により Dem_GetVersionInfo は明示的に未初期化
