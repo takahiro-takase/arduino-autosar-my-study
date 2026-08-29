@@ -204,7 +204,11 @@ static uint8 WdgM_SkipNextAliveJudgment = 0U;
  *  WDGM_EXPIRED_SUPERVISION_CYCLE_TOL コメントを参照)。
  *  いずれかのエンティティが FAILED の判定サイクルが続くたびに増加し、
  *  WDGM_EXPIRED_SUPERVISION_CYCLE_TOL を超えた時点で WdgM_GlobalStopped が
- *  立つ。全エンティティが OK に戻ればリセットされる。 */
+ *  立つ。全エンティティが OK に戻ればリセットされる。
+ *  WdgM_GetGlobalStatus() の FAILED/EXPIRED 判定もこの値を直接見る
+ *  （0 なら「まだ猶予サイクルを消費していない=FAILED」、1 以上なら
+ *  「猶予を消費中=EXPIRED」）ため、この値の意味を変更する場合は
+ *  WdgM_GetGlobalStatus() 側の解釈も合わせて見直すこと。 */
 static uint8 WdgM_ExpiredCycleCount = 0U;
 
 /** 1 = グローバル許容サイクルを使い切り、AUTOSAR の
@@ -227,6 +231,7 @@ static uint8 WdgM_GlobalStopped = 0U;
  *          直前に呼び出すこと（初期化中の正常な処理時間では誤って時間切れに
  *          ならないように、初期化の最後に有効化する）。
  *
+ * \AUTOSARReq     {SWS_WdgM_00151}
  * \ServiceID      {0x00}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
@@ -276,6 +281,8 @@ void WdgM_DeInit(void)
 /**
  * \brief   実 HW ウォッチドッグを WDGM_HW_WATCHDOG_TIMEOUT_MS (4000ms) で有効化する。
  *
+ * \note       AUTOSAR 標準の SWS_WdgM には存在しない本プロジェクト独自の
+ *             拡張関数のため、対応する \AUTOSARReq は無い。
  * \ServiceID      {0x07}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
@@ -291,6 +298,8 @@ void WdgM_EnableHwWatchdog(void)
 /**
  * \brief   実 HW ウォッチドッグを無効化する。
  *
+ * \note       AUTOSAR 標準の SWS_WdgM には存在しない本プロジェクト独自の
+ *             拡張関数のため、対応する \AUTOSARReq は無い。
  * \ServiceID      {0x06}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
@@ -355,6 +364,8 @@ void WdgM_DisableHwWatchdog(void)
  *          真に全エンティティが OK に戻ったとき（WdgM_MainFunction() 末尾の
  *          回復判定）にのみクリアされるようにする。
  *
+ * \note       AUTOSAR 標準の SWS_WdgM には存在しない本プロジェクト独自の
+ *             拡張関数のため、対応する \AUTOSARReq は無い。
  * \ServiceID      {0x08}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
@@ -389,6 +400,7 @@ void WdgM_ResumeSupervision(void)
  *          さらに、直前のチェックポイントからの実際の経過時間が許容範囲内かを
  *          確認する (Deadline Supervision)。
  *
+ * \AUTOSARReq     {SWS_WdgM_00263, SWS_WdgM_00278, SWS_WdgM_00279}
  * \ServiceID      {0x0E}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
@@ -468,6 +480,12 @@ Std_ReturnType WdgM_CheckpointReached(WdgM_SupervisedEntityIdType SEID, uint8 Ch
  *          (WdgM_LogicalStatus)・Deadline Supervision (WdgM_DeadlineStatus)
  *          のいずれか一つでも FAILED なら FAILED を返す。
  *
+ * \note       実 AUTOSAR の WdgM_GetLocalStatus は
+ *             `Std_ReturnType WdgM_GetLocalStatus(SEID, WdgM_LocalStatusType*
+ *             Status)`（[SWS_WdgM_00169]）という OUT パラメータ形式だが、本実装は
+ *             呼び出し側の簡潔さを優先し `WdgM_LocalStatusType` を直接返す形に
+ *             簡略化している（エラー時は戻り値の DEACTIVATED で表現）。
+ * \AUTOSARReq     {SWS_WdgM_00169, SWS_WdgM_00171, SWS_WdgM_00172, SWS_WdgM_00173}
  * \ServiceID      {0x0C}
  * \Reentrancy     {Reentrant}
  * \Synchronicity  {Synchronous}
@@ -491,6 +509,83 @@ WdgM_LocalStatusType WdgM_GetLocalStatus(WdgM_SupervisedEntityIdType SEID)
         || WdgM_DeadlineStatus[SEID] != WDGM_LOCAL_STATUS_OK)
         return WDGM_LOCAL_STATUS_FAILED;
     return WDGM_LOCAL_STATUS_OK;
+}
+
+/**
+ * \brief   全エンティティのうち、いずれか一つでも WdgM_GetLocalStatus() が
+ *          OK でないかを判定する。
+ *
+ * \details WdgM_MainFunction()（グローバル猶予サイクルの判定）と
+ *          WdgM_GetGlobalStatus()（グローバルステータスの導出）の両方から
+ *          共通で使う集約ロジックを 1 か所にまとめたもの。
+ *          呼び出し前に WdgM_Cfg != NULL であることを保証すること。
+ */
+static uint8 WdgM_AnyEntityNotOk(void)
+{
+    for (uint8 i = 0U; i < WdgM_Cfg->EntityCount; i++)
+    {
+        if (WdgM_GetLocalStatus(i) != WDGM_LOCAL_STATUS_OK)
+            return 1U;
+    }
+    return 0U;
+}
+
+/**
+ * \brief   WdgM 全体のグローバル supervision ステータスを取得する。
+ *
+ * \details 全エンティティの WdgM_GetLocalStatus() を集約し、グローバル猶予
+ *          サイクル (WdgM_ExpiredCycleCount)・停止フラグ (WdgM_GlobalStopped)
+ *          と合わせて AUTOSAR の 4 状態 (SWS_WdgM_00360) を導出する。
+ *
+ *          WdgM_SupervisionSuppressed 中（POST_RUN 中、Rte_Engine/
+ *          Rte_Warning が意図的に停止することによる Alive Supervision の
+ *          想定内の FAILED）は、WdgM_MainFunction() がグローバル猶予サイクルを
+ *          進めず、WdgM_TriggerHwWatchdog() も無条件に refresh を続けるのと
+ *          同じ考え方で、無条件に OK を返す（GlobalStopped が既に立っている
+ *          場合でも、抑制中である以上リフレッシュは継続しているため OK を
+ *          優先する）。
+ *
+ * \AUTOSARReq     {SWS_WdgM_00175, SWS_WdgM_00176, SWS_WdgM_00344}
+ * \ServiceID      {0x0D}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType WdgM_GetGlobalStatus(WdgM_GlobalStatusType* Status)
+{
+    DET_LOGT(TAG, "called");
+    if (Status == NULL)
+    {
+        Det_ReportError(WDGM_MODULE_ID, 0U, WDGM_API_ID_GET_GLOBAL_STATUS, WDGM_E_INV_POINTER);
+        return E_NOT_OK;
+    }
+
+    if (WdgM_Cfg == NULL)
+    {
+        Det_ReportError(WDGM_MODULE_ID, 0U, WDGM_API_ID_GET_GLOBAL_STATUS, WDGM_E_NO_INIT);
+        *Status = WDGM_GLOBAL_STATUS_DEACTIVATED;
+        return E_NOT_OK;
+    }
+
+    if (WdgM_SupervisionSuppressed)
+    {
+        *Status = WDGM_GLOBAL_STATUS_OK;
+        return E_OK;
+    }
+
+    if (WdgM_GlobalStopped)
+    {
+        *Status = WDGM_GLOBAL_STATUS_STOPPED;
+        return E_OK;
+    }
+
+    if (!WdgM_AnyEntityNotOk())
+        *Status = WDGM_GLOBAL_STATUS_OK;
+    else if (WdgM_ExpiredCycleCount > 0U)
+        *Status = WDGM_GLOBAL_STATUS_EXPIRED;
+    else
+        *Status = WDGM_GLOBAL_STATUS_FAILED;
+
+    return E_OK;
 }
 
 /**
@@ -525,6 +620,13 @@ WdgM_LocalStatusType WdgM_GetLocalStatus(WdgM_SupervisedEntityIdType SEID)
  *          するだけで、蓄積は継続したまま次回（Os 自身の周期により確実に
  *          一定時間後となる）の判定へ持ち越されるため、実害はない。
  *
+ * \note       実 AUTOSAR の WdgM_MainFunction はこれに加えて HW ウォッチドッグへの
+ *             実際のリフレッシュ指示までを 1 関数で担うが、本プロジェクトは
+ *             Renesas RA4M1 の IWDT タイムアウト制約（詳細は WdgM_Cfg.h の
+ *             WDGM_HW_WATCHDOG_TIMEOUT_MS 参照）によりリフレッシュ部分を
+ *             WdgM_TriggerHwWatchdog() へ分離している。
+ * \AUTOSARReq     {SWS_WdgM_00159, SWS_WdgM_00119, SWS_WdgM_00120,
+ *                  SWS_WdgM_00121, SWS_WdgM_00122}
  * \ServiceID      {0x08}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
@@ -596,15 +698,7 @@ void WdgM_MainFunction(void)
      * 消費してしまう（詳細は WdgM_TriggerHwWatchdog() 側の抑制と対になる
      * 判断）。
      * ------------------------------------------------------------------ */
-    uint8 anyNotOk = 0U;
-    for (uint8 i = 0U; i < WdgM_Cfg->EntityCount; i++)
-    {
-        if (WdgM_GetLocalStatus(i) != WDGM_LOCAL_STATUS_OK)
-        {
-            anyNotOk = 1U;
-            break;
-        }
-    }
+    const uint8 anyNotOk = WdgM_AnyEntityNotOk();
 
     if (anyNotOk && WdgM_SupervisionSuppressed)
     {
@@ -654,6 +748,11 @@ void WdgM_MainFunction(void)
  *          WdgM_GlobalStopped が変化してから最短 1 サイクル以内にリフレッシュ
  *          停止へ反映される。
  *
+ * \note       実 AUTOSAR の WdgM_MainFunction が内包するリフレッシュ指示
+ *             部分を本プロジェクトが分離した独自 API のため、専用の
+ *             Service ID は SWS_WdgM に存在しない（\ServiceID の値は
+ *             プロジェクト内でのみ一意な自己割当）。
+ * \AUTOSARReq     {SWS_WdgM_00119, SWS_WdgM_00120, SWS_WdgM_00121, SWS_WdgM_00122}
  * \ServiceID      {0x09}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
