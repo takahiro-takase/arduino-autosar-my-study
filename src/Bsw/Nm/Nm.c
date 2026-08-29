@@ -64,9 +64,10 @@ static void Nm_EnterReadySleep(void);
 static void Nm_EnterPrepareBusSleep(void);
 static void Nm_EnterBusSleep(void);
 
-void Nm_Init(void)
+void Nm_Init(const Nm_ConfigType* ConfigPtr)
 {
     DET_LOGT(TAG, "called");
+    (void)ConfigPtr;  /* 常に NULL（post-build 設定を持たないため。Nm.h 参照） */
     Nm_State               = NM_STATE_BUS_SLEEP;
     Nm_NetworkRequested     = 0U;
     Nm_TxEnabled            = 1U;
@@ -222,12 +223,18 @@ static void Nm_EnterBusSleep(void)
     ComM_Nm_BusSleepMode(0U);
 }
 
-Std_ReturnType Nm_NetworkRequest(void)
+Std_ReturnType Nm_NetworkRequest(NetworkHandleType Channel)
 {
     DET_LOGT(TAG, "called");
     if (!Nm_Initialized)
     {
         Det_ReportError(NM_MODULE_ID, 0U, NM_API_ID_NETWORK_REQUEST, NM_E_UNINIT);
+        return E_NOT_OK;
+    }
+
+    if (Channel != NM_MAIN_NETWORK_HANDLE)
+    {
+        Det_ReportError(NM_MODULE_ID, 0U, NM_API_ID_NETWORK_REQUEST, NM_E_INVALID_CHANNEL);
         return E_NOT_OK;
     }
 
@@ -256,12 +263,18 @@ Std_ReturnType Nm_NetworkRequest(void)
     return E_OK;
 }
 
-Std_ReturnType Nm_NetworkRelease(void)
+Std_ReturnType Nm_NetworkRelease(NetworkHandleType Channel)
 {
     DET_LOGT(TAG, "called");
     if (!Nm_Initialized)
     {
         Det_ReportError(NM_MODULE_ID, 0U, NM_API_ID_NETWORK_RELEASE, NM_E_UNINIT);
+        return E_NOT_OK;
+    }
+
+    if (Channel != NM_MAIN_NETWORK_HANDLE)
+    {
+        Det_ReportError(NM_MODULE_ID, 0U, NM_API_ID_NETWORK_RELEASE, NM_E_INVALID_CHANNEL);
         return E_NOT_OK;
     }
 
@@ -274,12 +287,18 @@ Std_ReturnType Nm_NetworkRelease(void)
     return E_OK;
 }
 
-Std_ReturnType Nm_RepeatMessageRequest(void)
+Std_ReturnType Nm_RepeatMessageRequest(NetworkHandleType Channel)
 {
     DET_LOGT(TAG, "called");
     if (!Nm_Initialized)
     {
         Det_ReportError(NM_MODULE_ID, 0U, NM_API_ID_REPEAT_MESSAGE_REQUEST, NM_E_UNINIT);
+        return E_NOT_OK;
+    }
+
+    if (Channel != NM_MAIN_NETWORK_HANDLE)
+    {
+        Det_ReportError(NM_MODULE_ID, 0U, NM_API_ID_REPEAT_MESSAGE_REQUEST, NM_E_INVALID_CHANNEL);
         return E_NOT_OK;
     }
 
@@ -463,12 +482,18 @@ void Nm_SetTxEnabled(uint8 Enabled)
     Nm_TxEnabled = Enabled;
 }
 
-Std_ReturnType Nm_GetState(Nm_StateType* StatePtr, Nm_ModeType* ModePtr)
+Std_ReturnType Nm_GetState(NetworkHandleType Channel, Nm_StateType* StatePtr, Nm_ModeType* ModePtr)
 {
     DET_LOGT(TAG, "called");
     if (!Nm_Initialized)
     {
         Det_ReportError(NM_MODULE_ID, 0U, NM_API_ID_GET_STATE, NM_E_UNINIT);
+        return E_NOT_OK;
+    }
+
+    if (Channel != NM_MAIN_NETWORK_HANDLE)
+    {
+        Det_ReportError(NM_MODULE_ID, 0U, NM_API_ID_GET_STATE, NM_E_INVALID_CHANNEL);
         return E_NOT_OK;
     }
 

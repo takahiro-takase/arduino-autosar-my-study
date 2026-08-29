@@ -122,16 +122,15 @@ Std_ReturnType MemIf_WriteImmediate(MemIf_DeviceType Device, uint16 Address, con
  * \brief   対応する下位ドライバの処理中ジョブを中断する。詳細は
  *          Fee_Cancel() 参照。
  *
- * \param[in]  Device  MEMIF_DEVICE_0 のみ有効。
+ * \param[in]  Device  MEMIF_DEVICE_0 のみ有効。Device が不正な場合は
+ *                      MEMIF_E_PARAM_DEVICE を報告して何もしない。
  *
- * \retval  E_OK      正常に中断した。
- * \retval  E_NOT_OK  Device が不正。
- *
+ * \AUTOSARReq     {SWS_MemIf_00041}
  * \ServiceID      {0x04}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
  */
-Std_ReturnType MemIf_Cancel(MemIf_DeviceType Device);
+void MemIf_Cancel(MemIf_DeviceType Device);
 
 /**
  * \brief   対応する下位ドライバのビジー状態を取得する。

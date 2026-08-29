@@ -90,12 +90,12 @@ Std_ReturnType MemIf_WriteImmediate(MemIf_DeviceType Device, uint16 Address, con
     return Fee_WriteImmediate(Address, DataBufferPtr, Length);
 }
 
-Std_ReturnType MemIf_Cancel(MemIf_DeviceType Device)
+void MemIf_Cancel(MemIf_DeviceType Device)
 {
     DET_LOGT(TAG, "called");
     if (!MemIf_CheckDevice(Device, MEMIF_API_ID_CANCEL))
-        return E_NOT_OK;
-    return Fee_Cancel();
+        return;
+    Fee_Cancel();
 }
 
 MemIf_StatusType MemIf_GetStatus(MemIf_DeviceType Device)

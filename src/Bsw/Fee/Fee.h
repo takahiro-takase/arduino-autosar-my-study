@@ -159,13 +159,12 @@ Std_ReturnType Fee_WriteImmediate(uint16 Address, const uint8* DataBufferPtr, ui
  *          Fee_GetJobResult() は MEMIF_JOB_CANCELED を返す。
  *          ジョブが無い状態で呼んでも副作用はない。
  *
- * \retval  E_OK  常に成功。
- *
+ * \AUTOSARReq     {SWS_Fee_00089}
  * \ServiceID      {0x04}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
  */
-Std_ReturnType Fee_Cancel(void);
+void Fee_Cancel(void);
 
 /**
  * \brief   現在のビジー状態を取得する。

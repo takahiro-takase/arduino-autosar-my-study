@@ -148,7 +148,7 @@ protected:
         CanIf_Init(&kTestCanIfConfig);
         CanSM_Init(NULL);
         ComM_Init(NULL);
-        Nm_Init();
+        Nm_Init(NULL);
 
         FakeDetHw_LogSuppressed = 0U;  // ここから各 TEST_F の実行(Act)区間
     }
@@ -174,7 +174,7 @@ protected:
         Nm_MainFunction();
         Nm_StateType state;
         Nm_ModeType  mode;
-        ASSERT_EQ(Nm_GetState(&state, &mode), E_OK);
+        ASSERT_EQ(Nm_GetState(NM_MAIN_NETWORK_HANDLE, &state, &mode), E_OK);
         ASSERT_EQ(state, NM_STATE_NORMAL_OPERATION);
 
         FakeCanHw_Reset();
@@ -218,13 +218,13 @@ protected:
         Nm_ModeType  mode;
         for (int i = 0; i < maxTicks; i++)
         {
-            ASSERT_EQ(Nm_GetState(&state, &mode), E_OK);
+            ASSERT_EQ(Nm_GetState(NM_MAIN_NETWORK_HANDLE, &state, &mode), E_OK);
             if (state == target)
                 return;
             FakeMillis_Value += NM_CYCLE_MS;
             Nm_MainFunction();
         }
-        ASSERT_EQ(Nm_GetState(&state, &mode), E_OK);
+        ASSERT_EQ(Nm_GetState(NM_MAIN_NETWORK_HANDLE, &state, &mode), E_OK);
         ASSERT_EQ(state, target);
     }
 
@@ -276,7 +276,7 @@ TEST_F(Bsw_SleepCoordination_Test, ReRequestFullCom_OK_CancelsPendingNmRelease)
     {
         FakeMillis_Value += NM_CYCLE_MS;
         Nm_MainFunction();
-        ASSERT_EQ(Nm_GetState(&state, &mode), E_OK);
+        ASSERT_EQ(Nm_GetState(NM_MAIN_NETWORK_HANDLE, &state, &mode), E_OK);
         ASSERT_NE(state, NM_STATE_BUS_SLEEP);
     }
     EXPECT_EQ(Can_Test_GetControllerState(), CAN_CS_STARTED);
@@ -304,7 +304,7 @@ TEST_F(Bsw_SleepCoordination_Test, BusOffDuringNmWinddown_OK_DoesNotResurrectNm)
      * チャネルは最終的に NO_COM へ正しく収束し、物理的にも実際にスリープする。 */
     Nm_StateType state;
     Nm_ModeType  nmMode;
-    ASSERT_EQ(Nm_GetState(&state, &nmMode), E_OK);
+    ASSERT_EQ(Nm_GetState(NM_MAIN_NETWORK_HANDLE, &state, &nmMode), E_OK);
     EXPECT_EQ(state, NM_STATE_BUS_SLEEP);
 
     ComM_ModeType comMode = COMM_FULL_COMMUNICATION;
@@ -357,7 +357,7 @@ TEST_F(Bsw_SleepCoordination_Test, ReRequestFullComDuringBusOff_OK_RestoresFullC
 
     Nm_StateType state;
     Nm_ModeType  nmMode;
-    ASSERT_EQ(Nm_GetState(&state, &nmMode), E_OK);
+    ASSERT_EQ(Nm_GetState(NM_MAIN_NETWORK_HANDLE, &state, &nmMode), E_OK);
     EXPECT_EQ(nmMode, NM_MODE_NETWORK);
     EXPECT_NE(state, NM_STATE_BUS_SLEEP);
 }
@@ -415,7 +415,7 @@ TEST_F(Bsw_SleepCoordination_Test, RxCancelsPrepareBusSleep_OK_RestoresFullComAn
     /* 評価 (Assert) */
     Nm_StateType state;
     Nm_ModeType  nmMode;
-    ASSERT_EQ(Nm_GetState(&state, &nmMode), E_OK);
+    ASSERT_EQ(Nm_GetState(NM_MAIN_NETWORK_HANDLE, &state, &nmMode), E_OK);
     EXPECT_EQ(state, NM_STATE_REPEAT_MESSAGE);
     EXPECT_EQ(Can_Test_GetControllerState(), CAN_CS_STARTED);
     ComM_ModeType mode = COMM_SILENT_COMMUNICATION;
@@ -453,7 +453,7 @@ TEST_F(Bsw_SleepCoordination_Test, ReRequestFullComAfterPrepareBusSleep_OK_Resto
 
     Nm_StateType state;
     Nm_ModeType  nmMode;
-    ASSERT_EQ(Nm_GetState(&state, &nmMode), E_OK);
+    ASSERT_EQ(Nm_GetState(NM_MAIN_NETWORK_HANDLE, &state, &nmMode), E_OK);
     EXPECT_EQ(nmMode, NM_MODE_NETWORK);
     EXPECT_NE(state, NM_STATE_BUS_SLEEP);
 
@@ -463,7 +463,7 @@ TEST_F(Bsw_SleepCoordination_Test, ReRequestFullComAfterPrepareBusSleep_OK_Resto
     {
         FakeMillis_Value += NM_CYCLE_MS;
         Nm_MainFunction();
-        ASSERT_EQ(Nm_GetState(&state, &nmMode), E_OK);
+        ASSERT_EQ(Nm_GetState(NM_MAIN_NETWORK_HANDLE, &state, &nmMode), E_OK);
         ASSERT_NE(state, NM_STATE_BUS_SLEEP);
     }
     EXPECT_EQ(Can_Test_GetControllerState(), CAN_CS_STARTED);
@@ -496,7 +496,7 @@ TEST_F(Bsw_SleepCoordination_Test, RedundantNoComRequestDuringSilentCom_OK_DoesN
     EXPECT_EQ(mode, static_cast<ComM_ModeType>(COMM_SILENT_COMMUNICATION));
     Nm_StateType state;
     Nm_ModeType  nmMode;
-    ASSERT_EQ(Nm_GetState(&state, &nmMode), E_OK);
+    ASSERT_EQ(Nm_GetState(NM_MAIN_NETWORK_HANDLE, &state, &nmMode), E_OK);
     EXPECT_EQ(state, NM_STATE_PREPARE_BUS_SLEEP);
 
     /* 実行 (Act): Nm を Bus-Sleep Mode まで進める */
@@ -547,7 +547,7 @@ TEST_F(Bsw_SleepCoordination_Test, BusOffDuringRxCancelledPrepareBusSleep_OK_Con
      * ため FULL_COM 要求を拒否し、チャネルは SILENT_COM のまま。 */
     Nm_StateType state;
     Nm_ModeType  nmMode;
-    ASSERT_EQ(Nm_GetState(&state, &nmMode), E_OK);
+    ASSERT_EQ(Nm_GetState(NM_MAIN_NETWORK_HANDLE, &state, &nmMode), E_OK);
     EXPECT_EQ(state, NM_STATE_REPEAT_MESSAGE);
     ASSERT_EQ(ComM_GetCurrentComMode(COMM_USER_0, &mode), E_OK);
     EXPECT_EQ(mode, static_cast<ComM_ModeType>(COMM_SILENT_COMMUNICATION));
@@ -561,7 +561,7 @@ TEST_F(Bsw_SleepCoordination_Test, BusOffDuringRxCancelledPrepareBusSleep_OK_Con
     ASSERT_EQ(ComM_GetCurrentComMode(COMM_USER_0, &mode), E_OK);
     EXPECT_EQ(mode, static_cast<ComM_ModeType>(COMM_FULL_COMMUNICATION));
     EXPECT_EQ(Can_Test_GetControllerState(), CAN_CS_STARTED);
-    ASSERT_EQ(Nm_GetState(&state, &nmMode), E_OK);
+    ASSERT_EQ(Nm_GetState(NM_MAIN_NETWORK_HANDLE, &state, &nmMode), E_OK);
     EXPECT_EQ(nmMode, NM_MODE_NETWORK);
     EXPECT_NE(state, NM_STATE_BUS_SLEEP);
 }

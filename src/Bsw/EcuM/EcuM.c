@@ -207,7 +207,7 @@ void EcuM_Init(void)
                                * 参照するため、これより後に置くと起動毎に
                                * NULL 参照となる。 */
     ComM_Init(NULL);
-    Nm_Init();                /* ComM_RequestComMode() より必ず前に置くこと。
+    Nm_Init(NULL);             /* ComM_RequestComMode() より必ず前に置くこと。
                                * ComM_RequestComMode(FULL_COM) は同期的に
                                * CanSM_RequestComMode → ComM_BusSMIndication(FULL_COM)
                                * → Nm_NetworkRequest() まで連鎖するため、ここより後に

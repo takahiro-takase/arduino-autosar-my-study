@@ -41,9 +41,15 @@
  * （Release 4.3.1、docs/ 配下）の「List of Basic Software Modules」表で
  * CAN Network Management (CanNm) に割り当てられた固定値 31 を使う。
  *
- * 本モジュールは実際の CanNm と異なり NetworkHandle/PDU-ID 等の引数を
- * 一切取らない単一チャネル固定の簡略設計のため、範囲チェック系の DET コード
- * （CANNM_E_INVALID_CHANNEL/CANNM_E_INVALID_PDUID）は対象が存在しない。
+ * 2026-08-30 追記: Nm_Init/NetworkRequest/NetworkRelease/RepeatMessageRequest/
+ * GetState は当初 NetworkHandle 引数を一切取らない設計だったが、IF
+ * シグネチャは仕様準拠という方針のもと NetworkHandleType 引数を追加した
+ * （Nm.h 各関数の doc コメント参照）。単一チャネル固定の本プロジェクトでも、
+ * 同じく単一チャネル固定の CanSM が CANSM_E_INVALID_NETWORK_HANDLE で
+ * 範囲チェックを行っている（CanSM.c 参照）のと平仄を合わせ、NM_E_INVALID_
+ * CHANNEL（[SWS_CanNm_00192] 準拠）による範囲チェックを追加した。
+ * RxPduId/TxPduId（CANNM_E_INVALID_PDUID 相当）は受信 PDU の識別子であり
+ * NetworkHandle とは別の引数のため、こちらは引き続き対象外。
  * ----------------------------------------------------------------------- */
 
 /** AUTOSAR CAN Network Management の ModuleId（AUTOSAR_TR_BSWModuleList 参照、固定値 31） */
@@ -51,6 +57,8 @@
 
 /** 開発エラーコード（SWS_CanNm 7.14.1 表より実測して確認済み） */
 #define NM_E_UNINIT           0x01U  /* [SWS_CanNm_00002/00191]: 未初期化時の API 呼び出し */
+#define NM_E_INVALID_CHANNEL  0x02U  /* [SWS_CanNm_00192]: NetworkHandle が
+                                      *  NM_MAIN_NETWORK_HANDLE 以外 */
 #define NM_E_NET_START_IND    0x04U  /* [SWS_CanNm_00336]: Bus-Sleep Mode 中に NM PDU を受信 */
 #define NM_E_NETWORK_TIMEOUT  0x11U  /* [SWS_CanNm_00193/00194]: Repeat Message/Normal
                                       *  Operation State で NM-Timeout Timer が満了 */
@@ -106,6 +114,11 @@
 
 /** 本 ECU（メータ ECU）の NM ノード識別子 */
 #define NM_SOURCE_NODE_ID  0x01U
+
+/** 本プロジェクトが持つ唯一の NM チャネルのハンドル値。呼び出し元はこの値を
+ *  渡すこと。これ以外の値は NM_E_INVALID_CHANNEL として拒否される
+ *  （[SWS_CanNm_00192]、Nm_NetworkRequest() 等参照）。 */
+#define NM_MAIN_NETWORK_HANDLE  0U
 
 /** Control Bit Vector のビット位置（[SWS_CanNm_00045] 実測。本プロジェクトは
  *  Bit0（Repeat Message Request）のみ扱う。Bit3(Coordinator Sleep)/Bit4(Active

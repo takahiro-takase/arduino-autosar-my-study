@@ -15,6 +15,12 @@
 #include "Std_Types.h"
 
 // AUTOSAR SWS_ComStackTypes
+// ネットワーク（チャネル）の識別子。CanSM/ComM/Nm 等が共通で使う
+// （本プロジェクトはネットワーク構成の複雑さを表現する必要が薄いため
+// ここでは typedef のみ提供し、各モジュールが個別に定義していた
+// 局所的な XxxNetworkHandleType は置き換えない）
+typedef uint8 NetworkHandleType;
+
 // PDU（Protocol Data Unit）の識別子
 typedef uint16 PduIdType;
 

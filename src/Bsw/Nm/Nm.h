@@ -75,15 +75,31 @@ typedef enum
 } Nm_StateType;
 
 /**
+ * \brief   Nm_Init() の設定引数型（不透明型）。
+ *
+ * \details SWS_CanNm_00208 は post-build 設定構造体へのポインタを要求するが、
+ *          本プロジェクトは単一 ECU 構成で post-build バリアント切替を
+ *          持たないため、中身を定義しない不透明型とし、ポインタとしてのみ
+ *          扱う（`CanSM_ConfigType`/`KeyM_ConfigType` と同じ簡略化パターン）。
+ */
+typedef struct Nm_ConfigType_Tag Nm_ConfigType;
+
+/**
  * \brief   Nm モジュールを初期化する。Bus-Sleep Mode から開始する。
  *
  * \pre        CanIf_Init() / ComM_Init() が正常に完了していること。
  *
+ * \param[in]  ConfigPtr  常に NULL を渡すこと（本プロジェクトは post-build
+ *                        設定を持たないため。実 AUTOSAR 仕様は
+ *                        SWS_CanNm_00208 で `CanNm_Init(const CanNm_ConfigType*
+ *                        cannmConfigPtr)` を要求する）。
+ *
+ * \AUTOSARReq     {SWS_CanNm_00208}
  * \ServiceID      {0x00}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
  */
-void Nm_Init(void);
+void Nm_Init(const Nm_ConfigType* ConfigPtr);
 
 /**
  * \brief   Nm モジュールを未初期化状態に戻す。
@@ -102,15 +118,17 @@ void Nm_DeInit(void);
  *          State へ遷移する。既に Repeat Message/Normal Operation State なら
  *          何もしない（冪等）。
  *
- * \retval  E_OK      要求を受理した。
- * \retval  E_NOT_OK  未初期化。
+ * \param[in]  Channel  NM チャネルハンドル（NM_MAIN_NETWORK_HANDLE 以外は拒否）。
  *
- * \AUTOSARReq     {SWS_CanNm_00213}
+ * \retval  E_OK      要求を受理した。
+ * \retval  E_NOT_OK  未初期化、または Channel が不正。
+ *
+ * \AUTOSARReq     {SWS_CanNm_00213, SWS_CanNm_00192}
  * \ServiceID      {0x02}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
  */
-Std_ReturnType Nm_NetworkRequest(void);
+Std_ReturnType Nm_NetworkRequest(NetworkHandleType Channel);
 
 /**
  * \brief   通信が不要になったことを Nm へ伝える（[SWS_CanNm_00105] 相当）。
@@ -119,14 +137,17 @@ Std_ReturnType Nm_NetworkRequest(void);
  *          遷移する（NM フレーム送信を停止するが、NM-Timeout Timer が
  *          満了するまでは Prepare Bus-Sleep Mode へは移行しない）。
  *
- * \retval  E_OK      要求を受理した。
- * \retval  E_NOT_OK  未初期化。
+ * \param[in]  Channel  NM チャネルハンドル（NM_MAIN_NETWORK_HANDLE 以外は拒否）。
  *
+ * \retval  E_OK      要求を受理した。
+ * \retval  E_NOT_OK  未初期化、または Channel が不正。
+ *
+ * \AUTOSARReq     {SWS_CanNm_00214, SWS_CanNm_00192}
  * \ServiceID      {0x03}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
  */
-Std_ReturnType Nm_NetworkRelease(void);
+Std_ReturnType Nm_NetworkRelease(NetworkHandleType Channel);
 
 /**
  * \brief   Repeat Message State への遷移を要求する（[SWS_CanNm_00120] 相当）。
@@ -136,14 +157,17 @@ Std_ReturnType Nm_NetworkRelease(void);
  *          Bus-Sleep Mode/Bus-Sleep Mode から呼ばれた場合は無視する
  *          （[SWS_CanNm_00137]）。
  *
- * \retval  E_OK      Repeat Message State へ遷移した。
- * \retval  E_NOT_OK  未初期化、または現在の状態では受理できない。
+ * \param[in]  Channel  NM チャネルハンドル（NM_MAIN_NETWORK_HANDLE 以外は拒否）。
  *
+ * \retval  E_OK      Repeat Message State へ遷移した。
+ * \retval  E_NOT_OK  未初期化、Channel が不正、または現在の状態では受理できない。
+ *
+ * \AUTOSARReq     {SWS_CanNm_00221, SWS_CanNm_00192}
  * \ServiceID      {0x08}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
  */
-Std_ReturnType Nm_RepeatMessageRequest(void);
+Std_ReturnType Nm_RepeatMessageRequest(NetworkHandleType Channel);
 
 /**
  * \brief   NM フレームの受信を通知する（CanIf から呼ばれる）。
@@ -208,17 +232,19 @@ void Nm_SetTxEnabled(uint8 Enabled);
 /**
  * \brief   現在の CanNm 状態とモードを取得する（[SWS_CanNm_00091] 相当）。
  *
+ * \param[in]   Channel   NM チャネルハンドル（NM_MAIN_NETWORK_HANDLE 以外は拒否）。
  * \param[out]  StatePtr  現在の内部状態の格納先。NULL 可（不要なら渡さなくてよい）。
  * \param[out]  ModePtr   現在の操作モードの格納先。NULL 可。
  *
  * \retval  E_OK      取得した。
- * \retval  E_NOT_OK  未初期化。
+ * \retval  E_NOT_OK  未初期化、または Channel が不正。
  *
+ * \AUTOSARReq     {SWS_CanNm_00223, SWS_CanNm_00192}
  * \ServiceID      {0x0B}
  * \Reentrancy     {Reentrant}
  * \Synchronicity  {Synchronous}
  */
-Std_ReturnType Nm_GetState(Nm_StateType* StatePtr, Nm_ModeType* ModePtr);
+Std_ReturnType Nm_GetState(NetworkHandleType Channel, Nm_StateType* StatePtr, Nm_ModeType* ModePtr);
 
 /**
  * \brief   Nm モジュールのバージョン情報を取得する。
