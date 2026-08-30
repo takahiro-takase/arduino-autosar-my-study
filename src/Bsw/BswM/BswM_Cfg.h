@@ -64,30 +64,41 @@
 #define BSWM_OS_TASK_RTE_ENGINE     2U  /**< Rte_ScheduleRunnables (3000 ms) */
 #define BSWM_OS_TASK_RTE_WARNING    3U  /**< Rte_ScheduleWarningIndicator (500 ms) */
 #define BSWM_OS_TASK_CANSM_MAIN     4U  /**< CanSM_MainFunction   (10 ms)   */
-#define BSWM_OS_TASK_COM_MAIN       5U  /**< Com_MainFunction     (100 ms)  */
-#define BSWM_OS_TASK_IOHWAB_MAIN    6U  /**< IoHwAb_MainFunction  (10 ms)   */
-#define BSWM_OS_TASK_WDGM_MAIN      7U  /**< WdgM_MainFunction    (6000 ms) */
-#define BSWM_OS_TASK_DCM_MAIN       8U  /**< Dcm_MainFunction     (1000 ms) */
-#define BSWM_OS_TASK_FIM_MAIN       9U  /**< FiM_MainFunction     (100 ms)  */
-#define BSWM_OS_TASK_WDGM_TRIGGER   10U /**< WdgM_TriggerHwWatchdog (1000 ms) */
-#define BSWM_OS_TASK_NM_MAIN        11U /**< Nm_MainFunction        (200 ms)  */
-#define BSWM_OS_TASK_NVM_MAIN       12U /**< NvM_MainFunction       (10 ms)   */
-#define BSWM_OS_TASK_CAN_TX_CONF    13U /**< Can_MainFunction_Write (1 ms)    */
-#define BSWM_OS_TASK_CAN_BUSOFF     14U /**< Can_MainFunction_BusOff (1 ms)   */
-#define BSWM_OS_TASK_CAN_WAKEUP     15U /**< Can_MainFunction_Wakeup (1 ms)   */
-#define BSWM_OS_TASK_SECOC_MAIN     16U /**< SecOC_MainFunctionTx     (100 ms)  */
-#define BSWM_OS_TASK_MEMIF_MAIN     17U /**< MemIf_MainFunction     (10 ms)   */
+#define BSWM_OS_TASK_COM_MAIN       5U  /**< Com_MainFunctionRx   (100 ms)  */
+/* Task 6 (Com_MainFunctionTx) は Com_MainFunctionRx（bit 5）の直後に挿入した
+ * （2026-08、単体だった Com_MainFunction を実仕様準拠の Rx/Tx へ分割した際に
+ * 新設）。SecOC_MainFunctionTx（旧 Task 16）が同一 Os_SchedulerStep() パス内で
+ * Com のディスパッチ結果（SecOC_TxPending[]）を同じティックで拾えるように、
+ * 末尾ではなくここへ挿入し、Task 6 以降を全て 1 つずつ後ろへずらした
+ * （/code-review で「末尾に追加すると SecOC より後に実行され、1 ティック分
+ * 余計な遅延が生じる」と指摘され是正）。 */
+#define BSWM_OS_TASK_COM_MAIN_TX    6U  /**< Com_MainFunctionTx   (100 ms)  */
+#define BSWM_OS_TASK_IOHWAB_MAIN    7U  /**< IoHwAb_MainFunction  (10 ms)   */
+#define BSWM_OS_TASK_WDGM_MAIN      8U  /**< WdgM_MainFunction    (6000 ms) */
+#define BSWM_OS_TASK_DCM_MAIN       9U  /**< Dcm_MainFunction     (1000 ms) */
+#define BSWM_OS_TASK_FIM_MAIN       10U /**< FiM_MainFunction     (100 ms)  */
+#define BSWM_OS_TASK_WDGM_TRIGGER   11U /**< WdgM_TriggerHwWatchdog (1000 ms) */
+#define BSWM_OS_TASK_NM_MAIN        12U /**< Nm_MainFunction        (200 ms)  */
+#define BSWM_OS_TASK_NVM_MAIN       13U /**< NvM_MainFunction       (10 ms)   */
+#define BSWM_OS_TASK_CAN_TX_CONF    14U /**< Can_MainFunction_Write (1 ms)    */
+#define BSWM_OS_TASK_CAN_BUSOFF     15U /**< Can_MainFunction_BusOff (1 ms)   */
+#define BSWM_OS_TASK_CAN_WAKEUP     16U /**< Can_MainFunction_Wakeup (1 ms)   */
+#define BSWM_OS_TASK_SECOC_MAIN     17U /**< SecOC_MainFunctionTx     (100 ms)  */
+#define BSWM_OS_TASK_MEMIF_MAIN     18U /**< MemIf_MainFunction     (10 ms)   */
+/* Task 19 (App_GptDemo_Run)・20 (ComM_MainFunction) は意図的にマスク対象外
+ * （Os_PBCfg.c 冒頭コメント参照）のため、BswM 用の Task ID 定数を持たない。 */
 
 /* -----------------------------------------------------------------------
  * タスクビットマスク (1ビット = 1タスク; ビット位置 = タスク ID)
  * タスク数が 16 を超えるため uint32 を使用する（BswM_PBCfg.h の
- * BswM_RuleType.TaskMask 参照。Task 16 (SecOC_MainFunctionTx) 追加時に
- * uint16 では bit 16 を表現できず、いかなる BswM ルールからも制御不能に
- * なっていたバグを修正した経緯がある）。
+ * BswM_RuleType.TaskMask 参照。Task 16 (SecOC_MainFunctionTx、当時の番号)
+ * 追加時に uint16 では bit 16 を表現できず、いかなる BswM ルールからも
+ * 制御不能になっていたバグを修正した経緯がある）。
  * ----------------------------------------------------------------------- */
 
-/** 全タスク (bits 0〜17) */
-#define BSWM_TASK_MASK_ALL  0x3FFFFUL
+/** 全タスク (bits 0〜18。bit 19/20 = App_GptDemo_Run/ComM_MainFunction は
+ *  意図的に除外——上記の注記参照）。 */
+#define BSWM_TASK_MASK_ALL  0x7FFFFUL
 
 /** アプリ Runnable タスク: RTE_ENGINE + RTE_WARNING
  *  POST_RUN 時に停止し、アプリロジックを凍結する */
@@ -105,7 +116,7 @@
  * Renesas RA の IWDT は一度有効化すると無効化する手段がなく
  * (Wdg_Hw.cpp 参照)、誰もリフレッシュしなければ SHUTDOWN 後も
  * HW タイムアウトで MCU がリセットされてしまう
- * (WdgM_SupervisionSuppressed が立っているため、Task 10 さえ動いていれば
+ * (WdgM_SupervisionSuppressed が立っているため、Task 11 さえ動いていれば
  * 無条件にリフレッシュを継続し、実害なく HW を満たし続けられる)。
  *
  * Can_MainFunction_Read・Can_MainFunction_Wakeup も同様に SHUTDOWN 中
@@ -152,11 +163,11 @@
  * Nm がその状態に永久に固着してしまう（実機で確認された不具合）。
  *
  * SecOC_MainFunctionTx はこの「動かし続ける」リストに含まれない
- * （Com_MainFunction 等と同様、SHUTDOWN 中は停止してよいタスクの扱い。
- * SHUTDOWN 中は Com_MainFunction 自体が停止して SecOC_TxPending[] を
+ * （Com_MainFunctionTx 等と同様、SHUTDOWN 中は停止してよいタスクの扱い。
+ * SHUTDOWN 中は Com_MainFunctionTx 自体が停止して SecOC_TxPending[] を
  * 誰も立てなくなるため送信要求は発生しないが、無効化しておくのが本来の
- * 設計意図であり、BSWM_TASK_MASK_ALL に bit 16 を含めることで
- * この無効化対象に含める）。
+ * 設計意図であり、BSWM_TASK_MASK_ALL に bit 17（BSWM_OS_TASK_SECOC_MAIN）を
+ * 含めることでこの無効化対象に含める）。
  */
 #define BSWM_TASK_MASK_SHUTDOWN  ((uint32)(BSWM_TASK_MASK_ALL \
                                             & (uint32)(~((1UL << BSWM_OS_TASK_WDGM_TRIGGER) \

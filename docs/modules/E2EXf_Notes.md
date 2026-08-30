@@ -325,11 +325,11 @@ E2EHealthStatus フレームは Counter=0 です。
 ### Com モジュールとの統合（E2E Transformer 方式）
 
 Com は E2EHealthStatus のペイロードにも一切関知しません。E2EHealthStatus は
-`COM_TX_MODE_PERIODIC` のため、`Com_MainFunction()` が自分の周期タイマで
+`COM_TX_MODE_PERIODIC` のため、`Com_MainFunctionTx()` が自分の周期タイマで
 送信を決定した際に `Com_IPduConfigType.TxTransformCbk`（`Com_PBCfg.c` で
 `Rte_COMTransform_E2EHealthStatus` を設定）を実 TX バッファへのポインタと
 長さ付きで呼び出すだけです（DIRECT/MIXED I-PDU の変化時送信も同じ
-`Com_MainFunction()` から呼ばれるため、「送信直前の最終変換」の仕組みを
+`Com_MainFunctionTx()` から呼ばれるため、「送信直前の最終変換」の仕組みを
 そのまま再利用しています）。実際に Counter・
 CRC16 を書き込むのは `Rte_COMTransform_E2EHealthStatus()`（`src/Rte/Rte.c`）で、
 中身は `E2EXf_TransformP05()`（`E2E_P05Protect()` への薄いラッパー。E2EXf.h には
@@ -340,7 +340,7 @@ AbsInfo の Check とは逆に、失敗や再送は発生しません（送信�
 前提がないため）。E2EMon（データの生産者）はこの E2E 保護の存在を一切知りません。
 
 ```
-Com_MainFunction()（PERIODIC モードの I-PDU。現状 IPduId=2 が対象）:
+Com_MainFunctionTx()（PERIODIC モードの I-PDU。現状 IPduId=2 が対象）:
   TxTransformCbk(Com_TxBuffer[PduId], DLC) を呼び出す
     = Rte_COMTransform_E2EHealthStatus() （Rte.c）
         E2EXf_TransformP05() を呼び出す

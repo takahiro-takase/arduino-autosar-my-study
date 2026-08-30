@@ -5,7 +5,7 @@
  *
  * \details README の該当コールチェーン図：
  *
- *              [100ms 周期タスク] Os_SchedulerStep() → Com_MainFunction()
+ *              [100ms 周期タスク] Os_SchedulerStep() → Com_MainFunctionRx()
  *                → (now - Com_RxLastMs[id]) がしきい値以上なら
  *                    Com_SigTimedOut[s] を立てる（WARN ログ、ここが検知点）
  *                ┊  (Com_SigTimedOut というフラグ経由。次に Com_ReceiveSignal()
@@ -20,8 +20,8 @@
  *          Tx 処理コールチェーン（Bsw_TxChain_test.cpp）の `Com_TxPending` と
  *          構造は同じ「立てる側／読む側が別々のタイミングで動く」非同期境界だが、
  *          向きが逆になっている: TX は「on-demand 呼び出し（Com_SendSignal）が
- *          立てて、周期タスク（Com_MainFunction）が読む」のに対し、こちらは
- *          「周期タスク（Com_MainFunction）が立てて、on-demand 呼び出し
+ *          立てて、周期タスク（Com_MainFunctionTx）が読む」のに対し、こちらは
+ *          「周期タスク（Com_MainFunctionRx）が立てて、on-demand 呼び出し
  *          （Com_ReceiveSignal）が読む」。この非同期境界でテストを2つの
  *          セグメントに分け、それぞれ個別に実行可能な `TEST_F` ケースとしている
  *          （`--gtest_filter=Bsw_RxTimeoutChain_Test.ComMainFunction_*` 等で
@@ -38,7 +38,7 @@
  *          （`COM_UNIT_TEST` 定義時のみ、`Com.h`/`Com.c` 参照）で直接観測する。
  *          セグメント②は Tx チェーンの `ComMainFunction_OK_...` と同様、
  *          セグメント①の終端状態（フラグが立った状態）を Arrange で
- *          `Com_RxIndication()`→`FakeMillis_Value` 加算→`Com_MainFunction()`と
+ *          `Com_RxIndication()`→`FakeMillis_Value` 加算→`Com_MainFunctionRx()`と
  *          再現してから、そこに続く `Com_ReceiveSignal()` を検証する。
  *
  *          本番の `Com_PBCfg.c` は Rte 依存の各種コールバックを持ち依存グラフが
@@ -68,7 +68,7 @@ namespace
 //
 // IPduId=1 は SWS_Com_00536/00556（Com_CbkRxTOut）のグループ単位経路専用の
 // 追加 I-PDU（IsSignalGroup=1、メンバー1本）。IPduId=0 側とは独立に
-// I-PDU 単位の FirstTimeoutMs/TimeoutMs を持たせ、Com_MainFunction() の
+// I-PDU 単位の FirstTimeoutMs/TimeoutMs を持たせ、Com_MainFunctionRx() の
 // I-PDU 単位ループ（本ファイル冒頭のコールチェーン図のうち、シグナル単位
 // ループとは別の分岐）を検証する。
 // -----------------------------------------------------------------------
@@ -319,7 +319,7 @@ protected:
 };
 
 // ------------------------------------------------------------
-// セグメント①: Com_MainFunction() ─ Com_SigTimedOut というフラグで切れるまで
+// セグメント①: Com_MainFunctionRx() ─ Com_SigTimedOut というフラグで切れるまで
 // ------------------------------------------------------------
 TEST_F(Bsw_RxTimeoutChain_Test, ComMainFunction_OK_DetectsTimeoutAfterThresholdElapsed)
 {
@@ -328,7 +328,7 @@ TEST_F(Bsw_RxTimeoutChain_Test, ComMainFunction_OK_DetectsTimeoutAfterThresholdE
     FakeMillis_Value = 600UL;
 
     /* 実行 (Act) */
-    Com_MainFunction();
+    Com_MainFunctionRx();
 
     /* 評価 (Assert): フラグに加えて SWS_Com_00536/00556 (Com_CbkRxTOut) の
      * シグナル単位コールバックも新規検出の瞬間に1回だけ呼ばれる */
@@ -343,7 +343,7 @@ TEST_F(Bsw_RxTimeoutChain_Test, ComMainFunction_NG_BeforeThreshold_LeavesSigTime
     FakeMillis_Value = 400UL;
 
     /* 実行 (Act) */
-    Com_MainFunction();
+    Com_MainFunctionRx();
 
     /* 評価 (Assert): まだ検知しない。コールバックも呼ばれない */
     EXPECT_EQ(Com_Test_GetSigTimedOut(0U), 0U);
@@ -353,15 +353,15 @@ TEST_F(Bsw_RxTimeoutChain_Test, ComMainFunction_NG_BeforeThreshold_LeavesSigTime
 TEST_F(Bsw_RxTimeoutChain_Test, ComMainFunction_OK_SigRxTOutCbkFiresOnlyOnceAcrossRepeatedCalls)
 {
     /* 準備 (Arrange): しきい値超過を検出させたあと、時間をさらに進めて
-     * Com_MainFunction() を再度呼ぶ（エッジトリガのため2回目は発火しない） */
+     * Com_MainFunctionRx() を再度呼ぶ（エッジトリガのため2回目は発火しない） */
     ReceiveOnce(0x1234U);
     FakeMillis_Value = 600UL;
-    Com_MainFunction();
+    Com_MainFunctionRx();
     ASSERT_EQ(s_sigRxTOutCount, 1U);
 
     /* 実行 (Act) */
     FakeMillis_Value = 700UL;
-    Com_MainFunction();
+    Com_MainFunctionRx();
 
     /* 評価 (Assert): 新規検出時のみ発火するため回数は増えない */
     EXPECT_EQ(s_sigRxTOutCount, 1U);
@@ -385,7 +385,7 @@ TEST_F(Bsw_RxTimeoutChain_Test, ComMainFunction_NG_RejectedFrameStillResetsDeadl
 
     /* 実行 (Act) */
     FakeMillis_Value = 600UL;
-    Com_MainFunction();
+    Com_MainFunctionRx();
 
     /* 評価 (Assert): 実 AUTOSAR ならタイムアウトしない状況
      * （バスは正常、ペイロードが拒否されただけ）で、実際にタイムアウト
@@ -408,12 +408,12 @@ TEST_F(Bsw_RxTimeoutChain_Test, ComMainFunction_OK_RejectedFrameStillTransitions
     /* t=750ms（拒否からの経過 450ms）: steady(500ms) 未満のためまだ
      * タイムアウトしない */
     FakeMillis_Value = 750UL;
-    Com_MainFunction();
+    Com_MainFunctionRx();
     ASSERT_EQ(Com_IsRxTimedOut(2U), 0U);
 
     /* 実行 (Act): t=850ms（拒否からの経過 550ms） */
     FakeMillis_Value = 850UL;
-    Com_MainFunction();
+    Com_MainFunctionRx();
 
     /* 評価 (Assert): steady の 500ms は超えているためタイムアウトする。
      * もし拒否によって First(1000ms) のまま据え置かれていたら、
@@ -433,7 +433,7 @@ TEST_F(Bsw_RxTimeoutChain_Test, ComMainFunction_NG_GroupShortFrameDiscardStillRe
 
     /* 実行 (Act) */
     FakeMillis_Value = 600UL;
-    Com_MainFunction();
+    Com_MainFunctionRx();
 
     /* 評価 (Assert): [SWS_Com_00738]（無効なシグナルグループ受信時も
      * タイマは再始動される）どおり、拒否された t=300ms を起点にまだ
@@ -444,7 +444,7 @@ TEST_F(Bsw_RxTimeoutChain_Test, ComMainFunction_NG_GroupShortFrameDiscardStillRe
 
 // ------------------------------------------------------------
 // SWS_Com_00536/00556（Com_CbkRxTOut）のグループ単位経路
-// （Com_MainFunction() の I-PDU 単位ループ、IPduId=1）
+// （Com_MainFunctionRx() の I-PDU 単位ループ、IPduId=1）
 // ------------------------------------------------------------
 TEST_F(Bsw_RxTimeoutChain_Test, ComMainFunction_OK_GroupRxTOutFiresAfterThresholdElapsed)
 {
@@ -453,7 +453,7 @@ TEST_F(Bsw_RxTimeoutChain_Test, ComMainFunction_OK_GroupRxTOutFiresAfterThreshol
     FakeMillis_Value = 600UL;
 
     /* 実行 (Act) */
-    Com_MainFunction();
+    Com_MainFunctionRx();
 
     /* 評価 (Assert): グループ単位のコールバックが発火する。IPduId=0 側の
      * シグナル単位監視は本テストでは検証対象外（同じ 500ms しきい値かつ
@@ -471,7 +471,7 @@ TEST_F(Bsw_RxTimeoutChain_Test, ComMainFunction_NG_GroupBeforeThreshold_DoesNotF
     FakeMillis_Value = 400UL;
 
     /* 実行 (Act) */
-    Com_MainFunction();
+    Com_MainFunctionRx();
 
     /* 評価 (Assert) */
     EXPECT_EQ(Com_IsRxTimedOut(1U), 0U);
@@ -490,7 +490,7 @@ TEST_F(Bsw_RxTimeoutChain_Test, ComMainFunction_NG_MisconfiguredGroupMemberDoesN
     FakeMillis_Value = 600UL;
 
     /* 実行 (Act) */
-    Com_MainFunction();
+    Com_MainFunctionRx();
 
     /* 評価 (Assert): グループ単位のコールバックは正しく1回発火するが、
      * 誤設定されたメンバー側のシグナル単位コールバックは発火しない */
@@ -506,7 +506,7 @@ TEST_F(Bsw_RxTimeoutChain_Test, ComReceiveSignal_OK_SubstitutesValueAfterTimeout
     /* 準備 (Arrange): セグメント①の終端状態（Com_SigTimedOut が立った状態）を用意する */
     ReceiveOnce(0x1234U);
     FakeMillis_Value = 600UL;
-    Com_MainFunction();
+    Com_MainFunctionRx();
     ASSERT_EQ(Com_Test_GetSigTimedOut(0U), 1U);
 
     /* 実行 (Act) */
@@ -523,7 +523,7 @@ TEST_F(Bsw_RxTimeoutChain_Test, ComReceiveSignal_NG_BeforeTimeout_ReturnsLastRec
     /* 準備 (Arrange): 受信直後、まだタイムアウトしきい値に達していない */
     ReceiveOnce(0x1234U);
     FakeMillis_Value = 400UL;
-    Com_MainFunction();
+    Com_MainFunctionRx();
     ASSERT_EQ(Com_Test_GetSigTimedOut(0U), 0U);
 
     /* 実行 (Act) */
@@ -592,7 +592,7 @@ const Com_IPduConfigType kTestRxGroupedIPdu = {
 // IPduId=1: 本番 EngineInfo と同じ形（非 Signal Group、シグナル単位の
 // RxDataTimeoutAction=SUBSTITUTE + RxTOutCbk）を再現する。上の
 // kTestRxGroupedIPdu（IPduId=0、Signal Group、I-PDU 単位 RxTOutCbk）だけでは
-// AbsInfo 寄りの経路しか検証できておらず、Com_MainFunction() のシグナル単位
+// AbsInfo 寄りの経路しか検証できておらず、Com_MainFunctionRx() のシグナル単位
 // ループ（Com.c）・Com_ReceiveSignal() の SUBSTITUTE 分岐がグループ停止中に
 // 正しく抑制されることを検証できていなかった（/code-review で指摘）。
 static uint8_t s_nonGroupRxTOutCount = 0U;
@@ -732,7 +732,8 @@ TEST_F(Bsw_RxIpduGroupChain_Test, ComMainFunction_NG_StoppedGroupedIPduNeverTime
 
     /* 実行 (Act): TimeoutMs(500ms) を大幅に超えて経過させる */
     FakeMillis_Value += 5000U;
-    Com_MainFunction();
+    Com_MainFunctionRx();
+    Com_MainFunctionTx();
 
     /* 評価 (Assert): 停止中はデッドライン監視自体が評価されないため
      * （[SWS_Com_00685]）、いくら経過しても RxTOutCbk は発火しない
@@ -748,7 +749,8 @@ TEST_F(Bsw_RxIpduGroupChain_Test, ComIpduGroupStart_OK_GroupedIPduBeginsMonitori
 
     /* 実行 (Act): TimeoutMs(500ms) 経過 */
     FakeMillis_Value += 500U;
-    Com_MainFunction();
+    Com_MainFunctionRx();
+    Com_MainFunctionTx();
 
     /* 評価 (Assert): 開始後は通常どおり監視が働き、タイムアウトが発火する */
     EXPECT_EQ(s_groupedRxTOutCount, 1U);
@@ -760,14 +762,16 @@ TEST_F(Bsw_RxIpduGroupChain_Test, ComIpduGroupStop_OK_StoppingAgainSuppressesTim
      * （本番の Bus-Sleep 遷移相当: FULL_COM → NO_COMMUNICATION）。 */
     Com_IpduGroupStart(COM_IPDU_GROUP_SENSOR_RX, 0U);
     FakeMillis_Value += 100U;
-    Com_MainFunction();
+    Com_MainFunctionRx();
+    Com_MainFunctionTx();
     ASSERT_EQ(s_groupedRxTOutCount, 0U);  // まだしきい値未満
 
     Com_IpduGroupStop(COM_IPDU_GROUP_SENSOR_RX);
 
     /* 実行 (Act): 停止中にしきい値を大幅に超えて経過させる */
     FakeMillis_Value += 5000U;
-    Com_MainFunction();
+    Com_MainFunctionRx();
+    Com_MainFunctionTx();
 
     /* 評価 (Assert): 停止中は評価されないため発火しない
      * （意図的なスリープのたびに誤って RX timeout が記録されていた
@@ -789,14 +793,16 @@ TEST_F(Bsw_RxIpduGroupChain_Test, ComIpduGroupStop_OK_NonGroupSignalFreezesInste
     Com_IpduGroupStart(COM_IPDU_GROUP_SENSOR_RX, 0U);
     ReceiveOnceNonGroup(0x1234U);
     FakeMillis_Value += 100U;
-    Com_MainFunction();
+    Com_MainFunctionRx();
+    Com_MainFunctionTx();
     ASSERT_EQ(s_nonGroupRxTOutCount, 0U);  // まだしきい値未満
 
     Com_IpduGroupStop(COM_IPDU_GROUP_SENSOR_RX);
 
     /* 実行 (Act): 停止中にしきい値を大幅に超えて経過させる */
     FakeMillis_Value += 5000U;
-    Com_MainFunction();
+    Com_MainFunctionRx();
+    Com_MainFunctionTx();
 
     /* 評価 (Assert): 停止中はシグナル単位ループも評価されないため
      * RxTOutCbk は発火しない。Com_ReceiveSignal() も SUBSTITUTE
@@ -820,7 +826,8 @@ TEST_F(Bsw_RxIpduGroupChain_Test, ComIpduGroupStart_OK_NonGroupSignalTimesOutAnd
 
     /* 実行 (Act): TimeoutMs(500ms) 経過 */
     FakeMillis_Value += 500U;
-    Com_MainFunction();
+    Com_MainFunctionRx();
+    Com_MainFunctionTx();
 
     /* 評価 (Assert): 開始後は通常どおり監視が働き、RxTOutCbk が発火し
      * Com_ReceiveSignal() も SUBSTITUTE 値を返すようになる。 */
@@ -865,7 +872,8 @@ TEST_F(Bsw_RxIpduGroupChain_Test, DisableReceptionDM_OK_SuppressesGroupTimeoutWh
 
     /* 実行 (Act): しきい値(500ms)を大幅に超えて経過させる */
     FakeMillis_Value += 5000U;
-    Com_MainFunction();
+    Com_MainFunctionRx();
+    Com_MainFunctionTx();
 
     /* 評価 (Assert): デッドライン監視のみ抑制され、RxTOutCbk は発火しない */
     EXPECT_EQ(s_groupedRxTOutCount, 0U);
@@ -888,12 +896,14 @@ TEST_F(Bsw_RxIpduGroupChain_Test, EnableReceptionDM_OK_ResetsTimerAndResumesDete
     ReceiveOnceNonGroup(0x1234U);
     Com_DisableReceptionDM(COM_IPDU_GROUP_SENSOR_RX);
     FakeMillis_Value += 5000U;
-    Com_MainFunction();
+    Com_MainFunctionRx();
+    Com_MainFunctionTx();
     ASSERT_EQ(s_nonGroupRxTOutCount, 0U);  // 無効化中は評価されない
 
-    /* 実行 (Act): 再度有効化した直後に Com_MainFunction() を呼ぶ */
+    /* 実行 (Act): 再度有効化した直後に Com_MainFunctionRx() を呼ぶ */
     Com_EnableReceptionDM(COM_IPDU_GROUP_SENSOR_RX);
-    Com_MainFunction();
+    Com_MainFunctionRx();
+    Com_MainFunctionTx();
 
     /* 評価 (Assert): タイマが再始動されているため、無効化中に「経過して
      * いた」5000ms を理由に即座にタイムアウト判定されない
@@ -902,7 +912,8 @@ TEST_F(Bsw_RxIpduGroupChain_Test, EnableReceptionDM_OK_ResetsTimerAndResumesDete
 
     /* 実行 (Act): 再有効化後、改めて TimeoutMs(500ms) 経過させる */
     FakeMillis_Value += 500U;
-    Com_MainFunction();
+    Com_MainFunctionRx();
+    Com_MainFunctionTx();
 
     /* 評価 (Assert): 通常どおり監視が再開されていること */
     EXPECT_EQ(s_nonGroupRxTOutCount, 1U);

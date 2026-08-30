@@ -68,7 +68,7 @@
  *          POST_RUN で BSW タスク (Can_MainFunction_Read / CanTp / CanSM / Com /
  *          IoHwAb) を継続させる理由:
  *            - 受信中の診断フレームを正常に処理する (CanTp)
- *            - COM デッドライン監視を最後まで実行する (Com_MainFunction)
+ *            - COM デッドライン監視を最後まで実行する (Com_MainFunctionRx/Tx)
  *            - ボタン入力をデバウンス完了まで処理する (IoHwAb_MainFunction)
  *
  *          SHUTDOWN で WdgM_TriggerHwWatchdog だけ止めない理由:

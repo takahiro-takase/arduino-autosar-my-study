@@ -11,21 +11,31 @@
  *            Task 2: Rte_ScheduleRunnables      3000 ms  — エンジン Runnable 起動
  *            Task 3: Rte_ScheduleWarningIndicator 500 ms — 警告灯 Runnable 起動
  *            Task 4: CanSM_MainFunction            10 ms  — Bus-Off 回復タイマ監視
- *            Task 5: Com_MainFunction             100 ms  — RX 受信デッドライン監視
- *            Task 6: IoHwAb_MainFunction           10 ms  — ボタンデバウンスサンプリング
- *            Task 7: WdgM_MainFunction           6000 ms  — Alive/Logical/Deadline 判定
- *            Task 8: Dcm_MainFunction            1000 ms  — S3 セッションタイムアウト監視
- *            Task 9: FiM_MainFunction             100 ms  — 機能抑止状態の再評価
- *            Task 10: WdgM_TriggerHwWatchdog      1000 ms  — HW ウォッチドッグ trigger（リフレッシュ）
- *            Task 11: Nm_MainFunction             1000 ms  — NM フレーム送信（ComM FULL_COM 中のみ）
- *            Task 12: NvM_MainFunction             10 ms  — 保留中 EEPROM 書き込みジョブを1バイトずつ処理
- *            Task 13: Can_MainFunction_Write        1 ms  — 保留中 TX 確認 (CanIf_TxConfirmation) をドレイン
- *            Task 14: Can_MainFunction_BusOff       1 ms  — Bus-Off (EFLG.TXBO) ポーリング
- *            Task 15: Can_MainFunction_Wakeup       1 ms  — SLEEP 中のウェイクアップペンディングのドレイン
- *            Task 16: SecOC_MainFunctionTx           100 ms  — TX Secured I-PDU の Freshness/MAC 計算・送信
- *            Task 17: MemIf_MainFunction            10 ms  — 保留中 EEPROM 書き込みジョブを1バイトずつ処理 (Fee)
- *            Task 18: App_GptDemo_Run             2000 ms  — Gpt 実 HW タイマ通知カウンタのログ出力（動作確認用）
- *            Task 19: ComM_MainFunction            100 ms  — 現状 NOP（ComMNmVariant=FULL では
+ *            Task 5: Com_MainFunctionRx           100 ms  — RX 受信デッドライン監視
+ *            Task 6: Com_MainFunctionTx           100 ms  — TX送信スケジューリング・送信確認監視
+ *                                                             （2026-08、単体の Com_MainFunction は
+ *                                                              実仕様に存在しないため Rx/Tx へ分割。
+ *                                                              Task 5 の直後へ挿入したのは、Task 17
+ *                                                              SecOC_MainFunctionTx が同一パス内で
+ *                                                              Com のディスパッチ結果を同じティックで
+ *                                                              拾えるようにするため——末尾に追加すると
+ *                                                              1 ティック分の遅延が生じてしまう。
+ *                                                              Task 7 以降は全て 1 つずつ後ろへ
+ *                                                              ずれている）
+ *            Task 7: IoHwAb_MainFunction           10 ms  — ボタンデバウンスサンプリング
+ *            Task 8: WdgM_MainFunction           6000 ms  — Alive/Logical/Deadline 判定
+ *            Task 9: Dcm_MainFunction            1000 ms  — S3 セッションタイムアウト監視
+ *            Task 10: FiM_MainFunction             100 ms  — 機能抑止状態の再評価
+ *            Task 11: WdgM_TriggerHwWatchdog      1000 ms  — HW ウォッチドッグ trigger（リフレッシュ）
+ *            Task 12: Nm_MainFunction             1000 ms  — NM フレーム送信（ComM FULL_COM 中のみ）
+ *            Task 13: NvM_MainFunction             10 ms  — 保留中 EEPROM 書き込みジョブを1バイトずつ処理
+ *            Task 14: Can_MainFunction_Write        1 ms  — 保留中 TX 確認 (CanIf_TxConfirmation) をドレイン
+ *            Task 15: Can_MainFunction_BusOff       1 ms  — Bus-Off (EFLG.TXBO) ポーリング
+ *            Task 16: Can_MainFunction_Wakeup       1 ms  — SLEEP 中のウェイクアップペンディングのドレイン
+ *            Task 17: SecOC_MainFunctionTx           100 ms  — TX Secured I-PDU の Freshness/MAC 計算・送信
+ *            Task 18: MemIf_MainFunction            10 ms  — 保留中 EEPROM 書き込みジョブを1バイトずつ処理 (Fee)
+ *            Task 19: App_GptDemo_Run             2000 ms  — Gpt 実 HW タイマ通知カウンタのログ出力（動作確認用）
+ *            Task 20: ComM_MainFunction            100 ms  — 現状 NOP（ComMNmVariant=FULL では
  *                                                             [SWS_ComM_00888] によりヒステリシス
  *                                                             タイマ不要。ComM.c 参照）
  *
@@ -57,7 +67,7 @@
  *            10 ms とする（ブロック・CRC・冗長化のオーケストレーションのみで
  *            EEPROM I/O は発生しないため軽量）。MemIf_MainFunction も同じ
  *            10 ms とし、実際の物理バイト書き込み（Fee が 1 呼び出しあたり
- *            1 バイトのみ）を進める。両タスクとも Task 12/17 として同一パス内
+ *            1 バイトのみ）を進める。両タスクとも Task 13/18 として同一パス内
  *            (インデックス昇順) で毎回実行されるため、NvM がジョブを開始した
  *            ティックのうちに MemIf 側の最初の 1 バイトも書かれる。1 ブロック
  *            最大 10 バイト（データ本体+CRC）を 100ms 以内に書き終えられ、
@@ -68,7 +78,7 @@
  *            とする。TX 確認 (CanIf_TxConfirmation) は元々 Can_Write() の
  *            呼び出しと同期していたため、遅延を体感できない範囲に抑える
  *            （詳細は Can.c ファイル冒頭のコメントを参照）。
- *            SecOC_MainFunctionTx は Com_MainFunction と同じ 100 ms とする
+ *            SecOC_MainFunctionTx は Com_MainFunctionTx と同じ 100 ms とする
  *            （周期自体は RX 方向の SecOC_IfRxIndication() とは無関係で、
  *            TX 方向専用のタスク。現在 TX 方向で SecOC を使う PDU は無い
  *            〈SECOC_TX_PDU_COUNT=0、SecOC.c 冒頭コメント参照〉ため、
@@ -88,12 +98,12 @@
  *            単調増加していることを目視確認しやすくしている。
  *            ComM_MainFunction は以前スケジューラに未登録で一度も呼ばれて
  *            いなかった（2026-08 のスペック監査で発見）。現状は
- *            Com_MainFunction/FiM_MainFunction/SecOC_MainFunctionTx と同じ
+ *            Com_MainFunctionRx/Tx/FiM_MainFunction/SecOC_MainFunctionTx と同じ
  *            100 ms ティアに揃えているが、[SWS_ComM_00888] のとおり本プロジェクトの
  *            構成（ComMNmVariant=FULL 相当）では中身は NOP のため、この周期
  *            自体に現状意味はない（詳細は ComM.c 参照）。BswM のタスク
  *            有効/無効制御（BswM_Cfg.h の BSWM_TASK_MASK_*）には含めていない
- *            （Task 18: App_GptDemo_Run と同じ扱い。NOP である以上、RUN/
+ *            （Task 19: App_GptDemo_Run と同じ扱い。NOP である以上、RUN/
  *            SHUTDOWN いずれの状態でも動いていて実害が無いため、既存の
  *            BSWM_TASK_MASK_ALL 等のビットマスクを手計算で拡張するリスクを
  *            負う理由がない）。
@@ -115,7 +125,8 @@ extern void CanTp_MainFunction(void);
 extern void Rte_ScheduleRunnables(void);
 extern void Rte_ScheduleWarningIndicator(void);
 extern void CanSM_MainFunction(void);
-extern void Com_MainFunction(void);
+extern void Com_MainFunctionRx(void);
+extern void Com_MainFunctionTx(void);
 extern void IoHwAb_MainFunction(void);
 extern void WdgM_MainFunction(void);
 extern void Dcm_MainFunction(void);
@@ -143,21 +154,22 @@ static const Os_TaskType Os_TaskTable[OS_TASK_COUNT] =
     /* Task 2 */ { Rte_ScheduleRunnables,        3000U },  /* 3000 ms : エンジン Runnable         */
     /* Task 3 */ { Rte_ScheduleWarningIndicator, 500U  },  /* 500 ms  : 警告灯 Runnable           */
     /* Task 4 */ { CanSM_MainFunction,           10U   },  /* 10 ms   : BusOff 回復タイマ監視     */
-    /* Task 5 */ { Com_MainFunction,             100U  },  /* 100 ms  : COM 受信デッドライン監視  */
-    /* Task 6 */ { IoHwAb_MainFunction,          10U   },  /* 10 ms   : ボタンデバウンスサンプリング */
-    /* Task 7 */ { WdgM_MainFunction,            6000U },  /* 6000 ms : Alive/Logical/Deadline 判定 */
-    /* Task 8 */ { Dcm_MainFunction,             1000U },  /* 1000 ms : S3 セッションタイムアウト監視 */
-    /* Task 9 */ { FiM_MainFunction,             100U  },  /* 100 ms  : 機能抑止状態の再評価      */
-    /* Task 10 */ { WdgM_TriggerHwWatchdog,      1000U },  /* 1000 ms : HW ウォッチドッグ trigger */
-    /* Task 11 */ { Nm_MainFunction,             1000U },  /* 1000 ms : NM フレーム送信           */
-    /* Task 12 */ { NvM_MainFunction,              10U  },  /* 10 ms   : 保留中 EEPROM ジョブ処理  */
-    /* Task 13 */ { Can_MainFunction_Write,          1U  },  /* 1 ms    : 保留中 TX 確認をドレイン  */
-    /* Task 14 */ { Can_MainFunction_BusOff,         1U  },  /* 1 ms    : Bus-Off ポーリング        */
-    /* Task 15 */ { Can_MainFunction_Wakeup,         1U  },  /* 1 ms    : ウェイクアップペンディングのドレイン */
-    /* Task 16 */ { SecOC_MainFunctionTx,            100U  },  /* 100 ms  : TX Secured I-PDU の Freshness/MAC 計算・送信 */
-    /* Task 17 */ { MemIf_MainFunction,             10U  },  /* 10 ms   : 保留中 EEPROM ジョブ処理 (Fee 物理バイト書き込み) */
-    /* Task 18 */ { App_GptDemo_Run,              2000U  },  /* 2000 ms : Gpt 実 HW タイマ通知カウンタのログ出力 (動作確認用) */
-    /* Task 19 */ { ComM_MainFunction,             100U  }   /* 100 ms  : 現状 NOP（SWS_ComM_00888、ComM.c 参照） */
+    /* Task 5 */ { Com_MainFunctionRx,           100U  },  /* 100 ms  : COM 受信デッドライン監視  */
+    /* Task 6 */ { Com_MainFunctionTx,           100U  },  /* 100 ms  : TX送信スケジューリング・送信確認監視 */
+    /* Task 7 */ { IoHwAb_MainFunction,          10U   },  /* 10 ms   : ボタンデバウンスサンプリング */
+    /* Task 8 */ { WdgM_MainFunction,            6000U },  /* 6000 ms : Alive/Logical/Deadline 判定 */
+    /* Task 9 */ { Dcm_MainFunction,             1000U },  /* 1000 ms : S3 セッションタイムアウト監視 */
+    /* Task 10 */ { FiM_MainFunction,             100U  },  /* 100 ms  : 機能抑止状態の再評価      */
+    /* Task 11 */ { WdgM_TriggerHwWatchdog,      1000U },  /* 1000 ms : HW ウォッチドッグ trigger */
+    /* Task 12 */ { Nm_MainFunction,             1000U },  /* 1000 ms : NM フレーム送信           */
+    /* Task 13 */ { NvM_MainFunction,              10U  },  /* 10 ms   : 保留中 EEPROM ジョブ処理  */
+    /* Task 14 */ { Can_MainFunction_Write,          1U  },  /* 1 ms    : 保留中 TX 確認をドレイン  */
+    /* Task 15 */ { Can_MainFunction_BusOff,         1U  },  /* 1 ms    : Bus-Off ポーリング        */
+    /* Task 16 */ { Can_MainFunction_Wakeup,         1U  },  /* 1 ms    : ウェイクアップペンディングのドレイン */
+    /* Task 17 */ { SecOC_MainFunctionTx,            100U  },  /* 100 ms  : TX Secured I-PDU の Freshness/MAC 計算・送信 */
+    /* Task 18 */ { MemIf_MainFunction,             10U  },  /* 10 ms   : 保留中 EEPROM ジョブ処理 (Fee 物理バイト書き込み) */
+    /* Task 19 */ { App_GptDemo_Run,              2000U  },  /* 2000 ms : Gpt 実 HW タイマ通知カウンタのログ出力 (動作確認用) */
+    /* Task 20 */ { ComM_MainFunction,             100U  }   /* 100 ms  : 現状 NOP（SWS_ComM_00888、ComM.c 参照） */
 };
 
 /* -----------------------------------------------------------------------

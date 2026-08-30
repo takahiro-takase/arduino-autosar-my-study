@@ -5,12 +5,12 @@
  *
  * \details README の該当コールチェーン図：
  *
- *              Com_MainFunction()
+ *              Com_MainFunctionTx()
  *                → TxTransformCbk があれば呼ぶ    ← Rte_COMTransform_E2EHealthStatus()
  *                                                    → E2EXf_TransformP05() → E2E_P05Protect()
  *                → PduR_Transmit() → CanIf_Transmit() → Can_Write()   （以降は「通常」と同じ）
  *
- *          「通常」の Tx チェーン（Com_MainFunction() → PduR_Transmit() →
+ *          「通常」の Tx チェーン（Com_MainFunctionTx() → PduR_Transmit() →
  *          CanIf_Transmit() → Can_Write()）は Bsw_TxChain_test.cpp が既に検証
  *          済みのため、本テストは TxTransformCbk フックの部分（E2EXf_TransformP05()
  *          → E2E_P05Protect() が Counter・CRC16 を正しく書き込むこと）に絞る。
@@ -237,7 +237,7 @@ TEST_F(Bsw_TxE2EChain_Test, ComMainFunction_OK_E2EProtectsAndReachesCanHw)
     E2E_P05Protect(&kRefE2EHealthStatusCfg, &refState, refBuf, 5U);
 
     /* 実行 (Act) */
-    Com_MainFunction();
+    Com_MainFunctionTx();
 
     /* 評価 (Assert) */
     EXPECT_EQ(FakeCanHw_SendCount, 1U);
@@ -254,12 +254,12 @@ TEST_F(Bsw_TxE2EChain_Test, ComMainFunction_OK_CounterIncrementsAcrossSends)
 
     /* 実行 (Act) 1 回目 */
     Com_SendSignal(0U, &value);
-    Com_MainFunction();
+    Com_MainFunctionTx();
     const uint8 firstCounter = FakeCanHw_LastSendData[2];  // Offset+2 = Counter
 
     /* 実行 (Act) 2 回目 */
     Com_SendSignal(0U, &value);
-    Com_MainFunction();
+    Com_MainFunctionTx();
     const uint8 secondCounter = FakeCanHw_LastSendData[2];
 
     /* 評価 (Assert) */

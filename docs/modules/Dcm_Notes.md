@@ -266,12 +266,12 @@ Nm モジュール（CAN 0x400 送信）を制御します。診断通信その�
 
 **Rx 無効時の挙動**: `Com_RxIndication()` が受信フレームを無視します（バッファ・
 タイムアウトタイマとも更新しません）。**Tx 無効時の挙動**: DIRECT/MIXED/PERIODIC
-いずれの I-PDU も、実送信（`PduR_Transmit()`）は `Com_MainFunction()` 内で行われ、
+いずれの I-PDU も、実送信（`PduR_Transmit()`）は `Com_MainFunctionTx()` 内で行われ、
 `Com_TxEnabled==0` の間はここで抑制されます（詳細は次項）。TX バッファの値自体は
 `Com_SendSignal()` が既に更新済みのため失われず、再開後に実際に値が変化した時、
 または通常の周期フロアに新たに達した時に初めて送信されます。
 
-**Rx 無効中の受信デッドライン監視**: `Com_MainFunction()`（受信デッドライン監視、
+**Rx 無効中の受信デッドライン監視**: `Com_MainFunctionRx()`（受信デッドライン監視、
 100ms 周期）は `Com_RxEnabled==0` の間、監視自体を評価しない
 （SWS_Com_00684/SWS_Com_00685: `Com_IpduGroupStop` により I-PDU が止められた
 間は受信処理だけでなくデッドライン監視自体も無効化する要求への対応）。
@@ -285,11 +285,11 @@ Nm モジュール（CAN 0x400 送信）を制御します。診断通信その�
 即座にタイムアウト判定される、ということは起きない。
 
 **Tx 無効中の送信トリガー破棄**: DIRECT/MIXED I-PDU の変化検知は `Com_TxPending[]`
-（「次回 `Com_MainFunction()` で送信すべき変化あり」フラグ）に記録されます。
-`Com_MainFunction()` はこのフラグが立っている（または周期フロアに達した）I-PDU を
+（「次回 `Com_MainFunctionTx()` で送信すべき変化あり」フラグ）に記録されます。
+`Com_MainFunctionTx()` はこのフラグが立っている（または周期フロアに達した）I-PDU を
 見つけるたび、`Com_TxEnabled` の値によらず無条件に `Com_TxPending[]` をクリアし
 `Com_TxLastSentMs` を更新した**上で**、`Com_TxEnabled==0` なら実送信をスキップします。
-つまり Tx 抑制中に変化があっても、そのフラグは Com_MainFunction() の次回巡回で
+つまり Tx 抑制中に変化があっても、そのフラグは Com_MainFunctionTx() の次回巡回で
 消費されて捨てられるだけで、後から蒸し返されることはありません
 （SWS_Com_00777「停止中の I-PDU の送信要求はキャンセルしなければならない」、
 SWS_Com_00334「停止中に発生した送信トリガーは保持されず、再開しても古い

@@ -41,7 +41,7 @@ static void E2EMon_Publish(uint8 crcErr, uint8 seqErr)
 
     /* 値をセットするだけで、送信タイミングには一切関与しない。実際に
      * CAN へ送信するかどうか・いつ送信するかは Com 自身の PERIODIC
-     * モード（Com_MainFunction()）が独立に判断する。 */
+     * モード（Com_MainFunctionTx()）が独立に判断する。 */
     (void)Com_SendSignal(COM_SIGNAL_E2E_CRC_ERR_COUNT, &E2EMon_CrcErrorCount);
     (void)Com_SendSignal(COM_SIGNAL_E2E_SEQ_ERR_COUNT, &E2EMon_SequenceErrorCount);
 }
