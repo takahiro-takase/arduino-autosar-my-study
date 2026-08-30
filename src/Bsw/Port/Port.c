@@ -22,6 +22,31 @@
 
 #define TAG "Port"
 
+typedef struct
+{
+    Port_PinType          Pin;
+    Port_PinDirectionType Direction;
+} Port_PinConfigType;
+
+/** PORT_PIN_COUNT と要素数が食い違えば初期化子の過不足でコンパイルエラーになる
+ *  （Port_Cfg.h にピンを追加する際は両方を同時に更新する必要がある）。 */
+static const Port_PinConfigType Port_PinConfig[PORT_PIN_COUNT] =
+{
+    { PORT_PIN_LED_RUNNING, PORT_PIN_OUT },
+    { PORT_PIN_LED_FAULT,   PORT_PIN_OUT },
+    { PORT_PIN_LED_WARNING, PORT_PIN_OUT },
+    { PORT_PIN_BUTTON,      PORT_PIN_IN_PULLUP },
+};
+
+/** Port_Init() と Port_RefreshPortDirection() の両方から呼ばれる（Port.h 参照）。 */
+static void Port_ApplyConfiguredDirections(void)
+{
+    for (uint8 i = 0U; i < PORT_PIN_COUNT; i++)
+    {
+        Port_Hw_SetPinDirection(Port_PinConfig[i].Pin, Port_PinConfig[i].Direction);
+    }
+}
+
 /**
  * \brief   Port モジュールを初期化する。
  *
@@ -36,11 +61,22 @@ void Port_Init(const Port_ConfigType* ConfigPtr)
 {
     DET_LOGT(TAG, "called");
     (void)ConfigPtr; /* 本プロジェクトは Port_Cfg.h の静的テーブルを直接参照する（Port.h 参照） */
-    Port_Hw_SetPinDirection(PORT_PIN_LED_RUNNING, PORT_PIN_OUT);
-    Port_Hw_SetPinDirection(PORT_PIN_LED_FAULT,   PORT_PIN_OUT);
-    Port_Hw_SetPinDirection(PORT_PIN_LED_WARNING,  PORT_PIN_OUT);
-    Port_Hw_SetPinDirection(PORT_PIN_BUTTON,       PORT_PIN_IN_PULLUP);
+    Port_ApplyConfiguredDirections();
     DET_LOGI(TAG, "Init pins=%u", (unsigned)PORT_PIN_COUNT);
+}
+
+/**
+ * \brief   全ピンの方向を設定方向へ再適用する（詳細は Port.h 参照）。
+ *
+ * \ServiceID      {0x02}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void Port_RefreshPortDirection(void)
+{
+    DET_LOGT(TAG, "called");
+    Port_ApplyConfiguredDirections();
+    DET_LOGI(TAG, "RefreshPortDirection pins=%u", (unsigned)PORT_PIN_COUNT);
 }
 
 /**
