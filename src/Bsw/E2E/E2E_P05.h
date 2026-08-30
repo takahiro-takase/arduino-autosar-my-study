@@ -63,6 +63,7 @@
 #define E2E_P05_H
 
 #include "Std_Types.h"
+#include "E2E_Types.h"
 
 /* -----------------------------------------------------------------------
  * E2E P05 チェック結果ステータス
@@ -122,9 +123,13 @@ typedef struct
 
 /**
  * \brief  E2E P05 送信ステートを初期化する。
+ *
  * \param[out] State  初期化する送信ステート。NULL 禁止。
+ * \return     E2E_E_OK: 正常完了。E2E_E_INPUTERR_NULL: State が NULL。
+ *
+ * \ServiceID      {0x27}
  */
-void E2E_P05ProtectInit(E2E_P05ProtectStateType *State);
+Std_ReturnType E2E_P05ProtectInit(E2E_P05ProtectStateType *State);
 
 /**
  * \brief  送信データに E2E P05 保護（Counter・CRC16）を付与する。
@@ -139,19 +144,31 @@ void E2E_P05ProtectInit(E2E_P05ProtectStateType *State);
  * \param[in]     Config  E2E P05 設定構造体。NULL 禁止。
  * \param[in,out] State   送信ステート。NULL 禁止。
  * \param[in,out] Data    送信 PDU バッファ（Counter/CRC バイトを上書きする）。NULL 禁止。
- * \param[in]     Length  送信 PDU バイト数。Config->DataLength 未満の場合は何もしない。
+ * \param[in]     Length  送信 PDU バイト数（実仕様どおり uint16。本プロジェクトの
+ *                        フレーム長は uint8 に収まるが、シグネチャは
+ *                        SWS_E2E_00047 の Syntax に合わせる）。
+ * \return        E2E_E_OK: 正常完了。E2E_E_INPUTERR_NULL: Config/State/Data
+ *                のいずれかが NULL。E2E_E_INPUTERR_WRONG: Length が
+ *                Config->DataLength 未満（何も書き込まない）。
+ *
+ * \AUTOSARReq     {SWS_E2E_00405}
+ * \ServiceID      {0x26}
  */
-void E2E_P05Protect(
+Std_ReturnType E2E_P05Protect(
     const E2E_P05ConfigType *Config,
     E2E_P05ProtectStateType *State,
     uint8                   *Data,
-    uint8                    Length);
+    uint16                   Length);
 
 /**
  * \brief  E2E P05 受信ステートを初期化する。
+ *
  * \param[out] State  初期化する受信ステート。NULL 禁止。
+ * \return     E2E_E_OK: 正常完了。E2E_E_INPUTERR_NULL: State が NULL。
+ *
+ * \ServiceID      {0x29}
  */
-void E2E_P05CheckInit(E2E_P05CheckStateType *State);
+Std_ReturnType E2E_P05CheckInit(E2E_P05CheckStateType *State);
 
 /**
  * \brief  受信データの E2E P05 チェックを実行する。
@@ -161,17 +178,25 @@ void E2E_P05CheckInit(E2E_P05CheckStateType *State);
  *          来た時点で通常通り判定する、E2E_P01Check() と同じ方針）。
  *          Profile01 と異なり INITIAL 相当の特別扱いは無く、初回呼び出しも
  *          通常の delta 計算にそのまま乗る（ヘッダ冒頭コメント参照）。
+ *          検証結果（6 状態）は本関数の戻り値ではなく State->Status に
+ *          書き込まれる。
  *
  * \param[in]  Config  E2E P05 設定構造体。NULL 禁止。
  * \param[io]  State   受信ステート。NULL 禁止。
  * \param[in]  Data    受信 PDU バッファ。NULL 禁止。
- * \param[in]  Length  受信 PDU バイト数。Config->DataLength と一致しない場合は ERROR。
- * \return     E2E_P05StatusType チェック結果。
+ * \param[in]  Length  受信 PDU バイト数（実仕様どおり uint16。上記 Protect
+ *                     と同じ理由）。Config->DataLength と一致しない場合は
+ *                     State->Status が ERROR になる。
+ * \return     E2E_E_OK: チェックを実行した（結果は State->Status 参照）。
+ *             E2E_E_INPUTERR_NULL: Config/State/Data のいずれかが NULL。
+ *
+ * \AUTOSARReq     {SWS_E2E_00411}
+ * \ServiceID      {0x28}
  */
-E2E_P05StatusType E2E_P05Check(
+Std_ReturnType E2E_P05Check(
     const E2E_P05ConfigType *Config,
     E2E_P05CheckStateType   *State,
     const uint8              *Data,
-    uint8                     Length);
+    uint16                    Length);
 
 #endif /* E2E_P05_H */

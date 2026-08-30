@@ -28,6 +28,7 @@
 #define E2E_P01_H
 
 #include "Std_Types.h"
+#include "E2E_Types.h"
 
 /* -----------------------------------------------------------------------
  * E2E P01 チェック結果ステータス
@@ -35,7 +36,10 @@
  * 値は公式仕様のビットパターンと一致させている（ビット OR で複数状態を
  * 表現する用途を想定した設計だが、本実装では単一値のみ返す）。
  * ERROR (0x80) のみ本実装独自の拡張で、NULL ポインタ・DLC 不足など
- * 入力パラメータ異常を表す（公式仕様では戻り値型が別になっている箇所）。
+ * 入力パラメータ異常を表す。公式仕様ではこの 8 状態は関数の戻り値
+ * （E2E_P01StatusType）ではなく E2E_P01CheckStateType.Status
+ * （inout パラメータ）で返される。関数自体の戻り値は E2E_Types.h の
+ * Std_ReturnType 拡張値（E2E_E_OK 等）である（下記 API 参照）。
  * ----------------------------------------------------------------------- */
 typedef enum
 {
@@ -106,32 +110,48 @@ typedef struct
 
 /**
  * \brief  E2E P01 受信ステートを初期化する。
+ *
  * \param[out] State  初期化する受信ステート。NULL 禁止。
+ * \return     E2E_E_OK: 正常完了。E2E_E_INPUTERR_NULL: State が NULL。
+ *
+ * \AUTOSARReq     {SWS_E2E_00390}
+ * \ServiceID      {0x1c}
  */
-void E2E_P01CheckInit(E2E_P01CheckStateType *State);
+Std_ReturnType E2E_P01CheckInit(E2E_P01CheckStateType *State);
 
 /**
  * \brief  受信データの E2E P01 チェックを実行する。
  *
+ * \details 検証結果（8 状態）は本関数の戻り値ではなく State->Status に
+ *          書き込まれる。呼び出し元は Data が Config->DataLength バイト
+ *          以上の有効な領域を指すことを保証すること（[SWS_E2E_00047] の
+ *          Length 引数は本実装では持たず、実仕様どおり Config->DataLength
+ *          が唯一の長さ情報である）。
+ *
  * \param[in]  Config  E2E P01 設定構造体。NULL 禁止。
  * \param[io]  State   受信ステート。NULL 禁止。
- * \param[in]  Data    受信 PDU バッファ。NULL 禁止。
- * \param[in]  Length  受信 PDU バイト数。
- * \return     E2E_P01StatusType チェック結果。8 状態のうち NONEWDATA は
- *             本実装の呼び出し方式（フレーム受信時にのみ呼ばれる）では
- *             到達しない。
+ * \param[in]  Data    受信 PDU バッファ。NULL 禁止、Config->DataLength
+ *                     バイト以上であること。
+ * \return     E2E_E_OK: チェックを実行した（結果は State->Status 参照）。
+ *             E2E_E_INPUTERR_NULL: Config/State/Data のいずれかが NULL。
+ *
+ * \AUTOSARReq     {SWS_E2E_00047}
+ * \ServiceID      {0x02}
  */
-E2E_P01StatusType E2E_P01Check(
+Std_ReturnType E2E_P01Check(
     const E2E_P01ConfigType *Config,
     E2E_P01CheckStateType   *State,
-    const uint8             *Data,
-    uint8                    Length);
+    const uint8             *Data);
 
 /**
  * \brief  E2E P01 送信ステートを初期化する。
+ *
  * \param[out] State  初期化する送信ステート。NULL 禁止。
+ * \return     E2E_E_OK: 正常完了。E2E_E_INPUTERR_NULL: State が NULL。
+ *
+ * \ServiceID      {0x1b}
  */
-void E2E_P01ProtectInit(E2E_P01ProtectStateType *State);
+Std_ReturnType E2E_P01ProtectInit(E2E_P01ProtectStateType *State);
 
 /**
  * \brief  送信データに E2E P01 保護（Counter・CRC8）を付与する。
@@ -140,17 +160,22 @@ void E2E_P01ProtectInit(E2E_P01ProtectStateType *State);
  *          DataID・Data[0..CRCOffset-1]・Data[CRCOffset+1..DataLength-1]
  *          (CRC バイト自身を除く PDU 全体) から CRC8 を計算して
  *          Data[Config->CRCOffset] へ書き込む。呼び出しごとに Counter を
- *          +1 する（4bit リングカウンタ）。
+ *          +1 する（4bit リングカウンタ）。呼び出し元は Data が
+ *          Config->DataLength バイト以上の有効な領域を指すことを
+ *          保証すること（E2E_P01Check() と同じ理由で Length 引数は持たない）。
  *
  * \param[in]     Config  E2E P01 設定構造体。NULL 禁止。
  * \param[in,out] State   送信ステート。NULL 禁止。
- * \param[in,out] Data    送信 PDU バッファ（Counter/CRC バイトを上書きする）。NULL 禁止。
- * \param[in]     Length  送信 PDU バイト数。Config->DataLength 未満の場合は何もしない。
+ * \param[in,out] Data    送信 PDU バッファ（Counter/CRC バイトを上書きする）。
+ *                        NULL 禁止、Config->DataLength バイト以上であること。
+ * \return        E2E_E_OK: 正常完了。E2E_E_INPUTERR_NULL: Config/State/Data
+ *                のいずれかが NULL。
+ *
+ * \ServiceID      {0x01}
  */
-void E2E_P01Protect(
+Std_ReturnType E2E_P01Protect(
     const E2E_P01ConfigType *Config,
     E2E_P01ProtectStateType *State,
-    uint8                   *Data,
-    uint8                    Length);
+    uint8                   *Data);
 
 #endif /* E2E_P01_H */
