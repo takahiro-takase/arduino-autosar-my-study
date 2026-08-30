@@ -234,7 +234,7 @@ static void CanSM_SetPduModeOnlineBestEffort(const char* callerTag)
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
  */
-Std_ReturnType CanSM_RequestComMode(CanSM_NetworkHandleType network, ComM_ModeType mode)
+Std_ReturnType CanSM_RequestComMode(NetworkHandleType network, ComM_ModeType mode)
 {
     DET_LOGT(TAG, "called");
 
@@ -351,7 +351,7 @@ Std_ReturnType CanSM_RequestComMode(CanSM_NetworkHandleType network, ComM_ModeTy
  * \Reentrancy     {Reentrant}
  * \Synchronicity  {Synchronous}
  */
-Std_ReturnType CanSM_GetCurrentComMode(CanSM_NetworkHandleType network, ComM_ModeType* mode)
+Std_ReturnType CanSM_GetCurrentComMode(NetworkHandleType network, ComM_ModeType* mode)
 {
     DET_LOGT(TAG, "called");
 

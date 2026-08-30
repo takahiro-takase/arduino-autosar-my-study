@@ -61,8 +61,11 @@ typedef struct E2EXf_ConfigType_Tag E2EXf_ConfigType;
 /** AUTOSAR E2E Transformer の ModuleId（AUTOSAR_TR_BSWModuleList 参照、固定値 176） */
 #define E2EXF_MODULE_ID  176U
 
-/** 開発エラーコード（SWS_E2EXf_00137 表より、実際に使用する分のみ） */
+/** 開発エラーコード（SWS_E2EXf_00137 表より、実際に使用する分のみ）。
+ *  E2EXF_E_PARAM は非ポインタ引数（Length 等）の異常、E2EXF_E_PARAM_POINTER
+ *  はポインタ引数の NULL に対応する（表の記載どおり区別する）。 */
 #define E2EXF_E_UNINIT        0x01U
+#define E2EXF_E_PARAM         0x03U
 #define E2EXF_E_PARAM_POINTER 0x04U
 
 /** ApiId（値は SWS 8.x 章の「Service ID[hex]」記載を実測して確認済み） */

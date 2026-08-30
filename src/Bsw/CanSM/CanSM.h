@@ -30,15 +30,13 @@
 #define CANSM_H
 
 #include "Std_Types.h"
+#include "ComStack_Types.h"
 #include "ComM.h"
 #include "CanSM_Cfg.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-/** ネットワークハンドル型 */
-typedef uint8 CanSM_NetworkHandleType;
 
 /**
  * \brief   CanSM_Init() の設定引数型（不透明型）。
@@ -96,7 +94,7 @@ void CanSM_DeInit(void);
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
  */
-Std_ReturnType CanSM_RequestComMode(CanSM_NetworkHandleType network, ComM_ModeType mode);
+Std_ReturnType CanSM_RequestComMode(NetworkHandleType network, ComM_ModeType mode);
 
 /**
  * \brief   ネットワークの現在の通信モードを取得する。
@@ -111,7 +109,7 @@ Std_ReturnType CanSM_RequestComMode(CanSM_NetworkHandleType network, ComM_ModeTy
  * \Reentrancy     {Reentrant}
  * \Synchronicity  {Synchronous}
  */
-Std_ReturnType CanSM_GetCurrentComMode(CanSM_NetworkHandleType network, ComM_ModeType* mode);
+Std_ReturnType CanSM_GetCurrentComMode(NetworkHandleType network, ComM_ModeType* mode);
 
 /**
  * \brief   Bus-Off 通知コールバック（CanIf から呼び出される）。

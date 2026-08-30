@@ -68,14 +68,32 @@ Std_ReturnType E2EXf_InverseTransform(const E2EXf_RxConfigType* Config, const ui
         return E_NOT_OK;
     }
 
-    if (Config == NULL || Buffer == NULL)
+    if (Config == NULL || Config->E2EConfig == NULL || Config->CheckState == NULL || Buffer == NULL)
     {
         Det_ReportError(E2EXF_MODULE_ID, 0U, E2EXF_API_ID_INVERSE_TRANSFORM, E2EXF_E_PARAM_POINTER);
         *CheckStatus = E2E_P01STATUS_ERROR;
         return E_NOT_OK;
     }
 
-    const E2E_P01StatusType status = E2E_P01Check(Config->E2EConfig, Config->CheckState, Buffer, Length);
+    /* E2E_P01Check() は SWS_E2E_00047 準拠で Length 引数を持たないため
+     * （Config->DataLength のみが唯一の長さ情報）、呼び出し元がここで
+     * バッファ長を検証する。 */
+    if (Length < Config->E2EConfig->DataLength)
+    {
+        Det_ReportError(E2EXF_MODULE_ID, 0U, E2EXF_API_ID_INVERSE_TRANSFORM, E2EXF_E_PARAM);
+        *CheckStatus = E2E_P01STATUS_ERROR;
+        return E_NOT_OK;
+    }
+
+    if (E2E_P01Check(Config->E2EConfig, Config->CheckState, Buffer) != E2E_E_OK)
+    {
+        /* Config->E2EConfig/CheckState/Buffer はここまでで NULL でないことを
+         * 確認済みのため、通常は到達しない（E2E_E_INPUTERR_NULL の防御）。 */
+        Det_ReportError(E2EXF_MODULE_ID, 0U, E2EXF_API_ID_INVERSE_TRANSFORM, E2EXF_E_PARAM_POINTER);
+        *CheckStatus = E2E_P01STATUS_ERROR;
+        return E_NOT_OK;
+    }
+    const E2E_P01StatusType status = Config->CheckState->Status;
     *CheckStatus = status;
 
     const uint8 acceptable =
@@ -109,14 +127,22 @@ Std_ReturnType E2EXf_InverseTransformP05(const E2EXf_RxConfigTypeP05* Config, co
         return E_NOT_OK;
     }
 
-    if (Config == NULL || Buffer == NULL)
+    if (Config == NULL || Config->E2EConfig == NULL || Config->CheckState == NULL || Buffer == NULL)
     {
         Det_ReportError(E2EXF_MODULE_ID, 0U, E2EXF_API_ID_INVERSE_TRANSFORM, E2EXF_E_PARAM_POINTER);
         *CheckStatus = E2E_P05STATUS_ERROR;
         return E_NOT_OK;
     }
 
-    E2E_P05StatusType status = E2E_P05Check(Config->E2EConfig, Config->CheckState, Buffer, Length);
+    if (E2E_P05Check(Config->E2EConfig, Config->CheckState, Buffer, Length) != E2E_E_OK)
+    {
+        /* Config->E2EConfig/CheckState/Buffer はここまでで NULL でないことを
+         * 確認済みのため、通常は到達しない（E2E_E_INPUTERR_NULL の防御）。 */
+        Det_ReportError(E2EXF_MODULE_ID, 0U, E2EXF_API_ID_INVERSE_TRANSFORM, E2EXF_E_PARAM_POINTER);
+        *CheckStatus = E2E_P05STATUS_ERROR;
+        return E_NOT_OK;
+    }
+    E2E_P05StatusType status = Config->CheckState->Status;
 
     /* Profile05にはProfile01のWaitForFirstData/INITIAL相当の初回受信の特別扱いが
      * 無い(E2E_P05.c は仕様に忠実な実装として意図的にこれを持たない)。しかし
@@ -155,13 +181,22 @@ void E2EXf_Transform(const E2EXf_TxConfigType* Config, uint8* Buffer, uint8 Leng
         return;
     }
 
-    if (Config == NULL || Buffer == NULL)
+    if (Config == NULL || Config->E2EConfig == NULL || Config->ProtectState == NULL || Buffer == NULL)
     {
         Det_ReportError(E2EXF_MODULE_ID, 0U, E2EXF_API_ID_TRANSFORM, E2EXF_E_PARAM_POINTER);
         return;
     }
 
-    E2E_P01Protect(Config->E2EConfig, Config->ProtectState, Buffer, Length);
+    /* E2E_P01Protect() は SWS_E2E_00047 準拠で Length 引数を持たないため
+     * （Config->DataLength のみが唯一の長さ情報）、呼び出し元がここで
+     * バッファ長を検証する（不足時は何もしない、旧実装と同じ挙動）。 */
+    if (Length < Config->E2EConfig->DataLength)
+    {
+        Det_ReportError(E2EXF_MODULE_ID, 0U, E2EXF_API_ID_TRANSFORM, E2EXF_E_PARAM);
+        return;
+    }
+
+    (void)E2E_P01Protect(Config->E2EConfig, Config->ProtectState, Buffer);
 }
 
 void E2EXf_TransformP05(const E2EXf_TxConfigTypeP05* Config, uint8* Buffer, uint8 Length)
@@ -173,13 +208,13 @@ void E2EXf_TransformP05(const E2EXf_TxConfigTypeP05* Config, uint8* Buffer, uint
         return;
     }
 
-    if (Config == NULL || Buffer == NULL)
+    if (Config == NULL || Config->E2EConfig == NULL || Config->ProtectState == NULL || Buffer == NULL)
     {
         Det_ReportError(E2EXF_MODULE_ID, 0U, E2EXF_API_ID_TRANSFORM, E2EXF_E_PARAM_POINTER);
         return;
     }
 
-    E2E_P05Protect(Config->E2EConfig, Config->ProtectState, Buffer, Length);
+    (void)E2E_P05Protect(Config->E2EConfig, Config->ProtectState, Buffer, Length);
 }
 
 void E2EXf_GetVersionInfo(Std_VersionInfoType* versioninfo)

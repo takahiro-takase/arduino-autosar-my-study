@@ -23,6 +23,7 @@
 #include <gtest/gtest.h>
 
 extern "C" {
+#include "E2E_P01.h"
 #include "E2E_P05.h"
 }
 
@@ -119,7 +120,8 @@ TEST_F(E2EP05Test, FirstCheckAfterInitIsRepeatedBecauseBothStartAtCounterZero)
     uint8_t data[5] = {0U, 0U, 0U, 0x01U, 0x02U};
     E2E_P05Protect(&config, &protectState, data, sizeof(data));
 
-    const E2E_P05StatusType status = E2E_P05Check(&config, &checkState, data, sizeof(data));
+    ASSERT_EQ(E2E_P05Check(&config, &checkState, data, sizeof(data)), E2E_E_OK);
+    const E2E_P05StatusType status = checkState.Status;
 
     EXPECT_EQ(status, E2E_P05STATUS_REPEATED);
     EXPECT_EQ(checkState.Counter, 0U);
@@ -138,7 +140,8 @@ TEST_F(E2EP05Test, SecondConsecutiveFrameIsOk)
     E2E_P05Protect(&config, &protectState, frame2, sizeof(frame2));
 
     E2E_P05Check(&config, &checkState, frame1, sizeof(frame1)); /* 1回目: REPEATED */
-    const E2E_P05StatusType status = E2E_P05Check(&config, &checkState, frame2, sizeof(frame2));
+    ASSERT_EQ(E2E_P05Check(&config, &checkState, frame2, sizeof(frame2)), E2E_E_OK);
+    const E2E_P05StatusType status = checkState.Status;
 
     EXPECT_EQ(status, E2E_P05STATUS_OK);
     EXPECT_EQ(checkState.Counter, 1U);
@@ -160,7 +163,8 @@ TEST_F(E2EP05Test, CounterJumpBeyondMaxDeltaIsWrongSequence)
 
     E2E_P05Check(&config, &checkState, frame1, sizeof(frame1)); /* REPEATED、checkState.Counter=0 */
     /* frame2 を飛ばして frame3 (Counter=2) を Check する → delta=2 > MaxDeltaCounter(1) */
-    const E2E_P05StatusType status = E2E_P05Check(&config, &checkState, frame3, sizeof(frame3));
+    ASSERT_EQ(E2E_P05Check(&config, &checkState, frame3, sizeof(frame3)), E2E_E_OK);
+    const E2E_P05StatusType status = checkState.Status;
 
     EXPECT_EQ(status, E2E_P05STATUS_WRONGSEQUENCE);
     EXPECT_EQ(checkState.Counter, 2U); /* WRONGSEQUENCEでも状態は受信値へ更新される (CRC正常なため) */
@@ -179,8 +183,10 @@ TEST_F(E2EP05Test, CounterWrapsFrom0xFFTo0IsRecognizedAsOk)
     E2E_P05Protect(&config, &protectState, frame1, sizeof(frame1));
     E2E_P05Protect(&config, &protectState, frame2, sizeof(frame2));
 
-    EXPECT_EQ(E2E_P05Check(&config, &checkState, frame1, sizeof(frame1)), E2E_P05STATUS_OK);
-    EXPECT_EQ(E2E_P05Check(&config, &checkState, frame2, sizeof(frame2)), E2E_P05STATUS_OK);
+    ASSERT_EQ(E2E_P05Check(&config, &checkState, frame1, sizeof(frame1)), E2E_E_OK);
+    EXPECT_EQ(checkState.Status, E2E_P05STATUS_OK);
+    ASSERT_EQ(E2E_P05Check(&config, &checkState, frame2, sizeof(frame2)), E2E_E_OK);
+    EXPECT_EQ(checkState.Status, E2E_P05STATUS_OK);
     EXPECT_EQ(checkState.Counter, 0U);
 }
 
@@ -194,10 +200,203 @@ TEST_F(E2EP05Test, CrcMismatchReturnsErrorAndDoesNotUpdateState)
 
     uint8_t data[5] = {0U, 0U, 6U, 0U, 0U}; /* Counter=6 だがCRCは未計算(0,0)のまま=不一致 */
 
-    const E2E_P05StatusType status = E2E_P05Check(&config, &checkState, data, sizeof(data));
+    ASSERT_EQ(E2E_P05Check(&config, &checkState, data, sizeof(data)), E2E_E_OK);
+    const E2E_P05StatusType status = checkState.Status;
 
     EXPECT_EQ(status, E2E_P05STATUS_ERROR);
     EXPECT_EQ(checkState.Counter, 5U); /* CRC不一致時は状態を更新しない */
+}
+
+/**
+ * \brief  SWS_E2E_00083 の CRC8 SAE-J1850 (多項式 0x1D、開始値・最終XORとも
+ *         0x00、MSB first) を本テストファイル内で独立に書き起こした参照実装。
+ *         E2E_P01.c の実装をコピーせずゼロから書く（ReferenceCrc16 と同じ方針）。
+ */
+uint8_t ReferenceCrc8(const uint8_t *data, uint8_t len, uint8_t crc)
+{
+    for (uint8_t i = 0; i < len; i++)
+    {
+        crc = static_cast<uint8_t>(crc ^ data[i]);
+        for (uint8_t bit = 0; bit < 8; bit++)
+        {
+            if (crc & 0x80U)
+                crc = static_cast<uint8_t>((crc << 1) ^ 0x1DU);
+            else
+                crc = static_cast<uint8_t>(crc << 1);
+        }
+    }
+    return crc;
+}
+
+/** CRC 計算範囲: DataID(下位→上位) → Data[0..CRCOffset-1] → Data[CRCOffset+1..DataLength-1]
+ *  (CRC バイト自身を除く、SWS_E2E_00082 Figure 7-6 準拠)。 */
+uint8_t ReferenceCrc8ForFrame(const uint8_t *data, uint8_t dataLength, uint8_t crcOffset, uint16_t dataId)
+{
+    uint8_t crc = 0x00U;
+    const uint8_t idLow  = static_cast<uint8_t>(dataId & 0xFFU);
+    const uint8_t idHigh = static_cast<uint8_t>((dataId >> 8U) & 0xFFU);
+    crc = ReferenceCrc8(&idLow,  1U, crc);
+    crc = ReferenceCrc8(&idHigh, 1U, crc);
+    if (crcOffset > 0U)
+        crc = ReferenceCrc8(data, crcOffset, crc);
+    if (static_cast<uint8_t>(crcOffset + 1U) < dataLength)
+        crc = ReferenceCrc8(&data[crcOffset + 1U], static_cast<uint8_t>(dataLength - crcOffset - 1U), crc);
+    return crc;
+}
+
+class E2EP01Test : public ::testing::Test
+{
+protected:
+    E2E_P01ConfigType config;
+
+    void SetUp() override
+    {
+        /* AbsInfo (CAN 0x110, DLC=5) 相当: byte[0]=CRC8, byte[1]=Counter, byte[2-4]=データ */
+        config.DataID          = 0x0110U;
+        config.DataLength       = 5U;
+        config.MaxDeltaCounter  = 1U;
+        config.CounterOffset    = 1U;
+        config.CRCOffset        = 0U;
+        config.SyncCounterInit  = 2U;
+    }
+};
+
+TEST_F(E2EP01Test, ProtectComputesCrcMatchingReferenceImplementationAndStartsAtCounterZero)
+{
+    E2E_P01ProtectStateType state;
+    ASSERT_EQ(E2E_P01ProtectInit(&state), E2E_E_OK);
+
+    uint8_t data[5] = {0U, 0U, 0x12U, 0x34U, 0x56U};
+    ASSERT_EQ(E2E_P01Protect(&config, &state, data), E2E_E_OK);
+
+    const uint8_t expectedCrc = ReferenceCrc8ForFrame(data, config.DataLength, config.CRCOffset, config.DataID);
+    EXPECT_EQ(data[0], expectedCrc);
+    EXPECT_EQ(data[1], 0U); /* 1回目の Counter は 0 */
+}
+
+TEST_F(E2EP01Test, ProtectIncrementsCounterAndWrapsAt14SkippingReservedValue15)
+{
+    E2E_P01ProtectStateType state;
+    ASSERT_EQ(E2E_P01ProtectInit(&state), E2E_E_OK);
+    state.Counter = 14U; /* 折り返し直前 (4bit、15は予約値のためスキップ) */
+
+    uint8_t data[5] = {0U, 0U, 0U, 0U, 0U};
+    ASSERT_EQ(E2E_P01Protect(&config, &state, data), E2E_E_OK);
+
+    EXPECT_EQ(data[1], 14U);      /* 送信された Counter は折り返し前の 14 */
+    EXPECT_EQ(state.Counter, 0U); /* 次回用の内部 Counter は 15 を飛ばして 0 */
+}
+
+TEST_F(E2EP01Test, FirstCheckAfterInitReturnsInitial)
+{
+    E2E_P01ProtectStateType protectState;
+    E2E_P01CheckStateType   checkState;
+    ASSERT_EQ(E2E_P01ProtectInit(&protectState), E2E_E_OK);
+    ASSERT_EQ(E2E_P01CheckInit(&checkState), E2E_E_OK);
+
+    uint8_t data[5] = {0U, 0U, 0x01U, 0x02U, 0x03U};
+    ASSERT_EQ(E2E_P01Protect(&config, &protectState, data), E2E_E_OK);
+
+    ASSERT_EQ(E2E_P01Check(&config, &checkState, data), E2E_E_OK);
+    EXPECT_EQ(checkState.Status, E2E_P01STATUS_INITIAL);
+    EXPECT_EQ(checkState.LastValidCounter, 0U);
+}
+
+TEST_F(E2EP01Test, SecondConsecutiveFrameIsOk)
+{
+    E2E_P01ProtectStateType protectState;
+    E2E_P01CheckStateType   checkState;
+    ASSERT_EQ(E2E_P01ProtectInit(&protectState), E2E_E_OK);
+    ASSERT_EQ(E2E_P01CheckInit(&checkState), E2E_E_OK);
+
+    uint8_t frame1[5] = {0U, 0U, 0U, 0U, 0U};
+    uint8_t frame2[5] = {0U, 0U, 0U, 0U, 0U};
+    ASSERT_EQ(E2E_P01Protect(&config, &protectState, frame1), E2E_E_OK);
+    ASSERT_EQ(E2E_P01Protect(&config, &protectState, frame2), E2E_E_OK);
+
+    ASSERT_EQ(E2E_P01Check(&config, &checkState, frame1), E2E_E_OK); /* INITIAL */
+    ASSERT_EQ(E2E_P01Check(&config, &checkState, frame2), E2E_E_OK);
+
+    EXPECT_EQ(checkState.Status, E2E_P01STATUS_OK);
+    EXPECT_EQ(checkState.LastValidCounter, 1U);
+}
+
+TEST_F(E2EP01Test, CrcMismatchReturnsWrongCrcAndDoesNotUpdateCounter)
+{
+    E2E_P01CheckStateType checkState;
+    ASSERT_EQ(E2E_P01CheckInit(&checkState), E2E_E_OK);
+    checkState.WaitForFirstData = 0U;
+    checkState.LastValidCounter = 3U;
+
+    uint8_t data[5] = {0U, 4U, 0U, 0U, 0U}; /* Counter=4 だが CRC は未計算(0)のまま=不一致 */
+
+    ASSERT_EQ(E2E_P01Check(&config, &checkState, data), E2E_E_OK);
+
+    EXPECT_EQ(checkState.Status, E2E_P01STATUS_WRONGCRC);
+    EXPECT_EQ(checkState.LastValidCounter, 3U); /* CRC不一致時は状態を更新しない */
+}
+
+TEST_F(E2EP01Test, CounterJumpBeyondMaxDeltaTriggersWrongSequenceThenSyncUntilRelocked)
+{
+    E2E_P01ProtectStateType protectState;
+    E2E_P01CheckStateType   checkState;
+    ASSERT_EQ(E2E_P01ProtectInit(&protectState), E2E_E_OK);
+    ASSERT_EQ(E2E_P01CheckInit(&checkState), E2E_E_OK);
+
+    uint8_t frame0[5] = {0U, 0U, 0U, 0U, 0U};
+    ASSERT_EQ(E2E_P01Protect(&config, &protectState, frame0), E2E_E_OK); /* Counter=0 */
+    ASSERT_EQ(E2E_P01Check(&config, &checkState, frame0), E2E_E_OK);     /* INITIAL、基準値=0 */
+
+    protectState.Counter = 3U; /* frame0(基準0)からdelta=3 > MaxDeltaCounter(1) */
+    uint8_t frameJump[5] = {0U, 0U, 0U, 0U, 0U};
+    ASSERT_EQ(E2E_P01Protect(&config, &protectState, frameJump), E2E_E_OK);
+    ASSERT_EQ(E2E_P01Check(&config, &checkState, frameJump), E2E_E_OK);
+
+    EXPECT_EQ(checkState.Status, E2E_P01STATUS_WRONGSEQUENCE);
+    EXPECT_EQ(checkState.LastValidCounter, 3U);
+    EXPECT_EQ(checkState.SyncCounter, config.SyncCounterInit);
+
+    /* 再ロック中 (SyncCounterInit=2回分) は CRC/Counter が正常でも SYNC を返す */
+    for (uint8_t i = 0U; i < config.SyncCounterInit; i++)
+    {
+        uint8_t frame[5] = {0U, 0U, 0U, 0U, 0U};
+        ASSERT_EQ(E2E_P01Protect(&config, &protectState, frame), E2E_E_OK);
+        ASSERT_EQ(E2E_P01Check(&config, &checkState, frame), E2E_E_OK);
+        EXPECT_EQ(checkState.Status, E2E_P01STATUS_SYNC);
+    }
+
+    /* 再ロック完了後は通常の OK に戻る */
+    uint8_t frameRelocked[5] = {0U, 0U, 0U, 0U, 0U};
+    ASSERT_EQ(E2E_P01Protect(&config, &protectState, frameRelocked), E2E_E_OK);
+    ASSERT_EQ(E2E_P01Check(&config, &checkState, frameRelocked), E2E_E_OK);
+    EXPECT_EQ(checkState.Status, E2E_P01STATUS_OK);
+}
+
+TEST_F(E2EP01Test, NullPointerReturnsInputErrNullWithoutTouchingState)
+{
+    E2E_P01CheckStateType   checkState;
+    E2E_P01ProtectStateType protectState;
+    ASSERT_EQ(E2E_P01CheckInit(&checkState), E2E_E_OK);
+    ASSERT_EQ(E2E_P01ProtectInit(&protectState), E2E_E_OK);
+    uint8_t data[5] = {0U, 0U, 0U, 0U, 0U};
+    const E2E_P01CheckStateType   checkStateBefore   = checkState;
+    const E2E_P01ProtectStateType protectStateBefore = protectState;
+
+    EXPECT_EQ(E2E_P01CheckInit(nullptr), E2E_E_INPUTERR_NULL);
+    EXPECT_EQ(E2E_P01ProtectInit(nullptr), E2E_E_INPUTERR_NULL);
+    EXPECT_EQ(E2E_P01Check(nullptr, &checkState, data), E2E_E_INPUTERR_NULL);
+    EXPECT_EQ(E2E_P01Check(&config, nullptr, data), E2E_E_INPUTERR_NULL);
+    EXPECT_EQ(E2E_P01Check(&config, &checkState, nullptr), E2E_E_INPUTERR_NULL);
+    EXPECT_EQ(E2E_P01Protect(nullptr, &protectState, data), E2E_E_INPUTERR_NULL);
+    EXPECT_EQ(E2E_P01Protect(&config, nullptr, data), E2E_E_INPUTERR_NULL);
+    EXPECT_EQ(E2E_P01Protect(&config, &protectState, nullptr), E2E_E_INPUTERR_NULL);
+
+    /* NULL 引数エラー時は State を一切書き換えないこと（テスト名の裏付け） */
+    EXPECT_EQ(checkState.LastValidCounter, checkStateBefore.LastValidCounter);
+    EXPECT_EQ(checkState.Status, checkStateBefore.Status);
+    EXPECT_EQ(checkState.WaitForFirstData, checkStateBefore.WaitForFirstData);
+    EXPECT_EQ(checkState.SyncCounter, checkStateBefore.SyncCounter);
+    EXPECT_EQ(protectState.Counter, protectStateBefore.Counter);
 }
 
 }  // namespace

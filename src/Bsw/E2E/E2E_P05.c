@@ -92,26 +92,27 @@ static uint16 E2E_CalcCrc16Body(const uint8 *Data, uint8 DataLength, uint8 Offse
  * 公開 API
  * ----------------------------------------------------------------------- */
 
-void E2E_P05ProtectInit(E2E_P05ProtectStateType *State)
+Std_ReturnType E2E_P05ProtectInit(E2E_P05ProtectStateType *State)
 {
     DET_LOGT(TAG, "called");
     if (State == NULL)
-        return;
+        return E2E_E_INPUTERR_NULL;
     State->Counter = 0U;
+    return E2E_E_OK;
 }
 
-void E2E_P05Protect(
+Std_ReturnType E2E_P05Protect(
     const E2E_P05ConfigType *Config,
     E2E_P05ProtectStateType *State,
     uint8                   *Data,
-    uint8                    Length)
+    uint16                   Length)
 {
     DET_LOGT(TAG, "called");
     if (Config == NULL || State == NULL || Data == NULL)
-        return;
+        return E2E_E_INPUTERR_NULL;
 
     if (Length < Config->DataLength)
-        return;
+        return E2E_E_INPUTERR_WRONG;
 
     /* Write Counter (SWS_E2E_00405) */
     Data[Config->Offset + 2U] = State->Counter;
@@ -127,26 +128,29 @@ void E2E_P05Protect(
 
     /* Increment Counter (SWS_E2E_00409): uint8 の自然なラップアラウンド (0xFF の次は 0) */
     State->Counter = (uint8)(State->Counter + 1U);
+
+    return E2E_E_OK;
 }
 
-void E2E_P05CheckInit(E2E_P05CheckStateType *State)
+Std_ReturnType E2E_P05CheckInit(E2E_P05CheckStateType *State)
 {
     DET_LOGT(TAG, "called");
     if (State == NULL)
-        return;
+        return E2E_E_INPUTERR_NULL;
     State->Counter = 0U;
     State->Status  = E2E_P05STATUS_NONEWDATA;
+    return E2E_E_OK;
 }
 
-E2E_P05StatusType E2E_P05Check(
+Std_ReturnType E2E_P05Check(
     const E2E_P05ConfigType *Config,
     E2E_P05CheckStateType   *State,
     const uint8              *Data,
-    uint8                     Length)
+    uint16                    Length)
 {
     DET_LOGT(TAG, "called");
     if (Config == NULL || State == NULL)
-        return E2E_P05STATUS_ERROR;
+        return E2E_E_INPUTERR_NULL;
 
     /* Verify inputs (SWS_E2E_00412)。本プロジェクトの呼び出し方式 (フレーム
      * 受信時にのみ Check を呼ぶ) では Data==NULL/Length==0 の組は到達しない
@@ -155,12 +159,12 @@ E2E_P05StatusType E2E_P05Check(
     if (Data == NULL && Length == 0U)
     {
         State->Status = E2E_P05STATUS_NONEWDATA;
-        return State->Status;
+        return E2E_E_OK;
     }
     if (Data == NULL || Length != Config->DataLength)
     {
         State->Status = E2E_P05STATUS_ERROR;
-        return State->Status;
+        return E2E_E_OK;
     }
 
     /* Read Counter/CRC (SWS_E2E_00413/00414) */
@@ -176,7 +180,7 @@ E2E_P05StatusType E2E_P05Check(
             /* CRC 不一致時は Counter 側の状態を一切変更しない
              * (次に CRC が正しいフレームが来た時点で通常通り判定する) */
             State->Status = E2E_P05STATUS_ERROR;
-            return State->Status;
+            return E2E_E_OK;
         }
 
         {
@@ -207,5 +211,5 @@ E2E_P05StatusType E2E_P05Check(
         }
     }
 
-    return State->Status;
+    return E2E_E_OK;
 }

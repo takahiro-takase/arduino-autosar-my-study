@@ -119,33 +119,26 @@ static uint8 E2E_CalcCrc8OverDataExcludingCrcByte(
  * 公開 API
  * ----------------------------------------------------------------------- */
 
-void E2E_P01CheckInit(E2E_P01CheckStateType *State)
+Std_ReturnType E2E_P01CheckInit(E2E_P01CheckStateType *State)
 {
     DET_LOGT(TAG, "called");
     if (State == NULL)
-        return;
+        return E2E_E_INPUTERR_NULL;
     State->LastValidCounter = 0U;
     State->Status           = E2E_P01STATUS_INITIAL;
     State->WaitForFirstData = 1U;
     State->SyncCounter      = 0U;
+    return E2E_E_OK;
 }
 
-E2E_P01StatusType E2E_P01Check(
+Std_ReturnType E2E_P01Check(
     const E2E_P01ConfigType *Config,
     E2E_P01CheckStateType   *State,
-    const uint8             *Data,
-    uint8                    Length)
+    const uint8             *Data)
 {
     DET_LOGT(TAG, "called");
     if (Config == NULL || State == NULL || Data == NULL)
-        return E2E_P01STATUS_ERROR;
-
-    /* DLC 不足は即エラー */
-    if (Length < Config->DataLength)
-    {
-        State->Status = E2E_P01STATUS_ERROR;
-        return E2E_P01STATUS_ERROR;
-    }
+        return E2E_E_INPUTERR_NULL;
 
     /* ------------------------------------------------------------------
      * CRC 検証
@@ -167,7 +160,7 @@ E2E_P01StatusType E2E_P01Check(
             /* CRC 不一致時は Counter 側の状態を一切変更しない
              * (次に CRC が正しいフレームが来た時点で通常通り判定する) */
             State->Status = E2E_P01STATUS_WRONGCRC;
-            return E2E_P01STATUS_WRONGCRC;
+            return E2E_E_OK;
         }
     }
 
@@ -184,7 +177,7 @@ E2E_P01StatusType E2E_P01Check(
             State->WaitForFirstData = 0U;
             State->SyncCounter      = 0U;
             State->Status           = E2E_P01STATUS_INITIAL;
-            return E2E_P01STATUS_INITIAL;
+            return E2E_E_OK;
         }
 
         /* deltaCounter: SWS_E2E_00075 により Profile 1 のカウンタは 0〜14 の
@@ -205,7 +198,7 @@ E2E_P01StatusType E2E_P01Check(
             /* 同一カウンタ = フレーム重複。LastValidCounter・SyncCounter は
              * どちらも維持する (継続性の判定材料が増えたわけではないため) */
             State->Status = E2E_P01STATUS_REPEATED;
-            return E2E_P01STATUS_REPEATED;
+            return E2E_E_OK;
         }
 
         if (delta > Config->MaxDeltaCounter)
@@ -216,7 +209,7 @@ E2E_P01StatusType E2E_P01Check(
             State->LastValidCounter = received;
             State->SyncCounter      = Config->SyncCounterInit;
             State->Status           = E2E_P01STATUS_WRONGSEQUENCE;
-            return E2E_P01STATUS_WRONGSEQUENCE;
+            return E2E_E_OK;
         }
 
         /* delta は 1..MaxDeltaCounter の範囲内 = カウンタとしては正常進行 */
@@ -230,43 +223,40 @@ E2E_P01StatusType E2E_P01Check(
             State->Status = E2E_P01STATUS_SYNC;
             DET_LOGW(TAG, "st=%u sync=%u",
                      (unsigned)State->Status, (unsigned)State->SyncCounter);
-            return E2E_P01STATUS_SYNC;
+            return E2E_E_OK;
         }
 
         if (delta == 1U)
         {
             State->Status = E2E_P01STATUS_OK;
-            return E2E_P01STATUS_OK;
+            return E2E_E_OK;
         }
         else
         {
             /* 1 < delta <= MaxDeltaCounter: 正常だが一部フレームが消失 */
             State->Status = E2E_P01STATUS_OKSOMELOST;
-            return E2E_P01STATUS_OKSOMELOST;
+            return E2E_E_OK;
         }
     }
 }
 
-void E2E_P01ProtectInit(E2E_P01ProtectStateType *State)
+Std_ReturnType E2E_P01ProtectInit(E2E_P01ProtectStateType *State)
 {
     DET_LOGT(TAG, "called");
     if (State == NULL)
-        return;
+        return E2E_E_INPUTERR_NULL;
     State->Counter = 0U;
+    return E2E_E_OK;
 }
 
-void E2E_P01Protect(
+Std_ReturnType E2E_P01Protect(
     const E2E_P01ConfigType *Config,
     E2E_P01ProtectStateType *State,
-    uint8                   *Data,
-    uint8                    Length)
+    uint8                   *Data)
 {
     DET_LOGT(TAG, "called");
     if (Config == NULL || State == NULL || Data == NULL)
-        return;
-
-    if (Length < Config->DataLength)
-        return;
+        return E2E_E_INPUTERR_NULL;
 
     /* Counter 書き込み (下位 4bit のみ使用。今回送信する値を書き込んでから
      * 次回用に進める)。SWS_E2E_00075: 14 (0xE) に達したら次は 0 に戻る
@@ -289,4 +279,6 @@ void E2E_P01Protect(
 
         Data[Config->CRCOffset] = crc;
     }
+
+    return E2E_E_OK;
 }
