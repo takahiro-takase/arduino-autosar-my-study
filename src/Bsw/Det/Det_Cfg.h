@@ -22,4 +22,27 @@
 #  define DET_LOG_LEVEL  LOG_I  /**< 既定値: ERROR/WARN/INFO を出力、TRACE/DEBUG を抑制 */
 #endif
 
+/* -----------------------------------------------------------------------
+ * DET（Default Error Tracer）自身の Det_GetVersionInfo 関連定数
+ *
+ * ModuleId は AUTOSAR_TR_BSWModuleList（Release 4.3.1、docs/ 配下）の
+ * 「List of Basic Software Modules」表で Det に割り当てられた固定値 15。
+ * ----------------------------------------------------------------------- */
+
+/** AUTOSAR Det の ModuleId（AUTOSAR_TR_BSWModuleList 参照、固定値 15） */
+#define DET_MODULE_ID  15U
+
+/** 開発エラーコード（SWS_Det_00301、Det_GetVersionInfo の NULL チェックのみ使用） */
+#define DET_E_PARAM_POINTER  0x01U
+
+/** ApiId（各関数の Doxygen \ServiceID タグと一致させること。SWS_Det_00011 の
+ *  「Service ID[hex]」記載を実測して確認済み） */
+#define DET_API_ID_GET_VERSION_INFO  0x03U
+
+/** バージョン情報（Com/E2EXf/PduR/Port 等の既存モジュールと同じ命名規則） */
+#define DET_VENDOR_ID          0U
+#define DET_SW_MAJOR_VERSION   1U
+#define DET_SW_MINOR_VERSION   0U
+#define DET_SW_PATCH_VERSION   0U
+
 #endif /* DET_CFG_H */

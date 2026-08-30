@@ -126,6 +126,23 @@ void Log_HexStr(char* dst, uint8_t dstSize,
  */
 Std_ReturnType Det_ReportError(uint16 ModuleId, uint8 InstanceId, uint8 ApiId, uint8 ErrorId);
 
+/**
+ * \brief   Det モジュールのバージョン情報を取得する。
+ *
+ * \details 他 BSW モジュールと共通の慣例により、未初期化時でもエラー報告
+ *          しない例外 API のため、初期化状態は確認せず NULL ポインタ
+ *          チェックのみ行う（Det 自身に Init は存在しないため、この点は他
+ *          モジュール以上に自明である）。
+ *
+ * \param[out]  versioninfo  バージョン情報の格納先。NULL 禁止。
+ *
+ * \AUTOSARReq     {SWS_Det_00011}
+ * \ServiceID      {0x03}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void Det_GetVersionInfo(Std_VersionInfoType* versioninfo);
+
 #ifdef __cplusplus
 }
 #endif

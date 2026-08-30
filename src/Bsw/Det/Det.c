@@ -20,6 +20,8 @@
 #include "Det.h"
 #include "Det_Hw.h"
 
+#define TAG "Det"
+
 void Log_Write(LogLevel lvl, const char* tag, const char* func, const char* fmt, ...)
 {
     if (lvl > DET_LOG_LEVEL) return;  /* DET_LOG_LEVEL より重要度が低いログは抑制 */
@@ -58,4 +60,20 @@ void Log_HexStr(char* dst, uint8_t dstSize,
         dst[pos++] = hex[src[i] & 0x0FU];
     }
     dst[pos] = '\0';
+}
+
+void Det_GetVersionInfo(Std_VersionInfoType* versioninfo)
+{
+    DET_LOGT(TAG, "called");
+    if (versioninfo == NULL)
+    {
+        Det_ReportError(DET_MODULE_ID, 0U, DET_API_ID_GET_VERSION_INFO, DET_E_PARAM_POINTER);
+        return;
+    }
+
+    versioninfo->vendorID         = DET_VENDOR_ID;
+    versioninfo->moduleID         = DET_MODULE_ID;
+    versioninfo->sw_major_version = DET_SW_MAJOR_VERSION;
+    versioninfo->sw_minor_version = DET_SW_MINOR_VERSION;
+    versioninfo->sw_patch_version = DET_SW_PATCH_VERSION;
 }
