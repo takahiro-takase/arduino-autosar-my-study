@@ -81,6 +81,22 @@ void Port_Init(const Port_ConfigType* ConfigPtr);
 void Port_SetPinDirection(Port_PinType Pin, Port_PinDirectionType Direction);
 
 /**
+ * \brief   全ピンの方向を設定方向へ再適用する。
+ *
+ * \details [SWS_Port_00060] の通り、全ピンの方向を Port_Cfg.h の設定方向へ
+ *          再適用する。[SWS_Port_00061] は「実行時に変更可能」なピンを
+ *          除外対象と定めるが、本プロジェクトにはその概念が存在しないため
+ *          （Port_SetPinDirection() はどのピンにも無条件で適用可能な設計）、
+ *          除外なしで Port_Init() と同じ全ピンへ再適用する。
+ *
+ * \AUTOSARReq     {SWS_Port_00142}
+ * \ServiceID      {0x02}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void Port_RefreshPortDirection(void);
+
+/**
  * \brief   Port ドライバのバージョン情報を取得する。
  *
  * \details 他 BSW モジュールと共通の慣例により、未初期化時でもエラー報告
