@@ -114,13 +114,13 @@ EcuM_StateType EcuM_GetState(void);
  *
  * \details POST_RUN 状態で呼ばれた場合は RUN へ戻る。
  *          SHUTDOWN 状態で呼ばれた場合も RUN へ戻る（CAN バスのウェイクアップ
- *          経由。CanSM_ControllerWakeup() → ComM_BusSMIndication(FULL_COM) →
+ *          経由。CanSM_ControllerWakeup() → ComM_BusSM_ModeIndication(FULL_COM) →
  *          本関数、という経路を想定）。
  *          STARTUP 状態で呼ばれた場合はビットのみ記録し、
  *          EcuM_Init() 完了時に RUN へ遷移する。
  *          SWS_EcuM_04125: 要求はネストできない。同一ユーザが既に RUN を
  *          要求中に再度呼ぶと DET 相当 (ECUM_E_MULTIPLE_RUN_REQUESTS) を
- *          ログ出力し E_NOT_OK を返す（呼び出し元 ComM_BusSMIndication() は
+ *          ログ出力し E_NOT_OK を返す（呼び出し元 ComM_BusSM_ModeIndication() は
  *          チャネルモードが実際に変化した時のみ本関数を呼ぶことで、この
  *          重複自体をなるべく避けている）。
  *

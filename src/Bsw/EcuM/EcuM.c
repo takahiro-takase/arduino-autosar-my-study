@@ -48,14 +48,14 @@
  *           22. Nm_Init        — CanNm 状態機械初期化 (Bus-Sleep Mode で開始)。
  *                                ComM_RequestComMode(FULL_COM) より必ず前に置くこと。
  *                                同要求は同期的に CanSM_RequestComMode →
- *                                ComM_BusSMIndication(FULL_COM) → Nm_NetworkRequest()
+ *                                ComM_BusSM_ModeIndication(FULL_COM) → Nm_NetworkRequest()
  *                                まで連鎖するため、これより後だと Nm 未初期化のまま
  *                                呼ばれて失敗し、Nm が Bus-Sleep Mode に固着する
  *                                （実機で確認された不具合）
  *           23. ComM_RequestComMode(FULL_COM) — CAN バス通信開始
  *                               （全上位層初期化後に開始することで
  *                                 フレーム到着時の未初期化アクセスを防ぐ。
- *                                 ComM_BusSMIndication 経由で BswM_ExecuteRules が
+ *                                 ComM_BusSM_ModeIndication 経由で BswM_ExecuteRules が
  *                                 同期的に呼ばれるため BswM_Init 済みである必要がある）
  *           24. App_EngineManager_Init — SW-C 初期化
  *           25. IoHwAb_Init    — I/O ハードウェア抽象化層初期化 (LED チャネル設定)
@@ -202,14 +202,14 @@ void EcuM_Init(void)
     CanSM_Init(NULL);                                             /* NO_COM 状態で開始 */
     BswM_Init(&BswM_Config);  /* ComM_Init/ComM_RequestComMode より前に必須:
                                * ComM_RequestComMode() → CanSM_RequestComMode() →
-                               * ComM_BusSMIndication() → BswM_ComM_CurrentMode() →
+                               * ComM_BusSM_ModeIndication() → BswM_ComM_CurrentMode() →
                                * BswM_ExecuteRules() が同期的に連鎖し BswM_Cfg を
                                * 参照するため、これより後に置くと起動毎に
                                * NULL 参照となる。 */
     ComM_Init(NULL);
     Nm_Init(NULL);             /* ComM_RequestComMode() より必ず前に置くこと。
                                * ComM_RequestComMode(FULL_COM) は同期的に
-                               * CanSM_RequestComMode → ComM_BusSMIndication(FULL_COM)
+                               * CanSM_RequestComMode → ComM_BusSM_ModeIndication(FULL_COM)
                                * → Nm_NetworkRequest() まで連鎖するため、ここより後に
                                * 置くと Nm 未初期化のため Nm_NetworkRequest() が
                                * NM_E_UNINIT で失敗し、Nm が Bus-Sleep Mode に
@@ -328,7 +328,7 @@ Std_ReturnType EcuM_RequestRUN(EcuM_UserType user)
         BswM_EcuM_CurrentState(ECUM_STATE_RUN);  /* Rule 0: 全タスク再有効化 */
     }
     /* SHUTDOWN 中に要求が来たら RUN へ戻る（CAN バスのウェイクアップ経由）。
-     * CanSM_ControllerWakeup() → ComM_BusSMIndication(FULL_COM) →
+     * CanSM_ControllerWakeup() → ComM_BusSM_ModeIndication(FULL_COM) →
      * EcuM_RequestRUN(ECUM_USER_COMM) という経路からの復帰を許可する。
      * POST_RUN からの復帰と同じ後処理（チェックポイント基準リセット・
      * HW ウォッチドッグ再有効化・全タスク再有効化）を行う。 */

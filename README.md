@@ -395,7 +395,7 @@ ModuleId の出典は `docs/AUTOSAR_TR_BSWModuleList.pdf`（Release 4.3.1、「L
 │   │   │   ├── SecOC_Cfg.h       # RX/TX Secured I-PDU 数定数
 │   │   │   ├── SecOC_PBCfg.h     # ポストビルド設定宣言（SecOC_Config）
 │   │   │   ├── SecOC_PBCfg.c     # RX/TX Secured I-PDU 設定実体（DataId/オフセット/CsmJobId）
-│   │   │   ├── SecOC.h           # 公開インタフェース（SecOC_IfRxIndication/SecOC_IfTransmit/SecOC_MainFunction）
+│   │   │   ├── SecOC.h           # 公開インタフェース（SecOC_IfRxIndication/SecOC_IfTransmit/SecOC_MainFunctionTx）
 │   │   │   └── SecOC.c           # フレッシュネス検証（RX）／Secured I-PDU 組み立て（TX）。MAC 自体は Csm 経由
 │   │   ├── Port/                 # ピン方向設定（MCAL・Dio と責務を分離）
 │   │   │   ├── Port_Cfg.h        # ピン番号定義（D6/D7/D8 OUTPUT / D9 INPUT_PULLUP）
@@ -767,7 +767,7 @@ EcuM/BswM が関わる箇所は「← EcuM が ComM へ要求」のように図�
 【起動時】
 EcuM_Init → ComM_RequestComMode(FULL_COM)   ← EcuM が ComM へ要求（上→下）
               └→ CanSM_RequestComMode(FULL_COM)
-                   └→ ComM_BusSMIndication(FULL_COM)  ← CanSM が ComM へ通知（下→上）
+                   └→ ComM_BusSM_ModeIndication(FULL_COM)  ← CanSM が ComM へ通知（下→上）
                         └→ EcuM_RequestRUN(ECUM_USER_COMM)
 
 【Bus-Off 検出時（回復試行の前、SWS_CanSM_00521）】
@@ -778,7 +778,7 @@ CanIf_ControllerBusOff → CanSM_ControllerBusOff
    FULL_COM だけを受け付ける設計では回復シーケンスが一切起動せず、
    コントローラが HW 的に Bus-Off し続けてしまう）
   └→ Can_SetControllerMode(CAN_T_STOP)
-       └→ ComM_BusSMIndication(SILENT_COM)  ← CanSM が ComM へ通知（下→上）
+       └→ ComM_BusSM_ModeIndication(SILENT_COM)  ← CanSM が ComM へ通知（下→上）
             （SILENT_COM は EcuM_RequestRUN/ReleaseRUN いずれも呼ばない → RUN 維持）
 
 【Bus-Off 回復試行時（L1/L2 バックオフで無期限に継続）】
@@ -787,14 +787,14 @@ CanSM_MainFunction（10ms タスク）
        └→ 復帰先は Bus-Off 発生時点の状態で分岐する
           （CanSM_BusOffFromPendingSleep フラグ、CanSM.c 参照）
           ├─ 発生時 FULL_COM だった場合: CanSM state → FULL_COM
-          │    └→ ComM_BusSMIndication(FULL_COM)  ← CanSM が ComM へ通知（下→上）
+          │    └→ ComM_BusSM_ModeIndication(FULL_COM)  ← CanSM が ComM へ通知（下→上）
           │         └→ ComM_EcuMRunMode が既に FULL_COMMUNICATION のため
           │            EcuM_RequestRUN() は呼ばない（RUN は Bus-Off 中も維持
           │            されたまま）。Nm へは Nm_NetworkRequest() のみ送る
           └─ 発生時 NO_COM_PENDING_SLEEP だった場合: CanSM state →
                NO_COM_PENDING_SLEEP（FULL_COM へは戻さない。ComM は既に
                NO_COM を要求済みで、戻すと誰も再要求せず取り残されるため）
-               └→ ComM_BusSMIndication(NO_COM)  ← CanSM が ComM へ通知（下→上）
+               └→ ComM_BusSM_ModeIndication(NO_COM)  ← CanSM が ComM へ通知（下→上）
                     └→ ComM_EcuMRunMode が既に NO_COMMUNICATION のため
                        EcuM_ReleaseRUN() は呼ばない（RUN は既にボランタリ
                        スリープ突入時点で解放済み）
@@ -806,7 +806,7 @@ App_EngineManager_Run（3000ms タスク、ENGINE_STATE_OFF が5周期継続）
        └→ ComM_RequestComMode(COMM_USER_0, NO_COM)
             └→ 集約結果が NO_COM（Dcm も extendedSession でない場合のみ）
                  └→ CanSM_RequestComMode(NO_COM) → Can_SetControllerMode(CAN_T_SLEEP)
-                      └→ ComM_BusSMIndication(NO_COM)
+                      └→ ComM_BusSM_ModeIndication(NO_COM)
                            └→ EcuM_ReleaseRUN(ECUM_USER_COMM)
                                 └→ EcuM: RUN → POST_RUN → (5秒後) → SHUTDOWN
 
@@ -825,7 +825,7 @@ Can_MainFunction_Read（Listen-Only になったため通常の RX ドレイン�
   └→ CanIf_RxIndication()                     ← 受信フレームを検出
        └→ CanSM_RxIndication(0)                ← 全受信フレームで無条件に呼ばれる
             └→ CanSM: WAKEUP_VALIDATING → FULL_COM（Can_SetControllerMode(CAN_T_START)）
-                 └→ ComM_BusSMIndication(FULL_COM)
+                 └→ ComM_BusSM_ModeIndication(FULL_COM)
                       └→ EcuM_RequestRUN(ECUM_USER_COMM)
                            └→ EcuM: SHUTDOWN → RUN（全タスク再有効化）
        └→ （同じフレームがそのまま PduR/Com/Dcm 等へも配信される）
@@ -857,7 +857,7 @@ ComM/CanSM/Nm 各モジュールの本プロジェクトでの役割は、上記
 `App_EngineManager_Run()` が `ENGINE_STATE_OFF` の継続を検知して
 `ComM_RequestComMode(COMM_USER_0, NO_COM)` を要求し、ComM の集約結果が実際に
 NO_COM になった場合（`Dcm` も extendedSession でないことが条件）、
-`ComM_BusSMIndication()` が `Nm_NetworkRelease()` を呼びます。ここで CanSM は
+`ComM_BusSM_ModeIndication()` が `Nm_NetworkRelease()` を呼びます。ここで CanSM は
 まだ物理スリープしません。`Nm` が Ready Sleep → Prepare Bus-Sleep → Bus-Sleep
 Mode と自律的に遷移し（他ノードからの NM フレーム受信があればその都度延期
 される）、実際に Bus-Sleep Mode へ到達した時点で `CanSM_NmBusSleepMode()` を
@@ -926,7 +926,7 @@ Can_MainFunction_Read()（1ms 周期、SHUTDOWN 中も動作）:
        → 受信フレームがあれば CanIf_RxIndication() → CanSM_RxIndication(0)
             CANSM_STATE_WAKEUP_VALIDATING 中 ?
               YES → 検証成功: Can_SetControllerMode(CAN_T_START) → CANSM_STATE_FULL_COM
-                     → ComM_BusSMIndication(FULL_COM) → EcuM_RequestRUN
+                     → ComM_BusSM_ModeIndication(FULL_COM) → EcuM_RequestRUN
               NO  → 通常運用中は何もしない
 
 CanSM_MainFunction()（10ms 周期、SHUTDOWN 中も動作）:
@@ -1009,7 +1009,7 @@ baud）を選んで Connect してください。CAN 接続とは完全に独立
 ため、両方同時に接続できます（ただし PlatformIO のシリアルモニタ自体とは同じ COM
 ポートを同時に掴めないため、どちらか一方のみ）。EcuM（`ECU State`表示。
 `ECUM_STATE_RUN`等の`EcuM_StateType`に対応）/ComM（`Comm Mode`表示。
-`ComM.c`の`ComM_BusSMIndication()`が出す`"ch%u ->mode=%u"`ログから数値を抽出し、
+`ComM.c`の`ComM_BusSM_ModeIndication()`が出す`"ch%u ->mode=%u"`ログから数値を抽出し、
 `ComM_ModeType`（NO_COM/SILENT_COM/FULL_COM）へ変換）/CanSM（`->FULL_COM`等の
 ログ行から正規表現で抽出、`docs/modules/CanSM_Notes.md`「状態遷移」参照）の
 最新状態は「ECU 状態」パネルに左から EcuM・ComM・CanSM の順、値は表示位置が
@@ -1440,7 +1440,7 @@ LEVEL は ERROR / WARN  / INFO  / DEBUG の 5 文字固定幅で列が揃いま�
 [10ms] INFO  CanSM: Init                  # NO_COM 状態で初期化
 [11ms] INFO  ComM: Init ch=1
 [12ms] INFO  CanSM: ->FULL_COM            # CanSM_RequestComMode 成功
-[12ms] INFO  ComM: ch0 ->mode=2           # ComM_BusSMIndication(FULL_COM) → EcuM_RequestRUN
+[12ms] INFO  ComM: ch0 ->mode=2           # ComM_BusSM_ModeIndication(FULL_COM) → EcuM_RequestRUN
 [13ms] INFO  Nm: Init ok node=0x01
 [14ms] INFO  AppEng: Init->OFF
 [15ms] INFO  IoHwAb: Init                 # LED 消灯（ピン方向は Port_Init 済み）
@@ -1541,21 +1541,21 @@ LEVEL は ERROR / WARN  / INFO  / DEBUG の 5 文字固定幅で列が揃いま�
 # 5 回連続失敗でソフトウェア Bus-Off 検出（HW Bus-Off の補完）
 [15094ms] WARN  Can: SW BusOff fallback: 5 consecutive TX failures
 [15100ms] WARN  CanIf: ControllerBusOff ch=0
-[15103ms] INFO  ComM: ch0 ->mode=1        # ComM_BusSMIndication(SILENT_COM)。RUN は維持（EcuM_RequestRUN/ReleaseRUN いずれも呼ばれない）
+[15103ms] INFO  ComM: ch0 ->mode=1        # ComM_BusSM_ModeIndication(SILENT_COM)。RUN は維持（EcuM_RequestRUN/ReleaseRUN いずれも呼ばれない）
 [15106ms] WARN  CanSM: BusOff detected! retry=0 (L1) recovery in 200ms
 [15112ms] INFO  WarnInd: [RUN:0 FAULT:0 ABS:0]  # EngineState が不定に
 
 # 200ms 後に回復試行（アダプタ再接続済みなら正常復帰）
 [15312ms] INFO  CanSM: BusOff: restart attempt 1 (L1, next in 200ms)
 [15313ms] INFO  Dem: PASSED ev=7          # 回復成功を報告。limit=1 のため即座に確定（TF クリア）
-[15314ms] INFO  ComM: ch0 ->mode=2        # ComM_BusSMIndication(FULL_COM) → EcuM_RequestRUN → RUN 維持
+[15314ms] INFO  ComM: ch0 ->mode=2        # ComM_BusSM_ModeIndication(FULL_COM) → EcuM_RequestRUN → RUN 維持
 # → TX 成功 → 通常動作に復帰
 
 # アダプタ未接続のまま L1 リトライ回数（既定 3）を超過 → 持続的な Bus-Off と判断し
 # DTC を確定した上で L2（既定 5000ms）へ降格するが、回復試行そのものは無期限に継続する
 # （AUTOSAR 仕様には「回復を諦めて停止する」状態が存在しないため、給電を切るまで
 #  通信不能のままになるようなことはない）
-[15909ms] INFO  ComM: ch0 ->mode=1        # ComM_BusSMIndication(SILENT_COM)。再度 Bus-Off のたびに呼ばれる
+[15909ms] INFO  ComM: ch0 ->mode=1        # ComM_BusSM_ModeIndication(SILENT_COM)。再度 Bus-Off のたびに呼ばれる
 [15912ms] WARN  CanSM: BusOff detected! retry=3 (L2) recovery in 5000ms
 [15913ms] ERROR CanSM: BusOff: L1(3) exceeded, degrade to L2 (5000ms)
 [15914ms] WARN  Dem: FAILED ev=7 dtc=0x000108  # limit=1 のため即座に確定・EEPROM に保存

@@ -22,7 +22,7 @@
  *            Task 13: Can_MainFunction_Write        1 ms  — 保留中 TX 確認 (CanIf_TxConfirmation) をドレイン
  *            Task 14: Can_MainFunction_BusOff       1 ms  — Bus-Off (EFLG.TXBO) ポーリング
  *            Task 15: Can_MainFunction_Wakeup       1 ms  — SLEEP 中のウェイクアップペンディングのドレイン
- *            Task 16: SecOC_MainFunction           100 ms  — TX Secured I-PDU の Freshness/MAC 計算・送信
+ *            Task 16: SecOC_MainFunctionTx           100 ms  — TX Secured I-PDU の Freshness/MAC 計算・送信
  *            Task 17: MemIf_MainFunction            10 ms  — 保留中 EEPROM 書き込みジョブを1バイトずつ処理 (Fee)
  *            Task 18: App_GptDemo_Run             2000 ms  — Gpt 実 HW タイマ通知カウンタのログ出力（動作確認用）
  *            Task 19: ComM_MainFunction            100 ms  — 現状 NOP（ComMNmVariant=FULL では
@@ -68,7 +68,7 @@
  *            とする。TX 確認 (CanIf_TxConfirmation) は元々 Can_Write() の
  *            呼び出しと同期していたため、遅延を体感できない範囲に抑える
  *            （詳細は Can.c ファイル冒頭のコメントを参照）。
- *            SecOC_MainFunction は Com_MainFunction と同じ 100 ms とする
+ *            SecOC_MainFunctionTx は Com_MainFunction と同じ 100 ms とする
  *            （周期自体は RX 方向の SecOC_IfRxIndication() とは無関係で、
  *            TX 方向専用のタスク。現在 TX 方向で SecOC を使う PDU は無い
  *            〈SECOC_TX_PDU_COUNT=0、SecOC.c 冒頭コメント参照〉ため、
@@ -88,7 +88,7 @@
  *            単調増加していることを目視確認しやすくしている。
  *            ComM_MainFunction は以前スケジューラに未登録で一度も呼ばれて
  *            いなかった（2026-08 のスペック監査で発見）。現状は
- *            Com_MainFunction/FiM_MainFunction/SecOC_MainFunction と同じ
+ *            Com_MainFunction/FiM_MainFunction/SecOC_MainFunctionTx と同じ
  *            100 ms ティアに揃えているが、[SWS_ComM_00888] のとおり本プロジェクトの
  *            構成（ComMNmVariant=FULL 相当）では中身は NOP のため、この周期
  *            自体に現状意味はない（詳細は ComM.c 参照）。BswM のタスク
@@ -126,7 +126,7 @@ extern void NvM_MainFunction(void);
 extern void Can_MainFunction_Write(void);
 extern void Can_MainFunction_BusOff(void);
 extern void Can_MainFunction_Wakeup(void);
-extern void SecOC_MainFunction(void);
+extern void SecOC_MainFunctionTx(void);
 extern void MemIf_MainFunction(void);
 extern void App_GptDemo_Run(void);
 extern void ComM_MainFunction(void);
@@ -154,7 +154,7 @@ static const Os_TaskType Os_TaskTable[OS_TASK_COUNT] =
     /* Task 13 */ { Can_MainFunction_Write,          1U  },  /* 1 ms    : 保留中 TX 確認をドレイン  */
     /* Task 14 */ { Can_MainFunction_BusOff,         1U  },  /* 1 ms    : Bus-Off ポーリング        */
     /* Task 15 */ { Can_MainFunction_Wakeup,         1U  },  /* 1 ms    : ウェイクアップペンディングのドレイン */
-    /* Task 16 */ { SecOC_MainFunction,            100U  },  /* 100 ms  : TX Secured I-PDU の Freshness/MAC 計算・送信 */
+    /* Task 16 */ { SecOC_MainFunctionTx,            100U  },  /* 100 ms  : TX Secured I-PDU の Freshness/MAC 計算・送信 */
     /* Task 17 */ { MemIf_MainFunction,             10U  },  /* 10 ms   : 保留中 EEPROM ジョブ処理 (Fee 物理バイト書き込み) */
     /* Task 18 */ { App_GptDemo_Run,              2000U  },  /* 2000 ms : Gpt 実 HW タイマ通知カウンタのログ出力 (動作確認用) */
     /* Task 19 */ { ComM_MainFunction,             100U  }   /* 100 ms  : 現状 NOP（SWS_ComM_00888、ComM.c 参照） */

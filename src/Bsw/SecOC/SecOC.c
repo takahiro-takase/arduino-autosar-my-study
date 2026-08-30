@@ -28,13 +28,13 @@
  *          Profile05（CRC16）へ強化した際に DLC が classic CAN の 8byte 上限を
  *          超えるため撤去した（詳細は README.md「SecOC」セクション、
  *          docs/E2E_Profile5_Notes.md 参照）。TX Pdu が実際に追加されるまで、
- *          `SecOC_MainFunction()` の TX ループは毎回 0 回実行で終わる。
+ *          `SecOC_MainFunctionTx()` の TX ループは毎回 0 回実行で終わる。
  *          RX とは異なり PduR の TX 経路
  *          （PduR_TxRoutingPathType.TransmitOverrideFct）に中間モジュールとして
  *          挟まる構成（[7.4.1] "Authentication during direct transmission"）。
  *          Com が PduR_Transmit() を呼ぶと SecOC_IfTransmit() が Authentic
  *          I-PDU を内部バッファへコピーして即座に返り（[SWS_SecOC_00058]）、
- *          次回 SecOC_MainFunction() で Freshness/MAC を計算して Secured
+ *          次回 SecOC_MainFunctionTx() で Freshness/MAC を計算して Secured
  *          I-PDU を組み立て、PduR_SecOCTransmit() で CanIf まで送り届ける
  *          （[SWS_SecOC_00060]〜[SWS_SecOC_00062]）。
  *
@@ -77,7 +77,7 @@ static uint8 SecOC_HasBaseline[SECOC_RX_PDU_COUNT];
 
 /* TX Secured I-PDU ごとの内部状態。
  * SecOC_TxAuthenticBuffer : SecOC_IfTransmit() がコピーした Authentic I-PDU。
- * SecOC_TxPending         : 「次回 SecOC_MainFunction() で変換・送信すべき
+ * SecOC_TxPending         : 「次回 SecOC_MainFunctionTx() で変換・送信すべき
  *                           データがある」フラグ（Com_TxPending と同じ
  *                           「実処理を呼び出し元のスタックフレームから切り離す」
  *                           設計思想。もっとも SecOC_IfTransmit() は割り込み
@@ -340,7 +340,7 @@ Std_ReturnType SecOC_IfTransmit(PduIdType TxPduId, const PduInfoType* PduInfoPtr
     }
 
     /* [SWS_SecOC_00058]: Authentic I-PDU を内部バッファへコピーするだけに
-     * 留め、Freshness/MAC の計算は次回 SecOC_MainFunction() まで遅延する
+     * 留め、Freshness/MAC の計算は次回 SecOC_MainFunctionTx() まで遅延する
      * （[SWS_SecOC_00060]〜[SWS_SecOC_00062]）。 */
     for (uint8 b = 0U; b < cfg->AuthenticPduLength; b++)
         SecOC_TxAuthenticBuffer[tableIndex][b] = PduInfoPtr->SduDataPtr[b];
@@ -349,7 +349,7 @@ Std_ReturnType SecOC_IfTransmit(PduIdType TxPduId, const PduInfoType* PduInfoPtr
     return E_OK;
 }
 
-void SecOC_MainFunction(void)
+void SecOC_MainFunctionTx(void)
 {
     DET_LOGT(TAG, "called");
     if (SecOC_ConfigPtr == NULL)

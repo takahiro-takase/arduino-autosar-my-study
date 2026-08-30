@@ -21,7 +21,7 @@
  *            2a. 検証成功: Can_MainFunction_Read() が受信フレームをドレイン
  *                → CanIf_RxIndication() → CanSM_RxIndication()
  *                  → Can_SetControllerMode(CAN_T_START) → CanSM_State: FULL_COM
- *                    → ComM_BusSMIndication(FULL_COM)
+ *                    → ComM_BusSM_ModeIndication(FULL_COM)
  *
  *            2b. 検証失敗（タイムアウト）: CanSM_MainFunction() が
  *                CANSM_WAKEUP_VALIDATION_MS 超過を検出
@@ -118,7 +118,7 @@ protected:
     }
 
     /* 現在 ComM が把握しているチャネルモードを返すヘルパー
-     * （FakeComM_BusSMIndicationCount 相当の「まだ通知されていないか」判定に使う）。 */
+     * （FakeComM_BusSM_ModeIndicationCount 相当の「まだ通知されていないか」判定に使う）。 */
     static ComM_ModeType CurrentComMode()
     {
         ComM_ModeType mode = 0xFFU;

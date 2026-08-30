@@ -71,7 +71,7 @@ INFO CanSM: ->NO_COM (CAN controller SLEEP)
 
 ## ウェイクアップ時の User0 要求の再同期
 
-CanSM がウェイクアップ検証成功時に `ComM_BusSMIndication(FULL_COM)` を呼んで
+CanSM がウェイクアップ検証成功時に `ComM_BusSM_ModeIndication(FULL_COM)` を呼んで
 チャネル状態を更新するのは、どのユーザの要求でもない自動的な変化です。これを
 放置すると `ComM_UserRequest[COMM_USER_0]` がスリープ突入時の古い値（`NO_COM`）
 のまま残り、`App_EngineManager_Run()` がまだ 1 周期も再評価していない
@@ -79,7 +79,7 @@ CanSM がウェイクアップ検証成功時に `ComM_BusSMIndication(FULL_COM)
 要求を変化させただけで、User0 の古い要求と誤って再集約され、ウェイクアップ
 直後に意図せず即座に再スリープしてしまいます。
 
-これを防ぐため `ComM_BusSMIndication()` は `FULL_COM`/`NO_COM` を通知するとき、
+これを防ぐため `ComM_BusSM_ModeIndication()` は `FULL_COM`/`NO_COM` を通知するとき、
 `ComM_UserRequest[COMM_USER_0]` もその値へ同期します。CanSM 側の自動的な状態変化を
 「User0 の暫定的な要求」とみなすことで、App_EngineManager が次に実際のエンジン
 状態に基づいて要求し直すまでの間、矛盾のない値を保持できます。Dcm
@@ -140,8 +140,8 @@ INFO CanSM: ->NO_COM (CAN controller SLEEP)
 ```
 
 `extendedSession` への切替では再現せず、`defaultSession` への切替でのみ
-再現していた。原因は `ComM_BusSMIndication()` にあった。CanSM がウェイクアップ
-検証成功時に `ComM_BusSMIndication(FULL_COM)` を呼んでチャネル状態を更新しても、
+再現していた。原因は `ComM_BusSM_ModeIndication()` にあった。CanSM がウェイクアップ
+検証成功時に `ComM_BusSM_ModeIndication(FULL_COM)` を呼んでチャネル状態を更新しても、
 **どのユーザの要求でもない自動的な変化**であるため `ComM_UserRequest[COMM_USER_0]`
 は更新されず、スリープ突入時の古い値（`NO_COM`）のまま残っていた。
 
@@ -154,7 +154,7 @@ defaultSession への SessionControl だったため、Dcm が
 即座に再スリープしてしまっていた。`extendedSession` の場合は `User1=FULL_COM`
 になるため、User0 の古い値が埋もれて表面化しなかっただけである。
 
-**修正**: `ComM_BusSMIndication()` が `FULL_COM`/`NO_COM` を通知するとき、
+**修正**: `ComM_BusSM_ModeIndication()` が `FULL_COM`/`NO_COM` を通知するとき、
 `ComM_UserRequest[COMM_USER_0]` もその値へ同期するようにした。CanSM 側の
 自動的な状態変化を「User0 の暫定的な要求」とみなすことで、App_EngineManager が
 次に実際のエンジン状態に基づいて要求し直すまでの間、矛盾のない値を保持できる。

@@ -631,7 +631,7 @@ TEST_F(Bsw_SleepCoordination_Test, BusOffDuringSilentCom_OK_RestoresSilentComAft
  *          の通知を再送しないため、Bus-Off 回復後に ComM が自ら
  *          ComM_NmReleasePending を見てリトライしない限り、チャネルは
  *          SILENT_COM のまま永久に取り残され、ECU は二度と物理スリープしない
- *          （ComM_BusSMIndication() の COMM_SILENT_COMMUNICATION 分岐に
+ *          （ComM_BusSM_ModeIndication() の COMM_SILENT_COMMUNICATION 分岐に
  *          追加したリトライで対応、ComM.c 参照）。
  */
 TEST_F(Bsw_SleepCoordination_Test, BusOffDuringSilentCom_OK_ConvergesToNoComWhenNmReachesBusSleepDuringOutage)

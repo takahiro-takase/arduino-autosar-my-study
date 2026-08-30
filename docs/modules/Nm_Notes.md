@@ -82,7 +82,7 @@ byte[1] : Source Node Identifier（本 ECU は 0x01）
 ## ComM との連携（エッジトリガ方式）
 
 ```
-ComM_BusSMIndication() がチャネルモードを確定させるたびに:
+ComM_BusSM_ModeIndication() がチャネルモードを確定させるたびに:
   FULL_COM へ変化 → Nm_NetworkRequest()
   NO_COM   へ変化 → Nm_NetworkRelease()
 ```
@@ -119,7 +119,7 @@ NM-Timeout Timer が再起動される（実質的にスリープが延期され
 ## ログ例（協調スリープにより物理スリープが延期される様子）
 
 ```
-[30315ms] INFO  ComM: ch0 ->mode=0                          # ComM_BusSMIndication(NO_COM)
+[30315ms] INFO  ComM: ch0 ->mode=0                          # ComM_BusSM_ModeIndication(NO_COM)
 [30318ms] INFO  Nm: -> Network Mode: Ready Sleep State (tx stopped)
 [33320ms] INFO  Nm: -> Prepare Bus-Sleep Mode                # NM-Timeout Timer(3000ms)満了
 [33320ms] INFO  CanSM: ->SILENT_COM                          # ComM_Nm_PrepareBusSleepMode() 経由

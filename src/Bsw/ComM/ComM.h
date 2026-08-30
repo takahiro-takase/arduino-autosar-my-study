@@ -195,11 +195,12 @@ void ComM_MainFunction(void);
  * \param[in]  Network  ネットワークハンドル (0 〜 COMM_CHANNEL_COUNT-1)。
  * \param[in]  Mode     新しい通信モード (ComM_ModeType)。
  *
+ * \AUTOSARReq     {SWS_ComM_00675}
  * \ServiceID      {0x33}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
  */
-void ComM_BusSMIndication(uint8 Network, ComM_ModeType Mode);
+void ComM_BusSM_ModeIndication(uint8 Network, ComM_ModeType Mode);
 
 /**
  * \brief   Nm が Prepare Bus-Sleep Mode へ入ったことの通知（Nm から呼び出される）。

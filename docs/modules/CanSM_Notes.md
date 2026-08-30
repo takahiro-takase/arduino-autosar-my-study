@@ -4,7 +4,7 @@
 > （旧「ECU 管理層」節から移動。実 AUTOSAR では EcuM/BswM/WdgM とは別クラスタ
 > [Communication Services] に属するため）。
 
-Bus-Off 検出直後（回復試行の前）に `ComM_BusSMIndication(SILENT_COMMUNICATION)` を
+Bus-Off 検出直後（回復試行の前）に `ComM_BusSM_ModeIndication(SILENT_COMMUNICATION)` を
 呼び、ComM のチャネル状態が回復完了まで FULL_COM のまま古い情報として残ることを
 防ぐ（SWS_CanSM_00521。SILENT_COM は EcuM の RUN を維持するため回復中も RUN は
 落ちない）。受け付ける Bus-Off はコントローラが物理的に稼働中の状態（FULL_COM、
@@ -92,15 +92,15 @@ stateDiagram-v2
 `Can_Hw.h`/`Can_Hw.cpp` の `CAN_HW_MODE_SLEEP_FINAL` を含む）を全て撤去し、
 `CANSM_BUSOFF_RECOVERY_L1_MS`/`_L2_MS`/`CANSM_BUSOFF_L1_TO_L2_COUNT` による
 L1/L2 バックオフに置き換えた。あわせて Bus-Off 検出直後（回復試行の前）に
-`ComM_BusSMIndication(SILENT_COMMUNICATION)` を呼ぶようにし（SWS_CanSM_00521）、
+`ComM_BusSM_ModeIndication(SILENT_COMMUNICATION)` を呼ぶようにし（SWS_CanSM_00521）、
 ComM のチャネル状態が回復完了まで FULL_COM のまま古い情報として残ることを
 防いだ。
 
 この設計変更は EcuM 側にも影響した。EcuM に「同一ユーザからの重複 RUN 要求」
 検知（SWS_EcuM_04125/04127）を追加したところ、CanSM の Bus-Off L1/L2
-バックオフがリトライ成功のたびに `ComM_BusSMIndication(FULL_COM)` を呼ぶ
+バックオフがリトライ成功のたびに `ComM_BusSM_ModeIndication(FULL_COM)` を呼ぶ
 （RUN を解放していないため）ことと衝突し、重複要求ログが頻発する状態に
-なった。これを避けるため `ComM_BusSMIndication()` はチャネルモードが実際に
+なった。これを避けるため `ComM_BusSM_ModeIndication()` はチャネルモードが実際に
 変化した時のみ `EcuM_RequestRUN()`/`EcuM_ReleaseRUN()` を呼ぶよう修正した。
 
 （README 該当箇所: [CAN コントローラの実スリープ](../../README.md#can-コントローラの実スリープcan_setcontrollermodecan_t_sleep)）
@@ -123,7 +123,7 @@ Nm 協調スリープ導入時に追加された `CANSM_STATE_NO_COM_PENDING_SLE
 Bus-Off 発生時点の状態を `CanSM_BusOffFromPendingSleep` フラグで記憶し、回復後
 も元の意図（FULL_COM か NO_COM_PENDING_SLEEP か）を復元するようにした。
 
-この修正の検証中、`ComM_BusSMIndication()` の重複呼び出し防止ロジック
+この修正の検証中、`ComM_BusSM_ModeIndication()` の重複呼び出し防止ロジック
 （`Mode != prevMode` 判定）にも別の潜在バグが見つかった。Bus-Off 検出時に
 一時的に挟まる `COMM_SILENT_COMMUNICATION`（EcuM の RUN 状態には無関係）を
 経由すると、回復時の FULL_COM/NO_COM 通知が「SILENT_COM からの変化」として
