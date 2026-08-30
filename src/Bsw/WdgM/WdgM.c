@@ -218,6 +218,28 @@ static uint8 WdgM_ExpiredCycleCount = 0U;
  *  継続し、STOPPED でのみ止める)。 */
 static uint8 WdgM_GlobalStopped = 0U;
 
+/** 1 = WdgM_PerformReset() が呼ばれた。WdgM_GlobalStopped とは独立して
+ *  持つ理由: WdgM_MainFunction() 末尾の自然回復判定（全エンティティが
+ *  OK に戻れば WdgM_GlobalStopped を 0 に戻す）は、WdgM_PerformReset()
+ *  による意図的なリセット要求には適用してはならない
+ *  （[SWS_WdgM_00233]: 「以降トリガ条件を二度と更新しない」。回復判定で
+ *  巻き戻ると仕様の意図に反する）。WdgM_TriggerHwWatchdog() 側で
+ *  WdgM_GlobalStopped より優先してチェックする。WdgM_Init() でのみ 0 に戻る。 */
+static uint8 WdgM_ResetRequested = 0U;
+
+/** [SWS_WdgM_00349] 準拠: 直前の HW リセット原因となった SEID を、実リセットを
+ *  またいで保持するための領域。C ランタイムが起動時にゼロクリアする通常の
+ *  静的変数（.bss）ではなく、リンカが未初期化のまま残す `.noinit` セクション
+ *  に配置する（AVR/ARM 双方の GCC ツールチェーンが対応する標準的な手法）。
+ *  電源断（POR）時は SRAM 内容自体が不定になるため保証されないが、本
+ *  プロジェクトで実際にリセットへ至る経路（HW ウォッチドッグタイムアウト、
+ *  電源は入ったまま）では SRAM 内容が保持される。値とその反転値
+ *  (WdgM_FirstExpiredSEIDInv) の両方を保存し、一致するかどうかで
+ *  「今回のリセット原因として書き込まれた有効な値」か「初回起動・POR 等で
+ *  たまたま残っていた不定値」かを判定する（WdgM_GetFirstExpiredSEID() 参照）。 */
+static WdgM_SupervisedEntityIdType WdgM_FirstExpiredSEID    __attribute__((section(".noinit")));
+static WdgM_SupervisedEntityIdType WdgM_FirstExpiredSEIDInv __attribute__((section(".noinit")));
+
 /* -----------------------------------------------------------------------
  * 公開 API
  * ----------------------------------------------------------------------- */
@@ -259,6 +281,7 @@ void WdgM_Init(const WdgM_ConfigType* ConfigPtr)
     WdgM_SkipNextAliveJudgment = 0U;
     WdgM_ExpiredCycleCount     = 0U;
     WdgM_GlobalStopped         = 0U;
+    WdgM_ResetRequested        = 0U;
 
     WdgM_EnableHwWatchdog();
 
@@ -658,6 +681,17 @@ void WdgM_MainFunction(void)
         return;
     }
 
+    /* 下の STOPPED 遷移時、WdgM_GetLocalStatus() を呼び直して再走査する代わりに
+     * この値を再利用する（/code-review で指摘: 同じ情報を1サイクル中に3回
+     * 導出していた）。firstNotOkFound で「見つかったか」を独立して管理し、
+     * firstNotOkSeid 自体には番兵値を持たせない
+     * （WDGM_SUPERVISED_ENTITY_COUNT と WdgM_Cfg->EntityCount という別々の
+     * 定数を比較する形だと、EntityCount <= WDGM_SUPERVISED_ENTITY_COUNT が
+     * 常に成り立つという前提を読者が別途確認しないと正しさを追えない。
+     * /simplify で指摘）。 */
+    uint8 firstNotOkFound = 0U;
+    uint8 firstNotOkSeid  = 0U;
+
     for (uint8 i = 0U; i < WdgM_Cfg->EntityCount; i++)
     {
         const WdgM_EntityCfgType* entity = &WdgM_Cfg->Entities[i];
@@ -689,6 +723,15 @@ void WdgM_MainFunction(void)
 
         if (WdgM_DeadlineStatus[i] != WDGM_LOCAL_STATUS_OK)
             DET_LOGW(TAG, "SE%u deadline still FAILED (latched since violation)", (unsigned)i);
+
+        if (!firstNotOkFound
+            && (WdgM_AliveStatus[i] != WDGM_LOCAL_STATUS_OK
+                || WdgM_LogicalStatus[i] != WDGM_LOCAL_STATUS_OK
+                || WdgM_DeadlineStatus[i] != WDGM_LOCAL_STATUS_OK))
+        {
+            firstNotOkFound = 1U;
+            firstNotOkSeid  = i;
+        }
 
         /* 次サイクルのためカウンタリセット */
         WdgM_AliveCount[i] = 0U;
@@ -729,6 +772,19 @@ void WdgM_MainFunction(void)
         else if (!WdgM_GlobalStopped)
         {
             WdgM_GlobalStopped = 1U;
+
+            /* [SWS_WdgM_00349] 相当: 実 HW リセットが確実に迫っているこの瞬間に、
+             * 原因となった最初の（走査順で最初に見つかった）FAILED な SE を
+             * noinit RAM へ記録する。次回起動時 WdgM_GetFirstExpiredSEID() で
+             * 診断できるようにするため。上のループで既に走査済みのため
+             * ここで WdgM_GetLocalStatus() を呼び直さない
+             * （/code-review で指摘: 同一サイクル中に同じ判定を3回行っていた）。 */
+            if (firstNotOkFound)
+            {
+                WdgM_FirstExpiredSEID    = (WdgM_SupervisedEntityIdType)firstNotOkSeid;
+                WdgM_FirstExpiredSEIDInv = (WdgM_SupervisedEntityIdType)(~firstNotOkSeid);
+            }
+
             DET_LOGE(TAG, "Global supervision STOPPED (tolerance exhausted) [HW WDT reset pending]");
         }
     }
@@ -736,6 +792,18 @@ void WdgM_MainFunction(void)
     {
         WdgM_ExpiredCycleCount = 0U;
         WdgM_GlobalStopped     = 0U;
+
+        /* STOPPED（実 HW リセット直前の状態）が実際のリセットへ至る前に解消した
+         * ケース（例: WdgM_DisableHwWatchdog() による WdgM_SupervisionSuppressed
+         * が refresh を再開させた後、RUN 復帰でエンティティが真に回復した場合）。
+         * 記録済みの WdgM_FirstExpiredSEID は今回のリセット原因ではなくなった
+         * ため、後で本当に無関係な原因（BOR 等）でリセットが起きた際に誤って
+         * 古い SEID を「今回の原因」と誤診断しないよう無効化する
+         * （value と inverse を一致させない = WdgM_GetFirstExpiredSEID() が
+         * E_NOT_OK を返すようにする。/code-review で指摘）。 */
+        WdgM_FirstExpiredSEID    = 0U;
+        WdgM_FirstExpiredSEIDInv = 0U;
+
         DET_LOGI(TAG, "Global status recovered (all entities OK)");
     }
 }
@@ -743,8 +811,11 @@ void WdgM_MainFunction(void)
 /**
  * \brief   HW ウォッチドッグの trigger（リフレッシュ）処理。
  *
- * \details WdgM_GlobalStopped が立っていない限り（または
- *          WdgM_SupervisionSuppressed による抑制中は無条件に）
+ * \details WdgM_ResetRequested（WdgM_PerformReset() 呼び出し済み）が
+ *          最優先で、これが立っていれば他の状態に関わらずリフレッシュを
+ *          拒否する（[SWS_WdgM_00233]: 呼び出し後は二度とトリガ条件を
+ *          更新しない）。それ以外は WdgM_GlobalStopped が立っていない限り
+ *          （または WdgM_SupervisionSuppressed による抑制中は無条件に）
  *          WdgIf_SetTriggerCondition() を呼ぶ（実体は Wdg_SetTriggerCondition()
  *          → Wdg_Hw_Refresh()）。
  *
@@ -774,7 +845,7 @@ void WdgM_MainFunction(void)
 void WdgM_TriggerHwWatchdog(void)
 {
     DET_LOGT(TAG, "called");
-    if (!WdgM_GlobalStopped || WdgM_SupervisionSuppressed)
+    if (!WdgM_ResetRequested && (!WdgM_GlobalStopped || WdgM_SupervisionSuppressed))
     {
         WdgIf_SetTriggerCondition(WDGIF_DEVICE_0, (uint16)WDGM_HW_WATCHDOG_TIMEOUT_MS);
         DET_LOGD(TAG, "HW watchdog refreshed");
@@ -784,6 +855,80 @@ void WdgM_TriggerHwWatchdog(void)
         DET_LOGE(TAG, "HW watchdog NOT refreshed - reset imminent");
     }
 }
+
+/**
+ * \brief   HW ウォッチドッグの trigger を永続的に止め、リセットさせる。
+ *
+ * \details WdgM_ResetRequested を立てるだけで、実際のリフレッシュ拒否は
+ *          WdgM_TriggerHwWatchdog() が次回呼び出し時に反映する
+ *          （[SWS_WdgM_00232]: 全 Watchdog Driver の trigger condition を
+ *          0 にする、の意）。WdgM_GlobalStopped とは独立した専用フラグに
+ *          しているのは、WdgM_MainFunction() 末尾の自然回復判定（全エンティティ
+ *          OK で WdgM_GlobalStopped を 0 に戻す）が本 API の効果を巻き戻して
+ *          しまわないようにするため（[SWS_WdgM_00233]: 呼び出し後は二度と
+ *          トリガ条件を更新しない）。
+ *
+ * \AUTOSARReq     {SWS_WdgM_00264, SWS_WdgM_00232, SWS_WdgM_00233, SWS_WdgM_00270}
+ * \ServiceID      {0x0f}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void WdgM_PerformReset(void)
+{
+    DET_LOGT(TAG, "called");
+    if (WdgM_Cfg == NULL)
+    {
+        Det_ReportError(WDGM_MODULE_ID, 0U, WDGM_API_ID_PERFORM_RESET, WDGM_E_NO_INIT);
+        return;
+    }
+
+    WdgM_ResetRequested = 1U;
+    DET_LOGE(TAG, "PerformReset called - HW watchdog refresh stopped permanently [HW WDT reset pending]");
+}
+
+/**
+ * \brief   直近の HW ウォッチドッグリセットの原因となった Supervised Entity の
+ *          ID を取得する。
+ *
+ * \details [SWS_WdgM_00349]: WdgM_FirstExpiredSEID/Inv（.noinit 領域、宣言
+ *          コメント参照）の一致を確認し、一致すれば有効な値として *SEID へ
+ *          書き込み E_OK を返す。不一致（初回起動・POR 等で不定値のまま）
+ *          なら *SEID に 0 を書き込み E_NOT_OK を返す。
+ *
+ * \note    [SWS_WdgM_00348] 準拠、WdgM_Init() 前でも呼び出せるため
+ *          WDGM_E_NO_INIT チェックは行わない。
+ *
+ * \AUTOSARReq     {SWS_WdgM_00346, SWS_WdgM_00347, SWS_WdgM_00348, SWS_WdgM_00349}
+ * \ServiceID      {0x10}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType WdgM_GetFirstExpiredSEID(WdgM_SupervisedEntityIdType* SEID)
+{
+    DET_LOGT(TAG, "called");
+    if (SEID == NULL)
+    {
+        Det_ReportError(WDGM_MODULE_ID, 0U, WDGM_API_ID_GET_FIRST_EXPIRED_SEID, WDGM_E_INV_POINTER);
+        return E_NOT_OK;
+    }
+
+    if ((WdgM_SupervisedEntityIdType)(~WdgM_FirstExpiredSEID) != WdgM_FirstExpiredSEIDInv)
+    {
+        *SEID = 0U;
+        return E_NOT_OK;
+    }
+
+    *SEID = WdgM_FirstExpiredSEID;
+    return E_OK;
+}
+
+#ifdef WDGM_UNIT_TEST
+void WdgM_Test_SetFirstExpiredSEIDRaw(WdgM_SupervisedEntityIdType value, WdgM_SupervisedEntityIdType inv)
+{
+    WdgM_FirstExpiredSEID    = value;
+    WdgM_FirstExpiredSEIDInv = inv;
+}
+#endif
 
 void WdgM_GetVersionInfo(Std_VersionInfoType* VersionInfo)
 {

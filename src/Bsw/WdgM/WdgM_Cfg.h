@@ -85,6 +85,8 @@
 #define WDGM_API_ID_MAIN_FUNCTION        0x08U
 #define WDGM_API_ID_DEINIT               0x01U
 #define WDGM_API_ID_GET_VERSION_INFO     0x02U
+#define WDGM_API_ID_PERFORM_RESET            0x0FU
+#define WDGM_API_ID_GET_FIRST_EXPIRED_SEID   0x10U
 
 /** バージョン情報（SWS_WdgM、Com/E2EXf/PduR 等の既存モジュールと同じ命名規則） */
 #define WDGM_VENDOR_ID          0U

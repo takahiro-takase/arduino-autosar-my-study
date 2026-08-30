@@ -327,6 +327,67 @@ void WdgM_MainFunction(void);
 void WdgM_TriggerHwWatchdog(void);
 
 /**
+ * \brief   HW ウォッチドッグの trigger を永続的に止め、リセットさせる。
+ *
+ * \details 呼び出し時点で WdgM_ResetRequested フラグを立てる。実際に全
+ *          Watchdog Driver の trigger condition を 0 にする（[SWS_WdgM_00232]）
+ *          のは、このフラグを見る WdgM_TriggerHwWatchdog() の次回呼び出し
+ *          （最大 WDGM_HW_TRIGGER_CYCLE_MS 後）であり、本関数自体は
+ *          WdgIf/Wdg を同期的には一切呼ばない（WdgM_MainFunction/
+ *          WdgM_TriggerHwWatchdog の周期分離という本プロジェクトの既存設計に
+ *          合わせている）。以降 WdgM_TriggerHwWatchdog() は Global
+ *          Supervision Status に関わらずリフレッシュを二度と行わなくなる
+ *          （次回 WdgM_Init() が呼ばれるまで）。本プロジェクトの HW
+ *          ウォッチドッグ（Renesas RA の IWDT）は一度有効化するとソフトウェア
+ *          から無効化できないため、リフレッシュ停止から
+ *          WDGM_HW_WATCHDOG_TIMEOUT_MS 以内に確実に実 MCU リセットへ至る。
+ *
+ * \note    WdgM が未初期化（WDGM_GLOBAL_STATUS_DEACTIVATED）の場合は
+ *          WDGM_E_NO_INIT を報告し、何もせず戻る（[SWS_WdgM_00270]）。
+ *
+ * \AUTOSARReq     {SWS_WdgM_00264, SWS_WdgM_00232, SWS_WdgM_00233, SWS_WdgM_00270}
+ * \ServiceID      {0x0f}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void WdgM_PerformReset(void);
+
+/**
+ * \brief   直近の HW ウォッチドッグリセットの原因となった Supervised Entity の
+ *          ID を取得する。
+ *
+ * \details [SWS_WdgM_00349] 準拠: SEID を実 HW リセットをまたいで保持する
+ *          必要があるため、C ランタイムが起動時にゼロクリアする通常の
+ *          静的変数ではなく、リンカが未初期化のまま残す領域
+ *          （`.noinit` セクション）に SEID とそのビット反転値を対で格納する。
+ *          両者が一致すれば直前のリセット原因として有効な値、一致しなければ
+ *          （初回起動・電源断からの起動等で RAM 内容が不定なため）無効と
+ *          判断し E_NOT_OK を返す。
+ *
+ *          値の書き込みは WdgM_MainFunction() が
+ *          WDGM_GLOBAL_STATUS_STOPPED（グローバル猶予サイクルを使い切り、
+ *          HW リセットが確実に迫っている状態）へ遷移した瞬間に、その時点で
+ *          FAILED な最初の Supervised Entity（走査順で最初に見つかったもの）
+ *          を記録する形で行う。
+ *
+ * \note    [SWS_WdgM_00348] 準拠: WdgM_Init() より前（未初期化状態）でも
+ *          呼び出せる（起動直後、WdgM_Init() を呼ぶ前に直前のリセット原因を
+ *          診断する用途を想定した仕様のため）。他の全 API と異なり
+ *          WDGM_E_NO_INIT チェックを行わない。
+ *
+ * \param[out]  SEID  直前のリセット原因となった SEID の格納先。NULL 禁止。
+ *                    E_NOT_OK 時は 0 を書き込む（[SWS_WdgM_00349]）。
+ * \retval  E_OK      SEID を正常に返した。
+ * \retval  E_NOT_OK  SEID が NULL、または保存値が無効（初回起動・POR 等）。
+ *
+ * \AUTOSARReq     {SWS_WdgM_00346, SWS_WdgM_00347, SWS_WdgM_00348, SWS_WdgM_00349}
+ * \ServiceID      {0x10}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType WdgM_GetFirstExpiredSEID(WdgM_SupervisedEntityIdType* SEID);
+
+/**
  * \brief   WdgM モジュールのバージョン情報を取得する。
  *
  * \details WdgM_Init と並び、未初期化時でも WDGM_E_NO_INIT を報告しない
@@ -341,6 +402,22 @@ void WdgM_TriggerHwWatchdog(void);
  * \Synchronicity  {Synchronous}
  */
 void WdgM_GetVersionInfo(Std_VersionInfoType* VersionInfo);
+
+#ifdef WDGM_UNIT_TEST
+/**
+ * \brief   [テスト専用] WdgM_GetFirstExpiredSEID() が読む .noinit 領域
+ *          （WdgM_FirstExpiredSEID/Inv）に任意の値を直接書き込む。
+ *
+ * \details `test/test_wdgm/` の単体テストからのみ使用するアクセサ。
+ *          `WDGM_UNIT_TEST` は `[env:native_wdgm]` の `build_flags` でのみ
+ *          定義され、実機ビルド（`uno_r4`）では定義されないため、実機の
+ *          `WdgM.h`/`WdgM.c` には一切含まれない（`Com.h` の
+ *          `COM_UNIT_TEST`/`Com_Test_*` と同じ運用）。
+ *          初回起動・電源断相当の「不定値」を模擬する場合は
+ *          `value`/`inv` にビット反転の関係にない値を渡すこと。
+ */
+void WdgM_Test_SetFirstExpiredSEIDRaw(WdgM_SupervisedEntityIdType value, WdgM_SupervisedEntityIdType inv);
+#endif
 
 #ifdef __cplusplus
 }
