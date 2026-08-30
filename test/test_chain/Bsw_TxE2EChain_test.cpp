@@ -187,8 +187,14 @@ protected:
         canConfig.crystalFreq     = CAN_CRYSTAL_16MHZ;
 
         Can_Init(&canConfig);
-        Can_SetControllerMode(0U, CAN_T_START);
         CanIf_Init(&kTestCanIfConfig);
+        /* CanIf_Init() より前に Can_SetControllerMode() を直接呼ぶと、CanIf が
+         * 追跡するコントローラ状態（CanIf_ControllerMode[]、CanIf.c 参照）が
+         * Init() で CAN_CS_STOPPED に巻き戻され、実際の Can 側の状態
+         * （CAN_CS_STARTED）と食い違ったままになる。本テストは CanSM を
+         * 経由しないためこの食い違い自体は実害が無いが、CanIf_SetControllerMode()
+         * 経由に統一しておく方が事故が起きない（/code-review 指摘）。 */
+        CanIf_SetControllerMode(0U, CAN_CS_STARTED);
         /* 本テストは CanSM を経由しない（CanSM_Init() を呼ばない）ため、
          * CanIf_Init() 直後の既定値 CANIF_OFFLINE のままでは CanIf_Transmit()
          * が常に E_NOT_OK になってしまう。CanSM が FULL_COM 確立時に行う

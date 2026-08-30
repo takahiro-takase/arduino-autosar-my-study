@@ -8,8 +8,10 @@
  *            ComM
  *             ↓ CanSM_RequestComMode()
  *            CanSM  ← 本モジュール
+ *             ↓ CanIf_SetControllerMode()
+ *            CanIf
  *             ↓ Can_SetControllerMode()
- *            CanIf → Can
+ *            Can
  *
  *          Bus-Off 回復シーケンス（SWS_CanSM_00514/00515 の L1/L2 バックオフ準拠）:
  *            CanIf_ControllerBusOff() → CanSM_ControllerBusOff()
@@ -81,7 +83,7 @@ void CanSM_DeInit(void);
  * \brief   ネットワークの通信モード遷移を要求する。
  *
  * \details ComM から呼び出され、要求モードに応じて
- *          Can_SetControllerMode() でハードウェアを制御する。
+ *          CanIf_SetControllerMode() でハードウェアを制御する。
  *          Bus-Off 回復中の場合は要求を保留する。
  *
  * \param[in]  network  ネットワークハンドル（0 〜 CANSM_CHANNEL_COUNT-1）。

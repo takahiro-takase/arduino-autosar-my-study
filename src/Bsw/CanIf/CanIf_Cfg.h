@@ -52,6 +52,9 @@
 #define CANIF_E_PARAM_PDU_MODE      22U  /* [SWS_CANIF_00860]: CanIf_SetPduMode() の
                                           *   PduModeRequest が CanIf_PduModeType の
                                           *   定義値以外 */
+#define CANIF_E_PARAM_CTRLMODE      21U  /* [SWS_CANIF_00774]: CanIf_SetControllerMode() の
+                                          *   ControllerMode が CAN_CS_STARTED/SLEEP/STOPPED
+                                          *   以外 */
 
 /** ApiId（各関数の Doxygen \ServiceID タグと一致させること。値は SWS 8.x 章の
  *  「Service ID[hex]」記載を実測して確認済み） */
@@ -63,8 +66,10 @@
 #define CANIF_API_ID_CONTROLLER_BUSOFF   0x16U
 #define CANIF_API_ID_GET_VERSION_INFO    0x0BU
 #define CANIF_API_ID_READ_RX_PDU_DATA    0x06U
-#define CANIF_API_ID_SET_PDU_MODE        0x03U
+#define CANIF_API_ID_SET_PDU_MODE        0x09U
 #define CANIF_API_ID_GET_PDU_MODE        0x0AU
+#define CANIF_API_ID_SET_CONTROLLER_MODE 0x03U
+#define CANIF_API_ID_GET_CONTROLLER_MODE 0x04U
 
 /** バージョン情報（SWS_CANInterface、Com/E2EXf/PduR 等の既存モジュールと同じ命名規則） */
 #define CANIF_VENDOR_ID          0U

@@ -13,7 +13,7 @@
  *              ↓ CanSM_ControllerBusOff()                    │ 回復成功
  *            CANSM_STATE_BUS_OFF                             │
  *              ↓ L1/L2 周期経過 (MainFunction)                │
- *              → Can_SetControllerMode(CAN_T_START) ─────────┘
+ *              → CanIf_SetControllerMode(CAN_CS_STARTED) ────┘
  *              （回復に失敗すれば CanSM_ControllerBusOff() が再度呼ばれ、
  *                リトライを継続する。無期限に諦めない。回復成功時は常に
  *                CANSM_STATE_FULL_COM へ戻る）
@@ -69,7 +69,7 @@
  *            なかったことを確認してから ComM_Nm_BusSleepMode() を呼ぶ
  *            （[SWS_ComM_00392]）。ComM はこれを受けて初めて
  *            CanSM_RequestComMode(NO_COM) を呼び、CanSM が
- *            Can_SetControllerMode(CAN_T_SLEEP) で MCP2515 を実際に
+ *            CanIf_SetControllerMode(CAN_CS_SLEEP) で MCP2515 を実際に
  *            スリープさせる。これにより「他ノードがまだ通信中の間は実際には
  *            スリープしない」という NM 本来の協調スリープを実機で確認できる。
  *            CANSM_STATE_BUS_OFF は実 HW をスリープさせないため、これが
@@ -126,7 +126,6 @@
  */
 
 #include "CanSM.h"
-#include "Can.h"
 #include "CanIf.h"
 #include "Dem.h"
 #include "Det.h"
@@ -260,9 +259,9 @@ Std_ReturnType CanSM_RequestComMode(NetworkHandleType network, ComM_ModeType mod
     switch (mode)
     {
         case COMM_FULL_COMMUNICATION:
-            if (Can_SetControllerMode(0U, CAN_T_START) != CAN_OK)
+            if (CanIf_SetControllerMode(0U, CAN_CS_STARTED) != E_OK)
             {
-                /* Can_SetControllerMode() は CanState==CAN_CS_SLEEP からの
+                /* CanIf_SetControllerMode() は CanState==CAN_CS_SLEEP からの
                  * CAN_T_START を拒否しうる（Can.c 参照）。現状の呼び出し
                  * 経路ではこの分岐に到達しないはずだが、もし到達すれば
                  * コントローラは実際にはまだ稼働していない。ここで
@@ -271,7 +270,7 @@ Std_ReturnType CanSM_RequestComMode(NetworkHandleType network, ComM_ModeType mod
                  * 送受信がハードリセットするまで静かに壊れる
                  * （2026-08 のレビューで指摘）。実際に遷移が成功したときのみ
                  * 状態を進める。 */
-                DET_LOGE(TAG, "RequestComMode E: Can_SetControllerMode(T_START) failed, state unchanged");
+                DET_LOGE(TAG, "RequestComMode E: CanIf_SetControllerMode(STARTED) failed, state unchanged");
                 return E_NOT_OK;
             }
             /* [SWS_CANIF_00137]: SILENT_COM から戻る場合に備え、PDU チャネルを
@@ -328,8 +327,8 @@ Std_ReturnType CanSM_RequestComMode(NetworkHandleType network, ComM_ModeType mod
              * 不要になったため削除した）。
              * CAN_T_SLEEP は Can_SetControllerMode() 側で状態検証をしておらず
              * （CAN_CS_STARTED/STOPPED いずれから呼ばれても正当なため）、
-             * 戻り値は常に CAN_OK。明示的に無視する。 */
-            (void)Can_SetControllerMode(0U, CAN_T_SLEEP);
+             * 戻り値は常に E_OK。明示的に無視する。 */
+            (void)CanIf_SetControllerMode(0U, CAN_CS_SLEEP);
             CanSM_State = CANSM_STATE_NO_COM;
             DET_LOGI(TAG, "->NO_COM (physical sleep)");
             ComM_BusSM_ModeIndication(network, COMM_NO_COMMUNICATION);
@@ -460,7 +459,7 @@ void CanSM_ControllerBusOff(uint8 ControllerId)
      * 再設定しなくて済む（下記コメント・CanSM_MainFunction() 参照）。 */
     CanSM_PreBusOffState = CanSM_State;
 
-    if (Can_SetControllerMode(0U, CAN_T_STOP) != CAN_OK)
+    if (CanIf_SetControllerMode(0U, CAN_CS_STOPPED) != E_OK)
     {
         /* 到達しないはずの経路（CanIf_ControllerBusOff は Can 側が
          * CanState==CAN_CS_STARTED のときしか呼ばないため、CAN_T_STOP が
@@ -471,7 +470,7 @@ void CanSM_ControllerBusOff(uint8 ControllerId)
          * という finding #1 と同じ症状に逆戻りしてしまう。矛盾を DET へ
          * 記録した上で、届いた Bus-Off 通知の処理そのものは続行する
          * （2026-08 のレビューで指摘）。 */
-        DET_LOGE(TAG, "ControllerBusOff E: Can_SetControllerMode(T_STOP) failed (state desync)");
+        DET_LOGE(TAG, "ControllerBusOff E: CanIf_SetControllerMode(STOPPED) failed (state desync)");
     }
 
     CanSM_State         = CANSM_STATE_BUS_OFF;
@@ -536,7 +535,7 @@ void CanSM_ControllerWakeup(uint8 ControllerId)
     }
 
     DET_LOGI(TAG, "Wakeup detected -> validating (Listen-Only, waiting for confirmed RX)");
-    if (Can_SetControllerMode(0U, CAN_T_WAKEUP) != CAN_OK)  /* CAN_CS_SLEEP -> CAN_CS_STOPPED (Listen-Only) */
+    if (CanIf_SetControllerMode(0U, CAN_CS_STOPPED) != E_OK)  /* CAN_CS_SLEEP -> CAN_CS_STOPPED (Listen-Only) */
     {
         /* 到達しないはずの経路（この分岐に来る時点で CanState==CAN_CS_SLEEP
          * であることは呼び出し元 Can_MainFunction_Wakeup() 側で保証されて
@@ -544,7 +543,7 @@ void CanSM_ControllerWakeup(uint8 ControllerId)
          * していないため、検証タイマだけ回して確定させるのは危険。
          * CANSM_STATE_NO_COM のまま据え置き、次のウェイクアップ通知を
          * 待つ（2026-08 のレビューで指摘）。 */
-        DET_LOGE(TAG, "ControllerWakeup E: Can_SetControllerMode(T_WAKEUP) failed, staying in NO_COM");
+        DET_LOGE(TAG, "ControllerWakeup E: CanIf_SetControllerMode(STOPPED) failed, staying in NO_COM");
         return;
     }
     CanSM_State             = CANSM_STATE_WAKEUP_VALIDATING;
@@ -585,7 +584,7 @@ void CanSM_RxIndication(uint8 ControllerId)
         return;
 
     DET_LOGI(TAG, "Wakeup validated (RX confirmed) -> FULL_COM");
-    if (Can_SetControllerMode(0U, CAN_T_START) != CAN_OK)   /* CAN_CS_STOPPED -> CAN_CS_STARTED */
+    if (CanIf_SetControllerMode(0U, CAN_CS_STARTED) != E_OK)   /* CAN_CS_STOPPED -> CAN_CS_STARTED */
     {
         /* 到達しないはずの経路（CANSM_STATE_WAKEUP_VALIDATING に入っている
          * 時点で CanState==CAN_CS_STOPPED のはず）。失敗した場合に
@@ -594,7 +593,7 @@ void CanSM_RxIndication(uint8 ControllerId)
          * できず、実害が静かに進行する（レビュー指摘の症状そのもの）。
          * WAKEUP_VALIDATING に留まり、タイムアウトで再スリープする
          * 既存のフェイルセーフ（CanSM_MainFunction）に委ねる。 */
-        DET_LOGE(TAG, "RxIndication E: Can_SetControllerMode(T_START) failed, staying in WAKEUP_VALIDATING");
+        DET_LOGE(TAG, "RxIndication E: CanIf_SetControllerMode(STARTED) failed, staying in WAKEUP_VALIDATING");
         return;
     }
     /* WAKEUP_VALIDATING に入る直前の状態が SILENT_COM だった場合（眠る前に
@@ -658,7 +657,7 @@ void CanSM_MainFunction(void)
                      (unsigned long)CANSM_WAKEUP_VALIDATION_MS);
             /* CAN_T_SLEEP は失敗しない（CanSM_RequestComMode() の
              * COMM_NO_COMMUNICATION 分岐のコメント参照）。戻り値は明示的に無視する。 */
-            (void)Can_SetControllerMode(0U, CAN_T_SLEEP);  /* CAN_CS_STOPPED -> CAN_CS_SLEEP、ウェイクアップ割り込み再武装 */
+            (void)CanIf_SetControllerMode(0U, CAN_CS_SLEEP);  /* CAN_CS_STOPPED -> CAN_CS_SLEEP、ウェイクアップ割り込み再武装 */
             CanSM_State = CANSM_STATE_NO_COM;
         }
         return;
@@ -690,7 +689,7 @@ void CanSM_MainFunction(void)
     DET_LOGI(TAG, "BusOff: restart attempt %u (%s, next in %lums)",
              (unsigned)CanSM_BusOffRetries, inL2 ? "L2" : "L1", interval);
 
-    if (Can_SetControllerMode(0U, CAN_T_START) != CAN_OK)
+    if (CanIf_SetControllerMode(0U, CAN_CS_STARTED) != E_OK)
     {
         /* 到達しないはずの経路（BUS_OFF 中は CanState==CAN_CS_STOPPED の
          * はず、CanSM_ControllerBusOff() が Bus-Off 検出時に CAN_T_STOP
@@ -699,7 +698,7 @@ void CanSM_MainFunction(void)
          * ままになる。CanSM_BusOffRetries は既にインクリメント済みのため、
          * 状態は BUS_OFF のまま据え置き、次の L1/L2 周期で再試行させる
          * （通常の回復失敗と同じ扱い。2026-08 のレビューで指摘）。 */
-        DET_LOGE(TAG, "MainFunction E: Can_SetControllerMode(T_START) failed during BusOff recovery, retry next cycle");
+        DET_LOGE(TAG, "MainFunction E: CanIf_SetControllerMode(STARTED) failed during BusOff recovery, retry next cycle");
         return;
     }
     /* 回復成功を報告。デバウンス確定すれば CAN_BUSOFF の TF をクリアする

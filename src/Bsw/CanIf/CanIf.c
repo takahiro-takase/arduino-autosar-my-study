@@ -41,6 +41,18 @@ static uint8 CanIf_RxPduDataValid[CANIF_RX_PDU_MAX];  /* 一度でも受信し�
  * 参照）。 */
 static CanIf_PduModeType CanIf_ControllerPduMode[CANIF_CONTROLLER_MAX];
 
+/* CanIf_SetControllerMode()/CanIf_GetControllerMode()（[SWS_CANIF_00003]/
+ * [SWS_CANIF_00229]、2026-08 追加）が追跡するコントローラ状態。
+ * 実 AUTOSAR は CanIf_ControllerModeIndication()（Can からの非同期通知）で
+ * 実際の遷移完了を知るが、本プロジェクトの Can_SetControllerMode() は
+ * 同期的に完了するため、要求成功時点で直接更新する形に簡略化している。
+ * CanIf_SetControllerMode(CAN_CS_STOPPED) を要求されたとき、その場に応じて
+ * Can_StateTransitionType(CAN_T_STOP か CAN_T_WAKEUP か) のどちらを
+ * Can_SetControllerMode() に渡すべきかは遷移元状態に依存する（Can.c の
+ * Can_SetControllerMode() 実装コメント参照）ため、この配列が無いと
+ * 判断できない。 */
+static Can_ControllerStateType CanIf_ControllerMode[CANIF_CONTROLLER_MAX];
+
 /**
  * \brief   CAN インタフェースモジュールを初期化する。
  *
@@ -94,12 +106,19 @@ void CanIf_Init(const CanIf_ConfigType* ConfigPtr)
         CanIf_RxPduDataValid[i]  = 0U;
     }
 
-    /* [SWS_CANIF_00137] の初期値: Init 直後は配下のコントローラもまだ
-     * 起動していない（CanIf_Init() の Note 参照）ため CANIF_OFFLINE とする。
-     * 実際に FULL_COM へ遷移する際に CanSM が CanIf_SetPduMode(CANIF_ONLINE)
-     * を呼ぶ。 */
     for (uint8 i = 0U; i < CANIF_CONTROLLER_MAX; i++)
+    {
+        /* [SWS_CANIF_00137] の初期値: Init 直後は配下のコントローラもまだ
+         * 起動していない（CanIf_Init() の Note 参照）ため CANIF_OFFLINE とする。
+         * 実際に FULL_COM へ遷移する際に CanSM が CanIf_SetPduMode(CANIF_ONLINE)
+         * を呼ぶ。 */
         CanIf_ControllerPduMode[i] = CANIF_OFFLINE;
+
+        /* Can_Init() 完了直後の実際のコントローラ状態（CAN_CS_STOPPED、Can.c の
+         * Can_Init() 参照）に合わせる。CanIf は Can_Init() の後に初期化される
+         * 前提（本関数の \pre 参照）。 */
+        CanIf_ControllerMode[i] = CAN_CS_STOPPED;
+    }
 
     DET_LOGI(TAG, "Init ok TX=%u RX=%u",
              (unsigned)ConfigPtr->TxPduCount, (unsigned)ConfigPtr->RxPduCount);
@@ -537,7 +556,7 @@ void CanIf_ControllerWakeup(uint8 ControllerId)
  *                     `CanIf_PduModeType` の定義値以外。
  *
  * \AUTOSARReq     {SWS_CANIF_00137, SWS_CANIF_00341, SWS_CANIF_00860}
- * \ServiceID      {0x03}
+ * \ServiceID      {0x09}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
  */
@@ -599,6 +618,112 @@ Std_ReturnType CanIf_GetPduMode(uint8 ControllerId, CanIf_PduModeType* PduModePt
     }
 
     *PduModePtr = CanIf_ControllerPduMode[ControllerId];
+    return E_OK;
+}
+
+/**
+ * \brief   CAN コントローラの動作モード（Started/Sleep/Stopped）の遷移を要求する。
+ *
+ * \details 下位の Can_SetControllerMode() を呼び出す（[SWS_CANIF_00308]）。
+ *          実 AUTOSAR は目標モードから実際の Can_StateTransitionType への
+ *          変換に Can 側の非同期通知（CanIf_ControllerModeIndication、
+ *          本実装は未実装）で得た現在状態を使うが、本プロジェクトの
+ *          Can_SetControllerMode() は同期的に完了するため、CanIf 自身が
+ *          追跡する `CanIf_ControllerMode[]`（前回の成功要求の結果）だけで
+ *          十分に判定できる。
+ *
+ *          CAN_CS_STARTED/CAN_CS_SLEEP は遷移元によらず常に単一の
+ *          Transition（CAN_T_START/CAN_T_SLEEP）に対応する（Can.c の
+ *          Can_SetControllerMode() が両方とも複数の遷移元を許容する設計の
+ *          ため）。CAN_CS_STOPPED のみ遷移元に応じて CAN_T_STOP
+ *          （CAN_CS_STARTED から）と CAN_T_WAKEUP（CAN_CS_SLEEP から）を
+ *          使い分ける必要がある。
+ *
+ * \param[in]  ControllerId    対象コントローラの ID。
+ * \param[in]  ControllerMode  要求する目標モード。CAN_CS_UNINIT は無効。
+ *
+ * \retval  E_OK      要求を受け付け、Can_SetControllerMode() が成功した。
+ * \retval  E_NOT_OK  ControllerId が範囲外、ControllerMode が
+ *                     CAN_CS_STARTED/SLEEP/STOPPED 以外、または
+ *                     Can_SetControllerMode() が失敗した。
+ *
+ * \AUTOSARReq     {SWS_CANIF_00003, SWS_CANIF_00308, SWS_CANIF_00311, SWS_CANIF_00774}
+ * \ServiceID      {0x03}
+ * \Reentrancy     {Reentrant (Not for the same controller)}
+ * \Synchronicity  {Asynchronous}
+ */
+Std_ReturnType CanIf_SetControllerMode(uint8 ControllerId, Can_ControllerStateType ControllerMode)
+{
+    DET_LOGT(TAG, "called");
+
+    if (CanIf_ConfigPtr == NULL)
+        return E_NOT_OK;
+
+    if (ControllerId >= CANIF_CONTROLLER_MAX)
+    {
+        Det_ReportError(CANIF_MODULE_ID, 0U, CANIF_API_ID_SET_CONTROLLER_MODE, CANIF_E_PARAM_CONTROLLERID);
+        return E_NOT_OK;
+    }
+
+    Can_StateTransitionType transition;
+    switch (ControllerMode)
+    {
+        case CAN_CS_STARTED:
+            transition = CAN_T_START;
+            break;
+        case CAN_CS_SLEEP:
+            transition = CAN_T_SLEEP;
+            break;
+        case CAN_CS_STOPPED:
+            transition = (CanIf_ControllerMode[ControllerId] == CAN_CS_SLEEP) ? CAN_T_WAKEUP : CAN_T_STOP;
+            break;
+        default:
+            Det_ReportError(CANIF_MODULE_ID, 0U, CANIF_API_ID_SET_CONTROLLER_MODE, CANIF_E_PARAM_CTRLMODE);
+            return E_NOT_OK;
+    }
+
+    if (Can_SetControllerMode(ControllerId, transition) != CAN_OK)
+        return E_NOT_OK;
+
+    DET_LOGI(TAG, "SetControllerMode ch=%u mode=%u", (unsigned)ControllerId, (unsigned)ControllerMode);
+    CanIf_ControllerMode[ControllerId] = ControllerMode;
+    return E_OK;
+}
+
+/**
+ * \brief   CAN コントローラの現在の動作モードを取得する。
+ *
+ * \param[in]   ControllerId     対象コントローラの ID。
+ * \param[out]  ControllerModePtr  現在のモードの格納先。NULL 禁止。
+ *
+ * \retval  E_OK      ControllerModePtr へ格納した。
+ * \retval  E_NOT_OK  ControllerId が範囲外、または ControllerModePtr が NULL。
+ *
+ * \AUTOSARReq     {SWS_CANIF_00229, SWS_CANIF_00313, SWS_CANIF_00656}
+ * \ServiceID      {0x04}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType CanIf_GetControllerMode(uint8 ControllerId, Can_ControllerStateType* ControllerModePtr)
+{
+    DET_LOGT(TAG, "called");
+
+    if (CanIf_ConfigPtr == NULL)
+        return E_NOT_OK;
+
+    if (ControllerId >= CANIF_CONTROLLER_MAX)
+    {
+        Det_ReportError(CANIF_MODULE_ID, 0U, CANIF_API_ID_GET_CONTROLLER_MODE, CANIF_E_PARAM_CONTROLLERID);
+        return E_NOT_OK;
+    }
+
+    if (ControllerModePtr == NULL)
+    {
+        Det_ReportError(CANIF_MODULE_ID, 0U, CANIF_API_ID_GET_CONTROLLER_MODE, CANIF_E_PARAM_POINTER);
+        return E_NOT_OK;
+    }
+
+    *ControllerModePtr = CanIf_ControllerMode[ControllerId];
     return E_OK;
 }
 

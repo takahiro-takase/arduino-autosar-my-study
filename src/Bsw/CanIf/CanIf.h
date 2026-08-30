@@ -29,6 +29,8 @@ void           CanIf_ControllerWakeup(uint8 ControllerId);
 void           CanIf_GetVersionInfo(Std_VersionInfoType* versioninfo);
 Std_ReturnType CanIf_SetPduMode(uint8 ControllerId, CanIf_PduModeType PduModeRequest);
 Std_ReturnType CanIf_GetPduMode(uint8 ControllerId, CanIf_PduModeType* PduModePtr);
+Std_ReturnType CanIf_SetControllerMode(uint8 ControllerId, Can_ControllerStateType ControllerMode);
+Std_ReturnType CanIf_GetControllerMode(uint8 ControllerId, Can_ControllerStateType* ControllerModePtr);
 
 #ifdef __cplusplus
 }
