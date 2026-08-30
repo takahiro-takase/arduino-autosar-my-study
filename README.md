@@ -472,9 +472,9 @@ RX（外部 → Arduino、上り）
 
 ```
 Com_SendSignal()/Com_SendSignalGroup()   ← ASW から呼ばれる。TX バッファへ pack するだけ
-  ┊  (Com_TxPending 経由。次回 Com_MainFunction() の 100ms tick まで非同期に待機)
+  ┊  (Com_TxPending 経由。次回 Com_MainFunctionTx() の 100ms tick まで非同期に待機)
   ↓
-Com_MainFunction()                        ← ここから下は同期呼び出し連鎖
+Com_MainFunctionTx()                        ← ここから下は同期呼び出し連鎖
   → PduR_Transmit()
     → TransmitOverrideFct 未設定（現状の全 TX I-PDU）:
         CanIf_Transmit() → Can_Write()（SPI 送信完了までここで同期完了）
@@ -490,12 +490,12 @@ Com_MainFunction()                        ← ここから下は同期呼び出�
 <a id="tx-processing-e2e"></a>
 ##### E2E（E2EHealthStatus 送信）
 
-`Com_MainFunction()` の TxTransformCbk フック（[E2E 保護](#e2e-p01) 参照）を経由して、
+`Com_MainFunctionTx()` の TxTransformCbk フック（[E2E 保護](#e2e-p01) 参照）を経由して、
 Protect 処理が通常のチェーンへ割り込みます。TxTransformCbk を使う TX I-PDU は
 現状 E2EHealthStatus のみです。
 
 ```
-Com_MainFunction()
+Com_MainFunctionTx()
   → TxTransformCbk があれば呼ぶ    ← Rte_COMTransform_E2EHealthStatus()
                                      → E2EXf_TransformP05() → E2E_P05Protect()
   → PduR_Transmit() → CanIf_Transmit() → Can_Write()   （以降は「通常」と同じ）
@@ -549,7 +549,7 @@ Com_RxIndication()                 ← EngineInfo/AbsInfo（RxIndicationCbk 経�
 なっている。
 
 ```
-[100ms 周期タスク] Os_SchedulerStep() → Com_MainFunction()
+[100ms 周期タスク] Os_SchedulerStep() → Com_MainFunctionRx()
   → (now - Com_RxLastMs[iPdu]) がしきい値（ComTimeout/ComFirstTimeout）以上なら
       Com_SigTimedOut[signal] を立てる（WARN ログ、ここが検知点）
   ┊  (Com_SigTimedOut というフラグ経由。次に Com_ReceiveSignal() が
@@ -562,10 +562,10 @@ Com_ReceiveSignal()                ← Rte 等から呼ばれる（同期）
       NONE（既定）: E_NOT_OK（呼び出し元は自分の初期値を使う）
 ```
 
-TX 処理の `Com_TxPending`（`Com_SendSignal()` が立てて `Com_MainFunction()` が
+TX 処理の `Com_TxPending`（`Com_SendSignal()` が立てて `Com_MainFunctionTx()` が
 読む）と同じ「立てる側／読む側が別々のタイミングで動く」非同期境界だが、
 向きが逆になっている点に注意（こちらは周期タスクが立てて、on-demand 呼び出し
-が読む）。`Com_MainFunction()` はあくまで 100ms ごとのポーリングでしきい値
+が読む）。`Com_MainFunctionRx()` はあくまで 100ms ごとのポーリングでしきい値
 超過を確認するだけで、しきい値ちょうどの瞬間に発火する割り込みではない
 （検知は最大約100ms 遅れうる）。
 
@@ -1148,13 +1148,13 @@ $env:DET_LOG_VERBOSE = "1"; pio test -e native_chain -v # TRACE ログ出力
 ##### Tx 処理（Com → PduR → CanIf → Can の順）
 
 [「Tx 処理」コールチェーン](#tx-processing)（`Com_SendSignal()` → …
-→ `Com_MainFunction()` → `PduR_Transmit()` → `CanIf_Transmit()` →
+→ `Com_MainFunctionTx()` → `PduR_Transmit()` → `CanIf_Transmit()` →
 `Can_Write()`）を複数モジュールにわたって実体（Com.c/PduR.c/CanIf.c/Can.c）で
 リンクし、そのまま検証する `Bsw_TxChain_test.cpp` を `test/test_chain/` に
 用意しています（`Com.c`/`PduR.c`/`CanIf.c` それぞれ単体のテストではなく、README の
 コールチェーン図そのものを実行して理解・確認するのが主目的）。
 コールチェーン図に明示されている非同期の切れ目
-（`Com_TxPending` というキュー経由で次回 `Com_MainFunction()` まで待機する
+（`Com_TxPending` というキュー経由で次回 `Com_MainFunctionTx()` まで待機する
 箇所）でテストを2つのセグメントに分け、それぞれを個別に実行可能な
 `TEST_F` ケースとしている（`--gtest_filter=Bsw_TxChain_Test.ComSendSignal_*` 等で
 絞り込み可）。フェイクは最下層の `Can_Hw` のみ（`test/test_chain/
@@ -1162,7 +1162,7 @@ Hal_Can_Hw_fake.c`）で、CanIf.c が呼ぶ `CanSM_RxIndication()` 等は
 `Bsw_CanSM_fake.c`（no-op スタブ、CanSM 自身のロジックは README
 「ECU管理層」の別のコールチェーンのため対象外）で満たしている。
 
-[「Tx 処理」の「E2E」](#tx-processing-e2e)（`Com_MainFunction()` →
+[「Tx 処理」の「E2E」](#tx-processing-e2e)（`Com_MainFunctionTx()` →
 TxTransformCbk → `E2EXf_TransformP05()` → `E2E_P05Protect()`）は
 `Bsw_TxE2EChain_test.cpp` で別途検証している。本番の TxTransformCbk
 （`Rte_COMTransform_E2EHealthStatus()`）は `Rte.c` にあるが、`Rte.c` 自体は
@@ -1196,7 +1196,7 @@ RxIndicationCbk → `E2EXf_InverseTransformP05()` → `E2E_P05Check()`）は
 `E2E_P05STATUS_ERROR` になることも含めて検証する（詳細は
 `Bsw_RxE2EChain_test.cpp` 冒頭のコメント参照）。
 
-[「Rx 処理」の「デッドライン監視」](#rx-processing-timeout)（`Com_MainFunction()`
+[「Rx 処理」の「デッドライン監視」](#rx-processing-timeout)（`Com_MainFunctionRx()`
 がしきい値超過を検知 → `Com_SigTimedOut` フラグ経由 → `Com_ReceiveSignal()` が
 `ComRxDataTimeoutAction` を適用）は `Bsw_RxTimeoutChain_test.cpp` で別途検証
 している。この非同期境界は Tx 処理の `Com_TxPending` と構造が同じだが、
@@ -1765,9 +1765,9 @@ byte[2] の警告灯3bitと byte[3-4] の EngineSpeed・byte[5] の CoolantTemp 
 
 `App_EngineManager_Run()`（3000ms 周期）は `Rte_Write_EngineStatus_EngineState()` で
 値を書き込むだけで、送信自体は Com が判断します。`EngineState` が変化すると Com が
-次回 `Com_MainFunction()`（Os の 100ms タスク）で送信し、変化がなくても一定間隔
+次回 `Com_MainFunctionTx()`（Os の 100ms タスク）で送信し、変化がなくても一定間隔
 （周期フロア、後述）で再送し続けます。実際の CAN 送信（SPI 通信）は必ず
-`Com_MainFunction()` 側で行われるため、`App_EngineManager_Run()` 自身が SPI
+`Com_MainFunctionTx()` 側で行われるため、`App_EngineManager_Run()` 自身が SPI
 送信でブロッキングすることはありません（詳細は「Com」の「ComFilterAlgorithm と TxModeMode」セクション参照）。E2E 保護は
 付与していません（EngineInfo/AbsInfo を Com が既に検証した**後**にメータ ECU 自身が
 導出する二次データであり、実車でも一次センサ値ほど厳密な保護が付与されないことが
@@ -1781,7 +1781,7 @@ byte[2] の警告灯3bitと byte[3-4] の EngineSpeed・byte[5] の CoolantTemp 
 
 `App_WarningIndicator_Run()`（500ms 周期）が 3 本の LED レベルを計算した直後、同じ値を
 Signal Group としてまとめて Com へコミットします。コミットで変化が検知されると
-次回 `Com_MainFunction()` で送信されます。E2E 保護は付与していません
+次回 `Com_MainFunctionTx()` で送信されます。E2E 保護は付与していません
 （ダッシュボード表示用の LED ミラー情報であり、他 ECU の制御判断に使う想定がないため）。
 
 この I-PDU は固定の `TxModeMode` を 1 つだけ持つのではなく、TMS

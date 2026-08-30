@@ -226,7 +226,7 @@ const Com_SignalConfigType kTestRxGroupSignalB = {
 const Com_IPduConfigType kTestRxGroupIPdu = {
     /* IPduId */           1U,
     /* DLC */              1U,
-    /* PduRId */           1U,  // 本テストは Com_MainFunction()/CanIf/PduR まで進めないため未使用
+    /* PduRId */           1U,  // 本テストは Com_MainFunctionRx()/Tx()/CanIf/PduR まで進めないため未使用
     /* FirstTimeoutMs */   0U,
     /* TimeoutMs */        0U,
     /* IsSignalGroup */    1U,
@@ -315,7 +315,7 @@ const Com_SignalConfigType kTestPartialSignalByte1 = {
 const Com_IPduConfigType kTestPartialIPdu = {
     /* IPduId */           2U,
     /* DLC */              2U,
-    /* PduRId */           2U,  // 本テストは Com_MainFunction()/CanIf/PduR まで進めないため未使用
+    /* PduRId */           2U,  // 本テストは Com_MainFunctionRx()/Tx()/CanIf/PduR まで進めないため未使用
     /* FirstTimeoutMs */   0U,
     /* TimeoutMs */        0U,
     /* IsSignalGroup */    0U,

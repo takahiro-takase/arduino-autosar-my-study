@@ -7,8 +7,8 @@
  *          図をそのまま実行して確認するもの：
  *
  *              Com_SendSignal()/Com_SendSignalGroup()   ← ASW から呼ばれる
- *                ┊  (Com_TxPending 経由。次回 Com_MainFunction() まで非同期に待機)
- *              Com_MainFunction()
+ *                ┊  (Com_TxPending 経由。次回 Com_MainFunctionTx() まで非同期に待機)
+ *              Com_MainFunctionTx()
  *                → PduR_Transmit() → CanIf_Transmit() → Can_Write()
  *                  （SPI 送信完了までここで同期完了）
  *
@@ -20,9 +20,9 @@
  *
  *            セグメント①: Com_SendSignal() が Com_TxPending をセットし、値を
  *                         TX バッファへ正しく pack することを検証し、そこで終わる
- *                         （Com_MainFunction() は呼ばない）。
+ *                         （Com_MainFunctionTx() は呼ばない）。
  *            セグメント②: セグメント①の終端状態（Com_TxPending が立った状態）を
- *                         Arrange で用意し、Com_MainFunction() が
+ *                         Arrange で用意し、Com_MainFunctionTx() が
  *                         PduR_Transmit()→CanIf_Transmit()→Can_Write() と同期連鎖し、
  *                         最終的に Can_Hw（フェイク）へ正しい CAN ID/DLC/データで
  *                         送信要求が届くことまで検証する。
@@ -36,7 +36,7 @@
  *          `test/test_chain/Hal_Can_Hw_fake.c` を使う）。中心となる
  *          セグメント①②はコールチェーン全体を貫く IPduId=0（16bit シグナル
  *          1本）のみを使う。IPduId=1/2 は SWS_Com_00495（TMS 遷移時の
- *          無条件即時送信）専用の追加 I-PDU で、Com_MainFunction() より前の
+ *          無条件即時送信）専用の追加 I-PDU で、Com_MainFunctionTx() より前の
  *          Com_SendSignal()/Com_SendSignalGroup() の境界内で完結する
  *          （PduR/CanIf 側にルーティングは設定していない）。IPduId=0
  *          （kTestTxIPdu）は ComTxModeNumberOfRepetitions（SWS_Com_00305）の
@@ -59,7 +59,7 @@
  *          ComM/Dem は境界としてフェイクに差し替える、Bsw_ComM_fake.h /
  *          Bsw_Dem_fake.h 冒頭コメント参照）。本ファイルの TX チェーンは
  *          CanSM の状態遷移に一切関与しないため、CanSM_Init() すら呼ばない
- *          （Com_MainFunction() は CanIf_RxIndication() を経由しないため）。
+ *          （Com_MainFunctionTx() は CanIf_RxIndication() を経由しないため）。
  */
 #include <gtest/gtest.h>
 
@@ -217,7 +217,7 @@ static void TestGroupTxAckCbk(void) { s_groupTxAckCount++; }
 const Com_IPduConfigType kTestTmsGroupIPdu = {
     /* IPduId */           1U,
     /* DLC */              1U,
-    /* PduRId */           1U,   // 本テストは Com_MainFunction()/PduR まで進めないため未使用
+    /* PduRId */           1U,   // 本テストは Com_MainFunctionTx()/PduR まで進めないため未使用
     /* FirstTimeoutMs */   0U,
     /* TimeoutMs */        0U,
     /* IsSignalGroup */    1U,
@@ -313,7 +313,7 @@ const Com_SignalConfigType kTestNonGroupTmsCalledSignal = {
 const Com_IPduConfigType kTestNonGroupTmsIPdu = {
     /* IPduId */           2U,
     /* DLC */              1U,
-    /* PduRId */           2U,   // 本テストは Com_MainFunction()/PduR まで進めないため未使用
+    /* PduRId */           2U,   // 本テストは Com_MainFunctionTx()/PduR まで進めないため未使用
     /* FirstTimeoutMs */   0U,
     /* TimeoutMs */        0U,
     /* IsSignalGroup */    0U,
@@ -812,7 +812,7 @@ TEST_F(Bsw_TxChain_Test, NonGroupTmsTransition_OK_TriggersImmediateSendEvenWhenC
 // 単位で走査していたため、WarningStatus のような 3 メンバー構成では最大 3 回
 // 呼ばれてしまう簡略化だった。kTestTmsGroupIPdu（IPduId=1、Signal Group、
 // TxAckCbk=TestGroupTxAckCbk）に対して Com_TxConfirmation() を直接呼び、
-// カウンタが厳密に 1 であることを確認する（本テストは Com_MainFunction()/
+// カウンタが厳密に 1 であることを確認する（本テストは Com_MainFunctionTx()/
 // PduR を経由しないため、Com_TxConfirmation() を直接呼ぶ形で検証する）。
 // ------------------------------------------------------------
 TEST_F(Bsw_TxChain_Test, TxConfirmation_OK_CallsSignalGroupAckCbkExactlyOnce)
@@ -849,7 +849,7 @@ TEST_F(Bsw_TxChain_Test, TxConfirmation_NG_NonGroupIPduDoesNotCallGroupAckCbk)
 TEST_F(Bsw_TxChain_Test, IpduGroupStop_OK_CallsSignalGroupErrCbkExactlyOnceWhenUnconfirmed)
 {
     /* 準備 (Arrange): 「PduR へは渡した（実送信済み）が Com_TxConfirmation()
-     * がまだ届いていない」状態を直接作る（Com_MainFunction()/PduR を経由
+     * がまだ届いていない」状態を直接作る（Com_MainFunctionTx()/PduR を経由
      * しないための test-only setter、Com.h 参照）。 */
     Com_Test_SetTxConfPending(3U, 1U);
 
@@ -875,7 +875,7 @@ TEST_F(Bsw_TxChain_Test, IpduGroupStop_NG_DoesNotCallErrCbkWhenAlreadyConfirmed)
 }
 
 // ------------------------------------------------------------
-// セグメント②: Com_MainFunction() ─ キューの続きから Can_Hw まで
+// セグメント②: Com_MainFunctionTx() ─ キューの続きから Can_Hw まで
 // ------------------------------------------------------------
 TEST_F(Bsw_TxChain_Test, ComMainFunction_OK_DrivesChainToCanHwSend)
 {
@@ -885,7 +885,7 @@ TEST_F(Bsw_TxChain_Test, ComMainFunction_OK_DrivesChainToCanHwSend)
     ASSERT_EQ(Com_Test_GetTxPending(0U), 1U);
 
     /* 実行 (Act) */
-    Com_MainFunction();
+    Com_MainFunctionTx();
 
     /* 評価 (Assert) */
     EXPECT_EQ(Com_Test_GetTxPending(0U), 0U);  // 送信要求が消費された
@@ -901,7 +901,7 @@ TEST_F(Bsw_TxChain_Test, ComMainFunction_NG_NothingPending_DoesNotReachCanHw)
     /* 準備 (Arrange): Com_SendSignal() を呼ばない（Com_TxPending が立っていない） */
 
     /* 実行 (Act) */
-    Com_MainFunction();
+    Com_MainFunctionTx();
 
     /* 評価 (Assert) */
     EXPECT_EQ(FakeCanHw_SendCount, 0U);
@@ -921,7 +921,7 @@ TEST_F(Bsw_TxChain_Test, ComMainFunction_OK_AcceptedByTxIpduCalloutTransmitsNorm
     Com_SendSignal(0U, &value);
 
     /* 実行 (Act) */
-    Com_MainFunction();
+    Com_MainFunctionTx();
 
     /* 評価 (Assert): callout は送信直前の最終バイト列で 1 回呼ばれ、
      * 通常どおり Can_Hw まで到達する。実際に PduR へ渡したため
@@ -940,7 +940,7 @@ TEST_F(Bsw_TxChain_Test, ComMainFunction_NG_RejectedByTxIpduCalloutDiscardsTrans
     Com_SendSignal(0U, &value);
 
     /* 実行 (Act) */
-    Com_MainFunction();
+    Com_MainFunctionTx();
 
     /* 評価 (Assert): [SWS_Com_00346] false のため PduR_Transmit() 以降
      * （CanIf/Can/Can_Hw）に一切到達しない。実際には送信していないため
@@ -955,10 +955,10 @@ TEST_F(Bsw_TxChain_Test, ComMainFunction_NG_RejectedByTxIpduCalloutDiscardsTrans
 // SWS_Com_00305: ComTxModeNumberOfRepetitions（変化時送信の冗長再送）。
 // kTestTxIPdu（IPduId=0）は NumberOfRepetitions=2U/RepetitionPeriodMs=50U を
 // 持つため、初回送信 + 2 回の再送 = 計3回送信されて止まることを検証する。
-// 残り回数の減算は Com_TxConfirmation() 到達時ではなく Com_MainFunction() の
+// 残り回数の減算は Com_TxConfirmation() 到達時ではなく Com_MainFunctionTx() の
 // dispatch 時点で行う設計のため（Com.c のコメント参照。TX 確認は
 // Can_MainFunction_Write() という別タスク経由で非同期に届き、
-// Com_MainFunction() 単独では待てないため）、これらのテストは
+// Com_MainFunctionTx() 単独では待てないため）、これらのテストは
 // Com_TxConfirmation() を一切呼ばない。
 // ------------------------------------------------------------
 TEST_F(Bsw_TxChain_Test, RepetitionSequence_OK_FiresConfiguredNumberOfRepeatsThenStops)
@@ -968,25 +968,25 @@ TEST_F(Bsw_TxChain_Test, RepetitionSequence_OK_FiresConfiguredNumberOfRepeatsThe
     Com_SendSignal(0U, &value);
 
     /* 実行 (Act) + 評価 (Assert): 初回送信 */
-    Com_MainFunction();
+    Com_MainFunctionTx();
     EXPECT_EQ(FakeCanHw_SendCount, 1U);
     EXPECT_EQ(Com_Test_GetTxRepeatsRemaining(0U), 2U);  // 初回はまだ減らない
 
     /* 1 回目の再送（RepetitionPeriodMs=50 経過後） */
     FakeMillis_Value += 50U;
-    Com_MainFunction();
+    Com_MainFunctionTx();
     EXPECT_EQ(FakeCanHw_SendCount, 2U);
     EXPECT_EQ(Com_Test_GetTxRepeatsRemaining(0U), 1U);
 
     /* 2 回目の再送（NumberOfRepetitions=2 を使い切る） */
     FakeMillis_Value += 50U;
-    Com_MainFunction();
+    Com_MainFunctionTx();
     EXPECT_EQ(FakeCanHw_SendCount, 3U);
     EXPECT_EQ(Com_Test_GetTxRepeatsRemaining(0U), 0U);
 
     /* 再送を使い切った後は、さらに周期が経過しても送信されない */
     FakeMillis_Value += 50U;
-    Com_MainFunction();
+    Com_MainFunctionTx();
     EXPECT_EQ(FakeCanHw_SendCount, 3U);
 }
 
@@ -1011,13 +1011,13 @@ TEST_F(Bsw_TxChain_Test, RepetitionSequence_OK_InitialSendDoesNotConsumeRepeatBu
      * 送信は再送としてカウントしない）。計3回まで正常に続くことは
      * RepetitionSequence_OK_FiresConfiguredNumberOfRepeatsThenStops が
      * 既に検証しているため、ここでは初回分の回帰確認に絞る。 */
-    Com_MainFunction();
+    Com_MainFunctionTx();
     EXPECT_EQ(FakeCanHw_SendCount, 1U);
     EXPECT_EQ(Com_Test_GetTxRepeatsRemaining(0U), 2U);
 
     /* 以降も正常に再送が続くことだけ 1 回分だけ確認する */
     FakeMillis_Value += 50U;
-    Com_MainFunction();
+    Com_MainFunctionTx();
     EXPECT_EQ(FakeCanHw_SendCount, 2U);
     EXPECT_EQ(Com_Test_GetTxRepeatsRemaining(0U), 1U);
 }
@@ -1032,7 +1032,7 @@ TEST_F(Bsw_TxChain_Test, RepetitionSequence_OK_DoesNotConsumeBudgetWhileCommunic
     /* 準備 (Arrange): 初回送信を済ませたうえで送信を抑制する */
     uint16_t value = 0x1234U;
     Com_SendSignal(0U, &value);
-    Com_MainFunction();
+    Com_MainFunctionTx();
     ASSERT_EQ(FakeCanHw_SendCount, 1U);
     ASSERT_EQ(Com_Test_GetTxRepeatsRemaining(0U), 2U);
     Com_SetCommunicationEnabled(1U, 0U);  // RxEnabled=1, TxEnabled=0
@@ -1041,9 +1041,9 @@ TEST_F(Bsw_TxChain_Test, RepetitionSequence_OK_DoesNotConsumeBudgetWhileCommunic
      * （repeatDue 自体は周期的に真になり得るが、Com_TxEnabled==0 のため
      * Com_DoTransmit() には到達しない） */
     FakeMillis_Value += 50U;
-    Com_MainFunction();
+    Com_MainFunctionTx();
     FakeMillis_Value += 50U;
-    Com_MainFunction();
+    Com_MainFunctionTx();
 
     /* 評価 (Assert): 送信は1本も増えておらず、残り回数も空費されていない */
     EXPECT_EQ(FakeCanHw_SendCount, 1U);
@@ -1052,7 +1052,7 @@ TEST_F(Bsw_TxChain_Test, RepetitionSequence_OK_DoesNotConsumeBudgetWhileCommunic
     /* 抑制解除後は、通常どおり残っていた再送が送信される */
     Com_SetCommunicationEnabled(1U, 1U);
     FakeMillis_Value += 50U;
-    Com_MainFunction();
+    Com_MainFunctionTx();
     EXPECT_EQ(FakeCanHw_SendCount, 2U);
     EXPECT_EQ(Com_Test_GetTxRepeatsRemaining(0U), 1U);
 }
@@ -1062,12 +1062,12 @@ TEST_F(Bsw_TxChain_Test, RepetitionSequence_NG_DoesNotFireBeforePeriodElapsed)
     /* 準備 (Arrange): 初回送信を済ませておく */
     uint16_t value = 0x1234U;
     Com_SendSignal(0U, &value);
-    Com_MainFunction();
+    Com_MainFunctionTx();
     ASSERT_EQ(FakeCanHw_SendCount, 1U);
 
     /* 実行 (Act): RepetitionPeriodMs(50) 未満しか経過していない */
     FakeMillis_Value += 49U;
-    Com_MainFunction();
+    Com_MainFunctionTx();
 
     /* 評価 (Assert): 再送されない。残り回数も減らない */
     EXPECT_EQ(FakeCanHw_SendCount, 1U);
@@ -1079,9 +1079,9 @@ TEST_F(Bsw_TxChain_Test, RepetitionSequence_OK_NewSendSignalRestartsSequence)
     /* 準備 (Arrange): 初回送信 + 1 回の再送を消費させる */
     uint16_t value = 0x1234U;
     Com_SendSignal(0U, &value);
-    Com_MainFunction();
+    Com_MainFunctionTx();
     FakeMillis_Value += 50U;
-    Com_MainFunction();
+    Com_MainFunctionTx();
     ASSERT_EQ(Com_Test_GetTxRepeatsRemaining(0U), 1U);
 
     /* 実行 (Act): 新たな送信要求（[SWS_Com_00279]、kTestSignal は
@@ -1112,27 +1112,27 @@ TEST_F(Bsw_TxChain_Test, IpduGroupStop_OK_ClearsRepeatsRemaining)
 // ------------------------------------------------------------
 // SWS_Com_00878/00879/00880/00304/00554: TX 送信デッドライン監視
 // （Com_CbkTxTOut）。kTestTxIPdu（IPduId=0）は TxFirstTimeoutMs=1000U/
-// TxTimeoutMs=500U を持つ。実際のディスパッチ（Com_MainFunction() 経由）が
+// TxTimeoutMs=500U を持つ。実際のディスパッチ（Com_MainFunctionTx() 経由）が
 // タイマをアームするため、Com_TxConfirmation() を直接呼ぶ場合を除き
-// Com_MainFunction() を通して検証する。
+// Com_MainFunctionTx() を通して検証する。
 // ------------------------------------------------------------
 TEST_F(Bsw_TxChain_Test, TxTOut_OK_FiresAfterFirstTimeoutWhenArmedAndUnconfirmed)
 {
     /* 準備 (Arrange): 送信し、確認を一切与えない（アームしたまま放置） */
     uint16_t value = 0x1234U;
     Com_SendSignal(0U, &value);
-    Com_MainFunction();  // t=0: 実送信、Com_TxConfPendingSinceMs[0]=0 でアーム
+    Com_MainFunctionTx();  // t=0: 実送信、Com_TxConfPendingSinceMs[0]=0 でアーム
     ASSERT_EQ(Com_Test_GetTxConfPending(0U), 1U);
 
     /* 実行 (Act) + 評価 (Assert): TxFirstTimeoutMs(1000) 未満ではまだ発火しない */
     FakeMillis_Value += 999U;
-    Com_MainFunction();
+    Com_MainFunctionTx();
     EXPECT_EQ(Com_Test_GetTxTimedOut(0U), 0U);
     EXPECT_EQ(s_txTOutCount, 0U);
 
     /* TxFirstTimeoutMs(1000) 超過で発火する */
     FakeMillis_Value += 2U;
-    Com_MainFunction();
+    Com_MainFunctionTx();
     EXPECT_EQ(Com_Test_GetTxTimedOut(0U), 1U);
     EXPECT_EQ(s_txTOutCount, 1U);
 }
@@ -1145,19 +1145,19 @@ TEST_F(Bsw_TxChain_Test, TxTOut_OK_RepeatsDoNotRestartOrExtendDeadline)
      * （[SWS_Com_00878] "unless already running"）。 */
     uint16_t value = 0x1234U;
     Com_SendSignal(0U, &value);
-    Com_MainFunction();  // t=0: 初回送信、アーム
+    Com_MainFunctionTx();  // t=0: 初回送信、アーム
     FakeMillis_Value += 50U;
-    Com_MainFunction();  // t=50: 再送1回目（Com_TxConfPending は既に1のまま）
+    Com_MainFunctionTx();  // t=50: 再送1回目（Com_TxConfPending は既に1のまま）
     FakeMillis_Value += 50U;
-    Com_MainFunction();  // t=100: 再送2回目（NumberOfRepetitions を使い切る）
+    Com_MainFunctionTx();  // t=100: 再送2回目（NumberOfRepetitions を使い切る）
     FakeMillis_Value += 50U;
-    Com_MainFunction();  // t=150: 再送なし
+    Com_MainFunctionTx();  // t=150: 再送なし
 
     /* 実行 (Act): t=0 基準で TxFirstTimeoutMs(1000) を超過させる
      * （t=150 + 851 = 1001。再送のたびにタイマが延命されていれば
      * t=100+1000=1100 まで発火しないはずだが、そうならないことを確認する） */
     FakeMillis_Value += 851U;
-    Com_MainFunction();
+    Com_MainFunctionTx();
 
     /* 評価 (Assert) */
     EXPECT_EQ(Com_Test_GetTxTimedOut(0U), 1U);
@@ -1169,7 +1169,7 @@ TEST_F(Bsw_TxChain_Test, TxTOut_OK_ConfirmationBeforeDeadlineCancelsIt)
     /* 準備 (Arrange): 送信後、TxFirstTimeoutMs(1000) 未満のうちに確認する */
     uint16_t value = 0x1234U;
     Com_SendSignal(0U, &value);
-    Com_MainFunction();  // t=0: 送信、アーム
+    Com_MainFunctionTx();  // t=0: 送信、アーム
     FakeMillis_Value += 400U;
     Com_TxConfirmation(0U, E_OK);  // t=400: 確認到達、タイマ解除
     ASSERT_EQ(Com_Test_GetTxConfPending(0U), 0U);
@@ -1177,7 +1177,7 @@ TEST_F(Bsw_TxChain_Test, TxTOut_OK_ConfirmationBeforeDeadlineCancelsIt)
     /* 実行 (Act): TxFirstTimeoutMs を優に超える時間が経過しても、
      * 既に確認済み（Com_TxConfPending==0）のため監視対象外のまま */
     FakeMillis_Value += 700U;
-    Com_MainFunction();
+    Com_MainFunctionTx();
 
     /* 評価 (Assert) */
     EXPECT_EQ(Com_Test_GetTxTimedOut(0U), 0U);
@@ -1190,7 +1190,7 @@ TEST_F(Bsw_TxChain_Test, TxTOut_OK_UsesSteadyTimeoutAfterFirstConfirmedCycle)
      * （Com_TxUsingFirstTimeout を false へ倒す） */
     uint16_t value = 0x1234U;
     Com_SendSignal(0U, &value);
-    Com_MainFunction();
+    Com_MainFunctionTx();
     Com_TxConfirmation(0U, E_OK);
     ASSERT_EQ(Com_Test_GetTxConfPending(0U), 0U);
 
@@ -1198,11 +1198,11 @@ TEST_F(Bsw_TxChain_Test, TxTOut_OK_UsesSteadyTimeoutAfterFirstConfirmedCycle)
      * 使うはずで、TxFirstTimeoutMs=1000 は使わない） */
     uint16_t value2 = 0x5678U;
     Com_SendSignal(0U, &value2);
-    Com_MainFunction();
+    Com_MainFunctionTx();
     ASSERT_EQ(Com_Test_GetTxConfPending(0U), 1U);
 
     FakeMillis_Value += 500U;
-    Com_MainFunction();
+    Com_MainFunctionTx();
 
     /* 評価 (Assert): TxFirstTimeoutMs(1000) ではなく TxTimeoutMs(500) で
      * 発火している */
@@ -1214,7 +1214,7 @@ TEST_F(Bsw_TxChain_Test, TxTOut_OK_GroupLevelFiresWhenStartedAndOverdue)
 {
     /* 準備 (Arrange): kTestErrGroupIPdu（IPduId=3、Signal Group、
      * TxFirstTimeoutMs=100U）を起動し、test-only setter で
-     * 「送信済み・未確認」状態を直接注入する（実際に Com_MainFunction()/PduR
+     * 「送信済み・未確認」状態を直接注入する（実際に Com_MainFunctionTx()/PduR
      * を経由させる配線は用意していないため）。 */
     Com_IpduGroupStart(kTestStoppableGroupId, 0U);
     Com_Test_SetTxConfPending(3U, 1U);
@@ -1222,7 +1222,7 @@ TEST_F(Bsw_TxChain_Test, TxTOut_OK_GroupLevelFiresWhenStartedAndOverdue)
 
     /* 実行 (Act): TxFirstTimeoutMs(100) を超過させる */
     FakeMillis_Value += 101U;
-    Com_MainFunction();
+    Com_MainFunctionTx();
 
     /* 評価 (Assert): グループ単位で発火する。TxErrCbk とは無関係 */
     EXPECT_EQ(s_groupTxTOutCount, 1U);
@@ -1232,7 +1232,7 @@ TEST_F(Bsw_TxChain_Test, TxTOut_OK_GroupLevelFiresWhenStartedAndOverdue)
 TEST_F(Bsw_TxChain_Test, IpduGroupStop_OK_PreventsTxTOutDoubleFireWithTxErrCbk)
 {
     /* 準備 (Arrange): TxTOut_OK_GroupLevelFiresWhenStartedAndOverdue と同じ
-     * 「送信済み・未確認のまま閾値超過」状態を作るが、Com_MainFunction() で
+     * 「送信済み・未確認のまま閾値超過」状態を作るが、Com_MainFunctionTx() で
      * 評価される前に Com_IpduGroupStop() を先に呼ぶ。 */
     Com_IpduGroupStart(kTestStoppableGroupId, 0U);
     Com_Test_SetTxConfPending(3U, 1U);
@@ -1241,7 +1241,7 @@ TEST_F(Bsw_TxChain_Test, IpduGroupStop_OK_PreventsTxTOutDoubleFireWithTxErrCbk)
 
     /* 実行 (Act) */
     Com_IpduGroupStop(kTestStoppableGroupId);  // TxErrCbk が発火、Started=0 に
-    Com_MainFunction();  // Com_TxIPduStarted[3]==0 のため監視ループ自体が対象外
+    Com_MainFunctionTx();  // Com_TxIPduStarted[3]==0 のため監視ループ自体が対象外
 
     /* 評価 (Assert): TxErrCbk は発火するが、TxTOutCbk とは二重発火しない */
     EXPECT_EQ(s_groupTxErrCount, 1U);
@@ -1360,7 +1360,7 @@ TEST_F(Bsw_TxChain_Test, TriggerIPDUSend_OK_ForcesDispatchWithoutValueChange)
     /* 実行 (Act) */
     uint8 ret = Com_TriggerIPDUSend(0U);
     ASSERT_EQ(ret, E_OK);
-    Com_MainFunction();
+    Com_MainFunctionTx();
 
     /* 評価 (Assert): 値の変化が一切無くても送信される（[SWS_Com_00861]）。
      * バッファ内容自体は InitValue のまま（トリガーは中身を変えない）。 */
@@ -1408,14 +1408,14 @@ TEST_F(Bsw_TxChain_Test, TriggerIPDUSend_OK_RespectsMinDelayTimeAndDispatchesOnc
     /* 実行 (Act 1): トリガーは受け付けるが、MDT 未経過のため今回は送信しない
      * （[SWS_Com_00388] "shall postpone transmissions if necessary"）。 */
     ASSERT_EQ(Com_TriggerIPDUSend(3U), E_OK);
-    Com_MainFunction();
+    Com_MainFunctionTx();
 
     /* 評価 (Assert 1): トリガーは破棄されず、次回以降のために保持される */
     EXPECT_EQ(Com_Test_GetTxTriggerPending(3U), 1U);
 
-    /* 実行 (Act 2): MDT 経過後に再度 Com_MainFunction() を呼ぶ */
+    /* 実行 (Act 2): MDT 経過後に再度 Com_MainFunctionTx() を呼ぶ */
     FakeMillis_Value += 100U;
-    Com_MainFunction();
+    Com_MainFunctionTx();
 
     /* 評価 (Assert 2): MDT 経過により消費される（実際の PduR ルートは
      * 未登録のため CAN 送信までは進まないが、ディスパッチ自体は試行される
@@ -1431,7 +1431,7 @@ TEST_F(Bsw_TxChain_Test, TriggerIPDUSend_OK_DoesNotConsumeNumberOfRepetitionsBud
 
     /* 実行 (Act) */
     ASSERT_EQ(Com_TriggerIPDUSend(0U), E_OK);
-    Com_MainFunction();
+    Com_MainFunctionTx();
 
     /* 評価 (Assert): [SWS_Com_00388] "shall not take into account ...
      * ComTxModeNumberOfRepetitions" のとおり、残り回数は変化しない
@@ -1455,7 +1455,7 @@ TEST_F(Bsw_TxChain_Test, SwitchIpduTxMode_OK_FlipsStateAndTriggersImmediateSend)
 
     /* 評価 (Assert): [SWS_Com_00881] 状態が切り替わり、[SWS_Com_00239]/
      * [SWS_Com_00495] と同じ経路（Com_RequestTxOnChange()）で次回
-     * Com_MainFunction() 向けの送信要求が立つ。 */
+     * Com_MainFunctionTx() 向けの送信要求が立つ。 */
     EXPECT_EQ(Com_Test_GetTmsState(1U), 1U);
     EXPECT_EQ(Com_Test_GetTxPending(1U), 1U);
 }
@@ -1476,10 +1476,10 @@ TEST_F(Bsw_TxChain_Test, SwitchIpduTxMode_NG_NoEffectWhenModeAlreadyActive)
 
 TEST_F(Bsw_TxChain_Test, SwitchIpduTxMode_OK_TogglingBackTriggersAnotherSend)
 {
-    /* 準備 (Arrange): 一旦 true へ切り替え、Com_MainFunction() で
+    /* 準備 (Arrange): 一旦 true へ切り替え、Com_MainFunctionTx() で
      * 送信要求を消費させておく。 */
     Com_SwitchIpduTxMode(1U, 1U);
-    Com_MainFunction();
+    Com_MainFunctionTx();
     ASSERT_EQ(Com_Test_GetTxPending(1U), 0U);
 
     /* 実行 (Act): false へ戻す（再び実際の変化） */
@@ -1512,7 +1512,7 @@ TEST_F(Bsw_TxChain_Test, SwitchIpduTxMode_NG_UnknownPduIdHasNoEffect)
 //
 // PduR_Init()/CanIf_Init() はあえて呼ばない: このフィクスチャの関心は
 // 「Com_TxTriggerPending が PERIODIC I-PDU でも period 判定と独立した OR 項
-// として効くか」のみであり、それは Com_MainFunction() 内で
+// として効くか」のみであり、それは Com_MainFunctionTx() 内で
 // PduR_Transmit() を呼ぶ前に確定する（Com_TxTriggerPending[id]=0 の
 // クリアは due=true になった時点で無条件に行われる、Com.c 参照）。
 // PduR_ConfigPtr が NULL のままでも PduR_Transmit() は安全に E_NOT_OK を
@@ -1591,7 +1591,7 @@ TEST_F(Bsw_TxTriggerPeriodicChain_Test, TriggerIPDUSend_OK_FiresBetweenPeriodsOn
 
     /* 実行 (Act 1): トリガー直後、MDT(50ms)未経過ではまだ消費されない */
     ASSERT_EQ(Com_TriggerIPDUSend(0U), E_OK);
-    Com_MainFunction();
+    Com_MainFunctionTx();
     EXPECT_EQ(Com_Test_GetTxTriggerPending(0U), 1U);
 
     /* 実行 (Act 2): MDT 経過後は、TxPeriodMs(1000ms) にまだ遠く及ばなくても
@@ -1599,7 +1599,7 @@ TEST_F(Bsw_TxTriggerPeriodicChain_Test, TriggerIPDUSend_OK_FiresBetweenPeriodsOn
      * PERIODIC I-PDU でも TxModeMode によらず効く。Com_TxTriggerPending の
      * 宣言コメント参照）。 */
     FakeMillis_Value += 50U;
-    Com_MainFunction();
+    Com_MainFunctionTx();
     EXPECT_EQ(Com_Test_GetTxTriggerPending(0U), 0U);
 }
 
@@ -1610,7 +1610,7 @@ TEST_F(Bsw_TxTriggerPeriodicChain_Test, ComMainFunction_NG_DoesNotFireBeforePeri
 
     /* 実行 (Act): TxPeriodMs(1000ms) 未満だけ経過させる */
     FakeMillis_Value += 999U;
-    Com_MainFunction();
+    Com_MainFunctionTx();
 
     /* 評価 (Assert): トリガーが無い限り、period 未経過では送信されない */
     EXPECT_EQ(Com_Test_GetTxTriggerPending(0U), 0U);
@@ -1685,7 +1685,7 @@ TEST_F(Bsw_TxSwitchPeriodicChain_Test, SwitchIpduTxMode_OK_RestartsPeriodicTimer
     /* 実行 (Act 2): 切り替え時点から 350ms だけ経過させる（Init 時点からは
      * 1050ms、TxPeriodMsTrue(1000ms) 以上）。 */
     FakeMillis_Value += 350U;
-    Com_MainFunction();
+    Com_MainFunctionTx();
 
     /* 評価 (Assert): [SWS_Com_00244] 周期タイマが切り替え時点で再始動されて
      * いれば、切り替えからまだ 350ms しか経っていないため送信されない。

@@ -85,7 +85,7 @@ static EngineState_t Rte_EngineStateMirror = ENGINE_STATE_OFF;
  * 合成の優先順位（重要）: Rte_Read_*() は必ず Com_IsRxTimedOut() を先に
  * 判定し、タイムアウトでなければ Rte_EngineInfoStatus/Rte_AbsInfoStatus を
  * そのまま返す。Rte_EngineInfoStatus 等は「最後にフレームを受信した瞬間」
- * にしか更新されないラッチであり、Com_IsRxTimedOut() は Com_MainFunction()
+ * にしか更新されないラッチであり、Com_IsRxTimedOut() は Com_MainFunctionRx()
  * が周期的に評価する「今まさに生きているか」の独立した軸である。もし
  * ラッチを先に見てしまうと、E2E ハードエラーを起こしたフレームを最後に
  * 通信が本当に途絶えた場合（配線断は E2E 異常と通信途絶を同時に招きやすい）、
@@ -211,7 +211,7 @@ void Rte_COMRxInd_EngineInfo(void)
  *          COM_DATA_INVALID_ACTION_NOTIFY）から InvalidNotificationCbk として
  *          登録される（実 AUTOSAR の ComInvalidNotification、ECUC_Com_00315
  *          相当）。Com_ReceiveSignal(COM_SIGNAL_COOLANT_TEMP, ...) が受信値と
- *          InvalidValue の一致を検知した「次回」の Com_MainFunction() から
+ *          InvalidValue の一致を検知した「次回」の Com_MainFunctionRx() から
  *          呼ばれる（SWS_Com_00680/00717。同期呼び出しにしていない理由は
  *          Com.c の Com_RxInvalidNotifyPending 宣言コメント参照 — この関数が
  *          行う Serial 出力は、Com_ReceiveSignal() の呼び出し元によっては
@@ -251,7 +251,7 @@ void Rte_COMInvalidNotify_CoolantTemp(void)
  *          COM_FILTER_NEW_IS_WITHIN）から FilterRejectCbk として登録される
  *          （実 AUTOSAR の ComNotification 相当）。Com_ReceiveSignal(
  *          COM_SIGNAL_ENGINE_SPEED, ...) が範囲外の値を検知した「次回」の
- *          Com_MainFunction() から呼ばれる（SWS_Com_00273。Rte_COMInvalidNotify_
+ *          Com_MainFunctionRx() から呼ばれる（SWS_Com_00273。Rte_COMInvalidNotify_
  *          CoolantTemp と同じ理由で同期呼び出しにしていない。Com.c の
  *          Com_RxFilterRejectPending 宣言コメント参照）。この関数自体は
  *          「異常が起きたことをログへ残す」以上のことは行わない。
@@ -294,7 +294,7 @@ void Rte_COMCbkTAck_EngineState(void)
  *
  * \details Com_PBCfg.c の EngineState シグナル設定（TxTOutCbk）から登録
  *          される（実 AUTOSAR の Com_CbkTxTOut、SWS_Com_00878/00879/00880/
- *          00304/00554 相当）。呼ばれるのは Com_MainFunction() が MeterStatus
+ *          00304/00554 相当）。呼ばれるのは Com_MainFunctionTx() が MeterStatus
  *          （TX IPduId=0）の送信確認が COM_TX_TIMEOUT_METERSTATUS_MS 以内に
  *          届かなかったことを検出した直後。
  *
@@ -349,7 +349,7 @@ void Rte_COMCbkTAck_WarningStatus(void)
  *          SWS_Com_00878/00879/00880/00304/00554 相当。SWS_Com_00554の
  *          "Rte_COMCbkTAck_<sn> or Rte_COMCbkTAck_<sg> respectively" と
  *          同じ区別が TxTOut にも適用される）。呼ばれるのは
- *          Com_MainFunction() が WarningStatus（TX IPduId=1、Signal Group）
+ *          Com_MainFunctionTx() が WarningStatus（TX IPduId=1、Signal Group）
  *          の送信確認が COM_TX_TIMEOUT_WARNINGSTATUS_MS 以内に届かなかった
  *          ことを検出した直後。`Rte_COMCbkTAck_WarningStatus()` と対になる、
  *          Signal Group 単位の実装例（`Rte_COMCbkTxTOut_EngineState()` の
@@ -412,7 +412,7 @@ void Rte_COMCbk_AbsInfo(void)
  * \brief   EngineInfo フレームの受信デッドライン超過を通知する（EngineOnFlag のRxTOut）。
  *
  * \details Com_PBCfg.c の EngineOnFlag シグナル設定（Com_SignalConfigType.
- *          RxTOutCbk）から登録される。呼ばれるのは Com_MainFunction() が
+ *          RxTOutCbk）から登録される。呼ばれるのは Com_MainFunctionRx() が
  *          このシグナルの FirstTimeoutMs/TimeoutMs（EngineInfo と同値）
  *          超過を新規検出した直後（Com_CbkRxTOut、SWS_Com_00536/00556）。
  *          既存の受信デッドライン監視（`Com: RX timeout sig=...` ログ、
@@ -423,7 +423,7 @@ void Rte_COMCbk_AbsInfo(void)
  *
  * \note    Com_PBCfg.c から extern 宣言経由で RxTOutCbk として参照されるため
  *          non-static。Rte.h には公開しない。呼び出しコンテキストは
- *          Rte_COMCbkTAck_EngineState() と同じく Com_MainFunction()
+ *          Rte_COMCbkTAck_EngineState() と同じく Com_MainFunctionRx()
  *          （割り込み禁止区間の外）のため Serial 出力も安全。
  */
 void Rte_COMCbkRxTOut_EngineOnFlag(void)
@@ -626,7 +626,7 @@ void Rte_COMRxInd_AbsInfo(void)
  * \brief   E2EHealthStatus (TX IPduId=2) 送信直前に呼ばれる E2E Transformer フック。
  *
  * \details Com_PBCfg.c の TxTransformCbk として登録される。COM_TX_MODE_PERIODIC
- *          のため、Com_MainFunction() が自分の周期タイマで送信を決定した際に
+ *          のため、Com_MainFunctionTx() が自分の周期タイマで送信を決定した際に
  *          このフックが呼ばれる（DIRECT/MIXED I-PDU のイベント駆動送信と
  *          同じ「送信直前の最終変換」の仕組みをそのまま再利用している）。
  *          実 TX バッファへ Counter・CRC16 を書き込む（E2E Profile05、
@@ -817,7 +817,7 @@ Rte_IStatusType Rte_Read_EngineStatus_EngineOnFlag(EngineOnFlag_t* data)
  * \details Com_SendSignal() 経由で EngineState 値を COM の TX I-PDU バッファへ
  *          パックする (AUTOSAR SWS_RTE の Rte_Write_<p>_<o> パターン)。
  *          MeterStatus は TxModeMode=MIXED のため、Com が値の変化を検知した
- *          場合は次回 Com_MainFunction()（Os の 100ms タスク）で送信される
+ *          場合は次回 Com_MainFunctionTx()（Os の 100ms タスク）で送信される
  *          （呼び出し元が別途送信をトリガする必要はなく、この呼び出し自体は
  *          PduR_Transmit() を呼ばないため、SPI 送信でブロッキングしない）。
  *
@@ -1356,7 +1356,7 @@ Std_ReturnType Rte_Write_WarningStatus_AbsLamp(uint8 level)
  *          (AUTOSAR 非標準 API)。RunLamp/FaultLamp/AbsLamp すべてを
  *          Rte_Write_WarningStatus_*() で設定した後に呼び出すこと。
  *          WarningStatus は TxModeMode=DIRECT のため、このコミットで変化が
- *          検知されれば次回 Com_MainFunction() で送信される（呼び出し元が
+ *          検知されれば次回 Com_MainFunctionTx() で送信される（呼び出し元が
  *          別途送信をトリガする必要はなく、この呼び出し自体は
  *          PduR_Transmit() を呼ばないため、SPI 送信でブロッキングしない）。
  *
@@ -1385,7 +1385,7 @@ Std_ReturnType Rte_SendSignalGroup_WarningStatus(void)
  *          デコードできるようにするための、本プロジェクト独自の拡張）。
  *          非 Signal Group のためシャドウバッファを経由せず、
  *          Com_SendSignal() 呼び出しの都度、値変化があれば次回
- *          Com_MainFunction() で送信される。
+ *          Com_MainFunctionTx() で送信される。
  *
  * \param[in]  speed  エンジン回転数 [rpm]。
  *

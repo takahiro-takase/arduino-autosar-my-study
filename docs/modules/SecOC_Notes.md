@@ -40,7 +40,7 @@ E2E は「Com のコールバックフック（RxIndicationCbk/TxTransformCbk）
 【TX】現在 SecOC を使う TX I-PDU は無い（後述）。以前は E2EHealthStatus
   （CAN 0x220）が以下の経路で SecOC 保護されていたが、E2E を Profile05（CRC16）
   へ強化した際に DLC が classic CAN の 8byte 上限を超えるため撤去した:
-    E2EMon → Com_SendSignal() → Com_MainFunction()（PERIODIC、6000ms周期）
+    E2EMon → Com_SendSignal() → Com_MainFunctionTx()（PERIODIC、6000ms周期）
       → TxTransformCbk（E2EXf、E2E CRC/Counter を書き込む）
       → PduR_Transmit(SrcPduId=3, 4byte)
           → TransmitOverrideFct=SecOC_IfTransmit()（Authentic I-PDU を内部

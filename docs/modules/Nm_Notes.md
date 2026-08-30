@@ -61,7 +61,7 @@ Com スタックを経由せず直接 `CanIf_Transmit()`/`CanIf_RxIndication()` 
 
 ```
 MeterStatus: App_EngineManager → Com_SendSignal → Com_RequestTxOnChange（フラグのみ）
-               … 次回 Com_MainFunction() → PduR_Transmit → CanIf_Transmit → Can_Write
+               … 次回 Com_MainFunctionTx() → PduR_Transmit → CanIf_Transmit → Can_Write
 
 Nm(TX):      Nm_MainFunction/Nm_NetworkRequest等 → CanIf_Transmit → Can_Write
 Nm(RX):      Can_Isr → CanIf_RxIndication → Nm_RxIndication

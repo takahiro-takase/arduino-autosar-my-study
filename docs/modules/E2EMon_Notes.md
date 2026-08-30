@@ -41,7 +41,7 @@ MeterStatus フレームに相乗りさせる案も検討しましたが、実�
 CDD 自身ではなく Com モジュールの責務」という判断が一般的なため、専用の新規
 I-PDU（`E2EHealthStatus`、CAN ID 0x220）として分離しました。Com には新たに
 `ComTxModeMode` 相当の `TxModeMode` 設定（`COM_TX_MODE_DIRECT` / `_MIXED` / `_PERIODIC`）
-を追加し、`E2EHealthStatus` は `COM_TX_MODE_PERIODIC` として `Com_MainFunction()`
+を追加し、`E2EHealthStatus` は `COM_TX_MODE_PERIODIC` として `Com_MainFunctionTx()`
 が自分の周期タイマ（既定 6000ms、`COM_TX_PERIOD_E2EHEALTH_MS`）で自動送信します。
 E2EMon は `Com_SendSignal()` を呼ぶだけで、送信タイミングには一切関与しません
 （詳細は [`Com_Notes.md`](./Com_Notes.md) 参照）。

@@ -7,7 +7,7 @@
  *          AUTOSAR 4.3.1 SWS_COM 仕様に準拠し、Arduino UNO 向けに
  *          バッファ数固定・更新ビットなしに簡略化している。
  *          受信デッドライン監視 (SWS_Com_00398) を実装しており、
- *          Com_MainFunction() が周期的にタイムアウトを検出する。
+ *          Com_MainFunctionRx() が周期的にタイムアウトを検出する。
  *          タイムアウト中の I-PDU に属するシグナルは Com_ReceiveSignal() が
  *          E_NOT_OK を返し、上位層（RTE/ASW）がフェイルセーフ処理を行う。
  *
@@ -93,7 +93,7 @@ static uint8 Com_RxShadowBuffer[COM_RX_IPDU_MAX][COM_IPDU_MAX_DLC];
 static uint8 Com_RxShadowTimedOut[COM_RX_IPDU_MAX];
 
 /* COM_TX_MODE_PERIODIC/MIXED の周期フロア判定用、最終送信時刻 [ms]。
- * Com_MainFunction() が実送信するたび（Com_TxPending 経由・周期フロア
+ * Com_MainFunctionTx() が実送信するたび（Com_TxPending 経由・周期フロア
  * 経由いずれも）更新することで、MIXED の周期フロアが直近の送信からの
  * 経過時間を基準に動く（COM_TX_MODE_DIRECT の I-PDU では未使用）。 */
 static unsigned long Com_TxLastSentMs[COM_TX_IPDU_MAX];
@@ -125,7 +125,7 @@ static uint8 Com_RxDmEnabled[COM_RX_IPDU_MAX];
 
 /* Com_ConfigPtr->RxIPdus[].IsSignalGroup を IPduId 添字で引けるようにした
  * キャッシュ（Com_Init() で一度だけ設定、以降不変。/simplify で指摘された
- * 「Com_MainFunction() のシグナル単位ループが、直前の I-PDU 単位ループで
+ * 「Com_MainFunctionRx() のシグナル単位ループが、直前の I-PDU 単位ループで
  * 既に読んだ IsSignalGroup を、毎 tick Com_FindRxIPdu() の線形探索で
  * 再導出していた」重複を解消するために追加）。 */
 static uint8 Com_RxIPduIsGroup[COM_RX_IPDU_MAX];
@@ -141,9 +141,9 @@ static uint32 Com_FilterLastValue[COM_SIGNAL_COUNT];  /* シグナルごとの�
  * 実バッファ/シャドウバッファの中身（無効値そのもの）は返さない。 */
 static uint32 Com_RxLastValidValue[COM_SIGNAL_COUNT];
 
-/* Com_ReceiveSignal() が無効値を検知した際に立てる、「次回 Com_MainFunction()
+/* Com_ReceiveSignal() が無効値を検知した際に立てる、「次回 Com_MainFunctionRx()
  * で InvalidNotificationCbk を呼ぶべき」フラグ。実際のコールバック呼び出しは
- * 必ず Com_MainFunction() 側へディスパッチし、Com_ReceiveSignal() の呼び出し
+ * 必ず Com_MainFunctionRx() 側へディスパッチし、Com_ReceiveSignal() の呼び出し
  * スタックフレームでは行わない。
  *
  * 理由（実機で確認済みの障害）: Com_ReceiveSignal() は Rte 層の
@@ -153,20 +153,20 @@ static uint32 Com_RxLastValidValue[COM_SIGNAL_COUNT];
  * コールバックが Serial 出力のような割り込み駆動の I/O を行うと、
  * 割り込み禁止中は UART TX バッファが空かず実質無限ループとなり、
  * WDT リセットを引き起こす。Com_TxPending と同じ設計思想（実処理を
- * ASW/Rte のスタックフレームから切り離し、必ず Com_MainFunction() 側で
+ * ASW/Rte のスタックフレームから切り離し、必ず Com_MainFunctionRx() 側で
  * 行う）でこれを回避する。 */
 static uint8 Com_RxInvalidNotifyPending[COM_SIGNAL_COUNT];
 
 /* ComFilterAlgorithm=COM_FILTER_NEW_IS_WITHIN の RX シグナル用、
  * Com_RxInvalidNotifyPending と全く同じ理由・同じ仕組みの遅延ディスパッチ
- * フラグ（「次回 Com_MainFunction() で FilterRejectCbk を呼ぶべき」）。
+ * フラグ（「次回 Com_MainFunctionRx() で FilterRejectCbk を呼ぶべき」）。
  * Com_ReceiveSignal() が範囲外の値を検知した際にここを立てるだけに留め、
- * 実際のコールバック呼び出しは必ず Com_MainFunction() 側で行う。 */
+ * 実際のコールバック呼び出しは必ず Com_MainFunctionRx() 側で行う。 */
 static uint8 Com_RxFilterRejectPending[COM_SIGNAL_COUNT];
 
-/* DIRECT/MIXED I-PDU 用、「次回 Com_MainFunction() で送信すべき変化あり」フラグ。
+/* DIRECT/MIXED I-PDU 用、「次回 Com_MainFunctionTx() で送信すべき変化あり」フラグ。
  * 実送信（PduR_Transmit → ... → MCP2515 への SPI 送信）を ASW Runnable の
- * スタックフレームから切り離し、必ず Com_MainFunction()（Os の 100ms タスク、
+ * スタックフレームから切り離し、必ず Com_MainFunctionTx()（Os の 100ms タスク、
  * WdgM 非監視）側で行うためのディスパッチ機構。COM_TX_MODE_PERIODIC の
  * I-PDU では未使用（常に 0）。 */
 static uint8 Com_TxPending[COM_TX_IPDU_MAX];
@@ -178,7 +178,7 @@ static uint8 Com_TxPending[COM_TX_IPDU_MAX];
  * Com_TriggerIPDUSend は「I-PDU が started であれば TxModeMode によらず
  * 送信をトリガーする」仕様（[SWS_Com_00861] に TxModeMode による除外の
  * 記述はない）のため、PERIODIC I-PDU に対しても効かせる必要がある。
- * Com_MainFunction() の due 判定に、Com_TxPending とは独立した OR 項として
+ * Com_MainFunctionTx() の due 判定に、Com_TxPending とは独立した OR 項として
  * 追加する（[SWS_Com_00388]: MDT のみ尊重し、ComTxModeNumberOfRepetitions
  * 等の他の TxMode パラメータは考慮しない——そのため
  * ComTxModeNumberOfRepetitions の残り再送回数デクリメント判定
@@ -217,9 +217,9 @@ static uint8 Com_TmsState[COM_TX_IPDU_MAX];
 
 /* ComTxModeNumberOfRepetitions（SWS_Com_00305）の残り再送回数。
  * Com_RequestTxOnChange() が新規要求のたびに ipdu->NumberOfRepetitions で
- * 上書き、Com_MainFunction() が実際の再送 dispatch のたびに 1 減らす
+ * 上書き、Com_MainFunctionTx() が実際の再送 dispatch のたびに 1 減らす
  * （確認 (Com_TxConfirmation) 到達時ではなく dispatch 時点で減らす理由は
- * Com_MainFunction() のコメント・docs/modules/Com_Notes.md 参照）。0 なら
+ * Com_MainFunctionTx() のコメント・docs/modules/Com_Notes.md 参照）。0 なら
  * 再送なし。Com_IpduGroupStart()/Com_IpduGroupStop() でも Com_TxPending
  * 同様にゼロへリセットする（[SWS_Com_00392]）。 */
 static uint8 Com_TxRepeatsRemaining[COM_TX_IPDU_MAX];
@@ -1046,14 +1046,14 @@ static uint8 Com_FindSignalIndex(Com_SignalIdType SignalId)
  *          何が実行されるか一切関知しない）、その後 TX バッファの内容を
  *          ログ出力して PduR_Transmit() を呼ぶ（PduR→CanIf→Can_Write と
  *          MCP2515 への SPI 送信までブロッキングで完了する）。
- *          `Com_MainFunction()` からのみ呼ばれる。DIRECT/MIXED I-PDU の
- *          イベント駆動送信であっても実送信は必ず `Com_MainFunction()`
+ *          `Com_MainFunctionTx()` からのみ呼ばれる。DIRECT/MIXED I-PDU の
+ *          イベント駆動送信であっても実送信は必ず `Com_MainFunctionTx()`
  *          （Os の 100ms タスク）側で行う設計とし、WdgM の Deadline
  *          Supervision 対象である ASW Runnable（`App_EngineManager_Run()`
  *          等）のスタックフレーム内で SPI 送信がブロッキングしないようにする
  *          （バス輻輳時に `sendMsgBuf()` の TX バッファ空き待ちが伸びても、
  *          Runnable 自体の実行時間には影響しない）。
- *          「送信すべきかどうかの判断」は呼び出し元（`Com_MainFunction()`）が
+ *          「送信すべきかどうかの判断」は呼び出し元（`Com_MainFunctionTx()`）が
  *          既に済ませてから呼ぶ。
  *
  *          update-bit クリア（ipdu->UpdateBitPosition が 0xFF 以外の場合、
@@ -1072,7 +1072,7 @@ static uint8 Com_FindSignalIndex(Com_SignalIdType SignalId)
  *          Com_Types.h の TxIpduCalloutCbk 参照）。
  *
  * \param[in]  ipdu  送信する TX I-PDU 設定。NULL 禁止（呼び出し元で保証する）。
- * \param[in]  now   Com_MainFunction() が計算済みの現在時刻 [ms]（millis()
+ * \param[in]  now   Com_MainFunctionTx() が計算済みの現在時刻 [ms]（millis()
  *                   を再度呼ばず再利用する。TX 送信デッドライン監視の
  *                   アーム時刻記録に使う）。
  *
@@ -1199,7 +1199,7 @@ static uint16 Com_EffectiveTxPeriodMs(const Com_IPduConfigType* ipdu)
  * \details TxModeMode==DIRECT の I-PDU のみを対象とする。MIXED の周期フロアや
  *          TMS との相互作用を避けるための設計上の制約であり、
  *          Com_RequestTxOnChange()（残り回数のセット/クリア）と
- *          Com_MainFunction()（repeatDue 判定）の両方から同一の predicate を
+ *          Com_MainFunctionTx()（repeatDue 判定）の両方から同一の predicate を
  *          呼ぶことで、判定条件が2箇所で食い違わないようにする（詳細は
  *          docs/modules/Com_Notes.md 参照）。
  *
@@ -1322,7 +1322,7 @@ static uint8 Com_RecalcTms(Com_IPduIdType ipduId)
  *          行わない（SWS_Com_00734/00742/00743 の要求"shall immediately
  *          (within the next main function at the latest) initiate..." の
  *          うち、「次回メイン関数まで」の猶予を使い、実送信は必ず
- *          `Com_MainFunction()` 側にディスパッチする設計にしている。
+ *          `Com_MainFunctionTx()` 側にディスパッチする設計にしている。
  *          呼び出しスタックと同一フレームで SPI 送信までブロッキングすると、
  *          WdgM の Deadline Supervision 対象である ASW Runnable
  *          （App_EngineManager_Run 等）の実行時間がバス輻輳時の SPI 遅延に
@@ -1330,14 +1330,14 @@ static uint8 Com_RecalcTms(Com_IPduIdType ipduId)
  *
  *          実効 TxModeMode（`Com_EffectiveTxModeMode()`、TMS 評価済み）が
  *          `COM_TX_MODE_PERIODIC` の I-PDU では何もしない（PERIODIC I-PDU は
- *          Com_MainFunction() の周期タスクのみが送信を担い、値の変化そのものは
+ *          Com_MainFunctionTx() の周期タスクのみが送信を担い、値の変化そのものは
  *          送信タイミングに影響しない）。
  *
  *          診断 CommunicationControl (UDS 0x28) による送信抑制中でも
  *          ここではフラグを立てるだけとする（実際に送信を抑制するかどうかの
- *          判断は Com_MainFunction() 側で行う。SWS_Com_00777/SWS_Com_00334
+ *          判断は Com_MainFunctionTx() 側で行う。SWS_Com_00777/SWS_Com_00334
  *          が要求する「停止中に発生した送信要求は保持されず、再開しても
- *          古いトリガーで即座に送信してはならない」は、Com_MainFunction()
+ *          古いトリガーで即座に送信してはならない」は、Com_MainFunctionTx()
  *          が抑制中にこのフラグを見つけ次第、実送信せずに破棄することで
  *          満たす）。
  *
@@ -1472,7 +1472,7 @@ uint8 Com_ReceiveSignal(Com_SignalIdType SignalId, void* SignalDataPtr)
          * I-PDU/グループ単位の判定を使う）。
          * 非 Signal Group のシグナルは、このシグナル自身の
          * FirstTimeoutMs/TimeoutMs に基づく Com_SigTimedOut[]（シグナル単位、
-         * Com_MainFunction() 参照）を使う。 */
+         * Com_MainFunctionRx() 参照）を使う。 */
         const uint8 timedOut = (ipdu->IsSignalGroup != 0U)
                                ? Com_RxShadowTimedOut[sig->IPduId]
                                : Com_SigTimedOut[s];
@@ -1522,7 +1522,7 @@ uint8 Com_ReceiveSignal(Com_SignalIdType SignalId, void* SignalDataPtr)
          * NOTIFY: 「シグナルオブジェクトへ格納しない」（SWS_Com_00717）。
          * すなわち Com_RxLastValidValue[s] を更新せず、直近の有効値をそのまま
          * 返す。通知コールバックの実呼び出しはここでは行わず、
-         * Com_RxInvalidNotifyPending[s] を立てるだけに留める（Com_MainFunction()
+         * Com_RxInvalidNotifyPending[s] を立てるだけに留める（Com_MainFunctionRx()
          * へディスパッチする理由は Com_RxInvalidNotifyPending の宣言コメント
          * 参照）。
          * REPLACE: 受信値を InitValue に置き換えたうえで、以降の
@@ -1553,7 +1553,7 @@ uint8 Com_ReceiveSignal(Com_SignalIdType SignalId, void* SignalDataPtr)
          * として使い回す（両者は同じ「格納しない」意味論のため、実質的に
          * 同じ状態を指す。1 つのシグナルに両方を設定する構成は想定していない）。
          * FilterRejectCbk の実呼び出しは Com_RxInvalidNotifyPending と同じ理由
-         * で次回 Com_MainFunction() まで遅延する。 */
+         * で次回 Com_MainFunctionRx() まで遅延する。 */
         if (sig->FilterAlgorithm == COM_FILTER_NEW_IS_WITHIN
             && (value < sig->FilterMin || value > sig->FilterMax))
         {
@@ -1623,7 +1623,7 @@ uint8 Com_ReceiveSignal(Com_SignalIdType SignalId, void* SignalDataPtr)
  *
  * \AUTOSARReq     {SWS_Com_00201, SWS_Com_00051, SWS_Com_00638, SWS_Com_00461,
  *                  SWS_Com_00876, SWS_Com_00324, SWS_Com_00802, SWS_Com_00067}
- * \ServiceID      {0x19}
+ * \ServiceID      {0x0e}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
  */
@@ -1702,7 +1702,7 @@ Std_ReturnType Com_ReceiveSignalGroup(Com_IPduIdType GroupId)
  *
  * \pre        Com_Init() が正常に完了していること。
  *
- * \ServiceID      {0x1A}
+ * \ServiceID      {0x24}
  * \Reentrancy     {Reentrant}
  * \Synchronicity  {Synchronous}
  */
@@ -1794,7 +1794,7 @@ uint8 Com_IsRxTimedOut(Com_IPduIdType IPduId)
  *          COM_FILTER_ALWAYS なら常に、COM_FILTER_MASKED_NEW_DIFFERS_MASKED_OLD
  *          なら (新値 & Mask) が前回のフィルタ比較値と異なる場合のみ、
  *          「送信すべき変化あり」とみなして Com_RequestTxOnChange() を呼ぶ
- *          （TxModeMode が DIRECT/MIXED の I-PDU なら次回 Com_MainFunction()
+ *          （TxModeMode が DIRECT/MIXED の I-PDU なら次回 Com_MainFunctionTx()
  *          で送信される。本関数自体は PduR_Transmit() を呼ばない）。これとは
  *          独立に、Com_RecalcTms() が TMS の遷移を検出した場合も
  *          ComFilterAlgorithm の判定結果によらず Com_RequestTxOnChange() を
@@ -1978,7 +1978,7 @@ uint8 Com_SendSignal(Com_SignalIdType SignalId, const void* SignalDataPtr)
  *          TRIGGERED_ON_CHANGE のメンバーが Com_SendSignal() 内で変化検知した
  *          際に立てるフラグ。Com_TransferPropertyType 参照）で判定する。
  *          立っていれば Com_RequestTxOnChange() を呼ぶ（TxModeMode が
- *          DIRECT/MIXED の I-PDU なら次回 Com_MainFunction() で送信される）。
+ *          DIRECT/MIXED の I-PDU なら次回 Com_MainFunctionTx() で送信される）。
  *          これとは独立に、Com_RecalcTms() が TMS（Transmission Mode
  *          Selector）の遷移（true⇔false）を検出した場合も、
  *          Com_GroupTriggerPending の状態によらず Com_RequestTxOnChange() を
@@ -2003,7 +2003,7 @@ uint8 Com_SendSignal(Com_SignalIdType SignalId, const void* SignalDataPtr)
  *
  * \AUTOSARReq     {SWS_Com_00200, SWS_Com_00050, SWS_Com_00742, SWS_Com_00743,
  *                  SWS_Com_00801, SWS_Com_00055, SWS_Com_00495}
- * \ServiceID      {0x18}
+ * \ServiceID      {0x0d}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
  */
@@ -2383,10 +2383,10 @@ uint8 Com_InvalidateSignalGroup(Com_IPduIdType SignalGroupId)
  *          `ComTxModeNumberOfRepetitions` 等、他の TxMode 関連パラメータは
  *          考慮しない。実際の送信は本関数内では行わず、既存の
  *          `Com_TxTriggerPending[]` フラグを立てるだけで
- *          `Com_MainFunction()` のディスパッチへ委ねる（`Com_SendSignal()`
+ *          `Com_MainFunctionTx()` のディスパッチへ委ねる（`Com_SendSignal()`
  *          が `Com_TxPending[]` を立てるのと同じ設計——実送信を ASW の
  *          呼び出しスタックから切り離し、WdgM の Deadline Supervision から
- *          保護するため。Com_MainFunction() の Doxygen コメント参照）。
+ *          保護するため。Com_MainFunctionTx() の Doxygen コメント参照）。
  *          `Com_TxTriggerPending[]` は `Com_TxPending[]` と異なり
  *          COM_TX_MODE_PERIODIC の I-PDU でも効く（詳細は同フラグの宣言
  *          コメント参照）。
@@ -2396,7 +2396,7 @@ uint8 Com_InvalidateSignalGroup(Com_IPduIdType SignalGroupId)
  *
  * \note    診断 CommunicationControl (UDS 0x28) による送信抑制中
  *          （`Com_TxEnabled==0`）に due 判定を満たしても、
- *          `Com_MainFunction()` はトリガーを消費するだけで実送信は行わない
+ *          `Com_MainFunctionTx()` はトリガーを消費するだけで実送信は行わない
  *          （`Com_TxPending[]` の既存挙動と同じ。SWS_Com_00777/
  *          SWS_Com_00334: 抑制解除後に「溜まった分」を即座に送らないため）。
  *          この場合本関数の戻り値自体は E_OK のままであり、トリガーが
@@ -2550,7 +2550,7 @@ typedef enum
  *          単位で別々のコールバック名（`Rte_COMCbkTAck_<sn>`/`<sg>`、
  *          `Rte_COMCbkTErr_<sn>`/`<sg>`、`Rte_COMCbkTxTOut_<sn>`/`<sg>`）を
  *          持てる。`Com_TxConfirmation()`（TxAckCbk/TxTOutCbk 解除側）・
- *          `Com_IpduGroupStop()`（TxErrCbk 側）・`Com_MainFunction()`
+ *          `Com_IpduGroupStop()`（TxErrCbk 側）・`Com_MainFunctionTx()`
  *          （TxTOutCbk 発火側）は「どのコールバックか」以外は完全に同じ
  *          配送ロジック（Signal Group ならグループ単位で 1 回、そうでなければ
  *          この I-PDU に属する TX シグナルのうち該当コールバックが設定
@@ -2651,7 +2651,7 @@ static void Com_InvokeTxNotification(const Com_IPduConfigType* ipdu,
  *                      する（確認自体は届いたため）。TX リトライやエラー
  *                      カウンタは実装しない。ComTxModeNumberOfRepetitions
  *                      （SWS_Com_00305）の残り再送回数は本関数ではなく
- *                      Com_MainFunction() が dispatch 時点で減らす（理由は
+ *                      Com_MainFunctionTx() が dispatch 時点で減らす（理由は
  *                      同関数のコメント参照）。Com_CbkTxErr（SWS_Com_00491）は
  *                      本関数ではなく Com_IpduGroupStop() 側で、確認が届く
  *                      前に I-PDU Group が停止された場合にのみ呼ばれる
@@ -2743,84 +2743,25 @@ void Com_TxConfirmation(PduIdType TxPduId, Std_ReturnType result)
  *          行った場合に割り込み禁止のまま停止し続け、WDT リセットを
  *          引き起こしうる（実機で確認済み）。
  *
- *          TX I-PDU の送信ディスパッチ（DIRECT/MIXED/PERIODIC 共通）:
- *          実際に PduR_Transmit()（→ MCP2515 への SPI 送信）を呼ぶのはこの
- *          関数だけである。判定に使う `TxModeMode`/`TxPeriodMs` は
- *          `Com_EffectiveTxModeMode()`/`Com_EffectiveTxPeriodMs()` 経由で
- *          TMS（Transmission Mode Selector、`Com_TmsState[]`）評価済みの
- *          実効値を使う（TMS を持たない I-PDU は常に基本の TxModeMode/
- *          TxPeriodMs のまま）。DIRECT/MIXED の変化時送信は
- *          `Com_RequestTxOnChange()` が立てた `Com_TxPending[]` を、
- *          MIXED/PERIODIC の周期送信は実効 TxPeriodMs からの経過時間を
- *          それぞれ判定材料にする:
- *            - DIRECT   : Com_TxPending[] が立っており、かつ MDT
- *                          （ComMinimumDelayTime、下記）を満たせば送信
- *            - MIXED    : (Com_TxPending[] が立っており、かつ MDT を満たす)、
- *                          または経過時間が実効 TxPeriodMs（周期フロア間隔）
- *                          を超えたら送信（周期フロアには MDT を適用しない）
- *            - PERIODIC : 経過時間が実効 TxPeriodMs を超えたら常に送信
- *                          （Com_TxPending[]・MDT のいずれも使用しない）
- *          上記いずれのモードでも、`Com_TriggerIPDUSend()` が立てた
- *          `Com_TxTriggerPending[]`（MDT のみ尊重、[SWS_Com_00861]/
- *          [SWS_Com_00388]）が独立した OR 項として効く（詳細は同フラグの
- *          宣言コメント参照）。
+ * \note    実仕様は本関数（Com_MainFunctionRx）と Com_MainFunctionTx に
+ *          分かれている（単体の Com_MainFunction は4.3.1仕様書に存在しない。
+ *          2026-08、シグネチャ準拠のため分割。旧実装は両者を1関数に
+ *          まとめていた経緯があり、TX側の設計判断（実送信を本関数側へ
+ *          一元化する理由等）は Com_MainFunctionTx() の Doxygen コメントを
+ *          参照）。
  *
- *          MDT（`ipdu->MinDelayMs`、DaVinci: ComMinimumDelayTime）: DIRECT/
- *          MIXED I-PDU の変化時送信について、直近の実送信から MinDelayMs
- *          未満しか経過していなければ送信を保留する（Com_TxPending[] は
- *          立てたまま破棄しない。次回以降の呼び出しで経過時間を満たし次第
- *          送信する）。MIXED の周期フロアには適用しない
- *          （SWS_Com_00789 の既定動作 [ComEnableMDTForCyclicTransmission=false]
- *          に合わせている）。MinDelayMs=0 の I-PDU は常に満了扱いのため、
- *          MDT 未設定の I-PDU の挙動に影響しない（SWS_Com_00471）。
- *
- *          実送信を Com_SendSignal()/Com_SendSignalGroup() の呼び出し元
- *          （ASW Runnable）ではなく本関数（Os の 100ms タスク、WdgM 非監視）
- *          側に一元化することで、バス輻輳時に `sendMsgBuf()` の TX バッファ
- *          空き待ちが伸びても、WdgM の Deadline Supervision 対象である
- *          ASW Runnable の実行時間には影響しない。ASW/CDD は
- *          `Com_SendSignal()` で値を更新するだけでよく、送信タイミング・
- *          TMS のいずれにも一切関与しない（実車の Com と同じ責務分離）。
- *          診断 CommunicationControl (UDS 0x28) による送信抑制中
- *          (Com_TxEnabled==0) は送信自体を行わないが、`Com_TxPending[]` の
- *          クリアと `Com_TxLastSentMs` の更新は行う（SWS_Com_00777/
- *          SWS_Com_00334: 停止中に発生した送信要求は保持されず、再開しても
- *          古いトリガーで即座に送信されることはない。抑制解除直後に
- *          「抑制中に溜まった分」を connectivity 復帰の合図として即座に
- *          送ってしまわないようにするため）。
- *
- *          ComTxModeNumberOfRepetitions（`ipdu->NumberOfRepetitions`/
- *          `RepetitionPeriodMs`、SWS_Com_00305）: Com_TxRepeatApplicable() が
- *          真の I-PDU のみ対象。残り再送回数（`Com_TxRepeatsRemaining[]`）が
- *          0 より大きく、かつ直近送信から RepetitionPeriodMs 以上経過して
- *          いれば再送する（repeatDue、changeDue/floorDue と OR）。残り回数を
- *          いつ・どう減らすかの詳細（オフバイワン対策・CommunicationControl
- *          無効中の扱い）は下の実装コメント・docs/modules/Com_Notes.md 参照。
- *
- *          TX 送信デッドライン監視（`ipdu->TxFirstTimeoutMs`/`TxTimeoutMs`/
- *          `TxTOutCbk`、Com_CbkTxTOut、SWS_Com_00878/00879/00880/00304/
- *          00554）: TX ディスパッチループの後段で、`Com_TxConfPending[]`が
- *          立ったまま`TxTimeoutMs`（初回は`TxFirstTimeoutMs`）を超えた
- *          I-PDU を検出し`TxTOutCbk`を発火する。実機では発動しない
- *          （理由は docs/modules/Com_Notes.md 参照）。
- *
- * \AUTOSARReq     {SWS_Com_00398, SWS_Com_00684, SWS_Com_00685, SWS_Com_00734,
- *                  SWS_Com_00742, SWS_Com_00743, SWS_Com_00777, SWS_Com_00032,
- *                  SWS_Com_00799, SWS_Com_00471, SWS_Com_00698, SWS_Com_00789,
- *                  SWS_Com_00305, SWS_Com_00467, SWS_Com_00392, SWS_Com_00878,
- *                  SWS_Com_00879, SWS_Com_00880, SWS_Com_00304, SWS_Com_00554,
- *                  SWS_Com_00861, SWS_Com_00388}
- * \ServiceID      {0x20}
+ * \AUTOSARReq     {SWS_Com_00398, SWS_Com_00684, SWS_Com_00685}
+ * \ServiceID      {0x18}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
  */
-void Com_MainFunction(void)
+void Com_MainFunctionRx(void)
 {
     DET_LOGT(TAG, "called");
 
     if (Com_ConfigPtr == NULL)
     {
-        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_MAIN_FUNCTION, COM_E_UNINIT);
+        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_MAIN_FUNCTION_RX, COM_E_UNINIT);
         return;
     }
 
@@ -2943,8 +2884,99 @@ void Com_MainFunction(void)
         }
     }
     /* Com_RxEnabled==0 の間はデッドライン監視自体を無効化する
-     * (SWS_Com_00684/00685)。TX 送信は Rx とは独立した機能のため、
-     * ここで return せず以下へ続ける。 */
+     * (SWS_Com_00684/00685)。 */
+}
+
+/**
+ * \brief   送信スケジューリング（周期送信・変化時送信・再送）と送信確認
+ *          デッドライン監視を周期的に処理する。
+ *
+ * \details Os の 100 ms タスクから呼び出される（Com_MainFunctionRx() とは
+ *          独立したタスクとして登録される。Os_PBCfg.c 参照）。
+ *
+ *          TX I-PDU の送信ディスパッチ（DIRECT/MIXED/PERIODIC 共通）:
+ *          実際に PduR_Transmit()（→ MCP2515 への SPI 送信）を呼ぶのはこの
+ *          関数だけである。判定に使う `TxModeMode`/`TxPeriodMs` は
+ *          `Com_EffectiveTxModeMode()`/`Com_EffectiveTxPeriodMs()` 経由で
+ *          TMS（Transmission Mode Selector、`Com_TmsState[]`）評価済みの
+ *          実効値を使う（TMS を持たない I-PDU は常に基本の TxModeMode/
+ *          TxPeriodMs のまま）。DIRECT/MIXED の変化時送信は
+ *          `Com_RequestTxOnChange()` が立てた `Com_TxPending[]` を、
+ *          MIXED/PERIODIC の周期送信は実効 TxPeriodMs からの経過時間を
+ *          それぞれ判定材料にする:
+ *            - DIRECT   : Com_TxPending[] が立っており、かつ MDT
+ *                          （ComMinimumDelayTime、下記）を満たせば送信
+ *            - MIXED    : (Com_TxPending[] が立っており、かつ MDT を満たす)、
+ *                          または経過時間が実効 TxPeriodMs（周期フロア間隔）
+ *                          を超えたら送信（周期フロアには MDT を適用しない）
+ *            - PERIODIC : 経過時間が実効 TxPeriodMs を超えたら常に送信
+ *                          （Com_TxPending[]・MDT のいずれも使用しない）
+ *          上記いずれのモードでも、`Com_TriggerIPDUSend()` が立てた
+ *          `Com_TxTriggerPending[]`（MDT のみ尊重、[SWS_Com_00861]/
+ *          [SWS_Com_00388]）が独立した OR 項として効く（詳細は同フラグの
+ *          宣言コメント参照）。
+ *
+ *          MDT（`ipdu->MinDelayMs`、DaVinci: ComMinimumDelayTime）: DIRECT/
+ *          MIXED I-PDU の変化時送信について、直近の実送信から MinDelayMs
+ *          未満しか経過していなければ送信を保留する（Com_TxPending[] は
+ *          立てたまま破棄しない。次回以降の呼び出しで経過時間を満たし次第
+ *          送信する）。MIXED の周期フロアには適用しない
+ *          （SWS_Com_00789 の既定動作 [ComEnableMDTForCyclicTransmission=false]
+ *          に合わせている）。MinDelayMs=0 の I-PDU は常に満了扱いのため、
+ *          MDT 未設定の I-PDU の挙動に影響しない（SWS_Com_00471）。
+ *
+ *          実送信を Com_SendSignal()/Com_SendSignalGroup() の呼び出し元
+ *          （ASW Runnable）ではなく本関数（Os の 100ms タスク、WdgM 非監視）
+ *          側に一元化することで、バス輻輳時に `sendMsgBuf()` の TX バッファ
+ *          空き待ちが伸びても、WdgM の Deadline Supervision 対象である
+ *          ASW Runnable の実行時間には影響しない。ASW/CDD は
+ *          `Com_SendSignal()` で値を更新するだけでよく、送信タイミング・
+ *          TMS のいずれにも一切関与しない（実車の Com と同じ責務分離）。
+ *          診断 CommunicationControl (UDS 0x28) による送信抑制中
+ *          (Com_TxEnabled==0) は送信自体を行わないが、`Com_TxPending[]` の
+ *          クリアと `Com_TxLastSentMs` の更新は行う（SWS_Com_00777/
+ *          SWS_Com_00334: 停止中に発生した送信要求は保持されず、再開しても
+ *          古いトリガーで即座に送信されることはない。抑制解除直後に
+ *          「抑制中に溜まった分」を connectivity 復帰の合図として即座に
+ *          送ってしまわないようにするため）。
+ *
+ *          ComTxModeNumberOfRepetitions（`ipdu->NumberOfRepetitions`/
+ *          `RepetitionPeriodMs`、SWS_Com_00305）: Com_TxRepeatApplicable() が
+ *          真の I-PDU のみ対象。残り再送回数（`Com_TxRepeatsRemaining[]`）が
+ *          0 より大きく、かつ直近送信から RepetitionPeriodMs 以上経過して
+ *          いれば再送する（repeatDue、changeDue/floorDue と OR）。残り回数を
+ *          いつ・どう減らすかの詳細（オフバイワン対策・CommunicationControl
+ *          無効中の扱い）は下の実装コメント・docs/modules/Com_Notes.md 参照。
+ *
+ *          TX 送信デッドライン監視（`ipdu->TxFirstTimeoutMs`/`TxTimeoutMs`/
+ *          `TxTOutCbk`、Com_CbkTxTOut、SWS_Com_00878/00879/00880/00304/
+ *          00554）: TX ディスパッチループの後段で、`Com_TxConfPending[]`が
+ *          立ったまま`TxTimeoutMs`（初回は`TxFirstTimeoutMs`）を超えた
+ *          I-PDU を検出し`TxTOutCbk`を発火する。実機では発動しない
+ *          （理由は docs/modules/Com_Notes.md 参照）。
+ *
+ * \pre        Com_Init() が正常に完了していること。
+ *
+ * \AUTOSARReq     {SWS_Com_00399, SWS_Com_00734, SWS_Com_00742, SWS_Com_00743,
+ *                  SWS_Com_00777, SWS_Com_00032, SWS_Com_00799, SWS_Com_00471,
+ *                  SWS_Com_00698, SWS_Com_00789, SWS_Com_00305, SWS_Com_00467,
+ *                  SWS_Com_00392, SWS_Com_00878, SWS_Com_00879, SWS_Com_00880,
+ *                  SWS_Com_00304, SWS_Com_00554, SWS_Com_00861, SWS_Com_00388}
+ * \ServiceID      {0x19}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void Com_MainFunctionTx(void)
+{
+    DET_LOGT(TAG, "called");
+
+    if (Com_ConfigPtr == NULL)
+    {
+        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_MAIN_FUNCTION_TX, COM_E_UNINIT);
+        return;
+    }
+
+    const unsigned long now = millis();
 
     for (uint8 i = 0; i < Com_ConfigPtr->TxIPduCount; i++)
     {
@@ -2987,7 +3019,7 @@ void Com_MainFunction(void)
              * （SWS_Com_00789 の既定動作。MinDelayMs=0 なら常に満了扱いのため
              * MDT 未設定の I-PDU では以前と同じ挙動になる）。満了前に変化検知が
              * あっても Com_TxPending は立てたまま保持し、破棄しない
-             * （次回 Com_MainFunction() で再判定する）。 */
+             * （次回 Com_MainFunctionTx() で再判定する）。 */
             const uint8 mdtElapsed = elapsed >= (unsigned long)ipdu->MinDelayMs;
             changeDue = (Com_TxPending[id] != 0U) && mdtElapsed;
             /* ComTxModeNumberOfRepetitions（SWS_Com_00305）。再送専用の
@@ -3077,7 +3109,7 @@ void Com_MainFunction(void)
  * \details Com_SetCommunicationEnabled() の受信再開時と Com_IpduGroupStart() が
  *          共通して行う手順（[SWS_Com_00787] 相当）をまとめたもの。
  *          Com_RxLastMs を現在時刻へリセットしないと、TimeoutMs 以上の時間
- *          受信を抑制していた場合、再有効化した直後（次の Com_MainFunction()
+ *          受信を抑制していた場合、再有効化した直後（次の Com_MainFunctionRx()
  *          呼び出し）で古い Com_RxLastMs のまま即座にタイムアウト判定されて
  *          しまう。既に立っていた Com_RxTimedOut/Com_SigTimedOut も、抑制中の
  *          「経過時間」を理由に上位層へ通信異常と伝え続けないよう、あわせて
@@ -3268,7 +3300,7 @@ void Com_IpduGroupStop(Com_IpduGroupIdType IpduGroupId)
 
         /* [SWS_Com_00684]/[SWS_Com_00685]: 受信処理・デッドライン監視の両方を
          * 無効化する。Com_RxTimedOut は意図的にクリアしない（Started==0 の間
-         * Com_MainFunction() 側の評価自体を止めるため、値は参照されない）。 */
+         * Com_MainFunctionRx() 側の評価自体を止めるため、値は参照されない）。 */
         Com_RxIPduStarted[ipdu->IPduId] = 0U;
 
         DET_LOGI(TAG, "IpduGroupStop grp=%u iPdu=%u(RX)",
@@ -3302,13 +3334,13 @@ void Com_IpduGroupStop(Com_IpduGroupIdType IpduGroupId)
         }
         /* Com_TxTimedOut/Com_TxUsingFirstTimeout/Com_TxConfPendingSinceMs
          * （TX 送信デッドライン監視）は意図的にクリアしない（上の RX 側
-         * Com_RxTimedOut と同じ理由: Started==0 の間は Com_MainFunction()
+         * Com_RxTimedOut と同じ理由: Started==0 の間は Com_MainFunctionTx()
          * 側の監視ループ自体が評価しないため値は参照されず、再開時は
          * Com_IpduGroupStart() が無条件で再初期化する）。この停止時点で
          * 確認待ちだった I-PDU が TxTOutCbk と二重発火しないのは、直上で
          * Com_TxConfPending[id] を無条件でクリアしているため（TX 監視
          * ループは Com_TxConfPending[id]==0 を見た時点でこの I-PDU を
-         * 対象外にする、Com_MainFunction() 参照）。Com_TxIPduStarted[id]==0
+         * 対象外にする、Com_MainFunctionTx() 参照）。Com_TxIPduStarted[id]==0
          * はあくまで「停止中は評価しない」という独立した目的であり、この
          * 二重発火防止自体の担い手ではない。 */
 

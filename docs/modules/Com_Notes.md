@@ -44,7 +44,7 @@ Com_SendSignal(ENGINE_STATE, value):
               ここで一切ブロッキングしない）
     NO  → 何もしない（バッファは更新済みだが送信要求は立たない）
 
-Com_MainFunction()（Os の 100ms タスクから周期的に呼ばれる。WdgM 非監視）:
+Com_MainFunctionTx()（Os の 100ms タスクから周期的に呼ばれる。WdgM 非監視）:
   MeterStatus について、
     Com_TxPending[MeterStatus] == 1 、
     または最終送信からの経過時間 >= TxPeriodMs（周期フロア間隔）？
@@ -54,12 +54,12 @@ Com_MainFunction()（Os の 100ms タスクから周期的に呼ばれる。WdgM
       NO  → 何もしない
 ```
 
-**なぜ実送信を `Com_MainFunction()` に一元化したか**: `Com_SendSignal()` の
+**なぜ実送信を `Com_MainFunctionTx()` に一元化したか**: `Com_SendSignal()` の
 呼び出し元は `App_EngineManager_Run()` であり、WdgM の Deadline Supervision
 （実行時間の上限監視）対象の Runnable です。もし `Com_SendSignal()` の中で
 `PduR_Transmit()`（→ MCP2515 への SPI 送信）まで同期的に呼び切ると、バス輻輳等で
 SPI 送信が想定より長引いた場合に Runnable 自体の実行時間が伸び、Deadline
-Supervision の誤検出につながりかねません。`Com_MainFunction()` は WdgM の
+Supervision の誤検出につながりかねません。`Com_MainFunctionTx()` は WdgM の
 監視対象外のタスクのため、実送信をそちらへディスパッチすることで、SPI 送信の
 所要時間が ASW Runnable の実行時間に影響しない設計にしています（SWS_Com_00734
 等が要求する「次回メイン関数までに送信を開始する」という猶予の範囲内）。
@@ -116,7 +116,7 @@ Com_SendSignalGroup(GroupId=1)   ← 3 シグナルすべて設定し終えた�
   Com_GroupTriggerPending[1] を判定
     立っている → Com_RequestTxOnChange(WarningStatus) を呼び、フラグをクリア
                   → Com_TxPending[WarningStatus] = 1 を立てるだけ
-                    （次回 Com_MainFunction() で送信、周期フロアなし）
+                    （次回 Com_MainFunctionTx() で送信、周期フロアなし）
     立っていない → 何もしない
 ```
 
@@ -248,7 +248,7 @@ Com_SwitchIpduTxMode(PduId, Mode)
     Com_TmsState[PduId] = Mode
     遷移後の実効 TxModeMode が PERIODIC か？
       No（DIRECT/MIXED）: Com_RequestTxOnChange(ipdu)  ← [SWS_Com_00239]/
-        [SWS_Com_00495] 相当。次回 Com_MainFunction() までに即時送信、
+        [SWS_Com_00495] 相当。次回 Com_MainFunctionTx() までに即時送信、
         その際 Com_TxLastSentMs の更新を介して周期タイマも自然に再始動する
       Yes（PERIODIC）: Com_RequestTxOnChange() は PERIODIC I-PDU に対して
         何もしない設計（値の変化自体が送信タイミングに影響しないのと
@@ -289,7 +289,7 @@ DIRECT/MIXED I-PDU は値が変化するたびに送信要求（`Com_TxPending[]
 WarningStatus (IPduId=1):
   MinDelayMs = COM_TX_MIN_DELAY_WARNINGSTATUS_MS（既定 100ms）
 
-Com_MainFunction()（DIRECT/MIXED 共通、周期フロアには適用しない）:
+Com_MainFunctionTx()（DIRECT/MIXED 共通、周期フロアには適用しない）:
   mdtElapsed = (経過時間 >= MinDelayMs)
   changeDue  = Com_TxPending[WarningStatus] && mdtElapsed
   due        = changeDue || floorDue（MIXED の周期フロア。MDT の影響を受けない）
@@ -299,7 +299,7 @@ Com_MainFunction()（DIRECT/MIXED 共通、周期フロアには適用しない�
 ```
 
 **「破棄」ではなく「保留」であることが重要**: MDT 未満で変化検知があっても
-`Com_TxPending[]` はクリアされません。次回以降の `Com_MainFunction()`
+`Com_TxPending[]` はクリアされません。次回以降の `Com_MainFunctionTx()`
 （100ms 周期）で MDT が満了していれば、そのとき初めて送信されます
 （SWS_Com_00471/00698/00789 準拠。値そのものを取りこぼすわけではなく、
 「送るタイミングを遅らせるだけ」という設計です）。
@@ -337,7 +337,7 @@ confirmations have been received."）。`0`（既定）なら通常どおり1回
 キャンセルします（[SWS_Com_00392]）。
 
 これまでの `Com_IPduConfigType`/`Com.c` にはこの機構が一切存在せず、
-`Com_MainFunction()` の DIRECT/MIXED 送信判定は「変化トリガー || MIXED
+`Com_MainFunctionTx()` の DIRECT/MIXED 送信判定は「変化トリガー || MIXED
 周期フロア」のみでした。今回、`ImmobilizerStatus`（IPduId=3、CAN 0x230）に
 適用しました。
 
@@ -351,7 +351,7 @@ Com_RequestTxOnChange()（Com_SendSignal()/Com_SendSignalGroup() 共通の
   Com_TxPending[ImmobilizerStatus] = 1
   Com_TxRepeatsRemaining[ImmobilizerStatus] = NumberOfRepetitions（無条件上書き）
 
-Com_MainFunction()（100ms 周期）:
+Com_MainFunctionTx()（100ms 周期）:
   changeDue = Com_TxPending[...] && mdtElapsed
   repeatDue = (TxModeMode==DIRECT) && (Com_TxRepeatsRemaining[...] > 0)
               && (経過時間 >= RepetitionPeriodMs)
@@ -373,25 +373,25 @@ Com_MainFunction()（100ms 周期）:
 `WarningStatus`（DIRECT だが TMS で MIXED へ遷移しうる）に誤って
 `NumberOfRepetitions` を設定してしまうと、TMS 中の周期フロアと再送タイマーが
 同じ `Com_TxLastSentMs` を取り合いながら無調整で二重に発火しかねません。
-これを設定規約だけに頼らず、`Com_MainFunction()` 側で
+これを設定規約だけに頼らず、`Com_MainFunctionTx()` 側で
 `mode == COM_TX_MODE_DIRECT` の実行時ガードとしてコードにも担保しています
 （`Com.c` の `Com_CbkRxAck`（[SWS_Com_00555]）実装にある
 `ipdu->IsSignalGroup != 0U` という「設定判別フィールドに対する実行時ガード」
 と同じ考え方です）。
 
 **残り再送回数のデクリメントを、確認 (Com_TxConfirmation) ではなく
-Com_MainFunction() の dispatch 時点で行う理由**: [SWS_Com_00305] の原文は
+Com_MainFunctionTx() の dispatch 時点で行う理由**: [SWS_Com_00305] の原文は
 「確認 (`Com_TxConfirmation`) が `NumberOfRepetitions`+1 回届くまで」再送する、
 という書き方です。しかし本コードベースでは `Can_Write()` は TX 確認を
 即座には呼ばず、`swPduHandle` を保留キューへ積むだけで、実際の
 `CanIf_TxConfirmation()` 呼び出しは **別タスク** `Can_MainFunction_Write()`
 （1ms 周期）がキューをドレインするタイミングで行われます（`Can.c` 冒頭コメント
-参照）。`Com_MainFunction()` は 100ms 周期の別タスクのため、「確認が届くまで
-待つ」ロジックを `Com_MainFunction()` 単独では組めません。また、確認到達の
+参照）。`Com_MainFunctionTx()` は 100ms 周期の別タスクのため、「確認が届くまで
+待つ」ロジックを `Com_MainFunctionTx()` 単独では組めません。また、確認到達の
 たびに単純にデクリメントする素朴な実装は、初回送信の確認も1回としてカウント
 してしまうため、`NumberOfRepetitions+1` 回ではなく `NumberOfRepetitions` 回
 しか送信されずに止まってしまうオフバイワンの不具合になります。そのため、
-`Com_MainFunction()` が実際に `Com_DoTransmit()` を呼んだ時点で
+`Com_MainFunctionTx()` が実際に `Com_DoTransmit()` を呼んだ時点で
 `Com_TxRepeatsRemaining[]` を減らす設計にしています。本コードベースでは
 送信失敗（`E_NOT_OK`）の経路が実質存在しない（Com_TxConfirmation() の
 `\note` 参照）ため、この簡略化による実質的な挙動差はありません。
@@ -437,14 +437,14 @@ Com_MainFunction() の dispatch 時点で行う理由**: [SWS_Com_00305] の原�
 **`Com_RequestTxOnChange()` 側のガード（もう1件の指摘）**: 上記とは別に、
 `Com_RequestTxOnChange()` は当初 `mode != PERIODIC` であれば
 （＝MIXED でも）`Com_TxRepeatsRemaining` を無条件にセットしていました。
-消費側（`Com_MainFunction()` の `repeatDue`）は `TxModeMode==DIRECT` に
+消費側（`Com_MainFunctionTx()` の `repeatDue`）は `TxModeMode==DIRECT` に
 限定しているため、設定側だけがガードされておらず、「仮に TMS 対応の
 I-PDU に誤って `NumberOfRepetitions` を設定してしまうと、MIXED の間に
 セットされた残り回数が古いまま残り、後で TMS が DIRECT へ遷移した際に
 古いタイマー基準で不意に再送が復活しかねない」という理論上の隙が
 ありました。`Com_RequestTxOnChange()` 側も `mode == COM_TX_MODE_DIRECT`
 のときのみセットし、それ以外では明示的に 0 へクリアするよう是正しました
-（`Com_MainFunction()` 側のガードと対称）。`ImmobilizerStatus` は
+（`Com_MainFunctionTx()` 側のガードと対称）。`ImmobilizerStatus` は
 `TmsContributor` を持つシグナルが無く本番では TMS 自体が起きないため、
 これは本番設定では到達しない防御的な修正です（既存のTX I-PDU4本すべてが
 既にこの防御を試験する専用フィクスチャの余地を使い切っているため
@@ -803,7 +803,7 @@ CAN RX フレームを受信するたびに `Signals[]` を 2 回走査するこ
   Com_GroupTriggerPending（TRIGGERED_ON_CHANGE メンバーが実際に変化したか）
   が立った場合のみ、UpdateBitPosition が 0xFF 以外ならそのビットをセット
   （SWS_Com_00801。こちらも本実装独自の条件付け、詳細は次項）
-送信側（Com_DoTransmit、Com_MainFunction() から。Signal Group かどうかを問わない）:
+送信側（Com_DoTransmit、Com_MainFunctionTx() から。Signal Group かどうかを問わない）:
   PduR_Transmit() で実送信（この時点でビット=1 のまま送信される）
   ret==E_OK のときのみ、送信直後にビットをクリア
   （SWS_Com_00062: ComTxIPduClearUpdateBit=Transmit）
@@ -858,7 +858,7 @@ Signal Group 側（`Com_SendSignalGroup()`）も同種の問題を抱えてい�
 **なぜ ComTxIPduClearUpdateBit=Transmit のみか**: 実 AUTOSAR は Transmit
 （`PduR_ComTransmit` 呼び出し直後にクリア）/ Confirmation（送信確認後にクリア）/
 TriggerTransmit（トリガ送信後にクリア）の 3 択ですが、本実装は Transmit のみ
-実装しています。本プロジェクトの送信経路は `Com_MainFunction()` →
+実装しています。本プロジェクトの送信経路は `Com_MainFunctionTx()` →
 `Com_DoTransmit()` → `PduR_Transmit()` が同期的に SPI 送信まで完了する
 （実際の送信完了と `PduR_ComTransmit` 呼び出しの間に有意な時間差がない）ため、
 3 つのタイミングの違いを意味のある形で再現できないという判断です。
@@ -1107,7 +1107,7 @@ Com_ReceiveSignal(COOLANT_TEMP, &out)  ← CoolantTemp のバイトが 0xFF の�
     COM_DATA_INVALID_ACTION_NONE（既定） → 無効値チェックをせず、受信値を
                                             そのまま返す（既存の全シグナルの挙動）
 
-Com_MainFunction()  ← 次回の Os 100ms タスク呼び出し
+Com_MainFunctionRx()  ← 次回の Os 100ms タスク呼び出し
   Com_RxInvalidNotifyPending[] が立っているシグナルについて
   InvalidNotificationCbk()（Rte_COMInvalidNotify_CoolantTemp）を呼ぶ
 ```
@@ -1161,7 +1161,7 @@ WDT（ウォッチドッグタイマ）リセットが発生しました。
 
 修正として、`InvalidNotificationCbk()` の実呼び出しを `Com_ReceiveSignal()` の
 呼び出しスタックフレームから切り離し、`Com_RxInvalidNotifyPending[]` フラグを
-立てるだけにして、実際の呼び出しは必ず `Com_MainFunction()`（Os の 100ms
+立てるだけにして、実際の呼び出しは必ず `Com_MainFunctionRx()`（Os の 100ms
 タスク、割り込み禁止区間の外）側で行うようにしました。これは `Com_TxPending`
 （`Com_SendSignal()` から `PduR_Transmit()` の実行を切り離す、既存の仕組み）と
 全く同じ設計思想です。この教訓は `ComInvalidNotification` に限らず一般化できます:
@@ -1311,7 +1311,7 @@ discard that signal and shall not process it.
 更新せず、直近の合格値を返し続ける）を行います。通知コールバック
 （`FilterRejectCbk`、実 AUTOSAR の `ComNotification` 相当）の実呼び出しは、
 `ComDataInvalidAction`/`InvalidNotificationCbk` と全く同じ理由・同じ仕組みで
-次回 `Com_MainFunction()` まで遅延します（`Com_ReceiveSignal()` は
+次回 `Com_MainFunctionRx()` まで遅延します（`Com_ReceiveSignal()` は
 `Rte_COMRxInd_EngineInfo()` の `SchM_Enter/Exit_Rte_MIRROR_EXCLUSIVE_AREA()`
 内側から呼ばれるため、その場でコールバックを直接呼ぶと WDT リセットを
 引き起こしうる教訓を踏襲）。
@@ -1359,7 +1359,7 @@ COM モジュールが各 RX I-PDU の受信間隔を監視し、設定タイム
   Com_RxIndication() → Com_RxLastMs[0] = millis()   ← タイマリセット
 
 100 ms ごとに（Task 5）
-  Com_MainFunction()
+  Com_MainFunctionRx()
     now - Com_RxLastMs[0] >= 5000 ms?
       YES → Com_RxTimedOut[0] = 1
              WARN ログ出力
@@ -1417,12 +1417,12 @@ TimeoutNotificationCbk`、`EngineSpeed`/`CoolantTemp`/`EngineOnFlag` 全てで
 ```
 EngineOnFlag（非 Signal Group、シグナル単位）:
   RxTOutCbk = Rte_COMCbkRxTOut_EngineOnFlag
-  Com_MainFunction() のシグナル単位ループが Com_SigTimedOut[s] を
+  Com_MainFunctionRx() のシグナル単位ループが Com_SigTimedOut[s] を
   新規に立てた瞬間、1回だけ呼ぶ
 
 AbsInfo（Signal Group、グループ単位）:
   RxTOutCbk = Rte_COMCbkRxTOut_AbsInfo
-  Com_MainFunction() の I-PDU 単位ループが Com_RxTimedOut[id] を
+  Com_MainFunctionRx() の I-PDU 単位ループが Com_RxTimedOut[id] を
   新規に立てた瞬間、ipdu->IsSignalGroup!=0 を条件に1回だけ呼ぶ
 ```
 
@@ -1445,7 +1445,7 @@ AbsInfo（Signal Group、グループ単位）:
 ```
 I-PDU 単位ループがシグナル単位ループより先に実行されるため、グループ単位
 （`AbsInfo`）の通知がシグナル単位（`EngineOnFlag`）の通知より先に出力される
-（`Com_MainFunction()` 内のループ順序どおり）。`Com_CbkTxTOut`（発動しない）とは対照的に、TX/RX
+（`Com_MainFunctionRx()` 内のループ順序どおり）。`Com_CbkTxTOut`（発動しない）とは対照的に、TX/RX
 両方の送受信デッドライン監視コールバックのうち、実機で実際に発動するのは
 こちら側のみです（理由: TX 側は Bus-Off が `Can_Write()` を同期的に
 失敗させるため「送信済み・未確認」状態自体が生まれないのに対し、RX 側は
@@ -1578,7 +1578,7 @@ Com_DoTransmit()（PduR_Transmit() が E_OK を返した場合のみ）:
   MIXED 周期フロアや NumberOfRepetitions による再送で Com_DoTransmit() が
   重複して呼ばれても、既に確認待ちならタイマは延命しない）
 
-Com_MainFunction()（TX ディスパッチループの後段）:
+Com_MainFunctionTx()（TX ディスパッチループの後段）:
   Com_TxEnabled（CommunicationControl 有効中）かつ Com_TxIPduStarted[0]
   かつ Com_TxConfPending[0] のときのみ評価（RX 監視の Com_RxEnabled ゲートと
   同じ理由。当初は TX 側にこのゲートが無く、/code-review で指摘・是正した）
@@ -1594,7 +1594,7 @@ Com_TxConfirmation()（成功/失敗を問わず、確認到達のたび）:
 **Signal Group への配線漏れの是正（2026-08 追加）**: 上記は当初 `MeterStatus`
 （非 Signal Group）にのみ適用しており、本プロジェクト唯一の TX Signal Group
 である `WarningStatus`（TX IPduId=1）には `TxFirstTimeoutMs`/`TxTimeoutMs`/
-`TxTOutCbk` が未設定のままでした。`Com_MainFunction()` の TX 監視ループも
+`TxTOutCbk` が未設定のままでした。`Com_MainFunctionTx()` の TX 監視ループも
 `Com_DoTransmit()` のタイマ起動処理も Signal Group か否かを区別しない設計
 （`kTestErrGroupIPdu` 向けのユニットテストで Signal Group 単位の動作は既に
 検証済み）だったため、これはエンジンの未実装ではなく単なる config 配線漏れ
@@ -1608,7 +1608,7 @@ dispatch/confirmation の同期性に依存しない設計にしている**: `Ca
 は TX 確認を即座には呼ばず、`swPduHandle` を保留キューへ積むだけで、実際の
 `CanIf_TxConfirmation()` 呼び出しは**別タスク** `Can_MainFunction_Write()`
 （1ms 周期）がキューをドレインするタイミングで行われます（`Can.c` 冒頭
-コメント参照）。`Com_MainFunction()` は 100ms 周期の別タスクのため、両者は
+コメント参照）。`Com_MainFunctionTx()` は 100ms 周期の別タスクのため、両者は
 非同期です。このタイマ機構はそもそも「確認が届くまで待つ」ことを目的とした
 仕組みなので、この非同期性自体は問題になりません（`Com_TxConfPendingSinceMs`
 というタイムスタンプで経過時間を測るだけで、確認の到着タイミングに依存しない）。
@@ -1838,7 +1838,7 @@ MAC 検証を通過した送信元が実装バグ等で `0x00`/`0x01` 以外の�
 ImmobilizerStatus (IPduId=3):
   TxIpduCalloutCbk = Rte_COMTxIpduCallout_ImmobilizerStatus
 
-Com_DoTransmit(ipdu=3, ...)  ← Com_MainFunction() の TX ディスパッチから呼ぶ
+Com_DoTransmit(ipdu=3, ...)  ← Com_MainFunctionTx() の TX ディスパッチから呼ぶ
   TxTransformCbk は未設定のためスキップ
   TxIpduCalloutCbk(Com_TxBuffer[3], DLC=1) を呼ぶ（PduR_Transmit() 直前）
     byte[0] が 0x00/0x01 以外 → 0（false）を返す
@@ -1950,7 +1950,7 @@ KeyFobEcu → SecOC（MAC・フレッシュネス検証） → Com_RxIndication(
       RX バッファから ImmobilizerCmd の生値をアンパック
       → Com_SendSignal(COM_SIGNAL_IMMOBILIZER_STATUS, &value)
           （SWC が直接呼ぶ場合と全く同じ経路。COM_FILTER_MASKED_NEW_DIFFERS_MASKED_OLD
-            により値が変化したときだけ次回 Com_MainFunction() で送信）
+            により値が変化したときだけ次回 Com_MainFunctionTx() で送信）
   → CAN 0x230 (ImmobilizerStatus) 送信
 ```
 
@@ -2032,13 +2032,13 @@ Signal Gateway 自体（`ImmobilizerCmd`→`ImmobilizerStatus`）は `SecureComm
 UDS CommunicationControl (SID 0x28) の実装時、2 つの仕様不整合が見つかった
 （現在の仕様は [`Dcm_Notes.md`](./Dcm_Notes.md#communicationcontrolsid-0x28) 参照）。
 
-**Rx 無効中の受信デッドライン監視**: 当初、`Com_MainFunction()`（受信デッドライン
+**Rx 無効中の受信デッドライン監視**: 当初、`Com_MainFunctionRx()`（受信デッドライン
 監視、100ms 周期）は `Com_RxEnabled` を一切参照していなかった。SWS_Com_00684/
 SWS_Com_00685（`Com_IpduGroupStop` により I-PDU が止められた間は受信処理だけでなく
 デッドライン監視自体も無効化することを要求）に反しており、意図的に
 CommunicationControl で受信を止めているだけなのに、`TimeoutMs` を超えて
 無効化し続けると `Com_RxTimedOut` が誤って立ち、上位層（RTE/ASW）へ
-「通信異常」として伝わってしまっていた。`Com_MainFunction()` は
+「通信異常」として伝わってしまっていた。`Com_MainFunctionRx()` は
 `Com_RxEnabled==0` の間は監視自体を評価しないよう修正した。
 
 あわせて、再度有効化（`RxEnabled` が 0→1）した瞬間に全 RX I-PDU の
@@ -2046,7 +2046,7 @@ CommunicationControl で受信を止めているだけなのに、`TimeoutMs` �
 （SWS_Com_00787: `Com_IpduGroupStart` 時にデッドライン監視タイマを
 再始動する要求に対応）。これをしないと、`TimeoutMs`（EngineInfo/AbsInfo
 とも 5000ms）以上の時間受信を無効化していた場合、再有効化した直後の
-`Com_MainFunction()` 呼び出しで「無効化前の古い `Com_RxLastMs`」のまま
+`Com_MainFunctionRx()` 呼び出しで「無効化前の古い `Com_RxLastMs`」のまま
 即座にタイムアウト判定されてしまう（実際にはまだ新しいフレームを
 1 つも受信できていない段階で）。
 

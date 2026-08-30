@@ -65,17 +65,27 @@
  * 静的ヘルパー Com_RequestTxOnChange() が誤ってこの値をコメントに持って
  * いたが、実装追加を機に是正した（同関数のコメント参照）。 */
 #define COM_API_ID_TRIGGER_IPDU_SEND            0x17U
-#define COM_API_ID_SEND_SIGNAL_GROUP            0x18U
-#define COM_API_ID_RECEIVE_SIGNAL_GROUP         0x19U
-#define COM_API_ID_RECEIVE_SIGNAL_GROUP_ARRAY   0x1AU
+/* [SWS_Com_00200]/[SWS_Com_00201]/[SWS_Com_00854] Com_SendSignalGroup/
+ * Com_ReceiveSignalGroup/Com_ReceiveSignalGroupArray の実 Service ID。
+ * 旧実装はそれぞれ 0x18/0x19/0x1A という誤った値を使っていたが、この3値は
+ * 実際には Com_MainFunctionRx（0x18）/Com_MainFunctionTx（0x19）/
+ * Com_MainFunctionRouteSignals（0x1A）の Service ID であり、単なる誤記
+ * ではなく他 API と衝突していた（2026-08、Com_MainFunctionRx/Tx 新設を機に
+ * 発覚・是正）。 */
+#define COM_API_ID_SEND_SIGNAL_GROUP            0x0DU
+#define COM_API_ID_RECEIVE_SIGNAL_GROUP         0x0EU
+#define COM_API_ID_RECEIVE_SIGNAL_GROUP_ARRAY   0x24U
 /* [SWS_Com_00557]/[SWS_Com_00645] Com_InvalidateSignalGroup の実 Service ID。
  * 旧 COM_API_ID_IS_RX_TIMED_OUT（本プロジェクト独自 API）がここ（0x1B）を
  * 占有していたため、下記の通り 0xF0 へ退避させて空けている。 */
 #define COM_API_ID_INVALIDATE_SIGNAL_GROUP      0x1BU
-#define COM_API_ID_MAIN_FUNCTION                0x20U
-#define COM_API_ID_SEND_SIGNAL_GROUP_ARRAY      0x23U  /* 実 AUTOSAR の Service ID と一致させている
-                                                         * ため昇順から外れる（0x1B の直後ではなく
-                                                         * ここに置く） */
+/* [SWS_Com_00398]/[SWS_Com_00399] Com_MainFunctionRx/Tx の実 Service ID。
+ * 単体の Com_MainFunction（旧 COM_API_ID_MAIN_FUNCTION=0x20、実仕様に
+ * 存在しない本プロジェクト独自の値）を廃止し2関数へ分割した際に新設
+ * （2026-08）。 */
+#define COM_API_ID_MAIN_FUNCTION_RX             0x18U
+#define COM_API_ID_MAIN_FUNCTION_TX             0x19U
+#define COM_API_ID_SEND_SIGNAL_GROUP_ARRAY      0x23U
 /* [SWS_Com_00881] Com_SwitchIpduTxMode の実 Service ID。 */
 #define COM_API_ID_SWITCH_IPDU_TX_MODE          0x27U
 #define COM_API_ID_SET_COMMUNICATION_ENABLED    0x30U
@@ -185,10 +195,10 @@
  * DaVinci: /ActiveEcuC/Com/ComConfig/[ComIPdu]/ComTxModeFalse/ComTxModeTimePeriodFactor
  *
  * ComFilterAlgorithm によって「変化なし」と判定され続けても、最終送信から
- * この間隔が経過したら Com_MainFunction() が強制的に再送する（実車の MIXED
+ * この間隔が経過したら Com_MainFunctionTx() が強制的に再送する（実車の MIXED
  * 送信モードが持つ「周期フロア」。起動直後や瞬断から復帰した受信側が、
  * いつまでも古い EngineState を握り続けないようにするための保険）。
- * 値が変化した場合は、このフロアを待たず次回 Com_MainFunction()（Os の
+ * 値が変化した場合は、このフロアを待たず次回 Com_MainFunctionTx()（Os の
  * 100ms タスク）で送信する。
  */
 #define COM_TX_PERIOD_METERSTATUS_FLOOR_MS  9000U

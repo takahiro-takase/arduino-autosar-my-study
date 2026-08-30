@@ -49,7 +49,7 @@ true が続く間の重複実行や true→false への遷移では実行しま�
 
 ## タスク ID とマスク（`BswM_Cfg.h`）
 
-タスク数が 16 を超えるため、`TaskMask` は uint32（bits 0〜17）です。
+タスク数が 16 を超えるため、`TaskMask` は uint32（bits 0〜18）です。
 
 | タスク ID | 定数 | 対応関数 | 周期 |
 |---------|------|---------|------|
@@ -58,19 +58,30 @@ true が続く間の重複実行や true→false への遷移では実行しま�
 | 2 | `BSWM_OS_TASK_RTE_ENGINE` | `Rte_ScheduleRunnables` | 3000 ms |
 | 3 | `BSWM_OS_TASK_RTE_WARNING` | `Rte_ScheduleWarningIndicator` | 500 ms |
 | 4 | `BSWM_OS_TASK_CANSM_MAIN` | `CanSM_MainFunction` | 10 ms |
-| 5 | `BSWM_OS_TASK_COM_MAIN` | `Com_MainFunction` | 100 ms |
-| 6 | `BSWM_OS_TASK_IOHWAB_MAIN` | `IoHwAb_MainFunction` | 10 ms |
-| 7 | `BSWM_OS_TASK_WDGM_MAIN` | `WdgM_MainFunction` | 6000 ms |
-| 8 | `BSWM_OS_TASK_DCM_MAIN` | `Dcm_MainFunction` | 1000 ms |
-| 9 | `BSWM_OS_TASK_FIM_MAIN` | `FiM_MainFunction` | 100 ms |
-| 10 | `BSWM_OS_TASK_WDGM_TRIGGER` | `WdgM_TriggerHwWatchdog` | 1000 ms |
-| 11 | `BSWM_OS_TASK_NM_MAIN` | `Nm_MainFunction` | 1000 ms |
-| 12 | `BSWM_OS_TASK_NVM_MAIN` | `NvM_MainFunction` | 10 ms |
-| 13 | `BSWM_OS_TASK_CAN_TX_CONF` | `Can_MainFunction_Write` | 1 ms |
-| 14 | `BSWM_OS_TASK_CAN_BUSOFF` | `Can_MainFunction_BusOff` | 1 ms |
-| 15 | `BSWM_OS_TASK_CAN_WAKEUP` | `Can_MainFunction_Wakeup` | 1 ms |
-| 16 | `BSWM_OS_TASK_SECOC_MAIN` | `SecOC_MainFunctionTx` | 100 ms |
-| 17 | `BSWM_OS_TASK_MEMIF_MAIN` | `MemIf_MainFunction` | 10 ms |
+| 5 | `BSWM_OS_TASK_COM_MAIN` | `Com_MainFunctionRx` | 100 ms |
+| 6 | `BSWM_OS_TASK_COM_MAIN_TX` | `Com_MainFunctionTx` | 100 ms |
+| 7 | `BSWM_OS_TASK_IOHWAB_MAIN` | `IoHwAb_MainFunction` | 10 ms |
+| 8 | `BSWM_OS_TASK_WDGM_MAIN` | `WdgM_MainFunction` | 6000 ms |
+| 9 | `BSWM_OS_TASK_DCM_MAIN` | `Dcm_MainFunction` | 1000 ms |
+| 10 | `BSWM_OS_TASK_FIM_MAIN` | `FiM_MainFunction` | 100 ms |
+| 11 | `BSWM_OS_TASK_WDGM_TRIGGER` | `WdgM_TriggerHwWatchdog` | 1000 ms |
+| 12 | `BSWM_OS_TASK_NM_MAIN` | `Nm_MainFunction` | 1000 ms |
+| 13 | `BSWM_OS_TASK_NVM_MAIN` | `NvM_MainFunction` | 10 ms |
+| 14 | `BSWM_OS_TASK_CAN_TX_CONF` | `Can_MainFunction_Write` | 1 ms |
+| 15 | `BSWM_OS_TASK_CAN_BUSOFF` | `Can_MainFunction_BusOff` | 1 ms |
+| 16 | `BSWM_OS_TASK_CAN_WAKEUP` | `Can_MainFunction_Wakeup` | 1 ms |
+| 17 | `BSWM_OS_TASK_SECOC_MAIN` | `SecOC_MainFunctionTx` | 100 ms |
+| 18 | `BSWM_OS_TASK_MEMIF_MAIN` | `MemIf_MainFunction` | 10 ms |
+| 19 | (マスク対象外) | `App_GptDemo_Run` | 2000 ms |
+| 20 | (マスク対象外) | `ComM_MainFunction` | 100 ms |
+
+Task 6（`Com_MainFunctionTx`）は 2026-08、単体だった `Com_MainFunction` を
+実仕様準拠の `Com_MainFunctionRx`/`Com_MainFunctionTx` へ分割した際に追加。
+Task 17（`SecOC_MainFunctionTx`）が同一 `Os_SchedulerStep()` パス内で Com の
+ディスパッチ結果を同じティックで拾えるよう、末尾ではなく Task 5 の直後へ
+挿入し、Task 7 以降を 1 つずつ後ろへずらした（`/code-review` で「末尾に
+追加すると 1 ティック分の遅延が生じる」と指摘され是正。詳細は
+`Os_PBCfg.c`/`BswM_Cfg.h` 参照）。
 
 `BSWM_TASK_MASK_APP = 0x00C`（bit2=Rte_Engine, bit3=Rte_Warning）がアプリタスクマスクです。
 POST_RUN ではこの 2 タスクだけを停止し、BSW タスク（Can_MainFunction_Read/BusOff/Wakeup・CanTp・CanSM・Com・IoHwAb・WdgM・Dcm・FiM・WdgM_TriggerHwWatchdog・Nm・NvM・MemIf・SecOC・Can_MainFunction_Write）は継続させます。
@@ -84,7 +95,7 @@ POST_RUN 遷移の原因にはならない）では ComM は既に NO_COM にな
 bit0=Can_MainFunction_Read・bit15=Can_MainFunction_Wakeup・bit4=CanSM_MainFunction・
 bit12=NvM_MainFunction・bit17=MemIf_MainFunction・bit11=Nm_MainFunction を除いたもの）が
 SHUTDOWN 時の無効化対象マスクです。SecOC_MainFunctionTx（bit16）はこの除外リストに
-含まれないため（POST_RUN 中に Com_MainFunction が止まり SecOC の送信要求自体が
+含まれないため（POST_RUN 中に Com_MainFunctionTx が止まり SecOC の送信要求自体が
 発生しなくなるのと同じ理由で、無効化しておくのが本来の設計意図）、
 Can_MainFunction_Write（bit13）・Can_MainFunction_BusOff（bit14）と同様に
 SHUTDOWN 中は停止します。BusOff ポーリングは `CanState==CAN_CS_STARTED` が条件のため
@@ -120,7 +131,7 @@ POST_RUN 中も BSW タスクを動かし続けることで、以下のグレー
 POST_RUN 中も動き続けるタスク:
   Can_MainFunction_Read / CanTp_Main → 受信中の診断フレームを最後まで処理
   CanSM_Main          → 回復シーケンスの完了まで管理
-  Com_MainFunction    → デッドライン監視の最終確認
+  Com_MainFunctionRx/Tx → 受信デッドライン監視の最終確認・送信スケジューリング
   IoHwAb_Main        → ボタンのデバウンス状態を正常終了
   WdgM_Main          → Alive Supervision のソフト評価は継続するが判定結果は無視される
                         （WdgM_SupervisionSuppressed が立っているため）

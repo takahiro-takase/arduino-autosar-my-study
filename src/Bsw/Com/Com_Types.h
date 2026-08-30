@@ -248,7 +248,7 @@ typedef enum
 //       あわせて `InvalidNotificationCbk`（ECUC_Com_00315:
 //       ComInvalidNotification 相当）が非 NULL なら呼び出す。ただし
 //       Com_ReceiveSignal() の呼び出しスタックフレームで同期的に呼ぶのでは
-//       なく、次回 Com_MainFunction() から呼ぶ（Com_ReceiveSignal() は
+//       なく、次回 Com_MainFunctionRx() から呼ぶ（Com_ReceiveSignal() は
 //       割り込み禁止区間から呼ばれることがあり、その中でコールバックを
 //       直接呼ぶとコールバックのブロッキング処理が割り込み禁止を長引かせ
 //       うるため。詳細は Com.c の Com_RxInvalidNotifyPending 宣言コメント
@@ -286,12 +286,12 @@ typedef enum
 //   （実車の Com と同じ「値の生成」と「送信タイミング」の責務分離。
 //   SWS_Com_00734/00742/00743: DIRECT/MIXED は変化検知した signal(group)の
 //   send request が「次回メイン関数までに」送信を開始させる。本実装では
-//   実際の PduR_Transmit() 呼び出しを必ず Com_MainFunction() 側で行う
+//   実際の PduR_Transmit() 呼び出しを必ず Com_MainFunctionTx() 側で行う
 //   ことで、この「次回メイン関数まで」の猶予をそのまま「ASW Runnable の
 //   スタックフレームで SPI 送信までブロッキングさせない」設計に利用している）。
 //
 //   COM_TX_MODE_DIRECT   : ComFilterAlgorithm を通過した変化があると
-//     次回 Com_MainFunction() で送信する。周期フロアは持たない
+//     次回 Com_MainFunctionTx() で送信する。周期フロアは持たない
 //     （WarningStatus が使用。他 ECU の制御判断に使われないダッシュボード
 //     表示用ミラー情報のため、取りこぼしても実害が小さいと判断した）。
 //
@@ -305,7 +305,7 @@ typedef enum
 //     厳密な位相シフト［Fig.16/17 の td 分の遅延］までは再現しない。MDT
 //     自体（変化時送信の最小間隔）は MinDelayMs として別途サポートする）。
 //
-//   COM_TX_MODE_PERIODIC : 値の変化には反応せず、Com_MainFunction()
+//   COM_TX_MODE_PERIODIC : 値の変化には反応せず、Com_MainFunctionTx()
 //     が TxPeriodMs 周期で常に送信する（E2EHealthStatus が使用）。
 //
 //   1 つの I-PDU に上記モードを 1 つだけ固定で持たせるのではなく、TMS
@@ -382,7 +382,7 @@ typedef enum
 //               あり、Com はここで何が実行されるか一切関知しない
 //               （IPduId のハードコード比較を Com.c 本体に埋め込まないため）。
 //   TxTransformCbk  : TX I-PDU のみ使用。非NULL なら実際の送信直前（DIRECT/
-//               MIXED はイベント駆動の送信直前、PERIODIC は Com_MainFunction()
+//               MIXED はイベント駆動の送信直前、PERIODIC は Com_MainFunctionTx()
 //               内部の周期送信直前）に、実 TX バッファへのポインタと長さを
 //               渡して呼ぶ。E2E Transformer が Counter/CRC をバッファへ
 //               書き込む等の「送信直前の最終変換」に使う汎用フック。
@@ -391,7 +391,7 @@ typedef enum
 //               0 = MDT 監視なし（SWS_Com_00471）。直近の実送信から
 //               MinDelayMs 未満しか経過していない場合、Com_TxPending が
 //               立っていても実送信を保留する（破棄はしない。次回
-//               Com_MainFunction() で経過時間を再判定し、満了次第送信する）。
+//               Com_MainFunctionTx() で経過時間を再判定し、満了次第送信する）。
 //               MIXED の周期フロア送信・PERIODIC の周期送信には適用しない
 //               （SWS_Com_00789: ComEnableMDTForCyclicTransmission が既定
 //               false の場合、MIXED の周期部分・PERIODIC には MDT タイマ
@@ -441,7 +441,7 @@ typedef enum
 //               送信/受信処理が行われない。停止中の RX I-PDU は
 //               Com_RxIndication() が受信処理自体を無効化し（[SWS_Com_00684]）、
 //               受信デッドライン監視も評価しない（[SWS_Com_00685]）。停止中の
-//               TX I-PDU は Com_MainFunction() が実送信を行わず、保留中の
+//               TX I-PDU は Com_MainFunctionTx() が実送信を行わず、保留中の
 //               送信要求は Com_IpduGroupStop() の時点でキャンセルされる
 //               （[SWS_Com_00777]）。Com_SendSignal()/Com_ReceiveSignal() 自体は
 //               停止中でも内部バッファを更新・参照できる（[SWS_Com_00334]、
@@ -518,7 +518,7 @@ typedef enum
 //               監視（既存の FirstTimeoutMs/TimeoutMs/Com_RxTimedOut、
 //               上記）がこの I-PDU（グループ全体で 1 つのデッドラインとして
 //               扱われる、[7.3.6]）のタイムアウトを新規検出した瞬間に
-//               Com_MainFunction() から呼ばれる（Com_CbkRxTOut、
+//               Com_MainFunctionRx() から呼ばれる（Com_CbkRxTOut、
 //               SWS_Com_00536/00556。RTE 生成名は Rte_COMCbkRxTOut_<sg>）。
 //               非 Signal Group の I-PDU では未使用（Com_SignalConfigType.
 //               RxTOutCbk 側のシグナル単位コールバックを使うこと）。NULL 可
@@ -678,7 +678,7 @@ typedef enum
 //               参照）。COM_FILTER_NEW_IS_WITHIN のときのみ FilterMin/FilterMax
 //               を参照し、範囲外の受信値を破棄する。FilterRejectCbk は NULL 可
 //               （通知不要なら未設定でよい。DataInvalidAction の
-//               InvalidNotificationCbk と同じ理由で、Com_MainFunction() から
+//               InvalidNotificationCbk と同じ理由で、Com_MainFunctionRx() から
 //               呼ばれる — Com_ReceiveSignal() が割り込み禁止区間から呼ばれる
 //               ことがあるため。Com.c の Com_RxFilterRejectPending 宣言コメント
 //               参照）。
@@ -744,7 +744,7 @@ typedef enum
 //               する（同一 I-PDU 内のシグナルは必ず同時に更新されるため、
 //               シグナルごとに別の受信時刻を持つ必要はない）。
 //               RxTOutCbk は非 NULL ならこのシグナルのデッドライン超過を
-//               新規検出した瞬間に Com_MainFunction() から呼ばれる
+//               新規検出した瞬間に Com_MainFunctionRx() から呼ばれる
 //               （Com_CbkRxTOut、SWS_Com_00536/00556。RTE 生成名は
 //               Rte_COMCbkRxTOut_<sn>、Com_CbkTxTOut と対になる、
 //               ComTimeoutNotification=ECUC_Com_00552 を共有する RX 側）。

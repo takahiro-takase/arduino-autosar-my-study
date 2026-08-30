@@ -49,7 +49,7 @@
  *            TX I-PDU 0 (IPduId=0): CAN ID 0x200, DLC=6  MeterStatus
  *              (メータ ECU、E2E 保護なし、TxModeMode=MIXED。
  *              ComFilterAlgorithm=MASKED_NEW_DIFFERS_MASKED_OLD で値変化を
- *              検知すると次回 Com_MainFunction() で送信、変化がなくても
+ *              検知すると次回 Com_MainFunctionTx() で送信、変化がなくても
  *              Com_Cfg.h の COM_TX_PERIOD_METERSTATUS_FLOOR_MS 間隔で
  *              周期フロア送信する。byte[1] bit0 に非 Signal Group の
  *              update-bit（UpdateBitPosition=8）を持ち、周期フロア再送と
@@ -73,7 +73,7 @@
  *              TMS（Transmission Mode Selector）を持つ I-PDU:
  *                通常（FaultLamp/AbsLamp 消灯 = TMS false）は TxModeMode=DIRECT。
  *                ダッシュボード表示用ミラー情報のため周期フロアを持たず、
- *                値変化時のみ次回 Com_MainFunction() で送信する。
+ *                値変化時のみ次回 Com_MainFunctionTx() で送信する。
  *                FaultLamp/AbsLamp のいずれかが点灯中（TMS true）は
  *                TxModeModeTrue=MIXED へ自動切り替えし、
  *                COM_TX_PERIOD_WARNINGSTATUS_TRUE_FLOOR_MS 間隔で周期フロア送信する。
@@ -311,7 +311,7 @@ static const Com_IPduConfigType Com_RxIPduConfigData[COM_RX_IPDU_COUNT] = {
 /* -----------------------------------------------------------------------
  * TX I-PDU テーブル
  * DaVinci: /ActiveEcuC/Com/ComConfig/[ComIPdu] (Direction=SEND)
- * Com_MainFunction()（DIRECT/MIXED の変化時送信・PERIODIC/MIXED の周期送信、
+ * Com_MainFunctionTx()（DIRECT/MIXED の変化時送信・PERIODIC/MIXED の周期送信、
  * いずれもこの関数のみが実送信を行う）が送信要求を PduR へ転送する際に参照する。
  * ----------------------------------------------------------------------- */
 static const Com_IPduConfigType Com_TxIPduConfigData[COM_TX_IPDU_COUNT] = {
@@ -344,7 +344,7 @@ static const Com_IPduConfigType Com_TxIPduConfigData[COM_TX_IPDU_COUNT] = {
         .IpduGroupId = COM_IPDU_GROUP_NONE, /* I-PDU Group に属さない（常に有効） */
         .TxModeMode = COM_TX_MODE_MIXED, /* DaVinci: ComTxModeMode = MIXED
                                           *          (Com_SendSignal() が変化検知時に Com_TxPending を立て、
-                                          *          次回 Com_MainFunction() で送信) */
+                                          *          次回 Com_MainFunctionTx() で送信) */
         .TxPeriodMs = COM_TX_PERIOD_METERSTATUS_FLOOR_MS, /* DaVinci: ComTxModeTimePeriodFactor（周期フロア間隔） */
         .TxFirstTimeoutMs = COM_TX_TIMEOUT_METERSTATUS_MS, /* DaVinci: ComTransmissionDeadlineMonitoring/ComFirstTimeout */
         .TxTimeoutMs      = COM_TX_TIMEOUT_METERSTATUS_MS  /* DaVinci: ComTransmissionDeadlineMonitoring/ComTimeout */
@@ -464,7 +464,7 @@ static const Com_IPduConfigType Com_TxIPduConfigData[COM_TX_IPDU_COUNT] = {
         .IpduGroupId = COM_IPDU_GROUP_NONE, /* I-PDU Group に属さない（常に有効） */
         .TxModeMode = COM_TX_MODE_DIRECT,  /* DaVinci: ComTxModeMode = DIRECT
                                             *          （ComFilterAlgorithm を通過した変化を
-                                            *          検知すると次回 Com_MainFunction() で送信。
+                                            *          検知すると次回 Com_MainFunctionTx() で送信。
                                             *          周期フロアなし） */
         .NumberOfRepetitions = 2U,   /* DaVinci: ComTxModeNumberOfRepetitions
                                       *          初回送信 + 再送2回 = 計3回（[SWS_Com_00305]） */
@@ -529,7 +529,7 @@ static const Com_SignalConfigType Com_SignalConfigData[COM_SIGNAL_COUNT] = {
          * 評価される（他の SUBSTITUTE/RX Signal Group 系の機能と異なり、
          * uds_tester で CoolantTemp=0xFF のフレームを送れば実機で検証できる）。
          * Rte_COMInvalidNotify_CoolantTemp() の実呼び出しは次回
-         * Com_MainFunction() まで遅延される（Com_RxInvalidNotifyPending
+         * Com_MainFunctionRx() まで遅延される（Com_RxInvalidNotifyPending
          * 参照。割り込み禁止区間からの直接呼び出しで WDT リセットを起こした
          * 実機障害の教訓）。
          * --------------------------------------------------------------- */

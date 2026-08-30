@@ -18,7 +18,7 @@ MCAL 最下層。HW を直接操作する唯一のモジュール。TX 確認の
 
 ```
 （修正前）
-Com_MainFunction() → Com_DoTransmit() → PduR_Transmit() → CanIf_Transmit() → Can_Write()
+Com_MainFunctionTx() → Com_DoTransmit() → PduR_Transmit() → CanIf_Transmit() → Can_Write()
                                                                                 → CanIf_TxConfirmation()
                                                                                   → PduR_CanIfTxConfirmation()
                                                                                     → Com_TxConfirmation()

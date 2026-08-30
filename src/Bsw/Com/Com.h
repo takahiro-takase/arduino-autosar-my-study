@@ -98,7 +98,7 @@ uint8 Com_ReceiveSignal(Com_SignalIdType SignalId, void* SignalDataPtr);
  *                    監視タイムアウト中である。
  *
  * \AUTOSARReq     {SWS_Com_00201, SWS_Com_00051, SWS_Com_00638, SWS_Com_00461}
- * \ServiceID      {0x19}
+ * \ServiceID      {0x0e}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
  */
@@ -118,7 +118,7 @@ Std_ReturnType Com_ReceiveSignalGroup(Com_IPduIdType GroupId);
  * \retval  E_OK      IPduId が見つかり、DataPtr へコピーした。
  * \retval  E_NOT_OK  COM 未初期化、DataPtr が NULL、または IPduId が存在しない。
  *
- * \ServiceID      {0x1A}
+ * \ServiceID      {0x24}
  * \Reentrancy     {Reentrant}
  * \Synchronicity  {Synchronous}
  */
@@ -220,7 +220,7 @@ uint8 Com_InvalidateSignalGroup(Com_IPduIdType SignalGroupId);
  * \details MDT（ComMinimumDelayTime）のみを尊重し、
  *          ComTxModeNumberOfRepetitions 等の他の TxMode パラメータは考慮
  *          しない（[SWS_Com_00861]/[SWS_Com_00388]）。実送信は
- *          Com_MainFunction() へ委ねる。診断 CommunicationControl による
+ *          Com_MainFunctionTx() へ委ねる。診断 CommunicationControl による
  *          送信抑制中は、トリガーを受け付けても実送信されないまま消費
  *          される点に注意（詳細は Com.c の実装コメント参照）。
  *
@@ -242,7 +242,7 @@ Std_ReturnType Com_TriggerIPDUSend(Com_IPduIdType PduId);
  *          もう一つの TMS 変更経路。要求済みの Mode が既に現在の状態と
  *          同じ場合は何もしない。実際に変化した場合、遷移後が DIRECT/MIXED
  *          なら Com_SendSignal()/Com_SendSignalGroup() 側の tmsChanged
- *          （[SWS_Com_00495]）と同じ経路で次回 Com_MainFunction() までに
+ *          （[SWS_Com_00495]）と同じ経路で次回 Com_MainFunctionTx() までに
  *          即時送信される。PERIODIC の場合は即時送信は発生しないが、周期
  *          タイマは再始動する（[SWS_Com_00244]）。詳細は Com.c の実装
  *          コメント参照。
@@ -258,15 +258,22 @@ void Com_SwitchIpduTxMode(Com_IPduIdType PduId, uint8 Mode);
 
 /* SWS_Com_00124 */
 void Com_TxConfirmation(PduIdType TxPduId, Std_ReturnType result);
-/* SWS_Com_00398: 受信デッドライン監視タイムアウト検出。Os の 100ms タスクから呼び出す */
-void Com_MainFunction(void);
+/* [SWS_Com_00398]: 受信デッドライン監視タイムアウト検出。Os の 100ms タスクから呼び出す。
+ * 実仕様は Com_MainFunctionRx/Tx/RouteSignals の3関数に分かれており（単体の
+ * Com_MainFunction は4.3.1仕様書に存在しない）、本プロジェクトも合わせて
+ * 分割した（2026-08、RouteSignalsはComのSignal GatewayをRxIndication内で
+ * 同期的に転送する設計のため対象外、Com.c 冒頭コメント参照）。 */
+void Com_MainFunctionRx(void);
+/* [SWS_Com_00399]: 送信スケジューリング（周期送信・変化時送信・TxTMS再送）と
+ * 送信確認デッドライン監視。Os の 100ms タスクから呼び出す。 */
+void Com_MainFunctionTx(void);
 
 /**
  * \brief   診断 CommunicationControl (UDS SID 0x28) からの通信有効/無効要求を反映する。
  *
  * \details RxEnabled=0 の間、Com_RxIndication() は受信フレームを無視する
  *          （バッファ・タイムアウトタイマとも更新しない）。あわせて
- *          Com_MainFunction() の受信デッドライン監視自体も評価を止める
+ *          Com_MainFunctionRx() の受信デッドライン監視自体も評価を止める
  *          （SWS_Com_00684/SWS_Com_00685 相当。意図的に止めているだけの
  *          通信を「通信異常」として誤って上位層へ伝えないため）。
  *          RxEnabled が 0→1 へ遷移した際は、全 RX I-PDU の
@@ -275,12 +282,12 @@ void Com_MainFunction(void);
  *          TimeoutMs 以上の時間受信を抑制していた場合に再開直後で
  *          即座にタイムアウト判定されてしまう）。
  *          TxEnabled=0 の間、DIRECT/MIXED/PERIODIC いずれの I-PDU も
- *          Com_MainFunction() での実送信を抑制する（DIRECT/MIXED の変化検知
+ *          Com_MainFunctionTx() での実送信を抑制する（DIRECT/MIXED の変化検知
  *          自体は Com_RequestTxOnChange() が Com_TxPending[] へ記録するが、
- *          実際に PduR_Transmit() を呼ぶかどうかは Com_MainFunction() が
+ *          実際に PduR_Transmit() を呼ぶかどうかは Com_MainFunctionTx() が
  *          Com_TxEnabled を見て判断する）。SWS_Com_00777「停止中の I-PDU の
  *          送信要求はキャンセルしなければならない」・SWS_Com_00334 の説明文
- *          の要求は、Com_MainFunction() が抑制中でも Com_TxPending[] を
+ *          の要求は、Com_MainFunctionTx() が抑制中でも Com_TxPending[] を
  *          破棄する（保留させない）ことで満たす。TX バッファの値自体は
  *          Com_SendSignal() が既に更新済みのため失われないが、再度有効化
  *          された「だけ」で即座に送信されることはなく、再開後に実際に値が
@@ -395,7 +402,7 @@ void Com_EnableReceptionDM(Com_IpduGroupIdType IpduGroupId);
  *          継続する）。無効化中にラッチ済みのタイムアウト状態
  *          （`Com_RxTimedOut`/`Com_SigTimedOut`）は意図的にクリアしない
  *          （`Com_IpduGroupStop()` と同じ理由: 無効化中は
- *          `Com_MainFunction()` 側の評価自体を止めるため値は参照されない）。
+ *          `Com_MainFunctionRx()` 側の評価自体を止めるため値は参照されない）。
  *
  *          [SWS_Com_00534]: `IpduGroupId` が1本でも TX I-PDU を含む場合、
  *          要求全体を黙って無視する（`Com_EnableReceptionDM()` 参照）。
@@ -437,7 +444,7 @@ uint8 Com_Test_GetTmsState(Com_IPduIdType ipduId);
 const uint8* Com_Test_GetTxBuffer(Com_IPduIdType ipduId);
 
 /** [テスト専用] RX シグナルの Com_SigTimedOut（デッドライン監視のタイムアウト
- *  検知フラグ）を取得する。`Com_MainFunction()` がしきい値超過を検知した後、
+ *  検知フラグ）を取得する。`Com_MainFunctionRx()` がしきい値超過を検知した後、
  *  `Com_ReceiveSignal()` が `RxDataTimeoutAction` を適用して消費するまでの間
  *  立っている（[「Rx 処理」の「デッドライン監視」](../../README.md#rx-processing-timeout)
  *  参照）。範囲外の `SignalId` は 0 を返す。 */
@@ -476,7 +483,7 @@ uint8 Com_Test_GetTxConfPending(Com_IPduIdType ipduId);
 
 /** [テスト専用] TX 送信デッドライン監視のアーム時刻
  *  （Com_TxConfPendingSinceMs[ipduId]）を直接セットする。実際に
- *  Com_MainFunction() 経由でディスパッチさせなくても、「以前のある時刻から
+ *  Com_MainFunctionTx() 経由でディスパッチさせなくても、「以前のある時刻から
  *  確認待ちである」状態を直接注入できるようにする（Com_IpduGroupStop() に
  *  よるキャンセル検証など）。範囲外の `ipduId` は無視する。 */
 void Com_Test_SetTxConfPendingSinceMs(Com_IPduIdType ipduId, unsigned long value);

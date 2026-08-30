@@ -95,7 +95,7 @@ void App_EngineManager_Init(void)
  *          byte[1] bit0 は EngineState 単体の update-bit、Com が自動管理する
  *          ため本 Runnable は関知しない）。
  *          MeterStatus は TxModeMode=MIXED のため、値が変化していれば
- *          次回 Com_MainFunction()（Os の 100ms タスク）で Com が送信し、
+ *          次回 Com_MainFunctionTx()（Os の 100ms タスク）で Com が送信し、
  *          変化がなくても Com 自身の周期フロアで一定間隔ごとに再送される
  *          （本 Runnable 自身は送信の要否・タイミングに関与せず、実際の
  *          PduR_Transmit()/SPI 送信も呼ばないため、その所要時間が本
