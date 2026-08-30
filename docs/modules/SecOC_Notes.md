@@ -182,20 +182,20 @@ E2E Profile05 単体保護に切り替えました（`E2EXf_PBCfg.c`/`SecOC_PBCf
    （実績のある独立したライブラリ）の CMAC 実装と全件一致することを確認済み
    （ホスト環境に C コンパイラが無く組込みコードを直接実行できなかったための
    代替検証手段。C コードとの対応は目視でも再確認済み）。
-3. `tools/uds_tester` の `_apply_secoc()`（Python、pycryptodome で本物の
+3. `tools/can_tool` の `_apply_secoc()`（Python、pycryptodome で本物の
    AES-CMAC を計算）と、Arduino 側の `SecOC_IfRxIndication()` → `Csm_MacVerify()`
    → `Crypto_ProcessJob()`（同一の自前実装）が同じ鍵・同じメッセージに対して
    同じ MAC を計算することを、バイトレイアウト（DataId の Big Endian 連結順・
    切り詰め位置）も含めて突き合わせ済みです。
 4. （履歴）以前 TX 方向で SecOC を使っていた際は、`SecOC_MainFunctionTx()` が
    `Csm_MacGenerate()` 経由で呼ぶ `Crypto_Cmac_Calculate()`（RX と同一実装）が
-   計算した MAC を、`tools/uds_tester` の `_verify_secoc()`（受信した
+   計算した MAC を、`tools/can_tool` の `_verify_secoc()`（受信した
    Secured I-PDU から MAC を再計算する、`_apply_secoc()` の逆方向）で
    独立に再検証できていました。現在は TX 方向で SecOC を使う I-PDU が無いため
    （E2EHealthStatus を E2E Profile05 単体保護へ切り替えたため）この経路は
    動作していませんが、`_verify_secoc()` 自体は汎用実装なので残しています。
 
-**実機で検証可能**: `tools/uds_tester/config.json` に「ImmobilizerCmd
+**実機で検証可能**: `tools/can_tool/config.json` に「ImmobilizerCmd
 (0x120, KeyFobEcu)」ボタンを追加しました（UNLOCK/LOCK の 2 プリセット）。
 
 - **正常系**: プリセットを送信すると、Arduino ログに
@@ -212,7 +212,7 @@ E2E Profile05 単体保護に切り替えました（`E2EXf_PBCfg.c`/`SecOC_PBCf
   MAC は依然として正しいにもかかわらず `SecOC: RxInd W: ... freshness check
   failed (replay or stale)` が出力され、拒否されることが確認できます。
 
-**TX 方向（履歴）**: 以前は `tools/uds_tester` の「E2EHealthStatus (0x220)」
+**TX 方向（履歴）**: 以前は `tools/can_tool` の「E2EHealthStatus (0x220)」
 受信モニターが、`crcErr=N seqErr=M` に加えて `SecOC:OK`/`SecOC:NG` を表示し、
 Arduino ログにも `SecOC: MainFunction: iPdu=0 secured OK (freshness=N)` が
 6000ms 周期で出力されていました。E2EHealthStatus を E2E Profile05 単体保護へ

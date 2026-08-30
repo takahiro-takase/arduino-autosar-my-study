@@ -1,3 +1,3 @@
-# can_signal_editor は標準ライブラリのみで追加依存なし。
-# uds_tester 側の依存（python-can/pyserial/pycryptodome）だけをここに集約する。
--r ../uds_tester/requirements.txt
+python-can[gs_usb]>=4.3.0
+pycryptodome>=3.20.0
+pyserial>=3.5

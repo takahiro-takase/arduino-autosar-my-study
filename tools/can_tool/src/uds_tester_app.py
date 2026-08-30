@@ -5,13 +5,11 @@ Cangaroo で都度ペイロードを手入力・FC を手動送信する代わ�
 定義した UDS コマンドをボタン1つで送信する。複数フレーム応答時の Flow
 Control 送信、SecurityAccess の seed->key 計算も自動化する。
 
-使い方:
-    pip install -r requirements.txt
-    python app.py [--config config.json]
+can_tool（app.py）の「UDS Tester」タブとして埋め込まれる。単体起動は
+サポートしない（app.py から `import uds_tester_app` される前提）。
 """
 from __future__ import annotations
 
-import argparse
 import gc
 import json
 import math
@@ -317,22 +315,29 @@ class UdsTesterFrame(ttk.Frame):
         inner.bind("<MouseWheel>", _scroll)
 
         # ヘッダ行
+        # 列順は「コマンド/送信/定期/周期(ms)/CAN ID/データ・説明」。UDS系ボタンは
+        # 上段=要求(0x7E0)/下段=応答(0x7E8)の2行1組で、CAN IDとデータは行ごとに
+        # 対になる値のため隣接させ、行に依存しない操作列（送信/定期/周期(ms)、
+        # いずれも rowspan=2）はコマンド名の直後にまとめる。データ・説明列だけ
+        # 突出して幅が広いため最後尾に置き、ログパネル表示時に横幅が圧迫されても
+        # コマンド送信操作が隠れないようにする（右端のデータ・説明列から先に
+        # 見切れる方が実害が小さい）。
         ttk.Label(inner, text="コマンド", font=("", 9, "bold")).grid(
             row=0, column=0, padx=(4, 2), pady=(4, 1), sticky="w")
+        ttk.Label(inner, text="送信", font=("", 9, "bold")).grid(
+            row=0, column=1, padx=(4, 4), pady=(4, 1), sticky="w")
+        ttk.Label(inner, text="定期", font=("", 9, "bold")).grid(
+            row=0, column=2, padx=(4, 4), pady=(4, 1), sticky="w")
+        ttk.Label(inner, text="周期(ms)", font=("", 9, "bold")).grid(
+            row=0, column=3, padx=(2, 4), pady=(4, 1), sticky="w")
         ttk.Label(inner, text="CAN ID", font=("", 9, "bold")).grid(
-            row=0, column=1, padx=(2, 4), pady=(4, 1), sticky="w")
+            row=0, column=4, padx=(2, 4), pady=(4, 1), sticky="w")
         hdr_cell = ttk.Frame(inner)
-        hdr_cell.grid(row=0, column=2, padx=(0, 4), pady=(4, 1), sticky="w")
+        hdr_cell.grid(row=0, column=5, padx=(0, 4), pady=(4, 1), sticky="w")
         ttk.Label(hdr_cell, text="データ (hex)", font=("", 9, "bold"),
                   width=30, anchor="w").pack(side="left")
         ttk.Label(hdr_cell, text="説明", font=("", 9, "bold"),
                   width=40, anchor="w").pack(side="left", padx=(4, 0))
-        ttk.Label(inner, text="送信", font=("", 9, "bold")).grid(
-            row=0, column=3, padx=(4, 4), pady=(4, 1), sticky="w")
-        ttk.Label(inner, text="定期", font=("", 9, "bold")).grid(
-            row=0, column=4, padx=(4, 4), pady=(4, 1), sticky="w")
-        ttk.Label(inner, text="周期(ms)", font=("", 9, "bold")).grid(
-            row=0, column=5, padx=(2, 4), pady=(4, 1), sticky="w")
         ttk.Separator(inner, orient="horizontal").grid(
             row=1, column=0, columnspan=6, sticky="ew", padx=4, pady=(0, 2))
 
@@ -364,12 +369,12 @@ class UdsTesterFrame(ttk.Frame):
                 cmd_lbl.bind("<MouseWheel>", _scroll)
                 id_lbl = ttk.Label(inner, text=f"0x{can_id_int:03X}",
                                    font=("Consolas", 9), foreground="#2a7a2a")
-                id_lbl.grid(row=row, column=1, padx=(2, 6), pady=2, sticky="w")
+                id_lbl.grid(row=row, column=4, padx=(2, 6), pady=2, sticky="w")
                 id_lbl.bind("<MouseWheel>", _scroll)
                 rx_var = tk.StringVar(value="")
                 name_var = tk.StringVar(value="")
                 cell = ttk.Frame(inner)
-                cell.grid(row=row, column=2, columnspan=3,
+                cell.grid(row=row, column=5,
                           padx=(0, 4), pady=2, sticky="ew")
                 cell.bind("<MouseWheel>", _scroll)
                 rx_lbl = ttk.Label(cell, textvariable=rx_var,
@@ -405,20 +410,20 @@ class UdsTesterFrame(ttk.Frame):
                 # TX 行 (上段): CAN ID=0x7E0 + 送信データ(編集可)
                 tx_id = ttk.Label(inner, text="0x7E0", font=("Consolas", 9),
                                   foreground="#555555")
-                tx_id.grid(row=row, column=1, padx=(2, 6), pady=(3, 1), sticky="w")
+                tx_id.grid(row=row, column=4, padx=(2, 6), pady=(3, 1), sticky="w")
                 tx_id.bind("<MouseWheel>", _scroll)
 
                 if t == "security_access_auto":
                     tx_data = ttk.Label(inner, text="(seed→key 自動計算)",
                                         font=("Consolas", 9))
-                    tx_data.grid(row=row, column=2, padx=(0, 4), pady=(3, 1), sticky="w")
+                    tx_data.grid(row=row, column=5, padx=(0, 4), pady=(3, 1), sticky="w")
                     tx_data.bind("<MouseWheel>", _scroll)
                 else:
                     default_hex = _hex_str(btn_cfg.get("payload", []))
                     data_var = tk.StringVar(value=default_hex)
                     presets = btn_cfg.get("presets", [])
                     cell = ttk.Frame(inner)
-                    cell.grid(row=row, column=2, padx=(0, 4), pady=(3, 1), sticky="w")
+                    cell.grid(row=row, column=5, padx=(0, 4), pady=(3, 1), sticky="w")
                     cell.bind("<MouseWheel>", _scroll)
                     # 送信データ入力欄: Entry+読み取り専用Comboboxだったものを、
                     # 直接編集も▼からのプリセット選択も両方できる1つの
@@ -470,28 +475,28 @@ class UdsTesterFrame(ttk.Frame):
                 # RX 行 (下段): CAN ID=0x7E8 + 受信データ(自動更新)
                 rx_id = ttk.Label(inner, text="0x7E8", font=("Consolas", 9),
                                   foreground="#3a7ebf")
-                rx_id.grid(row=row + 1, column=1, padx=(2, 6), pady=(1, 3), sticky="w")
+                rx_id.grid(row=row + 1, column=4, padx=(2, 6), pady=(1, 3), sticky="w")
                 rx_id.bind("<MouseWheel>", _scroll)
 
                 resp_var = tk.StringVar(value="")
                 resp_lbl = ttk.Label(inner, textvariable=resp_var,
                                      font=("Consolas", 9), foreground="#3a7ebf",
                                      anchor="w")
-                resp_lbl.grid(row=row + 1, column=2, padx=(0, 4), pady=(1, 3), sticky="ew")
+                resp_lbl.grid(row=row + 1, column=5, padx=(0, 4), pady=(1, 3), sticky="ew")
                 resp_lbl.bind("<MouseWheel>", _scroll)
                 self._response_vars[i] = resp_var
 
-                # 送信ボタン (col 3, rowspan=2)
+                # 送信ボタン (col 1, rowspan=2)
                 send_btn = ttk.Button(
                     inner, text="送信", width=5,
                     command=lambda c=btn_cfg, idx=i: self._on_send_click(c, idx),
                 )
-                send_btn.grid(row=row, column=3, rowspan=2,
+                send_btn.grid(row=row, column=1, rowspan=2,
                               padx=(4, 4), pady=2, sticky="nsew")
                 send_btn.bind("<MouseWheel>", _scroll)
 
                 if t == "raw":
-                    # 定期送信ボタン (col 4, rowspan=2)。Tester Present 等、状態を
+                    # 定期送信ボタン (col 2, rowspan=2)。Tester Present 等、状態を
                     # 持たない単純な UDS request のみサポートする（multiframe/
                     # security_* は対象外。_on_periodic_click() 参照）。
                     periodic_var = tk.StringVar(value="定期")
@@ -499,17 +504,17 @@ class UdsTesterFrame(ttk.Frame):
                         inner, textvariable=periodic_var, width=5,
                         command=lambda c=btn_cfg, idx=i: self._on_periodic_click(c, idx),
                     )
-                    periodic_btn.grid(row=row, column=4, rowspan=2,
+                    periodic_btn.grid(row=row, column=2, rowspan=2,
                                       padx=(2, 4), pady=2, sticky="nsew")
                     periodic_btn.bind("<MouseWheel>", _scroll)
                     self._periodic_btn_vars[i] = periodic_var
 
-                    # 周期(ms) 入力欄 (col 5, rowspan=2)。既定 2000ms
+                    # 周期(ms) 入力欄 (col 3, rowspan=2)。既定 2000ms
                     # （旧 Tester Present 自動送信チェックボックスの 2 秒毎と同じ）。
                     interval_var = tk.StringVar(value=str(btn_cfg.get("interval_ms", 2000)))
                     interval_entry = ttk.Entry(inner, textvariable=interval_var, width=6,
                                                font=("Consolas", 9))
-                    interval_entry.grid(row=row, column=5, rowspan=2,
+                    interval_entry.grid(row=row, column=3, rowspan=2,
                                         padx=(2, 4), pady=2, sticky="ns")
                     interval_entry.bind("<MouseWheel>", _scroll)
                     self._entry_vars.setdefault(i, {})["interval_ms"] = interval_var
@@ -522,7 +527,7 @@ class UdsTesterFrame(ttk.Frame):
                 can_id_var = tk.StringVar(value=f"0x{can_id_val:03X}")
                 id_widget = ttk.Entry(inner, textvariable=can_id_var, width=9,
                                       font=("Consolas", 9))
-                id_widget.grid(row=row, column=1, padx=(2, 6), pady=2, sticky="w")
+                id_widget.grid(row=row, column=4, padx=(2, 6), pady=2, sticky="w")
                 id_widget.bind("<MouseWheel>", _scroll)
                 self._entry_vars.setdefault(i, {})["can_id"] = can_id_var
 
@@ -543,7 +548,7 @@ class UdsTesterFrame(ttk.Frame):
                 data_var = tk.StringVar(value=default_hex)
                 presets = btn_cfg.get("presets", [])
                 cell = ttk.Frame(inner)
-                cell.grid(row=row, column=2, padx=(0, 4), pady=2, sticky="w")
+                cell.grid(row=row, column=5, padx=(0, 4), pady=2, sticky="w")
                 cell.bind("<MouseWheel>", _scroll)
                 # 送信データ入力欄: Entry+読み取り専用Comboboxだったものを、
                 # 直接編集も▼からのプリセット選択も両方できる1つの
@@ -590,25 +595,25 @@ class UdsTesterFrame(ttk.Frame):
                     data_combo.bind("<<ComboboxSelected>>", _on_preset)
                 self._entry_vars.setdefault(i, {})["data"] = data_var
 
-                # 送信ボタン (col 3)
+                # 送信ボタン (col 1)
                 send_btn = ttk.Button(
                     inner, text="送信", width=5,
                     command=lambda c=btn_cfg, idx=i: self._on_send_click(c, idx),
                 )
-                send_btn.grid(row=row, column=3, padx=(4, 2), pady=2)
+                send_btn.grid(row=row, column=1, padx=(4, 2), pady=2)
                 send_btn.bind("<MouseWheel>", _scroll)
 
-                # 定期送信ボタン (col 4)
+                # 定期送信ボタン (col 2)
                 periodic_var = tk.StringVar(value="定期")
                 periodic_btn = ttk.Button(
                     inner, textvariable=periodic_var, width=5,
                     command=lambda c=btn_cfg, idx=i: self._on_periodic_click(c, idx),
                 )
-                periodic_btn.grid(row=row, column=4, padx=(2, 4), pady=2)
+                periodic_btn.grid(row=row, column=2, padx=(2, 4), pady=2)
                 periodic_btn.bind("<MouseWheel>", _scroll)
                 self._periodic_btn_vars[i] = periodic_var
 
-                # 周期(ms) 入力欄 (col 5)。優先順位: config.json の interval_ms
+                # 周期(ms) 入力欄 (col 3)。優先順位: config.json の interval_ms
                 # （明示指定）→ data/can_signals.json の txPeriodMs（この can_id を
                 # 持つ RX/TX-RX 方向のフレーム定義があれば、そこに記録された送信
                 # 周期。can_frame ボタンは基本的に外部ECUからの受信を模擬する用途
@@ -628,7 +633,7 @@ class UdsTesterFrame(ttk.Frame):
                 interval_var = tk.StringVar(value=str(_default_interval))
                 interval_entry = ttk.Entry(inner, textvariable=interval_var, width=6,
                                            font=("Consolas", 9))
-                interval_entry.grid(row=row, column=5, padx=(2, 4), pady=2)
+                interval_entry.grid(row=row, column=3, padx=(2, 4), pady=2)
                 interval_entry.bind("<MouseWheel>", _scroll)
                 self._entry_vars.setdefault(i, {})["interval_ms"] = interval_var
 
@@ -2054,20 +2059,3 @@ class UdsTesterFrame(ttk.Frame):
                         self._update_virtual_meter(data)
 
         self.after(100, self._poll_queues)
-
-
-def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--config", default=DEFAULT_CONFIG_PATH)
-    args = parser.parse_args()
-
-    root = tk.Tk()
-    root.title("UDS Button Tester")
-    root.geometry("1100x650")
-    frame = UdsTesterFrame(root, args.config)
-    frame.pack(fill=tk.BOTH, expand=True)
-    root.mainloop()
-
-
-if __name__ == "__main__":
-    main()

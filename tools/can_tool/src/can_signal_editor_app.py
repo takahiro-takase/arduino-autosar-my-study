@@ -5,12 +5,11 @@ data/can_signals.json（README.md の「CAN フレーム仕様」表を一元管
 データソース）を Excel 風の表形式で表示・編集する。フレーム一覧とフィールド
 一覧を2段のグリッドで表示し、セルのダブルクリックでインライン編集する。
 
-使い方:
-    python src/app.py [--data ../../data/can_signals.json]
+can_tool（app.py）の1タブとして埋め込まれる。単体起動はサポートしない
+（app.py から `import can_signal_editor_app` される前提）。
 """
 from __future__ import annotations
 
-import argparse
 import json
 import os
 import tkinter as tk
@@ -688,25 +687,3 @@ class CanSignalEditorFrame(ttk.Frame):
         self._update_title()
         self._refresh_frame_tree()
         self._reset_field_pane()
-
-
-def main() -> None:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--data", default=DEFAULT_DATA_PATH)
-    args = parser.parse_args()
-
-    root = tk.Tk()
-    root.geometry("1200x720")
-    frame = CanSignalEditorFrame(root, args.data, on_title_change=root.title)
-    frame.pack(fill=tk.BOTH, expand=True)
-
-    def _on_close() -> None:
-        if frame.confirm_close():
-            root.destroy()
-
-    root.protocol("WM_DELETE_WINDOW", _on_close)
-    root.mainloop()
-
-
-if __name__ == "__main__":
-    main()

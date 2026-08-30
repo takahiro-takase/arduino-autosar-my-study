@@ -1,7 +1,7 @@
 # CanTp（ISO 15765-2 トランスポートプロトコル）
 
 > [README](../../README.md) の「[診断スタック](../../README.md#diag-stack)」節から分離。
-> `tools/uds_tester`/CAPL風DSLの解説はモジュール非依存のツール文書のため
+> `tools/can_tool`/CAPL風DSLの解説はモジュール非依存のツール文書のため
 > README側にそのまま残しています。
 
 CanTp モジュールが ISO 15765-2 のフレーム処理を担い、
