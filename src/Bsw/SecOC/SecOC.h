@@ -70,7 +70,7 @@ void SecOC_DeInit(void);
  * \Reentrancy     {Reentrant for different PduIds. Non reentrant for the same PduId.}
  * \Synchronicity  {Synchronous}
  */
-void SecOC_IfRxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr);
+void SecOC_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr);
 
 /**
  * \brief   PduR から呼ばれる、Authentic I-PDU 送信要求のエントリポイント。

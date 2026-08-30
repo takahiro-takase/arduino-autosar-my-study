@@ -36,7 +36,7 @@
  *
  *          Bsw_TxChain_test.cpp と同じ理由・同じ最小構成方針（本番の
  *          `*_PBCfg.c` は使わず、1シグナル・1 I-PDU のみのテスト専用設定を
- *          本ファイル内で定義する）。CanTp_RxIndication/SecOC_IfRxIndication
+ *          本ファイル内で定義する）。CanTp_RxIndication/SecOC_RxIndication
  *          へのマルチキャストは対象外（Com_RxIndication のみを転送先とする）。
  *
  *          `CanIf_RxIndication()` は無条件に `CanSM_RxIndication()` を呼ぶ

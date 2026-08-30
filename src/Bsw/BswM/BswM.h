@@ -46,6 +46,21 @@ extern "C" {
 void BswM_Init(const BswM_ConfigType* ConfigPtr);
 
 /**
+ * \brief   BswM モジュールを非初期化する。
+ *
+ * \details [SWS_BswM_00120] の通り、以降 BswM_EcuM_CurrentState()/
+ *          BswM_ComM_CurrentMode() が呼ばれてもモード処理（ルール評価・
+ *          Os_SetTaskActive() 呼び出し）を一切行わない。BswM_Init() 前に
+ *          呼ぶと BSWM_E_NO_INIT を報告する。
+ *
+ * \AUTOSARReq     {SWS_BswM_00119}
+ * \ServiceID      {0x04}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void BswM_Deinit(void);
+
+/**
  * \brief   BswM モジュールのバージョン情報を取得する。
  *
  * \details SWS_BswM_00003。BswM_Init と並び、未初期化時でも BSWM_E_NO_INIT を

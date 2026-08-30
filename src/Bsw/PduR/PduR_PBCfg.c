@@ -14,7 +14,7 @@
  *            RX パス 2 (SrcPduId=2, CAN ID 0x110):
  *              配信先: COM のみ → Com_RxIndication (DestPduId=1: AbsInfo_Rx, ABS ECU)
  *            RX パス 3 (SrcPduId=3, CAN ID 0x120):
- *              配信先: SecOC のみ → SecOC_IfRxIndication (DestPduId=0: ImmobilizerCmd,
+ *              配信先: SecOC のみ → SecOC_RxIndication (DestPduId=0: ImmobilizerCmd,
  *              KeyFobEcu 想定。SecOC が MAC/フレッシュネス検証後、自ら
  *              Com_RxIndication() を呼んで COM RX IPduId=2 へ転送する)
  *            TX パス 0 (SrcPduId=0):
@@ -112,7 +112,7 @@ static const PduR_RxDestType PduR_RxDests_Path3[PDUR_RX_DEST_COUNT_PATH3] = {
         .Module    = PDUR_MODULE_SECOC,   /* DaVinci: PduRDestPdu/PduRDestModule = SECOC */
         .DestPduId = 0U,                  /* DaVinci: PduRDestPdu/PduRDestPduHandleId
                                            *          → SecOC RX (SecOCRxPduId=0: ImmobilizerCmd) */
-        .RxIndFct  = SecOC_IfRxIndication /* DaVinci: 自動解決（PduRDestModule=SECOC） */
+        .RxIndFct  = SecOC_RxIndication /* DaVinci: 自動解決（PduRDestModule=SECOC） */
     }
 };
 

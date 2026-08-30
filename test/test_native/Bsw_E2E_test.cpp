@@ -23,6 +23,7 @@
 #include <gtest/gtest.h>
 
 extern "C" {
+#include "E2E.h"
 #include "E2E_P01.h"
 #include "E2E_P05.h"
 }
@@ -397,6 +398,30 @@ TEST_F(E2EP01Test, NullPointerReturnsInputErrNullWithoutTouchingState)
     EXPECT_EQ(checkState.WaitForFirstData, checkStateBefore.WaitForFirstData);
     EXPECT_EQ(checkState.SyncCounter, checkStateBefore.SyncCounter);
     EXPECT_EQ(protectState.Counter, protectStateBefore.Counter);
+}
+
+class E2ETest : public ::testing::Test
+{
+};
+
+TEST_F(E2ETest, GetVersionInfoFillsExpectedModuleId)
+{
+    Std_VersionInfoType info;
+
+    E2E_GetVersionInfo(&info);
+
+    EXPECT_EQ(info.moduleID, E2E_MODULE_ID);
+}
+
+TEST_F(E2ETest, GetVersionInfoSilentlyIgnoresNullPointer)
+{
+    /* [SWS_E2E_00216]: ライブラリは DET/DEM を呼んではならないため、NULL
+     * でもクラッシュせず何もせず戻ることだけを確認する（報告先が無い）。
+     * EXPECT_NO_FATAL_FAILURE は使わない（GoogleTest 1.17.0+MinGW の
+     * ThreadLocalRegistryImpl 絡みでハングする既知の組み合わせのため。
+     * 単純に直接呼び、クラッシュしなければ後続の行に到達する事実だけで
+     * 十分検証になる）。 */
+    E2E_GetVersionInfo(nullptr);
 }
 
 }  // namespace

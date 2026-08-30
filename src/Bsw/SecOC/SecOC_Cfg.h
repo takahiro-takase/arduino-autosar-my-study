@@ -24,9 +24,11 @@
  *
  * 本モジュールは AUTOSAR 標準の Doxygen \ServiceID タグを元々持たなかった
  * ため、SWS 8.x 章の「Service ID[hex]」記載を実測して新規に付与する。
- * SecOC_IfRxIndication は実際の SWS では SecOC_RxIndication（引数構成は
- * 同一）という名前であり、本プロジェクトは SecOC_IfTransmit との対称性の
- * ため独自に "If" を付けている。
+ * かつて本プロジェクトは SecOC_IfTransmit との対称性を理由に受信側にも
+ * 独自に "If" を付けて SecOC_IfRxIndication としていたが、実際の SWS は
+ * SecOC_RxIndication（"If" なし。Tp 層側は別途 SecOC_TpRxIndication）と
+ * 非対称な命名のため、2026-08 のシグネチャ準拠サーベイで実仕様の名前に
+ * 修正した。
  * ----------------------------------------------------------------------- */
 
 /** AUTOSAR Secure Onboard Communication の ModuleId

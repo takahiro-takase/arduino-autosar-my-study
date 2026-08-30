@@ -47,6 +47,7 @@
  *  「Service ID[hex]」記載を実測して確認済み） */
 #define BSWM_API_ID_INIT                  0x00U
 #define BSWM_API_ID_GET_VERSION_INFO      0x01U
+#define BSWM_API_ID_DEINIT                0x04U
 #define BSWM_API_ID_ECUM_CURRENT_STATE    0x0FU
 #define BSWM_API_ID_COMM_CURRENT_MODE     0x0EU
 

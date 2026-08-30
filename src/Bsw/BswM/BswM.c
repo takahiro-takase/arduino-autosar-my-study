@@ -187,6 +187,22 @@ void BswM_Init(const BswM_ConfigType* ConfigPtr)
     DET_LOGI(TAG, "Init ok rules=%u", (unsigned)ConfigPtr->RuleCount);
 }
 
+void BswM_Deinit(void)
+{
+    DET_LOGT(TAG, "called");
+    if (BswM_Cfg == NULL)
+    {
+        Det_ReportError(BSWM_MODULE_ID, 0U, BSWM_API_ID_DEINIT, BSWM_E_NO_INIT);
+        return;
+    }
+
+    /* [SWS_BswM_00120]: 以降 BswM_EcuM_CurrentState()/BswM_ComM_CurrentMode()
+     * が呼ばれても BswM_Cfg==NULL チェックで弾かれ、モード処理は行われない。 */
+    BswM_Cfg = NULL;
+
+    DET_LOGI(TAG, "DeInit ok");
+}
+
 void BswM_GetVersionInfo(Std_VersionInfoType* VersionInfo)
 {
     DET_LOGT(TAG, "called");
