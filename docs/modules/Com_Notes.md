@@ -1135,7 +1135,7 @@ E2E 検証に成功した**すべての** `EngineInfo` フレームに対して�
 すなわち、送信元が `CoolantTemp=0xFF` を含む（E2E CRC/Counter は正しい）
 フレームを送信しさえすれば、この無効値検知ロジックは通常運用の経路で確実に
 通過します（タイムアウト系の機能のように「このコールサイトは条件的に
-到達しない」という限界がありません）。`tools/uds_tester/config.json` の
+到達しない」という限界がありません）。`tools/can_tool/config.json` の
 EngineInfo プリセットに「水温センサ異常 (0xFF)」を追加済みで、実機で
 送信すると `Rte_EngineInfoMirror.temp` が更新されず、ログに
 `Rte: CoolantTemp invalid value received (sensor fault pattern)` が出力される

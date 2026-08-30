@@ -37,7 +37,7 @@ ARXML や設定ツールは使用せず、コードで階層構造・型定義�
       - [処理の流れ（コールチェーン）](#processing-flow-comm)
       - [CAN コントローラのスリープ制御（Can / CanSM / Nm 横断）](#can-controller-sleep)
   - [診断スタック（CanTp / Dcm / Dem / FiM / NvM）](#diag-stack)
-    - [UDS ボタン送信ツール（tools/uds_tester）](#uds-tester-tool)
+    - [UDS ボタン送信ツール（tools/can_tool）](#uds-tester-tool)
   - [ECU 管理層（EcuM / BswM / WdgM）](#ecu-management)
   - [IO スタック（IoHwAb / Dio / Port / Adc）](#io-stack)
     - [処理の流れ（コールチェーン）](#processing-flow-io)
@@ -48,7 +48,7 @@ ARXML や設定ツールは使用せず、コードで階層構造・型定義�
       - [Tx 処理（Com → PduR → CanIf → Can の順）](#unit-test-tx)
       - [Rx 処理（Can → CanIf → PduR → Com の順）](#unit-test-rx)
     - [単一モジュールのテスト（`[env:native]`）](#unit-test-single)
-  - [CAPL 風スクリプト機能（tools/uds_tester）](#capl-scripting)
+  - [CAPL 風スクリプト機能（tools/can_tool）](#capl-scripting)
   - [シリアルモニタ出力例](#serial-log-example)
 - [補足](#appendix)
   - [CAN フレーム仕様](#can-frame-spec)
@@ -74,12 +74,13 @@ ARXML や設定ツールは使用せず、コードで階層構造・型定義�
 Arduino UNO 上に最小構成で再現しています。
 その上でメータ ECU（インストルメントクラスタ）相当のアプリケーションを動作させることを目的としています。
 
-![仮想メータ表示（uds_tester）でエンジン回転数・RUN/FAULT/ABS 警告灯の動作を確認する様子](docs/images/MeterEcuAnimation.gif)
+![仮想メータ表示（can_tool の UDS Tester タブ）でエンジン回転数・RUN/FAULT/ABS 警告灯の動作を確認する様子](docs/images/MeterEcuAnimation.gif)
 
-> 上記は `tools/uds_tester` の仮想メータ表示タブで、PC から CAN 経由で送信した
-> EngineInfo/AbsInfo（本物の周辺 ECU が送信しているように E2E Profile05 で保護した
-> フレーム）を Arduino が受信し、RPM・RUN/ABS 警告灯へ反映している様子です
-> （[デモ用スクリプト](tools/uds_tester/capl_scripts/demo_realistic_engine.capl)）。
+> 上記は `tools/can_tool` の UDS Tester タブにある仮想メータ表示で、PC から CAN
+> 経由で送信した EngineInfo/AbsInfo（本物の周辺 ECU が送信しているように
+> E2E Profile05 で保護したフレーム）を Arduino が受信し、RPM・RUN/ABS 警告灯へ
+> 反映している様子です
+> （[デモ用スクリプト](tools/can_tool/capl_scripts/demo_realistic_engine.capl)）。
 
 CAN 経由で受信するエンジン ECU（0x100）・ABS ECU（0x110）からの情報を警告灯制御へ
 反映する、以下の入出力を持つメータ ECU です。
@@ -104,7 +105,7 @@ CAN 経由で受信するエンジン ECU（0x100）・ABS ECU（0x110）から�
 | プッシュボタン | 警告確認ボタン（D9 と GND を接続・内部プルアップ使用） |
 | USB-CAN アダプタ | PC との CAN バス接続（解析用） |
 | Cangaroo 等 | CAN フレーム送受信ツール |
-| tools/uds_tester（本リポジトリ同梱） | UDS コマンドのボタン送信・FC 自動応答（後述） |
+| tools/can_tool（本リポジトリ同梱） | UDS コマンドのボタン送信・FC 自動応答（後述） |
 
 <a id="wiring-diagram"></a>
 #### 配線図
@@ -964,12 +965,13 @@ FiM は Dem が確定した DTC をもとにアプリ機能の実行許可を判
 個別ノート）を参照してください。
 
 <a id="uds-tester-tool"></a>
-#### UDS ボタン送信ツール（tools/uds_tester）
+#### UDS ボタン送信ツール（tools/can_tool）
 
 セッション制御・SecurityAccess・複数フレーム応答の FC 送信など、手動操作する
 項目が増えて Cangaroo での都度のフレーム手入力が煩雑になってきたため、
 よく使う UDS コマンドをボタン 1 つで送信できる Python/Tkinter 製の補助ツールを
-`tools/uds_tester/` に用意しています。
+`tools/can_tool/` に用意しています（同じウィンドウの別タブに CAN 信号定義
+エディタ（`data/can_signals.json` を編集する GUI）も同居しています）。
 
 | 機能 | 説明 |
 |------|------|
@@ -985,14 +987,15 @@ FiM は Dem が確定した DTC をもとにアプリ機能の実行許可を判
 | Serial ログ表示 | `Serial.println()` のデバッグログ（`[ms] LEVEL TAG: message`）を USB シリアル経由で表示。CAN 接続とは独立した別の COM ポート接続（Serial 接続パネル）で、EcuM/ComM/CanSM の状態遷移（RUN/SHUTDOWN、FULL_COM/NO_COM、CanSM 独自状態 等）をログから抽出してリアルタイム表示 |
 
 ```
-cd tools/uds_tester
+cd tools/can_tool
 pip install -r requirements.txt
 python src/app.py
 ```
 
-Windows で `pip install` 済みなら `tools/uds_tester/run.bat` をダブルクリックしても
+Windows で `pip install` 済みなら `tools/can_tool/run.bat` をダブルクリックしても
 起動できます（内部で自分自身のディレクトリへ `cd` してから `python src\app.py` を
-実行するだけの薄いランチャーです）。
+実行するだけの薄いランチャーです）。UDS Tester は「UDS Tester」タブに、CAN 信号
+定義エディタはもう一方のタブに表示されます。
 
 接続先は「CAN 接続」パネルの `interface` / `channel` / `bitrate` で指定します
 （既定値は `config.json` の `can` セクション）。CANable / candleLight 互換
@@ -1106,7 +1109,7 @@ EcuM の POST_RUN 遷移時に Rte_Engine タスクと Rte_Warning タスクが�
 <a id="testing"></a>
 ## テスト（動作確認）
 
-ホスト上での単体テスト、`tools/uds_tester` の CAPL 風スクリプトによる手順化されたシナリオ検証、
+ホスト上での単体テスト、`tools/can_tool` の CAPL 風スクリプトによる手順化されたシナリオ検証、
 実機シリアルログによる動作確認、の 3 つの手段をまとめます。
 
 <a id="unit-test"></a>
@@ -1234,7 +1237,7 @@ PduR/CanIf/Can/CanSM を一切経由せず Com.c 単体で完結する。フェ�
 テストファイルには `int main()` を書かないこと）。
 
 <a id="capl-scripting"></a>
-### CAPL 風スクリプト機能（tools/uds_tester）
+### CAPL 風スクリプト機能（tools/can_tool）
 
 ツール自体（ボタン送信・`config.json` 設定・複数フレーム応答の自動 FC 等）の説明は
 「[UDS ボタン送信ツール](#uds-tester-tool)」（診断スタック）を参照してください。
@@ -1245,13 +1248,13 @@ PduR/CanIf/Can/CanSM を一切経由せず Com.c 単体で完結する。フェ�
 近い書き味で一連の手順をスクリプトとして書ける機能を用意しています。GUI の
 「スクリプト実行...」ボタンからファイルを選択するとバックグラウンドスレッドで
 実行されます（Connect 済みの `bus` をそのまま使用）。「停止」ボタンで途中中断
-できます。拡張子で以下の2種類を自動判別します（どちらも `tools/uds_tester/src/capl_api.py`
+できます。拡張子で以下の2種類を自動判別します（どちらも `tools/can_tool/src/capl_api.py`
 の `CaplContext` を実行時のランタイムとして共通で使うため、送受信の挙動は揃っています）。
 
 **`.py`（Python 構文、`capl_api.py`）**
 
 ファイルの内容をそのまま `exec()` する方式。Python 構文ですが、
-`tools/uds_tester/src/capl_api.py` が公開する以下の関数だけを使えば CAPL に近い
+`tools/can_tool/src/capl_api.py` が公開する以下の関数だけを使えば CAPL に近い
 書き味で書けます。
 
 | 関数 | 説明 |
@@ -1265,11 +1268,11 @@ PduR/CanIf/Can/CanSM を一切経由せず Com.c 単体で完結する。フェ�
 | `log(*args)` | GUI のログ欄に出力 |
 | `@ctx.on_timer(interval_s)` | interval_s 秒毎に呼ばれる関数を登録するデコレータ（`wait()` の実行中のみ発火） |
 
-サンプルは `tools/uds_tester/capl_scripts/example_session_check.py` を参照してください。
+サンプルは `tools/can_tool/capl_scripts/example_session_check.py` を参照してください。
 Python の全機能（if/while/変数等）が使えるため、複雑な分岐が必要な場合はこちらが
 向いています。
 
-**`.capl`（CAPL 風の独自 DSL、`tools/uds_tester/src/capl_dsl.py`）**
+**`.capl`（CAPL 風の独自 DSL、`tools/can_tool/src/capl_dsl.py`）**
 
 `on start`/`on timer`/`on message` という実際の CAPL に近いイベント構文に加えて、
 `variables { }` での変数宣言 (`byte`/`int`/`float`/`word` 配列、`byte`/`word` スカラーの
@@ -1398,24 +1401,24 @@ on message 0x200
 受け取ってしまい、開始直後にバックログが一気に発火してその後は静かに見える、という
 紛らわしい挙動になるため）。
 
-サンプルは `tools/uds_tester/capl_scripts/example_session_check.capl`（最小構成）、
-`tools/uds_tester/capl_scripts/example_variables_control_flow.capl`（変数宣言・
+サンプルは `tools/can_tool/capl_scripts/example_session_check.capl`（最小構成）、
+`tools/can_tool/capl_scripts/example_variables_control_flow.capl`（変数宣言・
 `if`/`else`/`while` を使った例）、
-`tools/uds_tester/capl_scripts/example_for_this_printf.capl`（`for`・
+`tools/can_tool/capl_scripts/example_for_this_printf.capl`（`for`・
 `this.byte(n)`/`this.id`/`this.dlc`・printf 風フォーマットを使った例）、
-`tools/uds_tester/capl_scripts/example_switch_array.capl`（`switch`/`case`・
+`tools/can_tool/capl_scripts/example_switch_array.capl`（`switch`/`case`・
 `break`/`continue`・`byte` 配列・複合代入/`++`/`--`・`respSid()`/`respNrc()`
 による UDS 応答の NRC 分岐を使った例）、
-`tools/uds_tester/capl_scripts/example_functions.capl`（`int`/`void` のユーザー定義
+`tools/can_tool/capl_scripts/example_functions.capl`（`int`/`void` のユーザー定義
 関数で TesterPresent 送信・DID 読み出しの共通処理を関数化し、関数内ローカル変数
 (ループカウンタ等) も使った例）、
-`tools/uds_tester/capl_scripts/example_message.capl`（`int`/`float` 配列、`message`
+`tools/can_tool/capl_scripts/example_message.capl`（`int`/`float` 配列、`message`
 変数の宣言・`.dlc`/`.byte(n)` フィールドの読み書き・`output()` による送信、
 ビット演算子 (`>>`/`&`) による DID の上位/下位バイト分解を使った例）、
-`tools/uds_tester/capl_scripts/example_byte_wraparound.capl`（`byte` スカラー変数の
+`tools/can_tool/capl_scripts/example_byte_wraparound.capl`（`byte` スカラー変数の
 0〜255 ラップアラウンド、`byte` 仮引数/戻り値/ローカル変数を使ったチェックサム
 計算・8bit カウンタ信号のラップアラウンドをシミュレートする例）、
-`tools/uds_tester/capl_scripts/example_do_while.capl`（`do`-`while` が条件を最初に
+`tools/can_tool/capl_scripts/example_do_while.capl`（`do`-`while` が条件を最初に
 評価する前に本体を必ず1回実行すること、`break` で途中脱出できること、
 TesterPresent を成功する/上限回数に達するまで送信するリトライ処理での
 実用例）を参照してください。
