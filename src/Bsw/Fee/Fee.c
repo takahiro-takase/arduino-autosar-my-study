@@ -70,6 +70,15 @@ void Fee_GetVersionInfo(Std_VersionInfoType* versioninfo)
     versioninfo->sw_patch_version = FEE_SW_PATCH_VERSION;
 }
 
+void Fee_SetMode(MemIf_ModeType Mode)
+{
+    /* Mode を保持する状態変数は持たない。書き込みペース (Fee_MainFunction 参照)
+     * には一切影響させないため、受理するだけで捨てる（Fee.h の Fee_SetMode()
+     * ドキュメント参照）。 */
+    DET_LOGT(TAG, "called");
+    (void)Mode;
+}
+
 Std_ReturnType Fee_Read(uint16 Address, uint8* DataBufferPtr, uint16 Length)
 {
     DET_LOGT(TAG, "called");

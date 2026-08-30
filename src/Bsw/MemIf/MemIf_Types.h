@@ -63,6 +63,21 @@ typedef uint8 MemIf_DeviceType;
 
 #define MEMIF_DEVICE_0  0U
 
+/**
+ * \brief   下位ドライバの動作モード（[SWS_MemIf_00066]）。
+ * \details 実 AUTOSAR は「フラッシュ書き込み電圧・タイミングを切り替えられる
+ *          HW」を想定するが、本プロジェクトが対応する Renesas RA の EEPROM
+ *          エミュレーションライブラリにそのような切り替え手段は無く、1 バイトの
+ *          書き込みでも常に同じ消去・書き込みサイクルを要する（MemIf_SetMode()
+ *          のドキュメント参照）。そのため本実装は Mode を受理するだけで
+ *          状態を保持せず、実際の書き込みペースへは影響させない。
+ */
+typedef enum
+{
+    MEMIF_MODE_SLOW = 0U,  /**< 既定値。実効果は無い（型定義コメント参照）。 */
+    MEMIF_MODE_FAST        /**< 実効果は無い（型定義コメント参照）。         */
+} MemIf_ModeType;
+
 #ifdef __cplusplus
 }
 #endif

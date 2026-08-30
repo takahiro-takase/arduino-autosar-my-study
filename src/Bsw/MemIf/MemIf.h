@@ -64,6 +64,24 @@ void MemIf_Init(void);
 void MemIf_GetVersionInfo(Std_VersionInfoType* versioninfo);
 
 /**
+ * \brief   全下位ドライバの動作モードを切り替える。詳細は Fee_SetMode() 参照。
+ *
+ * \details [SWS_MemIf_00038] の通り Device 引数を持たない（全下位ドライバへ
+ *          一括反映するため、個別切り替えの余地自体が仕様上存在しない）。
+ *          本プロジェクトの唯一の下位ドライバ (Fee) では Mode を受理する
+ *          だけで実効果を持たない（MemIf_ModeType の型定義コメント、
+ *          Fee_SetMode() 参照）。
+ *
+ * \param[in]  Mode  MEMIF_MODE_SLOW / MEMIF_MODE_FAST。
+ *
+ * \AUTOSARReq     {SWS_MemIf_00038}
+ * \ServiceID      {0x01}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void MemIf_SetMode(MemIf_ModeType Mode);
+
+/**
  * \brief   対応する下位ドライバへ読み込みをディスパッチする。詳細は
  *          Fee_Read() 参照（同期 API）。
  *
