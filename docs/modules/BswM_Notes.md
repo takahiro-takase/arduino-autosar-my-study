@@ -69,7 +69,7 @@ true が続く間の重複実行や true→false への遷移では実行しま�
 | 13 | `BSWM_OS_TASK_CAN_TX_CONF` | `Can_MainFunction_Write` | 1 ms |
 | 14 | `BSWM_OS_TASK_CAN_BUSOFF` | `Can_MainFunction_BusOff` | 1 ms |
 | 15 | `BSWM_OS_TASK_CAN_WAKEUP` | `Can_MainFunction_Wakeup` | 1 ms |
-| 16 | `BSWM_OS_TASK_SECOC_MAIN` | `SecOC_MainFunction` | 100 ms |
+| 16 | `BSWM_OS_TASK_SECOC_MAIN` | `SecOC_MainFunctionTx` | 100 ms |
 | 17 | `BSWM_OS_TASK_MEMIF_MAIN` | `MemIf_MainFunction` | 10 ms |
 
 `BSWM_TASK_MASK_APP = 0x00C`（bit2=Rte_Engine, bit3=Rte_Warning）がアプリタスクマスクです。
@@ -83,7 +83,7 @@ POST_RUN 遷移の原因にはならない）では ComM は既に NO_COM にな
 `BSWM_TASK_MASK_SHUTDOWN = 0x163EE`（`BSWM_TASK_MASK_ALL` から bit10=WdgM_TriggerHwWatchdog・
 bit0=Can_MainFunction_Read・bit15=Can_MainFunction_Wakeup・bit4=CanSM_MainFunction・
 bit12=NvM_MainFunction・bit17=MemIf_MainFunction・bit11=Nm_MainFunction を除いたもの）が
-SHUTDOWN 時の無効化対象マスクです。SecOC_MainFunction（bit16）はこの除外リストに
+SHUTDOWN 時の無効化対象マスクです。SecOC_MainFunctionTx（bit16）はこの除外リストに
 含まれないため（POST_RUN 中に Com_MainFunction が止まり SecOC の送信要求自体が
 発生しなくなるのと同じ理由で、無効化しておくのが本来の設計意図）、
 Can_MainFunction_Write（bit13）・Can_MainFunction_BusOff（bit14）と同様に
@@ -139,7 +139,7 @@ POST_RUN 中に停止するタスク:
 ```
 ボランタリスリープ突入（エンジン OFF 継続）
   CanSM: CANSM_STATE_NO_COM へ遷移（この時点ではまだ物理スリープしない）
-       → ComM_BusSMIndication(NO_COM)
+       → ComM_BusSM_ModeIndication(NO_COM)
             ├→ EcuM_ReleaseRUN(ECUM_USER_COMM)
             │     └→ EcuM: RUN → POST_RUN
             │               └→ BswM_EcuM_CurrentState(POST_RUN)

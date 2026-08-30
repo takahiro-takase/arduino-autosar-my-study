@@ -136,7 +136,7 @@ static void Nm_TransmitPdu(void)
  *               (再)アナウンスフレームの送信が（コントローラがまだ
  *               Listen-Only のため）静かに失敗する。
  *            2. 再入安全性: ComM_Nm_NetworkMode() → CanSM_RequestComMode()
- *               → ComM_BusSMIndication() → Nm_NetworkRequest() という経路で
+ *               → ComM_BusSM_ModeIndication() → Nm_NetworkRequest() という経路で
  *               本ファイルへ同期的に再入しうる。Nm_State を先に
  *               NM_STATE_REPEAT_MESSAGE へ更新済みだからこそ、再入した
  *               Nm_NetworkRequest() は「既に要求済み」の default 分岐に

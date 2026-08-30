@@ -116,7 +116,7 @@ Std_ReturnType CanSM_GetCurrentComMode(NetworkHandleType network, ComM_ModeType*
  *
  * \details CAN コントローラが Bus-Off 状態を検出した際に CanIf 経由で
  *          呼び出される。コントローラを停止し、回復タイマを起動する。
- *          検出直後（回復試行の前）に `ComM_BusSMIndication(Network,
+ *          検出直後（回復試行の前）に `ComM_BusSM_ModeIndication(Network,
  *          COMM_SILENT_COMMUNICATION)` を呼び、ComM のチャネル状態を
  *          回復完了まで FULL_COM のまま放置しない（SWS_CanSM_00521。
  *          詳細は CanSM.c 参照）。

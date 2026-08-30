@@ -39,7 +39,7 @@ SHUTDOWN は CAN バスのウェイクアップにより常に RUN へ復帰で�
 継続するため、Bus-Off の検出・回復だけを理由に新たに RUN が解放されて SHUTDOWN へ
 向かうことはなく、SHUTDOWN は ComM の NO_COM 要求による正常系（ボランタリ）スリープ
 からのみ到達します（NO_COM_PENDING_SLEEP 中に実際に Bus-Off が発生した場合、回復時に
-`ComM_BusSMIndication(NO_COM)` が呼ばれ直すことはありますが、RUN は既にボランタリ
+`ComM_BusSM_ModeIndication(NO_COM)` が呼ばれ直すことはありますが、RUN は既にボランタリ
 スリープ突入時点で解放済みのため、これによって新たに `EcuM_ReleaseRUN()` が呼ばれる
 ことはありません。詳細は CanSM.c の `CanSM_BusOffFromPendingSleep` 参照）。
 
@@ -96,7 +96,7 @@ RUN フェーズを継続するために「誰かが使っている」ことを�
 
 | ユーザ | 定数 | `EcuM_RequestRUN` タイミング | `EcuM_ReleaseRUN` タイミング |
 |-------|------|--------------------------|--------------------------|
-| ComM | `ECUM_USER_COMM` | CAN バスが FULL_COM になったとき（起動時 / Bus-Off 回復試行時 / ボランタリスリープからのウェイクアップ時） | CAN バスが NO_COM になったとき（エンジン OFF 継続によるボランタリスリープ突入時。NO_COM_PENDING_SLEEP 中に Bus-Off が発生し回復した場合も `ComM_BusSMIndication(NO_COM)` は呼ばれ直すが、RUN は既に解放済みのため `EcuM_ReleaseRUN()` が再度呼ばれることはない） |
+| ComM | `ECUM_USER_COMM` | CAN バスが FULL_COM になったとき（起動時 / Bus-Off 回復試行時 / ボランタリスリープからのウェイクアップ時） | CAN バスが NO_COM になったとき（エンジン OFF 継続によるボランタリスリープ突入時。NO_COM_PENDING_SLEEP 中に Bus-Off が発生し回復した場合も `ComM_BusSM_ModeIndication(NO_COM)` は呼ばれ直すが、RUN は既に解放済みのため `EcuM_ReleaseRUN()` が再度呼ばれることはない） |
 
 **重複要求・対応しない解放の検知（SWS_EcuM_04125/04127）:**
 `EcuM_RequestRUN()`/`EcuM_ReleaseRUN()` は、AUTOSAR の実 EcuM と同様に
@@ -108,7 +108,7 @@ RUN フェーズを継続するために「誰かが使っている」ことを�
 出力して `E_NOT_OK` を返します。呼び出し元は必ず `void` キャストで戻り値を
 捨てているため、この検知は実行時の挙動には影響しません（開発時の診断用途）。
 
-この検知の追加に伴い、`ComM_BusSMIndication()` 側も、実際に EcuM の RUN 要求状態が
+この検知の追加に伴い、`ComM_BusSM_ModeIndication()` 側も、実際に EcuM の RUN 要求状態が
 変化した時のみ `EcuM_RequestRUN()`/`EcuM_ReleaseRUN()` を呼ぶよう変更しました。
 当初はチャネルモード（`ComM_ChannelMode`）そのものの変化で判定していましたが、
 Bus-Off 検出時に一時的に挟まる `COMM_SILENT_COMMUNICATION`（EcuM の RUN 状態には

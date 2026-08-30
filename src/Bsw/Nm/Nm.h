@@ -13,7 +13,7 @@
  *            NO_COM へ集約した「その場で」Nm_NetworkRelease() を呼ぶ
  *            （[SWS_ComM_00133] 準拠。ComM のチャネルモードはこの時点では
  *            まだ FULL_COM のまま。ComM.c ファイル冒頭コメント参照）。
- *            FULL_COM 方向: ComM_BusSMIndication() がチャネルモードを
+ *            FULL_COM 方向: ComM_BusSM_ModeIndication() がチャネルモードを
  *            FULL_COM へ確定させたときに Nm_NetworkRequest() を呼ぶ。
  *            以降の実際の送受信・タイマ管理・状態遷移は本モジュールが
  *            自律的に行う（ComM は毎周期ポーリングしない）。

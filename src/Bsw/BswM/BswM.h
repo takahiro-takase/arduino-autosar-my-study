@@ -11,7 +11,7 @@
  *
  *          モード通知経路:
  *            EcuM_Init() / EcuM_ReleaseRUN() → BswM_EcuM_CurrentState()
- *            ComM_BusSMIndication()          → BswM_ComM_CurrentMode()
+ *            ComM_BusSM_ModeIndication()          → BswM_ComM_CurrentMode()
  *
  * \copyright  Copyright (c) 2025 T_T
  * \license    MIT License - 詳細は LICENSE ファイルを参照。
@@ -78,7 +78,7 @@ void BswM_EcuM_CurrentState(EcuM_StateType state);
 /**
  * \brief   ComM からの通信モード変化通知コールバック。
  *
- * \details ComM_BusSMIndication() が呼ぶ。
+ * \details ComM_BusSM_ModeIndication() が呼ぶ。
  *          BswM は受け取ったモードを含む条件を持つ全ルール（単一条件・複合
  *          条件いずれも）を評価する（BswM_PBCfg.c の Rule3/Rule5 参照）。
  *

@@ -75,13 +75,13 @@
 #define BSWM_OS_TASK_CAN_TX_CONF    13U /**< Can_MainFunction_Write (1 ms)    */
 #define BSWM_OS_TASK_CAN_BUSOFF     14U /**< Can_MainFunction_BusOff (1 ms)   */
 #define BSWM_OS_TASK_CAN_WAKEUP     15U /**< Can_MainFunction_Wakeup (1 ms)   */
-#define BSWM_OS_TASK_SECOC_MAIN     16U /**< SecOC_MainFunction     (100 ms)  */
+#define BSWM_OS_TASK_SECOC_MAIN     16U /**< SecOC_MainFunctionTx     (100 ms)  */
 #define BSWM_OS_TASK_MEMIF_MAIN     17U /**< MemIf_MainFunction     (10 ms)   */
 
 /* -----------------------------------------------------------------------
  * タスクビットマスク (1ビット = 1タスク; ビット位置 = タスク ID)
  * タスク数が 16 を超えるため uint32 を使用する（BswM_PBCfg.h の
- * BswM_RuleType.TaskMask 参照。Task 16 (SecOC_MainFunction) 追加時に
+ * BswM_RuleType.TaskMask 参照。Task 16 (SecOC_MainFunctionTx) 追加時に
  * uint16 では bit 16 を表現できず、いかなる BswM ルールからも制御不能に
  * なっていたバグを修正した経緯がある）。
  * ----------------------------------------------------------------------- */
@@ -151,7 +151,7 @@
  * 周期送信・状態遷移判定は本タスクの中でしか行われないため、これを止めると
  * Nm がその状態に永久に固着してしまう（実機で確認された不具合）。
  *
- * SecOC_MainFunction はこの「動かし続ける」リストに含まれない
+ * SecOC_MainFunctionTx はこの「動かし続ける」リストに含まれない
  * （Com_MainFunction 等と同様、SHUTDOWN 中は停止してよいタスクの扱い。
  * SHUTDOWN 中は Com_MainFunction 自体が停止して SecOC_TxPending[] を
  * 誰も立てなくなるため送信要求は発生しないが、無効化しておくのが本来の

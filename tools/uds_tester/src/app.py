@@ -829,7 +829,7 @@ class UdsTesterFrame(ttk.Frame):
     @staticmethod
     def _verify_secoc(data: bytes, secoc_cfg: dict) -> bool:
         """受信した Secured I-PDU の MAC を検証する（_apply_secoc の逆方向）。
-        Arduino 側 SecOC_MainFunction() が計算した MAC と、pycryptodome で
+        Arduino 側 SecOC_MainFunctionTx() が計算した MAC と、pycryptodome で
         独立に再計算した MAC が一致するかを確認する（Arduino の自前 AES-CMAC
         実装が TX 方向でも正しく動作していることの実機確認手段）。"""
         data_id: int = secoc_cfg["data_id"]
@@ -1092,7 +1092,7 @@ class UdsTesterFrame(ttk.Frame):
         ("->SHUTDOWN", "SHUTDOWN"),
     )
 
-    # ComM.c の ComM_BusSMIndication() が CanSM からのモード変化通知を受けるたびに
+    # ComM.c の ComM_BusSM_ModeIndication() が CanSM からのモード変化通知を受けるたびに
     # 必ず出す "ch%u ->mode=%u" ログ（ComM.c 参照）から ComM_ModeType を判定する。
     # ComM_ModeType は 0/1/2 の3値しか取らない（ComM.h 参照）ため、CanSM/EcuM と
     # 同じ部分文字列一致ルールで表現でき、専用の正規表現・分岐は不要。

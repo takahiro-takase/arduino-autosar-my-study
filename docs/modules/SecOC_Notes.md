@@ -45,7 +45,7 @@ E2E は「Com のコールバックフック（RxIndicationCbk/TxTransformCbk）
       → PduR_Transmit(SrcPduId=3, 4byte)
           → TransmitOverrideFct=SecOC_IfTransmit()（Authentic I-PDU を内部
             バッファへコピーし即座に E_OK を返す。[SWS_SecOC_00058]）
-      → 次回 SecOC_MainFunction()（100ms周期）:
+      → 次回 SecOC_MainFunctionTx()（100ms周期）:
           Freshness（自身の単調増加カウンタ）+ AES-128-CMAC を計算
           Secured I-PDU（8byte）を組み立て
           → PduR_SecOCTransmit(SrcPduId=3, 8byte) → CanIf_Transmit() → CAN 0x220 送信
@@ -187,7 +187,7 @@ E2E Profile05 単体保護に切り替えました（`E2EXf_PBCfg.c`/`SecOC_PBCf
    → `Crypto_ProcessJob()`（同一の自前実装）が同じ鍵・同じメッセージに対して
    同じ MAC を計算することを、バイトレイアウト（DataId の Big Endian 連結順・
    切り詰め位置）も含めて突き合わせ済みです。
-4. （履歴）以前 TX 方向で SecOC を使っていた際は、`SecOC_MainFunction()` が
+4. （履歴）以前 TX 方向で SecOC を使っていた際は、`SecOC_MainFunctionTx()` が
    `Csm_MacGenerate()` 経由で呼ぶ `Crypto_Cmac_Calculate()`（RX と同一実装）が
    計算した MAC を、`tools/uds_tester` の `_verify_secoc()`（受信した
    Secured I-PDU から MAC を再計算する、`_apply_secoc()` の逆方向）で
@@ -217,7 +217,7 @@ E2E Profile05 単体保護に切り替えました（`E2EXf_PBCfg.c`/`SecOC_PBCf
 Arduino ログにも `SecOC: MainFunction: iPdu=0 secured OK (freshness=N)` が
 6000ms 周期で出力されていました。E2EHealthStatus を E2E Profile05 単体保護へ
 切り替えた際に SecOC を撤去したため、現在はこの表示・ログは出力されません
-（TX 方向で SecOC を使う I-PDU が無いため、`SecOC_MainFunction()` の
+（TX 方向で SecOC を使う I-PDU が無いため、`SecOC_MainFunctionTx()` の
 TX ループは毎回 0 回実行で終わります）。
 
 ## 意図的に応用範囲を限定した理由

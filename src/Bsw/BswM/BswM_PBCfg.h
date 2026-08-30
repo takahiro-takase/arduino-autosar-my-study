@@ -114,7 +114,7 @@ typedef struct
     BswM_ActionType          Action;          /**< 実行するアクション */
     uint32                   TaskMask;        /**< 操作対象タスクのビットマスク (OS_TASK_COUNT タスク分。
                                                 *   uint16 では 16 個までしか表現できず、Task 16
-                                                *   (SecOC_MainFunction) 追加時に uint32 へ拡張した） */
+                                                *   (SecOC_MainFunctionTx) 追加時に uint32 へ拡張した） */
     Com_IpduGroupIdType      IpduGroupId;     /**< 操作対象の I-PDU Group ID */
     uint8                    Initialize;       /**< Com_IpduGroupStart() の initialize 引数 */
 } BswM_RuleType;

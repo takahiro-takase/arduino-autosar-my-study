@@ -70,14 +70,14 @@ typedef struct
  *   Com が PduR_Transmit() を呼ぶと SecOC_IfTransmit() が Authentic I-PDU を
  *   内部バッファへコピーして即座に E_OK を返し（[SWS_SecOC_00058]）、
  *   実際の Freshness/MAC 計算と Secured I-PDU の組み立ては次回
- *   SecOC_MainFunction() で行う（[SWS_SecOC_00060]〜[SWS_SecOC_00062]）。
+ *   SecOC_MainFunctionTx() で行う（[SWS_SecOC_00060]〜[SWS_SecOC_00062]）。
  *   計算完了後、SecOC 自身が PduR_SecOCTransmit() を呼んで CanIf まで
  *   到達させる。
  *
  *   DataId/AuthenticPduLength/FreshnessOffset/FreshnessLength/MacOffset/
  *   MacTxLength/SecuredPduLength/CsmJobId の意味は SecOC_RxPduConfigType と
  *   同じ（対称の TX 版。ただし CsmJobId は Csm_MacGenerate() 用のジョブを指す）。
- *   PduRSrcPduId : SecOC_MainFunction() が変換完了後に PduR_SecOCTransmit()
+ *   PduRSrcPduId : SecOC_MainFunctionTx() が変換完了後に PduR_SecOCTransmit()
  *                  へ渡す、元の Authentic I-PDU の TX ルーティングパス ID
  *                  （PduR_TxRoutingPathType.SrcPduId と一致させる）。
  * ----------------------------------------------------------------------- */
