@@ -79,7 +79,7 @@
  *            呼び出しと同期していたため、遅延を体感できない範囲に抑える
  *            （詳細は Can.c ファイル冒頭のコメントを参照）。
  *            SecOC_MainFunctionTx は Com_MainFunctionTx と同じ 100 ms とする
- *            （周期自体は RX 方向の SecOC_IfRxIndication() とは無関係で、
+ *            （周期自体は RX 方向の SecOC_RxIndication() とは無関係で、
  *            TX 方向専用のタスク。現在 TX 方向で SecOC を使う PDU は無い
  *            〈SECOC_TX_PDU_COUNT=0、SecOC.c 冒頭コメント参照〉ため、
  *            毎回 0 回実行で終わる no-op になっている）。

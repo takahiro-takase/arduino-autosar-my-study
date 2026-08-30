@@ -396,7 +396,7 @@ ModuleId の出典は `docs/AUTOSAR_TR_BSWModuleList.pdf`（Release 4.3.1、「L
 │   │   │   ├── SecOC_Cfg.h       # RX/TX Secured I-PDU 数定数
 │   │   │   ├── SecOC_PBCfg.h     # ポストビルド設定宣言（SecOC_Config）
 │   │   │   ├── SecOC_PBCfg.c     # RX/TX Secured I-PDU 設定実体（DataId/オフセット/CsmJobId）
-│   │   │   ├── SecOC.h           # 公開インタフェース（SecOC_IfRxIndication/SecOC_IfTransmit/SecOC_MainFunctionTx）
+│   │   │   ├── SecOC.h           # 公開インタフェース（SecOC_RxIndication/SecOC_IfTransmit/SecOC_MainFunctionTx）
 │   │   │   └── SecOC.c           # フレッシュネス検証（RX）／Secured I-PDU 組み立て（TX）。MAC 自体は Csm 経由
 │   │   ├── Port/                 # ピン方向設定（MCAL・Dio と責務を分離）
 │   │   │   ├── Port_Cfg.h        # ピン番号定義（D6/D7/D8 OUTPUT / D9 INPUT_PULLUP）
@@ -518,11 +518,11 @@ Can_MainFunction_Read()          ← フラグをドレイン、SPI 読み出し
       → 宛先ごとにマルチキャスト:
           Com_RxIndication()         ← EngineInfo/AbsInfo（RxIndicationCbk 経由で E2E 検証、後述）
           CanTp_RxIndication()       ← UDS 診断要求（複数フレーム対応）
-          SecOC_IfRxIndication()     ← ImmobilizerCmd
+          SecOC_RxIndication()     ← ImmobilizerCmd
             → Csm_MacVerify() → Com_RxIndication()
 ```
 
-> `SecOC_IfRxIndication()` → `Com_RxIndication()` は常に到達するわけではなく、
+> `SecOC_RxIndication()` → `Com_RxIndication()` は常に到達するわけではなく、
 > `Csm_MacVerify()` による認証成功時のみ呼ばれる（失敗時はログのみで Com へは
 > 転送しない）。この認証ゲート自体の詳細は
 > [`docs/modules/SecOC_Notes.md`](docs/modules/SecOC_Notes.md#アーキテクチャ--e2e-transformer-方式とは異なる理由)

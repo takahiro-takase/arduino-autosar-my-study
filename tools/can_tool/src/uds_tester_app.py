@@ -804,7 +804,7 @@ class UdsTesterFrame(ttk.Frame):
         DataToAuthenticator = DataId(2byte, Big Endian) | Authentic Payload |
         Complete Freshness Value
         (docs/AUTOSAR_SWS_SecureOnboardCommunication.pdf [7.1.1.2]、
-        Big Endian は [SWS_SecOC_00011]。Arduino 側の SecOC_IfRxIndication()
+        Big Endian は [SWS_SecOC_00011]。Arduino 側の SecOC_RxIndication()
         と同一のアルゴリズム)。
 
         secoc_cfg キー: data_id, frame_length（Secured I-PDU 全体長）,

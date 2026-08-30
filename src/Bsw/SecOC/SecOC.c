@@ -202,7 +202,7 @@ void SecOC_DeInit(void)
     DET_LOGI(TAG, "DeInit ok");
 }
 
-void SecOC_IfRxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
+void SecOC_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
 {
     DET_LOGT(TAG, "called");
     if (SecOC_ConfigPtr == NULL)
@@ -384,7 +384,7 @@ void SecOC_MainFunctionTx(void)
         const uint8 freshness = SecOC_TxFreshness[t];
 
         /* DataToAuthenticator = DataId(2byte, Big Endian) | Authentic Payload |
-         * Complete Freshness Value（SecOC_IfRxIndication() と対称のロジック）。 */
+         * Complete Freshness Value（SecOC_RxIndication() と対称のロジック）。 */
         uint8 authInput[SECOC_AUTH_INPUT_MAX];
         authInput[0] = (uint8)(cfg->DataId >> 8);
         authInput[1] = (uint8)(cfg->DataId & 0xFFU);

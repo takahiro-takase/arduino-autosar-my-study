@@ -122,7 +122,7 @@ Std_ReturnType Crypto_ProcessJob(uint32 objectId, Crypto_JobType* job)
         /* 定数時間比較（早期breakしない）。MAC検証は認証機能の核であり、不一致
          * バイト位置に応じて処理時間が変わる実装は、攻撃者に偽MACをバイト単位で
          * 総当たりさせる余地を与えるタイミングサイドチャネルになり得るため避ける
-         * （元 SecOC_IfRxIndication() が行っていた比較ロジックを、責務として
+         * （元 SecOC_RxIndication() が行っていた比較ロジックを、責務として
          * 正しい Crypto Driver 層へ移設した）。 */
         uint8 macDiff = 0U;
         for (uint32 b = 0U; b < job->macLength; b++)

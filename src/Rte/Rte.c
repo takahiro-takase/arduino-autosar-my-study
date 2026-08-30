@@ -456,11 +456,11 @@ void Rte_COMCbkRxTOut_AbsInfo(void)
  *          登録される。呼ばれるのは SecOC（src/Bsw/SecOC/）が MAC・フレッシュ
  *          ネス検証に成功し、`Com_RxIndication(2, ...)` を直接呼んだ直後のみ
  *          （検証に失敗したデータは Com へ一切渡らないため、このコールバック
- *          自体が呼ばれない。SecOC_IfRxIndication() 参照）。すなわちこのログが
+ *          自体が呼ばれない。SecOC_RxIndication() 参照）。すなわちこのログが
  *          出力されること自体が「認証済みコマンドである」ことを意味する。
  *          `Rte_COMCbkTAck_EngineState()` と同じ理由で、ここで Serial 出力
  *          （DET_LOGW）を直接行っても安全（この呼び出しチェーン
- *          Can_MainFunction_Read → ... → SecOC_IfRxIndication →
+ *          Can_MainFunction_Read → ... → SecOC_RxIndication →
  *          Com_RxIndication → このコールバック、の間に割り込み禁止区間は
  *          存在しない）。
  *

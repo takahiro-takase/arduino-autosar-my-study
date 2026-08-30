@@ -29,7 +29,7 @@ E2E は「Com のコールバックフック（RxIndicationCbk/TxTransformCbk）
 
   Arduino (MeterEcu):
     Can_Hw → CanIf_RxIndication → PduR_ComRxIndication
-      → SecOC_IfRxIndication()（PduR 宛先モジュール、DestPduId=0）
+      → SecOC_RxIndication()（PduR 宛先モジュール、DestPduId=0）
           Authentic Payload / Freshness Value / 切り詰め MAC を分離
           AES-128-CMAC を自前実装で再計算し MAC 一致を検証
           Freshness（8bit、単調増加）を検証（リプレイ検知）
@@ -183,7 +183,7 @@ E2E Profile05 単体保護に切り替えました（`E2EXf_PBCfg.c`/`SecOC_PBCf
    （ホスト環境に C コンパイラが無く組込みコードを直接実行できなかったための
    代替検証手段。C コードとの対応は目視でも再確認済み）。
 3. `tools/can_tool` の `_apply_secoc()`（Python、pycryptodome で本物の
-   AES-CMAC を計算）と、Arduino 側の `SecOC_IfRxIndication()` → `Csm_MacVerify()`
+   AES-CMAC を計算）と、Arduino 側の `SecOC_RxIndication()` → `Csm_MacVerify()`
    → `Crypto_ProcessJob()`（同一の自前実装）が同じ鍵・同じメッセージに対して
    同じ MAC を計算することを、バイトレイアウト（DataId の Big Endian 連結順・
    切り詰め位置）も含めて突き合わせ済みです。
