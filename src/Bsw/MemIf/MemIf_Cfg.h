@@ -47,6 +47,7 @@
  *  （EcuM/Os が Fee_Init/Fee_MainFunction 等を直接呼ぶ設計。MemIf.c 冒頭の
  *  コメント参照）本プロジェクト独自の拡張のため、実仕様が 0x01〜0x09 を
  *  使い切った範囲の外側 (0x00, 0x0A) を割り当てる。 */
+#define MEMIF_API_ID_SET_MODE          0x01U
 #define MEMIF_API_ID_READ              0x02U
 #define MEMIF_API_ID_WRITE             0x03U
 #define MEMIF_API_ID_CANCEL            0x04U

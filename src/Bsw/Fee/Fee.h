@@ -85,6 +85,30 @@ void Fee_Init(const Fee_ConfigType* ConfigPtr);
 void Fee_GetVersionInfo(Std_VersionInfoType* versioninfo);
 
 /**
+ * \brief   下位フラッシュドライバの動作モードを切り替える（[SWS_Fee_00086]）。
+ *
+ * \details 実 AUTOSAR は書き込み電圧・タイミングを切り替えられる HW を想定するが、
+ *          Renesas RA の EEPROM エミュレーションライブラリにその手段は無く、
+ *          1 バイトの書き込みでも常に同じ消去・書き込みサイクルを要する。
+ *          Fee_MainFunction() が 1 回の呼び出しにつき 1 バイトしか書かないのは
+ *          意図的な安全策（本ファイル冒頭のコメント参照: 過去に複数バイトを
+ *          同期的に書いて協調スケジューラを長時間停止させ、WdgM の Deadline
+ *          Supervision を巻き込んで実機 HW ウォッチドッグリセットを引き起こした
+ *          実績がある）であり、Mode によってこのペースを変えることはしない。
+ *          そのため本関数は Mode を受理するだけで状態を保持せず、実際の
+ *          書き込み挙動には一切影響しない（学習用簡略化。MemIf_ModeType の
+ *          型定義コメント参照）。
+ *
+ * \param[in]  Mode  MEMIF_MODE_SLOW / MEMIF_MODE_FAST。
+ *
+ * \AUTOSARReq     {SWS_Fee_00086}
+ * \ServiceID      {0x01}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Asynchronous}
+ */
+void Fee_SetMode(MemIf_ModeType Mode);
+
+/**
  * \brief   指定アドレスから Length バイトを同期的に読み込む。
  *
  * \details Os スケジューラ開始前（Fee_MainFunction() を誰も呼べない期間）の

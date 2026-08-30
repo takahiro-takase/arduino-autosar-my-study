@@ -66,6 +66,15 @@ void MemIf_GetVersionInfo(Std_VersionInfoType* versioninfo)
     versioninfo->sw_patch_version = MEMIF_SW_PATCH_VERSION;
 }
 
+void MemIf_SetMode(MemIf_ModeType Mode)
+{
+    /* [SWS_MemIf_00038]: Device 引数を持たない（全下位ドライバへ一括反映する
+     * ため）。本プロジェクトは下位ドライバが Fee 1 個のみのため、そのまま
+     * 1 回呼ぶだけで「全下位ドライバへの一括反映」になる。 */
+    DET_LOGT(TAG, "called");
+    Fee_SetMode(Mode);
+}
+
 Std_ReturnType MemIf_Read(MemIf_DeviceType Device, uint16 Address, uint8* DataBufferPtr, uint16 Length)
 {
     DET_LOGT(TAG, "called");

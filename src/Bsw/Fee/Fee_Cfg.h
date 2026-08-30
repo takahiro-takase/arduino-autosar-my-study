@@ -20,9 +20,10 @@
  *
  * 開発エラーコード・ApiId は docs/4.3.1/AUTOSAR_SWS_FlashEEPROMEmulation.pdf
  * ([SWS_Fee_00010] 7.2.1 Development Errors 表、8 章 Service ID[hex]) を
- * 実測して確認済み。本実装が持たない API（Fee_SetMode/Fee_InvalidateBlock/
+ * 実測して確認済み。本実装が持たない API（Fee_InvalidateBlock/
  * Fee_EraseImmediateBlock/Fee_JobEndNotification/Fee_JobErrorNotification、
- * いずれも学習用簡略化のため未実装）に対応するエラーコードは定義しない。
+ * いずれも学習用簡略化のため未実装。BlockNumber テーブルを持たない設計上の
+ * 制約は Fee.h 冒頭のコメント参照）に対応するエラーコードは定義しない。
  * ----------------------------------------------------------------------- */
 
 /** AUTOSAR Flash EEPROM Emulation の ModuleId（AUTOSAR_TR_BSWModuleList 参照、固定値 21） */
@@ -44,6 +45,7 @@
  *  ブロック属性として Fee_Write に統合される。Fee.h 冒頭のコメント参照）の
  *  ため、実仕様が 0x00〜0x09 を使い切った直後の未使用値 0x0A を割り当てる。 */
 #define FEE_API_ID_INIT              0x00U
+#define FEE_API_ID_SET_MODE           0x01U
 #define FEE_API_ID_READ               0x02U
 #define FEE_API_ID_WRITE              0x03U
 #define FEE_API_ID_CANCEL             0x04U
