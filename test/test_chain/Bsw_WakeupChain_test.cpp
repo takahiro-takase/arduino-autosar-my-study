@@ -11,8 +11,9 @@
  *                                          バックポーリング経路を使う）
  *                → CanIf_ControllerWakeup()
  *                  → CanSM_ControllerWakeup()
- *                    → Can_SetControllerMode(CAN_T_WAKEUP)   ← SLEEP→STOPPED
- *                                                                (Listen-Only)
+ *                    → CanIf_SetControllerMode(CAN_CS_STOPPED)
+ *                      → Can_SetControllerMode(CAN_T_WAKEUP)   ← SLEEP→STOPPED
+ *                                                                  (Listen-Only)
  *                      CanSM_State: NO_COM → WAKEUP_VALIDATING
  *                      （ComM/EcuM へはまだ通知しない）
  *
@@ -20,12 +21,14 @@
  *
  *            2a. 検証成功: Can_MainFunction_Read() が受信フレームをドレイン
  *                → CanIf_RxIndication() → CanSM_RxIndication()
- *                  → Can_SetControllerMode(CAN_T_START) → CanSM_State: FULL_COM
- *                    → ComM_BusSM_ModeIndication(FULL_COM)
+ *                  → CanIf_SetControllerMode(CAN_CS_STARTED)
+ *                    → Can_SetControllerMode(CAN_T_START) → CanSM_State: FULL_COM
+ *                      → ComM_BusSM_ModeIndication(FULL_COM)
  *
  *            2b. 検証失敗（タイムアウト）: CanSM_MainFunction() が
  *                CANSM_WAKEUP_VALIDATION_MS 超過を検出
- *                → Can_SetControllerMode(CAN_T_SLEEP) → CanSM_State: NO_COM
+ *                → CanIf_SetControllerMode(CAN_CS_SLEEP)
+ *                  → Can_SetControllerMode(CAN_T_SLEEP) → CanSM_State: NO_COM
  *                  （ComM/EcuM への通知なし）
  *
  *          ComM（CanSM が呼び返す通知の宛先）は 2026-08 の協調スリープ移管
@@ -101,7 +104,7 @@ protected:
         // ウェイクアップ検証は CANSM_STATE_NO_COM からの起床のみを受け付ける）。
         // ComM_Init() 直後の既定値は NO_COM のため、ComM 側は別途要求しなくても
         // この前提と一致する。
-        ASSERT_EQ(Can_SetControllerMode(0U, CAN_T_SLEEP), CAN_OK);
+        ASSERT_EQ(CanIf_SetControllerMode(0U, CAN_CS_SLEEP), E_OK);
         ASSERT_EQ(Can_Test_GetControllerState(), CAN_CS_SLEEP);
         FakeCanHw_SetModeCount = 0U;
 
