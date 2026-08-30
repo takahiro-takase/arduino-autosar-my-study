@@ -62,6 +62,36 @@ void Dio_WriteChannel(Dio_ChannelType channelId, Dio_LevelType level);
 Dio_LevelType Dio_ReadChannel(Dio_ChannelType channelId);
 
 /**
+ * \brief   指定チャネルの出力レベルを反転し、反転後のレベルを返す。
+ *
+ * \details 本プロジェクトの Dio はチャネルの入出力方向を追跡していない
+ *          （方向設定は Port モジュールの責務であり、Dio 側に問い合わせ手段が
+ *          ない）ため、出力チャネル向けの挙動（[SWS_Dio_00191]:
+ *          読み取り→反転→書き込みし、反転後の値を返す）のみを実装する。
+ *          入力チャネルへの適用は想定しない（[SWS_Dio_00192]/[SWS_Dio_00193]
+ *          が規定する「入力チャネルでは物理出力に影響を与えない」動作は
+ *          本実装では保証されない）。
+ *
+ * \note       読み取り→反転→書き込みは非アトミックである。SWS 上は
+ *             Reentrant だが、同一チャネルへ割り込みコンテキスト等から
+ *             同時に呼ばれた場合、片方の反転が失われる可能性がある
+ *             （本プロジェクトは現状 Dio チャネルを割り込みから操作しない
+ *             ため実害はないが、将来そのような呼び出し元を追加する場合は
+ *             Com.c/Can.c 等が使う SchM_Enter/Exit による排他が必要）。
+ *
+ * \param[in]  channelId  対象チャネル ID (Arduino ピン番号)。
+ *
+ * \return  反転後の出力レベル (DIO_HIGH / DIO_LOW)。
+ *
+ * \pre        Port_Init() で対象チャネルを出力モードに設定済みであること。
+ *
+ * \ServiceID      {0x11}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Dio_LevelType Dio_FlipChannel(Dio_ChannelType channelId);
+
+/**
  * \brief   DIO ドライバのバージョン情報を取得する。
  *
  * \details 本プロジェクトの Dio に初期化状態の概念はないため（実 SWS_Dio にも

@@ -55,6 +55,28 @@ Dio_LevelType Dio_ReadChannel(Dio_ChannelType channelId)
     return Dio_Hw_ReadChannel(channelId);
 }
 
+/**
+ * \brief   指定チャネルの出力レベルを反転し、反転後のレベルを返す。
+ *
+ * \details [SWS_Dio_00191] の出力チャネル向け挙動のみを実装する
+ *          （Dio.h 冒頭のコメント参照）。
+ *
+ * \param[in]  channelId  対象チャネル ID (Arduino ピン番号)。
+ *
+ * \return  反転後の出力レベル (DIO_HIGH / DIO_LOW)。
+ *
+ * \ServiceID      {0x11}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Dio_LevelType Dio_FlipChannel(Dio_ChannelType channelId)
+{
+    DET_LOGT(TAG, "called");
+    Dio_LevelType level = (Dio_Hw_ReadChannel(channelId) == DIO_HIGH) ? DIO_LOW : DIO_HIGH;
+    Dio_Hw_WriteChannel(channelId, level);
+    return level;
+}
+
 void Dio_GetVersionInfo(Std_VersionInfoType* VersionInfo)
 {
     DET_LOGT(TAG, "called");
