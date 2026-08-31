@@ -29,6 +29,19 @@ extern "C" {
  */
 typedef struct Dcm_ConfigType_Tag Dcm_ConfigType;
 
+/** セッション制御タイプ型 [SWS_Dcm_00339]。値は ISO 14229-1
+ *  diagnosticSessionType パラメータに準拠する（DCM_SESSION_* 定数参照）。 */
+typedef uint8 Dcm_SesCtrlType;
+
+/**
+ * \brief   セキュリティレベル型 [SWS_Dcm_00338]。
+ * \details 実仕様は `SecurityLevel = (SecurityAccessType + 1) / 2` という
+ *          変換式を規定するが、本プロジェクトは SecurityAccess Level1 のみ
+ *          対応する簡略実装のため、内部状態をそのまま 0(Locked)/1(Unlocked)
+ *          の2値で表す（`Dcm_Cbk.c` の `Dcm_SecurityLevel` 参照）。
+ */
+typedef uint8 Dcm_SecLevelType;
+
 /**
  * \brief   DCM モジュールを初期化する。
  *
@@ -60,6 +73,36 @@ void Dcm_Init(const Dcm_ConfigType* ConfigPtr);
  * \Synchronicity  {Synchronous}
  */
 void Dcm_MainFunction(void);
+
+/**
+ * \brief   現在アクティブなセッション制御タイプを取得する。
+ *
+ * \param[out]  SesCtrlType  取得値の格納先。NULL 禁止。
+ *
+ * \retval  E_OK      正常取得（実仕様上、値取得自体は常に成功する）。
+ * \retval  E_NOT_OK  未初期化、または SesCtrlType が NULL。
+ *
+ * \AUTOSARReq     {SWS_Dcm_00339}
+ * \ServiceID      {0x06}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType Dcm_GetSesCtrlType(Dcm_SesCtrlType* SesCtrlType);
+
+/**
+ * \brief   現在アクティブなセキュリティレベルを取得する。
+ *
+ * \param[out]  SecLevel  取得値の格納先。NULL 禁止。
+ *
+ * \retval  E_OK      正常取得（実仕様上、値取得自体は常に成功する）。
+ * \retval  E_NOT_OK  未初期化、または SecLevel が NULL。
+ *
+ * \AUTOSARReq     {SWS_Dcm_00338}
+ * \ServiceID      {0x0d}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType Dcm_GetSecurityLevel(Dcm_SecLevelType* SecLevel);
 
 /**
  * \brief   DCM モジュールのバージョン情報を取得する。
