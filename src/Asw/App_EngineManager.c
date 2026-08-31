@@ -226,8 +226,9 @@ void App_EngineManager_Run(void)
 
     /* ボランタリスリープ判断: ENGINE_STATE_OFF が APP_ENGINE_SLEEP_OFF_CYCLES
      * 周期継続したら、通信不要と判断して COMM_USER_0 の要求を解放する。
-     * Dcm (COMM_USER_1) が extendedSession でなければ ComM の集約結果が NO_COM
-     * になり、CanSM が実際に CAN コントローラをスリープさせる。
+     * Dcm が ComM_DCM_ActiveDiagnostic() で extendedSession 中を通知していなければ
+     * ComM の集約結果が NO_COM になり、CanSM が実際に CAN コントローラを
+     * スリープさせる。
      * OFF 以外の状態になったら即座に FULL_COM を要求し直す（毎回呼んでも
      * ComM 側で現状と同じなら何もしないため無害）。 */
     if (s_state != ENGINE_STATE_OFF)
