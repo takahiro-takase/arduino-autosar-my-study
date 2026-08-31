@@ -79,21 +79,28 @@
 
 /** ApiId（各関数の Doxygen \ServiceID タグをそのまま使う。本モジュールは実際の
  *  SWS_Dem の個々の関数シグネチャとは大きく異なる学習用簡略実装のため、
- *  SWS 側の Service ID との照合は行わない） */
+ *  多くの関数では SWS 側の Service ID との照合は行わない。ただし
+ *  Dem_GetDTCStatusAvailabilityMask/Dem_EnableDTCSetting/Dem_DisableDTCSetting
+ *  の3関数はシグネチャ準拠方針のもと実仕様の Service ID (0x16/0x25/0x24) を
+ *  採用したため、元々そこを占めていた本プロジェクト独自関数
+ *  Dem_GetAllDTCs/Dem_SetFreezeFrameContext（いずれも実 AUTOSAR に対応する
+ *  関数が無く ApiId は任意）を 0x2B/0x2C（Enable/DisableDTCSetting が
+ *  空けた値）へ入れ替えて衝突を回避した） */
 #define DEM_API_ID_INIT                          0x01U
 #define DEM_API_ID_REPORT_ERROR_STATUS            0x0FU
+#define DEM_API_ID_GET_DTC_STATUS_AVAILABILITY_MASK 0x16U
 #define DEM_API_ID_GET_STATUS_OF_EVENT             0x19U
 #define DEM_API_ID_GET_DTC_OF_EVENT                0x1AU
 #define DEM_API_ID_CLEAR_ALL_DTCS                  0x23U
-#define DEM_API_ID_GET_ALL_DTCS                    0x24U
-#define DEM_API_ID_SET_FREEZE_FRAME_CONTEXT        0x25U
+#define DEM_API_ID_DISABLE_DTC_SETTING              0x24U
+#define DEM_API_ID_ENABLE_DTC_SETTING               0x25U
 #define DEM_API_ID_GET_FREEZE_FRAME_OF_EVENT        0x26U
 #define DEM_API_ID_GET_EVENT_ID_OF_DTC              0x27U
 #define DEM_API_ID_CLEAR_DTC                        0x28U
 #define DEM_API_ID_GET_OCCURRENCE_COUNTER_OF_EVENT  0x29U
 #define DEM_API_ID_GET_SUPPORTED_DTCS               0x2AU
-#define DEM_API_ID_ENABLE_DTC_SETTING               0x2BU
-#define DEM_API_ID_DISABLE_DTC_SETTING              0x2CU
+#define DEM_API_ID_GET_ALL_DTCS                    0x2BU
+#define DEM_API_ID_SET_FREEZE_FRAME_CONTEXT        0x2CU
 #define DEM_API_ID_GET_VERSION_INFO                 0x00U
 
 /** バージョン情報（SWS_Dem、Com/E2EXf/PduR 等の既存モジュールと同じ命名規則） */

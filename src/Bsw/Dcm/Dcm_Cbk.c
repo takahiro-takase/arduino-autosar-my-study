@@ -704,7 +704,14 @@ static void Dcm_HandleReadDtcCount(const uint8* uds, uint8 udsLen)
     /* 正応答: [0x59, 0x01, statusAvailMask, dtcFormat, countH, countL] */
     Dcm_TxBuf[0] = 0x59U;                        /* SID 0x19 + 0x40 */
     Dcm_TxBuf[1] = DCM_DTC_SUBFUNC_REPORT_COUNT;
-    Dcm_TxBuf[2] = DEM_STATUS_AVAILABILITY_MASK;
+    if (Dem_GetDTCStatusAvailabilityMask(DCM_DEM_CLIENT_ID, &Dcm_TxBuf[2]) != E_OK)
+    {
+        /* Dem 未初期化等。Dcm_TxBuf は全ハンドラ共有の static バッファのため、
+         * ここで戻らずに後続の代入を続けると前回応答の残留バイトが混入した
+         * まま正応答として送信されてしまう（/code-review 指摘）。 */
+        Dcm_SendNegativeResponse(DCM_SID_READ_DTC_INFO, DCM_NRC_CONDITIONS_NOT_CORRECT);
+        return;
+    }
     Dcm_TxBuf[3] = DCM_DTC_FORMAT_ISO15031;
     Dcm_TxBuf[4] = 0x00U;                        /* countH */
     Dcm_TxBuf[5] = count;                        /* countL */
@@ -784,7 +791,11 @@ static void Dcm_HandleReadDtcByMask(const uint8* uds, uint8 udsLen)
 
     Dcm_TxBuf[0] = 0x59U;
     Dcm_TxBuf[1] = DCM_DTC_SUBFUNC_REPORT_BY_MASK;
-    Dcm_TxBuf[2] = DEM_STATUS_AVAILABILITY_MASK;
+    if (Dem_GetDTCStatusAvailabilityMask(DCM_DEM_CLIENT_ID, &Dcm_TxBuf[2]) != E_OK)
+    {
+        Dcm_SendNegativeResponse(DCM_SID_READ_DTC_INFO, DCM_NRC_CONDITIONS_NOT_CORRECT);
+        return;
+    }
 
     Dcm_SendDtcList(DCM_DTC_SUBFUNC_REPORT_BY_MASK, dtcBuf, statusBuf, count);
 }
@@ -822,7 +833,11 @@ static void Dcm_HandleReadDtcSupported(const uint8* uds, uint8 udsLen)
 
     Dcm_TxBuf[0] = 0x59U;
     Dcm_TxBuf[1] = DCM_DTC_SUBFUNC_REPORT_SUPPORTED;
-    Dcm_TxBuf[2] = DEM_STATUS_AVAILABILITY_MASK;
+    if (Dem_GetDTCStatusAvailabilityMask(DCM_DEM_CLIENT_ID, &Dcm_TxBuf[2]) != E_OK)
+    {
+        Dcm_SendNegativeResponse(DCM_SID_READ_DTC_INFO, DCM_NRC_CONDITIONS_NOT_CORRECT);
+        return;
+    }
 
     Dcm_SendDtcList(DCM_DTC_SUBFUNC_REPORT_SUPPORTED, dtcBuf, statusBuf, count);
 }
@@ -1488,9 +1503,18 @@ static void Dcm_DTCSettingReset(void)
     DET_LOGT(TAG, "called");
     if (Dcm_DTCSettingDisabled)
     {
-        Dem_EnableDTCSetting();
-        Dcm_DTCSettingDisabled = 0U;
-        DET_LOGI(TAG, "85 DTC setting auto re-enabled (default session)");
+        if (Dem_EnableDTCSetting(DCM_DEM_CLIENT_ID) == E_OK)
+        {
+            Dcm_DTCSettingDisabled = 0U;
+            DET_LOGI(TAG, "85 DTC setting auto re-enabled (default session)");
+        }
+        else
+        {
+            /* Dem 未初期化等（Det へは Dem.c 側が既に報告済み）。Dem 側の状態が
+             * 実際には変わっていないため、Dcm_DTCSettingDisabled はそのまま
+             * 残し「無効化中」の認識を保つ（次の遷移時に再試行される）。 */
+            DET_LOGW(TAG, "85 DTC setting re-enable failed, kept disabled");
+        }
     }
 }
 
@@ -1539,16 +1563,20 @@ static void Dcm_HandleControlDTCSetting(const uint8* uds, uint8 udsLen)
         return;
     }
 
-    if (subFunc == DCM_DTCSETTING_ON)
+    Std_ReturnType demRet = (subFunc == DCM_DTCSETTING_ON)
+                             ? Dem_EnableDTCSetting(DCM_DEM_CLIENT_ID)
+                             : Dem_DisableDTCSetting(DCM_DEM_CLIENT_ID);
+
+    if (demRet != E_OK)
     {
-        Dem_EnableDTCSetting();
-        Dcm_DTCSettingDisabled = 0U;
+        /* Dem 未初期化等（Det へは Dem.c 側が既に報告済み）。Dem 側の状態が
+         * 実際には変わっていないため Dcm_DTCSettingDisabled は更新せず、
+         * 成功と偽らずに負応答を返す。 */
+        Dcm_SendNegativeResponse(DCM_SID_CONTROL_DTC_SETTING, DCM_NRC_CONDITIONS_NOT_CORRECT);
+        return;
     }
-    else
-    {
-        Dem_DisableDTCSetting();
-        Dcm_DTCSettingDisabled = 1U;
-    }
+
+    Dcm_DTCSettingDisabled = (subFunc == DCM_DTCSETTING_ON) ? 0U : 1U;
 
     DET_LOGI(TAG, "85 subFunc=0x%02X", (unsigned)subFunc);
 

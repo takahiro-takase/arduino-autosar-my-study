@@ -158,6 +158,11 @@
 #define DCM_DTCSETTING_ON   0x01U  /**< DTCSettingType "on"  (記録を有効化)  */
 #define DCM_DTCSETTING_OFF  0x02U  /**< DTCSettingType "off" (記録を無効化) */
 
+/** Dem_EnableDTCSetting()/Dem_DisableDTCSetting()/Dem_GetDTCStatusAvailabilityMask()
+ *  に渡す ClientId（DcmDemClientRef 相当）。本プロジェクトは単一 ECU・単一
+ *  診断クライアント構成のため固定値 0 のみ使用する。 */
+#define DCM_DEM_CLIENT_ID  0U
+
 /* -----------------------------------------------------------------------
  * SecurityAccess (SID 0x27) サブ機能 (ISO 14229-1 Table 44; Level1 のみ対応)
  * ----------------------------------------------------------------------- */
