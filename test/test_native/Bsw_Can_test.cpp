@@ -663,4 +663,102 @@ TEST_F(Bsw_Can_Test, Can_GetVersionInfo_OK)
     EXPECT_EQ(versioninfo.sw_patch_version, CAN_SW_PATCH_VERSION);
 }
 
+// ------------------------------------------------------------
+// Can_GetControllerErrorState() の単体テスト（AUTOSAR 非標準の拡張。
+// Can.c の Can_GetControllerErrorState() ドキュメント参照）
+// ------------------------------------------------------------
+TEST_F(Bsw_Can_Test, Can_GetControllerErrorState_NG_NullConfig)
+{
+    /* 実行 (Act) */
+    Can_ErrorStateType state;
+    Std_ReturnType ret = Can_GetControllerErrorState(0U, &state);
+
+    /* 評価 (Assert) */
+    EXPECT_EQ(ret, E_NOT_OK);
+}
+
+TEST_F(Bsw_Can_Test, Can_GetControllerErrorState_NG_InvalidController)
+{
+    /* 準備 (Arrange) */
+    Can_Init(&config);
+
+    /* 実行 (Act) */
+    Can_ErrorStateType state;
+    Std_ReturnType ret = Can_GetControllerErrorState(1U, &state);
+
+    /* 評価 (Assert) */
+    EXPECT_EQ(ret, E_NOT_OK);
+}
+
+TEST_F(Bsw_Can_Test, Can_GetControllerErrorState_NG_NullPointer)
+{
+    /* 準備 (Arrange) */
+    Can_Init(&config);
+
+    /* 実行 (Act) */
+    Std_ReturnType ret = Can_GetControllerErrorState(0U, NULL);
+
+    /* 評価 (Assert) */
+    EXPECT_EQ(ret, E_NOT_OK);
+}
+
+TEST_F(Bsw_Can_Test, Can_GetControllerErrorState_OK_ReturnsActiveByDefault)
+{
+    /* 準備 (Arrange) */
+    Can_Init(&config);
+    FakeCanHw_ErrorState = 0U;  /* CAN_ERRORSTATE_ACTIVE */
+
+    /* 実行 (Act) */
+    Can_ErrorStateType state = CAN_ERRORSTATE_BUSOFF;  /* 未更新を検出できる初期値 */
+    Std_ReturnType ret = Can_GetControllerErrorState(0U, &state);
+
+    /* 評価 (Assert) */
+    EXPECT_EQ(ret, E_OK);
+    EXPECT_EQ(state, CAN_ERRORSTATE_ACTIVE);
+}
+
+TEST_F(Bsw_Can_Test, Can_GetControllerErrorState_OK_ReflectsPassiveFromHw)
+{
+    /* 準備 (Arrange) */
+    Can_Init(&config);
+    FakeCanHw_ErrorState = 1U;  /* CAN_ERRORSTATE_PASSIVE */
+
+    /* 実行 (Act) */
+    Can_ErrorStateType state;
+    Std_ReturnType ret = Can_GetControllerErrorState(0U, &state);
+
+    /* 評価 (Assert) */
+    EXPECT_EQ(ret, E_OK);
+    EXPECT_EQ(state, CAN_ERRORSTATE_PASSIVE);
+}
+
+TEST_F(Bsw_Can_Test, Can_GetControllerErrorState_OK_ReflectsBusOffFromHw)
+{
+    /* 準備 (Arrange) */
+    Can_Init(&config);
+    FakeCanHw_ErrorState = 2U;  /* CAN_ERRORSTATE_BUSOFF */
+
+    /* 実行 (Act) */
+    Can_ErrorStateType state;
+    Std_ReturnType ret = Can_GetControllerErrorState(0U, &state);
+
+    /* 評価 (Assert) */
+    EXPECT_EQ(ret, E_OK);
+    EXPECT_EQ(state, CAN_ERRORSTATE_BUSOFF);
+}
+
+TEST_F(Bsw_Can_Test, Can_GetControllerErrorState_NG_HwFailurePropagates)
+{
+    /* 準備 (Arrange) */
+    Can_Init(&config);
+    FakeCanHw_GetErrorStateReturn = CAN_HW_FAIL;
+
+    /* 実行 (Act) */
+    Can_ErrorStateType state;
+    Std_ReturnType ret = Can_GetControllerErrorState(0U, &state);
+
+    /* 評価 (Assert) */
+    EXPECT_EQ(ret, E_NOT_OK);
+}
+
 }  // namespace

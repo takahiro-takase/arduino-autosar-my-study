@@ -340,6 +340,57 @@ Can_ReturnType Can_SetControllerMode(uint8 Controller, Can_StateTransitionType T
 }
 
 /**
+ * \brief   CAN コントローラのエラー状態 (Active/Passive/Bus-Off) を取得する。
+ *
+ * \details [SWS_CANIF_91001] の CanIf_GetControllerErrorState() が「対応する
+ *          CAN ドライバのサービスを呼ぶ」と規定する、その CAN ドライバ側
+ *          サービスに相当する。実 AUTOSAR SWS_Can 4.3.1 は本関数に相当する
+ *          Service を規定していない（CanIf 側 API のみが定義されている）ため
+ *          AUTOSAR 非標準の拡張だが、CanIf から呼べる実体が必要なため用意する。
+ *          MCP2515 の EFLG レジスタ（Bus-Off/TX Error-Passive ビット）から
+ *          導出する（Can_Hw_GetErrorState() 参照）。
+ *
+ * \param[in]   Controller     対象コントローラ ID (0 固定)。
+ * \param[out]  ErrorStatePtr  エラー状態の格納先。NULL 禁止。
+ *
+ * \retval  E_OK      ErrorStatePtr へ格納した。
+ * \retval  E_NOT_OK  未初期化、Controller が範囲外、または ErrorStatePtr が NULL。
+ *
+ * \ServiceID      {0x0B}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType Can_GetControllerErrorState(uint8 Controller, Can_ErrorStateType* ErrorStatePtr)
+{
+    DET_LOGT(TAG, "called");
+
+    if (Can_ConfigPtr == NULL)
+    {
+        Det_ReportError(CAN_MODULE_ID, 0U, CAN_API_ID_GET_CONTROLLER_ERROR_STATE, CAN_E_UNINIT);
+        return E_NOT_OK;
+    }
+
+    if (Controller != 0U)
+    {
+        Det_ReportError(CAN_MODULE_ID, 0U, CAN_API_ID_GET_CONTROLLER_ERROR_STATE, CAN_E_PARAM_CONTROLLER);
+        return E_NOT_OK;
+    }
+
+    if (ErrorStatePtr == NULL)
+    {
+        Det_ReportError(CAN_MODULE_ID, 0U, CAN_API_ID_GET_CONTROLLER_ERROR_STATE, CAN_E_PARAM_POINTER);
+        return E_NOT_OK;
+    }
+
+    uint8_t rawState;
+    if (Can_Hw_GetErrorState(&rawState) != CAN_HW_OK)
+        return E_NOT_OK;
+
+    *ErrorStatePtr = (Can_ErrorStateType)rawState;
+    return E_OK;
+}
+
+/**
  * \brief   CAN フレームの送信を要求する。
  *
  * \details PDU を MCP2515 の送信バッファに渡し、送信成功時は swPduHandle を

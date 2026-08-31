@@ -728,6 +728,47 @@ Std_ReturnType CanIf_GetControllerMode(uint8 ControllerId, Can_ControllerStateTy
 }
 
 /**
+ * \brief   CAN コントローラのエラー状態 (Active/Passive/Bus-Off) を取得する。
+ *
+ * \details [SWS_CANIF_91001] の通り、対応する CAN ドライバのサービス
+ *          （本プロジェクトでは Can_GetControllerErrorState()、AUTOSAR
+ *          非標準の拡張。Can.c 参照）へそのまま転送する。
+ *
+ * \param[in]   ControllerId   対象コントローラの ID。
+ * \param[out]  ErrorStatePtr  エラー状態の格納先。NULL 禁止。
+ *
+ * \retval  E_OK      ErrorStatePtr へ格納した。
+ * \retval  E_NOT_OK  ControllerId が範囲外、ErrorStatePtr が NULL、または
+ *                      下位の Can ドライバが失敗した。
+ *
+ * \AUTOSARReq     {SWS_CANIF_91001}
+ * \ServiceID      {0x4B}
+ * \Reentrancy     {Non Reentrant for the same ControllerId}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType CanIf_GetControllerErrorState(uint8 ControllerId, Can_ErrorStateType* ErrorStatePtr)
+{
+    DET_LOGT(TAG, "called");
+
+    if (CanIf_ConfigPtr == NULL)
+        return E_NOT_OK;
+
+    if (ControllerId >= CANIF_CONTROLLER_MAX)
+    {
+        Det_ReportError(CANIF_MODULE_ID, 0U, CANIF_API_ID_GET_CONTROLLER_ERROR_STATE, CANIF_E_PARAM_CONTROLLERID);
+        return E_NOT_OK;
+    }
+
+    if (ErrorStatePtr == NULL)
+    {
+        Det_ReportError(CANIF_MODULE_ID, 0U, CANIF_API_ID_GET_CONTROLLER_ERROR_STATE, CANIF_E_PARAM_POINTER);
+        return E_NOT_OK;
+    }
+
+    return Can_GetControllerErrorState(ControllerId, ErrorStatePtr);
+}
+
+/**
  * \brief   CAN インタフェースモジュールのバージョン情報を取得する。
  *
  * \param[out]  versioninfo  バージョン情報の格納先。NULL 禁止。

@@ -21,6 +21,13 @@
 
 #define TAG "Can_Hw"
 
+/* MCP2515 EFLG レジスタのビット位置。Can_Hw_IsBusOff()/Can_Hw_GetErrorState()
+ * の両方がここを参照することで、値の食い違い（重複定義の一方だけ更新漏れ）を
+ * 防ぐ（/code-review 指摘）。 */
+#define MCP_EFLG_TXBO  0x20U  /* bit5: Bus-Off             */
+#define MCP_EFLG_TXEP  0x10U  /* bit4: TX Error-Passive    */
+#define MCP_EFLG_RXEP  0x08U  /* bit3: RX Error-Passive    */
+
 static uint8_t  driverBuf[sizeof(MCP_CAN)];
 static MCP_CAN* driver = nullptr;
 static uint8_t  Can_Hw_IntPin = 0xFFU;  /**< Can_Hw_AttachRxIsr() が登録したピン番号 */
@@ -168,7 +175,34 @@ Can_Hw_ReturnType Can_Hw_IsBusOff(void)
     }
 
     /* MCP2515 EFLG bit5 = TXBO（Bus-Off Error Flag） */
-    return ((eflg & 0x20U) != 0U) ? CAN_HW_OK : CAN_HW_FAIL;
+    return ((eflg & MCP_EFLG_TXBO) != 0U) ? CAN_HW_OK : CAN_HW_FAIL;
+}
+
+Can_Hw_ReturnType Can_Hw_GetErrorState(uint8_t* errorStateOut)
+{
+    if (driver == nullptr) return CAN_HW_FAIL;
+
+    /* Bus-Off 判定は Can_Hw_IsBusOff() に委譲し、条件式を二重定義しない
+     * （/simplify reuse 指摘）。getError() を都度読み直す分 SPI 読み出しが
+     * 1 回増えるが、本関数は Os_MainFunction からは呼ばれない診断用の
+     * オンデマンド API のため負荷への影響はない（/simplify efficiency 確認済み）。 */
+    if (Can_Hw_IsBusOff() == CAN_HW_OK)
+    {
+        *errorStateOut = 2U;        /* CAN_ERRORSTATE_BUSOFF */
+        return CAN_HW_OK;
+    }
+
+    /* Error-Passive は TEC/REC のどちらか一方でも閾値超過すれば成立する
+     * （TXEP/RXEP は独立にセットされうる。/code-review 指摘: RXEP 側の
+     * チェック漏れがあった。バス端の受信のみが劣化する環境ノイズ等で
+     * REC だけが上がるケースを見逃していた）。 */
+    uint8_t eflg = driver->getError();
+    if ((eflg & (MCP_EFLG_TXEP | MCP_EFLG_RXEP)) != 0U)
+        *errorStateOut = 1U;        /* CAN_ERRORSTATE_PASSIVE */
+    else
+        *errorStateOut = 0U;        /* CAN_ERRORSTATE_ACTIVE */
+
+    return CAN_HW_OK;
 }
 
 Can_Hw_ReturnType Can_Hw_AttachRxIsr(uint8_t intPin, void (*isr)(void))

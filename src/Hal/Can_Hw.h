@@ -42,6 +42,14 @@ Can_Hw_ReturnType Can_Hw_SetMode(Can_Hw_Mode mode);
 Can_Hw_ReturnType Can_Hw_CheckReceive(void);
 Can_Hw_ReturnType Can_Hw_IsBusOff(void);
 
+/** MCP2515 の EFLG レジスタから、Bus-Off/Error-Passive/Active の3状態を
+ *  導出して *errorStateOut に格納する（0=Active, 1=Passive, 2=Bus-Off。
+ *  Can_GeneralTypes.h の Can_ErrorStateType と同じ数値のため、呼び出し元は
+ *  そのままキャストして使ってよい）。このヘッダは AUTOSAR 型に依存しない
+ *  方針（Can_Hw.h 冒頭コメント参照）のため、値そのものは uint8_t で返す。
+ *  \retval  CAN_HW_FAIL  ドライバ未初期化。*errorStateOut は変更しない。 */
+Can_Hw_ReturnType Can_Hw_GetErrorState(uint8_t* errorStateOut);
+
 /** SLEEP 中の INT ピン（アクティブ LOW）を直接ポーリングし、ウェイクアップ
  *  要因がまだアサートされているかを返す。Can_Hw_AttachRxIsr() が登録した
  *  ピン番号を内部で覚えているため、呼び出し側はピン番号を意識しない。

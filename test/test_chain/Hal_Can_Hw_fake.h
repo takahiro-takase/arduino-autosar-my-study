@@ -24,6 +24,7 @@ extern uint32 FakeCanHw_InitFilterCount;
 extern uint32 FakeCanHw_SetModeCount;
 extern uint32 FakeCanHw_CheckReceiveCount;
 extern uint32 FakeCanHw_IsBusOffCount;
+extern uint32 FakeCanHw_GetErrorStateCount;
 extern uint32 FakeCanHw_IsWakeupPendingCount;
 extern uint32 FakeCanHw_AttachRxIsrCount;
 
@@ -63,6 +64,11 @@ extern Can_Hw_ReturnType FakeCanHw_InitReturn;
 extern Can_Hw_ReturnType FakeCanHw_SendReturn;
 extern Can_Hw_ReturnType FakeCanHw_IsBusOffReturn;
 extern Can_Hw_ReturnType FakeCanHw_IsWakeupPendingReturn;
+
+/** Can_Hw_GetErrorState() が *errorStateOut へ書き込む値（既定 0 = Active）と
+ *  戻り値（既定 CAN_HW_OK）。 */
+extern uint8_t            FakeCanHw_ErrorState;
+extern Can_Hw_ReturnType  FakeCanHw_GetErrorStateReturn;
 
 /** 各テストケースの開始時に呼び、記録・戻り値設定をすべて初期状態に戻す。 */
 void FakeCanHw_Reset(void);
