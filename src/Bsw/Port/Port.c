@@ -107,3 +107,21 @@ void Port_GetVersionInfo(Std_VersionInfoType* versioninfo)
     versioninfo->sw_minor_version = PORT_SW_MINOR_VERSION;
     versioninfo->sw_patch_version = PORT_SW_PATCH_VERSION;
 }
+
+/**
+ * \brief   指定ピンのモードを切り替える（詳細は Port.h 参照）。
+ *
+ * \ServiceID      {0x04}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void Port_SetPinMode(Port_PinType Pin, Port_PinModeType Mode)
+{
+    DET_LOGT(TAG, "called");
+    (void)Pin;
+    (void)Mode;
+    /* [SWS_Port_00223]: 本プロジェクトは全ピンが PortPinModeChangeable=FALSE
+     * 相当（Port.h の Port_SetPinMode() ドキュメント参照）のため、常にこの
+     * エラーを報告するだけで他には何もしない。 */
+    Det_ReportError(PORT_MODULE_ID, 0U, PORT_API_ID_SET_PIN_MODE, PORT_E_MODE_UNCHANGEABLE);
+}

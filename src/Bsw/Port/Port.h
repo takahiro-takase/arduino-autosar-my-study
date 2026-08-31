@@ -36,6 +36,14 @@ typedef uint8 Port_PinDirectionType;
 #define PORT_PIN_IN_PULLUP   2U  /**< 入力方向（内部プルアップ有効）ボタン等に使用 */
 
 /**
+ * \brief   ピンモード型（[SWS_Port_00231]。UART/SPI 等への切替を表す
+ *          MCU 固有の値域だが、本プロジェクトは Arduino のデジタル
+ *          ピンしか扱わずモード切替の概念自体を持たないため未使用。
+ *          Port_SetPinMode() のドキュメント参照）。
+ */
+typedef uint8 Port_PinModeType;
+
+/**
  * \brief   Port_Init() の設定引数型（不透明型）。
  *
  * \details SWS_Port_00140 は post-build 設定データ（各ピンの方向等）への
@@ -110,6 +118,27 @@ void Port_RefreshPortDirection(void);
  * \Synchronicity  {Synchronous}
  */
 void Port_GetVersionInfo(Std_VersionInfoType* versioninfo);
+
+/**
+ * \brief   指定ピンのモードを切り替える。
+ *
+ * \details [SWS_Port_00125] はランタイム中のピンモード切替（UART/SPI 等の
+ *          代替機能への切替）を規定するが、本プロジェクトは Arduino の
+ *          デジタルピンしか扱わずモード切替の概念自体を持たない。
+ *          [SWS_Port_00223] の通り、"PortPinModeChangeable" が FALSE の
+ *          ピンでは PORT_E_MODE_UNCHANGEABLE を報告し他に何もしないことが
+ *          要求されており、本プロジェクトは全ピンがこれに該当するため、
+ *          常にこのエラーを報告するだけの実装とする（学習用簡略化）。
+ *
+ * \param[in]  Pin   対象ピン番号。
+ * \param[in]  Mode  新しいピンモード（本実装では未使用）。
+ *
+ * \AUTOSARReq     {SWS_Port_00125, SWS_Port_00223}
+ * \ServiceID      {0x04}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void Port_SetPinMode(Port_PinType Pin, Port_PinModeType Mode);
 
 #ifdef __cplusplus
 }
