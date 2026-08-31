@@ -29,12 +29,14 @@
 #define PORT_MODULE_ID  124U
 
 /** 開発エラーコード（SWS_Port 7.x Development Error 表より、GetVersionInfo の
- *  NULL チェックのみ使用） */
-#define PORT_E_PARAM_POINTER  0x10U
+ *  NULL チェックと Port_SetPinMode() のみ使用） */
+#define PORT_E_PARAM_POINTER      0x10U
+#define PORT_E_MODE_UNCHANGEABLE  0x0EU
 
 /** ApiId（各関数の Doxygen \ServiceID タグと一致させること。値は SWS 8.x 章の
  *  「Service ID[hex]」記載を実測して確認済み） */
 #define PORT_API_ID_GET_VERSION_INFO  0x03U
+#define PORT_API_ID_SET_PIN_MODE      0x04U
 
 /** バージョン情報（SWS_Port_GetVersionInfo、Com/E2EXf/PduR 等の既存モジュールと同じ命名規則） */
 #define PORT_VENDOR_ID          0U
