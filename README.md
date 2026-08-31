@@ -891,9 +891,9 @@ App_EngineManager_Run()（3000ms 周期）:
     NO  → s_offCycles = 0、Rte_Call_ComM_RequestComMode(FULL_COM)
 ```
 
-`ComM_RequestComMode(COMM_USER_0, NO_COM)` は、Dcm（`COMM_USER_1`）が
-extendedSession で FULL_COM を要求し続けている間は無効化されます
-（ComM の複数ユーザ調停、前述の「ComM（通信マネージャ）」セクション参照）。
+`ComM_RequestComMode(COMM_USER_0, NO_COM)` は、Dcm が `ComM_DCM_ActiveDiagnostic()`
+で extendedSession 中を通知し続けている間は無効化されます
+（ComM のユーザ・診断アクティブ通知調停、前述の「ComM（通信マネージャ）」セクション参照）。
 つまり「エンジンが止まっていて、かつ診断ツールも繋がっていない」ときだけ
 実際にスリープします。
 

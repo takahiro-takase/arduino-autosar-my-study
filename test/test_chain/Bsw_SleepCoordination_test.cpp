@@ -283,6 +283,50 @@ TEST_F(Bsw_SleepCoordination_Test, ReRequestFullCom_OK_CancelsPendingNmRelease)
     EXPECT_EQ(FakeCanHw_SetModeCount, 0U);
 }
 
+TEST_F(Bsw_SleepCoordination_Test, DcmActiveDiagnostic_OK_KeepsFullComEvenWhenUser0RequestsNoCom)
+{
+    ArrangeFullCom();
+    ComM_DCM_ActiveDiagnostic(0U);
+
+    /* 実行 (Act): 唯一の実ユーザ (COMM_USER_0) が NO_COM を要求しても、
+     * Dcm の診断アクティブ通知 ([SWS_ComM_00876]) が集約結果を FULL_COM に
+     * 強制するはず。 */
+    ASSERT_EQ(ComM_RequestComMode(COMM_USER_0, COMM_NO_COMMUNICATION), E_OK);
+
+    /* 評価 (Assert): Nm を何周期回しても Bus-Sleep へは向かわない
+     * （Nm_NetworkRelease() 自体が送られていないはず）。 */
+    Nm_StateType state;
+    Nm_ModeType  nmMode;
+    for (int i = 0; i < 15; i++)
+    {
+        FakeMillis_Value += NM_CYCLE_MS;
+        Nm_MainFunction();
+        ASSERT_EQ(Nm_GetState(NM_MAIN_NETWORK_HANDLE, &state, &nmMode), E_OK);
+        ASSERT_NE(state, NM_STATE_BUS_SLEEP);
+    }
+    ComM_ModeType mode = COMM_NO_COMMUNICATION;
+    ASSERT_EQ(ComM_GetCurrentComMode(COMM_USER_0, &mode), E_OK);
+    EXPECT_EQ(mode, static_cast<ComM_ModeType>(COMM_FULL_COMMUNICATION));
+}
+
+TEST_F(Bsw_SleepCoordination_Test, DcmInactiveDiagnostic_OK_AllowsSleepOnceUser0AlsoReleased)
+{
+    ArrangeFullCom();
+    ComM_DCM_ActiveDiagnostic(0U);
+    ASSERT_EQ(ComM_RequestComMode(COMM_USER_0, COMM_NO_COMMUNICATION), E_OK);
+
+    /* 実行 (Act): Dcm が診断セッションを終える（S3 タイムアウト等に相当）。
+     * 唯一の実ユーザも既に NO_COM 要求済みのため、今度こそ集約結果が変化し
+     * Nm の協調スリープが進むはず。 */
+    ComM_DCM_InactiveDiagnostic(0U);
+    DriveNmUntil(NM_STATE_BUS_SLEEP);
+
+    ComM_ModeType mode = COMM_FULL_COMMUNICATION;
+    ASSERT_EQ(ComM_GetCurrentComMode(COMM_USER_0, &mode), E_OK);
+    EXPECT_EQ(mode, static_cast<ComM_ModeType>(COMM_NO_COMMUNICATION));
+    EXPECT_EQ(Can_Test_GetControllerState(), CAN_CS_SLEEP);
+}
+
 TEST_F(Bsw_SleepCoordination_Test, BusOffDuringNmWinddown_OK_DoesNotResurrectNm)
 {
     ArrangeFullCom();

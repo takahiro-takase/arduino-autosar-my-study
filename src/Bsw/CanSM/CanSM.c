@@ -47,8 +47,9 @@
  *          正常系（ボランタリ）スリープとウェイクアップ（Nm による協調スリープ）:
  *            App_EngineManager が「エンジン OFF が一定サイクル継続 = 通信不要」と
  *            判断すると ComM_RequestComMode(COMM_USER_0, NO_COM) を要求する。
- *            Dcm（COMM_USER_1）も extendedSession でなければ ComM の集約結果が
- *            NO_COM になるが、ComM はこの時点では CanSM を一切呼ばず
+ *            Dcm も ComM_DCM_ActiveDiagnostic() で extendedSession 中を通知して
+ *            いなければ ComM の集約結果が NO_COM になるが、ComM はこの時点では
+ *            CanSM を一切呼ばず
  *            Nm_NetworkRelease() のみを Nm（CanNm 状態機械、Nm.c 参照）へ送る
  *            （[SWS_ComM_00133]、詳細は ComM.c ファイル冒頭コメント参照）。
  *            Nm 自身が Ready Sleep → Prepare Bus-Sleep → Bus-Sleep Mode と

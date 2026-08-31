@@ -145,6 +145,43 @@ Std_ReturnType ComM_RequestComMode(ComM_UserHandleType User, ComM_ModeType ComMo
 Std_ReturnType ComM_GetCurrentComMode(ComM_UserHandleType User, ComM_ModeType* ComMode);
 
 /**
+ * \brief   Dcm から、対象チャネルで診断セッションが進行中であることを通知する。
+ *
+ * \details [SWS_ComM_00876]。実ユーザの要求に関わらず、以降
+ *          ComM_DCM_InactiveDiagnostic() が呼ばれるまで常に
+ *          COMM_FULL_COMMUNICATION を要求する仮想ユーザとして扱う。
+ *          潜在的な通信制限（ComM_LimitChannelToNoComMode 等、本プロジェクト
+ *          未実装）を一時的に無効化する趣旨だが、本プロジェクトは
+ *          ComM_RequestComMode() の集約ロジックへ仮想ユーザとして参加させる
+ *          ことで同じ効果（誰か一人でも通信を必要としていればバスは落とさない）
+ *          を実現する（ComM.c 参照）。
+ *
+ * \param[in]  Channel  診断通信が必要になったチャネル (0 固定)。
+ *
+ * \AUTOSARReq     {SWS_ComM_00873}
+ * \ServiceID      {0x1F}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void ComM_DCM_ActiveDiagnostic(uint8 Channel);
+
+/**
+ * \brief   Dcm から、対象チャネルで診断セッションが終了したことを通知する。
+ *
+ * \details [SWS_ComM_00876]。ComM_DCM_ActiveDiagnostic() が課していた仮想
+ *          COMM_FULL_COMMUNICATION 要求を解除する。他の実ユーザがまだ
+ *          COMM_FULL_COMMUNICATION を要求していれば、チャネルは維持される。
+ *
+ * \param[in]  Channel  診断通信が不要になったチャネル (0 固定)。
+ *
+ * \AUTOSARReq     {SWS_ComM_00874}
+ * \ServiceID      {0x20}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void ComM_DCM_InactiveDiagnostic(uint8 Channel);
+
+/**
  * \brief   ComM 周期処理（バス通信状態の監視）。
  *
  * \details 意図的な NOP。[SWS_ComM_00888] のとおり `ComMNmVariant=FULL`

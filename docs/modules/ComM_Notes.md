@@ -14,36 +14,48 @@ CAN バスの通信モード（NO_COM / SILENT_COM / FULL_COM）を決定する�
 
 当初は EcuM（`COMM_USER_0`）だけが起動時に一度 FULL_COM を要求し、以後誰も要求を
 変えない「実質1ユーザ」の実装でした。Dcm の SID 0x2F (IOControl) 実装を機に、
-Dcm を2人目のユーザ（`COMM_USER_1`）として追加し、`ComM_RequestComMode()` に
-複数ユーザの要求を実際に集約するロジックを実装しました。
+`ComM_RequestComMode()` に複数要求元を実際に集約するロジックを実装しました
+（当時は Dcm も2人目のユーザ `COMM_USER_1` として実装していましたが、2026-08 の
+シグネチャ準拠サーベイで本来の `ComM_DCM_ActiveDiagnostic`/`InactiveDiagnostic`
+API へ置き換え、現在ユーザは `COMM_USER_0` のみです。下記「Dcm との連携」参照）。
 
 ```
-ComM_RequestComMode(User, ComMode):
-  ComM_UserRequest[User] = ComMode            ← このユーザの要求を記録
+ComM_ComputeAggregatedMode():
   aggregated = max(ComM_UserRequest[0..N-1])  ← 全ユーザの要求のうち最も通信レベルの
                                                 高いモードを採用
                                                 (FULL_COM(2) > SILENT_COM(1) > NO_COM(0))
+  Dcm が ComM_DCM_ActiveDiagnostic() で診断中を通知していれば aggregated=FULL_COM に上書き
+  return aggregated
+
+ComM_RequestComMode(User, ComMode):
+  ComM_UserRequest[User] = ComMode
+  aggregated = ComM_ComputeAggregatedMode()
   aggregated == 現在のチャネルモード ?
     YES → 何もしない（要求は記録されたがチャネルへの反映は不要）
     NO  → CanSM_RequestComMode(0, aggregated) ← チャネルへ実際に反映
 ```
 
 「誰か一人でも通信を必要としていればバスは落とさない」という考え方で、
-1人が NO_COM を要求しても他のユーザが FULL_COM を要求していればチャネルは
+ユーザが NO_COM を要求しても Dcm が診断中を通知していればチャネルは
 FULL_COM のまま維持されます。
 
-## Dcm との連携（`COMM_USER_1`）
+## Dcm との連携（`ComM_DCM_ActiveDiagnostic`/`InactiveDiagnostic`）
 
-`Dcm_Cbk.c` は診断セッションの状態に応じて `COMM_USER_1` の要求を更新します
+`Dcm_Cbk.c` は診断セッションの状態に応じて ComM への診断アクティブ通知を更新します
 （`Dcm_UpdateComMRequest()`、セッション遷移が起こるすべての経路から呼ばれる）。
 
-| タイミング | 要求するモード |
+| タイミング | 呼び出し |
 |-----------|---------------|
-| extendedSession に入ったとき（SID 0x10/0x03） | `COMM_FULL_COMMUNICATION` |
-| defaultSession へ戻ったとき（明示要求・S3タイムアウト・ECUReset のいずれも） | `COMM_NO_COMMUNICATION` |
+| extendedSession に入ったとき（SID 0x10/0x03） | `ComM_DCM_ActiveDiagnostic(0)` |
+| defaultSession へ戻ったとき（明示要求・S3タイムアウト・ECUReset のいずれも） | `ComM_DCM_InactiveDiagnostic(0)` |
 
 「診断ツールが繋がっている間はバスを落とさない」という実車でもよくある要件を、
-EcuM（`COMM_USER_0`）とは独立したユーザ要求として表現しています。
+[SWS_ComM_00873]/[SWS_ComM_00874] が規定する専用 API 経由で、EcuM
+（`COMM_USER_0`）の要求とは独立に表現しています（[SWS_ComM_00876] のとおり、
+実装上は `ComM_ComputeAggregatedMode()` が実ユーザの集約結果に関わらず
+`COMM_FULL_COMMUNICATION` を強制する形。旧実装は仕様の専用 API が本プロジェクトに
+無かったため汎用ユーザースロット `COMM_USER_1` を Dcm 専用に流用していたが、
+2026-08 のシグネチャ準拠サーベイで本来の API へ置き換えた）。
 
 ## App_EngineManager との連携（`COMM_USER_0`）
 
@@ -53,19 +65,20 @@ EcuM（`COMM_USER_0`）とは独立したユーザ要求として表現してい
 実際に解放するようになりました（ボランタリスリープ。詳細は README の「CAN 通信スタック」
 セクションの「ボランタリスリープとウェイクアップ」を参照）。
 
-これにより、複数ユーザ調停が実際に意味を持つ場面が生まれました。
-「エンジンが止まっていて（`COMM_USER_0` が NO_COM 要求）、かつ診断ツールも
-繋がっていない（`COMM_USER_1` も NO_COM 要求）」ときだけ集約結果が NO_COM になり、
-どちらか一方でも通信を必要としていればチャネルは FULL_COM のまま維持されます。
+これにより、ユーザ要求と Dcm の診断アクティブ通知の調停が実際に意味を持つ場面が
+生まれました。「エンジンが止まっていて（`COMM_USER_0` が NO_COM 要求）、かつ
+診断ツールも繋がっていない（Dcm が `ComM_DCM_ActiveDiagnostic()` を通知していない）」
+ときだけ集約結果が NO_COM になり、どちらか一方でも通信を必要としていればチャネルは
+FULL_COM のまま維持されます。
 
 ```
 [Extended Session 突入中にエンジン OFF が継続した場合]
 INFO AppEng: OFF continued 5 cycles -> release COMM_USER_0 (voluntary sleep)
-INFO ComM: User0 req=0 -> aggregated=2 (channel=2)   ← User1(Dcm)がFULL_COM(2)要求中のため変化なし
+INFO ComM: User0 req=0 -> aggregated=2 (channel=2)   ← DcmがActiveDiagnostic通知中のため変化なし
 
 [Extended Session 終了後、なおエンジン OFF が継続していた場合]
 INFO Dcm: S3 timeout -> session=Default
-INFO ComM: User1 req=0 -> aggregated=0 (channel=2)   ← User0も既にNO_COM要求済みのため今度こそ集約結果が変化
+INFO ComM: DCM InactiveDiagnostic ch=0 -> aggregated=0   ← User0も既にNO_COM要求済みのため今度こそ集約結果が変化
 INFO CanSM: ->NO_COM (CAN controller SLEEP)
 ```
 
@@ -75,25 +88,28 @@ CanSM がウェイクアップ検証成功時に `ComM_BusSM_ModeIndication(FULL
 チャネル状態を更新するのは、どのユーザの要求でもない自動的な変化です。これを
 放置すると `ComM_UserRequest[COMM_USER_0]` がスリープ突入時の古い値（`NO_COM`）
 のまま残り、`App_EngineManager_Run()` がまだ 1 周期も再評価していない
-（Task 2 が次に実行されるのは最大3000ms後）わずかな間に他ユーザ（Dcm）が
-要求を変化させただけで、User0 の古い要求と誤って再集約され、ウェイクアップ
-直後に意図せず即座に再スリープしてしまいます。
+（Task 2 が次に実行されるのは最大3000ms後）わずかな間に Dcm の診断アクティブ
+通知（`ComM_DcmActiveDiagnostic[]`）が変化しただけで、User0 の古い要求と
+誤って再集約され、ウェイクアップ直後に意図せず即座に再スリープしてしまいます。
 
 これを防ぐため `ComM_BusSM_ModeIndication()` は `FULL_COM`/`NO_COM` を通知するとき、
 `ComM_UserRequest[COMM_USER_0]` もその値へ同期します。CanSM 側の自動的な状態変化を
 「User0 の暫定的な要求」とみなすことで、App_EngineManager が次に実際のエンジン
-状態に基づいて要求し直すまでの間、矛盾のない値を保持できます。Dcm
-（`COMM_USER_1`）の要求はセッション状態に基づく独立した判断のため、これには
-同期させません（実機で発見された経緯は
-後述の「[開発の経緯](#ウェイクアップ直後の再集約による即座の再スリープ)」参照）。
+状態に基づいて要求し直すまでの間、矛盾のない値を保持できます。Dcm の診断
+アクティブ通知はセッション状態に基づく独立した判断のため（そもそも
+`ComM_UserRequest[]` とは別の配列のため対象外）、これには同期させません
+（実機で発見された経緯は後述の
+「[開発の経緯](#ウェイクアップ直後の再集約による即座の再スリープ)」参照。
+発見当時は Dcm も `COMM_USER_1` として `ComM_UserRequest[]` に参加していたが、
+2026-08 のシグネチャ準拠サーベイで専用 API へ置き換えた後も、この非同期の
+方針自体は変わらない）。
 
 ## ComM 設定（`ComM_Cfg.h`）
 
 | 定数 | 既定値 | 意味 |
 |------|--------|------|
-| `COMM_USER_COUNT` | 2 | 通信モードを要求できるユーザ数 |
+| `COMM_USER_COUNT` | 1 | 通信モードを要求できるユーザ数（Dcm は `COMM_DCM_ActiveDiagnostic`/`InactiveDiagnostic` 経由のため対象外） |
 | `COMM_USER_0` | 0 | EcuM/App_EngineManager（エンジン運転中は FULL_COM、OFF 継続時は NO_COM を要求） |
-| `COMM_USER_1` | 1 | Dcm（extendedSession の間だけ FULL_COM を要求） |
 
 ## ComM_MainFunction が NOP である理由
 

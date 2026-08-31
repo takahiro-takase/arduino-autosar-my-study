@@ -132,6 +132,12 @@ static ComM_ModeType ComM_EcuMRunMode;
  *  区別が付かないため別途持つ。 */
 static uint8 ComM_Initialized = 0U;
 
+/** 1 = 対象チャネルで Dcm が ComM_DCM_ActiveDiagnostic() により診断セッション
+ *  進行中であることを通知済み（[SWS_ComM_00876]）。1 の間、ComM_UserRequest[]
+ *  の集約結果に関わらず常に COMM_FULL_COMMUNICATION を要求する仮想ユーザとして
+ *  扱う（ComM_ComputeAggregatedMode() 参照）。 */
+static uint8 ComM_DcmActiveDiagnostic[COMM_CHANNEL_COUNT];
+
 /**
  * \brief   ComM モジュールを初期化する。
  *
@@ -151,8 +157,9 @@ void ComM_Init(const ComM_ConfigType* ConfigPtr)
     uint8 i;
     for (i = 0U; i < COMM_CHANNEL_COUNT; i++)
     {
-        ComM_ChannelMode[i]      = COMM_NO_COMMUNICATION;
-        ComM_NmReleasePending[i] = 0U;
+        ComM_ChannelMode[i]         = COMM_NO_COMMUNICATION;
+        ComM_NmReleasePending[i]    = 0U;
+        ComM_DcmActiveDiagnostic[i] = 0U;
     }
     for (i = 0U; i < COMM_USER_COUNT; i++)
         ComM_UserRequest[i] = COMM_NO_COMMUNICATION;
@@ -202,48 +209,19 @@ Std_ReturnType ComM_GetStatus(ComM_InitStatusType* Status)
 }
 
 /**
- * \brief   ユーザが通信モードを要求する。
+ * \brief   ComM_UserRequest[] と ComM_DcmActiveDiagnostic[] から、チャネル0の
+ *          集約要求モードを計算する。
  *
- * \details ユーザの要求を記録した後、全ユーザの要求のうち最も通信レベルの高い
- *          モード（FULL_COM > SILENT_COM > NO_COM）へ集約し、集約結果が
- *          チャネルの現状と異なる場合のみ CanSM へ転送する。
- *          1 ユーザだけが FULL_COM を要求していても、
- *          他のユーザが NO_COM を要求している間はチャネルは FULL_COM のまま
- *          維持される（「誰か一人でも通信を必要としていればバスは落とさない」）。
- *
- * \param[in]  User     要求するユーザ ID (COMM_USER_0 / COMM_USER_1)。
- * \param[in]  ComMode  要求する通信モード。
- *
- * \retval  E_OK      要求を受理した（チャネルが実際に遷移したとは限らない）。
- * \retval  E_NOT_OK  User が範囲外、ComMode が不正、または CanSM への転送が失敗した
- *                    （Bus-Off 回復中等）。
- *
- * \AUTOSARReq     {SWS_ComM_00686, SWS_ComM_00500, SWS_ComM_00069}
- * \ServiceID      {0x05}
- * \Reentrancy     {Non Reentrant}
- * \Synchronicity  {Synchronous}
+ * \details 全ユーザの要求のうち最も通信レベルの高いモード（FULL_COM >
+ *          SILENT_COM > NO_COM）へ集約する。COMM_FULL_COMMUNICATION(2) >
+ *          COMM_SILENT_COMMUNICATION(1) > COMM_NO_COMMUNICATION(0) と値
+ *          そのものが優先順位になっているため、単純な最大値計算で集約できる。
+ *          Dcm が ComM_DCM_ActiveDiagnostic() で診断セッション進行中を通知
+ *          している間は、[SWS_ComM_00876] のとおり実ユーザの要求に関わらず
+ *          常に COMM_FULL_COMMUNICATION を要求する仮想ユーザとして扱う。
  */
-Std_ReturnType ComM_RequestComMode(ComM_UserHandleType User, ComM_ModeType ComMode)
+static ComM_ModeType ComM_ComputeAggregatedMode(void)
 {
-    DET_LOGT(TAG, "called");
-    if (!ComM_Initialized)
-    {
-        Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_REQUEST_COM_MODE, COMM_E_UNINIT);
-        return E_NOT_OK;
-    }
-
-    if (User >= COMM_USER_COUNT || ComMode > COMM_FULL_COMMUNICATION)
-    {
-        Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_REQUEST_COM_MODE, COMM_E_WRONG_PARAMETERS);
-        return E_NOT_OK;
-    }
-
-    ComM_UserRequest[User] = ComMode;
-
-    /* 全ユーザの要求のうち最も通信レベルの高いモードへ集約する。
-     * COMM_FULL_COMMUNICATION(2) > COMM_SILENT_COMMUNICATION(1) >
-     * COMM_NO_COMMUNICATION(0) と値そのものが優先順位になっているため、
-     * 単純な最大値計算で集約できる。 */
     ComM_ModeType aggregated = COMM_NO_COMMUNICATION;
     uint8 i;
     for (i = 0U; i < COMM_USER_COUNT; i++)
@@ -251,18 +229,28 @@ Std_ReturnType ComM_RequestComMode(ComM_UserHandleType User, ComM_ModeType ComMo
         if (ComM_UserRequest[i] > aggregated)
             aggregated = ComM_UserRequest[i];
     }
+    if (ComM_DcmActiveDiagnostic[0U])
+        aggregated = COMM_FULL_COMMUNICATION;
+    return aggregated;
+}
 
-    DET_LOGI(TAG, "User%u req=%u -> aggregated=%u (channel=%u)",
-             (unsigned)User, (unsigned)ComMode,
-             (unsigned)aggregated, (unsigned)ComM_ChannelMode[0U]);
-
+/**
+ * \brief   集約済み要求モード aggregated をチャネル0へ適用する。
+ *
+ * \details ComM_RequestComMode()/ComM_DCM_ActiveDiagnostic()/
+ *          ComM_DCM_InactiveDiagnostic() いずれが要求元でも同じ Nm 協調
+ *          スリープ絡みのレースコンディション処理を通す（挙動は要求元を
+ *          区別しない。「最新の集約結果が何か」だけを見る）。
+ */
+static Std_ReturnType ComM_ApplyAggregatedRequest(ComM_ModeType aggregated)
+{
     /* FULL_COM への（再）要求が Nm 協調スリープ待ち（ComM_NmReleasePending）の
      * 最中に来た場合は、他の何よりも先にこれを処理する（[SWS_ComM_00882] 相当）。
      * ComM_ChannelMode が現在何であるか（FULL_COM のまま据え置き中の通常ケース、
      * Nm が既に Prepare Bus-Sleep Mode へ到達し Stage 1（ComM_Nm_
      * PrepareBusSleepMode()）で SILENT_COM になっているケース、Bus-Off で
      * 一時的に SILENT_COM になっているケースのいずれであっても）に関わらず、
-     * ユーザーの最新の意思は「もう眠らなくていい」なので、まず解放を取り消す。
+     * 要求元の最新の意思は「もう眠らなくていい」なので、まず解放を取り消す。
      * 本関数自身はここで CanSM を直接呼ばないが、直後の Nm_NetworkRequest() の
      * 呼び出し結果として間接的に CanSM へ届く場合がある: Nm が既に Prepare
      * Bus-Sleep Mode へ到達済みであれば、Nm_NetworkRequest() は
@@ -297,7 +285,7 @@ Std_ReturnType ComM_RequestComMode(ComM_UserHandleType User, ComM_ModeType ComMo
     }
 
     /* 集約結果が現在のチャネル状態と同じなら何もしない
-     * （このユーザの要求変化が他ユーザの要求に埋もれて無効化されたケースを含む）。 */
+     * （要求元の要求変化が他の要求元の要求に埋もれて無効化されたケースを含む）。 */
     if (ComM_ChannelMode[0U] == aggregated)
         return E_OK;
 
@@ -351,6 +339,55 @@ Std_ReturnType ComM_RequestComMode(ComM_UserHandleType User, ComM_ModeType ComMo
 }
 
 /**
+ * \brief   ユーザが通信モードを要求する。
+ *
+ * \details ユーザの要求を記録した後、全ユーザの要求と Dcm の診断アクティブ
+ *          通知（ComM_DCM_ActiveDiagnostic()、ComM_ComputeAggregatedMode()
+ *          参照）のうち最も通信レベルの高いモード（FULL_COM > SILENT_COM >
+ *          NO_COM）へ集約し、集約結果がチャネルの現状と異なる場合のみ CanSM
+ *          へ転送する。1 ユーザだけが FULL_COM を要求していても、他のユーザが
+ *          NO_COM を要求している間はチャネルは FULL_COM のまま維持される
+ *          （「誰か一人でも通信を必要としていればバスは落とさない」）。
+ *
+ * \param[in]  User     要求するユーザ ID (COMM_USER_0)。
+ * \param[in]  ComMode  要求する通信モード。
+ *
+ * \retval  E_OK      要求を受理した（チャネルが実際に遷移したとは限らない）。
+ * \retval  E_NOT_OK  User が範囲外、ComMode が不正、または CanSM への転送が失敗した
+ *                    （Bus-Off 回復中等）。
+ *
+ * \AUTOSARReq     {SWS_ComM_00686, SWS_ComM_00500, SWS_ComM_00069}
+ * \ServiceID      {0x05}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType ComM_RequestComMode(ComM_UserHandleType User, ComM_ModeType ComMode)
+{
+    DET_LOGT(TAG, "called");
+    if (!ComM_Initialized)
+    {
+        Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_REQUEST_COM_MODE, COMM_E_UNINIT);
+        return E_NOT_OK;
+    }
+
+    if (User >= COMM_USER_COUNT || ComMode > COMM_FULL_COMMUNICATION)
+    {
+        Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_REQUEST_COM_MODE, COMM_E_WRONG_PARAMETERS);
+        return E_NOT_OK;
+    }
+
+    ComM_UserRequest[User] = ComMode;
+
+    ComM_ModeType aggregated = ComM_ComputeAggregatedMode();
+
+    DET_LOGI(TAG, "User%u req=%u -> aggregated=%u (channel=%u)",
+             (unsigned)User, (unsigned)ComMode,
+             (unsigned)aggregated, (unsigned)ComM_ChannelMode[0U]);
+
+    return ComM_ApplyAggregatedRequest(aggregated);
+}
+
+/**
  * \brief   ユーザの現在の通信モードを取得する。
  *
  * \ServiceID      {0x06}
@@ -381,6 +418,79 @@ Std_ReturnType ComM_GetCurrentComMode(ComM_UserHandleType User, ComM_ModeType* C
     /* ユーザ 0 → チャネル 0 の現在モードを返す */
     *ComMode = ComM_ChannelMode[0U];
     return E_OK;
+}
+
+/**
+ * \brief   Dcm から、対象チャネルで診断セッションが進行中であることを通知する。
+ *
+ * \details [SWS_ComM_00876]。実ユーザの要求に関わらず、以降
+ *          ComM_DCM_InactiveDiagnostic() が呼ばれるまで常に
+ *          COMM_FULL_COMMUNICATION を要求する仮想ユーザとして扱う
+ *          （ComM_ComputeAggregatedMode() 参照）。
+ *
+ * \param[in]  Channel  診断通信が必要になったチャネル。
+ *
+ * \AUTOSARReq     {SWS_ComM_00873}
+ * \ServiceID      {0x1F}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void ComM_DCM_ActiveDiagnostic(uint8 Channel)
+{
+    DET_LOGT(TAG, "called");
+    if (!ComM_Initialized)
+    {
+        Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_DCM_ACTIVE_DIAGNOSTIC, COMM_E_UNINIT);
+        return;
+    }
+
+    if (Channel >= COMM_CHANNEL_COUNT)
+    {
+        Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_DCM_ACTIVE_DIAGNOSTIC, COMM_E_WRONG_PARAMETERS);
+        return;
+    }
+
+    ComM_DcmActiveDiagnostic[Channel] = 1U;
+
+    ComM_ModeType aggregated = ComM_ComputeAggregatedMode();
+    DET_LOGI(TAG, "DCM ActiveDiagnostic ch=%u -> aggregated=%u", (unsigned)Channel, (unsigned)aggregated);
+    (void)ComM_ApplyAggregatedRequest(aggregated);
+}
+
+/**
+ * \brief   Dcm から、対象チャネルで診断セッションが終了したことを通知する。
+ *
+ * \details [SWS_ComM_00876]。ComM_DCM_ActiveDiagnostic() が課していた仮想
+ *          COMM_FULL_COMMUNICATION 要求を解除する。他の実ユーザがまだ
+ *          COMM_FULL_COMMUNICATION を要求していれば、チャネルは維持される。
+ *
+ * \param[in]  Channel  診断通信が不要になったチャネル。
+ *
+ * \AUTOSARReq     {SWS_ComM_00874}
+ * \ServiceID      {0x20}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void ComM_DCM_InactiveDiagnostic(uint8 Channel)
+{
+    DET_LOGT(TAG, "called");
+    if (!ComM_Initialized)
+    {
+        Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_DCM_INACTIVE_DIAGNOSTIC, COMM_E_UNINIT);
+        return;
+    }
+
+    if (Channel >= COMM_CHANNEL_COUNT)
+    {
+        Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_DCM_INACTIVE_DIAGNOSTIC, COMM_E_WRONG_PARAMETERS);
+        return;
+    }
+
+    ComM_DcmActiveDiagnostic[Channel] = 0U;
+
+    ComM_ModeType aggregated = ComM_ComputeAggregatedMode();
+    DET_LOGI(TAG, "DCM InactiveDiagnostic ch=%u -> aggregated=%u", (unsigned)Channel, (unsigned)aggregated);
+    (void)ComM_ApplyAggregatedRequest(aggregated);
 }
 
 /**
@@ -440,8 +550,10 @@ static void ComM_RetryNmReleaseAfterBusOff(uint8 Network, const char* modeLabel)
  *          COMM_USER_0（App_EngineManager）はチャネルの実状態が「暫定的な自分の
  *          要求」であるとみなし、次回 App_EngineManager_Run() が実際の
  *          エンジン状態に基づいて改めて要求し直すまではこの値を使う。
- *          Dcm（COMM_USER_1）の要求はセッション状態に基づく独立した判断のため、
- *          ここでは同期しない。
+ *          Dcm の診断アクティブ通知（ComM_DCM_ActiveDiagnostic/
+ *          InactiveDiagnostic、ComM_DcmActiveDiagnostic[]）はセッション状態に
+ *          基づく独立した判断のため、ここでは同期しない（そもそも
+ *          ComM_UserRequest[] とは別の配列のため対象外）。
  *          注意: この再同期は COMM_SILENT_COMMUNICATION を対象にしていない
  *          （CanSM_ControllerBusOff() が Bus-Off 検出時に本関数を SILENT_COM で
  *          呼ぶ経路があるが、Bus-Off 回復中は CanSM_RequestComMode() 自体が

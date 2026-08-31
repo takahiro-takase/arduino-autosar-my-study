@@ -42,6 +42,8 @@
 #define COMM_API_ID_NM_NETWORK_MODE          0x18U
 #define COMM_API_ID_NM_PREPARE_BUS_SLEEP_MODE 0x19U
 #define COMM_API_ID_NM_BUS_SLEEP_MODE       0x1AU
+#define COMM_API_ID_DCM_ACTIVE_DIAGNOSTIC    0x1FU
+#define COMM_API_ID_DCM_INACTIVE_DIAGNOSTIC  0x20U
 #define COMM_API_ID_MAIN_FUNCTION           0x60U
 #define COMM_API_ID_DEINIT                  0x02U
 #define COMM_API_ID_GET_VERSION_INFO        0x10U
@@ -56,18 +58,16 @@
 /** 管理チャネル数 */
 #define COMM_CHANNEL_COUNT  1U
 
-/** 管理ユーザ数 */
-#define COMM_USER_COUNT     2U
+/** 管理ユーザ数
+ *  （2026-08 のシグネチャ準拠サーベイで Dcm 用の仮想ユーザースロット
+ *  COMM_USER_1 を廃止し ComM_DCM_ActiveDiagnostic/InactiveDiagnostic
+ *  （ComM.c 参照）へ置き換えたため、実ユーザは COMM_USER_0 のみになった） */
+#define COMM_USER_COUNT     1U
 
 /** チャネル 0 ID */
 #define COMM_CHANNEL_0      0U
 
 /** ユーザ 0 ID（EcuM が RUN 中は常時 FULL_COM を要求する。実質「エンジン運用アプリ」の代表） */
 #define COMM_USER_0         0U
-
-/** ユーザ 1 ID（Dcm。extendedSession の間だけ FULL_COM を要求し、
- *  defaultSession 復帰（明示要求 / S3 タイムアウト / ECUReset）で解除する。
- *  「診断ツールが繋がっている間はバスを落とさない」という実車の要件を再現する） */
-#define COMM_USER_1         1U
 
 #endif /* COMM_CFG_H */

@@ -125,16 +125,19 @@
  *            Dcm → CanTp_Transmit(CANTP_TX_SDU_ID) → PduR_Transmit → CanIf
  *            → Can_Write → MCP2515 → CAN 0x7E8
  *
- *          ComM ユーザ (COMM_USER_1) としての通信モード要求:
- *            extendedSession に入っている間、ComM_RequestComMode(COMM_USER_1,
- *            FULL_COMMUNICATION) を要求し続ける。defaultSession へ戻る
+ *          ComM への診断アクティブ通知 (ComM_DCM_ActiveDiagnostic/
+ *          InactiveDiagnostic、[SWS_ComM_00873]/[SWS_ComM_00874]):
+ *            extendedSession に入っている間、ComM_DCM_ActiveDiagnostic(0) で
+ *            診断セッション進行中を通知し続ける。defaultSession へ戻る
  *            （明示要求・S3 タイムアウト・ECUReset のいずれも）と同時に
- *            NO_COMMUNICATION へ要求を下げる。「診断ツールが繋がっている間は
- *            バスを落とさない」という実車の要件を、EcuM (COMM_USER_0) とは
- *            独立したユーザ要求として ComM に伝える。現状は EcuM が常時
- *            FULL_COM を要求し続けるため、この要求だけでチャネルの実状態が
- *            変わることはない（ComM_RequestComMode() の集約ログで要求自体は
- *            確認できる）。
+ *            ComM_DCM_InactiveDiagnostic(0) で通知を解除する。「診断ツールが
+ *            繋がっている間はバスを落とさない」という実車の要件を、EcuM
+ *            (COMM_USER_0) の要求とは独立に ComM の集約ロジックへ伝える
+ *            （2026-08 のシグネチャ準拠サーベイで、以前は汎用ユーザースロット
+ *            COMM_USER_1 を Dcm 専用に流用する回避策だったものを、本来の
+ *            専用 API へ置き換えた）。現状は EcuM が常時 FULL_COM を要求し
+ *            続けるため、この要求だけでチャネルの実状態が変わることはない
+ *            （ComM_RequestComMode() の集約ログで要求自体は確認できる）。
  *
  * \copyright  Copyright (c) 2025 T_T
  * \license    MIT License - 詳細は LICENSE ファイルを参照。
@@ -426,10 +429,11 @@ void Dcm_MainFunction(void)
 }
 
 /**
- * \brief   セッション状態に応じて ComM への通信モード要求 (COMM_USER_1) を更新する。
+ * \brief   セッション状態に応じて ComM への診断アクティブ通知を更新する。
  *
- * \details extendedSession の間は COMM_FULL_COMMUNICATION、defaultSession の間は
- *          COMM_NO_COMMUNICATION を ComM_RequestComMode() で要求する。
+ * \details [SWS_ComM_00873]/[SWS_ComM_00874]。extendedSession の間は
+ *          ComM_DCM_ActiveDiagnostic(0) で診断セッション進行中を通知し、
+ *          defaultSession の間は ComM_DCM_InactiveDiagnostic(0) で解除する。
  *          セッションが切り替わるすべての経路（明示的な 0x10 要求、S3 タイムアウト、
  *          0x11 ECUReset 後のリセット）から呼ばれる。
  *
@@ -438,9 +442,14 @@ void Dcm_MainFunction(void)
 static void Dcm_UpdateComMRequest(uint8 session)
 {
     DET_LOGT(TAG, "called");
-    const ComM_ModeType mode = (session == DCM_SESSION_EXTENDED)
-                               ? COMM_FULL_COMMUNICATION : COMM_NO_COMMUNICATION;
-    (void)ComM_RequestComMode(COMM_USER_1, mode);
+    if (session == DCM_SESSION_EXTENDED)
+    {
+        ComM_DCM_ActiveDiagnostic(0U);
+    }
+    else
+    {
+        ComM_DCM_InactiveDiagnostic(0U);
+    }
 }
 
 /* -----------------------------------------------------------------------
