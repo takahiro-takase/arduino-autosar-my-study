@@ -167,4 +167,38 @@ TEST_F(Bsw_CanIf_ControllerMode_Test, SetControllerMode_OK_SleepFromStartedUsesC
     EXPECT_EQ(Can_Test_GetControllerState(), CAN_CS_SLEEP);
 }
 
+// ------------------------------------------------------------------------
+// CanIf_GetControllerErrorState() の単体テスト（[SWS_CANIF_91001]、
+// 2026-08-31 追加。CanIf → Can.c → Can_Hw.c（フェイク）の実チェーンで検証）。
+// ------------------------------------------------------------------------
+
+TEST_F(Bsw_CanIf_ControllerMode_Test, GetControllerErrorState_NG_InvalidControllerIdReturnsErrorAndReportsDet)
+{
+    Can_ErrorStateType state;
+    Std_ReturnType ret = CanIf_GetControllerErrorState(CANIF_CONTROLLER_MAX, &state);
+
+    EXPECT_EQ(ret, E_NOT_OK);
+    EXPECT_EQ(FakeDetHw_LastErrorId, CANIF_E_PARAM_CONTROLLERID);
+}
+
+TEST_F(Bsw_CanIf_ControllerMode_Test, GetControllerErrorState_NG_NullPointerReturnsErrorAndReportsDet)
+{
+    Std_ReturnType ret = CanIf_GetControllerErrorState(0U, NULL);
+
+    EXPECT_EQ(ret, E_NOT_OK);
+    EXPECT_EQ(FakeDetHw_LastErrorId, CANIF_E_PARAM_POINTER);
+}
+
+TEST_F(Bsw_CanIf_ControllerMode_Test, GetControllerErrorState_OK_ReflectsBusOffFromHwChain)
+{
+    FakeCanHw_ErrorState = 2U;  /* CAN_ERRORSTATE_BUSOFF */
+
+    Can_ErrorStateType state;
+    Std_ReturnType ret = CanIf_GetControllerErrorState(0U, &state);
+
+    EXPECT_EQ(ret, E_OK);
+    EXPECT_EQ(state, CAN_ERRORSTATE_BUSOFF);
+    EXPECT_EQ(FakeDetHw_ReportCount, 0U);
+}
+
 }  // namespace

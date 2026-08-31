@@ -70,6 +70,7 @@
 #define CANIF_API_ID_GET_PDU_MODE        0x0AU
 #define CANIF_API_ID_SET_CONTROLLER_MODE 0x03U
 #define CANIF_API_ID_GET_CONTROLLER_MODE 0x04U
+#define CANIF_API_ID_GET_CONTROLLER_ERROR_STATE 0x4BU
 
 /** バージョン情報（SWS_CANInterface、Com/E2EXf/PduR 等の既存モジュールと同じ命名規則） */
 #define CANIF_VENDOR_ID          0U
