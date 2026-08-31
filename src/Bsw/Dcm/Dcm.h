@@ -105,6 +105,25 @@ Std_ReturnType Dcm_GetSesCtrlType(Dcm_SesCtrlType* SesCtrlType);
 Std_ReturnType Dcm_GetSecurityLevel(Dcm_SecLevelType* SecLevel);
 
 /**
+ * \brief   現在のセッションを defaultSession へ強制的に戻す。
+ *
+ * \details [SWS_Dcm_01062]: アプリケーションが任意のタイミングで
+ *          extendedSession を終了させるための API（仕様の例: 車速が
+ *          しきい値を超えた場合の自動終了）。DCM 内部の defaultSession 復帰
+ *          処理列（SecurityAccess ロック・RoutineControl/TransferData 中断・
+ *          CommunicationControl/DTC設定のリセット・ComM 通知）を一括で実行する。
+ *
+ * \retval  E_OK      正常完了（実仕様上、実行自体は常に成功する）。
+ * \retval  E_NOT_OK  未初期化。
+ *
+ * \AUTOSARReq     {SWS_Dcm_00520}
+ * \ServiceID      {0x2a}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType Dcm_ResetToDefaultSession(void);
+
+/**
  * \brief   DCM モジュールのバージョン情報を取得する。
  *
  * \details Dcm_Init と並び、未初期化時でも DCM_E_UNINIT を報告しない

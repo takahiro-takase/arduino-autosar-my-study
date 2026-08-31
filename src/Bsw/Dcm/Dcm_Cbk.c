@@ -426,6 +426,46 @@ void Dcm_GetVersionInfo(Std_VersionInfoType* versioninfo)
 }
 
 /**
+ * \brief   現在のセッションを defaultSession へ強制的に戻す。
+ *
+ * \details [SWS_Dcm_01062]: アプリケーションが任意のタイミングで
+ *          extendedSession を終了させるための API（仕様の例: 車速が
+ *          しきい値を超えた場合の自動終了）。本プロジェクトでは、明示的な
+ *          0x10 defaultSession 要求・S3 タイムアウト・0x11 ECUReset 後の
+ *          いずれも同じ「セッションが変われば診断側の一時状態を破棄する」
+ *          処理列（Dcm_SecurityLock/Dcm_RoutineAbort/Dcm_TransferAbort/
+ *          Dcm_CommControlReset/Dcm_DTCSettingReset/Dcm_UpdateComMRequest）を
+ *          実行しており、これまで3箇所に重複していた。本 API 追加を機に、
+ *          その3箇所を含めて本関数へ集約した（/simplify 観点の副次効果）。
+ *
+ * \retval  E_OK      正常完了（実仕様上、実行自体は常に成功する）。
+ * \retval  E_NOT_OK  未初期化。
+ *
+ * \AUTOSARReq     {SWS_Dcm_00520}
+ * \ServiceID      {0x2a}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType Dcm_ResetToDefaultSession(void)
+{
+    DET_LOGT(TAG, "called");
+    if (!Dcm_Initialized)
+    {
+        Det_ReportError(DCM_MODULE_ID, 0U, DCM_API_ID_RESET_TO_DEFAULT_SESSION, DCM_E_UNINIT);
+        return E_NOT_OK;
+    }
+
+    Dcm_CurrentSession = DCM_SESSION_DEFAULT;
+    Dcm_SecurityLock();
+    Dcm_RoutineAbort();
+    Dcm_TransferAbort();
+    Dcm_CommControlReset();
+    Dcm_DTCSettingReset();
+    Dcm_UpdateComMRequest(DCM_SESSION_DEFAULT);
+    return E_OK;
+}
+
+/**
  * \brief   DCM 周期処理。S3 タイマ (セッションタイムアウト) を監視する。
  *
  * \details defaultSession 中は何もしない。それ以外の間、最後に診断要求を
@@ -472,13 +512,7 @@ void Dcm_MainFunction(void)
     if ((millis() - Dcm_LastActivityMs) >= DCM_S3_TIMEOUT_MS)
     {
         DET_LOGI(TAG, "S3 timeout -> session=Default");
-        Dcm_CurrentSession = DCM_SESSION_DEFAULT;
-        Dcm_SecurityLock();
-        Dcm_RoutineAbort();
-        Dcm_TransferAbort();
-        Dcm_CommControlReset();
-        Dcm_DTCSettingReset();
-        Dcm_UpdateComMRequest(DCM_SESSION_DEFAULT);
+        (void)Dcm_ResetToDefaultSession();
     }
 }
 
@@ -575,18 +609,15 @@ static void Dcm_HandleSessionControl(const uint8* uds, uint8 udsLen)
         return;
     }
 
-    Dcm_CurrentSession = subFunc;
-
     if (subFunc == DCM_SESSION_DEFAULT)
     {
-        Dcm_SecurityLock();
-        Dcm_RoutineAbort();
-        Dcm_TransferAbort();
-        Dcm_CommControlReset();
-        Dcm_DTCSettingReset();
+        (void)Dcm_ResetToDefaultSession();
     }
-
-    Dcm_UpdateComMRequest(subFunc);
+    else
+    {
+        Dcm_CurrentSession = subFunc;
+        Dcm_UpdateComMRequest(subFunc);
+    }
 
     DET_LOGI(TAG, "10 session=0x%02X", (unsigned)subFunc);
 
@@ -643,18 +674,12 @@ static void Dcm_HandleEcuReset(const uint8* uds, uint8 udsLen)
 
     Dcm_Transmit();
 
-    /* リセット後処理: セッションをデフォルトに戻す。
-     * Dcm_SecurityLock() も他の defaultSession 遷移経路（明示要求・S3
-     * タイムアウト）と同様に呼ぶ必要がある。これを怠ると、0x27 で
-     * unlock -> 0x11 ECUReset -> 0x10 で extendedSession へ戻る、という
-     * 経路で再認証なしに Dcm_SecurityLevel が unlocked のまま残ってしまう。 */
-    Dcm_CurrentSession = DCM_SESSION_DEFAULT;
-    Dcm_SecurityLock();
-    Dcm_RoutineAbort();
-    Dcm_TransferAbort();
-    Dcm_CommControlReset();
-    Dcm_DTCSettingReset();
-    Dcm_UpdateComMRequest(DCM_SESSION_DEFAULT);
+    /* リセット後処理: セッションをデフォルトに戻す（Dcm_ResetToDefaultSession()
+     * が Dcm_SecurityLock() 等の一式を実行する。他の defaultSession 遷移経路
+     * （明示要求・S3 タイムアウト）と同じ処理列を通ることで、0x27 で unlock ->
+     * 0x11 ECUReset -> 0x10 で extendedSession へ戻る、という経路で再認証なしに
+     * Dcm_SecurityLevel が unlocked のまま残ってしまう問題を防ぐ）。 */
+    (void)Dcm_ResetToDefaultSession();
     DET_LOGI(TAG, "11 session->Default");
 }
 

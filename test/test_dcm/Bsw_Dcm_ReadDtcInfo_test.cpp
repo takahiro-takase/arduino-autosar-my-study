@@ -149,6 +149,31 @@ TEST_F(Bsw_Dcm_ReadDtcInfo_Test, GetSecurityLevel_NG_NullPointerReturnsError)
 }
 
 // ------------------------------------------------------------
+// Dcm_ResetToDefaultSession（[SWS_Dcm_00520]。既存の3箇所（明示的な0x10
+// defaultSession要求・S3タイムアウト・0x11 ECUReset後）に重複していた
+// セッションリセット処理列を集約した新規公開API。3箇所からの呼び出しの
+// 回帰は Bsw_Dcm_ControlDTCSetting_test.cpp の AutoReEnables* 系テストが
+// 引き続き担当する。ここでは API 自体の直接呼び出しのみ検証する）
+// ------------------------------------------------------------
+
+TEST_F(Bsw_Dcm_ReadDtcInfo_Test, ResetToDefaultSession_OK_ReturnsSessionToDefault)
+{
+    uint8 req[2] = { DCM_SID_SESSION_CTRL, DCM_SESSION_EXTENDED };
+    SendReadDtcInfo(req, sizeof(req));
+    ASSERT_EQ(FakeCanTp_TxBuf[0], 0x50U);  // 前提: extendedSessionへ遷移済み
+    Dcm_SesCtrlType sessionBefore = 0U;
+    ASSERT_EQ(Dcm_GetSesCtrlType(&sessionBefore), E_OK);
+    ASSERT_EQ(sessionBefore, DCM_SESSION_EXTENDED);
+
+    Std_ReturnType ret = Dcm_ResetToDefaultSession();
+
+    Dcm_SesCtrlType sessionAfter = 0xFFU;  /* 未更新を検出できる初期値 */
+    EXPECT_EQ(ret, E_OK);
+    EXPECT_EQ(Dcm_GetSesCtrlType(&sessionAfter), E_OK);
+    EXPECT_EQ(sessionAfter, DCM_SESSION_DEFAULT);
+}
+
+// ------------------------------------------------------------
 // subFunc 0x0A reportSupportedDTC（今回の追加分、GitHub Issue #122）
 // ------------------------------------------------------------
 
