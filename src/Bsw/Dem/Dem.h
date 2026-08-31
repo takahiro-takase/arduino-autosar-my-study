@@ -131,6 +131,34 @@ void Dem_Init(const Dem_ConfigType* ConfigPtr);
 void Dem_ReportErrorStatus(Dem_EventIdType EventId, Dem_EventStatusType EventStatus);
 
 /**
+ * \brief   DTC ステータス availability mask（サポートするステータスビット）を取得する。
+ *
+ * \details DCM SID 0x19 の各種応答([SWS_Dem_00060]: statusAvailabilityMask
+ *          フィールド)が使う値を返す。本 ECU は ISO 14229-1 Annex B の
+ *          bit0(testFailed)/bit2(pendingDTC)/bit3(confirmedDTC)/
+ *          bit4(testNotCompletedSinceLastClear)/bit5(testFailedSinceLastClear)
+ *          をサポートする。
+ *
+ * \note    シグネチャは実 AUTOSAR の `ClientId` 引数を含めて仕様準拠とする
+ *          （方針: IF は仕様準拠、内部動作は Arduino で実現可能な範囲に
+ *          簡略化）。本プロジェクトは単一 ECU・単一診断クライアント構成の
+ *          ため、`ClientId` の値は内部で無視する（クライアントごとの
+ *          個別状態は持たない）。
+ *
+ * \param[in]   ClientId       呼び出し元のクライアント識別子。本実装では未使用。
+ * \param[out]  DTCStatusMask  取得したマスクの格納先。NULL 禁止。
+ *
+ * \retval  E_OK      正常取得。
+ * \retval  E_NOT_OK  DTCStatusMask が NULL。
+ *
+ * \AUTOSARReq     {SWS_Dem_00213}
+ * \ServiceID      {0x16}
+ * \Reentrancy     {Reentrant for different ClientIds, Non Reentrant for same ClientId}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType Dem_GetDTCStatusAvailabilityMask(uint8 ClientId, uint8* DTCStatusMask);
+
+/**
  * \brief   指定イベントの DTC ステータスバイトを返す。
  *
  * \param[in]  EventId  イベント ID (DEM_EVENT_* 定数)。
@@ -199,7 +227,12 @@ Std_ReturnType Dem_ClearDTC(Dem_EventIdType EventId);
  * \param[out]  count      マッチした DTC 数。
  * \param[in]   statusMask 絞り込みマスク。0xFF で全件取得。
  *
- * \ServiceID      {0x24}
+ * \note    本プロジェクト独自の関数（実 AUTOSAR に対応する関数は無い）のため
+ *          ApiId は任意の値。Dem_EnableDTCSetting/DisableDTCSetting を実仕様の
+ *          ServiceID(0x25/0x24) に合わせた際、元々そこにあった 0x24 から
+ *          空いていた 0x2B へ移した（Dem_Cfg.h 冒頭コメント参照）。
+ *
+ * \ServiceID      {0x2B}
  * \Reentrancy     {Reentrant}
  * \Synchronicity  {Synchronous}
  */
@@ -241,7 +274,11 @@ void Dem_GetSupportedDTCs(uint32* dtcBuf, uint8* statusBuf, uint8* count);
  * \param[in]  CoolantTemp  現在の冷却水温 (DID 0x0102 相当)。
  * \param[in]  EngineState  現在のエンジン状態 (DID 0x0103 相当)。
  *
- * \ServiceID      {0x25}
+ * \note    本プロジェクト独自の関数（実 AUTOSAR に対応する関数は無い）のため
+ *          ApiId は任意の値。Dem_GetAllDTCs と同じ経緯で 0x25 から 0x2C へ
+ *          移した（Dem_Cfg.h 冒頭コメント参照）。
+ *
+ * \ServiceID      {0x2C}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
  */
@@ -311,16 +348,24 @@ Std_ReturnType Dem_GetOccurrenceCounterOfEvent(Dem_EventIdType EventId, uint8* C
  *          が呼ばれても、本関数で再度有効化するまでデバウンス・DTC ステータス
  *          ともに一切変化しない（Dem_DisableDTCSetting() 参照）。
  *
- * \note    本プロジェクトは単一 ECU・単一診断クライアント構成のため、
- *          実 AUTOSAR の `ClientId` 引数（DcmDemClientRef、複数 Dcm インスタンス
- *          識別用）は持たない（Dem_Cfg.h 冒頭の「SWS_Dem の個々の関数シグネチャ
- *          とは大きく異なる学習用簡略実装」という既存方針を踏襲）。
+ * \note    シグネチャは実 AUTOSAR の `ClientId` 引数・`Std_ReturnType` 戻り値を
+ *          含めて仕様準拠とする（方針: IF は仕様準拠、内部動作は Arduino で
+ *          実現可能な範囲に簡略化。以前は `void Dem_EnableDTCSetting(void)`
+ *          という独自簡略シグネチャだったが、シグネチャ準拠方針のもと修正）。
+ *          本プロジェクトは単一 ECU・単一診断クライアント構成のため
+ *          `ClientId` は内部で無視し、非同期ジョブキューを持たないため
+ *          常に同期的に完了する（`DEM_PENDING` を返すことはない）。
  *
- * \ServiceID      {0x2B}
- * \Reentrancy     {Reentrant}
- * \Synchronicity  {Synchronous}
+ * \param[in]  ClientId  呼び出し元のクライアント識別子。本実装では未使用。
+ *
+ * \retval  E_OK  常に成功（同期完了）。
+ *
+ * \AUTOSARReq     {SWS_Dem_00243}
+ * \ServiceID      {0x25}
+ * \Reentrancy     {Reentrant for different ClientIds, Non Reentrant for same ClientId}
+ * \Synchronicity  {Asynchronous（本実装は同期的に完了するため DEM_PENDING は返さない）}
  */
-void Dem_EnableDTCSetting(void);
+Std_ReturnType Dem_EnableDTCSetting(uint8 ClientId);
 
 /**
  * \brief   DTC の記録（error memory への反映）を無効化する。
@@ -331,11 +376,19 @@ void Dem_EnableDTCSetting(void);
  *          RoutineControl でアクチュエータを意図的に操作するテスト中に、
  *          その副作用で誤った DTC が記録されるのを防ぐ用途を想定する。
  *
- * \ServiceID      {0x2C}
- * \Reentrancy     {Reentrant}
- * \Synchronicity  {Synchronous}
+ * \note    シグネチャは実 AUTOSAR の `ClientId` 引数・`Std_ReturnType` 戻り値を
+ *          含めて仕様準拠とする（`Dem_EnableDTCSetting()` と同じ経緯・理由）。
+ *
+ * \param[in]  ClientId  呼び出し元のクライアント識別子。本実装では未使用。
+ *
+ * \retval  E_OK  常に成功（同期完了）。
+ *
+ * \AUTOSARReq     {SWS_Dem_00242}
+ * \ServiceID      {0x24}
+ * \Reentrancy     {Reentrant for different ClientIds, Non Reentrant for same ClientId}
+ * \Synchronicity  {Asynchronous（本実装は同期的に完了するため DEM_PENDING は返さない）}
  */
-void Dem_DisableDTCSetting(void);
+Std_ReturnType Dem_DisableDTCSetting(uint8 ClientId);
 
 /**
  * \brief   Dem モジュールのバージョン情報を取得する。

@@ -61,6 +61,46 @@ protected:
 };
 
 // ------------------------------------------------------------
+// Dem_GetDTCStatusAvailabilityMask（Dcm_Cbk.c が DEM_STATUS_AVAILABILITY_MASK に
+// 直接アクセスしていたレイヤ違反を解消するために追加。上記 SID 0x19 各テストの
+// TxBuf[2] 検証が間接的な回帰検知になっているため、ここでは API 自体の
+// 直接呼び出しのみ検証する）
+// ------------------------------------------------------------
+
+TEST_F(Bsw_Dcm_ReadDtcInfo_Test, GetDTCStatusAvailabilityMask_OK_ReturnsConfiguredMask)
+{
+    uint8 mask = 0U;
+
+    Std_ReturnType ret = Dem_GetDTCStatusAvailabilityMask(DCM_DEM_CLIENT_ID, &mask);
+
+    EXPECT_EQ(ret, E_OK);
+    EXPECT_EQ(mask, DEM_STATUS_AVAILABILITY_MASK);
+}
+
+TEST_F(Bsw_Dcm_ReadDtcInfo_Test, GetDTCStatusAvailabilityMask_NG_NullPointerReturnsError)
+{
+    Std_ReturnType ret = Dem_GetDTCStatusAvailabilityMask(DCM_DEM_CLIENT_ID, NULL);
+
+    EXPECT_EQ(ret, E_NOT_OK);
+}
+
+// ------------------------------------------------------------
+// Dem_EnableDTCSetting/Dem_DisableDTCSetting（実仕様の ClientId 引数・
+// Std_ReturnType 戻り値へシグネチャを合わせた際の直接呼び出し検証。
+// UDS SID 0x85 経由の挙動は Bsw_Dcm_ControlDTCSetting_test.cpp が担当）
+// ------------------------------------------------------------
+
+TEST_F(Bsw_Dcm_ReadDtcInfo_Test, EnableDTCSetting_OK_ReturnsOk)
+{
+    EXPECT_EQ(Dem_EnableDTCSetting(DCM_DEM_CLIENT_ID), E_OK);
+}
+
+TEST_F(Bsw_Dcm_ReadDtcInfo_Test, DisableDTCSetting_OK_ReturnsOk)
+{
+    EXPECT_EQ(Dem_DisableDTCSetting(DCM_DEM_CLIENT_ID), E_OK);
+}
+
+// ------------------------------------------------------------
 // subFunc 0x0A reportSupportedDTC（今回の追加分、GitHub Issue #122）
 // ------------------------------------------------------------
 

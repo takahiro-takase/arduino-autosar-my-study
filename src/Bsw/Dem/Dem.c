@@ -509,6 +509,41 @@ void Dem_ReportErrorStatus(Dem_EventIdType EventId,
 }
 
 /**
+ * \brief   DTC ステータス availability mask を取得する。
+ *
+ * \param[in]   ClientId       呼び出し元のクライアント識別子。本実装では未使用。
+ * \param[out]  DTCStatusMask  取得したマスクの格納先。NULL 禁止。
+ *
+ * \retval  E_OK      正常取得。
+ * \retval  E_NOT_OK  DTCStatusMask が NULL。
+ *
+ * \AUTOSARReq     {SWS_Dem_00213}
+ * \ServiceID      {0x16}
+ * \Reentrancy     {Reentrant for different ClientIds, Non Reentrant for same ClientId}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType Dem_GetDTCStatusAvailabilityMask(uint8 ClientId, uint8* DTCStatusMask)
+{
+    DET_LOGT(TAG, "called");
+    (void)ClientId;  /* 単一ECU・単一診断クライアント構成のため未使用（Dem.h 冒頭コメント参照） */
+
+    if (!Dem_Initialized)
+    {
+        Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_GET_DTC_STATUS_AVAILABILITY_MASK, DEM_E_UNINIT);
+        return E_NOT_OK;
+    }
+
+    if (DTCStatusMask == NULL)
+    {
+        Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_GET_DTC_STATUS_AVAILABILITY_MASK, DEM_E_PARAM_POINTER);
+        return E_NOT_OK;
+    }
+
+    *DTCStatusMask = DEM_STATUS_AVAILABILITY_MASK;
+    return E_OK;
+}
+
+/**
  * \brief   指定イベントの DTC ステータスバイトを返す。
  *
  * \param[in]  EventId  イベント ID (DEM_EVENT_* 定数)。
@@ -876,30 +911,36 @@ Std_ReturnType Dem_GetOccurrenceCounterOfEvent(Dem_EventIdType EventId, uint8* C
     return E_OK;
 }
 
-void Dem_EnableDTCSetting(void)
+Std_ReturnType Dem_EnableDTCSetting(uint8 ClientId)
 {
     DET_LOGT(TAG, "called");
+    (void)ClientId;  /* 単一ECU・単一診断クライアント構成のため未使用（Dem.h 冒頭コメント参照） */
+
     if (!Dem_Initialized)
     {
         Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_ENABLE_DTC_SETTING, DEM_E_UNINIT);
-        return;
+        return E_NOT_OK;
     }
 
     Dem_DTCSettingEnabled = 1U;
     DET_LOGI(TAG, "DTC setting enabled");
+    return E_OK;
 }
 
-void Dem_DisableDTCSetting(void)
+Std_ReturnType Dem_DisableDTCSetting(uint8 ClientId)
 {
     DET_LOGT(TAG, "called");
+    (void)ClientId;  /* 単一ECU・単一診断クライアント構成のため未使用（Dem.h 冒頭コメント参照） */
+
     if (!Dem_Initialized)
     {
         Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_DISABLE_DTC_SETTING, DEM_E_UNINIT);
-        return;
+        return E_NOT_OK;
     }
 
     Dem_DTCSettingEnabled = 0U;
     DET_LOGI(TAG, "DTC setting disabled");
+    return E_OK;
 }
 
 void Dem_GetVersionInfo(Std_VersionInfoType* versioninfo)
