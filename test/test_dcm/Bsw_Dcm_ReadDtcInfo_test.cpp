@@ -101,6 +101,54 @@ TEST_F(Bsw_Dcm_ReadDtcInfo_Test, DisableDTCSetting_OK_ReturnsOk)
 }
 
 // ------------------------------------------------------------
+// Dcm_GetSesCtrlType/Dcm_GetSecurityLevel（Dcm_Cbk.c 内部の static フィールド
+// Dcm_CurrentSession/Dcm_SecurityLevel を読み出すだけの新規 getter API）
+// ------------------------------------------------------------
+
+TEST_F(Bsw_Dcm_ReadDtcInfo_Test, GetSesCtrlType_OK_ReturnsDefaultSessionAfterInit)
+{
+    Dcm_SesCtrlType session = 0xFFU;  /* 未更新を検出できる初期値 */
+
+    Std_ReturnType ret = Dcm_GetSesCtrlType(&session);
+
+    EXPECT_EQ(ret, E_OK);
+    EXPECT_EQ(session, DCM_SESSION_DEFAULT);
+}
+
+TEST_F(Bsw_Dcm_ReadDtcInfo_Test, GetSesCtrlType_OK_ReflectsExtendedSessionAfterRequest)
+{
+    uint8 req[2] = { DCM_SID_SESSION_CTRL, DCM_SESSION_EXTENDED };
+    SendReadDtcInfo(req, sizeof(req));
+    ASSERT_EQ(FakeCanTp_TxBuf[0], 0x50U);  // 正応答確認（前提が崩れていないこと）
+
+    Dcm_SesCtrlType session = 0U;
+    Std_ReturnType ret = Dcm_GetSesCtrlType(&session);
+
+    EXPECT_EQ(ret, E_OK);
+    EXPECT_EQ(session, DCM_SESSION_EXTENDED);
+}
+
+TEST_F(Bsw_Dcm_ReadDtcInfo_Test, GetSesCtrlType_NG_NullPointerReturnsError)
+{
+    EXPECT_EQ(Dcm_GetSesCtrlType(NULL), E_NOT_OK);
+}
+
+TEST_F(Bsw_Dcm_ReadDtcInfo_Test, GetSecurityLevel_OK_ReturnsLockedByDefault)
+{
+    Dcm_SecLevelType level = 0xFFU;  /* 未更新を検出できる初期値 */
+
+    Std_ReturnType ret = Dcm_GetSecurityLevel(&level);
+
+    EXPECT_EQ(ret, E_OK);
+    EXPECT_EQ(level, 0U);  /* Locked */
+}
+
+TEST_F(Bsw_Dcm_ReadDtcInfo_Test, GetSecurityLevel_NG_NullPointerReturnsError)
+{
+    EXPECT_EQ(Dcm_GetSecurityLevel(NULL), E_NOT_OK);
+}
+
+// ------------------------------------------------------------
 // subFunc 0x0A reportSupportedDTC（今回の追加分、GitHub Issue #122）
 // ------------------------------------------------------------
 

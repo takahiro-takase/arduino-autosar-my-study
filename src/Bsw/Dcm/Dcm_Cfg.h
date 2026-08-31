@@ -100,6 +100,8 @@
  *  実測して確認済み。Dcm_ComIndication は AUTOSAR 標準の単一関数に対応しない
  *  本プロジェクト独自のエントリポイントのため、既存の非標準値 0xF0 を踏襲する） */
 #define DCM_API_ID_INIT           0x01U
+#define DCM_API_ID_GET_SES_CTRL_TYPE 0x06U
+#define DCM_API_ID_GET_SECURITY_LEVEL 0x0DU
 #define DCM_API_ID_MAIN_FUNCTION  0x25U
 #define DCM_API_ID_COM_INDICATION 0xF0U
 #define DCM_API_ID_GET_VERSION_INFO 0x24U

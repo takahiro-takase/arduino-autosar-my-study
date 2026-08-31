@@ -345,6 +345,60 @@ void Dcm_Init(const Dcm_ConfigType* ConfigPtr)
 }
 
 /**
+ * \brief   現在アクティブなセッション制御タイプを取得する。
+ *
+ * \AUTOSARReq     {SWS_Dcm_00339}
+ * \ServiceID      {0x06}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType Dcm_GetSesCtrlType(Dcm_SesCtrlType* SesCtrlType)
+{
+    DET_LOGT(TAG, "called");
+    if (!Dcm_Initialized)
+    {
+        Det_ReportError(DCM_MODULE_ID, 0U, DCM_API_ID_GET_SES_CTRL_TYPE, DCM_E_UNINIT);
+        return E_NOT_OK;
+    }
+
+    if (SesCtrlType == NULL)
+    {
+        Det_ReportError(DCM_MODULE_ID, 0U, DCM_API_ID_GET_SES_CTRL_TYPE, DCM_E_PARAM_POINTER);
+        return E_NOT_OK;
+    }
+
+    *SesCtrlType = Dcm_CurrentSession;
+    return E_OK;
+}
+
+/**
+ * \brief   現在アクティブなセキュリティレベルを取得する。
+ *
+ * \AUTOSARReq     {SWS_Dcm_00338}
+ * \ServiceID      {0x0d}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType Dcm_GetSecurityLevel(Dcm_SecLevelType* SecLevel)
+{
+    DET_LOGT(TAG, "called");
+    if (!Dcm_Initialized)
+    {
+        Det_ReportError(DCM_MODULE_ID, 0U, DCM_API_ID_GET_SECURITY_LEVEL, DCM_E_UNINIT);
+        return E_NOT_OK;
+    }
+
+    if (SecLevel == NULL)
+    {
+        Det_ReportError(DCM_MODULE_ID, 0U, DCM_API_ID_GET_SECURITY_LEVEL, DCM_E_PARAM_POINTER);
+        return E_NOT_OK;
+    }
+
+    *SecLevel = Dcm_SecurityLevel;
+    return E_OK;
+}
+
+/**
  * \brief   DCM モジュールのバージョン情報を取得する。
  *
  * \details Dcm_Init と並び、未初期化時でも DCM_E_UNINIT を報告しない
