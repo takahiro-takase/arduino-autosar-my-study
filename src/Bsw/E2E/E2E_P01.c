@@ -282,3 +282,42 @@ Std_ReturnType E2E_P01Protect(
 
     return E2E_E_OK;
 }
+
+E2E_PCheckStatusType E2E_P01MapStatusToSM(
+    Std_ReturnType    CheckReturn,
+    E2E_P01StatusType Status,
+    uint8             profileBehavior)
+{
+    /* [SWS_E2E_00216] によりライブラリは Det/Dem を呼ばない方針のため
+     * DET_LOGT すら使わない（本ファイル冒頭の他関数は引数に NULL 可能性の
+     * あるポインタを持つため DET_LOGT のみは許容してきたが、本関数は値渡し
+     * のみで NULL チェックの概念自体が無い）。 */
+    if (CheckReturn != E2E_E_OK)
+        return E2E_P_ERROR;  /* [SWS_E2E_00384]: Status に関わらず優先 */
+
+    /* [SWS_E2E_00383]/[SWS_E2E_00476]: TRUE(R4.2以降)/FALSE(それ以前)で
+     * SYNC/INITIAL の帰属がちょうど入れ替わる点だけが違うため、両表で
+     * 共通の6状態は1つの switch にまとめ、SYNC/INITIAL だけ
+     * profileBehavior で分岐する（仕様書8.3.1.5章の表の実際のセル結合を
+     * ベクタ座標から確認済み。pdftotext単純抽出では一意に読み取れなかった）。 */
+    switch (Status)
+    {
+    case E2E_P01STATUS_OK:
+    case E2E_P01STATUS_OKSOMELOST:
+        return E2E_P_OK;
+    case E2E_P01STATUS_REPEATED:
+        return E2E_P_REPEATED;
+    case E2E_P01STATUS_NONEWDATA:
+        return E2E_P_NONEWDATA;
+    case E2E_P01STATUS_WRONGSEQUENCE:
+        return E2E_P_WRONGSEQUENCE;
+    case E2E_P01STATUS_SYNC:
+        return (profileBehavior != 0U) ? E2E_P_OK : E2E_P_WRONGSEQUENCE;
+    case E2E_P01STATUS_INITIAL:
+        return (profileBehavior != 0U) ? E2E_P_WRONGSEQUENCE : E2E_P_OK;
+    case E2E_P01STATUS_WRONGCRC:
+    case E2E_P01STATUS_ERROR:
+    default:
+        return E2E_P_ERROR;
+    }
+}

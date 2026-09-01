@@ -213,3 +213,30 @@ Std_ReturnType E2E_P05Check(
 
     return E2E_E_OK;
 }
+
+E2E_PCheckStatusType E2E_P05MapStatusToSM(
+    Std_ReturnType    CheckReturn,
+    E2E_P05StatusType Status)
+{
+    /* [SWS_E2E_00216] によりライブラリは Det/Dem を呼ばない方針のため
+     * DET_LOGT すら使わない（値渡しのみで NULL チェックの概念自体が無い）。 */
+    if (CheckReturn != E2E_E_OK)
+        return E2E_P_ERROR;  /* [SWS_E2E_00454]: Status に関わらず優先 */
+
+    /* [SWS_E2E_00453] */
+    switch (Status)
+    {
+    case E2E_P05STATUS_OK:
+    case E2E_P05STATUS_OKSOMELOST:
+        return E2E_P_OK;
+    case E2E_P05STATUS_REPEATED:
+        return E2E_P_REPEATED;
+    case E2E_P05STATUS_NONEWDATA:
+        return E2E_P_NONEWDATA;
+    case E2E_P05STATUS_WRONGSEQUENCE:
+        return E2E_P_WRONGSEQUENCE;
+    case E2E_P05STATUS_ERROR:
+    default:
+        return E2E_P_ERROR;
+    }
+}
