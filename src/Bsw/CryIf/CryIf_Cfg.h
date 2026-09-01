@@ -35,6 +35,7 @@
 #define CRYIF_API_ID_GET_VERSION_INFO  0x01U
 #define CRYIF_API_ID_KEY_ELEMENT_SET   0x04U
 #define CRYIF_API_ID_KEY_SET_VALID     0x05U
+#define CRYIF_API_ID_KEY_ELEMENT_GET   0x06U
 #define CRYIF_API_ID_PROCESS_JOB       0x03U
 
 /** バージョン情報（Com/E2EXf/PduR 等の既存モジュールと同じ命名規則） */

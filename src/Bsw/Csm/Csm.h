@@ -156,6 +156,29 @@ Std_ReturnType Csm_KeyElementSet(uint32 keyId, uint32 keyElementId,
  */
 Std_ReturnType Csm_KeySetValid(uint32 keyId);
 
+/**
+ * \brief   鍵要素（AES-128 鍵本体）を読み出す。
+ *
+ * \details `Csm_KeyElementSet()`の対となる読み出しAPI。単一 CryIf チャネルへの
+ *          実質パススルー（[SWS_Csm_01004]）。
+ *
+ * \param[in]     keyId            読み出す鍵の ID（CRYPTO_KEY_* 定数）。
+ * \param[in]     keyElementId     CRYPTO_KEY_ELEMENT_ID_CIPHER_KEY 固定。
+ * \param[out]    keyPtr           読み出した鍵バイト列の格納先。NULL 禁止。
+ * \param[in,out] keyLengthPtr     in: keyPtr のバッファ長。out: 実際に
+ *                                 書き込んだバイト数。NULL 禁止、値0も禁止。
+ *
+ * \retval  E_OK      鍵要素を読み出した。
+ * \retval  E_NOT_OK  未初期化、NULL、`*keyLengthPtr`=0、または下位層が失敗。
+ *
+ * \AUTOSARReq     {SWS_Csm_00959}
+ * \ServiceID      {0x68}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType Csm_KeyElementGet(uint32 keyId, uint32 keyElementId,
+                                  uint8* keyPtr, uint32* keyLengthPtr);
+
 #ifdef __cplusplus
 }
 #endif

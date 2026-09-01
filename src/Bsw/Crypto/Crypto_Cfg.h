@@ -47,6 +47,7 @@
 #define CRYPTO_API_ID_GET_VERSION_INFO  0x01U
 #define CRYPTO_API_ID_KEY_ELEMENT_SET   0x04U
 #define CRYPTO_API_ID_KEY_SET_VALID     0x05U
+#define CRYPTO_API_ID_KEY_ELEMENT_GET   0x06U
 #define CRYPTO_API_ID_PROCESS_JOB       0x03U
 
 /** 鍵要素 ID。実 AUTOSAR は鍵ごとに複数の要素（暗号鍵本体・アルゴリズム情報等）

@@ -109,6 +109,29 @@ Std_ReturnType CryIf_KeyElementSet(uint32 cryIfKeyId, uint32 keyElementId,
  */
 Std_ReturnType CryIf_KeySetValid(uint32 cryIfKeyId);
 
+/**
+ * \brief   鍵要素を対応する Crypto Driver Object から読み出す。
+ *
+ * \details 単一 Crypto Driver Object のみのため `Crypto_KeyElementGet()` への
+ *          実質パススルー（[SWS_CryIf_00065]）。
+ *
+ * \param[in]     cryIfKeyId       鍵 ID。Crypto Driver 側の cryptoKeyId へそのまま渡す。
+ * \param[in]     keyElementId     鍵要素 ID。
+ * \param[out]    resultPtr        読み出した鍵バイト列の格納先。NULL 禁止。
+ * \param[in,out] resultLengthPtr  in: resultPtr のバッファ長。out: 実際に
+ *                                 書き込んだバイト数。NULL 禁止、値0も禁止。
+ *
+ * \retval  E_OK      鍵要素を読み出した。
+ * \retval  E_NOT_OK  未初期化、NULL、`*resultLengthPtr`=0、または下位層が失敗。
+ *
+ * \AUTOSARReq     {SWS_CryIf_91006}
+ * \ServiceID      {0x06}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType CryIf_KeyElementGet(uint32 cryIfKeyId, uint32 keyElementId,
+                                    uint8* resultPtr, uint32* resultLengthPtr);
+
 #ifdef __cplusplus
 }
 #endif
