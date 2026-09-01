@@ -45,6 +45,8 @@
 #define ECUM_API_ID_INIT           0x01U
 #define ECUM_API_ID_REQUEST_RUN    0x03U
 #define ECUM_API_ID_RELEASE_RUN    0x04U
+#define ECUM_API_ID_REQUEST_POST_RUN 0x0AU
+#define ECUM_API_ID_RELEASE_POST_RUN 0x0BU
 #define ECUM_API_ID_GET_VERSION_INFO 0x00U
 
 /** バージョン情報（SWS_EcuM_GetVersionInfo、Com/E2EXf/PduR 等の既存モジュールと同じ命名規則） */

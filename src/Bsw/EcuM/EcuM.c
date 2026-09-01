@@ -148,6 +148,11 @@ static EcuM_StateType  EcuM_State          = ECUM_STATE_STARTUP;
 /** RUN 要求中ユーザのビットマスク (bit N = ECUM_USER_N が要求中) */
 static uint8           EcuM_RunUsers       = 0U;
 
+/** POST_RUN 要求中ユーザのビットマスク。[SWS_EcuM_04128]により RUN 要求とは
+ *  独立して追跡する（EcuM_RunUsers とは別変数）。1件でも立っていれば
+ *  POST_RUN → SHUTDOWN の自動タイムアウトを保留する。 */
+static uint8           EcuM_PostRunUsers   = 0U;
+
 /** POST_RUN フェーズ開始時刻 (ms) */
 static unsigned long   EcuM_PostRunTimerMs = 0UL;
 
@@ -256,7 +261,9 @@ void EcuM_MainFunction(void)
 
         case ECUM_STATE_POST_RUN:
             Os_SchedulerStep();
-            if ((millis() - EcuM_PostRunTimerMs) >= ECUM_POST_RUN_TIMEOUT_MS)
+            /* EcuM_PostRunUsers に1件でも要求が残っていれば SHUTDOWN への
+             * 自動タイムアウトを保留する（[SWS_EcuM_04128]）。 */
+            if ((EcuM_PostRunUsers == 0U) && (millis() - EcuM_PostRunTimerMs) >= ECUM_POST_RUN_TIMEOUT_MS)
             {
                 EcuM_State = ECUM_STATE_SHUTDOWN;
                 DET_LOGI(TAG, "->SHUTDOWN");
@@ -326,6 +333,12 @@ Std_ReturnType EcuM_RequestRUN(EcuM_UserType user)
         WdgM_ResumeSupervision();
         WdgM_EnableHwWatchdog();
         BswM_EcuM_CurrentState(ECUM_STATE_RUN);  /* Rule 0: 全タスク再有効化 */
+        /* この POST_RUN サイクルは RUN 復帰により終了したため、残っている
+         * POST_RUN 要求は今後の SHUTDOWN 判定にとって無意味になる。クリア
+         * しないと、次に POST_RUN へ再突入した際にこの古いビットのせいで
+         * SHUTDOWN への自動タイムアウトが永久に保留されてしまう
+         * （/code-review 指摘）。 */
+        EcuM_PostRunUsers = 0U;
     }
     /* SHUTDOWN 中に要求が来たら RUN へ戻る（CAN バスのウェイクアップ経由）。
      * CanSM_ControllerWakeup() → ComM_BusSM_ModeIndication(FULL_COM) →
@@ -339,6 +352,7 @@ Std_ReturnType EcuM_RequestRUN(EcuM_UserType user)
         WdgM_ResumeSupervision();
         WdgM_EnableHwWatchdog();
         BswM_EcuM_CurrentState(ECUM_STATE_RUN);  /* Rule 0: 全タスク再有効化 */
+        EcuM_PostRunUsers = 0U;  /* 前回 POST_RUN サイクルの残留要求をクリア（上記と同じ理由） */
     }
     return E_OK;
 }
@@ -381,6 +395,83 @@ Std_ReturnType EcuM_ReleaseRUN(EcuM_UserType user)
          * 安全な無効化ポイントとする。 */
         WdgM_DisableHwWatchdog();
         BswM_EcuM_CurrentState(ECUM_STATE_POST_RUN);  /* Rule 1: アプリタスク無効化 */
+    }
+    return E_OK;
+}
+
+/**
+ * \brief   POST_RUN フェーズの継続を要求する。
+ *
+ * \details [SWS_EcuM_04128]: RUN 要求とは独立した `EcuM_PostRunUsers`
+ *          ビットマスクで追跡する。1件でも残っていれば
+ *          EcuM_MainFunction() の SHUTDOWN 自動タイムアウトを保留する
+ *          （詳細は EcuM.h の宣言側コメント参照）。
+ *
+ * \AUTOSARReq     {SWS_EcuM_04128}
+ * \ServiceID      {0x0a}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType EcuM_RequestPOST_RUN(EcuM_UserType user)
+{
+    DET_LOGT(TAG, "called");
+    if (user >= ECUM_USER_COUNT)
+    {
+        Det_ReportError(ECUM_MODULE_ID, 0U, ECUM_API_ID_REQUEST_POST_RUN, ECUM_E_INVALID_PAR);
+        return E_NOT_OK;
+    }
+
+    const uint8 mask = (uint8)(1U << user);
+
+    if ((EcuM_PostRunUsers & mask) != 0U)
+    {
+        DET_LOGW(TAG, "RequestPOST_RUN E: multiple request user=%u", (unsigned)user);
+        Det_ReportError(ECUM_MODULE_ID, 0U, ECUM_API_ID_REQUEST_POST_RUN, ECUM_E_MULTIPLE_RUN_REQUESTS);
+        return E_NOT_OK;
+    }
+
+    EcuM_PostRunUsers |= mask;
+    DET_LOGI(TAG, "POST_RUN requested user=%u", (unsigned)user);
+    return E_OK;
+}
+
+/**
+ * \brief   POST_RUN フェーズの継続要求を解放する。
+ *
+ * \details [SWS_EcuM_04129]。最後の1件を解放した瞬間から改めてタイムアウトを
+ *          起算する（詳細は EcuM.h の宣言側コメント参照）。
+ *
+ * \AUTOSARReq     {SWS_EcuM_04129}
+ * \ServiceID      {0x0b}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType EcuM_ReleasePOST_RUN(EcuM_UserType user)
+{
+    DET_LOGT(TAG, "called");
+    if (user >= ECUM_USER_COUNT)
+    {
+        Det_ReportError(ECUM_MODULE_ID, 0U, ECUM_API_ID_RELEASE_POST_RUN, ECUM_E_INVALID_PAR);
+        return E_NOT_OK;
+    }
+
+    const uint8 mask = (uint8)(1U << user);
+
+    if ((EcuM_PostRunUsers & mask) == 0U)
+    {
+        DET_LOGW(TAG, "ReleasePOST_RUN E: mismatched release user=%u", (unsigned)user);
+        Det_ReportError(ECUM_MODULE_ID, 0U, ECUM_API_ID_RELEASE_POST_RUN, ECUM_E_MISMATCHED_RUN_RELEASE);
+        return E_NOT_OK;
+    }
+
+    EcuM_PostRunUsers &= (uint8)(~mask);
+
+    /* 最後の1件を解放した瞬間から改めてタイムアウトを起算する（保留していた
+     * 分だけ SHUTDOWN までの猶予を必ず確保するため）。 */
+    if ((EcuM_PostRunUsers == 0U) && (EcuM_State == ECUM_STATE_POST_RUN))
+    {
+        EcuM_PostRunTimerMs = millis();
+        DET_LOGI(TAG, "POST_RUN released user=%u, timeout restarted", (unsigned)user);
     }
     return E_OK;
 }
