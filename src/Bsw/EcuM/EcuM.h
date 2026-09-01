@@ -157,6 +157,61 @@ Std_ReturnType EcuM_RequestRUN(EcuM_UserType user);
 Std_ReturnType EcuM_ReleaseRUN(EcuM_UserType user);
 
 /**
+ * \brief   POST_RUN フェーズの継続を要求する。
+ *
+ * \details [SWS_EcuM_04128]: RUN 要求とは独立して追跡される
+ *          （本実装では `EcuM_RunUsers` とは別の `EcuM_PostRunUsers`
+ *          ビットマスクで管理する）。POST_RUN 中に1件でも要求が残っていれば
+ *          `ECUM_POST_RUN_TIMEOUT_MS` のタイムアウトを保留し、SHUTDOWN への
+ *          自動遷移を防ぐ。RUN 中に呼んだ場合はビットを記録するのみで、
+ *          その場での状態遷移は起きない（後で自然に POST_RUN へ遷移した際に
+ *          反映される）。
+ *          [SWS_EcuM_04125]相当のネスト禁止規則（EcuM_RequestRUN と同一の
+ *          エラーコード ECUM_E_MULTIPLE_RUN_REQUESTS を流用）も同様に適用する。
+ *
+ * \param[in]  user  要求ユーザ (ECUM_USER_* 定数)。
+ *
+ * \retval  E_OK      受理した。
+ * \retval  E_NOT_OK  user が範囲外、またはこのユーザが既に POST_RUN を要求中。
+ *
+ * \note    実仕様は Reentrant と規定するが、本実装は `EcuM_RequestRUN`/
+ *          `EcuM_ReleaseRUN` と同じ無保護のビットマスク読み書きのため、
+ *          実際の並行呼び出し安全性に合わせ Non Reentrant として文書化する
+ *          （既存の RUN 系 API と同じ簡略化方針。EcuM.h 冒頭の既存注記参照）。
+ *
+ * \AUTOSARReq     {SWS_EcuM_04128}
+ * \ServiceID      {0x0a}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType EcuM_RequestPOST_RUN(EcuM_UserType user);
+
+/**
+ * \brief   POST_RUN フェーズの継続要求を解放する。
+ *
+ * \details [SWS_EcuM_04129]。最後の1件を解放した瞬間から改めて
+ *          `ECUM_POST_RUN_TIMEOUT_MS` のタイムアウトを起算する
+ *          （解放が遅れた分だけ SHUTDOWN までの猶予を必ず確保するため）。
+ *          [SWS_EcuM_04127]相当のエラーコード ECUM_E_MISMATCHED_RUN_RELEASE
+ *          を `EcuM_ReleaseRUN` と共用する。
+ *
+ * \param[in]  user  解放するユーザ (ECUM_USER_* 定数)。
+ *
+ * \retval  E_OK      受理した。
+ * \retval  E_NOT_OK  user が範囲外、またはこのユーザに対応する POST_RUN
+ *                    要求が存在しない。
+ *
+ * \note    実仕様は Reentrant と規定するが、`EcuM_RequestPOST_RUN` と同じ
+ *          理由で Non Reentrant として文書化する。
+ *
+ * \AUTOSARReq     {SWS_EcuM_04129}
+ * \ServiceID      {0x0b}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType EcuM_ReleasePOST_RUN(EcuM_UserType user);
+
+/**
  * \brief   EcuM モジュールのバージョン情報を取得する。
  *
  * \details EcuM_Init と並び、未初期化時でもエラー報告しない例外 API
