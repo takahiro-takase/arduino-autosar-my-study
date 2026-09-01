@@ -349,6 +349,40 @@ Std_ReturnType SecOC_IfTransmit(PduIdType TxPduId, const PduInfoType* PduInfoPtr
     return E_OK;
 }
 
+/**
+ * \brief   下位層からの TX 完了通知エントリポイント。
+ *
+ * \AUTOSARReq     {SWS_SecOC_00126}
+ * \ServiceID      {0x40}
+ * \Reentrancy     {Reentrant for different PduIds. Non reentrant for the same PduId.}
+ * \Synchronicity  {Synchronous}
+ */
+void SecOC_TxConfirmation(PduIdType TxPduId, Std_ReturnType result)
+{
+    DET_LOGT(TAG, "called");
+    if (SecOC_ConfigPtr == NULL)
+    {
+        Det_ReportError(SECOC_MODULE_ID, 0U, SECOC_API_ID_TX_CONFIRMATION, SECOC_E_UNINIT);
+        return;
+    }
+
+    uint8 tableIndex = 0U;
+    const SecOC_TxPduConfigType* cfg = SecOC_FindTxPdu(TxPduId, &tableIndex);
+    if (cfg == NULL)
+    {
+        DET_LOGW(TAG, "TxConfirmation W: no matching SecOC TX PDU for id=%u", (unsigned)TxPduId);
+        Det_ReportError(SECOC_MODULE_ID, 0U, SECOC_API_ID_TX_CONFIRMATION, SECOC_E_INVALID_PDU_SDU_ID);
+        return;
+    }
+
+    DET_LOGI(TAG, "TxConfirmation: iPdu=%u result=%u", (unsigned)TxPduId, (unsigned)result);
+
+    /* [SWS_SecOC_00063]: 結果を元の送信元（Com 等）へ中継する。
+     * [SWS_SecOC_00064] のバッファ解放については SecOC.h の宣言側コメント
+     * 参照（本実装は既に解放済み扱いのため追加処理不要）。 */
+    PduR_SecOCTxConfirmation(cfg->PduRSrcPduId, result);
+}
+
 void SecOC_MainFunctionTx(void)
 {
     DET_LOGT(TAG, "called");

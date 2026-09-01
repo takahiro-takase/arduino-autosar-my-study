@@ -101,6 +101,35 @@ void SecOC_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr);
 Std_ReturnType SecOC_IfTransmit(PduIdType TxPduId, const PduInfoType* PduInfoPtr);
 
 /**
+ * \brief   下位層（CanIf 等）からの TX 完了通知エントリポイント。
+ *
+ * \details `PduR_TxRoutingPathType.ConfFct` へ直接登録できる（[7.4.1]
+ *          "Authentication during direct transmission" の ad-hoc
+ *          transmission フロー相当。[SWS_SecOC_00063]/[SWS_SecOC_00064]）。
+ *          `TxPduId` に一致する TX エントリが見つかれば、結果を
+ *          `PduR_SecOCTxConfirmation()` 経由で元の送信元（Com 等）へ中継する
+ *          （[SWS_SecOC_00063]）。
+ *
+ *          [SWS_SecOC_00064] が要求する「Secured I-PDU を保持するバッファの
+ *          解放」について: 本実装の TX バッファ（`SecOC_TxAuthenticBuffer`）は
+ *          `SecOC_MainFunctionTx()` が `PduR_SecOCTransmit()` へコピーした
+ *          時点で既に解放済み扱い（次の `SecOC_IfTransmit()` 呼び出しで
+ *          上書きしてよい）であり、送信完了通知を待って別途ロック解除する
+ *          仕組みは持たない。実運用への影響は無い（現状 TX 方向で SecOC を
+ *          使う PDU が無いため。`SECOC_TX_PDU_COUNT` 参照）。
+ *
+ * \param[in]  TxPduId  送信完了が通知された SecOC TX Secured I-PDU ID
+ *                      （SecOC_TxPduConfigType.SecOCTxPduId と照合する）。
+ * \param[in]  result   E_OK: 送信成功。E_NOT_OK: 送信失敗。
+ *
+ * \AUTOSARReq     {SWS_SecOC_00126}
+ * \ServiceID      {0x40}
+ * \Reentrancy     {Reentrant for different PduIds. Non reentrant for the same PduId.}
+ * \Synchronicity  {Synchronous}
+ */
+void SecOC_TxConfirmation(PduIdType TxPduId, Std_ReturnType result);
+
+/**
  * \brief   周期実行関数。保留中の TX Secured I-PDU を組み立てて送信する。
  *
  * \details SecOC_IfTransmit() が内部バッファへコピーした Authentic I-PDU に

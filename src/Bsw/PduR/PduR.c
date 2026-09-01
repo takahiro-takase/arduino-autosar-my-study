@@ -203,6 +203,34 @@ void PduR_CanIfTxConfirmation(PduIdType TxPduId, Std_ReturnType result)
 }
 
 /**
+ * \brief   SecOC からの TX 送信完了通知を上位層（Com 等）へ転送する。
+ *
+ * \details generic な PduR_<Lo>TxConfirmation テンプレートの SecOC 向け
+ *          実体化（PduR_SecOC.h 冒頭コメント参照）。PDUR_API_ID_SECOC_TX_
+ *          CONFIRMATION が PDUR_API_ID_TX_CONFIRMATION のエイリアスである
+ *          （PduR_Cfg.h 参照）通り、内部動作は CanIf 向けと完全に同一の
+ *          ため、`PduR_CanIfTxConfirmation()` へそのまま委譲する。
+ *
+ * \param[in]  SrcPduId  SecOC_TxPduConfigType.PduRSrcPduId と一致する、
+ *                       元の送信元 PDU の ID。TX ルーティングパスの検索に
+ *                       使用する。
+ * \param[in]  result    下位層からの送信結果。
+ *                       E_OK = 成功、E_NOT_OK = 失敗。
+ *                       上位層（COM 等）の TxConfirmation へそのまま転送する。
+ *
+ * \pre        PduR_Init() が正常に完了していること。
+ *
+ * \AUTOSARReq     {SWS_PduR_00365}
+ * \ServiceID      {0x40}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void PduR_SecOCTxConfirmation(PduIdType SrcPduId, Std_ReturnType result)
+{
+    PduR_CanIfTxConfirmation(SrcPduId, result);
+}
+
+/**
  * \brief   上位層からの PDU 送信要求を CanIf へ転送する。
  *
  * \details COM 等の上位層から PDU 送信を要求された際に呼び出される。

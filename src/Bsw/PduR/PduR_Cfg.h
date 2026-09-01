@@ -53,6 +53,11 @@
  *  そのまま使う（0x4A は PduR_<User:Up>CancelTransmit の Service ID であり
  *  「未使用の隣接値」ではないため、以前の割り当ては誤りだった）。 */
 #define PDUR_API_ID_SECOC_TRANSMIT      PDUR_API_ID_TRANSMIT
+/** SecOC 向け TX 確認エントリポイント（PduR_SecOCTxConfirmation）。CanIf 向け
+ *  の PduR_CanIfTxConfirmation と同じく generic な PduR_<Lo>TxConfirmation
+ *  テンプレート（Service ID 0x40）の実体化のため、PDUR_API_ID_TX_CONFIRMATION
+ *  と同じ値を使う。 */
+#define PDUR_API_ID_SECOC_TX_CONFIRMATION PDUR_API_ID_TX_CONFIRMATION
 #define PDUR_API_ID_GET_VERSION_INFO    0xF1U
 
 /** バージョン情報（SWS_PduR_00338、Com/E2EXf 等の既存モジュールと同じ命名規則） */
