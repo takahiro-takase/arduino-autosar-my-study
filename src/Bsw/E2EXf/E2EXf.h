@@ -201,14 +201,20 @@ void E2EXf_DeInit(void);
 /**
  * \brief   RX I-PDU バイト列に対する E2E Inverse Transform（検証）を行う。
  *
- * \details E2E_P01Check() を呼び、結果を Dem_ReportErrorStatus() で
- *          Config->DemEventId へ報告する。OK/OKSOMELOST/SYNC/INITIAL の
- *          4状態はいずれも CRC が正しい（データ自体は信頼できる）ため
- *          E_OK を返す。SYNC は WRONGSEQUENCE 検知後の再ロック中で
- *          シーケンスの継続性はまだ完全には確定していないが、個々の
- *          フレームの CRC・カウンタ自体は正常範囲内なのでデータは
- *          使用してよいと判断している。
- *          REPEATED（重複）・WRONGCRC・WRONGSEQUENCE・ERROR は E_NOT_OK。
+ * \details E2E_P01Check() を呼び、結果を `E2E_P01MapStatusToSM()`
+ *          ([SWS_E2E_00476]、profileBehavior=FALSE = R4.2より前の挙動)
+ *          で汎用ステータスへ変換したうえで Dem_ReportErrorStatus() へ
+ *          報告する。OK/OKSOMELOST/INITIAL の3状態は E2E_P_OK に写像され
+ *          E_OK を返す（INITIAL は初回受信という正常な起動シーケンスで
+ *          あり故障ではない）。
+ *          REPEATED（重複）・WRONGCRC・WRONGSEQUENCE・ERROR に加え、SYNC
+ *          （WRONGSEQUENCE 検知後の再ロック中）も E2E_P_WRONGSEQUENCE へ
+ *          写像され E_NOT_OK となる。個々のフレームの CRC・カウンタ自体は
+ *          正常範囲内だが、SyncCounterInit 回分の連続正常受信が完了する
+ *          までは「復旧候補」にすぎないため、再ロック機構本来の目的
+ *          （回復確認まで安易に正常扱いしない）に合わせて不合格のまま
+ *          扱う（2026-09、以前は SYNC も合格扱いだったのを、仕様準拠の
+ *          汎用マッピングとの整合を理由に変更）。
  *
  * \param[in]  Config       RX 側設定。NULL 禁止。
  * \param[in]  Buffer       検証対象の I-PDU バイト列。NULL 禁止。
