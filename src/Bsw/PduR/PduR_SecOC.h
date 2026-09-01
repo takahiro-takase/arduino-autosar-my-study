@@ -21,6 +21,12 @@ extern "C" {
 /* SWS_SecOC_00062: SecOC が変換完了後の Secured I-PDU を送信する際に呼ぶ。 */
 Std_ReturnType PduR_SecOCTransmit(PduIdType SrcPduId, const PduInfoType* PduInfoPtr);
 
+/* SWS_PduR_00365 相当（generic な PduR_<Lo>TxConfirmation テンプレートの
+ * SecOC 向け実体化）: 下位層（CanIf 等）が PduR_CanIfTxConfirmation() 経由で
+ * 通知した TX 確認結果を、SecOC の TX 経路（PduRSrcPduId、SecOC_TxPduConfigType
+ * 参照）へルーティングする際に SecOC_TxConfirmation() から呼ぶ。 */
+void PduR_SecOCTxConfirmation(PduIdType SrcPduId, Std_ReturnType result);
+
 #ifdef __cplusplus
 }
 #endif
