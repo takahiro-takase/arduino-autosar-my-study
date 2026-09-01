@@ -112,3 +112,31 @@ Std_ReturnType CryIf_KeySetValid(uint32 cryIfKeyId)
     /* [SWS_CryIf_00058]: 単一 Crypto Driver Object へのパススルー。 */
     return Crypto_KeySetValid(cryIfKeyId);
 }
+
+Std_ReturnType CryIf_KeyElementGet(uint32 cryIfKeyId, uint32 keyElementId,
+                                    uint8* resultPtr, uint32* resultLengthPtr)
+{
+    DET_LOGT(TAG, "called");
+    if (!CryIf_Initialized)
+    {
+        Det_ReportError(CRYIF_MODULE_ID, 0U, CRYIF_API_ID_KEY_ELEMENT_GET, CRYIF_E_UNINIT);
+        return E_NOT_OK;
+    }
+
+    if (resultPtr == NULL || resultLengthPtr == NULL)
+    {
+        Det_ReportError(CRYIF_MODULE_ID, 0U, CRYIF_API_ID_KEY_ELEMENT_GET, CRYIF_E_PARAM_POINTER);
+        return E_NOT_OK;
+    }
+
+    if (*resultLengthPtr == 0U)
+    {
+        Det_ReportError(CRYIF_MODULE_ID, 0U, CRYIF_API_ID_KEY_ELEMENT_GET, CRYIF_E_PARAM_VALUE);
+        return E_NOT_OK;
+    }
+
+    /* [SWS_CryIf_00065]: 単一 Crypto Driver Object へのパススルーのため、
+     * cryIfKeyId/keyElementId の範囲チェックは Crypto_KeyElementGet() に委ねる
+     * （CryIf_KeyElementSet() と同じ方針）。 */
+    return Crypto_KeyElementGet(cryIfKeyId, keyElementId, resultPtr, resultLengthPtr);
+}

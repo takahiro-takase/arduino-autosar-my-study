@@ -129,6 +129,41 @@ Std_ReturnType Crypto_KeyElementSet(uint32 cryptoKeyId, uint32 keyElementId,
  */
 Std_ReturnType Crypto_KeySetValid(uint32 cryptoKeyId);
 
+/**
+ * \brief   鍵要素（AES-128 鍵本体）を読み出す。
+ *
+ * \details `Crypto_KeyElementSet()`の対となる読み出しAPI。本プロジェクトは
+ *          鍵要素の部分アクセス（オフセット指定読み出し）を持たないため、
+ *          `*resultLengthPtr` は常に `CRYPTO_AES128_KEY_SIZE` 丁度でなければ
+ *          ならない（大きすぎる/小さすぎるバッファはいずれも拒否する）。
+ *          実仕様が定義する `CRYPTO_E_BUSY`/`CRYPTO_E_KEY_NOT_AVAILABLE`/
+ *          `CRYPTO_E_KEY_READ_FAIL`/`CRYPTO_E_SMALL_BUFFER` という
+ *          `Std_ReturnType` 拡張値は本実装では扱わず、`E_OK`/`E_NOT_OK` のみに
+ *          単純化する（`Crypto_KeyElementSet`/`Crypto_ProcessJob` と同じ方針。
+ *          本ファイル冒頭コメント参照）。`Crypto_KeySetValid()` 未実行
+ *          （鍵が pending 状態）でも読み出し自体は許可する（実仕様は
+ *          読み出し可否をキー無効状態と結び付けていない）。
+ *
+ * \param[in]     cryptoKeyId      読み出す鍵の ID（CRYPTO_KEY_* 定数）。
+ * \param[in]     keyElementId     CRYPTO_KEY_ELEMENT_ID_CIPHER_KEY 固定。
+ * \param[out]    resultPtr        読み出した鍵バイト列の格納先。NULL 禁止。
+ * \param[in,out] resultLengthPtr  in: resultPtr のバッファ長。
+ *                                 out: 実際に書き込んだバイト数
+ *                                 （本プロジェクトでは常に
+ *                                 CRYPTO_AES128_KEY_SIZE）。NULL 禁止。
+ *
+ * \retval  E_OK      鍵要素を読み出した。
+ * \retval  E_NOT_OK  未初期化、cryptoKeyId/keyElementId が不正、NULL、
+ *                    または `*resultLengthPtr` が CRYPTO_AES128_KEY_SIZE と不一致。
+ *
+ * \AUTOSARReq     {SWS_Crypto_91006}
+ * \ServiceID      {0x06}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType Crypto_KeyElementGet(uint32 cryptoKeyId, uint32 keyElementId,
+                                     uint8* resultPtr, uint32* resultLengthPtr);
+
 #ifdef __cplusplus
 }
 #endif

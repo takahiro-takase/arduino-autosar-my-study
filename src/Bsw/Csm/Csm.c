@@ -196,3 +196,24 @@ Std_ReturnType Csm_KeySetValid(uint32 keyId)
     /* [SWS_Csm_01003]: 単一 CryIf チャネルへの実質パススルー。 */
     return CryIf_KeySetValid(keyId);
 }
+
+Std_ReturnType Csm_KeyElementGet(uint32 keyId, uint32 keyElementId,
+                                  uint8* keyPtr, uint32* keyLengthPtr)
+{
+    DET_LOGT(TAG, "called");
+    if (!Csm_Initialized)
+    {
+        Det_ReportError(CSM_MODULE_ID, 0U, CSM_API_ID_KEY_ELEMENT_GET, CSM_E_UNINIT);
+        return E_NOT_OK;
+    }
+
+    if (keyPtr == NULL || keyLengthPtr == NULL)
+    {
+        Det_ReportError(CSM_MODULE_ID, 0U, CSM_API_ID_KEY_ELEMENT_GET, CSM_E_PARAM_POINTER);
+        return E_NOT_OK;
+    }
+
+    /* [SWS_Csm_01004]: 単一 CryIf チャネルへの実質パススルー。keyId は
+     * CryIf 側の cryIfKeyId へそのまま渡す（Csm_KeyElementSet と同じ方針）。 */
+    return CryIf_KeyElementGet(keyId, keyElementId, keyPtr, keyLengthPtr);
+}

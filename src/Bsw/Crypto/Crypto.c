@@ -177,6 +177,44 @@ Std_ReturnType Crypto_KeyElementSet(uint32 cryptoKeyId, uint32 keyElementId,
     return E_OK;
 }
 
+Std_ReturnType Crypto_KeyElementGet(uint32 cryptoKeyId, uint32 keyElementId,
+                                     uint8* resultPtr, uint32* resultLengthPtr)
+{
+    DET_LOGT(TAG, "called");
+    if (!Crypto_Initialized)
+    {
+        Det_ReportError(CRYPTO_MODULE_ID, 0U, CRYPTO_API_ID_KEY_ELEMENT_GET, CRYPTO_E_UNINIT);
+        return E_NOT_OK;
+    }
+
+    if (cryptoKeyId >= CRYPTO_KEY_COUNT || keyElementId != CRYPTO_KEY_ELEMENT_ID_CIPHER_KEY)
+    {
+        Det_ReportError(CRYPTO_MODULE_ID, 0U, CRYPTO_API_ID_KEY_ELEMENT_GET, CRYPTO_E_PARAM_HANDLE);
+        return E_NOT_OK;
+    }
+
+    if (resultPtr == NULL || resultLengthPtr == NULL)
+    {
+        Det_ReportError(CRYPTO_MODULE_ID, 0U, CRYPTO_API_ID_KEY_ELEMENT_GET, CRYPTO_E_PARAM_POINTER);
+        return E_NOT_OK;
+    }
+
+    /* [SWS_Crypto_00090] 相当のゼロ長チェックに加え、本プロジェクトは部分
+     * アクセス不可の固定長鍵要素のみを扱うため（Crypto_KeyElementSet と同じ
+     * 方針）、CRYPTO_AES128_KEY_SIZE 丁度以外も一律拒否する。 */
+    if (*resultLengthPtr != CRYPTO_AES128_KEY_SIZE)
+    {
+        Det_ReportError(CRYPTO_MODULE_ID, 0U, CRYPTO_API_ID_KEY_ELEMENT_GET, CRYPTO_E_PARAM_VALUE);
+        return E_NOT_OK;
+    }
+
+    for (uint32 b = 0U; b < CRYPTO_AES128_KEY_SIZE; b++)
+        resultPtr[b] = Crypto_KeyStore[cryptoKeyId][b];
+
+    *resultLengthPtr = CRYPTO_AES128_KEY_SIZE;
+    return E_OK;
+}
+
 Std_ReturnType Crypto_KeySetValid(uint32 cryptoKeyId)
 {
     DET_LOGT(TAG, "called");
