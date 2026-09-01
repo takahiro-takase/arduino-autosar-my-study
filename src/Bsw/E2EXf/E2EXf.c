@@ -96,11 +96,16 @@ Std_ReturnType E2EXf_InverseTransform(const E2EXf_RxConfigType* Config, const ui
     const E2E_P01StatusType status = Config->CheckState->Status;
     *CheckStatus = status;
 
-    const uint8 acceptable =
-        (status == E2E_P01STATUS_OK)
-        || (status == E2E_P01STATUS_OKSOMELOST)
-        || (status == E2E_P01STATUS_SYNC)
-        || (status == E2E_P01STATUS_INITIAL);
+    /* [SWS_E2E_00476] (profileBehavior=FALSE、R4.2より前の挙動) に基づき
+     * 汎用ステータスへ変換して合否を判定する。CheckReturn はここまでで
+     * E2E_E_OK であることを確認済み。FALSE 表では INITIAL→OK（初回受信は
+     * 正常な起動シーケンスであり故障ではない）、SYNC→WRONGSEQUENCE
+     * （WRONGSEQUENCE 検知後の再ロック中はまだ回復未確定として不合格の
+     * まま扱う。個々のフレームの CRC・カウンタ自体は正常範囲内だが、
+     * SyncCounterInit 回分の連続正常受信が完了するまでは「復旧候補」に
+     * すぎず、再ロック機構の本来の目的（回復確認まで安易に正常扱いしない）
+     * と整合させるため、以前は SYNC も合格扱いにしていたのを変更した）。 */
+    const uint8 acceptable = (E2E_P01MapStatusToSM(E2E_E_OK, status, 0U) == E2E_P_OK);
 
     if (!acceptable)
         DET_LOGW(TAG, "InverseTransform NG DemEvent=%u st=%u", (unsigned)Config->DemEventId, (unsigned)status);
