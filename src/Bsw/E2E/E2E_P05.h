@@ -199,4 +199,28 @@ Std_ReturnType E2E_P05Check(
     const uint8              *Data,
     uint16                    Length);
 
+/**
+ * \brief  E2E_P05Check() の詳細な6状態を、プロファイル非依存の汎用結果へ変換する。
+ *
+ * \details [SWS_E2E_00452]〜[SWS_E2E_00454]。Profile01と異なりINITIAL/SYNC
+ *          相当の状態が無いため挙動切り替え引数(profileBehavior)も無い、
+ *          単純な1対1マッピング。`CheckReturn` が E2E_E_OK 以外の場合は
+ *          `Status` に関わらず `E2E_P_ERROR` を返す。
+ *          [SWS_E2E_00216] によりライブラリはDet/Dem/RTEを呼び出さないため、
+ *          本関数もポインタ引数を持たず、内部でDet_ReportError()を呼ばない。
+ *
+ * \param[in]  CheckReturn  E2E_P05Check() の戻り値。
+ * \param[in]  Status       E2E_P05Check() が書き込んだ State->Status。
+ *
+ * \return  プロファイル非依存のチェック結果。
+ *
+ * \AUTOSARReq     {SWS_E2E_00452}
+ * \ServiceID      {0x2a}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+E2E_PCheckStatusType E2E_P05MapStatusToSM(
+    Std_ReturnType    CheckReturn,
+    E2E_P05StatusType Status);
+
 #endif /* E2E_P05_H */

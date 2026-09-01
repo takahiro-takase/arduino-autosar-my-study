@@ -178,4 +178,38 @@ Std_ReturnType E2E_P01Protect(
     E2E_P01ProtectStateType *State,
     uint8                   *Data);
 
+/**
+ * \brief  E2E_P01Check() の詳細な8状態を、プロファイル非依存の汎用結果へ変換する。
+ *
+ * \details [SWS_E2E_00382]〜[SWS_E2E_00384]。`profileBehavior` により2種類の
+ *          マッピング表を切り替える(実仕様の `boolean` 型は本プロジェクトに
+ *          存在しないため、他の1/0フラグ群と同じ `uint8` で代用。
+ *          E2E_Types.h 参照)。
+ *            - `profileBehavior`=1 (TRUE、R4.2以降の挙動):
+ *              {OK, OKSOMELOST, SYNC}→OK, {WRONGSEQUENCE, INITIAL}→WRONGSEQUENCE
+ *            - `profileBehavior`=0 (FALSE、R4.2より前の挙動):
+ *              {OK, OKSOMELOST, INITIAL}→OK, {WRONGSEQUENCE, SYNC}→WRONGSEQUENCE
+ *          （WRONGCRC→ERROR、REPEATED→REPEATED、NONEWDATA→NONEWDATAは共通）
+ *          `CheckReturn` が E2E_E_OK 以外の場合は `Status` に関わらず
+ *          `E2E_P_ERROR` を返す。
+ *          [SWS_E2E_00216] によりライブラリはDet/Dem/RTEを呼び出さないため、
+ *          本関数もポインタ引数を持たず（NULL チェック不要）、内部で
+ *          Det_ReportError() を一切呼ばない。
+ *
+ * \param[in]  CheckReturn      E2E_P01Check() の戻り値。
+ * \param[in]  Status           E2E_P01Check() が書き込んだ State->Status。
+ * \param[in]  profileBehavior  1=R4.2以降の挙動、0=それ以前の挙動。
+ *
+ * \return  プロファイル非依存のチェック結果。
+ *
+ * \AUTOSARReq     {SWS_E2E_00382}
+ * \ServiceID      {0x1d}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+E2E_PCheckStatusType E2E_P01MapStatusToSM(
+    Std_ReturnType    CheckReturn,
+    E2E_P01StatusType Status,
+    uint8             profileBehavior);
+
 #endif /* E2E_P01_H */

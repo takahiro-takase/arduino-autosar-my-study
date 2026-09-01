@@ -31,4 +31,24 @@
 #define E2E_E_INTERR          0x19U
 #define E2E_E_WRONGSTATE      0x1AU
 
+/**
+ * \brief   プロファイル非依存のチェック結果型 [SWS_E2E_00347]。
+ * \details `E2E_PxxMapStatusToSM()` が各プロファイル固有の詳細ステータス
+ *          (`E2E_P01StatusType`/`E2E_P05StatusType` 等) を、E2E ステート
+ *          マシン（本プロジェクトでは E2EXf 層が代替、E2E_SMCheck 自体は
+ *          未実装）が使う共通形式へ変換した結果を表す。値は仕様書の
+ *          ビットパターンと一致させている（`E2E_P_NOTAVAILABLE` はバッファの
+ *          初期化値専用でどのプロファイルからも返されない、との仕様注記の
+ *          通り本実装でも返却しない）。
+ */
+typedef enum
+{
+    E2E_P_OK            = 0x00U, /**< このサイクルのチェックは成功（カウンタ検証含む） */
+    E2E_P_REPEATED      = 0x01U, /**< カウンタが直前と同一（重複データ）                */
+    E2E_P_WRONGSEQUENCE = 0x02U, /**< カウンタ検証以外は成功だが、許容超過のカウンタ飛び */
+    E2E_P_ERROR         = 0x03U, /**< カウンタ以外のエラー（CRC不一致・長さ不正等）      */
+    E2E_P_NOTAVAILABLE  = 0x04U, /**< 未受信（バッファの初期化値専用。返却されない）      */
+    E2E_P_NONEWDATA     = 0x05U  /**< 新規データなし                                     */
+} E2E_PCheckStatusType;
+
 #endif /* E2E_TYPES_H */
