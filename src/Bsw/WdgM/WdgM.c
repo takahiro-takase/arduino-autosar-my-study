@@ -199,6 +199,11 @@ static unsigned long WdgM_LastCheckpointTimeMs[WDGM_SUPERVISED_ENTITY_COUNT];
  *  実機で確認された（詳細は WdgM_MainFunction() 冒頭のコメント参照）。 */
 static uint8 WdgM_SkipNextAliveJudgment = 0U;
 
+/** WdgM_SetMode()/WdgM_GetMode() が扱う現在のモード。本プロジェクトは
+ *  単一の静的コンフィグのみ保持するため、常に WDGM_MODE_DEFAULT に留まる
+ *  （WdgM.h の WdgM_SetMode() Doxygen コメント参照）。 */
+static WdgM_ModeType WdgM_CurrentMode = WDGM_MODE_DEFAULT;
+
 /** グローバルレベルの EXPIRED 許容サイクルカウンタ
  *  (AUTOSAR WdgMExpiredSupervisionCycleTol 相当。詳細は WdgM_Cfg.h の
  *  WDGM_EXPIRED_SUPERVISION_CYCLE_TOL コメントを参照)。
@@ -282,6 +287,7 @@ void WdgM_Init(const WdgM_ConfigType* ConfigPtr)
     WdgM_ExpiredCycleCount     = 0U;
     WdgM_GlobalStopped         = 0U;
     WdgM_ResetRequested        = 0U;
+    WdgM_CurrentMode           = WDGM_MODE_DEFAULT;
 
     WdgM_EnableHwWatchdog();
 
@@ -299,6 +305,62 @@ void WdgM_DeInit(void)
 
     WdgM_Cfg = NULL;
     DET_LOGI(TAG, "DeInit ok");
+}
+
+/**
+ * \brief   WdgM の現在のモードを設定する（[SWS_WdgM_00154]）。
+ *
+ * \AUTOSARReq     {SWS_WdgM_00154, SWS_WdgM_00020, SWS_WdgM_00021}
+ * \ServiceID      {0x03}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType WdgM_SetMode(WdgM_ModeType Mode)
+{
+    DET_LOGT(TAG, "called");
+    if (WdgM_Cfg == NULL)
+    {
+        Det_ReportError(WDGM_MODULE_ID, 0U, WDGM_API_ID_SET_MODE, WDGM_E_NO_INIT);
+        return E_NOT_OK;
+    }
+
+    if (Mode != WDGM_MODE_DEFAULT)
+    {
+        Det_ReportError(WDGM_MODULE_ID, 0U, WDGM_API_ID_SET_MODE, WDGM_E_PARAM_MODE);
+        return E_NOT_OK;
+    }
+
+    WdgM_CurrentMode = Mode;
+    DET_LOGI(TAG, "SetMode ok mode=%u", (unsigned)Mode);
+    return E_OK;
+}
+
+/**
+ * \brief   WdgM の現在のモードを取得する（[SWS_WdgM_00168]）。
+ *
+ * \AUTOSARReq     {SWS_WdgM_00168, SWS_WdgM_00170, SWS_WdgM_00253}
+ * \ServiceID      {0x0b}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType WdgM_GetMode(WdgM_ModeType* Mode)
+{
+    DET_LOGT(TAG, "called");
+    if (Mode == NULL)
+    {
+        Det_ReportError(WDGM_MODULE_ID, 0U, WDGM_API_ID_GET_MODE, WDGM_E_INV_POINTER);
+        return E_NOT_OK;
+    }
+
+    if (WdgM_Cfg == NULL)
+    {
+        Det_ReportError(WDGM_MODULE_ID, 0U, WDGM_API_ID_GET_MODE, WDGM_E_NO_INIT);
+        *Mode = WDGM_MODE_DEFAULT;
+        return E_NOT_OK;
+    }
+
+    *Mode = WdgM_CurrentMode;
+    return E_OK;
 }
 
 /**

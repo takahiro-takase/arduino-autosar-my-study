@@ -66,6 +66,16 @@ extern "C" {
 typedef uint8 WdgM_SupervisedEntityIdType;
 
 /**
+ * \brief   WdgM に設定されたモードを区別する型。
+ * \details AUTOSAR WdgM_ModeType に相当する ([SWS_WdgM_00358])。範囲は
+ *          0〜<設定モード数>-1 だが、本プロジェクトは単一の静的コンフィグ
+ *          のみ保持するため実質的に WDGM_MODE_DEFAULT (0) のみが有効な値。
+ *
+ * \AUTOSARReq     {SWS_WdgM_00358}
+ */
+typedef uint8 WdgM_ModeType;
+
+/**
  * \brief   Supervised Entity のローカルステータス
  * \details AUTOSAR WdgM_LocalStatusType に相当する ([SWS_WdgM_00359])。
  *
@@ -135,6 +145,42 @@ void WdgM_Init(const WdgM_ConfigType* ConfigPtr);
  * \Synchronicity  {Synchronous}
  */
 void WdgM_DeInit(void);
+
+/**
+ * \brief   WdgM の現在のモードを設定する。
+ *
+ * \details 実仕様は複数の監視設定セット（モード）間の切替 API だが、
+ *          本プロジェクトは単一の静的コンフィグのみ保持するため、
+ *          `WDGM_MODE_DEFAULT` (0) 以外はエラーとして拒否するだけの
+ *          簡略実装とする（監視対象・許容値セット自体の実際の入れ替えは
+ *          行わない）。
+ *
+ * \param[in]  Mode  設定するモード。`WDGM_MODE_DEFAULT` のみ有効。
+ * \retval  E_OK      モードを正常に設定した。
+ * \retval  E_NOT_OK  WdgM 未初期化、または Mode が範囲外
+ *                    (`WDGM_MODE_DEFAULT` 以外)。
+ *
+ * \AUTOSARReq     {SWS_WdgM_00154, SWS_WdgM_00020, SWS_WdgM_00021}
+ * \ServiceID      {0x03}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType WdgM_SetMode(WdgM_ModeType Mode);
+
+/**
+ * \brief   WdgM の現在のモードを取得する。
+ *
+ * \param[out]  Mode  現在のモードの格納先。NULL 禁止。
+ * \retval  E_OK      モードを正常に返した。
+ * \retval  E_NOT_OK  NULL ポインタ、または WdgM 未初期化
+ *                    (この場合 *Mode は `WDGM_MODE_DEFAULT`)。
+ *
+ * \AUTOSARReq     {SWS_WdgM_00168, SWS_WdgM_00170, SWS_WdgM_00253}
+ * \ServiceID      {0x0b}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType WdgM_GetMode(WdgM_ModeType* Mode);
 
 /**
  * \brief   実ハードウェアウォッチドッグを WDGM_HW_WATCHDOG_TIMEOUT_MS で有効化する。
