@@ -38,6 +38,13 @@
  *            Task 20: ComM_MainFunction            100 ms  — 現状 NOP（ComMNmVariant=FULL では
  *                                                             [SWS_ComM_00888] によりヒステリシス
  *                                                             タイマ不要。ComM.c 参照）
+ *            Task 21: SecOC_MainFunctionRx          100 ms  — 現状 NOP（SecOC_RxIndication() が
+ *                                                             受信の都度 Csm_MacVerify() を同期実行
+ *                                                             するため保留中の RX ジョブが存在しない。
+ *                                                             SecOC.c 参照。ComM_MainFunction と同じく、
+ *                                                             「宣言されたが一度もスケジューラに登録
+ *                                                             されない」ギャップを避けるため配線のみ
+ *                                                             行う）
  *
  *          CAN 受信が真のハードウェア割り込み (Can_Isr(), INT ピン立ち下がりで
  *          attachInterrupt 起動) になったことに伴い、旧 Task 0 (Can_Isr の
@@ -141,6 +148,7 @@ extern void SecOC_MainFunctionTx(void);
 extern void MemIf_MainFunction(void);
 extern void App_GptDemo_Run(void);
 extern void ComM_MainFunction(void);
+extern void SecOC_MainFunctionRx(void);
 
 /* -----------------------------------------------------------------------
  * タスクテーブル
@@ -169,7 +177,8 @@ static const Os_TaskType Os_TaskTable[OS_TASK_COUNT] =
     /* Task 17 */ { SecOC_MainFunctionTx,            100U  },  /* 100 ms  : TX Secured I-PDU の Freshness/MAC 計算・送信 */
     /* Task 18 */ { MemIf_MainFunction,             10U  },  /* 10 ms   : 保留中 EEPROM ジョブ処理 (Fee 物理バイト書き込み) */
     /* Task 19 */ { App_GptDemo_Run,              2000U  },  /* 2000 ms : Gpt 実 HW タイマ通知カウンタのログ出力 (動作確認用) */
-    /* Task 20 */ { ComM_MainFunction,             100U  }   /* 100 ms  : 現状 NOP（SWS_ComM_00888、ComM.c 参照） */
+    /* Task 20 */ { ComM_MainFunction,             100U  },  /* 100 ms  : 現状 NOP（SWS_ComM_00888、ComM.c 参照） */
+    /* Task 21 */ { SecOC_MainFunctionRx,          100U  }   /* 100 ms  : 現状 NOP（RX 検証は同期実行済み、SecOC.c 参照） */
 };
 
 /* -----------------------------------------------------------------------

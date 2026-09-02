@@ -457,6 +457,28 @@ void SecOC_MainFunctionTx(void)
     }
 }
 
+/**
+ * \brief   周期実行関数。RX 方向の認証・検証処理を行う（[SWS_SecOC_00171]）。
+ *
+ * \AUTOSARReq     {SWS_SecOC_00171}
+ * \ServiceID      {0x06}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void SecOC_MainFunctionRx(void)
+{
+    DET_LOGT(TAG, "called");
+    if (SecOC_ConfigPtr == NULL)
+    {
+        Det_ReportError(SECOC_MODULE_ID, 0U, SECOC_API_ID_MAIN_FUNCTION_RX, SECOC_E_UNINIT);
+        return;
+    }
+
+    /* SecOC_RxIndication() が受信の都度 Csm_MacVerify() を SINGLECALL で
+     * 同期実行して検証を完結させる設計のため、本関数が処理すべき保留中の
+     * RX ジョブは存在しない（SecOC.h の本関数 Doxygen コメント参照）。 */
+}
+
 void SecOC_GetVersionInfo(Std_VersionInfoType* versioninfo)
 {
     DET_LOGT(TAG, "called");

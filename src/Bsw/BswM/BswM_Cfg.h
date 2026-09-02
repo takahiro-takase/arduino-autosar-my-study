@@ -86,8 +86,9 @@
 #define BSWM_OS_TASK_CAN_WAKEUP     16U /**< Can_MainFunction_Wakeup (1 ms)   */
 #define BSWM_OS_TASK_SECOC_MAIN     17U /**< SecOC_MainFunctionTx     (100 ms)  */
 #define BSWM_OS_TASK_MEMIF_MAIN     18U /**< MemIf_MainFunction     (10 ms)   */
-/* Task 19 (App_GptDemo_Run)・20 (ComM_MainFunction) は意図的にマスク対象外
- * （Os_PBCfg.c 冒頭コメント参照）のため、BswM 用の Task ID 定数を持たない。 */
+/* Task 19 (App_GptDemo_Run)・20 (ComM_MainFunction)・21 (SecOC_MainFunctionRx)
+ * は意図的にマスク対象外（Os_PBCfg.c 冒頭コメント参照）のため、BswM 用の
+ * Task ID 定数を持たない。 */
 
 /* -----------------------------------------------------------------------
  * タスクビットマスク (1ビット = 1タスク; ビット位置 = タスク ID)
@@ -97,8 +98,8 @@
  * 制御不能になっていたバグを修正した経緯がある）。
  * ----------------------------------------------------------------------- */
 
-/** 全タスク (bits 0〜18。bit 19/20 = App_GptDemo_Run/ComM_MainFunction は
- *  意図的に除外——上記の注記参照）。 */
+/** 全タスク (bits 0〜18。bit 19/20/21 = App_GptDemo_Run/ComM_MainFunction/
+ *  SecOC_MainFunctionRx は意図的に除外——上記の注記参照）。 */
 #define BSWM_TASK_MASK_ALL  0x7FFFFUL
 
 /** アプリ Runnable タスク: RTE_ENGINE + RTE_WARNING

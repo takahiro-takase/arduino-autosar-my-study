@@ -148,6 +148,25 @@ void SecOC_TxConfirmation(PduIdType TxPduId, Std_ReturnType result);
 void SecOC_MainFunctionTx(void);
 
 /**
+ * \brief   周期実行関数。RX 方向の認証・検証処理を行う（[SWS_SecOC_00171]）。
+ *
+ * \details 実仕様は RX 方向の認証・検証処理を非同期の検証キュー越しに周期
+ *          処理する構成も許容するが、本プロジェクトの `SecOC_RxIndication()`
+ *          は受信の都度 `Csm_MacVerify()` を SINGLECALL で同期実行し検証を
+ *          完結させる設計のため、本関数が処理すべき保留中の RX ジョブは
+ *          存在しない。そのため未初期化チェックのみを行う薄い実装とする
+ *          （[SWS_SecOC_00172] 「未初期化なら何もせず戻る」は満たす）。
+ *
+ * \pre        SecOC_Init() が正常に完了していること。
+ *
+ * \AUTOSARReq     {SWS_SecOC_00171}
+ * \ServiceID      {0x06}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void SecOC_MainFunctionRx(void);
+
+/**
  * \brief   SecOC モジュールのバージョン情報を取得する。
  *
  * \details SecOC_Init と並び、未初期化時でも SECOC_E_UNINIT を報告しない
