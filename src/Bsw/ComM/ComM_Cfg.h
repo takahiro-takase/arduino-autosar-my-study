@@ -37,6 +37,7 @@
  *  「Service ID[hex]」記載を実測して確認済み） */
 #define COMM_API_ID_INIT                    0x01U
 #define COMM_API_ID_REQUEST_COM_MODE        0x05U
+#define COMM_API_ID_GET_REQUESTED_COM_MODE  0x07U
 #define COMM_API_ID_GET_CURRENT_COM_MODE    0x08U
 #define COMM_API_ID_BUS_SM_MODE_INDICATION  0x33U
 #define COMM_API_ID_NM_NETWORK_MODE          0x18U
