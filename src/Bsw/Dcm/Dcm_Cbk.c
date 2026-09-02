@@ -1478,7 +1478,7 @@ static void Dcm_CommControlReset(void)
 {
     DET_LOGT(TAG, "called");
     Com_SetCommunicationEnabled(1U, 1U);
-    Nm_SetTxEnabled(1U);
+    (void)Nm_EnableCommunication(NM_MAIN_NETWORK_HANDLE);
 }
 
 /**
@@ -1543,10 +1543,22 @@ static void Dcm_HandleCommunicationControl(const uint8* uds, uint8 udsLen)
     const uint8 txEnabled = (controlType == DCM_COMMCTRL_ENABLE_RX_TX
                               || controlType == DCM_COMMCTRL_DISABLE_RX_ENABLE_TX) ? 1U : 0U;
 
+    /* Nm 側を先に確定させる。Com_SetCommunicationEnabled() は失敗しうる
+     * 戻り値を持たないため、Nm が失敗した場合に Com だけ適用済みという
+     * 中途半端な状態を避けるべく、先に Nm 側のみ試す。 */
+    if ((communicationType & DCM_COMMTYPE_NM) != 0U)
+    {
+        Std_ReturnType nmRet = txEnabled
+            ? Nm_EnableCommunication(NM_MAIN_NETWORK_HANDLE)
+            : Nm_DisableCommunication(NM_MAIN_NETWORK_HANDLE);
+        if (nmRet != E_OK)
+        {
+            Dcm_SendNegativeResponse(DCM_SID_COMM_CONTROL, DCM_NRC_CONDITIONS_NOT_CORRECT);
+            return;
+        }
+    }
     if ((communicationType & DCM_COMMTYPE_NORMAL) != 0U)
         Com_SetCommunicationEnabled(rxEnabled, txEnabled);
-    if ((communicationType & DCM_COMMTYPE_NM) != 0U)
-        Nm_SetTxEnabled(txEnabled);
 
     DET_LOGI(TAG, "28 controlType=0x%02X commType=0x%02X",
              (unsigned)controlType, (unsigned)communicationType);

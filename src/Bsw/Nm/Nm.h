@@ -215,19 +215,48 @@ void Nm_TxConfirmation(PduIdType TxPduId, Std_ReturnType result);
 void Nm_MainFunction(void);
 
 /**
- * \brief   診断 CommunicationControl (UDS SID 0x28) からの送信有効/無効要求を反映する。
+ * \brief   診断 CommunicationControl (UDS SID 0x28) からの NM PDU 送信無効化要求を反映する
+ *          （[SWS_CanNm_00215] 相当）。
  *
- * \details Enabled=0 の間、Repeat Message/Normal Operation State でも NM
- *          フレームを送信しない（[SWS_CanNm_00100] の passive mode 相当の
- *          抑制。状態機械自体は通常どおり遷移する）。
+ * \details 無効化中は Repeat Message/Normal Operation State でも NM フレームを
+ *          送信しない（[SWS_CanNm_00100] の passive mode 相当の抑制。状態機械
+ *          自体は通常どおり遷移する）。実仕様（[SWS_CanNm_00172]）は現在
+ *          Network Mode でない場合に E_NOT_OK を要求するが、本プロジェクトは
+ *          そのゲートを実装しない（Bus-Sleep 中に呼ばれても抑制フラグ自体は
+ *          そのまま更新して良く、次回 Network Mode 復帰時に正しく反映される
+ *          ため。Nm_NetworkRequest/Release と同じ「現在の状態に関わらず常に
+ *          受理する」簡略方針）。
  *
- * \param[in]  Enabled  0=送信を抑制する、1=通常どおり送信する。
+ * \param[in]  Channel  NM チャネルハンドル（NM_MAIN_NETWORK_HANDLE 以外は拒否）。
  *
+ * \retval  E_OK      要求を受理した。
+ * \retval  E_NOT_OK  未初期化、または Channel が不正。
+ *
+ * \AUTOSARReq     {SWS_CanNm_00215, SWS_CanNm_00192}
  * \ServiceID      {0x0C}
- * \Reentrancy     {Non Reentrant}
+ * \Reentrancy     {Reentrant (but not for the same NM-channel)}
  * \Synchronicity  {Synchronous}
  */
-void Nm_SetTxEnabled(uint8 Enabled);
+Std_ReturnType Nm_DisableCommunication(NetworkHandleType Channel);
+
+/**
+ * \brief   診断 CommunicationControl (UDS SID 0x28) からの NM PDU 送信再有効化要求を反映する
+ *          （[SWS_CanNm_00216] 相当）。
+ *
+ * \details `Nm_DisableCommunication()` で立てた抑制を解除する。ゲート省略の
+ *          方針は同関数のコメントを参照。
+ *
+ * \param[in]  Channel  NM チャネルハンドル（NM_MAIN_NETWORK_HANDLE 以外は拒否）。
+ *
+ * \retval  E_OK      要求を受理した。
+ * \retval  E_NOT_OK  未初期化、または Channel が不正。
+ *
+ * \AUTOSARReq     {SWS_CanNm_00216, SWS_CanNm_00192}
+ * \ServiceID      {0x0D}
+ * \Reentrancy     {Reentrant (but not for the same NM-channel)}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType Nm_EnableCommunication(NetworkHandleType Channel);
 
 /**
  * \brief   現在の CanNm 状態とモードを取得する（[SWS_CanNm_00091] 相当）。

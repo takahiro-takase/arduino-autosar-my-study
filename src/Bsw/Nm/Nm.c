@@ -468,18 +468,46 @@ void Nm_MainFunction(void)
     }
 }
 
-void Nm_SetTxEnabled(uint8 Enabled)
+Std_ReturnType Nm_DisableCommunication(NetworkHandleType Channel)
 {
     DET_LOGT(TAG, "called");
     if (!Nm_Initialized)
     {
-        Det_ReportError(NM_MODULE_ID, 0U, NM_API_ID_SET_TX_ENABLED, NM_E_UNINIT);
-        return;
+        Det_ReportError(NM_MODULE_ID, 0U, NM_API_ID_DISABLE_COMMUNICATION, NM_E_UNINIT);
+        return E_NOT_OK;
     }
 
-    if (Nm_TxEnabled != Enabled)
-        DET_LOGI(TAG, "CommunicationControl tx=%u->%u", (unsigned)Nm_TxEnabled, (unsigned)Enabled);
-    Nm_TxEnabled = Enabled;
+    if (Channel != NM_MAIN_NETWORK_HANDLE)
+    {
+        Det_ReportError(NM_MODULE_ID, 0U, NM_API_ID_DISABLE_COMMUNICATION, NM_E_INVALID_CHANNEL);
+        return E_NOT_OK;
+    }
+
+    if (Nm_TxEnabled != 0U)
+        DET_LOGI(TAG, "CommunicationControl tx=%u->0", (unsigned)Nm_TxEnabled);
+    Nm_TxEnabled = 0U;
+    return E_OK;
+}
+
+Std_ReturnType Nm_EnableCommunication(NetworkHandleType Channel)
+{
+    DET_LOGT(TAG, "called");
+    if (!Nm_Initialized)
+    {
+        Det_ReportError(NM_MODULE_ID, 0U, NM_API_ID_ENABLE_COMMUNICATION, NM_E_UNINIT);
+        return E_NOT_OK;
+    }
+
+    if (Channel != NM_MAIN_NETWORK_HANDLE)
+    {
+        Det_ReportError(NM_MODULE_ID, 0U, NM_API_ID_ENABLE_COMMUNICATION, NM_E_INVALID_CHANNEL);
+        return E_NOT_OK;
+    }
+
+    if (Nm_TxEnabled != 1U)
+        DET_LOGI(TAG, "CommunicationControl tx=%u->1", (unsigned)Nm_TxEnabled);
+    Nm_TxEnabled = 1U;
+    return E_OK;
 }
 
 Std_ReturnType Nm_GetState(NetworkHandleType Channel, Nm_StateType* StatePtr, Nm_ModeType* ModePtr)
