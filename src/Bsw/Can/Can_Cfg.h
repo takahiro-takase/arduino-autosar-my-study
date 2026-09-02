@@ -53,6 +53,8 @@
 #define CAN_API_ID_MAIN_FUNCTION_WAKEUP  0x0AU
 #define CAN_API_ID_GET_VERSION_INFO      0x07U
 #define CAN_API_ID_GET_CONTROLLER_ERROR_STATE  0x0BU  /**< AUTOSAR 非標準（Can.h 参照） */
+#define CAN_API_ID_DISABLE_CONTROLLER_INTERRUPTS  0x04U
+#define CAN_API_ID_ENABLE_CONTROLLER_INTERRUPTS   0x05U
 
 /** バージョン情報（SWS_Can_GetVersionInfo、Com/E2EXf/PduR 等の既存モジュールと同じ命名規則） */
 #define CAN_VENDOR_ID          0U

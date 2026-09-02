@@ -27,6 +27,8 @@ extern uint32 FakeCanHw_IsBusOffCount;
 extern uint32 FakeCanHw_GetErrorStateCount;
 extern uint32 FakeCanHw_IsWakeupPendingCount;
 extern uint32 FakeCanHw_AttachRxIsrCount;
+extern uint32 FakeCanHw_DisableRxIsrCount;
+extern uint32 FakeCanHw_EnableRxIsrCount;
 
 /** 直近の Can_Hw_Send() の引数（送信内容の検証用）。 */
 extern uint32_t FakeCanHw_LastSendId;

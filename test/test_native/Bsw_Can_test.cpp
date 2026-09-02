@@ -208,6 +208,86 @@ TEST_F(Bsw_Can_Test, Can_SetControllerMode_NG_OtherTransition)
 #endif
 
 // ------------------------------------------------------------
+// Can_DisableControllerInterrupts()/Can_EnableControllerInterrupts() の
+// 単体テスト（[SWS_Can_00202] のネストカウント仕様を検証する）
+// ------------------------------------------------------------
+TEST_F(Bsw_Can_Test, Can_DisableControllerInterrupts_NG_NullConfig)
+{
+    Can_DisableControllerInterrupts(0U);
+
+    EXPECT_EQ(FakeCanHw_DisableRxIsrCount, 0U);
+}
+
+TEST_F(Bsw_Can_Test, Can_DisableControllerInterrupts_NG_InvalidController)
+{
+    Can_Init(&config);
+
+    Can_DisableControllerInterrupts(1U);
+
+    EXPECT_EQ(FakeCanHw_DisableRxIsrCount, 0U);
+}
+
+TEST_F(Bsw_Can_Test, Can_DisableControllerInterrupts_OK_FirstCallDisablesHw)
+{
+    Can_Init(&config);
+
+    Can_DisableControllerInterrupts(0U);
+
+    EXPECT_EQ(FakeCanHw_DisableRxIsrCount, 1U);
+}
+
+TEST_F(Bsw_Can_Test, Can_DisableControllerInterrupts_OK_NestedCallOnlyDisablesHwOnce)
+{
+    Can_Init(&config);
+
+    Can_DisableControllerInterrupts(0U);
+    Can_DisableControllerInterrupts(0U);
+
+    EXPECT_EQ(FakeCanHw_DisableRxIsrCount, 1U);
+}
+
+TEST_F(Bsw_Can_Test, Can_EnableControllerInterrupts_NG_NullConfig)
+{
+    Can_EnableControllerInterrupts(0U);
+
+    EXPECT_EQ(FakeCanHw_EnableRxIsrCount, 0U);
+}
+
+TEST_F(Bsw_Can_Test, Can_EnableControllerInterrupts_NG_InvalidController)
+{
+    Can_Init(&config);
+    Can_DisableControllerInterrupts(0U);
+
+    Can_EnableControllerInterrupts(1U);
+
+    EXPECT_EQ(FakeCanHw_EnableRxIsrCount, 0U);
+}
+
+TEST_F(Bsw_Can_Test, Can_EnableControllerInterrupts_NG_UnmatchedCallIsNoOp)
+{
+    /* 対応する Disable が無い状態で Enable を呼んでも、ネストカウンタを
+     * 0 未満へアンダーフローさせず、HW も一切呼ばない ([SWS_Can_00202])。 */
+    Can_Init(&config);
+
+    Can_EnableControllerInterrupts(0U);
+
+    EXPECT_EQ(FakeCanHw_EnableRxIsrCount, 0U);
+}
+
+TEST_F(Bsw_Can_Test, Can_EnableControllerInterrupts_OK_OnlyReEnablesHwAfterMatchingDisableCount)
+{
+    Can_Init(&config);
+    Can_DisableControllerInterrupts(0U);
+    Can_DisableControllerInterrupts(0U);  // ネスト2重
+
+    Can_EnableControllerInterrupts(0U);   // 1回目: まだ再有効化しない
+    EXPECT_EQ(FakeCanHw_EnableRxIsrCount, 0U);
+
+    Can_EnableControllerInterrupts(0U);   // 2回目: ここで再有効化
+    EXPECT_EQ(FakeCanHw_EnableRxIsrCount, 1U);
+}
+
+// ------------------------------------------------------------
 // Can_Write() の単体テスト
 // ------------------------------------------------------------
 TEST_F(Bsw_Can_Test, Can_Write_NG_NullConfig)

@@ -16,6 +16,8 @@ uint32 FakeCanHw_IsBusOffCount        = 0U;
 uint32 FakeCanHw_GetErrorStateCount   = 0U;
 uint32 FakeCanHw_IsWakeupPendingCount = 0U;
 uint32 FakeCanHw_AttachRxIsrCount     = 0U;
+uint32 FakeCanHw_DisableRxIsrCount    = 0U;
+uint32 FakeCanHw_EnableRxIsrCount     = 0U;
 
 uint32_t FakeCanHw_LastSendId     = 0U;
 uint8_t  FakeCanHw_LastSendDlc    = 0U;
@@ -51,6 +53,8 @@ void FakeCanHw_Reset(void)
     FakeCanHw_GetErrorStateCount   = 0U;
     FakeCanHw_IsWakeupPendingCount = 0U;
     FakeCanHw_AttachRxIsrCount     = 0U;
+    FakeCanHw_DisableRxIsrCount    = 0U;
+    FakeCanHw_EnableRxIsrCount     = 0U;
 
     FakeCanHw_LastSendId  = 0U;
     FakeCanHw_LastSendDlc = 0U;
@@ -166,5 +170,17 @@ Can_Hw_ReturnType Can_Hw_AttachRxIsr(uint8_t intPin, void (*isr)(void))
     (void)intPin;
     FakeCanHw_AttachRxIsrCount++;
     FakeCanHw_AttachedIsr = isr;
+    return CAN_HW_OK;
+}
+
+Can_Hw_ReturnType Can_Hw_DisableRxIsr(void)
+{
+    FakeCanHw_DisableRxIsrCount++;
+    return CAN_HW_OK;
+}
+
+Can_Hw_ReturnType Can_Hw_EnableRxIsr(void)
+{
+    FakeCanHw_EnableRxIsrCount++;
     return CAN_HW_OK;
 }
