@@ -90,6 +90,7 @@ DID_NAMES = {
     0x0105: "RunLamp",
     0x0106: "FaultLamp",
     0x0107: "AbsLamp",
+    0xF190: "VIN",
 }
 
 ENGINE_STATE_NAMES = {0: "OFF", 1: "STARTING", 2: "RUNNING", 3: "FAULT"}
@@ -374,6 +375,11 @@ def decode_did_value(did: int, data: bytes) -> str:
         return f"{name} = {data[0]}"
     if did == 0x0103 and len(data) >= 1:
         return f"{name} = {data[0]} ({ENGINE_STATE_NAMES.get(data[0], '?')})"
+    if did == 0xF190 and len(data) >= 1:
+        try:
+            return f"{name} = {data.decode('ascii')}"
+        except UnicodeDecodeError:
+            pass
     return f"{name} = " + " ".join(f"{b:02X}" for b in data)
 
 

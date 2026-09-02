@@ -75,6 +75,30 @@ void Dcm_Init(const Dcm_ConfigType* ConfigPtr);
 void Dcm_MainFunction(void);
 
 /**
+ * \brief   VIN (Vehicle Identification Number) を取得する（[SWS_Dcm_00950]）。
+ *
+ * \details 実仕様は、ECU 統合者（車両側の実装）が本関数を提供し、Dcm が
+ *          起動時に一度だけ呼び出してキャッシュする「Dcm が呼び出す側」の
+ *          関数である（[SWS_Dcm_01174]）。本プロジェクトは車両情報の実体を
+ *          外部に持たないため、Dcm.c 自身が固定値を返す簡略実装とし、
+ *          `Dcm_Init()` が同じ「起動時に一度だけ取得しキャッシュする」
+ *          呼び出しパターンを踏襲する（UDS SID 0x22 DID 0xF190 の応答は
+ *          このキャッシュから返す。`Dcm_ReadDid()` 参照）。
+ *
+ * \param[out]  Data  VIN 格納先（`DCM_VIN_LENGTH` (17) バイト以上の
+ *                    バッファであること）。NULL 禁止。
+ *
+ * \retval  E_OK      Data に有効な VIN を格納した。
+ * \retval  E_NOT_OK  Data が NULL（本プロジェクトではこれ以外に失敗しない）。
+ *
+ * \AUTOSARReq     {SWS_Dcm_00950}
+ * \ServiceID      {0x07}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType Dcm_GetVin(uint8* Data);
+
+/**
  * \brief   現在アクティブなセッション制御タイプを取得する。
  *
  * \param[out]  SesCtrlType  取得値の格納先。NULL 禁止。

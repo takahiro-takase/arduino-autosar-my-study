@@ -100,6 +100,7 @@
  *  実測して確認済み。Dcm_ComIndication は AUTOSAR 標準の単一関数に対応しない
  *  本プロジェクト独自のエントリポイントのため、既存の非標準値 0xF0 を踏襲する） */
 #define DCM_API_ID_INIT           0x01U
+#define DCM_API_ID_GET_VIN        0x07U
 #define DCM_API_ID_GET_SES_CTRL_TYPE 0x06U
 #define DCM_API_ID_GET_SECURITY_LEVEL 0x0DU
 #define DCM_API_ID_RESET_TO_DEFAULT_SESSION 0x2AU
@@ -275,6 +276,14 @@
 #define DCM_DID_CRYPTO_KEY_UPDATE          0x0108U
 /** keyName(1) + keyData(16, CRYPTO_AES128_KEY_SIZE と同値) */
 #define DCM_DID_CRYPTO_KEY_UPDATE_LENGTH   17U
+
+/** VIN (Vehicle Identification Number): uint8[DCM_VIN_LENGTH]、読み取り専用
+ *  (0x22 のみ)。ISO 14229-1 Annex F の標準化領域 (0xF180-0xF19F) に属する
+ *  固定 DID のため、本ファイル冒頭コメントの製造者定義領域 (0x0100-0xFEFF)
+ *  とは別枠。実仕様は `Dcm_GetVin()`（Dcm.h 参照）が起動時に一度だけ取得
+ *  した値をここへキャッシュして返す。 */
+#define DCM_DID_VIN     0xF190U
+#define DCM_VIN_LENGTH  17U
 
 /* -----------------------------------------------------------------------
  * InputOutputControlByIdentifier (SID 0x2F) controlOptionRecord

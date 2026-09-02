@@ -263,6 +263,11 @@ static uint8 Dcm_TxBuf[DCM_TX_BUF_SIZE];
  *  検証するための学習用データ（実際の車両データではない）。 */
 static uint8 Dcm_TestPattern[DCM_DID_TEST_PATTERN_LENGTH];
 
+/** DID 0xF190 (VIN) のキャッシュ領域。[SWS_Dcm_01174] に倣い Dcm_Init() が
+ *  起動時に一度だけ Dcm_GetVin() を呼んで埋める（Dcm_GetVin() の Doxygen
+ *  コメント参照）。 */
+static uint8 Dcm_Vin[DCM_VIN_LENGTH];
+
 /** CanTp_Transmit に渡す PDU 情報構造体 */
 static PduInfoType Dcm_TxPdu;
 
@@ -340,8 +345,39 @@ void Dcm_Init(const Dcm_ConfigType* ConfigPtr)
 
     Dcm_DTCSettingDisabled = 0U;
 
+    (void)Dcm_GetVin(Dcm_Vin);  /* [SWS_Dcm_01174]: 起動時に一度だけ取得しキャッシュする */
+
     Dcm_Initialized = 1U;
     DET_LOGI(TAG, "Init ok");
+}
+
+/**
+ * \brief   VIN (Vehicle Identification Number) を取得する（[SWS_Dcm_00950]）。
+ *
+ * \AUTOSARReq     {SWS_Dcm_00950}
+ * \ServiceID      {0x07}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType Dcm_GetVin(uint8* Data)
+{
+    DET_LOGT(TAG, "called");
+    if (Data == NULL)
+    {
+        Det_ReportError(DCM_MODULE_ID, 0U, DCM_API_ID_GET_VIN, DCM_E_PARAM_POINTER);
+        return E_NOT_OK;
+    }
+
+    /* 本プロジェクトは実車両の VIN 発行元を持たないため固定値を返す
+     * （学習用の架空値。ISO 3779 の混同回避文字 I/O/Q は避けている）。 */
+    static const uint8 kFixedVin[DCM_VIN_LENGTH] =
+        { 'A','R','D','U','N','0','A','U','T','0','S','A','R','2','0','2','6' };
+
+    uint8 i;
+    for (i = 0U; i < DCM_VIN_LENGTH; i++)
+        Data[i] = kFixedVin[i];
+
+    return E_OK;
 }
 
 /**
@@ -1201,6 +1237,14 @@ static Std_ReturnType Dcm_ReadDid(uint16 did, uint8* buf, uint8* dataLen)
         *dataLen = DCM_DID_TEST_PATTERN_LENGTH;
         return E_OK;
     }
+    case DCM_DID_VIN:
+    {
+        uint8 i;
+        for (i = 0U; i < DCM_VIN_LENGTH; i++)
+            buf[i] = Dcm_Vin[i];
+        *dataLen = DCM_VIN_LENGTH;
+        return E_OK;
+    }
     default:
         return E_NOT_OK;
     }
@@ -1226,7 +1270,10 @@ static void Dcm_HandleReadDataById(const uint8* uds, uint8 udsLen)
 
     uint16 did = ((uint16)uds[1] << 8U) | (uint16)uds[2];
 
-    uint8 dataBuf[DCM_DID_TEST_PATTERN_LENGTH];
+    /* Dcm_ReadDid() が扱う DID の中で最大の長さ（DCM_VIN_LENGTH=17）に
+     * 合わせる。DCM_DID_TEST_PATTERN_LENGTH(8) だけを見て確保すると VIN
+     * (0xF190) 読み出し時にスタックバッファオーバーフローする。 */
+    uint8 dataBuf[DCM_VIN_LENGTH];
     uint8 dataLen = 0U;
 
     if (Dcm_ReadDid(did, dataBuf, &dataLen) != E_OK)

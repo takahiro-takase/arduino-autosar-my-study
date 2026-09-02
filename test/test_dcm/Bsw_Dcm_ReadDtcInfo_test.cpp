@@ -144,6 +144,58 @@ TEST_F(Bsw_Dcm_ReadDtcInfo_Test, GetFaultDetectionCounter_NG_NullPointerReturnsE
 }
 
 // ------------------------------------------------------------
+// Dcm_GetVin / DID 0xF190（VIN読み出し新設。実仕様ではDcmが呼び出す側の
+// 関数だが、本プロジェクトは固定値を返す簡略実装。Dcm_Init()が起動時に
+// 一度だけ呼びキャッシュし、UDS SID 0x22経由の応答はそのキャッシュから
+// 返す）
+// ------------------------------------------------------------
+
+TEST_F(Bsw_Dcm_ReadDtcInfo_Test, GetVin_OK_ReturnsFixedSeventeenByteVin)
+{
+    uint8 vin[DCM_VIN_LENGTH] = { 0 };
+
+    Std_ReturnType ret = Dcm_GetVin(vin);
+
+    EXPECT_EQ(ret, E_OK);
+    /* 全バイトが書き換わっている（0x00埋めのまま残っていない）ことのみ検証。
+     * 具体的な文字列内容は固定値の実装詳細のため固定しない。 */
+    uint8 nonZeroCount = 0U;
+    for (uint8 i = 0U; i < DCM_VIN_LENGTH; i++)
+        if (vin[i] != 0U)
+            nonZeroCount++;
+    EXPECT_EQ(nonZeroCount, DCM_VIN_LENGTH);
+}
+
+TEST_F(Bsw_Dcm_ReadDtcInfo_Test, GetVin_NG_NullPointerReturnsError)
+{
+    Std_ReturnType ret = Dcm_GetVin(NULL);
+
+    EXPECT_EQ(ret, E_NOT_OK);
+}
+
+TEST_F(Bsw_Dcm_ReadDtcInfo_Test, ReadDataById_OK_VinReturnsSeventeenBytesMatchingDcmGetVin)
+{
+    /* 準備 (Arrange): [0x22, 0xF1, 0x90] */
+    uint8 req[3] = { DCM_SID_READ_DATA, (uint8)(DCM_DID_VIN >> 8U), (uint8)(DCM_DID_VIN & 0xFFU) };
+
+    /* 実行 (Act) */
+    PduInfoType pdu = { req, sizeof(req) };
+    Dcm_ComIndication(0U, &pdu);
+
+    /* 評価 (Assert): [0x62, 0xF1, 0x90, VIN(17バイト)] */
+    ASSERT_EQ(FakeCanTp_TransmitCount, 1U);
+    ASSERT_EQ(FakeCanTp_TxLength, (uint8)(3U + DCM_VIN_LENGTH));
+    EXPECT_EQ(FakeCanTp_TxBuf[0], 0x62U);
+    EXPECT_EQ(FakeCanTp_TxBuf[1], (uint8)(DCM_DID_VIN >> 8U));
+    EXPECT_EQ(FakeCanTp_TxBuf[2], (uint8)(DCM_DID_VIN & 0xFFU));
+
+    uint8 expectedVin[DCM_VIN_LENGTH];
+    ASSERT_EQ(Dcm_GetVin(expectedVin), E_OK);
+    for (uint8 i = 0U; i < DCM_VIN_LENGTH; i++)
+        EXPECT_EQ(FakeCanTp_TxBuf[3U + i], expectedVin[i]) << "byte " << (unsigned)i;
+}
+
+// ------------------------------------------------------------
 // Dcm_GetSesCtrlType/Dcm_GetSecurityLevel（Dcm_Cbk.c 内部の static フィールド
 // Dcm_CurrentSession/Dcm_SecurityLevel を読み出すだけの新規 getter API）
 // ------------------------------------------------------------
