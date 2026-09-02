@@ -61,6 +61,16 @@ Can_Hw_ReturnType Can_Hw_IsWakeupPending(void);
  *  isr はこの登録以降、真の割り込みコンテキストで呼ばれる。 */
 Can_Hw_ReturnType Can_Hw_AttachRxIsr(uint8_t intPin, void (*isr)(void));
 
+/** Can_Hw_AttachRxIsr() が登録した INT ピンの割り込みを一時的に切り離す
+ *  （`detachInterrupt()`）。MCP2515 自体はバス活動の受信を継続するため、
+ *  Can_MainFunction_Read() 等のポーリング経路には影響しない
+ *  （Can_DisableControllerInterrupts() が本関数を使う理由は Can.h 参照）。 */
+Can_Hw_ReturnType Can_Hw_DisableRxIsr(void);
+
+/** Can_Hw_DisableRxIsr() で切り離した INT ピンの割り込みを、
+ *  Can_Hw_AttachRxIsr() が記憶している ISR で再登録する。 */
+Can_Hw_ReturnType Can_Hw_EnableRxIsr(void);
+
 #ifdef __cplusplus
 }
 #endif

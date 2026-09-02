@@ -130,6 +130,12 @@ static volatile uint8 Can_WakeupIrqPending = 0U;
 static uint8 Can_TxErrCount = 0U;
 #define CAN_BUSOFF_TX_ERR_THRESHOLD  5U
 
+/** Can_DisableControllerInterrupts()/Can_EnableControllerInterrupts() の
+ *  ネストカウンタ（[SWS_Can_00202]: N 回 Disable したら N 回 Enable するまで
+ *  実際には再有効化しない）。0 の間だけ実際に Can_Hw_DisableRxIsr() を呼び、
+ *  0 に戻った瞬間だけ Can_Hw_EnableRxIsr() を呼ぶ。 */
+static uint8 Can_InterruptDisableNestCount = 0U;
+
 /* -----------------------------------------------------------------------
  * TX 確認 (CanIf_TxConfirmation) 保留キュー
  *
@@ -184,6 +190,7 @@ void Can_Init(const Can_ConfigType* Config)
     Can_TxConfHead = 0U;
     Can_TxConfTail = 0U;
     Can_TxConfLen  = 0U;
+    Can_InterruptDisableNestCount = 0U;
 
     if (Can_Hw_Init(Config->csPin, Config->baudrate, Config->crystalFreq) != CAN_HW_OK)
     {
@@ -337,6 +344,86 @@ Can_ReturnType Can_SetControllerMode(uint8 Controller, Can_StateTransitionType T
     }
 
     return CAN_OK;
+}
+
+/**
+ * \brief   指定 CAN コントローラの割り込みを全て無効化する。
+ *
+ * \details 本プロジェクトの CAN 受信は MCP2515 の INT ピン割り込み
+ *          （`Can_Hw_AttachRxIsr()`）で駆動するが、`Can_MainFunction_Read()`
+ *          自体は割り込みの有無に関わらず毎周期ポーリングする二重化設計
+ *          （ファイル冒頭コメント参照）のため、本関数は MCU 側の割り込み
+ *          （`detachInterrupt()`）のみを切り離す簡略実装とする。MCP2515
+ *          自体はバス活動の受信を継続するため、切り離し中でも次回の
+ *          `Can_MainFunction_Read()` で正しく処理される。
+ *
+ * \param[in]  Controller  CAN コントローラのインデックス。
+ *                         本実装はコントローラ 0 のみ対応。
+ *
+ * \AUTOSARReq     {SWS_Can_00231, SWS_Can_00049, SWS_Can_00202, SWS_Can_00205, SWS_Can_00206}
+ * \ServiceID      {0x04}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void Can_DisableControllerInterrupts(uint8 Controller)
+{
+    DET_LOGT(TAG, "called");
+
+    if (Can_ConfigPtr == NULL)
+    {
+        Det_ReportError(CAN_MODULE_ID, 0U, CAN_API_ID_DISABLE_CONTROLLER_INTERRUPTS, CAN_E_UNINIT);
+        return;
+    }
+
+    if (Controller != 0U)
+    {
+        Det_ReportError(CAN_MODULE_ID, 0U, CAN_API_ID_DISABLE_CONTROLLER_INTERRUPTS, CAN_E_PARAM_CONTROLLER);
+        return;
+    }
+
+    /* [SWS_Can_00202]: N 回 Disable したら N 回 Enable するまで実際には
+     * 再有効化しない。最初の1回だけ実際に切り離す。 */
+    if (Can_InterruptDisableNestCount == 0U)
+        (void)Can_Hw_DisableRxIsr();
+    Can_InterruptDisableNestCount++;
+}
+
+/**
+ * \brief   Can_DisableControllerInterrupts() で無効化した割り込みを再有効化する。
+ *
+ * \details [SWS_Can_00202] に従い、ネストカウンタが 0 に戻った時だけ実際に
+ *          再登録する。対応する Disable 呼び出しより多く呼ばれた分は無視する。
+ *
+ * \param[in]  Controller  CAN コントローラのインデックス。
+ *                         本実装はコントローラ 0 のみ対応。
+ *
+ * \AUTOSARReq     {SWS_Can_00232, SWS_Can_00202}
+ * \ServiceID      {0x05}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void Can_EnableControllerInterrupts(uint8 Controller)
+{
+    DET_LOGT(TAG, "called");
+
+    if (Can_ConfigPtr == NULL)
+    {
+        Det_ReportError(CAN_MODULE_ID, 0U, CAN_API_ID_ENABLE_CONTROLLER_INTERRUPTS, CAN_E_UNINIT);
+        return;
+    }
+
+    if (Controller != 0U)
+    {
+        Det_ReportError(CAN_MODULE_ID, 0U, CAN_API_ID_ENABLE_CONTROLLER_INTERRUPTS, CAN_E_PARAM_CONTROLLER);
+        return;
+    }
+
+    if (Can_InterruptDisableNestCount == 0U)
+        return;  /* 対応する Disable より多く呼ばれた分は無視する */
+
+    Can_InterruptDisableNestCount--;
+    if (Can_InterruptDisableNestCount == 0U)
+        (void)Can_Hw_EnableRxIsr();
 }
 
 /**
