@@ -341,6 +341,28 @@ Std_ReturnType Dem_GetEventIdOfDTC(uint32 DTC, Dem_EventIdType* EventId);
 Std_ReturnType Dem_GetOccurrenceCounterOfEvent(Dem_EventIdType EventId, uint8* Counter);
 
 /**
+ * \brief   指定イベントの Fault Detection Counter（デバウンスカウンタの生値）を取得する。
+ *
+ * \details DCM SID 0x19 subFunc 0x0B (reportDTCFaultDetectionCounter) から
+ *          呼び出す。ISO 14229-1 に従い -128(PASSED 側に最も振れた状態)〜
+ *          127(FAILED 側に最も振れた状態) の範囲で、内部の
+ *          `Dem_DebounceCounter[]`（`Dem_ReportErrorStatus()` が更新する値）を
+ *          そのまま返す。
+ *
+ * \param[in]   EventId               イベント ID (DEM_EVENT_* 定数)。
+ * \param[out]  FaultDetectionCounter デバウンスカウンタ生値の格納先。NULL 禁止。
+ *
+ * \retval  E_OK      正常取得。
+ * \retval  E_NOT_OK  未初期化、EventId が範囲外、または FaultDetectionCounter が NULL。
+ *
+ * \AUTOSARReq     {SWS_Dem_00203}
+ * \ServiceID      {0x3e}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType Dem_GetFaultDetectionCounter(Dem_EventIdType EventId, sint8* FaultDetectionCounter);
+
+/**
  * \brief   DTC の記録（error memory への反映）を有効化する。
  *
  * \details Dcm UDS SID 0x85 ControlDTCSetting のサブ機能 0x01 (on) から呼び出す

@@ -113,6 +113,7 @@
               { "label": "DTC一覧取得 全件 (02/FF)",        "payload": ["0x03", "0x19", "0x02", "0xFF"] },
               { "label": "DTC一覧取得 Active only (02/08)", "payload": ["0x03", "0x19", "0x02", "0x08"] },
               { "label": "対応DTC全件取得 (0A)",            "payload": ["0x02", "0x19", "0x0A"] },
+              { "label": "FaultDetectionCounter取得 (14)", "payload": ["0x02", "0x19", "0x14"] },
               { "label": "FreezeFrame取得 (04)",           "payload": ["0x06", "0x19", "0x04", "0x00", "0x01", "0x01", "0x01"] },
               { "label": "ExtendedData取得 (06)",          "payload": ["0x06", "0x19", "0x06", "0x00", "0x01", "0x01", "0x01"] }
           ]

@@ -1391,6 +1391,19 @@ class UdsTesterFrame(ttk.Frame):
                 i += 4
             label = "no supported DTC" if sub == 0x0A else "no DTC"
             return "; ".join(entries) if entries else f"({label})"
+        if sub == 0x14:
+            # 応答: [0x59, 0x14, (DTC_H,DTC_M,DTC_L,FDC) x N]
+            # 0x02/0x0A と異なり statusAvailMask バイトを含まないため、
+            # DTCレコードは raw[2] から始まる。
+            entries = []
+            i = 2
+            while i + 4 <= len(raw):
+                dtc = (raw[i] << 16) | (raw[i + 1] << 8) | raw[i + 2]
+                fdc = raw[i + 3]
+                fdc_signed = fdc - 256 if fdc >= 128 else fdc
+                entries.append(f"{uds_link.dtc_name(dtc)} (FDC={fdc_signed})")
+                i += 4
+            return "; ".join(entries) if entries else "(no supported DTC)"
         if sub == 0x04 and len(raw) >= 7:
             dtc = (raw[2] << 16) | (raw[3] << 8) | raw[4]
             data = " ".join(f"{b:02X}" for b in raw[6:])

@@ -192,6 +192,9 @@
 #define DCM_DTC_SUBFUNC_REPORT_SNAPSHOT  0x04U  /**< reportDTCSnapshotRecordByDTCNumber */
 #define DCM_DTC_SUBFUNC_REPORT_EXTDATA   0x06U  /**< reportExtendedDataRecordByDTCNumber */
 #define DCM_DTC_SUBFUNC_REPORT_SUPPORTED 0x0AU  /**< reportSupportedDTC            */
+#define DCM_DTC_SUBFUNC_REPORT_FDC       0x14U  /**< reportDTCFaultDetectionCounter (ISO 14229-1
+                                                  *   ではこの値。0x0B は reportFirstTestFailedDTC
+                                                  *   という別サービスのため混同しないこと） */
 
 /** ISO 14229-1 DTC フォーマット識別子 (0x01 = ISO 15031-6 / SAE J2012) */
 #define DCM_DTC_FORMAT_ISO15031         0x01U

@@ -911,6 +911,39 @@ Std_ReturnType Dem_GetOccurrenceCounterOfEvent(Dem_EventIdType EventId, uint8* C
     return E_OK;
 }
 
+/**
+ * \brief   指定イベントの Fault Detection Counter（デバウンスカウンタ生値）を取得する。
+ *
+ * \AUTOSARReq     {SWS_Dem_00203}
+ * \ServiceID      {0x3e}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType Dem_GetFaultDetectionCounter(Dem_EventIdType EventId, sint8* FaultDetectionCounter)
+{
+    DET_LOGT(TAG, "called");
+    if (!Dem_Initialized)
+    {
+        Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_GET_FAULT_DETECTION_COUNTER, DEM_E_UNINIT);
+        return E_NOT_OK;
+    }
+
+    if (EventId >= DEM_EVENT_COUNT)
+    {
+        Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_GET_FAULT_DETECTION_COUNTER, DEM_E_WRONG_CONFIGURATION);
+        return E_NOT_OK;
+    }
+
+    if (FaultDetectionCounter == NULL)
+    {
+        Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_GET_FAULT_DETECTION_COUNTER, DEM_E_PARAM_POINTER);
+        return E_NOT_OK;
+    }
+
+    *FaultDetectionCounter = Dem_DebounceCounter[EventId];
+    return E_OK;
+}
+
 Std_ReturnType Dem_EnableDTCSetting(uint8 ClientId)
 {
     DET_LOGT(TAG, "called");
