@@ -130,6 +130,26 @@ Std_ReturnType ComM_GetStatus(ComM_InitStatusType* Status);
 Std_ReturnType ComM_RequestComMode(ComM_UserHandleType User, ComM_ModeType ComMode);
 
 /**
+ * \brief   ユーザが現在要求している通信モードを取得する（[SWS_ComM_00079]）。
+ *
+ * \details `ComM_RequestComMode()` で設定された、集約前のユーザ単位の要求値
+ *          （`ComM_UserRequest[User]`）をそのまま返す。集約後のチャネル単位の
+ *          現在モードを返す `ComM_GetCurrentComMode()` とは異なる点に注意。
+ *
+ * \param[in]   User     照会するユーザ ID。
+ * \param[out]  ComMode  要求中のモードを受け取る変数へのポインタ。NULL 禁止。
+ *
+ * \retval  E_OK      正常に取得した。
+ * \retval  E_NOT_OK  User が範囲外、または ComMode が NULL。
+ *
+ * \AUTOSARReq     {SWS_ComM_00079}
+ * \ServiceID      {0x07}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType ComM_GetRequestedComMode(ComM_UserHandleType User, ComM_ModeType* ComMode);
+
+/**
  * \brief   ユーザの現在の通信モードを取得する。
  *
  * \param[in]  User      照会するユーザ ID。

@@ -388,6 +388,39 @@ Std_ReturnType ComM_RequestComMode(ComM_UserHandleType User, ComM_ModeType ComMo
 }
 
 /**
+ * \brief   ユーザが現在要求している通信モードを取得する（[SWS_ComM_00079]）。
+ *
+ * \AUTOSARReq     {SWS_ComM_00079}
+ * \ServiceID      {0x07}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType ComM_GetRequestedComMode(ComM_UserHandleType User, ComM_ModeType* ComMode)
+{
+    DET_LOGT(TAG, "called");
+    if (!ComM_Initialized)
+    {
+        Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_GET_REQUESTED_COM_MODE, COMM_E_UNINIT);
+        return E_NOT_OK;
+    }
+
+    if (User >= COMM_USER_COUNT)
+    {
+        Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_GET_REQUESTED_COM_MODE, COMM_E_WRONG_PARAMETERS);
+        return E_NOT_OK;
+    }
+
+    if (ComMode == NULL)
+    {
+        Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_GET_REQUESTED_COM_MODE, COMM_E_PARAM_POINTER);
+        return E_NOT_OK;
+    }
+
+    *ComMode = ComM_UserRequest[User];
+    return E_OK;
+}
+
+/**
  * \brief   ユーザの現在の通信モードを取得する。
  *
  * \ServiceID      {0x06}
