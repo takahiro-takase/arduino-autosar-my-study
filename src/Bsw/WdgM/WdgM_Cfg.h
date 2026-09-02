@@ -75,6 +75,7 @@
 #define WDGM_E_NO_INIT       0x10U  /* [SWS_WdgM_00389 等]: 未初期化時の API 呼び出し */
 #define WDGM_E_PARAM_SEID    0x13U  /* [SWS_WdgM_00278/00172 等]: SEID が範囲外 */
 #define WDGM_E_INV_POINTER   0x14U  /* NULL ポインタチェック */
+#define WDGM_E_PARAM_MODE    0x18U  /* [SWS_WdgM_00020]: WdgM_SetMode() の Mode が範囲外 */
 
 /** ApiId（各関数の Doxygen \ServiceID タグと一致させること。値は SWS 8.x 章の
  *  「Service ID[hex]」記載を実測して確認済み） */
@@ -87,12 +88,20 @@
 #define WDGM_API_ID_GET_VERSION_INFO     0x02U
 #define WDGM_API_ID_PERFORM_RESET            0x0FU
 #define WDGM_API_ID_GET_FIRST_EXPIRED_SEID   0x10U
+#define WDGM_API_ID_SET_MODE                 0x03U
+#define WDGM_API_ID_GET_MODE                 0x0BU
 
 /** バージョン情報（SWS_WdgM、Com/E2EXf/PduR 等の既存モジュールと同じ命名規則） */
 #define WDGM_VENDOR_ID          0U
 #define WDGM_SW_MAJOR_VERSION   1U
 #define WDGM_SW_MINOR_VERSION   0U
 #define WDGM_SW_PATCH_VERSION   0U
+
+/** WdgM モードの設定数。本プロジェクトは単一の静的コンフィグのみ保持し、
+ *  複数モード間の切替（監視対象・許容値セットの入れ替え）には対応しない
+ *  ため、常にこの 1 モードのみを受理する（[SWS_WdgM_00358] WdgM_ModeType の
+ *  Range 0〜<Number of Modes>-1 は本プロジェクトでは 0 のみ）。 */
+#define WDGM_MODE_DEFAULT     0U
 
 /** 監視対象エンティティ総数 */
 #define WDGM_SUPERVISED_ENTITY_COUNT     2U
