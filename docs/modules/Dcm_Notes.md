@@ -59,6 +59,7 @@ CAN 0x100（EngineInfo）・0x110（AbsInfo）・0x7E0（診断要求）は PduR
 |  |  |  | 0x04<br>(FreezeFrame取得) | `06 19 04 HH MM LL RR 00` | byte3-5=DTCコード<br>byte6=recordNumber（固定0x01） |
 |  |  |  | 0x06<br>(ExtendedData取得) | `06 19 06 HH MM LL RR 00` | byte3-5=DTCコード<br>byte6=recordNumber（固定0x01） |
 |  |  |  | 0x0A<br>(サポートDTC一覧取得) | `02 19 0A 00 00 00 00 00` | 追加パラメータなし。statusMask による絞り込みを一切行わず、本 ECU が対応する DEM_EVENT_COUNT 件全てを返す（後述） |
+|  |  |  | 0x14<br>(FaultDetectionCounter取得) | `02 19 14 00 00 00 00 00` | 追加パラメータなし。0x0A と同じ全件取得だが、応答に statusAvailMask を含まない点が 0x02/0x0A と異なる（後述） |
 | 0x22<br>ReadDataByIdentifier | ○ | ○ | — | `03 22 HH LL 00 00 00 00` | byte2-3=DID（0x0101/0x0102/0x0103/0x0104） |
 | 0x27<br>SecurityAccess | × | ○ | 0x01<br>(requestSeed) | `02 27 01 00 00 00 00 00` | seed 2 バイト |
 |  |  |  | 0x02<br>(sendKey) | `04 27 02 HH LL 00 00 00` | byte2-3=key（big-endian） |
@@ -133,6 +134,17 @@ FF（len=43）が受理され、CF×6（sn=1〜6）まで正しく送信完了
 （`CanTp_SendNextCF: TX done`）し、応答バイト列を手動デコードすると
 `DEM_EVENT_COUNT=10` 件全ての DTC レコードが正しい順序で組み立てられて
 いることを確認しました。
+
+### 0x19/0x14 reportDTCFaultDetectionCounter（2026-09 追加）
+
+`Dem_GetFaultDetectionCounter()`（[SWS_Dem_00203]、デバウンスカウンタ生値
+-128〜127を返すgetter）新設に伴い追加。DTC 一覧の取得自体は 0x0A と同じ
+`Dem_GetSupportedDTCs()` を使うが、応答フォーマットが 0x02/0x0A と異なり
+`DTCStatusAvailabilityMask` バイトを含まない（ISO 14229-1 の
+`reportDTCFaultDetectionCounter` はそもそもステータス概念を扱わないため）。
+実装当初 subFunc 値を 0x0B と誤って割り当てていたが、ISO 14229-1 では
+0x0B は別サービス（reportFirstTestFailedDTC）であるため `/code-review` の
+指摘で 0x14 に訂正した（`Dcm_Cfg.h`/`Dcm_Cbk.c` 参照）。
 
 ## DID 一覧（0x22 ReadDataByIdentifier）
 

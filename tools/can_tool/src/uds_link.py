@@ -161,6 +161,7 @@ DTC_SUBFUNC_NAMES = {
     0x04: "reportDTCSnapshotRecordByDTCNumber",
     0x06: "reportExtendedDataRecordByDTCNumber",
     0x0A: "reportSupportedDTC",
+    0x14: "reportDTCFaultDetectionCounter",
 }
 
 # SID 0x31 RoutineControl の subFunction

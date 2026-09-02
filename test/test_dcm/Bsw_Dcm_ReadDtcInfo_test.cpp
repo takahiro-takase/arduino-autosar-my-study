@@ -101,6 +101,49 @@ TEST_F(Bsw_Dcm_ReadDtcInfo_Test, DisableDTCSetting_OK_ReturnsOk)
 }
 
 // ------------------------------------------------------------
+// Dem_GetFaultDetectionCounter（UDS SID 0x19 subFunc 0x0B
+// reportDTCFaultDetectionCounter 用に新設。内部の Dem_DebounceCounter[] を
+// そのまま返す薄いgetter）
+// ------------------------------------------------------------
+
+TEST_F(Bsw_Dcm_ReadDtcInfo_Test, GetFaultDetectionCounter_OK_ReturnsZeroForFreshEvent)
+{
+    sint8 fdc = 0x7F;  /* 未更新を検出できる初期値 */
+
+    Std_ReturnType ret = Dem_GetFaultDetectionCounter(DEM_EVENT_ENGINE_OVERHEAT, &fdc);
+
+    EXPECT_EQ(ret, E_OK);
+    EXPECT_EQ(fdc, 0);
+}
+
+TEST_F(Bsw_Dcm_ReadDtcInfo_Test, GetFaultDetectionCounter_OK_ReflectsDebounceCounterAfterFailedReport)
+{
+    Dem_ReportErrorStatus(DEM_EVENT_ENGINE_OVERHEAT, DEM_EVENT_STATUS_FAILED);
+
+    sint8 fdc = 0;
+    Std_ReturnType ret = Dem_GetFaultDetectionCounter(DEM_EVENT_ENGINE_OVERHEAT, &fdc);
+
+    EXPECT_EQ(ret, E_OK);
+    EXPECT_EQ(fdc, 1);  /* 中立(0)から FAILED 方向へ1回分だけ進む */
+}
+
+TEST_F(Bsw_Dcm_ReadDtcInfo_Test, GetFaultDetectionCounter_NG_InvalidEventIdReturnsError)
+{
+    sint8 fdc = 0;
+
+    Std_ReturnType ret = Dem_GetFaultDetectionCounter((Dem_EventIdType)DEM_EVENT_COUNT, &fdc);
+
+    EXPECT_EQ(ret, E_NOT_OK);
+}
+
+TEST_F(Bsw_Dcm_ReadDtcInfo_Test, GetFaultDetectionCounter_NG_NullPointerReturnsError)
+{
+    Std_ReturnType ret = Dem_GetFaultDetectionCounter(DEM_EVENT_ENGINE_OVERHEAT, NULL);
+
+    EXPECT_EQ(ret, E_NOT_OK);
+}
+
+// ------------------------------------------------------------
 // Dcm_GetSesCtrlType/Dcm_GetSecurityLevel（Dcm_Cbk.c 内部の static フィールド
 // Dcm_CurrentSession/Dcm_SecurityLevel を読み出すだけの新規 getter API）
 // ------------------------------------------------------------
@@ -217,6 +260,47 @@ TEST_F(Bsw_Dcm_ReadDtcInfo_Test, ReadDtcSupported_OK_DiffersFromReportByStatusMa
      * 実装コメント参照）。 */
     ASSERT_EQ(FakeCanTp_TransmitCount, 1U);
     EXPECT_EQ(FakeCanTp_TxLength, (uint8)(3U + DEM_EVENT_COUNT * 4U));
+}
+
+// ------------------------------------------------------------
+// subFunc 0x14 reportDTCFaultDetectionCounter
+// （Dem_GetFaultDetectionCounter() 新設に伴う追加。DTC 一覧取得は 0x0A と
+// 同じ Dem_GetSupportedDTCs() を使うが、応答に statusAvailMask を含まない
+// 点が 0x02/0x0A と異なる（ISO 14229-1、/code-review で当初の subFunc
+// 0x0B 誤割当ても合わせて訂正済み。docs/modules/Dcm_Notes.md 参照）。
+// ------------------------------------------------------------
+
+TEST_F(Bsw_Dcm_ReadDtcInfo_Test, ReadDtcFaultDetectionCounter_OK_ReturnsZeroForFreshEvents)
+{
+    /* 準備 (Arrange): [0x19, 0x14]（追加パラメータなし） */
+    uint8 req[2] = { DCM_SID_READ_DTC_INFO, DCM_DTC_SUBFUNC_REPORT_FDC };
+
+    /* 実行 (Act) */
+    SendReadDtcInfo(req, sizeof(req));
+
+    /* 評価 (Assert): [0x59, 0x14, (DTC_H,DTC_M,DTC_L,FDC) x DEM_EVENT_COUNT]
+     * （availMask バイトは含まない）。Dem_Init() 直後は全イベントの
+     * Fault Detection Counter が 0。 */
+    ASSERT_EQ(FakeCanTp_TransmitCount, 1U);
+    ASSERT_EQ(FakeCanTp_TxLength, (uint8)(2U + DEM_EVENT_COUNT * 4U));
+    EXPECT_EQ(FakeCanTp_TxBuf[0], 0x59U);
+    EXPECT_EQ(FakeCanTp_TxBuf[1], DCM_DTC_SUBFUNC_REPORT_FDC);
+    EXPECT_EQ(FakeCanTp_TxBuf[5], 0U);  // 1件目(EventId=0)のFDC
+}
+
+TEST_F(Bsw_Dcm_ReadDtcInfo_Test, ReadDtcFaultDetectionCounter_OK_ReflectsDebounceCounterAfterFailedReport)
+{
+    /* 準備 (Arrange): EventId=0 (DEM_EVENT_ENGINE_OVERHEAT) を1回 FAILED 報告 */
+    Dem_ReportErrorStatus(DEM_EVENT_ENGINE_OVERHEAT, DEM_EVENT_STATUS_FAILED);
+
+    uint8 req[2] = { DCM_SID_READ_DTC_INFO, DCM_DTC_SUBFUNC_REPORT_FDC };
+
+    /* 実行 (Act) */
+    SendReadDtcInfo(req, sizeof(req));
+
+    /* 評価 (Assert): 1件目(EventId=0)のFDCが中立(0)からFAILED方向へ1進む */
+    ASSERT_EQ(FakeCanTp_TransmitCount, 1U);
+    EXPECT_EQ(FakeCanTp_TxBuf[5], 1U);
 }
 
 // ------------------------------------------------------------

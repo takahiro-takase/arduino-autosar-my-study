@@ -101,6 +101,7 @@
 #define DEM_API_ID_GET_SUPPORTED_DTCS               0x2AU
 #define DEM_API_ID_GET_ALL_DTCS                    0x2BU
 #define DEM_API_ID_SET_FREEZE_FRAME_CONTEXT        0x2CU
+#define DEM_API_ID_GET_FAULT_DETECTION_COUNTER      0x3EU
 #define DEM_API_ID_GET_VERSION_INFO                 0x00U
 
 /** バージョン情報（SWS_Dem、Com/E2EXf/PduR 等の既存モジュールと同じ命名規則） */
