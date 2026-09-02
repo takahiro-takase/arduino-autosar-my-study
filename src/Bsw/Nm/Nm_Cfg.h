@@ -71,11 +71,11 @@
 #define NM_API_ID_NETWORK_RELEASE          0x03U
 #define NM_API_ID_REPEAT_MESSAGE_REQUEST   0x08U
 #define NM_API_ID_GET_STATE                0x0BU
-/** Nm_SetTxEnabled は本プロジェクト独自の診断連携関数（UDS 0x28
- *  CommunicationControl 用、有効/無効を1つの bool 引数で扱う）であり、
- *  AUTOSAR 標準の CanNm_DisableCommunication(0x0c)/CanNm_EnableCommunication(0x0d)
- *  に 1:1 対応しないため、その代表として前者の値を踏襲する。 */
-#define NM_API_ID_SET_TX_ENABLED           0x0CU
+/** 2026-09、独自の `Nm_SetTxEnabled(uint8 Enabled)`（1つの bool 引数で
+ *  有効/無効をまとめて扱う簡略設計）から、シグネチャ準拠方針のもと実仕様の
+ *  `CanNm_DisableCommunication`/`CanNm_EnableCommunication` 2関数へ分割した。 */
+#define NM_API_ID_DISABLE_COMMUNICATION    0x0CU
+#define NM_API_ID_ENABLE_COMMUNICATION     0x0DU
 #define NM_API_ID_MAIN_FUNCTION            0x13U
 #define NM_API_ID_TX_CONFIRMATION          0x40U
 #define NM_API_ID_RX_INDICATION            0x42U

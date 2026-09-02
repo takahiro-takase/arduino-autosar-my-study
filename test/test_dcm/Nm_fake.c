@@ -5,7 +5,14 @@
  */
 #include "Nm.h"
 
-void Nm_SetTxEnabled(uint8 Enabled)
+Std_ReturnType Nm_EnableCommunication(NetworkHandleType Channel)
 {
-    (void)Enabled;
+    (void)Channel;
+    return E_OK;
+}
+
+Std_ReturnType Nm_DisableCommunication(NetworkHandleType Channel)
+{
+    (void)Channel;
+    return E_OK;
 }

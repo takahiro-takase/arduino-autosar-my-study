@@ -95,3 +95,35 @@ TEST_F(Bsw_Nm_ChannelValidation_Test, GetState_OK_ValidChannelIsAccepted)
     EXPECT_EQ(ret, E_OK);
     EXPECT_EQ(FakeDetHw_ReportCount, 0U);
 }
+
+TEST_F(Bsw_Nm_ChannelValidation_Test, DisableCommunication_NG_InvalidChannelReturnsErrorAndReportsDet)
+{
+    Std_ReturnType ret = Nm_DisableCommunication(kInvalidChannel);
+
+    EXPECT_EQ(ret, E_NOT_OK);
+    EXPECT_EQ(FakeDetHw_LastErrorId, NM_E_INVALID_CHANNEL);
+}
+
+TEST_F(Bsw_Nm_ChannelValidation_Test, EnableCommunication_NG_InvalidChannelReturnsErrorAndReportsDet)
+{
+    Std_ReturnType ret = Nm_EnableCommunication(kInvalidChannel);
+
+    EXPECT_EQ(ret, E_NOT_OK);
+    EXPECT_EQ(FakeDetHw_LastErrorId, NM_E_INVALID_CHANNEL);
+}
+
+TEST_F(Bsw_Nm_ChannelValidation_Test, DisableCommunication_OK_ValidChannelIsAccepted)
+{
+    Std_ReturnType ret = Nm_DisableCommunication(NM_MAIN_NETWORK_HANDLE);
+
+    EXPECT_EQ(ret, E_OK);
+    EXPECT_EQ(FakeDetHw_ReportCount, 0U);
+}
+
+TEST_F(Bsw_Nm_ChannelValidation_Test, EnableCommunication_OK_ValidChannelIsAccepted)
+{
+    Std_ReturnType ret = Nm_EnableCommunication(NM_MAIN_NETWORK_HANDLE);
+
+    EXPECT_EQ(ret, E_OK);
+    EXPECT_EQ(FakeDetHw_ReportCount, 0U);
+}
