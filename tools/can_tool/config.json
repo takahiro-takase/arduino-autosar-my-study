@@ -124,7 +124,8 @@
               { "label": "EngineSpeed   (DID 0101)", "payload": ["0x03", "0x22", "0x01", "0x01"] },
               { "label": "CoolantTemp   (DID 0102)", "payload": ["0x03", "0x22", "0x01", "0x02"] },
               { "label": "EngineState   (DID 0103)", "payload": ["0x03", "0x22", "0x01", "0x03"] },
-              { "label": "TestPattern   (DID 0104)", "payload": ["0x03", "0x22", "0x01", "0x04"] }
+              { "label": "TestPattern   (DID 0104)", "payload": ["0x03", "0x22", "0x01", "0x04"] },
+              { "label": "VIN           (DID F190)", "payload": ["0x03", "0x22", "0xF1", "0x90"] }
           ]
         },
         { "label": "Write TestPattern\n(0x2E 複数フレーム)", "type": "multiframe",

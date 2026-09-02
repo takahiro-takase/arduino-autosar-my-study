@@ -146,6 +146,22 @@ FF（len=43）が受理され、CF×6（sn=1〜6）まで正しく送信完了
 0x0B は別サービス（reportFirstTestFailedDTC）であるため `/code-review` の
 指摘で 0x14 に訂正した（`Dcm_Cfg.h`/`Dcm_Cbk.c` 参照）。
 
+### Dcm_GetVin / DID 0xF190（2026-09 追加）
+
+実仕様（[SWS_Dcm_00950]/[SWS_Dcm_01174]）は「ECU 統合者が `Dcm_GetVin()` を
+実装し、Dcm が起動時に一度だけ呼び出してキャッシュする」という、Dcm が
+呼び出す側の関数として定義されている。本プロジェクトは車両情報の実体を
+外部に持たないため、`Dcm_GetVin()` 自体を `Dcm_Cbk.c` 内に固定値を返す
+簡略実装として置き、`Dcm_Init()` が同じ「起動時に一度だけ取得しキャッシュ
+する」呼び出しパターンを踏襲する。DID 0xF190 (VIN) の 0x22 応答はこの
+キャッシュ（`Dcm_Vin[]`）から返す。
+
+**実装中に発見・修正したバッファサイズのバグ**: `Dcm_HandleReadDataById()`
+のスタック上の一時バッファ`dataBuf`は、それまで最大の読み取り DID だった
+`DCM_DID_TEST_PATTERN_LENGTH`(8バイト)に合わせてサイズを決めていたため、
+17バイトの VIN をそのまま書き込むとスタックバッファオーバーフローする
+状態だった。`DCM_VIN_LENGTH`(17)に合わせて拡張して対応した。
+
 ## DID 一覧（0x22 ReadDataByIdentifier）
 
 | DID    | データ      | 型                                            | 単位 |
@@ -153,6 +169,7 @@ FF（len=43）が受理され、CF×6（sn=1〜6）まで正しく送信完了
 | 0x0101 | EngineSpeed | uint16, big-endian                           | rpm  |
 | 0x0102 | CoolantTemp | uint8                                        | ℃   |
 | 0x0103 | EngineState | uint8（0=OFF / 1=STARTING / 2=RUNNING / 3=FAULT） | —  |
+| 0xF190 | VIN         | uint8[17]（ASCII固定文字列、`Dcm_GetVin()`参照）    | —  |
 
 ## DID 一覧（0x2F InputOutputControlByIdentifier）
 
