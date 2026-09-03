@@ -111,6 +111,73 @@ Std_ReturnType Det_ReportError(uint16 ModuleId, uint8 InstanceId, uint8 ApiId, u
 }
 
 /**
+ * \brief   実行時エラーを標準化された形式で通知する（[SWS_Det_01001]）。
+ *
+ * \details 実仕様は「コールアウトフックが設定されていれば呼び出す」機構を
+ *          持つが、本プロジェクトはそのようなコールアウト登録機構自体を
+ *          持たない学習用の簡略実装（Det_ReportError() と同じ設計方針）
+ *          であり、単に Det_ReportError() と同一形式の1行を出力するのみ。
+ *          開発エラー(Det_ReportError)と実行時エラー(本関数)を実運用上は
+ *          区別せず同じチャネルへ出力する。
+ *
+ * \param[in]  ModuleId    エラーを検出したモジュールの AUTOSAR ModuleId。
+ * \param[in]  InstanceId  マルチインスタンスモジュールのインスタンス番号。
+ *                         シングルインスタンスモジュールは 0 を渡す。
+ * \param[in]  ApiId       エラーを検出した API のサービス ID
+ *                         （呼び出し元モジュールの SWS で定義される値）。
+ * \param[in]  ErrorId     検出した実行時エラーの ID
+ *                         （呼び出し元モジュールの SWS で定義される値）。
+ *
+ * \return  Std_ReturnType。実 AUTOSAR も「常に E_OK を返す」と規定している。
+ *
+ * \AUTOSARReq     {SWS_Det_01001}
+ * \ServiceID      {0x04}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType Det_ReportRuntimeError(uint16 ModuleId, uint8 InstanceId, uint8 ApiId, uint8 ErrorId)
+{
+    Det_Hw_PrintDetError(ModuleId, InstanceId, ApiId, ErrorId);
+
+    /* [SWS_Det_01001]: 常に E_OK を返す。 */
+    return E_OK;
+}
+
+/**
+ * \brief   一過性障害を標準化された形式で通知する（[SWS_Det_01003]）。
+ *
+ * \details 実仕様は「コールアウトフックが設定されていればその戻り値
+ *          （複数設定時は論理和）を返し、未設定なら E_OK」と規定するが、
+ *          本プロジェクトはコールアウト登録機構自体を持たない学習用の
+ *          簡略実装のため常に E_OK を返す（Det_ReportError()/
+ *          Det_ReportRuntimeError() と同じ設計方針）。単に同一形式の1行を
+ *          出力するのみで、開発エラー・実行時エラーとは区別しない。
+ *
+ * \param[in]  ModuleId    一過性障害を検出したモジュールの AUTOSAR ModuleId。
+ * \param[in]  InstanceId  マルチインスタンスモジュールのインスタンス番号。
+ *                         シングルインスタンスモジュールは 0 を渡す。
+ * \param[in]  ApiId       一過性障害を検出した API のサービス ID
+ *                         （呼び出し元モジュールの SWS で定義される値）。
+ * \param[in]  FaultId     検出した一過性障害の ID
+ *                         （呼び出し元モジュールの SWS で定義される値）。
+ *
+ * \return  Std_ReturnType。実仕様はコールアウトの戻り値を返すが、本
+ *          プロジェクトはコールアウト機構自体を持たないため常に E_OK。
+ *
+ * \AUTOSARReq     {SWS_Det_01003}
+ * \ServiceID      {0x05}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType Det_ReportTransientFault(uint16 ModuleId, uint8 InstanceId, uint8 ApiId, uint8 FaultId)
+{
+    Det_Hw_PrintDetError(ModuleId, InstanceId, ApiId, FaultId);
+
+    /* [SWS_Det_01003]: コールアウト機構を持たないため常に E_OK。 */
+    return E_OK;
+}
+
+/**
  * \brief   Det モジュールを起動する（[SWS_Det_00010]）。
  *
  * \details 実仕様は「Det の環境（統合者）が Det 自身のセルフテストを
