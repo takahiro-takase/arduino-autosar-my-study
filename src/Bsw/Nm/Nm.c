@@ -44,6 +44,11 @@ static uint8 Nm_NetworkRequested;
 /** 診断 CommunicationControl (UDS SID 0x28) からの送信有効/無効状態。既定は有効。 */
 static uint8 Nm_TxEnabled = 1U;
 
+/** 直近に受信した NM フレームの送信元ノード ID（`Nm_GetNodeIdentifier()`
+ *  [SWS_CanNm_00219] 用キャッシュ）。一度も受信していない間は 0。
+ *  `Nm_RxIndication()` が受信の都度更新する。 */
+static uint8 Nm_LastRxNodeId;
+
 /** 送信する NM フレームの CBV Bit0 (Repeat Message Request)。
  *  Nm_RepeatMessageRequest() が呼ばれた場合のみ 1 になり、Repeat Message
  *  State を離れるときに 0 へ戻す（[SWS_CanNm_00107]）。 */
@@ -64,6 +69,21 @@ static void Nm_EnterReadySleep(void);
 static void Nm_EnterPrepareBusSleep(void);
 static void Nm_EnterBusSleep(void);
 
+/**
+ * \brief   Nm モジュールを初期化する。Bus-Sleep Mode から開始する。
+ *
+ * \pre        CanIf_Init() / ComM_Init() が正常に完了していること。
+ *
+ * \param[in]  ConfigPtr  常に NULL を渡すこと（本プロジェクトは post-build
+ *                        設定を持たないため。実 AUTOSAR 仕様は
+ *                        SWS_CanNm_00208 で `CanNm_Init(const CanNm_ConfigType*
+ *                        cannmConfigPtr)` を要求する）。
+ *
+ * \AUTOSARReq     {SWS_CanNm_00208}
+ * \ServiceID      {0x00}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
 void Nm_Init(const Nm_ConfigType* ConfigPtr)
 {
     DET_LOGT(TAG, "called");
@@ -72,12 +92,20 @@ void Nm_Init(const Nm_ConfigType* ConfigPtr)
     Nm_NetworkRequested     = 0U;
     Nm_TxEnabled            = 1U;
     Nm_RepeatMessageBitSet  = 0U;
+    Nm_LastRxNodeId         = 0U;
     Nm_TimeoutTimerMs       = millis();
     Nm_StateTimerMs         = millis();
     Nm_Initialized          = 1U;
     DET_LOGI(TAG, "Init ok node=0x%02X (Bus-Sleep Mode)", (unsigned)NM_SOURCE_NODE_ID);
 }
 
+/**
+ * \brief   Nm モジュールを未初期化状態に戻す。
+ *
+ * \ServiceID      {0x10}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
 void Nm_DeInit(void)
 {
     DET_LOGT(TAG, "called");
@@ -223,6 +251,24 @@ static void Nm_EnterBusSleep(void)
     ComM_Nm_BusSleepMode(0U);
 }
 
+/**
+ * \brief   通信が必要であることを Nm へ伝える（[SWS_CanNm_00104] 相当）。
+ *
+ * \details Bus-Sleep/Prepare Bus-Sleep Mode から呼ばれた場合は Repeat Message
+ *          State へ、Ready Sleep State から呼ばれた場合は Normal Operation
+ *          State へ遷移する。既に Repeat Message/Normal Operation State なら
+ *          何もしない（冪等）。
+ *
+ * \param[in]  Channel  NM チャネルハンドル（NM_MAIN_NETWORK_HANDLE 以外は拒否）。
+ *
+ * \retval  E_OK      要求を受理した。
+ * \retval  E_NOT_OK  未初期化、または Channel が不正。
+ *
+ * \AUTOSARReq     {SWS_CanNm_00213, SWS_CanNm_00192}
+ * \ServiceID      {0x02}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
 Std_ReturnType Nm_NetworkRequest(NetworkHandleType Channel)
 {
     DET_LOGT(TAG, "called");
@@ -263,6 +309,23 @@ Std_ReturnType Nm_NetworkRequest(NetworkHandleType Channel)
     return E_OK;
 }
 
+/**
+ * \brief   通信が不要になったことを Nm へ伝える（[SWS_CanNm_00105] 相当）。
+ *
+ * \details Normal Operation State から呼ばれた場合は Ready Sleep State へ
+ *          遷移する（NM フレーム送信を停止するが、NM-Timeout Timer が
+ *          満了するまでは Prepare Bus-Sleep Mode へは移行しない）。
+ *
+ * \param[in]  Channel  NM チャネルハンドル（NM_MAIN_NETWORK_HANDLE 以外は拒否）。
+ *
+ * \retval  E_OK      要求を受理した。
+ * \retval  E_NOT_OK  未初期化、または Channel が不正。
+ *
+ * \AUTOSARReq     {SWS_CanNm_00214, SWS_CanNm_00192}
+ * \ServiceID      {0x03}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
 Std_ReturnType Nm_NetworkRelease(NetworkHandleType Channel)
 {
     DET_LOGT(TAG, "called");
@@ -287,6 +350,24 @@ Std_ReturnType Nm_NetworkRelease(NetworkHandleType Channel)
     return E_OK;
 }
 
+/**
+ * \brief   Repeat Message State への遷移を要求する（[SWS_CanNm_00120] 相当）。
+ *
+ * \details 本プロジェクトでは診断・デバッグ用途を想定するのみで、通常の
+ *          運用フローからは呼ばない。Repeat Message State/Prepare
+ *          Bus-Sleep Mode/Bus-Sleep Mode から呼ばれた場合は無視する
+ *          （[SWS_CanNm_00137]）。
+ *
+ * \param[in]  Channel  NM チャネルハンドル（NM_MAIN_NETWORK_HANDLE 以外は拒否）。
+ *
+ * \retval  E_OK      Repeat Message State へ遷移した。
+ * \retval  E_NOT_OK  未初期化、Channel が不正、または現在の状態では受理できない。
+ *
+ * \AUTOSARReq     {SWS_CanNm_00221, SWS_CanNm_00192}
+ * \ServiceID      {0x08}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
 Std_ReturnType Nm_RepeatMessageRequest(NetworkHandleType Channel)
 {
     DET_LOGT(TAG, "called");
@@ -317,6 +398,25 @@ Std_ReturnType Nm_RepeatMessageRequest(NetworkHandleType Channel)
     return E_OK;
 }
 
+/**
+ * \brief   NM フレームの受信を通知する（CanIf から呼ばれる）。
+ *
+ * \details Network Mode 中は NM-Timeout Timer を再起動する
+ *          （[SWS_CanNm_00098]）。Prepare Bus-Sleep Mode 中は Network Mode
+ *          （Repeat Message State）へ自動遷移する（[SWS_CanNm_00124]）。
+ *          Bus-Sleep Mode 中は状態遷移せず NM_E_NET_START_IND を DET へ
+ *          報告するのみ（[SWS_CanNm_00127]/[SWS_CanNm_00336]。実際に
+ *          ネットワークへ復帰するかどうかは上位層（本プロジェクトでは
+ *          CanSM のウェイクアップ検証経由）が別途 Nm_NetworkRequest() を
+ *          呼んで決める）。
+ *
+ * \param[in]  RxPduId     受信 PDU ID（本プロジェクトでは単一チャネルのため未使用）。
+ * \param[in]  PduInfoPtr  受信データ。NULL 禁止。
+ *
+ * \ServiceID      {0x42}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
 void Nm_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
 {
     DET_LOGT(TAG, "called");
@@ -336,6 +436,10 @@ void Nm_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
 
     const uint8 cbv          = (PduInfoPtr->SduLength >= 1U) ? PduInfoPtr->SduDataPtr[0] : 0U;
     const uint8 sourceNodeId = (PduInfoPtr->SduLength >= 2U) ? PduInfoPtr->SduDataPtr[1] : 0U;
+
+    /* [SWS_CanNm_00219] Nm_GetNodeIdentifier() 用キャッシュ。状態に関わらず
+     * 受信の都度更新する（Bus-Sleep Mode 中の受信も含む）。 */
+    Nm_LastRxNodeId = sourceNodeId;
 
     switch (Nm_State)
     {
@@ -376,6 +480,19 @@ void Nm_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
     }
 }
 
+/**
+ * \brief   NM フレームの送信完了を通知する（CanIf から呼ばれる）。
+ *
+ * \details 送信成功時、Network Mode 中は NM-Timeout Timer を再起動する
+ *          （[SWS_CanNm_00099]）。
+ *
+ * \param[in]  TxPduId  送信完了した PDU ID（本プロジェクトでは単一チャネルのため未使用）。
+ * \param[in]  result   E_OK=送信成功。
+ *
+ * \ServiceID      {0x40}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
 void Nm_TxConfirmation(PduIdType TxPduId, Std_ReturnType result)
 {
     DET_LOGT(TAG, "called");
@@ -391,6 +508,13 @@ void Nm_TxConfirmation(PduIdType TxPduId, Std_ReturnType result)
         Nm_TimeoutTimerMs = millis();
 }
 
+/**
+ * \brief   Nm の周期処理。タイマ満了判定と NM フレームの（再）送信を行う。
+ *
+ * \ServiceID      {0x13}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
 void Nm_MainFunction(void)
 {
     DET_LOGT(TAG, "called");
@@ -468,6 +592,29 @@ void Nm_MainFunction(void)
     }
 }
 
+/**
+ * \brief   診断 CommunicationControl (UDS SID 0x28) からの NM PDU 送信無効化要求を反映する
+ *          （[SWS_CanNm_00215] 相当）。
+ *
+ * \details 無効化中は Repeat Message/Normal Operation State でも NM フレームを
+ *          送信しない（[SWS_CanNm_00100] の passive mode 相当の抑制。状態機械
+ *          自体は通常どおり遷移する）。実仕様（[SWS_CanNm_00172]）は現在
+ *          Network Mode でない場合に E_NOT_OK を要求するが、本プロジェクトは
+ *          そのゲートを実装しない（Bus-Sleep 中に呼ばれても抑制フラグ自体は
+ *          そのまま更新して良く、次回 Network Mode 復帰時に正しく反映される
+ *          ため。Nm_NetworkRequest/Release と同じ「現在の状態に関わらず常に
+ *          受理する」簡略方針）。
+ *
+ * \param[in]  Channel  NM チャネルハンドル（NM_MAIN_NETWORK_HANDLE 以外は拒否）。
+ *
+ * \retval  E_OK      要求を受理した。
+ * \retval  E_NOT_OK  未初期化、または Channel が不正。
+ *
+ * \AUTOSARReq     {SWS_CanNm_00215, SWS_CanNm_00192}
+ * \ServiceID      {0x0C}
+ * \Reentrancy     {Reentrant (but not for the same NM-channel)}
+ * \Synchronicity  {Synchronous}
+ */
 Std_ReturnType Nm_DisableCommunication(NetworkHandleType Channel)
 {
     DET_LOGT(TAG, "called");
@@ -489,6 +636,23 @@ Std_ReturnType Nm_DisableCommunication(NetworkHandleType Channel)
     return E_OK;
 }
 
+/**
+ * \brief   診断 CommunicationControl (UDS SID 0x28) からの NM PDU 送信再有効化要求を反映する
+ *          （[SWS_CanNm_00216] 相当）。
+ *
+ * \details `Nm_DisableCommunication()` で立てた抑制を解除する。ゲート省略の
+ *          方針は同関数のコメントを参照。
+ *
+ * \param[in]  Channel  NM チャネルハンドル（NM_MAIN_NETWORK_HANDLE 以外は拒否）。
+ *
+ * \retval  E_OK      要求を受理した。
+ * \retval  E_NOT_OK  未初期化、または Channel が不正。
+ *
+ * \AUTOSARReq     {SWS_CanNm_00216, SWS_CanNm_00192}
+ * \ServiceID      {0x0D}
+ * \Reentrancy     {Reentrant (but not for the same NM-channel)}
+ * \Synchronicity  {Synchronous}
+ */
 Std_ReturnType Nm_EnableCommunication(NetworkHandleType Channel)
 {
     DET_LOGT(TAG, "called");
@@ -510,6 +674,109 @@ Std_ReturnType Nm_EnableCommunication(NetworkHandleType Channel)
     return E_OK;
 }
 
+/**
+ * \brief   自ノードに設定されたノード識別子を取得する（[SWS_CanNm_00220]）。
+ *
+ * \details 送信する NM フレームに乗せる自ノードの ID（`NM_SOURCE_NODE_ID`）を
+ *          そのまま返す。受信した NM フレームの送信元 ID を返す
+ *          `Nm_GetNodeIdentifier()` とは区別されるので注意。
+ *
+ * \param[in]   Channel      NM チャネルハンドル（NM_MAIN_NETWORK_HANDLE 以外は拒否）。
+ * \param[out]  nmNodeIdPtr  自ノードの ID の格納先。NULL 禁止。
+ *
+ * \retval  E_OK      正常に取得した。
+ * \retval  E_NOT_OK  未初期化、Channel が不正、または nmNodeIdPtr が NULL。
+ *
+ * \AUTOSARReq     {SWS_CanNm_00220, SWS_CanNm_00192}
+ * \ServiceID      {0x07}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType Nm_GetLocalNodeIdentifier(NetworkHandleType Channel, uint8* nmNodeIdPtr)
+{
+    DET_LOGT(TAG, "called");
+    if (!Nm_Initialized)
+    {
+        Det_ReportError(NM_MODULE_ID, 0U, NM_API_ID_GET_LOCAL_NODE_IDENTIFIER, NM_E_UNINIT);
+        return E_NOT_OK;
+    }
+
+    if (Channel != NM_MAIN_NETWORK_HANDLE)
+    {
+        Det_ReportError(NM_MODULE_ID, 0U, NM_API_ID_GET_LOCAL_NODE_IDENTIFIER, NM_E_INVALID_CHANNEL);
+        return E_NOT_OK;
+    }
+
+    if (nmNodeIdPtr == NULL)
+    {
+        Det_ReportError(NM_MODULE_ID, 0U, NM_API_ID_GET_LOCAL_NODE_IDENTIFIER, NM_E_PARAM_POINTER);
+        return E_NOT_OK;
+    }
+
+    *nmNodeIdPtr = NM_SOURCE_NODE_ID;
+    return E_OK;
+}
+
+/**
+ * \brief   直近に受信した NM フレームの送信元ノード識別子を取得する（[SWS_CanNm_00219]）。
+ *
+ * \details `Nm_RxIndication()` が受信の都度更新するキャッシュ値をそのまま
+ *          返す。一度も NM フレームを受信していない場合は 0 を返す
+ *          （実仕様は「未設定/取得失敗時は E_NOT_OK」も許容するが、本
+ *          プロジェクトは他の getter 系 API と同じく既定値を返すだけの
+ *          簡略実装とする）。
+ *
+ * \param[in]   Channel      NM チャネルハンドル（NM_MAIN_NETWORK_HANDLE 以外は拒否）。
+ * \param[out]  nmNodeIdPtr  直近受信 NM フレームの送信元 ID の格納先。NULL 禁止。
+ *
+ * \retval  E_OK      正常に取得した。
+ * \retval  E_NOT_OK  未初期化、Channel が不正、または nmNodeIdPtr が NULL。
+ *
+ * \AUTOSARReq     {SWS_CanNm_00219, SWS_CanNm_00192}
+ * \ServiceID      {0x06}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType Nm_GetNodeIdentifier(NetworkHandleType Channel, uint8* nmNodeIdPtr)
+{
+    DET_LOGT(TAG, "called");
+    if (!Nm_Initialized)
+    {
+        Det_ReportError(NM_MODULE_ID, 0U, NM_API_ID_GET_NODE_IDENTIFIER, NM_E_UNINIT);
+        return E_NOT_OK;
+    }
+
+    if (Channel != NM_MAIN_NETWORK_HANDLE)
+    {
+        Det_ReportError(NM_MODULE_ID, 0U, NM_API_ID_GET_NODE_IDENTIFIER, NM_E_INVALID_CHANNEL);
+        return E_NOT_OK;
+    }
+
+    if (nmNodeIdPtr == NULL)
+    {
+        Det_ReportError(NM_MODULE_ID, 0U, NM_API_ID_GET_NODE_IDENTIFIER, NM_E_PARAM_POINTER);
+        return E_NOT_OK;
+    }
+
+    *nmNodeIdPtr = Nm_LastRxNodeId;
+    return E_OK;
+}
+
+/**
+ * \brief   現在の CanNm 状態とモードを取得する（[SWS_CanNm_00091] 相当）。
+ *
+ * \param[in]   Channel   NM チャネルハンドル（NM_MAIN_NETWORK_HANDLE 以外は拒否）。
+ * \param[out]  StatePtr  現在の内部状態の格納先。NULL 可（不要なら渡さなくてよい）。
+ * \param[out]  ModePtr   現在の操作モードの格納先。NULL 可。
+ *
+ * \retval  E_OK      取得した。
+ * \retval  E_NOT_OK  未初期化、または Channel が不正。
+ *
+ * \AUTOSARReq     {SWS_CanNm_00223, SWS_CanNm_00192}
+ * \ServiceID      {0x0B}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
 Std_ReturnType Nm_GetState(NetworkHandleType Channel, Nm_StateType* StatePtr, Nm_ModeType* ModePtr)
 {
     DET_LOGT(TAG, "called");
@@ -541,6 +808,19 @@ Std_ReturnType Nm_GetState(NetworkHandleType Channel, Nm_StateType* StatePtr, Nm
     return E_OK;
 }
 
+/**
+ * \brief   Nm モジュールのバージョン情報を取得する。
+ *
+ * \details Nm_Init と並び、未初期化時でも NM_E_UNINIT を報告しない例外 API
+ *          （他 BSW モジュールと共通の慣例）のため、初期化状態は確認せず
+ *          NULL ポインタチェックのみ行う。
+ *
+ * \param[out]  versioninfo  バージョン情報の格納先。NULL 禁止。
+ *
+ * \ServiceID      {0xF1}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
 void Nm_GetVersionInfo(Std_VersionInfoType* versioninfo)
 {
     DET_LOGT(TAG, "called");
