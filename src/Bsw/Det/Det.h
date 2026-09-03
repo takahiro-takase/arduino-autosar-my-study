@@ -62,6 +62,18 @@ typedef enum
 #  define LOG_BUF_SIZE 64U
 #endif
 
+/**
+ * \brief   Det_Init() の設定引数型（不透明型）。
+ *
+ * \details 実仕様は post-build 設定構造体へのポインタを要求するが、本
+ *          プロジェクトは単一 ECU 構成で post-build バリアント切替を持たず、
+ *          かつ Det 自身が初期化を要する内部状態（コールアウトフック登録先
+ *          等）を一切持たないため、中身を定義しない不透明型とし、ポインタ
+ *          としてのみ扱う（`Nm_ConfigType`/`CanSM_ConfigType` と同じ簡略化
+ *          パターン）。
+ */
+typedef struct Det_ConfigType_Tag Det_ConfigType;
+
 /* -----------------------------------------------------------------------
  * コア出力関数
  * ----------------------------------------------------------------------- */
@@ -89,6 +101,29 @@ void Log_HexStr(char* dst, uint8_t dstSize,
 #define DET_LOGI(tag, fmt, ...)  Log_Write(LOG_I, tag, __func__, fmt, ##__VA_ARGS__)
 #define DET_LOGT(tag, fmt, ...)  Log_Write(LOG_T, tag, __func__, fmt, ##__VA_ARGS__)
 #define DET_LOGD(tag, fmt, ...)  Log_Write(LOG_D, tag, __func__, fmt, ##__VA_ARGS__)
+
+/**
+ * \brief   Det モジュールを初期化する（[SWS_Det_00008]）。
+ *
+ * \details 実仕様は「内部変数の設定」を初期化の目的として挙げるが、本
+ *          プロジェクトの Det はログ出力の都度その場でフォーマットするだけの
+ *          ステートレスな実装であり、初期化を要する内部変数を一切持たない
+ *          （`Det_ReportError()`/`Log_Write()` は本関数の呼び出し有無に
+ *          関わらず常に動作する。他の全 BSW モジュールの `_Init()` 内で
+ *          発生しうる初期化前エラーも report できる必要があるため、この
+ *          「常に動作する」という既存の挙動はあえて変更しない）。そのため
+ *          本関数は仕様上の呼び出し位置（`EcuM_Init()` の先頭、他の全 BSW
+ *          モジュール初期化より前）に配線するだけの no-op とする。
+ *
+ * \param[in]  ConfigPtr  常に NULL を渡すこと（本プロジェクトは post-build
+ *                        設定を持たないため）。
+ *
+ * \AUTOSARReq     {SWS_Det_00008}
+ * \ServiceID      {0x00}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void Det_Init(const Det_ConfigType* ConfigPtr);
 
 /**
  * \brief   開発エラーを標準化された形式で通知する（AUTOSAR Det_ReportError 準拠）。
@@ -127,12 +162,27 @@ void Log_HexStr(char* dst, uint8_t dstSize,
 Std_ReturnType Det_ReportError(uint16 ModuleId, uint8 InstanceId, uint8 ApiId, uint8 ErrorId);
 
 /**
+ * \brief   Det モジュールを起動する（[SWS_Det_00010]）。
+ *
+ * \details 実仕様は「Det の環境（統合者）が Det 自身のセルフテストを
+ *          トリガする」用途を想定するが、本プロジェクトはそのようなセルフ
+ *          テスト機構を持たないため no-op とする（実仕様自身も「起動時
+ *          呼び出しを要しない Det 実装では空でよい」と明記している）。
+ *
+ * \AUTOSARReq     {SWS_Det_00010}
+ * \ServiceID      {0x02}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void Det_Start(void);
+
+/**
  * \brief   Det モジュールのバージョン情報を取得する。
  *
  * \details 他 BSW モジュールと共通の慣例により、未初期化時でもエラー報告
  *          しない例外 API のため、初期化状態は確認せず NULL ポインタ
- *          チェックのみ行う（Det 自身に Init は存在しないため、この点は他
- *          モジュール以上に自明である）。
+ *          チェックのみ行う（Det_Init()/Det_ReportError() 自身も内部状態を
+ *          持たず常に動作するため、この点は他モジュール以上に自明である）。
  *
  * \param[out]  versioninfo  バージョン情報の格納先。NULL 禁止。
  *

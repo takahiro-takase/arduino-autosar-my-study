@@ -7,6 +7,9 @@
  *          ECU を起動・運転できるようにする。
  *
  *          起動シーケンス (EcuM_Init):
+ *            0. Det_Init/Det_Start — 他の全 BSW モジュール初期化より前
+ *                                (それらの Init 内での初期化前エラーも
+ *                                report できる必要があるため)。Det.h 参照
  *            1. MemIf_Init     — Fee (Renesas RA) の EEPROM 抽象化層初期化
  *                                (NvM_Init より前、最初期)。EcuM 自身は
  *                                Fee という具体名を意識しない（詳細は
@@ -161,6 +164,9 @@ static unsigned long   EcuM_PostRunTimerMs = 0UL;
  *
  * \details AUTOSAR の依存関係順（下位層から上位層）に各モジュールの
  *          _Init 関数を呼び出す。
+ *          - Det_Init/Det_Start: 他の全モジュールの Init より前に呼ぶ
+ *            （それらの Init 内での初期化前エラーも report できるように
+ *            するため）。
  *          - MemIf_Init: NvM_Init より前に、EEPROM 抽象化層 (Fee) を
  *            初期化する。
  *          - NvM_Init: 全 NvM ブロックを EEPROM から RAM ミラーへ一括ロードする。
@@ -184,6 +190,9 @@ static unsigned long   EcuM_PostRunTimerMs = 0UL;
 void EcuM_Init(void)
 {
     DET_LOGT(TAG, "called");
+    Det_Init(NULL);  /* 他の全 BSW モジュール初期化より前（それらの Init 内での
+                       * 初期化前エラーも report できる必要があるため）。Det.h 参照 */
+    Det_Start();
     MemIf_Init();   /* NvM_Init より前: EEPROM 抽象化層 (Fee) を初期化 */
     NvM_Init(&NvM_Config);
     Port_Init(NULL);                    /* ピン方向設定（Dio 操作より前に完了）    */
