@@ -37,6 +37,8 @@
 
 /** ApiId（各関数の Doxygen \ServiceID タグと一致させること。SWS_Det_00011 の
  *  「Service ID[hex]」記載を実測して確認済み） */
+#define DET_API_ID_INIT               0x00U
+#define DET_API_ID_START              0x02U
 #define DET_API_ID_GET_VERSION_INFO  0x03U
 
 /** バージョン情報（Com/E2EXf/PduR/Port 等の既存モジュールと同じ命名規則） */
