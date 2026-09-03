@@ -67,6 +67,8 @@
 /** ApiId（値は docs/4.3.1/AUTOSAR_SWS_CANNetworkManagement.pdf の
  *  「Service ID[hex]」記載を実測して確認済み） */
 #define NM_API_ID_INIT                     0x00U
+#define NM_API_ID_GET_NODE_IDENTIFIER       0x06U
+#define NM_API_ID_GET_LOCAL_NODE_IDENTIFIER 0x07U
 #define NM_API_ID_NETWORK_REQUEST          0x02U
 #define NM_API_ID_NETWORK_RELEASE          0x03U
 #define NM_API_ID_REPEAT_MESSAGE_REQUEST   0x08U

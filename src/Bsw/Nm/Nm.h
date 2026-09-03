@@ -259,6 +259,48 @@ Std_ReturnType Nm_DisableCommunication(NetworkHandleType Channel);
 Std_ReturnType Nm_EnableCommunication(NetworkHandleType Channel);
 
 /**
+ * \brief   自ノードに設定されたノード識別子を取得する（[SWS_CanNm_00220]）。
+ *
+ * \details 送信する NM フレームに乗せる自ノードの ID（`NM_SOURCE_NODE_ID`）を
+ *          そのまま返す。受信した NM フレームの送信元 ID を返す
+ *          `Nm_GetNodeIdentifier()` とは区別されるので注意。
+ *
+ * \param[in]   Channel      NM チャネルハンドル（NM_MAIN_NETWORK_HANDLE 以外は拒否）。
+ * \param[out]  nmNodeIdPtr  自ノードの ID の格納先。NULL 禁止。
+ *
+ * \retval  E_OK      正常に取得した。
+ * \retval  E_NOT_OK  未初期化、Channel が不正、または nmNodeIdPtr が NULL。
+ *
+ * \AUTOSARReq     {SWS_CanNm_00220, SWS_CanNm_00192}
+ * \ServiceID      {0x07}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType Nm_GetLocalNodeIdentifier(NetworkHandleType Channel, uint8* nmNodeIdPtr);
+
+/**
+ * \brief   直近に受信した NM フレームの送信元ノード識別子を取得する（[SWS_CanNm_00219]）。
+ *
+ * \details `Nm_RxIndication()` が受信の都度更新するキャッシュ値をそのまま
+ *          返す。一度も NM フレームを受信していない場合は 0 を返す
+ *          （実仕様は「未設定/取得失敗時は E_NOT_OK」も許容するが、本
+ *          プロジェクトは他の getter 系 API と同じく既定値を返すだけの
+ *          簡略実装とする）。
+ *
+ * \param[in]   Channel      NM チャネルハンドル（NM_MAIN_NETWORK_HANDLE 以外は拒否）。
+ * \param[out]  nmNodeIdPtr  直近受信 NM フレームの送信元 ID の格納先。NULL 禁止。
+ *
+ * \retval  E_OK      正常に取得した。
+ * \retval  E_NOT_OK  未初期化、Channel が不正、または nmNodeIdPtr が NULL。
+ *
+ * \AUTOSARReq     {SWS_CanNm_00219, SWS_CanNm_00192}
+ * \ServiceID      {0x06}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType Nm_GetNodeIdentifier(NetworkHandleType Channel, uint8* nmNodeIdPtr);
+
+/**
  * \brief   現在の CanNm 状態とモードを取得する（[SWS_CanNm_00091] 相当）。
  *
  * \param[in]   Channel   NM チャネルハンドル（NM_MAIN_NETWORK_HANDLE 以外は拒否）。

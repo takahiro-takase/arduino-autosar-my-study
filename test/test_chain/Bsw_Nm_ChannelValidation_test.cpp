@@ -127,3 +127,81 @@ TEST_F(Bsw_Nm_ChannelValidation_Test, EnableCommunication_OK_ValidChannelIsAccep
     EXPECT_EQ(ret, E_OK);
     EXPECT_EQ(FakeDetHw_ReportCount, 0U);
 }
+
+// ------------------------------------------------------------
+// Nm_GetLocalNodeIdentifier()/Nm_GetNodeIdentifier()
+// （[SWS_CanNm_00220]/[SWS_CanNm_00219] 準拠で新設）
+// ------------------------------------------------------------
+
+TEST_F(Bsw_Nm_ChannelValidation_Test, GetLocalNodeIdentifier_NG_InvalidChannelReturnsErrorAndReportsDet)
+{
+    uint8 nodeId = 0U;
+
+    Std_ReturnType ret = Nm_GetLocalNodeIdentifier(kInvalidChannel, &nodeId);
+
+    EXPECT_EQ(ret, E_NOT_OK);
+    EXPECT_EQ(FakeDetHw_LastErrorId, NM_E_INVALID_CHANNEL);
+}
+
+TEST_F(Bsw_Nm_ChannelValidation_Test, GetLocalNodeIdentifier_NG_NullPointerReturnsErrorAndReportsDet)
+{
+    Std_ReturnType ret = Nm_GetLocalNodeIdentifier(NM_MAIN_NETWORK_HANDLE, NULL);
+
+    EXPECT_EQ(ret, E_NOT_OK);
+    EXPECT_EQ(FakeDetHw_LastErrorId, NM_E_PARAM_POINTER);
+}
+
+TEST_F(Bsw_Nm_ChannelValidation_Test, GetLocalNodeIdentifier_OK_ReturnsConfiguredSourceNodeId)
+{
+    uint8 nodeId = 0U;
+
+    Std_ReturnType ret = Nm_GetLocalNodeIdentifier(NM_MAIN_NETWORK_HANDLE, &nodeId);
+
+    EXPECT_EQ(ret, E_OK);
+    EXPECT_EQ(nodeId, NM_SOURCE_NODE_ID);
+    EXPECT_EQ(FakeDetHw_ReportCount, 0U);
+}
+
+TEST_F(Bsw_Nm_ChannelValidation_Test, GetNodeIdentifier_NG_InvalidChannelReturnsErrorAndReportsDet)
+{
+    uint8 nodeId = 0U;
+
+    Std_ReturnType ret = Nm_GetNodeIdentifier(kInvalidChannel, &nodeId);
+
+    EXPECT_EQ(ret, E_NOT_OK);
+    EXPECT_EQ(FakeDetHw_LastErrorId, NM_E_INVALID_CHANNEL);
+}
+
+TEST_F(Bsw_Nm_ChannelValidation_Test, GetNodeIdentifier_NG_NullPointerReturnsErrorAndReportsDet)
+{
+    Std_ReturnType ret = Nm_GetNodeIdentifier(NM_MAIN_NETWORK_HANDLE, NULL);
+
+    EXPECT_EQ(ret, E_NOT_OK);
+    EXPECT_EQ(FakeDetHw_LastErrorId, NM_E_PARAM_POINTER);
+}
+
+TEST_F(Bsw_Nm_ChannelValidation_Test, GetNodeIdentifier_OK_ReturnsZeroBeforeAnyReception)
+{
+    uint8 nodeId = 0xFFU;
+
+    Std_ReturnType ret = Nm_GetNodeIdentifier(NM_MAIN_NETWORK_HANDLE, &nodeId);
+
+    EXPECT_EQ(ret, E_OK);
+    EXPECT_EQ(nodeId, 0U);
+}
+
+TEST_F(Bsw_Nm_ChannelValidation_Test, GetNodeIdentifier_OK_ReflectsMostRecentlyReceivedFrame)
+{
+    /* Bus-Sleep Mode 中の受信は状態遷移もカスケードも起こさない
+     * （[SWS_CanNm_00127]/[SWS_CanNm_00336]、DET_LOGW + Det_ReportError のみ）
+     * ため、ComM/CanSM 未初期化のこの軽量フィクスチャでも安全に呼べる。 */
+    uint8 pdu[2] = { 0x00U, 0x2AU };  // CBV=0, sourceNodeId=0x2A
+    PduInfoType pduInfo = { pdu, 2U };
+    Nm_RxIndication(0U, &pduInfo);
+
+    uint8 nodeId = 0U;
+    Std_ReturnType ret = Nm_GetNodeIdentifier(NM_MAIN_NETWORK_HANDLE, &nodeId);
+
+    EXPECT_EQ(ret, E_OK);
+    EXPECT_EQ(nodeId, 0x2AU);
+}
