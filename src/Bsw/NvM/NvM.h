@@ -222,6 +222,43 @@ Std_ReturnType NvM_WriteBlock(NvM_BlockIdType BlockId, const void* NvM_SrcPtr);
 Std_ReturnType NvM_RestoreBlockDefaults(NvM_BlockIdType BlockId, void* NvM_DestPtr);
 
 /**
+ * \brief   ブロックの書き込み保護を設定/解除する（[SWS_NvM_00450]）。
+ *
+ * \details 実仕様は設定時点(`NvMBlockWriteProt`)の既定保護や、一度だけ書き込み
+ *          可能で以後は明示解除禁止となる `NvMWriteBlockOnce` ブロック種別を
+ *          持つが、本プロジェクトはそのような書き込み一度きりブロックの概念
+ *          自体を持たないため、本関数が唯一の保護設定手段であり、常に
+ *          （設定値に関わらず）有効/無効を切り替えられる（[SWS_NvM_00325]
+ *          相当の簡略化。[SWS_NvM_00577]/[SWS_NvM_00398] の禁止条件は対象外）。
+ *
+ *          保護状態は RAM 上の管理情報としてのみ保持し（EEPROM には保存
+ *          しない）、`NvM_Init()` で常に「保護なし」へ戻る（実仕様の
+ *          「リセット時は NvMWriteBlockOnce ブロックの保護のみクリアされる」
+ *          という規定とは異なるが、本プロジェクトは電源断からの復電時に
+ *          常にブロックの内容を EEPROM から再展開するため、保護設定も
+ *          RAM 状態の一部として同様に初期化し直すのが一貫している）。
+ *
+ *          保護中のブロックは `NvM_WriteBlock()`/`NvM_RestoreBlockDefaults()`
+ *          が `E_NOT_OK` を返して書き込みを拒否する（[SWS_NvM_00217]）。
+ *          実仕様が要求する production error `NVM_E_WRITE_PROTECTED`
+ *          （Dem 経由）は、本プロジェクトが NvM の production error を
+ *          Dem に配線する仕組み自体を持たないため報告しない
+ *          （DET ログのみ出力）。
+ *
+ * \param[in]  BlockId            ブロック ID (NVM_BLOCK_ID_* 定数)。
+ * \param[in]  ProtectionEnabled  0 以外: 保護を有効化。0: 保護を解除。
+ *
+ * \retval  E_OK      正常に設定/解除した。
+ * \retval  E_NOT_OK  未初期化、または BlockId が範囲外。
+ *
+ * \AUTOSARReq     {SWS_NvM_00450, SWS_NvM_00016, SWS_NvM_00325}
+ * \ServiceID      {0x03}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType NvM_SetBlockProtection(NvM_BlockIdType BlockId, uint8 ProtectionEnabled);
+
+/**
  * \brief   ブロックの直近のジョブ結果を取得する。
  *
  * \details NvM_WriteBlock() / NvM_RestoreBlockDefaults() の完了を

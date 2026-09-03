@@ -68,6 +68,7 @@
 /** ApiId（各関数の Doxygen \ServiceID タグと一致させること。値は SWS 8.x 章の
  *  「Service ID[hex]」記載を実測して確認済み） */
 #define NVM_API_ID_INIT                     0x00U
+#define NVM_API_ID_SET_BLOCK_PROTECTION     0x03U
 #define NVM_API_ID_GET_ERROR_STATUS         0x04U
 #define NVM_API_ID_READ_BLOCK               0x06U
 #define NVM_API_ID_WRITE_BLOCK              0x07U

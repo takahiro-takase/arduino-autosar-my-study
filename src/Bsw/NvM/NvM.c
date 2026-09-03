@@ -91,6 +91,10 @@ static uint8 NvM_BlockPending[NVM_BLOCK_COUNT];
 /** ブロックごとの直近のジョブ結果 (NvM_GetErrorStatus() が返す値)。 */
 static NvM_RequestResultType NvM_BlockResult[NVM_BLOCK_COUNT];
 
+/** ブロックごとの書き込み保護状態 (NvM_SetBlockProtection() が設定、
+ *  0 以外なら保護中。NvM.h の NvM_SetBlockProtection() Doxygen 参照)。 */
+static uint8 NvM_BlockProtected[NVM_BLOCK_COUNT];
+
 /** 現在 NvM_MainFunction() が処理中のブロック ID。
  *  NVM_BLOCK_COUNT ならどのブロックも処理中でないことを示す。 */
 static uint8 NvM_ActiveBlockId = NVM_BLOCK_COUNT;
@@ -367,8 +371,9 @@ void NvM_Init(const NvM_ConfigType* ConfigPtr)
 
     for (uint8 i = 0U; i < ConfigPtr->NumBlocks && i < NVM_BLOCK_COUNT; i++)
     {
-        NvM_BlockPending[i] = 0U;
-        NvM_BlockResult[i]  = NVM_REQ_OK;
+        NvM_BlockPending[i]   = 0U;
+        NvM_BlockResult[i]    = NVM_REQ_OK;
+        NvM_BlockProtected[i] = 0U;
 
         NvM_LoadAndVerifyBlock(i, &ConfigPtr->Blocks[i]);
     }
@@ -455,6 +460,15 @@ Std_ReturnType NvM_WriteBlock(NvM_BlockIdType BlockId, const void* NvM_SrcPtr)
         return E_NOT_OK;
     }
 
+    if (NvM_BlockProtected[BlockId] != 0U)
+    {
+        /* [SWS_NvM_00217]: 保護中ブロックへの書き込みは E_NOT_OK で拒否する。
+         * production error NVM_E_WRITE_PROTECTED は Dem 未配線のため報告しない
+         * (NvM_SetBlockProtection() の Doxygen 参照)。 */
+        DET_LOGW(TAG, "block=%u write rejected (write-protected)", (unsigned)BlockId);
+        return E_NOT_OK;
+    }
+
     const NvM_BlockDescriptorType* blk = &NvM_Cfg->Blocks[BlockId];
     if (blk->RamBlockDataAddress == NULL)
         return E_NOT_OK;
@@ -497,6 +511,14 @@ Std_ReturnType NvM_RestoreBlockDefaults(NvM_BlockIdType BlockId, void* NvM_DestP
         return E_NOT_OK;
     }
 
+    if (NvM_BlockProtected[BlockId] != 0U)
+    {
+        /* [SWS_NvM_00217]相当: 保護中ブロックへの復元も書き込みの一種として拒否する。
+         * NvM_WriteBlock() と同じ理由で production error は報告しない。 */
+        DET_LOGW(TAG, "block=%u restore rejected (write-protected)", (unsigned)BlockId);
+        return E_NOT_OK;
+    }
+
     const NvM_BlockDescriptorType* blk = &NvM_Cfg->Blocks[BlockId];
     if (blk->RamBlockDataAddress == NULL)
         return E_NOT_OK;
@@ -516,6 +538,62 @@ Std_ReturnType NvM_RestoreBlockDefaults(NvM_BlockIdType BlockId, void* NvM_DestP
              (blk->RomBlockDataAddress != NULL) ? "ROM default" : "zero-fill");
 
     NvM_MarkPending(BlockId);
+
+    return E_OK;
+}
+
+/**
+ * \brief   ブロックの書き込み保護を設定/解除する（[SWS_NvM_00450]）。
+ *
+ * \details 実仕様は設定時点(`NvMBlockWriteProt`)の既定保護や、一度だけ書き込み
+ *          可能で以後は明示解除禁止となる `NvMWriteBlockOnce` ブロック種別を
+ *          持つが、本プロジェクトはそのような書き込み一度きりブロックの概念
+ *          自体を持たないため、本関数が唯一の保護設定手段であり、常に
+ *          （設定値に関わらず）有効/無効を切り替えられる（[SWS_NvM_00325]
+ *          相当の簡略化。[SWS_NvM_00577]/[SWS_NvM_00398] の禁止条件は対象外）。
+ *
+ *          保護状態は RAM 上の管理情報としてのみ保持し（EEPROM には保存
+ *          しない）、`NvM_Init()` で常に「保護なし」へ戻る（実仕様の
+ *          「リセット時は NvMWriteBlockOnce ブロックの保護のみクリアされる」
+ *          という規定とは異なるが、本プロジェクトは電源断からの復電時に
+ *          常にブロックの内容を EEPROM から再展開するため、保護設定も
+ *          RAM 状態の一部として同様に初期化し直すのが一貫している）。
+ *
+ *          保護中のブロックは `NvM_WriteBlock()`/`NvM_RestoreBlockDefaults()`
+ *          が `E_NOT_OK` を返して書き込みを拒否する（[SWS_NvM_00217]）。
+ *          実仕様が要求する production error `NVM_E_WRITE_PROTECTED`
+ *          （Dem 経由）は、本プロジェクトが NvM の production error を
+ *          Dem に配線する仕組み自体を持たないため報告しない
+ *          （DET ログのみ出力）。
+ *
+ * \param[in]  BlockId            ブロック ID (NVM_BLOCK_ID_* 定数)。
+ * \param[in]  ProtectionEnabled  0 以外: 保護を有効化。0: 保護を解除。
+ *
+ * \retval  E_OK      正常に設定/解除した。
+ * \retval  E_NOT_OK  未初期化、または BlockId が範囲外。
+ *
+ * \AUTOSARReq     {SWS_NvM_00450, SWS_NvM_00016, SWS_NvM_00325}
+ * \ServiceID      {0x03}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType NvM_SetBlockProtection(NvM_BlockIdType BlockId, uint8 ProtectionEnabled)
+{
+    DET_LOGT(TAG, "called");
+    if (NvM_Cfg == NULL)
+    {
+        Det_ReportError(NVM_MODULE_ID, 0U, NVM_API_ID_SET_BLOCK_PROTECTION, NVM_E_NOT_INITIALIZED);
+        return E_NOT_OK;
+    }
+
+    if (BlockId >= NvM_Cfg->NumBlocks)
+    {
+        Det_ReportError(NVM_MODULE_ID, 0U, NVM_API_ID_SET_BLOCK_PROTECTION, NVM_E_PARAM_BLOCK_ID);
+        return E_NOT_OK;
+    }
+
+    NvM_BlockProtected[BlockId] = ProtectionEnabled;
+    DET_LOGI(TAG, "block=%u protection=%u", (unsigned)BlockId, (unsigned)ProtectionEnabled);
 
     return E_OK;
 }
