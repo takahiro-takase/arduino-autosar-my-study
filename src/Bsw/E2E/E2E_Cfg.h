@@ -15,8 +15,10 @@
  *  「List of libraries」表参照、固定値 207） */
 #define E2E_MODULE_ID  207U
 
-/** ApiId（[SWS_E2E_00032] の Service ID[hex] を実測して確認済み） */
+/** ApiId（各 SWS 番号の Service ID[hex] を実測して確認済み） */
 #define E2E_API_ID_GET_VERSION_INFO  0x14U
+#define E2E_API_ID_SM_CHECK          0x30U
+#define E2E_API_ID_SM_CHECK_INIT     0x31U
 
 /** バージョン情報（Com/E2EXf/PduR 等の既存モジュールと同じ命名規則） */
 #define E2E_VENDOR_ID          0U
