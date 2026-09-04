@@ -49,6 +49,7 @@
 #define SECOC_API_ID_MAIN_FUNCTION_RX  0x06U
 #define SECOC_API_ID_DEINIT            0x05U
 #define SECOC_API_ID_GET_VERSION_INFO  0x02U
+#define SECOC_API_ID_VERIFY_STATUS_OVERRIDE  0x0BU
 
 /** バージョン情報（SWS_SecOC、Com/E2EXf/PduR 等の既存モジュールと同じ命名規則） */
 #define SECOC_VENDOR_ID          0U

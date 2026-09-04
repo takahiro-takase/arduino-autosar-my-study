@@ -75,6 +75,18 @@ static const SecOC_ConfigType* SecOC_ConfigPtr = NULL;
 static uint8 SecOC_LastFreshness[SECOC_RX_PDU_COUNT];
 static uint8 SecOC_HasBaseline[SECOC_RX_PDU_COUNT];
 
+/* オーバーライド未設定を示すセンチネル値（実仕様の overrideStatus 値
+ * 0/1/2/41 のいずれとも衝突しない）。 */
+#define SECOC_OVERRIDE_NONE  0xFFU
+
+/* Secured I-PDU (= SecOC_VerifyStatusOverride() の freshnessValueID) ごとの
+ * VerifyStatus 強制状態。SecOC_VerifyStatusOverride() の Doxygen 参照。
+ * SecOC_OverrideStatus: SECOC_OVERRIDE_NONE または SECOC_OVERRIDE_FAIL_INDEFINITE/
+ * SECOC_OVERRIDE_FAIL_COUNTED のいずれか（41=Pass強制は非対応のため格納されない）。
+ * SecOC_OverrideRemaining: SECOC_OVERRIDE_FAIL_COUNTED のときのみ有効な残り回数。 */
+static uint8 SecOC_OverrideStatus[SECOC_RX_PDU_COUNT];
+static uint8 SecOC_OverrideRemaining[SECOC_RX_PDU_COUNT];
+
 /* TX Secured I-PDU ごとの内部状態。
  * SecOC_TxAuthenticBuffer : SecOC_IfTransmit() がコピーした Authentic I-PDU。
  * SecOC_TxPending         : 「次回 SecOC_MainFunctionTx() で変換・送信すべき
@@ -127,6 +139,49 @@ static const SecOC_RxPduConfigType* SecOC_FindRxPdu(PduIdType rxPduId, uint8* ta
 }
 
 /**
+ * \brief   実際の検証結果に SecOC_VerifyStatusOverride() のオーバーライド設定を適用する。
+ *
+ * \details [SWS_SecOC_00122] の Note「オーバーライド中でも CSM による実際の
+ *          検証は継続する」を踏まえ、呼び出し元（SecOC_RxIndication()）は
+ *          実際の MAC/フレッシュネス検証を必ず先に完了させ、その結果を
+ *          `actualPass` として渡すこと。回数指定オーバーライド
+ *          (SECOC_OVERRIDE_FAIL_COUNTED) は呼び出しのたびに残り回数を消費し、
+ *          0 に達したら自動的に解除する。
+ *
+ * \param[in]  tableIndex  SecOC_FindRxPdu() で得たテーブルインデックス。
+ * \param[in]  actualPass  実際の検証結果 (1=成功, 0=失敗)。
+ *
+ * \return  最終的な VerifyStatus (1=成功として扱う, 0=失敗として扱う)。
+ *          本実装は overrideStatus=41 (Pass 強制) を非対応とするため、
+ *          `actualPass` を成功から失敗へ強制することはあっても、その逆
+ *          （失敗を成功にする）ことはない。
+ */
+static uint8 SecOC_ApplyVerifyStatusOverride(uint8 tableIndex, uint8 actualPass)
+{
+    const uint8 ov = SecOC_OverrideStatus[tableIndex];
+
+    if (ov == SECOC_OVERRIDE_NONE)
+        return actualPass;
+
+    if (ov == SECOC_OVERRIDE_FAIL_INDEFINITE)
+        return 0U;
+
+    /* ここに来るのは SECOC_OVERRIDE_FAIL_COUNTED のみ
+     * (41=Pass 強制は SecOC_VerifyStatusOverride() 側で常に拒否するため、
+     *  SecOC_OverrideStatus[] へ格納されることがない)。 */
+    if (SecOC_OverrideRemaining[tableIndex] > 0U)
+    {
+        SecOC_OverrideRemaining[tableIndex]--;
+        if (SecOC_OverrideRemaining[tableIndex] == 0U)
+            SecOC_OverrideStatus[tableIndex] = SECOC_OVERRIDE_NONE;
+        return 0U;
+    }
+
+    SecOC_OverrideStatus[tableIndex] = SECOC_OVERRIDE_NONE;
+    return actualPass;
+}
+
+/**
  * \brief   SecOC_TxPduConfigType テーブルから SecOCTxPduId に一致するエントリを検索する。
  *
  * \details SecOC_FindRxPdu() の TX 版。同じ「配列添字に暗黙依存せず、明示 ID
@@ -176,8 +231,10 @@ void SecOC_Init(const SecOC_ConfigType* config)
 
     for (uint8 i = 0U; i < SECOC_RX_PDU_COUNT; i++)
     {
-        SecOC_LastFreshness[i] = 0U;
-        SecOC_HasBaseline[i]   = 0U;
+        SecOC_LastFreshness[i]    = 0U;
+        SecOC_HasBaseline[i]      = 0U;
+        SecOC_OverrideStatus[i]   = SECOC_OVERRIDE_NONE;
+        SecOC_OverrideRemaining[i] = 0U;
     }
 
     for (uint8 i = 0U; i < SECOC_TX_PDU_COUNT; i++)
@@ -266,11 +323,11 @@ void SecOC_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
                                                  authInput, authInputLen,
                                                  &secured[cfg->MacOffset], (uint32)cfg->MacTxLength * 8U,
                                                  &verifyResult);
-    if (csmRet != E_OK || verifyResult != CRYPTO_E_VER_OK)
+    const uint8 macOk = (csmRet == E_OK && verifyResult == CRYPTO_E_VER_OK) ? 1U : 0U;
+    if (macOk == 0U)
     {
         DET_LOGW(TAG, "RxInd W: iPdu=%u MAC verification failed (tampered or wrong key)",
                  (unsigned)RxPduId);
-        return;
     }
 
     /* フレッシュネス検証（リプレイ検知）。本実装は FreshnessLength=1（8bit）
@@ -279,20 +336,54 @@ void SecOC_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
      * （received-last の差が 1〜127 なら「より新しい」とみなす）を用いる。
      * 差が 0（完全一致 = リプレイ）または 128 以上（古い方向、または折り返し
      * 境界で新旧が確定できない）は拒否する。初回受信（SecOC_HasBaseline=0）は
-     * 比較対象がないため、この検証自体をスキップして無条件に受理する。 */
+     * 比較対象がないため、この検証自体をスキップして無条件に受理する。
+     * MAC 検証が既に失敗している場合はフレッシュネスの正否は最終判定に影響
+     * しない（actualPass は macOk との論理積のため）ので判定自体を省略する
+     * （攻撃者制御下の任意バイトに対する「replay or stale」の紛らわしい
+     * 二重ログを防ぐ）。 */
     const uint8 freshness = secured[cfg->FreshnessOffset];
-    if (SecOC_HasBaseline[tableIndex] != 0U)
+    uint8 freshnessOk = 0U;
+    if (macOk != 0U)
     {
-        const uint8 delta = (uint8)(freshness - SecOC_LastFreshness[tableIndex]);
-        if (delta == 0U || delta >= 128U)
+        freshnessOk = 1U;
+        if (SecOC_HasBaseline[tableIndex] != 0U)
         {
-            DET_LOGW(TAG, "RxInd W: iPdu=%u freshness check failed (replay or stale, got=%u last=%u)",
-                     (unsigned)RxPduId, (unsigned)freshness, (unsigned)SecOC_LastFreshness[tableIndex]);
-            return;
+            const uint8 delta = (uint8)(freshness - SecOC_LastFreshness[tableIndex]);
+            if (delta == 0U || delta >= 128U)
+            {
+                freshnessOk = 0U;
+                DET_LOGW(TAG, "RxInd W: iPdu=%u freshness check failed (replay or stale, got=%u last=%u)",
+                         (unsigned)RxPduId, (unsigned)freshness, (unsigned)SecOC_LastFreshness[tableIndex]);
+            }
         }
     }
-    SecOC_LastFreshness[tableIndex] = freshness;
-    SecOC_HasBaseline[tableIndex]   = 1U;
+
+    /* [SWS_SecOC_00122]: SecOC_VerifyStatusOverride() が設定した強制状態を、
+     * 実際の検証結果 (actualPass) に適用して最終判定 (effectivePass) を得る
+     * (SecOC_ApplyVerifyStatusOverride() の Doxygen 参照)。 */
+    const uint8 actualPass    = (uint8)((macOk != 0U) && (freshnessOk != 0U));
+    const uint8 effectivePass = SecOC_ApplyVerifyStatusOverride(tableIndex, actualPass);
+
+    /* フレッシュネス基準値は「実際に」検証が成功した場合 (actualPass) に
+     * 更新する。Com への転送可否は下記の effectivePass に従うが、Fail に
+     * 強制された場合でも actualPass が真（＝本物の正当なトラフィック）なら
+     * 基準値は進めておかないと、オーバーライド解除後に基準値が古いまま残り、
+     * 以後の正当なメッセージまで「リプレイ/古い」と誤判定してしまう。 */
+    if (actualPass != 0U)
+    {
+        SecOC_LastFreshness[tableIndex] = freshness;
+        SecOC_HasBaseline[tableIndex]   = 1U;
+    }
+
+    if (effectivePass == 0U)
+    {
+        if (actualPass != 0U)
+        {
+            DET_LOGW(TAG, "RxInd W: iPdu=%u verification succeeded but forced to Fail by SecOC_VerifyStatusOverride()",
+                     (unsigned)RxPduId);
+        }
+        return;
+    }
 
     DET_LOGI(TAG, "RxInd: iPdu=%u verified OK (freshness=%u)", (unsigned)RxPduId, (unsigned)freshness);
 
@@ -305,6 +396,104 @@ void SecOC_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
         .SduLength  = cfg->AuthenticPduLength
     };
     Com_RxIndication(cfg->ComRxPduId, &authenticPduInfo);
+}
+
+/**
+ * \brief   指定 Freshness Value の VerifyStatus を強制上書きする（[SWS_SecOC_00122]）。
+ *
+ * \details 実仕様はテスト・診断目的で「実際の認証結果に関わらず検証結果を
+ *          強制する」任意サービス。CSM による実際の MAC 検証・フレッシュネス
+ *          検証は本関数の呼び出し有無に関わらず常に行われる（本実装は
+ *          `SecOC_RxIndication()` 内で実際の検証結果を求めたのち、本関数が
+ *          設定したオーバーライド状態を適用して最終判定とする）。
+ *
+ *          実仕様は個別の Freshness Value を識別する `freshnessValueId`
+ *          という専用の設定要素（Freshness Value Manager 相当）を持つが、
+ *          本プロジェクトはそのような機構自体を持たず、Freshness Value は
+ *          RX Secured I-PDU ごとに 1 対 1 で紐づく（`SecOC_RxPduConfigType`
+ *          参照）。そのため本実装では `freshnessValueID` を対象の
+ *          `SecOCRxPduId`（`SecOC_RxIndication()` の `RxPduId` と同じ値）と
+ *          みなして扱う（学習用簡略化）。
+ *
+ *          `overrideStatus=41`（VerifyStatus を Pass に強制）は、実仕様
+ *          自身が既定 FALSE の `SecOCEnableForcedPassOverride`
+ *          （[ECUC_SecOC_00051]）で無効化されている危険な機能（未検証データを
+ *          無条件に信頼させる）であり、本プロジェクトはこのコンフィグ切替を
+ *          持たないため、常に非対応として `E_NOT_OK` を返す（安全側の既定を
+ *          採用）。`overrideStatus=0`（無期限 Fail 強制）/`1`（回数指定 Fail
+ *          強制）/`2`（解除）のみサポートする。
+ *
+ * \param[in]  freshnessValueID            対象の SecOCRxPduId
+ *                                         （上記の簡略化参照）。
+ * \param[in]  overrideStatus              SECOC_OVERRIDE_FAIL_INDEFINITE(0) /
+ *                                         SECOC_OVERRIDE_FAIL_COUNTED(1) /
+ *                                         SECOC_OVERRIDE_CANCEL(2) のいずれか。
+ *                                         それ以外（41 含む）は非対応。
+ * \param[in]  numberOfMessagesToOverride  overrideStatus=1 のときのみ有効。
+ *                                         強制 Fail を適用する残りメッセージ数。
+ *
+ * \retval  E_OK      正常に設定/解除した。
+ * \retval  E_NOT_OK  未初期化、freshnessValueID に一致する RX PDU が無い、
+ *                    または overrideStatus が非対応の値。
+ *
+ * \AUTOSARReq     {SWS_SecOC_00122}
+ * \ServiceID      {0x0b}
+ * \Reentrancy     {Non Reentrant for the same FreshnessValueID. Reentrant for
+ *                  different FreshnessValueIDs.}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType SecOC_VerifyStatusOverride(uint16 freshnessValueID, uint8 overrideStatus,
+                                          uint8 numberOfMessagesToOverride)
+{
+    DET_LOGT(TAG, "called");
+    if (SecOC_ConfigPtr == NULL)
+    {
+        Det_ReportError(SECOC_MODULE_ID, 0U, SECOC_API_ID_VERIFY_STATUS_OVERRIDE, SECOC_E_UNINIT);
+        return E_NOT_OK;
+    }
+
+    uint8 tableIndex = 0U;
+    if (SecOC_FindRxPdu((PduIdType)freshnessValueID, &tableIndex) == NULL)
+    {
+        DET_LOGW(TAG, "VerifyStatusOverride W: no matching SecOC RX PDU for freshnessValueID=%u",
+                 (unsigned)freshnessValueID);
+        Det_ReportError(SECOC_MODULE_ID, 0U, SECOC_API_ID_VERIFY_STATUS_OVERRIDE, SECOC_E_INVALID_PDU_SDU_ID);
+        return E_NOT_OK;
+    }
+
+    switch (overrideStatus)
+    {
+        case SECOC_OVERRIDE_FAIL_INDEFINITE:
+            SecOC_OverrideStatus[tableIndex]    = SECOC_OVERRIDE_FAIL_INDEFINITE;
+            SecOC_OverrideRemaining[tableIndex] = 0U;
+            DET_LOGW(TAG, "iPdu=%u VerifyStatus forced to Fail (indefinite)", (unsigned)freshnessValueID);
+            break;
+
+        case SECOC_OVERRIDE_FAIL_COUNTED:
+            SecOC_OverrideStatus[tableIndex]    = SECOC_OVERRIDE_FAIL_COUNTED;
+            SecOC_OverrideRemaining[tableIndex] = numberOfMessagesToOverride;
+            DET_LOGW(TAG, "iPdu=%u VerifyStatus forced to Fail for %u message(s)",
+                     (unsigned)freshnessValueID, (unsigned)numberOfMessagesToOverride);
+            break;
+
+        case SECOC_OVERRIDE_CANCEL:
+            SecOC_OverrideStatus[tableIndex]    = SECOC_OVERRIDE_NONE;
+            SecOC_OverrideRemaining[tableIndex] = 0U;
+            DET_LOGI(TAG, "iPdu=%u VerifyStatus override canceled", (unsigned)freshnessValueID);
+            break;
+
+        default:
+            /* overrideStatus=41 (強制 Pass) は [ECUC_SecOC_00051]
+             * SecOCEnableForcedPassOverride の既定値 FALSE に倣い、本プロジェクトは
+             * 対応するコンフィグ切替を持たないため常に非対応として扱う（未検証
+             * データを無条件に信頼させる危険な機能のため、安全側の既定を採用。
+             * SecOC.h の Doxygen 参照）。それ以外の未知の値も含めここで拒否する。 */
+            DET_LOGW(TAG, "VerifyStatusOverride W: iPdu=%u unsupported overrideStatus=%u",
+                     (unsigned)freshnessValueID, (unsigned)overrideStatus);
+            return E_NOT_OK;
+    }
+
+    return E_OK;
 }
 
 Std_ReturnType SecOC_IfTransmit(PduIdType TxPduId, const PduInfoType* PduInfoPtr)
