@@ -90,7 +90,7 @@
 #define DEM_API_ID_SET_EVENT_STATUS              0x04U
 #define DEM_API_ID_GET_DTC_STATUS_AVAILABILITY_MASK 0x16U
 #define DEM_API_ID_GET_EVENT_UDS_STATUS            0xB6U
-#define DEM_API_ID_GET_DTC_OF_EVENT                0x1AU
+#define DEM_API_ID_GET_DTC_OF_EVENT                0x0DU
 #define DEM_API_ID_CLEAR_ALL_DTCS                  0x23U
 #define DEM_API_ID_DISABLE_DTC_SETTING              0x24U
 #define DEM_API_ID_ENABLE_DTC_SETTING               0x25U
