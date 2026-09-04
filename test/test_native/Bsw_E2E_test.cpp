@@ -475,4 +475,169 @@ TEST_F(E2ETest, GetVersionInfoSilentlyIgnoresNullPointer)
     E2E_GetVersionInfo(nullptr);
 }
 
+/**
+ * \brief  E2E_SMCheck()/E2E_SMCheckInit() の単体テスト（[SWS_E2E_00340]/
+ *         [SWS_E2E_00353]）。
+ * \details 状態遷移の閾値は WindowSize=3、Init系=3件全OK/0件Errorで昇格、
+ *          Valid系=1件OK/1件Errorまで許容、Invalid系=3件全OK/0件Errorで
+ *          復帰、という小さく手計算しやすい値にしている。
+ */
+class E2ESMTest : public ::testing::Test
+{
+protected:
+    uint8_t          window[3];
+    E2E_SMConfigType config;
+    E2E_SMCheckStateType state;
+
+    void SetUp() override
+    {
+        config.WindowSize           = 3U;
+        config.MinOkStateInit       = 3U;
+        config.MaxErrorStateInit    = 0U;
+        config.MinOkStateValid      = 1U;
+        config.MaxErrorStateValid   = 1U;
+        config.MinOkStateInvalid    = 3U;
+        config.MaxErrorStateInvalid = 0U;
+
+        state.ProfileStatusWindow = window;
+    }
+};
+
+TEST_F(E2ESMTest, CheckInit_OK_SetsNodataStateAndClearsWindow)
+{
+    ASSERT_EQ(E2E_SMCheckInit(&state, &config), E2E_E_OK);
+
+    EXPECT_EQ(state.SMState, E2E_SM_NODATA);
+    EXPECT_EQ(state.WindowTopIndex, 0U);
+    EXPECT_EQ(state.OkCount, 0U);
+    EXPECT_EQ(state.ErrorCount, 0U);
+    for (uint8_t i = 0U; i < config.WindowSize; i++)
+        EXPECT_EQ(window[i], static_cast<uint8_t>(E2E_P_NOTAVAILABLE));
+}
+
+TEST_F(E2ESMTest, CheckInit_NG_NullPointerReturnsInputErrNull)
+{
+    EXPECT_EQ(E2E_SMCheckInit(nullptr, &config), E2E_E_INPUTERR_NULL);
+    EXPECT_EQ(E2E_SMCheckInit(&state, nullptr), E2E_E_INPUTERR_NULL);
+}
+
+TEST_F(E2ESMTest, Check_NG_NullPointerReturnsInputErrNull)
+{
+    ASSERT_EQ(E2E_SMCheckInit(&state, &config), E2E_E_OK);
+
+    EXPECT_EQ(E2E_SMCheck(E2E_P_OK, nullptr, &state), E2E_E_INPUTERR_NULL);
+    EXPECT_EQ(E2E_SMCheck(E2E_P_OK, &config, nullptr), E2E_E_INPUTERR_NULL);
+}
+
+TEST_F(E2ESMTest, Check_NG_DeinitStateReturnsWrongStateWithoutChangingState)
+{
+    /* E2E_SMCheckInit() を一度も呼んでいない場合を模擬するため、State を
+     * 明示的に E2E_SM_DEINIT にする。注意: [SWS_E2E_00343] の値定義は
+     * E2E_SM_VALID=0x00・E2E_SM_DEINIT=0x01 のため、ゼロ初期化しただけでは
+     * DEINIT にはならず（誤って VALID 扱いになってしまう）、呼び出し元は
+     * 必ず E2E_SMCheckInit() を明示的に呼ぶ必要がある（本テストはその
+     * 「明示的な初期化が必須」という前提を裏付けるためのもの）。 */
+    state.SMState = E2E_SM_DEINIT;
+
+    EXPECT_EQ(E2E_SMCheck(E2E_P_OK, &config, &state), E2E_E_WRONGSTATE);
+    EXPECT_EQ(state.SMState, E2E_SM_DEINIT); /* 状態遷移しないこと */
+}
+
+TEST_F(E2ESMTest, Check_OK_NodataStaysUntilFirstGoodStatus)
+{
+    ASSERT_EQ(E2E_SMCheckInit(&state, &config), E2E_E_OK);
+
+    ASSERT_EQ(E2E_SMCheck(E2E_P_ERROR, &config, &state), E2E_E_OK);
+    EXPECT_EQ(state.SMState, E2E_SM_NODATA);
+
+    ASSERT_EQ(E2E_SMCheck(E2E_P_NONEWDATA, &config, &state), E2E_E_OK);
+    EXPECT_EQ(state.SMState, E2E_SM_NODATA);
+
+    /* NODATA からの遷移では E2E_SMAddStatus() を呼ばない（PDFベクタ座標解析で
+     * 確認済み、E2E_SMCheck() の Doxygen 参照）ため、ここまで OkCount/
+     * ErrorCount は 0 のままのはず。 */
+    EXPECT_EQ(state.OkCount, 0U);
+    EXPECT_EQ(state.ErrorCount, 0U);
+
+    ASSERT_EQ(E2E_SMCheck(E2E_P_OK, &config, &state), E2E_E_OK);
+    EXPECT_EQ(state.SMState, E2E_SM_INIT);
+    EXPECT_EQ(state.OkCount, 0U);    /* この遷移自体もウィンドウには追加しない */
+    EXPECT_EQ(state.ErrorCount, 0U);
+}
+
+TEST_F(E2ESMTest, Check_OK_InitPromotesToValidOnceWindowFullOfOk)
+{
+    ASSERT_EQ(E2E_SMCheckInit(&state, &config), E2E_E_OK);
+    ASSERT_EQ(E2E_SMCheck(E2E_P_OK, &config, &state), E2E_E_OK); /* NODATA -> INIT */
+    ASSERT_EQ(state.SMState, E2E_SM_INIT);
+
+    /* WindowSize(3) 回分 OK を積むまでは INIT に留まる */
+    ASSERT_EQ(E2E_SMCheck(E2E_P_OK, &config, &state), E2E_E_OK);
+    EXPECT_EQ(state.SMState, E2E_SM_INIT);
+    ASSERT_EQ(E2E_SMCheck(E2E_P_OK, &config, &state), E2E_E_OK);
+    EXPECT_EQ(state.SMState, E2E_SM_INIT);
+
+    /* 3回目でウィンドウが全て OK になり VALID へ昇格 */
+    ASSERT_EQ(E2E_SMCheck(E2E_P_OK, &config, &state), E2E_E_OK);
+    EXPECT_EQ(state.SMState, E2E_SM_VALID);
+    EXPECT_EQ(state.OkCount, 3U);
+    EXPECT_EQ(state.ErrorCount, 0U);
+}
+
+TEST_F(E2ESMTest, Check_OK_InitDemotesDirectlyToInvalidWhenErrorExceedsMax)
+{
+    ASSERT_EQ(E2E_SMCheckInit(&state, &config), E2E_E_OK);
+    ASSERT_EQ(E2E_SMCheck(E2E_P_OK, &config, &state), E2E_E_OK); /* NODATA -> INIT */
+
+    /* MaxErrorStateInit=0 のため、INIT 中に ERROR が1回でも発生すると
+     * (OK が十分溜まる前でも) 即座に INVALID へ落ちる。 */
+    ASSERT_EQ(E2E_SMCheck(E2E_P_ERROR, &config, &state), E2E_E_OK);
+    EXPECT_EQ(state.SMState, E2E_SM_INVALID);
+}
+
+TEST_F(E2ESMTest, Check_OK_ValidStaysValidWithinErrorLimitThenDemotesWhenExceeded)
+{
+    ASSERT_EQ(E2E_SMCheckInit(&state, &config), E2E_E_OK);
+    ASSERT_EQ(E2E_SMCheck(E2E_P_OK, &config, &state), E2E_E_OK); /* NODATA -> INIT（AddStatus は呼ばれない） */
+    ASSERT_EQ(E2E_SMCheck(E2E_P_OK, &config, &state), E2E_E_OK); /* window=[OK,NA,NA] */
+    ASSERT_EQ(E2E_SMCheck(E2E_P_OK, &config, &state), E2E_E_OK); /* window=[OK,OK,NA] */
+    ASSERT_EQ(E2E_SMCheck(E2E_P_OK, &config, &state), E2E_E_OK); /* window=[OK,OK,OK] -> VALID */
+    ASSERT_EQ(state.SMState, E2E_SM_VALID);
+
+    /* MaxErrorStateValid=1 のため、1件だけの ERROR は許容され VALID を維持する
+     * (window=[ERROR,OK,OK] は OkCount=2>=MinOkStateValid(1)、ErrorCount=1<=1)。 */
+    ASSERT_EQ(E2E_SMCheck(E2E_P_ERROR, &config, &state), E2E_E_OK);
+    EXPECT_EQ(state.SMState, E2E_SM_VALID);
+
+    /* 2件目の ERROR で許容量(1)を超え INVALID へ落ちる
+     * (window=[ERROR,ERROR,OK] は ErrorCount=2>1)。 */
+    ASSERT_EQ(E2E_SMCheck(E2E_P_ERROR, &config, &state), E2E_E_OK);
+    EXPECT_EQ(state.SMState, E2E_SM_INVALID);
+}
+
+TEST_F(E2ESMTest, Check_OK_InvalidRecoversToValidOnceWindowFullOfOk)
+{
+    /* INIT を経由せず、INVALID から直接検証する（E2E_SMAddStatus() は
+     * 呼び出し毎にウィンドウ全体を再走査して OkCount/ErrorCount を再計算する
+     * ため、事前の Ok/ErrorCount の値そのものは結果に影響しない）。 */
+    window[0] = static_cast<uint8_t>(E2E_P_ERROR);
+    window[1] = static_cast<uint8_t>(E2E_P_ERROR);
+    window[2] = static_cast<uint8_t>(E2E_P_ERROR);
+    state.WindowTopIndex = 0U;
+    state.SMState        = E2E_SM_INVALID;
+
+    /* MinOkStateInvalid=3/MaxErrorStateInvalid=0 のため、ウィンドウ全体が
+     * OK で埋まるまで INVALID に留まる。 */
+    ASSERT_EQ(E2E_SMCheck(E2E_P_OK, &config, &state), E2E_E_OK);
+    EXPECT_EQ(state.SMState, E2E_SM_INVALID);
+    ASSERT_EQ(E2E_SMCheck(E2E_P_OK, &config, &state), E2E_E_OK);
+    EXPECT_EQ(state.SMState, E2E_SM_INVALID);
+
+    /* 3回目でウィンドウが全て OK になり VALID へ復帰 */
+    ASSERT_EQ(E2E_SMCheck(E2E_P_OK, &config, &state), E2E_E_OK);
+    EXPECT_EQ(state.SMState, E2E_SM_VALID);
+    EXPECT_EQ(state.OkCount, 3U);
+    EXPECT_EQ(state.ErrorCount, 0U);
+}
+
 }  // namespace
