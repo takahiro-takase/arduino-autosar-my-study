@@ -160,13 +160,13 @@ static uint8 Dem_AgingCounter[DEM_EVENT_COUNT];
 /** イベントごとの ExtendedData（確定 FAILED の累積回数、0xFF で飽和）。NvM 経由で永続化する */
 static uint8 Dem_OccurrenceCounter[DEM_EVENT_COUNT];
 
-/** [SWS_Dem_00124] 用の初期化済みフラグ。Dem_ReportErrorStatus() 相当
- *  (Dem_SetEventStatus) は明示的に未初期化チェック対象外のため参照しない。 */
+/** [SWS_Dem_00124] 用の初期化済みフラグ。Dem_SetEventStatus() は
+ *  明示的に未初期化チェック対象外のため参照しない。 */
 static uint8 Dem_Initialized = 0U;
 
 /** DTC の記録が有効か（1=有効、0=無効）。Dem_EnableDTCSetting()/
  *  Dem_DisableDTCSetting()（Dcm UDS SID 0x85 ControlDTCSetting 用）で操作する。
- *  既定で有効。無効化中は Dem_ReportErrorStatus() を丸ごと無視する。 */
+ *  既定で有効。無効化中は Dem_SetEventStatus() を丸ごと無視する。 */
 static uint8 Dem_DTCSettingEnabled = 1U;
 
 /**
@@ -350,7 +350,8 @@ void Dem_Init(const Dem_ConfigType* ConfigPtr)
 }
 
 /**
- * \brief   イベントの発生/消滅を DEM に通知する (モニタからの生のテスト結果)。
+ * \brief   イベントの発生/消滅を DEM に通知する (モニタからの生のテスト結果、
+ *          [SWS_Dem_00183])。
  *
  * \details FAILED/PASSED の生の報告をそのまま確定はせず、まずデバウンスカウンタを
  *          ±1 する。カウンタがイベントごとの確定閾値 (Dem_DebounceLimitTable[EventId])
@@ -369,26 +370,42 @@ void Dem_Init(const Dem_ConfigType* ConfigPtr)
  *
  * \param[in]  EventId      イベント ID (DEM_EVENT_* 定数)。
  * \param[in]  EventStatus  DEM_EVENT_STATUS_FAILED または DEM_EVENT_STATUS_PASSED。
+ *                          PREPASSED / PREFAILED は受け付けない。
  *
- * \ServiceID      {0x0F}
+ * \retval  E_OK      正常に受理した（デバウンス未確定・DTC設定無効化中の
+ *                    無視も含む。実仕様も「呼び出し元のBSWモジュールは戻り値を
+ *                    無視してよい」と明記しているため、実質的な失敗のみを
+ *                    E_NOT_OK とする）。
+ * \retval  E_NOT_OK  EventId が範囲外、または EventStatus が
+ *                    DEM_EVENT_STATUS_FAILED/PASSED 以外。
+ *
+ * \note    実仕様は「異なる EventId 間では Reentrant」と規定するが、本実装は
+ *          確定 (デバウンス閾値到達) の都度 `Dem_StatusTable[]`/
+ *          `Dem_OccurrenceCounter[]` を配列丸ごと `NvM_WriteBlock()` するため、
+ *          異なる EventId への同時呼び出しでも書き込みが競合しうる
+ *          （実仕様のようにイベント単位でキュー分離していないための制約）。
+ *          そのため本実装は Non Reentrant のまま扱う。
+ *
+ * \AUTOSARReq     {SWS_Dem_00183}
+ * \ServiceID      {0x04}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
  */
-void Dem_ReportErrorStatus(Dem_EventIdType EventId,
-                            Dem_EventStatusType EventStatus)
+Std_ReturnType Dem_SetEventStatus(Dem_EventIdType EventId,
+                                   Dem_EventStatusType EventStatus)
 {
     DET_LOGT(TAG, "called");
     /* [SWS_Dem_00124]: Dem_SetEventStatus 相当のため未初期化チェック対象外。 */
 
     if (EventId >= DEM_EVENT_COUNT)
     {
-        Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_REPORT_ERROR_STATUS, DEM_E_WRONG_CONFIGURATION);
-        return;
+        Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_SET_EVENT_STATUS, DEM_E_WRONG_CONFIGURATION);
+        return E_NOT_OK;
     }
     if (EventStatus != DEM_EVENT_STATUS_FAILED && EventStatus != DEM_EVENT_STATUS_PASSED)
     {
-        Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_REPORT_ERROR_STATUS, DEM_E_PARAM_DATA);
-        return;
+        Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_SET_EVENT_STATUS, DEM_E_PARAM_DATA);
+        return E_NOT_OK;
     }
 
     if (!Dem_DTCSettingEnabled)
@@ -398,7 +415,7 @@ void Dem_ReportErrorStatus(Dem_EventIdType EventId,
          * （再有効化した瞬間に、無効化中に蓄積した中途半端なカウントで
          * 誤確定させないため）。 */
         DET_LOGD(TAG, "ev=%u report ignored: DTC setting disabled", (unsigned)EventId);
-        return;
+        return E_OK;
     }
 
     const sint8 limit       = Dem_DebounceLimitTable[EventId];
@@ -430,7 +447,7 @@ void Dem_ReportErrorStatus(Dem_EventIdType EventId,
         /* カウンタが上下限で飽和済み（既に確定済みの状態が継続）: 変化なしのため何もしない。
          * これにより、確定後も毎サイクル報告され続けるイベント（ADC_VOLT_LOW 等）で
          * 同じデバウンスログが繰り返し出力されることを防ぐ。 */
-        return;
+        return E_OK;
     }
     Dem_DebounceCounter[EventId] = counter;
 
@@ -477,7 +494,7 @@ void Dem_ReportErrorStatus(Dem_EventIdType EventId,
         DET_LOGD(TAG, "ev=%u debounce=%d (%s)",
                  (unsigned)EventId, (int)counter,
                  (counter > 0) ? "PREFAILED" : (counter < 0) ? "PREPASSED" : "neutral");
-        return;
+        return E_OK;
     }
 
     /* ステータスが変化した場合のみ NvM (EEPROM) を更新 */
@@ -506,6 +523,8 @@ void Dem_ReportErrorStatus(Dem_EventIdType EventId,
 
         (void)NvM_WriteBlock(NVM_BLOCK_ID_DEM_STATUS, Dem_StatusTable);
     }
+
+    return E_OK;
 }
 
 /**
@@ -787,7 +806,7 @@ void Dem_GetSupportedDTCs(uint32* dtcBuf, uint8* statusBuf, uint8* count)
 /**
  * \brief   FreezeFrame として保存する現在値を更新する。
  *
- * \details Dem_ReportErrorStatus() が参照する「現在値」を上書きするだけで、
+ * \details Dem_SetEventStatus() が参照する「現在値」を上書きするだけで、
  *          この時点では FreezeFrameTable へのコピーは行わない。
  *
  * \ServiceID      {0x25}

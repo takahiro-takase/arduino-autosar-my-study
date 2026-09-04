@@ -42,12 +42,12 @@ App_EngineManager_Run が読み取る:
 確定押下が継続するたびに (IoHwAb_MainFunction):
   s_stuckCounter++
   s_stuckCounter == 500?
-    → Dem_ReportErrorStatus(DEM_EVENT_BUTTON_STUCK, FAILED)
+    → Dem_SetEventStatus(DEM_EVENT_BUTTON_STUCK, FAILED)
     → WARN: "Button stuck dtc=0x000106"      ← DTC 0x000106 が即座に確定・EEPROM に保存
 
 ボタン解放時:
   if s_stuckCounter >= 500:
-    → Dem_ReportErrorStatus(DEM_EVENT_BUTTON_STUCK, PASSED)
+    → Dem_SetEventStatus(DEM_EVENT_BUTTON_STUCK, PASSED)
     → INFO: "Button stuck cleared"            ← TF が即座にクリア（CDTC は残る）
   s_stuckCounter = 0
 ```
@@ -68,8 +68,8 @@ App_EngineManager_Run が読み取る:
   mv  = (uint32)raw * ADC_REF_VOLTAGE_MV / ADC_RESOLUTION_MAX
 
   mv < 1000 (IOHWAB_ADC_LOW_VOLT_THRESHOLD_MV)?
-    YES → Dem_ReportErrorStatus(DEM_EVENT_ADC_VOLT_LOW, FAILED)
-    NO  → Dem_ReportErrorStatus(DEM_EVENT_ADC_VOLT_LOW, PASSED)
+    YES → Dem_SetEventStatus(DEM_EVENT_ADC_VOLT_LOW, FAILED)
+    NO  → Dem_SetEventStatus(DEM_EVENT_ADC_VOLT_LOW, PASSED)
 
 App_EngineManager_Run が読み取る:
   Rte_Call_Adc_GetValue_mV(&mv)

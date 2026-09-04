@@ -203,7 +203,7 @@ void E2EXf_DeInit(void);
  *
  * \details E2E_P01Check() を呼び、結果を `E2E_P01MapStatusToSM()`
  *          ([SWS_E2E_00476]、profileBehavior=FALSE = R4.2より前の挙動)
- *          で汎用ステータスへ変換したうえで Dem_ReportErrorStatus() へ
+ *          で汎用ステータスへ変換したうえで Dem_SetEventStatus() へ
  *          報告する。OK/OKSOMELOST/INITIAL の3状態は E2E_P_OK に写像され
  *          E_OK を返す（INITIAL は初回受信という正常な起動シーケンスで
  *          あり故障ではない）。
@@ -240,7 +240,7 @@ Std_ReturnType E2EXf_InverseTransform(const E2EXf_RxConfigType* Config, const ui
 /**
  * \brief   RX I-PDU バイト列に対する E2E Profile 05 の Inverse Transform（検証）を行う。
  *
- * \details E2E_P05Check() を呼び、結果を Dem_ReportErrorStatus() で
+ * \details E2E_P05Check() を呼び、結果を Dem_SetEventStatus() で
  *          Config->DemEventId へ報告する。P05 には Profile01 の
  *          INITIAL/SYNC に相当する状態が無いため、OK/OKSOMELOST の2状態
  *          のみ E_OK（データ自体は信頼できる）。REPEATED・WRONGSEQUENCE・

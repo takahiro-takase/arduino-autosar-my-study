@@ -129,7 +129,7 @@ WdgM_TriggerHwWatchdog()（1000ms 周期）:
 ```
 
 > **END→START の許容上限には他モジュール由来の遅延を見込んだ余裕がある**:
-> NvM の EEPROM 書き込み（`Dem_ReportErrorStatus()` からの DTC 確定時）は
+> NvM の EEPROM 書き込み（`Dem_SetEventStatus()` からの DTC 確定時）は
 > ブロッキング処理のため、DTC 確定のたびに協調スケジューラが数百ms 単位で
 > 止まりえます。これは WARNING タスク自身の異常ではなく他 BSW モジュール
 > （Dem/NvM）由来の遅延のため、ENGINE・WARNING 双方の END→START 上限
@@ -510,7 +510,7 @@ Deadline Supervision 導入直後、以下の 3 段階の不具合が連続し�
 当初 WARNING エンティティの END→START 上限は 700ms（500ms 周期に ±200ms/±40%）
 だったが、障害注入を伴わない通常動作でも Deadline Supervision が FAILED になり、
 実際に HW ウォッチドッグリセットが発生した（`elapsed=741ms`）。原因は
-`Dem_ReportErrorStatus()` が新規 DTC 確定時に `NvM_WriteBlock()` 経由で
+`Dem_SetEventStatus()` が新規 DTC 確定時に `NvM_WriteBlock()` 経由で
 EEPROM へ同期書き込みすることで、DTC 確定のたびに協調スケジューラが
 数百ms 単位で止まっていたためである（詳細は
 [`NvM_Notes.md`](./NvM_Notes.md#非同期書き込みジョブキューへの変更経緯)

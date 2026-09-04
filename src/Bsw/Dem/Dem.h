@@ -5,7 +5,7 @@
  *          報告するための API を公開する。
  *
  *          エラー検出コンポーネント (App_EngineManager 等) は
- *          Dem_ReportErrorStatus() でイベントの発生・消滅を通知する。
+ *          Dem_SetEventStatus() でイベントの発生・消滅を通知する。
  *          DEM は DTC ライフサイクル (PENDING → CONFIRMED → STORED) を
  *          管理し、EEPROM へ永続化する。
  *          CONFIRMED した DTC は、再故障せずに複数回の操作サイクル（起動〜次回
@@ -54,7 +54,7 @@ typedef uint8 Dem_EventIdType;
  *          報告し、Dem 側がその報告回数をカウントして閾値到達時に確定するという、
  *          仕様上は PREFAILED/PREPASSED に割り当てられた段階的カウント挙動に近い方式を
  *          FAILED/PASSED の名前のまま採用している。PREPASSED/PREFAILED 自体は
- *          Dem_ReportErrorStatus() への入力として受け付けない
+ *          Dem_SetEventStatus() への入力として受け付けない
  *          （AUTOSAR がこれらを入力不可と規定しているのではなく、本プロジェクト独自の
  *          簡略化。詳細は Dem.c の実装コメント参照）。
  */
@@ -114,7 +114,8 @@ typedef struct Dem_ConfigType_Tag Dem_ConfigType;
 void Dem_Init(const Dem_ConfigType* ConfigPtr);
 
 /**
- * \brief   イベントの発生/消滅を DEM に通知する (モニタからの生のテスト結果)。
+ * \brief   イベントの発生/消滅を DEM に通知する (モニタからの生のテスト結果、
+ *          [SWS_Dem_00183])。
  * \details FAILED/PASSED の報告でデバウンスカウンタを ±1 し、カウンタが
  *          イベントごとの確定閾値（Dem_Cfg.h の DEM_DEBOUNCE_LIMIT_*）に
  *          達した瞬間にのみ DTC ステータス (TF/PDTC/CDTC/TFSLC) を確定して
@@ -124,11 +125,26 @@ void Dem_Init(const Dem_ConfigType* ConfigPtr);
  * \param[in]  EventStatus  DEM_EVENT_STATUS_FAILED または DEM_EVENT_STATUS_PASSED。
  *                          PREPASSED / PREFAILED は受け付けない。
  *
- * \ServiceID      {0x0F}
+ * \retval  E_OK      正常に受理した（デバウンス未確定・DTC設定無効化中の
+ *                    無視も含む。実仕様も「呼び出し元のBSWモジュールは戻り値を
+ *                    無視してよい」と明記しているため、実質的な失敗のみを
+ *                    E_NOT_OK とする）。
+ * \retval  E_NOT_OK  EventId が範囲外、または EventStatus が
+ *                    DEM_EVENT_STATUS_FAILED/PASSED 以外。
+ *
+ * \note    実仕様は「異なる EventId 間では Reentrant」と規定するが、本実装は
+ *          確定 (デバウンス閾値到達) の都度 `Dem_StatusTable[]`/
+ *          `Dem_OccurrenceCounter[]` を配列丸ごと `NvM_WriteBlock()` するため、
+ *          異なる EventId への同時呼び出しでも書き込みが競合しうる
+ *          （実仕様のようにイベント単位でキュー分離していないための制約）。
+ *          そのため本実装は Non Reentrant のまま扱う。
+ *
+ * \AUTOSARReq     {SWS_Dem_00183}
+ * \ServiceID      {0x04}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
  */
-void Dem_ReportErrorStatus(Dem_EventIdType EventId, Dem_EventStatusType EventStatus);
+Std_ReturnType Dem_SetEventStatus(Dem_EventIdType EventId, Dem_EventStatusType EventStatus);
 
 /**
  * \brief   DTC ステータス availability mask（サポートするステータスビット）を取得する。
@@ -264,7 +280,7 @@ void Dem_GetSupportedDTCs(uint32* dtcBuf, uint8* statusBuf, uint8* count);
  *
  * \details SW-C (App_EngineManager) が周期 Runnable の先頭で毎回呼び出し、
  *          「現在の車両状態」を Dem 内部に保持させる。
- *          Dem_ReportErrorStatus() が FAILED 遷移を検出した瞬間に、
+ *          Dem_SetEventStatus() が FAILED 遷移を検出した瞬間に、
  *          この値をイベントごとのスナップショットとしてコピーする
  *          (リアルタイムに値を読みに行くのではなく、毎周期の最新値を使う点が
  *          学習用簡略化。AUTOSAR では FreezeFrameClass の DataElement を
@@ -346,7 +362,7 @@ Std_ReturnType Dem_GetOccurrenceCounterOfEvent(Dem_EventIdType EventId, uint8* C
  * \details DCM SID 0x19 subFunc 0x0B (reportDTCFaultDetectionCounter) から
  *          呼び出す。ISO 14229-1 に従い -128(PASSED 側に最も振れた状態)〜
  *          127(FAILED 側に最も振れた状態) の範囲で、内部の
- *          `Dem_DebounceCounter[]`（`Dem_ReportErrorStatus()` が更新する値）を
+ *          `Dem_DebounceCounter[]`（`Dem_SetEventStatus()` が更新する値）を
  *          そのまま返す。
  *
  * \param[in]   EventId               イベント ID (DEM_EVENT_* 定数)。
@@ -366,7 +382,7 @@ Std_ReturnType Dem_GetFaultDetectionCounter(Dem_EventIdType EventId, sint8* Faul
  * \brief   DTC の記録（error memory への反映）を有効化する。
  *
  * \details Dcm UDS SID 0x85 ControlDTCSetting のサブ機能 0x01 (on) から呼び出す
- *          （[SWS_Dcm_01063]）。既定で有効。無効化中に Dem_ReportErrorStatus()
+ *          （[SWS_Dcm_01063]）。既定で有効。無効化中に Dem_SetEventStatus()
  *          が呼ばれても、本関数で再度有効化するまでデバウンス・DTC ステータス
  *          ともに一切変化しない（Dem_DisableDTCSetting() 参照）。
  *
@@ -393,7 +409,7 @@ Std_ReturnType Dem_EnableDTCSetting(uint8 ClientId);
  * \brief   DTC の記録（error memory への反映）を無効化する。
  *
  * \details Dcm UDS SID 0x85 ControlDTCSetting のサブ機能 0x02 (off) から呼び出す
- *          （[SWS_Dcm_00406]）。無効化中は Dem_ReportErrorStatus() への報告を
+ *          （[SWS_Dcm_00406]）。無効化中は Dem_SetEventStatus() への報告を
  *          すべて無視する（デバウンスカウンタも進めない）。IOControl/
  *          RoutineControl でアクチュエータを意図的に操作するテスト中に、
  *          その副作用で誤った DTC が記録されるのを防ぐ用途を想定する。

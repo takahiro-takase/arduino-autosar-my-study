@@ -59,12 +59,12 @@
  * （Release 4.3.1、docs/ 配下）の「List of Basic Software Modules」表で
  * Diagnostic Event Manager (Dem) に割り当てられた固定値 54 を使う。
  *
- * [SWS_Dem_00124]: Dem_SetEventStatus 相当（本プロジェクトの
- * Dem_ReportErrorStatus）・Dem_ResetEventStatus・Dem_SetEventAvailable・
- * Dem_ResetEventDebounceStatus・Dem_GetVersionInfo は明示的に未初期化チェック
- * (DEM_E_UNINIT) の対象外と規定されている。モニタコンポーネントが起動シーケンス
- * の初期に呼ぶ可能性があるための例外であり、本実装の Dem_ReportErrorStatus()
- * もこの例外に該当するため UNINIT チェックを追加しない。
+ * [SWS_Dem_00124]: Dem_SetEventStatus・Dem_ResetEventStatus・
+ * Dem_SetEventAvailable・Dem_ResetEventDebounceStatus・Dem_GetVersionInfo は
+ * 明示的に未初期化チェック(DEM_E_UNINIT)の対象外と規定されている。モニタ
+ * コンポーネントが起動シーケンスの初期に呼ぶ可能性があるための例外であり、
+ * 本実装の Dem_SetEventStatus() もこの例外に該当するため UNINIT チェックを
+ * 追加しない。
  * ----------------------------------------------------------------------- */
 
 /** AUTOSAR Diagnostic Event Manager の ModuleId
@@ -87,7 +87,7 @@
  *  関数が無く ApiId は任意）を 0x2B/0x2C（Enable/DisableDTCSetting が
  *  空けた値）へ入れ替えて衝突を回避した） */
 #define DEM_API_ID_INIT                          0x01U
-#define DEM_API_ID_REPORT_ERROR_STATUS            0x0FU
+#define DEM_API_ID_SET_EVENT_STATUS              0x04U
 #define DEM_API_ID_GET_DTC_STATUS_AVAILABILITY_MASK 0x16U
 #define DEM_API_ID_GET_STATUS_OF_EVENT             0x19U
 #define DEM_API_ID_GET_DTC_OF_EVENT                0x1AU
@@ -112,7 +112,7 @@
 
 /* -----------------------------------------------------------------------
  * イベント ID 定義
- * App_EngineManager の状態ハンドラが Dem_ReportErrorStatus() に渡す。
+ * App_EngineManager の状態ハンドラが Dem_SetEventStatus() に渡す。
  * ----------------------------------------------------------------------- */
 #define DEM_EVENT_ENGINE_OVERHEAT       0U  /**< 冷却水温過熱                     */
 #define DEM_EVENT_ENGINE_STALL          1U  /**< エンジン失速                     */

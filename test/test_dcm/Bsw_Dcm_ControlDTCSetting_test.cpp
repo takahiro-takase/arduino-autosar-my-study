@@ -9,7 +9,7 @@
  *
  *          0x85 は extendedSession 限定のため、SendExtendedSession() で
  *          事前にセッションを遷移させてから各テストを実行する。
- *          Dem_ReportErrorStatus() は Dem.c が本 env に実体でリンクされている
+ *          Dem_SetEventStatus() は Dem.c が本 env に実体でリンクされている
  *          ため直接呼び出し、DTC 記録の有効/無効が実際に Dem_GetStatusOfEvent()
  *          へ反映されるか（またはされないか）を確認する。
  */
@@ -76,7 +76,7 @@ protected:
      *  ビットが立つはず。 */
     static void ReportBusOffFailed()
     {
-        Dem_ReportErrorStatus(DEM_EVENT_CAN_BUSOFF, DEM_EVENT_STATUS_FAILED);
+        (void)Dem_SetEventStatus(DEM_EVENT_CAN_BUSOFF, DEM_EVENT_STATUS_FAILED);
     }
 
     static uint8 BusOffStatus()

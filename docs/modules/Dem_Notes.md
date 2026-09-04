@@ -350,7 +350,7 @@ App_EngineManager_Run（3000ms 周期、毎回呼ばれる）:
   Dem_SetFreezeFrameContext(speed, temp, s_state)
     → Dem_CurrentContext を更新するだけ（まだイベントには紐付かない）
 
-Dem_ReportErrorStatus(EventId, FAILED) が呼ばれ、ステータスが変化した場合のみ:
+Dem_SetEventStatus(EventId, FAILED) が呼ばれ、ステータスが変化した場合のみ:
   Dem_FreezeFrameTable[EventId] = Dem_CurrentContext   ← この瞬間のスナップショットを確定
   Dem_FreezeFrameValid[EventId] = 1
 
@@ -410,7 +410,7 @@ FreezeFrame が「故障した瞬間の車両状態のスナップショット�
 ### 記録の仕組み
 
 ```
-Dem_ReportErrorStatus(EventId, FAILED) が呼ばれ、確定 FAILED に遷移した瞬間
+Dem_SetEventStatus(EventId, FAILED) が呼ばれ、確定 FAILED に遷移した瞬間
 （FreezeFrame 更新と同じ箇所）に:
   Dem_OccurrenceCounter[EventId]++   （0xFF で飽和、それ以上は増えない）
   NvM_WriteBlock(NVM_BLOCK_ID_DEM_EXTENDED, Dem_OccurrenceCounter)

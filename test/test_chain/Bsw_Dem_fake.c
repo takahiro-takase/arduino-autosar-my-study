@@ -5,20 +5,21 @@
  */
 #include "Bsw_Dem_fake.h"
 
-uint32              FakeDem_ReportErrorStatusCount = 0U;
+uint32              FakeDem_SetEventStatusCount = 0U;
 Dem_EventIdType     FakeDem_LastEventId            = 0xFFU;
 Dem_EventStatusType FakeDem_LastEventStatus         = 0xFFU;
 
 void FakeDem_Reset(void)
 {
-    FakeDem_ReportErrorStatusCount = 0U;
+    FakeDem_SetEventStatusCount = 0U;
     FakeDem_LastEventId            = 0xFFU;
     FakeDem_LastEventStatus        = 0xFFU;
 }
 
-void Dem_ReportErrorStatus(Dem_EventIdType EventId, Dem_EventStatusType EventStatus)
+Std_ReturnType Dem_SetEventStatus(Dem_EventIdType EventId, Dem_EventStatusType EventStatus)
 {
-    FakeDem_ReportErrorStatusCount++;
+    FakeDem_SetEventStatusCount++;
     FakeDem_LastEventId     = EventId;
     FakeDem_LastEventStatus = EventStatus;
+    return E_OK;
 }
