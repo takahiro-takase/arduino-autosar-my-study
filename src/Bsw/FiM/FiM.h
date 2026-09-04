@@ -55,7 +55,7 @@ void FiM_Init(const FiM_ConfigType* ConfigPtr);
 /**
  * \brief   FiM 周期処理。各 FID の許可状態を再評価する。
  *
- * \details FiM_Functions[] の各行について Dem_GetStatusOfEvent() を確認し、
+ * \details FiM_Functions[] の各行について Dem_GetEventUdsStatus() を確認し、
  *          InhibitStatusMask のいずれかのビットが立っていれば該当 FID を
  *          「抑止」、立っていなければ「許可」にする。許可状態が変化した
  *          瞬間にのみログを出力する。

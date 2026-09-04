@@ -10,7 +10,7 @@
  *          0x85 は extendedSession 限定のため、SendExtendedSession() で
  *          事前にセッションを遷移させてから各テストを実行する。
  *          Dem_SetEventStatus() は Dem.c が本 env に実体でリンクされている
- *          ため直接呼び出し、DTC 記録の有効/無効が実際に Dem_GetStatusOfEvent()
+ *          ため直接呼び出し、DTC 記録の有効/無効が実際に Dem_GetEventUdsStatus()
  *          へ反映されるか（またはされないか）を確認する。
  */
 #include <gtest/gtest.h>
@@ -81,7 +81,9 @@ protected:
 
     static uint8 BusOffStatus()
     {
-        return Dem_GetStatusOfEvent(DEM_EVENT_CAN_BUSOFF);
+        Dem_UdsStatusByteType status = 0U;
+        (void)Dem_GetEventUdsStatus(DEM_EVENT_CAN_BUSOFF, &status);
+        return status;
     }
 };
 

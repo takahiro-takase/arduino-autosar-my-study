@@ -39,6 +39,10 @@ extern "C" {
 /** イベント ID 型 (DEM_EVENT_* 定数を渡す) */
 typedef uint8 Dem_EventIdType;
 
+/** UDS DTC ステータスバイト型（[SWS_Dem_00928]、AUTOSAR では Bitfield/uint8
+ *  として定義される。本実装の `Dem_StatusTable[]` の要素と同じビット配置）。 */
+typedef uint8 Dem_UdsStatusByteType;
+
 /**
  * \brief   イベントステータス型 (Dem_EventStatusType は AUTOSAR SWS_Dem_00926 で定義)
  *
@@ -175,18 +179,29 @@ Std_ReturnType Dem_SetEventStatus(Dem_EventIdType EventId, Dem_EventStatusType E
 Std_ReturnType Dem_GetDTCStatusAvailabilityMask(uint8 ClientId, uint8* DTCStatusMask);
 
 /**
- * \brief   指定イベントの DTC ステータスバイトを返す。
+ * \brief   指定イベントの UDS DTC ステータスバイトを取得する（[SWS_Dem_91008]）。
  *
- * \param[in]  EventId  イベント ID (DEM_EVENT_* 定数)。
+ * \details 実仕様は本関数を SW-C や FiM 等の BSW モジュールがイベント単位で
+ *          使うためのものと位置づけ、Dcm は DTC 単位の `Dem_GetStatusOfDTC`
+ *          を使うと規定する（同関数の Note 参照）。本プロジェクトは
+ *          `Dem_GetStatusOfDTC`（DTC→EventId 変換を内蔵する別 API）を持たず、
+ *          Dcm 側は既に解決済みの EventId で直接本関数を呼ぶ既存の簡略化を
+ *          そのまま踏襲する（本関数の改名以前から変わらない設計）。
  *
- * \return  statusAvailabilityMask でマスクされたステータスバイト。
- *          EventId が範囲外の場合は 0。
+ * \param[in]   EventId        イベント ID (DEM_EVENT_* 定数)。
+ * \param[out]  UDSStatusByte  取得したステータスバイト（statusAvailabilityMask
+ *                             でマスク済み）の格納先。NULL 禁止。
+ *                             戻り値が E_NOT_OK の場合は不定。
  *
- * \ServiceID      {0x19}
+ * \retval  E_OK      正常取得。
+ * \retval  E_NOT_OK  未初期化、EventId が範囲外、または UDSStatusByte が NULL。
+ *
+ * \AUTOSARReq     {SWS_Dem_91008, SWS_Dem_00051}
+ * \ServiceID      {0xb6}
  * \Reentrancy     {Reentrant}
  * \Synchronicity  {Synchronous}
  */
-uint8 Dem_GetStatusOfEvent(Dem_EventIdType EventId);
+Std_ReturnType Dem_GetEventUdsStatus(Dem_EventIdType EventId, Dem_UdsStatusByteType* UDSStatusByte);
 
 /**
  * \brief   イベント ID から DTC コードを取得する。
