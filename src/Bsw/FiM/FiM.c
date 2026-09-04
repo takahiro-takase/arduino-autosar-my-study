@@ -7,7 +7,7 @@
  *          判定アルゴリズム:
  *            1. FiM_MainFunction() (100 ms 周期) が FiM_Functions[] を
  *               先頭から走査する。
- *            2. 各行について Dem_GetStatusOfEvent(EventId) を取得し、
+ *            2. 各行について Dem_GetEventUdsStatus(EventId) を取得し、
  *               InhibitStatusMask とのビット AND が非ゼロなら抑止、
  *               ゼロなら許可と判定する。
  *            3. 判定結果が前回から変化した場合のみログを出力する
@@ -88,7 +88,8 @@ void FiM_MainFunction(void)
     for (uint8 i = 0U; i < FiM_Cfg->FunctionCount; i++)
     {
         const FiM_FunctionCfgType* fn = &FiM_Cfg->Functions[i];
-        const uint8 status        = Dem_GetStatusOfEvent(fn->EventId);
+        Dem_UdsStatusByteType status = 0U;
+        (void)Dem_GetEventUdsStatus(fn->EventId, &status);
         const uint8 newPermitted  = ((status & fn->InhibitStatusMask) != 0U) ? 0U : 1U;
 
         if (newPermitted != FiM_Permitted[fn->FunctionId])

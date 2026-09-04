@@ -1062,7 +1062,9 @@ static void Dcm_HandleReadDtcSnapshot(const uint8* uds, uint8 udsLen)
     Dcm_TxBuf[2]  = (uint8)(dtc >> 16U);
     Dcm_TxBuf[3]  = (uint8)(dtc >>  8U);
     Dcm_TxBuf[4]  = (uint8)(dtc);
-    Dcm_TxBuf[5]  = Dem_GetStatusOfEvent(eventId);
+    Dem_UdsStatusByteType statusByte = 0U;
+    (void)Dem_GetEventUdsStatus(eventId, &statusByte);
+    Dcm_TxBuf[5]  = statusByte;
     Dcm_TxBuf[6]  = recordNumber;
     Dcm_TxBuf[7]  = DCM_FREEZEFRAME_DID_COUNT;
     Dcm_TxBuf[8]  = (uint8)(DCM_DID_ENGINE_SPEED >> 8U);
@@ -1126,7 +1128,9 @@ static void Dcm_HandleReadDtcExtendedData(const uint8* uds, uint8 udsLen)
     Dcm_TxBuf[2] = (uint8)(dtc >> 16U);
     Dcm_TxBuf[3] = (uint8)(dtc >>  8U);
     Dcm_TxBuf[4] = (uint8)(dtc);
-    Dcm_TxBuf[5] = Dem_GetStatusOfEvent(eventId);
+    Dem_UdsStatusByteType statusByte = 0U;
+    (void)Dem_GetEventUdsStatus(eventId, &statusByte);
+    Dcm_TxBuf[5] = statusByte;
     Dcm_TxBuf[6] = recordNumber;
     Dcm_TxBuf[7] = occurrenceCounter;
     Dcm_TxPdu.SduLength = 8U;

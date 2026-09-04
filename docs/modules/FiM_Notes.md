@@ -24,7 +24,7 @@ FID↔イベント対応表・判定フロー・フェールセーフ既定値�
 ```
 FiM_MainFunction（100 ms 周期、Os Task 9）:
   FiM_Functions[] を先頭から走査:
-    status = Dem_GetStatusOfEvent(EventId)
+    status = Dem_GetEventUdsStatus(EventId)
     (status & InhibitStatusMask) != 0 ?
       YES → 該当 FID を「抑止」
       NO  → 該当 FID を「許可」

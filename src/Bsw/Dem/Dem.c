@@ -563,32 +563,51 @@ Std_ReturnType Dem_GetDTCStatusAvailabilityMask(uint8 ClientId, uint8* DTCStatus
 }
 
 /**
- * \brief   指定イベントの DTC ステータスバイトを返す。
+ * \brief   指定イベントの UDS DTC ステータスバイトを取得する（[SWS_Dem_91008]）。
  *
- * \param[in]  EventId  イベント ID (DEM_EVENT_* 定数)。
+ * \details 実仕様は本関数を SW-C や FiM 等の BSW モジュールがイベント単位で
+ *          使うためのものと位置づけ、Dcm は DTC 単位の `Dem_GetStatusOfDTC`
+ *          を使うと規定する（同関数の Note 参照）。本プロジェクトは
+ *          `Dem_GetStatusOfDTC`（DTC→EventId 変換を内蔵する別 API）を持たず、
+ *          Dcm 側は既に解決済みの EventId で直接本関数を呼ぶ既存の簡略化を
+ *          そのまま踏襲する（本関数の改名以前から変わらない設計）。
  *
- * \return  statusAvailabilityMask でマスクされたステータスバイト。
- *          EventId が範囲外の場合は 0。
+ * \param[in]   EventId        イベント ID (DEM_EVENT_* 定数)。
+ * \param[out]  UDSStatusByte  取得したステータスバイト（statusAvailabilityMask
+ *                             でマスク済み）の格納先。NULL 禁止。
+ *                             戻り値が E_NOT_OK の場合は不定。
  *
- * \ServiceID      {0x19}
+ * \retval  E_OK      正常取得。
+ * \retval  E_NOT_OK  未初期化、EventId が範囲外、または UDSStatusByte が NULL。
+ *
+ * \AUTOSARReq     {SWS_Dem_91008, SWS_Dem_00051}
+ * \ServiceID      {0xb6}
  * \Reentrancy     {Reentrant}
  * \Synchronicity  {Synchronous}
  */
-uint8 Dem_GetStatusOfEvent(Dem_EventIdType EventId)
+Std_ReturnType Dem_GetEventUdsStatus(Dem_EventIdType EventId, Dem_UdsStatusByteType* UDSStatusByte)
 {
     DET_LOGT(TAG, "called");
     if (!Dem_Initialized)
     {
-        Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_GET_STATUS_OF_EVENT, DEM_E_UNINIT);
-        return 0U;
+        Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_GET_EVENT_UDS_STATUS, DEM_E_UNINIT);
+        return E_NOT_OK;
     }
 
     if (EventId >= DEM_EVENT_COUNT)
     {
-        Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_GET_STATUS_OF_EVENT, DEM_E_WRONG_CONFIGURATION);
-        return 0U;
+        Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_GET_EVENT_UDS_STATUS, DEM_E_WRONG_CONFIGURATION);
+        return E_NOT_OK;
     }
-    return Dem_StatusTable[EventId] & DEM_STATUS_AVAILABILITY_MASK;
+
+    if (UDSStatusByte == NULL)
+    {
+        Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_GET_EVENT_UDS_STATUS, DEM_E_PARAM_POINTER);
+        return E_NOT_OK;
+    }
+
+    *UDSStatusByte = Dem_StatusTable[EventId] & DEM_STATUS_AVAILABILITY_MASK;
+    return E_OK;
 }
 
 /**
