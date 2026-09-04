@@ -60,6 +60,16 @@
  *             SILENT_COM 中に Bus-Off が発生しても無視されず処理され、回復後は
  *             FULL_COM ではなく元の SILENT_COM へ正しく戻ること。
  *
+ *          10. RxDuringBusOffAfterNmBusSleep_OK_DoesNotResurrectNm（2026-09
+ *              追加、ComM_Nm_NetworkStartIndication()、[SWS_ComM_00383]/
+ *              [SWS_CanNm_00127]）: Bus-Off 回復待ち中に Nm だけが先に
+ *              Bus-Sleep Mode へ到達した状態で他ノードの NM フレームを
+ *              受信しても（CanSM_RequestComMode(FULL_COM) は Bus-Off 中
+ *              ガードにより拒否される）、ComM_NmReleasePending を誤って
+ *              クリアせず、Bus-Off 回復後も BusOffDuringNmWinddown_OK_
+ *              DoesNotResurrectNm と同じ NO_COM へ正しく収束すること
+ *              （/code-review で発見した回帰の防止）。
+ *
  *          EcuM（ComM の RUN 要求先）と BswM（ComM のモード通知先）は境界として
  *          フェイクに差し替える（Bsw_EcuM_fake.h/Bsw_BswM_fake.h 冒頭コメント
  *          参照）。CanIf は Nm が CanIf_Transmit() を直接呼ぶために実体で
@@ -471,6 +481,73 @@ TEST_F(Bsw_SleepCoordination_Test, RxCancelsPrepareBusSleep_OK_RestoresFullComAn
     EXPECT_EQ(FakeCanHw_LastSendDlc, static_cast<uint8_t>(NM_DLC));
     EXPECT_EQ(FakeEcuM_ReleaseRUNCount, 0U);
     EXPECT_EQ(FakeEcuM_RequestRUNCount, 0U);  /* RUN は SILENT_COM 中も維持されたまま */
+}
+
+/**
+ * \brief   2026-09 追加（ComM_Nm_NetworkStartIndication()、[SWS_ComM_00383]/
+ *          [SWS_CanNm_00127]）、/code-review で発見した重大な回帰の防止:
+ *
+ *          本プロジェクトの同期的な設計では、Nm が独自に Bus-Sleep Mode へ
+ *          到達する時点で通常は物理コントローラも既に CAN_CS_SLEEP のはずで
+ *          あり（Can_MainFunction_Read() 自体が停止するため）、
+ *          Nm_RxIndication() が Bus-Sleep Mode のまま呼ばれることは物理的に
+ *          ない。唯一の現実的な到達経路は、
+ *          BusOffDuringNmWinddown_OK_DoesNotResurrectNm と同じ状況——Bus-Off
+ *          回復待ち中に Nm だけが独立したタイマで先に Bus-Sleep Mode へ
+ *          到達し、コントローラは Bus-Off により Listen-Only のまま受信は
+ *          継続している——場合に、他ノードの NM フレームを受信するケースである。
+ *
+ *          この場合 CanSM_RequestComMode(FULL_COM) は CanSM の Bus-Off 中
+ *          ガードにより必ず拒否される。当初の実装は
+ *          `ComM_Nm_NetworkMode()` と同じ「無条件クリア」方針を踏襲していたが、
+ *          これだと拒否された呼び出しのために `ComM_NmReleasePending` が
+ *          誤ってクリアされ、後の Bus-Off 回復時に
+ *          `ComM_BusSM_ModeIndication()` の SILENT_COM 分岐にあるリトライ
+ *          ガードが働かず、ユーザーが望んでいないのに FULL_COM へ「復活」
+ *          してしまう（BusOffDuringNmWinddown_OK_DoesNotResurrectNm と全く
+ *          同じ症状）。本テストは、この回帰が再発しないこと（＝失敗時は
+ *          `ComM_NmReleasePending` を変更しない）を確認する。
+ */
+TEST_F(Bsw_SleepCoordination_Test, RxDuringBusOffAfterNmBusSleep_OK_DoesNotResurrectNm)
+{
+    ArrangeFullCom();
+    ASSERT_EQ(ComM_RequestComMode(COMM_USER_0, COMM_NO_COMMUNICATION), E_OK);
+
+    /* BusOffDuringNmWinddown_OK_DoesNotResurrectNm と同じ状況を再現する:
+     * Nm の協調スリープ待ち中に Bus-Off が発生し、Nm だけが独立したタイマで
+     * Bus-Sleep Mode へ到達してしまう（ComM_Nm_BusSleepMode() 経由の
+     * CanSM_RequestComMode(NO_COM) は Bus-Off 中のため CanSM に拒否される）。 */
+    CanSM_ControllerBusOff(0U);
+    DriveNmUntil(NM_STATE_BUS_SLEEP);
+
+    FakeCanHw_Reset();
+    FakeDem_Reset();
+    FakeEcuM_Reset();
+    FakeBswM_Reset();
+
+    /* 実行 (Act): Bus-Off 中(コントローラは Listen-Only で受信継続)に他
+     * ノードの NM フレームを受信する。CanSM_RequestComMode(FULL_COM) は
+     * Bus-Off 中ガードにより拒否されるため、Nm は Bus-Sleep Mode のまま
+     * 変化しない。 */
+    SimulateOtherNodeNmRx();
+
+    Nm_StateType state;
+    Nm_ModeType  nmMode;
+    ASSERT_EQ(Nm_GetState(NM_MAIN_NETWORK_HANDLE, &state, &nmMode), E_OK);
+    EXPECT_EQ(state, NM_STATE_BUS_SLEEP);
+
+    /* Bus-Off から回復させる（L1 周期経過） */
+    FakeMillis_Value += CANSM_BUSOFF_RECOVERY_L1_MS + 1UL;
+    CanSM_MainFunction();
+
+    /* 評価 (Assert): ComM_NmReleasePending が正しく保持されていれば、
+     * BusOffDuringNmWinddown_OK_DoesNotResurrectNm と同じ最終状態（NO_COM、
+     * 物理スリープ）へ収束する。誤ってクリアされていると FULL_COM へ
+     * 「復活」してしまう（回帰時の症状）。 */
+    ComM_ModeType comMode = COMM_FULL_COMMUNICATION;
+    ASSERT_EQ(ComM_GetCurrentComMode(COMM_USER_0, &comMode), E_OK);
+    EXPECT_EQ(comMode, static_cast<ComM_ModeType>(COMM_NO_COMMUNICATION));
+    EXPECT_EQ(Can_Test_GetControllerState(), CAN_CS_SLEEP);
 }
 
 /**

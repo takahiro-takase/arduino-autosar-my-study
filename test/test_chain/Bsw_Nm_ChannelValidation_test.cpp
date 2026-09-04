@@ -17,6 +17,7 @@
 
 extern "C" {
 #include "Nm.h"
+#include "ComM.h"
 #include "Hal_Millis_fake.h"
 #include "Hal_Det_Hw_fake.h"
 }
@@ -28,6 +29,14 @@ protected:
     {
         FakeMillis_Reset();
         FakeDetHw_LogSuppressed = 1U;  // Init() のログはノイズになるため抑制
+        /* 2026-09 追加の Nm_RxIndication() -> ComM_Nm_NetworkStartIndication()
+         * 呼び出し（[SWS_CanNm_00127]）は ComM が初期化済みだとカスケードする。
+         * 本フィクスチャは意図的に ComM_Init() を呼ばない軽量構成のため、他の
+         * テストファイルが ComM を初期化したまま残す可能性
+         * （feedback_native_chain_shared_static_hang 参照）を排除するべく、
+         * 明示的に ComM_DeInit() で未初期化状態を保証する
+         * （未初期化なら DET 報告のみで無害に即 return）。 */
+        ComM_DeInit();
         Nm_Init(NULL);
         FakeDetHw_Reset();             // Init 自体の記録を後続の検証対象から除く
         FakeDetHw_LogSuppressed = 0U;  // ここから各 TEST_F の実行(Act)区間
@@ -192,9 +201,13 @@ TEST_F(Bsw_Nm_ChannelValidation_Test, GetNodeIdentifier_OK_ReturnsZeroBeforeAnyR
 
 TEST_F(Bsw_Nm_ChannelValidation_Test, GetNodeIdentifier_OK_ReflectsMostRecentlyReceivedFrame)
 {
-    /* Bus-Sleep Mode 中の受信は状態遷移もカスケードも起こさない
-     * （[SWS_CanNm_00127]/[SWS_CanNm_00336]、DET_LOGW + Det_ReportError のみ）
-     * ため、ComM/CanSM 未初期化のこの軽量フィクスチャでも安全に呼べる。 */
+    /* 2026-09 追加の ComM_Nm_NetworkStartIndication() 呼び出し
+     * （[SWS_CanNm_00127]）により、Bus-Sleep Mode 中の受信は ComM が
+     * 初期化済みだとカスケードしうる（CanSM_RequestComMode()/
+     * Nm_NetworkRequest() 経由）が、SetUp() の ComM_DeInit() により本テスト
+     * では ComM は必ず未初期化（＝カスケードせず COMM_E_UNINIT の DET 報告
+     * のみで即 return）。カスケード時の挙動検証自体は
+     * Bsw_SleepCoordination_test.cpp の責務。 */
     uint8 pdu[2] = { 0x00U, 0x2AU };  // CBV=0, sourceNodeId=0x2A
     PduInfoType pduInfo = { pdu, 2U };
     Nm_RxIndication(0U, &pduInfo);

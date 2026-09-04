@@ -277,6 +277,62 @@ void ComM_BusSM_ModeIndication(uint8 Network, ComM_ModeType Mode);
 void ComM_Nm_PrepareBusSleepMode(uint8 Network);
 
 /**
+ * \brief   Bus-Sleep Mode 中に NM PDU を受信したことの通知（Nm から呼び出される、
+ *          [SWS_ComM_00383]）。
+ *
+ * \details [SWS_CanNm_00127]: Nm は Bus-Sleep Mode 中に NM PDU を受信しても
+ *          自動的に Network Mode へ遷移せず、上位層（ComM）へ通知するのみで
+ *          判断を委ねる。これは「他ノードは既に Network Mode にいる」ことを
+ *          示す、レース条件由来のシグナルである（[SWS_ComM_00583] のユース
+ *          ケース参照）。
+ *
+ *          本プロジェクトの同期的な設計では、Nm が `NM_STATE_BUS_SLEEP` へ
+ *          到達する時点で通常は `ComM_Nm_BusSleepMode()` 経由の
+ *          `CanSM_RequestComMode(NO_COM)` が既に成功しており、物理コントローラ
+ *          も `CAN_CS_SLEEP` へ落ちている（＝`Can_MainFunction_Read()` 自体が
+ *          停止し `Nm_RxIndication()` は物理的に呼ばれ得ない）。そのため本関数
+ *          が実際に到達しうるのは、Bus-Off 回復待ち中に `CanSM_RequestComMode
+ *          (NO_COM)` が拒否されて Nm だけが独立したタイマで先に Bus-Sleep
+ *          Mode へ到達してしまうケース（コントローラは Bus-Off により
+ *          Listen-Only のまま受信は継続、`ComM_Nm_BusSleepMode()` の Doxygen
+ *          `BusOffDuringNmWinddown_OK_DoesNotResurrectNm` 相当）にほぼ限られる。
+ *
+ *          [SWS_ComM_00583]: `ComM_ChannelMode[Network]` が既に
+ *          COMM_FULL_COMMUNICATION でなければ `CanSM_RequestComMode(Network,
+ *          COMM_FULL_COMMUNICATION)` を試みる（実仕様の `CommunicationAllowed`
+ *          フラグは本プロジェクトが対応するゲート機構自体を持たないため常に
+ *          許可とみなす簡略化）。**`ComM_Nm_NetworkMode()` とは異なり
+ *          `ComM_NmReleasePending[Network]` は呼び出しが実際に成功した場合
+ *          のみクリアする**（`ComM_Nm_BusSleepMode()` の NO_COM 分岐と同じ
+ *          「まだ解放が完了していない事実を保持し続ける」方針）。上記の
+ *          Bus-Off 回復待ちシナリオでは `CanSM_RequestComMode()` は
+ *          `CanSM_State==CANSM_STATE_BUS_OFF` により必ず拒否される（モード
+ *          変更は Bus-Off 回復ステートマシンに一本化する設計、CanSM.c
+ *          参照）ため、ここで無条件にクリアしてしまうと、後の Bus-Off 回復時に
+ *          `ComM_BusSM_ModeIndication()` の SILENT_COM 分岐にある既存の
+ *          リトライガード（`ComM_NmReleasePending` が立っていれば
+ *          `CanSM_RequestComMode(NO_COM)` を再送する）を迂回させ、ユーザーが
+ *          望んでいないのに FULL_COM へ「復活」させてしまう
+ *          （`BusOffDuringNmWinddown_OK_DoesNotResurrectNm` と同種の回帰）。
+ *
+ *          実仕様は `ComMNmVariant=FULL` 構成で `Nm_PassiveStartup()` を要求
+ *          するが（[SWS_ComM_00903]）、本 ECU は能動送信ノードでありこの API
+ *          自体を実装しない（`CanNm_PassiveStartUp` は既知の対応除外）。
+ *          `CanSM_RequestComMode(FULL_COM)` が成功する経路では
+ *          `ComM_BusSM_ModeIndication()` が内部で `Nm_NetworkRequest()` を
+ *          呼び Nm 自身を起こす（同関数の FULL_COM 分岐参照）ため、本関数は
+ *          追加のアクションを取らない。
+ *
+ * \param[in]  Network  ネットワークハンドル（0 〜 COMM_CHANNEL_COUNT-1）。
+ *
+ * \AUTOSARReq     {SWS_ComM_00383, SWS_ComM_00583}
+ * \ServiceID      {0x15}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Asynchronous}
+ */
+void ComM_Nm_NetworkStartIndication(uint8 Network);
+
+/**
  * \brief   Nm が Network Mode へ（再）入ったことの通知（Nm から呼び出される）。
  *
  * \details [SWS_ComM_00296]。典型的には、Prepare Bus-Sleep Mode 中に他ノードの

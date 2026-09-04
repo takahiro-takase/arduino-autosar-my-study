@@ -404,11 +404,11 @@ Std_ReturnType Nm_RepeatMessageRequest(NetworkHandleType Channel)
  * \details Network Mode 中は NM-Timeout Timer を再起動する
  *          （[SWS_CanNm_00098]）。Prepare Bus-Sleep Mode 中は Network Mode
  *          （Repeat Message State）へ自動遷移する（[SWS_CanNm_00124]）。
- *          Bus-Sleep Mode 中は状態遷移せず NM_E_NET_START_IND を DET へ
- *          報告するのみ（[SWS_CanNm_00127]/[SWS_CanNm_00336]。実際に
- *          ネットワークへ復帰するかどうかは上位層（本プロジェクトでは
- *          CanSM のウェイクアップ検証経由）が別途 Nm_NetworkRequest() を
- *          呼んで決める）。
+ *          Bus-Sleep Mode 中は Nm 自身は状態遷移せず、NM_E_NET_START_IND
+ *          の DET 報告に加え ComM_Nm_NetworkStartIndication() で上位層
+ *          （ComM）へ通知する（[SWS_CanNm_00127]/[SWS_CanNm_00336]。実際に
+ *          ネットワークへ復帰させ Nm 自身を起こす処理は
+ *          ComM_Nm_NetworkStartIndication() 側が行う、同関数の Doxygen 参照）。
  *
  * \param[in]  RxPduId     受信 PDU ID（本プロジェクトでは単一チャネルのため未使用）。
  * \param[in]  PduInfoPtr  受信データ。NULL 禁止。
@@ -444,13 +444,16 @@ void Nm_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
     switch (Nm_State)
     {
         case NM_STATE_BUS_SLEEP:
-            /* [SWS_CanNm_00127]/[SWS_CanNm_00336]: 状態遷移
-             * はせず DET へ通知するのみ。実際にネットワークへ復帰するか
-             * どうかは上位層（本プロジェクトでは CanSM のウェイクアップ
-             * 検証経由の ComM）が別途 Nm_NetworkRequest() を呼んで決める。 */
+            /* [SWS_CanNm_00127]/[SWS_CanNm_00336]: Nm 自身はここで状態遷移
+             * せず、DET 通知と共に上位層（ComM）へ ComM_Nm_NetworkStartIndication()
+             * で通知する（[SWS_CanNm_00127] が要求する呼び出しそのもの）。
+             * 実際にネットワークへ復帰するかどうかの判断・Nm 自身を起こす
+             * 処理は ComM_Nm_NetworkStartIndication() 側が行う（同関数の
+             * Doxygen 参照）。 */
             DET_LOGW(TAG, "RxIndication W: NM PDU received in Bus-Sleep Mode (node=0x%02X)",
                      (unsigned)sourceNodeId);
             Det_ReportError(NM_MODULE_ID, 0U, NM_API_ID_RX_INDICATION, NM_E_NET_START_IND);
+            ComM_Nm_NetworkStartIndication(NM_MAIN_NETWORK_HANDLE);
             break;
 
         case NM_STATE_PREPARE_BUS_SLEEP:

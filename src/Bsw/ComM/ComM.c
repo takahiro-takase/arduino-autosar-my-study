@@ -70,16 +70,14 @@
  *            この待機期間中に誰かが FULL_COM を再要求した場合の扱いは
  *            ComM_NmReleasePending[] のコメント（下記）を参照。
  *
- *            ComM_Nm_NetworkStartIndication() のみ引き続き未実装（Bus-Sleep
- *            Mode 中に他ノードの NM フレームを受信した場合の通知）。この
- *            プロジェクトの物理ウェイクアップ経路（CanSM_ControllerWakeup() →
+ *            2026-09 追加: ComM_Nm_NetworkStartIndication()（[SWS_ComM_00383]）。
+ *            この待機期間中の物理ウェイクアップ（CanSM_ControllerWakeup() →
  *            ウェイクアップ検証 → CanSM_RxIndication() →
- *            ComM_BusSM_ModeIndication(FULL_COM)）が既に「外部 CAN イベントで
- *            起床」を実質的にカバーしており、Nm.c は「Bus-Sleep 明けの最初の
- *            NM フレーム」を区別通知する設計になっていない（Nm_RxIndication()
- *            の NM_STATE_BUS_SLEEP ケースは DET へログするのみ）ため、ComM 側
- *            で追加できることが実質的にない。ComMNmVariant=FULL の完全準拠
- *            ではなく、この意味での部分対応である。
+ *            ComM_BusSM_ModeIndication(FULL_COM)）とは別に、Nm 自身がまだ
+ *            Bus-Sleep Mode のまま NM フレームを受信した場合（レース条件、
+ *            [SWS_CanNm_00127]）は Nm_RxIndication() の NM_STATE_BUS_SLEEP
+ *            ケースから本関数が呼ばれ、チャネルを FULL_COM へ、Nm 自身も
+ *            Bus-Sleep Mode から起こす（詳細は同関数の Doxygen 参照）。
  *
  *          本実装の簡略化:
  *            - 1 チャネル固定
@@ -738,6 +736,96 @@ void ComM_Nm_PrepareBusSleepMode(uint8 Network)
     {
         (void)CanSM_RequestComMode(Network, COMM_SILENT_COMMUNICATION);
     }
+}
+
+/**
+ * \brief   Bus-Sleep Mode 中に NM PDU を受信したことの通知（Nm から呼び出される、
+ *          [SWS_ComM_00383]）。
+ *
+ * \details [SWS_CanNm_00127]: Nm は Bus-Sleep Mode 中に NM PDU を受信しても
+ *          自動的に Network Mode へ遷移せず、上位層（ComM）へ通知するのみで
+ *          判断を委ねる。これは「他ノードは既に Network Mode にいる」ことを
+ *          示す、レース条件由来のシグナルである（[SWS_ComM_00583] のユース
+ *          ケース参照）。
+ *
+ *          本プロジェクトの同期的な設計では、Nm が `NM_STATE_BUS_SLEEP` へ
+ *          到達する時点で通常は `ComM_Nm_BusSleepMode()` 経由の
+ *          `CanSM_RequestComMode(NO_COM)` が既に成功しており、物理コントローラ
+ *          も `CAN_CS_SLEEP` へ落ちている（＝`Can_MainFunction_Read()` 自体が
+ *          停止し `Nm_RxIndication()` は物理的に呼ばれ得ない）。そのため本関数
+ *          が実際に到達しうるのは、Bus-Off 回復待ち中に `CanSM_RequestComMode
+ *          (NO_COM)` が拒否されて Nm だけが独立したタイマで先に Bus-Sleep
+ *          Mode へ到達してしまうケース（コントローラは Bus-Off により
+ *          Listen-Only のまま受信は継続、`ComM_Nm_BusSleepMode()` の Doxygen
+ *          `BusOffDuringNmWinddown_OK_DoesNotResurrectNm` 相当）にほぼ限られる。
+ *
+ *          [SWS_ComM_00583]: `ComM_ChannelMode[Network]` が既に
+ *          COMM_FULL_COMMUNICATION でなければ `CanSM_RequestComMode(Network,
+ *          COMM_FULL_COMMUNICATION)` を試みる（実仕様の `CommunicationAllowed`
+ *          フラグは本プロジェクトが対応するゲート機構自体を持たないため常に
+ *          許可とみなす簡略化）。**`ComM_Nm_NetworkMode()` とは異なり
+ *          `ComM_NmReleasePending[Network]` は呼び出しが実際に成功した場合
+ *          のみクリアする**（`ComM_Nm_BusSleepMode()` の NO_COM 分岐と同じ
+ *          「まだ解放が完了していない事実を保持し続ける」方針）。上記の
+ *          Bus-Off 回復待ちシナリオでは `CanSM_RequestComMode()` は
+ *          `CanSM_State==CANSM_STATE_BUS_OFF` により必ず拒否される（モード
+ *          変更は Bus-Off 回復ステートマシンに一本化する設計、CanSM.c
+ *          参照）ため、ここで無条件にクリアしてしまうと、後の Bus-Off 回復時に
+ *          `ComM_BusSM_ModeIndication()` の SILENT_COM 分岐にある既存の
+ *          リトライガード（`ComM_NmReleasePending` が立っていれば
+ *          `CanSM_RequestComMode(NO_COM)` を再送する）を迂回させ、ユーザーが
+ *          望んでいないのに FULL_COM へ「復活」させてしまう
+ *          （`BusOffDuringNmWinddown_OK_DoesNotResurrectNm` と同種の回帰）。
+ *
+ *          実仕様は `ComMNmVariant=FULL` 構成で `Nm_PassiveStartup()` を要求
+ *          するが（[SWS_ComM_00903]）、本 ECU は能動送信ノードでありこの API
+ *          自体を実装しない（`CanNm_PassiveStartUp` は既知の対応除外）。
+ *          `CanSM_RequestComMode(FULL_COM)` が成功する経路では
+ *          `ComM_BusSM_ModeIndication()` が内部で `Nm_NetworkRequest()` を
+ *          呼び Nm 自身を起こす（同関数の FULL_COM 分岐参照）ため、本関数は
+ *          追加のアクションを取らない。
+ *
+ * \param[in]  Network  ネットワークハンドル（0 〜 COMM_CHANNEL_COUNT-1）。
+ *
+ * \AUTOSARReq     {SWS_ComM_00383, SWS_ComM_00583}
+ * \ServiceID      {0x15}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Asynchronous}
+ */
+void ComM_Nm_NetworkStartIndication(uint8 Network)
+{
+    DET_LOGT(TAG, "called");
+    if (!ComM_Initialized)
+    {
+        Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_NM_NETWORK_START_INDICATION, COMM_E_UNINIT);
+        return;
+    }
+
+    if (Network >= COMM_CHANNEL_COUNT)
+    {
+        Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_NM_NETWORK_START_INDICATION, COMM_E_WRONG_PARAMETERS);
+        return;
+    }
+
+    DET_LOGW(TAG, "ch%u NetworkStartIndication (NM PDU seen while Nm Bus-Sleep, race condition)",
+             (unsigned)Network);
+
+    if (ComM_ChannelMode[Network] != COMM_FULL_COMMUNICATION)
+    {
+        /* 呼び出しが実際に成功した場合のみクリアする（理由は本関数の
+         * \details 参照。ComM_Nm_NetworkMode() と同じ無条件クリアに
+         * 変更しないこと）。 */
+        if (CanSM_RequestComMode(Network, COMM_FULL_COMMUNICATION) == E_OK)
+        {
+            ComM_NmReleasePending[Network] = 0U;
+        }
+    }
+    /* else: チャネルは既に FULL_COM。本プロジェクトの同期的な設計では
+     * ComM_ChannelMode を FULL_COM にする経路（ComM_BusSM_ModeIndication()の
+     * FULL_COM分岐、ComM_Nm_NetworkMode()）がいずれも呼び出しの中で
+     * Nm_NetworkRequest() を既に呼んでいるため、Nm がこの時点でなお
+     * NM_STATE_BUS_SLEEP のままという状況は本プロジェクトの呼び出し経路
+     * からは到達しない（本関数のDoxygen参照）。 */
 }
 
 /**
