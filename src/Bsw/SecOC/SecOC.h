@@ -17,6 +17,15 @@
 extern "C" {
 #endif
 
+/* -----------------------------------------------------------------------
+ * SecOC_VerifyStatusOverride() の overrideStatus 引数値（[SWS_SecOC_00122]）
+ * ----------------------------------------------------------------------- */
+#define SECOC_OVERRIDE_FAIL_INDEFINITE  0U   /**< VerifyStatus を Fail に強制（解除まで継続） */
+#define SECOC_OVERRIDE_FAIL_COUNTED     1U   /**< VerifyStatus を Fail に強制（指定回数のみ） */
+#define SECOC_OVERRIDE_CANCEL           2U   /**< オーバーライドを解除                        */
+/* overrideStatus=41 (Pass 強制) は本プロジェクトでは非対応。
+ * SecOC_VerifyStatusOverride() の Doxygen 参照。 */
+
 /**
  * \brief   SecOC モジュールを初期化する。
  *
@@ -71,6 +80,53 @@ void SecOC_DeInit(void);
  * \Synchronicity  {Synchronous}
  */
 void SecOC_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr);
+
+/**
+ * \brief   指定 Freshness Value の VerifyStatus を強制上書きする（[SWS_SecOC_00122]）。
+ *
+ * \details 実仕様はテスト・診断目的で「実際の認証結果に関わらず検証結果を
+ *          強制する」任意サービス。CSM による実際の MAC 検証・フレッシュネス
+ *          検証は本関数の呼び出し有無に関わらず常に行われる（本実装は
+ *          `SecOC_RxIndication()` 内で実際の検証結果を求めたのち、本関数が
+ *          設定したオーバーライド状態を適用して最終判定とする）。
+ *
+ *          実仕様は個別の Freshness Value を識別する `freshnessValueId`
+ *          という専用の設定要素（Freshness Value Manager 相当）を持つが、
+ *          本プロジェクトはそのような機構自体を持たず、Freshness Value は
+ *          RX Secured I-PDU ごとに 1 対 1 で紐づく（`SecOC_RxPduConfigType`
+ *          参照）。そのため本実装では `freshnessValueID` を対象の
+ *          `SecOCRxPduId`（`SecOC_RxIndication()` の `RxPduId` と同じ値）と
+ *          みなして扱う（学習用簡略化）。
+ *
+ *          `overrideStatus=41`（VerifyStatus を Pass に強制）は、実仕様
+ *          自身が既定 FALSE の `SecOCEnableForcedPassOverride`
+ *          （[ECUC_SecOC_00051]）で無効化されている危険な機能（未検証データを
+ *          無条件に信頼させる）であり、本プロジェクトはこのコンフィグ切替を
+ *          持たないため、常に非対応として `E_NOT_OK` を返す（安全側の既定を
+ *          採用）。`overrideStatus=0`（無期限 Fail 強制）/`1`（回数指定 Fail
+ *          強制）/`2`（解除）のみサポートする。
+ *
+ * \param[in]  freshnessValueID            対象の SecOCRxPduId
+ *                                         （上記の簡略化参照）。
+ * \param[in]  overrideStatus              SECOC_OVERRIDE_FAIL_INDEFINITE(0) /
+ *                                         SECOC_OVERRIDE_FAIL_COUNTED(1) /
+ *                                         SECOC_OVERRIDE_CANCEL(2) のいずれか。
+ *                                         それ以外（41 含む）は非対応。
+ * \param[in]  numberOfMessagesToOverride  overrideStatus=1 のときのみ有効。
+ *                                         強制 Fail を適用する残りメッセージ数。
+ *
+ * \retval  E_OK      正常に設定/解除した。
+ * \retval  E_NOT_OK  未初期化、freshnessValueID に一致する RX PDU が無い、
+ *                    または overrideStatus が非対応の値。
+ *
+ * \AUTOSARReq     {SWS_SecOC_00122}
+ * \ServiceID      {0x0b}
+ * \Reentrancy     {Non Reentrant for the same FreshnessValueID. Reentrant for
+ *                  different FreshnessValueIDs.}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType SecOC_VerifyStatusOverride(uint16 freshnessValueID, uint8 overrideStatus,
+                                          uint8 numberOfMessagesToOverride);
 
 /**
  * \brief   PduR から呼ばれる、Authentic I-PDU 送信要求のエントリポイント。
