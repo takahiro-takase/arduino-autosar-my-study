@@ -144,6 +144,56 @@ TEST_F(Bsw_Dcm_ReadDtcInfo_Test, GetFaultDetectionCounter_NG_NullPointerReturnsE
 }
 
 // ------------------------------------------------------------
+// Dem_GetDTCOfEvent（DTCFormat引数欠落の是正。本プロジェクトはUDS 3-byte
+// 形式のDTCのみ構成しているため、DEM_DTC_FORMAT_UDS以外はDEM_E_NO_DTC_AVAILABLE
+// で拒否する）
+// ------------------------------------------------------------
+
+TEST_F(Bsw_Dcm_ReadDtcInfo_Test, GetDTCOfEvent_OK_ReturnsUdsDtcWhenFormatIsUds)
+{
+    uint32 dtc = 0U;
+
+    Std_ReturnType ret = Dem_GetDTCOfEvent(DEM_EVENT_ENGINE_OVERHEAT, DEM_DTC_FORMAT_UDS, &dtc);
+
+    EXPECT_EQ(ret, E_OK);
+    EXPECT_EQ(dtc, static_cast<uint32>(DEM_DTC_ENGINE_OVERHEAT));
+}
+
+TEST_F(Bsw_Dcm_ReadDtcInfo_Test, GetDTCOfEvent_NG_ObdFormatReturnsNoDtcAvailable)
+{
+    uint32 dtc = 0U;
+
+    Std_ReturnType ret = Dem_GetDTCOfEvent(DEM_EVENT_ENGINE_OVERHEAT, DEM_DTC_FORMAT_OBD, &dtc);
+
+    EXPECT_EQ(ret, DEM_E_NO_DTC_AVAILABLE);
+}
+
+TEST_F(Bsw_Dcm_ReadDtcInfo_Test, GetDTCOfEvent_NG_J1939FormatReturnsNoDtcAvailable)
+{
+    uint32 dtc = 0U;
+
+    Std_ReturnType ret = Dem_GetDTCOfEvent(DEM_EVENT_ENGINE_OVERHEAT, DEM_DTC_FORMAT_J1939, &dtc);
+
+    EXPECT_EQ(ret, DEM_E_NO_DTC_AVAILABLE);
+}
+
+TEST_F(Bsw_Dcm_ReadDtcInfo_Test, GetDTCOfEvent_NG_InvalidEventIdReturnsError)
+{
+    uint32 dtc = 0U;
+
+    Std_ReturnType ret = Dem_GetDTCOfEvent((Dem_EventIdType)DEM_EVENT_COUNT, DEM_DTC_FORMAT_UDS, &dtc);
+
+    EXPECT_EQ(ret, E_NOT_OK);
+}
+
+TEST_F(Bsw_Dcm_ReadDtcInfo_Test, GetDTCOfEvent_NG_NullPointerReturnsError)
+{
+    Std_ReturnType ret = Dem_GetDTCOfEvent(DEM_EVENT_ENGINE_OVERHEAT, DEM_DTC_FORMAT_UDS, NULL);
+
+    EXPECT_EQ(ret, E_NOT_OK);
+}
+
+// ------------------------------------------------------------
 // Dcm_GetVin / DID 0xF190（VIN読み出し新設。実仕様ではDcmが呼び出す側の
 // 関数だが、本プロジェクトは固定値を返す簡略実装。Dcm_Init()が起動時に
 // 一度だけ呼びキャッシュし、UDS SID 0x22経由の応答はそのキャッシュから

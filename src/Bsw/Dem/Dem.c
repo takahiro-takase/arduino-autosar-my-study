@@ -611,19 +611,32 @@ Std_ReturnType Dem_GetEventUdsStatus(Dem_EventIdType EventId, Dem_UdsStatusByteT
 }
 
 /**
- * \brief   イベント ID から DTC コード (24-bit) を取得する。
+ * \brief   イベント ID から DTC コードを取得する（[SWS_Dem_00198]/[SWS_Dem_00269]）。
  *
- * \param[in]   EventId  イベント ID (DEM_EVENT_* 定数)。
- * \param[out]  DTC      DTC コードの格納先。NULL 禁止。
+ * \details 本プロジェクトの `Dem_DtcTable[]`（Dem_Cfg.h）は UDS 3-byte 形式の
+ *          DTC 値のみを構成しており、OBD/J1939 形式は一切保持しないため、
+ *          `DTCFormat` に `DEM_DTC_FORMAT_UDS` 以外を渡された場合は
+ *          `DEM_E_NO_DTC_AVAILABLE`（要求フォーマットの DTC が構成されていない）
+ *          を返す。
  *
- * \retval  E_OK      正常取得。
- * \retval  E_NOT_OK  EventId が範囲外、または DTC が NULL。
+ * \param[in]   EventId     イベント ID (DEM_EVENT_* 定数)。
+ * \param[in]   DTCFormat   取得する DTC 値のフォーマット。本プロジェクトは
+ *                          `DEM_DTC_FORMAT_UDS` のみ対応。
+ * \param[out]  DTCOfEvent  24-bit DTC コードの格納先。NULL 禁止。
+ *                          戻り値が E_OK 以外の場合は不定。
  *
- * \ServiceID      {0x1A}
+ * \retval  E_OK                   正常取得。
+ * \retval  E_NOT_OK               未初期化、EventId が範囲外、または
+ *                                 DTCOfEvent が NULL。
+ * \retval  DEM_E_NO_DTC_AVAILABLE DTCFormat が DEM_DTC_FORMAT_UDS 以外
+ *                                 （要求フォーマットの DTC は構成されていない）。
+ *
+ * \AUTOSARReq     {SWS_Dem_00198, SWS_Dem_00269}
+ * \ServiceID      {0x0D}
  * \Reentrancy     {Reentrant}
  * \Synchronicity  {Synchronous}
  */
-Std_ReturnType Dem_GetDTCOfEvent(Dem_EventIdType EventId, uint32* DTC)
+Std_ReturnType Dem_GetDTCOfEvent(Dem_EventIdType EventId, Dem_DTCFormatType DTCFormat, uint32* DTCOfEvent)
 {
     DET_LOGT(TAG, "called");
     if (!Dem_Initialized)
@@ -638,13 +651,18 @@ Std_ReturnType Dem_GetDTCOfEvent(Dem_EventIdType EventId, uint32* DTC)
         return E_NOT_OK;
     }
 
-    if (DTC == NULL)
+    if (DTCOfEvent == NULL)
     {
         Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_GET_DTC_OF_EVENT, DEM_E_PARAM_POINTER);
         return E_NOT_OK;
     }
 
-    *DTC = Dem_DtcTable[EventId];
+    if (DTCFormat != DEM_DTC_FORMAT_UDS)
+    {
+        return DEM_E_NO_DTC_AVAILABLE;
+    }
+
+    *DTCOfEvent = Dem_DtcTable[EventId];
     return E_OK;
 }
 

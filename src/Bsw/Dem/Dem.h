@@ -44,6 +44,27 @@ typedef uint8 Dem_EventIdType;
 typedef uint8 Dem_UdsStatusByteType;
 
 /**
+ * \brief   DTC 値のフォーマットを選択する型（[SWS_Dem_00933]）。
+ * \details 本プロジェクトの `Dem_DtcTable[]`（Dem_Cfg.h）は UDS 3-byte 形式の
+ *          DTC 値のみを保持し、OBD/J1939 形式は一切構成していないため、
+ *          `Dem_GetDTCOfEvent()` は `DEM_DTC_FORMAT_UDS` 以外を
+ *          `DEM_E_NO_DTC_AVAILABLE` で拒否する（実仕様の Return value 表が
+ *          想定する「要求フォーマットの DTC が設定されていない」ケースそのもの）。
+ */
+typedef enum
+{
+    DEM_DTC_FORMAT_OBD   = 0U, /**< 2-byte OBD DTC 形式（本プロジェクトは非対応）        */
+    DEM_DTC_FORMAT_UDS   = 1U, /**< 3-byte UDS DTC 形式（本プロジェクトが唯一対応する形式）*/
+    DEM_DTC_FORMAT_J1939 = 2U  /**< SPN+FMI を合成した 3-byte J1939 形式（本プロジェクトは非対応）*/
+} Dem_DTCFormatType;
+
+/** [SWS_Dem_00198] `Dem_GetDTCOfEvent()` の拡張戻り値（要求フォーマットに
+ *  対応する DTC が構成されていない場合）。実仕様の Service Interface
+ *  DiagnosticInfo（値表）に基づく数値。Dem_Cfg.h の `DEM_E_*`（Det_ReportError
+ *  に渡す開発エラー ID）とは別の値域（本関数の戻り値そのもの）である点に注意。 */
+#define DEM_E_NO_DTC_AVAILABLE  0x0AU
+
+/**
  * \brief   イベントステータス型 (Dem_EventStatusType は AUTOSAR SWS_Dem_00926 で定義)
  *
  * \details 本実装は counter-based debouncing の学習用簡略版。AUTOSAR 仕様では
@@ -204,19 +225,32 @@ Std_ReturnType Dem_GetDTCStatusAvailabilityMask(uint8 ClientId, uint8* DTCStatus
 Std_ReturnType Dem_GetEventUdsStatus(Dem_EventIdType EventId, Dem_UdsStatusByteType* UDSStatusByte);
 
 /**
- * \brief   イベント ID から DTC コードを取得する。
+ * \brief   イベント ID から DTC コードを取得する（[SWS_Dem_00198]/[SWS_Dem_00269]）。
  *
- * \param[in]   EventId  イベント ID (DEM_EVENT_* 定数)。
- * \param[out]  DTC      24-bit DTC コードの格納先。NULL 禁止。
+ * \details 本プロジェクトの `Dem_DtcTable[]`（Dem_Cfg.h）は UDS 3-byte 形式の
+ *          DTC 値のみを構成しており、OBD/J1939 形式は一切保持しないため、
+ *          `DTCFormat` に `DEM_DTC_FORMAT_UDS` 以外を渡された場合は
+ *          `DEM_E_NO_DTC_AVAILABLE`（要求フォーマットの DTC が構成されていない）
+ *          を返す。
  *
- * \retval  E_OK      正常取得。
- * \retval  E_NOT_OK  EventId が範囲外、または DTC が NULL。
+ * \param[in]   EventId     イベント ID (DEM_EVENT_* 定数)。
+ * \param[in]   DTCFormat   取得する DTC 値のフォーマット。本プロジェクトは
+ *                          `DEM_DTC_FORMAT_UDS` のみ対応。
+ * \param[out]  DTCOfEvent  24-bit DTC コードの格納先。NULL 禁止。
+ *                          戻り値が E_OK 以外の場合は不定。
  *
- * \ServiceID      {0x1A}
+ * \retval  E_OK                   正常取得。
+ * \retval  E_NOT_OK               未初期化、EventId が範囲外、または
+ *                                 DTCOfEvent が NULL。
+ * \retval  DEM_E_NO_DTC_AVAILABLE DTCFormat が DEM_DTC_FORMAT_UDS 以外
+ *                                 （要求フォーマットの DTC は構成されていない）。
+ *
+ * \AUTOSARReq     {SWS_Dem_00198, SWS_Dem_00269}
+ * \ServiceID      {0x0D}
  * \Reentrancy     {Reentrant}
  * \Synchronicity  {Synchronous}
  */
-Std_ReturnType Dem_GetDTCOfEvent(Dem_EventIdType EventId, uint32* DTC);
+Std_ReturnType Dem_GetDTCOfEvent(Dem_EventIdType EventId, Dem_DTCFormatType DTCFormat, uint32* DTCOfEvent);
 
 /**
  * \brief   全 DTC をクリアし、EEPROM を初期状態へ戻す。
