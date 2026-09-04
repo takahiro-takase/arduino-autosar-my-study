@@ -32,6 +32,16 @@ static uint8 CanIf_RxPduDataBuffer[CANIF_RX_PDU_MAX][CANIF_MAX_DLC];
 static uint8 CanIf_RxPduDataLength[CANIF_RX_PDU_MAX];
 static uint8 CanIf_RxPduDataValid[CANIF_RX_PDU_MAX];  /* 一度でも受信したか */
 
+/* CanIf_ReadTxNotifStatus()/CanIf_ReadRxNotifStatus()（[SWS_CANIF_00202]/
+ * [SWS_CANIF_00230]、2026-09 追加）用の通知状態。CanIf_TxConfirmation()/
+ * CanIf_RxIndication() が CANIF_TX_RX_NOTIFICATION をセットし、対応する
+ * Read*NotifStatus() が読み出しと同時に CANIF_NO_NOTIFICATION へリセットする
+ * （[SWS_CANIF_00393]/[SWS_CANIF_00394]）。CanIf_RxPduDataBuffer[] 等と同じ
+ * 固定上限（CANIF_TX_PDU_MAX/CANIF_RX_PDU_MAX）で確保する
+ * （feedback_test_chain_ipdu_id_ceiling 参照）。 */
+static CanIf_NotifStatusType CanIf_TxNotifStatus[CANIF_TX_PDU_MAX];
+static CanIf_NotifStatusType CanIf_RxNotifStatus[CANIF_RX_PDU_MAX];
+
 /* CanIf_SetPduMode()/CanIf_GetPduMode()（[SWS_CANIF_00137]、2026-08 追加）の
  * コントローラ単位の状態。CanIf_Transmit() はここが CANIF_ONLINE のときのみ
  * Can_Write() まで到達させる。RX 側（CanIf_RxIndication() の上位層通知）は
@@ -94,6 +104,15 @@ void CanIf_Init(const CanIf_ConfigType* ConfigPtr)
         return;
     }
 
+    if (ConfigPtr->TxPduCount > CANIF_TX_PDU_MAX)
+    {
+        /* CanIf_TxNotifStatus[] が CANIF_TX_PDU_MAX でしか確保されていない
+         * ため、上記 RxPduCount と同じ理由で拒否する。 */
+        DET_LOGE(TAG, "Init E: TxPduCount>max");
+        Det_ReportError(CANIF_MODULE_ID, 0U, CANIF_API_ID_INIT, CANIF_E_INIT_FAILED);
+        return;
+    }
+
     CanIf_ConfigPtr = ConfigPtr;
 
     /* CanIf_ReadRxPduData() 用バッファの初期化（[SWS_CANIF_00194]）。
@@ -104,6 +123,12 @@ void CanIf_Init(const CanIf_ConfigType* ConfigPtr)
     {
         CanIf_RxPduDataLength[i] = 0U;
         CanIf_RxPduDataValid[i]  = 0U;
+        CanIf_RxNotifStatus[i]   = CANIF_NO_NOTIFICATION;
+    }
+
+    for (uint8 i = 0U; i < CANIF_TX_PDU_MAX; i++)
+    {
+        CanIf_TxNotifStatus[i] = CANIF_NO_NOTIFICATION;
     }
 
     for (uint8 i = 0U; i < CANIF_CONTROLLER_MAX; i++)
@@ -328,6 +353,10 @@ void CanIf_RxIndication(const Can_HwType* Mailbox, const PduInfoType* PduInfoPtr
             CanIf_RxPduDataValid[i]  = 1U;
         }
 
+        /* [SWS_CANIF_00230]: CanIf_ReadRxNotifStatus() 用の通知状態
+         * （CanIf_ReadRxNotifStatus() の Doxygen 参照）。 */
+        CanIf_RxNotifStatus[i] = CANIF_TX_RX_NOTIFICATION;
+
         if (rxCfg->RxIndicationFct != NULL)
             rxCfg->RxIndicationFct(rxCfg->UpperLayerRxPduId, PduInfoPtr);
 
@@ -479,8 +508,101 @@ void CanIf_TxConfirmation(PduIdType CanTxPduId)
 
     DET_LOGI(TAG, "TxConf id=%u", (unsigned)CanTxPduId);
 
+    /* [SWS_CANIF_00202]: CanIf_ReadTxNotifStatus() 用の通知状態
+     * （CanIf_ReadTxNotifStatus() の Doxygen 参照）。 */
+    CanIf_TxNotifStatus[CanTxPduId] = CANIF_TX_RX_NOTIFICATION;
+
     if (txCfg->TxConfirmFct != NULL)
         txCfg->TxConfirmFct(txCfg->UpperLayerTxPduId, E_OK);
+}
+
+/**
+ * \brief   指定 TX PDU の送信完了通知状態を取得し、読み出した状態をクリアする
+ *          （[SWS_CANIF_00202]）。
+ *
+ * \details `CanIf_TxConfirmation()` が呼ばれると当該 TX PDU の状態は
+ *          `CANIF_TX_RX_NOTIFICATION` になり、本関数を呼ぶと
+ *          `CANIF_NO_NOTIFICATION` へリセットされる（[SWS_CANIF_00393]）。
+ *          実仕様はこのリセット動作自体を `CANIF_PUBLIC_READTXPDU_NOTIFY_STATUS_API`/
+ *          `CANIF_TXPDU_READ_NOTIFYSTATUS` の2つのビルド時コンフィグで
+ *          有効/無効を切り替えられるが、本プロジェクトはそのような切替を
+ *          持たないため常に読み出し時にリセットする（学習用簡略化）。
+ *
+ * \param[in]  CanIfTxSduId  対象 TX PDU の ID（`CanIf_ConfigPtr->TxPduConfig[]`
+ *                           の添字、`CanIf_Transmit()`/`CanIf_TxConfirmation()`
+ *                           と同じ名前空間）。
+ *
+ * \return  対象 TX PDU の通知状態（読み出し前の値）。未初期化または
+ *          `CanIfTxSduId` が範囲外の場合は `CANIF_NO_NOTIFICATION` を返す
+ *          （フェールセーフ、[SWS_CANIF_00331] の DET 報告と併用）。
+ *
+ * \AUTOSARReq     {SWS_CANIF_00202, SWS_CANIF_00393, SWS_CANIF_00331}
+ * \ServiceID      {0x07}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+CanIf_NotifStatusType CanIf_ReadTxNotifStatus(PduIdType CanIfTxSduId)
+{
+    DET_LOGT(TAG, "called");
+
+    if (CanIf_ConfigPtr == NULL)
+        return CANIF_NO_NOTIFICATION;  /* CanIf の他 API と同じ方針、CanIf_Cfg.h 冒頭コメント参照 */
+
+    if (CanIfTxSduId >= CanIf_ConfigPtr->TxPduCount)
+    {
+        DET_LOGE(TAG, "ReadTxNotifStatus E: invalid CanIfTxSduId");
+        Det_ReportError(CANIF_MODULE_ID, 0U, CANIF_API_ID_READ_TX_NOTIF_STATUS, CANIF_E_INVALID_TXPDUID);
+        return CANIF_NO_NOTIFICATION;
+    }
+
+    const CanIf_NotifStatusType status = CanIf_TxNotifStatus[CanIfTxSduId];
+    CanIf_TxNotifStatus[CanIfTxSduId] = CANIF_NO_NOTIFICATION;
+    return status;
+}
+
+/**
+ * \brief   指定 RX PDU の受信通知状態を取得し、読み出した状態をクリアする
+ *          （[SWS_CANIF_00230]）。
+ *
+ * \details `CanIf_RxIndication()` が対象 RX PDU への振り分けに成功すると
+ *          当該 RX PDU の状態は `CANIF_TX_RX_NOTIFICATION` になり、本関数を
+ *          呼ぶと `CANIF_NO_NOTIFICATION` へリセットされる（[SWS_CANIF_00394]）。
+ *          実仕様はこのリセット動作自体を `CANIF_PUBLIC_READRXPDU_NOTIFY_STATUS_API`/
+ *          `CANIF_RXPDU_READ_NOTIFYSTATUS` の2つのビルド時コンフィグで
+ *          有効/無効を切り替えられるが、本プロジェクトはそのような切替を
+ *          持たないため常に読み出し時にリセットする（学習用簡略化）。
+ *
+ * \param[in]  CanIfRxSduId  対象 RX PDU の ID（`CanIf_ConfigPtr->RxPduConfig[]`
+ *                           の添字、`CanIf_ReadRxPduData()` と同じ名前空間。
+ *                           `UpperLayerRxPduId` とは別の ID 空間である点に
+ *                           注意——同関数の Doxygen 参照）。
+ *
+ * \return  対象 RX PDU の通知状態（読み出し前の値）。未初期化または
+ *          `CanIfRxSduId` が範囲外の場合は `CANIF_NO_NOTIFICATION` を返す
+ *          （フェールセーフ、[SWS_CANIF_00336] の DET 報告と併用）。
+ *
+ * \AUTOSARReq     {SWS_CANIF_00230, SWS_CANIF_00394, SWS_CANIF_00336}
+ * \ServiceID      {0x08}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+CanIf_NotifStatusType CanIf_ReadRxNotifStatus(PduIdType CanIfRxSduId)
+{
+    DET_LOGT(TAG, "called");
+
+    if (CanIf_ConfigPtr == NULL)
+        return CANIF_NO_NOTIFICATION;  /* CanIf の他 API と同じ方針、CanIf_Cfg.h 冒頭コメント参照 */
+
+    if (CanIfRxSduId >= CanIf_ConfigPtr->RxPduCount)
+    {
+        DET_LOGE(TAG, "ReadRxNotifStatus E: invalid CanIfRxSduId");
+        Det_ReportError(CANIF_MODULE_ID, 0U, CANIF_API_ID_READ_RX_NOTIF_STATUS, CANIF_E_INVALID_RXPDUID);
+        return CANIF_NO_NOTIFICATION;
+    }
+
+    const CanIf_NotifStatusType status = CanIf_RxNotifStatus[CanIfRxSduId];
+    CanIf_RxNotifStatus[CanIfRxSduId] = CANIF_NO_NOTIFICATION;
+    return status;
 }
 
 /**

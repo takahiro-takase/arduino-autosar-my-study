@@ -97,4 +97,12 @@ typedef enum
     CANIF_ONLINE     = 0x03   /* 通常動作（TX/RX 双方有効） */
 } CanIf_PduModeType;
 
+/* [SWS_CANIF_00201]: CanIf_ReadTxNotifStatus()/CanIf_ReadRxNotifStatus() の
+ * 戻り値型。送受信イベントの発生有無のみを表す 2 値。 */
+typedef enum
+{
+    CANIF_NO_NOTIFICATION    = 0x00,  /* 対象 L-PDU について通知イベント無し */
+    CANIF_TX_RX_NOTIFICATION = 0x01   /* 対象 L-PDU の送信完了/受信を検出済み */
+} CanIf_NotifStatusType;
+
 #endif
