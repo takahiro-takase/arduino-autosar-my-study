@@ -112,11 +112,11 @@ Com_RxIndication() (RxIndicationCbk が設定された I-PDU。現状 IPduId=0/1
         E2EXf_InverseTransformP05() を呼び出す（CheckStatus 出力引数で生の6状態も受け取る）
           → E2E_P05Check() を実行
             OK / OKSOMELOST
-                      → Dem_ReportErrorStatus(DemEventId, PASSED)
+                      → Dem_SetEventStatus(DemEventId, PASSED)
                         E_OK を返す → Rte ミラーを更新
             REPEATED / WRONGSEQUENCE / ERROR
                       → DET_LOGW(TAG="E2EXf", "InverseTransformP05 NG DemEvent=%u st=%u")
-                        Dem_ReportErrorStatus(DemEventId, FAILED)
+                        Dem_SetEventStatus(DemEventId, FAILED)
                         E_NOT_OK を返す → Rte ミラー非更新（前回値を維持）
         CheckStatus を Rte_MapE2EStatusP05() で Rte_IStatusType へ写像し
         Rte_EngineInfoStatus / Rte_AbsInfoStatus（静的変数）へ保存

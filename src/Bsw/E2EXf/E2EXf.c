@@ -110,7 +110,7 @@ Std_ReturnType E2EXf_InverseTransform(const E2EXf_RxConfigType* Config, const ui
     if (!acceptable)
         DET_LOGW(TAG, "InverseTransform NG DemEvent=%u st=%u", (unsigned)Config->DemEventId, (unsigned)status);
 
-    Dem_ReportErrorStatus(Config->DemEventId, acceptable ? DEM_EVENT_STATUS_PASSED : DEM_EVENT_STATUS_FAILED);
+    (void)Dem_SetEventStatus(Config->DemEventId, acceptable ? DEM_EVENT_STATUS_PASSED : DEM_EVENT_STATUS_FAILED);
 
     return acceptable ? E_OK : E_NOT_OK;
 }
@@ -172,7 +172,7 @@ Std_ReturnType E2EXf_InverseTransformP05(const E2EXf_RxConfigTypeP05* Config, co
     if (!acceptable)
         DET_LOGW(TAG, "InverseTransformP05 NG DemEvent=%u st=%u", (unsigned)Config->DemEventId, (unsigned)status);
 
-    Dem_ReportErrorStatus(Config->DemEventId, acceptable ? DEM_EVENT_STATUS_PASSED : DEM_EVENT_STATUS_FAILED);
+    (void)Dem_SetEventStatus(Config->DemEventId, acceptable ? DEM_EVENT_STATUS_PASSED : DEM_EVENT_STATUS_FAILED);
 
     return acceptable ? E_OK : E_NOT_OK;
 }

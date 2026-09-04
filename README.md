@@ -324,7 +324,7 @@ ModuleId の出典は `docs/AUTOSAR_TR_BSWModuleList.pdf`（Release 4.3.1、「L
 │   │   │   └── E2E_P05.h/.c      # Profile05（Check: E2E_P05Check/CheckInit、Protect: E2E_P05Protect/ProtectInit）。EngineInfo/AbsInfo(RX)・EngineHealthStatus(TX)いずれも使用
 │   │   ├── E2EXf/                # E2E Transformer（Com から E2E ロジックを切り離す統合層）
 │   │   │   ├── E2EXf.h           # 汎用 API 宣言（E2EXf_Init/E2EXf_DeInit/E2EXf_InverseTransform/E2EXf_InverseTransformP05/E2EXf_Transform/E2EXf_TransformP05/E2EXf_GetVersionInfo。E2E_P01/E2E_P05 それぞれへの薄いラッパー）
-│   │   │   ├── E2EXf.c           # 上記実装（Dem_ReportErrorStatus への報告・モジュール自身の初期化状態ガードも含む）
+│   │   │   ├── E2EXf.c           # 上記実装（Dem_SetEventStatus への報告・モジュール自身の初期化状態ガードも含む）
 │   │   │   ├── E2EXf_PBCfg.h     # ポストビルド設定宣言（E2EXf_*RxCfg/TxCfgP05、E2EXf_PBCfg_Init）
 │   │   │   └── E2EXf_PBCfg.c     # I-PDU ごとの E2E 設定/状態実体（EngineInfo/AbsInfo/E2EHealthStatus いずれも Profile05）
 │   │   ├── E2EMon/                # 独自 CDD 相当（標準 AUTOSAR モジュールではない、E2E 健全性監視の例）
@@ -341,7 +341,7 @@ ModuleId の出典は `docs/AUTOSAR_TR_BSWModuleList.pdf`（Release 4.3.1、「L
 │   │   │   └── Dcm_Cbk.c         # UDS サービスディスパッチ実装・S3 タイマ監視・SecurityAccess/RoutineControl 状態機械
 │   │   ├── Dem/                  # 診断イベントマネージャ（DTC 管理）
 │   │   │   ├── Dem_Cfg.h         # イベント ID・DTC コード・ステータスビットマスク・デバウンス閾値
-│   │   │   ├── Dem.h             # 公開インタフェース（ReportErrorStatus / GetAllDTCs / FreezeFrame）
+│   │   │   ├── Dem.h             # 公開インタフェース（SetEventStatus / GetAllDTCs / FreezeFrame）
 │   │   │   └── Dem.c             # DTC ライフサイクル・デバウンス・FreezeFrame 記録・NvM 永続化
 │   │   ├── Det/                  # Default Error Tracer（Serial ブリッジ）
 │   │   │   ├── Det.h             # ログマクロ定義（DET_LOGI/W/E/D）

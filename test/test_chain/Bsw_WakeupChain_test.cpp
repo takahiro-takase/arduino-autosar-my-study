@@ -200,7 +200,7 @@ TEST_F(Bsw_WakeupChain_Test, CanMainFunctionRead_OK_ValidatesWakeupAndNotifiesCo
     EXPECT_EQ(FakeBswM_ComM_CurrentModeCount, 1U);
     EXPECT_EQ(FakeBswM_LastMode, static_cast<ComM_ModeType>(COMM_FULL_COMMUNICATION));
     // Bus-Off の TF クリア相当（PASSED）を Dem へ報告する
-    EXPECT_EQ(FakeDem_ReportErrorStatusCount, 1U);
+    EXPECT_EQ(FakeDem_SetEventStatusCount, 1U);
     EXPECT_EQ(FakeDem_LastEventStatus, DEM_EVENT_STATUS_PASSED);
 }
 

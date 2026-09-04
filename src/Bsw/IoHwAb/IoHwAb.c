@@ -196,7 +196,7 @@ void IoHwAb_MainFunction(void)
             {
                 /* 5 秒固着判定済み（十分な持続性チェック）のため、
                  * Dem 側は DEM_DEBOUNCE_LIMIT_BUTTON_STUCK=1 で 1 回の報告で確定する */
-                Dem_ReportErrorStatus(DEM_EVENT_BUTTON_STUCK, DEM_EVENT_STATUS_FAILED);
+                (void)Dem_SetEventStatus(DEM_EVENT_BUTTON_STUCK, DEM_EVENT_STATUS_FAILED);
                 DET_LOGW(TAG, "Button stuck dtc=0x%06lX", (unsigned long)DEM_DTC_BUTTON_STUCK);
             }
         }
@@ -206,7 +206,7 @@ void IoHwAb_MainFunction(void)
         if (s_stuckCounter >= IOHWAB_BUTTON_STUCK_COUNT)
         {
             /* 固着から解放 → PASSED 報告 */
-            Dem_ReportErrorStatus(DEM_EVENT_BUTTON_STUCK, DEM_EVENT_STATUS_PASSED);
+            (void)Dem_SetEventStatus(DEM_EVENT_BUTTON_STUCK, DEM_EVENT_STATUS_PASSED);
             DET_LOGI(TAG, "Button stuck cleared");
         }
         s_stuckCounter = 0U;
@@ -219,11 +219,11 @@ void IoHwAb_MainFunction(void)
         s_adcMv = (uint16)((uint32)raw * ADC_REF_VOLTAGE_MV / ADC_RESOLUTION_MAX);
         if (s_adcMv < IOHWAB_ADC_LOW_VOLT_THRESHOLD_MV)
         {
-            Dem_ReportErrorStatus(DEM_EVENT_ADC_VOLT_LOW, DEM_EVENT_STATUS_FAILED);
+            (void)Dem_SetEventStatus(DEM_EVENT_ADC_VOLT_LOW, DEM_EVENT_STATUS_FAILED);
         }
         else
         {
-            Dem_ReportErrorStatus(DEM_EVENT_ADC_VOLT_LOW, DEM_EVENT_STATUS_PASSED);
+            (void)Dem_SetEventStatus(DEM_EVENT_ADC_VOLT_LOW, DEM_EVENT_STATUS_PASSED);
         }
     }
 }

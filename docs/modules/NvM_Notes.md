@@ -100,7 +100,7 @@ EEPROM.write(0x0DU, EEPROM.read(0x0DU) ^ 0xFFU);  // DEM_AGING ブロックの�
 **なぜ非同期化したか**: Renesas RA の EEPROM ライブラリ（内蔵フラッシュの
 エミュレーション）は 1 バイトの書き込みでも消去・書き込みサイクルを伴うため、
 9 バイト超のブロック（DEM_STATUS 等）をまとめて同期的に書くと数百 ms
-協調スケジューラ全体が停止します。この停止を放置すると `Dem_ReportErrorStatus()`
+協調スケジューラ全体が停止します。この停止を放置すると `Dem_SetEventStatus()`
 が新規 DTC 確定のたびに WdgM の Deadline Supervision を巻き込んで HW
 ウォッチドッグリセットを引き起こしうるため（経緯は
 後述の「[開発の経緯](#非同期書き込みジョブキューへの変更経緯)」、および
@@ -262,7 +262,7 @@ EEPROM.write(0x18U, EEPROM.read(0x18U) ^ 0xFFU);  // DEM_EXTENDED プライマ�
 Renesas RA の EEPROM ライブラリ（内蔵フラッシュのエミュレーション）は
 1 バイトの書き込みでも消去・書き込みサイクルを伴うため、9 バイト超のブロック
 （DEM_STATUS 等）をまとめて同期的に書くと数百 ms 協調スケジューラ全体が
-停止することが実機で判明した。この停止は `Dem_ReportErrorStatus()` が
+停止することが実機で判明した。この停止は `Dem_SetEventStatus()` が
 新規 DTC 確定のたびに発生し、WdgM の Deadline Supervision を巻き込んで
 実際に HW ウォッチドッグリセットを引き起こしていた（詳細は
 [`WdgM_Notes.md`](./WdgM_Notes.md#deadline-supervision-上限緩和と-os_schedulerstep-のバグ)
