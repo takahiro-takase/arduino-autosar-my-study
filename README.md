@@ -354,7 +354,7 @@ ModuleId の出典は `docs/AUTOSAR_TR_BSWModuleList.pdf`（Release 4.3.1、「L
 │   │   │   ├── FiM_Cfg.h         # 機能 ID (FID) 定義
 │   │   │   ├── FiM_PBCfg.h       # FID×イベント設定構造体型定義・FiM_Config 宣言
 │   │   │   ├── FiM_PBCfg.c       # FID×イベント対応テーブル実体
-│   │   │   ├── FiM.h             # 公開インタフェース（FiM_Init / FiM_MainFunction / GetFunctionPermission）
+│   │   │   ├── FiM.h             # 公開インタフェース（FiM_Init / FiM_MainFunction / GetFunctionPermission / SetFunctionAvailable）
 │   │   │   └── FiM.c             # 許可状態の再評価・キャッシュ
 │   │   ├── Nm/                   # ネットワークマネジメント（CanNm 状態機械）
 │   │   │   ├── Nm_Cfg.h          # DET 定数・NM フレーム周期/DLC/ノードID・状態機械タイマ値

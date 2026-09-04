@@ -39,6 +39,28 @@ FiM は Dem の状態だけを参照し、ASW は FiM の判定結果だけを�
 ASW が Dem を直接参照しないことで、「どの DTC が確定したら何を止めるか」という
 ルールを FiM 側に閉じ込め、ASW のロジックを単純に保てます。
 
+## 利用可否の強制設定 (FiM_SetFunctionAvailable)
+
+`FiM_SetFunctionAvailable(FID, Availability)`（[SWS_Fim_00106]）は、上記の
+Dem ベースの判定とは独立に、FID の利用可否を外部から強制設定する API です。
+`Availability=0`（利用不可）に設定した FID は、Dem のイベントステータスが
+どうであれ `FiM_GetFunctionPermission()` が常に「抑止」を返します
+（[SWS_Fim_00105]）。実装は判定フローそのものを変えず、読み出し側で
+両条件の論理積を取るだけです:
+
+```
+FiM_GetFunctionPermission(FID):
+  Available[FID] == 0 ?
+    YES → 常に「抑止」（Permitted[FID] の値に関わらず）
+    NO  → Permitted[FID]（上記 Dem ベースの判定結果）をそのまま返す
+```
+
+実仕様は `FiMAvailabilitySupport` が configured=True の場合のみ有効な
+任意サービスだが、本プロジェクトはそのようなビルド時コンフィグ切替を
+持たないため常に有効とする（学習用簡略化）。2026-09 時点では
+`Rte_Call_FiM_SetFunctionAvailable()` のような ASW 向けラッパー・呼び出し元は
+まだ存在せず、API 自体は未配線（本サーベイ系統の他の多くの新規 API と同様）。
+
 ## ログ例
 
 ```
