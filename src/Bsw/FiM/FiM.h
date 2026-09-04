@@ -84,6 +84,34 @@ void FiM_MainFunction(void);
 Std_ReturnType FiM_GetFunctionPermission(FiM_FunctionIdType FunctionId, uint8* Status);
 
 /**
+ * \brief   指定 FID の利用可否を外部から強制設定する（[SWS_Fim_00106]）。
+ *
+ * \details 実仕様は `FiMAvailabilitySupport` が configured=True の場合のみ
+ *          有効な任意サービスだが、本プロジェクトはそのようなビルド時
+ *          コンフィグ切替を持たないため常に有効とする（学習用簡略化）。
+ *
+ *          [SWS_Fim_00105]: Availability=0（利用不可）に設定した FID は、
+ *          `FiM_MainFunction()` が Dem のイベントステータスから判定する
+ *          抑止状態に関わらず、`FiM_GetFunctionPermission()` が常に
+ *          「抑止」を返すようになる（本実装では読み出し側
+ *          `FiM_GetFunctionPermission()` で両方の条件の論理積を取る形で
+ *          実現し、`FiM_MainFunction()` の DTC ベースの判定ロジック自体は
+ *          変更しない）。
+ *
+ * \param[in]  FID           機能 ID (FIM_FID_*)。
+ * \param[in]  Availability  0 以外: 利用可能。0: 利用不可（強制抑止）。
+ *
+ * \retval  E_OK      正常に設定した。
+ * \retval  E_NOT_OK  未初期化、または FID が範囲外。
+ *
+ * \AUTOSARReq     {SWS_Fim_00106, SWS_Fim_00105}
+ * \ServiceID      {0x07}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType FiM_SetFunctionAvailable(FiM_FunctionIdType FID, uint8 Availability);
+
+/**
  * \brief   FiM モジュールのバージョン情報を取得する。
  *
  * \details FiM_Init と並び、未初期化時でも FIM_E_UNINIT を報告しない

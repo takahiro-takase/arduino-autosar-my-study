@@ -48,6 +48,7 @@
  *  「Service ID[hex]」記載を実測して確認済み） */
 #define FIM_API_ID_INIT                     0x00U
 #define FIM_API_ID_GET_FUNCTION_PERMISSION  0x01U
+#define FIM_API_ID_SET_FUNCTION_AVAILABLE   0x07U
 #define FIM_API_ID_MAIN_FUNCTION            0x05U
 #define FIM_API_ID_GET_VERSION_INFO         0x04U
 
