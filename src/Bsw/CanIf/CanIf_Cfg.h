@@ -71,6 +71,8 @@
 #define CANIF_API_ID_SET_CONTROLLER_MODE 0x03U
 #define CANIF_API_ID_GET_CONTROLLER_MODE 0x04U
 #define CANIF_API_ID_GET_CONTROLLER_ERROR_STATE 0x4BU
+#define CANIF_API_ID_READ_TX_NOTIF_STATUS 0x07U
+#define CANIF_API_ID_READ_RX_NOTIF_STATUS 0x08U
 
 /** バージョン情報（SWS_CANInterface、Com/E2EXf/PduR 等の既存モジュールと同じ命名規則） */
 #define CANIF_VENDOR_ID          0U
@@ -107,6 +109,13 @@
  *  （feedback_test_chain_ipdu_id_ceiling 参照。超過は範囲外書き込みによる
  *  無関係なテストの原因不明なハングを引き起こす）。 */
 #define CANIF_RX_PDU_MAX    CANIF_RX_PDU_COUNT
+
+/** CanIf_ReadTxNotifStatus()（2026-09 追加）の内部状態配列
+ *  CanIf_TxNotifStatus[] のサイズ。CANIF_RX_PDU_MAX と同じ理由（テスト側の
+ *  CanIf_ConfigType.TxPduCount が本番設定と異なりうる native_chain 環境で
+ *  固定サイズ配列の範囲外書き込みを防ぐため、feedback_test_chain_ipdu_id_ceiling
+ *  参照）で、TxPduCount を直接使わずこの固定上限を用いる。 */
+#define CANIF_TX_PDU_MAX    CANIF_TX_PDU_COUNT
 
 /** CAN classic の最大データ長 [byte]（CAN FD は本プロジェクト未対応、
  *  project_can_fd_postponed 参照）。CanIf_ReadRxPduData() の内部バッファ
