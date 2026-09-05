@@ -23,6 +23,17 @@
  *          FromCheckpointId から ToCheckpointId への遷移のみを許可する
  *          有向グラフの辺を表す。FromCheckpointId には WDGM_CP_INITIAL も指定できる
  *          （起動直後に許可される最初のチェックポイントを表す）。
+ *
+ * \note    公開 API `WdgM_CheckpointReached()` の引数型は仕様準拠の
+ *          `WdgM_CheckpointIdType`（uint16 由来、[SWS_WdgM_00357]）だが、
+ *          本コンフィグテーブル自体はコンパイル時に確定する少数の固定値
+ *          （WdgM_Cfg.h の `WDGM_CP_*`、現状 0〜3 と番兵値 `WDGM_CP_INITIAL`
+ *          =0xFF のみ）しか保持しないため、あえて `uint8` のまま最小サイズで
+ *          持たせている（Arduino の限られた RAM を無駄に消費しないための
+ *          意図的な簡略化。方針上「シグネチャは仕様準拠、内部実装は Arduino
+ *          で実現可能な範囲に簡略化」に該当。将来 256 種類を超える
+ *          チェックポイントを設定する場合はこのテーブルも
+ *          `WdgM_CheckpointIdType` へ拡張すること）。
  */
 typedef struct
 {
@@ -35,6 +46,9 @@ typedef struct
  * \details AUTOSAR の WdgMDeadlineSupervision コンテナに相当する。
  *          FromCheckpointId から ToCheckpointId への実際の経過時間が
  *          [MinMs, MaxMs] の範囲内であることを検証する。
+ *
+ * \note    `WdgM_TransitionCfgType` と同じ理由で FromCheckpointId/
+ *          ToCheckpointId は `uint8` のまま（上記コメント参照）。
  */
 typedef struct
 {
@@ -47,6 +61,13 @@ typedef struct
 /**
  * \brief   Supervised Entity 1 件の設定
  * \details AUTOSAR の WdgMSupervisedEntity コンテナに相当する。
+ *
+ * \note    公開 API の SEID 引数型は仕様準拠の `WdgM_SupervisedEntityIdType`
+ *          （uint16 由来、[SWS_WdgM_00356]）だが、EntityId はコンパイル時に
+ *          確定する少数の固定値（WdgM_Cfg.h の `WDGM_ENTITY_*`、現状 0/1 の
+ *          み・`WDGM_SUPERVISED_ENTITY_COUNT`=2）しか取らないため、
+ *          `WdgM_TransitionCfgType`/`WdgM_DeadlineCfgType` と同じ理由で
+ *          `uint8` のまま最小サイズで持たせている。
  */
 typedef struct
 {
@@ -62,6 +83,9 @@ typedef struct
 /**
  * \brief   WdgM ポストビルドコンフィグ型
  * \details WdgM_Init() に渡す最上位コンフィグ構造体。WdgM_PBCfg.c でインスタンス化する。
+ *
+ * \note    EntityCount も `WdgM_EntityCfgType.EntityId` と同じ理由で `uint8`
+ *          のまま（現状 `WDGM_SUPERVISED_ENTITY_COUNT`=2）。
  */
 typedef struct
 {

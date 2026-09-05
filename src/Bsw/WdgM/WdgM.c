@@ -183,7 +183,7 @@ static WdgM_LocalStatusType WdgM_LogicalStatus[WDGM_SUPERVISED_ENTITY_COUNT];
 static WdgM_LocalStatusType WdgM_DeadlineStatus[WDGM_SUPERVISED_ENTITY_COUNT];
 
 /** エンティティごとの直前のチェックポイント ID (Logical Supervision 用) */
-static uint8 WdgM_LastCheckpoint[WDGM_SUPERVISED_ENTITY_COUNT];
+static WdgM_CheckpointIdType WdgM_LastCheckpoint[WDGM_SUPERVISED_ENTITY_COUNT];
 
 /** エンティティごとの直前のチェックポイント発生時刻 [ms] (Deadline Supervision 用) */
 static unsigned long WdgM_LastCheckpointTimeMs[WDGM_SUPERVISED_ENTITY_COUNT];
@@ -485,12 +485,13 @@ void WdgM_ResumeSupervision(void)
  *          さらに、直前のチェックポイントからの実際の経過時間が許容範囲内かを
  *          確認する (Deadline Supervision)。
  *
- * \AUTOSARReq     {SWS_WdgM_00263, SWS_WdgM_00278, SWS_WdgM_00279}
+ * \AUTOSARReq     {SWS_WdgM_00263, SWS_WdgM_00278, SWS_WdgM_00279,
+ *                  SWS_WdgM_00356, SWS_WdgM_00357}
  * \ServiceID      {0x0E}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
  */
-Std_ReturnType WdgM_CheckpointReached(WdgM_SupervisedEntityIdType SEID, uint8 CheckpointId)
+Std_ReturnType WdgM_CheckpointReached(WdgM_SupervisedEntityIdType SEID, WdgM_CheckpointIdType CheckpointId)
 {
     DET_LOGT(TAG, "called");
     if (WdgM_Cfg == NULL)
@@ -508,7 +509,7 @@ Std_ReturnType WdgM_CheckpointReached(WdgM_SupervisedEntityIdType SEID, uint8 Ch
     WdgM_AliveCount[SEID]++;
 
     const WdgM_EntityCfgType* entity = &WdgM_Cfg->Entities[SEID];
-    const uint8 fromCp = WdgM_LastCheckpoint[SEID];
+    const WdgM_CheckpointIdType fromCp = WdgM_LastCheckpoint[SEID];
     const unsigned long now = millis();
     uint8 allowed = 0U;
 

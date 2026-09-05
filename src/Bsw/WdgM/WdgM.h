@@ -62,8 +62,26 @@ extern "C" {
  * 型定義
  * ----------------------------------------------------------------------- */
 
-/** Supervised Entity ID 型 */
-typedef uint8 WdgM_SupervisedEntityIdType;
+/**
+ * \brief   Supervised Entity ID 型 ([SWS_WdgM_00356])。
+ * \details 実仕様は uint16 由来と規定する。本プロジェクトのエンティティ数は
+ *          少数（WdgM_Cfg.h の WDGM_ENTITY_* 参照）で uint8 でも実害はないが、
+ *          型としては仕様に合わせる（2026-09-05 是正、以前は uint8 だった）。
+ *
+ * \AUTOSARReq     {SWS_WdgM_00356}
+ */
+typedef uint16 WdgM_SupervisedEntityIdType;
+
+/**
+ * \brief   チェックポイント ID 型 ([SWS_WdgM_00357])。
+ * \details 実仕様は uint16 由来と規定する。本プロジェクトのチェックポイント数は
+ *          少数（WdgM_Cfg.h の WDGM_CP_* 参照）で uint8 でも実害はないが、
+ *          型としては仕様に合わせる（2026-09-05 是正、以前は素の uint8 引数
+ *          だった）。
+ *
+ * \AUTOSARReq     {SWS_WdgM_00357}
+ */
+typedef uint16 WdgM_CheckpointIdType;
 
 /**
  * \brief   WdgM に設定されたモードを区別する型。
@@ -259,12 +277,13 @@ void WdgM_ResumeSupervision(void);
  * \param[in]  CheckpointId  チェックポイント ID (WdgM_Cfg.h の WDGM_CP_*)。
  * \return     E_OK: 正常受付。E_NOT_OK: ID 不正。
  *
- * \AUTOSARReq     {SWS_WdgM_00263, SWS_WdgM_00278, SWS_WdgM_00279}
+ * \AUTOSARReq     {SWS_WdgM_00263, SWS_WdgM_00278, SWS_WdgM_00279,
+ *                  SWS_WdgM_00356, SWS_WdgM_00357}
  * \ServiceID      {0x0E}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
  */
-Std_ReturnType WdgM_CheckpointReached(WdgM_SupervisedEntityIdType SEID, uint8 CheckpointId);
+Std_ReturnType WdgM_CheckpointReached(WdgM_SupervisedEntityIdType SEID, WdgM_CheckpointIdType CheckpointId);
 
 /**
  * \brief   Supervised Entity の現在のローカルステータスを取得する。
