@@ -325,7 +325,7 @@ static const Com_IPduConfigType Com_TxIPduConfigData[COM_TX_IPDU_COUNT] = {
          * update-bit（非 Signal Group、SWS_Com_00061/00062）: byte[1] bit0
          * （ネットワークビット8）に、EngineState 単体の update-bit を持つ。
          * Com_SendSignal() 呼び出しのたびに 1 にセットされ、実送信直後
-         * （PduR_Transmit() が E_OK を返した時点）にクリアされる。MIXED の
+         * （PduR_ComTransmit() が E_OK を返した時点）にクリアされる。MIXED の
          * 周期フロア再送（値変化なしの再送）ではセットされないため、受信側は
          * このビットで「実際に値が更新された送信」と「周期フロアの単なる
          * 再送」を区別できる（WarningStatus のグループ単位 update-bit との
@@ -386,7 +386,7 @@ static const Com_IPduConfigType Com_TxIPduConfigData[COM_TX_IPDU_COUNT] = {
         .DLC       = 1U,  /* DaVinci: ComIPduLength    - I-PDU バイト長
                            *          （bit0-2=RunLamp/FaultLamp/AbsLamp、bit3=update-bit、残り4bitは予約） */
         .PduRId    = 2U,  /* DaVinci: ComIPduPduRef    - PduR TX パス 2 へのリンク
-                           *          (PduR_Transmit の SrcPduId は COM/CanTp で共通の名前空間のため、
+                           *          (PduR_ComTransmit/PduR_CanTpTransmit の SrcPduId は COM/CanTp で共通の名前空間のため、
                            *          CanTp が使用する 1U と衝突しないよう 2U を割り当てる) */
         .TimeoutMs = 0U,  /* TX I-PDU のため監視無効 */
         .IsSignalGroup = 1U, /* Signal Group（Com_SendSignalGroup で確定コミット） */

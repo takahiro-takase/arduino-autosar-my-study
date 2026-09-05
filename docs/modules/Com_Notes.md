@@ -40,7 +40,7 @@ Com_SendSignal(ENGINE_STATE, value):
   (value & Mask) != (前回のフィルタ比較値 & Mask) ?
     YES → Com_RequestTxOnChange(MeterStatus) を呼ぶ
             → Com_TxPending[MeterStatus] = 1 を立てるだけ
-              （PduR_Transmit は呼ばない。呼び出し元の Runnable は
+              （PduR_ComTransmit は呼ばない。呼び出し元の Runnable は
               ここで一切ブロッキングしない）
     NO  → 何もしない（バッファは更新済みだが送信要求は立たない）
 
@@ -49,7 +49,7 @@ Com_MainFunctionTx()（Os の 100ms タスクから周期的に呼ばれる。Wd
     Com_TxPending[MeterStatus] == 1 、
     または最終送信からの経過時間 >= TxPeriodMs（周期フロア間隔）？
       YES → CommunicationControl 抑制中でなければ送信する
-              （TxTransformCbk があれば呼んだ上で PduR_Transmit
+              （TxTransformCbk があれば呼んだ上で PduR_ComTransmit
               → CanIf_Transmit → Can_Write の SPI 送信まで完了する）
       NO  → 何もしない
 ```
@@ -57,7 +57,7 @@ Com_MainFunctionTx()（Os の 100ms タスクから周期的に呼ばれる。Wd
 **なぜ実送信を `Com_MainFunctionTx()` に一元化したか**: `Com_SendSignal()` の
 呼び出し元は `App_EngineManager_Run()` であり、WdgM の Deadline Supervision
 （実行時間の上限監視）対象の Runnable です。もし `Com_SendSignal()` の中で
-`PduR_Transmit()`（→ MCP2515 への SPI 送信）まで同期的に呼び切ると、バス輻輳等で
+`PduR_ComTransmit()`（→ MCP2515 への SPI 送信）まで同期的に呼び切ると、バス輻輳等で
 SPI 送信が想定より長引いた場合に Runnable 自体の実行時間が伸び、Deadline
 Supervision の誤検出につながりかねません。`Com_MainFunctionTx()` は WdgM の
 監視対象外のタスクのため、実送信をそちらへディスパッチすることで、SPI 送信の
@@ -804,7 +804,7 @@ CAN RX フレームを受信するたびに `Signals[]` を 2 回走査するこ
   が立った場合のみ、UpdateBitPosition が 0xFF 以外ならそのビットをセット
   （SWS_Com_00801。こちらも本実装独自の条件付け、詳細は次項）
 送信側（Com_DoTransmit、Com_MainFunctionTx() から。Signal Group かどうかを問わない）:
-  PduR_Transmit() で実送信（この時点でビット=1 のまま送信される）
+  PduR_ComTransmit() で実送信（この時点でビット=1 のまま送信される）
   ret==E_OK のときのみ、送信直後にビットをクリア
   （SWS_Com_00062: ComTxIPduClearUpdateBit=Transmit）
 ```
@@ -859,14 +859,14 @@ Signal Group 側（`Com_SendSignalGroup()`）も同種の問題を抱えてい�
 （`PduR_ComTransmit` 呼び出し直後にクリア）/ Confirmation（送信確認後にクリア）/
 TriggerTransmit（トリガ送信後にクリア）の 3 択ですが、本実装は Transmit のみ
 実装しています。本プロジェクトの送信経路は `Com_MainFunctionTx()` →
-`Com_DoTransmit()` → `PduR_Transmit()` が同期的に SPI 送信まで完了する
+`Com_DoTransmit()` → `PduR_ComTransmit()` が同期的に SPI 送信まで完了する
 （実際の送信完了と `PduR_ComTransmit` 呼び出しの間に有意な時間差がない）ため、
 3 つのタイミングの違いを意味のある形で再現できないという判断です。
 
 **レビューで見つかった問題（update-bit クリアが送信結果を無視していた）**:
 このコード自体は、実際に `WarningStatus` へ試験的に適用していた開発中の段階で
 見つかった問題を修正済みです。初期実装は `Com_DoTransmit()` 内で
-`PduR_Transmit()` の戻り値 `ret` を見ずに update-bit を無条件でクリアして
+`PduR_ComTransmit()` の戻り値 `ret` を見ずに update-bit を無条件でクリアして
 いました。しかし本節が引用する SWS_Com_00062 の原文は "after this I-PDU was
 sent out via PduR_ComTransmit **and PduR_ComTransmit returned E_OK**" であり、
 送信成功時のみクリアすべきと明記されています。当時のコードコメントは
@@ -1163,7 +1163,7 @@ WDT（ウォッチドッグタイマ）リセットが発生しました。
 呼び出しスタックフレームから切り離し、`Com_RxInvalidNotifyPending[]` フラグを
 立てるだけにして、実際の呼び出しは必ず `Com_MainFunctionRx()`（Os の 100ms
 タスク、割り込み禁止区間の外）側で行うようにしました。これは `Com_TxPending`
-（`Com_SendSignal()` から `PduR_Transmit()` の実行を切り離す、既存の仕組み）と
+（`Com_SendSignal()` から `PduR_ComTransmit()` の実行を切り離す、既存の仕組み）と
 全く同じ設計思想です。この教訓は `ComInvalidNotification` に限らず一般化できます:
 **Com のコールバック系フック（`RxIndicationCbk`/`TxTransformCbk`/
 `InvalidNotificationCbk` 等）は、それ自身がどの呼び出しコンテキスト（割り込み
@@ -1541,7 +1541,7 @@ StoppedGroupedIPduNeverTimesOutRegardlessOfElapsed`/
 ## TX 送信デッドライン監視（Com_CbkTxTOut）
 
 RX 側の受信デッドライン監視（上記）と対をなす、TX 側の送信確認デッドライン
-監視です。`PduR_Transmit()` へ送信を渡した後、対応する `Com_TxConfirmation()`
+監視です。`PduR_ComTransmit()` へ送信を渡した後、対応する `Com_TxConfirmation()`
 が一定時間内に届かなければ `Com_CbkTxTOut`（`TxTOutCbk`）を発火します。
 
 ```
@@ -1572,7 +1572,7 @@ signals and signal groups."
 MeterStatus (IPduId=0):
   TxFirstTimeoutMs = TxTimeoutMs = COM_TX_TIMEOUT_METERSTATUS_MS（既定 2000ms）
 
-Com_DoTransmit()（PduR_Transmit() が E_OK を返した場合のみ）:
+Com_DoTransmit()（PduR_ComTransmit() が E_OK を返した場合のみ）:
   Com_TxConfPending[0] が 0→1 に遷移する瞬間だけ
   Com_TxConfPendingSinceMs[0] = now（[SWS_Com_00878] "unless already running"。
   MIXED 周期フロアや NumberOfRepetitions による再送で Com_DoTransmit() が
@@ -1625,7 +1625,7 @@ dispatch/confirmation の同期性に依存しない設計にしている**: `Ca
 延長）。
 
 **この機能は実際に発動するか**: **発動しません。** `Com_DoTransmit()` →
-`PduR_Transmit()` → `CanIf_Transmit()` → `Can_Write()` は同期的に完結し
+`PduR_ComTransmit()` → `CanIf_Transmit()` → `Can_Write()` は同期的に完結し
 （SPI 送信自体は MCP2515 とのブロッキング通信）、Bus-Off 中は `Can_Write()`
 が `CanState != CAN_CS_STARTED` により**送信そのものを同期的に失敗**させます
 （`Can.c:404-405`）。つまり Bus-Off 中は `Com_DoTransmit()` の `ret` が
@@ -1819,7 +1819,7 @@ diretly before the I-PDU is transmitted via PduR_ComTransmit.
 ```
 
 `Com_DoTransmit()` 内、`TxTransformCbk`（E2E/CRC 等の送信直前変換）適用後・
-`PduR_Transmit()` 呼び出し直前に、実際に送信される最終バイト列を渡して
+`PduR_ComTransmit()` 呼び出し直前に、実際に送信される最終バイト列を渡して
 呼びます（RX 側が「PduR から渡された生バイト列」を見るのと対称に、TX 側は
 「PduR へこれから渡す最終バイト列」を見ます）。
 
@@ -1840,13 +1840,13 @@ ImmobilizerStatus (IPduId=3):
 
 Com_DoTransmit(ipdu=3, ...)  ← Com_MainFunctionTx() の TX ディスパッチから呼ぶ
   TxTransformCbk は未設定のためスキップ
-  TxIpduCalloutCbk(Com_TxBuffer[3], DLC=1) を呼ぶ（PduR_Transmit() 直前）
+  TxIpduCalloutCbk(Com_TxBuffer[3], DLC=1) を呼ぶ（PduR_ComTransmit() 直前）
     byte[0] が 0x00/0x01 以外 → 0（false）を返す
       → Com_DoTransmit() が E_NOT_OK で即 return
-        （PduR_Transmit() 自体を呼ばない。Com_TxConfPending もセット
+        （PduR_ComTransmit() 自体を呼ばない。Com_TxConfPending もセット
           しない＝TX 送信デッドライン監視の誤発火を防ぐ。update-bit も
           クリアしない＝次回の実送信で改めて「更新あり」を伝える）
-    0x00/0x01 → 1（true）を返す → 通常どおり PduR_Transmit() へ進む
+    0x00/0x01 → 1（true）を返す → 通常どおり PduR_ComTransmit() へ進む
 ```
 
 **RX 側との非対称性（1点）**: RX 側は拒否されてもデッドライン監視タイマの

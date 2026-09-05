@@ -298,7 +298,7 @@ void Rte_COMCbkTAck_EngineState(void)
  *          （TX IPduId=0）の送信確認が COM_TX_TIMEOUT_METERSTATUS_MS 以内に
  *          届かなかったことを検出した直後。
  *
- * \note    実機では発動しない: Com_DoTransmit()→PduR_Transmit()→
+ * \note    実機では発動しない: Com_DoTransmit()→PduR_ComTransmit()→
  *          CanIf_Transmit()→Can_Write() は同期的に完結し、Bus-Off 中は
  *          Can_Write() が「送信済み・未確認」状態自体を作らずに即座に
  *          失敗するため（詳細は docs/modules/Com_Notes.md「TX 送信デッド
@@ -542,7 +542,7 @@ uint8 Rte_COMRxIpduCallout_SecureCommand(const uint8* SduDataPtr, uint8 SduLengt
  *
  * \details Com_PBCfg.c の ImmobilizerStatus I-PDU 設定（Com_IPduConfigType.
  *          TxIpduCalloutCbk）から登録される（Com_TxIpduCallout、
- *          SWS_Com_00346/00719）。Com_DoTransmit() 内、PduR_Transmit()
+ *          SWS_Com_00346/00719）。Com_DoTransmit() 内、PduR_ComTransmit()
  *          呼び出し直前に呼ばれる。RxIpduCalloutCbk の送信側対
  *          （Rte_COMRxIpduCallout_SecureCommand）。
  *          Signal Gateway（Com_GwMappingData）が SecOC 検証済みの
@@ -819,7 +819,7 @@ Rte_IStatusType Rte_Read_EngineStatus_EngineOnFlag(EngineOnFlag_t* data)
  *          MeterStatus は TxModeMode=MIXED のため、Com が値の変化を検知した
  *          場合は次回 Com_MainFunctionTx()（Os の 100ms タスク）で送信される
  *          （呼び出し元が別途送信をトリガする必要はなく、この呼び出し自体は
- *          PduR_Transmit() を呼ばないため、SPI 送信でブロッキングしない）。
+ *          PduR_ComTransmit() を呼ばないため、SPI 送信でブロッキングしない）。
  *
  * \param[in]  state  書き込むエンジン状態
  *                    (OFF / STARTING / RUNNING / FAULT)。
@@ -1358,7 +1358,7 @@ Std_ReturnType Rte_Write_WarningStatus_AbsLamp(uint8 level)
  *          WarningStatus は TxModeMode=DIRECT のため、このコミットで変化が
  *          検知されれば次回 Com_MainFunctionTx() で送信される（呼び出し元が
  *          別途送信をトリガする必要はなく、この呼び出し自体は
- *          PduR_Transmit() を呼ばないため、SPI 送信でブロッキングしない）。
+ *          PduR_ComTransmit() を呼ばないため、SPI 送信でブロッキングしない）。
  *
  * \retval  E_OK      COM の実 TX バッファへ正常にコミットした。
  * \retval  E_NOT_OK  COM 未初期化、または WarningStatus の I-PDU ID が

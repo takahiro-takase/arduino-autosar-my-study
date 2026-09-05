@@ -9,7 +9,7 @@
  *              Com_SendSignal()/Com_SendSignalGroup()   ← ASW から呼ばれる
  *                ┊  (Com_TxPending 経由。次回 Com_MainFunctionTx() まで非同期に待機)
  *              Com_MainFunctionTx()
- *                → PduR_Transmit() → CanIf_Transmit() → Can_Write()
+ *                → PduR_ComTransmit() → CanIf_Transmit() → Can_Write()
  *                  （SPI 送信完了までここで同期完了）
  *
  *          図中の「┊」（Com_TxPending というキュー経由の非同期の切れ目）を境に、
@@ -23,7 +23,7 @@
  *                         （Com_MainFunctionTx() は呼ばない）。
  *            セグメント②: セグメント①の終端状態（Com_TxPending が立った状態）を
  *                         Arrange で用意し、Com_MainFunctionTx() が
- *                         PduR_Transmit()→CanIf_Transmit()→Can_Write() と同期連鎖し、
+ *                         PduR_ComTransmit()→CanIf_Transmit()→Can_Write() と同期連鎖し、
  *                         最終的に Can_Hw（フェイク）へ正しい CAN ID/DLC/データで
  *                         送信要求が届くことまで検証する。
  *
@@ -350,7 +350,7 @@ const Com_IPduConfigType kTestErrGroupIPdu = {
     /* IPduId */           3U,
     /* DLC */              1U,
     /* PduRId */           3U,   // kTestPduRConfig に対応する経路を登録していないため
-                                 // 未登録（PduR_Transmit は経路なしで安全に E_NOT_OK を
+                                 // 未登録（PduR_ComTransmit は経路なしで安全に E_NOT_OK を
                                  // 返す。Com_TriggerIPDUSend の MDT 検証用に実際に
                                  // ディスパッチさせるが、実 CAN 送信までは進めない）
     /* FirstTimeoutMs */   0U,
@@ -911,7 +911,7 @@ TEST_F(Bsw_TxChain_Test, ComMainFunction_NG_NothingPending_DoesNotReachCanHw)
 // Com_TxIpduCallout（SWS_Com_00346、TX I-PDU 単位のフィルタリングフック）。
 // Bsw_RxChain_test.cpp の Com_RxIpduCallout テストと対になる、送信側の検証。
 // kTestTxIPdu（IPduId=0）に TestTxIpduCallout を設定済み。Com_DoTransmit()
-// 内で TxTransformCbk 適用後・PduR_Transmit() 呼び出し直前に呼ばれることを、
+// 内で TxTransformCbk 適用後・PduR_ComTransmit() 呼び出し直前に呼ばれることを、
 // Can_Hw まで到達するかどうかで確認する。
 // ------------------------------------------------------------
 TEST_F(Bsw_TxChain_Test, ComMainFunction_OK_AcceptedByTxIpduCalloutTransmitsNormally)
@@ -942,7 +942,7 @@ TEST_F(Bsw_TxChain_Test, ComMainFunction_NG_RejectedByTxIpduCalloutDiscardsTrans
     /* 実行 (Act) */
     Com_MainFunctionTx();
 
-    /* 評価 (Assert): [SWS_Com_00346] false のため PduR_Transmit() 以降
+    /* 評価 (Assert): [SWS_Com_00346] false のため PduR_ComTransmit() 以降
      * （CanIf/Can/Can_Hw）に一切到達しない。実際には送信していないため
      * Com_TxConfPending もセットされない（TX 送信デッドライン監視タイマも
      * 起動しない）。 */
@@ -1513,9 +1513,9 @@ TEST_F(Bsw_TxChain_Test, SwitchIpduTxMode_NG_UnknownPduIdHasNoEffect)
 // PduR_Init()/CanIf_Init() はあえて呼ばない: このフィクスチャの関心は
 // 「Com_TxTriggerPending が PERIODIC I-PDU でも period 判定と独立した OR 項
 // として効くか」のみであり、それは Com_MainFunctionTx() 内で
-// PduR_Transmit() を呼ぶ前に確定する（Com_TxTriggerPending[id]=0 の
+// PduR_ComTransmit() を呼ぶ前に確定する（Com_TxTriggerPending[id]=0 の
 // クリアは due=true になった時点で無条件に行われる、Com.c 参照）。
-// PduR_ConfigPtr が NULL のままでも PduR_Transmit() は安全に E_NOT_OK を
+// PduR_ConfigPtr が NULL のままでも PduR_ComTransmit() は安全に E_NOT_OK を
 // 返すため（PduR.c 参照）、実際の CAN 送信まで配線しなくても検証できる。
 //
 // このパターンの SetUp()/TearDown() 自体は本ファイル内で 2 回目の登場のため

@@ -67,7 +67,7 @@ typedef struct
  *   PduR の TX 経路上（PduR_TxRoutingPathType.TransmitOverrideFct）に
  *   挟まる中間モジュールとして動作する（[7.4.1] "Authentication during
  *   direct transmission" の ad-hoc transmission フロー相当）。
- *   Com が PduR_Transmit() を呼ぶと SecOC_IfTransmit() が Authentic I-PDU を
+ *   Com が PduR_ComTransmit() を呼ぶと SecOC_IfTransmit() が Authentic I-PDU を
  *   内部バッファへコピーして即座に E_OK を返し（[SWS_SecOC_00058]）、
  *   実際の Freshness/MAC 計算と Secured I-PDU の組み立ては次回
  *   SecOC_MainFunctionTx() で行う（[SWS_SecOC_00060]〜[SWS_SecOC_00062]）。

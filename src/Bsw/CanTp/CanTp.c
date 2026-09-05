@@ -164,7 +164,7 @@ static Std_ReturnType CanTp_SendFrame(void)
     static PduInfoType pdu;
     pdu.SduDataPtr = CanTp_TxFrameBuf;
     pdu.SduLength  = 8U;
-    return PduR_Transmit(CANTP_PDUR_TX_SDU_ID, &pdu);
+    return PduR_CanTpTransmit(CANTP_PDUR_TX_SDU_ID, &pdu);
 }
 
 /**

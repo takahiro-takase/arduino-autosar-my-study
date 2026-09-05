@@ -122,7 +122,7 @@
  *            「どの SID がどのセッションで使えるか」を一覧できるようにしている。
  *
  *          応答送信フロー:
- *            Dcm → CanTp_Transmit(CANTP_TX_SDU_ID) → PduR_Transmit → CanIf
+ *            Dcm → CanTp_Transmit(CANTP_TX_SDU_ID) → PduR_CanTpTransmit → CanIf
  *            → Can_Write → MCP2515 → CAN 0x7E8
  *
  *          ComM への診断アクティブ通知 (ComM_DCM_ActiveDiagnostic/

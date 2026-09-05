@@ -98,7 +98,7 @@ void App_EngineManager_Init(void)
  *          次回 Com_MainFunctionTx()（Os の 100ms タスク）で Com が送信し、
  *          変化がなくても Com 自身の周期フロアで一定間隔ごとに再送される
  *          （本 Runnable 自身は送信の要否・タイミングに関与せず、実際の
- *          PduR_Transmit()/SPI 送信も呼ばないため、その所要時間が本
+ *          PduR_ComTransmit()/SPI 送信も呼ばないため、その所要時間が本
  *          Runnable の WdgM Deadline Supervision に影響することはない）。
  *          Rte_ScheduleRunnables() から 3000 ms ごとに呼び出される。
  *

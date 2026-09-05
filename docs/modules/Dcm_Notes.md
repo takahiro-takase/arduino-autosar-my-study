@@ -30,7 +30,7 @@ MCP2515 → Can → CanIf（CanId=0x7E0 → RxPduId=1）
                   ≤7B → SF 送信
                   ≥8B → FF 送信 → FC 待ち → CF 送信
                   ↓
-                PduR_Transmit(SrcPduId=1) → CanIf → Can
+                PduR_CanTpTransmit(SrcPduId=1) → CanIf → Can
   │  CAN 0x7E8  [UDS 応答 / FC]
   ↓
 外部テスター
@@ -295,7 +295,7 @@ Nm モジュール（CAN 0x400 送信）を制御します。診断通信その�
 
 **Rx 無効時の挙動**: `Com_RxIndication()` が受信フレームを無視します（バッファ・
 タイムアウトタイマとも更新しません）。**Tx 無効時の挙動**: DIRECT/MIXED/PERIODIC
-いずれの I-PDU も、実送信（`PduR_Transmit()`）は `Com_MainFunctionTx()` 内で行われ、
+いずれの I-PDU も、実送信（`PduR_ComTransmit()`）は `Com_MainFunctionTx()` 内で行われ、
 `Com_TxEnabled==0` の間はここで抑制されます（詳細は次項）。TX バッファの値自体は
 `Com_SendSignal()` が既に更新済みのため失われず、再開後に実際に値が変化した時、
 または通常の周期フロアに新たに達した時に初めて送信されます。

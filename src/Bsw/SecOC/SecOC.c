@@ -32,7 +32,7 @@
  *          RX とは異なり PduR の TX 経路
  *          （PduR_TxRoutingPathType.TransmitOverrideFct）に中間モジュールとして
  *          挟まる構成（[7.4.1] "Authentication during direct transmission"）。
- *          Com が PduR_Transmit() を呼ぶと SecOC_IfTransmit() が Authentic
+ *          Com が PduR_ComTransmit() を呼ぶと SecOC_IfTransmit() が Authentic
  *          I-PDU を内部バッファへコピーして即座に返り（[SWS_SecOC_00058]）、
  *          次回 SecOC_MainFunctionTx() で Freshness/MAC を計算して Secured
  *          I-PDU を組み立て、PduR_SecOCTransmit() で CanIf まで送り届ける

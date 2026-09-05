@@ -476,7 +476,7 @@ Com_SendSignal()/Com_SendSignalGroup()   ← ASW から呼ばれる。TX バッ�
   ┊  (Com_TxPending 経由。次回 Com_MainFunctionTx() の 100ms tick まで非同期に待機)
   ↓
 Com_MainFunctionTx()                        ← ここから下は同期呼び出し連鎖
-  → PduR_Transmit()
+  → PduR_ComTransmit()
     → TransmitOverrideFct 未設定（現状の全 TX I-PDU）:
         CanIf_Transmit() → Can_Write()（SPI 送信完了までここで同期完了）
 ```
@@ -499,7 +499,7 @@ Protect 処理が通常のチェーンへ割り込みます。TxTransformCbk を
 Com_MainFunctionTx()
   → TxTransformCbk があれば呼ぶ    ← Rte_COMTransform_E2EHealthStatus()
                                      → E2EXf_TransformP05() → E2E_P05Protect()
-  → PduR_Transmit() → CanIf_Transmit() → Can_Write()   （以降は「通常」と同じ）
+  → PduR_ComTransmit() → CanIf_Transmit() → Can_Write()   （以降は「通常」と同じ）
 ```
 
 <a id="rx-processing"></a>
@@ -1151,7 +1151,7 @@ $env:DET_LOG_VERBOSE = "1"; pio test -e native_chain -v # TRACE ログ出力
 ##### Tx 処理（Com → PduR → CanIf → Can の順）
 
 [「Tx 処理」コールチェーン](#tx-processing)（`Com_SendSignal()` → …
-→ `Com_MainFunctionTx()` → `PduR_Transmit()` → `CanIf_Transmit()` →
+→ `Com_MainFunctionTx()` → `PduR_ComTransmit()` → `CanIf_Transmit()` →
 `Can_Write()`）を複数モジュールにわたって実体（Com.c/PduR.c/CanIf.c/Can.c）で
 リンクし、そのまま検証する `Bsw_TxChain_test.cpp` を `test/test_chain/` に
 用意しています（`Com.c`/`PduR.c`/`CanIf.c` それぞれ単体のテストではなく、README の
