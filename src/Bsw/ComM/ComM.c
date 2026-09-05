@@ -421,7 +421,7 @@ Std_ReturnType ComM_GetRequestedComMode(ComM_UserHandleType User, ComM_ModeType*
 /**
  * \brief   ユーザの現在の通信モードを取得する。
  *
- * \ServiceID      {0x06}
+ * \ServiceID      {0x08}
  * \Reentrancy     {Reentrant}
  * \Synchronicity  {Synchronous}
  */

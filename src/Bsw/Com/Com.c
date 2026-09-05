@@ -258,7 +258,7 @@ static uint8 Com_GroupTriggerPending[COM_TX_IPDU_MAX];
  *             それを超える設定は拒否される。
  *
  * \AUTOSARReq     {SWS_Com_00432, SWS_Com_00217, SWS_Com_00098, SWS_Com_00603}
- * \ServiceID      {0x00}
+ * \ServiceID      {0x01}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
  */

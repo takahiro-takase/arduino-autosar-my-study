@@ -50,7 +50,7 @@
 #define COM_E_INIT_FAILED    0x04U  /* [SWS_Com_00837]: 不正なコンフィグセット選択 */
 
 /** ApiId（各関数の Doxygen \ServiceID タグと一致させること） */
-#define COM_API_ID_INIT                        0x00U
+#define COM_API_ID_INIT                        0x01U  /* [SWS_Com_00432]: 実測値0x01（従来0x00は誤り、2026-09-05是正） */
 #define COM_API_ID_IPDU_GROUP_START             0x03U
 #define COM_API_ID_IPDU_GROUP_STOP              0x04U
 #define COM_API_ID_DISABLE_RECEPTION_DM         0x05U
