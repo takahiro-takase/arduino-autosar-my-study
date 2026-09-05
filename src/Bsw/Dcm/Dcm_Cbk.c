@@ -435,6 +435,49 @@ Std_ReturnType Dcm_GetSecurityLevel(Dcm_SecLevelType* SecLevel)
 }
 
 /**
+ * \brief   現在アクティブなプロトコル・コネクション・テスター送信元アドレスを取得する。
+ *
+ * \details 実仕様は複数プロトコル(OBD/UDS×CAN/FlexRay/IP等)・複数コネクションを
+ *          動的に追跡するが、本プロジェクトは UDS on CAN の単一プロトコル・
+ *          単一コネクション・物理アドレッシング固定構成のため、`ActiveProtocolType`
+ *          は常に `DCM_UDS_ON_CAN`、`ConnectionId`は常に`DCM_CONNECTION_ID`(0)、
+ *          `TesterSourceAddress`は常に`DCM_TESTER_SOURCE_ADDRESS`(UDS診断要求の
+ *          CAN ID)を返す固定値実装とする（Dcm_Cfg.h 参照）。
+ *
+ * \param[out]  ActiveProtocolType    アクティブなプロトコル種別の格納先。NULL 禁止。
+ * \param[out]  ConnectionId          コネクション識別子の格納先。NULL 禁止。
+ * \param[out]  TesterSourceAddress   テスターの送信元アドレスの格納先。NULL 禁止。
+ *
+ * \retval  E_OK      正常取得（実仕様上、値取得自体は常に成功する）。
+ * \retval  E_NOT_OK  未初期化、またはいずれかの引数が NULL。
+ *
+ * \AUTOSARReq     {SWS_Dcm_00340}
+ * \ServiceID      {0x0f}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType Dcm_GetActiveProtocol(Dcm_ProtocolType* ActiveProtocolType, uint16* ConnectionId, uint16* TesterSourceAddress)
+{
+    DET_LOGT(TAG, "called");
+    if (!Dcm_Initialized)
+    {
+        Det_ReportError(DCM_MODULE_ID, 0U, DCM_API_ID_GET_ACTIVE_PROTOCOL, DCM_E_UNINIT);
+        return E_NOT_OK;
+    }
+
+    if (ActiveProtocolType == NULL || ConnectionId == NULL || TesterSourceAddress == NULL)
+    {
+        Det_ReportError(DCM_MODULE_ID, 0U, DCM_API_ID_GET_ACTIVE_PROTOCOL, DCM_E_PARAM_POINTER);
+        return E_NOT_OK;
+    }
+
+    *ActiveProtocolType  = DCM_UDS_ON_CAN;
+    *ConnectionId        = DCM_CONNECTION_ID;
+    *TesterSourceAddress = DCM_TESTER_SOURCE_ADDRESS;
+    return E_OK;
+}
+
+/**
  * \brief   DCM モジュールのバージョン情報を取得する。
  *
  * \details Dcm_Init と並び、未初期化時でも DCM_E_UNINIT を報告しない

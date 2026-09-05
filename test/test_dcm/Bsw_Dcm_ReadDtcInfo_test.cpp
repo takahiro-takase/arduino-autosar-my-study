@@ -294,6 +294,49 @@ TEST_F(Bsw_Dcm_ReadDtcInfo_Test, GetSecurityLevel_NG_NullPointerReturnsError)
 }
 
 // ------------------------------------------------------------
+// Dcm_GetActiveProtocol（[SWS_Dcm_00340]、2026-09-05 新設。単一プロトコル・
+// 単一コネクション構成のため、固定値を返すだけの実装であることを検証する）
+// ------------------------------------------------------------
+
+TEST_F(Bsw_Dcm_ReadDtcInfo_Test, GetActiveProtocol_OK_ReturnsFixedUdsOnCanValues)
+{
+    Dcm_ProtocolType protocol = 0xFFU;
+    uint16 connectionId       = 0xFFFFU;
+    uint16 testerAddress      = 0xFFFFU;
+
+    Std_ReturnType ret = Dcm_GetActiveProtocol(&protocol, &connectionId, &testerAddress);
+
+    EXPECT_EQ(ret, E_OK);
+    EXPECT_EQ(protocol, DCM_UDS_ON_CAN);
+    EXPECT_EQ(connectionId, DCM_CONNECTION_ID);
+    EXPECT_EQ(testerAddress, DCM_TESTER_SOURCE_ADDRESS);
+}
+
+TEST_F(Bsw_Dcm_ReadDtcInfo_Test, GetActiveProtocol_NG_NullActiveProtocolTypeReturnsError)
+{
+    uint16 connectionId  = 0U;
+    uint16 testerAddress = 0U;
+
+    EXPECT_EQ(Dcm_GetActiveProtocol(NULL, &connectionId, &testerAddress), E_NOT_OK);
+}
+
+TEST_F(Bsw_Dcm_ReadDtcInfo_Test, GetActiveProtocol_NG_NullConnectionIdReturnsError)
+{
+    Dcm_ProtocolType protocol = 0U;
+    uint16 testerAddress      = 0U;
+
+    EXPECT_EQ(Dcm_GetActiveProtocol(&protocol, NULL, &testerAddress), E_NOT_OK);
+}
+
+TEST_F(Bsw_Dcm_ReadDtcInfo_Test, GetActiveProtocol_NG_NullTesterSourceAddressReturnsError)
+{
+    Dcm_ProtocolType protocol = 0U;
+    uint16 connectionId       = 0U;
+
+    EXPECT_EQ(Dcm_GetActiveProtocol(&protocol, &connectionId, NULL), E_NOT_OK);
+}
+
+// ------------------------------------------------------------
 // Dcm_ResetToDefaultSession（[SWS_Dcm_00520]。既存の3箇所（明示的な0x10
 // defaultSession要求・S3タイムアウト・0x11 ECUReset後）に重複していた
 // セッションリセット処理列を集約した新規公開API。3箇所からの呼び出しの

@@ -107,6 +107,14 @@
 #define DCM_API_ID_MAIN_FUNCTION  0x25U
 #define DCM_API_ID_COM_INDICATION 0xF0U
 #define DCM_API_ID_GET_VERSION_INFO 0x24U
+#define DCM_API_ID_GET_ACTIVE_PROTOCOL 0x0FU
+
+/** Dcm_GetActiveProtocol() 用の固定値。本プロジェクトは単一プロトコル
+ *  (UDS on CAN)・単一コネクション・物理アドレッシング固定のため、実仕様が
+ *  要求する「複数プロトコル/コネクションの動的追跡」は行わず、常にこの
+ *  固定値を返す。 */
+#define DCM_CONNECTION_ID           0U       /**< 唯一のコネクションのID（追跡不要のため固定） */
+#define DCM_TESTER_SOURCE_ADDRESS   0x7E0U   /**< UDS 診断要求の CAN ID（CanIf_PBCfg.c の RxPduId=1 と同じ値） */
 
 /** バージョン情報（SWS_Dcm、Com/E2EXf/PduR 等の既存モジュールと同じ命名規則） */
 #define DCM_VENDOR_ID          0U
