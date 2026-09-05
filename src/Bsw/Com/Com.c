@@ -1576,10 +1576,11 @@ uint8 Com_ReceiveSignal(Com_SignalIdType SignalId, void* SignalDataPtr)
 /**
  * \brief   RX Signal Group を I-PDU バッファから RX シャドウバッファへ確定コピーする。
  *
- * \details Com_SendSignalGroup()（TX 側）の対称版。GroupId が RX Signal Group
- *          （IsSignalGroup=1）であれば、Com_RxBuffer[GroupId] の内容を
- *          Com_RxShadowBuffer[GroupId] へバイト単位でコピーし、あわせて
- *          その時点の Com_RxTimedOut[GroupId] を Com_RxShadowTimedOut[GroupId]
+ * \details Com_SendSignalGroup()（TX 側）の対称版。SignalGroupId が RX Signal
+ *          Group（IsSignalGroup=1）であれば、Com_RxBuffer[SignalGroupId] の
+ *          内容を Com_RxShadowBuffer[SignalGroupId] へバイト単位でコピーし、
+ *          あわせてその時点の Com_RxTimedOut[SignalGroupId] を
+ *          Com_RxShadowTimedOut[SignalGroupId]
  *          へスナップショットする。以降 Com_ReceiveSignal() は、このグループに
  *          属するシグナルに対してこのスナップショットを読む（次に
  *          Com_ReceiveSignalGroup() が呼ばれるまで更新されない）。
@@ -1611,11 +1612,12 @@ uint8 Com_ReceiveSignal(Com_SignalIdType SignalId, void* SignalDataPtr)
  *          group... It will only be discarded"）。1（更新済み、SWS_Com_00067）
  *          の場合のみ、以下の通常の確定コピー処理を行う。
  *
- * \param[in]  GroupId  確定コピーする RX Signal Group（RX I-PDU）の ID。
+ * \param[in]  SignalGroupId  確定コピーする RX Signal Group の ID（所属する
+ *                            RX I-PDU の ID と同じ、Com_Types.h 参照）。
  *
- * \retval  E_OK      GroupId が見つかり、コピー時点でタイムアウト中でなかった
- *                    （または update-bit=0 のため何もせず破棄した）。
- * \retval  E_NOT_OK  COM 未初期化、GroupId が RX I-PDU 設定テーブルに
+ * \retval  E_OK      SignalGroupId が見つかり、コピー時点でタイムアウト中で
+ *                    なかった（または update-bit=0 のため何もせず破棄した）。
+ * \retval  E_NOT_OK  COM 未初期化、SignalGroupId が RX I-PDU 設定テーブルに
  *                    存在しない、IsSignalGroup=0 の I-PDU を指定した、
  *                    またはコピーは行ったがコピー時点でタイムアウト中だった。
  *
@@ -1627,7 +1629,7 @@ uint8 Com_ReceiveSignal(Com_SignalIdType SignalId, void* SignalDataPtr)
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
  */
-Std_ReturnType Com_ReceiveSignalGroup(Com_IPduIdType GroupId)
+uint8 Com_ReceiveSignalGroup(Com_SignalGroupIdType SignalGroupId)
 {
     DET_LOGT(TAG, "called");
 
@@ -1637,23 +1639,23 @@ Std_ReturnType Com_ReceiveSignalGroup(Com_IPduIdType GroupId)
         return E_NOT_OK;
     }
 
-    /* 範囲チェック: GroupId をそのまま Com_RxBuffer[] 等の配列添字として
+    /* 範囲チェック: SignalGroupId をそのまま Com_RxBuffer[] 等の配列添字として
      * 使うため、RX I-PDU 設定テーブル自体に範囲外の IPduId が設定される
      * 事態に備えて明示的に検査する（Com_ReceiveSignal/Com_SendSignalGroup と
      * 同じ方針）。 */
-    if (GroupId >= COM_RX_IPDU_MAX)
+    if (SignalGroupId >= COM_RX_IPDU_MAX)
     {
-        DET_LOGE(TAG, "ReceiveSignalGroup E: GroupId=%u out of range (max=%u)",
-                 (unsigned)GroupId, (unsigned)COM_RX_IPDU_MAX);
+        DET_LOGE(TAG, "ReceiveSignalGroup E: SignalGroupId=%u out of range (max=%u)",
+                 (unsigned)SignalGroupId, (unsigned)COM_RX_IPDU_MAX);
         Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_RECEIVE_SIGNAL_GROUP, COM_E_PARAM);
         return E_NOT_OK;
     }
 
-    const Com_IPduConfigType* ipdu = Com_FindRxIPdu(GroupId);
+    const Com_IPduConfigType* ipdu = Com_FindRxIPdu(SignalGroupId);
     if (ipdu == NULL || ipdu->IsSignalGroup == 0U)
     {
-        DET_LOGE(TAG, "ReceiveSignalGroup E: GroupId=%u not found or not a Signal Group",
-                 (unsigned)GroupId);
+        DET_LOGE(TAG, "ReceiveSignalGroup E: SignalGroupId=%u not found or not a Signal Group",
+                 (unsigned)SignalGroupId);
         Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_RECEIVE_SIGNAL_GROUP, COM_E_PARAM);
         return E_NOT_OK;
     }
@@ -1664,18 +1666,18 @@ Std_ReturnType Com_ReceiveSignalGroup(Com_IPduIdType GroupId)
      * コピーした内容を Com_ReceiveSignal() が返し続ける）。 */
     if (ipdu->UpdateBitPosition != 0xFFU)
     {
-        const uint32 updateBit = Com_UnpackSignal(Com_RxBuffer[GroupId],
+        const uint32 updateBit = Com_UnpackSignal(Com_RxBuffer[SignalGroupId],
                                                     ipdu->UpdateBitPosition, 1U, COM_BIG_ENDIAN);
         if (updateBit == 0U)
             return E_OK;
     }
 
     for (uint8 b = 0U; b < ipdu->DLC; b++)
-        Com_RxShadowBuffer[GroupId][b] = Com_RxBuffer[GroupId][b];
+        Com_RxShadowBuffer[SignalGroupId][b] = Com_RxBuffer[SignalGroupId][b];
 
-    Com_RxShadowTimedOut[GroupId] = Com_RxTimedOut[GroupId];
+    Com_RxShadowTimedOut[SignalGroupId] = Com_RxTimedOut[SignalGroupId];
 
-    return Com_RxShadowTimedOut[GroupId] ? E_NOT_OK : E_OK;
+    return Com_RxShadowTimedOut[SignalGroupId] ? E_NOT_OK : E_OK;
 }
 
 /**
@@ -1991,10 +1993,11 @@ uint8 Com_SendSignal(Com_SignalIdType SignalId, const void* SignalDataPtr)
  *          （値が実際に変化したかどうかは問わない。Com_GroupTriggerPending
  *          とは独立の判断軸）。クリアは Com_DoTransmit() 側で行う。
  *
- * \param[in]  GroupId  コミットする Signal Group（TX I-PDU）の ID。
+ * \param[in]  SignalGroupId  コミットする Signal Group の ID（所属する TX
+ *                            I-PDU の ID と同じ、Com_Types.h 参照）。
  *
- * \retval  E_OK      GroupId が見つかり、コミット処理を行った。
- * \retval  E_NOT_OK  COM 未初期化、GroupId が TX I-PDU 設定テーブルに
+ * \retval  E_OK      SignalGroupId が見つかり、コミット処理を行った。
+ * \retval  E_NOT_OK  COM 未初期化、SignalGroupId が TX I-PDU 設定テーブルに
  *                    存在しない、または IsSignalGroup=0 の I-PDU を指定した。
  *
  * \pre        Com_Init() が正常に完了していること。
@@ -2007,7 +2010,7 @@ uint8 Com_SendSignal(Com_SignalIdType SignalId, const void* SignalDataPtr)
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
  */
-Std_ReturnType Com_SendSignalGroup(Com_IPduIdType GroupId)
+uint8 Com_SendSignalGroup(Com_SignalGroupIdType SignalGroupId)
 {
     DET_LOGT(TAG, "called");
 
@@ -2017,23 +2020,23 @@ Std_ReturnType Com_SendSignalGroup(Com_IPduIdType GroupId)
         return E_NOT_OK;
     }
 
-    /* 範囲チェック: GroupId をそのまま Com_TxBuffer[] 等の配列添字として
+    /* 範囲チェック: SignalGroupId をそのまま Com_TxBuffer[] 等の配列添字として
      * 使うため、TX I-PDU 設定テーブル自体に範囲外の IPduId が設定される
      * 事態に備えて明示的に検査する（Com_ReceiveSignal/Com_SendSignal と
      * 同じ方針）。 */
-    if (GroupId >= COM_TX_IPDU_MAX)
+    if (SignalGroupId >= COM_TX_IPDU_MAX)
     {
-        DET_LOGE(TAG, "SendSignalGroup E: GroupId=%u out of range (max=%u)",
-                 (unsigned)GroupId, (unsigned)COM_TX_IPDU_MAX);
+        DET_LOGE(TAG, "SendSignalGroup E: SignalGroupId=%u out of range (max=%u)",
+                 (unsigned)SignalGroupId, (unsigned)COM_TX_IPDU_MAX);
         Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_SEND_SIGNAL_GROUP, COM_E_PARAM);
         return E_NOT_OK;
     }
 
-    const Com_IPduConfigType* ipdu = Com_FindTxIPdu(GroupId);
+    const Com_IPduConfigType* ipdu = Com_FindTxIPdu(SignalGroupId);
     if (ipdu == NULL || ipdu->IsSignalGroup == 0U)
     {
-        DET_LOGE(TAG, "SendSignalGroup E: GroupId=%u not found or not a Signal Group",
-                 (unsigned)GroupId);
+        DET_LOGE(TAG, "SendSignalGroup E: SignalGroupId=%u not found or not a Signal Group",
+                 (unsigned)SignalGroupId);
         Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_SEND_SIGNAL_GROUP, COM_E_PARAM);
         return E_NOT_OK;
     }
@@ -2043,7 +2046,7 @@ Std_ReturnType Com_SendSignalGroup(Com_IPduIdType GroupId)
      * メンバーが引き起こした送信に便乗して最新値が運ばれる）。 */
     for (uint8 b = 0U; b < ipdu->DLC; b++)
     {
-        Com_TxBuffer[GroupId][b] = Com_TxShadowBuffer[GroupId][b];
+        Com_TxBuffer[SignalGroupId][b] = Com_TxShadowBuffer[SignalGroupId][b];
     }
 
     /* TMS 再評価（SWS_Com_00245）。Com_RequestTxOnChange() が
@@ -2053,14 +2056,14 @@ Std_ReturnType Com_SendSignalGroup(Com_IPduIdType GroupId)
      * これは仕様上の矛盾ではない（TMS は「次に送信するときどのモードを
      * 使うか」を決めるだけで、それ自体が送信のトリガーではないため）。
      * 戻り値（TMS が今回変化したか）は下記 SWS_Com_00495 対応で使う。 */
-    const uint8 tmsChanged = Com_RecalcTms(GroupId);
+    const uint8 tmsChanged = Com_RecalcTms(SignalGroupId);
 
     /* 送信を引き起こすかどうかは、ComTransferProperty=TRIGGERED_ON_CHANGE の
      * メンバーが Com_SendSignal() 内で変化検知して立てたフラグのみで判定する
      * （バイト単位の生比較はしない。PENDING メンバーだけが変化した場合は
      * このフラグは立たず、コミットはされても送信は引き起こされない）。 */
-    const uint8 groupTriggered = Com_GroupTriggerPending[GroupId];
-    Com_GroupTriggerPending[GroupId] = 0U;
+    const uint8 groupTriggered = Com_GroupTriggerPending[SignalGroupId];
+    Com_GroupTriggerPending[SignalGroupId] = 0U;
 
     /* SWS_Com_00495: TMS の遷移によって送信モードが切り替わった場合は、
      * その変化を起こしたシグナルの ComTransferProperty（TRIGGERED_ON_CHANGE/
@@ -2091,7 +2094,7 @@ Std_ReturnType Com_SendSignalGroup(Com_IPduIdType GroupId)
      * の条件には含めない（groupTriggered のみで判定する）。 */
     if (groupTriggered && ipdu->UpdateBitPosition != 0xFFU)
     {
-        Com_PackSignal(Com_TxBuffer[GroupId], ipdu->UpdateBitPosition, 1U, COM_BIG_ENDIAN, 1U);
+        Com_PackSignal(Com_TxBuffer[SignalGroupId], ipdu->UpdateBitPosition, 1U, COM_BIG_ENDIAN, 1U);
     }
 
     return E_OK;
@@ -2320,7 +2323,7 @@ uint8 Com_InvalidateSignal(Com_SignalIdType SignalId)
  * \Reentrancy     {Non Reentrant for the same signal group. Reentrant for different signal groups.}
  * \Synchronicity  {Asynchronous}
  */
-uint8 Com_InvalidateSignalGroup(Com_IPduIdType SignalGroupId)
+uint8 Com_InvalidateSignalGroup(Com_SignalGroupIdType SignalGroupId)
 {
     DET_LOGT(TAG, "called");
 

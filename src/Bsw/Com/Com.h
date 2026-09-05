@@ -89,10 +89,15 @@ uint8 Com_ReceiveSignal(Com_SignalIdType SignalId, void* SignalDataPtr);
  *          Com_RxBuffer を上書きしても）読み取り側は常にこの呼び出し時点の
  *          一貫したスナップショットを見る。
  *
- * \param[in]  GroupId  確定コピーする RX Signal Group（RX I-PDU）の ID。
+ * \param[in]  SignalGroupId  確定コピーする RX Signal Group の ID。本プロジェクトは
+ *                            Signal Group を専用の ID 空間ではなく、所属する
+ *                            RX I-PDU の ID（`Com_IPduIdType`）でそのまま識別する
+ *                            簡略設計のため、`Com_SignalGroupIdType` は
+ *                            `Com_IPduIdType` と同じ `uint8` の別名として定義する
+ *                            （Com_Types.h 参照）。
  *
- * \retval  E_OK      GroupId が見つかり、コピーを行った（かつ現在タイムアウト中でない）。
- * \retval  E_NOT_OK  COM 未初期化、GroupId が RX I-PDU 設定テーブルに
+ * \retval  E_OK      SignalGroupId が見つかり、コピーを行った（かつ現在タイムアウト中でない）。
+ * \retval  E_NOT_OK  COM 未初期化、SignalGroupId が RX I-PDU 設定テーブルに
  *                    存在しない、IsSignalGroup=0 の I-PDU を指定した、
  *                    またはコピー自体は行ったが当該 I-PDU が現在デッドライン
  *                    監視タイムアウト中である。
@@ -102,7 +107,7 @@ uint8 Com_ReceiveSignal(Com_SignalIdType SignalId, void* SignalDataPtr);
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
  */
-Std_ReturnType Com_ReceiveSignalGroup(Com_IPduIdType GroupId);
+uint8 Com_ReceiveSignalGroup(Com_SignalGroupIdType SignalGroupId);
 
 /**
  * \brief   RX I-PDU の生バイト列をそのままコピーする（E2E Transformer 等向け）。
@@ -147,8 +152,10 @@ uint8 Com_IsRxTimedOut(Com_IPduIdType IPduId);
 
 /* SWS_Com_00197 */
 uint8 Com_SendSignal(Com_SignalIdType SignalId, const void* SignalDataPtr);
-/* SWS_Com_00200: Signal Group メンバーをシャドウバッファへまとめて確定コミットする */
-Std_ReturnType Com_SendSignalGroup(Com_IPduIdType GroupId);
+/* SWS_Com_00200: Signal Group メンバーをシャドウバッファへまとめて確定コミットする。
+ * SignalGroupId は所属する TX I-PDU の ID（Com_IPduIdType と同じ uint8 の別名
+ * Com_SignalGroupIdType、Com_Types.h 参照）。 */
+uint8 Com_SendSignalGroup(Com_SignalGroupIdType SignalGroupId);
 
 /**
  * \brief   TX I-PDU へ生バイト列をそのままコミットする（Signal Group 単位）。
@@ -212,7 +219,7 @@ uint8 Com_InvalidateSignal(Com_SignalIdType SignalId);
  * \Reentrancy     {Non Reentrant for the same signal group. Reentrant for different signal groups.}
  * \Synchronicity  {Asynchronous}
  */
-uint8 Com_InvalidateSignalGroup(Com_IPduIdType SignalGroupId);
+uint8 Com_InvalidateSignalGroup(Com_SignalGroupIdType SignalGroupId);
 
 /**
  * \brief   TX I-PDU を、値の変化や送信モードに関わらず今すぐ送信要求する。
