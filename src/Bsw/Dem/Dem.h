@@ -131,8 +131,11 @@ typedef struct Dem_ConfigType_Tag Dem_ConfigType;
  *
  * \pre        EcuM_Init() から、Com_Init() の後に呼び出すこと。
  *
+ * \note    ServiceID 0x01 は実仕様では未実装の `Dem_PreInit`（[SWS_Dem_00180]）
+ *          に割り当てられており、本関数の正しい ServiceID は 0x02 である。
+ *
  * \AUTOSARReq     {SWS_Dem_00181}
- * \ServiceID      {0x01}
+ * \ServiceID      {0x02}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
  */

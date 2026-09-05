@@ -2,9 +2,15 @@
  * \file    Dcm_Cbk.h
  * \brief   DCM コールバック 公開インタフェース (AUTOSAR SWS_DCM 簡易実装)
  * \details PduR から呼び出される DCM 受信コールバックを宣言する。
- *          AUTOSAR では Dcm_ComIndication が SWS_Dcm で規定されており、
- *          PduR が受信 PDU を DCM へルーティングする際に呼び出す。
- *          本実装は学習用の簡易スタブであり、受信内容を Det 経由でログ出力する。
+ *          `Dcm_ComIndication` という名前・シグネチャ自体は SWS_Dcm 本文には
+ *          存在しない、本プロジェクト独自の関数である（2026-09-05 是正前は
+ *          誤って「AUTOSAR 規定」と記載していた）。実仕様は CanTp からの
+ *          受信を `Dcm_StartOfReception`/`Dcm_CopyRxData`/`Dcm_TpRxIndication`
+ *          の3関数へ分割し、ペイロードを逐次コピーさせる設計だが、本プロジェクトの
+ *          CanTp は組み立て済みバッファを `PduInfoType*` で丸ごと1回で渡すため、
+ *          単純な改名では実仕様に合わせられない（アーキテクチャ自体が異なる）。
+ *          本実装は組み立て済み UDS ペイロードを受け取り、SID ディスパッチまで
+ *          含めて処理する。
  *
  * \copyright  Copyright (c) 2025 T_T
  * \license    MIT License - 詳細は LICENSE ファイルを参照。

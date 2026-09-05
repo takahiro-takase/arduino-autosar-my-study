@@ -274,7 +274,10 @@ static void Dem_EvaluatePendingClear(Dem_EventIdType EventId)
  *          サイクル境界での評価対象ではないため、そのまま復元するだけでよい。
  *          マジックバイトが無効なら全イベントを初期状態にして NvM へ書き込む。
  *
- * \ServiceID      {0x01}
+ * \note    ServiceID 0x01 は実仕様では未実装の `Dem_PreInit`（[SWS_Dem_00180]）
+ *          に割り当てられており、本関数の正しい ServiceID は 0x02 である。
+ *
+ * \ServiceID      {0x02}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
  */
