@@ -782,7 +782,7 @@ Std_ReturnType Dem_ClearOneDtc(Dem_EventIdType EventId)
  * \param[out]  count      マッチした DTC 数。
  * \param[in]   statusMask 絞り込みマスク。0xFF で全件取得。
  *
- * \ServiceID      {0x24}
+ * \ServiceID      {0x2B}
  * \Reentrancy     {Reentrant}
  * \Synchronicity  {Synchronous}
  */
@@ -860,7 +860,7 @@ void Dem_GetSupportedDTCs(uint32* dtcBuf, uint8* statusBuf, uint8* count)
  * \details Dem_SetEventStatus() が参照する「現在値」を上書きするだけで、
  *          この時点では FreezeFrameTable へのコピーは行わない。
  *
- * \ServiceID      {0x25}
+ * \ServiceID      {0x2C}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
  */

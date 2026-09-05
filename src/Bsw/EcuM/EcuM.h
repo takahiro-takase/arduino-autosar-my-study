@@ -107,7 +107,12 @@ void EcuM_MainFunction(void);
  *
  * \return  EcuM_StateType (STARTUP / RUN / POST_RUN / SHUTDOWN)
  *
- * \ServiceID      {0x06}
+ * \note       AUTOSAR 標準の SWS_EcuM には存在しない本プロジェクト独自の
+ *             拡張関数（EcuM_StateType 自体が実仕様 4.2.2 以降で廃止された
+ *             概念）のため、対応する \AUTOSARReq は無い。ApiId は自己割当だが、
+ *             従来の 0x06 は実仕様の EcuM_SelectShutdownTarget([SWS_EcuM_02822])
+ *             の正規 ServiceID と衝突していたため、未使用の 0x05 へ変更した。
+ * \ServiceID      {0x05}
  * \Reentrancy     {Reentrant}
  * \Synchronicity  {Synchronous}
  */

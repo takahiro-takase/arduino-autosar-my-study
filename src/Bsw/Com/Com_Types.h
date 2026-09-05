@@ -31,13 +31,6 @@ typedef uint8 Com_IpduGroupIdType;
  *  いたが、実仕様が要求する専用の型名としてシグネチャを合わせた）。 */
 typedef uint8 Com_SignalGroupIdType;
 
-/** \note   `Com_SendSignalGroup`/`Com_ReceiveSignalGroup`/`Com_InvalidateSignalGroup`
- *          は本是正で `Com_SignalGroupIdType` へ移行済み。一方 `Com_SendSignalGroupArray`/
- *          `Com_ReceiveSignalGroupArray`（Com.h 参照）も実仕様上は同じ
- *          `Com_SignalGroupIdType` を引数に取るはずだが、戻り値型
- *          （`Std_ReturnType`→仕様は`uint8`）・ServiceID の再確認も合わせて
- *          必要なため、今回は対象外とし次回サーベイの候補として残している。 */
-
 /* I-PDU が所属する I-PDU Group を持たないことを示すセンチネル値
  * （UpdateBitPosition の 0xFF センチネルと同じ規約）。
  * [SWS_Com_00840]: I-PDU Group に属さない I-PDU は Com_Init() 時に常に

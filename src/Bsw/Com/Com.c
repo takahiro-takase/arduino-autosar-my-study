@@ -1694,21 +1694,27 @@ uint8 Com_ReceiveSignalGroup(Com_SignalGroupIdType SignalGroupId)
  *          （RxIndicationCbk はフレーム受信直後、タイムアウト判定より前に
  *          呼ばれるため、このコピー自体は常に「最新の受信データ」を指す）。
  *
- * \param[in]  IPduId   読み取る RX I-PDU の ID。
- * \param[out] DataPtr  コピー先バッファへのポインタ。ipdu->DLC バイト以上
- *                      必要。NULL 禁止。
+ * \param[in]  SignalGroupId  読み取る Signal Group（RX I-PDU）の ID。本プロジェクトは
+ *                            Signal Group を専用の ID 空間に持たず所属 I-PDU の ID を
+ *                            そのまま使う簡略設計のため、Com_SignalGroupIdType は
+ *                            Com_IPduIdType と同じ uint8 の別名（Com_Types.h 参照）。
+ * \param[out] DataPtr        コピー先バッファへのポインタ。ipdu->DLC バイト以上
+ *                            必要。NULL 禁止。
  *
- * \retval  E_OK      IPduId が見つかり、DataPtr へコピーした。
+ * \retval  E_OK      SignalGroupId が見つかり、DataPtr へコピーした。
  * \retval  E_NOT_OK  COM 未初期化、DataPtr が NULL、
- *                    または IPduId が RX I-PDU 設定に存在しない。
+ *                    または SignalGroupId が RX I-PDU 設定に存在しない。
  *
  * \pre        Com_Init() が正常に完了していること。
  *
+ * \note    実仕様([SWS_Com_00854])は戻り値型 uint8・引数型 Com_SignalGroupIdType
+ *          だが、以前は Com_SendSignalGroup/Com_ReceiveSignalGroup(PR#192で修正済み)
+ *          と同じ乖離が残っていた。今回まとめて修正。
  * \ServiceID      {0x24}
  * \Reentrancy     {Reentrant}
  * \Synchronicity  {Synchronous}
  */
-Std_ReturnType Com_ReceiveSignalGroupArray(Com_IPduIdType IPduId, uint8* DataPtr)
+uint8 Com_ReceiveSignalGroupArray(Com_SignalGroupIdType SignalGroupId, uint8* DataPtr)
 {
     DET_LOGT(TAG, "called");
 
@@ -1723,16 +1729,16 @@ Std_ReturnType Com_ReceiveSignalGroupArray(Com_IPduIdType IPduId, uint8* DataPtr
         return E_NOT_OK;
     }
 
-    const Com_IPduConfigType* ipdu = Com_FindRxIPdu(IPduId);
+    const Com_IPduConfigType* ipdu = Com_FindRxIPdu(SignalGroupId);
     if (ipdu == NULL)
     {
-        DET_LOGE(TAG, "ReceiveSignalGroupArray E: IPduId=%u not found", (unsigned)IPduId);
+        DET_LOGE(TAG, "ReceiveSignalGroupArray E: SignalGroupId=%u not found", (unsigned)SignalGroupId);
         Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_RECEIVE_SIGNAL_GROUP_ARRAY, COM_E_PARAM);
         return E_NOT_OK;
     }
 
     for (uint8 b = 0; b < ipdu->DLC; b++)
-        DataPtr[b] = Com_RxBuffer[IPduId][b];
+        DataPtr[b] = Com_RxBuffer[SignalGroupId][b];
     return E_OK;
 }
 
@@ -2135,23 +2141,29 @@ uint8 Com_SendSignalGroup(Com_SignalGroupIdType SignalGroupId)
  *          等）に合わせた対策であり、本関数は呼び出し側が明示的に「新しい
  *          データがある」ときのみ呼ぶ想定の別 API のため、その対策は不要）。
  *
- * \param[in]  GroupId  コミットする Signal Group（TX I-PDU）の ID。
- * \param[in]  DataPtr  書き込む生バイト列。ipdu->DLC バイト以上必要。NULL 禁止。
+ * \param[in]  SignalGroupId  コミットする Signal Group（TX I-PDU）の ID。本プロジェクトは
+ *                            Signal Group を専用の ID 空間に持たず所属 I-PDU の ID を
+ *                            そのまま使う簡略設計のため、Com_SignalGroupIdType は
+ *                            Com_IPduIdType と同じ uint8 の別名（Com_Types.h 参照）。
+ * \param[in]  DataPtr        書き込む生バイト列。ipdu->DLC バイト以上必要。NULL 禁止。
  *
- * \retval  E_OK      GroupId が見つかり、書き込み・コミット処理を行った。
- * \retval  E_NOT_OK  COM 未初期化、DataPtr が NULL、GroupId が TX I-PDU 設定
+ * \retval  E_OK      SignalGroupId が見つかり、書き込み・コミット処理を行った。
+ * \retval  E_NOT_OK  COM 未初期化、DataPtr が NULL、SignalGroupId が TX I-PDU 設定
  *                    テーブルに存在しない、または IsSignalGroup=0 の I-PDU
  *                    を指定した。
  *
  * \pre        Com_Init() が正常に完了していること。
  *
+ * \note    実仕様([SWS_Com_00851])は戻り値型 uint8・引数型 Com_SignalGroupIdType
+ *          だが、以前は Com_SendSignalGroup/Com_ReceiveSignalGroup(PR#192で修正済み)
+ *          と同じ乖離が残っていた。今回まとめて修正。
  * \AUTOSARReq     {SWS_Com_00851, SWS_Com_00852, SWS_Com_00853}
  * \ServiceID      {0x23}
  * \Reentrancy     {Non Reentrant for the same signal group. Reentrant for
  *                  different signal groups.}
  * \Synchronicity  {Asynchronous}
  */
-Std_ReturnType Com_SendSignalGroupArray(Com_IPduIdType GroupId, const uint8* DataPtr)
+uint8 Com_SendSignalGroupArray(Com_SignalGroupIdType SignalGroupId, const uint8* DataPtr)
 {
     DET_LOGT(TAG, "called");
 
@@ -2166,22 +2178,22 @@ Std_ReturnType Com_SendSignalGroupArray(Com_IPduIdType GroupId, const uint8* Dat
         return E_NOT_OK;
     }
 
-    /* 範囲チェック: GroupId をそのまま Com_TxBuffer[] 等の配列添字として使う
-     * ため、TX I-PDU 設定テーブル自体に範囲外の IPduId が設定される事態に
+    /* 範囲チェック: SignalGroupId をそのまま Com_TxBuffer[] 等の配列添字として
+     * 使うため、TX I-PDU 設定テーブル自体に範囲外の IPduId が設定される事態に
      * 備えて明示的に検査する（Com_SendSignalGroup() と同じ方針）。 */
-    if (GroupId >= COM_TX_IPDU_MAX)
+    if (SignalGroupId >= COM_TX_IPDU_MAX)
     {
-        DET_LOGE(TAG, "SendSignalGroupArray E: GroupId=%u out of range (max=%u)",
-                 (unsigned)GroupId, (unsigned)COM_TX_IPDU_MAX);
+        DET_LOGE(TAG, "SendSignalGroupArray E: SignalGroupId=%u out of range (max=%u)",
+                 (unsigned)SignalGroupId, (unsigned)COM_TX_IPDU_MAX);
         Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_SEND_SIGNAL_GROUP_ARRAY, COM_E_PARAM);
         return E_NOT_OK;
     }
 
-    const Com_IPduConfigType* ipdu = Com_FindTxIPdu(GroupId);
+    const Com_IPduConfigType* ipdu = Com_FindTxIPdu(SignalGroupId);
     if (ipdu == NULL || ipdu->IsSignalGroup == 0U)
     {
-        DET_LOGE(TAG, "SendSignalGroupArray E: GroupId=%u not found or not a Signal Group",
-                 (unsigned)GroupId);
+        DET_LOGE(TAG, "SendSignalGroupArray E: SignalGroupId=%u not found or not a Signal Group",
+                 (unsigned)SignalGroupId);
         Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_SEND_SIGNAL_GROUP_ARRAY, COM_E_PARAM);
         return E_NOT_OK;
     }
@@ -2190,18 +2202,18 @@ Std_ReturnType Com_SendSignalGroupArray(Com_IPduIdType GroupId, const uint8* Dat
      * 上の \details 参照。 */
     for (uint8 b = 0U; b < ipdu->DLC; b++)
     {
-        Com_TxBuffer[GroupId][b]       = DataPtr[b];
-        Com_TxShadowBuffer[GroupId][b] = DataPtr[b];
+        Com_TxBuffer[SignalGroupId][b]       = DataPtr[b];
+        Com_TxShadowBuffer[SignalGroupId][b] = DataPtr[b];
     }
 
-    Com_GroupTriggerPending[GroupId] = 0U;
+    Com_GroupTriggerPending[SignalGroupId] = 0U;
 
     for (uint8 s = 0U; s < Com_ConfigPtr->SignalCount; s++)
     {
         const Com_SignalConfigType* sig = &Com_ConfigPtr->Signals[s];
-        if (sig->Direction == COM_SIGNAL_DIRECTION_TX && sig->IPduId == GroupId)
+        if (sig->Direction == COM_SIGNAL_DIRECTION_TX && sig->IPduId == SignalGroupId)
         {
-            Com_FilterLastValue[s] = Com_UnpackSignal(Com_TxBuffer[GroupId],
+            Com_FilterLastValue[s] = Com_UnpackSignal(Com_TxBuffer[SignalGroupId],
                                                         sig->BitPosition, sig->BitSize, sig->Endian);
         }
     }
@@ -2211,12 +2223,12 @@ Std_ReturnType Com_SendSignalGroupArray(Com_IPduIdType GroupId, const uint8* Dat
      * 送信要求するため、TMS 遷移かどうかで分岐する必要がない
      * （SWS_Com_00495 が要求する「TMS 遷移は無条件で即座に送信」も、
      * この無条件送信要求に自然に含まれる）。 */
-    (void)Com_RecalcTms(GroupId);
+    (void)Com_RecalcTms(SignalGroupId);
     Com_RequestTxOnChange(ipdu);
 
     if (ipdu->UpdateBitPosition != 0xFFU)
     {
-        Com_PackSignal(Com_TxBuffer[GroupId], ipdu->UpdateBitPosition, 1U, COM_BIG_ENDIAN, 1U);
+        Com_PackSignal(Com_TxBuffer[SignalGroupId], ipdu->UpdateBitPosition, 1U, COM_BIG_ENDIAN, 1U);
     }
 
     return E_OK;

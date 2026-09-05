@@ -450,8 +450,10 @@ void WdgM_DisableHwWatchdog(void)
  *          回復判定）にのみクリアされるようにする。
  *
  * \note       AUTOSAR 標準の SWS_WdgM には存在しない本プロジェクト独自の
- *             拡張関数のため、対応する \AUTOSARReq は無い。
- * \ServiceID      {0x08}
+ *             拡張関数のため、対応する \AUTOSARReq は無い。ApiId は自己割当
+ *             だが、従来の 0x08 は実仕様の WdgM_MainFunction([SWS_WdgM_00159])
+ *             の正規 ServiceID と衝突していたため、未使用の 0x0a へ変更した。
+ * \ServiceID      {0x0a}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
  */

@@ -254,8 +254,10 @@ void WdgM_DisableHwWatchdog(void);
  *
  * \note       AUTOSAR 標準の SWS_WdgM には存在しない本プロジェクト独自の
  *             拡張関数のため、対応する \AUTOSARReq は無い
- *             (WdgM_Cfg.h 冒頭のコメント参照)。
- * \ServiceID      {0x08}
+ *             (WdgM_Cfg.h 冒頭のコメント参照)。ApiId は自己割当だが、
+ *             従来の 0x08 は実仕様の WdgM_MainFunction([SWS_WdgM_00159])の
+ *             正規 ServiceID と衝突していたため、未使用の 0x0a へ変更した。
+ * \ServiceID      {0x0a}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
  */
