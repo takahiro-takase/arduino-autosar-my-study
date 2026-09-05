@@ -16,6 +16,7 @@
 #define COMM_H
 
 #include "Std_Types.h"
+#include "ComStack_Types.h"
 #include "ComM_Cfg.h"
 
 #ifdef __cplusplus
@@ -183,7 +184,7 @@ Std_ReturnType ComM_GetCurrentComMode(ComM_UserHandleType User, ComM_ModeType* C
  * \Reentrancy     {Reentrant}
  * \Synchronicity  {Synchronous}
  */
-void ComM_DCM_ActiveDiagnostic(uint8 Channel);
+void ComM_DCM_ActiveDiagnostic(NetworkHandleType Channel);
 
 /**
  * \brief   Dcm から、対象チャネルで診断セッションが終了したことを通知する。
@@ -199,7 +200,7 @@ void ComM_DCM_ActiveDiagnostic(uint8 Channel);
  * \Reentrancy     {Reentrant}
  * \Synchronicity  {Synchronous}
  */
-void ComM_DCM_InactiveDiagnostic(uint8 Channel);
+void ComM_DCM_InactiveDiagnostic(NetworkHandleType Channel);
 
 /**
  * \brief   ComM 周期処理（バス通信状態の監視）。
@@ -257,7 +258,7 @@ void ComM_MainFunction(void);
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
  */
-void ComM_BusSM_ModeIndication(uint8 Network, ComM_ModeType Mode);
+void ComM_BusSM_ModeIndication(NetworkHandleType Network, ComM_ModeType Mode);
 
 /**
  * \brief   Nm が Prepare Bus-Sleep Mode へ入ったことの通知（Nm から呼び出される）。
@@ -274,7 +275,7 @@ void ComM_BusSM_ModeIndication(uint8 Network, ComM_ModeType Mode);
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
  */
-void ComM_Nm_PrepareBusSleepMode(uint8 Network);
+void ComM_Nm_PrepareBusSleepMode(NetworkHandleType Network);
 
 /**
  * \brief   Bus-Sleep Mode 中に NM PDU を受信したことの通知（Nm から呼び出される、
@@ -330,7 +331,7 @@ void ComM_Nm_PrepareBusSleepMode(uint8 Network);
  * \Reentrancy     {Reentrant}
  * \Synchronicity  {Asynchronous}
  */
-void ComM_Nm_NetworkStartIndication(uint8 Network);
+void ComM_Nm_NetworkStartIndication(NetworkHandleType Network);
 
 /**
  * \brief   Nm が Network Mode へ（再）入ったことの通知（Nm から呼び出される）。
@@ -351,7 +352,7 @@ void ComM_Nm_NetworkStartIndication(uint8 Network);
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
  */
-void ComM_Nm_NetworkMode(uint8 Network);
+void ComM_Nm_NetworkMode(NetworkHandleType Network);
 
 /**
  * \brief   Nm が Bus-Sleep Mode へ到達したことの通知（Nm から呼び出される）。
@@ -370,7 +371,7 @@ void ComM_Nm_NetworkMode(uint8 Network);
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
  */
-void ComM_Nm_BusSleepMode(uint8 Network);
+void ComM_Nm_BusSleepMode(NetworkHandleType Network);
 
 /**
  * \brief   ComM モジュールのバージョン情報を取得する。
