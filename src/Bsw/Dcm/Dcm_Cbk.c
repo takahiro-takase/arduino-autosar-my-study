@@ -728,8 +728,9 @@ static void Dcm_HandleEcuReset(const uint8* uds, uint8 udsLen)
  *
  * \details groupOfDTC=0xFFFFFF なら Dem_ClearAllDTCs() で全 DTC をクリアする。
  *          それ以外の値は特定の DTC コードとみなし、Dem_GetEventIdOfDTC() で
- *          一致するイベントを探して Dem_ClearDTC() で 1 件だけクリアする
- *          （該当イベントがなければ NRC 0x31）。
+ *          一致するイベントを探して Dem_ClearOneDtc()（旧 Dem_ClearDTC、
+ *          2026-09-05 に実仕様との名前衝突を避けて改名。Dem.h 参照）で
+ *          1 件だけクリアする（該当イベントがなければ NRC 0x31）。
  *          いずれの場合も正応答 [0x54] を返す。
  *          DTC 履歴の消去は誤操作・悪用の影響が大きいため二重に保護する:
  *            ・extendedSession 限定（Dcm_ComIndication の Dcm_SidSessionTable[] が判定、
@@ -775,7 +776,7 @@ static void Dcm_HandleClearDtc(const uint8* uds, uint8 udsLen)
         }
 
         DET_LOGI(TAG, "14 ClearDTC dtc=0x%06lX", (unsigned long)group);
-        Dem_ClearDTC(eventId);
+        Dem_ClearOneDtc(eventId);
     }
 
     /* 正応答: [0x54] */

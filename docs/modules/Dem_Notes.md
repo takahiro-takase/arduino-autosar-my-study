@@ -205,7 +205,8 @@ ENGINE_OVERHEAT（DTC 0x000101）だけをクリアする例:
 受信 ← 0x7E8: [01 54 00 00 00 00 00 00]
 ```
 内部では `Dem_GetEventIdOfDTC(0x000101, &eventId)` で該当イベントを逆引きし、
-`Dem_ClearDTC(eventId)` でそのイベントだけをステータス・デバウンスカウンタ・
+`Dem_ClearOneDtc(eventId)`（旧`Dem_ClearDTC`、2026-09-05に実仕様との名前衝突を
+避けて改名）でそのイベントだけをステータス・デバウンスカウンタ・
 FreezeFrame ともに未記録状態へ戻す（他の DTC には影響しない）。
 一致する DTC が存在しない場合は NRC 0x31（requestOutOfRange）を返す。
 

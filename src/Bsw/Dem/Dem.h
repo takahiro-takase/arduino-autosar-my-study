@@ -270,10 +270,22 @@ Std_ReturnType Dem_ClearAllDTCs(void);
 
 /**
  * \brief   指定イベントの DTC のみをクリアし、EEPROM へ反映する。
+ *
  * \details DCM SID 0x14 (ClearDiagnosticInformation) のグループ指定クリア
  *          (特定の DTC コードのみを指定するケース) から呼び出す。
  *          対象イベントのステータスを TNCLC | TNCTOC にリセットし、
  *          デバウンスカウンタと FreezeFrame も未記録状態に戻す。
+ *
+ * \note    本プロジェクト独自の関数名（2026-09-05 是正）。以前は
+ *          `Dem_ClearDTC` という名前だったが、実仕様には全く同名・別内容の
+ *          `Dem_ClearDTC(uint8 ClientId)`（[SWS_Dem_00665]、ServiceID 0x23）
+ *          ——事前に `Dem_SelectDTC()` で選択した DTC を ClientId 単位で
+ *          非同期にクリアする API——が実在するため、実仕様に対応物が無い
+ *          独自関数だと誤って説明していた（同名衝突）。実仕様の select+clear
+ *          非同期方式は単一クライアント・同期処理のみの本プロジェクトには
+ *          過剰なため実装せず、単純に衝突しない名前へ改名して対応する。
+ *          ServiceID 0x28 は実仕様のどの Dem 関数にも使われていない値である
+ *          ことを確認済みのためそのまま踏襲する。
  *
  * \param[in]  EventId  イベント ID (DEM_EVENT_* 定数)。
  *
@@ -284,7 +296,7 @@ Std_ReturnType Dem_ClearAllDTCs(void);
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
  */
-Std_ReturnType Dem_ClearDTC(Dem_EventIdType EventId);
+Std_ReturnType Dem_ClearOneDtc(Dem_EventIdType EventId);
 
 /**
  * \brief   ステータスマスクに一致する全 DTC を列挙する。
