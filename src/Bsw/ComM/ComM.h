@@ -166,6 +166,45 @@ Std_ReturnType ComM_GetRequestedComMode(ComM_UserHandleType User, ComM_ModeType*
 Std_ReturnType ComM_GetCurrentComMode(ComM_UserHandleType User, ComM_ModeType* ComMode);
 
 /**
+ * \brief   対象チャネルの通信可否を通知する（[SWS_ComM_00871]）。仕様上の
+ *          呼び出し元は EcuM または BswM だが、\b 本プロジェクトで実際に
+ *          呼ぶのは EcuM_Init() のみ（起動時に一度きり）。BswM からの動的な
+ *          呼び出しは配線されていない。
+ *
+ * \details [SWS_ComM_00884]: ComM はチャネルごとに CommunicationAllowed
+ *          フラグを保持し、ComM_Init() 直後の既定値は FALSE（通信禁止）。
+ *          本プロジェクトは EcuM/Fixed 相当（単一チャネル、動的な許可制御は
+ *          未導入）のため、EcuM_Init() が ComM_Init() 直後に
+ *          `ComM_CommunicationAllowed(COMM_CHANNEL_0, TRUE)` を呼び、以降は
+ *          常時許可のまま運用する（EcuM.c 参照）。本関数を起動後に FALSE で
+ *          動的に呼び直す運用は検証していない（ComM.c 冒頭「本実装の
+ *          簡略化」参照）。
+ *
+ *          [SWS_ComM_00895/00896]: このフラグは、ユーザ要求の集約
+ *          （ComM_RequestComMode()/ComM_DCM_ActiveDiagnostic() 経由）が
+ *          COMM_NO_COMMUNICATION から COMM_FULL_COMMUNICATION へ遷移しようと
+ *          するタイミングでのみ評価される。Allowed=FALSE の間は CanSM へ
+ *          何も伝えず保留する（個別の保留状態は記憶しない）。Allowed=TRUE が
+ *          通知された時点でチャネルがまだ NO_COM のままなら、ユーザ要求を
+ *          その場で再集計し、なお FULL_COM が望まれていれば
+ *          `CanSM_RequestComMode(FULL_COM)` を発行する（ComM.c 参照）。
+ *          Nm 側の再起床通知（ComM_Nm_NetworkMode() 等）や
+ *          COMM_SILENT_COMMUNICATION 要求はこのゲートの対象外（各関数の
+ *          Doxygen 参照）。既に COMM_FULL_COMMUNICATION であるチャネルには
+ *          影響しない（[SWS_ComM_00896] のとおり評価対象は NO_COM からの
+ *          遷移時のみ）。
+ *
+ * \param[in]  Channel  対象ネットワークハンドル（0 〜 COMM_CHANNEL_COUNT-1）。
+ * \param[in]  Allowed  TRUE: 通信を許可する。FALSE: 通信を許可しない。
+ *
+ * \AUTOSARReq     {SWS_ComM_00871, SWS_ComM_00884, SWS_ComM_00885, SWS_ComM_00895}
+ * \ServiceID      {0x35}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void ComM_CommunicationAllowed(NetworkHandleType Channel, boolean Allowed);
+
+/**
  * \brief   Dcm から、対象チャネルで診断セッションが進行中であることを通知する。
  *
  * \details [SWS_ComM_00876]。実ユーザの要求に関わらず、以降
@@ -300,9 +339,11 @@ void ComM_Nm_PrepareBusSleepMode(NetworkHandleType Network);
  *
  *          [SWS_ComM_00583]: `ComM_ChannelMode[Network]` が既に
  *          COMM_FULL_COMMUNICATION でなければ `CanSM_RequestComMode(Network,
- *          COMM_FULL_COMMUNICATION)` を試みる（実仕様の `CommunicationAllowed`
- *          フラグは本プロジェクトが対応するゲート機構自体を持たないため常に
- *          許可とみなす簡略化）。**`ComM_Nm_NetworkMode()` とは異なり
+ *          COMM_FULL_COMMUNICATION)` を試みる。ただし `CommunicationAllowed`
+ *          フラグ（[SWS_ComM_00871]、`ComM_CommunicationAllowed()` 参照）が
+ *          FALSE の間は CanSM へは伝えず遷移を保留する（Allowed=TRUE 通知時に
+ *          `ComM_CommunicationAllowed()` 側が改めて発行する）。
+ *          **`ComM_Nm_NetworkMode()` とは異なり
  *          `ComM_NmReleasePending[Network]` は呼び出しが実際に成功した場合
  *          のみクリアする**（`ComM_Nm_BusSleepMode()` の NO_COM 分岐と同じ
  *          「まだ解放が完了していない事実を保持し続ける」方針）。上記の

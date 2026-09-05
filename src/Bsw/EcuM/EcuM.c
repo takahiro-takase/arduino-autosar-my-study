@@ -48,28 +48,36 @@
  *           20. BswM_Init      — ルールエンジン初期化。ComM_Init/ComM_RequestComMode
  *                                より前が必須（下記参照）
  *           21. ComM_Init      — 通信マネージャ初期化 (NO_COM 状態)
- *           22. Nm_Init        — CanNm 状態機械初期化 (Bus-Sleep Mode で開始)。
+ *           22. ComM_CommunicationAllowed(TRUE) — [SWS_ComM_00871] 通信許可を
+ *                                通知する。ComM_Init() 直後の既定値は FALSE
+ *                                （[SWS_ComM_00884]）のため、これを呼ばないと
+ *                                以降の ComM_RequestComMode(FULL_COM) は
+ *                                CanSM へ届かず保留され続ける。本プロジェクトは
+ *                                EcuM/Fixed 相当（動的な許可制御は未導入）の
+ *                                ため、起動時に一度だけ許可し以後は常時許可のまま
+ *                                運用する（ComM.c 冒頭のコメント参照）
+ *           23. Nm_Init        — CanNm 状態機械初期化 (Bus-Sleep Mode で開始)。
  *                                ComM_RequestComMode(FULL_COM) より必ず前に置くこと。
  *                                同要求は同期的に CanSM_RequestComMode →
  *                                ComM_BusSM_ModeIndication(FULL_COM) → Nm_NetworkRequest()
  *                                まで連鎖するため、これより後だと Nm 未初期化のまま
  *                                呼ばれて失敗し、Nm が Bus-Sleep Mode に固着する
  *                                （実機で確認された不具合）
- *           23. ComM_RequestComMode(FULL_COM) — CAN バス通信開始
+ *           24. ComM_RequestComMode(FULL_COM) — CAN バス通信開始
  *                               （全上位層初期化後に開始することで
  *                                 フレーム到着時の未初期化アクセスを防ぐ。
  *                                 ComM_BusSM_ModeIndication 経由で BswM_ExecuteRules が
  *                                 同期的に呼ばれるため BswM_Init 済みである必要がある）
- *           24. App_EngineManager_Init — SW-C 初期化
- *           25. IoHwAb_Init    — I/O ハードウェア抽象化層初期化 (LED チャネル設定)
- *           26. App_WarningIndicator_Init — 警告灯 SW-C 初期化
- *           27. Wdg_Init       — Watchdog Driver 初期化（WdgM_Init より前。
+ *           25. App_EngineManager_Init — SW-C 初期化
+ *           26. IoHwAb_Init    — I/O ハードウェア抽象化層初期化 (LED チャネル設定)
+ *           27. App_WarningIndicator_Init — 警告灯 SW-C 初期化
+ *           28. Wdg_Init       — Watchdog Driver 初期化（WdgM_Init より前。
  *                                コンフィグの記録のみ行い、HW はまだ有効化しない）
- *           28. WdgM_Init      — Alive/Logical Supervision 初期化。
+ *           29. WdgM_Init      — Alive/Logical Supervision 初期化。
  *                                実 HW ウォッチドッグもここで有効化する
  *                                （他の全モジュール初期化完了後、最後に有効化することで
  *                                  初期化処理自体がタイムアウトの影響を受けないようにする）
- *           29. Os_Init        — タスクスケジューラ初期化 (全モジュール初期化後)。
+ *           30. Os_Init        — タスクスケジューラ初期化 (全モジュール初期化後)。
  *                                自身の Gpt チャネル (GPT_CHANNEL_1) を起動し、
  *                                以後のタスク周期判定は millis() ではなくこの
  *                                チャネルのティック値で行う（Os.c 冒頭のコメント参照）
@@ -221,6 +229,14 @@ void EcuM_Init(void)
                                * 参照するため、これより後に置くと起動毎に
                                * NULL 参照となる。 */
     ComM_Init(NULL);
+    ComM_CommunicationAllowed(COMM_CHANNEL_0, TRUE);  /* [SWS_ComM_00871]:
+                               * ComM_Init() 直後の既定値は FALSE
+                               * （[SWS_ComM_00884]）のため、これを呼ばないと
+                               * 下記 ComM_RequestComMode(FULL_COM) が CanSM へ
+                               * 届かず保留され続ける（ComM.c 冒頭のコメント
+                               * 参照）。本プロジェクトは EcuM/Fixed 相当で
+                               * 動的な許可制御を持たないため、起動時に一度
+                               * だけ許可する。 */
     Nm_Init(NULL);             /* ComM_RequestComMode() より必ず前に置くこと。
                                * ComM_RequestComMode(FULL_COM) は同期的に
                                * CanSM_RequestComMode → ComM_BusSM_ModeIndication(FULL_COM)

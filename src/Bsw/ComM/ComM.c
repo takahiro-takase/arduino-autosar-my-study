@@ -79,8 +79,43 @@
  *            ケースから本関数が呼ばれ、チャネルを FULL_COM へ、Nm 自身も
  *            Bus-Sleep Mode から起こす（詳細は同関数の Doxygen 参照）。
  *
+ *          CommunicationAllowed ゲート（2026-09、[SWS_ComM_00871]/
+ *          [SWS_ComM_00884]/[SWS_ComM_00895]）:
+ *            ユーザ起因の要求（ComM_RequestComMode()/ComM_DCM_
+ *            ActiveDiagnostic() 経由の集約）は、ComM_CommunicationAllowed(TRUE)
+ *            が呼ばれるまで COMM_NO_COMMUNICATION -> COMM_FULL_COMMUNICATION
+ *            へ遷移できない（既定値 FALSE）。本プロジェクトは EcuM/Fixed
+ *            相当のため、EcuM_Init() が ComM_Init() 直後・Nm_Init() より前に
+ *            一度だけ TRUE を通知し、以降は常時許可のまま運用する（EcuM.c
+ *            参照。現状の唯一の呼び出し元は EcuM のみで、BswM からの動的な
+ *            切り替えは配線されていない）。Allowed=FALSE の間の保留は個別に
+ *            記憶せず、Allowed=TRUE 通知時に ComM_ApplyAggregatedRequest
+ *            (ComM_ComputeAggregatedMode()) を呼んで改めて再評価する
+ *            （ComM_CommunicationAllowed() 参照。ComM_DCM_ActiveDiagnostic()/
+ *            InactiveDiagnostic() と同じ「トリガーが変わっただけ」パターン。
+ *            2026-09 導入当初は個別の保留フラグ方式だったが、Nm 協調
+ *            スリープ絡みの状態不整合を複数 /code-review で発見したため
+ *            再集計方式へ変更）。
+ *            Nm 起因の再起床（ComM_Nm_NetworkMode()/
+ *            ComM_Nm_NetworkStartIndication()）はこのゲートを意図的に通さず、
+ *            常に直接 CanSM を呼ぶ: これらは Nm_Init() 後にしか発火せず、
+ *            EcuM_Init() の呼び出し順序上 Allowed は既に TRUE になっている
+ *            ため実害はなく、むしろゲートを通すと「NmReleasePending の
+ *            クリアと ComM_ChannelMode の FULL_COM 遷移は必ず同時に起きる」
+ *            という両関数が前提とする不変条件を壊してしまう
+ *            （各関数の Doxygen 参照）。
+ *
  *          本実装の簡略化:
  *            - 1 チャネル固定
+ *            - CommunicationAllowed ゲートは「EcuM が起動時に一度だけ許可する」
+ *              単発ラッチとしてのみ検証・運用している。仕様が想定する
+ *              BswM 等からの動的な ON/OFF 切り替えには対応しない
+ *              （呼び出せば記録はするが、Nm 起因の遷移や
+ *              COMM_SILENT_COMMUNICATION 要求まではゲート対象に含めていない
+ *              ため、Allowed=FALSE への動的な変更を安全に扱えるとは限らない）。
+ *              ComM_Init() を起動後に再度呼ぶ運用（ソフトリセット等）も
+ *              想定していない（Allowed が既定値 FALSE へ戻り、再度 EcuM が
+ *              呼び直さない限り通信が再開しない）。
  *
  * \copyright  Copyright (c) 2025 T_T
  * \license    MIT License - 詳細は LICENSE ファイルを参照。
@@ -136,6 +171,12 @@ static uint8 ComM_Initialized = 0U;
  *  扱う（ComM_ComputeAggregatedMode() 参照）。 */
 static uint8 ComM_DcmActiveDiagnostic[COMM_CHANNEL_COUNT];
 
+/** [SWS_ComM_00871]/[SWS_ComM_00884] CommunicationAllowed フラグ。チャネル
+ *  ごとに保持し、既定値は FALSE（ComM_Init() 参照）。TRUE の間だけ
+ *  COMM_NO_COMMUNICATION -> COMM_FULL_COMMUNICATION への遷移を許可する
+ *  （ComM_RequestFullComOrPend() 参照）。 */
+static boolean ComM_CommunicationAllowedFlag[COMM_CHANNEL_COUNT];
+
 /**
  * \brief   ComM モジュールを初期化する。
  *
@@ -155,9 +196,10 @@ void ComM_Init(const ComM_ConfigType* ConfigPtr)
     uint8 i;
     for (i = 0U; i < COMM_CHANNEL_COUNT; i++)
     {
-        ComM_ChannelMode[i]         = COMM_NO_COMMUNICATION;
-        ComM_NmReleasePending[i]    = 0U;
-        ComM_DcmActiveDiagnostic[i] = 0U;
+        ComM_ChannelMode[i]              = COMM_NO_COMMUNICATION;
+        ComM_NmReleasePending[i]         = 0U;
+        ComM_DcmActiveDiagnostic[i]      = 0U;
+        ComM_CommunicationAllowedFlag[i] = FALSE;  /* [SWS_ComM_00884] 既定値 */
     }
     for (i = 0U; i < COMM_USER_COUNT; i++)
         ComM_UserRequest[i] = COMM_NO_COMMUNICATION;
@@ -230,6 +272,45 @@ static ComM_ModeType ComM_ComputeAggregatedMode(void)
     if (ComM_DcmActiveDiagnostic[0U])
         aggregated = COMM_FULL_COMMUNICATION;
     return aggregated;
+}
+
+/**
+ * \brief   チャネルを COMM_FULL_COMMUNICATION へ遷移させる。ただし
+ *          [SWS_ComM_00871]/[SWS_ComM_00895] の CommunicationAllowed ゲートを
+ *          通す。
+ *
+ * \details Allowed=TRUE ならこれまでどおり CanSM_RequestComMode() を発行する。
+ *          Allowed=FALSE の間は CanSM を一切呼ばず保留する（[SWS_ComM_00895]
+ *          の COMM_NO_COM_REQUEST_PENDING サブステートに相当）。保留中の
+ *          要求そのものは別途記憶しない: ComM_CommunicationAllowed(TRUE) が
+ *          呼ばれた時点で ComM_ComputeAggregatedMode() を改めて再評価し、
+ *          その時点でなお FULL_COM が望まれていれば発行する
+ *          （ComM_CommunicationAllowed() 参照）。個別の保留フラグを持たない
+ *          ことで、「保留を立てたユーザが後で撤回したのに古い保留だけが
+ *          残る」という状態不整合が構造的に起こり得ない（2026-09、
+ *          /code-review で個別フラグ方式の同種バグを複数発見し設計変更）。
+ *          本関数はユーザ起因の要求（ComM_RequestComMode/
+ *          ComM_DCM_ActiveDiagnostic 経由）にのみ使う。Nm 起因のコールバック
+ *          （ComM_Nm_NetworkMode 等）はこのゲートを意図的に通さない
+ *          （理由はそれぞれの Doxygen 参照）。
+ *
+ * \retval  E_OK      要求を受理した（保留の場合も含む。CanSM への転送が
+ *                     実際に成功したとは限らない）。
+ * \retval  E_NOT_OK  CanSM_RequestComMode() が拒否した（Bus-Off 回復中等）。
+ */
+static Std_ReturnType ComM_RequestFullComOrPend(NetworkHandleType Network)
+{
+    if (!ComM_CommunicationAllowedFlag[Network])
+    {
+        /* 呼び出し元（ComM_RequestComMode() 等）は集約結果までしかログしない
+         * ため、「CanSM へ転送されたか、ここで保留されたか」を実機シリアル
+         * ログから判別できるよう明示的に記録する（/code-review で診断性の
+         * 指摘、値そのものは既に上で ComM_CommunicationAllowed() がログ済み
+         * だが、どの要求が保留されたかはここでしか分からない）。 */
+        DET_LOGI(TAG, "ch%u FULL_COM held pending CommunicationAllowed", (unsigned)Network);
+        return E_OK;
+    }
+    return CanSM_RequestComMode(Network, COMM_FULL_COMMUNICATION);
 }
 
 /**
@@ -332,7 +413,16 @@ static Std_ReturnType ComM_ApplyAggregatedRequest(ComM_ModeType aggregated)
 
     /* それ以外（NO_COM -> FULL_COM 等）は従来どおり即座に CanSM へ転送する。
      * 成功すれば CanSM が ComM_BusSM_ModeIndication を呼んでチャネル状態と EcuM を
-     * 更新する。Bus-Off 回復中は E_NOT_OK が返る。 */
+     * 更新する。Bus-Off 回復中は E_NOT_OK が返る。
+     * ただし [SWS_ComM_00895/00896] のとおり CommunicationAllowed ゲート
+     * （ComM_RequestFullComOrPend() 参照）が評価対象とするのは
+     * COMM_NO_COMMUNICATION からの遷移時のみ。SILENT_COM からの FULL_COM
+     * 再要求（例: 真の Bus-Off 中の再要求。NmReleasePending==0 のためここまで
+     * 落ちてくる）はゲートの対象外とし、これまでどおり CanSM へそのまま
+     * 転送する（Bus-Off 中は CanSM 自身が拒否する。/code-review で
+     * 対象範囲の逸脱を指摘）。 */
+    if (aggregated == COMM_FULL_COMMUNICATION && ComM_ChannelMode[0U] == COMM_NO_COMMUNICATION)
+        return ComM_RequestFullComOrPend(0U);
     return CanSM_RequestComMode(0U, aggregated);
 }
 
@@ -449,6 +539,69 @@ Std_ReturnType ComM_GetCurrentComMode(ComM_UserHandleType User, ComM_ModeType* C
     /* ユーザ 0 → チャネル 0 の現在モードを返す */
     *ComMode = ComM_ChannelMode[0U];
     return E_OK;
+}
+
+/**
+ * \brief   EcuM または BswM から、対象チャネルの通信可否を通知する
+ *          （[SWS_ComM_00871]）。
+ *
+ * \details [SWS_ComM_00884] のとおりチャネルごとに CommunicationAllowed
+ *          フラグを保持する（既定 FALSE、ComM_Init() 参照）。
+ *          [SWS_ComM_00895]: Allowed=TRUE を受け取った時点でチャネルが
+ *          まだ COMM_NO_COMMUNICATION のままであれば、ユーザ側の要求を
+ *          その場で再集計する（ComM_ComputeAggregatedMode()、
+ *          ComM_RequestComMode()/ComM_DCM_ActiveDiagnostic() が更新する
+ *          ComM_UserRequest[]/ComM_DcmActiveDiagnostic[] をそのまま再評価）。
+ *          その結果がなお COMM_FULL_COMMUNICATION であれば直ちに
+ *          CanSM_RequestComMode(FULL_COM) を発行する。個別の「保留」状態を
+ *          別途記憶しないため、Allowed=FALSE の間に要求が出た後で撤回
+ *          された場合でも、撤回後の最新の要求だけが正しく反映される
+ *          （2026-09、/code-review で個別保留フラグ方式の状態不整合を複数
+ *          発見し設計変更。ComM_RequestFullComOrPend() 参照）。
+ *          Nm 起因の FULL_COM 遷移（ComM_Nm_NetworkMode() 等）はこの
+ *          再集計の対象外（それぞれの Doxygen 参照）。Allowed=FALSE への
+ *          変更は既に COMM_FULL_COMMUNICATION のチャネルには影響しない
+ *          （[SWS_ComM_00896] のとおり評価対象は NO_COM からの遷移時のみ）。
+ *
+ * \param[in]  Channel  対象ネットワークハンドル。
+ * \param[in]  Allowed  TRUE: 通信を許可する。FALSE: 通信を許可しない。
+ *
+ * \AUTOSARReq     {SWS_ComM_00871, SWS_ComM_00884, SWS_ComM_00885, SWS_ComM_00895}
+ * \ServiceID      {0x35}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void ComM_CommunicationAllowed(NetworkHandleType Channel, boolean Allowed)
+{
+    DET_LOGT(TAG, "called");
+    if (!ComM_Initialized)
+    {
+        Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_COMMUNICATION_ALLOWED, COMM_E_UNINIT);
+        return;
+    }
+
+    if (Channel >= COMM_CHANNEL_COUNT)
+    {
+        Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_COMMUNICATION_ALLOWED, COMM_E_WRONG_PARAMETERS);
+        return;
+    }
+
+    ComM_CommunicationAllowedFlag[Channel] = Allowed;
+    DET_LOGI(TAG, "ch%u CommunicationAllowed=%u", (unsigned)Channel, (unsigned)Allowed);
+
+    if (Allowed)
+    {
+        /* [SWS_ComM_00895]: Allowed=TRUE になった時点で、ユーザ要求の集約結果を
+         * 改めて評価する。ComM_DCM_ActiveDiagnostic()/InactiveDiagnostic() と
+         * 全く同じ「トリガーが変わっただけで、適用ロジックは共通」パターン
+         * （ComM_ApplyAggregatedRequest() 参照。「NO_COM かつ集約結果が
+         * FULL_COM か」を個別に判定するコードをここに複製しない —
+         * ComM_ApplyAggregatedRequest() 自身の早期 return 群がそれを兼ねる。
+         * 2026-09、/code-review で条件の二重実装を指摘）。既に希望通りの
+         * 状態（channel==FULL_COM、または誰も FULL_COM を望んでいない）なら
+         * 内部の早期 return で何も起きない。 */
+        (void)ComM_ApplyAggregatedRequest(ComM_ComputeAggregatedMode());
+    }
 }
 
 /**
@@ -761,9 +914,11 @@ void ComM_Nm_PrepareBusSleepMode(NetworkHandleType Network)
  *
  *          [SWS_ComM_00583]: `ComM_ChannelMode[Network]` が既に
  *          COMM_FULL_COMMUNICATION でなければ `CanSM_RequestComMode(Network,
- *          COMM_FULL_COMMUNICATION)` を試みる（実仕様の `CommunicationAllowed`
- *          フラグは本プロジェクトが対応するゲート機構自体を持たないため常に
- *          許可とみなす簡略化）。**`ComM_Nm_NetworkMode()` とは異なり
+ *          COMM_FULL_COMMUNICATION)` を試みる。ただし `CommunicationAllowed`
+ *          フラグ（[SWS_ComM_00871]、`ComM_CommunicationAllowed()` 参照）が
+ *          FALSE の間は CanSM へは伝えず遷移を保留する（Allowed=TRUE 通知時に
+ *          `ComM_CommunicationAllowed()` 側が改めて発行する）。
+ *          **`ComM_Nm_NetworkMode()` とは異なり
  *          `ComM_NmReleasePending[Network]` は呼び出しが実際に成功した場合
  *          のみクリアする**（`ComM_Nm_BusSleepMode()` の NO_COM 分岐と同じ
  *          「まだ解放が完了していない事実を保持し続ける」方針）。上記の
@@ -814,7 +969,9 @@ void ComM_Nm_NetworkStartIndication(NetworkHandleType Network)
     {
         /* 呼び出しが実際に成功した場合のみクリアする（理由は本関数の
          * \details 参照。ComM_Nm_NetworkMode() と同じ無条件クリアに
-         * 変更しないこと）。 */
+         * 変更しないこと）。CommunicationAllowed ゲート（ComM_RequestFullComOrPend()
+         * 参照）はここでは意図的に通さず直接 CanSM を呼ぶ（理由は
+         * ComM_Nm_NetworkMode() 側の同種コメント参照）。 */
         if (CanSM_RequestComMode(Network, COMM_FULL_COMMUNICATION) == E_OK)
         {
             ComM_NmReleasePending[Network] = 0U;
@@ -882,7 +1039,24 @@ void ComM_Nm_NetworkMode(NetworkHandleType Network)
     if (ComM_ChannelMode[Network] != COMM_FULL_COMMUNICATION)
     {
         /* CanSM_RequestComMode() 呼び出しの成否に関わらず無条件でクリアする
-         * （理由は上記 \details 参照。ここを条件付きクリアに変更しないこと）。 */
+         * （理由は上記 \details 参照。ここを条件付きクリアに変更しないこと）。
+         * CommunicationAllowed ゲート（ComM_RequestFullComOrPend()）は意図的に
+         * 通さず直接 CanSM を呼ぶ: 本関数を含む Nm 由来の全コールバック
+         * （ComM_Nm_NetworkMode/NetworkStartIndication/PrepareBusSleepMode/
+         * BusSleepMode）は Nm_Init() 済みでなければ呼ばれ得ないが、
+         * EcuM_Init() は Nm_Init() より必ず前に ComM_CommunicationAllowed(TRUE)
+         * を通知する（EcuM.c 参照）ため、本プロジェクトでは Allowed=FALSE の
+         * 状態でこれらが呼ばれることはあり得ない。もしここでもゲートを通すと、
+         * 「NmReleasePending のクリアと ComM_ChannelMode の FULL_COM 遷移は
+         * 常に同時に起きる」という本関数・ComM_BusSM_ModeIndication() 双方が
+         * 前提とする不変条件が崩れ、CanSM が拒否も成功もしていないのに
+         * NmReleasePending だけが解除された不整合な中間状態
+         * （ComM_ChannelMode==SILENT_COM のまま）を作ってしまい、直後の
+         * ユーザー起因の NO_COM 再要求が Nm の協調スリープを無視して
+         * コントローラを強制的に即座に物理スリープさせる、という
+         * 2026-08 に一度修正した回帰と同種の不具合を再導入する
+         * （2026-09 の CommunicationAllowed 導入時に /code-review で発見・
+         * 実装を戻して回避）。 */
         ComM_NmReleasePending[Network] = 0U;
         (void)CanSM_RequestComMode(Network, COMM_FULL_COMMUNICATION);
     }

@@ -50,6 +50,7 @@
 #define COMM_API_ID_DEINIT                  0x02U
 #define COMM_API_ID_GET_VERSION_INFO        0x10U
 #define COMM_API_ID_GET_STATUS              0x03U
+#define COMM_API_ID_COMMUNICATION_ALLOWED   0x35U
 
 /** バージョン情報（SWS_ComM、Com/E2EXf/PduR 等の既存モジュールと同じ命名規則） */
 #define COMM_VENDOR_ID          0U
