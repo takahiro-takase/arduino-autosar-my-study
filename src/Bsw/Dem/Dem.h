@@ -200,7 +200,7 @@ Std_ReturnType Dem_SetEventStatus(Dem_EventIdType EventId, Dem_EventStatusType E
  * \Reentrancy     {Reentrant for different ClientIds, Non Reentrant for same ClientId}
  * \Synchronicity  {Synchronous}
  */
-Std_ReturnType Dem_GetDTCStatusAvailabilityMask(uint8 ClientId, uint8* DTCStatusMask);
+Std_ReturnType Dem_GetDTCStatusAvailabilityMask(uint8 ClientId, Dem_UdsStatusByteType* DTCStatusMask);
 
 /**
  * \brief   指定イベントの UDS DTC ステータスバイトを取得する（[SWS_Dem_91008]）。

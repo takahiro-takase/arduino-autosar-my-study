@@ -241,7 +241,7 @@ void BswM_EcuM_CurrentState(EcuM_StateType state)
     BswM_ExecuteRules(BSWM_MODE_SRC_ECUM, (uint8)state);
 }
 
-void BswM_ComM_CurrentMode(uint8 channel, ComM_ModeType mode)
+void BswM_ComM_CurrentMode(NetworkHandleType channel, ComM_ModeType mode)
 {
     DET_LOGT(TAG, "called");
     (void)channel;
