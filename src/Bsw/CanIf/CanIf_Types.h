@@ -86,10 +86,31 @@ typedef struct
 /* [SWS_CANIF_00137]: PDU チャネル（本プロジェクトは単一コントローラのため
  * 実質コントローラ単位）の送受信有効/無効状態。CanIf_SetPduMode()/
  * CanIf_GetPduMode() で操作する。
- * CANIF_TX_OFFLINE_ACTIVE(0x02) は CanIfTxOfflineActiveSupport=TRUE 前提の
- * オプション機能（Offline時も一定間隔でウェイクアップ用フレームを送信する
- * モード）で、本プロジェクトの用途（SILENT_COMMUNICATION の TX 抑制のみ）
- * には不要なため未実装（見送り）。 */
+ *
+ * CANIF_TX_OFFLINE_ACTIVE(0x02、[SWS_CANIF_00072]、7.19.2.3節)は未実装
+ * （欠番）。実仕様は「CanIf_Transmit() が Can_Write() まで到達させず、
+ * その場で即座に TX 確認コールバックを呼んで送信成功を偽装する」モード
+ * （診断パッシブモード等の用途）であり、過去の本コメントは「一定間隔で
+ * ウェイクアップ用フレームを送信するモード」と誤って説明していたため訂正
+ * した（2026-09-05、シグネチャ準拠サーベイで発覚）。
+ *
+ * 訂正後、Arduino 上でも実装できないか検討した（CanIf_Transmit() へ
+ * Can_Write() を経由しない即時 CanIf_TxConfirmation() 呼び出し分岐を
+ * 一度実装した）が、/code-review で重大な設計上の非互換を発見: 本プロジェクトの
+ * `Com_DoTransmit()`（Com.c）は「PduR_ComTransmit() が返ってきた後に
+ * `Com_TxConfPending[]` を 1 にセットする」という順序を前提にしており、
+ * これは `Can.c` が実ハードウェア送信の TX 確認を意図的に別タスク（
+ * `Can_MainFunction_Write`）へ遅延させている設計（Can.c 冒頭コメント、
+ * 過去の Bus-Off + HW ウォッチドッグリセット不具合の再発防止）と対になる
+ * 前提である。CANIF_TX_OFFLINE_ACTIVE の「即座に確認コールバックを呼ぶ」
+ * という仕様どおりの同期動作にすると、`PduR_ComTransmit()` が返る前に
+ * `Com_TxConfPending[]` が 0 へクリアされてしまい、直後に `Com_DoTransmit()`
+ * が無条件で 1 に上書きしてしまう。結果、当該 I-PDU は「送信済み・未確認」の
+ * まま二度と確認が届かない状態に固着し、TX 送信デッドライン監視が誤って
+ * 発火する（実害のあるリグレッション）。根本修正には `Com_DoTransmit()` の
+ * 保留フラグ管理の順序自体を見直す必要があり、実機検証済みの COM 送信経路
+ * 中枢に手を入れることになる一方、本モード自体は現状どこからも呼ばれない
+ * （動機のない）機能であるため、リスクに見合わないと判断し実装を見送った。 */
 typedef enum
 {
     CANIF_OFFLINE    = 0x00,  /* TX/RX 双方禁止（初期化直後の既定） */
