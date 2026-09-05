@@ -466,7 +466,7 @@ Std_ReturnType ComM_GetCurrentComMode(ComM_UserHandleType User, ComM_ModeType* C
  * \Reentrancy     {Reentrant}
  * \Synchronicity  {Synchronous}
  */
-void ComM_DCM_ActiveDiagnostic(uint8 Channel)
+void ComM_DCM_ActiveDiagnostic(NetworkHandleType Channel)
 {
     DET_LOGT(TAG, "called");
     if (!ComM_Initialized)
@@ -502,7 +502,7 @@ void ComM_DCM_ActiveDiagnostic(uint8 Channel)
  * \Reentrancy     {Reentrant}
  * \Synchronicity  {Synchronous}
  */
-void ComM_DCM_InactiveDiagnostic(uint8 Channel)
+void ComM_DCM_InactiveDiagnostic(NetworkHandleType Channel)
 {
     DET_LOGT(TAG, "called");
     if (!ComM_Initialized)
@@ -595,7 +595,7 @@ static void ComM_RetryNmReleaseAfterBusOff(uint8 Network, const char* modeLabel)
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
  */
-void ComM_BusSM_ModeIndication(uint8 Network, ComM_ModeType Mode)
+void ComM_BusSM_ModeIndication(NetworkHandleType Network, ComM_ModeType Mode)
 {
     DET_LOGT(TAG, "called");
     if (!ComM_Initialized)
@@ -717,7 +717,7 @@ void ComM_BusSM_ModeIndication(uint8 Network, ComM_ModeType Mode)
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
  */
-void ComM_Nm_PrepareBusSleepMode(uint8 Network)
+void ComM_Nm_PrepareBusSleepMode(NetworkHandleType Network)
 {
     DET_LOGT(TAG, "called");
     if (!ComM_Initialized)
@@ -792,7 +792,7 @@ void ComM_Nm_PrepareBusSleepMode(uint8 Network)
  * \Reentrancy     {Reentrant}
  * \Synchronicity  {Asynchronous}
  */
-void ComM_Nm_NetworkStartIndication(uint8 Network)
+void ComM_Nm_NetworkStartIndication(NetworkHandleType Network)
 {
     DET_LOGT(TAG, "called");
     if (!ComM_Initialized)
@@ -864,7 +864,7 @@ void ComM_Nm_NetworkStartIndication(uint8 Network)
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
  */
-void ComM_Nm_NetworkMode(uint8 Network)
+void ComM_Nm_NetworkMode(NetworkHandleType Network)
 {
     DET_LOGT(TAG, "called");
     if (!ComM_Initialized)
@@ -912,7 +912,7 @@ void ComM_Nm_NetworkMode(uint8 Network)
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
  */
-void ComM_Nm_BusSleepMode(uint8 Network)
+void ComM_Nm_BusSleepMode(NetworkHandleType Network)
 {
     DET_LOGT(TAG, "called");
     if (!ComM_Initialized)
