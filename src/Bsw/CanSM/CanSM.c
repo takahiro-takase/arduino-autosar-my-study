@@ -100,7 +100,9 @@
  *            「本当に有効な CAN フレームを受信できたか」を確認してから
  *            復帰する 2 段階の手順を踏む。
  *              1. Can_Isr()（真の割り込み）が SLEEP 中の INT アサートを検出
- *                 → Can_MainFunction_Wakeup() が CanIf_ControllerWakeup() を呼ぶ
+ *                 → Can_MainFunction_Wakeup() が EcuM_CheckWakeup() を呼ぶ
+ *                   （[SWS_Can_00271]。2026-09-05 是正前は実仕様に存在しない
+ *                   独自 API CanIf_ControllerWakeup() 経由だった）
  *                 → CanSM_ControllerModeIndication()（旧 CanSM_ControllerWakeup）
  *                 → CAN_T_WAKEUP のみ実行（SLEEP→STOPPED、Listen-Only）。
  *                   CANSM_STATE_WAKEUP_VALIDATING へ遷移し、検証タイマ開始。
@@ -487,14 +489,16 @@ void CanSM_ControllerBusOff(uint8 ControllerId)
 }
 
 /**
- * \brief   コントローラモード変化通知コールバック（[SWS_CanSM_00396]、CanIf
- *          から呼び出される）。旧 `CanSM_ControllerWakeup`（2026-09-05、
- *          実仕様名・シグネチャへ是正。詳細は CanSM.h 参照）。
+ * \brief   コントローラモード変化通知コールバック（[SWS_CanSM_00396]）。旧
+ *          `CanSM_ControllerWakeup`（2026-09-05、実仕様名・シグネチャへ
+ *          是正。詳細は CanSM.h 参照）。
  *
  * \details CAN_CS_SLEEP 中に MCP2515 がバス活動を検知して自律的にウェイクアップ
  *          した際、Can_Isr()（割り込み） → Can_MainFunction_Wakeup() →
- *          CanIf_ControllerWakeup() 経由で呼び出される（本プロジェクトの
- *          唯一の呼び出し場面。CanIf.h 冒頭コメント参照）。
+ *          EcuM_CheckWakeup()（[SWS_Can_00271]、2026-09-05 是正前は実仕様に
+ *          存在しない独自 API CanIf_ControllerWakeup() 経由だった） 経由で
+ *          呼び出される（本プロジェクトの唯一の呼び出し場面。EcuM.h 冒頭
+ *          コメント参照）。
  *
  *          CANSM_STATE_NO_COM（ComM の NO_COM 要求によるボランタリスリープ）
  *          からの起床のみを受け付ける。CANSM_STATE_BUS_OFF は Can_T_STOP/

@@ -89,6 +89,7 @@
 #include "Can.h"
 #include "Can_Hw.h"
 #include "CanIf.h"
+#include "EcuM.h"
 #include "Det.h"
 #include "SchM.h"
 
@@ -728,7 +729,12 @@ void Can_MainFunction_Read(void)
  *          INT ピンの直接ポーリング（`Can_Hw_IsWakeupPending()`、旧実装と
  *          同じ digitalRead() 方式を Can_Hw 層へ委譲したもの）も
  *          フォールバックとして併用する。いずれか一方でも検出できれば
- *          CanIf_ControllerWakeup() で上位層へ通知する。
+ *          `EcuM_CheckWakeup(ECUM_WKSOURCE_CAN)`（[SWS_Can_00271]）で
+ *          ECU State Manager へ直接通知する（2026-09-05 是正前は、実仕様に
+ *          存在しない独自 API `CanIf_ControllerWakeup()` を経由していた）。
+ *          `EcuM_CheckWakeup()` は内部で `CanSM_ControllerModeIndication()`
+ *          （AUTOSAR EcuM Wakeup Validation Protocol 相当を CanSM 側で模した
+ *          検証シーケンス、CanSM.c 参照）へ委譲する（EcuM.h 参照）。
  *
  *          BswM は SHUTDOWN 中も本タスクだけは無効化しない
  *          （WdgM_TriggerHwWatchdog・Can_MainFunction_Read・CanSM_MainFunction・
@@ -736,15 +742,6 @@ void Can_MainFunction_Read(void)
  *          詳細は BswM_Cfg.h の BSWM_TASK_MASK_SHUTDOWN を参照）。実機の割り込みが
  *          CPU のスリープからの復帰トリガそのものであるのと同じ理由で、この
  *          タスクもウェイクアップ検出のためだけには動き続ける必要がある。
- *
- *          仕様との既知の相違点: SWS_Can_00271 が規定する通知先は本来
- *          EcuM_CheckWakeup() （ECU State Manager を直接呼ぶ）だが、本プロジェクトは
- *          EcuM のウェイクアップソース管理を実装しておらず、CanIf 経由で
- *          CanSM_ControllerModeIndication() （AUTOSAR EcuM Wakeup Validation Protocol 相当を
- *          CanSM 側で模した検証シーケンス、CanSM.c 参照）へ委譲する設計を
- *          一貫して採る。00271 の引用は「ISR または Can_MainFunction_Wakeup の
- *          いずれかの文脈で通知する」というタイミング要件の部分のみ有効で、
- *          通知先の関数名までは仕様どおりではない。
  *
  * \pre        Can_Init() が正常に完了していること。
  *
@@ -778,7 +775,7 @@ void Can_MainFunction_Wakeup(void)
     if (pending)
     {
         DET_LOGI(TAG, "Wakeup detected (INT asserted during SLEEP)");
-        CanIf_ControllerWakeup(0U);
+        EcuM_CheckWakeup(ECUM_WKSOURCE_CAN);
     }
 }
 

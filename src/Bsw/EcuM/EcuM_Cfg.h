@@ -47,6 +47,7 @@
 #define ECUM_API_ID_RELEASE_RUN    0x04U
 #define ECUM_API_ID_REQUEST_POST_RUN 0x0AU
 #define ECUM_API_ID_RELEASE_POST_RUN 0x0BU
+#define ECUM_API_ID_CHECK_WAKEUP     0x42U
 #define ECUM_API_ID_GET_VERSION_INFO 0x00U
 
 /** バージョン情報（SWS_EcuM_GetVersionInfo、Com/E2EXf/PduR 等の既存モジュールと同じ命名規則） */
@@ -64,5 +65,12 @@
 /** POST_RUN フェーズタイムアウト (ms)
  *  この時間内に誰も RUN を要求しなければ SHUTDOWN へ遷移する。 */
 #define ECUM_POST_RUN_TIMEOUT_MS     5000UL
+
+/** [SWS_EcuM_04040] `EcuM_WakeupSourceType` のビット0〜4は仕様で予約済み
+ *  （ECUM_WKSOURCE_POWER/RESET/INTERNAL_RESET/INTERNAL_WDG/EXTERNAL_WDG）。
+ *  本プロジェクトが実際に持つウェイクアップ要因は CAN バス起床のみのため、
+ *  予約範囲の次のビット5を独自に割り当てる（他モジュールと衝突しない
+ *  プロジェクト内自己割当）。 */
+#define ECUM_WKSOURCE_CAN            0x00000020UL
 
 #endif /* ECUM_CFG_H */

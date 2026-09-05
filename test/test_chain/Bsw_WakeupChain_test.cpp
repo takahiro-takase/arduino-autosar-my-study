@@ -9,7 +9,11 @@
  *                                          要因を検出。本テストでは
  *                                          Can_Hw_IsWakeupPending() のフォール
  *                                          バックポーリング経路を使う）
- *                → CanIf_ControllerWakeup()
+ *                → EcuM_CheckWakeup(ECUM_WKSOURCE_CAN)（[SWS_Can_00271]、
+ *                                          2026-09-05 是正前は実仕様に存在
+ *                                          しない独自 API CanIf_ControllerWakeup()
+ *                                          経由だった。フェイク実装は
+ *                                          Bsw_EcuM_fake.h 参照）
  *                  → CanSM_ControllerModeIndication()
  *                    → CanIf_SetControllerMode(CAN_CS_STOPPED)
  *                      → Can_SetControllerMode(CAN_T_WAKEUP)   ← SLEEP→STOPPED
@@ -38,6 +42,10 @@
  *          NO_COM）がそのまま「ボランタリスリープ済み」の前提と一致する。
  *          ComM が呼ぶ EcuM_RequestRUN()/BswM_ComM_CurrentMode() は境界として
  *          フェイクに差し替える（Bsw_EcuM_fake.h/Bsw_BswM_fake.h 参照）。
+ *          Can_MainFunction_Wakeup() が呼ぶ EcuM_CheckWakeup() のみ、
+ *          フェイクから実 CanSM_ControllerModeIndication() へ委譲する
+ *          （Bsw_EcuM_fake.h 冒頭コメント参照。この関数だけはチェーンの
+ *          途中経路であり終端ではないため）。
  *          Dem（Bus-Off 通信路の PASSED/FAILED 報告先）も同様にフェイクに
  *          差し替える（Bsw_Dem_fake.h 参照）。PduR はこのチェーンに登場
  *          しないため（CanSM_RxIndication() は CanIf_RxIndication() の PDU
@@ -162,6 +170,10 @@ TEST_F(Bsw_WakeupChain_Test, CanMainFunctionWakeup_OK_StartsValidationWithoutNot
     EXPECT_EQ(FakeCanHw_LastMode, CAN_HW_MODE_LISTEN_ONLY);
     EXPECT_EQ(CurrentComMode(), static_cast<ComM_ModeType>(COMM_NO_COMMUNICATION));
     EXPECT_EQ(FakeEcuM_RequestRUNCount, 0U);
+    // EcuM_CheckWakeup(ECUM_WKSOURCE_CAN) が入口として実際に呼ばれたことを確認
+    // （旧 CanIf_ControllerWakeup() の役割、2026-09-05 是正）
+    EXPECT_EQ(FakeEcuM_CheckWakeupCount, 1U);
+    EXPECT_EQ(FakeEcuM_LastWakeupSource, static_cast<EcuM_WakeupSourceType>(ECUM_WKSOURCE_CAN));
 }
 
 TEST_F(Bsw_WakeupChain_Test, CanMainFunctionWakeup_NG_NoWakeupPending_StaysAsleep)

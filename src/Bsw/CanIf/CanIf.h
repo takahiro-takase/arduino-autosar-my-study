@@ -25,7 +25,6 @@ void           CanIf_RxIndication(const Can_HwType* Mailbox, const PduInfoType* 
 Std_ReturnType CanIf_ReadRxPduData(PduIdType CanIfRxSduId, PduInfoType* CanIfRxInfoPtr);
 void           CanIf_TxConfirmation(PduIdType CanTxPduId);
 void           CanIf_ControllerBusOff(uint8 ControllerId);
-void           CanIf_ControllerWakeup(uint8 ControllerId);
 void           CanIf_GetVersionInfo(Std_VersionInfoType* versioninfo);
 Std_ReturnType CanIf_SetPduMode(uint8 ControllerId, CanIf_PduModeType PduModeRequest);
 Std_ReturnType CanIf_GetPduMode(uint8 ControllerId, CanIf_PduModeType* PduModePtr);

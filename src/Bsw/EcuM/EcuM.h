@@ -57,6 +57,10 @@ typedef enum
 /** EcuM RUN 要求ユーザ型 (ECUM_USER_* 定数を渡す) */
 typedef uint8 EcuM_UserType;
 
+/** EcuM ウェイクアップ要因型（[SWS_EcuM_04040]、uint32 ビットフィールド）。
+ *  本プロジェクトが実際に使う値は ECUM_WKSOURCE_CAN のみ（EcuM_Cfg.h 参照）。 */
+typedef uint32 EcuM_WakeupSourceType;
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -210,6 +214,43 @@ Std_ReturnType EcuM_RequestPOST_RUN(EcuM_UserType user);
  * \Synchronicity  {Synchronous}
  */
 Std_ReturnType EcuM_ReleasePOST_RUN(EcuM_UserType user);
+
+/**
+ * \brief   ウェイクアップ要因を確認する（[SWS_Can_00271]、CAN ドライバの
+ *          ウェイクアップ割り込み/ポーリング文脈からの直接通知先）。
+ *          旧 `CanIf_ControllerWakeup`（実仕様に存在しない独自 API だった、
+ *          2026-09-05 是正）の役割を引き継ぐ。
+ *
+ * \details 実仕様の `EcuM_CheckWakeup()` は EcuM 本体ではなく ECU 統合側が
+ *          実装する「コールアウト」（EcuM 自身がポーリング時に、CAN
+ *          ドライバの ISR/Can_MainFunction_Wakeup が割り込み時にそれぞれ
+ *          呼ぶ）と位置づけられるが、本プロジェクトは単一 ECU 構成で EcuM の
+ *          ウェイクアップソース管理（`EcuM_SetWakeupEvent`/
+ *          `EcuM_ValidateWakeupEvent` 等の保留/検証状態機械、BswM への通知）
+ *          自体を実装しないため、EcuM.c 内の通常関数として簡略実装する。
+ *
+ *          本プロジェクトで実際にサポートするウェイクアップ要因は CAN バス
+ *          起床（`ECUM_WKSOURCE_CAN`）のみである。実際の検証（Listen-Only
+ *          によるノイズ除去、有効フレーム受信確認による FULL_COM 確定）は
+ *          `CanSM_ControllerModeIndication()`/`CanSM_RxIndication()` 側の
+ *          既存のステートマシンが担うため、本関数はその入口として単に
+ *          委譲する。
+ *
+ * \param[in]  wakeupSource  検出されたウェイクアップ要因のビットマスク。
+ *                           `ECUM_WKSOURCE_CAN` ビットが立っていない場合は
+ *                           未知の要因として `ECUM_E_INVALID_PAR` を DET へ
+ *                           報告し、何もしない（本プロジェクトが持つ
+ *                           ウェイクアップ要因は CAN バス起床のみのため）。
+ *
+ * \pre        `Can_MainFunction_Wakeup()`（または `Can_Isr()`）の文脈から
+ *             呼ぶこと（[SWS_Can_00271]）。
+ *
+ * \AUTOSARReq     {SWS_Can_00271}
+ * \ServiceID      {0x42}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void EcuM_CheckWakeup(EcuM_WakeupSourceType wakeupSource);
 
 /**
  * \brief   EcuM モジュールのバージョン情報を取得する。
