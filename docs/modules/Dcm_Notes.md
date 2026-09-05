@@ -287,6 +287,15 @@ communicationType（対象。ビット0=通常通信、ビット1=NM通信）:
   上記以外（サブネット指定を含む）→ NRC 0x31 (requestOutOfRange)
 ```
 
+**実装経路（2026-09-05、シグネチャ準拠サーベイで是正）**: `Dcm_HandleCommunicationControl()`/
+`Dcm_CommControlReset()` は `Com_SetCommunicationEnabled()`/`Nm_EnableCommunication()`/
+`Nm_DisableCommunication()` を直接呼ばず、`BswM_Dcm_CommunicationMode_CurrentState()`
+（[SWS_Dcm_00785]、`Dcm_CommunicationModeType` 値へ変換して通知するだけ）を呼びます。
+実際の Com/Nm への反映は `BswM_PBCfg.c` の 12 通りのルール（`BSWM_ACTION_DCM_COMM_APPLY`、
+`BswM_ApplyDcmCommMode()`）が担います（本来の AUTOSAR アーキテクチャ、詳細は
+`docs/modules/BswM_Notes.md` 参照）。以下の Com/Nm 側の挙動自体（Rx/Tx 無効化の
+意味論、デッドライン監視への影響等）はこの経路変更による差はありません。
+
 **対象と非対象**: `communicationType` の bit0（通常通信）は Com モジュール
 （EngineInfo/AbsInfo 受信、MeterStatus/WarningStatus 送信）を、bit1（NM通信）は
 Nm モジュール（CAN 0x400 送信）を制御します。診断通信そのもの（CanTp/Dcm）は

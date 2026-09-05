@@ -48,14 +48,23 @@ typedef enum
     BSWM_ACTION_ACTIVATE,         /**< 対象タスクを有効化 */
     BSWM_ACTION_DEACTIVATE,       /**< 対象タスクを無効化 */
     BSWM_ACTION_PDU_GROUP_START,  /**< Com_IpduGroupStart(IpduGroupId, Initialize) を呼ぶ */
-    BSWM_ACTION_PDU_GROUP_STOP    /**< Com_IpduGroupStop(IpduGroupId) を呼ぶ */
+    BSWM_ACTION_PDU_GROUP_STOP,   /**< Com_IpduGroupStop(IpduGroupId) を呼ぶ */
+    /** `BSWM_MODE_SRC_DCM_COMM` の現在値（本ルール発火時点で既にキャッシュ
+     *  済みの `Dcm_CommunicationModeType`）を Com/Nm への具体的な有効/無効
+     *  呼び出しへ変換する（[SWS_BswM_00048]、`BswMDcmComModeRequest`
+     *  コンフィグ相当）。PDU_GROUP 系と異なりルール行に専用パラメータを
+     *  持たず、発火時にキャッシュを読み直す方式（`BswM_ExecuteRules()` 参照。
+     *  12 通りの `Dcm_CommunicationModeType` それぞれに対して本アクションを
+     *  持つルールを 1 行ずつ登録する）。 */
+    BSWM_ACTION_DCM_COMM_APPLY
 } BswM_ActionType;
 
 /** BswM モードソース種別 (どのモジュールからの通知か) */
 typedef enum
 {
-    BSWM_MODE_SRC_ECUM,  /**< EcuM_CurrentState からの通知 */
-    BSWM_MODE_SRC_COMM   /**< ComM_CurrentMode からの通知  */
+    BSWM_MODE_SRC_ECUM,      /**< EcuM_CurrentState からの通知 */
+    BSWM_MODE_SRC_COMM,      /**< ComM_CurrentMode からの通知  */
+    BSWM_MODE_SRC_DCM_COMM   /**< Dcm_CommunicationMode_CurrentState からの通知（UDS 0x28） */
 } BswM_ModeSrcType;
 
 /**

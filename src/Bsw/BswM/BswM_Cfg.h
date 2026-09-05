@@ -50,6 +50,7 @@
 #define BSWM_API_ID_DEINIT                0x04U
 #define BSWM_API_ID_ECUM_CURRENT_STATE    0x0FU
 #define BSWM_API_ID_COMM_CURRENT_MODE     0x0EU
+#define BSWM_API_ID_DCM_COMMUNICATION_MODE_CURRENT_STATE  0x06U
 
 /** バージョン情報（SWS_BswM_00003、Com/E2EXf/PduR 等の既存モジュールと同じ命名規則） */
 #define BSWM_VENDOR_ID          0U
@@ -183,11 +184,13 @@
 /* -----------------------------------------------------------------------
  * ルール数
  * ----------------------------------------------------------------------- */
-#define BSWM_RULE_COUNT  8U
+/* 既存 8 ルール + Dcm_CommunicationModeType（[SWS_Dcm_00981]）の全 12 通り
+ * それぞれに対応する BSWM_ACTION_DCM_COMM_APPLY ルールを 1 行ずつ追加。 */
+#define BSWM_RULE_COUNT  20U
 
 /** モードソース数（BswM_ModeSrcType の列挙値数。複合条件ルール評価用の
  *  モードキャッシュ配列 BswM_ModeSrcCache[] のサイズに使う）。 */
-#define BSWM_MODE_SRC_COUNT  2U
+#define BSWM_MODE_SRC_COUNT  3U
 
 /** 1 ルールが持てる条件数の上限（BswMArgumentRef [ECUC_BswM_00820] は
  *  実 AUTOSAR では Multiplicity=1..* だが、本プロジェクトは AND/OR 2 条件までの

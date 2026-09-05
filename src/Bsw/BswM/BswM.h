@@ -12,6 +12,8 @@
  *          モード通知経路:
  *            EcuM_Init() / EcuM_ReleaseRUN() → BswM_EcuM_CurrentState()
  *            ComM_BusSM_ModeIndication()          → BswM_ComM_CurrentMode()
+ *            Dcm_HandleCommunicationControl()/Dcm_CommControlReset()
+ *              → BswM_Dcm_CommunicationMode_CurrentState()
  *
  * \copyright  Copyright (c) 2025 T_T
  * \license    MIT License - 詳細は LICENSE ファイルを参照。
@@ -26,6 +28,7 @@
 #include "BswM_PBCfg.h"
 #include "EcuM.h"
 #include "ComM.h"
+#include "Dcm_Types.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -105,6 +108,34 @@ void BswM_EcuM_CurrentState(EcuM_StateType state);
  * \Synchronicity  {Synchronous}
  */
 void BswM_ComM_CurrentMode(NetworkHandleType channel, ComM_ModeType mode);
+
+/**
+ * \brief   Dcm からの UDS 0x28 CommunicationControl 通知コールバック。
+ *
+ * \details Dcm_HandleCommunicationControl()/Dcm_CommControlReset() が呼ぶ。
+ *          BswM は受け取った Dcm_CommunicationModeType 値に一致する
+ *          `BSWM_ACTION_DCM_COMM_APPLY` ルール（`BswM_PBCfg.c`）を発火させ、
+ *          `BswM_ApplyDcmCommMode()` 経由で実際に Com/Nm へ反映する
+ *          （2026-09-05、シグネチャ準拠サーベイで、Dcm 側が Com/Nm を直接
+ *          呼んでいたレイヤ違反を是正した際に新設）。
+ *
+ * \param[in]  Network        通信チャネル（本プロジェクトは単一ネットワーク
+ *                            構成のため受け取るだけで検証・使用しない）。
+ * \param[in]  RequestedMode  要求された通信モード。
+ *
+ * \note    BswM 未初期化時（`BswM_Cfg == NULL`）は DET 報告のみで無視するが、
+ *          本関数は仕様どおり戻り値を持たないため呼び出し元（Dcm）へは
+ *          伝わらない。実際にはこの呼び出し経路（`Dcm_HandleCommunicationControl()`/
+ *          `Dcm_CommControlReset()`）は EcuM_Init() の起動シーケンスで
+ *          BswM_Init() 完了後にしか到達しない（診断セッション確立後の
+ *          UDS 要求経由のため）ため、実運用上は問題にならない。
+ *
+ * \AUTOSARReq     {SWS_BswM_00048, SWS_BswM_00079, SWS_BswM_00093}
+ * \ServiceID      {0x06}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void BswM_Dcm_CommunicationMode_CurrentState(NetworkHandleType Network, Dcm_CommunicationModeType RequestedMode);
 
 #ifdef __cplusplus
 }

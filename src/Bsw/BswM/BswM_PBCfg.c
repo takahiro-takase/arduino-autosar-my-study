@@ -20,6 +20,14 @@
  *                                    → I-PDU Group「センサーRX」(EngineInfo/AbsInfo) を起動
  *            Rule 7: ComM==NO_COMMUNICATION（真の物理スリープのみ）
  *                                    → I-PDU Group「センサーRX」(EngineInfo/AbsInfo) を停止
+ *            Rule 8-19: Dcm_CommunicationModeType（UDS 0x28 CommunicationControl）の
+ *                                    全 12 通りそれぞれに対応し、BswM_ApplyDcmCommMode()
+ *                                    経由で Com_SetCommunicationEnabled()/
+ *                                    Nm_EnableCommunication()/DisableCommunication() へ
+ *                                    反映する（2026-09-05 追加、[SWS_BswM_00048]。
+ *                                    Dcm_HandleCommunicationControl()/
+ *                                    Dcm_CommControlReset() が
+ *                                    BswM_Dcm_CommunicationMode_CurrentState() 経由で通知）。
  *
  *          Rule 3/4/5 の狙い: E2EHealthStatus は診断監視用のネットワーク健全性
  *          テレメトリであり、車両の基本動作には不要な「非重要」通信である。
@@ -90,6 +98,7 @@
 #include "EcuM.h"
 #include "ComM.h"
 #include "Com_Cfg.h"
+#include "Dcm_Types.h"
 
 /* -----------------------------------------------------------------------
  * ルールテーブル
@@ -180,6 +189,83 @@ static const BswM_RuleType BswM_Rules[BSWM_RULE_COUNT] =
         .ConditionCount = 1U,
         .Action         = BSWM_ACTION_PDU_GROUP_STOP,
         .IpduGroupId    = COM_IPDU_GROUP_SENSOR_RX
+    },
+    /* Rule 8-19: Dcm_CommunicationModeType（[SWS_Dcm_00981]）の全 12 通り
+     * それぞれに対して BSWM_ACTION_DCM_COMM_APPLY を発火させる
+     * （BswM_Dcm_CommunicationMode_CurrentState()/BswM_ApplyDcmCommMode()
+     * 参照。12 条件は互いに排他的なため、値が変化するたびに旧値のルールが
+     * false へ、新値のルールが true へ遷移し、常にちょうど1本だけ発火する）。 */
+    {
+        .Operator       = BSWM_OP_AND,
+        .Condition       = {{ BSWM_MODE_SRC_DCM_COMM, DCM_ENABLE_RX_TX_NORM }},
+        .ConditionCount = 1U,
+        .Action         = BSWM_ACTION_DCM_COMM_APPLY
+    },
+    {
+        .Operator       = BSWM_OP_AND,
+        .Condition       = {{ BSWM_MODE_SRC_DCM_COMM, DCM_ENABLE_RX_DISABLE_TX_NORM }},
+        .ConditionCount = 1U,
+        .Action         = BSWM_ACTION_DCM_COMM_APPLY
+    },
+    {
+        .Operator       = BSWM_OP_AND,
+        .Condition       = {{ BSWM_MODE_SRC_DCM_COMM, DCM_DISABLE_RX_ENABLE_TX_NORM }},
+        .ConditionCount = 1U,
+        .Action         = BSWM_ACTION_DCM_COMM_APPLY
+    },
+    {
+        .Operator       = BSWM_OP_AND,
+        .Condition       = {{ BSWM_MODE_SRC_DCM_COMM, DCM_DISABLE_RX_TX_NORM }},
+        .ConditionCount = 1U,
+        .Action         = BSWM_ACTION_DCM_COMM_APPLY
+    },
+    {
+        .Operator       = BSWM_OP_AND,
+        .Condition       = {{ BSWM_MODE_SRC_DCM_COMM, DCM_ENABLE_RX_TX_NM }},
+        .ConditionCount = 1U,
+        .Action         = BSWM_ACTION_DCM_COMM_APPLY
+    },
+    {
+        .Operator       = BSWM_OP_AND,
+        .Condition       = {{ BSWM_MODE_SRC_DCM_COMM, DCM_ENABLE_RX_DISABLE_TX_NM }},
+        .ConditionCount = 1U,
+        .Action         = BSWM_ACTION_DCM_COMM_APPLY
+    },
+    {
+        .Operator       = BSWM_OP_AND,
+        .Condition       = {{ BSWM_MODE_SRC_DCM_COMM, DCM_DISABLE_RX_ENABLE_TX_NM }},
+        .ConditionCount = 1U,
+        .Action         = BSWM_ACTION_DCM_COMM_APPLY
+    },
+    {
+        .Operator       = BSWM_OP_AND,
+        .Condition       = {{ BSWM_MODE_SRC_DCM_COMM, DCM_DISABLE_RX_TX_NM }},
+        .ConditionCount = 1U,
+        .Action         = BSWM_ACTION_DCM_COMM_APPLY
+    },
+    {
+        .Operator       = BSWM_OP_AND,
+        .Condition       = {{ BSWM_MODE_SRC_DCM_COMM, DCM_ENABLE_RX_TX_NORM_NM }},
+        .ConditionCount = 1U,
+        .Action         = BSWM_ACTION_DCM_COMM_APPLY
+    },
+    {
+        .Operator       = BSWM_OP_AND,
+        .Condition       = {{ BSWM_MODE_SRC_DCM_COMM, DCM_ENABLE_RX_DISABLE_TX_NORM_NM }},
+        .ConditionCount = 1U,
+        .Action         = BSWM_ACTION_DCM_COMM_APPLY
+    },
+    {
+        .Operator       = BSWM_OP_AND,
+        .Condition       = {{ BSWM_MODE_SRC_DCM_COMM, DCM_DISABLE_RX_ENABLE_TX_NORM_NM }},
+        .ConditionCount = 1U,
+        .Action         = BSWM_ACTION_DCM_COMM_APPLY
+    },
+    {
+        .Operator       = BSWM_OP_AND,
+        .Condition       = {{ BSWM_MODE_SRC_DCM_COMM, DCM_DISABLE_RX_TX_NORM_NM }},
+        .ConditionCount = 1U,
+        .Action         = BSWM_ACTION_DCM_COMM_APPLY
     }
 };
 

@@ -152,9 +152,9 @@
 #include "CanTp.h"
 #include "Rte.h"
 #include "ComM.h"
-#include "Com.h"
 #include "Nm.h"
 #include "KeyM.h"
+#include "BswM.h"
 #include "Det.h"
 
 /* millis() is declared in Arduino wiring.c with C linkage. */
@@ -1585,12 +1585,17 @@ static void Dcm_HandleIoControl(const uint8* uds, uint8 udsLen)
  *          揃えている。これを怠ると、CommunicationControl で通信を無効化
  *          したままテスターが切断された場合、ECU が defaultSession に
  *          戻っても通信不能のまま残ってしまう。
+ *
+ * \note    2026-09-05、Com_SetCommunicationEnabled()/Nm_EnableCommunication()
+ *          の直接呼び出しから `BswM_Dcm_CommunicationMode_CurrentState()`
+ *          経由へ変更（本関数と `Dcm_HandleCommunicationControl()` の
+ *          両方が唯一の適用経路である BswM を必ず通るようにするため。
+ *          BswM 側のルールテーブルが実際に Com/Nm へ反映する）。
  */
 static void Dcm_CommControlReset(void)
 {
     DET_LOGT(TAG, "called");
-    Com_SetCommunicationEnabled(1U, 1U);
-    (void)Nm_EnableCommunication(NM_MAIN_NETWORK_HANDLE);
+    BswM_Dcm_CommunicationMode_CurrentState(NM_MAIN_NETWORK_HANDLE, DCM_ENABLE_RX_TX_NORM_NM);
 }
 
 /**
@@ -1621,6 +1626,22 @@ static void Dcm_CommControlReset(void)
  *          要求: [0x28, controlType, communicationType]
  *          応答: [0x68, controlType]
  *
+ *          実装方針（2026-09-05、シグネチャ準拠サーベイで是正）: 実仕様
+ *          （[SWS_Dcm_00785]）は本サービス受理時に
+ *          `BswM_Dcm_CommunicationMode_CurrentState(Network, RequestedMode)`
+ *          を呼んで通知するだけで、実際の Com/Nm への反映は BswM のルール
+ *          テーブル（`BswM_PBCfg.c` の Dcm_CommunicationModeType 別ルール）が
+ *          担う設計。従来は本関数が `Com_SetCommunicationEnabled()`/
+ *          `Nm_EnableCommunication()`/`Nm_DisableCommunication()` を直接
+ *          呼んでいたが（レイヤ違反）、この本来の経路へ是正した。
+ *          `BswM_Dcm_CommunicationMode_CurrentState()` は戻り値を持たない
+ *          （void）ため、旧実装にあった「Nm が失敗したら NRC 0x22」という
+ *          防御的分岐は原理的に組めなくなった。ただし当該分岐は
+ *          `NM_MAIN_NETWORK_HANDLE`（常に有効な定数）以外の Channel を
+ *          渡すことがなく、`Nm_Initialized` も本サービスが呼ばれる時点
+ *          （診断セッション確立後）では必ず真であるため、実運用上は
+ *          到達しない防御コードだった（値としては失われるが、実害はない）。
+ *
  * \param[in]  uds     UDS ペイロード先頭ポインタ (uds[0]=SID 0x28)。
  * \param[in]  udsLen  UDS ペイロード長。
  */
@@ -1650,30 +1671,17 @@ static void Dcm_HandleCommunicationControl(const uint8* uds, uint8 udsLen)
         return;
     }
 
-    const uint8 rxEnabled = (controlType == DCM_COMMCTRL_ENABLE_RX_TX
-                              || controlType == DCM_COMMCTRL_ENABLE_RX_DISABLE_TX) ? 1U : 0U;
-    const uint8 txEnabled = (controlType == DCM_COMMCTRL_ENABLE_RX_TX
-                              || controlType == DCM_COMMCTRL_DISABLE_RX_ENABLE_TX) ? 1U : 0U;
+    /* [SWS_Dcm_00981]: controlType/communicationType の組み合わせを
+     * Dcm_CommunicationModeType の一意な値へ変換する（Dcm_Types.h 参照）。
+     * communicationType は 1(normal)/2(NM)/3(両方) の 3 通りのため
+     * (communicationType-1)*4 が各グループの先頭値になる。 */
+    Dcm_CommunicationModeType mode =
+        (Dcm_CommunicationModeType)(controlType + (uint8)((communicationType - 1U) * 4U));
 
-    /* Nm 側を先に確定させる。Com_SetCommunicationEnabled() は失敗しうる
-     * 戻り値を持たないため、Nm が失敗した場合に Com だけ適用済みという
-     * 中途半端な状態を避けるべく、先に Nm 側のみ試す。 */
-    if ((communicationType & DCM_COMMTYPE_NM) != 0U)
-    {
-        Std_ReturnType nmRet = txEnabled
-            ? Nm_EnableCommunication(NM_MAIN_NETWORK_HANDLE)
-            : Nm_DisableCommunication(NM_MAIN_NETWORK_HANDLE);
-        if (nmRet != E_OK)
-        {
-            Dcm_SendNegativeResponse(DCM_SID_COMM_CONTROL, DCM_NRC_CONDITIONS_NOT_CORRECT);
-            return;
-        }
-    }
-    if ((communicationType & DCM_COMMTYPE_NORMAL) != 0U)
-        Com_SetCommunicationEnabled(rxEnabled, txEnabled);
+    BswM_Dcm_CommunicationMode_CurrentState(NM_MAIN_NETWORK_HANDLE, mode);
 
-    DET_LOGI(TAG, "28 controlType=0x%02X commType=0x%02X",
-             (unsigned)controlType, (unsigned)communicationType);
+    DET_LOGI(TAG, "28 controlType=0x%02X commType=0x%02X mode=0x%02X",
+             (unsigned)controlType, (unsigned)communicationType, (unsigned)mode);
 
     /* 正応答: [0x68, controlType] */
     Dcm_TxBuf[0] = 0x68U;               /* SID + 0x40 */

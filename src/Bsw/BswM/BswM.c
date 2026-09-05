@@ -48,6 +48,7 @@
 #include "Os.h"
 #include "Os_Cfg.h"
 #include "Com.h"
+#include "Nm.h"
 #include "Det.h"
 
 #define TAG "BswM"
@@ -101,6 +102,40 @@ static uint8 BswM_EvaluateRule(const BswM_RuleType* rule)
             return isOr;
     }
     return !isOr;
+}
+
+/**
+ * \brief   `BSWM_MODE_SRC_DCM_COMM` の現在キャッシュ値を Com/Nm への具体的な
+ *          有効/無効呼び出しへ変換して適用する（[SWS_BswM_00048]、
+ *          `BswMDcmComModeRequest` コンフィグ相当）。
+ *
+ * \details `Dcm_CommunicationModeType`（0x00〜0x0B）は
+ *          `controlType + (communicationType-1)*4` で構成されるため、
+ *          4 で割った商が対象範囲（0=normal/1=NM/2=両方）、余りが
+ *          Rx/Tx の有効/無効パターン（0=enableRxTx/1=enableRxDisableTx/
+ *          2=disableRxEnableTx/3=disableRxTx）を表す（Dcm_Types.h 参照）。
+ *          12 通りの `BSWM_ACTION_DCM_COMM_APPLY` ルール（`BswM_PBCfg.c`）は
+ *          いずれも本関数を呼ぶだけで、発火時点で `BswM_ModeSrcCache[]` は
+ *          既に新値へ更新済み（`BswM_ExecuteRules()` 冒頭）のため、
+ *          どのルールが発火したかに関わらず正しい値を読み直せる。
+ */
+static void BswM_ApplyDcmCommMode(void)
+{
+    const uint8 mode  = BswM_ModeSrcCache[BSWM_MODE_SRC_DCM_COMM];
+    const uint8 group = mode / 4U;  /* 0=normal, 1=NM, 2=両方 */
+    const uint8 op    = mode % 4U;  /* 0=enableRxTx/1=enableRxDisableTx/2=disableRxEnableTx/3=disableRxTx */
+    const uint8 rxEnabled = (op == 0U || op == 1U) ? 1U : 0U;
+    const uint8 txEnabled = (op == 0U || op == 2U) ? 1U : 0U;
+
+    if (group == 0U || group == 2U)
+        Com_SetCommunicationEnabled(rxEnabled, txEnabled);
+
+    if (group == 1U || group == 2U)
+    {
+        (void)(txEnabled
+            ? Nm_EnableCommunication(NM_MAIN_NETWORK_HANDLE)
+            : Nm_DisableCommunication(NM_MAIN_NETWORK_HANDLE));
+    }
 }
 
 /**
@@ -160,6 +195,10 @@ static void BswM_ExecuteRules(BswM_ModeSrcType src, uint8 newValue)
              * を呼ぶ。 */
             Com_IpduGroupStop(rule->IpduGroupId);
         }
+        else if (rule->Action == BSWM_ACTION_DCM_COMM_APPLY)
+        {
+            BswM_ApplyDcmCommMode();
+        }
     }
 }
 
@@ -179,8 +218,12 @@ void BswM_Init(const BswM_ConfigType* ConfigPtr)
 
     BswM_Cfg = ConfigPtr;
 
-    BswM_ModeSrcCache[BSWM_MODE_SRC_ECUM] = (uint8)ECUM_STATE_STARTUP;
-    BswM_ModeSrcCache[BSWM_MODE_SRC_COMM] = (uint8)COMM_NO_COMMUNICATION;
+    BswM_ModeSrcCache[BSWM_MODE_SRC_ECUM]     = (uint8)ECUM_STATE_STARTUP;
+    BswM_ModeSrcCache[BSWM_MODE_SRC_COMM]     = (uint8)COMM_NO_COMMUNICATION;
+    /* 起動直後は UDS 0x28 が一度も要求されていない状態 = Rx/Tx とも
+     * 通常通信・NM通信ともに有効（Com_SetCommunicationEnabled()/
+     * Nm_EnableCommunication() の既定値と一致させる）。 */
+    BswM_ModeSrcCache[BSWM_MODE_SRC_DCM_COMM] = (uint8)DCM_ENABLE_RX_TX_NORM_NM;
     for (uint8 i = 0U; i < ConfigPtr->RuleCount; i++)
         BswM_RuleLastResult[i] = 0U;
 
@@ -262,4 +305,51 @@ void BswM_ComM_CurrentMode(NetworkHandleType channel, ComM_ModeType mode)
         return;
 
     BswM_ExecuteRules(BSWM_MODE_SRC_COMM, (uint8)mode);
+}
+
+/**
+ * \brief   Dcm からの UDS 0x28 CommunicationControl 通知コールバック。
+ *
+ * \details Dcm_HandleCommunicationControl()/Dcm_CommControlReset() が呼ぶ。
+ *          BswM は受け取った Dcm_CommunicationModeType 値に一致する
+ *          `BSWM_ACTION_DCM_COMM_APPLY` ルール（`BswM_PBCfg.c`）を発火させ、
+ *          `BswM_ApplyDcmCommMode()` 経由で実際に Com/Nm へ反映する。
+ *
+ * \param[in]  Network        通信チャネル（本プロジェクトは単一ネットワーク
+ *                            構成のため受け取るだけで検証・使用しない）。
+ * \param[in]  RequestedMode  要求された通信モード。
+ *
+ * \note    BswM 未初期化時（`BswM_Cfg == NULL`）は DET 報告のみで無視するが、
+ *          本関数は仕様どおり戻り値を持たないため呼び出し元（Dcm）へは
+ *          伝わらない。実際にはこの呼び出し経路（`Dcm_HandleCommunicationControl()`/
+ *          `Dcm_CommControlReset()`）は EcuM_Init() の起動シーケンスで
+ *          BswM_Init() 完了後にしか到達しない（診断セッション確立後の
+ *          UDS 要求経由のため）ため、実運用上は問題にならない。
+ *
+ * \AUTOSARReq     {SWS_BswM_00048, SWS_BswM_00079, SWS_BswM_00093}
+ * \ServiceID      {0x06}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void BswM_Dcm_CommunicationMode_CurrentState(NetworkHandleType Network, Dcm_CommunicationModeType RequestedMode)
+{
+    DET_LOGT(TAG, "called");
+    (void)Network;
+
+    if (BswM_Cfg == NULL)
+    {
+        Det_ReportError(BSWM_MODULE_ID, 0U, BSWM_API_ID_DCM_COMMUNICATION_MODE_CURRENT_STATE, BSWM_E_NO_INIT);
+        return;
+    }
+
+    if (RequestedMode > DCM_DISABLE_RX_TX_NORM_NM)
+    {
+        Det_ReportError(BSWM_MODULE_ID, 0U, BSWM_API_ID_DCM_COMMUNICATION_MODE_CURRENT_STATE, BSWM_E_REQ_MODE_OUT_OF_RANGE);
+        return;
+    }
+
+    if (BswM_ModeSrcCache[BSWM_MODE_SRC_DCM_COMM] == (uint8)RequestedMode)
+        return;
+
+    BswM_ExecuteRules(BSWM_MODE_SRC_DCM_COMM, (uint8)RequestedMode);
 }
