@@ -346,7 +346,7 @@ Com_MainFunctionTx()（PERIODIC モードの I-PDU。現状 IPduId=2 が対象�
         E2EXf_TransformP05() を呼び出す
           → E2E_P05Protect() を実行
             Counter を書き込み +1、CRC16 を計算して書き込む
-  PduR_Transmit() で送信（SecOC 等の中間モジュールは挟まらず CanIf へ直結）
+  PduR_ComTransmit() で送信（SecOC 等の中間モジュールは挟まらず CanIf へ直結）
 ```
 
 ### E2E モジュール設定（`src/Bsw/E2EXf/E2EXf_PBCfg.c` の `E2EXf_E2EHealthStatusTxCfgP05`）

@@ -284,7 +284,7 @@ void Com_MainFunctionTx(void);
  *          TxEnabled=0 の間、DIRECT/MIXED/PERIODIC いずれの I-PDU も
  *          Com_MainFunctionTx() での実送信を抑制する（DIRECT/MIXED の変化検知
  *          自体は Com_RequestTxOnChange() が Com_TxPending[] へ記録するが、
- *          実際に PduR_Transmit() を呼ぶかどうかは Com_MainFunctionTx() が
+ *          実際に PduR_ComTransmit() を呼ぶかどうかは Com_MainFunctionTx() が
  *          Com_TxEnabled を見て判断する）。SWS_Com_00777「停止中の I-PDU の
  *          送信要求はキャンセルしなければならない」・SWS_Com_00334 の説明文
  *          の要求は、Com_MainFunctionTx() が抑制中でも Com_TxPending[] を
@@ -452,7 +452,7 @@ uint8 Com_Test_GetSigTimedOut(Com_SignalIdType SignalId);
 
 /** [テスト専用] TX I-PDU の「送信済み・未確認」フラグ（Com_TxConfPending
  *  [ipduId]）を直接セットする。Com_IpduGroupStop() の TxErrCbk（グループ単位
- *  是正、SWS_Com_00491）を検証するには、実際に PduR_Transmit() 成功後・
+ *  是正、SWS_Com_00491）を検証するには、実際に PduR_ComTransmit() 成功後・
  *  Com_TxConfirmation() 到達前という狭い区間を作り出す必要があるが、
  *  Signal Group の PduR/CanIf ルーティングをテスト専用に用意するのは
  *  過剰なため、この内部フラグを直接操作できるようにする。範囲外の

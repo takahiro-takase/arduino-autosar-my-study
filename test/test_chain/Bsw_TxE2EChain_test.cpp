@@ -8,9 +8,9 @@
  *              Com_MainFunctionTx()
  *                → TxTransformCbk があれば呼ぶ    ← Rte_COMTransform_E2EHealthStatus()
  *                                                    → E2EXf_TransformP05() → E2E_P05Protect()
- *                → PduR_Transmit() → CanIf_Transmit() → Can_Write()   （以降は「通常」と同じ）
+ *                → PduR_ComTransmit() → CanIf_Transmit() → Can_Write()   （以降は「通常」と同じ）
  *
- *          「通常」の Tx チェーン（Com_MainFunctionTx() → PduR_Transmit() →
+ *          「通常」の Tx チェーン（Com_MainFunctionTx() → PduR_ComTransmit() →
  *          CanIf_Transmit() → Can_Write()）は Bsw_TxChain_test.cpp が既に検証
  *          済みのため、本テストは TxTransformCbk フックの部分（E2EXf_TransformP05()
  *          → E2E_P05Protect() が Counter・CRC16 を正しく書き込むこと）に絞る。

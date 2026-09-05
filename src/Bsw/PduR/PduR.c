@@ -26,7 +26,7 @@ static const PduR_PBConfigType* PduR_ConfigPtr = NULL;
 /**
  * \brief   SrcPduId に一致する TX ルーティングパスを検索する。
  *
- * \details PduR_CanIfTxConfirmation/PduR_Transmit/PduR_SecOCTransmit が
+ * \details PduR_CanIfTxConfirmation/PduR_ComTransmit/PduR_SecOCTransmit が
  *          共通で行う「TxPaths を SrcPduId で線形探索する」処理をまとめたもの。
  *
  * \param[in]  SrcPduId  検索する送信元 PDU ID。
@@ -101,7 +101,7 @@ void PduR_Init(const PduR_PBConfigType* ConfigPtr)
  *                         RX ルーティングパスの検索に使用する。
  * \param[in]  PduInfoPtr  受信 PDU のデータと長さへのポインタ。
  *                         NULL 禁止。SduDataPtr も NULL 禁止
- *                         （PduR_Transmit が委譲する CanIf_Transmit と
+ *                         （PduR_ComTransmit が委譲する CanIf_Transmit と
  *                         対称の入力検証。下流の RxIndFct がそのまま
  *                         SduDataPtr を参照するため、ここで検証しておく）。
  *
@@ -231,14 +231,17 @@ void PduR_SecOCTxConfirmation(PduIdType SrcPduId, Std_ReturnType result)
 }
 
 /**
- * \brief   上位層からの PDU 送信要求を CanIf へ転送する。
+ * \brief   Com からの PDU 送信要求を CanIf へ転送する（[SWS_PduR_00406]、
+ *          generic な PduR_<User:Up>Transmit テンプレートの Com 向け実体化）。
  *
- * \details COM 等の上位層から PDU 送信を要求された際に呼び出される。
+ * \details Com から PDU 送信を要求された際に呼び出される。
  *          SrcPduId に一致する TX ルーティングパスを検索し、
  *          CanIf_Transmit() へ転送する。
  *          一致するパスが存在しない場合は即座に E_NOT_OK を返す。
+ *          CanTp 向けの実体化である `PduR_CanTpTransmit()` は本関数と
+ *          挙動が完全に同一のため、本関数へそのまま委譲する。
  *
- * \param[in]  SrcPduId    送信する上位層 PDU の ID。
+ * \param[in]  SrcPduId    送信する Com 側 PDU の ID。
  *                         TX ルーティングパスの検索に使用する。
  * \param[in]  PduInfoPtr  送信するデータと長さへのポインタ。NULL 禁止。
  *
@@ -255,7 +258,7 @@ void PduR_SecOCTxConfirmation(PduIdType SrcPduId, Std_ReturnType result)
  * \Reentrancy     {Reentrant}
  * \Synchronicity  {Synchronous}
  */
-Std_ReturnType PduR_Transmit(PduIdType SrcPduId, const PduInfoType* PduInfoPtr)
+Std_ReturnType PduR_ComTransmit(PduIdType SrcPduId, const PduInfoType* PduInfoPtr)
 {
     DET_LOGT(TAG, "called");
 
@@ -295,10 +298,44 @@ Std_ReturnType PduR_Transmit(PduIdType SrcPduId, const PduInfoType* PduInfoPtr)
 }
 
 /**
- * \brief   SecOC が変換済みの Secured I-PDU を送信する際に呼ぶ、PduR_Transmit()
- *          とは別の TX エントリポイント。
+ * \brief   CanTp からの PDU 送信要求を CanIf へ転送する（[SWS_PduR_00406]、
+ *          generic な PduR_<User:Up>Transmit テンプレートの CanTp 向け実体化）。
  *
- * \details PduR_Transmit() と異なり TransmitOverrideFct を一切評価せず、常に
+ * \details Com 向けの `PduR_ComTransmit()` と挙動が完全に同一（同じ
+ *          TX ルーティングテーブルを同じロジックで検索するだけで、CanTp
+ *          固有の特別扱いは無い）ため、そのまま委譲する
+ *          （`PduR_SecOCTxConfirmation()` が `PduR_CanIfTxConfirmation()` へ
+ *          委譲するのと同じ方針。`PduR_SecOCTransmit()` が独自に本体を持つのは
+ *          TransmitOverrideFct を評価しないという実際の挙動差があるためで、
+ *          今回はそのような差が無い）。
+ *
+ * \param[in]  SrcPduId    送信する CanTp 側 PDU の ID。
+ *                         TX ルーティングパスの検索に使用する。
+ * \param[in]  PduInfoPtr  送信するデータと長さへのポインタ。NULL 禁止。
+ *
+ * \retval  E_OK      PDU が CanIf_Transmit() に正常に転送された。
+ * \retval  E_NOT_OK  PduR 未初期化、PduInfoPtr が NULL、
+ *                    一致する TX ルーティングパスなし、
+ *                    または CanIf_Transmit() が失敗した。
+ *
+ * \pre        PduR_Init() が正常に完了していること。
+ *
+ * \AUTOSARReq     {SWS_PduR_00406}
+ * \ServiceID      {0x49}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType PduR_CanTpTransmit(PduIdType SrcPduId, const PduInfoType* PduInfoPtr)
+{
+    return PduR_ComTransmit(SrcPduId, PduInfoPtr);
+}
+
+/**
+ * \brief   SecOC が変換済みの Secured I-PDU を送信する際に呼ぶ、
+ *          PduR_ComTransmit()/PduR_CanTpTransmit() とは別の TX エントリポイント。
+ *
+ * \details PduR_ComTransmit()/PduR_CanTpTransmit() と異なり
+ *          TransmitOverrideFct を一切評価せず、常に
  *          CanIf_Transmit() へ直接転送する（SecOC は既に変換を終えた後にここへ
  *          来るため、再度 TransmitOverrideFct を評価すると SecOC_IfTransmit() を
  *          無限に呼び直すことになってしまう）。SrcPduId は元の Authentic I-PDU

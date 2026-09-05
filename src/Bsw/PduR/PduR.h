@@ -15,6 +15,7 @@
 #include "PduR_Cfg.h"
 #include "PduR_CanIf.h"
 #include "PduR_COM.h"
+#include "PduR_CanTp.h"
 #include "PduR_SecOC.h"
 
 #ifdef __cplusplus
@@ -23,8 +24,6 @@ extern "C" {
 
 /* SWS_PduR_00334 */
 void           PduR_Init(const PduR_PBConfigType* ConfigPtr);
-/* SWS_PduR_00406 */
-Std_ReturnType PduR_Transmit(PduIdType SrcPduId, const PduInfoType* PduInfoPtr);
 /* SWS_PduR_00338: PduR_Init と並び PDUR_E_UNINIT 報告の対象外である唯一の例外 API
  * (SWS_PduR_00119)。 */
 void           PduR_GetVersionInfo(Std_VersionInfoType* versioninfo);

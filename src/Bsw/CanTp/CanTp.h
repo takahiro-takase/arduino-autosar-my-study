@@ -12,7 +12,7 @@
  *
  *          TX フロー:
  *            Dcm → CanTp_Transmit (UDS ペイロードのみ)
- *            CanTp: SF/FF+CF に分割 → PduR_Transmit → CanIf → CAN 0x7E8
+ *            CanTp: SF/FF+CF に分割 → PduR_CanTpTransmit → CanIf → CAN 0x7E8
  *
  * \copyright  Copyright (c) 2025 T_T
  * \license    MIT License - 詳細は LICENSE ファイルを参照。

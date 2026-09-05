@@ -286,7 +286,7 @@ typedef enum
 //   （実車の Com と同じ「値の生成」と「送信タイミング」の責務分離。
 //   SWS_Com_00734/00742/00743: DIRECT/MIXED は変化検知した signal(group)の
 //   send request が「次回メイン関数までに」送信を開始させる。本実装では
-//   実際の PduR_Transmit() 呼び出しを必ず Com_MainFunctionTx() 側で行う
+//   実際の PduR_ComTransmit() 呼び出しを必ず Com_MainFunctionTx() 側で行う
 //   ことで、この「次回メイン関数まで」の猶予をそのまま「ASW Runnable の
 //   スタックフレームで SPI 送信までブロッキングさせない」設計に利用している）。
 //
@@ -328,7 +328,7 @@ typedef enum
 //   DLC       : PDU のバイト長 = 内部バッファサイズ
 //   PduRId    : PduR 空間での ID
 //               RX → Com_RxIndication に渡される DestPduId と一致させる
-//               TX → PduR_Transmit に渡す SrcPduId と一致させる
+//               TX → PduR_ComTransmit に渡す SrcPduId と一致させる
 //   FirstTimeoutMs : RX 受信デッドライン監視の初回猶予時間 [ms]（DaVinci:
 //               ComFirstTimeout。[SWS_Com_00787] 項目2・[SWS_Com_00716]）。
 //               I-PDU Group 起動直後（または Com_SetCommunicationEnabled() に
@@ -502,7 +502,7 @@ typedef enum
 //               いつ減らすか等）は Com.c・docs/modules/Com_Notes.md 参照。
 //   TxFirstTimeoutMs, TxTimeoutMs, TxTOutCbk :
 //               TX 送信デッドライン監視（Com_CbkTxTOut、SWS_Com_00878/00879/
-//               00880/00304/00554）。PduR_Transmit() へ渡した（＝
+//               00880/00304/00554）。PduR_ComTransmit() へ渡した（＝
 //               Com_TxConfPending が 0→1 に遷移した）時点でタイマを開始し、
 //               Com_TxConfirmation() が届く前に TxTimeoutMs（初回は
 //               TxFirstTimeoutMs）を超えると TxTOutCbk を呼ぶ。上の
@@ -548,7 +548,7 @@ typedef enum
 //               the outgoing I-PDU."。ECUC_Com_00387 ComIPduCallout）。
 //               RxIpduCalloutCbk の送信側対（上記）。Com_DoTransmit() 内、
 //               TxTransformCbk（E2E/CRC 等の送信直前変換）適用後・
-//               PduR_Transmit() 呼び出し直前に、実際に送信される最終バイト列
+//               PduR_ComTransmit() 呼び出し直前に、実際に送信される最終バイト列
 //               を渡して呼ぶ（[SWS_Com_00719]: "the AUTOSAR COM module shall
 //               invoke this I-PDU callout directly before the I-PDU is
 //               transmitted via PduR_ComTransmit"）。戻り値 0（false 相当）
@@ -767,7 +767,7 @@ typedef enum
 //               通知は Com_IPduConfigType.TxErrCbk 側でグループ単位に 1 回だけ
 //               行う。2026-08 対応、TxAckCbk と同時に是正。詳細は同フィールドの
 //               コメント参照）。非 NULL なら、このシグナルが属する I-PDU が
-//               「送信済み・未確認」（PduR_Transmit() には渡したが対応する
+//               「送信済み・未確認」（PduR_ComTransmit() には渡したが対応する
 //               Com_TxConfirmation() がまだ届いていない）状態のまま
 //               Com_IpduGroupStop() で停止されたときに呼ばれる
 //               （Com_CbkTxErr、SWS_Com_00491/SWS_Com_00479 相当。

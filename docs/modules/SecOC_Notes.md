@@ -42,7 +42,7 @@ E2E は「Com のコールバックフック（RxIndicationCbk/TxTransformCbk）
   へ強化した際に DLC が classic CAN の 8byte 上限を超えるため撤去した:
     E2EMon → Com_SendSignal() → Com_MainFunctionTx()（PERIODIC、6000ms周期）
       → TxTransformCbk（E2EXf、E2E CRC/Counter を書き込む）
-      → PduR_Transmit(SrcPduId=3, 4byte)
+      → PduR_ComTransmit(SrcPduId=3, 4byte)
           → TransmitOverrideFct=SecOC_IfTransmit()（Authentic I-PDU を内部
             バッファへコピーし即座に E_OK を返す。[SWS_SecOC_00058]）
       → 次回 SecOC_MainFunctionTx()（100ms周期）:
@@ -65,7 +65,7 @@ transmission"）に忠実な形で追加しました。実装当初の RX 専用
 `TransmitOverrideFct`/`TransmitOverrideId` を追加し、NULL（既定）なら従来どおり
 `CanIf_Transmit()` へ直接転送、非 NULL なら中間モジュール（SecOC）へ委譲する形に
 一般化しました（既存の全 TX パスはこのフィールドを設定しないため無変更・無
-リグレッションです）。中間モジュールは変換完了後、`PduR_Transmit()` とは別の
+リグレッションです）。中間モジュールは変換完了後、`PduR_ComTransmit()` とは別の
 `PduR_SecOCTransmit()`（`TransmitOverrideFct` を再評価しない）を呼んで
 `CanIf_Transmit()` まで到達させます（`TransmitOverrideFct`/`TransmitOverrideId`
 という機構自体は、現在これを使う TX I-PDU が無くなった後も学習用リファレンス

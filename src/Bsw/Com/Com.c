@@ -165,7 +165,7 @@ static uint8 Com_RxInvalidNotifyPending[COM_SIGNAL_COUNT];
 static uint8 Com_RxFilterRejectPending[COM_SIGNAL_COUNT];
 
 /* DIRECT/MIXED I-PDU 用、「次回 Com_MainFunctionTx() で送信すべき変化あり」フラグ。
- * 実送信（PduR_Transmit → ... → MCP2515 への SPI 送信）を ASW Runnable の
+ * 実送信（PduR_ComTransmit → ... → MCP2515 への SPI 送信）を ASW Runnable の
  * スタックフレームから切り離し、必ず Com_MainFunctionTx()（Os の 100ms タスク、
  * WdgM 非監視）側で行うためのディスパッチ機構。COM_TX_MODE_PERIODIC の
  * I-PDU では未使用（常に 0）。 */
@@ -185,11 +185,11 @@ static uint8 Com_TxPending[COM_TX_IPDU_MAX];
  * （`repeatDue && !changeDue`）にはあえて混ぜていない）。 */
 static uint8 Com_TxTriggerPending[COM_TX_IPDU_MAX];
 
-/* 「PduR_Transmit() には渡した（実送信済み）が、対応する Com_TxConfirmation()
+/* 「PduR_ComTransmit() には渡した（実送信済み）が、対応する Com_TxConfirmation()
  * がまだ届いていない」ことを示すフラグ（TX I-PDU 単位）。Com_TxPending が
  * 「まだ送信要求すら出していない」を表すのに対し、こちらは送信要求は完了して
  * 確認応答だけを待っている状態を表す（両者は排他ではなく別軸）。
- * Com_DoTransmit() が PduR_Transmit() 成功時にセットし、
+ * Com_DoTransmit() が PduR_ComTransmit() 成功時にセットし、
  * Com_TxConfirmation()（成功/失敗を問わず）が届いた時点でクリアする。
  * [SWS_Com_00479]/[SWS_Com_00491]: Com_IpduGroupStop() 実行時にこのフラグが
  * 立ったままの I-PDU があれば、確認されないまま停止されたとみなし
@@ -1039,12 +1039,12 @@ static uint8 Com_FindSignalIndex(Com_SignalIdType SignalId)
 }
 
 /**
- * \brief   TX I-PDU バッファを実際に PduR_Transmit() へ渡す共通処理。
+ * \brief   TX I-PDU バッファを実際に PduR_ComTransmit() へ渡す共通処理。
  *
  * \details TxTransformCbk が設定されていれば送信直前に呼び出し（E2E
  *          Transformer 等、送信直前の最終変換用の汎用フック。Com はここで
  *          何が実行されるか一切関知しない）、その後 TX バッファの内容を
- *          ログ出力して PduR_Transmit() を呼ぶ（PduR→CanIf→Can_Write と
+ *          ログ出力して PduR_ComTransmit() を呼ぶ（PduR→CanIf→Can_Write と
  *          MCP2515 への SPI 送信までブロッキングで完了する）。
  *          `Com_MainFunctionTx()` からのみ呼ばれる。DIRECT/MIXED I-PDU の
  *          イベント駆動送信であっても実送信は必ず `Com_MainFunctionTx()`
@@ -1057,17 +1057,17 @@ static uint8 Com_FindSignalIndex(Com_SignalIdType SignalId)
  *          既に済ませてから呼ぶ。
  *
  *          update-bit クリア（ipdu->UpdateBitPosition が 0xFF 以外の場合、
- *          SWS_Com_00062: ComTxIPduClearUpdateBit=Transmit 相当）: PduR_Transmit()
+ *          SWS_Com_00062: ComTxIPduClearUpdateBit=Transmit 相当）: PduR_ComTransmit()
  *          が E_OK を返した場合のみクリアする（SWS_Com_00062 原文 "after this
  *          I-PDU was sent out via PduR_ComTransmit and PduR_ComTransmit
  *          returned E_OK" のとおり）。失敗時はクリアせず、次回の再送で
  *          update-bit ごと正しく伝わるようにする。
  *
  *          TxIpduCalloutCbk（[SWS_Com_00346]/[SWS_Com_00719]）: TxTransformCbk
- *          適用後・PduR_Transmit() 呼び出し直前に、実際に送信される最終
+ *          適用後・PduR_ComTransmit() 呼び出し直前に、実際に送信される最終
  *          バイト列を渡して呼ぶ。戻り値 0（false）ならこの送信は行わず
  *          即座に E_NOT_OK を返す。「実際には PduR へ渡していない」ため、
- *          PduR_Transmit() 自体が失敗した場合と同様に Com_TxConfPending は
+ *          PduR_ComTransmit() 自体が失敗した場合と同様に Com_TxConfPending は
  *          セットしない・update-bit もクリアしない（詳細は下記コメント・
  *          Com_Types.h の TxIpduCalloutCbk 参照）。
  *
@@ -1076,9 +1076,9 @@ static uint8 Com_FindSignalIndex(Com_SignalIdType SignalId)
  *                   を再度呼ばず再利用する。TX 送信デッドライン監視の
  *                   アーム時刻記録に使う）。
  *
- * \retval  E_OK      PduR_Transmit() が成功した。
- * \retval  E_NOT_OK  PduR_Transmit() が失敗した、または TxIpduCalloutCbk が
- *                     送信を拒否した（この場合 PduR_Transmit() 自体を呼ばない）。
+ * \retval  E_OK      PduR_ComTransmit() が成功した。
+ * \retval  E_NOT_OK  PduR_ComTransmit() が失敗した、または TxIpduCalloutCbk が
+ *                     送信を拒否した（この場合 PduR_ComTransmit() 自体を呼ばない）。
  *
  * \AUTOSARReq     {SWS_Com_00062, SWS_Com_00878, SWS_Com_00346, SWS_Com_00719,
  *                   SWS_Com_00381}
@@ -1109,7 +1109,7 @@ static Std_ReturnType Com_DoTransmit(const Com_IPduConfigType* ipdu, unsigned lo
         .SduDataPtr = Com_TxBuffer[ipdu->IPduId],
         .SduLength  = ipdu->DLC
     };
-    const Std_ReturnType ret = PduR_Transmit(ipdu->PduRId, &pduInfo);
+    const Std_ReturnType ret = PduR_ComTransmit(ipdu->PduRId, &pduInfo);
 
     /* [SWS_Com_00479]/[SWS_Com_00491]: PduR への引き渡しが成功した時点で
      * 「送信済み・未確認」とマークする。対応する Com_TxConfirmation() が
@@ -1133,7 +1133,7 @@ static Std_ReturnType Com_DoTransmit(const Com_IPduConfigType* ipdu, unsigned lo
      * していた過去の実装は誤り。失敗時にもクリアすると、update-bit だけが
      * 消えてバッファのデータは残ったまま次回再送されるため、実際には
      * 初めて正常配信される新データが受信側に「未更新」として誤って破棄
-     * されうる）。PduR_Transmit() はこの呼び出し内で同期的に SPI 送信まで
+     * されうる）。PduR_ComTransmit() はこの呼び出し内で同期的に SPI 送信まで
      * 完了しているため、この時点で Com_TxBuffer を書き換えても既に送信済み
      * のバイト列には影響しない。
      * Signal Group（SWS_Com_00801）・非 Signal Group（SWS_Com_00061、
@@ -1318,7 +1318,7 @@ static uint8 Com_RecalcTms(Com_IPduIdType ipduId)
  *
  * \details Com_SendSignal() / Com_SendSignalGroup() が変化を検知した際に
  *          呼ばれる。ここでは `Com_TxPending[]` を立てるだけで、実際の
- *          PduR_Transmit() 呼び出し（ひいては MCP2515 への SPI 送信）は一切
+ *          PduR_ComTransmit() 呼び出し（ひいては MCP2515 への SPI 送信）は一切
  *          行わない（SWS_Com_00734/00742/00743 の要求"shall immediately
  *          (within the next main function at the latest) initiate..." の
  *          うち、「次回メイン関数まで」の猶予を使い、実送信は必ず
@@ -1795,7 +1795,7 @@ uint8 Com_IsRxTimedOut(Com_IPduIdType IPduId)
  *          なら (新値 & Mask) が前回のフィルタ比較値と異なる場合のみ、
  *          「送信すべき変化あり」とみなして Com_RequestTxOnChange() を呼ぶ
  *          （TxModeMode が DIRECT/MIXED の I-PDU なら次回 Com_MainFunctionTx()
- *          で送信される。本関数自体は PduR_Transmit() を呼ばない）。これとは
+ *          で送信される。本関数自体は PduR_ComTransmit() を呼ばない）。これとは
  *          独立に、Com_RecalcTms() が TMS の遷移を検出した場合も
  *          ComFilterAlgorithm の判定結果によらず Com_RequestTxOnChange() を
  *          呼ぶ（SWS_Com_00495。非 Signal Group のシグナルに TmsContributor=1
@@ -2895,7 +2895,7 @@ void Com_MainFunctionRx(void)
  *          独立したタスクとして登録される。Os_PBCfg.c 参照）。
  *
  *          TX I-PDU の送信ディスパッチ（DIRECT/MIXED/PERIODIC 共通）:
- *          実際に PduR_Transmit()（→ MCP2515 への SPI 送信）を呼ぶのはこの
+ *          実際に PduR_ComTransmit()（→ MCP2515 への SPI 送信）を呼ぶのはこの
  *          関数だけである。判定に使う `TxModeMode`/`TxPeriodMs` は
  *          `Com_EffectiveTxModeMode()`/`Com_EffectiveTxPeriodMs()` 経由で
  *          TMS（Transmission Mode Selector、`Com_TmsState[]`）評価済みの

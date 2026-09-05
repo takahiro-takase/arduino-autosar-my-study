@@ -209,7 +209,7 @@
  * DaVinci: /ActiveEcuC/Com/ComConfig/[ComIPdu]/ComTransmissionDeadlineMonitoring/
  *          ComFirstTimeout・ComTimeout
  *
- * PduR_Transmit() へ渡してから Com_TxConfirmation() が届くまでの許容時間。
+ * PduR_ComTransmit() へ渡してから Com_TxConfirmation() が届くまでの許容時間。
  * 実送信間隔（COM_TX_PERIOD_METERSTATUS_FLOOR_MS=9000ms）より十分短く、
  * 現実的な確認応答遅延より十分長い値とし、First/Timeout 共通で使う
  * （EngineInfo の COM_TIMEOUT_ENGINE_INFO_MS と同じ流儀）。実機で発動する
