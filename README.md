@@ -281,7 +281,7 @@ ModuleId の出典は `docs/AUTOSAR_TR_BSWModuleList.pdf`（Release 4.3.1、「L
 │   │   ├── CanSM/                # CAN ステートマネージャ（Bus-Off 回復シーケンス、L1/L2 バックオフ）
 │   │   │   ├── CanSM_Cfg.h       # L1/L2 回復待機時間・L1→L2 切替閾値
 │   │   │   ├── CanSM.h           # 公開インタフェース・CanSM_ControllerBusOff コールバック
-│   │   │   └── CanSM.c           # 状態機械・Bus-Off L1/L2 バックオフ回復タイマ管理・NO_COM要求時に CAN コントローラを実際にスリープ・ウェイクアップ検証（CanSM_ControllerWakeup/CanSM_RxIndication/検証タイムアウト）
+│   │   │   └── CanSM.c           # 状態機械・Bus-Off L1/L2 バックオフ回復タイマ管理・NO_COM要求時に CAN コントローラを実際にスリープ・ウェイクアップ検証（CanSM_ControllerModeIndication/CanSM_RxIndication/検証タイムアウト）
 │   │   ├── CanTp/                # CAN トランスポートプロトコル（ISO 15765-2）
 │   │   │   ├── CanTp_Cfg.h       # ブロックサイズ・STmin・タイムアウト設定
 │   │   │   ├── CanTp.h           # 公開インタフェース（CanTp_Transmit / CanTp_RxIndication）
@@ -816,7 +816,7 @@ Can_Isr（INT ピン立ち下がりの真のハードウェア割り込み。SHU
   └→ Can_WakeupIrqPending フラグをセットするのみ（SPI/Serial は行わない）
        └→ Can_MainFunction_Wakeup（1ms タスク、SHUTDOWN 中もこのタスクだけは動き続ける）
             がフラグをドレインし CanIf_ControllerWakeup(0)  ← Can が CanIf へ通知（下→上）
-                 └→ CanSM_ControllerWakeup(0)
+                 └→ CanSM_ControllerModeIndication(0)
                       └→ Can_SetControllerMode(CAN_T_WAKEUP)   ← SLEEP→STOPPED (Listen-Only) のみ
                            └→ CanSM: NO_COM → WAKEUP_VALIDATING（ComM/EcuM へはまだ何も通知しない）
 
@@ -916,7 +916,7 @@ Can_Isr()（INT ピン立ち下がりの真のハードウェア割り込み、S
 
 Can_MainFunction_Wakeup()（1ms 周期、SHUTDOWN 中も動作）:
   CAN_CS_SLEEP 中 かつ Can_WakeupIrqPending ?
-    YES → フラグをクリアし CanIf_ControllerWakeup(0) → CanSM_ControllerWakeup(0)
+    YES → フラグをクリアし CanIf_ControllerWakeup(0) → CanSM_ControllerModeIndication(0)
             → Can_SetControllerMode(CAN_T_WAKEUP)   ← SLEEP→STOPPED (Listen-Only) のみ
             → CanSM: NO_COM → WAKEUP_VALIDATING（ComM/EcuM へはまだ通知しない）
 

@@ -634,7 +634,7 @@ void Can_MainFunction_Write(void)
  *          ウェイクアップ要因となったフレーム自体の受信は保証されない
  *          （モード遷移中に取りこぼされることがある）ため、ここでは読み出さず
  *          「目覚めた」ことだけをフラグで伝える。実際のフレーム受信は
- *          CanSM_ControllerWakeup() が CAN_CS_STARTED へ遷移させた後、
+ *          CanSM_ControllerModeIndication() が CAN_CS_STARTED へ遷移させた後、
  *          以降の Can_MainFunction_Read() 呼び出しで通常どおり処理される。
  *
  * \pre        Can_Init() が正常に完了していること。
@@ -740,7 +740,7 @@ void Can_MainFunction_Read(void)
  *          仕様との既知の相違点: SWS_Can_00271 が規定する通知先は本来
  *          EcuM_CheckWakeup() （ECU State Manager を直接呼ぶ）だが、本プロジェクトは
  *          EcuM のウェイクアップソース管理を実装しておらず、CanIf 経由で
- *          CanSM_ControllerWakeup() （AUTOSAR EcuM Wakeup Validation Protocol 相当を
+ *          CanSM_ControllerModeIndication() （AUTOSAR EcuM Wakeup Validation Protocol 相当を
  *          CanSM 側で模した検証シーケンス、CanSM.c 参照）へ委譲する設計を
  *          一貫して採る。00271 の引用は「ISR または Can_MainFunction_Wakeup の
  *          いずれかの文脈で通知する」というタイミング要件の部分のみ有効で、
