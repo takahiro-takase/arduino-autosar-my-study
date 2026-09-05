@@ -1,6 +1,7 @@
 /**
  * \file    Bsw_CanIf_NotifStatus_test.cpp
- * \brief   CanIf_ReadTxNotifStatus/CanIf_ReadRxNotifStatus の単体テスト
+ * \brief   CanIf_ReadTxNotifStatus/CanIf_ReadRxNotifStatus/
+ *          CanIf_GetTxConfirmationState の単体テスト
  *          （GoogleTest / PlatformIO `[env:native_chain]`）。
  *
  * \details 2026-09、シグネチャ準拠サーベイで新設した
@@ -10,6 +11,13 @@
  *          通知状態がセットされること・読み出しと同時にクリアされる
  *          ことを確認する。上位層ルーティングは不要（TxConfirmFct/
  *          RxIndicationFct=NULL）なため PduR/Com は初期化しない。
+ *
+ *          2026-09-05、同じくシグネチャ準拠サーベイで新設した
+ *          CanIf_GetTxConfirmationState()（[SWS_CANIF_00734]、コントローラ
+ *          単位で「直近の起動以降に TX 確認があったか」を返す）も本ファイルに
+ *          追加。PDU 単位の Read*NotifStatus() と異なり読み出し時にはクリア
+ *          されず、CanIf_SetControllerMode(STARTED) への遷移でのみリセット
+ *          される点がテストの主眼。
  *
  *          CanIf_RxIndication() は無条件に CanSM_RxIndication() を呼ぶため
  *          （CanIf.c 参照）、feedback_native_chain_shared_static_hang の
@@ -167,6 +175,73 @@ TEST_F(Bsw_CanIf_NotifStatus_Test, ReadRxNotifStatus_NG_UninitializedReturnsNoNo
     CanIf_DeInit();
 
     CanIf_NotifStatusType status = CanIf_ReadRxNotifStatus(0U);
+
+    EXPECT_EQ(status, CANIF_NO_NOTIFICATION);
+    EXPECT_EQ(FakeDetHw_ReportCount, 0U);
+}
+
+// ------------------------------------------------------------
+// CanIf_GetTxConfirmationState()（[SWS_CANIF_00734]、2026-09-05 追加）
+// ------------------------------------------------------------
+
+TEST_F(Bsw_CanIf_NotifStatus_Test, GetTxConfirmationState_OK_ReturnsNoNotificationAfterInit)
+{
+    /* CanIf_Init() のゼロクリアを確認する基礎ケース（SetUp() の
+     * CanIf_SetControllerMode(STARTED) によるリセットの検証は
+     * ResetsOnControllerRestart が別途担う）。 */
+    CanIf_NotifStatusType status = CanIf_GetTxConfirmationState(0U);
+
+    EXPECT_EQ(status, CANIF_NO_NOTIFICATION);
+    EXPECT_EQ(FakeDetHw_ReportCount, 0U);
+}
+
+TEST_F(Bsw_CanIf_NotifStatus_Test, GetTxConfirmationState_NG_NotUpdatedWhileControllerStopped)
+{
+    /* [SWS_CANIF_00740]: STARTED でなければバッファしない。Can_TxConfQueue
+     * の非同期ドレインにより、送信要求時点では STARTED でも通知到達時には
+     * 停止済みというケースの回帰防止（/code-review で発見）。 */
+    ASSERT_EQ(CanIf_SetControllerMode(0U, CAN_CS_STOPPED), E_OK);
+
+    CanIf_TxConfirmation(0U);
+
+    EXPECT_EQ(CanIf_GetTxConfirmationState(0U), CANIF_NO_NOTIFICATION);
+}
+
+TEST_F(Bsw_CanIf_NotifStatus_Test, GetTxConfirmationState_OK_ReflectsTxConfirmationAndDoesNotClearOnRead)
+{
+    CanIf_TxConfirmation(0U);
+
+    /* [SWS_CANIF_00734] は Read*NotifStatus() と異なり読み出し時のクリアを
+     * 規定しないため、複数回読んでも状態は変わらないこと。 */
+    EXPECT_EQ(CanIf_GetTxConfirmationState(0U), CANIF_TX_RX_NOTIFICATION);
+    EXPECT_EQ(CanIf_GetTxConfirmationState(0U), CANIF_TX_RX_NOTIFICATION);
+}
+
+TEST_F(Bsw_CanIf_NotifStatus_Test, GetTxConfirmationState_OK_ResetsOnControllerRestart)
+{
+    CanIf_TxConfirmation(0U);
+    ASSERT_EQ(CanIf_GetTxConfirmationState(0U), CANIF_TX_RX_NOTIFICATION);
+
+    /* 「直近のコントローラ起動以降」を表すため、再起動（CAN_CS_STARTED への
+     * 再遷移）でリセットされること（Table 8.25）。 */
+    ASSERT_EQ(CanIf_SetControllerMode(0U, CAN_CS_STARTED), E_OK);
+
+    EXPECT_EQ(CanIf_GetTxConfirmationState(0U), CANIF_NO_NOTIFICATION);
+}
+
+TEST_F(Bsw_CanIf_NotifStatus_Test, GetTxConfirmationState_NG_InvalidControllerIdReturnsNoNotificationAndReportsDet)
+{
+    CanIf_NotifStatusType status = CanIf_GetTxConfirmationState(CANIF_CONTROLLER_MAX);
+
+    EXPECT_EQ(status, CANIF_NO_NOTIFICATION);
+    EXPECT_EQ(FakeDetHw_LastErrorId, CANIF_E_PARAM_CONTROLLERID);
+}
+
+TEST_F(Bsw_CanIf_NotifStatus_Test, GetTxConfirmationState_NG_UninitializedReturnsNoNotificationWithoutDet)
+{
+    CanIf_DeInit();
+
+    CanIf_NotifStatusType status = CanIf_GetTxConfirmationState(0U);
 
     EXPECT_EQ(status, CANIF_NO_NOTIFICATION);
     EXPECT_EQ(FakeDetHw_ReportCount, 0U);

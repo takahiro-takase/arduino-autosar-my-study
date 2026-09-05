@@ -63,6 +63,15 @@ static CanIf_PduModeType CanIf_ControllerPduMode[CANIF_CONTROLLER_MAX];
  * 判断できない。 */
 static Can_ControllerStateType CanIf_ControllerMode[CANIF_CONTROLLER_MAX];
 
+/* CanIf_GetTxConfirmationState()（[SWS_CANIF_00734]、2026-09 追加）用の
+ * コントローラ単位の TX 確認状態。CanIf_TxConfirmation() が対象コントローラの
+ * 状態を CANIF_TX_RX_NOTIFICATION へセットし、CanIf_SetControllerMode()
+ * による CAN_CS_STARTED への遷移成功のたびに CANIF_NO_NOTIFICATION へ
+ * リセットする（[SWS_CANIF_00734]の"since the last CAN controller start"）。
+ * CanIf_TxNotifStatus[]（PDU 単位、読み出し時にクリア）とは別物で、本関数は
+ * 読み出し時にはクリアしない（CanIf_GetTxConfirmationState() の Doxygen 参照）。 */
+static CanIf_NotifStatusType CanIf_TxConfirmationState[CANIF_CONTROLLER_MAX];
+
 /**
  * \brief   CAN インタフェースモジュールを初期化する。
  *
@@ -143,6 +152,8 @@ void CanIf_Init(const CanIf_ConfigType* ConfigPtr)
          * Can_Init() 参照）に合わせる。CanIf は Can_Init() の後に初期化される
          * 前提（本関数の \pre 参照）。 */
         CanIf_ControllerMode[i] = CAN_CS_STOPPED;
+
+        CanIf_TxConfirmationState[i] = CANIF_NO_NOTIFICATION;
     }
 
     DET_LOGI(TAG, "Init ok TX=%u RX=%u",
@@ -512,6 +523,19 @@ void CanIf_TxConfirmation(PduIdType CanTxPduId)
      * （CanIf_ReadTxNotifStatus() の Doxygen 参照）。 */
     CanIf_TxNotifStatus[CanTxPduId] = CANIF_TX_RX_NOTIFICATION;
 
+    /* [SWS_CANIF_00734]/[SWS_CANIF_00740]: CanIf_GetTxConfirmationState() 用の
+     * コントローラ単位の通知状態。TX PDU 設定はコントローラ ID を持たないが、
+     * 本プロジェクトは CANIF_CONTROLLER_MAX=1（単一コントローラ）のため、
+     * 全 TX PDU はコントローラ 0 に属するとみなしてよい。[SWS_CANIF_00740]の
+     * 「コントローラが CAN_CS_STARTED のときだけバッファする」通り、STARTED
+     * 以外では更新しない。Can.c の Can_TxConfQueue は非同期にドレインされる
+     * ため、CanIf_Transmit() 時点では STARTED でも、実際にこの通知が届く
+     * 頃には CanIf_SetControllerMode(STOPPED) 済み（Bus-Off 等）ということが
+     * ありうる（/code-review で発見: 状態チェックが無いと、停止後に届いた
+     * 古い通知で「起動後に TX 確認あり」と誤認しうる）。 */
+    if (CanIf_ControllerMode[0] == CAN_CS_STARTED)
+        CanIf_TxConfirmationState[0] = CANIF_TX_RX_NOTIFICATION;
+
     if (txCfg->TxConfirmFct != NULL)
         txCfg->TxConfirmFct(txCfg->UpperLayerTxPduId, E_OK);
 }
@@ -789,6 +813,15 @@ Std_ReturnType CanIf_SetControllerMode(uint8 ControllerId, Can_ControllerStateTy
 
     DET_LOGI(TAG, "SetControllerMode ch=%u mode=%u", (unsigned)ControllerId, (unsigned)ControllerMode);
     CanIf_ControllerMode[ControllerId] = ControllerMode;
+
+    /* CanIf_GetTxConfirmationState() 用状態のリセット。
+     * [SWS_CANIF_00734]: 起動成功のたびに「直近の起動以降」の起点をリセット。
+     * [SWS_CANIF_00739]: 停止時にもバッファ済み情報をクリアする（本プロジェクトは
+     * 同要求が求める「未確認 TX への <User_TxConfirmation>(id, E_NOT_OK)」の
+     * 一括通知までは実装しないが、状態クリア自体は該当箇所のみ反映する）。 */
+    if (ControllerMode == CAN_CS_STARTED || ControllerMode == CAN_CS_STOPPED)
+        CanIf_TxConfirmationState[ControllerId] = CANIF_NO_NOTIFICATION;
+
     return E_OK;
 }
 
@@ -868,6 +901,60 @@ Std_ReturnType CanIf_GetControllerErrorState(uint8 ControllerId, Can_ErrorStateT
     }
 
     return Can_GetControllerErrorState(ControllerId, ErrorStatePtr);
+}
+
+/**
+ * \brief   指定コントローラで、直近の起動以降に一度でも TX 確認があったかを返す
+ *          （[SWS_CANIF_00734]）。
+ *
+ * \details `CanIf_TxConfirmation()` が呼ばれるたびに、対象コントローラ（本
+ *          プロジェクトは `CANIF_CONTROLLER_MAX=1` のため常にコントローラ 0）
+ *          が `CAN_CS_STARTED` であれば状態を `CANIF_TX_RX_NOTIFICATION` へ
+ *          セットする（[SWS_CANIF_00740]、STARTED 以外では更新しない。Can.c
+ *          の `Can_TxConfQueue` は非同期にドレインされるため、送信要求時点で
+ *          STARTED でも通知が届く頃には停止済みということがありうるため）。
+ *          `CanIf_SetControllerMode(ControllerId, CAN_CS_STARTED)` が成功する
+ *          たびに `CANIF_NO_NOTIFICATION` へリセットする（Table 8.25 の
+ *          "since the last CAN controller start" に対応）。`CAN_CS_STOPPED`
+ *          への遷移成功時にもリセットする（[SWS_CANIF_00739]。同要求が求める
+ *          「未確認 TX への負の確認通知の一括送出」までは実装しない）。
+ *
+ *          `CanIf_ReadTxNotifStatus()`/`CanIf_ReadRxNotifStatus()` と異なり、
+ *          本関数は「Read」ではなく「Get」であり、実仕様も読み出し時の
+ *          クリアを規定していない（[SWS_CANIF_00734]にリセット言及なし）
+ *          ため、本実装も読み出し時にはクリアしない。
+ *
+ * \note    実仕様は CanSM の Bus-Off 回復判定（G_BUS_OFF_PASSIVE、
+ *          [SWS_CanSM_00497]、`CANSM_BOR_TX_CONFIRMATION_POLLING` 有効時）が
+ *          本関数を使う想定だが、本プロジェクトの `CanSM_MainFunction()` は
+ *          コントローラ再起動（`CanIf_SetControllerMode(STARTED)`）の成功
+ *          そのものを回復完了とみなす簡略設計のため、現時点では未配線。
+ *
+ * \param[in]  ControllerId  対象コントローラの ID。
+ *
+ * \return  対象コントローラの TX 確認状態。未初期化または `ControllerId` が
+ *          範囲外の場合は `CANIF_NO_NOTIFICATION` を返す
+ *          （フェールセーフ、[SWS_CANIF_00736] の DET 報告と併用）。
+ *
+ * \AUTOSARReq     {SWS_CANIF_00734, SWS_CANIF_00736, SWS_CANIF_00739, SWS_CANIF_00740}
+ * \ServiceID      {0x19}
+ * \Reentrancy     {Reentrant (Not for the same controller)}
+ * \Synchronicity  {Synchronous}
+ */
+CanIf_NotifStatusType CanIf_GetTxConfirmationState(uint8 ControllerId)
+{
+    DET_LOGT(TAG, "called");
+
+    if (CanIf_ConfigPtr == NULL)
+        return CANIF_NO_NOTIFICATION;  /* CanIf の他 API と同じ方針、CanIf_Cfg.h 冒頭コメント参照 */
+
+    if (ControllerId >= CANIF_CONTROLLER_MAX)
+    {
+        Det_ReportError(CANIF_MODULE_ID, 0U, CANIF_API_ID_GET_TX_CONFIRMATION_STATE, CANIF_E_PARAM_CONTROLLERID);
+        return CANIF_NO_NOTIFICATION;
+    }
+
+    return CanIf_TxConfirmationState[ControllerId];
 }
 
 /**

@@ -87,6 +87,46 @@ CanIf_NotifStatusType CanIf_ReadTxNotifStatus(PduIdType CanIfTxSduId);
  */
 CanIf_NotifStatusType CanIf_ReadRxNotifStatus(PduIdType CanIfRxSduId);
 
+/**
+ * \brief   指定コントローラで、直近の起動以降に一度でも TX 確認があったかを返す
+ *          （[SWS_CANIF_00734]）。
+ *
+ * \details `CanIf_TxConfirmation()` が呼ばれるたびに、対象コントローラ（本
+ *          プロジェクトは `CANIF_CONTROLLER_MAX=1` のため常にコントローラ 0）
+ *          が `CAN_CS_STARTED` であれば状態を `CANIF_TX_RX_NOTIFICATION` へ
+ *          セットする（[SWS_CANIF_00740]、STARTED 以外では更新しない。Can.c
+ *          の `Can_TxConfQueue` は非同期にドレインされるため、送信要求時点で
+ *          STARTED でも通知が届く頃には停止済みということがありうるため）。
+ *          `CanIf_SetControllerMode(ControllerId, CAN_CS_STARTED)` が成功する
+ *          たびに `CANIF_NO_NOTIFICATION` へリセットする（Table 8.25 の
+ *          "since the last CAN controller start" に対応）。`CAN_CS_STOPPED`
+ *          への遷移成功時にもリセットする（[SWS_CANIF_00739]。同要求が求める
+ *          「未確認 TX への負の確認通知の一括送出」までは実装しない）。
+ *
+ *          `CanIf_ReadTxNotifStatus()`/`CanIf_ReadRxNotifStatus()` と異なり、
+ *          本関数は「Read」ではなく「Get」であり、実仕様も読み出し時の
+ *          クリアを規定していない（[SWS_CANIF_00734]にリセット言及なし）
+ *          ため、本実装も読み出し時にはクリアしない。
+ *
+ * \note    実仕様は CanSM の Bus-Off 回復判定（G_BUS_OFF_PASSIVE、
+ *          [SWS_CanSM_00497]、`CANSM_BOR_TX_CONFIRMATION_POLLING` 有効時）が
+ *          本関数を使う想定だが、本プロジェクトの `CanSM_MainFunction()` は
+ *          コントローラ再起動（`CanIf_SetControllerMode(STARTED)`）の成功
+ *          そのものを回復完了とみなす簡略設計のため、現時点では未配線。
+ *
+ * \param[in]  ControllerId  対象コントローラの ID。
+ *
+ * \return  対象コントローラの TX 確認状態。未初期化または `ControllerId` が
+ *          範囲外の場合は `CANIF_NO_NOTIFICATION` を返す
+ *          （フェールセーフ、[SWS_CANIF_00736] の DET 報告と併用）。
+ *
+ * \AUTOSARReq     {SWS_CANIF_00734, SWS_CANIF_00736, SWS_CANIF_00739, SWS_CANIF_00740}
+ * \ServiceID      {0x19}
+ * \Reentrancy     {Reentrant (Not for the same controller)}
+ * \Synchronicity  {Synchronous}
+ */
+CanIf_NotifStatusType CanIf_GetTxConfirmationState(uint8 ControllerId);
+
 #ifdef __cplusplus
 }
 #endif
