@@ -664,7 +664,6 @@ void CanIf_ControllerBusOff(uint8 ControllerId)
  *          にすると、以後 `CanIf_Transmit()` は `E_NOT_OK` を返し
  *          `Can_Write()` まで到達しなくなる（コントローラ自体は
  *          `CAN_CS_STARTED` のまま、送信のみを禁止する）。
- *
  *          [SWS_CANIF_00874] は「対象コントローラが `CAN_CS_STARTED` でない
  *          場合は `E_NOT_OK`」と規定するが、本プロジェクトの CanIf は
  *          コントローラ状態を一切追跡しない既存方針（`CanIf_ReadRxPduData()`
