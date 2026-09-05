@@ -44,6 +44,19 @@ typedef uint8 Dcm_SesCtrlType;
 typedef uint8 Dcm_SecLevelType;
 
 /**
+ * \brief   アクティブなプロトコル種別型 [SWS_Dcm_00979]。
+ *
+ * \details 実仕様は OBD/UDS × CAN/FlexRay/IP/LIN、ROE、周期送信等
+ *          20通り以上を定義するが、本プロジェクトは UDS on CAN
+ *          (ISO15765-3/ISO14229-1) の単一プロトコル構成のため、実際に
+ *          使用する `DCM_UDS_ON_CAN` のみ定義する（値は PDF のベクタ座標
+ *          解析で確認済み、[SWS_Dcm_00979] Table 8.92）。
+ */
+typedef uint8 Dcm_ProtocolType;
+
+#define DCM_UDS_ON_CAN 0x03U
+
+/**
  * \brief   DCM モジュールを初期化する。
  *
  * \details セッション状態を Default Session にリセットする
@@ -128,6 +141,30 @@ Std_ReturnType Dcm_GetSesCtrlType(Dcm_SesCtrlType* SesCtrlType);
  * \Synchronicity  {Synchronous}
  */
 Std_ReturnType Dcm_GetSecurityLevel(Dcm_SecLevelType* SecLevel);
+
+/**
+ * \brief   現在アクティブなプロトコル・コネクション・テスター送信元アドレスを取得する。
+ *
+ * \details 実仕様は複数プロトコル(OBD/UDS×CAN/FlexRay/IP等)・複数コネクションを
+ *          動的に追跡するが、本プロジェクトは UDS on CAN の単一プロトコル・
+ *          単一コネクション・物理アドレッシング固定構成のため、`ActiveProtocolType`
+ *          は常に `DCM_UDS_ON_CAN`、`ConnectionId`は常に`DCM_CONNECTION_ID`(0)、
+ *          `TesterSourceAddress`は常に`DCM_TESTER_SOURCE_ADDRESS`(UDS診断要求の
+ *          CAN ID)を返す固定値実装とする（Dcm_Cfg.h 参照）。
+ *
+ * \param[out]  ActiveProtocolType    アクティブなプロトコル種別の格納先。NULL 禁止。
+ * \param[out]  ConnectionId          コネクション識別子の格納先。NULL 禁止。
+ * \param[out]  TesterSourceAddress   テスターの送信元アドレスの格納先。NULL 禁止。
+ *
+ * \retval  E_OK      正常取得（実仕様上、値取得自体は常に成功する）。
+ * \retval  E_NOT_OK  未初期化、またはいずれかの引数が NULL。
+ *
+ * \AUTOSARReq     {SWS_Dcm_00340}
+ * \ServiceID      {0x0f}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType Dcm_GetActiveProtocol(Dcm_ProtocolType* ActiveProtocolType, uint16* ConnectionId, uint16* TesterSourceAddress);
 
 /**
  * \brief   現在のセッションを defaultSession へ強制的に戻す。
