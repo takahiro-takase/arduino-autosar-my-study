@@ -266,7 +266,7 @@ ModuleId の出典は `docs/AUTOSAR_TR_BSWModuleList.pdf`（Release 4.3.1、「L
 │   │   │   ├── BswM_Cfg.h        # タスク ID 定数・タスクマスク定義
 │   │   │   ├── BswM_PBCfg.h      # ルール構造体型定義・BswM_Config 宣言
 │   │   │   ├── BswM_PBCfg.c      # ルールテーブル実体（6 ルール、うち2つは AND/OR 複合条件）
-│   │   │   ├── BswM.h            # 公開インタフェース（Init / EcuM通知 / ComM通知）
+│   │   │   ├── BswM.h            # 公開インタフェース（Init / EcuM通知 / ComM通知 / Dcm通知）
 │   │   │   └── BswM.c            # ルールエンジン実装・Os_SetTaskActive 呼び出し
 │   │   ├── Can/                  # CAN ドライバ（AUTOSAR SWS_Can 準拠 API）
 │   │   │   ├── Can.h             # 公開インタフェース

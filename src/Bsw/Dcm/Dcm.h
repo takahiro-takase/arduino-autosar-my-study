@@ -14,6 +14,7 @@
 #define DCM_H
 
 #include "Dcm_Cbk.h"
+#include "Dcm_Types.h"
 
 #ifdef __cplusplus
 extern "C" {

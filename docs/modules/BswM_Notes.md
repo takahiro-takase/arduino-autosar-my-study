@@ -22,6 +22,22 @@ EcuM が「今どのフェーズか」を決めるのに対し、BswM は「そ�
 | 3 | **EcuM==RUN `AND` ComM==FULL_COMMUNICATION** | PDU_GROUP_START | I-PDU Group「テレメトリ」(E2EHealthStatus) |
 | 4 | EcuM==POST_RUN | PDU_GROUP_STOP | I-PDU Group「テレメトリ」 |
 | 5 | **ComM==SILENT_COMMUNICATION `OR` ComM==NO_COMMUNICATION** | PDU_GROUP_STOP | I-PDU Group「テレメトリ」 |
+| 6 | EcuM==RUN `AND` ComM==FULL_COMMUNICATION | PDU_GROUP_START | I-PDU Group「センサーRX」(EngineInfo/AbsInfo) |
+| 7 | ComM==NO_COMMUNICATION | PDU_GROUP_STOP | I-PDU Group「センサーRX」 |
+| 8-19 | Dcm_CommunicationModeType の12通り（Dcm==各値） | `BSWM_ACTION_DCM_COMM_APPLY` | `BswM_ApplyDcmCommMode()` 経由で Com_SetCommunicationEnabled()/Nm_EnableCommunication()/DisableCommunication() |
+
+Rule 8-19 は UDS 0x28 CommunicationControl（2026-09-05 追加）専用です。
+`Dcm_HandleCommunicationControl()`/`Dcm_CommControlReset()` が
+`BswM_Dcm_CommunicationMode_CurrentState()` を呼ぶと、要求内容を表す
+`Dcm_CommunicationModeType`（[SWS_Dcm_00981]、0x00〜0x0B の12通り）を
+`BSWM_MODE_SRC_DCM_COMM` としてキャッシュ・評価します。12通りの条件は
+互いに排他的なため常にちょうど1本だけが発火し、`BswM_ApplyDcmCommMode()`
+が発火時点のキャッシュ値を `mode/4`（対象: normal/NM/両方）・`mode%4`
+（Rx/Tx の有効/無効パターン）に分解して実際の Com/Nm 呼び出しへ変換します
+（他の PDU_GROUP 系ルールと異なりルール行自体には専用パラメータを持たない
+点に注意）。詳細（Dcm 側の変換式・値の一覧）は
+[`Dcm_Notes.md`](./Dcm_Notes.md) の「CommunicationControl（SID 0x28）」を
+参照してください。
 
 Rule 3/5 が複合条件（`BswM_ConditionType` の配列を `BswM_LogicalOperatorType`
 (`BSWM_OP_AND`/`BSWM_OP_OR`) で組み合わせる、[SWS_BswM_00808]
@@ -44,8 +60,9 @@ true が続く間の重複実行や true→false への遷移では実行しま�
 
 対応除外（実 AUTOSAR の BswMLogicalExpression と比べた簡略化）: NAND/NOT/XOR
 演算子、3条件以上、LogicalExpression の入れ子（木構造）。本プロジェクトの
-モードソースは EcuM/ComM の2つのみで、これらを使うルールの実績もないため
-対応除外としています。
+モードソースは EcuM/ComM/Dcm（2026-09-05 追加、Rule 8-19 参照）の3つですが、
+複合条件（AND/OR、Rule 3/5/6）の実績は EcuM/ComM の組み合わせのみで、
+3条件以上を要する使用実績が無いため対応除外としています。
 
 ## タスク ID とマスク（`BswM_Cfg.h`）
 
