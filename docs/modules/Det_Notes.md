@@ -105,8 +105,8 @@ ModuleId は README の「[モジュール一覧](../../README.md#module-list)�
   本実装の設計上そもそも検出対象が存在せず、追加していません
   （ServiceID タグの誤りのみ修正）。
 
-**非標準の独自拡張関数（DET 対象外）**: `CanIf_ControllerWakeup` /
-`CanSM_RxIndication` / `WdgM_EnableHwWatchdog` /
+**非標準の独自拡張関数（DET 対象外）**: `CanSM_RxIndication` /
+`WdgM_EnableHwWatchdog` /
 `WdgM_DisableHwWatchdog` / `WdgM_ResumeSupervision` / `Dcm_ComIndication` /
 `Adc_ReadChannel` はいずれも実際の AUTOSAR SWS には存在しない、本プロジェクト
 独自の簡略化・拡張関数のため、DET のエラーコード・ApiId は個々の実 SWS 関数
@@ -114,7 +114,10 @@ ModuleId は README の「[モジュール一覧](../../README.md#module-list)�
 `CanSM_RxIndication` は2026-09-05に0x07→0x15へ変更、CanSM_Cfg.hのコメント参照）。
 `CanSM_ControllerWakeup`は2026-09-05に実仕様の`CanSM_ControllerModeIndication`
 （[SWS_CanSM_00396]、ControllerMode引数を追加）へ改名・是正したため、この
-一覧からは除外した。
+一覧からは除外した。同じく`CanIf_ControllerWakeup`（実仕様に存在しない独自
+API だった）は2026-09-05に廃止し、実仕様の`EcuM_CheckWakeup`
+（[SWS_Can_00271]/[SWS_EcuM_02929]、ServiceID 0x42）へ役割を引き継がせたため
+この一覧から除外した。
 
 **副次的に発見・修正した ServiceID タグの誤り**: 対応作業中、各モジュールの
 実 SWS「Service ID[hex]」記載と実測照合したところ、20 件以上の Doxygen

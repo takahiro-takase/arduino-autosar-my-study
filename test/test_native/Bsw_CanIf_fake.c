@@ -8,11 +8,9 @@
 uint32 FakeCanIf_TxConfirmationCount   = 0U;
 uint32 FakeCanIf_ControllerBusOffCount = 0U;
 uint32 FakeCanIf_RxIndicationCount     = 0U;
-uint32 FakeCanIf_ControllerWakeupCount = 0U;
 
 PduIdType     FakeCanIf_LastTxConfirmationPduId = 0U;
 uint8         FakeCanIf_LastControllerBusOffId  = 0U;
-uint8         FakeCanIf_LastControllerWakeupId  = 0U;
 Can_HwType    FakeCanIf_LastRxMailbox           = { 0U, 0U, 0U };
 uint8         FakeCanIf_LastRxData[8]           = { 0U };
 PduLengthType FakeCanIf_LastRxLength            = 0U;
@@ -22,11 +20,9 @@ void FakeCanIf_Reset(void)
     FakeCanIf_TxConfirmationCount   = 0U;
     FakeCanIf_ControllerBusOffCount = 0U;
     FakeCanIf_RxIndicationCount     = 0U;
-    FakeCanIf_ControllerWakeupCount = 0U;
 
     FakeCanIf_LastTxConfirmationPduId = 0U;
     FakeCanIf_LastControllerBusOffId  = 0U;
-    FakeCanIf_LastControllerWakeupId  = 0U;
     FakeCanIf_LastRxMailbox.CanId        = 0U;
     FakeCanIf_LastRxMailbox.Hoh          = 0U;
     FakeCanIf_LastRxMailbox.ControllerId = 0U;
@@ -56,8 +52,3 @@ void CanIf_RxIndication(const Can_HwType* Mailbox, const PduInfoType* PduInfoPtr
         FakeCanIf_LastRxData[i] = PduInfoPtr->SduDataPtr[i];
 }
 
-void CanIf_ControllerWakeup(uint8 ControllerId)
-{
-    FakeCanIf_ControllerWakeupCount++;
-    FakeCanIf_LastControllerWakeupId = ControllerId;
-}

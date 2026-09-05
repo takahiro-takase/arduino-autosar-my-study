@@ -133,21 +133,22 @@ Std_ReturnType CanSM_GetCurrentComMode(NetworkHandleType network, ComM_ModeType*
 void CanSM_ControllerBusOff(uint8 ControllerId);
 
 /**
- * \brief   コントローラモード変化通知コールバック（[SWS_CanSM_00396]、
- *          CanIf から呼び出される）。旧 `CanSM_ControllerWakeup`
- *          （2026-09-05、実仕様名・シグネチャへ是正）。
+ * \brief   コントローラモード変化通知コールバック（[SWS_CanSM_00396]）。旧
+ *          `CanSM_ControllerWakeup`（2026-09-05、実仕様名・シグネチャへ
+ *          是正）。
  *
  * \details 実仕様は「CAN コントローラのモードが変化したことを通知する」
  *          汎用コールバックだが、本プロジェクトは通常のモード変化を
  *          `CanIf_SetControllerMode()` の戻り値で同期的に把握する設計
  *          （CanIf.c 冒頭のコメント参照）のため、本コールバック経由の通知が
  *          必要になる場面は「CAN コントローラが CAN_CS_SLEEP 中にバス活動を
- *          検知して自律的にウェイクアップした」場合（CanIf_ControllerWakeup()
- *          からの委譲）のみに限定される。「通常のスリープ（ComM の NO_COM
- *          要求による、CANSM_STATE_NO_COM）」からの復帰のみを扱う。
- *          CANSM_STATE_BUS_OFF は実 HW をスリープさせず Can_T_STOP/
- *          Can_T_START のみで回復を試行するため、この状態から呼ばれることは
- *          原理的にない。
+ *          検知して自律的にウェイクアップした」場合（`EcuM_CheckWakeup()`
+ *          からの委譲、[SWS_Can_00271]。2026-09-05 是正前は実仕様に存在
+ *          しない独自 API `CanIf_ControllerWakeup()` 経由だった）のみに
+ *          限定される。「通常のスリープ（ComM の NO_COM 要求による、
+ *          CANSM_STATE_NO_COM）」からの復帰のみを扱う。CANSM_STATE_BUS_OFF
+ *          は実 HW をスリープさせず Can_T_STOP/Can_T_START のみで回復を
+ *          試行するため、この状態から呼ばれることは原理的にない。
  *
  *          この時点ではまだ FULL_COM へ確定しない（ウェイクアップ検証、
  *          AUTOSAR EcuM Wakeup Validation Protocol 相当）。CAN_T_WAKEUP のみ
@@ -157,7 +158,7 @@ void CanSM_ControllerBusOff(uint8 ControllerId);
  *
  * \param[in]  ControllerId   モードが変化したコントローラ ID。
  * \param[in]  ControllerMode 通知されたコントローラモード。本プロジェクトの
- *                            唯一の呼び出し元（CanIf_ControllerWakeup()）は
+ *                            唯一の呼び出し元（`EcuM_CheckWakeup()`）は
  *                            `CAN_CS_STOPPED`（ウェイクアップ検知直後、
  *                            本関数自身がこの直後に確定させる Listen-Only
  *                            相当のモード）を渡す。上記の通り呼び出し場面が

@@ -277,7 +277,7 @@ ModuleId の出典は `docs/AUTOSAR_TR_BSWModuleList.pdf`（Release 4.3.1、「L
 │   │   │   ├── CanIf_PBCfg.h     # ポストビルド設定宣言（CanIf_Config）
 │   │   │   ├── CanIf_PBCfg.c     # TX/RX PDU ルーティングテーブル実体
 │   │   │   ├── CanIf.h           # 公開インタフェース（CanIf_Transmit / CanIf_RxIndication）
-│   │   │   └── CanIf.c           # CAN ID ↔ 論理 PDU マッピング・Can/PduR 間の仲介・ControllerBusOff/Wakeup 通知の中継・全受信フレームを CanSM_RxIndication へ転送（ウェイクアップ検証用）
+│   │   │   └── CanIf.c           # CAN ID ↔ 論理 PDU マッピング・Can/PduR 間の仲介・ControllerBusOff 通知の中継・全受信フレームを CanSM_RxIndication へ転送（ウェイクアップ検証用）
 │   │   ├── CanSM/                # CAN ステートマネージャ（Bus-Off 回復シーケンス、L1/L2 バックオフ）
 │   │   │   ├── CanSM_Cfg.h       # L1/L2 回復待機時間・L1→L2 切替閾値
 │   │   │   ├── CanSM.h           # 公開インタフェース・CanSM_ControllerBusOff コールバック
@@ -333,7 +333,7 @@ ModuleId の出典は `docs/AUTOSAR_TR_BSWModuleList.pdf`（Release 4.3.1、「L
 │   │   ├── EcuM/                 # ECU ステートマネージャ（ライフサイクル管理）
 │   │   │   ├── EcuM_Cfg.h        # RUN ユーザ定義・POST_RUN タイムアウト
 │   │   │   ├── EcuM.h            # 公開インタフェース・EcuM_StateType 定義
-│   │   │   └── EcuM.c            # 状態マシン・EcuM_RequestRUN / EcuM_ReleaseRUN（SHUTDOWN→RUNのCANウェイクアップ復帰対応）
+│   │   │   └── EcuM.c            # 状態マシン・EcuM_RequestRUN / EcuM_ReleaseRUN（SHUTDOWN→RUNのCANウェイクアップ復帰対応）・EcuM_CheckWakeup（Canからのウェイクアップ通知の入口）
 │   │   ├── Dcm/                  # 診断通信マネージャ（UDS ISO 14229-1）
 │   │   │   ├── Dcm_Cfg.h         # SID/NRC/DID 定数・セッション・S3 タイマ・SecurityAccess 設定
 │   │   │   ├── Dcm_Cbk.h         # PduR から呼ばれる受信コールバック宣言（Dcm_ComIndication）
@@ -815,7 +815,7 @@ App_EngineManager_Run（3000ms タスク、ENGINE_STATE_OFF が5周期継続）
 Can_Isr（INT ピン立ち下がりの真のハードウェア割り込み。SHUTDOWN 中も常に有効）
   └→ Can_WakeupIrqPending フラグをセットするのみ（SPI/Serial は行わない）
        └→ Can_MainFunction_Wakeup（1ms タスク、SHUTDOWN 中もこのタスクだけは動き続ける）
-            がフラグをドレインし CanIf_ControllerWakeup(0)  ← Can が CanIf へ通知（下→上）
+            がフラグをドレインし EcuM_CheckWakeup(ECUM_WKSOURCE_CAN)  ← Can が EcuM へ直接通知（[SWS_Can_00271]）
                  └→ CanSM_ControllerModeIndication(0)
                       └→ Can_SetControllerMode(CAN_T_WAKEUP)   ← SLEEP→STOPPED (Listen-Only) のみ
                            └→ CanSM: NO_COM → WAKEUP_VALIDATING（ComM/EcuM へはまだ何も通知しない）
@@ -916,7 +916,7 @@ Can_Isr()（INT ピン立ち下がりの真のハードウェア割り込み、S
 
 Can_MainFunction_Wakeup()（1ms 周期、SHUTDOWN 中も動作）:
   CAN_CS_SLEEP 中 かつ Can_WakeupIrqPending ?
-    YES → フラグをクリアし CanIf_ControllerWakeup(0) → CanSM_ControllerModeIndication(0)
+    YES → フラグをクリアし EcuM_CheckWakeup(ECUM_WKSOURCE_CAN) → CanSM_ControllerModeIndication(0)
             → Can_SetControllerMode(CAN_T_WAKEUP)   ← SLEEP→STOPPED (Listen-Only) のみ
             → CanSM: NO_COM → WAKEUP_VALIDATING（ComM/EcuM へはまだ通知しない）
 

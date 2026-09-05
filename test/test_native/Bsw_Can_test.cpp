@@ -15,6 +15,7 @@ extern "C" {
 #include "Can_Hw.h"
 #include "Hal_Can_Hw_fake.h"
 #include "Bsw_CanIf_fake.h"
+#include "Bsw_EcuM_fake.h"
 }
 
 namespace
@@ -27,6 +28,7 @@ protected:
     {
         FakeCanHw_Reset();
         FakeCanIf_Reset();
+        FakeEcuM_Reset();
         Can_Test_SetConfigPtr(NULL);  // 初期化前状態に戻す
         Can_Test_SetControllerState(CAN_CS_UNINIT);  // 初期化前状態に戻す
         Can_Test_ResetTxErrCount();  // Can_Init() ではリセットされないため明示的に戻す
@@ -632,8 +634,8 @@ TEST_F(Bsw_Can_Test, Can_MainFunction_Wakeup_OK)
 
     /* 評価 (Assert) */
     EXPECT_EQ(Can_Test_GetControllerState(), CAN_CS_SLEEP);  // 遷移自体は CanSM が行うため状態は変化しない
-    EXPECT_EQ(FakeCanIf_ControllerWakeupCount, 1U);
-    EXPECT_EQ(FakeCanIf_LastControllerWakeupId, 0U);
+    EXPECT_EQ(FakeEcuM_CheckWakeupCount, 1U);
+    EXPECT_EQ(FakeEcuM_LastWakeupSource, static_cast<EcuM_WakeupSourceType>(ECUM_WKSOURCE_CAN));
 }
 
 TEST_F(Bsw_Can_Test, Can_MainFunction_Wakeup_NG_NoWakeupDetected)
@@ -648,7 +650,7 @@ TEST_F(Bsw_Can_Test, Can_MainFunction_Wakeup_NG_NoWakeupDetected)
 
     /* 評価 (Assert) */
     EXPECT_EQ(Can_Test_GetControllerState(), CAN_CS_SLEEP);
-    EXPECT_EQ(FakeCanIf_ControllerWakeupCount, 0U);
+    EXPECT_EQ(FakeEcuM_CheckWakeupCount, 0U);
 }
 
 //------------------------------------------------------------
