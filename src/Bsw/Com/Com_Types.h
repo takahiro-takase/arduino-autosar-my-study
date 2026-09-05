@@ -540,10 +540,8 @@ typedef enum
 //               監視タイマのリセット・RxAckCbk/RxIndicationCbk のいずれよりも
 //               前に、PduR から渡された生バイト列（DLC によるクランプ前、
 //               [SWS_Com_00816]: "shall forward all data of the received
-//               I-PDU"）をそのまま渡して呼ぶ。戻り値 0（false 相当。本
-//               プロジェクトは AUTOSAR の boolean 型を持たないため、他の
-//               1/0 フラグ群と同じ uint8 で代用）ならこの受信は以降一切
-//               処理しない（[SWS_Com_00700] "false: I-PDU will not be
+//               I-PDU"）をそのまま渡して呼ぶ。戻り値 FALSE ならこの受信は
+//               以降一切処理しない（[SWS_Com_00700] "false: I-PDU will not be
 //               processed any further"）。RxIndicationCbk（バッファ格納後の
 //               本プロジェクト独自フック）・RxAckCbk/RxTOutCbk（同じく格納後
 //               の通知）とは異なり、これは唯一「格納そのものを拒否できる」層
@@ -616,8 +614,8 @@ typedef struct
     uint16             TxTimeoutMs;
     void (*TxTOutCbk)(void);
     void (*RxTOutCbk)(void);
-    uint8 (*RxIpduCalloutCbk)(const uint8* SduDataPtr, uint8 SduLength);
-    uint8 (*TxIpduCalloutCbk)(const uint8* SduDataPtr, uint8 SduLength);
+    boolean (*RxIpduCalloutCbk)(const uint8* SduDataPtr, uint8 SduLength);
+    boolean (*TxIpduCalloutCbk)(const uint8* SduDataPtr, uint8 SduLength);
 } Com_IPduConfigType;
 
 // -------------------------------------------------------

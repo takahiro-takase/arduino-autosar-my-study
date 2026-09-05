@@ -143,7 +143,7 @@ static const BswM_RuleType BswM_Rules[BSWM_RULE_COUNT] =
         .ConditionCount = 2U,
         .Action         = BSWM_ACTION_PDU_GROUP_START,
         .IpduGroupId    = COM_IPDU_GROUP_TELEMETRY,
-        .Initialize     = 0U
+        .Initialize     = FALSE
     },
     /* Rule 4: EcuM → POST_RUN: I-PDU Group「テレメトリ」を停止 */
     {
@@ -178,7 +178,7 @@ static const BswM_RuleType BswM_Rules[BSWM_RULE_COUNT] =
         .ConditionCount = 2U,
         .Action         = BSWM_ACTION_PDU_GROUP_START,
         .IpduGroupId    = COM_IPDU_GROUP_SENSOR_RX,
-        .Initialize     = 0U
+        .Initialize     = FALSE
     },
     {
         /* Rule 7: ComM==NO_COMMUNICATION（真の物理スリープのみ。

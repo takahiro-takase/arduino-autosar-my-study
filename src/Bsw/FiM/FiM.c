@@ -112,14 +112,15 @@ void FiM_MainFunction(void)
 /**
  * \brief   指定 FID が現在許可されているかを取得する。
  *
+ * \AUTOSARReq     {SWS_Fim_00011}
  * \ServiceID      {0x01}
  * \Reentrancy     {Reentrant}
  * \Synchronicity  {Synchronous}
  */
-Std_ReturnType FiM_GetFunctionPermission(FiM_FunctionIdType FunctionId, uint8* Status)
+Std_ReturnType FiM_GetFunctionPermission(FiM_FunctionIdType FunctionId, boolean* Permission)
 {
     DET_LOGT(TAG, "called");
-    if (Status == NULL)
+    if (Permission == NULL)
     {
         Det_ReportError(FIM_MODULE_ID, 0U, FIM_API_ID_GET_FUNCTION_PERMISSION, FIM_E_PARAM_POINTER);
         return E_NOT_OK;
@@ -127,21 +128,21 @@ Std_ReturnType FiM_GetFunctionPermission(FiM_FunctionIdType FunctionId, uint8* S
 
     if (FiM_Cfg == NULL)
     {
-        *Status = 0U;  /* フェールセーフ: 未初期化中は抑止扱いとする */
+        *Permission = FALSE;  /* フェールセーフ: 未初期化中は抑止扱いとする */
         Det_ReportError(FIM_MODULE_ID, 0U, FIM_API_ID_GET_FUNCTION_PERMISSION, FIM_E_UNINIT);
         return E_NOT_OK;
     }
 
     if (FunctionId >= FiM_Cfg->FunctionCount)
     {
-        *Status = 0U;  /* フェールセーフ: 不明な FID は抑止扱いとする */
+        *Permission = FALSE;  /* フェールセーフ: 不明な FID は抑止扱いとする */
         Det_ReportError(FIM_MODULE_ID, 0U, FIM_API_ID_GET_FUNCTION_PERMISSION, FIM_E_FID_OUT_OF_RANGE);
         return E_NOT_OK;
     }
 
     /* [SWS_Fim_00105]: Availability=0 (利用不可) の FID は Dem ベースの判定に
      * 関わらず常に抑止扱いとする (FiM_SetFunctionAvailable() の Doxygen 参照)。 */
-    *Status = (FiM_Available[FunctionId] != 0U) ? FiM_Permitted[FunctionId] : 0U;
+    *Permission = (FiM_Available[FunctionId] != 0U) ? (FiM_Permitted[FunctionId] != 0U) : FALSE;
     return E_OK;
 }
 
@@ -161,7 +162,7 @@ Std_ReturnType FiM_GetFunctionPermission(FiM_FunctionIdType FunctionId, uint8* S
  *          変更しない）。
  *
  * \param[in]  FID           機能 ID (FIM_FID_*)。
- * \param[in]  Availability  0 以外: 利用可能。0: 利用不可（強制抑止）。
+ * \param[in]  Availability  TRUE: 利用可能。FALSE: 利用不可（強制抑止）。
  *
  * \retval  E_OK      正常に設定した。
  * \retval  E_NOT_OK  未初期化、または FID が範囲外。
@@ -171,7 +172,7 @@ Std_ReturnType FiM_GetFunctionPermission(FiM_FunctionIdType FunctionId, uint8* S
  * \Reentrancy     {Reentrant}
  * \Synchronicity  {Synchronous}
  */
-Std_ReturnType FiM_SetFunctionAvailable(FiM_FunctionIdType FID, uint8 Availability)
+Std_ReturnType FiM_SetFunctionAvailable(FiM_FunctionIdType FID, boolean Availability)
 {
     DET_LOGT(TAG, "called");
     if (FiM_Cfg == NULL)
@@ -186,9 +187,9 @@ Std_ReturnType FiM_SetFunctionAvailable(FiM_FunctionIdType FID, uint8 Availabili
         return E_NOT_OK;
     }
 
-    FiM_Available[FID] = Availability;
+    FiM_Available[FID] = Availability ? 1U : 0U;
 
-    if (Availability == 0U)
+    if (!Availability)
         DET_LOGW(TAG, "FID%u made unavailable (forced)", (unsigned)FID);
     else
         DET_LOGI(TAG, "FID%u made available again", (unsigned)FID);

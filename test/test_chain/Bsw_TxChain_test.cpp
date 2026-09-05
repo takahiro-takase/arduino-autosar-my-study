@@ -98,11 +98,11 @@ static void TestTxTOutCbk(void) { s_txTOutCount++; }
 static uint8_t s_txCalloutAccept      = 1U;
 static uint8_t s_txCalloutInvokeCount = 0U;
 static uint8_t s_txCalloutLastByte0   = 0U;
-static uint8_t TestTxIpduCallout(const uint8* SduDataPtr, uint8 SduLength)
+static boolean TestTxIpduCallout(const uint8* SduDataPtr, uint8 SduLength)
 {
     s_txCalloutInvokeCount++;
     s_txCalloutLastByte0 = (SduLength >= 1U) ? SduDataPtr[0] : 0xFFU;
-    return s_txCalloutAccept;
+    return s_txCalloutAccept != 0U;
 }
 
 const Com_SignalConfigType kTestSignal = {

@@ -125,7 +125,7 @@ typedef struct
                                                 *   uint16 では 16 個までしか表現できず、Task 16
                                                 *   (SecOC_MainFunctionTx) 追加時に uint32 へ拡張した） */
     Com_IpduGroupIdType      IpduGroupId;     /**< 操作対象の I-PDU Group ID */
-    uint8                    Initialize;       /**< Com_IpduGroupStart() の initialize 引数 */
+    boolean                  Initialize;       /**< Com_IpduGroupStart() の initialize 引数 */
 } BswM_RuleType;
 
 /**

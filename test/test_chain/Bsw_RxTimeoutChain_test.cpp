@@ -201,12 +201,12 @@ const Com_IPduConfigType kTestRxTimeoutGroupIPdu = {
 // 検証する（/code-review で見つかった「本来タイムアウトしないはずの状況で
 // タイムアウトしてしまう」問題の是正）。
 static uint8_t s_rejectCalloutInvokeCount = 0U;
-static uint8 TestAlwaysRejectCallout(const uint8* SduDataPtr, uint8 SduLength)
+static boolean TestAlwaysRejectCallout(const uint8* SduDataPtr, uint8 SduLength)
 {
     (void)SduDataPtr;
     (void)SduLength;
     s_rejectCalloutInvokeCount++;
-    return 0U;
+    return FALSE;
 }
 
 const Com_IPduConfigType kTestRxTimeoutRejectedIPdu = {

@@ -199,8 +199,8 @@ extern void Rte_COMCbk_AbsInfo(void);
 extern void Rte_COMRxInd_SecureCommand(void);
 extern void Rte_COMCbkRxTOut_EngineOnFlag(void);
 extern void Rte_COMCbkRxTOut_AbsInfo(void);
-extern uint8 Rte_COMRxIpduCallout_SecureCommand(const uint8* SduDataPtr, uint8 SduLength);
-extern uint8 Rte_COMTxIpduCallout_ImmobilizerStatus(const uint8* SduDataPtr, uint8 SduLength);
+extern boolean Rte_COMRxIpduCallout_SecureCommand(const uint8* SduDataPtr, uint8 SduLength);
+extern boolean Rte_COMTxIpduCallout_ImmobilizerStatus(const uint8* SduDataPtr, uint8 SduLength);
 
 /* -----------------------------------------------------------------------
  * RX I-PDU テーブル

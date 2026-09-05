@@ -70,18 +70,19 @@ void FiM_MainFunction(void);
  * \brief   指定 FID が現在許可されているかを取得する。
  *
  * \param[in]   FunctionId  機能 ID (FIM_FID_*)。
- * \param[out]  Status      1=許可 / 0=抑止 の格納先。NULL 禁止。
+ * \param[out]  Permission  TRUE=許可 / FALSE=抑止 の格納先。NULL 禁止。
  *
  * \retval  E_OK      正常取得。
- * \retval  E_NOT_OK  FunctionId が範囲外、または Status が NULL
- *                     （この場合 Status には安全側のフェールセーフとして
- *                       書き込み可能であれば 0 を設定する）。
+ * \retval  E_NOT_OK  FunctionId が範囲外、または Permission が NULL
+ *                     （この場合 Permission には安全側のフェールセーフとして
+ *                       書き込み可能であれば FALSE を設定する）。
  *
+ * \AUTOSARReq     {SWS_Fim_00011}
  * \ServiceID      {0x01}
  * \Reentrancy     {Reentrant}
  * \Synchronicity  {Synchronous}
  */
-Std_ReturnType FiM_GetFunctionPermission(FiM_FunctionIdType FunctionId, uint8* Status);
+Std_ReturnType FiM_GetFunctionPermission(FiM_FunctionIdType FunctionId, boolean* Permission);
 
 /**
  * \brief   指定 FID の利用可否を外部から強制設定する（[SWS_Fim_00106]）。
@@ -99,7 +100,7 @@ Std_ReturnType FiM_GetFunctionPermission(FiM_FunctionIdType FunctionId, uint8* S
  *          変更しない）。
  *
  * \param[in]  FID           機能 ID (FIM_FID_*)。
- * \param[in]  Availability  0 以外: 利用可能。0: 利用不可（強制抑止）。
+ * \param[in]  Availability  TRUE: 利用可能。FALSE: 利用不可（強制抑止）。
  *
  * \retval  E_OK      正常に設定した。
  * \retval  E_NOT_OK  未初期化、または FID が範囲外。
@@ -109,7 +110,7 @@ Std_ReturnType FiM_GetFunctionPermission(FiM_FunctionIdType FunctionId, uint8* S
  * \Reentrancy     {Reentrant}
  * \Synchronicity  {Synchronous}
  */
-Std_ReturnType FiM_SetFunctionAvailable(FiM_FunctionIdType FID, uint8 Availability);
+Std_ReturnType FiM_SetFunctionAvailable(FiM_FunctionIdType FID, boolean Availability);
 
 /**
  * \brief   FiM モジュールのバージョン情報を取得する。

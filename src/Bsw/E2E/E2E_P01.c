@@ -286,7 +286,7 @@ Std_ReturnType E2E_P01Protect(
 E2E_PCheckStatusType E2E_P01MapStatusToSM(
     Std_ReturnType    CheckReturn,
     E2E_P01StatusType Status,
-    uint8             profileBehavior)
+    boolean           profileBehavior)
 {
     /* [SWS_E2E_00216] によりライブラリは Det/Dem を呼ばない方針のため
      * DET_LOGT すら使わない（本ファイル冒頭の他関数は引数に NULL 可能性の
@@ -312,9 +312,9 @@ E2E_PCheckStatusType E2E_P01MapStatusToSM(
     case E2E_P01STATUS_WRONGSEQUENCE:
         return E2E_P_WRONGSEQUENCE;
     case E2E_P01STATUS_SYNC:
-        return (profileBehavior != 0U) ? E2E_P_OK : E2E_P_WRONGSEQUENCE;
+        return profileBehavior ? E2E_P_OK : E2E_P_WRONGSEQUENCE;
     case E2E_P01STATUS_INITIAL:
-        return (profileBehavior != 0U) ? E2E_P_WRONGSEQUENCE : E2E_P_OK;
+        return profileBehavior ? E2E_P_WRONGSEQUENCE : E2E_P_OK;
     case E2E_P01STATUS_WRONGCRC:
     case E2E_P01STATUS_ERROR:
     default:
