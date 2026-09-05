@@ -350,7 +350,7 @@ Std_ReturnType EcuM_RequestRUN(EcuM_UserType user)
         EcuM_PostRunUsers = 0U;
     }
     /* SHUTDOWN 中に要求が来たら RUN へ戻る（CAN バスのウェイクアップ経由）。
-     * CanSM_ControllerWakeup() → ComM_BusSM_ModeIndication(FULL_COM) →
+     * CanSM_ControllerModeIndication() → ComM_BusSM_ModeIndication(FULL_COM) →
      * EcuM_RequestRUN(ECUM_USER_COMM) という経路からの復帰を許可する。
      * POST_RUN からの復帰と同じ後処理（チェックポイント基準リセット・
      * HW ウォッチドッグ再有効化・全タスク再有効化）を行う。 */

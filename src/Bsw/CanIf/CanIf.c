@@ -638,7 +638,11 @@ void CanIf_ControllerBusOff(uint8 ControllerId)
  * \details Can_MainFunction_Wakeup() が CAN_CS_SLEEP 中に Can_Isr()（INT ピン
  *          立ち下がり割り込み）が検出したウェイクアップ（バス活動による
  *          MCP2515 の自律的なウェイクアップ）を確認した際に呼び出される。
- *          CanSM_ControllerWakeup() へ委譲する。
+ *          `CanSM_ControllerModeIndication()`（旧 `CanSM_ControllerWakeup`、
+ *          2026-09-05 に実仕様名・シグネチャへ是正。CanSM.h 参照）へ委譲する。
+ *          `ControllerMode` には `CAN_CS_STOPPED`（本関数がこの直後に確定
+ *          させる Listen-Only 相当のモード）を渡す（CanSM.h の
+ *          `CanSM_ControllerModeIndication()` Doxygen 参照）。
  *
  * \param[in]  ControllerId  ウェイクアップを検出したコントローラ ID。
  *
@@ -649,7 +653,7 @@ void CanIf_ControllerBusOff(uint8 ControllerId)
 void CanIf_ControllerWakeup(uint8 ControllerId)
 {
     DET_LOGI(TAG, "ControllerWakeup ch=%u", (unsigned)ControllerId);
-    CanSM_ControllerWakeup(ControllerId);
+    CanSM_ControllerModeIndication(ControllerId, CAN_CS_STOPPED);
 }
 
 /**

@@ -101,7 +101,7 @@
  *            復帰する 2 段階の手順を踏む。
  *              1. Can_Isr()（真の割り込み）が SLEEP 中の INT アサートを検出
  *                 → Can_MainFunction_Wakeup() が CanIf_ControllerWakeup() を呼ぶ
- *                 → CanSM_ControllerWakeup()
+ *                 → CanSM_ControllerModeIndication()（旧 CanSM_ControllerWakeup）
  *                 → CAN_T_WAKEUP のみ実行（SLEEP→STOPPED、Listen-Only）。
  *                   CANSM_STATE_WAKEUP_VALIDATING へ遷移し、検証タイマ開始。
  *                   ComM/EcuM へはまだ何も通知しない（この時点ではノイズの
@@ -487,11 +487,14 @@ void CanSM_ControllerBusOff(uint8 ControllerId)
 }
 
 /**
- * \brief   ウェイクアップ通知コールバック（CanIf から呼び出される）。
+ * \brief   コントローラモード変化通知コールバック（[SWS_CanSM_00396]、CanIf
+ *          から呼び出される）。旧 `CanSM_ControllerWakeup`（2026-09-05、
+ *          実仕様名・シグネチャへ是正。詳細は CanSM.h 参照）。
  *
  * \details CAN_CS_SLEEP 中に MCP2515 がバス活動を検知して自律的にウェイクアップ
  *          した際、Can_Isr()（割り込み） → Can_MainFunction_Wakeup() →
- *          CanIf_ControllerWakeup() 経由で呼び出される。
+ *          CanIf_ControllerWakeup() 経由で呼び出される（本プロジェクトの
+ *          唯一の呼び出し場面。CanIf.h 冒頭コメント参照）。
  *
  *          CANSM_STATE_NO_COM（ComM の NO_COM 要求によるボランタリスリープ）
  *          からの起床のみを受け付ける。CANSM_STATE_BUS_OFF は Can_T_STOP/
@@ -505,21 +508,41 @@ void CanSM_ControllerBusOff(uint8 ControllerId)
  *          確認したとき（検証成功）、または CanSM_MainFunction() が検証タイムアウトを
  *          検出して再スリープするとき（検証失敗）のいずれかである。
  *
- * \param[in]  ControllerId  ウェイクアップを検出したコントローラ ID。
+ * \param[in]  ControllerId   モードが変化したコントローラ ID。
+ * \param[in]  ControllerMode 通知されたコントローラモード。呼び出し場面が
+ *                            ウェイクアップ検知のみに限定されるため、内部
+ *                            ロジックはこの値では分岐しない（CanSM.h 参照）。
  *
- * \ServiceID      {0x06}
+ * \note    実仕様の \Reentrancy は「Reentrant (only for different CAN
+ *          controllers)」だが、本実装は `CanSM_State`/`CanSM_ValidationTimerMs`
+ *          等の共有 static 変数を排他制御なしに読み書きするため、
+ *          兄弟関数（`CanSM_ControllerBusOff`/`CanSM_RxIndication`/
+ *          `CanSM_RequestComMode` 等、いずれも `Non Reentrant`）と同様に
+ *          `Non Reentrant` のまま扱う（本プロジェクトは単一コントローラ構成
+ *          で ControllerId!=0 を DET 拒否するため、実仕様が言う「異なる
+ *          コントローラ間」のケース自体が到達しない点も踏まえた判断）。
+ *
+ * \AUTOSARReq     {SWS_CanSM_00396, SWS_CanSM_00397, SWS_CanSM_00398}
+ * \ServiceID      {0x07}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
  */
-void CanSM_ControllerWakeup(uint8 ControllerId)
+void CanSM_ControllerModeIndication(uint8 ControllerId, Can_ControllerStateType ControllerMode)
 {
-    (void)ControllerId;
+    (void)ControllerMode;
 
     DET_LOGT(TAG, "called");
 
     if (!CanSM_Initialized)
     {
-        Det_ReportError(CANSM_MODULE_ID, 0U, CANSM_API_ID_CONTROLLER_WAKEUP, CANSM_E_UNINIT);
+        Det_ReportError(CANSM_MODULE_ID, 0U, CANSM_API_ID_CONTROLLER_MODE_INDICATION, CANSM_E_UNINIT);
+        return;
+    }
+
+    if (ControllerId != 0U)
+    {
+        /* [SWS_CanSM_00397] */
+        Det_ReportError(CANSM_MODULE_ID, 0U, CANSM_API_ID_CONTROLLER_MODE_INDICATION, CANSM_E_PARAM_CONTROLLER);
         return;
     }
 
@@ -565,7 +588,13 @@ void CanSM_ControllerWakeup(uint8 ControllerId)
  *
  * \param[in]  ControllerId  受信したコントローラ ID。
  *
- * \ServiceID      {0x07}
+ * \note    実仕様には存在しない本プロジェクト独自の拡張関数のため、対応する
+ *          \AUTOSARReq は無い（CanSM_Cfg.h の CANSM_API_ID_RX_INDICATION
+ *          コメント参照）。ServiceID は以前 0x07 だったが、
+ *          `CanSM_ControllerModeIndication`（旧 CanSM_ControllerWakeup）の
+ *          正しい ServiceID が実は 0x07 だったと判明したため、2026-09-05 に
+ *          0x15 へ変更した（自己割当値、実仕様との衝突を避けるため）。
+ * \ServiceID      {0x15}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
  */

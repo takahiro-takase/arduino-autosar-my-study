@@ -18,7 +18,7 @@ Bus-Off 検出直後（回復試行の前）に `ComM_BusSM_ModeIndication(SILEN
 戻さない）。ComM の NO_COM 要求によるボランタリスリープでは即座にはスリープせず、
 Nm（CanNm 状態機械）が Bus-Sleep Mode へ到達した通知（`CanSM_NmBusSleepMode()`）を
 受けてから `Can_SetControllerMode(CAN_T_SLEEP)` で実 HW を実際にスリープさせる
-（協調スリープ、詳細は [`Nm_Notes.md`](./Nm_Notes.md) 参照）。`CanSM_ControllerWakeup()`
+（協調スリープ、詳細は [`Nm_Notes.md`](./Nm_Notes.md) 参照）。`CanSM_ControllerModeIndication()`
 による復帰経路を持ち、復帰は即座に確定せず、ウェイクアップ検証（Wakeup Validation
 Protocol 相当）により有効な CAN フレーム受信を確認してから FULL_COM へ確定する。
 
@@ -39,7 +39,7 @@ stateDiagram-v2
 
     NO_COM --> FULL_COM: RequestComMode(FULL_COM)
     NO_COM --> SILENT_COM: RequestComMode(SILENT_COM)
-    NO_COM --> WAKEUP_VALIDATING: ControllerWakeup()
+    NO_COM --> WAKEUP_VALIDATING: ControllerModeIndication()
 
     NO_COM_PENDING_SLEEP --> FULL_COM: RequestComMode(FULL_COM)
     NO_COM_PENDING_SLEEP --> SILENT_COM: RequestComMode(SILENT_COM)

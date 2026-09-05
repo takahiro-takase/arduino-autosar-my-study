@@ -71,7 +71,7 @@
  *            ComM_NmReleasePending[] のコメント（下記）を参照。
  *
  *            2026-09 追加: ComM_Nm_NetworkStartIndication()（[SWS_ComM_00383]）。
- *            この待機期間中の物理ウェイクアップ（CanSM_ControllerWakeup() →
+ *            この待機期間中の物理ウェイクアップ（CanSM_ControllerModeIndication() →
  *            ウェイクアップ検証 → CanSM_RxIndication() →
  *            ComM_BusSM_ModeIndication(FULL_COM)）とは別に、Nm 自身がまだ
  *            Bus-Sleep Mode のまま NM フレームを受信した場合（レース条件、

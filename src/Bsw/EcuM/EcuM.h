@@ -30,7 +30,7 @@
  * \details フェーズ値は AUTOSAR 仕様の定義に準拠した範囲を使用している。
  *          STARTUP は EcuM_Init() 実行中のみ。
  *          SHUTDOWN は Arduino では電源断できないためアイドル待機となるが、
- *          CAN バスのウェイクアップ（CanSM_ControllerWakeup 経由の
+ *          CAN バスのウェイクアップ（CanSM_ControllerModeIndication 経由の
  *          EcuM_RequestRUN）により RUN へ復帰でき、実機リセットは不要
  *          （詳細は EcuM_RequestRUN() を参照。CanSM の Bus-Off 回復は
  *          L1/L2 バックオフで無期限に継続するため、Bus-Off が原因で
@@ -114,7 +114,7 @@ EcuM_StateType EcuM_GetState(void);
  *
  * \details POST_RUN 状態で呼ばれた場合は RUN へ戻る。
  *          SHUTDOWN 状態で呼ばれた場合も RUN へ戻る（CAN バスのウェイクアップ
- *          経由。CanSM_ControllerWakeup() → ComM_BusSM_ModeIndication(FULL_COM) →
+ *          経由。CanSM_ControllerModeIndication() → ComM_BusSM_ModeIndication(FULL_COM) →
  *          本関数、という経路を想定）。
  *          STARTUP 状態で呼ばれた場合はビットのみ記録し、
  *          EcuM_Init() 完了時に RUN へ遷移する。

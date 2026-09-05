@@ -10,7 +10,7 @@
  *                                          Can_Hw_IsWakeupPending() のフォール
  *                                          バックポーリング経路を使う）
  *                → CanIf_ControllerWakeup()
- *                  → CanSM_ControllerWakeup()
+ *                  → CanSM_ControllerModeIndication()
  *                    → CanIf_SetControllerMode(CAN_CS_STOPPED)
  *                      → Can_SetControllerMode(CAN_T_WAKEUP)   ← SLEEP→STOPPED
  *                                                                  (Listen-Only)

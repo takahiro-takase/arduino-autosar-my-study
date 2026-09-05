@@ -39,8 +39,18 @@
 #define CANSM_API_ID_REQUEST_COM_MODE       0x02U
 #define CANSM_API_ID_GET_CURRENT_COM_MODE  0x03U
 #define CANSM_API_ID_CONTROLLER_BUSOFF     0x04U
-#define CANSM_API_ID_CONTROLLER_WAKEUP     0x06U
-#define CANSM_API_ID_RX_INDICATION         0x07U
+/** [SWS_CanSM_00396] `CanSM_ControllerModeIndication`（旧 `CanSM_ControllerWakeup`、
+ *  2026-09-05 是正）。誤って 0x06（実仕様では別関数
+ *  `CanSM_ConfirmPnAvailability`、Partial Networking 用で本プロジェクト未実装）
+ *  を使っていたが、正しくは 0x07。 */
+#define CANSM_API_ID_CONTROLLER_MODE_INDICATION  0x07U
+/** `CanSM_RxIndication` は実仕様に存在しない本プロジェクト独自の拡張関数
+ *  （ウェイクアップ検証用、CanSM.h 冒頭コメント参照）のため、実仕様の
+ *  ServiceID 空間（本ファイルで実際に使用している 0x00〜0x14）と衝突しない
+ *  自己割当値を用いる。旧 0x07 は上記の是正で
+ *  `CanSM_ControllerModeIndication` の正しい値と衝突するようになったため、
+ *  DeInit(0x14) の次の空き番号 0x15 へ変更した（2026-09-05）。 */
+#define CANSM_API_ID_RX_INDICATION         0x15U
 #define CANSM_API_ID_MAIN_FUNCTION         0x05U
 #define CANSM_API_ID_DEINIT                 0x14U
 #define CANSM_API_ID_GET_VERSION_INFO       0x01U
