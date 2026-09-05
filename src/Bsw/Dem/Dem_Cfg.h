@@ -86,7 +86,9 @@
  *  Dem_GetAllDTCs/Dem_SetFreezeFrameContext（いずれも実 AUTOSAR に対応する
  *  関数が無く ApiId は任意）を 0x2B/0x2C（Enable/DisableDTCSetting が
  *  空けた値）へ入れ替えて衝突を回避した） */
-#define DEM_API_ID_INIT                          0x01U
+/** ServiceID 0x01 は実仕様では未実装の Dem_PreInit（[SWS_Dem_00180]）に
+ *  割り当てられているため、Dem_Init は正しくは 0x02 を使う（2026-09-05 是正）。 */
+#define DEM_API_ID_INIT                          0x02U
 #define DEM_API_ID_SET_EVENT_STATUS              0x04U
 #define DEM_API_ID_GET_DTC_STATUS_AVAILABILITY_MASK 0x16U
 #define DEM_API_ID_GET_EVENT_UDS_STATUS            0xB6U
