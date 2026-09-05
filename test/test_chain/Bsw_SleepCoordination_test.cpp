@@ -158,6 +158,7 @@ protected:
         CanIf_Init(&kTestCanIfConfig);
         CanSM_Init(NULL);
         ComM_Init(NULL);
+        ComM_CommunicationAllowed(COMM_CHANNEL_0, TRUE);  // 実 EcuM_Init() と同じく起動時に許可
         Nm_Init(NULL);
 
         FakeDetHw_LogSuppressed = 0U;  // ここから各 TEST_F の実行(Act)区間
@@ -783,6 +784,65 @@ TEST_F(Bsw_SleepCoordination_Test, BusOffDuringSilentCom_OK_ConvergesToNoComWhen
     EXPECT_EQ(mode, static_cast<ComM_ModeType>(COMM_NO_COMMUNICATION));
     EXPECT_EQ(Can_Test_GetControllerState(), CAN_CS_SLEEP);
     EXPECT_EQ(FakeEcuM_ReleaseRUNCount, 1U);
+}
+
+/**
+ * \brief   2026-09 追加: [SWS_ComM_00871]/[SWS_ComM_00895] CommunicationAllowed
+ *          ゲート。SetUp() は実 EcuM_Init() を模して起動直後に TRUE を通知
+ *          するため、本テストではまず明示的に FALSE へ戻してから検証する。
+ *          Allowed=FALSE の間は FULL_COM 要求を受理（E_OK）はするが CanSM へは
+ *          一切伝えず、チャネルは NO_COM のまま・コントローラも起動しない。
+ */
+TEST_F(Bsw_SleepCoordination_Test, CommunicationAllowed_OK_HoldsFullComPendingWhileNotAllowed)
+{
+    ComM_CommunicationAllowed(COMM_CHANNEL_0, FALSE);
+
+    /* 実行 (Act) */
+    ASSERT_EQ(ComM_RequestComMode(COMM_USER_0, COMM_FULL_COMMUNICATION), E_OK);
+
+    /* 評価 (Assert): 保留されており CanSM へは届いていない。 */
+    ComM_ModeType mode = COMM_FULL_COMMUNICATION;
+    ASSERT_EQ(ComM_GetCurrentComMode(COMM_USER_0, &mode), E_OK);
+    EXPECT_EQ(mode, static_cast<ComM_ModeType>(COMM_NO_COMMUNICATION));
+    EXPECT_NE(Can_Test_GetControllerState(), CAN_CS_STARTED);
+}
+
+/**
+ * \brief   [SWS_ComM_00895]: Allowed=FALSE の間に保留された FULL_COM 要求は、
+ *          Allowed=TRUE が通知された瞬間に（追加のユーザ要求なしで）即座に
+ *          CanSM_RequestComMode(FULL_COM) が発行され収束すること。
+ */
+TEST_F(Bsw_SleepCoordination_Test, CommunicationAllowed_OK_DispatchesPendingFullComImmediatelyWhenGranted)
+{
+    ComM_CommunicationAllowed(COMM_CHANNEL_0, FALSE);
+    ASSERT_EQ(ComM_RequestComMode(COMM_USER_0, COMM_FULL_COMMUNICATION), E_OK);
+
+    /* 実行 (Act) */
+    ComM_CommunicationAllowed(COMM_CHANNEL_0, TRUE);
+
+    /* 評価 (Assert) */
+    ComM_ModeType mode = COMM_NO_COMMUNICATION;
+    ASSERT_EQ(ComM_GetCurrentComMode(COMM_USER_0, &mode), E_OK);
+    EXPECT_EQ(mode, static_cast<ComM_ModeType>(COMM_FULL_COMMUNICATION));
+    EXPECT_EQ(Can_Test_GetControllerState(), CAN_CS_STARTED);
+}
+
+/**
+ * \brief   Allowed=TRUE で保留中の要求が無い場合は、CanSM を一切呼ばない
+ *          （チャネルが既に NO_COM のまま変化しないこと、および冗長な
+ *          Allowed(TRUE) 再通知が誤って何かを起こさないことの確認）。
+ */
+TEST_F(Bsw_SleepCoordination_Test, CommunicationAllowed_OK_NoPendingRequestDoesNothing)
+{
+    /* 実行 (Act): SetUp() は既に TRUE を通知済み。保留中の要求もないまま
+     * 冗長に再通知する。 */
+    ComM_CommunicationAllowed(COMM_CHANNEL_0, TRUE);
+
+    /* 評価 (Assert) */
+    ComM_ModeType mode = COMM_FULL_COMMUNICATION;
+    ASSERT_EQ(ComM_GetCurrentComMode(COMM_USER_0, &mode), E_OK);
+    EXPECT_EQ(mode, static_cast<ComM_ModeType>(COMM_NO_COMMUNICATION));
+    EXPECT_NE(Can_Test_GetControllerState(), CAN_CS_STARTED);
 }
 
 }  // namespace
