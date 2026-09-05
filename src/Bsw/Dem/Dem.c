@@ -544,7 +544,7 @@ Std_ReturnType Dem_SetEventStatus(Dem_EventIdType EventId,
  * \Reentrancy     {Reentrant for different ClientIds, Non Reentrant for same ClientId}
  * \Synchronicity  {Synchronous}
  */
-Std_ReturnType Dem_GetDTCStatusAvailabilityMask(uint8 ClientId, uint8* DTCStatusMask)
+Std_ReturnType Dem_GetDTCStatusAvailabilityMask(uint8 ClientId, Dem_UdsStatusByteType* DTCStatusMask)
 {
     DET_LOGT(TAG, "called");
     (void)ClientId;  /* 単一ECU・単一診断クライアント構成のため未使用（Dem.h 冒頭コメント参照） */

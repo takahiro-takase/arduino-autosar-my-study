@@ -104,7 +104,7 @@ void BswM_EcuM_CurrentState(EcuM_StateType state);
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
  */
-void BswM_ComM_CurrentMode(uint8 channel, ComM_ModeType mode);
+void BswM_ComM_CurrentMode(NetworkHandleType channel, ComM_ModeType mode);
 
 #ifdef __cplusplus
 }
