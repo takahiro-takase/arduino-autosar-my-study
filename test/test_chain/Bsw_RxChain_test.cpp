@@ -93,11 +93,11 @@ static void TestPartialAckCbk1(void) { s_partialAckCount1++; }
 static uint8_t s_calloutAccept = 1U;
 static uint8_t s_calloutInvokeCount = 0U;
 static uint8_t s_calloutLastByte1 = 0U;
-static uint8 TestRxIpduCallout(const uint8* SduDataPtr, uint8 SduLength)
+static boolean TestRxIpduCallout(const uint8* SduDataPtr, uint8 SduLength)
 {
     s_calloutInvokeCount++;
     s_calloutLastByte1 = (SduLength > 1U) ? SduDataPtr[1] : 0xFFU;
-    return s_calloutAccept;
+    return s_calloutAccept != 0U;
 }
 
 const Com_SignalConfigType kTestRxSignal = {

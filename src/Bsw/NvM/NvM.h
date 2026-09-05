@@ -246,7 +246,7 @@ Std_ReturnType NvM_RestoreBlockDefaults(NvM_BlockIdType BlockId, void* NvM_DestP
  *          （DET ログのみ出力）。
  *
  * \param[in]  BlockId            ブロック ID (NVM_BLOCK_ID_* 定数)。
- * \param[in]  ProtectionEnabled  0 以外: 保護を有効化。0: 保護を解除。
+ * \param[in]  ProtectionEnabled  TRUE: 保護を有効化。FALSE: 保護を解除。
  *
  * \retval  E_OK      正常に設定/解除した。
  * \retval  E_NOT_OK  未初期化、または BlockId が範囲外。
@@ -256,7 +256,7 @@ Std_ReturnType NvM_RestoreBlockDefaults(NvM_BlockIdType BlockId, void* NvM_DestP
  * \Reentrancy     {Reentrant}
  * \Synchronicity  {Synchronous}
  */
-Std_ReturnType NvM_SetBlockProtection(NvM_BlockIdType BlockId, uint8 ProtectionEnabled);
+Std_ReturnType NvM_SetBlockProtection(NvM_BlockIdType BlockId, boolean ProtectionEnabled);
 
 /**
  * \brief   ブロックの直近のジョブ結果を取得する。

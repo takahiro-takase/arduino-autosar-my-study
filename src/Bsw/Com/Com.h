@@ -269,13 +269,14 @@ Std_ReturnType Com_TriggerIPDUSend(Com_IPduIdType PduId);
  *          コメント参照。
  *
  * \param[in]  PduId  TMS 状態を切り替える TX I-PDU の ID。
- * \param[in]  Mode   新しい TMS 状態（0=false/1=true）。
+ * \param[in]  Mode   新しい TMS 状態（TRUE/FALSE）。
  *
+ * \AUTOSARReq     {SWS_Com_00881, SWS_Com_00239, SWS_Com_00244}
  * \ServiceID      {0x27}
  * \Reentrancy     {Reentrant for different PduIds. Non reentrant for the same PduId.}
  * \Synchronicity  {Synchronous}
  */
-void Com_SwitchIpduTxMode(Com_IPduIdType PduId, uint8 Mode);
+void Com_SwitchIpduTxMode(Com_IPduIdType PduId, boolean Mode);
 
 /* SWS_Com_00124 */
 void Com_TxConfirmation(PduIdType TxPduId, Std_ReturnType result);
@@ -340,10 +341,10 @@ void Com_SetCommunicationEnabled(uint8 RxEnabled, uint8 TxEnabled);
  *
  * \param[in]  IpduGroupId  起動する I-PDU Group の ID
  *                          （Com_Cfg.h の COM_IPDU_GROUP_* 参照）。
- * \param[in]  initialize   非 0 の場合、追加で I-PDU のデータ・Signal Group の
+ * \param[in]  initialize   TRUE の場合、追加で I-PDU のデータ・Signal Group の
  *                          シャドウバッファ・フィルタ old_value を
  *                          ComSignalInitValue で初期化する（[SWS_Com_00222]）。
- *                          0 の場合は直近の値を保持したまま起動する。
+ *                          FALSE の場合は直近の値を保持したまま起動する。
  *
  * \AUTOSARReq     {SWS_Com_91001, SWS_Com_00114, SWS_Com_00787, SWS_Com_00222,
  *                  SWS_Com_00223, SWS_Com_00840}
@@ -351,7 +352,7 @@ void Com_SetCommunicationEnabled(uint8 RxEnabled, uint8 TxEnabled);
  * \Reentrancy     {Reentrant for different I-PDU groups. Non reentrant for the same I-PDU group.}
  * \Synchronicity  {Synchronous}
  */
-void Com_IpduGroupStart(Com_IpduGroupIdType IpduGroupId, uint8 initialize);
+void Com_IpduGroupStart(Com_IpduGroupIdType IpduGroupId, boolean initialize);
 
 /**
  * \brief   I-PDU Group を停止する（所属する I-PDU の送受信処理を禁止する）。

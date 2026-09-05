@@ -611,11 +611,11 @@ void Com_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
 
         /* [SWS_Com_00700]/[SWS_Com_00816] (Com_RxIpduCallout): バッファ書き込み・
          * RxAckCbk/RxIndicationCbk のいずれよりも前に、PduR から渡された
-         * 生バイト列をそのまま渡して呼ぶ。0（false 相当）を返したら、
+         * 生バイト列をそのまま渡して呼ぶ。FALSE を返したら、
          * この受信は以降一切処理しない（デッドライン監視タイマは上で
          * 既にリセット済みのため、これ以降の reject では巻き戻さない）。 */
         if (ipdu->RxIpduCalloutCbk != NULL &&
-            ipdu->RxIpduCalloutCbk(PduInfoPtr->SduDataPtr, (uint8)PduInfoPtr->SduLength) == 0U)
+            !ipdu->RxIpduCalloutCbk(PduInfoPtr->SduDataPtr, (uint8)PduInfoPtr->SduLength))
         {
             /* 具体的な拒否理由は RxIpduCalloutCbk 自身が WARN で既に出力
              * 済みのはず（Rte_COMRxIpduCallout_SecureCommand 等）。ここでは
@@ -1092,7 +1092,7 @@ static Std_ReturnType Com_DoTransmit(const Com_IPduConfigType* ipdu, unsigned lo
         ipdu->TxTransformCbk(Com_TxBuffer[ipdu->IPduId], ipdu->DLC);
 
     if (ipdu->TxIpduCalloutCbk != NULL &&
-        ipdu->TxIpduCalloutCbk(Com_TxBuffer[ipdu->IPduId], ipdu->DLC) == 0U)
+        !ipdu->TxIpduCalloutCbk(Com_TxBuffer[ipdu->IPduId], ipdu->DLC))
     {
         /* [SWS_Com_00346] false: 送信そのものを行わない。具体的な拒否理由は
          * TxIpduCalloutCbk 自身が WARN で既に出力している想定のため、ここは
@@ -2482,17 +2482,14 @@ Std_ReturnType Com_TriggerIPDUSend(Com_IPduIdType PduId)
  *          docs/modules/Com_Notes.md「Com_SwitchIpduTxMode」参照。
  *
  * \param[in]  PduId  TMS 状態を切り替える TX I-PDU の ID。
- * \param[in]  Mode   新しい TMS 状態（0=false/1=true。実 AUTOSAR の
- *                    `boolean` に相当。本プロジェクトは `boolean` 型を
- *                    持たないため `Com_IpduGroupStart()` の `initialize`
- *                    引数と同じ規約で `uint8` を使う）。
+ * \param[in]  Mode   新しい TMS 状態（TRUE/FALSE）。
  *
  * \AUTOSARReq     {SWS_Com_00881, SWS_Com_00239, SWS_Com_00244}
  * \ServiceID      {0x27}
  * \Reentrancy     {Reentrant for different PduIds. Non reentrant for the same PduId.}
  * \Synchronicity  {Synchronous}
  */
-void Com_SwitchIpduTxMode(Com_IPduIdType PduId, uint8 Mode)
+void Com_SwitchIpduTxMode(Com_IPduIdType PduId, boolean Mode)
 {
     DET_LOGT(TAG, "called");
 
@@ -2518,7 +2515,7 @@ void Com_SwitchIpduTxMode(Com_IPduIdType PduId, uint8 Mode)
         return;
     }
 
-    const uint8 newState = (Mode != 0U) ? 1U : 0U;
+    const uint8 newState = Mode ? 1U : 0U;
     if (Com_TmsState[PduId] == newState)
         return;  /* spec 原文: "the call will have no effect" */
 
@@ -3177,7 +3174,7 @@ void Com_SetCommunicationEnabled(uint8 RxEnabled, uint8 TxEnabled)
     Com_TxEnabled = TxEnabled;
 }
 
-void Com_IpduGroupStart(Com_IpduGroupIdType IpduGroupId, uint8 initialize)
+void Com_IpduGroupStart(Com_IpduGroupIdType IpduGroupId, boolean initialize)
 {
     DET_LOGT(TAG, "called");
 
@@ -3202,7 +3199,7 @@ void Com_IpduGroupStart(Com_IpduGroupIdType IpduGroupId, uint8 initialize)
          * （Com_SetCommunicationEnabled() の再開時と同じ理由）。 */
         Com_ResetRxDeadlineMonitoring(id, now);
 
-        if (initialize != 0U)
+        if (initialize)
         {
             /* [SWS_Com_00222] 項目1: I-PDU のデータを ComSignalInitValue で
              * 初期化する（Com_Init() と同じ手順: バイト単位ゼロクリア →
@@ -3263,7 +3260,7 @@ void Com_IpduGroupStart(Com_IpduGroupIdType IpduGroupId, uint8 initialize)
         if (ipdu->UpdateBitPosition != 0xFFU)
             Com_PackSignal(Com_TxBuffer[id], ipdu->UpdateBitPosition, 1U, COM_BIG_ENDIAN, 0U);
 
-        if (initialize != 0U)
+        if (initialize)
         {
             /* [SWS_Com_00222] 項目1: I-PDU のデータを ComSignalInitValue で
              * 初期化する（RX 側と同じ手順）。 */

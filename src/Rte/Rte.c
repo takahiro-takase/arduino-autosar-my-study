@@ -505,36 +505,36 @@ void Rte_COMRxInd_SecureCommand(void)
  * \param[in]  SduDataPtr  PduR から渡された生バイト列（DLC によるクランプ前）。
  * \param[in]  SduLength   その長さ。
  *
- * \retval  1  受理する（Reserved==0x00）。
- * \retval  0  拒否する（Reserved!=0x00、または Reserved バイトを読める長さが
- *             無い）。長さ不足を fail-open（受理）にしないのは、非
- *             Signal Group の SecureCommand には [SWS_Com_00575] の短小
- *             フレーム破棄（IsSignalGroup 専用）が適用されず、代わりに
- *             部分受理パス（byte[0] のみ書き込み）へ進んでしまうと、
- *             この検査自体が一度も評価されないまま「検査済み」として
- *             通過してしまうため（/code-review で指摘・是正）。
+ * \retval  TRUE   受理する（Reserved==0x00）。
+ * \retval  FALSE  拒否する（Reserved!=0x00、または Reserved バイトを読める長さが
+ *                 無い）。長さ不足を fail-open（受理）にしないのは、非
+ *                 Signal Group の SecureCommand には [SWS_Com_00575] の短小
+ *                 フレーム破棄（IsSignalGroup 専用）が適用されず、代わりに
+ *                 部分受理パス（byte[0] のみ書き込み）へ進んでしまうと、
+ *                 この検査自体が一度も評価されないまま「検査済み」として
+ *                 通過してしまうため（/code-review で指摘・是正）。
  *
  * \note    Com_PBCfg.c から extern 宣言経由で RxIpduCalloutCbk として
  *          参照されるため non-static。Rte.h には公開しない。呼び出し
  *          コンテキストは `Rte_COMRxInd_SecureCommand()` と同じ
  *          （割り込み禁止区間の外）。
  */
-uint8 Rte_COMRxIpduCallout_SecureCommand(const uint8* SduDataPtr, uint8 SduLength)
+boolean Rte_COMRxIpduCallout_SecureCommand(const uint8* SduDataPtr, uint8 SduLength)
 {
     if (SduLength <= SECURECOMMAND_RESERVED_BYTE_OFFSET)
     {
         DET_LOGW(TAG, "SecureCommand rejected by RxIpduCallout (len=%u too short)",
                  (unsigned)SduLength);
-        return 0U;
+        return FALSE;
     }
 
     if (SduDataPtr[SECURECOMMAND_RESERVED_BYTE_OFFSET] != 0x00U)
     {
         DET_LOGW(TAG, "SecureCommand rejected by RxIpduCallout (Reserved=0x%02X)",
                  (unsigned)SduDataPtr[SECURECOMMAND_RESERVED_BYTE_OFFSET]);
-        return 0U;
+        return FALSE;
     }
-    return 1U;
+    return TRUE;
 }
 
 /**
@@ -558,13 +558,13 @@ uint8 Rte_COMRxIpduCallout_SecureCommand(const uint8* SduDataPtr, uint8 SduLengt
  * \param[in]  SduDataPtr  送信直前の TX バッファ（TxTransformCbk 適用後）。
  * \param[in]  SduLength   その長さ（本 I-PDU は DLC=1U 固定）。
  *
- * \retval  1  受理する（byte[0]==0x00 または 0x01）。
- * \retval  0  拒否する（それ以外の値）。
+ * \retval  TRUE   受理する（byte[0]==0x00 または 0x01）。
+ * \retval  FALSE  拒否する（それ以外の値）。
  *
  * \note    Com_PBCfg.c から extern 宣言経由で TxIpduCalloutCbk として
  *          参照されるため non-static。Rte.h には公開しない。
  */
-uint8 Rte_COMTxIpduCallout_ImmobilizerStatus(const uint8* SduDataPtr, uint8 SduLength)
+boolean Rte_COMTxIpduCallout_ImmobilizerStatus(const uint8* SduDataPtr, uint8 SduLength)
 {
     (void)SduLength;  /* TX 呼び出しは常に IPdu の DLC 固定長（=1）で呼ばれる
                         * ため長さチェックは不要（RX の RxIpduCalloutCbk とは
@@ -575,9 +575,9 @@ uint8 Rte_COMTxIpduCallout_ImmobilizerStatus(const uint8* SduDataPtr, uint8 SduL
     {
         DET_LOGW(TAG, "ImmobilizerStatus rejected by TxIpduCallout (value=0x%02X)",
                  (unsigned)SduDataPtr[0]);
-        return 0U;
+        return FALSE;
     }
-    return 1U;
+    return TRUE;
 }
 
 /**
@@ -1176,19 +1176,19 @@ Std_ReturnType Rte_Call_Adc_GetValue_mV(uint16* mv)
  *          (AUTOSAR SWS_RTE の Rte_Call_<p>_<o> パターン)。
  *
  * \param[in]   functionId  機能 ID (FIM_FID_*)。
- * \param[out]  status      1=許可 / 0=抑止 の格納先。NULL 禁止。
+ * \param[out]  permission  TRUE=許可 / FALSE=抑止 の格納先。NULL 禁止。
  *
  * \retval  E_OK      正常取得。
- * \retval  E_NOT_OK  functionId が範囲外、または status が NULL。
+ * \retval  E_NOT_OK  functionId が範囲外、または permission が NULL。
  *
  * \ServiceID      {0xF1}
  * \Reentrancy     {Reentrant}
  * \Synchronicity  {Synchronous}
  */
-Std_ReturnType Rte_Call_FiM_GetFunctionPermission(uint8 functionId, uint8* status)
+Std_ReturnType Rte_Call_FiM_GetFunctionPermission(uint8 functionId, boolean* permission)
 {
     DET_LOGT(TAG, "called");
-    return FiM_GetFunctionPermission(functionId, status);
+    return FiM_GetFunctionPermission(functionId, permission);
 }
 
 /**

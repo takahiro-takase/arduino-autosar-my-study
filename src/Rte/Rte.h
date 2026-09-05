@@ -83,7 +83,7 @@ Std_ReturnType Rte_Call_Button_GetLevel(uint8* level);
 Std_ReturnType Rte_Call_Adc_GetValue_mV(uint16* mv);
 
 /* Client/Server ポート — FiM_GetFunctionPermission へ委譲 */
-Std_ReturnType Rte_Call_FiM_GetFunctionPermission(uint8 functionId, uint8* status);
+Std_ReturnType Rte_Call_FiM_GetFunctionPermission(uint8 functionId, boolean* permission);
 
 /* ABS ECU シグナル読み取りポート (AbsInfo フレーム 0x110)。
  * EngineInfo 系と同じ理由で Rte_IStatusType を返す。 */

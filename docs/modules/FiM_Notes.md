@@ -31,8 +31,8 @@ FiM_MainFunction（100 ms 周期、Os Task 9）:
     （許可状態が変化した瞬間にのみログ出力）
 
 ASW (App_WarningIndicator_Run / App_EngineManager_Run):
-  Rte_Call_FiM_GetFunctionPermission(FID, &status)
-  status == 0 (抑止) なら、当該機能の実行を見送る
+  Rte_Call_FiM_GetFunctionPermission(FID, &permission)
+  permission == FALSE (抑止) なら、当該機能の実行を見送る
 ```
 
 FiM は Dem の状態だけを参照し、ASW は FiM の判定結果だけを参照します。
@@ -43,14 +43,14 @@ ASW が Dem を直接参照しないことで、「どの DTC が確定したら
 
 `FiM_SetFunctionAvailable(FID, Availability)`（[SWS_Fim_00106]）は、上記の
 Dem ベースの判定とは独立に、FID の利用可否を外部から強制設定する API です。
-`Availability=0`（利用不可）に設定した FID は、Dem のイベントステータスが
+`Availability=FALSE`（利用不可）に設定した FID は、Dem のイベントステータスが
 どうであれ `FiM_GetFunctionPermission()` が常に「抑止」を返します
 （[SWS_Fim_00105]）。実装は判定フローそのものを変えず、読み出し側で
 両条件の論理積を取るだけです:
 
 ```
 FiM_GetFunctionPermission(FID):
-  Available[FID] == 0 ?
+  Available[FID] == FALSE ?
     YES → 常に「抑止」（Permitted[FID] の値に関わらず）
     NO  → Permitted[FID]（上記 Dem ベースの判定結果）をそのまま返す
 ```
@@ -83,22 +83,23 @@ FiM_GetFunctionPermission(FID):
 ## 呼び出し側（ASW）のフェールセーフ既定値
 
 `FiM_GetFunctionPermission()` 自体は、FID が不正・FiM 未初期化などで判定できない
-場合に `Status` を安全側（0 = 抑止）にしてから `E_NOT_OK` を返す契約になっています
-（`FiM.h` 参照）。
+場合に `Permission` を安全側（FALSE = 抑止）にしてから `E_NOT_OK` を返す契約に
+なっています（`FiM.h` 参照）。
 
 ASW 側（`App_EngineManager_Run` / `App_WarningIndicator_Run`）の呼び出しも、
 この契約に依存しきらず、呼び出し前のローカル変数の既定値そのものを
-`0`（抑止）にし、戻り値が `E_NOT_OK` の場合も明示的に `0` へ上書きしています。
+`FALSE`（抑止）にし、戻り値が `E_NOT_OK` の場合も明示的に `FALSE` へ上書き
+しています。
 
 ```c
-uint8 ackPermitted = 0U;  /* 既定値は「抑止」(許可ではない) */
+boolean ackPermitted = FALSE;  /* 既定値は「抑止」(許可ではない) */
 if (Rte_Call_FiM_GetFunctionPermission(FIM_FID_BUTTON_ACK, &ackPermitted) != E_OK)
 {
-    ackPermitted = 0U;
+    ackPermitted = FALSE;
 }
 ```
 
-呼び出し先の実装が将来変わって `Status` を書き込まない失敗経路が増えても、
+呼び出し先の実装が将来変わって `Permission` を書き込まない失敗経路が増えても、
 呼び出し側のローカルな既定値だけで安全側に倒れる（fail-safe）ようにする狙いです。
 「許可判定が確認できないときは許可しない」という既定値の選び方は、
 セキュリティ・機能安全の定石（fail-safe defaults）そのものです。
