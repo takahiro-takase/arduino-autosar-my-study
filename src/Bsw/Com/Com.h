@@ -117,17 +117,24 @@ uint8 Com_ReceiveSignalGroup(Com_SignalGroupIdType SignalGroupId);
  *          Com_RxTimedOut は見ない（RxIndicationCbk から、フレーム受信直後・
  *          タイムアウト判定より前に呼ばれる用途を想定しているため）。
  *
- * \param[in]  IPduId   読み取る RX I-PDU の ID。
- * \param[out] DataPtr  コピー先バッファへのポインタ。ipdu->DLC バイト以上必要。
+ * \param[in]  SignalGroupId  読み取る Signal Group（RX I-PDU）の ID。本プロジェクトは
+ *                            Signal Group を専用の ID 空間に持たず所属 I-PDU の ID を
+ *                            そのまま使う簡略設計のため、Com_SignalGroupIdType は
+ *                            Com_IPduIdType と同じ uint8 の別名（Com_Types.h 参照）。
+ * \param[out] DataPtr        コピー先バッファへのポインタ。ipdu->DLC バイト以上必要。
  *
- * \retval  E_OK      IPduId が見つかり、DataPtr へコピーした。
- * \retval  E_NOT_OK  COM 未初期化、DataPtr が NULL、または IPduId が存在しない。
+ * \retval  E_OK      SignalGroupId が見つかり、DataPtr へコピーした。
+ * \retval  E_NOT_OK  COM 未初期化、DataPtr が NULL、または SignalGroupId が存在しない。
  *
+ * \note    実仕様([SWS_Com_00851]/[SWS_Com_00854])は戻り値型 uint8・引数型
+ *          Com_SignalGroupIdType だが、以前は Com_SendSignalGroup/Com_ReceiveSignalGroup
+ *          (PR#192で修正済み)と同じ乖離が残っていた。今回まとめて修正。
+ * \AUTOSARReq     {SWS_Com_00854, SWS_Com_00855, SWS_Com_00856, SWS_Com_00857}
  * \ServiceID      {0x24}
  * \Reentrancy     {Reentrant}
  * \Synchronicity  {Synchronous}
  */
-Std_ReturnType Com_ReceiveSignalGroupArray(Com_IPduIdType IPduId, uint8* DataPtr);
+uint8 Com_ReceiveSignalGroupArray(Com_SignalGroupIdType SignalGroupId, uint8* DataPtr);
 
 /**
  * \brief   RX I-PDU が現在タイムアウト中かどうかを返す軽量アクセサ。
@@ -166,19 +173,26 @@ uint8 Com_SendSignalGroup(Com_SignalGroupIdType SignalGroupId);
  *          Com_SendSignalGroupArray に相当する簡略版。Com_ReceiveSignalGroupArray
  *          と対称）。
  *
- * \param[in]  GroupId  コミットする Signal Group（TX I-PDU）の ID。
- * \param[in]  DataPtr  書き込む生バイト列。ipdu->DLC バイト以上必要。NULL 禁止。
+ * \param[in]  SignalGroupId  コミットする Signal Group（TX I-PDU）の ID。本プロジェクトは
+ *                            Signal Group を専用の ID 空間に持たず所属 I-PDU の ID を
+ *                            そのまま使う簡略設計のため、Com_SignalGroupIdType は
+ *                            Com_IPduIdType と同じ uint8 の別名（Com_Types.h 参照）。
+ * \param[in]  DataPtr        書き込む生バイト列。ipdu->DLC バイト以上必要。NULL 禁止。
  *
- * \retval  E_OK      GroupId が見つかり、書き込み・コミット処理を行った。
- * \retval  E_NOT_OK  COM 未初期化、DataPtr が NULL、GroupId が TX I-PDU 設定
+ * \retval  E_OK      SignalGroupId が見つかり、書き込み・コミット処理を行った。
+ * \retval  E_NOT_OK  COM 未初期化、DataPtr が NULL、SignalGroupId が TX I-PDU 設定
  *                    テーブルに存在しない、または IsSignalGroup=0 の I-PDU
  *                    を指定した。
  *
+ * \note    実仕様([SWS_Com_00851])は戻り値型 uint8・引数型 Com_SignalGroupIdType
+ *          だが、以前は Com_SendSignalGroup/Com_ReceiveSignalGroup(PR#192で修正済み)
+ *          と同じ乖離が残っていた。今回まとめて修正。
+ * \AUTOSARReq     {SWS_Com_00851, SWS_Com_00852, SWS_Com_00853}
  * \ServiceID      {0x23}
  * \Reentrancy     {Non Reentrant for the same signal group}
  * \Synchronicity  {Asynchronous}
  */
-Std_ReturnType Com_SendSignalGroupArray(Com_IPduIdType GroupId, const uint8* DataPtr);
+uint8 Com_SendSignalGroupArray(Com_SignalGroupIdType SignalGroupId, const uint8* DataPtr);
 
 /**
  * \brief   シグナルを、設定済みの ComSignalDataInvalidValue で無効化する。
