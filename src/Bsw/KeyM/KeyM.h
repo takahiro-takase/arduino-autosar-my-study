@@ -79,13 +79,20 @@ void KeyM_Init(const KeyM_ConfigType* ConfigPtr);
 /**
  * \brief   Key Manager モジュールを未初期化状態に戻す。
  *
- * \details [SWS_KeyM_00048] は RAM 上の鍵材料の実消去を要求するが、本プロジェクトの
- *          簡略化では KeyM は鍵材料そのものを保持しない（Crypto 層が保持する）
- *          ため、KeyM 側では内部セッション状態のリセットのみ行う。実消去には
- *          Crypto 層に専用の破棄 API が必要になるが、本プロジェクトでは
- *          未実装（スコープ外）。
+ * \details [SWS_KeyM_00144]: 未初期化時は KEYM_E_UNINIT を報告し何もしない
+ *          （2026-09 追加。以前はローカルなフラグのリセットのみで実害が
+ *          無かったためガードが無かったが、実際に鍵材料を書き換えるように
+ *          なったため必須化した）。
  *
- * \AUTOSARReq     {SWS_KeyM_00047}
+ *          [SWS_KeyM_00048]: RAM 上の鍵材料（Crypto 層が保持する
+ *          `Crypto_KeyStore[]`）を能動的に破棄する（2026-09 是正）。
+ *          KeyM 自身は鍵材料を保持しないため、`KeyM_Update()` と同じ
+ *          `Csm_KeyElementSet()` 経路へ全ゼロの鍵データを流すことで実消去する
+ *          （Crypto 層専用の破棄 API を新設する必要はなかった）。副次的に
+ *          鍵は無効化状態にもなる（`Crypto.c` 参照）。内部セッション状態も
+ *          あわせてリセットする。
+ *
+ * \AUTOSARReq     {SWS_KeyM_00047, SWS_KeyM_00048, SWS_KeyM_00144}
  * \ServiceID      {0x02}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}

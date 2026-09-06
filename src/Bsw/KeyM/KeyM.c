@@ -12,6 +12,7 @@
 #include "KeyM_PBCfg.h"
 #include "Csm.h"
 #include "Crypto_Cfg.h"
+#include "Crypto_Aes128.h"
 #include "Det.h"
 
 #define TAG "KeyM"
@@ -57,10 +58,40 @@ void KeyM_Init(const KeyM_ConfigType* ConfigPtr)
 void KeyM_Deinit(void)
 {
     DET_LOGT(TAG, "called");
-    /* [SWS_KeyM_00048]: 実車では RAM 上の鍵材料を消去するが、本プロジェクトの
-     * 簡略化では KeyM は鍵材料そのものを保持しない（Crypto 層が保持）ため、
-     * ここではセッション状態のリセットのみ行う（スコープ外、本ファイル冒頭
-     * コメント参照）。 */
+    /* [SWS_KeyM_00144]: 他の全 API 同様、未初期化時は KEYM_E_UNINIT を報告し
+     * 何もせず返る。以前は本関数がローカルなフラグのリセットのみだったため
+     * このチェックが無くても実害が無かったが、下記の鍵消去処理が
+     * Csm/Crypto 側の実際の鍵データを書き換えるようになった（2026-09）ため、
+     * 未初期化な KeyM から誤って呼ばれても生きている鍵材料を触らないよう
+     * 必須のガードとして追加した（KEYM_API_ID_DEINIT は元々定義済みだが
+     * 未使用だった、/code-review で指摘）。 */
+    if (!KeyM_Initialized)
+    {
+        Det_ReportError(KEYM_MODULE_ID, 0U, KEYM_API_ID_DEINIT, KEYM_E_UNINIT);
+        return;
+    }
+
+    /* [SWS_KeyM_00048]: RAM 上の鍵材料を能動的に破棄する（2026-09 是正。
+     * 以前は KeyM は鍵材料そのものを保持しない（Crypto 層が保持する）ことを
+     * 理由にスコープ外としていたが、Crypto 層専用の破棄 API を新設しなくても
+     * 既存の Csm_KeyElementSet() 経路（KeyM_Update() が使うのと同じ更新API）
+     * に全ゼロの鍵データを流すだけで実消去できることに気づいたため対応した。
+     * これは副次的に Crypto_KeyValid[] も無効化するため（Crypto.c 参照）、
+     * 万一 Deinit 後に古い呼び出し元が残っていても鍵は「ゼロ埋め・無効」の
+     * 二重の安全側状態になる。1件失敗しても他の鍵の消去は継続する
+     * （KeyM_Finalize() の「1件失敗しても残りは継続」と同じ方針）。 */
+    static const uint8 zeroKey[CRYPTO_AES128_KEY_SIZE] = { 0U };
+    for (uint8 i = 0U; i < KEYM_CRYPTO_KEY_COUNT; i++)
+    {
+        if (Csm_KeyElementSet(KeyM_CryptoKeyConfigData[i].CsmKeyTargetRef,
+                               CRYPTO_KEY_ELEMENT_ID_CIPHER_KEY,
+                               zeroKey, CRYPTO_AES128_KEY_SIZE) != E_OK)
+        {
+            DET_LOGW(TAG, "Deinit W: failed to erase key material for keyName=0x%02X",
+                     (unsigned)KeyM_CryptoKeyConfigData[i].KeyName);
+        }
+    }
+
     KeyM_SessionOpen = 0U;
     for (uint8 i = 0U; i < KEYM_CRYPTO_KEY_COUNT; i++)
         KeyM_PendingValidate[i] = 0U;
