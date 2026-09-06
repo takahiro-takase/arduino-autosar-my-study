@@ -137,8 +137,13 @@ Std_ReturnType E2E_P05CheckInit(E2E_P05CheckStateType *State)
     DET_LOGT(TAG, "called");
     if (State == NULL)
         return E2E_E_INPUTERR_NULL;
-    State->Counter = 0U;
-    State->Status  = E2E_P05STATUS_NONEWDATA;
+    /* [SWS_E2E_00451] Counter=0xFF/Status=ERROR が正しい初期値
+     * （2026-09-06 是正。以前は 0/NONEWDATA だった）。本プロジェクトの
+     * 呼び出し元（EngineInfo/AbsInfo）は WaitForFirstData フラグにより
+     * 初回フレーム到達時の判定を別途上書きするため、実際の観測可能な
+     * 挙動には影響しない（E2EXf_PBCfg.c 参照）。 */
+    State->Counter = 0xFFU;
+    State->Status  = E2E_P05STATUS_ERROR;
     return E2E_E_OK;
 }
 
@@ -163,8 +168,14 @@ Std_ReturnType E2E_P05Check(
     }
     if (Data == NULL || Length != Config->DataLength)
     {
+        /* [SWS_E2E_00411/00412]: "wrong input" 分岐は E2E_E_INPUTERR_WRONG を
+         * 返さなければならない（2026-09-06 是正。以前は E2E_E_OK を返して
+         * いた）。呼び出し元 E2EXf_InverseTransformP05() は元々 E2E_E_OK 以外
+         * を NULL 相当の防御分岐として扱う実装になっているため、この修正で
+         * 下流の分岐構造は変わらない（EngineInfo/AbsInfo は固定長でしか
+         * 呼ばないため、この分岐自体は現状到達しない）。 */
         State->Status = E2E_P05STATUS_ERROR;
-        return E2E_E_OK;
+        return E2E_E_INPUTERR_WRONG;
     }
 
     /* Read Counter/CRC (SWS_E2E_00413/00414) */

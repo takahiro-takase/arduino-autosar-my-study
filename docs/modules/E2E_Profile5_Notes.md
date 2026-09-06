@@ -114,12 +114,15 @@ Profile01 の `E2E_P01CheckStateType` は `WaitForFirstData`（初回受信の�
 存在しない（`SyncCounterInit` フィールド自体が無い）。そのため:
 
 - 初回の `E2E_P05Check()` 呼び出しも、他の呼び出しと全く同じ delta 計算に
-  そのまま乗る。`ProtectState`/`CheckState` とも初期値は `Counter=0` なので、
-  初回フレーム（Counter=0）を初回 Check（State->Counter も 0）すると
-  `delta=0` となり **`REPEATED` と判定される**（`OK` にはならない）。
-  これは Profile05 の仕様上正しい挙動であり、バグではない
+  そのまま乗る。`E2E_P05CheckInit()` は `[SWS_E2E_00451]` のとおり
+  `Counter=0xFF`/`Status=E2E_P05STATUS_ERROR` で初期化する（2026-09-06
+  是正。以前は `Counter=0`/`Status=NONEWDATA` という誤った値を使っており、
+  送信側が `Counter=0` から送り始める素直なケースで初回フレームが
+  `delta=0` の `REPEATED` と誤判定されていた）。仕様通りの `0xFF` 初期値
+  により、`ProtectState`（`Counter=0` から送信開始）からの初回フレームは
+  `delta=1`（`0 - 0xFF` の mod-256 引き算）となり **`OK` と判定される**
   （`test/test_native/Bsw_E2E_test.cpp` の
-  `FirstCheckAfterInitIsRepeatedBecauseBothStartAtCounterZero` で確認済み）。
+  `FirstCheckAfterInitIsOkBecauseCheckStateStartsAtCounter0xFF` で確認済み）。
 - `WRONGSEQUENCE` 検知後も、Profile01 のような「SyncCounterInit 回分は
   `SYNC` を返し続ける再ロック期間」は無く、次のフレームで `delta` が
   1 に戻れば即座に `OK` に復帰する。
@@ -167,9 +170,12 @@ Profile01 (`E2E_P01StatusType`) とはビットパターンが異なる点に注
   ことが普通にあり得るため、そのまま繋ぐと起動直後の最初の（CRC は正しい）
   フレームが `REPEATED`/`WRONGSEQUENCE` と誤判定され、
   `DEM_DEBOUNCE_LIMIT_E2E_ENGINEINFO`/`_ABSINFO`（`Dem_Cfg.h`、いずれも 1 = 即確定）
-  と相まって毎回の電源投入直後に誤った DTC が確定してしまう。`E2E_P05.c`
-  自体は仕様に忠実なまま変更せず（`test/test_native/Bsw_E2E_test.cpp` の
-  `FirstCheckAfterInitIsRepeatedBecauseBothStartAtCounterZero` が反する変更を
+  と相まって毎回の電源投入直後に誤った DTC が確定してしまう（`E2E_P05CheckInit()`
+  の初期値を仕様通り `Counter=0xFF` に是正した後も、送信元の Counter が
+  たまたま 0 から始まる場合を除き一般には解消しない、本質的に別の問題）。
+  `E2E_P05.c` 自体は仕様に忠実なまま変更せず（`test/test_native/
+  Bsw_E2E_test.cpp` の
+  `FirstCheckAfterInitIsOkBecauseCheckStateStartsAtCounter0xFF` が反する変更を
   検出する）、統合層である `E2EXf_RxConfigTypeP05.WaitForFirstData` フラグと
   `E2EXf_InverseTransformP05()` 側の格上げ処理で対処した。CRC が正しい最初の
   1 フレームに限り判定結果を `OK` に格上げして Dem/E2EMon/Rte ステータスの

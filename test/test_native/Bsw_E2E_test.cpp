@@ -107,12 +107,16 @@ TEST_F(E2EP05Test, ProtectIncrementsCounterAndWrapsAt0xFF)
     EXPECT_EQ(state.Counter, 0U); /* 次回用の内部Counterは0に折り返す */
 }
 
-TEST_F(E2EP05Test, FirstCheckAfterInitIsRepeatedBecauseBothStartAtCounterZero)
+TEST_F(E2EP05Test, FirstCheckAfterInitIsOkBecauseCheckStateStartsAtCounter0xFF)
 {
-    /* Profile05にはProfile01のようなINITIAL状態が無く、初回のCheck呼び出しも
-     * 通常のdelta計算にそのまま乗る。ProtectStateもCheckStateも初期値は
-     * Counter=0なので、1回目のフレームは delta=0 (REPEATED) と判定される
-     * ことを確認する (E2E_P05.h ファイル冒頭コメントに明記した仕様通りの挙動)。*/
+    /* [SWS_E2E_00451]: E2E_P05CheckInit() は Counter を 0xFF で初期化する
+     * （2026-09-06 是正。以前は 0 だったため、送信側が Counter=0 から
+     * 送り始める最初のフレームが delta=0 の REPEATED と誤判定されていた）。
+     * ProtectState は Counter=0 から送り始めるため、CheckState 側が 0xFF
+     * から始まることで初回フレームは delta=1（0 - 0xFF の mod-256 引き算）
+     * となり OK と判定される。これは Profile01 の WaitForFirstData/INITIAL
+     * に相当する「初回フレームを特別扱いしなくても正しく判定できる」効果を
+     * 仕様上の初期値そのものが持っていることを示す。 */
     E2E_P05ProtectStateType protectState;
     E2E_P05CheckStateType   checkState;
     E2E_P05ProtectInit(&protectState);
@@ -124,7 +128,7 @@ TEST_F(E2EP05Test, FirstCheckAfterInitIsRepeatedBecauseBothStartAtCounterZero)
     ASSERT_EQ(E2E_P05Check(&config, &checkState, data, sizeof(data)), E2E_E_OK);
     const E2E_P05StatusType status = checkState.Status;
 
-    EXPECT_EQ(status, E2E_P05STATUS_REPEATED);
+    EXPECT_EQ(status, E2E_P05STATUS_OK);
     EXPECT_EQ(checkState.Counter, 0U);
 }
 
@@ -140,7 +144,7 @@ TEST_F(E2EP05Test, SecondConsecutiveFrameIsOk)
     E2E_P05Protect(&config, &protectState, frame1, sizeof(frame1));
     E2E_P05Protect(&config, &protectState, frame2, sizeof(frame2));
 
-    E2E_P05Check(&config, &checkState, frame1, sizeof(frame1)); /* 1回目: REPEATED */
+    E2E_P05Check(&config, &checkState, frame1, sizeof(frame1)); /* 1回目: OK（CheckState は Counter=0xFF から始まるため） */
     ASSERT_EQ(E2E_P05Check(&config, &checkState, frame2, sizeof(frame2)), E2E_E_OK);
     const E2E_P05StatusType status = checkState.Status;
 
@@ -162,7 +166,7 @@ TEST_F(E2EP05Test, CounterJumpBeyondMaxDeltaIsWrongSequence)
     E2E_P05Protect(&config, &protectState, frame2, sizeof(frame2)); /* Counter=1 */
     E2E_P05Protect(&config, &protectState, frame3, sizeof(frame3)); /* Counter=2 */
 
-    E2E_P05Check(&config, &checkState, frame1, sizeof(frame1)); /* REPEATED、checkState.Counter=0 */
+    E2E_P05Check(&config, &checkState, frame1, sizeof(frame1)); /* OK、checkState.Counter=0 */
     /* frame2 を飛ばして frame3 (Counter=2) を Check する → delta=2 > MaxDeltaCounter(1) */
     ASSERT_EQ(E2E_P05Check(&config, &checkState, frame3, sizeof(frame3)), E2E_E_OK);
     const E2E_P05StatusType status = checkState.Status;
@@ -206,6 +210,34 @@ TEST_F(E2EP05Test, CrcMismatchReturnsErrorAndDoesNotUpdateState)
 
     EXPECT_EQ(status, E2E_P05STATUS_ERROR);
     EXPECT_EQ(checkState.Counter, 5U); /* CRC不一致時は状態を更新しない */
+}
+
+/**
+ * \brief  [SWS_E2E_00411/00412]: Length が Config->DataLength と不一致な
+ *         「wrong input」は E2E_E_INPUTERR_WRONG を返さなければならない
+ *         （2026-09-06 是正。以前は誤って E2E_E_OK を返していた）。
+ */
+TEST_F(E2EP05Test, NG_LengthMismatchReturnsInputErrWrong)
+{
+    E2E_P05CheckStateType checkState;
+    E2E_P05CheckInit(&checkState);
+
+    uint8_t data[6] = {0U, 0U, 0U, 0U, 0U, 0U}; /* config.DataLength=5 と不一致 */
+
+    EXPECT_EQ(E2E_P05Check(&config, &checkState, data, sizeof(data)), E2E_E_INPUTERR_WRONG);
+}
+
+/**
+ * \brief  Data==NULL かつ Length!=0 も同じ「wrong input」扱い
+ *         （Data==NULL && Length==0 のみが NONEWDATA、それ以外の
+ *         Data==NULL は wrong input）。
+ */
+TEST_F(E2EP05Test, NG_NullDataWithNonZeroLengthReturnsInputErrWrong)
+{
+    E2E_P05CheckStateType checkState;
+    E2E_P05CheckInit(&checkState);
+
+    EXPECT_EQ(E2E_P05Check(&config, &checkState, nullptr, 5U), E2E_E_INPUTERR_WRONG);
 }
 
 TEST_F(E2EP05Test, MapStatusToSM_OK_MapsEachStatusPerSpecTable)
