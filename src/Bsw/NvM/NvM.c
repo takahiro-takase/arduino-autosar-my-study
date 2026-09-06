@@ -221,6 +221,9 @@ static void NvM_ApplyDefaultSync(NvM_BlockIdType id, const NvM_BlockDescriptorTy
     if (blk->Redundant != 0U)
         NvM_WriteCopySync(blk->NvMNvBlockBaseNumberMirror, blk->RamBlockDataAddress, blk->NvMNvBlockLength);
 
+    /* [SWS_NvM_00470]: ROM デフォルト値で RAM ミラーを復元したことを
+     * NvM_GetErrorStatus() 経由で確認できるようにする。 */
+    NvM_BlockResult[id] = NVM_REQ_RESTORED_FROM_ROM;
     DET_LOGW(TAG, "block=%u defaults restored (%s)", (unsigned)id,
              (blk->RomBlockDataAddress != NULL) ? "ROM default" : "zero-fill");
 }
@@ -299,6 +302,10 @@ static void NvM_LoadAndVerifyBlock(NvM_BlockIdType id, const NvM_BlockDescriptor
         return;
     }
 
+    /* 片面のみ破損した自己修復ケース（上のケース）はユーザーデータをそのまま
+     * 維持しておりデフォルト復元ではないため、NvM_BlockResult は
+     * NVM_REQ_OK のまま変更しない（NvM_ApplyDefaultSync() 内で
+     * NVM_REQ_RESTORED_FROM_ROM を設定するのは両面とも破損した本ケースのみ）。 */
     DET_LOGE(TAG, "block=%u redundant: both copies CRC mismatch, restoring defaults", (unsigned)id);
     NvM_ApplyDefaultSync(id, blk);
 }

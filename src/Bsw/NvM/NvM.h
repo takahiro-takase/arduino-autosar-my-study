@@ -81,14 +81,35 @@ typedef uint8 NvM_BlockIdType;
 
 /**
  * \brief   ブロックの直近のジョブ結果。
- * \details AUTOSAR NvM_RequestResultType (SWS_NvM_00470) の一部に相当する。
- *          本実装で使用するのは以下の 3 値のみ（学習用簡略化）。
+ *
+ * \details AUTOSAR NvM_RequestResultType ([SWS_NvM_00470]) に完全準拠する
+ *          8 値を定義する（2026-09-06 是正。以前は 3 値のみで、しかも
+ *          NVM_REQ_NOT_OK/NVM_REQ_PENDING の値が仕様と入れ替わっていた）。
+ *          このうち `NVM_REQ_BLOCK_SKIPPED`/`NVM_REQ_NV_INVALIDATED`/
+ *          `NVM_REQ_CANCELED` は、対応するトリガー（`NvM_ReadAll`/
+ *          `NvM_WriteAll`、`NvM_InvalidateNvBlock`、`NvM_CancelJobs`/
+ *          `NvM_CancelWriteAll`）自体を本プロジェクトが実装していないため、
+ *          型としては定義するが実際に返されることはない
+ *          （シグネチャ完全準拠・動作は実装済み範囲のみ、という本プロジェクト
+ *          の方針どおり）。
  */
 typedef enum
 {
-    NVM_REQ_OK      = 0U,  /**< 直近のジョブが正常完了した                 */
-    NVM_REQ_PENDING = 1U,  /**< ジョブがキュー投入済み、まだ完了していない */
-    NVM_REQ_NOT_OK  = 2U   /**< BlockId が無効、またはジョブ未実行         */
+    NVM_REQ_OK                = 0U,  /**< 直近のジョブが正常完了した（リセット後既定値） */
+    NVM_REQ_NOT_OK            = 1U,  /**< 直近の read/write/control 要求が失敗した */
+    NVM_REQ_PENDING           = 2U,  /**< read/write/control 要求が処理中          */
+    NVM_REQ_INTEGRITY_FAILED  = 3U,  /**< データ整合性エラー（本プロジェクト未使用。
+                                       *   CRC 不一致は検出後ただちに ROM デフォルト
+                                       *   値へ復元するため、最終結果は本値ではなく
+                                       *   NVM_REQ_RESTORED_FROM_ROM になる） */
+    NVM_REQ_BLOCK_SKIPPED     = 4U,  /**< NvM_ReadAll/WriteAll でスキップされた
+                                       *   （本プロジェクト未実装のため不使用）    */
+    NVM_REQ_NV_INVALIDATED    = 5U,  /**< 参照先 NV ブロックが無効化されている
+                                       *   （NvM_InvalidateNvBlock 未実装のため不使用） */
+    NVM_REQ_CANCELED          = 6U,  /**< NvM_CancelJobs/CancelWriteAll でキャンセル
+                                       *   された（いずれも未実装のため不使用）      */
+    NVM_REQ_RESTORED_FROM_ROM = 8U   /**< ROM デフォルト値で RAM ミラーを復元した
+                                       *   （0x07 は仕様上未使用のため 8 まで飛ぶ） */
 } NvM_RequestResultType;
 
 /**
