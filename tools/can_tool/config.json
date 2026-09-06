@@ -69,21 +69,21 @@
 
         { "type": "group_header", "label": "テスター" },
 
-        { "label": "Session Control\n(0x10)", "type": "raw",
+        { "label": "Session Control\n(0x10)", "type": "raw", "interval_ms": 0,
           "payload": ["0x02", "0x10", "0x01"],
           "presets": [
               { "label": "Default Session (0x01)", "payload": ["0x02", "0x10", "0x01"] },
               { "label": "Extended Session (0x03)", "payload": ["0x02", "0x10", "0x03"] }
           ]
         },
-        { "label": "ECU Reset\n(0x11)", "type": "raw",
+        { "label": "ECU Reset\n(0x11)", "type": "raw", "interval_ms": 0,
           "payload": ["0x02", "0x11", "0x01"],
           "presets": [
               { "label": "Hard reset (0x01)", "payload": ["0x02", "0x11", "0x01"] },
               { "label": "Soft reset (0x03)", "payload": ["0x02", "0x11", "0x03"] }
           ]
         },
-        { "label": "CommunicationControl\n(0x28)", "type": "raw",
+        { "label": "CommunicationControl\n(0x28)", "type": "raw", "interval_ms": 0,
           "payload": ["0x03", "0x28", "0x00", "0x01"],
           "presets": [
               { "label": "enableRxAndTx / normal (00/01)",       "payload": ["0x03", "0x28", "0x00", "0x01"] },
@@ -96,16 +96,16 @@
           "payload": ["0x02", "0x27", "0x01"] },
         { "label": "SecurityAccess Lv1\nStep2: Key送信", "type": "security_key",
           "payload": ["0x04", "0x27", "0x02", "0x00", "0x00"] },
-        { "label": "Clear All DTC\n(0x14)", "type": "raw",
+        { "label": "Clear All DTC\n(0x14)", "type": "raw", "interval_ms": 0,
           "payload": ["0x04", "0x14", "0xFF", "0xFF", "0xFF"] },
-        { "label": "ControlDTCSetting\n(0x85)", "type": "raw",
+        { "label": "ControlDTCSetting\n(0x85)", "type": "raw", "interval_ms": 0,
           "payload": ["0x02", "0x85", "0x01"],
           "presets": [
               { "label": "on  (0x01, DTC記録を再開)", "payload": ["0x02", "0x85", "0x01"] },
               { "label": "off (0x02, DTC記録を停止)", "payload": ["0x02", "0x85", "0x02"] }
           ]
         },
-        { "label": "ReadDTCInformation\n(0x19)", "type": "raw",
+        { "label": "ReadDTCInformation\n(0x19)", "type": "raw", "interval_ms": 0,
           "payload": ["0x03", "0x19", "0x01", "0xFF"],
           "presets": [
               { "label": "件数取得 全件 (01/FF)",          "payload": ["0x03", "0x19", "0x01", "0xFF"] },
@@ -118,7 +118,7 @@
               { "label": "ExtendedData取得 (06)",          "payload": ["0x06", "0x19", "0x06", "0x00", "0x01", "0x01", "0x01"] }
           ]
         },
-        { "label": "Read DID\n(0x22)", "type": "raw",
+        { "label": "Read DID\n(0x22)", "type": "raw", "interval_ms": 0,
           "payload": ["0x03", "0x22", "0x01", "0x01"],
           "presets": [
               { "label": "EngineSpeed   (DID 0101)", "payload": ["0x03", "0x22", "0x01", "0x01"] },
@@ -145,12 +145,12 @@
                              "0x63", "0x72", "0x65", "0x74", "0x21", "0x21", "0x21", "0x21"] }
           ]
         },
-        { "label": "Tester Present\n(0x3E/00)", "type": "raw",
+        { "label": "Tester Present\n(0x3E/00)", "type": "raw", "interval_ms": 2000,
           "payload": ["0x02", "0x3E", "0x00"] },
 
         { "type": "group_header", "label": "ランプ IOControl (0x2F)" },
 
-        { "label": "RunLamp IOControl\n(DID 0105)", "type": "raw",
+        { "label": "RunLamp IOControl\n(DID 0105)", "type": "raw", "interval_ms": 0,
           "payload": ["0x04", "0x2F", "0x01", "0x05", "0x00"],
           "presets": [
               { "label": "returnControlToECU (00)",  "payload": ["0x04", "0x2F", "0x01", "0x05", "0x00"] },
@@ -160,7 +160,7 @@
               { "label": "shortTermAdjustment OFF",   "payload": ["0x05", "0x2F", "0x01", "0x05", "0x03", "0x00"] }
           ]
         },
-        { "label": "FaultLamp IOControl\n(DID 0106)", "type": "raw",
+        { "label": "FaultLamp IOControl\n(DID 0106)", "type": "raw", "interval_ms": 0,
           "payload": ["0x04", "0x2F", "0x01", "0x06", "0x00"],
           "presets": [
               { "label": "returnControlToECU (00)",  "payload": ["0x04", "0x2F", "0x01", "0x06", "0x00"] },
@@ -170,7 +170,7 @@
               { "label": "shortTermAdjustment OFF",   "payload": ["0x05", "0x2F", "0x01", "0x06", "0x03", "0x00"] }
           ]
         },
-        { "label": "AbsLamp IOControl\n(DID 0107)", "type": "raw",
+        { "label": "AbsLamp IOControl\n(DID 0107)", "type": "raw", "interval_ms": 0,
           "payload": ["0x04", "0x2F", "0x01", "0x07", "0x00"],
           "presets": [
               { "label": "returnControlToECU (00)",  "payload": ["0x04", "0x2F", "0x01", "0x07", "0x00"] },
@@ -183,7 +183,7 @@
 
         { "type": "group_header", "label": "RoutineControl (0x31)" },
 
-        { "label": "EngineHealthCheck\n(RID 0203)", "type": "raw",
+        { "label": "EngineHealthCheck\n(RID 0203)", "type": "raw", "interval_ms": 0,
           "payload": ["0x04", "0x31", "0x01", "0x02", "0x03"],
           "presets": [
               { "label": "startRoutine",            "payload": ["0x04", "0x31", "0x01", "0x02", "0x03"] },
@@ -205,7 +205,7 @@
           ]
         },
 
-        { "label": "TransferData 異常系\n(0x36 SF)", "type": "raw",
+        { "label": "TransferData 異常系\n(0x36 SF)", "type": "raw", "interval_ms": 0,
           "payload": ["0x04", "0x36", "0x05", "0xFF", "0xFF"],
           "presets": [
               { "label": "Wrong Counter (RequestDownload直後に送信)", "payload": ["0x04", "0x36", "0x05", "0xFF", "0xFF"] },
@@ -213,7 +213,7 @@
           ]
         },
 
-        { "label": "RequestTransferExit\n(0x37)", "type": "raw",
+        { "label": "RequestTransferExit\n(0x37)", "type": "raw", "interval_ms": 0,
           "payload": ["0x01", "0x37"] }
     ]
 }
