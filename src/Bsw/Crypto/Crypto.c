@@ -35,7 +35,16 @@ static uint8 Crypto_KeyValid[CRYPTO_KEY_COUNT];
 void Crypto_Init(void)
 {
     DET_LOGT(TAG, "called");
-    (void)Crypto_Aes128_SelfTest();
+    if (Crypto_Aes128_SelfTest() != E_OK)
+    {
+        /* [SWS_Crypto_00045]: 自己診断に失敗した場合は CRYPTO_E_INIT_FAILED を
+         * DET へ報告し、初期化未完了のまま return する（Crypto_Initialized は
+         * 0U のまま）。以降の全 API 呼び出しは CRYPTO_E_UNINIT で一律拒否される
+         * （fail-open で「Init ok」を騙らない）。 */
+        Det_ReportError(CRYPTO_MODULE_ID, 0U, CRYPTO_API_ID_INIT, CRYPTO_E_INIT_FAILED);
+        DET_LOGE(TAG, "Init E: AES-128 self-test failed");
+        return;
+    }
 
     for (uint32 k = 0U; k < CRYPTO_KEY_COUNT; k++)
     {

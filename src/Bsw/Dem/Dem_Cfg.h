@@ -93,15 +93,27 @@
 #define DEM_API_ID_GET_DTC_STATUS_AVAILABILITY_MASK 0x16U
 #define DEM_API_ID_GET_EVENT_UDS_STATUS            0xB6U
 #define DEM_API_ID_GET_DTC_OF_EVENT                0x0DU
-#define DEM_API_ID_CLEAR_ALL_DTCS                  0x23U
+/** 2026-09-06 是正: 以下4つの本プロジェクト独自関数（実 AUTOSAR に対応する
+ *  関数が無く ApiId は任意）が、たまたま実在する別の Dem 関数の Service ID
+ *  と衝突していたことが判明したため、`pdftotext -layout`/非layout両方で
+ *  AUTOSAR_SWS_DiagnosticEventManager.pdf 全体を独立検証し、どの実 Dem
+ *  関数の Service ID とも一致しないことを確認した空き番号
+ *  (0x2D/0x2E/0x2F/0x31) へ付け替えた:
+ *    DEM_API_ID_CLEAR_ALL_DTCS:                 0x23(実は Dem_ClearDTC          [SWS_Dem_00665]) -> 0x2D
+ *    DEM_API_ID_GET_OCCURRENCE_COUNTER_OF_EVENT: 0x29(実は Dem_GetIndicatorStatus [SWS_Dem_00205]) -> 0x2E
+ *    DEM_API_ID_GET_SUPPORTED_DTCS:              0x2A(実は Dem_GetComponentFailed [SWS_Dem_01115]) -> 0x2F
+ *    DEM_API_ID_GET_ALL_DTCS:                    0x2B(実は Dem_SetComponentAvailable [SWS_Dem_01117]) -> 0x31
+ *  （0x30 は実仕様の別関数が使用済みのため飛ばした）。ロジック自体への
+ *  影響はなく、DET ログの識別子のみが変わる。 */
+#define DEM_API_ID_CLEAR_ALL_DTCS                  0x2DU
 #define DEM_API_ID_DISABLE_DTC_SETTING              0x24U
 #define DEM_API_ID_ENABLE_DTC_SETTING               0x25U
 #define DEM_API_ID_GET_FREEZE_FRAME_OF_EVENT        0x26U
 #define DEM_API_ID_GET_EVENT_ID_OF_DTC              0x27U
 #define DEM_API_ID_CLEAR_DTC                        0x28U
-#define DEM_API_ID_GET_OCCURRENCE_COUNTER_OF_EVENT  0x29U
-#define DEM_API_ID_GET_SUPPORTED_DTCS               0x2AU
-#define DEM_API_ID_GET_ALL_DTCS                    0x2BU
+#define DEM_API_ID_GET_OCCURRENCE_COUNTER_OF_EVENT  0x2EU
+#define DEM_API_ID_GET_SUPPORTED_DTCS               0x2FU
+#define DEM_API_ID_GET_ALL_DTCS                    0x31U
 #define DEM_API_ID_SET_FREEZE_FRAME_CONTEXT        0x2CU
 #define DEM_API_ID_GET_FAULT_DETECTION_COUNTER      0x3EU
 #define DEM_API_ID_GET_VERSION_INFO                 0x00U

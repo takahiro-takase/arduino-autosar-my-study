@@ -260,9 +260,16 @@ Std_ReturnType Dem_GetDTCOfEvent(Dem_EventIdType EventId, Dem_DTCFormatType DTCF
  * \details DCM SID 0x14 (ClearDiagnosticInformation) から呼び出す。
  *          全イベントのステータスを TNCLC | TNCTOC にリセットする。
  *
+ * \note    本プロジェクト独自の関数（実 AUTOSAR に対応する関数は無い）のため
+ *          ApiId は任意の値のはずだったが、以前の 0x23 は実仕様の
+ *          `Dem_ClearDTC(uint8 ClientId)`（[SWS_Dem_00665]）と衝突していた
+ *          ことが判明したため、実仕様のどの Dem 関数の Service ID とも
+ *          一致しないことを確認済みの 0x2D へ 2026-09-06 に付け替えた
+ *          （Dem_Cfg.h 冒頭コメント参照）。
+ *
  * \retval  E_OK  常に成功。
  *
- * \ServiceID      {0x23}
+ * \ServiceID      {0x2D}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
  */
@@ -310,9 +317,13 @@ Std_ReturnType Dem_ClearOneDtc(Dem_EventIdType EventId);
  * \note    本プロジェクト独自の関数（実 AUTOSAR に対応する関数は無い）のため
  *          ApiId は任意の値。Dem_EnableDTCSetting/DisableDTCSetting を実仕様の
  *          ServiceID(0x25/0x24) に合わせた際、元々そこにあった 0x24 から
- *          空いていた 0x2B へ移した（Dem_Cfg.h 冒頭コメント参照）。
+ *          空いていた 0x2B へ移した（Dem_Cfg.h 冒頭コメント参照）。ところが
+ *          その移設先 0x2B 自体が実仕様の `Dem_SetComponentAvailable`
+ *          （[SWS_Dem_01117]）と衝突していたことが判明したため、実仕様の
+ *          どの Dem 関数の Service ID とも一致しないことを確認済みの 0x31 へ
+ *          2026-09-06 に再度付け替えた。
  *
- * \ServiceID      {0x2B}
+ * \ServiceID      {0x31}
  * \Reentrancy     {Reentrant}
  * \Synchronicity  {Synchronous}
  */
@@ -333,7 +344,14 @@ void Dem_GetAllDTCs(uint32* dtcBuf, uint8* statusBuf, uint8* count, uint8 status
  * \param[out]  statusBuf  DTC ステータスバイトの格納先。同サイズ。
  * \param[out]  count      列挙した DTC 数（常に DEM_EVENT_COUNT）。
  *
- * \ServiceID      {0x2A}
+ * \note    本プロジェクト独自の関数（実 AUTOSAR に対応する関数は無い）のため
+ *          ApiId は任意の値のはずだったが、以前の 0x2A は実仕様の
+ *          `Dem_GetComponentFailed`（[SWS_Dem_01115]）と衝突していたことが
+ *          判明したため、実仕様のどの Dem 関数の Service ID とも一致しない
+ *          ことを確認済みの 0x2F へ 2026-09-06 に付け替えた（Dem_Cfg.h
+ *          冒頭コメント参照）。
+ *
+ * \ServiceID      {0x2F}
  * \Reentrancy     {Reentrant}
  * \Synchronicity  {Synchronous}
  */
@@ -414,7 +432,14 @@ Std_ReturnType Dem_GetEventIdOfDTC(uint32 DTC, Dem_EventIdType* EventId);
  * \retval  E_OK      正常取得。
  * \retval  E_NOT_OK  EventId が範囲外、または Counter が NULL。
  *
- * \ServiceID      {0x29}
+ * \note    本プロジェクト独自の関数（実 AUTOSAR に対応する関数は無い）のため
+ *          ApiId は任意の値のはずだったが、以前の 0x29 は実仕様の
+ *          `Dem_GetIndicatorStatus`（[SWS_Dem_00205]）と衝突していたことが
+ *          判明したため、実仕様のどの Dem 関数の Service ID とも一致しない
+ *          ことを確認済みの 0x2E へ 2026-09-06 に付け替えた（Dem_Cfg.h
+ *          冒頭コメント参照）。
+ *
+ * \ServiceID      {0x2E}
  * \Reentrancy     {Reentrant}
  * \Synchronicity  {Synchronous}
  */

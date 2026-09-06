@@ -28,8 +28,12 @@ extern "C" {
  * \brief   Crypto Driver モジュールを初期化する。
  *
  * \details AES-128 の自己診断（Crypto_Aes128_SelfTest()、FIPS-197 既知
- *          テストベクタ）を実行し、結果をログ出力する
- *          （元 SecOC_Init() が行っていたセルフテストを移設）。
+ *          テストベクタ）を実行する（元 SecOC_Init() が行っていたセルフテスト
+ *          を移設）。[SWS_Crypto_00045]: 自己診断に失敗した場合は
+ *          CRYPTO_E_INIT_FAILED を DET へ報告し、鍵テーブルのロードを行わず
+ *          未初期化のまま return する（以降の全 API 呼び出しは
+ *          CRYPTO_E_UNINIT で一律拒否される。fail-open で初期化成功を
+ *          騙らない）。
  *
  * \AUTOSARReq     {SWS_Crypto_00045}
  * \ServiceID      {0x00}

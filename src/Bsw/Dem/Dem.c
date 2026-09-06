@@ -695,7 +695,11 @@ static void Dem_ClearOne(Dem_EventIdType EventId)
  *
  * \retval  E_OK  常に成功。
  *
- * \ServiceID      {0x23}
+ * \note    本プロジェクト独自関数のため ApiId は任意の値のはずだったが、
+ *          以前の 0x23 は実仕様の `Dem_ClearDTC`（[SWS_Dem_00665]）と衝突して
+ *          いたため 0x2D へ 2026-09-06 に付け替えた（Dem_Cfg.h 参照）。
+ *
+ * \ServiceID      {0x2D}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
  */
@@ -782,7 +786,12 @@ Std_ReturnType Dem_ClearOneDtc(Dem_EventIdType EventId)
  * \param[out]  count      マッチした DTC 数。
  * \param[in]   statusMask 絞り込みマスク。0xFF で全件取得。
  *
- * \ServiceID      {0x2B}
+ * \note    本プロジェクト独自関数のため ApiId は任意の値のはずだったが、
+ *          以前の 0x2B は実仕様の `Dem_SetComponentAvailable`
+ *          （[SWS_Dem_01117]）と衝突していたため 0x31 へ 2026-09-06 に
+ *          付け替えた（Dem_Cfg.h 参照）。
+ *
+ * \ServiceID      {0x31}
  * \Reentrancy     {Reentrant}
  * \Synchronicity  {Synchronous}
  */
@@ -827,7 +836,12 @@ void Dem_GetAllDTCs(uint32* dtcBuf, uint8* statusBuf,
  * \param[out]  statusBuf  DTC ステータスバイトの格納先。同サイズ。
  * \param[out]  count      列挙した DTC 数（常に DEM_EVENT_COUNT）。
  *
- * \ServiceID      {0x2A}
+ * \note    本プロジェクト独自関数のため ApiId は任意の値のはずだったが、
+ *          以前の 0x2A は実仕様の `Dem_GetComponentFailed`（[SWS_Dem_01115]）
+ *          と衝突していたため 0x2F へ 2026-09-06 に付け替えた（Dem_Cfg.h
+ *          参照）。
+ *
+ * \ServiceID      {0x2F}
  * \Reentrancy     {Reentrant}
  * \Synchronicity  {Synchronous}
  */
@@ -952,7 +966,12 @@ Std_ReturnType Dem_GetEventIdOfDTC(uint32 DTC, Dem_EventIdType* EventId)
  * \details FreezeFrame と異なり「記録なし」という状態を持たない
  *          （一度も確定 FAILED していなければ単に 0）。
  *
- * \ServiceID      {0x29}
+ * \note    本プロジェクト独自関数のため ApiId は任意の値のはずだったが、
+ *          以前の 0x29 は実仕様の `Dem_GetIndicatorStatus`（[SWS_Dem_00205]）
+ *          と衝突していたため 0x2E へ 2026-09-06 に付け替えた（Dem_Cfg.h
+ *          参照）。
+ *
+ * \ServiceID      {0x2E}
  * \Reentrancy     {Reentrant}
  * \Synchronicity  {Synchronous}
  */
