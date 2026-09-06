@@ -53,6 +53,36 @@ DEFAULT_SIGNAL_DEFS_PATH = os.path.normpath(
 DEFAULT_CONFIG_PATH = os.path.normpath(os.path.join(_THIS_DIR, "..", "config.json"))
 
 
+class _Tooltip:
+    """ttk には標準のツールチップが無いため、最小構成の自前実装を用意する。
+    ウィジェットへ <Enter>/<Leave> をバインドし、枠なしの Toplevel をカーソル
+    近くに出す/消すだけの単純なもの（他アプリでもよく使われる定番の構成）。"""
+
+    def __init__(self, widget: tk.Widget, text: str):
+        self.widget = widget
+        self.text = text
+        self._tip: "tk.Toplevel | None" = None
+        widget.bind("<Enter>", self._show, add="+")
+        widget.bind("<Leave>", self._hide, add="+")
+
+    def _show(self, _event=None):
+        if self._tip is not None:
+            return
+        x = self.widget.winfo_rootx() + 12
+        y = self.widget.winfo_rooty() + self.widget.winfo_height() + 4
+        self._tip = tk.Toplevel(self.widget)
+        self._tip.wm_overrideredirect(True)
+        self._tip.wm_geometry(f"+{x}+{y}")
+        ttk.Label(self._tip, text=self.text, background="#ffffe0",
+                  relief="solid", borderwidth=1, font=("", 9),
+                  justify="left", padding=(4, 2)).pack()
+
+    def _hide(self, _event=None):
+        if self._tip is not None:
+            self._tip.destroy()
+            self._tip = None
+
+
 class UdsTesterFrame(ttk.Frame):
     def _load_signal_defs(self, path: str) -> "dict[int, dict]":
         """data/can_signals.json を読み込み、{CAN ID(int): フレーム定義} の辞書を返す。
@@ -96,6 +126,11 @@ class UdsTesterFrame(ttk.Frame):
         self._entry_vars: "dict[int, dict[str, tk.StringVar]]" = {}
         self._response_vars: "dict[int, tk.StringVar]" = {}
         self._periodic_btn_vars: "dict[int, tk.StringVar]" = {}
+        # 送信/受信タイムスタンプ（送信・定期ボタン統合後に空いた列へ表示、
+        # HH:MM:SS の PC ローカル時刻）。ボタン索引 idx をキーにする点は他の
+        # *_vars 辞書と同じ。
+        self._tx_ts_vars: "dict[int, tk.StringVar]" = {}
+        self._rx_ts_vars: "dict[int, tk.StringVar]" = {}
         self._log_visible = tk.BooleanVar(value=False)
         self._rx_monitor_vars: "dict[int, tk.StringVar]" = {}
         self._rx_monitor_ids: "dict[int, int]" = {}
@@ -315,20 +350,28 @@ class UdsTesterFrame(ttk.Frame):
         inner.bind("<MouseWheel>", _scroll)
 
         # ヘッダ行
-        # 列順は「コマンド/送信/定期/周期(ms)/CAN ID/データ・説明」。UDS系ボタンは
-        # 上段=要求(0x7E0)/下段=応答(0x7E8)の2行1組で、CAN IDとデータは行ごとに
-        # 対になる値のため隣接させ、行に依存しない操作列（送信/定期/周期(ms)、
-        # いずれも rowspan=2）はコマンド名の直後にまとめる。データ・説明列だけ
-        # 突出して幅が広いため最後尾に置き、ログパネル表示時に横幅が圧迫されても
-        # コマンド送信操作が隠れないようにする（右端のデータ・説明列から先に
-        # 見切れる方が実害が小さい）。
+        # 列順は「コマンド/周期(ms)/送信・定期/時刻/CAN ID/データ・説明」。
+        # UDS系ボタンは上段=要求(0x7E0)/下段=応答(0x7E8)の2行1組で、時刻・CAN ID・
+        # データは行ごとに対になる値のため隣接させ、行に依存しない操作列
+        # （周期(ms)/送信・定期ボタン、いずれも rowspan=2）はコマンド名の直後に
+        # まとめる。時刻はCAN IDの左隣（TX時刻はCAN ID=0x7E0の行、RX時刻は
+        # CAN ID=0x7E8の行）に置き、時刻・CAN IDとも「その行がいつ・どのPDUを
+        # 送受信したか」という対になる情報として並べる。データ・説明列
+        # だけ突出して幅が広いため最後尾に置き、ログパネル表示時に横幅が
+        # 圧迫されてもコマンド送信操作が隠れないようにする（右端のデータ・
+        # 説明列から先に見切れる方が実害が小さい）。
+        #
+        # 送信ボタンと定期送信ボタンは2026-09に1つへ統合した（周期(ms)欄が0の
+        # ときは単発送信、0以外のときは定期送信の開始/停止トグルとして働く。
+        # ボタン表示は待機中「▶」/定期送信中「■」、ツールチップで挙動を説明する。
+        # 統合で空いた列にはTX/RXタイムスタンプ（PCローカル時刻）を表示する。
         ttk.Label(inner, text="コマンド", font=("", 9, "bold")).grid(
             row=0, column=0, padx=(4, 2), pady=(4, 1), sticky="w")
-        ttk.Label(inner, text="送信", font=("", 9, "bold")).grid(
-            row=0, column=1, padx=(4, 4), pady=(4, 1), sticky="w")
-        ttk.Label(inner, text="定期", font=("", 9, "bold")).grid(
-            row=0, column=2, padx=(4, 4), pady=(4, 1), sticky="w")
         ttk.Label(inner, text="周期(ms)", font=("", 9, "bold")).grid(
+            row=0, column=1, padx=(4, 4), pady=(4, 1), sticky="w")
+        ttk.Label(inner, text="送信/定期", font=("", 9, "bold")).grid(
+            row=0, column=2, padx=(2, 4), pady=(4, 1), sticky="w")
+        ttk.Label(inner, text="時刻", font=("", 9, "bold")).grid(
             row=0, column=3, padx=(2, 4), pady=(4, 1), sticky="w")
         ttk.Label(inner, text="CAN ID", font=("", 9, "bold")).grid(
             row=0, column=4, padx=(2, 4), pady=(4, 1), sticky="w")
@@ -367,6 +410,12 @@ class UdsTesterFrame(ttk.Frame):
                                     anchor="w", justify="left")
                 cmd_lbl.grid(row=row, column=0, padx=(4, 2), pady=2, sticky="nsew")
                 cmd_lbl.bind("<MouseWheel>", _scroll)
+                rx_ts_var = tk.StringVar(value="")
+                rx_ts_lbl = ttk.Label(inner, textvariable=rx_ts_var,
+                                      font=("Consolas", 8), foreground="#777777")
+                rx_ts_lbl.grid(row=row, column=3, padx=(4, 4), pady=2, sticky="w")
+                rx_ts_lbl.bind("<MouseWheel>", _scroll)
+                self._rx_ts_vars[i] = rx_ts_var
                 id_lbl = ttk.Label(inner, text=f"0x{can_id_int:03X}",
                                    font=("Consolas", 9), foreground="#2a7a2a")
                 id_lbl.grid(row=row, column=4, padx=(2, 6), pady=2, sticky="w")
@@ -486,35 +535,53 @@ class UdsTesterFrame(ttk.Frame):
                 resp_lbl.bind("<MouseWheel>", _scroll)
                 self._response_vars[i] = resp_var
 
-                # 送信ボタン (col 1, rowspan=2)
-                send_btn = ttk.Button(
-                    inner, text="送信", width=5,
-                    command=lambda c=btn_cfg, idx=i: self._on_send_click(c, idx),
+                # 送信/定期ボタン (col 2, rowspan=2)。2026-09、送信ボタンと定期
+                # 送信ボタンを1つへ統合（周期(ms)欄が0なら単発送信、0以外なら
+                # 定期送信の開始/停止トグル）。表示は待機中「▶」/定期送信中
+                # 「■」。周期(ms)欄自体を持たない multiframe/security_* は
+                # 常に単発送信（_on_combined_click() 参照）。
+                combined_var = tk.StringVar(value="▶")
+                combined_btn = ttk.Button(
+                    inner, textvariable=combined_var, width=5,
+                    command=lambda c=btn_cfg, idx=i: self._on_combined_click(c, idx),
                 )
-                send_btn.grid(row=row, column=1, rowspan=2,
-                              padx=(4, 4), pady=2, sticky="nsew")
-                send_btn.bind("<MouseWheel>", _scroll)
+                combined_btn.grid(row=row, column=2, rowspan=2,
+                                  padx=(4, 4), pady=2, sticky="nsew")
+                combined_btn.bind("<MouseWheel>", _scroll)
+                self._periodic_btn_vars[i] = combined_var
+                _Tooltip(combined_btn, "▶: 送信（周期(ms)が0以外なら定期送信を開始）\n■: クリックで定期送信を停止"
+                         if t == "raw" else "▶: 送信")
+
+                # TX/RXタイムスタンプ (col 3)。CAN ID (col 4) の左隣に置き、
+                # 「どのPDUをいつ送受信したか」が同じ行で分かるようにする。
+                tx_ts_var = tk.StringVar(value="")
+                tx_ts_lbl = ttk.Label(inner, textvariable=tx_ts_var,
+                                      font=("Consolas", 8), foreground="#777777")
+                tx_ts_lbl.grid(row=row, column=3, padx=(4, 4), pady=(3, 1), sticky="w")
+                tx_ts_lbl.bind("<MouseWheel>", _scroll)
+                self._tx_ts_vars[i] = tx_ts_var
+
+                rx_ts_var = tk.StringVar(value="")
+                rx_ts_lbl = ttk.Label(inner, textvariable=rx_ts_var,
+                                      font=("Consolas", 8), foreground="#777777")
+                rx_ts_lbl.grid(row=row + 1, column=3, padx=(4, 4), pady=(1, 3), sticky="w")
+                rx_ts_lbl.bind("<MouseWheel>", _scroll)
+                self._rx_ts_vars[i] = rx_ts_var
 
                 if t == "raw":
-                    # 定期送信ボタン (col 2, rowspan=2)。Tester Present 等、状態を
-                    # 持たない単純な UDS request のみサポートする（multiframe/
-                    # security_* は対象外。_on_periodic_click() 参照）。
-                    periodic_var = tk.StringVar(value="定期")
-                    periodic_btn = ttk.Button(
-                        inner, textvariable=periodic_var, width=5,
-                        command=lambda c=btn_cfg, idx=i: self._on_periodic_click(c, idx),
-                    )
-                    periodic_btn.grid(row=row, column=2, rowspan=2,
-                                      padx=(2, 4), pady=2, sticky="nsew")
-                    periodic_btn.bind("<MouseWheel>", _scroll)
-                    self._periodic_btn_vars[i] = periodic_var
-
-                    # 周期(ms) 入力欄 (col 3, rowspan=2)。既定 2000ms
-                    # （旧 Tester Present 自動送信チェックボックスの 2 秒毎と同じ）。
-                    interval_var = tk.StringVar(value=str(btn_cfg.get("interval_ms", 2000)))
+                    # 周期(ms) 入力欄 (col 1, rowspan=2)。既定 0（単発送信）。
+                    # UDS診断リクエストはTester Present(0x3E)を除きそもそも
+                    # 周期送信するものではないため、config.json で interval_ms
+                    # を明示していない（=将来ボタンを追加し忘れた）場合も
+                    # 安全側の単発送信にフォールバックする（2026-09、以前は
+                    # 2000msだったため全ボタンが誤って「定期」寄りの既定値に
+                    # なっていた）。Tester Present は config.json 側で
+                    # interval_ms=2000 を明示している。送信/定期ボタン
+                    # (col 2) の左隣に置く。
+                    interval_var = tk.StringVar(value=str(btn_cfg.get("interval_ms", 0)))
                     interval_entry = ttk.Entry(inner, textvariable=interval_var, width=6,
                                                font=("Consolas", 9))
-                    interval_entry.grid(row=row, column=3, rowspan=2,
+                    interval_entry.grid(row=row, column=1, rowspan=2,
                                         padx=(2, 4), pady=2, sticky="ns")
                     interval_entry.bind("<MouseWheel>", _scroll)
                     self._entry_vars.setdefault(i, {})["interval_ms"] = interval_var
@@ -595,25 +662,7 @@ class UdsTesterFrame(ttk.Frame):
                     data_combo.bind("<<ComboboxSelected>>", _on_preset)
                 self._entry_vars.setdefault(i, {})["data"] = data_var
 
-                # 送信ボタン (col 1)
-                send_btn = ttk.Button(
-                    inner, text="送信", width=5,
-                    command=lambda c=btn_cfg, idx=i: self._on_send_click(c, idx),
-                )
-                send_btn.grid(row=row, column=1, padx=(4, 2), pady=2)
-                send_btn.bind("<MouseWheel>", _scroll)
-
-                # 定期送信ボタン (col 2)
-                periodic_var = tk.StringVar(value="定期")
-                periodic_btn = ttk.Button(
-                    inner, textvariable=periodic_var, width=5,
-                    command=lambda c=btn_cfg, idx=i: self._on_periodic_click(c, idx),
-                )
-                periodic_btn.grid(row=row, column=2, padx=(2, 4), pady=2)
-                periodic_btn.bind("<MouseWheel>", _scroll)
-                self._periodic_btn_vars[i] = periodic_var
-
-                # 周期(ms) 入力欄 (col 3)。優先順位: config.json の interval_ms
+                # 周期(ms) 入力欄 (col 1)。優先順位: config.json の interval_ms
                 # （明示指定）→ data/can_signals.json の txPeriodMs（この can_id を
                 # 持つ RX/TX-RX 方向のフレーム定義があれば、そこに記録された送信
                 # 周期。can_frame ボタンは基本的に外部ECUからの受信を模擬する用途
@@ -622,7 +671,7 @@ class UdsTesterFrame(ttk.Frame):
                 # （メータECU自身が送るMeterStatus等）の txPeriodMs はメータECU
                 # 自身の送信周期であり「相手ECUが送るべき周期」ではないため、
                 # ここでは対象外にする）→ 既定100ms、の順で決める。実行時には
-                # この Entry の値を変更できる。
+                # この Entry の値を変更できる。送信/定期ボタン (col 2) の左隣に置く。
                 _default_interval = btn_cfg.get("interval_ms")
                 if _default_interval is None:
                     _frame_def = self.signal_defs.get(can_id_val)
@@ -633,9 +682,30 @@ class UdsTesterFrame(ttk.Frame):
                 interval_var = tk.StringVar(value=str(_default_interval))
                 interval_entry = ttk.Entry(inner, textvariable=interval_var, width=6,
                                            font=("Consolas", 9))
-                interval_entry.grid(row=row, column=3, padx=(2, 4), pady=2)
+                interval_entry.grid(row=row, column=1, padx=(2, 4), pady=2)
                 interval_entry.bind("<MouseWheel>", _scroll)
                 self._entry_vars.setdefault(i, {})["interval_ms"] = interval_var
+
+                # 送信/定期ボタン (col 2)。2026-09、送信ボタンと定期送信ボタンを
+                # 1つへ統合（周期(ms)欄が0なら単発送信、0以外なら定期送信の
+                # 開始/停止トグル）。表示は待機中「▶」/定期送信中「■」。
+                combined_var = tk.StringVar(value="▶")
+                combined_btn = ttk.Button(
+                    inner, textvariable=combined_var, width=5,
+                    command=lambda c=btn_cfg, idx=i: self._on_combined_click(c, idx),
+                )
+                combined_btn.grid(row=row, column=2, padx=(4, 2), pady=2)
+                combined_btn.bind("<MouseWheel>", _scroll)
+                self._periodic_btn_vars[i] = combined_var
+                _Tooltip(combined_btn, "▶: 周期(ms)=0なら送信、0以外なら定期送信を開始\n■: クリックで定期送信を停止")
+
+                # TXタイムスタンプ (col 3)。CAN ID (col 4) の左隣に置く。
+                tx_ts_var = tk.StringVar(value="")
+                tx_ts_lbl = ttk.Label(inner, textvariable=tx_ts_var,
+                                      font=("Consolas", 8), foreground="#777777")
+                tx_ts_lbl.grid(row=row, column=3, padx=(4, 4), pady=2, sticky="w")
+                tx_ts_lbl.bind("<MouseWheel>", _scroll)
+                self._tx_ts_vars[i] = tx_ts_var
 
                 current_row += 1
         # ---- ログ ----
@@ -934,7 +1004,7 @@ class UdsTesterFrame(ttk.Frame):
         for pidx, stop_ev in self._periodic_stops.items():
             stop_ev.set()
             if pidx in self._periodic_btn_vars:
-                self._periodic_btn_vars[pidx].set("定期")
+                self._periodic_btn_vars[pidx].set("▶")
         self._periodic_stops.clear()
         # python-can の gs_usb バックエンドは shutdown() 内部でデバイスの
         # 再スキャンを行うが、これを明示的に呼ぶと（特に複数回呼ばれた場合に）
@@ -1190,6 +1260,40 @@ class UdsTesterFrame(ttk.Frame):
         else:
             self._handle_periodic_can_toggle(btn_cfg, idx, label, entry_data)
 
+    @staticmethod
+    def _now_ts() -> str:
+        """TX/RXタイムスタンプ表示用の PC ローカル時刻文字列（HH:MM:SS）。"""
+        return time.strftime("%H:%M:%S")
+
+    def _mark_tx(self, idx: int) -> None:
+        self.state_queue.put(("tx_ts", (idx, self._now_ts())))
+
+    def _mark_rx(self, idx: int) -> None:
+        self.state_queue.put(("rx_ts", (idx, self._now_ts())))
+
+    def _on_combined_click(self, btn_cfg, idx: int):
+        """送信/定期ボタン統合（2026-09）: 周期(ms)欄を持たない（=定期送信非対応の
+        multiframe/security_*）場合、または周期(ms)欄の値が0の場合は単発送信、
+        それ以外は定期送信の開始/停止トグルとして扱う。既に定期送信中の場合は
+        周期(ms)欄の現在値に関わらず必ず停止（_toggle_periodic() が
+        self._periodic_stops を見て判定するため、ここで別途 running 判定を
+        重複させる必要はない）。"""
+        is_running = idx in self._periodic_stops and not self._periodic_stops[idx].is_set()
+        interval_var = self._entry_vars.get(idx, {}).get("interval_ms")
+        if not is_running and interval_var is not None:
+            try:
+                interval_ms = int(interval_var.get())
+            except ValueError:
+                interval_ms = None  # 非数値は _on_periodic_click 側の _parse_interval_ms に判定・エラーログを委ねる
+            if interval_ms == 0:
+                self._on_send_click(btn_cfg, idx)
+                return
+        if interval_var is None:
+            # 定期送信非対応（multiframe/security_*）は常に単発送信。
+            self._on_send_click(btn_cfg, idx)
+            return
+        self._on_periodic_click(btn_cfg, idx)
+
     def _send_worker(self, btn_cfg, entry_data: dict, idx: int):
         """entry_data: GUI スレッドで読み取った入力フィールドの文字列 {"data": "...", "can_id": "..."}"""
         label = btn_cfg["label"].replace("\n", " ")
@@ -1222,6 +1326,11 @@ class UdsTesterFrame(ttk.Frame):
             try:
                 if btn_cfg["type"] == "security_access_auto":
                     result = uds_link.security_access_auto(self.bus)
+                    # seed/key の複数往復を1回の呼び出しに隠蔽しているため、
+                    # 個々のTX/RX時刻ではなく「一連の交換が完了した時刻」として
+                    # まとめて記録する。
+                    self._mark_tx(idx)
+                    self._mark_rx(idx)
                     self.log_queue.put(f"[{label}] {result}")
                     self.state_queue.put(("resp", (idx, result)))
                 elif btn_cfg["type"] == "security_seed":
@@ -1233,7 +1342,9 @@ class UdsTesterFrame(ttk.Frame):
                         f"[{label}] TX " + " ".join(f"{b:02X}" for b in payload)
                     )
                     uds_link.send_raw(self.bus, payload)
+                    self._mark_tx(idx)
                     resp = uds_link.receive_uds_response(self.bus)
+                    self._mark_rx(idx)
                     self.state_queue.put(("resp", (idx, self._rx_display(resp))))
                     if (not resp.is_negative and len(resp.raw) >= 4
                             and resp.raw[0] == 0x67):
@@ -1267,7 +1378,9 @@ class UdsTesterFrame(ttk.Frame):
                         f"[{label}] TX " + " ".join(f"{b:02X}" for b in payload)
                     )
                     uds_link.send_raw(self.bus, payload)
+                    self._mark_tx(idx)
                     resp = uds_link.receive_uds_response(self.bus)
+                    self._mark_rx(idx)
                     decoded = self._decode_response(payload, resp)
                     self.log_queue.put(f"[{label}] RX " + decoded)
                     self.state_queue.put(("resp", (idx, self._rx_display(resp))))
@@ -1281,7 +1394,9 @@ class UdsTesterFrame(ttk.Frame):
                         + " ".join(f"{b:02X}" for b in uds_payload)
                     )
                     uds_link.send_multiframe_request(self.bus, uds_payload)
+                    self._mark_tx(idx)
                     resp = uds_link.receive_uds_response(self.bus)
+                    self._mark_rx(idx)
                     sent = bytes([0]) + uds_payload  # _decode_response は sent[1]=SID を見る
                     decoded = self._decode_response(sent, resp)
                     self.log_queue.put(f"[{label}] RX " + decoded)
@@ -1300,6 +1415,7 @@ class UdsTesterFrame(ttk.Frame):
                     e2e_cfg = btn_cfg.get("e2e")
                     secoc_cfg = btn_cfg.get("secoc")
                     uds_link.send_can_frame(self.bus, can_id, data)
+                    self._mark_tx(idx)
                     self.log_queue.put(
                         f"[{label}] TX ID=0x{can_id:03X} " + " ".join(f"{b:02X}" for b in data)
                     )
@@ -1522,7 +1638,7 @@ class UdsTesterFrame(ttk.Frame):
         if stop_ev is not None and not stop_ev.is_set():
             stop_ev.set()
             self.log_queue.put(f"[{label}] 周期送信 停止")
-            self.state_queue.put(("periodic_btn", (idx, "定期")))
+            self.state_queue.put(("periodic_btn", (idx, "▶")))
             return
         built = build_worker()
         if built is None:
@@ -1530,7 +1646,7 @@ class UdsTesterFrame(ttk.Frame):
         worker_target, worker_args, start_log_text = built
         new_stop = threading.Event()
         self._periodic_stops[idx] = new_stop
-        self.state_queue.put(("periodic_btn", (idx, "停止")))
+        self.state_queue.put(("periodic_btn", (idx, "■")))
         self.log_queue.put(start_log_text)
         threading.Thread(
             target=worker_target,
@@ -1577,14 +1693,14 @@ class UdsTesterFrame(ttk.Frame):
                 f"  ID=0x{can_id:03X} DATA=" + " ".join(f"{b:02X}" for b in data)
             )
             return (self._periodic_can_worker,
-                    (label, can_id, data, interval_ms / 1000.0, e2e_cfg_p, secoc_cfg_p),
+                    (idx, label, can_id, data, interval_ms / 1000.0, e2e_cfg_p, secoc_cfg_p),
                     log_text)
         self._toggle_periodic(idx, label, build_worker)
 
     # 送信直後に UDS が続いても間隔を保てるよう、送信後にロックを保持する時間 (秒)
     _PERIODIC_POST_SEND_HOLD_S = 0.010  # 10ms
 
-    def _periodic_can_worker(self, label, can_id, data, interval_s,
+    def _periodic_can_worker(self, idx, label, can_id, data, interval_s,
                               e2e_cfg, secoc_cfg, stop_ev):
         """interval_s ごとに CAN フレームを送り続ける。stop_ev がセットされたら終了。
 
@@ -1621,6 +1737,7 @@ class UdsTesterFrame(ttk.Frame):
                         else:
                             send_data = data
                         uds_link.send_can_frame(self.bus, can_id, send_data)
+                        self._mark_tx(idx)
                         time.sleep(self._PERIODIC_POST_SEND_HOLD_S)
                     except Exception:  # noqa: BLE001 - 周期送信中の一時エラーは無視して継続する
                         pass
@@ -1657,10 +1774,10 @@ class UdsTesterFrame(ttk.Frame):
                 f"[{label}] 周期送信 開始 ({interval_ms}ms 間隔)"
                 f"  DATA=" + " ".join(f"{b:02X}" for b in payload)
             )
-            return self._periodic_uds_worker, (payload, interval_ms / 1000.0), log_text
+            return self._periodic_uds_worker, (idx, payload, interval_ms / 1000.0), log_text
         self._toggle_periodic(idx, label, build_worker)
 
-    def _periodic_uds_worker(self, payload: bytes, interval_s: float,
+    def _periodic_uds_worker(self, idx: int, payload: bytes, interval_s: float,
                               stop_ev: threading.Event) -> None:
         """interval_s ごとに UDS request を送り応答を読み捨て続ける
         （_periodic_can_worker() と同じ send-then-wait の順序）。
@@ -1672,7 +1789,9 @@ class UdsTesterFrame(ttk.Frame):
                 with self.bus_lock:
                     try:
                         uds_link.send_raw(self.bus, payload)
+                        self._mark_tx(idx)
                         uds_link.receive_uds_response(self.bus, timeout=1.0)
+                        self._mark_rx(idx)
                     except Exception:  # noqa: BLE001 - 周期送信中の一時エラーは無視して継続する
                         pass
             if stop_ev.wait(interval_s):
@@ -1901,6 +2020,7 @@ class UdsTesterFrame(ttk.Frame):
             for idx, monitor_id in self._rx_monitor_ids.items():
                 if msg.arbitration_id == monitor_id:
                     self.state_queue.put(("rx_mon", (idx, bytes(msg.data))))
+                    self._mark_rx(idx)
 
     # ------------------------------------------------------------------
     # スクリプト実行 (CAPL風 API 、capl_api.py 参照)
@@ -2036,6 +2156,14 @@ class UdsTesterFrame(ttk.Frame):
                 btn_idx, text = value
                 if btn_idx in self._periodic_btn_vars:
                     self._periodic_btn_vars[btn_idx].set(text)
+            elif kind == "tx_ts":
+                ts_idx, ts_text = value
+                if ts_idx in self._tx_ts_vars:
+                    self._tx_ts_vars[ts_idx].set(ts_text)
+            elif kind == "rx_ts":
+                ts_idx, ts_text = value
+                if ts_idx in self._rx_ts_vars:
+                    self._rx_ts_vars[ts_idx].set(ts_text)
             elif kind == "serial_state":
                 tag, state = value
                 if tag in self._serial_state_vars:
