@@ -125,7 +125,11 @@ Std_ReturnType E2E_P01CheckInit(E2E_P01CheckStateType *State)
     if (State == NULL)
         return E2E_E_INPUTERR_NULL;
     State->LastValidCounter = 0U;
-    State->Status           = E2E_P01STATUS_INITIAL;
+    /* [SWS_E2E_00389] Status は NONEWDATA が正しい初期値（2026-09-06 是正。
+     * 以前は INITIAL だった）。WaitForFirstData=1 により初回チェックは別途
+     * INITIAL へ遷移するため（E2E_P01Check() 参照）、実際の観測可能な挙動は
+     * 変わらない。 */
+    State->Status           = E2E_P01STATUS_NONEWDATA;
     State->WaitForFirstData = 1U;
     State->SyncCounter      = 0U;
     return E2E_E_OK;

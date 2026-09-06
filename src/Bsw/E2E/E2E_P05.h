@@ -185,10 +185,13 @@ Std_ReturnType E2E_P05CheckInit(E2E_P05CheckStateType *State);
  * \param[io]  State   受信ステート。NULL 禁止。
  * \param[in]  Data    受信 PDU バッファ。NULL 禁止。
  * \param[in]  Length  受信 PDU バイト数（実仕様どおり uint16。上記 Protect
- *                     と同じ理由）。Config->DataLength と一致しない場合は
- *                     State->Status が ERROR になる。
+ *                     と同じ理由）。
  * \return     E2E_E_OK: チェックを実行した（結果は State->Status 参照）。
- *             E2E_E_INPUTERR_NULL: Config/State/Data のいずれかが NULL。
+ *             E2E_E_INPUTERR_NULL: Config/State のいずれかが NULL。
+ *             E2E_E_INPUTERR_WRONG: Data が NULL、または Length が
+ *             Config->DataLength と不一致（[SWS_E2E_00411/00412]、
+ *             2026-09-06 是正。以前はこのケースでも E2E_E_OK を返し
+ *             State->Status のみ ERROR にしていた）。
  *
  * \AUTOSARReq     {SWS_E2E_00411}
  * \ServiceID      {0x28}

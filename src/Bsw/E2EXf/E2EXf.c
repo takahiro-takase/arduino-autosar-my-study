@@ -142,7 +142,14 @@ Std_ReturnType E2EXf_InverseTransformP05(const E2EXf_RxConfigTypeP05* Config, co
     if (E2E_P05Check(Config->E2EConfig, Config->CheckState, Buffer, Length) != E2E_E_OK)
     {
         /* Config->E2EConfig/CheckState/Buffer はここまでで NULL でないことを
-         * 確認済みのため、通常は到達しない（E2E_E_INPUTERR_NULL の防御）。 */
+         * 確認済みのため E2E_E_INPUTERR_NULL は到達しない。2026-09-06 是正の
+         * E2E_E_INPUTERR_WRONG（Length が Config->E2EConfig->DataLength と
+         * 不一致）は理論上ここに落ちるが、本プロジェクトの呼び出し元
+         * （Rte.c、EngineInfo/AbsInfo）は固定長でしか呼ばないため現状は
+         * 到達しない。到達した場合 Dem_SetEventStatus() を呼ばずに return
+         * する（上の E2EXf_InverseTransform()（Profile01 版）の Length
+         * チェック分岐（81-86 行目）も同様に Dem_SetEventStatus() を呼ばずに
+         * return しており、両プロファイルで挙動は対称）。 */
         Det_ReportError(E2EXF_MODULE_ID, 0U, E2EXF_API_ID_INVERSE_TRANSFORM, E2EXF_E_PARAM_POINTER);
         *CheckStatus = E2E_P05STATUS_ERROR;
         return E_NOT_OK;
