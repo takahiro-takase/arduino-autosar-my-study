@@ -144,10 +144,16 @@
  *     ゼロ回に設定すれば単発の異常で即 STOPPED になるが、それは意図的な
  *     コンフィグレーション上の選択であり、デフォルトの挙動ではない。
  *
- * 本実装は Local Supervision Status を OK/FAILED の 2 値に単純化しており
- * （実仕様の FAILED/EXPIRED の区別、per-SE の
- * WdgMFailedAliveSupervisionRefCycleTol は実装していない）、その代わりに
- * この 1 段のグローバル許容サイクル数だけを持つ。値 2 は、実機で発生した
+ * 【2026-09 更新】本コメントは元々「Local Supervision Status を OK/FAILED の
+ * 2 値に単純化しており、per-SE の FAILED/EXPIRED 区別は実装していない」と
+ * 記載していたが、これはユーザー承認の上で是正済み
+ * （WdgM_LocalStatusType に WDGM_LOCAL_STATUS_EXPIRED を追加、
+ * WdgM.h/WdgM.c 参照）。ただし per-SE の
+ * WdgMFailedAliveSupervisionRefCycleTol という専用コンフィグパラメータは
+ * 新設せず、この WDGM_EXPIRED_SUPERVISION_CYCLE_TOL をエンティティ単位の
+ * Alive Supervision 猶予カウンタとしてもそのまま流用する簡易実装とした
+ * （詳細は WdgM.c の WdgM_EntityExpiredCycleCount コメント参照）。
+ * 以下は本来 Global Supervision Status についての説明。値 2 は、実機で発生した
  * NvM の EEPROM ブロッキング書き込み（数百ms、最大で確認された elapsed=741ms）
  * のような単発の一時的なスケジューラ遅延を、判定サイクル
  * (WDGM_SUPERVISION_CYCLE_MS=6000ms) 1 回分の猶予で吸収できるように選んだ

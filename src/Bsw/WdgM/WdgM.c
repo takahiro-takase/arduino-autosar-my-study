@@ -19,8 +19,12 @@
  *               WdgM_LastCheckpoint[SEID]（直前のチェックポイント）から
  *               今回の CheckpointId への遷移が許可遷移テーブル
  *               (WdgM_PBCfg.c の Transitions[]) に含まれるかを即座に確認する。
- *            2. 含まれない場合は WdgM_LogicalStatus[SEID] を FAILED にして
- *               WARN ログを出力する (MainFunction の周期を待たず即時検出)。
+ *            2. 含まれない場合は WdgM_LogicalStatus[SEID] を EXPIRED にして
+ *               WARN ログを出力する (MainFunction の周期を待たず即時検出。
+ *               実仕様 [SWS_WdgM_00202]/[SWS_WdgM_00206] 通り、Logical/Deadline
+ *               違反には Alive Supervision のような猶予サイクルが無く、
+ *               検出した瞬間に直接 EXPIRED へ遷移する。2026-09 是正: 従来は
+ *               FAILED を割り当てていたが、これは実仕様との乖離だった)。
  *            3. WdgM_LastCheckpoint[SEID] を今回の CheckpointId に更新する。
  *
  *          Deadline Supervision アルゴリズム (Alive/Logical に続く 3 つ目):
@@ -30,7 +34,8 @@
  *            2. 直前のチェックポイントから今回のチェックポイントへの区間が
  *               許容テーブル (WdgM_PBCfg.c の Deadlines[]) に設定されていれば、
  *               経過時間が [MinMs, MaxMs] の範囲内かを確認する。範囲外なら
- *               WdgM_DeadlineStatus[SEID] を FAILED にして WARN ログを出力する。
+ *               WdgM_DeadlineStatus[SEID] を EXPIRED にして WARN ログを出力する
+ *               (Logical Supervision と同じ理由で猶予サイクルなし。2026-09 是正)。
  *            3. WdgM_LastCheckpointTimeMs[SEID] を現在時刻に更新する
  *               (WDGM_CP_INITIAL からの最初の遷移には基準時刻がないため対象外)。
  *
@@ -39,9 +44,16 @@
  *            WdgM_DeadlineStatus[] (Deadline) を別々の配列で保持する。
  *            WdgM_GetLocalStatus() と WdgM_MainFunction() の HW ウォッチドッグ
  *            refresh 判定は、3 つ全てが OK の場合のみ OK とみなす。
- *            WdgM_AliveStatus は周期ごとに OK/FAILED を再評価するが、
+ *            WdgM_AliveStatus は周期ごとに OK/FAILED/EXPIRED を再評価するが、
  *            WdgM_LogicalStatus と WdgM_DeadlineStatus は WdgM_Init() でのみ
  *            OK に戻る（違反が起きたという事実は Alive 条件を満たしても消えない）。
+ *            [SWS_WdgM_00202]/[SWS_WdgM_00206] 通り Logical/Deadline は検出した
+ *            瞬間に EXPIRED（猶予なし）。Alive のみ、実仕様の per-SE
+ *            WdgMFailedAliveSupervisionRefCycleTol の代わりに Global の
+ *            WDGM_EXPIRED_SUPERVISION_CYCLE_TOL をエンティティ単位へ簡易流用し、
+ *            連続 FAILED サイクル数が閾値に達すると EXPIRED へ遷移する
+ *            （WdgM_EntityExpiredCycleCount 参照。ユーザー承認済みの簡略化、
+ *            実仕様の増減カウンタ式回復ではなく OK 復帰で即 0 リセット）。
  *            旧実装ではこれらを 1 つの WdgM_LocalStatus に統合していたため、
  *            Logical/Deadline Supervision が FAILED と判定した直後でも次の
  *            MainFunction サイクルで Alive 条件を満たせば OK に上書きされ、
@@ -182,6 +194,26 @@ static WdgM_LocalStatusType WdgM_LogicalStatus[WDGM_SUPERVISED_ENTITY_COUNT];
 /** エンティティごとの Deadline Supervision ステータス (WdgM_Init まで FAILED がラッチされる) */
 static WdgM_LocalStatusType WdgM_DeadlineStatus[WDGM_SUPERVISED_ENTITY_COUNT];
 
+/** エンティティごとの Alive Supervision 用 EXPIRED 猶予カウンタ。
+ *  実仕様は per-SE の WdgMFailedAliveSupervisionRefCycleTol（増減式カウンタ、
+ *  ECUC_WdgM_00327）を持つが、本プロジェクトは新規コンフィグパラメータを
+ *  増やさず、Global の WDGM_EXPIRED_SUPERVISION_CYCLE_TOL をそのままエンティティ
+ *  単位へ流用する簡易実装とした（ユーザー承認済み）。
+ *  Alive Supervision が連続 FAILED と判定するたびに 1 ずつ増加し
+ *  (WDGM_EXPIRED_SUPERVISION_CYCLE_TOL で頭打ち)、WdgM_GetLocalStatus() が
+ *  この値が閾値に達したかどうかで FAILED/EXPIRED を区別する
+ *  （初回 FAILED 検出サイクルではまだ 1 のため FAILED のまま。既存テスト
+ *  GetLocalStatus_OK_ReturnsFailedAfterAliveShortfall が単発の Alive 不足を
+ *  1 回の WdgM_MainFunction() 呼び出し後に FAILED と判定することを前提に
+ *  しているため、この閾値未満＝FAILED という区切りは変更しないこと）。
+ *  Alive が OK に戻った時点で即座に 0 へリセットする（実仕様の 1 段階ずつの
+ *  減算ではなく、Global 側と同じ単純な二値復帰）。
+ *  Logical/Deadline Supervision はこのカウンタを使わず、検出した瞬間に
+ *  WdgM_CheckpointReached() が直接 EXPIRED にする（猶予なし、実仕様通り）。
+ *  WdgM_ResumeSupervision() では意図的にリセットしない
+ *  （WdgM_ExpiredCycleCount と同じ方針。理由は同関数のコメント参照）。 */
+static uint8 WdgM_EntityExpiredCycleCount[WDGM_SUPERVISED_ENTITY_COUNT];
+
 /** エンティティごとの直前のチェックポイント ID (Logical Supervision 用) */
 static WdgM_CheckpointIdType WdgM_LastCheckpoint[WDGM_SUPERVISED_ENTITY_COUNT];
 
@@ -280,6 +312,7 @@ void WdgM_Init(const WdgM_ConfigType* ConfigPtr)
         WdgM_AliveStatus[i]         = WDGM_LOCAL_STATUS_OK;
         WdgM_LogicalStatus[i]       = WDGM_LOCAL_STATUS_OK;
         WdgM_DeadlineStatus[i]      = WDGM_LOCAL_STATUS_OK;
+        WdgM_EntityExpiredCycleCount[i] = 0U;
         WdgM_LastCheckpoint[i]      = WDGM_CP_INITIAL;
         WdgM_LastCheckpointTimeMs[i] = millis();
     }
@@ -448,6 +481,11 @@ void WdgM_DisableHwWatchdog(void)
  *          それに応じて評価するグローバル猶予カウンタも resume では回復させず、
  *          真に全エンティティが OK に戻ったとき（WdgM_MainFunction() 末尾の
  *          回復判定）にのみクリアされるようにする。
+ *          エンティティ単位の WdgM_EntityExpiredCycleCount（2026-09 追加）も
+ *          同じ理由で意図的にリセットしない
+ *          （WdgM_AliveStatus は resume 直後に OK へ戻すが、猶予カウンタ自体は
+ *          次回 WdgM_MainFunction() で Alive が OK と評価されて初めて 0 になる。
+ *          resume を跨いでも「連続 FAILED サイクル数」の蓄積を失わせないため）。
  *
  * \note       AUTOSAR 標準の SWS_WdgM には存在しない本プロジェクト独自の
  *             拡張関数のため、対応する \AUTOSARReq は無い。ApiId は自己割当
@@ -485,10 +523,12 @@ void WdgM_ResumeSupervision(void)
  *          続けて、直前のチェックポイントから今回のチェックポイントへの遷移が
  *          許可遷移テーブルに含まれるかを即座に確認する (Logical Supervision)。
  *          さらに、直前のチェックポイントからの実際の経過時間が許容範囲内かを
- *          確認する (Deadline Supervision)。
+ *          確認する (Deadline Supervision)。いずれかの違反を検出した場合、
+ *          Alive Supervision と異なり猶予サイクルなしで直接 EXPIRED にする
+ *          ([SWS_WdgM_00202]/[SWS_WdgM_00206]。2026-09 是正: 従来は FAILED だった)。
  *
- * \AUTOSARReq     {SWS_WdgM_00263, SWS_WdgM_00278, SWS_WdgM_00279,
- *                  SWS_WdgM_00356, SWS_WdgM_00357}
+ * \AUTOSARReq     {SWS_WdgM_00202, SWS_WdgM_00206, SWS_WdgM_00263, SWS_WdgM_00278,
+ *                  SWS_WdgM_00279, SWS_WdgM_00356, SWS_WdgM_00357}
  * \ServiceID      {0x0E}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
@@ -527,8 +567,8 @@ Std_ReturnType WdgM_CheckpointReached(WdgM_SupervisedEntityIdType SEID, WdgM_Che
 
     if (allowed == 0U)
     {
-        WdgM_LogicalStatus[SEID] = WDGM_LOCAL_STATUS_FAILED;
-        DET_LOGW(TAG, "SE%u logical FAILED cp %u->%u (unexpected) [HW WDT reset pending]",
+        WdgM_LogicalStatus[SEID] = WDGM_LOCAL_STATUS_EXPIRED;
+        DET_LOGW(TAG, "SE%u logical EXPIRED cp %u->%u (unexpected) [HW WDT reset pending]",
                  (unsigned)SEID, (unsigned)fromCp, (unsigned)CheckpointId);
     }
 
@@ -546,8 +586,8 @@ Std_ReturnType WdgM_CheckpointReached(WdgM_SupervisedEntityIdType SEID, WdgM_Che
             unsigned long elapsed = now - WdgM_LastCheckpointTimeMs[SEID];
             if (elapsed < dl->MinMs || elapsed > dl->MaxMs)
             {
-                WdgM_DeadlineStatus[SEID] = WDGM_LOCAL_STATUS_FAILED;
-                DET_LOGW(TAG, "SE%u deadline FAILED cp %u->%u elapsed=%lu (exp %lu..%lu) [HW WDT reset pending]",
+                WdgM_DeadlineStatus[SEID] = WDGM_LOCAL_STATUS_EXPIRED;
+                DET_LOGW(TAG, "SE%u deadline EXPIRED cp %u->%u elapsed=%lu (exp %lu..%lu) [HW WDT reset pending]",
                          (unsigned)SEID, (unsigned)fromCp, (unsigned)CheckpointId,
                          elapsed, dl->MinMs, dl->MaxMs);
             }
@@ -566,13 +606,16 @@ Std_ReturnType WdgM_CheckpointReached(WdgM_SupervisedEntityIdType SEID, WdgM_Che
  *
  * \details Alive Supervision (WdgM_AliveStatus)・Logical Supervision
  *          (WdgM_LogicalStatus)・Deadline Supervision (WdgM_DeadlineStatus)
- *          のいずれか一つでも FAILED なら FAILED を返す。
+ *          のいずれか一つでも FAILED なら FAILED または EXPIRED を返す。
+ *          FAILED が前回の WdgM_MainFunction() 判定サイクルから継続している
+ *          場合は EXPIRED（WdgM_EntityExpiredCycleCount 参照。2026-09 追加）、
+ *          今回のサイクルで初めて FAILED になった場合はこれまで通り FAILED。
  *
  * \warning    戻り値 (Std_ReturnType: E_OK=0/E_NOT_OK=1) と *Status
  *             (WdgM_LocalStatusType: OK=0/FAILED=1) は数値がたまたま重なる。
  *             戻り値と *Status の型を混同して比較しないこと。
  * \AUTOSARReq     {SWS_WdgM_00169, SWS_WdgM_00171, SWS_WdgM_00172,
- *                  SWS_WdgM_00173, SWS_WdgM_00257}
+ *                  SWS_WdgM_00173, SWS_WdgM_00257, SWS_WdgM_00359}
  * \ServiceID      {0x0C}
  * \Reentrancy     {Reentrant}
  * \Synchronicity  {Synchronous}
@@ -600,12 +643,25 @@ Std_ReturnType WdgM_GetLocalStatus(WdgM_SupervisedEntityIdType SEID, WdgM_LocalS
         return E_NOT_OK;
     }
 
-    if (WdgM_AliveStatus[SEID]    != WDGM_LOCAL_STATUS_OK
-        || WdgM_LogicalStatus[SEID]  != WDGM_LOCAL_STATUS_OK
-        || WdgM_DeadlineStatus[SEID] != WDGM_LOCAL_STATUS_OK)
-        *Status = WDGM_LOCAL_STATUS_FAILED;
+    if (WdgM_LogicalStatus[SEID]  == WDGM_LOCAL_STATUS_EXPIRED
+        || WdgM_DeadlineStatus[SEID] == WDGM_LOCAL_STATUS_EXPIRED)
+    {
+        /* [SWS_WdgM_00202]/[SWS_WdgM_00206]: Logical/Deadline は猶予なしで
+         * 即 EXPIRED (WdgM_CheckpointReached() 側で既に確定済み)。 */
+        *Status = WDGM_LOCAL_STATUS_EXPIRED;
+    }
+    else if (WdgM_AliveStatus[SEID] != WDGM_LOCAL_STATUS_OK)
+    {
+        /* Alive のみ、連続 FAILED サイクル数が閾値に達しているかで区別する
+         * (WdgM_EntityExpiredCycleCount のコメント参照)。 */
+        *Status = (WdgM_EntityExpiredCycleCount[SEID] >= WDGM_EXPIRED_SUPERVISION_CYCLE_TOL)
+            ? WDGM_LOCAL_STATUS_EXPIRED
+            : WDGM_LOCAL_STATUS_FAILED;
+    }
     else
+    {
         *Status = WDGM_LOCAL_STATUS_OK;
+    }
     return E_OK;
 }
 
@@ -783,11 +839,35 @@ void WdgM_MainFunction(void)
                      (unsigned)entity->ExpectedAliveIndications);
         }
 
+        /* エンティティ単位の EXPIRED 猶予カウンタ (Alive Supervision 専用。
+         * WdgM_EntityExpiredCycleCount のコメント参照)。Logical/Deadline は
+         * このカウンタを使わず、既に WdgM_CheckpointReached() 側で EXPIRED が
+         * 確定済みのためここでは触れない。
+         * WdgM_SupervisionSuppressed 中（POST_RUN 中の意図的な Alive 不足）は
+         * グローバル猶予カウンタ（下の anyNotOk 判定）と同じく凍結する
+         * （/code-review で指摘: これを怠ると POST_RUN が
+         * WDGM_EXPIRED_SUPERVISION_CYCLE_TOL 判定サイクル分以上続いただけで、
+         * resume 直後の想定内の 1 回だけの Alive 不足が
+         * いきなり EXPIRED と誤判定されてしまう）。 */
+        if (WdgM_AliveStatus[i] != WDGM_LOCAL_STATUS_OK && WdgM_SupervisionSuppressed)
+        {
+            /* 凍結: 進めも回復させもしない。 */
+        }
+        else if (WdgM_AliveStatus[i] != WDGM_LOCAL_STATUS_OK)
+        {
+            if (WdgM_EntityExpiredCycleCount[i] < WDGM_EXPIRED_SUPERVISION_CYCLE_TOL)
+                WdgM_EntityExpiredCycleCount[i]++;
+        }
+        else
+        {
+            WdgM_EntityExpiredCycleCount[i] = 0U;
+        }
+
         if (WdgM_LogicalStatus[i] != WDGM_LOCAL_STATUS_OK)
-            DET_LOGW(TAG, "SE%u logical still FAILED (latched since violation)", (unsigned)i);
+            DET_LOGW(TAG, "SE%u logical still EXPIRED (latched since violation)", (unsigned)i);
 
         if (WdgM_DeadlineStatus[i] != WDGM_LOCAL_STATUS_OK)
-            DET_LOGW(TAG, "SE%u deadline still FAILED (latched since violation)", (unsigned)i);
+            DET_LOGW(TAG, "SE%u deadline still EXPIRED (latched since violation)", (unsigned)i);
 
         if (!firstNotOkFound
             && (WdgM_AliveStatus[i] != WDGM_LOCAL_STATUS_OK

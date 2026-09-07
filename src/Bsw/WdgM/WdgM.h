@@ -102,7 +102,18 @@ typedef uint8 WdgM_ModeType;
 typedef enum
 {
     WDGM_LOCAL_STATUS_OK          = 0x00U,  /**< 正常: Checkpoint が期待回数以上届いた */
-    WDGM_LOCAL_STATUS_FAILED      = 0x01U,  /**< 失敗: Checkpoint 不足 */
+    WDGM_LOCAL_STATUS_FAILED      = 0x01U,  /**< 失敗: Checkpoint 不足（今回のサイクルで
+                                              *   初めて FAILED と判定された。まだ猶予
+                                              *   サイクルを消費していない） */
+    WDGM_LOCAL_STATUS_EXPIRED     = 0x02U,  /**< 猶予超過/即時違反 (2026-09 追加)。
+                                              *   Logical/Deadline 違反は検出した瞬間に
+                                              *   猶予なしでこの値になり
+                                              *   ([SWS_WdgM_00202]/[SWS_WdgM_00206])、
+                                              *   Alive 不足は FAILED が連続して
+                                              *   WDGM_EXPIRED_SUPERVISION_CYCLE_TOL
+                                              *   サイクルに達した場合になる
+                                              *   （WdgM.c の
+                                              *   WdgM_EntityExpiredCycleCount 参照） */
     WDGM_LOCAL_STATUS_DEACTIVATED = 0x04U   /**< 無効: 初期化前または ID 不正 (SWS_WdgM_00359) */
 } WdgM_LocalStatusType;
 
@@ -270,17 +281,18 @@ void WdgM_ResumeSupervision(void);
  *          WdgM 内部の Alive カウンタをインクリメントし (Alive Supervision)、
  *          直前に報告されたチェックポイントから今回のチェックポイントへの遷移が
  *          許可テーブルに含まれるかを即座に検査する (Logical Supervision)。
- *          許可されない遷移の場合はローカルステータスを即座に FAILED にする。
- *          さらに、直前のチェックポイントからの実際の経過時間が許容範囲
- *          [MinMs, MaxMs] 内かも即座に検査する (Deadline Supervision)。
- *          範囲外の場合もローカルステータスを即座に FAILED にする。
+ *          許可されない遷移の場合はローカルステータスを即座に EXPIRED にする
+ *          (Alive Supervision と異なり猶予サイクルなし。[SWS_WdgM_00202]/
+ *          [SWS_WdgM_00206])。さらに、直前のチェックポイントからの実際の
+ *          経過時間が許容範囲 [MinMs, MaxMs] 内かも即座に検査する
+ *          (Deadline Supervision)。範囲外の場合も同様に即座に EXPIRED にする。
  *
  * \param[in]  SEID          エンティティ ID (WdgM_Cfg.h の WDGM_ENTITY_*)。
  * \param[in]  CheckpointId  チェックポイント ID (WdgM_Cfg.h の WDGM_CP_*)。
  * \return     E_OK: 正常受付。E_NOT_OK: ID 不正。
  *
- * \AUTOSARReq     {SWS_WdgM_00263, SWS_WdgM_00278, SWS_WdgM_00279,
- *                  SWS_WdgM_00356, SWS_WdgM_00357}
+ * \AUTOSARReq     {SWS_WdgM_00202, SWS_WdgM_00206, SWS_WdgM_00263, SWS_WdgM_00278,
+ *                  SWS_WdgM_00279, SWS_WdgM_00356, SWS_WdgM_00357}
  * \ServiceID      {0x0E}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
@@ -290,9 +302,16 @@ Std_ReturnType WdgM_CheckpointReached(WdgM_SupervisedEntityIdType SEID, WdgM_Che
 /**
  * \brief   Supervised Entity の現在のローカルステータスを取得する。
  *
- * \details Alive・Logical・Deadline Supervision のいずれか一つでも FAILED
- *          なら FAILED を返す（AUTOSAR の「全アルゴリズムの結果の最悪値」と
- *          同じ考え方）。
+ * \details Alive・Logical・Deadline Supervision のいずれか一つでも FAILED/
+ *          EXPIRED なら、その最悪値（EXPIRED > FAILED）を返す（AUTOSAR の
+ *          「全アルゴリズムの結果の最悪値」と同じ考え方）。
+ *          Logical/Deadline は猶予サイクルなしで検出した瞬間に EXPIRED
+ *          （[SWS_WdgM_00202]/[SWS_WdgM_00206]、WdgM_CheckpointReached() 側で
+ *          確定済み）。Alive のみ、連続 FAILED 判定サイクル数が
+ *          WDGM_EXPIRED_SUPERVISION_CYCLE_TOL（WdgM_Cfg.h）に達するまでは
+ *          FAILED に留まり、達すると EXPIRED になる（2026-09 追加。実仕様の
+ *          per-SE WdgMFailedAliveSupervisionRefCycleTol 増減カウンタの簡易版。
+ *          詳細は WdgM.c の WdgM_EntityExpiredCycleCount コメント参照）。
  *
  * \param[in]   SEID    エンティティ ID。
  * \param[out]  Status  ローカルステータスの格納先。NULL 禁止。
@@ -306,7 +325,7 @@ Std_ReturnType WdgM_CheckpointReached(WdgM_SupervisedEntityIdType SEID, WdgM_Che
  *             （それは常に false になり、本来検出したい FAILED を
  *             見逃す）。必ず戻り値で成否を確認した上で *Status を見ること。
  * \AUTOSARReq     {SWS_WdgM_00169, SWS_WdgM_00171, SWS_WdgM_00172,
- *                  SWS_WdgM_00173, SWS_WdgM_00257}
+ *                  SWS_WdgM_00173, SWS_WdgM_00202, SWS_WdgM_00206, SWS_WdgM_00257}
  * \ServiceID      {0x0C}
  * \Reentrancy     {Reentrant}
  * \Synchronicity  {Synchronous}
