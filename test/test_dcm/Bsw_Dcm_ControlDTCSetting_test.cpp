@@ -268,4 +268,22 @@ TEST_F(Bsw_Dcm_ControlDTCSetting_Test, ControlDTCSetting_NG_ExtraOptionRecordRet
     EXPECT_EQ(FakeCanTp_TxBuf[2], DCM_NRC_INCORRECT_MESSAGE_LENGTH);
 }
 
+TEST_F(Bsw_Dcm_ControlDTCSetting_Test, ControlDTCSetting_NG_UnsupportedSubFuncWithExtraBytePrefersSubFuncNrc)
+{
+    EnterExtendedSession();
+
+    /* [SWS_Dcm_00273]/[SWS_Dcm_00696]: サブ機能サポート確認は
+     * [SWS_Dcm_01399] 代用の optionRecord 超過チェックより先に行う処理順序
+     * （2026-09 是正）。subFunc(uds[1])が不正かつ optionRecord も付いている
+     * (udsLen=3>2)場合でも、NRC 0x13(incorrectMessageLength)ではなく
+     * 0x12(subFunctionNotSupported)を返すべき。 */
+    uint8 req[3] = { DCM_SID_CONTROL_DTC_SETTING, 0xFFU, 0x00U };
+    Send(req, sizeof(req));
+
+    ASSERT_EQ(FakeCanTp_TransmitCount, 1U);
+    ASSERT_EQ(FakeCanTp_TxLength, 3U);
+    EXPECT_EQ(FakeCanTp_TxBuf[0], DCM_SID_NEGATIVE_RESP);
+    EXPECT_EQ(FakeCanTp_TxBuf[2], DCM_NRC_SUB_FUNC_NOT_SUPPORTED);
+}
+
 }  // namespace
