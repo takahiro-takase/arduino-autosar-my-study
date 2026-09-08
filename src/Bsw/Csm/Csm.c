@@ -11,6 +11,7 @@
 #include "Csm.h"
 #include "Csm_PBCfg.h"
 #include "CryIf.h"
+#include "Crypto_Cfg.h"
 #include "Crypto_Cmac.h"
 #include "Det.h"
 
@@ -196,6 +197,22 @@ Std_ReturnType Csm_KeyElementSet(uint32 keyId, uint32 keyElementId,
         return E_NOT_OK;
     }
 
+    if (keyId >= CRYPTO_KEY_COUNT)
+    {
+        /* [SWS_Csm_91011]: keyId を持つ Csm API は、下位層（Crypto.c）に
+         * 委ねず Csm 自身が範囲チェックして CSM_E_PARAM_HANDLE を報告
+         * しなければならない（2026-09 是正。以前は Crypto_KeyElementSet()
+         * 自身の CRYPTO_E_PARAM_HANDLE 報告に委ねていたが、それは Crypto
+         * 自身の診断義務であって Csm 自身の診断義務を代替しない。
+         * Csm_MacGenerate() の jobId 検証と同じ理由で、Csm_KeyElementSet()
+         * には Csm 独自の鍵 ID 空間が無く CryIf/Crypto と共有しているため
+         * CRYPTO_KEY_COUNT を直接参照する（Csm_PBCfg.c の CryptoKeyId
+         * フィールドが既に CRYPTO_KEY_* を直接使っているのと同じ方針）。 */
+        DET_LOGW(TAG, "KeyElementSet W: keyId=%u out of range", (unsigned)keyId);
+        Det_ReportError(CSM_MODULE_ID, 0U, CSM_API_ID_KEY_ELEMENT_SET, CSM_E_PARAM_HANDLE);
+        return E_NOT_OK;
+    }
+
     if (!CryIf_IsInitialized())
     {
         /* [SWS_Csm_91010]（Csm_MacGenerate と同じ理由。2026-09 是正） */
@@ -216,6 +233,14 @@ Std_ReturnType Csm_KeySetValid(uint32 keyId)
     if (!Csm_Initialized)
     {
         Det_ReportError(CSM_MODULE_ID, 0U, CSM_API_ID_KEY_SET_VALID, CSM_E_UNINIT);
+        return E_NOT_OK;
+    }
+
+    if (keyId >= CRYPTO_KEY_COUNT)
+    {
+        /* [SWS_Csm_91011]（Csm_KeyElementSet と同じ理由。2026-09 是正） */
+        DET_LOGW(TAG, "KeySetValid W: keyId=%u out of range", (unsigned)keyId);
+        Det_ReportError(CSM_MODULE_ID, 0U, CSM_API_ID_KEY_SET_VALID, CSM_E_PARAM_HANDLE);
         return E_NOT_OK;
     }
 
@@ -244,6 +269,14 @@ Std_ReturnType Csm_KeyElementGet(uint32 keyId, uint32 keyElementId,
     if (keyPtr == NULL || keyLengthPtr == NULL)
     {
         Det_ReportError(CSM_MODULE_ID, 0U, CSM_API_ID_KEY_ELEMENT_GET, CSM_E_PARAM_POINTER);
+        return E_NOT_OK;
+    }
+
+    if (keyId >= CRYPTO_KEY_COUNT)
+    {
+        /* [SWS_Csm_91011]（Csm_KeyElementSet と同じ理由。2026-09 是正） */
+        DET_LOGW(TAG, "KeyElementGet W: keyId=%u out of range", (unsigned)keyId);
+        Det_ReportError(CSM_MODULE_ID, 0U, CSM_API_ID_KEY_ELEMENT_GET, CSM_E_PARAM_HANDLE);
         return E_NOT_OK;
     }
 
