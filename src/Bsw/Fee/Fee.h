@@ -113,14 +113,19 @@ void Fee_SetMode(MemIf_ModeType Mode);
  *
  * \details Os スケジューラ開始前（Fee_MainFunction() を誰も呼べない期間）の
  *          利用のみを想定した同期 API。ブロッキングする。
+ *          ジョブ処理中（MEMIF_BUSY）の呼び出しは拒否する（[SWS_Fee_00133]/
+ *          [SWS_Fee_00172]。2026-09 追加。Fee_Write() には既にあった
+ *          チェックが Fee_Read() には欠けていた非対称を是正）。
  *
  * \param[in]   Address        読み込み開始アドレス。
  * \param[out]  DataBufferPtr  読み込み先バッファ。NULL 禁止。
  * \param[in]   Length         読み込むバイト数。0 禁止。
  *
  * \retval  E_OK      正常完了。
- * \retval  E_NOT_OK  未初期化、NULL、または Length=0。
+ * \retval  E_NOT_OK  未初期化、NULL、Length=0、またはジョブ処理中
+ *                    （[SWS_Fee_00133]）。
  *
+ * \AUTOSARReq     {SWS_Fee_00133, SWS_Fee_00172}
  * \ServiceID      {0x02}
  * \Reentrancy     {Reentrant}
  * \Synchronicity  {Synchronous}
@@ -144,8 +149,10 @@ Std_ReturnType Fee_Read(uint16 Address, uint8* DataBufferPtr, uint16 Length);
  * \param[in]  Length         書き込むバイト数。0 禁止。
  *
  * \retval  E_OK      ジョブを受け付けた（書き込み完了を意味しない）。
- * \retval  E_NOT_OK  未初期化、NULL、Length=0、または既にジョブ処理中。
+ * \retval  E_NOT_OK  未初期化、NULL、Length=0、またはジョブ処理中
+ *                    （[SWS_Fee_00144]）。
  *
+ * \AUTOSARReq     {SWS_Fee_00144, SWS_Fee_00174}
  * \ServiceID      {0x03}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Asynchronous}

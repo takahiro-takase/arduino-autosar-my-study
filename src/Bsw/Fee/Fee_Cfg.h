@@ -37,7 +37,9 @@
 #define FEE_E_UNINIT             0x01U  /**< 未初期化時の API 呼び出し */
 #define FEE_E_PARAM_POINTER      0x04U  /**< NULL ポインタ            */
 #define FEE_E_INVALID_BLOCK_LEN  0x05U  /**< Length=0                 */
-#define FEE_E_BUSY               0x06U  /**< 既にジョブ処理中に新規 Write を要求（Runtime Error） */
+#define FEE_E_BUSY               0x06U  /**< ジョブ処理中に新規 Read/Write を要求（Runtime Error、
+                                          *   [SWS_Fee_00133]/[SWS_Fee_00144]。2026-09 追記:
+                                          *   Fee_Read() も報告するようになった） */
 #define FEE_E_INVALID_CANCEL     0x08U  /**< ジョブが無いのに Fee_Cancel() を呼んだ（Runtime Error、
                                           *   [SWS_Fee_00184]。2026-09 追加） */
 
