@@ -38,6 +38,8 @@
 #define FEE_E_PARAM_POINTER      0x04U  /**< NULL ポインタ            */
 #define FEE_E_INVALID_BLOCK_LEN  0x05U  /**< Length=0                 */
 #define FEE_E_BUSY               0x06U  /**< 既にジョブ処理中に新規 Write を要求（Runtime Error） */
+#define FEE_E_INVALID_CANCEL     0x08U  /**< ジョブが無いのに Fee_Cancel() を呼んだ（Runtime Error、
+                                          *   [SWS_Fee_00184]。2026-09 追加） */
 
 /** ApiId（各関数の Doxygen \ServiceID タグと一致させること。実装している API は
  *  [SWS_Fee_00084]〜[SWS_Fee_00191] の Service ID[hex] と一致させた。
