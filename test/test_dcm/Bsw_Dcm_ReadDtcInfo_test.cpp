@@ -245,6 +245,25 @@ TEST_F(Bsw_Dcm_ReadDtcInfo_Test, ReadDataById_OK_VinReturnsSeventeenBytesMatchin
         EXPECT_EQ(FakeCanTp_TxBuf[3U + i], expectedVin[i]) << "byte " << (unsigned)i;
 }
 
+TEST_F(Bsw_Dcm_ReadDtcInfo_Test, ReadDataById_NG_TooShortRequestReturnsIncorrectMessageLength)
+{
+    /* 準備 (Arrange): DID の下位バイトが無い ([0x22, 0xF1] のみ、3バイト必須) */
+    uint8 req[2] = { DCM_SID_READ_DATA, (uint8)(DCM_DID_VIN >> 8U) };
+
+    /* 実行 (Act) */
+    PduInfoType pdu = { req, sizeof(req) };
+    Dcm_ComIndication(0U, &pdu);
+
+    /* 評価 (Assert): [0x7F, 0x22, 0x13 incorrectMessageLength]
+     * ([SWS_Dcm_00272]: DSP submoduleは要求長・形式不正時にNRC 0x13を
+     * 返す。2026-09是正: 従来は0x22 conditionsNotCorrectを返していた) */
+    ASSERT_EQ(FakeCanTp_TransmitCount, 1U);
+    ASSERT_EQ(FakeCanTp_TxLength, 3U);
+    EXPECT_EQ(FakeCanTp_TxBuf[0], DCM_SID_NEGATIVE_RESP);
+    EXPECT_EQ(FakeCanTp_TxBuf[1], DCM_SID_READ_DATA);
+    EXPECT_EQ(FakeCanTp_TxBuf[2], DCM_NRC_INCORRECT_MESSAGE_LENGTH);
+}
+
 // ------------------------------------------------------------
 // Dcm_GetSesCtrlType/Dcm_GetSecurityLevel（Dcm_Cbk.c 内部の static フィールド
 // Dcm_CurrentSession/Dcm_SecurityLevel を読み出すだけの新規 getter API）
@@ -518,11 +537,73 @@ TEST_F(Bsw_Dcm_ReadDtcInfo_Test, ReadDtcInfo_NG_TooShortRequestReturnsNegativeRe
     /* 実行 (Act) */
     SendReadDtcInfo(req, sizeof(req));
 
-    /* 評価 (Assert): [0x7F, 0x19, 0x22 conditionsNotCorrect] */
+    /* 評価 (Assert): [0x7F, 0x19, 0x13 incorrectMessageLength]
+     * ([SWS_Dcm_00696]: DSD submoduleは要求長が最小長未満ならNRC 0x13を
+     * 返す。2026-09是正: 従来は0x22を返していた) */
     ASSERT_EQ(FakeCanTp_TransmitCount, 1U);
     ASSERT_EQ(FakeCanTp_TxLength, 3U);
     EXPECT_EQ(FakeCanTp_TxBuf[0], DCM_SID_NEGATIVE_RESP);
-    EXPECT_EQ(FakeCanTp_TxBuf[2], DCM_NRC_CONDITIONS_NOT_CORRECT);
+    EXPECT_EQ(FakeCanTp_TxBuf[2], DCM_NRC_INCORRECT_MESSAGE_LENGTH);
+}
+
+TEST_F(Bsw_Dcm_ReadDtcInfo_Test, ReadDtcCount_NG_TooShortRequestReturnsIncorrectMessageLength)
+{
+    /* 準備 (Arrange): statusMask バイトが無い ([0x19, 0x01] のみ、3バイト必須) */
+    uint8 req[2] = { DCM_SID_READ_DTC_INFO, DCM_DTC_SUBFUNC_REPORT_COUNT };
+
+    /* 実行 (Act) */
+    SendReadDtcInfo(req, sizeof(req));
+
+    /* 評価 (Assert): [0x7F, 0x19, 0x13 incorrectMessageLength] ([SWS_Dcm_00696]) */
+    ASSERT_EQ(FakeCanTp_TransmitCount, 1U);
+    ASSERT_EQ(FakeCanTp_TxLength, 3U);
+    EXPECT_EQ(FakeCanTp_TxBuf[0], DCM_SID_NEGATIVE_RESP);
+    EXPECT_EQ(FakeCanTp_TxBuf[2], DCM_NRC_INCORRECT_MESSAGE_LENGTH);
+}
+
+TEST_F(Bsw_Dcm_ReadDtcInfo_Test, ReadDtcByMask_NG_TooShortRequestReturnsIncorrectMessageLength)
+{
+    /* 準備 (Arrange): statusMask バイトが無い ([0x19, 0x02] のみ、3バイト必須) */
+    uint8 req[2] = { DCM_SID_READ_DTC_INFO, DCM_DTC_SUBFUNC_REPORT_BY_MASK };
+
+    /* 実行 (Act) */
+    SendReadDtcInfo(req, sizeof(req));
+
+    /* 評価 (Assert): [0x7F, 0x19, 0x13 incorrectMessageLength] ([SWS_Dcm_00696]) */
+    ASSERT_EQ(FakeCanTp_TransmitCount, 1U);
+    ASSERT_EQ(FakeCanTp_TxLength, 3U);
+    EXPECT_EQ(FakeCanTp_TxBuf[0], DCM_SID_NEGATIVE_RESP);
+    EXPECT_EQ(FakeCanTp_TxBuf[2], DCM_NRC_INCORRECT_MESSAGE_LENGTH);
+}
+
+TEST_F(Bsw_Dcm_ReadDtcInfo_Test, ReadDtcSnapshot_NG_TooShortRequestReturnsIncorrectMessageLength)
+{
+    /* 準備 (Arrange): DTC/recordNumberが揃わない ([0x19, 0x04, DTC_H, DTC_M]、6バイト必須) */
+    uint8 req[4] = { DCM_SID_READ_DTC_INFO, DCM_DTC_SUBFUNC_REPORT_SNAPSHOT, 0x00U, 0x01U };
+
+    /* 実行 (Act) */
+    SendReadDtcInfo(req, sizeof(req));
+
+    /* 評価 (Assert): [0x7F, 0x19, 0x13 incorrectMessageLength] ([SWS_Dcm_00696]) */
+    ASSERT_EQ(FakeCanTp_TransmitCount, 1U);
+    ASSERT_EQ(FakeCanTp_TxLength, 3U);
+    EXPECT_EQ(FakeCanTp_TxBuf[0], DCM_SID_NEGATIVE_RESP);
+    EXPECT_EQ(FakeCanTp_TxBuf[2], DCM_NRC_INCORRECT_MESSAGE_LENGTH);
+}
+
+TEST_F(Bsw_Dcm_ReadDtcInfo_Test, ReadDtcExtendedData_NG_TooShortRequestReturnsIncorrectMessageLength)
+{
+    /* 準備 (Arrange): DTC/recordNumberが揃わない ([0x19, 0x06, DTC_H, DTC_M]、6バイト必須) */
+    uint8 req[4] = { DCM_SID_READ_DTC_INFO, DCM_DTC_SUBFUNC_REPORT_EXTDATA, 0x00U, 0x01U };
+
+    /* 実行 (Act) */
+    SendReadDtcInfo(req, sizeof(req));
+
+    /* 評価 (Assert): [0x7F, 0x19, 0x13 incorrectMessageLength] ([SWS_Dcm_00696]) */
+    ASSERT_EQ(FakeCanTp_TransmitCount, 1U);
+    ASSERT_EQ(FakeCanTp_TxLength, 3U);
+    EXPECT_EQ(FakeCanTp_TxBuf[0], DCM_SID_NEGATIVE_RESP);
+    EXPECT_EQ(FakeCanTp_TxBuf[2], DCM_NRC_INCORRECT_MESSAGE_LENGTH);
 }
 
 }  // namespace
