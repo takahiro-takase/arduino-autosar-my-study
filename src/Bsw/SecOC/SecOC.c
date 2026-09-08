@@ -323,8 +323,19 @@ void SecOC_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
                                                  authInput, authInputLen,
                                                  &secured[cfg->MacOffset], (uint32)cfg->MacTxLength * 8U,
                                                  &verifyResult);
+    if (csmRet != E_OK)
+    {
+        /* [SWS_SecOC_00166]: CSM から認証/検証サービス自体を最終的に得られ
+         * なかった場合（MAC 不一致という正常な検証結果とは別の、下位層
+         * （Csm/CryIf/Crypto）自体の異常）は SECOC_E_CRYPTO_FAILURE を
+         * 報告する（2026-09 追加。以前はこの区別をせず両者を「MAC
+         * verification failed」の WARN ログに一括していた）。 */
+        DET_LOGE(TAG, "RxInd E: iPdu=%u Csm_MacVerify() service failed", (unsigned)RxPduId);
+        Det_ReportError(SECOC_MODULE_ID, 0U, SECOC_API_ID_RX_INDICATION, SECOC_E_CRYPTO_FAILURE);
+    }
+
     const uint8 macOk = (csmRet == E_OK && verifyResult == CRYPTO_E_VER_OK) ? 1U : 0U;
-    if (macOk == 0U)
+    if (macOk == 0U && csmRet == E_OK)
     {
         DET_LOGW(TAG, "RxInd W: iPdu=%u MAC verification failed (tampered or wrong key)",
                  (unsigned)RxPduId);
