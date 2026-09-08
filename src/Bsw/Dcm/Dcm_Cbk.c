@@ -1691,21 +1691,36 @@ static void Dcm_CommControlReset(void)
 static void Dcm_HandleCommunicationControl(const uint8* uds, uint8 udsLen)
 {
     DET_LOGT(TAG, "called");
-    if (udsLen != 3U)
+    /* [SWS_Dcm_00273]/[SWS_Dcm_00696]: サブ機能サポート確認は最小メッセージ長
+     * 確認より先に行う仕様の処理順序（7.4.4.4節）。まず controlType
+     * (uds[1]) を読める最小長だけを確認し、その妥当性を判定してから、
+     * communicationType (uds[2]) を含む要求全体の長さを確認する
+     * (2026-09 是正: 以前は udsLen != 3U を先に判定していたため、
+     * 「長さ超過かつ controlType 不正」な要求に対し本来の NRC 0x12
+     * ではなく 0x13 を返していた)。 */
+    if (udsLen < 2U)
     {
         Dcm_SendNegativeResponse(DCM_SID_COMM_CONTROL, DCM_NRC_INCORRECT_MESSAGE_LENGTH);
         return;
     }
 
     /* bit7: suppressPosRspMsgIndicationBit (本実装では無視。0x10 と同じ方針) */
-    uint8 controlType     = uds[1] & 0x7FU;
-    uint8 communicationType = uds[2];
+    uint8 controlType = uds[1] & 0x7FU;
 
     if (controlType > DCM_COMMCTRL_DISABLE_RX_TX)
     {
         Dcm_SendNegativeResponse(DCM_SID_COMM_CONTROL, DCM_NRC_SUB_FUNC_NOT_SUPPORTED);
         return;
     }
+
+    if (udsLen != 3U)
+    {
+        Dcm_SendNegativeResponse(DCM_SID_COMM_CONTROL, DCM_NRC_INCORRECT_MESSAGE_LENGTH);
+        return;
+    }
+
+    uint8 communicationType = uds[2];
+
     if (communicationType != DCM_COMMTYPE_NORMAL
         && communicationType != DCM_COMMTYPE_NM
         && communicationType != DCM_COMMTYPE_NORMAL_AND_NM)
@@ -1802,7 +1817,13 @@ static void Dcm_DTCSettingReset(void)
 static void Dcm_HandleControlDTCSetting(const uint8* uds, uint8 udsLen)
 {
     DET_LOGT(TAG, "called");
-    if (udsLen != 2U)
+    /* [SWS_Dcm_00273]/[SWS_Dcm_00696]（Dcm_HandleCommunicationControl と同じ
+     * 理由。2026-09 是正）: まず subFunc (uds[1]) を読める最小長だけを
+     * 確認し妥当性を判定してから、[SWS_Dcm_01399] 代用の optionRecord
+     * 超過チェック（本関数冒頭のコメント参照）を行う。以前は udsLen != 2U
+     * を先に判定していたため、「optionRecord 付きかつ subFunc 不正」な
+     * 要求に対し本来の NRC 0x12 ではなく 0x13 を返していた。 */
+    if (udsLen < 2U)
     {
         Dcm_SendNegativeResponse(DCM_SID_CONTROL_DTC_SETTING, DCM_NRC_INCORRECT_MESSAGE_LENGTH);
         return;
@@ -1814,6 +1835,14 @@ static void Dcm_HandleControlDTCSetting(const uint8* uds, uint8 udsLen)
     if (subFunc != DCM_DTCSETTING_ON && subFunc != DCM_DTCSETTING_OFF)
     {
         Dcm_SendNegativeResponse(DCM_SID_CONTROL_DTC_SETTING, DCM_NRC_SUB_FUNC_NOT_SUPPORTED);
+        return;
+    }
+
+    if (udsLen != 2U)
+    {
+        /* [SWS_Dcm_01399] 代用の optionRecord 超過チェック（本関数冒頭の
+         * コメント参照）。subFunc 妥当性確認の後に行う。 */
+        Dcm_SendNegativeResponse(DCM_SID_CONTROL_DTC_SETTING, DCM_NRC_INCORRECT_MESSAGE_LENGTH);
         return;
     }
 

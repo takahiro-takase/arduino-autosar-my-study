@@ -152,6 +152,21 @@ TEST_F(Bsw_Dcm_CommunicationControl_Test, NG_IncorrectLengthReturnsNegativeRespo
     EXPECT_EQ(FakeBswM_CallCount, 0U);
 }
 
+TEST_F(Bsw_Dcm_CommunicationControl_Test, NG_UnsupportedControlTypeWithWrongLengthPrefersSubFuncNrc)
+{
+    /* [SWS_Dcm_00273]/[SWS_Dcm_00696]: サブ機能サポート確認は最小メッセージ長
+     * 確認より先に行う処理順序（2026-09 是正）。controlType(uds[1])が
+     * 不正かつ communicationType(uds[2]) が欠けている(udsLen=2<3)場合でも、
+     * NRC 0x13(incorrectMessageLength)ではなく 0x12(subFunctionNotSupported)
+     * を返すべき。 */
+    uint8 req[2] = { DCM_SID_COMM_CONTROL, 0xFFU };
+    Send(req, sizeof(req));
+
+    EXPECT_EQ(FakeCanTp_TxBuf[0], 0x7FU);
+    EXPECT_EQ(FakeCanTp_TxBuf[2], DCM_NRC_SUB_FUNC_NOT_SUPPORTED);
+    EXPECT_EQ(FakeBswM_CallCount, 0U);
+}
+
 // ------------------------------------------------------------
 // Dcm_CommControlReset()（defaultSession への遷移で通信を初期状態へ戻す）
 // ------------------------------------------------------------
