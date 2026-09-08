@@ -39,6 +39,15 @@
 #define SECOC_E_PARAM_POINTER      0x01U
 #define SECOC_E_UNINIT             0x02U
 #define SECOC_E_INVALID_PDU_SDU_ID 0x03U
+#define SECOC_E_CRYPTO_FAILURE     0x04U  /**< [SWS_SecOC_00166]: CSM から認証/検証
+                                            *   サービス自体を得られなかった場合
+                                            *   （2026-09 追加。値は `pdftotext -table`
+                                            *   （-layout/無指定では表の行がずれて
+                                            *   誤読みしやすいことが判明。-table
+                                            *   モードで正しく行揃えされ、既存の
+                                            *   PARAM_POINTER=0x01/UNINIT=0x02/
+                                            *   INVALID_PDU_SDU_ID=0x03 との整合も
+                                            *   確認済み）で実測して確認済み） */
 
 /** ApiId（値は SWS 8.x 章の「Service ID[hex]」記載を実測して確認済み） */
 #define SECOC_API_ID_INIT              0x01U

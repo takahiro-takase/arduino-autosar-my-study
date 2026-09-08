@@ -71,10 +71,16 @@ void SecOC_DeInit(void);
  *          （検証されていないデータを上位層へ渡さないことが本モジュールの
  *          存在意義そのものであるため）。
  *
+ *          `Csm_MacVerify()` 自体がサービスを提供できなかった場合（MAC
+ *          不一致という正常な検証結果とは別の、下位層自体の異常）は
+ *          `SECOC_E_CRYPTO_FAILURE` を報告する（[SWS_SecOC_00166]。
+ *          2026-09 追加）。
+ *
  * \param[in]  RxPduId     検証対象の SecOC RX Secured I-PDU ID
  *                         （SecOC_RxPduConfigType.SecOCRxPduId と照合する）。
  * \param[in]  PduInfoPtr  受信した Secured I-PDU のデータと長さ。NULL 禁止。
  *
+ * \AUTOSARReq     {SWS_SecOC_00166}
  * \ServiceID      {0x42}
  * \Reentrancy     {Reentrant for different PduIds. Non reentrant for the same PduId.}
  * \Synchronicity  {Synchronous}
