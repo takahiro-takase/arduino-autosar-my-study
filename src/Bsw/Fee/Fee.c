@@ -97,6 +97,15 @@ Std_ReturnType Fee_Read(uint16 Address, uint8* DataBufferPtr, uint16 Length)
         Det_ReportError(FEE_MODULE_ID, 0U, FEE_API_ID_READ, FEE_E_INVALID_BLOCK_LEN);
         return E_NOT_OK;
     }
+    if (Fee_Job.Active)
+    {
+        /* [SWS_Fee_00133]/[SWS_Fee_00172]: ジョブ処理中の読み込み要求は
+         * 拒否する（実行時エラー、[SWS_Fee_00162]により module status/job
+         * result は変更しない）。2026-09 追加。Fee_Write() には既に同種の
+         * チェックがあったが Fee_Read() には欠けていた（非対称）。 */
+        Det_ReportError(FEE_MODULE_ID, 0U, FEE_API_ID_READ, FEE_E_BUSY);
+        return E_NOT_OK;
+    }
 
     Fee_Hw_ReadBlock(DataBufferPtr, Address, Length);
     return E_OK;
