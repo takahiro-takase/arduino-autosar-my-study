@@ -49,6 +49,25 @@ void CryIf_Init(void);
 void CryIf_GetVersionInfo(Std_VersionInfoType* versioninfo);
 
 /**
+ * \brief   CryIf モジュールが初期化済みかを返す。
+ *
+ * \details AUTOSAR 標準の SWS_CryptoInterface には存在しない本プロジェクト
+ *          独自の拡張関数（2026-09 追加）。上位層 Csm が [SWS_Csm_91010]
+ *          （「CSM API が未初期化の CryIf を呼ぶ場合、操作を実行せず
+ *          CSM_E_SERVICE_NOT_STARTED を DET 報告しなければならない」）を
+ *          満たすために、CryIf_ProcessJob() 等を実際に呼ぶ前に状態を
+ *          問い合わせる目的で新設した（Csm.c 参照）。本関数自体は前提条件を
+ *          持たないため DET 報告は行わない（常に成功する単純な状態参照）。
+ *
+ * \return  TRUE: 初期化済み。FALSE: 未初期化。
+ *
+ * \ServiceID      {0x02}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+boolean CryIf_IsInitialized(void);
+
+/**
  * \brief   ジョブを対応する Crypto Driver Object へディスパッチする。
  *
  * \details 本プロジェクトは単一 Crypto Driver Object のみのため、

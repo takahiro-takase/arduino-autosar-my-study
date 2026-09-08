@@ -69,10 +69,12 @@ void Csm_GetVersionInfo(Std_VersionInfoType* versioninfo);
  *                              バイト数（本プロジェクトでは常に in と同じ）。NULL 禁止。
  *
  * \retval  E_OK      MAC を生成した。
- * \retval  E_NOT_OK  未初期化、NULL ポインタ、jobId が範囲外/種別不一致、
+ * \retval  E_NOT_OK  未初期化（Csm 自身、または下位層 CryIf が未初期化。
+ *                    後者は [SWS_Csm_91010] により CSM_E_SERVICE_NOT_STARTED
+ *                    を報告する）、NULL ポインタ、jobId が範囲外/種別不一致、
  *                    または要求長が CMAC 出力長(16byte)を超える。
  *
- * \AUTOSARReq     {SWS_Csm_00982}
+ * \AUTOSARReq     {SWS_Csm_00982, SWS_Csm_91010}
  * \ServiceID      {0x60}
  * \Reentrancy     {Reentrant}
  * \Synchronicity  {Synchronous}
@@ -102,10 +104,12 @@ Std_ReturnType Csm_MacGenerate(uint32 jobId, Crypto_OperationModeType mode,
  * \param[out]  verifyPtr   検証結果の格納先。NULL 禁止。
  *
  * \retval  E_OK      検証処理を実行した（結果は verifyPtr 参照）。
- * \retval  E_NOT_OK  未初期化、NULL ポインタ、jobId が範囲外/種別不一致、
- *                    または macLength が 8 の倍数でない/CMAC 出力長を超える。
+ * \retval  E_NOT_OK  未初期化（Csm_MacGenerate と同じく Csm/CryIf いずれの
+ *                    未初期化も含む、[SWS_Csm_91010]）、NULL ポインタ、
+ *                    jobId が範囲外/種別不一致、または macLength が 8 の
+ *                    倍数でない/CMAC 出力長を超える。
  *
- * \AUTOSARReq     {SWS_Csm_01050}
+ * \AUTOSARReq     {SWS_Csm_01050, SWS_Csm_91010}
  * \ServiceID      {0x61}
  * \Reentrancy     {Reentrant}
  * \Synchronicity  {Synchronous}
@@ -129,9 +133,10 @@ Std_ReturnType Csm_MacVerify(uint32 jobId, Crypto_OperationModeType mode,
  * \param[in]  keyLength     keyPtr のバイト長。CRYPTO_AES128_KEY_SIZE(16) 以外は拒否。
  *
  * \retval  E_OK      鍵を書き換えた。
- * \retval  E_NOT_OK  未初期化、NULL、または下位層が失敗。
+ * \retval  E_NOT_OK  未初期化（Csm/CryIf いずれか、[SWS_Csm_91010]）、
+ *                    NULL、または下位層が失敗。
  *
- * \AUTOSARReq     {SWS_Csm_00957}
+ * \AUTOSARReq     {SWS_Csm_00957, SWS_Csm_91010}
  * \ServiceID      {0x78}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
@@ -147,9 +152,10 @@ Std_ReturnType Csm_KeyElementSet(uint32 keyId, uint32 keyElementId,
  * \param[in]  keyId  有効化する鍵の ID（CRYPTO_KEY_* 定数）。
  *
  * \retval  E_OK      有効化した。
- * \retval  E_NOT_OK  未初期化、または下位層が失敗。
+ * \retval  E_NOT_OK  未初期化（Csm/CryIf いずれか、[SWS_Csm_91010]）、
+ *                    または下位層が失敗。
  *
- * \AUTOSARReq     {SWS_Csm_00958}
+ * \AUTOSARReq     {SWS_Csm_00958, SWS_Csm_91010}
  * \ServiceID      {0x67}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
@@ -169,9 +175,10 @@ Std_ReturnType Csm_KeySetValid(uint32 keyId);
  *                                 書き込んだバイト数。NULL 禁止、値0も禁止。
  *
  * \retval  E_OK      鍵要素を読み出した。
- * \retval  E_NOT_OK  未初期化、NULL、`*keyLengthPtr`=0、または下位層が失敗。
+ * \retval  E_NOT_OK  未初期化（Csm/CryIf いずれか、[SWS_Csm_91010]）、
+ *                    NULL、`*keyLengthPtr`=0、または下位層が失敗。
  *
- * \AUTOSARReq     {SWS_Csm_00959}
+ * \AUTOSARReq     {SWS_Csm_00959, SWS_Csm_91010}
  * \ServiceID      {0x68}
  * \Reentrancy     {Reentrant}
  * \Synchronicity  {Synchronous}

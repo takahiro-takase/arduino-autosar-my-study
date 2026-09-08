@@ -96,6 +96,18 @@ Std_ReturnType Csm_MacGenerate(uint32 jobId, Crypto_OperationModeType mode,
         return E_NOT_OK;
     }
 
+    if (!CryIf_IsInitialized())
+    {
+        /* [SWS_Csm_91010]: 下位層(CryIf)が未初期化な場合、操作を実行せず
+         * Csm 自身が CSM_E_SERVICE_NOT_STARTED を報告しなければならない
+         * （2026-09 是正。以前は CryIf_ProcessJob() 自身が報告する
+         * CRYIF_E_UNINIT に委ねていたが、それは CryIf 自身の診断義務であって
+         * Csm 自身の診断義務を代替しない）。 */
+        DET_LOGW(TAG, "MacGenerate W: CryIf not initialized");
+        Det_ReportError(CSM_MODULE_ID, 0U, CSM_API_ID_MAC_GENERATE, CSM_E_SERVICE_NOT_STARTED);
+        return E_NOT_OK;
+    }
+
     Crypto_JobType job;
     job.jobId           = jobId;
     job.service          = CRYPTO_MACGENERATE;
@@ -107,8 +119,6 @@ Std_ReturnType Csm_MacGenerate(uint32 jobId, Crypto_OperationModeType mode,
     job.macLength        = *macLengthPtr;
     job.verifyResultPtr  = NULL;
 
-    /* [SWS_Csm_91010] 相当: CryIf 未初期化なら CryIf_ProcessJob() 自身が
-     * CRYIF_E_UNINIT を報告し E_NOT_OK を返す。ここでは戻り値をそのまま返す。 */
     return CryIf_ProcessJob(CRYIF_CHANNEL_ID, &job);
 }
 
@@ -148,6 +158,14 @@ Std_ReturnType Csm_MacVerify(uint32 jobId, Crypto_OperationModeType mode,
         return E_NOT_OK;
     }
 
+    if (!CryIf_IsInitialized())
+    {
+        /* [SWS_Csm_91010]（Csm_MacGenerate と同じ理由。2026-09 是正） */
+        DET_LOGW(TAG, "MacVerify W: CryIf not initialized");
+        Det_ReportError(CSM_MODULE_ID, 0U, CSM_API_ID_MAC_VERIFY, CSM_E_SERVICE_NOT_STARTED);
+        return E_NOT_OK;
+    }
+
     Crypto_JobType job;
     job.jobId           = jobId;
     job.service          = CRYPTO_MACVERIFY;
@@ -178,6 +196,14 @@ Std_ReturnType Csm_KeyElementSet(uint32 keyId, uint32 keyElementId,
         return E_NOT_OK;
     }
 
+    if (!CryIf_IsInitialized())
+    {
+        /* [SWS_Csm_91010]（Csm_MacGenerate と同じ理由。2026-09 是正） */
+        DET_LOGW(TAG, "KeyElementSet W: CryIf not initialized");
+        Det_ReportError(CSM_MODULE_ID, 0U, CSM_API_ID_KEY_ELEMENT_SET, CSM_E_SERVICE_NOT_STARTED);
+        return E_NOT_OK;
+    }
+
     /* [SWS_Csm_01002]: 単一 CryIf チャネルへの実質パススルー。keyId は
      * CryIf 側の cryIfKeyId へそのまま渡す（本プロジェクトは Csm/CryIf/Crypto
      * を通じて鍵 ID 空間を分割していない）。 */
@@ -190,6 +216,14 @@ Std_ReturnType Csm_KeySetValid(uint32 keyId)
     if (!Csm_Initialized)
     {
         Det_ReportError(CSM_MODULE_ID, 0U, CSM_API_ID_KEY_SET_VALID, CSM_E_UNINIT);
+        return E_NOT_OK;
+    }
+
+    if (!CryIf_IsInitialized())
+    {
+        /* [SWS_Csm_91010]（Csm_MacGenerate と同じ理由。2026-09 是正） */
+        DET_LOGW(TAG, "KeySetValid W: CryIf not initialized");
+        Det_ReportError(CSM_MODULE_ID, 0U, CSM_API_ID_KEY_SET_VALID, CSM_E_SERVICE_NOT_STARTED);
         return E_NOT_OK;
     }
 
@@ -210,6 +244,14 @@ Std_ReturnType Csm_KeyElementGet(uint32 keyId, uint32 keyElementId,
     if (keyPtr == NULL || keyLengthPtr == NULL)
     {
         Det_ReportError(CSM_MODULE_ID, 0U, CSM_API_ID_KEY_ELEMENT_GET, CSM_E_PARAM_POINTER);
+        return E_NOT_OK;
+    }
+
+    if (!CryIf_IsInitialized())
+    {
+        /* [SWS_Csm_91010]（Csm_MacGenerate と同じ理由。2026-09 是正） */
+        DET_LOGW(TAG, "KeyElementGet W: CryIf not initialized");
+        Det_ReportError(CSM_MODULE_ID, 0U, CSM_API_ID_KEY_ELEMENT_GET, CSM_E_SERVICE_NOT_STARTED);
         return E_NOT_OK;
     }
 

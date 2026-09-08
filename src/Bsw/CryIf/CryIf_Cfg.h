@@ -38,6 +38,15 @@
 #define CRYIF_API_ID_KEY_ELEMENT_GET   0x06U
 #define CRYIF_API_ID_PROCESS_JOB       0x03U
 
+/* CryIf_IsInitialized()（AUTOSAR標準のSWS_CryptoInterfaceには存在しない
+ * 本プロジェクト独自の拡張API、[SWS_Csm_91010]対応のため2026-09追加）は
+ * DET報告を一切行わないため、他の *_API_ID_* 定数と異なり ApiId 定数は
+ * ここでは定義しない（WdgM_ResumeSupervision と同じ方針、その
+ * \ServiceID {0x0a} も専用定数を持たない）。CryIf.h/.c の Doxygen コメントに
+ * \ServiceID {0x02} と直接記載する（実仕様は 0x00〜0x01, 0x03〜0x11 を
+ * 使用済みで 0x02 のみ未使用。docs/autosar/4.3.1/AUTOSAR_SWS_CryptoInterface.pdf
+ * を実測して確認済み）。 */
+
 /** バージョン情報（Com/E2EXf/PduR 等の既存モジュールと同じ命名規則） */
 #define CRYIF_VENDOR_ID          0U
 #define CRYIF_SW_MAJOR_VERSION   1U
