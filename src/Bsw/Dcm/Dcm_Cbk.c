@@ -675,7 +675,7 @@ static void Dcm_HandleSessionControl(const uint8* uds, uint8 udsLen)
     DET_LOGT(TAG, "called");
     if (udsLen < 2U)
     {
-        Dcm_SendNegativeResponse(DCM_SID_SESSION_CTRL, DCM_NRC_CONDITIONS_NOT_CORRECT);
+        Dcm_SendNegativeResponse(DCM_SID_SESSION_CTRL, DCM_NRC_INCORRECT_MESSAGE_LENGTH);
         return;
     }
 
@@ -732,7 +732,7 @@ static void Dcm_HandleEcuReset(const uint8* uds, uint8 udsLen)
     DET_LOGT(TAG, "called");
     if (udsLen < 2U)
     {
-        Dcm_SendNegativeResponse(DCM_SID_ECU_RESET, DCM_NRC_CONDITIONS_NOT_CORRECT);
+        Dcm_SendNegativeResponse(DCM_SID_ECU_RESET, DCM_NRC_INCORRECT_MESSAGE_LENGTH);
         return;
     }
 
@@ -794,7 +794,7 @@ static void Dcm_HandleClearDtc(const uint8* uds, uint8 udsLen)
 
     if (udsLen < 4U)
     {
-        Dcm_SendNegativeResponse(DCM_SID_CLEAR_DTC, DCM_NRC_CONDITIONS_NOT_CORRECT);
+        Dcm_SendNegativeResponse(DCM_SID_CLEAR_DTC, DCM_NRC_INCORRECT_MESSAGE_LENGTH);
         return;
     }
 
@@ -847,7 +847,7 @@ static void Dcm_HandleReadDtcCount(const uint8* uds, uint8 udsLen)
     DET_LOGT(TAG, "called");
     if (udsLen < 3U)
     {
-        Dcm_SendNegativeResponse(DCM_SID_READ_DTC_INFO, DCM_NRC_CONDITIONS_NOT_CORRECT);
+        Dcm_SendNegativeResponse(DCM_SID_READ_DTC_INFO, DCM_NRC_INCORRECT_MESSAGE_LENGTH);
         return;
     }
 
@@ -939,7 +939,7 @@ static void Dcm_HandleReadDtcByMask(const uint8* uds, uint8 udsLen)
     DET_LOGT(TAG, "called");
     if (udsLen < 3U)
     {
-        Dcm_SendNegativeResponse(DCM_SID_READ_DTC_INFO, DCM_NRC_CONDITIONS_NOT_CORRECT);
+        Dcm_SendNegativeResponse(DCM_SID_READ_DTC_INFO, DCM_NRC_INCORRECT_MESSAGE_LENGTH);
         return;
     }
 
@@ -1080,7 +1080,7 @@ static void Dcm_HandleReadDtcSnapshot(const uint8* uds, uint8 udsLen)
     DET_LOGT(TAG, "called");
     if (udsLen < 6U)
     {
-        Dcm_SendNegativeResponse(DCM_SID_READ_DTC_INFO, DCM_NRC_CONDITIONS_NOT_CORRECT);
+        Dcm_SendNegativeResponse(DCM_SID_READ_DTC_INFO, DCM_NRC_INCORRECT_MESSAGE_LENGTH);
         return;
     }
 
@@ -1145,7 +1145,7 @@ static void Dcm_HandleReadDtcExtendedData(const uint8* uds, uint8 udsLen)
     DET_LOGT(TAG, "called");
     if (udsLen < 6U)
     {
-        Dcm_SendNegativeResponse(DCM_SID_READ_DTC_INFO, DCM_NRC_CONDITIONS_NOT_CORRECT);
+        Dcm_SendNegativeResponse(DCM_SID_READ_DTC_INFO, DCM_NRC_INCORRECT_MESSAGE_LENGTH);
         return;
     }
 
@@ -1201,7 +1201,7 @@ static void Dcm_HandleReadDtcInfo(const uint8* uds, uint8 udsLen)
     DET_LOGT(TAG, "called");
     if (udsLen < 2U)
     {
-        Dcm_SendNegativeResponse(DCM_SID_READ_DTC_INFO, DCM_NRC_CONDITIONS_NOT_CORRECT);
+        Dcm_SendNegativeResponse(DCM_SID_READ_DTC_INFO, DCM_NRC_INCORRECT_MESSAGE_LENGTH);
         return;
     }
 
@@ -1312,7 +1312,7 @@ static void Dcm_HandleReadDataById(const uint8* uds, uint8 udsLen)
     DET_LOGT(TAG, "called");
     if (udsLen < 3U)
     {
-        Dcm_SendNegativeResponse(DCM_SID_READ_DATA, DCM_NRC_CONDITIONS_NOT_CORRECT);
+        Dcm_SendNegativeResponse(DCM_SID_READ_DATA, DCM_NRC_INCORRECT_MESSAGE_LENGTH);
         return;
     }
 
@@ -1417,7 +1417,7 @@ static void Dcm_HandleWriteDataById(const uint8* uds, uint8 udsLen)
 
     if (udsLen < 3U)
     {
-        Dcm_SendNegativeResponse(DCM_SID_WRITE_DATA, DCM_NRC_CONDITIONS_NOT_CORRECT);
+        Dcm_SendNegativeResponse(DCM_SID_WRITE_DATA, DCM_NRC_INCORRECT_MESSAGE_LENGTH);
         return;
     }
 
@@ -1533,7 +1533,7 @@ static void Dcm_HandleIoControl(const uint8* uds, uint8 udsLen)
     DET_LOGT(TAG, "called");
     if (udsLen < 4U)
     {
-        Dcm_SendNegativeResponse(DCM_SID_IO_CONTROL, DCM_NRC_CONDITIONS_NOT_CORRECT);
+        Dcm_SendNegativeResponse(DCM_SID_IO_CONTROL, DCM_NRC_INCORRECT_MESSAGE_LENGTH);
         return;
     }
 
@@ -1953,7 +1953,7 @@ static void Dcm_HandleSecuritySendKey(uint8 subFunc, const uint8* uds, uint8 uds
     DET_LOGT(TAG, "called");
     if (udsLen < 4U)
     {
-        Dcm_SendNegativeResponse(DCM_SID_SECURITY_ACCESS, DCM_NRC_CONDITIONS_NOT_CORRECT);
+        Dcm_SendNegativeResponse(DCM_SID_SECURITY_ACCESS, DCM_NRC_INCORRECT_MESSAGE_LENGTH);
         return;
     }
 
@@ -2014,7 +2014,7 @@ static void Dcm_HandleSecurityAccess(const uint8* uds, uint8 udsLen)
     DET_LOGT(TAG, "called");
     if (udsLen < 2U)
     {
-        Dcm_SendNegativeResponse(DCM_SID_SECURITY_ACCESS, DCM_NRC_CONDITIONS_NOT_CORRECT);
+        Dcm_SendNegativeResponse(DCM_SID_SECURITY_ACCESS, DCM_NRC_INCORRECT_MESSAGE_LENGTH);
         return;
     }
 
@@ -2177,7 +2177,7 @@ static void Dcm_HandleRoutineControl(const uint8* uds, uint8 udsLen)
     DET_LOGT(TAG, "called");
     if (udsLen < 4U)
     {
-        Dcm_SendNegativeResponse(DCM_SID_ROUTINE_CONTROL, DCM_NRC_CONDITIONS_NOT_CORRECT);
+        Dcm_SendNegativeResponse(DCM_SID_ROUTINE_CONTROL, DCM_NRC_INCORRECT_MESSAGE_LENGTH);
         return;
     }
 
@@ -2269,7 +2269,7 @@ static void Dcm_HandleRequestDownload(const uint8* uds, uint8 udsLen)
 
     if (udsLen < 3U)
     {
-        Dcm_SendNegativeResponse(DCM_SID_REQUEST_DOWNLOAD, DCM_NRC_CONDITIONS_NOT_CORRECT);
+        Dcm_SendNegativeResponse(DCM_SID_REQUEST_DOWNLOAD, DCM_NRC_INCORRECT_MESSAGE_LENGTH);
         return;
     }
 
@@ -2293,7 +2293,7 @@ static void Dcm_HandleRequestDownload(const uint8* uds, uint8 udsLen)
 
     if (udsLen != (uint8)(3U + addrBytes + sizeBytes))
     {
-        Dcm_SendNegativeResponse(DCM_SID_REQUEST_DOWNLOAD, DCM_NRC_CONDITIONS_NOT_CORRECT);
+        Dcm_SendNegativeResponse(DCM_SID_REQUEST_DOWNLOAD, DCM_NRC_INCORRECT_MESSAGE_LENGTH);
         return;
     }
 
@@ -2361,7 +2361,7 @@ static void Dcm_HandleTransferData(const uint8* uds, uint8 udsLen)
 
     if (udsLen < 2U)
     {
-        Dcm_SendNegativeResponse(DCM_SID_TRANSFER_DATA, DCM_NRC_CONDITIONS_NOT_CORRECT);
+        Dcm_SendNegativeResponse(DCM_SID_TRANSFER_DATA, DCM_NRC_INCORRECT_MESSAGE_LENGTH);
         return;
     }
 
