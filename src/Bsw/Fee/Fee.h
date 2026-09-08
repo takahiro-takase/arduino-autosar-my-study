@@ -214,10 +214,17 @@ MemIf_StatusType Fee_GetStatus(void);
 /**
  * \brief   直近のジョブ結果を取得する。
  *
+ * \details 未初期化時は FEE_E_UNINIT を報告し MEMIF_JOB_FAILED を返す
+ *          （[SWS_Fee_00125]。2026-09 追加。Fee_GetStatus() の
+ *          MEMIF_UNINIT 分岐と対称。以前はチェックが無く Fee_Init() 前でも
+ *          初期値 MEMIF_JOB_OK をそのまま返していた）。
+ *
  * \retval  MEMIF_JOB_OK       直近のジョブが正常完了した。
  * \retval  MEMIF_JOB_PENDING  ジョブが処理中。
  * \retval  MEMIF_JOB_CANCELED 直近のジョブが Fee_Cancel() で中断された。
+ * \retval  MEMIF_JOB_FAILED   未初期化（[SWS_Fee_00125]）。
  *
+ * \AUTOSARReq     {SWS_Fee_00125}
  * \ServiceID      {0x06}
  * \Reentrancy     {Reentrant}
  * \Synchronicity  {Synchronous}

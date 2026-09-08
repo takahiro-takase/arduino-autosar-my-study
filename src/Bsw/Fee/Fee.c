@@ -204,6 +204,15 @@ MemIf_StatusType Fee_GetStatus(void)
 MemIf_JobResultType Fee_GetJobResult(void)
 {
     DET_LOGT(TAG, "called");
+    if (!Fee_Initialized)
+    {
+        /* [SWS_Fee_00125]: 未初期化時は FEE_E_UNINIT を報告し
+         * MEMIF_JOB_FAILED を返す（2026-09 是正。以前はチェックが無く
+         * Fee_Init() 前でも初期値 MEMIF_JOB_OK をそのまま返していた。
+         * Fee_GetStatus() の MEMIF_UNINIT 分岐と対称にする）。 */
+        Det_ReportError(FEE_MODULE_ID, 0U, FEE_API_ID_GET_JOB_RESULT, FEE_E_UNINIT);
+        return MEMIF_JOB_FAILED;
+    }
     return Fee_LastResult;
 }
 
