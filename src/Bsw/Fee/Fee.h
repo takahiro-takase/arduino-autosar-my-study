@@ -179,11 +179,19 @@ Std_ReturnType Fee_WriteImmediate(uint16 Address, const uint8* DataBufferPtr, ui
  *
  * \details 呼び出し元（NvM）が処理中のブロックへ新たな書き込みを要求した際、
  *          書きかけの古いデータと新しいデータが混在した「ちぎれ書き」を
- *          防ぐために使う。中断後、ジョブ状態は IDLE に戻り
- *          Fee_GetJobResult() は MEMIF_JOB_CANCELED を返す。
- *          ジョブが無い状態で呼んでも副作用はない。
+ *          防ぐために使う。ジョブ処理中（MEMIF_BUSY）に呼ばれた場合のみ
+ *          中断を受理し、ジョブ状態は IDLE に戻り Fee_GetJobResult() は
+ *          MEMIF_JOB_CANCELED を返す（[SWS_Fee_00080]/[SWS_Fee_00081]）。
  *
- * \AUTOSARReq     {SWS_Fee_00089}
+ *          未初期化時は何も変更せず FEE_E_UNINIT を報告する
+ *          （[SWS_Fee_00124]）。ジョブが無い状態（MEMIF_BUSY でない）で
+ *          呼んだ場合も module status/job result を一切変更せず、実行時
+ *          エラー FEE_E_INVALID_CANCEL のみ報告する（[SWS_Fee_00164]/
+ *          [SWS_Fee_00184]。2026-09 是正: 以前は毎回無条件で
+ *          Fee_GetJobResult() の結果を MEMIF_JOB_CANCELED へ上書きしていた）。
+ *
+ * \AUTOSARReq     {SWS_Fee_00089, SWS_Fee_00080, SWS_Fee_00081,
+ *                  SWS_Fee_00124, SWS_Fee_00164, SWS_Fee_00184}
  * \ServiceID      {0x04}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}

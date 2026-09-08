@@ -170,6 +170,25 @@ Std_ReturnType Fee_WriteImmediate(uint16 Address, const uint8* DataBufferPtr, ui
 void Fee_Cancel(void)
 {
     DET_LOGT(TAG, "called");
+    if (!Fee_Initialized)
+    {
+        /* [SWS_Fee_00124]: 未初期化時は何も変更せず開発エラーのみ報告する。 */
+        Det_ReportError(FEE_MODULE_ID, 0U, FEE_API_ID_CANCEL, FEE_E_UNINIT);
+        return;
+    }
+
+    if (!Fee_Job.Active)
+    {
+        /* [SWS_Fee_00164]/[SWS_Fee_00184]: キャンセルすべきジョブが無い
+         * (MEMIF_BUSY でない) 場合は module status/job result を一切変更せず、
+         * 実行時エラー FEE_E_INVALID_CANCEL のみ報告する（2026-09 是正。
+         * 以前は呼び出しのたびに無条件で Fee_LastResult を上書きしていた）。 */
+        Det_ReportError(FEE_MODULE_ID, 0U, FEE_API_ID_CANCEL, FEE_E_INVALID_CANCEL);
+        return;
+    }
+
+    /* [SWS_Fee_00080]/[SWS_Fee_00081]: ジョブ処理中のみキャンセルを受理し、
+     * MEMIF_IDLE に戻す。 */
     Fee_Job.Active = 0U;
     Fee_LastResult = MEMIF_JOB_CANCELED;
 }

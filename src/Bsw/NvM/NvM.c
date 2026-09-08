@@ -315,12 +315,17 @@ static void NvM_LoadAndVerifyBlock(NvM_BlockIdType id, const NvM_BlockDescriptor
  *          自体は呼び出し元が既に更新済みであること）。
  *
  * \details 対象ブロックを NvM_MainFunction() が今まさに処理中だった場合は、
- *          MemIf_Cancel() で進行中のジョブを中断し、書き込み位置を先頭
- *          (データ本体フェーズ) へ巻き戻す。RAM ミラーは直前に最新値へ
- *          上書きされているため、巻き戻さずに続きから書くと古いバイトと
- *          新しいバイトが混在した不整合な内容が EEPROM に残ってしまう
- *          （ちぎれ書き）。冗長ブロックの場合はコピー選択（プライマリ／
- *          ミラー）も先頭（プライマリ）へ巻き戻す。
+ *          書き込み位置を先頭 (データ本体フェーズ) へ巻き戻す。RAM ミラーは
+ *          直前に最新値へ上書きされているため、巻き戻さずに続きから書くと
+ *          古いバイトと新しいバイトが混在した不整合な内容が EEPROM に
+ *          残ってしまう（ちぎれ書き）。冗長ブロックの場合はコピー選択
+ *          （プライマリ／ミラー）も先頭（プライマリ）へ巻き戻す。
+ *          Fee 側に実際に in-flight なジョブがある場合のみ MemIf_Cancel() で
+ *          中断する（2026-09 是正: NvM_ActiveBlockId が一致するだけで
+ *          無条件に呼ぶと、フェーズ遷移の合間で Fee が既に IDLE な一瞬に
+ *          当たった場合、Fee_Cancel() が [SWS_Fee_00184] 通り報告するように
+ *          なった FEE_E_INVALID_CANCEL が正常系で紛らわしく出てしまうため、
+ *          MemIf_GetStatus() で MEMIF_BUSY を確認してから呼ぶ）。
  *          まだ pending でないブロックのみ FIFO キューの末尾に積む
  *          （既に pending 中のブロックを再度積むと、投入順が崩れたり
  *          キューが枯渇前に重複エントリで溢れたりする）。
@@ -340,7 +345,18 @@ static void NvM_MarkPending(NvM_BlockIdType id)
 
     if (NvM_ActiveBlockId == id)
     {
-        MemIf_Cancel(MEMIF_DEVICE_0);
+        /* NvM_ActiveBlockId == id は「このブロックを処理中」という NvM 側の
+         * 論理状態に過ぎず、Fee 側に実際にジョブが in-flight (MEMIF_BUSY)
+         * かどうかとは独立している。NVM_PHASE_NONE 直後（キューから取り出した
+         * 直後、または冗長ブロックのプライマリ面完了直後で継続してミラー面の
+         * ジョブをまだ開始していない一瞬）は Fee 側は既に IDLE のことがある。
+         * MEMIF_BUSY でないときに MemIf_Cancel() を呼ぶと、Fee_Cancel() が
+         * [SWS_Fee_00184] 通り FEE_E_INVALID_CANCEL を報告するようになった
+         * （2026-09 是正）ため、完全に正常な NvM 内部の巻き戻しのたびに
+         * 紛らわしい実行時エラーログが出てしまう（/code-review で指摘）。
+         * 実際にキャンセルすべきジョブがあるときだけ呼ぶよう先に確認する。 */
+        if (MemIf_GetStatus(MEMIF_DEVICE_0) == MEMIF_BUSY)
+            MemIf_Cancel(MEMIF_DEVICE_0);
         NvM_ActivePhase        = NVM_PHASE_NONE;
         NvM_ActiveCopyIsMirror = 0U;
     }
