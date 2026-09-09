@@ -48,6 +48,18 @@
                                             *   PARAM_POINTER=0x01/UNINIT=0x02/
                                             *   INVALID_PDU_SDU_ID=0x03 との整合も
                                             *   確認済み）で実測して確認済み） */
+#define SECOC_E_INIT_FAILED        0x07U  /**< [SWS_SecOC_00101]: Development Error
+                                            *   Types 表。SecOC_Init() の設定パラメータ
+                                            *   不正時に報告する（2026-09 追加。7.9節の
+                                            *   未採番の本文にも同記載あり。
+                                            *   SWS_SecOC_00102はSECOC_E_UNINITの規定
+                                            *   でありこの値とは無関係、/code-reviewで
+                                            *   誤引用を指摘され独立検証の上修正）。
+                                            *   実仕様の表記は"SECCOC_E_INIT_FAILED"
+                                            *   (誤字)だが、他モジュール
+                                            *   (CSM_E_INIT_FAILED等)と同じ命名規則へ
+                                            *   正す。値は`pdftotext -table`で実測して
+                                            *   確認済み） */
 
 /** ApiId（値は SWS 8.x 章の「Service ID[hex]」記載を実測して確認済み） */
 #define SECOC_API_ID_INIT              0x01U

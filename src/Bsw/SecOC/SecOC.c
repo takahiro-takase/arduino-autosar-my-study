@@ -218,12 +218,18 @@ void SecOC_Init(const SecOC_ConfigType* config)
     }
     if (config->RxPduCount > SECOC_RX_PDU_COUNT)
     {
+        /* [SWS_SecOC_00101]: 設定パラメータ不正時は SECOC_E_INIT_FAILED を
+         * 報告する（2026-09 追加。以前はログのみでDET報告していなかった。
+         * SecOC_Cfg.h の SECOC_E_INIT_FAILED コメント参照）。 */
         DET_LOGE(TAG, "Init E: RxPduCount>max");
+        Det_ReportError(SECOC_MODULE_ID, 0U, SECOC_API_ID_INIT, SECOC_E_INIT_FAILED);
         return;
     }
     if (config->TxPduCount > SECOC_TX_PDU_COUNT)
     {
+        /* [SWS_SecOC_00101]（RxPduCount と同じ理由。2026-09 追加） */
         DET_LOGE(TAG, "Init E: TxPduCount>max");
+        Det_ReportError(SECOC_MODULE_ID, 0U, SECOC_API_ID_INIT, SECOC_E_INIT_FAILED);
         return;
     }
 
