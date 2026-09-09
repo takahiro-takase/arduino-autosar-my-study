@@ -480,7 +480,20 @@ Std_ReturnType Dem_SetEventStatus(Dem_EventIdType EventId,
     {
         /* デバウンス確定: PASSED */
         status &= (uint8)(~DEM_STATUS_TEST_FAILED);
-        status &= (uint8)(~DEM_STATUS_TF_THIS_OP_CYCLE);
+        /* DEM_STATUS_TF_THIS_OP_CYCLE (bit1) は PASSED 確定でクリアしては
+         * ならない（[SWS_Dem_00389] Figure 7.18。2026-09 是正）。仕様の状態
+         * 遷移図は TFTOC を Dem_SetOperationCycleState(START) または
+         * ClearDTC でのみ FALSE に戻すと定義しており、PASSED 確定はそもそも
+         * 遷移条件に含まれない（同一操作サイクル内で「一度でも FAILED
+         * 確定した」という事実は、その後 PASSED に回復しても消えない）。
+         * 以前は TEST_FAILED と一緒に無条件でクリアしていたため、
+         * Dem_EvaluatePendingClear() の cleanCycle 判定
+         * （TFTOC==0 && NOT_COMPLETED_THIS_CYCLE==0 なら次回起動時に
+         * PendingDTC を自動クリア）が誤って「このサイクルは健全だった」と
+         * 判定し、本来保持すべき PendingDTC を不当に早期クリアしていた。
+         * TFTOC 自体は Dem_Init() の新サイクル開始処理（本ファイル内、
+         * サイクル開始時に必ずクリア）と ClearDTC 系関数（状態バイト全体を
+         * リセット）で正しくクリアされるため、ここで削除しても副作用はない。 */
         status &= (uint8)(~DEM_STATUS_NOT_COMPLETED_THIS_CYCLE);
         /* SWS_Dem_00392 (Figure 7.21): testNotCompletedSinceLastClear は
          * FAILED・PASSED いずれの確定でもクリアされる（「一度もテストされて
