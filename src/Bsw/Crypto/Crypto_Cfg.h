@@ -33,13 +33,14 @@
 #define CRYPTO_E_PARAM_HANDLE  0x04U  /* [SWS_Crypto_00058 等]: objectId/cryptoKeyId が範囲外 */
 #define CRYPTO_E_PARAM_VALUE   0x05U  /* [SWS_Crypto_00079 等]: keyLength=0 等の不正値 */
 
-/** Std_ReturnType の拡張値（[SWS_Crypto_00043]。DET の Development/Runtime
- *  Error とは別物 — サービス関数がジョブ失敗を呼び出し元へ伝える戻り値の
- *  拡張レンジであり、Det_ReportError の対象ではない）。実車の値は 9
- *  （[SWS_Crypto_00043] のレンジ表内の値）だが、本実装は同期処理のみで
- *  この拡張戻り値自体を使わず、DET_LOGW のログメッセージ識別用としてのみ
- *  このファイル内で値を流用する。 */
-#define CRYPTO_E_KEY_NOT_VALID  9U
+/* Std_ReturnType の拡張値（CRYPTO_E_KEY_NOT_VALID/CRYPTO_E_SMALL_BUFFER/
+ * CRYPTO_E_KEY_SIZE_MISMATCH）は DET の Development/Runtime Error とは別物
+ * （サービス関数がジョブ失敗を呼び出し元へ伝える戻り値の拡張レンジであり、
+ * Det_ReportError の対象ではない）ため、DET エラーコードと同じ役割の本
+ * セクションではなく Crypto_Types.h（Csm/CryIf/Crypto の3層が共通で使う
+ * 型置き場）で定義する（2026-09 是正。/code-review で指摘: 以前はここに
+ * 「実際には使わない」という説明付きの重複定義が残っており、実際に返す
+ * ようになった Crypto_Types.h 側の定義とマクロ再定義警告を起こしていた）。 */
 
 /** ApiId（値は docs/AUTOSAR_SWS_CryptoDriver.pdf の「Service ID[hex]」記載を
  *  実測して確認済み） */

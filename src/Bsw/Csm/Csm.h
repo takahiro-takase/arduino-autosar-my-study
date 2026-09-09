@@ -69,10 +69,15 @@ void Csm_GetVersionInfo(Std_VersionInfoType* versioninfo);
  *                              バイト数（本プロジェクトでは常に in と同じ）。NULL 禁止。
  *
  * \retval  E_OK      MAC を生成した。
+ * \retval  CRYPTO_E_SMALL_BUFFER  要求長が CMAC 出力長(16byte)を超える
+ *                    （2026-09 是正: 以前は素の E_NOT_OK だった）。
+ * \retval  CRYPTO_E_KEY_NOT_VALID  jobId に紐づく鍵が無効化中
+ *                    （`Csm_KeyElementSet()` 直後、`Csm_KeySetValid()`
+ *                    未実行。下位層 Crypto.c から伝播、2026-09 是正）。
  * \retval  E_NOT_OK  未初期化（Csm 自身、または下位層 CryIf が未初期化。
  *                    後者は [SWS_Csm_91010] により CSM_E_SERVICE_NOT_STARTED
- *                    を報告する）、NULL ポインタ、jobId が範囲外/種別不一致、
- *                    または要求長が CMAC 出力長(16byte)を超える。
+ *                    を報告する）、NULL ポインタ、または jobId が範囲外/種別
+ *                    不一致。
  *
  * \AUTOSARReq     {SWS_Csm_00982, SWS_Csm_91010}
  * \ServiceID      {0x60}
@@ -104,6 +109,8 @@ Std_ReturnType Csm_MacGenerate(uint32 jobId, Crypto_OperationModeType mode,
  * \param[out]  verifyPtr   検証結果の格納先。NULL 禁止。
  *
  * \retval  E_OK      検証処理を実行した（結果は verifyPtr 参照）。
+ * \retval  CRYPTO_E_KEY_NOT_VALID  jobId に紐づく鍵が無効化中
+ *                    （Csm_MacGenerate と同じ理由。2026-09 追加）。
  * \retval  E_NOT_OK  未初期化（Csm_MacGenerate と同じく Csm/CryIf いずれの
  *                    未初期化も含む、[SWS_Csm_91010]）、NULL ポインタ、
  *                    jobId が範囲外/種別不一致、または macLength が 8 の
@@ -133,9 +140,10 @@ Std_ReturnType Csm_MacVerify(uint32 jobId, Crypto_OperationModeType mode,
  * \param[in]  keyLength     keyPtr のバイト長。CRYPTO_AES128_KEY_SIZE(16) 以外は拒否。
  *
  * \retval  E_OK      鍵を書き換えた。
+ * \retval  CRYPTO_E_KEY_SIZE_MISMATCH  keyLength が CRYPTO_AES128_KEY_SIZE と
+ *                    不一致（下位層 Crypto.c から伝播、2026-09 是正）。
  * \retval  E_NOT_OK  未初期化（Csm/CryIf いずれか、[SWS_Csm_91010]）、
- *                    NULL、keyId が範囲外（[SWS_Csm_91011]）、
- *                    または下位層が失敗。
+ *                    NULL、または keyId が範囲外（[SWS_Csm_91011]）。
  *
  * \AUTOSARReq     {SWS_Csm_00957, SWS_Csm_91010, SWS_Csm_91011}
  * \ServiceID      {0x78}
@@ -176,9 +184,11 @@ Std_ReturnType Csm_KeySetValid(uint32 keyId);
  *                                 書き込んだバイト数。NULL 禁止、値0も禁止。
  *
  * \retval  E_OK      鍵要素を読み出した。
+ * \retval  CRYPTO_E_SMALL_BUFFER  `*keyLengthPtr` が CRYPTO_AES128_KEY_SIZE
+ *                    未満（下位層 Crypto.c から伝播、2026-09 追加）。
  * \retval  E_NOT_OK  未初期化（Csm/CryIf いずれか、[SWS_Csm_91010]）、
  *                    NULL、keyId が範囲外（[SWS_Csm_91011]）、
- *                    `*keyLengthPtr`=0、または下位層が失敗。
+ *                    または `*keyLengthPtr` が CRYPTO_AES128_KEY_SIZE 超過。
  *
  * \AUTOSARReq     {SWS_Csm_00959, SWS_Csm_91010, SWS_Csm_91011}
  * \ServiceID      {0x68}

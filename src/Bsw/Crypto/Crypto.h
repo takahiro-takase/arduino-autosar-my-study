@@ -68,19 +68,23 @@ void Crypto_GetVersionInfo(Std_VersionInfoType* versioninfo);
  *          実行が失敗したかどうかとは別軸）。
  *
  *          本プロジェクトは同期処理のみのため、実 AUTOSAR が定義する
- *          CRYPTO_E_BUSY/CRYPTO_E_QUEUE_FULL/CRYPTO_E_KEY_NOT_VALID 等の
- *          非同期・複数ジョブキュー由来の戻り値は扱わない（E_OK/E_NOT_OK
- *          のみ）。
+ *          CRYPTO_E_BUSY/CRYPTO_E_QUEUE_FULL 等の非同期・複数ジョブキュー
+ *          由来の戻り値は扱わない。ただし `cryptoKeyId` が無効化中
+ *          （`Crypto_KeyElementSet()` 直後、`Crypto_KeySetValid()` 未実行）
+ *          の場合は `CRYPTO_E_KEY_NOT_VALID` を返す（[SWS_Crypto_00043]。
+ *          2026-09 是正: 以前は素の `E_NOT_OK` に統一していた）。
  *
  * \param[in]     objectId  Crypto Driver Object の ID。本プロジェクトは
  *                          単一オブジェクトのみのため CRYPTO_OBJECT_ID
  *                          以外は不正値として扱う。
  * \param[in,out] job       ジョブ記述（Crypto_JobType）。NULL 禁止。
  *
- * \retval  E_OK      要求されたプリミティブを実行した
- *                    （MACVERIFY の場合、検証結果自体は verifyResultPtr 参照）。
- * \retval  E_NOT_OK  未初期化、objectId/cryptoKeyId が範囲外、job が NULL、
- *                    またはサポートしないサービス種別。
+ * \retval  E_OK                  要求されたプリミティブを実行した
+ *                                （MACVERIFY の場合、検証結果自体は
+ *                                verifyResultPtr 参照）。
+ * \retval  CRYPTO_E_KEY_NOT_VALID  cryptoKeyId の鍵が無効化中。
+ * \retval  E_NOT_OK              未初期化、objectId/cryptoKeyId が範囲外、
+ *                                job が NULL、またはサポートしないサービス種別。
  *
  * \AUTOSARReq     {SWS_Crypto_91003}
  * \ServiceID      {0x03}
@@ -105,7 +109,10 @@ Std_ReturnType Crypto_ProcessJob(uint32 objectId, Crypto_JobType* job);
  * \param[in]  keyLength      keyPtr のバイト長。CRYPTO_AES128_KEY_SIZE(16) 以外は拒否。
  *
  * \retval  E_OK      鍵を書き換えた（無効状態になる）。
- * \retval  E_NOT_OK  未初期化、cryptoKeyId/keyElementId が不正、NULL、または長さ不一致。
+ * \retval  CRYPTO_E_KEY_SIZE_MISMATCH  keyLength が CRYPTO_AES128_KEY_SIZE と
+ *                    不一致（2026-09 是正: 以前は素の E_NOT_OK に統一する
+ *                    意図的な簡略化だったが、ユーザー承認の上で是正）。
+ * \retval  E_NOT_OK  未初期化、cryptoKeyId/keyElementId が不正、または NULL。
  *
  * \AUTOSARReq     {SWS_Crypto_91004}
  * \ServiceID      {0x04}
@@ -140,12 +147,14 @@ Std_ReturnType Crypto_KeySetValid(uint32 cryptoKeyId);
  *          鍵要素の部分アクセス（オフセット指定読み出し）を持たないため、
  *          `*resultLengthPtr` は常に `CRYPTO_AES128_KEY_SIZE` 丁度でなければ
  *          ならない（大きすぎる/小さすぎるバッファはいずれも拒否する）。
+ *          バッファが小さすぎる場合は [SWS_Csm_00959] の Csm_KeyElementGet
+ *          戻り値表通り `CRYPTO_E_SMALL_BUFFER` を返す（2026-09 追加）。
+ *          バッファが大きすぎる場合（本プロジェクト独自の「厳密一致」制約で
+ *          実仕様に対応する専用値が無い）は従来通り `E_NOT_OK` のまま。
  *          実仕様が定義する `CRYPTO_E_BUSY`/`CRYPTO_E_KEY_NOT_AVAILABLE`/
- *          `CRYPTO_E_KEY_READ_FAIL`/`CRYPTO_E_SMALL_BUFFER` という
- *          `Std_ReturnType` 拡張値は本実装では扱わず、`E_OK`/`E_NOT_OK` のみに
- *          単純化する（`Crypto_KeyElementSet`/`Crypto_ProcessJob` と同じ方針。
- *          本ファイル冒頭コメント参照）。`Crypto_KeySetValid()` 未実行
- *          （鍵が pending 状態）でも読み出し自体は許可する（実仕様は
+ *          `CRYPTO_E_KEY_READ_FAIL` は本実装では扱わない（対応する機能自体
+ *          が無いため。本ファイル冒頭コメント参照）。`Crypto_KeySetValid()`
+ *          未実行（鍵が pending 状態）でも読み出し自体は許可する（実仕様は
  *          読み出し可否をキー無効状態と結び付けていない）。
  *
  * \param[in]     cryptoKeyId      読み出す鍵の ID（CRYPTO_KEY_* 定数）。
@@ -157,8 +166,10 @@ Std_ReturnType Crypto_KeySetValid(uint32 cryptoKeyId);
  *                                 CRYPTO_AES128_KEY_SIZE）。NULL 禁止。
  *
  * \retval  E_OK      鍵要素を読み出した。
+ * \retval  CRYPTO_E_SMALL_BUFFER  `*resultLengthPtr` が CRYPTO_AES128_KEY_SIZE
+ *                    未満（2026-09 追加）。
  * \retval  E_NOT_OK  未初期化、cryptoKeyId/keyElementId が不正、NULL、
- *                    または `*resultLengthPtr` が CRYPTO_AES128_KEY_SIZE と不一致。
+ *                    または `*resultLengthPtr` が CRYPTO_AES128_KEY_SIZE 超過。
  *
  * \AUTOSARReq     {SWS_Crypto_91006}
  * \ServiceID      {0x06}

@@ -28,10 +28,37 @@
 #define CRYPTO_TYPES_H
 
 #include "Platform_Types.h"
+#include "Std_Types.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+/**
+ * \brief   Std_ReturnType の Crypto スタック拡張値 (AUTOSAR [SWS_Csm_01069] Range)
+ * \details 実仕様は`E_OK`/`E_NOT_OK`(Std_Types.h)に加え、失敗理由を細分化する
+ *          追加のuint8値群を定義する。本プロジェクトは実際に返せる/意味を持つ
+ *          3値のみ定義する（2026-09 追加）:
+ *            - `CRYPTO_E_KEY_NOT_VALID`: 鍵が無効化中(Crypto_KeyElementSet()
+ *              直後、Crypto_KeySetValid()未実行)にCrypto_ProcessJob()が
+ *              呼ばれた場合。
+ *            - `CRYPTO_E_SMALL_BUFFER`: 出力バッファが結果を格納するには
+ *              小さすぎる場合（Csm_MacGenerate()のmacLengthPtr超過等）。
+ *            - `CRYPTO_E_KEY_SIZE_MISMATCH`: 鍵長が一致しない場合
+ *              （Crypto_KeyElementSet()/KeyElementGet()）。以前は
+ *              「この戻り値種別は導入せずE_NOT_OKに統一する」という意図的な
+ *              簡略化だったが、ユーザー承認の上で是正。
+ *          `CRYPTO_E_BUSY`(0x02、ジョブが処理中で拒否)は本プロジェクトが
+ *          常に同期・単一ジョブ処理（キューイングや並行処理を持たない）で
+ *          原理的にこの状態が発生しないため未対応（対応する実装ポイントが
+ *          存在しない）。他の拡張値（CRYPTO_E_ENTROPY_EXHAUSTION等）も
+ *          対応する機能自体が本プロジェクトに無いため未対応。
+ *          値は`pdftotext -table`（開発エラーコード表等の抽出に強い）で
+ *          実測して確認済み。
+ */
+#define CRYPTO_E_SMALL_BUFFER      ((Std_ReturnType)0x03U)
+#define CRYPTO_E_KEY_NOT_VALID     ((Std_ReturnType)0x09U)
+#define CRYPTO_E_KEY_SIZE_MISMATCH ((Std_ReturnType)0x0AU)
 
 /**
  * \brief   ジョブが実行するプリミティブ種別 (AUTOSAR Crypto_ServiceInfoType の抜粋)
