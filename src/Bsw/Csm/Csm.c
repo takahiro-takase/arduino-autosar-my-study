@@ -84,9 +84,12 @@ Std_ReturnType Csm_MacGenerate(uint32 jobId, Crypto_OperationModeType mode,
 
     if (*macLengthPtr > CRYPTO_CMAC_SIZE)
     {
+        /* [SWS_Csm_00982] の戻り値表に CRYPTO_E_SMALL_BUFFER が明記されている
+         * ため、DET報告(CSM_E_SMALL_BUFFER、既存のまま変更なし)に加えて戻り値
+         * 自体も拡張値で返す（2026-09 是正。以前は素の E_NOT_OK だった）。 */
         DET_LOGE(TAG, "MacGenerate E: macLength=%u exceeds CMAC size", (unsigned)*macLengthPtr);
         Det_ReportError(CSM_MODULE_ID, 0U, CSM_API_ID_MAC_GENERATE, CSM_E_SMALL_BUFFER);
-        return E_NOT_OK;
+        return CRYPTO_E_SMALL_BUFFER;
     }
 
     const Csm_JobConfigType* jobCfg = Csm_FindJob(jobId, CRYPTO_MACGENERATE);

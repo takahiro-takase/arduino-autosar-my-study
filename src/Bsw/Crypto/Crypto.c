@@ -104,10 +104,13 @@ Std_ReturnType Crypto_ProcessJob(uint32 objectId, Crypto_JobType* job)
     {
         /* [SWS_Crypto_00043] CRYPTO_E_KEY_NOT_VALID は Std_ReturnType の拡張値
          * （DET の Development/Runtime Error のいずれでもない）のため
-         * Det_ReportError() は呼ばない。 */
+         * Det_ReportError() は呼ばない。ただし戻り値自体は拡張値
+         * CRYPTO_E_KEY_NOT_VALID を返す必要がある（2026-09 是正。以前はこの
+         * コメントの通りDET報告を省略した上で、戻り値まで素の E_NOT_OK に
+         * 統一してしまっていた）。 */
         DET_LOGW(TAG, "ProcessJob W: cryptoKeyId=%u not valid (pending KeySetValid)",
                  (unsigned)job->cryptoKeyId);
-        return E_NOT_OK;
+        return CRYPTO_E_KEY_NOT_VALID;
     }
 
     uint8 fullMac[CRYPTO_CMAC_SIZE];
@@ -168,12 +171,16 @@ Std_ReturnType Crypto_KeyElementSet(uint32 cryptoKeyId, uint32 keyElementId,
     }
 
     /* [SWS_Crypto_00146] 相当。本プロジェクトは部分アクセス不可の固定長鍵要素
-     * のみを扱うため、長さ不一致は単純に拒否する（CRYPTO_E_KEY_SIZE_MISMATCH
-     * という戻り値種別は導入せず、E_NOT_OK に統一。Crypto.h 冒頭コメント参照）。 */
+     * のみを扱うため、長さ不一致は拒否する。以前はCRYPTO_E_KEY_SIZE_MISMATCH
+     * という戻り値種別を導入せずE_NOT_OKに統一する意図的な簡略化だったが、
+     * ユーザー承認の上で是正した（2026-09。Crypto_Types.h の
+     * CRYPTO_E_KEY_SIZE_MISMATCH コメント参照）。DET報告(CRYPTO_E_PARAM_VALUE)
+     * 自体は開発エラーであり拡張Std_ReturnTypeとは独立した仕組みのため
+     * 変更しない。 */
     if (keyLength != CRYPTO_AES128_KEY_SIZE)
     {
         Det_ReportError(CRYPTO_MODULE_ID, 0U, CRYPTO_API_ID_KEY_ELEMENT_SET, CRYPTO_E_PARAM_VALUE);
-        return E_NOT_OK;
+        return CRYPTO_E_KEY_SIZE_MISMATCH;
     }
 
     for (uint32 b = 0U; b < CRYPTO_AES128_KEY_SIZE; b++)
@@ -210,7 +217,17 @@ Std_ReturnType Crypto_KeyElementGet(uint32 cryptoKeyId, uint32 keyElementId,
 
     /* [SWS_Crypto_00090] 相当のゼロ長チェックに加え、本プロジェクトは部分
      * アクセス不可の固定長鍵要素のみを扱うため（Crypto_KeyElementSet と同じ
-     * 方針）、CRYPTO_AES128_KEY_SIZE 丁度以外も一律拒否する。 */
+     * 方針）、CRYPTO_AES128_KEY_SIZE 丁度以外も一律拒否する。
+     * バッファが小さすぎる場合は実仕様([SWS_Csm_00959]のCsm_KeyElementGet
+     * 戻り値表)通りCRYPTO_E_SMALL_BUFFERを返す（2026-09 追加）。バッファが
+     * 大きすぎる場合（本プロジェクト独自の「部分アクセス不可・厳密一致」
+     * 制約であり実仕様にこれに対応する専用値が無い）は従来通り素の
+     * E_NOT_OK のままとする。 */
+    if (*resultLengthPtr < CRYPTO_AES128_KEY_SIZE)
+    {
+        Det_ReportError(CRYPTO_MODULE_ID, 0U, CRYPTO_API_ID_KEY_ELEMENT_GET, CRYPTO_E_PARAM_VALUE);
+        return CRYPTO_E_SMALL_BUFFER;
+    }
     if (*resultLengthPtr != CRYPTO_AES128_KEY_SIZE)
     {
         Det_ReportError(CRYPTO_MODULE_ID, 0U, CRYPTO_API_ID_KEY_ELEMENT_GET, CRYPTO_E_PARAM_VALUE);
