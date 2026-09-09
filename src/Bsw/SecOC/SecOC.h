@@ -33,9 +33,15 @@ extern "C" {
  *          （最後に受理した Freshness Value）を初期化する。
  *          AES-128 の自己診断は Crypto_Init()（Csm/CryIf/Crypto レイヤ、
  *          EcuM_Init() から本関数より前に呼ばれる）が担う。
+ *          config->RxPduCount/TxPduCount が本プロジェクトのテーブル上限
+ *          （SECOC_RX_PDU_COUNT/SECOC_TX_PDU_COUNT）を超える場合は
+ *          `SECOC_E_INIT_FAILED` を報告し初期化を行わない
+ *          （[SWS_SecOC_00101]。2026-09 追加。以前はログのみで DET 報告
+ *          していなかった）。
  *
  * \param[in]  config  SecOC 設定構造体。NULL 禁止。
  *
+ * \AUTOSARReq     {SWS_SecOC_00101}
  * \ServiceID      {0x01}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
