@@ -294,7 +294,7 @@ static void Dcm_DTCSettingReset(void);
 static Std_ReturnType Dcm_LampIdOfDid(uint16 did, Rte_LampIdType* lamp);
 static void Dcm_UpdateComMRequest(uint8 session);
 static void Dcm_HandleSecurityAccess(const uint8* uds, uint8 udsLen);
-static void Dcm_HandleSecurityRequestSeed(uint8 subFunc);
+static void Dcm_HandleSecurityRequestSeed(uint8 subFunc, uint8 udsLen);
 static void Dcm_HandleSecuritySendKey(uint8 subFunc, const uint8* uds, uint8 udsLen);
 static uint16 Dcm_ComputeSecurityKey(uint16 seed);
 static void Dcm_SecurityLock(void);
@@ -688,6 +688,15 @@ static void Dcm_HandleSessionControl(const uint8* uds, uint8 udsLen)
         return;
     }
 
+    if (udsLen != 2U)
+    {
+        /* [SWS_Dcm_00273]/[SWS_Dcm_00696]: サブ機能サポート確認の後に厳密長
+         * チェックを行う（2026-09 追加。固定長サービスの上限チェック欠落の
+         * 是正。0x10 は要求パラメータを持たず常に2バイト固定）。 */
+        Dcm_SendNegativeResponse(DCM_SID_SESSION_CTRL, DCM_NRC_INCORRECT_MESSAGE_LENGTH);
+        return;
+    }
+
     if (subFunc == DCM_SESSION_DEFAULT)
     {
         (void)Dcm_ResetToDefaultSession();
@@ -744,6 +753,14 @@ static void Dcm_HandleEcuReset(const uint8* uds, uint8 udsLen)
         return;
     }
 
+    if (udsLen != 2U)
+    {
+        /* [SWS_Dcm_00273]/[SWS_Dcm_00696]（Dcm_HandleSessionControl と同じ
+         * 理由。2026-09 追加）。0x11 は要求パラメータを持たず常に2バイト固定。 */
+        Dcm_SendNegativeResponse(DCM_SID_ECU_RESET, DCM_NRC_INCORRECT_MESSAGE_LENGTH);
+        return;
+    }
+
     DET_LOGI(TAG, "11 sub=0x%02X", (unsigned)subFunc);
 
     /* 正応答: [0x51, subFunc] */
@@ -792,8 +809,10 @@ static void Dcm_HandleClearDtc(const uint8* uds, uint8 udsLen)
         return;
     }
 
-    if (udsLen < 4U)
+    if (udsLen != 4U)
     {
+        /* [SWS_Dcm_00696]: 0x14 はサブ機能を持たず groupOfDTC(3byte)固定のため
+         * 常に4バイト厳密一致（2026-09 是正: 以前は下限のみ判定していた）。 */
         Dcm_SendNegativeResponse(DCM_SID_CLEAR_DTC, DCM_NRC_INCORRECT_MESSAGE_LENGTH);
         return;
     }
@@ -845,8 +864,10 @@ static void Dcm_HandleClearDtc(const uint8* uds, uint8 udsLen)
 static void Dcm_HandleReadDtcCount(const uint8* uds, uint8 udsLen)
 {
     DET_LOGT(TAG, "called");
-    if (udsLen < 3U)
+    if (udsLen != 3U)
     {
+        /* [SWS_Dcm_00696]: statusMask(1byte)固定のため常に3バイト厳密一致
+         * （2026-09 是正: 以前は下限のみ判定していた）。 */
         Dcm_SendNegativeResponse(DCM_SID_READ_DTC_INFO, DCM_NRC_INCORRECT_MESSAGE_LENGTH);
         return;
     }
@@ -937,8 +958,9 @@ static void Dcm_SendDtcList(uint8 subFunc, uint8 headerLen, const uint32* dtcBuf
 static void Dcm_HandleReadDtcByMask(const uint8* uds, uint8 udsLen)
 {
     DET_LOGT(TAG, "called");
-    if (udsLen < 3U)
+    if (udsLen != 3U)
     {
+        /* [SWS_Dcm_00696]（0x19/01 と同じ理由。2026-09 是正） */
         Dcm_SendNegativeResponse(DCM_SID_READ_DTC_INFO, DCM_NRC_INCORRECT_MESSAGE_LENGTH);
         return;
     }
@@ -983,8 +1005,14 @@ static void Dcm_HandleReadDtcSupported(const uint8* uds, uint8 udsLen)
 {
     DET_LOGT(TAG, "called");
     (void)uds;
-    (void)udsLen;  /* 追加パラメータなし。長さチェックは呼び出し元
-                    * Dcm_HandleReadDtcInfo() が既に udsLen < 2U で行っている */
+    if (udsLen != 2U)
+    {
+        /* [SWS_Dcm_00696]: 追加パラメータなしのため常に2バイト厳密一致
+         * （2026-09 追加。以前は呼び出し元 Dcm_HandleReadDtcInfo() の
+         * udsLen < 2U という下限チェックにしか委ねていなかった）。 */
+        Dcm_SendNegativeResponse(DCM_SID_READ_DTC_INFO, DCM_NRC_INCORRECT_MESSAGE_LENGTH);
+        return;
+    }
 
     uint32 dtcBuf[DEM_EVENT_COUNT];
     uint8  statusBuf[DEM_EVENT_COUNT];
@@ -1028,7 +1056,12 @@ static void Dcm_HandleReadDtcFaultDetectionCounter(const uint8* uds, uint8 udsLe
 {
     DET_LOGT(TAG, "called");
     (void)uds;
-    (void)udsLen;  /* 追加パラメータなし（0x0A と同じ） */
+    if (udsLen != 2U)
+    {
+        /* [SWS_Dcm_00696]（0x19/0A と同じ理由。2026-09 追加） */
+        Dcm_SendNegativeResponse(DCM_SID_READ_DTC_INFO, DCM_NRC_INCORRECT_MESSAGE_LENGTH);
+        return;
+    }
 
     uint32 dtcBuf[DEM_EVENT_COUNT];
     uint8  statusBuf[DEM_EVENT_COUNT];  /* Dem_GetSupportedDTCs() の必須出力だが本サブ機能では未使用 */
@@ -1078,8 +1111,10 @@ static void Dcm_HandleReadDtcFaultDetectionCounter(const uint8* uds, uint8 udsLe
 static void Dcm_HandleReadDtcSnapshot(const uint8* uds, uint8 udsLen)
 {
     DET_LOGT(TAG, "called");
-    if (udsLen < 6U)
+    if (udsLen != 6U)
     {
+        /* [SWS_Dcm_00696]: DTC(3byte)+recordNumber(1byte)固定のため常に
+         * 6バイト厳密一致（2026-09 是正: 以前は下限のみ判定していた）。 */
         Dcm_SendNegativeResponse(DCM_SID_READ_DTC_INFO, DCM_NRC_INCORRECT_MESSAGE_LENGTH);
         return;
     }
@@ -1143,8 +1178,9 @@ static void Dcm_HandleReadDtcSnapshot(const uint8* uds, uint8 udsLen)
 static void Dcm_HandleReadDtcExtendedData(const uint8* uds, uint8 udsLen)
 {
     DET_LOGT(TAG, "called");
-    if (udsLen < 6U)
+    if (udsLen != 6U)
     {
+        /* [SWS_Dcm_00696]（0x19/04 と同じ理由。2026-09 是正） */
         Dcm_SendNegativeResponse(DCM_SID_READ_DTC_INFO, DCM_NRC_INCORRECT_MESSAGE_LENGTH);
         return;
     }
@@ -1918,10 +1954,21 @@ static void Dcm_SecurityLock(void)
  *          (seed=0x0000) を返し、sendKey が不要であることを示す。
  *
  * \param[in]  subFunc  要求されたサブ機能 (0x01、suppressPosRsp ビット除去済み)。
+ * \param[in]  udsLen   UDS ペイロード長。
  */
-static void Dcm_HandleSecurityRequestSeed(uint8 subFunc)
+static void Dcm_HandleSecurityRequestSeed(uint8 subFunc, uint8 udsLen)
 {
     DET_LOGT(TAG, "called");
+    if (udsLen != 2U)
+    {
+        /* [SWS_Dcm_00696]: 追加パラメータなしのため常に2バイト厳密一致
+         * （2026-09 追加。以前は呼び出し元 Dcm_HandleSecurityAccess() の
+         * udsLen < 2U という下限チェックにしか委ねておらず、本関数自体は
+         * udsLen を受け取っていなかった）。 */
+        Dcm_SendNegativeResponse(DCM_SID_SECURITY_ACCESS, DCM_NRC_INCORRECT_MESSAGE_LENGTH);
+        return;
+    }
+
     if (Dcm_SecurityLevel != 0U)
     {
         DET_LOGI(TAG, "27/%02X already unlocked -> allZeroSeed", (unsigned)subFunc);
@@ -1980,8 +2027,10 @@ static void Dcm_HandleSecurityRequestSeed(uint8 subFunc)
 static void Dcm_HandleSecuritySendKey(uint8 subFunc, const uint8* uds, uint8 udsLen)
 {
     DET_LOGT(TAG, "called");
-    if (udsLen < 4U)
+    if (udsLen != 4U)
     {
+        /* [SWS_Dcm_00696]: key(2byte)固定のため常に4バイト厳密一致
+         * （2026-09 是正: 以前は下限のみ判定していた）。 */
         Dcm_SendNegativeResponse(DCM_SID_SECURITY_ACCESS, DCM_NRC_INCORRECT_MESSAGE_LENGTH);
         return;
     }
@@ -2052,7 +2101,7 @@ static void Dcm_HandleSecurityAccess(const uint8* uds, uint8 udsLen)
     switch (subFunc)
     {
     case DCM_SEC_SUBFUNC_REQUEST_SEED:
-        Dcm_HandleSecurityRequestSeed(subFunc);
+        Dcm_HandleSecurityRequestSeed(subFunc, udsLen);
         break;
     case DCM_SEC_SUBFUNC_SEND_KEY:
         Dcm_HandleSecuritySendKey(subFunc, uds, udsLen);
@@ -2515,6 +2564,14 @@ static void Dcm_HandleTesterPresent(const uint8* uds, uint8 udsLen)
     if (subFunc != 0x00U)   /* zeroSubFunction 以外は不正 */
     {
         Dcm_SendNegativeResponse(DCM_SID_TESTER_PRESENT, DCM_NRC_SUB_FUNC_NOT_SUPPORTED);
+        return;
+    }
+
+    if (udsLen != 2U)
+    {
+        /* [SWS_Dcm_00273]/[SWS_Dcm_00696]（Dcm_HandleSessionControl と同じ
+         * 理由。2026-09 追加）。0x3E は要求パラメータを持たず常に2バイト固定。 */
+        Dcm_SendNegativeResponse(DCM_SID_TESTER_PRESENT, DCM_NRC_INCORRECT_MESSAGE_LENGTH);
         return;
     }
 

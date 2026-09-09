@@ -576,6 +576,36 @@ TEST_F(Bsw_Dcm_ReadDtcInfo_Test, ReadDtcByMask_NG_TooShortRequestReturnsIncorrec
     EXPECT_EQ(FakeCanTp_TxBuf[2], DCM_NRC_INCORRECT_MESSAGE_LENGTH);
 }
 
+TEST_F(Bsw_Dcm_ReadDtcInfo_Test, ReadDtcCount_NG_ExtraByteReturnsIncorrectMessageLength)
+{
+    /* 準備 (Arrange): statusMask の後に余分な1バイト ([0x19, 0x01, mask, 0x00]、
+     * 3バイト厳密一致のため上限超過。2026-09 追加: 以前は下限のみ判定していた
+     * ため黙って受理していた） */
+    uint8 req[4] = { DCM_SID_READ_DTC_INFO, DCM_DTC_SUBFUNC_REPORT_COUNT, 0x00U, 0x00U };
+
+    SendReadDtcInfo(req, sizeof(req));
+
+    ASSERT_EQ(FakeCanTp_TransmitCount, 1U);
+    ASSERT_EQ(FakeCanTp_TxLength, 3U);
+    EXPECT_EQ(FakeCanTp_TxBuf[0], DCM_SID_NEGATIVE_RESP);
+    EXPECT_EQ(FakeCanTp_TxBuf[2], DCM_NRC_INCORRECT_MESSAGE_LENGTH);
+}
+
+TEST_F(Bsw_Dcm_ReadDtcInfo_Test, ReadDtcSupported_NG_ExtraByteReturnsIncorrectMessageLength)
+{
+    /* 準備 (Arrange): 追加パラメータなしの subFunc に余分な1バイト
+     * ([0x19, 0x0A, 0x00]、2バイト厳密一致。2026-09 追加: 以前は udsLen を
+     * 一切見ておらず何バイト付けても黙って受理していた） */
+    uint8 req[3] = { DCM_SID_READ_DTC_INFO, DCM_DTC_SUBFUNC_REPORT_SUPPORTED, 0x00U };
+
+    SendReadDtcInfo(req, sizeof(req));
+
+    ASSERT_EQ(FakeCanTp_TransmitCount, 1U);
+    ASSERT_EQ(FakeCanTp_TxLength, 3U);
+    EXPECT_EQ(FakeCanTp_TxBuf[0], DCM_SID_NEGATIVE_RESP);
+    EXPECT_EQ(FakeCanTp_TxBuf[2], DCM_NRC_INCORRECT_MESSAGE_LENGTH);
+}
+
 TEST_F(Bsw_Dcm_ReadDtcInfo_Test, ReadDtcSnapshot_NG_TooShortRequestReturnsIncorrectMessageLength)
 {
     /* 準備 (Arrange): DTC/recordNumberが揃わない ([0x19, 0x04, DTC_H, DTC_M]、6バイト必須) */
@@ -603,6 +633,146 @@ TEST_F(Bsw_Dcm_ReadDtcInfo_Test, ReadDtcExtendedData_NG_TooShortRequestReturnsIn
     ASSERT_EQ(FakeCanTp_TransmitCount, 1U);
     ASSERT_EQ(FakeCanTp_TxLength, 3U);
     EXPECT_EQ(FakeCanTp_TxBuf[0], DCM_SID_NEGATIVE_RESP);
+    EXPECT_EQ(FakeCanTp_TxBuf[2], DCM_NRC_INCORRECT_MESSAGE_LENGTH);
+}
+
+// ------------------------------------------------------------
+// 固定長サービスの上限長チェック欠落の是正(2026-09)。0x19 以外の
+// SID(0x10/0x11/0x27/0x3E)でも、有効なサブ機能に余分なバイトを付けた
+// 要求が黙って受理されていた問題を修正。各1件のみ代表的に検証する。
+// ------------------------------------------------------------
+
+TEST_F(Bsw_Dcm_ReadDtcInfo_Test, SessionControl_NG_ExtraByteReturnsIncorrectMessageLength)
+{
+    /* 準備 (Arrange): 有効な subFunc に余分な1バイト ([0x10, 0x01, 0x00]、
+     * 2バイト厳密一致のため上限超過) */
+    uint8 req[3] = { DCM_SID_SESSION_CTRL, DCM_SESSION_DEFAULT, 0x00U };
+
+    PduInfoType pdu = { req, sizeof(req) };
+    Dcm_ComIndication(0U, &pdu);
+
+    ASSERT_EQ(FakeCanTp_TransmitCount, 1U);
+    ASSERT_EQ(FakeCanTp_TxLength, 3U);
+    EXPECT_EQ(FakeCanTp_TxBuf[0], DCM_SID_NEGATIVE_RESP);
+    EXPECT_EQ(FakeCanTp_TxBuf[1], DCM_SID_SESSION_CTRL);
+    EXPECT_EQ(FakeCanTp_TxBuf[2], DCM_NRC_INCORRECT_MESSAGE_LENGTH);
+}
+
+TEST_F(Bsw_Dcm_ReadDtcInfo_Test, EcuReset_NG_ExtraByteReturnsIncorrectMessageLength)
+{
+    /* 準備 (Arrange): 有効な subFunc に余分な1バイト ([0x11, 0x01, 0x00]) */
+    uint8 req[3] = { DCM_SID_ECU_RESET, DCM_RESET_HARD, 0x00U };
+
+    PduInfoType pdu = { req, sizeof(req) };
+    Dcm_ComIndication(0U, &pdu);
+
+    ASSERT_EQ(FakeCanTp_TransmitCount, 1U);
+    ASSERT_EQ(FakeCanTp_TxLength, 3U);
+    EXPECT_EQ(FakeCanTp_TxBuf[0], DCM_SID_NEGATIVE_RESP);
+    EXPECT_EQ(FakeCanTp_TxBuf[1], DCM_SID_ECU_RESET);
+    EXPECT_EQ(FakeCanTp_TxBuf[2], DCM_NRC_INCORRECT_MESSAGE_LENGTH);
+}
+
+TEST_F(Bsw_Dcm_ReadDtcInfo_Test, TesterPresent_NG_ExtraByteReturnsIncorrectMessageLength)
+{
+    /* 準備 (Arrange): zeroSubFunction に余分な1バイト ([0x3E, 0x00, 0x00]) */
+    uint8 req[3] = { DCM_SID_TESTER_PRESENT, 0x00U, 0x00U };
+
+    PduInfoType pdu = { req, sizeof(req) };
+    Dcm_ComIndication(0U, &pdu);
+
+    ASSERT_EQ(FakeCanTp_TransmitCount, 1U);
+    ASSERT_EQ(FakeCanTp_TxLength, 3U);
+    EXPECT_EQ(FakeCanTp_TxBuf[0], DCM_SID_NEGATIVE_RESP);
+    EXPECT_EQ(FakeCanTp_TxBuf[1], DCM_SID_TESTER_PRESENT);
+    EXPECT_EQ(FakeCanTp_TxBuf[2], DCM_NRC_INCORRECT_MESSAGE_LENGTH);
+}
+
+TEST_F(Bsw_Dcm_ReadDtcInfo_Test, ClearDtc_NG_ExtraByteReturnsIncorrectMessageLength)
+{
+    /* 準備 (Arrange): 0x14 は extendedSession かつ SecurityAccess Level1
+     * アンロック必須（本関数内でセキュリティを長さより先に判定するが、これは
+     * 仕様上の一般処理順序 セッション→セキュリティ→モード→サブ機能→長さ
+     * に合致し正当。requestSeed→sendKey で実際にアンロックしてから、
+     * groupOfDTC(3byte)の後に余分な1バイトを付けた要求
+     * ([0x14, 0xFF,0xFF,0xFF, 0x00]、4バイト厳密一致。2026-09 追加:
+     * 以前は下限のみ判定していた）を送る。 */
+    uint8 sessionReq[2] = { DCM_SID_SESSION_CTRL, DCM_SESSION_EXTENDED };
+    PduInfoType sessionPdu = { sessionReq, sizeof(sessionReq) };
+    Dcm_ComIndication(0U, &sessionPdu);
+
+    uint8 seedReq[2] = { DCM_SID_SECURITY_ACCESS, DCM_SEC_SUBFUNC_REQUEST_SEED };
+    PduInfoType seedPdu = { seedReq, sizeof(seedReq) };
+    Dcm_ComIndication(0U, &seedPdu);
+    ASSERT_EQ(FakeCanTp_TxBuf[0], 0x67U);
+    uint16 seed = (uint16)(((uint16)FakeCanTp_TxBuf[2] << 8U) | (uint16)FakeCanTp_TxBuf[3]);
+    uint16 key  = (uint16)(seed ^ DCM_SECURITY_KEY_MASK);
+
+    uint8 keyReq[4] = { DCM_SID_SECURITY_ACCESS, DCM_SEC_SUBFUNC_SEND_KEY,
+                         (uint8)(key >> 8U), (uint8)(key & 0xFFU) };
+    PduInfoType keyPdu = { keyReq, sizeof(keyReq) };
+    Dcm_ComIndication(0U, &keyPdu);
+    ASSERT_EQ(FakeCanTp_TxBuf[0], 0x67U) << "security unlock must succeed as a test precondition";
+
+    FakeCanTp_Reset();
+    uint8 req[5] = { DCM_SID_CLEAR_DTC, 0xFFU, 0xFFU, 0xFFU, 0x00U };
+    PduInfoType pdu = { req, sizeof(req) };
+    Dcm_ComIndication(0U, &pdu);
+
+    ASSERT_EQ(FakeCanTp_TransmitCount, 1U);
+    ASSERT_EQ(FakeCanTp_TxLength, 3U);
+    EXPECT_EQ(FakeCanTp_TxBuf[0], DCM_SID_NEGATIVE_RESP);
+    EXPECT_EQ(FakeCanTp_TxBuf[1], DCM_SID_CLEAR_DTC);
+    EXPECT_EQ(FakeCanTp_TxBuf[2], DCM_NRC_INCORRECT_MESSAGE_LENGTH);
+}
+
+TEST_F(Bsw_Dcm_ReadDtcInfo_Test, SecuritySendKey_NG_ExtraByteReturnsIncorrectMessageLength)
+{
+    /* 準備 (Arrange): requestSeed 済みの状態で、sendKey に余分な1バイト
+     * ([0x27, 0x02, keyH, keyL, 0x00]、4バイト厳密一致。2026-09 追加:
+     * 以前は下限のみ判定していた）。キー値自体は不正でも長さチェックが
+     * それより先に効くため一致させる必要はない。 */
+    uint8 sessionReq[2] = { DCM_SID_SESSION_CTRL, DCM_SESSION_EXTENDED };
+    PduInfoType sessionPdu = { sessionReq, sizeof(sessionReq) };
+    Dcm_ComIndication(0U, &sessionPdu);
+
+    uint8 seedReq[2] = { DCM_SID_SECURITY_ACCESS, DCM_SEC_SUBFUNC_REQUEST_SEED };
+    PduInfoType seedPdu = { seedReq, sizeof(seedReq) };
+    Dcm_ComIndication(0U, &seedPdu);
+    ASSERT_EQ(FakeCanTp_TxBuf[0], 0x67U);
+
+    FakeCanTp_Reset();
+    uint8 req[5] = { DCM_SID_SECURITY_ACCESS, DCM_SEC_SUBFUNC_SEND_KEY, 0x00U, 0x00U, 0x00U };
+    PduInfoType pdu = { req, sizeof(req) };
+    Dcm_ComIndication(0U, &pdu);
+
+    ASSERT_EQ(FakeCanTp_TransmitCount, 1U);
+    ASSERT_EQ(FakeCanTp_TxLength, 3U);
+    EXPECT_EQ(FakeCanTp_TxBuf[0], DCM_SID_NEGATIVE_RESP);
+    EXPECT_EQ(FakeCanTp_TxBuf[1], DCM_SID_SECURITY_ACCESS);
+    EXPECT_EQ(FakeCanTp_TxBuf[2], DCM_NRC_INCORRECT_MESSAGE_LENGTH);
+}
+
+TEST_F(Bsw_Dcm_ReadDtcInfo_Test, SecurityRequestSeed_NG_ExtraByteReturnsIncorrectMessageLength)
+{
+    /* 準備 (Arrange): 0x27 は extendedSession 限定のため、まず 0x10 で
+     * 遷移する。続けて requestSeed に余分な1バイト
+     * ([0x27, 0x01, 0x00]、2バイト厳密一致。2026-09 追加: 以前は
+     * Dcm_HandleSecurityRequestSeed() 自体が udsLen を受け取ってすら
+     * いなかった）。 */
+    uint8 sessionReq[2] = { DCM_SID_SESSION_CTRL, DCM_SESSION_EXTENDED };
+    PduInfoType sessionPdu = { sessionReq, sizeof(sessionReq) };
+    Dcm_ComIndication(0U, &sessionPdu);
+    FakeCanTp_Reset();
+
+    uint8 req[3] = { DCM_SID_SECURITY_ACCESS, DCM_SEC_SUBFUNC_REQUEST_SEED, 0x00U };
+    PduInfoType pdu = { req, sizeof(req) };
+    Dcm_ComIndication(0U, &pdu);
+
+    ASSERT_EQ(FakeCanTp_TransmitCount, 1U);
+    ASSERT_EQ(FakeCanTp_TxLength, 3U);
+    EXPECT_EQ(FakeCanTp_TxBuf[0], DCM_SID_NEGATIVE_RESP);
+    EXPECT_EQ(FakeCanTp_TxBuf[1], DCM_SID_SECURITY_ACCESS);
     EXPECT_EQ(FakeCanTp_TxBuf[2], DCM_NRC_INCORRECT_MESSAGE_LENGTH);
 }
 
