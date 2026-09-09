@@ -776,4 +776,71 @@ TEST_F(Bsw_Dcm_ReadDtcInfo_Test, SecurityRequestSeed_NG_ExtraByteReturnsIncorrec
     EXPECT_EQ(FakeCanTp_TxBuf[2], DCM_NRC_INCORRECT_MESSAGE_LENGTH);
 }
 
+TEST_F(Bsw_Dcm_ReadDtcInfo_Test, SessionControl_OK_SuppressPosRspBitSuppressesPositiveResponse)
+{
+    /* 準備 (Arrange): subFunc の bit7 (suppressPosRspMsgIndicationBit) を立てた
+     * [0x10, 0x80|DCM_SESSION_EXTENDED]（[SWS_Dcm_00200]/[SWS_Dcm_00201]。
+     * 2026-09 追加: 以前は読み取って捨てるだけで実際には抑制していなかった）。
+     * セッション自体は正常に遷移するはずだが、正応答フレームは一切送信され
+     * ないことを確認する。 */
+    uint8 req[2] = { DCM_SID_SESSION_CTRL, (uint8)(0x80U | DCM_SESSION_EXTENDED) };
+
+    PduInfoType pdu = { req, sizeof(req) };
+    Dcm_ComIndication(0U, &pdu);
+
+    EXPECT_EQ(FakeCanTp_TransmitCount, 0U);
+
+    /* セッション遷移自体は抑制されていないことを Dcm_GetSesCtrlType() で確認 */
+    Dcm_SesCtrlType sesCtrlType;
+    ASSERT_EQ(Dcm_GetSesCtrlType(&sesCtrlType), E_OK);
+    EXPECT_EQ(sesCtrlType, DCM_SESSION_EXTENDED);
+}
+
+TEST_F(Bsw_Dcm_ReadDtcInfo_Test, TesterPresent_OK_SuppressPosRspBitSuppressesPositiveResponse)
+{
+    /* 準備 (Arrange): zeroSubFunction の bit7 を立てた [0x3E, 0x80]。
+     * TesterPresent は副作用が S3 タイマ更新のみのため、正応答が送信され
+     * ないことだけを確認すればよい。 */
+    uint8 req[2] = { DCM_SID_TESTER_PRESENT, 0x80U };
+
+    PduInfoType pdu = { req, sizeof(req) };
+    Dcm_ComIndication(0U, &pdu);
+
+    EXPECT_EQ(FakeCanTp_TransmitCount, 0U);
+}
+
+TEST_F(Bsw_Dcm_ReadDtcInfo_Test, EcuReset_OK_SuppressPosRspBitAcceptsHardResetWithoutTransmitting)
+{
+    /* 準備 (Arrange): [0x11, 0x80|DCM_RESET_HARD]（本タスクで見つけた実害バグの
+     * 直接的な回帰テスト: 以前は bit7 を一切マスクせず生バイトのまま subFunc
+     * として比較していたため、本ビットを立てただけで hardReset/softReset の
+     * どちらとも不一致になり誤って NRC 0x12 subFunctionNotSupported を返して
+     * いた。是正後は bit7 を無視して正しく hardReset と認識しつつ、正応答は
+     * 抑制されることを確認する）。 */
+    uint8 req[2] = { DCM_SID_ECU_RESET, (uint8)(0x80U | DCM_RESET_HARD) };
+
+    PduInfoType pdu = { req, sizeof(req) };
+    Dcm_ComIndication(0U, &pdu);
+
+    EXPECT_EQ(FakeCanTp_TransmitCount, 0U);
+}
+
+TEST_F(Bsw_Dcm_ReadDtcInfo_Test, SessionControl_NG_SuppressPosRspBitDoesNotSuppressNegativeResponse)
+{
+    /* 準備 (Arrange): bit7 を立てた不正サブ機能 [0x10, 0x80|0x02]（存在しない
+     * subFunc=0x02）。否定応答は suppressPosRspMsgIndicationBit の対象外
+     * （Dcm_SendNegativeResponse() は Dcm_SuppressPosRsp を一切見ない）ため、
+     * bit7 が立っていても NRC は必ず送信されることを確認する。 */
+    uint8 req[2] = { DCM_SID_SESSION_CTRL, 0x82U };
+
+    PduInfoType pdu = { req, sizeof(req) };
+    Dcm_ComIndication(0U, &pdu);
+
+    ASSERT_EQ(FakeCanTp_TransmitCount, 1U);
+    ASSERT_EQ(FakeCanTp_TxLength, 3U);
+    EXPECT_EQ(FakeCanTp_TxBuf[0], DCM_SID_NEGATIVE_RESP);
+    EXPECT_EQ(FakeCanTp_TxBuf[1], DCM_SID_SESSION_CTRL);
+    EXPECT_EQ(FakeCanTp_TxBuf[2], DCM_NRC_SUB_FUNC_NOT_SUPPORTED);
+}
+
 }  // namespace

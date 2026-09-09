@@ -172,6 +172,17 @@ static uint8 Dcm_Initialized;
 /** 現在の診断セッション (DCM_SESSION_DEFAULT / DCM_SESSION_EXTENDED) */
 static uint8 Dcm_CurrentSession;
 
+/** 今回のリクエストで suppressPosRspMsgIndicationBit (bit7) が立っていたか
+ *  (1=正応答を送信してはならない)。[SWS_Dcm_00200]/[SWS_Dcm_00201]/
+ *  [SWS_Dcm_00202] 相当: サブ機能を持つ各 SID のハンドラが uds[1] から bit7
+ *  を読み取ってこの変数へ格納し、正応答送信直前の Dcm_TransmitPositiveResponse()
+ *  がこれを見て抑制する（否定応答は対象外。Dcm_SendNegativeResponse() は
+ *  この変数を見ずに常に送信する）。Dcm_ComIndication() が新規リクエストの
+ *  たびに 0 へリセットするため、リクエストを跨いで持ち越されることはない
+ *  （[SWS_Dcm_00204]: サブ機能を持たない SID では誰もこの変数を立てないため
+ *  常に 0 のまま=抑制なし）。 */
+static uint8 Dcm_SuppressPosRsp;
+
 /** 最後に診断要求を受信した時刻 (S3 タイマの基準点) */
 static unsigned long Dcm_LastActivityMs;
 
@@ -275,6 +286,8 @@ static PduInfoType Dcm_TxPdu;
  * 内部関数プロトタイプ
  * ----------------------------------------------------------------------- */
 static void Dcm_Transmit(void);
+static void Dcm_TransmitPositiveResponse(void);
+static uint8 Dcm_ExtractSubFunc(uint8 subFuncByte);
 static void Dcm_SendNegativeResponse(uint8 sid, uint8 nrc);
 static void Dcm_HandleSessionControl(const uint8* uds, uint8 udsLen);
 static void Dcm_HandleEcuReset(const uint8* uds, uint8 udsLen);
@@ -636,6 +649,45 @@ static void Dcm_Transmit(void)
 }
 
 /**
+ * \brief   組み立て済みの正応答フレーム(Dcm_TxBuf/Dcm_TxPdu)を送信する。
+ *
+ * \details [SWS_Dcm_00200]: suppressPosRspMsgIndicationBit (Dcm_SuppressPosRsp)
+ *          が立っている場合は送信せず抑制する。サブ機能を持つ SID
+ *          (0x10/0x19/0x27/0x28/0x31/0x85/0x3E) の正応答はこの関数を通すこと
+ *          （2026-09 追加。以前は全 SID が Dcm_Transmit() を直接呼び、この
+ *          ビットを一律無視していた）。否定応答（Dcm_SendNegativeResponse()）
+ *          は対象外で常に送信する（[SWS_Dcm_00001] の機能アドレッシング限定
+ *          抑制は本プロジェクトが物理アドレッシングのみのため対応不要）。
+ */
+static void Dcm_TransmitPositiveResponse(void)
+{
+    if (Dcm_SuppressPosRsp)
+    {
+        DET_LOGI(TAG, "positive response suppressed (suppressPosRspMsgIndicationBit)");
+        return;
+    }
+    Dcm_Transmit();
+}
+
+/**
+ * \brief   サブ機能バイトから bit7 (suppressPosRspMsgIndicationBit) を取り出し
+ *          Dcm_SuppressPosRsp へ格納した上で、残る下位7bitを返す。
+ *
+ * \details [SWS_Dcm_00201]: DSD はこのビットをマスクして除去してから以降の
+ *          処理へ渡す。サブ機能を持つ8個のSID (0x10/0x11/0x19/0x27/0x28/0x31/
+ *          0x85/0x3E) のハンドラ/ディスパッチャが個別にこの2行を書いていたのを
+ *          本ヘルパーへ統合（2026-09 /simplify 対応）。
+ *
+ * \param[in]  subFuncByte  UDS ペイロードの2バイト目（生のサブ機能バイト）。
+ * \return  bit7 を除いた下位7bit（実際のサブ機能値）。
+ */
+static uint8 Dcm_ExtractSubFunc(uint8 subFuncByte)
+{
+    Dcm_SuppressPosRsp = (uint8)((subFuncByte & 0x80U) != 0U);
+    return (uint8)(subFuncByte & 0x7FU);
+}
+
+/**
  * \brief   UDS 否定応答 (NRC) フレームを送信する。
  *
  * \details ISO 14229-1 に従い [0x7F, SID, NRC] を CanTp へ渡す。
@@ -667,6 +719,10 @@ static void Dcm_SendNegativeResponse(uint8 sid, uint8 nrc)
  *          P2/P2* タイミングパラメータを含む正応答を返す。
  *          対応: 0x01=defaultSession, 0x03=extendedDiagnosticSession
  *
+ *          subFunction バイトの bit7 (suppressPosRspMsgIndicationBit) が
+ *          立っている場合、セッション遷移自体は実行するが正応答は送信しない
+ *          （[SWS_Dcm_00200]/[SWS_Dcm_00201]。2026-09 追加）。
+ *
  * \param[in]  uds     UDS ペイロード先頭ポインタ (uds[0]=SID)。
  * \param[in]  udsLen  UDS ペイロード長。
  */
@@ -679,8 +735,10 @@ static void Dcm_HandleSessionControl(const uint8* uds, uint8 udsLen)
         return;
     }
 
-    /* bit7: suppressPosRspMsgIndicationBit (本実装では無視) */
-    uint8 subFunc = uds[1] & 0x7FU;
+    /* bit7: suppressPosRspMsgIndicationBit（[SWS_Dcm_00200]/[SWS_Dcm_00201]。
+     * 2026-09 是正: 以前は読み取って捨てるだけで実際には抑制していなかった。
+     * Dcm_TransmitPositiveResponse() 参照）。 */
+    uint8 subFunc = Dcm_ExtractSubFunc(uds[1]);
 
     if (subFunc != DCM_SESSION_DEFAULT && subFunc != DCM_SESSION_EXTENDED)
     {
@@ -718,7 +776,7 @@ static void Dcm_HandleSessionControl(const uint8* uds, uint8 udsLen)
     Dcm_TxBuf[5] = DCM_SESSION_P2X_LOW;
     Dcm_TxPdu.SduLength = 6U;
 
-    Dcm_Transmit();
+    Dcm_TransmitPositiveResponse();
 }
 
 /* -----------------------------------------------------------------------
@@ -733,6 +791,13 @@ static void Dcm_HandleSessionControl(const uint8* uds, uint8 udsLen)
  *          ハードウェアリセットを発行せずログのみで代替する（学習用簡略化）。
  *          対応: 0x01=hardReset, 0x03=softReset
  *
+ *          subFunction バイトの bit7 (suppressPosRspMsgIndicationBit) が
+ *          立っている場合は正応答を送信しない（[SWS_Dcm_00200]/
+ *          [SWS_Dcm_00201]。2026-09 追加。以前は bit7 を一切マスクしておらず、
+ *          テスターが本ビットを立てただけで hardReset/softReset いずれとも
+ *          不一致となり誤って NRC 0x12 subFunctionNotSupported を返す実害
+ *          あるバグでもあった）。
+ *
  * \param[in]  uds     UDS ペイロード先頭ポインタ。
  * \param[in]  udsLen  UDS ペイロード長。
  */
@@ -745,7 +810,12 @@ static void Dcm_HandleEcuReset(const uint8* uds, uint8 udsLen)
         return;
     }
 
-    uint8 subFunc = uds[1];
+    /* bit7: suppressPosRspMsgIndicationBit（[SWS_Dcm_00200]/[SWS_Dcm_00201]。
+     * 2026-09 是正: 以前は bit7 を一切マスクせず生バイトのまま subFunc として
+     * 比較していたため、テスターが本ビットを立てただけで hardReset/softReset
+     * どちらの値とも一致せず誤って NRC 0x12 subFunctionNotSupported を返す
+     * 実害あるバグでもあった。Dcm_HandleSessionControl 等と同じ方針へ統一）。 */
+    uint8 subFunc = Dcm_ExtractSubFunc(uds[1]);
 
     if (subFunc != DCM_RESET_HARD && subFunc != DCM_RESET_SOFT)
     {
@@ -768,7 +838,7 @@ static void Dcm_HandleEcuReset(const uint8* uds, uint8 udsLen)
     Dcm_TxBuf[1] = subFunc;
     Dcm_TxPdu.SduLength = 2U;
 
-    Dcm_Transmit();
+    Dcm_TransmitPositiveResponse();
 
     /* リセット後処理: セッションをデフォルトに戻す（Dcm_ResetToDefaultSession()
      * が Dcm_SecurityLock() 等の一式を実行する。他の defaultSession 遷移経路
@@ -897,7 +967,7 @@ static void Dcm_HandleReadDtcCount(const uint8* uds, uint8 udsLen)
     Dcm_TxBuf[5] = count;                        /* countL */
     Dcm_TxPdu.SduLength = 6U;
 
-    Dcm_Transmit();
+    Dcm_TransmitPositiveResponse();
 }
 
 /**
@@ -939,7 +1009,7 @@ static void Dcm_SendDtcList(uint8 subFunc, uint8 headerLen, const uint32* dtcBuf
     }
     Dcm_TxPdu.SduLength = (PduLengthType)offset;
 
-    Dcm_Transmit();
+    Dcm_TransmitPositiveResponse();
 }
 
 /**
@@ -1158,7 +1228,7 @@ static void Dcm_HandleReadDtcSnapshot(const uint8* uds, uint8 udsLen)
     Dcm_TxBuf[17] = frame.EngineState;
     Dcm_TxPdu.SduLength = 18U;
 
-    Dcm_Transmit();
+    Dcm_TransmitPositiveResponse();
 }
 
 /**
@@ -1215,7 +1285,7 @@ static void Dcm_HandleReadDtcExtendedData(const uint8* uds, uint8 udsLen)
     Dcm_TxBuf[7] = occurrenceCounter;
     Dcm_TxPdu.SduLength = 8U;
 
-    Dcm_Transmit();
+    Dcm_TransmitPositiveResponse();
 }
 
 /**
@@ -1229,6 +1299,10 @@ static void Dcm_HandleReadDtcExtendedData(const uint8* uds, uint8 udsLen)
  *            0x0A reportSupportedDTC                    → Dcm_HandleReadDtcSupported()
  *            0x14 reportDTCFaultDetectionCounter         → Dcm_HandleReadDtcFaultDetectionCounter()
  *
+ *          subFunction バイトの bit7 (suppressPosRspMsgIndicationBit) はここ
+ *          で一括して読み取り、各リーフハンドラの正応答送信へ反映する
+ *          （[SWS_Dcm_00200]/[SWS_Dcm_00201]。2026-09 追加）。
+ *
  * \param[in]  uds     UDS ペイロード先頭ポインタ。
  * \param[in]  udsLen  UDS ペイロード長。
  */
@@ -1241,7 +1315,10 @@ static void Dcm_HandleReadDtcInfo(const uint8* uds, uint8 udsLen)
         return;
     }
 
-    uint8 subFunc = uds[1] & 0x7FU;   /* bit7: suppressPosRsp (本実装では無視) */
+    /* bit7: suppressPosRspMsgIndicationBit（[SWS_Dcm_00200]。2026-09 是正）。
+     * 全サブ機能共通のためディスパッチャで一度だけ立てる
+     * （Dcm_TransmitPositiveResponse() 参照）。 */
+    uint8 subFunc = Dcm_ExtractSubFunc(uds[1]);
 
     switch (subFunc)
     {
@@ -1721,6 +1798,10 @@ static void Dcm_CommControlReset(void)
  *          （診断セッション確立後）では必ず真であるため、実運用上は
  *          到達しない防御コードだった（値としては失われるが、実害はない）。
  *
+ *          controlType バイトの bit7 (suppressPosRspMsgIndicationBit) が
+ *          立っている場合は正応答を送信しない（[SWS_Dcm_00200]/
+ *          [SWS_Dcm_00201]。2026-09 追加）。
+ *
  * \param[in]  uds     UDS ペイロード先頭ポインタ (uds[0]=SID 0x28)。
  * \param[in]  udsLen  UDS ペイロード長。
  */
@@ -1740,8 +1821,9 @@ static void Dcm_HandleCommunicationControl(const uint8* uds, uint8 udsLen)
         return;
     }
 
-    /* bit7: suppressPosRspMsgIndicationBit (本実装では無視。0x10 と同じ方針) */
-    uint8 controlType = uds[1] & 0x7FU;
+    /* bit7: suppressPosRspMsgIndicationBit（[SWS_Dcm_00200]。0x10 と同じ方針。
+     * 2026-09 是正: 以前は読み取って捨てるだけで実際には抑制していなかった） */
+    uint8 controlType = Dcm_ExtractSubFunc(uds[1]);
 
     if (controlType > DCM_COMMCTRL_DISABLE_RX_TX)
     {
@@ -1782,7 +1864,7 @@ static void Dcm_HandleCommunicationControl(const uint8* uds, uint8 udsLen)
     Dcm_TxBuf[1] = controlType;
     Dcm_TxPdu.SduLength = 2U;
 
-    Dcm_Transmit();
+    Dcm_TransmitPositiveResponse();
 }
 
 /* -----------------------------------------------------------------------
@@ -1847,6 +1929,10 @@ static void Dcm_DTCSettingReset(void)
  *          要求: [0x85, DTCSettingType]
  *          応答: [0xC5, DTCSettingType]
  *
+ *          DTCSettingType バイトの bit7 (suppressPosRspMsgIndicationBit) が
+ *          立っている場合は正応答を送信しない（[SWS_Dcm_00200]/
+ *          [SWS_Dcm_00201]。2026-09 追加）。
+ *
  * \param[in]  uds     UDS ペイロード先頭ポインタ (uds[0]=SID 0x85)。
  * \param[in]  udsLen  UDS ペイロード長。
  */
@@ -1865,8 +1951,9 @@ static void Dcm_HandleControlDTCSetting(const uint8* uds, uint8 udsLen)
         return;
     }
 
-    /* bit7: suppressPosRspMsgIndicationBit (本実装では無視。0x10/0x28 と同じ方針) */
-    uint8 subFunc = uds[1] & 0x7FU;
+    /* bit7: suppressPosRspMsgIndicationBit（[SWS_Dcm_00200]。0x10/0x28 と同じ
+     * 方針。2026-09 是正: 以前は読み取って捨てるだけで実際には抑制していなかった） */
+    uint8 subFunc = Dcm_ExtractSubFunc(uds[1]);
 
     if (subFunc != DCM_DTCSETTING_ON && subFunc != DCM_DTCSETTING_OFF)
     {
@@ -1904,7 +1991,7 @@ static void Dcm_HandleControlDTCSetting(const uint8* uds, uint8 udsLen)
     Dcm_TxBuf[1] = subFunc;
     Dcm_TxPdu.SduLength = 2U;
 
-    Dcm_Transmit();
+    Dcm_TransmitPositiveResponse();
 }
 
 /* -----------------------------------------------------------------------
@@ -1980,7 +2067,7 @@ static void Dcm_HandleSecurityRequestSeed(uint8 subFunc, uint8 udsLen)
         Dcm_TxPdu.SduLength = 4U;
 
         Dcm_SecuritySeedPending = 0U;
-        Dcm_Transmit();
+        Dcm_TransmitPositiveResponse();
         return;
     }
 
@@ -2006,7 +2093,7 @@ static void Dcm_HandleSecurityRequestSeed(uint8 subFunc, uint8 udsLen)
     Dcm_TxBuf[3] = (uint8)(Dcm_SecuritySeed & 0xFFU);
     Dcm_TxPdu.SduLength = 4U;
 
-    Dcm_Transmit();
+    Dcm_TransmitPositiveResponse();
 }
 
 /**
@@ -2074,7 +2161,7 @@ static void Dcm_HandleSecuritySendKey(uint8 subFunc, const uint8* uds, uint8 uds
     Dcm_TxBuf[1] = subFunc;
     Dcm_TxPdu.SduLength = 2U;
 
-    Dcm_Transmit();
+    Dcm_TransmitPositiveResponse();
 }
 
 /**
@@ -2083,6 +2170,11 @@ static void Dcm_HandleSecuritySendKey(uint8 subFunc, const uint8* uds, uint8 uds
  * \details extendedSession 限定であることは Dcm_ComIndication の
  *          Dcm_SidSessionTable[] チェックで一元的に保証済みのため、
  *          本関数ではセッション判定を行わない。
+ *
+ *          subFunction バイトの bit7 (suppressPosRspMsgIndicationBit) はここ
+ *          で一括して読み取り、各リーフハンドラ（requestSeed/sendKey）の
+ *          正応答送信へ反映する（[SWS_Dcm_00200]/[SWS_Dcm_00201]。
+ *          2026-09 追加）。
  *
  * \param[in]  uds     UDS ペイロード先頭ポインタ (uds[0]=SID 0x27)。
  * \param[in]  udsLen  UDS ペイロード長。
@@ -2096,7 +2188,10 @@ static void Dcm_HandleSecurityAccess(const uint8* uds, uint8 udsLen)
         return;
     }
 
-    uint8 subFunc = uds[1] & 0x7FU;   /* bit7: suppressPosRsp (本実装では無視) */
+    /* bit7: suppressPosRspMsgIndicationBit（[SWS_Dcm_00200]。全サブ機能共通の
+     * ためディスパッチャで一度だけ立てる。2026-09 是正: 以前は読み取って
+     * 捨てるだけで実際には抑制していなかった） */
+    uint8 subFunc = Dcm_ExtractSubFunc(uds[1]);
 
     switch (subFunc)
     {
@@ -2162,7 +2257,7 @@ static void Dcm_HandleRoutineStart(uint16 rid)
     Dcm_TxBuf[3] = (uint8)(rid & 0xFFU);
     Dcm_TxPdu.SduLength = 4U;
 
-    Dcm_Transmit();
+    Dcm_TransmitPositiveResponse();
 }
 
 /**
@@ -2193,7 +2288,7 @@ static void Dcm_HandleRoutineStop(uint16 rid)
     Dcm_TxBuf[3] = (uint8)(rid & 0xFFU);
     Dcm_TxPdu.SduLength = 4U;
 
-    Dcm_Transmit();
+    Dcm_TransmitPositiveResponse();
 }
 
 /**
@@ -2236,7 +2331,7 @@ static void Dcm_HandleRoutineRequestResults(uint16 rid)
         Dcm_TxPdu.SduLength = 6U;
     }
 
-    Dcm_Transmit();
+    Dcm_TransmitPositiveResponse();
 }
 
 /**
@@ -2246,6 +2341,11 @@ static void Dcm_HandleRoutineRequestResults(uint16 rid)
  *          Dcm_SidSessionTable[] チェックで一元的に保証済みのため、
  *          本関数ではセッション判定を行わない。対応 RID は
  *          DCM_RID_ENGINE_HEALTH_CHECK (0x0203) のみ。
+ *
+ *          subFunction バイトの bit7 (suppressPosRspMsgIndicationBit) はここ
+ *          で一括して読み取り、各リーフハンドラ（start/stop/requestResults）
+ *          の正応答送信へ反映する（[SWS_Dcm_00200]/[SWS_Dcm_00201]。
+ *          2026-09 追加）。
  *
  * \param[in]  uds     UDS ペイロード先頭ポインタ (uds[0]=SID 0x31)。
  * \param[in]  udsLen  UDS ペイロード長。
@@ -2259,7 +2359,10 @@ static void Dcm_HandleRoutineControl(const uint8* uds, uint8 udsLen)
         return;
     }
 
-    uint8  subFunc = uds[1] & 0x7FU;   /* bit7: suppressPosRsp (本実装では無視) */
+    /* bit7: suppressPosRspMsgIndicationBit（[SWS_Dcm_00200]。全サブ機能共通の
+     * ためディスパッチャで一度だけ立てる。2026-09 是正: 以前は読み取って
+     * 捨てるだけで実際には抑制していなかった） */
+    uint8  subFunc = Dcm_ExtractSubFunc(uds[1]);
     uint16 rid     = ((uint16)uds[2] << 8U) | (uint16)uds[3];
 
     if (rid != DCM_RID_ENGINE_HEALTH_CHECK)
@@ -2547,6 +2650,10 @@ static void Dcm_HandleRequestTransferExit(const uint8* uds, uint8 udsLen)
  *          （本ファイルの他サービスと同じ検証パターン）。
  *          正応答 [0x7E, subFunc] を返す。
  *
+ *          bit7 が立っている場合は実際に正応答を送信しない
+ *          （[SWS_Dcm_00200]/[SWS_Dcm_00201]。2026-09 是正: 以前は読み取って
+ *          捨てるだけで実際には抑制していなかった）。
+ *
  * \param[in]  uds     UDS ペイロード先頭ポインタ。
  * \param[in]  udsLen  UDS ペイロード長。
  */
@@ -2559,7 +2666,9 @@ static void Dcm_HandleTesterPresent(const uint8* uds, uint8 udsLen)
         return;
     }
 
-    uint8 subFunc = uds[1] & 0x7FU;   /* bit7 = suppressPosRspMsgIndicationBit */
+    /* bit7 = suppressPosRspMsgIndicationBit（[SWS_Dcm_00200]。2026-09 是正:
+     * 以前は読み取って捨てるだけで実際には抑制していなかった） */
+    uint8 subFunc = Dcm_ExtractSubFunc(uds[1]);
 
     if (subFunc != 0x00U)   /* zeroSubFunction 以外は不正 */
     {
@@ -2582,7 +2691,7 @@ static void Dcm_HandleTesterPresent(const uint8* uds, uint8 udsLen)
     Dcm_TxBuf[1] = subFunc;
     Dcm_TxPdu.SduLength = 2U;
 
-    Dcm_Transmit();
+    Dcm_TransmitPositiveResponse();
 }
 
 /* -----------------------------------------------------------------------
@@ -2707,6 +2816,11 @@ void Dcm_ComIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
     const uint8* uds    = PduInfoPtr->SduDataPtr;
     uint8        udsLen = (uint8)PduInfoPtr->SduLength;
     uint8        sid    = uds[0];
+
+    /* [SWS_Dcm_00202]: suppressPosRspMsgIndicationBit の状態はリクエストごとに
+     * 独立して評価する（前回リクエストの抑制状態を持ち越さない）。サブ機能を
+     * 持つ各 SID のハンドラのみが後で立て直す。 */
+    Dcm_SuppressPosRsp = 0U;
 
     /* 診断要求を受信した時点で S3 タイマをリセットする（NRC になる要求も対象） */
     Dcm_LastActivityMs = millis();
