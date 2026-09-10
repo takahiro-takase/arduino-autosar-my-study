@@ -264,6 +264,27 @@ TEST_F(Bsw_Dcm_ReadDtcInfo_Test, ReadDataById_NG_TooShortRequestReturnsIncorrect
     EXPECT_EQ(FakeCanTp_TxBuf[2], DCM_NRC_INCORRECT_MESSAGE_LENGTH);
 }
 
+TEST_F(Bsw_Dcm_ReadDtcInfo_Test, ReadDataById_NG_MultipleDidRequestReturnsIncorrectMessageLength)
+{
+    /* 準備 (Arrange): 2つ目のDID([0x22, 0xF1,0x90, 0xF1,0x90]、VINを2件要求)
+     * が付いた要求。本実装は Dcm_ReadDid() が単一DIDしか扱えない設計のため
+     * 実質 DcmDspMaxDidToRead=1 に相当し、2件目以降は NRC 0x13 で拒否する
+     * ([SWS_Dcm_01335]。2026-09 追加: 以前は余分なDIDバイトを黙って無視し
+     * 1件目だけの正応答を返してしまっていた）。 */
+    uint8 req[5] = { DCM_SID_READ_DATA,
+                      (uint8)(DCM_DID_VIN >> 8U), (uint8)(DCM_DID_VIN & 0xFFU),
+                      (uint8)(DCM_DID_VIN >> 8U), (uint8)(DCM_DID_VIN & 0xFFU) };
+
+    PduInfoType pdu = { req, sizeof(req) };
+    Dcm_ComIndication(0U, &pdu);
+
+    ASSERT_EQ(FakeCanTp_TransmitCount, 1U);
+    ASSERT_EQ(FakeCanTp_TxLength, 3U);
+    EXPECT_EQ(FakeCanTp_TxBuf[0], DCM_SID_NEGATIVE_RESP);
+    EXPECT_EQ(FakeCanTp_TxBuf[1], DCM_SID_READ_DATA);
+    EXPECT_EQ(FakeCanTp_TxBuf[2], DCM_NRC_INCORRECT_MESSAGE_LENGTH);
+}
+
 // ------------------------------------------------------------
 // Dcm_GetSesCtrlType/Dcm_GetSecurityLevel（Dcm_Cbk.c 内部の static フィールド
 // Dcm_CurrentSession/Dcm_SecurityLevel を読み出すだけの新規 getter API）

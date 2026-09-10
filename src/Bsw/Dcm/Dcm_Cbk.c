@@ -1437,13 +1437,20 @@ static Std_ReturnType Dcm_ReadDid(uint16 did, uint8* buf, uint8* dataLen)
  * \details 要求フレームから DID を抽出し、対応するデータを読み出して
  *          正応答 [0x62, DID_H, DID_L, data...] を返す。
  *
+ *          本実装は `Dcm_ReadDid()` が単一 DID しか扱えない設計のため、
+ *          実質的に `DcmDspMaxDidToRead=1` に相当する。要求に2つ目以降の
+ *          DID が付いている場合(udsLen>3)は NRC 0x13 で拒否する
+ *          （[SWS_Dcm_01335]。2026-09 是正: 以前は下限のみ判定していたため、
+ *          余分な DID バイトを黙って無視し要求と食い違う1件分だけの正応答を
+ *          返してしまっていた）。
+ *
  * \param[in]  uds     UDS ペイロード先頭ポインタ。
  * \param[in]  udsLen  UDS ペイロード長。
  */
 static void Dcm_HandleReadDataById(const uint8* uds, uint8 udsLen)
 {
     DET_LOGT(TAG, "called");
-    if (udsLen < 3U)
+    if (udsLen != 3U)
     {
         Dcm_SendNegativeResponse(DCM_SID_READ_DATA, DCM_NRC_INCORRECT_MESSAGE_LENGTH);
         return;
