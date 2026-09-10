@@ -684,6 +684,24 @@ TEST_F(Bsw_Dcm_ReadDtcInfo_Test, ReadDtcExtendedData_OK_RecordNumber0xFFReturnsT
     EXPECT_EQ(FakeCanTp_TxBuf[6], DCM_EXTENDED_DATA_RECORD_NUMBER);
 }
 
+TEST_F(Bsw_Dcm_ReadDtcInfo_Test, ReadDtcExtendedData_NG_NeverFailedDtcReturnsRequestOutOfRange)
+{
+    /* 準備 (Arrange): EventId=0 (DEM_EVENT_ENGINE_OVERHEAT, DTC=0x000101) は
+     * 一度も FAILED 報告していない(ExtendedData 未記録)状態で
+     * [0x19, 0x06, 0x00,0x01,0x01, 0x01] を送る（[SWS_Dcm_01242]相当。
+     * 2026-09 追加: 以前は Dem_GetOccurrenceCounterOfEvent() が未記録でも
+     * 常に E_OK・カウンタ 0 を返していたため、誤って正応答
+     * occurrenceCounter=0 を返してしまっていた）。 */
+    uint8 req[6] = { DCM_SID_READ_DTC_INFO, DCM_DTC_SUBFUNC_REPORT_EXTDATA,
+                      0x00U, 0x01U, 0x01U, DCM_EXTENDED_DATA_RECORD_NUMBER };
+    SendReadDtcInfo(req, sizeof(req));
+
+    ASSERT_EQ(FakeCanTp_TransmitCount, 1U);
+    ASSERT_EQ(FakeCanTp_TxLength, 3U);
+    EXPECT_EQ(FakeCanTp_TxBuf[0], DCM_SID_NEGATIVE_RESP);
+    EXPECT_EQ(FakeCanTp_TxBuf[2], DCM_NRC_REQUEST_OUT_OF_RANGE);
+}
+
 TEST_F(Bsw_Dcm_ReadDtcInfo_Test, ReadDtcSnapshot_NG_UnsupportedRecordNumberStillRejected)
 {
     /* 準備 (Arrange): 0x01/0xFF以外のrecordNumber(0x02)は依然として拒否される

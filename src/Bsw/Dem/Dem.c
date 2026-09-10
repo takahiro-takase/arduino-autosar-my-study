@@ -976,8 +976,16 @@ Std_ReturnType Dem_GetEventIdOfDTC(uint32 DTC, Dem_EventIdType* EventId)
 /**
  * \brief   指定イベントの ExtendedData（故障確定回数）を取得する。
  *
- * \details FreezeFrame と異なり「記録なし」という状態を持たない
- *          （一度も確定 FAILED していなければ単に 0）。
+ * \details カウンタは一度も確定 FAILED していなければ 0 のまま
+ *          （確定 FAILED の瞬間にのみ +1 する、Dem_SetEventStatus() 参照）。
+ *          0 は「ExtendedData が一度も記録されていない」ことと等価なため、
+ *          FreezeFrame の Dem_GetFreezeFrameOfEvent()（Dem_FreezeFrameValid[]
+ *          で判定）と同様に「未記録」として E_NOT_OK を返す（2026-09 是正:
+ *          以前は「FreezeFrameと異なり記録なし状態を持たない」という設計
+ *          だったため、一度も故障していない DTC でも常に E_OK を返し、
+ *          唯一の呼び出し元 Dcm_HandleReadDtcExtendedData()(UDS 0x19/06)が
+ *          誤って正応答(occurrenceCounter=0)を返してしまっていた。
+ *          [SWS_Dcm_01242]相当のNRC 0x31 扱いに合わせる）。
  *
  * \note    本プロジェクト独自関数のため ApiId は任意の値のはずだったが、
  *          以前の 0x29 は実仕様の `Dem_GetIndicatorStatus`（[SWS_Dem_00205]）
@@ -1008,6 +1016,9 @@ Std_ReturnType Dem_GetOccurrenceCounterOfEvent(Dem_EventIdType EventId, uint8* C
         Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_GET_OCCURRENCE_COUNTER_OF_EVENT, DEM_E_PARAM_POINTER);
         return E_NOT_OK;
     }
+
+    if (Dem_OccurrenceCounter[EventId] == 0U)
+        return E_NOT_OK;  /* 未記録: DET 対象外（正常な「記録なし」状態） */
 
     *Counter = Dem_OccurrenceCounter[EventId];
     return E_OK;
