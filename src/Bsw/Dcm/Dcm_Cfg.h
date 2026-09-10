@@ -208,6 +208,16 @@
 /** ISO 14229-1 DTC フォーマット識別子 (0x01 = ISO 15031-6 / SAE J2012) */
 #define DCM_DTC_FORMAT_ISO15031         0x01U
 
+/** ISO 14229-1 の慣行で「当該DTCの全レコードを要求」を意味する予約値。
+ *  [SWS_Dcm_00441]は、DcmがDem_SelectFreezeFrameData()へRecordNumber=0xFF
+ *  を渡す（全レコードのサイズ取得の）用途で明記しており、要求元のテスタが
+ *  この値を使うことも前提にしている。7.5.2.5.5節のDTCExtendedDataRecordNumber
+ *  も要求からそのままDem_SelectExtendedDataRecord()へ渡される値のため同じ
+ *  慣行が適用される。本実装はFreezeFrame/ExtendedDataともイベントごとに
+ *  1レコードのみ保持する学習用簡略化のため、0xFFを唯一のレコード番号への
+ *  エイリアスとして受理する（SID 0x19 サブ機能0x04/0x06で共用、2026-09 追加）。 */
+#define DCM_RECORD_NUMBER_ALL  0xFFU
+
 /* -----------------------------------------------------------------------
  * FreezeFrame (SID 0x19/04) 関連定数
  * 本実装はイベントごとに 1 レコードのみ保持する学習用簡略化を行う。
