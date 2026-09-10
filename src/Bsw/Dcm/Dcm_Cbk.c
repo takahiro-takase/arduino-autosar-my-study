@@ -1166,7 +1166,10 @@ static void Dcm_HandleReadDtcFaultDetectionCounter(const uint8* uds, uint8 udsLe
  * \details 要求された DTC に一致する FreezeFrame を Dem から取得し、
  *          EngineSpeed (DID 0x0101) / CoolantTemp (0x0102) / EngineState (0x0103)
  *          の 3 DID 固定フォーマットで返す。
- *          本実装はレコード番号 0x01 のみ対応する（イベントごとに 1 スナップショット）。
+ *          本実装はレコード番号 0x01 のみ保持する（イベントごとに 1 スナップショット）。
+ *          ISO 14229-1 の慣行で「全レコード要求」を意味する 0xFF
+ *          (DCM_RECORD_NUMBER_ALL) も、この唯一のレコードへの
+ *          エイリアスとして受理する（[SWS_Dcm_00441]。2026-09 追加）。
  *          応答は 18 バイトで SF の 7 バイト制限を超えるため、CanTp が FF+CF に分割する。
  *
  *          要求: [0x19, 0x04, DTC_H, DTC_M, DTC_L, recordNumber]
@@ -1174,6 +1177,8 @@ static void Dcm_HandleReadDtcFaultDetectionCounter(const uint8* uds, uint8 udsLe
  *                 DID1_H, DID1_L, EngineSpeed_H, EngineSpeed_L,
  *                 DID2_H, DID2_L, CoolantTemp,
  *                 DID3_H, DID3_L, EngineState]
+ *          (recordNumberは要求が0xFFでも実際のレコード番号0x01を返す。
+ *          [SWS_Dcm_00302]/Table 7.18参照)
  *
  * \param[in]  uds     UDS ペイロード先頭ポインタ。
  * \param[in]  udsLen  UDS ペイロード長。
@@ -1196,7 +1201,8 @@ static void Dcm_HandleReadDtcSnapshot(const uint8* uds, uint8 udsLen)
     Dem_FreezeFrameType frame;
 
     if (Dem_GetEventIdOfDTC(dtc, &eventId) != E_OK
-        || recordNumber != DCM_FREEZEFRAME_RECORD_NUMBER
+        || (recordNumber != DCM_FREEZEFRAME_RECORD_NUMBER
+            && recordNumber != DCM_RECORD_NUMBER_ALL)
         || Dem_GetFreezeFrameOfEvent(eventId, &frame) != E_OK)
     {
         /* DTC 不明・レコード番号不一致・FreezeFrame 未記録 (一度も FAILED していない) */
@@ -1214,7 +1220,10 @@ static void Dcm_HandleReadDtcSnapshot(const uint8* uds, uint8 udsLen)
     Dem_UdsStatusByteType statusByte = 0U;
     (void)Dem_GetEventUdsStatus(eventId, &statusByte);
     Dcm_TxBuf[5]  = statusByte;
-    Dcm_TxBuf[6]  = recordNumber;
+    /* [SWS_Dcm_00302]: 応答のrecordNumberはDemが実際に保持するレコード番号
+     * （要求が0xFFの場合も実レコード番号0x01を返す。要求値をそのまま
+     * echoしない）。 */
+    Dcm_TxBuf[6]  = DCM_FREEZEFRAME_RECORD_NUMBER;
     Dcm_TxBuf[7]  = DCM_FREEZEFRAME_DID_COUNT;
     Dcm_TxBuf[8]  = (uint8)(DCM_DID_ENGINE_SPEED >> 8U);
     Dcm_TxBuf[9]  = (uint8)(DCM_DID_ENGINE_SPEED & 0xFFU);
@@ -1237,10 +1246,14 @@ static void Dcm_HandleReadDtcSnapshot(const uint8* uds, uint8 udsLen)
  * \details 要求された DTC の ExtendedData（確定 FAILED の累積回数）を Dem から
  *          取得して返す。FreezeFrame（故障時点のスナップショット、18 バイトで
  *          CanTp の FF+CF が必要）とは異なり、応答は 8 バイトで SF に収まる。
- *          本実装はレコード番号 0x01 のみ対応する（イベントごとに 1 カウンタ）。
+ *          本実装はレコード番号 0x01 のみ保持する（イベントごとに 1 カウンタ）。
+ *          ISO 14229-1 の慣行で「全レコード要求」を意味する 0xFF
+ *          (DCM_RECORD_NUMBER_ALL) も、この唯一のレコードへの
+ *          エイリアスとして受理する（7.5.2.5.5節。2026-09 追加）。
  *
  *          要求: [0x19, 0x06, DTC_H, DTC_M, DTC_L, recordNumber]
  *          応答: [0x59, 0x06, DTC_H, DTC_M, DTC_L, status, recordNumber, occurrenceCounter]
+ *          (recordNumberは要求が0xFFでも実際のレコード番号0x01を返す)
  *
  * \param[in]  uds     UDS ペイロード先頭ポインタ。
  * \param[in]  udsLen  UDS ペイロード長。
@@ -1262,7 +1275,8 @@ static void Dcm_HandleReadDtcExtendedData(const uint8* uds, uint8 udsLen)
     uint8           occurrenceCounter = 0U;
 
     if (Dem_GetEventIdOfDTC(dtc, &eventId) != E_OK
-        || recordNumber != DCM_EXTENDED_DATA_RECORD_NUMBER
+        || (recordNumber != DCM_EXTENDED_DATA_RECORD_NUMBER
+            && recordNumber != DCM_RECORD_NUMBER_ALL)
         || Dem_GetOccurrenceCounterOfEvent(eventId, &occurrenceCounter) != E_OK)
     {
         /* DTC 不明、またはレコード番号不一致 */
@@ -1281,7 +1295,9 @@ static void Dcm_HandleReadDtcExtendedData(const uint8* uds, uint8 udsLen)
     Dem_UdsStatusByteType statusByte = 0U;
     (void)Dem_GetEventUdsStatus(eventId, &statusByte);
     Dcm_TxBuf[5] = statusByte;
-    Dcm_TxBuf[6] = recordNumber;
+    /* [SWS_Dcm_00295]系と同様、応答recordNumberは実レコード番号を返す
+     * （要求値0xFFをそのままechoしない）。 */
+    Dcm_TxBuf[6] = DCM_EXTENDED_DATA_RECORD_NUMBER;
     Dcm_TxBuf[7] = occurrenceCounter;
     Dcm_TxPdu.SduLength = 8U;
 

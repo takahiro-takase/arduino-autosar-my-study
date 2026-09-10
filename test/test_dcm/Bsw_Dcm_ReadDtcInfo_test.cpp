@@ -637,6 +637,70 @@ TEST_F(Bsw_Dcm_ReadDtcInfo_Test, ReadDtcExtendedData_NG_TooShortRequestReturnsIn
 }
 
 // ------------------------------------------------------------
+// DTCSnapshotRecordNumber/DTCExtDataRecordNumber の 0xFF(全レコード要求)を
+// 唯一のレコードへのエイリアスとして受理する是正(2026-09、[SWS_Dcm_00441])。
+// 以前は 0x01 との厳密一致のみ受理し、0xFF は NRC 0x31 で拒否していた。
+// ------------------------------------------------------------
+
+TEST_F(Bsw_Dcm_ReadDtcInfo_Test, ReadDtcSnapshot_OK_RecordNumber0xFFReturnsTheOnlyRecord)
+{
+    /* 準備 (Arrange): EventId=0 (DEM_EVENT_ENGINE_OVERHEAT, DTC=0x000101) を
+     * デバウンス確定閾値(DEM_DEBOUNCE_LIMIT_ENGINE_OVERHEAT=2)回FAILED報告して
+     * デバウンス確定させFreezeFrameを記録させてから、recordNumber=0xFF
+     * ([0x19, 0x04, 0x00,0x01,0x01, 0xFF]) を送る。 */
+    (void)Dem_SetEventStatus(DEM_EVENT_ENGINE_OVERHEAT, DEM_EVENT_STATUS_FAILED);
+    (void)Dem_SetEventStatus(DEM_EVENT_ENGINE_OVERHEAT, DEM_EVENT_STATUS_FAILED);
+
+    uint8 req[6] = { DCM_SID_READ_DTC_INFO, DCM_DTC_SUBFUNC_REPORT_SNAPSHOT,
+                      0x00U, 0x01U, 0x01U, 0xFFU };
+    SendReadDtcInfo(req, sizeof(req));
+
+    /* 評価 (Assert): recordNumber=0x01 を指定した場合と同じ正応答が返る
+     * （応答のrecordNumberフィールドは実レコード番号0x01であり、要求の
+     * 0xFFをそのままechoしない、[SWS_Dcm_00302]）。 */
+    ASSERT_EQ(FakeCanTp_TransmitCount, 1U);
+    ASSERT_EQ(FakeCanTp_TxLength, 18U);
+    EXPECT_EQ(FakeCanTp_TxBuf[0], 0x59U);
+    EXPECT_EQ(FakeCanTp_TxBuf[1], DCM_DTC_SUBFUNC_REPORT_SNAPSHOT);
+    EXPECT_EQ(FakeCanTp_TxBuf[6], DCM_FREEZEFRAME_RECORD_NUMBER);
+}
+
+TEST_F(Bsw_Dcm_ReadDtcInfo_Test, ReadDtcExtendedData_OK_RecordNumber0xFFReturnsTheOnlyRecord)
+{
+    /* 準備 (Arrange): EventId=0 をデバウンス確定閾値回FAILED報告して確定させて
+     * から recordNumber=0xFF ([0x19, 0x06, 0x00,0x01,0x01, 0xFF]) を送る。 */
+    (void)Dem_SetEventStatus(DEM_EVENT_ENGINE_OVERHEAT, DEM_EVENT_STATUS_FAILED);
+    (void)Dem_SetEventStatus(DEM_EVENT_ENGINE_OVERHEAT, DEM_EVENT_STATUS_FAILED);
+
+    uint8 req[6] = { DCM_SID_READ_DTC_INFO, DCM_DTC_SUBFUNC_REPORT_EXTDATA,
+                      0x00U, 0x01U, 0x01U, 0xFFU };
+    SendReadDtcInfo(req, sizeof(req));
+
+    /* 評価 (Assert): recordNumber=0x01 を指定した場合と同じ正応答が返る */
+    ASSERT_EQ(FakeCanTp_TransmitCount, 1U);
+    ASSERT_EQ(FakeCanTp_TxLength, 8U);
+    EXPECT_EQ(FakeCanTp_TxBuf[0], 0x59U);
+    EXPECT_EQ(FakeCanTp_TxBuf[1], DCM_DTC_SUBFUNC_REPORT_EXTDATA);
+    EXPECT_EQ(FakeCanTp_TxBuf[6], DCM_EXTENDED_DATA_RECORD_NUMBER);
+}
+
+TEST_F(Bsw_Dcm_ReadDtcInfo_Test, ReadDtcSnapshot_NG_UnsupportedRecordNumberStillRejected)
+{
+    /* 準備 (Arrange): 0x01/0xFF以外のrecordNumber(0x02)は依然として拒否される
+     * ことを確認する(0xFF追加が「何でも受理」への後退でないことの回帰)。 */
+    (void)Dem_SetEventStatus(DEM_EVENT_ENGINE_OVERHEAT, DEM_EVENT_STATUS_FAILED);
+
+    uint8 req[6] = { DCM_SID_READ_DTC_INFO, DCM_DTC_SUBFUNC_REPORT_SNAPSHOT,
+                      0x00U, 0x01U, 0x01U, 0x02U };
+    SendReadDtcInfo(req, sizeof(req));
+
+    ASSERT_EQ(FakeCanTp_TransmitCount, 1U);
+    ASSERT_EQ(FakeCanTp_TxLength, 3U);
+    EXPECT_EQ(FakeCanTp_TxBuf[0], DCM_SID_NEGATIVE_RESP);
+    EXPECT_EQ(FakeCanTp_TxBuf[2], DCM_NRC_REQUEST_OUT_OF_RANGE);
+}
+
+// ------------------------------------------------------------
 // 固定長サービスの上限長チェック欠落の是正(2026-09)。0x19 以外の
 // SID(0x10/0x11/0x27/0x3E)でも、有効なサブ機能に余分なバイトを付けた
 // 要求が黙って受理されていた問題を修正。各1件のみ代表的に検証する。
