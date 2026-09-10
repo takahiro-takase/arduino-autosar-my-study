@@ -424,13 +424,17 @@ Std_ReturnType Dem_GetEventIdOfDTC(uint32 DTC, Dem_EventIdType* EventId);
  * \details DCM SID 0x19 subFunc 0x06 (reportExtendedDataRecordByDTCNumber) から
  *          呼び出す。FreezeFrame（故障時点のスナップショット）とは異なり、
  *          これまでに確定 FAILED した累積回数を返す（0xFF で飽和）。
- *          一度も確定 FAILED していないイベントは 0 を返す（E_OK のまま）。
+ *          一度も確定 FAILED していない（=ExtendedData 未記録の）イベントは
+ *          E_NOT_OK を返す（[SWS_Dcm_01242]相当、2026-09 是正: 以前は常に
+ *          E_OK・カウンタ 0 を返しており、唯一の呼び出し元 Dcm 側が
+ *          誤って正応答を返してしまっていた）。
  *
  * \param[in]   EventId   イベント ID (DEM_EVENT_* 定数)。
  * \param[out]  Counter   故障確定回数の格納先。NULL 禁止。
  *
- * \retval  E_OK      正常取得。
- * \retval  E_NOT_OK  EventId が範囲外、または Counter が NULL。
+ * \retval  E_OK      正常取得（1 回以上確定 FAILED 済み）。
+ * \retval  E_NOT_OK  EventId が範囲外、Counter が NULL、または ExtendedData
+ *                    未記録（一度も確定 FAILED していない）。
  *
  * \note    本プロジェクト独自の関数（実 AUTOSAR に対応する関数は無い）のため
  *          ApiId は任意の値のはずだったが、以前の 0x29 は実仕様の

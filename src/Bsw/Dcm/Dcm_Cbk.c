@@ -1279,7 +1279,11 @@ static void Dcm_HandleReadDtcExtendedData(const uint8* uds, uint8 udsLen)
             && recordNumber != DCM_RECORD_NUMBER_ALL)
         || Dem_GetOccurrenceCounterOfEvent(eventId, &occurrenceCounter) != E_OK)
     {
-        /* DTC 不明、またはレコード番号不一致 */
+        /* DTC 不明、レコード番号不一致、または ExtendedData 未記録
+         * （一度も確定 FAILED していない DTC。[SWS_Dcm_01242]相当。
+         * 2026-09 是正: 以前は Dem_GetOccurrenceCounterOfEvent() が
+         * 未記録でも常に E_OK・カウンタ 0 を返していたため誤って正応答して
+         * いた） */
         Dcm_SendNegativeResponse(DCM_SID_READ_DTC_INFO, DCM_NRC_REQUEST_OUT_OF_RANGE);
         return;
     }
