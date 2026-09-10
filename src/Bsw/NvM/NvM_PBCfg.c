@@ -65,8 +65,12 @@ static const uint8 NvM_Default_DemStatus[NVM_BLOCK_DEM_STATUS_LENGTH] =
 
 /* DEM_AGING / DEM_EXTENDED はデフォルトを定義しない (NULL)。経年回復カウンタ・
  * 故障確定回数 (ExtendedData) の初回起動値はいずれも全イベント 0 であり、
- * これは NvM が NULL の場合に行う全 0 フィルそのものと一致するため、
- * 専用の ROM テーブルを用意する必要がない。 */
+ * NvM_Init() が CRC 不一致検出時に NULL の場合行う全 0 フィルと一致するため、
+ * 専用の ROM テーブルを用意する必要がない（2026-09 追記: ただしこれは
+ * NvM_Init() 内部の起動時復旧処理に限った話で、実行中に明示的に呼ぶ
+ * `NvM_RestoreBlockDefaults()` は ROM デフォルト値が未設定のブロックに対し
+ * E_NOT_OK を返すだけで全 0 フィルは行わない、[SWS_NvM_00883]。この2ブロックに
+ * 対して `NvM_RestoreBlockDefaults()` を呼んでもリセットは起きない）。 */
 
 /* -----------------------------------------------------------------------
  * ブロック記述子テーブル
