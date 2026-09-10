@@ -92,7 +92,10 @@ Std_ReturnType CryIf_ProcessJob(uint32 channelId, Crypto_JobType* job);
  * \brief   鍵要素を対応する Crypto Driver Object へディスパッチする。
  *
  * \details 単一 Crypto Driver Object のみのため `Crypto_KeyElementSet()` への
- *          実質パススルー（[SWS_CryIf_00055]）。
+ *          実質パススルー（[SWS_CryIf_00055]）。ただし cryIfKeyId の範囲
+ *          チェックは下位層に委ねず CryIf 自身が行う（[SWS_CryIf_00050]。
+ *          2026-09 追加。CryIf は独自の鍵 ID 空間を持たず Crypto と共有
+ *          しているため CRYPTO_KEY_COUNT を直接参照する）。
  *
  * \param[in]  cryIfKeyId    鍵 ID。Crypto Driver 側の cryptoKeyId へそのまま渡す。
  * \param[in]  keyElementId  鍵要素 ID。
@@ -100,9 +103,10 @@ Std_ReturnType CryIf_ProcessJob(uint32 channelId, Crypto_JobType* job);
  * \param[in]  keyLength     keyPtr のバイト長。0 禁止。
  *
  * \retval  E_OK      鍵要素を書き換えた。
- * \retval  E_NOT_OK  未初期化、NULL、keyLength=0、または下位層が失敗。
+ * \retval  E_NOT_OK  未初期化、NULL、keyLength=0、cryIfKeyId が範囲外
+ *                    （[SWS_CryIf_00050]）、または下位層が失敗。
  *
- * \AUTOSARReq     {SWS_CryIf_91004}
+ * \AUTOSARReq     {SWS_CryIf_91004, SWS_CryIf_00050}
  * \ServiceID      {0x04}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
@@ -114,14 +118,17 @@ Std_ReturnType CryIf_KeyElementSet(uint32 cryIfKeyId, uint32 keyElementId,
  * \brief   鍵を対応する Crypto Driver Object 上で有効化する。
  *
  * \details 単一 Crypto Driver Object のみのため `Crypto_KeySetValid()` への
- *          実質パススルー（[SWS_CryIf_00058]）。
+ *          実質パススルー（[SWS_CryIf_00058]）。ただし cryIfKeyId の範囲
+ *          チェックは下位層に委ねず CryIf 自身が行う（[SWS_CryIf_00057]。
+ *          2026-09 追加）。
  *
  * \param[in]  cryIfKeyId  有効化する鍵の ID。
  *
  * \retval  E_OK      有効化した。
- * \retval  E_NOT_OK  未初期化、または下位層が失敗。
+ * \retval  E_NOT_OK  未初期化、cryIfKeyId が範囲外（[SWS_CryIf_00057]）、
+ *                    または下位層が失敗。
  *
- * \AUTOSARReq     {SWS_CryIf_91005}
+ * \AUTOSARReq     {SWS_CryIf_91005, SWS_CryIf_00057}
  * \ServiceID      {0x05}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
@@ -132,7 +139,9 @@ Std_ReturnType CryIf_KeySetValid(uint32 cryIfKeyId);
  * \brief   鍵要素を対応する Crypto Driver Object から読み出す。
  *
  * \details 単一 Crypto Driver Object のみのため `Crypto_KeyElementGet()` への
- *          実質パススルー（[SWS_CryIf_00065]）。
+ *          実質パススルー（[SWS_CryIf_00065]）。ただし cryIfKeyId の範囲
+ *          チェックは下位層に委ねず CryIf 自身が行う（[SWS_CryIf_00060]。
+ *          2026-09 追加）。
  *
  * \param[in]     cryIfKeyId       鍵 ID。Crypto Driver 側の cryptoKeyId へそのまま渡す。
  * \param[in]     keyElementId     鍵要素 ID。
@@ -141,9 +150,10 @@ Std_ReturnType CryIf_KeySetValid(uint32 cryIfKeyId);
  *                                 書き込んだバイト数。NULL 禁止、値0も禁止。
  *
  * \retval  E_OK      鍵要素を読み出した。
- * \retval  E_NOT_OK  未初期化、NULL、`*resultLengthPtr`=0、または下位層が失敗。
+ * \retval  E_NOT_OK  未初期化、NULL、`*resultLengthPtr`=0、cryIfKeyId が範囲外
+ *                    （[SWS_CryIf_00060]）、または下位層が失敗。
  *
- * \AUTOSARReq     {SWS_CryIf_91006}
+ * \AUTOSARReq     {SWS_CryIf_91006, SWS_CryIf_00060}
  * \ServiceID      {0x06}
  * \Reentrancy     {Reentrant}
  * \Synchronicity  {Synchronous}
