@@ -10,6 +10,7 @@
  */
 #include "CryIf.h"
 #include "Crypto.h"
+#include "Crypto_Cfg.h"
 #include "Det.h"
 
 #define TAG "CryIf"
@@ -116,10 +117,22 @@ Std_ReturnType CryIf_KeyElementSet(uint32 cryIfKeyId, uint32 keyElementId,
         return E_NOT_OK;
     }
 
-    /* [SWS_CryIf_00055]: 単一 Crypto Driver Object へのパススルーのため、
-     * cryIfKeyId/keyElementId の範囲チェックは Crypto_KeyElementSet() に委ねる
-     * （CryIf_ProcessJob() が job->cryptoKeyId の範囲チェックを Crypto 側に
-     * 委ねているのと同じ方針）。 */
+    if (cryIfKeyId >= CRYPTO_KEY_COUNT)
+    {
+        /* [SWS_CryIf_00050]: cryIfKeyId の範囲チェックは CryIf 自身の診断義務
+         * であり、下位層（Crypto.c）の CRYPTO_E_PARAM_HANDLE 報告に委ねては
+         * ならない（2026-09 是正。以前は範囲チェック自体を行わず
+         * Crypto_KeyElementSet() に委ねていたため、DET 診断コードが
+         * Crypto のものになってしまっていた。Csm_KeyElementSet() で
+         * [SWS_Csm_91011] に対応した際と同じ理由、Csm.c 参照）。
+         * CryIf は独自の鍵 ID 空間を持たず Crypto と共有しているため
+         * CRYPTO_KEY_COUNT を直接参照する。 */
+        DET_LOGW(TAG, "KeyElementSet W: cryIfKeyId=%u out of range", (unsigned)cryIfKeyId);
+        Det_ReportError(CRYIF_MODULE_ID, 0U, CRYIF_API_ID_KEY_ELEMENT_SET, CRYIF_E_PARAM_HANDLE);
+        return E_NOT_OK;
+    }
+
+    /* [SWS_CryIf_00055]: 単一 Crypto Driver Object へのパススルー。 */
     return Crypto_KeyElementSet(cryIfKeyId, keyElementId, keyPtr, keyLength);
 }
 
@@ -129,6 +142,14 @@ Std_ReturnType CryIf_KeySetValid(uint32 cryIfKeyId)
     if (!CryIf_Initialized)
     {
         Det_ReportError(CRYIF_MODULE_ID, 0U, CRYIF_API_ID_KEY_SET_VALID, CRYIF_E_UNINIT);
+        return E_NOT_OK;
+    }
+
+    if (cryIfKeyId >= CRYPTO_KEY_COUNT)
+    {
+        /* [SWS_CryIf_00057]（CryIf_KeyElementSet と同じ理由。2026-09 追加） */
+        DET_LOGW(TAG, "KeySetValid W: cryIfKeyId=%u out of range", (unsigned)cryIfKeyId);
+        Det_ReportError(CRYIF_MODULE_ID, 0U, CRYIF_API_ID_KEY_SET_VALID, CRYIF_E_PARAM_HANDLE);
         return E_NOT_OK;
     }
 
@@ -158,8 +179,14 @@ Std_ReturnType CryIf_KeyElementGet(uint32 cryIfKeyId, uint32 keyElementId,
         return E_NOT_OK;
     }
 
-    /* [SWS_CryIf_00065]: 単一 Crypto Driver Object へのパススルーのため、
-     * cryIfKeyId/keyElementId の範囲チェックは Crypto_KeyElementGet() に委ねる
-     * （CryIf_KeyElementSet() と同じ方針）。 */
+    if (cryIfKeyId >= CRYPTO_KEY_COUNT)
+    {
+        /* [SWS_CryIf_00060]（CryIf_KeyElementSet と同じ理由。2026-09 追加） */
+        DET_LOGW(TAG, "KeyElementGet W: cryIfKeyId=%u out of range", (unsigned)cryIfKeyId);
+        Det_ReportError(CRYIF_MODULE_ID, 0U, CRYIF_API_ID_KEY_ELEMENT_GET, CRYIF_E_PARAM_HANDLE);
+        return E_NOT_OK;
+    }
+
+    /* [SWS_CryIf_00065]: 単一 Crypto Driver Object へのパススルー。 */
     return Crypto_KeyElementGet(cryIfKeyId, keyElementId, resultPtr, resultLengthPtr);
 }

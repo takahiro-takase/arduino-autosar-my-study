@@ -26,7 +26,9 @@
 #define CRYIF_E_UNINIT        0x00U  /* [SWS_CryIf_00027 等]: 未初期化時の API 呼び出し */
 #define CRYIF_E_INIT_FAILED   0x01U
 #define CRYIF_E_PARAM_POINTER 0x02U  /* [SWS_CryIf_00029 等]: NULL ポインタチェック */
-#define CRYIF_E_PARAM_HANDLE  0x03U  /* [SWS_CryIf_00028 等]: channelId が範囲外 */
+#define CRYIF_E_PARAM_HANDLE  0x03U  /* [SWS_CryIf_00028 等]: channelId が範囲外。
+                                      * [SWS_CryIf_00050/00057/00060]: cryIfKeyId が
+                                      * 範囲外（2026-09 追加）も同じコードを使う */
 #define CRYIF_E_PARAM_VALUE   0x04U  /* [SWS_CryIf_00053]: keyLength=0 等の不正値 */
 
 /** ApiId（値は docs/AUTOSAR_SWS_CryptoInterface.pdf の「Service ID[hex]」記載を
