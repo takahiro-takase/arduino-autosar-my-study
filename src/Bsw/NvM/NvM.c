@@ -95,6 +95,16 @@ static NvM_RequestResultType NvM_BlockResult[NVM_BLOCK_COUNT];
  *  0 以外なら保護中。NvM.h の NvM_SetBlockProtection() Doxygen 参照)。 */
 static uint8 NvM_BlockProtected[NVM_BLOCK_COUNT];
 
+/** 非冗長ブロック(Redundant=0)ごとの「直近の read/write ジョブで確定した
+ *  CRC」([SWS_NvM_00852]の`NvMBlockUseCRCCompMechanism`比較対象)。
+ *  NvM_LoadAndVerifyBlock()（起動時の読み込み成功時、またはデフォルト
+ *  復元後）と NvM_MainFunction()（書き込みジョブ完了時）の両方で更新する。
+ *  NvM_WriteBlock() の書き込みスキップ判定は Redundant==0U を前提条件と
+ *  しているため、冗長ブロック分のエントリは意図的に更新しない（値は
+ *  不定のまま=未使用。専用の valid フラグを設けず「非冗長ブロックなら
+ *  NvM_Init() 完了後に必ず有効」という限定した不変条件で足りる）。 */
+static uint8 NvM_LastCrc[NVM_BLOCK_COUNT];
+
 /** 現在 NvM_MainFunction() が処理中のブロック ID。
  *  NVM_BLOCK_COUNT ならどのブロックも処理中でないことを示す。 */
 static uint8 NvM_ActiveBlockId = NVM_BLOCK_COUNT;
@@ -249,6 +259,16 @@ static void NvM_ApplyDefaultSync(NvM_BlockIdType id, const NvM_BlockDescriptorTy
         NvM_BlockResult[id] = NVM_REQ_INTEGRITY_FAILED;
         DET_LOGW(TAG, "block=%u zero-filled (no ROM default -> INTEGRITY_FAILED)", (unsigned)id);
     }
+
+    if (blk->Redundant == 0U)
+    {
+        /* [SWS_NvM_00852]比較対象の更新。今書き終えた内容が「直近の
+         * read/writeジョブで確定したCRC」になる。冗長ブロックは
+         * NvM_WriteBlock() の書き込みスキップ判定が Redundant==0U を
+         * 前提条件にしており本配列を一切参照しないため、更新しない
+         * （/simplify で指摘: 冗長ブロックでの更新は死んだ書き込みだった）。 */
+        NvM_LastCrc[id] = NvM_CalcCrc8((const uint8*)blk->RamBlockDataAddress, blk->NvMNvBlockLength);
+    }
 }
 
 /**
@@ -293,6 +313,12 @@ static void NvM_LoadAndVerifyBlock(NvM_BlockIdType id, const NvM_BlockDescriptor
                      (unsigned)id, (unsigned)storedCrcPrimary, (unsigned)calcCrcPrimary);
             NvM_ApplyDefaultSync(id, blk);
         }
+        else
+        {
+            /* [SWS_NvM_00852]比較対象の初期値: 起動時に読み込んだ内容が
+             * そのまま「直近の read ジョブで確定した CRC」になる。 */
+            NvM_LastCrc[id] = calcCrcPrimary;
+        }
         return;
     }
 
@@ -314,6 +340,9 @@ static void NvM_LoadAndVerifyBlock(NvM_BlockIdType id, const NvM_BlockDescriptor
             DET_LOGW(TAG, "block=%u redundant: mirror CRC mismatch, repairing from primary", (unsigned)id);
             NvM_WriteCopySync(blk->NvMNvBlockBaseNumberMirror, blk->RamBlockDataAddress, blk->NvMNvBlockLength);
         }
+        /* NvM_LastCrc[] は更新しない: 本ブロックは Redundant=1 のため
+         * NvM_WriteBlock() の書き込みスキップ判定（Redundant==0U が前提条件）
+         * から一切参照されない（NvM_LastCrc[] 宣言部のコメント参照）。 */
         return;
     }
 
@@ -480,6 +509,8 @@ Std_ReturnType NvM_ReadBlock(NvM_BlockIdType BlockId, void* NvM_DstPtr)
  * \details RAM ミラーの更新は同期的で即座に反映される。実際の EEPROM 書き込みは
  *          NvM_MainFunction() と MemIf_MainFunction() が非同期に行うため、
  *          ここではブロックしない（詳細はファイル冒頭のコメント参照）。
+ *          内容が直近の read/write ジョブと同一(CRC一致)の場合は物理書き込み
+ *          をスキップする（[SWS_NvM_00852]、NvM.h 参照）。
  *
  * \ServiceID      {0x07}
  * \Reentrancy     {Non Reentrant}
@@ -521,6 +552,36 @@ Std_ReturnType NvM_WriteBlock(NvM_BlockIdType BlockId, const void* NvM_SrcPtr)
 
     /* RAM ミラーを最新値で更新 (同期) */
     memcpy(blk->RamBlockDataAddress, NvM_SrcPtr, blk->NvMNvBlockLength);
+
+    if (blk->Redundant == 0U
+        && NvM_BlockPending[BlockId] == 0U
+        && NvM_CalcCrc8((const uint8*)blk->RamBlockDataAddress, blk->NvMNvBlockLength) == NvM_LastCrc[BlockId])
+    {
+        /* [SWS_NvM_00852]: 書き込むデータのCRCが直近のread/writeジョブで
+         * 確定したCRCと一致する場合、物理書き込みをスキップしジョブを
+         * 即座に成功扱いとする（2026-09 追加）。「冗長性喪失が検出された
+         * ブロックには適用しない」という仕様の除外規定は、本実装では
+         * 単純に全冗長ブロック(Redundant=1)を対象外とすることで安全側に
+         * 倒す（冗長ブロックはプライマリ/ミラー個別の破損検出状態を
+         * 追跡しておらず、片面のみ破損しているケースを見分けられない
+         * ため）。
+         * `NvM_BlockPending[BlockId] == 0U` の確認は必須（/code-review で
+         * 発見）: 既に非同期書き込みジョブが進行中の場合、そのジョブの
+         * 内容は「今回のNvM_SrcPtr」とは限らない（例: A→Bへの書き込みが
+         * 進行中の間にB→Aへ戻す要求が来ると、Aは直近確定CRCと一致するため
+         * 本分岐に来てしまうが、EEPROM上はBの書き込みが物理的に進行中）。
+         * この場合はスキップせず必ず NvM_MarkPending() を通し、進行中の
+         * ジョブを正しくキャンセル・巻き戻す（ちぎれ書き・値の取り違えを
+         * 防ぐ）。
+         * 比較は8bit CRCのみで、バイト列そのものの完全一致ではない
+         * （[SWS_NvM_00852]本文が要求する比較方法自体がCRC比較であり、
+         * 衝突確率(1/256)を許容する設計。/code-review で指摘されたが、
+         * 仕様がバイト完全一致ではなくCRC一致を明示的に要求しているため
+         * 意図した挙動として維持する）。 */
+        NvM_BlockResult[BlockId] = NVM_REQ_OK;
+        DET_LOGI(TAG, "block=%u write skipped (CRC unchanged)", (unsigned)BlockId);
+        return E_OK;
+    }
 
     /* EEPROM への実書き込みは NvM_MainFunction()/MemIf_MainFunction() へ委譲 (非同期) */
     NvM_MarkPending(BlockId);
@@ -808,9 +869,13 @@ void NvM_MainFunction(void)
         return;
     }
 
-    /* ブロック完了（非冗長ブロック、または冗長ブロックの両面完了） */
+    /* ブロック完了（非冗長ブロック、または冗長ブロックの両面完了）。
+     * [SWS_NvM_00852]比較対象の更新: NvM_ActiveCrc は直前の BODY→CRC
+     * フェーズ遷移時に計算した、今回書き終えたデータ本体の CRC
+     * （冗長ブロックでも無害なので条件分岐せず一律更新する）。 */
     NvM_BlockPending[NvM_ActiveBlockId] = 0U;
     NvM_BlockResult[NvM_ActiveBlockId]  = NVM_REQ_OK;
+    NvM_LastCrc[NvM_ActiveBlockId]      = NvM_ActiveCrc;
     NvM_ActiveBlockId      = NVM_BLOCK_COUNT;
     NvM_ActivePhase         = NVM_PHASE_NONE;
     NvM_ActiveCopyIsMirror  = 0U;

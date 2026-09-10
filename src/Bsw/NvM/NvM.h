@@ -214,12 +214,23 @@ Std_ReturnType NvM_ReadBlock(NvM_BlockIdType BlockId, void* NvM_DstPtr);
  *          （書きかけの古いデータと新しいデータが混在する「ちぎれ書き」を防ぐ）。
  *          完了したかどうかは NvM_GetErrorStatus() で確認できる。
  *
+ *          書き込むデータの CRC が直近の read/write ジョブで確定した CRC と
+ *          一致する場合、物理書き込みそのものをスキップしジョブを即座に
+ *          NVM_REQ_OK 扱いとする（[SWS_NvM_00852]。2026-09 追加。EEPROM
+ *          エミュレーション（内蔵フラッシュ）の書き込み・消去サイクル摩耗を
+ *          抑える目的。冗長ブロック(Redundant=1)は本スキップの対象外
+ *          （仕様の「冗長性喪失検出ブロックには適用しない」除外規定に対し、
+ *          本実装はプライマリ/ミラー個別の破損検出状態を追跡していないため、
+ *          安全側に倒して常に対象外とする）。
+ *
  * \param[in]  BlockId      ブロック ID (NVM_BLOCK_ID_* 定数)。
  * \param[in]  NvM_SrcPtr   書き込みデータの元アドレス。NULL 禁止。
  *
- * \retval  E_OK      ジョブを受け付けた（書き込み完了を意味しない）。
+ * \retval  E_OK      ジョブを受け付けた、または内容不変のため書き込みを
+ *                    スキップし即座に成功扱いとした（[SWS_NvM_00852]）。
  * \retval  E_NOT_OK  BlockId が範囲外、または NvM_SrcPtr が NULL。
  *
+ * \AUTOSARReq     {SWS_NvM_00208, SWS_NvM_00852}
  * \ServiceID      {0x07}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Asynchronous}
