@@ -46,19 +46,28 @@ MemIf_MainFunction()（NvM_MainFunction とは独立に周期呼び出し。実�
 ## NvM_RestoreBlockDefaults — デフォルト値への復元
 
 CRC 不一致を検出すると、ブロックごとに設定された **ROM デフォルト値**
-（`NvM_PBCfg.c` の `NvM_BlockDescriptorType.RomBlockDataAddress`、未設定なら
-全 0）を RAM ミラーへコピーし、CRC を付け直して EEPROM へ書き戻します。
-この処理は `NvM_Init()` が破損検出時に内部的に呼ぶほか、
-`NvM_RestoreBlockDefaults(BlockId, NvM_DestPtr)` として明示的にも呼び出せます
-（SWS_NvM_00451 準拠の2引数形式。`NvM_DestPtr` は NULL 可で、非 NULL の場合
-復元したデフォルト値がそこへも追加でコピーされます）。
+（`NvM_PBCfg.c` の `NvM_BlockDescriptorType.RomBlockDataAddress`）を RAM
+ミラーへコピーし、CRC を付け直して EEPROM へ書き戻します。この処理は
+`NvM_Init()` が破損検出時に内部的に行うのと、実行中に明示的に呼び出す
+`NvM_RestoreBlockDefaults(BlockId, NvM_DestPtr)`（SWS_NvM_00451 準拠の
+2引数形式。`NvM_DestPtr` は NULL 可で、非 NULL の場合復元したデフォルト値が
+そこへも追加でコピーされる）の2箇所から使われますが、**ROM デフォルト値が
+未設定（NULL）のブロックでの挙動は2箇所で異なります**（2026-09 是正、
+[SWS_NvM_00204]/[SWS_NvM_00883]）:
+
+- `NvM_Init()` 内部の起動時 CRC 不一致検出: RAM ミラーを全 0 で埋めて EEPROM
+  へ書き戻した上で、結果を `NVM_REQ_INTEGRITY_FAILED` とする（「復元できた」
+  という体裁を取らない）。
+- `NvM_RestoreBlockDefaults()` を明示的に呼んだ場合: ブロック状態を一切変えず
+  `E_NOT_OK` を返し `NVM_E_BLOCK_WITHOUT_DEFAULTS` を DET 報告するのみ。
+  RAM ミラー・EEPROM とも変更しない。
 
 | ブロック | デフォルト値 | 理由 |
 |---|---|---|
 | DEM_MAGIC | `0x00`（`DEM_NVM_MAGIC_BYTE`=0xDE とは異なる値） | MAGIC が破損から復元されても、Dem_Init() 自身の「マジック不一致 = 初回起動扱い」ロジックがそのまま働き、STATUS/AGING を含めて一貫した初期化になる |
 | DEM_STATUS | 全イベント `DEM_STATUS_NOT_COMPLETED_SINCE_CLEAR \| DEM_STATUS_NOT_COMPLETED_THIS_CYCLE` | Dem_Init() の初回起動時と同じ値。MAGIC は無事だが STATUS だけ破損したケースでも Dem が想定する初期状態と一致させる |
-| DEM_AGING | 未設定（NULL）→ 全 0 で代替 | 経年回復カウンタの初回起動値はそもそも全イベント 0 であり、NvM の汎用フォールバックと完全に一致するため専用テーブル不要 |
-| DEM_EXTENDED | 未設定（NULL）→ 全 0 で代替 | 故障確定回数 (ExtendedData) の初回起動値もそもそも全イベント 0 であり、同様に専用テーブル不要 |
+| DEM_AGING | 未設定（NULL） | 経年回復カウンタの初回起動値はそもそも全イベント 0 であり、`NvM_Init()` 内部の全 0 フォールバックと一致するため専用テーブル不要。ただし `NvM_RestoreBlockDefaults(NVM_BLOCK_ID_DEM_AGING, ...)` を明示的に呼んでも E_NOT_OK が返るだけでリセットはされない点に注意 |
+| DEM_EXTENDED | 未設定（NULL） | 故障確定回数 (ExtendedData) の初回起動値も同様に全イベント 0。DEM_AGING と同じ注意点が当てはまる |
 
 DEM_STATUS のデフォルト値定義に `Dem_Cfg.h` の定数を使っているのは
 `NvM_PBCfg.c` だけです。NvM 本体 (`NvM.c`) は Dem の存在を一切知りません
@@ -69,7 +78,7 @@ DEM_STATUS のデフォルト値定義に `Dem_Cfg.h` の定数を使ってい�
 
 ```
 [19ms] ERROR NvM: block=2 CRC mismatch (stored=0xA3 calc=0x7F)
-[19ms] WARN  NvM: block=2 defaults restored (zero-fill)
+[19ms] WARN  NvM: block=2 zero-filled (no ROM default -> INTEGRITY_FAILED)
 [19ms] INFO  NvM: Init ok blocks=4
 ```
 
@@ -90,8 +99,9 @@ EEPROM.write(0x0DU, EEPROM.read(0x0DU) ^ 0xFFU);  // DEM_AGING ブロックの�
 
 > **動作確認の前に**: 上記を追加して再アップロードすると、`NvM_Init()` が
 > EEPROM を読み込む直前に DEM_AGING ブロックの先頭バイトを直接破壊します。
-> 起動直後のシリアルログに `CRC mismatch` → `defaults restored` が出れば
-> 動作確認完了です。**確認後は必ず追加したコードを削除して再アップロード**
+> 起動直後のシリアルログに `CRC mismatch` → `zero-filled (no ROM default ->
+> INTEGRITY_FAILED)` が出れば動作確認完了です。
+> **確認後は必ず追加したコードを削除して再アップロード**
 > してください（破壊用コードを有効なまま運用すると毎回 DEM_AGING が
 > リセットされてしまいます）。
 

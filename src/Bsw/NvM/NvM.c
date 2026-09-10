@@ -212,7 +212,9 @@ static void NvM_WriteCopySync(uint16 base, const void* data, uint16 length)
 static void NvM_ApplyDefaultSync(NvM_BlockIdType id, const NvM_BlockDescriptorType* blk)
 {
     DET_LOGT(TAG, "called");
-    if (blk->RomBlockDataAddress != NULL)
+    const boolean hasRomDefault = (boolean)(blk->RomBlockDataAddress != NULL);
+
+    if (hasRomDefault)
         memcpy(blk->RamBlockDataAddress, blk->RomBlockDataAddress, blk->NvMNvBlockLength);
     else
         memset(blk->RamBlockDataAddress, 0, blk->NvMNvBlockLength);
@@ -221,11 +223,32 @@ static void NvM_ApplyDefaultSync(NvM_BlockIdType id, const NvM_BlockDescriptorTy
     if (blk->Redundant != 0U)
         NvM_WriteCopySync(blk->NvMNvBlockBaseNumberMirror, blk->RamBlockDataAddress, blk->NvMNvBlockLength);
 
-    /* [SWS_NvM_00470]: ROM デフォルト値で RAM ミラーを復元したことを
-     * NvM_GetErrorStatus() 経由で確認できるようにする。 */
-    NvM_BlockResult[id] = NVM_REQ_RESTORED_FROM_ROM;
-    DET_LOGW(TAG, "block=%u defaults restored (%s)", (unsigned)id,
-             (blk->RomBlockDataAddress != NULL) ? "ROM default" : "zero-fill");
+    if (hasRomDefault)
+    {
+        /* [SWS_NvM_00470]: ROM デフォルト値で RAM ミラーを復元したことを
+         * NvM_GetErrorStatus() 経由で確認できるようにする。 */
+        NvM_BlockResult[id] = NVM_REQ_RESTORED_FROM_ROM;
+        DET_LOGW(TAG, "block=%u defaults restored (ROM default)", (unsigned)id);
+    }
+    else
+    {
+        /* [SWS_NvM_00204]: ROM デフォルト値も InitBlockCallback（本実装は
+         * 概念自体を持たないため常に「無し」扱い）も無いブロックの CRC
+         * 不一致は NVM_REQ_INTEGRITY_FAILED とする（2026-09 是正: 以前は
+         * ROM デフォルトが無いブロックでも一律 NVM_REQ_RESTORED_FROM_ROM を
+         * 設定しており、実際には失われたデータを黙って全 0 で埋めていた
+         * だけなのに「正常に復元した」かのように見えてしまっていた）。
+         * RAM ミラー自体の内容は引き続き全 0 で埋める（[SWS_NvM_00658]は
+         * 「invalid のまま残す」ことを求めるが、本実装は明示的な
+         * valid/invalid フラグを持たず、`NvM_ReadBlock()` の呼び出し元
+         * (`Dem_Init()` 等) も戻り値を見ずに RAM ミラーをそのまま使う設計の
+         * ため、そこだけ未定義値を残すと影響範囲が広がる。安全側の初期値
+         * である全 0 を維持しつつ、`NvM_GetErrorStatus()` で「実際には
+         * デフォルト復元ではなかった」ことを正しく確認できるようにする、
+         * という限定的な是正にとどめる）。 */
+        NvM_BlockResult[id] = NVM_REQ_INTEGRITY_FAILED;
+        DET_LOGW(TAG, "block=%u zero-filled (no ROM default -> INTEGRITY_FAILED)", (unsigned)id);
+    }
 }
 
 /**
@@ -506,15 +529,17 @@ Std_ReturnType NvM_WriteBlock(NvM_BlockIdType BlockId, const void* NvM_SrcPtr)
 }
 
 /**
- * \brief   指定ブロックを ROM デフォルト値（未設定なら全 0）へ復元する。
+ * \brief   指定ブロックを ROM デフォルト値へ復元する。
  *
  * \details RAM ミラーの更新は同期的に行い、EEPROM への書き戻しは
  *          NvM_WriteBlock() と同じ非同期ジョブキュー経由で行う。
  *          NvM_DestPtr の扱い（常に RAM ミラーを更新し、非 NULL なら
  *          追加でコピーするだけの簡略化）は NvM.h の doc コメント参照。
+ *          ROM デフォルト値が未設定のブロックは E_NOT_OK を返す
+ *          （[SWS_NvM_00883]/[SWS_NvM_00885]、2026-09 是正、NvM.h 参照）。
  *
  * \AUTOSARReq     {SWS_NvM_00456, SWS_NvM_00012, SWS_NvM_00224, SWS_NvM_00267,
- *                  SWS_NvM_00902}
+ *                  SWS_NvM_00902, SWS_NvM_00883, SWS_NvM_00885}
  * \ServiceID      {0x08}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Asynchronous}
@@ -546,10 +571,20 @@ Std_ReturnType NvM_RestoreBlockDefaults(NvM_BlockIdType BlockId, void* NvM_DestP
     if (blk->RamBlockDataAddress == NULL)
         return E_NOT_OK;
 
-    if (blk->RomBlockDataAddress != NULL)
-        memcpy(blk->RamBlockDataAddress, blk->RomBlockDataAddress, blk->NvMNvBlockLength);
-    else
-        memset(blk->RamBlockDataAddress, 0, blk->NvMNvBlockLength);
+    if (blk->RomBlockDataAddress == NULL)
+    {
+        /* [SWS_NvM_00883]/[SWS_NvM_00885]: ROM デフォルト値も InitBlockCallback
+         * （本実装は概念自体を持たないため常に「無し」扱い）も無いブロックに
+         * 対する復元要求は、ブロック状態を一切変えずに NVM_E_BLOCK_WITHOUT_DEFAULTS
+         * を DET 報告し E_NOT_OK を返す（2026-09 是正: 以前は他ブロックと同様に
+         * 全 0 埋め＋非同期書き込みジョブを積み E_OK を返していたが、実際には
+         * 存在しないデフォルト値を「復元できた」かのように扱う誤りだった）。 */
+        DET_LOGW(TAG, "block=%u restore rejected (no ROM default configured)", (unsigned)BlockId);
+        Det_ReportError(NVM_MODULE_ID, 0U, NVM_API_ID_RESTORE_BLOCK_DEFAULTS, NVM_E_BLOCK_WITHOUT_DEFAULTS);
+        return E_NOT_OK;
+    }
+
+    memcpy(blk->RamBlockDataAddress, blk->RomBlockDataAddress, blk->NvMNvBlockLength);
 
     /* [SWS_NvM_00435]: 呼び出し元が RAM ブロックアドレスを指定した場合は、
      * それも使う（本実装では常時保持している RAM ミラーへの反映に加えて、
@@ -557,8 +592,7 @@ Std_ReturnType NvM_RestoreBlockDefaults(NvM_BlockIdType BlockId, void* NvM_DestP
     if (NvM_DestPtr != NULL)
         memcpy(NvM_DestPtr, blk->RamBlockDataAddress, blk->NvMNvBlockLength);
 
-    DET_LOGW(TAG, "block=%u defaults restored (%s), write queued", (unsigned)BlockId,
-             (blk->RomBlockDataAddress != NULL) ? "ROM default" : "zero-fill");
+    DET_LOGW(TAG, "block=%u defaults restored, write queued", (unsigned)BlockId);
 
     NvM_MarkPending(BlockId);
 

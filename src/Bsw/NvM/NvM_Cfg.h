@@ -63,6 +63,11 @@
 #define NVM_E_PARAM_ADDRESS     0x0DU
 #define NVM_E_PARAM_DATA        0x0EU
 #define NVM_E_PARAM_POINTER     0x0FU
+/** [SWS_NvM_00885]: NvM_RestoreBlockDefaults() が ROM デフォルト値も
+ *  InitBlockCallback（本実装は概念自体を持たないため常に「無し」）も
+ *  無いブロックに対して呼ばれた場合に報告する（2026-09 追加、`pdftotext -table`
+ *  で 7.3.1 節の値を実測して確認済み）。 */
+#define NVM_E_BLOCK_WITHOUT_DEFAULTS  0x11U
 #define NVM_E_NOT_INITIALIZED   0x14U
 
 /** ApiId（各関数の Doxygen \ServiceID タグと一致させること。値は SWS 8.x 章の

@@ -98,9 +98,16 @@ typedef enum
     NVM_REQ_OK                = 0U,  /**< 直近のジョブが正常完了した（リセット後既定値） */
     NVM_REQ_NOT_OK            = 1U,  /**< 直近の read/write/control 要求が失敗した */
     NVM_REQ_PENDING           = 2U,  /**< read/write/control 要求が処理中          */
-    NVM_REQ_INTEGRITY_FAILED  = 3U,  /**< データ整合性エラー（本プロジェクト未使用。
-                                       *   CRC 不一致は検出後ただちに ROM デフォルト
-                                       *   値へ復元するため、最終結果は本値ではなく
+    NVM_REQ_INTEGRITY_FAILED  = 3U,  /**< データ整合性エラー（[SWS_NvM_00204]。
+                                       *   CRC 不一致かつ ROM デフォルト値が
+                                       *   設定されていないブロックで返る
+                                       *   （2026-09 是正: 以前は本値を一切
+                                       *   使わず一律 NVM_REQ_RESTORED_FROM_ROM
+                                       *   としていたため、実際にはデフォルト
+                                       *   復元ではなく全 0 埋めなのに「正常に
+                                       *   復元した」かのように見えていた）。
+                                       *   ROM デフォルト値が設定されている
+                                       *   ブロックの CRC 不一致は従来通り
                                        *   NVM_REQ_RESTORED_FROM_ROM になる） */
     NVM_REQ_BLOCK_SKIPPED     = 4U,  /**< NvM_ReadAll/WriteAll でスキップされた
                                        *   （本プロジェクト未実装のため不使用）    */
@@ -160,9 +167,14 @@ typedef struct
  * \details EcuM_Init() から最初期 (Can_Init より前) に呼び出すこと。
  *          以降、NvM_ReadBlock() / NvM_WriteBlock() が使用可能になる。
  *          各ブロックは読み込み直後に CRC を検証する。EEPROM のビット化けや
- *          書き込み中の電源断などで保存値が壊れていた場合、自動的に
- *          NvM_RestoreBlockDefaults() と同等の処理（ROM デフォルト値、
- *          未設定なら全 0 へ復元し EEPROM へ書き戻す）を行う。
+ *          書き込み中の電源断などで保存値が壊れていた場合、ROM デフォルト値が
+ *          設定されているブロックは自動的にその値へ復元し EEPROM へ書き戻す
+ *          （結果は NVM_REQ_RESTORED_FROM_ROM）。ROM デフォルト値が未設定の
+ *          ブロックは RAM ミラーを全 0 で埋めた上で結果を NVM_REQ_INTEGRITY_FAILED
+ *          とする（2026-09 是正。この「未設定なら全 0」という起動時の内部復旧
+ *          処理は、実行中に明示的に呼ぶ NvM_RestoreBlockDefaults()（ROM
+ *          デフォルト値が未設定のブロックには E_NOT_OK を返し何もしない、
+ *          [SWS_NvM_00883]）とは挙動が異なる点に注意）。
  *
  * \param[in]  ConfigPtr  ポストビルドコンフィグへのポインタ。NULL 禁止。
  *
@@ -215,7 +227,7 @@ Std_ReturnType NvM_ReadBlock(NvM_BlockIdType BlockId, void* NvM_DstPtr);
 Std_ReturnType NvM_WriteBlock(NvM_BlockIdType BlockId, const void* NvM_SrcPtr);
 
 /**
- * \brief   指定ブロックを ROM デフォルト値（未設定なら全 0）へ復元する。
+ * \brief   指定ブロックを ROM デフォルト値へ復元する。
  *
  * \details RAM ミラーへデフォルト値を即座に反映し、NvM_WriteBlock() と同じ
  *          非同期ジョブキュー経由で EEPROM へ書き戻す。NvM_Init() が
@@ -223,6 +235,12 @@ Std_ReturnType NvM_WriteBlock(NvM_BlockIdType BlockId, const void* NvM_SrcPtr);
  *          （こちらは起動時のため同期処理のまま）とは異なり、本 API は
  *          実行中に明示的に呼び出すことを想定した
  *          AUTOSAR の NvM_RestoreBlockDefaults() 相当の API。
+ *
+ *          ROM デフォルト値が設定されていないブロックに対して呼ばれた場合は
+ *          ブロック状態を一切変えず`NVM_E_BLOCK_WITHOUT_DEFAULTS`を DET 報告し
+ *          E_NOT_OK を返す（[SWS_NvM_00883]/[SWS_NvM_00885]。2026-09 是正:
+ *          以前は全 0 埋め＋非同期書き込みジョブを積み E_OK を返していたが、
+ *          存在しないデフォルト値を「復元できた」かのように扱う誤りだった）。
  *
  * \param[in]   BlockId      ブロック ID (NVM_BLOCK_ID_* 定数)。
  * \param[out]  NvM_DestPtr  復元したデフォルト値の追加コピー先。NULL 可。
@@ -232,10 +250,11 @@ Std_ReturnType NvM_WriteBlock(NvM_BlockIdType BlockId, const void* NvM_SrcPtr);
  *             未実装。
  *
  * \retval  E_OK      ジョブを受け付けた（書き込み完了を意味しない）。
- * \retval  E_NOT_OK  BlockId が範囲外。
+ * \retval  E_NOT_OK  BlockId が範囲外、または ROM デフォルト値が未設定
+ *                    （[SWS_NvM_00883]）。
  *
  * \AUTOSARReq     {SWS_NvM_00456, SWS_NvM_00012, SWS_NvM_00224, SWS_NvM_00267,
- *                  SWS_NvM_00902}
+ *                  SWS_NvM_00902, SWS_NvM_00883, SWS_NvM_00885}
  * \ServiceID      {0x08}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Asynchronous}
