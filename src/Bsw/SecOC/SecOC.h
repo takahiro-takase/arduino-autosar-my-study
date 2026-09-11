@@ -51,9 +51,15 @@ void SecOC_Init(const SecOC_ConfigType* config);
 /**
  * \brief   SecOC モジュールを未初期化状態に戻す。
  *
- * \details 設定ポインタを NULL に戻す。未初期化状態で呼ばれた場合は
+ * \details 設定ポインタを NULL に戻すとともに、全ての内部グローバル変数
+ *          (RX 側のフレッシュネス状態・VerifyStatusOverride 設定、TX 側の
+ *          保留フラグ・フレッシュネスカウンタ)と Secured I-PDU のバッファ
+ *          (TX Authentic I-PDU バッファ)をクリアする（[SWS_SecOC_00157]、
+ *          2026-09 追加。以前は設定ポインタの NULL 化のみで内部状態が
+ *          残ったままだった）。未初期化状態で呼ばれた場合は
  *          SECOC_E_UNINIT を報告し何もしない。
  *
+ * \AUTOSARReq     {SWS_SecOC_00161, SWS_SecOC_00157}
  * \ServiceID      {0x05}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
