@@ -94,12 +94,10 @@ static EngineState_t Rte_EngineStateMirror = ENGINE_STATE_OFF;
  * ラッチされた RTE_E_HARD_TRANSFORMER_ERROR が永久に優先され、
  * Com_IsRxTimedOut() が真に切り替わっても RTE_E_COM_STOPPED が一切
  * 浮上しなくなる（＝COMM_TIMEOUT の FAULT 遷移が永久にマスクされる）。
- * 実 AUTOSAR の優先順位規定（[SWS_Rte_08594]、複数要因が「同一呼び出しで
- * 同時に新規発生した」場合を想定: HARD_TRANSFORMER_ERROR > COM_STOPPED >
- * SOFT_TRANSFORMER_ERROR）をそのまま適用しない。本実装は E2E チェックを
- * フレーム受信時に非同期に行い結果をラッチする設計のため、「過去の一時点の
- * ラッチ」と「現在も継続する物理層の状態」を比較する場面では、常に
- * 後者（生きている情報）を優先する。
+ * 実 AUTOSAR の Rte_Read 用優先順位規定（[SWS_Rte_08592]）では COM_STOPPED
+ * が HARD_TRANSFORMER_ERROR より優先度が高く、本実装が Com_IsRxTimedOut()
+ * を先に見る挙動はこの規定と整合している（詳細な優先順位リストと
+ * 2026-09 是正の経緯は Rte_Type.h の Rte_IStatusType コメント参照）。
  * ----------------------------------------------------------------------- */
 typedef struct
 {
