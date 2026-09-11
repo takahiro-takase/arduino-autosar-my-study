@@ -20,6 +20,16 @@
 extern "C" {
 #endif
 
+/* RTE ライフサイクル API（[SWS_Rte_02569]/[SWS_Rte_02570]/[SWS_Rte_06749]、
+ * 詳細は Rte.c 末尾の「RTE ライフサイクル API」コメント参照）。
+ * EcuM_Init() から Rte_Start() → Rte_Init_EngineManager() →
+ * Rte_Init_WarningIndicator() の順に一度だけ呼び出すこと。Rte_Stop() は
+ * 本プロジェクトに BSW シャットダウンシーケンス自体が無いため未使用。 */
+Std_ReturnType Rte_Start(void);
+void           Rte_Init_EngineManager(void);
+void           Rte_Init_WarningIndicator(void);
+Std_ReturnType Rte_Stop(void);
+
 /* EngineInfo (CAN 0x100) 由来の Read ポート。E2E Transformer 経由のため
  * Rte_IStatusType を返す（RTE_E_OK / RTE_E_COM_STOPPED /
  * RTE_E_HARD_TRANSFORMER_ERROR / RTE_E_SOFT_TRANSFORMER_ERROR。詳細は
