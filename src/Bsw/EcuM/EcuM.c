@@ -112,7 +112,6 @@
 #include "Wdg_PBCfg.h"
 #include "MemIf.h"
 #include "NvM.h"
-#include "NvM_PBCfg.h"
 #include "Os.h"
 #include "Os_PBCfg.h"
 #include "Can.h"
@@ -208,7 +207,8 @@ void EcuM_Init(void)
                        * 初期化前エラーも report できる必要があるため）。Det.h 参照 */
     Det_Start();
     MemIf_Init();   /* NvM_Init より前: EEPROM 抽象化層 (Fee) を初期化 */
-    NvM_Init(&NvM_Config);
+    NvM_Init(NULL); /* [SWS_NvM_00881]: ConfigPtr は常に NULL（2026-09 是正。
+                      * 以前は&NvM_Configを渡し実際に依存していた。NvM.c 参照） */
     Port_Init(NULL);                    /* ピン方向設定（Dio 操作より前に完了）    */
     Adc_Init(NULL);                     /* ADC 初期化（Port と同じ MCAL 下位層。IoHwAb より前） */
     Gpt_Init(&Gpt_Config);           /* HW タイマ準備（他モジュールに依存しない下位ドライバ） */

@@ -56,7 +56,6 @@
 | PduR | 694993d | 914c041 | SWS_PduR 記述 |
 | Gpt | 7aa4ccd | 914c041 | Gpt SWS 記述 |
 | Mcu | 72d091f | 914c041 | Mcu SWS 記述 |
-| NvM | a471e3b | 914c041 | NvM SWS 記述 |
 | Wdg | 9bc33bb | 914c041 | Wdg SWS 記述 |
 | WdgM | 9bc33bb | 914c041 | WdgM SWS 記述 |
 | BswM | a7cc1b3 | 914c041 | BswM SWS 記述 |
@@ -117,6 +116,32 @@ grep したが SWS 文書中に0件で、こちらは確かに仕様上 Init を
 | モジュール | .h SHA | .c SHA | 仕様根拠 |
 |---|---|---|---|
 | Adc | 444b7a0 | 444b7a0 | SWS_Adc_00365: `Adc_Init(const Adc_ConfigType* ConfigPtr)`。本実装はハードウェア初期化状態を持たないためシグネチャ適合のみ（実処理なし） |
+
+### 対応済み（2026-09-12追加、NvM: 「仕様通り（ConfigPtr注入）」表への誤分類を是正）
+
+上表（2026-08-13付「仕様通り（ConfigPtr 注入、実装も注入）」表）に `NvM | a471e3b | 914c041 |
+NvM SWS 記述` という行があったが、根拠列が具体的な要求IDを欠いており（Adc の
+`SWS_Adc_00365` のような明示引用が無い）、実際には `NvM_Init()` のシグネチャ
+（`void NvM_Init(const NvM_ConfigType* ConfigPtr)`）だけを見て「引数がある＝実際に
+使う」と誤って判定していたと判明（この台帳自体を検証せず信用していた見落とし、
+Adc の回と同種の教訓）。改めて `AUTOSAR_SWS_NVRAMManager.pdf` の 8.1.3.1.1 節を
+`pdftotext -layout` で精読した結果、[SWS_NvM_00881]「The Configuration pointer
+ConfigPtr shall always have a NULL_PTR value」（"is currently not used"）と、
+シグネチャのすぐ下に明示されていた。CanSM/CanTp/ComM/Dcm/Dem/Fee/Port/IoHwAb/Adc と
+全く同じ opaque ConfigType + 常に NULL 方式へ是正し、`NvM_Init()` は内部で
+`NvM_PBCfg.c` の静的テーブル `NvM_Config` を直接参照するよう変更。
+
+**教訓**: この台帳の「仕様通り（ConfigPtr 注入、実装も注入）」表（Can/CanIf/Com/PduR/Gpt/
+Mcu/Wdg/WdgM/BswM/FiM/SecOC が現在も掲載されたまま）は、根拠列が「〜SWS 記述」という
+曖昧な記載のみで具体的な要求ID引用が無いエントリ（Com/PduR/Gpt/Mcu/Wdg/WdgM/BswM/SecOC
+の8件が該当。Can/CanIf/FiMの3件は具体的なID引用あり、FiMはこの教訓を追記した際に
+誤って曖昧引用グループへ含めていたため是正済み）について、NvMと同じ誤分類が潜んでいる
+可能性があり未検証のまま残っている。次回この観点のレビューを行う際は、具体的なID引用が
+無い行から優先的に`pdftotext`で本文を再確認すること。
+
+| モジュール | .h SHA | .c SHA | 仕様根拠 |
+|---|---|---|---|
+| NvM | (コミット後に SHA 更新要) | (コミット後に SHA 更新要) | SWS_NvM_00881: `ConfigPtr shall always have a NULL_PTR value`。`NvM_PBCfg.c`の`NvM_Config`を内部で直接参照 |
 
 ### 未対応（本プロジェクト独自モジュールのため対象外）
 
