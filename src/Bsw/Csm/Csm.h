@@ -66,7 +66,10 @@ void Csm_GetVersionInfo(Std_VersionInfoType* versioninfo);
  * \param[in]     dataLength    dataPtr のバイト長。
  * \param[out]    macPtr        生成した MAC の書き込み先。NULL 禁止。
  * \param[in,out] macLengthPtr  in: 欲しい切り詰めバイト数。out: 実際に書き込んだ
- *                              バイト数（本プロジェクトでは常に in と同じ）。NULL 禁止。
+ *                              バイト数（[SWS_Csm_00982]、2026-09 是正:
+ *                              以前は書き戻していなかった。本プロジェクトの
+ *                              実装は in の値をそのまま切り詰め長として使う
+ *                              ため常に in と同じ値になる）。NULL 禁止。
  *
  * \retval  E_OK      MAC を生成した。
  * \retval  CRYPTO_E_SMALL_BUFFER  要求長が CMAC 出力長(16byte)を超える

@@ -123,7 +123,21 @@ Std_ReturnType Csm_MacGenerate(uint32 jobId, Crypto_OperationModeType mode,
     job.macLength        = *macLengthPtr;
     job.verifyResultPtr  = NULL;
 
-    return CryIf_ProcessJob(CRYIF_CHANNEL_ID, &job);
+    const Std_ReturnType ret = CryIf_ProcessJob(CRYIF_CHANNEL_ID, &job);
+    if (ret == E_OK)
+    {
+        /* [SWS_Csm_00982]: macLengthPtr は inout パラメータで、要求完了時に
+         * 実際に書き込んだ MAC 長を書き戻す義務がある（2026-09 追加。以前は
+         * 入力としてのみ扱い書き戻していなかった）。本実装は job.macLength
+         * (呼び出し時の *macLengthPtr) をそのまま切り詰め長として使うため
+         * （Crypto_ProcessJob() 参照）、書き戻す値は常に呼び出し時と同一に
+         * なるが、契約としては明示的に書き戻す必要がある。エラー時
+         * (CRYPTO_E_SMALL_BUFFER 等) は書き戻さない: 仕様本文はエラー時の
+         * 扱いを明記していないが、MAC 生成自体が完了していない以上
+         * job.macLength に「実際に書き込んだ長さ」としての意味が無いため。 */
+        *macLengthPtr = job.macLength;
+    }
+    return ret;
 }
 
 Std_ReturnType Csm_MacVerify(uint32 jobId, Crypto_OperationModeType mode,
