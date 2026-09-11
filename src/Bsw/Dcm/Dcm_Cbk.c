@@ -723,6 +723,13 @@ static void Dcm_SendNegativeResponse(uint8 sid, uint8 nrc)
  *          立っている場合、セッション遷移自体は実行するが正応答は送信しない
  *          （[SWS_Dcm_00200]/[SWS_Dcm_00201]。2026-09 追加）。
  *
+ *          defaultSession以外への遷移（現在アクティブなセッションへの
+ *          再遷移を含む）では、SecurityAccessで得たUnlock状態を
+ *          Dcm_SecurityLock()で再ロックする（[SWS_Dcm_00139]。2026-09
+ *          追加: 以前はdefaultSessionへの遷移時のみ再ロックしており、
+ *          同一セッションの再選択でUnlock状態が維持されてしまうセキュリ
+ *          ティ上のバグだった）。
+ *
  * \param[in]  uds     UDS ペイロード先頭ポインタ (uds[0]=SID)。
  * \param[in]  udsLen  UDS ペイロード長。
  */
@@ -761,6 +768,8 @@ static void Dcm_HandleSessionControl(const uint8* uds, uint8 udsLen)
     }
     else
     {
+        /* [SWS_Dcm_00139]（詳細は本関数の \details 参照）。 */
+        Dcm_SecurityLock();
         Dcm_CurrentSession = subFunc;
         Dcm_UpdateComMRequest(subFunc);
     }
@@ -2044,16 +2053,17 @@ static uint16 Dcm_ComputeSecurityKey(uint16 seed)
 /**
  * \brief   SecurityAccess Level1 を再ロックする。
  *
- * \details defaultSession への遷移（明示要求・S3 タイムアウト・ECUReset の
- *          いずれも）で呼ぶ。連続失敗回数・ロックアウト解除時刻はあえて
- *          リセットしない（セッション往復によるブルートフォース対策の
- *          回避を防ぐため）。
+ * \details Dcm_ResetToDefaultSession()（defaultSessionへの遷移）と
+ *          Dcm_HandleSessionControl()（defaultSession以外への遷移、
+ *          [SWS_Dcm_00139]。詳細はそちらの \details 参照）の両方から呼ぶ。
+ *          連続失敗回数・ロックアウト解除時刻はあえてリセットしない
+ *          （セッション往復によるブルートフォース対策の回避を防ぐため）。
  */
 static void Dcm_SecurityLock(void)
 {
     DET_LOGT(TAG, "called");
     if (Dcm_SecurityLevel != 0U)
-        DET_LOGI(TAG, "27 Security locked (session->Default)");
+        DET_LOGI(TAG, "27 Security locked (session change)");
 
     Dcm_SecurityLevel       = 0U;
     Dcm_SecuritySeedPending = 0U;

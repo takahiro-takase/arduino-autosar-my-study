@@ -58,6 +58,32 @@ protected:
         PduInfoType pdu = { const_cast<uint8*>(payload), len };
         Dcm_ComIndication(0U, &pdu);
     }
+
+    /** extendedSessionへ遷移し、requestSeed→sendKeyで実際にSecurityAccess
+     *  Level1をUnlockする（seed/keyの計算式は本番コードと同じ
+     *  `seed ^ DCM_SECURITY_KEY_MASK`）。Unlock成功をASSERTし、以降の
+     *  応答を検証しやすいよう最後にFakeCanTp_Reset()する。 */
+    void UnlockSecurityAccessLevel1()
+    {
+        uint8 sessionReq[2] = { DCM_SID_SESSION_CTRL, DCM_SESSION_EXTENDED };
+        PduInfoType sessionPdu = { sessionReq, sizeof(sessionReq) };
+        Dcm_ComIndication(0U, &sessionPdu);
+
+        uint8 seedReq[2] = { DCM_SID_SECURITY_ACCESS, DCM_SEC_SUBFUNC_REQUEST_SEED };
+        PduInfoType seedPdu = { seedReq, sizeof(seedReq) };
+        Dcm_ComIndication(0U, &seedPdu);
+        ASSERT_EQ(FakeCanTp_TxBuf[0], 0x67U);
+        uint16 seed = (uint16)(((uint16)FakeCanTp_TxBuf[2] << 8U) | (uint16)FakeCanTp_TxBuf[3]);
+        uint16 key  = (uint16)(seed ^ DCM_SECURITY_KEY_MASK);
+
+        uint8 keyReq[4] = { DCM_SID_SECURITY_ACCESS, DCM_SEC_SUBFUNC_SEND_KEY,
+                             (uint8)(key >> 8U), (uint8)(key & 0xFFU) };
+        PduInfoType keyPdu = { keyReq, sizeof(keyReq) };
+        Dcm_ComIndication(0U, &keyPdu);
+        ASSERT_EQ(FakeCanTp_TxBuf[0], 0x67U) << "security unlock must succeed as a test precondition";
+
+        FakeCanTp_Reset();
+    }
 };
 
 // ------------------------------------------------------------
@@ -800,24 +826,7 @@ TEST_F(Bsw_Dcm_ReadDtcInfo_Test, ClearDtc_NG_ExtraByteReturnsIncorrectMessageLen
      * groupOfDTC(3byte)の後に余分な1バイトを付けた要求
      * ([0x14, 0xFF,0xFF,0xFF, 0x00]、4バイト厳密一致。2026-09 追加:
      * 以前は下限のみ判定していた）を送る。 */
-    uint8 sessionReq[2] = { DCM_SID_SESSION_CTRL, DCM_SESSION_EXTENDED };
-    PduInfoType sessionPdu = { sessionReq, sizeof(sessionReq) };
-    Dcm_ComIndication(0U, &sessionPdu);
-
-    uint8 seedReq[2] = { DCM_SID_SECURITY_ACCESS, DCM_SEC_SUBFUNC_REQUEST_SEED };
-    PduInfoType seedPdu = { seedReq, sizeof(seedReq) };
-    Dcm_ComIndication(0U, &seedPdu);
-    ASSERT_EQ(FakeCanTp_TxBuf[0], 0x67U);
-    uint16 seed = (uint16)(((uint16)FakeCanTp_TxBuf[2] << 8U) | (uint16)FakeCanTp_TxBuf[3]);
-    uint16 key  = (uint16)(seed ^ DCM_SECURITY_KEY_MASK);
-
-    uint8 keyReq[4] = { DCM_SID_SECURITY_ACCESS, DCM_SEC_SUBFUNC_SEND_KEY,
-                         (uint8)(key >> 8U), (uint8)(key & 0xFFU) };
-    PduInfoType keyPdu = { keyReq, sizeof(keyReq) };
-    Dcm_ComIndication(0U, &keyPdu);
-    ASSERT_EQ(FakeCanTp_TxBuf[0], 0x67U) << "security unlock must succeed as a test precondition";
-
-    FakeCanTp_Reset();
+    UnlockSecurityAccessLevel1();
     uint8 req[5] = { DCM_SID_CLEAR_DTC, 0xFFU, 0xFFU, 0xFFU, 0x00U };
     PduInfoType pdu = { req, sizeof(req) };
     Dcm_ComIndication(0U, &pdu);
@@ -944,6 +953,36 @@ TEST_F(Bsw_Dcm_ReadDtcInfo_Test, SessionControl_NG_SuppressPosRspBitDoesNotSuppr
     EXPECT_EQ(FakeCanTp_TxBuf[0], DCM_SID_NEGATIVE_RESP);
     EXPECT_EQ(FakeCanTp_TxBuf[1], DCM_SID_SESSION_CTRL);
     EXPECT_EQ(FakeCanTp_TxBuf[2], DCM_NRC_SUB_FUNC_NOT_SUPPORTED);
+}
+
+// ------------------------------------------------------------
+// SecurityAccess再ロック漏れの是正(2026-09)。[SWS_Dcm_00139]は
+// defaultSession以外からdefaultSession以外への遷移(現在アクティブな
+// セッションへの再遷移を含む)でもセキュリティレベルを再ロックすべきと
+// 規定するが、以前はdefaultSessionへの遷移時のみ再ロックしていた。
+// ------------------------------------------------------------
+
+TEST_F(Bsw_Dcm_ReadDtcInfo_Test, SessionControl_OK_ReselectingSameSessionRelocksSecurity)
+{
+    /* 準備 (Arrange): extendedSessionへ遷移し、requestSeed→sendKeyで実際に
+     * Unlockする。 */
+    UnlockSecurityAccessLevel1();
+
+    Dcm_SecLevelType levelAfterUnlock = 0U;
+    ASSERT_EQ(Dcm_GetSecurityLevel(&levelAfterUnlock), E_OK);
+    ASSERT_NE(levelAfterUnlock, 0U) << "must be unlocked as a test precondition";
+
+    /* 実行 (Act): 同じextendedSessionを再度選択する
+     * ([0x10, 0x03]、現在アクティブなセッションへの再遷移)。 */
+    uint8 sessionReq[2] = { DCM_SID_SESSION_CTRL, DCM_SESSION_EXTENDED };
+    PduInfoType sessionPdu = { sessionReq, sizeof(sessionReq) };
+    Dcm_ComIndication(0U, &sessionPdu);
+
+    /* 評価 (Assert): [SWS_Dcm_00139]通りセキュリティレベルがLockedへ
+     * 戻っていること。 */
+    Dcm_SecLevelType levelAfterReselect = 0xFFU;
+    ASSERT_EQ(Dcm_GetSecurityLevel(&levelAfterReselect), E_OK);
+    EXPECT_EQ(levelAfterReselect, 0U) << "re-selecting the same session must re-lock security";
 }
 
 }  // namespace
