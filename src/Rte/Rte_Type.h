@@ -46,11 +46,18 @@ typedef enum
  *
  * 実 AUTOSAR では Rte_Read/Rte_Receive がトランスフォーマチェーンを持つ
  * ポートに対して Std_ReturnType ではなくこの型を返し、複数要因が同時に
- * 起きた場合は優先順位（[SWS_Rte_08594] 等）に従って 1 つに絞り込む:
- * RTE_E_HARD_TRANSFORMER_ERROR > RTE_E_COM_STOPPED > RTE_E_SOFT_TRANSFORMER_ERROR。
+ * 起きた場合は Rte_Read 用の優先順位規定（[SWS_Rte_08592]、2026-09 是正:
+ * 以前は Rte_Call（Client-Server）用の [SWS_Rte_08594] を誤って引用して
+ * いた）に従って 1 つに絞り込む: 優先度の高い順に UNCONNECTED >
+ * RTE_E_COM_STOPPED > NEVER_RECEIVED > COM_BUSY >
+ * RTE_E_HARD_TRANSFORMER_ERROR > INVALID > OUT_OF_RANGE >
+ * RTE_E_SOFT_TRANSFORMER_ERROR。
  *
- * 本実装はこの優先順位をそのままでは適用しない。E2E チェックはフレーム
- * 受信時に非同期に行い結果をラッチする設計のため、RTE_E_HARD_TRANSFORMER_ERROR
+ * 本実装はこの優先順位と実際には整合している（2026-09 是正: 以前は
+ * ここで「本実装は優先順位をそのままでは適用しない」と誤って説明して
+ * いたが、上記の通り COM_STOPPED は元々 HARD_TRANSFORMER_ERROR より
+ * 優先度が高く、乖離ではなかった）。E2E チェックはフレーム受信時に
+ * 非同期に行い結果をラッチする設計のため、RTE_E_HARD_TRANSFORMER_ERROR
  * は「過去の一時点（最後の受信）のラッチ」であり、RTE_E_COM_STOPPED
  * （Com_IsRxTimedOut()）は「現在も継続する物理層の状態」である。ラッチを
  * 無条件に優先すると、E2E エラーを起こしたフレームを最後に通信が本当に

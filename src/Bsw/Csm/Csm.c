@@ -307,5 +307,15 @@ Std_ReturnType Csm_KeyElementGet(uint32 keyId, uint32 keyElementId,
 
     /* [SWS_Csm_01004]: 単一 CryIf チャネルへの実質パススルー。keyId は
      * CryIf 側の cryIfKeyId へそのまま渡す（Csm_KeyElementSet と同じ方針）。 */
-    return CryIf_KeyElementGet(keyId, keyElementId, keyPtr, keyLengthPtr);
+    const Std_ReturnType ret = CryIf_KeyElementGet(keyId, keyElementId, keyPtr, keyLengthPtr);
+    if (ret == CRYPTO_E_SMALL_BUFFER)
+    {
+        /* [SWS_Csm_00830]: どの Csm API であっても CRYPTO_E_SMALL_BUFFER を
+         * 返す場合は、追加で CSM_E_SMALL_BUFFER を自ら DET 報告しなければ
+         * ならない（2026-09 追加。以前は下位層の戻り値を素通しするだけで、
+         * Csm_MacGenerate() が既に満たしているこの義務が本関数だけ抜けて
+         * いた）。 */
+        Det_ReportError(CSM_MODULE_ID, 0U, CSM_API_ID_KEY_ELEMENT_GET, CSM_E_SMALL_BUFFER);
+    }
+    return ret;
 }

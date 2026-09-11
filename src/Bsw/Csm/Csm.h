@@ -188,12 +188,15 @@ Std_ReturnType Csm_KeySetValid(uint32 keyId);
  *
  * \retval  E_OK      鍵要素を読み出した。
  * \retval  CRYPTO_E_SMALL_BUFFER  `*keyLengthPtr` が CRYPTO_AES128_KEY_SIZE
- *                    未満（下位層 Crypto.c から伝播、2026-09 追加）。
+ *                    未満（下位層 Crypto.c から伝播、2026-09 追加）。この
+ *                    場合 CSM 自身も development error `CSM_E_SMALL_BUFFER`
+ *                    を報告する（[SWS_Csm_00830]、2026-09 追加。以前は
+ *                    下位層の戻り値を素通しするだけで報告していなかった）。
  * \retval  E_NOT_OK  未初期化（Csm/CryIf いずれか、[SWS_Csm_91010]）、
  *                    NULL、keyId が範囲外（[SWS_Csm_91011]）、
  *                    または `*keyLengthPtr` が CRYPTO_AES128_KEY_SIZE 超過。
  *
- * \AUTOSARReq     {SWS_Csm_00959, SWS_Csm_91010, SWS_Csm_91011}
+ * \AUTOSARReq     {SWS_Csm_00959, SWS_Csm_91010, SWS_Csm_91011, SWS_Csm_00830}
  * \ServiceID      {0x68}
  * \Reentrancy     {Reentrant}
  * \Synchronicity  {Synchronous}
