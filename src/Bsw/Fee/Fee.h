@@ -95,13 +95,19 @@ void Fee_GetVersionInfo(Std_VersionInfoType* versioninfo);
  *          同期的に書いて協調スケジューラを長時間停止させ、WdgM の Deadline
  *          Supervision を巻き込んで実機 HW ウォッチドッグリセットを引き起こした
  *          実績がある）であり、Mode によってこのペースを変えることはしない。
- *          そのため本関数は Mode を受理するだけで状態を保持せず、実際の
- *          書き込み挙動には一切影響しない（学習用簡略化。MemIf_ModeType の
- *          型定義コメント参照）。
+ *          そのため未初期化/ジョブ処理中のチェックを通過した後は Mode を
+ *          受理するだけで状態を保持せず、実際の書き込み挙動には一切影響
+ *          しない（学習用簡略化。MemIf_ModeType の型定義コメント参照）。
+ *
+ *          未初期化時は`FEE_E_UNINIT`（[SWS_Fee_00121]）、ジョブ処理中は
+ *          `FEE_E_BUSY`（[SWS_Fee_00170]）をそれぞれ報告しモード切替を
+ *          実行せず戻る（2026-09 追加。以前は`Fee_Read`/`Fee_Write`/
+ *          `Fee_Cancel`が律儀にチェックしている2条件が本関数だけ抜けていた
+ *          非対称な実装だった）。
  *
  * \param[in]  Mode  MEMIF_MODE_SLOW / MEMIF_MODE_FAST。
  *
- * \AUTOSARReq     {SWS_Fee_00086}
+ * \AUTOSARReq     {SWS_Fee_00086, SWS_Fee_00121, SWS_Fee_00170}
  * \ServiceID      {0x01}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Asynchronous}
