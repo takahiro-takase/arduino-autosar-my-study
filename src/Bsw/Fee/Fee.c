@@ -72,10 +72,32 @@ void Fee_GetVersionInfo(Std_VersionInfoType* versioninfo)
 
 void Fee_SetMode(MemIf_ModeType Mode)
 {
-    /* Mode を保持する状態変数は持たない。書き込みペース (Fee_MainFunction 参照)
-     * には一切影響させないため、受理するだけで捨てる（Fee.h の Fee_SetMode()
-     * ドキュメント参照）。 */
     DET_LOGT(TAG, "called");
+    if (!Fee_Initialized)
+    {
+        /* [SWS_Fee_00121]: 未初期化時は development error FEE_E_UNINIT を
+         * 報告しモード切替を実行せず戻る（2026-09 追加。Fee_Read/Write等の
+         * 他APIと同じチェックがなぜかFee_SetMode()だけ抜けていた非対称な
+         * 実装だった）。 */
+        Det_ReportError(FEE_MODULE_ID, 0U, FEE_API_ID_SET_MODE, FEE_E_UNINIT);
+        return;
+    }
+
+    if (Fee_Job.Active)
+    {
+        /* [SWS_Fee_00170]: ジョブ処理中は runtime error FEE_E_BUSY を報告し
+         * モード切替を実行せず戻る（2026-09 追加）。[SWS_Fee_00190]は
+         * MEMIF_IDLE/MEMIF_BUSY_INTERNALでは受理すべきと規定するが、本
+         * 実装はMEMIF_BUSY_INTERNAL相当の状態を持たない（Fee_Job.Active
+         * のみで管理する簡略化、他APIと同じ2値モデル）ため、この判定のみで
+         * 十分。 */
+        Det_ReportError(FEE_MODULE_ID, 0U, FEE_API_ID_SET_MODE, FEE_E_BUSY);
+        return;
+    }
+
+    /* Mode を保持する状態変数は持たない。書き込みペース (Fee_MainFunction 参照)
+     * には一切影響させないため、上記チェックを通過したら受理するだけで捨てる
+     * （Fee.h の Fee_SetMode() ドキュメント参照）。 */
     (void)Mode;
 }
 
