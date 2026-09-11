@@ -50,6 +50,7 @@
 #include "Com.h"
 #include "PduR_SecOC.h"
 #include "Det.h"
+#include <string.h>
 
 #define TAG "SecOC"
 
@@ -260,6 +261,27 @@ void SecOC_DeInit(void)
         Det_ReportError(SECOC_MODULE_ID, 0U, SECOC_API_ID_DEINIT, SECOC_E_UNINIT);
         return;
     }
+
+    /* [SWS_SecOC_00157]: 全ての内部グローバル変数と Secured I-PDU の
+     * バッファをクリアする。RX 側の状態(SecOC_Init() が初期化する分)に加え、
+     * TX バッファ(Init は未クリア、SecOC.c 冒頭コメント参照)も対象に含める。
+     * TX 側は SECOC_TX_PDU_COUNT ではなく実際の配列確保サイズ
+     * (SECOC_TX_STATE_STORAGE_COUNT) を使い、将来 TX Pdu が追加された場合にも
+     * 取りこぼしなくクリアされるようにする。 */
+    for (uint8 i = 0U; i < SECOC_RX_PDU_COUNT; i++)
+    {
+        SecOC_LastFreshness[i]     = 0U;
+        SecOC_HasBaseline[i]       = 0U;
+        SecOC_OverrideStatus[i]    = SECOC_OVERRIDE_NONE;
+        SecOC_OverrideRemaining[i] = 0U;
+    }
+
+    for (uint8 i = 0U; i < SECOC_TX_STATE_STORAGE_COUNT; i++)
+    {
+        SecOC_TxPending[i]   = 0U;
+        SecOC_TxFreshness[i] = 0U;
+    }
+    memset(SecOC_TxAuthenticBuffer, 0, sizeof(SecOC_TxAuthenticBuffer));
 
     SecOC_ConfigPtr = NULL;
     DET_LOGI(TAG, "DeInit ok");
