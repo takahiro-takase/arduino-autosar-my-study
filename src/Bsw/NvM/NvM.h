@@ -176,8 +176,13 @@ typedef struct
  *          デフォルト値が未設定のブロックには E_NOT_OK を返し何もしない、
  *          [SWS_NvM_00883]）とは挙動が異なる点に注意）。
  *
- * \param[in]  ConfigPtr  ポストビルドコンフィグへのポインタ。NULL 禁止。
+ * \param[in]  ConfigPtr  未使用。[SWS_NvM_00881]により常に NULL を渡すこと
+ *                        （2026-09 是正。以前は実際にこの引数の中身に依存して
+ *                        いた。post-build 設定は`NvM_PBCfg.c`の静的テーブル
+ *                        `NvM_Config`を内部で直接参照する、他の8モジュールと
+ *                        同じ opaque ConfigType パターン。NvM.c 参照）。
  *
+ * \AUTOSARReq     {SWS_NvM_00881}
  * \ServiceID      {0x00}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}

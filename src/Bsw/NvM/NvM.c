@@ -70,6 +70,7 @@
  */
 
 #include "NvM.h"
+#include "NvM_PBCfg.h"
 #include "MemIf.h"
 #include "Det.h"
 #include <string.h>
@@ -425,9 +426,20 @@ static void NvM_MarkPending(NvM_BlockIdType id)
  *          読み込み直後に各ブロックの CRC を検証し、不一致ならデフォルト値
  *          (NvM_ApplyDefaultSync()) で復元する。
  *
+ *          ConfigPtr は無視し、`NvM_PBCfg.c` の静的テーブル`NvM_Config`を
+ *          直接参照する（[SWS_NvM_00881]「ConfigPtr は常に NULL_PTR である
+ *          べき（post-build 設定は API 引数経由ではなく NvM 内部の生成
+ *          テーブルから取得する）」。2026-09 是正: 以前は呼び出し元
+ *          （EcuM_Init()）が渡すポインタの中身に実際に依存しており、他の
+ *          8 モジュール（CanSM/CanTp/ComM/Dcm/Dem/Fee/Port/IoHwAb、
+ *          docs/autosar_review_checkpoints.md 参照）に既に適用済みの
+ *          「opaque ConfigType + 常に NULL を渡す」パターンから外れて
+ *          いた）。
+ *
  * \pre        MemIf_Init() が完了していること（EcuM_Init() が NvM_Init() より
  *             前に呼ぶ。EcuM.c 参照）。
  *
+ * \AUTOSARReq     {SWS_NvM_00881}
  * \ServiceID      {0x00}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
@@ -435,22 +447,17 @@ static void NvM_MarkPending(NvM_BlockIdType id)
 void NvM_Init(const NvM_ConfigType* ConfigPtr)
 {
     DET_LOGT(TAG, "called");
-    if (ConfigPtr == NULL)
-    {
-        DET_LOGE(TAG, "Init: NULL ConfigPtr");
-        Det_ReportError(NVM_MODULE_ID, 0U, NVM_API_ID_INIT, NVM_E_PARAM_POINTER);
-        return;
-    }
+    (void)ConfigPtr; /* [SWS_NvM_00881]、本関数の \details 参照 */
 
-    NvM_Cfg = ConfigPtr;
+    NvM_Cfg = &NvM_Config;
 
-    for (uint8 i = 0U; i < ConfigPtr->NumBlocks && i < NVM_BLOCK_COUNT; i++)
+    for (uint8 i = 0U; i < NvM_Config.NumBlocks && i < NVM_BLOCK_COUNT; i++)
     {
         NvM_BlockPending[i]   = 0U;
         NvM_BlockResult[i]    = NVM_REQ_OK;
         NvM_BlockProtected[i] = 0U;
 
-        NvM_LoadAndVerifyBlock(i, &ConfigPtr->Blocks[i]);
+        NvM_LoadAndVerifyBlock(i, &NvM_Config.Blocks[i]);
     }
 
     NvM_ActiveBlockId      = NVM_BLOCK_COUNT;
@@ -460,7 +467,7 @@ void NvM_Init(const NvM_ConfigType* ConfigPtr)
     NvM_QueueTail = 0U;
     NvM_QueueLen  = 0U;
 
-    DET_LOGI(TAG, "Init ok blocks=%u", (unsigned)ConfigPtr->NumBlocks);
+    DET_LOGI(TAG, "Init ok blocks=%u", (unsigned)NvM_Config.NumBlocks);
 }
 
 /**

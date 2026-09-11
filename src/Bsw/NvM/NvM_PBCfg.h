@@ -2,7 +2,9 @@
  * \file    NvM_PBCfg.h
  * \brief   NvM ポストビルドコンフィグ 宣言
  * \details NvM_PBCfg.c で定義されたコンフィグインスタンスを外部公開する。
- *          EcuM_Init() が NvM_Init(&NvM_Config) に渡す。
+ *          [SWS_NvM_00881]により NvM_Init() の ConfigPtr 引数は常に NULL
+ *          （EcuM_Init() も NvM_Init(NULL) を呼ぶ）のため、NvM.c が本ヘッダ
+ *          を直接 include して NvM_Config を内部参照する（2026-09 是正）。
  *
  * \copyright  Copyright (c) 2025 T_T
  * \license    MIT License - 詳細は LICENSE ファイルを参照。
