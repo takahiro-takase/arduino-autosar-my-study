@@ -469,6 +469,14 @@ void NvM_Init(const NvM_ConfigType* ConfigPtr)
  * \details EEPROM アクセスは発生しない。NvM_Init() 後であれば RAM ミラーは
  *          常に最新の EEPROM 値を保持している。
  *
+ *          NvM_DstPtr が NULL の場合、恒久 RAM ブロック（本プロジェクトの
+ *          全ブロックが該当、NvM_PBCfg.c 参照）を使うという意味であり
+ *          エラーではない（[SWS_NvM_00898]、2026-09 是正。以前は無条件で
+ *          development error 扱いにしていた）。データは既に RAM ミラーに
+ *          保持済みのため追加のコピーは不要で、そのまま E_OK を返す。
+ *          非 NULL の場合は従来通り、RAM ミラーとは別にそのバッファへも
+ *          追加でコピーする（[SWS_NvM_00278]）。
+ *
  * \ServiceID      {0x06}
  * \Reentrancy     {Reentrant}
  * \Synchronicity  {Synchronous}
@@ -488,16 +496,29 @@ Std_ReturnType NvM_ReadBlock(NvM_BlockIdType BlockId, void* NvM_DstPtr)
         return E_NOT_OK;
     }
 
-    if (NvM_DstPtr == NULL)
+    const NvM_BlockDescriptorType* blk = &NvM_Cfg->Blocks[BlockId];
+
+    if (blk->RamBlockDataAddress == NULL)
     {
-        Det_ReportError(NVM_MODULE_ID, 0U, NVM_API_ID_READ_BLOCK, NVM_E_PARAM_ADDRESS);
+        if (NvM_DstPtr == NULL)
+        {
+            /* [SWS_NvM_00616]: 恒久RAMブロックも明示同期も設定されていない
+             * ブロック（本プロジェクトには存在しないが念のため）へNULLを
+             * 渡した場合のみ development error。 */
+            Det_ReportError(NVM_MODULE_ID, 0U, NVM_API_ID_READ_BLOCK, NVM_E_PARAM_ADDRESS);
+        }
         return E_NOT_OK;
     }
 
-    const NvM_BlockDescriptorType* blk = &NvM_Cfg->Blocks[BlockId];
-    if (blk->RamBlockDataAddress == NULL)
-        return E_NOT_OK;
+    if (NvM_DstPtr == NULL)
+    {
+        /* [SWS_NvM_00898]: 恒久 RAM ブロックが設定されている場合、NULL 指定は
+         * それを使う意味でありエラーではない。実データは既に RAM ミラーに
+         * 保持済み（本関数 \details 参照）なのでコピー不要。 */
+        return E_OK;
+    }
 
+    /* [SWS_NvM_00278]: 非 NULL は「追加でこのバッファにもコピーする」の意。 */
     memcpy(NvM_DstPtr, blk->RamBlockDataAddress, blk->NvMNvBlockLength);
     return E_OK;
 }
@@ -511,6 +532,14 @@ Std_ReturnType NvM_ReadBlock(NvM_BlockIdType BlockId, void* NvM_DstPtr)
  *          ここではブロックしない（詳細はファイル冒頭のコメント参照）。
  *          内容が直近の read/write ジョブと同一(CRC一致)の場合は物理書き込み
  *          をスキップする（[SWS_NvM_00852]、NvM.h 参照）。
+ *
+ *          NvM_SrcPtr が NULL の場合、恒久 RAM ブロック（本プロジェクトの
+ *          全ブロックが該当）を使うという意味でありエラーではない
+ *          （[SWS_NvM_00900]、2026-09 是正。以前は無条件で development error
+ *          扱いにしていた）。RAM ミラーへ新規上書きするデータが無いだけで、
+ *          現在の RAM ミラー内容をそのまま EEPROM へ（再）書き込むジョブとして
+ *          扱う。非 NULL の場合は従来通り、まず RAM ミラーをそのデータで
+ *          更新してから書き込む（[SWS_NvM_00280]）。
  *
  * \ServiceID      {0x07}
  * \Reentrancy     {Non Reentrant}
@@ -531,12 +560,6 @@ Std_ReturnType NvM_WriteBlock(NvM_BlockIdType BlockId, const void* NvM_SrcPtr)
         return E_NOT_OK;
     }
 
-    if (NvM_SrcPtr == NULL)
-    {
-        Det_ReportError(NVM_MODULE_ID, 0U, NVM_API_ID_WRITE_BLOCK, NVM_E_PARAM_ADDRESS);
-        return E_NOT_OK;
-    }
-
     if (NvM_BlockProtected[BlockId] != 0U)
     {
         /* [SWS_NvM_00217]: 保護中ブロックへの書き込みは E_NOT_OK で拒否する。
@@ -547,11 +570,31 @@ Std_ReturnType NvM_WriteBlock(NvM_BlockIdType BlockId, const void* NvM_SrcPtr)
     }
 
     const NvM_BlockDescriptorType* blk = &NvM_Cfg->Blocks[BlockId];
-    if (blk->RamBlockDataAddress == NULL)
-        return E_NOT_OK;
 
-    /* RAM ミラーを最新値で更新 (同期) */
-    memcpy(blk->RamBlockDataAddress, NvM_SrcPtr, blk->NvMNvBlockLength);
+    if (blk->RamBlockDataAddress == NULL)
+    {
+        if (NvM_SrcPtr == NULL)
+        {
+            /* [SWS_NvM_00622]: 恒久RAMブロックも明示同期も設定されていない
+             * ブロック（本プロジェクトには存在しないが念のため）へNULLを
+             * 渡した場合のみ development error。 */
+            Det_ReportError(NVM_MODULE_ID, 0U, NVM_API_ID_WRITE_BLOCK, NVM_E_PARAM_ADDRESS);
+        }
+        return E_NOT_OK;
+    }
+
+    if (NvM_SrcPtr == NULL)
+    {
+        /* [SWS_NvM_00900]: 恒久 RAM ブロックが設定されている場合、NULL 指定は
+         * それを使う意味でありエラーではない。RAM ミラーは既に更新済みの
+         * 前提で、新規上書きせず現在の内容をそのまま EEPROM へ書き戻す。 */
+    }
+    else
+    {
+        /* [SWS_NvM_00280]: 非 NULL は RAM ミラーをこのデータで更新してから
+         * 書き込む、の意（従来からの本実装の挙動）。 */
+        memcpy(blk->RamBlockDataAddress, NvM_SrcPtr, blk->NvMNvBlockLength);
+    }
 
     if (blk->Redundant == 0U
         && NvM_BlockPending[BlockId] == 0U

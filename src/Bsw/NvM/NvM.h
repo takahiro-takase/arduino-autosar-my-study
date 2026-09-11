@@ -189,12 +189,22 @@ void NvM_Init(const NvM_ConfigType* ConfigPtr);
  * \details NvM_Init() 完了後に RAM ミラーは最新 EEPROM 値を保持している。
  *          EEPROM への追加アクセスは発生しない。
  *
+ *          NvM_DstPtr が NULL の場合、恒久 RAM ブロック（本プロジェクトの
+ *          全ブロックが該当、NvM_PBCfg.c 参照）を使うという意味であり
+ *          エラーではない（[SWS_NvM_00898]、2026-09 是正。以前は無条件で
+ *          development error 扱いにしていた）。実データは既に RAM ミラーに
+ *          保持済みのため、この場合は追加のコピーを行わず E_OK を返す。
+ *
  * \param[in]  BlockId      ブロック ID (NVM_BLOCK_ID_* 定数)。
- * \param[out] NvM_DstPtr   データのコピー先。NULL 禁止。
+ * \param[out] NvM_DstPtr   データのコピー先。NULL の場合は恒久 RAM ブロックを
+ *                          使う（[SWS_NvM_00898]）。
  *
  * \retval  E_OK      正常完了。
- * \retval  E_NOT_OK  BlockId が範囲外、または NvM_DstPtr が NULL。
+ * \retval  E_NOT_OK  BlockId が範囲外。または、恒久 RAM ブロックが設定
+ *                    されていないブロック（本プロジェクトには存在しない）
+ *                    へ NULL を渡した（[SWS_NvM_00616]）。
  *
+ * \AUTOSARReq     {SWS_NvM_00898, SWS_NvM_00278, SWS_NvM_00616}
  * \ServiceID      {0x06}
  * \Reentrancy     {Reentrant}
  * \Synchronicity  {Synchronous}
@@ -223,14 +233,25 @@ Std_ReturnType NvM_ReadBlock(NvM_BlockIdType BlockId, void* NvM_DstPtr);
  *          本実装はプライマリ/ミラー個別の破損検出状態を追跡していないため、
  *          安全側に倒して常に対象外とする）。
  *
+ *          NvM_SrcPtr が NULL の場合、恒久 RAM ブロック（本プロジェクトの
+ *          全ブロックが該当）を使うという意味でありエラーではない
+ *          （[SWS_NvM_00900]、2026-09 是正。以前は無条件で development error
+ *          扱いにしていた）。この場合 RAM ミラーへの上書きは行わず、現在の
+ *          RAM ミラー内容をそのまま EEPROM へ（再）書き込むジョブとして扱う。
+ *
  * \param[in]  BlockId      ブロック ID (NVM_BLOCK_ID_* 定数)。
- * \param[in]  NvM_SrcPtr   書き込みデータの元アドレス。NULL 禁止。
+ * \param[in]  NvM_SrcPtr   書き込みデータの元アドレス。NULL の場合は恒久 RAM
+ *                          ブロック（現在の RAM ミラー内容）を使う
+ *                          （[SWS_NvM_00900]）。
  *
  * \retval  E_OK      ジョブを受け付けた、または内容不変のため書き込みを
  *                    スキップし即座に成功扱いとした（[SWS_NvM_00852]）。
- * \retval  E_NOT_OK  BlockId が範囲外、または NvM_SrcPtr が NULL。
+ * \retval  E_NOT_OK  BlockId が範囲外。または、恒久 RAM ブロックが設定
+ *                    されていないブロック（本プロジェクトには存在しない）
+ *                    へ NULL を渡した（[SWS_NvM_00622]）。
  *
- * \AUTOSARReq     {SWS_NvM_00208, SWS_NvM_00852}
+ * \AUTOSARReq     {SWS_NvM_00208, SWS_NvM_00852, SWS_NvM_00900, SWS_NvM_00280,
+ *                  SWS_NvM_00622}
  * \ServiceID      {0x07}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Asynchronous}
