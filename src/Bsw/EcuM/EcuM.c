@@ -68,9 +68,15 @@
  *                                 フレーム到着時の未初期化アクセスを防ぐ。
  *                                 ComM_BusSM_ModeIndication 経由で BswM_ExecuteRules が
  *                                 同期的に呼ばれるため BswM_Init 済みである必要がある）
- *           25. App_EngineManager_Init — SW-C 初期化
+ *           25. Rte_Start/Rte_Init_EngineManager — RTE 自身の初期化と
+ *                                EngineManager SW-C の Init Runnable 起動
+ *                                （[SWS_Rte_02569]/[SWS_Rte_06749]、2026-09
+ *                                追加。以前は EcuM がApp_EngineManager_Init()
+ *                                を直接呼んでいた。Rte.c 末尾の「RTE
+ *                                ライフサイクル API」コメント参照）
  *           26. IoHwAb_Init    — I/O ハードウェア抽象化層初期化 (LED チャネル設定)
- *           27. App_WarningIndicator_Init — 警告灯 SW-C 初期化
+ *           27. Rte_Init_WarningIndicator — 警告灯 SW-C の Init Runnable 起動
+ *                                (IoHwAb_Init() の後であること、同上)
  *           28. Wdg_Init       — Watchdog Driver 初期化（WdgM_Init より前。
  *                                コンフィグの記録のみ行い、HW はまだ有効化しない）
  *           29. WdgM_Init      — Alive/Logical Supervision 初期化。
@@ -245,10 +251,20 @@ void EcuM_Init(void)
                                * NM_E_UNINIT で失敗し、Nm が Bus-Sleep Mode に
                                * 固着したまま起動する（実機で確認された不具合）。 */
     ComM_RequestComMode(COMM_USER_0, COMM_FULL_COMMUNICATION);/* 全層初期化後に開通 */
-    App_EngineManager_Init();
+    Rte_Start();                /* RTE 自身の初期化（[SWS_Rte_02569]）。SW-C の
+                                  * Init Runnable 起動より必ず前に置くこと
+                                  * （[SWS_Rte_CONSTR_09035]、詳細は Rte.c 末尾の
+                                  * 「RTE ライフサイクル API」コメント参照） */
+    Rte_Init_EngineManager();   /* App_EngineManager_Init() を Rte 経由で起動
+                                  * （[SWS_Rte_06749]相当、2026-09 是正。以前は
+                                  * EcuM_Init() が直接呼んでいた） */
     IoHwAb_Init(NULL);
-    App_WarningIndicator_Init();
-    App_GptDemo_Init();  /* Gpt_Init 済みが前提。実 HW タイマの動作確認用デモ */
+    Rte_Init_WarningIndicator();/* App_WarningIndicator_Init() を Rte 経由で起動。
+                                  * IoHwAb_Init() 完了後であること（同上） */
+    App_GptDemo_Init();  /* Gpt_Init 済みが前提。実 HW タイマの動作確認用デモ。
+                           * Rte のポートを経由しない単独モジュールのため、他の
+                           * BSW モジュール Init と同じく EcuM が直接呼ぶ
+                           * （Rte.c 末尾の「RTE ライフサイクル API」コメント参照）。 */
     Wdg_Init(&Wdg_Config);    /* WdgM_Init より前: Watchdog Driver 初期化 (HW はまだ有効化しない) */
     WdgM_Init(&WdgM_Config);  /* Alive Supervision 初期化 (Os_Init より前) */
     Os_Init(&Os_Config);      /* タスクテーブル初期化 (全タスク有効で起動)。

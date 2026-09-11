@@ -37,9 +37,11 @@
 
 /* App_EngineManager.c が定義する SW-C Runnable の前方宣言 */
 extern void App_EngineManager_Run(void);
+extern void App_EngineManager_Init(void);
 
 /* App_WarningIndicator.c が定義する SW-C Runnable の前方宣言 */
 extern void App_WarningIndicator_Run(void);
+extern void App_WarningIndicator_Init(void);
 
 /* EngineState の内部ミラー変数。
  * Rte_Write_EngineStatus_EngineState() が書き込み、
@@ -1568,4 +1570,160 @@ Std_ReturnType Rte_Call_ComM_GetCurrentComMode(ComM_ModeType* mode)
 {
     DET_LOGT(TAG, "called");
     return ComM_GetCurrentComMode(COMM_USER_0, mode);
+}
+
+/* -----------------------------------------------------------------------
+ * RTE ライフサイクル API ([SWS_Rte_02569]/[SWS_Rte_02570]/[SWS_Rte_06749])
+ *
+ * 実 AUTOSAR では EcuM (ECU State Manager) が起動シーケンス中に
+ * Rte_Start() → Rte_Init_<InitContainer>()（コンフィグ上の
+ * RteInitializationRunnableBatch コンテナごとに 1 個生成される、SW-C の
+ * Init Runnable 起動関数） → Rte_StartTiming() の順に呼び出す
+ * （[SWS_Rte_CONSTR_09035]/[SWS_Rte_CONSTR_09060]）。以前の本プロジェクトは
+ * この 3 つのライフサイクル API 自体が一切存在せず、EcuM_Init() が
+ * App_EngineManager_Init()/App_WarningIndicator_Init() を直接呼び出していた
+ * （2026-09 是正）。
+ *
+ * 本プロジェクトには ARXML 由来の RteInitializationRunnableBatch コンテナ
+ * 概念が無いため、`Rte_Init_<InitContainer>` の代わりに SW-C 名で
+ * 直接命名した Rte_Init_EngineManager()/Rte_Init_WarningIndicator() を
+ * 個別に用意する（1 コンテナ=1 SW-C とみなす簡略化）。App_GptDemo は
+ * Rte のいずれのポート（Rte_Read/Write/Call）も経由しない単独の HW 動作
+ * 確認用モジュールであり、他 SW-C のように Rte が仲介する対象ではないため
+ * 対象外とし、従来通り EcuM_Init() が直接 App_GptDemo_Init() を呼ぶ
+ * （IoHwAb_Init() 等の BSW モジュール Init 呼び出しと同じ扱い）。
+ *
+ * Rte_Start() が「OS 初期化後」（[SWS_Rte_CONSTR_09035]）ではなく本プロジェクト
+ * の起動シーケンスの中盤（Os_Init() は EcuM.c の最終ステップ）で呼ばれる点は
+ * 実仕様と厳密には順序が異なるが、本プロジェクトの Os は「周期ティックを
+ * 開始するだけで、EcuM_MainFunction() のループが始まるまでどのタスクも
+ * 実行されない」設計（Os.c 冒頭のコメント参照）のため、Rte_Start() 時点で
+ * OS 由来のプリエンプションを考慮する必要がなく実害はない。
+ * ----------------------------------------------------------------------- */
+
+/**
+ * \brief   RTE 自身を初期化する（[SWS_Rte_02569]）。
+ *
+ * \details RTE が管理する内部ミラー変数・オーバーライド状態を全て初期値へ
+ *          リセットする（実仕様の「システムリソース・通信リソースの割当て・
+ *          初期化」に相当。本プロジェクトは動的資源確保を行わないため、
+ *          静的変数の明示的な初期値再設定のみを行う）。EcuM_Init() から
+ *          Com_Init() 等の RTE が仲介する BSW モジュール群の初期化完了後、
+ *          SW-C の Init Runnable（Rte_Init_EngineManager() 等）を呼び出す
+ *          前に一度だけ呼び出すこと（[SWS_Rte_CONSTR_09035]）。
+ *
+ * \retval  E_OK  常に成功（本実装は資源確保に失敗しうる要素を持たないため、
+ *                実仕様の RTE_E_LIMIT を返すことはない）。
+ *
+ * \note       [SWS_Rte_CONSTR_09036]「SchM_Init 完了後にのみ使用可」は、
+ *             本プロジェクトの SchM（src/Bsw/SchM/SchM.h）がコンパイル時
+ *             マクロのみで構成され、対応する Init 関数自体を持たないため
+ *             対象外。
+ *
+ * \AUTOSARReq     {SWS_Rte_02569, SWS_Rte_CONSTR_09035}
+ * \ServiceID      {0x70}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType Rte_Start(void)
+{
+    DET_LOGT(TAG, "called");
+
+    /* [SWS_Rte_CONSTR_09035]で規定される呼び出し順序上、本関数の直前に
+     * ComM_RequestComMode(FULL_COM)が完了しCAN通信が有効化されているため
+     * （EcuM_Init()参照）、以下のミラー変数はいずれも割り込みコンテキストの
+     * Rte_COMRxInd_EngineInfo()/Rte_COMRxInd_AbsInfo()と競合しうる。他の
+     * 全アクセサ関数と同じくSchM排他エリアで保護する（2026-09 是正:
+     * 当初は無保護のまま直接代入していた）。 */
+    SchM_Enter_Rte_MIRROR_EXCLUSIVE_AREA();
+
+    Rte_EngineStateMirror = ENGINE_STATE_OFF;
+
+    Rte_EngineInfoMirror.speed  = 0U;
+    Rte_EngineInfoMirror.temp   = 0U;
+    Rte_EngineInfoMirror.onFlag = 0U;
+    Rte_EngineInfoStatus        = RTE_E_OK;
+
+    Rte_AbsInfoMirror.speed = 0U;
+    Rte_AbsInfoMirror.brake = 0U;
+    Rte_AbsInfoMirror.abs   = 0U;
+    Rte_AbsInfoStatus       = RTE_E_OK;
+
+    SchM_Exit_Rte_MIRROR_EXCLUSIVE_AREA();
+
+    for (uint8 i = 0U; i < RTE_LAMP_COUNT; i++)
+    {
+        Rte_LampOverrideActive[i] = 0U;
+        Rte_LampOverrideValue[i]  = 0U;
+        Rte_LampLastLevel[i]      = 0U;
+    }
+
+    DET_LOGI(TAG, "Start ok");
+    return E_OK;
+}
+
+/**
+ * \brief   EngineManager SW-C の Init Runnable を起動する。
+ *
+ * \details 実仕様の `Rte_Init_<InitContainer>()`（[SWS_Rte_06749]、
+ *          コンテナ名は ARXML の RteInitializationRunnableBatch 由来）に
+ *          相当する、EngineManager SW-C 専用の簡略版（ファイル冒頭の
+ *          「RTE ライフサイクル API」コメント参照）。Rte_Start() の後、
+ *          EcuM_Init() から一度だけ呼び出すこと（[SWS_Rte_CONSTR_09060]）。
+ *
+ * \AUTOSARReq     {SWS_Rte_06749, SWS_Rte_06751, SWS_Rte_CONSTR_09060}
+ * \ServiceID      {0x75}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void Rte_Init_EngineManager(void)
+{
+    DET_LOGT(TAG, "called");
+    App_EngineManager_Init();
+}
+
+/**
+ * \brief   WarningIndicator SW-C の Init Runnable を起動する。
+ *
+ * \details Rte_Init_EngineManager() と同様（[SWS_Rte_06749]相当）。
+ *          WarningIndicator は IoHwAb 経由でランプを駆動するため、
+ *          EcuM_Init() は IoHwAb_Init() 完了後に本関数を呼び出すこと
+ *          （App_WarningIndicator.h 参照）。
+ *
+ * \AUTOSARReq     {SWS_Rte_06749, SWS_Rte_06751, SWS_Rte_CONSTR_09060}
+ * \ServiceID      {0x75}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void Rte_Init_WarningIndicator(void)
+{
+    DET_LOGT(TAG, "called");
+    App_WarningIndicator_Init();
+}
+
+/**
+ * \brief   RTE を終了する（[SWS_Rte_02570]）。
+ *
+ * \details 実仕様は「RTE がその core 上で割り当てたシステム・通信資源を
+ *          全て解放する」と規定するが、本プロジェクトは動的資源確保を
+ *          行わないため実質的に何も解放しない（本 API 自体は仕様上
+ *          「常に生成される」ため、契約を満たすために提供する）。
+ *          EcuM 側に BSW 全体のシャットダウンシーケンス自体が無いため、
+ *          本プロジェクトの現在の起動フローからは呼び出されない
+ *          （本プロジェクトには他にも呼び出し元を持たないまま API 契約を
+ *          満たすためだけに提供している関数の前例が複数ある）。
+ *
+ * \retval  E_OK  常に成功（本実装は解放に失敗しうる資源を持たないため、
+ *                実仕様の RTE_E_LIMIT を返すことはない）。
+ *
+ * \AUTOSARReq     {SWS_Rte_02570, SWS_Rte_CONSTR_09038}
+ * \ServiceID      {0x71}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType Rte_Stop(void)
+{
+    DET_LOGT(TAG, "called");
+    DET_LOGI(TAG, "Stop ok");
+    return E_OK;
 }
