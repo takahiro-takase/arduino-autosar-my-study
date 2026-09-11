@@ -50,9 +50,13 @@
  * により NVM_E_PARAM_ADDRESS（NVM_E_PARAM_POINTER ではない）と規定されて
  * いる点に注意。NvM_GetErrorStatus の NULL RequestResultPtr は
  * SWS_NvM_00612 により NVM_E_PARAM_DATA と規定されている。
- * NVM_E_BLOCK_PENDING（処理中ブロックへの再要求）は本実装では意図的に
- * エラー扱いしない（NvM_WriteBlock の doxygen 参照: 進行中のジョブを
- * 破棄して最新データで書き直す設計のため、対象外）。
+ * NVM_E_BLOCK_PENDING は NvM_WriteBlock/NvM_RestoreBlockDefaults に対しては
+ * 本実装では意図的にエラー扱いしない（両関数の doxygen 参照: 進行中の
+ * ジョブを破棄して最新データで書き直す設計のため対象外）が、
+ * NvM_SetBlockProtection に対しては [SWS_NvM_00607]/[SWS_NvM_00704] により
+ * 報告が必須（2026-09 追加。管理ブロックの変更操作はジョブ完了まで
+ * 許可されないという別の規定のため、書き込み系API向けの上記除外理由は
+ * 当てはまらない）。
  * ----------------------------------------------------------------------- */
 
 /** AUTOSAR NVRAM Manager の ModuleId（AUTOSAR_TR_BSWModuleList 参照、固定値 20） */
@@ -63,6 +67,11 @@
 #define NVM_E_PARAM_ADDRESS     0x0DU
 #define NVM_E_PARAM_DATA        0x0EU
 #define NVM_E_PARAM_POINTER     0x0FU
+/** [SWS_NvM_00587]: 処理中(キュー投入済みまたは実行中)のブロックに対する
+ *  管理ブロック変更操作(NvM_SetBlockProtection 等)で報告する
+ *  （[SWS_NvM_00607]/[SWS_NvM_00704]、2026-09 追加、`pdftotext -table`で
+ *  7.3.1 節の値を実測して確認済み）。 */
+#define NVM_E_BLOCK_PENDING     0x15U
 /** [SWS_NvM_00885]: NvM_RestoreBlockDefaults() が ROM デフォルト値も
  *  InitBlockCallback（本実装は概念自体を持たないため常に「無し」）も
  *  無いブロックに対して呼ばれた場合に報告する（2026-09 追加、`pdftotext -table`

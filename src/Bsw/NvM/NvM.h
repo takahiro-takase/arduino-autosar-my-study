@@ -317,13 +317,21 @@ Std_ReturnType NvM_RestoreBlockDefaults(NvM_BlockIdType BlockId, void* NvM_DestP
  *          Dem に配線する仕組み自体を持たないため報告しない
  *          （DET ログのみ出力）。
  *
+ *          非同期書き込みジョブが処理中(キュー投入済みまたは実行中)の
+ *          ブロックに対しては、保護状態を変更せず development error
+ *          `NVM_E_BLOCK_PENDING` を報告する（[SWS_NvM_00607]/
+ *          [SWS_NvM_00704]。2026-09 追加。以前はこのチェックが無く、
+ *          進行中のジョブに関わらず無条件で保護フラグを反転させていた）。
+ *
  * \param[in]  BlockId            ブロック ID (NVM_BLOCK_ID_* 定数)。
  * \param[in]  ProtectionEnabled  TRUE: 保護を有効化。FALSE: 保護を解除。
  *
  * \retval  E_OK      正常に設定/解除した。
- * \retval  E_NOT_OK  未初期化、または BlockId が範囲外。
+ * \retval  E_NOT_OK  未初期化、BlockId が範囲外、または対象ブロックの
+ *                    非同期ジョブが処理中（[SWS_NvM_00607]）。
  *
- * \AUTOSARReq     {SWS_NvM_00450, SWS_NvM_00016, SWS_NvM_00325}
+ * \AUTOSARReq     {SWS_NvM_00450, SWS_NvM_00016, SWS_NvM_00325, SWS_NvM_00607,
+ *                  SWS_NvM_00704}
  * \ServiceID      {0x03}
  * \Reentrancy     {Reentrant}
  * \Synchronicity  {Synchronous}

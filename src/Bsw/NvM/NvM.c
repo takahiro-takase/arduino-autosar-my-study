@@ -753,6 +753,15 @@ Std_ReturnType NvM_SetBlockProtection(NvM_BlockIdType BlockId, boolean Protectio
         return E_NOT_OK;
     }
 
+    if (NvM_BlockPending[BlockId] != 0U)
+    {
+        /* [SWS_NvM_00607]/[SWS_NvM_00704]: 処理中(キュー投入済みまたは
+         * 実行中)のブロックに対する管理ブロック変更操作は許可しない
+         * （2026-09 追加。以前は無条件で保護フラグを反転させていた）。 */
+        Det_ReportError(NVM_MODULE_ID, 0U, NVM_API_ID_SET_BLOCK_PROTECTION, NVM_E_BLOCK_PENDING);
+        return E_NOT_OK;
+    }
+
     NvM_BlockProtected[BlockId] = ProtectionEnabled;
     DET_LOGI(TAG, "block=%u protection=%u", (unsigned)BlockId, (unsigned)ProtectionEnabled);
 
