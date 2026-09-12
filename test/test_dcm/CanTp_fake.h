@@ -23,6 +23,11 @@ extern uint8  FakeCanTp_TxBuf[CANTP_FAKE_TX_BUF_SIZE];
 extern uint8  FakeCanTp_TxLength;
 extern uint32 FakeCanTp_TransmitCount;
 
+/** `CanTp_IsTxBusy()` の戻り値を制御する。デフォルト FALSE（アイドル）。
+ *  Dcm_ComIndication() のビジー時無視分岐（[SWS_Dcm_00557]）を検証する
+ *  テストが TRUE に設定する。`FakeCanTp_Reset()` で FALSE へ戻る。 */
+extern boolean FakeCanTp_Busy;
+
 /** 各テストケースの開始時に呼び、直近の送信記録をクリアする。 */
 void FakeCanTp_Reset(void);
 

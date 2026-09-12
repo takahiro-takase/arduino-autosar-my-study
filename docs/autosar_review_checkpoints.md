@@ -52,15 +52,15 @@
 |---|---|---|---|
 | Can | 2dad126 | 914c041 | SWS_Can_00223 |
 | CanIf | 694993d | 914c041 | SWS_CANIF_00001 |
-| Com | d628731 | 914c041 | Com_Init 本文の SWS_Com 記述 |
-| PduR | 694993d | 914c041 | SWS_PduR 記述 |
-| Gpt | 7aa4ccd | 914c041 | Gpt SWS 記述 |
-| Mcu | 72d091f | 914c041 | Mcu SWS 記述 |
-| Wdg | 9bc33bb | 914c041 | Wdg SWS 記述 |
-| WdgM | 9bc33bb | 914c041 | WdgM SWS 記述 |
-| BswM | a7cc1b3 | 914c041 | BswM SWS 記述 |
+| Com | 587da32 | 587da32 | SWS_Com_00432（2026-09-12 再検証済み: 実装が`config->RxIPduCount`等を実際に参照し規定と整合。「常にNULL」規定なし） |
+| PduR | bede9fc | bede9fc | SWS_PduR_00709（2026-09-12 再検証済み: 実装が`ConfigPtr->RxPathCount`等を実際に参照し整合。「常にNULL」規定なし） |
+| Gpt | 7aa4ccd | 914c041 | SWS_Gpt_00006（2026-09-12 再検証済み: 実装が`ConfigPtr`を実際に保持・参照し整合。「常にNULL」規定なし） |
+| Mcu | 72d091f | 914c041 | SWS_Mcu_00126（2026-09-12 再検証済み: 本要求はVARIANT-PRE-COMPILEのみNULL必須と規定し、post-buildは対象外。本プロジェクトは全モジュール共通でpost-build方式のためNULL禁止が正しい。実装はConfigPtrの中身自体は参照しないが非NULLである意味自体を要求する設計として整合） |
+| Wdg | 9bc33bb | 914c041 | SWS_Wdg_00001（2026-09-12 再検証済み: 実装が`ConfigPtr->DefaultTimeoutMs`を実際に参照し整合。「常にNULL」規定なし） |
+| WdgM | ad0eacc | ad0eacc | SWS_WdgM_00151/00135（2026-09-12 再検証済み: 実装が`ConfigPtr->EntityCount`を実際に参照し整合。「常にNULL」規定なし） |
+| BswM | 8f2dfc2 | 8f2dfc2 | SWS_BswM_00043/00045（2026-09-12 再検証済み: 実装が`ConfigPtr`を実際に保持し規定の設定値検証整合。「常にNULL」規定なし） |
 | FiM | 694993d | 914c041 | SWS_Fim_00077 |
-| SecOC | ed3f7d2 | 914c041 | SecOC SWS 記述 |
+| SecOC | 93b53b0 | 93b53b0 | SWS_SecOC_00106（2026-09-12 再検証済み: 実装が`config->RxPduCount`等を実際に参照し整合。「常にNULL」規定なし） |
 
 ### 仕様通り（void、実装も void）
 
@@ -131,17 +131,38 @@ ConfigPtr shall always have a NULL_PTR value」（"is currently not used"）と�
 全く同じ opaque ConfigType + 常に NULL 方式へ是正し、`NvM_Init()` は内部で
 `NvM_PBCfg.c` の静的テーブル `NvM_Config` を直接参照するよう変更。
 
-**教訓**: この台帳の「仕様通り（ConfigPtr 注入、実装も注入）」表（Can/CanIf/Com/PduR/Gpt/
-Mcu/Wdg/WdgM/BswM/FiM/SecOC が現在も掲載されたまま）は、根拠列が「〜SWS 記述」という
-曖昧な記載のみで具体的な要求ID引用が無いエントリ（Com/PduR/Gpt/Mcu/Wdg/WdgM/BswM/SecOC
-の8件が該当。Can/CanIf/FiMの3件は具体的なID引用あり、FiMはこの教訓を追記した際に
-誤って曖昧引用グループへ含めていたため是正済み）について、NvMと同じ誤分類が潜んでいる
-可能性があり未検証のまま残っている。次回この観点のレビューを行う際は、具体的なID引用が
+**教訓**: この台帳の「仕様通り（ConfigPtr 注入、実装も注入）」表は、根拠列が「〜SWS 記述」
+という曖昧な記載のみで具体的な要求ID引用が無いエントリ（Com/PduR/Gpt/Mcu/Wdg/WdgM/BswM/
+SecOCの8件が該当。Can/CanIf/FiMの3件は具体的なID引用あり）について、NvMと同じ誤分類が
+潜んでいる可能性があると判明した。次回この観点のレビューを行う際は、具体的なID引用が
 無い行から優先的に`pdftotext`で本文を再確認すること。
 
 | モジュール | .h SHA | .c SHA | 仕様根拠 |
 |---|---|---|---|
-| NvM | (コミット後に SHA 更新要) | (コミット後に SHA 更新要) | SWS_NvM_00881: `ConfigPtr shall always have a NULL_PTR value`。`NvM_PBCfg.c`の`NvM_Config`を内部で直接参照 |
+| NvM | 7601966 | 7601966 | SWS_NvM_00881: `ConfigPtr shall always have a NULL_PTR value`。`NvM_PBCfg.c`の`NvM_Config`を内部で直接参照 |
+
+### 対応済み（2026-09-12追加、上記教訓に基づき残り8モジュールを専用サーベイし全件「誤分類なし」と確認）
+
+ユーザーからの明示依頼で、上記教訓が示す未検証8モジュール（Com/PduR/Gpt/Mcu/Wdg/WdgM/
+BswM/SecOC）を専用サーベイした。各モジュールのSWS文書から実際の`<Module>_Init()`
+定義節（Service name/Syntax直後の説明文）を`pdftotext -layout`で精読し、NvMのような
+「ConfigPtr shall always have a NULL_PTR value」型の絶対規定が存在するか確認した結果、
+**8件全て、そのような規定は存在しないと確認**（各行の仕様根拠列に個別のSWS要求IDを
+追記済み、上表参照）。むしろ逆に、各モジュールの規定はConfigPtrの中身（Com:RxIPduCount、
+PduR:RxPathCount、Gpt:タイマ設定、Wdg:DefaultTimeoutMs、WdgM:EntityCount、
+BswM:設定値の妥当性検証、SecOC:RxPduCount/TxPduCount）が実際に使われることを前提とした
+記述になっており、本プロジェクトの現在の実装（いずれも`ConfigPtr->フィールド`を実際に
+参照）と整合していることを個別に確認した。
+
+唯一 Mcu のみ特殊で、[SWS_Mcu_00126]は「VARIANT-PRE-COMPILEの場合のみConfigPtrは常に
+NULLであるべき」という**条件付き**規定であり、post-build変種は対象外。本プロジェクトは
+他の全モジュールと同じくpost-build方式（`_PBCfg.c`命名規則）を採用しているため、
+`Mcu_Init(&Mcu_Config)`という現在の非NULL呼び出しはこの規定の対象外ケースとして正当
+（`Mcu_Init()`自体はConfigPtrの中身を実際には参照しないが、非NULLであること自体が
+post-build方式の意味を持つ設計と整合）。
+
+**結論**: NvMは本当に唯一の誤分類だった。この観点のサーベイはこれで完了とし、
+今後この教訓に基づく再検証を追加で行う必要はない。
 
 ### 未対応（本プロジェクト独自モジュールのため対象外）
 

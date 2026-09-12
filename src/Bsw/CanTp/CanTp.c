@@ -349,7 +349,7 @@ Std_ReturnType CanTp_Transmit(PduIdType TxSduId, const PduInfoType* PduInfoPtr)
      * フレームがそのままバスへ出てしまい、受信側の再組み立てを破壊する
      * （2026-08 のスペック監査で発見・修正。以前は FF 分岐にのみこの
      * チェックがあった）。 */
-    if (CanTp_Tx.state != CANTP_TX_IDLE)
+    if (CanTp_IsTxBusy())
     {
         DET_LOGE(TAG, "TX E: busy");
         return E_NOT_OK;
@@ -407,6 +407,12 @@ Std_ReturnType CanTp_Transmit(PduIdType TxSduId, const PduInfoType* PduInfoPtr)
     CanTp_Tx.bsTimer = millis();
 
     return E_OK;
+}
+
+boolean CanTp_IsTxBusy(void)
+{
+    DET_LOGT(TAG, "called");
+    return (boolean)(CanTp_Tx.state != CANTP_TX_IDLE);
 }
 
 /* -----------------------------------------------------------------------

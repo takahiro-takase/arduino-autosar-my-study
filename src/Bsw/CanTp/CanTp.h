@@ -80,6 +80,27 @@ void CanTp_Init(const CanTp_ConfigType* CfgPtr);
 Std_ReturnType CanTp_Transmit(PduIdType TxSduId, const PduInfoType* PduInfoPtr);
 
 /**
+ * \brief   TX チャネルが送信中(ビジー)かどうかを返す。
+ *
+ * \details AUTOSAR 実仕様の CanTp には存在しない、本プロジェクト独自の
+ *          拡張問い合わせ API。上位層(Dcm)が新規要求を受理する前に、前回の
+ *          応答送信（特にマルチフレーム）がまだ完了していないかを判定する
+ *          目的で新設した（[SWS_Dcm_00557]対応、Dcm_ComIndication() 参照。
+ *          2026-09 追加）。`CanTp_Transmit()` 自身も同じ状態を見て
+ *          ビジー時に E_NOT_OK を返すが、それは「送信を試みてから失敗を知る」
+ *          方式のため、要求の副作用（診断サービスの実処理）が既に確定して
+ *          しまった後では手遅れになる。本 API は副作用が発生する前に
+ *          事前確認するために用いる。
+ *
+ * \return  TRUE: 送信中（新規送信は受け付けられない）。FALSE: アイドル。
+ *
+ * \ServiceID      {0x4A}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+boolean CanTp_IsTxBusy(void);
+
+/**
  * \brief   PduR から配信された受信 CAN フレームを処理する。
  *
  * \details フレームタイプ (SF/FF/CF/FC) を判定し、
