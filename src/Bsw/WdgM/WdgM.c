@@ -236,16 +236,43 @@ static uint8 WdgM_SkipNextAliveJudgment = 0U;
  *  （WdgM.h の WdgM_SetMode() Doxygen コメント参照）。 */
 static WdgM_ModeType WdgM_CurrentMode = WDGM_MODE_DEFAULT;
 
+/** 1 = Global Supervision Status が一度 WDGM_GLOBAL_STATUS_EXPIRED に
+ *  ラッチされた（[SWS_WdgM_00215]/[00077]、いずれかのエンティティの
+ *  Local Status が実際に EXPIRED になった時点）。2026-09 追加。
+ *
+ *  仕様上 EXPIRED から OK/FAILED へ直接戻る遷移は定義されていない
+ *  （Figure 4 の遷移(9)(10)のみ、いずれも EXPIRED 発生後の行き先は
+ *  EXPIRED 継続または STOPPED のみ。さらに [SWS_WdgM_00359] は Local
+ *  Status の WDGM_LOCAL_STATUS_EXPIRED 自体を「この状態から抜けることは
+ *  できない」と明記しており、Global 側でも同様に扱う設計が裏付けられる。
+ *  自己レビューで発見）ため、一度ラッチしたら
+ *  WdgM_ExpiredCycleCount による猶予サイクル消費（下記）を経て
+ *  STOPPED に至るまで、たとえ本プロジェクト独自の Alive 局所回復
+ *  簡略化により対象エンティティの Local Status がその後 OK に戻っても
+ *  このフラグ自体は下げない。全エンティティが OK に戻った場合の
+ *  例外的な復帰（WdgM_MainFunction() 末尾の回復判定コメント参照）でのみ
+ *  WdgM_ExpiredCycleCount・WdgM_GlobalStopped と合わせてクリアする。 */
+static uint8 WdgM_GlobalExpired = 0U;
+
 /** グローバルレベルの EXPIRED 許容サイクルカウンタ
  *  (AUTOSAR WdgMExpiredSupervisionCycleTol 相当。詳細は WdgM_Cfg.h の
  *  WDGM_EXPIRED_SUPERVISION_CYCLE_TOL コメントを参照)。
- *  いずれかのエンティティが FAILED の判定サイクルが続くたびに増加し、
- *  WDGM_EXPIRED_SUPERVISION_CYCLE_TOL を超えた時点で WdgM_GlobalStopped が
- *  立つ。全エンティティが OK に戻ればリセットされる。
- *  WdgM_GetGlobalStatus() の FAILED/EXPIRED 判定もこの値を直接見る
- *  （0 なら「まだ猶予サイクルを消費していない=FAILED」、1 以上なら
- *  「猶予を消費中=EXPIRED」）ため、この値の意味を変更する場合は
- *  WdgM_GetGlobalStatus() 側の解釈も合わせて見直すこと。 */
+ *
+ *  [SWS_WdgM_00219]/[00220]: WdgM_GlobalExpired がラッチされている間のみ
+ *  判定サイクルごとに増加し、WDGM_EXPIRED_SUPERVISION_CYCLE_TOL を
+ *  超えた時点で WdgM_GlobalStopped が立つ。全エンティティが OK に戻れば
+ *  （WdgM_GlobalExpired と合わせて）リセットされる。
+ *
+ *  2026-09 是正: 以前は「いずれかのエンティティが FAILED（EXPIRED か否か
+ *  問わず）の判定サイクルが続くたびに増加」しており、(a) Alive が
+ *  FAILED になった最初の1周期（まだどの Local Status も EXPIRED でない）
+ *  でこの値が 0→1 になり WdgM_GetGlobalStatus() が誤って即座に EXPIRED を
+ *  返す、(b) Logical/Deadline 違反のように EXPIRED へ昇格しない、単なる
+ *  FAILED が続くだけのケースでもこの値が進み続けグローバル猶予を消費して
+ *  誤って STOPPED に至る、という 2 つの仕様乖離（[SWS_WdgM_00076]〜
+ *  [SWS_WdgM_00078]/[00215]〜[00221]）があった。WdgM_GlobalExpired の
+ *  導入により、この値は「実際に Global が EXPIRED 状態にある間の経過
+ *  サイクル数」のみを表すよう是正した。 */
 static uint8 WdgM_ExpiredCycleCount = 0U;
 
 /** 1 = グローバル許容サイクルを使い切り、AUTOSAR の
@@ -317,6 +344,7 @@ void WdgM_Init(const WdgM_ConfigType* ConfigPtr)
         WdgM_LastCheckpointTimeMs[i] = millis();
     }
     WdgM_SkipNextAliveJudgment = 0U;
+    WdgM_GlobalExpired         = 0U;
     WdgM_ExpiredCycleCount     = 0U;
     WdgM_GlobalStopped         = 0U;
     WdgM_ResetRequested        = 0U;
@@ -468,8 +496,9 @@ void WdgM_DisableHwWatchdog(void)
  *          いないうちに FAILED と誤判定してしまう（実機で確認された不具合。
  *          詳細は WdgM_MainFunction() 冒頭のコメント参照）。
  *
- *          WdgM_ExpiredCycleCount・WdgM_GlobalStopped は意図的にリセットしない
- *          （実機で見つかった重大な不具合の教訓）。当初はここで一緒にリセット
+ *          WdgM_GlobalExpired・WdgM_ExpiredCycleCount・WdgM_GlobalStopped は
+ *          意図的にリセットしない（実機で見つかった重大な不具合の教訓）。
+ *          当初はここで一緒にリセット
  *          していたが、それだと「ボランタリスリープ→復帰」を繰り返すだけで、
  *          Logical/Deadline Supervision の恒久的な違反（本物のプログラムフロー
  *          バグ）があってもグローバル猶予カウンタが毎回 0 に戻り、
@@ -689,11 +718,43 @@ static uint8 WdgM_AnyEntityNotOk(void)
 }
 
 /**
+ * \brief   全エンティティのうち、いずれか一つでも Local Status が
+ *          WDGM_LOCAL_STATUS_EXPIRED かを判定する。
+ *
+ * \details [SWS_WdgM_00076]/[00078]/[00215]/[00217] 等、Global Supervision
+ *          Status の FAILED/EXPIRED を分岐させる条件そのもの
+ *          （「少なくとも1エンティティが EXPIRED か否か」）に対応する。
+ *          WdgM_AnyEntityNotOk() は FAILED/EXPIRED を区別しないため、
+ *          Global 側の EXPIRED 判定には本関数を使う（2026-09 追加）。
+ *          呼び出し前提は WdgM_AnyEntityNotOk() と同じで、フェイルセーフの
+ *          方針も揃える: WdgM_GetLocalStatus() が万一 E_NOT_OK を返した
+ *          場合も、より重篤な EXPIRED 側とみなす（/simplify で
+ *          WdgM_AnyEntityNotOk() との不一致を指摘され是正。現状は SEID が
+ *          常に呼び出し元のループ範囲内のため実際には到達しない）。
+ */
+static uint8 WdgM_AnyEntityExpired(void)
+{
+    for (uint8 i = 0U; i < WdgM_Cfg->EntityCount; i++)
+    {
+        WdgM_LocalStatusType status;
+        if (WdgM_GetLocalStatus(i, &status) != E_OK || status == WDGM_LOCAL_STATUS_EXPIRED)
+            return 1U;
+    }
+    return 0U;
+}
+
+/**
  * \brief   WdgM 全体のグローバル supervision ステータスを取得する。
  *
- * \details 全エンティティの WdgM_GetLocalStatus() を集約し、グローバル猶予
- *          サイクル (WdgM_ExpiredCycleCount)・停止フラグ (WdgM_GlobalStopped)
- *          と合わせて AUTOSAR の 4 状態 (SWS_WdgM_00360) を導出する。
+ * \details 全エンティティの WdgM_GetLocalStatus() を集約し、EXPIRED ラッチ
+ *          (WdgM_GlobalExpired)・停止フラグ (WdgM_GlobalStopped) と合わせて
+ *          AUTOSAR の 4 状態 (SWS_WdgM_00360) を導出する
+ *          （[SWS_WdgM_00076]/[00078]/[00215]〜[00221]、Figure 4 の状態機械。
+ *          実際の遷移ロジックは WdgM_MainFunction() 側が毎周期 1 回だけ計算し
+ *          [SWS_WdgM_00214]、本関数はその結果（ラッチ済みの
+ *          WdgM_GlobalExpired/WdgM_GlobalStopped）と、まだ EXPIRED/STOPPED に
+ *          ラッチされていない間だけ現在値を都度参照する OK/FAILED
+ *          [SWS_WdgM_00076]/[00078]/[00217]/[00218] を組み合わせて返す）。
  *
  *          WdgM_SupervisionSuppressed 中（POST_RUN 中、Rte_Engine/
  *          Rte_Warning が意図的に停止することによる Alive Supervision の
@@ -703,7 +764,10 @@ static uint8 WdgM_AnyEntityNotOk(void)
  *          場合でも、抑制中である以上リフレッシュは継続しているため OK を
  *          優先する）。
  *
- * \AUTOSARReq     {SWS_WdgM_00175, SWS_WdgM_00176, SWS_WdgM_00344}
+ * \AUTOSARReq     {SWS_WdgM_00175, SWS_WdgM_00176, SWS_WdgM_00344,
+ *                  SWS_WdgM_00076, SWS_WdgM_00078, SWS_WdgM_00215,
+ *                  SWS_WdgM_00216, SWS_WdgM_00217, SWS_WdgM_00218,
+ *                  SWS_WdgM_00219, SWS_WdgM_00220, SWS_WdgM_00221}
  * \ServiceID      {0x0D}
  * \Reentrancy     {Reentrant}
  * \Synchronicity  {Synchronous}
@@ -736,14 +800,48 @@ Std_ReturnType WdgM_GetGlobalStatus(WdgM_GlobalStatusType* Status)
         return E_OK;
     }
 
-    if (!WdgM_AnyEntityNotOk())
-        *Status = WDGM_GLOBAL_STATUS_OK;
-    else if (WdgM_ExpiredCycleCount > 0U)
+    if (WdgM_GlobalExpired)
+        /* [SWS_WdgM_00219]: 一度ラッチしたら、猶予サイクルを消費し尽くして
+         * STOPPED に至るまで EXPIRED のまま（2026-09 是正、WdgM_GlobalExpired
+         * のコメント参照）。 */
         *Status = WDGM_GLOBAL_STATUS_EXPIRED;
+    else if (!WdgM_AnyEntityNotOk())
+        *Status = WDGM_GLOBAL_STATUS_OK;
     else
         *Status = WDGM_GLOBAL_STATUS_FAILED;
 
     return E_OK;
+}
+
+/**
+ * \brief   Global Supervision Status を WDGM_GLOBAL_STATUS_STOPPED へ遷移させる
+ *          （[SWS_WdgM_00117]/[00220]、STOPPED への2つの遷移元で共通の処理）。
+ *
+ * \details WdgM_GlobalStopped を立て、[SWS_WdgM_00349] 相当として原因となった
+ *          最初の（走査順で最初に見つかった）FAILED/EXPIRED な SE を noinit
+ *          RAM へ記録する（次回起動時 WdgM_GetFirstExpiredSEID() で診断できる
+ *          ようにするため）。呼び出し元が走査済みのため WdgM_GetLocalStatus()
+ *          を呼び直さない（/code-review で指摘: 同一サイクル中に同じ判定を
+ *          3回行っていた）。2026-09 追加（/simplify で「[SWS_WdgM_00220]の
+ *          通常経路と[SWS_WdgM_00117]のtol=0防御分岐でほぼ同じ処理が重複
+ *          していた」と指摘され抽出）。
+ *
+ * \param[in]  reason          DET ログに残す遷移理由の短い説明文字列。
+ * \param[in]  firstNotOkFound 呼び出し元のループで FAILED/EXPIRED な SE が
+ *                             見つかったか。
+ * \param[in]  firstNotOkSeid  見つかった場合のその SEID。
+ */
+static void WdgM_EnterGlobalStopped(const char* reason, uint8 firstNotOkFound, uint8 firstNotOkSeid)
+{
+    WdgM_GlobalStopped = 1U;
+
+    if (firstNotOkFound)
+    {
+        WdgM_FirstExpiredSEID    = (WdgM_SupervisedEntityIdType)firstNotOkSeid;
+        WdgM_FirstExpiredSEIDInv = (WdgM_SupervisedEntityIdType)(~firstNotOkSeid);
+    }
+
+    DET_LOGE(TAG, "Global supervision STOPPED (%s) [HW WDT reset pending]", reason);
 }
 
 /**
@@ -784,7 +882,11 @@ Std_ReturnType WdgM_GetGlobalStatus(WdgM_GlobalStatusType* Status)
  *             WDGM_HW_WATCHDOG_TIMEOUT_MS 参照）によりリフレッシュ部分を
  *             WdgM_TriggerHwWatchdog() へ分離している。
  * \AUTOSARReq     {SWS_WdgM_00159, SWS_WdgM_00119, SWS_WdgM_00120,
- *                  SWS_WdgM_00121, SWS_WdgM_00122}
+ *                  SWS_WdgM_00121, SWS_WdgM_00122, SWS_WdgM_00076,
+ *                  SWS_WdgM_00077, SWS_WdgM_00078, SWS_WdgM_00117,
+ *                  SWS_WdgM_00215, SWS_WdgM_00216, SWS_WdgM_00217,
+ *                  SWS_WdgM_00218, SWS_WdgM_00219, SWS_WdgM_00220,
+ *                  SWS_WdgM_00221, SWS_WdgM_00214}
  * \ServiceID      {0x08}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
@@ -883,69 +985,98 @@ void WdgM_MainFunction(void)
     }
 
     /* ------------------------------------------------------------------
-     * グローバルレベルの EXPIRED 許容サイクル判定
-     * (AUTOSAR SWS_WdgM_00119-00122・WdgMExpiredSupervisionCycleTol 相当。
-     * 詳細は WdgM_Cfg.h の WDGM_EXPIRED_SUPERVISION_CYCLE_TOL コメントを参照)。
-     * 1 つでも FAILED なエンティティがあれば猶予カウンタを消費し、
-     * WDGM_EXPIRED_SUPERVISION_CYCLE_TOL を超えて初めて WdgM_GlobalStopped を
-     * 立てる。全エンティティが OK に戻れば猶予カウンタはリセットされる
-     * （AUTOSAR 本来は EXPIRED から OK への回復には別途ルールがあるが、
-     * 本実装は前述の 2 値簡略化に合わせてここも単純化している）。
+     * グローバル Supervision Status の状態機械 (Figure 4、[SWS_WdgM_00076]/
+     * [00078]/[00215]〜[00221])。
+     *
+     * 2026-09 是正: 以前は「1つでも FAILED（EXPIRED か否か問わず）なら
+     * 猶予カウンタ (WdgM_ExpiredCycleCount) を消費する」という単一の
+     * カウンタで OK/FAILED/EXPIRED/STOPPED を一括して表現していたため、
+     * (a) Alive が FAILED になった最初の1周期（まだどの Local Status も
+     * EXPIRED でない）でカウンタが 0→1 になり Global が誤って即座に
+     * EXPIRED と判定される、(b) Logical/Deadline 違反のように EXPIRED へ
+     * 昇格しない単なる FAILED が続くだけのケースでもカウンタが進み続け、
+     * 本来無期限に FAILED を維持すべき（[SWS_WdgM_00217]）ところを誤って
+     * グローバル猶予を消費し STOPPED に至ってしまう、という 2 つの仕様
+     * 乖離があった。是正後は WdgM_GlobalExpired という別ラッチを設け、
+     * 「少なくとも1エンティティが実際に EXPIRED か」(WdgM_AnyEntityExpired())
+     * を見てから初めて EXPIRED へ入り、EXPIRED に入って以降のみ
+     * WdgM_ExpiredCycleCount で STOPPED までの猶予を消費する。
      *
      * WdgM_SupervisionSuppressed 中（POST_RUN 中の意図的な Alive 不足）は
-     * カウンタ自体を進めない。POST_RUN 中に Rte_Engine/Rte_Warning が
-     * 意図的に停止して Alive Supervision が FAILED になるのは想定内の挙動
-     * であり、これを毎回グローバル猶予に食い込ませてしまうと、本物の
-     * Logical/Deadline 違反ではなく POST_RUN の頻度・長さ次第で猶予を
-     * 消費してしまう（詳細は WdgM_TriggerHwWatchdog() 側の抑制と対になる
-     * 判断）。
+     * 状態遷移そのものを凍結する（詳細は WdgM_TriggerHwWatchdog() 側の
+     * 抑制と対になる判断、既存方針を維持）。
      * ------------------------------------------------------------------ */
     const uint8 anyNotOk = WdgM_AnyEntityNotOk();
 
     if (anyNotOk && WdgM_SupervisionSuppressed)
     {
-        /* 抑制中は猶予カウンタを進めも回復させもしない（判定を凍結する）。 */
+        /* 抑制中は状態遷移そのものを凍結する。 */
     }
     else if (anyNotOk)
     {
-        if (WdgM_ExpiredCycleCount < WDGM_EXPIRED_SUPERVISION_CYCLE_TOL)
+        if (WdgM_GlobalStopped)
         {
-            WdgM_ExpiredCycleCount++;
-            DET_LOGW(TAG, "Global status not OK, tolerance %u/%u cycles",
-                     (unsigned)WdgM_ExpiredCycleCount, (unsigned)WDGM_EXPIRED_SUPERVISION_CYCLE_TOL);
+            /* [SWS_WdgM_00221]: STOPPED は最終状態、そのまま。 */
         }
-        else if (!WdgM_GlobalStopped)
+        else if (WdgM_GlobalExpired)
         {
-            WdgM_GlobalStopped = 1U;
-
-            /* [SWS_WdgM_00349] 相当: 実 HW リセットが確実に迫っているこの瞬間に、
-             * 原因となった最初の（走査順で最初に見つかった）FAILED な SE を
-             * noinit RAM へ記録する。次回起動時 WdgM_GetFirstExpiredSEID() で
-             * 診断できるようにするため。上のループで既に走査済みのため
-             * ここで WdgM_GetLocalStatus() を呼び直さない
-             * （/code-review で指摘: 同一サイクル中に同じ判定を3回行っていた）。 */
-            if (firstNotOkFound)
+            /* [SWS_WdgM_00219]/[00220]: 既に EXPIRED。仕様上 EXPIRED から
+             * OK/FAILED への直接遷移は定義されていないため、この時点の
+             * WdgM_AnyEntityExpired() の値に関わらず猶予サイクルの消費を
+             * 継続する。 */
+            if (WdgM_ExpiredCycleCount < WDGM_EXPIRED_SUPERVISION_CYCLE_TOL)
             {
-                WdgM_FirstExpiredSEID    = (WdgM_SupervisedEntityIdType)firstNotOkSeid;
-                WdgM_FirstExpiredSEIDInv = (WdgM_SupervisedEntityIdType)(~firstNotOkSeid);
+                WdgM_ExpiredCycleCount++;
+                DET_LOGW(TAG, "Global status EXPIRED, tolerance %u/%u cycles",
+                         (unsigned)WdgM_ExpiredCycleCount, (unsigned)WDGM_EXPIRED_SUPERVISION_CYCLE_TOL);
             }
-
-            DET_LOGE(TAG, "Global supervision STOPPED (tolerance exhausted) [HW WDT reset pending]");
+            else
+            {
+                WdgM_EnterGlobalStopped("tolerance exhausted", firstNotOkFound, firstNotOkSeid);
+            }
+        }
+        else if (WdgM_AnyEntityExpired())
+        {
+            if (WDGM_EXPIRED_SUPERVISION_CYCLE_TOL == 0U)
+            {
+                /* [SWS_WdgM_00216]/[00117]: 猶予 0 設定時は EXPIRED を経由
+                 * せず直接 STOPPED（本プロジェクトの現在の設定値では
+                 * 到達しない防御分岐、WdgM_Cfg.h 参照）。 */
+                WdgM_EnterGlobalStopped("zero tolerance", firstNotOkFound, firstNotOkSeid);
+            }
+            else
+            {
+                /* [SWS_WdgM_00215]/[00077]: 少なくとも1エンティティが
+                 * 実際に EXPIRED になった時点で初めて Global を EXPIRED へ
+                 * ラッチする。 */
+                WdgM_GlobalExpired     = 1U;
+                WdgM_ExpiredCycleCount = 0U;
+                DET_LOGW(TAG, "Global status EXPIRED (an SE reached local EXPIRED)");
+            }
+        }
+        else
+        {
+            /* [SWS_WdgM_00076]/[00217]: FAILED のみ（EXPIRED なエンティティは
+             * 無し）。永続状態を持つ必要がなく、WdgM_GetGlobalStatus() が
+             * その都度 WdgM_AnyEntityNotOk() を見て導出するため、ここでは
+             * 何もしない。 */
         }
     }
-    else if (WdgM_ExpiredCycleCount > 0U || WdgM_GlobalStopped)
+    else if (WdgM_ExpiredCycleCount > 0U || WdgM_GlobalStopped || WdgM_GlobalExpired)
     {
+        WdgM_GlobalExpired     = 0U;
         WdgM_ExpiredCycleCount = 0U;
         WdgM_GlobalStopped     = 0U;
 
-        /* STOPPED（実 HW リセット直前の状態）が実際のリセットへ至る前に解消した
-         * ケース（例: WdgM_DisableHwWatchdog() による WdgM_SupervisionSuppressed
-         * が refresh を再開させた後、RUN 復帰でエンティティが真に回復した場合）。
-         * 記録済みの WdgM_FirstExpiredSEID は今回のリセット原因ではなくなった
-         * ため、後で本当に無関係な原因（BOR 等）でリセットが起きた際に誤って
-         * 古い SEID を「今回の原因」と誤診断しないよう無効化する
-         * （value と inverse を一致させない = WdgM_GetFirstExpiredSEID() が
-         * E_NOT_OK を返すようにする。/code-review で指摘）。 */
+        /* STOPPED/EXPIRED（実 HW リセットが迫っていた状態）が実際のリセットへ
+         * 至る前に解消したケース（例: WdgM_DisableHwWatchdog() による
+         * WdgM_SupervisionSuppressed が refresh を再開させた後、RUN 復帰で
+         * エンティティが真に回復した場合）。記録済みの WdgM_FirstExpiredSEID
+         * は今回のリセット原因ではなくなったため、後で本当に無関係な原因
+         * （BOR 等）でリセットが起きた際に誤って古い SEID を「今回の原因」と
+         * 誤診断しないよう無効化する（value と inverse を一致させない =
+         * WdgM_GetFirstExpiredSEID() が E_NOT_OK を返すようにする。
+         * /code-review で指摘）。 */
         WdgM_FirstExpiredSEID    = 0U;
         WdgM_FirstExpiredSEIDInv = 0U;
 
