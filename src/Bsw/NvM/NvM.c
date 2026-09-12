@@ -128,9 +128,21 @@ static uint8 NvM_ActiveCrc = 0U;
 
 /** 冗長ブロック（Redundant=1）処理中、現在どちらのコピーを書き込んでいるか。
  *  0 = プライマリ面、1 = ミラー面。非冗長ブロックでは未使用（常に 0）。
- *  プライマリを完全に書き終えてからミラーへ移るため、書き込み途中で
- *  電源が落ちても、書き込み中でない側は必ず直前の完了済みの内容を保持する。 */
+ *  1面目を完全に書き終えてから2面目へ移るため、書き込み途中で
+ *  電源が落ちても、書き込み中でない側は必ず直前の完了済みの内容を保持する。
+ *  ジョブ開始時は NvM_WriteStartIsMirror[] の値で初期化される（2026-09
+ *  是正、[SWS_NvM_00761]。以前は常に 0=プライマリで固定していた）。 */
 static uint8 NvM_ActiveCopyIsMirror = 0U;
+
+/** 冗長ブロックの次回書き込みジョブが「先頭でどちらの面から書き始める
+ *  べきか」（[SWS_NvM_00761]: 直近の読み込みジョブで実際には読まれ
+ *  なかった＝RAM ミラーへ採用されなかった側から書き始め、その後もう
+ *  一方を書く）。0 = プライマリ, 1 = ミラー。非冗長ブロックでは未使用
+ *  （常に 0）。NvM_LoadAndVerifyBlock() が起動時の読み込み結果に基づいて
+ *  一度だけ確定する（本プロジェクトには NvM_ReadBlock() 相当の実行時
+ *  再読み込みトリガーが無いため、Init 時の結果がブロックの生存期間中
+ *  ずっと有効）。2026-09 追加。 */
+static uint8 NvM_WriteStartIsMirror[NVM_BLOCK_COUNT];
 
 /** 保留ブロック ID を投入順 (FIFO) で保持するリングバッファ。
  *  呼び出し元 (Dem 等) は「後から投入したブロックほど後で物理書き込みされる」
@@ -287,9 +299,19 @@ static void NvM_ApplyDefaultSync(NvM_BlockIdType id, const NvM_BlockDescriptorTy
  *            - 両面とも破損 → 通常ブロックと同様、デフォルト値へ復元する
  *              （プライマリ・ミラー両面に書く）。
  *          これにより、書き込み中の電源断で片方のコピーが不完全な状態に
- *          なっても、もう片方（プライマリ→ミラーの順で完全に書き終えてから
+ *          なっても、もう片方（開始面から完全に書き終えてから次の面／
  *          次のブロックへ移るため、書き込み中でない側は必ず直前の完了済みの
  *          内容を保持している）からデータを失わずに復旧できる。
+ *
+ *          あわせて、RAM ミラーへ実際に採用した面（＝「読まれた」面）と逆を
+ *          次回の NvM_WriteBlock() の開始面として NvM_WriteStartIsMirror[] へ
+ *          記録する（[SWS_NvM_00761]、2026-09 追加）。自己修復ケース（片面の
+ *          み正常）では、破損側も物理的には読み込み自体は試みられているため
+ *          文字通りの"not been read"ではないが、RAM へ最終的に反映された
+ *          のは正常だった側のみという点を「読まれた」の判定基準として採用
+ *          している（仕様書内にこの曖昧さを解消する詳細アルゴリズム記述は
+ *          見当たらないため、[SWS_NvM_00531]の冗長ブロック復旧思想と整合
+ *          させた合理的解釈。自己仕様引用裏取りで確認済み）。
  */
 static void NvM_LoadAndVerifyBlock(NvM_BlockIdType id, const NvM_BlockDescriptorType* blk)
 {
@@ -344,6 +366,11 @@ static void NvM_LoadAndVerifyBlock(NvM_BlockIdType id, const NvM_BlockDescriptor
         /* NvM_LastCrc[] は更新しない: 本ブロックは Redundant=1 のため
          * NvM_WriteBlock() の書き込みスキップ判定（Redundant==0U が前提条件）
          * から一切参照されない（NvM_LastCrc[] 宣言部のコメント参照）。 */
+
+        /* [SWS_NvM_00761]: RAM ミラーはプライマリの内容を採用した（＝
+         * プライマリが「読まれた」）ため、次回の NvM_WriteBlock() は
+         * 読まれなかった側＝ミラーから書き始める。 */
+        NvM_WriteStartIsMirror[id] = 1U;
         return;
     }
 
@@ -352,6 +379,11 @@ static void NvM_LoadAndVerifyBlock(NvM_BlockIdType id, const NvM_BlockDescriptor
         DET_LOGW(TAG, "block=%u redundant: primary CRC mismatch, recovered from mirror", (unsigned)id);
         memcpy(blk->RamBlockDataAddress, mirrorBuf, blk->NvMNvBlockLength);
         NvM_WriteCopySync(blk->NvMNvBlockBaseNumber, blk->RamBlockDataAddress, blk->NvMNvBlockLength);
+
+        /* [SWS_NvM_00761]: RAM ミラーはミラー面の内容を採用した（＝
+         * ミラーが「読まれた」）ため、次回の NvM_WriteBlock() は
+         * 読まれなかった側＝プライマリから書き始める。 */
+        NvM_WriteStartIsMirror[id] = 0U;
         return;
     }
 
@@ -361,6 +393,15 @@ static void NvM_LoadAndVerifyBlock(NvM_BlockIdType id, const NvM_BlockDescriptor
      * NVM_REQ_RESTORED_FROM_ROM を設定するのは両面とも破損した本ケースのみ）。 */
     DET_LOGE(TAG, "block=%u redundant: both copies CRC mismatch, restoring defaults", (unsigned)id);
     NvM_ApplyDefaultSync(id, blk);
+
+    /* 両面とも破損しており「読まれた」面が無い（[SWS_NvM_00761]の前提と
+     * なる正常な読み込みが成立しない）ため、フォールバックとしてプライマリ
+     * を明示的に設定する。NvM_ApplyDefaultSync() が両面とも同一のデフォルト
+     * 値で上書きするため今回はどちらから始めても実害はないが、この配列は
+     * NvM_Init() 本体では明示的にリセットされないため、明示的に代入して
+     * おくことで、将来 NvM_Init() が複数回呼ばれる経路が追加された場合に
+     * 前回の値が意図せず残る回帰を防ぐ。 */
+    NvM_WriteStartIsMirror[id] = 0U;
 }
 
 /**
@@ -372,7 +413,8 @@ static void NvM_LoadAndVerifyBlock(NvM_BlockIdType id, const NvM_BlockDescriptor
  *          直前に最新値へ上書きされているため、巻き戻さずに続きから書くと
  *          古いバイトと新しいバイトが混在した不整合な内容が EEPROM に
  *          残ってしまう（ちぎれ書き）。冗長ブロックの場合はコピー選択
- *          （プライマリ／ミラー）も先頭（プライマリ）へ巻き戻す。
+ *          （プライマリ／ミラー）もこのブロックの開始面
+ *          （NvM_WriteStartIsMirror[]、[SWS_NvM_00761]）へ巻き戻す。
  *          Fee 側に実際に in-flight なジョブがある場合のみ MemIf_Cancel() で
  *          中断する（2026-09 是正: NvM_ActiveBlockId が一致するだけで
  *          無条件に呼ぶと、フェーズ遷移の合間で Fee が既に IDLE な一瞬に
@@ -401,8 +443,9 @@ static void NvM_MarkPending(NvM_BlockIdType id)
         /* NvM_ActiveBlockId == id は「このブロックを処理中」という NvM 側の
          * 論理状態に過ぎず、Fee 側に実際にジョブが in-flight (MEMIF_BUSY)
          * かどうかとは独立している。NVM_PHASE_NONE 直後（キューから取り出した
-         * 直後、または冗長ブロックのプライマリ面完了直後で継続してミラー面の
-         * ジョブをまだ開始していない一瞬）は Fee 側は既に IDLE のことがある。
+         * 直後、または冗長ブロックの1面目（開始面、NvM_WriteStartIsMirror[]
+         * 参照）完了直後で継続してもう一方の面のジョブをまだ開始していない
+         * 一瞬）は Fee 側は既に IDLE のことがある。
          * MEMIF_BUSY でないときに MemIf_Cancel() を呼ぶと、Fee_Cancel() が
          * [SWS_Fee_00184] 通り FEE_E_INVALID_CANCEL を報告するようになった
          * （2026-09 是正）ため、完全に正常な NvM 内部の巻き戻しのたびに
@@ -411,7 +454,10 @@ static void NvM_MarkPending(NvM_BlockIdType id)
         if (MemIf_GetStatus(MEMIF_DEVICE_0) == MEMIF_BUSY)
             MemIf_Cancel(MEMIF_DEVICE_0);
         NvM_ActivePhase        = NVM_PHASE_NONE;
-        NvM_ActiveCopyIsMirror = 0U;
+        /* [SWS_NvM_00761]: 巻き戻し先は「このブロックのジョブが本来
+         * 開始すべき面」であり、必ずしもプライマリとは限らない
+         * （2026-09 是正、NvM_WriteStartIsMirror[] 参照）。 */
+        NvM_ActiveCopyIsMirror = NvM_WriteStartIsMirror[id];
     }
 }
 
@@ -830,8 +876,12 @@ Std_ReturnType NvM_GetErrorStatus(NvM_BlockIdType BlockId, NvM_RequestResultType
  *            (b) 開始済みなら MemIf_GetJobResult() で完了だけを確認する
  *          のどちらか一方だけを行う。データ本体 → CRC の順で 2 つのジョブを
  *          完了させるとその面（プライマリ/ミラー）が完了し、冗長ブロックなら
- *          続けてミラー面へ、そうでなければブロック完了として次のブロックへ移る。
+ *          続けてもう一方の面へ、そうでなければブロック完了として次のブロックへ移る。
+ *          冗長ブロックの開始面は NvM_WriteStartIsMirror[] が決める
+ *          （[SWS_NvM_00761]、2026-09 追加。以前は常にプライマリ面固定
+ *          だった）。
  *
+ * \AUTOSARReq     {SWS_NvM_00761}
  * \ServiceID      {0x0E}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
@@ -858,7 +908,9 @@ void NvM_MainFunction(void)
         NvM_ActiveBlockId = NvM_PendingQueue[NvM_QueueHead];
         NvM_QueueHead = (uint8)((NvM_QueueHead + 1U) % NVM_BLOCK_COUNT);
         NvM_QueueLen--;
-        NvM_ActiveCopyIsMirror = 0U;  /* 冗長ブロックは必ずプライマリ面から書き始める */
+        /* [SWS_NvM_00761]: 冗長ブロックは NvM_WriteStartIsMirror[] が示す面
+         * から書き始める（2026-09 是正、非冗長ブロックは常に 0）。 */
+        NvM_ActiveCopyIsMirror = NvM_WriteStartIsMirror[NvM_ActiveBlockId];
         NvM_ActivePhase        = NVM_PHASE_NONE;
     }
 
@@ -925,14 +977,18 @@ void NvM_MainFunction(void)
 
     /* NvM_ActivePhase == NVM_PHASE_CRC かつ result == MEMIF_JOB_OK: この面
      * (プライマリ/ミラー) を書き終えた。 */
-    if (blk->Redundant != 0U && NvM_ActiveCopyIsMirror == 0U)
+    if (blk->Redundant != 0U && NvM_ActiveCopyIsMirror == NvM_WriteStartIsMirror[NvM_ActiveBlockId])
     {
-        /* 冗長ブロックのプライマリ面を書き終えた: 続けてミラー面を
-         * 先頭（データ本体フェーズ）から書く（ジョブはまだ完了扱いに
-         * しない）。プライマリを完全に書き終えてからでないとミラーへ
-         * 移らないため、この時点で電源が落ちてもプライマリは既に整合した
-         * 新データを保持している。 */
-        NvM_ActiveCopyIsMirror = 1U;
+        /* 冗長ブロックの開始面（NvM_WriteStartIsMirror[]、[SWS_NvM_00761]）を
+         * 書き終えた: 続けてもう一方の面を先頭（データ本体フェーズ）から
+         * 書く（ジョブはまだ完了扱いにしない）。1 面目を完全に書き終えて
+         * からでないと 2 面目へ移らないため、この時点で電源が落ちても
+         * 1 面目は既に整合した新データを保持している。
+         * 2026-09 是正: 以前は「プライマリ面(0)を書き終えたら次はミラー(1)」
+         * と固定していたが、開始面がプライマリとは限らなくなったため、
+         * 「今書き終えた面が開始面と一致するか」で1面目/2面目を判定し、
+         * 一致すれば「もう一方」へ反転させる形へ一般化した。 */
+        NvM_ActiveCopyIsMirror = (NvM_ActiveCopyIsMirror != 0U) ? 0U : 1U;
         NvM_ActivePhase        = NVM_PHASE_NONE;
         return;
     }
