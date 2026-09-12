@@ -15,6 +15,7 @@
 #include "Wdg.h"
 #include "Wdg_Hw.h"
 #include "Det.h"
+#include "Dem.h"
 
 #define TAG "Wdg"
 
@@ -54,12 +55,13 @@ Std_ReturnType Wdg_SetMode(WdgIf_ModeType Mode)
 
     case WDGIF_OFF_MODE:
         /* Renesas RA4M1 の IWDT は一度有効化すると FSP からの無効化手段が
-         * ないため（Wdg_Hw.cpp 参照）、この要求は物理的に受理できない。
-         * 実 AUTOSAR の拡張プロダクションエラー WDG_E_DISABLE_REJECTED に
-         * 相当する状況だが、本プロジェクトはプロダクションエラーの仕組み
-         * 自体を持たないため DET_LOGW のみで通知し、開発エラーとしては
-         * 報告しない（想定内の正常な拒否のため。Wdg.h 冒頭のコメント参照）。 */
+         * ないため（Wdg_Hw.cpp 参照）、この要求は物理的に受理できない
+         * ([SWS_Wdg_00026]: モード切替を実行せず WDG_E_DISABLE_REJECTED を
+         * 発生させ E_NOT_OK を返す。経緯は Wdg_Cfg.h 冒頭のコメント参照)。
+         * 対になる PASSED（[SWS_Wdg_00183]）は、本プロジェクトの Wdg が
+         * 無効化に成功する経路を持たないため報告しない。 */
         Wdg_Hw_Disable();
+        (void)Dem_SetEventStatus(DEM_EVENT_WDG_DISABLE_REJECTED, DEM_EVENT_STATUS_FAILED);
         DET_LOGW(TAG, "SetMode(OFF) rejected - HW cannot be disabled once armed");
         return E_NOT_OK;
 

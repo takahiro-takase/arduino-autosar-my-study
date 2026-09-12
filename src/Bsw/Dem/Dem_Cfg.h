@@ -20,15 +20,18 @@
  *                                             WDGM_GLOBAL_STATUS_STOPPED に到達
  *                                             (実 HW ウォッチドッグリセットが確実に
  *                                             迫っている、[SWS_WdgM_00129]/[00375])
+ *            DEM_EVENT_WDG_DISABLE_REJECTED — Wdg_SetMode(WDGIF_OFF_MODE) が
+ *                                             無効化不可により拒否された
+ *                                             ([SWS_Wdg_00026]/[00182])
  *
- *          EEPROM レイアウト (Arduino UNO 内蔵 EEPROM 1KB の先頭 50 バイト使用。
+ *          EEPROM レイアウト (Arduino UNO 内蔵 EEPROM 1KB の先頭 54 バイト使用。
  *          各ブロックには NvM が CRC8 を 1 バイト付加するため、詳細なアドレスは
  *          NvM_Cfg.h を参照。DEM はブロック ID (NVM_BLOCK_ID_DEM_*) でのみアクセスし
  *          物理アドレスを知らない):
  *            NVM_BLOCK_ID_DEM_MAGIC:    マジックバイト (0xDE = 有効な DEM データ)
- *            NVM_BLOCK_ID_DEM_STATUS:   イベント 0-10 ステータスバイト
- *            NVM_BLOCK_ID_DEM_AGING:    イベント 0-10 経年回復(Aging)カウンタ
- *            NVM_BLOCK_ID_DEM_EXTENDED: イベント 0-10 故障確定回数 (ExtendedData)
+ *            NVM_BLOCK_ID_DEM_STATUS:   イベント 0-11 ステータスバイト
+ *            NVM_BLOCK_ID_DEM_AGING:    イベント 0-11 経年回復(Aging)カウンタ
+ *            NVM_BLOCK_ID_DEM_EXTENDED: イベント 0-11 故障確定回数 (ExtendedData)
  *
  *          経年回復 (Aging):
  *            CONFIRMED（確定）した DTC は、再故障せずに DEM_AGING_THRESHOLD_*
@@ -145,7 +148,10 @@
 #define DEM_EVENT_WDGM_SUPERVISION      10U /**< WdgM Global Supervision Status が
                                               *   WDGM_GLOBAL_STATUS_STOPPED に到達
                                               *   ([SWS_WdgM_00129]/[00375]、2026-09 追加) */
-#define DEM_EVENT_COUNT                 11U /**< イベント総数                     */
+#define DEM_EVENT_WDG_DISABLE_REJECTED  11U /**< Wdg_SetMode(WDGIF_OFF_MODE) が
+                                              *   無効化不可（HW制約）により拒否された
+                                              *   ([SWS_Wdg_00026]/[00182]、2026-09 追加) */
+#define DEM_EVENT_COUNT                 12U /**< イベント総数                     */
 
 /* -----------------------------------------------------------------------
  * DTC コード (24-bit, ISO 14229-1)
@@ -162,6 +168,7 @@
 #define DEM_DTC_E2E_ABSINFO             0x000109UL  /**< AbsInfo E2E 保護違反     */
 #define DEM_DTC_E2E_ENGINEINFO          0x00010AUL  /**< EngineInfo E2E 保護違反  */
 #define DEM_DTC_WDGM_SUPERVISION        0x00010BUL  /**< WdgM Global Supervision Status STOPPED */
+#define DEM_DTC_WDG_DISABLE_REJECTED    0x00010CUL  /**< Wdg_SetMode(OFF) 無効化拒否 */
 
 /* -----------------------------------------------------------------------
  * デバウンス (counter-based debouncing)
@@ -193,6 +200,9 @@
                                                        *   猶予サイクル消費という多段階の
                                                        *   持続性チェックを経てから STOPPED を
                                                        *   報告するため、二重チェック不要 */
+#define DEM_DEBOUNCE_LIMIT_WDG_DISABLE_REJECTED  1  /**< HW制約による決定論的な拒否
+                                                       *   （毎回必ず拒否される）ため
+                                                       *   二重チェック不要 */
 
 /* -----------------------------------------------------------------------
  * 経年回復 (Aging)
@@ -214,6 +224,7 @@
 #define DEM_AGING_THRESHOLD_E2E_ABSINFO           3U  /**< 標準 */
 #define DEM_AGING_THRESHOLD_E2E_ENGINEINFO        3U  /**< 標準 */
 #define DEM_AGING_THRESHOLD_WDGM_SUPERVISION      5U  /**< 重大故障（実HWリセット直前）。誤って早期回復しないよう慎重に */
+#define DEM_AGING_THRESHOLD_WDG_DISABLE_REJECTED  5U  /**< 安全上重要な無効化拒否。誤って早期回復しないよう慎重に */
 
 /* -----------------------------------------------------------------------
  * DTC ステータスビットマスク (ISO 14229-1 Annex B)
