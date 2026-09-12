@@ -19,8 +19,9 @@
  *              の IWDT は一度有効化すると FSP からの無効化手段がないため
  *              （Wdg_Hw.cpp 参照）、無効化要求は物理的に受理できない。
  *              実 AUTOSAR の拡張プロダクションエラー WDG_E_DISABLE_REJECTED
- *              に相当する状況だが、本プロジェクトはプロダクションエラーの
- *              仕組み自体を持たないため DET_LOGW のみで通知する。
+ *              に相当する状況であり、DET_LOGW に加えて
+ *              DEM_EVENT_WDG_DISABLE_REJECTED を Dem へ FAILED 報告する
+ *              ([SWS_Wdg_00026]/[00182]、2026-09 追加。詳細は Wdg.c 参照）。
  *              呼び出し元 (WdgIf 経由の WdgM) は戻り値を見て HW が実際には
  *              無効化されていないことを前提に振る舞う必要はない
  *              （WdgM 側は WdgM_SupervisionSuppressed という別のソフトウェア
@@ -75,7 +76,9 @@ void Wdg_Init(const Wdg_ConfigType* ConfigPtr);
  *
  * \retval  E_OK      WDGIF_FAST_MODE への切替に成功した。
  * \retval  E_NOT_OK  未初期化、Mode が範囲外、または WDGIF_OFF_MODE
- *                    （HW 制約により常に拒否される。Wdg.h 冒頭のコメント参照）。
+ *                    （HW 制約により常に拒否される。[SWS_Wdg_00026]準拠で
+ *                    DEM_EVENT_WDG_DISABLE_REJECTED を FAILED 報告する。
+ *                    Wdg.h 冒頭のコメント参照）。
  *
  * \ServiceID      {0x01}
  * \Reentrancy     {Non Reentrant}
