@@ -2822,9 +2822,14 @@ static uint8 Dcm_IsServiceAllowedInSession(uint8 sid, uint8 session)
  *          PduInfoPtr には PCI バイトを含まない生 UDS ペイロードが格納されている。
  *          先頭バイト (uds[0]) が UDS サービス ID (SID) となる。
  *
+ *          前回の応答送信（特にマルチフレーム）が `CanTp_MainFunction()` に
+ *          より継続中の場合、新規要求は一切ディスパッチせず無視する
+ *          （[SWS_Dcm_00557]、2026-09 追加。詳細は本関数内のコメント参照）。
+ *
  * \param[in]  RxPduId     受信 PDU ID（未使用; CanTp からの単一チャネル固定）。
  * \param[in]  PduInfoPtr  組立済み UDS ペイロードへのポインタ。NULL 禁止。
  *
+ * \AUTOSARReq     {SWS_Dcm_00557}
  * \ServiceID      {0xF0}
  * \Reentrancy     {Reentrant}
  * \Synchronicity  {Synchronous}
@@ -2853,6 +2858,26 @@ void Dcm_ComIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
     const uint8* uds    = PduInfoPtr->SduDataPtr;
     uint8        udsLen = (uint8)PduInfoPtr->SduLength;
     uint8        sid    = uds[0];
+
+    if (CanTp_IsTxBusy())
+    {
+        /* [SWS_Dcm_00557]: 同一コネクション上で処理中の診断要求がある間、
+         * 新規要求は Dcm_StartOfReception() で BUFREQ_E_NOT_OK として拒否
+         * すべき（TesterPresentのみS3タイマ更新目的でBUFREQ_OKを返すが
+         * 以降処理はしない、という例外つき）。本実装はCanTpが受信の
+         * 組立を独立して完結させ Dcm_StartOfReception() 相当の段階受理
+         * API 自体を持たないため、Dcm が関与できる最も早い地点である
+         * 本関数冒頭でこれに相当するチェックを行う。「処理中」の判定は
+         * CanTp TX チャネルのビジー状態（前回応答、特にマルチフレームの
+         * 送信未完了）で代用する（2026-09 追加。以前はこのチェックが無く、
+         * 要求は最後まで処理されるが応答だけが CanTp_Transmit() の
+         * ビジー判定で黙って消えていた）。S3 タイマは
+         * [SWS_Dcm_00557]のTesterPresent特例と同じ理由で更新する
+         * （要求が届いたこと自体がテスター生存の証跡）。 */
+        Dcm_LastActivityMs = millis();
+        DET_LOGW(TAG, "req SID=0x%02X ignored (CanTp TX busy)", (unsigned)sid);
+        return;
+    }
 
     /* [SWS_Dcm_00202]: suppressPosRspMsgIndicationBit の状態はリクエストごとに
      * 独立して評価する（前回リクエストの抑制状態を持ち越さない）。サブ機能を

@@ -6,15 +6,22 @@
 #include "CanTp.h"
 #include <string.h>
 
-uint8  FakeCanTp_TxBuf[CANTP_FAKE_TX_BUF_SIZE];
-uint8  FakeCanTp_TxLength      = 0U;
-uint32 FakeCanTp_TransmitCount = 0U;
+uint8   FakeCanTp_TxBuf[CANTP_FAKE_TX_BUF_SIZE];
+uint8   FakeCanTp_TxLength      = 0U;
+uint32  FakeCanTp_TransmitCount = 0U;
+boolean FakeCanTp_Busy          = (boolean)0U;
 
 void FakeCanTp_Reset(void)
 {
     memset(FakeCanTp_TxBuf, 0, sizeof(FakeCanTp_TxBuf));
     FakeCanTp_TxLength      = 0U;
     FakeCanTp_TransmitCount = 0U;
+    FakeCanTp_Busy          = (boolean)0U;
+}
+
+boolean CanTp_IsTxBusy(void)
+{
+    return FakeCanTp_Busy;
 }
 
 Std_ReturnType CanTp_Transmit(PduIdType TxSduId, const PduInfoType* PduInfoPtr)

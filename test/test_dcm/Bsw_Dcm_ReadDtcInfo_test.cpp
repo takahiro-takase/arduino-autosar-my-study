@@ -985,4 +985,44 @@ TEST_F(Bsw_Dcm_ReadDtcInfo_Test, SessionControl_OK_ReselectingSameSessionRelocks
     EXPECT_EQ(levelAfterReselect, 0U) << "re-selecting the same session must re-lock security";
 }
 
+TEST_F(Bsw_Dcm_ReadDtcInfo_Test, ComIndication_NG_IgnoresRequestWhileCanTpTxBusy)
+{
+    /* 準備 (Arrange): 前回応答（マルチフレーム等）の送信が CanTp 側で
+     * まだ完了していない状態を模擬する。 */
+    FakeCanTp_Busy = (boolean)1U;
+
+    /* 実行 (Act): TesterPresent（副作用の無い単純なSID）を送る。 */
+    uint8 req[2] = { DCM_SID_TESTER_PRESENT, 0x00U };
+    PduInfoType pdu = { req, sizeof(req) };
+    Dcm_ComIndication(0U, &pdu);
+
+    /* 評価 (Assert): [SWS_Dcm_00557] ディスパッチ自体が行われず、
+     * 応答も一切送信されないこと（CanTp TX がビジーなため、どちらの
+     * 応答も物理的に送信できない）。 */
+    EXPECT_EQ(FakeCanTp_TransmitCount, 0U);
+}
+
+TEST_F(Bsw_Dcm_ReadDtcInfo_Test, ComIndication_OK_ProcessesRequestOnceCanTpTxIdleAgain)
+{
+    /* 準備 (Arrange): ビジー中に届いた要求は無視されることを確認した後、
+     * アイドルに戻れば通常通り処理されることを確認する。 */
+    FakeCanTp_Busy = (boolean)1U;
+    uint8 reqWhileBusy[2] = { DCM_SID_TESTER_PRESENT, 0x00U };
+    PduInfoType pduWhileBusy = { reqWhileBusy, sizeof(reqWhileBusy) };
+    Dcm_ComIndication(0U, &pduWhileBusy);
+    ASSERT_EQ(FakeCanTp_TransmitCount, 0U) << "must be ignored while busy (test precondition)";
+
+    /* 実行 (Act): CanTp TX がアイドルへ戻った後、同じ要求を再送する。 */
+    FakeCanTp_Busy = (boolean)0U;
+    uint8 req[2] = { DCM_SID_TESTER_PRESENT, 0x00U };
+    PduInfoType pdu = { req, sizeof(req) };
+    Dcm_ComIndication(0U, &pdu);
+
+    /* 評価 (Assert): 通常通り正応答 [0x7E, 0x00] が送信されること。 */
+    ASSERT_EQ(FakeCanTp_TransmitCount, 1U);
+    ASSERT_EQ(FakeCanTp_TxLength, 2U);
+    EXPECT_EQ(FakeCanTp_TxBuf[0], (uint8)(DCM_SID_TESTER_PRESENT + 0x40U));
+    EXPECT_EQ(FakeCanTp_TxBuf[1], 0x00U);
+}
+
 }  // namespace
