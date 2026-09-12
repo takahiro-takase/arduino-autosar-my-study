@@ -163,6 +163,7 @@
 #include "WdgM.h"
 #include "WdgIf.h"
 #include "Det.h"
+#include "Dem.h"
 
 /* millis() is declared in Arduino wiring.c with C linkage. */
 extern unsigned long millis(void);
@@ -826,6 +827,14 @@ Std_ReturnType WdgM_GetGlobalStatus(WdgM_GlobalStatusType* Status)
  *          通常経路と[SWS_WdgM_00117]のtol=0防御分岐でほぼ同じ処理が重複
  *          していた」と指摘され抽出）。
  *
+ *          あわせて [SWS_WdgM_00129] 準拠として DEM_EVENT_WDGM_SUPERVISION を
+ *          FAILED 報告する（本プロジェクトは `WdgMDemStoppedSupervisionReport`
+ *          設定パラメータ自体を持たないため常に TRUE 相当として無条件に
+ *          報告する。仕様上の既定値は FALSE（[ECUC_WdgM_00338]）だが、本
+ *          プロジェクトは診断可視性を優先しあえて常時有効化する
+ *          — E2EXf.h の `XfrmDevErrorDetect` と同じ簡略化方針。自己仕様引用
+ *          裏取りで確認済み。2026-09 追加）。
+ *
  * \param[in]  reason          DET ログに残す遷移理由の短い説明文字列。
  * \param[in]  firstNotOkFound 呼び出し元のループで FAILED/EXPIRED な SE が
  *                             見つかったか。
@@ -840,6 +849,8 @@ static void WdgM_EnterGlobalStopped(const char* reason, uint8 firstNotOkFound, u
         WdgM_FirstExpiredSEID    = (WdgM_SupervisedEntityIdType)firstNotOkSeid;
         WdgM_FirstExpiredSEIDInv = (WdgM_SupervisedEntityIdType)(~firstNotOkSeid);
     }
+
+    (void)Dem_SetEventStatus(DEM_EVENT_WDGM_SUPERVISION, DEM_EVENT_STATUS_FAILED);
 
     DET_LOGE(TAG, "Global supervision STOPPED (%s) [HW WDT reset pending]", reason);
 }
@@ -886,7 +897,7 @@ static void WdgM_EnterGlobalStopped(const char* reason, uint8 firstNotOkFound, u
  *                  SWS_WdgM_00077, SWS_WdgM_00078, SWS_WdgM_00117,
  *                  SWS_WdgM_00215, SWS_WdgM_00216, SWS_WdgM_00217,
  *                  SWS_WdgM_00218, SWS_WdgM_00219, SWS_WdgM_00220,
- *                  SWS_WdgM_00221, SWS_WdgM_00214}
+ *                  SWS_WdgM_00221, SWS_WdgM_00214, SWS_WdgM_00129}
  * \ServiceID      {0x08}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
@@ -1064,6 +1075,24 @@ void WdgM_MainFunction(void)
     }
     else if (WdgM_ExpiredCycleCount > 0U || WdgM_GlobalStopped || WdgM_GlobalExpired)
     {
+        /* [SWS_WdgM_00129]/[00375]: DEM_EVENT_WDGM_SUPERVISION の Fail 条件は
+         * 「WDGM_GLOBAL_STATUS_STOPPED に到達した」ことであり、EXPIRED から
+         * FAILED を一度も報告しないまま回復した場合は対になる PASSED も
+         * 報告しない（WdgM_EnterGlobalStopped() で FAILED 済みの場合のみ
+         * PASSED を報告する）。
+         *
+         * 仕様上の注記: [SWS_WdgM_00375]の Detection Criteria、および
+         * [SWS_WdgM_00221]「STOPPED はいずれ HW リセットに至る最終状態」は、
+         * そもそも STOPPED から（リセットを経ずに）回復するケース自体を
+         * 想定していない。本プロジェクトは STOPPED を実際の HW リセットに
+         * 至る前に（WdgM_DisableHwWatchdog() 等による WdgM_SupervisionSuppressed
+         * 経由で）解消できる独自拡張を既に持っており（このブロック自体の
+         * 目的）、この PASSED 報告はその独自拡張シナリオに対する、仕様の
+         * 想定範囲を超えた本プロジェクト独自の対応付けである（自己仕様引用
+         * 裏取りで指摘・追記）。 */
+        if (WdgM_GlobalStopped)
+            (void)Dem_SetEventStatus(DEM_EVENT_WDGM_SUPERVISION, DEM_EVENT_STATUS_PASSED);
+
         WdgM_GlobalExpired     = 0U;
         WdgM_ExpiredCycleCount = 0U;
         WdgM_GlobalStopped     = 0U;

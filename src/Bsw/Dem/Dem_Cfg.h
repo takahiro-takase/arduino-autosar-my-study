@@ -16,15 +16,19 @@
  *            DEM_EVENT_CAN_BUSOFF           — CAN Bus-Off 持続（L1 リトライ超過、L2 へ降格）
  *            DEM_EVENT_E2E_ABSINFO          — AbsInfo E2E 保護違反 (CRC/カウンタ異常)
  *            DEM_EVENT_E2E_ENGINEINFO       — EngineInfo E2E 保護違反 (CRC/カウンタ異常)
+ *            DEM_EVENT_WDGM_SUPERVISION     — WdgM Global Supervision Status が
+ *                                             WDGM_GLOBAL_STATUS_STOPPED に到達
+ *                                             (実 HW ウォッチドッグリセットが確実に
+ *                                             迫っている、[SWS_WdgM_00129]/[00375])
  *
- *          EEPROM レイアウト (Arduino UNO 内蔵 EEPROM 1KB の先頭 32 バイト使用。
+ *          EEPROM レイアウト (Arduino UNO 内蔵 EEPROM 1KB の先頭 50 バイト使用。
  *          各ブロックには NvM が CRC8 を 1 バイト付加するため、詳細なアドレスは
  *          NvM_Cfg.h を参照。DEM はブロック ID (NVM_BLOCK_ID_DEM_*) でのみアクセスし
  *          物理アドレスを知らない):
  *            NVM_BLOCK_ID_DEM_MAGIC:    マジックバイト (0xDE = 有効な DEM データ)
- *            NVM_BLOCK_ID_DEM_STATUS:   イベント 0-9 ステータスバイト
- *            NVM_BLOCK_ID_DEM_AGING:    イベント 0-9 経年回復(Aging)カウンタ
- *            NVM_BLOCK_ID_DEM_EXTENDED: イベント 0-9 故障確定回数 (ExtendedData)
+ *            NVM_BLOCK_ID_DEM_STATUS:   イベント 0-10 ステータスバイト
+ *            NVM_BLOCK_ID_DEM_AGING:    イベント 0-10 経年回復(Aging)カウンタ
+ *            NVM_BLOCK_ID_DEM_EXTENDED: イベント 0-10 故障確定回数 (ExtendedData)
  *
  *          経年回復 (Aging):
  *            CONFIRMED（確定）した DTC は、再故障せずに DEM_AGING_THRESHOLD_*
@@ -138,7 +142,10 @@
 #define DEM_EVENT_CAN_BUSOFF            7U  /**< CAN Bus-Off 持続（L1→L2 降格）    */
 #define DEM_EVENT_E2E_ABSINFO           8U  /**< AbsInfo E2E 保護違反 (CRC/カウンタ異常) */
 #define DEM_EVENT_E2E_ENGINEINFO        9U  /**< EngineInfo E2E 保護違反 (CRC/カウンタ異常) */
-#define DEM_EVENT_COUNT                 10U /**< イベント総数                     */
+#define DEM_EVENT_WDGM_SUPERVISION      10U /**< WdgM Global Supervision Status が
+                                              *   WDGM_GLOBAL_STATUS_STOPPED に到達
+                                              *   ([SWS_WdgM_00129]/[00375]、2026-09 追加) */
+#define DEM_EVENT_COUNT                 11U /**< イベント総数                     */
 
 /* -----------------------------------------------------------------------
  * DTC コード (24-bit, ISO 14229-1)
@@ -154,6 +161,7 @@
 #define DEM_DTC_CAN_BUSOFF              0x000108UL  /**< CAN Bus-Off 持続（L1→L2 降格） */
 #define DEM_DTC_E2E_ABSINFO             0x000109UL  /**< AbsInfo E2E 保護違反     */
 #define DEM_DTC_E2E_ENGINEINFO          0x00010AUL  /**< EngineInfo E2E 保護違反  */
+#define DEM_DTC_WDGM_SUPERVISION        0x00010BUL  /**< WdgM Global Supervision Status STOPPED */
 
 /* -----------------------------------------------------------------------
  * デバウンス (counter-based debouncing)
@@ -181,6 +189,10 @@
 #define DEM_DEBOUNCE_LIMIT_CAN_BUSOFF            1  /**< CanSM が L1 リトライ済み。二重チェック不要 */
 #define DEM_DEBOUNCE_LIMIT_E2E_ABSINFO           1  /**< E2E チェックは決定論的。CRC 不一致は即確定 */
 #define DEM_DEBOUNCE_LIMIT_E2E_ENGINEINFO        1  /**< E2E チェックは決定論的。CRC 不一致は即確定 */
+#define DEM_DEBOUNCE_LIMIT_WDGM_SUPERVISION      1  /**< WdgM 自身が OK→FAILED→EXPIRED→
+                                                       *   猶予サイクル消費という多段階の
+                                                       *   持続性チェックを経てから STOPPED を
+                                                       *   報告するため、二重チェック不要 */
 
 /* -----------------------------------------------------------------------
  * 経年回復 (Aging)
@@ -201,6 +213,7 @@
 #define DEM_AGING_THRESHOLD_CAN_BUSOFF            5U  /**< 通信路の重大故障。誤って早期回復しないよう慎重に */
 #define DEM_AGING_THRESHOLD_E2E_ABSINFO           3U  /**< 標準 */
 #define DEM_AGING_THRESHOLD_E2E_ENGINEINFO        3U  /**< 標準 */
+#define DEM_AGING_THRESHOLD_WDGM_SUPERVISION      5U  /**< 重大故障（実HWリセット直前）。誤って早期回復しないよう慎重に */
 
 /* -----------------------------------------------------------------------
  * DTC ステータスビットマスク (ISO 14229-1 Annex B)
