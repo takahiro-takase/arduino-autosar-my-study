@@ -68,6 +68,22 @@ typedef struct E2EXf_ConfigType_Tag E2EXf_ConfigType;
 #define E2EXF_E_PARAM         0x03U
 #define E2EXF_E_PARAM_POINTER 0x04U
 
+/** [SWS_E2EXf_00152]/[00153]: E2EXf_Inv_<transformerId>（本プロジェクトの
+ *  E2EXf_InverseTransform()/E2EXf_InverseTransformP05()）はパラメータ異常・
+ *  未初期化検出時、通常の Std_ReturnType (E_OK/E_NOT_OK) ではなく本値を
+ *  返すべきと規定されている（実 AUTOSAR では TransformerTypes.h で定義
+ *  される値だが、本プロジェクトは同ヘッダを持たないためここで定義する）。
+ *  いずれの規定も設定パラメータ XfrmDevErrorDetect が有効な場合のみ適用
+ *  されるが、本プロジェクトは同設定自体を持たず常時有効とみなす
+ *  （他モジュールの DevErrorDetect 系設定と同じ簡略化方針）。
+ *  対になる forward 側の規定 [SWS_E2EXf_00150]/[00151]（E2EXf_<transformerId>、
+ *  本プロジェクトの E2EXf_Transform()/E2EXf_TransformP05()）は、TX 側が
+ *  void 型で戻り値による区別ができないため対象外（本ヘッダの型を変える
+ *  ほどの動機が無いための意図的な適用範囲外、技術的負債として認識）。
+ *  E2E チェック自体の合否(WRONGCRC 等)は [SWS_E2EXf_00009] のランタイムエラー
+ *  区分であり対象外、従来通り E_NOT_OK のまま。 */
+#define E_SAFETY_HARD_RUNTIMEERROR ((Std_ReturnType)0xFFU)
+
 /** ApiId（値は SWS 8.x 章の「Service ID[hex]」記載を実測して確認済み） */
 #define E2EXF_API_ID_INIT               0x01U
 #define E2EXF_API_ID_DEINIT             0x02U
@@ -224,12 +240,21 @@ void E2EXf_DeInit(void);
  *                          し直すための詳細情報で、Dem への報告方針（PASSED/
  *                          FAILED の 2値化）には影響しない。
  *
- * \retval  E_OK      検証に合格した。呼び出し元は Buffer の内容を使ってよい。
- * \retval  E_NOT_OK  検証に失敗した、または E2EXf_Init() 未呼び出し
- *                    （SWS_E2EXf_00133 相当）。呼び出し元は Buffer の内容を
- *                    破棄すべき（前回の有効値を保持し続けるか、タイムアウト
- *                    経由でフェイルセーフへ移行する）。
+ * \retval  E_OK                        検証に合格した。呼び出し元は Buffer の
+ *                                      内容を使ってよい。
+ * \retval  E_NOT_OK                    E2E チェック自体に失敗した
+ *                                      （[SWS_E2EXf_00009] のランタイムエラー）。
+ *                                      呼び出し元は Buffer の内容を破棄すべき
+ *                                      （前回の有効値を保持し続けるか、
+ *                                      タイムアウト経由でフェイルセーフへ
+ *                                      移行する）。
+ * \retval  E_SAFETY_HARD_RUNTIMEERROR  Config/Buffer/CheckStatus が NULL、
+ *                                      Length 不足、または E2EXf_Init() 未呼び出し
+ *                                      （[SWS_E2EXf_00152]/[00153]、開発エラー。
+ *                                      2026-09 追加、以前は E_NOT_OK と区別
+ *                                      していなかった）。
  *
+ * \AUTOSARReq     {SWS_E2EXf_00152, SWS_E2EXf_00153, SWS_E2EXf_00009}
  * \ServiceID      {0x04}
  * \Reentrancy     {Reentrant}
  * \Synchronicity  {Synchronous}
@@ -263,12 +288,21 @@ Std_ReturnType E2EXf_InverseTransform(const E2EXf_RxConfigType* Config, const ui
  *                          し直すための詳細情報で、Dem への報告方針（PASSED/
  *                          FAILED の 2値化）には影響しない。
  *
- * \retval  E_OK      検証に合格した。呼び出し元は Buffer の内容を使ってよい。
- * \retval  E_NOT_OK  検証に失敗した、または E2EXf_Init() 未呼び出し
- *                    （SWS_E2EXf_00133 相当）。呼び出し元は Buffer の内容を
- *                    破棄すべき（前回の有効値を保持し続けるか、タイムアウト
- *                    経由でフェイルセーフへ移行する）。
+ * \retval  E_OK                        検証に合格した。呼び出し元は Buffer の
+ *                                      内容を使ってよい。
+ * \retval  E_NOT_OK                    E2E チェック自体に失敗した
+ *                                      （[SWS_E2EXf_00009] のランタイムエラー）。
+ *                                      呼び出し元は Buffer の内容を破棄すべき
+ *                                      （前回の有効値を保持し続けるか、
+ *                                      タイムアウト経由でフェイルセーフへ
+ *                                      移行する）。
+ * \retval  E_SAFETY_HARD_RUNTIMEERROR  Config/Buffer/CheckStatus が NULL、
+ *                                      または E2EXf_Init() 未呼び出し
+ *                                      （[SWS_E2EXf_00152]/[00153]、開発エラー。
+ *                                      2026-09 追加、以前は E_NOT_OK と区別
+ *                                      していなかった）。
  *
+ * \AUTOSARReq     {SWS_E2EXf_00152, SWS_E2EXf_00153, SWS_E2EXf_00009}
  * \ServiceID      {0x04}
  * \Reentrancy     {Reentrant}
  * \Synchronicity  {Synchronous}

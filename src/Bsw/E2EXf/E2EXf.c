@@ -57,22 +57,29 @@ Std_ReturnType E2EXf_InverseTransform(const E2EXf_RxConfigType* Config, const ui
     DET_LOGT(TAG, "called");
     if (CheckStatus == NULL)
     {
+        /* [SWS_E2EXf_00152]（本関数は E2EXf_Inv_<transformerId> 相当のため
+         * 00150 ではなく 00152 が対応する規定。00150/00151 は forward 関数
+         * E2EXf_<transformerId>（本プロジェクトの E2EXf_Transform()、void
+         * のため対象外）向け）。パラメータ異常検出時は E_NOT_OK ではなく
+         * E_SAFETY_HARD_RUNTIMEERROR を返すべき（2026-09 是正）。 */
         Det_ReportError(E2EXF_MODULE_ID, 0U, E2EXF_API_ID_INVERSE_TRANSFORM, E2EXF_E_PARAM_POINTER);
-        return E_NOT_OK;
+        return E_SAFETY_HARD_RUNTIMEERROR;
     }
 
     if (!E2EXf_Initialized)
     {
+        /* [SWS_E2EXf_00153] */
         Det_ReportError(E2EXF_MODULE_ID, 0U, E2EXF_API_ID_INVERSE_TRANSFORM, E2EXF_E_UNINIT);
         *CheckStatus = E2E_P01STATUS_ERROR;
-        return E_NOT_OK;
+        return E_SAFETY_HARD_RUNTIMEERROR;
     }
 
     if (Config == NULL || Config->E2EConfig == NULL || Config->CheckState == NULL || Buffer == NULL)
     {
+        /* [SWS_E2EXf_00152] */
         Det_ReportError(E2EXF_MODULE_ID, 0U, E2EXF_API_ID_INVERSE_TRANSFORM, E2EXF_E_PARAM_POINTER);
         *CheckStatus = E2E_P01STATUS_ERROR;
-        return E_NOT_OK;
+        return E_SAFETY_HARD_RUNTIMEERROR;
     }
 
     /* E2E_P01Check() は SWS_E2E_00047 準拠で Length 引数を持たないため
@@ -80,18 +87,20 @@ Std_ReturnType E2EXf_InverseTransform(const E2EXf_RxConfigType* Config, const ui
      * バッファ長を検証する。 */
     if (Length < Config->E2EConfig->DataLength)
     {
+        /* [SWS_E2EXf_00152] */
         Det_ReportError(E2EXF_MODULE_ID, 0U, E2EXF_API_ID_INVERSE_TRANSFORM, E2EXF_E_PARAM);
         *CheckStatus = E2E_P01STATUS_ERROR;
-        return E_NOT_OK;
+        return E_SAFETY_HARD_RUNTIMEERROR;
     }
 
     if (E2E_P01Check(Config->E2EConfig, Config->CheckState, Buffer) != E2E_E_OK)
     {
         /* Config->E2EConfig/CheckState/Buffer はここまでで NULL でないことを
-         * 確認済みのため、通常は到達しない（E2E_E_INPUTERR_NULL の防御）。 */
+         * 確認済みのため、通常は到達しない（E2E_E_INPUTERR_NULL の防御）。
+         * [SWS_E2EXf_00152] */
         Det_ReportError(E2EXF_MODULE_ID, 0U, E2EXF_API_ID_INVERSE_TRANSFORM, E2EXF_E_PARAM_POINTER);
         *CheckStatus = E2E_P01STATUS_ERROR;
-        return E_NOT_OK;
+        return E_SAFETY_HARD_RUNTIMEERROR;
     }
     const E2E_P01StatusType status = Config->CheckState->Status;
     *CheckStatus = status;
@@ -121,22 +130,26 @@ Std_ReturnType E2EXf_InverseTransformP05(const E2EXf_RxConfigTypeP05* Config, co
     DET_LOGT(TAG, "called");
     if (CheckStatus == NULL)
     {
+        /* [SWS_E2EXf_00152]: パラメータ異常検出時は E_NOT_OK ではなく
+         * E_SAFETY_HARD_RUNTIMEERROR を返すべき（2026-09 是正）。 */
         Det_ReportError(E2EXF_MODULE_ID, 0U, E2EXF_API_ID_INVERSE_TRANSFORM, E2EXF_E_PARAM_POINTER);
-        return E_NOT_OK;
+        return E_SAFETY_HARD_RUNTIMEERROR;
     }
 
     if (!E2EXf_Initialized)
     {
+        /* [SWS_E2EXf_00153] */
         Det_ReportError(E2EXF_MODULE_ID, 0U, E2EXF_API_ID_INVERSE_TRANSFORM, E2EXF_E_UNINIT);
         *CheckStatus = E2E_P05STATUS_ERROR;
-        return E_NOT_OK;
+        return E_SAFETY_HARD_RUNTIMEERROR;
     }
 
     if (Config == NULL || Config->E2EConfig == NULL || Config->CheckState == NULL || Buffer == NULL)
     {
+        /* [SWS_E2EXf_00152] */
         Det_ReportError(E2EXF_MODULE_ID, 0U, E2EXF_API_ID_INVERSE_TRANSFORM, E2EXF_E_PARAM_POINTER);
         *CheckStatus = E2E_P05STATUS_ERROR;
-        return E_NOT_OK;
+        return E_SAFETY_HARD_RUNTIMEERROR;
     }
 
     if (E2E_P05Check(Config->E2EConfig, Config->CheckState, Buffer, Length) != E2E_E_OK)
@@ -149,10 +162,10 @@ Std_ReturnType E2EXf_InverseTransformP05(const E2EXf_RxConfigTypeP05* Config, co
          * 到達しない。到達した場合 Dem_SetEventStatus() を呼ばずに return
          * する（上の E2EXf_InverseTransform()（Profile01 版）の Length
          * チェック分岐（81-86 行目）も同様に Dem_SetEventStatus() を呼ばずに
-         * return しており、両プロファイルで挙動は対称）。 */
+         * return しており、両プロファイルで挙動は対称）。[SWS_E2EXf_00152] */
         Det_ReportError(E2EXF_MODULE_ID, 0U, E2EXF_API_ID_INVERSE_TRANSFORM, E2EXF_E_PARAM_POINTER);
         *CheckStatus = E2E_P05STATUS_ERROR;
-        return E_NOT_OK;
+        return E_SAFETY_HARD_RUNTIMEERROR;
     }
     E2E_P05StatusType status = Config->CheckState->Status;
 
