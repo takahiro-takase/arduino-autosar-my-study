@@ -127,13 +127,20 @@ typedef enum
  */
 typedef enum
 {
-    WDGM_GLOBAL_STATUS_OK          = 0x00U,  /**< 正常: 全エンティティ OK */
+    WDGM_GLOBAL_STATUS_OK          = 0x00U,  /**< 正常: 全エンティティ OK
+                                               *   ([SWS_WdgM_00078]/[00218]) */
     WDGM_GLOBAL_STATUS_FAILED      = 0x01U,  /**< 失敗: いずれかのエンティティが FAILED だが、
-                                               *   まだグローバル猶予サイクルを消費していない */
-    WDGM_GLOBAL_STATUS_EXPIRED     = 0x02U,  /**< 猶予消費中: FAILED が継続し
-                                               *   WdgM_ExpiredCycleCount が進んでいるが、
-                                               *   まだ WDGM_EXPIRED_SUPERVISION_CYCLE_TOL に
-                                               *   達していない (HW ウォッチドッグは refresh 継続) */
+                                               *   EXPIRED なエンティティは無い
+                                               *   ([SWS_WdgM_00076]/[00217]、猶予サイクルは
+                                               *   消費しない。2026-09 是正: 以前は FAILED が
+                                               *   続くだけでも猶予を消費しうる誤りがあった） */
+    WDGM_GLOBAL_STATUS_EXPIRED     = 0x02U,  /**< 猶予消費中: 少なくとも1エンティティが
+                                               *   実際に EXPIRED になった
+                                               *   ([SWS_WdgM_00215]/[00077]) 後、
+                                               *   WdgM_ExpiredCycleCount で
+                                               *   WDGM_EXPIRED_SUPERVISION_CYCLE_TOL に
+                                               *   達するまでの間 (HW ウォッチドッグは
+                                               *   refresh 継続、[SWS_WdgM_00219]) */
     WDGM_GLOBAL_STATUS_STOPPED     = 0x03U,  /**< 猶予を使い切り、HW ウォッチドッグの refresh を
                                                *   拒否している状態。リセットが差し迫っている */
     WDGM_GLOBAL_STATUS_DEACTIVATED = 0x04U   /**< 無効: 未初期化 */

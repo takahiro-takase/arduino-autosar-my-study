@@ -27,21 +27,40 @@ protected:
     }
 
     /* CheckpointReached を一切呼ばずに両エンティティの Alive Supervision を
-     * 失敗させ続け、WDGM_EXPIRED_SUPERVISION_CYCLE_TOL 回の判定サイクルの間
-     * EXPIRED であることを確認したうえで、猶予を使い切って STOPPED に
-     * 遷移するところまで駆動するヘルパー。 */
+     * 失敗させ続け、STOPPED まで駆動するヘルパー。
+     *
+     * 2026-09 是正: エンティティ単位の EXPIRED 猶予
+     * (WdgM_EntityExpiredCycleCount、Alive の連続 FAILED サイクル数が
+     * WDGM_EXPIRED_SUPERVISION_CYCLE_TOL に達するまで) を使い切るまでは
+     * Local Status はまだ FAILED であり Global も FAILED のまま
+     * （[SWS_WdgM_00076]/[00217]）。Local Status が実際に EXPIRED へ
+     * 昇格した周期で初めて Global も EXPIRED へラッチし
+     * （[SWS_WdgM_00215]/[00077]）、そこから改めて
+     * WDGM_EXPIRED_SUPERVISION_CYCLE_TOL 回（ラッチした周期を含め計 TOL+1
+     * 周期）の間 EXPIRED を維持したのち STOPPED に遷移する
+     * （[SWS_WdgM_00219]/[00220]）。以前はこの2段階の猶予が単一のカウンタに
+     * 誤って統合されていたため、Alive が FAILED になった最初の1周期で
+     * 即座に EXPIRED と誤判定されていた。 */
     void DriveAllEntitiesToStopped()
     {
-        for (uint8 cycle = 0U; cycle < WDGM_EXPIRED_SUPERVISION_CYCLE_TOL; cycle++)
+        for (uint8 cycle = 0U; cycle < WDGM_EXPIRED_SUPERVISION_CYCLE_TOL - 1U; cycle++)
         {
             WdgM_MainFunction();
             WdgM_GlobalStatusType status;
             ASSERT_EQ(WdgM_GetGlobalStatus(&status), E_OK);
-            EXPECT_EQ(status, WDGM_GLOBAL_STATUS_EXPIRED) << "cycle " << (unsigned)cycle;
+            EXPECT_EQ(status, WDGM_GLOBAL_STATUS_FAILED) << "pre-expired cycle " << (unsigned)cycle;
         }
 
-        /* 猶予カウンタが TOL に達しているため、ここで初めて WdgM_GlobalStopped
-         * が立ち STOPPED に遷移する。 */
+        for (uint8 cycle = 0U; cycle < WDGM_EXPIRED_SUPERVISION_CYCLE_TOL + 1U; cycle++)
+        {
+            WdgM_MainFunction();
+            WdgM_GlobalStatusType status;
+            ASSERT_EQ(WdgM_GetGlobalStatus(&status), E_OK);
+            EXPECT_EQ(status, WDGM_GLOBAL_STATUS_EXPIRED) << "expired cycle " << (unsigned)cycle;
+        }
+
+        /* グローバル猶予カウンタが尽きて初めて WdgM_GlobalStopped が立ち
+         * STOPPED に遷移する。 */
         WdgM_MainFunction();
         WdgM_GlobalStatusType status;
         ASSERT_EQ(WdgM_GetGlobalStatus(&status), E_OK);
@@ -110,14 +129,37 @@ TEST_F(Bsw_WdgM_GetGlobalStatus_Test,
     Std_ReturnType cpRet = WdgM_CheckpointReached(WDGM_ENTITY_ENGINE, WDGM_CP_ENGINE_END);
     ASSERT_EQ(cpRet, E_OK);
 
-    /* WdgM_MainFunction() はまだ呼んでいないため、グローバル猶予カウンタ
-     * (WdgM_ExpiredCycleCount) は 0 のまま。ローカル違反だけが即座に検出された
-     * 「FAILED」状態を観測できるはず。 */
+    /* WdgM_MainFunction() はまだ呼んでいないため、Global Supervision Status
+     * は([SWS_WdgM_00214]により毎周期1回だけ計算される値のため)まだ更新
+     * されていない。ローカル違反だけが即座に検出された「FAILED」状態を
+     * 観測できるはず（2026-09 是正後も本テストの期待値自体は変わらない。
+     * WdgM_GlobalExpired は WdgM_MainFunction() 内でのみラッチされるため）。 */
     WdgM_GlobalStatusType status = WDGM_GLOBAL_STATUS_OK;
     Std_ReturnType ret = WdgM_GetGlobalStatus(&status);
 
     EXPECT_EQ(ret, E_OK);
     EXPECT_EQ(status, WDGM_GLOBAL_STATUS_FAILED);
+}
+
+TEST_F(Bsw_WdgM_GetGlobalStatus_Test,
+       GetGlobalStatus_OK_BecomesExpiredOnFirstMainFunctionCycleAfterLogicalViolation)
+{
+    /* [SWS_WdgM_00215]/[00077] の回帰テスト(2026-09 追加): Logical/Deadline
+     * 違反は Alive Supervision と異なり猶予なしで即座に Local Status が
+     * EXPIRED になるため([SWS_WdgM_00202])、Global は Alive のような
+     * 複数周期のランプアップ無しで、違反後最初の WdgM_MainFunction() 呼び出し
+     * 1回で直接 EXPIRED へラッチするべき（是正前は「いずれかのエンティティが
+     * FAILED（EXPIRED か否か問わず）」というグローバル猶予カウンタでしか
+     * EXPIRED を判定できず、Alive 用の複数周期ぶんの猶予を誤って必要として
+     * いた）。 */
+    Std_ReturnType cpRet = WdgM_CheckpointReached(WDGM_ENTITY_ENGINE, WDGM_CP_ENGINE_END);
+    ASSERT_EQ(cpRet, E_OK);
+
+    WdgM_MainFunction();
+
+    WdgM_GlobalStatusType status;
+    ASSERT_EQ(WdgM_GetGlobalStatus(&status), E_OK);
+    EXPECT_EQ(status, WDGM_GLOBAL_STATUS_EXPIRED);
 }
 
 TEST_F(Bsw_WdgM_GetGlobalStatus_Test, GetGlobalStatus_OK_ExpiresThenStopsAfterToleranceExhausted)

@@ -35,14 +35,22 @@ protected:
      * END から今サイクル先頭の START まで）にも END->START の Deadline 許容
      * 範囲 [300,1500]ms を満たす経過時間を入れる（入れないとサイクル2周目
      * 以降で WARNING の Deadline Supervision も意図せず FAILED ラッチしてしまう）。
-     * WDGM_EXPIRED_SUPERVISION_CYCLE_TOL 回分の判定サイクルを消費させ、
      * STOPPED へ到達させる。走査順（SEID 昇順）では ENGINE（SEID=0）が
      * WARNING（SEID=1）より先に確認されるため、記録される SEID は
      * ENGINE になるはず（/simplify で重複ループの指摘を受け、共通ヘルパーへ
-     * 抽出した）。 */
+     * 抽出した）。
+     *
+     * 2026-09 是正: Global Supervision Status の状態機械修正
+     * （[SWS_WdgM_00076]/[00078]/[00215]〜[00221]、WdgM.c の WdgM_GlobalExpired
+     * コメント参照）により、STOPPED に至るまでの判定サイクル数は
+     * 「エンティティ単位の EXPIRED 猶予（ENGINE の Local Status が実際に
+     * EXPIRED になるまで）」+「そこから Global の EXPIRED→STOPPED 猶予」の
+     * 2段階を合算した 2*WDGM_EXPIRED_SUPERVISION_CYCLE_TOL+1 回分になる
+     * （以前は単一のカウンタに誤って統合されていたため
+     * WDGM_EXPIRED_SUPERVISION_CYCLE_TOL+1 回で足りていた）。 */
     void DriveEngineToStoppedViaWarningAliveOnly()
     {
-        for (uint8 cycle = 0U; cycle <= WDGM_EXPIRED_SUPERVISION_CYCLE_TOL; cycle++)
+        for (uint8 cycle = 0U; cycle < 2U * WDGM_EXPIRED_SUPERVISION_CYCLE_TOL + 1U; cycle++)
         {
             FakeMillis_Value += 500UL;
             WdgM_CheckpointReached(WDGM_ENTITY_WARNING, WDGM_CP_WARNING_START);
