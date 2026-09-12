@@ -5,21 +5,23 @@
  *          実際の AUTOSAR 環境ではコンフィギュレーションツールが生成する
  *          ファイルに相当する。
  *
- *          本プロジェクトの EEPROM レイアウト (Arduino UNO 内蔵 1KB の先頭 46 バイト):
+ *          本プロジェクトの EEPROM レイアウト (Arduino UNO 内蔵 1KB の先頭 50 バイト。
+ *          2026-09、DEM_EVENT_COUNT が 10→11 に増えたことに伴い各ブロック長・
+ *          後続アドレスを更新):
  *          各ブロックはデータ本体直後に CRC8 (SAE J1850) を 1 バイト付加する
  *          (NvM.c の NvM_CalcCrc8() / NvM_CrcAddressForBase() 参照)。
  *            Addr 0x0000: NVM_BLOCK_ID_DEM_MAGIC    データ (1 byte) — DEM 有効マーカー
  *            Addr 0x0001: NVM_BLOCK_ID_DEM_MAGIC    CRC   (1 byte)
- *            Addr 0x0002: NVM_BLOCK_ID_DEM_STATUS   データ (10 bytes) — DEM イベントステータス
- *            Addr 0x000C: NVM_BLOCK_ID_DEM_STATUS   CRC   (1 byte)
- *            Addr 0x000D: NVM_BLOCK_ID_DEM_AGING    データ (10 bytes) — DEM 経年回復(Aging)カウンタ
- *            Addr 0x0017: NVM_BLOCK_ID_DEM_AGING    CRC   (1 byte)
- *            Addr 0x0018: NVM_BLOCK_ID_DEM_EXTENDED データ (10 bytes) — DEM 故障確定回数(ExtendedData)
+ *            Addr 0x0002: NVM_BLOCK_ID_DEM_STATUS   データ (11 bytes) — DEM イベントステータス
+ *            Addr 0x000D: NVM_BLOCK_ID_DEM_STATUS   CRC   (1 byte)
+ *            Addr 0x000E: NVM_BLOCK_ID_DEM_AGING    データ (11 bytes) — DEM 経年回復(Aging)カウンタ
+ *            Addr 0x0019: NVM_BLOCK_ID_DEM_AGING    CRC   (1 byte)
+ *            Addr 0x001A: NVM_BLOCK_ID_DEM_EXTENDED データ (11 bytes) — DEM 故障確定回数(ExtendedData)
  *                         プライマリ面
- *            Addr 0x0022: NVM_BLOCK_ID_DEM_EXTENDED CRC   (1 byte) — プライマリ面
- *            Addr 0x0023: NVM_BLOCK_ID_DEM_EXTENDED データ (10 bytes) — ミラー面
+ *            Addr 0x0025: NVM_BLOCK_ID_DEM_EXTENDED CRC   (1 byte) — プライマリ面
+ *            Addr 0x0026: NVM_BLOCK_ID_DEM_EXTENDED データ (11 bytes) — ミラー面
  *                         （冗長ブロック。詳細は NvM.h の「冗長ブロック」参照）
- *            Addr 0x002D: NVM_BLOCK_ID_DEM_EXTENDED CRC   (1 byte) — ミラー面
+ *            Addr 0x0031: NVM_BLOCK_ID_DEM_EXTENDED CRC   (1 byte) — ミラー面
  *
  *          DEM_EXTENDED（故障確定回数、UDS SID 0x19/06 で読み出せる車両生涯の
  *          累積値）のみ冗長ブロック化している。1 バイトの書き込み不良で
@@ -101,36 +103,46 @@
  * NvM_ReadBlock() / NvM_WriteBlock() の第 1 引数に渡す。
  * ----------------------------------------------------------------------- */
 #define NVM_BLOCK_ID_DEM_MAGIC    0U  /**< DEM 有効マーカー (1 byte)         */
-#define NVM_BLOCK_ID_DEM_STATUS   1U  /**< DEM イベントステータス (10 bytes)  */
-#define NVM_BLOCK_ID_DEM_AGING    2U  /**< DEM 経年回復(Aging)カウンタ (10 bytes) */
-#define NVM_BLOCK_ID_DEM_EXTENDED 3U  /**< DEM 故障確定回数 ExtendedData (10 bytes) */
+#define NVM_BLOCK_ID_DEM_STATUS   1U  /**< DEM イベントステータス (11 bytes)  */
+#define NVM_BLOCK_ID_DEM_AGING    2U  /**< DEM 経年回復(Aging)カウンタ (11 bytes) */
+#define NVM_BLOCK_ID_DEM_EXTENDED 3U  /**< DEM 故障確定回数 ExtendedData (11 bytes) */
 #define NVM_BLOCK_COUNT           4U  /**< 管理ブロック総数                   */
-
-/* -----------------------------------------------------------------------
- * EEPROM 先頭アドレス (各ブロックの物理格納先)
- * ----------------------------------------------------------------------- */
-/* 各ブロックのデータ本体直後 (BaseNumber + Length) に CRC 1 バイトが入るため、
- * 後続ブロックの先頭アドレスは前ブロックの (データ長+1) ずつ後ろにずれる。 */
-#define NVM_BLOCK_DEM_MAGIC_EEPROM_ADDR    0x0000U  /**< マジックバイトのアドレス (CRC は 0x0001) */
-#define NVM_BLOCK_DEM_STATUS_EEPROM_ADDR   0x0002U  /**< ステータステーブルの先頭アドレス (CRC は 0x000C) */
-#define NVM_BLOCK_DEM_AGING_EEPROM_ADDR    0x000DU  /**< Aging カウンタの先頭アドレス (CRC は 0x0017) */
-#define NVM_BLOCK_DEM_EXTENDED_EEPROM_ADDR 0x0018U  /**< 故障確定回数の先頭アドレス・プライマリ面 (CRC は 0x0022) */
-#define NVM_BLOCK_DEM_EXTENDED_MIRROR_EEPROM_ADDR 0x0023U  /**< 故障確定回数のミラー面 (CRC は 0x002D)。
-                                                             *   冗長ブロック（NvM_PBCfg.c の .Redundant=1）専用 */
 
 /* -----------------------------------------------------------------------
  * ブロックサイズ (bytes)
  * ----------------------------------------------------------------------- */
 #define NVM_BLOCK_DEM_MAGIC_LENGTH     1U   /**< マジックバイト: 1 byte           */
-#define NVM_BLOCK_DEM_STATUS_LENGTH    10U  /**< DEM_EVENT_COUNT = 10 イベント分  */
-#define NVM_BLOCK_DEM_AGING_LENGTH     10U  /**< DEM_EVENT_COUNT = 10 イベント分  */
-#define NVM_BLOCK_DEM_EXTENDED_LENGTH  10U  /**< DEM_EVENT_COUNT = 10 イベント分  */
+#define NVM_BLOCK_DEM_STATUS_LENGTH    11U  /**< DEM_EVENT_COUNT = 11 イベント分  */
+#define NVM_BLOCK_DEM_AGING_LENGTH     11U  /**< DEM_EVENT_COUNT = 11 イベント分  */
+#define NVM_BLOCK_DEM_EXTENDED_LENGTH  11U  /**< DEM_EVENT_COUNT = 11 イベント分  */
+
+/* -----------------------------------------------------------------------
+ * EEPROM 先頭アドレス (各ブロックの物理格納先)
+ * ----------------------------------------------------------------------- */
+/* 各ブロックのデータ本体直後 (BaseNumber + Length) に CRC 1 バイトが入るため、
+ * 後続ブロックの先頭アドレスは前ブロックの (データ長+1) ずつ後ろにずれる。
+ * 2026-09 是正（/simplify 指摘）: 以前は各アドレスを 16 進電卓計算で手書き
+ * していたため、ブロック長変更のたびに後続アドレス全てを手動で再計算する
+ * 必要があり人為的ミスのリスクがあった。上記 LENGTH マクロからの連鎖式へ
+ * 変更し、プリプロセッサに計算させることでこのリスクを解消した
+ * （CRC アドレス自体は NvM.c の NvM_CrcAddressForBase() が base+length から
+ * 実行時に動的計算するため、ここでは先頭アドレスのみ連鎖させればよい）。 */
+#define NVM_BLOCK_DEM_MAGIC_EEPROM_ADDR    0x0000U  /**< マジックバイトのアドレス (CRC は +MAGIC_LENGTH) */
+#define NVM_BLOCK_DEM_STATUS_EEPROM_ADDR \
+    (NVM_BLOCK_DEM_MAGIC_EEPROM_ADDR + NVM_BLOCK_DEM_MAGIC_LENGTH + 1U)   /**< ステータステーブルの先頭アドレス */
+#define NVM_BLOCK_DEM_AGING_EEPROM_ADDR \
+    (NVM_BLOCK_DEM_STATUS_EEPROM_ADDR + NVM_BLOCK_DEM_STATUS_LENGTH + 1U) /**< Aging カウンタの先頭アドレス */
+#define NVM_BLOCK_DEM_EXTENDED_EEPROM_ADDR \
+    (NVM_BLOCK_DEM_AGING_EEPROM_ADDR + NVM_BLOCK_DEM_AGING_LENGTH + 1U)   /**< 故障確定回数の先頭アドレス・プライマリ面 */
+#define NVM_BLOCK_DEM_EXTENDED_MIRROR_EEPROM_ADDR \
+    (NVM_BLOCK_DEM_EXTENDED_EEPROM_ADDR + NVM_BLOCK_DEM_EXTENDED_LENGTH + 1U) /**< 故障確定回数のミラー面。
+                                                             *   冗長ブロック（NvM_PBCfg.c の .Redundant=1）専用 */
 
 /** 設定済みブロックの中で最大の NvMNvBlockLength。
  *  冗長ブロックの読み込み検証（NvM.c の NvM_LoadAndVerifyBlock()）が
  *  ミラー面の内容を一時的に保持するスタック上のスクラッチバッファの
  *  サイズとして使う。新しいブロックを追加してこれより大きくする場合は
  *  あわせて更新すること。 */
-#define NVM_MAX_BLOCK_LENGTH  10U
+#define NVM_MAX_BLOCK_LENGTH  11U
 
 #endif /* NVM_CFG_H */

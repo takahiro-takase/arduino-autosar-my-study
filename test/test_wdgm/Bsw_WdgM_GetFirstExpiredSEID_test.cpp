@@ -12,6 +12,7 @@
 #include <gtest/gtest.h>
 #include "WdgM.h"
 #include "WdgIf_fake.h"
+#include "Dem_fake.h"
 #include "Hal_Det_Hw_fake.h"
 #include "Hal_Millis_fake.h"
 
@@ -23,6 +24,7 @@ protected:
         FakeMillis_Reset();
         FakeDetHw_Reset();
         FakeWdgIf_Reset();
+        FakeDem_Reset();
         WdgM_Init(&WdgM_Config);
         FakeDetHw_Reset();  /* Init 自体が出す DET ログ・記録を後続の検証対象から除く */
     }

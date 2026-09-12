@@ -11,6 +11,7 @@
 #include <gtest/gtest.h>
 #include "WdgM.h"
 #include "WdgIf_fake.h"
+#include "Dem_fake.h"
 #include "Hal_Det_Hw_fake.h"
 #include "Hal_Millis_fake.h"
 
@@ -22,6 +23,7 @@ protected:
         FakeMillis_Reset();
         FakeDetHw_Reset();
         FakeWdgIf_Reset();
+        FakeDem_Reset();
         WdgM_Init(&WdgM_Config);
         FakeDetHw_Reset();  /* Init 自体が出す DET ログ・記録を後続の検証対象から除く */
     }
@@ -60,11 +62,15 @@ protected:
         }
 
         /* グローバル猶予カウンタが尽きて初めて WdgM_GlobalStopped が立ち
-         * STOPPED に遷移する。 */
+         * STOPPED に遷移する。この瞬間に [SWS_WdgM_00129] 対応として
+         * DEM_EVENT_WDGM_SUPERVISION が FAILED 報告される（2026-09 追加）。 */
         WdgM_MainFunction();
         WdgM_GlobalStatusType status;
         ASSERT_EQ(WdgM_GetGlobalStatus(&status), E_OK);
         EXPECT_EQ(status, WDGM_GLOBAL_STATUS_STOPPED);
+        EXPECT_EQ(FakeDem_SetEventStatusCount, 1U);
+        EXPECT_EQ(FakeDem_LastEventId, DEM_EVENT_WDGM_SUPERVISION);
+        EXPECT_EQ(FakeDem_LastEventStatus, DEM_EVENT_STATUS_FAILED);
     }
 };
 
@@ -209,4 +215,11 @@ TEST_F(Bsw_WdgM_GetGlobalStatus_Test,
     WdgM_GlobalStatusType status;
     ASSERT_EQ(WdgM_GetGlobalStatus(&status), E_OK);
     EXPECT_EQ(status, WDGM_GLOBAL_STATUS_OK);
+
+    /* [SWS_WdgM_00129]/[00375] の回帰テスト(2026-09 追加): STOPPED から
+     * 回復した際、対になる PASSED を報告する
+     * (DriveAllEntitiesToStopped() 内で既に FAILED 1 回分をカウント済み)。 */
+    EXPECT_EQ(FakeDem_SetEventStatusCount, 2U);
+    EXPECT_EQ(FakeDem_LastEventId, DEM_EVENT_WDGM_SUPERVISION);
+    EXPECT_EQ(FakeDem_LastEventStatus, DEM_EVENT_STATUS_PASSED);
 }
