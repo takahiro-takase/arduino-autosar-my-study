@@ -680,7 +680,16 @@ Std_ReturnType NvM_RestoreBlockDefaults(NvM_BlockIdType BlockId, void* NvM_DestP
 
     const NvM_BlockDescriptorType* blk = &NvM_Cfg->Blocks[BlockId];
     if (blk->RamBlockDataAddress == NULL)
+    {
+        if (NvM_DestPtr == NULL)
+        {
+            /* [SWS_NvM_00629]: 恒久RAMブロックも明示同期も設定されていない
+             * ブロック（本プロジェクトには存在しないが念のため）へNULLを
+             * 渡した場合のみ development error。 */
+            Det_ReportError(NVM_MODULE_ID, 0U, NVM_API_ID_RESTORE_BLOCK_DEFAULTS, NVM_E_PARAM_ADDRESS);
+        }
         return E_NOT_OK;
+    }
 
     if (blk->RomBlockDataAddress == NULL)
     {

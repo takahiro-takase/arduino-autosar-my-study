@@ -280,18 +280,24 @@ Std_ReturnType NvM_WriteBlock(NvM_BlockIdType BlockId, const void* NvM_SrcPtr);
  *          存在しないデフォルト値を「復元できた」かのように扱う誤りだった）。
  *
  * \param[in]   BlockId      ブロック ID (NVM_BLOCK_ID_* 定数)。
- * \param[out]  NvM_DestPtr  復元したデフォルト値の追加コピー先。NULL 可。
+ * \param[out]  NvM_DestPtr  復元したデフォルト値の追加コピー先。NULL の場合は
+ *                          恒久 RAM ブロックを使う（本プロジェクトの全ブロックが
+ *                          該当）ため NULL 可。ただし恒久 RAM ブロックが設定
+ *                          されていないブロック（本プロジェクトには存在しない）
+ *                          へ NULL を渡した場合は development error
+ *                          （[SWS_NvM_00629]）。
  *
  * \note       NvM_DestPtr が非 NULL の場合は RAM ミラー更新に加えて
  *             追加でコピーするだけで、仕様の either/or ([SWS_NvM_00435]) は
  *             未実装。
  *
  * \retval  E_OK      ジョブを受け付けた（書き込み完了を意味しない）。
- * \retval  E_NOT_OK  BlockId が範囲外、または ROM デフォルト値が未設定
- *                    （[SWS_NvM_00883]）。
+ * \retval  E_NOT_OK  BlockId が範囲外、ROM デフォルト値が未設定
+ *                    （[SWS_NvM_00883]）、または恒久 RAM ブロックが設定
+ *                    されていないブロックへ NULL を渡した（[SWS_NvM_00629]）。
  *
  * \AUTOSARReq     {SWS_NvM_00456, SWS_NvM_00012, SWS_NvM_00224, SWS_NvM_00267,
- *                  SWS_NvM_00902, SWS_NvM_00883, SWS_NvM_00885}
+ *                  SWS_NvM_00902, SWS_NvM_00883, SWS_NvM_00885, SWS_NvM_00629}
  * \ServiceID      {0x08}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Asynchronous}
