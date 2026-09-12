@@ -5,23 +5,23 @@
  *          実際の AUTOSAR 環境ではコンフィギュレーションツールが生成する
  *          ファイルに相当する。
  *
- *          本プロジェクトの EEPROM レイアウト (Arduino UNO 内蔵 1KB の先頭 54 バイト。
- *          2026-09、DEM_EVENT_COUNT が 11→12 に増えたことに伴い各ブロック長・
+ *          本プロジェクトの EEPROM レイアウト (Arduino UNO 内蔵 1KB の先頭 62 バイト。
+ *          2026-09、DEM_EVENT_COUNT が 12→14 に増えたことに伴い各ブロック長・
  *          後続アドレスを更新):
  *          各ブロックはデータ本体直後に CRC8 (SAE J1850) を 1 バイト付加する
  *          (NvM.c の NvM_CalcCrc8() / NvM_CrcAddressForBase() 参照)。
  *            Addr 0x0000: NVM_BLOCK_ID_DEM_MAGIC    データ (1 byte) — DEM 有効マーカー
  *            Addr 0x0001: NVM_BLOCK_ID_DEM_MAGIC    CRC   (1 byte)
- *            Addr 0x0002: NVM_BLOCK_ID_DEM_STATUS   データ (12 bytes) — DEM イベントステータス
- *            Addr 0x000E: NVM_BLOCK_ID_DEM_STATUS   CRC   (1 byte)
- *            Addr 0x000F: NVM_BLOCK_ID_DEM_AGING    データ (12 bytes) — DEM 経年回復(Aging)カウンタ
- *            Addr 0x001B: NVM_BLOCK_ID_DEM_AGING    CRC   (1 byte)
- *            Addr 0x001C: NVM_BLOCK_ID_DEM_EXTENDED データ (12 bytes) — DEM 故障確定回数(ExtendedData)
+ *            Addr 0x0002: NVM_BLOCK_ID_DEM_STATUS   データ (14 bytes) — DEM イベントステータス
+ *            Addr 0x0010: NVM_BLOCK_ID_DEM_STATUS   CRC   (1 byte)
+ *            Addr 0x0011: NVM_BLOCK_ID_DEM_AGING    データ (14 bytes) — DEM 経年回復(Aging)カウンタ
+ *            Addr 0x001F: NVM_BLOCK_ID_DEM_AGING    CRC   (1 byte)
+ *            Addr 0x0020: NVM_BLOCK_ID_DEM_EXTENDED データ (14 bytes) — DEM 故障確定回数(ExtendedData)
  *                         プライマリ面
- *            Addr 0x0028: NVM_BLOCK_ID_DEM_EXTENDED CRC   (1 byte) — プライマリ面
- *            Addr 0x0029: NVM_BLOCK_ID_DEM_EXTENDED データ (12 bytes) — ミラー面
+ *            Addr 0x002E: NVM_BLOCK_ID_DEM_EXTENDED CRC   (1 byte) — プライマリ面
+ *            Addr 0x002F: NVM_BLOCK_ID_DEM_EXTENDED データ (14 bytes) — ミラー面
  *                         （冗長ブロック。詳細は NvM.h の「冗長ブロック」参照）
- *            Addr 0x0035: NVM_BLOCK_ID_DEM_EXTENDED CRC   (1 byte) — ミラー面
+ *            Addr 0x003D: NVM_BLOCK_ID_DEM_EXTENDED CRC   (1 byte) — ミラー面
  *
  *          DEM_EXTENDED（故障確定回数、UDS SID 0x19/06 で読み出せる車両生涯の
  *          累積値）のみ冗長ブロック化している。1 バイトの書き込み不良で
@@ -103,18 +103,18 @@
  * NvM_ReadBlock() / NvM_WriteBlock() の第 1 引数に渡す。
  * ----------------------------------------------------------------------- */
 #define NVM_BLOCK_ID_DEM_MAGIC    0U  /**< DEM 有効マーカー (1 byte)         */
-#define NVM_BLOCK_ID_DEM_STATUS   1U  /**< DEM イベントステータス (12 bytes)  */
-#define NVM_BLOCK_ID_DEM_AGING    2U  /**< DEM 経年回復(Aging)カウンタ (12 bytes) */
-#define NVM_BLOCK_ID_DEM_EXTENDED 3U  /**< DEM 故障確定回数 ExtendedData (12 bytes) */
+#define NVM_BLOCK_ID_DEM_STATUS   1U  /**< DEM イベントステータス (14 bytes)  */
+#define NVM_BLOCK_ID_DEM_AGING    2U  /**< DEM 経年回復(Aging)カウンタ (14 bytes) */
+#define NVM_BLOCK_ID_DEM_EXTENDED 3U  /**< DEM 故障確定回数 ExtendedData (14 bytes) */
 #define NVM_BLOCK_COUNT           4U  /**< 管理ブロック総数                   */
 
 /* -----------------------------------------------------------------------
  * ブロックサイズ (bytes)
  * ----------------------------------------------------------------------- */
 #define NVM_BLOCK_DEM_MAGIC_LENGTH     1U   /**< マジックバイト: 1 byte           */
-#define NVM_BLOCK_DEM_STATUS_LENGTH    12U  /**< DEM_EVENT_COUNT = 12 イベント分  */
-#define NVM_BLOCK_DEM_AGING_LENGTH     12U  /**< DEM_EVENT_COUNT = 12 イベント分  */
-#define NVM_BLOCK_DEM_EXTENDED_LENGTH  12U  /**< DEM_EVENT_COUNT = 12 イベント分  */
+#define NVM_BLOCK_DEM_STATUS_LENGTH    14U  /**< DEM_EVENT_COUNT = 14 イベント分  */
+#define NVM_BLOCK_DEM_AGING_LENGTH     14U  /**< DEM_EVENT_COUNT = 14 イベント分  */
+#define NVM_BLOCK_DEM_EXTENDED_LENGTH  14U  /**< DEM_EVENT_COUNT = 14 イベント分  */
 
 /* -----------------------------------------------------------------------
  * EEPROM 先頭アドレス (各ブロックの物理格納先)
@@ -143,6 +143,6 @@
  *  ミラー面の内容を一時的に保持するスタック上のスクラッチバッファの
  *  サイズとして使う。新しいブロックを追加してこれより大きくする場合は
  *  あわせて更新すること。 */
-#define NVM_MAX_BLOCK_LENGTH  12U
+#define NVM_MAX_BLOCK_LENGTH  14U
 
 #endif /* NVM_CFG_H */

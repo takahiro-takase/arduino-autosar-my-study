@@ -73,6 +73,7 @@
 #include "NvM_PBCfg.h"
 #include "MemIf.h"
 #include "Det.h"
+#include "Dem.h"
 #include <string.h>
 
 #define TAG "NvM"
@@ -143,6 +144,25 @@ static uint8 NvM_ActiveCopyIsMirror = 0U;
  *  再読み込みトリガーが無いため、Init 時の結果がブロックの生存期間中
  *  ずっと有効）。2026-09 追加。 */
 static uint8 NvM_WriteStartIsMirror[NVM_BLOCK_COUNT];
+
+/** [SWS_NvM_00591]/[SWS_NvM_00595]: NvM_LoadAndVerifyBlock() が起動時の
+ *  読み込みで検出した CRC 不整合・冗長性喪失を Dem へ報告するための、
+ *  ブロックごとの保留結果。NvM_LoadAndVerifyBlock() は NvM_Init() から
+ *  （EcuM_Init() 内で Dem_Init() より前に）呼ばれるため、その場で直接
+ *  Dem_SetEventStatus() を呼んでも、直後に実行される Dem_Init() が
+ *  Dem_StatusTable[]/Dem_DebounceCounter[] を丸ごと初期化し直すため
+ *  効果が消えてしまう（EcuM.c の呼び出し順序参照）。そのためここへ
+ *  結果を保留し、EcuM_Init() が Dem_Init() の直後に
+ *  NvM_ReportBootDiagnosticsToDem() を呼んで遅延報告する（2026-09 追加）。 */
+typedef enum
+{
+    NVM_DEM_REPORT_NONE = 0U,  /**< 対象外（非冗長ブロックの LOSS_OF_REDUNDANCY 等） */
+    NVM_DEM_REPORT_FAILED,
+    NVM_DEM_REPORT_PASSED
+} NvM_DemReportType;
+
+static NvM_DemReportType NvM_IntegrityFailedReport[NVM_BLOCK_COUNT];
+static NvM_DemReportType NvM_LossOfRedundancyReport[NVM_BLOCK_COUNT];
 
 /** 保留ブロック ID を投入順 (FIFO) で保持するリングバッファ。
  *  呼び出し元 (Dem 等) は「後から投入したブロックほど後で物理書き込みされる」
@@ -312,6 +332,14 @@ static void NvM_ApplyDefaultSync(NvM_BlockIdType id, const NvM_BlockDescriptorTy
  *          している（仕様書内にこの曖昧さを解消する詳細アルゴリズム記述は
  *          見当たらないため、[SWS_NvM_00531]の冗長ブロック復旧思想と整合
  *          させた合理的解釈。自己仕様引用裏取りで確認済み）。
+ *
+ *          あわせて、検出結果を [SWS_NvM_00591]（NVM_E_INTEGRITY_FAILED、
+ *          読み込みでCRC不整合を検出）/ [SWS_NvM_00595]
+ *          （NVM_E_LOSS_OF_REDUNDANCY、冗長ブロックの片面破損）として
+ *          Dem へ報告するため `NvM_IntegrityFailedReport[]`/
+ *          `NvM_LossOfRedundancyReport[]` へ記録する（2026-09 追加。
+ *          Dem_Init() より前に呼ばれるため直接 Dem_SetEventStatus() は
+ *          呼べない。両配列宣言部のコメント参照）。
  */
 static void NvM_LoadAndVerifyBlock(NvM_BlockIdType id, const NvM_BlockDescriptorType* blk)
 {
@@ -335,13 +363,20 @@ static void NvM_LoadAndVerifyBlock(NvM_BlockIdType id, const NvM_BlockDescriptor
             DET_LOGE(TAG, "block=%u CRC mismatch (stored=0x%02X calc=0x%02X)",
                      (unsigned)id, (unsigned)storedCrcPrimary, (unsigned)calcCrcPrimary);
             NvM_ApplyDefaultSync(id, blk);
+            /* [SWS_NvM_00864]: 読み込みでCRC不整合を検出 → FAILED（遅延報告、
+             * 本関数冒頭のコメント参照）。 */
+            NvM_IntegrityFailedReport[id] = NVM_DEM_REPORT_FAILED;
         }
         else
         {
             /* [SWS_NvM_00852]比較対象の初期値: 起動時に読み込んだ内容が
              * そのまま「直近の read ジョブで確定した CRC」になる。 */
             NvM_LastCrc[id] = calcCrcPrimary;
+            /* [SWS_NvM_00872]: CRC不整合なし → PASSED。 */
+            NvM_IntegrityFailedReport[id] = NVM_DEM_REPORT_PASSED;
         }
+        /* 非冗長ブロックのため LOSS_OF_REDUNDANCY は対象外
+         * (NvM_LossOfRedundancyReport[id] は初期値 NONE のまま)。 */
         return;
     }
 
@@ -362,10 +397,27 @@ static void NvM_LoadAndVerifyBlock(NvM_BlockIdType id, const NvM_BlockDescriptor
         {
             DET_LOGW(TAG, "block=%u redundant: mirror CRC mismatch, repairing from primary", (unsigned)id);
             NvM_WriteCopySync(blk->NvMNvBlockBaseNumberMirror, blk->RamBlockDataAddress, blk->NvMNvBlockLength);
+            /* [SWS_NvM_00868]は「1面目(プライマリ)が読めず2面目(ミラー)が
+             * 読めた」場合のみを文字通りの Fail 条件とするが、本実装は
+             * プライマリ・ミラー両面を常に検証する拡張を行っているため、
+             * 逆方向（プライマリ正常・ミラー破損）も対称的に「冗長性を
+             * 喪失した」とみなして報告する（本プロジェクト独自の拡張。
+             * 実仕様の最小読み込みアルゴリズム([SWS_NvM_00199]、1面目が
+             * 成功すれば2面目は読まない)では検出しえないケースのため、
+             * 文字通りの要求ID一致ではない）。 */
+            NvM_LossOfRedundancyReport[id] = NVM_DEM_REPORT_FAILED;
+        }
+        else
+        {
+            /* [SWS_NvM_00876]: 両面とも正常 → 冗長性喪失なし。 */
+            NvM_LossOfRedundancyReport[id] = NVM_DEM_REPORT_PASSED;
         }
         /* NvM_LastCrc[] は更新しない: 本ブロックは Redundant=1 のため
          * NvM_WriteBlock() の書き込みスキップ判定（Redundant==0U が前提条件）
          * から一切参照されない（NvM_LastCrc[] 宣言部のコメント参照）。 */
+        /* [SWS_NvM_00872]: PASSED（有効データ取得済み。詳細は本関数冒頭の
+         * コメント参照）。 */
+        NvM_IntegrityFailedReport[id] = NVM_DEM_REPORT_PASSED;
 
         /* [SWS_NvM_00761]: RAM ミラーはプライマリの内容を採用した（＝
          * プライマリが「読まれた」）ため、次回の NvM_WriteBlock() は
@@ -380,6 +432,12 @@ static void NvM_LoadAndVerifyBlock(NvM_BlockIdType id, const NvM_BlockDescriptor
         memcpy(blk->RamBlockDataAddress, mirrorBuf, blk->NvMNvBlockLength);
         NvM_WriteCopySync(blk->NvMNvBlockBaseNumber, blk->RamBlockDataAddress, blk->NvMNvBlockLength);
 
+        /* [SWS_NvM_00868]: 1面目(プライマリ)が読めず2面目(ミラー)が読めた
+         * ため文字通りの Fail 条件に合致。 */
+        NvM_LossOfRedundancyReport[id] = NVM_DEM_REPORT_FAILED;
+        /* [SWS_NvM_00872]: PASSED（有効データ取得済み）。 */
+        NvM_IntegrityFailedReport[id] = NVM_DEM_REPORT_PASSED;
+
         /* [SWS_NvM_00761]: RAM ミラーはミラー面の内容を採用した（＝
          * ミラーが「読まれた」）ため、次回の NvM_WriteBlock() は
          * 読まれなかった側＝プライマリから書き始める。 */
@@ -393,6 +451,12 @@ static void NvM_LoadAndVerifyBlock(NvM_BlockIdType id, const NvM_BlockDescriptor
      * NVM_REQ_RESTORED_FROM_ROM を設定するのは両面とも破損した本ケースのみ）。 */
     DET_LOGE(TAG, "block=%u redundant: both copies CRC mismatch, restoring defaults", (unsigned)id);
     NvM_ApplyDefaultSync(id, blk);
+    /* [SWS_NvM_00864]: 両面とも破損し最終的に有効なデータが得られなかった
+     * ため INTEGRITY_FAILED は FAILED。LOSS_OF_REDUNDANCY は「片方は
+     * 生きている」ことが前提の規定であり、両面破損はより重篤な
+     * INTEGRITY_FAILED に一本化し二重報告しない（NvM_LossOfRedundancyReport[id]
+     * は初期値 NONE のまま据え置く）。 */
+    NvM_IntegrityFailedReport[id] = NVM_DEM_REPORT_FAILED;
 
     /* 両面とも破損しており「読まれた」面が無い（[SWS_NvM_00761]の前提と
      * なる正常な読み込みが成立しない）ため、フォールバックとしてプライマリ
@@ -514,6 +578,69 @@ void NvM_Init(const NvM_ConfigType* ConfigPtr)
     NvM_QueueLen  = 0U;
 
     DET_LOGI(TAG, "Init ok blocks=%u", (unsigned)NvM_Config.NumBlocks);
+}
+
+/**
+ * \brief   NvM_Init() 時点で検出した CRC 不整合・冗長性喪失を Dem へ報告する。
+ *
+ * \details [SWS_NvM_00591]（NVM_E_INTEGRITY_FAILED）/ [SWS_NvM_00595]
+ *          （NVM_E_LOSS_OF_REDUNDANCY）への対応。NvM_LoadAndVerifyBlock()
+ *          （NvM_Init() から呼ばれる）が記録した
+ *          `NvM_IntegrityFailedReport[]`/`NvM_LossOfRedundancyReport[]` を
+ *          読み、対応する Dem イベントを FAILED/PASSED 報告する。
+ *
+ *          EcuM_Init() が `Dem_Init()` の直後に呼ぶこと。NvM_Init() 自体は
+ *          Dem_Init() より前に実行されるため、NvM_LoadAndVerifyBlock() から
+ *          直接 Dem_SetEventStatus() を呼んでも、直後の Dem_Init() が
+ *          Dem 側の状態テーブルを丸ごと初期化し直すため効果が消えてしまう
+ *          （`NvM_IntegrityFailedReport[]` 宣言部のコメント参照）。
+ *
+ *          Dem イベントはブロック単位ではなくモジュール単位で1つしか無い
+ *          ため、複数ブロックの結果は「いずれか1つでも FAILED なら FAILED、
+ *          全て PASSED なら PASSED」に集約してから1回だけ報告する
+ *          （2026-09 是正、自己 `/code-review` で発見: 当初はブロックごとに
+ *          毎回 Dem_SetEventStatus() を呼んでおり、後から処理したブロックの
+ *          結果が前のブロックの結果を上書きしてしまっていた。例えば
+ *          MAGIC ブロックが CRC 不整合で FAILED でも、最後に処理される
+ *          EXTENDED ブロックが正常なら PASSED で上書きされ、実際の
+ *          EEPROM 破損が握りつぶされていた）。
+ *
+ * \note    実仕様には存在しない本プロジェクト独自の拡張関数のため、対応する
+ *          \AUTOSARReq は無い（対応する実際の要求は上記 [SWS_NvM_00591]/
+ *          [00595] 自体に付与済み）。
+ */
+void NvM_ReportBootDiagnosticsToDem(void)
+{
+    DET_LOGT(TAG, "called");
+    uint8 anyIntegrityFailed  = 0U;
+    uint8 anyIntegrityPassed  = 0U;
+    uint8 anyRedundancyFailed = 0U;
+    uint8 anyRedundancyPassed = 0U;
+
+    for (uint8 i = 0U; i < NVM_BLOCK_COUNT; i++)
+    {
+        if (NvM_IntegrityFailedReport[i] == NVM_DEM_REPORT_FAILED)
+            anyIntegrityFailed = 1U;
+        else if (NvM_IntegrityFailedReport[i] == NVM_DEM_REPORT_PASSED)
+            anyIntegrityPassed = 1U;
+        NvM_IntegrityFailedReport[i] = NVM_DEM_REPORT_NONE;
+
+        if (NvM_LossOfRedundancyReport[i] == NVM_DEM_REPORT_FAILED)
+            anyRedundancyFailed = 1U;
+        else if (NvM_LossOfRedundancyReport[i] == NVM_DEM_REPORT_PASSED)
+            anyRedundancyPassed = 1U;
+        NvM_LossOfRedundancyReport[i] = NVM_DEM_REPORT_NONE;
+    }
+
+    if (anyIntegrityFailed)
+        (void)Dem_SetEventStatus(DEM_EVENT_NVM_INTEGRITY_FAILED, DEM_EVENT_STATUS_FAILED);
+    else if (anyIntegrityPassed)
+        (void)Dem_SetEventStatus(DEM_EVENT_NVM_INTEGRITY_FAILED, DEM_EVENT_STATUS_PASSED);
+
+    if (anyRedundancyFailed)
+        (void)Dem_SetEventStatus(DEM_EVENT_NVM_LOSS_OF_REDUNDANCY, DEM_EVENT_STATUS_FAILED);
+    else if (anyRedundancyPassed)
+        (void)Dem_SetEventStatus(DEM_EVENT_NVM_LOSS_OF_REDUNDANCY, DEM_EVENT_STATUS_PASSED);
 }
 
 /**
