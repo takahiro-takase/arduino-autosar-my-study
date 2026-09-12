@@ -181,6 +181,49 @@ TEST_F(Bsw_Dcm_ControlDTCSetting_Test, ControlDTCSetting_OK_AutoReEnablesOnS3Tim
     EXPECT_NE(BusOffStatus() & DEM_STATUS_TEST_FAILED, 0U);
 }
 
+TEST_F(Bsw_Dcm_ControlDTCSetting_Test, S3Timer_OK_DoesNotTimeOutWhileCanTpTxBusy)
+{
+    /* 準備 (Arrange): extendedSession へ遷移。 */
+    EnterExtendedSession();
+
+    /* 実行 (Act): CanTp TX がビジー状態(前回応答、特にマルチフレームの
+     * 送信未完了を模擬)のまま S3 タイムアウト相当の時間が経過しても、
+     * [SWS_Dcm_00141] によりタイマは進まないはず。 */
+    FakeCanTp_Busy = (boolean)1U;
+    FakeMillis_Value += DCM_S3_TIMEOUT_MS + 1UL;
+    Dcm_MainFunction();
+    FakeCanTp_Busy = (boolean)0U;
+
+    /* 評価 (Assert): defaultSession へ落ちていないこと
+     * (extendedSession 限定の 0x85 が引き続き正応答を返すことで確認)。 */
+    FakeCanTp_Reset();
+    SendControlDTCSetting(DCM_DTCSETTING_ON);
+    ASSERT_EQ(FakeCanTp_TxBuf[0], (uint8)(DCM_SID_CONTROL_DTC_SETTING + 0x40U));
+}
+
+TEST_F(Bsw_Dcm_ControlDTCSetting_Test, S3Timer_OK_TimesOutNormallyOnceCanTpTxIdleAgain)
+{
+    /* 準備 (Arrange): extendedSession へ遷移し、ビジー中はタイムアウトしない
+     * ことを確認する（前のテストと同じ前提）。 */
+    EnterExtendedSession();
+    FakeCanTp_Busy = (boolean)1U;
+    FakeMillis_Value += DCM_S3_TIMEOUT_MS + 1UL;
+    Dcm_MainFunction();
+
+    /* 実行 (Act): CanTp TX がアイドルへ戻った後、改めて S3 タイムアウト分の
+     * 時間を経過させる。 */
+    FakeCanTp_Busy = (boolean)0U;
+    Dcm_MainFunction();
+    FakeMillis_Value += DCM_S3_TIMEOUT_MS + 1UL;
+    Dcm_MainFunction();
+
+    /* 評価 (Assert): 通常通り defaultSession へ落ちていること
+     * (0x85 が NRC 0x7F で拒否される)。 */
+    FakeCanTp_Reset();
+    SendControlDTCSetting(DCM_DTCSETTING_ON);
+    ASSERT_EQ(FakeCanTp_TxBuf[0], DCM_SID_NEGATIVE_RESP);
+}
+
 TEST_F(Bsw_Dcm_ControlDTCSetting_Test, ControlDTCSetting_OK_AutoReEnablesAfterEcuReset)
 {
     EnterExtendedSession();

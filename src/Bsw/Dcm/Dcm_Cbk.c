@@ -564,6 +564,9 @@ Std_ReturnType Dcm_ResetToDefaultSession(void)
  *          受信してから DCM_S3_TIMEOUT_MS 以上経過していれば
  *          defaultSession へ復帰させる (ISO 14229-1 の S3 タイマに相当)。
  *
+ *          [SWS_Dcm_00141]対応（2026-09 追加。詳細は本関数内のコメント参照）。
+ *
+ * \AUTOSARReq     {SWS_Dcm_00140, SWS_Dcm_00141}
  * \ServiceID      {0x25}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
@@ -600,6 +603,21 @@ void Dcm_MainFunction(void)
 
     if (Dcm_CurrentSession == DCM_SESSION_DEFAULT)
         return;
+
+    if (CanTp_IsTxBusy())
+    {
+        /* [SWS_Dcm_00141]: S3Server タイマは最終応答の送信完了
+         * (Dcm_TpTxConfirmation) まで停止しているべきだが、本プロジェクトは
+         * Dcm_TpTxConfirmation相当のコールバック自体を持たない
+         * ([SWS_Dcm_00557]対応時の`Dcm_ComIndication()`と同じ制約)。CanTp
+         * TX がビジー（前回応答、特にマルチフレームの送信未完了）の間は
+         * 毎周期タイマを更新し続けることで、タイマが進まない代用とする
+         * （2026-09 追加。以前はこのチェックが無く、応答送信が長時間かかった
+         * 場合（gs_usb の TX スタック不具合等）に、送信継続中でも S3
+         * タイムアウトが誤発火しうる状態だった）。 */
+        Dcm_LastActivityMs = millis();
+        return;
+    }
 
     if ((millis() - Dcm_LastActivityMs) >= DCM_S3_TIMEOUT_MS)
     {
