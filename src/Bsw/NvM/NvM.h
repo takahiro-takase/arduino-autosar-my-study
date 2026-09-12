@@ -190,6 +190,23 @@ typedef struct
 void NvM_Init(const NvM_ConfigType* ConfigPtr);
 
 /**
+ * \brief   NvM_Init() 時点で検出した CRC 不整合・冗長性喪失を Dem へ報告する。
+ *
+ * \details [SWS_NvM_00591]（NVM_E_INTEGRITY_FAILED）/ [SWS_NvM_00595]
+ *          （NVM_E_LOSS_OF_REDUNDANCY）への対応（2026-09 追加）。EcuM_Init() が
+ *          `Dem_Init()` の直後に呼ぶこと（NvM_Init() は Dem_Init() より前に
+ *          実行されるため、その時点では直接 Dem へ報告できない。詳細は
+ *          NvM.c の本関数・`NvM_LoadAndVerifyBlock()` のコメント参照）。
+ *
+ * \note    実仕様には存在しない本プロジェクト独自の拡張関数のため、対応する
+ *          \AUTOSARReq は無い（対応する実際の要求は上記 [SWS_NvM_00591]/
+ *          [00595] 自体に付与済み）。
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void NvM_ReportBootDiagnosticsToDem(void);
+
+/**
  * \brief   指定ブロックの RAM ミラー内容を NvM_DstPtr へコピーする。
  * \details NvM_Init() 完了後に RAM ミラーは最新 EEPROM 値を保持している。
  *          EEPROM への追加アクセスは発生しない。

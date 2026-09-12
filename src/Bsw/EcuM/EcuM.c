@@ -226,6 +226,10 @@ void EcuM_Init(void)
     CanTp_Init(NULL);
     Dcm_Init(NULL);
     Dem_Init(NULL);
+    NvM_ReportBootDiagnosticsToDem(); /* [SWS_NvM_00591]/[00595]: NvM_Init()時点で
+                                        * 検出したCRC不整合・冗長性喪失の遅延報告
+                                        * （Dem_Init()より前は直接報告できないため。
+                                        * NvM.c 参照）。Dem_Init() の直後に呼ぶこと */
     FiM_Init(&FiM_Config);                                    /* Dem_Init の後（Dem 状態を参照するため） */
     CanSM_Init(NULL);                                             /* NO_COM 状態で開始 */
     BswM_Init(&BswM_Config);  /* ComM_Init/ComM_RequestComMode より前に必須:
