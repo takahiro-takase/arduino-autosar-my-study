@@ -21,6 +21,37 @@
  */
 #include "E2EXf_PBCfg.h"
 #include "Dem_Cfg.h"
+#include "E2E.h"
+
+/* -----------------------------------------------------------------------
+ * E2E ステートマシン設定（[SWS_E2EXf_00028]、E2E_SMConfigType）
+ * 全 RX インスタンス共通。仕様書はしきい値の具体的な数値を規定しない
+ * （アプリケーション/インテグレータが選ぶ設定パラメータ、ECUC_E2E_*）ため、
+ * 以下は本プロジェクト独自の判断:
+ *   - WindowSize=3: Arduino UNO R4 の限られた RAM を踏まえ、判定に必要な
+ *     最小限の履歴数（インスタンスあたり ProfileStatusWindow 3 byte +
+ *     E2E_SMCheckStateType 本体のみ）に絞った。`E2EXF_SM_WINDOW_SIZE` と
+ *     しても定義し、各インスタンスの `ProfileStatusWindow` 配列サイズを
+ *     ここへ連動させる（値のハードコード重複を避ける）。
+ *   - Init系(2/1): 起動直後、直近3回中2回以上OKで初期同期完了とみなす
+ *     （1回はエラー相性が悪くても許容）。
+ *   - Valid系(2/1): 直近3回中1回のCRC/カウンタ異常（例: ノイズによる単発
+ *     ビット化け）までは通信健全とみなし DTC を確定させない。これが本設定
+ *     追加の主目的（以前は E2E_SMCheck() 自体を呼んでおらず、単発異常が
+ *     即座に FAILED に直結していた、2026-09 是正）。2回連続なら INVALID。
+ *   - Invalid系(2/1): VALID復帰もVALID維持と同じ基準で対称に統一した。
+ * ----------------------------------------------------------------------- */
+#define E2EXF_SM_WINDOW_SIZE 3U
+
+static const E2E_SMConfigType E2EXf_SMConfigDefault = {
+    E2EXF_SM_WINDOW_SIZE, /* WindowSize */
+    2U, /* MinOkStateInit       */
+    1U, /* MaxErrorStateInit    */
+    2U, /* MinOkStateValid      */
+    1U, /* MaxErrorStateValid   */
+    2U, /* MinOkStateInvalid    */
+    1U  /* MaxErrorStateInvalid */
+};
 
 /* -----------------------------------------------------------------------
  * EngineInfo (RX IPduId=0, CAN 0x100)
@@ -43,12 +74,17 @@ static E2E_P05CheckStateType E2EXf_EngineInfoStateP05;
 /* Profile05にはINITIAL相当が無いため、E2EXf層で初回受信の特別扱いを行う
  * ためのフラグ(E2EXf_RxConfigTypeP05.WaitForFirstData 宣言コメント参照)。 */
 static uint8 E2EXf_EngineInfoWaitForFirstDataP05;
+/* E2E ステートマシン状態（E2EXf_SMConfigDefault 参照）。 */
+static uint8 E2EXf_EngineInfoSMWindow[E2EXF_SM_WINDOW_SIZE];
+static E2E_SMCheckStateType E2EXf_EngineInfoSMState = { E2EXf_EngineInfoSMWindow, 0U, 0U, 0U, E2E_SM_DEINIT };
 
 const E2EXf_RxConfigTypeP05 E2EXf_EngineInfoRxCfg = {
     .E2EConfig        = &E2EXf_EngineInfoCfgP05,
     .CheckState       = &E2EXf_EngineInfoStateP05,
     .DemEventId       = DEM_EVENT_E2E_ENGINEINFO,
-    .WaitForFirstData = &E2EXf_EngineInfoWaitForFirstDataP05
+    .WaitForFirstData = &E2EXf_EngineInfoWaitForFirstDataP05,
+    .SMConfig         = &E2EXf_SMConfigDefault,
+    .SMState          = &E2EXf_EngineInfoSMState
 };
 
 /* -----------------------------------------------------------------------
@@ -66,12 +102,17 @@ static const E2E_P05ConfigType E2EXf_AbsInfoCfgP05 = {
 static E2E_P05CheckStateType E2EXf_AbsInfoStateP05;
 /* EngineInfo と同じ理由(E2EXf_EngineInfoWaitForFirstDataP05 参照)。 */
 static uint8 E2EXf_AbsInfoWaitForFirstDataP05;
+/* EngineInfo と同じ理由(E2EXf_EngineInfoSMState 参照)。 */
+static uint8 E2EXf_AbsInfoSMWindow[E2EXF_SM_WINDOW_SIZE];
+static E2E_SMCheckStateType E2EXf_AbsInfoSMState = { E2EXf_AbsInfoSMWindow, 0U, 0U, 0U, E2E_SM_DEINIT };
 
 const E2EXf_RxConfigTypeP05 E2EXf_AbsInfoRxCfg = {
     .E2EConfig        = &E2EXf_AbsInfoCfgP05,
     .CheckState       = &E2EXf_AbsInfoStateP05,
     .DemEventId       = DEM_EVENT_E2E_ABSINFO,
-    .WaitForFirstData = &E2EXf_AbsInfoWaitForFirstDataP05
+    .WaitForFirstData = &E2EXf_AbsInfoWaitForFirstDataP05,
+    .SMConfig         = &E2EXf_SMConfigDefault,
+    .SMState          = &E2EXf_AbsInfoSMState
 };
 
 /* -----------------------------------------------------------------------
@@ -102,6 +143,11 @@ void E2EXf_PBCfg_Init(void)
     E2E_P05CheckInit(&E2EXf_AbsInfoStateP05);
     E2EXf_EngineInfoWaitForFirstDataP05 = 1U;
     E2EXf_AbsInfoWaitForFirstDataP05    = 1U;
+    /* [SWS_E2E_00353]: E2E_SMCheckInit() を明示的に呼ぶ（呼ばないまま
+     * ゼロ初期化のみに頼ると E2E_SM_VALID(0x00) と誤認する、E2E.h の
+     * E2E_SMCheck() 宣言側コメント参照）。 */
+    (void)E2E_SMCheckInit(&E2EXf_EngineInfoSMState, &E2EXf_SMConfigDefault);
+    (void)E2E_SMCheckInit(&E2EXf_AbsInfoSMState, &E2EXf_SMConfigDefault);
     E2E_P05ProtectInit(&E2EXf_E2EHealthStatusStateP05);
 
     /* 各 State の初期化が完了した最後に、E2EXf モジュール自身の初期化状態

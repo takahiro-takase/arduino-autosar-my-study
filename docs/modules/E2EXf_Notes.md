@@ -112,12 +112,22 @@ Com_RxIndication() (RxIndicationCbk が設定された I-PDU。現状 IPduId=0/1
         E2EXf_InverseTransformP05() を呼び出す（CheckStatus 出力引数で生の6状態も受け取る）
           → E2E_P05Check() を実行
             OK / OKSOMELOST
-                      → Dem_SetEventStatus(DemEventId, PASSED)
-                        E_OK を返す → Rte ミラーを更新
+                      → E_OK を返す → Rte ミラーを更新（今回のフレームは使ってよい）
             REPEATED / WRONGSEQUENCE / ERROR
                       → DET_LOGW(TAG="E2EXf", "InverseTransformP05 NG DemEvent=%u st=%u")
-                        Dem_SetEventStatus(DemEventId, FAILED)
                         E_NOT_OK を返す → Rte ミラー非更新（前回値を維持）
+          → E2E_SMCheck() で通信路全体の健全性（直近 WindowSize 回分の
+            OK/ERROR 件数）を判定（[SWS_E2EXf_00028]/[00029]、2026-09 追加）
+            SMState == VALID   → Dem_SetEventStatus(DemEventId, PASSED)
+            SMState == INVALID → Dem_SetEventStatus(DemEventId, FAILED)
+            SMState == NODATA/INIT（判定材料が揃うまでの起動直後）
+                               → Dem 報告を保留（まだ確定した健全性判定を
+                                 返せないため）
+          ※ 「今回のフレームが使えるか」（E_OK/E_NOT_OK・Rte ミラー更新）と
+            「Dem への PASSED/FAILED 報告」は 2026-09 以降は別々の判定である
+            点に注意。以前は同じ判定を直接 Dem へ流していたため、単発の
+            CRC/カウンタ異常だけで即座に FAILED が確定してしまっていた
+            （E2E_SMCheck() 未呼び出しによる不具合、2026-09 是正）。
         CheckStatus を Rte_MapE2EStatusP05() で Rte_IStatusType へ写像し
         Rte_EngineInfoStatus / Rte_AbsInfoStatus（静的変数）へ保存
           → 次回以降の Rte_Read_*() 呼び出しがこれを返す（詳細は次項）
@@ -230,26 +240,34 @@ E2E の設定・状態実体は Com から独立し、`E2EXf_PBCfg.c` で保持�
 
 ### ログ例
 
+> **注意（2026-09 追記）**: 以下のログ例は `E2E_SMCheck()` 未導入だった頃
+> （単発の CRC/カウンタ異常が即座に Dem FAILED へ直結していた旧挙動）の
+> 実機ログで、Dem 確定のタイミングが現在の実装とは異なる（`WARN E2EXf:...NG`
+> のログ自体は変わらず出るが、`Dem: FAILED` 確定は直近 WindowSize=3 回中
+> 2 回以上の ERROR が続いた場合のみに変わった）。新挙動での実機再取得は
+> 未実施（[[project_bsw_spec_gap_survey_series]] 参照）。単発異常時は
+> `Dem: FAILED` の行が出ず、通信路が VALID を維持したままになる。
+
 **正常受信時:**
 ```
 （E2E 正常時はログなし — バッファが静かに更新される）
 ```
 
-**CRC 不一致発生時（AbsInfo）:**
+**CRC 不一致発生時（AbsInfo、旧挙動のログ。単発異常では現在は FAILED まで進まない）:**
 ```
 [7001ms] WARN  E2EXf: InverseTransformP05 NG DemEvent=8 st=7  ← st=7: ERROR（CRC 不一致）
 [7002ms] DEBUG Dem: ev=8 debounce=1 (PREFAILED)  ← limit=1 のため次回確定
 [7003ms] WARN  Dem: FAILED ev=8 dtc=0x000109     ← 即座に確定・EEPROM に保存
 ```
 
-**CRC 不一致発生時（EngineInfo）:**
+**CRC 不一致発生時（EngineInfo、旧挙動のログ。単発異常では現在は FAILED まで進まない）:**
 ```
 [8001ms] WARN  E2EXf: InverseTransformP05 NG DemEvent=9 st=7  ← st=7: ERROR（CRC 不一致）
 [8002ms] DEBUG Dem: ev=9 debounce=1 (PREFAILED)  ← limit=1 のため次回確定
 [8003ms] WARN  Dem: FAILED ev=9 dtc=0x00010A     ← 即座に確定・EEPROM に保存
 ```
 
-**カウンタ飛び超過（WRONGSEQUENCE）検知の様子（実機ログ、uds_tester で意図的にカウンタを飛ばして送信）:**
+**カウンタ飛び超過（WRONGSEQUENCE）検知の様子（実機ログ、uds_tester で意図的にカウンタを飛ばして送信。旧挙動）:**
 
 Profile05 には Profile01 の SyncCounter 再ロック機構が無いため、カウンタ飛びを
 検知した次のフレームが正常な delta（==1）でさえあれば、それだけで即座に OK へ戻ります

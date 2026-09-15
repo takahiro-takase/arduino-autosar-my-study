@@ -210,8 +210,9 @@
 #define DEM_DEBOUNCE_LIMIT_BUTTON_STUCK          1  /**< IoHwAb が 5 秒固着判定済み。二重チェック不要 */
 #define DEM_DEBOUNCE_LIMIT_ADC_VOLT_LOW          2  /**< 毎サイクル報告のため数十 ms で確定 */
 #define DEM_DEBOUNCE_LIMIT_CAN_BUSOFF            1  /**< CanSM が L1 リトライ済み。二重チェック不要 */
-#define DEM_DEBOUNCE_LIMIT_E2E_ABSINFO           1  /**< E2E チェックは決定論的。CRC 不一致は即確定 */
-#define DEM_DEBOUNCE_LIMIT_E2E_ENGINEINFO        1  /**< E2E チェックは決定論的。CRC 不一致は即確定 */
+#define DEM_DEBOUNCE_LIMIT_E2E_ABSINFO           1  /**< E2EXf が E2E_SMCheck() で単発異常を
+                                                       *   吸収済み(2026-09)。二重チェック不要 */
+#define DEM_DEBOUNCE_LIMIT_E2E_ENGINEINFO        1  /**< 同上(E2EXf_AbsInfoRxCfg 参照) */
 #define DEM_DEBOUNCE_LIMIT_WDGM_SUPERVISION      1  /**< WdgM 自身が OK→FAILED→EXPIRED→
                                                        *   猶予サイクル消費という多段階の
                                                        *   持続性チェックを経てから STOPPED を

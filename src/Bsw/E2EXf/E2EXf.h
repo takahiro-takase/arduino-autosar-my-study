@@ -25,6 +25,7 @@
 #define E2EXF_H
 
 #include "Std_Types.h"
+#include "E2E_Types.h"
 #include "E2E_P01.h"
 #include "E2E_P05.h"
 #include "Dem.h"
@@ -108,6 +109,10 @@ typedef struct
     const E2E_P01ConfigType* E2EConfig;
     E2E_P01CheckStateType*   CheckState;
     Dem_EventIdType          DemEventId;
+    /** E2E ステートマシン設定・状態（[SWS_E2EXf_00028]、E2EXf_InverseTransform()
+     *  参照）。NULL 不可 — Config自体がNULLでない限り必ず設定すること。 */
+    const E2E_SMConfigType*  SMConfig;
+    E2E_SMCheckStateType*    SMState;
 } E2EXf_RxConfigType;
 
 /* -----------------------------------------------------------------------
@@ -139,6 +144,10 @@ typedef struct
     E2E_P05CheckStateType*   CheckState;
     Dem_EventIdType          DemEventId;
     uint8*                   WaitForFirstData;
+    /** E2E ステートマシン設定・状態（[SWS_E2EXf_00028]、
+     *  E2EXf_InverseTransformP05() 参照）。NULL 不可。 */
+    const E2E_SMConfigType*  SMConfig;
+    E2E_SMCheckStateType*    SMState;
 } E2EXf_RxConfigTypeP05;
 
 /* -----------------------------------------------------------------------
@@ -219,8 +228,8 @@ void E2EXf_DeInit(void);
  *
  * \details E2E_P01Check() を呼び、結果を `E2E_P01MapStatusToSM()`
  *          ([SWS_E2E_00476]、profileBehavior=FALSE = R4.2より前の挙動)
- *          で汎用ステータスへ変換したうえで Dem_SetEventStatus() へ
- *          報告する。OK/OKSOMELOST/INITIAL の3状態は E2E_P_OK に写像され
+ *          で汎用ステータスへ変換する。OK/OKSOMELOST/INITIAL の3状態は
+ *          E2E_P_OK に写像され、この呼び出し（今回のフレーム）自体は
  *          E_OK を返す（INITIAL は初回受信という正常な起動シーケンスで
  *          あり故障ではない）。
  *          REPEATED（重複）・WRONGCRC・WRONGSEQUENCE・ERROR に加え、SYNC
@@ -231,6 +240,33 @@ void E2EXf_DeInit(void);
  *          （回復確認まで安易に正常扱いしない）に合わせて不合格のまま
  *          扱う（2026-09、以前は SYNC も合格扱いだったのを、仕様準拠の
  *          汎用マッピングとの整合を理由に変更）。
+ *
+ *          2026-09 追加: 上記の「今回のフレームが使えるか」という毎回の
+ *          判定（戻り値・*CheckStatus）とは別に、`E2E_SMCheck()`
+ *          （[SWS_E2EXf_00028]/[00029]、通信路全体の直近 WindowSize 回分の
+ *          健全性を判定するステートマシン）を呼び、その結果
+ *          （`Config->SMState->SMState`）でのみ Dem_SetEventStatus() の
+ *          PASSED/FAILED を報告するよう変更した。以前は毎フレームの合否を
+ *          そのまま Dem へ直結していたため、単発の CRC/カウンタ異常だけで
+ *          即座に FAILED が確定してしまっていた
+ *          （[SWS_E2EXf_00028]/[00029] 未実装によりステートマシンが完全に
+ *          バイパスされていた不具合、2026-09 是正）。`E2E_SM_NODATA`/
+ *          `E2E_SM_INIT`（判定材料が揃うまでの起動直後）の間は Dem 報告を
+ *          保留する（[SWS_E2E_00345] の状態図が "do NOT use data" と規定する
+ *          状態であり、まだ確定した健全性判定を返せないため）。
+ *
+ * \note    [SWS_E2EXf_00027] は本関数の戻り値を「上位ニブル=SMState、
+ *          下位ニブル=プロファイル非依存チェック状態」のパック値にすべきと
+ *          規定するが、本プロジェクトは意図的にこれを実装せず、従来通り
+ *          単純な `Std_ReturnType`（E_OK/E_NOT_OK/E_SAFETY_HARD_RUNTIMEERROR
+ *          の3値）のまま維持している（`\AUTOSARReq` タグにも00027を含めて
+ *          いない）。理由: 呼び出し元（`Rte.c`）は元々この3値の契約だけを
+ *          前提に書かれており、ニブルパック化は本プロジェクトが採用しない
+ *          RTE 生成コード側の型（`Rte_IStatusType` 等）と組み合わせて初めて
+ *          意味を持つ規定のため。SMState 自体は本関数内で Dem 報告の
+ *          判定にのみ使い呼び出し元には渡らないが、万一 E2E_SMCheck() が
+ *          失敗しても Dem 報告が保留されるだけ（PASSED に誤認されない）の
+ *          安全側の簡略化であるため許容している。
  *
  * \param[in]  Config       RX 側設定。NULL 禁止。
  * \param[in]  Buffer       検証対象の I-PDU バイト列。NULL 禁止。
@@ -254,7 +290,8 @@ void E2EXf_DeInit(void);
  *                                      2026-09 追加、以前は E_NOT_OK と区別
  *                                      していなかった）。
  *
- * \AUTOSARReq     {SWS_E2EXf_00152, SWS_E2EXf_00153, SWS_E2EXf_00009}
+ * \AUTOSARReq     {SWS_E2EXf_00152, SWS_E2EXf_00153, SWS_E2EXf_00009,
+ *                  SWS_E2EXf_00028, SWS_E2EXf_00029}
  * \ServiceID      {0x04}
  * \Reentrancy     {Reentrant}
  * \Synchronicity  {Synchronous}
@@ -265,11 +302,9 @@ Std_ReturnType E2EXf_InverseTransform(const E2EXf_RxConfigType* Config, const ui
 /**
  * \brief   RX I-PDU バイト列に対する E2E Profile 05 の Inverse Transform（検証）を行う。
  *
- * \details E2E_P05Check() を呼び、結果を Dem_SetEventStatus() で
- *          Config->DemEventId へ報告する。P05 には Profile01 の
- *          INITIAL/SYNC に相当する状態が無いため、OK/OKSOMELOST の2状態
- *          のみ E_OK（データ自体は信頼できる）。REPEATED・WRONGSEQUENCE・
- *          ERROR は E_NOT_OK。
+ * \details E2E_P05Check() を呼ぶ。P05 には Profile01 の INITIAL/SYNC に
+ *          相当する状態が無いため、OK/OKSOMELOST の2状態のみ E_OK（データ
+ *          自体は信頼できる）。REPEATED・WRONGSEQUENCE・ERROR は E_NOT_OK。
  *
  *          `Config->WaitForFirstData` が非 NULL かつ真の場合、CRC が正しい
  *          （ERROR 以外の）最初の呼び出しに限り、生の判定結果に関わらず
@@ -279,6 +314,20 @@ Std_ReturnType E2EXf_InverseTransform(const E2EXf_RxConfigType* Config, const ui
  *          の宣言コメント参照）。E2E_P05Check() 自身は内部で
  *          `State->Counter` を受信値へ同期済みのため、2回目以降の呼び出しは
  *          通常の delta 判定に自然に戻る。
+ *
+ *          2026-09 追加: 上記の毎フレームの合否（戻り値・*CheckStatus）とは
+ *          別に、`E2E_SMCheck()`（[SWS_E2EXf_00028]/[00029]）を呼び、直近
+ *          WindowSize 回分の健全性判定（`Config->SMState->SMState`）が
+ *          `E2E_SM_VALID`/`E2E_SM_INVALID` に確定したときのみ
+ *          Dem_SetEventStatus() で Config->DemEventId へ PASSED/FAILED を
+ *          報告する（E2EXf_InverseTransform() の同名コメント参照。以前は
+ *          ステートマシンを一切呼ばず毎フレームの合否をそのまま Dem へ
+ *          直結していたため、単発の CRC/カウンタ異常だけで即座に FAILED が
+ *          確定してしまっていた、2026-09 是正）。`E2E_SM_NODATA`/
+ *          `E2E_SM_INIT` の間は Dem 報告を保留する。
+ *
+ * \note    [SWS_E2EXf_00027] の戻り値ニブルパック化を意図的に実装していない
+ *          理由は E2EXf_InverseTransform() の同名の `\note` を参照。
  *
  * \param[in]  Config       RX 側設定（Profile 05）。NULL 禁止。
  * \param[in]  Buffer       検証対象の I-PDU バイト列。NULL 禁止。
@@ -302,7 +351,8 @@ Std_ReturnType E2EXf_InverseTransform(const E2EXf_RxConfigType* Config, const ui
  *                                      2026-09 追加、以前は E_NOT_OK と区別
  *                                      していなかった）。
  *
- * \AUTOSARReq     {SWS_E2EXf_00152, SWS_E2EXf_00153, SWS_E2EXf_00009}
+ * \AUTOSARReq     {SWS_E2EXf_00152, SWS_E2EXf_00153, SWS_E2EXf_00009,
+ *                  SWS_E2EXf_00028, SWS_E2EXf_00029}
  * \ServiceID      {0x04}
  * \Reentrancy     {Reentrant}
  * \Synchronicity  {Synchronous}
