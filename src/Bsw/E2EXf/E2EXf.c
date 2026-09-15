@@ -9,6 +9,7 @@
  *          AUTOSAR 認証済み実装ではなく、製品への適用は想定していません。
  */
 #include "E2EXf.h"
+#include "E2E.h"
 #include "Det.h"
 
 #define TAG "E2EXf"
@@ -23,6 +24,54 @@
  * 本プロジェクトの他 BSW モジュール（Com_ConfigPtr 等）と同じ
  * 「未初期化アクセスを防ぐ」方針に合わせている。 */
 static uint8 E2EXf_Initialized = 0U;
+
+/**
+ * \brief   [SWS_E2EXf_00028]/[00029] の共通部分（P01/P05 いずれからも呼ばれる、
+ *          プロファイル非依存の後処理）: `E2E_SMCheck()` を呼び、結果が
+ *          VALID/INVALID に確定したときのみ Dem へ PASSED/FAILED を報告する。
+ *
+ * \details E2EXf_InverseTransform()/E2EXf_InverseTransformP05() の同名コメント
+ *          参照。P01/P05 のプロファイル固有処理（E2E_PxxCheck()・acceptable
+ *          判定・WaitForFirstData 等）は各関数に残し、この後処理部分だけを
+ *          共通化する（両プロファイルで完全に同一のロジックのため）。
+ *
+ * \param[in]     DemEventId    報告先の Dem イベント ID。
+ * \param[in]     ProfileStatus `E2E_PxxMapStatusToSM()` が返したプロファイル
+ *                              非依存の判定結果。
+ * \param[in]     SMConfig      ステートマシン設定。NULL 禁止（呼び出し元で
+ *                              確認済みであること）。
+ * \param[in,out] SMState       ステートマシン状態。NULL 禁止（同上）。
+ */
+static void E2EXf_ReportSMVerdict(Dem_EventIdType DemEventId, E2E_PCheckStatusType ProfileStatus,
+                                   const E2E_SMConfigType* SMConfig, E2E_SMCheckStateType* SMState)
+{
+    const Std_ReturnType smRet = E2E_SMCheck(ProfileStatus, SMConfig, SMState);
+    if (smRet != E2E_E_OK)
+    {
+        /* 到達しないはずの経路（E2EXf_PBCfg_Init() が全インスタンスに対し
+         * E2E_SMCheckInit() を呼んでから使うため、E2E_E_WRONGSTATE
+         * （E2E_SMCheckInit() 未実施）は起きないはず）。E2E_SMCheck() は
+         * [SWS_E2E_00216] により DET/DEM を呼べないため、ここで代わりに
+         * 記録する。SMState は VALID にも INVALID にもならないため、以降
+         * Dem 報告は保留され続ける（フェイルセーフ側に倒れる）。 */
+        DET_LOGE(TAG, "ReportSMVerdict E: E2E_SMCheck failed ret=%u DemEvent=%u",
+                 (unsigned)smRet, (unsigned)DemEventId);
+        return;
+    }
+
+    switch (SMState->SMState)
+    {
+        case E2E_SM_VALID:
+            (void)Dem_SetEventStatus(DemEventId, DEM_EVENT_STATUS_PASSED);
+            break;
+        case E2E_SM_INVALID:
+            (void)Dem_SetEventStatus(DemEventId, DEM_EVENT_STATUS_FAILED);
+            break;
+        default:
+            /* NODATA/INIT: 判定材料が揃うまでの起動直後、Dem 報告を保留する。 */
+            break;
+    }
+}
 
 /**
  * \AUTOSARReq     {SWS_E2EXf_00035}
@@ -74,7 +123,8 @@ Std_ReturnType E2EXf_InverseTransform(const E2EXf_RxConfigType* Config, const ui
         return E_SAFETY_HARD_RUNTIMEERROR;
     }
 
-    if (Config == NULL || Config->E2EConfig == NULL || Config->CheckState == NULL || Buffer == NULL)
+    if (Config == NULL || Config->E2EConfig == NULL || Config->CheckState == NULL || Buffer == NULL
+        || Config->SMConfig == NULL || Config->SMState == NULL)
     {
         /* [SWS_E2EXf_00152] */
         Det_ReportError(E2EXF_MODULE_ID, 0U, E2EXF_API_ID_INVERSE_TRANSFORM, E2EXF_E_PARAM_POINTER);
@@ -106,20 +156,27 @@ Std_ReturnType E2EXf_InverseTransform(const E2EXf_RxConfigType* Config, const ui
     *CheckStatus = status;
 
     /* [SWS_E2E_00476] (profileBehavior=FALSE、R4.2より前の挙動) に基づき
-     * 汎用ステータスへ変換して合否を判定する。CheckReturn はここまでで
-     * E2E_E_OK であることを確認済み。FALSE 表では INITIAL→OK（初回受信は
-     * 正常な起動シーケンスであり故障ではない）、SYNC→WRONGSEQUENCE
-     * （WRONGSEQUENCE 検知後の再ロック中はまだ回復未確定として不合格の
-     * まま扱う。個々のフレームの CRC・カウンタ自体は正常範囲内だが、
-     * SyncCounterInit 回分の連続正常受信が完了するまでは「復旧候補」に
+     * 汎用ステータスへ変換して「今回のフレームが使えるか」を判定する。
+     * CheckReturn はここまでで E2E_E_OK であることを確認済み。FALSE 表では
+     * INITIAL→OK（初回受信は正常な起動シーケンスであり故障ではない）、
+     * SYNC→WRONGSEQUENCE（WRONGSEQUENCE 検知後の再ロック中はまだ回復未確定
+     * として不合格のまま扱う。個々のフレームの CRC・カウンタ自体は正常範囲内
+     * だが、SyncCounterInit 回分の連続正常受信が完了するまでは「復旧候補」に
      * すぎず、再ロック機構の本来の目的（回復確認まで安易に正常扱いしない）
-     * と整合させるため、以前は SYNC も合格扱いにしていたのを変更した）。 */
-    const uint8 acceptable = (E2E_P01MapStatusToSM(E2E_E_OK, status, 0U) == E2E_P_OK);
+     * と整合させるため、以前は SYNC も合格扱いにしていたのを変更した）。
+     * この acceptable は「今回の Buffer を呼び出し元が使ってよいか」だけを
+     * 表し、Dem への PASSED/FAILED 報告方針とは別物（下記参照）。 */
+    const E2E_PCheckStatusType profileStatus = E2E_P01MapStatusToSM(E2E_E_OK, status, 0U);
+    const uint8 acceptable = (profileStatus == E2E_P_OK);
 
     if (!acceptable)
         DET_LOGW(TAG, "InverseTransform NG DemEvent=%u st=%u", (unsigned)Config->DemEventId, (unsigned)status);
 
-    (void)Dem_SetEventStatus(Config->DemEventId, acceptable ? DEM_EVENT_STATUS_PASSED : DEM_EVENT_STATUS_FAILED);
+    /* [SWS_E2EXf_00028]/[00029]: 通信路全体の直近 WindowSize 回分の健全性を
+     * E2E_SMCheck() のステートマシンで判定し、その結果が VALID/INVALID に
+     * 確定したときのみ Dem へ報告する（E2EXf.h の関数コメント参照。共通処理は
+     * E2EXf_ReportSMVerdict() 参照）。 */
+    E2EXf_ReportSMVerdict(Config->DemEventId, profileStatus, Config->SMConfig, Config->SMState);
 
     return acceptable ? E_OK : E_NOT_OK;
 }
@@ -144,7 +201,8 @@ Std_ReturnType E2EXf_InverseTransformP05(const E2EXf_RxConfigTypeP05* Config, co
         return E_SAFETY_HARD_RUNTIMEERROR;
     }
 
-    if (Config == NULL || Config->E2EConfig == NULL || Config->CheckState == NULL || Buffer == NULL)
+    if (Config == NULL || Config->E2EConfig == NULL || Config->CheckState == NULL || Buffer == NULL
+        || Config->SMConfig == NULL || Config->SMState == NULL)
     {
         /* [SWS_E2EXf_00152] */
         Det_ReportError(E2EXF_MODULE_ID, 0U, E2EXF_API_ID_INVERSE_TRANSFORM, E2EXF_E_PARAM_POINTER);
@@ -187,12 +245,17 @@ Std_ReturnType E2EXf_InverseTransformP05(const E2EXf_RxConfigTypeP05* Config, co
 
     *CheckStatus = status;
 
-    const uint8 acceptable = (status == E2E_P05STATUS_OK) || (status == E2E_P05STATUS_OKSOMELOST);
+    /* 「今回のフレームが使えるか」の判定（acceptable）は Dem への報告方針とは
+     * 別物（E2EXf_InverseTransform() の同名コメント参照）。 */
+    const E2E_PCheckStatusType profileStatus = E2E_P05MapStatusToSM(E2E_E_OK, status);
+    const uint8 acceptable = (profileStatus == E2E_P_OK);
 
     if (!acceptable)
         DET_LOGW(TAG, "InverseTransformP05 NG DemEvent=%u st=%u", (unsigned)Config->DemEventId, (unsigned)status);
 
-    (void)Dem_SetEventStatus(Config->DemEventId, acceptable ? DEM_EVENT_STATUS_PASSED : DEM_EVENT_STATUS_FAILED);
+    /* [SWS_E2EXf_00028]/[00029]（E2EXf_InverseTransform() の同名コメント参照。
+     * 共通処理は E2EXf_ReportSMVerdict() 参照）。 */
+    E2EXf_ReportSMVerdict(Config->DemEventId, profileStatus, Config->SMConfig, Config->SMState);
 
     return acceptable ? E_OK : E_NOT_OK;
 }
