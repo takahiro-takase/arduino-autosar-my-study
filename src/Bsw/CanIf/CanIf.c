@@ -268,7 +268,8 @@ Std_ReturnType CanIf_Transmit(PduIdType TxPduId, const PduInfoType* PduInfoPtr)
  *          設定された上位層の RxIndication コールバックへ転送する。
  *          一致するエントリが存在しない場合はフレームを破棄してログを出力する。
  *          一致したエントリの設定 DLC に満たない L-PDU も上位層へ渡さず棄却する
- *          （データ長チェック、違反時は CANIF_E_INVALID_DATA_LENGTH 相当）。
+ *          （データ長チェック、違反時はランタイムエラー
+ *          CANIF_E_INVALID_DATA_LENGTH を報告する、[SWS_CANIF_00168]）。
  *
  *          上位 PDU への振り分け結果に関わらず、CanSM_RxIndication() を
  *          呼び出して「有効なフレームを受信した」ことを CanSM へ通知する
@@ -327,16 +328,24 @@ void CanIf_RxIndication(const Can_HwType* Mailbox, const PduInfoType* PduInfoPtr
         if (rxCfg->CanId != Mailbox->CanId)
             continue;
 
-        /* SWS_CANIF_00026/00168 相当: 設定 DLC に満たない L-PDU は
-         * 上位層へ渡さず棄却する。Com/CanTp 側にも独自の受信長チェックが
-         * あるが、本来この責務は CanIf 層にある。CanIf にチェックがないと、
-         * 将来 PduR に新しいルートが追加された際、上位層側でチェックを
-         * 入れ忘れるリスクを CanIf 一層で防げなくなる。 */
+        /* [SWS_CANIF_00026]: 設定 DLC に満たない L-PDU は上位層へ渡さず棄却する。
+         * Com/CanTp 側にも独自の受信長チェックがあるが、本来この責務は CanIf
+         * 層にある。CanIf にチェックがないと、将来 PduR に新しいルートが
+         * 追加された際、上位層側でチェックを入れ忘れるリスクを CanIf 一層で
+         * 防げなくなる。[SWS_CANIF_00168]: 棄却時はランタイムエラー
+         * CANIF_E_INVALID_DATA_LENGTH を報告する（2026-09 追加、以前は
+         * ログ出力のみで未報告だった）。
+         * 実仕様は本チェック自体を CanIfPrivateDataLengthCheck で全体
+         * 無効化できると規定するが（無効時は [SWS_CANIF_00830] により受信長を
+         * そのまま上位層へ渡す）、本プロジェクトはその無効化コンフィグを
+         * 持たず常時有効の簡略実装（自己spec-citation検証で確認済み）。 */
         if (PduInfoPtr->SduLength < rxCfg->Dlc)
         {
             DET_LOGW(TAG, "RX can=0x%lX length mismatch got=%u exp=%u",
                      (unsigned long)Mailbox->CanId,
                      (unsigned)PduInfoPtr->SduLength, (unsigned)rxCfg->Dlc);
+            (void)Det_ReportRuntimeError(CANIF_MODULE_ID, 0U, CANIF_API_ID_RX_INDICATION,
+                                          CANIF_E_INVALID_DATA_LENGTH);
             return;
         }
 

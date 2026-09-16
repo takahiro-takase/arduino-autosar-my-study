@@ -509,6 +509,35 @@ TEST_F(Bsw_RxChain_Test, CanMainFunctionRead_NG_NothingReceived_LeavesInitValue)
 }
 
 // ------------------------------------------------------------
+// [SWS_CANIF_00026]/[SWS_CANIF_00168]（2026-09 追加）: 設定 Dlc(kTestCanIfRxPdu
+// は 2) に満たないフレームは上位層へ渡さず棄却し、ランタイムエラー
+// CANIF_E_INVALID_DATA_LENGTH を報告する。
+// ------------------------------------------------------------
+TEST_F(Bsw_RxChain_Test, CanMainFunctionRead_NG_InsufficientDlcIsDiscardedAndReportsRuntimeError)
+{
+    /* 準備 (Arrange): 設定 Dlc(2) に満たない 1byte フレームを積む */
+    FakeCanHw_RxPendingCount = 1U;
+    FakeCanHw_RxId  = 0x100U;
+    FakeCanHw_RxDlc = 1U;
+    FakeCanHw_RxData[0] = 0x56U;
+    FakeDetHw_Reset();
+
+    /* 実行 (Act) */
+    Can_MainFunction_Read();
+
+    /* 評価 (Assert): 上位層(Com)へは渡らず InitValue のまま、かつ
+     * CANIF_E_INVALID_DATA_LENGTH がランタイムエラーとして報告される */
+    uint16_t value = 0xFFFFU;
+    uint8 ret = Com_ReceiveSignal(0U, &value);
+    EXPECT_EQ(ret, E_OK);
+    EXPECT_EQ(value, 0U);
+
+    EXPECT_EQ(FakeDetHw_LastModuleId, static_cast<uint16>(CANIF_MODULE_ID));
+    EXPECT_EQ(FakeDetHw_LastApiId, static_cast<uint8>(CANIF_API_ID_RX_INDICATION));
+    EXPECT_EQ(FakeDetHw_LastErrorId, static_cast<uint8>(CANIF_E_INVALID_DATA_LENGTH));
+}
+
+// ------------------------------------------------------------
 // CanIf_ReadRxPduData（SWS_CANIF_00194、2026-08 追加）。
 // kTestCanIfRxPdu（CanIfRxSduId=0、ReadRxPduDataEnabled=1）を流用する。
 // ------------------------------------------------------------
