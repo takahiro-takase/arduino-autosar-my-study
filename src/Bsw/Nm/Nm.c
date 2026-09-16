@@ -401,8 +401,9 @@ Std_ReturnType Nm_RepeatMessageRequest(NetworkHandleType Channel)
 /**
  * \brief   NM フレームの受信を通知する（CanIf から呼ばれる）。
  *
- * \details Network Mode 中は NM-Timeout Timer を再起動する
- *          （[SWS_CanNm_00098]）。Prepare Bus-Sleep Mode 中は Network Mode
+ * \details Network Mode 中、かつ送信能力が有効な場合は NM-Timeout Timer を
+ *          再起動する（[SWS_CanNm_00098]、2026-09 追加: 条文の "if PDU
+ *          transmission ability is enabled" を反映）。Prepare Bus-Sleep Mode 中は Network Mode
  *          （Repeat Message State）へ自動遷移する（[SWS_CanNm_00124]）。
  *          Bus-Sleep Mode 中は Nm 自身は状態遷移せず、NM_E_NET_START_IND
  *          の DET 報告に加え ComM_Nm_NetworkStartIndication() で上位層
@@ -465,9 +466,15 @@ void Nm_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
         case NM_STATE_REPEAT_MESSAGE:
         case NM_STATE_NORMAL_OPERATION:
         case NM_STATE_READY_SLEEP:
-            /* [SWS_CanNm_00098]: Network Mode 中は NM-Timeout Timer を再起動
-             * （＝他ノードがまだ通信中なら自ノードは眠れない、の核心部分）。 */
-            Nm_TimeoutTimerMs = millis();
+            /* [SWS_CanNm_00098]: Network Mode 中、かつ送信能力が有効な場合のみ
+             * NM-Timeout Timer を再起動する（＝他ノードがまだ通信中なら自ノード
+             * は眠れない、の核心部分。条文の "if PDU transmission ability is
+             * enabled" を反映、2026-09 追加）。送信無効化中
+             * （[SWS_CanNm_00174]、`Nm_MainFunction()` 参照）は
+             * `Nm_TimeoutTimerMs` の値自体がタイムアウト判定に使われないため
+             * 実害は無かったが、条文への厳密な準拠のため明示的にガードする。 */
+            if (Nm_TxEnabled)
+                Nm_TimeoutTimerMs = millis();
 
             if ((cbv & NM_CBV_BIT_REPEAT_MESSAGE_REQUEST) != 0U && Nm_State != NM_STATE_REPEAT_MESSAGE)
             {
@@ -541,7 +548,14 @@ void Nm_MainFunction(void)
             break;
 
         case NM_STATE_REPEAT_MESSAGE:
-            if ((now - Nm_TimeoutTimerMs) >= NM_TIMEOUT_MS)
+            /* [SWS_CanNm_00174]: PDU 送信能力が無効化されている間は NM-Timeout
+             * Timer を停止する（満了判定自体を行わない）。診断
+             * CommunicationControl(0x28)で送信を止めている最中に、他ノードが
+             * 存在しない/自ノードの送信も止まっているケースで
+             * NM_E_NETWORK_TIMEOUT のDET報告が周期的に空しく繰り返される
+             * 不具合の是正（2026-09）。[SWS_CanNm_00179]の「再有効化時に
+             * 再起動」は Nm_EnableCommunication() 側で行う。 */
+            if (Nm_TxEnabled && (now - Nm_TimeoutTimerMs) >= NM_TIMEOUT_MS)
             {
                 /* [SWS_CanNm_00193]/[SWS_CanNm_00101]: NM-Timeout Timer 満了時は
                  * タイマーの再起動と DET 報告のみを行う（PDU の (再)送信は
@@ -575,7 +589,8 @@ void Nm_MainFunction(void)
             break;
 
         case NM_STATE_NORMAL_OPERATION:
-            if ((now - Nm_TimeoutTimerMs) >= NM_TIMEOUT_MS)
+            /* [SWS_CanNm_00174]（上記 Repeat Message State と同じ理由）。 */
+            if (Nm_TxEnabled && (now - Nm_TimeoutTimerMs) >= NM_TIMEOUT_MS)
             {
                 /* [SWS_CanNm_00194]/[SWS_CanNm_00117]: 上記 Repeat Message State
                  * と同じ理由で、ここでは送信を行わない。 */
@@ -589,7 +604,11 @@ void Nm_MainFunction(void)
             break;
 
         case NM_STATE_READY_SLEEP:
-            if ((now - Nm_TimeoutTimerMs) >= NM_TIMEOUT_MS)
+            /* [SWS_CanNm_00174]/[SWS_CanNm_00109]: NM-Timeout Timer は Ready
+             * Sleep State でも同一のタイマーであり（[SWS_CanNm_00109]自身が
+             * "When the NM-Timeout Timer expires in the Ready Sleep..." と
+             * 明記）、送信無効化中は同様に停止する。 */
+            if (Nm_TxEnabled && (now - Nm_TimeoutTimerMs) >= NM_TIMEOUT_MS)
                 Nm_EnterPrepareBusSleep();  /* [SWS_CanNm_00109] */
             break;
     }
@@ -608,12 +627,22 @@ void Nm_MainFunction(void)
  *          ため。Nm_NetworkRequest/Release と同じ「現在の状態に関わらず常に
  *          受理する」簡略方針）。
  *
+ *          2026-09 追加: [SWS_CanNm_00174] により、送信無効化中は NM-Timeout
+ *          Timer も停止しなければならない。本関数自体はフラグ(`Nm_TxEnabled`)
+ *          を落とすだけで、実際の停止（満了判定のスキップ）は
+ *          `Nm_MainFunction()` 側の各 State で `Nm_TxEnabled` を条件に加える
+ *          形で行う（以前はこのタイマーが無効化中も動き続け、他ノードが
+ *          存在しない/自ノードの送信も止まっている状況で
+ *          `NM_E_NETWORK_TIMEOUT` の DET 報告が周期的に空しく繰り返されて
+ *          いた不具合の是正）。再有効化時の再起動（[SWS_CanNm_00179]）は
+ *          `Nm_EnableCommunication()` 側で行う。
+ *
  * \param[in]  Channel  NM チャネルハンドル（NM_MAIN_NETWORK_HANDLE 以外は拒否）。
  *
  * \retval  E_OK      要求を受理した。
  * \retval  E_NOT_OK  未初期化、または Channel が不正。
  *
- * \AUTOSARReq     {SWS_CanNm_00215, SWS_CanNm_00192}
+ * \AUTOSARReq     {SWS_CanNm_00215, SWS_CanNm_00192, SWS_CanNm_00174}
  * \ServiceID      {0x0C}
  * \Reentrancy     {Reentrant (but not for the same NM-channel)}
  * \Synchronicity  {Synchronous}
@@ -646,12 +675,16 @@ Std_ReturnType Nm_DisableCommunication(NetworkHandleType Channel)
  * \details `Nm_DisableCommunication()` で立てた抑制を解除する。ゲート省略の
  *          方針は同関数のコメントを参照。
  *
+ *          2026-09 追加: [SWS_CanNm_00179] により、再有効化時に NM-Timeout
+ *          Timer を再起動する（`Nm_DisableCommunication()` の同名コメント
+ *          参照）。
+ *
  * \param[in]  Channel  NM チャネルハンドル（NM_MAIN_NETWORK_HANDLE 以外は拒否）。
  *
  * \retval  E_OK      要求を受理した。
  * \retval  E_NOT_OK  未初期化、または Channel が不正。
  *
- * \AUTOSARReq     {SWS_CanNm_00216, SWS_CanNm_00192}
+ * \AUTOSARReq     {SWS_CanNm_00216, SWS_CanNm_00192, SWS_CanNm_00179}
  * \ServiceID      {0x0D}
  * \Reentrancy     {Reentrant (but not for the same NM-channel)}
  * \Synchronicity  {Synchronous}
@@ -672,7 +705,15 @@ Std_ReturnType Nm_EnableCommunication(NetworkHandleType Channel)
     }
 
     if (Nm_TxEnabled != 1U)
+    {
         DET_LOGI(TAG, "CommunicationControl tx=%u->1", (unsigned)Nm_TxEnabled);
+        /* [SWS_CanNm_00179]: 再有効化時に NM-Timeout Timer を再起動する。
+         * 無効化中は Nm_MainFunction() 側で満了判定自体を止めている
+         * （Nm_DisableCommunication() の Doxygen 参照）ため、ここで
+         * millis() を取り直さないと、無効化されていた間の経過時間が
+         * そのまま残り再有効化直後に見かけ上の満了が起きてしまう。 */
+        Nm_TimeoutTimerMs = millis();
+    }
     Nm_TxEnabled = 1U;
     return E_OK;
 }
