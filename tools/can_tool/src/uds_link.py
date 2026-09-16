@@ -389,9 +389,13 @@ def dtc_name(dtc: int) -> str:
 
 def send_can_frame(bus: can.BusABC, can_id: int, data: bytes) -> None:
     """任意の CAN ID で生フレームを送信する。UDS 応答を待たない。
-    data が 8 バイト未満の場合は 0x00 でパディングする。"""
-    padded = bytes(data) + b"\x00" * max(0, 8 - len(data))
-    msg = can.Message(arbitration_id=can_id, data=padded[:8], is_extended_id=False)
+    実 CAN と同じく DLC は data の実バイト数そのもの（8 バイトへの
+    自動パディングは行わない）。CanIf のデータ長チェック([SWS_CANIF_00026]/
+    [SWS_CANIF_00168])を意図的に発火させたい場合は、データ入力欄に設定 Dlc
+    未満のバイト数を入力するだけでよい（2026-09、以前は常に0x00で8バイトへ
+    パディングしており、バイト数を減らしても実際に流れる DLC が変わらなかった
+    ため、この検証ができなかった）。"""
+    msg = can.Message(arbitration_id=can_id, data=bytes(data)[:8], is_extended_id=False)
     bus.send(msg)
 
 
