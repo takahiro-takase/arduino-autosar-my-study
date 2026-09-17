@@ -2408,8 +2408,21 @@ static void Dcm_HandleRoutineRequestResults(uint16 rid)
 static void Dcm_HandleRoutineControl(const uint8* uds, uint8 udsLen)
 {
     DET_LOGT(TAG, "called");
-    if (udsLen < 4U)
+    if (udsLen != 4U)
     {
+        /* [SWS_Dcm_01140]: 0x31 は下限チェック（[SWS_Dcm_00696]）だけでなく
+         * 「overall length」の厳密なチェックが要求される。対応 RID
+         * (DCM_RID_ENGINE_HEALTH_CHECK) は routineControlOptionRecord を
+         * 定義しないため、サブ機能によらず常に SID+subFunc+RID(2byte)の
+         * 4byte固定（2026-09 是正: 以前は下限のみ判定しており、余分な末尾
+         * バイトを黙って受理していた。他SID(0x14等)と同じ是正パターン）。
+         * 本チェックは「唯一の対応RIDがoptionRecordを持たない」という
+         * 現状のコンフィグに依存した固定値である点に注意。将来 RID を
+         * 追加する際、そのRIDがoptionRecordを持つなら、この関数冒頭の
+         * 一律チェックのままでは対応できず、0x2F IoControl
+         * (Dcm_HandleIoControl() 参照)と同じ「下限チェック→セレクタ
+         * (RID)解決→case内で個別に厳密長チェック」という構成へ作り直す
+         * 必要がある（自己simplifyレビューで指摘）。 */
         Dcm_SendNegativeResponse(DCM_SID_ROUTINE_CONTROL, DCM_NRC_INCORRECT_MESSAGE_LENGTH);
         return;
     }
