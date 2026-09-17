@@ -28,18 +28,18 @@
  *          戻り値だけをピンポイントで差し替えられる
  *          （Wrap_CanIf_SetControllerMode.h 参照）。
  *
- * \note    試作中に判明した既存の挙動: `CanSM_BusOffTimerMs` は Bus-Off
- *          検出時（`CanSM_ControllerBusOff()`）に一度だけ `millis()` で
- *          セットされ、以降のリトライ試行では更新されない
- *          （`CanSM_MainFunction()` のゲート判定 `(millis() -
- *          CanSM_BusOffTimerMs) < interval` 参照）。そのため一度 L1/L2 周期を
- *          超過すると、以後は `FakeMillis_Value` を追加で進めなくても
- *          `CanSM_MainFunction()` を呼ぶたびに毎回リトライ条件を満たし続ける
- *          （本テストの2回目の `CanSM_MainFunction()` 呼び出しが
- *          `FakeMillis_Value` 追加なしで即リトライされるのはこのため）。
- *          これがリトライ間隔の意図どおりの動作か（毎周期リトライになり
- *          L1/L2 のレート制限が実質効かないのでは）は本試作のスコープ外の
- *          別問題として、ユーザーへの報告時に切り分けて伝える。
+ * \note    試作中に発見した副次的なバグ（2026-09-18、別ラウンドで是正済み）:
+ *          `CanSM_BusOffTimerMs` は Bus-Off 検出時（`CanSM_ControllerBusOff()`）
+ *          だけでなく、各リトライ試行そのものの時刻でも更新するよう修正した
+ *          （`CanSM_MainFunction()` 本体のコメント参照）。以前は検出時の1回
+ *          しか更新されず、`CanIf_SetControllerMode(CAN_CS_STARTED)` が
+ *          失敗して BUS_OFF に据え置かれた場合、以後は `CanSM_MainFunction()`
+ *          を呼ぶたびに毎回リトライ条件を満たし続けてしまい（L1/L2 の
+ *          バックオフが実質効かない）、`FakeMillis_Value` を追加で進めなくても
+ *          即リトライされてしまう不具合だった。下記
+ *          `MainFunction_OK_RecoversOnNextAttemptAfterPriorFailure` は
+ *          是正後の正しい挙動（2回目の試行にも L1 周期の待機が必要）を
+ *          検証するよう更新済み。
  */
 #include <gtest/gtest.h>
 
@@ -171,8 +171,32 @@ TEST_F(Bsw_CanSM_BusOffRecovery_Test, MainFunction_NG_RecoveryAttemptFails_Stays
 }
 
 // ------------------------------------------------------------
-// 正常系: 失敗した次の周期で CanIf_SetControllerMode(STARTED) が成功すれば
-// FULL_COM へ正しく回復する（上のテストと地続きの回復シーケンス）。
+// 2026-09 是正の本題: 失敗した試行の直後（L1 周期を空けずに）呼んでも
+// 再試行しない（バックオフ周期を正しく守る）。
+// ------------------------------------------------------------
+TEST_F(Bsw_CanSM_BusOffRecovery_Test, MainFunction_OK_DoesNotRetryImmediatelyAfterFailedAttempt)
+{
+    /* 準備 (Arrange): 1 回目は失敗させ、BUS_OFF のまま据え置かれた状態にする */
+    ArrangeBusOffPastL1Interval();
+    WrapCanIfSetControllerMode_ForceFail = 1U;
+    CanSM_MainFunction();
+    ASSERT_EQ(Can_Test_GetControllerState(), CAN_CS_STOPPED);
+    ASSERT_EQ(WrapCanIfSetControllerMode_CallCount, 1U);
+    WrapCanIfSetControllerMode_ForceFail = 0U;  // 以降はパススルー（実体成功）
+
+    /* 実行 (Act): FakeMillis_Value を進めずに（＝L1 周期未経過のまま）
+     * 呼ぶ。是正前はここで即座に2回目の試行が発生していた
+     * （ファイル冒頭コメント参照）。 */
+    CanSM_MainFunction();
+
+    /* 評価 (Assert): 再試行は発生せず（呼び出し回数据え置き）、BUS_OFF のまま */
+    EXPECT_EQ(WrapCanIfSetControllerMode_CallCount, 1U);
+    EXPECT_EQ(Can_Test_GetControllerState(), CAN_CS_STOPPED);
+}
+
+// ------------------------------------------------------------
+// 正常系: L1 周期を空けて次の試行で CanIf_SetControllerMode(STARTED) が
+// 成功すれば FULL_COM へ正しく回復する（上のテストと地続きの回復シーケンス）。
 // ------------------------------------------------------------
 TEST_F(Bsw_CanSM_BusOffRecovery_Test, MainFunction_OK_RecoversOnNextAttemptAfterPriorFailure)
 {
@@ -183,8 +207,9 @@ TEST_F(Bsw_CanSM_BusOffRecovery_Test, MainFunction_OK_RecoversOnNextAttemptAfter
     ASSERT_EQ(Can_Test_GetControllerState(), CAN_CS_STOPPED);
     WrapCanIfSetControllerMode_ForceFail = 0U;  // 以降はパススルー（実体成功）
 
-    /* 実行 (Act): FakeMillis_Value を追加で進めなくても、タイマ未更新のため
-     * 次周期のリトライ条件は既に満たされている（ファイル冒頭コメント参照）。 */
+    /* 実行 (Act): 是正後は失敗した試行の時刻が基準点として更新されるため、
+     * 次の試行にも改めて L1 周期分の経過が必要。 */
+    FakeMillis_Value += static_cast<unsigned long>(CANSM_BUSOFF_RECOVERY_L1_MS) + 1UL;
     CanSM_MainFunction();
 
     /* 評価 (Assert): FULL_COM へ回復し、Dem へ PASSED を報告する */

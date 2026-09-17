@@ -652,6 +652,10 @@ void CanSM_RxIndication(uint8 ControllerId)
  *          再起動後に再度 Bus-Off が発生すると CanSM_ControllerBusOff() が
  *          呼ばれ、試行回数がインクリメントされる（リトライ回数は次回の
  *          CanSM_RequestComMode(FULL_COM) までリセットされない）。
+ *          各リトライ試行そのものの時刻を基準点として毎回更新するため、
+ *          `CanIf_SetControllerMode(CAN_CS_STARTED)` が失敗して BUS_OFF に
+ *          据え置かれた場合でも、次の試行は L1/L2 周期を空けてから行われる
+ *          （2026-09 是正、下記本体コメント参照）。
  *
  *          L1/L2 バックオフ（SWS_CanSM_00514/00515 準拠）:
  *            試行回数 <= CANSM_BUSOFF_L1_TO_L2_COUNT の間は
@@ -707,8 +711,24 @@ void CanSM_MainFunction(void)
     if ((millis() - CanSM_BusOffTimerMs) < interval)
         return;
 
-    /* L1/L2 周期経過: 回復試行 */
+    /* L1/L2 周期経過: 回復試行。この試行自体の時刻を基準点として更新する
+     * （2026-09 是正: 以前は本行が無く、CanSM_BusOffTimerMs が
+     * CanSM_ControllerBusOff() 検出時の1回しか更新されなかった。
+     * 下記 CanIf_SetControllerMode() が失敗した場合に return するだけで
+     * 基準点を更新していなかったため、失敗後は次回以降の
+     * CanSM_MainFunction() 呼び出しのたびに毎回リトライ条件を満たし続け、
+     * L1/L2 バックオフのレート制限が実質効かなくなっていた
+     * （native_chain_wrap 試作テストで偶然発見）。失敗・成功のいずれでも
+     * 「この時点で1回試行した」という事実は変わらないため、成否判定より
+     * 前でまとめて更新する。
+     * 仕様（[SWS_CanSM_00514]/[00515]）の基準点は厳密には「直近の確定
+     * Bus-Off発生時刻(T_BUS_OFF)」であり「リトライ試行を行った瞬間」とは
+     * 概念上異なるが、本プロジェクトは単一コントローラ・同期的な
+     * CanIf_SetControllerMode() 呼び出しのみのため、試行失敗は実質即座の
+     * 再Bus-Off相当とみなせ、両者は事実上一致する。自己spec-citation検証で
+     * 確認済みの意図的な近似）。 */
     CanSM_BusOffRetries++;
+    CanSM_BusOffTimerMs = millis();
 
     if (CanSM_BusOffRetries == (CANSM_BUSOFF_L1_TO_L2_COUNT + 1U))
     {

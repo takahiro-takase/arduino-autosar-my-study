@@ -38,6 +38,24 @@
  *          I-PDU を組み立て、PduR_SecOCTransmit() で CanIf まで送り届ける
  *          （[SWS_SecOC_00060]〜[SWS_SecOC_00062]）。
  *
+ *          新鮮性値（Freshness Value）の生成・検証について（意図的な簡略化、
+ *          2026-09 サーベイで検討・見送り確定）: 実仕様は
+ *          `SecOCQueryFreshnessValue`（CFUNC/RTE）に応じて、SecOC が
+ *          `SecOC_GetTxFreshness()`/`SecOC_GetRxFreshness()`（またはRTE経由の
+ *          `FreshnessManagement_GetTxFreshness()`等）という外部コールアウト
+ *          関数を必ず呼び出す構造を規定する（[SWS_SecOC_00221]〜[00224]）。
+ *          さらに、そのコールアウトが E_BUSY を返した場合の認証ビルド/検証
+ *          試行カウンタによるリトライ機構（[SWS_SecOC_00225]〜[00237]）と、
+ *          送信成功を通知する `SecOC_SPduTxConfirmation()`（[SWS_SecOC_00232]/
+ *          [00233]）まで一式で構成される。本実装はこの外部コールアウト境界
+ *          を設けず、`SecOC_RxIndication()`/`SecOC_MainFunctionTx()` 内で
+ *          `SecOC_LastFreshness[]`/`SecOC_TxFreshness[]` という単調増加
+ *          カウンタを直接参照・更新する（完全同期処理のため E_BUSY が原理的
+ *          に発生しない設計であり、上記リトライ機構自体が本質的に不要）。
+ *          この関数境界の欠如自体は仕様乖離だが、上記一式をフル実装するのは
+ *          本プロジェクトの規模に対して過大と判断し、意図的な簡略化として
+ *          維持することとした。
+ *
  * \copyright  Copyright (c) 2025 T_T
  * \license    MIT License - 詳細は LICENSE ファイルを参照。
  *
