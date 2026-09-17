@@ -145,6 +145,16 @@ typedef struct
                                          *   CRC はこの直後
                                          *   (NvMNvBlockBaseNumberMirror + NvMNvBlockLength)
                                          *   に保存する。Redundant=0 では未使用。       */
+    uint8       UseCrcCompMechanism;   /**< AUTOSAR NvMBlockUseCRCCompMechanism 相当
+                                         *   （ECUC_NvM_00556、既定 false = 0）。
+                                         *   1 の場合のみ、書き込み対象データの CRC が
+                                         *   直近の read/write ジョブと一致するとき
+                                         *   物理書き込みをスキップする
+                                         *   （[SWS_NvM_00852]、NvM_WriteBlock() 参照。
+                                         *   2026-09 追加。以前はこのフラグ自体が無く、
+                                         *   全非冗長ブロックに無条件適用していた
+                                         *   ——本来オプトインの機能を強制常時有効化
+                                         *   していた仕様乖離、の是正）。               */
 } NvM_BlockDescriptorType;
 
 /**
