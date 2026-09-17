@@ -40,9 +40,12 @@ typedef uint8 FiM_FunctionIdType;
 /**
  * \brief   FiM モジュールを初期化する。
  *
- * \details 全 FID の許可状態を「許可」で初期化する
- *          (Dem の復元状態を反映するのは最初の FiM_MainFunction() まで待つ)。
- *          EcuM_Init() から、Dem_Init() の後に呼び出すこと。
+ * \details 全 FID の許可状態を、Dem の現在のイベントステータスから直接評価
+ *          して初期化する（[SWS_Fim_00102]/[SWS_Fim_00104]。2026-09 是正、
+ *          以前は無条件で「許可」初期化しておりDem復元状態の反映が最初の
+ *          FiM_MainFunction() 呼び出しまで遅延していた）。
+ *          EcuM_Init() から、Dem_Init() の後に呼び出すこと
+ *          （Dem 側の状態が確定済みである必要があるため）。
  *
  * \param[in]  ConfigPtr  ポストビルドコンフィグへのポインタ。NULL 禁止。
  *

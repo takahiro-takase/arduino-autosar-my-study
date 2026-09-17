@@ -41,11 +41,40 @@ static uint8 FiM_Permitted[FIM_FUNCTION_COUNT];
 static uint8 FiM_Available[FIM_FUNCTION_COUNT];
 
 /**
+ * \brief   単一 FID の許可状態を Dem の現在のイベントステータスから評価する。
+ *
+ * \details FiM_Init() と FiM_MainFunction() の共通ロジック（2026-09 追加、
+ *          自己/simplify 指摘: 両者が同一の判定式を重複して持っていたため
+ *          抽出）。InhibitStatusMask のいずれかのビットが立っていれば抑止
+ *          (0)、立っていなければ許可 (1) を返す。
+ */
+static uint8 FiM_EvaluatePermission(const FiM_FunctionCfgType* fn)
+{
+    Dem_UdsStatusByteType status = 0U;
+    (void)Dem_GetEventUdsStatus(fn->EventId, &status);
+    return ((status & fn->InhibitStatusMask) != 0U) ? 0U : 1U;
+}
+
+/**
  * \brief   FiM モジュールを初期化する。
  *
- * \details 全 FID を「許可」で初期化する。実際の Dem 状態の反映は
- *          最初の FiM_MainFunction() 呼び出しまで行われない
- *          (起動直後の一瞬だけ、確定済み DTC があっても許可状態になる学習用簡略化)。
+ * \details 全 FID の許可状態を、Dem の現在のイベントステータス
+ *          （NvM 復元済みの、前回起動までの確定 DTC を含む）から直接評価して
+ *          初期化する（[SWS_Fim_00102]/[SWS_Fim_00104]、2026-09 是正）。
+ *
+ *          実仕様は「FiM_Init() → Dem_Init() → (Dem_Init() 内部から)
+ *          FiM_DemInit() が Dem_GetMonitorStatus() を全 FID についてループし
+ *          最終的な許可状態を確定する」という3段階の初期化シーケンスを規定
+ *          するが、本プロジェクトの起動順序は EcuM.c で
+ *          「Dem_Init() → FiM_Init()」と逆（Dem 側が先に確定済み）のため、
+ *          FiM_DemInit() 相当の別関数を新設せず、FiM_Init() 自身が
+ *          （FiM_MainFunction() と同じ）Dem 参照ロジックをその場で使うことで
+ *          等価な結果を得ている。
+ *
+ *          以前は全 FID を無条件で「許可」初期化しており、起動直後から
+ *          最初の FiM_MainFunction() 呼び出しまでの間、既に確定済みの DTC が
+ *          あっても誤って許可扱いになる乖離があった（本来 FiM_Init() 完了
+ *          時点で正しい許可状態が確定しているべき、[SWS_Fim_00104]違反）。
  *
  * \ServiceID      {0x00}
  * \Reentrancy     {Non Reentrant}
@@ -65,8 +94,17 @@ void FiM_Init(const FiM_ConfigType* ConfigPtr)
 
     for (uint8 i = 0U; i < ConfigPtr->FunctionCount; i++)
     {
-        FiM_Permitted[i] = 1U;
-        FiM_Available[i] = 1U;
+        const FiM_FunctionCfgType* fn = &ConfigPtr->Functions[i];
+        const uint8 permitted = FiM_EvaluatePermission(fn);
+
+        FiM_Permitted[fn->FunctionId] = permitted;
+        FiM_Available[fn->FunctionId] = 1U;
+
+        if (permitted == 0U)
+        {
+            DET_LOGW(TAG, "FID%u inhibited at init (ev=%u)",
+                     (unsigned)fn->FunctionId, (unsigned)fn->EventId);
+        }
     }
 
     DET_LOGI(TAG, "Init ok functions=%u", (unsigned)ConfigPtr->FunctionCount);
@@ -88,9 +126,7 @@ void FiM_MainFunction(void)
     for (uint8 i = 0U; i < FiM_Cfg->FunctionCount; i++)
     {
         const FiM_FunctionCfgType* fn = &FiM_Cfg->Functions[i];
-        Dem_UdsStatusByteType status = 0U;
-        (void)Dem_GetEventUdsStatus(fn->EventId, &status);
-        const uint8 newPermitted  = ((status & fn->InhibitStatusMask) != 0U) ? 0U : 1U;
+        const uint8 newPermitted = FiM_EvaluatePermission(fn);
 
         if (newPermitted != FiM_Permitted[fn->FunctionId])
         {
@@ -98,8 +134,8 @@ void FiM_MainFunction(void)
 
             if (newPermitted == 0U)
             {
-                DET_LOGW(TAG, "FID%u inhibited (ev=%u status=0x%02X)",
-                         (unsigned)fn->FunctionId, (unsigned)fn->EventId, (unsigned)status);
+                DET_LOGW(TAG, "FID%u inhibited (ev=%u)",
+                         (unsigned)fn->FunctionId, (unsigned)fn->EventId);
             }
             else
             {
