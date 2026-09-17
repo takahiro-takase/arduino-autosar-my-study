@@ -82,26 +82,39 @@ static const uint8 NvM_Default_DemStatus[NVM_BLOCK_DEM_STATUS_LENGTH] =
  * ----------------------------------------------------------------------- */
 static const NvM_BlockDescriptorType NvM_BlockTable[NVM_BLOCK_COUNT] =
 {
-    /* NVM_BLOCK_ID_DEM_MAGIC */
+    /* NVM_BLOCK_ID_DEM_MAGIC
+     * UseCrcCompMechanism=1: 内容が変化しない起動が大半のため、CRC一致時は
+     * 物理書き込みをスキップしEEPROM書き込み耐久を節約する
+     * （[SWS_NvM_00852]、2026-09 追加。NvM.h の UseCrcCompMechanism 宣言
+     * コメント参照。以下 STATUS/AGING も同じ理由）。 */
     {
         NVM_BLOCK_DEM_MAGIC_EEPROM_ADDR,   /* NvMNvBlockBaseNumber */
         NVM_BLOCK_DEM_MAGIC_LENGTH,        /* NvMNvBlockLength     */
         NvM_Ram_DemMagic,                  /* RamBlockDataAddress  */
-        &NvM_Default_DemMagic              /* RomBlockDataAddress  */
+        &NvM_Default_DemMagic,             /* RomBlockDataAddress  */
+        0U,                                /* Redundant: 非冗長     */
+        0U,                                /* NvMNvBlockBaseNumberMirror: 非冗長のため未使用 */
+        1U                                 /* UseCrcCompMechanism  */
     },
     /* NVM_BLOCK_ID_DEM_STATUS */
     {
         NVM_BLOCK_DEM_STATUS_EEPROM_ADDR,  /* NvMNvBlockBaseNumber */
         NVM_BLOCK_DEM_STATUS_LENGTH,       /* NvMNvBlockLength     */
         NvM_Ram_DemStatus,                 /* RamBlockDataAddress  */
-        NvM_Default_DemStatus              /* RomBlockDataAddress  */
+        NvM_Default_DemStatus,             /* RomBlockDataAddress  */
+        0U,                                /* Redundant: 非冗長     */
+        0U,                                /* NvMNvBlockBaseNumberMirror: 非冗長のため未使用 */
+        1U                                 /* UseCrcCompMechanism  */
     },
     /* NVM_BLOCK_ID_DEM_AGING */
     {
         NVM_BLOCK_DEM_AGING_EEPROM_ADDR,   /* NvMNvBlockBaseNumber */
         NVM_BLOCK_DEM_AGING_LENGTH,        /* NvMNvBlockLength     */
         NvM_Ram_DemAging,                  /* RamBlockDataAddress  */
-        NULL                               /* RomBlockDataAddress: 未設定→全0で代替 */
+        NULL,                              /* RomBlockDataAddress: 未設定→全0で代替 */
+        0U,                                /* Redundant: 非冗長     */
+        0U,                                /* NvMNvBlockBaseNumberMirror: 非冗長のため未使用 */
+        1U                                 /* UseCrcCompMechanism  */
     },
     /* NVM_BLOCK_ID_DEM_EXTENDED — 冗長ブロック（2 面化）。
      * UDS SID 0x19/06 で読み出せる車両生涯の故障確定回数を保持するため、
@@ -113,7 +126,10 @@ static const NvM_BlockDescriptorType NvM_BlockTable[NVM_BLOCK_COUNT] =
         NvM_Ram_DemExtended,                 /* RamBlockDataAddress  */
         NULL,                                /* RomBlockDataAddress: 未設定→全0で代替 */
         1U,                                  /* Redundant: 冗長ブロック */
-        NVM_BLOCK_DEM_EXTENDED_MIRROR_EEPROM_ADDR /* NvMNvBlockBaseNumberMirror */
+        NVM_BLOCK_DEM_EXTENDED_MIRROR_EEPROM_ADDR, /* NvMNvBlockBaseNumberMirror */
+        0U                                   /* UseCrcCompMechanism: N/A (Redundant=1のため
+                                                * NvM_WriteBlock() のスキップ条件が
+                                                * Redundant==0U で対象外にする) */
     }
 };
 

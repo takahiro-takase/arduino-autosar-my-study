@@ -710,8 +710,10 @@ Std_ReturnType NvM_ReadBlock(NvM_BlockIdType BlockId, void* NvM_DstPtr)
  * \details RAM ミラーの更新は同期的で即座に反映される。実際の EEPROM 書き込みは
  *          NvM_MainFunction() と MemIf_MainFunction() が非同期に行うため、
  *          ここではブロックしない（詳細はファイル冒頭のコメント参照）。
- *          内容が直近の read/write ジョブと同一(CRC一致)の場合は物理書き込み
- *          をスキップする（[SWS_NvM_00852]、NvM.h 参照）。
+ *          `NvM_BlockDescriptorType.UseCrcCompMechanism` が有効なブロックに
+ *          限り、内容が直近の read/write ジョブと同一(CRC一致)の場合は物理
+ *          書き込みをスキップする（[SWS_NvM_00852]、既定 false のオプトイン
+ *          機能。NvM.h 参照）。
  *
  *          NvM_SrcPtr が NULL の場合、恒久 RAM ブロック（本プロジェクトの
  *          全ブロックが該当）を使うという意味でありエラーではない
@@ -776,18 +778,22 @@ Std_ReturnType NvM_WriteBlock(NvM_BlockIdType BlockId, const void* NvM_SrcPtr)
         memcpy(blk->RamBlockDataAddress, NvM_SrcPtr, blk->NvMNvBlockLength);
     }
 
-    if (blk->Redundant == 0U
+    if (blk->UseCrcCompMechanism != 0U
+        && blk->Redundant == 0U
         && NvM_BlockPending[BlockId] == 0U
         && NvM_CalcCrc8((const uint8*)blk->RamBlockDataAddress, blk->NvMNvBlockLength) == NvM_LastCrc[BlockId])
     {
-        /* [SWS_NvM_00852]: 書き込むデータのCRCが直近のread/writeジョブで
-         * 確定したCRCと一致する場合、物理書き込みをスキップしジョブを
-         * 即座に成功扱いとする（2026-09 追加）。「冗長性喪失が検出された
-         * ブロックには適用しない」という仕様の除外規定は、本実装では
-         * 単純に全冗長ブロック(Redundant=1)を対象外とすることで安全側に
-         * 倒す（冗長ブロックはプライマリ/ミラー個別の破損検出状態を
-         * 追跡しておらず、片面のみ破損しているケースを見分けられない
-         * ため）。
+        /* [SWS_NvM_00852]: NvMBlockUseCRCCompMechanism が有効なブロックに限り、
+         * 書き込むデータのCRCが直近のread/writeジョブで確定したCRCと一致する
+         * 場合、物理書き込みをスキップしジョブを即座に成功扱いとする
+         * （2026-09 追加。以前は本条件のオプトインフラグ(blk->UseCrcCompMechanism)
+         * 自体が存在せず全非冗長ブロックへ無条件適用していたが、仕様は既定
+         * falseのオプトイン機能と規定しているため是正。有効化する側は
+         * NvM_PBCfg.c 参照）。「冗長性喪失が検出されたブロックには適用しない」
+         * という仕様の除外規定は、本実装では単純に全冗長ブロック(Redundant=1)
+         * を対象外とすることで安全側に倒す（冗長ブロックはプライマリ/ミラー
+         * 個別の破損検出状態を追跡しておらず、片面のみ破損しているケースを
+         * 見分けられないため）。
          * `NvM_BlockPending[BlockId] == 0U` の確認は必須（/code-review で
          * 発見）: 既に非同期書き込みジョブが進行中の場合、そのジョブの
          * 内容は「今回のNvM_SrcPtr」とは限らない（例: A→Bへの書き込みが
@@ -800,7 +806,14 @@ Std_ReturnType NvM_WriteBlock(NvM_BlockIdType BlockId, const void* NvM_SrcPtr)
          * （[SWS_NvM_00852]本文が要求する比較方法自体がCRC比較であり、
          * 衝突確率(1/256)を許容する設計。/code-review で指摘されたが、
          * 仕様がバイト完全一致ではなくCRC一致を明示的に要求しているため
-         * 意図した挙動として維持する）。 */
+         * 意図した挙動として維持する）。
+         * [SWS_NvM_00851]: 本メカニズムは NvMCalcRamBlockCrc/NvMBlockUseCrc
+         * が有効なブロックにのみ提供するとされるが、本プロジェクトはブロック
+         * 単位で CRC 使用を無効化する仕組み自体を持たず、全ブロックについて
+         * 常に RAM ブロック CRC を計算し EEPROM 側と比較する設計
+         * （NvM_CalcCrc8() 呼び出し箇所参照）。よって両パラメータは全ブロック
+         * で事実上常時 true 相当であり、追加のゲート条件は不要（自己仕様
+         * 引用裏取りで確認済み）。 */
         NvM_BlockResult[BlockId] = NVM_REQ_OK;
         DET_LOGI(TAG, "block=%u write skipped (CRC unchanged)", (unsigned)BlockId);
         return E_OK;
