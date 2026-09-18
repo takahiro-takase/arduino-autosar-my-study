@@ -85,6 +85,16 @@ typedef struct E2EXf_ConfigType_Tag E2EXf_ConfigType;
  *  区分であり対象外、従来通り E_NOT_OK のまま。 */
 #define E_SAFETY_HARD_RUNTIMEERROR ((Std_ReturnType)0xFFU)
 
+/** [SWS_E2EXf_00027]（2026-09 追加）: E2E_SMCheck() が E2E_E_OK 以外を返した
+ *  場合（[SWS_E2EXf_00027]/[SWS_E2E_00216]参照、E2EXf_ReportSMVerdict()の
+ *  Doxygen参照）の戻り値。「安全性の判定（SMState）は確定できなかったが、
+ *  保護されていない生データ自体は使用可能」ことを表す（0x77、実測値）。
+ *  ニブルパック化された戻り値との組み合わせ規定である[SWS_E2EXf_00027]の
+ *  他の部分（正常時の上位/下位ニブル分割）は意図的に未実装のままだが、
+ *  本値単体は既存の `Std_ReturnType` 3値契約に単純追加できるため対応した
+ *  （E2EXf_InverseTransform()/InverseTransformP05() の同名 `\note` 参照）。 */
+#define E_SAFETY_SOFT_RUNTIMEERROR ((Std_ReturnType)0x77U)
+
 /** ApiId（値は SWS 8.x 章の「Service ID[hex]」記載を実測して確認済み） */
 #define E2EXF_API_ID_INIT               0x01U
 #define E2EXF_API_ID_DEINIT             0x02U
@@ -258,15 +268,19 @@ void E2EXf_DeInit(void);
  * \note    [SWS_E2EXf_00027] は本関数の戻り値を「上位ニブル=SMState、
  *          下位ニブル=プロファイル非依存チェック状態」のパック値にすべきと
  *          規定するが、本プロジェクトは意図的にこれを実装せず、従来通り
- *          単純な `Std_ReturnType`（E_OK/E_NOT_OK/E_SAFETY_HARD_RUNTIMEERROR
- *          の3値）のまま維持している（`\AUTOSARReq` タグにも00027を含めて
- *          いない）。理由: 呼び出し元（`Rte.c`）は元々この3値の契約だけを
- *          前提に書かれており、ニブルパック化は本プロジェクトが採用しない
- *          RTE 生成コード側の型（`Rte_IStatusType` 等）と組み合わせて初めて
- *          意味を持つ規定のため。SMState 自体は本関数内で Dem 報告の
- *          判定にのみ使い呼び出し元には渡らないが、万一 E2E_SMCheck() が
- *          失敗しても Dem 報告が保留されるだけ（PASSED に誤認されない）の
- *          安全側の簡略化であるため許容している。
+ *          単純な `Std_ReturnType` のまま維持している（`\AUTOSARReq` タグにも
+ *          00027の当該部分は含めていない）。理由: 呼び出し元（`Rte.c`）は
+ *          元々この単純な契約だけを前提に書かれており、ニブルパック化は
+ *          本プロジェクトが採用しない RTE 生成コード側の型
+ *          （`Rte_IStatusType` 等）と組み合わせて初めて意味を持つ規定の
+ *          ため（将来 RTE 側にこの生成コード相当の仕組みを実装する機会が
+ *          あれば、その時点で意味を持つようになる）。
+ *
+ *          一方、[SWS_E2EXf_00027]の「E2E_SMCheck() が E2E_E_OK 以外を
+ *          返した場合、戻り値は E_SAFETY_SOFT_RUNTIMEERROR であるべき」
+ *          という部分は、ニブルパック化と無関係な単一の具体的な値であり
+ *          既存の `Std_ReturnType` 契約に単純追加できるため対応した
+ *          （2026-09 追加、`E2EXf_ReportSMVerdict()` の戻り値参照）。
  *
  * \param[in]  Config       RX 側設定。NULL 禁止。
  * \param[in]  Buffer       検証対象の I-PDU バイト列。NULL 禁止。
@@ -289,9 +303,14 @@ void E2EXf_DeInit(void);
  *                                      （[SWS_E2EXf_00152]/[00153]、開発エラー。
  *                                      2026-09 追加、以前は E_NOT_OK と区別
  *                                      していなかった）。
+ * \retval  E_SAFETY_SOFT_RUNTIMEERROR  E2E_SMCheck() が失敗した（到達しない
+ *                                      はずの防御的な経路。[SWS_E2EXf_00027]、
+ *                                      2026-09 追加）。CheckStatus 自体は
+ *                                      有効（生データの合否判定は行えている）
+ *                                      が、Dem への健全性報告は保留される。
  *
  * \AUTOSARReq     {SWS_E2EXf_00152, SWS_E2EXf_00153, SWS_E2EXf_00009,
- *                  SWS_E2EXf_00028, SWS_E2EXf_00029}
+ *                  SWS_E2EXf_00027, SWS_E2EXf_00028, SWS_E2EXf_00029}
  * \ServiceID      {0x04}
  * \Reentrancy     {Reentrant}
  * \Synchronicity  {Synchronous}
@@ -327,7 +346,8 @@ Std_ReturnType E2EXf_InverseTransform(const E2EXf_RxConfigType* Config, const ui
  *          `E2E_SM_INIT` の間は Dem 報告を保留する。
  *
  * \note    [SWS_E2EXf_00027] の戻り値ニブルパック化を意図的に実装していない
- *          理由は E2EXf_InverseTransform() の同名の `\note` を参照。
+ *          理由、および E_SAFETY_SOFT_RUNTIMEERROR 部分のみ対応した経緯は
+ *          E2EXf_InverseTransform() の同名の `\note` を参照。
  *
  * \param[in]  Config       RX 側設定（Profile 05）。NULL 禁止。
  * \param[in]  Buffer       検証対象の I-PDU バイト列。NULL 禁止。
@@ -350,9 +370,14 @@ Std_ReturnType E2EXf_InverseTransform(const E2EXf_RxConfigType* Config, const ui
  *                                      （[SWS_E2EXf_00152]/[00153]、開発エラー。
  *                                      2026-09 追加、以前は E_NOT_OK と区別
  *                                      していなかった）。
+ * \retval  E_SAFETY_SOFT_RUNTIMEERROR  E2E_SMCheck() が失敗した（到達しない
+ *                                      はずの防御的な経路。[SWS_E2EXf_00027]、
+ *                                      2026-09 追加）。CheckStatus 自体は
+ *                                      有効（生データの合否判定は行えている）
+ *                                      が、Dem への健全性報告は保留される。
  *
  * \AUTOSARReq     {SWS_E2EXf_00152, SWS_E2EXf_00153, SWS_E2EXf_00009,
- *                  SWS_E2EXf_00028, SWS_E2EXf_00029}
+ *                  SWS_E2EXf_00027, SWS_E2EXf_00028, SWS_E2EXf_00029}
  * \ServiceID      {0x04}
  * \Reentrancy     {Reentrant}
  * \Synchronicity  {Synchronous}
