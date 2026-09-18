@@ -115,10 +115,12 @@ TEST_F(Bsw_E2EXf_SMCheckFailure_Test, InverseTransformP05_OK_ValidFrameReportsPa
 
 // ------------------------------------------------------------
 // 2026-09 新規カバー: E2E_SMCheck() が E2E_E_OK 以外を返した場合、
-// 「今回のフレームが使えるか」の判定（戻り値/CheckStatus）には影響せず、
-// Dem への PASSED/FAILED 報告だけが保留される（フェイルセーフ側）。
+// [SWS_E2EXf_00027]により戻り値は E_SAFETY_SOFT_RUNTIMEERROR になる。
+// CheckStatus 自体（生データの合否判定）は SMCheck 呼び出し前に確定済みの
+// ため書き換わらず、Dem への PASSED/FAILED 報告だけが保留される
+// （フェイルセーフ側）。
 // ------------------------------------------------------------
-TEST_F(Bsw_E2EXf_SMCheckFailure_Test, InverseTransformP05_NG_SMCheckFailureSkipsDemReportButStillAcceptsFrame)
+TEST_F(Bsw_E2EXf_SMCheckFailure_Test, InverseTransformP05_NG_SMCheckFailureReturnsSafetySoftRuntimeErrorAndSkipsDemReport)
 {
     /* 準備 (Arrange): CRC/Counter は正しいフレームを用意した上で、
      * E2E_SMCheck() だけを強制失敗させる。 */
@@ -135,12 +137,14 @@ TEST_F(Bsw_E2EXf_SMCheckFailure_Test, InverseTransformP05_NG_SMCheckFailureSkips
     const Std_ReturnType ret =
         E2EXf_InverseTransformP05(&E2EXf_EngineInfoRxCfg, buf, 7U, &checkStatus);
 
-    /* 評価 (Assert): CRC/Counter 判定自体は E2E_SMCheck() の前に確定して
-     * いるため、戻り値・CheckStatus は正常系と変わらない
-     * （E2EXf.c 248〜250 行目「フレームが使えるかの判定は Dem 報告方針とは
-     * 別物」というコメント通り）。一方 Dem への報告はゼロ件のまま
-     * （E2EXf_ReportSMVerdict() が SMCheck 失敗を検知して return するため）。 */
-    EXPECT_EQ(ret, E_OK);
+    /* 評価 (Assert): [SWS_E2EXf_00027] 準拠で戻り値は
+     * E_SAFETY_SOFT_RUNTIMEERROR（2026-09 追加、以前は誤って通常の
+     * E_OK/E_NOT_OK を返していた）。CheckStatus は E2E_SMCheck() の前に
+     * 確定済みのため正常系と変わらない（E2EXf.c のコメント「フレームが
+     * 使えるかの判定は Dem 報告方針とは別物」参照）。Dem への報告はゼロ件の
+     * まま（E2EXf_ReportSMVerdict() が SMCheck 失敗を検知して return する
+     * ため）。 */
+    EXPECT_EQ(ret, E_SAFETY_SOFT_RUNTIMEERROR);
     EXPECT_EQ(checkStatus, E2E_P05STATUS_OK);
     EXPECT_EQ(WrapE2ESMCheck_CallCount, 1U);
     EXPECT_EQ(FakeDem_SetEventStatusCount, 0U);

@@ -41,9 +41,21 @@ static uint8 E2EXf_Initialized = 0U;
  * \param[in]     SMConfig      ステートマシン設定。NULL 禁止（呼び出し元で
  *                              確認済みであること）。
  * \param[in,out] SMState       ステートマシン状態。NULL 禁止（同上）。
+ *
+ * \retval  E2E_E_OK                     E2E_SMCheck() が成功した（Dem 報告は
+ *                                      SMState->SMState に応じて実施・保留の
+ *                                      いずれか）。
+ * \retval  E_SAFETY_SOFT_RUNTIMEERROR  E2E_SMCheck() が失敗した（[SWS_E2EXf_00027]、
+ *                                      呼び出し元はこの値をそのまま自身の
+ *                                      戻り値として使ってよい。2026-09 追加、
+ *                                      E2EXf.h の同名 `\note` 参照。自己
+ *                                      /simplify 指摘: 呼び出し元は生の
+ *                                      E2E_SMCheck() 戻り値を使わず常に
+ *                                      E_SAFETY_SOFT_RUNTIMEERROR へ差し替える
+ *                                      だけなので、ここで直接返す方が単純）。
  */
-static void E2EXf_ReportSMVerdict(Dem_EventIdType DemEventId, E2E_PCheckStatusType ProfileStatus,
-                                   const E2E_SMConfigType* SMConfig, E2E_SMCheckStateType* SMState)
+static Std_ReturnType E2EXf_ReportSMVerdict(Dem_EventIdType DemEventId, E2E_PCheckStatusType ProfileStatus,
+                                             const E2E_SMConfigType* SMConfig, E2E_SMCheckStateType* SMState)
 {
     const Std_ReturnType smRet = E2E_SMCheck(ProfileStatus, SMConfig, SMState);
     if (smRet != E2E_E_OK)
@@ -56,7 +68,7 @@ static void E2EXf_ReportSMVerdict(Dem_EventIdType DemEventId, E2E_PCheckStatusTy
          * Dem 報告は保留され続ける（フェイルセーフ側に倒れる）。 */
         DET_LOGE(TAG, "ReportSMVerdict E: E2E_SMCheck failed ret=%u DemEvent=%u",
                  (unsigned)smRet, (unsigned)DemEventId);
-        return;
+        return E_SAFETY_SOFT_RUNTIMEERROR;
     }
 
     switch (SMState->SMState)
@@ -71,6 +83,8 @@ static void E2EXf_ReportSMVerdict(Dem_EventIdType DemEventId, E2E_PCheckStatusTy
             /* NODATA/INIT: 判定材料が揃うまでの起動直後、Dem 報告を保留する。 */
             break;
     }
+
+    return E2E_E_OK;
 }
 
 /**
@@ -176,7 +190,15 @@ Std_ReturnType E2EXf_InverseTransform(const E2EXf_RxConfigType* Config, const ui
      * E2E_SMCheck() のステートマシンで判定し、その結果が VALID/INVALID に
      * 確定したときのみ Dem へ報告する（E2EXf.h の関数コメント参照。共通処理は
      * E2EXf_ReportSMVerdict() 参照）。 */
-    E2EXf_ReportSMVerdict(Config->DemEventId, profileStatus, Config->SMConfig, Config->SMState);
+    const Std_ReturnType smVerdict =
+        E2EXf_ReportSMVerdict(Config->DemEventId, profileStatus, Config->SMConfig, Config->SMState);
+    if (smVerdict != E2E_E_OK)
+    {
+        /* [SWS_E2EXf_00027]: E2E_SMCheck() 自体が失敗した場合の戻り値
+         * （2026-09 追加、E2EXf.h の \note 参照）。CheckStatus は既に
+         * 上で確定済み（生データの合否判定自体は行えている）ため書き換えない。 */
+        return smVerdict;
+    }
 
     return acceptable ? E_OK : E_NOT_OK;
 }
@@ -255,7 +277,13 @@ Std_ReturnType E2EXf_InverseTransformP05(const E2EXf_RxConfigTypeP05* Config, co
 
     /* [SWS_E2EXf_00028]/[00029]（E2EXf_InverseTransform() の同名コメント参照。
      * 共通処理は E2EXf_ReportSMVerdict() 参照）。 */
-    E2EXf_ReportSMVerdict(Config->DemEventId, profileStatus, Config->SMConfig, Config->SMState);
+    const Std_ReturnType smVerdict =
+        E2EXf_ReportSMVerdict(Config->DemEventId, profileStatus, Config->SMConfig, Config->SMState);
+    if (smVerdict != E2E_E_OK)
+    {
+        /* [SWS_E2EXf_00027]（E2EXf_InverseTransform() の同名コメント参照）。 */
+        return smVerdict;
+    }
 
     return acceptable ? E_OK : E_NOT_OK;
 }
