@@ -70,23 +70,18 @@
  *  CryptoKeyUpdate (0x2E, DID 0x0108) の 20 バイト（4ヘッダ+16文字キー）。 */
 #define CANTP_RX_BUFFER_SIZE      32U
 
-/** TX N-SDU バッファサイズ (FF/CF 分割用): 48 バイト
- *  Dcm_Cbk.c の DCM_TX_BUF_SIZE（3 + DEM_EVENT_COUNT*4、subFunc 0x02/0x0A の
- *  DTC一覧応答の最大長）以上でなければならない。以前は固定値 32 のままで、
- *  DEM_EVENT_COUNT=10 なら DCM_TX_BUF_SIZE=43 バイトとなり 32 バイトの
- *  バッファに収まらず、subFunc 0x0A（全DTC無条件応答、常に最大長になる）の
- *  応答が CanTp_Transmit() で "invalid len" として毎回拒否されるバグが
- *  実機ログで発覚した（Dcm_Cbk.c 側は DEM_EVENT_COUNT 変化に自動追従する
- *  よう既に修正済みだったが、このバッファは連動していなかった）。
- *  48 = FF(6バイト) + CF×6(7バイト×6) というISO-TPのフレーム境界に
- *  ちょうど一致する値で、最後のCFにパディングの無駄が出ない。43バイトへの
- *  最小限の対応（44等）ではなく、DEM_EVENT_COUNT が今後 11 に増えても
- *  （3+11*4=47 バイト）このバッファを再度触らずに済む余裕を持たせている
- *  （このバグは Dcm_TxBuf 自体の教訓の後に CanTp 側で再発したものであり、
- *  同種の再発を避けるため）。RAM使用率に対して数バイトの余裕は無視できる
- *  コストである一方、DEM_EVENT_COUNT を大きく変更する場合はこの値も
- *  再確認すること。 */
-#define CANTP_TX_BUFFER_SIZE      48U
+/** TX N-SDU バッファサイズ (FF/CF 分割用): 76 バイト
+ *  Dcm_Cbk.c の DCM_TX_BUF_SIZE（3 + DEM_EVENT_COUNT*4、subFunc 0x0A の
+ *  DTC一覧応答の最大長）以上でなければならない。この制約は Dcm_Cbk.c 側
+ *  （DCM_TX_BUF_SIZE 定義の直後）の静的アサートでビルド時に強制している。
+ *
+ *  DEM_EVENT_COUNT 増加にこの値が追従せず実機の UDS 0x19 応答が無応答に
+ *  なるバグが過去2回発生（直近: 2026-09-20、10→14 増加時。経緯は git 履歴
+ *  参照）。76 = FF(6) + CF×10(7×10) という ISO-TP フレーム境界に一致する値で、
+ *  DEM_EVENT_COUNT が今後 18 まで増えてもこの値を再確認せずに済む余裕を
+ *  持たせている。余裕を使い切ってなお増やす場合は上記の静的アサートが
+ *  ビルドを止めて教える。 */
+#define CANTP_TX_BUFFER_SIZE      76U
 
 /* -----------------------------------------------------------------------
  * フロー制御パラメータ (AUTOSAR CanTp N_USData.req の N_Ar, N_Bs, N_Cr)

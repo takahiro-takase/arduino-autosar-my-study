@@ -189,7 +189,19 @@ void WdgM_DeInit(void);
  *          本プロジェクトは単一の静的コンフィグのみ保持するため、
  *          `WDGM_MODE_DEFAULT` (0) 以外はエラーとして拒否するだけの
  *          簡略実装とする（監視対象・許容値セット自体の実際の入れ替えは
- *          行わない）。
+ *          行わない）（学習用簡略化）。この簡略化の結果、モード切替の実体で
+ *          ある `WdgIf_SetMode()` 呼び出し自体を行っておらず、それに伴う
+ *          [SWS_WdgM_00186]（監視パラメータ一式のモードごとの入れ替え）・
+ *          [SWS_WdgM_00139]/[SWS_WdgM_00142]（`WdgIf_SetMode()` 失敗時の
+ *          Global Status STOPPED 遷移・Dem `WDGM_E_SET_MODE` 拡張
+ *          プロダクションエラー報告）・[SWS_WdgM_00145]/[SWS_WdgM_00316]
+ *          （Global Status ガード）・[SWS_WdgM_00182]/[SWS_WdgM_00315]
+ *          （SE 単位の activate/deactivate）・[SWS_WdgM_00031]（OFF_MODE
+ *          禁止時の `WDGM_E_DISABLE_NOT_ALLOWED`）も未実装（詳細・調査
+ *          経緯は docs/modules/WdgM_Notes.md 参照）。`WdgM_SetMode()`
+ *          自体、本プロジェクトの本番コード（EcuM/BswM 含む）からは
+ *          一度も呼ばれておらず、複数モード対応には呼び出し元の設計も
+ *          別途必要になる。
  *
  * \param[in]  Mode  設定するモード。`WDGM_MODE_DEFAULT` のみ有効。
  * \retval  E_OK      モードを正常に設定した。

@@ -32,10 +32,14 @@ Std_ReturnType CanTp_Transmit(PduIdType TxSduId, const PduInfoType* PduInfoPtr)
     if (PduInfoPtr == NULL || PduInfoPtr->SduDataPtr == NULL)
         return E_NOT_OK;
 
-    uint8 len = (uint8)PduInfoPtr->SduLength;
-    if (len > CANTP_FAKE_TX_BUF_SIZE)
-        len = CANTP_FAKE_TX_BUF_SIZE;
+    /* 実体の CanTp_Transmit() と同じ上限チェック（CanTp.c の "invalid len"
+     * 分岐参照）。DEM_EVENT_COUNT 増加に CANTP_TX_BUFFER_SIZE が追従して
+     * いない場合、ここで E_NOT_OK になり呼び出し元テストの
+     * FakeCanTp_TransmitCount/TxLength アサートが失敗して検知できる。 */
+    if (PduInfoPtr->SduLength == 0U || PduInfoPtr->SduLength > (uint16)CANTP_FAKE_TX_BUF_SIZE)
+        return E_NOT_OK;
 
+    uint8 len = (uint8)PduInfoPtr->SduLength;
     memcpy(FakeCanTp_TxBuf, PduInfoPtr->SduDataPtr, len);
     FakeCanTp_TxLength = len;
 

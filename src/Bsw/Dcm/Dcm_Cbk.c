@@ -270,6 +270,10 @@ static uint8 Dcm_TransferChecksum;
 /** UDS 応答バッファ (PCI バイトなし; CanTp がトランスポート層を付加する) */
 static uint8 Dcm_TxBuf[DCM_TX_BUF_SIZE];
 
+/** CANTP_TX_BUFFER_SIZE 追従し忘れの再発防止（経緯は CanTp_Cfg.h 参照）。
+ *  AVR/native 両ビルドで有効な C89 互換の静的アサート（負配列サイズは違法）。 */
+typedef char Dcm_TxBuf_Must_Fit_In_CanTp_TxBuffer[(CANTP_TX_BUFFER_SIZE >= DCM_TX_BUF_SIZE) ? 1 : -1];
+
 /** DID 0x0104 (TestPattern) の格納領域。CanTp の複数フレーム要求受信を
  *  検証するための学習用データ（実際の車両データではない）。 */
 static uint8 Dcm_TestPattern[DCM_DID_TEST_PATTERN_LENGTH];
