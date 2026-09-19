@@ -21,8 +21,8 @@ extern "C" {
 #include "Dem.h"
 #include "Dem_Cfg.h"
 #include "Fake_CanTp.h"
-#include "Fake_Hal_Millis.h"
-#include "Fake_Hal_Det_Hw.h"
+#include "Fake_Millis.h"
+#include "Fake_Det_Hw.h"
 #include "Wrap_ComM.h"
 }
 

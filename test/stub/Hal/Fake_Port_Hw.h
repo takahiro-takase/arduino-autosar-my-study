@@ -1,12 +1,12 @@
 /**
- * \file    Fake_Hal_Port_Hw.h
+ * \file    Fake_Port_Hw.h
  * \brief   Port_Hw.h（Arduino pinMode 境界）のテスト用フェイク実装の宣言
  * \details Port.c のロジック（Port_RefreshPortDirection が全ピンへ設定方向を
  *          再適用すること）を検証するため、ピンごとに直近に設定された方向と
  *          呼び出し回数を記録する。
  */
-#ifndef FAKE_HAL_PORT_HW_H
-#define FAKE_HAL_PORT_HW_H
+#ifndef FAKE_PORT_HW_H
+#define FAKE_PORT_HW_H
 
 #include "Port.h"
 
@@ -26,4 +26,4 @@ Port_PinDirectionType FakePortHw_GetLastDirection(Port_PinType pin);
 }
 #endif
 
-#endif /* FAKE_HAL_PORT_HW_H */
+#endif /* FAKE_PORT_HW_H */

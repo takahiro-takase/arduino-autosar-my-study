@@ -1,5 +1,5 @@
 /**
- * \file    Fake_Hal_Can_Hw.h
+ * \file    Fake_Can_Hw.h
  * \brief   Can_Hw.h（MCP2515 境界）のテスト用フェイク実装の宣言
  * \details Can.c のロジックだけを検証したいので、実 HW（MCP2515/SPI）は使わず、
  *          呼び出し回数・引数を記録するだけのフェイクに差し替える。
@@ -7,11 +7,11 @@
  *          すべて `CAN_HW_OK`（成功）にしてある。
  *
  *          2026-09、`test_native`/`test_chain` の2envで内容が重複していた
- *          ため、`Fake_Hal_Det_Hw.h` と同じ理由で `test/stub/Hal/` へ
+ *          ため、`Fake_Det_Hw.h` と同じ理由で `test/stub/Hal/` へ
  *          集約した。
  */
-#ifndef FAKE_HAL_CAN_HW_H
-#define FAKE_HAL_CAN_HW_H
+#ifndef FAKE_CAN_HW_H
+#define FAKE_CAN_HW_H
 
 #include "Std_Types.h"
 #include "Can_Hw.h"
@@ -83,4 +83,4 @@ void FakeCanHw_Reset(void);
 }
 #endif
 
-#endif /* FAKE_HAL_CAN_HW_H */
+#endif /* FAKE_CAN_HW_H */

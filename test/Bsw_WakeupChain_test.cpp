@@ -65,12 +65,12 @@ extern "C" {
 #include "Can_Hw.h"
 #include "ComM.h"
 #include "Nm.h"
-#include "Fake_Hal_Can_Hw.h"
-#include "Fake_Hal_Millis.h"
+#include "Fake_Can_Hw.h"
+#include "Fake_Millis.h"
 #include "Fake_Bsw_EcuM.h"
 #include "Fake_Bsw_BswM.h"
 #include "Wrap_Dem.h"
-#include "Fake_Hal_Det_Hw.h"
+#include "Fake_Det_Hw.h"
 }
 
 namespace

@@ -3,7 +3,7 @@
  * \brief   Dio.c（src/Bsw/Dio/Dio.c）の Dio_FlipChannel() 単体テスト
  * \details AUTOSAR SWS_Dio_00190/00191 が規定する「読み取り→反転→書き込みし、
  *          反転後の値を返す」挙動を検証する。Dio.c 自体は実物をリンクし、
- *          実 HW 依存の Dio_Hw.cpp のみを Fake_Hal_Dio_Hw.c（チャネルごとの
+ *          実 HW 依存の Dio_Hw.cpp のみを Fake_Dio_Hw.c（チャネルごとの
  *          現在レベルを保持する簡易メモリモデル）に差し替える。
  *
  *          GoogleTest の main() は test_main.cpp に集約しているため、
@@ -13,8 +13,8 @@
 
 extern "C" {
 #include "Dio.h"
-#include "Fake_Hal_Dio_Hw.h"
-#include "Fake_Hal_Det_Hw.h"
+#include "Fake_Dio_Hw.h"
+#include "Fake_Det_Hw.h"
 }
 
 namespace

@@ -14,7 +14,7 @@
 
 extern "C" {
 #include "ComM.h"
-#include "Fake_Hal_Det_Hw.h"
+#include "Fake_Det_Hw.h"
 }
 
 class Bsw_ComM_GetRequestedComMode_Test : public ::testing::Test

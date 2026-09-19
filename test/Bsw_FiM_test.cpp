@@ -13,7 +13,7 @@
  *          も誤って許可扱いになっていた）を是正したのに合わせ、専用環境を
  *          新設した。
  *
- *          Dem.c は本物をリンクし（`test/Fake_NvM.c`で「常に初回
+ *          Dem.c は本物をリンクし（`test/stub/Bsw/NvM/Fake_NvM.c`で「常に初回
  *          起動」を決定的に固定）、実際の確定 DTC ステータス伝播をそのまま
  *          検証する。
  */
@@ -23,8 +23,8 @@ extern "C" {
 #include "FiM.h"
 #include "Dem.h"
 #include "Dem_Cfg.h"
-#include "Fake_Hal_Millis.h"
-#include "Fake_Hal_Det_Hw.h"
+#include "Fake_Millis.h"
+#include "Fake_Det_Hw.h"
 }
 
 namespace

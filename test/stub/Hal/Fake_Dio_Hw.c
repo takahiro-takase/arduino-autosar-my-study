@@ -1,9 +1,9 @@
 /**
- * \file    Fake_Hal_Dio_Hw.c
+ * \file    Fake_Dio_Hw.c
  * \brief   Dio_Hw.h のテスト用フェイク実装
- * \details Fake_Hal_Dio_Hw.h 冒頭のコメント参照。
+ * \details Fake_Dio_Hw.h 冒頭のコメント参照。
  */
-#include "Fake_Hal_Dio_Hw.h"
+#include "Fake_Dio_Hw.h"
 #include "Dio_Hw.h"
 
 static Dio_LevelType FakeDioHw_ChannelLevel[256];

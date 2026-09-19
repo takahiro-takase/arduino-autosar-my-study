@@ -37,7 +37,7 @@ extern "C" {
 #include "E2EXf.h"
 #include "E2E.h"
 #include "Wrap_Dem.h"
-#include "Fake_Hal_Det_Hw.h"
+#include "Fake_Det_Hw.h"
 }
 
 namespace

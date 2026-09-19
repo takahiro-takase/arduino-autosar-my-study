@@ -1166,7 +1166,7 @@ $env:DET_LOG_VERBOSE = "1"; pio test -e native_chain -v # TRACE ログ出力
 箇所）でテストを2つのセグメントに分け、それぞれを個別に実行可能な
 `TEST_F` ケースとしている（`--gtest_filter=Bsw_TxChain_Test.ComSendSignal_*` 等で
 絞り込み可）。フェイクは最下層の `Can_Hw` のみ（`test/
-Fake_Hal_Can_Hw.c`）で、CanIf.c が呼ぶ `CanSM_RxIndication()` 等は
+Fake_Can_Hw.c`）で、CanIf.c が呼ぶ `CanSM_RxIndication()` 等は
 `Bsw_CanSM_fake.c`（no-op スタブ、CanSM 自身のロジックは README
 「ECU管理層」の別のコールチェーンのため対象外）で満たしている。
 
@@ -1210,7 +1210,7 @@ RxIndicationCbk → `E2EXf_InverseTransformP05()` → `E2E_P05Check()`）は
 している。この非同期境界は Tx 処理の `Com_TxPending` と構造が同じだが、
 「立てる側／読む側」が逆（周期タスクが立てて on-demand 呼び出しが読む）ため、
 PduR/CanIf/Can/CanSM を一切経由せず Com.c 単体で完結する。フェイクは
-`millis()`（`test/Fake_Hal_Millis.c`）のみで、`Com_RxIndication()`を
+`millis()`（`test/stub/Hal/Fake_Millis.c`）のみで、`Com_RxIndication()`を
 直接呼んで「受信していたが途絶えた」状態を作り、`FakeMillis_Value` を
 しきい値超過まで進めてから検証する。Tx チェーンと同じくフラグの前後で
 2セグメントに分け、フラグの状態自体はテスト専用アクセサ
@@ -1223,7 +1223,7 @@ PduR/CanIf/Can/CanSM を一切経由せず Com.c 単体で完結する。フェ�
 `Gpt`/`Dio`/`Port`/`Det`/`E2E`/`E2E_P05`/`E2E_P01` のように他モジュールと
 コールチェーンを共有しない末端モジュールは、HAL 層（`*_Hw` ファイル）だけを
 フェイクに差し替えて単体で検証している（`test/` 内の
-`Bsw_Gpt_test.cpp`/`Fake_Hal_Gpt_Hw.c` 等、2026-09 に専用 env `[env:native]`
+`Bsw_Gpt_test.cpp`/`Fake_Gpt_Hw.c` 等、2026-09 に専用 env `[env:native]`
 から本 env（`[env:native_chain]`）へ統合済み）。ファイル名は
 `{層}_{モジュール}_{test|fake}`（実ファイル名が `<Module>_Hw` の場合はそれも
 含める）で統一し、フォルダを分けなくてもどの層・モジュールのファイルかが

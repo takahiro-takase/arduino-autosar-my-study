@@ -1,9 +1,9 @@
 /**
- * \file    Fake_Hal_Can_Hw.c
+ * \file    Fake_Can_Hw.c
  * \brief   Can_Hw.h（MCP2515 境界）のテスト用フェイク実装
- * \details Fake_Hal_Can_Hw.h 冒頭のコメント参照。
+ * \details Fake_Can_Hw.h 冒頭のコメント参照。
  */
-#include "Fake_Hal_Can_Hw.h"
+#include "Fake_Can_Hw.h"
 
 uint32 FakeCanHw_InitCount            = 0U;
 uint32 FakeCanHw_SendCount            = 0U;

@@ -1,5 +1,5 @@
 /**
- * \file    Fake_Hal_Det_Hw.h
+ * \file    Fake_Det_Hw.h
  * \brief   Det_Hw.h（Arduino Serial 出力）のテスト用スパイ実装の宣言
  * \details Det.c のロジック（レベル抑制・vsnprintf でのメッセージ整形）は
  *          そのまま検証したいので、実 HW（Arduino Serial）に依存する
@@ -17,8 +17,8 @@
  *          一致するため、既存テストへの影響はない）を持たない簡略版
  *          だったが、集約にあたりこちらの版へ統一した。
  */
-#ifndef FAKE_HAL_DET_HW_H
-#define FAKE_HAL_DET_HW_H
+#ifndef FAKE_DET_HW_H
+#define FAKE_DET_HW_H
 
 #include "Std_Types.h"
 
@@ -43,4 +43,4 @@ void FakeDetHw_Reset(void);
 }
 #endif
 
-#endif /* FAKE_HAL_DET_HW_H */
+#endif /* FAKE_DET_HW_H */

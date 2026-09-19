@@ -27,7 +27,7 @@ extern "C" {
 #include "E2EXf.h"
 #include "E2EXf_PBCfg.h"
 #include "E2E_P05.h"
-#include "Fake_Hal_Det_Hw.h"
+#include "Fake_Det_Hw.h"
 #include "Wrap_Dem.h"
 #include "Wrap_E2E.h"
 }
