@@ -35,4 +35,4 @@ opt-in にした理由・[SWS_CANIF_00324]（コントローラ状態チェッ�
 **この機能は実際に発動するか**: 本番設定への配線は行っていない
 （`CanIf_PBCfg.c` の RX PDU はいずれも `ReadRxPduDataEnabled` 未設定
 ＝既定 0 のまま）。ユニットテストでのみ検証している
-（`test/test_chain/Bsw_RxChain_test.cpp` の `CanIfReadRxPduData_*`）。
+（`test/Bsw_RxChain_test.cpp` の `CanIfReadRxPduData_*`）。

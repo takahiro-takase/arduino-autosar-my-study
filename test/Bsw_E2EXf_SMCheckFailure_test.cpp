@@ -18,7 +18,7 @@
  *          差し替えられる（Wrap_E2E.h 参照）。
  *
  *          Com/PduR/CanIf 等は経由せず、`E2EXf_InverseTransformP05()` を
- *          直接呼ぶところから始める（`test/test_chain/Bsw_RxE2EChain_test.cpp`
+ *          直接呼ぶところから始める（`test/Bsw_RxE2EChain_test.cpp`
  *          と同じ粒度・同じ本番設定 `E2EXf_EngineInfoRxCfg` を使う）。
  */
 #include <gtest/gtest.h>
@@ -37,7 +37,7 @@ namespace
 
 // 検証対象フレームの組み立て用のローカル E2E 設定（本番の
 // E2EXf_EngineInfoCfgP05 と同じ DataID/DataLength/Offset。
-// test/test_chain/Bsw_RxE2EChain_test.cpp の kRefEngineInfoCfg と同じ）。
+// test/Bsw_RxE2EChain_test.cpp の kRefEngineInfoCfg と同じ）。
 const E2E_P05ConfigType kRefEngineInfoCfg = {
     0x0100U,  /* DataID */
     7U,       /* DataLength */
@@ -69,7 +69,7 @@ protected:
     }
 
     // kRefEngineInfoCfg に基づき、独立した Protect 状態でフレームを組み立てる
-    // （test/test_chain/Bsw_RxE2EChain_test.cpp の BuildFrame() と同じ）。
+    // （test/Bsw_RxE2EChain_test.cpp の BuildFrame() と同じ）。
     static void BuildFrame(uint8 (&buf)[7], E2E_P05ProtectStateType* state)
     {
         buf[3] = 0x01U;  // EngineSpeed=500rpm 相当

@@ -274,7 +274,7 @@ I-PDU に対して自動評価（`Com_SendSignal`/`Com_SendSignalGroup` 経由�
 （`WarningStatus` の TMS は現状 `FaultLamp`/`AbsLamp` の自動評価のみで
 運用されており、手動切り替えが必要な具体的なユースケースが本プロジェクトの
 アプリケーション側に無いため）。ユニットテストでのみ検証しています
-（`test/test_chain/Bsw_TxChain_test.cpp` の `SwitchIpduTxMode_*`、
+（`test/Bsw_TxChain_test.cpp` の `SwitchIpduTxMode_*`、
 `kTestTmsGroupIPdu` を流用）。
 
 ## MDT（ComMinimumDelayTime、変化時送信の最小送信間隔）
@@ -593,7 +593,7 @@ signal group 単位で別名を持てます。`Com_IpduGroupStop()`（送信済�
 Group へ所属させる設定変更が必要ですが、それ自体が「常時有効なダッシュボード
 表示」という意図と反するため見送っています）。`ComRxDataTimeoutAction` の
 REPLACE 等と同じく、動機は実利より仕様忠実性であり、修正の正しさは
-`test/test_chain/Bsw_TxChain_test.cpp` のユニットテスト（Signal Group 用の
+`test/Bsw_TxChain_test.cpp` のユニットテスト（Signal Group 用の
 I-PDU Group を持つテスト専用設定で `Com_IpduGroupStop()` を直接呼ぶ）でのみ
 検証しています。
 
@@ -1004,7 +1004,7 @@ RX 側で新しい問題を作った」のと同種の落とし穴）。その�
 
 **この機能は実際に発動するか**: 実機での動作確認は未実施です（上記の
 理由により、本番の呼び出し元が存在しないため）。回帰テストとして
-`test/test_chain/Bsw_TxChain_test.cpp` の
+`test/Bsw_TxChain_test.cpp` の
 `SendSignalGroupArray_OK_WritesBufferTriggersSendAndSetsUpdateBit`/
 `SendSignalGroupArray_OK_AlwaysTriggersEvenWithoutChange`/
 `SendSignalGroupArray_NG_NullDataPtrReturnsError`/
@@ -1255,7 +1255,7 @@ Rte_COMInvalidNotify_CoolantTemp()  ← EngineInfo.CoolantTemp=0xFF 検知時
 （Signal Group 版）は本番設定では未使用（本プロジェクトの唯一の TX Signal
 Group である `WarningStatus` に `ComSignalDataInvalidValue` を設定した
 シグナルが無いため）で、ユニットテストのみで検証しています。回帰テストは
-`test/test_chain/Bsw_TxChain_test.cpp` の
+`test/Bsw_TxChain_test.cpp` の
 `InvalidateSignal_OK_WritesConfiguredInvalidValueToBuffer`/
 `InvalidateSignal_NG_UnconfiguredInvalidValueReturnsErrorWithoutWriting`/
 `InvalidateSignal_NG_UnknownSignalIdReturnsError`/
@@ -1526,7 +1526,7 @@ ON/OFF する専用 API）でしたが、実装を進める過程で以下の理
 判断）。`Com_IpduGroupStart`/`Stop` の RX 側コード自体は既存の共通実装
 （元々 TX 専用グループでのみ実運用されていた）を流用しており、
 `Com.c` 側の変更は一切ありません。回帰テストとして
-`test/test_chain/Bsw_RxTimeoutChain_test.cpp` の
+`test/Bsw_RxTimeoutChain_test.cpp` の
 `Bsw_RxIpduGroupChain_Test` フィクスチャ（`ComMainFunction_NG_
 StoppedGroupedIPduNeverTimesOutRegardlessOfElapsed`/
 `ComIpduGroupStart_OK_GroupedIPduBeginsMonitoringAfterExplicitStart`/
