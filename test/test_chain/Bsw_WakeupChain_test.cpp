@@ -69,7 +69,7 @@ extern "C" {
 #include "Hal_Millis_fake.h"
 #include "Bsw_EcuM_fake.h"
 #include "Bsw_BswM_fake.h"
-#include "Bsw_Dem_fake.h"
+#include "Wrap_Dem.h"
 #include "Hal_Det_Hw_fake.h"
 }
 
@@ -91,9 +91,10 @@ protected:
         FakeCanHw_Reset();
         FakeEcuM_Reset();
         FakeBswM_Reset();
-        FakeDem_Reset();
+        WrapDemSetEventStatus_Reset();
         FakeMillis_Reset();
         FakeDetHw_LogSuppressed = 1U;  // Init() のログはノイズになるため抑制
+        Dem_Init(NULL);  // Demの内部状態を毎テスト決定的にリセットする（NvM_fake.cにより常に「初回起動」）
 
         canConfig.filter.filterId = 0x0220U;
         canConfig.filter.mask     = 0x1FFFU;
@@ -148,7 +149,7 @@ protected:
         FakeCanHw_SetModeCount = 0U;
         FakeEcuM_Reset();
         FakeBswM_Reset();
-        FakeDem_Reset();
+        WrapDemSetEventStatus_Reset();
     }
 
     Can_ConfigType canConfig;
@@ -212,8 +213,8 @@ TEST_F(Bsw_WakeupChain_Test, CanMainFunctionRead_OK_ValidatesWakeupAndNotifiesCo
     EXPECT_EQ(FakeBswM_ComM_CurrentModeCount, 1U);
     EXPECT_EQ(FakeBswM_LastMode, static_cast<ComM_ModeType>(COMM_FULL_COMMUNICATION));
     // Bus-Off の TF クリア相当（PASSED）を Dem へ報告する
-    EXPECT_EQ(FakeDem_SetEventStatusCount, 1U);
-    EXPECT_EQ(FakeDem_LastEventStatus, DEM_EVENT_STATUS_PASSED);
+    EXPECT_EQ(WrapDemSetEventStatus_CallCount, 1U);
+    EXPECT_EQ(WrapDemSetEventStatus_LastEventStatus, DEM_EVENT_STATUS_PASSED);
 }
 
 // ------------------------------------------------------------

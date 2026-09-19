@@ -32,7 +32,7 @@ extern "C" {
 #include "Hal_Can_Hw_fake.h"
 #include "Hal_Millis_fake.h"
 #include "Hal_Det_Hw_fake.h"
-#include "Bsw_Dem_fake.h"
+#include "Wrap_Dem.h"
 #include "Bsw_EcuM_fake.h"
 #include "Bsw_BswM_fake.h"
 }
@@ -67,7 +67,8 @@ protected:
     void SetUp() override
     {
         FakeCanHw_Reset();
-        FakeDem_Reset();
+        WrapDemSetEventStatus_Reset();
+        Dem_Init(NULL);  // Demの内部状態を毎テスト決定的にリセットする（NvM_fake.cにより常に「初回起動」）
         FakeEcuM_Reset();
         FakeBswM_Reset();
         FakeMillis_Reset();

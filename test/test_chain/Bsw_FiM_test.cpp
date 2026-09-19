@@ -1,19 +1,21 @@
 /**
  * \file    Bsw_FiM_test.cpp
  * \brief   FiM(機能抑止マネージャ)の単体テスト（GoogleTest / PlatformIO
- *          `[env:native_fim]`、2026-09 新設）。
+ *          `[env:native_chain]`。2026-09、専用環境 `[env:native_fim]` として
+ *          新設した後、同月中に `native_chain` の Dem 実体リンク化に合わせて
+ *          本 env へ統合した）。
  *
  * \details FiM.c は本プロジェクトでこれまでどの native テスト環境にもリンク
- *          されておらず、テストカバレッジが皆無だった。今回
+ *          されておらず、テストカバレッジが皆無だった。新設時、
  *          `FiM_Init()`が全FIDを無条件で「許可」初期化していた乖離
  *          （[SWS_Fim_00102]/[SWS_Fim_00104]。以前は起動直後から最初の
  *          `FiM_MainFunction()`呼び出しまでの間、既に確定済みのDTCがあって
  *          も誤って許可扱いになっていた）を是正したのに合わせ、専用環境を
  *          新設した。
  *
- *          Dem.c は本物をリンクし（`NvM_fake.c`で「常に初回起動」を決定的に
- *          固定、native_dcm と同じ方式）、実際の確定 DTC ステータス伝播を
- *          そのまま検証する。
+ *          Dem.c は本物をリンクし（`test/test_chain/NvM_fake.c`で「常に初回
+ *          起動」を決定的に固定）、実際の確定 DTC ステータス伝播をそのまま
+ *          検証する。
  */
 #include <gtest/gtest.h>
 
