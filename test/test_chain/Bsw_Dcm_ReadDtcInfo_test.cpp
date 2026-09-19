@@ -1,10 +1,10 @@
 /**
  * \file    Bsw_Dcm_ReadDtcInfo_test.cpp
  * \brief   UDS SID 0x19 ReadDTCInformation の単体テスト（GoogleTest /
- *          PlatformIO `[env:native_dcm]`）。
+ *          PlatformIO `[env:native_chain]`。2026-08新設時は専用環境`[env:native_dcm]`だったが、2026-09にnative_chainへ統合した）。
  *
  * \details 本プロジェクトで Dcm_Cbk.c/Dem.c を対象とする初めてのユニット
- *          テスト（platformio.ini `[env:native_dcm]` 冒頭のコメント参照）。
+ *          テスト。
  *          GitHub Issue #122（subFunc 0x0A reportSupportedDTC の追加要望）
  *          への対応をきっかけに新設した。
  *
@@ -27,6 +27,7 @@ extern "C" {
 #include "CanTp_fake.h"
 #include "Hal_Millis_fake.h"
 #include "Hal_Det_Hw_fake.h"
+#include "Wrap_ComM.h"
 }
 
 namespace
@@ -39,6 +40,7 @@ protected:
     {
         FakeMillis_Reset();
         FakeCanTp_Reset();
+        WrapComM_DcmDiagnosticSuppressed = 1U;  // 本テストは通信管理(ComM/CanSM/Nm)が対象外
         FakeDetHw_LogSuppressed = 1U;  // Init() のログはノイズになるため抑制
 
         Dem_Init(NULL);
@@ -50,6 +52,7 @@ protected:
     void TearDown() override
     {
         FakeDetHw_LogSuppressed = 1U;
+        WrapComM_Reset();  // 他のテストファイルへ影響を残さない
     }
 
     /** [0x19, subFunc, ...] を組み立てて Dcm_ComIndication() へ直接渡す。 */

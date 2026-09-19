@@ -1,22 +1,26 @@
 /**
  * \file    Bsw_Dcm_CommunicationControl_test.cpp
  * \brief   UDS SID 0x28 CommunicationControl の単体テスト（GoogleTest /
- *          PlatformIO `[env:native_dcm]`）。
+ *          PlatformIO `[env:native_chain]`。2026-08新設時は専用環境
+ *          `[env:native_dcm]`だったが、2026-09にDem実体リンク化に続けて
+ *          本envへ統合した）。
  *
  * \details 2026-09-05、シグネチャ準拠サーベイで
  *          `Dcm_HandleCommunicationControl()`/`Dcm_CommControlReset()` が
  *          `Com_SetCommunicationEnabled()`/`Nm_EnableCommunication()`/
  *          `Nm_DisableCommunication()` を直接呼んでいたレイヤ違反を是正し、
- *          `BswM_Dcm_CommunicationMode_CurrentState()`（BswM_fake.h で
- *          スパイに差し替え）経由へ変更した際に新設。
+ *          `BswM_Dcm_CommunicationMode_CurrentState()`（`Bsw_BswM_fake.h`で
+ *          スパイに差し替え。native_chain統合時にComM.c用の既存フェイクへ
+ *          統合、アクセサ名は`FakeBswM_LastDcmCommunicationMode`等へ改称）
+ *          経由へ変更した際に新設。
  *
  *          Bsw_Dcm_ControlDTCSetting_test.cpp と同じ「Dcm_ComIndication() に
  *          生の UDS バイト列を直接渡し、応答と副作用（本テストでは
- *          BswM_fake の記録）を検証する」ブラックボックステスト方式。
+ *          Bsw_BswM_fake の記録）を検証する」ブラックボックステスト方式。
  *          BswM.c 自体（ルールエンジン本体）はこの env にリンクされないため、
  *          「Dcm が正しい Dcm_CommunicationModeType 値で BswM を呼んだか」の
  *          みを検証し、Com/Nm への実際の反映（BswM_ApplyDcmCommMode()）は
- *          対象外とする（platformio.ini [env:native_dcm] コメント参照）。
+ *          対象外とする。
  */
 #include <gtest/gtest.h>
 
@@ -25,7 +29,8 @@ extern "C" {
 #include "Dcm_Cfg.h"
 #include "Dem.h"
 #include "CanTp_fake.h"
-#include "BswM_fake.h"
+#include "Bsw_BswM_fake.h"
+#include "Wrap_ComM.h"
 #include "Hal_Millis_fake.h"
 #include "Hal_Det_Hw_fake.h"
 }
@@ -41,6 +46,7 @@ protected:
         FakeMillis_Reset();
         FakeCanTp_Reset();
         FakeBswM_Reset();
+        WrapComM_DcmDiagnosticSuppressed = 1U;  // 本テストは通信管理(ComM/CanSM/Nm)が対象外
         FakeDetHw_LogSuppressed = 1U;  // Init() のログはノイズになるため抑制
 
         Dem_Init(NULL);
@@ -53,6 +59,7 @@ protected:
     void TearDown() override
     {
         FakeDetHw_LogSuppressed = 1U;
+        WrapComM_Reset();  // 他のテストファイルへ影響を残さない
     }
 
     /** UDS ペイロードを Dcm_ComIndication() へ直接渡す。 */
@@ -89,8 +96,8 @@ TEST_F(Bsw_Dcm_CommunicationControl_Test, OK_EnableRxTxNormalMapsToDcmEnableRxTx
 
     EXPECT_EQ(FakeCanTp_TxBuf[0], 0x68U);
     EXPECT_EQ(FakeCanTp_TxBuf[1], 0x00U);
-    EXPECT_EQ(FakeBswM_CallCount, 1U);
-    EXPECT_EQ(FakeBswM_LastMode, DCM_ENABLE_RX_TX_NORM);
+    EXPECT_EQ(FakeBswM_DcmCommunicationModeCurrentStateCount, 1U);
+    EXPECT_EQ(FakeBswM_LastDcmCommunicationMode, DCM_ENABLE_RX_TX_NORM);
 }
 
 TEST_F(Bsw_Dcm_CommunicationControl_Test, OK_DisableRxTxNmMapsToDcmDisableRxTxNm)
@@ -99,8 +106,8 @@ TEST_F(Bsw_Dcm_CommunicationControl_Test, OK_DisableRxTxNmMapsToDcmDisableRxTxNm
 
     EXPECT_EQ(FakeCanTp_TxBuf[0], 0x68U);
     EXPECT_EQ(FakeCanTp_TxBuf[1], 0x03U);
-    EXPECT_EQ(FakeBswM_CallCount, 1U);
-    EXPECT_EQ(FakeBswM_LastMode, DCM_DISABLE_RX_TX_NM);
+    EXPECT_EQ(FakeBswM_DcmCommunicationModeCurrentStateCount, 1U);
+    EXPECT_EQ(FakeBswM_LastDcmCommunicationMode, DCM_DISABLE_RX_TX_NM);
 }
 
 TEST_F(Bsw_Dcm_CommunicationControl_Test, OK_EnableRxDisableTxNormAndNmMapsToDcmEnableRxDisableTxNormNm)
@@ -109,15 +116,15 @@ TEST_F(Bsw_Dcm_CommunicationControl_Test, OK_EnableRxDisableTxNormAndNmMapsToDcm
 
     EXPECT_EQ(FakeCanTp_TxBuf[0], 0x68U);
     EXPECT_EQ(FakeCanTp_TxBuf[1], 0x01U);
-    EXPECT_EQ(FakeBswM_CallCount, 1U);
-    EXPECT_EQ(FakeBswM_LastMode, DCM_ENABLE_RX_DISABLE_TX_NORM_NM);
+    EXPECT_EQ(FakeBswM_DcmCommunicationModeCurrentStateCount, 1U);
+    EXPECT_EQ(FakeBswM_LastDcmCommunicationMode, DCM_ENABLE_RX_DISABLE_TX_NORM_NM);
 }
 
 TEST_F(Bsw_Dcm_CommunicationControl_Test, OK_DisableRxEnableTxNormMapsToDcmDisableRxEnableTxNorm)
 {
     SendCommunicationControl(0x02U /* disableRxAndEnableTx */, 0x01U /* normal */);
 
-    EXPECT_EQ(FakeBswM_LastMode, DCM_DISABLE_RX_ENABLE_TX_NORM);
+    EXPECT_EQ(FakeBswM_LastDcmCommunicationMode, DCM_DISABLE_RX_ENABLE_TX_NORM);
 }
 
 // ------------------------------------------------------------
@@ -130,7 +137,7 @@ TEST_F(Bsw_Dcm_CommunicationControl_Test, NG_UnsupportedControlTypeReturnsNegati
 
     EXPECT_EQ(FakeCanTp_TxBuf[0], 0x7FU);
     EXPECT_EQ(FakeCanTp_TxBuf[2], DCM_NRC_SUB_FUNC_NOT_SUPPORTED);
-    EXPECT_EQ(FakeBswM_CallCount, 0U);
+    EXPECT_EQ(FakeBswM_DcmCommunicationModeCurrentStateCount, 0U);
 }
 
 TEST_F(Bsw_Dcm_CommunicationControl_Test, NG_InvalidCommunicationTypeReturnsNegativeResponseWithoutCallingBswM)
@@ -139,7 +146,7 @@ TEST_F(Bsw_Dcm_CommunicationControl_Test, NG_InvalidCommunicationTypeReturnsNega
 
     EXPECT_EQ(FakeCanTp_TxBuf[0], 0x7FU);
     EXPECT_EQ(FakeCanTp_TxBuf[2], DCM_NRC_REQUEST_OUT_OF_RANGE);
-    EXPECT_EQ(FakeBswM_CallCount, 0U);
+    EXPECT_EQ(FakeBswM_DcmCommunicationModeCurrentStateCount, 0U);
 }
 
 TEST_F(Bsw_Dcm_CommunicationControl_Test, NG_IncorrectLengthReturnsNegativeResponseWithoutCallingBswM)
@@ -149,7 +156,7 @@ TEST_F(Bsw_Dcm_CommunicationControl_Test, NG_IncorrectLengthReturnsNegativeRespo
 
     EXPECT_EQ(FakeCanTp_TxBuf[0], 0x7FU);
     EXPECT_EQ(FakeCanTp_TxBuf[2], DCM_NRC_INCORRECT_MESSAGE_LENGTH);
-    EXPECT_EQ(FakeBswM_CallCount, 0U);
+    EXPECT_EQ(FakeBswM_DcmCommunicationModeCurrentStateCount, 0U);
 }
 
 TEST_F(Bsw_Dcm_CommunicationControl_Test, NG_UnsupportedControlTypeWithWrongLengthPrefersSubFuncNrc)
@@ -164,7 +171,7 @@ TEST_F(Bsw_Dcm_CommunicationControl_Test, NG_UnsupportedControlTypeWithWrongLeng
 
     EXPECT_EQ(FakeCanTp_TxBuf[0], 0x7FU);
     EXPECT_EQ(FakeCanTp_TxBuf[2], DCM_NRC_SUB_FUNC_NOT_SUPPORTED);
-    EXPECT_EQ(FakeBswM_CallCount, 0U);
+    EXPECT_EQ(FakeBswM_DcmCommunicationModeCurrentStateCount, 0U);
 }
 
 // ------------------------------------------------------------
@@ -174,14 +181,14 @@ TEST_F(Bsw_Dcm_CommunicationControl_Test, NG_UnsupportedControlTypeWithWrongLeng
 TEST_F(Bsw_Dcm_CommunicationControl_Test, OK_ReturnToDefaultSessionResetsToEnableRxTxNormNm)
 {
     SendCommunicationControl(0x03U /* disableRxAndTx */, 0x03U /* normal + NM */);
-    ASSERT_EQ(FakeBswM_LastMode, DCM_DISABLE_RX_TX_NORM_NM);
+    ASSERT_EQ(FakeBswM_LastDcmCommunicationMode, DCM_DISABLE_RX_TX_NORM_NM);
     FakeBswM_Reset();
 
     uint8 req[2] = { DCM_SID_SESSION_CTRL, DCM_SESSION_DEFAULT };
     Send(req, sizeof(req));
 
-    EXPECT_EQ(FakeBswM_CallCount, 1U);
-    EXPECT_EQ(FakeBswM_LastMode, DCM_ENABLE_RX_TX_NORM_NM);
+    EXPECT_EQ(FakeBswM_DcmCommunicationModeCurrentStateCount, 1U);
+    EXPECT_EQ(FakeBswM_LastDcmCommunicationMode, DCM_ENABLE_RX_TX_NORM_NM);
 }
 
 }  // namespace

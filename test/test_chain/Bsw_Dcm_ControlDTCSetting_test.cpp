@@ -1,7 +1,7 @@
 /**
  * \file    Bsw_Dcm_ControlDTCSetting_test.cpp
  * \brief   UDS SID 0x85 ControlDTCSetting の単体テスト（GoogleTest /
- *          PlatformIO `[env:native_dcm]`）。
+ *          PlatformIO `[env:native_chain]`。2026-08新設時は専用環境`[env:native_dcm]`だったが、2026-09にnative_chainへ統合した）。
  *
  * \details Bsw_Dcm_ReadDtcInfo_test.cpp と同じ「Dcm_ComIndication() に生の
  *          UDS バイト列を直接渡し、CanTp_Transmit()（CanTp_fake.h でキャプチャ）
@@ -23,6 +23,7 @@ extern "C" {
 #include "CanTp_fake.h"
 #include "Hal_Millis_fake.h"
 #include "Hal_Det_Hw_fake.h"
+#include "Wrap_ComM.h"
 }
 
 namespace
@@ -35,6 +36,7 @@ protected:
     {
         FakeMillis_Reset();
         FakeCanTp_Reset();
+        WrapComM_DcmDiagnosticSuppressed = 1U;  // 本テストは通信管理(ComM/CanSM/Nm)が対象外
         FakeDetHw_LogSuppressed = 1U;  // Init() のログはノイズになるため抑制
 
         Dem_Init(NULL);
@@ -46,6 +48,7 @@ protected:
     void TearDown() override
     {
         FakeDetHw_LogSuppressed = 1U;
+        WrapComM_Reset();  // 他のテストファイルへ影響を残さない
     }
 
     /** UDS ペイロードを Dcm_ComIndication() へ直接渡す。 */
