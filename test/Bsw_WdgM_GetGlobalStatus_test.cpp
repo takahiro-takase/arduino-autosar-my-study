@@ -12,8 +12,8 @@
 #include "WdgM.h"
 #include "Fake_WdgIf.h"
 #include "Wrap_Dem.h"
-#include "Fake_Hal_Det_Hw.h"
-#include "Fake_Hal_Millis.h"
+#include "Fake_Det_Hw.h"
+#include "Fake_Millis.h"
 
 class Bsw_WdgM_GetGlobalStatus_Test : public ::testing::Test
 {

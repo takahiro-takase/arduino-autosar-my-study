@@ -1,9 +1,9 @@
 /**
- * \file    Fake_Hal_Port_Hw.c
+ * \file    Fake_Port_Hw.c
  * \brief   Port_Hw.h のテスト用フェイク実装
- * \details Fake_Hal_Port_Hw.h 冒頭のコメント参照。
+ * \details Fake_Port_Hw.h 冒頭のコメント参照。
  */
-#include "Fake_Hal_Port_Hw.h"
+#include "Fake_Port_Hw.h"
 #include "Port_Hw.h"
 
 #define FAKE_PORT_HW_UNSET  0xFFU

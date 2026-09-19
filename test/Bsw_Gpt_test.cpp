@@ -2,8 +2,8 @@
  * \file    Bsw_Gpt_test.cpp
  * \brief   Gpt.c（src/Bsw/Gpt/Gpt.c）の単体テスト（GoogleTest / PlatformIO native環境）
  * \details 実 HW 依存部分（Gpt_Hw / FspTimer、Det_Hw / Serial出力、SchM_Hw /
- *          割り込み制御）のみを Fake_Hal_Gpt_Hw.c / Fake_Hal_Det_Hw.c /
- *          Fake_Hal_SchM_Hw.c に差し替え、Gpt.c・Det.c 自体は実物をリンクして
+ *          割り込み制御）のみを Fake_Gpt_Hw.c / Fake_Det_Hw.c /
+ *          Fake_SchM_Hw.c に差し替え、Gpt.c・Det.c 自体は実物をリンクして
  *          ロジックを検証する。実 HW 割り込みは Gpt_OnTick() を直接呼ぶことで
  *          模擬する（Gpt.c がこの関数を素の呼び出し可能関数として公開する
  *          設計になっているため、モックの割り込みコントローラ等は不要）。
@@ -23,8 +23,8 @@ extern "C" {
 #include "Gpt.h"
 #include "Gpt_PBCfg.h"
 #include "Gpt_Hw.h"  /* Gpt_OnTick() — テストから ISR tick を模擬するために呼ぶ */
-#include "Fake_Hal_Gpt_Hw.h"
-#include "Fake_Hal_Det_Hw.h"
+#include "Fake_Gpt_Hw.h"
+#include "Fake_Det_Hw.h"
 }
 
 namespace

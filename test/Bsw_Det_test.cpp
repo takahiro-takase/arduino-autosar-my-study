@@ -7,7 +7,7 @@
  *          および SWS_Det_01001/01003 が規定する Det_ReportRuntimeError()/
  *          Det_ReportTransientFault()（報告内容とE_OK固定の戻り値）を検証する。
  *          Det.c 自体は実物をリンクし、実 HW 依存の Det_Hw.cpp のみを
- *          Fake_Hal_Det_Hw.c に差し替える（他モジュールのテストと同じ構成）。
+ *          Fake_Det_Hw.c に差し替える（他モジュールのテストと同じ構成）。
  *
  *          GoogleTest の main() は test_main.cpp に集約しているため、
  *          本ファイルでは定義しない。
@@ -16,7 +16,7 @@
 
 extern "C" {
 #include "Det.h"
-#include "Fake_Hal_Det_Hw.h"
+#include "Fake_Det_Hw.h"
 }
 
 namespace

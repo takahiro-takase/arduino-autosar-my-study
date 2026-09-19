@@ -11,7 +11,7 @@
 
 extern "C" {
 #include "PduR.h"
-#include "Fake_Hal_Det_Hw.h"
+#include "Fake_Det_Hw.h"
 }
 
 namespace

@@ -13,7 +13,7 @@ extern "C" {
 #include "Can.h"
 #include "Can_Cfg.h"
 #include "Can_Hw.h"
-#include "Fake_Hal_Can_Hw.h"
+#include "Fake_Can_Hw.h"
 #include "Wrap_CanIf.h"
 #include "Fake_Bsw_EcuM.h"
 }

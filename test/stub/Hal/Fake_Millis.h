@@ -1,5 +1,5 @@
 /**
- * \file    Fake_Hal_Millis.h
+ * \file    Fake_Millis.h
  * \brief   Arduino の millis() のテスト用フェイク実装の宣言。
  * \details Com.c 等、複数の Bsw モジュールが `extern unsigned long millis(void);`
  *          で Arduino のグローバル関数を直接参照する。実機（uno_r4）では
@@ -10,11 +10,11 @@
  *          `FakeMillis_Value` を直接書き換えて進める。
  *
  *          2026-09、`test_chain`/`test_dcm`/`test_fim`/`test_wdgm` の4envで
- *          内容が重複していたため、`Fake_Hal_Det_Hw.h` と同じ理由で
+ *          内容が重複していたため、`Fake_Det_Hw.h` と同じ理由で
  *          `test/stub/Hal/` へ集約した。
  */
-#ifndef FAKE_HAL_MILLIS_H
-#define FAKE_HAL_MILLIS_H
+#ifndef FAKE_MILLIS_H
+#define FAKE_MILLIS_H
 
 #ifdef __cplusplus
 extern "C" {
@@ -29,4 +29,4 @@ void FakeMillis_Reset(void);
 }
 #endif
 
-#endif /* FAKE_HAL_MILLIS_H */
+#endif /* FAKE_MILLIS_H */

@@ -5,7 +5,7 @@
  *          再適用する」挙動、および SWS_Port_00223 が規定する
  *          Port_SetPinMode() の PORT_E_MODE_UNCHANGEABLE 報告を検証する。
  *          Port.c 自体は実物をリンクし、実 HW 依存の Port_Hw.cpp のみを
- *          Fake_Hal_Port_Hw.c（ピンごとに直近の設定方向を記録する簡易メモリ
+ *          Fake_Port_Hw.c（ピンごとに直近の設定方向を記録する簡易メモリ
  *          モデル）に差し替える。
  *
  *          GoogleTest の main() は test_main.cpp に集約しているため、
@@ -15,8 +15,8 @@
 
 extern "C" {
 #include "Port.h"
-#include "Fake_Hal_Port_Hw.h"
-#include "Fake_Hal_Det_Hw.h"
+#include "Fake_Port_Hw.h"
+#include "Fake_Det_Hw.h"
 }
 
 namespace

@@ -31,8 +31,8 @@ extern "C" {
 #include "Fake_CanTp.h"
 #include "Fake_Bsw_BswM.h"
 #include "Wrap_ComM.h"
-#include "Fake_Hal_Millis.h"
-#include "Fake_Hal_Det_Hw.h"
+#include "Fake_Millis.h"
+#include "Fake_Det_Hw.h"
 }
 
 namespace

@@ -1,7 +1,7 @@
 /**
- * \file    Fake_Hal_Det_Hw.c
+ * \file    Fake_Det_Hw.c
  * \brief   Det_Hw.h（Arduino Serial 出力）のテスト用スパイ実装
- * \details Fake_Hal_Det_Hw.h 冒頭のコメント参照。
+ * \details Fake_Det_Hw.h 冒頭のコメント参照。
  *
  *          既定では標準出力へ書かない（テスト実行のノイズになるため）。
  *          DET_LOG_VERBOSE 環境変数を 0 以外に設定して実行した場合のみ、
@@ -9,9 +9,9 @@
  *          途中で実際にどの関数が呼ばれたかをテスト実行結果から確認する用途）。
  *          値の検証自体は引き続き Det_Hw_PrintDetError() 側のスパイで行う。
  */
-#include "Fake_Hal_Det_Hw.h"
+#include "Fake_Det_Hw.h"
 #include "Det_Hw.h"
-#include "Fake_Hal_Millis.h"
+#include "Fake_Millis.h"
 #include <stdio.h>
 #include <stdlib.h>
 

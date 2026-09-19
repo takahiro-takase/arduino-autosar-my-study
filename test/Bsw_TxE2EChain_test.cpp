@@ -50,8 +50,8 @@ extern "C" {
 #include "E2EXf.h"
 #include "E2EXf_PBCfg.h"
 #include "E2E_P05.h"
-#include "Fake_Hal_Can_Hw.h"
-#include "Fake_Hal_Det_Hw.h"
+#include "Fake_Can_Hw.h"
+#include "Fake_Det_Hw.h"
 }
 
 namespace
