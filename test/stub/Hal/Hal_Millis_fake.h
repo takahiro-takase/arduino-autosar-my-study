@@ -8,6 +8,10 @@
  *          既定では固定値を返す（呼び出しごとに時間が進まない）。TxPeriodMs/
  *          MinDelayMs のような時間経過に依存するロジックをテストする場合は
  *          `FakeMillis_Value` を直接書き換えて進める。
+ *
+ *          2026-09、`test_chain`/`test_dcm`/`test_fim`/`test_wdgm` の4envで
+ *          内容が重複していたため、`Hal_Det_Hw_fake.h` と同じ理由で
+ *          `test/stub/Hal/` へ集約した。
  */
 #ifndef HAL_MILLIS_FAKE_H
 #define HAL_MILLIS_FAKE_H
