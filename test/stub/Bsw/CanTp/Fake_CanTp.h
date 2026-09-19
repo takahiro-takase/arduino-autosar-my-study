@@ -12,12 +12,16 @@
 #define FAKE_CANTP_H
 
 #include "Std_Types.h"
+#include "CanTp_Cfg.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-#define CANTP_FAKE_TX_BUF_SIZE 64U
+/** 実体の CanTp.c と同じ上限を使う（独自の固定値だと native テストが
+ *  実体側のバッファ超過バグを検知できない。経緯は CanTp_Cfg.h の
+ *  CANTP_TX_BUFFER_SIZE コメント参照）。 */
+#define CANTP_FAKE_TX_BUF_SIZE CANTP_TX_BUFFER_SIZE
 
 extern uint8  FakeCanTp_TxBuf[CANTP_FAKE_TX_BUF_SIZE];
 extern uint8  FakeCanTp_TxLength;

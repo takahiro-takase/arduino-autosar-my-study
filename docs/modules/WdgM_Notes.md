@@ -496,6 +496,42 @@ delay(1000);  /* 動作確認用: 500ms の許容上限を超えさせる */
 許可遷移グラフは `WdgM_PBCfg.c` の `WdgM_EngineTransitions[]`、Deadline 許容範囲テーブルは
 同ファイルの `WdgM_EngineDeadlines[]`（いずれもポストビルド設定）で管理します。
 
+## 明示する簡略化
+
+- **`WdgM_SetMode()` は複数モード切替に対応していません**（本プロジェクトは
+  `WdgM_ConfigType`/`WdgM_EntityCfgType` が単一の静的コンフィグのみを保持する
+  構造で、`WDGM_MODE_DEFAULT` (0) 以外の `Mode` を渡すと常にエラー拒否する
+  だけの簡略実装です。実際にモード間で監視対象・許容値セットを入れ替える
+  ロジック自体を持ちません）。2026-09-19〜20のBSW仕様乖離サーベイで
+  `WdgM_E_SET_MODE`（実は Dem の拡張プロダクションエラー、
+  [SWS_WdgM_00376]/[SWS_WdgM_00142]）が未実装というバックログ候補を調査した
+  結果、この簡略化に起因すると確定したため、正式にここへ登録する（以前は
+  `WdgM.h`/`WdgM_Cfg.h`/`WdgM.c` の Doxygen コメントにのみ設計意図が
+  散在しており、この Notes.md には記載が無かったため「未実装ギャップ」として
+  何度か再発見されるリスクがあった）。
+  - 未実装の要求: [SWS_WdgM_00186]（`WdgIf_SetMode()` によるモードごとの
+    監視パラメータ一式の適用。本プロジェクトはそもそも `WdgIf_SetMode()` を
+    呼んでいない）、[SWS_WdgM_00139]/[SWS_WdgM_00142]（`WdgIf_SetMode()`
+    失敗時の Global Status STOPPED 遷移・Dem `WDGM_E_SET_MODE` 報告。
+    呼び出し自体が無いためこの失敗パス自体が発生しえない）、
+    [SWS_WdgM_00145]/[SWS_WdgM_00316]（Global Status が OK/FAILED 以外の
+    ときに何もせず return するガード）、[SWS_WdgM_00182]/[SWS_WdgM_00315]
+    （新モードで非activateなSEを`WDGM_LOCAL_STATUS_DEACTIVATED`にする等の
+    SE単位のactivate/deactivate処理）、[SWS_WdgM_00031]（`WdgMOffModeEnabled`
+    がFALSEのときのOFF_MODE拒否、DET `WDGM_E_DISABLE_NOT_ALLOWED`）。
+  - **本プロジェクトの本番コード（EcuM/BswM含む）から`WdgM_SetMode()`は
+    一度も呼ばれていません**（呼び出し元はユニットテストのみ）。そのため
+    実機ログでの観測・検証は原理的に不可能です。
+  - フル対応するには、モードごとの監視パラメータ一式（`WdgMSupervisionCycle`/
+    `WdgMExpiredSupervisionCycleTol`/Alive・Deadline・Logical各設定/
+    WdgIfトリガ設定）を保持する新規コンフィグ構造への全面刷新、
+    `WdgM_MainFunction()`等の判定ロジック全体の実行時モード参照化、
+    EcuM/BswM側での実際のモード切替呼び出し元の新設が必要な大規模な変更。
+    WdgMは実機のフェイルセーフ経路そのもの（本ファイル「開発の経緯」に
+    複数回の実機不具合が記録されている通り）でリグレッションリスクが高いため、
+    AUTOSAR OS本格導入見送りと同様、着手するなら独立した設計判断として
+    別途検討する。
+
 ## 開発の経緯（実機で見つかった不具合・設計変更）
 
 > 現在の仕様を理解するだけなら読む必要はありません。実機検証で見つかった

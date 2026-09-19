@@ -100,7 +100,8 @@
 /** WdgM モードの設定数。本プロジェクトは単一の静的コンフィグのみ保持し、
  *  複数モード間の切替（監視対象・許容値セットの入れ替え）には対応しない
  *  ため、常にこの 1 モードのみを受理する（[SWS_WdgM_00358] WdgM_ModeType の
- *  Range 0〜<Number of Modes>-1 は本プロジェクトでは 0 のみ）。 */
+ *  Range 0〜<Number of Modes>-1 は本プロジェクトでは 0 のみ）
+ *  （学習用簡略化、詳細は docs/modules/WdgM_Notes.md 参照）。 */
 #define WDGM_MODE_DEFAULT     0U
 
 /** 監視対象エンティティ総数 */

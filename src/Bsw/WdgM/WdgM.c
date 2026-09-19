@@ -234,7 +234,7 @@ static uint8 WdgM_SkipNextAliveJudgment = 0U;
 
 /** WdgM_SetMode()/WdgM_GetMode() が扱う現在のモード。本プロジェクトは
  *  単一の静的コンフィグのみ保持するため、常に WDGM_MODE_DEFAULT に留まる
- *  （WdgM.h の WdgM_SetMode() Doxygen コメント参照）。 */
+ *  （学習用簡略化、WdgM.h の WdgM_SetMode() Doxygen コメント参照）。 */
 static WdgM_ModeType WdgM_CurrentMode = WDGM_MODE_DEFAULT;
 
 /** 1 = Global Supervision Status が一度 WDGM_GLOBAL_STATUS_EXPIRED に
