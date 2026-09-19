@@ -29,7 +29,7 @@
  *
  *          この非同期境界の検知はどちらも Com.c 内で完結する（PduR/CanIf/Can/
  *          CanSM は経由しない）ため、Tx/Rx チェーンと異なりフェイクは
- *          `millis()`（`test/test_chain/Fake_Hal_Millis.c`）のみで足りる。
+ *          `millis()`（`test/Fake_Hal_Millis.c`）のみで足りる。
  *          `Com_RxIndication()` を直接呼んで受信済み状態を作ってから
  *          `FakeMillis_Value` を進める、という手順で「通信していたが途絶えた」
  *          状況を再現する。

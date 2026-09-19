@@ -11,7 +11,7 @@
  *          `CanSM.c` 726〜736 行目）。この分岐は「本プロジェクトの簡略化された
  *          CanIf/Can HW 抽象化では到達しないはず」という防御的コードとして
  *          2026-08 のレビュー以降コメントだけが残り、一度もテストで踏まれた
- *          ことがなかった（`test/test_chain/` を検索しても Bus-Off 回復の
+ *          ことがなかった（`test/` を検索しても Bus-Off 回復の
  *          正常系（`Bsw_SleepCoordination_test.cpp` の
  *          `ReRequestFullComDuringBusOff_OK_RestoresFullComAfterRecovery` 等）
  *          しか存在しない）。

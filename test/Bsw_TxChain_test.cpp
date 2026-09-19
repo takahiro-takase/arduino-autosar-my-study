@@ -33,7 +33,7 @@
  *          「機構」の理解・検証に絞るため、テスト専用の最小 Com/PduR/CanIf
  *          設定を本ファイル内で定義し、Com.c/PduR.c/CanIf.c/Can.c は実体を
  *          リンクする（フェイクは `Can_Hw` 層のみ、
- *          `test/test_chain/Fake_Hal_Can_Hw.c` を使う）。中心となる
+ *          `test/Fake_Hal_Can_Hw.c` を使う）。中心となる
  *          セグメント①②はコールチェーン全体を貫く IPduId=0（16bit シグナル
  *          1本）のみを使う。IPduId=1/2 は SWS_Com_00495（TMS 遷移時の
  *          無条件即時送信）専用の追加 I-PDU で、Com_MainFunctionTx() より前の
@@ -44,12 +44,13 @@
  *          そのため本ファイルは `Fake_Hal_Millis.h` で `millis()` を決定的に
  *          進められるようにしている（`SetUp()` で `FakeMillis_Reset()`）。
  *
- *          [env:native]（test/test_native/）は Can.c 単体を CanIf フェイクで
- *          隔離して検証しており、同じバイナリに CanIf.c の本物を混在させると
- *          シンボル多重定義になる。そのため本テストは env（＝ビルド
- *          ディレクトリ・バイナリ）そのものを分けた `[env:native_chain]`
- *          （このファイルが属する `test/test_chain/`）で実行する
- *          （`pio test -e native_chain`）。
+ *          Can.c 単体検証（`Bsw_Can_test.cpp`）も同じ `[env:native_chain]`
+ *          バイナリに同居している（2026-09、旧 `[env:native]` から統合）。
+ *          Can.c が上位層通知として呼ぶ `CanIf_RxIndication()` 等は
+ *          `test/stub/Bsw/CanIf/Wrap_CanIf.c` で `--wrap` 化してあるため、
+ *          同一バイナリに CanIf.c の実体が混在していてもシンボル多重定義には
+ *          ならない（詳細は `Bsw_Can_test.cpp`・`platformio.ini` の
+ *          `[env:native_chain]` 冒頭コメント参照）。
  *
  *          CanIf.c は CanSM_RxIndication()/ControllerBusOff()/
  *          ControllerWakeup() をハードコードで呼ぶため、同じ `[env:native_chain]`
