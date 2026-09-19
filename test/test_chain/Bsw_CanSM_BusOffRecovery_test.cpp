@@ -28,7 +28,7 @@
  *          `[env:native_chain]` 参照）を使うと、CanIf.c/Can.c の実体は
  *          そのまま保ちつつ、CanSM.c から見た `CanIf_SetControllerMode()` の
  *          戻り値だけをピンポイントで差し替えられる
- *          （Wrap_CanIf_SetControllerMode.h 参照）。
+ *          （Wrap_CanIf.h 参照）。
  *
  * \note    試作中に発見した副次的なバグ（2026-09-18、別ラウンドで是正済み）:
  *          `CanSM_BusOffTimerMs` は Bus-Off 検出時（`CanSM_ControllerBusOff()`）
@@ -59,7 +59,7 @@ extern "C" {
 #include "Bsw_Dem_fake.h"
 #include "Bsw_EcuM_fake.h"
 #include "Bsw_BswM_fake.h"
-#include "Wrap_CanIf_SetControllerMode.h"
+#include "Wrap_CanIf.h"
 }
 
 namespace

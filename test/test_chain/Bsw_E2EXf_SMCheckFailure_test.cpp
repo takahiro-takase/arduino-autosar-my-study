@@ -9,13 +9,13 @@
  *          `E2EXf_PBCfg_Init()` が全インスタンスに対し `E2E_SMCheckInit()` を
  *          呼んでから使うため「到達しないはず」の防御的コードとしてコメント
  *          だけが残り、一度もテストで踏まれたことがなかった
- *          （`Wrap_CanIf_SetControllerMode.h`/`Bsw_CanSM_BusOffRecovery_test.cpp`
+ *          （`Wrap_CanIf.h`/`Bsw_CanSM_BusOffRecovery_test.cpp`
  *          と同じ状況、CanSM.c 726〜736 行目の初カバーに続く2件目）。
  *
  *          `-Wl,--wrap=E2E_SMCheck`（platformio.ini の `[env:native_chain]`
  *          参照）を使うと、E2EXf.c/E2E.c/E2E_P05.c の実体はそのまま保ちつつ、
  *          E2EXf.c から見た `E2E_SMCheck()` の戻り値だけをピンポイントで
- *          差し替えられる（Wrap_E2E_SMCheck.h 参照）。
+ *          差し替えられる（Wrap_E2E.h 参照）。
  *
  *          Com/PduR/CanIf 等は経由せず、`E2EXf_InverseTransformP05()` を
  *          直接呼ぶところから始める（`test/test_chain/Bsw_RxE2EChain_test.cpp`
@@ -29,7 +29,7 @@ extern "C" {
 #include "E2E_P05.h"
 #include "Hal_Det_Hw_fake.h"
 #include "Bsw_Dem_fake.h"
-#include "Wrap_E2E_SMCheck.h"
+#include "Wrap_E2E.h"
 }
 
 namespace
