@@ -1,7 +1,9 @@
 /**
  * \file    Bsw_CanSM_BusOffRecovery_test.cpp
- * \brief   コールチェーン方式 + `-Wl,--wrap` フォールトインジェクションの試作
- *          （GoogleTest / PlatformIO `[env:native_chain_wrap]`）。
+ * \brief   コールチェーン方式 + `-Wl,--wrap` フォールトインジェクション
+ *          （GoogleTest / PlatformIO `[env:native_chain]`。2026-09、
+ *          試作環境 `[env:native_chain_wrap]` として2ラウンドの実績を
+ *          積んだ後、本 env へ統合した）。
  *
  * \details 対象は `CanSM_MainFunction()` の Bus-Off 回復リトライ（README
  *          「CAN コントローラの Bus-Off 検出/回復」節、CanSM.c 内
@@ -23,7 +25,7 @@
  *          コールチェーンの実体（CanIf→Can の実ロジック）を検証できなくなる。
  *
  *          `-Wl,--wrap=CanIf_SetControllerMode`（platformio.ini の
- *          `[env:native_chain_wrap]` 参照）を使うと、CanIf.c/Can.c の実体は
+ *          `[env:native_chain]` 参照）を使うと、CanIf.c/Can.c の実体は
  *          そのまま保ちつつ、CanSM.c から見た `CanIf_SetControllerMode()` の
  *          戻り値だけをピンポイントで差し替えられる
  *          （Wrap_CanIf_SetControllerMode.h 参照）。

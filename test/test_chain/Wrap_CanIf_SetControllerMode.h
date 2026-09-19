@@ -1,10 +1,11 @@
 /**
  * \file    Wrap_CanIf_SetControllerMode.h
  * \brief   `-Wl,--wrap=CanIf_SetControllerMode` によるフォールトインジェクション
- *          制御用アクセサ（コールチェーン方式テスト刷新の試作、README 未反映）。
+ *          制御用アクセサ（`[env:native_chain]`。2026-09、試作環境
+ *          `[env:native_chain_wrap]` から本 env へ統合した）。
  * \details GNU ld の `--wrap` は、最終リンク後のバイナリ内で対象シンボルへの
  *          全呼び出し元（本ファイルの場合 CanSM.c/CanIf.c 双方を含む、
- *          `[env:native_chain_wrap]` にリンクされる全 .o が対象）を
+ *          `[env:native_chain]` にリンクされる全 .o が対象）を
  *          `__wrap_CanIf_SetControllerMode()` へ差し替える。本物の定義
  *          （CanIf.c 内の `CanIf_SetControllerMode()`）は `__real_...` という
  *          名前で引き続き呼び出せる。
@@ -18,10 +19,11 @@
  *
  *          この方式の利点は、CanIf.c/Can.c を丸ごとフェイクへ差し替えることなく
  *          （＝コールチェーンの残り全区間は実体のまま）、ピンポイントで
- *          1 関数だけ失敗させられる点にある。本プロジェクトの
- *          `native_chain`（実体リンク）と `native`/`native_wdgm` 等
- *          （個別モジュールをフェイクで隔離）という二極化した既存構成に対し、
- *          「実体を保ったまま特定の失敗経路だけ作る」第三の選択肢を試作する。
+ *          1 関数だけ失敗させられる点にある。「実体を保ったまま特定の
+ *          失敗経路だけ作る」という方式そのものが `native_chain` の標準の
+ *          stub 差し替え手段（2026-09、試作を経て本 env へ統合）であり、
+ *          `native`/`native_wdgm` 等の個別モジュール単位フェイク隔離とは
+ *          対照的な位置づけになる。
  */
 #ifndef WRAP_CANIF_SETCONTROLLERMODE_H
 #define WRAP_CANIF_SETCONTROLLERMODE_H
