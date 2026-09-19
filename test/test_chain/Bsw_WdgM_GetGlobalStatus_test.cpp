@@ -11,7 +11,7 @@
 #include <gtest/gtest.h>
 #include "WdgM.h"
 #include "WdgIf_fake.h"
-#include "Dem_fake.h"
+#include "Bsw_Dem_fake.h"
 #include "Hal_Det_Hw_fake.h"
 #include "Hal_Millis_fake.h"
 
