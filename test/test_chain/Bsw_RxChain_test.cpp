@@ -56,8 +56,8 @@ extern "C" {
 #include "CanSM.h"
 #include "Can.h"
 #include "Can_Hw.h"
-#include "Hal_Can_Hw_fake.h"
-#include "Hal_Det_Hw_fake.h"
+#include "Fake_Hal_Can_Hw.h"
+#include "Fake_Hal_Det_Hw.h"
 }
 
 namespace

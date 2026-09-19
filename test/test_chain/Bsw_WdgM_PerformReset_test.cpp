@@ -4,16 +4,16 @@
  * \details AUTOSAR SWS_WdgM_00232/00233/00264/00270 が規定する、呼び出し以降
  *          HW ウォッチドッグの trigger を二度と行わなくなる（＝リセットが
  *          確実に迫る）挙動を、WdgM_TriggerHwWatchdog() の呼び出し記録
- *          （WdgIf_fake.h）で検証する。本番の WdgM_Config
+ *          （Fake_WdgIf.h）で検証する。本番の WdgM_Config
  *          （WdgM_PBCfg.c、Entity 0=ENGINE/Entity 1=WARNING の2エンティティ
  *          構成）をそのまま使う。
  */
 #include <gtest/gtest.h>
 #include "WdgM.h"
-#include "WdgIf_fake.h"
+#include "Fake_WdgIf.h"
 #include "Wrap_Dem.h"
-#include "Hal_Det_Hw_fake.h"
-#include "Hal_Millis_fake.h"
+#include "Fake_Hal_Det_Hw.h"
+#include "Fake_Hal_Millis.h"
 
 class Bsw_WdgM_PerformReset_Test : public ::testing::Test
 {
@@ -24,7 +24,7 @@ protected:
         FakeDetHw_Reset();
         FakeWdgIf_Reset();
         WrapDemSetEventStatus_Reset();
-        Dem_Init(NULL);  // Demの内部状態を毎テスト決定的にリセットする（NvM_fake.cにより常に「初回起動」）
+        Dem_Init(NULL);  // Demの内部状態を毎テスト決定的にリセットする（Fake_NvM.cにより常に「初回起動」）
         WdgM_Init(&WdgM_Config);
         FakeDetHw_Reset();  /* Init 自体が出す DET ログ・記録を後続の検証対象から除く */
     }

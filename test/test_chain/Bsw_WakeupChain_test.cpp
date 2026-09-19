@@ -13,7 +13,7 @@
  *                                          2026-09-05 是正前は実仕様に存在
  *                                          しない独自 API CanIf_ControllerWakeup()
  *                                          経由だった。フェイク実装は
- *                                          Bsw_EcuM_fake.h 参照）
+ *                                          Fake_Bsw_EcuM.h 参照）
  *                  → CanSM_ControllerModeIndication()
  *                    → CanIf_SetControllerMode(CAN_CS_STOPPED)
  *                      → Can_SetControllerMode(CAN_T_WAKEUP)   ← SLEEP→STOPPED
@@ -41,10 +41,10 @@
  *          API を直接叩くため、ComM の内部状態（ComM_Init() 直後の既定値
  *          NO_COM）がそのまま「ボランタリスリープ済み」の前提と一致する。
  *          ComM が呼ぶ EcuM_RequestRUN()/BswM_ComM_CurrentMode() は境界として
- *          フェイクに差し替える（Bsw_EcuM_fake.h/Bsw_BswM_fake.h 参照）。
+ *          フェイクに差し替える（Fake_Bsw_EcuM.h/Fake_Bsw_BswM.h 参照）。
  *          Can_MainFunction_Wakeup() が呼ぶ EcuM_CheckWakeup() のみ、
  *          フェイクから実 CanSM_ControllerModeIndication() へ委譲する
- *          （Bsw_EcuM_fake.h 冒頭コメント参照。この関数だけはチェーンの
+ *          （Fake_Bsw_EcuM.h 冒頭コメント参照。この関数だけはチェーンの
  *          途中経路であり終端ではないため）。
  *          Dem（Bus-Off 通信路の PASSED/FAILED 報告先）も同様にフェイクに
  *          差し替える（Bsw_Dem_fake.h 参照）。PduR はこのチェーンに登場
@@ -65,12 +65,12 @@ extern "C" {
 #include "Can_Hw.h"
 #include "ComM.h"
 #include "Nm.h"
-#include "Hal_Can_Hw_fake.h"
-#include "Hal_Millis_fake.h"
-#include "Bsw_EcuM_fake.h"
-#include "Bsw_BswM_fake.h"
+#include "Fake_Hal_Can_Hw.h"
+#include "Fake_Hal_Millis.h"
+#include "Fake_Bsw_EcuM.h"
+#include "Fake_Bsw_BswM.h"
 #include "Wrap_Dem.h"
-#include "Hal_Det_Hw_fake.h"
+#include "Fake_Hal_Det_Hw.h"
 }
 
 namespace
@@ -94,7 +94,7 @@ protected:
         WrapDemSetEventStatus_Reset();
         FakeMillis_Reset();
         FakeDetHw_LogSuppressed = 1U;  // Init() のログはノイズになるため抑制
-        Dem_Init(NULL);  // Demの内部状態を毎テスト決定的にリセットする（NvM_fake.cにより常に「初回起動」）
+        Dem_Init(NULL);  // Demの内部状態を毎テスト決定的にリセットする（Fake_NvM.cにより常に「初回起動」）
 
         canConfig.filter.filterId = 0x0220U;
         canConfig.filter.mask     = 0x1FFFU;

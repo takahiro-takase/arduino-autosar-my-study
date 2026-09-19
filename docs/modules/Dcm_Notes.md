@@ -123,7 +123,7 @@ subFunc 0x0A の応答が一切送信されない不具合が見つかりまし�
 下流の `CanTp_Transmit()` が独自に持つ TX バッファ上限（固定値 32 バイト）
 が連動しておらず、`DEM_EVENT_COUNT=10` での 0x0A 応答（43 バイト）を
 常に「invalid len」で拒否していました。`[env:native_dcm]` のユニット
-テストは `CanTp_fake.c` を使うためこの層のチェックを再現しておらず、
+テストは `Fake_CanTp.c` を使うためこの層のチェックを再現しておらず、
 検出できませんでした。詳細と修正内容は
 [`CanTp_Notes.md`](./CanTp_Notes.md) の該当節を参照してください。
 

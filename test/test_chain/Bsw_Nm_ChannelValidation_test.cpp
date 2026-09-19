@@ -18,8 +18,8 @@
 extern "C" {
 #include "Nm.h"
 #include "ComM.h"
-#include "Hal_Millis_fake.h"
-#include "Hal_Det_Hw_fake.h"
+#include "Fake_Hal_Millis.h"
+#include "Fake_Hal_Det_Hw.h"
 }
 
 class Bsw_Nm_ChannelValidation_Test : public ::testing::Test

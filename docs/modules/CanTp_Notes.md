@@ -118,7 +118,7 @@ UDS 0x19 subFunc 0x0A（reportSupportedDTC、statusMask による絞り込みを
 32 バイトの `CANTP_TX_BUFFER_SIZE` を常に超えるため、実機で
 subFunc 0x0A を送るたびに以下のように応答が一切送信されない状態に
 なっていた（ユニットテストでは検出できなかった。`[env:native_dcm]` は
-`CanTp_fake.c` で長さチェックを行わないため）:
+`Fake_CanTp.c` で長さチェックを行わないため）:
 
 ```
 受信 → 0x7E0: [02 19 0A 00 00 00 00 00]

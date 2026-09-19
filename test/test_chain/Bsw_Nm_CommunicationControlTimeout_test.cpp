@@ -29,12 +29,12 @@ extern "C" {
 #include "ComM.h"
 #include "Nm.h"
 #include "Nm_Cfg.h"
-#include "Hal_Can_Hw_fake.h"
-#include "Hal_Millis_fake.h"
-#include "Hal_Det_Hw_fake.h"
+#include "Fake_Hal_Can_Hw.h"
+#include "Fake_Hal_Millis.h"
+#include "Fake_Hal_Det_Hw.h"
 #include "Wrap_Dem.h"
-#include "Bsw_EcuM_fake.h"
-#include "Bsw_BswM_fake.h"
+#include "Fake_Bsw_EcuM.h"
+#include "Fake_Bsw_BswM.h"
 }
 
 namespace
@@ -68,7 +68,7 @@ protected:
     {
         FakeCanHw_Reset();
         WrapDemSetEventStatus_Reset();
-        Dem_Init(NULL);  // Demの内部状態を毎テスト決定的にリセットする（NvM_fake.cにより常に「初回起動」）
+        Dem_Init(NULL);  // Demの内部状態を毎テスト決定的にリセットする（Fake_NvM.cにより常に「初回起動」）
         FakeEcuM_Reset();
         FakeBswM_Reset();
         FakeMillis_Reset();

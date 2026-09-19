@@ -25,7 +25,7 @@
  * リセットできるようにしてある（`WrapDemSetEventStatus_Reset()` は Dem 自体の
  * 内部状態には触れない）。Dem 自体の内部状態（`Dem_StatusTable[]` 等）を
  * テストケース間でクリーンに戻すには、各テストの `SetUp()` で別途
- * `Dem_Init(NULL)` を呼ぶこと（`test/test_chain/NvM_fake.c` により常に
+ * `Dem_Init(NULL)` を呼ぶこと（`test/test_chain/Fake_NvM.c` により常に
  * 「初回起動」相当の決定的なリセットになる）。
  */
 #ifndef WRAP_DEM_H

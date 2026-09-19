@@ -71,7 +71,7 @@
  *              （/code-review で発見した回帰の防止）。
  *
  *          EcuM（ComM の RUN 要求先）と BswM（ComM のモード通知先）は境界として
- *          フェイクに差し替える（Bsw_EcuM_fake.h/Bsw_BswM_fake.h 冒頭コメント
+ *          フェイクに差し替える（Fake_Bsw_EcuM.h/Fake_Bsw_BswM.h 冒頭コメント
  *          参照）。CanIf は Nm が CanIf_Transmit() を直接呼ぶために実体で
  *          リンクするが、既定は TxPduCount=0 の空設定を渡す
  *          （Bsw_WakeupChain_test.cpp の kTestCanIfConfig と同じパターン）ため
@@ -95,12 +95,12 @@ extern "C" {
 #include "CanSM.h"
 #include "ComM.h"
 #include "Nm.h"
-#include "Hal_Can_Hw_fake.h"
-#include "Hal_Millis_fake.h"
-#include "Hal_Det_Hw_fake.h"
+#include "Fake_Hal_Can_Hw.h"
+#include "Fake_Hal_Millis.h"
+#include "Fake_Hal_Det_Hw.h"
 #include "Wrap_Dem.h"
-#include "Bsw_EcuM_fake.h"
-#include "Bsw_BswM_fake.h"
+#include "Fake_Bsw_EcuM.h"
+#include "Fake_Bsw_BswM.h"
 }
 
 namespace
@@ -146,7 +146,7 @@ protected:
         FakeBswM_Reset();
         FakeMillis_Reset();
         FakeDetHw_LogSuppressed = 1U;  // Init() のログはノイズになるため抑制
-        Dem_Init(NULL);  // Demの内部状態を毎テスト決定的にリセットする（NvM_fake.cにより常に「初回起動」）
+        Dem_Init(NULL);  // Demの内部状態を毎テスト決定的にリセットする（Fake_NvM.cにより常に「初回起動」）
 
         canConfig.filter.filterId = 0x0220U;
         canConfig.filter.mask     = 0x1FFFU;

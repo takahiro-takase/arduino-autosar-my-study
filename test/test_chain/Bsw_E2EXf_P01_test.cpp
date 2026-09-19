@@ -37,7 +37,7 @@ extern "C" {
 #include "E2EXf.h"
 #include "E2E.h"
 #include "Wrap_Dem.h"
-#include "Hal_Det_Hw_fake.h"
+#include "Fake_Hal_Det_Hw.h"
 }
 
 namespace
@@ -78,7 +78,7 @@ protected:
     {
         FakeDetHw_LogSuppressed = 1U;
         WrapDemSetEventStatus_Reset();
-        Dem_Init(NULL);  // Demの内部状態を毎テスト決定的にリセットする（NvM_fake.cにより常に「初回起動」）
+        Dem_Init(NULL);  // Demの内部状態を毎テスト決定的にリセットする（Fake_NvM.cにより常に「初回起動」）
         E2E_P01ProtectInit(&protectState);
         E2E_P01CheckInit(&checkState);
         smState.ProfileStatusWindow = smWindow;

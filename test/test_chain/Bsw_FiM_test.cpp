@@ -13,7 +13,7 @@
  *          も誤って許可扱いになっていた）を是正したのに合わせ、専用環境を
  *          新設した。
  *
- *          Dem.c は本物をリンクし（`test/test_chain/NvM_fake.c`で「常に初回
+ *          Dem.c は本物をリンクし（`test/test_chain/Fake_NvM.c`で「常に初回
  *          起動」を決定的に固定）、実際の確定 DTC ステータス伝播をそのまま
  *          検証する。
  */
@@ -23,8 +23,8 @@ extern "C" {
 #include "FiM.h"
 #include "Dem.h"
 #include "Dem_Cfg.h"
-#include "Hal_Millis_fake.h"
-#include "Hal_Det_Hw_fake.h"
+#include "Fake_Hal_Millis.h"
+#include "Fake_Hal_Det_Hw.h"
 }
 
 namespace
@@ -38,7 +38,7 @@ protected:
         FakeMillis_Reset();
         FakeDetHw_LogSuppressed = 1U;  // Dem_Init() のログはノイズになるため抑制
 
-        Dem_Init(NULL);  // NvM_fake.c により常に「初回起動」で確定的に再現
+        Dem_Init(NULL);  // Fake_NvM.c により常に「初回起動」で確定的に再現
 
         FakeDetHw_LogSuppressed = 0U;  // ここから各 TEST_F の実行(Act)区間
     }
