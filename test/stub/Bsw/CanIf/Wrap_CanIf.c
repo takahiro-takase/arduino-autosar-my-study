@@ -1,9 +1,13 @@
 /**
- * \file    Wrap_CanIf_SetControllerMode.c
- * \brief   `-Wl,--wrap=CanIf_SetControllerMode` の実体（Wrap_CanIf_SetControllerMode.h 参照）。
+ * \file    Wrap_CanIf.c
+ * \brief   `src/Bsw/CanIf/CanIf.c` 内の関数を対象とした wrap 実体
+ *          （Wrap_CanIf.h 参照）。
  */
-#include "Wrap_CanIf_SetControllerMode.h"
+#include "Wrap_CanIf.h"
 
+/* ----------------------------------------------------------------------
+ * CanIf_SetControllerMode
+ * ---------------------------------------------------------------------- */
 extern Std_ReturnType __real_CanIf_SetControllerMode(uint8 ControllerId, Can_ControllerStateType ControllerMode);
 
 uint32 WrapCanIfSetControllerMode_CallCount = 0U;
