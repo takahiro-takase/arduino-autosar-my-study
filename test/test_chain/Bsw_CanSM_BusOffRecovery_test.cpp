@@ -56,7 +56,7 @@ extern "C" {
 #include "Hal_Can_Hw_fake.h"
 #include "Hal_Millis_fake.h"
 #include "Hal_Det_Hw_fake.h"
-#include "Bsw_Dem_fake.h"
+#include "Wrap_Dem.h"
 #include "Bsw_EcuM_fake.h"
 #include "Bsw_BswM_fake.h"
 #include "Wrap_CanIf.h"
@@ -78,12 +78,13 @@ protected:
     void SetUp() override
     {
         FakeCanHw_Reset();
-        FakeDem_Reset();
+        WrapDemSetEventStatus_Reset();
         FakeEcuM_Reset();
         FakeBswM_Reset();
         FakeMillis_Reset();
         WrapCanIfSetControllerMode_Reset();
         FakeDetHw_LogSuppressed = 1U;  // Init() のログはノイズになるため抑制
+        Dem_Init(NULL);  // Demの内部状態を毎テスト決定的にリセットする（NvM_fake.cにより常に「初回起動」）
 
         canConfig.filter.filterId = 0x0220U;
         canConfig.filter.mask     = 0x1FFFU;
@@ -115,7 +116,7 @@ protected:
         ASSERT_EQ(nmState, NM_STATE_NORMAL_OPERATION);
 
         FakeCanHw_Reset();
-        FakeDem_Reset();
+        WrapDemSetEventStatus_Reset();
         FakeEcuM_Reset();
         FakeBswM_Reset();
         WrapCanIfSetControllerMode_Reset();
@@ -142,7 +143,7 @@ protected:
         FakeMillis_Value += static_cast<unsigned long>(CANSM_BUSOFF_RECOVERY_L1_MS) + 1UL;
 
         FakeCanHw_SetModeCount = 0U;
-        FakeDem_Reset();
+        WrapDemSetEventStatus_Reset();
         WrapCanIfSetControllerMode_Reset();
     }
 
@@ -169,7 +170,7 @@ TEST_F(Bsw_CanSM_BusOffRecovery_Test, MainFunction_NG_RecoveryAttemptFails_Stays
     ComM_ModeType mode = COMM_FULL_COMMUNICATION;
     ASSERT_EQ(ComM_GetCurrentComMode(COMM_USER_0, &mode), E_OK);
     EXPECT_EQ(mode, static_cast<ComM_ModeType>(COMM_SILENT_COMMUNICATION));
-    EXPECT_EQ(FakeDem_SetEventStatusCount, 0U);  // まだ PASSED は報告しない
+    EXPECT_EQ(WrapDemSetEventStatus_CallCount, 0U);  // まだ PASSED は報告しない
 }
 
 // ------------------------------------------------------------
@@ -219,8 +220,8 @@ TEST_F(Bsw_CanSM_BusOffRecovery_Test, MainFunction_OK_RecoversOnNextAttemptAfter
     ComM_ModeType mode = COMM_NO_COMMUNICATION;
     ASSERT_EQ(ComM_GetCurrentComMode(COMM_USER_0, &mode), E_OK);
     EXPECT_EQ(mode, static_cast<ComM_ModeType>(COMM_FULL_COMMUNICATION));
-    EXPECT_EQ(FakeDem_SetEventStatusCount, 1U);
-    EXPECT_EQ(FakeDem_LastEventStatus, DEM_EVENT_STATUS_PASSED);
+    EXPECT_EQ(WrapDemSetEventStatus_CallCount, 1U);
+    EXPECT_EQ(WrapDemSetEventStatus_LastEventStatus, DEM_EVENT_STATUS_PASSED);
 }
 
 }  // namespace

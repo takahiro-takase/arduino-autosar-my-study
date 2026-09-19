@@ -98,7 +98,7 @@ extern "C" {
 #include "Hal_Can_Hw_fake.h"
 #include "Hal_Millis_fake.h"
 #include "Hal_Det_Hw_fake.h"
-#include "Bsw_Dem_fake.h"
+#include "Wrap_Dem.h"
 #include "Bsw_EcuM_fake.h"
 #include "Bsw_BswM_fake.h"
 }
@@ -141,11 +141,12 @@ protected:
     void SetUp() override
     {
         FakeCanHw_Reset();
-        FakeDem_Reset();
+        WrapDemSetEventStatus_Reset();
         FakeEcuM_Reset();
         FakeBswM_Reset();
         FakeMillis_Reset();
         FakeDetHw_LogSuppressed = 1U;  // Init() のログはノイズになるため抑制
+        Dem_Init(NULL);  // Demの内部状態を毎テスト決定的にリセットする（NvM_fake.cにより常に「初回起動」）
 
         canConfig.filter.filterId = 0x0220U;
         canConfig.filter.mask     = 0x1FFFU;
@@ -189,7 +190,7 @@ protected:
         ASSERT_EQ(state, NM_STATE_NORMAL_OPERATION);
 
         FakeCanHw_Reset();
-        FakeDem_Reset();
+        WrapDemSetEventStatus_Reset();
         FakeEcuM_Reset();
         FakeBswM_Reset();
     }
@@ -460,7 +461,7 @@ TEST_F(Bsw_SleepCoordination_Test, RxCancelsPrepareBusSleep_OK_RestoresFullComAn
     ArrangeSilentComAtPrepareBusSleep();
 
     FakeCanHw_Reset();
-    FakeDem_Reset();
+    WrapDemSetEventStatus_Reset();
     FakeEcuM_Reset();
     FakeBswM_Reset();
 
@@ -522,7 +523,7 @@ TEST_F(Bsw_SleepCoordination_Test, RxDuringBusOffAfterNmBusSleep_OK_DoesNotResur
     DriveNmUntil(NM_STATE_BUS_SLEEP);
 
     FakeCanHw_Reset();
-    FakeDem_Reset();
+    WrapDemSetEventStatus_Reset();
     FakeEcuM_Reset();
     FakeBswM_Reset();
 

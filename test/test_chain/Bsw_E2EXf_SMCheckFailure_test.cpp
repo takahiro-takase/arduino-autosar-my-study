@@ -28,7 +28,7 @@ extern "C" {
 #include "E2EXf_PBCfg.h"
 #include "E2E_P05.h"
 #include "Hal_Det_Hw_fake.h"
-#include "Bsw_Dem_fake.h"
+#include "Wrap_Dem.h"
 #include "Wrap_E2E.h"
 }
 
@@ -51,7 +51,8 @@ protected:
     void SetUp() override
     {
         FakeDetHw_LogSuppressed = 1U;  // Init() のログはノイズになるため抑制
-        FakeDem_Reset();
+        WrapDemSetEventStatus_Reset();
+        Dem_Init(NULL);  // Demの内部状態を毎テスト決定的にリセットする（NvM_fake.cにより常に「初回起動」）
         WrapE2ESMCheck_Reset();
 
         // E2EXf_PBCfg_Init() が E2EXf_EngineInfoRxCfg の CheckState/SMState/
@@ -109,9 +110,9 @@ TEST_F(Bsw_E2EXf_SMCheckFailure_Test, InverseTransformP05_OK_ValidFrameReportsPa
     EXPECT_EQ(ret, E_OK);
     EXPECT_EQ(checkStatus, E2E_P05STATUS_OK);
     EXPECT_EQ(WrapE2ESMCheck_CallCount, 3U);
-    EXPECT_EQ(FakeDem_SetEventStatusCount, 1U);
-    EXPECT_EQ(FakeDem_LastEventId, DEM_EVENT_E2E_ENGINEINFO);
-    EXPECT_EQ(FakeDem_LastEventStatus, DEM_EVENT_STATUS_PASSED);
+    EXPECT_EQ(WrapDemSetEventStatus_CallCount, 1U);
+    EXPECT_EQ(WrapDemSetEventStatus_LastEventId, DEM_EVENT_E2E_ENGINEINFO);
+    EXPECT_EQ(WrapDemSetEventStatus_LastEventStatus, DEM_EVENT_STATUS_PASSED);
 }
 
 // ------------------------------------------------------------
@@ -148,7 +149,7 @@ TEST_F(Bsw_E2EXf_SMCheckFailure_Test, InverseTransformP05_NG_SMCheckFailureRetur
     EXPECT_EQ(ret, E_SAFETY_SOFT_RUNTIMEERROR);
     EXPECT_EQ(checkStatus, E2E_P05STATUS_OK);
     EXPECT_EQ(WrapE2ESMCheck_CallCount, 1U);
-    EXPECT_EQ(FakeDem_SetEventStatusCount, 0U);
+    EXPECT_EQ(WrapDemSetEventStatus_CallCount, 0U);
 }
 
 // ------------------------------------------------------------
@@ -177,7 +178,7 @@ TEST_F(Bsw_E2EXf_SMCheckFailure_Test, InverseTransformP05_OK_ResumesReportingAft
     WrapE2ESMCheck_ForceFail = 1U;
     E2E_P05StatusType checkStatus = E2E_P05STATUS_ERROR;
     (void)E2EXf_InverseTransformP05(&E2EXf_EngineInfoRxCfg, buf1, 7U, &checkStatus);
-    ASSERT_EQ(FakeDem_SetEventStatusCount, 0U);
+    ASSERT_EQ(WrapDemSetEventStatus_CallCount, 0U);
     WrapE2ESMCheck_ForceFail = 0U;  // 以降はパススルー（実体成功）
 
     /* 実行 (Act) */
@@ -188,8 +189,8 @@ TEST_F(Bsw_E2EXf_SMCheckFailure_Test, InverseTransformP05_OK_ResumesReportingAft
     /* 評価 (Assert): 強制失敗が悪影響を残さず、実フレーム3回分で通常通り
      * Dem へ PASSED を報告する */
     EXPECT_EQ(WrapE2ESMCheck_CallCount, 4U);
-    EXPECT_EQ(FakeDem_SetEventStatusCount, 1U);
-    EXPECT_EQ(FakeDem_LastEventStatus, DEM_EVENT_STATUS_PASSED);
+    EXPECT_EQ(WrapDemSetEventStatus_CallCount, 1U);
+    EXPECT_EQ(WrapDemSetEventStatus_LastEventStatus, DEM_EVENT_STATUS_PASSED);
 }
 
 }  // namespace

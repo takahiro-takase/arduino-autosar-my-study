@@ -12,7 +12,7 @@
 #include <gtest/gtest.h>
 #include "WdgM.h"
 #include "WdgIf_fake.h"
-#include "Bsw_Dem_fake.h"
+#include "Wrap_Dem.h"
 #include "Hal_Det_Hw_fake.h"
 #include "Hal_Millis_fake.h"
 
@@ -24,7 +24,8 @@ protected:
         FakeMillis_Reset();
         FakeDetHw_Reset();
         FakeWdgIf_Reset();
-        FakeDem_Reset();
+        WrapDemSetEventStatus_Reset();
+        Dem_Init(NULL);  // Demの内部状態を毎テスト決定的にリセットする（NvM_fake.cにより常に「初回起動」）
         WdgM_Init(&WdgM_Config);
         FakeDetHw_Reset();  /* Init 自体が出す DET ログ・記録を後続の検証対象から除く */
     }
