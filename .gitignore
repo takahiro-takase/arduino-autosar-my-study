@@ -13,3 +13,9 @@ docs/autosar/4.4.0/*.*
 # Python
 __pycache__/
 *.pyc
+
+# clang source-based coverage の生成物（[env:native_coverage]、実行のたびに
+# .pio/build/native_coverage/ 配下やカレントディレクトリに作られる）
+*.profraw
+*.profdata
+coverage_html/

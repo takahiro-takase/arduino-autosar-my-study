@@ -7,6 +7,11 @@
  */
 #include <cstdlib>
 
+/* `_UCRT`（llvm-mingw 等）では本物の __imp_quick_exit/__imp__Exit が既に
+ * 存在するため本スタブは無効化する（test/test_native/win_quick_exit_stub.cpp
+ * のコメント参照、2026-09 追加）。 */
+#ifndef _UCRT
+
 extern "C" void QuickExitStub(int status)
 {
     std::exit(status);
@@ -19,3 +24,5 @@ extern "C" void UnderscoreExitStub(int status)
 
 extern "C" void (*__imp_quick_exit)(int) = QuickExitStub;
 extern "C" void (*__imp__Exit)(int)      = UnderscoreExitStub;
+
+#endif /* _UCRT */

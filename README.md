@@ -1126,6 +1126,9 @@ EcuM の POST_RUN 遷移時に Rte_Engine タスクと Rte_Warning タスクが�
 pio test -e native      # Gpt/E2E_P05/Can 単体
 pio test -e native_chain  # Tx/Rx処理コールチェーン（通常/E2E/デッドライン監視とも）
 pio test -e native_dcm  # Dcm_Cbk.c/Dem.c（UDS SID 0x19 ReadDTCInformation 中心）
+# [env:native_coverage]: [env:native] と同じ対象を clang（llvm-mingw）でビルドし、
+# MC/DC を含む source-based coverage を計測する試作 env。事前準備・使い方は
+# platformio.ini の当該セクションのコメント参照。
 $env:DET_LOG_VERBOSE = "1"; pio test -e native_chain -v # TRACE ログ出力
 ```
 

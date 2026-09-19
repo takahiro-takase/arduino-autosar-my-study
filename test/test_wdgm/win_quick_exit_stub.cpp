@@ -20,8 +20,18 @@
  *          参照される可能性があるパスであり、本プロジェクトのテストは
  *          ASSERT_DEATH 等を使わないため、通常のテスト実行では
  *          このスタブが実際に呼ばれることはない。
+ *
+ *          `_UCRT`（UCRT ランタイム版 MinGW-w64 で定義されるマクロ、
+ *          llvm-mingw 等）でビルドする場合は本物の `__imp_quick_exit`/
+ *          `__imp__Exit` が既にランタイム側に存在するため、本スタブを
+ *          定義すると多重定義リンクエラーになる。ファイル冒頭コメントの
+ *          既存の記載通り、その場合は本スタブを丸ごと無効化する
+ *          （2026-09 追加、`[env:native_coverage]` の clang/llvm-mingw
+ *          ビルドで実際に踏んだ）。
  */
 #include <cstdlib>
+
+#ifndef _UCRT
 
 extern "C" void QuickExitStub(int status)
 {
@@ -35,3 +45,5 @@ extern "C" void UnderscoreExitStub(int status)
 
 extern "C" void (*__imp_quick_exit)(int) = QuickExitStub;
 extern "C" void (*__imp__Exit)(int)      = UnderscoreExitStub;
+
+#endif /* _UCRT */
