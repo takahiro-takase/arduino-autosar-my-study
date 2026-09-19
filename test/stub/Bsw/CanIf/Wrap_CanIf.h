@@ -30,12 +30,26 @@
  * として新設し、本ファイルへ統合した）。CanIf.c/Can.c 自体はフェイクに
  * 置き換えず実体のまま、CanSM.c から見た戻り値だけをピンポイントで
  * 差し替える。
+ *
+ * \par CanIf_RxIndication / CanIf_TxConfirmation / CanIf_ControllerBusOff
+ * 2026-09、test_native を native_chain へ統合した際に追加。Can.c がこの3関数を
+ * 上位層通知として呼ぶ（旧 `test/test_native/Bsw_CanIf_fake.h` が単純な
+ * 呼び出し記録フェイクとして丸ごと差し替えていた境界）。native_chain は
+ * 既に CanIf.c を実体でリンクしており（Tx/Rx チェーン検証用）、
+ * Bsw_Can_test.cpp（Can.c 単体検証）は CanIf の実際のPDUルーティングまでは
+ * 対象外で、呼び出し回数・引数だけを検証したいため、CanIf_SetControllerMode
+ * と同じ考え方で境界だけをピンポイントで観測する。既定は
+ * `__real_...` へのパススルー（CanIf/CanSM 側に未初期化ガードがあり、
+ * Bsw_Can_test.cpp は CanIf_Init()/CanSM_Init() を呼ばないため、実体へ渡っても
+ * 静かに no-op になるだけで既存挙動に影響しない。ForceFail 相当のトグルは
+ * 無い（誰も故障注入を必要としていないため）。
  */
 #ifndef WRAP_CANIF_H
 #define WRAP_CANIF_H
 
 #include "Std_Types.h"
 #include "CanIf.h"
+#include "Can.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -50,6 +64,20 @@ extern uint8 WrapCanIfSetControllerMode_ForceFail;
 
 /** 各テストケースの開始時に呼び、呼び出し回数・強制失敗フラグを初期状態へ戻す。 */
 void WrapCanIfSetControllerMode_Reset(void);
+
+extern uint32    WrapCanIfRxIndication_CallCount;
+extern Can_HwType    WrapCanIfRxIndication_LastMailbox;
+extern uint8         WrapCanIfRxIndication_LastData[8];
+extern PduLengthType WrapCanIfRxIndication_LastLength;
+void WrapCanIfRxIndication_Reset(void);
+
+extern uint32    WrapCanIfTxConfirmation_CallCount;
+extern PduIdType WrapCanIfTxConfirmation_LastPduId;
+void WrapCanIfTxConfirmation_Reset(void);
+
+extern uint32 WrapCanIfControllerBusOff_CallCount;
+extern uint8  WrapCanIfControllerBusOff_LastControllerId;
+void WrapCanIfControllerBusOff_Reset(void);
 
 #ifdef __cplusplus
 }

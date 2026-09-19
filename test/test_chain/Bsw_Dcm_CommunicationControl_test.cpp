@@ -9,14 +9,14 @@
  *          `Dcm_HandleCommunicationControl()`/`Dcm_CommControlReset()` が
  *          `Com_SetCommunicationEnabled()`/`Nm_EnableCommunication()`/
  *          `Nm_DisableCommunication()` を直接呼んでいたレイヤ違反を是正し、
- *          `BswM_Dcm_CommunicationMode_CurrentState()`（`Bsw_BswM_fake.h`で
+ *          `BswM_Dcm_CommunicationMode_CurrentState()`（`Fake_Bsw_BswM.h`で
  *          スパイに差し替え。native_chain統合時にComM.c用の既存フェイクへ
  *          統合、アクセサ名は`FakeBswM_LastDcmCommunicationMode`等へ改称）
  *          経由へ変更した際に新設。
  *
  *          Bsw_Dcm_ControlDTCSetting_test.cpp と同じ「Dcm_ComIndication() に
  *          生の UDS バイト列を直接渡し、応答と副作用（本テストでは
- *          Bsw_BswM_fake の記録）を検証する」ブラックボックステスト方式。
+ *          Fake_Bsw_BswM の記録）を検証する」ブラックボックステスト方式。
  *          BswM.c 自体（ルールエンジン本体）はこの env にリンクされないため、
  *          「Dcm が正しい Dcm_CommunicationModeType 値で BswM を呼んだか」の
  *          みを検証し、Com/Nm への実際の反映（BswM_ApplyDcmCommMode()）は
@@ -28,11 +28,11 @@ extern "C" {
 #include "Dcm.h"
 #include "Dcm_Cfg.h"
 #include "Dem.h"
-#include "CanTp_fake.h"
-#include "Bsw_BswM_fake.h"
+#include "Fake_CanTp.h"
+#include "Fake_Bsw_BswM.h"
 #include "Wrap_ComM.h"
-#include "Hal_Millis_fake.h"
-#include "Hal_Det_Hw_fake.h"
+#include "Fake_Hal_Millis.h"
+#include "Fake_Hal_Det_Hw.h"
 }
 
 namespace

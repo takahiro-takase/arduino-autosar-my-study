@@ -9,7 +9,7 @@
  *          への対応をきっかけに新設した。
  *
  *          `Dcm_ComIndication()` に生の UDS バイト列を直接渡し、
- *          `CanTp_Transmit()`（`CanTp_fake.h` でキャプチャ）へ渡された応答を
+ *          `CanTp_Transmit()`（`Fake_CanTp.h` でキャプチャ）へ渡された応答を
  *          検証する、という「入口と出口だけを見る」ブラックボックステスト。
  *          CanTp/PduR/CanIf/Can は経由しない（`Dcm_ComIndication()` 自体が
  *          「CanTp が組み立てた生 UDS ペイロードを受け取る」入口のため）。
@@ -24,9 +24,9 @@ extern "C" {
 #include "Dcm.h"
 #include "Dcm_Cfg.h"
 #include "Dem.h"
-#include "CanTp_fake.h"
-#include "Hal_Millis_fake.h"
-#include "Hal_Det_Hw_fake.h"
+#include "Fake_CanTp.h"
+#include "Fake_Hal_Millis.h"
+#include "Fake_Hal_Det_Hw.h"
 #include "Wrap_ComM.h"
 }
 

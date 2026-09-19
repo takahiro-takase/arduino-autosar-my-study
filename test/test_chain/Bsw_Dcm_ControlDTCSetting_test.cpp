@@ -4,7 +4,7 @@
  *          PlatformIO `[env:native_chain]`。2026-08新設時は専用環境`[env:native_dcm]`だったが、2026-09にnative_chainへ統合した）。
  *
  * \details Bsw_Dcm_ReadDtcInfo_test.cpp と同じ「Dcm_ComIndication() に生の
- *          UDS バイト列を直接渡し、CanTp_Transmit()（CanTp_fake.h でキャプチャ）
+ *          UDS バイト列を直接渡し、CanTp_Transmit()（Fake_CanTp.h でキャプチャ）
  *          へ渡された応答を検証する」ブラックボックステスト方式。
  *
  *          0x85 は extendedSession 限定のため、SendExtendedSession() で
@@ -20,9 +20,9 @@ extern "C" {
 #include "Dcm_Cfg.h"
 #include "Dem.h"
 #include "Dem_Cfg.h"
-#include "CanTp_fake.h"
-#include "Hal_Millis_fake.h"
-#include "Hal_Det_Hw_fake.h"
+#include "Fake_CanTp.h"
+#include "Fake_Hal_Millis.h"
+#include "Fake_Hal_Det_Hw.h"
 #include "Wrap_ComM.h"
 }
 

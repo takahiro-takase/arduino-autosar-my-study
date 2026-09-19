@@ -27,7 +27,7 @@ extern "C" {
 #include "E2EXf.h"
 #include "E2EXf_PBCfg.h"
 #include "E2E_P05.h"
-#include "Hal_Det_Hw_fake.h"
+#include "Fake_Hal_Det_Hw.h"
 #include "Wrap_Dem.h"
 #include "Wrap_E2E.h"
 }
@@ -52,7 +52,7 @@ protected:
     {
         FakeDetHw_LogSuppressed = 1U;  // Init() のログはノイズになるため抑制
         WrapDemSetEventStatus_Reset();
-        Dem_Init(NULL);  // Demの内部状態を毎テスト決定的にリセットする（NvM_fake.cにより常に「初回起動」）
+        Dem_Init(NULL);  // Demの内部状態を毎テスト決定的にリセットする（Fake_NvM.cにより常に「初回起動」）
         WrapE2ESMCheck_Reset();
 
         // E2EXf_PBCfg_Init() が E2EXf_EngineInfoRxCfg の CheckState/SMState/

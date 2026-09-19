@@ -33,7 +33,7 @@
  *          「機構」の理解・検証に絞るため、テスト専用の最小 Com/PduR/CanIf
  *          設定を本ファイル内で定義し、Com.c/PduR.c/CanIf.c/Can.c は実体を
  *          リンクする（フェイクは `Can_Hw` 層のみ、
- *          `test/test_chain/Hal_Can_Hw_fake.c` を使う）。中心となる
+ *          `test/test_chain/Fake_Hal_Can_Hw.c` を使う）。中心となる
  *          セグメント①②はコールチェーン全体を貫く IPduId=0（16bit シグナル
  *          1本）のみを使う。IPduId=1/2 は SWS_Com_00495（TMS 遷移時の
  *          無条件即時送信）専用の追加 I-PDU で、Com_MainFunctionTx() より前の
@@ -41,7 +41,7 @@
  *          （PduR/CanIf 側にルーティングは設定していない）。IPduId=0
  *          （kTestTxIPdu）は ComTxModeNumberOfRepetitions（SWS_Com_00305）の
  *          検証も兼ねる（NumberOfRepetitions=2U/RepetitionPeriodMs=50U）。
- *          そのため本ファイルは `Hal_Millis_fake.h` で `millis()` を決定的に
+ *          そのため本ファイルは `Fake_Hal_Millis.h` で `millis()` を決定的に
  *          進められるようにしている（`SetUp()` で `FakeMillis_Reset()`）。
  *
  *          [env:native]（test/test_native/）は Can.c 単体を CanIf フェイクで
@@ -69,9 +69,9 @@ extern "C" {
 #include "CanIf.h"
 #include "Can.h"
 #include "Can_Hw.h"
-#include "Hal_Can_Hw_fake.h"
-#include "Hal_Det_Hw_fake.h"
-#include "Hal_Millis_fake.h"
+#include "Fake_Hal_Can_Hw.h"
+#include "Fake_Hal_Det_Hw.h"
+#include "Fake_Hal_Millis.h"
 }
 
 namespace

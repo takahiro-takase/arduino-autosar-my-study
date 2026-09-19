@@ -1,12 +1,18 @@
 #!/usr/bin/env bash
-# カバレッジレポート生成スクリプト（clang/llvm-mingw ベースの [env:*_coverage]
-# 環境群、platformio.ini の [env:native_coverage] セクション・
+# カバレッジレポート生成スクリプト（clang/llvm-mingw ベースの
+# [env:native_chain_coverage]、platformio.ini の当該セクション・
 # scripts/use_clang_coverage.py 参照）。
 #
-# 全 *_coverage 環境をビルド・テスト実行し、生成された各プロファイルを
-# 1 つに統合した上で、MC/DC 条件カバレッジを含む HTML レポートを
-# coverage_html/ へ生成する（.gitignore 済み、index.html をブラウザで
-# 直接開ける）。
+# 2026-09、test_native/test_dcm/test_wdgm/test_fim を test_chain へ統合した
+# ことに伴い、native env自体が [env:native_chain]（+ _coverage）1つに
+# 集約された。以前は複数の *_coverage envのプロファイルを統合していたが、
+# 今は単一envのプロファイルをそのまま使うだけで足りる（将来また
+# coverage envが増えた場合に備え、複数env統合の仕組み自体はそのまま
+# 残してある）。
+#
+# 対象env（ENVS配列）をビルド・テスト実行し、生成されたプロファイルから
+# MC/DC 条件カバレッジを含む HTML レポートを coverage_html/ へ生成する
+# （.gitignore 済み、index.html をブラウザで直接開ける）。
 #
 # 使い方（事前に環境変数を設定してから呼ぶこと）:
 #   export LLVM_MINGW_BIN="/c/Users/<you>/llvm-mingw-YYYYMMDD-ucrt-x86_64/bin"
@@ -36,12 +42,7 @@ if ! command -v pio > /dev/null 2>&1; then
 fi
 
 ENVS=(
-    native_coverage
     native_chain_coverage
-    native_chain_wrap_coverage
-    native_dcm_coverage
-    native_wdgm_coverage
-    native_fim_coverage
 )
 
 PIO_ENV_ARGS=()

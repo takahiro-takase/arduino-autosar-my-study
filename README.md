@@ -47,7 +47,7 @@ ARXML や設定ツールは使用せず、コードで階層構造・型定義�
     - [コールチェーンのテスト（`[env:native_chain]`）](#unit-test-chain)
       - [Tx 処理（Com → PduR → CanIf → Can の順）](#unit-test-tx)
       - [Rx 処理（Can → CanIf → PduR → Com の順）](#unit-test-rx)
-    - [単一モジュールのテスト（`[env:native]`）](#unit-test-single)
+    - [単一モジュールのテスト](#unit-test-single)
   - [CAPL 風スクリプト機能（tools/can_tool）](#capl-scripting)
   - [シリアルモニタ出力例](#serial-log-example)
 - [補足](#appendix)
@@ -1116,19 +1116,21 @@ EcuM の POST_RUN 遷移時に Rte_Engine タスクと Rte_Warning タスクが�
 ### 単体テスト（ホスト上でのロジック検証）
 
 実 HW（UNO R4）を使わず、Bsw モジュールのロジックだけをホスト PC 上で GoogleTest
-により検証します。単一モジュールを対象にした `[env:native]`、複数モジュールに
-またがる関数コールチェーンをそのまま検証する `[env:native_chain]`、Dcm/Dem
-（診断・故障記憶）専用の `[env:native_dcm]` の 3 つの環境を用意しています
-（`platformio.ini` 参照）。
+により検証します。単一モジュールのテストも複数モジュールにまたがる関数
+コールチェーンの検証も含め、`test/test_chain/` 1 フォルダ・`[env:native_chain]`
+1 環境に集約しています（2026-09、`[env:native]`/`[env:native_dcm]`/
+`[env:native_wdgm]`/`[env:native_fim]` という個別 env に分かれていた時期が
+ありましたが、`--wrap` によるフォールトインジェクション（`platformio.ini` の
+`[env:native_chain]` 冒頭コメント参照）を活用してすべて本 env へ統合しました）。
 
 ```bash
 # ホスト上でビルド・実行（GoogleTest、実 HW 不要）
-pio test -e native      # Gpt/E2E_P05/Can 単体
-pio test -e native_chain  # Tx/Rx処理コールチェーン（通常/E2E/デッドライン監視とも）
-pio test -e native_dcm  # Dcm_Cbk.c/Dem.c（UDS SID 0x19 ReadDTCInformation 中心）
-# [env:native_coverage]: [env:native] と同じ対象を clang（llvm-mingw）でビルドし、
-# MC/DC を含む source-based coverage を計測する試作 env。事前準備・使い方は
-# platformio.ini の当該セクションのコメント参照。
+pio test -e native_chain  # 単一モジュール検証(Can/Gpt/Dio/Port/Det/E2E等)＋
+                           # Tx/Rx処理コールチェーン(通常/E2E/デッドライン監視)＋
+                           # Dcm/Dem/WdgM/FiM 等すべて含む
+# [env:native_chain_coverage]: [env:native_chain] と同じ対象を clang（llvm-mingw）
+# でビルドし、MC/DC を含む source-based coverage を計測する env。事前準備・
+# 使い方は platformio.ini の当該セクションのコメント参照。
 $env:DET_LOG_VERBOSE = "1"; pio test -e native_chain -v # TRACE ログ出力
 ```
 
@@ -1142,7 +1144,7 @@ $env:DET_LOG_VERBOSE = "1"; pio test -e native_chain -v # TRACE ログ出力
 > death test 機構経由で `libmingw32.a` 内の UCRT 専用シンボル
 > (`__imp_quick_exit`/`__imp__Exit`) が要求され、
 > `undefined reference to __imp_quick_exit` 等でリンクに失敗することがある。
-> `test/test_native/win_quick_exit_stub.cpp` はこの環境向けの回避コード
+> `test/test_chain/win_quick_exit_stub.cpp` はこの環境向けの回避コード
 > （該当シンボルを `std::exit()` へ委譲する自前スタブで満たす）。
 > UCRT ランタイム版の MinGW-w64 を使っている場合は本来不要で、
 > `__imp_quick_exit`/`__imp__Exit` の多重定義エラーが出たら削除すること。
@@ -1164,7 +1166,7 @@ $env:DET_LOG_VERBOSE = "1"; pio test -e native_chain -v # TRACE ログ出力
 箇所）でテストを2つのセグメントに分け、それぞれを個別に実行可能な
 `TEST_F` ケースとしている（`--gtest_filter=Bsw_TxChain_Test.ComSendSignal_*` 等で
 絞り込み可）。フェイクは最下層の `Can_Hw` のみ（`test/test_chain/
-Hal_Can_Hw_fake.c`）で、CanIf.c が呼ぶ `CanSM_RxIndication()` 等は
+Fake_Hal_Can_Hw.c`）で、CanIf.c が呼ぶ `CanSM_RxIndication()` 等は
 `Bsw_CanSM_fake.c`（no-op スタブ、CanSM 自身のロジックは README
 「ECU管理層」の別のコールチェーンのため対象外）で満たしている。
 
@@ -1208,7 +1210,7 @@ RxIndicationCbk → `E2EXf_InverseTransformP05()` → `E2E_P05Check()`）は
 している。この非同期境界は Tx 処理の `Com_TxPending` と構造が同じだが、
 「立てる側／読む側」が逆（周期タスクが立てて on-demand 呼び出しが読む）ため、
 PduR/CanIf/Can/CanSM を一切経由せず Com.c 単体で完結する。フェイクは
-`millis()`（`test/test_chain/Hal_Millis_fake.c`）のみで、`Com_RxIndication()`を
+`millis()`（`test/test_chain/Fake_Hal_Millis.c`）のみで、`Com_RxIndication()`を
 直接呼んで「受信していたが途絶えた」状態を作り、`FakeMillis_Value` を
 しきい値超過まで進めてから検証する。Tx チェーンと同じくフラグの前後で
 2セグメントに分け、フラグの状態自体はテスト専用アクセサ
@@ -1216,28 +1218,33 @@ PduR/CanIf/Can/CanSM を一切経由せず Com.c 単体で完結する。フェ�
 （詳細は `Bsw_RxTimeoutChain_test.cpp` 冒頭のコメント参照）。
 
 <a id="unit-test-single"></a>
-#### 単一モジュールのテスト（`[env:native]`）
+#### 単一モジュールのテスト
 
-全モジュールのテストは `test/test_native/` 1 フォルダに集約し、HAL 層
-（`*_Hw` ファイル）だけをフェイクに差し替えて、その上位の実モジュールは
-依存関係の下位から順に `build_src_filter` へ積み上げていく方式を取っている
-（現状は `src/Bsw/Gpt/Gpt.c` と `src/Bsw/E2E/E2E_P05.c` が対象）。ファイル名は
+`Gpt`/`Dio`/`Port`/`Det`/`E2E`/`E2E_P05`/`E2E_P01` のように他モジュールと
+コールチェーンを共有しない末端モジュールは、HAL 層（`*_Hw` ファイル）だけを
+フェイクに差し替えて単体で検証している（`test/test_chain/` 内の
+`Bsw_Gpt_test.cpp`/`Fake_Hal_Gpt_Hw.c` 等、2026-09 に専用 env `[env:native]`
+から本 env（`[env:native_chain]`）へ統合済み）。ファイル名は
 `{層}_{モジュール}_{test|fake}`（実ファイル名が `<Module>_Hw` の場合はそれも
-含める。例: `Bsw_Gpt_test.cpp`、`Hal_Gpt_Hw_fake.c`）で統一し、フォルダを
-分けなくてもどの層・モジュールのファイルかが名前だけで分かるようにしている。
-`Gpt_OnTick()`（本来 ISR から呼ばれる関数）はテストから直接呼ぶことで、
-実割り込みなしに状態機械を駆動している。
+含める）で統一し、フォルダを分けなくてもどの層・モジュールのファイルかが
+名前だけで分かるようにしている。`Gpt_OnTick()`（本来 ISR から呼ばれる関数）は
+テストから直接呼ぶことで、実割り込みなしに状態機械を駆動している。
 
-`Bsw_Can_test.cpp`（`src/Bsw/Can/Can.c` 単体、CanIf は上位層通知4関数
-（TxConfirmation/ControllerBusOff/RxIndication/ControllerWakeup）だけをフェイク
-に差し替えて隔離）はこの方式の一例です（[コールチェーンのテスト](#unit-test-chain)
-の env と分離している理由は前節参照）。
+`Bsw_Can_test.cpp`（`src/Bsw/Can/Can.c` 単体）は少し特殊で、`[env:native_chain]`
+は他のコールチェーンテストのために `CanIf.c`/`CanSM.c` を実体でリンクして
+いるため、Can.c が上位層通知として呼ぶ3関数（`CanIf_RxIndication()`/
+`CanIf_TxConfirmation()`/`CanIf_ControllerBusOff()`）だけを`--wrap`で
+観測する（`test/stub/Bsw/CanIf/Wrap_CanIf.c`、既定は実体へパススルーしつつ
+呼び出し回数・引数を記録。詳細は `platformio.ini` の `[env:native_chain]`
+冒頭コメント参照）。CanIf/CanSM 側の未初期化ガードにより、本テストが
+`CanIf_Init()`/`CanSM_Init()` を呼ばない限りパススルー後の実処理は
+静かに no-op になる。
 
-新しい Bsw モジュールのテストを追加する場合は `test/test_native/` に
-`{層}_{モジュール}_test.cpp`（および必要なら `{層}_{モジュール}_fake.c`）を
-追加し、`[env:native]` の `build_src_filter` と `-I` にその実ソースを積み
-増す（GoogleTest の `main()` は `test_main.cpp` に集約しているため、新規
-テストファイルには `int main()` を書かないこと）。
+新しい Bsw モジュールのテストを追加する場合は `test/test_chain/` に
+`Bsw_{シナリオ名}_test.cpp`（および必要なら `{モジュール}_fake.c`）を
+追加し、`[env:native_chain]` の `build_src_filter` と `-I` にその実ソースを
+積み増す（GoogleTest の `main()` は `test_main.cpp` に集約しているため、
+新規テストファイルには `int main()` を書かないこと）。
 
 <a id="capl-scripting"></a>
 ### CAPL 風スクリプト機能（tools/can_tool）
