@@ -1,7 +1,8 @@
 /**
  * \file    Bsw_E2EXf_SMCheckFailure_test.cpp
  * \brief   コールチェーン方式 + `-Wl,--wrap` フォールトインジェクションの
- *          第2適用例（GoogleTest / PlatformIO `[env:native_chain_wrap]`）。
+ *          第2適用例（GoogleTest / PlatformIO `[env:native_chain]`。2026-09、
+ *          試作環境 `[env:native_chain_wrap]` から本 env へ統合した）。
  *
  * \details 対象は `E2EXf_ReportSMVerdict()`（E2EXf.c）内の、`E2E_SMCheck()`
  *          が `E2E_E_OK` 以外を返した場合の分岐（E2EXf.c 47〜59 行目）。
@@ -11,7 +12,7 @@
  *          （`Wrap_CanIf_SetControllerMode.h`/`Bsw_CanSM_BusOffRecovery_test.cpp`
  *          と同じ状況、CanSM.c 726〜736 行目の初カバーに続く2件目）。
  *
- *          `-Wl,--wrap=E2E_SMCheck`（platformio.ini の `[env:native_chain_wrap]`
+ *          `-Wl,--wrap=E2E_SMCheck`（platformio.ini の `[env:native_chain]`
  *          参照）を使うと、E2EXf.c/E2E.c/E2E_P05.c の実体はそのまま保ちつつ、
  *          E2EXf.c から見た `E2E_SMCheck()` の戻り値だけをピンポイントで
  *          差し替えられる（Wrap_E2E_SMCheck.h 参照）。
