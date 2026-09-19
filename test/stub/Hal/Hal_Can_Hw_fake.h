@@ -5,6 +5,10 @@
  *          呼び出し回数・引数を記録するだけのフェイクに差し替える。
  *          各関数の戻り値は `FakeCanHw_*Return` で個別に制御でき、既定は
  *          すべて `CAN_HW_OK`（成功）にしてある。
+ *
+ *          2026-09、`test_native`/`test_chain` の2envで内容が重複していた
+ *          ため、`Hal_Det_Hw_fake.h` と同じ理由で `test/stub/Hal/` へ
+ *          集約した。
  */
 #ifndef HAL_CAN_HW_FAKE_H
 #define HAL_CAN_HW_FAKE_H
