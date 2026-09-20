@@ -1,5 +1,5 @@
 /**
- * \file    Bsw_RxTimeoutChain_test.cpp
+ * \file    Bsw_ComStack_RxTimeoutChain_test.cpp
  * \brief   README.md「Rx 処理」の「デッドライン監視（受信タイムアウト）」
  *          コールチェーンの単体テスト（GoogleTest / PlatformIO `[env:native_chain]`）。
  *
@@ -17,7 +17,7 @@
  *                    REPLACE    : InitValue で置換
  *                    NONE       : E_NOT_OK（既定、呼び出し元は自分の初期値を使う）
  *
- *          Tx 処理コールチェーン（Bsw_TxChain_test.cpp）の `Com_TxPending` と
+ *          Tx 処理コールチェーン（Bsw_ComStack_TxChain_test.cpp）の `Com_TxPending` と
  *          構造は同じ「立てる側／読む側が別々のタイミングで動く」非同期境界だが、
  *          向きが逆になっている: TX は「on-demand 呼び出し（Com_SendSignal）が
  *          立てて、周期タスク（Com_MainFunctionTx）が読む」のに対し、こちらは
@@ -42,7 +42,7 @@
  *          再現してから、そこに続く `Com_ReceiveSignal()` を検証する。
  *
  *          本番の `Com_PBCfg.c` は Rte 依存の各種コールバックを持ち依存グラフが
- *          巨大なため（Bsw_TxChain_test.cpp 冒頭コメントと同じ理由）、1シグナル・
+ *          巨大なため（Bsw_ComStack_TxChain_test.cpp 冒頭コメントと同じ理由）、1シグナル・
  *          1 I-PDU のみのテスト専用の最小 Com 設定を本ファイル内で定義する。
  */
 #include <gtest/gtest.h>
@@ -57,7 +57,7 @@ namespace
 {
 
 // -----------------------------------------------------------------------
-// テスト専用の最小 Com 設定（Bsw_TxChain_test.cpp/Bsw_RxChain_test.cpp と
+// テスト専用の最小 Com 設定（Bsw_ComStack_TxChain_test.cpp/Bsw_ComStack_RxChain_test.cpp と
 // 同じ方針）。SignalId=0 (RX, 16bit BigEndian) 1本だけを持つ IPduId=0 の
 // RX I-PDU。RxDataTimeoutAction=SUBSTITUTE、TimeoutSubstitutionValue=0xFFFF
 // （本番の VehicleSpeed と同じ実運用パターン）。I-PDU 単位のデッドライン監視

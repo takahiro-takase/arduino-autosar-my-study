@@ -1,5 +1,5 @@
 /**
- * \file    Bsw_WakeupChain_test.cpp
+ * \file    Bsw_NmStack_WakeupChain_test.cpp
  * \brief   README.md「ウェイクアップ検出とウェイクアップ検証」コールチェーンの
  *          単体テスト（GoogleTest / PlatformIO `[env:native_chain]`）。
  *
@@ -36,7 +36,7 @@
  *                  （ComM/EcuM への通知なし）
  *
  *          ComM（CanSM が呼び返す通知の宛先）は 2026-08 の協調スリープ移管
- *          （Bsw_SleepCoordination_test.cpp 参照）で本 env に実体として
+ *          （Bsw_NmStack_SleepCoordination_test.cpp 参照）で本 env に実体として
  *          統合された。本テストは ComM_RequestComMode() を経由せず CanSM の
  *          API を直接叩くため、ComM の内部状態（ComM_Init() 直後の既定値
  *          NO_COM）がそのまま「ボランタリスリープ済み」の前提と一致する。
@@ -52,9 +52,9 @@
  *          振り分けより前に無条件で呼ばれる、CanIf.c 参照）、CanIf の RxPdu
  *          設定は 0 件のまま使う。
  *
- *          Bsw_TxChain_test.cpp/Bsw_RxChain_test.cpp（README「Tx/Rx処理」の
+ *          Bsw_ComStack_TxChain_test.cpp/Bsw_ComStack_RxChain_test.cpp（README「Tx/Rx処理」の
  *          コールチェーン）と同じ `[env:native_chain]` 上で CanSM.c の実体を
- *          共有する（詳細は Bsw_TxChain_test.cpp 冒頭コメント参照）。
+ *          共有する（詳細は Bsw_ComStack_TxChain_test.cpp 冒頭コメント参照）。
  */
 #include <gtest/gtest.h>
 

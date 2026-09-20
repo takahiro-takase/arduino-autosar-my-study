@@ -1,5 +1,5 @@
 /**
- * \file    Bsw_TxChain_test.cpp
+ * \file    Bsw_ComStack_TxChain_test.cpp
  * \brief   README.md「Tx 処理（Com → PduR → CanIf → Can の順）」コールチェーンの
  *          単体テスト（GoogleTest / PlatformIO `[env:native_chain]`）。
  *
@@ -56,7 +56,7 @@
  *          ControllerWakeup() をハードコードで呼ぶため、同じ `[env:native_chain]`
  *          は CanSM.c の実体もリンクしている（README「CAN コントローラの
  *          スリープ制御」のコールチェーンを検証する Bsw_SleepChain_test.cpp /
- *          Bsw_WakeupChain_test.cpp と同一バイナリ。CanSM が呼び返す
+ *          Bsw_NmStack_WakeupChain_test.cpp と同一バイナリ。CanSM が呼び返す
  *          ComM/Dem は境界としてフェイクに差し替える、Bsw_ComM_fake.h /
  *          Bsw_Dem_fake.h 冒頭コメント参照）。本ファイルの TX チェーンは
  *          CanSM の状態遷移に一切関与しないため、CanSM_Init() すら呼ばない
@@ -95,7 +95,7 @@ static void TestTxTOutCbk(void) { s_txTOutCount++; }
 
 // Com_TxIpduCallout（SWS_Com_00346、TX I-PDU 単位のフィルタリングフック）
 // 検証用。kTestTxIPdu（IPduId=0）に設定する。s_txCalloutAccept で戻り値を
-// 切り替えられるトグル式（Bsw_RxChain_test.cpp の TestRxIpduCallout と対称）。
+// 切り替えられるトグル式（Bsw_ComStack_RxChain_test.cpp の TestRxIpduCallout と対称）。
 static uint8_t s_txCalloutAccept      = 1U;
 static uint8_t s_txCalloutInvokeCount = 0U;
 static uint8_t s_txCalloutLastByte0   = 0U;
@@ -910,7 +910,7 @@ TEST_F(Bsw_TxChain_Test, ComMainFunction_NG_NothingPending_DoesNotReachCanHw)
 
 // ------------------------------------------------------------
 // Com_TxIpduCallout（SWS_Com_00346、TX I-PDU 単位のフィルタリングフック）。
-// Bsw_RxChain_test.cpp の Com_RxIpduCallout テストと対になる、送信側の検証。
+// Bsw_ComStack_RxChain_test.cpp の Com_RxIpduCallout テストと対になる、送信側の検証。
 // kTestTxIPdu（IPduId=0）に TestTxIpduCallout を設定済み。Com_DoTransmit()
 // 内で TxTransformCbk 適用後・PduR_ComTransmit() 呼び出し直前に呼ばれることを、
 // Can_Hw まで到達するかどうかで確認する。
@@ -1555,7 +1555,7 @@ TEST_F(Bsw_TxChain_Test, SwitchIpduTxMode_NG_UnknownPduIdHasNoEffect)
 // （feedback_test_chain_ipdu_id_ceiling: COM_RX/TX_IPDU_MAX は
 // native_chain バイナリ全体で共有される固定サイズ配列であり、超過は
 // 範囲外書き込みによる無関係なテストの原因不明なハングを引き起こす）。
-// そのため Bsw_RxTimeoutChain_test.cpp の `rx_ipdu_group` 名前空間と同じ
+// そのため Bsw_ComStack_RxTimeoutChain_test.cpp の `rx_ipdu_group` 名前空間と同じ
 // 手法（専用の最小 Com_ConfigType、IPduId=0 を再利用した独立した
 // Com_Init() サイクル）で分離する。
 //

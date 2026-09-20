@@ -7,7 +7,7 @@
  *          異常系・初期値のみ検証する。「Allowed=TRUE で保留中の要求が
  *          実際に CanSM まで届く」正常系は、ComM_RequestComMode.md 等と同じ
  *          static 共有状態のハザードを避けるため、CanSM/CanIf/Can が
- *          安全に初期化済みの Bsw_SleepCoordination_test.cpp 側で検証する
+ *          安全に初期化済みの Bsw_NmStack_SleepCoordination_test.cpp 側で検証する
  *          （Bsw_ComM_GetRequestedComMode_test.cpp 末尾のコメントと同じ理由）。
  */
 #include <gtest/gtest.h>
