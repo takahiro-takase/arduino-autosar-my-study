@@ -1,0 +1,44 @@
+{
+    "version": 3,
+    "cmakeMinimumRequired": { "major": 3, "minor": 21, "patch": 0 },
+    "configurePresets": [
+        {
+            "name": "native-chain",
+            "displayName": "native_chain (clang++ / llvm-mingw)",
+            "description": "GoogleTest によるコールチェーンテスト一式。事前に環境変数 LLVM_MINGW_BIN を llvm-mingw の bin ディレクトリへ設定しておくこと（[[reference_pio_cli_location]] と同じ理由でパスはハードコードしない）。",
+            "generator": "MinGW Makefiles",
+            "binaryDir": "${sourceDir}/build/native_chain",
+            "cacheVariables": {
+                "CMAKE_C_COMPILER": "$env{LLVM_MINGW_BIN}/x86_64-w64-mingw32-clang.exe",
+                "CMAKE_CXX_COMPILER": "$env{LLVM_MINGW_BIN}/x86_64-w64-mingw32-clang++.exe",
+                "CMAKE_MAKE_PROGRAM": "$env{LLVM_MINGW_BIN}/mingw32-make.exe",
+                "ENABLE_COVERAGE": "OFF"
+            }
+        },
+        {
+            "name": "native-chain-coverage",
+            "displayName": "native_chain_coverage (Clang MC/DC coverage)",
+            "inherits": "native-chain",
+            "binaryDir": "${sourceDir}/build/native_chain_coverage",
+            "cacheVariables": {
+                "ENABLE_COVERAGE": "ON"
+            }
+        }
+    ],
+    "buildPresets": [
+        { "name": "native-chain", "configurePreset": "native-chain" },
+        { "name": "native-chain-coverage", "configurePreset": "native-chain-coverage" }
+    ],
+    "testPresets": [
+        {
+            "name": "native-chain",
+            "configurePreset": "native-chain",
+            "output": { "outputOnFailure": true }
+        },
+        {
+            "name": "native-chain-coverage",
+            "configurePreset": "native-chain-coverage",
+            "output": { "outputOnFailure": true }
+        }
+    ]
+}
