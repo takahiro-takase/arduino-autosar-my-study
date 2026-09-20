@@ -827,6 +827,23 @@ static void Com_WriteSignalBytes(uint8* dataPtr, uint8 byteCount, uint32 value)
 }
 
 /**
+ * \brief   [SWS_Com_00334]/Table 3 の「I-PDU Group 停止中は
+ *          COM_SERVICE_NOT_AVAILABLE」を、TX/RX 双方の Send/Receive 系
+ *          API から共通に導く（/code-review 指摘: 同じ三項演算子が
+ *          Com_SendSignal()/Com_SendSignalGroup()/Com_SendSignalGroupArray()/
+ *          Com_ReceiveSignalGroup()/Com_ReceiveSignalGroupArray() の
+ *          計6箇所に重複していたため集約）。
+ *
+ * \param[in]  started  対象 I-PDU の Com_TxIPduStarted[]/Com_RxIPduStarted[]。
+ *
+ * \return  started が真なら E_OK、偽なら COM_SERVICE_NOT_AVAILABLE。
+ */
+static uint8 Com_ServiceResult(uint8 started)
+{
+    return started ? E_OK : COM_SERVICE_NOT_AVAILABLE;
+}
+
+/**
  * \brief   指定 I-PDU バッファへ、所属する全シグナルの ComSignalInitValue を
  *          ビット単位でパックする。
  *
@@ -1388,7 +1405,8 @@ static void Com_RequestTxOnChange(const Com_IPduConfigType* ipdu)
  *                           リトルエンディアン uint32 として書き込まれる。
  *                           NULL 禁止。
  *
- * \retval  E_OK      シグナルが見つかり、SignalDataPtr へ値を書き込んだ
+ * \retval  E_OK      シグナルが見つかり、所属 I-PDU の I-PDU Group が起動中で、
+ *                    SignalDataPtr へ値を書き込んだ
  *                    （実データ、当該 I-PDU がタイムアウト中かつ
  *                    RxDataTimeoutAction=SUBSTITUTE の場合は
  *                    TimeoutSubstitutionValue、RxDataTimeoutAction=REPLACE
@@ -1397,10 +1415,16 @@ static void Com_RequestTxOnChange(const Com_IPduConfigType* ipdu)
  *                    受信値が InvalidValue と一致し DataInvalidAction=NOTIFY
  *                    の場合、または FilterAlgorithm=NEW_IS_WITHIN の範囲外の
  *                    場合は直近の合格値）。
+ * \retval  COM_SERVICE_NOT_AVAILABLE 所属 I-PDU の I-PDU Group が停止中
+ *                    （[SWS_Com_00684]/[SWS_Com_00685]/Table 3）。
+ *                    SignalDataPtr へは停止直前の最後の受信値（未受信なら
+ *                    初期値）をそのまま書き込む。デッドライン監視自体が
+ *                    無効化されているため RxDataTimeoutAction の判定より
+ *                    優先する。
  * \retval  E_NOT_OK  COM 未初期化、SignalDataPtr が NULL、
  *                    シグナル設定テーブルに SignalId が存在しない、
- *                    または当該 I-PDU がタイムアウト中かつ
- *                    RxDataTimeoutAction=NONE（既定）。
+ *                    または（I-PDU Group が起動中で）当該 I-PDU が
+ *                    タイムアウト中かつ RxDataTimeoutAction=NONE（既定）。
  *
  * \pre        Com_Init() が正常に完了していること。
  * \pre        このシグナルが属する I-PDU で Com_RxIndication() が
@@ -1410,11 +1434,13 @@ static void Com_RequestTxOnChange(const Com_IPduConfigType* ipdu)
  *             少なくとも 1 回呼ばれていること（呼ばれるまでは初期値 = 安全値の
  *             まま更新されない。Com_ReceiveSignalGroup() 参照）。
  * \note       戻り値型は仕様に従い uint8。E_OK / E_NOT_OK の値（0x00 / 0x01）は
- *             RTE が使う Std_ReturnType と互換性がある。
+ *             RTE が使う Std_ReturnType と互換性がある。COM_SERVICE_NOT_AVAILABLE
+ *             （0x80）は Com 独自の拡張値（Com.h 参照）。
  *
  * \AUTOSARReq     {SWS_Com_00198, SWS_Com_00500, SWS_Com_00875, SWS_Com_00876,
  *                  SWS_Com_00470, SWS_Com_00680, SWS_Com_00681, SWS_Com_00717,
- *                  SWS_Com_00273, SWS_Com_00303, SWS_Com_00695}
+ *                  SWS_Com_00273, SWS_Com_00303, SWS_Com_00695, SWS_Com_00684,
+ *                  SWS_Com_00685}
  * \ServiceID      {0x0B}
  * \Reentrancy     {Reentrant}
  * \Synchronicity  {Synchronous}
@@ -1486,7 +1512,13 @@ uint8 Com_ReceiveSignal(Com_SignalIdType SignalId, void* SignalDataPtr)
          * BitSize から必要バイト数だけを書き込む。 */
         const uint8 byteCount = (uint8)((sig->BitSize + 7U) / 8U);
 
-        if (timedOut)
+        /* [SWS_Com_00684]/[SWS_Com_00685]/Table 3: Group 停止中はデッドライン
+         * 監視も無効化されるため timedOut 分岐へは入れず、下の通常経路
+         * （buf を読み Invalid/Filter 判定を経る）へ合流させ、戻り値だけ
+         * Com_ServiceResult(started) で切り替える。 */
+        const uint8 started = Com_RxIPduStarted[sig->IPduId];
+
+        if (started && timedOut)
         {
             /* ComRxDataTimeoutAction（Com_RxDataTimeoutActionType 参照）:
              * NONE（既定）なら、値を書き込まず E_NOT_OK を返す
@@ -1537,7 +1569,7 @@ uint8 Com_ReceiveSignal(Com_SignalIdType SignalId, void* SignalDataPtr)
                 Com_RxInvalidNotifyPending[s] = 1U;
 
                 Com_WriteSignalBytes(dataPtr, byteCount, Com_RxLastValidValue[s]);
-                return E_OK;
+                return Com_ServiceResult(started);
             }
             if (sig->DataInvalidAction == COM_DATA_INVALID_ACTION_REPLACE)
             {
@@ -1560,12 +1592,12 @@ uint8 Com_ReceiveSignal(Com_SignalIdType SignalId, void* SignalDataPtr)
             Com_RxFilterRejectPending[s] = 1U;
 
             Com_WriteSignalBytes(dataPtr, byteCount, Com_RxLastValidValue[s]);
-            return E_OK;
+            return Com_ServiceResult(started);
         }
 
         Com_RxLastValidValue[s] = value;
         Com_WriteSignalBytes(dataPtr, byteCount, value);
-        return E_OK;
+        return Com_ServiceResult(started);
     }
 
     DET_LOGE(TAG, "ReceiveSignal E: sig=%u not found", (unsigned)SignalId);
@@ -1585,13 +1617,17 @@ uint8 Com_ReceiveSignal(Com_SignalIdType SignalId, void* SignalDataPtr)
  *          属するシグナルに対してこのスナップショットを読む（次に
  *          Com_ReceiveSignalGroup() が呼ばれるまで更新されない）。
  *
- *          コピー自体は、現在タイムアウト中かどうかに関わらず常に行う
- *          （SWS_Com_00461: I-PDU が停止/タイムアウト中でも既知の最新値を
- *          シャドウバッファへ反映すること、という実 AUTOSAR の要求に合わせた）。
- *          ただし本実装は Com_ReceiveSignal() の非グループ経路と同じ簡略化
- *          （タイムアウト中かどうかを E_OK/E_NOT_OK の 2 値にまとめる）を
- *          踏襲しており、実 AUTOSAR の COM_SERVICE_NOT_AVAILABLE や
- *          ComSignalInitValue によるフォールバックといった細分化は行わない。
+ *          コピー自体は、現在タイムアウト中かどうか・I-PDU Group が
+ *          停止中かどうかに関わらず常に行う（[SWS_Com_00461]: I-PDU が
+ *          停止/タイムアウト中でも既知の最新値をシャドウバッファへ反映
+ *          すること）。タイムアウト軸は本実装では Com_ReceiveSignal() の
+ *          非グループ経路と同じ簡略化（E_OK/E_NOT_OK の 2 値にまとめる）を
+ *          踏襲し、ComSignalInitValue によるフォールバックといった細分化は
+ *          行わない。一方 I-PDU Group 停止軸は、コピー時点で停止中なら
+ *          update-bit/タイムアウト判定に関わらず COM_SERVICE_NOT_AVAILABLE
+ *          を返す（2026-09-20 是正。この2軸は独立しており、後者は
+ *          「値の取得」と「送受信タイミング」の分離という Com_SendSignal()
+ *          側と同じ理由による）。
  *
  *          ComRxDataTimeoutAction=SUBSTITUTE（Com_RxDataTimeoutActionType 参照）
  *          との関係: このグループのメンバーに対する SUBSTITUTE 判定
@@ -1615,11 +1651,16 @@ uint8 Com_ReceiveSignal(Com_SignalIdType SignalId, void* SignalDataPtr)
  * \param[in]  SignalGroupId  確定コピーする RX Signal Group の ID（所属する
  *                            RX I-PDU の ID と同じ、Com_Types.h 参照）。
  *
- * \retval  E_OK      SignalGroupId が見つかり、コピー時点でタイムアウト中で
- *                    なかった（または update-bit=0 のため何もせず破棄した）。
+ * \retval  E_OK      SignalGroupId が見つかり、所属 I-PDU Group が起動中で、
+ *                    コピー時点でタイムアウト中でなかった（または
+ *                    update-bit=0 のため何もせず破棄した）。
+ * \retval  COM_SERVICE_NOT_AVAILABLE 所属 I-PDU Group が停止中
+ *                    （[SWS_Com_00461]/Table 3）。コピー自体は停止中でも
+ *                    行う（update-bit=0 の場合を除く）。
  * \retval  E_NOT_OK  COM 未初期化、SignalGroupId が RX I-PDU 設定テーブルに
  *                    存在しない、IsSignalGroup=0 の I-PDU を指定した、
- *                    またはコピーは行ったがコピー時点でタイムアウト中だった。
+ *                    または（I-PDU Group が起動中で）コピーは行ったが
+ *                    コピー時点でタイムアウト中だった。
  *
  * \pre        Com_Init() が正常に完了していること。
  *
@@ -1660,6 +1701,10 @@ uint8 Com_ReceiveSignalGroup(Com_SignalGroupIdType SignalGroupId)
         return E_NOT_OK;
     }
 
+    /* [SWS_Com_00461]/Table 3: Group 停止中は update-bit/タイムアウト状態に
+     * 関わらず COM_SERVICE_NOT_AVAILABLE を返すため、以降の全 return で使う。 */
+    const uint8 started = Com_RxIPduStarted[SignalGroupId];
+
     /* update-bit（SWS_Com_00324/00802）: 設定されており、かつ 0（未更新）の
      * 場合、受信データを破棄する。シャドウバッファ・タイムアウトスナップ
      * ショットとも直近の状態のまま更新しない（＝前回 update-bit=1 で確定
@@ -1669,13 +1714,18 @@ uint8 Com_ReceiveSignalGroup(Com_SignalGroupIdType SignalGroupId)
         const uint32 updateBit = Com_UnpackSignal(Com_RxBuffer[SignalGroupId],
                                                     ipdu->UpdateBitPosition, 1U, COM_BIG_ENDIAN);
         if (updateBit == 0U)
-            return E_OK;
+            return Com_ServiceResult(started);
     }
 
+    /* [SWS_Com_00461]: 停止中でも常にコピーする（「最後に受信した値」を
+     * シャドウバッファへ反映し続ける）。 */
     for (uint8 b = 0U; b < ipdu->DLC; b++)
         Com_RxShadowBuffer[SignalGroupId][b] = Com_RxBuffer[SignalGroupId][b];
 
     Com_RxShadowTimedOut[SignalGroupId] = Com_RxTimedOut[SignalGroupId];
+
+    if (!started)
+        return COM_SERVICE_NOT_AVAILABLE;
 
     return Com_RxShadowTimedOut[SignalGroupId] ? E_NOT_OK : E_OK;
 }
@@ -1701,7 +1751,11 @@ uint8 Com_ReceiveSignalGroup(Com_SignalGroupIdType SignalGroupId)
  * \param[out] DataPtr        コピー先バッファへのポインタ。ipdu->DLC バイト以上
  *                            必要。NULL 禁止。
  *
- * \retval  E_OK      SignalGroupId が見つかり、DataPtr へコピーした。
+ * \retval  E_OK      SignalGroupId が見つかり、所属 I-PDU Group が起動中で、
+ *                    DataPtr へコピーした。
+ * \retval  COM_SERVICE_NOT_AVAILABLE 所属 I-PDU Group が停止中
+ *                    （[SWS_Com_00857]/Table 3）。コピー自体は停止中でも
+ *                    行う。
  * \retval  E_NOT_OK  COM 未初期化、DataPtr が NULL、
  *                    または SignalGroupId が RX I-PDU 設定に存在しない。
  *
@@ -1710,6 +1764,7 @@ uint8 Com_ReceiveSignalGroup(Com_SignalGroupIdType SignalGroupId)
  * \note    実仕様([SWS_Com_00854])は戻り値型 uint8・引数型 Com_SignalGroupIdType
  *          だが、以前は Com_SendSignalGroup/Com_ReceiveSignalGroup(PR#192で修正済み)
  *          と同じ乖離が残っていた。今回まとめて修正。
+ * \AUTOSARReq     {SWS_Com_00854, SWS_Com_00857}
  * \ServiceID      {0x24}
  * \Reentrancy     {Reentrant}
  * \Synchronicity  {Synchronous}
@@ -1739,7 +1794,10 @@ uint8 Com_ReceiveSignalGroupArray(Com_SignalGroupIdType SignalGroupId, uint8* Da
 
     for (uint8 b = 0; b < ipdu->DLC; b++)
         DataPtr[b] = Com_RxBuffer[SignalGroupId][b];
-    return E_OK;
+
+    /* [SWS_Com_00857]/Table 3: I-PDU Group 停止中もコピーは行うが、
+     * 戻り値は COM_SERVICE_NOT_AVAILABLE にする。 */
+    return Com_ServiceResult(Com_RxIPduStarted[SignalGroupId]);
 }
 
 /**
@@ -1793,9 +1851,16 @@ uint8 Com_IsRxTimedOut(Com_IPduIdType IPduId)
  * \param[in]  SignalDataPtr シグナル値へのポインタ。4 バイト以上で
  *                           リトルエンディアン順。NULL 禁止。
  *
- * \retval  E_OK      シグナルが見つかり、TX バッファへ値をパックした。
- * \retval  E_NOT_OK  COM 未初期化、SignalDataPtr が NULL、
- *                    またはシグナル設定テーブルに SignalId が存在しない。
+ * \retval  E_OK                      シグナルが見つかり、所属 I-PDU の
+ *                                    I-PDU Group が起動中で、TX バッファへ
+ *                                    値をパックした。
+ * \retval  COM_SERVICE_NOT_AVAILABLE 所属 I-PDU の I-PDU Group が停止中
+ *                                    （[SWS_Com_00334]、詳細は下記
+ *                                    \AUTOSARReq 直前の説明参照）。バッファ
+ *                                    更新自体は停止中でも行う。
+ * \retval  E_NOT_OK                  COM 未初期化、SignalDataPtr が NULL、
+ *                                    またはシグナル設定テーブルに SignalId
+ *                                    が存在しない。
  *
  * \details ComFilterAlgorithm:
  *          値をバッファへパックした後、シグナルの FilterAlgorithm を評価する。
@@ -1820,10 +1885,14 @@ uint8 Com_IsRxTimedOut(Com_IPduIdType IPduId)
  *
  * \pre        Com_Init() が正常に完了していること。
  * \note       戻り値型は仕様に従い uint8。E_OK / E_NOT_OK の値（0x00 / 0x01）は
- *             RTE が使う Std_ReturnType と互換性がある。
+ *             RTE が使う Std_ReturnType と互換性がある。COM_SERVICE_NOT_AVAILABLE
+ *             （0x80）は Com 独自の拡張値（Com.h 参照）。I-PDU Group 停止中
+ *             （Com_IpduGroupStop() 参照）は [SWS_Com_00334]/Table 3 のとおり
+ *             バッファ更新・TMS/フィルタ評価は変わらず行うが本値を返す
+ *             （値のセットと送信タイミングは独立した責務のため）。
  *
  * \AUTOSARReq     {SWS_Com_00197, SWS_Com_00742, SWS_Com_00743, SWS_Com_00061,
- *                  SWS_Com_00495}
+ *                  SWS_Com_00495, SWS_Com_00334}
  * \ServiceID      {0x0A}
  * \Reentrancy     {Reentrant}
  * \Synchronicity  {Synchronous}
@@ -1908,7 +1977,9 @@ uint8 Com_SendSignal(Com_SignalIdType SignalId, const void* SignalDataPtr)
 
             Com_PackSignal(Com_TxShadowBuffer[sig->IPduId],
                            sig->BitPosition, sig->BitSize, sig->Endian, value);
-            return E_OK;
+            /* [SWS_Com_00334]/Table 3: I-PDU Group 停止中もバッファ更新は
+             * 続けるが、戻り値は COM_SERVICE_NOT_AVAILABLE にする。 */
+            return Com_ServiceResult(Com_TxIPduStarted[sig->IPduId]);
         }
 
         Com_PackSignal(Com_TxBuffer[sig->IPduId],
@@ -1966,7 +2037,9 @@ uint8 Com_SendSignal(Com_SignalIdType SignalId, const void* SignalDataPtr)
         if (passesFilter && ipdu->UpdateBitPosition != 0xFFU && sig->UpdateBitContributor == 1U)
             Com_PackSignal(Com_TxBuffer[sig->IPduId], ipdu->UpdateBitPosition, 1U, COM_BIG_ENDIAN, 1U);
 
-        return E_OK;
+        /* [SWS_Com_00334]/Table 3: I-PDU Group 停止中もバッファ更新・TMS/
+         * フィルタ評価は続けるが、戻り値は COM_SERVICE_NOT_AVAILABLE にする。 */
+        return Com_ServiceResult(Com_TxIPduStarted[sig->IPduId]);
     }
 
     DET_LOGE(TAG, "SendSignal E: sig=%u not found", (unsigned)SignalId);
@@ -2002,16 +2075,21 @@ uint8 Com_SendSignal(Com_SignalIdType SignalId, const void* SignalDataPtr)
  * \param[in]  SignalGroupId  コミットする Signal Group の ID（所属する TX
  *                            I-PDU の ID と同じ、Com_Types.h 参照）。
  *
- * \retval  E_OK      SignalGroupId が見つかり、コミット処理を行った。
- * \retval  E_NOT_OK  COM 未初期化、SignalGroupId が TX I-PDU 設定テーブルに
- *                    存在しない、または IsSignalGroup=0 の I-PDU を指定した。
+ * \retval  E_OK                      SignalGroupId が見つかり、所属 I-PDU
+ *                                    Group が起動中で、コミット処理を行った。
+ * \retval  COM_SERVICE_NOT_AVAILABLE 所属 I-PDU Group が停止中
+ *                                    （[SWS_Com_00334]/Table 3）。コミット・
+ *                                    TMS 評価自体は停止中でも行う。
+ * \retval  E_NOT_OK                  COM 未初期化、SignalGroupId が TX I-PDU
+ *                                    設定テーブルに存在しない、または
+ *                                    IsSignalGroup=0 の I-PDU を指定した。
  *
  * \pre        Com_Init() が正常に完了していること。
  * \pre        コミット前に、このグループに属する全メンバーを
  *             Com_SendSignal() で設定しておくこと。
  *
  * \AUTOSARReq     {SWS_Com_00200, SWS_Com_00050, SWS_Com_00742, SWS_Com_00743,
- *                  SWS_Com_00801, SWS_Com_00055, SWS_Com_00495}
+ *                  SWS_Com_00801, SWS_Com_00055, SWS_Com_00495, SWS_Com_00334}
  * \ServiceID      {0x0d}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
@@ -2103,7 +2181,9 @@ uint8 Com_SendSignalGroup(Com_SignalGroupIdType SignalGroupId)
         Com_PackSignal(Com_TxBuffer[SignalGroupId], ipdu->UpdateBitPosition, 1U, COM_BIG_ENDIAN, 1U);
     }
 
-    return E_OK;
+    /* [SWS_Com_00334]/Table 3: I-PDU Group 停止中もコミット・TMS 評価は
+     * 続けるが、戻り値は COM_SERVICE_NOT_AVAILABLE にする。 */
+    return Com_ServiceResult(Com_TxIPduStarted[SignalGroupId]);
 }
 
 /**
@@ -2147,17 +2227,23 @@ uint8 Com_SendSignalGroup(Com_SignalGroupIdType SignalGroupId)
  *                            Com_IPduIdType と同じ uint8 の別名（Com_Types.h 参照）。
  * \param[in]  DataPtr        書き込む生バイト列。ipdu->DLC バイト以上必要。NULL 禁止。
  *
- * \retval  E_OK      SignalGroupId が見つかり、書き込み・コミット処理を行った。
- * \retval  E_NOT_OK  COM 未初期化、DataPtr が NULL、SignalGroupId が TX I-PDU 設定
- *                    テーブルに存在しない、または IsSignalGroup=0 の I-PDU
- *                    を指定した。
+ * \retval  E_OK                      SignalGroupId が見つかり、所属 I-PDU
+ *                                    Group が起動中で、書き込み・コミット
+ *                                    処理を行った。
+ * \retval  COM_SERVICE_NOT_AVAILABLE 所属 I-PDU Group が停止中
+ *                                    （[SWS_Com_00334]/Table 3）。書き込み・
+ *                                    コミット自体は停止中でも行う。
+ * \retval  E_NOT_OK                  COM 未初期化、DataPtr が NULL、
+ *                                    SignalGroupId が TX I-PDU 設定テーブルに
+ *                                    存在しない、または IsSignalGroup=0 の
+ *                                    I-PDU を指定した。
  *
  * \pre        Com_Init() が正常に完了していること。
  *
  * \note    実仕様([SWS_Com_00851])は戻り値型 uint8・引数型 Com_SignalGroupIdType
  *          だが、以前は Com_SendSignalGroup/Com_ReceiveSignalGroup(PR#192で修正済み)
  *          と同じ乖離が残っていた。今回まとめて修正。
- * \AUTOSARReq     {SWS_Com_00851, SWS_Com_00852, SWS_Com_00853}
+ * \AUTOSARReq     {SWS_Com_00851, SWS_Com_00852, SWS_Com_00853, SWS_Com_00334}
  * \ServiceID      {0x23}
  * \Reentrancy     {Non Reentrant for the same signal group. Reentrant for
  *                  different signal groups.}
@@ -2231,7 +2317,9 @@ uint8 Com_SendSignalGroupArray(Com_SignalGroupIdType SignalGroupId, const uint8*
         Com_PackSignal(Com_TxBuffer[SignalGroupId], ipdu->UpdateBitPosition, 1U, COM_BIG_ENDIAN, 1U);
     }
 
-    return E_OK;
+    /* [SWS_Com_00334]/Table 3: I-PDU Group 停止中もコミット・TMS 評価は
+     * 続けるが、戻り値は COM_SERVICE_NOT_AVAILABLE にする。 */
+    return Com_ServiceResult(Com_TxIPduStarted[SignalGroupId]);
 }
 
 /**
@@ -2245,19 +2333,26 @@ uint8 Com_SendSignalGroupArray(Com_SignalGroupIdType SignalGroupId, const uint8*
  *
  *          [SWS_Com_00643]: ComSignalDataInvalidValue が未設定
  *          （Com_SignalConfigType.InvalidValueConfigured=0）の場合は
- *          COM_SERVICE_NOT_AVAILABLE 相当として拒否する。この条件は仕様上
+ *          COM_SERVICE_NOT_AVAILABLE を返す。この条件は仕様上
  *          「開発エラーによる失敗」とは別区分のため、Det_ReportError() は
  *          呼ばない（DET ログのみ）。
  *
+ *          I-PDU Group 停止中: 内部で委譲する Com_SendSignal() が
+ *          [SWS_Com_00334]/Table 3 に従い COM_SERVICE_NOT_AVAILABLE を
+ *          返すため、本関数もそのまま伝播する。
+ *
  * \param[in]  SignalId  無効化する TX シグナルの ID。
  *
- * \retval  E_OK      SignalId が見つかり、InvalidValue が設定済みで、
- *                    Com_SendSignal() が成功した。
- * \retval  E_NOT_OK  COM 未初期化、SignalId が存在しない、SignalId が TX
- *                    シグナルでない、ComSignalDataInvalidValue が未設定、
- *                    または内部の Com_SendSignal() が失敗した。
+ * \retval  E_OK                      SignalId が見つかり、InvalidValue が
+ *                                    設定済みで、Com_SendSignal() が成功した。
+ * \retval  COM_SERVICE_NOT_AVAILABLE ComSignalDataInvalidValue が未設定
+ *                                    （[SWS_Com_00643]）、または所属 I-PDU
+ *                                    Group が停止中（Com_SendSignal() から
+ *                                    伝播）。
+ * \retval  E_NOT_OK                  COM 未初期化、SignalId が存在しない、
+ *                                    または SignalId が TX シグナルでない。
  *
- * \AUTOSARReq     {SWS_Com_00099, SWS_Com_00642, SWS_Com_00643}
+ * \AUTOSARReq     {SWS_Com_00099, SWS_Com_00642, SWS_Com_00643, SWS_Com_00334}
  * \ServiceID      {0x10}
  * \Reentrancy     {Non Reentrant for the same signal. Reentrant for different signals.}
  * \Synchronicity  {Asynchronous}
@@ -2300,11 +2395,17 @@ uint8 Com_InvalidateSignal(Com_SignalIdType SignalId)
     }
     if (sig->InvalidValueConfigured == 0U)
     {
+        /* [SWS_Com_00643] 原文どおり COM_SERVICE_NOT_AVAILABLE を返す
+         * （2026-09-20 是正。COM_SERVICE_NOT_AVAILABLE 定数が存在しない
+         * 期間はE_NOT_OKで代用していたが、値が異なり呼び出し元が
+         * 区別できなかった）。 */
         DET_LOGW(TAG, "InvalidateSignal: sig=%u has no ComSignalDataInvalidValue configured",
                  (unsigned)SignalId);
-        return E_NOT_OK;
+        return COM_SERVICE_NOT_AVAILABLE;
     }
 
+    /* I-PDU Group 停止中の COM_SERVICE_NOT_AVAILABLE は、委譲先の
+     * Com_SendSignal() がそのまま返す（[SWS_Com_00334]）。 */
     return Com_SendSignal(SignalId, &sig->InvalidValue);
 }
 
@@ -2324,13 +2425,16 @@ uint8 Com_InvalidateSignal(Com_SignalIdType SignalId)
  *
  * \param[in]  SignalGroupId  無効化する Signal Group（TX I-PDU）の ID。
  *
- * \retval  E_OK      全メンバーの InvalidValue が設定済みで、コミットまで成功した。
+ * \retval  E_OK      全メンバーの InvalidValue が設定済みで、所属 I-PDU Group
+ *                    が起動中で、コミットまで成功した。
+ * \retval  COM_SERVICE_NOT_AVAILABLE いずれかのメンバーの
+ *                    ComSignalDataInvalidValue が未設定、または所属 I-PDU
+ *                    Group が停止中（[SWS_Com_00557]、後者は内部で呼ぶ
+ *                    Com_SendSignalGroup() から伝播）。
  * \retval  E_NOT_OK  COM 未初期化、SignalGroupId が TX I-PDU 設定テーブルに
- *                    存在しない、IsSignalGroup=0 の I-PDU を指定した、
- *                    またはいずれかのメンバーの ComSignalDataInvalidValue が
- *                    未設定。
+ *                    存在しない、または IsSignalGroup=0 の I-PDU を指定した。
  *
- * \AUTOSARReq     {SWS_Com_00557, SWS_Com_00645}
+ * \AUTOSARReq     {SWS_Com_00557, SWS_Com_00645, SWS_Com_00334}
  * \ServiceID      {0x1B}
  * \Reentrancy     {Non Reentrant for the same signal group. Reentrant for different signal groups.}
  * \Synchronicity  {Asynchronous}
@@ -2368,10 +2472,12 @@ uint8 Com_InvalidateSignalGroup(Com_SignalGroupIdType SignalGroupId)
         if (sig->Direction == COM_SIGNAL_DIRECTION_TX && sig->IPduId == SignalGroupId
             && sig->InvalidValueConfigured == 0U)
         {
+            /* [SWS_Com_00557] 原文どおり COM_SERVICE_NOT_AVAILABLE を返す
+             * （Com_InvalidateSignal() の同種是正と対、2026-09-20）。 */
             DET_LOGW(TAG, "InvalidateSignalGroup: SignalGroupId=%u member sig=%u has no "
                      "ComSignalDataInvalidValue configured",
                      (unsigned)SignalGroupId, (unsigned)sig->SignalId);
-            return E_NOT_OK;
+            return COM_SERVICE_NOT_AVAILABLE;
         }
     }
 

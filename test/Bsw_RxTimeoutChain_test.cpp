@@ -810,12 +810,56 @@ TEST_F(Bsw_RxIpduGroupChain_Test, ComIpduGroupStop_OK_NonGroupSignalFreezesInste
      * 凍結されたまま返り続ける。これが本来の目的（Bus-Sleep 中に
      * 「通信異常」として誤って上位層へ伝わらないようにする）だが、
      * 裏を返せば「本当に通信異常が起きても、再開までは検知されない」
-     * ことも意味する（意図的な停止期間中は当然の仕様）。 */
+     * ことも意味する（意図的な停止期間中は当然の仕様）。戻り値は
+     * [SWS_Com_00684]/[SWS_Com_00685]/Table 3 のとおり
+     * COM_SERVICE_NOT_AVAILABLE（2026-09-20 是正。以前は
+     * COM_SERVICE_NOT_AVAILABLE 定数が存在せず E_OK のままだった）。 */
     EXPECT_EQ(s_nonGroupRxTOutCount, 0U);
     uint16_t value = 0U;
     uint8 ret = Com_ReceiveSignal(0U, &value);
-    EXPECT_EQ(ret, E_OK);
+    EXPECT_EQ(ret, COM_SERVICE_NOT_AVAILABLE);
     EXPECT_EQ(value, 0x1234U);  // SUBSTITUTE(0xFFFF) にはならない
+}
+
+// ------------------------------------------------------------
+// COM_SERVICE_NOT_AVAILABLE（[SWS_Com_00461]/[SWS_Com_00857]/Table 3、
+// 2026-09-20 追加）: I-PDU Group 停止中の Com_ReceiveSignalGroup()/
+// Com_ReceiveSignalGroupArray() の戻り値。kTestRxGroupedIPdu（IPduId=0、
+// Signal Group、COM_IPDU_GROUP_SENSOR_RX）を使う。
+// ------------------------------------------------------------
+TEST_F(Bsw_RxIpduGroupChain_Test, ComReceiveSignalGroup_OK_ReturnsServiceNotAvailableWhenGroupStopped)
+{
+    /* 準備 (Arrange): 開始してから停止する（Com_Init() 直後の未開始状態との
+     * 区別のため、明示的に一度開始してから止める）。 */
+    Com_IpduGroupStart(COM_IPDU_GROUP_SENSOR_RX, 0U);
+    Com_IpduGroupStop(COM_IPDU_GROUP_SENSOR_RX);
+
+    /* 実行 (Act) */
+    uint8 ret = Com_ReceiveSignalGroup(0U);
+
+    /* 評価 (Assert): [SWS_Com_00461] 停止中でもシャドウバッファへの
+     * コピー自体は行うが、戻り値は COM_SERVICE_NOT_AVAILABLE。 */
+    EXPECT_EQ(ret, COM_SERVICE_NOT_AVAILABLE);
+}
+
+TEST_F(Bsw_RxIpduGroupChain_Test, ComReceiveSignalGroupArray_OK_ReturnsServiceNotAvailableWhenGroupStoppedButStillCopies)
+{
+    /* 準備 (Arrange): 開始して実受信させてから停止する（受信値が
+     * 凍結されたまま返ることも合わせて確認する）。 */
+    Com_IpduGroupStart(COM_IPDU_GROUP_SENSOR_RX, 0U);
+    uint8 data[1] = { 0xABU };
+    PduInfoType pdu = { data, 1U };
+    Com_RxIndication(0U, &pdu);
+    Com_IpduGroupStop(COM_IPDU_GROUP_SENSOR_RX);
+
+    /* 実行 (Act) */
+    uint8 out[1] = { 0U };
+    uint8 ret = Com_ReceiveSignalGroupArray(0U, out);
+
+    /* 評価 (Assert): [SWS_Com_00857] 停止中でも最後の受信値をそのまま
+     * コピーするが、戻り値は COM_SERVICE_NOT_AVAILABLE。 */
+    EXPECT_EQ(ret, COM_SERVICE_NOT_AVAILABLE);
+    EXPECT_EQ(out[0], 0xABU);
 }
 
 TEST_F(Bsw_RxIpduGroupChain_Test, ComIpduGroupStart_OK_NonGroupSignalTimesOutAndSubstitutesAfterExplicitStart)
