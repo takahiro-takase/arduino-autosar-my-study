@@ -48,6 +48,10 @@
 #include "SecOC_Cfg.h"
 #include "Csm_Cfg.h"
 
+/* Rte.c 側の実体（他の *_PBCfg.c と同じく、循環インクルードを避けるため
+ * Rte.h は include せずローカルに extern 宣言する）。 */
+extern void Rte_SecOCVerificationStatus_ImmobilizerCmd(SecOC_VerificationStatusType status);
+
 static const SecOC_RxPduConfigType SecOC_RxPduConfigData[SECOC_RX_PDU_COUNT] = {
     {
         /* ---------------------------------------------------------------
@@ -64,7 +68,9 @@ static const SecOC_RxPduConfigType SecOC_RxPduConfigData[SECOC_RX_PDU_COUNT] = {
         .MacTxLength        = 3U,      /* 24bit（SecOC Profile 1） */
         .SecuredPduLength   = 6U,      /* 2 + 1 + 3 */
         .CsmJobId           = CSM_JOB_ID_IMMOBILIZER_CMD_VERIFY,
-        .ComRxPduId         = 2U       /* Com RX IPduId=2 (SecureCommand_Rx) */
+        .ComRxPduId         = 2U,      /* Com RX IPduId=2 (SecureCommand_Rx) */
+        .VerificationStatusCallout       = Rte_SecOCVerificationStatus_ImmobilizerCmd,
+        .VerificationStatusPropagationMode = SECOC_VERIFICATION_STATUS_PROPAGATION_BOTH
     }
 };
 
