@@ -51,10 +51,10 @@ void FakeDetHw_Reset(void)
 
 void Det_Hw_PrintLogLine(LogLevel lvl, const char* tag, const char* func, const char* msg)
 {
-    if (FakeDetHw_IsVerbose())
-    {
+    //if (FakeDetHw_IsVerbose())
+    //{
         printf("[%lums] %s %s: %s: %s\n", FakeMillis_Value, FakeDetHw_LevelName(lvl), tag, func, msg);
-    }
+    //}
 }
 
 void Det_Hw_PrintDetError(uint16 ModuleId, uint8 InstanceId, uint8 ApiId, uint8 ErrorId)
@@ -72,3 +72,4 @@ void Det_Hw_PrintDetError(uint16 ModuleId, uint8 InstanceId, uint8 ApiId, uint8 
                (unsigned)ApiId, (unsigned)ErrorId);
     }
 }
+

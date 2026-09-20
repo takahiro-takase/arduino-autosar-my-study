@@ -189,6 +189,7 @@ set(NATIVE_CHAIN_INCLUDE_DIRS
     src/Bsw/Port
     src/Rte
     src/Hal
+    test/stub/Bsw/Can
     test/stub/Bsw/CanIf
     test/stub/Bsw/E2E
     test/stub/Bsw/Dem
@@ -231,6 +232,7 @@ set(NATIVE_CHAIN_SRC_SOURCES
 
 # 同じくリンクする test/stub/ 配下のフェイク/wrapソース。
 set(NATIVE_CHAIN_STUB_SOURCES
+    test/stub/Bsw/Can/Wrap_Can.c
     test/stub/Bsw/CanIf/Wrap_CanIf.c
     test/stub/Bsw/E2E/Wrap_E2E.c
     test/stub/Bsw/Dem/Wrap_Dem.c
@@ -287,6 +289,18 @@ set(NATIVE_CHAIN_WRAP_SYMBOLS
     CanIf_RxIndication
     CanIf_TxConfirmation
     CanIf_ControllerBusOff
+    # Can.c の AUTOSAR IF 全数（2026-09-20、Wrap_Can.h/.c 参照）。
+    Can_Init
+    Can_GetVersionInfo
+    Can_SetControllerMode
+    Can_GetControllerErrorState
+    Can_DisableControllerInterrupts
+    Can_EnableControllerInterrupts
+    Can_Write
+    Can_MainFunction_Read
+    Can_MainFunction_Write
+    Can_MainFunction_BusOff
+    Can_MainFunction_Wakeup
 )
 foreach(wrap_symbol IN LISTS NATIVE_CHAIN_WRAP_SYMBOLS)
     target_link_options(native_chain_tests PRIVATE "-Wl,--wrap=${wrap_symbol}")

@@ -24,3 +24,4 @@ __pycache__/
 *.profraw
 *.profdata
 coverage_html/
+memo.txt

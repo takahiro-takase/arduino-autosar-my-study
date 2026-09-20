@@ -52,9 +52,9 @@
  *          振り分けより前に無条件で呼ばれる、CanIf.c 参照）、CanIf の RxPdu
  *          設定は 0 件のまま使う。
  *
- *          Bsw_ComStack_TxChain_test.cpp/Bsw_ComStack_RxChain_test.cpp（README「Tx/Rx処理」の
+ *          Bsw_ComStack_TxChain_ComSendSignal_test.cpp/Bsw_ComStack_RxChain_test.cpp（README「Tx/Rx処理」の
  *          コールチェーン）と同じ `[env:native_chain]` 上で CanSM.c の実体を
- *          共有する（詳細は Bsw_ComStack_TxChain_test.cpp 冒頭コメント参照）。
+ *          共有する（詳細は Bsw_ComStack_TxChain_ComSendSignal_test.cpp 冒頭コメント参照）。
  */
 #include <gtest/gtest.h>
 
