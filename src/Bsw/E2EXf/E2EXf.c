@@ -122,9 +122,10 @@ Std_ReturnType E2EXf_InverseTransform(const E2EXf_RxConfigType* Config, const ui
     {
         /* [SWS_E2EXf_00152]（本関数は E2EXf_Inv_<transformerId> 相当のため
          * 00150 ではなく 00152 が対応する規定。00150/00151 は forward 関数
-         * E2EXf_<transformerId>（本プロジェクトの E2EXf_Transform()、void
-         * のため対象外）向け）。パラメータ異常検出時は E_NOT_OK ではなく
-         * E_SAFETY_HARD_RUNTIMEERROR を返すべき（2026-09 是正）。 */
+         * E2EXf_<transformerId>（本プロジェクトの E2EXf_Transform()）向けで、
+         * こちらも 2026-09-20 に同じ E_SAFETY_HARD_RUNTIMEERROR 対応済み）。
+         * パラメータ異常検出時は E_NOT_OK ではなく E_SAFETY_HARD_RUNTIMEERROR
+         * を返すべき（2026-09 是正）。 */
         Det_ReportError(E2EXF_MODULE_ID, 0U, E2EXF_API_ID_INVERSE_TRANSFORM, E2EXF_E_PARAM_POINTER);
         return E_SAFETY_HARD_RUNTIMEERROR;
     }
@@ -288,19 +289,22 @@ Std_ReturnType E2EXf_InverseTransformP05(const E2EXf_RxConfigTypeP05* Config, co
     return acceptable ? E_OK : E_NOT_OK;
 }
 
-void E2EXf_Transform(const E2EXf_TxConfigType* Config, uint8* Buffer, uint8 Length)
+Std_ReturnType E2EXf_Transform(const E2EXf_TxConfigType* Config, uint8* Buffer, uint8 Length)
 {
     DET_LOGT(TAG, "called");
     if (!E2EXf_Initialized)
     {
+        /* [SWS_E2EXf_00151]（E2EXf_InverseTransform() の同名コメント参照。
+         * 2026-09-20 是正: 以前は戻り値自体が無く区別できなかった）。 */
         Det_ReportError(E2EXF_MODULE_ID, 0U, E2EXF_API_ID_TRANSFORM, E2EXF_E_UNINIT);
-        return;
+        return E_SAFETY_HARD_RUNTIMEERROR;
     }
 
     if (Config == NULL || Config->E2EConfig == NULL || Config->ProtectState == NULL || Buffer == NULL)
     {
+        /* [SWS_E2EXf_00150] */
         Det_ReportError(E2EXF_MODULE_ID, 0U, E2EXF_API_ID_TRANSFORM, E2EXF_E_PARAM_POINTER);
-        return;
+        return E_SAFETY_HARD_RUNTIMEERROR;
     }
 
     /* E2E_P01Protect() は SWS_E2E_00047 準拠で Length 引数を持たないため
@@ -308,29 +312,34 @@ void E2EXf_Transform(const E2EXf_TxConfigType* Config, uint8* Buffer, uint8 Leng
      * バッファ長を検証する（不足時は何もしない、旧実装と同じ挙動）。 */
     if (Length < Config->E2EConfig->DataLength)
     {
+        /* [SWS_E2EXf_00150] */
         Det_ReportError(E2EXF_MODULE_ID, 0U, E2EXF_API_ID_TRANSFORM, E2EXF_E_PARAM);
-        return;
+        return E_SAFETY_HARD_RUNTIMEERROR;
     }
 
     (void)E2E_P01Protect(Config->E2EConfig, Config->ProtectState, Buffer);
+    return E_OK;
 }
 
-void E2EXf_TransformP05(const E2EXf_TxConfigTypeP05* Config, uint8* Buffer, uint8 Length)
+Std_ReturnType E2EXf_TransformP05(const E2EXf_TxConfigTypeP05* Config, uint8* Buffer, uint8 Length)
 {
     DET_LOGT(TAG, "called");
     if (!E2EXf_Initialized)
     {
+        /* [SWS_E2EXf_00151] */
         Det_ReportError(E2EXF_MODULE_ID, 0U, E2EXF_API_ID_TRANSFORM, E2EXF_E_UNINIT);
-        return;
+        return E_SAFETY_HARD_RUNTIMEERROR;
     }
 
     if (Config == NULL || Config->E2EConfig == NULL || Config->ProtectState == NULL || Buffer == NULL)
     {
+        /* [SWS_E2EXf_00150] */
         Det_ReportError(E2EXF_MODULE_ID, 0U, E2EXF_API_ID_TRANSFORM, E2EXF_E_PARAM_POINTER);
-        return;
+        return E_SAFETY_HARD_RUNTIMEERROR;
     }
 
     (void)E2E_P05Protect(Config->E2EConfig, Config->ProtectState, Buffer, Length);
+    return E_OK;
 }
 
 void E2EXf_GetVersionInfo(Std_VersionInfoType* versioninfo)

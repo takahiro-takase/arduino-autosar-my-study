@@ -88,11 +88,17 @@ void SecOC_DeInit(void);
  *          `SECOC_E_CRYPTO_FAILURE` を報告する（[SWS_SecOC_00166]。
  *          2026-09 追加）。
  *
+ *          検証結果は、`SecOC_RxPduConfigType.VerificationStatusCallout` が
+ *          設定されていれば `VerificationStatusPropagationMode` に従って
+ *          都度通知する（[SWS_SecOC_00048]/[SWS_SecOC_00119]、2026-09-20
+ *          追加）。報告する種別は `SecOC_VerifyStatusOverride()` 適用後の
+ *          最終判定に基づく（詳細は `SecOC_VerificationResultType` 参照）。
+ *
  * \param[in]  RxPduId     検証対象の SecOC RX Secured I-PDU ID
  *                         （SecOC_RxPduConfigType.SecOCRxPduId と照合する）。
  * \param[in]  PduInfoPtr  受信した Secured I-PDU のデータと長さ。NULL 禁止。
  *
- * \AUTOSARReq     {SWS_SecOC_00166}
+ * \AUTOSARReq     {SWS_SecOC_00166, SWS_SecOC_00048, SWS_SecOC_00119}
  * \ServiceID      {0x42}
  * \Reentrancy     {Reentrant for different PduIds. Non reentrant for the same PduId.}
  * \Synchronicity  {Synchronous}

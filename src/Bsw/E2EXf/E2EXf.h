@@ -389,36 +389,67 @@ Std_ReturnType E2EXf_InverseTransformP05(const E2EXf_RxConfigTypeP05* Config, co
  * \brief   TX I-PDU バイト列に対する E2E Transform（Counter/CRC 付与）を行う。
  *
  * \details E2E_P01Protect() を呼び、Buffer へ Counter・CRC8 を書き込む。
- *          E2EXf_Init() 未呼び出しの場合は何もしない（SWS_E2EXf_00133 相当）。
+ *
+ *          \note 現時点で本関数を実際に呼ぶ TX I-PDU は存在しない
+ *          （E2E Profile01→05移行に伴い、唯一の利用先だった
+ *          E2EHealthStatus は `E2EXf_TransformP05()` 側へ切り替え済み。
+ *          docs/E2E_Profile5_Notes.md 参照）。将来 Profile01 の TX I-PDU が
+ *          追加された場合に備えて残す参考実装であり、下記の戻り値契約は
+ *          その時点で初めて実際に検証されることになる。
+ *
+ *          戻り値は [SWS_E2EXf_00032]（実仕様の generic `E2EXf_<transformerId>`
+ *          シグネチャは `buffer/bufferLength/inputBuffer/inputBufferLength` を
+ *          持つ大きく異なるものだが、本プロジェクトは E2EXf_InverseTransform()
+ *          と対称の簡略化済みシグネチャを採用しており、それ自体は既存の
+ *          設計判断のまま変更しない）。以前は `void` のままで、対になる
+ *          E2EXf_InverseTransform() が既に持つ戻り値との非対称が残っていた
+ *          （2026-09-20 是正）。[SWS_E2EXf_00150]/[00151] のとおり、
+ *          未初期化・パラメータ異常は `E_SAFETY_HARD_RUNTIMEERROR` を返す
+ *          （E_NOT_OK ではない点に注意、E2EXf_InverseTransform() の同名
+ *          コメント参照）。
  *
  * \param[in]     Config  TX 側設定。NULL 禁止。
  * \param[in,out] Buffer  変換対象の I-PDU バイト列（上書きされる）。NULL 禁止。
  * \param[in]     Length  Buffer のバイト数。
  *
+ * \retval  E_OK                       変換を実行した。
+ * \retval  E_SAFETY_HARD_RUNTIMEERROR 未初期化、または Config/Buffer が NULL
+ *                                     等のパラメータ異常（[SWS_E2EXf_00150]/
+ *                                     [00151]）。
+ *
+ * \AUTOSARReq     {SWS_E2EXf_00032, SWS_E2EXf_00150, SWS_E2EXf_00151}
  * \ServiceID      {0x03}
  * \Reentrancy     {Reentrant}
  * \Synchronicity  {Synchronous}
  */
-void E2EXf_Transform(const E2EXf_TxConfigType* Config, uint8* Buffer, uint8 Length);
+Std_ReturnType E2EXf_Transform(const E2EXf_TxConfigType* Config, uint8* Buffer, uint8 Length);
 
 /**
  * \brief   TX I-PDU バイト列に対する E2E Profile 05 の Transform（Counter/CRC16 付与）を行う。
  *
  * \details E2E_P05Protect() を呼び、Buffer へ Counter・CRC16 を書き込む。
- *          E2EXf_Init() 未呼び出しの場合は何もしない（SWS_E2EXf_00133 相当、
- *          E2EXf_Initialized フラグは Profile 01/05 で共用する。実 AUTOSAR でも
+ *          E2EXf_Initialized フラグは Profile 01/05 で共用する（実 AUTOSAR でも
  *          E2E Transformer モジュール自身の初期化状態はプロファイル非依存で
  *          モジュール単位のため）。
+ *
+ *          戻り値の経緯は E2EXf_Transform() の同名コメント参照
+ *          （2026-09-20 是正、以前は `void`）。
  *
  * \param[in]     Config  TX 側設定（Profile 05）。NULL 禁止。
  * \param[in,out] Buffer  変換対象の I-PDU バイト列（上書きされる）。NULL 禁止。
  * \param[in]     Length  Buffer のバイト数。
  *
+ * \retval  E_OK                       変換を実行した。
+ * \retval  E_SAFETY_HARD_RUNTIMEERROR 未初期化、または Config/Buffer が NULL
+ *                                     等のパラメータ異常（[SWS_E2EXf_00150]/
+ *                                     [00151]）。
+ *
+ * \AUTOSARReq     {SWS_E2EXf_00032, SWS_E2EXf_00150, SWS_E2EXf_00151}
  * \ServiceID      {0x03}
  * \Reentrancy     {Reentrant}
  * \Synchronicity  {Synchronous}
  */
-void E2EXf_TransformP05(const E2EXf_TxConfigTypeP05* Config, uint8* Buffer, uint8 Length);
+Std_ReturnType E2EXf_TransformP05(const E2EXf_TxConfigTypeP05* Config, uint8* Buffer, uint8 Length);
 
 /**
  * \brief   E2EXf モジュールのバージョン情報を取得する。

@@ -63,7 +63,7 @@ namespace
 // -----------------------------------------------------------------------
 void TestTxTransform_E2EHealthStatus(uint8* Data, uint8 Length)
 {
-    E2EXf_TransformP05(&E2EXf_E2EHealthStatusTxCfgP05, Data, Length);
+    (void)E2EXf_TransformP05(&E2EXf_E2EHealthStatusTxCfgP05, Data, Length);
 }
 
 // -----------------------------------------------------------------------

@@ -45,6 +45,48 @@
  *                           Csm/CryIf/Crypto レイヤ分離の詳細は SecOC.c 参照）。
  *   ComRxPduId            : 検証成功時に Com_RxIndication() へ渡す Com RX I-PDU ID。
  * ----------------------------------------------------------------------- */
+/**
+ * \brief   検証結果の種別（[SWS_SecOC_00149]）。
+ * \details `SECOC_AUTHENTICATIONBUILDFAILURE` は「Freshness 値の問い合わせ
+ *          自体が失敗した」場合用だが、本プロジェクトの Freshness は受信
+ *          バイト列から同期的に導出するだけで問い合わせ処理を持たないため
+ *          （SecOC_Types.h 内 FreshnessOffset/Length コメント参照）、この値が
+ *          実際に使われることはない（値の定義のみ）。
+ */
+typedef enum
+{
+    SECOC_VERIFICATIONSUCCESS        = 0x00U, /**< 検証成功 */
+    SECOC_VERIFICATIONFAILURE        = 0x01U, /**< MAC不一致、または下位層(Csm等)自体の失敗 */
+    SECOC_FRESHNESSFAILURE           = 0x02U, /**< MACは一致したがFreshness(リプレイ)検証で不合格 */
+    SECOC_AUTHENTICATIONBUILDFAILURE = 0x03U  /**< 本実装では未到達（上記説明参照） */
+} SecOC_VerificationResultType;
+
+/**
+ * \brief   `SecOC_VerificationStatusCallout()` へ渡す通知データ構造体
+ *          （[SWS_SecOC_00160]）。
+ * \details `freshnessValueID` は実仕様が持つ専用の Freshness Value ID 空間
+ *          ではなく、`SecOC_VerifyStatusOverride()` と同じ学習用簡略化により
+ *          対象の `SecOCRxPduId` をそのまま使う（同関数の Doxygen 参照）。
+ */
+typedef struct
+{
+    uint16                        freshnessValueID;
+    SecOC_VerificationResultType  verificationStatus;
+    uint16                        secOCDataId;
+} SecOC_VerificationStatusType;
+
+/**
+ * \brief   検証ステータス伝播モード（[ECUC_SecOC_00046]
+ *          SecOCVerificationStatusPropagationMode 相当）。RX Secured I-PDU
+ *          ごとに設定する。
+ */
+typedef enum
+{
+    SECOC_VERIFICATION_STATUS_PROPAGATION_NONE = 0U,          /**< 通知しない（既定） */
+    SECOC_VERIFICATION_STATUS_PROPAGATION_FAILURE_ONLY,       /**< 失敗時のみ通知 */
+    SECOC_VERIFICATION_STATUS_PROPAGATION_BOTH                /**< 成功・失敗とも通知 */
+} SecOC_VerificationStatusPropagationModeType;
+
 typedef struct
 {
     PduIdType    SecOCRxPduId;  /* PduR_RxDestType.DestPduId と一致させる検索キー
@@ -59,6 +101,12 @@ typedef struct
     uint8        SecuredPduLength;
     uint32       CsmJobId;
     PduIdType    ComRxPduId;
+    /** [SWS_SecOC_00048]/[SWS_SecOC_00119]: 非NULLなら検証の都度、
+     *  VerificationStatusPropagationMode に従って呼ぶ（[SWS_SecOC_00048]、
+     *  詳細は SecOC.c の SecOC_RxIndication() 参照）。NULL 可（通知不要なら
+     *  未設定でよい、他の Cbk フックと同じ規約）。 */
+    void (*VerificationStatusCallout)(SecOC_VerificationStatusType status);
+    SecOC_VerificationStatusPropagationModeType VerificationStatusPropagationMode;
 } SecOC_RxPduConfigType;
 
 /* -----------------------------------------------------------------------

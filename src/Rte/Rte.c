@@ -29,6 +29,7 @@
 #include "E2EXf.h"
 #include "E2EXf_PBCfg.h"
 #include "E2EMon.h"
+#include "SecOC_Types.h"
 #include "Det.h"
 
 #define TAG "Rte"
@@ -486,6 +487,60 @@ void Rte_COMRxInd_SecureCommand(void)
         DET_LOGW(TAG, "ImmobilizerCmd: LOCK (authenticated via SecOC)");
 }
 
+/**
+ * \brief   ImmobilizerCmd (SecOC RX Secured I-PDU 0) の検証結果通知
+ *          （[SWS_SecOC_00048]/[SWS_SecOC_00119]、2026-09-20 追加）。
+ *
+ * \details SecOC_PBCfg.c の ImmobilizerCmd エントリに
+ *          `VerificationStatusCallout` として登録される
+ *          （`VerificationStatusPropagationMode=BOTH` のため成功・失敗とも
+ *          都度呼ばれる）。`Rte_COMRxInd_SecureCommand()` と異なり、MAC/
+ *          フレッシュネス検証の成否に関わらず呼ばれる点が異なる（ただし
+ *          長さ不足・未登録 PDU 等、実際に `Csm_MacVerify()` へ進む前に
+ *          `SecOC_RxIndication()` が早期 return するケースは「検証の試行」
+ *          自体が発生していないため対象外。SecOC.c 参照）。検証成功時は
+ *          `Rte_COMRxInd_SecureCommand()` と合わせて2つの通知が届くことに
+ *          なるが、前者は「Com へ転送された事実」、こちらは「SecOC 自身の
+ *          検証結果そのもの」という別の関心事のため、重複ではなく意図的な
+ *          役割分担）。
+ *
+ *          この関数自体はログ出力のみを行う（侵入検知システム等への実際の
+ *          対応は本実装のスコープ外、`Rte_COMRxInd_SecureCommand()` と同じ
+ *          最小デモパターン）。can_tool 等で改ざん/リプレイされたフレームを
+ *          送ると、この通知から実際に検証結果を確認できる。
+ *
+ * \param[in]  status  検証結果（[SWS_SecOC_00160]）。
+ *
+ * \note    SecOC_PBCfg.c から extern 宣言経由で VerificationStatusCallout
+ *          として参照されるため non-static。Rte.h には公開しない（他の
+ *          Rte_COM* グループと同じ理由）。
+ */
+void Rte_SecOCVerificationStatus_ImmobilizerCmd(SecOC_VerificationStatusType status)
+{
+    DET_LOGT(TAG, "called");
+    switch (status.verificationStatus)
+    {
+    case SECOC_VERIFICATIONSUCCESS:
+        DET_LOGI(TAG, "SecOC VerificationStatus: dataId=0x%04X OK", (unsigned)status.secOCDataId);
+        break;
+    case SECOC_FRESHNESSFAILURE:
+        DET_LOGW(TAG, "SecOC VerificationStatus: dataId=0x%04X FRESHNESS_FAILURE (replay?)",
+                 (unsigned)status.secOCDataId);
+        break;
+    case SECOC_VERIFICATIONFAILURE:
+        DET_LOGW(TAG, "SecOC VerificationStatus: dataId=0x%04X FAILURE (MAC mismatch or crypto service error)",
+                 (unsigned)status.secOCDataId);
+        break;
+    default:
+        /* SECOC_AUTHENTICATIONBUILDFAILURE。本実装では未到達
+         * （SecOC_VerificationResultType 参照）。到達した場合も安全側で
+         * 汎用 FAILURE として扱う。 */
+        DET_LOGW(TAG, "SecOC VerificationStatus: dataId=0x%04X FAILURE (status=%u)",
+                 (unsigned)status.secOCDataId, (unsigned)status.verificationStatus);
+        break;
+    }
+}
+
 /* SecureCommand (RX IPduId=2) の Reserved バイト位置。Com_PBCfg.c の
  * IPduId=2 エントリの .DLC=2U、SecOC_PBCfg.c の .AuthenticPduLength=2U と
  * 一致させること（レイアウトを変える場合はこの3箇所を連動して直す）。 */
@@ -640,7 +695,13 @@ void Rte_COMRxInd_AbsInfo(void)
 void Rte_COMTransform_E2EHealthStatus(uint8* Data, uint8 Length)
 {
     DET_LOGT(TAG, "called");
-    E2EXf_TransformP05(&E2EXf_E2EHealthStatusTxCfgP05, Data, Length);
+    /* E2EXf_TransformP05() の戻り値（2026-09-20 追加）は現状の起動順序
+     * （EcuM_Init() が E2EXf_PBCfg_Init() を Com_MainFunctionTx() 呼び出しより
+     * 前に完了させる）では E_SAFETY_HARD_RUNTIMEERROR を観測していないが、
+     * TxTransformCbk 自体の型が void のまま（Com_Types.h 参照）で受け渡す
+     * 経路が無いため、ここで破棄する（/code-review 指摘: 起動順序が将来
+     * 変わった場合の再検証はこの破棄では検知できない点に注意）。 */
+    (void)E2EXf_TransformP05(&E2EXf_E2EHealthStatusTxCfgP05, Data, Length);
 }
 
 /* -----------------------------------------------------------------------

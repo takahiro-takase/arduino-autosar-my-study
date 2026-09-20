@@ -421,6 +421,39 @@ void SecOC_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
     const uint8 actualPass    = (uint8)((macOk != 0U) && (freshnessOk != 0U));
     const uint8 effectivePass = SecOC_ApplyVerifyStatusOverride(tableIndex, actualPass);
 
+    /* [SWS_SecOC_00048]/[SWS_SecOC_00119]: 検証の都度、設定済みなら
+     * VerificationStatusCallout() を呼ぶ。報告する種別は effectivePass
+     * （SecOC_VerifyStatusOverride() 適用後）に基づく——[SWS_SecOC_00243]の
+     * 注記「オーバーライド使用中は Freshness Management が実際の結果と
+     * 食い違いうる」のとおり、実仕様上もオーバーライドの影響を受ける通知
+     * だからである。オーバーライドで Fail に強制された場合の具体的な理由は
+     * MAC/Freshness いずれかに一意に決まらないため、汎用の
+     * SECOC_VERIFICATIONFAILURE を報告する（macOk=0 の場合と結果的に同じ
+     * 分類のため else 側にまとめる。/simplify 指摘で4分岐から3分岐に整理）。
+     * コールアウト未設定（大多数の RX PDU）では分類自体が無駄になるため、
+     * NULL チェックの内側でのみ計算する。 */
+    if (cfg->VerificationStatusCallout != NULL)
+    {
+        const SecOC_VerificationResultType verificationStatus =
+            (effectivePass != 0U)  ? SECOC_VERIFICATIONSUCCESS :
+            (freshnessOk == 0U && actualPass == 0U && macOk != 0U) ? SECOC_FRESHNESSFAILURE :
+            SECOC_VERIFICATIONFAILURE;
+
+        const uint8 propagate =
+            (cfg->VerificationStatusPropagationMode == SECOC_VERIFICATION_STATUS_PROPAGATION_BOTH)
+            || ((cfg->VerificationStatusPropagationMode == SECOC_VERIFICATION_STATUS_PROPAGATION_FAILURE_ONLY)
+                && (verificationStatus != SECOC_VERIFICATIONSUCCESS));
+        if (propagate)
+        {
+            const SecOC_VerificationStatusType status = {
+                .freshnessValueID  = (uint16)RxPduId,  /* SecOC_VerifyStatusOverride()と同じ簡略化 */
+                .verificationStatus = verificationStatus,
+                .secOCDataId       = cfg->DataId
+            };
+            cfg->VerificationStatusCallout(status);
+        }
+    }
+
     /* フレッシュネス基準値は「実際に」検証が成功した場合 (actualPass) に
      * 更新する。Com への転送可否は下記の effectivePass に従うが、Fail に
      * 強制された場合でも actualPass が真（＝本物の正当なトラフィック）なら
