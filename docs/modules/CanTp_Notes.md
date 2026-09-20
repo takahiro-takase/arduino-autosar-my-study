@@ -151,6 +151,29 @@ subFunc 0x0A を送るたびに以下のように応答が一切送信されな�
 チャネルビジー判定、[SWS_CanTp_00123]）で正しく拒否されており、
 これは新しい問題ではなく想定通りの排他動作。
 
+### 同種バグの再発と再発防止（2026-09-20）
+
+上記の対応で `CANTP_TX_BUFFER_SIZE` を「`DEM_EVENT_COUNT` が今後 11 に
+増えても再確認不要」な 48 バイトへ拡張していたが、その後 `DEM_EVENT_COUNT`
+が 10→14 まで増加（WDGM_SUPERVISION/WDG_DISABLE_REJECTED/
+NVM_INTEGRITY_FAILED/NVM_LOSS_OF_REDUNDANCY 追加）した際、この値を
+再確認する旨のコメントがあったにも関わらず見落とされ、`DCM_TX_BUF_SIZE`
+が 0x0A で 59 バイト・0x14 で 58 バイトとなり、再び 48 バイトの上限を
+超えて subFunc 0x0A/0x14 の応答が実機で常に無応答になっていた。
+
+**対応**: `CANTP_TX_BUFFER_SIZE` を 76 バイト（FF(6)+CF×10(7×10)、
+`DEM_EVENT_COUNT` が今後 18 まで増えても再度触らずに済む余裕）へ
+再拡張。さらに、コメントによる注意喚起だけでは同じ見落としが
+三度目も起こりうるため、`Dcm_Cbk.c` の `DCM_TX_BUF_SIZE` 定義直後に
+本プロジェクト初の静的アサート（負のサイズの配列は違法という
+C89 以降常に有効な性質を利用、AVR/native 両ビルドで動作）を追加し、
+`CANTP_TX_BUFFER_SIZE` 不足時はビルドエラーで機械的に検知できるようにした。
+テスト側の `Fake_CanTp.c`（`test/stub/Bsw/CanTp/`）も実体と同じ長さ
+チェックを持たない設計だったため、`CANTP_FAKE_TX_BUF_SIZE` を実体の
+`CANTP_TX_BUFFER_SIZE` に連動させ、この種のバグを native テストでも
+検知できるようにした。実機ログで 0x19/0x0A(`TX FF len=59`)・
+0x19/0x14(`TX FF len=58`) とも FF+CF×8 で正常完走することを確認済み。
+
 ## マルチフレーム応答例（2 DTC の場合）
 
 2 件以上の DTC が一致すると応答が 8 バイトを超え、FF + CF に分割されます。

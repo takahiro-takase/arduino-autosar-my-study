@@ -59,7 +59,7 @@ CAN 0x100（EngineInfo）・0x110（AbsInfo）・0x7E0（診断要求）は PduR
 |  |  |  | 0x04<br>(FreezeFrame取得) | `06 19 04 HH MM LL RR 00` | byte3-5=DTCコード<br>byte6=recordNumber（固定0x01） |
 |  |  |  | 0x06<br>(ExtendedData取得) | `06 19 06 HH MM LL RR 00` | byte3-5=DTCコード<br>byte6=recordNumber（固定0x01） |
 |  |  |  | 0x0A<br>(サポートDTC一覧取得) | `02 19 0A 00 00 00 00 00` | 追加パラメータなし。statusMask による絞り込みを一切行わず、本 ECU が対応する DEM_EVENT_COUNT 件全てを返す（後述） |
-|  |  |  | 0x14<br>(FaultDetectionCounter取得) | `02 19 14 00 00 00 00 00` | 追加パラメータなし。0x0A と同じ全件取得だが、応答に statusAvailMask を含まない点が 0x02/0x0A と異なる（後述） |
+|  |  |  | 0x14<br>(FaultDetectionCounter取得) | `02 19 14 00 00 00 00 00` | 追加パラメータなし。DTC 候補一覧は 0x0A と同じ取得元だが「prefailed」(FDC値1〜0x7E)のみへ絞り込む点、応答に statusAvailMask を含まない点が 0x02/0x0A と異なる（後述） |
 | 0x22<br>ReadDataByIdentifier | ○ | ○ | — | `03 22 HH LL 00 00 00 00` | byte2-3=DID（0x0101/0x0102/0x0103/0x0104） |
 | 0x27<br>SecurityAccess | × | ○ | 0x01<br>(requestSeed) | `02 27 01 00 00 00 00 00` | seed 2 バイト |
 |  |  |  | 0x02<br>(sendKey) | `04 27 02 HH LL 00 00 00` | byte2-3=key（big-endian） |
@@ -127,24 +127,54 @@ subFunc 0x0A の応答が一切送信されない不具合が見つかりまし�
 検出できませんでした。詳細と修正内容は
 [`CanTp_Notes.md`](./CanTp_Notes.md) の該当節を参照してください。
 
-`CANTP_TX_BUFFER_SIZE` を修正後（最終的に48バイト。ISO-TPのフレーム境界に
-一致し、`DEM_EVENT_COUNT` の今後の増加にも余裕を持たせた値。詳細は
+`CANTP_TX_BUFFER_SIZE` を修正後（当時48バイト。ISO-TPのフレーム境界に
+一致し、`DEM_EVENT_COUNT` の今後の増加にも余裕を持たせた値。その後
+`DEM_EVENT_COUNT` の更なる増加により同種バグが再発し76バイトへ再拡張、
+再発防止の静的アサートも追加済み。詳細は
 [`CanTp_Notes.md`](./CanTp_Notes.md) 参照）、実機で再検証済みです。
 FF（len=43）が受理され、CF×6（sn=1〜6）まで正しく送信完了
 （`CanTp_SendNextCF: TX done`）し、応答バイト列を手動デコードすると
 `DEM_EVENT_COUNT=10` 件全ての DTC レコードが正しい順序で組み立てられて
 いることを確認しました。
 
-### 0x19/0x14 reportDTCFaultDetectionCounter（2026-09 追加）
+### 0x19/0x14 reportDTCFaultDetectionCounter（2026-09 追加、2026-09-20 仕様乖離を修正）
 
-`Dem_GetFaultDetectionCounter()`（[SWS_Dem_00203]、デバウンスカウンタ生値
--128〜127を返すgetter）新設に伴い追加。DTC 一覧の取得自体は 0x0A と同じ
-`Dem_GetSupportedDTCs()` を使うが、応答フォーマットが 0x02/0x0A と異なり
-`DTCStatusAvailabilityMask` バイトを含まない（ISO 14229-1 の
-`reportDTCFaultDetectionCounter` はそもそもステータス概念を扱わないため）。
-実装当初 subFunc 値を 0x0B と誤って割り当てていたが、ISO 14229-1 では
-0x0B は別サービス（reportFirstTestFailedDTC）であるため `/code-review` の
-指摘で 0x14 に訂正した（`Dcm_Cfg.h`/`Dcm_Cbk.c` 参照）。
+`Dem_GetFaultDetectionCounter()`（[SWS_Dem_00203]）新設に伴い追加。DTC 候補
+一覧の取得自体は 0x0A と同じ `Dem_GetSupportedDTCs()` を使うが、応答
+フォーマットが 0x02/0x0A と異なり `DTCStatusAvailabilityMask` バイトを
+含まない（ISO 14229-1 の `reportDTCFaultDetectionCounter` はそもそも
+ステータス概念を扱わないため）。実装当初 subFunc 値を 0x0B と誤って
+割り当てていたが、ISO 14229-1 では 0x0B は別サービス
+（reportFirstTestFailedDTC）であるため `/code-review` の指摘で 0x14 に
+訂正した（`Dcm_Cfg.h`/`Dcm_Cbk.c` 参照）。
+
+**2026-09-20、仕様乖離2件を修正**（詳細は [`Dem_Notes.md`](./Dem_Notes.md) 参照）:
+1. `Dem_GetFaultDetectionCounter()` は当初デバウンスカウンタの生値
+   （limit がほぼ1〜2と小さいため実質 -2〜2 程度の範囲）をそのまま
+   返しており、[SWS_Dem_00415]が要求する「-128〜127への線形写像」を
+   実装していなかった。`Dem_MapDebounceCounterToFdc()` を新設し是正。
+2. 本ハンドラは [SWS_Dcm_00465] が要求する「ステータスが『prefailed』
+   （Dem_SetDTCFilter の FilterForFaultDetectionCounter 説明により
+   FDC値が1〜0x7E の意）の DTC のみ」という絞り込みを行わず、常に
+   `DEM_EVENT_COUNT` 件全てを返していた。本プロジェクトは
+   `Dem_SetDTCFilter()`/`Dem_GetNextFilteredDTCAndFDC()` を実装せず
+   `Dem_GetSupportedDTCs()` で代替している。絞り込み条件（FDC値域）は
+   Dem 内部のデバウンス状態に基づく Dem 側の知識のため、`/simplify`
+   の指摘（`Dem_GetAllDTCs()` の statusMask 絞り込みと同じ設計に
+   揃えるべき）を受けて、当初 Dcm ハンドラ内に実装した絞り込みロジックを
+   `Dem_GetPrefailedDTCs()`（新設）へ移設した。ハンドラ側は一括取得済みの
+   結果をそのまま応答へ整形するだけになった。
+   この結果、故障が一件も進行していない平常時は DTC 列挙部分の無い
+   `[0x59, 0x14]` のみを返すようになった（以前は平常時でも
+   `DEM_EVENT_COUNT` 件全てを FDC=0 で列挙していた）。
+
+抱き合わせで、0x19/0x01 応答の `DTCFormatIdentifier` バイトを供給していた
+`DCM_DTC_FORMAT_ISO15031`（値 0x01U）という定数も、コメント・名前ともに
+誤り（ISO14229-1 の `Dem_DTCTranslationFormatType` では 0x00 が
+ISO15031-6、0x01 が ISO14229-1）と判明したため削除し、新設した
+`Dem_GetTranslationType()`（[SWS_Dem_00230]/[SWS_Dem_00231]、常に
+`DEM_DTC_TRANSLATION_ISO14229_1` を返す）の呼び出しに置き換えた
+（値自体は 0x01 のまま変化なし、命名と規格根拠のみ是正）。
 
 ### Dcm_GetVin / DID 0xF190（2026-09 追加）
 

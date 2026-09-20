@@ -1037,9 +1037,36 @@ Std_ReturnType Dem_GetOccurrenceCounterOfEvent(Dem_EventIdType EventId, uint8* C
 }
 
 /**
- * \brief   指定イベントの Fault Detection Counter（デバウンスカウンタ生値）を取得する。
+ * \brief   デバウンスカウンタ生値 (-limit〜+limit) を UDS の Fault Detection
+ *          Counter 値域 (-128〜+127) へ線形写像する。
+ *
+ * \details [SWS_Dem_00415]: 内部デバウンスカウンタの値と範囲に基づき、
+ *          線形にマッピングすること、との要求。`(counter * N) / limit` の
+ *          Nを正側は127、負側は128に使い分ける（除数は共通のlimit、
+ *          sint8 の値域が非対称(-128〜127、負側が1つ多い)なための調整）
+ *          ことで、両端(counter=±limit)がちょうど±127/-128に一致する。
+ *
+ * \AUTOSARReq     {SWS_Dem_00415}
+ */
+static sint8 Dem_MapDebounceCounterToFdc(sint8 counter, sint8 limit)
+{
+    if (limit <= 0)
+        return 0;  /* 未到達コード想定 (Dem_DebounceLimitTable[] は全て1以上) */
+
+    if (counter >= 0)
+        return (sint8)(((sint16)counter * 127) / limit);
+    else
+        return (sint8)(((sint16)counter * 128) / limit);
+}
+
+/**
+ * \brief   指定イベントの Fault Detection Counter を取得する。
+ *
+ * \details デバウンスカウンタ生値を [SWS_Dem_00415] 通り -128〜127 へ
+ *          線形写像して返す (`Dem_MapDebounceCounterToFdc()`参照)。
  *
  * \AUTOSARReq     {SWS_Dem_00203}
+ * \AUTOSARReq     {SWS_Dem_00415}
  * \ServiceID      {0x3e}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
@@ -1065,8 +1092,74 @@ Std_ReturnType Dem_GetFaultDetectionCounter(Dem_EventIdType EventId, sint8* Faul
         return E_NOT_OK;
     }
 
-    *FaultDetectionCounter = Dem_DebounceCounter[EventId];
+    *FaultDetectionCounter = Dem_MapDebounceCounterToFdc(Dem_DebounceCounter[EventId], Dem_DebounceLimitTable[EventId]);
     return E_OK;
+}
+
+/**
+ * \brief   ステータスが「prefailed」の DTC のみを、対応する Fault Detection
+ *          Counter と共に列挙する（[SWS_Dcm_00465]、詳細は Dem.h 参照）。
+ *
+ * \AUTOSARReq     {SWS_Dcm_00465}
+ * \ServiceID      {0x43}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void Dem_GetPrefailedDTCs(uint32* dtcBuf, uint8* fdcBuf, uint8* count)
+{
+    DET_LOGT(TAG, "called");
+    if (!Dem_Initialized)
+    {
+        Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_GET_PREFAILED_DTCS, DEM_E_UNINIT);
+        return;
+    }
+
+    if (dtcBuf == NULL || fdcBuf == NULL || count == NULL)
+    {
+        Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_GET_PREFAILED_DTCS, DEM_E_PARAM_POINTER);
+        return;
+    }
+
+    *count = 0U;
+    for (uint8 i = 0U; i < DEM_EVENT_COUNT; i++)
+    {
+        sint8 fdc = Dem_MapDebounceCounterToFdc(Dem_DebounceCounter[i], Dem_DebounceLimitTable[i]);
+        if (fdc >= 1 && fdc <= 0x7E)
+        {
+            dtcBuf[*count] = Dem_DtcTable[i];
+            fdcBuf[*count] = (uint8)fdc;
+            (*count)++;
+        }
+    }
+}
+
+/**
+ * \brief   本 ECU が構成する DTC 翻訳フォーマットを取得する。
+ *
+ * \details エラー戻り値の定義が実仕様に存在しないため（[SWS_Dem_00231]）、
+ *          ClientId・初期化状態に関わらず常に `DEM_DTC_TRANSLATION_ISO14229_1`
+ *          を返す（本プロジェクトが `DemTypeOfDTCSupported` として構成する
+ *          唯一の形式）。
+ *
+ * \param[in]  ClientId  クライアント ID。単一診断クライアント構成のため未使用。
+ *
+ * \return  構成済み DTC 翻訳フォーマット。
+ *
+ * \AUTOSARReq     {SWS_Dem_00230}
+ * \AUTOSARReq     {SWS_Dem_00231}
+ * \ServiceID      {0x3c}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Dem_DTCTranslationFormatType Dem_GetTranslationType(uint8 ClientId)
+{
+    DET_LOGT(TAG, "called");
+    (void)ClientId;  /* 単一ECU・単一診断クライアント構成のため未使用（Dem.h 冒頭コメント参照） */
+
+    /* [SWS_Dem_00231]: DemTypeOfDTCSupported の構成値を返す。本プロジェクトは
+     * ISO 14229-1 形式のみ構成するため常にこの値（エラー戻り値は実仕様に
+     * 定義が無いため未初期化チェックは行わない）。 */
+    return DEM_DTC_TRANSLATION_ISO14229_1;
 }
 
 Std_ReturnType Dem_EnableDTCSetting(uint8 ClientId)

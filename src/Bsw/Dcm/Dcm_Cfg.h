@@ -205,9 +205,6 @@
                                                   *   ではこの値。0x0B は reportFirstTestFailedDTC
                                                   *   という別サービスのため混同しないこと） */
 
-/** ISO 14229-1 DTC フォーマット識別子 (0x01 = ISO 15031-6 / SAE J2012) */
-#define DCM_DTC_FORMAT_ISO15031         0x01U
-
 /** ISO 14229-1 の慣行で「当該DTCの全レコードを要求」を意味する予約値。
  *  [SWS_Dcm_00441]は、DcmがDem_SelectFreezeFrameData()へRecordNumber=0xFF
  *  を渡す（全レコードのサイズ取得の）用途で明記しており、要求元のテスタが
