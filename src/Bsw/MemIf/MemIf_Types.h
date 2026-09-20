@@ -22,33 +22,37 @@ extern "C" {
 
 /**
  * \brief   下位ドライバ (Fee) の現在のビジー状態。
- * \details AUTOSAR MemIf_StatusType (SWS_MemIf) の一部に相当する。
- *          本実装で使用するのは以下の 3 値のみ（学習用簡略化。
- *          複数ジョブの内部キューイングを表す MEMIF_BUSY_INTERNAL は
- *          本プロジェクトが常に「同時に 1 ジョブのみ」しか扱わないため
- *          未使用）。
+ * \details [SWS_MemIf_00064] 準拠の4値全てを定義する。本プロジェクトの
+ *          `MemIf_GetStatus()`（MemIf.c）は Fee の状態をそのまま返す
+ *          薄い委譲のみで、Fee 自体は「同時に1ジョブのみ」しか扱わず
+ *          複数ジョブの内部キューイングという概念を持たないため、
+ *          `MEMIF_BUSY_INTERNAL` が実際に返ることはない（2026-09-20
+ *          追加、値の定義のみで到達経路は無い）。
  */
 typedef enum
 {
-    MEMIF_UNINIT = 0U,  /**< Fee_Init() 未実行                       */
-    MEMIF_IDLE,         /**< 進行中のジョブなし。次のジョブを受付可能 */
-    MEMIF_BUSY          /**< 非同期ジョブ (Write) 処理中              */
+    MEMIF_UNINIT = 0U,   /**< Fee_Init() 未実行                       */
+    MEMIF_IDLE,          /**< 進行中のジョブなし。次のジョブを受付可能 */
+    MEMIF_BUSY,          /**< 非同期ジョブ (Write) 処理中              */
+    MEMIF_BUSY_INTERNAL  /**< 内部管理処理でビジー（本実装では未到達） */
 } MemIf_StatusType;
 
 /**
  * \brief   直近のジョブの結果。
- * \details AUTOSAR MemIf_JobResultType (SWS_MemIf) の一部に相当する。
- *          本実装で使用するのは以下の 4 値のみ（学習用簡略化。
- *          MEMIF_BLOCK_INCONSISTENT/MEMIF_BLOCK_INVALID は Fee 自身の
- *          仮想ページ管理・ガベージコレクションに関わる状態のため、
- *          本実装はそれらを持たず対象外）。
+ * \details [SWS_MemIf_00065] 準拠の6値全てを定義する。
+ *          `MEMIF_BLOCK_INCONSISTENT`/`MEMIF_BLOCK_INVALID` は Fee 自身の
+ *          仮想ページ管理・ガベージコレクションに関わる状態だが、本実装は
+ *          それらの機構を持たないため実際に返ることはない（2026-09-20
+ *          追加、値の定義のみで到達経路は無い）。
  */
 typedef enum
 {
-    MEMIF_JOB_OK = 0U,     /**< ジョブが正常完了した                       */
-    MEMIF_JOB_FAILED,      /**< ジョブが失敗した（本実装では未使用の予約値） */
-    MEMIF_JOB_PENDING,     /**< ジョブがまだ完了していない                 */
-    MEMIF_JOB_CANCELED     /**< MemIf_Cancel()/Fee_Cancel() で中断された */
+    MEMIF_JOB_OK = 0U,        /**< ジョブが正常完了した                       */
+    MEMIF_JOB_FAILED,         /**< ジョブが失敗した（本実装では未使用の予約値） */
+    MEMIF_JOB_PENDING,        /**< ジョブがまだ完了していない                 */
+    MEMIF_JOB_CANCELED,       /**< MemIf_Cancel()/Fee_Cancel() で中断された */
+    MEMIF_BLOCK_INCONSISTENT, /**< ブロックが不整合（本実装では未到達）        */
+    MEMIF_BLOCK_INVALID       /**< ブロックが無効化済み（本実装では未到達）    */
 } MemIf_JobResultType;
 
 /**

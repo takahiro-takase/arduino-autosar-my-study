@@ -1100,6 +1100,11 @@ Std_ReturnType Dem_GetFaultDetectionCounter(Dem_EventIdType EventId, sint8* Faul
  * \brief   ステータスが「prefailed」の DTC のみを、対応する Fault Detection
  *          Counter と共に列挙する（[SWS_Dcm_00465]、詳細は Dem.h 参照）。
  *
+ * \param[out]  dtcBuf   DTC コード (24-bit) の格納先。DEM_EVENT_COUNT 要素以上。
+ * \param[out]  fdcBuf   `Dem_GetFaultDetectionCounter()` と同じ写像済み
+ *                       Fault Detection Counter の格納先。同サイズ。
+ * \param[out]  count    prefailed だった DTC 数。
+ *
  * \AUTOSARReq     {SWS_Dcm_00465}
  * \ServiceID      {0x43}
  * \Reentrancy     {Reentrant}
