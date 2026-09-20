@@ -156,6 +156,9 @@ static uint8     Can_TxConfHead = 0U;  /**< 次に取り出すエントリの in
 static uint8     Can_TxConfTail = 0U;  /**< 次に積むエントリの index     */
 static uint8     Can_TxConfLen  = 0U;  /**< キュー内の有効エントリ数     */
 
+/* ==================================================================== */
+/*  External Functions                                                  */
+/* ==================================================================== */
 
 /**
  * \brief   CAN ドライバを初期化する。
@@ -231,7 +234,6 @@ void Can_Init(const Can_ConfigType* Config)
  */
 static void Can_EnterListenOnly(void)
 {
-    DET_LOGT(TAG, "called");
     Can_Hw_SetMode(CAN_HW_MODE_LISTEN_ONLY);
     CanState = CAN_CS_STOPPED;
 }
@@ -289,8 +291,6 @@ static void Can_EnterListenOnly(void)
  */
 Can_ReturnType Can_SetControllerMode(uint8 Controller, Can_StateTransitionType Transition)
 {
-    DET_LOGT(TAG, "called");
-
     if (Can_ConfigPtr == NULL)
     {
         Det_ReportError(CAN_MODULE_ID, 0U, CAN_API_ID_SET_CONTROLLER_MODE, CAN_E_UNINIT);
@@ -368,8 +368,6 @@ Can_ReturnType Can_SetControllerMode(uint8 Controller, Can_StateTransitionType T
  */
 void Can_DisableControllerInterrupts(uint8 Controller)
 {
-    DET_LOGT(TAG, "called");
-
     if (Can_ConfigPtr == NULL)
     {
         Det_ReportError(CAN_MODULE_ID, 0U, CAN_API_ID_DISABLE_CONTROLLER_INTERRUPTS, CAN_E_UNINIT);
@@ -405,8 +403,6 @@ void Can_DisableControllerInterrupts(uint8 Controller)
  */
 void Can_EnableControllerInterrupts(uint8 Controller)
 {
-    DET_LOGT(TAG, "called");
-
     if (Can_ConfigPtr == NULL)
     {
         Det_ReportError(CAN_MODULE_ID, 0U, CAN_API_ID_ENABLE_CONTROLLER_INTERRUPTS, CAN_E_UNINIT);
@@ -450,8 +446,6 @@ void Can_EnableControllerInterrupts(uint8 Controller)
  */
 Std_ReturnType Can_GetControllerErrorState(uint8 Controller, Can_ErrorStateType* ErrorStatePtr)
 {
-    DET_LOGT(TAG, "called");
-
     if (Can_ConfigPtr == NULL)
     {
         Det_ReportError(CAN_MODULE_ID, 0U, CAN_API_ID_GET_CONTROLLER_ERROR_STATE, CAN_E_UNINIT);
@@ -510,8 +504,6 @@ Std_ReturnType Can_GetControllerErrorState(uint8 Controller, Can_ErrorStateType*
 Can_ReturnType Can_Write(Can_HwHandleType Hth, const Can_PduType* PduInfo)
 {
     (void)Hth;
-
-    DET_LOGT(TAG, "called");
 
     if (Can_ConfigPtr == NULL)
     {
@@ -600,8 +592,6 @@ Can_ReturnType Can_Write(Can_HwHandleType Hth, const Can_PduType* PduInfo)
  */
 void Can_MainFunction_Write(void)
 {
-    DET_LOGT(TAG, "called");
-
     if (Can_ConfigPtr == NULL)
     {
         Det_ReportError(CAN_MODULE_ID, 0U, CAN_API_ID_MAIN_FUNCTION_WRITE, CAN_E_UNINIT);
@@ -690,8 +680,6 @@ static void Can_Isr(void)
  */
 void Can_MainFunction_Read(void)
 {
-    DET_LOGT(TAG, "called");
-
     if (Can_ConfigPtr == NULL)
     {
         Det_ReportError(CAN_MODULE_ID, 0U, CAN_API_ID_MAIN_FUNCTION_READ, CAN_E_UNINIT);
@@ -752,8 +740,6 @@ void Can_MainFunction_Read(void)
  */
 void Can_MainFunction_Wakeup(void)
 {
-    DET_LOGT(TAG, "called");
-
     if (Can_ConfigPtr == NULL)
     {
         Det_ReportError(CAN_MODULE_ID, 0U, CAN_API_ID_MAIN_FUNCTION_WAKEUP, CAN_E_UNINIT);
@@ -796,8 +782,6 @@ void Can_MainFunction_Wakeup(void)
  */
 void Can_MainFunction_BusOff(void)
 {
-    DET_LOGT(TAG, "called");
-
     if (Can_ConfigPtr == NULL)
     {
         Det_ReportError(CAN_MODULE_ID, 0U, CAN_API_ID_MAIN_FUNCTION_BUSOFF, CAN_E_UNINIT);
@@ -825,8 +809,6 @@ void Can_MainFunction_BusOff(void)
  */
 void Can_GetVersionInfo(Std_VersionInfoType* versioninfo)
 {
-    DET_LOGT(TAG, "called");
-
     if (versioninfo == NULL)
     {
         Det_ReportError(CAN_MODULE_ID, 0U, CAN_API_ID_GET_VERSION_INFO, CAN_E_PARAM_POINTER);
@@ -839,6 +821,14 @@ void Can_GetVersionInfo(Std_VersionInfoType* versioninfo)
     versioninfo->sw_minor_version = CAN_SW_MINOR_VERSION;
     versioninfo->sw_patch_version = CAN_SW_PATCH_VERSION;
 }
+
+/* ==================================================================== */
+/*  Internal Functions                                                  */
+/* ==================================================================== */
+
+/* ==================================================================== */
+/*  Test Functions                                                      */
+/* ==================================================================== */
 
 #ifdef CAN_UNIT_TEST
 Can_ControllerStateType Can_Test_GetControllerState(void)

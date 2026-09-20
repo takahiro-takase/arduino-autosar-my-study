@@ -19,7 +19,7 @@
  *          本番の RxIndicationCbk（`Rte_COMRxInd_EngineInfo()`）は `Rte.c` に
  *          あるが、`Rte.c` 自体は IoHwAb/FiM/App_EngineManager/
  *          App_WarningIndicator まで巨大な依存グラフを引き込むため
- *          （Bsw_ComStack_TxChain_test.cpp 冒頭コメントと同じ理由）リンクしない。
+ *          （Bsw_ComStack_TxChain_ComSendSignal_test.cpp 冒頭コメントと同じ理由）リンクしない。
  *          本ファイル内に、本番の Rte_COMRxInd_EngineInfo() と同じ処理
  *          （Com_ReceiveSignalGroupArray() で生バイト列を取得し
  *          E2EXf_InverseTransformP05() へ渡す）をテスト専用の

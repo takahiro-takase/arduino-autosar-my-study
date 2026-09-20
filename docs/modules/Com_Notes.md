@@ -274,7 +274,7 @@ I-PDU に対して自動評価（`Com_SendSignal`/`Com_SendSignalGroup` 経由�
 （`WarningStatus` の TMS は現状 `FaultLamp`/`AbsLamp` の自動評価のみで
 運用されており、手動切り替えが必要な具体的なユースケースが本プロジェクトの
 アプリケーション側に無いため）。ユニットテストでのみ検証しています
-（`test/Bsw_ComStack_TxChain_test.cpp` の `SwitchIpduTxMode_*`、
+（`test/Bsw_ComStack_TxChain_SwitchIpduTxMode_test.cpp` の `SwitchIpduTxMode_*`、
 `kTestTmsGroupIPdu` を流用）。
 
 ## MDT（ComMinimumDelayTime、変化時送信の最小送信間隔）
@@ -593,7 +593,7 @@ signal group 単位で別名を持てます。`Com_IpduGroupStop()`（送信済�
 Group へ所属させる設定変更が必要ですが、それ自体が「常時有効なダッシュボード
 表示」という意図と反するため見送っています）。`ComRxDataTimeoutAction` の
 REPLACE 等と同じく、動機は実利より仕様忠実性であり、修正の正しさは
-`test/Bsw_ComStack_TxChain_test.cpp` のユニットテスト（Signal Group 用の
+`test/Bsw_ComStack_TxChain_IpduGroupStop_test.cpp` のユニットテスト（Signal Group 用の
 I-PDU Group を持つテスト専用設定で `Com_IpduGroupStop()` を直接呼ぶ）でのみ
 検証しています。
 
@@ -1004,7 +1004,7 @@ RX 側で新しい問題を作った」のと同種の落とし穴）。その�
 
 **この機能は実際に発動するか**: 実機での動作確認は未実施です（上記の
 理由により、本番の呼び出し元が存在しないため）。回帰テストとして
-`test/Bsw_ComStack_TxChain_test.cpp` の
+`test/Bsw_ComStack_TxChain_SendSignalGroupArray_test.cpp` の
 `SendSignalGroupArray_OK_WritesBufferTriggersSendAndSetsUpdateBit`/
 `SendSignalGroupArray_OK_AlwaysTriggersEvenWithoutChange`/
 `SendSignalGroupArray_NG_NullDataPtrReturnsError`/
@@ -1255,7 +1255,7 @@ Rte_COMInvalidNotify_CoolantTemp()  ← EngineInfo.CoolantTemp=0xFF 検知時
 （Signal Group 版）は本番設定では未使用（本プロジェクトの唯一の TX Signal
 Group である `WarningStatus` に `ComSignalDataInvalidValue` を設定した
 シグナルが無いため）で、ユニットテストのみで検証しています。回帰テストは
-`test/Bsw_ComStack_TxChain_test.cpp` の
+`test/Bsw_ComStack_TxChain_InvalidateSignal_test.cpp` の
 `InvalidateSignal_OK_WritesConfiguredInvalidValueToBuffer`/
 `InvalidateSignal_NG_UnconfiguredInvalidValueReturnsErrorWithoutWriting`/
 `InvalidateSignal_NG_UnknownSignalIdReturnsError`/
@@ -1869,7 +1869,7 @@ SecOC 鍵付き `ImmobilizerCmd=UNLOCK(0x01)` を送ると、ログで
 拒否側は実機での確認は未実施です（`ImmobilizerCmd` の送信元となる別 ECU が
 無く、正規の SecOC 鍵で `0x00`/`0x01` 以外の値を意図的に送る手段が
 `uds_tester` 側に無いため）。回帰テスト
-（`Bsw_ComStack_TxChain_test.cpp` の
+（`Bsw_ComStack_TxChain_ComMainFunction_test.cpp` の
 `ComMainFunction_NG_RejectedByTxIpduCalloutDiscardsTransmission`）でのみ
 検証済みです。
 

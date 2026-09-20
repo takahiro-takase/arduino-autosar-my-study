@@ -1169,13 +1169,15 @@ $env:DET_LOG_VERBOSE = "1"; ./build/native_chain/native_chain_tests.exe # TRACE 
 [「Tx 処理」コールチェーン](#tx-processing)（`Com_SendSignal()` → …
 → `Com_MainFunctionTx()` → `PduR_ComTransmit()` → `CanIf_Transmit()` →
 `Can_Write()`）を複数モジュールにわたって実体（Com.c/PduR.c/CanIf.c/Can.c）で
-リンクし、そのまま検証する `Bsw_ComStack_TxChain_test.cpp` を `test/` に
-用意しています（`Com.c`/`PduR.c`/`CanIf.c` それぞれ単体のテストではなく、README の
-コールチェーン図そのものを実行して理解・確認するのが主目的）。
+リンクし、そのまま検証する `Bsw_ComStack_TxChain_{Scenario}_test.cpp` 群（2026-09-20、
+シナリオごとに分割。`ComSendSignal`/`SendSignalGroupArray`/`ComMainFunction`/
+`RepetitionSequence`/`TxTOut` 等）を `test/` に用意しています（`Com.c`/`PduR.c`/
+`CanIf.c` それぞれ単体のテストではなく、README のコールチェーン図そのものを
+実行して理解・確認するのが主目的）。
 コールチェーン図に明示されている非同期の切れ目
 （`Com_TxPending` というキュー経由で次回 `Com_MainFunctionTx()` まで待機する
 箇所）でテストを2つのセグメントに分け、それぞれを個別に実行可能な
-`TEST_F` ケースとしている（`--gtest_filter=Bsw_TxChain_Test.ComSendSignal_*` 等で
+`TEST_F` ケースとしている（`--gtest_filter=Bsw_ComStack_TxChain_ComSendSignal_Test.*` 等で
 絞り込み可）。フェイクは最下層の `Can_Hw` のみ（`test/stub/Hal/
 Fake_Can_Hw.c`）で、CanIf.c が呼ぶ `CanSM_RxIndication()`/
 `CanSM_ControllerModeIndication()` 等は CanSM.c 自身を実体でリンクして
@@ -1241,7 +1243,12 @@ PduR/CanIf/Can/CanSM を一切経由せず Com.c 単体で完結する。フェ�
 2026-09 に専用 env `[env:native]` から本テストバイナリ（`native_chain_tests`）へ
 統合済み）。ファイル名は、テストは `test/` 直下に
 `Bsw_{Module}_{Scenario}_test.cpp`（複数モジュールを跨ぐ統合テストは
-`Bsw_{Stack}Stack_{Scenario}_test.cpp`、上記「コールチェーンのテスト」参照）、
+`Bsw_{Stack}Stack_{Scenario}_test.cpp`、上記「コールチェーンのテスト」参照）で、
+`{Scenario}` は**1つの正常系（OK）シナリオ単位**とする（2026-09-20、
+`Bsw_ComStack_TxChain_test.cpp` が1ファイルに多数のシナリオを詰め込んで
+肥大化していたのを`ComSendSignal`/`SendSignalGroupArray`/`TxTOut` 等15ファイルへ
+分割した経緯を踏まえ、以後の新規テストファイルもこの粒度を守る。そのシナリオの
+派生 NG ケースは同じファイルに同居させる）。
 フェイク/`--wrap` は `test/stub/` 配下に `src/` のディレクトリ構成を
 ミラーリングして `Fake_{Module}.c`/`Wrap_{Module}.c`（HAL 層はフォルダ名
 との重複を避け `Fake_{Module}_Hw.c`）で統一している。`Gpt_OnTick()`

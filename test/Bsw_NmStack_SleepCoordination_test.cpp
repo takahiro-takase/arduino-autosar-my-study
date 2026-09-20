@@ -83,7 +83,7 @@
  *          本ファイルは当初 `[env:native_sleep_chain]` という別envに分離して
  *          いたが（協調スリープ移管作業のリスクを既存チェーンテストから
  *          切り離すため）、実機検証まで完了し安定したため `[env:native_chain]`
- *          へ統合した（Bsw_ComStack_TxChain_test.cpp/Bsw_NmStack_WakeupChain_test.cpp 等と
+ *          へ統合した（Bsw_ComStack_TxChain_ComSendSignal_test.cpp/Bsw_NmStack_WakeupChain_test.cpp 等と
  *          CanSM.c/ComM.c/Nm.c の実体を共有する）。
  */
 #include <gtest/gtest.h>
