@@ -1250,6 +1250,51 @@ TEST_F(Bsw_TxChain_Test, IpduGroupStop_OK_PreventsTxTOutDoubleFireWithTxErrCbk)
 }
 
 // ------------------------------------------------------------
+// COM_SERVICE_NOT_AVAILABLE（[SWS_Com_00334]/Table 3、2026-09-20 追加）:
+// I-PDU Group 停止中の Com_SendSignal()/Com_SendSignalGroup()/
+// Com_SendSignalGroupArray() の戻り値。kTestErrGroupIPdu（IPduId=3、
+// kTestStoppableGroupId）は Com_Init() 直後は既定で停止状態
+// （[SWS_Com_00444]）のため、明示的な Start なしでそのまま検証できる。
+// ------------------------------------------------------------
+TEST_F(Bsw_TxChain_Test, SendSignal_OK_ReturnsServiceNotAvailableWhenGroupStoppedButStillWritesShadowBuffer)
+{
+    /* 準備 (Arrange): kTestErrGroupIPdu は既定で停止状態。SignalId=6 は
+     * そのメンバー（BitPosition=0、BitSize=1、big-endian）。 */
+
+    /* 実行 (Act) */
+    uint8_t value = 1U;
+    uint8 ret = Com_SendSignal(6U, &value);
+
+    /* 評価 (Assert): [SWS_Com_00334] 停止中でも戻り値は
+     * COM_SERVICE_NOT_AVAILABLE。シャドウバッファへの書き込み自体は
+     * 停止中でも行われることを、Com_SendSignalGroup() でのコミット結果
+     * （これも停止中は同じく COM_SERVICE_NOT_AVAILABLE を返す）で確認する。 */
+    EXPECT_EQ(ret, COM_SERVICE_NOT_AVAILABLE);
+
+    uint8 groupRet = Com_SendSignalGroup(3U);
+    EXPECT_EQ(groupRet, COM_SERVICE_NOT_AVAILABLE);
+    const uint8* buf = Com_Test_GetTxBuffer(3U);
+    ASSERT_NE(buf, nullptr);
+    EXPECT_EQ(buf[0] & 0x80U, 0x80U);  // bit0 (BitPosition=0, big-endian) = MSB
+}
+
+TEST_F(Bsw_TxChain_Test, SendSignalGroupArray_OK_ReturnsServiceNotAvailableWhenGroupStoppedButStillWrites)
+{
+    /* 準備 (Arrange): kTestErrGroupIPdu は既定で停止状態。 */
+
+    /* 実行 (Act) */
+    uint8_t raw = 0xAAU;
+    uint8 ret = Com_SendSignalGroupArray(3U, &raw);
+
+    /* 評価 (Assert): [SWS_Com_00334] 停止中でも書き込み自体は行うが、
+     * 戻り値は COM_SERVICE_NOT_AVAILABLE。 */
+    EXPECT_EQ(ret, COM_SERVICE_NOT_AVAILABLE);
+    const uint8* buf = Com_Test_GetTxBuffer(3U);
+    ASSERT_NE(buf, nullptr);
+    EXPECT_EQ(buf[0], 0xAAU);
+}
+
+// ------------------------------------------------------------
 // Com_InvalidateSignal（SWS_Com_00099/SWS_Com_00642/SWS_Com_00643、2026-08
 // 追加）。kTestSignal（非 Signal Group、IPduId=0、16bit BigEndian、
 // InvalidValue=0xBEEF・InvalidValueConfigured=1）を流用する。
@@ -1268,7 +1313,7 @@ TEST_F(Bsw_TxChain_Test, InvalidateSignal_OK_WritesConfiguredInvalidValueToBuffe
     EXPECT_EQ(buf[1], 0xEFU);
 }
 
-TEST_F(Bsw_TxChain_Test, InvalidateSignal_NG_UnconfiguredInvalidValueReturnsErrorWithoutWriting)
+TEST_F(Bsw_TxChain_Test, InvalidateSignal_NG_UnconfiguredInvalidValueReturnsServiceNotAvailableWithoutWriting)
 {
     /* 準備 (Arrange): kTestNonGroupTmsCalledSignal（SignalId=5、IPduId=2）は
      * InvalidValueConfigured が既定の 0（未設定）のまま。 */
@@ -1276,9 +1321,11 @@ TEST_F(Bsw_TxChain_Test, InvalidateSignal_NG_UnconfiguredInvalidValueReturnsErro
     /* 実行 (Act) */
     uint8 ret = Com_InvalidateSignal(5U);
 
-    /* 評価 (Assert): [SWS_Com_00643] ComSignalDataInvalidValue 未設定のため
-     * E_NOT_OK。副作用（バッファ書き込み）も一切起きない。 */
-    EXPECT_EQ(ret, E_NOT_OK);
+    /* 評価 (Assert): [SWS_Com_00643] 原文どおり ComSignalDataInvalidValue
+     * 未設定のため COM_SERVICE_NOT_AVAILABLE（2026-09-20 是正。以前は
+     * COM_SERVICE_NOT_AVAILABLE 定数が存在せず E_NOT_OK で代用していた）。
+     * 副作用（バッファ書き込み）も一切起きない。 */
+    EXPECT_EQ(ret, COM_SERVICE_NOT_AVAILABLE);
     const uint8* buf = Com_Test_GetTxBuffer(2U);
     ASSERT_NE(buf, nullptr);
     // bit0 は kTestNonGroupTmsContributorSignal（SignalId=4、InitValue=1）が
@@ -1325,7 +1372,7 @@ TEST_F(Bsw_TxChain_Test, InvalidateSignalGroup_OK_WritesMemberInvalidValueAndCom
     EXPECT_EQ(buf[0] & 0x80U, 0x80U);
 }
 
-TEST_F(Bsw_TxChain_Test, InvalidateSignalGroup_NG_AnyMemberUnconfiguredReturnsErrorWithoutPartialCommit)
+TEST_F(Bsw_TxChain_Test, InvalidateSignalGroup_NG_AnyMemberUnconfiguredReturnsServiceNotAvailableWithoutPartialCommit)
 {
     /* 準備 (Arrange): kTestErrGroupIPdu（IPduId=3）に、InvalidValueConfigured=1
      * の SignalId=6 と、あえて未設定のままの SignalId=7 の 2 メンバーを設定
@@ -1334,11 +1381,12 @@ TEST_F(Bsw_TxChain_Test, InvalidateSignalGroup_NG_AnyMemberUnconfiguredReturnsEr
     /* 実行 (Act) */
     uint8 ret = Com_InvalidateSignalGroup(3U);
 
-    /* 評価 (Assert): [SWS_Com_00557] "no ComSignalDataInvalidValue is
-     * configured for any of the group signals" に該当するため、1本でも
-     * 未設定なら all-or-nothing で全体を E_NOT_OK とし、設定済みの
-     * SignalId=6 側も含めて一切バッファへ書き込まない。 */
-    EXPECT_EQ(ret, E_NOT_OK);
+    /* 評価 (Assert): [SWS_Com_00557] 原文どおり "no ComSignalDataInvalidValue
+     * is configured for any of the group signals" は COM_SERVICE_NOT_AVAILABLE
+     * （2026-09-20 是正、Com_InvalidateSignal() と同様以前は E_NOT_OK で
+     * 代用していた）。1本でも未設定なら all-or-nothing で全体を拒否し、
+     * 設定済みの SignalId=6 側も含めて一切バッファへ書き込まない。 */
+    EXPECT_EQ(ret, COM_SERVICE_NOT_AVAILABLE);
     const uint8* buf = Com_Test_GetTxBuffer(3U);
     ASSERT_NE(buf, nullptr);
     EXPECT_EQ(buf[0], 0x00U);

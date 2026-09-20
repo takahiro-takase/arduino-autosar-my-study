@@ -18,6 +18,15 @@
 extern "C" {
 #endif
 
+/** E_OK/E_NOT_OK に加えた Com 独自の拡張戻り値（uint8、Std_ReturnType とは
+ *  別の値域。値は `pdftotext -table` で実測確認済み）。
+ *  `COM_SERVICE_NOT_AVAILABLE`: 対象 I-PDU が所属する I-PDU Group が
+ *  停止中の場合に返す（Table 3, SWS_Com_00334 等）。`COM_BUSY`: 大サイズ
+ *  I-PDU（Transport Protocol 経由）専用で、本プロジェクトは TP を実装せず
+ *  該当条件が存在しないため未使用（値の定義のみ）。 */
+#define COM_SERVICE_NOT_AVAILABLE  0x80U
+#define COM_BUSY                   0x81U
+
 /* SWS_Com_00432 */
 void Com_Init(const Com_ConfigType* config);
 
