@@ -1,5 +1,5 @@
 /**
- * \file    Bsw_RxChain_test.cpp
+ * \file    Bsw_ComStack_RxChain_test.cpp
  * \brief   README.md「Rx 処理（Can → CanIf → PduR → Com の順）」コールチェーンの
  *          単体テスト（GoogleTest / PlatformIO `[env:native_chain]`）。
  *
@@ -13,7 +13,7 @@
  *                  → PduR_CanIfRxIndication() (= PduR_ComRxIndication())
  *                    → Com_RxIndication()       ← マルチキャスト先の1つ（本テストではこれのみ設定）
  *
- *          Tx処理コールチェーン（Bsw_TxChain_test.cpp）と同じ発想で「非同期の
+ *          Tx処理コールチェーン（Bsw_ComStack_TxChain_test.cpp）と同じ発想で「非同期の
  *          切れ目で2セグメントに分ける」を試みたが、Rx処理では以下の理由で
  *          1セグメントにまとめている（これ自体もコールチェーンの理解の一部）:
  *
@@ -34,14 +34,14 @@
  *          検証する（フェイクの `Can_Hw` に受信フレームを積んでおき、
  *          最終的に `Com_ReceiveSignal()` で正しい値が取得できることを確認する）。
  *
- *          Bsw_TxChain_test.cpp と同じ理由・同じ最小構成方針（本番の
+ *          Bsw_ComStack_TxChain_test.cpp と同じ理由・同じ最小構成方針（本番の
  *          `*_PBCfg.c` は使わず、1シグナル・1 I-PDU のみのテスト専用設定を
  *          本ファイル内で定義する）。CanTp_RxIndication/SecOC_RxIndication
  *          へのマルチキャストは対象外（Com_RxIndication のみを転送先とする）。
  *
  *          `CanIf_RxIndication()` は無条件に `CanSM_RxIndication()` を呼ぶ
  *          （CanIf.c 参照）。同じ `[env:native_chain]` は CanSM.c の実体を
- *          リンクしている（Bsw_SleepChain_test.cpp / Bsw_WakeupChain_test.cpp
+ *          リンクしている（Bsw_SleepChain_test.cpp / Bsw_NmStack_WakeupChain_test.cpp
  *          参照）ため、本テストの SetUp()/TearDown() でも CanSM_Init()/
  *          CanSM_DeInit() を呼ぶ（呼ばないと毎回 DET_E_UNINIT が報告される）。
  *          本テストは CanSM_State を WAKEUP_VALIDATING にしないため、
@@ -64,13 +64,13 @@ namespace
 {
 
 // -----------------------------------------------------------------------
-// テスト専用の最小 Com/PduR/CanIf 設定（Bsw_TxChain_test.cpp と同じ方針）。
+// テスト専用の最小 Com/PduR/CanIf 設定（Bsw_ComStack_TxChain_test.cpp と同じ方針）。
 // SignalId=0 (RX, 16bit BigEndian) 1本だけを持つ IPduId=0 の RX I-PDU。
 // CanIf の RxPduId=0（CAN ID=0x100, Hrh=0）→ PduR の SrcPduId=0 → Com の
 // PduRId=0、と1本のパスだけを通す。中心となる2テスト（末尾）はこの
 // IPduId=0 のみを使う。IPduId=1/2 は SWS_Com_00555（Com_CbkRxAck）専用の
 // 追加 I-PDU で、CanIf/PduR 側にルーティングは設定していない
-// （Bsw_TxChain_test.cpp の TMS/TxAckCbk/TxErrCbk テスト群と同じ理由で、
+// （Bsw_ComStack_TxChain_test.cpp の TMS/TxAckCbk/TxErrCbk テスト群と同じ理由で、
 // Com_RxIndication() を直接呼ぶ形で検証する）。
 // -----------------------------------------------------------------------
 

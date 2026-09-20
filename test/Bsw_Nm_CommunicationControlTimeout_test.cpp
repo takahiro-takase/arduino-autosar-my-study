@@ -12,7 +12,7 @@
  *          （`Nm_EnableCommunication()`）にタイマーを再起動するよう修正した。
  *
  *          `kTestCanIfConfig`（NM_CANIF_TX_PDU_ID のみ有効化、
- *          `Bsw_SleepCoordination_test.cpp` の `kTestCanIfConfigWithNmTx` と
+ *          `Bsw_NmStack_SleepCoordination_test.cpp` の `kTestCanIfConfigWithNmTx` と
  *          同じパターン）を使う。TxPduCount=0 の空設定だと、Nm の周期送信
  *          （`Nm_TransmitPdu()` → `CanIf_Transmit()`）のたびに
  *          `CANIF_E_INVALID_TXPDUID` が DET 報告されてしまい、
@@ -42,7 +42,7 @@ namespace
 
 /* Nm の周期送信(NM_CANIF_TX_PDU_ID)が CanIf 層で CANIF_E_INVALID_TXPDUID を
  * 報告してしまうと、NM_E_NETWORK_TIMEOUT の DET 報告有無の検証にノイズが
- * 混ざる(Bsw_SleepCoordination_test.cpp の kTestCanIfConfigWithNmTx と同じ
+ * 混ざる(Bsw_NmStack_SleepCoordination_test.cpp の kTestCanIfConfigWithNmTx と同じ
  * 理由・同じパターン)。index 0/1 はダミー。 */
 const CanIf_TxPduConfigType kTestCanIfTxPduConfigWithNmTx[3] = {
     { 0U, 0U, 0U, 0U, NULL },
@@ -88,7 +88,7 @@ protected:
         ComM_CommunicationAllowed(COMM_CHANNEL_0, TRUE);  // 実 EcuM_Init() と同じく起動時に許可
         Nm_Init(NULL);
 
-        // NORMAL_OPERATION State まで進める(Bsw_SleepCoordination_test.cpp の
+        // NORMAL_OPERATION State まで進める(Bsw_NmStack_SleepCoordination_test.cpp の
         // ArrangeFullCom() と同じ流儀)。
         ASSERT_EQ(ComM_RequestComMode(COMM_USER_0, COMM_FULL_COMMUNICATION), E_OK);
         FakeMillis_Value += NM_REPEAT_MESSAGE_MS + 100UL;

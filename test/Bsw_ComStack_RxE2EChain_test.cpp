@@ -1,5 +1,5 @@
 /**
- * \file    Bsw_RxE2EChain_test.cpp
+ * \file    Bsw_ComStack_RxE2EChain_test.cpp
  * \brief   README.md「Rx 処理」→「E2E（EngineInfo/AbsInfo 受信）」コールチェーンの
  *          単体テスト（GoogleTest / PlatformIO `[env:native_chain]`）。
  *
@@ -10,7 +10,7 @@
  *                  → E2EXf_InverseTransformP05() → E2E_P05Check()
  *
  *          「通常」の Rx チェーン（Can_Isr() → … → Com_RxIndication()）は
- *          Bsw_RxChain_test.cpp が既に検証済みのため、本テストは
+ *          Bsw_ComStack_RxChain_test.cpp が既に検証済みのため、本テストは
  *          RxIndicationCbk フックの部分（E2EXf_InverseTransformP05() →
  *          E2E_P05Check() が CRC・カウンタ連続性を正しく検証すること）に絞り、
  *          `Com_RxIndication()` を直接呼ぶところから始める
@@ -19,7 +19,7 @@
  *          本番の RxIndicationCbk（`Rte_COMRxInd_EngineInfo()`）は `Rte.c` に
  *          あるが、`Rte.c` 自体は IoHwAb/FiM/App_EngineManager/
  *          App_WarningIndicator まで巨大な依存グラフを引き込むため
- *          （Bsw_TxChain_test.cpp 冒頭コメントと同じ理由）リンクしない。
+ *          （Bsw_ComStack_TxChain_test.cpp 冒頭コメントと同じ理由）リンクしない。
  *          本ファイル内に、本番の Rte_COMRxInd_EngineInfo() と同じ処理
  *          （Com_ReceiveSignalGroupArray() で生バイト列を取得し
  *          E2EXf_InverseTransformP05() へ渡す）をテスト専用の

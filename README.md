@@ -1158,7 +1158,7 @@ $env:DET_LOG_VERBOSE = "1"; pio test -e native_chain -v # TRACE ログ出力
 [「Tx 処理」コールチェーン](#tx-processing)（`Com_SendSignal()` → …
 → `Com_MainFunctionTx()` → `PduR_ComTransmit()` → `CanIf_Transmit()` →
 `Can_Write()`）を複数モジュールにわたって実体（Com.c/PduR.c/CanIf.c/Can.c）で
-リンクし、そのまま検証する `Bsw_TxChain_test.cpp` を `test/` に
+リンクし、そのまま検証する `Bsw_ComStack_TxChain_test.cpp` を `test/` に
 用意しています（`Com.c`/`PduR.c`/`CanIf.c` それぞれ単体のテストではなく、README の
 コールチェーン図そのものを実行して理解・確認するのが主目的）。
 コールチェーン図に明示されている非同期の切れ目
@@ -1172,12 +1172,12 @@ Fake_Can_Hw.c`）で、CanIf.c が呼ぶ `CanSM_RxIndication()` 等は
 
 [「Tx 処理」の「E2E」](#tx-processing-e2e)（`Com_MainFunctionTx()` →
 TxTransformCbk → `E2EXf_TransformP05()` → `E2E_P05Protect()`）は
-`Bsw_TxE2EChain_test.cpp` で別途検証している。本番の TxTransformCbk
+`Bsw_ComStack_TxE2EChain_test.cpp` で別途検証している。本番の TxTransformCbk
 （`Rte_COMTransform_E2EHealthStatus()`）は `Rte.c` にあるが、`Rte.c` 自体は
 IoHwAb/FiM/App_EngineManager/App_WarningIndicator まで巨大な依存グラフを
 引き込むためリンクせず、本番と同じ1行の委譲呼び出しをテスト専用の
 TxTransformCbk として定義し、そこから先（E2EXf.c/E2EXf_PBCfg.c/E2E_P05.c）は
-実体をそのまま検証する（詳細は `Bsw_TxE2EChain_test.cpp` 冒頭のコメント参照）。
+実体をそのまま検証する（詳細は `Bsw_ComStack_TxE2EChain_test.cpp` 冒頭のコメント参照）。
 
 <a id="unit-test-rx"></a>
 ##### Rx 処理（Can → CanIf → PduR → Com の順）
@@ -1185,7 +1185,7 @@ TxTransformCbk として定義し、そこから先（E2EXf.c/E2EXf_PBCfg.c/E2E_
 同じ `test/` に、[「Rx 処理」コールチェーン](#rx-processing)
 （`Can_MainFunction_Read()` → `CanIf_RxIndication()` →
 `PduR_CanIfRxIndication()`（`PduR_ComRxIndication()` の `#define` エイリアス）→
-`Com_RxIndication()`）を検証する `Bsw_RxChain_test.cpp` もある。Tx処理と異なり
+`Com_RxIndication()`）を検証する `Bsw_ComStack_RxChain_test.cpp` もある。Tx処理と異なり
 1セグメントにまとめている理由がある: 図中の非同期境界を担う `Can_Isr()` は
 `Can.c` 内の `static` 関数でテストから直接呼べず、かつ `Can_MainFunction_Read()`
 自身も `Can_RxIrqPending` フラグの有無に関わらず無条件にポーリングする設計
@@ -1193,20 +1193,20 @@ TxTransformCbk として定義し、そこから先（E2EXf.c/E2EXf_PBCfg.c/E2E_
 二重防御、`Can.c` 冒頭のコメント参照）のため、フラグは `Com_TxPending` の
 ような「後続処理の前提条件」ではない。したがって `Can_MainFunction_Read()` を
 起点とする1つのコールチェーンとして検証している（詳細は
-`Bsw_RxChain_test.cpp` 冒頭のコメント参照）。
+`Bsw_ComStack_RxChain_test.cpp` 冒頭のコメント参照）。
 
 [「Rx 処理」の「E2E」](#rx-processing-e2e)（`Com_RxIndication()` →
 RxIndicationCbk → `E2EXf_InverseTransformP05()` → `E2E_P05Check()`）は
-`Bsw_RxE2EChain_test.cpp` で別途検証している。`Com_RxIndication()` を直接
+`Bsw_ComStack_RxE2EChain_test.cpp` で別途検証している。`Com_RxIndication()` を直接
 呼ぶところから始め（README の図もこの粒度で揃えている）、Tx 側と同じ理由で
 `Rte.c` はリンクせず、本番の RxIndicationCbk（`Rte_COMRxInd_EngineInfo()`）と
 同じ処理をテスト専用の RxIndicationCbk として定義している。CRC 破損時に
 `E2E_P05STATUS_ERROR` になることも含めて検証する（詳細は
-`Bsw_RxE2EChain_test.cpp` 冒頭のコメント参照）。
+`Bsw_ComStack_RxE2EChain_test.cpp` 冒頭のコメント参照）。
 
 [「Rx 処理」の「デッドライン監視」](#rx-processing-timeout)（`Com_MainFunctionRx()`
 がしきい値超過を検知 → `Com_SigTimedOut` フラグ経由 → `Com_ReceiveSignal()` が
-`ComRxDataTimeoutAction` を適用）は `Bsw_RxTimeoutChain_test.cpp` で別途検証
+`ComRxDataTimeoutAction` を適用）は `Bsw_ComStack_RxTimeoutChain_test.cpp` で別途検証
 している。この非同期境界は Tx 処理の `Com_TxPending` と構造が同じだが、
 「立てる側／読む側」が逆（周期タスクが立てて on-demand 呼び出しが読む）ため、
 PduR/CanIf/Can/CanSM を一切経由せず Com.c 単体で完結する。フェイクは
@@ -1215,7 +1215,7 @@ PduR/CanIf/Can/CanSM を一切経由せず Com.c 単体で完結する。フェ�
 しきい値超過まで進めてから検証する。Tx チェーンと同じくフラグの前後で
 2セグメントに分け、フラグの状態自体はテスト専用アクセサ
 `Com_Test_GetSigTimedOut()`（`COM_UNIT_TEST` 定義時のみ）で直接観測する
-（詳細は `Bsw_RxTimeoutChain_test.cpp` 冒頭のコメント参照）。
+（詳細は `Bsw_ComStack_RxTimeoutChain_test.cpp` 冒頭のコメント参照）。
 
 <a id="unit-test-single"></a>
 #### 単一モジュールのテスト

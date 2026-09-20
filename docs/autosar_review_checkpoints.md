@@ -79,8 +79,8 @@ CanSM/CanTp/ComM/Dcm/Dem/Fee/Port/IoHwAb の8モジュールについて、`KeyM
 「IF（シグネチャ）はあまり乖離させたくないが、関数の中身は簡略化してよい」に基づき、
 内部実装は `(void)ConfigPtr;` で無視するのみ（post-build データの実体は作らない）。
 呼び出し元（`EcuM.c`、Fee のみ `MemIf.c`）も `NULL` 引数で更新済み。
-`test/test_chain/` の `CanSM_Init()` 呼び出し3箇所（Bsw_RxChain_test.cpp/
-Bsw_SleepChain_test.cpp/Bsw_WakeupChain_test.cpp）も追随済み。
+`test/test_chain/` の `CanSM_Init()` 呼び出し3箇所（Bsw_ComStack_RxChain_test.cpp/
+Bsw_SleepChain_test.cpp/Bsw_NmStack_WakeupChain_test.cpp）も追随済み。
 `pio test -e native`(62件)/`pio test -e native_chain`(19件)/`pio run -e uno_r4`
 いずれも成功を確認済み。コミット `444b7a0`（"modified: init function parameter"）で
 確定（`docs: modified README.md` 等とは別コミット）。
