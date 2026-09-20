@@ -502,9 +502,10 @@ Std_ReturnType Dem_GetOccurrenceCounterOfEvent(Dem_EventIdType EventId, uint8* C
 /**
  * \brief   本 ECU が構成する DTC 翻訳フォーマットを取得する。
  *
- * \details DCM SID 0x19 subFunc 0x01/0x04/0x06 等の応答に含まれる
- *          DTCFormatIdentifier バイトの取得元（[SWS_Dcm_00xxx]系、
- *          Dcm_Cbk.c 参照）。エラー戻り値の定義が実仕様に存在しないため
+ * \details DCM SID 0x19 subFunc 0x01（reportNumberOfDTCByStatusMask）の
+ *          応答に含まれる DTCFormatIdentifier バイトの取得元
+ *          （[SWS_Dcm_00376]、Dcm_Cbk.c 参照）。エラー戻り値の定義が
+ *          実仕様に存在しないため
  *          （[SWS_Dem_00231]）、ClientId・初期化状態に関わらず常に
  *          `DEM_DTC_TRANSLATION_ISO14229_1` を返す（本プロジェクトが
  *          `DemTypeOfDTCSupported` として構成する唯一の形式）。
