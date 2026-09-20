@@ -58,6 +58,23 @@ typedef enum
     DEM_DTC_FORMAT_J1939 = 2U  /**< SPN+FMI を合成した 3-byte J1939 形式（本プロジェクトは非対応）*/
 } Dem_DTCFormatType;
 
+/**
+ * \brief   DTC 翻訳フォーマット型（[SWS_Dem_00936]、`Dem_GetTranslationType()`
+ *          の戻り値）。DTC 値自体の表現形式を選ぶ `Dem_DTCFormatType` とは
+ *          別の型・値域である点に注意。
+ * \details 本プロジェクトは `DemTypeOfDTCSupported` として ISO 14229-1 形式
+ *          のみを構成するため、`DEM_DTC_TRANSLATION_ISO14229_1` 以外が
+ *          返ることはない。
+ */
+typedef enum
+{
+    DEM_DTC_TRANSLATION_ISO15031_6              = 0U, /**< ISO15031-6 / SAE J2012-DA_DTCFormat_00（本プロジェクトは非対応）*/
+    DEM_DTC_TRANSLATION_ISO14229_1              = 1U, /**< ISO 14229-1 DTC 形式（本プロジェクトが唯一構成する形式）*/
+    DEM_DTC_TRANSLATION_SAEJ1939_73             = 2U, /**< SAE J1939-73 DTC 形式（本プロジェクトは非対応）*/
+    DEM_DTC_TRANSLATION_ISO11992_4              = 3U, /**< ISO 11992-4 DTC 形式（本プロジェクトは非対応）*/
+    DEM_DTC_TRANSLATION_SAE_J2012_DA_DTCFORMAT_04 = 4U /**< SAE J2012-DA_DTCFormat_04（本プロジェクトは非対応）*/
+} Dem_DTCTranslationFormatType;
+
 /** [SWS_Dem_00198] `Dem_GetDTCOfEvent()` の拡張戻り値（要求フォーマットに
  *  対応する DTC が構成されていない場合）。実仕様の Service Interface
  *  DiagnosticInfo（値表）に基づく数値。Dem_Cfg.h の `DEM_E_*`（Det_ReportError
@@ -358,6 +375,39 @@ void Dem_GetAllDTCs(uint32* dtcBuf, uint8* statusBuf, uint8* count, uint8 status
 void Dem_GetSupportedDTCs(uint32* dtcBuf, uint8* statusBuf, uint8* count);
 
 /**
+ * \brief   ステータスが「prefailed」の DTC のみを、対応する Fault Detection
+ *          Counter と共に列挙する。
+ *
+ * \details [SWS_Dcm_00465] は UDS SID 0x19 サブ機能 0x14
+ *          reportDTCFaultDetectionCounter に対し、実仕様では
+ *          `Dem_SetDTCFilter()`(FilterForFaultDetectionCounter=TRUE) +
+ *          `Dem_GetNextFilteredDTCAndFDC()` の反復呼び出しで「prefailed」
+ *          （Fault Detection Counter の値が 1〜0x7E）の DTC のみを取得する
+ *          ことを要求する。本プロジェクトはこのフィルタ問い合わせ API 対
+ *          （`Dem_SetDTCFilter()`/`Dem_GetNextFilteredDTCAndFDC()`）を
+ *          実装せず、`Dem_GetAllDTCs()`/`Dem_GetSupportedDTCs()` と同様に
+ *          「一括取得＋Dem内部で絞り込み」方式で代替する。
+ *          絞り込み条件（FDC値域）は Dem 内部のデバウンス状態に基づく
+ *          Dem 側の知識であるため、Dcm 層ではなく本関数側で判定する
+ *          （`Dem_GetAllDTCs()` の statusMask 絞り込みと同じ設計）。
+ *
+ * \param[out]  dtcBuf   DTC コード (24-bit) の格納先。DEM_EVENT_COUNT 要素以上。
+ * \param[out]  fdcBuf   `Dem_GetFaultDetectionCounter()` と同じ写像済み
+ *                       Fault Detection Counter の格納先。同サイズ。
+ * \param[out]  count    prefailed だった DTC 数。
+ *
+ * \note    本プロジェクト独自の関数（実 AUTOSAR に対応する関数は無い）の
+ *          ため ApiId は任意の値。実仕様のどの Dem 関数の Service ID
+ *          （`Dem_GetNextFilteredDTCAndFDC`=0x3b 含む）とも一致しないことを
+ *          `pdftotext`で確認済みの 0x43 を使う。
+ *
+ * \ServiceID      {0x43}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void Dem_GetPrefailedDTCs(uint32* dtcBuf, uint8* fdcBuf, uint8* count);
+
+/**
  * \brief   FreezeFrame として保存する現在値を更新する。
  *
  * \details SW-C (App_EngineManager) が周期 Runnable の先頭で毎回呼び出し、
@@ -450,21 +500,45 @@ Std_ReturnType Dem_GetEventIdOfDTC(uint32 DTC, Dem_EventIdType* EventId);
 Std_ReturnType Dem_GetOccurrenceCounterOfEvent(Dem_EventIdType EventId, uint8* Counter);
 
 /**
- * \brief   指定イベントの Fault Detection Counter（デバウンスカウンタの生値）を取得する。
+ * \brief   本 ECU が構成する DTC 翻訳フォーマットを取得する。
  *
- * \details DCM SID 0x19 subFunc 0x0B (reportDTCFaultDetectionCounter) から
- *          呼び出す。ISO 14229-1 に従い -128(PASSED 側に最も振れた状態)〜
- *          127(FAILED 側に最も振れた状態) の範囲で、内部の
- *          `Dem_DebounceCounter[]`（`Dem_SetEventStatus()` が更新する値）を
- *          そのまま返す。
+ * \details DCM SID 0x19 subFunc 0x01/0x04/0x06 等の応答に含まれる
+ *          DTCFormatIdentifier バイトの取得元（[SWS_Dcm_00xxx]系、
+ *          Dcm_Cbk.c 参照）。エラー戻り値の定義が実仕様に存在しないため
+ *          （[SWS_Dem_00231]）、ClientId・初期化状態に関わらず常に
+ *          `DEM_DTC_TRANSLATION_ISO14229_1` を返す（本プロジェクトが
+ *          `DemTypeOfDTCSupported` として構成する唯一の形式）。
+ *
+ * \param[in]  ClientId  クライアント ID。単一診断クライアント構成のため未使用。
+ *
+ * \return  構成済み DTC 翻訳フォーマット。
+ *
+ * \AUTOSARReq     {SWS_Dem_00230}
+ * \AUTOSARReq     {SWS_Dem_00231}
+ * \ServiceID      {0x3c}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Dem_DTCTranslationFormatType Dem_GetTranslationType(uint8 ClientId);
+
+/**
+ * \brief   指定イベントの Fault Detection Counter を取得する。
+ *
+ * \details DCM SID 0x19 subFunc 0x14 (reportDTCFaultDetectionCounter) から
+ *          呼び出す。内部の `Dem_DebounceCounter[]`（-limit〜+limit、limit は
+ *          イベントごとの `Dem_DebounceLimitTable[]`）を、ISO 14229-1 に従い
+ *          -128(PASSED 側に最も振れた状態)〜127(FAILED 側に最も振れた状態)の
+ *          範囲へ線形写像して返す（[SWS_Dem_00415]、`Dem_MapDebounceCounterToFdc()`
+ *          参照）。
  *
  * \param[in]   EventId               イベント ID (DEM_EVENT_* 定数)。
- * \param[out]  FaultDetectionCounter デバウンスカウンタ生値の格納先。NULL 禁止。
+ * \param[out]  FaultDetectionCounter 写像後の Fault Detection Counter の格納先。NULL 禁止。
  *
  * \retval  E_OK      正常取得。
  * \retval  E_NOT_OK  未初期化、EventId が範囲外、または FaultDetectionCounter が NULL。
  *
  * \AUTOSARReq     {SWS_Dem_00203}
+ * \AUTOSARReq     {SWS_Dem_00415}
  * \ServiceID      {0x3e}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}

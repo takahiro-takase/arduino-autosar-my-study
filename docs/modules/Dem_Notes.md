@@ -472,3 +472,33 @@ BUTTON_STUCK は「固着で+1、解放で-1」を繰り返すだけで確定（
 
 イベントごとの閾値（`DEM_DEBOUNCE_LIMIT_*`）に変更したことで、両モジュールとも
 報告ロジックを自然な「1 回だけ報告する」形に戻せた。
+
+### Fault Detection Counter の線形写像未実装（2026-09-20 仕様乖離を修正）
+
+`Dem_GetFaultDetectionCounter()`（UDS 0x19/0x14 reportDTCFaultDetectionCounter
+から利用、[`Dcm_Notes.md`](./Dcm_Notes.md) 参照）は、当初 `Dem_DebounceCounter[]`
+の生値（イベントごとの `Dem_DebounceLimitTable[]` により実質 -2〜+2 程度の
+狭い範囲）をそのまま返していた。しかし [SWS_Dem_00415] は「内部デバウンス
+カウンタの値・範囲に基づき、-128〜127へ線形に写像すること」を要求しており、
+本プロジェクトはこの写像を実装していなかった。
+
+`Dem_MapDebounceCounterToFdc()` を新設し、カウンタが正側（FAILED方向）なら
+127を、負側（PASSED方向）なら128を分母に使う（sint8 の値域が非対称、
+負側が1つ多いため）ことで、内部カウンタの両端（±limit）がちょうど
+外部値の両端（-128〜127）に一致するようにした。limit が小さい
+（1または2）ため写像後も粒度は粗いが、要求自体は満たしている。
+
+あわせて、対になる `Dcm_HandleReadDtcFaultDetectionCounter()`
+（[SWS_Dcm_00465]）が「ステータスが『prefailed』(FDC値1〜0x7E) の DTC
+のみ」という絞り込みを行わず常に全イベントを返していた乖離も修正した
+（詳細は [`Dcm_Notes.md`](./Dcm_Notes.md) 参照）。この絞り込み条件は
+Dem 内部のデバウンス状態に基づく知識のため、`Dem_GetAllDTCs()`
+（statusMask 絞り込み）/`Dem_GetSupportedDTCs()`（無条件全件）と同じ
+「Dem 側で判定し、フィルタ済みの結果だけを返す」設計に揃え、
+新設した `Dem_GetPrefailedDTCs()` に実装している
+（`/simplify` のaltitude観点で「Dcmハンドラに直接実装すると
+既存の設計パターンから外れる」と指摘され是正）。
+
+抱き合わせで、`Dem_GetTranslationType()`（[SWS_Dem_00230]/[SWS_Dem_00231]）
+も未実装だったため新設した（常に `DEM_DTC_TRANSLATION_ISO14229_1` を返す。
+本プロジェクトが構成する唯一の DTC 翻訳フォーマットのため）。

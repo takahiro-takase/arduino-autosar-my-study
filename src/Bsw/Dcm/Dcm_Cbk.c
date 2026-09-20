@@ -993,7 +993,7 @@ static void Dcm_HandleReadDtcCount(const uint8* uds, uint8 udsLen)
         Dcm_SendNegativeResponse(DCM_SID_READ_DTC_INFO, DCM_NRC_CONDITIONS_NOT_CORRECT);
         return;
     }
-    Dcm_TxBuf[3] = DCM_DTC_FORMAT_ISO15031;
+    Dcm_TxBuf[3] = (uint8)Dem_GetTranslationType(DCM_DEM_CLIENT_ID);
     Dcm_TxBuf[4] = 0x00U;                        /* countH */
     Dcm_TxBuf[5] = count;                        /* countL */
     Dcm_TxPdu.SduLength = 6U;
@@ -1137,16 +1137,18 @@ static void Dcm_HandleReadDtcSupported(const uint8* uds, uint8 udsLen)
 /**
  * \brief   SID 0x19 subFunc 0x14 reportDTCFaultDetectionCounter を処理する。
  *
- * \details 本 ECU が対応する全 DTC について、Fault Detection Counter
- *          （`Dem_GetFaultDetectionCounter()`、デバウンスカウンタ生値）を
- *          返す。DTC 一覧の取得自体は subFunc 0x0A と同じ
- *          `Dem_GetSupportedDTCs()` を使う（ステータスに関わらず全件、
- *          要求パラメータなし）。ISO 14229-1 上、本サブ機能の応答は
- *          0x02/0x0A と異なり DTCStatusAvailabilityMask を含まない
- *          （SID/subFunc の2バイトの直後から DTC 一覧が始まる）点に注意。
+ * \details [SWS_Dcm_00465]: ステータスが「prefailed」の DTC のみを対象に
+ *          Fault Detection Counter（[SWS_Dem_00415]により -128〜127へ
+ *          線形写像済みの値）を返す。絞り込み自体は Dem 内部のデバウンス
+ *          状態に基づく Dem 側の知識のため、`Dem_GetSupportedDTCs()`
+ *          （0x0A）と対になる `Dem_GetPrefailedDTCs()` へ委譲する
+ *          （`Dem_GetAllDTCs()` の statusMask 絞り込みと同じ設計、詳細は
+ *          Dem.h 参照）。ISO 14229-1 上、本サブ機能の応答は 0x02/0x0A と
+ *          異なり DTCStatusAvailabilityMask を含まない（SID/subFunc の
+ *          2バイトの直後から DTC 一覧が始まる）点に注意。
  *
  *          要求: [0x19, 0x14]
- *          応答 (n 件、n = DEM_EVENT_COUNT): [0x59, 0x14,
+ *          応答 (n 件、n = prefailed 状態の DTC 数): [0x59, 0x14,
  *                        DTC1_H, DTC1_M, DTC1_L, FDC1,
  *                        DTC2_H, DTC2_M, DTC2_L, FDC2, ...]
  *
@@ -1165,25 +1167,12 @@ static void Dcm_HandleReadDtcFaultDetectionCounter(const uint8* uds, uint8 udsLe
     }
 
     uint32 dtcBuf[DEM_EVENT_COUNT];
-    uint8  statusBuf[DEM_EVENT_COUNT];  /* Dem_GetSupportedDTCs() の必須出力だが本サブ機能では未使用 */
     uint8  fdcBuf[DEM_EVENT_COUNT];
     uint8  count = 0U;
 
-    Dem_GetSupportedDTCs(dtcBuf, statusBuf, &count);
+    Dem_GetPrefailedDTCs(dtcBuf, fdcBuf, &count);
 
-    /* Dem_GetSupportedDTCs() は EventId 昇順(0..DEM_EVENT_COUNT-1)で dtcBuf を
-     * 埋めるため、配列添字 i がそのまま EventId になる（Dem.c 参照）。
-     * Dem_GetEventIdOfDTC() による DTC→EventId の逆引きは不要（重複 DTC が
-     * あった場合に誤った EventId を拾う経路にもなり得るため、あえて避ける）。 */
-    uint8 i;
-    for (i = 0U; i < count; i++)
-    {
-        sint8 fdc = 0;
-        (void)Dem_GetFaultDetectionCounter((Dem_EventIdType)i, &fdc);
-        fdcBuf[i] = (uint8)fdc;
-    }
-
-    DET_LOGI(TAG, "19/14 supported=%u", (unsigned)count);
+    DET_LOGI(TAG, "19/14 prefailed=%u", (unsigned)count);
 
     Dcm_TxBuf[0] = 0x59U;
     Dcm_TxBuf[1] = DCM_DTC_SUBFUNC_REPORT_FDC;

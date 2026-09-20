@@ -130,9 +130,10 @@ TEST_F(Bsw_Dcm_ReadDtcInfo_Test, DisableDTCSetting_OK_ReturnsOk)
 }
 
 // ------------------------------------------------------------
-// Dem_GetFaultDetectionCounter（UDS SID 0x19 subFunc 0x0B
-// reportDTCFaultDetectionCounter 用に新設。内部の Dem_DebounceCounter[] を
-// そのまま返す薄いgetter）
+// Dem_GetFaultDetectionCounter（UDS SID 0x19 subFunc 0x14
+// reportDTCFaultDetectionCounter 用に新設。[SWS_Dem_00415]により内部の
+// Dem_DebounceCounter[]（-limit〜+limit）を-128〜127へ線形写像して返す。
+// DEM_EVENT_ENGINE_OVERHEAT の limit は 2 (DEM_DEBOUNCE_LIMIT_ENGINE_OVERHEAT)。
 // ------------------------------------------------------------
 
 TEST_F(Bsw_Dcm_ReadDtcInfo_Test, GetFaultDetectionCounter_OK_ReturnsZeroForFreshEvent)
@@ -142,7 +143,7 @@ TEST_F(Bsw_Dcm_ReadDtcInfo_Test, GetFaultDetectionCounter_OK_ReturnsZeroForFresh
     Std_ReturnType ret = Dem_GetFaultDetectionCounter(DEM_EVENT_ENGINE_OVERHEAT, &fdc);
 
     EXPECT_EQ(ret, E_OK);
-    EXPECT_EQ(fdc, 0);
+    EXPECT_EQ(fdc, 0);  /* カウンタ0の写像は0(正負どちらの式でも0) */
 }
 
 TEST_F(Bsw_Dcm_ReadDtcInfo_Test, GetFaultDetectionCounter_OK_ReflectsDebounceCounterAfterFailedReport)
@@ -153,7 +154,9 @@ TEST_F(Bsw_Dcm_ReadDtcInfo_Test, GetFaultDetectionCounter_OK_ReflectsDebounceCou
     Std_ReturnType ret = Dem_GetFaultDetectionCounter(DEM_EVENT_ENGINE_OVERHEAT, &fdc);
 
     EXPECT_EQ(ret, E_OK);
-    EXPECT_EQ(fdc, 1);  /* 中立(0)から FAILED 方向へ1回分だけ進む */
+    /* 中立(0)から FAILED 方向へ1回分だけ進んだ生カウンタ1を、
+     * limit=2 で線形写像: (1*127)/2 = 63 (整数除算)。 */
+    EXPECT_EQ(fdc, 63);
 }
 
 TEST_F(Bsw_Dcm_ReadDtcInfo_Test, GetFaultDetectionCounter_NG_InvalidEventIdReturnsError)
@@ -478,13 +481,15 @@ TEST_F(Bsw_Dcm_ReadDtcInfo_Test, ReadDtcSupported_OK_DiffersFromReportByStatusMa
 
 // ------------------------------------------------------------
 // subFunc 0x14 reportDTCFaultDetectionCounter
-// （Dem_GetFaultDetectionCounter() 新設に伴う追加。DTC 一覧取得は 0x0A と
-// 同じ Dem_GetSupportedDTCs() を使うが、応答に statusAvailMask を含まない
-// 点が 0x02/0x0A と異なる（ISO 14229-1、/code-review で当初の subFunc
-// 0x0B 誤割当ても合わせて訂正済み。docs/modules/Dcm_Notes.md 参照）。
+// （Dem_GetFaultDetectionCounter() 新設に伴う追加。DTC 一覧取得の候補は 0x0A
+// と同じ Dem_GetSupportedDTCs() を使うが、[SWS_Dcm_00465]により「prefailed」
+// (Dem_GetFaultDetectionCounter() の写像値が 1〜0x7E) の DTC のみへ絞り込む
+// 点、および応答に statusAvailMask を含まない点が 0x02/0x0A と異なる
+// （ISO 14229-1、/code-review で当初の subFunc 0x0B 誤割当ても合わせて
+// 訂正済み。docs/modules/Dcm_Notes.md 参照）。
 // ------------------------------------------------------------
 
-TEST_F(Bsw_Dcm_ReadDtcInfo_Test, ReadDtcFaultDetectionCounter_OK_ReturnsZeroForFreshEvents)
+TEST_F(Bsw_Dcm_ReadDtcInfo_Test, ReadDtcFaultDetectionCounter_OK_ReturnsEmptyListWhenNoEventIsPrefailed)
 {
     /* 準備 (Arrange): [0x19, 0x14]（追加パラメータなし） */
     uint8 req[2] = { DCM_SID_READ_DTC_INFO, DCM_DTC_SUBFUNC_REPORT_FDC };
@@ -492,19 +497,19 @@ TEST_F(Bsw_Dcm_ReadDtcInfo_Test, ReadDtcFaultDetectionCounter_OK_ReturnsZeroForF
     /* 実行 (Act) */
     SendReadDtcInfo(req, sizeof(req));
 
-    /* 評価 (Assert): [0x59, 0x14, (DTC_H,DTC_M,DTC_L,FDC) x DEM_EVENT_COUNT]
-     * （availMask バイトは含まない）。Dem_Init() 直後は全イベントの
-     * Fault Detection Counter が 0。 */
+    /* 評価 (Assert): Dem_Init() 直後は全イベントの Fault Detection Counter が
+     * 0 (未着手)であり [SWS_Dcm_00465] の「prefailed」(1〜0x7E) の定義を
+     * どれも満たさないため、DTC 列挙部分の無い [0x59, 0x14] のみを返す。 */
     ASSERT_EQ(FakeCanTp_TransmitCount, 1U);
-    ASSERT_EQ(FakeCanTp_TxLength, (uint8)(2U + DEM_EVENT_COUNT * 4U));
+    ASSERT_EQ(FakeCanTp_TxLength, 2U);
     EXPECT_EQ(FakeCanTp_TxBuf[0], 0x59U);
     EXPECT_EQ(FakeCanTp_TxBuf[1], DCM_DTC_SUBFUNC_REPORT_FDC);
-    EXPECT_EQ(FakeCanTp_TxBuf[5], 0U);  // 1件目(EventId=0)のFDC
 }
 
-TEST_F(Bsw_Dcm_ReadDtcInfo_Test, ReadDtcFaultDetectionCounter_OK_ReflectsDebounceCounterAfterFailedReport)
+TEST_F(Bsw_Dcm_ReadDtcInfo_Test, ReadDtcFaultDetectionCounter_OK_ReturnsOnlyThePrefailedEvent)
 {
-    /* 準備 (Arrange): EventId=0 (DEM_EVENT_ENGINE_OVERHEAT) を1回 FAILED 報告 */
+    /* 準備 (Arrange): EventId=0 (DEM_EVENT_ENGINE_OVERHEAT、limit=2) を1回
+     * FAILED 報告。生カウンタ1は確定閾値2未満のため「prefailed」。 */
     (void)Dem_SetEventStatus(DEM_EVENT_ENGINE_OVERHEAT, DEM_EVENT_STATUS_FAILED);
 
     uint8 req[2] = { DCM_SID_READ_DTC_INFO, DCM_DTC_SUBFUNC_REPORT_FDC };
@@ -512,9 +517,11 @@ TEST_F(Bsw_Dcm_ReadDtcInfo_Test, ReadDtcFaultDetectionCounter_OK_ReflectsDebounc
     /* 実行 (Act) */
     SendReadDtcInfo(req, sizeof(req));
 
-    /* 評価 (Assert): 1件目(EventId=0)のFDCが中立(0)からFAILED方向へ1進む */
+    /* 評価 (Assert): prefailed なのはこの1件のみのため、DTC 一覧は1件だけ。
+     * 生カウンタ1を limit=2 で線形写像: (1*127)/2 = 63 (整数除算)。 */
     ASSERT_EQ(FakeCanTp_TransmitCount, 1U);
-    EXPECT_EQ(FakeCanTp_TxBuf[5], 1U);
+    ASSERT_EQ(FakeCanTp_TxLength, 6U);  /* 2(header) + 1件×4 */
+    EXPECT_EQ(FakeCanTp_TxBuf[5], 63U);
 }
 
 // ------------------------------------------------------------
