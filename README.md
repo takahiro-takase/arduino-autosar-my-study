@@ -44,7 +44,7 @@ ARXML や設定ツールは使用せず、コードで階層構造・型定義�
   - [アプリケーション（App_EngineManager / App_WarningIndicator）](#application)
 - [テスト（動作確認）](#testing)
   - [単体テスト（ホスト上でのロジック検証）](#unit-test)
-    - [コールチェーンのテスト（`[env:native_chain]`）](#unit-test-chain)
+    - [コールチェーンのテスト（`native_chain_tests`）](#unit-test-chain)
       - [Tx 処理（Com → PduR → CanIf → Can の順）](#unit-test-tx)
       - [Rx 処理（Can → CanIf → PduR → Com の順）](#unit-test-rx)
     - [単一モジュールのテスト](#unit-test-single)
@@ -1117,27 +1117,38 @@ EcuM の POST_RUN 遷移時に Rte_Engine タスクと Rte_Warning タスクが�
 
 実 HW（UNO R4）を使わず、Bsw モジュールのロジックだけをホスト PC 上で GoogleTest
 により検証します。単一モジュールのテストも複数モジュールにまたがる関数
-コールチェーンの検証も含め、`test/` 1 フォルダ・`[env:native_chain]`
-1 環境に集約しています（2026-09、`[env:native]`/`[env:native_dcm]`/
-`[env:native_wdgm]`/`[env:native_fim]` という個別 env に分かれていた時期が
-ありましたが、`--wrap` によるフォールトインジェクション（`platformio.ini` の
-`[env:native_chain]` 冒頭コメント参照）を活用してすべて本 env へ統合しました）。
+コールチェーンの検証も含め、`test/` 1 フォルダ・`native_chain_tests` という
+単一のテストバイナリに集約しています（2026-09、`[env:native]`/`[env:native_dcm]`/
+`[env:native_wdgm]`/`[env:native_fim]` という PlatformIO の個別 env に分かれて
+いた時期がありましたが、`--wrap` によるフォールトインジェクション
+（`CMakeLists.txt` 冒頭コメント参照）を活用してすべて統合しました）。
+
+ビルドは PlatformIO ではなく **CMake + clang++（llvm-mingw）** で行います
+（2026-09-20、PlatformIO の `native` プラットフォームが CC/CXX を強制的に
+gcc/g++ へ上書きし直してしまい clang++ へ確実に切り替えられないという制約が
+あったため移行。`[env:uno_r4]` の実機ビルドは引き続き PlatformIO のまま）。
+
+事前準備として、[llvm-mingw](https://github.com/mstorsjo/llvm-mingw) を導入し、
+その `bin` ディレクトリを環境変数 `LLVM_MINGW_BIN` に設定しておく（絶対パスを
+リポジトリへハードコードしていないのはマシンごとに設置先が異なるため）。
+CMake は VSCode の CMake Tools 拡張などから導入できる。
 
 ```bash
-# ホスト上でビルド・実行（GoogleTest、実 HW 不要）
-pio test -e native_chain  # 単一モジュール検証(Can/Gpt/Dio/Port/Det/E2E等)＋
-                           # Tx/Rx処理コールチェーン(通常/E2E/デッドライン監視)＋
-                           # Dcm/Dem/WdgM/FiM 等すべて含む
-# [env:native_chain_coverage]: [env:native_chain] と同じ対象を clang（llvm-mingw）
-# でビルドし、MC/DC を含む source-based coverage を計測する env。事前準備・
-# 使い方は platformio.ini の当該セクションのコメント参照。
-$env:DET_LOG_VERBOSE = "1"; pio test -e native_chain -v # TRACE ログ出力
-```
+# 事前準備（マシンごとに1回）
+export LLVM_MINGW_BIN="/c/Users/<you>/llvm-mingw-YYYYMMDD-ucrt-x86_64/bin"
 
-事前準備として、ホスト用の C++17 対応 MinGW-w64/GCC がインストールされ
-`g++` に PATH が通っている必要がある（`uno_r4` 環境のビルドとは別の
-ネイティブコンパイラ）。初回実行時に GoogleTest ライブラリと `native`
-プラットフォームを自動ダウンロードする。
+# ホスト上でビルド・実行（GoogleTest、実 HW 不要）
+cmake --preset native-chain
+cmake --build --preset native-chain
+./build/native_chain/native_chain_tests.exe  # 単一モジュール検証(Can/Gpt/Dio/Port/Det/E2E等)＋
+                                              # Tx/Rx処理コールチェーン(通常/E2E/デッドライン監視)＋
+                                              # Dcm/Dem/WdgM/FiM 等すべて含む
+
+# native-chain-coverage プリセット: 同じ対象を MC/DC 含む source-based coverage
+# 計測付きでビルドする。使い方は scripts/generate_coverage_report.sh 参照。
+
+$env:DET_LOG_VERBOSE = "1"; ./build/native_chain/native_chain_tests.exe # TRACE ログ出力
+```
 
 > **Windows 環境固有の注意（MinGW-w64 のランタイム不整合）**:
 > 一部の MinGW-w64 配布物（msvcrt ランタイム版）では、GoogleTest の
@@ -1150,7 +1161,7 @@ $env:DET_LOG_VERBOSE = "1"; pio test -e native_chain -v # TRACE ログ出力
 > `__imp_quick_exit`/`__imp__Exit` の多重定義エラーが出たら削除すること。
 
 <a id="unit-test-chain"></a>
-#### コールチェーンのテスト（`[env:native_chain]`）
+#### コールチェーンのテスト（`native_chain_tests`）
 
 <a id="unit-test-tx"></a>
 ##### Tx 処理（Com → PduR → CanIf → Can の順）
@@ -1165,10 +1176,13 @@ $env:DET_LOG_VERBOSE = "1"; pio test -e native_chain -v # TRACE ログ出力
 （`Com_TxPending` というキュー経由で次回 `Com_MainFunctionTx()` まで待機する
 箇所）でテストを2つのセグメントに分け、それぞれを個別に実行可能な
 `TEST_F` ケースとしている（`--gtest_filter=Bsw_TxChain_Test.ComSendSignal_*` 等で
-絞り込み可）。フェイクは最下層の `Can_Hw` のみ（`test/
-Fake_Can_Hw.c`）で、CanIf.c が呼ぶ `CanSM_RxIndication()` 等は
-`Bsw_CanSM_fake.c`（no-op スタブ、CanSM 自身のロジックは README
-「ECU管理層」の別のコールチェーンのため対象外）で満たしている。
+絞り込み可）。フェイクは最下層の `Can_Hw` のみ（`test/stub/Hal/
+Fake_Can_Hw.c`）で、CanIf.c が呼ぶ `CanSM_RxIndication()`/
+`CanSM_ControllerModeIndication()` 等は CanSM.c 自身を実体でリンクして
+処理させている（同じ `native_chain_tests` で CanSM 自身のコールチェーン
+（「[CAN コントローラのスリープ制御](#can-controller-sleep)」節）も検証するため、2026-09 に
+フェイクから実体リンクへ切り替えた。本チェーンのテスト自体は CanSM の
+状態遷移を検証対象にしていないが、実体を混在させても副作用はない）。
 
 [「Tx 処理」の「E2E」](#tx-processing-e2e)（`Com_MainFunctionTx()` →
 TxTransformCbk → `E2EXf_TransformP05()` → `E2E_P05Protect()`）は
@@ -1222,27 +1236,32 @@ PduR/CanIf/Can/CanSM を一切経由せず Com.c 単体で完結する。フェ�
 
 `Gpt`/`Dio`/`Port`/`Det`/`E2E`/`E2E_P05`/`E2E_P01` のように他モジュールと
 コールチェーンを共有しない末端モジュールは、HAL 層（`*_Hw` ファイル）だけを
-フェイクに差し替えて単体で検証している（`test/` 内の
-`Bsw_Gpt_test.cpp`/`Fake_Gpt_Hw.c` 等、2026-09 に専用 env `[env:native]`
-から本 env（`[env:native_chain]`）へ統合済み）。ファイル名は
-`{層}_{モジュール}_{test|fake}`（実ファイル名が `<Module>_Hw` の場合はそれも
-含める）で統一し、フォルダを分けなくてもどの層・モジュールのファイルかが
-名前だけで分かるようにしている。`Gpt_OnTick()`（本来 ISR から呼ばれる関数）は
-テストから直接呼ぶことで、実割り込みなしに状態機械を駆動している。
+フェイクに差し替えて単体で検証している（テストファイルは `test/` 直下の
+`Bsw_Gpt_test.cpp` 等、フェイクは `test/stub/Hal/Fake_Gpt_Hw.c` 等、
+2026-09 に専用 env `[env:native]` から本テストバイナリ（`native_chain_tests`）へ
+統合済み）。ファイル名は、テストは `test/` 直下に
+`Bsw_{Module}_{Scenario}_test.cpp`（複数モジュールを跨ぐ統合テストは
+`Bsw_{Stack}Stack_{Scenario}_test.cpp`、上記「コールチェーンのテスト」参照）、
+フェイク/`--wrap` は `test/stub/` 配下に `src/` のディレクトリ構成を
+ミラーリングして `Fake_{Module}.c`/`Wrap_{Module}.c`（HAL 層はフォルダ名
+との重複を避け `Fake_{Module}_Hw.c`）で統一している。`Gpt_OnTick()`
+（本来 ISR から呼ばれる関数）はテストから直接呼ぶことで、実割り込みなしに
+状態機械を駆動している。
 
-`Bsw_Can_test.cpp`（`src/Bsw/Can/Can.c` 単体）は少し特殊で、`[env:native_chain]`
+`Bsw_Can_test.cpp`（`src/Bsw/Can/Can.c` 単体）は少し特殊で、`native_chain_tests`
 は他のコールチェーンテストのために `CanIf.c`/`CanSM.c` を実体でリンクして
 いるため、Can.c が上位層通知として呼ぶ3関数（`CanIf_RxIndication()`/
 `CanIf_TxConfirmation()`/`CanIf_ControllerBusOff()`）だけを`--wrap`で
 観測する（`test/stub/Bsw/CanIf/Wrap_CanIf.c`、既定は実体へパススルーしつつ
-呼び出し回数・引数を記録。詳細は `platformio.ini` の `[env:native_chain]`
-冒頭コメント参照）。CanIf/CanSM 側の未初期化ガードにより、本テストが
+呼び出し回数・引数を記録。詳細は `CMakeLists.txt` 冒頭コメント参照）。
+CanIf/CanSM 側の未初期化ガードにより、本テストが
 `CanIf_Init()`/`CanSM_Init()` を呼ばない限りパススルー後の実処理は
 静かに no-op になる。
 
 新しい Bsw モジュールのテストを追加する場合は `test/` に
-`Bsw_{シナリオ名}_test.cpp`（および必要なら `{モジュール}_fake.c`）を
-追加し、`[env:native_chain]` の `build_src_filter` と `-I` にその実ソースを
+`Bsw_{Module}_{Scenario}_test.cpp`（および必要なら `test/stub/` 配下の
+対応する `src/` パスに `Fake_{Module}.c`）を追加し、`CMakeLists.txt` の
+`NATIVE_CHAIN_SRC_SOURCES`/`NATIVE_CHAIN_INCLUDE_DIRS` にその実ソースを
 積み増す（GoogleTest の `main()` は `test_main.cpp` に集約しているため、
 新規テストファイルには `int main()` を書かないこと）。
 
