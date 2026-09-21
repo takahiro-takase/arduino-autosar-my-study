@@ -19,8 +19,20 @@
  *          全体に効く一括置換であり特定のテストケースだけを狙って差し替える
  *          仕組みではないため、既定動作は `__real_...` への単純な委譲
  *          （パススルー）とし、他のテストケースの挙動を暗黙に変えないように
- *          している。個々のテストは `ForceFail` 系フラグを Arrange 区間でのみ
- *          立てて狙った箇所だけ故障注入し、Act 直後に倒す。
+ *          している。
+ *
+ *          2026-09-21、`test/stub/Bsw/Can/Wrap_Can.h` で確立した標準テンプレート
+ *          （[[reference_wrap_stub_naming_convention]]）へ統一した。故障注入は
+ *          単純な bool `ForceFail` ではなく回数閾値方式の
+ *          `FailFromCallCount_CanIf_SetControllerMode`（既定
+ *          `WRAP_CANIF_FAIL_FROM_CALL_COUNT_DISABLED`）を使う。
+ *          `CallCount_CanIf_SetControllerMode` がこの値に達した回から
+ *          （以降ずっと）`ForcedReturn_CanIf_SetControllerMode` を返す。
+ *          N=1 を設定すれば即時強制失敗としても使える。変数名は
+ *          `<種類>_<Module>_<関数名>`（種類=CallCount/FailFromCallCount/
+ *          ForcedReturn/Last* を先頭側に置く）で統一する。個々のテストは
+ *          `FailFromCallCount_CanIf_SetControllerMode` を Arrange 区間でのみ
+ *          立て、`WrapCanIf_Reset()` で Act 直後に倒すこと。
  *
  * \par CanIf_SetControllerMode
  * `CanSM_MainFunction()` の Bus-Off 回復リトライ（`CanIf_SetControllerMode
@@ -41,13 +53,14 @@
  * と同じ考え方で境界だけをピンポイントで観測する。既定は
  * `__real_...` へのパススルー（CanIf/CanSM 側に未初期化ガードがあり、
  * Bsw_Can_test.cpp は CanIf_Init()/CanSM_Init() を呼ばないため、実体へ渡っても
- * 静かに no-op になるだけで既存挙動に影響しない。ForceFail 相当のトグルは
- * 無い（誰も故障注入を必要としていないため）。
+ * 静かに no-op になるだけで既存挙動に影響しない）。故障注入は誰も必要と
+ * していないため、この3関数には呼び出し回数・引数キャプチャのみを持つ。
  */
 #ifndef WRAP_CANIF_H
 #define WRAP_CANIF_H
 
 #include "Std_Types.h"
+#include "CanIf_Types.h"
 #include "CanIf.h"
 #include "Can.h"
 
@@ -55,29 +68,62 @@
 extern "C" {
 #endif
 
-/** `__wrap_CanIf_SetControllerMode()` が呼ばれた回数。 */
-extern uint32 WrapCanIfSetControllerMode_CallCount;
+/** `FailFromCallCount_CanIf_Xxx` の「無効（常にパススルー）」を表す番兵値。
+ *  `uint32` の最大値のため、テストの呼び出し回数が現実的に到達することはない。 */
+#define WRAP_CANIF_FAIL_FROM_CALL_COUNT_DISABLED 0xFFFFFFFFU
 
-/** 0（既定）: `__real_CanIf_SetControllerMode()` へパススルー。
- *  0 以外: 呼び出し元へ即座に E_NOT_OK を返す（本物は一切呼ばない）。 */
-extern uint8 WrapCanIfSetControllerMode_ForceFail;
+/* ====================================================================
+ * External Variables
+ * ==================================================================== */
+extern uint32 CallCount_CanIf_Init;
+extern uint32 CallCount_CanIf_DeInit;
+extern uint32 CallCount_CanIf_SetControllerMode;
+extern uint32 CallCount_CanIf_GetControllerMode;
+extern uint32 CallCount_CanIf_GetControllerErrorState;
+extern uint32 CallCount_CanIf_Transmit;
+extern uint32 CallCount_CanIf_ReadRxPduData;
+extern uint32 CallCount_CanIf_ReadTxNotifStatus;
+extern uint32 CallCount_CanIf_ReadRxNotifStatus;
+extern uint32 CallCount_CanIf_SetPduMode;
+extern uint32 CallCount_CanIf_GetPduMode;
+extern uint32 CallCount_CanIf_GetVersionInfo;
+extern uint32 CallCount_CanIf_GetTxConfirmationState;
+extern uint32 CallCount_CanIf_TxConfirmation;
+extern uint32 CallCount_CanIf_RxIndication;
+extern uint32 CallCount_CanIf_ControllerBusOff;
 
-/** 各テストケースの開始時に呼び、呼び出し回数・強制失敗フラグを初期状態へ戻す。 */
-void WrapCanIfSetControllerMode_Reset(void);
+extern uint32 FailFromCallCount_CanIf_SetControllerMode;
+extern uint32 FailFromCallCount_CanIf_GetControllerMode;
+extern uint32 FailFromCallCount_CanIf_GetControllerErrorState;
+extern uint32 FailFromCallCount_CanIf_Transmit;
+extern uint32 FailFromCallCount_CanIf_ReadRxPduData;
+extern uint32 FailFromCallCount_CanIf_ReadTxNotifStatus;
+extern uint32 FailFromCallCount_CanIf_ReadRxNotifStatus;
+extern uint32 FailFromCallCount_CanIf_SetPduMode;
+extern uint32 FailFromCallCount_CanIf_GetPduMode;
+extern uint32 FailFromCallCount_CanIf_GetTxConfirmationState;
 
-extern uint32    WrapCanIfRxIndication_CallCount;
-extern Can_HwType    WrapCanIfRxIndication_LastMailbox;
-extern uint8         WrapCanIfRxIndication_LastData[8];
-extern PduLengthType WrapCanIfRxIndication_LastLength;
-void WrapCanIfRxIndication_Reset(void);
+/** 閾値到達後に返す戻り値（既定 E_NOT_OK）。 */
+extern Std_ReturnType ForcedReturn_CanIf_SetControllerMode;
+extern Std_ReturnType ForcedReturn_CanIf_GetControllerMode;
+extern Std_ReturnType ForcedReturn_CanIf_GetControllerErrorState;
+extern Std_ReturnType ForcedReturn_CanIf_Transmit;
+extern Std_ReturnType ForcedReturn_CanIf_ReadRxPduData;
+extern CanIf_NotifStatusType ForcedReturn_CanIf_ReadTxNotifStatus;
+extern CanIf_NotifStatusType ForcedReturn_CanIf_ReadRxNotifStatus;
+extern Std_ReturnType ForcedReturn_CanIf_SetPduMode;
+extern Std_ReturnType ForcedReturn_CanIf_GetPduMode;
+extern CanIf_NotifStatusType ForcedReturn_CanIf_GetTxConfirmationState;
 
-extern uint32    WrapCanIfTxConfirmation_CallCount;
-extern PduIdType WrapCanIfTxConfirmation_LastPduId;
-void WrapCanIfTxConfirmation_Reset(void);
+extern uint8         LastData_CanIf_RxIndication[8];
+extern Can_HwType    LastMailbox_CanIf_RxIndication;
+extern PduLengthType LastLength_CanIf_RxIndication;
+extern PduIdType     LastPduId_CanIf_TxConfirmation;
+extern uint8         LastControllerId_CanIf_ControllerBusOff;
 
-extern uint32 WrapCanIfControllerBusOff_CallCount;
-extern uint8  WrapCanIfControllerBusOff_LastControllerId;
-void WrapCanIfControllerBusOff_Reset(void);
+/** すべての関数呼び出し回数・回数閾値・強制戻り値・キャプチャ済み引数を
+ *  初期状態へ戻す。各テストケースの開始時（SetUp()）に1回呼ぶ。 */
+void WrapCanIf_Reset(void);
 
 #ifdef __cplusplus
 }

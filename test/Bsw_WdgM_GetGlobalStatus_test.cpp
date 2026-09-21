@@ -23,7 +23,7 @@ protected:
         FakeMillis_Reset();
         FakeDetHw_Reset();
         FakeWdgIf_Reset();
-        WrapDemSetEventStatus_Reset();
+        WrapDem_Reset();
         Dem_Init(NULL);  // Demの内部状態を毎テスト決定的にリセットする（Fake_NvM.cにより常に「初回起動」）
         WdgM_Init(&WdgM_Config);
         FakeDetHw_Reset();  /* Init 自体が出す DET ログ・記録を後続の検証対象から除く */
@@ -69,9 +69,9 @@ protected:
         WdgM_GlobalStatusType status;
         ASSERT_EQ(WdgM_GetGlobalStatus(&status), E_OK);
         EXPECT_EQ(status, WDGM_GLOBAL_STATUS_STOPPED);
-        EXPECT_EQ(WrapDemSetEventStatus_CallCount, 1U);
-        EXPECT_EQ(WrapDemSetEventStatus_LastEventId, DEM_EVENT_WDGM_SUPERVISION);
-        EXPECT_EQ(WrapDemSetEventStatus_LastEventStatus, DEM_EVENT_STATUS_FAILED);
+        EXPECT_EQ(CallCount_Dem_SetEventStatus, 1U);
+        EXPECT_EQ(LastEventId_Dem_SetEventStatus, DEM_EVENT_WDGM_SUPERVISION);
+        EXPECT_EQ(LastEventStatus_Dem_SetEventStatus, DEM_EVENT_STATUS_FAILED);
     }
 };
 
@@ -220,7 +220,7 @@ TEST_F(Bsw_WdgM_GetGlobalStatus_Test,
     /* [SWS_WdgM_00129]/[00375] の回帰テスト(2026-09 追加): STOPPED から
      * 回復した際、対になる PASSED を報告する
      * (DriveAllEntitiesToStopped() 内で既に FAILED 1 回分をカウント済み)。 */
-    EXPECT_EQ(WrapDemSetEventStatus_CallCount, 2U);
-    EXPECT_EQ(WrapDemSetEventStatus_LastEventId, DEM_EVENT_WDGM_SUPERVISION);
-    EXPECT_EQ(WrapDemSetEventStatus_LastEventStatus, DEM_EVENT_STATUS_PASSED);
+    EXPECT_EQ(CallCount_Dem_SetEventStatus, 2U);
+    EXPECT_EQ(LastEventId_Dem_SetEventStatus, DEM_EVENT_WDGM_SUPERVISION);
+    EXPECT_EQ(LastEventStatus_Dem_SetEventStatus, DEM_EVENT_STATUS_PASSED);
 }

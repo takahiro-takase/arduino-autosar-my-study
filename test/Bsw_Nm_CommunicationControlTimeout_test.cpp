@@ -35,6 +35,8 @@ extern "C" {
 #include "Wrap_Dem.h"
 #include "Fake_Bsw_EcuM.h"
 #include "Fake_Bsw_BswM.h"
+#include "Wrap_CanIf.h"
+#include "Wrap_Can.h"
 }
 
 namespace
@@ -67,7 +69,9 @@ protected:
     void SetUp() override
     {
         FakeCanHw_Reset();
-        WrapDemSetEventStatus_Reset();
+        WrapCanIf_Reset();  // 他ファイルの故障注入が漏れ伝わらないよう防御的にリセット
+        WrapCan_Reset();  // 同上（Can.c 側）
+        WrapDem_Reset();
         Dem_Init(NULL);  // Demの内部状態を毎テスト決定的にリセットする（Fake_NvM.cにより常に「初回起動」）
         FakeEcuM_Reset();
         FakeBswM_Reset();

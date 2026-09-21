@@ -38,7 +38,7 @@ protected:
     {
         FakeMillis_Reset();
         FakeCanTp_Reset();
-        WrapComM_DcmDiagnosticSuppressed = 1U;  // 本テストは通信管理(ComM/CanSM/Nm)が対象外
+        Suppressed_ComM_DcmDiagnostic = 1U;  // 本テストは通信管理(ComM/CanSM/Nm)が対象外
         FakeDetHw_LogSuppressed = 1U;  // Init() のログはノイズになるため抑制
 
         Dem_Init(NULL);

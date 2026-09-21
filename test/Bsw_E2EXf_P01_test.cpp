@@ -77,7 +77,7 @@ protected:
     void SetUp() override
     {
         FakeDetHw_LogSuppressed = 1U;
-        WrapDemSetEventStatus_Reset();
+        WrapDem_Reset();
         Dem_Init(NULL);  // Demの内部状態を毎テスト決定的にリセットする（Fake_NvM.cにより常に「初回起動」）
         E2E_P01ProtectInit(&protectState);
         E2E_P01CheckInit(&checkState);
@@ -127,7 +127,7 @@ TEST_F(Bsw_E2EXf_P01_Test, InverseTransform_OK_FirstFrameInitialIsAcceptedButDem
     // NODATA -> INIT（1回目は AddStatus されない）。まだ VALID に確定して
     // いないため Dem 報告は保留される。
     EXPECT_EQ(smState.SMState, E2E_SM_INIT);
-    EXPECT_EQ(WrapDemSetEventStatus_CallCount, 0U);
+    EXPECT_EQ(CallCount_Dem_SetEventStatus, 0U);
 }
 
 TEST_F(Bsw_E2EXf_P01_Test, InverseTransform_OK_SecondConsecutiveFrameIsAcceptedButDemNotYetReported)
@@ -146,7 +146,7 @@ TEST_F(Bsw_E2EXf_P01_Test, InverseTransform_OK_SecondConsecutiveFrameIsAcceptedB
     // INIT で AddStatus 1回目: OkCount=1 < MinOkStateInit(2) のため VALID
     // にはまだ届かず INIT のまま。Dem 報告も引き続き保留。
     EXPECT_EQ(smState.SMState, E2E_SM_INIT);
-    EXPECT_EQ(WrapDemSetEventStatus_CallCount, 0U);
+    EXPECT_EQ(CallCount_Dem_SetEventStatus, 0U);
 }
 
 TEST_F(Bsw_E2EXf_P01_Test, InverseTransform_OK_ThirdConsecutiveFrameReachesValidAndReportsPassed)
@@ -167,8 +167,8 @@ TEST_F(Bsw_E2EXf_P01_Test, InverseTransform_OK_ThirdConsecutiveFrameReachesValid
     // INIT で AddStatus 2回目: OkCount=2 >= MinOkStateInit(2) かつ
     // ErrorCount=0 <= MaxErrorStateInit(1) のため VALID へ昇格する。
     EXPECT_EQ(smState.SMState, E2E_SM_VALID);
-    EXPECT_EQ(WrapDemSetEventStatus_CallCount, 1U);
-    EXPECT_EQ(WrapDemSetEventStatus_LastEventStatus, DEM_EVENT_STATUS_PASSED);
+    EXPECT_EQ(CallCount_Dem_SetEventStatus, 1U);
+    EXPECT_EQ(LastEventStatus_Dem_SetEventStatus, DEM_EVENT_STATUS_PASSED);
 }
 
 // ------------------------------------------------------------
@@ -189,7 +189,7 @@ TEST_F(Bsw_E2EXf_P01_Test, InverseTransform_NG_CorruptedCrcIsRejectedButDemNotYe
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(checkStatus, E2E_P01STATUS_WRONGCRC);
     EXPECT_EQ(smState.SMState, E2E_SM_NODATA);
-    EXPECT_EQ(WrapDemSetEventStatus_CallCount, 0U);
+    EXPECT_EQ(CallCount_Dem_SetEventStatus, 0U);
 }
 
 // ------------------------------------------------------------
@@ -215,15 +215,15 @@ TEST_F(Bsw_E2EXf_P01_Test, InverseTransform_OK_SingleGlitchAfterValidIsTolerated
     E2EXf_InverseTransform(&rxConfig, buf2, sizeof(buf2), &checkStatus);
     E2EXf_InverseTransform(&rxConfig, buf3, sizeof(buf3), &checkStatus);
     ASSERT_EQ(smState.SMState, E2E_SM_VALID);
-    WrapDemSetEventStatus_Reset();  // ここまでの PASSED 報告をリセットし、以降だけを見る
+    WrapDem_Reset();  // ここまでの PASSED 報告をリセットし、以降だけを見る
 
     Std_ReturnType ret4 = E2EXf_InverseTransform(&rxConfig, buf4, sizeof(buf4), &checkStatus);
 
     EXPECT_EQ(ret4, E_NOT_OK);  // このフレーム自体は使えない
     EXPECT_EQ(checkStatus, E2E_P01STATUS_WRONGCRC);
     EXPECT_EQ(smState.SMState, E2E_SM_VALID);  // ErrorCount=1 <= 許容値のため維持
-    EXPECT_EQ(WrapDemSetEventStatus_CallCount, 1U);
-    EXPECT_EQ(WrapDemSetEventStatus_LastEventStatus, DEM_EVENT_STATUS_PASSED);  // FAILEDへ倒れない
+    EXPECT_EQ(CallCount_Dem_SetEventStatus, 1U);
+    EXPECT_EQ(LastEventStatus_Dem_SetEventStatus, DEM_EVENT_STATUS_PASSED);  // FAILEDへ倒れない
 }
 
 TEST_F(Bsw_E2EXf_P01_Test, InverseTransform_NG_TwoConsecutiveGlitchesAfterValidReportFailed)
@@ -248,14 +248,14 @@ TEST_F(Bsw_E2EXf_P01_Test, InverseTransform_NG_TwoConsecutiveGlitchesAfterValidR
     ASSERT_EQ(smState.SMState, E2E_SM_VALID);
     E2EXf_InverseTransform(&rxConfig, buf4, sizeof(buf4), &checkStatus);
     ASSERT_EQ(smState.SMState, E2E_SM_VALID);  // 1件目はまだ許容範囲内
-    WrapDemSetEventStatus_Reset();
+    WrapDem_Reset();
 
     E2EXf_InverseTransform(&rxConfig, buf5, sizeof(buf5), &checkStatus);
 
     // 直近3件中2件が ERROR (> MaxErrorStateValid=1) のため INVALID へ転落する。
     EXPECT_EQ(smState.SMState, E2E_SM_INVALID);
-    EXPECT_EQ(WrapDemSetEventStatus_CallCount, 1U);
-    EXPECT_EQ(WrapDemSetEventStatus_LastEventStatus, DEM_EVENT_STATUS_FAILED);
+    EXPECT_EQ(CallCount_Dem_SetEventStatus, 1U);
+    EXPECT_EQ(LastEventStatus_Dem_SetEventStatus, DEM_EVENT_STATUS_FAILED);
 }
 
 // ------------------------------------------------------------
@@ -278,7 +278,7 @@ TEST_F(Bsw_E2EXf_P01_Test, InverseTransform_NG_ResyncingAfterWrongSequenceIsReje
     // WRONGSEQUENCE は OK でも ERROR でもないため OkCount/ErrorCount いずれも
     // 増えず、INIT のまま(昇格もINVALID転落もしない)。Dem報告は保留のまま。
     EXPECT_EQ(smState.SMState, E2E_SM_INIT);
-    EXPECT_EQ(WrapDemSetEventStatus_CallCount, 0U);
+    EXPECT_EQ(CallCount_Dem_SetEventStatus, 0U);
 
     uint8 frameResync[5] = { 0U };
     BuildFrame(frameResync);
@@ -287,7 +287,7 @@ TEST_F(Bsw_E2EXf_P01_Test, InverseTransform_NG_ResyncingAfterWrongSequenceIsReje
 
     EXPECT_EQ(retResync, E_NOT_OK);
     EXPECT_EQ(smState.SMState, E2E_SM_INIT);
-    EXPECT_EQ(WrapDemSetEventStatus_CallCount, 0U);
+    EXPECT_EQ(CallCount_Dem_SetEventStatus, 0U);
 }
 
 }  // namespace

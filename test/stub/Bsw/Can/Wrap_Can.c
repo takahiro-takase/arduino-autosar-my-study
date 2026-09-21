@@ -14,9 +14,9 @@
 
 #define TAG "Can"
 
-/* ==================================================================== */
-/*  External Variables                                                  */
-/* ==================================================================== */
+/* ======================================================================
+ * External Variables
+ * ====================================================================== */
 uint32 CallCount_Can_Init                         = 0U;
 uint32 CallCount_Can_GetVersionInfo               = 0U;
 uint32 CallCount_Can_SetControllerMode            = 0U;
@@ -63,9 +63,9 @@ void WrapCan_Reset(void)
     ForcedReturn_Can_Write                   = CAN_NOT_OK;
 }
 
-/* ==================================================================== */
-/*  External Functions                                                  */
-/* ==================================================================== */
+/* ======================================================================
+ * Functions
+ * ====================================================================== */
 
 /* ----------------------------------------------------------------------
  * Can_Init
@@ -94,6 +94,18 @@ void __wrap_Can_GetVersionInfo(Std_VersionInfoType* versioninfo)
 }
 
 /* ----------------------------------------------------------------------
+ * Can_CheckBaudrate
+ * ---------------------------------------------------------------------- */
+
+/* ----------------------------------------------------------------------
+ * Can_ChangeBaudrate
+ * ---------------------------------------------------------------------- */
+
+/* ----------------------------------------------------------------------
+ * Can_SetBaudrate
+ * ---------------------------------------------------------------------- */
+
+/* ----------------------------------------------------------------------
  * Can_SetControllerMode
  * ---------------------------------------------------------------------- */
 extern
@@ -109,24 +121,6 @@ Can_ReturnType __wrap_Can_SetControllerMode(uint8 Controller, Can_StateTransitio
     }
 
     return __real_Can_SetControllerMode(Controller, Transition);
-}
-
-/* ----------------------------------------------------------------------
- * Can_GetControllerErrorState
- * ---------------------------------------------------------------------- */
-extern
-Std_ReturnType __real_Can_GetControllerErrorState(uint8 Controller, Can_ErrorStateType* ErrorStatePtr);
-Std_ReturnType __wrap_Can_GetControllerErrorState(uint8 Controller, Can_ErrorStateType* ErrorStatePtr)
-{
-    CallCount_Can_GetControllerErrorState++;
-    Log_Write(LOG_T, TAG, "Can_GetControllerErrorState", "called %u times", CallCount_Can_GetControllerErrorState);
-
-    if (CallCount_Can_GetControllerErrorState >= FailFromCallCount_Can_GetControllerErrorState)
-    {
-        return ForcedReturn_Can_GetControllerErrorState;
-    }
-
-    return __real_Can_GetControllerErrorState(Controller, ErrorStatePtr);
 }
 
 /* ----------------------------------------------------------------------
@@ -156,6 +150,10 @@ void __wrap_Can_EnableControllerInterrupts(uint8 Controller)
 }
 
 /* ----------------------------------------------------------------------
+ * Can_CheckWakeup
+ * ---------------------------------------------------------------------- */
+
+/* ----------------------------------------------------------------------
  * Can_Write
  * ---------------------------------------------------------------------- */
 extern
@@ -173,18 +171,13 @@ Can_ReturnType __wrap_Can_Write(Can_HwHandleType Hth, const Can_PduType* PduInfo
     return __real_Can_Write(Hth, PduInfo);
 }
 
-/* ----------------------------------------------------------------------
- * Can_MainFunction_Read
- * ---------------------------------------------------------------------- */
-extern
-void __real_Can_MainFunction_Read(void);
-void __wrap_Can_MainFunction_Read(void)
-{
-    CallCount_Can_MainFunctionRead++;
-    Log_Write(LOG_T, TAG, "Can_MainFunction_Read", "called %u times", CallCount_Can_MainFunctionRead);
+/* ======================================================================
+ * Callback notifications
+ * ====================================================================== */
 
-    __real_Can_MainFunction_Read();
-}
+/* ======================================================================
+ * Scheduled functions
+ * ====================================================================== */
 
 /* ----------------------------------------------------------------------
  * Can_MainFunction_Write
@@ -197,6 +190,19 @@ void __wrap_Can_MainFunction_Write(void)
     Log_Write(LOG_T, TAG, "Can_MainFunction_Write", "called %u times", CallCount_Can_MainFunctionWrite);
 
     __real_Can_MainFunction_Write();
+}
+
+/* ----------------------------------------------------------------------
+ * Can_MainFunction_Read
+ * ---------------------------------------------------------------------- */
+extern
+void __real_Can_MainFunction_Read(void);
+void __wrap_Can_MainFunction_Read(void)
+{
+    CallCount_Can_MainFunctionRead++;
+    Log_Write(LOG_T, TAG, "Can_MainFunction_Read", "called %u times", CallCount_Can_MainFunctionRead);
+
+    __real_Can_MainFunction_Read();
 }
 
 /* ----------------------------------------------------------------------
@@ -223,4 +229,30 @@ void __wrap_Can_MainFunction_Wakeup(void)
     Log_Write(LOG_T, TAG, "Can_MainFunction_Wakeup", "called %u times", CallCount_Can_MainFunctionWakeup);
 
     __real_Can_MainFunction_Wakeup();
+}
+
+/* ----------------------------------------------------------------------
+ * Can_MainFunction_Mode
+ * ---------------------------------------------------------------------- */
+
+/* ==================================================================== */
+/*  Internal Functions                                                  */
+/* ==================================================================== */
+
+/* ----------------------------------------------------------------------
+ * Can_GetControllerErrorState
+ * ---------------------------------------------------------------------- */
+extern
+Std_ReturnType __real_Can_GetControllerErrorState(uint8 Controller, Can_ErrorStateType* ErrorStatePtr);
+Std_ReturnType __wrap_Can_GetControllerErrorState(uint8 Controller, Can_ErrorStateType* ErrorStatePtr)
+{
+    CallCount_Can_GetControllerErrorState++;
+    Log_Write(LOG_T, TAG, "Can_GetControllerErrorState", "called %u times", CallCount_Can_GetControllerErrorState);
+
+    if (CallCount_Can_GetControllerErrorState >= FailFromCallCount_Can_GetControllerErrorState)
+    {
+        return ForcedReturn_Can_GetControllerErrorState;
+    }
+
+    return __real_Can_GetControllerErrorState(Controller, ErrorStatePtr);
 }

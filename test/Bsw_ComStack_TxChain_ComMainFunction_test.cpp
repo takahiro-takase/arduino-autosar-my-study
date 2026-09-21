@@ -21,6 +21,8 @@ extern "C" {
 #include "Fake_Can_Hw.h"
 #include "Fake_Det_Hw.h"
 #include "Fake_Millis.h"
+#include "Wrap_Can.h"
+#include "Wrap_CanIf.h"
 }
 
 namespace
@@ -497,6 +499,7 @@ protected:
                               // （ComTxModeNumberOfRepetitions テストで
                               // FakeMillis_Value を進めて決定的に検証するため）
         FakeCanHw_Reset();
+        WrapCanIf_Reset();  // 他ファイルの故障注入が漏れ伝わらないよう防御的にリセット
         FakeDetHw_LogSuppressed = 1U;  // Init() のログはノイズになるため抑制
 
         canConfig.filter.filterId = 0x0220U;
@@ -530,6 +533,8 @@ protected:
         s_txCalloutAccept      = 1U;
         s_txCalloutInvokeCount = 0U;
         s_txCalloutLastByte0   = 0U;
+
+        WrapCan_Reset();
     }
 
     void TearDown() override
@@ -568,6 +573,29 @@ TEST_F(Bsw_ComStack_TxChain_ComMainFunction_Test, ComMainFunction_OK_DrivesChain
 TEST_F(Bsw_ComStack_TxChain_ComMainFunction_Test, ComMainFunction_NG_NothingPending_DoesNotReachCanHw)
 {
     /* 準備 (Arrange): Com_SendSignal() を呼ばない（Com_TxPending が立っていない） */
+
+    /* 実行 (Act) */
+    FakeDetHw_LogSuppressed = 0U;  // ログ出力
+    Com_MainFunctionTx();
+    FakeDetHw_LogSuppressed = 1U;  // ログ抑制
+
+    /* 評価 (Assert) */
+    EXPECT_EQ(FakeCanHw_SendCount, 0U);
+}
+
+TEST_F(Bsw_ComStack_TxChain_ComMainFunction_Test, ComMainFunction_NG_Can_Write_CAN_BUSY)
+{
+    /* 準備 (Arrange): セグメント①の終端状態（Com_TxPending が立った状態）を
+     * 用意した上で、Can_Write() を強制的に CAN_BUSY で失敗させる
+     * （test/stub/Bsw/Can/Wrap_Can.h 参照）。Com_SendSignal() を呼ばないと
+     * Com_MainFunctionTx() が Can_Write() 自体を呼ばず、
+     * ComMainFunction_NG_NothingPending_DoesNotReachCanHw と区別が
+     * つかなくなってしまう点に注意。 */
+    uint16_t value = 0x1234U;
+    Com_SendSignal(0U, &value);
+    ASSERT_EQ(Com_Test_GetTxPending(0U), 1U);
+    FailFromCallCount_Can_Write = 1U;
+    ForcedReturn_Can_Write = CAN_BUSY;
 
     /* 実行 (Act) */
     FakeDetHw_LogSuppressed = 0U;  // ログ出力

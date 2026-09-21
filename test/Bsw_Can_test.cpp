@@ -15,6 +15,7 @@ extern "C" {
 #include "Can_Hw.h"
 #include "Fake_Can_Hw.h"
 #include "Wrap_CanIf.h"
+#include "Wrap_Can.h"
 #include "Fake_Bsw_EcuM.h"
 }
 
@@ -27,9 +28,8 @@ protected:
     void SetUp() override
     {
         FakeCanHw_Reset();
-        WrapCanIfRxIndication_Reset();
-        WrapCanIfTxConfirmation_Reset();
-        WrapCanIfControllerBusOff_Reset();
+        WrapCanIf_Reset();
+        WrapCan_Reset();  // 他ファイルの故障注入が漏れ伝わらないよう防御的にリセット
         FakeEcuM_Reset();
         Can_Test_SetConfigPtr(NULL);  // 初期化前状態に戻す
         Can_Test_SetControllerState(CAN_CS_UNINIT);  // 初期化前状態に戻す
@@ -404,7 +404,7 @@ TEST_F(Bsw_Can_Test, Can_Write_NG_HwSendFails)
     /* 評価 (Assert) */
     EXPECT_EQ(ret, CAN_NOT_OK);
     EXPECT_EQ(Can_Test_GetTxErrCount(), 1U);
-    EXPECT_EQ(WrapCanIfControllerBusOff_CallCount, 0U);  // 閾値未満のため BusOff 通知はまだ来ない
+    EXPECT_EQ(CallCount_CanIf_ControllerBusOff, 0U);  // 閾値未満のため BusOff 通知はまだ来ない
 }
 
 TEST_F(Bsw_Can_Test, Can_Write_NG_HwSendFails_ReachesBusOffThreshold)
@@ -431,8 +431,8 @@ TEST_F(Bsw_Can_Test, Can_Write_NG_HwSendFails_ReachesBusOffThreshold)
     /* 評価 (Assert) */
     EXPECT_EQ(ret, CAN_NOT_OK);
     EXPECT_EQ(Can_Test_GetTxErrCount(), 0U);  // 閾値到達時に 0 へリセットされる（Can.c 実装参照）
-    EXPECT_EQ(WrapCanIfControllerBusOff_CallCount, 1U);
-    EXPECT_EQ(WrapCanIfControllerBusOff_LastControllerId, 0U);
+    EXPECT_EQ(CallCount_CanIf_ControllerBusOff, 1U);
+    EXPECT_EQ(LastControllerId_CanIf_ControllerBusOff, 0U);
 }
 
 TEST_F(Bsw_Can_Test, Can_Write_OK)
@@ -513,15 +513,15 @@ TEST_F(Bsw_Can_Test, Can_MainFunction_Write_OK)
     pdu.swPduHandle = 42U;
 
     Can_Write(0U, &pdu);
-    ASSERT_EQ(WrapCanIfTxConfirmation_CallCount, 0U);  // Can_Write 単体ではまだ通知されない
+    ASSERT_EQ(CallCount_CanIf_TxConfirmation, 0U);  // Can_Write 単体ではまだ通知されない
 
     /* 実行 (Act) */
     Can_MainFunction_Write();
 
     /* 評価 (Assert) */
     EXPECT_EQ(Can_Test_GetControllerState(), CAN_CS_STARTED);
-    EXPECT_EQ(WrapCanIfTxConfirmation_CallCount, 1U);
-    EXPECT_EQ(WrapCanIfTxConfirmation_LastPduId, 42U);
+    EXPECT_EQ(CallCount_CanIf_TxConfirmation, 1U);
+    EXPECT_EQ(LastPduId_CanIf_TxConfirmation, 42U);
 }
 
 //------------------------------------------------------------
@@ -564,7 +564,7 @@ TEST_F(Bsw_Can_Test, Can_MainFunction_Read_NG_Can_Hw_CheckReceive_Fails)
 
     /* 評価 (Assert) */
     EXPECT_EQ(Can_Test_GetControllerState(), CAN_CS_STARTED);
-    EXPECT_EQ(WrapCanIfRxIndication_CallCount, 0U);  // 受信なしなので上位層通知もされない
+    EXPECT_EQ(CallCount_CanIf_RxIndication, 0U);  // 受信なしなので上位層通知もされない
 }
 
 TEST_F(Bsw_Can_Test, Can_MainFunction_Read_OK)
@@ -587,13 +587,13 @@ TEST_F(Bsw_Can_Test, Can_MainFunction_Read_OK)
     /* 評価 (Assert) */
     EXPECT_EQ(Can_Test_GetControllerState(), CAN_CS_STARTED);
     EXPECT_EQ(FakeCanHw_RxPendingCount, 0U);  // ドレインし尽くしたこと
-    EXPECT_EQ(WrapCanIfRxIndication_CallCount, 1U);
-    EXPECT_EQ(WrapCanIfRxIndication_LastMailbox.CanId, 0x100U);
-    EXPECT_EQ(WrapCanIfRxIndication_LastLength, 4U);
-    EXPECT_EQ(WrapCanIfRxIndication_LastData[0], 0xDEU);
-    EXPECT_EQ(WrapCanIfRxIndication_LastData[1], 0xADU);
-    EXPECT_EQ(WrapCanIfRxIndication_LastData[2], 0xBEU);
-    EXPECT_EQ(WrapCanIfRxIndication_LastData[3], 0xEFU);
+    EXPECT_EQ(CallCount_CanIf_RxIndication, 1U);
+    EXPECT_EQ(LastMailbox_CanIf_RxIndication.CanId, 0x100U);
+    EXPECT_EQ(LastLength_CanIf_RxIndication, 4U);
+    EXPECT_EQ(LastData_CanIf_RxIndication[0], 0xDEU);
+    EXPECT_EQ(LastData_CanIf_RxIndication[1], 0xADU);
+    EXPECT_EQ(LastData_CanIf_RxIndication[2], 0xBEU);
+    EXPECT_EQ(LastData_CanIf_RxIndication[3], 0xEFU);
 }
 
 //------------------------------------------------------------
@@ -696,8 +696,8 @@ TEST_F(Bsw_Can_Test, Can_MainFunction_BusOff_OK)
 
     /* 評価 (Assert) */
     EXPECT_EQ(Can_Test_GetControllerState(), CAN_CS_STARTED);  // 遷移自体は CanSM が行うため状態は変化しない
-    EXPECT_EQ(WrapCanIfControllerBusOff_CallCount, 1U);
-    EXPECT_EQ(WrapCanIfControllerBusOff_LastControllerId, 0U);
+    EXPECT_EQ(CallCount_CanIf_ControllerBusOff, 1U);
+    EXPECT_EQ(LastControllerId_CanIf_ControllerBusOff, 0U);
 }
 
 TEST_F(Bsw_Can_Test, Can_MainFunction_BusOff_NG_NoBusOffDetected)
@@ -712,7 +712,7 @@ TEST_F(Bsw_Can_Test, Can_MainFunction_BusOff_NG_NoBusOffDetected)
 
     /* 評価 (Assert) */
     EXPECT_EQ(Can_Test_GetControllerState(), CAN_CS_STARTED);
-    EXPECT_EQ(WrapCanIfControllerBusOff_CallCount, 0U);
+    EXPECT_EQ(CallCount_CanIf_ControllerBusOff, 0U);
 }
 
 //------------------------------------------------------------

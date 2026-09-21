@@ -281,15 +281,11 @@ target_link_options(native_chain_tests PRIVATE -static)
 
 # native_chain_tests がリンク時に故障注入する -Wl,--wrap= 対象シンボル一覧。
 set(NATIVE_CHAIN_WRAP_SYMBOLS
-    CanIf_SetControllerMode
     E2E_SMCheck
     Dem_SetEventStatus
     ComM_DCM_ActiveDiagnostic
     ComM_DCM_InactiveDiagnostic
-    CanIf_RxIndication
-    CanIf_TxConfirmation
-    CanIf_ControllerBusOff
-    # Can.c の AUTOSAR IF 全数（2026-09-20、Wrap_Can.h/.c 参照）。
+    # Can.c の AUTOSAR IF 全数（Wrap_Can.h/.c 参照）。
     Can_Init
     Can_GetVersionInfo
     Can_SetControllerMode
@@ -301,6 +297,23 @@ set(NATIVE_CHAIN_WRAP_SYMBOLS
     Can_MainFunction_Write
     Can_MainFunction_BusOff
     Can_MainFunction_Wakeup
+    # CanIf.c の AUTOSAR IF 全数（Wrap_CanIf.h/.c 参照）。
+    CanIf_Init
+    CanIf_DeInit
+    CanIf_SetControllerMode
+    CanIf_GetControllerMode
+    CanIf_GetControllerErrorState
+    CanIf_Transmit
+    CanIf_ReadRxPduData
+    CanIf_ReadTxNotifStatus
+    CanIf_ReadRxNotifStatus
+    CanIf_SetPduMode
+    CanIf_GetPduMode
+    CanIf_GetVersionInfo
+    CanIf_GetTxConfirmationState
+    CanIf_TxConfirmation
+    CanIf_RxIndication
+    CanIf_ControllerBusOff
 )
 foreach(wrap_symbol IN LISTS NATIVE_CHAIN_WRAP_SYMBOLS)
     target_link_options(native_chain_tests PRIVATE "-Wl,--wrap=${wrap_symbol}")

@@ -5,30 +5,42 @@
  */
 #include "Wrap_E2E.h"
 
+/* ======================================================================
+ *  External Variables
+ * ====================================================================== */
+uint32         CallCount_E2E_SMCheck         = 0U;
+uint32         FailFromCallCount_E2E_SMCheck = WRAP_E2E_FAIL_FROM_CALL_COUNT_DISABLED;
+Std_ReturnType ForcedReturn_E2E_SMCheck      = E2E_E_WRONGSTATE;
+
+/* ----------------------------------------------------------------------
+ * WrapE2E_Reset — すべての関数状態を一括で初期化する（Wrap_E2E.h 参照）。
+ * ---------------------------------------------------------------------- */
+void WrapE2E_Reset(void)
+{
+    CallCount_E2E_SMCheck         = 0U;
+    FailFromCallCount_E2E_SMCheck = WRAP_E2E_FAIL_FROM_CALL_COUNT_DISABLED;
+    ForcedReturn_E2E_SMCheck      = E2E_E_WRONGSTATE;
+}
+
+/* ======================================================================
+ * Functions
+ * ====================================================================== */
+
 /* ----------------------------------------------------------------------
  * E2E_SMCheck
  * ---------------------------------------------------------------------- */
-extern Std_ReturnType __real_E2E_SMCheck(E2E_PCheckStatusType ProfileStatus, const E2E_SMConfigType* ConfigPtr,
-                                          E2E_SMCheckStateType* StatePtr);
-
-uint32          WrapE2ESMCheck_CallCount    = 0U;
-uint8           WrapE2ESMCheck_ForceFail    = 0U;
-Std_ReturnType  WrapE2ESMCheck_ForcedReturn = E2E_E_WRONGSTATE;
-
-void WrapE2ESMCheck_Reset(void)
-{
-    WrapE2ESMCheck_CallCount    = 0U;
-    WrapE2ESMCheck_ForceFail    = 0U;
-    WrapE2ESMCheck_ForcedReturn = E2E_E_WRONGSTATE;
-}
-
+extern
+Std_ReturnType __real_E2E_SMCheck(E2E_PCheckStatusType ProfileStatus, const E2E_SMConfigType* ConfigPtr,
+                                   E2E_SMCheckStateType* StatePtr);
 Std_ReturnType __wrap_E2E_SMCheck(E2E_PCheckStatusType ProfileStatus, const E2E_SMConfigType* ConfigPtr,
                                    E2E_SMCheckStateType* StatePtr)
 {
-    WrapE2ESMCheck_CallCount++;
+    CallCount_E2E_SMCheck++;
 
-    if (WrapE2ESMCheck_ForceFail)
-        return WrapE2ESMCheck_ForcedReturn;
+    if (CallCount_E2E_SMCheck >= FailFromCallCount_E2E_SMCheck)
+    {
+        return ForcedReturn_E2E_SMCheck;
+    }
 
     return __real_E2E_SMCheck(ProfileStatus, ConfigPtr, StatePtr);
 }

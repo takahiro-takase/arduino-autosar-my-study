@@ -60,6 +60,7 @@ extern "C" {
 #include "Fake_Bsw_EcuM.h"
 #include "Fake_Bsw_BswM.h"
 #include "Wrap_CanIf.h"
+#include "Wrap_Can.h"
 }
 
 namespace
@@ -78,11 +79,12 @@ protected:
     void SetUp() override
     {
         FakeCanHw_Reset();
-        WrapDemSetEventStatus_Reset();
+        WrapDem_Reset();
         FakeEcuM_Reset();
         FakeBswM_Reset();
         FakeMillis_Reset();
-        WrapCanIfSetControllerMode_Reset();
+        WrapCanIf_Reset();
+        WrapCan_Reset();
         FakeDetHw_LogSuppressed = 1U;  // Init() のログはノイズになるため抑制
         Dem_Init(NULL);  // Demの内部状態を毎テスト決定的にリセットする（Fake_NvM.cにより常に「初回起動」）
 
@@ -116,10 +118,11 @@ protected:
         ASSERT_EQ(nmState, NM_STATE_NORMAL_OPERATION);
 
         FakeCanHw_Reset();
-        WrapDemSetEventStatus_Reset();
+        WrapDem_Reset();
         FakeEcuM_Reset();
         FakeBswM_Reset();
-        WrapCanIfSetControllerMode_Reset();
+        WrapCanIf_Reset();
+        WrapCan_Reset();
 
         FakeDetHw_LogSuppressed = 0U;  // ここから各 TEST_F の実行(Act)区間
     }
@@ -143,8 +146,9 @@ protected:
         FakeMillis_Value += static_cast<unsigned long>(CANSM_BUSOFF_RECOVERY_L1_MS) + 1UL;
 
         FakeCanHw_SetModeCount = 0U;
-        WrapDemSetEventStatus_Reset();
-        WrapCanIfSetControllerMode_Reset();
+        WrapDem_Reset();
+        WrapCanIf_Reset();
+        WrapCan_Reset();
     }
 
     Can_ConfigType canConfig;
@@ -159,18 +163,18 @@ TEST_F(Bsw_CanSM_BusOffRecovery_Test, MainFunction_NG_RecoveryAttemptFails_Stays
 {
     /* 準備 (Arrange) */
     ArrangeBusOffPastL1Interval();
-    WrapCanIfSetControllerMode_ForceFail = 1U;
+    FailFromCallCount_CanIf_SetControllerMode = 1U;
 
     /* 実行 (Act) */
     CanSM_MainFunction();
 
     /* 評価 (Assert): 回復を試みたが失敗 → BUS_OFF のまま */
-    EXPECT_EQ(WrapCanIfSetControllerMode_CallCount, 1U);
+    EXPECT_EQ(CallCount_CanIf_SetControllerMode, 1U);
     EXPECT_EQ(Can_Test_GetControllerState(), CAN_CS_STOPPED);
     ComM_ModeType mode = COMM_FULL_COMMUNICATION;
     ASSERT_EQ(ComM_GetCurrentComMode(COMM_USER_0, &mode), E_OK);
     EXPECT_EQ(mode, static_cast<ComM_ModeType>(COMM_SILENT_COMMUNICATION));
-    EXPECT_EQ(WrapDemSetEventStatus_CallCount, 0U);  // まだ PASSED は報告しない
+    EXPECT_EQ(CallCount_Dem_SetEventStatus, 0U);  // まだ PASSED は報告しない
 }
 
 // ------------------------------------------------------------
@@ -181,11 +185,11 @@ TEST_F(Bsw_CanSM_BusOffRecovery_Test, MainFunction_OK_DoesNotRetryImmediatelyAft
 {
     /* 準備 (Arrange): 1 回目は失敗させ、BUS_OFF のまま据え置かれた状態にする */
     ArrangeBusOffPastL1Interval();
-    WrapCanIfSetControllerMode_ForceFail = 1U;
+    FailFromCallCount_CanIf_SetControllerMode = 1U;
     CanSM_MainFunction();
     ASSERT_EQ(Can_Test_GetControllerState(), CAN_CS_STOPPED);
-    ASSERT_EQ(WrapCanIfSetControllerMode_CallCount, 1U);
-    WrapCanIfSetControllerMode_ForceFail = 0U;  // 以降はパススルー（実体成功）
+    ASSERT_EQ(CallCount_CanIf_SetControllerMode, 1U);
+    FailFromCallCount_CanIf_SetControllerMode = WRAP_CANIF_FAIL_FROM_CALL_COUNT_DISABLED;  // 以降はパススルー（実体成功）
 
     /* 実行 (Act): FakeMillis_Value を進めずに（＝L1 周期未経過のまま）
      * 呼ぶ。是正前はここで即座に2回目の試行が発生していた
@@ -193,7 +197,7 @@ TEST_F(Bsw_CanSM_BusOffRecovery_Test, MainFunction_OK_DoesNotRetryImmediatelyAft
     CanSM_MainFunction();
 
     /* 評価 (Assert): 再試行は発生せず（呼び出し回数据え置き）、BUS_OFF のまま */
-    EXPECT_EQ(WrapCanIfSetControllerMode_CallCount, 1U);
+    EXPECT_EQ(CallCount_CanIf_SetControllerMode, 1U);
     EXPECT_EQ(Can_Test_GetControllerState(), CAN_CS_STOPPED);
 }
 
@@ -205,10 +209,10 @@ TEST_F(Bsw_CanSM_BusOffRecovery_Test, MainFunction_OK_RecoversOnNextAttemptAfter
 {
     /* 準備 (Arrange): 1 回目は失敗させ、BUS_OFF のまま据え置かれた状態にする */
     ArrangeBusOffPastL1Interval();
-    WrapCanIfSetControllerMode_ForceFail = 1U;
+    FailFromCallCount_CanIf_SetControllerMode = 1U;
     CanSM_MainFunction();
     ASSERT_EQ(Can_Test_GetControllerState(), CAN_CS_STOPPED);
-    WrapCanIfSetControllerMode_ForceFail = 0U;  // 以降はパススルー（実体成功）
+    FailFromCallCount_CanIf_SetControllerMode = WRAP_CANIF_FAIL_FROM_CALL_COUNT_DISABLED;  // 以降はパススルー（実体成功）
 
     /* 実行 (Act): 是正後は失敗した試行の時刻が基準点として更新されるため、
      * 次の試行にも改めて L1 周期分の経過が必要。 */
@@ -220,8 +224,8 @@ TEST_F(Bsw_CanSM_BusOffRecovery_Test, MainFunction_OK_RecoversOnNextAttemptAfter
     ComM_ModeType mode = COMM_NO_COMMUNICATION;
     ASSERT_EQ(ComM_GetCurrentComMode(COMM_USER_0, &mode), E_OK);
     EXPECT_EQ(mode, static_cast<ComM_ModeType>(COMM_FULL_COMMUNICATION));
-    EXPECT_EQ(WrapDemSetEventStatus_CallCount, 1U);
-    EXPECT_EQ(WrapDemSetEventStatus_LastEventStatus, DEM_EVENT_STATUS_PASSED);
+    EXPECT_EQ(CallCount_Dem_SetEventStatus, 1U);
+    EXPECT_EQ(LastEventStatus_Dem_SetEventStatus, DEM_EVENT_STATUS_PASSED);
 }
 
 }  // namespace
