@@ -1,12 +1,16 @@
 /**
- * \file    Bsw_ComStack_TxChain_IpduGroupStop_test.cpp
+ * \file    Bsw_ComStack_TxChain_TxTOutGroupLevel_test.cpp
  * \brief   README.md「Tx 処理（Com → PduR → CanIf → Can の順）」コールチェーンの
- *          単体テスト（GoogleTest / CMake native_chain_tests）。IpduGroupStop シナリオ専用。
+ *          単体テスト（GoogleTest / CMake native_chain_tests）。TxTOutGroupLevel シナリオ専用。
  *
- * \details 2026-09-20、Bsw_ComStack_TxChain_test.cpp から本シナリオ（OK 1種＋
- *          派生 NG）を切り出した（1 OK シナリオ名につき1ファイルという方針、
- *          ユーザー指示）。Com/PduR/CanIf のテスト専用設定・fixture は元ファイルと
- *          全く同じものを複製している（COM_TX_IPDU_MAX の制約上、シナリオごとに
+ * \details 2026-09-21、Bsw_ComStack_TxChain_TxTOut_test.cpp から分離した。
+ *          Bsw_ComStack_TxChain_TxTOut_test.cpp が検証するシグナル単位の
+ *          デッドライン監視（Com_CbkTxTOut）と、Signal Group 単位の
+ *          デッドライン監視は別の API・粒度であり、1 OK シナリオ名に
+ *          つき1ファイルの方針（ユーザー指示）上、同じ「TxTOut」接頭辞に
+ *          同居させるのは不適切だったため、ユーザー指摘を受けて分離した。
+ *          Com/PduR/CanIf のテスト専用設定・fixture は元ファイルと全く
+ *          同じものを複製している（COM_TX_IPDU_MAX の制約上、シナリオごとに
  *          設定を作り分けるより安全なため）。設定の背景・コールチェーン全体の
  *          説明は元ファイル（分割前）のコメントをそのまま引き継いでいる。
  */
@@ -487,7 +491,7 @@ const CanIf_ConfigType kTestCanIfConfig = {
     /* RxPduCount */  0U
 };
 
-class Bsw_ComStack_TxChain_IpduGroupStop_Test : public ::testing::Test
+class Bsw_ComStack_TxChain_TxTOutGroupLevel_Test : public ::testing::Test
 {
 protected:
     void SetUp() override
@@ -544,40 +548,27 @@ protected:
     Can_ConfigType canConfig;
 };
 
-
 // ------------------------------------------------------------
-// SWS_Com_00491: Signal Group の TxErrCbk はグループ単位で 1 回だけ呼ばれる
-// （Rte_COMCbkTErr_<sg> 相当）ことの回帰テスト。TxAckCbk と全く同じ理由で
-// 当初はメンバーシグナル単位の走査だった。本番の Com_PBCfg.c では
-// WarningStatus（唯一の Signal Group）が IpduGroupId=COM_IPDU_GROUP_NONE
-// （常時有効）のため Com_IpduGroupStop() の対象にならず、実機では発動しない
-// （docs/modules/Com_Notes.md 参照）。このユニットテストのみが検証手段となる。
+// SWS_Com_00878/00879/00880/00304/00554: TX 送信デッドライン監視
+// （Com_CbkTxTOut）の Signal Group 単位版。kTestErrGroupIPdu（IPduId=3、
+// TxFirstTimeoutMs=100U）を使う。
 // ------------------------------------------------------------
-TEST_F(Bsw_ComStack_TxChain_IpduGroupStop_Test, IpduGroupStop_OK_CallsSignalGroupErrCbkExactlyOnceWhenUnconfirmed)
+TEST_F(Bsw_ComStack_TxChain_TxTOutGroupLevel_Test, TxTOutGroupLevel_OK_FiresWhenStartedAndOverdue)
 {
-    /* 準備 (Arrange): 「PduR へは渡した（実送信済み）が Com_TxConfirmation()
-     * がまだ届いていない」状態を直接作る（Com_MainFunctionTx()/PduR を経由
-     * しないための test-only setter、Com.h 参照）。 */
+    /* 準備 (Arrange): kTestErrGroupIPdu（IPduId=3、Signal Group、
+     * TxFirstTimeoutMs=100U）を起動し、test-only setter で
+     * 「送信済み・未確認」状態を直接注入する（実際に Com_MainFunctionTx()/PduR
+     * を経由させる配線は用意していないため）。 */
+    Com_IpduGroupStart(kTestStoppableGroupId, 0U);
     Com_Test_SetTxConfPending(3U, 1U);
+    Com_Test_SetTxConfPendingSinceMs(3U, FakeMillis_Value);
 
-    /* 実行 (Act): kTestErrGroupIPdu（IPduId=3）が所属する I-PDU Group を
-     * 未確認のまま停止する。 */
-    Com_IpduGroupStop(kTestStoppableGroupId);
+    /* 実行 (Act): TxFirstTimeoutMs(100) を超過させる */
+    FakeMillis_Value += 101U;
+    Com_MainFunctionTx();
 
-    /* 評価 (Assert): メンバー数に関わらず、グループ単位で厳密に 1 回だけ
-     * 呼ばれる。 */
-    EXPECT_EQ(s_groupTxErrCount, 1U);
-}
-
-TEST_F(Bsw_ComStack_TxChain_IpduGroupStop_Test, IpduGroupStop_NG_DoesNotCallErrCbkWhenAlreadyConfirmed)
-{
-    /* 準備 (Arrange): 不要。「送信済み・未確認」状態を一切作らない
-     * （Com_TxConfPending は Com_Init() で 0 のまま）。 */
-
-    /* 実行 (Act) */
-    Com_IpduGroupStop(kTestStoppableGroupId);
-
-    /* 評価 (Assert): 未確認の送信が無いため TxErrCbk は呼ばれない。 */
+    /* 評価 (Assert): グループ単位で発火する。TxErrCbk とは無関係 */
+    EXPECT_EQ(s_groupTxTOutCount, 1U);
     EXPECT_EQ(s_groupTxErrCount, 0U);
 }
 

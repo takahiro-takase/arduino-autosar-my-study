@@ -1,14 +1,18 @@
 /**
- * \file    Bsw_ComStack_TxChain_IpduGroupStop_test.cpp
+ * \file    Bsw_ComStack_TxChain_TxIpduCallout_test.cpp
  * \brief   README.md「Tx 処理（Com → PduR → CanIf → Can の順）」コールチェーンの
- *          単体テスト（GoogleTest / CMake native_chain_tests）。IpduGroupStop シナリオ専用。
+ *          単体テスト（GoogleTest / CMake native_chain_tests）。TxIpduCallout シナリオ専用。
  *
- * \details 2026-09-20、Bsw_ComStack_TxChain_test.cpp から本シナリオ（OK 1種＋
- *          派生 NG）を切り出した（1 OK シナリオ名につき1ファイルという方針、
- *          ユーザー指示）。Com/PduR/CanIf のテスト専用設定・fixture は元ファイルと
- *          全く同じものを複製している（COM_TX_IPDU_MAX の制約上、シナリオごとに
- *          設定を作り分けるより安全なため）。設定の背景・コールチェーン全体の
- *          説明は元ファイル（分割前）のコメントをそのまま引き継いでいる。
+ * \details 2026-09-21、Bsw_ComStack_TxChain_ComMainFunction_test.cpp から
+ *          Com_TxIpduCallout（SWS_Com_00346）シナリオを分離した。分割時点では
+ *          両者が同じ「ComMainFunction」接頭辞を共有していたが、実際には
+ *          「通常送信」と「TxIpduCalloutフックによるフィルタリング」という
+ *          別々の下流の仕組みを検証しており、1 OK シナリオ名につき1ファイルの
+ *          方針（ユーザー指示）に反していたため、ユーザー指摘を受けて再分割した。
+ *          Com/PduR/CanIf のテスト専用設定・fixture は元ファイルと全く同じものを
+ *          複製している（COM_TX_IPDU_MAX の制約上、シナリオごとに設定を
+ *          作り分けるより安全なため）。設定の背景・コールチェーン全体の説明は
+ *          元ファイル（分割前）のコメントをそのまま引き継いでいる。
  */
 #include <gtest/gtest.h>
 
@@ -487,7 +491,7 @@ const CanIf_ConfigType kTestCanIfConfig = {
     /* RxPduCount */  0U
 };
 
-class Bsw_ComStack_TxChain_IpduGroupStop_Test : public ::testing::Test
+class Bsw_ComStack_TxChain_TxIpduCallout_Test : public ::testing::Test
 {
 protected:
     void SetUp() override
@@ -530,13 +534,10 @@ protected:
         s_txCalloutAccept      = 1U;
         s_txCalloutInvokeCount = 0U;
         s_txCalloutLastByte0   = 0U;
-
-        FakeDetHw_LogSuppressed = 0U;  // ここから各 TEST_F の実行(Act)区間
     }
 
     void TearDown() override
     {
-        FakeDetHw_LogSuppressed = 1U;  // DeInit() のログを抑制
         Com_DeInit();
         CanIf_DeInit();
     }
@@ -544,41 +545,52 @@ protected:
     Can_ConfigType canConfig;
 };
 
-
 // ------------------------------------------------------------
-// SWS_Com_00491: Signal Group の TxErrCbk はグループ単位で 1 回だけ呼ばれる
-// （Rte_COMCbkTErr_<sg> 相当）ことの回帰テスト。TxAckCbk と全く同じ理由で
-// 当初はメンバーシグナル単位の走査だった。本番の Com_PBCfg.c では
-// WarningStatus（唯一の Signal Group）が IpduGroupId=COM_IPDU_GROUP_NONE
-// （常時有効）のため Com_IpduGroupStop() の対象にならず、実機では発動しない
-// （docs/modules/Com_Notes.md 参照）。このユニットテストのみが検証手段となる。
+// Com_TxIpduCallout（SWS_Com_00346、TX I-PDU 単位のフィルタリングフック）。
+// Bsw_ComStack_RxChain_test.cpp の Com_RxIpduCallout テストと対になる、送信側の検証。
+// kTestTxIPdu（IPduId=0）に TestTxIpduCallout を設定済み。Com_DoTransmit()
+// 内で TxTransformCbk 適用後・PduR_ComTransmit() 呼び出し直前に呼ばれることを、
+// Can_Hw まで到達するかどうかで確認する。
 // ------------------------------------------------------------
-TEST_F(Bsw_ComStack_TxChain_IpduGroupStop_Test, IpduGroupStop_OK_CallsSignalGroupErrCbkExactlyOnceWhenUnconfirmed)
+TEST_F(Bsw_ComStack_TxChain_TxIpduCallout_Test, TxIpduCallout_OK_AcceptedTransmitsNormally)
 {
-    /* 準備 (Arrange): 「PduR へは渡した（実送信済み）が Com_TxConfirmation()
-     * がまだ届いていない」状態を直接作る（Com_MainFunctionTx()/PduR を経由
-     * しないための test-only setter、Com.h 参照）。 */
-    Com_Test_SetTxConfPending(3U, 1U);
-
-    /* 実行 (Act): kTestErrGroupIPdu（IPduId=3）が所属する I-PDU Group を
-     * 未確認のまま停止する。 */
-    Com_IpduGroupStop(kTestStoppableGroupId);
-
-    /* 評価 (Assert): メンバー数に関わらず、グループ単位で厳密に 1 回だけ
-     * 呼ばれる。 */
-    EXPECT_EQ(s_groupTxErrCount, 1U);
-}
-
-TEST_F(Bsw_ComStack_TxChain_IpduGroupStop_Test, IpduGroupStop_NG_DoesNotCallErrCbkWhenAlreadyConfirmed)
-{
-    /* 準備 (Arrange): 不要。「送信済み・未確認」状態を一切作らない
-     * （Com_TxConfPending は Com_Init() で 0 のまま）。 */
+    /* 準備 (Arrange): s_txCalloutAccept は SetUp() で 1（既定）にリセット済み */
+    uint16_t value = 0x1234U;
+    Com_SendSignal(0U, &value);
 
     /* 実行 (Act) */
-    Com_IpduGroupStop(kTestStoppableGroupId);
+    FakeDetHw_LogSuppressed = 0U;  // ログ出力
+    Com_MainFunctionTx();
+    FakeDetHw_LogSuppressed = 1U;  // ログ抑制
 
-    /* 評価 (Assert): 未確認の送信が無いため TxErrCbk は呼ばれない。 */
-    EXPECT_EQ(s_groupTxErrCount, 0U);
+    /* 評価 (Assert): callout は送信直前の最終バイト列で 1 回呼ばれ、
+     * 通常どおり Can_Hw まで到達する。実際に PduR へ渡したため
+     * Com_TxConfPending もセットされる。 */
+    EXPECT_EQ(s_txCalloutInvokeCount, 1U);
+    EXPECT_EQ(s_txCalloutLastByte0, 0x12U);
+    EXPECT_EQ(FakeCanHw_SendCount, 1U);
+    EXPECT_EQ(Com_Test_GetTxConfPending(0U), 1U);
+}
+
+TEST_F(Bsw_ComStack_TxChain_TxIpduCallout_Test, TxIpduCallout_NG_RejectedDiscardsTransmission)
+{
+    /* 準備 (Arrange) */
+    s_txCalloutAccept = 0U;
+    uint16_t value = 0x1234U;
+    Com_SendSignal(0U, &value);
+
+    /* 実行 (Act) */
+    FakeDetHw_LogSuppressed = 0U;  // ログ出力
+    Com_MainFunctionTx();
+    FakeDetHw_LogSuppressed = 1U;  // ログ抑制
+
+    /* 評価 (Assert): [SWS_Com_00346] false のため PduR_ComTransmit() 以降
+     * （CanIf/Can/Can_Hw）に一切到達しない。実際には送信していないため
+     * Com_TxConfPending もセットされない（TX 送信デッドライン監視タイマも
+     * 起動しない）。 */
+    EXPECT_EQ(s_txCalloutInvokeCount, 1U);
+    EXPECT_EQ(FakeCanHw_SendCount, 0U);
+    EXPECT_EQ(Com_Test_GetTxConfPending(0U), 0U);
 }
 
 }  // namespace

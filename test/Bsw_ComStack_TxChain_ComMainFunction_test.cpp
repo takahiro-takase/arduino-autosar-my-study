@@ -530,13 +530,10 @@ protected:
         s_txCalloutAccept      = 1U;
         s_txCalloutInvokeCount = 0U;
         s_txCalloutLastByte0   = 0U;
-
-        FakeDetHw_LogSuppressed = 0U;  // ここから各 TEST_F の実行(Act)区間
     }
 
     void TearDown() override
     {
-        FakeDetHw_LogSuppressed = 1U;  // DeInit() のログを抑制
         Com_DeInit();
         CanIf_DeInit();
     }
@@ -555,7 +552,9 @@ TEST_F(Bsw_ComStack_TxChain_ComMainFunction_Test, ComMainFunction_OK_DrivesChain
     ASSERT_EQ(Com_Test_GetTxPending(0U), 1U);
 
     /* 実行 (Act) */
+    FakeDetHw_LogSuppressed = 0U;  // ログ出力
     Com_MainFunctionTx();
+    FakeDetHw_LogSuppressed = 1U;  // ログ抑制
 
     /* 評価 (Assert) */
     EXPECT_EQ(Com_Test_GetTxPending(0U), 0U);  // 送信要求が消費された
@@ -571,150 +570,12 @@ TEST_F(Bsw_ComStack_TxChain_ComMainFunction_Test, ComMainFunction_NG_NothingPend
     /* 準備 (Arrange): Com_SendSignal() を呼ばない（Com_TxPending が立っていない） */
 
     /* 実行 (Act) */
+    FakeDetHw_LogSuppressed = 0U;  // ログ出力
     Com_MainFunctionTx();
+    FakeDetHw_LogSuppressed = 1U;  // ログ抑制
 
     /* 評価 (Assert) */
     EXPECT_EQ(FakeCanHw_SendCount, 0U);
 }
 
-// ------------------------------------------------------------
-// Com_TxIpduCallout（SWS_Com_00346、TX I-PDU 単位のフィルタリングフック）。
-// Bsw_ComStack_RxChain_test.cpp の Com_RxIpduCallout テストと対になる、送信側の検証。
-// kTestTxIPdu（IPduId=0）に TestTxIpduCallout を設定済み。Com_DoTransmit()
-// 内で TxTransformCbk 適用後・PduR_ComTransmit() 呼び出し直前に呼ばれることを、
-// Can_Hw まで到達するかどうかで確認する。
-// ------------------------------------------------------------
-TEST_F(Bsw_ComStack_TxChain_ComMainFunction_Test, ComMainFunction_OK_AcceptedByTxIpduCalloutTransmitsNormally)
-{
-    /* 準備 (Arrange): s_txCalloutAccept は SetUp() で 1（既定）にリセット済み */
-    uint16_t value = 0x1234U;
-    Com_SendSignal(0U, &value);
-
-    /* 実行 (Act) */
-    Com_MainFunctionTx();
-
-    /* 評価 (Assert): callout は送信直前の最終バイト列で 1 回呼ばれ、
-     * 通常どおり Can_Hw まで到達する。実際に PduR へ渡したため
-     * Com_TxConfPending もセットされる。 */
-    EXPECT_EQ(s_txCalloutInvokeCount, 1U);
-    EXPECT_EQ(s_txCalloutLastByte0, 0x12U);
-    EXPECT_EQ(FakeCanHw_SendCount, 1U);
-    EXPECT_EQ(Com_Test_GetTxConfPending(0U), 1U);
-}
-
-TEST_F(Bsw_ComStack_TxChain_ComMainFunction_Test, ComMainFunction_NG_RejectedByTxIpduCalloutDiscardsTransmission)
-{
-    /* 準備 (Arrange) */
-    s_txCalloutAccept = 0U;
-    uint16_t value = 0x1234U;
-    Com_SendSignal(0U, &value);
-
-    /* 実行 (Act) */
-    Com_MainFunctionTx();
-
-    /* 評価 (Assert): [SWS_Com_00346] false のため PduR_ComTransmit() 以降
-     * （CanIf/Can/Can_Hw）に一切到達しない。実際には送信していないため
-     * Com_TxConfPending もセットされない（TX 送信デッドライン監視タイマも
-     * 起動しない）。 */
-    EXPECT_EQ(s_txCalloutInvokeCount, 1U);
-    EXPECT_EQ(FakeCanHw_SendCount, 0U);
-    EXPECT_EQ(Com_Test_GetTxConfPending(0U), 0U);
-}
-// ------------------------------------------------------------
-// Com_TriggerIPDUSend の COM_TX_MODE_PERIODIC 分岐専用の独立したフィクスチャ。
-// Bsw_ComStack_TxChain_ComMainFunction_Test（上記）は TX I-PDU 4 本（COM_TX_IPDU_MAX と同数）を
-// 既に使い切っており、新たに PERIODIC I-PDU を追加できない
-// （feedback_test_chain_ipdu_id_ceiling: COM_RX/TX_IPDU_MAX は
-// native_chain バイナリ全体で共有される固定サイズ配列であり、超過は
-// 範囲外書き込みによる無関係なテストの原因不明なハングを引き起こす）。
-// そのため Bsw_ComStack_RxTimeoutChain_test.cpp の `rx_ipdu_group` 名前空間と同じ
-// 手法（専用の最小 Com_ConfigType、IPduId=0 を再利用した独立した
-// Com_Init() サイクル）で分離する。
-//
-// PduR_Init()/CanIf_Init() はあえて呼ばない: このフィクスチャの関心は
-// 「Com_TxTriggerPending が PERIODIC I-PDU でも period 判定と独立した OR 項
-// として効くか」のみであり、それは Com_MainFunctionTx() 内で
-// PduR_ComTransmit() を呼ぶ前に確定する（Com_TxTriggerPending[id]=0 の
-// クリアは due=true になった時点で無条件に行われる、Com.c 参照）。
-// PduR_ConfigPtr が NULL のままでも PduR_ComTransmit() は安全に E_NOT_OK を
-// 返すため（PduR.c 参照）、実際の CAN 送信まで配線しなくても検証できる。
-//
-// このパターンの SetUp()/TearDown() 自体は本ファイル内で 2 回目の登場のため
-// （tx_switch_periodic 名前空間も同じ構成を使う）、共通基底クラスへ切り出す
-// （/code-review 指摘、rule of three）。派生側は対象の Com_ConfigType への
-// ポインタを返す GetComConfig() だけを実装する。
-// ------------------------------------------------------------
-class IsolatedComTxFixtureBase : public ::testing::Test
-{
-protected:
-    virtual const Com_ConfigType* GetComConfig() const = 0;
-
-    void SetUp() override
-    {
-        FakeMillis_Reset();
-        FakeCanHw_Reset();
-        FakeDetHw_LogSuppressed = 1U;
-        Com_Init(GetComConfig());
-        FakeDetHw_LogSuppressed = 0U;
-    }
-
-    void TearDown() override
-    {
-        FakeDetHw_LogSuppressed = 1U;
-        Com_DeInit();
-    }
-};
-namespace tx_trigger_periodic
-{
-
-const Com_IPduConfigType kTestPeriodicIPdu = {
-    /* IPduId */           0U,
-    /* DLC */              1U,
-    /* PduRId */           0U,   // PduR_Init() を呼ばないため未登録のまま
-                                 // （上記名前空間コメント参照）
-    /* FirstTimeoutMs */   0U,
-    /* TimeoutMs */        0U,
-    /* IsSignalGroup */    0U,
-    /* TxModeMode */       COM_TX_MODE_PERIODIC,
-    /* TxPeriodMs */       1000U,
-    /* TxModeModeTrue */   COM_TX_MODE_PERIODIC,
-    /* TxPeriodMsTrue */   1000U,
-    /* MinDelayMs */       50U,  // Com_TriggerIPDUSend の MDT 尊重（SWS_Com_00388）検証用
-    /* UpdateBitPosition */ 0xFFU,
-    /* IpduGroupId */      COM_IPDU_GROUP_NONE
-};
-
-const Com_IPduConfigType kTestTxIPdus[] = { kTestPeriodicIPdu };
-
-const Com_ConfigType kTestComConfig = {
-    /* RxIPdus */       NULL,
-    /* RxIPduCount */   0U,
-    /* TxIPdus */       kTestTxIPdus,
-    /* TxIPduCount */   1U,
-    /* Signals */       NULL,
-    /* SignalCount */   0U,
-    /* GwMappings */    NULL,
-    /* GwMappingCount */ 0U
-};
-
-class Bsw_ComStack_TxChain_ComMainFunctionPeriodic_Test : public IsolatedComTxFixtureBase
-{
-protected:
-    const Com_ConfigType* GetComConfig() const override { return &kTestComConfig; }
-};
-TEST_F(Bsw_ComStack_TxChain_ComMainFunctionPeriodic_Test, ComMainFunction_NG_DoesNotFireBeforePeriodElapsedWithoutTrigger)
-{
-    /* 準備 (Arrange): トリガーを一切呼ばない（回帰確認: 本変更が既存の
-     * PERIODIC 判定そのものを壊していないこと）。 */
-
-    /* 実行 (Act): TxPeriodMs(1000ms) 未満だけ経過させる */
-    FakeMillis_Value += 999U;
-    Com_MainFunctionTx();
-
-    /* 評価 (Assert): トリガーが無い限り、period 未経過では送信されない */
-    EXPECT_EQ(Com_Test_GetTxTriggerPending(0U), 0U);
-    EXPECT_EQ(FakeCanHw_SendCount, 0U);
-}
-
-}  // namespace tx_trigger_periodic
 }  // namespace
