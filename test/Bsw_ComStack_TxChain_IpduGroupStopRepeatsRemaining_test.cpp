@@ -1,14 +1,20 @@
 /**
- * \file    Bsw_ComStack_TxChain_IpduGroupStop_test.cpp
+ * \file    Bsw_ComStack_TxChain_IpduGroupStopRepeatsRemaining_test.cpp
  * \brief   README.md「Tx 処理（Com → PduR → CanIf → Can の順）」コールチェーンの
- *          単体テスト（GoogleTest / CMake native_chain_tests）。IpduGroupStop シナリオ専用。
+ *          単体テスト（GoogleTest / CMake native_chain_tests）。
+ *          IpduGroupStopRepeatsRemaining シナリオ専用。
  *
- * \details 2026-09-20、Bsw_ComStack_TxChain_test.cpp から本シナリオ（OK 1種＋
- *          派生 NG）を切り出した（1 OK シナリオ名につき1ファイルという方針、
- *          ユーザー指示）。Com/PduR/CanIf のテスト専用設定・fixture は元ファイルと
- *          全く同じものを複製している（COM_TX_IPDU_MAX の制約上、シナリオごとに
- *          設定を作り分けるより安全なため）。設定の背景・コールチェーン全体の
- *          説明は元ファイル（分割前）のコメントをそのまま引き継いでいる。
+ * \details 2026-09-21、Bsw_ComStack_TxChain_IpduGroupStop_test.cpp から
+ *          分離した。分割時点では「TxErrCbk発火」「再送残数クリア」
+ *          「TxTOutとの二重発火防止」という3つの別々の下流影響が
+ *          「IpduGroupStop」という同じ接頭辞に同居していたが、実際には
+ *          Com_IpduGroupStop() が引き起こす別々の副作用であり、1 OK シナリオ
+ *          名につき1ファイルの方針（ユーザー指示）に反していたため、
+ *          ユーザー指摘を受けて再分割した。Com/PduR/CanIf のテスト専用
+ *          設定・fixture は元ファイルと全く同じものを複製している
+ *          （COM_TX_IPDU_MAX の制約上、シナリオごとに設定を作り分けるより
+ *          安全なため）。設定の背景・コールチェーン全体の説明は
+ *          元ファイル（分割前）のコメントをそのまま引き継いでいる。
  */
 #include <gtest/gtest.h>
 
@@ -487,7 +493,7 @@ const CanIf_ConfigType kTestCanIfConfig = {
     /* RxPduCount */  0U
 };
 
-class Bsw_ComStack_TxChain_IpduGroupStop_Test : public ::testing::Test
+class Bsw_ComStack_TxChain_IpduGroupStopRepeatsRemaining_Test : public ::testing::Test
 {
 protected:
     void SetUp() override
@@ -544,41 +550,23 @@ protected:
     Can_ConfigType canConfig;
 };
 
-
 // ------------------------------------------------------------
-// SWS_Com_00491: Signal Group の TxErrCbk はグループ単位で 1 回だけ呼ばれる
-// （Rte_COMCbkTErr_<sg> 相当）ことの回帰テスト。TxAckCbk と全く同じ理由で
-// 当初はメンバーシグナル単位の走査だった。本番の Com_PBCfg.c では
-// WarningStatus（唯一の Signal Group）が IpduGroupId=COM_IPDU_GROUP_NONE
-// （常時有効）のため Com_IpduGroupStop() の対象にならず、実機では発動しない
-// （docs/modules/Com_Notes.md 参照）。このユニットテストのみが検証手段となる。
+// [SWS_Com_00392] Com_IpduGroupStop() は再送シーケンス（残り再送回数）も
+// キャンセルする。
 // ------------------------------------------------------------
-TEST_F(Bsw_ComStack_TxChain_IpduGroupStop_Test, IpduGroupStop_OK_CallsSignalGroupErrCbkExactlyOnceWhenUnconfirmed)
+TEST_F(Bsw_ComStack_TxChain_IpduGroupStopRepeatsRemaining_Test, IpduGroupStopRepeatsRemaining_OK_ClearsRepeatsRemaining)
 {
-    /* 準備 (Arrange): 「PduR へは渡した（実送信済み）が Com_TxConfirmation()
-     * がまだ届いていない」状態を直接作る（Com_MainFunctionTx()/PduR を経由
-     * しないための test-only setter、Com.h 参照）。 */
-    Com_Test_SetTxConfPending(3U, 1U);
+    /* 準備 (Arrange): 再送シーケンス進行中の状態を、実際に NumberOfRepetitions
+     * を設定した停止可能グループの I-PDU を新規に用意しなくても、test-only
+     * setter で直接作る（kTestErrGroupIPdu/kTestStoppableGroupId を流用）。 */
+    Com_Test_SetTxRepeatsRemaining(3U, 2U);
 
-    /* 実行 (Act): kTestErrGroupIPdu（IPduId=3）が所属する I-PDU Group を
-     * 未確認のまま停止する。 */
+    /* 実行 (Act): [SWS_Com_00392] I-PDU Group の停止は再送シーケンスも
+     * キャンセルする */
     Com_IpduGroupStop(kTestStoppableGroupId);
 
-    /* 評価 (Assert): メンバー数に関わらず、グループ単位で厳密に 1 回だけ
-     * 呼ばれる。 */
-    EXPECT_EQ(s_groupTxErrCount, 1U);
-}
-
-TEST_F(Bsw_ComStack_TxChain_IpduGroupStop_Test, IpduGroupStop_NG_DoesNotCallErrCbkWhenAlreadyConfirmed)
-{
-    /* 準備 (Arrange): 不要。「送信済み・未確認」状態を一切作らない
-     * （Com_TxConfPending は Com_Init() で 0 のまま）。 */
-
-    /* 実行 (Act) */
-    Com_IpduGroupStop(kTestStoppableGroupId);
-
-    /* 評価 (Assert): 未確認の送信が無いため TxErrCbk は呼ばれない。 */
-    EXPECT_EQ(s_groupTxErrCount, 0U);
+    /* 評価 (Assert) */
+    EXPECT_EQ(Com_Test_GetTxRepeatsRemaining(3U), 0U);
 }
 
 }  // namespace

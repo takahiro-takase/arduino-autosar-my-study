@@ -9,6 +9,12 @@
  *          全く同じものを複製している（COM_TX_IPDU_MAX の制約上、シナリオごとに
  *          設定を作り分けるより安全なため）。設定の背景・コールチェーン全体の
  *          説明は元ファイル（分割前）のコメントをそのまま引き継いでいる。
+ *
+ *          2026-09-21、本ファイルが検証するシグナル単位のデッドライン監視
+ *          （Com_CbkTxTOut）と、Signal Group 単位のデッドライン監視は別の
+ *          API・粒度であるため、後者を Bsw_ComStack_TxChain_TxTOutGroupLevel_test.cpp
+ *          へ分離した（ユーザー指摘、1 OK シナリオ名につき1ファイルの方針上、
+ *          両者を同じ「TxTOut」接頭辞に同居させるのは不適切だったため）。
  */
 #include <gtest/gtest.h>
 
@@ -645,22 +651,4 @@ TEST_F(Bsw_ComStack_TxChain_TxTOut_Test, TxTOut_OK_UsesSteadyTimeoutAfterFirstCo
     EXPECT_EQ(s_txTOutCount, 1U);
 }
 
-TEST_F(Bsw_ComStack_TxChain_TxTOut_Test, TxTOut_OK_GroupLevelFiresWhenStartedAndOverdue)
-{
-    /* 準備 (Arrange): kTestErrGroupIPdu（IPduId=3、Signal Group、
-     * TxFirstTimeoutMs=100U）を起動し、test-only setter で
-     * 「送信済み・未確認」状態を直接注入する（実際に Com_MainFunctionTx()/PduR
-     * を経由させる配線は用意していないため）。 */
-    Com_IpduGroupStart(kTestStoppableGroupId, 0U);
-    Com_Test_SetTxConfPending(3U, 1U);
-    Com_Test_SetTxConfPendingSinceMs(3U, FakeMillis_Value);
-
-    /* 実行 (Act): TxFirstTimeoutMs(100) を超過させる */
-    FakeMillis_Value += 101U;
-    Com_MainFunctionTx();
-
-    /* 評価 (Assert): グループ単位で発火する。TxErrCbk とは無関係 */
-    EXPECT_EQ(s_groupTxTOutCount, 1U);
-    EXPECT_EQ(s_groupTxErrCount, 0U);
-}
 }  // namespace

@@ -742,5 +742,25 @@ TEST_F(Bsw_ComStack_TxChain_TriggerIPDUSendPeriodic_Test, TriggerIPDUSend_OK_Fir
     EXPECT_EQ(Com_Test_GetTxTriggerPending(0U), 0U);
 }
 
+// 2026-09-21、Bsw_ComStack_TxChain_ComMainFunction_test.cpp から移設
+// （ユーザー指摘: トリガー機能追加が既存の PERIODIC 判定そのものを壊して
+// いないことを確認する回帰テストであり、ComMainFunction 側より
+// TriggerIPDUSend 側の関心事に近いため）。名前も
+// ComMainFunction_NG_DoesNotFireBeforePeriodElapsedWithoutTrigger から
+// 本ファイルの命名規則に合わせて変更した。
+TEST_F(Bsw_ComStack_TxChain_TriggerIPDUSendPeriodic_Test, TriggerIPDUSend_NG_DoesNotFireBeforePeriodElapsedWithoutTrigger)
+{
+    /* 準備 (Arrange): トリガーを一切呼ばない（回帰確認: 本変更が既存の
+     * PERIODIC 判定そのものを壊していないこと）。 */
+
+    /* 実行 (Act): TxPeriodMs(1000ms) 未満だけ経過させる */
+    FakeMillis_Value += 999U;
+    Com_MainFunctionTx();
+
+    /* 評価 (Assert): トリガーが無い限り、period 未経過では送信されない */
+    EXPECT_EQ(Com_Test_GetTxTriggerPending(0U), 0U);
+    EXPECT_EQ(FakeCanHw_SendCount, 0U);
+}
+
 }  // namespace tx_trigger_periodic
 }  // namespace
