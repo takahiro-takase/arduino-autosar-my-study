@@ -1054,3 +1054,7 @@ void CanIf_ControllerBusOff(uint8 ControllerId)
 /*
  * CanIf_CurrentIcomConfiguration
  */
+
+/* ======================================================================
+ * Internal Functions
+ * ====================================================================== */

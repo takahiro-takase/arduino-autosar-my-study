@@ -38,6 +38,20 @@
 #define COM_RX_IPDU_MAX   COM_RX_IPDU_COUNT  /* Com_Cfg.h の設定値に連動 */
 #define COM_TX_IPDU_MAX   COM_TX_IPDU_COUNT  /* Com_Cfg.h の設定値に連動 */
 
+/* Com_InvokeTxNotification() が「TxAckCbk・TxErrCbk・TxTOutCbk のどれを
+ * 配送するか」を選ぶための判別子。2026-08 のレビューでは「呼び出し先が
+ * 2 種類しかないため三項演算子で十分、関数ポインタテーブルは過剰な抽象化」
+ * と判断したが、Com_CbkTxTOut（TX 送信デッドライン監視）追加で 3 種類に
+ * なった。3 種とも呼び出し側がコンパイル時に知っている固定種別のままで
+ * あることは変わらないため、関数ポインタテーブルへは寄せず、三項演算子を
+ * switch 文に置き換えるだけで対応する（同じ判断基準の延長）。 */
+typedef enum
+{
+    COM_TX_NOTIFY_ACK  = 0,
+    COM_TX_NOTIFY_ERR  = 1,
+    COM_TX_NOTIFY_TOUT = 2
+} Com_TxNotifyKindType;
+
 /* millis() は Arduino wiring.c で C リンケージ定義されている */
 extern unsigned long millis(void);
 
@@ -239,6 +253,40 @@ static uint8 Com_TxShadowBuffer[COM_TX_IPDU_MAX][COM_IPDU_MAX_DLC];
  * Com_SendSignalGroup() が読み取ってクリアする。 */
 static uint8 Com_GroupTriggerPending[COM_TX_IPDU_MAX];
 
+static uint32 Com_UnpackSignal(const uint8* buf,
+                                uint8 bitPos,
+                                uint8 bitSize,
+                                Com_SignalEndianType endian);
+static void Com_PackSignal(uint8* buf,
+                            uint8 bitPos,
+                            uint8 bitSize,
+                            Com_SignalEndianType endian,
+                            uint32 value);
+static void Com_WriteSignalBytes(uint8* dataPtr, uint8 byteCount, uint32 value);
+static uint8 Com_ServiceResult(uint8 started);
+static void Com_PackInitValues(uint8* buf, Com_IPduIdType id, Com_SignalDirectionType dir);
+static void Com_ResetBufferToInitValues(uint8* buf, Com_IPduIdType id, Com_SignalDirectionType dir);
+static void Com_GatewayRoute(Com_IPduIdType rxIPduId);
+static const Com_IPduConfigType* Com_FindTxIPdu(Com_IPduIdType IPduId);
+static const Com_IPduConfigType* Com_FindRxIPdu(Com_IPduIdType IPduId);
+static uint8 Com_FindSignalIndex(Com_SignalIdType SignalId);
+static Std_ReturnType Com_DoTransmit(const Com_IPduConfigType* ipdu, unsigned long now);
+static Com_TxModeModeType Com_EffectiveTxModeMode(const Com_IPduConfigType* ipdu);
+static uint16 Com_EffectiveTxPeriodMs(const Com_IPduConfigType* ipdu);
+static uint8 Com_TxRepeatApplicable(Com_TxModeModeType mode);
+static uint16 Com_SelectTimeoutThreshold(uint8 usingFirst, uint16 firstMs, uint16 steadyMs);
+static uint8 Com_RecalcTms(Com_IPduIdType ipduId);
+static void Com_RequestTxOnChange(const Com_IPduConfigType* ipdu);
+static void Com_InvokeTxNotification(const Com_IPduConfigType* ipdu,
+                                      Com_IPduIdType TxPduId,
+                                      Com_TxNotifyKindType kind);
+static void Com_ResetRxDeadlineMonitoring(Com_IPduIdType id, unsigned long now);
+static uint8 Com_IpduGroupHasTxMember(Com_IpduGroupIdType IpduGroupId);
+
+/* ======================================================================
+ * Functions
+ * ====================================================================== */
+
 /**
  * \brief   COM モジュールを初期化し、すべての I-PDU バッファをクリアする。
  *
@@ -264,8 +312,6 @@ static uint8 Com_GroupTriggerPending[COM_TX_IPDU_MAX];
  */
 void Com_Init(const Com_ConfigType* config)
 {
-    DET_LOGT(TAG, "called");
-
     if (config == NULL)
     {
         DET_LOGE(TAG, "Init E: config NULL");
@@ -418,8 +464,6 @@ void Com_Init(const Com_ConfigType* config)
  */
 void Com_DeInit(void)
 {
-    DET_LOGT(TAG, "called");
-
     if (Com_ConfigPtr == NULL)
     {
         Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_DEINIT, COM_E_UNINIT);
@@ -434,6 +478,278 @@ void Com_DeInit(void)
     Com_ConfigPtr = NULL;
 
     DET_LOGI(TAG, "DeInit ok");
+}
+
+/*
+ * Com_IpduGroupStart
+ */
+void Com_IpduGroupStart(Com_IpduGroupIdType IpduGroupId, boolean initialize)
+{
+    if (Com_ConfigPtr == NULL)
+    {
+        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_IPDU_GROUP_START, COM_E_UNINIT);
+        return;
+    }
+
+    const unsigned long now = millis();
+
+    for (uint8 i = 0U; i < Com_ConfigPtr->RxIPduCount; i++)
+    {
+        const Com_IPduConfigType* ipdu = &Com_ConfigPtr->RxIPdus[i];
+        if (ipdu->IpduGroupId != IpduGroupId)
+            continue;
+
+        const Com_IPduIdType id = ipdu->IPduId;
+        Com_RxIPduStarted[id] = 1U;
+
+        /* [SWS_Com_00787] 項目2: 受信デッドライン監視タイマを再始動する
+         * （Com_SetCommunicationEnabled() の再開時と同じ理由）。 */
+        Com_ResetRxDeadlineMonitoring(id, now);
+
+        if (initialize)
+        {
+            /* [SWS_Com_00222] 項目1: I-PDU のデータを ComSignalInitValue で
+             * 初期化する（Com_Init() と同じ手順: バイト単位ゼロクリア →
+             * ビット単位で InitValue 上書き。[SWS_Com_00217]）。 */
+            Com_ResetBufferToInitValues(Com_RxBuffer[id], id, COM_SIGNAL_DIRECTION_RX);
+
+            /* Com_RxLastValidValue も InitValue へ戻す（[SWS_Com_00228]:
+             * 起動時点でまだ実際に受信していないシグナルは InitValue を
+             * 返すべきという要求に対応。Com_Init() の該当コメント参照）。 */
+            for (uint8 s = 0U; s < Com_ConfigPtr->SignalCount; s++)
+            {
+                const Com_SignalConfigType* rsig = &Com_ConfigPtr->Signals[s];
+                if (rsig->Direction == COM_SIGNAL_DIRECTION_RX && rsig->IPduId == id)
+                    Com_RxLastValidValue[s] = rsig->InitValue;
+            }
+
+            if (ipdu->IsSignalGroup != 0U)
+            {
+                /* [SWS_Com_00222] 項目2: Signal Group のシャドウバッファも
+                 * 同じ手順で初期化する。未コミット状態（利用不可）へ戻す。 */
+                Com_ResetBufferToInitValues(Com_RxShadowBuffer[id], id, COM_SIGNAL_DIRECTION_RX);
+                Com_RxShadowTimedOut[id] = 1U;
+            }
+        }
+
+        DET_LOGI(TAG, "IpduGroupStart grp=%u iPdu=%u(RX) init=%u",
+                 (unsigned)IpduGroupId, (unsigned)id, (unsigned)initialize);
+    }
+
+    for (uint8 i = 0U; i < Com_ConfigPtr->TxIPduCount; i++)
+    {
+        const Com_IPduConfigType* ipdu = &Com_ConfigPtr->TxIPdus[i];
+        if (ipdu->IpduGroupId != IpduGroupId)
+            continue;
+
+        const Com_IPduIdType id = ipdu->IPduId;
+        Com_TxIPduStarted[id] = 1U;
+
+        /* [SWS_Com_00787] 項目1/3: MDT・周期タイマの基準時刻を再始動する
+         * （再開直後に「積み残し」として即座に送信されないようにする。
+         * Com_SetCommunicationEnabled() の既存コメントと同じ考え方）。 */
+        Com_TxLastSentMs[id] = now;
+        Com_TxPending[id]    = 0U;
+        Com_TxTriggerPending[id] = 0U;
+        /* 起動直後は必ず「送信済み・未確認」状態もクリアしておく（前回の
+         * Stop() で既にクリア済みのはずだが、初回 Start() 時の保険）。 */
+        Com_TxConfPending[id] = 0U;
+        /* ComTxModeNumberOfRepetitions（SWS_Com_00305）の残り再送回数も同様に
+         * クリアする（前回 Stop() 時点の再送シーケンスを持ち越さない）。 */
+        Com_TxRepeatsRemaining[id] = 0U;
+        /* TX 送信デッドライン監視（SWS_Com_00878 等）も同様に再初期化する
+         * （Com_ResetRxDeadlineMonitoring() の RX 側と対称）。 */
+        Com_TxConfPendingSinceMs[id] = now;
+        Com_TxTimedOut[id]           = 0U;
+        Com_TxUsingFirstTimeout[id]  = 1U;
+
+        /* [SWS_Com_00787] 項目4: update-bit をクリアする。 */
+        if (ipdu->UpdateBitPosition != 0xFFU)
+            Com_PackSignal(Com_TxBuffer[id], ipdu->UpdateBitPosition, 1U, COM_BIG_ENDIAN, 0U);
+
+        if (initialize)
+        {
+            /* [SWS_Com_00222] 項目1: I-PDU のデータを ComSignalInitValue で
+             * 初期化する（RX 側と同じ手順）。 */
+            Com_ResetBufferToInitValues(Com_TxBuffer[id], id, COM_SIGNAL_DIRECTION_TX);
+
+            /* [SWS_Com_00222] 項目3: フィルタの old_value も InitValue へ戻す
+             * （Com_Init() の該当コメント参照。COM_FILTER_MASKED_NEW_DIFFERS_
+             * MASKED_OLD が、再起動直後に InitValue と同じ値を送っただけで
+             * 誤って「変化あり」と判定しないようにするため）。 */
+            for (uint8 s = 0U; s < Com_ConfigPtr->SignalCount; s++)
+            {
+                const Com_SignalConfigType* tsig = &Com_ConfigPtr->Signals[s];
+                if (tsig->Direction == COM_SIGNAL_DIRECTION_TX && tsig->IPduId == id)
+                    Com_FilterLastValue[s] = tsig->InitValue;
+            }
+
+            if (ipdu->IsSignalGroup != 0U)
+            {
+                Com_ResetBufferToInitValues(Com_TxShadowBuffer[id], id, COM_SIGNAL_DIRECTION_TX);
+            }
+        }
+
+        /* [SWS_Com_00223] I-PDU 起動時、現在のデータ内容から TMS を再評価する
+         * （initialize の有無に関わらず。ゼロ初期化直後でも、TmsContributor
+         * シグナルの初期値に基づいて正しく再評価される）。起動時の再評価は
+         * SWS_Com_00495（送信トリガー）の対象ではないため戻り値は使わない。 */
+        (void)Com_RecalcTms(id);
+
+        DET_LOGI(TAG, "IpduGroupStart grp=%u iPdu=%u(TX) init=%u",
+                 (unsigned)IpduGroupId, (unsigned)id, (unsigned)initialize);
+    }
+}
+
+/*
+ * Com_IpduGroupStop
+ */
+void Com_IpduGroupStop(Com_IpduGroupIdType IpduGroupId)
+{
+    if (Com_ConfigPtr == NULL)
+    {
+        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_IPDU_GROUP_STOP, COM_E_UNINIT);
+        return;
+    }
+
+    for (uint8 i = 0U; i < Com_ConfigPtr->RxIPduCount; i++)
+    {
+        const Com_IPduConfigType* ipdu = &Com_ConfigPtr->RxIPdus[i];
+        if (ipdu->IpduGroupId != IpduGroupId)
+            continue;
+
+        /* [SWS_Com_00684]/[SWS_Com_00685]: 受信処理・デッドライン監視の両方を
+         * 無効化する。Com_RxTimedOut は意図的にクリアしない（Started==0 の間
+         * Com_MainFunctionRx() 側の評価自体を止めるため、値は参照されない）。 */
+        Com_RxIPduStarted[ipdu->IPduId] = 0U;
+
+        DET_LOGI(TAG, "IpduGroupStop grp=%u iPdu=%u(RX)",
+                 (unsigned)IpduGroupId, (unsigned)ipdu->IPduId);
+    }
+
+    for (uint8 i = 0U; i < Com_ConfigPtr->TxIPduCount; i++)
+    {
+        const Com_IPduConfigType* ipdu = &Com_ConfigPtr->TxIPdus[i];
+        if (ipdu->IpduGroupId != IpduGroupId)
+            continue;
+
+        const Com_IPduIdType id = ipdu->IPduId;
+        Com_TxIPduStarted[id] = 0U;
+
+        /* [SWS_Com_00479]/[SWS_Com_00491]: PduR へは渡した（実送信済み）が
+         * 対応する Com_TxConfirmation() がまだ届いていない（＝未確認の）
+         * I-PDU がこの停止時点で存在すれば、TxErrCbk（Com_CbkTxErr 相当）を
+         * 即座に呼ぶ（signal/signal group 単位の配送は Com_TxConfirmation()
+         * の TxAckCbk と共通の Com_InvokeTxNotification() を使う、同関数の
+         * コメント参照）。呼び出し後は確認待ちでなくなるためフラグをクリア
+         * する（後から届く Com_TxConfirmation() は Com_TxIPduStarted[id]==0
+         * により無視される、上記参照）。 */
+        if (Com_TxConfPending[id])
+        {
+            Com_InvokeTxNotification(ipdu, id, COM_TX_NOTIFY_ERR);
+            Com_TxConfPending[id] = 0U;
+
+            DET_LOGW(TAG, "IpduGroupStop grp=%u iPdu=%u(TX) unconfirmed at stop -> TxErrCbk",
+                     (unsigned)IpduGroupId, (unsigned)id);
+        }
+        /* Com_TxTimedOut/Com_TxUsingFirstTimeout/Com_TxConfPendingSinceMs
+         * （TX 送信デッドライン監視）は意図的にクリアしない（上の RX 側
+         * Com_RxTimedOut と同じ理由: Started==0 の間は Com_MainFunctionTx()
+         * 側の監視ループ自体が評価しないため値は参照されず、再開時は
+         * Com_IpduGroupStart() が無条件で再初期化する）。この停止時点で
+         * 確認待ちだった I-PDU が TxTOutCbk と二重発火しないのは、直上で
+         * Com_TxConfPending[id] を無条件でクリアしているため（TX 監視
+         * ループは Com_TxConfPending[id]==0 を見た時点でこの I-PDU を
+         * 対象外にする、Com_MainFunctionTx() 参照）。Com_TxIPduStarted[id]==0
+         * はあくまで「停止中は評価しない」という独立した目的であり、この
+         * 二重発火防止自体の担い手ではない。 */
+
+        /* [SWS_Com_00777]: 保留中の送信要求をキャンセルする。再開時に
+         * 「停止中に溜まった分」が積み残しとして即座に送信されないようにする
+         * （Com_SetCommunicationEnabled() の既存コメントと同じ考え方）。 */
+        Com_TxPending[id] = 0U;
+        Com_TxTriggerPending[id] = 0U;
+
+        /* [SWS_Com_00392]: I-PDU Group の停止は ComTxModeNumberOfRepetitions
+         * の再送シーケンスもキャンセルする。本番設定では対象 I-PDU
+         * （ImmobilizerStatus）が IpduGroupId=COM_IPDU_GROUP_NONE のため
+         * このパスは実機では到達しないが、防御的にクリアしておく。 */
+        Com_TxRepeatsRemaining[id] = 0U;
+
+        DET_LOGI(TAG, "IpduGroupStop grp=%u iPdu=%u(TX)",
+                 (unsigned)IpduGroupId, (unsigned)id);
+    }
+}
+
+/*
+ * Com_EnableReceptionDM
+ */
+void Com_EnableReceptionDM(Com_IpduGroupIdType IpduGroupId)
+{
+    if (Com_ConfigPtr == NULL)
+    {
+        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_ENABLE_RECEPTION_DM, COM_E_UNINIT);
+        return;
+    }
+
+    if (Com_IpduGroupHasTxMember(IpduGroupId))
+    {
+        /* [SWS_Com_00534]: 要求全体を無視する（RX 側も一切変更しない）。 */
+        DET_LOGW(TAG, "EnableReceptionDM grp=%u ignored: group contains TX I-PDU(s)",
+                 (unsigned)IpduGroupId);
+        return;
+    }
+
+    const unsigned long now = millis();
+
+    for (uint8 i = 0U; i < Com_ConfigPtr->RxIPduCount; i++)
+    {
+        const Com_IPduConfigType* ipdu = &Com_ConfigPtr->RxIPdus[i];
+        if (ipdu->IpduGroupId != IpduGroupId)
+            continue;
+
+        Com_RxDmEnabled[ipdu->IPduId] = 1U;
+
+        /* Com_IpduGroupStart() の [SWS_Com_00787] 項目2と同じ理由:
+         * 無効化していた間の経過時間を理由に、再有効化した直後で即座に
+         * タイムアウト判定されてしまうのを防ぐ。 */
+        Com_ResetRxDeadlineMonitoring(ipdu->IPduId, now);
+
+        DET_LOGI(TAG, "EnableReceptionDM grp=%u iPdu=%u",
+                 (unsigned)IpduGroupId, (unsigned)ipdu->IPduId);
+    }
+}
+
+/*
+ * Com_DisableReceptionDM
+ */
+void Com_DisableReceptionDM(Com_IpduGroupIdType IpduGroupId)
+{
+    if (Com_ConfigPtr == NULL)
+    {
+        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_DISABLE_RECEPTION_DM, COM_E_UNINIT);
+        return;
+    }
+
+    if (Com_IpduGroupHasTxMember(IpduGroupId))
+    {
+        /* [SWS_Com_00534]: 要求全体を無視する（RX 側も一切変更しない）。 */
+        DET_LOGW(TAG, "DisableReceptionDM grp=%u ignored: group contains TX I-PDU(s)",
+                 (unsigned)IpduGroupId);
+        return;
+    }
+
+    for (uint8 i = 0U; i < Com_ConfigPtr->RxIPduCount; i++)
+    {
+        const Com_IPduConfigType* ipdu = &Com_ConfigPtr->RxIPdus[i];
+        if (ipdu->IpduGroupId != IpduGroupId)
+            continue;
+
+        Com_RxDmEnabled[ipdu->IPduId] = 0U;
+
+        DET_LOGI(TAG, "DisableReceptionDM grp=%u iPdu=%u",
+                 (unsigned)IpduGroupId, (unsigned)ipdu->IPduId);
+    }
 }
 
 /**
@@ -451,7 +767,6 @@ void Com_DeInit(void)
  */
 Com_StatusType Com_GetStatus(void)
 {
-    DET_LOGT(TAG, "called");
     return (Com_ConfigPtr != NULL) ? COM_INIT : COM_UNINIT;
 }
 
@@ -467,8 +782,6 @@ Com_StatusType Com_GetStatus(void)
  */
 void Com_GetVersionInfo(Std_VersionInfoType* versioninfo)
 {
-    DET_LOGT(TAG, "called");
-
     if (Com_ConfigPtr == NULL)
     {
         Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_GET_VERSION_INFO, COM_E_UNINIT);
@@ -487,6 +800,1224 @@ void Com_GetVersionInfo(Std_VersionInfoType* versioninfo)
     versioninfo->sw_minor_version  = COM_SW_MINOR_VERSION;
     versioninfo->sw_patch_version  = COM_SW_PATCH_VERSION;
 }
+
+/**
+ * \brief   TX I-PDU バッファへシグナル値をパックする。
+ *
+ * \details シグナル設定テーブルの SignalId に一致するエントリを検索し、
+ *          ビット位置・サイズ・エンディアンに従って内部 TX バッファへ
+ *          パックする。SignalDataPtr から 4 バイトのリトルエンディアン整数として
+ *          値を読み取り、BitSize に関係なく該当ビットのみ書き換える。
+ *          送信要否・タイミングの判断は本関数内で完結する
+ *          （ComFilterAlgorithm 通過時、DIRECT/MIXED I-PDU なら即座に
+ *          送信する。呼び出し元が別途送信をトリガする必要はない）。
+ *
+ * \param[in]  SignalId      書き込むシグナルの ID。
+ *                           シグナル設定テーブルのエントリと一致すること。
+ * \param[in]  SignalDataPtr シグナル値へのポインタ。4 バイト以上で
+ *                           リトルエンディアン順。NULL 禁止。
+ *
+ * \retval  E_OK                      シグナルが見つかり、所属 I-PDU の
+ *                                    I-PDU Group が起動中で、TX バッファへ
+ *                                    値をパックした。
+ * \retval  COM_SERVICE_NOT_AVAILABLE 所属 I-PDU の I-PDU Group が停止中
+ *                                    （[SWS_Com_00334]、詳細は下記
+ *                                    \AUTOSARReq 直前の説明参照）。バッファ
+ *                                    更新自体は停止中でも行う。
+ * \retval  E_NOT_OK                  COM 未初期化、SignalDataPtr が NULL、
+ *                                    またはシグナル設定テーブルに SignalId
+ *                                    が存在しない。
+ *
+ * \details ComFilterAlgorithm:
+ *          値をバッファへパックした後、シグナルの FilterAlgorithm を評価する。
+ *          COM_FILTER_ALWAYS なら常に、COM_FILTER_MASKED_NEW_DIFFERS_MASKED_OLD
+ *          なら (新値 & Mask) が前回のフィルタ比較値と異なる場合のみ、
+ *          「送信すべき変化あり」とみなして Com_RequestTxOnChange() を呼ぶ
+ *          （TxModeMode が DIRECT/MIXED の I-PDU なら次回 Com_MainFunctionTx()
+ *          で送信される。本関数自体は PduR_ComTransmit() を呼ばない）。これとは
+ *          独立に、Com_RecalcTms() が TMS の遷移を検出した場合も
+ *          ComFilterAlgorithm の判定結果によらず Com_RequestTxOnChange() を
+ *          呼ぶ（SWS_Com_00495。非 Signal Group のシグナルに TmsContributor=1
+ *          を設定した場合に備える。現状の設定ではこの経路は通らない）。
+ *
+ *          Signal Group（詳細は Com_SendSignalGroup() の \AUTOSARReq 参照）:
+ *          所属する I-PDU が IsSignalGroup=1 の場合、値は実 TX バッファ
+ *          (Com_TxBuffer) ではなくシャドウバッファ (Com_TxShadowBuffer) へ
+ *          パックするのみとし、ComFilterAlgorithm の判定も行わない
+ *          （Signal Group メンバーの送信要否は ComFilterAlgorithm ではなく
+ *          ComTransferProperty が決める。Com_TransferPropertyType 参照）。
+ *          Com_SendSignalGroup() が呼ばれるまで実バッファへは反映されない
+ *          （グループの複数メンバーを不整合な状態で送信しないため）。
+ *
+ * \pre        Com_Init() が正常に完了していること。
+ * \note       戻り値型は仕様に従い uint8。E_OK / E_NOT_OK の値（0x00 / 0x01）は
+ *             RTE が使う Std_ReturnType と互換性がある。COM_SERVICE_NOT_AVAILABLE
+ *             （0x80）は Com 独自の拡張値（Com.h 参照）。I-PDU Group 停止中
+ *             （Com_IpduGroupStop() 参照）は [SWS_Com_00334]/Table 3 のとおり
+ *             バッファ更新・TMS/フィルタ評価は変わらず行うが本値を返す
+ *             （値のセットと送信タイミングは独立した責務のため）。
+ *
+ * \AUTOSARReq     {SWS_Com_00197, SWS_Com_00742, SWS_Com_00743, SWS_Com_00061,
+ *                  SWS_Com_00495, SWS_Com_00334}
+ * \ServiceID      {0x0A}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+uint8 Com_SendSignal(Com_SignalIdType SignalId, const void* SignalDataPtr)
+{
+    if (Com_ConfigPtr == NULL)
+    {
+        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_SEND_SIGNAL, COM_E_UNINIT);
+        return E_NOT_OK;
+    }
+    if (SignalDataPtr == NULL)
+    {
+        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_SEND_SIGNAL, COM_E_PARAM_POINTER);
+        return E_NOT_OK;
+    }
+
+    const uint8* dataPtr = (const uint8*)SignalDataPtr;
+
+    const uint8 s = Com_FindSignalIndex(SignalId);
+    if (s < Com_ConfigPtr->SignalCount)
+    {
+        const Com_SignalConfigType* sig = &Com_ConfigPtr->Signals[s];
+
+        /* 範囲チェック + 登録確認: sig->IPduId をそのまま Com_TxBuffer[] 等の
+         * 配列添字として使う前に、(1) 配列範囲内であること、
+         * (2) TX I-PDU 設定テーブルに実際に登録された IPduId であることを
+         * 確認する。Com_FindTxIPdu() が NULL を返す（設定ミスで存在しない
+         * I-PDU を指している）場合に以前は判定を素通りしてしまい、範囲外の
+         * IPduId であれば隣接するグローバル変数を破壊するバッファオーバーラン
+         * になり得た。 */
+        if (sig->IPduId >= COM_TX_IPDU_MAX)
+        {
+            DET_LOGE(TAG, "SendSignal E: sig=%u IPduId=%u out of range (max=%u)",
+                     (unsigned)SignalId, (unsigned)sig->IPduId, (unsigned)COM_TX_IPDU_MAX);
+            Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_SEND_SIGNAL, COM_E_PARAM);
+            return E_NOT_OK;
+        }
+
+        const Com_IPduConfigType* ipdu = Com_FindTxIPdu(sig->IPduId);
+        if (ipdu == NULL)
+        {
+            DET_LOGE(TAG, "SendSignal E: sig=%u IPduId=%u not a registered TX I-PDU",
+                     (unsigned)SignalId, (unsigned)sig->IPduId);
+            Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_SEND_SIGNAL, COM_E_PARAM);
+            return E_NOT_OK;
+        }
+
+        /* SignalDataPtr は呼び出し元が BitSize に応じた幅の変数
+         * (uint8/uint16/uint32) を渡す。常に 4 バイト読み込むと、
+         * 8bit/16bit の呼び出し元ではスタック上の隣接領域を読んでしまう。
+         * BitSize から必要バイト数だけを読み込む。 */
+        const uint8 byteCount = (uint8)((sig->BitSize + 7U) / 8U);
+        uint32 value = 0U;
+        for (uint8 b = 0U; b < byteCount; b++)
+        {
+            value |= ((uint32)dataPtr[b]) << (8U * b);
+        }
+
+        if (ipdu->IsSignalGroup != 0U)
+        {
+            /* Signal Group メンバー: シャドウバッファへ書き込むのみ。
+             * 実バッファへの反映は Com_SendSignalGroup() が行う。
+             *
+             * ComTransferProperty（SWS_Com_00742/00743、Com_TransferPropertyType
+             * 参照）: TRIGGERED_ON_CHANGE のメンバーのみ、前回値との比較で
+             * このグループの送信を引き起こすかどうかを判定する。この比較は
+             * ComFilterAlgorithm/Mask/FilterX とは独立しており、マスクなしの
+             * 生値同士を比較する（TmsContributor=1 として同じシグナルが
+             * COM_FILTER_MASKED_NEW_DIFFERS_X を TMS 評価に使っていても競合
+             * しない。TMS 再評価は Com_SendSignalGroup() 側で行う）。
+             * PENDING のメンバーは Com_GroupTriggerPending へ一切書き込まない
+             * （＝自身の変化だけでは送信を引き起こさない。SWS_Com_00743）。 */
+            if (sig->TransferProperty == COM_TRANSFER_PROPERTY_TRIGGERED_ON_CHANGE
+                && value != Com_FilterLastValue[s])
+            {
+                Com_GroupTriggerPending[sig->IPduId] = 1U;
+            }
+            Com_FilterLastValue[s] = value;
+
+            Com_PackSignal(Com_TxShadowBuffer[sig->IPduId],
+                           sig->BitPosition, sig->BitSize, sig->Endian, value);
+            /* [SWS_Com_00334]/Table 3: I-PDU Group 停止中もバッファ更新は
+             * 続けるが、戻り値は COM_SERVICE_NOT_AVAILABLE にする。 */
+            return Com_ServiceResult(Com_TxIPduStarted[sig->IPduId]);
+        }
+
+        Com_PackSignal(Com_TxBuffer[sig->IPduId],
+                       sig->BitPosition, sig->BitSize, sig->Endian, value);
+
+        /* TMS 再評価（SWS_Com_00245）。Com_SendSignalGroup() と同様、実バッファへの
+         * 反映後・Com_RequestTxOnChange() 呼び出し前に行う（Com_RequestTxOnChange()
+         * が Com_EffectiveTxModeMode() 経由で Com_TmsState を参照するため）。
+         * 現状 TmsContributor=1 を設定しているシグナルは Signal Group
+         * （WarningStatus）にしか存在しないためこの呼び出しがなくても実害はないが、
+         * 非 Signal Group のシグナルに TmsContributor=1 を設定した場合に備える。
+         * 戻り値（TMS が今回変化したか）は下記 SWS_Com_00495 対応で使う。 */
+        const uint8 tmsChanged = Com_RecalcTms(sig->IPduId);
+
+        /* ComFilterAlgorithm 評価: 送信すべき更新かどうかは Com 自身が判断する
+         * (ASW は値をセットするだけで、送信要否には関与しない) */
+        uint8 passesFilter = 1U;
+        if (sig->FilterAlgorithm == COM_FILTER_MASKED_NEW_DIFFERS_MASKED_OLD)
+        {
+            passesFilter = ((value & sig->Mask) != (Com_FilterLastValue[s] & sig->Mask)) ? 1U : 0U;
+        }
+        Com_FilterLastValue[s] = value;
+
+        /* SWS_Com_00495: TMS の遷移によって送信モードが切り替わった場合は、
+         * この変化を起こしたシグナルの ComFilterAlgorithm 判定によらず無条件に
+         * 即座に送信しなければならない。passesFilter とは独立の判断軸として
+         * OR で合成する（詳細は Com_RecalcTms() のドキュメント参照）。 */
+        if (passesFilter || tmsChanged)
+        {
+            Com_RequestTxOnChange(ipdu);
+        }
+
+        /* update-bit セット（SWS_Com_00061 相当）。仕様原文は「Com_SendSignal
+         * が呼ばれるたびに無条件でセットする」だが、本プロジェクトの ASW は
+         * 毎サイクル無条件に Com_SendSignal() を呼び、「値が実際に変化したか」
+         * の判定は Com の ComFilterAlgorithm に委ねる設計（README「責務分離の
+         * 効果」参照）。そのため文字どおり無条件にセットすると、次の実送信
+         * （周期フロア含む）までの間に必ず ASW が再度 Com_SendSignal() を
+         * 呼んでビットを再セットしてしまい、update-bit が常に 1 のまま
+         * 「実際に変化したか」を一切表せなくなる（2026-07 時点で実機確認済み
+         * の不具合）。そこで本実装は、このシグナルの送信要否判定
+         * （passesFilter、Com_RequestTxOnChange() と同じ判断軸）に合わせて
+         * セットする。ASW 側の「常に書き込む」設計を変えずに、update-bit
+         * 本来の目的（このシグナルが実際に更新されたかどうかを示す）を
+         * 満たすための、本プロジェクト固有の解釈である。TMS 遷移のみによる
+         * 即時送信（tmsChanged）はこのシグナル自体の値更新を意味しないため、
+         * update-bit の条件には含めない（passesFilter のみで判定する）。 */
+        /* UpdateBitContributor（Com_Types.h 参照）: I-PDU に複数の非 Signal
+         * Group TX シグナルが同居する場合、update-bit を「このシグナルの
+         * 変化」専用に保つため、寄与するシグナルのみに絞る（TmsContributor
+         * と同じパターン。2026-08 コードレビューで、MeterStatus に
+         * EngineSpeed/RunLamp 等のミラーシグナルを追加した際、それらの
+         * 変化だけで EngineState 用の update-bit が誤って立つ不具合が
+         * 見つかり対応した）。 */
+        if (passesFilter && ipdu->UpdateBitPosition != 0xFFU && sig->UpdateBitContributor == 1U)
+            Com_PackSignal(Com_TxBuffer[sig->IPduId], ipdu->UpdateBitPosition, 1U, COM_BIG_ENDIAN, 1U);
+
+        /* [SWS_Com_00334]/Table 3: I-PDU Group 停止中もバッファ更新・TMS/
+         * フィルタ評価は続けるが、戻り値は COM_SERVICE_NOT_AVAILABLE にする。 */
+        return Com_ServiceResult(Com_TxIPduStarted[sig->IPduId]);
+    }
+
+    DET_LOGE(TAG, "SendSignal E: sig=%u not found", (unsigned)SignalId);
+    Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_SEND_SIGNAL, COM_E_PARAM);
+    return E_NOT_OK;
+}
+
+/*
+ * Com_SendDynSignal
+ */
+
+/**
+ * \brief   RX I-PDU バッファからシグナル値を取り出す。
+ *
+ * \details シグナル設定テーブルの SignalId に一致するエントリを検索し、
+ *          ビット位置・サイズ・エンディアンに従って内部 RX バッファから
+ *          アンパックする。アンパックした値は BitSize にかかわらず、
+ *          常に 4 バイトのリトルエンディアン整数として SignalDataPtr へ
+ *          書き込む。
+ *
+ * \param[in]  SignalId      読み取るシグナルの ID。
+ *                           シグナル設定テーブルのエントリと一致すること。
+ * \param[out] SignalDataPtr 出力バッファへのポインタ。4 バイト以上必要。
+ *                           リトルエンディアン uint32 として書き込まれる。
+ *                           NULL 禁止。
+ *
+ * \retval  E_OK      シグナルが見つかり、所属 I-PDU の I-PDU Group が起動中で、
+ *                    SignalDataPtr へ値を書き込んだ
+ *                    （実データ、当該 I-PDU がタイムアウト中かつ
+ *                    RxDataTimeoutAction=SUBSTITUTE の場合は
+ *                    TimeoutSubstitutionValue、RxDataTimeoutAction=REPLACE
+ *                    または受信値が InvalidValue と一致し
+ *                    DataInvalidAction=REPLACE の場合は InitValue、
+ *                    受信値が InvalidValue と一致し DataInvalidAction=NOTIFY
+ *                    の場合、または FilterAlgorithm=NEW_IS_WITHIN の範囲外の
+ *                    場合は直近の合格値）。
+ * \retval  COM_SERVICE_NOT_AVAILABLE 所属 I-PDU の I-PDU Group が停止中
+ *                    （[SWS_Com_00684]/[SWS_Com_00685]/Table 3）。
+ *                    SignalDataPtr へは停止直前の最後の受信値（未受信なら
+ *                    初期値）をそのまま書き込む。デッドライン監視自体が
+ *                    無効化されているため RxDataTimeoutAction の判定より
+ *                    優先する。
+ * \retval  E_NOT_OK  COM 未初期化、SignalDataPtr が NULL、
+ *                    シグナル設定テーブルに SignalId が存在しない、
+ *                    または（I-PDU Group が起動中で）当該 I-PDU が
+ *                    タイムアウト中かつ RxDataTimeoutAction=NONE（既定）。
+ *
+ * \pre        Com_Init() が正常に完了していること。
+ * \pre        このシグナルが属する I-PDU で Com_RxIndication() が
+ *             少なくとも 1 回呼ばれていること。
+ * \pre        このシグナルが RX Signal Group（所属 I-PDU の IsSignalGroup=1）の
+ *             メンバーである場合は、あわせて Com_ReceiveSignalGroup() が
+ *             少なくとも 1 回呼ばれていること（呼ばれるまでは初期値 = 安全値の
+ *             まま更新されない。Com_ReceiveSignalGroup() 参照）。
+ * \note       戻り値型は仕様に従い uint8。E_OK / E_NOT_OK の値（0x00 / 0x01）は
+ *             RTE が使う Std_ReturnType と互換性がある。COM_SERVICE_NOT_AVAILABLE
+ *             （0x80）は Com 独自の拡張値（Com.h 参照）。
+ *
+ * \AUTOSARReq     {SWS_Com_00198, SWS_Com_00500, SWS_Com_00875, SWS_Com_00876,
+ *                  SWS_Com_00470, SWS_Com_00680, SWS_Com_00681, SWS_Com_00717,
+ *                  SWS_Com_00273, SWS_Com_00303, SWS_Com_00695, SWS_Com_00684,
+ *                  SWS_Com_00685}
+ * \ServiceID      {0x0B}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+uint8 Com_ReceiveSignal(Com_SignalIdType SignalId, void* SignalDataPtr)
+{
+    if (Com_ConfigPtr == NULL)
+    {
+        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_RECEIVE_SIGNAL, COM_E_UNINIT);
+        return E_NOT_OK;
+    }
+    if (SignalDataPtr == NULL)
+    {
+        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_RECEIVE_SIGNAL, COM_E_PARAM_POINTER);
+        return E_NOT_OK;
+    }
+
+    uint8* dataPtr = (uint8*)SignalDataPtr;
+
+    const uint8 s = Com_FindSignalIndex(SignalId);
+    if (s < Com_ConfigPtr->SignalCount)
+    {
+        const Com_SignalConfigType* sig = &Com_ConfigPtr->Signals[s];
+
+        /* 範囲チェック: Signal 設定テーブルの IPduId をそのまま Com_RxBuffer[]
+         * 等の配列添字として使うため、設定ミス（存在しない I-PDU を指す
+         * IPduId 等）で範囲外の値が来ると隣接するグローバル変数を破壊する
+         * バッファオーバーランになる。MPU のない AVR/Renesas RA では
+         * これを検出する手段がハードウェアにないため、ここで明示的に
+         * 検査する。 */
+        if (sig->IPduId >= COM_RX_IPDU_MAX)
+        {
+            DET_LOGE(TAG, "ReceiveSignal E: sig=%u IPduId=%u out of range (max=%u)",
+                     (unsigned)SignalId, (unsigned)sig->IPduId, (unsigned)COM_RX_IPDU_MAX);
+            Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_RECEIVE_SIGNAL, COM_E_PARAM);
+            return E_NOT_OK;
+        }
+
+        const Com_IPduConfigType* ipdu = Com_FindRxIPdu(sig->IPduId);
+        if (ipdu == NULL)
+        {
+            DET_LOGE(TAG, "ReceiveSignal E: sig=%u IPduId=%u not a registered RX I-PDU",
+                     (unsigned)SignalId, (unsigned)sig->IPduId);
+            Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_RECEIVE_SIGNAL, COM_E_PARAM);
+            return E_NOT_OK;
+        }
+
+        /* RX Signal Group メンバーは Com_ReceiveSignalGroup() が確定コピーした
+         * シャドウバッファ・タイムアウトスナップショットを読む（Com_RxBuffer/
+         * Com_RxTimedOut を直接見ない）。これにより、同じグループの複数
+         * メンバーを読む間に新しいフレームが届いても一貫した値が返る
+         * （[7.3.6] "handled like a signal" のとおり、グループはこの
+         * I-PDU/グループ単位の判定を使う）。
+         * 非 Signal Group のシグナルは、このシグナル自身の
+         * FirstTimeoutMs/TimeoutMs に基づく Com_SigTimedOut[]（シグナル単位、
+         * Com_MainFunctionRx() 参照）を使う。 */
+        const uint8 timedOut = (ipdu->IsSignalGroup != 0U)
+                               ? Com_RxShadowTimedOut[sig->IPduId]
+                               : Com_SigTimedOut[s];
+        const uint8* srcBuf  = (ipdu->IsSignalGroup != 0U)
+                               ? Com_RxShadowBuffer[sig->IPduId]
+                               : Com_RxBuffer[sig->IPduId];
+
+        /* SignalDataPtr は呼び出し元が BitSize に応じた幅の変数
+         * (uint8/uint16/uint32) を渡す。常に 4 バイト書き込むと、
+         * 8bit/16bit の呼び出し元ではスタック上の隣接領域を破壊する。
+         * BitSize から必要バイト数だけを書き込む。 */
+        const uint8 byteCount = (uint8)((sig->BitSize + 7U) / 8U);
+
+        /* [SWS_Com_00684]/[SWS_Com_00685]/Table 3: Group 停止中はデッドライン
+         * 監視も無効化されるため timedOut 分岐へは入れず、下の通常経路
+         * （buf を読み Invalid/Filter 判定を経る）へ合流させ、戻り値だけ
+         * Com_ServiceResult(started) で切り替える。 */
+        const uint8 started = Com_RxIPduStarted[sig->IPduId];
+
+        if (started && timedOut)
+        {
+            /* ComRxDataTimeoutAction（Com_RxDataTimeoutActionType 参照）:
+             * NONE（既定）なら、値を書き込まず E_NOT_OK を返す
+             * （呼び出し元の初期値=安全値を使用、既存の既定動作）。
+             * SUBSTITUTE なら I-PDU バッファ/シャドウバッファは読まず、
+             * 設定済みの TimeoutSubstitutionValue を代わりに書き込んで
+             * E_OK を返す（実データが古いまま返ることを防ぐ）。
+             * REPLACE なら同様にバッファは読まず、InitValue を書き込んで
+             * E_OK を返す（[SWS_Com_00470]）。あわせて Com_RxLastValidValue[s]
+             * も InitValue で上書きする（同要求の "the last received value is
+             * overwritten and gets lost" のとおり、新しい値を受信するまで
+             * InitValue を返し続けさせるため）。 */
+            if (sig->RxDataTimeoutAction == COM_RX_TIMEOUT_ACTION_SUBSTITUTE)
+            {
+                Com_WriteSignalBytes(dataPtr, byteCount, sig->TimeoutSubstitutionValue);
+                return E_OK;
+            }
+            if (sig->RxDataTimeoutAction == COM_RX_TIMEOUT_ACTION_REPLACE)
+            {
+                Com_RxLastValidValue[s] = sig->InitValue;
+                Com_WriteSignalBytes(dataPtr, byteCount, sig->InitValue);
+                return E_OK;
+            }
+            return E_NOT_OK;
+        }
+
+        uint32 value = Com_UnpackSignal(
+            srcBuf,
+            sig->BitPosition, sig->BitSize, sig->Endian);
+
+        /* ComDataInvalidAction（Com_DataInvalidActionType 参照）: 受信値が
+         * InvalidValue と一致する場合の振る舞い。
+         * NOTIFY: 「シグナルオブジェクトへ格納しない」（SWS_Com_00717）。
+         * すなわち Com_RxLastValidValue[s] を更新せず、直近の有効値をそのまま
+         * 返す。通知コールバックの実呼び出しはここでは行わず、
+         * Com_RxInvalidNotifyPending[s] を立てるだけに留める（Com_MainFunctionRx()
+         * へディスパッチする理由は Com_RxInvalidNotifyPending の宣言コメント
+         * 参照）。
+         * REPLACE: 受信値を InitValue に置き換えたうえで、以降の
+         * フィルタ処理・格納処理へそのまま合流させる（[SWS_Com_00681]:
+         * "the normal signal processing like filtering and notification
+         * shall take place as if the ComSignalInitValue would have been
+         * received"。NOTIFY と異なり InvalidNotificationCbk は呼ばない）。 */
+        if (value == sig->InvalidValue)
+        {
+            if (sig->DataInvalidAction == COM_DATA_INVALID_ACTION_NOTIFY)
+            {
+                Com_RxInvalidNotifyPending[s] = 1U;
+
+                Com_WriteSignalBytes(dataPtr, byteCount, Com_RxLastValidValue[s]);
+                return Com_ServiceResult(started);
+            }
+            if (sig->DataInvalidAction == COM_DATA_INVALID_ACTION_REPLACE)
+            {
+                value = sig->InitValue;
+            }
+        }
+
+        /* RX ComFilterAlgorithm（Com_FilterAlgorithmType の用途 (3) 参照）:
+         * COM_FILTER_NEW_IS_WITHIN の場合、値が [FilterMin, FilterMax] の
+         * 範囲外ならフィルタ条件は偽となり、このシグナルを「破棄」する
+         * （SWS_Com_00273: 処理しない。SWS_Com_00303: old_value も更新しない）。
+         * DataInvalidAction と同じ Com_RxLastValidValue[s] を「直近の合格値」
+         * として使い回す（両者は同じ「格納しない」意味論のため、実質的に
+         * 同じ状態を指す。1 つのシグナルに両方を設定する構成は想定していない）。
+         * FilterRejectCbk の実呼び出しは Com_RxInvalidNotifyPending と同じ理由
+         * で次回 Com_MainFunctionRx() まで遅延する。 */
+        if (sig->FilterAlgorithm == COM_FILTER_NEW_IS_WITHIN
+            && (value < sig->FilterMin || value > sig->FilterMax))
+        {
+            Com_RxFilterRejectPending[s] = 1U;
+
+            Com_WriteSignalBytes(dataPtr, byteCount, Com_RxLastValidValue[s]);
+            return Com_ServiceResult(started);
+        }
+
+        Com_RxLastValidValue[s] = value;
+        Com_WriteSignalBytes(dataPtr, byteCount, value);
+        return Com_ServiceResult(started);
+    }
+
+    DET_LOGE(TAG, "ReceiveSignal E: sig=%u not found", (unsigned)SignalId);
+    Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_RECEIVE_SIGNAL, COM_E_PARAM);
+    return E_NOT_OK;
+}
+
+/*
+ * Com_ReceiveDynSignal
+ */
+
+/**
+ * \brief   Signal Group メンバーをシャドウバッファから実 TX バッファへ確定コミットする。
+ *
+ * \details Com_SendSignal() が Signal Group（IsSignalGroup=1）のメンバーを
+ *          書き込んだシャドウバッファ (Com_TxShadowBuffer) を、実 TX バッファ
+ *          (Com_TxBuffer) へまとめてコピーする（PENDING/TRIGGERED_ON_CHANGE
+ *          いずれのメンバーの値も分け隔てなくコピーする）。
+ *          送信を引き起こすかどうかは、バイト単位の変化比較ではなく
+ *          Com_GroupTriggerPending[GroupId]（ComTransferProperty=
+ *          TRIGGERED_ON_CHANGE のメンバーが Com_SendSignal() 内で変化検知した
+ *          際に立てるフラグ。Com_TransferPropertyType 参照）で判定する。
+ *          立っていれば Com_RequestTxOnChange() を呼ぶ（TxModeMode が
+ *          DIRECT/MIXED の I-PDU なら次回 Com_MainFunctionTx() で送信される）。
+ *          これとは独立に、Com_RecalcTms() が TMS（Transmission Mode
+ *          Selector）の遷移（true⇔false）を検出した場合も、
+ *          Com_GroupTriggerPending の状態によらず Com_RequestTxOnChange() を
+ *          呼ぶ（SWS_Com_00495: TMS 遷移によるモード切り替えは、それを
+ *          起こしたシグナルの ComTransferProperty によらず無条件に即座に
+ *          送信しなければならない）。
+ *
+ *          update-bit（IPduId->UpdateBitPosition が 0xFF 以外の場合、
+ *          SWS_Com_00801）: 呼ばれるたびに無条件でこのビットをセットする
+ *          （値が実際に変化したかどうかは問わない。Com_GroupTriggerPending
+ *          とは独立の判断軸）。クリアは Com_DoTransmit() 側で行う。
+ *
+ * \param[in]  SignalGroupId  コミットする Signal Group の ID（所属する TX
+ *                            I-PDU の ID と同じ、Com_Types.h 参照）。
+ *
+ * \retval  E_OK                      SignalGroupId が見つかり、所属 I-PDU
+ *                                    Group が起動中で、コミット処理を行った。
+ * \retval  COM_SERVICE_NOT_AVAILABLE 所属 I-PDU Group が停止中
+ *                                    （[SWS_Com_00334]/Table 3）。コミット・
+ *                                    TMS 評価自体は停止中でも行う。
+ * \retval  E_NOT_OK                  COM 未初期化、SignalGroupId が TX I-PDU
+ *                                    設定テーブルに存在しない、または
+ *                                    IsSignalGroup=0 の I-PDU を指定した。
+ *
+ * \pre        Com_Init() が正常に完了していること。
+ * \pre        コミット前に、このグループに属する全メンバーを
+ *             Com_SendSignal() で設定しておくこと。
+ *
+ * \AUTOSARReq     {SWS_Com_00200, SWS_Com_00050, SWS_Com_00742, SWS_Com_00743,
+ *                  SWS_Com_00801, SWS_Com_00055, SWS_Com_00495, SWS_Com_00334}
+ * \ServiceID      {0x0d}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+uint8 Com_SendSignalGroup(Com_SignalGroupIdType SignalGroupId)
+{
+    if (Com_ConfigPtr == NULL)
+    {
+        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_SEND_SIGNAL_GROUP, COM_E_UNINIT);
+        return E_NOT_OK;
+    }
+
+    /* 範囲チェック: SignalGroupId をそのまま Com_TxBuffer[] 等の配列添字として
+     * 使うため、TX I-PDU 設定テーブル自体に範囲外の IPduId が設定される
+     * 事態に備えて明示的に検査する（Com_ReceiveSignal/Com_SendSignal と
+     * 同じ方針）。 */
+    if (SignalGroupId >= COM_TX_IPDU_MAX)
+    {
+        DET_LOGE(TAG, "SendSignalGroup E: SignalGroupId=%u out of range (max=%u)",
+                 (unsigned)SignalGroupId, (unsigned)COM_TX_IPDU_MAX);
+        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_SEND_SIGNAL_GROUP, COM_E_PARAM);
+        return E_NOT_OK;
+    }
+
+    const Com_IPduConfigType* ipdu = Com_FindTxIPdu(SignalGroupId);
+    if (ipdu == NULL || ipdu->IsSignalGroup == 0U)
+    {
+        DET_LOGE(TAG, "SendSignalGroup E: SignalGroupId=%u not found or not a Signal Group",
+                 (unsigned)SignalGroupId);
+        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_SEND_SIGNAL_GROUP, COM_E_PARAM);
+        return E_NOT_OK;
+    }
+
+    /* PENDING/TRIGGERED_ON_CHANGE を問わず、シャドウバッファの値はすべて
+     * 実バッファへコピーする（SWS_Com_00743: PENDING メンバーも、他の
+     * メンバーが引き起こした送信に便乗して最新値が運ばれる）。 */
+    for (uint8 b = 0U; b < ipdu->DLC; b++)
+    {
+        Com_TxBuffer[SignalGroupId][b] = Com_TxShadowBuffer[SignalGroupId][b];
+    }
+
+    /* TMS 再評価（SWS_Com_00245）。Com_RequestTxOnChange() が
+     * Com_EffectiveTxModeMode() 経由で Com_TmsState を参照するため、
+     * その呼び出しより前に確定させる。TMS 寄与シグナルが PENDING の場合、
+     * 「送信は引き起こさないが TMS だけは変化する」こともあり得るが、
+     * これは仕様上の矛盾ではない（TMS は「次に送信するときどのモードを
+     * 使うか」を決めるだけで、それ自体が送信のトリガーではないため）。
+     * 戻り値（TMS が今回変化したか）は下記 SWS_Com_00495 対応で使う。 */
+    const uint8 tmsChanged = Com_RecalcTms(SignalGroupId);
+
+    /* 送信を引き起こすかどうかは、ComTransferProperty=TRIGGERED_ON_CHANGE の
+     * メンバーが Com_SendSignal() 内で変化検知して立てたフラグのみで判定する
+     * （バイト単位の生比較はしない。PENDING メンバーだけが変化した場合は
+     * このフラグは立たず、コミットはされても送信は引き起こされない）。 */
+    const uint8 groupTriggered = Com_GroupTriggerPending[SignalGroupId];
+    Com_GroupTriggerPending[SignalGroupId] = 0U;
+
+    /* SWS_Com_00495: TMS の遷移によって送信モードが切り替わった場合は、
+     * その変化を起こしたシグナルの ComTransferProperty（TRIGGERED_ON_CHANGE/
+     * PENDING）によらず無条件に即座に送信しなければならない。groupTriggered
+     * （通常のトリガー）とは独立の判断軸として OR で合成する。これにより、
+     * TMS 寄与シグナルが PENDING のみで構成される場合でも（groupTriggered が
+     * 立たないため）TMS 遷移そのものが確実に送信を引き起こすようになる
+     * （詳細は Com_RecalcTms() のドキュメント参照）。 */
+    if (groupTriggered || tmsChanged)
+    {
+        Com_RequestTxOnChange(ipdu);
+    }
+
+    /* update-bit セット（SWS_Com_00801 相当）。仕様原文は「
+     * Com_SendSignalGroup が呼ばれるたびに無条件でセットする」だが、
+     * MeterStatus/EngineState（Com_SendSignal 側）で実機確認済みの
+     * 不具合と同じ理由により、本実装では Com_GroupTriggerPending
+     * （＝ TRIGGERED_ON_CHANGE メンバーが実際に変化したかどうか、
+     * Com_RequestTxOnChange() を呼ぶかどうかと同じ判断軸）に条件づける。
+     * App_WarningIndicator_Run() は毎サイクル無条件に
+     * Rte_SendSignalGroup_WarningStatus()（→本関数）を呼ぶ設計（ASW は
+     * 値を書くだけ、Com が送信要否を判断する責務分離。README「責務分離
+     * の効果」参照）のため、無条件セットのままだと次の実送信までの間に
+     * 必ず ASW が本関数を再度呼んでビットを再セットしてしまい、
+     * update-bit が常に 1 のままになる。詳細は Com_SendSignal() の
+     * 同種コメント・README「Update Bit」節参照。TMS 遷移のみによる即時送信
+     * （tmsChanged）はグループメンバーの値更新を意味しないため、update-bit
+     * の条件には含めない（groupTriggered のみで判定する）。 */
+    if (groupTriggered && ipdu->UpdateBitPosition != 0xFFU)
+    {
+        Com_PackSignal(Com_TxBuffer[SignalGroupId], ipdu->UpdateBitPosition, 1U, COM_BIG_ENDIAN, 1U);
+    }
+
+    /* [SWS_Com_00334]/Table 3: I-PDU Group 停止中もコミット・TMS 評価は
+     * 続けるが、戻り値は COM_SERVICE_NOT_AVAILABLE にする。 */
+    return Com_ServiceResult(Com_TxIPduStarted[SignalGroupId]);
+}
+
+/**
+ * \brief   RX Signal Group を I-PDU バッファから RX シャドウバッファへ確定コピーする。
+ *
+ * \details Com_SendSignalGroup()（TX 側）の対称版。SignalGroupId が RX Signal
+ *          Group（IsSignalGroup=1）であれば、Com_RxBuffer[SignalGroupId] の
+ *          内容を Com_RxShadowBuffer[SignalGroupId] へバイト単位でコピーし、
+ *          あわせてその時点の Com_RxTimedOut[SignalGroupId] を
+ *          Com_RxShadowTimedOut[SignalGroupId]
+ *          へスナップショットする。以降 Com_ReceiveSignal() は、このグループに
+ *          属するシグナルに対してこのスナップショットを読む（次に
+ *          Com_ReceiveSignalGroup() が呼ばれるまで更新されない）。
+ *
+ *          コピー自体は、現在タイムアウト中かどうか・I-PDU Group が
+ *          停止中かどうかに関わらず常に行う（[SWS_Com_00461]: I-PDU が
+ *          停止/タイムアウト中でも既知の最新値をシャドウバッファへ反映
+ *          すること）。タイムアウト軸は本実装では Com_ReceiveSignal() の
+ *          非グループ経路と同じ簡略化（E_OK/E_NOT_OK の 2 値にまとめる）を
+ *          踏襲し、ComSignalInitValue によるフォールバックといった細分化は
+ *          行わない。一方 I-PDU Group 停止軸は、コピー時点で停止中なら
+ *          update-bit/タイムアウト判定に関わらず COM_SERVICE_NOT_AVAILABLE
+ *          を返す（2026-09-20 是正。この2軸は独立しており、後者は
+ *          「値の取得」と「送受信タイミング」の分離という Com_SendSignal()
+ *          側と同じ理由による）。
+ *
+ *          ComRxDataTimeoutAction=SUBSTITUTE（Com_RxDataTimeoutActionType 参照）
+ *          との関係: このグループのメンバーに対する SUBSTITUTE 判定
+ *          （SWS_Com_00876「...when the reception deadline monitoring timer
+ *          of a signal group expires」）は、この関数が Com_RxTimedOut[GroupId]
+ *          を読むこの瞬間にのみライブに評価される。この呼び出し以降、次に
+ *          本関数が呼ばれるまでの間にタイムアウトが新規発生しても、
+ *          Com_ReceiveSignal() はこの時点のスナップショット
+ *          （Com_RxShadowTimedOut[GroupId]）しか見ないため、SUBSTITUTE は
+ *          即座には反映されない。これは呼び出し側の都合ではなく、Signal
+ *          Group が「Com_ReceiveSignal() はシャドウバッファのみを読む」
+ *          という設計だからである。
+ *
+ *          update-bit（ipdu->UpdateBitPosition が 0xFF 以外の場合、
+ *          SWS_Com_00324/00802）: I-PDU バッファ内のこのビットが 0（未更新）
+ *          なら、確定コピー・タイムアウトスナップショット更新のいずれも
+ *          行わずに戻る（SWS_Com_00802: "shall discard this signal/ signal
+ *          group... It will only be discarded"）。1（更新済み、SWS_Com_00067）
+ *          の場合のみ、以下の通常の確定コピー処理を行う。
+ *
+ * \param[in]  SignalGroupId  確定コピーする RX Signal Group の ID（所属する
+ *                            RX I-PDU の ID と同じ、Com_Types.h 参照）。
+ *
+ * \retval  E_OK      SignalGroupId が見つかり、所属 I-PDU Group が起動中で、
+ *                    コピー時点でタイムアウト中でなかった（または
+ *                    update-bit=0 のため何もせず破棄した）。
+ * \retval  COM_SERVICE_NOT_AVAILABLE 所属 I-PDU Group が停止中
+ *                    （[SWS_Com_00461]/Table 3）。コピー自体は停止中でも
+ *                    行う（update-bit=0 の場合を除く）。
+ * \retval  E_NOT_OK  COM 未初期化、SignalGroupId が RX I-PDU 設定テーブルに
+ *                    存在しない、IsSignalGroup=0 の I-PDU を指定した、
+ *                    または（I-PDU Group が起動中で）コピーは行ったが
+ *                    コピー時点でタイムアウト中だった。
+ *
+ * \pre        Com_Init() が正常に完了していること。
+ *
+ * \AUTOSARReq     {SWS_Com_00201, SWS_Com_00051, SWS_Com_00638, SWS_Com_00461,
+ *                  SWS_Com_00876, SWS_Com_00324, SWS_Com_00802, SWS_Com_00067}
+ * \ServiceID      {0x0e}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+uint8 Com_ReceiveSignalGroup(Com_SignalGroupIdType SignalGroupId)
+{
+    if (Com_ConfigPtr == NULL)
+    {
+        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_RECEIVE_SIGNAL_GROUP, COM_E_UNINIT);
+        return E_NOT_OK;
+    }
+
+    /* 範囲チェック: SignalGroupId をそのまま Com_RxBuffer[] 等の配列添字として
+     * 使うため、RX I-PDU 設定テーブル自体に範囲外の IPduId が設定される
+     * 事態に備えて明示的に検査する（Com_ReceiveSignal/Com_SendSignalGroup と
+     * 同じ方針）。 */
+    if (SignalGroupId >= COM_RX_IPDU_MAX)
+    {
+        DET_LOGE(TAG, "ReceiveSignalGroup E: SignalGroupId=%u out of range (max=%u)",
+                 (unsigned)SignalGroupId, (unsigned)COM_RX_IPDU_MAX);
+        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_RECEIVE_SIGNAL_GROUP, COM_E_PARAM);
+        return E_NOT_OK;
+    }
+
+    const Com_IPduConfigType* ipdu = Com_FindRxIPdu(SignalGroupId);
+    if (ipdu == NULL || ipdu->IsSignalGroup == 0U)
+    {
+        DET_LOGE(TAG, "ReceiveSignalGroup E: SignalGroupId=%u not found or not a Signal Group",
+                 (unsigned)SignalGroupId);
+        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_RECEIVE_SIGNAL_GROUP, COM_E_PARAM);
+        return E_NOT_OK;
+    }
+
+    /* [SWS_Com_00461]/Table 3: Group 停止中は update-bit/タイムアウト状態に
+     * 関わらず COM_SERVICE_NOT_AVAILABLE を返すため、以降の全 return で使う。 */
+    const uint8 started = Com_RxIPduStarted[SignalGroupId];
+
+    /* update-bit（SWS_Com_00324/00802）: 設定されており、かつ 0（未更新）の
+     * 場合、受信データを破棄する。シャドウバッファ・タイムアウトスナップ
+     * ショットとも直近の状態のまま更新しない（＝前回 update-bit=1 で確定
+     * コピーした内容を Com_ReceiveSignal() が返し続ける）。 */
+    if (ipdu->UpdateBitPosition != 0xFFU)
+    {
+        const uint32 updateBit = Com_UnpackSignal(Com_RxBuffer[SignalGroupId],
+                                                    ipdu->UpdateBitPosition, 1U, COM_BIG_ENDIAN);
+        if (updateBit == 0U)
+            return Com_ServiceResult(started);
+    }
+
+    /* [SWS_Com_00461]: 停止中でも常にコピーする（「最後に受信した値」を
+     * シャドウバッファへ反映し続ける）。 */
+    for (uint8 b = 0U; b < ipdu->DLC; b++)
+        Com_RxShadowBuffer[SignalGroupId][b] = Com_RxBuffer[SignalGroupId][b];
+
+    Com_RxShadowTimedOut[SignalGroupId] = Com_RxTimedOut[SignalGroupId];
+
+    if (!started)
+        return COM_SERVICE_NOT_AVAILABLE;
+
+    return Com_RxShadowTimedOut[SignalGroupId] ? E_NOT_OK : E_OK;
+}
+
+/**
+ * \brief   TX I-PDU へ生バイト列をそのままコミットする（Signal Group 単位）。
+ *
+ * \details Com_SendSignal() を1本ずつ呼んでシャドウバッファ (Com_TxShadowBuffer)
+ *          へ書き込み、Com_SendSignalGroup() でまとめてコミットする通常経路の
+ *          代わりに、I-PDU 全体のバイト列を1回で TX バッファ (Com_TxBuffer) へ
+ *          直接書き込む（実 AUTOSAR の Com_SendSignalGroupArray に相当する
+ *          簡略版。Com_ReceiveSignalGroupArray と対称——あちらは I-PDU から
+ *          呼び出し元へ、こちらは呼び出し元から I-PDU への一括コピー）。
+ *
+ *          Com_SendSignalGroup() と異なりシャドウバッファへの書き込みは
+ *          経由しないが、以降に通常経路（Com_SendSignal()+
+ *          Com_SendSignalGroup()）と混在して使われた場合に古い状態で
+ *          上書きされないよう、シャドウバッファ・Com_GroupTriggerPending・
+ *          各メンバーの変化検知ベースライン（Com_FilterLastValue）は
+ *          いずれも今回の書き込み内容に同期する（/code-review で
+ *          指摘: 同期しないと、後で Com_SendSignalGroup() が呼ばれた際に
+ *          古いシャドウバッファ内容で今回のコミットを黙って巻き戻す、
+ *          または古い Com_GroupTriggerPending が残ったまま次回変化なしで
+ *          誤発火する、といった状態不整合が起こり得た）。
+ *          TMS 再評価（Com_RecalcTms()）は Com_TxBuffer から直接読むため、
+ *          この直接書き込みでも正しく動作する（Com.c 該当関数参照）。
+ *
+ *          個々のシグナル単位の変化検知（Com_GroupTriggerPending、
+ *          ComTransferProperty=TRIGGERED_ON_CHANGE のメンバーが
+ *          Com_SendSignal() 内で検知するもの）を経由しないため、本関数は
+ *          呼ばれるたびに常に「新しいデータがある」ものとして扱い、無条件で
+ *          送信要求（Com_RequestTxOnChange()）・update-bit セットを行う
+ *          （[SWS_Com_00801] 原文どおり「呼ばれるたびに無条件でセットする」
+ *          という素直な実装。Com_SendSignal()/Com_SendSignalGroup() 側で
+ *          これを Com_GroupTriggerPending に条件づけているのは、ASW が
+ *          毎サイクル無条件に呼ぶ既存の呼び出しパターン（App_WarningIndicator_Run
+ *          等）に合わせた対策であり、本関数は呼び出し側が明示的に「新しい
+ *          データがある」ときのみ呼ぶ想定の別 API のため、その対策は不要）。
+ *
+ * \param[in]  SignalGroupId  コミットする Signal Group（TX I-PDU）の ID。本プロジェクトは
+ *                            Signal Group を専用の ID 空間に持たず所属 I-PDU の ID を
+ *                            そのまま使う簡略設計のため、Com_SignalGroupIdType は
+ *                            Com_IPduIdType と同じ uint8 の別名（Com_Types.h 参照）。
+ * \param[in]  DataPtr        書き込む生バイト列。ipdu->DLC バイト以上必要。NULL 禁止。
+ *
+ * \retval  E_OK                      SignalGroupId が見つかり、所属 I-PDU
+ *                                    Group が起動中で、書き込み・コミット
+ *                                    処理を行った。
+ * \retval  COM_SERVICE_NOT_AVAILABLE 所属 I-PDU Group が停止中
+ *                                    （[SWS_Com_00334]/Table 3）。書き込み・
+ *                                    コミット自体は停止中でも行う。
+ * \retval  E_NOT_OK                  COM 未初期化、DataPtr が NULL、
+ *                                    SignalGroupId が TX I-PDU 設定テーブルに
+ *                                    存在しない、または IsSignalGroup=0 の
+ *                                    I-PDU を指定した。
+ *
+ * \pre        Com_Init() が正常に完了していること。
+ *
+ * \note    実仕様([SWS_Com_00851])は戻り値型 uint8・引数型 Com_SignalGroupIdType
+ *          だが、以前は Com_SendSignalGroup/Com_ReceiveSignalGroup(PR#192で修正済み)
+ *          と同じ乖離が残っていた。今回まとめて修正。
+ * \AUTOSARReq     {SWS_Com_00851, SWS_Com_00852, SWS_Com_00853, SWS_Com_00334}
+ * \ServiceID      {0x23}
+ * \Reentrancy     {Non Reentrant for the same signal group. Reentrant for
+ *                  different signal groups.}
+ * \Synchronicity  {Asynchronous}
+ */
+uint8 Com_SendSignalGroupArray(Com_SignalGroupIdType SignalGroupId, const uint8* DataPtr)
+{
+    if (Com_ConfigPtr == NULL)
+    {
+        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_SEND_SIGNAL_GROUP_ARRAY, COM_E_UNINIT);
+        return E_NOT_OK;
+    }
+    if (DataPtr == NULL)
+    {
+        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_SEND_SIGNAL_GROUP_ARRAY, COM_E_PARAM_POINTER);
+        return E_NOT_OK;
+    }
+
+    /* 範囲チェック: SignalGroupId をそのまま Com_TxBuffer[] 等の配列添字として
+     * 使うため、TX I-PDU 設定テーブル自体に範囲外の IPduId が設定される事態に
+     * 備えて明示的に検査する（Com_SendSignalGroup() と同じ方針）。 */
+    if (SignalGroupId >= COM_TX_IPDU_MAX)
+    {
+        DET_LOGE(TAG, "SendSignalGroupArray E: SignalGroupId=%u out of range (max=%u)",
+                 (unsigned)SignalGroupId, (unsigned)COM_TX_IPDU_MAX);
+        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_SEND_SIGNAL_GROUP_ARRAY, COM_E_PARAM);
+        return E_NOT_OK;
+    }
+
+    const Com_IPduConfigType* ipdu = Com_FindTxIPdu(SignalGroupId);
+    if (ipdu == NULL || ipdu->IsSignalGroup == 0U)
+    {
+        DET_LOGE(TAG, "SendSignalGroupArray E: SignalGroupId=%u not found or not a Signal Group",
+                 (unsigned)SignalGroupId);
+        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_SEND_SIGNAL_GROUP_ARRAY, COM_E_PARAM);
+        return E_NOT_OK;
+    }
+
+    /* シャドウバッファ・保留フラグ・変化検知ベースラインの同期理由は
+     * 上の \details 参照。 */
+    for (uint8 b = 0U; b < ipdu->DLC; b++)
+    {
+        Com_TxBuffer[SignalGroupId][b]       = DataPtr[b];
+        Com_TxShadowBuffer[SignalGroupId][b] = DataPtr[b];
+    }
+
+    Com_GroupTriggerPending[SignalGroupId] = 0U;
+
+    for (uint8 s = 0U; s < Com_ConfigPtr->SignalCount; s++)
+    {
+        const Com_SignalConfigType* sig = &Com_ConfigPtr->Signals[s];
+        if (sig->Direction == COM_SIGNAL_DIRECTION_TX && sig->IPduId == SignalGroupId)
+        {
+            Com_FilterLastValue[s] = Com_UnpackSignal(Com_TxBuffer[SignalGroupId],
+                                                        sig->BitPosition, sig->BitSize, sig->Endian);
+        }
+    }
+
+    /* TMS 再評価（SWS_Com_00245、本関数でも正しく動く理由は上の \details
+     * 参照）。戻り値（TMS が今回変化したか）は使わない: 本関数は常に無条件で
+     * 送信要求するため、TMS 遷移かどうかで分岐する必要がない
+     * （SWS_Com_00495 が要求する「TMS 遷移は無条件で即座に送信」も、
+     * この無条件送信要求に自然に含まれる）。 */
+    (void)Com_RecalcTms(SignalGroupId);
+    Com_RequestTxOnChange(ipdu);
+
+    if (ipdu->UpdateBitPosition != 0xFFU)
+    {
+        Com_PackSignal(Com_TxBuffer[SignalGroupId], ipdu->UpdateBitPosition, 1U, COM_BIG_ENDIAN, 1U);
+    }
+
+    /* [SWS_Com_00334]/Table 3: I-PDU Group 停止中もコミット・TMS 評価は
+     * 続けるが、戻り値は COM_SERVICE_NOT_AVAILABLE にする。 */
+    return Com_ServiceResult(Com_TxIPduStarted[SignalGroupId]);
+}
+
+/**
+ * \brief   RX I-PDU の生バイト列をそのままコピーする。
+ *
+ * \details Com_ReceiveSignal() のようなビット単位アンパックを行わず、
+ *          I-PDU バッファの内容を DataPtr へそのまま（先頭 DLC バイト分）
+ *          コピーする。E2E Transformer（RxIndicationCbk 経由で呼ばれる
+ *          InverseTransform 等）が、CRC/Counter 検証のために I-PDU 全体の
+ *          バイト列を必要とする用途を想定している（実 AUTOSAR の
+ *          Com_ReceiveSignalGroupArray に相当する簡略版）。
+ *
+ *          Com_ReceiveSignal() と異なり、Com_RxTimedOut は見ない
+ *          （RxIndicationCbk はフレーム受信直後、タイムアウト判定より前に
+ *          呼ばれるため、このコピー自体は常に「最新の受信データ」を指す）。
+ *
+ * \param[in]  SignalGroupId  読み取る Signal Group（RX I-PDU）の ID。本プロジェクトは
+ *                            Signal Group を専用の ID 空間に持たず所属 I-PDU の ID を
+ *                            そのまま使う簡略設計のため、Com_SignalGroupIdType は
+ *                            Com_IPduIdType と同じ uint8 の別名（Com_Types.h 参照）。
+ * \param[out] DataPtr        コピー先バッファへのポインタ。ipdu->DLC バイト以上
+ *                            必要。NULL 禁止。
+ *
+ * \retval  E_OK      SignalGroupId が見つかり、所属 I-PDU Group が起動中で、
+ *                    DataPtr へコピーした。
+ * \retval  COM_SERVICE_NOT_AVAILABLE 所属 I-PDU Group が停止中
+ *                    （[SWS_Com_00857]/Table 3）。コピー自体は停止中でも
+ *                    行う。
+ * \retval  E_NOT_OK  COM 未初期化、DataPtr が NULL、
+ *                    または SignalGroupId が RX I-PDU 設定に存在しない。
+ *
+ * \pre        Com_Init() が正常に完了していること。
+ *
+ * \note    実仕様([SWS_Com_00854])は戻り値型 uint8・引数型 Com_SignalGroupIdType
+ *          だが、以前は Com_SendSignalGroup/Com_ReceiveSignalGroup(PR#192で修正済み)
+ *          と同じ乖離が残っていた。今回まとめて修正。
+ * \AUTOSARReq     {SWS_Com_00854, SWS_Com_00857}
+ * \ServiceID      {0x24}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+uint8 Com_ReceiveSignalGroupArray(Com_SignalGroupIdType SignalGroupId, uint8* DataPtr)
+{
+    if (Com_ConfigPtr == NULL)
+    {
+        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_RECEIVE_SIGNAL_GROUP_ARRAY, COM_E_UNINIT);
+        return E_NOT_OK;
+    }
+    if (DataPtr == NULL)
+    {
+        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_RECEIVE_SIGNAL_GROUP_ARRAY, COM_E_PARAM_POINTER);
+        return E_NOT_OK;
+    }
+
+    const Com_IPduConfigType* ipdu = Com_FindRxIPdu(SignalGroupId);
+    if (ipdu == NULL)
+    {
+        DET_LOGE(TAG, "ReceiveSignalGroupArray E: SignalGroupId=%u not found", (unsigned)SignalGroupId);
+        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_RECEIVE_SIGNAL_GROUP_ARRAY, COM_E_PARAM);
+        return E_NOT_OK;
+    }
+
+    for (uint8 b = 0; b < ipdu->DLC; b++)
+        DataPtr[b] = Com_RxBuffer[SignalGroupId][b];
+
+    /* [SWS_Com_00857]/Table 3: I-PDU Group 停止中もコピーは行うが、
+     * 戻り値は COM_SERVICE_NOT_AVAILABLE にする。 */
+    return Com_ServiceResult(Com_RxIPduStarted[SignalGroupId]);
+}
+
+/**
+ * \brief   シグナルを、設定済みの ComSignalDataInvalidValue で無効化する。
+ *
+ * \details [SWS_Com_00099]/[SWS_Com_00642]: 内部的に Com_SendSignal() を
+ *          InvalidValue で呼ぶだけであり、独自の送信ロジックは持たない。
+ *          SignalId が Signal Group メンバーであっても Com_SendSignal()
+ *          自身がシャドウバッファへの書き込みに正しく分岐するため
+ *          （7.4.2 章）、本関数側で Signal Group か否かを判定する必要はない。
+ *
+ *          [SWS_Com_00643]: ComSignalDataInvalidValue が未設定
+ *          （Com_SignalConfigType.InvalidValueConfigured=0）の場合は
+ *          COM_SERVICE_NOT_AVAILABLE を返す。この条件は仕様上
+ *          「開発エラーによる失敗」とは別区分のため、Det_ReportError() は
+ *          呼ばない（DET ログのみ）。
+ *
+ *          I-PDU Group 停止中: 内部で委譲する Com_SendSignal() が
+ *          [SWS_Com_00334]/Table 3 に従い COM_SERVICE_NOT_AVAILABLE を
+ *          返すため、本関数もそのまま伝播する。
+ *
+ * \param[in]  SignalId  無効化する TX シグナルの ID。
+ *
+ * \retval  E_OK                      SignalId が見つかり、InvalidValue が
+ *                                    設定済みで、Com_SendSignal() が成功した。
+ * \retval  COM_SERVICE_NOT_AVAILABLE ComSignalDataInvalidValue が未設定
+ *                                    （[SWS_Com_00643]）、または所属 I-PDU
+ *                                    Group が停止中（Com_SendSignal() から
+ *                                    伝播）。
+ * \retval  E_NOT_OK                  COM 未初期化、SignalId が存在しない、
+ *                                    または SignalId が TX シグナルでない。
+ *
+ * \AUTOSARReq     {SWS_Com_00099, SWS_Com_00642, SWS_Com_00643, SWS_Com_00334}
+ * \ServiceID      {0x10}
+ * \Reentrancy     {Non Reentrant for the same signal. Reentrant for different signals.}
+ * \Synchronicity  {Asynchronous}
+ */
+uint8 Com_InvalidateSignal(Com_SignalIdType SignalId)
+{
+    if (Com_ConfigPtr == NULL)
+    {
+        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_INVALIDATE_SIGNAL, COM_E_UNINIT);
+        return E_NOT_OK;
+    }
+
+    const uint8 s = Com_FindSignalIndex(SignalId);
+    if (s >= Com_ConfigPtr->SignalCount)
+    {
+        /* 未知の SignalId。下の InvalidValueConfigured 確認のためにここで
+         * シグナルを解決する必要があり、Com_SendSignal() 側の同種チェックを
+         * 先取りする形になる（DET 報告の内容は Com_SendSignal() と同じ）。 */
+        DET_LOGE(TAG, "InvalidateSignal E: sig=%u not found", (unsigned)SignalId);
+        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_INVALIDATE_SIGNAL, COM_E_PARAM);
+        return E_NOT_OK;
+    }
+
+    const Com_SignalConfigType* sig = &Com_ConfigPtr->Signals[s];
+    if (sig->Direction != COM_SIGNAL_DIRECTION_TX)
+    {
+        /* RX/TX の IPduId は別々の配列だが同じ数値空間を共有するため
+         * （Com_FindTxIPdu() は数値が一致する限り RX シグナルの IPduId とも
+         * 偶然マッチしてしまいうる）、Direction を明示的に確認しないまま
+         * Com_SendSignal() に委譲すると、誤って RX シグナルに
+         * InvalidValueConfigured=1 を設定した場合に無関係な TX I-PDU を
+         * 静かに破壊しかねない（DET エラーなし）。Com_InvalidateSignalGroup()
+         * 側は元々メンバー走査時に Direction==TX で絞っているため、この
+         * チェックはそちらと対称にするための是正（/code-review 指摘）。 */
+        DET_LOGE(TAG, "InvalidateSignal E: sig=%u is not a TX signal", (unsigned)SignalId);
+        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_INVALIDATE_SIGNAL, COM_E_PARAM);
+        return E_NOT_OK;
+    }
+    if (sig->InvalidValueConfigured == 0U)
+    {
+        /* [SWS_Com_00643] 原文どおり COM_SERVICE_NOT_AVAILABLE を返す
+         * （2026-09-20 是正。COM_SERVICE_NOT_AVAILABLE 定数が存在しない
+         * 期間はE_NOT_OKで代用していたが、値が異なり呼び出し元が
+         * 区別できなかった）。 */
+        DET_LOGW(TAG, "InvalidateSignal: sig=%u has no ComSignalDataInvalidValue configured",
+                 (unsigned)SignalId);
+        return COM_SERVICE_NOT_AVAILABLE;
+    }
+
+    /* I-PDU Group 停止中の COM_SERVICE_NOT_AVAILABLE は、委譲先の
+     * Com_SendSignal() がそのまま返す（[SWS_Com_00334]）。 */
+    return Com_SendSignal(SignalId, &sig->InvalidValue);
+}
+
+/**
+ * \brief   Signal Group の全メンバーを、各々の ComSignalDataInvalidValue で無効化する。
+ *
+ * \details [SWS_Com_00557]: グループメンバーのいずれか 1 つでも
+ *          ComSignalDataInvalidValue が未設定なら、書き込みを一切行わず
+ *          全体を E_NOT_OK とする（all-or-nothing。副作用を起こす前に
+ *          全メンバーを検証してから実際の書き込みへ進む）。
+ *
+ *          [SWS_Com_00099]/[SWS_Com_00645]: 各メンバーごとに
+ *          Com_SendSignal() を InvalidValue で呼んでシャドウバッファへ
+ *          書き込んだのち、内部的に Com_SendSignalGroup() を呼んで実
+ *          バッファへ確定コミットする（Com_InvalidateSignal() と同じ
+ *          「内部的に対応する送信 API を呼ぶ」構造の Signal Group 版）。
+ *
+ * \param[in]  SignalGroupId  無効化する Signal Group（TX I-PDU）の ID。
+ *
+ * \retval  E_OK      全メンバーの InvalidValue が設定済みで、所属 I-PDU Group
+ *                    が起動中で、コミットまで成功した。
+ * \retval  COM_SERVICE_NOT_AVAILABLE いずれかのメンバーの
+ *                    ComSignalDataInvalidValue が未設定、または所属 I-PDU
+ *                    Group が停止中（[SWS_Com_00557]、後者は内部で呼ぶ
+ *                    Com_SendSignalGroup() から伝播）。
+ * \retval  E_NOT_OK  COM 未初期化、SignalGroupId が TX I-PDU 設定テーブルに
+ *                    存在しない、または IsSignalGroup=0 の I-PDU を指定した。
+ *
+ * \AUTOSARReq     {SWS_Com_00557, SWS_Com_00645, SWS_Com_00334}
+ * \ServiceID      {0x1B}
+ * \Reentrancy     {Non Reentrant for the same signal group. Reentrant for different signal groups.}
+ * \Synchronicity  {Asynchronous}
+ */
+uint8 Com_InvalidateSignalGroup(Com_SignalGroupIdType SignalGroupId)
+{
+    if (Com_ConfigPtr == NULL)
+    {
+        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_INVALIDATE_SIGNAL_GROUP, COM_E_UNINIT);
+        return E_NOT_OK;
+    }
+
+    if (SignalGroupId >= COM_TX_IPDU_MAX)
+    {
+        DET_LOGE(TAG, "InvalidateSignalGroup E: SignalGroupId=%u out of range (max=%u)",
+                 (unsigned)SignalGroupId, (unsigned)COM_TX_IPDU_MAX);
+        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_INVALIDATE_SIGNAL_GROUP, COM_E_PARAM);
+        return E_NOT_OK;
+    }
+
+    const Com_IPduConfigType* ipdu = Com_FindTxIPdu(SignalGroupId);
+    if (ipdu == NULL || ipdu->IsSignalGroup == 0U)
+    {
+        DET_LOGE(TAG, "InvalidateSignalGroup E: SignalGroupId=%u not found or not a Signal Group",
+                 (unsigned)SignalGroupId);
+        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_INVALIDATE_SIGNAL_GROUP, COM_E_PARAM);
+        return E_NOT_OK;
+    }
+
+    for (uint8 s = 0U; s < Com_ConfigPtr->SignalCount; s++)
+    {
+        const Com_SignalConfigType* sig = &Com_ConfigPtr->Signals[s];
+        if (sig->Direction == COM_SIGNAL_DIRECTION_TX && sig->IPduId == SignalGroupId
+            && sig->InvalidValueConfigured == 0U)
+        {
+            /* [SWS_Com_00557] 原文どおり COM_SERVICE_NOT_AVAILABLE を返す
+             * （Com_InvalidateSignal() の同種是正と対、2026-09-20）。 */
+            DET_LOGW(TAG, "InvalidateSignalGroup: SignalGroupId=%u member sig=%u has no "
+                     "ComSignalDataInvalidValue configured",
+                     (unsigned)SignalGroupId, (unsigned)sig->SignalId);
+            return COM_SERVICE_NOT_AVAILABLE;
+        }
+    }
+
+    for (uint8 s = 0U; s < Com_ConfigPtr->SignalCount; s++)
+    {
+        const Com_SignalConfigType* sig = &Com_ConfigPtr->Signals[s];
+        if (sig->Direction == COM_SIGNAL_DIRECTION_TX && sig->IPduId == SignalGroupId)
+        {
+            (void)Com_SendSignal(sig->SignalId, &sig->InvalidValue);
+        }
+    }
+
+    return Com_SendSignalGroup(SignalGroupId);
+}
+
+/**
+ * \brief   TX I-PDU を、値の変化や送信モードに関わらず今すぐ送信要求する。
+ *
+ * \details [SWS_Com_00861]: 対象 I-PDU が started の場合のみトリガーする。
+ *          stopped の場合は E_NOT_OK を返すのみで、後で started になっても
+ *          自動的には実行されない（トリガー自体を憶えておく仕組みはない）。
+ *
+ *          [SWS_Com_00388]: MDT（`ipdu->MinDelayMs`）のみを尊重し、
+ *          `ComTxModeNumberOfRepetitions` 等、他の TxMode 関連パラメータは
+ *          考慮しない。実際の送信は本関数内では行わず、既存の
+ *          `Com_TxTriggerPending[]` フラグを立てるだけで
+ *          `Com_MainFunctionTx()` のディスパッチへ委ねる（`Com_SendSignal()`
+ *          が `Com_TxPending[]` を立てるのと同じ設計——実送信を ASW の
+ *          呼び出しスタックから切り離し、WdgM の Deadline Supervision から
+ *          保護するため。Com_MainFunctionTx() の Doxygen コメント参照）。
+ *          `Com_TxTriggerPending[]` は `Com_TxPending[]` と異なり
+ *          COM_TX_MODE_PERIODIC の I-PDU でも効く（詳細は同フラグの宣言
+ *          コメント参照）。
+ *
+ *          [SWS_Com_00492]: 設定済みの TxIpduCalloutCbk は、既存の
+ *          `Com_DoTransmit()` が呼ぶため、本関数側で別途呼ぶ必要はない。
+ *
+ * \note    診断 CommunicationControl (UDS 0x28) による送信抑制中
+ *          （`Com_TxEnabled==0`）に due 判定を満たしても、
+ *          `Com_MainFunctionTx()` はトリガーを消費するだけで実送信は行わない
+ *          （`Com_TxPending[]` の既存挙動と同じ。SWS_Com_00777/
+ *          SWS_Com_00334: 抑制解除後に「溜まった分」を即座に送らないため）。
+ *          この場合本関数の戻り値自体は E_OK のままであり、トリガーが
+ *          後で自動的に再送されることもない——呼び出し元が抑制解除後に
+ *          必要なら改めて呼び直すこと（/code-review 指摘）。
+ *
+ * \param[in]  PduId  即時送信をトリガーする TX I-PDU の ID。
+ *
+ * \retval  E_OK      I-PDU が見つかり、started であり、トリガーを受け付けた
+ *                    （実際に送信されるとは限らない。上記 \note 参照）。
+ * \retval  E_NOT_OK  COM 未初期化、PduId が TX I-PDU 設定テーブルに
+ *                    存在しない、または I-PDU が stopped。
+ *
+ * \AUTOSARReq     {SWS_Com_00861, SWS_Com_00388, SWS_Com_00492}
+ * \ServiceID      {0x17}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType Com_TriggerIPDUSend(Com_IPduIdType PduId)
+{
+    if (Com_ConfigPtr == NULL)
+    {
+        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_TRIGGER_IPDU_SEND, COM_E_UNINIT);
+        return E_NOT_OK;
+    }
+
+    if (PduId >= COM_TX_IPDU_MAX)
+    {
+        DET_LOGE(TAG, "TriggerIPDUSend E: PduId=%u out of range (max=%u)",
+                 (unsigned)PduId, (unsigned)COM_TX_IPDU_MAX);
+        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_TRIGGER_IPDU_SEND, COM_E_PARAM);
+        return E_NOT_OK;
+    }
+
+    const Com_IPduConfigType* ipdu = Com_FindTxIPdu(PduId);
+    if (ipdu == NULL)
+    {
+        DET_LOGE(TAG, "TriggerIPDUSend E: PduId=%u not a registered TX I-PDU", (unsigned)PduId);
+        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_TRIGGER_IPDU_SEND, COM_E_PARAM);
+        return E_NOT_OK;
+    }
+
+    if (!Com_TxIPduStarted[PduId])
+    {
+        /* [SWS_Com_00861]: stopped I-PDU は単に E_NOT_OK。開発エラーによる
+         * 失敗とは別区分のため Det_ReportError() は呼ばない（DET ログのみ、
+         * Com_InvalidateSignal() の InvalidValueConfigured==0 判定と同じ
+         * 方針）。 */
+        DET_LOGW(TAG, "TriggerIPDUSend: PduId=%u is stopped", (unsigned)PduId);
+        return E_NOT_OK;
+    }
+
+    Com_TxTriggerPending[PduId] = 1U;
+    return E_OK;
+}
+
+/*
+ * Com_TriggerIPDUSendWithMetaData
+ */
+
+/**
+ * \brief   TX I-PDU の TMS（Transmission Mode Selector）状態を明示的に切り替える。
+ *
+ * \details `Com_TmsState[PduId]` を直接書き換える、シグナル値に基づく自動
+ *          評価（`Com_RecalcTms()`）とは独立したもう一つの TMS 変更経路。
+ *          要求済みの Mode が既に現在の状態と同じ場合は何もしない（spec 原文
+ *          "the call will have no effect"）。DIRECT/MIXED/PERIODIC 遷移ごとの
+ *          即時送信・周期タイマ再始動の詳細、自動評価と混在させる場合の注意、
+ *          `ComTxModeTimeOffset` 省略の理由は
+ *          docs/modules/Com_Notes.md「Com_SwitchIpduTxMode」参照。
+ *
+ * \param[in]  PduId  TMS 状態を切り替える TX I-PDU の ID。
+ * \param[in]  Mode   新しい TMS 状態（TRUE/FALSE）。
+ *
+ * \AUTOSARReq     {SWS_Com_00881, SWS_Com_00239, SWS_Com_00244}
+ * \ServiceID      {0x27}
+ * \Reentrancy     {Reentrant for different PduIds. Non reentrant for the same PduId.}
+ * \Synchronicity  {Synchronous}
+ */
+void Com_SwitchIpduTxMode(Com_IPduIdType PduId, boolean Mode)
+{
+    if (Com_ConfigPtr == NULL)
+    {
+        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_SWITCH_IPDU_TX_MODE, COM_E_UNINIT);
+        return;
+    }
+
+    if (PduId >= COM_TX_IPDU_MAX)
+    {
+        DET_LOGE(TAG, "SwitchIpduTxMode E: PduId=%u out of range (max=%u)",
+                 (unsigned)PduId, (unsigned)COM_TX_IPDU_MAX);
+        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_SWITCH_IPDU_TX_MODE, COM_E_PARAM);
+        return;
+    }
+
+    const Com_IPduConfigType* ipdu = Com_FindTxIPdu(PduId);
+    if (ipdu == NULL)
+    {
+        DET_LOGE(TAG, "SwitchIpduTxMode E: PduId=%u not a registered TX I-PDU", (unsigned)PduId);
+        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_SWITCH_IPDU_TX_MODE, COM_E_PARAM);
+        return;
+    }
+
+    const uint8 newState = Mode ? 1U : 0U;
+    if (Com_TmsState[PduId] == newState)
+        return;  /* spec 原文: "the call will have no effect" */
+
+    Com_TmsState[PduId] = newState;
+
+    /* [SWS_Com_00244] 周期タイマ再始動。PERIODIC のみここで直接
+     * Com_TxLastSentMs を更新する理由は docs/modules/Com_Notes.md
+     * 「Com_SwitchIpduTxMode」参照。DIRECT/MIXED 側で触らない理由（非自明）:
+     * MinDelayMs>0 の I-PDU では、ここでリセットすると直後の
+     * Com_RequestTxOnChange() による「即時」送信要求が MDT 未経過と
+     * 誤判定されて遅延してしまうため。 */
+    if (Com_EffectiveTxModeMode(ipdu) == COM_TX_MODE_PERIODIC)
+    {
+        Com_TxLastSentMs[PduId] = millis();
+    }
+    else
+    {
+        Com_RequestTxOnChange(ipdu);
+    }
+}
+
+/* ======================================================================
+ * Callback Functions and Notifications
+ * ====================================================================== */
+
+/*
+ * Com_TriggerTransmit
+ */
 
 /**
  * \brief   受信した I-PDU ペイロードを内部 RX バッファへコピーする。
@@ -546,8 +2077,6 @@ void Com_GetVersionInfo(Std_VersionInfoType* versioninfo)
  */
 void Com_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
 {
-    DET_LOGT(TAG, "called");
-
     if (Com_ConfigPtr == NULL)
     {
         Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_RX_INDICATION, COM_E_UNINIT);
@@ -727,2009 +2256,9 @@ void Com_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
     DET_LOGW(TAG, "RX no iPdu src=%u", (unsigned)RxPduId);
 }
 
-/* -----------------------------------------------------------------------
- * 内部ヘルパー — AUTOSAR COM 公開 API の範囲外
- * ----------------------------------------------------------------------- */
-
-/**
- * \brief   ネットワークビット順でバイトバッファからビットフィールドを取り出す。
- *
- * \details ビット番号の定義: bit 0 = byte[0] の MSB、bit 7 = byte[0] の LSB、
- *          bit 8 = byte[1] の MSB、...（ネットワーク / Motorola 順）。
- *          COM_BIG_ENDIAN では最初に読んだビットが結果の MSB になり、
- *          COM_LITTLE_ENDIAN では最初に読んだビットが LSB になる。
- *
- * \param[in]  buf      読み取り元バイトバッファ。
- * \param[in]  bitPos   開始ビット位置（ネットワークビット順）。
- * \param[in]  bitSize  取り出すビット数（1〜32）。
- * \param[in]  endian   ビット重みの方向 (COM_BIG_ENDIAN / COM_LITTLE_ENDIAN)。
- *
- * \return  アンパックしたシグナル値（uint32）。
- *
- * \ServiceID      {0xF0}
- * \Reentrancy     {Reentrant}
- * \Synchronicity  {Synchronous}
+/*
+ * Com_TpRxIndication
  */
-static uint32 Com_UnpackSignal(const uint8* buf,
-                                uint8 bitPos,
-                                uint8 bitSize,
-                                Com_SignalEndianType endian)
-{
-    DET_LOGT(TAG, "called");
-    uint32 value = 0U;
-    for (uint8 i = 0; i < bitSize; i++)
-    {
-        const uint8 pos = bitPos + i;
-        const uint8 bit = (buf[pos / 8U] >> (7U - (pos % 8U))) & 1U;
-        if (endian == COM_BIG_ENDIAN)
-            value = (value << 1U) | bit;
-        else
-            value |= ((uint32)bit << i);
-    }
-    return value;
-}
-
-/**
- * \brief   ネットワークビット順でバイトバッファのビットフィールドに値を書き込む。
- *
- * \details Com_UnpackSignal() と同じネットワークビット番号定義に従い、
- *          bitPos から bitSize ビット分の value を buf へ書き込む。
- *          対象ビット以外の buf の内容は保持される。
- *
- * \param[in,out] buf      書き込み先バイトバッファ。
- * \param[in]     bitPos   開始ビット位置（ネットワークビット順）。
- * \param[in]     bitSize  書き込むビット数（1〜32）。
- * \param[in]     endian   ビット重みの方向 (COM_BIG_ENDIAN / COM_LITTLE_ENDIAN)。
- * \param[in]     value    パックするシグナル値。下位 bitSize ビットのみ使用する。
- *
- * \ServiceID      {0xF1}
- * \Reentrancy     {Reentrant}
- * \Synchronicity  {Synchronous}
- */
-static void Com_PackSignal(uint8* buf,
-                            uint8 bitPos,
-                            uint8 bitSize,
-                            Com_SignalEndianType endian,
-                            uint32 value)
-{
-    DET_LOGT(TAG, "called");
-    for (uint8 i = 0; i < bitSize; i++)
-    {
-        const uint8 bit   = (endian == COM_BIG_ENDIAN)
-                            ? (uint8)((value >> (bitSize - 1U - i)) & 1U)
-                            : (uint8)((value >> i) & 1U);
-        const uint8 pos   = bitPos + i;
-        const uint8 shift = 7U - (pos % 8U);
-        if (bit)
-            buf[pos / 8U] |=  (uint8)(1U << shift);
-        else
-            buf[pos / 8U] &= (uint8)~(1U << shift);
-    }
-}
-
-/**
- * \brief   value の下位 byteCount バイトを、リトルエンディアンで dataPtr へ書き出す。
- *
- * \details Com_ReceiveSignal() が呼び出し元の SignalDataPtr（BitSize に応じた
- *          uint8/uint16/uint32 変数）へ値を返す際の共通処理。常に 4 バイト
- *          書き込むと 8bit/16bit の呼び出し元でスタック上の隣接領域を
- *          破壊するため、byteCount 分だけを書き込む。
- *
- * \param[out] dataPtr    書き込み先。byteCount バイト以上必要。
- * \param[in]  byteCount  書き込むバイト数（1〜4）。
- * \param[in]  value      書き込む値。
- */
-static void Com_WriteSignalBytes(uint8* dataPtr, uint8 byteCount, uint32 value)
-{
-    DET_LOGT(TAG, "called");
-    for (uint8 b = 0U; b < byteCount; b++)
-        dataPtr[b] = (uint8)(value >> (8U * b));
-}
-
-/**
- * \brief   [SWS_Com_00334]/Table 3 の「I-PDU Group 停止中は
- *          COM_SERVICE_NOT_AVAILABLE」を、TX/RX 双方の Send/Receive 系
- *          API から共通に導く（/code-review 指摘: 同じ三項演算子が
- *          Com_SendSignal()/Com_SendSignalGroup()/Com_SendSignalGroupArray()/
- *          Com_ReceiveSignalGroup()/Com_ReceiveSignalGroupArray() の
- *          計6箇所に重複していたため集約）。
- *
- * \param[in]  started  対象 I-PDU の Com_TxIPduStarted[]/Com_RxIPduStarted[]。
- *
- * \return  started が真なら E_OK、偽なら COM_SERVICE_NOT_AVAILABLE。
- */
-static uint8 Com_ServiceResult(uint8 started)
-{
-    return started ? E_OK : COM_SERVICE_NOT_AVAILABLE;
-}
-
-/**
- * \brief   指定 I-PDU バッファへ、所属する全シグナルの ComSignalInitValue を
- *          ビット単位でパックする。
- *
- * \details [SWS_Com_00217]/[SWS_Com_00222] 項目1・2: I-PDU のデータ初期化は
- *          まずバイト単位でゼロクリアし（ComTxIPduUnusedAreasDefault 相当、
- *          本実装は常に 0）、その後ビット単位で各シグナルの InitValue を
- *          上書きする、という 2 段階の手順で行う。本関数は後段（ビット単位
- *          の上書き）のみを担う。呼び出し元が先にバイト単位のゼロクリアを
- *          済ませておくこと。RX/TX 両方の I-PDU バッファ・シャドウバッファ
- *          初期化（Com_Init()/Com_IpduGroupStart()）で共用する。
- *
- * \param[in,out] buf  初期化対象のバッファ（Com_RxBuffer[id] 等）。
- *                      COM_IPDU_MAX_DLC バイト以上必要。
- * \param[in]     id   対象 I-PDU の ID（dir 側の値空間、Com_SignalConfigType
- *                      の IPduId と同じ規約）。
- * \param[in]     dir  対象シグナルの方向（RX/TX）。この I-PDU 自体の
- *                      RX/TX は呼び出し元が Com_RxBuffer/Com_TxBuffer の
- *                      どちらを渡すかで決まるため、ここでは対象シグナルの
- *                      絞り込みにのみ使う。
- *
- * \pre        Com_ConfigPtr が NULL でないこと。
- *
- * \ServiceID      {0xF6}
- * \Reentrancy     {Reentrant}
- * \Synchronicity  {Synchronous}
- */
-static void Com_PackInitValues(uint8* buf, Com_IPduIdType id, Com_SignalDirectionType dir)
-{
-    DET_LOGT(TAG, "called");
-    for (uint8 s = 0U; s < Com_ConfigPtr->SignalCount; s++)
-    {
-        const Com_SignalConfigType* sig = &Com_ConfigPtr->Signals[s];
-        if (sig->Direction == dir && sig->IPduId == id)
-        {
-            Com_PackSignal(buf, sig->BitPosition, sig->BitSize, sig->Endian, sig->InitValue);
-        }
-    }
-}
-
-/**
- * \brief   I-PDU バッファ 1 本を [SWS_Com_00217]/[SWS_Com_00222] 項目1・2の
- *          2 段階手順（バイト単位ゼロクリア → Com_PackInitValues()）で
- *          初期値へリセットする。
- *
- * \details Com_IpduGroupStart() が RX/TX バッファ・シャドウバッファの
- *          計 4 箇所で共通して行う手順をまとめたもの。
- *
- * \param[in,out] buf  初期化対象のバッファ（Com_RxBuffer[id] 等）。
- *                      COM_IPDU_MAX_DLC バイト以上必要。
- * \param[in]     id   対象 I-PDU の ID。
- * \param[in]     dir  対象シグナルの方向（RX/TX）。
- *
- * \pre        Com_ConfigPtr が NULL でないこと。
- */
-static void Com_ResetBufferToInitValues(uint8* buf, Com_IPduIdType id, Com_SignalDirectionType dir)
-{
-    DET_LOGT(TAG, "called");
-    for (uint8 b = 0U; b < COM_IPDU_MAX_DLC; b++)
-        buf[b] = 0U;
-    Com_PackInitValues(buf, id, dir);
-}
-
-/**
- * \brief   Signal Gateway: RX I-PDU の受信を機に、紐づく TX シグナルへ値を転送する。
- *
- * \details Com_RxIndication() が RX バッファを更新した直後に呼ばれる。
- *          `Com_ConfigPtr->GwMappings[]` を線形検索し、`SrcSignalId` が
- *          rxIPduId に属するエントリごとに、RX バッファから生値を直接
- *          アンパックして `Com_SendSignal(DestSignalId, ...)` を呼ぶ
- *          （[SWS_Com_00357]/[SWS_Com_00377]）。Com_ReceiveSignal() を経由
- *          しないため、ComRxDataTimeoutAction・ComDataInvalidAction・
- *          ComFilterAlgorithm(NEW_IS_WITHIN) はいずれも評価しない
- *          （[SWS_Com_00872] の RX 側処理段階に、これらは含まれていない）。
- *          転送先の実際の送信要否・タイミング判定は Com_SendSignal() 自身が
- *          行う（SWC が直接呼ぶ場合と全く同じ経路。7.2.5 節 "the signal
- *          processing does not differ ..." のとおり）。
- *
- * \param[in]  rxIPduId  受信した RX I-PDU の ID（Com_IPduConfigType.IPduId）。
- *
- * \pre        Com_ConfigPtr が NULL でないこと（Com_RxIndication() が保証する）。
- * \pre        Com_RxBuffer[rxIPduId] が最新の受信データで更新済みであること。
- *
- * \AUTOSARReq     {SWS_Com_00357, SWS_Com_00360, SWS_Com_00377, SWS_Com_00701}
- * \ServiceID      {0xF5}
- * \Reentrancy     {Non Reentrant}
- * \Synchronicity  {Synchronous}
- */
-static void Com_GatewayRoute(Com_IPduIdType rxIPduId)
-{
-    DET_LOGT(TAG, "called");
-    for (uint8 g = 0U; g < Com_ConfigPtr->GwMappingCount; g++)
-    {
-        const Com_GwMappingType* gw = &Com_ConfigPtr->GwMappings[g];
-
-        /* ゲートウェイ元シグナルの設定を検索し、rxIPduId に属するかを確認する
-         * （SrcSignalId 自体は RX/TX 共通のシグナル ID 空間の値のため、
-         * Direction も確認して RX シグナルであることを保証する。
-         * Com_SignalDirectionType の宣言コメント参照）。 */
-        const Com_SignalConfigType* srcSig = NULL;
-        for (uint8 s = 0U; s < Com_ConfigPtr->SignalCount; s++)
-        {
-            const Com_SignalConfigType* cand = &Com_ConfigPtr->Signals[s];
-            if (cand->SignalId == gw->SrcSignalId && cand->Direction == COM_SIGNAL_DIRECTION_RX)
-            {
-                srcSig = cand;
-                break;
-            }
-        }
-        if (srcSig == NULL || srcSig->IPduId != rxIPduId)
-            continue;
-
-        /* [SWS_Com_00360]: エンディアン変換はアンパック（Src の Endian）と
-         * パック（Com_SendSignal() 内、Dest の Endian）をそれぞれ独立に
-         * 行うだけで自然に達成される（本実装は元々シグナルごとに Endian を
-         * 個別設定できる設計のため、ゲートウェイ専用の変換処理は不要）。 */
-        const uint32 value = Com_UnpackSignal(
-            Com_RxBuffer[rxIPduId], srcSig->BitPosition, srcSig->BitSize, srcSig->Endian);
-
-        DET_LOGI(TAG, "Gateway src=%u -> dst=%u value=%lu",
-                 (unsigned)gw->SrcSignalId, (unsigned)gw->DestSignalId, (unsigned long)value);
-
-        /* SWC が Com_SendSignal() を直接呼ぶのと全く同じ経路（7.2.5 節）。
-         * value は uint32 のローカル変数のため、その先頭アドレスを渡せば
-         * Com_SendSignal() 内部が DestSignalId の BitSize に応じて必要な
-         * バイト数だけリトルエンディアンで読み取る（既存の呼び出し規約と同じ）。 */
-        (void)Com_SendSignal(gw->DestSignalId, &value);
-    }
-}
-
-/**
- * \brief   TX I-PDU 設定テーブルから IPduId に一致するエントリを検索する。
- *
- * \details Com_SendSignal() / Com_SendSignalGroup() が、シグナルの所属する
- *          I-PDU が Signal Group（IsSignalGroup=1）かどうかを判定するために使う。
- *
- * \param[in]  IPduId  検索する TX I-PDU の ID。
- *
- * \return  一致するエントリへのポインタ。見つからない場合は NULL。
- *
- * \pre        Com_ConfigPtr が NULL でないこと（呼び出し元で保証する）。
- *
- * \ServiceID      {0xF2}
- * \Reentrancy     {Reentrant}
- * \Synchronicity  {Synchronous}
- */
-static const Com_IPduConfigType* Com_FindTxIPdu(Com_IPduIdType IPduId)
-{
-    DET_LOGT(TAG, "called");
-    for (uint8 i = 0; i < Com_ConfigPtr->TxIPduCount; i++)
-    {
-        if (Com_ConfigPtr->TxIPdus[i].IPduId == IPduId)
-            return &Com_ConfigPtr->TxIPdus[i];
-    }
-    return NULL;
-}
-
-/**
- * \brief   RX I-PDU 設定テーブルから IPduId に一致するエントリを検索する。
- *
- * \details Com_ReceiveSignal() / Com_ReceiveSignalGroup() が、シグナルの
- *          所属する I-PDU が RX Signal Group（IsSignalGroup=1）かどうかを
- *          判定するために使う（Com_FindTxIPdu() の RX 側対称）。
- *
- * \param[in]  IPduId  検索する RX I-PDU の ID。
- *
- * \return  一致するエントリへのポインタ。見つからない場合は NULL。
- *
- * \pre        Com_ConfigPtr が NULL でないこと（呼び出し元で保証する）。
- *
- * \ServiceID      {0xF4}
- * \Reentrancy     {Reentrant}
- * \Synchronicity  {Synchronous}
- */
-static const Com_IPduConfigType* Com_FindRxIPdu(Com_IPduIdType IPduId)
-{
-    DET_LOGT(TAG, "called");
-    for (uint8 i = 0; i < Com_ConfigPtr->RxIPduCount; i++)
-    {
-        if (Com_ConfigPtr->RxIPdus[i].IPduId == IPduId)
-            return &Com_ConfigPtr->RxIPdus[i];
-    }
-    return NULL;
-}
-
-/**
- * \brief   シグナル設定テーブルから SignalId に一致するエントリの添字を検索する。
- *
- * \details Com_ReceiveSignal() / Com_SendSignal() が共通で使う、
- *          Signals[] を SignalId で線形探索する処理をまとめたもの。
- *          見つかった後の処理が Com_RxLastValidValue[s]/Com_FilterLastValue[s]
- *          等、添字 s を要する並行配列を参照するため、ポインタではなく
- *          添字を返す。
- *
- * \param[in]  SignalId  検索するシグナル ID。
- *
- * \return  一致するエントリの添字。見つからない場合は Com_ConfigPtr->SignalCount
- *          （＝配列の範囲外を示す番兵値）。
- *
- * \pre        Com_ConfigPtr が NULL でないこと（呼び出し元で保証する）。
- */
-static uint8 Com_FindSignalIndex(Com_SignalIdType SignalId)
-{
-    DET_LOGT(TAG, "called");
-    for (uint8 s = 0; s < Com_ConfigPtr->SignalCount; s++)
-    {
-        if (Com_ConfigPtr->Signals[s].SignalId == SignalId)
-            return s;
-    }
-    return Com_ConfigPtr->SignalCount;
-}
-
-/**
- * \brief   TX I-PDU バッファを実際に PduR_ComTransmit() へ渡す共通処理。
- *
- * \details TxTransformCbk が設定されていれば送信直前に呼び出し（E2E
- *          Transformer 等、送信直前の最終変換用の汎用フック。Com はここで
- *          何が実行されるか一切関知しない）、その後 TX バッファの内容を
- *          ログ出力して PduR_ComTransmit() を呼ぶ（PduR→CanIf→Can_Write と
- *          MCP2515 への SPI 送信までブロッキングで完了する）。
- *          `Com_MainFunctionTx()` からのみ呼ばれる。DIRECT/MIXED I-PDU の
- *          イベント駆動送信であっても実送信は必ず `Com_MainFunctionTx()`
- *          （Os の 100ms タスク）側で行う設計とし、WdgM の Deadline
- *          Supervision 対象である ASW Runnable（`App_EngineManager_Run()`
- *          等）のスタックフレーム内で SPI 送信がブロッキングしないようにする
- *          （バス輻輳時に `sendMsgBuf()` の TX バッファ空き待ちが伸びても、
- *          Runnable 自体の実行時間には影響しない）。
- *          「送信すべきかどうかの判断」は呼び出し元（`Com_MainFunctionTx()`）が
- *          既に済ませてから呼ぶ。
- *
- *          update-bit クリア（ipdu->UpdateBitPosition が 0xFF 以外の場合、
- *          SWS_Com_00062: ComTxIPduClearUpdateBit=Transmit 相当）: PduR_ComTransmit()
- *          が E_OK を返した場合のみクリアする（SWS_Com_00062 原文 "after this
- *          I-PDU was sent out via PduR_ComTransmit and PduR_ComTransmit
- *          returned E_OK" のとおり）。失敗時はクリアせず、次回の再送で
- *          update-bit ごと正しく伝わるようにする。
- *
- *          TxIpduCalloutCbk（[SWS_Com_00346]/[SWS_Com_00719]）: TxTransformCbk
- *          適用後・PduR_ComTransmit() 呼び出し直前に、実際に送信される最終
- *          バイト列を渡して呼ぶ。戻り値 0（false）ならこの送信は行わず
- *          即座に E_NOT_OK を返す。「実際には PduR へ渡していない」ため、
- *          PduR_ComTransmit() 自体が失敗した場合と同様に Com_TxConfPending は
- *          セットしない・update-bit もクリアしない（詳細は下記コメント・
- *          Com_Types.h の TxIpduCalloutCbk 参照）。
- *
- * \param[in]  ipdu  送信する TX I-PDU 設定。NULL 禁止（呼び出し元で保証する）。
- * \param[in]  now   Com_MainFunctionTx() が計算済みの現在時刻 [ms]（millis()
- *                   を再度呼ばず再利用する。TX 送信デッドライン監視の
- *                   アーム時刻記録に使う）。
- *
- * \retval  E_OK      PduR_ComTransmit() が成功した。
- * \retval  E_NOT_OK  PduR_ComTransmit() が失敗した、または TxIpduCalloutCbk が
- *                     送信を拒否した（この場合 PduR_ComTransmit() 自体を呼ばない）。
- *
- * \AUTOSARReq     {SWS_Com_00062, SWS_Com_00878, SWS_Com_00346, SWS_Com_00719,
- *                   SWS_Com_00381}
- * \ServiceID      {0xF3}
- * \Reentrancy     {Non Reentrant}
- * \Synchronicity  {Synchronous}
- */
-static Std_ReturnType Com_DoTransmit(const Com_IPduConfigType* ipdu, unsigned long now)
-{
-    if (ipdu->TxTransformCbk != NULL)
-        ipdu->TxTransformCbk(Com_TxBuffer[ipdu->IPduId], ipdu->DLC);
-
-    if (ipdu->TxIpduCalloutCbk != NULL &&
-        !ipdu->TxIpduCalloutCbk(Com_TxBuffer[ipdu->IPduId], ipdu->DLC))
-    {
-        /* [SWS_Com_00346] false: 送信そのものを行わない。具体的な拒否理由は
-         * TxIpduCalloutCbk 自身が WARN で既に出力している想定のため、ここは
-         * DET_LOGD に留める（RxIpduCalloutCbk と同じ二重ログ回避の方針）。 */
-        DET_LOGD(TAG, "TX iPdu=%u rejected by TxIpduCallout", (unsigned)ipdu->IPduId);
-        return E_NOT_OK;
-    }
-
-    char hexbuf[25];
-    Log_HexStr(hexbuf, sizeof(hexbuf), Com_TxBuffer[ipdu->IPduId], ipdu->DLC);
-    DET_LOGI(TAG, "TX iPdu=%u [%s]", (unsigned)ipdu->IPduId, hexbuf);
-
-    PduInfoType pduInfo = {
-        .SduDataPtr = Com_TxBuffer[ipdu->IPduId],
-        .SduLength  = ipdu->DLC
-    };
-    const Std_ReturnType ret = PduR_ComTransmit(ipdu->PduRId, &pduInfo);
-
-    /* [SWS_Com_00479]/[SWS_Com_00491]: PduR への引き渡しが成功した時点で
-     * 「送信済み・未確認」とマークする。対応する Com_TxConfirmation() が
-     * 届くまでの間に Com_IpduGroupStop() が呼ばれたら TxErrCbk の対象となる
-     * （詳細は Com_TxConfPending[] の宣言コメント参照）。
-     * [SWS_Com_00878] "unless already running": TX 送信デッドライン監視の
-     * アーム時刻は 0→1 遷移の瞬間のみ記録する。MIXED 周期フロアや再送
-     * （NumberOfRepetitions）による同一 I-PDU の重複ディスパッチ（既に
-     * Com_TxConfPending==1）はタイマを延命しない。 */
-    if (ret == E_OK)
-    {
-        if (Com_TxConfPending[ipdu->IPduId] == 0U)
-            Com_TxConfPendingSinceMs[ipdu->IPduId] = now;
-        Com_TxConfPending[ipdu->IPduId] = 1U;
-    }
-
-    /* update-bit クリア（SWS_Com_00062: ComTxIPduClearUpdateBit=Transmit 相当。
-     * Confirmation/TriggerTransmit の 2 択は未実装）。原文は "after this I-PDU
-     * was sent out via PduR_ComTransmit and PduR_ComTransmit returned E_OK"
-     * であり、ret==E_OK のときのみクリアする（ret を無視して無条件にクリア
-     * していた過去の実装は誤り。失敗時にもクリアすると、update-bit だけが
-     * 消えてバッファのデータは残ったまま次回再送されるため、実際には
-     * 初めて正常配信される新データが受信側に「未更新」として誤って破棄
-     * されうる）。PduR_ComTransmit() はこの呼び出し内で同期的に SPI 送信まで
-     * 完了しているため、この時点で Com_TxBuffer を書き換えても既に送信済み
-     * のバイト列には影響しない。
-     * Signal Group（SWS_Com_00801）・非 Signal Group（SWS_Com_00061、
-     * Com_SendSignal() 参照）いずれの update-bit も、クリア自体は本関数で
-     * 同じ処理を行う（SWS_Com_00062 はどちらの場合も区別しない）。
-     * `UpdateBitPosition != 0xFFU` の判定のみで十分であり IsSignalGroup は
-     * 見ない。ただしこれは「update-bit を使わない I-PDU は必ず
-     * `.UpdateBitPosition = 0xFFU` を明示設定する」という Com_PBCfg.c 側の
-     * 規約が守られていることが前提（C の既定初期化 0 のまま放置すると、
-     * その I-PDU のバッファ bit0 を毎回誤ってクリアし、シグナル値を破壊する）。 */
-    if (ret == E_OK && ipdu->UpdateBitPosition != 0xFFU)
-        Com_PackSignal(Com_TxBuffer[ipdu->IPduId], ipdu->UpdateBitPosition, 1U, COM_BIG_ENDIAN, 0U);
-
-    return ret;
-}
-
-/**
- * \brief   TMS（Transmission Mode Selector）評価に基づく実効 TxModeMode を返す。
- *
- * \details `Com_TmsState[]` が true なら `TxModeModeTrue`、false なら
- *          `TxModeMode` を返す（SWS_Com_00032/00799）。TMS を持たない
- *          （TmsContributor なシグナルが存在せず、Com_TmsState が常に 0 の）
- *          I-PDU では常に `TxModeMode` を返すため、既存の単一モード I-PDU の
- *          挙動に影響しない。
- *
- * \param[in]  ipdu  対象 TX I-PDU 設定。NULL 禁止。
- *
- * \return  現在有効な Com_TxModeModeType。
- *
- * \ServiceID      {0x1C}
- * \Reentrancy     {Reentrant}
- * \Synchronicity  {Synchronous}
- */
-static Com_TxModeModeType Com_EffectiveTxModeMode(const Com_IPduConfigType* ipdu)
-{
-    DET_LOGT(TAG, "called");
-    return Com_TmsState[ipdu->IPduId] ? ipdu->TxModeModeTrue : ipdu->TxModeMode;
-}
-
-/**
- * \brief   TMS 評価に基づく実効 TxPeriodMs を返す。
- *
- * \details Com_EffectiveTxModeMode() と対になる周期値のペア選択。
- *
- * \param[in]  ipdu  対象 TX I-PDU 設定。NULL 禁止。
- *
- * \return  現在有効な TxPeriodMs [ms]。
- *
- * \ServiceID      {0x1D}
- * \Reentrancy     {Reentrant}
- * \Synchronicity  {Synchronous}
- */
-static uint16 Com_EffectiveTxPeriodMs(const Com_IPduConfigType* ipdu)
-{
-    DET_LOGT(TAG, "called");
-    return Com_TmsState[ipdu->IPduId] ? ipdu->TxPeriodMsTrue : ipdu->TxPeriodMs;
-}
-
-/**
- * \brief   ComTxModeNumberOfRepetitions（SWS_Com_00305）が現在の実効モードで
- *          適用対象かどうかを返す。
- *
- * \details TxModeMode==DIRECT の I-PDU のみを対象とする。MIXED の周期フロアや
- *          TMS との相互作用を避けるための設計上の制約であり、
- *          Com_RequestTxOnChange()（残り回数のセット/クリア）と
- *          Com_MainFunctionTx()（repeatDue 判定）の両方から同一の predicate を
- *          呼ぶことで、判定条件が2箇所で食い違わないようにする（詳細は
- *          docs/modules/Com_Notes.md 参照）。
- *
- * \param[in]  mode  Com_EffectiveTxModeMode() が返した実効 TxModeMode。
- *
- * \return  1 = 対象（DIRECT）、0 = 対象外。
- *
- * \ServiceID      {0x1F}
- * \Reentrancy     {Reentrant}
- * \Synchronicity  {Synchronous}
- */
-static uint8 Com_TxRepeatApplicable(Com_TxModeModeType mode)
-{
-    return (mode == COM_TX_MODE_DIRECT) ? 1U : 0U;
-}
-
-/**
- * \brief   デッドライン監視の「初回猶予期間か定常状態か」に応じて閾値を選ぶ。
- *
- * \details RX I-PDU 単位・RX シグナル単位・TX（Com_CbkTxTOut）の3箇所が
- *          同じ形の判定（`usingFirst ? firstMs : steadyMs`）を必要とするため
- *          共通化した（/code-review で重複を指摘）。呼び出し元ごとに対象と
- *          なる配列・フィールドが異なる（Com_RxUsingFirstTimeout[]/
- *          Com_TxUsingFirstTimeout[]、FirstTimeoutMs/TxFirstTimeoutMs 等）
- *          ため、値だけを受け取る薄いヘルパーとする。
- *
- * \param[in]  usingFirst  1 = 初回猶予期間中（firstMs を使う）。
- * \param[in]  firstMs     初回猶予期間の閾値 [ms]。
- * \param[in]  steadyMs    定常状態の閾値 [ms]。
- *
- * \return  適用すべき閾値 [ms]。
- *
- * \ServiceID      {0x21}
- * \Reentrancy     {Reentrant}
- * \Synchronicity  {Synchronous}
- */
-static uint16 Com_SelectTimeoutThreshold(uint8 usingFirst, uint16 firstMs, uint16 steadyMs)
-{
-    return usingFirst ? firstMs : steadyMs;
-}
-
-/**
- * \brief   TMS（Transmission Mode Selector）を再評価する。
- *
- * \details 指定 I-PDU に属するシグナルのうち `TmsContributor=1` のものについて、
- *          `Com_TxBuffer[ipduId]` から現在値をアンパックし、
- *          `(値 & Mask) != FilterX` を TMC（Transmission Mode Condition）として
- *          評価する。1 つでも真なら TMS = true（SWS_Com_00678）、
- *          寄与するシグナルは存在するがどれも偽なら TMS = false
- *          （SWS_Com_00679）。
- *
- *          仕様との既知の相違点（意図的、未修正）: 寄与するシグナルが
- *          1 つも無い I-PDU について、仕様は TMS = true と規定する
- *          （SWS_Com_00677）が、本実装は false のまま（tmsTrue の初期値
- *          0 が変化しない）とする。これは、本プロジェクトの `Com_PBCfg.c`
- *          が「TmsContributor を持たない I-PDU では TxModeModeTrue/
- *          TxPeriodMsTrue を設定しない（0 のまま）」という前提で
- *          `TxModeMode`/`TxPeriodMs` 側のみを実際の意図した値に設定して
- *          いるため（例: E2EHealthStatus は PERIODIC、ImmobilizerStatus は
- *          DIRECT）、仕様どおり TMS=true にすると `Com_EffectiveTxModeMode()`/
- *          `Com_EffectiveTxPeriodMs()` が未設定（0 = MIXED/0ms）の True 側
- *          フィールドを返してしまい、実際に意図した送信モードが壊れる。
- *          TMS の True/False 切り替えを実際に使う I-PDU
- *          （WarningStatus、FaultLamp/AbsLamp が TmsContributor）は
- *          TxModeModeTrue/TxPeriodMsTrue を明示的に設定済みのため、この
- *          相違の影響を受けない。結果を `Com_TmsState[ipduId]` へ保存する。
- *
- *          Com_SendSignal()（Signal Group でない場合）と
- *          Com_SendSignalGroup() の確定コミット後、いずれも実バッファへの
- *          反映が完了した時点で呼ぶこと（SWS_Com_00245: 値の更新のたびに
- *          TMS を再計算する）。
- *
- *          戻り値は「この呼び出しで Com_TmsState[ipduId] が変化したか」。
- *          SWS_Com_00495（TMS の遷移によってモードが切り替わったら、その
- *          変化を起こしたシグナルの ComTransferProperty によらず無条件に
- *          即座に送信しなければならない）を呼び出し元が実装するために使う。
- *
- * \param[in]  ipduId  再評価する TX I-PDU の ID。
- *
- * \retval  1  Com_TmsState[ipduId] が今回の呼び出しで変化した（true⇔false）。
- * \retval  0  変化しなかった。
- *
- * \pre        Com_ConfigPtr が NULL でないこと（呼び出し元で保証する）。
- * \pre        `Com_TxBuffer[ipduId]` が最新値へ更新済みであること。
- *
- * \AUTOSARReq     {SWS_Com_00245, SWS_Com_00495, SWS_Com_00676, SWS_Com_00677,
- *                  SWS_Com_00678, SWS_Com_00679}
- * \ServiceID      {0x1E}
- * \Reentrancy     {Non Reentrant}
- * \Synchronicity  {Synchronous}
- */
-static uint8 Com_RecalcTms(Com_IPduIdType ipduId)
-{
-    DET_LOGT(TAG, "called");
-    uint8 tmsTrue = 0U;
-
-    for (uint8 s = 0; s < Com_ConfigPtr->SignalCount; s++)
-    {
-        const Com_SignalConfigType* sig = &Com_ConfigPtr->Signals[s];
-        if (sig->IPduId != ipduId || sig->TmsContributor == 0U)
-            continue;
-
-        const uint32 value = Com_UnpackSignal(Com_TxBuffer[ipduId],
-                                               sig->BitPosition, sig->BitSize, sig->Endian);
-        if ((value & sig->Mask) != sig->FilterX)
-            tmsTrue = 1U;
-    }
-
-    const uint8 changed = (Com_TmsState[ipduId] != tmsTrue) ? 1U : 0U;
-    Com_TmsState[ipduId] = tmsTrue;
-    return changed;
-}
-
-/**
- * \brief   ComFilterAlgorithm を通過した変化を「次回送信あり」として記録する。
- *
- * \details Com_SendSignal() / Com_SendSignalGroup() が変化を検知した際に
- *          呼ばれる。ここでは `Com_TxPending[]` を立てるだけで、実際の
- *          PduR_ComTransmit() 呼び出し（ひいては MCP2515 への SPI 送信）は一切
- *          行わない（SWS_Com_00734/00742/00743 の要求"shall immediately
- *          (within the next main function at the latest) initiate..." の
- *          うち、「次回メイン関数まで」の猶予を使い、実送信は必ず
- *          `Com_MainFunctionTx()` 側にディスパッチする設計にしている。
- *          呼び出しスタックと同一フレームで SPI 送信までブロッキングすると、
- *          WdgM の Deadline Supervision 対象である ASW Runnable
- *          （App_EngineManager_Run 等）の実行時間がバス輻輳時の SPI 遅延に
- *          左右されてしまうため）。
- *
- *          実効 TxModeMode（`Com_EffectiveTxModeMode()`、TMS 評価済み）が
- *          `COM_TX_MODE_PERIODIC` の I-PDU では何もしない（PERIODIC I-PDU は
- *          Com_MainFunctionTx() の周期タスクのみが送信を担い、値の変化そのものは
- *          送信タイミングに影響しない）。
- *
- *          診断 CommunicationControl (UDS 0x28) による送信抑制中でも
- *          ここではフラグを立てるだけとする（実際に送信を抑制するかどうかの
- *          判断は Com_MainFunctionTx() 側で行う。SWS_Com_00777/SWS_Com_00334
- *          が要求する「停止中に発生した送信要求は保持されず、再開しても
- *          古いトリガーで即座に送信してはならない」は、Com_MainFunctionTx()
- *          が抑制中にこのフラグを見つけ次第、実送信せずに破棄することで
- *          満たす）。
- *
- * \param[in]  ipdu  対象 TX I-PDU 設定。NULL 禁止（呼び出し元で保証する）。
- *
- *          あわせて ComTxModeNumberOfRepetitions（SWS_Com_00305）の残り
- *          再送回数を ipdu->NumberOfRepetitions で無条件上書きする
- *          （[SWS_Com_00279]: 新規送信要求は進行中の再送をキャンセルして
- *          再スタートする）。
- *
- *          \note   本関数は static な内部ヘルパーであり、Det_ReportError() を
- *          直接呼ぶ公開 API ではないため、他の静的ヘルパー（Com_FindSignalIndex
- *          等）と同様に \ServiceID/\Reentrancy/\Synchronicity タグは付与しない
- *          （旧コメントには誤って \ServiceID{0x17} が付いていたが、これは
- *          本来 Com_TriggerIPDUSend の実 Service ID であり、本関数のものでは
- *          ない。2026-08 の Com_TriggerIPDUSend 追加を機に是正した）。
- *
- * \AUTOSARReq     {SWS_Com_00734, SWS_Com_00742, SWS_Com_00743, SWS_Com_00279}
- */
-static void Com_RequestTxOnChange(const Com_IPduConfigType* ipdu)
-{
-    DET_LOGT(TAG, "called");
-    const Com_TxModeModeType mode = Com_EffectiveTxModeMode(ipdu);
-    if (mode == COM_TX_MODE_PERIODIC)
-        return;
-
-    Com_TxPending[ipdu->IPduId] = 1U;
-    /* [SWS_Com_00279]: 新規送信要求は進行中の再送シーケンスをキャンセルして
-     * 再スタートする（NumberOfRepetitions=0 の I-PDU では no-op）。DIRECT
-     * 以外では明示的に 0 へクリアする（Com_TxRepeatApplicable() 参照。MIXED
-     * の間の古い残り回数が、後で TMS が DIRECT へ戻った際に不意の再送として
-     * 復活するのを防ぐ）。 */
-    Com_TxRepeatsRemaining[ipdu->IPduId] = Com_TxRepeatApplicable(mode) ? ipdu->NumberOfRepetitions : 0U;
-}
-
-/**
- * \brief   RX I-PDU バッファからシグナル値を取り出す。
- *
- * \details シグナル設定テーブルの SignalId に一致するエントリを検索し、
- *          ビット位置・サイズ・エンディアンに従って内部 RX バッファから
- *          アンパックする。アンパックした値は BitSize にかかわらず、
- *          常に 4 バイトのリトルエンディアン整数として SignalDataPtr へ
- *          書き込む。
- *
- * \param[in]  SignalId      読み取るシグナルの ID。
- *                           シグナル設定テーブルのエントリと一致すること。
- * \param[out] SignalDataPtr 出力バッファへのポインタ。4 バイト以上必要。
- *                           リトルエンディアン uint32 として書き込まれる。
- *                           NULL 禁止。
- *
- * \retval  E_OK      シグナルが見つかり、所属 I-PDU の I-PDU Group が起動中で、
- *                    SignalDataPtr へ値を書き込んだ
- *                    （実データ、当該 I-PDU がタイムアウト中かつ
- *                    RxDataTimeoutAction=SUBSTITUTE の場合は
- *                    TimeoutSubstitutionValue、RxDataTimeoutAction=REPLACE
- *                    または受信値が InvalidValue と一致し
- *                    DataInvalidAction=REPLACE の場合は InitValue、
- *                    受信値が InvalidValue と一致し DataInvalidAction=NOTIFY
- *                    の場合、または FilterAlgorithm=NEW_IS_WITHIN の範囲外の
- *                    場合は直近の合格値）。
- * \retval  COM_SERVICE_NOT_AVAILABLE 所属 I-PDU の I-PDU Group が停止中
- *                    （[SWS_Com_00684]/[SWS_Com_00685]/Table 3）。
- *                    SignalDataPtr へは停止直前の最後の受信値（未受信なら
- *                    初期値）をそのまま書き込む。デッドライン監視自体が
- *                    無効化されているため RxDataTimeoutAction の判定より
- *                    優先する。
- * \retval  E_NOT_OK  COM 未初期化、SignalDataPtr が NULL、
- *                    シグナル設定テーブルに SignalId が存在しない、
- *                    または（I-PDU Group が起動中で）当該 I-PDU が
- *                    タイムアウト中かつ RxDataTimeoutAction=NONE（既定）。
- *
- * \pre        Com_Init() が正常に完了していること。
- * \pre        このシグナルが属する I-PDU で Com_RxIndication() が
- *             少なくとも 1 回呼ばれていること。
- * \pre        このシグナルが RX Signal Group（所属 I-PDU の IsSignalGroup=1）の
- *             メンバーである場合は、あわせて Com_ReceiveSignalGroup() が
- *             少なくとも 1 回呼ばれていること（呼ばれるまでは初期値 = 安全値の
- *             まま更新されない。Com_ReceiveSignalGroup() 参照）。
- * \note       戻り値型は仕様に従い uint8。E_OK / E_NOT_OK の値（0x00 / 0x01）は
- *             RTE が使う Std_ReturnType と互換性がある。COM_SERVICE_NOT_AVAILABLE
- *             （0x80）は Com 独自の拡張値（Com.h 参照）。
- *
- * \AUTOSARReq     {SWS_Com_00198, SWS_Com_00500, SWS_Com_00875, SWS_Com_00876,
- *                  SWS_Com_00470, SWS_Com_00680, SWS_Com_00681, SWS_Com_00717,
- *                  SWS_Com_00273, SWS_Com_00303, SWS_Com_00695, SWS_Com_00684,
- *                  SWS_Com_00685}
- * \ServiceID      {0x0B}
- * \Reentrancy     {Reentrant}
- * \Synchronicity  {Synchronous}
- */
-uint8 Com_ReceiveSignal(Com_SignalIdType SignalId, void* SignalDataPtr)
-{
-    DET_LOGT(TAG, "called");
-
-    if (Com_ConfigPtr == NULL)
-    {
-        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_RECEIVE_SIGNAL, COM_E_UNINIT);
-        return E_NOT_OK;
-    }
-    if (SignalDataPtr == NULL)
-    {
-        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_RECEIVE_SIGNAL, COM_E_PARAM_POINTER);
-        return E_NOT_OK;
-    }
-
-    uint8* dataPtr = (uint8*)SignalDataPtr;
-
-    const uint8 s = Com_FindSignalIndex(SignalId);
-    if (s < Com_ConfigPtr->SignalCount)
-    {
-        const Com_SignalConfigType* sig = &Com_ConfigPtr->Signals[s];
-
-        /* 範囲チェック: Signal 設定テーブルの IPduId をそのまま Com_RxBuffer[]
-         * 等の配列添字として使うため、設定ミス（存在しない I-PDU を指す
-         * IPduId 等）で範囲外の値が来ると隣接するグローバル変数を破壊する
-         * バッファオーバーランになる。MPU のない AVR/Renesas RA では
-         * これを検出する手段がハードウェアにないため、ここで明示的に
-         * 検査する。 */
-        if (sig->IPduId >= COM_RX_IPDU_MAX)
-        {
-            DET_LOGE(TAG, "ReceiveSignal E: sig=%u IPduId=%u out of range (max=%u)",
-                     (unsigned)SignalId, (unsigned)sig->IPduId, (unsigned)COM_RX_IPDU_MAX);
-            Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_RECEIVE_SIGNAL, COM_E_PARAM);
-            return E_NOT_OK;
-        }
-
-        const Com_IPduConfigType* ipdu = Com_FindRxIPdu(sig->IPduId);
-        if (ipdu == NULL)
-        {
-            DET_LOGE(TAG, "ReceiveSignal E: sig=%u IPduId=%u not a registered RX I-PDU",
-                     (unsigned)SignalId, (unsigned)sig->IPduId);
-            Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_RECEIVE_SIGNAL, COM_E_PARAM);
-            return E_NOT_OK;
-        }
-
-        /* RX Signal Group メンバーは Com_ReceiveSignalGroup() が確定コピーした
-         * シャドウバッファ・タイムアウトスナップショットを読む（Com_RxBuffer/
-         * Com_RxTimedOut を直接見ない）。これにより、同じグループの複数
-         * メンバーを読む間に新しいフレームが届いても一貫した値が返る
-         * （[7.3.6] "handled like a signal" のとおり、グループはこの
-         * I-PDU/グループ単位の判定を使う）。
-         * 非 Signal Group のシグナルは、このシグナル自身の
-         * FirstTimeoutMs/TimeoutMs に基づく Com_SigTimedOut[]（シグナル単位、
-         * Com_MainFunctionRx() 参照）を使う。 */
-        const uint8 timedOut = (ipdu->IsSignalGroup != 0U)
-                               ? Com_RxShadowTimedOut[sig->IPduId]
-                               : Com_SigTimedOut[s];
-        const uint8* srcBuf  = (ipdu->IsSignalGroup != 0U)
-                               ? Com_RxShadowBuffer[sig->IPduId]
-                               : Com_RxBuffer[sig->IPduId];
-
-        /* SignalDataPtr は呼び出し元が BitSize に応じた幅の変数
-         * (uint8/uint16/uint32) を渡す。常に 4 バイト書き込むと、
-         * 8bit/16bit の呼び出し元ではスタック上の隣接領域を破壊する。
-         * BitSize から必要バイト数だけを書き込む。 */
-        const uint8 byteCount = (uint8)((sig->BitSize + 7U) / 8U);
-
-        /* [SWS_Com_00684]/[SWS_Com_00685]/Table 3: Group 停止中はデッドライン
-         * 監視も無効化されるため timedOut 分岐へは入れず、下の通常経路
-         * （buf を読み Invalid/Filter 判定を経る）へ合流させ、戻り値だけ
-         * Com_ServiceResult(started) で切り替える。 */
-        const uint8 started = Com_RxIPduStarted[sig->IPduId];
-
-        if (started && timedOut)
-        {
-            /* ComRxDataTimeoutAction（Com_RxDataTimeoutActionType 参照）:
-             * NONE（既定）なら、値を書き込まず E_NOT_OK を返す
-             * （呼び出し元の初期値=安全値を使用、既存の既定動作）。
-             * SUBSTITUTE なら I-PDU バッファ/シャドウバッファは読まず、
-             * 設定済みの TimeoutSubstitutionValue を代わりに書き込んで
-             * E_OK を返す（実データが古いまま返ることを防ぐ）。
-             * REPLACE なら同様にバッファは読まず、InitValue を書き込んで
-             * E_OK を返す（[SWS_Com_00470]）。あわせて Com_RxLastValidValue[s]
-             * も InitValue で上書きする（同要求の "the last received value is
-             * overwritten and gets lost" のとおり、新しい値を受信するまで
-             * InitValue を返し続けさせるため）。 */
-            if (sig->RxDataTimeoutAction == COM_RX_TIMEOUT_ACTION_SUBSTITUTE)
-            {
-                Com_WriteSignalBytes(dataPtr, byteCount, sig->TimeoutSubstitutionValue);
-                return E_OK;
-            }
-            if (sig->RxDataTimeoutAction == COM_RX_TIMEOUT_ACTION_REPLACE)
-            {
-                Com_RxLastValidValue[s] = sig->InitValue;
-                Com_WriteSignalBytes(dataPtr, byteCount, sig->InitValue);
-                return E_OK;
-            }
-            return E_NOT_OK;
-        }
-
-        uint32 value = Com_UnpackSignal(
-            srcBuf,
-            sig->BitPosition, sig->BitSize, sig->Endian);
-
-        /* ComDataInvalidAction（Com_DataInvalidActionType 参照）: 受信値が
-         * InvalidValue と一致する場合の振る舞い。
-         * NOTIFY: 「シグナルオブジェクトへ格納しない」（SWS_Com_00717）。
-         * すなわち Com_RxLastValidValue[s] を更新せず、直近の有効値をそのまま
-         * 返す。通知コールバックの実呼び出しはここでは行わず、
-         * Com_RxInvalidNotifyPending[s] を立てるだけに留める（Com_MainFunctionRx()
-         * へディスパッチする理由は Com_RxInvalidNotifyPending の宣言コメント
-         * 参照）。
-         * REPLACE: 受信値を InitValue に置き換えたうえで、以降の
-         * フィルタ処理・格納処理へそのまま合流させる（[SWS_Com_00681]:
-         * "the normal signal processing like filtering and notification
-         * shall take place as if the ComSignalInitValue would have been
-         * received"。NOTIFY と異なり InvalidNotificationCbk は呼ばない）。 */
-        if (value == sig->InvalidValue)
-        {
-            if (sig->DataInvalidAction == COM_DATA_INVALID_ACTION_NOTIFY)
-            {
-                Com_RxInvalidNotifyPending[s] = 1U;
-
-                Com_WriteSignalBytes(dataPtr, byteCount, Com_RxLastValidValue[s]);
-                return Com_ServiceResult(started);
-            }
-            if (sig->DataInvalidAction == COM_DATA_INVALID_ACTION_REPLACE)
-            {
-                value = sig->InitValue;
-            }
-        }
-
-        /* RX ComFilterAlgorithm（Com_FilterAlgorithmType の用途 (3) 参照）:
-         * COM_FILTER_NEW_IS_WITHIN の場合、値が [FilterMin, FilterMax] の
-         * 範囲外ならフィルタ条件は偽となり、このシグナルを「破棄」する
-         * （SWS_Com_00273: 処理しない。SWS_Com_00303: old_value も更新しない）。
-         * DataInvalidAction と同じ Com_RxLastValidValue[s] を「直近の合格値」
-         * として使い回す（両者は同じ「格納しない」意味論のため、実質的に
-         * 同じ状態を指す。1 つのシグナルに両方を設定する構成は想定していない）。
-         * FilterRejectCbk の実呼び出しは Com_RxInvalidNotifyPending と同じ理由
-         * で次回 Com_MainFunctionRx() まで遅延する。 */
-        if (sig->FilterAlgorithm == COM_FILTER_NEW_IS_WITHIN
-            && (value < sig->FilterMin || value > sig->FilterMax))
-        {
-            Com_RxFilterRejectPending[s] = 1U;
-
-            Com_WriteSignalBytes(dataPtr, byteCount, Com_RxLastValidValue[s]);
-            return Com_ServiceResult(started);
-        }
-
-        Com_RxLastValidValue[s] = value;
-        Com_WriteSignalBytes(dataPtr, byteCount, value);
-        return Com_ServiceResult(started);
-    }
-
-    DET_LOGE(TAG, "ReceiveSignal E: sig=%u not found", (unsigned)SignalId);
-    Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_RECEIVE_SIGNAL, COM_E_PARAM);
-    return E_NOT_OK;
-}
-
-/**
- * \brief   RX Signal Group を I-PDU バッファから RX シャドウバッファへ確定コピーする。
- *
- * \details Com_SendSignalGroup()（TX 側）の対称版。SignalGroupId が RX Signal
- *          Group（IsSignalGroup=1）であれば、Com_RxBuffer[SignalGroupId] の
- *          内容を Com_RxShadowBuffer[SignalGroupId] へバイト単位でコピーし、
- *          あわせてその時点の Com_RxTimedOut[SignalGroupId] を
- *          Com_RxShadowTimedOut[SignalGroupId]
- *          へスナップショットする。以降 Com_ReceiveSignal() は、このグループに
- *          属するシグナルに対してこのスナップショットを読む（次に
- *          Com_ReceiveSignalGroup() が呼ばれるまで更新されない）。
- *
- *          コピー自体は、現在タイムアウト中かどうか・I-PDU Group が
- *          停止中かどうかに関わらず常に行う（[SWS_Com_00461]: I-PDU が
- *          停止/タイムアウト中でも既知の最新値をシャドウバッファへ反映
- *          すること）。タイムアウト軸は本実装では Com_ReceiveSignal() の
- *          非グループ経路と同じ簡略化（E_OK/E_NOT_OK の 2 値にまとめる）を
- *          踏襲し、ComSignalInitValue によるフォールバックといった細分化は
- *          行わない。一方 I-PDU Group 停止軸は、コピー時点で停止中なら
- *          update-bit/タイムアウト判定に関わらず COM_SERVICE_NOT_AVAILABLE
- *          を返す（2026-09-20 是正。この2軸は独立しており、後者は
- *          「値の取得」と「送受信タイミング」の分離という Com_SendSignal()
- *          側と同じ理由による）。
- *
- *          ComRxDataTimeoutAction=SUBSTITUTE（Com_RxDataTimeoutActionType 参照）
- *          との関係: このグループのメンバーに対する SUBSTITUTE 判定
- *          （SWS_Com_00876「...when the reception deadline monitoring timer
- *          of a signal group expires」）は、この関数が Com_RxTimedOut[GroupId]
- *          を読むこの瞬間にのみライブに評価される。この呼び出し以降、次に
- *          本関数が呼ばれるまでの間にタイムアウトが新規発生しても、
- *          Com_ReceiveSignal() はこの時点のスナップショット
- *          （Com_RxShadowTimedOut[GroupId]）しか見ないため、SUBSTITUTE は
- *          即座には反映されない。これは呼び出し側の都合ではなく、Signal
- *          Group が「Com_ReceiveSignal() はシャドウバッファのみを読む」
- *          という設計だからである。
- *
- *          update-bit（ipdu->UpdateBitPosition が 0xFF 以外の場合、
- *          SWS_Com_00324/00802）: I-PDU バッファ内のこのビットが 0（未更新）
- *          なら、確定コピー・タイムアウトスナップショット更新のいずれも
- *          行わずに戻る（SWS_Com_00802: "shall discard this signal/ signal
- *          group... It will only be discarded"）。1（更新済み、SWS_Com_00067）
- *          の場合のみ、以下の通常の確定コピー処理を行う。
- *
- * \param[in]  SignalGroupId  確定コピーする RX Signal Group の ID（所属する
- *                            RX I-PDU の ID と同じ、Com_Types.h 参照）。
- *
- * \retval  E_OK      SignalGroupId が見つかり、所属 I-PDU Group が起動中で、
- *                    コピー時点でタイムアウト中でなかった（または
- *                    update-bit=0 のため何もせず破棄した）。
- * \retval  COM_SERVICE_NOT_AVAILABLE 所属 I-PDU Group が停止中
- *                    （[SWS_Com_00461]/Table 3）。コピー自体は停止中でも
- *                    行う（update-bit=0 の場合を除く）。
- * \retval  E_NOT_OK  COM 未初期化、SignalGroupId が RX I-PDU 設定テーブルに
- *                    存在しない、IsSignalGroup=0 の I-PDU を指定した、
- *                    または（I-PDU Group が起動中で）コピーは行ったが
- *                    コピー時点でタイムアウト中だった。
- *
- * \pre        Com_Init() が正常に完了していること。
- *
- * \AUTOSARReq     {SWS_Com_00201, SWS_Com_00051, SWS_Com_00638, SWS_Com_00461,
- *                  SWS_Com_00876, SWS_Com_00324, SWS_Com_00802, SWS_Com_00067}
- * \ServiceID      {0x0e}
- * \Reentrancy     {Non Reentrant}
- * \Synchronicity  {Synchronous}
- */
-uint8 Com_ReceiveSignalGroup(Com_SignalGroupIdType SignalGroupId)
-{
-    DET_LOGT(TAG, "called");
-
-    if (Com_ConfigPtr == NULL)
-    {
-        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_RECEIVE_SIGNAL_GROUP, COM_E_UNINIT);
-        return E_NOT_OK;
-    }
-
-    /* 範囲チェック: SignalGroupId をそのまま Com_RxBuffer[] 等の配列添字として
-     * 使うため、RX I-PDU 設定テーブル自体に範囲外の IPduId が設定される
-     * 事態に備えて明示的に検査する（Com_ReceiveSignal/Com_SendSignalGroup と
-     * 同じ方針）。 */
-    if (SignalGroupId >= COM_RX_IPDU_MAX)
-    {
-        DET_LOGE(TAG, "ReceiveSignalGroup E: SignalGroupId=%u out of range (max=%u)",
-                 (unsigned)SignalGroupId, (unsigned)COM_RX_IPDU_MAX);
-        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_RECEIVE_SIGNAL_GROUP, COM_E_PARAM);
-        return E_NOT_OK;
-    }
-
-    const Com_IPduConfigType* ipdu = Com_FindRxIPdu(SignalGroupId);
-    if (ipdu == NULL || ipdu->IsSignalGroup == 0U)
-    {
-        DET_LOGE(TAG, "ReceiveSignalGroup E: SignalGroupId=%u not found or not a Signal Group",
-                 (unsigned)SignalGroupId);
-        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_RECEIVE_SIGNAL_GROUP, COM_E_PARAM);
-        return E_NOT_OK;
-    }
-
-    /* [SWS_Com_00461]/Table 3: Group 停止中は update-bit/タイムアウト状態に
-     * 関わらず COM_SERVICE_NOT_AVAILABLE を返すため、以降の全 return で使う。 */
-    const uint8 started = Com_RxIPduStarted[SignalGroupId];
-
-    /* update-bit（SWS_Com_00324/00802）: 設定されており、かつ 0（未更新）の
-     * 場合、受信データを破棄する。シャドウバッファ・タイムアウトスナップ
-     * ショットとも直近の状態のまま更新しない（＝前回 update-bit=1 で確定
-     * コピーした内容を Com_ReceiveSignal() が返し続ける）。 */
-    if (ipdu->UpdateBitPosition != 0xFFU)
-    {
-        const uint32 updateBit = Com_UnpackSignal(Com_RxBuffer[SignalGroupId],
-                                                    ipdu->UpdateBitPosition, 1U, COM_BIG_ENDIAN);
-        if (updateBit == 0U)
-            return Com_ServiceResult(started);
-    }
-
-    /* [SWS_Com_00461]: 停止中でも常にコピーする（「最後に受信した値」を
-     * シャドウバッファへ反映し続ける）。 */
-    for (uint8 b = 0U; b < ipdu->DLC; b++)
-        Com_RxShadowBuffer[SignalGroupId][b] = Com_RxBuffer[SignalGroupId][b];
-
-    Com_RxShadowTimedOut[SignalGroupId] = Com_RxTimedOut[SignalGroupId];
-
-    if (!started)
-        return COM_SERVICE_NOT_AVAILABLE;
-
-    return Com_RxShadowTimedOut[SignalGroupId] ? E_NOT_OK : E_OK;
-}
-
-/**
- * \brief   RX I-PDU の生バイト列をそのままコピーする。
- *
- * \details Com_ReceiveSignal() のようなビット単位アンパックを行わず、
- *          I-PDU バッファの内容を DataPtr へそのまま（先頭 DLC バイト分）
- *          コピーする。E2E Transformer（RxIndicationCbk 経由で呼ばれる
- *          InverseTransform 等）が、CRC/Counter 検証のために I-PDU 全体の
- *          バイト列を必要とする用途を想定している（実 AUTOSAR の
- *          Com_ReceiveSignalGroupArray に相当する簡略版）。
- *
- *          Com_ReceiveSignal() と異なり、Com_RxTimedOut は見ない
- *          （RxIndicationCbk はフレーム受信直後、タイムアウト判定より前に
- *          呼ばれるため、このコピー自体は常に「最新の受信データ」を指す）。
- *
- * \param[in]  SignalGroupId  読み取る Signal Group（RX I-PDU）の ID。本プロジェクトは
- *                            Signal Group を専用の ID 空間に持たず所属 I-PDU の ID を
- *                            そのまま使う簡略設計のため、Com_SignalGroupIdType は
- *                            Com_IPduIdType と同じ uint8 の別名（Com_Types.h 参照）。
- * \param[out] DataPtr        コピー先バッファへのポインタ。ipdu->DLC バイト以上
- *                            必要。NULL 禁止。
- *
- * \retval  E_OK      SignalGroupId が見つかり、所属 I-PDU Group が起動中で、
- *                    DataPtr へコピーした。
- * \retval  COM_SERVICE_NOT_AVAILABLE 所属 I-PDU Group が停止中
- *                    （[SWS_Com_00857]/Table 3）。コピー自体は停止中でも
- *                    行う。
- * \retval  E_NOT_OK  COM 未初期化、DataPtr が NULL、
- *                    または SignalGroupId が RX I-PDU 設定に存在しない。
- *
- * \pre        Com_Init() が正常に完了していること。
- *
- * \note    実仕様([SWS_Com_00854])は戻り値型 uint8・引数型 Com_SignalGroupIdType
- *          だが、以前は Com_SendSignalGroup/Com_ReceiveSignalGroup(PR#192で修正済み)
- *          と同じ乖離が残っていた。今回まとめて修正。
- * \AUTOSARReq     {SWS_Com_00854, SWS_Com_00857}
- * \ServiceID      {0x24}
- * \Reentrancy     {Reentrant}
- * \Synchronicity  {Synchronous}
- */
-uint8 Com_ReceiveSignalGroupArray(Com_SignalGroupIdType SignalGroupId, uint8* DataPtr)
-{
-    DET_LOGT(TAG, "called");
-
-    if (Com_ConfigPtr == NULL)
-    {
-        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_RECEIVE_SIGNAL_GROUP_ARRAY, COM_E_UNINIT);
-        return E_NOT_OK;
-    }
-    if (DataPtr == NULL)
-    {
-        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_RECEIVE_SIGNAL_GROUP_ARRAY, COM_E_PARAM_POINTER);
-        return E_NOT_OK;
-    }
-
-    const Com_IPduConfigType* ipdu = Com_FindRxIPdu(SignalGroupId);
-    if (ipdu == NULL)
-    {
-        DET_LOGE(TAG, "ReceiveSignalGroupArray E: SignalGroupId=%u not found", (unsigned)SignalGroupId);
-        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_RECEIVE_SIGNAL_GROUP_ARRAY, COM_E_PARAM);
-        return E_NOT_OK;
-    }
-
-    for (uint8 b = 0; b < ipdu->DLC; b++)
-        DataPtr[b] = Com_RxBuffer[SignalGroupId][b];
-
-    /* [SWS_Com_00857]/Table 3: I-PDU Group 停止中もコピーは行うが、
-     * 戻り値は COM_SERVICE_NOT_AVAILABLE にする。 */
-    return Com_ServiceResult(Com_RxIPduStarted[SignalGroupId]);
-}
-
-/**
- * \brief   RX I-PDU が現在タイムアウト中かどうかを返す。
- *
- * \details Com_RxTimedOut[IPduId] をそのまま返す軽量アクセサ。
- *          Rte 層が Com_ReceiveSignal() を介さずに、E_NOT_OK 判定の
- *          ゲートとして直接参照する用途を想定している
- *          （E2E Transformer 方式では Rte がミラーから値を読むため、
- *          Com_ReceiveSignal() のタイムアウトチェックを経由しない）。
- *
- * \param[in]  IPduId  確認する RX I-PDU の ID。
- *
- * \retval  1  タイムアウト中（IPduId が範囲外の場合も安全側でこちらを返す）。
- * \retval  0  タイムアウトしていない（正常受信中）。
- *
- * \pre        Com_Init() が正常に完了していること。
- *
- * \note    本プロジェクト独自 API（実 AUTOSAR に対応関数なし）のため、
- *          ServiceID は Dcm_ComIndication 等と同じ非標準値 0xF0 を踏襲する
- *          （Com_Cfg.h 参照）。
- * \ServiceID      {0xF0}
- * \Reentrancy     {Reentrant}
- * \Synchronicity  {Synchronous}
- */
-uint8 Com_IsRxTimedOut(Com_IPduIdType IPduId)
-{
-    DET_LOGT(TAG, "called");
-
-    if (IPduId >= COM_RX_IPDU_MAX)
-    {
-        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_IS_RX_TIMED_OUT, COM_E_PARAM);
-        return 1U;
-    }
-    return Com_RxTimedOut[IPduId];
-}
-
-/**
- * \brief   TX I-PDU バッファへシグナル値をパックする。
- *
- * \details シグナル設定テーブルの SignalId に一致するエントリを検索し、
- *          ビット位置・サイズ・エンディアンに従って内部 TX バッファへ
- *          パックする。SignalDataPtr から 4 バイトのリトルエンディアン整数として
- *          値を読み取り、BitSize に関係なく該当ビットのみ書き換える。
- *          送信要否・タイミングの判断は本関数内で完結する
- *          （ComFilterAlgorithm 通過時、DIRECT/MIXED I-PDU なら即座に
- *          送信する。呼び出し元が別途送信をトリガする必要はない）。
- *
- * \param[in]  SignalId      書き込むシグナルの ID。
- *                           シグナル設定テーブルのエントリと一致すること。
- * \param[in]  SignalDataPtr シグナル値へのポインタ。4 バイト以上で
- *                           リトルエンディアン順。NULL 禁止。
- *
- * \retval  E_OK                      シグナルが見つかり、所属 I-PDU の
- *                                    I-PDU Group が起動中で、TX バッファへ
- *                                    値をパックした。
- * \retval  COM_SERVICE_NOT_AVAILABLE 所属 I-PDU の I-PDU Group が停止中
- *                                    （[SWS_Com_00334]、詳細は下記
- *                                    \AUTOSARReq 直前の説明参照）。バッファ
- *                                    更新自体は停止中でも行う。
- * \retval  E_NOT_OK                  COM 未初期化、SignalDataPtr が NULL、
- *                                    またはシグナル設定テーブルに SignalId
- *                                    が存在しない。
- *
- * \details ComFilterAlgorithm:
- *          値をバッファへパックした後、シグナルの FilterAlgorithm を評価する。
- *          COM_FILTER_ALWAYS なら常に、COM_FILTER_MASKED_NEW_DIFFERS_MASKED_OLD
- *          なら (新値 & Mask) が前回のフィルタ比較値と異なる場合のみ、
- *          「送信すべき変化あり」とみなして Com_RequestTxOnChange() を呼ぶ
- *          （TxModeMode が DIRECT/MIXED の I-PDU なら次回 Com_MainFunctionTx()
- *          で送信される。本関数自体は PduR_ComTransmit() を呼ばない）。これとは
- *          独立に、Com_RecalcTms() が TMS の遷移を検出した場合も
- *          ComFilterAlgorithm の判定結果によらず Com_RequestTxOnChange() を
- *          呼ぶ（SWS_Com_00495。非 Signal Group のシグナルに TmsContributor=1
- *          を設定した場合に備える。現状の設定ではこの経路は通らない）。
- *
- *          Signal Group（詳細は Com_SendSignalGroup() の \AUTOSARReq 参照）:
- *          所属する I-PDU が IsSignalGroup=1 の場合、値は実 TX バッファ
- *          (Com_TxBuffer) ではなくシャドウバッファ (Com_TxShadowBuffer) へ
- *          パックするのみとし、ComFilterAlgorithm の判定も行わない
- *          （Signal Group メンバーの送信要否は ComFilterAlgorithm ではなく
- *          ComTransferProperty が決める。Com_TransferPropertyType 参照）。
- *          Com_SendSignalGroup() が呼ばれるまで実バッファへは反映されない
- *          （グループの複数メンバーを不整合な状態で送信しないため）。
- *
- * \pre        Com_Init() が正常に完了していること。
- * \note       戻り値型は仕様に従い uint8。E_OK / E_NOT_OK の値（0x00 / 0x01）は
- *             RTE が使う Std_ReturnType と互換性がある。COM_SERVICE_NOT_AVAILABLE
- *             （0x80）は Com 独自の拡張値（Com.h 参照）。I-PDU Group 停止中
- *             （Com_IpduGroupStop() 参照）は [SWS_Com_00334]/Table 3 のとおり
- *             バッファ更新・TMS/フィルタ評価は変わらず行うが本値を返す
- *             （値のセットと送信タイミングは独立した責務のため）。
- *
- * \AUTOSARReq     {SWS_Com_00197, SWS_Com_00742, SWS_Com_00743, SWS_Com_00061,
- *                  SWS_Com_00495, SWS_Com_00334}
- * \ServiceID      {0x0A}
- * \Reentrancy     {Reentrant}
- * \Synchronicity  {Synchronous}
- */
-uint8 Com_SendSignal(Com_SignalIdType SignalId, const void* SignalDataPtr)
-{
-    DET_LOGT(TAG, "called");
-
-    if (Com_ConfigPtr == NULL)
-    {
-        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_SEND_SIGNAL, COM_E_UNINIT);
-        return E_NOT_OK;
-    }
-    if (SignalDataPtr == NULL)
-    {
-        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_SEND_SIGNAL, COM_E_PARAM_POINTER);
-        return E_NOT_OK;
-    }
-
-    const uint8* dataPtr = (const uint8*)SignalDataPtr;
-
-    const uint8 s = Com_FindSignalIndex(SignalId);
-    if (s < Com_ConfigPtr->SignalCount)
-    {
-        const Com_SignalConfigType* sig = &Com_ConfigPtr->Signals[s];
-
-        /* 範囲チェック + 登録確認: sig->IPduId をそのまま Com_TxBuffer[] 等の
-         * 配列添字として使う前に、(1) 配列範囲内であること、
-         * (2) TX I-PDU 設定テーブルに実際に登録された IPduId であることを
-         * 確認する。Com_FindTxIPdu() が NULL を返す（設定ミスで存在しない
-         * I-PDU を指している）場合に以前は判定を素通りしてしまい、範囲外の
-         * IPduId であれば隣接するグローバル変数を破壊するバッファオーバーラン
-         * になり得た。 */
-        if (sig->IPduId >= COM_TX_IPDU_MAX)
-        {
-            DET_LOGE(TAG, "SendSignal E: sig=%u IPduId=%u out of range (max=%u)",
-                     (unsigned)SignalId, (unsigned)sig->IPduId, (unsigned)COM_TX_IPDU_MAX);
-            Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_SEND_SIGNAL, COM_E_PARAM);
-            return E_NOT_OK;
-        }
-
-        const Com_IPduConfigType* ipdu = Com_FindTxIPdu(sig->IPduId);
-        if (ipdu == NULL)
-        {
-            DET_LOGE(TAG, "SendSignal E: sig=%u IPduId=%u not a registered TX I-PDU",
-                     (unsigned)SignalId, (unsigned)sig->IPduId);
-            Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_SEND_SIGNAL, COM_E_PARAM);
-            return E_NOT_OK;
-        }
-
-        /* SignalDataPtr は呼び出し元が BitSize に応じた幅の変数
-         * (uint8/uint16/uint32) を渡す。常に 4 バイト読み込むと、
-         * 8bit/16bit の呼び出し元ではスタック上の隣接領域を読んでしまう。
-         * BitSize から必要バイト数だけを読み込む。 */
-        const uint8 byteCount = (uint8)((sig->BitSize + 7U) / 8U);
-        uint32 value = 0U;
-        for (uint8 b = 0U; b < byteCount; b++)
-        {
-            value |= ((uint32)dataPtr[b]) << (8U * b);
-        }
-
-        if (ipdu->IsSignalGroup != 0U)
-        {
-            /* Signal Group メンバー: シャドウバッファへ書き込むのみ。
-             * 実バッファへの反映は Com_SendSignalGroup() が行う。
-             *
-             * ComTransferProperty（SWS_Com_00742/00743、Com_TransferPropertyType
-             * 参照）: TRIGGERED_ON_CHANGE のメンバーのみ、前回値との比較で
-             * このグループの送信を引き起こすかどうかを判定する。この比較は
-             * ComFilterAlgorithm/Mask/FilterX とは独立しており、マスクなしの
-             * 生値同士を比較する（TmsContributor=1 として同じシグナルが
-             * COM_FILTER_MASKED_NEW_DIFFERS_X を TMS 評価に使っていても競合
-             * しない。TMS 再評価は Com_SendSignalGroup() 側で行う）。
-             * PENDING のメンバーは Com_GroupTriggerPending へ一切書き込まない
-             * （＝自身の変化だけでは送信を引き起こさない。SWS_Com_00743）。 */
-            if (sig->TransferProperty == COM_TRANSFER_PROPERTY_TRIGGERED_ON_CHANGE
-                && value != Com_FilterLastValue[s])
-            {
-                Com_GroupTriggerPending[sig->IPduId] = 1U;
-            }
-            Com_FilterLastValue[s] = value;
-
-            Com_PackSignal(Com_TxShadowBuffer[sig->IPduId],
-                           sig->BitPosition, sig->BitSize, sig->Endian, value);
-            /* [SWS_Com_00334]/Table 3: I-PDU Group 停止中もバッファ更新は
-             * 続けるが、戻り値は COM_SERVICE_NOT_AVAILABLE にする。 */
-            return Com_ServiceResult(Com_TxIPduStarted[sig->IPduId]);
-        }
-
-        Com_PackSignal(Com_TxBuffer[sig->IPduId],
-                       sig->BitPosition, sig->BitSize, sig->Endian, value);
-
-        /* TMS 再評価（SWS_Com_00245）。Com_SendSignalGroup() と同様、実バッファへの
-         * 反映後・Com_RequestTxOnChange() 呼び出し前に行う（Com_RequestTxOnChange()
-         * が Com_EffectiveTxModeMode() 経由で Com_TmsState を参照するため）。
-         * 現状 TmsContributor=1 を設定しているシグナルは Signal Group
-         * （WarningStatus）にしか存在しないためこの呼び出しがなくても実害はないが、
-         * 非 Signal Group のシグナルに TmsContributor=1 を設定した場合に備える。
-         * 戻り値（TMS が今回変化したか）は下記 SWS_Com_00495 対応で使う。 */
-        const uint8 tmsChanged = Com_RecalcTms(sig->IPduId);
-
-        /* ComFilterAlgorithm 評価: 送信すべき更新かどうかは Com 自身が判断する
-         * (ASW は値をセットするだけで、送信要否には関与しない) */
-        uint8 passesFilter = 1U;
-        if (sig->FilterAlgorithm == COM_FILTER_MASKED_NEW_DIFFERS_MASKED_OLD)
-        {
-            passesFilter = ((value & sig->Mask) != (Com_FilterLastValue[s] & sig->Mask)) ? 1U : 0U;
-        }
-        Com_FilterLastValue[s] = value;
-
-        /* SWS_Com_00495: TMS の遷移によって送信モードが切り替わった場合は、
-         * この変化を起こしたシグナルの ComFilterAlgorithm 判定によらず無条件に
-         * 即座に送信しなければならない。passesFilter とは独立の判断軸として
-         * OR で合成する（詳細は Com_RecalcTms() のドキュメント参照）。 */
-        if (passesFilter || tmsChanged)
-        {
-            Com_RequestTxOnChange(ipdu);
-        }
-
-        /* update-bit セット（SWS_Com_00061 相当）。仕様原文は「Com_SendSignal
-         * が呼ばれるたびに無条件でセットする」だが、本プロジェクトの ASW は
-         * 毎サイクル無条件に Com_SendSignal() を呼び、「値が実際に変化したか」
-         * の判定は Com の ComFilterAlgorithm に委ねる設計（README「責務分離の
-         * 効果」参照）。そのため文字どおり無条件にセットすると、次の実送信
-         * （周期フロア含む）までの間に必ず ASW が再度 Com_SendSignal() を
-         * 呼んでビットを再セットしてしまい、update-bit が常に 1 のまま
-         * 「実際に変化したか」を一切表せなくなる（2026-07 時点で実機確認済み
-         * の不具合）。そこで本実装は、このシグナルの送信要否判定
-         * （passesFilter、Com_RequestTxOnChange() と同じ判断軸）に合わせて
-         * セットする。ASW 側の「常に書き込む」設計を変えずに、update-bit
-         * 本来の目的（このシグナルが実際に更新されたかどうかを示す）を
-         * 満たすための、本プロジェクト固有の解釈である。TMS 遷移のみによる
-         * 即時送信（tmsChanged）はこのシグナル自体の値更新を意味しないため、
-         * update-bit の条件には含めない（passesFilter のみで判定する）。 */
-        /* UpdateBitContributor（Com_Types.h 参照）: I-PDU に複数の非 Signal
-         * Group TX シグナルが同居する場合、update-bit を「このシグナルの
-         * 変化」専用に保つため、寄与するシグナルのみに絞る（TmsContributor
-         * と同じパターン。2026-08 コードレビューで、MeterStatus に
-         * EngineSpeed/RunLamp 等のミラーシグナルを追加した際、それらの
-         * 変化だけで EngineState 用の update-bit が誤って立つ不具合が
-         * 見つかり対応した）。 */
-        if (passesFilter && ipdu->UpdateBitPosition != 0xFFU && sig->UpdateBitContributor == 1U)
-            Com_PackSignal(Com_TxBuffer[sig->IPduId], ipdu->UpdateBitPosition, 1U, COM_BIG_ENDIAN, 1U);
-
-        /* [SWS_Com_00334]/Table 3: I-PDU Group 停止中もバッファ更新・TMS/
-         * フィルタ評価は続けるが、戻り値は COM_SERVICE_NOT_AVAILABLE にする。 */
-        return Com_ServiceResult(Com_TxIPduStarted[sig->IPduId]);
-    }
-
-    DET_LOGE(TAG, "SendSignal E: sig=%u not found", (unsigned)SignalId);
-    Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_SEND_SIGNAL, COM_E_PARAM);
-    return E_NOT_OK;
-}
-
-/**
- * \brief   Signal Group メンバーをシャドウバッファから実 TX バッファへ確定コミットする。
- *
- * \details Com_SendSignal() が Signal Group（IsSignalGroup=1）のメンバーを
- *          書き込んだシャドウバッファ (Com_TxShadowBuffer) を、実 TX バッファ
- *          (Com_TxBuffer) へまとめてコピーする（PENDING/TRIGGERED_ON_CHANGE
- *          いずれのメンバーの値も分け隔てなくコピーする）。
- *          送信を引き起こすかどうかは、バイト単位の変化比較ではなく
- *          Com_GroupTriggerPending[GroupId]（ComTransferProperty=
- *          TRIGGERED_ON_CHANGE のメンバーが Com_SendSignal() 内で変化検知した
- *          際に立てるフラグ。Com_TransferPropertyType 参照）で判定する。
- *          立っていれば Com_RequestTxOnChange() を呼ぶ（TxModeMode が
- *          DIRECT/MIXED の I-PDU なら次回 Com_MainFunctionTx() で送信される）。
- *          これとは独立に、Com_RecalcTms() が TMS（Transmission Mode
- *          Selector）の遷移（true⇔false）を検出した場合も、
- *          Com_GroupTriggerPending の状態によらず Com_RequestTxOnChange() を
- *          呼ぶ（SWS_Com_00495: TMS 遷移によるモード切り替えは、それを
- *          起こしたシグナルの ComTransferProperty によらず無条件に即座に
- *          送信しなければならない）。
- *
- *          update-bit（IPduId->UpdateBitPosition が 0xFF 以外の場合、
- *          SWS_Com_00801）: 呼ばれるたびに無条件でこのビットをセットする
- *          （値が実際に変化したかどうかは問わない。Com_GroupTriggerPending
- *          とは独立の判断軸）。クリアは Com_DoTransmit() 側で行う。
- *
- * \param[in]  SignalGroupId  コミットする Signal Group の ID（所属する TX
- *                            I-PDU の ID と同じ、Com_Types.h 参照）。
- *
- * \retval  E_OK                      SignalGroupId が見つかり、所属 I-PDU
- *                                    Group が起動中で、コミット処理を行った。
- * \retval  COM_SERVICE_NOT_AVAILABLE 所属 I-PDU Group が停止中
- *                                    （[SWS_Com_00334]/Table 3）。コミット・
- *                                    TMS 評価自体は停止中でも行う。
- * \retval  E_NOT_OK                  COM 未初期化、SignalGroupId が TX I-PDU
- *                                    設定テーブルに存在しない、または
- *                                    IsSignalGroup=0 の I-PDU を指定した。
- *
- * \pre        Com_Init() が正常に完了していること。
- * \pre        コミット前に、このグループに属する全メンバーを
- *             Com_SendSignal() で設定しておくこと。
- *
- * \AUTOSARReq     {SWS_Com_00200, SWS_Com_00050, SWS_Com_00742, SWS_Com_00743,
- *                  SWS_Com_00801, SWS_Com_00055, SWS_Com_00495, SWS_Com_00334}
- * \ServiceID      {0x0d}
- * \Reentrancy     {Non Reentrant}
- * \Synchronicity  {Synchronous}
- */
-uint8 Com_SendSignalGroup(Com_SignalGroupIdType SignalGroupId)
-{
-    DET_LOGT(TAG, "called");
-
-    if (Com_ConfigPtr == NULL)
-    {
-        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_SEND_SIGNAL_GROUP, COM_E_UNINIT);
-        return E_NOT_OK;
-    }
-
-    /* 範囲チェック: SignalGroupId をそのまま Com_TxBuffer[] 等の配列添字として
-     * 使うため、TX I-PDU 設定テーブル自体に範囲外の IPduId が設定される
-     * 事態に備えて明示的に検査する（Com_ReceiveSignal/Com_SendSignal と
-     * 同じ方針）。 */
-    if (SignalGroupId >= COM_TX_IPDU_MAX)
-    {
-        DET_LOGE(TAG, "SendSignalGroup E: SignalGroupId=%u out of range (max=%u)",
-                 (unsigned)SignalGroupId, (unsigned)COM_TX_IPDU_MAX);
-        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_SEND_SIGNAL_GROUP, COM_E_PARAM);
-        return E_NOT_OK;
-    }
-
-    const Com_IPduConfigType* ipdu = Com_FindTxIPdu(SignalGroupId);
-    if (ipdu == NULL || ipdu->IsSignalGroup == 0U)
-    {
-        DET_LOGE(TAG, "SendSignalGroup E: SignalGroupId=%u not found or not a Signal Group",
-                 (unsigned)SignalGroupId);
-        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_SEND_SIGNAL_GROUP, COM_E_PARAM);
-        return E_NOT_OK;
-    }
-
-    /* PENDING/TRIGGERED_ON_CHANGE を問わず、シャドウバッファの値はすべて
-     * 実バッファへコピーする（SWS_Com_00743: PENDING メンバーも、他の
-     * メンバーが引き起こした送信に便乗して最新値が運ばれる）。 */
-    for (uint8 b = 0U; b < ipdu->DLC; b++)
-    {
-        Com_TxBuffer[SignalGroupId][b] = Com_TxShadowBuffer[SignalGroupId][b];
-    }
-
-    /* TMS 再評価（SWS_Com_00245）。Com_RequestTxOnChange() が
-     * Com_EffectiveTxModeMode() 経由で Com_TmsState を参照するため、
-     * その呼び出しより前に確定させる。TMS 寄与シグナルが PENDING の場合、
-     * 「送信は引き起こさないが TMS だけは変化する」こともあり得るが、
-     * これは仕様上の矛盾ではない（TMS は「次に送信するときどのモードを
-     * 使うか」を決めるだけで、それ自体が送信のトリガーではないため）。
-     * 戻り値（TMS が今回変化したか）は下記 SWS_Com_00495 対応で使う。 */
-    const uint8 tmsChanged = Com_RecalcTms(SignalGroupId);
-
-    /* 送信を引き起こすかどうかは、ComTransferProperty=TRIGGERED_ON_CHANGE の
-     * メンバーが Com_SendSignal() 内で変化検知して立てたフラグのみで判定する
-     * （バイト単位の生比較はしない。PENDING メンバーだけが変化した場合は
-     * このフラグは立たず、コミットはされても送信は引き起こされない）。 */
-    const uint8 groupTriggered = Com_GroupTriggerPending[SignalGroupId];
-    Com_GroupTriggerPending[SignalGroupId] = 0U;
-
-    /* SWS_Com_00495: TMS の遷移によって送信モードが切り替わった場合は、
-     * その変化を起こしたシグナルの ComTransferProperty（TRIGGERED_ON_CHANGE/
-     * PENDING）によらず無条件に即座に送信しなければならない。groupTriggered
-     * （通常のトリガー）とは独立の判断軸として OR で合成する。これにより、
-     * TMS 寄与シグナルが PENDING のみで構成される場合でも（groupTriggered が
-     * 立たないため）TMS 遷移そのものが確実に送信を引き起こすようになる
-     * （詳細は Com_RecalcTms() のドキュメント参照）。 */
-    if (groupTriggered || tmsChanged)
-    {
-        Com_RequestTxOnChange(ipdu);
-    }
-
-    /* update-bit セット（SWS_Com_00801 相当）。仕様原文は「
-     * Com_SendSignalGroup が呼ばれるたびに無条件でセットする」だが、
-     * MeterStatus/EngineState（Com_SendSignal 側）で実機確認済みの
-     * 不具合と同じ理由により、本実装では Com_GroupTriggerPending
-     * （＝ TRIGGERED_ON_CHANGE メンバーが実際に変化したかどうか、
-     * Com_RequestTxOnChange() を呼ぶかどうかと同じ判断軸）に条件づける。
-     * App_WarningIndicator_Run() は毎サイクル無条件に
-     * Rte_SendSignalGroup_WarningStatus()（→本関数）を呼ぶ設計（ASW は
-     * 値を書くだけ、Com が送信要否を判断する責務分離。README「責務分離
-     * の効果」参照）のため、無条件セットのままだと次の実送信までの間に
-     * 必ず ASW が本関数を再度呼んでビットを再セットしてしまい、
-     * update-bit が常に 1 のままになる。詳細は Com_SendSignal() の
-     * 同種コメント・README「Update Bit」節参照。TMS 遷移のみによる即時送信
-     * （tmsChanged）はグループメンバーの値更新を意味しないため、update-bit
-     * の条件には含めない（groupTriggered のみで判定する）。 */
-    if (groupTriggered && ipdu->UpdateBitPosition != 0xFFU)
-    {
-        Com_PackSignal(Com_TxBuffer[SignalGroupId], ipdu->UpdateBitPosition, 1U, COM_BIG_ENDIAN, 1U);
-    }
-
-    /* [SWS_Com_00334]/Table 3: I-PDU Group 停止中もコミット・TMS 評価は
-     * 続けるが、戻り値は COM_SERVICE_NOT_AVAILABLE にする。 */
-    return Com_ServiceResult(Com_TxIPduStarted[SignalGroupId]);
-}
-
-/**
- * \brief   TX I-PDU へ生バイト列をそのままコミットする（Signal Group 単位）。
- *
- * \details Com_SendSignal() を1本ずつ呼んでシャドウバッファ (Com_TxShadowBuffer)
- *          へ書き込み、Com_SendSignalGroup() でまとめてコミットする通常経路の
- *          代わりに、I-PDU 全体のバイト列を1回で TX バッファ (Com_TxBuffer) へ
- *          直接書き込む（実 AUTOSAR の Com_SendSignalGroupArray に相当する
- *          簡略版。Com_ReceiveSignalGroupArray と対称——あちらは I-PDU から
- *          呼び出し元へ、こちらは呼び出し元から I-PDU への一括コピー）。
- *
- *          Com_SendSignalGroup() と異なりシャドウバッファへの書き込みは
- *          経由しないが、以降に通常経路（Com_SendSignal()+
- *          Com_SendSignalGroup()）と混在して使われた場合に古い状態で
- *          上書きされないよう、シャドウバッファ・Com_GroupTriggerPending・
- *          各メンバーの変化検知ベースライン（Com_FilterLastValue）は
- *          いずれも今回の書き込み内容に同期する（/code-review で
- *          指摘: 同期しないと、後で Com_SendSignalGroup() が呼ばれた際に
- *          古いシャドウバッファ内容で今回のコミットを黙って巻き戻す、
- *          または古い Com_GroupTriggerPending が残ったまま次回変化なしで
- *          誤発火する、といった状態不整合が起こり得た）。
- *          TMS 再評価（Com_RecalcTms()）は Com_TxBuffer から直接読むため、
- *          この直接書き込みでも正しく動作する（Com.c 該当関数参照）。
- *
- *          個々のシグナル単位の変化検知（Com_GroupTriggerPending、
- *          ComTransferProperty=TRIGGERED_ON_CHANGE のメンバーが
- *          Com_SendSignal() 内で検知するもの）を経由しないため、本関数は
- *          呼ばれるたびに常に「新しいデータがある」ものとして扱い、無条件で
- *          送信要求（Com_RequestTxOnChange()）・update-bit セットを行う
- *          （[SWS_Com_00801] 原文どおり「呼ばれるたびに無条件でセットする」
- *          という素直な実装。Com_SendSignal()/Com_SendSignalGroup() 側で
- *          これを Com_GroupTriggerPending に条件づけているのは、ASW が
- *          毎サイクル無条件に呼ぶ既存の呼び出しパターン（App_WarningIndicator_Run
- *          等）に合わせた対策であり、本関数は呼び出し側が明示的に「新しい
- *          データがある」ときのみ呼ぶ想定の別 API のため、その対策は不要）。
- *
- * \param[in]  SignalGroupId  コミットする Signal Group（TX I-PDU）の ID。本プロジェクトは
- *                            Signal Group を専用の ID 空間に持たず所属 I-PDU の ID を
- *                            そのまま使う簡略設計のため、Com_SignalGroupIdType は
- *                            Com_IPduIdType と同じ uint8 の別名（Com_Types.h 参照）。
- * \param[in]  DataPtr        書き込む生バイト列。ipdu->DLC バイト以上必要。NULL 禁止。
- *
- * \retval  E_OK                      SignalGroupId が見つかり、所属 I-PDU
- *                                    Group が起動中で、書き込み・コミット
- *                                    処理を行った。
- * \retval  COM_SERVICE_NOT_AVAILABLE 所属 I-PDU Group が停止中
- *                                    （[SWS_Com_00334]/Table 3）。書き込み・
- *                                    コミット自体は停止中でも行う。
- * \retval  E_NOT_OK                  COM 未初期化、DataPtr が NULL、
- *                                    SignalGroupId が TX I-PDU 設定テーブルに
- *                                    存在しない、または IsSignalGroup=0 の
- *                                    I-PDU を指定した。
- *
- * \pre        Com_Init() が正常に完了していること。
- *
- * \note    実仕様([SWS_Com_00851])は戻り値型 uint8・引数型 Com_SignalGroupIdType
- *          だが、以前は Com_SendSignalGroup/Com_ReceiveSignalGroup(PR#192で修正済み)
- *          と同じ乖離が残っていた。今回まとめて修正。
- * \AUTOSARReq     {SWS_Com_00851, SWS_Com_00852, SWS_Com_00853, SWS_Com_00334}
- * \ServiceID      {0x23}
- * \Reentrancy     {Non Reentrant for the same signal group. Reentrant for
- *                  different signal groups.}
- * \Synchronicity  {Asynchronous}
- */
-uint8 Com_SendSignalGroupArray(Com_SignalGroupIdType SignalGroupId, const uint8* DataPtr)
-{
-    DET_LOGT(TAG, "called");
-
-    if (Com_ConfigPtr == NULL)
-    {
-        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_SEND_SIGNAL_GROUP_ARRAY, COM_E_UNINIT);
-        return E_NOT_OK;
-    }
-    if (DataPtr == NULL)
-    {
-        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_SEND_SIGNAL_GROUP_ARRAY, COM_E_PARAM_POINTER);
-        return E_NOT_OK;
-    }
-
-    /* 範囲チェック: SignalGroupId をそのまま Com_TxBuffer[] 等の配列添字として
-     * 使うため、TX I-PDU 設定テーブル自体に範囲外の IPduId が設定される事態に
-     * 備えて明示的に検査する（Com_SendSignalGroup() と同じ方針）。 */
-    if (SignalGroupId >= COM_TX_IPDU_MAX)
-    {
-        DET_LOGE(TAG, "SendSignalGroupArray E: SignalGroupId=%u out of range (max=%u)",
-                 (unsigned)SignalGroupId, (unsigned)COM_TX_IPDU_MAX);
-        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_SEND_SIGNAL_GROUP_ARRAY, COM_E_PARAM);
-        return E_NOT_OK;
-    }
-
-    const Com_IPduConfigType* ipdu = Com_FindTxIPdu(SignalGroupId);
-    if (ipdu == NULL || ipdu->IsSignalGroup == 0U)
-    {
-        DET_LOGE(TAG, "SendSignalGroupArray E: SignalGroupId=%u not found or not a Signal Group",
-                 (unsigned)SignalGroupId);
-        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_SEND_SIGNAL_GROUP_ARRAY, COM_E_PARAM);
-        return E_NOT_OK;
-    }
-
-    /* シャドウバッファ・保留フラグ・変化検知ベースラインの同期理由は
-     * 上の \details 参照。 */
-    for (uint8 b = 0U; b < ipdu->DLC; b++)
-    {
-        Com_TxBuffer[SignalGroupId][b]       = DataPtr[b];
-        Com_TxShadowBuffer[SignalGroupId][b] = DataPtr[b];
-    }
-
-    Com_GroupTriggerPending[SignalGroupId] = 0U;
-
-    for (uint8 s = 0U; s < Com_ConfigPtr->SignalCount; s++)
-    {
-        const Com_SignalConfigType* sig = &Com_ConfigPtr->Signals[s];
-        if (sig->Direction == COM_SIGNAL_DIRECTION_TX && sig->IPduId == SignalGroupId)
-        {
-            Com_FilterLastValue[s] = Com_UnpackSignal(Com_TxBuffer[SignalGroupId],
-                                                        sig->BitPosition, sig->BitSize, sig->Endian);
-        }
-    }
-
-    /* TMS 再評価（SWS_Com_00245、本関数でも正しく動く理由は上の \details
-     * 参照）。戻り値（TMS が今回変化したか）は使わない: 本関数は常に無条件で
-     * 送信要求するため、TMS 遷移かどうかで分岐する必要がない
-     * （SWS_Com_00495 が要求する「TMS 遷移は無条件で即座に送信」も、
-     * この無条件送信要求に自然に含まれる）。 */
-    (void)Com_RecalcTms(SignalGroupId);
-    Com_RequestTxOnChange(ipdu);
-
-    if (ipdu->UpdateBitPosition != 0xFFU)
-    {
-        Com_PackSignal(Com_TxBuffer[SignalGroupId], ipdu->UpdateBitPosition, 1U, COM_BIG_ENDIAN, 1U);
-    }
-
-    /* [SWS_Com_00334]/Table 3: I-PDU Group 停止中もコミット・TMS 評価は
-     * 続けるが、戻り値は COM_SERVICE_NOT_AVAILABLE にする。 */
-    return Com_ServiceResult(Com_TxIPduStarted[SignalGroupId]);
-}
-
-/**
- * \brief   シグナルを、設定済みの ComSignalDataInvalidValue で無効化する。
- *
- * \details [SWS_Com_00099]/[SWS_Com_00642]: 内部的に Com_SendSignal() を
- *          InvalidValue で呼ぶだけであり、独自の送信ロジックは持たない。
- *          SignalId が Signal Group メンバーであっても Com_SendSignal()
- *          自身がシャドウバッファへの書き込みに正しく分岐するため
- *          （7.4.2 章）、本関数側で Signal Group か否かを判定する必要はない。
- *
- *          [SWS_Com_00643]: ComSignalDataInvalidValue が未設定
- *          （Com_SignalConfigType.InvalidValueConfigured=0）の場合は
- *          COM_SERVICE_NOT_AVAILABLE を返す。この条件は仕様上
- *          「開発エラーによる失敗」とは別区分のため、Det_ReportError() は
- *          呼ばない（DET ログのみ）。
- *
- *          I-PDU Group 停止中: 内部で委譲する Com_SendSignal() が
- *          [SWS_Com_00334]/Table 3 に従い COM_SERVICE_NOT_AVAILABLE を
- *          返すため、本関数もそのまま伝播する。
- *
- * \param[in]  SignalId  無効化する TX シグナルの ID。
- *
- * \retval  E_OK                      SignalId が見つかり、InvalidValue が
- *                                    設定済みで、Com_SendSignal() が成功した。
- * \retval  COM_SERVICE_NOT_AVAILABLE ComSignalDataInvalidValue が未設定
- *                                    （[SWS_Com_00643]）、または所属 I-PDU
- *                                    Group が停止中（Com_SendSignal() から
- *                                    伝播）。
- * \retval  E_NOT_OK                  COM 未初期化、SignalId が存在しない、
- *                                    または SignalId が TX シグナルでない。
- *
- * \AUTOSARReq     {SWS_Com_00099, SWS_Com_00642, SWS_Com_00643, SWS_Com_00334}
- * \ServiceID      {0x10}
- * \Reentrancy     {Non Reentrant for the same signal. Reentrant for different signals.}
- * \Synchronicity  {Asynchronous}
- */
-uint8 Com_InvalidateSignal(Com_SignalIdType SignalId)
-{
-    DET_LOGT(TAG, "called");
-
-    if (Com_ConfigPtr == NULL)
-    {
-        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_INVALIDATE_SIGNAL, COM_E_UNINIT);
-        return E_NOT_OK;
-    }
-
-    const uint8 s = Com_FindSignalIndex(SignalId);
-    if (s >= Com_ConfigPtr->SignalCount)
-    {
-        /* 未知の SignalId。下の InvalidValueConfigured 確認のためにここで
-         * シグナルを解決する必要があり、Com_SendSignal() 側の同種チェックを
-         * 先取りする形になる（DET 報告の内容は Com_SendSignal() と同じ）。 */
-        DET_LOGE(TAG, "InvalidateSignal E: sig=%u not found", (unsigned)SignalId);
-        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_INVALIDATE_SIGNAL, COM_E_PARAM);
-        return E_NOT_OK;
-    }
-
-    const Com_SignalConfigType* sig = &Com_ConfigPtr->Signals[s];
-    if (sig->Direction != COM_SIGNAL_DIRECTION_TX)
-    {
-        /* RX/TX の IPduId は別々の配列だが同じ数値空間を共有するため
-         * （Com_FindTxIPdu() は数値が一致する限り RX シグナルの IPduId とも
-         * 偶然マッチしてしまいうる）、Direction を明示的に確認しないまま
-         * Com_SendSignal() に委譲すると、誤って RX シグナルに
-         * InvalidValueConfigured=1 を設定した場合に無関係な TX I-PDU を
-         * 静かに破壊しかねない（DET エラーなし）。Com_InvalidateSignalGroup()
-         * 側は元々メンバー走査時に Direction==TX で絞っているため、この
-         * チェックはそちらと対称にするための是正（/code-review 指摘）。 */
-        DET_LOGE(TAG, "InvalidateSignal E: sig=%u is not a TX signal", (unsigned)SignalId);
-        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_INVALIDATE_SIGNAL, COM_E_PARAM);
-        return E_NOT_OK;
-    }
-    if (sig->InvalidValueConfigured == 0U)
-    {
-        /* [SWS_Com_00643] 原文どおり COM_SERVICE_NOT_AVAILABLE を返す
-         * （2026-09-20 是正。COM_SERVICE_NOT_AVAILABLE 定数が存在しない
-         * 期間はE_NOT_OKで代用していたが、値が異なり呼び出し元が
-         * 区別できなかった）。 */
-        DET_LOGW(TAG, "InvalidateSignal: sig=%u has no ComSignalDataInvalidValue configured",
-                 (unsigned)SignalId);
-        return COM_SERVICE_NOT_AVAILABLE;
-    }
-
-    /* I-PDU Group 停止中の COM_SERVICE_NOT_AVAILABLE は、委譲先の
-     * Com_SendSignal() がそのまま返す（[SWS_Com_00334]）。 */
-    return Com_SendSignal(SignalId, &sig->InvalidValue);
-}
-
-/**
- * \brief   Signal Group の全メンバーを、各々の ComSignalDataInvalidValue で無効化する。
- *
- * \details [SWS_Com_00557]: グループメンバーのいずれか 1 つでも
- *          ComSignalDataInvalidValue が未設定なら、書き込みを一切行わず
- *          全体を E_NOT_OK とする（all-or-nothing。副作用を起こす前に
- *          全メンバーを検証してから実際の書き込みへ進む）。
- *
- *          [SWS_Com_00099]/[SWS_Com_00645]: 各メンバーごとに
- *          Com_SendSignal() を InvalidValue で呼んでシャドウバッファへ
- *          書き込んだのち、内部的に Com_SendSignalGroup() を呼んで実
- *          バッファへ確定コミットする（Com_InvalidateSignal() と同じ
- *          「内部的に対応する送信 API を呼ぶ」構造の Signal Group 版）。
- *
- * \param[in]  SignalGroupId  無効化する Signal Group（TX I-PDU）の ID。
- *
- * \retval  E_OK      全メンバーの InvalidValue が設定済みで、所属 I-PDU Group
- *                    が起動中で、コミットまで成功した。
- * \retval  COM_SERVICE_NOT_AVAILABLE いずれかのメンバーの
- *                    ComSignalDataInvalidValue が未設定、または所属 I-PDU
- *                    Group が停止中（[SWS_Com_00557]、後者は内部で呼ぶ
- *                    Com_SendSignalGroup() から伝播）。
- * \retval  E_NOT_OK  COM 未初期化、SignalGroupId が TX I-PDU 設定テーブルに
- *                    存在しない、または IsSignalGroup=0 の I-PDU を指定した。
- *
- * \AUTOSARReq     {SWS_Com_00557, SWS_Com_00645, SWS_Com_00334}
- * \ServiceID      {0x1B}
- * \Reentrancy     {Non Reentrant for the same signal group. Reentrant for different signal groups.}
- * \Synchronicity  {Asynchronous}
- */
-uint8 Com_InvalidateSignalGroup(Com_SignalGroupIdType SignalGroupId)
-{
-    DET_LOGT(TAG, "called");
-
-    if (Com_ConfigPtr == NULL)
-    {
-        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_INVALIDATE_SIGNAL_GROUP, COM_E_UNINIT);
-        return E_NOT_OK;
-    }
-
-    if (SignalGroupId >= COM_TX_IPDU_MAX)
-    {
-        DET_LOGE(TAG, "InvalidateSignalGroup E: SignalGroupId=%u out of range (max=%u)",
-                 (unsigned)SignalGroupId, (unsigned)COM_TX_IPDU_MAX);
-        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_INVALIDATE_SIGNAL_GROUP, COM_E_PARAM);
-        return E_NOT_OK;
-    }
-
-    const Com_IPduConfigType* ipdu = Com_FindTxIPdu(SignalGroupId);
-    if (ipdu == NULL || ipdu->IsSignalGroup == 0U)
-    {
-        DET_LOGE(TAG, "InvalidateSignalGroup E: SignalGroupId=%u not found or not a Signal Group",
-                 (unsigned)SignalGroupId);
-        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_INVALIDATE_SIGNAL_GROUP, COM_E_PARAM);
-        return E_NOT_OK;
-    }
-
-    for (uint8 s = 0U; s < Com_ConfigPtr->SignalCount; s++)
-    {
-        const Com_SignalConfigType* sig = &Com_ConfigPtr->Signals[s];
-        if (sig->Direction == COM_SIGNAL_DIRECTION_TX && sig->IPduId == SignalGroupId
-            && sig->InvalidValueConfigured == 0U)
-        {
-            /* [SWS_Com_00557] 原文どおり COM_SERVICE_NOT_AVAILABLE を返す
-             * （Com_InvalidateSignal() の同種是正と対、2026-09-20）。 */
-            DET_LOGW(TAG, "InvalidateSignalGroup: SignalGroupId=%u member sig=%u has no "
-                     "ComSignalDataInvalidValue configured",
-                     (unsigned)SignalGroupId, (unsigned)sig->SignalId);
-            return COM_SERVICE_NOT_AVAILABLE;
-        }
-    }
-
-    for (uint8 s = 0U; s < Com_ConfigPtr->SignalCount; s++)
-    {
-        const Com_SignalConfigType* sig = &Com_ConfigPtr->Signals[s];
-        if (sig->Direction == COM_SIGNAL_DIRECTION_TX && sig->IPduId == SignalGroupId)
-        {
-            (void)Com_SendSignal(sig->SignalId, &sig->InvalidValue);
-        }
-    }
-
-    return Com_SendSignalGroup(SignalGroupId);
-}
-
-/**
- * \brief   TX I-PDU を、値の変化や送信モードに関わらず今すぐ送信要求する。
- *
- * \details [SWS_Com_00861]: 対象 I-PDU が started の場合のみトリガーする。
- *          stopped の場合は E_NOT_OK を返すのみで、後で started になっても
- *          自動的には実行されない（トリガー自体を憶えておく仕組みはない）。
- *
- *          [SWS_Com_00388]: MDT（`ipdu->MinDelayMs`）のみを尊重し、
- *          `ComTxModeNumberOfRepetitions` 等、他の TxMode 関連パラメータは
- *          考慮しない。実際の送信は本関数内では行わず、既存の
- *          `Com_TxTriggerPending[]` フラグを立てるだけで
- *          `Com_MainFunctionTx()` のディスパッチへ委ねる（`Com_SendSignal()`
- *          が `Com_TxPending[]` を立てるのと同じ設計——実送信を ASW の
- *          呼び出しスタックから切り離し、WdgM の Deadline Supervision から
- *          保護するため。Com_MainFunctionTx() の Doxygen コメント参照）。
- *          `Com_TxTriggerPending[]` は `Com_TxPending[]` と異なり
- *          COM_TX_MODE_PERIODIC の I-PDU でも効く（詳細は同フラグの宣言
- *          コメント参照）。
- *
- *          [SWS_Com_00492]: 設定済みの TxIpduCalloutCbk は、既存の
- *          `Com_DoTransmit()` が呼ぶため、本関数側で別途呼ぶ必要はない。
- *
- * \note    診断 CommunicationControl (UDS 0x28) による送信抑制中
- *          （`Com_TxEnabled==0`）に due 判定を満たしても、
- *          `Com_MainFunctionTx()` はトリガーを消費するだけで実送信は行わない
- *          （`Com_TxPending[]` の既存挙動と同じ。SWS_Com_00777/
- *          SWS_Com_00334: 抑制解除後に「溜まった分」を即座に送らないため）。
- *          この場合本関数の戻り値自体は E_OK のままであり、トリガーが
- *          後で自動的に再送されることもない——呼び出し元が抑制解除後に
- *          必要なら改めて呼び直すこと（/code-review 指摘）。
- *
- * \param[in]  PduId  即時送信をトリガーする TX I-PDU の ID。
- *
- * \retval  E_OK      I-PDU が見つかり、started であり、トリガーを受け付けた
- *                    （実際に送信されるとは限らない。上記 \note 参照）。
- * \retval  E_NOT_OK  COM 未初期化、PduId が TX I-PDU 設定テーブルに
- *                    存在しない、または I-PDU が stopped。
- *
- * \AUTOSARReq     {SWS_Com_00861, SWS_Com_00388, SWS_Com_00492}
- * \ServiceID      {0x17}
- * \Reentrancy     {Non Reentrant}
- * \Synchronicity  {Synchronous}
- */
-Std_ReturnType Com_TriggerIPDUSend(Com_IPduIdType PduId)
-{
-    DET_LOGT(TAG, "called");
-
-    if (Com_ConfigPtr == NULL)
-    {
-        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_TRIGGER_IPDU_SEND, COM_E_UNINIT);
-        return E_NOT_OK;
-    }
-
-    if (PduId >= COM_TX_IPDU_MAX)
-    {
-        DET_LOGE(TAG, "TriggerIPDUSend E: PduId=%u out of range (max=%u)",
-                 (unsigned)PduId, (unsigned)COM_TX_IPDU_MAX);
-        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_TRIGGER_IPDU_SEND, COM_E_PARAM);
-        return E_NOT_OK;
-    }
-
-    const Com_IPduConfigType* ipdu = Com_FindTxIPdu(PduId);
-    if (ipdu == NULL)
-    {
-        DET_LOGE(TAG, "TriggerIPDUSend E: PduId=%u not a registered TX I-PDU", (unsigned)PduId);
-        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_TRIGGER_IPDU_SEND, COM_E_PARAM);
-        return E_NOT_OK;
-    }
-
-    if (!Com_TxIPduStarted[PduId])
-    {
-        /* [SWS_Com_00861]: stopped I-PDU は単に E_NOT_OK。開発エラーによる
-         * 失敗とは別区分のため Det_ReportError() は呼ばない（DET ログのみ、
-         * Com_InvalidateSignal() の InvalidValueConfigured==0 判定と同じ
-         * 方針）。 */
-        DET_LOGW(TAG, "TriggerIPDUSend: PduId=%u is stopped", (unsigned)PduId);
-        return E_NOT_OK;
-    }
-
-    Com_TxTriggerPending[PduId] = 1U;
-    return E_OK;
-}
-
-/**
- * \brief   TX I-PDU の TMS（Transmission Mode Selector）状態を明示的に切り替える。
- *
- * \details `Com_TmsState[PduId]` を直接書き換える、シグナル値に基づく自動
- *          評価（`Com_RecalcTms()`）とは独立したもう一つの TMS 変更経路。
- *          要求済みの Mode が既に現在の状態と同じ場合は何もしない（spec 原文
- *          "the call will have no effect"）。DIRECT/MIXED/PERIODIC 遷移ごとの
- *          即時送信・周期タイマ再始動の詳細、自動評価と混在させる場合の注意、
- *          `ComTxModeTimeOffset` 省略の理由は
- *          docs/modules/Com_Notes.md「Com_SwitchIpduTxMode」参照。
- *
- * \param[in]  PduId  TMS 状態を切り替える TX I-PDU の ID。
- * \param[in]  Mode   新しい TMS 状態（TRUE/FALSE）。
- *
- * \AUTOSARReq     {SWS_Com_00881, SWS_Com_00239, SWS_Com_00244}
- * \ServiceID      {0x27}
- * \Reentrancy     {Reentrant for different PduIds. Non reentrant for the same PduId.}
- * \Synchronicity  {Synchronous}
- */
-void Com_SwitchIpduTxMode(Com_IPduIdType PduId, boolean Mode)
-{
-    DET_LOGT(TAG, "called");
-
-    if (Com_ConfigPtr == NULL)
-    {
-        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_SWITCH_IPDU_TX_MODE, COM_E_UNINIT);
-        return;
-    }
-
-    if (PduId >= COM_TX_IPDU_MAX)
-    {
-        DET_LOGE(TAG, "SwitchIpduTxMode E: PduId=%u out of range (max=%u)",
-                 (unsigned)PduId, (unsigned)COM_TX_IPDU_MAX);
-        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_SWITCH_IPDU_TX_MODE, COM_E_PARAM);
-        return;
-    }
-
-    const Com_IPduConfigType* ipdu = Com_FindTxIPdu(PduId);
-    if (ipdu == NULL)
-    {
-        DET_LOGE(TAG, "SwitchIpduTxMode E: PduId=%u not a registered TX I-PDU", (unsigned)PduId);
-        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_SWITCH_IPDU_TX_MODE, COM_E_PARAM);
-        return;
-    }
-
-    const uint8 newState = Mode ? 1U : 0U;
-    if (Com_TmsState[PduId] == newState)
-        return;  /* spec 原文: "the call will have no effect" */
-
-    Com_TmsState[PduId] = newState;
-
-    /* [SWS_Com_00244] 周期タイマ再始動。PERIODIC のみここで直接
-     * Com_TxLastSentMs を更新する理由は docs/modules/Com_Notes.md
-     * 「Com_SwitchIpduTxMode」参照。DIRECT/MIXED 側で触らない理由（非自明）:
-     * MinDelayMs>0 の I-PDU では、ここでリセットすると直後の
-     * Com_RequestTxOnChange() による「即時」送信要求が MDT 未経過と
-     * 誤判定されて遅延してしまうため。 */
-    if (Com_EffectiveTxModeMode(ipdu) == COM_TX_MODE_PERIODIC)
-    {
-        Com_TxLastSentMs[PduId] = millis();
-    }
-    else
-    {
-        Com_RequestTxOnChange(ipdu);
-    }
-}
-
-typedef void (*Com_VoidCbkType)(void);
-
-/* Com_InvokeTxNotification() が「TxAckCbk・TxErrCbk・TxTOutCbk のどれを
- * 配送するか」を選ぶための判別子。2026-08 のレビューでは「呼び出し先が
- * 2 種類しかないため三項演算子で十分、関数ポインタテーブルは過剰な抽象化」
- * と判断したが、Com_CbkTxTOut（TX 送信デッドライン監視）追加で 3 種類に
- * なった。3 種とも呼び出し側がコンパイル時に知っている固定種別のままで
- * あることは変わらないため、関数ポインタテーブルへは寄せず、三項演算子を
- * switch 文に置き換えるだけで対応する（同じ判断基準の延長）。 */
-typedef enum
-{
-    COM_TX_NOTIFY_ACK  = 0,
-    COM_TX_NOTIFY_ERR  = 1,
-    COM_TX_NOTIFY_TOUT = 2
-} Com_TxNotifyKindType;
-
-/**
- * \brief   TxAckCbk/TxErrCbk/TxTOutCbk（Com_CbkTxAck/Com_CbkTxErr/
- *          Com_CbkTxTOut、SWS_Com_00468/SWS_Com_00491/SWS_Com_00554）
- *          共通の配送ロジック。
- *
- * \details 実 AUTOSAR はいずれのコールバックも signal 単位/signal group
- *          単位で別々のコールバック名（`Rte_COMCbkTAck_<sn>`/`<sg>`、
- *          `Rte_COMCbkTErr_<sn>`/`<sg>`、`Rte_COMCbkTxTOut_<sn>`/`<sg>`）を
- *          持てる。`Com_TxConfirmation()`（TxAckCbk/TxTOutCbk 解除側）・
- *          `Com_IpduGroupStop()`（TxErrCbk 側）・`Com_MainFunctionTx()`
- *          （TxTOutCbk 発火側）は「どのコールバックか」以外は完全に同じ
- *          配送ロジック（Signal Group ならグループ単位で 1 回、そうでなければ
- *          この I-PDU に属する TX シグナルのうち該当コールバックが設定
- *          されているものすべてを呼ぶ）のため、2026-08 のレビューで指摘
- *          された重複をここへ集約した。
- *
- * \param[in]  ipdu   対象 TX I-PDU 設定。NULL 可（NULL は「Signal Group では
- *                    ない」扱いとし、下記シグナル走査へ進む。Com_FindTxIPdu()
- *                    が見つけられなかった場合に備える、Com_TxConfirmation()
- *                    参照）。
- * \param[in]  TxPduId 対象 TX I-PDU の ID（シグナル走査時の `sig->IPduId`
- *                    一致判定に使う）。
- * \param[in]  kind   配送するコールバックの種別。
- *
- * \pre        Com_ConfigPtr が NULL でないこと（呼び出し元で保証する）。
- *
- * \ServiceID      {0xF2}
- * \Reentrancy     {Non Reentrant}
- * \Synchronicity  {Synchronous}
- */
-static void Com_InvokeTxNotification(const Com_IPduConfigType* ipdu,
-                                      Com_IPduIdType TxPduId,
-                                      Com_TxNotifyKindType kind)
-{
-    DET_LOGT(TAG, "called");
-
-    if (ipdu != NULL && ipdu->IsSignalGroup != 0U)
-    {
-        Com_VoidCbkType groupCbk = NULL;
-        switch (kind)
-        {
-        case COM_TX_NOTIFY_ACK:  groupCbk = ipdu->TxAckCbk;  break;
-        case COM_TX_NOTIFY_ERR:  groupCbk = ipdu->TxErrCbk;  break;
-        case COM_TX_NOTIFY_TOUT: groupCbk = ipdu->TxTOutCbk; break;
-        }
-        if (groupCbk != NULL)
-            groupCbk();
-        return;
-    }
-
-    for (uint8 s = 0U; s < Com_ConfigPtr->SignalCount; s++)
-    {
-        const Com_SignalConfigType* sig = &Com_ConfigPtr->Signals[s];
-        /* Direction のチェックが必須: RX I-PDU と TX I-PDU の IPduId は
-         * 別々の値空間（どちらも 0 始まり）のため、IPduId の一致だけでは
-         * 方向を判別できない（例: RX の EngineInfo=0 と TX の
-         * MeterStatus=0）。詳細は Com_SignalDirectionType の宣言コメント参照。 */
-        if (sig->Direction != COM_SIGNAL_DIRECTION_TX || sig->IPduId != TxPduId)
-            continue;
-
-        Com_VoidCbkType cbk = NULL;
-        switch (kind)
-        {
-        case COM_TX_NOTIFY_ACK:  cbk = sig->TxAckCbk;  break;
-        case COM_TX_NOTIFY_ERR:  cbk = sig->TxErrCbk;  break;
-        case COM_TX_NOTIFY_TOUT: cbk = sig->TxTOutCbk; break;
-        }
-        if (cbk != NULL)
-            cbk();
-    }
-}
 
 /**
  * \brief   TX I-PDU の送信完了を COM へ通知し、ComNotification（TxAck）を配送する。
@@ -2830,6 +2359,26 @@ void Com_TxConfirmation(PduIdType TxPduId, Std_ReturnType result)
     Com_InvokeTxNotification(ipdu, TxPduId, COM_TX_NOTIFY_ACK);
 }
 
+/*
+ * Com_TpTxConfirmation
+ */
+
+/*
+ * Com_StartOfReception
+ */
+
+/*
+ * Com_CopyRxData
+ */
+
+/*
+ * Com_CopyTxData
+ */
+
+/* ======================================================================
+ * Scheduled Functions
+ * ====================================================================== */
+
 /**
  * \brief   受信デッドライン監視タイムアウトを周期的に検出する。
  *
@@ -2875,8 +2424,6 @@ void Com_TxConfirmation(PduIdType TxPduId, Std_ReturnType result)
  */
 void Com_MainFunctionRx(void)
 {
-    DET_LOGT(TAG, "called");
-
     if (Com_ConfigPtr == NULL)
     {
         Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_MAIN_FUNCTION_RX, COM_E_UNINIT);
@@ -3086,8 +2633,6 @@ void Com_MainFunctionRx(void)
  */
 void Com_MainFunctionTx(void)
 {
-    DET_LOGT(TAG, "called");
-
     if (Com_ConfigPtr == NULL)
     {
         Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_MAIN_FUNCTION_TX, COM_E_UNINIT);
@@ -3221,45 +2766,16 @@ void Com_MainFunctionTx(void)
     }
 }
 
-/**
- * \brief   RX I-PDU 1 本分のデッドライン監視タイマを再始動する。
- *
- * \details Com_SetCommunicationEnabled() の受信再開時と Com_IpduGroupStart() が
- *          共通して行う手順（[SWS_Com_00787] 相当）をまとめたもの。
- *          Com_RxLastMs を現在時刻へリセットしないと、TimeoutMs 以上の時間
- *          受信を抑制していた場合、再有効化した直後（次の Com_MainFunctionRx()
- *          呼び出し）で古い Com_RxLastMs のまま即座にタイムアウト判定されて
- *          しまう。既に立っていた Com_RxTimedOut/Com_SigTimedOut も、抑制中の
- *          「経過時間」を理由に上位層へ通信異常と伝え続けないよう、あわせて
- *          クリアする。再始動直後は ComFirstTimeout 相当（FirstTimeoutMs）
- *          から監視を始める。
- *
- * \param[in]  id   対象 RX I-PDU の ID。
- * \param[in]  now  基準時刻（millis()）。
- *
- * \pre        Com_ConfigPtr が NULL でないこと。
+/*
+ * Com_MainFunctionRouteSignals
  */
-static void Com_ResetRxDeadlineMonitoring(Com_IPduIdType id, unsigned long now)
-{
-    DET_LOGT(TAG, "called");
-    Com_RxLastMs[id]   = now;
-    Com_RxTimedOut[id] = 0U;
-    Com_RxUsingFirstTimeout[id] = 1U;
 
-    for (uint8 s = 0U; s < Com_ConfigPtr->SignalCount; s++)
-    {
-        if (Com_ConfigPtr->Signals[s].Direction == COM_SIGNAL_DIRECTION_RX
-            && Com_ConfigPtr->Signals[s].IPduId == id)
-        {
-            Com_SigTimedOut[s] = 0U;
-        }
-    }
-}
+/* ======================================================================
+ * Internal Functions
+ * ====================================================================== */
 
 void Com_SetCommunicationEnabled(uint8 RxEnabled, uint8 TxEnabled)
 {
-    DET_LOGT(TAG, "called");
-
     if (Com_RxEnabled != RxEnabled || Com_TxEnabled != TxEnabled)
     {
         DET_LOGI(TAG, "CommunicationControl rx=%u->%u tx=%u->%u",
@@ -3280,202 +2796,788 @@ void Com_SetCommunicationEnabled(uint8 RxEnabled, uint8 TxEnabled)
     Com_TxEnabled = TxEnabled;
 }
 
-void Com_IpduGroupStart(Com_IpduGroupIdType IpduGroupId, boolean initialize)
+/**
+ * \brief   ネットワークビット順でバイトバッファからビットフィールドを取り出す。
+ *
+ * \details ビット番号の定義: bit 0 = byte[0] の MSB、bit 7 = byte[0] の LSB、
+ *          bit 8 = byte[1] の MSB、...（ネットワーク / Motorola 順）。
+ *          COM_BIG_ENDIAN では最初に読んだビットが結果の MSB になり、
+ *          COM_LITTLE_ENDIAN では最初に読んだビットが LSB になる。
+ *
+ * \param[in]  buf      読み取り元バイトバッファ。
+ * \param[in]  bitPos   開始ビット位置（ネットワークビット順）。
+ * \param[in]  bitSize  取り出すビット数（1〜32）。
+ * \param[in]  endian   ビット重みの方向 (COM_BIG_ENDIAN / COM_LITTLE_ENDIAN)。
+ *
+ * \return  アンパックしたシグナル値（uint32）。
+ *
+ * \ServiceID      {0xF0}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+static uint32 Com_UnpackSignal(const uint8* buf,
+                                uint8 bitPos,
+                                uint8 bitSize,
+                                Com_SignalEndianType endian)
 {
-    DET_LOGT(TAG, "called");
-
-    if (Com_ConfigPtr == NULL)
+    uint32 value = 0U;
+    for (uint8 i = 0; i < bitSize; i++)
     {
-        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_IPDU_GROUP_START, COM_E_UNINIT);
-        return;
+        const uint8 pos = bitPos + i;
+        const uint8 bit = (buf[pos / 8U] >> (7U - (pos % 8U))) & 1U;
+        if (endian == COM_BIG_ENDIAN)
+            value = (value << 1U) | bit;
+        else
+            value |= ((uint32)bit << i);
     }
+    return value;
+}
 
-    const unsigned long now = millis();
-
-    for (uint8 i = 0U; i < Com_ConfigPtr->RxIPduCount; i++)
+/**
+ * \brief   ネットワークビット順でバイトバッファのビットフィールドに値を書き込む。
+ *
+ * \details Com_UnpackSignal() と同じネットワークビット番号定義に従い、
+ *          bitPos から bitSize ビット分の value を buf へ書き込む。
+ *          対象ビット以外の buf の内容は保持される。
+ *
+ * \param[in,out] buf      書き込み先バイトバッファ。
+ * \param[in]     bitPos   開始ビット位置（ネットワークビット順）。
+ * \param[in]     bitSize  書き込むビット数（1〜32）。
+ * \param[in]     endian   ビット重みの方向 (COM_BIG_ENDIAN / COM_LITTLE_ENDIAN)。
+ * \param[in]     value    パックするシグナル値。下位 bitSize ビットのみ使用する。
+ *
+ * \ServiceID      {0xF1}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+static void Com_PackSignal(uint8* buf,
+                            uint8 bitPos,
+                            uint8 bitSize,
+                            Com_SignalEndianType endian,
+                            uint32 value)
+{
+    for (uint8 i = 0; i < bitSize; i++)
     {
-        const Com_IPduConfigType* ipdu = &Com_ConfigPtr->RxIPdus[i];
-        if (ipdu->IpduGroupId != IpduGroupId)
-            continue;
-
-        const Com_IPduIdType id = ipdu->IPduId;
-        Com_RxIPduStarted[id] = 1U;
-
-        /* [SWS_Com_00787] 項目2: 受信デッドライン監視タイマを再始動する
-         * （Com_SetCommunicationEnabled() の再開時と同じ理由）。 */
-        Com_ResetRxDeadlineMonitoring(id, now);
-
-        if (initialize)
-        {
-            /* [SWS_Com_00222] 項目1: I-PDU のデータを ComSignalInitValue で
-             * 初期化する（Com_Init() と同じ手順: バイト単位ゼロクリア →
-             * ビット単位で InitValue 上書き。[SWS_Com_00217]）。 */
-            Com_ResetBufferToInitValues(Com_RxBuffer[id], id, COM_SIGNAL_DIRECTION_RX);
-
-            /* Com_RxLastValidValue も InitValue へ戻す（[SWS_Com_00228]:
-             * 起動時点でまだ実際に受信していないシグナルは InitValue を
-             * 返すべきという要求に対応。Com_Init() の該当コメント参照）。 */
-            for (uint8 s = 0U; s < Com_ConfigPtr->SignalCount; s++)
-            {
-                const Com_SignalConfigType* rsig = &Com_ConfigPtr->Signals[s];
-                if (rsig->Direction == COM_SIGNAL_DIRECTION_RX && rsig->IPduId == id)
-                    Com_RxLastValidValue[s] = rsig->InitValue;
-            }
-
-            if (ipdu->IsSignalGroup != 0U)
-            {
-                /* [SWS_Com_00222] 項目2: Signal Group のシャドウバッファも
-                 * 同じ手順で初期化する。未コミット状態（利用不可）へ戻す。 */
-                Com_ResetBufferToInitValues(Com_RxShadowBuffer[id], id, COM_SIGNAL_DIRECTION_RX);
-                Com_RxShadowTimedOut[id] = 1U;
-            }
-        }
-
-        DET_LOGI(TAG, "IpduGroupStart grp=%u iPdu=%u(RX) init=%u",
-                 (unsigned)IpduGroupId, (unsigned)id, (unsigned)initialize);
-    }
-
-    for (uint8 i = 0U; i < Com_ConfigPtr->TxIPduCount; i++)
-    {
-        const Com_IPduConfigType* ipdu = &Com_ConfigPtr->TxIPdus[i];
-        if (ipdu->IpduGroupId != IpduGroupId)
-            continue;
-
-        const Com_IPduIdType id = ipdu->IPduId;
-        Com_TxIPduStarted[id] = 1U;
-
-        /* [SWS_Com_00787] 項目1/3: MDT・周期タイマの基準時刻を再始動する
-         * （再開直後に「積み残し」として即座に送信されないようにする。
-         * Com_SetCommunicationEnabled() の既存コメントと同じ考え方）。 */
-        Com_TxLastSentMs[id] = now;
-        Com_TxPending[id]    = 0U;
-        Com_TxTriggerPending[id] = 0U;
-        /* 起動直後は必ず「送信済み・未確認」状態もクリアしておく（前回の
-         * Stop() で既にクリア済みのはずだが、初回 Start() 時の保険）。 */
-        Com_TxConfPending[id] = 0U;
-        /* ComTxModeNumberOfRepetitions（SWS_Com_00305）の残り再送回数も同様に
-         * クリアする（前回 Stop() 時点の再送シーケンスを持ち越さない）。 */
-        Com_TxRepeatsRemaining[id] = 0U;
-        /* TX 送信デッドライン監視（SWS_Com_00878 等）も同様に再初期化する
-         * （Com_ResetRxDeadlineMonitoring() の RX 側と対称）。 */
-        Com_TxConfPendingSinceMs[id] = now;
-        Com_TxTimedOut[id]           = 0U;
-        Com_TxUsingFirstTimeout[id]  = 1U;
-
-        /* [SWS_Com_00787] 項目4: update-bit をクリアする。 */
-        if (ipdu->UpdateBitPosition != 0xFFU)
-            Com_PackSignal(Com_TxBuffer[id], ipdu->UpdateBitPosition, 1U, COM_BIG_ENDIAN, 0U);
-
-        if (initialize)
-        {
-            /* [SWS_Com_00222] 項目1: I-PDU のデータを ComSignalInitValue で
-             * 初期化する（RX 側と同じ手順）。 */
-            Com_ResetBufferToInitValues(Com_TxBuffer[id], id, COM_SIGNAL_DIRECTION_TX);
-
-            /* [SWS_Com_00222] 項目3: フィルタの old_value も InitValue へ戻す
-             * （Com_Init() の該当コメント参照。COM_FILTER_MASKED_NEW_DIFFERS_
-             * MASKED_OLD が、再起動直後に InitValue と同じ値を送っただけで
-             * 誤って「変化あり」と判定しないようにするため）。 */
-            for (uint8 s = 0U; s < Com_ConfigPtr->SignalCount; s++)
-            {
-                const Com_SignalConfigType* tsig = &Com_ConfigPtr->Signals[s];
-                if (tsig->Direction == COM_SIGNAL_DIRECTION_TX && tsig->IPduId == id)
-                    Com_FilterLastValue[s] = tsig->InitValue;
-            }
-
-            if (ipdu->IsSignalGroup != 0U)
-            {
-                Com_ResetBufferToInitValues(Com_TxShadowBuffer[id], id, COM_SIGNAL_DIRECTION_TX);
-            }
-        }
-
-        /* [SWS_Com_00223] I-PDU 起動時、現在のデータ内容から TMS を再評価する
-         * （initialize の有無に関わらず。ゼロ初期化直後でも、TmsContributor
-         * シグナルの初期値に基づいて正しく再評価される）。起動時の再評価は
-         * SWS_Com_00495（送信トリガー）の対象ではないため戻り値は使わない。 */
-        (void)Com_RecalcTms(id);
-
-        DET_LOGI(TAG, "IpduGroupStart grp=%u iPdu=%u(TX) init=%u",
-                 (unsigned)IpduGroupId, (unsigned)id, (unsigned)initialize);
+        const uint8 bit   = (endian == COM_BIG_ENDIAN)
+                            ? (uint8)((value >> (bitSize - 1U - i)) & 1U)
+                            : (uint8)((value >> i) & 1U);
+        const uint8 pos   = bitPos + i;
+        const uint8 shift = 7U - (pos % 8U);
+        if (bit)
+            buf[pos / 8U] |=  (uint8)(1U << shift);
+        else
+            buf[pos / 8U] &= (uint8)~(1U << shift);
     }
 }
 
-void Com_IpduGroupStop(Com_IpduGroupIdType IpduGroupId)
+/**
+ * \brief   value の下位 byteCount バイトを、リトルエンディアンで dataPtr へ書き出す。
+ *
+ * \details Com_ReceiveSignal() が呼び出し元の SignalDataPtr（BitSize に応じた
+ *          uint8/uint16/uint32 変数）へ値を返す際の共通処理。常に 4 バイト
+ *          書き込むと 8bit/16bit の呼び出し元でスタック上の隣接領域を
+ *          破壊するため、byteCount 分だけを書き込む。
+ *
+ * \param[out] dataPtr    書き込み先。byteCount バイト以上必要。
+ * \param[in]  byteCount  書き込むバイト数（1〜4）。
+ * \param[in]  value      書き込む値。
+ */
+static void Com_WriteSignalBytes(uint8* dataPtr, uint8 byteCount, uint32 value)
 {
-    DET_LOGT(TAG, "called");
+    for (uint8 b = 0U; b < byteCount; b++)
+        dataPtr[b] = (uint8)(value >> (8U * b));
+}
 
-    if (Com_ConfigPtr == NULL)
+/**
+ * \brief   [SWS_Com_00334]/Table 3 の「I-PDU Group 停止中は
+ *          COM_SERVICE_NOT_AVAILABLE」を、TX/RX 双方の Send/Receive 系
+ *          API から共通に導く（/code-review 指摘: 同じ三項演算子が
+ *          Com_SendSignal()/Com_SendSignalGroup()/Com_SendSignalGroupArray()/
+ *          Com_ReceiveSignalGroup()/Com_ReceiveSignalGroupArray() の
+ *          計6箇所に重複していたため集約）。
+ *
+ * \param[in]  started  対象 I-PDU の Com_TxIPduStarted[]/Com_RxIPduStarted[]。
+ *
+ * \return  started が真なら E_OK、偽なら COM_SERVICE_NOT_AVAILABLE。
+ */
+static uint8 Com_ServiceResult(uint8 started)
+{
+    return started ? E_OK : COM_SERVICE_NOT_AVAILABLE;
+}
+
+/**
+ * \brief   指定 I-PDU バッファへ、所属する全シグナルの ComSignalInitValue を
+ *          ビット単位でパックする。
+ *
+ * \details [SWS_Com_00217]/[SWS_Com_00222] 項目1・2: I-PDU のデータ初期化は
+ *          まずバイト単位でゼロクリアし（ComTxIPduUnusedAreasDefault 相当、
+ *          本実装は常に 0）、その後ビット単位で各シグナルの InitValue を
+ *          上書きする、という 2 段階の手順で行う。本関数は後段（ビット単位
+ *          の上書き）のみを担う。呼び出し元が先にバイト単位のゼロクリアを
+ *          済ませておくこと。RX/TX 両方の I-PDU バッファ・シャドウバッファ
+ *          初期化（Com_Init()/Com_IpduGroupStart()）で共用する。
+ *
+ * \param[in,out] buf  初期化対象のバッファ（Com_RxBuffer[id] 等）。
+ *                      COM_IPDU_MAX_DLC バイト以上必要。
+ * \param[in]     id   対象 I-PDU の ID（dir 側の値空間、Com_SignalConfigType
+ *                      の IPduId と同じ規約）。
+ * \param[in]     dir  対象シグナルの方向（RX/TX）。この I-PDU 自体の
+ *                      RX/TX は呼び出し元が Com_RxBuffer/Com_TxBuffer の
+ *                      どちらを渡すかで決まるため、ここでは対象シグナルの
+ *                      絞り込みにのみ使う。
+ *
+ * \pre        Com_ConfigPtr が NULL でないこと。
+ *
+ * \ServiceID      {0xF6}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+static void Com_PackInitValues(uint8* buf, Com_IPduIdType id, Com_SignalDirectionType dir)
+{
+    for (uint8 s = 0U; s < Com_ConfigPtr->SignalCount; s++)
     {
-        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_IPDU_GROUP_STOP, COM_E_UNINIT);
+        const Com_SignalConfigType* sig = &Com_ConfigPtr->Signals[s];
+        if (sig->Direction == dir && sig->IPduId == id)
+        {
+            Com_PackSignal(buf, sig->BitPosition, sig->BitSize, sig->Endian, sig->InitValue);
+        }
+    }
+}
+
+/**
+ * \brief   I-PDU バッファ 1 本を [SWS_Com_00217]/[SWS_Com_00222] 項目1・2の
+ *          2 段階手順（バイト単位ゼロクリア → Com_PackInitValues()）で
+ *          初期値へリセットする。
+ *
+ * \details Com_IpduGroupStart() が RX/TX バッファ・シャドウバッファの
+ *          計 4 箇所で共通して行う手順をまとめたもの。
+ *
+ * \param[in,out] buf  初期化対象のバッファ（Com_RxBuffer[id] 等）。
+ *                      COM_IPDU_MAX_DLC バイト以上必要。
+ * \param[in]     id   対象 I-PDU の ID。
+ * \param[in]     dir  対象シグナルの方向（RX/TX）。
+ *
+ * \pre        Com_ConfigPtr が NULL でないこと。
+ */
+static void Com_ResetBufferToInitValues(uint8* buf, Com_IPduIdType id, Com_SignalDirectionType dir)
+{
+    for (uint8 b = 0U; b < COM_IPDU_MAX_DLC; b++)
+        buf[b] = 0U;
+    Com_PackInitValues(buf, id, dir);
+}
+
+/**
+ * \brief   Signal Gateway: RX I-PDU の受信を機に、紐づく TX シグナルへ値を転送する。
+ *
+ * \details Com_RxIndication() が RX バッファを更新した直後に呼ばれる。
+ *          `Com_ConfigPtr->GwMappings[]` を線形検索し、`SrcSignalId` が
+ *          rxIPduId に属するエントリごとに、RX バッファから生値を直接
+ *          アンパックして `Com_SendSignal(DestSignalId, ...)` を呼ぶ
+ *          （[SWS_Com_00357]/[SWS_Com_00377]）。Com_ReceiveSignal() を経由
+ *          しないため、ComRxDataTimeoutAction・ComDataInvalidAction・
+ *          ComFilterAlgorithm(NEW_IS_WITHIN) はいずれも評価しない
+ *          （[SWS_Com_00872] の RX 側処理段階に、これらは含まれていない）。
+ *          転送先の実際の送信要否・タイミング判定は Com_SendSignal() 自身が
+ *          行う（SWC が直接呼ぶ場合と全く同じ経路。7.2.5 節 "the signal
+ *          processing does not differ ..." のとおり）。
+ *
+ * \param[in]  rxIPduId  受信した RX I-PDU の ID（Com_IPduConfigType.IPduId）。
+ *
+ * \pre        Com_ConfigPtr が NULL でないこと（Com_RxIndication() が保証する）。
+ * \pre        Com_RxBuffer[rxIPduId] が最新の受信データで更新済みであること。
+ *
+ * \AUTOSARReq     {SWS_Com_00357, SWS_Com_00360, SWS_Com_00377, SWS_Com_00701}
+ * \ServiceID      {0xF5}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+static void Com_GatewayRoute(Com_IPduIdType rxIPduId)
+{
+    for (uint8 g = 0U; g < Com_ConfigPtr->GwMappingCount; g++)
+    {
+        const Com_GwMappingType* gw = &Com_ConfigPtr->GwMappings[g];
+
+        /* ゲートウェイ元シグナルの設定を検索し、rxIPduId に属するかを確認する
+         * （SrcSignalId 自体は RX/TX 共通のシグナル ID 空間の値のため、
+         * Direction も確認して RX シグナルであることを保証する。
+         * Com_SignalDirectionType の宣言コメント参照）。 */
+        const Com_SignalConfigType* srcSig = NULL;
+        for (uint8 s = 0U; s < Com_ConfigPtr->SignalCount; s++)
+        {
+            const Com_SignalConfigType* cand = &Com_ConfigPtr->Signals[s];
+            if (cand->SignalId == gw->SrcSignalId && cand->Direction == COM_SIGNAL_DIRECTION_RX)
+            {
+                srcSig = cand;
+                break;
+            }
+        }
+        if (srcSig == NULL || srcSig->IPduId != rxIPduId)
+            continue;
+
+        /* [SWS_Com_00360]: エンディアン変換はアンパック（Src の Endian）と
+         * パック（Com_SendSignal() 内、Dest の Endian）をそれぞれ独立に
+         * 行うだけで自然に達成される（本実装は元々シグナルごとに Endian を
+         * 個別設定できる設計のため、ゲートウェイ専用の変換処理は不要）。 */
+        const uint32 value = Com_UnpackSignal(
+            Com_RxBuffer[rxIPduId], srcSig->BitPosition, srcSig->BitSize, srcSig->Endian);
+
+        DET_LOGI(TAG, "Gateway src=%u -> dst=%u value=%lu",
+                 (unsigned)gw->SrcSignalId, (unsigned)gw->DestSignalId, (unsigned long)value);
+
+        /* SWC が Com_SendSignal() を直接呼ぶのと全く同じ経路（7.2.5 節）。
+         * value は uint32 のローカル変数のため、その先頭アドレスを渡せば
+         * Com_SendSignal() 内部が DestSignalId の BitSize に応じて必要な
+         * バイト数だけリトルエンディアンで読み取る（既存の呼び出し規約と同じ）。 */
+        (void)Com_SendSignal(gw->DestSignalId, &value);
+    }
+}
+
+/**
+ * \brief   TX I-PDU 設定テーブルから IPduId に一致するエントリを検索する。
+ *
+ * \details Com_SendSignal() / Com_SendSignalGroup() が、シグナルの所属する
+ *          I-PDU が Signal Group（IsSignalGroup=1）かどうかを判定するために使う。
+ *
+ * \param[in]  IPduId  検索する TX I-PDU の ID。
+ *
+ * \return  一致するエントリへのポインタ。見つからない場合は NULL。
+ *
+ * \pre        Com_ConfigPtr が NULL でないこと（呼び出し元で保証する）。
+ *
+ * \ServiceID      {0xF2}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+static const Com_IPduConfigType* Com_FindTxIPdu(Com_IPduIdType IPduId)
+{
+    for (uint8 i = 0; i < Com_ConfigPtr->TxIPduCount; i++)
+    {
+        if (Com_ConfigPtr->TxIPdus[i].IPduId == IPduId)
+            return &Com_ConfigPtr->TxIPdus[i];
+    }
+    return NULL;
+}
+
+/**
+ * \brief   RX I-PDU 設定テーブルから IPduId に一致するエントリを検索する。
+ *
+ * \details Com_ReceiveSignal() / Com_ReceiveSignalGroup() が、シグナルの
+ *          所属する I-PDU が RX Signal Group（IsSignalGroup=1）かどうかを
+ *          判定するために使う（Com_FindTxIPdu() の RX 側対称）。
+ *
+ * \param[in]  IPduId  検索する RX I-PDU の ID。
+ *
+ * \return  一致するエントリへのポインタ。見つからない場合は NULL。
+ *
+ * \pre        Com_ConfigPtr が NULL でないこと（呼び出し元で保証する）。
+ *
+ * \ServiceID      {0xF4}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+static const Com_IPduConfigType* Com_FindRxIPdu(Com_IPduIdType IPduId)
+{
+    for (uint8 i = 0; i < Com_ConfigPtr->RxIPduCount; i++)
+    {
+        if (Com_ConfigPtr->RxIPdus[i].IPduId == IPduId)
+            return &Com_ConfigPtr->RxIPdus[i];
+    }
+    return NULL;
+}
+
+/**
+ * \brief   シグナル設定テーブルから SignalId に一致するエントリの添字を検索する。
+ *
+ * \details Com_ReceiveSignal() / Com_SendSignal() が共通で使う、
+ *          Signals[] を SignalId で線形探索する処理をまとめたもの。
+ *          見つかった後の処理が Com_RxLastValidValue[s]/Com_FilterLastValue[s]
+ *          等、添字 s を要する並行配列を参照するため、ポインタではなく
+ *          添字を返す。
+ *
+ * \param[in]  SignalId  検索するシグナル ID。
+ *
+ * \return  一致するエントリの添字。見つからない場合は Com_ConfigPtr->SignalCount
+ *          （＝配列の範囲外を示す番兵値）。
+ *
+ * \pre        Com_ConfigPtr が NULL でないこと（呼び出し元で保証する）。
+ */
+static uint8 Com_FindSignalIndex(Com_SignalIdType SignalId)
+{
+    for (uint8 s = 0; s < Com_ConfigPtr->SignalCount; s++)
+    {
+        if (Com_ConfigPtr->Signals[s].SignalId == SignalId)
+            return s;
+    }
+    return Com_ConfigPtr->SignalCount;
+}
+
+/**
+ * \brief   TX I-PDU バッファを実際に PduR_ComTransmit() へ渡す共通処理。
+ *
+ * \details TxTransformCbk が設定されていれば送信直前に呼び出し（E2E
+ *          Transformer 等、送信直前の最終変換用の汎用フック。Com はここで
+ *          何が実行されるか一切関知しない）、その後 TX バッファの内容を
+ *          ログ出力して PduR_ComTransmit() を呼ぶ（PduR→CanIf→Can_Write と
+ *          MCP2515 への SPI 送信までブロッキングで完了する）。
+ *          `Com_MainFunctionTx()` からのみ呼ばれる。DIRECT/MIXED I-PDU の
+ *          イベント駆動送信であっても実送信は必ず `Com_MainFunctionTx()`
+ *          （Os の 100ms タスク）側で行う設計とし、WdgM の Deadline
+ *          Supervision 対象である ASW Runnable（`App_EngineManager_Run()`
+ *          等）のスタックフレーム内で SPI 送信がブロッキングしないようにする
+ *          （バス輻輳時に `sendMsgBuf()` の TX バッファ空き待ちが伸びても、
+ *          Runnable 自体の実行時間には影響しない）。
+ *          「送信すべきかどうかの判断」は呼び出し元（`Com_MainFunctionTx()`）が
+ *          既に済ませてから呼ぶ。
+ *
+ *          update-bit クリア（ipdu->UpdateBitPosition が 0xFF 以外の場合、
+ *          SWS_Com_00062: ComTxIPduClearUpdateBit=Transmit 相当）: PduR_ComTransmit()
+ *          が E_OK を返した場合のみクリアする（SWS_Com_00062 原文 "after this
+ *          I-PDU was sent out via PduR_ComTransmit and PduR_ComTransmit
+ *          returned E_OK" のとおり）。失敗時はクリアせず、次回の再送で
+ *          update-bit ごと正しく伝わるようにする。
+ *
+ *          TxIpduCalloutCbk（[SWS_Com_00346]/[SWS_Com_00719]）: TxTransformCbk
+ *          適用後・PduR_ComTransmit() 呼び出し直前に、実際に送信される最終
+ *          バイト列を渡して呼ぶ。戻り値 0（false）ならこの送信は行わず
+ *          即座に E_NOT_OK を返す。「実際には PduR へ渡していない」ため、
+ *          PduR_ComTransmit() 自体が失敗した場合と同様に Com_TxConfPending は
+ *          セットしない・update-bit もクリアしない（詳細は下記コメント・
+ *          Com_Types.h の TxIpduCalloutCbk 参照）。
+ *
+ * \param[in]  ipdu  送信する TX I-PDU 設定。NULL 禁止（呼び出し元で保証する）。
+ * \param[in]  now   Com_MainFunctionTx() が計算済みの現在時刻 [ms]（millis()
+ *                   を再度呼ばず再利用する。TX 送信デッドライン監視の
+ *                   アーム時刻記録に使う）。
+ *
+ * \retval  E_OK      PduR_ComTransmit() が成功した。
+ * \retval  E_NOT_OK  PduR_ComTransmit() が失敗した、または TxIpduCalloutCbk が
+ *                     送信を拒否した（この場合 PduR_ComTransmit() 自体を呼ばない）。
+ *
+ * \AUTOSARReq     {SWS_Com_00062, SWS_Com_00878, SWS_Com_00346, SWS_Com_00719,
+ *                   SWS_Com_00381}
+ * \ServiceID      {0xF3}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+static Std_ReturnType Com_DoTransmit(const Com_IPduConfigType* ipdu, unsigned long now)
+{
+    if (ipdu->TxTransformCbk != NULL)
+        ipdu->TxTransformCbk(Com_TxBuffer[ipdu->IPduId], ipdu->DLC);
+
+    if (ipdu->TxIpduCalloutCbk != NULL &&
+        !ipdu->TxIpduCalloutCbk(Com_TxBuffer[ipdu->IPduId], ipdu->DLC))
+    {
+        /* [SWS_Com_00346] false: 送信そのものを行わない。具体的な拒否理由は
+         * TxIpduCalloutCbk 自身が WARN で既に出力している想定のため、ここは
+         * DET_LOGD に留める（RxIpduCalloutCbk と同じ二重ログ回避の方針）。 */
+        DET_LOGD(TAG, "TX iPdu=%u rejected by TxIpduCallout", (unsigned)ipdu->IPduId);
+        return E_NOT_OK;
+    }
+
+    char hexbuf[25];
+    Log_HexStr(hexbuf, sizeof(hexbuf), Com_TxBuffer[ipdu->IPduId], ipdu->DLC);
+    DET_LOGI(TAG, "TX iPdu=%u [%s]", (unsigned)ipdu->IPduId, hexbuf);
+
+    PduInfoType pduInfo = {
+        .SduDataPtr = Com_TxBuffer[ipdu->IPduId],
+        .SduLength  = ipdu->DLC
+    };
+    const Std_ReturnType ret = PduR_ComTransmit(ipdu->PduRId, &pduInfo);
+
+    /* [SWS_Com_00479]/[SWS_Com_00491]: PduR への引き渡しが成功した時点で
+     * 「送信済み・未確認」とマークする。対応する Com_TxConfirmation() が
+     * 届くまでの間に Com_IpduGroupStop() が呼ばれたら TxErrCbk の対象となる
+     * （詳細は Com_TxConfPending[] の宣言コメント参照）。
+     * [SWS_Com_00878] "unless already running": TX 送信デッドライン監視の
+     * アーム時刻は 0→1 遷移の瞬間のみ記録する。MIXED 周期フロアや再送
+     * （NumberOfRepetitions）による同一 I-PDU の重複ディスパッチ（既に
+     * Com_TxConfPending==1）はタイマを延命しない。 */
+    if (ret == E_OK)
+    {
+        if (Com_TxConfPending[ipdu->IPduId] == 0U)
+            Com_TxConfPendingSinceMs[ipdu->IPduId] = now;
+        Com_TxConfPending[ipdu->IPduId] = 1U;
+    }
+
+    /* update-bit クリア（SWS_Com_00062: ComTxIPduClearUpdateBit=Transmit 相当。
+     * Confirmation/TriggerTransmit の 2 択は未実装）。原文は "after this I-PDU
+     * was sent out via PduR_ComTransmit and PduR_ComTransmit returned E_OK"
+     * であり、ret==E_OK のときのみクリアする（ret を無視して無条件にクリア
+     * していた過去の実装は誤り。失敗時にもクリアすると、update-bit だけが
+     * 消えてバッファのデータは残ったまま次回再送されるため、実際には
+     * 初めて正常配信される新データが受信側に「未更新」として誤って破棄
+     * されうる）。PduR_ComTransmit() はこの呼び出し内で同期的に SPI 送信まで
+     * 完了しているため、この時点で Com_TxBuffer を書き換えても既に送信済み
+     * のバイト列には影響しない。
+     * Signal Group（SWS_Com_00801）・非 Signal Group（SWS_Com_00061、
+     * Com_SendSignal() 参照）いずれの update-bit も、クリア自体は本関数で
+     * 同じ処理を行う（SWS_Com_00062 はどちらの場合も区別しない）。
+     * `UpdateBitPosition != 0xFFU` の判定のみで十分であり IsSignalGroup は
+     * 見ない。ただしこれは「update-bit を使わない I-PDU は必ず
+     * `.UpdateBitPosition = 0xFFU` を明示設定する」という Com_PBCfg.c 側の
+     * 規約が守られていることが前提（C の既定初期化 0 のまま放置すると、
+     * その I-PDU のバッファ bit0 を毎回誤ってクリアし、シグナル値を破壊する）。 */
+    if (ret == E_OK && ipdu->UpdateBitPosition != 0xFFU)
+        Com_PackSignal(Com_TxBuffer[ipdu->IPduId], ipdu->UpdateBitPosition, 1U, COM_BIG_ENDIAN, 0U);
+
+    return ret;
+}
+
+/**
+ * \brief   TMS（Transmission Mode Selector）評価に基づく実効 TxModeMode を返す。
+ *
+ * \details `Com_TmsState[]` が true なら `TxModeModeTrue`、false なら
+ *          `TxModeMode` を返す（SWS_Com_00032/00799）。TMS を持たない
+ *          （TmsContributor なシグナルが存在せず、Com_TmsState が常に 0 の）
+ *          I-PDU では常に `TxModeMode` を返すため、既存の単一モード I-PDU の
+ *          挙動に影響しない。
+ *
+ * \param[in]  ipdu  対象 TX I-PDU 設定。NULL 禁止。
+ *
+ * \return  現在有効な Com_TxModeModeType。
+ *
+ * \ServiceID      {0x1C}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+static Com_TxModeModeType Com_EffectiveTxModeMode(const Com_IPduConfigType* ipdu)
+{
+    return Com_TmsState[ipdu->IPduId] ? ipdu->TxModeModeTrue : ipdu->TxModeMode;
+}
+
+/**
+ * \brief   TMS 評価に基づく実効 TxPeriodMs を返す。
+ *
+ * \details Com_EffectiveTxModeMode() と対になる周期値のペア選択。
+ *
+ * \param[in]  ipdu  対象 TX I-PDU 設定。NULL 禁止。
+ *
+ * \return  現在有効な TxPeriodMs [ms]。
+ *
+ * \ServiceID      {0x1D}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+static uint16 Com_EffectiveTxPeriodMs(const Com_IPduConfigType* ipdu)
+{
+    return Com_TmsState[ipdu->IPduId] ? ipdu->TxPeriodMsTrue : ipdu->TxPeriodMs;
+}
+
+/**
+ * \brief   ComTxModeNumberOfRepetitions（SWS_Com_00305）が現在の実効モードで
+ *          適用対象かどうかを返す。
+ *
+ * \details TxModeMode==DIRECT の I-PDU のみを対象とする。MIXED の周期フロアや
+ *          TMS との相互作用を避けるための設計上の制約であり、
+ *          Com_RequestTxOnChange()（残り回数のセット/クリア）と
+ *          Com_MainFunctionTx()（repeatDue 判定）の両方から同一の predicate を
+ *          呼ぶことで、判定条件が2箇所で食い違わないようにする（詳細は
+ *          docs/modules/Com_Notes.md 参照）。
+ *
+ * \param[in]  mode  Com_EffectiveTxModeMode() が返した実効 TxModeMode。
+ *
+ * \return  1 = 対象（DIRECT）、0 = 対象外。
+ *
+ * \ServiceID      {0x1F}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+static uint8 Com_TxRepeatApplicable(Com_TxModeModeType mode)
+{
+    return (mode == COM_TX_MODE_DIRECT) ? 1U : 0U;
+}
+
+/**
+ * \brief   デッドライン監視の「初回猶予期間か定常状態か」に応じて閾値を選ぶ。
+ *
+ * \details RX I-PDU 単位・RX シグナル単位・TX（Com_CbkTxTOut）の3箇所が
+ *          同じ形の判定（`usingFirst ? firstMs : steadyMs`）を必要とするため
+ *          共通化した（/code-review で重複を指摘）。呼び出し元ごとに対象と
+ *          なる配列・フィールドが異なる（Com_RxUsingFirstTimeout[]/
+ *          Com_TxUsingFirstTimeout[]、FirstTimeoutMs/TxFirstTimeoutMs 等）
+ *          ため、値だけを受け取る薄いヘルパーとする。
+ *
+ * \param[in]  usingFirst  1 = 初回猶予期間中（firstMs を使う）。
+ * \param[in]  firstMs     初回猶予期間の閾値 [ms]。
+ * \param[in]  steadyMs    定常状態の閾値 [ms]。
+ *
+ * \return  適用すべき閾値 [ms]。
+ *
+ * \ServiceID      {0x21}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+static uint16 Com_SelectTimeoutThreshold(uint8 usingFirst, uint16 firstMs, uint16 steadyMs)
+{
+    return usingFirst ? firstMs : steadyMs;
+}
+
+/**
+ * \brief   TMS（Transmission Mode Selector）を再評価する。
+ *
+ * \details 指定 I-PDU に属するシグナルのうち `TmsContributor=1` のものについて、
+ *          `Com_TxBuffer[ipduId]` から現在値をアンパックし、
+ *          `(値 & Mask) != FilterX` を TMC（Transmission Mode Condition）として
+ *          評価する。1 つでも真なら TMS = true（SWS_Com_00678）、
+ *          寄与するシグナルは存在するがどれも偽なら TMS = false
+ *          （SWS_Com_00679）。
+ *
+ *          仕様との既知の相違点（意図的、未修正）: 寄与するシグナルが
+ *          1 つも無い I-PDU について、仕様は TMS = true と規定する
+ *          （SWS_Com_00677）が、本実装は false のまま（tmsTrue の初期値
+ *          0 が変化しない）とする。これは、本プロジェクトの `Com_PBCfg.c`
+ *          が「TmsContributor を持たない I-PDU では TxModeModeTrue/
+ *          TxPeriodMsTrue を設定しない（0 のまま）」という前提で
+ *          `TxModeMode`/`TxPeriodMs` 側のみを実際の意図した値に設定して
+ *          いるため（例: E2EHealthStatus は PERIODIC、ImmobilizerStatus は
+ *          DIRECT）、仕様どおり TMS=true にすると `Com_EffectiveTxModeMode()`/
+ *          `Com_EffectiveTxPeriodMs()` が未設定（0 = MIXED/0ms）の True 側
+ *          フィールドを返してしまい、実際に意図した送信モードが壊れる。
+ *          TMS の True/False 切り替えを実際に使う I-PDU
+ *          （WarningStatus、FaultLamp/AbsLamp が TmsContributor）は
+ *          TxModeModeTrue/TxPeriodMsTrue を明示的に設定済みのため、この
+ *          相違の影響を受けない。結果を `Com_TmsState[ipduId]` へ保存する。
+ *
+ *          Com_SendSignal()（Signal Group でない場合）と
+ *          Com_SendSignalGroup() の確定コミット後、いずれも実バッファへの
+ *          反映が完了した時点で呼ぶこと（SWS_Com_00245: 値の更新のたびに
+ *          TMS を再計算する）。
+ *
+ *          戻り値は「この呼び出しで Com_TmsState[ipduId] が変化したか」。
+ *          SWS_Com_00495（TMS の遷移によってモードが切り替わったら、その
+ *          変化を起こしたシグナルの ComTransferProperty によらず無条件に
+ *          即座に送信しなければならない）を呼び出し元が実装するために使う。
+ *
+ * \param[in]  ipduId  再評価する TX I-PDU の ID。
+ *
+ * \retval  1  Com_TmsState[ipduId] が今回の呼び出しで変化した（true⇔false）。
+ * \retval  0  変化しなかった。
+ *
+ * \pre        Com_ConfigPtr が NULL でないこと（呼び出し元で保証する）。
+ * \pre        `Com_TxBuffer[ipduId]` が最新値へ更新済みであること。
+ *
+ * \AUTOSARReq     {SWS_Com_00245, SWS_Com_00495, SWS_Com_00676, SWS_Com_00677,
+ *                  SWS_Com_00678, SWS_Com_00679}
+ * \ServiceID      {0x1E}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+static uint8 Com_RecalcTms(Com_IPduIdType ipduId)
+{
+    uint8 tmsTrue = 0U;
+
+    for (uint8 s = 0; s < Com_ConfigPtr->SignalCount; s++)
+    {
+        const Com_SignalConfigType* sig = &Com_ConfigPtr->Signals[s];
+        if (sig->IPduId != ipduId || sig->TmsContributor == 0U)
+            continue;
+
+        const uint32 value = Com_UnpackSignal(Com_TxBuffer[ipduId],
+                                               sig->BitPosition, sig->BitSize, sig->Endian);
+        if ((value & sig->Mask) != sig->FilterX)
+            tmsTrue = 1U;
+    }
+
+    const uint8 changed = (Com_TmsState[ipduId] != tmsTrue) ? 1U : 0U;
+    Com_TmsState[ipduId] = tmsTrue;
+    return changed;
+}
+
+/**
+ * \brief   ComFilterAlgorithm を通過した変化を「次回送信あり」として記録する。
+ *
+ * \details Com_SendSignal() / Com_SendSignalGroup() が変化を検知した際に
+ *          呼ばれる。ここでは `Com_TxPending[]` を立てるだけで、実際の
+ *          PduR_ComTransmit() 呼び出し（ひいては MCP2515 への SPI 送信）は一切
+ *          行わない（SWS_Com_00734/00742/00743 の要求"shall immediately
+ *          (within the next main function at the latest) initiate..." の
+ *          うち、「次回メイン関数まで」の猶予を使い、実送信は必ず
+ *          `Com_MainFunctionTx()` 側にディスパッチする設計にしている。
+ *          呼び出しスタックと同一フレームで SPI 送信までブロッキングすると、
+ *          WdgM の Deadline Supervision 対象である ASW Runnable
+ *          （App_EngineManager_Run 等）の実行時間がバス輻輳時の SPI 遅延に
+ *          左右されてしまうため）。
+ *
+ *          実効 TxModeMode（`Com_EffectiveTxModeMode()`、TMS 評価済み）が
+ *          `COM_TX_MODE_PERIODIC` の I-PDU では何もしない（PERIODIC I-PDU は
+ *          Com_MainFunctionTx() の周期タスクのみが送信を担い、値の変化そのものは
+ *          送信タイミングに影響しない）。
+ *
+ *          診断 CommunicationControl (UDS 0x28) による送信抑制中でも
+ *          ここではフラグを立てるだけとする（実際に送信を抑制するかどうかの
+ *          判断は Com_MainFunctionTx() 側で行う。SWS_Com_00777/SWS_Com_00334
+ *          が要求する「停止中に発生した送信要求は保持されず、再開しても
+ *          古いトリガーで即座に送信してはならない」は、Com_MainFunctionTx()
+ *          が抑制中にこのフラグを見つけ次第、実送信せずに破棄することで
+ *          満たす）。
+ *
+ * \param[in]  ipdu  対象 TX I-PDU 設定。NULL 禁止（呼び出し元で保証する）。
+ *
+ *          あわせて ComTxModeNumberOfRepetitions（SWS_Com_00305）の残り
+ *          再送回数を ipdu->NumberOfRepetitions で無条件上書きする
+ *          （[SWS_Com_00279]: 新規送信要求は進行中の再送をキャンセルして
+ *          再スタートする）。
+ *
+ *          \note   本関数は static な内部ヘルパーであり、Det_ReportError() を
+ *          直接呼ぶ公開 API ではないため、他の静的ヘルパー（Com_FindSignalIndex
+ *          等）と同様に \ServiceID/\Reentrancy/\Synchronicity タグは付与しない
+ *          （旧コメントには誤って \ServiceID{0x17} が付いていたが、これは
+ *          本来 Com_TriggerIPDUSend の実 Service ID であり、本関数のものでは
+ *          ない。2026-08 の Com_TriggerIPDUSend 追加を機に是正した）。
+ *
+ * \AUTOSARReq     {SWS_Com_00734, SWS_Com_00742, SWS_Com_00743, SWS_Com_00279}
+ */
+static void Com_RequestTxOnChange(const Com_IPduConfigType* ipdu)
+{
+    const Com_TxModeModeType mode = Com_EffectiveTxModeMode(ipdu);
+    if (mode == COM_TX_MODE_PERIODIC)
+        return;
+
+    Com_TxPending[ipdu->IPduId] = 1U;
+    /* [SWS_Com_00279]: 新規送信要求は進行中の再送シーケンスをキャンセルして
+     * 再スタートする（NumberOfRepetitions=0 の I-PDU では no-op）。DIRECT
+     * 以外では明示的に 0 へクリアする（Com_TxRepeatApplicable() 参照。MIXED
+     * の間の古い残り回数が、後で TMS が DIRECT へ戻った際に不意の再送として
+     * 復活するのを防ぐ）。 */
+    Com_TxRepeatsRemaining[ipdu->IPduId] = Com_TxRepeatApplicable(mode) ? ipdu->NumberOfRepetitions : 0U;
+}
+
+/**
+ * \brief   RX I-PDU が現在タイムアウト中かどうかを返す。
+ *
+ * \details Com_RxTimedOut[IPduId] をそのまま返す軽量アクセサ。
+ *          Rte 層が Com_ReceiveSignal() を介さずに、E_NOT_OK 判定の
+ *          ゲートとして直接参照する用途を想定している
+ *          （E2E Transformer 方式では Rte がミラーから値を読むため、
+ *          Com_ReceiveSignal() のタイムアウトチェックを経由しない）。
+ *
+ * \param[in]  IPduId  確認する RX I-PDU の ID。
+ *
+ * \retval  1  タイムアウト中（IPduId が範囲外の場合も安全側でこちらを返す）。
+ * \retval  0  タイムアウトしていない（正常受信中）。
+ *
+ * \pre        Com_Init() が正常に完了していること。
+ *
+ * \note    本プロジェクト独自 API（実 AUTOSAR に対応関数なし）のため、
+ *          ServiceID は Dcm_ComIndication 等と同じ非標準値 0xF0 を踏襲する
+ *          （Com_Cfg.h 参照）。
+ * \ServiceID      {0xF0}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+uint8 Com_IsRxTimedOut(Com_IPduIdType IPduId)
+{
+    if (IPduId >= COM_RX_IPDU_MAX)
+    {
+        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_IS_RX_TIMED_OUT, COM_E_PARAM);
+        return 1U;
+    }
+    return Com_RxTimedOut[IPduId];
+}
+
+typedef void (*Com_VoidCbkType)(void);
+
+/**
+ * \brief   TxAckCbk/TxErrCbk/TxTOutCbk（Com_CbkTxAck/Com_CbkTxErr/
+ *          Com_CbkTxTOut、SWS_Com_00468/SWS_Com_00491/SWS_Com_00554）
+ *          共通の配送ロジック。
+ *
+ * \details 実 AUTOSAR はいずれのコールバックも signal 単位/signal group
+ *          単位で別々のコールバック名（`Rte_COMCbkTAck_<sn>`/`<sg>`、
+ *          `Rte_COMCbkTErr_<sn>`/`<sg>`、`Rte_COMCbkTxTOut_<sn>`/`<sg>`）を
+ *          持てる。`Com_TxConfirmation()`（TxAckCbk/TxTOutCbk 解除側）・
+ *          `Com_IpduGroupStop()`（TxErrCbk 側）・`Com_MainFunctionTx()`
+ *          （TxTOutCbk 発火側）は「どのコールバックか」以外は完全に同じ
+ *          配送ロジック（Signal Group ならグループ単位で 1 回、そうでなければ
+ *          この I-PDU に属する TX シグナルのうち該当コールバックが設定
+ *          されているものすべてを呼ぶ）のため、2026-08 のレビューで指摘
+ *          された重複をここへ集約した。
+ *
+ * \param[in]  ipdu   対象 TX I-PDU 設定。NULL 可（NULL は「Signal Group では
+ *                    ない」扱いとし、下記シグナル走査へ進む。Com_FindTxIPdu()
+ *                    が見つけられなかった場合に備える、Com_TxConfirmation()
+ *                    参照）。
+ * \param[in]  TxPduId 対象 TX I-PDU の ID（シグナル走査時の `sig->IPduId`
+ *                    一致判定に使う）。
+ * \param[in]  kind   配送するコールバックの種別。
+ *
+ * \pre        Com_ConfigPtr が NULL でないこと（呼び出し元で保証する）。
+ *
+ * \ServiceID      {0xF2}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void Com_InvokeTxNotification(const Com_IPduConfigType* ipdu,
+                                      Com_IPduIdType TxPduId,
+                                      Com_TxNotifyKindType kind)
+{
+    if (ipdu != NULL && ipdu->IsSignalGroup != 0U)
+    {
+        Com_VoidCbkType groupCbk = NULL;
+        switch (kind)
+        {
+        case COM_TX_NOTIFY_ACK:  groupCbk = ipdu->TxAckCbk;  break;
+        case COM_TX_NOTIFY_ERR:  groupCbk = ipdu->TxErrCbk;  break;
+        case COM_TX_NOTIFY_TOUT: groupCbk = ipdu->TxTOutCbk; break;
+        }
+        if (groupCbk != NULL)
+            groupCbk();
         return;
     }
 
-    for (uint8 i = 0U; i < Com_ConfigPtr->RxIPduCount; i++)
+    for (uint8 s = 0U; s < Com_ConfigPtr->SignalCount; s++)
     {
-        const Com_IPduConfigType* ipdu = &Com_ConfigPtr->RxIPdus[i];
-        if (ipdu->IpduGroupId != IpduGroupId)
+        const Com_SignalConfigType* sig = &Com_ConfigPtr->Signals[s];
+        /* Direction のチェックが必須: RX I-PDU と TX I-PDU の IPduId は
+         * 別々の値空間（どちらも 0 始まり）のため、IPduId の一致だけでは
+         * 方向を判別できない（例: RX の EngineInfo=0 と TX の
+         * MeterStatus=0）。詳細は Com_SignalDirectionType の宣言コメント参照。 */
+        if (sig->Direction != COM_SIGNAL_DIRECTION_TX || sig->IPduId != TxPduId)
             continue;
 
-        /* [SWS_Com_00684]/[SWS_Com_00685]: 受信処理・デッドライン監視の両方を
-         * 無効化する。Com_RxTimedOut は意図的にクリアしない（Started==0 の間
-         * Com_MainFunctionRx() 側の評価自体を止めるため、値は参照されない）。 */
-        Com_RxIPduStarted[ipdu->IPduId] = 0U;
-
-        DET_LOGI(TAG, "IpduGroupStop grp=%u iPdu=%u(RX)",
-                 (unsigned)IpduGroupId, (unsigned)ipdu->IPduId);
-    }
-
-    for (uint8 i = 0U; i < Com_ConfigPtr->TxIPduCount; i++)
-    {
-        const Com_IPduConfigType* ipdu = &Com_ConfigPtr->TxIPdus[i];
-        if (ipdu->IpduGroupId != IpduGroupId)
-            continue;
-
-        const Com_IPduIdType id = ipdu->IPduId;
-        Com_TxIPduStarted[id] = 0U;
-
-        /* [SWS_Com_00479]/[SWS_Com_00491]: PduR へは渡した（実送信済み）が
-         * 対応する Com_TxConfirmation() がまだ届いていない（＝未確認の）
-         * I-PDU がこの停止時点で存在すれば、TxErrCbk（Com_CbkTxErr 相当）を
-         * 即座に呼ぶ（signal/signal group 単位の配送は Com_TxConfirmation()
-         * の TxAckCbk と共通の Com_InvokeTxNotification() を使う、同関数の
-         * コメント参照）。呼び出し後は確認待ちでなくなるためフラグをクリア
-         * する（後から届く Com_TxConfirmation() は Com_TxIPduStarted[id]==0
-         * により無視される、上記参照）。 */
-        if (Com_TxConfPending[id])
+        Com_VoidCbkType cbk = NULL;
+        switch (kind)
         {
-            Com_InvokeTxNotification(ipdu, id, COM_TX_NOTIFY_ERR);
-            Com_TxConfPending[id] = 0U;
-
-            DET_LOGW(TAG, "IpduGroupStop grp=%u iPdu=%u(TX) unconfirmed at stop -> TxErrCbk",
-                     (unsigned)IpduGroupId, (unsigned)id);
+        case COM_TX_NOTIFY_ACK:  cbk = sig->TxAckCbk;  break;
+        case COM_TX_NOTIFY_ERR:  cbk = sig->TxErrCbk;  break;
+        case COM_TX_NOTIFY_TOUT: cbk = sig->TxTOutCbk; break;
         }
-        /* Com_TxTimedOut/Com_TxUsingFirstTimeout/Com_TxConfPendingSinceMs
-         * （TX 送信デッドライン監視）は意図的にクリアしない（上の RX 側
-         * Com_RxTimedOut と同じ理由: Started==0 の間は Com_MainFunctionTx()
-         * 側の監視ループ自体が評価しないため値は参照されず、再開時は
-         * Com_IpduGroupStart() が無条件で再初期化する）。この停止時点で
-         * 確認待ちだった I-PDU が TxTOutCbk と二重発火しないのは、直上で
-         * Com_TxConfPending[id] を無条件でクリアしているため（TX 監視
-         * ループは Com_TxConfPending[id]==0 を見た時点でこの I-PDU を
-         * 対象外にする、Com_MainFunctionTx() 参照）。Com_TxIPduStarted[id]==0
-         * はあくまで「停止中は評価しない」という独立した目的であり、この
-         * 二重発火防止自体の担い手ではない。 */
+        if (cbk != NULL)
+            cbk();
+    }
+}
 
-        /* [SWS_Com_00777]: 保留中の送信要求をキャンセルする。再開時に
-         * 「停止中に溜まった分」が積み残しとして即座に送信されないようにする
-         * （Com_SetCommunicationEnabled() の既存コメントと同じ考え方）。 */
-        Com_TxPending[id] = 0U;
-        Com_TxTriggerPending[id] = 0U;
+/**
+ * \brief   RX I-PDU 1 本分のデッドライン監視タイマを再始動する。
+ *
+ * \details Com_SetCommunicationEnabled() の受信再開時と Com_IpduGroupStart() が
+ *          共通して行う手順（[SWS_Com_00787] 相当）をまとめたもの。
+ *          Com_RxLastMs を現在時刻へリセットしないと、TimeoutMs 以上の時間
+ *          受信を抑制していた場合、再有効化した直後（次の Com_MainFunctionRx()
+ *          呼び出し）で古い Com_RxLastMs のまま即座にタイムアウト判定されて
+ *          しまう。既に立っていた Com_RxTimedOut/Com_SigTimedOut も、抑制中の
+ *          「経過時間」を理由に上位層へ通信異常と伝え続けないよう、あわせて
+ *          クリアする。再始動直後は ComFirstTimeout 相当（FirstTimeoutMs）
+ *          から監視を始める。
+ *
+ * \param[in]  id   対象 RX I-PDU の ID。
+ * \param[in]  now  基準時刻（millis()）。
+ *
+ * \pre        Com_ConfigPtr が NULL でないこと。
+ */
+static void Com_ResetRxDeadlineMonitoring(Com_IPduIdType id, unsigned long now)
+{
+    Com_RxLastMs[id]   = now;
+    Com_RxTimedOut[id] = 0U;
+    Com_RxUsingFirstTimeout[id] = 1U;
 
-        /* [SWS_Com_00392]: I-PDU Group の停止は ComTxModeNumberOfRepetitions
-         * の再送シーケンスもキャンセルする。本番設定では対象 I-PDU
-         * （ImmobilizerStatus）が IpduGroupId=COM_IPDU_GROUP_NONE のため
-         * このパスは実機では到達しないが、防御的にクリアしておく。 */
-        Com_TxRepeatsRemaining[id] = 0U;
-
-        DET_LOGI(TAG, "IpduGroupStop grp=%u iPdu=%u(TX)",
-                 (unsigned)IpduGroupId, (unsigned)id);
+    for (uint8 s = 0U; s < Com_ConfigPtr->SignalCount; s++)
+    {
+        if (Com_ConfigPtr->Signals[s].Direction == COM_SIGNAL_DIRECTION_RX
+            && Com_ConfigPtr->Signals[s].IPduId == id)
+        {
+            Com_SigTimedOut[s] = 0U;
+        }
     }
 }
 
@@ -3507,74 +3609,9 @@ static uint8 Com_IpduGroupHasTxMember(Com_IpduGroupIdType IpduGroupId)
     return 0U;
 }
 
-void Com_EnableReceptionDM(Com_IpduGroupIdType IpduGroupId)
-{
-    DET_LOGT(TAG, "called");
-
-    if (Com_ConfigPtr == NULL)
-    {
-        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_ENABLE_RECEPTION_DM, COM_E_UNINIT);
-        return;
-    }
-
-    if (Com_IpduGroupHasTxMember(IpduGroupId))
-    {
-        /* [SWS_Com_00534]: 要求全体を無視する（RX 側も一切変更しない）。 */
-        DET_LOGW(TAG, "EnableReceptionDM grp=%u ignored: group contains TX I-PDU(s)",
-                 (unsigned)IpduGroupId);
-        return;
-    }
-
-    const unsigned long now = millis();
-
-    for (uint8 i = 0U; i < Com_ConfigPtr->RxIPduCount; i++)
-    {
-        const Com_IPduConfigType* ipdu = &Com_ConfigPtr->RxIPdus[i];
-        if (ipdu->IpduGroupId != IpduGroupId)
-            continue;
-
-        Com_RxDmEnabled[ipdu->IPduId] = 1U;
-
-        /* Com_IpduGroupStart() の [SWS_Com_00787] 項目2と同じ理由:
-         * 無効化していた間の経過時間を理由に、再有効化した直後で即座に
-         * タイムアウト判定されてしまうのを防ぐ。 */
-        Com_ResetRxDeadlineMonitoring(ipdu->IPduId, now);
-
-        DET_LOGI(TAG, "EnableReceptionDM grp=%u iPdu=%u",
-                 (unsigned)IpduGroupId, (unsigned)ipdu->IPduId);
-    }
-}
-
-void Com_DisableReceptionDM(Com_IpduGroupIdType IpduGroupId)
-{
-    DET_LOGT(TAG, "called");
-
-    if (Com_ConfigPtr == NULL)
-    {
-        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_DISABLE_RECEPTION_DM, COM_E_UNINIT);
-        return;
-    }
-
-    if (Com_IpduGroupHasTxMember(IpduGroupId))
-    {
-        /* [SWS_Com_00534]: 要求全体を無視する（RX 側も一切変更しない）。 */
-        DET_LOGW(TAG, "DisableReceptionDM grp=%u ignored: group contains TX I-PDU(s)",
-                 (unsigned)IpduGroupId);
-        return;
-    }
-
-    for (uint8 i = 0U; i < Com_ConfigPtr->RxIPduCount; i++)
-    {
-        const Com_IPduConfigType* ipdu = &Com_ConfigPtr->RxIPdus[i];
-        if (ipdu->IpduGroupId != IpduGroupId)
-            continue;
-
-        Com_RxDmEnabled[ipdu->IPduId] = 0U;
-
-        DET_LOGI(TAG, "DisableReceptionDM grp=%u iPdu=%u",
-                 (unsigned)IpduGroupId, (unsigned)ipdu->IPduId);
-    }
-}
+/* ======================================================================
+ * Test Functions
+ * ====================================================================== */
 
 #ifdef COM_UNIT_TEST
 uint8 Com_Test_GetTxPending(Com_IPduIdType ipduId)

@@ -18,11 +18,13 @@ extern "C" {
 #include "CanIf.h"
 #include "Can.h"
 #include "Can_Hw.h"
-#include "Fake_Can_Hw.h"
 #include "Fake_Det_Hw.h"
 #include "Fake_Millis.h"
+#include "Fake_Can_Hw.h"
 #include "Wrap_Can.h"
 #include "Wrap_CanIf.h"
+#include "Wrap_PduR.h"
+#include "Wrap_Com.h"
 }
 
 namespace
@@ -499,7 +501,10 @@ protected:
                               // （ComTxModeNumberOfRepetitions テストで
                               // FakeMillis_Value を進めて決定的に検証するため）
         FakeCanHw_Reset();
+        WrapCan_Reset();
         WrapCanIf_Reset();  // 他ファイルの故障注入が漏れ伝わらないよう防御的にリセット
+        WrapPduR_Reset();
+        WrapCom_Reset();
         FakeDetHw_LogSuppressed = 1U;  // Init() のログはノイズになるため抑制
 
         canConfig.filter.filterId = 0x0220U;
@@ -533,8 +538,6 @@ protected:
         s_txCalloutAccept      = 1U;
         s_txCalloutInvokeCount = 0U;
         s_txCalloutLastByte0   = 0U;
-
-        WrapCan_Reset();
     }
 
     void TearDown() override
