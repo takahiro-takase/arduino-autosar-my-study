@@ -97,7 +97,7 @@ extern Can_ReturnType ForcedReturn_Can_SetControllerMode;      /**< 既定 CAN_N
 extern Std_ReturnType ForcedReturn_Can_GetControllerErrorState; /**< 既定 E_NOT_OK */
 extern Can_ReturnType ForcedReturn_Can_Write;                   /**< 既定 CAN_NOT_OK */
 
-/** 上記11関数すべての呼び出し回数・回数閾値・強制戻り値を初期状態へ戻す。
+/** すべての関数呼び出し回数・回数閾値・強制戻り値を初期状態へ戻す。
  *  各テストケースの開始時（SetUp()）に1回呼ぶ。 */
 void WrapCan_Reset(void);
 

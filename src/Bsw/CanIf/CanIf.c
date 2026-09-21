@@ -72,6 +72,10 @@ static Can_ControllerStateType CanIf_ControllerMode[CANIF_CONTROLLER_MAX];
  * 読み出し時にはクリアしない（CanIf_GetTxConfirmationState() の Doxygen 参照）。 */
 static CanIf_NotifStatusType CanIf_TxConfirmationState[CANIF_CONTROLLER_MAX];
 
+/* ======================================================================
+ * Functions
+ * ====================================================================== */
+
 /**
  * \brief   CAN インタフェースモジュールを初期化する。
  *
@@ -90,8 +94,6 @@ static CanIf_NotifStatusType CanIf_TxConfirmationState[CANIF_CONTROLLER_MAX];
  */
 void CanIf_Init(const CanIf_ConfigType* ConfigPtr)
 {
-    DET_LOGT(TAG, "called");
-
     if (ConfigPtr == NULL)
     {
         DET_LOGE(TAG, "Init: NULL ConfigPtr");
@@ -176,583 +178,6 @@ void CanIf_DeInit(void)
 {
     CanIf_ConfigPtr = NULL;
     DET_LOGI(TAG, "DeInit ok");
-}
-
-/**
- * \brief   CAN ドライバ経由で PDU の送信を要求する。
- *
- * \details TxPduId で TX PDU 設定を検索し、PDU 長を設定 DLC と照合したうえで
- *          Can_PduType を構築して Can_Write() を呼び出す。
- *
- * \param[in]  TxPduId     送信する TX PDU の ID。
- *                         設定済み TxPduCount 未満であること。
- * \param[in]  PduInfoPtr  送信するデータと長さへのポインタ。
- *                         NULL 禁止。SduDataPtr も NULL 禁止。
- *
- * \retval  E_OK      PDU が Can_Write() に正常に渡された。
- * \retval  E_NOT_OK  CanIf 未初期化、TxPduId 不正、NULL ポインタ、
- *                    SduLength が設定 DLC を超過、PDU チャネルが
- *                    CANIF_ONLINE でない（CanIf_SetPduMode() 参照）、
- *                    または Can_Write() 失敗。
- *
- * \pre        CanIf_Init() が正常に完了していること。
- * \pre        CAN コントローラが CAN_CS_STARTED 状態であること。
- *
- * \AUTOSARReq     {SWS_CANIF_00005}
- * \ServiceID      {0x49}
- * \Reentrancy     {Reentrant}
- * \Synchronicity  {Synchronous}
- */
-Std_ReturnType CanIf_Transmit(PduIdType TxPduId, const PduInfoType* PduInfoPtr)
-{
-    DET_LOGT(TAG, "called");
-
-    if (CanIf_ConfigPtr == NULL)
-        return E_NOT_OK;
-
-    if (TxPduId >= CanIf_ConfigPtr->TxPduCount)
-    {
-        DET_LOGE(TAG, "TX E: invalid TxPduId");
-        Det_ReportError(CANIF_MODULE_ID, 0U, CANIF_API_ID_TRANSMIT, CANIF_E_INVALID_TXPDUID);
-        return E_NOT_OK;
-    }
-
-    if (PduInfoPtr == NULL || PduInfoPtr->SduDataPtr == NULL)
-    {
-        DET_LOGE(TAG, "TX E: PduInfoPtr NULL");
-        Det_ReportError(CANIF_MODULE_ID, 0U, CANIF_API_ID_TRANSMIT, CANIF_E_PARAM_POINTER);
-        return E_NOT_OK;
-    }
-
-    const CanIf_TxPduConfigType* txCfg = &CanIf_ConfigPtr->TxPduConfig[TxPduId];
-
-    if (PduInfoPtr->SduLength > txCfg->Dlc)
-    {
-        DET_LOGE(TAG, "TX E: SduLength>DLC");
-        return E_NOT_OK;
-    }
-
-    /* [SWS_CANIF_00137]/[SWS_CANIF_00074] 相当: PDU チャネルが CANIF_ONLINE
-     * でなければ送信しない（CANIF_OFFLINE/CANIF_TX_OFFLINE いずれも TX 禁止）。
-     * 本プロジェクトは単一コントローラのため添字は固定で 0。DET は報告しない
-     * （TxIpduCalloutCbk による拒否と同じ扱い、呼び出し元の CanSM が既に
-     * 意図して TX_OFFLINE にしている想定のため）。 */
-    if (CanIf_ControllerPduMode[0] != CANIF_ONLINE)
-    {
-        DET_LOGD(TAG, "TX iPdu=%u rejected: PduMode not ONLINE", (unsigned)TxPduId);
-        return E_NOT_OK;
-    }
-
-    Can_PduType canPdu = {
-        .swPduHandle = TxPduId,
-        .id          = txCfg->CanId,
-        .length      = (uint8)PduInfoPtr->SduLength,
-        .sdu         = PduInfoPtr->SduDataPtr
-    };
-
-    DET_LOGI(TAG, "TX id=%u can=0x%lX", (unsigned)TxPduId, (unsigned long)txCfg->CanId);
-
-    Can_ReturnType ret = Can_Write(txCfg->Hth, &canPdu);
-
-    if (ret == CAN_BUSY)
-        DET_LOGW(TAG, "TX BUSY");
-
-    return (ret == CAN_OK) ? E_OK : E_NOT_OK;
-}
-
-/**
- * \brief   CAN ドライバから受信フレームを上位層へ通知する。
- *
- * \details CAN ドライバがフレームを受信した際に呼び出される。
- *          RX PDU テーブルから HOH と CAN ID が一致するエントリを検索し、
- *          設定された上位層の RxIndication コールバックへ転送する。
- *          一致するエントリが存在しない場合はフレームを破棄してログを出力する。
- *          一致したエントリの設定 DLC に満たない L-PDU も上位層へ渡さず棄却する
- *          （データ長チェック、違反時はランタイムエラー
- *          CANIF_E_INVALID_DATA_LENGTH を報告する、[SWS_CANIF_00168]）。
- *
- *          上位 PDU への振り分け結果に関わらず、CanSM_RxIndication() を
- *          呼び出して「有効なフレームを受信した」ことを CanSM へ通知する
- *          (AUTOSAR SWS_CanSM の CanSMRxIndicationUsed に相当)。通常運用中は
- *          無害だが、ウェイクアップ検証中はこれが検証成功の唯一の合図になる
- *          （詳細は CanSM_RxIndication() を参照）。
- *
- *          `ReadRxPduDataEnabled=1` の RX PDU では、上位層コールバックの
- *          呼び出しに加えて内部バッファも更新し、`CanIf_ReadRxPduData()`
- *          （[SWS_CANIF_00194]）でのポーリング取得に備える。
- *
- * \param[in]  Mailbox     受信 CAN ID・HOH・コントローラ ID を格納した
- *                         ハードウェアメールボックス記述子へのポインタ。
- *                         NULL 禁止。
- * \param[in]  PduInfoPtr  受信 PDU のデータと長さへのポインタ。
- *                         NULL 禁止。SduDataPtr も NULL 禁止
- *                         （CanIf_Transmit と対称の入力検証）。
- *
- * \pre        CanIf_Init() が正常に完了していること。
- *
- * \AUTOSARReq     {SWS_CANIF_00415, SWS_CANIF_00026, SWS_CANIF_00168}
- * \ServiceID      {0x14}
- * \Reentrancy     {Reentrant}
- * \Synchronicity  {Synchronous}
- */
-void CanIf_RxIndication(const Can_HwType* Mailbox, const PduInfoType* PduInfoPtr)
-{
-    DET_LOGT(TAG, "called");
-
-    if (CanIf_ConfigPtr == NULL)
-        return;  /* [SWS_CANIF_00421]: 未初期化時は黙って何もしない（DET 報告なし） */
-
-    if (Mailbox == NULL || PduInfoPtr == NULL || PduInfoPtr->SduDataPtr == NULL)
-    {
-        DET_LOGE(TAG, "RX: NULL Mailbox/PduInfoPtr");
-        Det_ReportError(CANIF_MODULE_ID, 0U, CANIF_API_ID_RX_INDICATION, CANIF_E_PARAM_POINTER);
-        return;
-    }
-
-    CanSM_RxIndication(Mailbox->ControllerId);
-
-    /* SWS_CANIF_00416/00417: Hoh 自体が未設定なのか（HOH エラー）、Hoh は
-     * 設定済みだが CanId が想定と異なるのか（CanId エラー）を区別して
-     * 報告するため、ループ内で Hoh 一致の有無を別途記録する。 */
-    uint8 hohMatched = 0U;
-
-    for (uint8 i = 0; i < CanIf_ConfigPtr->RxPduCount; i++)
-    {
-        const CanIf_RxPduConfigType* rxCfg = &CanIf_ConfigPtr->RxPduConfig[i];
-
-        if (rxCfg->Hrh != Mailbox->Hoh)
-            continue;
-
-        hohMatched = 1U;
-
-        if (rxCfg->CanId != Mailbox->CanId)
-            continue;
-
-        /* [SWS_CANIF_00026]: 設定 DLC に満たない L-PDU は上位層へ渡さず棄却する。
-         * Com/CanTp 側にも独自の受信長チェックがあるが、本来この責務は CanIf
-         * 層にある。CanIf にチェックがないと、将来 PduR に新しいルートが
-         * 追加された際、上位層側でチェックを入れ忘れるリスクを CanIf 一層で
-         * 防げなくなる。[SWS_CANIF_00168]: 棄却時はランタイムエラー
-         * CANIF_E_INVALID_DATA_LENGTH を報告する（2026-09 追加、以前は
-         * ログ出力のみで未報告だった）。
-         * 実仕様は本チェック自体を CanIfPrivateDataLengthCheck で全体
-         * 無効化できると規定するが（無効時は [SWS_CANIF_00830] により受信長を
-         * そのまま上位層へ渡す）、本プロジェクトはその無効化コンフィグを
-         * 持たず常時有効の簡略実装（自己spec-citation検証で確認済み）。 */
-        if (PduInfoPtr->SduLength < rxCfg->Dlc)
-        {
-            DET_LOGW(TAG, "RX can=0x%lX length mismatch got=%u exp=%u",
-                     (unsigned long)Mailbox->CanId,
-                     (unsigned)PduInfoPtr->SduLength, (unsigned)rxCfg->Dlc);
-            (void)Det_ReportRuntimeError(CANIF_MODULE_ID, 0U, CANIF_API_ID_RX_INDICATION,
-                                          CANIF_E_INVALID_DATA_LENGTH);
-            return;
-        }
-
-        DET_LOGI(TAG, "RX can=0x%lX pdu=%u",
-                 (unsigned long)Mailbox->CanId,
-                 (unsigned)rxCfg->UpperLayerRxPduId);
-
-        /* CanIf_ReadRxPduData() 用バッファ更新（[SWS_CANIF_00194]、
-         * ReadRxPduDataEnabled=1 の RX PDU のみ）。上のデータ長チェックは
-         * SduLength < rxCfg->Dlc（不足）のみを棄却し、超過は素通りするため、
-         * ここでは rxCfg->Dlc（この PDU 自身の設定値）でクランプする
-         * （CANIF_MAX_DLC ではない——CanIf_ReadRxPduData() の呼び出し元が
-         * 「この PDU の設定 Dlc 分だけ確保すれば十分」と信頼できるように
-         * するため。/code-review 指摘: 当初 CANIF_MAX_DLC でクランプしており、
-         * Dlc より大きい異常フレームを受けた場合に契約を超えるデータ長を
-         * 返しうる状態だった）。 */
-        if (rxCfg->ReadRxPduDataEnabled != 0U)
-        {
-            const uint8 copyLen = (PduInfoPtr->SduLength <= rxCfg->Dlc)
-                                       ? (uint8)PduInfoPtr->SduLength
-                                       : rxCfg->Dlc;
-            for (uint8 b = 0U; b < copyLen; b++)
-                CanIf_RxPduDataBuffer[i][b] = PduInfoPtr->SduDataPtr[b];
-            CanIf_RxPduDataLength[i] = copyLen;
-            CanIf_RxPduDataValid[i]  = 1U;
-        }
-
-        /* [SWS_CANIF_00230]: CanIf_ReadRxNotifStatus() 用の通知状態
-         * （CanIf_ReadRxNotifStatus() の Doxygen 参照）。 */
-        CanIf_RxNotifStatus[i] = CANIF_TX_RX_NOTIFICATION;
-
-        if (rxCfg->RxIndicationFct != NULL)
-            rxCfg->RxIndicationFct(rxCfg->UpperLayerRxPduId, PduInfoPtr);
-
-        return;
-    }
-
-    DET_LOGW(TAG, "RX no match can=0x%lX", (unsigned long)Mailbox->CanId);
-    if (hohMatched)
-        Det_ReportError(CANIF_MODULE_ID, 0U, CANIF_API_ID_RX_INDICATION, CANIF_E_PARAM_CANID);
-    else
-        Det_ReportError(CANIF_MODULE_ID, 0U, CANIF_API_ID_RX_INDICATION, CANIF_E_PARAM_HOH);
-}
-
-/**
- * \brief   RX PDU の直近受信データをポーリングで取得する。
- *
- * \details `CanIf_RxIndication()` が上位層コールバックへプッシュ配送する
- *          経路とは独立した、ポーリングによる受信データ取得経路
- *          （実 AUTOSAR の I-PDU callout 等とも異なる、CanIf 自身が保持する
- *          内部バッファへのアクセサ）。対象 RX PDU は
- *          `CanIf_RxPduConfigType.ReadRxPduDataEnabled=1` で事前に
- *          opt-in されている必要がある（[SWS_CANIF_00325]、既定は 0
- *          ＝バッファリングなし）。
- *
- *          `CanIfRxSduId` は `CanIf_ConfigPtr->RxPduConfig[]` 上の位置
- *          （`CanIf_RxIndication()` のループ添字 `i` と同じ名前空間）であり、
- *          上位層へ渡す `UpperLayerRxPduId` とは別の ID 空間である点に注意
- *          （実 AUTOSAR の "CanIf 内部ハンドル" に相当）。
- *
- * \note    本プロジェクトは [SWS_CANIF_00324]（コントローラが
- *          CAN_CS_STARTED かつ受信パスが online でなければ E_NOT_OK）は
- *          実装しない。CanIf 自身はコントローラ状態を一切追跡しておらず
- *          （Can_MainFunction_Read() から渡されたフレームをそのまま
- *          振り分けるだけの設計）、この状態管理は CanSM の責務のため
- *          スコープ外とする。「一度も受信していない PDU は E_NOT_OK」
- *          （spec 原文 "No valid data has been received"）のみ実装する。
- *
- * \param[in]   CanIfRxSduId    データを取得する RX PDU の ID
- *                              （`CanIf_ConfigPtr->RxPduConfig[]` の添字）。
- * \param[out]  CanIfRxInfoPtr  取得したデータの格納先。`SduDataPtr` は
- *                              対象 PDU の設定 `Dlc` バイト分確保しておけば
- *                              十分（バッファ自体の格納長も `Dlc` でクランプ
- *                              される。詳細は `CanIf_RxIndication()` の
- *                              実装コメント参照）。NULL 禁止。
- *
- * \retval  E_OK      データを `CanIfRxInfoPtr` へ格納した。
- * \retval  E_NOT_OK  CanIf 未初期化、CanIfRxSduId が範囲外、対象 PDU が
- *                    `ReadRxPduDataEnabled=0`、`CanIfRxInfoPtr`/
- *                    `SduDataPtr` が NULL、またはこの PDU をまだ一度も
- *                    受信していない。
- *
- * \pre        CanIf_Init() が正常に完了していること。
- *
- * \note    本プロジェクトは単一の協調的スーパーループ（Os の各タスクが
- *          プリエンプションなしで順次実行される、`Os_PBCfg.c` 参照）で
- *          動作するため、`CanIf_RxIndication()`（Reentrant）と本関数
- *          （Non Reentrant）が実際に競合して同じ `CanIf_RxPduDataBuffer[]`
- *          要素を同時に読み書きすることはない（`CanIf_RxIndication()` 自体
- *          も真の割り込みコンテキストではなく `Can_MainFunction_Read()`
- *          からポーリングで呼ばれる、本ファイル冒頭の
- *          `CanIf_RxIndication()` の Doxygen コメント参照）。マルチコア化
- *          等でこの前提が崩れる場合は、Rte.c の
- *          `SchM_Enter/Exit_Rte_MIRROR_EXCLUSIVE_AREA()` と同様の排他区間が
- *          必要になる（/code-review 指摘）。
- *
- * \AUTOSARReq     {SWS_CANIF_00194, SWS_CANIF_00325, SWS_CANIF_00326}
- * \ServiceID      {0x06}
- * \Reentrancy     {Non Reentrant}
- * \Synchronicity  {Synchronous}
- */
-Std_ReturnType CanIf_ReadRxPduData(PduIdType CanIfRxSduId, PduInfoType* CanIfRxInfoPtr)
-{
-    DET_LOGT(TAG, "called");
-
-    if (CanIf_ConfigPtr == NULL)
-        return E_NOT_OK;  /* CanIf の他 API と同じ方針、CanIf_Cfg.h 冒頭コメント参照 */
-
-    if (CanIfRxSduId >= CanIf_ConfigPtr->RxPduCount)
-    {
-        DET_LOGE(TAG, "ReadRxPduData E: invalid CanIfRxSduId");
-        Det_ReportError(CANIF_MODULE_ID, 0U, CANIF_API_ID_READ_RX_PDU_DATA, CANIF_E_INVALID_RXPDUID);
-        return E_NOT_OK;
-    }
-
-    if (CanIfRxInfoPtr == NULL || CanIfRxInfoPtr->SduDataPtr == NULL)
-    {
-        DET_LOGE(TAG, "ReadRxPduData E: NULL CanIfRxInfoPtr");
-        Det_ReportError(CANIF_MODULE_ID, 0U, CANIF_API_ID_READ_RX_PDU_DATA, CANIF_E_PARAM_POINTER);
-        return E_NOT_OK;
-    }
-
-    const CanIf_RxPduConfigType* rxCfg = &CanIf_ConfigPtr->RxPduConfig[CanIfRxSduId];
-    if (rxCfg->ReadRxPduDataEnabled == 0U)
-    {
-        /* [SWS_CANIF_00325]: opt-in されていない PDU の要求も開発エラー */
-        DET_LOGE(TAG, "ReadRxPduData E: CanIfRxSduId=%u not configured for buffering",
-                 (unsigned)CanIfRxSduId);
-        Det_ReportError(CANIF_MODULE_ID, 0U, CANIF_API_ID_READ_RX_PDU_DATA, CANIF_E_INVALID_RXPDUID);
-        return E_NOT_OK;
-    }
-
-    if (CanIf_RxPduDataValid[CanIfRxSduId] == 0U)
-    {
-        /* spec 原文: "E_NOT_OK: No valid data has been received"。まだ一度も
-         * 受信していないだけの正常な状態のため Det_ReportError() は呼ばない。 */
-        return E_NOT_OK;
-    }
-
-    const uint8 len = CanIf_RxPduDataLength[CanIfRxSduId];
-    for (uint8 b = 0U; b < len; b++)
-        CanIfRxInfoPtr->SduDataPtr[b] = CanIf_RxPduDataBuffer[CanIfRxSduId][b];
-    CanIfRxInfoPtr->SduLength = len;
-
-    return E_OK;
-}
-
-/**
- * \brief   CAN フレームの送信完了を上位層へ通知する。
- *
- * \details CAN ドライバが送信完了を確認した後に呼び出される。
- *          CanTxPduId で TX PDU 設定を検索し、設定された上位層の
- *          TxConfirmation コールバックを呼び出す。
- *          CanTxPduId が範囲外の場合は処理を無視する。
- *
- * \param[in]  CanTxPduId  送信が完了した TX PDU の ID。
- *                         設定済み TxPduCount 未満であること。
- *
- * \pre        CanIf_Init() が正常に完了していること。
- *
- * \AUTOSARReq     {SWS_CANIF_00007}
- * \ServiceID      {0x13}
- * \Reentrancy     {Reentrant}
- * \Synchronicity  {Synchronous}
- */
-void CanIf_TxConfirmation(PduIdType CanTxPduId)
-{
-    DET_LOGT(TAG, "called");
-
-    if (CanIf_ConfigPtr == NULL)
-        return;
-
-    if (CanTxPduId >= CanIf_ConfigPtr->TxPduCount)
-    {
-        Det_ReportError(CANIF_MODULE_ID, 0U, CANIF_API_ID_TX_CONFIRMATION, CANIF_E_PARAM_LPDU);
-        return;
-    }
-
-    const CanIf_TxPduConfigType* txCfg = &CanIf_ConfigPtr->TxPduConfig[CanTxPduId];
-
-    DET_LOGI(TAG, "TxConf id=%u", (unsigned)CanTxPduId);
-
-    /* [SWS_CANIF_00202]: CanIf_ReadTxNotifStatus() 用の通知状態
-     * （CanIf_ReadTxNotifStatus() の Doxygen 参照）。 */
-    CanIf_TxNotifStatus[CanTxPduId] = CANIF_TX_RX_NOTIFICATION;
-
-    /* [SWS_CANIF_00734]/[SWS_CANIF_00740]: CanIf_GetTxConfirmationState() 用の
-     * コントローラ単位の通知状態。TX PDU 設定はコントローラ ID を持たないが、
-     * 本プロジェクトは CANIF_CONTROLLER_MAX=1（単一コントローラ）のため、
-     * 全 TX PDU はコントローラ 0 に属するとみなしてよい。[SWS_CANIF_00740]の
-     * 「コントローラが CAN_CS_STARTED のときだけバッファする」通り、STARTED
-     * 以外では更新しない。Can.c の Can_TxConfQueue は非同期にドレインされる
-     * ため、CanIf_Transmit() 時点では STARTED でも、実際にこの通知が届く
-     * 頃には CanIf_SetControllerMode(STOPPED) 済み（Bus-Off 等）ということが
-     * ありうる（/code-review で発見: 状態チェックが無いと、停止後に届いた
-     * 古い通知で「起動後に TX 確認あり」と誤認しうる）。 */
-    if (CanIf_ControllerMode[0] == CAN_CS_STARTED)
-        CanIf_TxConfirmationState[0] = CANIF_TX_RX_NOTIFICATION;
-
-    if (txCfg->TxConfirmFct != NULL)
-        txCfg->TxConfirmFct(txCfg->UpperLayerTxPduId, E_OK);
-}
-
-/**
- * \brief   指定 TX PDU の送信完了通知状態を取得し、読み出した状態をクリアする
- *          （[SWS_CANIF_00202]）。
- *
- * \details `CanIf_TxConfirmation()` が呼ばれると当該 TX PDU の状態は
- *          `CANIF_TX_RX_NOTIFICATION` になり、本関数を呼ぶと
- *          `CANIF_NO_NOTIFICATION` へリセットされる（[SWS_CANIF_00393]）。
- *          実仕様はこのリセット動作自体を `CANIF_PUBLIC_READTXPDU_NOTIFY_STATUS_API`/
- *          `CANIF_TXPDU_READ_NOTIFYSTATUS` の2つのビルド時コンフィグで
- *          有効/無効を切り替えられるが、本プロジェクトはそのような切替を
- *          持たないため常に読み出し時にリセットする（学習用簡略化）。
- *
- * \param[in]  CanIfTxSduId  対象 TX PDU の ID（`CanIf_ConfigPtr->TxPduConfig[]`
- *                           の添字、`CanIf_Transmit()`/`CanIf_TxConfirmation()`
- *                           と同じ名前空間）。
- *
- * \return  対象 TX PDU の通知状態（読み出し前の値）。未初期化または
- *          `CanIfTxSduId` が範囲外の場合は `CANIF_NO_NOTIFICATION` を返す
- *          （フェールセーフ、[SWS_CANIF_00331] の DET 報告と併用）。
- *
- * \AUTOSARReq     {SWS_CANIF_00202, SWS_CANIF_00393, SWS_CANIF_00331}
- * \ServiceID      {0x07}
- * \Reentrancy     {Non Reentrant}
- * \Synchronicity  {Synchronous}
- */
-CanIf_NotifStatusType CanIf_ReadTxNotifStatus(PduIdType CanIfTxSduId)
-{
-    DET_LOGT(TAG, "called");
-
-    if (CanIf_ConfigPtr == NULL)
-        return CANIF_NO_NOTIFICATION;  /* CanIf の他 API と同じ方針、CanIf_Cfg.h 冒頭コメント参照 */
-
-    if (CanIfTxSduId >= CanIf_ConfigPtr->TxPduCount)
-    {
-        DET_LOGE(TAG, "ReadTxNotifStatus E: invalid CanIfTxSduId");
-        Det_ReportError(CANIF_MODULE_ID, 0U, CANIF_API_ID_READ_TX_NOTIF_STATUS, CANIF_E_INVALID_TXPDUID);
-        return CANIF_NO_NOTIFICATION;
-    }
-
-    const CanIf_NotifStatusType status = CanIf_TxNotifStatus[CanIfTxSduId];
-    CanIf_TxNotifStatus[CanIfTxSduId] = CANIF_NO_NOTIFICATION;
-    return status;
-}
-
-/**
- * \brief   指定 RX PDU の受信通知状態を取得し、読み出した状態をクリアする
- *          （[SWS_CANIF_00230]）。
- *
- * \details `CanIf_RxIndication()` が対象 RX PDU への振り分けに成功すると
- *          当該 RX PDU の状態は `CANIF_TX_RX_NOTIFICATION` になり、本関数を
- *          呼ぶと `CANIF_NO_NOTIFICATION` へリセットされる（[SWS_CANIF_00394]）。
- *          実仕様はこのリセット動作自体を `CANIF_PUBLIC_READRXPDU_NOTIFY_STATUS_API`/
- *          `CANIF_RXPDU_READ_NOTIFYSTATUS` の2つのビルド時コンフィグで
- *          有効/無効を切り替えられるが、本プロジェクトはそのような切替を
- *          持たないため常に読み出し時にリセットする（学習用簡略化）。
- *
- * \param[in]  CanIfRxSduId  対象 RX PDU の ID（`CanIf_ConfigPtr->RxPduConfig[]`
- *                           の添字、`CanIf_ReadRxPduData()` と同じ名前空間。
- *                           `UpperLayerRxPduId` とは別の ID 空間である点に
- *                           注意——同関数の Doxygen 参照）。
- *
- * \return  対象 RX PDU の通知状態（読み出し前の値）。未初期化または
- *          `CanIfRxSduId` が範囲外の場合は `CANIF_NO_NOTIFICATION` を返す
- *          （フェールセーフ、[SWS_CANIF_00336] の DET 報告と併用）。
- *
- * \AUTOSARReq     {SWS_CANIF_00230, SWS_CANIF_00394, SWS_CANIF_00336}
- * \ServiceID      {0x08}
- * \Reentrancy     {Non Reentrant}
- * \Synchronicity  {Synchronous}
- */
-CanIf_NotifStatusType CanIf_ReadRxNotifStatus(PduIdType CanIfRxSduId)
-{
-    DET_LOGT(TAG, "called");
-
-    if (CanIf_ConfigPtr == NULL)
-        return CANIF_NO_NOTIFICATION;  /* CanIf の他 API と同じ方針、CanIf_Cfg.h 冒頭コメント参照 */
-
-    if (CanIfRxSduId >= CanIf_ConfigPtr->RxPduCount)
-    {
-        DET_LOGE(TAG, "ReadRxNotifStatus E: invalid CanIfRxSduId");
-        Det_ReportError(CANIF_MODULE_ID, 0U, CANIF_API_ID_READ_RX_NOTIF_STATUS, CANIF_E_INVALID_RXPDUID);
-        return CANIF_NO_NOTIFICATION;
-    }
-
-    const CanIf_NotifStatusType status = CanIf_RxNotifStatus[CanIfRxSduId];
-    CanIf_RxNotifStatus[CanIfRxSduId] = CANIF_NO_NOTIFICATION;
-    return status;
-}
-
-/**
- * \brief   CAN コントローラの Bus-Off 状態を上位層へ通知する。
- *
- * \details Can_MainFunction_BusOff() が Bus-Off を検出した際に呼び出される。
- *          CanSM_ControllerBusOff() へ委譲し、回復シーケンスを起動する。
- *
- * \param[in]  ControllerId  Bus-Off を検出したコントローラ ID。
- *
- * \AUTOSARReq     {SWS_CANIF_00218}
- * \ServiceID      {0x16}
- * \Reentrancy     {Non Reentrant}
- * \Synchronicity  {Synchronous}
- */
-void CanIf_ControllerBusOff(uint8 ControllerId)
-{
-    DET_LOGT(TAG, "called");
-
-    if (ControllerId != 0U)
-    {
-        Det_ReportError(CANIF_MODULE_ID, 0U, CANIF_API_ID_CONTROLLER_BUSOFF, CANIF_E_PARAM_CONTROLLERID);
-        return;
-    }
-
-    DET_LOGW(TAG, "ControllerBusOff ch=%u", (unsigned)ControllerId);
-    CanSM_ControllerBusOff(ControllerId);
-}
-
-/**
- * \brief   PDU チャネル（コントローラ単位）の送受信有効/無効状態を設定する。
- *
- * \details 実 AUTOSAR の主な用途は CanSM が SILENT_COMMUNICATION 等の
- *          通信モードを実現するための下位レイヤ操作。`CANIF_TX_OFFLINE`
- *          にすると、以後 `CanIf_Transmit()` は `E_NOT_OK` を返し
- *          `Can_Write()` まで到達しなくなる（コントローラ自体は
- *          `CAN_CS_STARTED` のまま、送信のみを禁止する）。
- *          [SWS_CANIF_00874] は「対象コントローラが `CAN_CS_STARTED` でない
- *          場合は `E_NOT_OK`」と規定するが、本プロジェクトの CanIf は
- *          コントローラ状態を一切追跡しない既存方針（`CanIf_ReadRxPduData()`
- *          の doc コメント参照）のため、このチェックは実装しない。
- *
- *          RX 側（`CanIf_RxIndication()` の上位層通知抑制）は本 API では
- *          制御しない（本ファイル冒頭の `CanIf_ControllerPduMode` 宣言コメント
- *          参照）。
- *
- * \param[in]  ControllerId    対象コントローラの ID。
- * \param[in]  PduModeRequest  要求する PDU モード。
- *
- * \retval  E_OK      要求を受け付けた。
- * \retval  E_NOT_OK  ControllerId が範囲外、または PduModeRequest が
- *                     `CanIf_PduModeType` の定義値以外。
- *
- * \AUTOSARReq     {SWS_CANIF_00137, SWS_CANIF_00341, SWS_CANIF_00860}
- * \ServiceID      {0x09}
- * \Reentrancy     {Non Reentrant}
- * \Synchronicity  {Synchronous}
- */
-Std_ReturnType CanIf_SetPduMode(uint8 ControllerId, CanIf_PduModeType PduModeRequest)
-{
-    DET_LOGT(TAG, "called");
-
-    if (CanIf_ConfigPtr == NULL)
-        return E_NOT_OK;
-
-    if (ControllerId >= CANIF_CONTROLLER_MAX)
-    {
-        Det_ReportError(CANIF_MODULE_ID, 0U, CANIF_API_ID_SET_PDU_MODE, CANIF_E_PARAM_CONTROLLERID);
-        return E_NOT_OK;
-    }
-
-    if (PduModeRequest != CANIF_OFFLINE && PduModeRequest != CANIF_TX_OFFLINE && PduModeRequest != CANIF_ONLINE)
-    {
-        Det_ReportError(CANIF_MODULE_ID, 0U, CANIF_API_ID_SET_PDU_MODE, CANIF_E_PARAM_PDU_MODE);
-        return E_NOT_OK;
-    }
-
-    DET_LOGI(TAG, "SetPduMode ch=%u mode=%u", (unsigned)ControllerId, (unsigned)PduModeRequest);
-    CanIf_ControllerPduMode[ControllerId] = PduModeRequest;
-    return E_OK;
-}
-
-/**
- * \brief   PDU チャネル（コントローラ単位）の現在の送受信有効/無効状態を取得する。
- *
- * \param[in]   ControllerId  対象コントローラの ID。
- * \param[out]  PduModePtr    現在の PDU モードの格納先。NULL 禁止。
- *
- * \retval  E_OK      PduModePtr へ格納した。
- * \retval  E_NOT_OK  ControllerId が範囲外、または PduModePtr が NULL。
- *
- * \AUTOSARReq     {SWS_CANIF_00009, SWS_CANIF_00346, SWS_CANIF_00657}
- * \ServiceID      {0x0A}
- * \Reentrancy     {Reentrant (Not for the same channel)}
- * \Synchronicity  {Synchronous}
- */
-Std_ReturnType CanIf_GetPduMode(uint8 ControllerId, CanIf_PduModeType* PduModePtr)
-{
-    DET_LOGT(TAG, "called");
-
-    if (CanIf_ConfigPtr == NULL)
-        return E_NOT_OK;
-
-    if (ControllerId >= CANIF_CONTROLLER_MAX)
-    {
-        Det_ReportError(CANIF_MODULE_ID, 0U, CANIF_API_ID_GET_PDU_MODE, CANIF_E_PARAM_CONTROLLERID);
-        return E_NOT_OK;
-    }
-
-    if (PduModePtr == NULL)
-    {
-        Det_ReportError(CANIF_MODULE_ID, 0U, CANIF_API_ID_GET_PDU_MODE, CANIF_E_PARAM_POINTER);
-        return E_NOT_OK;
-    }
-
-    *PduModePtr = CanIf_ControllerPduMode[ControllerId];
-    return E_OK;
 }
 
 /**
@@ -891,8 +316,6 @@ Std_ReturnType CanIf_GetControllerMode(uint8 ControllerId, Can_ControllerStateTy
  */
 Std_ReturnType CanIf_GetControllerErrorState(uint8 ControllerId, Can_ErrorStateType* ErrorStatePtr)
 {
-    DET_LOGT(TAG, "called");
-
     if (CanIf_ConfigPtr == NULL)
         return E_NOT_OK;
 
@@ -910,6 +333,417 @@ Std_ReturnType CanIf_GetControllerErrorState(uint8 ControllerId, Can_ErrorStateT
 
     return Can_GetControllerErrorState(ControllerId, ErrorStatePtr);
 }
+
+/**
+ * \brief   CAN ドライバ経由で PDU の送信を要求する。
+ *
+ * \details TxPduId で TX PDU 設定を検索し、PDU 長を設定 DLC と照合したうえで
+ *          Can_PduType を構築して Can_Write() を呼び出す。
+ *
+ * \param[in]  TxPduId     送信する TX PDU の ID。
+ *                         設定済み TxPduCount 未満であること。
+ * \param[in]  PduInfoPtr  送信するデータと長さへのポインタ。
+ *                         NULL 禁止。SduDataPtr も NULL 禁止。
+ *
+ * \retval  E_OK      PDU が Can_Write() に正常に渡された。
+ * \retval  E_NOT_OK  CanIf 未初期化、TxPduId 不正、NULL ポインタ、
+ *                    SduLength が設定 DLC を超過、PDU チャネルが
+ *                    CANIF_ONLINE でない（CanIf_SetPduMode() 参照）、
+ *                    または Can_Write() 失敗。
+ *
+ * \pre        CanIf_Init() が正常に完了していること。
+ * \pre        CAN コントローラが CAN_CS_STARTED 状態であること。
+ *
+ * \AUTOSARReq     {SWS_CANIF_00005}
+ * \ServiceID      {0x49}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType CanIf_Transmit(PduIdType TxPduId, const PduInfoType* PduInfoPtr)
+{
+    if (CanIf_ConfigPtr == NULL)
+        return E_NOT_OK;
+
+    if (TxPduId >= CanIf_ConfigPtr->TxPduCount)
+    {
+        DET_LOGE(TAG, "TX E: invalid TxPduId");
+        Det_ReportError(CANIF_MODULE_ID, 0U, CANIF_API_ID_TRANSMIT, CANIF_E_INVALID_TXPDUID);
+        return E_NOT_OK;
+    }
+
+    if (PduInfoPtr == NULL || PduInfoPtr->SduDataPtr == NULL)
+    {
+        DET_LOGE(TAG, "TX E: PduInfoPtr NULL");
+        Det_ReportError(CANIF_MODULE_ID, 0U, CANIF_API_ID_TRANSMIT, CANIF_E_PARAM_POINTER);
+        return E_NOT_OK;
+    }
+
+    const CanIf_TxPduConfigType* txCfg = &CanIf_ConfigPtr->TxPduConfig[TxPduId];
+
+    if (PduInfoPtr->SduLength > txCfg->Dlc)
+    {
+        DET_LOGE(TAG, "TX E: SduLength>DLC");
+        return E_NOT_OK;
+    }
+
+    /* [SWS_CANIF_00137]/[SWS_CANIF_00074] 相当: PDU チャネルが CANIF_ONLINE
+     * でなければ送信しない（CANIF_OFFLINE/CANIF_TX_OFFLINE いずれも TX 禁止）。
+     * 本プロジェクトは単一コントローラのため添字は固定で 0。DET は報告しない
+     * （TxIpduCalloutCbk による拒否と同じ扱い、呼び出し元の CanSM が既に
+     * 意図して TX_OFFLINE にしている想定のため）。 */
+    if (CanIf_ControllerPduMode[0] != CANIF_ONLINE)
+    {
+        DET_LOGD(TAG, "TX iPdu=%u rejected: PduMode not ONLINE", (unsigned)TxPduId);
+        return E_NOT_OK;
+    }
+
+    Can_PduType canPdu = {
+        .swPduHandle = TxPduId,
+        .id          = txCfg->CanId,
+        .length      = (uint8)PduInfoPtr->SduLength,
+        .sdu         = PduInfoPtr->SduDataPtr
+    };
+
+    DET_LOGI(TAG, "TX id=%u can=0x%lX", (unsigned)TxPduId, (unsigned long)txCfg->CanId);
+
+    Can_ReturnType ret = Can_Write(txCfg->Hth, &canPdu);
+
+    if (ret == CAN_BUSY)
+        DET_LOGW(TAG, "TX BUSY");
+
+    return (ret == CAN_OK) ? E_OK : E_NOT_OK;
+}
+
+/*
+ * CanIf_CancelTransmit
+ */
+
+/**
+ * \brief   RX PDU の直近受信データをポーリングで取得する。
+ *
+ * \details `CanIf_RxIndication()` が上位層コールバックへプッシュ配送する
+ *          経路とは独立した、ポーリングによる受信データ取得経路
+ *          （実 AUTOSAR の I-PDU callout 等とも異なる、CanIf 自身が保持する
+ *          内部バッファへのアクセサ）。対象 RX PDU は
+ *          `CanIf_RxPduConfigType.ReadRxPduDataEnabled=1` で事前に
+ *          opt-in されている必要がある（[SWS_CANIF_00325]、既定は 0
+ *          ＝バッファリングなし）。
+ *
+ *          `CanIfRxSduId` は `CanIf_ConfigPtr->RxPduConfig[]` 上の位置
+ *          （`CanIf_RxIndication()` のループ添字 `i` と同じ名前空間）であり、
+ *          上位層へ渡す `UpperLayerRxPduId` とは別の ID 空間である点に注意
+ *          （実 AUTOSAR の "CanIf 内部ハンドル" に相当）。
+ *
+ * \note    本プロジェクトは [SWS_CANIF_00324]（コントローラが
+ *          CAN_CS_STARTED かつ受信パスが online でなければ E_NOT_OK）は
+ *          実装しない。CanIf 自身はコントローラ状態を一切追跡しておらず
+ *          （Can_MainFunction_Read() から渡されたフレームをそのまま
+ *          振り分けるだけの設計）、この状態管理は CanSM の責務のため
+ *          スコープ外とする。「一度も受信していない PDU は E_NOT_OK」
+ *          （spec 原文 "No valid data has been received"）のみ実装する。
+ *
+ * \param[in]   CanIfRxSduId    データを取得する RX PDU の ID
+ *                              （`CanIf_ConfigPtr->RxPduConfig[]` の添字）。
+ * \param[out]  CanIfRxInfoPtr  取得したデータの格納先。`SduDataPtr` は
+ *                              対象 PDU の設定 `Dlc` バイト分確保しておけば
+ *                              十分（バッファ自体の格納長も `Dlc` でクランプ
+ *                              される。詳細は `CanIf_RxIndication()` の
+ *                              実装コメント参照）。NULL 禁止。
+ *
+ * \retval  E_OK      データを `CanIfRxInfoPtr` へ格納した。
+ * \retval  E_NOT_OK  CanIf 未初期化、CanIfRxSduId が範囲外、対象 PDU が
+ *                    `ReadRxPduDataEnabled=0`、`CanIfRxInfoPtr`/
+ *                    `SduDataPtr` が NULL、またはこの PDU をまだ一度も
+ *                    受信していない。
+ *
+ * \pre        CanIf_Init() が正常に完了していること。
+ *
+ * \note    本プロジェクトは単一の協調的スーパーループ（Os の各タスクが
+ *          プリエンプションなしで順次実行される、`Os_PBCfg.c` 参照）で
+ *          動作するため、`CanIf_RxIndication()`（Reentrant）と本関数
+ *          （Non Reentrant）が実際に競合して同じ `CanIf_RxPduDataBuffer[]`
+ *          要素を同時に読み書きすることはない（`CanIf_RxIndication()` 自体
+ *          も真の割り込みコンテキストではなく `Can_MainFunction_Read()`
+ *          からポーリングで呼ばれる、本ファイル冒頭の
+ *          `CanIf_RxIndication()` の Doxygen コメント参照）。マルチコア化
+ *          等でこの前提が崩れる場合は、Rte.c の
+ *          `SchM_Enter/Exit_Rte_MIRROR_EXCLUSIVE_AREA()` と同様の排他区間が
+ *          必要になる（/code-review 指摘）。
+ *
+ * \AUTOSARReq     {SWS_CANIF_00194, SWS_CANIF_00325, SWS_CANIF_00326}
+ * \ServiceID      {0x06}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType CanIf_ReadRxPduData(PduIdType CanIfRxSduId, PduInfoType* CanIfRxInfoPtr)
+{
+    if (CanIf_ConfigPtr == NULL)
+        return E_NOT_OK;  /* CanIf の他 API と同じ方針、CanIf_Cfg.h 冒頭コメント参照 */
+
+    if (CanIfRxSduId >= CanIf_ConfigPtr->RxPduCount)
+    {
+        DET_LOGE(TAG, "ReadRxPduData E: invalid CanIfRxSduId");
+        Det_ReportError(CANIF_MODULE_ID, 0U, CANIF_API_ID_READ_RX_PDU_DATA, CANIF_E_INVALID_RXPDUID);
+        return E_NOT_OK;
+    }
+
+    if (CanIfRxInfoPtr == NULL || CanIfRxInfoPtr->SduDataPtr == NULL)
+    {
+        DET_LOGE(TAG, "ReadRxPduData E: NULL CanIfRxInfoPtr");
+        Det_ReportError(CANIF_MODULE_ID, 0U, CANIF_API_ID_READ_RX_PDU_DATA, CANIF_E_PARAM_POINTER);
+        return E_NOT_OK;
+    }
+
+    const CanIf_RxPduConfigType* rxCfg = &CanIf_ConfigPtr->RxPduConfig[CanIfRxSduId];
+    if (rxCfg->ReadRxPduDataEnabled == 0U)
+    {
+        /* [SWS_CANIF_00325]: opt-in されていない PDU の要求も開発エラー */
+        DET_LOGE(TAG, "ReadRxPduData E: CanIfRxSduId=%u not configured for buffering",
+                 (unsigned)CanIfRxSduId);
+        Det_ReportError(CANIF_MODULE_ID, 0U, CANIF_API_ID_READ_RX_PDU_DATA, CANIF_E_INVALID_RXPDUID);
+        return E_NOT_OK;
+    }
+
+    if (CanIf_RxPduDataValid[CanIfRxSduId] == 0U)
+    {
+        /* spec 原文: "E_NOT_OK: No valid data has been received"。まだ一度も
+         * 受信していないだけの正常な状態のため Det_ReportError() は呼ばない。 */
+        return E_NOT_OK;
+    }
+
+    const uint8 len = CanIf_RxPduDataLength[CanIfRxSduId];
+    for (uint8 b = 0U; b < len; b++)
+        CanIfRxInfoPtr->SduDataPtr[b] = CanIf_RxPduDataBuffer[CanIfRxSduId][b];
+    CanIfRxInfoPtr->SduLength = len;
+
+    return E_OK;
+}
+
+/**
+ * \brief   指定 TX PDU の送信完了通知状態を取得し、読み出した状態をクリアする
+ *          （[SWS_CANIF_00202]）。
+ *
+ * \details `CanIf_TxConfirmation()` が呼ばれると当該 TX PDU の状態は
+ *          `CANIF_TX_RX_NOTIFICATION` になり、本関数を呼ぶと
+ *          `CANIF_NO_NOTIFICATION` へリセットされる（[SWS_CANIF_00393]）。
+ *          実仕様はこのリセット動作自体を `CANIF_PUBLIC_READTXPDU_NOTIFY_STATUS_API`/
+ *          `CANIF_TXPDU_READ_NOTIFYSTATUS` の2つのビルド時コンフィグで
+ *          有効/無効を切り替えられるが、本プロジェクトはそのような切替を
+ *          持たないため常に読み出し時にリセットする（学習用簡略化）。
+ *
+ * \param[in]  CanIfTxSduId  対象 TX PDU の ID（`CanIf_ConfigPtr->TxPduConfig[]`
+ *                           の添字、`CanIf_Transmit()`/`CanIf_TxConfirmation()`
+ *                           と同じ名前空間）。
+ *
+ * \return  対象 TX PDU の通知状態（読み出し前の値）。未初期化または
+ *          `CanIfTxSduId` が範囲外の場合は `CANIF_NO_NOTIFICATION` を返す
+ *          （フェールセーフ、[SWS_CANIF_00331] の DET 報告と併用）。
+ *
+ * \AUTOSARReq     {SWS_CANIF_00202, SWS_CANIF_00393, SWS_CANIF_00331}
+ * \ServiceID      {0x07}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+CanIf_NotifStatusType CanIf_ReadTxNotifStatus(PduIdType CanIfTxSduId)
+{
+    if (CanIf_ConfigPtr == NULL)
+        return CANIF_NO_NOTIFICATION;  /* CanIf の他 API と同じ方針、CanIf_Cfg.h 冒頭コメント参照 */
+
+    if (CanIfTxSduId >= CanIf_ConfigPtr->TxPduCount)
+    {
+        DET_LOGE(TAG, "ReadTxNotifStatus E: invalid CanIfTxSduId");
+        Det_ReportError(CANIF_MODULE_ID, 0U, CANIF_API_ID_READ_TX_NOTIF_STATUS, CANIF_E_INVALID_TXPDUID);
+        return CANIF_NO_NOTIFICATION;
+    }
+
+    const CanIf_NotifStatusType status = CanIf_TxNotifStatus[CanIfTxSduId];
+    CanIf_TxNotifStatus[CanIfTxSduId] = CANIF_NO_NOTIFICATION;
+    return status;
+}
+
+/**
+ * \brief   指定 RX PDU の受信通知状態を取得し、読み出した状態をクリアする
+ *          （[SWS_CANIF_00230]）。
+ *
+ * \details `CanIf_RxIndication()` が対象 RX PDU への振り分けに成功すると
+ *          当該 RX PDU の状態は `CANIF_TX_RX_NOTIFICATION` になり、本関数を
+ *          呼ぶと `CANIF_NO_NOTIFICATION` へリセットされる（[SWS_CANIF_00394]）。
+ *          実仕様はこのリセット動作自体を `CANIF_PUBLIC_READRXPDU_NOTIFY_STATUS_API`/
+ *          `CANIF_RXPDU_READ_NOTIFYSTATUS` の2つのビルド時コンフィグで
+ *          有効/無効を切り替えられるが、本プロジェクトはそのような切替を
+ *          持たないため常に読み出し時にリセットする（学習用簡略化）。
+ *
+ * \param[in]  CanIfRxSduId  対象 RX PDU の ID（`CanIf_ConfigPtr->RxPduConfig[]`
+ *                           の添字、`CanIf_ReadRxPduData()` と同じ名前空間。
+ *                           `UpperLayerRxPduId` とは別の ID 空間である点に
+ *                           注意——同関数の Doxygen 参照）。
+ *
+ * \return  対象 RX PDU の通知状態（読み出し前の値）。未初期化または
+ *          `CanIfRxSduId` が範囲外の場合は `CANIF_NO_NOTIFICATION` を返す
+ *          （フェールセーフ、[SWS_CANIF_00336] の DET 報告と併用）。
+ *
+ * \AUTOSARReq     {SWS_CANIF_00230, SWS_CANIF_00394, SWS_CANIF_00336}
+ * \ServiceID      {0x08}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+CanIf_NotifStatusType CanIf_ReadRxNotifStatus(PduIdType CanIfRxSduId)
+{
+    if (CanIf_ConfigPtr == NULL)
+        return CANIF_NO_NOTIFICATION;  /* CanIf の他 API と同じ方針、CanIf_Cfg.h 冒頭コメント参照 */
+
+    if (CanIfRxSduId >= CanIf_ConfigPtr->RxPduCount)
+    {
+        DET_LOGE(TAG, "ReadRxNotifStatus E: invalid CanIfRxSduId");
+        Det_ReportError(CANIF_MODULE_ID, 0U, CANIF_API_ID_READ_RX_NOTIF_STATUS, CANIF_E_INVALID_RXPDUID);
+        return CANIF_NO_NOTIFICATION;
+    }
+
+    const CanIf_NotifStatusType status = CanIf_RxNotifStatus[CanIfRxSduId];
+    CanIf_RxNotifStatus[CanIfRxSduId] = CANIF_NO_NOTIFICATION;
+    return status;
+}
+
+/**
+ * \brief   PDU チャネル（コントローラ単位）の送受信有効/無効状態を設定する。
+ *
+ * \details 実 AUTOSAR の主な用途は CanSM が SILENT_COMMUNICATION 等の
+ *          通信モードを実現するための下位レイヤ操作。`CANIF_TX_OFFLINE`
+ *          にすると、以後 `CanIf_Transmit()` は `E_NOT_OK` を返し
+ *          `Can_Write()` まで到達しなくなる（コントローラ自体は
+ *          `CAN_CS_STARTED` のまま、送信のみを禁止する）。
+ *          [SWS_CANIF_00874] は「対象コントローラが `CAN_CS_STARTED` でない
+ *          場合は `E_NOT_OK`」と規定するが、本プロジェクトの CanIf は
+ *          コントローラ状態を一切追跡しない既存方針（`CanIf_ReadRxPduData()`
+ *          の doc コメント参照）のため、このチェックは実装しない。
+ *
+ *          RX 側（`CanIf_RxIndication()` の上位層通知抑制）は本 API では
+ *          制御しない（本ファイル冒頭の `CanIf_ControllerPduMode` 宣言コメント
+ *          参照）。
+ *
+ * \param[in]  ControllerId    対象コントローラの ID。
+ * \param[in]  PduModeRequest  要求する PDU モード。
+ *
+ * \retval  E_OK      要求を受け付けた。
+ * \retval  E_NOT_OK  ControllerId が範囲外、または PduModeRequest が
+ *                     `CanIf_PduModeType` の定義値以外。
+ *
+ * \AUTOSARReq     {SWS_CANIF_00137, SWS_CANIF_00341, SWS_CANIF_00860}
+ * \ServiceID      {0x09}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType CanIf_SetPduMode(uint8 ControllerId, CanIf_PduModeType PduModeRequest)
+{
+    if (CanIf_ConfigPtr == NULL)
+        return E_NOT_OK;
+
+    if (ControllerId >= CANIF_CONTROLLER_MAX)
+    {
+        Det_ReportError(CANIF_MODULE_ID, 0U, CANIF_API_ID_SET_PDU_MODE, CANIF_E_PARAM_CONTROLLERID);
+        return E_NOT_OK;
+    }
+
+    if (PduModeRequest != CANIF_OFFLINE && PduModeRequest != CANIF_TX_OFFLINE && PduModeRequest != CANIF_ONLINE)
+    {
+        Det_ReportError(CANIF_MODULE_ID, 0U, CANIF_API_ID_SET_PDU_MODE, CANIF_E_PARAM_PDU_MODE);
+        return E_NOT_OK;
+    }
+
+    DET_LOGI(TAG, "SetPduMode ch=%u mode=%u", (unsigned)ControllerId, (unsigned)PduModeRequest);
+    CanIf_ControllerPduMode[ControllerId] = PduModeRequest;
+    return E_OK;
+}
+
+/**
+ * \brief   PDU チャネル（コントローラ単位）の現在の送受信有効/無効状態を取得する。
+ *
+ * \param[in]   ControllerId  対象コントローラの ID。
+ * \param[out]  PduModePtr    現在の PDU モードの格納先。NULL 禁止。
+ *
+ * \retval  E_OK      PduModePtr へ格納した。
+ * \retval  E_NOT_OK  ControllerId が範囲外、または PduModePtr が NULL。
+ *
+ * \AUTOSARReq     {SWS_CANIF_00009, SWS_CANIF_00346, SWS_CANIF_00657}
+ * \ServiceID      {0x0A}
+ * \Reentrancy     {Reentrant (Not for the same channel)}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType CanIf_GetPduMode(uint8 ControllerId, CanIf_PduModeType* PduModePtr)
+{
+    if (CanIf_ConfigPtr == NULL)
+        return E_NOT_OK;
+
+    if (ControllerId >= CANIF_CONTROLLER_MAX)
+    {
+        Det_ReportError(CANIF_MODULE_ID, 0U, CANIF_API_ID_GET_PDU_MODE, CANIF_E_PARAM_CONTROLLERID);
+        return E_NOT_OK;
+    }
+
+    if (PduModePtr == NULL)
+    {
+        Det_ReportError(CANIF_MODULE_ID, 0U, CANIF_API_ID_GET_PDU_MODE, CANIF_E_PARAM_POINTER);
+        return E_NOT_OK;
+    }
+
+    *PduModePtr = CanIf_ControllerPduMode[ControllerId];
+    return E_OK;
+}
+
+
+/**
+ * \brief   CAN インタフェースモジュールのバージョン情報を取得する。
+ *
+ * \param[out]  versioninfo  バージョン情報の格納先。NULL 禁止。
+ *
+ * \ServiceID      {0x0B}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void CanIf_GetVersionInfo(Std_VersionInfoType* versioninfo)
+{
+    DET_LOGT(TAG, "called");
+
+    if (versioninfo == NULL)
+    {
+        Det_ReportError(CANIF_MODULE_ID, 0U, CANIF_API_ID_GET_VERSION_INFO, CANIF_E_PARAM_POINTER);
+        return;
+    }
+
+    versioninfo->vendorID         = CANIF_VENDOR_ID;
+    versioninfo->moduleID         = CANIF_MODULE_ID;
+    versioninfo->sw_major_version = CANIF_SW_MAJOR_VERSION;
+    versioninfo->sw_minor_version = CANIF_SW_MINOR_VERSION;
+    versioninfo->sw_patch_version = CANIF_SW_PATCH_VERSION;
+}
+
+/*
+ * CanIf_SetDynamicTxId
+ */
+
+/*
+ * CanIf_SetTrcvMode
+ */
+
+/*
+ * CanIf_GetTrcvMode
+ */
+
+/*
+ * CanIf_GetTrcvWakeupReason
+ */
+
+/*
+ * CanIf_SetTrcvWakeupMode
+ */
+
+/*
+ * CanIf_CheckWakeup
+ */
+
+/*
+ * CanIf_CheckValidation
+ */
 
 /**
  * \brief   指定コントローラで、直近の起動以降に一度でも TX 確認があったかを返す
@@ -965,28 +799,258 @@ CanIf_NotifStatusType CanIf_GetTxConfirmationState(uint8 ControllerId)
     return CanIf_TxConfirmationState[ControllerId];
 }
 
+/*
+ * CanIf_ClearTrcvWufFlag
+ */
+
+/*
+ * CanIf_CheckTrcvWakeFlag
+ */
+
+/*
+ * CanIf_SetBaudrate
+ */
+
+/*
+ * CanIf_SetIcomConfiguration
+ */
+
+/* ======================================================================
+ * Callback notifications
+ * ====================================================================== */
+
+/* 
+ * CanIf_TriggerTransmit
+ */
+
+
 /**
- * \brief   CAN インタフェースモジュールのバージョン情報を取得する。
+ * \brief   CAN フレームの送信完了を上位層へ通知する。
  *
- * \param[out]  versioninfo  バージョン情報の格納先。NULL 禁止。
+ * \details CAN ドライバが送信完了を確認した後に呼び出される。
+ *          CanTxPduId で TX PDU 設定を検索し、設定された上位層の
+ *          TxConfirmation コールバックを呼び出す。
+ *          CanTxPduId が範囲外の場合は処理を無視する。
  *
- * \ServiceID      {0x0B}
+ * \param[in]  CanTxPduId  送信が完了した TX PDU の ID。
+ *                         設定済み TxPduCount 未満であること。
+ *
+ * \pre        CanIf_Init() が正常に完了していること。
+ *
+ * \AUTOSARReq     {SWS_CANIF_00007}
+ * \ServiceID      {0x13}
  * \Reentrancy     {Reentrant}
  * \Synchronicity  {Synchronous}
  */
-void CanIf_GetVersionInfo(Std_VersionInfoType* versioninfo)
+void CanIf_TxConfirmation(PduIdType CanTxPduId)
 {
-    DET_LOGT(TAG, "called");
+    if (CanIf_ConfigPtr == NULL)
+        return;
 
-    if (versioninfo == NULL)
+    if (CanTxPduId >= CanIf_ConfigPtr->TxPduCount)
     {
-        Det_ReportError(CANIF_MODULE_ID, 0U, CANIF_API_ID_GET_VERSION_INFO, CANIF_E_PARAM_POINTER);
+        Det_ReportError(CANIF_MODULE_ID, 0U, CANIF_API_ID_TX_CONFIRMATION, CANIF_E_PARAM_LPDU);
         return;
     }
 
-    versioninfo->vendorID         = CANIF_VENDOR_ID;
-    versioninfo->moduleID         = CANIF_MODULE_ID;
-    versioninfo->sw_major_version = CANIF_SW_MAJOR_VERSION;
-    versioninfo->sw_minor_version = CANIF_SW_MINOR_VERSION;
-    versioninfo->sw_patch_version = CANIF_SW_PATCH_VERSION;
+    const CanIf_TxPduConfigType* txCfg = &CanIf_ConfigPtr->TxPduConfig[CanTxPduId];
+
+    DET_LOGI(TAG, "TxConf id=%u", (unsigned)CanTxPduId);
+
+    /* [SWS_CANIF_00202]: CanIf_ReadTxNotifStatus() 用の通知状態
+     * （CanIf_ReadTxNotifStatus() の Doxygen 参照）。 */
+    CanIf_TxNotifStatus[CanTxPduId] = CANIF_TX_RX_NOTIFICATION;
+
+    /* [SWS_CANIF_00734]/[SWS_CANIF_00740]: CanIf_GetTxConfirmationState() 用の
+     * コントローラ単位の通知状態。TX PDU 設定はコントローラ ID を持たないが、
+     * 本プロジェクトは CANIF_CONTROLLER_MAX=1（単一コントローラ）のため、
+     * 全 TX PDU はコントローラ 0 に属するとみなしてよい。[SWS_CANIF_00740]の
+     * 「コントローラが CAN_CS_STARTED のときだけバッファする」通り、STARTED
+     * 以外では更新しない。Can.c の Can_TxConfQueue は非同期にドレインされる
+     * ため、CanIf_Transmit() 時点では STARTED でも、実際にこの通知が届く
+     * 頃には CanIf_SetControllerMode(STOPPED) 済み（Bus-Off 等）ということが
+     * ありうる（/code-review で発見: 状態チェックが無いと、停止後に届いた
+     * 古い通知で「起動後に TX 確認あり」と誤認しうる）。 */
+    if (CanIf_ControllerMode[0] == CAN_CS_STARTED)
+        CanIf_TxConfirmationState[0] = CANIF_TX_RX_NOTIFICATION;
+
+    if (txCfg->TxConfirmFct != NULL)
+        txCfg->TxConfirmFct(txCfg->UpperLayerTxPduId, E_OK);
 }
+
+/**
+ * \brief   CAN ドライバから受信フレームを上位層へ通知する。
+ *
+ * \details CAN ドライバがフレームを受信した際に呼び出される。
+ *          RX PDU テーブルから HOH と CAN ID が一致するエントリを検索し、
+ *          設定された上位層の RxIndication コールバックへ転送する。
+ *          一致するエントリが存在しない場合はフレームを破棄してログを出力する。
+ *          一致したエントリの設定 DLC に満たない L-PDU も上位層へ渡さず棄却する
+ *          （データ長チェック、違反時はランタイムエラー
+ *          CANIF_E_INVALID_DATA_LENGTH を報告する、[SWS_CANIF_00168]）。
+ *
+ *          上位 PDU への振り分け結果に関わらず、CanSM_RxIndication() を
+ *          呼び出して「有効なフレームを受信した」ことを CanSM へ通知する
+ *          (AUTOSAR SWS_CanSM の CanSMRxIndicationUsed に相当)。通常運用中は
+ *          無害だが、ウェイクアップ検証中はこれが検証成功の唯一の合図になる
+ *          （詳細は CanSM_RxIndication() を参照）。
+ *
+ *          `ReadRxPduDataEnabled=1` の RX PDU では、上位層コールバックの
+ *          呼び出しに加えて内部バッファも更新し、`CanIf_ReadRxPduData()`
+ *          （[SWS_CANIF_00194]）でのポーリング取得に備える。
+ *
+ * \param[in]  Mailbox     受信 CAN ID・HOH・コントローラ ID を格納した
+ *                         ハードウェアメールボックス記述子へのポインタ。
+ *                         NULL 禁止。
+ * \param[in]  PduInfoPtr  受信 PDU のデータと長さへのポインタ。
+ *                         NULL 禁止。SduDataPtr も NULL 禁止
+ *                         （CanIf_Transmit と対称の入力検証）。
+ *
+ * \pre        CanIf_Init() が正常に完了していること。
+ *
+ * \AUTOSARReq     {SWS_CANIF_00415, SWS_CANIF_00026, SWS_CANIF_00168}
+ * \ServiceID      {0x14}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void CanIf_RxIndication(const Can_HwType* Mailbox, const PduInfoType* PduInfoPtr)
+{
+    if (CanIf_ConfigPtr == NULL)
+        return;  /* [SWS_CANIF_00421]: 未初期化時は黙って何もしない（DET 報告なし） */
+
+    if (Mailbox == NULL || PduInfoPtr == NULL || PduInfoPtr->SduDataPtr == NULL)
+    {
+        DET_LOGE(TAG, "RX: NULL Mailbox/PduInfoPtr");
+        Det_ReportError(CANIF_MODULE_ID, 0U, CANIF_API_ID_RX_INDICATION, CANIF_E_PARAM_POINTER);
+        return;
+    }
+
+    CanSM_RxIndication(Mailbox->ControllerId);
+
+    /* SWS_CANIF_00416/00417: Hoh 自体が未設定なのか（HOH エラー）、Hoh は
+     * 設定済みだが CanId が想定と異なるのか（CanId エラー）を区別して
+     * 報告するため、ループ内で Hoh 一致の有無を別途記録する。 */
+    uint8 hohMatched = 0U;
+
+    for (uint8 i = 0; i < CanIf_ConfigPtr->RxPduCount; i++)
+    {
+        const CanIf_RxPduConfigType* rxCfg = &CanIf_ConfigPtr->RxPduConfig[i];
+
+        if (rxCfg->Hrh != Mailbox->Hoh)
+            continue;
+
+        hohMatched = 1U;
+
+        if (rxCfg->CanId != Mailbox->CanId)
+            continue;
+
+        /* [SWS_CANIF_00026]: 設定 DLC に満たない L-PDU は上位層へ渡さず棄却する。
+         * Com/CanTp 側にも独自の受信長チェックがあるが、本来この責務は CanIf
+         * 層にある。CanIf にチェックがないと、将来 PduR に新しいルートが
+         * 追加された際、上位層側でチェックを入れ忘れるリスクを CanIf 一層で
+         * 防げなくなる。[SWS_CANIF_00168]: 棄却時はランタイムエラー
+         * CANIF_E_INVALID_DATA_LENGTH を報告する（2026-09 追加、以前は
+         * ログ出力のみで未報告だった）。
+         * 実仕様は本チェック自体を CanIfPrivateDataLengthCheck で全体
+         * 無効化できると規定するが（無効時は [SWS_CANIF_00830] により受信長を
+         * そのまま上位層へ渡す）、本プロジェクトはその無効化コンフィグを
+         * 持たず常時有効の簡略実装（自己spec-citation検証で確認済み）。 */
+        if (PduInfoPtr->SduLength < rxCfg->Dlc)
+        {
+            DET_LOGW(TAG, "RX can=0x%lX length mismatch got=%u exp=%u",
+                     (unsigned long)Mailbox->CanId,
+                     (unsigned)PduInfoPtr->SduLength, (unsigned)rxCfg->Dlc);
+            (void)Det_ReportRuntimeError(CANIF_MODULE_ID, 0U, CANIF_API_ID_RX_INDICATION,
+                                          CANIF_E_INVALID_DATA_LENGTH);
+            return;
+        }
+
+        DET_LOGI(TAG, "RX can=0x%lX pdu=%u",
+                 (unsigned long)Mailbox->CanId,
+                 (unsigned)rxCfg->UpperLayerRxPduId);
+
+        /* CanIf_ReadRxPduData() 用バッファ更新（[SWS_CANIF_00194]、
+         * ReadRxPduDataEnabled=1 の RX PDU のみ）。上のデータ長チェックは
+         * SduLength < rxCfg->Dlc（不足）のみを棄却し、超過は素通りするため、
+         * ここでは rxCfg->Dlc（この PDU 自身の設定値）でクランプする
+         * （CANIF_MAX_DLC ではない——CanIf_ReadRxPduData() の呼び出し元が
+         * 「この PDU の設定 Dlc 分だけ確保すれば十分」と信頼できるように
+         * するため。/code-review 指摘: 当初 CANIF_MAX_DLC でクランプしており、
+         * Dlc より大きい異常フレームを受けた場合に契約を超えるデータ長を
+         * 返しうる状態だった）。 */
+        if (rxCfg->ReadRxPduDataEnabled != 0U)
+        {
+            const uint8 copyLen = (PduInfoPtr->SduLength <= rxCfg->Dlc)
+                                       ? (uint8)PduInfoPtr->SduLength
+                                       : rxCfg->Dlc;
+            for (uint8 b = 0U; b < copyLen; b++)
+                CanIf_RxPduDataBuffer[i][b] = PduInfoPtr->SduDataPtr[b];
+            CanIf_RxPduDataLength[i] = copyLen;
+            CanIf_RxPduDataValid[i]  = 1U;
+        }
+
+        /* [SWS_CANIF_00230]: CanIf_ReadRxNotifStatus() 用の通知状態
+         * （CanIf_ReadRxNotifStatus() の Doxygen 参照）。 */
+        CanIf_RxNotifStatus[i] = CANIF_TX_RX_NOTIFICATION;
+
+        if (rxCfg->RxIndicationFct != NULL)
+            rxCfg->RxIndicationFct(rxCfg->UpperLayerRxPduId, PduInfoPtr);
+
+        return;
+    }
+
+    DET_LOGW(TAG, "RX no match can=0x%lX", (unsigned long)Mailbox->CanId);
+    if (hohMatched)
+        Det_ReportError(CANIF_MODULE_ID, 0U, CANIF_API_ID_RX_INDICATION, CANIF_E_PARAM_CANID);
+    else
+        Det_ReportError(CANIF_MODULE_ID, 0U, CANIF_API_ID_RX_INDICATION, CANIF_E_PARAM_HOH);
+}
+
+/**
+ * \brief   CAN コントローラの Bus-Off 状態を上位層へ通知する。
+ *
+ * \details Can_MainFunction_BusOff() が Bus-Off を検出した際に呼び出される。
+ *          CanSM_ControllerBusOff() へ委譲し、回復シーケンスを起動する。
+ *
+ * \param[in]  ControllerId  Bus-Off を検出したコントローラ ID。
+ *
+ * \AUTOSARReq     {SWS_CANIF_00218}
+ * \ServiceID      {0x16}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void CanIf_ControllerBusOff(uint8 ControllerId)
+{
+    if (ControllerId != 0U)
+    {
+        Det_ReportError(CANIF_MODULE_ID, 0U, CANIF_API_ID_CONTROLLER_BUSOFF, CANIF_E_PARAM_CONTROLLERID);
+        return;
+    }
+
+    DET_LOGW(TAG, "ControllerBusOff ch=%u", (unsigned)ControllerId);
+    CanSM_ControllerBusOff(ControllerId);
+}
+
+/*
+ * CanIf_ConfirmPnAvailability
+ */
+
+/*
+ * CanIf_ClearTrcvWufFlagIndication
+ */
+
+/*
+ * CanIf_CheckTrcvWakeFlagIndication
+ */
+
+/*
+ * CanIf_ControllerModeIndication
+ */
+
+/*
+ * CanIf_TrcvModeIndication
+ */
+
+/*
+ * CanIf_CurrentIcomConfiguration
+ */

@@ -99,6 +99,8 @@
  * のみ使う内部関数のため Can.h には公開しない）。定義は本ファイル末尾。 */
 static void Can_Isr(void);
 
+static void Can_EnterListenOnly(void);
+
 static const Can_ConfigType*    Can_ConfigPtr  = NULL;
 /** Can_Isr()（真の割り込みコンテキスト）と Can_MainFunction_xxx()（メインループ）
  *  の両方から読み書きされるため volatile。 */
@@ -156,9 +158,9 @@ static uint8     Can_TxConfHead = 0U;  /**< 次に取り出すエントリの in
 static uint8     Can_TxConfTail = 0U;  /**< 次に積むエントリの index     */
 static uint8     Can_TxConfLen  = 0U;  /**< キュー内の有効エントリ数     */
 
-/* ==================================================================== */
-/*  External Functions                                                  */
-/* ==================================================================== */
+/* ======================================================================
+ * Functions
+ * ====================================================================== */
 
 /**
  * \brief   CAN ドライバを初期化する。
@@ -225,18 +227,44 @@ void Can_Init(const Can_ConfigType* Config)
 }
 
 /**
- * \brief   コントローラを受信専用モード（Listen-Only）へ遷移させる。
+ * \brief   CAN ドライバのバージョン情報を取得する。
  *
- * \details CAN_T_STOP（CAN_CS_STARTED → CAN_CS_STOPPED）と CAN_T_WAKEUP
- *          （CAN_CS_SLEEP → CAN_CS_STOPPED）は遷移元状態の妥当性チェックが
- *          異なる（Can_SetControllerMode() 参照）が、実際に適用する HW モード
- *          と CanState は同一のため、その部分だけを共通化する。
+ * \details Can_Init と並び、未初期化時でも CAN_E_UNINIT を報告しない例外 API
+ *          （他 BSW モジュールと共通の慣例）のため、初期化状態は確認せず
+ *          NULL ポインタチェックのみ行う。
+ *
+ * \param[out]  versioninfo  バージョン情報の格納先。NULL 禁止。
+ *
+ * \ServiceID      {0x07}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
  */
-static void Can_EnterListenOnly(void)
+void Can_GetVersionInfo(Std_VersionInfoType* versioninfo)
 {
-    Can_Hw_SetMode(CAN_HW_MODE_LISTEN_ONLY);
-    CanState = CAN_CS_STOPPED;
+    if (versioninfo == NULL)
+    {
+        Det_ReportError(CAN_MODULE_ID, 0U, CAN_API_ID_GET_VERSION_INFO, CAN_E_PARAM_POINTER);
+        return;
+    }
+
+    versioninfo->vendorID         = CAN_VENDOR_ID;
+    versioninfo->moduleID         = CAN_MODULE_ID;
+    versioninfo->sw_major_version = CAN_SW_MAJOR_VERSION;
+    versioninfo->sw_minor_version = CAN_SW_MINOR_VERSION;
+    versioninfo->sw_patch_version = CAN_SW_PATCH_VERSION;
 }
+
+/*
+ * Can_CheckBaudrate
+ */
+
+/*
+ * Can_ChangeBaudrate
+ */
+
+/*
+ * Can_SetBaudrate
+ */
 
 /**
  * \brief   CAN コントローラの状態遷移を要求する。
@@ -347,6 +375,7 @@ Can_ReturnType Can_SetControllerMode(uint8 Controller, Can_StateTransitionType T
     return CAN_OK;
 }
 
+
 /**
  * \brief   指定 CAN コントローラの割り込みを全て無効化する。
  *
@@ -387,6 +416,7 @@ void Can_DisableControllerInterrupts(uint8 Controller)
     Can_InterruptDisableNestCount++;
 }
 
+
 /**
  * \brief   Can_DisableControllerInterrupts() で無効化した割り込みを再有効化する。
  *
@@ -423,54 +453,9 @@ void Can_EnableControllerInterrupts(uint8 Controller)
         (void)Can_Hw_EnableRxIsr();
 }
 
-/**
- * \brief   CAN コントローラのエラー状態 (Active/Passive/Bus-Off) を取得する。
- *
- * \details [SWS_CANIF_91001] の CanIf_GetControllerErrorState() が「対応する
- *          CAN ドライバのサービスを呼ぶ」と規定する、その CAN ドライバ側
- *          サービスに相当する。実 AUTOSAR SWS_Can 4.3.1 は本関数に相当する
- *          Service を規定していない（CanIf 側 API のみが定義されている）ため
- *          AUTOSAR 非標準の拡張だが、CanIf から呼べる実体が必要なため用意する。
- *          MCP2515 の EFLG レジスタ（Bus-Off/TX Error-Passive ビット）から
- *          導出する（Can_Hw_GetErrorState() 参照）。
- *
- * \param[in]   Controller     対象コントローラ ID (0 固定)。
- * \param[out]  ErrorStatePtr  エラー状態の格納先。NULL 禁止。
- *
- * \retval  E_OK      ErrorStatePtr へ格納した。
- * \retval  E_NOT_OK  未初期化、Controller が範囲外、または ErrorStatePtr が NULL。
- *
- * \ServiceID      {0x0B}
- * \Reentrancy     {Reentrant}
- * \Synchronicity  {Synchronous}
+/*
+ * Can_CheckWakeup
  */
-Std_ReturnType Can_GetControllerErrorState(uint8 Controller, Can_ErrorStateType* ErrorStatePtr)
-{
-    if (Can_ConfigPtr == NULL)
-    {
-        Det_ReportError(CAN_MODULE_ID, 0U, CAN_API_ID_GET_CONTROLLER_ERROR_STATE, CAN_E_UNINIT);
-        return E_NOT_OK;
-    }
-
-    if (Controller != 0U)
-    {
-        Det_ReportError(CAN_MODULE_ID, 0U, CAN_API_ID_GET_CONTROLLER_ERROR_STATE, CAN_E_PARAM_CONTROLLER);
-        return E_NOT_OK;
-    }
-
-    if (ErrorStatePtr == NULL)
-    {
-        Det_ReportError(CAN_MODULE_ID, 0U, CAN_API_ID_GET_CONTROLLER_ERROR_STATE, CAN_E_PARAM_POINTER);
-        return E_NOT_OK;
-    }
-
-    uint8_t rawState;
-    if (Can_Hw_GetErrorState(&rawState) != CAN_HW_OK)
-        return E_NOT_OK;
-
-    *ErrorStatePtr = (Can_ErrorStateType)rawState;
-    return E_OK;
-}
 
 /**
  * \brief   CAN フレームの送信を要求する。
@@ -573,6 +558,14 @@ Can_ReturnType Can_Write(Can_HwHandleType Hth, const Can_PduType* PduInfo)
     return CAN_OK;
 }
 
+/* ======================================================================
+ * Callback notifications
+ * ====================================================================== */
+
+/* ======================================================================
+ * Scheduled functions
+ * ====================================================================== */
+
 /**
  * \brief   保留中の TX 確認 (CanIf_TxConfirmation) をまとめて処理する。
  *
@@ -608,50 +601,6 @@ void Can_MainFunction_Write(void)
     }
 }
 
-/**
- * \brief   MCP2515 INT ピンの立ち下がりエッジで起動する真のハードウェア割り込み。
- *
- * \details Can_Hw_AttachRxIsr()（Can_Init 内）により attachInterrupt() で
- *          登録され、Os スケジューラの周期とは無関係に INT ピンが立ち下がった
- *          瞬間に起動する。SPI 通信・Serial ログ・CanIf 呼び出しは一切行わず、
- *          ペンディングフラグを立てるだけに留める（理由はファイル冒頭の
- *          コメントを参照）。実際の処理は Can_MainFunction_Read() /
- *          Can_MainFunction_Wakeup()（メインループのタスク）に委譲する。
- *
- *          CAN_CS_SLEEP 中は Can_WakeupIrqPending、それ以外は
- *          Can_RxIrqPending をセットする。MCP2515 はスリープ中にバス活動を
- *          検知すると自律的に Listen-Only へ遷移し INT ピンをアサートする
- *          （Can_Hw_SetMode() の CAN_HW_MODE_SLEEP 参照）。この時点では
- *          ウェイクアップ要因となったフレーム自体の受信は保証されない
- *          （モード遷移中に取りこぼされることがある）ため、ここでは読み出さず
- *          「目覚めた」ことだけをフラグで伝える。実際のフレーム受信は
- *          CanSM_ControllerModeIndication() が CAN_CS_STARTED へ遷移させた後、
- *          以降の Can_MainFunction_Read() 呼び出しで通常どおり処理される。
- *
- * \pre        Can_Init() が正常に完了していること。
- * \note       AUTOSAR 標準外の API。INT ピン番号は Can_ConfigType::intPin
- *             から取得し、Can_Hw_AttachRxIsr() へ渡す。
- * \note       SWS_Can_00271 が規定する通知先（EcuM_CheckWakeup()）との相違点は
- *             Can_MainFunction_Wakeup() の doc コメントを参照。
- *
- * \AUTOSARReq     {SWS_Can_00396, SWS_Can_00271}
- * \ServiceID      {0xF0}
- * \Reentrancy     {Non Reentrant}
- * \Synchronicity  {Asynchronous}
- */
-static void Can_Isr(void)
-{
-    if (Can_ConfigPtr == NULL)
-        return;
-
-    if (CanState == CAN_CS_SLEEP)
-    {
-        Can_WakeupIrqPending = 1U;
-        return;
-    }
-
-    Can_RxIrqPending = 1U;
-}
 
 /**
  * \brief   受信フレームをポーリングでドレインする。
@@ -705,6 +654,36 @@ void Can_MainFunction_Read(void)
         Can_HwType  mailbox = { .CanId = rxId, .Hoh = 0U, .ControllerId = 0U };
         PduInfoType pduInfo = { .SduDataPtr = buf, .SduLength = (PduLengthType)len };
         CanIf_RxIndication(&mailbox, &pduInfo);
+    }
+}
+
+
+/**
+ * \brief   Bus-Off イベントのポーリングを行う。
+ *
+ * \details MCP2515 の ERRIE がデフォルト無効で Bus-Off 発生時に INT を
+ *          アサートしないため、EFLG.TXBO ビットを直接ポーリングすることで
+ *          確実に検出する（割り込みではなくポーリングに拠るイベントのため、
+ *          AUTOSAR も本関数を Can_MainFunction_xxx の 1 つとして定義している）。
+ *
+ * \pre        Can_Init() が正常に完了していること。
+ *
+ * \AUTOSARReq     {SWS_Can_00109}
+ * \ServiceID      {0x09}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void Can_MainFunction_BusOff(void)
+{
+    if (Can_ConfigPtr == NULL)
+    {
+        Det_ReportError(CAN_MODULE_ID, 0U, CAN_API_ID_MAIN_FUNCTION_BUSOFF, CAN_E_UNINIT);
+        return;
+    }
+
+    if (CanState == CAN_CS_STARTED && Can_Hw_IsBusOff() == CAN_HW_OK)
+    {
+        CanIf_ControllerBusOff(0U);
     }
 }
 
@@ -765,66 +744,121 @@ void Can_MainFunction_Wakeup(void)
     }
 }
 
-/**
- * \brief   Bus-Off イベントのポーリングを行う。
- *
- * \details MCP2515 の ERRIE がデフォルト無効で Bus-Off 発生時に INT を
- *          アサートしないため、EFLG.TXBO ビットを直接ポーリングすることで
- *          確実に検出する（割り込みではなくポーリングに拠るイベントのため、
- *          AUTOSAR も本関数を Can_MainFunction_xxx の 1 つとして定義している）。
- *
- * \pre        Can_Init() が正常に完了していること。
- *
- * \AUTOSARReq     {SWS_Can_00109}
- * \ServiceID      {0x09}
- * \Reentrancy     {Non Reentrant}
- * \Synchronicity  {Synchronous}
+/*
+ * Can_MainFunction_Mode
  */
-void Can_MainFunction_BusOff(void)
-{
-    if (Can_ConfigPtr == NULL)
-    {
-        Det_ReportError(CAN_MODULE_ID, 0U, CAN_API_ID_MAIN_FUNCTION_BUSOFF, CAN_E_UNINIT);
-        return;
-    }
-
-    if (CanState == CAN_CS_STARTED && Can_Hw_IsBusOff() == CAN_HW_OK)
-    {
-        CanIf_ControllerBusOff(0U);
-    }
-}
-
-/**
- * \brief   CAN ドライバのバージョン情報を取得する。
- *
- * \details Can_Init と並び、未初期化時でも CAN_E_UNINIT を報告しない例外 API
- *          （他 BSW モジュールと共通の慣例）のため、初期化状態は確認せず
- *          NULL ポインタチェックのみ行う。
- *
- * \param[out]  versioninfo  バージョン情報の格納先。NULL 禁止。
- *
- * \ServiceID      {0x07}
- * \Reentrancy     {Reentrant}
- * \Synchronicity  {Synchronous}
- */
-void Can_GetVersionInfo(Std_VersionInfoType* versioninfo)
-{
-    if (versioninfo == NULL)
-    {
-        Det_ReportError(CAN_MODULE_ID, 0U, CAN_API_ID_GET_VERSION_INFO, CAN_E_PARAM_POINTER);
-        return;
-    }
-
-    versioninfo->vendorID         = CAN_VENDOR_ID;
-    versioninfo->moduleID         = CAN_MODULE_ID;
-    versioninfo->sw_major_version = CAN_SW_MAJOR_VERSION;
-    versioninfo->sw_minor_version = CAN_SW_MINOR_VERSION;
-    versioninfo->sw_patch_version = CAN_SW_PATCH_VERSION;
-}
 
 /* ==================================================================== */
 /*  Internal Functions                                                  */
 /* ==================================================================== */
+
+/**
+ * \brief   MCP2515 INT ピンの立ち下がりエッジで起動する真のハードウェア割り込み。
+ *
+ * \details Can_Hw_AttachRxIsr()（Can_Init 内）により attachInterrupt() で
+ *          登録され、Os スケジューラの周期とは無関係に INT ピンが立ち下がった
+ *          瞬間に起動する。SPI 通信・Serial ログ・CanIf 呼び出しは一切行わず、
+ *          ペンディングフラグを立てるだけに留める（理由はファイル冒頭の
+ *          コメントを参照）。実際の処理は Can_MainFunction_Read() /
+ *          Can_MainFunction_Wakeup()（メインループのタスク）に委譲する。
+ *
+ *          CAN_CS_SLEEP 中は Can_WakeupIrqPending、それ以外は
+ *          Can_RxIrqPending をセットする。MCP2515 はスリープ中にバス活動を
+ *          検知すると自律的に Listen-Only へ遷移し INT ピンをアサートする
+ *          （Can_Hw_SetMode() の CAN_HW_MODE_SLEEP 参照）。この時点では
+ *          ウェイクアップ要因となったフレーム自体の受信は保証されない
+ *          （モード遷移中に取りこぼされることがある）ため、ここでは読み出さず
+ *          「目覚めた」ことだけをフラグで伝える。実際のフレーム受信は
+ *          CanSM_ControllerModeIndication() が CAN_CS_STARTED へ遷移させた後、
+ *          以降の Can_MainFunction_Read() 呼び出しで通常どおり処理される。
+ *
+ * \pre        Can_Init() が正常に完了していること。
+ * \note       AUTOSAR 標準外の API。INT ピン番号は Can_ConfigType::intPin
+ *             から取得し、Can_Hw_AttachRxIsr() へ渡す。
+ * \note       SWS_Can_00271 が規定する通知先（EcuM_CheckWakeup()）との相違点は
+ *             Can_MainFunction_Wakeup() の doc コメントを参照。
+ *
+ * \AUTOSARReq     {SWS_Can_00396, SWS_Can_00271}
+ * \ServiceID      {0xF0}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Asynchronous}
+ */
+static void Can_Isr(void)
+{
+    if (Can_ConfigPtr == NULL)
+        return;
+
+    if (CanState == CAN_CS_SLEEP)
+    {
+        Can_WakeupIrqPending = 1U;
+        return;
+    }
+
+    Can_RxIrqPending = 1U;
+}
+
+/**
+ * \brief   CAN コントローラのエラー状態 (Active/Passive/Bus-Off) を取得する。
+ *
+ * \details [SWS_CANIF_91001] の CanIf_GetControllerErrorState() が「対応する
+ *          CAN ドライバのサービスを呼ぶ」と規定する、その CAN ドライバ側
+ *          サービスに相当する。実 AUTOSAR SWS_Can 4.3.1 は本関数に相当する
+ *          Service を規定していない（CanIf 側 API のみが定義されている）ため
+ *          AUTOSAR 非標準の拡張だが、CanIf から呼べる実体が必要なため用意する。
+ *          MCP2515 の EFLG レジスタ（Bus-Off/TX Error-Passive ビット）から
+ *          導出する（Can_Hw_GetErrorState() 参照）。
+ *
+ * \param[in]   Controller     対象コントローラ ID (0 固定)。
+ * \param[out]  ErrorStatePtr  エラー状態の格納先。NULL 禁止。
+ *
+ * \retval  E_OK      ErrorStatePtr へ格納した。
+ * \retval  E_NOT_OK  未初期化、Controller が範囲外、または ErrorStatePtr が NULL。
+ *
+ * \ServiceID      {0x0B}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType Can_GetControllerErrorState(uint8 Controller, Can_ErrorStateType* ErrorStatePtr)
+{
+    if (Can_ConfigPtr == NULL)
+    {
+        Det_ReportError(CAN_MODULE_ID, 0U, CAN_API_ID_GET_CONTROLLER_ERROR_STATE, CAN_E_UNINIT);
+        return E_NOT_OK;
+    }
+
+    if (Controller != 0U)
+    {
+        Det_ReportError(CAN_MODULE_ID, 0U, CAN_API_ID_GET_CONTROLLER_ERROR_STATE, CAN_E_PARAM_CONTROLLER);
+        return E_NOT_OK;
+    }
+
+    if (ErrorStatePtr == NULL)
+    {
+        Det_ReportError(CAN_MODULE_ID, 0U, CAN_API_ID_GET_CONTROLLER_ERROR_STATE, CAN_E_PARAM_POINTER);
+        return E_NOT_OK;
+    }
+
+    uint8_t rawState;
+    if (Can_Hw_GetErrorState(&rawState) != CAN_HW_OK)
+        return E_NOT_OK;
+
+    *ErrorStatePtr = (Can_ErrorStateType)rawState;
+    return E_OK;
+}
+
+/**
+ * \brief   コントローラを受信専用モード（Listen-Only）へ遷移させる。
+ *
+ * \details CAN_T_STOP（CAN_CS_STARTED → CAN_CS_STOPPED）と CAN_T_WAKEUP
+ *          （CAN_CS_SLEEP → CAN_CS_STOPPED）は遷移元状態の妥当性チェックが
+ *          異なる（Can_SetControllerMode() 参照）が、実際に適用する HW モード
+ *          と CanState は同一のため、その部分だけを共通化する。
+ */
+static void Can_EnterListenOnly(void)
+{
+    Can_Hw_SetMode(CAN_HW_MODE_LISTEN_ONLY);
+    CanState = CAN_CS_STOPPED;
+}
 
 /* ==================================================================== */
 /*  Test Functions                                                      */
