@@ -45,6 +45,7 @@ extern "C" {
 #include "E2EXf_PBCfg.h"
 #include "E2E_P05.h"
 #include "Fake_Det_Hw.h"
+#include "Wrap_Com.h"
 }
 
 namespace

@@ -189,16 +189,18 @@ set(NATIVE_CHAIN_INCLUDE_DIRS
     src/Bsw/Port
     src/Rte
     src/Hal
+    test/stub/Bsw/BswM
     test/stub/Bsw/Can
     test/stub/Bsw/CanIf
-    test/stub/Bsw/E2E
-    test/stub/Bsw/Dem
-    test/stub/Bsw/ComM
-    test/stub/Bsw/BswM
-    test/stub/Bsw/EcuM
     test/stub/Bsw/CanTp
+    test/stub/Bsw/Com
+    test/stub/Bsw/ComM
+    test/stub/Bsw/Dem
+    test/stub/Bsw/E2E
+    test/stub/Bsw/EcuM
     test/stub/Bsw/KeyM
     test/stub/Bsw/NvM
+    test/stub/Bsw/PduR
     test/stub/Bsw/WdgIf
     test/stub/Rte
     test/stub/Hal
@@ -234,6 +236,7 @@ set(NATIVE_CHAIN_SRC_SOURCES
 set(NATIVE_CHAIN_STUB_SOURCES
     test/stub/Bsw/Can/Wrap_Can.c
     test/stub/Bsw/CanIf/Wrap_CanIf.c
+    test/stub/Bsw/Com/Wrap_Com.c
     test/stub/Bsw/E2E/Wrap_E2E.c
     test/stub/Bsw/Dem/Wrap_Dem.c
     test/stub/Bsw/ComM/Wrap_ComM.c
@@ -242,6 +245,7 @@ set(NATIVE_CHAIN_STUB_SOURCES
     test/stub/Bsw/CanTp/Fake_CanTp.c
     test/stub/Bsw/KeyM/Fake_KeyM.c
     test/stub/Bsw/NvM/Fake_NvM.c
+    test/stub/Bsw/PduR/Wrap_PduR.c
     test/stub/Bsw/WdgIf/Fake_WdgIf.c
     test/stub/Rte/Fake_Rte.c
     test/stub/Hal/Fake_Can_Hw.c
@@ -314,6 +318,38 @@ set(NATIVE_CHAIN_WRAP_SYMBOLS
     CanIf_TxConfirmation
     CanIf_RxIndication
     CanIf_ControllerBusOff
+    # PduR.c の AUTOSAR IF 全数（Wrap_PduR.h/.c 参照）。
+    PduR_Init
+    PduR_GetVersionInfo
+    PduR_ComTransmit
+    PduR_CanTpTransmit
+    PduR_SecOCTransmit
+    PduR_ComRxIndication
+    PduR_CanIfTxConfirmation
+    PduR_SecOCTxConfirmation
+    # Com.c の AUTOSAR IF 全数（Wrap_Com.h/.c 参照）。
+    Com_Init
+    Com_DeInit
+    Com_IpduGroupStart
+    Com_IpduGroupStop
+    Com_EnableReceptionDM
+    Com_DisableReceptionDM
+    Com_GetStatus
+    Com_GetVersionInfo
+    Com_SendSignal
+    Com_ReceiveSignal
+    Com_SendSignalGroup
+    Com_ReceiveSignalGroup
+    Com_SendSignalGroupArray
+    Com_ReceiveSignalGroupArray
+    Com_InvalidateSignal
+    Com_InvalidateSignalGroup
+    Com_TriggerIPDUSend
+    Com_SwitchIpduTxMode
+    Com_RxIndication
+    Com_TxConfirmation
+    Com_MainFunctionRx
+    Com_MainFunctionTx
 )
 foreach(wrap_symbol IN LISTS NATIVE_CHAIN_WRAP_SYMBOLS)
     target_link_options(native_chain_tests PRIVATE "-Wl,--wrap=${wrap_symbol}")

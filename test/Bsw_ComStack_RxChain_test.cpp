@@ -58,8 +58,10 @@ extern "C" {
 #include "Can_Hw.h"
 #include "Fake_Can_Hw.h"
 #include "Fake_Det_Hw.h"
-#include "Wrap_CanIf.h"
 #include "Wrap_Can.h"
+#include "Wrap_CanIf.h"
+#include "Wrap_PduR.h"
+#include "Wrap_Com.h"
 }
 
 namespace
@@ -422,8 +424,10 @@ protected:
     void SetUp() override
     {
         FakeCanHw_Reset();
-        WrapCanIf_Reset();  // 他ファイルの故障注入が漏れ伝わらないよう防御的にリセット
-        WrapCan_Reset();  // 同上（Can.c 側）
+        WrapCan_Reset();
+        WrapCanIf_Reset();
+        WrapPduR_Reset();
+        WrapCom_Reset();
         FakeDetHw_LogSuppressed = 1U;  // Init() のログはノイズになるため抑制
 
         canConfig.filter.filterId = 0x0220U;
