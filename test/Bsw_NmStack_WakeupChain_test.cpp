@@ -40,8 +40,11 @@
  *          統合された。本テストは ComM_RequestComMode() を経由せず CanSM の
  *          API を直接叩くため、ComM の内部状態（ComM_Init() 直後の既定値
  *          NO_COM）がそのまま「ボランタリスリープ済み」の前提と一致する。
- *          ComM が呼ぶ EcuM_RequestRUN()/BswM_ComM_CurrentMode() は境界として
- *          フェイクに差し替える（Fake_Bsw_EcuM.h/Fake_Bsw_BswM.h 参照）。
+ *          ComM が呼ぶ EcuM_RequestRUN() は境界としてフェイクに差し替える
+ *          （Fake_Bsw_EcuM.h 参照）。BswM_ComM_CurrentMode() は実体でリンク
+ *          される（2026-09-22、Fake_Bsw_BswM.c から切り替え）が、
+ *          `BswM_Init()` を呼ばないため実際のルール評価は走らず、
+ *          `Wrap_BswM.h` の呼び出し回数・引数キャプチャのみを検証に使う。
  *          Can_MainFunction_Wakeup() が呼ぶ EcuM_CheckWakeup() のみ、
  *          フェイクから実 CanSM_ControllerModeIndication() へ委譲する
  *          （Fake_Bsw_EcuM.h 冒頭コメント参照。この関数だけはチェーンの
@@ -68,7 +71,7 @@ extern "C" {
 #include "Fake_Can_Hw.h"
 #include "Fake_Millis.h"
 #include "Fake_Bsw_EcuM.h"
-#include "Fake_Bsw_BswM.h"
+#include "Wrap_BswM.h"
 #include "Wrap_Dem.h"
 #include "Fake_Det_Hw.h"
 #include "Wrap_CanIf.h"
@@ -94,7 +97,7 @@ protected:
         WrapCanIf_Reset();  // 他ファイルの故障注入が漏れ伝わらないよう防御的にリセット
         WrapCan_Reset();  // 同上（Can.c 側）
         FakeEcuM_Reset();
-        FakeBswM_Reset();
+        WrapBswM_Reset();
         WrapDem_Reset();
         FakeMillis_Reset();
         FakeDetHw_LogSuppressed = 1U;  // Init() のログはノイズになるため抑制
@@ -152,7 +155,7 @@ protected:
         ASSERT_EQ(FakeEcuM_RequestRUNCount, 0U);
         FakeCanHw_SetModeCount = 0U;
         FakeEcuM_Reset();
-        FakeBswM_Reset();
+        WrapBswM_Reset();
         WrapDem_Reset();
     }
 
@@ -214,8 +217,8 @@ TEST_F(Bsw_WakeupChain_Test, CanMainFunctionRead_OK_ValidatesWakeupAndNotifiesCo
     EXPECT_EQ(FakeCanHw_LastMode, CAN_HW_MODE_NORMAL);
     EXPECT_EQ(CurrentComMode(), static_cast<ComM_ModeType>(COMM_FULL_COMMUNICATION));
     EXPECT_EQ(FakeEcuM_RequestRUNCount, 1U);
-    EXPECT_EQ(FakeBswM_ComM_CurrentModeCount, 1U);
-    EXPECT_EQ(FakeBswM_LastMode, static_cast<ComM_ModeType>(COMM_FULL_COMMUNICATION));
+    EXPECT_EQ(CallCount_BswM_ComM_CurrentMode, 1U);
+    EXPECT_EQ(LastMode_BswM_ComM_CurrentMode, static_cast<ComM_ModeType>(COMM_FULL_COMMUNICATION));
     // Bus-Off の TF クリア相当（PASSED）を Dem へ報告する
     EXPECT_EQ(CallCount_Dem_SetEventStatus, 1U);
     EXPECT_EQ(LastEventStatus_Dem_SetEventStatus, DEM_EVENT_STATUS_PASSED);

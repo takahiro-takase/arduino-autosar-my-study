@@ -36,8 +36,10 @@
 # 移管作業のリスクを既存5チェーンテストから切り離すため一時的に
 # `[env:native_sleep_chain]` という別envに分離していたが、実機検証まで完了し
 # 安定したため本バイナリへ統合した）。ComM.c が呼ぶ EcuM_RequestRUN()/
-# EcuM_ReleaseRUN()/BswM_ComM_CurrentMode() は境界としてフェイクに差し替える
-# （test/stub/Bsw/EcuM/Fake_Bsw_EcuM.h・test/stub/Bsw/BswM/Fake_Bsw_BswM.h 参照）。
+# EcuM_ReleaseRUN() は境界としてフェイクに差し替える
+# （test/stub/Bsw/EcuM/Fake_Bsw_EcuM.h 参照）。BswM_ComM_CurrentMode() は
+# 2026-09-22 に実体リンク+wrap化した（test/stub/Bsw/BswM/Wrap_BswM.h 参照、
+# 下記「BswM は...」の段落参照）。
 # Dem は実体でリンクし、Dem_SetEventStatus() のみ `--wrap` で観測・故障注入する
 # （test/stub/Bsw/Dem/Wrap_Dem.h 参照、2026-09 に完全フェイクから切り替え）。
 # CanSM 状態遷移に関与しない Tx/Rx/E2E チェーンのテストは ComM_Init()/Nm_Init()
@@ -104,10 +106,17 @@
 # （2026-09-22、DcmStack コールチェーンテストに備えて CanTp.c を実体リンクへ
 # 切り替え、Fake_CanTp.c/h は test/stub/Bsw/CanTp/Wrap_CanTp.c/h へ置き換えた。
 # Rte/KeyM は引き続き Fake のまま）。
-# BswM は Dcm_Cbk.c から見た通知先 BswM_Dcm_CommunicationMode_CurrentState()
-# を、ComM.c 用の既存フェイク Fake_Bsw_BswM.c/h へ統合（対象関数は別だが
+# BswM は当初 Dcm_Cbk.c から見た通知先 BswM_Dcm_CommunicationMode_CurrentState()
+# を、ComM.c 用の既存フェイク Fake_Bsw_BswM.c/h へ統合していた（対象関数は別だが
 # `FakeBswM_Reset`/`FakeBswM_LastMode` のシンボル名が衝突するため、Dcm 側の
-# アクセサを `FakeBswM_LastDcmCommunicationMode` 等へ改称して統合）。ComM は
+# アクセサを `FakeBswM_LastDcmCommunicationMode` 等へ改称して統合）。
+# （2026-09-22、BswM.c 自体を実体リンクへ切り替え、Fake_Bsw_BswM.c/h は
+# test/stub/Bsw/BswM/Wrap_BswM.c/h へ置き換えた。BswM.c が依存する
+# Os_SetTaskActive()（src/Os/Os.c）は Os_Init() を呼ばない限り Os_Cfg==NULL
+# ガードで即座に no-op となる安全な依存のため、Os_PBCfg.c は持ち込まず
+# Os.c 単体のみ追加した。既存テストは BswM_Init() も呼ばないため、実際の
+# ルール評価は走らず、wrap 境界での呼び出し回数・引数キャプチャのみで
+# 旧フェイクと同じ検証範囲を維持する）。ComM は
 # native_chain が既に実体をリンクしているため（Nm↔CanSM↔ComM 協調スリープ
 # 検証用）、Dcm_Cbk.c が呼ぶ `ComM_DCM_ActiveDiagnostic()`/
 # `ComM_DCM_InactiveDiagnostic()` を実体へ到達させると、Dcm のテスト対象外
@@ -190,6 +199,7 @@ set(NATIVE_CHAIN_INCLUDE_DIRS
     src/Bsw/Gpt
     src/Bsw/Dio
     src/Bsw/Port
+    src/Os
     src/Rte
     src/Hal
     test/stub/Bsw/BswM
@@ -232,6 +242,8 @@ set(NATIVE_CHAIN_SRC_SOURCES
     src/Bsw/FiM/FiM_PBCfg.c
     src/Bsw/Dcm/Dcm_Cbk.c
     src/Bsw/CanTp/CanTp.c
+    src/Bsw/BswM/BswM.c
+    src/Os/Os.c
     src/Bsw/Gpt/Gpt.c
     src/Bsw/Dio/Dio.c
     src/Bsw/Port/Port.c
@@ -246,7 +258,7 @@ set(NATIVE_CHAIN_STUB_SOURCES
     test/stub/Bsw/Dem/Wrap_Dem.c
     test/stub/Bsw/Dcm/Wrap_Dcm.c
     test/stub/Bsw/ComM/Wrap_ComM.c
-    test/stub/Bsw/BswM/Fake_Bsw_BswM.c
+    test/stub/Bsw/BswM/Wrap_BswM.c
     test/stub/Bsw/EcuM/Fake_Bsw_EcuM.c
     test/stub/Bsw/CanTp/Wrap_CanTp.c
     test/stub/Bsw/KeyM/Fake_KeyM.c
@@ -374,6 +386,13 @@ set(NATIVE_CHAIN_WRAP_SYMBOLS
     Dcm_ResetToDefaultSession
     Dcm_GetVersionInfo
     Dcm_ComIndication
+    # BswM.h の AUTOSAR IF 全6関数（Wrap_BswM.h/.c 参照）。
+    BswM_Init
+    BswM_Deinit
+    BswM_GetVersionInfo
+    BswM_EcuM_CurrentState
+    BswM_ComM_CurrentMode
+    BswM_Dcm_CommunicationMode_CurrentState
 )
 foreach(wrap_symbol IN LISTS NATIVE_CHAIN_WRAP_SYMBOLS)
     target_link_options(native_chain_tests PRIVATE "-Wl,--wrap=${wrap_symbol}")

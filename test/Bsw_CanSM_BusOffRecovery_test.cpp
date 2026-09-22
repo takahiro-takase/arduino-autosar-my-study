@@ -58,7 +58,7 @@ extern "C" {
 #include "Fake_Det_Hw.h"
 #include "Wrap_Dem.h"
 #include "Fake_Bsw_EcuM.h"
-#include "Fake_Bsw_BswM.h"
+#include "Wrap_BswM.h"
 #include "Wrap_CanIf.h"
 #include "Wrap_Can.h"
 }
@@ -81,7 +81,7 @@ protected:
         FakeCanHw_Reset();
         WrapDem_Reset();
         FakeEcuM_Reset();
-        FakeBswM_Reset();
+        WrapBswM_Reset();
         FakeMillis_Reset();
         WrapCanIf_Reset();
         WrapCan_Reset();
@@ -120,7 +120,7 @@ protected:
         FakeCanHw_Reset();
         WrapDem_Reset();
         FakeEcuM_Reset();
-        FakeBswM_Reset();
+        WrapBswM_Reset();
         WrapCanIf_Reset();
         WrapCan_Reset();
 

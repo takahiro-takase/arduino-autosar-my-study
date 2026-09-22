@@ -34,7 +34,7 @@ extern "C" {
 #include "Fake_Det_Hw.h"
 #include "Wrap_Dem.h"
 #include "Fake_Bsw_EcuM.h"
-#include "Fake_Bsw_BswM.h"
+#include "Wrap_BswM.h"
 #include "Wrap_CanIf.h"
 #include "Wrap_Can.h"
 }
@@ -74,7 +74,7 @@ protected:
         WrapDem_Reset();
         Dem_Init(NULL);  // Demの内部状態を毎テスト決定的にリセットする（Fake_NvM.cにより常に「初回起動」）
         FakeEcuM_Reset();
-        FakeBswM_Reset();
+        WrapBswM_Reset();
         FakeMillis_Reset();
         FakeDetHw_LogSuppressed = 1U;  // Init() のログはノイズになるため抑制
 
