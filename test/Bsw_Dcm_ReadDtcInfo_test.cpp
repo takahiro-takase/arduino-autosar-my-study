@@ -260,67 +260,11 @@ TEST_F(Bsw_Dcm_ReadDtcInfo_Test, GetVin_NG_NullPointerReturnsError)
     EXPECT_EQ(ret, E_NOT_OK);
 }
 
-TEST_F(Bsw_Dcm_ReadDtcInfo_Test, ReadDataById_OK_VinReturnsSeventeenBytesMatchingDcmGetVin)
-{
-    /* 準備 (Arrange): [0x22, 0xF1, 0x90] */
-    uint8 req[3] = { DCM_SID_READ_DATA, (uint8)(DCM_DID_VIN >> 8U), (uint8)(DCM_DID_VIN & 0xFFU) };
-
-    /* 実行 (Act) */
-    PduInfoType pdu = { req, sizeof(req) };
-    Dcm_ComIndication(0U, &pdu);
-
-    /* 評価 (Assert): [0x62, 0xF1, 0x90, VIN(17バイト)] */
-    ASSERT_EQ(CallCount_CanTp_Transmit, 1U);
-    ASSERT_EQ(LastLength_CanTp_Transmit, (uint8)(3U + DCM_VIN_LENGTH));
-    EXPECT_EQ(LastData_CanTp_Transmit[0], 0x62U);
-    EXPECT_EQ(LastData_CanTp_Transmit[1], (uint8)(DCM_DID_VIN >> 8U));
-    EXPECT_EQ(LastData_CanTp_Transmit[2], (uint8)(DCM_DID_VIN & 0xFFU));
-
-    uint8 expectedVin[DCM_VIN_LENGTH];
-    ASSERT_EQ(Dcm_GetVin(expectedVin), E_OK);
-    for (uint8 i = 0U; i < DCM_VIN_LENGTH; i++)
-        EXPECT_EQ(LastData_CanTp_Transmit[3U + i], expectedVin[i]) << "byte " << (unsigned)i;
-}
-
-TEST_F(Bsw_Dcm_ReadDtcInfo_Test, ReadDataById_NG_TooShortRequestReturnsIncorrectMessageLength)
-{
-    /* 準備 (Arrange): DID の下位バイトが無い ([0x22, 0xF1] のみ、3バイト必須) */
-    uint8 req[2] = { DCM_SID_READ_DATA, (uint8)(DCM_DID_VIN >> 8U) };
-
-    /* 実行 (Act) */
-    PduInfoType pdu = { req, sizeof(req) };
-    Dcm_ComIndication(0U, &pdu);
-
-    /* 評価 (Assert): [0x7F, 0x22, 0x13 incorrectMessageLength]
-     * ([SWS_Dcm_00272]: DSP submoduleは要求長・形式不正時にNRC 0x13を
-     * 返す。2026-09是正: 従来は0x22 conditionsNotCorrectを返していた) */
-    ASSERT_EQ(CallCount_CanTp_Transmit, 1U);
-    ASSERT_EQ(LastLength_CanTp_Transmit, 3U);
-    EXPECT_EQ(LastData_CanTp_Transmit[0], DCM_SID_NEGATIVE_RESP);
-    EXPECT_EQ(LastData_CanTp_Transmit[1], DCM_SID_READ_DATA);
-    EXPECT_EQ(LastData_CanTp_Transmit[2], DCM_NRC_INCORRECT_MESSAGE_LENGTH);
-}
-
-TEST_F(Bsw_Dcm_ReadDtcInfo_Test, ReadDataById_NG_MultipleDidRequestReturnsIncorrectMessageLength)
-{
-    /* 準備 (Arrange): 2つ目のDID([0x22, 0xF1,0x90, 0xF1,0x90]、VINを2件要求)
-     * が付いた要求。本実装は Dcm_ReadDid() が単一DIDしか扱えない設計のため
-     * 実質 DcmDspMaxDidToRead=1 に相当し、2件目以降は NRC 0x13 で拒否する
-     * ([SWS_Dcm_01335]。2026-09 追加: 以前は余分なDIDバイトを黙って無視し
-     * 1件目だけの正応答を返してしまっていた）。 */
-    uint8 req[5] = { DCM_SID_READ_DATA,
-                      (uint8)(DCM_DID_VIN >> 8U), (uint8)(DCM_DID_VIN & 0xFFU),
-                      (uint8)(DCM_DID_VIN >> 8U), (uint8)(DCM_DID_VIN & 0xFFU) };
-
-    PduInfoType pdu = { req, sizeof(req) };
-    Dcm_ComIndication(0U, &pdu);
-
-    ASSERT_EQ(CallCount_CanTp_Transmit, 1U);
-    ASSERT_EQ(LastLength_CanTp_Transmit, 3U);
-    EXPECT_EQ(LastData_CanTp_Transmit[0], DCM_SID_NEGATIVE_RESP);
-    EXPECT_EQ(LastData_CanTp_Transmit[1], DCM_SID_READ_DATA);
-    EXPECT_EQ(LastData_CanTp_Transmit[2], DCM_NRC_INCORRECT_MESSAGE_LENGTH);
-}
+// ReadDataById_OK_VinReturnsSeventeenBytesMatchingDcmGetVin /
+// ReadDataById_NG_TooShortRequestReturnsIncorrectMessageLength /
+// ReadDataById_NG_MultipleDidRequestReturnsIncorrectMessageLength は
+// Bsw_DcmStack_SID22_ReadDataByIdChain_test.cpp へ移植済み（2026-09、同内容
+// のため削除）。
 
 // ------------------------------------------------------------
 // Dcm_GetSesCtrlType/Dcm_GetSecurityLevel（Dcm_Cbk.c 内部の static フィールド
@@ -516,128 +460,14 @@ TEST_F(Bsw_Dcm_ReadDtcInfo_Test, ReadDtcSnapshot_NG_UnsupportedRecordNumberStill
     EXPECT_EQ(LastData_CanTp_Transmit[2], DCM_NRC_REQUEST_OUT_OF_RANGE);
 }
 
-// ------------------------------------------------------------
-// 固定長サービスの上限長チェック欠落の是正(2026-09)。0x19 以外の
-// SID(0x10/0x11/0x27/0x3E)でも、有効なサブ機能に余分なバイトを付けた
-// 要求が黙って受理されていた問題を修正。各1件のみ代表的に検証する。
-// ------------------------------------------------------------
-
-TEST_F(Bsw_Dcm_ReadDtcInfo_Test, SessionControl_NG_ExtraByteReturnsIncorrectMessageLength)
-{
-    /* 準備 (Arrange): 有効な subFunc に余分な1バイト ([0x10, 0x01, 0x00]、
-     * 2バイト厳密一致のため上限超過) */
-    uint8 req[3] = { DCM_SID_SESSION_CTRL, DCM_SESSION_DEFAULT, 0x00U };
-
-    PduInfoType pdu = { req, sizeof(req) };
-    Dcm_ComIndication(0U, &pdu);
-
-    ASSERT_EQ(CallCount_CanTp_Transmit, 1U);
-    ASSERT_EQ(LastLength_CanTp_Transmit, 3U);
-    EXPECT_EQ(LastData_CanTp_Transmit[0], DCM_SID_NEGATIVE_RESP);
-    EXPECT_EQ(LastData_CanTp_Transmit[1], DCM_SID_SESSION_CTRL);
-    EXPECT_EQ(LastData_CanTp_Transmit[2], DCM_NRC_INCORRECT_MESSAGE_LENGTH);
-}
-
-TEST_F(Bsw_Dcm_ReadDtcInfo_Test, EcuReset_NG_ExtraByteReturnsIncorrectMessageLength)
-{
-    /* 準備 (Arrange): 有効な subFunc に余分な1バイト ([0x11, 0x01, 0x00]) */
-    uint8 req[3] = { DCM_SID_ECU_RESET, DCM_RESET_HARD, 0x00U };
-
-    PduInfoType pdu = { req, sizeof(req) };
-    Dcm_ComIndication(0U, &pdu);
-
-    ASSERT_EQ(CallCount_CanTp_Transmit, 1U);
-    ASSERT_EQ(LastLength_CanTp_Transmit, 3U);
-    EXPECT_EQ(LastData_CanTp_Transmit[0], DCM_SID_NEGATIVE_RESP);
-    EXPECT_EQ(LastData_CanTp_Transmit[1], DCM_SID_ECU_RESET);
-    EXPECT_EQ(LastData_CanTp_Transmit[2], DCM_NRC_INCORRECT_MESSAGE_LENGTH);
-}
-
-TEST_F(Bsw_Dcm_ReadDtcInfo_Test, TesterPresent_NG_ExtraByteReturnsIncorrectMessageLength)
-{
-    /* 準備 (Arrange): zeroSubFunction に余分な1バイト ([0x3E, 0x00, 0x00]) */
-    uint8 req[3] = { DCM_SID_TESTER_PRESENT, 0x00U, 0x00U };
-
-    PduInfoType pdu = { req, sizeof(req) };
-    Dcm_ComIndication(0U, &pdu);
-
-    ASSERT_EQ(CallCount_CanTp_Transmit, 1U);
-    ASSERT_EQ(LastLength_CanTp_Transmit, 3U);
-    EXPECT_EQ(LastData_CanTp_Transmit[0], DCM_SID_NEGATIVE_RESP);
-    EXPECT_EQ(LastData_CanTp_Transmit[1], DCM_SID_TESTER_PRESENT);
-    EXPECT_EQ(LastData_CanTp_Transmit[2], DCM_NRC_INCORRECT_MESSAGE_LENGTH);
-}
-
-TEST_F(Bsw_Dcm_ReadDtcInfo_Test, ClearDtc_NG_ExtraByteReturnsIncorrectMessageLength)
-{
-    /* 準備 (Arrange): 0x14 は extendedSession かつ SecurityAccess Level1
-     * アンロック必須（本関数内でセキュリティを長さより先に判定するが、これは
-     * 仕様上の一般処理順序 セッション→セキュリティ→モード→サブ機能→長さ
-     * に合致し正当。requestSeed→sendKey で実際にアンロックしてから、
-     * groupOfDTC(3byte)の後に余分な1バイトを付けた要求
-     * ([0x14, 0xFF,0xFF,0xFF, 0x00]、4バイト厳密一致。2026-09 追加:
-     * 以前は下限のみ判定していた）を送る。 */
-    UnlockSecurityAccessLevel1();
-    uint8 req[5] = { DCM_SID_CLEAR_DTC, 0xFFU, 0xFFU, 0xFFU, 0x00U };
-    PduInfoType pdu = { req, sizeof(req) };
-    Dcm_ComIndication(0U, &pdu);
-
-    ASSERT_EQ(CallCount_CanTp_Transmit, 1U);
-    ASSERT_EQ(LastLength_CanTp_Transmit, 3U);
-    EXPECT_EQ(LastData_CanTp_Transmit[0], DCM_SID_NEGATIVE_RESP);
-    EXPECT_EQ(LastData_CanTp_Transmit[1], DCM_SID_CLEAR_DTC);
-    EXPECT_EQ(LastData_CanTp_Transmit[2], DCM_NRC_INCORRECT_MESSAGE_LENGTH);
-}
-
-TEST_F(Bsw_Dcm_ReadDtcInfo_Test, SecuritySendKey_NG_ExtraByteReturnsIncorrectMessageLength)
-{
-    /* 準備 (Arrange): requestSeed 済みの状態で、sendKey に余分な1バイト
-     * ([0x27, 0x02, keyH, keyL, 0x00]、4バイト厳密一致。2026-09 追加:
-     * 以前は下限のみ判定していた）。キー値自体は不正でも長さチェックが
-     * それより先に効くため一致させる必要はない。 */
-    uint8 sessionReq[2] = { DCM_SID_SESSION_CTRL, DCM_SESSION_EXTENDED };
-    PduInfoType sessionPdu = { sessionReq, sizeof(sessionReq) };
-    Dcm_ComIndication(0U, &sessionPdu);
-
-    uint8 seedReq[2] = { DCM_SID_SECURITY_ACCESS, DCM_SEC_SUBFUNC_REQUEST_SEED };
-    PduInfoType seedPdu = { seedReq, sizeof(seedReq) };
-    Dcm_ComIndication(0U, &seedPdu);
-    ASSERT_EQ(LastData_CanTp_Transmit[0], 0x67U);
-
-    WrapCanTp_Reset();
-    uint8 req[5] = { DCM_SID_SECURITY_ACCESS, DCM_SEC_SUBFUNC_SEND_KEY, 0x00U, 0x00U, 0x00U };
-    PduInfoType pdu = { req, sizeof(req) };
-    Dcm_ComIndication(0U, &pdu);
-
-    ASSERT_EQ(CallCount_CanTp_Transmit, 1U);
-    ASSERT_EQ(LastLength_CanTp_Transmit, 3U);
-    EXPECT_EQ(LastData_CanTp_Transmit[0], DCM_SID_NEGATIVE_RESP);
-    EXPECT_EQ(LastData_CanTp_Transmit[1], DCM_SID_SECURITY_ACCESS);
-    EXPECT_EQ(LastData_CanTp_Transmit[2], DCM_NRC_INCORRECT_MESSAGE_LENGTH);
-}
-
-TEST_F(Bsw_Dcm_ReadDtcInfo_Test, SecurityRequestSeed_NG_ExtraByteReturnsIncorrectMessageLength)
-{
-    /* 準備 (Arrange): 0x27 は extendedSession 限定のため、まず 0x10 で
-     * 遷移する。続けて requestSeed に余分な1バイト
-     * ([0x27, 0x01, 0x00]、2バイト厳密一致。2026-09 追加: 以前は
-     * Dcm_HandleSecurityRequestSeed() 自体が udsLen を受け取ってすら
-     * いなかった）。 */
-    uint8 sessionReq[2] = { DCM_SID_SESSION_CTRL, DCM_SESSION_EXTENDED };
-    PduInfoType sessionPdu = { sessionReq, sizeof(sessionReq) };
-    Dcm_ComIndication(0U, &sessionPdu);
-    WrapCanTp_Reset();
-
-    uint8 req[3] = { DCM_SID_SECURITY_ACCESS, DCM_SEC_SUBFUNC_REQUEST_SEED, 0x00U };
-    PduInfoType pdu = { req, sizeof(req) };
-    Dcm_ComIndication(0U, &pdu);
-
-    ASSERT_EQ(CallCount_CanTp_Transmit, 1U);
-    ASSERT_EQ(LastLength_CanTp_Transmit, 3U);
-    EXPECT_EQ(LastData_CanTp_Transmit[0], DCM_SID_NEGATIVE_RESP);
-    EXPECT_EQ(LastData_CanTp_Transmit[1], DCM_SID_SECURITY_ACCESS);
-    EXPECT_EQ(LastData_CanTp_Transmit[2], DCM_NRC_INCORRECT_MESSAGE_LENGTH);
-}
+// SessionControl_NG_ExtraByteReturnsIncorrectMessageLength (SID 0x10) /
+// EcuReset_NG_ExtraByteReturnsIncorrectMessageLength (SID 0x11) /
+// TesterPresent_NG_ExtraByteReturnsIncorrectMessageLength (SID 0x3E) /
+// ClearDtc_NG_ExtraByteReturnsIncorrectMessageLength (SID 0x14) /
+// SecuritySendKey_NG_ExtraByteReturnsIncorrectMessageLength /
+// SecurityRequestSeed_NG_ExtraByteReturnsIncorrectMessageLength (SID 0x27) は
+// Bsw_DcmStack_SID10/SID11/SID3E/SID14/SID27_*Chain_test.cpp へ移植済み
+// （2026-09、同内容のため削除）。
 
 TEST_F(Bsw_Dcm_ReadDtcInfo_Test, SessionControl_OK_SuppressPosRspBitSuppressesPositiveResponse)
 {
@@ -736,44 +566,9 @@ TEST_F(Bsw_Dcm_ReadDtcInfo_Test, SessionControl_OK_ReselectingSameSessionRelocks
     EXPECT_EQ(levelAfterReselect, 0U) << "re-selecting the same session must re-lock security";
 }
 
-TEST_F(Bsw_Dcm_ReadDtcInfo_Test, ComIndication_NG_IgnoresRequestWhileCanTpTxBusy)
-{
-    /* 準備 (Arrange): 前回応答（マルチフレーム等）の送信が CanTp 側で
-     * まだ完了していない状態を模擬する。 */
-    FailFromCallCount_CanTp_IsTxBusy = 1U;
-
-    /* 実行 (Act): TesterPresent（副作用の無い単純なSID）を送る。 */
-    uint8 req[2] = { DCM_SID_TESTER_PRESENT, 0x00U };
-    PduInfoType pdu = { req, sizeof(req) };
-    Dcm_ComIndication(0U, &pdu);
-
-    /* 評価 (Assert): [SWS_Dcm_00557] ディスパッチ自体が行われず、
-     * 応答も一切送信されないこと（CanTp TX がビジーなため、どちらの
-     * 応答も物理的に送信できない）。 */
-    EXPECT_EQ(CallCount_CanTp_Transmit, 0U);
-}
-
-TEST_F(Bsw_Dcm_ReadDtcInfo_Test, ComIndication_OK_ProcessesRequestOnceCanTpTxIdleAgain)
-{
-    /* 準備 (Arrange): ビジー中に届いた要求は無視されることを確認した後、
-     * アイドルに戻れば通常通り処理されることを確認する。 */
-    FailFromCallCount_CanTp_IsTxBusy = 1U;
-    uint8 reqWhileBusy[2] = { DCM_SID_TESTER_PRESENT, 0x00U };
-    PduInfoType pduWhileBusy = { reqWhileBusy, sizeof(reqWhileBusy) };
-    Dcm_ComIndication(0U, &pduWhileBusy);
-    ASSERT_EQ(CallCount_CanTp_Transmit, 0U) << "must be ignored while busy (test precondition)";
-
-    /* 実行 (Act): CanTp TX がアイドルへ戻った後、同じ要求を再送する。 */
-    FailFromCallCount_CanTp_IsTxBusy = WRAP_CANTP_FAIL_FROM_CALL_COUNT_DISABLED;
-    uint8 req[2] = { DCM_SID_TESTER_PRESENT, 0x00U };
-    PduInfoType pdu = { req, sizeof(req) };
-    Dcm_ComIndication(0U, &pdu);
-
-    /* 評価 (Assert): 通常通り正応答 [0x7E, 0x00] が送信されること。 */
-    ASSERT_EQ(CallCount_CanTp_Transmit, 1U);
-    ASSERT_EQ(LastLength_CanTp_Transmit, 2U);
-    EXPECT_EQ(LastData_CanTp_Transmit[0], (uint8)(DCM_SID_TESTER_PRESENT + 0x40U));
-    EXPECT_EQ(LastData_CanTp_Transmit[1], 0x00U);
-}
+// ComIndication_NG_IgnoresRequestWhileCanTpTxBusy /
+// ComIndication_OK_ProcessesRequestOnceCanTpTxIdleAgain は
+// Bsw_DcmStack_CanTpBusyChain_test.cpp（実際のマルチフレーム送信中の
+// 真のビジー状態を使う版）へ移植済み（2026-09、旧S3Timer系と統合）。
 
 }  // namespace
