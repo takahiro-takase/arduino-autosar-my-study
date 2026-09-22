@@ -16,7 +16,7 @@
  *          BswM/WdgM/NvM/Crypto 等 native_chain がリンクしない大量の依存を
  *          持つためフェイクに差し替えざるを得ないが、`EcuM_CheckWakeup()`
  *          自体の実装は「CanSM への一行委譲」のみであり、これをただの
- *          スパイにしてしまうと `Bsw_WakeupChain_test.cpp` が検証していた
+ *          スパイにしてしまうと `Bsw_Wakeup_test.cpp` が検証していた
  *          ウェイクアップ検証チェーン全体（CanSM の状態機械）がここで
  *          途切れてしまう。他の RUN/POST_RUN 系 API（本物の状態機械を持つ）
  *          とは境界の性質が異なると判断し、この関数だけ委譲する。

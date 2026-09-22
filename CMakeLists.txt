@@ -20,15 +20,15 @@
 # コールチェーンテスト全般の方針。README の「Tx処理」「Rx処理」「CAN コント
 # ローラのスリープ制御」（実スリープ・ウェイクアップ検証）のようにモジュール
 # 横断でコールチェーンを実体（Com.c/PduR.c/CanIf.c/Can.c/CanSM.c）のまま
-# リンクして検証したいテストを test/ に置く（Bsw_ComStack_TxChain_test.cpp 参照）。
+# リンクして検証したいテストを test/ に置く（Bsw_ComStack_Tx_test.cpp 参照）。
 #
 # CanIf.c が CanSM_RxIndication()/ControllerBusOff() を、Can.c が
 # EcuM_CheckWakeup() 経由で CanSM_ControllerModeIndication() をハードコードで
 # 呼ぶため（2026-09-05、旧 CanIf_ControllerWakeup() 経由から変更。
 # Fake_Bsw_EcuM.h 参照）、CanSM.c は実体・フェイクのいずれかをこのバイナリ
-# 全体で選ぶ必要がある。Tx/Rx チェーン（Bsw_ComStack_TxChain_test.cpp/
-# Bsw_ComStack_RxChain_test.cpp）は CanSM の状態遷移に関与しないが、CanSM 自身の
-# コールチェーン（Bsw_NmStack_WakeupChain_test.cpp）や Nm↔CanSM↔ComM 協調スリープ
+# 全体で選ぶ必要がある。Tx/Rx チェーン（Bsw_ComStack_Tx_test.cpp/
+# Bsw_ComStack_Rx_test.cpp）は CanSM の状態遷移に関与しないが、CanSM 自身の
+# コールチェーン（Bsw_NmStack_Wakeup_test.cpp）や Nm↔CanSM↔ComM 協調スリープ
 # （Bsw_NmStack_SleepCoordination_test.cpp）を同じバイナリで検証するため、CanSM.c は
 # 実体をリンクしている。
 #
@@ -46,12 +46,12 @@
 # を呼ばないため、これらのモジュールの実体は未初期化のまま（呼ばれない）で無害。
 #
 # E2E チェーン（README「Tx 処理」「Rx 処理」それぞれの「E2E」節、
-# Bsw_ComStack_TxE2EChain_test.cpp/Bsw_ComStack_RxE2EChain_test.cpp）は E2EXf.c/
+# Bsw_ComStack_TxE2E_test.cpp/Bsw_ComStack_RxE2E_test.cpp）は E2EXf.c/
 # E2EXf_PBCfg.c/E2E_P05.c/E2E_P01.c（E2EXf.c が両 Profile を参照するため）を
 # 実体でリンクする。本番の TxTransformCbk/RxIndicationCbk
 # （Rte_COMTransform_E2EHealthStatus()/Rte_COMCbk_EngineInfo() 等）は Rte.c
 # 内にあるが、Rte.c 自体は IoHwAb/FiM/App_EngineManager/App_WarningIndicator
-# まで巨大な依存グラフを引き込むため（Bsw_ComStack_TxChain_test.cpp 冒頭コメント
+# まで巨大な依存グラフを引き込むため（Bsw_ComStack_Tx_test.cpp 冒頭コメント
 # と同じ理由）リンクしない。各テストファイル内に、本番の
 # Rte_COMTransform_E2EHealthStatus()/Rte_COMCbk_EngineInfo() と同じ1行の委譲
 # 呼び出しをテスト専用の TxTransformCbk/RxIndicationCbk として定義し、
@@ -60,7 +60,7 @@
 # （README の「E2E」節の図に含めていない別軸のため）。
 #
 # デッドライン監視チェーン（README「Rx 処理」の「デッドライン監視」節、
-# Bsw_ComStack_RxTimeoutChain_test.cpp）は PduR/CanIf/Can/CanSM を経由せず Com.c
+# Bsw_ComStack_RxTimeout_test.cpp）は PduR/CanIf/Can/CanSM を経由せず Com.c
 # 単体で完結するため、フェイクは millis()（Fake_Millis.c）のみで足りる。
 #
 # GNU ld の `-Wl,--wrap=<symbol>` によるフォールトインジェクション（2026-09
@@ -275,11 +275,14 @@ set(NATIVE_CHAIN_STUB_SOURCES
     test/stub/Hal/Fake_Port_Hw.c
 )
 
-# test/ 直下のテストファイル（Bsw_{Module|Stack}_{シナリオ}_test.cpp）を自動収集する
-# （旧 PlatformIO 版の test_build_src=yes によるテストソース自動検出、test/ 直下の
-# ファイルのみを拾う仕様、[[reference_platformio_test_suite_discovery]] 参照、と
-# 同じ挙動を CONFIGURE_DEPENDS 付き GLOB で再現する）。
-file(GLOB NATIVE_CHAIN_TEST_SOURCES CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/test/*.cpp)
+# test/ 配下のテストファイル（Bsw_{Module|Stack}_{シナリオ}_test.cpp）を自動収集する。
+# 2026-09、test/ 直下にモジュール別サブフォルダ（test/Can/・test/DcmStack/ 等、
+# test/stub/ と同じ「src/ ミラーリング」の発想）を新設し整理したため、
+# test/ 直下限定だった旧 GLOB から GLOB_RECURSE へ変更した。test/stub/ 配下は
+# 全て .c（wrap/fake スタブ）で .cpp が無いため、再帰化しても誤って拾われる
+# 心配はない（旧 PlatformIO 版の test_build_src=yes 自動検出、
+# [[reference_platformio_test_suite_discovery]] 参照、とは既に無関係）。
+file(GLOB_RECURSE NATIVE_CHAIN_TEST_SOURCES CONFIGURE_DEPENDS ${CMAKE_SOURCE_DIR}/test/*.cpp)
 
 add_executable(native_chain_tests
     ${NATIVE_CHAIN_TEST_SOURCES}
