@@ -4,8 +4,12 @@
  *          PlatformIO `[env:native_chain]`。2026-08新設時は専用環境`[env:native_dcm]`だったが、2026-09にnative_chainへ統合した）。
  *
  * \details Bsw_Dcm_ReadDtcInfo_test.cpp と同じ「Dcm_ComIndication() に生の
- *          UDS バイト列を直接渡し、CanTp_Transmit()（Fake_CanTp.h でキャプチャ）
- *          へ渡された応答を検証する」ブラックボックステスト方式。
+ *          UDS バイト列を直接渡し、CanTp_Transmit()（Wrap_CanTp.h で
+ *          応答ペイロードをキャプチャ）へ渡された応答を検証する」
+ *          ブラックボックステスト方式。CanTp.c 自体は実体でリンクされる
+ *          （2026-09-22、Fake_CanTp.c から切り替え）が、その先の
+ *          PduR/CanIf/Can は本 env では未初期化のため、物理送信は
+ *          （テストの関心事ではなく）静かに失敗する。
  *
  *          0x85 は extendedSession 限定のため、SendExtendedSession() で
  *          事前にセッションを遷移させてから各テストを実行する。
@@ -20,7 +24,7 @@ extern "C" {
 #include "Dcm_Cfg.h"
 #include "Dem.h"
 #include "Dem_Cfg.h"
-#include "Fake_CanTp.h"
+#include "Wrap_CanTp.h"
 #include "Fake_Millis.h"
 #include "Fake_Det_Hw.h"
 #include "Wrap_ComM.h"
@@ -35,10 +39,11 @@ protected:
     void SetUp() override
     {
         FakeMillis_Reset();
-        FakeCanTp_Reset();
+        WrapCanTp_Reset();
         Suppressed_ComM_DcmDiagnostic = 1U;  // 本テストは通信管理(ComM/CanSM/Nm)が対象外
         FakeDetHw_LogSuppressed = 1U;  // Init() のログはノイズになるため抑制
 
+        CanTp_Init(NULL);
         Dem_Init(NULL);
         Dcm_Init(NULL);
 
@@ -63,8 +68,8 @@ protected:
     {
         uint8 req[2] = { DCM_SID_SESSION_CTRL, DCM_SESSION_EXTENDED };
         Send(req, sizeof(req));
-        ASSERT_EQ(FakeCanTp_TxBuf[0], 0x50U);  // 正応答確認（前提が崩れていないこと）
-        FakeCanTp_Reset();
+        ASSERT_EQ(LastData_CanTp_Transmit[0], 0x50U);  // 正応答確認（前提が崩れていないこと）
+        WrapCanTp_Reset();
     }
 
     /** [0x85, subFunc] を送る。 */
@@ -101,10 +106,10 @@ TEST_F(Bsw_Dcm_ControlDTCSetting_Test, ControlDTCSetting_OK_OffIsAcceptedWithPos
     SendControlDTCSetting(DCM_DTCSETTING_OFF);
 
     /* 評価 (Assert): [0xC5, 0x02] */
-    ASSERT_EQ(FakeCanTp_TransmitCount, 1U);
-    ASSERT_EQ(FakeCanTp_TxLength, 2U);
-    EXPECT_EQ(FakeCanTp_TxBuf[0], 0xC5U);
-    EXPECT_EQ(FakeCanTp_TxBuf[1], DCM_DTCSETTING_OFF);
+    ASSERT_EQ(CallCount_CanTp_Transmit, 1U);
+    ASSERT_EQ(LastLength_CanTp_Transmit, 2U);
+    EXPECT_EQ(LastData_CanTp_Transmit[0], 0xC5U);
+    EXPECT_EQ(LastData_CanTp_Transmit[1], DCM_DTCSETTING_OFF);
 }
 
 TEST_F(Bsw_Dcm_ControlDTCSetting_Test, ControlDTCSetting_OK_OnIsAcceptedWithPositiveResponse)
@@ -114,10 +119,10 @@ TEST_F(Bsw_Dcm_ControlDTCSetting_Test, ControlDTCSetting_OK_OnIsAcceptedWithPosi
     SendControlDTCSetting(DCM_DTCSETTING_ON);
 
     /* 評価 (Assert): [0xC5, 0x01] */
-    ASSERT_EQ(FakeCanTp_TransmitCount, 1U);
-    ASSERT_EQ(FakeCanTp_TxLength, 2U);
-    EXPECT_EQ(FakeCanTp_TxBuf[0], 0xC5U);
-    EXPECT_EQ(FakeCanTp_TxBuf[1], DCM_DTCSETTING_ON);
+    ASSERT_EQ(CallCount_CanTp_Transmit, 1U);
+    ASSERT_EQ(LastLength_CanTp_Transmit, 2U);
+    EXPECT_EQ(LastData_CanTp_Transmit[0], 0xC5U);
+    EXPECT_EQ(LastData_CanTp_Transmit[1], DCM_DTCSETTING_ON);
 }
 
 // ------------------------------------------------------------
@@ -138,7 +143,7 @@ TEST_F(Bsw_Dcm_ControlDTCSetting_Test, ControlDTCSetting_OK_OffSuppressesDtcReco
     EXPECT_EQ(BusOffStatus() & DEM_STATUS_CONFIRMED, 0U);
 
     /* 実行 (Act): on に戻してから同じ報告をする */
-    FakeCanTp_Reset();
+    WrapCanTp_Reset();
     SendControlDTCSetting(DCM_DTCSETTING_ON);
     ReportBusOffFailed();
 
@@ -158,10 +163,10 @@ TEST_F(Bsw_Dcm_ControlDTCSetting_Test, ControlDTCSetting_OK_AutoReEnablesOnExpli
     SendControlDTCSetting(DCM_DTCSETTING_OFF);
 
     /* 実行 (Act): [0x10, 0x01] defaultSession へ明示的に戻る */
-    FakeCanTp_Reset();
+    WrapCanTp_Reset();
     uint8 req[2] = { DCM_SID_SESSION_CTRL, DCM_SESSION_DEFAULT };
     Send(req, sizeof(req));
-    ASSERT_EQ(FakeCanTp_TxBuf[0], 0x50U);  // 正応答確認
+    ASSERT_EQ(LastData_CanTp_Transmit[0], 0x50U);  // 正応答確認
 
     /* 評価 (Assert): 明示的に on を送っていないにも関わらず、defaultSession
      * への遷移だけで自動的に記録が再開される。 */
@@ -192,16 +197,16 @@ TEST_F(Bsw_Dcm_ControlDTCSetting_Test, S3Timer_OK_DoesNotTimeOutWhileCanTpTxBusy
     /* 実行 (Act): CanTp TX がビジー状態(前回応答、特にマルチフレームの
      * 送信未完了を模擬)のまま S3 タイムアウト相当の時間が経過しても、
      * [SWS_Dcm_00141] によりタイマは進まないはず。 */
-    FakeCanTp_Busy = (boolean)1U;
+    FailFromCallCount_CanTp_IsTxBusy = 1U;
     FakeMillis_Value += DCM_S3_TIMEOUT_MS + 1UL;
     Dcm_MainFunction();
-    FakeCanTp_Busy = (boolean)0U;
+    FailFromCallCount_CanTp_IsTxBusy = WRAP_CANTP_FAIL_FROM_CALL_COUNT_DISABLED;
 
     /* 評価 (Assert): defaultSession へ落ちていないこと
      * (extendedSession 限定の 0x85 が引き続き正応答を返すことで確認)。 */
-    FakeCanTp_Reset();
+    WrapCanTp_Reset();
     SendControlDTCSetting(DCM_DTCSETTING_ON);
-    ASSERT_EQ(FakeCanTp_TxBuf[0], (uint8)(DCM_SID_CONTROL_DTC_SETTING + 0x40U));
+    ASSERT_EQ(LastData_CanTp_Transmit[0], (uint8)(DCM_SID_CONTROL_DTC_SETTING + 0x40U));
 }
 
 TEST_F(Bsw_Dcm_ControlDTCSetting_Test, S3Timer_OK_TimesOutNormallyOnceCanTpTxIdleAgain)
@@ -209,22 +214,22 @@ TEST_F(Bsw_Dcm_ControlDTCSetting_Test, S3Timer_OK_TimesOutNormallyOnceCanTpTxIdl
     /* 準備 (Arrange): extendedSession へ遷移し、ビジー中はタイムアウトしない
      * ことを確認する（前のテストと同じ前提）。 */
     EnterExtendedSession();
-    FakeCanTp_Busy = (boolean)1U;
+    FailFromCallCount_CanTp_IsTxBusy = 1U;
     FakeMillis_Value += DCM_S3_TIMEOUT_MS + 1UL;
     Dcm_MainFunction();
 
     /* 実行 (Act): CanTp TX がアイドルへ戻った後、改めて S3 タイムアウト分の
      * 時間を経過させる。 */
-    FakeCanTp_Busy = (boolean)0U;
+    FailFromCallCount_CanTp_IsTxBusy = WRAP_CANTP_FAIL_FROM_CALL_COUNT_DISABLED;
     Dcm_MainFunction();
     FakeMillis_Value += DCM_S3_TIMEOUT_MS + 1UL;
     Dcm_MainFunction();
 
     /* 評価 (Assert): 通常通り defaultSession へ落ちていること
      * (0x85 が NRC 0x7F で拒否される)。 */
-    FakeCanTp_Reset();
+    WrapCanTp_Reset();
     SendControlDTCSetting(DCM_DTCSETTING_ON);
-    ASSERT_EQ(FakeCanTp_TxBuf[0], DCM_SID_NEGATIVE_RESP);
+    ASSERT_EQ(LastData_CanTp_Transmit[0], DCM_SID_NEGATIVE_RESP);
 }
 
 TEST_F(Bsw_Dcm_ControlDTCSetting_Test, ControlDTCSetting_OK_AutoReEnablesAfterEcuReset)
@@ -234,10 +239,10 @@ TEST_F(Bsw_Dcm_ControlDTCSetting_Test, ControlDTCSetting_OK_AutoReEnablesAfterEc
 
     /* 実行 (Act): [0x11, 0x01] hardReset（本実装は実際のリセットは行わず
      * セッションを defaultSession へ戻すのみ）。 */
-    FakeCanTp_Reset();
+    WrapCanTp_Reset();
     uint8 req[2] = { DCM_SID_ECU_RESET, 0x01U };
     Send(req, sizeof(req));
-    ASSERT_EQ(FakeCanTp_TxBuf[0], 0x51U);  // 正応答確認
+    ASSERT_EQ(LastData_CanTp_Transmit[0], 0x51U);  // 正応答確認
 
     /* 評価 (Assert): ECUReset 経由でも自動的に記録が再開される。 */
     ReportBusOffFailed();
@@ -270,11 +275,11 @@ TEST_F(Bsw_Dcm_ControlDTCSetting_Test, ControlDTCSetting_NG_DefaultSessionReject
     SendControlDTCSetting(DCM_DTCSETTING_OFF);
 
     /* 評価 (Assert): [0x7F, 0x85, 0x7F serviceNotSupportedInActiveSession] */
-    ASSERT_EQ(FakeCanTp_TransmitCount, 1U);
-    ASSERT_EQ(FakeCanTp_TxLength, 3U);
-    EXPECT_EQ(FakeCanTp_TxBuf[0], DCM_SID_NEGATIVE_RESP);
-    EXPECT_EQ(FakeCanTp_TxBuf[1], DCM_SID_CONTROL_DTC_SETTING);
-    EXPECT_EQ(FakeCanTp_TxBuf[2], DCM_NRC_SERVICE_NOT_SUPPORTED_IN_SESSION);
+    ASSERT_EQ(CallCount_CanTp_Transmit, 1U);
+    ASSERT_EQ(LastLength_CanTp_Transmit, 3U);
+    EXPECT_EQ(LastData_CanTp_Transmit[0], DCM_SID_NEGATIVE_RESP);
+    EXPECT_EQ(LastData_CanTp_Transmit[1], DCM_SID_CONTROL_DTC_SETTING);
+    EXPECT_EQ(LastData_CanTp_Transmit[2], DCM_NRC_SERVICE_NOT_SUPPORTED_IN_SESSION);
 
     /* 記録も無効化されていないことを確認する（拒否された要求が副作用を
      * 持たないこと）。 */
@@ -290,10 +295,10 @@ TEST_F(Bsw_Dcm_ControlDTCSetting_Test, ControlDTCSetting_NG_UnsupportedSubFuncRe
     SendControlDTCSetting(0x03U);
 
     /* 評価 (Assert): [0x7F, 0x85, 0x12 subFunctionNotSupported] */
-    ASSERT_EQ(FakeCanTp_TransmitCount, 1U);
-    ASSERT_EQ(FakeCanTp_TxLength, 3U);
-    EXPECT_EQ(FakeCanTp_TxBuf[0], DCM_SID_NEGATIVE_RESP);
-    EXPECT_EQ(FakeCanTp_TxBuf[2], DCM_NRC_SUB_FUNC_NOT_SUPPORTED);
+    ASSERT_EQ(CallCount_CanTp_Transmit, 1U);
+    ASSERT_EQ(LastLength_CanTp_Transmit, 3U);
+    EXPECT_EQ(LastData_CanTp_Transmit[0], DCM_SID_NEGATIVE_RESP);
+    EXPECT_EQ(LastData_CanTp_Transmit[2], DCM_NRC_SUB_FUNC_NOT_SUPPORTED);
 }
 
 TEST_F(Bsw_Dcm_ControlDTCSetting_Test, ControlDTCSetting_NG_ExtraOptionRecordReturnsIncorrectLength)
@@ -308,10 +313,10 @@ TEST_F(Bsw_Dcm_ControlDTCSetting_Test, ControlDTCSetting_NG_ExtraOptionRecordRet
     Send(req, sizeof(req));
 
     /* 評価 (Assert): [0x7F, 0x85, 0x13 incorrectMessageLength] */
-    ASSERT_EQ(FakeCanTp_TransmitCount, 1U);
-    ASSERT_EQ(FakeCanTp_TxLength, 3U);
-    EXPECT_EQ(FakeCanTp_TxBuf[0], DCM_SID_NEGATIVE_RESP);
-    EXPECT_EQ(FakeCanTp_TxBuf[2], DCM_NRC_INCORRECT_MESSAGE_LENGTH);
+    ASSERT_EQ(CallCount_CanTp_Transmit, 1U);
+    ASSERT_EQ(LastLength_CanTp_Transmit, 3U);
+    EXPECT_EQ(LastData_CanTp_Transmit[0], DCM_SID_NEGATIVE_RESP);
+    EXPECT_EQ(LastData_CanTp_Transmit[2], DCM_NRC_INCORRECT_MESSAGE_LENGTH);
 }
 
 TEST_F(Bsw_Dcm_ControlDTCSetting_Test, ControlDTCSetting_NG_UnsupportedSubFuncWithExtraBytePrefersSubFuncNrc)
@@ -326,10 +331,10 @@ TEST_F(Bsw_Dcm_ControlDTCSetting_Test, ControlDTCSetting_NG_UnsupportedSubFuncWi
     uint8 req[3] = { DCM_SID_CONTROL_DTC_SETTING, 0xFFU, 0x00U };
     Send(req, sizeof(req));
 
-    ASSERT_EQ(FakeCanTp_TransmitCount, 1U);
-    ASSERT_EQ(FakeCanTp_TxLength, 3U);
-    EXPECT_EQ(FakeCanTp_TxBuf[0], DCM_SID_NEGATIVE_RESP);
-    EXPECT_EQ(FakeCanTp_TxBuf[2], DCM_NRC_SUB_FUNC_NOT_SUPPORTED);
+    ASSERT_EQ(CallCount_CanTp_Transmit, 1U);
+    ASSERT_EQ(LastLength_CanTp_Transmit, 3U);
+    EXPECT_EQ(LastData_CanTp_Transmit[0], DCM_SID_NEGATIVE_RESP);
+    EXPECT_EQ(LastData_CanTp_Transmit[2], DCM_NRC_SUB_FUNC_NOT_SUPPORTED);
 }
 
 }  // namespace
