@@ -28,7 +28,7 @@ extern "C" {
 #include "Dcm.h"
 #include "Dcm_Cfg.h"
 #include "Dem.h"
-#include "Fake_CanTp.h"
+#include "Wrap_CanTp.h"
 #include "Fake_Bsw_BswM.h"
 #include "Wrap_ComM.h"
 #include "Fake_Millis.h"
@@ -44,11 +44,12 @@ protected:
     void SetUp() override
     {
         FakeMillis_Reset();
-        FakeCanTp_Reset();
+        WrapCanTp_Reset();
         FakeBswM_Reset();
         Suppressed_ComM_DcmDiagnostic = 1U;  // 本テストは通信管理(ComM/CanSM/Nm)が対象外
         FakeDetHw_LogSuppressed = 1U;  // Init() のログはノイズになるため抑制
 
+        CanTp_Init(NULL);
         Dem_Init(NULL);
         Dcm_Init(NULL);
         EnterExtendedSession();  // 0x28 は extendedSession 限定
@@ -74,8 +75,8 @@ protected:
     {
         uint8 req[2] = { DCM_SID_SESSION_CTRL, DCM_SESSION_EXTENDED };
         Send(req, sizeof(req));
-        ASSERT_EQ(FakeCanTp_TxBuf[0], 0x50U);  // 正応答確認（前提が崩れていないこと）
-        FakeCanTp_Reset();
+        ASSERT_EQ(LastData_CanTp_Transmit[0], 0x50U);  // 正応答確認（前提が崩れていないこと）
+        WrapCanTp_Reset();
     }
 
     /** [0x28, controlType, communicationType] を送る。 */
@@ -94,8 +95,8 @@ TEST_F(Bsw_Dcm_CommunicationControl_Test, OK_EnableRxTxNormalMapsToDcmEnableRxTx
 {
     SendCommunicationControl(0x00U /* enableRxAndTx */, 0x01U /* normal */);
 
-    EXPECT_EQ(FakeCanTp_TxBuf[0], 0x68U);
-    EXPECT_EQ(FakeCanTp_TxBuf[1], 0x00U);
+    EXPECT_EQ(LastData_CanTp_Transmit[0], 0x68U);
+    EXPECT_EQ(LastData_CanTp_Transmit[1], 0x00U);
     EXPECT_EQ(FakeBswM_DcmCommunicationModeCurrentStateCount, 1U);
     EXPECT_EQ(FakeBswM_LastDcmCommunicationMode, DCM_ENABLE_RX_TX_NORM);
 }
@@ -104,8 +105,8 @@ TEST_F(Bsw_Dcm_CommunicationControl_Test, OK_DisableRxTxNmMapsToDcmDisableRxTxNm
 {
     SendCommunicationControl(0x03U /* disableRxAndTx */, 0x02U /* NM */);
 
-    EXPECT_EQ(FakeCanTp_TxBuf[0], 0x68U);
-    EXPECT_EQ(FakeCanTp_TxBuf[1], 0x03U);
+    EXPECT_EQ(LastData_CanTp_Transmit[0], 0x68U);
+    EXPECT_EQ(LastData_CanTp_Transmit[1], 0x03U);
     EXPECT_EQ(FakeBswM_DcmCommunicationModeCurrentStateCount, 1U);
     EXPECT_EQ(FakeBswM_LastDcmCommunicationMode, DCM_DISABLE_RX_TX_NM);
 }
@@ -114,8 +115,8 @@ TEST_F(Bsw_Dcm_CommunicationControl_Test, OK_EnableRxDisableTxNormAndNmMapsToDcm
 {
     SendCommunicationControl(0x01U /* enableRxAndDisableTx */, 0x03U /* normal + NM */);
 
-    EXPECT_EQ(FakeCanTp_TxBuf[0], 0x68U);
-    EXPECT_EQ(FakeCanTp_TxBuf[1], 0x01U);
+    EXPECT_EQ(LastData_CanTp_Transmit[0], 0x68U);
+    EXPECT_EQ(LastData_CanTp_Transmit[1], 0x01U);
     EXPECT_EQ(FakeBswM_DcmCommunicationModeCurrentStateCount, 1U);
     EXPECT_EQ(FakeBswM_LastDcmCommunicationMode, DCM_ENABLE_RX_DISABLE_TX_NORM_NM);
 }
@@ -135,8 +136,8 @@ TEST_F(Bsw_Dcm_CommunicationControl_Test, NG_UnsupportedControlTypeReturnsNegati
 {
     SendCommunicationControl(0x04U /* enableRxAndDisableTxWithEnhancedAddressInformation、非対応 */, 0x01U);
 
-    EXPECT_EQ(FakeCanTp_TxBuf[0], 0x7FU);
-    EXPECT_EQ(FakeCanTp_TxBuf[2], DCM_NRC_SUB_FUNC_NOT_SUPPORTED);
+    EXPECT_EQ(LastData_CanTp_Transmit[0], 0x7FU);
+    EXPECT_EQ(LastData_CanTp_Transmit[2], DCM_NRC_SUB_FUNC_NOT_SUPPORTED);
     EXPECT_EQ(FakeBswM_DcmCommunicationModeCurrentStateCount, 0U);
 }
 
@@ -144,8 +145,8 @@ TEST_F(Bsw_Dcm_CommunicationControl_Test, NG_InvalidCommunicationTypeReturnsNega
 {
     SendCommunicationControl(0x00U, 0x00U /* 0 は未定義 */);
 
-    EXPECT_EQ(FakeCanTp_TxBuf[0], 0x7FU);
-    EXPECT_EQ(FakeCanTp_TxBuf[2], DCM_NRC_REQUEST_OUT_OF_RANGE);
+    EXPECT_EQ(LastData_CanTp_Transmit[0], 0x7FU);
+    EXPECT_EQ(LastData_CanTp_Transmit[2], DCM_NRC_REQUEST_OUT_OF_RANGE);
     EXPECT_EQ(FakeBswM_DcmCommunicationModeCurrentStateCount, 0U);
 }
 
@@ -154,8 +155,8 @@ TEST_F(Bsw_Dcm_CommunicationControl_Test, NG_IncorrectLengthReturnsNegativeRespo
     uint8 req[2] = { DCM_SID_COMM_CONTROL, 0x00U };
     Send(req, sizeof(req));
 
-    EXPECT_EQ(FakeCanTp_TxBuf[0], 0x7FU);
-    EXPECT_EQ(FakeCanTp_TxBuf[2], DCM_NRC_INCORRECT_MESSAGE_LENGTH);
+    EXPECT_EQ(LastData_CanTp_Transmit[0], 0x7FU);
+    EXPECT_EQ(LastData_CanTp_Transmit[2], DCM_NRC_INCORRECT_MESSAGE_LENGTH);
     EXPECT_EQ(FakeBswM_DcmCommunicationModeCurrentStateCount, 0U);
 }
 
@@ -169,8 +170,8 @@ TEST_F(Bsw_Dcm_CommunicationControl_Test, NG_UnsupportedControlTypeWithWrongLeng
     uint8 req[2] = { DCM_SID_COMM_CONTROL, 0xFFU };
     Send(req, sizeof(req));
 
-    EXPECT_EQ(FakeCanTp_TxBuf[0], 0x7FU);
-    EXPECT_EQ(FakeCanTp_TxBuf[2], DCM_NRC_SUB_FUNC_NOT_SUPPORTED);
+    EXPECT_EQ(LastData_CanTp_Transmit[0], 0x7FU);
+    EXPECT_EQ(LastData_CanTp_Transmit[2], DCM_NRC_SUB_FUNC_NOT_SUPPORTED);
     EXPECT_EQ(FakeBswM_DcmCommunicationModeCurrentStateCount, 0U);
 }
 

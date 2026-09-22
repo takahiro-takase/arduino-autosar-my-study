@@ -9,10 +9,14 @@
  *          への対応をきっかけに新設した。
  *
  *          `Dcm_ComIndication()` に生の UDS バイト列を直接渡し、
- *          `CanTp_Transmit()`（`Fake_CanTp.h` でキャプチャ）へ渡された応答を
- *          検証する、という「入口と出口だけを見る」ブラックボックステスト。
- *          CanTp/PduR/CanIf/Can は経由しない（`Dcm_ComIndication()` 自体が
- *          「CanTp が組み立てた生 UDS ペイロードを受け取る」入口のため）。
+ *          `CanTp_Transmit()`（`Wrap_CanTp.h` で応答ペイロードをキャプチャ）
+ *          へ渡された応答を検証する、という「入口と出口だけを見る」
+ *          ブラックボックステスト。`Dcm_ComIndication()` 自体は
+ *          「CanTp が組み立てた生 UDS ペイロードを受け取る」入口のため、
+ *          RX 側の CanTp/PduR/CanIf/Can は経由しない。TX 側は CanTp.c が
+ *          実体でリンクされる（2026-09-22、Fake_CanTp.c から切り替え）が、
+ *          その先の PduR/CanIf/Can は本 env では未初期化のため、物理送信は
+ *          （テストの関心事ではなく）静かに失敗する。
  *
  *          既存 subFunc（0x01/0x02/0x04/0x06）は今回追加した 0x0A との
  *          対比・将来の回帰検知のため最小限のみカバーする。全 UDS サービス
@@ -24,7 +28,7 @@ extern "C" {
 #include "Dcm.h"
 #include "Dcm_Cfg.h"
 #include "Dem.h"
-#include "Fake_CanTp.h"
+#include "Wrap_CanTp.h"
 #include "Fake_Millis.h"
 #include "Fake_Det_Hw.h"
 #include "Wrap_ComM.h"
@@ -39,10 +43,11 @@ protected:
     void SetUp() override
     {
         FakeMillis_Reset();
-        FakeCanTp_Reset();
+        WrapCanTp_Reset();
         Suppressed_ComM_DcmDiagnostic = 1U;  // 本テストは通信管理(ComM/CanSM/Nm)が対象外
         FakeDetHw_LogSuppressed = 1U;  // Init() のログはノイズになるため抑制
 
+        CanTp_Init(NULL);
         Dem_Init(NULL);
         Dcm_Init(NULL);
 
@@ -65,7 +70,7 @@ protected:
     /** extendedSessionへ遷移し、requestSeed→sendKeyで実際にSecurityAccess
      *  Level1をUnlockする（seed/keyの計算式は本番コードと同じ
      *  `seed ^ DCM_SECURITY_KEY_MASK`）。Unlock成功をASSERTし、以降の
-     *  応答を検証しやすいよう最後にFakeCanTp_Reset()する。 */
+     *  応答を検証しやすいよう最後にWrapCanTp_Reset()する。 */
     void UnlockSecurityAccessLevel1()
     {
         uint8 sessionReq[2] = { DCM_SID_SESSION_CTRL, DCM_SESSION_EXTENDED };
@@ -75,17 +80,17 @@ protected:
         uint8 seedReq[2] = { DCM_SID_SECURITY_ACCESS, DCM_SEC_SUBFUNC_REQUEST_SEED };
         PduInfoType seedPdu = { seedReq, sizeof(seedReq) };
         Dcm_ComIndication(0U, &seedPdu);
-        ASSERT_EQ(FakeCanTp_TxBuf[0], 0x67U);
-        uint16 seed = (uint16)(((uint16)FakeCanTp_TxBuf[2] << 8U) | (uint16)FakeCanTp_TxBuf[3]);
+        ASSERT_EQ(LastData_CanTp_Transmit[0], 0x67U);
+        uint16 seed = (uint16)(((uint16)LastData_CanTp_Transmit[2] << 8U) | (uint16)LastData_CanTp_Transmit[3]);
         uint16 key  = (uint16)(seed ^ DCM_SECURITY_KEY_MASK);
 
         uint8 keyReq[4] = { DCM_SID_SECURITY_ACCESS, DCM_SEC_SUBFUNC_SEND_KEY,
                              (uint8)(key >> 8U), (uint8)(key & 0xFFU) };
         PduInfoType keyPdu = { keyReq, sizeof(keyReq) };
         Dcm_ComIndication(0U, &keyPdu);
-        ASSERT_EQ(FakeCanTp_TxBuf[0], 0x67U) << "security unlock must succeed as a test precondition";
+        ASSERT_EQ(LastData_CanTp_Transmit[0], 0x67U) << "security unlock must succeed as a test precondition";
 
-        FakeCanTp_Reset();
+        WrapCanTp_Reset();
     }
 };
 
@@ -265,16 +270,16 @@ TEST_F(Bsw_Dcm_ReadDtcInfo_Test, ReadDataById_OK_VinReturnsSeventeenBytesMatchin
     Dcm_ComIndication(0U, &pdu);
 
     /* 評価 (Assert): [0x62, 0xF1, 0x90, VIN(17バイト)] */
-    ASSERT_EQ(FakeCanTp_TransmitCount, 1U);
-    ASSERT_EQ(FakeCanTp_TxLength, (uint8)(3U + DCM_VIN_LENGTH));
-    EXPECT_EQ(FakeCanTp_TxBuf[0], 0x62U);
-    EXPECT_EQ(FakeCanTp_TxBuf[1], (uint8)(DCM_DID_VIN >> 8U));
-    EXPECT_EQ(FakeCanTp_TxBuf[2], (uint8)(DCM_DID_VIN & 0xFFU));
+    ASSERT_EQ(CallCount_CanTp_Transmit, 1U);
+    ASSERT_EQ(LastLength_CanTp_Transmit, (uint8)(3U + DCM_VIN_LENGTH));
+    EXPECT_EQ(LastData_CanTp_Transmit[0], 0x62U);
+    EXPECT_EQ(LastData_CanTp_Transmit[1], (uint8)(DCM_DID_VIN >> 8U));
+    EXPECT_EQ(LastData_CanTp_Transmit[2], (uint8)(DCM_DID_VIN & 0xFFU));
 
     uint8 expectedVin[DCM_VIN_LENGTH];
     ASSERT_EQ(Dcm_GetVin(expectedVin), E_OK);
     for (uint8 i = 0U; i < DCM_VIN_LENGTH; i++)
-        EXPECT_EQ(FakeCanTp_TxBuf[3U + i], expectedVin[i]) << "byte " << (unsigned)i;
+        EXPECT_EQ(LastData_CanTp_Transmit[3U + i], expectedVin[i]) << "byte " << (unsigned)i;
 }
 
 TEST_F(Bsw_Dcm_ReadDtcInfo_Test, ReadDataById_NG_TooShortRequestReturnsIncorrectMessageLength)
@@ -289,11 +294,11 @@ TEST_F(Bsw_Dcm_ReadDtcInfo_Test, ReadDataById_NG_TooShortRequestReturnsIncorrect
     /* 評価 (Assert): [0x7F, 0x22, 0x13 incorrectMessageLength]
      * ([SWS_Dcm_00272]: DSP submoduleは要求長・形式不正時にNRC 0x13を
      * 返す。2026-09是正: 従来は0x22 conditionsNotCorrectを返していた) */
-    ASSERT_EQ(FakeCanTp_TransmitCount, 1U);
-    ASSERT_EQ(FakeCanTp_TxLength, 3U);
-    EXPECT_EQ(FakeCanTp_TxBuf[0], DCM_SID_NEGATIVE_RESP);
-    EXPECT_EQ(FakeCanTp_TxBuf[1], DCM_SID_READ_DATA);
-    EXPECT_EQ(FakeCanTp_TxBuf[2], DCM_NRC_INCORRECT_MESSAGE_LENGTH);
+    ASSERT_EQ(CallCount_CanTp_Transmit, 1U);
+    ASSERT_EQ(LastLength_CanTp_Transmit, 3U);
+    EXPECT_EQ(LastData_CanTp_Transmit[0], DCM_SID_NEGATIVE_RESP);
+    EXPECT_EQ(LastData_CanTp_Transmit[1], DCM_SID_READ_DATA);
+    EXPECT_EQ(LastData_CanTp_Transmit[2], DCM_NRC_INCORRECT_MESSAGE_LENGTH);
 }
 
 TEST_F(Bsw_Dcm_ReadDtcInfo_Test, ReadDataById_NG_MultipleDidRequestReturnsIncorrectMessageLength)
@@ -310,11 +315,11 @@ TEST_F(Bsw_Dcm_ReadDtcInfo_Test, ReadDataById_NG_MultipleDidRequestReturnsIncorr
     PduInfoType pdu = { req, sizeof(req) };
     Dcm_ComIndication(0U, &pdu);
 
-    ASSERT_EQ(FakeCanTp_TransmitCount, 1U);
-    ASSERT_EQ(FakeCanTp_TxLength, 3U);
-    EXPECT_EQ(FakeCanTp_TxBuf[0], DCM_SID_NEGATIVE_RESP);
-    EXPECT_EQ(FakeCanTp_TxBuf[1], DCM_SID_READ_DATA);
-    EXPECT_EQ(FakeCanTp_TxBuf[2], DCM_NRC_INCORRECT_MESSAGE_LENGTH);
+    ASSERT_EQ(CallCount_CanTp_Transmit, 1U);
+    ASSERT_EQ(LastLength_CanTp_Transmit, 3U);
+    EXPECT_EQ(LastData_CanTp_Transmit[0], DCM_SID_NEGATIVE_RESP);
+    EXPECT_EQ(LastData_CanTp_Transmit[1], DCM_SID_READ_DATA);
+    EXPECT_EQ(LastData_CanTp_Transmit[2], DCM_NRC_INCORRECT_MESSAGE_LENGTH);
 }
 
 // ------------------------------------------------------------
@@ -336,7 +341,7 @@ TEST_F(Bsw_Dcm_ReadDtcInfo_Test, GetSesCtrlType_OK_ReflectsExtendedSessionAfterR
 {
     uint8 req[2] = { DCM_SID_SESSION_CTRL, DCM_SESSION_EXTENDED };
     SendReadDtcInfo(req, sizeof(req));
-    ASSERT_EQ(FakeCanTp_TxBuf[0], 0x50U);  // 正応答確認（前提が崩れていないこと）
+    ASSERT_EQ(LastData_CanTp_Transmit[0], 0x50U);  // 正応答確認（前提が崩れていないこと）
 
     Dcm_SesCtrlType session = 0U;
     Std_ReturnType ret = Dcm_GetSesCtrlType(&session);
@@ -420,7 +425,7 @@ TEST_F(Bsw_Dcm_ReadDtcInfo_Test, ResetToDefaultSession_OK_ReturnsSessionToDefaul
 {
     uint8 req[2] = { DCM_SID_SESSION_CTRL, DCM_SESSION_EXTENDED };
     SendReadDtcInfo(req, sizeof(req));
-    ASSERT_EQ(FakeCanTp_TxBuf[0], 0x50U);  // 前提: extendedSessionへ遷移済み
+    ASSERT_EQ(LastData_CanTp_Transmit[0], 0x50U);  // 前提: extendedSessionへ遷移済み
     Dcm_SesCtrlType sessionBefore = 0U;
     ASSERT_EQ(Dcm_GetSesCtrlType(&sessionBefore), E_OK);
     ASSERT_EQ(sessionBefore, DCM_SESSION_EXTENDED);
@@ -448,11 +453,11 @@ TEST_F(Bsw_Dcm_ReadDtcInfo_Test, ReadDtcSupported_OK_ReturnsAllConfiguredDtcsReg
     /* 評価 (Assert): [0x59, 0x0A, availMask, (DTC_H,DTC_M,DTC_L,status) x DEM_EVENT_COUNT]
      * を、Dem_Init() 直後の状態（1件も FAILED になっていない）でも
      * DEM_EVENT_COUNT 件全て返す（reportDTCByStatusMask との違いそのもの）。 */
-    ASSERT_EQ(FakeCanTp_TransmitCount, 1U);
-    ASSERT_EQ(FakeCanTp_TxLength, (uint8)(3U + DEM_EVENT_COUNT * 4U));
-    EXPECT_EQ(FakeCanTp_TxBuf[0], 0x59U);
-    EXPECT_EQ(FakeCanTp_TxBuf[1], DCM_DTC_SUBFUNC_REPORT_SUPPORTED);
-    EXPECT_EQ(FakeCanTp_TxBuf[2], DEM_STATUS_AVAILABILITY_MASK);
+    ASSERT_EQ(CallCount_CanTp_Transmit, 1U);
+    ASSERT_EQ(LastLength_CanTp_Transmit, (uint8)(3U + DEM_EVENT_COUNT * 4U));
+    EXPECT_EQ(LastData_CanTp_Transmit[0], 0x59U);
+    EXPECT_EQ(LastData_CanTp_Transmit[1], DCM_DTC_SUBFUNC_REPORT_SUPPORTED);
+    EXPECT_EQ(LastData_CanTp_Transmit[2], DEM_STATUS_AVAILABILITY_MASK);
 }
 
 TEST_F(Bsw_Dcm_ReadDtcInfo_Test, ReadDtcSupported_OK_DiffersFromReportByStatusMaskWithImpossibleMask)
@@ -462,12 +467,12 @@ TEST_F(Bsw_Dcm_ReadDtcInfo_Test, ReadDtcSupported_OK_DiffersFromReportByStatusMa
      * 何にも一致しないため 0 件になるはず。 */
     uint8 reqByMask[3] = { DCM_SID_READ_DTC_INFO, DCM_DTC_SUBFUNC_REPORT_BY_MASK, 0x00U };
     SendReadDtcInfo(reqByMask, sizeof(reqByMask));
-    ASSERT_EQ(FakeCanTp_TransmitCount, 1U);
+    ASSERT_EQ(CallCount_CanTp_Transmit, 1U);
     /* 応答: [0x59, 0x02, availMask] のみ（0 件時は DTC 列挙部分が無い） */
-    ASSERT_EQ(FakeCanTp_TxLength, 3U);
+    ASSERT_EQ(LastLength_CanTp_Transmit, 3U);
 
     /* 実行 (Act): 同じ Dem 状態のまま reportSupportedDTC (0x0A) を送る */
-    FakeCanTp_Reset();
+    WrapCanTp_Reset();
     uint8 reqSupported[2] = { DCM_SID_READ_DTC_INFO, DCM_DTC_SUBFUNC_REPORT_SUPPORTED };
     SendReadDtcInfo(reqSupported, sizeof(reqSupported));
 
@@ -475,8 +480,8 @@ TEST_F(Bsw_Dcm_ReadDtcInfo_Test, ReadDtcSupported_OK_DiffersFromReportByStatusMa
      * 0 件だったのと対照的に DEM_EVENT_COUNT 件全て返る。これが
      * reportSupportedDTC の存在意義そのもの（Dem_GetSupportedDTCs() の
      * 実装コメント参照）。 */
-    ASSERT_EQ(FakeCanTp_TransmitCount, 1U);
-    EXPECT_EQ(FakeCanTp_TxLength, (uint8)(3U + DEM_EVENT_COUNT * 4U));
+    ASSERT_EQ(CallCount_CanTp_Transmit, 1U);
+    EXPECT_EQ(LastLength_CanTp_Transmit, (uint8)(3U + DEM_EVENT_COUNT * 4U));
 }
 
 // ------------------------------------------------------------
@@ -500,10 +505,10 @@ TEST_F(Bsw_Dcm_ReadDtcInfo_Test, ReadDtcFaultDetectionCounter_OK_ReturnsEmptyLis
     /* 評価 (Assert): Dem_Init() 直後は全イベントの Fault Detection Counter が
      * 0 (未着手)であり [SWS_Dcm_00465] の「prefailed」(1〜0x7E) の定義を
      * どれも満たさないため、DTC 列挙部分の無い [0x59, 0x14] のみを返す。 */
-    ASSERT_EQ(FakeCanTp_TransmitCount, 1U);
-    ASSERT_EQ(FakeCanTp_TxLength, 2U);
-    EXPECT_EQ(FakeCanTp_TxBuf[0], 0x59U);
-    EXPECT_EQ(FakeCanTp_TxBuf[1], DCM_DTC_SUBFUNC_REPORT_FDC);
+    ASSERT_EQ(CallCount_CanTp_Transmit, 1U);
+    ASSERT_EQ(LastLength_CanTp_Transmit, 2U);
+    EXPECT_EQ(LastData_CanTp_Transmit[0], 0x59U);
+    EXPECT_EQ(LastData_CanTp_Transmit[1], DCM_DTC_SUBFUNC_REPORT_FDC);
 }
 
 TEST_F(Bsw_Dcm_ReadDtcInfo_Test, ReadDtcFaultDetectionCounter_OK_ReturnsOnlyThePrefailedEvent)
@@ -519,9 +524,9 @@ TEST_F(Bsw_Dcm_ReadDtcInfo_Test, ReadDtcFaultDetectionCounter_OK_ReturnsOnlyTheP
 
     /* 評価 (Assert): prefailed なのはこの1件のみのため、DTC 一覧は1件だけ。
      * 生カウンタ1を limit=2 で線形写像: (1*127)/2 = 63 (整数除算)。 */
-    ASSERT_EQ(FakeCanTp_TransmitCount, 1U);
-    ASSERT_EQ(FakeCanTp_TxLength, 6U);  /* 2(header) + 1件×4 */
-    EXPECT_EQ(FakeCanTp_TxBuf[5], 63U);
+    ASSERT_EQ(CallCount_CanTp_Transmit, 1U);
+    ASSERT_EQ(LastLength_CanTp_Transmit, 6U);  /* 2(header) + 1件×4 */
+    EXPECT_EQ(LastData_CanTp_Transmit[5], 63U);
 }
 
 // ------------------------------------------------------------
@@ -543,11 +548,11 @@ TEST_F(Bsw_Dcm_ReadDtcInfo_Test, ReadDtcCount_OK_ReturnsZeroFailedWhenNothingFai
 
     /* 評価 (Assert): [0x59, 0x01, availMask, format, countH, countL]。
      * Dem_Init() 直後は 1 件も FAILED になっていないため countL=0。 */
-    ASSERT_EQ(FakeCanTp_TransmitCount, 1U);
-    ASSERT_EQ(FakeCanTp_TxLength, 6U);
-    EXPECT_EQ(FakeCanTp_TxBuf[0], 0x59U);
-    EXPECT_EQ(FakeCanTp_TxBuf[1], DCM_DTC_SUBFUNC_REPORT_COUNT);
-    EXPECT_EQ(FakeCanTp_TxBuf[5], 0U);  // countL
+    ASSERT_EQ(CallCount_CanTp_Transmit, 1U);
+    ASSERT_EQ(LastLength_CanTp_Transmit, 6U);
+    EXPECT_EQ(LastData_CanTp_Transmit[0], 0x59U);
+    EXPECT_EQ(LastData_CanTp_Transmit[1], DCM_DTC_SUBFUNC_REPORT_COUNT);
+    EXPECT_EQ(LastData_CanTp_Transmit[5], 0U);  // countL
 }
 
 TEST_F(Bsw_Dcm_ReadDtcInfo_Test, ReadDtcCount_OK_StatusMask0xFFMatchesNotCompletedSinceClear)
@@ -564,9 +569,9 @@ TEST_F(Bsw_Dcm_ReadDtcInfo_Test, ReadDtcCount_OK_StatusMask0xFFMatchesNotComplet
     /* 評価 (Assert): DEM_STATUS_NOT_COMPLETED_SINCE_CLEAR ビットが
      * DEM_STATUS_AVAILABILITY_MASK に含まれるため、Dem_Init() 直後の
      * 全イベントがこのビットを立てており、0xFF マスクには全件ヒットする。 */
-    ASSERT_EQ(FakeCanTp_TransmitCount, 1U);
-    ASSERT_EQ(FakeCanTp_TxLength, 6U);
-    EXPECT_EQ(FakeCanTp_TxBuf[5], (uint8)DEM_EVENT_COUNT);  // countL
+    ASSERT_EQ(CallCount_CanTp_Transmit, 1U);
+    ASSERT_EQ(LastLength_CanTp_Transmit, 6U);
+    EXPECT_EQ(LastData_CanTp_Transmit[5], (uint8)DEM_EVENT_COUNT);  // countL
 }
 
 TEST_F(Bsw_Dcm_ReadDtcInfo_Test, ReadDtcInfo_NG_UnsupportedSubFuncReturnsNegativeResponse)
@@ -579,11 +584,11 @@ TEST_F(Bsw_Dcm_ReadDtcInfo_Test, ReadDtcInfo_NG_UnsupportedSubFuncReturnsNegativ
     SendReadDtcInfo(req, sizeof(req));
 
     /* 評価 (Assert): [0x7F, 0x19, 0x12 subFunctionNotSupported] */
-    ASSERT_EQ(FakeCanTp_TransmitCount, 1U);
-    ASSERT_EQ(FakeCanTp_TxLength, 3U);
-    EXPECT_EQ(FakeCanTp_TxBuf[0], DCM_SID_NEGATIVE_RESP);
-    EXPECT_EQ(FakeCanTp_TxBuf[1], DCM_SID_READ_DTC_INFO);
-    EXPECT_EQ(FakeCanTp_TxBuf[2], DCM_NRC_SUB_FUNC_NOT_SUPPORTED);
+    ASSERT_EQ(CallCount_CanTp_Transmit, 1U);
+    ASSERT_EQ(LastLength_CanTp_Transmit, 3U);
+    EXPECT_EQ(LastData_CanTp_Transmit[0], DCM_SID_NEGATIVE_RESP);
+    EXPECT_EQ(LastData_CanTp_Transmit[1], DCM_SID_READ_DTC_INFO);
+    EXPECT_EQ(LastData_CanTp_Transmit[2], DCM_NRC_SUB_FUNC_NOT_SUPPORTED);
 }
 
 TEST_F(Bsw_Dcm_ReadDtcInfo_Test, ReadDtcInfo_NG_TooShortRequestReturnsNegativeResponse)
@@ -597,10 +602,10 @@ TEST_F(Bsw_Dcm_ReadDtcInfo_Test, ReadDtcInfo_NG_TooShortRequestReturnsNegativeRe
     /* 評価 (Assert): [0x7F, 0x19, 0x13 incorrectMessageLength]
      * ([SWS_Dcm_00696]: DSD submoduleは要求長が最小長未満ならNRC 0x13を
      * 返す。2026-09是正: 従来は0x22を返していた) */
-    ASSERT_EQ(FakeCanTp_TransmitCount, 1U);
-    ASSERT_EQ(FakeCanTp_TxLength, 3U);
-    EXPECT_EQ(FakeCanTp_TxBuf[0], DCM_SID_NEGATIVE_RESP);
-    EXPECT_EQ(FakeCanTp_TxBuf[2], DCM_NRC_INCORRECT_MESSAGE_LENGTH);
+    ASSERT_EQ(CallCount_CanTp_Transmit, 1U);
+    ASSERT_EQ(LastLength_CanTp_Transmit, 3U);
+    EXPECT_EQ(LastData_CanTp_Transmit[0], DCM_SID_NEGATIVE_RESP);
+    EXPECT_EQ(LastData_CanTp_Transmit[2], DCM_NRC_INCORRECT_MESSAGE_LENGTH);
 }
 
 TEST_F(Bsw_Dcm_ReadDtcInfo_Test, ReadDtcCount_NG_TooShortRequestReturnsIncorrectMessageLength)
@@ -612,10 +617,10 @@ TEST_F(Bsw_Dcm_ReadDtcInfo_Test, ReadDtcCount_NG_TooShortRequestReturnsIncorrect
     SendReadDtcInfo(req, sizeof(req));
 
     /* 評価 (Assert): [0x7F, 0x19, 0x13 incorrectMessageLength] ([SWS_Dcm_00696]) */
-    ASSERT_EQ(FakeCanTp_TransmitCount, 1U);
-    ASSERT_EQ(FakeCanTp_TxLength, 3U);
-    EXPECT_EQ(FakeCanTp_TxBuf[0], DCM_SID_NEGATIVE_RESP);
-    EXPECT_EQ(FakeCanTp_TxBuf[2], DCM_NRC_INCORRECT_MESSAGE_LENGTH);
+    ASSERT_EQ(CallCount_CanTp_Transmit, 1U);
+    ASSERT_EQ(LastLength_CanTp_Transmit, 3U);
+    EXPECT_EQ(LastData_CanTp_Transmit[0], DCM_SID_NEGATIVE_RESP);
+    EXPECT_EQ(LastData_CanTp_Transmit[2], DCM_NRC_INCORRECT_MESSAGE_LENGTH);
 }
 
 TEST_F(Bsw_Dcm_ReadDtcInfo_Test, ReadDtcByMask_NG_TooShortRequestReturnsIncorrectMessageLength)
@@ -627,10 +632,10 @@ TEST_F(Bsw_Dcm_ReadDtcInfo_Test, ReadDtcByMask_NG_TooShortRequestReturnsIncorrec
     SendReadDtcInfo(req, sizeof(req));
 
     /* 評価 (Assert): [0x7F, 0x19, 0x13 incorrectMessageLength] ([SWS_Dcm_00696]) */
-    ASSERT_EQ(FakeCanTp_TransmitCount, 1U);
-    ASSERT_EQ(FakeCanTp_TxLength, 3U);
-    EXPECT_EQ(FakeCanTp_TxBuf[0], DCM_SID_NEGATIVE_RESP);
-    EXPECT_EQ(FakeCanTp_TxBuf[2], DCM_NRC_INCORRECT_MESSAGE_LENGTH);
+    ASSERT_EQ(CallCount_CanTp_Transmit, 1U);
+    ASSERT_EQ(LastLength_CanTp_Transmit, 3U);
+    EXPECT_EQ(LastData_CanTp_Transmit[0], DCM_SID_NEGATIVE_RESP);
+    EXPECT_EQ(LastData_CanTp_Transmit[2], DCM_NRC_INCORRECT_MESSAGE_LENGTH);
 }
 
 TEST_F(Bsw_Dcm_ReadDtcInfo_Test, ReadDtcCount_NG_ExtraByteReturnsIncorrectMessageLength)
@@ -642,10 +647,10 @@ TEST_F(Bsw_Dcm_ReadDtcInfo_Test, ReadDtcCount_NG_ExtraByteReturnsIncorrectMessag
 
     SendReadDtcInfo(req, sizeof(req));
 
-    ASSERT_EQ(FakeCanTp_TransmitCount, 1U);
-    ASSERT_EQ(FakeCanTp_TxLength, 3U);
-    EXPECT_EQ(FakeCanTp_TxBuf[0], DCM_SID_NEGATIVE_RESP);
-    EXPECT_EQ(FakeCanTp_TxBuf[2], DCM_NRC_INCORRECT_MESSAGE_LENGTH);
+    ASSERT_EQ(CallCount_CanTp_Transmit, 1U);
+    ASSERT_EQ(LastLength_CanTp_Transmit, 3U);
+    EXPECT_EQ(LastData_CanTp_Transmit[0], DCM_SID_NEGATIVE_RESP);
+    EXPECT_EQ(LastData_CanTp_Transmit[2], DCM_NRC_INCORRECT_MESSAGE_LENGTH);
 }
 
 TEST_F(Bsw_Dcm_ReadDtcInfo_Test, ReadDtcSupported_NG_ExtraByteReturnsIncorrectMessageLength)
@@ -657,10 +662,10 @@ TEST_F(Bsw_Dcm_ReadDtcInfo_Test, ReadDtcSupported_NG_ExtraByteReturnsIncorrectMe
 
     SendReadDtcInfo(req, sizeof(req));
 
-    ASSERT_EQ(FakeCanTp_TransmitCount, 1U);
-    ASSERT_EQ(FakeCanTp_TxLength, 3U);
-    EXPECT_EQ(FakeCanTp_TxBuf[0], DCM_SID_NEGATIVE_RESP);
-    EXPECT_EQ(FakeCanTp_TxBuf[2], DCM_NRC_INCORRECT_MESSAGE_LENGTH);
+    ASSERT_EQ(CallCount_CanTp_Transmit, 1U);
+    ASSERT_EQ(LastLength_CanTp_Transmit, 3U);
+    EXPECT_EQ(LastData_CanTp_Transmit[0], DCM_SID_NEGATIVE_RESP);
+    EXPECT_EQ(LastData_CanTp_Transmit[2], DCM_NRC_INCORRECT_MESSAGE_LENGTH);
 }
 
 TEST_F(Bsw_Dcm_ReadDtcInfo_Test, ReadDtcSnapshot_NG_TooShortRequestReturnsIncorrectMessageLength)
@@ -672,10 +677,10 @@ TEST_F(Bsw_Dcm_ReadDtcInfo_Test, ReadDtcSnapshot_NG_TooShortRequestReturnsIncorr
     SendReadDtcInfo(req, sizeof(req));
 
     /* 評価 (Assert): [0x7F, 0x19, 0x13 incorrectMessageLength] ([SWS_Dcm_00696]) */
-    ASSERT_EQ(FakeCanTp_TransmitCount, 1U);
-    ASSERT_EQ(FakeCanTp_TxLength, 3U);
-    EXPECT_EQ(FakeCanTp_TxBuf[0], DCM_SID_NEGATIVE_RESP);
-    EXPECT_EQ(FakeCanTp_TxBuf[2], DCM_NRC_INCORRECT_MESSAGE_LENGTH);
+    ASSERT_EQ(CallCount_CanTp_Transmit, 1U);
+    ASSERT_EQ(LastLength_CanTp_Transmit, 3U);
+    EXPECT_EQ(LastData_CanTp_Transmit[0], DCM_SID_NEGATIVE_RESP);
+    EXPECT_EQ(LastData_CanTp_Transmit[2], DCM_NRC_INCORRECT_MESSAGE_LENGTH);
 }
 
 TEST_F(Bsw_Dcm_ReadDtcInfo_Test, ReadDtcExtendedData_NG_TooShortRequestReturnsIncorrectMessageLength)
@@ -687,10 +692,10 @@ TEST_F(Bsw_Dcm_ReadDtcInfo_Test, ReadDtcExtendedData_NG_TooShortRequestReturnsIn
     SendReadDtcInfo(req, sizeof(req));
 
     /* 評価 (Assert): [0x7F, 0x19, 0x13 incorrectMessageLength] ([SWS_Dcm_00696]) */
-    ASSERT_EQ(FakeCanTp_TransmitCount, 1U);
-    ASSERT_EQ(FakeCanTp_TxLength, 3U);
-    EXPECT_EQ(FakeCanTp_TxBuf[0], DCM_SID_NEGATIVE_RESP);
-    EXPECT_EQ(FakeCanTp_TxBuf[2], DCM_NRC_INCORRECT_MESSAGE_LENGTH);
+    ASSERT_EQ(CallCount_CanTp_Transmit, 1U);
+    ASSERT_EQ(LastLength_CanTp_Transmit, 3U);
+    EXPECT_EQ(LastData_CanTp_Transmit[0], DCM_SID_NEGATIVE_RESP);
+    EXPECT_EQ(LastData_CanTp_Transmit[2], DCM_NRC_INCORRECT_MESSAGE_LENGTH);
 }
 
 // ------------------------------------------------------------
@@ -715,11 +720,11 @@ TEST_F(Bsw_Dcm_ReadDtcInfo_Test, ReadDtcSnapshot_OK_RecordNumber0xFFReturnsTheOn
     /* 評価 (Assert): recordNumber=0x01 を指定した場合と同じ正応答が返る
      * （応答のrecordNumberフィールドは実レコード番号0x01であり、要求の
      * 0xFFをそのままechoしない、[SWS_Dcm_00302]）。 */
-    ASSERT_EQ(FakeCanTp_TransmitCount, 1U);
-    ASSERT_EQ(FakeCanTp_TxLength, 18U);
-    EXPECT_EQ(FakeCanTp_TxBuf[0], 0x59U);
-    EXPECT_EQ(FakeCanTp_TxBuf[1], DCM_DTC_SUBFUNC_REPORT_SNAPSHOT);
-    EXPECT_EQ(FakeCanTp_TxBuf[6], DCM_FREEZEFRAME_RECORD_NUMBER);
+    ASSERT_EQ(CallCount_CanTp_Transmit, 1U);
+    ASSERT_EQ(LastLength_CanTp_Transmit, 18U);
+    EXPECT_EQ(LastData_CanTp_Transmit[0], 0x59U);
+    EXPECT_EQ(LastData_CanTp_Transmit[1], DCM_DTC_SUBFUNC_REPORT_SNAPSHOT);
+    EXPECT_EQ(LastData_CanTp_Transmit[6], DCM_FREEZEFRAME_RECORD_NUMBER);
 }
 
 TEST_F(Bsw_Dcm_ReadDtcInfo_Test, ReadDtcExtendedData_OK_RecordNumber0xFFReturnsTheOnlyRecord)
@@ -734,11 +739,11 @@ TEST_F(Bsw_Dcm_ReadDtcInfo_Test, ReadDtcExtendedData_OK_RecordNumber0xFFReturnsT
     SendReadDtcInfo(req, sizeof(req));
 
     /* 評価 (Assert): recordNumber=0x01 を指定した場合と同じ正応答が返る */
-    ASSERT_EQ(FakeCanTp_TransmitCount, 1U);
-    ASSERT_EQ(FakeCanTp_TxLength, 8U);
-    EXPECT_EQ(FakeCanTp_TxBuf[0], 0x59U);
-    EXPECT_EQ(FakeCanTp_TxBuf[1], DCM_DTC_SUBFUNC_REPORT_EXTDATA);
-    EXPECT_EQ(FakeCanTp_TxBuf[6], DCM_EXTENDED_DATA_RECORD_NUMBER);
+    ASSERT_EQ(CallCount_CanTp_Transmit, 1U);
+    ASSERT_EQ(LastLength_CanTp_Transmit, 8U);
+    EXPECT_EQ(LastData_CanTp_Transmit[0], 0x59U);
+    EXPECT_EQ(LastData_CanTp_Transmit[1], DCM_DTC_SUBFUNC_REPORT_EXTDATA);
+    EXPECT_EQ(LastData_CanTp_Transmit[6], DCM_EXTENDED_DATA_RECORD_NUMBER);
 }
 
 TEST_F(Bsw_Dcm_ReadDtcInfo_Test, ReadDtcExtendedData_NG_NeverFailedDtcReturnsRequestOutOfRange)
@@ -753,10 +758,10 @@ TEST_F(Bsw_Dcm_ReadDtcInfo_Test, ReadDtcExtendedData_NG_NeverFailedDtcReturnsReq
                       0x00U, 0x01U, 0x01U, DCM_EXTENDED_DATA_RECORD_NUMBER };
     SendReadDtcInfo(req, sizeof(req));
 
-    ASSERT_EQ(FakeCanTp_TransmitCount, 1U);
-    ASSERT_EQ(FakeCanTp_TxLength, 3U);
-    EXPECT_EQ(FakeCanTp_TxBuf[0], DCM_SID_NEGATIVE_RESP);
-    EXPECT_EQ(FakeCanTp_TxBuf[2], DCM_NRC_REQUEST_OUT_OF_RANGE);
+    ASSERT_EQ(CallCount_CanTp_Transmit, 1U);
+    ASSERT_EQ(LastLength_CanTp_Transmit, 3U);
+    EXPECT_EQ(LastData_CanTp_Transmit[0], DCM_SID_NEGATIVE_RESP);
+    EXPECT_EQ(LastData_CanTp_Transmit[2], DCM_NRC_REQUEST_OUT_OF_RANGE);
 }
 
 TEST_F(Bsw_Dcm_ReadDtcInfo_Test, ReadDtcSnapshot_NG_UnsupportedRecordNumberStillRejected)
@@ -769,10 +774,10 @@ TEST_F(Bsw_Dcm_ReadDtcInfo_Test, ReadDtcSnapshot_NG_UnsupportedRecordNumberStill
                       0x00U, 0x01U, 0x01U, 0x02U };
     SendReadDtcInfo(req, sizeof(req));
 
-    ASSERT_EQ(FakeCanTp_TransmitCount, 1U);
-    ASSERT_EQ(FakeCanTp_TxLength, 3U);
-    EXPECT_EQ(FakeCanTp_TxBuf[0], DCM_SID_NEGATIVE_RESP);
-    EXPECT_EQ(FakeCanTp_TxBuf[2], DCM_NRC_REQUEST_OUT_OF_RANGE);
+    ASSERT_EQ(CallCount_CanTp_Transmit, 1U);
+    ASSERT_EQ(LastLength_CanTp_Transmit, 3U);
+    EXPECT_EQ(LastData_CanTp_Transmit[0], DCM_SID_NEGATIVE_RESP);
+    EXPECT_EQ(LastData_CanTp_Transmit[2], DCM_NRC_REQUEST_OUT_OF_RANGE);
 }
 
 // ------------------------------------------------------------
@@ -790,11 +795,11 @@ TEST_F(Bsw_Dcm_ReadDtcInfo_Test, SessionControl_NG_ExtraByteReturnsIncorrectMess
     PduInfoType pdu = { req, sizeof(req) };
     Dcm_ComIndication(0U, &pdu);
 
-    ASSERT_EQ(FakeCanTp_TransmitCount, 1U);
-    ASSERT_EQ(FakeCanTp_TxLength, 3U);
-    EXPECT_EQ(FakeCanTp_TxBuf[0], DCM_SID_NEGATIVE_RESP);
-    EXPECT_EQ(FakeCanTp_TxBuf[1], DCM_SID_SESSION_CTRL);
-    EXPECT_EQ(FakeCanTp_TxBuf[2], DCM_NRC_INCORRECT_MESSAGE_LENGTH);
+    ASSERT_EQ(CallCount_CanTp_Transmit, 1U);
+    ASSERT_EQ(LastLength_CanTp_Transmit, 3U);
+    EXPECT_EQ(LastData_CanTp_Transmit[0], DCM_SID_NEGATIVE_RESP);
+    EXPECT_EQ(LastData_CanTp_Transmit[1], DCM_SID_SESSION_CTRL);
+    EXPECT_EQ(LastData_CanTp_Transmit[2], DCM_NRC_INCORRECT_MESSAGE_LENGTH);
 }
 
 TEST_F(Bsw_Dcm_ReadDtcInfo_Test, EcuReset_NG_ExtraByteReturnsIncorrectMessageLength)
@@ -805,11 +810,11 @@ TEST_F(Bsw_Dcm_ReadDtcInfo_Test, EcuReset_NG_ExtraByteReturnsIncorrectMessageLen
     PduInfoType pdu = { req, sizeof(req) };
     Dcm_ComIndication(0U, &pdu);
 
-    ASSERT_EQ(FakeCanTp_TransmitCount, 1U);
-    ASSERT_EQ(FakeCanTp_TxLength, 3U);
-    EXPECT_EQ(FakeCanTp_TxBuf[0], DCM_SID_NEGATIVE_RESP);
-    EXPECT_EQ(FakeCanTp_TxBuf[1], DCM_SID_ECU_RESET);
-    EXPECT_EQ(FakeCanTp_TxBuf[2], DCM_NRC_INCORRECT_MESSAGE_LENGTH);
+    ASSERT_EQ(CallCount_CanTp_Transmit, 1U);
+    ASSERT_EQ(LastLength_CanTp_Transmit, 3U);
+    EXPECT_EQ(LastData_CanTp_Transmit[0], DCM_SID_NEGATIVE_RESP);
+    EXPECT_EQ(LastData_CanTp_Transmit[1], DCM_SID_ECU_RESET);
+    EXPECT_EQ(LastData_CanTp_Transmit[2], DCM_NRC_INCORRECT_MESSAGE_LENGTH);
 }
 
 TEST_F(Bsw_Dcm_ReadDtcInfo_Test, TesterPresent_NG_ExtraByteReturnsIncorrectMessageLength)
@@ -820,11 +825,11 @@ TEST_F(Bsw_Dcm_ReadDtcInfo_Test, TesterPresent_NG_ExtraByteReturnsIncorrectMessa
     PduInfoType pdu = { req, sizeof(req) };
     Dcm_ComIndication(0U, &pdu);
 
-    ASSERT_EQ(FakeCanTp_TransmitCount, 1U);
-    ASSERT_EQ(FakeCanTp_TxLength, 3U);
-    EXPECT_EQ(FakeCanTp_TxBuf[0], DCM_SID_NEGATIVE_RESP);
-    EXPECT_EQ(FakeCanTp_TxBuf[1], DCM_SID_TESTER_PRESENT);
-    EXPECT_EQ(FakeCanTp_TxBuf[2], DCM_NRC_INCORRECT_MESSAGE_LENGTH);
+    ASSERT_EQ(CallCount_CanTp_Transmit, 1U);
+    ASSERT_EQ(LastLength_CanTp_Transmit, 3U);
+    EXPECT_EQ(LastData_CanTp_Transmit[0], DCM_SID_NEGATIVE_RESP);
+    EXPECT_EQ(LastData_CanTp_Transmit[1], DCM_SID_TESTER_PRESENT);
+    EXPECT_EQ(LastData_CanTp_Transmit[2], DCM_NRC_INCORRECT_MESSAGE_LENGTH);
 }
 
 TEST_F(Bsw_Dcm_ReadDtcInfo_Test, ClearDtc_NG_ExtraByteReturnsIncorrectMessageLength)
@@ -841,11 +846,11 @@ TEST_F(Bsw_Dcm_ReadDtcInfo_Test, ClearDtc_NG_ExtraByteReturnsIncorrectMessageLen
     PduInfoType pdu = { req, sizeof(req) };
     Dcm_ComIndication(0U, &pdu);
 
-    ASSERT_EQ(FakeCanTp_TransmitCount, 1U);
-    ASSERT_EQ(FakeCanTp_TxLength, 3U);
-    EXPECT_EQ(FakeCanTp_TxBuf[0], DCM_SID_NEGATIVE_RESP);
-    EXPECT_EQ(FakeCanTp_TxBuf[1], DCM_SID_CLEAR_DTC);
-    EXPECT_EQ(FakeCanTp_TxBuf[2], DCM_NRC_INCORRECT_MESSAGE_LENGTH);
+    ASSERT_EQ(CallCount_CanTp_Transmit, 1U);
+    ASSERT_EQ(LastLength_CanTp_Transmit, 3U);
+    EXPECT_EQ(LastData_CanTp_Transmit[0], DCM_SID_NEGATIVE_RESP);
+    EXPECT_EQ(LastData_CanTp_Transmit[1], DCM_SID_CLEAR_DTC);
+    EXPECT_EQ(LastData_CanTp_Transmit[2], DCM_NRC_INCORRECT_MESSAGE_LENGTH);
 }
 
 TEST_F(Bsw_Dcm_ReadDtcInfo_Test, SecuritySendKey_NG_ExtraByteReturnsIncorrectMessageLength)
@@ -861,18 +866,18 @@ TEST_F(Bsw_Dcm_ReadDtcInfo_Test, SecuritySendKey_NG_ExtraByteReturnsIncorrectMes
     uint8 seedReq[2] = { DCM_SID_SECURITY_ACCESS, DCM_SEC_SUBFUNC_REQUEST_SEED };
     PduInfoType seedPdu = { seedReq, sizeof(seedReq) };
     Dcm_ComIndication(0U, &seedPdu);
-    ASSERT_EQ(FakeCanTp_TxBuf[0], 0x67U);
+    ASSERT_EQ(LastData_CanTp_Transmit[0], 0x67U);
 
-    FakeCanTp_Reset();
+    WrapCanTp_Reset();
     uint8 req[5] = { DCM_SID_SECURITY_ACCESS, DCM_SEC_SUBFUNC_SEND_KEY, 0x00U, 0x00U, 0x00U };
     PduInfoType pdu = { req, sizeof(req) };
     Dcm_ComIndication(0U, &pdu);
 
-    ASSERT_EQ(FakeCanTp_TransmitCount, 1U);
-    ASSERT_EQ(FakeCanTp_TxLength, 3U);
-    EXPECT_EQ(FakeCanTp_TxBuf[0], DCM_SID_NEGATIVE_RESP);
-    EXPECT_EQ(FakeCanTp_TxBuf[1], DCM_SID_SECURITY_ACCESS);
-    EXPECT_EQ(FakeCanTp_TxBuf[2], DCM_NRC_INCORRECT_MESSAGE_LENGTH);
+    ASSERT_EQ(CallCount_CanTp_Transmit, 1U);
+    ASSERT_EQ(LastLength_CanTp_Transmit, 3U);
+    EXPECT_EQ(LastData_CanTp_Transmit[0], DCM_SID_NEGATIVE_RESP);
+    EXPECT_EQ(LastData_CanTp_Transmit[1], DCM_SID_SECURITY_ACCESS);
+    EXPECT_EQ(LastData_CanTp_Transmit[2], DCM_NRC_INCORRECT_MESSAGE_LENGTH);
 }
 
 TEST_F(Bsw_Dcm_ReadDtcInfo_Test, SecurityRequestSeed_NG_ExtraByteReturnsIncorrectMessageLength)
@@ -885,17 +890,17 @@ TEST_F(Bsw_Dcm_ReadDtcInfo_Test, SecurityRequestSeed_NG_ExtraByteReturnsIncorrec
     uint8 sessionReq[2] = { DCM_SID_SESSION_CTRL, DCM_SESSION_EXTENDED };
     PduInfoType sessionPdu = { sessionReq, sizeof(sessionReq) };
     Dcm_ComIndication(0U, &sessionPdu);
-    FakeCanTp_Reset();
+    WrapCanTp_Reset();
 
     uint8 req[3] = { DCM_SID_SECURITY_ACCESS, DCM_SEC_SUBFUNC_REQUEST_SEED, 0x00U };
     PduInfoType pdu = { req, sizeof(req) };
     Dcm_ComIndication(0U, &pdu);
 
-    ASSERT_EQ(FakeCanTp_TransmitCount, 1U);
-    ASSERT_EQ(FakeCanTp_TxLength, 3U);
-    EXPECT_EQ(FakeCanTp_TxBuf[0], DCM_SID_NEGATIVE_RESP);
-    EXPECT_EQ(FakeCanTp_TxBuf[1], DCM_SID_SECURITY_ACCESS);
-    EXPECT_EQ(FakeCanTp_TxBuf[2], DCM_NRC_INCORRECT_MESSAGE_LENGTH);
+    ASSERT_EQ(CallCount_CanTp_Transmit, 1U);
+    ASSERT_EQ(LastLength_CanTp_Transmit, 3U);
+    EXPECT_EQ(LastData_CanTp_Transmit[0], DCM_SID_NEGATIVE_RESP);
+    EXPECT_EQ(LastData_CanTp_Transmit[1], DCM_SID_SECURITY_ACCESS);
+    EXPECT_EQ(LastData_CanTp_Transmit[2], DCM_NRC_INCORRECT_MESSAGE_LENGTH);
 }
 
 TEST_F(Bsw_Dcm_ReadDtcInfo_Test, SessionControl_OK_SuppressPosRspBitSuppressesPositiveResponse)
@@ -910,7 +915,7 @@ TEST_F(Bsw_Dcm_ReadDtcInfo_Test, SessionControl_OK_SuppressPosRspBitSuppressesPo
     PduInfoType pdu = { req, sizeof(req) };
     Dcm_ComIndication(0U, &pdu);
 
-    EXPECT_EQ(FakeCanTp_TransmitCount, 0U);
+    EXPECT_EQ(CallCount_CanTp_Transmit, 0U);
 
     /* セッション遷移自体は抑制されていないことを Dcm_GetSesCtrlType() で確認 */
     Dcm_SesCtrlType sesCtrlType;
@@ -928,7 +933,7 @@ TEST_F(Bsw_Dcm_ReadDtcInfo_Test, TesterPresent_OK_SuppressPosRspBitSuppressesPos
     PduInfoType pdu = { req, sizeof(req) };
     Dcm_ComIndication(0U, &pdu);
 
-    EXPECT_EQ(FakeCanTp_TransmitCount, 0U);
+    EXPECT_EQ(CallCount_CanTp_Transmit, 0U);
 }
 
 TEST_F(Bsw_Dcm_ReadDtcInfo_Test, EcuReset_OK_SuppressPosRspBitAcceptsHardResetWithoutTransmitting)
@@ -944,7 +949,7 @@ TEST_F(Bsw_Dcm_ReadDtcInfo_Test, EcuReset_OK_SuppressPosRspBitAcceptsHardResetWi
     PduInfoType pdu = { req, sizeof(req) };
     Dcm_ComIndication(0U, &pdu);
 
-    EXPECT_EQ(FakeCanTp_TransmitCount, 0U);
+    EXPECT_EQ(CallCount_CanTp_Transmit, 0U);
 }
 
 TEST_F(Bsw_Dcm_ReadDtcInfo_Test, SessionControl_NG_SuppressPosRspBitDoesNotSuppressNegativeResponse)
@@ -958,11 +963,11 @@ TEST_F(Bsw_Dcm_ReadDtcInfo_Test, SessionControl_NG_SuppressPosRspBitDoesNotSuppr
     PduInfoType pdu = { req, sizeof(req) };
     Dcm_ComIndication(0U, &pdu);
 
-    ASSERT_EQ(FakeCanTp_TransmitCount, 1U);
-    ASSERT_EQ(FakeCanTp_TxLength, 3U);
-    EXPECT_EQ(FakeCanTp_TxBuf[0], DCM_SID_NEGATIVE_RESP);
-    EXPECT_EQ(FakeCanTp_TxBuf[1], DCM_SID_SESSION_CTRL);
-    EXPECT_EQ(FakeCanTp_TxBuf[2], DCM_NRC_SUB_FUNC_NOT_SUPPORTED);
+    ASSERT_EQ(CallCount_CanTp_Transmit, 1U);
+    ASSERT_EQ(LastLength_CanTp_Transmit, 3U);
+    EXPECT_EQ(LastData_CanTp_Transmit[0], DCM_SID_NEGATIVE_RESP);
+    EXPECT_EQ(LastData_CanTp_Transmit[1], DCM_SID_SESSION_CTRL);
+    EXPECT_EQ(LastData_CanTp_Transmit[2], DCM_NRC_SUB_FUNC_NOT_SUPPORTED);
 }
 
 // ------------------------------------------------------------
@@ -999,7 +1004,7 @@ TEST_F(Bsw_Dcm_ReadDtcInfo_Test, ComIndication_NG_IgnoresRequestWhileCanTpTxBusy
 {
     /* 準備 (Arrange): 前回応答（マルチフレーム等）の送信が CanTp 側で
      * まだ完了していない状態を模擬する。 */
-    FakeCanTp_Busy = (boolean)1U;
+    FailFromCallCount_CanTp_IsTxBusy = 1U;
 
     /* 実行 (Act): TesterPresent（副作用の無い単純なSID）を送る。 */
     uint8 req[2] = { DCM_SID_TESTER_PRESENT, 0x00U };
@@ -1009,30 +1014,30 @@ TEST_F(Bsw_Dcm_ReadDtcInfo_Test, ComIndication_NG_IgnoresRequestWhileCanTpTxBusy
     /* 評価 (Assert): [SWS_Dcm_00557] ディスパッチ自体が行われず、
      * 応答も一切送信されないこと（CanTp TX がビジーなため、どちらの
      * 応答も物理的に送信できない）。 */
-    EXPECT_EQ(FakeCanTp_TransmitCount, 0U);
+    EXPECT_EQ(CallCount_CanTp_Transmit, 0U);
 }
 
 TEST_F(Bsw_Dcm_ReadDtcInfo_Test, ComIndication_OK_ProcessesRequestOnceCanTpTxIdleAgain)
 {
     /* 準備 (Arrange): ビジー中に届いた要求は無視されることを確認した後、
      * アイドルに戻れば通常通り処理されることを確認する。 */
-    FakeCanTp_Busy = (boolean)1U;
+    FailFromCallCount_CanTp_IsTxBusy = 1U;
     uint8 reqWhileBusy[2] = { DCM_SID_TESTER_PRESENT, 0x00U };
     PduInfoType pduWhileBusy = { reqWhileBusy, sizeof(reqWhileBusy) };
     Dcm_ComIndication(0U, &pduWhileBusy);
-    ASSERT_EQ(FakeCanTp_TransmitCount, 0U) << "must be ignored while busy (test precondition)";
+    ASSERT_EQ(CallCount_CanTp_Transmit, 0U) << "must be ignored while busy (test precondition)";
 
     /* 実行 (Act): CanTp TX がアイドルへ戻った後、同じ要求を再送する。 */
-    FakeCanTp_Busy = (boolean)0U;
+    FailFromCallCount_CanTp_IsTxBusy = WRAP_CANTP_FAIL_FROM_CALL_COUNT_DISABLED;
     uint8 req[2] = { DCM_SID_TESTER_PRESENT, 0x00U };
     PduInfoType pdu = { req, sizeof(req) };
     Dcm_ComIndication(0U, &pdu);
 
     /* 評価 (Assert): 通常通り正応答 [0x7E, 0x00] が送信されること。 */
-    ASSERT_EQ(FakeCanTp_TransmitCount, 1U);
-    ASSERT_EQ(FakeCanTp_TxLength, 2U);
-    EXPECT_EQ(FakeCanTp_TxBuf[0], (uint8)(DCM_SID_TESTER_PRESENT + 0x40U));
-    EXPECT_EQ(FakeCanTp_TxBuf[1], 0x00U);
+    ASSERT_EQ(CallCount_CanTp_Transmit, 1U);
+    ASSERT_EQ(LastLength_CanTp_Transmit, 2U);
+    EXPECT_EQ(LastData_CanTp_Transmit[0], (uint8)(DCM_SID_TESTER_PRESENT + 0x40U));
+    EXPECT_EQ(LastData_CanTp_Transmit[1], 0x00U);
 }
 
 }  // namespace

@@ -100,7 +100,10 @@
 # Dcm_Cbk.c は CanTp/Rte/KeyM の3モジュールへ依存するが、これらは
 # native_chain の他モジュールと一切コールチェーンを共有しない純粋なリンク
 # スタブ（test/stub/Bsw/CanTp/Fake_CanTp.c/h・test/stub/Rte/Fake_Rte.c・
-# test/stub/Bsw/KeyM/Fake_KeyM.c）のため、そのまま持ち込むだけで済んだ。
+# test/stub/Bsw/KeyM/Fake_KeyM.c）のため、そのまま持ち込むだけで済んだ
+# （2026-09-22、DcmStack コールチェーンテストに備えて CanTp.c を実体リンクへ
+# 切り替え、Fake_CanTp.c/h は test/stub/Bsw/CanTp/Wrap_CanTp.c/h へ置き換えた。
+# Rte/KeyM は引き続き Fake のまま）。
 # BswM は Dcm_Cbk.c から見た通知先 BswM_Dcm_CommunicationMode_CurrentState()
 # を、ComM.c 用の既存フェイク Fake_Bsw_BswM.c/h へ統合（対象関数は別だが
 # `FakeBswM_Reset`/`FakeBswM_LastMode` のシンボル名が衝突するため、Dcm 側の
@@ -227,6 +230,7 @@ set(NATIVE_CHAIN_SRC_SOURCES
     src/Bsw/FiM/FiM.c
     src/Bsw/FiM/FiM_PBCfg.c
     src/Bsw/Dcm/Dcm_Cbk.c
+    src/Bsw/CanTp/CanTp.c
     src/Bsw/Gpt/Gpt.c
     src/Bsw/Dio/Dio.c
     src/Bsw/Port/Port.c
@@ -242,7 +246,7 @@ set(NATIVE_CHAIN_STUB_SOURCES
     test/stub/Bsw/ComM/Wrap_ComM.c
     test/stub/Bsw/BswM/Fake_Bsw_BswM.c
     test/stub/Bsw/EcuM/Fake_Bsw_EcuM.c
-    test/stub/Bsw/CanTp/Fake_CanTp.c
+    test/stub/Bsw/CanTp/Wrap_CanTp.c
     test/stub/Bsw/KeyM/Fake_KeyM.c
     test/stub/Bsw/NvM/Fake_NvM.c
     test/stub/Bsw/PduR/Wrap_PduR.c
@@ -350,6 +354,14 @@ set(NATIVE_CHAIN_WRAP_SYMBOLS
     Com_TxConfirmation
     Com_MainFunctionRx
     Com_MainFunctionTx
+    # CanTp.c の AUTOSAR IF 全数（Wrap_CanTp.h/.c 参照）。
+    CanTp_Init
+    CanTp_Transmit
+    CanTp_IsTxBusy
+    CanTp_RxIndication
+    CanTp_TxConfirmation
+    CanTp_MainFunction
+    CanTp_GetVersionInfo
 )
 foreach(wrap_symbol IN LISTS NATIVE_CHAIN_WRAP_SYMBOLS)
     target_link_options(native_chain_tests PRIVATE "-Wl,--wrap=${wrap_symbol}")

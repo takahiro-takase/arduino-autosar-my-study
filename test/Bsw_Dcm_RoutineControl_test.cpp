@@ -4,8 +4,9 @@
  *          PlatformIO `[env:native_chain]`。2026-08新設時は専用環境`[env:native_dcm]`だったが、2026-09にnative_chainへ統合した）。
  *
  * \details Bsw_Dcm_ControlDTCSetting_test.cpp と同じ「Dcm_ComIndication() に
- *          生の UDS バイト列を直接渡し、CanTp_Transmit()（Fake_CanTp.h で
- *          キャプチャ）へ渡された応答を検証する」ブラックボックステスト方式。
+ *          生の UDS バイト列を直接渡し、CanTp_Transmit()（Wrap_CanTp.h で
+ *          応答ペイロードをキャプチャ）へ渡された応答を検証する」
+ *          ブラックボックステスト方式。
  *
  *          0x31 は extendedSession 限定のため、EnterExtendedSession() で
  *          事前にセッションを遷移させてから各テストを実行する。対応 RID は
@@ -22,7 +23,7 @@ extern "C" {
 #include "Dcm.h"
 #include "Dcm_Cfg.h"
 #include "Dem.h"
-#include "Fake_CanTp.h"
+#include "Wrap_CanTp.h"
 #include "Fake_Millis.h"
 #include "Fake_Det_Hw.h"
 #include "Wrap_ComM.h"
@@ -37,10 +38,11 @@ protected:
     void SetUp() override
     {
         FakeMillis_Reset();
-        FakeCanTp_Reset();
+        WrapCanTp_Reset();
         Suppressed_ComM_DcmDiagnostic = 1U;  // 本テストは通信管理(ComM/CanSM/Nm)が対象外
         FakeDetHw_LogSuppressed = 1U;  // Init() のログはノイズになるため抑制
 
+        CanTp_Init(NULL);
         Dem_Init(NULL);
         Dcm_Init(NULL);
 
@@ -65,8 +67,8 @@ protected:
     {
         uint8 req[2] = { DCM_SID_SESSION_CTRL, DCM_SESSION_EXTENDED };
         Send(req, sizeof(req));
-        ASSERT_EQ(FakeCanTp_TxBuf[0], 0x50U);  // 正応答確認（前提が崩れていないこと）
-        FakeCanTp_Reset();
+        ASSERT_EQ(LastData_CanTp_Transmit[0], 0x50U);  // 正応答確認（前提が崩れていないこと）
+        WrapCanTp_Reset();
     }
 
     /** [0x31, subFunc, RID_H, RID_L] をちょうど4byteで送る。 */
@@ -81,11 +83,11 @@ protected:
      *  検証する（自己/simplify指摘: 4テストで重複していた検証ブロックを集約）。 */
     static void ExpectNegativeResponse(uint8 nrc)
     {
-        ASSERT_EQ(FakeCanTp_TransmitCount, 1U);
-        ASSERT_EQ(FakeCanTp_TxLength, 3U);
-        EXPECT_EQ(FakeCanTp_TxBuf[0], DCM_SID_NEGATIVE_RESP);
-        EXPECT_EQ(FakeCanTp_TxBuf[1], DCM_SID_ROUTINE_CONTROL);
-        EXPECT_EQ(FakeCanTp_TxBuf[2], nrc);
+        ASSERT_EQ(CallCount_CanTp_Transmit, 1U);
+        ASSERT_EQ(LastLength_CanTp_Transmit, 3U);
+        EXPECT_EQ(LastData_CanTp_Transmit[0], DCM_SID_NEGATIVE_RESP);
+        EXPECT_EQ(LastData_CanTp_Transmit[1], DCM_SID_ROUTINE_CONTROL);
+        EXPECT_EQ(LastData_CanTp_Transmit[2], nrc);
     }
 };
 
@@ -100,26 +102,26 @@ TEST_F(Bsw_Dcm_RoutineControl_Test, RoutineControl_OK_StartWithExactLengthIsAcce
     SendRoutineControl(DCM_ROUTINE_SUBFUNC_START);
 
     /* 評価 (Assert): [0x71, 0x01, 0x02, 0x03] */
-    ASSERT_EQ(FakeCanTp_TransmitCount, 1U);
-    ASSERT_EQ(FakeCanTp_TxLength, 4U);
-    EXPECT_EQ(FakeCanTp_TxBuf[0], 0x71U);
-    EXPECT_EQ(FakeCanTp_TxBuf[1], DCM_ROUTINE_SUBFUNC_START);
-    EXPECT_EQ(FakeCanTp_TxBuf[2], 0x02U);
-    EXPECT_EQ(FakeCanTp_TxBuf[3], 0x03U);
+    ASSERT_EQ(CallCount_CanTp_Transmit, 1U);
+    ASSERT_EQ(LastLength_CanTp_Transmit, 4U);
+    EXPECT_EQ(LastData_CanTp_Transmit[0], 0x71U);
+    EXPECT_EQ(LastData_CanTp_Transmit[1], DCM_ROUTINE_SUBFUNC_START);
+    EXPECT_EQ(LastData_CanTp_Transmit[2], 0x02U);
+    EXPECT_EQ(LastData_CanTp_Transmit[3], 0x03U);
 }
 
 TEST_F(Bsw_Dcm_RoutineControl_Test, RoutineControl_OK_StopWithExactLengthIsAccepted)
 {
     EnterExtendedSession();
     SendRoutineControl(DCM_ROUTINE_SUBFUNC_START);
-    FakeCanTp_Reset();
+    WrapCanTp_Reset();
 
     SendRoutineControl(DCM_ROUTINE_SUBFUNC_STOP);
 
-    ASSERT_EQ(FakeCanTp_TransmitCount, 1U);
-    ASSERT_EQ(FakeCanTp_TxLength, 4U);
-    EXPECT_EQ(FakeCanTp_TxBuf[0], 0x71U);
-    EXPECT_EQ(FakeCanTp_TxBuf[1], DCM_ROUTINE_SUBFUNC_STOP);
+    ASSERT_EQ(CallCount_CanTp_Transmit, 1U);
+    ASSERT_EQ(LastLength_CanTp_Transmit, 4U);
+    EXPECT_EQ(LastData_CanTp_Transmit[0], 0x71U);
+    EXPECT_EQ(LastData_CanTp_Transmit[1], DCM_ROUTINE_SUBFUNC_STOP);
 }
 
 // ------------------------------------------------------------
@@ -156,9 +158,9 @@ TEST_F(Bsw_Dcm_RoutineControl_Test, RoutineControl_NG_ExtraTrailingByteReturnsIn
     /* 拒否された要求が副作用を持たない(ルーチンが開始されていない)ことも
      * 確認する: stopRoutine が「未開始」の requestSequenceError で拒否される
      * はず。 */
-    FakeCanTp_Reset();
+    WrapCanTp_Reset();
     SendRoutineControl(DCM_ROUTINE_SUBFUNC_STOP);
-    EXPECT_EQ(FakeCanTp_TxBuf[2], DCM_NRC_REQUEST_SEQUENCE_ERROR);
+    EXPECT_EQ(LastData_CanTp_Transmit[2], DCM_NRC_REQUEST_SEQUENCE_ERROR);
 }
 
 // ------------------------------------------------------------
