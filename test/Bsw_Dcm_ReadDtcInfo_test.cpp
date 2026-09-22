@@ -439,204 +439,22 @@ TEST_F(Bsw_Dcm_ReadDtcInfo_Test, ResetToDefaultSession_OK_ReturnsSessionToDefaul
 }
 
 // ------------------------------------------------------------
-// subFunc 0x0A reportSupportedDTC（今回の追加分、GitHub Issue #122）
+// subFunc 0x0A/0x14/0x01 の OK シナリオは、物理層 Can_Hw までの検証を含む
+// Bsw_DcmStack_SID19_SF0A_ReadDtcSupportedChain_test.cpp /
+// Bsw_DcmStack_SID19_SF14_ReadDtcFaultDetectionCounterChain_test.cpp /
+// Bsw_DcmStack_SID19_SF01_ReadDtcCountChain_test.cpp へ移植済み（2026-09、
+// 同内容のため本ファイルからは削除）。
 // ------------------------------------------------------------
 
-TEST_F(Bsw_Dcm_ReadDtcInfo_Test, ReadDtcSupported_OK_ReturnsAllConfiguredDtcsRegardlessOfStatus)
-{
-    /* 準備 (Arrange): [0x19, 0x0A]（追加パラメータなし） */
-    uint8 req[2] = { DCM_SID_READ_DTC_INFO, DCM_DTC_SUBFUNC_REPORT_SUPPORTED };
+// ReadDtcInfo_NG_UnsupportedSubFuncReturnsNegativeResponse /
+// ReadDtcInfo_NG_TooShortRequestReturnsNegativeResponse は
+// Bsw_DcmStack_SID19_DispatchChain_test.cpp へ移植済み（2026-09、同内容の
+// ため削除）。
 
-    /* 実行 (Act) */
-    SendReadDtcInfo(req, sizeof(req));
-
-    /* 評価 (Assert): [0x59, 0x0A, availMask, (DTC_H,DTC_M,DTC_L,status) x DEM_EVENT_COUNT]
-     * を、Dem_Init() 直後の状態（1件も FAILED になっていない）でも
-     * DEM_EVENT_COUNT 件全て返す（reportDTCByStatusMask との違いそのもの）。 */
-    ASSERT_EQ(CallCount_CanTp_Transmit, 1U);
-    ASSERT_EQ(LastLength_CanTp_Transmit, (uint8)(3U + DEM_EVENT_COUNT * 4U));
-    EXPECT_EQ(LastData_CanTp_Transmit[0], 0x59U);
-    EXPECT_EQ(LastData_CanTp_Transmit[1], DCM_DTC_SUBFUNC_REPORT_SUPPORTED);
-    EXPECT_EQ(LastData_CanTp_Transmit[2], DEM_STATUS_AVAILABILITY_MASK);
-}
-
-TEST_F(Bsw_Dcm_ReadDtcInfo_Test, ReadDtcSupported_OK_DiffersFromReportByStatusMaskWithImpossibleMask)
-{
-    /* 準備 (Arrange): reportDTCByStatusMask (0x02) を、どの DTC のステータス
-     * とも一致しないマスク (0x00) で送る。AND 演算の定義上、0x00 マスクは
-     * 何にも一致しないため 0 件になるはず。 */
-    uint8 reqByMask[3] = { DCM_SID_READ_DTC_INFO, DCM_DTC_SUBFUNC_REPORT_BY_MASK, 0x00U };
-    SendReadDtcInfo(reqByMask, sizeof(reqByMask));
-    ASSERT_EQ(CallCount_CanTp_Transmit, 1U);
-    /* 応答: [0x59, 0x02, availMask] のみ（0 件時は DTC 列挙部分が無い） */
-    ASSERT_EQ(LastLength_CanTp_Transmit, 3U);
-
-    /* 実行 (Act): 同じ Dem 状態のまま reportSupportedDTC (0x0A) を送る */
-    WrapCanTp_Reset();
-    uint8 reqSupported[2] = { DCM_SID_READ_DTC_INFO, DCM_DTC_SUBFUNC_REPORT_SUPPORTED };
-    SendReadDtcInfo(reqSupported, sizeof(reqSupported));
-
-    /* 評価 (Assert): マスクによる絞り込みを一切行わないため、0x02/mask=0x00 が
-     * 0 件だったのと対照的に DEM_EVENT_COUNT 件全て返る。これが
-     * reportSupportedDTC の存在意義そのもの（Dem_GetSupportedDTCs() の
-     * 実装コメント参照）。 */
-    ASSERT_EQ(CallCount_CanTp_Transmit, 1U);
-    EXPECT_EQ(LastLength_CanTp_Transmit, (uint8)(3U + DEM_EVENT_COUNT * 4U));
-}
-
-// ------------------------------------------------------------
-// subFunc 0x14 reportDTCFaultDetectionCounter
-// （Dem_GetFaultDetectionCounter() 新設に伴う追加。DTC 一覧取得の候補は 0x0A
-// と同じ Dem_GetSupportedDTCs() を使うが、[SWS_Dcm_00465]により「prefailed」
-// (Dem_GetFaultDetectionCounter() の写像値が 1〜0x7E) の DTC のみへ絞り込む
-// 点、および応答に statusAvailMask を含まない点が 0x02/0x0A と異なる
-// （ISO 14229-1、/code-review で当初の subFunc 0x0B 誤割当ても合わせて
-// 訂正済み。docs/modules/Dcm_Notes.md 参照）。
-// ------------------------------------------------------------
-
-TEST_F(Bsw_Dcm_ReadDtcInfo_Test, ReadDtcFaultDetectionCounter_OK_ReturnsEmptyListWhenNoEventIsPrefailed)
-{
-    /* 準備 (Arrange): [0x19, 0x14]（追加パラメータなし） */
-    uint8 req[2] = { DCM_SID_READ_DTC_INFO, DCM_DTC_SUBFUNC_REPORT_FDC };
-
-    /* 実行 (Act) */
-    SendReadDtcInfo(req, sizeof(req));
-
-    /* 評価 (Assert): Dem_Init() 直後は全イベントの Fault Detection Counter が
-     * 0 (未着手)であり [SWS_Dcm_00465] の「prefailed」(1〜0x7E) の定義を
-     * どれも満たさないため、DTC 列挙部分の無い [0x59, 0x14] のみを返す。 */
-    ASSERT_EQ(CallCount_CanTp_Transmit, 1U);
-    ASSERT_EQ(LastLength_CanTp_Transmit, 2U);
-    EXPECT_EQ(LastData_CanTp_Transmit[0], 0x59U);
-    EXPECT_EQ(LastData_CanTp_Transmit[1], DCM_DTC_SUBFUNC_REPORT_FDC);
-}
-
-TEST_F(Bsw_Dcm_ReadDtcInfo_Test, ReadDtcFaultDetectionCounter_OK_ReturnsOnlyThePrefailedEvent)
-{
-    /* 準備 (Arrange): EventId=0 (DEM_EVENT_ENGINE_OVERHEAT、limit=2) を1回
-     * FAILED 報告。生カウンタ1は確定閾値2未満のため「prefailed」。 */
-    (void)Dem_SetEventStatus(DEM_EVENT_ENGINE_OVERHEAT, DEM_EVENT_STATUS_FAILED);
-
-    uint8 req[2] = { DCM_SID_READ_DTC_INFO, DCM_DTC_SUBFUNC_REPORT_FDC };
-
-    /* 実行 (Act) */
-    SendReadDtcInfo(req, sizeof(req));
-
-    /* 評価 (Assert): prefailed なのはこの1件のみのため、DTC 一覧は1件だけ。
-     * 生カウンタ1を limit=2 で線形写像: (1*127)/2 = 63 (整数除算)。 */
-    ASSERT_EQ(CallCount_CanTp_Transmit, 1U);
-    ASSERT_EQ(LastLength_CanTp_Transmit, 6U);  /* 2(header) + 1件×4 */
-    EXPECT_EQ(LastData_CanTp_Transmit[5], 63U);
-}
-
-// ------------------------------------------------------------
-// 既存 subFunc の最小回帰（0x0A 追加による既存ディスパッチへの影響がないこと）
-// ------------------------------------------------------------
-
-TEST_F(Bsw_Dcm_ReadDtcInfo_Test, ReadDtcCount_OK_ReturnsZeroFailedWhenNothingFailedYet)
-{
-    /* 準備 (Arrange): [0x19, 0x01, statusMask=DEM_STATUS_TEST_FAILED]。
-     * Dem_Init() 直後は DEM_STATUS_NOT_COMPLETED_SINCE_CLEAR ビットが全
-     * イベントで立っている（まだ一度もテストが完了していないため）ので、
-     * statusMask=0xFF だと全件ヒットしてしまう。「実際に FAILED した
-     * DTC の件数」を問うテストにするため、testFailed ビットのみを
-     * マスクに使う。 */
-    uint8 req[3] = { DCM_SID_READ_DTC_INFO, DCM_DTC_SUBFUNC_REPORT_COUNT, DEM_STATUS_TEST_FAILED };
-
-    /* 実行 (Act) */
-    SendReadDtcInfo(req, sizeof(req));
-
-    /* 評価 (Assert): [0x59, 0x01, availMask, format, countH, countL]。
-     * Dem_Init() 直後は 1 件も FAILED になっていないため countL=0。 */
-    ASSERT_EQ(CallCount_CanTp_Transmit, 1U);
-    ASSERT_EQ(LastLength_CanTp_Transmit, 6U);
-    EXPECT_EQ(LastData_CanTp_Transmit[0], 0x59U);
-    EXPECT_EQ(LastData_CanTp_Transmit[1], DCM_DTC_SUBFUNC_REPORT_COUNT);
-    EXPECT_EQ(LastData_CanTp_Transmit[5], 0U);  // countL
-}
-
-TEST_F(Bsw_Dcm_ReadDtcInfo_Test, ReadDtcCount_OK_StatusMask0xFFMatchesNotCompletedSinceClear)
-{
-    /* 準備 (Arrange): [0x19, 0x01, statusMask=0xFF]。上のテストとの対比
-     * （0x0A reportSupportedDTC が「ステータスに関わらず全件」を返すのとは
-     * 異なり、0x01/0x02 はあくまでステータスマスクによる絞り込みである
-     * ことを裏付ける）。 */
-    uint8 req[3] = { DCM_SID_READ_DTC_INFO, DCM_DTC_SUBFUNC_REPORT_COUNT, 0xFFU };
-
-    /* 実行 (Act) */
-    SendReadDtcInfo(req, sizeof(req));
-
-    /* 評価 (Assert): DEM_STATUS_NOT_COMPLETED_SINCE_CLEAR ビットが
-     * DEM_STATUS_AVAILABILITY_MASK に含まれるため、Dem_Init() 直後の
-     * 全イベントがこのビットを立てており、0xFF マスクには全件ヒットする。 */
-    ASSERT_EQ(CallCount_CanTp_Transmit, 1U);
-    ASSERT_EQ(LastLength_CanTp_Transmit, 6U);
-    EXPECT_EQ(LastData_CanTp_Transmit[5], (uint8)DEM_EVENT_COUNT);  // countL
-}
-
-TEST_F(Bsw_Dcm_ReadDtcInfo_Test, ReadDtcInfo_NG_UnsupportedSubFuncReturnsNegativeResponse)
-{
-    /* 準備 (Arrange): 未対応の subFunc（0x0A と離れた値を使い、将来 0x0B 等が
-     * 追加されても意図せず衝突しないようにする） */
-    uint8 req[2] = { DCM_SID_READ_DTC_INFO, 0x55U };
-
-    /* 実行 (Act) */
-    SendReadDtcInfo(req, sizeof(req));
-
-    /* 評価 (Assert): [0x7F, 0x19, 0x12 subFunctionNotSupported] */
-    ASSERT_EQ(CallCount_CanTp_Transmit, 1U);
-    ASSERT_EQ(LastLength_CanTp_Transmit, 3U);
-    EXPECT_EQ(LastData_CanTp_Transmit[0], DCM_SID_NEGATIVE_RESP);
-    EXPECT_EQ(LastData_CanTp_Transmit[1], DCM_SID_READ_DTC_INFO);
-    EXPECT_EQ(LastData_CanTp_Transmit[2], DCM_NRC_SUB_FUNC_NOT_SUPPORTED);
-}
-
-TEST_F(Bsw_Dcm_ReadDtcInfo_Test, ReadDtcInfo_NG_TooShortRequestReturnsNegativeResponse)
-{
-    /* 準備 (Arrange): SID のみ（subFunc すら無い） */
-    uint8 req[1] = { DCM_SID_READ_DTC_INFO };
-
-    /* 実行 (Act) */
-    SendReadDtcInfo(req, sizeof(req));
-
-    /* 評価 (Assert): [0x7F, 0x19, 0x13 incorrectMessageLength]
-     * ([SWS_Dcm_00696]: DSD submoduleは要求長が最小長未満ならNRC 0x13を
-     * 返す。2026-09是正: 従来は0x22を返していた) */
-    ASSERT_EQ(CallCount_CanTp_Transmit, 1U);
-    ASSERT_EQ(LastLength_CanTp_Transmit, 3U);
-    EXPECT_EQ(LastData_CanTp_Transmit[0], DCM_SID_NEGATIVE_RESP);
-    EXPECT_EQ(LastData_CanTp_Transmit[2], DCM_NRC_INCORRECT_MESSAGE_LENGTH);
-}
-
-TEST_F(Bsw_Dcm_ReadDtcInfo_Test, ReadDtcCount_NG_TooShortRequestReturnsIncorrectMessageLength)
-{
-    /* 準備 (Arrange): statusMask バイトが無い ([0x19, 0x01] のみ、3バイト必須) */
-    uint8 req[2] = { DCM_SID_READ_DTC_INFO, DCM_DTC_SUBFUNC_REPORT_COUNT };
-
-    /* 実行 (Act) */
-    SendReadDtcInfo(req, sizeof(req));
-
-    /* 評価 (Assert): [0x7F, 0x19, 0x13 incorrectMessageLength] ([SWS_Dcm_00696]) */
-    ASSERT_EQ(CallCount_CanTp_Transmit, 1U);
-    ASSERT_EQ(LastLength_CanTp_Transmit, 3U);
-    EXPECT_EQ(LastData_CanTp_Transmit[0], DCM_SID_NEGATIVE_RESP);
-    EXPECT_EQ(LastData_CanTp_Transmit[2], DCM_NRC_INCORRECT_MESSAGE_LENGTH);
-}
-
-TEST_F(Bsw_Dcm_ReadDtcInfo_Test, ReadDtcByMask_NG_TooShortRequestReturnsIncorrectMessageLength)
-{
-    /* 準備 (Arrange): statusMask バイトが無い ([0x19, 0x02] のみ、3バイト必須) */
-    uint8 req[2] = { DCM_SID_READ_DTC_INFO, DCM_DTC_SUBFUNC_REPORT_BY_MASK };
-
-    /* 実行 (Act) */
-    SendReadDtcInfo(req, sizeof(req));
-
-    /* 評価 (Assert): [0x7F, 0x19, 0x13 incorrectMessageLength] ([SWS_Dcm_00696]) */
-    ASSERT_EQ(CallCount_CanTp_Transmit, 1U);
-    ASSERT_EQ(LastLength_CanTp_Transmit, 3U);
-    EXPECT_EQ(LastData_CanTp_Transmit[0], DCM_SID_NEGATIVE_RESP);
-    EXPECT_EQ(LastData_CanTp_Transmit[2], DCM_NRC_INCORRECT_MESSAGE_LENGTH);
-}
+// ReadDtcCount_NG_TooShortRequestReturnsIncorrectMessageLength /
+// ReadDtcByMask_NG_TooShortRequestReturnsIncorrectMessageLength は
+// Bsw_DcmStack_SID19_SF01/SF02_*Chain_test.cpp の NG シナリオへ移植済み
+// （2026-09、同内容のため削除）。
 
 TEST_F(Bsw_Dcm_ReadDtcInfo_Test, ReadDtcCount_NG_ExtraByteReturnsIncorrectMessageLength)
 {
@@ -668,101 +486,19 @@ TEST_F(Bsw_Dcm_ReadDtcInfo_Test, ReadDtcSupported_NG_ExtraByteReturnsIncorrectMe
     EXPECT_EQ(LastData_CanTp_Transmit[2], DCM_NRC_INCORRECT_MESSAGE_LENGTH);
 }
 
-TEST_F(Bsw_Dcm_ReadDtcInfo_Test, ReadDtcSnapshot_NG_TooShortRequestReturnsIncorrectMessageLength)
-{
-    /* 準備 (Arrange): DTC/recordNumberが揃わない ([0x19, 0x04, DTC_H, DTC_M]、6バイト必須) */
-    uint8 req[4] = { DCM_SID_READ_DTC_INFO, DCM_DTC_SUBFUNC_REPORT_SNAPSHOT, 0x00U, 0x01U };
-
-    /* 実行 (Act) */
-    SendReadDtcInfo(req, sizeof(req));
-
-    /* 評価 (Assert): [0x7F, 0x19, 0x13 incorrectMessageLength] ([SWS_Dcm_00696]) */
-    ASSERT_EQ(CallCount_CanTp_Transmit, 1U);
-    ASSERT_EQ(LastLength_CanTp_Transmit, 3U);
-    EXPECT_EQ(LastData_CanTp_Transmit[0], DCM_SID_NEGATIVE_RESP);
-    EXPECT_EQ(LastData_CanTp_Transmit[2], DCM_NRC_INCORRECT_MESSAGE_LENGTH);
-}
-
-TEST_F(Bsw_Dcm_ReadDtcInfo_Test, ReadDtcExtendedData_NG_TooShortRequestReturnsIncorrectMessageLength)
-{
-    /* 準備 (Arrange): DTC/recordNumberが揃わない ([0x19, 0x06, DTC_H, DTC_M]、6バイト必須) */
-    uint8 req[4] = { DCM_SID_READ_DTC_INFO, DCM_DTC_SUBFUNC_REPORT_EXTDATA, 0x00U, 0x01U };
-
-    /* 実行 (Act) */
-    SendReadDtcInfo(req, sizeof(req));
-
-    /* 評価 (Assert): [0x7F, 0x19, 0x13 incorrectMessageLength] ([SWS_Dcm_00696]) */
-    ASSERT_EQ(CallCount_CanTp_Transmit, 1U);
-    ASSERT_EQ(LastLength_CanTp_Transmit, 3U);
-    EXPECT_EQ(LastData_CanTp_Transmit[0], DCM_SID_NEGATIVE_RESP);
-    EXPECT_EQ(LastData_CanTp_Transmit[2], DCM_NRC_INCORRECT_MESSAGE_LENGTH);
-}
+// ReadDtcSnapshot_NG_TooShortRequestReturnsIncorrectMessageLength /
+// ReadDtcExtendedData_NG_TooShortRequestReturnsIncorrectMessageLength は
+// Bsw_DcmStack_SID19_SF04/SF06_*Chain_test.cpp の NG シナリオへ移植済み
+// （2026-09、同内容のため削除）。
 
 // ------------------------------------------------------------
 // DTCSnapshotRecordNumber/DTCExtDataRecordNumber の 0xFF(全レコード要求)を
 // 唯一のレコードへのエイリアスとして受理する是正(2026-09、[SWS_Dcm_00441])。
 // 以前は 0x01 との厳密一致のみ受理し、0xFF は NRC 0x31 で拒否していた。
+// OK シナリオ（recordNumber=0xFF が実レコード番号0x01と同じ応答になること）と
+// ReadDtcExtendedData_NG_NeverFailedDtcReturnsRequestOutOfRange は
+// Bsw_DcmStack_SID19_SF04/SF06_*Chain_test.cpp へ移植済み（同内容のため削除）。
 // ------------------------------------------------------------
-
-TEST_F(Bsw_Dcm_ReadDtcInfo_Test, ReadDtcSnapshot_OK_RecordNumber0xFFReturnsTheOnlyRecord)
-{
-    /* 準備 (Arrange): EventId=0 (DEM_EVENT_ENGINE_OVERHEAT, DTC=0x000101) を
-     * デバウンス確定閾値(DEM_DEBOUNCE_LIMIT_ENGINE_OVERHEAT=2)回FAILED報告して
-     * デバウンス確定させFreezeFrameを記録させてから、recordNumber=0xFF
-     * ([0x19, 0x04, 0x00,0x01,0x01, 0xFF]) を送る。 */
-    (void)Dem_SetEventStatus(DEM_EVENT_ENGINE_OVERHEAT, DEM_EVENT_STATUS_FAILED);
-    (void)Dem_SetEventStatus(DEM_EVENT_ENGINE_OVERHEAT, DEM_EVENT_STATUS_FAILED);
-
-    uint8 req[6] = { DCM_SID_READ_DTC_INFO, DCM_DTC_SUBFUNC_REPORT_SNAPSHOT,
-                      0x00U, 0x01U, 0x01U, 0xFFU };
-    SendReadDtcInfo(req, sizeof(req));
-
-    /* 評価 (Assert): recordNumber=0x01 を指定した場合と同じ正応答が返る
-     * （応答のrecordNumberフィールドは実レコード番号0x01であり、要求の
-     * 0xFFをそのままechoしない、[SWS_Dcm_00302]）。 */
-    ASSERT_EQ(CallCount_CanTp_Transmit, 1U);
-    ASSERT_EQ(LastLength_CanTp_Transmit, 18U);
-    EXPECT_EQ(LastData_CanTp_Transmit[0], 0x59U);
-    EXPECT_EQ(LastData_CanTp_Transmit[1], DCM_DTC_SUBFUNC_REPORT_SNAPSHOT);
-    EXPECT_EQ(LastData_CanTp_Transmit[6], DCM_FREEZEFRAME_RECORD_NUMBER);
-}
-
-TEST_F(Bsw_Dcm_ReadDtcInfo_Test, ReadDtcExtendedData_OK_RecordNumber0xFFReturnsTheOnlyRecord)
-{
-    /* 準備 (Arrange): EventId=0 をデバウンス確定閾値回FAILED報告して確定させて
-     * から recordNumber=0xFF ([0x19, 0x06, 0x00,0x01,0x01, 0xFF]) を送る。 */
-    (void)Dem_SetEventStatus(DEM_EVENT_ENGINE_OVERHEAT, DEM_EVENT_STATUS_FAILED);
-    (void)Dem_SetEventStatus(DEM_EVENT_ENGINE_OVERHEAT, DEM_EVENT_STATUS_FAILED);
-
-    uint8 req[6] = { DCM_SID_READ_DTC_INFO, DCM_DTC_SUBFUNC_REPORT_EXTDATA,
-                      0x00U, 0x01U, 0x01U, 0xFFU };
-    SendReadDtcInfo(req, sizeof(req));
-
-    /* 評価 (Assert): recordNumber=0x01 を指定した場合と同じ正応答が返る */
-    ASSERT_EQ(CallCount_CanTp_Transmit, 1U);
-    ASSERT_EQ(LastLength_CanTp_Transmit, 8U);
-    EXPECT_EQ(LastData_CanTp_Transmit[0], 0x59U);
-    EXPECT_EQ(LastData_CanTp_Transmit[1], DCM_DTC_SUBFUNC_REPORT_EXTDATA);
-    EXPECT_EQ(LastData_CanTp_Transmit[6], DCM_EXTENDED_DATA_RECORD_NUMBER);
-}
-
-TEST_F(Bsw_Dcm_ReadDtcInfo_Test, ReadDtcExtendedData_NG_NeverFailedDtcReturnsRequestOutOfRange)
-{
-    /* 準備 (Arrange): EventId=0 (DEM_EVENT_ENGINE_OVERHEAT, DTC=0x000101) は
-     * 一度も FAILED 報告していない(ExtendedData 未記録)状態で
-     * [0x19, 0x06, 0x00,0x01,0x01, 0x01] を送る（[SWS_Dcm_01242]相当。
-     * 2026-09 追加: 以前は Dem_GetOccurrenceCounterOfEvent() が未記録でも
-     * 常に E_OK・カウンタ 0 を返していたため、誤って正応答
-     * occurrenceCounter=0 を返してしまっていた）。 */
-    uint8 req[6] = { DCM_SID_READ_DTC_INFO, DCM_DTC_SUBFUNC_REPORT_EXTDATA,
-                      0x00U, 0x01U, 0x01U, DCM_EXTENDED_DATA_RECORD_NUMBER };
-    SendReadDtcInfo(req, sizeof(req));
-
-    ASSERT_EQ(CallCount_CanTp_Transmit, 1U);
-    ASSERT_EQ(LastLength_CanTp_Transmit, 3U);
-    EXPECT_EQ(LastData_CanTp_Transmit[0], DCM_SID_NEGATIVE_RESP);
-    EXPECT_EQ(LastData_CanTp_Transmit[2], DCM_NRC_REQUEST_OUT_OF_RANGE);
-}
 
 TEST_F(Bsw_Dcm_ReadDtcInfo_Test, ReadDtcSnapshot_NG_UnsupportedRecordNumberStillRejected)
 {
