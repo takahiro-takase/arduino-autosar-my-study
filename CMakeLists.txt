@@ -37,11 +37,11 @@
 # `[env:native_sleep_chain]` という別envに分離していたが、実機検証まで完了し
 # 安定したため本バイナリへ統合した）。ComM.c が呼ぶ EcuM_RequestRUN()/
 # EcuM_ReleaseRUN() は境界としてフェイクに差し替える
-# （test/stub/Bsw/EcuM/Fake_Bsw_EcuM.h 参照）。BswM_ComM_CurrentMode() は
-# 2026-09-22 に実体リンク+wrap化した（test/stub/Bsw/BswM/Wrap_BswM.h 参照、
+# （stub/Bsw/EcuM/Fake_Bsw_EcuM.h 参照）。BswM_ComM_CurrentMode() は
+# 2026-09-22 に実体リンク+wrap化した（stub/Bsw/BswM/Wrap_BswM.h 参照、
 # 下記「BswM は...」の段落参照）。
 # Dem は実体でリンクし、Dem_SetEventStatus() のみ `--wrap` で観測・故障注入する
-# （test/stub/Bsw/Dem/Wrap_Dem.h 参照、2026-09 に完全フェイクから切り替え）。
+# （stub/Bsw/Dem/Wrap_Dem.h 参照、2026-09 に完全フェイクから切り替え）。
 # CanSM 状態遷移に関与しない Tx/Rx/E2E チェーンのテストは ComM_Init()/Nm_Init()
 # を呼ばないため、これらのモジュールの実体は未初期化のまま（呼ばれない）で無害。
 #
@@ -68,8 +68,8 @@
 # の実績（CanSM Bus-Off回復・E2EXf SMCheck失敗分岐、いずれも
 # test/Bsw_CanSM_BusOffRecovery_test.cpp/Bsw_E2EXf_SMCheckFailure_test.cpp 参照）を
 # 経て本バイナリへ統合した）。実体を丸ごとフェイクへ差し替えず、境界の1関数
-# だけをピンポイントで失敗させたい場合に使う（test/stub/Bsw/CanIf/Wrap_CanIf.h・
-# test/stub/Bsw/E2E/Wrap_E2E.h 冒頭コメント参照）。「stub は fake ファイルではなく
+# だけをピンポイントで失敗させたい場合に使う（stub/Bsw/CanIf/Wrap_CanIf.h・
+# stub/Bsw/E2E/Wrap_E2E.h 冒頭コメント参照）。「stub は fake ファイルではなく
 # wrap 方式で」という本プロジェクトの方針を体現する。
 #
 # WdgM（2026-09、旧 [env:native_wdgm] から統合）。WdgM.c は WdgIf.h（下位
@@ -77,7 +77,7 @@
 # （Can/CanIf/CanSM/ComM/Nm 等）と一切コールチェーンを共有しないため、
 # test_native/test_dcm/test_fim/test_wdgm を test_chain へ統合するという長期
 # ゴールの中で最も依存が軽い候補として最初に統合した。WdgIf は他 env に同種
-# モジュールが無いため専用フェイク（test/stub/Bsw/WdgIf/Fake_WdgIf.c/h）を
+# モジュールが無いため専用フェイク（stub/Bsw/WdgIf/Fake_WdgIf.c/h）を
 # そのまま持ち込んだ。
 #
 # Dem/FiM（2026-09、旧 [env:native_fim] から統合、上記 WdgM 統合の直後）。
@@ -88,30 +88,30 @@
 # デバウンス/DTC確定/EEPROM永続化まで絡む別物になってしまう。
 # CanIf_SetControllerMode/E2E_SMCheck と同じ考え方（実体は保ったまま境界の
 # 1関数だけ観測する）で `-Wl,--wrap=Dem_SetEventStatus`
-# （test/stub/Bsw/Dem/Wrap_Dem.h 参照）を導入し、常に `__real_Dem_SetEventStatus()`
+# （stub/Bsw/Dem/Wrap_Dem.h 参照）を導入し、常に `__real_Dem_SetEventStatus()`
 # へパススルーしつつ呼び出し回数・引数を記録する。対象イベント
 # （DEM_EVENT_CAN_BUSOFF/DEM_EVENT_WDGM_SUPERVISION）はいずれもデバウンス閾値が
 # 1（Dem_Cfg.h の DEM_DEBOUNCE_LIMIT_*）のため、既存テストの「1回呼べば確定/
 # 回復する」という前提はそのまま成立する。Dem の内部状態自体はテストケースを
 # 跨いで永続する static のため、各テストの SetUp() で `Dem_Init(NULL)` を追加
-# （test/stub/Bsw/NvM/Fake_NvM.c により常に「初回起動」相当の決定的なリセット
+# （stub/Bsw/NvM/Fake_NvM.c により常に「初回起動」相当の決定的なリセット
 # になる）。FiM.c は Dem.h/Det.h にしか依存しないため、Dem を実体化した後は
 # test_fim をそのまま統合するだけで済んだ。
 #
 # Dcm（2026-09、旧 [env:native_dcm] から統合、上記 Dem/FiM 統合の直後）。
 # Dcm_Cbk.c は CanTp/Rte/KeyM の3モジュールへ依存するが、これらは
 # native_chain の他モジュールと一切コールチェーンを共有しない純粋なリンク
-# スタブ（test/stub/Bsw/CanTp/Fake_CanTp.c/h・test/stub/Rte/Fake_Rte.c・
-# test/stub/Bsw/KeyM/Fake_KeyM.c）のため、そのまま持ち込むだけで済んだ
+# スタブ（stub/Bsw/CanTp/Fake_CanTp.c/h・stub/Rte/Fake_Rte.c・
+# stub/Bsw/KeyM/Fake_KeyM.c）のため、そのまま持ち込むだけで済んだ
 # （2026-09-22、DcmStack コールチェーンテストに備えて CanTp.c を実体リンクへ
-# 切り替え、Fake_CanTp.c/h は test/stub/Bsw/CanTp/Wrap_CanTp.c/h へ置き換えた。
+# 切り替え、Fake_CanTp.c/h は stub/Bsw/CanTp/Wrap_CanTp.c/h へ置き換えた。
 # Rte/KeyM は引き続き Fake のまま）。
 # BswM は当初 Dcm_Cbk.c から見た通知先 BswM_Dcm_CommunicationMode_CurrentState()
 # を、ComM.c 用の既存フェイク Fake_Bsw_BswM.c/h へ統合していた（対象関数は別だが
 # `FakeBswM_Reset`/`FakeBswM_LastMode` のシンボル名が衝突するため、Dcm 側の
 # アクセサを `FakeBswM_LastDcmCommunicationMode` 等へ改称して統合）。
 # （2026-09-22、BswM.c 自体を実体リンクへ切り替え、Fake_Bsw_BswM.c/h は
-# test/stub/Bsw/BswM/Wrap_BswM.c/h へ置き換えた。BswM.c が依存する
+# stub/Bsw/BswM/Wrap_BswM.c/h へ置き換えた。BswM.c が依存する
 # Os_SetTaskActive()（src/Os/Os.c）は Os_Init() を呼ばない限り Os_Cfg==NULL
 # ガードで即座に no-op となる安全な依存のため、Os_PBCfg.c は持ち込まず
 # Os.c 単体のみ追加した。既存テストは BswM_Init() も呼ばないため、実際の
@@ -122,17 +122,17 @@
 # `ComM_DCM_InactiveDiagnostic()` を実体へ到達させると、Dcm のテスト対象外
 # である通信管理（Nm/CanSM 経由の実際のモード遷移）まで連鎖してしまう。
 # `-Wl,--wrap=` でこの2関数を「常に何もしない」よう隔離した
-# （test/stub/Bsw/ComM/Wrap_ComM.c参照。CanIf/E2E/Dem の wrap とは異なり、
+# （stub/Bsw/ComM/Wrap_ComM.c参照。CanIf/E2E/Dem の wrap とは異なり、
 # 既定パススルーではなく常時no-op という特殊ケース）。
 #
 # test_native（2026-09、旧 [env:native]/[env:native_coverage] から統合。
 # test_native/test_dcm/test_wdgm/test_fim を test_chain へ統合するという長期
 # ゴールの最終回）。Gpt/Dio/Port は他モジュールと無縁の末端モジュールのため、
-# それぞれの HAL 層フェイク（test/stub/Hal/Fake_Gpt_Hw.c 等）ごとそのまま
+# それぞれの HAL 層フェイク（stub/Hal/Fake_Gpt_Hw.c 等）ごとそのまま
 # 持ち込むだけで済んだ。Can.c 単体検証（Bsw_Can_test.cpp）だけは、Can.c が
 # 上位層通知として呼ぶ `CanIf_RxIndication()`/`CanIf_TxConfirmation()`/
 # `CanIf_ControllerBusOff()` の3関数を、native_chain が既に CanIf.c を実体で
-# リンクしているため `--wrap` 化する必要があった（test/stub/Bsw/CanIf/
+# リンクしているため `--wrap` 化する必要があった（stub/Bsw/CanIf/
 # Wrap_CanIf.c/h へ追記）。3関数とも（a）CanIf/CanSM側に未初期化ガードがあり、
 # Bsw_Can_test.cppはCanIf_Init()/CanSM_Init()を呼ばないため実体へパススルー
 # しても静かにno-opになるだけ、（b）Bsw_Can_test.cpp自体にDET報告回数の完全
@@ -142,12 +142,27 @@
 # フェイクの配置規則（2026-09、test_native/test_dcm 統合が一段落した後に整理）。
 # 全 env が native_chain 1つに統合されたことで、「test/ 直下にテストファイルと
 # フェイクファイルが混在する」状態になっていた。--wrap ファイル（Wrap_CanIf.h
-# 等）は既に src/ の対応する1ファイルにつき1ファイルという規則で test/stub/
+# 等）は既に src/ の対応する1ファイルにつき1ファイルという規則で stub/
 # 配下に整理されていたため、単純な呼び出し記録フェイク（Fake_Bsw_BswM.c 等）
-# も同じ考え方で test/stub/ 配下（src/ のディレクトリ構成をそのまま反映:
-# 例 src/Bsw/CanTp/ → test/stub/Bsw/CanTp/、src/Rte/ → test/stub/Rte/）へ移設
+# も同じ考え方で stub/ 配下（src/ のディレクトリ構成をそのまま反映:
+# 例 src/Bsw/CanTp/ → stub/Bsw/CanTp/、src/Rte/ → stub/Rte/）へ移設
 # した。結果として `test/` 直下はテストファイル（`Bsw_{シナリオ名}_test.cpp`）と
 # `test_main.cpp`/`win_quick_exit_stub.cpp` のみになった。
+#
+# 2026-09-23、`test/` 配下をさらにモジュール別サブフォルダ（`test/Can/`・
+# `test/DcmStack/` 等）へ整理した際、`test/stub/` が17個のモジュールフォルダに
+# 埋もれて見えるようになった。旧 PlatformIO ネイティブテスト env（`pio test`
+# による `test/` 配下の自動検出、[[reference_platformio_test_suite_discovery]]
+# 参照）は既に廃止済み（`platformio.ini` の 2026-09-20 コメント参照）で
+# `stub/` を `test/` 配下に置く制約が無くなっていたため、`stub/` を `src/`/
+# `test/` と同階層のリポジトリ直下へ移設した。
+#
+# 2026-09-23、続けて17個のモジュール別サブフォルダも、`src/Bsw/<Module>/`・
+# `stub/Bsw/<Module>/` と同じ構成に揃えるため `test/Bsw/<Module>/` へ1段
+# 追加した。`ComStack`/`DcmStack`/`NmStack` は単一の `src/Bsw/<Module>` には
+# 対応しない（複数モジュールを跨ぐチェーンテストのため）が、Bsw層を検証する
+# テストであることに変わりないため、同じく `test/Bsw/` 配下に置いている。
+# `test/` と同階層のリポジトリ直下へ移設した。
 
 cmake_minimum_required(VERSION 3.21)
 project(native_chain_tests LANGUAGES C CXX)
@@ -202,22 +217,22 @@ set(NATIVE_CHAIN_INCLUDE_DIRS
     src/Os
     src/Rte
     src/Hal
-    test/stub/Bsw/BswM
-    test/stub/Bsw/Can
-    test/stub/Bsw/CanIf
-    test/stub/Bsw/CanTp
-    test/stub/Bsw/Com
-    test/stub/Bsw/Dcm
-    test/stub/Bsw/ComM
-    test/stub/Bsw/Dem
-    test/stub/Bsw/E2E
-    test/stub/Bsw/EcuM
-    test/stub/Bsw/KeyM
-    test/stub/Bsw/NvM
-    test/stub/Bsw/PduR
-    test/stub/Bsw/WdgIf
-    test/stub/Rte
-    test/stub/Hal
+    stub/Bsw/BswM
+    stub/Bsw/Can
+    stub/Bsw/CanIf
+    stub/Bsw/CanTp
+    stub/Bsw/Com
+    stub/Bsw/Dcm
+    stub/Bsw/ComM
+    stub/Bsw/Dem
+    stub/Bsw/E2E
+    stub/Bsw/EcuM
+    stub/Bsw/KeyM
+    stub/Bsw/NvM
+    stub/Bsw/PduR
+    stub/Bsw/WdgIf
+    stub/Rte
+    stub/Hal
 )
 
 # native_chain_tests が実体でリンクする src/ 配下のソース。
@@ -249,36 +264,36 @@ set(NATIVE_CHAIN_SRC_SOURCES
     src/Bsw/Port/Port.c
 )
 
-# 同じくリンクする test/stub/ 配下のフェイク/wrapソース。
+# 同じくリンクする stub/ 配下のフェイク/wrapソース。
 set(NATIVE_CHAIN_STUB_SOURCES
-    test/stub/Bsw/Can/Wrap_Can.c
-    test/stub/Bsw/CanIf/Wrap_CanIf.c
-    test/stub/Bsw/Com/Wrap_Com.c
-    test/stub/Bsw/E2E/Wrap_E2E.c
-    test/stub/Bsw/Dem/Wrap_Dem.c
-    test/stub/Bsw/Dcm/Wrap_Dcm.c
-    test/stub/Bsw/ComM/Wrap_ComM.c
-    test/stub/Bsw/BswM/Wrap_BswM.c
-    test/stub/Bsw/EcuM/Fake_Bsw_EcuM.c
-    test/stub/Bsw/CanTp/Wrap_CanTp.c
-    test/stub/Bsw/KeyM/Fake_KeyM.c
-    test/stub/Bsw/NvM/Fake_NvM.c
-    test/stub/Bsw/PduR/Wrap_PduR.c
-    test/stub/Bsw/WdgIf/Fake_WdgIf.c
-    test/stub/Rte/Fake_Rte.c
-    test/stub/Hal/Fake_Can_Hw.c
-    test/stub/Hal/Fake_Det_Hw.c
-    test/stub/Hal/Fake_Millis.c
-    test/stub/Hal/Fake_SchM_Hw.c
-    test/stub/Hal/Fake_Dio_Hw.c
-    test/stub/Hal/Fake_Gpt_Hw.c
-    test/stub/Hal/Fake_Port_Hw.c
+    stub/Bsw/Can/Wrap_Can.c
+    stub/Bsw/CanIf/Wrap_CanIf.c
+    stub/Bsw/Com/Wrap_Com.c
+    stub/Bsw/E2E/Wrap_E2E.c
+    stub/Bsw/Dem/Wrap_Dem.c
+    stub/Bsw/Dcm/Wrap_Dcm.c
+    stub/Bsw/ComM/Wrap_ComM.c
+    stub/Bsw/BswM/Wrap_BswM.c
+    stub/Bsw/EcuM/Fake_Bsw_EcuM.c
+    stub/Bsw/CanTp/Wrap_CanTp.c
+    stub/Bsw/KeyM/Fake_KeyM.c
+    stub/Bsw/NvM/Fake_NvM.c
+    stub/Bsw/PduR/Wrap_PduR.c
+    stub/Bsw/WdgIf/Fake_WdgIf.c
+    stub/Rte/Fake_Rte.c
+    stub/Hal/Fake_Can_Hw.c
+    stub/Hal/Fake_Det_Hw.c
+    stub/Hal/Fake_Millis.c
+    stub/Hal/Fake_SchM_Hw.c
+    stub/Hal/Fake_Dio_Hw.c
+    stub/Hal/Fake_Gpt_Hw.c
+    stub/Hal/Fake_Port_Hw.c
 )
 
 # test/ 配下のテストファイル（Bsw_{Module|Stack}_{シナリオ}_test.cpp）を自動収集する。
-# 2026-09、test/ 直下にモジュール別サブフォルダ（test/Can/・test/DcmStack/ 等、
-# test/stub/ と同じ「src/ ミラーリング」の発想）を新設し整理したため、
-# test/ 直下限定だった旧 GLOB から GLOB_RECURSE へ変更した。test/stub/ 配下は
+# 2026-09、test/ 直下にモジュール別サブフォルダ（test/Bsw/Can/・test/Bsw/DcmStack/
+# 等、stub/ と同じ「src/ ミラーリング」の発想）を新設し整理したため、
+# test/ 直下限定だった旧 GLOB から GLOB_RECURSE へ変更した。stub/ 配下は
 # 全て .c（wrap/fake スタブ）で .cpp が無いため、再帰化しても誤って拾われる
 # 心配はない（旧 PlatformIO 版の test_build_src=yes 自動検出、
 # [[reference_platformio_test_suite_discovery]] 参照、とは既に無関係）。
