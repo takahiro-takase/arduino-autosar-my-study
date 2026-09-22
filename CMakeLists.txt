@@ -197,6 +197,7 @@ set(NATIVE_CHAIN_INCLUDE_DIRS
     test/stub/Bsw/CanIf
     test/stub/Bsw/CanTp
     test/stub/Bsw/Com
+    test/stub/Bsw/Dcm
     test/stub/Bsw/ComM
     test/stub/Bsw/Dem
     test/stub/Bsw/E2E
@@ -243,6 +244,7 @@ set(NATIVE_CHAIN_STUB_SOURCES
     test/stub/Bsw/Com/Wrap_Com.c
     test/stub/Bsw/E2E/Wrap_E2E.c
     test/stub/Bsw/Dem/Wrap_Dem.c
+    test/stub/Bsw/Dcm/Wrap_Dcm.c
     test/stub/Bsw/ComM/Wrap_ComM.c
     test/stub/Bsw/BswM/Fake_Bsw_BswM.c
     test/stub/Bsw/EcuM/Fake_Bsw_EcuM.c
@@ -362,6 +364,16 @@ set(NATIVE_CHAIN_WRAP_SYMBOLS
     CanTp_TxConfirmation
     CanTp_MainFunction
     CanTp_GetVersionInfo
+    # Dcm.h の AUTOSAR IF 全8関数 + Dcm_ComIndication（Wrap_Dcm.h/.c 参照）。
+    Dcm_Init
+    Dcm_MainFunction
+    Dcm_GetVin
+    Dcm_GetSesCtrlType
+    Dcm_GetSecurityLevel
+    Dcm_GetActiveProtocol
+    Dcm_ResetToDefaultSession
+    Dcm_GetVersionInfo
+    Dcm_ComIndication
 )
 foreach(wrap_symbol IN LISTS NATIVE_CHAIN_WRAP_SYMBOLS)
     target_link_options(native_chain_tests PRIVATE "-Wl,--wrap=${wrap_symbol}")
