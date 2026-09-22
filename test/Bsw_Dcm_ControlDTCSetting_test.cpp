@@ -1,21 +1,19 @@
 /**
  * \file    Bsw_Dcm_ControlDTCSetting_test.cpp
- * \brief   UDS SID 0x85 ControlDTCSetting の単体テスト（GoogleTest /
- *          PlatformIO `[env:native_chain]`。2026-08新設時は専用環境`[env:native_dcm]`だったが、2026-09にnative_chainへ統合した）。
+ * \brief   UDS SID 0x85 ControlDTCSetting のうち、`Wrap_CanTp.h` で CanTp の
+ *          ビジー状態を強制注入する境界フォールトインジェクションのテスト
+ *          （GoogleTest / PlatformIO `[env:native_chain]`）。
  *
- * \details Bsw_Dcm_ReadDtcInfo_test.cpp と同じ「Dcm_ComIndication() に生の
- *          UDS バイト列を直接渡し、CanTp_Transmit()（Wrap_CanTp.h で
- *          応答ペイロードをキャプチャ）へ渡された応答を検証する」
- *          ブラックボックステスト方式。CanTp.c 自体は実体でリンクされる
- *          （2026-09-22、Fake_CanTp.c から切り替え）が、その先の
- *          PduR/CanIf/Can は本 env では未初期化のため、物理送信は
- *          （テストの関心事ではなく）静かに失敗する。
- *
- *          0x85 は extendedSession 限定のため、SendExtendedSession() で
- *          事前にセッションを遷移させてから各テストを実行する。
- *          Dem_SetEventStatus() は Dem.c が本 env に実体でリンクされている
- *          ため直接呼び出し、DTC 記録の有効/無効が実際に Dem_GetEventUdsStatus()
- *          へ反映されるか（またはされないか）を確認する。
+ * \details 大半のシナリオ（UDS要求データと外部データ（Dem状態・セッション
+ *          状態）の組み合わせで確認できる内容）は
+ *          Bsw_DcmStack_SID85_ControlDTCSettingChain_test.cpp（物理層 Can_Hw
+ *          までの検証）へ移植済み（2026-09）。本ファイルに残る2件
+ *          （S3Timer_OK_*）は、CanTp が実際にビジーかどうかではなく
+ *          `Wrap_CanTp.h`（`FailFromCallCount_CanTp_IsTxBusy`）で人工的に
+ *          ビジー状態を作り出して Dcm の S3 タイマー一時停止ロジック
+ *          （[SWS_Dcm_00141]）を検証するものであり、物理チェーンとは無関係
+ *          なため、引き続き `Dcm_ComIndication()` に生の UDS バイト列を
+ *          直接渡すブラックボックステストのまま残す。
  */
 #include <gtest/gtest.h>
 
@@ -23,7 +21,6 @@ extern "C" {
 #include "Dcm.h"
 #include "Dcm_Cfg.h"
 #include "Dem.h"
-#include "Dem_Cfg.h"
 #include "Wrap_CanTp.h"
 #include "Fake_Millis.h"
 #include "Fake_Det_Hw.h"
@@ -78,116 +75,7 @@ protected:
         uint8 req[2] = { DCM_SID_CONTROL_DTC_SETTING, subFunc };
         Send(req, sizeof(req));
     }
-
-    /** DEM_EVENT_CAN_BUSOFF (DEM_DEBOUNCE_LIMIT_CAN_BUSOFF=1、1回の報告で
-     *  即確定) を FAILED 報告する。DTC 記録が有効なら testFailed/confirmedDTC
-     *  ビットが立つはず。 */
-    static void ReportBusOffFailed()
-    {
-        (void)Dem_SetEventStatus(DEM_EVENT_CAN_BUSOFF, DEM_EVENT_STATUS_FAILED);
-    }
-
-    static uint8 BusOffStatus()
-    {
-        Dem_UdsStatusByteType status = 0U;
-        (void)Dem_GetEventUdsStatus(DEM_EVENT_CAN_BUSOFF, &status);
-        return status;
-    }
 };
-
-// ------------------------------------------------------------
-// 正常系: on/off の受理と応答
-// ------------------------------------------------------------
-
-TEST_F(Bsw_Dcm_ControlDTCSetting_Test, ControlDTCSetting_OK_OffIsAcceptedWithPositiveResponse)
-{
-    EnterExtendedSession();
-
-    SendControlDTCSetting(DCM_DTCSETTING_OFF);
-
-    /* 評価 (Assert): [0xC5, 0x02] */
-    ASSERT_EQ(CallCount_CanTp_Transmit, 1U);
-    ASSERT_EQ(LastLength_CanTp_Transmit, 2U);
-    EXPECT_EQ(LastData_CanTp_Transmit[0], 0xC5U);
-    EXPECT_EQ(LastData_CanTp_Transmit[1], DCM_DTCSETTING_OFF);
-}
-
-TEST_F(Bsw_Dcm_ControlDTCSetting_Test, ControlDTCSetting_OK_OnIsAcceptedWithPositiveResponse)
-{
-    EnterExtendedSession();
-
-    SendControlDTCSetting(DCM_DTCSETTING_ON);
-
-    /* 評価 (Assert): [0xC5, 0x01] */
-    ASSERT_EQ(CallCount_CanTp_Transmit, 1U);
-    ASSERT_EQ(LastLength_CanTp_Transmit, 2U);
-    EXPECT_EQ(LastData_CanTp_Transmit[0], 0xC5U);
-    EXPECT_EQ(LastData_CanTp_Transmit[1], DCM_DTCSETTING_ON);
-}
-
-// ------------------------------------------------------------
-// DTC 記録の有効/無効が Dem へ実際に反映されること（本機能の核心）
-// ------------------------------------------------------------
-
-TEST_F(Bsw_Dcm_ControlDTCSetting_Test, ControlDTCSetting_OK_OffSuppressesDtcRecordingUntilOn)
-{
-    EnterExtendedSession();
-
-    /* 実行 (Act): off にしてから、通常なら即確定するはずの FAILED を報告する */
-    SendControlDTCSetting(DCM_DTCSETTING_OFF);
-    ReportBusOffFailed();
-
-    /* 評価 (Assert): 記録無効化中のため testFailed/confirmedDTC ビットとも
-     * 立っていない（DEM_STATUS_NOT_COMPLETED_SINCE_CLEAR 等の初期ビットのみ）。 */
-    EXPECT_EQ(BusOffStatus() & DEM_STATUS_TEST_FAILED, 0U);
-    EXPECT_EQ(BusOffStatus() & DEM_STATUS_CONFIRMED, 0U);
-
-    /* 実行 (Act): on に戻してから同じ報告をする */
-    WrapCanTp_Reset();
-    SendControlDTCSetting(DCM_DTCSETTING_ON);
-    ReportBusOffFailed();
-
-    /* 評価 (Assert): 再有効化後は通常どおり即確定する
-     * (DEM_DEBOUNCE_LIMIT_CAN_BUSOFF=1)。 */
-    EXPECT_NE(BusOffStatus() & DEM_STATUS_TEST_FAILED, 0U);
-    EXPECT_NE(BusOffStatus() & DEM_STATUS_CONFIRMED, 0U);
-}
-
-// ------------------------------------------------------------
-// defaultSession への遷移で自動的に on へ復帰すること（SWS_Dcm_00751）
-// ------------------------------------------------------------
-
-TEST_F(Bsw_Dcm_ControlDTCSetting_Test, ControlDTCSetting_OK_AutoReEnablesOnExplicitDefaultSessionRequest)
-{
-    EnterExtendedSession();
-    SendControlDTCSetting(DCM_DTCSETTING_OFF);
-
-    /* 実行 (Act): [0x10, 0x01] defaultSession へ明示的に戻る */
-    WrapCanTp_Reset();
-    uint8 req[2] = { DCM_SID_SESSION_CTRL, DCM_SESSION_DEFAULT };
-    Send(req, sizeof(req));
-    ASSERT_EQ(LastData_CanTp_Transmit[0], 0x50U);  // 正応答確認
-
-    /* 評価 (Assert): 明示的に on を送っていないにも関わらず、defaultSession
-     * への遷移だけで自動的に記録が再開される。 */
-    ReportBusOffFailed();
-    EXPECT_NE(BusOffStatus() & DEM_STATUS_TEST_FAILED, 0U);
-}
-
-TEST_F(Bsw_Dcm_ControlDTCSetting_Test, ControlDTCSetting_OK_AutoReEnablesOnS3Timeout)
-{
-    EnterExtendedSession();
-    SendControlDTCSetting(DCM_DTCSETTING_OFF);
-
-    /* 実行 (Act): S3 タイムアウトで defaultSession へ自動遷移させる
-     * (明示的な 0x10 要求を送らない経路)。 */
-    FakeMillis_Value += DCM_S3_TIMEOUT_MS + 1UL;
-    Dcm_MainFunction();
-
-    /* 評価 (Assert): S3 タイムアウト経由でも自動的に記録が再開される。 */
-    ReportBusOffFailed();
-    EXPECT_NE(BusOffStatus() & DEM_STATUS_TEST_FAILED, 0U);
-}
 
 TEST_F(Bsw_Dcm_ControlDTCSetting_Test, S3Timer_OK_DoesNotTimeOutWhileCanTpTxBusy)
 {
@@ -230,111 +118,6 @@ TEST_F(Bsw_Dcm_ControlDTCSetting_Test, S3Timer_OK_TimesOutNormallyOnceCanTpTxIdl
     WrapCanTp_Reset();
     SendControlDTCSetting(DCM_DTCSETTING_ON);
     ASSERT_EQ(LastData_CanTp_Transmit[0], DCM_SID_NEGATIVE_RESP);
-}
-
-TEST_F(Bsw_Dcm_ControlDTCSetting_Test, ControlDTCSetting_OK_AutoReEnablesAfterEcuReset)
-{
-    EnterExtendedSession();
-    SendControlDTCSetting(DCM_DTCSETTING_OFF);
-
-    /* 実行 (Act): [0x11, 0x01] hardReset（本実装は実際のリセットは行わず
-     * セッションを defaultSession へ戻すのみ）。 */
-    WrapCanTp_Reset();
-    uint8 req[2] = { DCM_SID_ECU_RESET, 0x01U };
-    Send(req, sizeof(req));
-    ASSERT_EQ(LastData_CanTp_Transmit[0], 0x51U);  // 正応答確認
-
-    /* 評価 (Assert): ECUReset 経由でも自動的に記録が再開される。 */
-    ReportBusOffFailed();
-    EXPECT_NE(BusOffStatus() & DEM_STATUS_TEST_FAILED, 0U);
-}
-
-TEST_F(Bsw_Dcm_ControlDTCSetting_Test, ControlDTCSetting_NG_DoesNotReEnableWhenNotDisabled)
-{
-    /* 準備 (Arrange): 一度も off にしていない状態で defaultSession へ戻る。
-     * Dcm_DTCSettingDisabled が立っていないため Dem_EnableDTCSetting() は
-     * 呼ばれないはずだが、既に有効なので外部から見た挙動に差はない
-     * （冗長呼び出しでないことのみ、記録が有効なままであることで間接確認）。 */
-    EnterExtendedSession();
-    uint8 req[2] = { DCM_SID_SESSION_CTRL, DCM_SESSION_DEFAULT };
-    Send(req, sizeof(req));
-
-    ReportBusOffFailed();
-    EXPECT_NE(BusOffStatus() & DEM_STATUS_TEST_FAILED, 0U);
-}
-
-// ------------------------------------------------------------
-// 異常系
-// ------------------------------------------------------------
-
-TEST_F(Bsw_Dcm_ControlDTCSetting_Test, ControlDTCSetting_NG_DefaultSessionRejectsWithNrc7F)
-{
-    /* 準備 (Arrange): Dcm_Init() 直後は defaultSession のまま */
-
-    /* 実行 (Act) */
-    SendControlDTCSetting(DCM_DTCSETTING_OFF);
-
-    /* 評価 (Assert): [0x7F, 0x85, 0x7F serviceNotSupportedInActiveSession] */
-    ASSERT_EQ(CallCount_CanTp_Transmit, 1U);
-    ASSERT_EQ(LastLength_CanTp_Transmit, 3U);
-    EXPECT_EQ(LastData_CanTp_Transmit[0], DCM_SID_NEGATIVE_RESP);
-    EXPECT_EQ(LastData_CanTp_Transmit[1], DCM_SID_CONTROL_DTC_SETTING);
-    EXPECT_EQ(LastData_CanTp_Transmit[2], DCM_NRC_SERVICE_NOT_SUPPORTED_IN_SESSION);
-
-    /* 記録も無効化されていないことを確認する（拒否された要求が副作用を
-     * 持たないこと）。 */
-    ReportBusOffFailed();
-    EXPECT_NE(BusOffStatus() & DEM_STATUS_TEST_FAILED, 0U);
-}
-
-TEST_F(Bsw_Dcm_ControlDTCSetting_Test, ControlDTCSetting_NG_UnsupportedSubFuncReturnsNegativeResponse)
-{
-    EnterExtendedSession();
-
-    /* 実行 (Act): 0x01/0x02 以外のサブ機能 */
-    SendControlDTCSetting(0x03U);
-
-    /* 評価 (Assert): [0x7F, 0x85, 0x12 subFunctionNotSupported] */
-    ASSERT_EQ(CallCount_CanTp_Transmit, 1U);
-    ASSERT_EQ(LastLength_CanTp_Transmit, 3U);
-    EXPECT_EQ(LastData_CanTp_Transmit[0], DCM_SID_NEGATIVE_RESP);
-    EXPECT_EQ(LastData_CanTp_Transmit[2], DCM_NRC_SUB_FUNC_NOT_SUPPORTED);
-}
-
-TEST_F(Bsw_Dcm_ControlDTCSetting_Test, ControlDTCSetting_NG_ExtraOptionRecordReturnsIncorrectLength)
-{
-    EnterExtendedSession();
-
-    /* 準備 (Arrange): [SWS_Dcm_01399] 相当。DTCSettingControlOptionRecord
-     * (0xFFFFFF 以外) を付けて送る = udsLen が 2 を超える。 */
-    uint8 req[5] = { DCM_SID_CONTROL_DTC_SETTING, DCM_DTCSETTING_OFF, 0x12U, 0x34U, 0x56U };
-
-    /* 実行 (Act) */
-    Send(req, sizeof(req));
-
-    /* 評価 (Assert): [0x7F, 0x85, 0x13 incorrectMessageLength] */
-    ASSERT_EQ(CallCount_CanTp_Transmit, 1U);
-    ASSERT_EQ(LastLength_CanTp_Transmit, 3U);
-    EXPECT_EQ(LastData_CanTp_Transmit[0], DCM_SID_NEGATIVE_RESP);
-    EXPECT_EQ(LastData_CanTp_Transmit[2], DCM_NRC_INCORRECT_MESSAGE_LENGTH);
-}
-
-TEST_F(Bsw_Dcm_ControlDTCSetting_Test, ControlDTCSetting_NG_UnsupportedSubFuncWithExtraBytePrefersSubFuncNrc)
-{
-    EnterExtendedSession();
-
-    /* [SWS_Dcm_00273]/[SWS_Dcm_00696]: サブ機能サポート確認は
-     * [SWS_Dcm_01399] 代用の optionRecord 超過チェックより先に行う処理順序
-     * （2026-09 是正）。subFunc(uds[1])が不正かつ optionRecord も付いている
-     * (udsLen=3>2)場合でも、NRC 0x13(incorrectMessageLength)ではなく
-     * 0x12(subFunctionNotSupported)を返すべき。 */
-    uint8 req[3] = { DCM_SID_CONTROL_DTC_SETTING, 0xFFU, 0x00U };
-    Send(req, sizeof(req));
-
-    ASSERT_EQ(CallCount_CanTp_Transmit, 1U);
-    ASSERT_EQ(LastLength_CanTp_Transmit, 3U);
-    EXPECT_EQ(LastData_CanTp_Transmit[0], DCM_SID_NEGATIVE_RESP);
-    EXPECT_EQ(LastData_CanTp_Transmit[2], DCM_NRC_SUB_FUNC_NOT_SUPPORTED);
 }
 
 }  // namespace
