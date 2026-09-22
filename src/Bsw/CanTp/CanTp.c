@@ -40,21 +40,22 @@
  *          AUTOSAR 認証済み実装ではなく、製品への適用は想定していません。
  */
 
+/* ======================================================================
+ * Includes
+ * ====================================================================== */
+
 #include "CanTp.h"
 #include "PduR.h"
 #include "Dcm_Cbk.h"
 #include "Det.h"
 
-#define TAG "CanTp"
+/* ======================================================================
+ * Definitions
+ * ====================================================================== */
 
-/** [SWS_CanTp_00031] 用の初期化済みフラグ。本実装は CanTp_ConfigType を
- *  保持しない簡略設計のため、他モジュールの ConfigPtr==NULL 相当として
- *  このフラグを使う。 */
-static uint8 CanTp_Initialized = 0U;
+ #define TAG "CanTp"
 
-extern unsigned long millis(void);
-
-/* -----------------------------------------------------------------------
+ /* -----------------------------------------------------------------------
  * ISO 15765-2 フレームタイプ定数
  * ----------------------------------------------------------------------- */
 #define CANTP_FRAME_SF    0x0U   /**< Single Frame       */
@@ -69,6 +70,10 @@ extern unsigned long millis(void);
 #define CANTP_SF_MAX_DATA 7U     /**< SF: 最大 UDS ペイロード長    */
 #define CANTP_FF_DATA     6U     /**< FF: 先頭データバイト数       */
 #define CANTP_CF_DATA     7U     /**< CF: データバイト数           */
+
+/* ======================================================================
+ * Type Definitions
+ * ====================================================================== */
 
 /* -----------------------------------------------------------------------
  * RX/TX 状態型
@@ -116,8 +121,23 @@ static struct {
                                      *   0 = 現在失敗継続中ではない */
 } CanTp_Tx;
 
+/* ======================================================================
+ * Global Variables
+ * ====================================================================== */
+
+/** [SWS_CanTp_00031] 用の初期化済みフラグ。本実装は CanTp_ConfigType を
+ *  保持しない簡略設計のため、他モジュールの ConfigPtr==NULL 相当として
+ *  このフラグを使う。 */
+static uint8 CanTp_Initialized = 0U;
+
 /** TX フレーム送信用バッファ (SF/FF/CF/FC 共用) */
 static uint8 CanTp_TxFrameBuf[8];
+
+/* ======================================================================
+ * Function Prototypes
+ * ====================================================================== */
+
+extern unsigned long millis(void);
 
 /* -----------------------------------------------------------------------
  * 内部関数プロトタイプ
@@ -126,6 +146,10 @@ static Std_ReturnType CanTp_SendFrame(void);
 static void CanTp_SendFlowControl(uint8 fs, uint8 bs, uint8 stMin);
 static void CanTp_SendNextCF(void);
 static uint8 CanTp_DecodeStMin(uint8 raw);
+
+/* ======================================================================
+ * Functions
+ * ====================================================================== */
 
 /* -----------------------------------------------------------------------
  * CanTp_Init
@@ -152,143 +176,30 @@ void CanTp_Init(const CanTp_ConfigType* CfgPtr)
 }
 
 /* -----------------------------------------------------------------------
- * 内部ヘルパー: フレーム送信
+ * CanTp_GetVersionInfo
  * ----------------------------------------------------------------------- */
 
-/** CanTp_TxFrameBuf の内容 (8 バイト) を PduR 経由で CAN 0x7E8 に送信する。
- *  \retval E_OK     送信受け付け成功。
- *  \retval E_NOT_OK PduR / CanIf / Can_Write が失敗（TX バッファビジー等）。 */
-static Std_ReturnType CanTp_SendFrame(void)
+void CanTp_GetVersionInfo(Std_VersionInfoType* versioninfo)
 {
     DET_LOGT(TAG, "called");
-    static PduInfoType pdu;
-    pdu.SduDataPtr = CanTp_TxFrameBuf;
-    pdu.SduLength  = 8U;
-    return PduR_CanTpTransmit(CANTP_PDUR_TX_SDU_ID, &pdu);
-}
-
-/**
- * \brief   ISO 15765-2 の STmin バイト値をミリ秒へデコードする。
- *
- * \details 0x00-0x7F はそのまま ms（0-127ms）。0xF1-0xF9 は 100-900µs 刻みだが、
- *          本実装は CanTp_MainFunction() が ms 分解能でしか駆動されないため
- *          （Os スケジューラの最小周期が 1ms）、サブミリ秒の要求は「追加の
- *          待機なし」として 0ms に切り下げる。0x80-0xF0 / 0xFA-0xFF は予約値
- *          のため、誤った短い遅延でバスを圧迫しないよう安全側（規格上の
- *          直接値レンジの最大値 127ms）に倒す。
- *
- * \param[in]  raw  受信した FC フレームの STmin 生バイト値。
- * \return     ミリ秒に換算した STmin。
- */
-static uint8 CanTp_DecodeStMin(uint8 raw)
-{
-    DET_LOGT(TAG, "called");
-    if (raw <= 0x7FU)
-        return raw;
-
-    if (raw >= 0xF1U && raw <= 0xF9U)
-        return 0U;
-
-    DET_LOGW(TAG, "STmin reserved value 0x%02X -> clamp 127ms", (unsigned)raw);
-    return 127U;
-}
-
-/**
- * \brief   Flow Control フレームを組立て送信する。
- *
- * \param[in]  fs     フローステータス (CTS=0 / WAIT=1 / OVFLW=2)。
- * \param[in]  bs     ブロックサイズ。
- * \param[in]  stMin  最小分離時間 (ms)。
- */
-static void CanTp_SendFlowControl(uint8 fs, uint8 bs, uint8 stMin)
-{
-    DET_LOGT(TAG, "called");
-    CanTp_TxFrameBuf[0] = (uint8)(0x30U | (fs & 0x0FU));
-    CanTp_TxFrameBuf[1] = bs;
-    CanTp_TxFrameBuf[2] = stMin;
-    CanTp_TxFrameBuf[3] = 0x00U;
-    CanTp_TxFrameBuf[4] = 0x00U;
-    CanTp_TxFrameBuf[5] = 0x00U;
-    CanTp_TxFrameBuf[6] = 0x00U;
-    CanTp_TxFrameBuf[7] = 0x00U;
-
-    DET_LOGI(TAG, "TX FC fs=%u bs=%u", (unsigned)fs, (unsigned)bs);
-
-    (void)CanTp_SendFrame();   /* FC 送信失敗は N_Cr タイムアウトで上位が再試行 */
-}
-
-/**
- * \brief   次の Consecutive Frame を組立て送信する。
- *
- * \details CanTp_Tx.buf からデータを取り出し CF PCI を付けて送信する。
- *          送信後、位置・シーケンス番号を更新する。
- *          全バイト送信完了なら IDLE へ遷移し、BS を消費したなら WAIT_FC へ遷移する。
- *
- *          N_As タイムアウト（CanTp_Cfg.h 参照）: 送信が同期的に失敗し続ける間、
- *          最初の失敗時刻から CANTP_N_AS_TIMEOUT_MS 経過してもまだ失敗していれば
- *          セッションを中断する。これが無いと、バス障害等で送信が失敗し続ける
- *          場合に無期限にリトライし続け、CanTp_Transmit() の busy 判定により
- *          新規送信が永久に拒否され続けてしまう。
- */
-static void CanTp_SendNextCF(void)
-{
-    DET_LOGT(TAG, "called");
-    uint16 remaining = CanTp_Tx.msgLen - CanTp_Tx.pos;
-    uint8  copyLen   = (remaining > (uint16)CANTP_CF_DATA)
-                       ? CANTP_CF_DATA : (uint8)remaining;
-
-    CanTp_TxFrameBuf[0] = (uint8)(0x20U | (CanTp_Tx.sn & 0x0FU));
-    uint8 i;
-    for (i = 0U; i < copyLen; i++)
-        CanTp_TxFrameBuf[1U + i] = CanTp_Tx.buf[CanTp_Tx.pos + i];
-    for (; i < CANTP_CF_DATA; i++)
-        CanTp_TxFrameBuf[1U + i] = 0x00U;
-
-    DET_LOGI(TAG, "TX CF sn=%u pos=%u", (unsigned)CanTp_Tx.sn, (unsigned)CanTp_Tx.pos);
-
-    if (CanTp_SendFrame() != E_OK)
+    if (versioninfo == NULL)
     {
-        unsigned long now = millis();
-
-        if (CanTp_Tx.asFailTimer == 0UL)
-            CanTp_Tx.asFailTimer = now;   /* 失敗継続の開始時刻を記録 */
-
-        if ((now - CanTp_Tx.asFailTimer) >= CANTP_N_AS_TIMEOUT_MS)
-        {
-            DET_LOGE(TAG, "TX N_As timeout abort sn=%u", (unsigned)CanTp_Tx.sn);
-            CanTp_Tx.state       = CANTP_TX_IDLE;
-            CanTp_Tx.asFailTimer = 0UL;
-            return;
-        }
-
-        /* 送信失敗: pos/sn を進めず次の CanTp_MainFunction 呼び出しでリトライ */
-        DET_LOGE(TAG, "TX CF FAIL sn=%u retry", (unsigned)CanTp_Tx.sn);
+        Det_ReportError(CANTP_MODULE_ID, 0U, CANTP_API_ID_GET_VERSION_INFO, CANTP_E_PARAM_POINTER);
         return;
     }
 
-    CanTp_Tx.asFailTimer = 0UL;   /* 送信成功: 失敗継続の記録をクリア */
-    CanTp_Tx.pos += (uint16)copyLen;
-    CanTp_Tx.sn   = (uint8)((CanTp_Tx.sn + 1U) & 0x0FU);
-
-    if (CanTp_Tx.pos >= CanTp_Tx.msgLen)
-    {
-        DET_LOGI(TAG, "TX done");
-        CanTp_Tx.state = CANTP_TX_IDLE;
-        return;
-    }
-
-    /* ブロックサイズ管理 (bs=0 なら無制限) */
-    if (CanTp_Tx.bs > 0U)
-    {
-        CanTp_Tx.bsCnt--;
-        if (CanTp_Tx.bsCnt == 0U)
-        {
-            DET_LOGI(TAG, "TX block done wait FC");
-            CanTp_Tx.state   = CANTP_TX_WAIT_FC;
-            CanTp_Tx.bsTimer = millis();
-        }
-    }
+    versioninfo->vendorID         = CANTP_VENDOR_ID;
+    versioninfo->moduleID         = CANTP_MODULE_ID;
+    versioninfo->sw_major_version = CANTP_SW_MAJOR_VERSION;
+    versioninfo->sw_minor_version = CANTP_SW_MINOR_VERSION;
+    versioninfo->sw_patch_version = CANTP_SW_PATCH_VERSION;
 }
+
+/* -----------------------------------------------------------------------
+ * CanTp_Shutdown
+ * ----------------------------------------------------------------------- */
+
+/* 未実装 */
 
 /* -----------------------------------------------------------------------
  * CanTp_Transmit
@@ -409,11 +320,89 @@ Std_ReturnType CanTp_Transmit(PduIdType TxSduId, const PduInfoType* PduInfoPtr)
     return E_OK;
 }
 
-boolean CanTp_IsTxBusy(void)
+/* -----------------------------------------------------------------------
+ * CanTp_CancelTransmit
+ * ----------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* -----------------------------------------------------------------------
+ * CanTp_CancelReceive
+ * ----------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* -----------------------------------------------------------------------
+ * CanTp_ChangeParameter
+ * ----------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* -----------------------------------------------------------------------
+ * CanTp_ReadParameter
+ * ----------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* -----------------------------------------------------------------------
+ * CanTp_MainFunction
+ * ----------------------------------------------------------------------- */
+
+/**
+ * \brief   タイムアウト監視と CF 送信を周期的に処理する。
+ *
+ * \details EcuM_MainFunction から毎ループ呼び出す。
+ *
+ * \AUTOSARReq     {SWS_CanTp_00213}
+ * \ServiceID      {0x06}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void CanTp_MainFunction(void)
 {
     DET_LOGT(TAG, "called");
-    return (boolean)(CanTp_Tx.state != CANTP_TX_IDLE);
+    if (!CanTp_Initialized)
+    {
+        Det_ReportError(CANTP_MODULE_ID, 0U, CANTP_API_ID_MAIN_FUNCTION, CANTP_E_UNINIT);
+        return;
+    }
+
+    unsigned long now = millis();
+
+    /* ---- TX: N_Bs タイムアウト (WAIT_FC) ---- */
+    if (CanTp_Tx.state == CANTP_TX_WAIT_FC)
+    {
+        if (now - CanTp_Tx.bsTimer >= CANTP_N_BS_TIMEOUT_MS)
+        {
+            DET_LOGE(TAG, "TX N_Bs timeout abort");
+            CanTp_Tx.state = CANTP_TX_IDLE;
+        }
+    }
+
+    /* ---- TX: CF 送信 (SEND_CF) ---- */
+    if (CanTp_Tx.state == CANTP_TX_SEND_CF)
+    {
+        if (now - CanTp_Tx.cfTimer >= (unsigned long)CanTp_Tx.stMin)
+        {
+            CanTp_SendNextCF();
+            CanTp_Tx.cfTimer = now;
+        }
+    }
+
+    /* ---- RX: N_Cr タイムアウト (WAIT_CF) ---- */
+    if (CanTp_Rx.state == CANTP_RX_WAIT_CF)
+    {
+        if (now - CanTp_Rx.timer >= CANTP_N_CR_TIMEOUT_MS)
+        {
+            DET_LOGE(TAG, "RX N_Cr timeout abort");
+            CanTp_Rx.state = CANTP_RX_IDLE;
+        }
+    }
 }
+
+/* ======================================================================
+ * Call-back notifications
+ * ====================================================================== */
 
 /* -----------------------------------------------------------------------
  * CanTp_RxIndication
@@ -640,6 +629,7 @@ void CanTp_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
     }
 }
 
+
 /* -----------------------------------------------------------------------
  * CanTp_TxConfirmation
  * ----------------------------------------------------------------------- */
@@ -677,74 +667,151 @@ void CanTp_TxConfirmation(PduIdType TxPduId, Std_ReturnType result)
     }
 }
 
+/* ======================================================================
+ * Internal Functions
+ * ====================================================================== */
+
 /* -----------------------------------------------------------------------
- * CanTp_MainFunction
+ * 内部ヘルパー: フレーム送信
  * ----------------------------------------------------------------------- */
 
-/**
- * \brief   タイムアウト監視と CF 送信を周期的に処理する。
- *
- * \details EcuM_MainFunction から毎ループ呼び出す。
- *
- * \AUTOSARReq     {SWS_CanTp_00213}
- * \ServiceID      {0x06}
- * \Reentrancy     {Non Reentrant}
- * \Synchronicity  {Synchronous}
- */
-void CanTp_MainFunction(void)
+/** CanTp_TxFrameBuf の内容 (8 バイト) を PduR 経由で CAN 0x7E8 に送信する。
+ *  \retval E_OK     送信受け付け成功。
+ *  \retval E_NOT_OK PduR / CanIf / Can_Write が失敗（TX バッファビジー等）。 */
+static Std_ReturnType CanTp_SendFrame(void)
 {
     DET_LOGT(TAG, "called");
-    if (!CanTp_Initialized)
+    static PduInfoType pdu;
+    pdu.SduDataPtr = CanTp_TxFrameBuf;
+    pdu.SduLength  = 8U;
+    return PduR_CanTpTransmit(CANTP_PDUR_TX_SDU_ID, &pdu);
+}
+
+/**
+ * \brief   ISO 15765-2 の STmin バイト値をミリ秒へデコードする。
+ *
+ * \details 0x00-0x7F はそのまま ms（0-127ms）。0xF1-0xF9 は 100-900µs 刻みだが、
+ *          本実装は CanTp_MainFunction() が ms 分解能でしか駆動されないため
+ *          （Os スケジューラの最小周期が 1ms）、サブミリ秒の要求は「追加の
+ *          待機なし」として 0ms に切り下げる。0x80-0xF0 / 0xFA-0xFF は予約値
+ *          のため、誤った短い遅延でバスを圧迫しないよう安全側（規格上の
+ *          直接値レンジの最大値 127ms）に倒す。
+ *
+ * \param[in]  raw  受信した FC フレームの STmin 生バイト値。
+ * \return     ミリ秒に換算した STmin。
+ */
+static uint8 CanTp_DecodeStMin(uint8 raw)
+{
+    DET_LOGT(TAG, "called");
+    if (raw <= 0x7FU)
+        return raw;
+
+    if (raw >= 0xF1U && raw <= 0xF9U)
+        return 0U;
+
+    DET_LOGW(TAG, "STmin reserved value 0x%02X -> clamp 127ms", (unsigned)raw);
+    return 127U;
+}
+
+/**
+ * \brief   Flow Control フレームを組立て送信する。
+ *
+ * \param[in]  fs     フローステータス (CTS=0 / WAIT=1 / OVFLW=2)。
+ * \param[in]  bs     ブロックサイズ。
+ * \param[in]  stMin  最小分離時間 (ms)。
+ */
+static void CanTp_SendFlowControl(uint8 fs, uint8 bs, uint8 stMin)
+{
+    DET_LOGT(TAG, "called");
+    CanTp_TxFrameBuf[0] = (uint8)(0x30U | (fs & 0x0FU));
+    CanTp_TxFrameBuf[1] = bs;
+    CanTp_TxFrameBuf[2] = stMin;
+    CanTp_TxFrameBuf[3] = 0x00U;
+    CanTp_TxFrameBuf[4] = 0x00U;
+    CanTp_TxFrameBuf[5] = 0x00U;
+    CanTp_TxFrameBuf[6] = 0x00U;
+    CanTp_TxFrameBuf[7] = 0x00U;
+
+    DET_LOGI(TAG, "TX FC fs=%u bs=%u", (unsigned)fs, (unsigned)bs);
+
+    (void)CanTp_SendFrame();   /* FC 送信失敗は N_Cr タイムアウトで上位が再試行 */
+}
+
+/**
+ * \brief   次の Consecutive Frame を組立て送信する。
+ *
+ * \details CanTp_Tx.buf からデータを取り出し CF PCI を付けて送信する。
+ *          送信後、位置・シーケンス番号を更新する。
+ *          全バイト送信完了なら IDLE へ遷移し、BS を消費したなら WAIT_FC へ遷移する。
+ *
+ *          N_As タイムアウト（CanTp_Cfg.h 参照）: 送信が同期的に失敗し続ける間、
+ *          最初の失敗時刻から CANTP_N_AS_TIMEOUT_MS 経過してもまだ失敗していれば
+ *          セッションを中断する。これが無いと、バス障害等で送信が失敗し続ける
+ *          場合に無期限にリトライし続け、CanTp_Transmit() の busy 判定により
+ *          新規送信が永久に拒否され続けてしまう。
+ */
+static void CanTp_SendNextCF(void)
+{
+    DET_LOGT(TAG, "called");
+    uint16 remaining = CanTp_Tx.msgLen - CanTp_Tx.pos;
+    uint8  copyLen   = (remaining > (uint16)CANTP_CF_DATA)
+                       ? CANTP_CF_DATA : (uint8)remaining;
+
+    CanTp_TxFrameBuf[0] = (uint8)(0x20U | (CanTp_Tx.sn & 0x0FU));
+    uint8 i;
+    for (i = 0U; i < copyLen; i++)
+        CanTp_TxFrameBuf[1U + i] = CanTp_Tx.buf[CanTp_Tx.pos + i];
+    for (; i < CANTP_CF_DATA; i++)
+        CanTp_TxFrameBuf[1U + i] = 0x00U;
+
+    DET_LOGI(TAG, "TX CF sn=%u pos=%u", (unsigned)CanTp_Tx.sn, (unsigned)CanTp_Tx.pos);
+
+    if (CanTp_SendFrame() != E_OK)
     {
-        Det_ReportError(CANTP_MODULE_ID, 0U, CANTP_API_ID_MAIN_FUNCTION, CANTP_E_UNINIT);
+        unsigned long now = millis();
+
+        if (CanTp_Tx.asFailTimer == 0UL)
+            CanTp_Tx.asFailTimer = now;   /* 失敗継続の開始時刻を記録 */
+
+        if ((now - CanTp_Tx.asFailTimer) >= CANTP_N_AS_TIMEOUT_MS)
+        {
+            DET_LOGE(TAG, "TX N_As timeout abort sn=%u", (unsigned)CanTp_Tx.sn);
+            CanTp_Tx.state       = CANTP_TX_IDLE;
+            CanTp_Tx.asFailTimer = 0UL;
+            return;
+        }
+
+        /* 送信失敗: pos/sn を進めず次の CanTp_MainFunction 呼び出しでリトライ */
+        DET_LOGE(TAG, "TX CF FAIL sn=%u retry", (unsigned)CanTp_Tx.sn);
         return;
     }
 
-    unsigned long now = millis();
+    CanTp_Tx.asFailTimer = 0UL;   /* 送信成功: 失敗継続の記録をクリア */
+    CanTp_Tx.pos += (uint16)copyLen;
+    CanTp_Tx.sn   = (uint8)((CanTp_Tx.sn + 1U) & 0x0FU);
 
-    /* ---- TX: N_Bs タイムアウト (WAIT_FC) ---- */
-    if (CanTp_Tx.state == CANTP_TX_WAIT_FC)
+    if (CanTp_Tx.pos >= CanTp_Tx.msgLen)
     {
-        if (now - CanTp_Tx.bsTimer >= CANTP_N_BS_TIMEOUT_MS)
-        {
-            DET_LOGE(TAG, "TX N_Bs timeout abort");
-            CanTp_Tx.state = CANTP_TX_IDLE;
-        }
+        DET_LOGI(TAG, "TX done");
+        CanTp_Tx.state = CANTP_TX_IDLE;
+        return;
     }
 
-    /* ---- TX: CF 送信 (SEND_CF) ---- */
-    if (CanTp_Tx.state == CANTP_TX_SEND_CF)
+    /* ブロックサイズ管理 (bs=0 なら無制限) */
+    if (CanTp_Tx.bs > 0U)
     {
-        if (now - CanTp_Tx.cfTimer >= (unsigned long)CanTp_Tx.stMin)
+        CanTp_Tx.bsCnt--;
+        if (CanTp_Tx.bsCnt == 0U)
         {
-            CanTp_SendNextCF();
-            CanTp_Tx.cfTimer = now;
-        }
-    }
-
-    /* ---- RX: N_Cr タイムアウト (WAIT_CF) ---- */
-    if (CanTp_Rx.state == CANTP_RX_WAIT_CF)
-    {
-        if (now - CanTp_Rx.timer >= CANTP_N_CR_TIMEOUT_MS)
-        {
-            DET_LOGE(TAG, "RX N_Cr timeout abort");
-            CanTp_Rx.state = CANTP_RX_IDLE;
+            DET_LOGI(TAG, "TX block done wait FC");
+            CanTp_Tx.state   = CANTP_TX_WAIT_FC;
+            CanTp_Tx.bsTimer = millis();
         }
     }
 }
 
-void CanTp_GetVersionInfo(Std_VersionInfoType* versioninfo)
+boolean CanTp_IsTxBusy(void)
 {
     DET_LOGT(TAG, "called");
-    if (versioninfo == NULL)
-    {
-        Det_ReportError(CANTP_MODULE_ID, 0U, CANTP_API_ID_GET_VERSION_INFO, CANTP_E_PARAM_POINTER);
-        return;
-    }
-
-    versioninfo->vendorID         = CANTP_VENDOR_ID;
-    versioninfo->moduleID         = CANTP_MODULE_ID;
-    versioninfo->sw_major_version = CANTP_SW_MAJOR_VERSION;
-    versioninfo->sw_minor_version = CANTP_SW_MINOR_VERSION;
-    versioninfo->sw_patch_version = CANTP_SW_PATCH_VERSION;
+    return (boolean)(CanTp_Tx.state != CANTP_TX_IDLE);
 }

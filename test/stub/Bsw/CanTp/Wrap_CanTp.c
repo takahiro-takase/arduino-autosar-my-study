@@ -11,13 +11,13 @@
 /* ======================================================================
  * External Variables
  * ====================================================================== */
-uint32 CallCount_CanTp_Init          = 0U;
-uint32 CallCount_CanTp_Transmit      = 0U;
-uint32 CallCount_CanTp_IsTxBusy      = 0U;
-uint32 CallCount_CanTp_RxIndication  = 0U;
-uint32 CallCount_CanTp_TxConfirmation = 0U;
-uint32 CallCount_CanTp_MainFunction  = 0U;
+uint32 CallCount_CanTp_Init           = 0U;
 uint32 CallCount_CanTp_GetVersionInfo = 0U;
+uint32 CallCount_CanTp_Transmit       = 0U;
+uint32 CallCount_CanTp_MainFunction   = 0U;
+uint32 CallCount_CanTp_RxIndication   = 0U;
+uint32 CallCount_CanTp_TxConfirmation = 0U;
+uint32 CallCount_CanTp_IsTxBusy       = 0U;
 
 uint32 FailFromCallCount_CanTp_Transmit = WRAP_CANTP_FAIL_FROM_CALL_COUNT_DISABLED;
 uint32 FailFromCallCount_CanTp_IsTxBusy = WRAP_CANTP_FAIL_FROM_CALL_COUNT_DISABLED;
@@ -34,12 +34,12 @@ PduLengthType LastLength_CanTp_Transmit                     = 0U;
 void WrapCanTp_Reset(void)
 {
     CallCount_CanTp_Init           = 0U;
+    CallCount_CanTp_GetVersionInfo = 0U;
     CallCount_CanTp_Transmit       = 0U;
-    CallCount_CanTp_IsTxBusy       = 0U;
+    CallCount_CanTp_MainFunction   = 0U;
     CallCount_CanTp_RxIndication   = 0U;
     CallCount_CanTp_TxConfirmation = 0U;
-    CallCount_CanTp_MainFunction   = 0U;
-    CallCount_CanTp_GetVersionInfo = 0U;
+    CallCount_CanTp_IsTxBusy       = 0U;
 
     FailFromCallCount_CanTp_Transmit = WRAP_CANTP_FAIL_FROM_CALL_COUNT_DISABLED;
     FailFromCallCount_CanTp_IsTxBusy = WRAP_CANTP_FAIL_FROM_CALL_COUNT_DISABLED;
@@ -72,6 +72,25 @@ void __wrap_CanTp_Init(const CanTp_ConfigType* CfgPtr)
 }
 
 /* ----------------------------------------------------------------------
+ * CanTp_GetVersionInfo
+ * ---------------------------------------------------------------------- */
+extern
+void __real_CanTp_GetVersionInfo(Std_VersionInfoType* versioninfo);
+void __wrap_CanTp_GetVersionInfo(Std_VersionInfoType* versioninfo)
+{
+    CallCount_CanTp_GetVersionInfo++;
+    Log_Write(LOG_T, TAG, "CanTp_GetVersionInfo", "called %u times", CallCount_CanTp_GetVersionInfo);
+
+    __real_CanTp_GetVersionInfo(versioninfo);
+}
+
+/* -----------------------------------------------------------------------
+ * CanTp_Shutdown
+ * ----------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ----------------------------------------------------------------------
  * CanTp_Transmit
  * ---------------------------------------------------------------------- */
 extern
@@ -100,23 +119,47 @@ Std_ReturnType __wrap_CanTp_Transmit(PduIdType TxSduId, const PduInfoType* PduIn
     return __real_CanTp_Transmit(TxSduId, PduInfoPtr);
 }
 
+/* -----------------------------------------------------------------------
+ * CanTp_CancelTransmit
+ * ----------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* -----------------------------------------------------------------------
+ * CanTp_CancelReceive
+ * ----------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* -----------------------------------------------------------------------
+ * CanTp_ChangeParameter
+ * ----------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* -----------------------------------------------------------------------
+ * CanTp_ReadParameter
+ * ----------------------------------------------------------------------- */
+
+/* 未実装 */
+
+
 /* ----------------------------------------------------------------------
- * CanTp_IsTxBusy
+ * CanTp_MainFunction
  * ---------------------------------------------------------------------- */
 extern
-boolean __real_CanTp_IsTxBusy(void);
-boolean __wrap_CanTp_IsTxBusy(void)
+void __real_CanTp_MainFunction(void);
+void __wrap_CanTp_MainFunction(void)
 {
-    CallCount_CanTp_IsTxBusy++;
-    Log_Write(LOG_T, TAG, "CanTp_IsTxBusy", "called %u times", CallCount_CanTp_IsTxBusy);
+    CallCount_CanTp_MainFunction++;
+    Log_Write(LOG_T, TAG, "CanTp_MainFunction", "called %u times", CallCount_CanTp_MainFunction);
 
-    if (CallCount_CanTp_IsTxBusy >= FailFromCallCount_CanTp_IsTxBusy)
-    {
-        return ForcedReturn_CanTp_IsTxBusy;
-    }
-
-    return __real_CanTp_IsTxBusy();
+    __real_CanTp_MainFunction();
 }
+
+/* ======================================================================
+ * Call-back notifications
+ * ====================================================================== */
 
 /* ----------------------------------------------------------------------
  * CanTp_RxIndication
@@ -144,28 +187,25 @@ void __wrap_CanTp_TxConfirmation(PduIdType TxPduId, Std_ReturnType result)
     __real_CanTp_TxConfirmation(TxPduId, result);
 }
 
-/* ----------------------------------------------------------------------
- * CanTp_MainFunction
- * ---------------------------------------------------------------------- */
-extern
-void __real_CanTp_MainFunction(void);
-void __wrap_CanTp_MainFunction(void)
-{
-    CallCount_CanTp_MainFunction++;
-    Log_Write(LOG_T, TAG, "CanTp_MainFunction", "called %u times", CallCount_CanTp_MainFunction);
-
-    __real_CanTp_MainFunction();
-}
+/* ======================================================================
+ * Internal Functions
+ * ====================================================================== */
 
 /* ----------------------------------------------------------------------
- * CanTp_GetVersionInfo
+ * CanTp_IsTxBusy
  * ---------------------------------------------------------------------- */
 extern
-void __real_CanTp_GetVersionInfo(Std_VersionInfoType* versioninfo);
-void __wrap_CanTp_GetVersionInfo(Std_VersionInfoType* versioninfo)
+boolean __real_CanTp_IsTxBusy(void);
+boolean __wrap_CanTp_IsTxBusy(void)
 {
-    CallCount_CanTp_GetVersionInfo++;
-    Log_Write(LOG_T, TAG, "CanTp_GetVersionInfo", "called %u times", CallCount_CanTp_GetVersionInfo);
+    CallCount_CanTp_IsTxBusy++;
+    Log_Write(LOG_T, TAG, "CanTp_IsTxBusy", "called %u times", CallCount_CanTp_IsTxBusy);
 
-    __real_CanTp_GetVersionInfo(versioninfo);
+    if (CallCount_CanTp_IsTxBusy >= FailFromCallCount_CanTp_IsTxBusy)
+    {
+        return ForcedReturn_CanTp_IsTxBusy;
+    }
+
+    return __real_CanTp_IsTxBusy();
 }
+

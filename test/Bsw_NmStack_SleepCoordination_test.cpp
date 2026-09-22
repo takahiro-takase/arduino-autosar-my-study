@@ -70,9 +70,12 @@
  *              DoesNotResurrectNm と同じ NO_COM へ正しく収束すること
  *              （/code-review で発見した回帰の防止）。
  *
- *          EcuM（ComM の RUN 要求先）と BswM（ComM のモード通知先）は境界として
- *          フェイクに差し替える（Fake_Bsw_EcuM.h/Fake_Bsw_BswM.h 冒頭コメント
- *          参照）。CanIf は Nm が CanIf_Transmit() を直接呼ぶために実体で
+ *          EcuM（ComM の RUN 要求先）は境界としてフェイクに差し替える
+ *          （Fake_Bsw_EcuM.h 冒頭コメント参照）。BswM（ComM のモード通知先）は
+ *          実体でリンクされる（2026-09-22、Fake_Bsw_BswM.c から切り替え）が、
+ *          `BswM_Init()` を呼ばないため実際のルール評価は走らず、
+ *          `Wrap_BswM.h` の呼び出し回数・引数キャプチャのみを検証に使う。
+ *          CanIf は Nm が CanIf_Transmit() を直接呼ぶために実体で
  *          リンクするが、既定は TxPduCount=0 の空設定を渡す
  *          （Bsw_NmStack_WakeupChain_test.cpp の kTestCanIfConfig と同じパターン）ため
  *          送信は毎回 E_NOT_OK で終わり、Com/PduR は不要。テスト6のみ、
@@ -100,7 +103,7 @@ extern "C" {
 #include "Fake_Det_Hw.h"
 #include "Wrap_Dem.h"
 #include "Fake_Bsw_EcuM.h"
-#include "Fake_Bsw_BswM.h"
+#include "Wrap_BswM.h"
 #include "Wrap_CanIf.h"
 #include "Wrap_Can.h"
 #include "Wrap_ComM.h"
@@ -149,7 +152,7 @@ protected:
         WrapComM_Reset();  // 同上（ComM.c 側）
         WrapDem_Reset();
         FakeEcuM_Reset();
-        FakeBswM_Reset();
+        WrapBswM_Reset();
         FakeMillis_Reset();
         FakeDetHw_LogSuppressed = 1U;  // Init() のログはノイズになるため抑制
         Dem_Init(NULL);  // Demの内部状態を毎テスト決定的にリセットする（Fake_NvM.cにより常に「初回起動」）
@@ -198,7 +201,7 @@ protected:
         FakeCanHw_Reset();
         WrapDem_Reset();
         FakeEcuM_Reset();
-        FakeBswM_Reset();
+        WrapBswM_Reset();
     }
 
     /** NO_COM を要求し、Nm が Prepare Bus-Sleep Mode（チャネルは SILENT_COM）
@@ -469,7 +472,7 @@ TEST_F(Bsw_SleepCoordination_Test, RxCancelsPrepareBusSleep_OK_RestoresFullComAn
     FakeCanHw_Reset();
     WrapDem_Reset();
     FakeEcuM_Reset();
-    FakeBswM_Reset();
+    WrapBswM_Reset();
 
     /* 実行 (Act): 他ノード(node=0x02)の NM フレーム受信を模擬する */
     SimulateOtherNodeNmRx();
@@ -531,7 +534,7 @@ TEST_F(Bsw_SleepCoordination_Test, RxDuringBusOffAfterNmBusSleep_OK_DoesNotResur
     FakeCanHw_Reset();
     WrapDem_Reset();
     FakeEcuM_Reset();
-    FakeBswM_Reset();
+    WrapBswM_Reset();
 
     /* 実行 (Act): Bus-Off 中(コントローラは Listen-Only で受信継続)に他
      * ノードの NM フレームを受信する。CanSM_RequestComMode(FULL_COM) は

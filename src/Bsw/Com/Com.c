@@ -28,15 +28,27 @@
  *          AUTOSAR 認証済み実装ではなく、製品への適用は想定していません。
  */
 
+/* ======================================================================
+ * Includes
+ * ====================================================================== */
+
 #include "Com.h"
 #include "PduR.h"
 #include "Det.h"
+
+/* ======================================================================
+ * Definitions
+ * ====================================================================== */
 
 #define TAG "Com"
 
 #define COM_IPDU_MAX_DLC  8U
 #define COM_RX_IPDU_MAX   COM_RX_IPDU_COUNT  /* Com_Cfg.h の設定値に連動 */
 #define COM_TX_IPDU_MAX   COM_TX_IPDU_COUNT  /* Com_Cfg.h の設定値に連動 */
+
+/* ======================================================================
+ * Type Definitions
+ * ====================================================================== */
 
 /* Com_InvokeTxNotification() が「TxAckCbk・TxErrCbk・TxTOutCbk のどれを
  * 配送するか」を選ぶための判別子。2026-08 のレビューでは「呼び出し先が
@@ -52,8 +64,9 @@ typedef enum
     COM_TX_NOTIFY_TOUT = 2
 } Com_TxNotifyKindType;
 
-/* millis() は Arduino wiring.c で C リンケージ定義されている */
-extern unsigned long millis(void);
+/* ======================================================================
+ * Global Variables
+ * ====================================================================== */
 
 /* Signal Gateway（Com_GwMappingType 参照）。Com_UnpackSignal() を使うため
  * 定義は同関数より後に置くが、Com_RxIndication() から呼ぶため前方宣言する
@@ -253,6 +266,13 @@ static uint8 Com_TxShadowBuffer[COM_TX_IPDU_MAX][COM_IPDU_MAX_DLC];
  * Com_SendSignalGroup() が読み取ってクリアする。 */
 static uint8 Com_GroupTriggerPending[COM_TX_IPDU_MAX];
 
+/* ======================================================================
+ * Function Prototypes
+ * ====================================================================== */
+
+/* millis() は Arduino wiring.c で C リンケージ定義されている */
+extern unsigned long millis(void);
+
 static uint32 Com_UnpackSignal(const uint8* buf,
                                 uint8 bitPos,
                                 uint8 bitSize,
@@ -286,6 +306,10 @@ static uint8 Com_IpduGroupHasTxMember(Com_IpduGroupIdType IpduGroupId);
 /* ======================================================================
  * Functions
  * ====================================================================== */
+
+/* ----------------------------------------------------------------------
+ * Com_Init
+ * ---------------------------------------------------------------------- */
 
 /**
  * \brief   COM モジュールを初期化し、すべての I-PDU バッファをクリアする。
@@ -443,6 +467,10 @@ void Com_Init(const Com_ConfigType* config)
              (unsigned)config->SignalCount);
 }
 
+/* ----------------------------------------------------------------------
+ * Com_DeInit
+ * ---------------------------------------------------------------------- */
+
 /**
  * \brief   COM モジュールを未初期化状態に戻す。
  *
@@ -480,8 +508,31 @@ void Com_DeInit(void)
     DET_LOGI(TAG, "DeInit ok");
 }
 
-/*
+/* ----------------------------------------------------------------------
  * Com_IpduGroupStart
+ * ---------------------------------------------------------------------- */
+
+/**
+ * \brief   I-PDU Group を起動する（所属する I-PDU の送受信処理を許可する）。
+ *
+ * \details IpduGroupId に一致する `Com_IPduConfigType.IpduGroupId` を持つ
+ *          全 I-PDU（RX/TX 双方）を起動済み状態にする。RX I-PDU は受信処理・
+ *          デッドライン監視タイマを再始動する（[SWS_Com_00787]）。TX I-PDU は
+ *          MDT/周期タイマの基準時刻を再始動し、update-bit をクリアし、
+ *          現在のデータ内容から TMS を再評価する。
+ *
+ * \param[in]  IpduGroupId  起動する I-PDU Group の ID
+ *                          （Com_Cfg.h の COM_IPDU_GROUP_* 参照）。
+ * \param[in]  initialize   TRUE の場合、追加で I-PDU のデータ・Signal Group の
+ *                          シャドウバッファ・フィルタ old_value を
+ *                          ComSignalInitValue で初期化する（[SWS_Com_00222]）。
+ *                          FALSE の場合は直近の値を保持したまま起動する。
+ *
+ * \AUTOSARReq     {SWS_Com_91001, SWS_Com_00114, SWS_Com_00787, SWS_Com_00222,
+ *                  SWS_Com_00223, SWS_Com_00840}
+ * \ServiceID      {0x03}
+ * \Reentrancy     {Reentrant for different I-PDU groups. Non reentrant for the same I-PDU group.}
+ * \Synchronicity  {Synchronous}
  */
 void Com_IpduGroupStart(Com_IpduGroupIdType IpduGroupId, boolean initialize)
 {
@@ -601,8 +652,38 @@ void Com_IpduGroupStart(Com_IpduGroupIdType IpduGroupId, boolean initialize)
     }
 }
 
-/*
+/* ----------------------------------------------------------------------
  * Com_IpduGroupStop
+ * ---------------------------------------------------------------------- */
+
+/**
+ * \brief   I-PDU Group を停止する（所属する I-PDU の送受信処理を禁止する）。
+ *
+ * \details IpduGroupId に一致する `Com_IPduConfigType.IpduGroupId` を持つ
+ *          全 I-PDU（RX/TX 双方）を停止済み状態にする。RX I-PDU は受信処理・
+ *          デッドライン監視を無効化する（[SWS_Com_00684]/[SWS_Com_00685]）。
+ *          TX I-PDU は保留中の送信要求をキャンセルする（[SWS_Com_00777]）。
+ *          さらに、PduR へは引き渡し済み（実送信済み）だが対応する
+ *          `Com_TxConfirmation()` がまだ届いていない（未確認の）TX I-PDU が
+ *          あれば、その `TxErrCbk`（Com_CbkTxErr 相当）を即座に呼ぶ
+ *          （[SWS_Com_00479]/[SWS_Com_00491]）。実 AUTOSAR は signal 単位/
+ *          signal group 単位で別々のコールバック名（Rte_COMCbkTErr_<sn>/<sg>）
+ *          を持てるため（SWS_Com_00491 "corresponds to Rte_COMCbkTErr_<sn>
+ *          or Rte_COMCbkTErr_<sg> respectively"）、Signal Group なら
+ *          `Com_IPduConfigType.TxErrCbk` をグループ単位で 1 回、非 Signal
+ *          Group なら従来どおり `Com_SignalConfigType.TxErrCbk` をシグナル
+ *          単位で呼ぶ（TxAckCbk/Com_TxConfirmation() と同じ区別。詳細は
+ *          Com.c の Com_IpduGroupStop() 実装コメント参照）。
+ *          `Com_SendSignal()`/`Com_ReceiveSignal()` 自体は停止中でも内部
+ *          バッファを更新・参照できる（[SWS_Com_00334]）。
+ *
+ * \param[in]  IpduGroupId  停止する I-PDU Group の ID。
+ *
+ * \AUTOSARReq     {SWS_Com_91002, SWS_Com_00684, SWS_Com_00685, SWS_Com_00777,
+ *                  SWS_Com_00800, SWS_Com_00334, SWS_Com_00479, SWS_Com_00491}
+ * \ServiceID      {0x04}
+ * \Reentrancy     {Reentrant for different I-PDU groups. Non reentrant for the same I-PDU group.}
+ * \Synchronicity  {Synchronous}
  */
 void Com_IpduGroupStop(Com_IpduGroupIdType IpduGroupId)
 {
@@ -681,8 +762,38 @@ void Com_IpduGroupStop(Com_IpduGroupIdType IpduGroupId)
     }
 }
 
-/*
+/* ----------------------------------------------------------------------
  * Com_EnableReceptionDM
+ * ---------------------------------------------------------------------- */
+
+/**
+ * \brief   指定した I-PDU Group に属する RX I-PDU の受信デッドライン監視を有効化する。
+ *
+ * \details `Com_IpduGroupStart()`/`Com_IpduGroupStop()`（I-PDU の送受信処理
+ *          自体の起動/停止）とは独立した、より細かい制御軸である
+ *          （SRS_Com_00192）。I-PDU Group 自体は起動済みのまま、デッドライン
+ *          監視（タイムアウト判定・`RxDataTimeoutAction`・`Com_CbkRxTOut`）
+ *          だけを一時的に止めたい診断・キャリブレーション用途を想定する。
+ *          既定では全 RX I-PDU のデッドライン監視は有効（`Com_Init()` 時点）
+ *          であり、本 API は `Com_DisableReceptionDM()` で無効化した後に
+ *          再度有効化する場合にのみ意味を持つ。
+ *
+ *          有効化すると、対象 I-PDU のデッドライン監視タイマを再始動する
+ *          （`Com_ResetRxDeadlineMonitoring()`、`Com_IpduGroupStart()`の
+ *          [SWS_Com_00787]項目2と同じ理由: 無効化していた間の経過時間を
+ *          理由に再開直後で即座にタイムアウト判定されるのを防ぐ）。
+ *
+ *          [SWS_Com_00534]: `IpduGroupId` が1本でも TX I-PDU を含む場合、
+ *          要求全体を黙って無視する（RX 側も一切変更しない）。本プロジェクトの
+ *          `COM_IPDU_GROUP_NONE` は RX/TX 混在グループの実例であり、この
+ *          無視が実際に発動しうる（Com_PBCfg.c 参照）。
+ *
+ * \param[in]  IpduGroupId  対象の I-PDU Group の ID。
+ *
+ * \AUTOSARReq     {SWS_Com_91001の対、SRS_Com_00192, SWS_Com_00534}
+ * \ServiceID      {0x06}
+ * \Reentrancy     {Reentrant for different I-PDU groups. Non reentrant for the same I-PDU group.}
+ * \Synchronicity  {Synchronous}
  */
 void Com_EnableReceptionDM(Com_IpduGroupIdType IpduGroupId)
 {
@@ -720,8 +831,29 @@ void Com_EnableReceptionDM(Com_IpduGroupIdType IpduGroupId)
     }
 }
 
-/*
+/* ----------------------------------------------------------------------
  * Com_DisableReceptionDM
+ * ---------------------------------------------------------------------- */
+
+/**
+ * \brief   指定した I-PDU Group に属する RX I-PDU の受信デッドライン監視を無効化する。
+ *
+ * \details `Com_EnableReceptionDM()` の対。I-PDU Group 自体の起動状態には
+ *          影響しない（`Com_RxIndication()` による受信処理・バッファ更新は
+ *          継続する）。無効化中にラッチ済みのタイムアウト状態
+ *          （`Com_RxTimedOut`/`Com_SigTimedOut`）は意図的にクリアしない
+ *          （`Com_IpduGroupStop()` と同じ理由: 無効化中は
+ *          `Com_MainFunctionRx()` 側の評価自体を止めるため値は参照されない）。
+ *
+ *          [SWS_Com_00534]: `IpduGroupId` が1本でも TX I-PDU を含む場合、
+ *          要求全体を黙って無視する（`Com_EnableReceptionDM()` 参照）。
+ *
+ * \param[in]  IpduGroupId  対象の I-PDU Group の ID。
+ *
+ * \AUTOSARReq     {SWS_Com_91003の対、SRS_Com_00192, SWS_Com_00534}
+ * \ServiceID      {0x05}
+ * \Reentrancy     {Reentrant for different I-PDU groups. Non reentrant for the same I-PDU group.}
+ * \Synchronicity  {Synchronous}
  */
 void Com_DisableReceptionDM(Com_IpduGroupIdType IpduGroupId)
 {
@@ -752,6 +884,10 @@ void Com_DisableReceptionDM(Com_IpduGroupIdType IpduGroupId)
     }
 }
 
+/* ----------------------------------------------------------------------
+ * Com_GetStatus
+ * ---------------------------------------------------------------------- */
+
 /**
  * \brief   COM モジュールの初期化状態を返す。
  *
@@ -769,6 +905,10 @@ Com_StatusType Com_GetStatus(void)
 {
     return (Com_ConfigPtr != NULL) ? COM_INIT : COM_UNINIT;
 }
+
+/* ----------------------------------------------------------------------
+ * Com_GetVersionInfo
+ * ---------------------------------------------------------------------- */
 
 /**
  * \brief   COM モジュールのバージョン情報を取得する。
@@ -800,6 +940,10 @@ void Com_GetVersionInfo(Std_VersionInfoType* versioninfo)
     versioninfo->sw_minor_version  = COM_SW_MINOR_VERSION;
     versioninfo->sw_patch_version  = COM_SW_PATCH_VERSION;
 }
+
+/* ----------------------------------------------------------------------
+ * Com_SendSignal
+ * ---------------------------------------------------------------------- */
 
 /**
  * \brief   TX I-PDU バッファへシグナル値をパックする。
@@ -1011,9 +1155,15 @@ uint8 Com_SendSignal(Com_SignalIdType SignalId, const void* SignalDataPtr)
     return E_NOT_OK;
 }
 
-/*
+/* ----------------------------------------------------------------------
  * Com_SendDynSignal
- */
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ----------------------------------------------------------------------
+ * Com_ReceiveSignal
+ * ---------------------------------------------------------------------- */
 
 /**
  * \brief   RX I-PDU バッファからシグナル値を取り出す。
@@ -1228,9 +1378,15 @@ uint8 Com_ReceiveSignal(Com_SignalIdType SignalId, void* SignalDataPtr)
     return E_NOT_OK;
 }
 
-/*
+/* ----------------------------------------------------------------------
  * Com_ReceiveDynSignal
- */
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ----------------------------------------------------------------------
+ * Com_SendSignalGroup
+ * ---------------------------------------------------------------------- */
 
 /**
  * \brief   Signal Group メンバーをシャドウバッファから実 TX バッファへ確定コミットする。
@@ -1369,6 +1525,10 @@ uint8 Com_SendSignalGroup(Com_SignalGroupIdType SignalGroupId)
     return Com_ServiceResult(Com_TxIPduStarted[SignalGroupId]);
 }
 
+/* ----------------------------------------------------------------------
+ * Com_ReceiveSignalGroup
+ * ---------------------------------------------------------------------- */
+
 /**
  * \brief   RX Signal Group を I-PDU バッファから RX シャドウバッファへ確定コピーする。
  *
@@ -1491,6 +1651,10 @@ uint8 Com_ReceiveSignalGroup(Com_SignalGroupIdType SignalGroupId)
 
     return Com_RxShadowTimedOut[SignalGroupId] ? E_NOT_OK : E_OK;
 }
+
+/* ----------------------------------------------------------------------
+ * Com_SendSignalGroupArray
+ * ---------------------------------------------------------------------- */
 
 /**
  * \brief   TX I-PDU へ生バイト列をそのままコミットする（Signal Group 単位）。
@@ -1626,6 +1790,10 @@ uint8 Com_SendSignalGroupArray(Com_SignalGroupIdType SignalGroupId, const uint8*
     return Com_ServiceResult(Com_TxIPduStarted[SignalGroupId]);
 }
 
+/* ----------------------------------------------------------------------
+ * Com_ReceiveSignalGroupArray
+ * ---------------------------------------------------------------------- */
+
 /**
  * \brief   RX I-PDU の生バイト列をそのままコピーする。
  *
@@ -1693,6 +1861,10 @@ uint8 Com_ReceiveSignalGroupArray(Com_SignalGroupIdType SignalGroupId, uint8* Da
      * 戻り値は COM_SERVICE_NOT_AVAILABLE にする。 */
     return Com_ServiceResult(Com_RxIPduStarted[SignalGroupId]);
 }
+
+/* ----------------------------------------------------------------------
+ * Com_InvalidateSignal
+ * ---------------------------------------------------------------------- */
 
 /**
  * \brief   シグナルを、設定済みの ComSignalDataInvalidValue で無効化する。
@@ -1779,6 +1951,10 @@ uint8 Com_InvalidateSignal(Com_SignalIdType SignalId)
     return Com_SendSignal(SignalId, &sig->InvalidValue);
 }
 
+/* ----------------------------------------------------------------------
+ * Com_InvalidateSignalGroup
+ * ---------------------------------------------------------------------- */
+
 /**
  * \brief   Signal Group の全メンバーを、各々の ComSignalDataInvalidValue で無効化する。
  *
@@ -1861,6 +2037,10 @@ uint8 Com_InvalidateSignalGroup(Com_SignalGroupIdType SignalGroupId)
     return Com_SendSignalGroup(SignalGroupId);
 }
 
+/* ----------------------------------------------------------------------
+ * Com_TriggerIPDUSend
+ * ---------------------------------------------------------------------- */
+
 /**
  * \brief   TX I-PDU を、値の変化や送信モードに関わらず今すぐ送信要求する。
  *
@@ -1942,9 +2122,15 @@ Std_ReturnType Com_TriggerIPDUSend(Com_IPduIdType PduId)
     return E_OK;
 }
 
-/*
+/* ----------------------------------------------------------------------
  * Com_TriggerIPDUSendWithMetaData
- */
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ----------------------------------------------------------------------
+ * Com_SwitchIpduTxMode
+ * ---------------------------------------------------------------------- */
 
 /**
  * \brief   TX I-PDU の TMS（Transmission Mode Selector）状態を明示的に切り替える。
@@ -2015,9 +2201,15 @@ void Com_SwitchIpduTxMode(Com_IPduIdType PduId, boolean Mode)
  * Callback Functions and Notifications
  * ====================================================================== */
 
-/*
+/* ----------------------------------------------------------------------
  * Com_TriggerTransmit
- */
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ----------------------------------------------------------------------
+ * Com_RxIndication
+ * ---------------------------------------------------------------------- */
 
 /**
  * \brief   受信した I-PDU ペイロードを内部 RX バッファへコピーする。
@@ -2256,9 +2448,15 @@ void Com_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
     DET_LOGW(TAG, "RX no iPdu src=%u", (unsigned)RxPduId);
 }
 
-/*
+/* ----------------------------------------------------------------------
  * Com_TpRxIndication
- */
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ----------------------------------------------------------------------
+ * Com_TxConfirmation
+ * ---------------------------------------------------------------------- */
 
 /**
  * \brief   TX I-PDU の送信完了を COM へ通知し、ComNotification（TxAck）を配送する。
@@ -2359,25 +2557,37 @@ void Com_TxConfirmation(PduIdType TxPduId, Std_ReturnType result)
     Com_InvokeTxNotification(ipdu, TxPduId, COM_TX_NOTIFY_ACK);
 }
 
-/*
+/* ----------------------------------------------------------------------
  * Com_TpTxConfirmation
- */
+ * ---------------------------------------------------------------------- */
 
-/*
+/* 未実装 */
+
+/* ----------------------------------------------------------------------
  * Com_StartOfReception
- */
+ * ---------------------------------------------------------------------- */
 
-/*
+/*　未実装  */
+
+/* ----------------------------------------------------------------------
  * Com_CopyRxData
- */
+ * ---------------------------------------------------------------------- */
 
-/*
+/* 未実装 */
+
+/* ----------------------------------------------------------------------
  * Com_CopyTxData
- */
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
 
 /* ======================================================================
  * Scheduled Functions
  * ====================================================================== */
+
+/* ----------------------------------------------------------------------
+ * Com_MainFunctionRx
+ * ---------------------------------------------------------------------- */
 
 /**
  * \brief   受信デッドライン監視タイムアウトを周期的に検出する。
@@ -2551,6 +2761,10 @@ void Com_MainFunctionRx(void)
     /* Com_RxEnabled==0 の間はデッドライン監視自体を無効化する
      * (SWS_Com_00684/00685)。 */
 }
+
+/* ----------------------------------------------------------------------
+ * Com_MainFunctionTx
+ * ---------------------------------------------------------------------- */
 
 /**
  * \brief   送信スケジューリング（周期送信・変化時送信・再送）と送信確認
@@ -2766,14 +2980,58 @@ void Com_MainFunctionTx(void)
     }
 }
 
-/*
+/* ----------------------------------------------------------------------
  * Com_MainFunctionRouteSignals
- */
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
 
 /* ======================================================================
  * Internal Functions
  * ====================================================================== */
 
+/* ----------------------------------------------------------------------
+ * Com_SetCommunicationEnabled
+ * ---------------------------------------------------------------------- */
+
+/**
+ * \brief   診断 CommunicationControl (UDS SID 0x28) からの通信有効/無効要求を反映する。
+ *
+ * \details RxEnabled=0 の間、Com_RxIndication() は受信フレームを無視する
+ *          （バッファ・タイムアウトタイマとも更新しない）。あわせて
+ *          Com_MainFunctionRx() の受信デッドライン監視自体も評価を止める
+ *          （SWS_Com_00684/SWS_Com_00685 相当。意図的に止めているだけの
+ *          通信を「通信異常」として誤って上位層へ伝えないため）。
+ *          RxEnabled が 0→1 へ遷移した際は、全 RX I-PDU の
+ *          最終受信時刻・タイムアウトフラグをリセットしてデッドライン監視
+ *          タイマを再始動する（SWS_Com_00787 相当。リセットしないと、
+ *          TimeoutMs 以上の時間受信を抑制していた場合に再開直後で
+ *          即座にタイムアウト判定されてしまう）。
+ *          TxEnabled=0 の間、DIRECT/MIXED/PERIODIC いずれの I-PDU も
+ *          Com_MainFunctionTx() での実送信を抑制する（DIRECT/MIXED の変化検知
+ *          自体は Com_RequestTxOnChange() が Com_TxPending[] へ記録するが、
+ *          実際に PduR_ComTransmit() を呼ぶかどうかは Com_MainFunctionTx() が
+ *          Com_TxEnabled を見て判断する）。SWS_Com_00777「停止中の I-PDU の
+ *          送信要求はキャンセルしなければならない」・SWS_Com_00334 の説明文
+ *          の要求は、Com_MainFunctionTx() が抑制中でも Com_TxPending[] を
+ *          破棄する（保留させない）ことで満たす。TX バッファの値自体は
+ *          Com_SendSignal() が既に更新済みのため失われないが、再度有効化
+ *          された「だけ」で即座に送信されることはなく、再開後に実際に値が
+ *          変化した時、または通常の周期フロアに新たに達した時に初めて
+ *          送信される。
+ *
+ *          Com_IpduGroupStart()/Com_IpduGroupStop()（上記）とは独立した、
+ *          直交する抑制機構である点に注意: こちらは全 I-PDU 一括の診断用
+ *          スイッチ、I-PDU Group は個別の I-PDU 単位の起動/停止状態。
+ *          実際に送受信処理が行われるのは両方が有効な場合のみ（AND 条件）。
+ *
+ * \param[in]  RxEnabled  0=受信を無視する、1=通常どおり受信する。
+ * \param[in]  TxEnabled  0=送信を抑制する、1=通常どおり送信する。
+ *
+ * \ServiceID      {0x30}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
 void Com_SetCommunicationEnabled(uint8 RxEnabled, uint8 TxEnabled)
 {
     if (Com_RxEnabled != RxEnabled || Com_TxEnabled != TxEnabled)
@@ -2795,6 +3053,10 @@ void Com_SetCommunicationEnabled(uint8 RxEnabled, uint8 TxEnabled)
     Com_RxEnabled = RxEnabled;
     Com_TxEnabled = TxEnabled;
 }
+
+/* ----------------------------------------------------------------------
+ * Com_UnpackSignal
+ * ---------------------------------------------------------------------- */
 
 /**
  * \brief   ネットワークビット順でバイトバッファからビットフィールドを取り出す。
@@ -2833,6 +3095,10 @@ static uint32 Com_UnpackSignal(const uint8* buf,
     return value;
 }
 
+/* ----------------------------------------------------------------------
+ * Com_PackSignal
+ * ---------------------------------------------------------------------- */
+
 /**
  * \brief   ネットワークビット順でバイトバッファのビットフィールドに値を書き込む。
  *
@@ -2870,6 +3136,10 @@ static void Com_PackSignal(uint8* buf,
     }
 }
 
+/* ----------------------------------------------------------------------
+ * Com_WriteSignalBytes
+ * ---------------------------------------------------------------------- */
+
 /**
  * \brief   value の下位 byteCount バイトを、リトルエンディアンで dataPtr へ書き出す。
  *
@@ -2888,6 +3158,10 @@ static void Com_WriteSignalBytes(uint8* dataPtr, uint8 byteCount, uint32 value)
         dataPtr[b] = (uint8)(value >> (8U * b));
 }
 
+/* ----------------------------------------------------------------------
+ * Com_ServiceResult
+ * ---------------------------------------------------------------------- */
+
 /**
  * \brief   [SWS_Com_00334]/Table 3 の「I-PDU Group 停止中は
  *          COM_SERVICE_NOT_AVAILABLE」を、TX/RX 双方の Send/Receive 系
@@ -2904,6 +3178,10 @@ static uint8 Com_ServiceResult(uint8 started)
 {
     return started ? E_OK : COM_SERVICE_NOT_AVAILABLE;
 }
+
+/* ----------------------------------------------------------------------
+ * Com_PackInitValues
+ * ---------------------------------------------------------------------- */
 
 /**
  * \brief   指定 I-PDU バッファへ、所属する全シグナルの ComSignalInitValue を
@@ -2944,6 +3222,10 @@ static void Com_PackInitValues(uint8* buf, Com_IPduIdType id, Com_SignalDirectio
     }
 }
 
+/* ----------------------------------------------------------------------
+ * Com_ResetBufferToInitValues
+ * ---------------------------------------------------------------------- */
+
 /**
  * \brief   I-PDU バッファ 1 本を [SWS_Com_00217]/[SWS_Com_00222] 項目1・2の
  *          2 段階手順（バイト単位ゼロクリア → Com_PackInitValues()）で
@@ -2965,6 +3247,10 @@ static void Com_ResetBufferToInitValues(uint8* buf, Com_IPduIdType id, Com_Signa
         buf[b] = 0U;
     Com_PackInitValues(buf, id, dir);
 }
+
+/* ----------------------------------------------------------------------
+ * Com_GatewayRoute
+ * ---------------------------------------------------------------------- */
 
 /**
  * \brief   Signal Gateway: RX I-PDU の受信を機に、紐づく TX シグナルへ値を転送する。
@@ -3032,6 +3318,10 @@ static void Com_GatewayRoute(Com_IPduIdType rxIPduId)
     }
 }
 
+/* ----------------------------------------------------------------------
+ * Com_FindTxIPdu
+ * ---------------------------------------------------------------------- */
+
 /**
  * \brief   TX I-PDU 設定テーブルから IPduId に一致するエントリを検索する。
  *
@@ -3057,6 +3347,10 @@ static const Com_IPduConfigType* Com_FindTxIPdu(Com_IPduIdType IPduId)
     }
     return NULL;
 }
+
+/* ----------------------------------------------------------------------
+ * Com_FindRxIPdu
+ * ---------------------------------------------------------------------- */
 
 /**
  * \brief   RX I-PDU 設定テーブルから IPduId に一致するエントリを検索する。
@@ -3085,6 +3379,10 @@ static const Com_IPduConfigType* Com_FindRxIPdu(Com_IPduIdType IPduId)
     return NULL;
 }
 
+/* ----------------------------------------------------------------------
+ * Com_FindSignalIndex
+ * ---------------------------------------------------------------------- */
+
 /**
  * \brief   シグナル設定テーブルから SignalId に一致するエントリの添字を検索する。
  *
@@ -3110,6 +3408,10 @@ static uint8 Com_FindSignalIndex(Com_SignalIdType SignalId)
     }
     return Com_ConfigPtr->SignalCount;
 }
+
+/* ----------------------------------------------------------------------
+ * Com_DoTransmit
+ * ---------------------------------------------------------------------- */
 
 /**
  * \brief   TX I-PDU バッファを実際に PduR_ComTransmit() へ渡す共通処理。
@@ -3223,6 +3525,10 @@ static Std_ReturnType Com_DoTransmit(const Com_IPduConfigType* ipdu, unsigned lo
     return ret;
 }
 
+/* ----------------------------------------------------------------------
+ * Com_EffectiveTxModeMode
+ * ---------------------------------------------------------------------- */
+
 /**
  * \brief   TMS（Transmission Mode Selector）評価に基づく実効 TxModeMode を返す。
  *
@@ -3245,6 +3551,10 @@ static Com_TxModeModeType Com_EffectiveTxModeMode(const Com_IPduConfigType* ipdu
     return Com_TmsState[ipdu->IPduId] ? ipdu->TxModeModeTrue : ipdu->TxModeMode;
 }
 
+/* ----------------------------------------------------------------------
+ * Com_EffectiveTxPeriodMs
+ * ---------------------------------------------------------------------- */
+
 /**
  * \brief   TMS 評価に基づく実効 TxPeriodMs を返す。
  *
@@ -3262,6 +3572,10 @@ static uint16 Com_EffectiveTxPeriodMs(const Com_IPduConfigType* ipdu)
 {
     return Com_TmsState[ipdu->IPduId] ? ipdu->TxPeriodMsTrue : ipdu->TxPeriodMs;
 }
+
+/* ----------------------------------------------------------------------
+ * Com_TxRepeatApplicable
+ * ---------------------------------------------------------------------- */
 
 /**
  * \brief   ComTxModeNumberOfRepetitions（SWS_Com_00305）が現在の実効モードで
@@ -3287,6 +3601,10 @@ static uint8 Com_TxRepeatApplicable(Com_TxModeModeType mode)
     return (mode == COM_TX_MODE_DIRECT) ? 1U : 0U;
 }
 
+/* ----------------------------------------------------------------------
+ * Com_SelectTimeoutThreshold
+ * ---------------------------------------------------------------------- */
+
 /**
  * \brief   デッドライン監視の「初回猶予期間か定常状態か」に応じて閾値を選ぶ。
  *
@@ -3311,6 +3629,10 @@ static uint16 Com_SelectTimeoutThreshold(uint8 usingFirst, uint16 firstMs, uint1
 {
     return usingFirst ? firstMs : steadyMs;
 }
+
+/* ----------------------------------------------------------------------
+ * Com_RecalcTms
+ * ---------------------------------------------------------------------- */
 
 /**
  * \brief   TMS（Transmission Mode Selector）を再評価する。
@@ -3383,6 +3705,10 @@ static uint8 Com_RecalcTms(Com_IPduIdType ipduId)
     return changed;
 }
 
+/* ----------------------------------------------------------------------
+ * Com_RequestTxOnChange
+ * ---------------------------------------------------------------------- */
+
 /**
  * \brief   ComFilterAlgorithm を通過した変化を「次回送信あり」として記録する。
  *
@@ -3442,6 +3768,10 @@ static void Com_RequestTxOnChange(const Com_IPduConfigType* ipdu)
     Com_TxRepeatsRemaining[ipdu->IPduId] = Com_TxRepeatApplicable(mode) ? ipdu->NumberOfRepetitions : 0U;
 }
 
+/* ----------------------------------------------------------------------
+ * Com_IsRxTimedOut
+ * ---------------------------------------------------------------------- */
+
 /**
  * \brief   RX I-PDU が現在タイムアウト中かどうかを返す。
  *
@@ -3476,6 +3806,10 @@ uint8 Com_IsRxTimedOut(Com_IPduIdType IPduId)
 }
 
 typedef void (*Com_VoidCbkType)(void);
+
+/* ----------------------------------------------------------------------
+ * Com_InvokeTxNotification
+ * ---------------------------------------------------------------------- */
 
 /**
  * \brief   TxAckCbk/TxErrCbk/TxTOutCbk（Com_CbkTxAck/Com_CbkTxErr/
@@ -3547,6 +3881,10 @@ void Com_InvokeTxNotification(const Com_IPduConfigType* ipdu,
     }
 }
 
+/* ----------------------------------------------------------------------
+ * Com_ResetRxDeadlineMonitoring
+ * ---------------------------------------------------------------------- */
+
 /**
  * \brief   RX I-PDU 1 本分のデッドライン監視タイマを再始動する。
  *
@@ -3580,6 +3918,10 @@ static void Com_ResetRxDeadlineMonitoring(Com_IPduIdType id, unsigned long now)
         }
     }
 }
+
+/* ----------------------------------------------------------------------
+ * Com_IpduGroupHasTxMember
+ * ---------------------------------------------------------------------- */
 
 /**
  * \brief   指定した I-PDU Group に TX I-PDU が1本でも含まれるか判定する。
