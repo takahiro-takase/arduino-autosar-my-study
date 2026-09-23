@@ -39,103 +39,16 @@
  * Function Prototypes
  * ====================================================================== */
 
+static uint16 E2E_CalcCrc16(uint16 crc, const uint8 *data, uint8 len);
+static uint16 E2E_CalcCrc16Body(const uint8 *Data, uint8 DataLength, uint8 Offset, uint16 DataID);
+
 /* ======================================================================
  * Functions
  * ====================================================================== */
 
 /* -----------------------------------------------------------------------
- * 内部ヘルパー
- * ----------------------------------------------------------------------- */
-
-/* ----------------------------------------------------------------------
- * E2E_CalcCrc16
- * ---------------------------------------------------------------------- */
-
-/**
- * \brief  CRC16 (多項式 0x1021、MSB first、非反転) を 1 バイト単位で更新する
- *         内部ルーティン。内部で自動的な開始値・XOR 補正は一切行わない
- *         素の実装 (E2E_P01.c の E2E_CalcCrc8() と同じ考え方)。
- *
- * \param[in] crc   現在の CRC 値。
- * \param[in] data  処理するバイト列。
- * \param[in] len   バイト数。
- * \return    更新後 CRC 値。
- */
-static uint16 E2E_CalcCrc16(uint16 crc, const uint8 *data, uint8 len)
-{
-    DET_LOGT(TAG, "called");
-    uint8 i;
-    uint8 bit;
-    for (i = 0U; i < len; i++)
-    {
-        crc ^= (uint16)((uint16)data[i] << 8U);
-        for (bit = 0U; bit < 8U; bit++)
-        {
-            if (crc & 0x8000U)
-                crc = (uint16)((crc << 1U) ^ 0x1021U);
-            else
-                crc = (uint16)(crc << 1U);
-        }
-    }
-    return crc;
-}
-
-/* ----------------------------------------------------------------------
- * E2E_CalcCrc16Body
- * ---------------------------------------------------------------------- */
-
-/**
- * \brief  E2E P05 の CRC16 計算範囲全体 (SWS_E2E_00406) をまとめて計算する。
- *         Data[Offset+2..DataLength-1] (Counter を含みユーザーデータまで、
- *         CRC16 バイト自身 [Offset, Offset+1] は除外) → DataID 下位バイト
- *         → DataID 上位バイトの順で 1 回の呼び出しにまとめる (Protect/Check
- *         の両方が同じ計算をするため共通化する)。
- *
- * \note   SWS_E2E_00406 の擬似コードは本来 `Config->Offset > 0` の場合、
- *         上記に先立って Data[0..Offset-1]（E2E ヘッダより前のバイト）も
- *         CRC 計算に含める分岐を持つが、本実装はこの分岐を持たない
- *         （常に Offset==0 側の経路のみを実装）。本プロジェクトの3用途
- *         (EngineHealthStatus/EngineInfo/AbsInfo、E2EXf_PBCfg.c 参照) は
- *         いずれも E2E ヘッダを PDU 先頭に置き Offset=0 固定のため実害は
- *         ないが、Offset>0 の構成を追加する場合はこの関数の拡張が必要。
- *
- * \param[in] Data        対象 PDU バッファ。
- * \param[in] DataLength  PDU 全体バイト数 (CRC16 バイトを含む)。
- * \param[in] Offset      E2E ヘッダの PDU 内バイトオフセット。
- * \param[in] DataID      CRC 計算に投入する DataID。
- * \return    計算した CRC16 値。
- */
-static uint16 E2E_CalcCrc16Body(const uint8 *Data, uint8 DataLength, uint8 Offset, uint16 DataID)
-{
-    DET_LOGT(TAG, "called");
-    uint16 crc = 0xFFFFU; /* SWS_E2E_00406: Crc_StartValue16: 0xFFFF */
-
-    crc = E2E_CalcCrc16(crc, &Data[Offset + 2U], (uint8)(DataLength - Offset - 2U));
-
-    {
-        const uint8 idBytes[2] = { (uint8)(DataID & 0xFFU), (uint8)((DataID >> 8U) & 0xFFU) };
-        crc = E2E_CalcCrc16(crc, idBytes, 2U);
-    }
-
-    return crc;
-}
-
-/* -----------------------------------------------------------------------
  * 公開 API
  * ----------------------------------------------------------------------- */
-
-/* ----------------------------------------------------------------------
- * E2E_P05ProtectInit
- * ---------------------------------------------------------------------- */
-
-Std_ReturnType E2E_P05ProtectInit(E2E_P05ProtectStateType *State)
-{
-    DET_LOGT(TAG, "called");
-    if (State == NULL)
-        return E2E_E_INPUTERR_NULL;
-    State->Counter = 0U;
-    return E2E_E_OK;
-}
 
 /* ----------------------------------------------------------------------
  * E2E_P05Protect
@@ -147,7 +60,6 @@ Std_ReturnType E2E_P05Protect(
     uint8                   *Data,
     uint16                   Length)
 {
-    DET_LOGT(TAG, "called");
     if (Config == NULL || State == NULL || Data == NULL)
         return E2E_E_INPUTERR_NULL;
 
@@ -173,21 +85,14 @@ Std_ReturnType E2E_P05Protect(
 }
 
 /* ----------------------------------------------------------------------
- * E2E_P05CheckInit
+ * E2E_P05ProtectInit
  * ---------------------------------------------------------------------- */
 
-Std_ReturnType E2E_P05CheckInit(E2E_P05CheckStateType *State)
+Std_ReturnType E2E_P05ProtectInit(E2E_P05ProtectStateType *State)
 {
-    DET_LOGT(TAG, "called");
     if (State == NULL)
         return E2E_E_INPUTERR_NULL;
-    /* [SWS_E2E_00451] Counter=0xFF/Status=ERROR が正しい初期値
-     * （2026-09-06 是正。以前は 0/NONEWDATA だった）。本プロジェクトの
-     * 呼び出し元（EngineInfo/AbsInfo）は WaitForFirstData フラグにより
-     * 初回フレーム到達時の判定を別途上書きするため、実際の観測可能な
-     * 挙動には影響しない（E2EXf_PBCfg.c 参照）。 */
-    State->Counter = 0xFFU;
-    State->Status  = E2E_P05STATUS_ERROR;
+    State->Counter = 0U;
     return E2E_E_OK;
 }
 
@@ -201,7 +106,6 @@ Std_ReturnType E2E_P05Check(
     const uint8              *Data,
     uint16                    Length)
 {
-    DET_LOGT(TAG, "called");
     if (Config == NULL || State == NULL)
         return E2E_E_INPUTERR_NULL;
 
@@ -274,6 +178,24 @@ Std_ReturnType E2E_P05Check(
 }
 
 /* ----------------------------------------------------------------------
+ * E2E_P05CheckInit
+ * ---------------------------------------------------------------------- */
+
+Std_ReturnType E2E_P05CheckInit(E2E_P05CheckStateType *State)
+{
+    if (State == NULL)
+        return E2E_E_INPUTERR_NULL;
+    /* [SWS_E2E_00451] Counter=0xFF/Status=ERROR が正しい初期値
+     * （2026-09-06 是正。以前は 0/NONEWDATA だった）。本プロジェクトの
+     * 呼び出し元（EngineInfo/AbsInfo）は WaitForFirstData フラグにより
+     * 初回フレーム到達時の判定を別途上書きするため、実際の観測可能な
+     * 挙動には影響しない（E2EXf_PBCfg.c 参照）。 */
+    State->Counter = 0xFFU;
+    State->Status  = E2E_P05STATUS_ERROR;
+    return E2E_E_OK;
+}
+
+/* ----------------------------------------------------------------------
  * E2E_P05MapStatusToSM
  * ---------------------------------------------------------------------- */
 
@@ -303,3 +225,83 @@ E2E_PCheckStatusType E2E_P05MapStatusToSM(
         return E2E_P_ERROR;
     }
 }
+
+/* ======================================================================
+ * Internal Functions
+ * ====================================================================== */
+
+/* -----------------------------------------------------------------------
+ * 内部ヘルパー
+ * ----------------------------------------------------------------------- */
+
+/* ----------------------------------------------------------------------
+ * E2E_CalcCrc16
+ * ---------------------------------------------------------------------- */
+
+/**
+ * \brief  CRC16 (多項式 0x1021、MSB first、非反転) を 1 バイト単位で更新する
+ *         内部ルーティン。内部で自動的な開始値・XOR 補正は一切行わない
+ *         素の実装 (E2E_P01.c の E2E_CalcCrc8() と同じ考え方)。
+ *
+ * \param[in] crc   現在の CRC 値。
+ * \param[in] data  処理するバイト列。
+ * \param[in] len   バイト数。
+ * \return    更新後 CRC 値。
+ */
+static uint16 E2E_CalcCrc16(uint16 crc, const uint8 *data, uint8 len)
+{
+    uint8 i;
+    uint8 bit;
+    for (i = 0U; i < len; i++)
+    {
+        crc ^= (uint16)((uint16)data[i] << 8U);
+        for (bit = 0U; bit < 8U; bit++)
+        {
+            if (crc & 0x8000U)
+                crc = (uint16)((crc << 1U) ^ 0x1021U);
+            else
+                crc = (uint16)(crc << 1U);
+        }
+    }
+    return crc;
+}
+
+/* ----------------------------------------------------------------------
+ * E2E_CalcCrc16Body
+ * ---------------------------------------------------------------------- */
+
+/**
+ * \brief  E2E P05 の CRC16 計算範囲全体 (SWS_E2E_00406) をまとめて計算する。
+ *         Data[Offset+2..DataLength-1] (Counter を含みユーザーデータまで、
+ *         CRC16 バイト自身 [Offset, Offset+1] は除外) → DataID 下位バイト
+ *         → DataID 上位バイトの順で 1 回の呼び出しにまとめる (Protect/Check
+ *         の両方が同じ計算をするため共通化する)。
+ *
+ * \note   SWS_E2E_00406 の擬似コードは本来 `Config->Offset > 0` の場合、
+ *         上記に先立って Data[0..Offset-1]（E2E ヘッダより前のバイト）も
+ *         CRC 計算に含める分岐を持つが、本実装はこの分岐を持たない
+ *         （常に Offset==0 側の経路のみを実装）。本プロジェクトの3用途
+ *         (EngineHealthStatus/EngineInfo/AbsInfo、E2EXf_PBCfg.c 参照) は
+ *         いずれも E2E ヘッダを PDU 先頭に置き Offset=0 固定のため実害は
+ *         ないが、Offset>0 の構成を追加する場合はこの関数の拡張が必要。
+ *
+ * \param[in] Data        対象 PDU バッファ。
+ * \param[in] DataLength  PDU 全体バイト数 (CRC16 バイトを含む)。
+ * \param[in] Offset      E2E ヘッダの PDU 内バイトオフセット。
+ * \param[in] DataID      CRC 計算に投入する DataID。
+ * \return    計算した CRC16 値。
+ */
+static uint16 E2E_CalcCrc16Body(const uint8 *Data, uint8 DataLength, uint8 Offset, uint16 DataID)
+{
+    uint16 crc = 0xFFFFU; /* SWS_E2E_00406: Crc_StartValue16: 0xFFFF */
+
+    crc = E2E_CalcCrc16(crc, &Data[Offset + 2U], (uint8)(DataLength - Offset - 2U));
+
+    {
+        const uint8 idBytes[2] = { (uint8)(DataID & 0xFFU), (uint8)((DataID >> 8U) & 0xFFU) };
+        crc = E2E_CalcCrc16(crc, idBytes, 2U);
+    }
+
+    return crc;
+}
+
