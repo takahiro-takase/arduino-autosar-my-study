@@ -180,4 +180,83 @@ TEST_F(Bsw_DcmStack_SID11_EcuReset_Test,
     EXPECT_EQ(FakeCanHw_LastSendData[3], DCM_NRC_INCORRECT_MESSAGE_LENGTH);
 }
 
+// ------------------------------------------------------------
+// OK: [0x11, 0x01] hardReset は extendedSession 中でも正応答
+// [0x51, 0x01] を返し、応答後にセッションが defaultSession へ自動的に
+// 戻る（Dcm_ResetToDefaultSession() 経由。ファイル冒頭で参照している
+// Dcm_HandleEcuReset() の \details 参照）。
+// ------------------------------------------------------------
+TEST_F(Bsw_DcmStack_SID11_EcuReset_Test,
+       EcuReset_OK_HardResetFromExtendedSessionReturnsToDefaultSessionOnCanHw)
+{
+    /* 準備 (Arrange 1): 先に extendedSession へ遷移させておく（セッションが
+     * 本当に defaultSession へ戻ったことを確認できるようにするため）。 */
+    FakeCanHw_RxId  = 0x7E0U;
+    FakeCanHw_RxDlc = 8U;
+    FakeCanHw_RxData[0] = 2U;
+    FakeCanHw_RxData[1] = DCM_SID_SESSION_CTRL;
+    FakeCanHw_RxData[2] = DCM_SESSION_EXTENDED;
+    for (uint8 i = 3U; i < 8U; i++)
+        FakeCanHw_RxData[i] = 0U;
+    FakeCanHw_RxPendingCount = 1U;
+    Can_MainFunction_Read();
+    ASSERT_EQ(FakeCanHw_LastSendData[1], 0x50U);  // 前提確認
+    FakeCanHw_Reset();
+
+    /* 準備 (Arrange 2): [0x11, 0x01] を 0x7E0 の受信バッファへセットする
+     * （SF: 02 11 01）。 */
+    FakeCanHw_RxId  = 0x7E0U;
+    FakeCanHw_RxDlc = 8U;
+    FakeCanHw_RxData[0] = 2U;
+    FakeCanHw_RxData[1] = DCM_SID_ECU_RESET;
+    FakeCanHw_RxData[2] = DCM_RESET_HARD;
+    for (uint8 i = 3U; i < 8U; i++)
+        FakeCanHw_RxData[i] = 0U;
+    FakeCanHw_RxPendingCount = 1U;
+
+    /* 実行 (Act) */
+    Can_MainFunction_Read();
+
+    /* 評価 (Assert): 正応答 [0x51, 0x01] が Can_Hw まで到達し、
+     * セッションが defaultSession へ戻っていること。 */
+    ASSERT_EQ(FakeCanHw_SendCount, 1U);
+    EXPECT_EQ(FakeCanHw_LastSendId, 0x7E8U);
+    EXPECT_EQ(FakeCanHw_LastSendDlc, 8U);
+    EXPECT_EQ(FakeCanHw_LastSendData[0], 0x02U);  // SF PCI（UDSペイロード長=2）
+    EXPECT_EQ(FakeCanHw_LastSendData[1], 0x51U);
+    EXPECT_EQ(FakeCanHw_LastSendData[2], DCM_RESET_HARD);
+
+    Dcm_SesCtrlType session = 0U;
+    ASSERT_EQ(Dcm_GetSesCtrlType(&session), E_OK);
+    EXPECT_EQ(session, DCM_SESSION_DEFAULT);
+}
+
+// ------------------------------------------------------------
+// OK: [0x11, 0x03] softReset も正応答 [0x51, 0x03] を返す
+// （hardReset とは異なる subFunc 値が正しく echo されることの確認）。
+// ------------------------------------------------------------
+TEST_F(Bsw_DcmStack_SID11_EcuReset_Test,
+       EcuReset_OK_SoftResetProducesPositiveResponseEchoingSubFuncOnCanHw)
+{
+    /* 準備 (Arrange): [0x11, 0x03] を 0x7E0 の受信バッファへセットする
+     * （SF: 02 11 03）。 */
+    FakeCanHw_RxId  = 0x7E0U;
+    FakeCanHw_RxDlc = 8U;
+    FakeCanHw_RxData[0] = 2U;
+    FakeCanHw_RxData[1] = DCM_SID_ECU_RESET;
+    FakeCanHw_RxData[2] = DCM_RESET_SOFT;
+    for (uint8 i = 3U; i < 8U; i++)
+        FakeCanHw_RxData[i] = 0U;
+    FakeCanHw_RxPendingCount = 1U;
+
+    /* 実行 (Act) */
+    Can_MainFunction_Read();
+
+    /* 評価 (Assert) */
+    ASSERT_EQ(FakeCanHw_SendCount, 1U);
+    EXPECT_EQ(FakeCanHw_LastSendData[0], 0x02U);
+    EXPECT_EQ(FakeCanHw_LastSendData[1], 0x51U);
+    EXPECT_EQ(FakeCanHw_LastSendData[2], DCM_RESET_SOFT);
+}
+
 }  // namespace

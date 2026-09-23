@@ -378,7 +378,6 @@ static void Dcm_TransferAbort(void);
  */
 void Dcm_Init(const Dcm_ConfigType* ConfigPtr)
 {
-    DET_LOGT(TAG, "called");
     (void)ConfigPtr; /* 本プロジェクトは post-build 設定を持たない（Dcm.h 参照） */
     Dcm_CurrentSession   = DCM_SESSION_DEFAULT;
     Dcm_TxPdu.SduDataPtr = Dcm_TxBuf;
@@ -419,7 +418,6 @@ void Dcm_Init(const Dcm_ConfigType* ConfigPtr)
  */
 void Dcm_GetVersionInfo(Std_VersionInfoType* versioninfo)
 {
-    DET_LOGT(TAG, "called");
     if (versioninfo == NULL)
     {
         Det_ReportError(DCM_MODULE_ID, 0U, DCM_API_ID_GET_VERSION_INFO, DCM_E_PARAM_POINTER);
@@ -453,7 +451,6 @@ void Dcm_GetVersionInfo(Std_VersionInfoType* versioninfo)
  */
 Std_ReturnType Dcm_GetVin(uint8* Data)
 {
-    DET_LOGT(TAG, "called");
     if (Data == NULL)
     {
         Det_ReportError(DCM_MODULE_ID, 0U, DCM_API_ID_GET_VIN, DCM_E_PARAM_POINTER);
@@ -490,7 +487,6 @@ Std_ReturnType Dcm_GetVin(uint8* Data)
  */
 Std_ReturnType Dcm_GetSecurityLevel(Dcm_SecLevelType* SecLevel)
 {
-    DET_LOGT(TAG, "called");
     if (!Dcm_Initialized)
     {
         Det_ReportError(DCM_MODULE_ID, 0U, DCM_API_ID_GET_SECURITY_LEVEL, DCM_E_UNINIT);
@@ -521,7 +517,6 @@ Std_ReturnType Dcm_GetSecurityLevel(Dcm_SecLevelType* SecLevel)
  */
 Std_ReturnType Dcm_GetSesCtrlType(Dcm_SesCtrlType* SesCtrlType)
 {
-    DET_LOGT(TAG, "called");
     if (!Dcm_Initialized)
     {
         Det_ReportError(DCM_MODULE_ID, 0U, DCM_API_ID_GET_SES_CTRL_TYPE, DCM_E_UNINIT);
@@ -566,7 +561,6 @@ Std_ReturnType Dcm_GetSesCtrlType(Dcm_SesCtrlType* SesCtrlType)
  */
 Std_ReturnType Dcm_GetActiveProtocol(Dcm_ProtocolType* ActiveProtocolType, uint16* ConnectionId, uint16* TesterSourceAddress)
 {
-    DET_LOGT(TAG, "called");
     if (!Dcm_Initialized)
     {
         Det_ReportError(DCM_MODULE_ID, 0U, DCM_API_ID_GET_ACTIVE_PROTOCOL, DCM_E_UNINIT);
@@ -612,7 +606,6 @@ Std_ReturnType Dcm_GetActiveProtocol(Dcm_ProtocolType* ActiveProtocolType, uint1
  */
 Std_ReturnType Dcm_ResetToDefaultSession(void)
 {
-    DET_LOGT(TAG, "called");
     if (!Dcm_Initialized)
     {
         Det_ReportError(DCM_MODULE_ID, 0U, DCM_API_ID_RESET_TO_DEFAULT_SESSION, DCM_E_UNINIT);
@@ -775,7 +768,6 @@ Std_ReturnType Dcm_ResetToDefaultSession(void)
  */
 void Dcm_MainFunction(void)
 {
-    DET_LOGT(TAG, "called");
     if (!Dcm_Initialized)
     {
         Det_ReportError(DCM_MODULE_ID, 0U, DCM_API_ID_MAIN_FUNCTION, DCM_E_UNINIT);
@@ -845,7 +837,6 @@ void Dcm_MainFunction(void)
  */
 static void Dcm_UpdateComMRequest(uint8 session)
 {
-    DET_LOGT(TAG, "called");
     if (session == DCM_SESSION_EXTENDED)
     {
         ComM_DCM_ActiveDiagnostic(0U);
@@ -868,7 +859,6 @@ static void Dcm_UpdateComMRequest(uint8 session)
  */
 static void Dcm_Transmit(void)
 {
-    DET_LOGT(TAG, "called");
     CanTp_Transmit(CANTP_TX_SDU_ID, &Dcm_TxPdu);
 }
 
@@ -921,7 +911,6 @@ static uint8 Dcm_ExtractSubFunc(uint8 subFuncByte)
  */
 static void Dcm_SendNegativeResponse(uint8 sid, uint8 nrc)
 {
-    DET_LOGT(TAG, "called");
     Dcm_TxBuf[0] = DCM_SID_NEGATIVE_RESP;
     Dcm_TxBuf[1] = sid;
     Dcm_TxBuf[2] = nrc;
@@ -959,7 +948,6 @@ static void Dcm_SendNegativeResponse(uint8 sid, uint8 nrc)
  */
 static void Dcm_HandleSessionControl(const uint8* uds, uint8 udsLen)
 {
-    DET_LOGT(TAG, "called");
     if (udsLen < 2U)
     {
         Dcm_SendNegativeResponse(DCM_SID_SESSION_CTRL, DCM_NRC_INCORRECT_MESSAGE_LENGTH);
@@ -1036,7 +1024,6 @@ static void Dcm_HandleSessionControl(const uint8* uds, uint8 udsLen)
  */
 static void Dcm_HandleEcuReset(const uint8* uds, uint8 udsLen)
 {
-    DET_LOGT(TAG, "called");
     if (udsLen < 2U)
     {
         Dcm_SendNegativeResponse(DCM_SID_ECU_RESET, DCM_NRC_INCORRECT_MESSAGE_LENGTH);
@@ -1105,7 +1092,6 @@ static void Dcm_HandleEcuReset(const uint8* uds, uint8 udsLen)
  */
 static void Dcm_HandleClearDtc(const uint8* uds, uint8 udsLen)
 {
-    DET_LOGT(TAG, "called");
     if (Dcm_SecurityLevel == 0U)
     {
         Dcm_SendNegativeResponse(DCM_SID_CLEAR_DTC, DCM_NRC_SECURITY_ACCESS_DENIED);
@@ -1166,7 +1152,6 @@ static void Dcm_HandleClearDtc(const uint8* uds, uint8 udsLen)
  */
 static void Dcm_HandleReadDtcCount(const uint8* uds, uint8 udsLen)
 {
-    DET_LOGT(TAG, "called");
     if (udsLen != 3U)
     {
         /* [SWS_Dcm_00696]: statusMask(1byte)固定のため常に3バイト厳密一致
@@ -1260,7 +1245,6 @@ static void Dcm_SendDtcList(uint8 subFunc, uint8 headerLen, const uint32* dtcBuf
  */
 static void Dcm_HandleReadDtcByMask(const uint8* uds, uint8 udsLen)
 {
-    DET_LOGT(TAG, "called");
     if (udsLen != 3U)
     {
         /* [SWS_Dcm_00696]（0x19/01 と同じ理由。2026-09 是正） */
@@ -1306,7 +1290,6 @@ static void Dcm_HandleReadDtcByMask(const uint8* uds, uint8 udsLen)
  */
 static void Dcm_HandleReadDtcSupported(const uint8* uds, uint8 udsLen)
 {
-    DET_LOGT(TAG, "called");
     (void)uds;
     if (udsLen != 2U)
     {
@@ -1359,7 +1342,6 @@ static void Dcm_HandleReadDtcSupported(const uint8* uds, uint8 udsLen)
  */
 static void Dcm_HandleReadDtcFaultDetectionCounter(const uint8* uds, uint8 udsLen)
 {
-    DET_LOGT(TAG, "called");
     (void)uds;
     if (udsLen != 2U)
     {
@@ -1407,7 +1389,6 @@ static void Dcm_HandleReadDtcFaultDetectionCounter(const uint8* uds, uint8 udsLe
  */
 static void Dcm_HandleReadDtcSnapshot(const uint8* uds, uint8 udsLen)
 {
-    DET_LOGT(TAG, "called");
     if (udsLen != 6U)
     {
         /* [SWS_Dcm_00696]: DTC(3byte)+recordNumber(1byte)固定のため常に
@@ -1482,7 +1463,6 @@ static void Dcm_HandleReadDtcSnapshot(const uint8* uds, uint8 udsLen)
  */
 static void Dcm_HandleReadDtcExtendedData(const uint8* uds, uint8 udsLen)
 {
-    DET_LOGT(TAG, "called");
     if (udsLen != 6U)
     {
         /* [SWS_Dcm_00696]（0x19/04 と同じ理由。2026-09 是正） */
@@ -1550,7 +1530,6 @@ static void Dcm_HandleReadDtcExtendedData(const uint8* uds, uint8 udsLen)
  */
 static void Dcm_HandleReadDtcInfo(const uint8* uds, uint8 udsLen)
 {
-    DET_LOGT(TAG, "called");
     if (udsLen < 2U)
     {
         Dcm_SendNegativeResponse(DCM_SID_READ_DTC_INFO, DCM_NRC_INCORRECT_MESSAGE_LENGTH);
@@ -1604,7 +1583,6 @@ static void Dcm_HandleReadDtcInfo(const uint8* uds, uint8 udsLen)
  */
 static Std_ReturnType Dcm_ReadDid(uint16 did, uint8* buf, uint8* dataLen)
 {
-    DET_LOGT(TAG, "called");
     switch (did)
     {
     case DCM_DID_ENGINE_SPEED:
@@ -1671,7 +1649,6 @@ static Std_ReturnType Dcm_ReadDid(uint16 did, uint8* buf, uint8* dataLen)
  */
 static void Dcm_HandleReadDataById(const uint8* uds, uint8 udsLen)
 {
-    DET_LOGT(TAG, "called");
     if (udsLen != 3U)
     {
         Dcm_SendNegativeResponse(DCM_SID_READ_DATA, DCM_NRC_INCORRECT_MESSAGE_LENGTH);
@@ -1730,7 +1707,6 @@ static void Dcm_HandleReadDataById(const uint8* uds, uint8 udsLen)
  */
 static Std_ReturnType Dcm_UpdateCryptoKey(uint8 keyName, const uint8* keyData)
 {
-    DET_LOGT(TAG, "called");
     Std_ReturnType ret = KeyM_Start(KEYM_START_WORKSHOPMODE, NULL, 0U, NULL, NULL);
     if (ret != E_OK)
         return E_NOT_OK;
@@ -1770,7 +1746,6 @@ static Std_ReturnType Dcm_UpdateCryptoKey(uint8 keyName, const uint8* keyData)
  */
 static void Dcm_HandleWriteDataById(const uint8* uds, uint8 udsLen)
 {
-    DET_LOGT(TAG, "called");
     if (Dcm_SecurityLevel == 0U)
     {
         Dcm_SendNegativeResponse(DCM_SID_WRITE_DATA, DCM_NRC_SECURITY_ACCESS_DENIED);
@@ -1849,7 +1824,6 @@ static void Dcm_HandleWriteDataById(const uint8* uds, uint8 udsLen)
  */
 static Std_ReturnType Dcm_LampIdOfDid(uint16 did, Rte_LampIdType* lamp)
 {
-    DET_LOGT(TAG, "called");
     switch (did)
     {
     case DCM_DID_RUN_LAMP:   *lamp = RTE_LAMP_RUN;   return E_OK;
@@ -1892,7 +1866,6 @@ static Std_ReturnType Dcm_LampIdOfDid(uint16 did, Rte_LampIdType* lamp)
  */
 static void Dcm_HandleIoControl(const uint8* uds, uint8 udsLen)
 {
-    DET_LOGT(TAG, "called");
     if (udsLen < 4U)
     {
         Dcm_SendNegativeResponse(DCM_SID_IO_CONTROL, DCM_NRC_INCORRECT_MESSAGE_LENGTH);
@@ -1999,7 +1972,6 @@ static void Dcm_HandleIoControl(const uint8* uds, uint8 udsLen)
  */
 static void Dcm_CommControlReset(void)
 {
-    DET_LOGT(TAG, "called");
     BswM_Dcm_CommunicationMode_CurrentState(NM_MAIN_NETWORK_HANDLE, DCM_ENABLE_RX_TX_NORM_NM);
 }
 
@@ -2056,7 +2028,6 @@ static void Dcm_CommControlReset(void)
  */
 static void Dcm_HandleCommunicationControl(const uint8* uds, uint8 udsLen)
 {
-    DET_LOGT(TAG, "called");
     /* [SWS_Dcm_00273]/[SWS_Dcm_00696]: サブ機能サポート確認は最小メッセージ長
      * 確認より先に行う仕様の処理順序（7.4.4.4節）。まず controlType
      * (uds[1]) を読める最小長だけを確認し、その妥当性を判定してから、
@@ -2136,7 +2107,6 @@ static void Dcm_HandleCommunicationControl(const uint8* uds, uint8 udsLen)
  */
 static void Dcm_DTCSettingReset(void)
 {
-    DET_LOGT(TAG, "called");
     if (Dcm_DTCSettingDisabled)
     {
         if (Dem_EnableDTCSetting(DCM_DEM_CLIENT_ID) == E_OK)
@@ -2187,7 +2157,6 @@ static void Dcm_DTCSettingReset(void)
  */
 static void Dcm_HandleControlDTCSetting(const uint8* uds, uint8 udsLen)
 {
-    DET_LOGT(TAG, "called");
     /* [SWS_Dcm_00273]/[SWS_Dcm_00696]（Dcm_HandleCommunicationControl と同じ
      * 理由。2026-09 是正）: まず subFunc (uds[1]) を読める最小長だけを
      * 確認し妥当性を判定してから、[SWS_Dcm_01399] 代用の optionRecord
@@ -2259,7 +2228,6 @@ static void Dcm_HandleControlDTCSetting(const uint8* uds, uint8 udsLen)
  */
 static uint16 Dcm_ComputeSecurityKey(uint16 seed)
 {
-    DET_LOGT(TAG, "called");
     return (uint16)(seed ^ DCM_SECURITY_KEY_MASK);
 }
 
@@ -2274,7 +2242,6 @@ static uint16 Dcm_ComputeSecurityKey(uint16 seed)
  */
 static void Dcm_SecurityLock(void)
 {
-    DET_LOGT(TAG, "called");
     if (Dcm_SecurityLevel != 0U)
         DET_LOGI(TAG, "27 Security locked (session change)");
 
@@ -2295,7 +2262,6 @@ static void Dcm_SecurityLock(void)
  */
 static void Dcm_HandleSecurityRequestSeed(uint8 subFunc, uint8 udsLen)
 {
-    DET_LOGT(TAG, "called");
     if (udsLen != 2U)
     {
         /* [SWS_Dcm_00696]: 追加パラメータなしのため常に2バイト厳密一致
@@ -2363,7 +2329,6 @@ static void Dcm_HandleSecurityRequestSeed(uint8 subFunc, uint8 udsLen)
  */
 static void Dcm_HandleSecuritySendKey(uint8 subFunc, const uint8* uds, uint8 udsLen)
 {
-    DET_LOGT(TAG, "called");
     if (udsLen != 4U)
     {
         /* [SWS_Dcm_00696]: key(2byte)固定のため常に4バイト厳密一致
@@ -2431,7 +2396,6 @@ static void Dcm_HandleSecuritySendKey(uint8 subFunc, const uint8* uds, uint8 uds
  */
 static void Dcm_HandleSecurityAccess(const uint8* uds, uint8 udsLen)
 {
-    DET_LOGT(TAG, "called");
     if (udsLen < 2U)
     {
         Dcm_SendNegativeResponse(DCM_SID_SECURITY_ACCESS, DCM_NRC_INCORRECT_MESSAGE_LENGTH);
@@ -2470,7 +2434,6 @@ static void Dcm_HandleSecurityAccess(const uint8* uds, uint8 udsLen)
  */
 static void Dcm_RoutineAbort(void)
 {
-    DET_LOGT(TAG, "called");
     if (Dcm_RoutineState != DCM_ROUTINE_STATE_IDLE)
         DET_LOGI(TAG, "31 EngineHealthCheck aborted (session change)");
 
@@ -2488,7 +2451,6 @@ static void Dcm_RoutineAbort(void)
  */
 static void Dcm_HandleRoutineStart(uint16 rid)
 {
-    DET_LOGT(TAG, "called");
     if (Dcm_RoutineState == DCM_ROUTINE_STATE_RUNNING)
     {
         Dcm_SendNegativeResponse(DCM_SID_ROUTINE_CONTROL, DCM_NRC_CONDITIONS_NOT_CORRECT);
@@ -2520,7 +2482,6 @@ static void Dcm_HandleRoutineStart(uint16 rid)
  */
 static void Dcm_HandleRoutineStop(uint16 rid)
 {
-    DET_LOGT(TAG, "called");
     if (Dcm_RoutineState == DCM_ROUTINE_STATE_IDLE)
     {
         Dcm_SendNegativeResponse(DCM_SID_ROUTINE_CONTROL, DCM_NRC_REQUEST_SEQUENCE_ERROR);
@@ -2555,7 +2516,6 @@ static void Dcm_HandleRoutineStop(uint16 rid)
  */
 static void Dcm_HandleRoutineRequestResults(uint16 rid)
 {
-    DET_LOGT(TAG, "called");
     if (Dcm_RoutineState == DCM_ROUTINE_STATE_IDLE)
     {
         Dcm_SendNegativeResponse(DCM_SID_ROUTINE_CONTROL, DCM_NRC_REQUEST_SEQUENCE_ERROR);
@@ -2602,7 +2562,6 @@ static void Dcm_HandleRoutineRequestResults(uint16 rid)
  */
 static void Dcm_HandleRoutineControl(const uint8* uds, uint8 udsLen)
 {
-    DET_LOGT(TAG, "called");
     if (udsLen != 4U)
     {
         /* [SWS_Dcm_01140]: 0x31 は下限チェック（[SWS_Dcm_00696]）だけでなく
@@ -2664,7 +2623,6 @@ static void Dcm_HandleRoutineControl(const uint8* uds, uint8 udsLen)
  */
 static void Dcm_TransferAbort(void)
 {
-    DET_LOGT(TAG, "called");
     if (Dcm_TransferState != DCM_TRANSFER_STATE_IDLE)
     {
         DET_LOGI(TAG, "34 transfer aborted (session change) received=%lu/%lu",
@@ -2698,7 +2656,6 @@ static void Dcm_TransferAbort(void)
  */
 static void Dcm_HandleRequestDownload(const uint8* uds, uint8 udsLen)
 {
-    DET_LOGT(TAG, "called");
     if (Dcm_SecurityLevel == 0U)
     {
         Dcm_SendNegativeResponse(DCM_SID_REQUEST_DOWNLOAD, DCM_NRC_SECURITY_ACCESS_DENIED);
@@ -2796,7 +2753,6 @@ static void Dcm_HandleRequestDownload(const uint8* uds, uint8 udsLen)
  */
 static void Dcm_HandleTransferData(const uint8* uds, uint8 udsLen)
 {
-    DET_LOGT(TAG, "called");
     if (Dcm_TransferState != DCM_TRANSFER_STATE_DOWNLOADING)
     {
         Dcm_SendNegativeResponse(DCM_SID_TRANSFER_DATA, DCM_NRC_REQUEST_SEQUENCE_ERROR);
@@ -2868,7 +2824,6 @@ static void Dcm_HandleTransferData(const uint8* uds, uint8 udsLen)
  */
 static void Dcm_HandleRequestTransferExit(const uint8* uds, uint8 udsLen)
 {
-    DET_LOGT(TAG, "called");
     (void)uds;
     (void)udsLen;
 
@@ -2922,7 +2877,6 @@ static void Dcm_HandleRequestTransferExit(const uint8* uds, uint8 udsLen)
  */
 static void Dcm_HandleTesterPresent(const uint8* uds, uint8 udsLen)
 {
-    DET_LOGT(TAG, "called");
     if (udsLen < 2U)
     {
         Dcm_SendNegativeResponse(DCM_SID_TESTER_PRESENT, DCM_NRC_INCORRECT_MESSAGE_LENGTH);
@@ -3019,7 +2973,6 @@ static const Dcm_SidSessionRowType Dcm_SidSessionTable[] =
  */
 static uint8 Dcm_IsServiceAllowedInSession(uint8 sid, uint8 session)
 {
-    DET_LOGT(TAG, "called");
     const uint8 sessionMask = (session == DCM_SESSION_EXTENDED)
                                ? DCM_SESSION_MASK_EXTENDED
                                : DCM_SESSION_MASK_DEFAULT;
@@ -3062,7 +3015,6 @@ static uint8 Dcm_IsServiceAllowedInSession(uint8 sid, uint8 session)
  */
 void Dcm_ComIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
 {
-    DET_LOGT(TAG, "called");
     (void)RxPduId;
 
     if (!Dcm_Initialized)

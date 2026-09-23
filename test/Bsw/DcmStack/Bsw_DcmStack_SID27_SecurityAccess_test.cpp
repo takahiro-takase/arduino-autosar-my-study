@@ -258,4 +258,128 @@ TEST_F(Bsw_DcmStack_SID27_SecurityAccess_Test,
     EXPECT_EQ(FakeCanHw_LastSendData[3], DCM_NRC_INCORRECT_MESSAGE_LENGTH);
 }
 
+// ------------------------------------------------------------
+// OK: requestSeed→sendKey の実チェーンで SecurityAccess Level1 が
+// アンロックされる（key = seed ^ DCM_SECURITY_KEY_MASK、本番コードと同じ
+// 計算式。seed は requestSeed の物理応答フレームから読み取る）。
+// ------------------------------------------------------------
+TEST_F(Bsw_DcmStack_SID27_SecurityAccess_Test,
+       SecurityAccess_OK_RequestSeedThenSendKeyUnlocksLevel1OnCanHw)
+{
+    /* 準備 (Arrange): [0x27, 0x01] requestSeed を 0x7E0 の受信バッファへ
+     * セットする（SF: 02 27 01）。SetUp() の EnterExtendedSession() が
+     * 残した送信カウントをリセットしてから使う。 */
+    FakeCanHw_Reset();
+    FakeCanHw_RxId  = 0x7E0U;
+    FakeCanHw_RxDlc = 8U;
+    FakeCanHw_RxData[0] = 2U;
+    FakeCanHw_RxData[1] = DCM_SID_SECURITY_ACCESS;
+    FakeCanHw_RxData[2] = DCM_SEC_SUBFUNC_REQUEST_SEED;
+    for (uint8 i = 3U; i < 8U; i++)
+        FakeCanHw_RxData[i] = 0U;
+    FakeCanHw_RxPendingCount = 1U;
+
+    /* 実行 (Act 1) */
+    Can_MainFunction_Read();
+
+    /* 評価 (Assert 1): requestSeed の正応答 [0x67, 0x01, seedH, seedL] が
+     * Can_Hw まで到達すること。 */
+    ASSERT_EQ(FakeCanHw_SendCount, 1U);
+    EXPECT_EQ(FakeCanHw_LastSendData[0], 0x04U);  // SF PCI（UDSペイロード長=4）
+    EXPECT_EQ(FakeCanHw_LastSendData[1], 0x67U);
+    EXPECT_EQ(FakeCanHw_LastSendData[2], DCM_SEC_SUBFUNC_REQUEST_SEED);
+    uint16 seed = (uint16)(((uint16)FakeCanHw_LastSendData[3] << 8U) | (uint16)FakeCanHw_LastSendData[4]);
+    uint16 key  = (uint16)(seed ^ DCM_SECURITY_KEY_MASK);
+    FakeCanHw_Reset();
+
+    /* 準備 (Arrange 2): [0x27, 0x02, keyH, keyL] を 0x7E0 の受信バッファへ
+     * セットする（SF: 04 27 02 keyH keyL）。 */
+    FakeCanHw_RxId  = 0x7E0U;
+    FakeCanHw_RxDlc = 8U;
+    FakeCanHw_RxData[0] = 4U;
+    FakeCanHw_RxData[1] = DCM_SID_SECURITY_ACCESS;
+    FakeCanHw_RxData[2] = DCM_SEC_SUBFUNC_SEND_KEY;
+    FakeCanHw_RxData[3] = (uint8)(key >> 8U);
+    FakeCanHw_RxData[4] = (uint8)(key & 0xFFU);
+    for (uint8 i = 5U; i < 8U; i++)
+        FakeCanHw_RxData[i] = 0U;
+    FakeCanHw_RxPendingCount = 1U;
+
+    /* 実行 (Act 2) */
+    Can_MainFunction_Read();
+
+    /* 評価 (Assert 2): sendKey の正応答 [0x67, 0x02] が Can_Hw まで到達し、
+     * SecurityAccess Level1 が実際にアンロックされていること。 */
+    ASSERT_EQ(FakeCanHw_SendCount, 1U);
+    EXPECT_EQ(FakeCanHw_LastSendData[0], 0x02U);  // SF PCI（UDSペイロード長=2）
+    EXPECT_EQ(FakeCanHw_LastSendData[1], 0x67U);
+    EXPECT_EQ(FakeCanHw_LastSendData[2], DCM_SEC_SUBFUNC_SEND_KEY);
+
+    Dcm_SecLevelType secLevel = 0U;
+    ASSERT_EQ(Dcm_GetSecurityLevel(&secLevel), E_OK);
+    EXPECT_EQ(secLevel, 1U);  // Unlocked
+}
+
+// ------------------------------------------------------------
+// OK: 既にアンロック済みの状態で requestSeed を再送すると、ISO 14229-1 の
+// 作法どおり allZeroSeed（[0x67, 0x01, 0x00, 0x00]）を返す（sendKey 不要の
+// 合図）。
+// ------------------------------------------------------------
+TEST_F(Bsw_DcmStack_SID27_SecurityAccess_Test,
+       SecurityAccess_OK_RequestSeedWhenAlreadyUnlockedReturnsAllZeroSeedOnCanHw)
+{
+    /* 準備 (Arrange 1): 一度 requestSeed→sendKey でアンロックしておく。 */
+    FakeCanHw_Reset();
+    FakeCanHw_RxId  = 0x7E0U;
+    FakeCanHw_RxDlc = 8U;
+    FakeCanHw_RxData[0] = 2U;
+    FakeCanHw_RxData[1] = DCM_SID_SECURITY_ACCESS;
+    FakeCanHw_RxData[2] = DCM_SEC_SUBFUNC_REQUEST_SEED;
+    for (uint8 i = 3U; i < 8U; i++)
+        FakeCanHw_RxData[i] = 0U;
+    FakeCanHw_RxPendingCount = 1U;
+    Can_MainFunction_Read();
+    ASSERT_EQ(FakeCanHw_LastSendData[1], 0x67U);
+    uint16 seed = (uint16)(((uint16)FakeCanHw_LastSendData[3] << 8U) | (uint16)FakeCanHw_LastSendData[4]);
+    uint16 key  = (uint16)(seed ^ DCM_SECURITY_KEY_MASK);
+    FakeCanHw_Reset();
+
+    FakeCanHw_RxId  = 0x7E0U;
+    FakeCanHw_RxDlc = 8U;
+    FakeCanHw_RxData[0] = 4U;
+    FakeCanHw_RxData[1] = DCM_SID_SECURITY_ACCESS;
+    FakeCanHw_RxData[2] = DCM_SEC_SUBFUNC_SEND_KEY;
+    FakeCanHw_RxData[3] = (uint8)(key >> 8U);
+    FakeCanHw_RxData[4] = (uint8)(key & 0xFFU);
+    for (uint8 i = 5U; i < 8U; i++)
+        FakeCanHw_RxData[i] = 0U;
+    FakeCanHw_RxPendingCount = 1U;
+    Can_MainFunction_Read();
+    ASSERT_EQ(FakeCanHw_LastSendData[1], 0x67U);
+    Dcm_SecLevelType secLevel = 0U;
+    ASSERT_EQ(Dcm_GetSecurityLevel(&secLevel), E_OK);
+    ASSERT_EQ(secLevel, 1U);  // アンロック済みであることの前提確認
+    FakeCanHw_Reset();
+
+    /* 準備 (Arrange 2): [0x27, 0x01] requestSeed を再送する。 */
+    FakeCanHw_RxId  = 0x7E0U;
+    FakeCanHw_RxDlc = 8U;
+    FakeCanHw_RxData[0] = 2U;
+    FakeCanHw_RxData[1] = DCM_SID_SECURITY_ACCESS;
+    FakeCanHw_RxData[2] = DCM_SEC_SUBFUNC_REQUEST_SEED;
+    for (uint8 i = 3U; i < 8U; i++)
+        FakeCanHw_RxData[i] = 0U;
+    FakeCanHw_RxPendingCount = 1U;
+
+    /* 実行 (Act) */
+    Can_MainFunction_Read();
+
+    /* 評価 (Assert): allZeroSeed [0x67, 0x01, 0x00, 0x00] が返ること。 */
+    ASSERT_EQ(FakeCanHw_SendCount, 1U);
+    EXPECT_EQ(FakeCanHw_LastSendData[1], 0x67U);
+    EXPECT_EQ(FakeCanHw_LastSendData[2], DCM_SEC_SUBFUNC_REQUEST_SEED);
+    EXPECT_EQ(FakeCanHw_LastSendData[3], 0x00U);
+    EXPECT_EQ(FakeCanHw_LastSendData[4], 0x00U);
+}
+
 }  // namespace

@@ -185,4 +185,92 @@ TEST_F(Bsw_DcmStack_SID10_SessionControl_Test,
     EXPECT_EQ(FakeCanHw_LastSendData[3], DCM_NRC_INCORRECT_MESSAGE_LENGTH);
 }
 
+// ------------------------------------------------------------
+// OK: [0x10, 0x03] extendedDiagnosticSession は正応答
+// [0x50, 0x03, P2_H, P2_L, P2X_H, P2X_L] を返し、セッションが実際に
+// extendedSession へ遷移する（Dcm_GetSesCtrlType() で直接確認）。
+// ------------------------------------------------------------
+TEST_F(Bsw_DcmStack_SID10_SessionControl_Test,
+       SessionControl_OK_ExtendedSessionRequestProducesPositiveResponseWithP2TimingOnCanHw)
+{
+    /* 準備 (Arrange): [0x10, 0x03] を 0x7E0 の受信バッファへセットする
+     * （SF: 02 10 03）。 */
+    FakeCanHw_RxId  = 0x7E0U;
+    FakeCanHw_RxDlc = 8U;
+    FakeCanHw_RxData[0] = 2U;
+    FakeCanHw_RxData[1] = DCM_SID_SESSION_CTRL;
+    FakeCanHw_RxData[2] = DCM_SESSION_EXTENDED;
+    for (uint8 i = 3U; i < 8U; i++)
+        FakeCanHw_RxData[i] = 0U;
+    FakeCanHw_RxPendingCount = 1U;
+
+    /* 実行 (Act) */
+    Can_MainFunction_Read();
+
+    /* 評価 (Assert): 正応答 [0x50, 0x03, P2_H, P2_L, P2X_H, P2X_L]
+     * （[SWS_Dcm_00341]、ISO 14229-1 準拠の P2/P2* タイミングパラメータ）
+     * が Can_Hw まで到達すること。 */
+    ASSERT_EQ(FakeCanHw_SendCount, 1U);
+    EXPECT_EQ(FakeCanHw_LastSendId, 0x7E8U);
+    EXPECT_EQ(FakeCanHw_LastSendDlc, 8U);
+    EXPECT_EQ(FakeCanHw_LastSendData[0], 0x06U);  // SF PCI（UDSペイロード長=6）
+    EXPECT_EQ(FakeCanHw_LastSendData[1], 0x50U);
+    EXPECT_EQ(FakeCanHw_LastSendData[2], DCM_SESSION_EXTENDED);
+    EXPECT_EQ(FakeCanHw_LastSendData[3], DCM_SESSION_P2_HIGH);
+    EXPECT_EQ(FakeCanHw_LastSendData[4], DCM_SESSION_P2_LOW);
+    EXPECT_EQ(FakeCanHw_LastSendData[5], DCM_SESSION_P2X_HIGH);
+    EXPECT_EQ(FakeCanHw_LastSendData[6], DCM_SESSION_P2X_LOW);
+
+    /* セッションが実際に切り替わっていること（Can_Hw 応答だけでなく
+     * Dcm 内部状態も正しいことの裏付け）。 */
+    Dcm_SesCtrlType session = 0U;
+    ASSERT_EQ(Dcm_GetSesCtrlType(&session), E_OK);
+    EXPECT_EQ(session, DCM_SESSION_EXTENDED);
+}
+
+// ------------------------------------------------------------
+// OK: extendedSession から [0x10, 0x01] defaultSession への遷移は正応答を
+// 返し、セッションが実際に defaultSession へ戻る。
+// ------------------------------------------------------------
+TEST_F(Bsw_DcmStack_SID10_SessionControl_Test,
+       SessionControl_OK_DefaultSessionRequestFromExtendedReturnsToDefaultOnCanHw)
+{
+    /* 準備 (Arrange 1): 先に extendedSession へ遷移させておく。 */
+    FakeCanHw_RxId  = 0x7E0U;
+    FakeCanHw_RxDlc = 8U;
+    FakeCanHw_RxData[0] = 2U;
+    FakeCanHw_RxData[1] = DCM_SID_SESSION_CTRL;
+    FakeCanHw_RxData[2] = DCM_SESSION_EXTENDED;
+    for (uint8 i = 3U; i < 8U; i++)
+        FakeCanHw_RxData[i] = 0U;
+    FakeCanHw_RxPendingCount = 1U;
+    Can_MainFunction_Read();
+    ASSERT_EQ(FakeCanHw_LastSendData[1], 0x50U);  // 前提確認
+    FakeCanHw_Reset();
+
+    /* 準備 (Arrange 2): [0x10, 0x01] を 0x7E0 の受信バッファへセットする
+     * （SF: 02 10 01）。 */
+    FakeCanHw_RxId  = 0x7E0U;
+    FakeCanHw_RxDlc = 8U;
+    FakeCanHw_RxData[0] = 2U;
+    FakeCanHw_RxData[1] = DCM_SID_SESSION_CTRL;
+    FakeCanHw_RxData[2] = DCM_SESSION_DEFAULT;
+    for (uint8 i = 3U; i < 8U; i++)
+        FakeCanHw_RxData[i] = 0U;
+    FakeCanHw_RxPendingCount = 1U;
+
+    /* 実行 (Act) */
+    Can_MainFunction_Read();
+
+    /* 評価 (Assert): 正応答 [0x50, 0x01, ...] が Can_Hw まで到達し、
+     * セッションが実際に defaultSession へ戻ること。 */
+    ASSERT_EQ(FakeCanHw_SendCount, 1U);
+    EXPECT_EQ(FakeCanHw_LastSendData[1], 0x50U);
+    EXPECT_EQ(FakeCanHw_LastSendData[2], DCM_SESSION_DEFAULT);
+
+    Dcm_SesCtrlType session = 0U;
+    ASSERT_EQ(Dcm_GetSesCtrlType(&session), E_OK);
+    EXPECT_EQ(session, DCM_SESSION_DEFAULT);
+}
+
 }  // namespace
