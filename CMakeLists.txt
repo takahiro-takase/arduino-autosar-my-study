@@ -420,6 +420,23 @@ set(NATIVE_CHAIN_WRAP_SYMBOLS
     BswM_EcuM_CurrentState
     BswM_ComM_CurrentMode
     BswM_Dcm_CommunicationMode_CurrentState
+    # ComM.h の AUTOSAR IF 全16関数（Wrap_ComM.h/.c 参照）。
+    ComM_Init
+    ComM_DeInit
+    ComM_GetStatus
+    ComM_RequestComMode
+    ComM_GetRequestedComMode
+    ComM_GetCurrentComMode
+    ComM_GetVersionInfo
+    ComM_Nm_NetworkStartIndication
+    ComM_Nm_NetworkMode
+    ComM_Nm_PrepareBusSleepMode
+    ComM_Nm_BusSleepMode
+    ComM_DCM_ActiveDiagnostic
+    ComM_DCM_InactiveDiagnostic
+    ComM_CommunicationAllowed
+    ComM_BusSM_ModeIndication
+    ComM_MainFunction
 )
 foreach(wrap_symbol IN LISTS NATIVE_CHAIN_WRAP_SYMBOLS)
     target_link_options(native_chain_tests PRIVATE "-Wl,--wrap=${wrap_symbol}")

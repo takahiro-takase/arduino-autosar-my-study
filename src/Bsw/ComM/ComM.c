@@ -124,6 +124,10 @@
  *          AUTOSAR 認証済み実装ではなく、製品への適用は想定していません。
  */
 
+/* ======================================================================
+ * Includes
+ * ====================================================================== */
+
 #include "ComM.h"
 #include "CanSM.h"
 #include "EcuM.h"
@@ -131,7 +135,19 @@
 #include "Nm.h"
 #include "Det.h"
 
+/* ======================================================================
+ * Definitions
+ * ====================================================================== */
+
 #define TAG "ComM"
+
+/* ======================================================================
+ * Type Definitions
+ * ====================================================================== */
+
+/* ======================================================================
+ * External Variables
+ * ====================================================================== */
 
 /* チャネルごとの現在の通信モード */
 static ComM_ModeType ComM_ChannelMode[COMM_CHANNEL_COUNT];
@@ -177,6 +193,22 @@ static uint8 ComM_DcmActiveDiagnostic[COMM_CHANNEL_COUNT];
  *  （ComM_RequestFullComOrPend() 参照）。 */
 static boolean ComM_CommunicationAllowedFlag[COMM_CHANNEL_COUNT];
 
+/* ======================================================================
+ * Function Prototypes
+ * ====================================================================== */
+
+static ComM_ModeType ComM_ComputeAggregatedMode(void);
+static Std_ReturnType ComM_ApplyAggregatedRequest(ComM_ModeType aggregated);
+static void ComM_RetryNmReleaseAfterBusOff(uint8 Network, const char* modeLabel);
+
+/* ======================================================================
+ * Functions
+ * ====================================================================== */
+
+/* ----------------------------------------------------------------------
+ * ComM_Init
+ * ---------------------------------------------------------------------- */
+
 /**
  * \brief   ComM モジュールを初期化する。
  *
@@ -191,7 +223,6 @@ static boolean ComM_CommunicationAllowedFlag[COMM_CHANNEL_COUNT];
  */
 void ComM_Init(const ComM_ConfigType* ConfigPtr)
 {
-    DET_LOGT(TAG, "called");
     (void)ConfigPtr; /* 本プロジェクトは post-build 設定を持たない（ComM.h 参照） */
     uint8 i;
     for (i = 0U; i < COMM_CHANNEL_COUNT; i++)
@@ -208,6 +239,10 @@ void ComM_Init(const ComM_ConfigType* ConfigPtr)
     DET_LOGI(TAG, "Init ch=%u", (unsigned)COMM_CHANNEL_COUNT);
 }
 
+/* ----------------------------------------------------------------------
+ * ComM_DeInit
+ * ---------------------------------------------------------------------- */
+
 /**
  * \brief   ComM モジュールを未初期化状態に戻す。
  *
@@ -217,7 +252,6 @@ void ComM_Init(const ComM_ConfigType* ConfigPtr)
  */
 void ComM_DeInit(void)
 {
-    DET_LOGT(TAG, "called");
     if (!ComM_Initialized)
     {
         Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_DEINIT, COMM_E_UNINIT);
@@ -228,6 +262,16 @@ void ComM_DeInit(void)
     DET_LOGI(TAG, "DeInit ok");
 }
 
+/* ----------------------------------------------------------------------
+ * ComM_GetState
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ----------------------------------------------------------------------
+ * ComM_GetStatus
+ * ---------------------------------------------------------------------- */
+
 /**
  * \brief   ComM モジュールの初期化状態を取得する。
  *
@@ -237,7 +281,6 @@ void ComM_DeInit(void)
  */
 Std_ReturnType ComM_GetStatus(ComM_InitStatusType* Status)
 {
-    DET_LOGT(TAG, "called");
     if (Status == NULL)
     {
         Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_GET_STATUS, COMM_E_PARAM_POINTER);
@@ -247,6 +290,819 @@ Std_ReturnType ComM_GetStatus(ComM_InitStatusType* Status)
     *Status = ComM_Initialized ? COMM_INIT : COMM_UNINIT;
     return E_OK;
 }
+
+/* ----------------------------------------------------------------------
+ * ComM_GetInhibitionStatus
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ----------------------------------------------------------------------
+ * ComM_RequestComMode
+ * ---------------------------------------------------------------------- */
+
+/**
+ * \brief   ユーザが通信モードを要求する。
+ *
+ * \details ユーザの要求を記録した後、全ユーザの要求と Dcm の診断アクティブ
+ *          通知（ComM_DCM_ActiveDiagnostic()、ComM_ComputeAggregatedMode()
+ *          参照）のうち最も通信レベルの高いモード（FULL_COM > SILENT_COM >
+ *          NO_COM）へ集約し、集約結果がチャネルの現状と異なる場合のみ CanSM
+ *          へ転送する。1 ユーザだけが FULL_COM を要求していても、他のユーザが
+ *          NO_COM を要求している間はチャネルは FULL_COM のまま維持される
+ *          （「誰か一人でも通信を必要としていればバスは落とさない」）。
+ *
+ * \param[in]  User     要求するユーザ ID (COMM_USER_0)。
+ * \param[in]  ComMode  要求する通信モード。
+ *
+ * \retval  E_OK      要求を受理した（チャネルが実際に遷移したとは限らない）。
+ * \retval  E_NOT_OK  User が範囲外、ComMode が不正、または CanSM への転送が失敗した
+ *                    （Bus-Off 回復中等）。
+ *
+ * \AUTOSARReq     {SWS_ComM_00686, SWS_ComM_00500, SWS_ComM_00069}
+ * \ServiceID      {0x05}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType ComM_RequestComMode(ComM_UserHandleType User, ComM_ModeType ComMode)
+{
+    if (!ComM_Initialized)
+    {
+        Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_REQUEST_COM_MODE, COMM_E_UNINIT);
+        return E_NOT_OK;
+    }
+
+    if (User >= COMM_USER_COUNT || ComMode > COMM_FULL_COMMUNICATION)
+    {
+        Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_REQUEST_COM_MODE, COMM_E_WRONG_PARAMETERS);
+        return E_NOT_OK;
+    }
+
+    ComM_UserRequest[User] = ComMode;
+
+    ComM_ModeType aggregated = ComM_ComputeAggregatedMode();
+
+    DET_LOGI(TAG, "User%u req=%u -> aggregated=%u (channel=%u)",
+             (unsigned)User, (unsigned)ComMode,
+             (unsigned)aggregated, (unsigned)ComM_ChannelMode[0U]);
+
+    return ComM_ApplyAggregatedRequest(aggregated);
+}
+
+/* ----------------------------------------------------------------------
+ * ComM_GetMaxComMode
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ----------------------------------------------------------------------
+ * ComM_GetRequestedComMode
+ * ---------------------------------------------------------------------- */
+
+/**
+ * \brief   ユーザが現在要求している通信モードを取得する（[SWS_ComM_00079]）。
+ *
+ * \AUTOSARReq     {SWS_ComM_00079}
+ * \ServiceID      {0x07}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType ComM_GetRequestedComMode(ComM_UserHandleType User, ComM_ModeType* ComMode)
+{
+    if (!ComM_Initialized)
+    {
+        Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_GET_REQUESTED_COM_MODE, COMM_E_UNINIT);
+        return E_NOT_OK;
+    }
+
+    if (User >= COMM_USER_COUNT)
+    {
+        Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_GET_REQUESTED_COM_MODE, COMM_E_WRONG_PARAMETERS);
+        return E_NOT_OK;
+    }
+
+    if (ComMode == NULL)
+    {
+        Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_GET_REQUESTED_COM_MODE, COMM_E_PARAM_POINTER);
+        return E_NOT_OK;
+    }
+
+    *ComMode = ComM_UserRequest[User];
+    return E_OK;
+}
+
+/* ----------------------------------------------------------------------
+ * ComM_GetCurrentComMode
+ * ---------------------------------------------------------------------- */
+
+/**
+ * \brief   ユーザの現在の通信モードを取得する。
+ *
+ * \ServiceID      {0x08}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType ComM_GetCurrentComMode(ComM_UserHandleType User, ComM_ModeType* ComMode)
+{
+    if (!ComM_Initialized)
+    {
+        Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_GET_CURRENT_COM_MODE, COMM_E_UNINIT);
+        return E_NOT_OK;
+    }
+
+    if (User >= COMM_USER_COUNT)
+    {
+        Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_GET_CURRENT_COM_MODE, COMM_E_WRONG_PARAMETERS);
+        return E_NOT_OK;
+    }
+
+    if (ComMode == NULL)
+    {
+        Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_GET_CURRENT_COM_MODE, COMM_E_PARAM_POINTER);
+        return E_NOT_OK;
+    }
+
+    /* ユーザ 0 → チャネル 0 の現在モードを返す */
+    *ComMode = ComM_ChannelMode[0U];
+    return E_OK;
+}
+
+/* ----------------------------------------------------------------------
+ * ComM_PreventWakeUp
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ----------------------------------------------------------------------
+ * ComM_LimitChannelToNoComMode
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ----------------------------------------------------------------------
+ * ComM_LimitECUToNoComMode
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ----------------------------------------------------------------------
+ * ComM_ReadInhibitCounter
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ----------------------------------------------------------------------
+ * ComM_ResetInhibitCounter
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ----------------------------------------------------------------------
+ * ComM_SetECUGroupClassification
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ----------------------------------------------------------------------
+ * ComM_GetVersionInfo
+ * ---------------------------------------------------------------------- */
+
+void ComM_GetVersionInfo(Std_VersionInfoType* Versioninfo)
+{
+    if (Versioninfo == NULL)
+    {
+        Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_GET_VERSION_INFO, COMM_E_PARAM_POINTER);
+        return;
+    }
+
+    Versioninfo->vendorID         = COMM_VENDOR_ID;
+    Versioninfo->moduleID         = COMM_MODULE_ID;
+    Versioninfo->sw_major_version = COMM_SW_MAJOR_VERSION;
+    Versioninfo->sw_minor_version = COMM_SW_MINOR_VERSION;
+    Versioninfo->sw_patch_version = COMM_SW_PATCH_VERSION;
+}
+
+/* ======================================================================
+ *  Callback notifications
+ * ====================================================================== */
+
+/* ----------------------------------------------------------------------
+ * ComM_Nm_NetworkStartIndication
+ * ---------------------------------------------------------------------- */
+
+/**
+ * \brief   Bus-Sleep Mode 中に NM PDU を受信したことの通知（Nm から呼び出される、
+ *          [SWS_ComM_00383]）。
+ *
+ * \details [SWS_CanNm_00127]: Nm は Bus-Sleep Mode 中に NM PDU を受信しても
+ *          自動的に Network Mode へ遷移せず、上位層（ComM）へ通知するのみで
+ *          判断を委ねる。これは「他ノードは既に Network Mode にいる」ことを
+ *          示す、レース条件由来のシグナルである（[SWS_ComM_00583] のユース
+ *          ケース参照）。
+ *
+ *          本プロジェクトの同期的な設計では、Nm が `NM_STATE_BUS_SLEEP` へ
+ *          到達する時点で通常は `ComM_Nm_BusSleepMode()` 経由の
+ *          `CanSM_RequestComMode(NO_COM)` が既に成功しており、物理コントローラ
+ *          も `CAN_CS_SLEEP` へ落ちている（＝`Can_MainFunction_Read()` 自体が
+ *          停止し `Nm_RxIndication()` は物理的に呼ばれ得ない）。そのため本関数
+ *          が実際に到達しうるのは、Bus-Off 回復待ち中に `CanSM_RequestComMode
+ *          (NO_COM)` が拒否されて Nm だけが独立したタイマで先に Bus-Sleep
+ *          Mode へ到達してしまうケース（コントローラは Bus-Off により
+ *          Listen-Only のまま受信は継続、`ComM_Nm_BusSleepMode()` の Doxygen
+ *          `BusOffDuringNmWinddown_OK_DoesNotResurrectNm` 相当）にほぼ限られる。
+ *
+ *          [SWS_ComM_00583]: `ComM_ChannelMode[Network]` が既に
+ *          COMM_FULL_COMMUNICATION でなければ `CanSM_RequestComMode(Network,
+ *          COMM_FULL_COMMUNICATION)` を試みる。ただし `CommunicationAllowed`
+ *          フラグ（[SWS_ComM_00871]、`ComM_CommunicationAllowed()` 参照）が
+ *          FALSE の間は CanSM へは伝えず遷移を保留する（Allowed=TRUE 通知時に
+ *          `ComM_CommunicationAllowed()` 側が改めて発行する）。
+ *          **`ComM_Nm_NetworkMode()` とは異なり
+ *          `ComM_NmReleasePending[Network]` は呼び出しが実際に成功した場合
+ *          のみクリアする**（`ComM_Nm_BusSleepMode()` の NO_COM 分岐と同じ
+ *          「まだ解放が完了していない事実を保持し続ける」方針）。上記の
+ *          Bus-Off 回復待ちシナリオでは `CanSM_RequestComMode()` は
+ *          `CanSM_State==CANSM_STATE_BUS_OFF` により必ず拒否される（モード
+ *          変更は Bus-Off 回復ステートマシンに一本化する設計、CanSM.c
+ *          参照）ため、ここで無条件にクリアしてしまうと、後の Bus-Off 回復時に
+ *          `ComM_BusSM_ModeIndication()` の SILENT_COM 分岐にある既存の
+ *          リトライガード（`ComM_NmReleasePending` が立っていれば
+ *          `CanSM_RequestComMode(NO_COM)` を再送する）を迂回させ、ユーザーが
+ *          望んでいないのに FULL_COM へ「復活」させてしまう
+ *          （`BusOffDuringNmWinddown_OK_DoesNotResurrectNm` と同種の回帰）。
+ *
+ *          実仕様は `ComMNmVariant=FULL` 構成で `Nm_PassiveStartup()` を要求
+ *          するが（[SWS_ComM_00903]）、本 ECU は能動送信ノードでありこの API
+ *          自体を実装しない（`CanNm_PassiveStartUp` は既知の対応除外）。
+ *          `CanSM_RequestComMode(FULL_COM)` が成功する経路では
+ *          `ComM_BusSM_ModeIndication()` が内部で `Nm_NetworkRequest()` を
+ *          呼び Nm 自身を起こす（同関数の FULL_COM 分岐参照）ため、本関数は
+ *          追加のアクションを取らない。
+ *
+ * \param[in]  Network  ネットワークハンドル（0 〜 COMM_CHANNEL_COUNT-1）。
+ *
+ * \AUTOSARReq     {SWS_ComM_00383, SWS_ComM_00583}
+ * \ServiceID      {0x15}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Asynchronous}
+ */
+void ComM_Nm_NetworkStartIndication(NetworkHandleType Network)
+{
+    if (!ComM_Initialized)
+    {
+        Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_NM_NETWORK_START_INDICATION, COMM_E_UNINIT);
+        return;
+    }
+
+    if (Network >= COMM_CHANNEL_COUNT)
+    {
+        Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_NM_NETWORK_START_INDICATION, COMM_E_WRONG_PARAMETERS);
+        return;
+    }
+
+    DET_LOGW(TAG, "ch%u NetworkStartIndication (NM PDU seen while Nm Bus-Sleep, race condition)",
+             (unsigned)Network);
+
+    if (ComM_ChannelMode[Network] != COMM_FULL_COMMUNICATION)
+    {
+        /* 呼び出しが実際に成功した場合のみクリアする（理由は本関数の
+         * \details 参照。ComM_Nm_NetworkMode() と同じ無条件クリアに
+         * 変更しないこと）。CommunicationAllowed ゲート（ComM_RequestFullComOrPend()
+         * 参照）はここでは意図的に通さず直接 CanSM を呼ぶ（理由は
+         * ComM_Nm_NetworkMode() 側の同種コメント参照）。 */
+        if (CanSM_RequestComMode(Network, COMM_FULL_COMMUNICATION) == E_OK)
+        {
+            ComM_NmReleasePending[Network] = 0U;
+        }
+    }
+    /* else: チャネルは既に FULL_COM。本プロジェクトの同期的な設計では
+     * ComM_ChannelMode を FULL_COM にする経路（ComM_BusSM_ModeIndication()の
+     * FULL_COM分岐、ComM_Nm_NetworkMode()）がいずれも呼び出しの中で
+     * Nm_NetworkRequest() を既に呼んでいるため、Nm がこの時点でなお
+     * NM_STATE_BUS_SLEEP のままという状況は本プロジェクトの呼び出し経路
+     * からは到達しない（本関数のDoxygen参照）。 */
+}
+
+/* ----------------------------------------------------------------------
+ * ComM_Nm_NetworkMode
+ * ---------------------------------------------------------------------- */
+
+/**
+ * \brief   Nm が Network Mode へ（再）入ったことの通知（Nm から呼び出される）。
+ *
+ * \details [SWS_ComM_00296]。典型的には、Prepare Bus-Sleep Mode 中に他ノードの
+ *          NM フレームを受信して Nm が自律的にスリープを取りやめたケース
+ *          （[SWS_CanNm_00124]）。`ComM_ChannelMode[Network] !=
+ *          COMM_FULL_COMMUNICATION` の場合、CanSM_RequestComMode(Network,
+ *          COMM_FULL_COMMUNICATION) を呼ぶ前に ComM_NmReleasePending[Network]
+ *          を無条件で（この呼び出しが成功するか Bus-Off 回復中で拒否される
+ *          かに関わらず）クリアする。
+ *
+ *          この無条件クリアが安全性の根拠そのものである点に注意（「2 経路が
+ *          物理的に排他だから安全」ではない）: CANSM_STATE_BUS_OFF 中も
+ *          コントローラは受信を継続する（Can_MainFunction_Read() が RX
+ *          ドレインをスキップするのは CanState==CAN_CS_SLEEP のときのみで、
+ *          BUS_OFF は CAN_CS_STOPPED）ため、Bus-Off の
+ *          最中でも Nm_RxIndication() は普通に発火しうる。つまり本関数が
+ *          CanSM_State==CANSM_STATE_BUS_OFF の最中に呼ばれ、
+ *          CanSM_RequestComMode() が拒否されるケースは実在する。もしここで
+ *          「成功したときだけクリア」としていたら、ComM_NmReleasePending が
+ *          立ったまま残り、後の Bus-Off 回復時に ComM_BusSM_ModeIndication() の
+ *          FULL_COM 分岐にある既存のリトライガード（ComM_NmReleasePending が
+ *          立っていれば CanSM_RequestComMode(NO_COM) を再送する）を誤って
+ *          発火させ、Nm が既に Repeat Message State へ復帰して送信中の
+ *          コントローラを強制的に再スリープさせてしまう（Nm の内部状態と
+ *          物理コントローラの状態が食い違う）。無条件クリアにより、この
+ *          リトライガードは本当に「Bus-Off がまだ解放未確認のまま回復した」
+ *          ケースにのみ発火する。
+ *
+ * \param[in]  Network  ネットワークハンドル（0 〜 COMM_CHANNEL_COUNT-1）。
+ *
+ * \AUTOSARReq     {SWS_ComM_00390, SWS_ComM_00296}
+ * \ServiceID      {0x18}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void ComM_Nm_NetworkMode(NetworkHandleType Network)
+{
+    if (!ComM_Initialized)
+    {
+        Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_NM_NETWORK_MODE, COMM_E_UNINIT);
+        return;
+    }
+
+    if (Network >= COMM_CHANNEL_COUNT)
+    {
+        Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_NM_NETWORK_MODE, COMM_E_WRONG_PARAMETERS);
+        return;
+    }
+
+    if (ComM_ChannelMode[Network] != COMM_FULL_COMMUNICATION)
+    {
+        /* CanSM_RequestComMode() 呼び出しの成否に関わらず無条件でクリアする
+         * （理由は上記 \details 参照。ここを条件付きクリアに変更しないこと）。
+         * CommunicationAllowed ゲート（ComM_RequestFullComOrPend()）は意図的に
+         * 通さず直接 CanSM を呼ぶ: 本関数を含む Nm 由来の全コールバック
+         * （ComM_Nm_NetworkMode/NetworkStartIndication/PrepareBusSleepMode/
+         * BusSleepMode）は Nm_Init() 済みでなければ呼ばれ得ないが、
+         * EcuM_Init() は Nm_Init() より必ず前に ComM_CommunicationAllowed(TRUE)
+         * を通知する（EcuM.c 参照）ため、本プロジェクトでは Allowed=FALSE の
+         * 状態でこれらが呼ばれることはあり得ない。もしここでもゲートを通すと、
+         * 「NmReleasePending のクリアと ComM_ChannelMode の FULL_COM 遷移は
+         * 常に同時に起きる」という本関数・ComM_BusSM_ModeIndication() 双方が
+         * 前提とする不変条件が崩れ、CanSM が拒否も成功もしていないのに
+         * NmReleasePending だけが解除された不整合な中間状態
+         * （ComM_ChannelMode==SILENT_COM のまま）を作ってしまい、直後の
+         * ユーザー起因の NO_COM 再要求が Nm の協調スリープを無視して
+         * コントローラを強制的に即座に物理スリープさせる、という
+         * 2026-08 に一度修正した回帰と同種の不具合を再導入する
+         * （2026-09 の CommunicationAllowed 導入時に /code-review で発見・
+         * 実装を戻して回避）。 */
+        ComM_NmReleasePending[Network] = 0U;
+        (void)CanSM_RequestComMode(Network, COMM_FULL_COMMUNICATION);
+    }
+}
+
+/* ----------------------------------------------------------------------
+ * ComM_Nm_PrepareBusSleepMode
+ * ---------------------------------------------------------------------- */
+
+/**
+ * \brief   Nm が Prepare Bus-Sleep Mode へ入ったことの通知（Nm から呼び出される）。
+ *
+ * \details [SWS_ComM_00826]。COMM_FULL_COMMUNICATION 中に Nm が Prepare
+ *          Bus-Sleep Mode へ入ると、CanSM_RequestComMode(Network,
+ *          COMM_SILENT_COMMUNICATION) を呼びチャネルを受信専用へ切り替える。
+ *          `ComM_ChannelMode[Network]` が既に COMM_FULL_COMMUNICATION でない
+ *          場合（Bus-Off で既に SILENT_COM のケース等）は no-op とし、
+ *          Bus-Off 回復シーケンスと衝突させない。
+ *
+ * \param[in]  Network  ネットワークハンドル（0 〜 COMM_CHANNEL_COUNT-1）。
+ *
+ * \AUTOSARReq     {SWS_ComM_00391, SWS_ComM_00826}
+ * \ServiceID      {0x19}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void ComM_Nm_PrepareBusSleepMode(NetworkHandleType Network)
+{
+    if (!ComM_Initialized)
+    {
+        Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_NM_PREPARE_BUS_SLEEP_MODE, COMM_E_UNINIT);
+        return;
+    }
+
+    if (Network >= COMM_CHANNEL_COUNT)
+    {
+        Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_NM_PREPARE_BUS_SLEEP_MODE, COMM_E_WRONG_PARAMETERS);
+        return;
+    }
+
+    if (ComM_ChannelMode[Network] == COMM_FULL_COMMUNICATION)
+    {
+        (void)CanSM_RequestComMode(Network, COMM_SILENT_COMMUNICATION);
+    }
+}
+
+/* ----------------------------------------------------------------------
+ * ComM_Nm_BusSleepMode
+ * ---------------------------------------------------------------------- */
+
+/**
+ * \brief   Nm が Bus-Sleep Mode へ到達したことの通知（Nm から呼び出される）。
+ *
+ * \details [SWS_ComM_00392]。ComM_RequestComMode() が FULL_COM -> NO_COM の
+ *          要求時に Nm_NetworkRelease() のみを送って以降、Nm の協調スリープが
+ *          完了する（[SWS_ComM_00637]）まで ComM_ChannelMode は FULL_COM の
+ *          まま据え置かれている（ファイル冒頭コメント参照）。本関数はその
+ *          完了通知であり、ここで初めて CanSM_RequestComMode(NO_COM) を呼び、
+ *          物理スリープと ComM_ChannelMode の更新（CanSM が呼び返す
+ *          ComM_BusSM_ModeIndication 経由）を行う。
+ *
+ *          Bus-Off 回復中は CanSM_RequestComMode() が E_NOT_OK を返しうる
+ *          （CanSM.c 参照）。この場合 ComM_NmReleasePending はクリアしない
+ *          （まだ解放が完了していないという事実を保持し続ける必要がある。
+ *          クリアするタイミングは対称性のため ComM_BusSM_ModeIndication() の
+ *          NO_COM 分岐に一本化している。同分岐の FULL_COM 側コメントも参照）。
+ *
+ * \param[in]  Network  ネットワークハンドル（0 〜 COMM_CHANNEL_COUNT-1）。
+ *
+ * \AUTOSARReq     {SWS_ComM_00392, SWS_ComM_00637}
+ * \ServiceID      {0x1a}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void ComM_Nm_BusSleepMode(NetworkHandleType Network)
+{
+    if (!ComM_Initialized)
+    {
+        Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_NM_BUS_SLEEP_MODE, COMM_E_UNINIT);
+        return;
+    }
+
+    if (Network >= COMM_CHANNEL_COUNT)
+    {
+        Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_NM_BUS_SLEEP_MODE, COMM_E_WRONG_PARAMETERS);
+        return;
+    }
+
+    (void)CanSM_RequestComMode(Network, COMM_NO_COMMUNICATION);
+}
+
+/* ----------------------------------------------------------------------
+ * ComM_Nm_RestartIndication
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ----------------------------------------------------------------------
+ * ComM_DCM_ActiveDiagnostic
+ * ---------------------------------------------------------------------- */
+
+/**
+ * \brief   Dcm から、対象チャネルで診断セッションが進行中であることを通知する。
+ *
+ * \details [SWS_ComM_00876]。実ユーザの要求に関わらず、以降
+ *          ComM_DCM_InactiveDiagnostic() が呼ばれるまで常に
+ *          COMM_FULL_COMMUNICATION を要求する仮想ユーザとして扱う
+ *          （ComM_ComputeAggregatedMode() 参照）。
+ *
+ * \param[in]  Channel  診断通信が必要になったチャネル。
+ *
+ * \AUTOSARReq     {SWS_ComM_00873}
+ * \ServiceID      {0x1F}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void ComM_DCM_ActiveDiagnostic(NetworkHandleType Channel)
+{
+    if (!ComM_Initialized)
+    {
+        Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_DCM_ACTIVE_DIAGNOSTIC, COMM_E_UNINIT);
+        return;
+    }
+
+    if (Channel >= COMM_CHANNEL_COUNT)
+    {
+        Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_DCM_ACTIVE_DIAGNOSTIC, COMM_E_WRONG_PARAMETERS);
+        return;
+    }
+
+    ComM_DcmActiveDiagnostic[Channel] = 1U;
+
+    ComM_ModeType aggregated = ComM_ComputeAggregatedMode();
+    DET_LOGI(TAG, "DCM ActiveDiagnostic ch=%u -> aggregated=%u", (unsigned)Channel, (unsigned)aggregated);
+    (void)ComM_ApplyAggregatedRequest(aggregated);
+}
+
+/* ----------------------------------------------------------------------
+ * ComM_DCM_InactiveDiagnostic
+ * ---------------------------------------------------------------------- */
+
+/**
+ * \brief   Dcm から、対象チャネルで診断セッションが終了したことを通知する。
+ *
+ * \details [SWS_ComM_00876]。ComM_DCM_ActiveDiagnostic() が課していた仮想
+ *          COMM_FULL_COMMUNICATION 要求を解除する。他の実ユーザがまだ
+ *          COMM_FULL_COMMUNICATION を要求していれば、チャネルは維持される。
+ *
+ * \param[in]  Channel  診断通信が不要になったチャネル。
+ *
+ * \AUTOSARReq     {SWS_ComM_00874}
+ * \ServiceID      {0x20}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void ComM_DCM_InactiveDiagnostic(NetworkHandleType Channel)
+{
+    if (!ComM_Initialized)
+    {
+        Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_DCM_INACTIVE_DIAGNOSTIC, COMM_E_UNINIT);
+        return;
+    }
+
+    if (Channel >= COMM_CHANNEL_COUNT)
+    {
+        Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_DCM_INACTIVE_DIAGNOSTIC, COMM_E_WRONG_PARAMETERS);
+        return;
+    }
+
+    ComM_DcmActiveDiagnostic[Channel] = 0U;
+
+    ComM_ModeType aggregated = ComM_ComputeAggregatedMode();
+    DET_LOGI(TAG, "DCM InactiveDiagnostic ch=%u -> aggregated=%u", (unsigned)Channel, (unsigned)aggregated);
+    (void)ComM_ApplyAggregatedRequest(aggregated);
+}
+
+/* ----------------------------------------------------------------------
+ * ComM_EcuM_WakeUpIndication
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ----------------------------------------------------------------------
+ * ComM_EcuM_PNCWakeUpIndication
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ----------------------------------------------------------------------
+ * ComM_CommunicationAllowed
+ * ---------------------------------------------------------------------- */
+
+/**
+ * \brief   EcuM または BswM から、対象チャネルの通信可否を通知する
+ *          （[SWS_ComM_00871]）。
+ *
+ * \details [SWS_ComM_00884] のとおりチャネルごとに CommunicationAllowed
+ *          フラグを保持する（既定 FALSE、ComM_Init() 参照）。
+ *          [SWS_ComM_00895]: Allowed=TRUE を受け取った時点でチャネルが
+ *          まだ COMM_NO_COMMUNICATION のままであれば、ユーザ側の要求を
+ *          その場で再集計する（ComM_ComputeAggregatedMode()、
+ *          ComM_RequestComMode()/ComM_DCM_ActiveDiagnostic() が更新する
+ *          ComM_UserRequest[]/ComM_DcmActiveDiagnostic[] をそのまま再評価）。
+ *          その結果がなお COMM_FULL_COMMUNICATION であれば直ちに
+ *          CanSM_RequestComMode(FULL_COM) を発行する。個別の「保留」状態を
+ *          別途記憶しないため、Allowed=FALSE の間に要求が出た後で撤回
+ *          された場合でも、撤回後の最新の要求だけが正しく反映される
+ *          （2026-09、/code-review で個別保留フラグ方式の状態不整合を複数
+ *          発見し設計変更。ComM_RequestFullComOrPend() 参照）。
+ *          Nm 起因の FULL_COM 遷移（ComM_Nm_NetworkMode() 等）はこの
+ *          再集計の対象外（それぞれの Doxygen 参照）。Allowed=FALSE への
+ *          変更は既に COMM_FULL_COMMUNICATION のチャネルには影響しない
+ *          （[SWS_ComM_00896] のとおり評価対象は NO_COM からの遷移時のみ）。
+ *
+ * \param[in]  Channel  対象ネットワークハンドル。
+ * \param[in]  Allowed  TRUE: 通信を許可する。FALSE: 通信を許可しない。
+ *
+ * \AUTOSARReq     {SWS_ComM_00871, SWS_ComM_00884, SWS_ComM_00885, SWS_ComM_00895}
+ * \ServiceID      {0x35}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void ComM_CommunicationAllowed(NetworkHandleType Channel, boolean Allowed)
+{
+    if (!ComM_Initialized)
+    {
+        Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_COMMUNICATION_ALLOWED, COMM_E_UNINIT);
+        return;
+    }
+
+    if (Channel >= COMM_CHANNEL_COUNT)
+    {
+        Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_COMMUNICATION_ALLOWED, COMM_E_WRONG_PARAMETERS);
+        return;
+    }
+
+    ComM_CommunicationAllowedFlag[Channel] = Allowed;
+    DET_LOGI(TAG, "ch%u CommunicationAllowed=%u", (unsigned)Channel, (unsigned)Allowed);
+
+    if (Allowed)
+    {
+        /* [SWS_ComM_00895]: Allowed=TRUE になった時点で、ユーザ要求の集約結果を
+         * 改めて評価する。ComM_DCM_ActiveDiagnostic()/InactiveDiagnostic() と
+         * 全く同じ「トリガーが変わっただけで、適用ロジックは共通」パターン
+         * （ComM_ApplyAggregatedRequest() 参照。「NO_COM かつ集約結果が
+         * FULL_COM か」を個別に判定するコードをここに複製しない —
+         * ComM_ApplyAggregatedRequest() 自身の早期 return 群がそれを兼ねる。
+         * 2026-09、/code-review で条件の二重実装を指摘）。既に希望通りの
+         * 状態（channel==FULL_COM、または誰も FULL_COM を望んでいない）なら
+         * 内部の早期 return で何も起きない。 */
+        (void)ComM_ApplyAggregatedRequest(ComM_ComputeAggregatedMode());
+    }
+}
+
+/* ----------------------------------------------------------------------
+ * ComM_BusSM_ModeIndication
+ * ---------------------------------------------------------------------- */
+
+/**
+ * \brief   CanSM からの通信モード変化通知コールバック（下位層 → 上位層）。
+ *
+ * \details CanSM が実際の CAN バス状態を変化させた後に呼ぶ。
+ *          ComM はチャネル状態を更新し EcuM の RUN 要求を操作する。
+ *
+ *          ComM_UserRequest[COMM_USER_0] の再同期:
+ *          この通知は CanSM がユーザの要求とは独立に（ウェイクアップ検証成功や
+ *          Bus-Off 回復等）チャネルを変化させた場合にも呼ばれる。
+ *          これは「どのユーザの要求でもない」変化のため、放置すると
+ *          ComM_UserRequest[COMM_USER_0] が古い値のまま残り、次に別ユーザが
+ *          ComM_RequestComMode() を呼んだ瞬間に古い値と誤って再集約されてしまう
+ *          （実機で確認された不具合: ウェイクアップ直後、App_EngineManager が
+ *          まだ 1 周期も再評価していない間に Dcm が defaultSession へ戻ると、
+ *          User0 の古い NO_COM 要求と集約されて即座に再スリープしていた）。
+ *          COMM_USER_0（App_EngineManager）はチャネルの実状態が「暫定的な自分の
+ *          要求」であるとみなし、次回 App_EngineManager_Run() が実際の
+ *          エンジン状態に基づいて改めて要求し直すまではこの値を使う。
+ *          Dcm の診断アクティブ通知（ComM_DCM_ActiveDiagnostic/
+ *          InactiveDiagnostic、ComM_DcmActiveDiagnostic[]）はセッション状態に
+ *          基づく独立した判断のため、ここでは同期しない（そもそも
+ *          ComM_UserRequest[] とは別の配列のため対象外）。
+ *          注意: この再同期は COMM_SILENT_COMMUNICATION を対象にしていない
+ *          （CanSM_ControllerBusOff() が Bus-Off 検出時に本関数を SILENT_COM で
+ *          呼ぶ経路があるが、Bus-Off 回復中は CanSM_RequestComMode() 自体が
+ *          全ユーザ要求を拒否するため現状は無害。将来 SILENT_COM を能動的に
+ *          要求するユーザを追加する場合はこの非対称性に注意すること）。
+ *
+ * \ServiceID      {0x33}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void ComM_BusSM_ModeIndication(NetworkHandleType Network, ComM_ModeType Mode)
+{
+    if (!ComM_Initialized)
+    {
+        Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_BUS_SM_MODE_INDICATION, COMM_E_UNINIT);
+        return;
+    }
+
+    if (Network >= COMM_CHANNEL_COUNT)
+    {
+        Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_BUS_SM_MODE_INDICATION, COMM_E_WRONG_PARAMETERS);
+        return;
+    }
+
+    const ComM_ModeType prevMode = ComM_ChannelMode[Network];
+    ComM_ChannelMode[Network] = Mode;
+    DET_LOGI(TAG, "ch%u ->mode=%u", (unsigned)Network, (unsigned)Mode);
+
+    if (Mode == COMM_FULL_COMMUNICATION || Mode == COMM_NO_COMMUNICATION)
+    {
+        ComM_UserRequest[COMM_USER_0] = Mode;
+    }
+
+    /* EcuM_RequestRUN()/EcuM_ReleaseRUN() は冪等呼び出しを避けるため、
+     * 実際に EcuM の RUN 要求状態（ComM_EcuMRunMode）が変化する時のみ呼ぶ。
+     * CanSM の Bus-Off 回復（L1/L2 バックオフ）はリトライ成功のたびに本関数を
+     * COMM_FULL_COMMUNICATION で呼ぶため、変化を見ずに毎回呼ぶと EcuM 側で
+     * 「同一ユーザからの重複要求」(SWS_EcuM_04125) が不必要に頻発してしまう。
+     * ここで生の prevMode（ComM_ChannelMode）ではなく専用の ComM_EcuMRunMode
+     * を比較対象にしているのは、Bus-Off 中に挟まる COMM_SILENT_COMMUNICATION
+     * （EcuM の RUN 状態には影響しない、下記コメント参照）を挟んだ前後で
+     * FULL⇔NO_COM が実際には変化していないのに変化したと誤判定するのを防ぐ
+     * ため（2026-08 のスペック監査で発見・修正。以前は SILENT_COM を経由した
+     * だけで EcuM_RequestRUN()/EcuM_ReleaseRUN() が二重に呼ばれ、
+     * SWS_EcuM_04125/04127 の誤検知を起こしていた）。 */
+    if (Mode != prevMode)
+    {
+        if (Mode == COMM_FULL_COMMUNICATION)
+        {
+            if (ComM_NmReleasePending[Network])
+            {
+                /* Nm 協調スリープ待ちの最中に Bus-Off が発生し、回復した CanSM が
+                 * 改めて FULL_COMMUNICATION を通知してきたケース（誰かが
+                 * FULL_COM を能動的に再要求したのであれば、その再要求は
+                 * ComM_RequestComMode() の「集約結果が現状と同じ」早期return
+                 * パスが既に処理し ComM_NmReleasePending をクリア済みのはず
+                 * なので、ここへ到達するのは Bus-Off 由来のみ）。詳細は
+                 * ComM_RetryNmReleaseAfterBusOff() 参照。 */
+                ComM_RetryNmReleaseAfterBusOff(Network, "FULL_COM");
+                return;
+            }
+            if (ComM_EcuMRunMode != COMM_FULL_COMMUNICATION)
+            {
+                (void)EcuM_RequestRUN(ECUM_USER_COMM);
+                ComM_EcuMRunMode = COMM_FULL_COMMUNICATION;
+            }
+            (void)Nm_NetworkRequest(NM_MAIN_NETWORK_HANDLE);  /* 通信が必要になったことを Nm へ伝える */
+        }
+        else if (Mode == COMM_NO_COMMUNICATION)
+        {
+            /* Nm_NetworkRelease() はここでは呼ばない。ComM_RequestComMode() が
+             * FULL_COM -> NO_COM 要求の時点で既に呼んでおり（Nm 協調スリープの
+             * 起点、ファイル冒頭コメント参照）、本関数が呼ばれる頃には Nm は
+             * 既に Bus-Sleep Mode へ到達済みのため呼んでも無意味である。
+             * ComM_NmReleasePending は、物理スリープが実際に完了したことが
+             * 確定するこのタイミングでクリアする。 */
+            ComM_NmReleasePending[Network] = 0U;
+            if (ComM_EcuMRunMode != COMM_NO_COMMUNICATION)
+            {
+                (void)EcuM_ReleaseRUN(ECUM_USER_COMM);
+                ComM_EcuMRunMode = COMM_NO_COMMUNICATION;
+            }
+        }
+        else if (Mode == COMM_SILENT_COMMUNICATION)
+        {
+            /* Bus-Off 検出時に CanSM_ControllerBusOff() が CanSM_RequestComMode()
+             * を経由せず直接呼ぶ経路（CanSM.c 参照）。EcuM の RUN 状態は維持
+             * するが（下記コメント参照）、CAN コントローラは Can_T_STOP されて
+             * おり送信できないため、Nm にも通信不要を伝えて送信試行を止める。
+             * これを怠ると、Nm が NM-Timeout Timer 満了のたびに送信を再試行
+             * しては Can_Write() に拒否され、Bus-Off 回復完了まで（L2 バックオフ
+             * のため無期限になり得る）NM_E_NETWORK_TIMEOUT を報告し続ける
+             * （実機で確認された不具合）。回復成功時は CanSM が改めて
+             * ComM_BusSM_ModeIndication(FULL_COMMUNICATION) を呼ぶため、その際に
+             * 上の分岐（ComM_NmReleasePending が立っていなければ）で
+             * Nm_NetworkRequest() が呼ばれ自動的に再開する。 */
+            (void)Nm_NetworkRelease(NM_MAIN_NETWORK_HANDLE);
+        }
+    }
+    else if (Mode == COMM_SILENT_COMMUNICATION && ComM_NmReleasePending[Network])
+    {
+        /* 2026-08 追加: Mode==prevMode==COMM_SILENT_COMMUNICATION（上の
+         * `if (Mode != prevMode)` では捕捉できない再通知）で、かつ Nm 協調
+         * スリープ待ちが残っているケース。SILENT_COM 中にも本当に Bus-Off
+         * しうるようになったことで生まれた、上の FULL_COM 分岐と対称の経路
+         * （詳細は ComM_RetryNmReleaseAfterBusOff() 参照）。 */
+        ComM_RetryNmReleaseAfterBusOff(Network, "SILENT_COM");
+        return;
+    }
+    /* SILENT_COM: EcuM の RUN 状態は維持（受信専用でも ECU は動作継続）。 */
+
+    BswM_ComM_CurrentMode(Network, Mode);  /* BswM へ ComM モード変化を通知 */
+}
+
+/* ----------------------------------------------------------------------
+ * ComM_COMCbk_<sn>
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ======================================================================
+ *  Scheduled functions
+ * ====================================================================== */
+
+/* ----------------------------------------------------------------------
+ * ComM_MainFunction_<Channel_Id>
+ * ---------------------------------------------------------------------- */
+
+/**
+ * \brief   ComM 周期処理。
+ *
+ * \details 本実装は意図的な NOP。ComMTMinFullComModeDuration（ECUC_ComM_00557、
+ *          FULL_COM 要求解放を一定時間遅らせて要求のチャタリングを防ぐ
+ *          ヒステリシスタイマ）は、[SWS_ComM_00888] のとおり
+ *          `ComMNmVariant=FULL` の構成では不要（Rationale 原文: "No timer
+ *          needed if AUTOSAR NM is used. This avoids redundant functionality
+ *          because AUTOSAR NM also ensures this functionality."）。本プロジェクトは
+ *          `Nm_NetworkRequest()`/`Nm_NetworkRelease()` を能動的に呼び、CanNm の
+ *          協調スリープ（Repeat Message Time → Ready Sleep Time → Prepare
+ *          Bus-Sleep、Nm.c 参照）が同じチャタリング防止の役目を既に果たして
+ *          いるため、この `ComMNmVariant=FULL` に該当する。そのため本関数で
+ *          追加のタイマ処理は行わない（2026-08 のスペック監査で確認・
+ *          Os_PBCfg.c への MainFunction 登録漏れも同時に修正済み）。
+ *          `ComM_MainFunction()` 自体は AUTOSAR が要求する周期関数のため、
+ *          将来 DCM ActiveDiagnostic 監視等の別用途が生じた際に流用できるよう
+ *          スケジューラへの登録（Task 19、Os_PBCfg.c 参照）だけは行っている。
+ *
+ * \AUTOSARReq     {SWS_ComM_00888}
+ * \ServiceID      {0x60}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void ComM_MainFunction(void)
+{
+    if (!ComM_Initialized)
+    {
+        Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_MAIN_FUNCTION, COMM_E_UNINIT);
+        return;
+    }
+    /* NOP（理由は上記 \details 参照）。 */
+}
+
+/* ======================================================================
+ * Internal functions
+ * ====================================================================== */
 
 /**
  * \brief   ComM_UserRequest[] と ComM_DcmActiveDiagnostic[] から、チャネル0の
@@ -426,256 +1282,6 @@ static Std_ReturnType ComM_ApplyAggregatedRequest(ComM_ModeType aggregated)
     return CanSM_RequestComMode(0U, aggregated);
 }
 
-/**
- * \brief   ユーザが通信モードを要求する。
- *
- * \details ユーザの要求を記録した後、全ユーザの要求と Dcm の診断アクティブ
- *          通知（ComM_DCM_ActiveDiagnostic()、ComM_ComputeAggregatedMode()
- *          参照）のうち最も通信レベルの高いモード（FULL_COM > SILENT_COM >
- *          NO_COM）へ集約し、集約結果がチャネルの現状と異なる場合のみ CanSM
- *          へ転送する。1 ユーザだけが FULL_COM を要求していても、他のユーザが
- *          NO_COM を要求している間はチャネルは FULL_COM のまま維持される
- *          （「誰か一人でも通信を必要としていればバスは落とさない」）。
- *
- * \param[in]  User     要求するユーザ ID (COMM_USER_0)。
- * \param[in]  ComMode  要求する通信モード。
- *
- * \retval  E_OK      要求を受理した（チャネルが実際に遷移したとは限らない）。
- * \retval  E_NOT_OK  User が範囲外、ComMode が不正、または CanSM への転送が失敗した
- *                    （Bus-Off 回復中等）。
- *
- * \AUTOSARReq     {SWS_ComM_00686, SWS_ComM_00500, SWS_ComM_00069}
- * \ServiceID      {0x05}
- * \Reentrancy     {Non Reentrant}
- * \Synchronicity  {Synchronous}
- */
-Std_ReturnType ComM_RequestComMode(ComM_UserHandleType User, ComM_ModeType ComMode)
-{
-    DET_LOGT(TAG, "called");
-    if (!ComM_Initialized)
-    {
-        Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_REQUEST_COM_MODE, COMM_E_UNINIT);
-        return E_NOT_OK;
-    }
-
-    if (User >= COMM_USER_COUNT || ComMode > COMM_FULL_COMMUNICATION)
-    {
-        Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_REQUEST_COM_MODE, COMM_E_WRONG_PARAMETERS);
-        return E_NOT_OK;
-    }
-
-    ComM_UserRequest[User] = ComMode;
-
-    ComM_ModeType aggregated = ComM_ComputeAggregatedMode();
-
-    DET_LOGI(TAG, "User%u req=%u -> aggregated=%u (channel=%u)",
-             (unsigned)User, (unsigned)ComMode,
-             (unsigned)aggregated, (unsigned)ComM_ChannelMode[0U]);
-
-    return ComM_ApplyAggregatedRequest(aggregated);
-}
-
-/**
- * \brief   ユーザが現在要求している通信モードを取得する（[SWS_ComM_00079]）。
- *
- * \AUTOSARReq     {SWS_ComM_00079}
- * \ServiceID      {0x07}
- * \Reentrancy     {Reentrant}
- * \Synchronicity  {Synchronous}
- */
-Std_ReturnType ComM_GetRequestedComMode(ComM_UserHandleType User, ComM_ModeType* ComMode)
-{
-    DET_LOGT(TAG, "called");
-    if (!ComM_Initialized)
-    {
-        Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_GET_REQUESTED_COM_MODE, COMM_E_UNINIT);
-        return E_NOT_OK;
-    }
-
-    if (User >= COMM_USER_COUNT)
-    {
-        Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_GET_REQUESTED_COM_MODE, COMM_E_WRONG_PARAMETERS);
-        return E_NOT_OK;
-    }
-
-    if (ComMode == NULL)
-    {
-        Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_GET_REQUESTED_COM_MODE, COMM_E_PARAM_POINTER);
-        return E_NOT_OK;
-    }
-
-    *ComMode = ComM_UserRequest[User];
-    return E_OK;
-}
-
-/**
- * \brief   ユーザの現在の通信モードを取得する。
- *
- * \ServiceID      {0x08}
- * \Reentrancy     {Reentrant}
- * \Synchronicity  {Synchronous}
- */
-Std_ReturnType ComM_GetCurrentComMode(ComM_UserHandleType User, ComM_ModeType* ComMode)
-{
-    DET_LOGT(TAG, "called");
-    if (!ComM_Initialized)
-    {
-        Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_GET_CURRENT_COM_MODE, COMM_E_UNINIT);
-        return E_NOT_OK;
-    }
-
-    if (User >= COMM_USER_COUNT)
-    {
-        Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_GET_CURRENT_COM_MODE, COMM_E_WRONG_PARAMETERS);
-        return E_NOT_OK;
-    }
-
-    if (ComMode == NULL)
-    {
-        Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_GET_CURRENT_COM_MODE, COMM_E_PARAM_POINTER);
-        return E_NOT_OK;
-    }
-
-    /* ユーザ 0 → チャネル 0 の現在モードを返す */
-    *ComMode = ComM_ChannelMode[0U];
-    return E_OK;
-}
-
-/**
- * \brief   EcuM または BswM から、対象チャネルの通信可否を通知する
- *          （[SWS_ComM_00871]）。
- *
- * \details [SWS_ComM_00884] のとおりチャネルごとに CommunicationAllowed
- *          フラグを保持する（既定 FALSE、ComM_Init() 参照）。
- *          [SWS_ComM_00895]: Allowed=TRUE を受け取った時点でチャネルが
- *          まだ COMM_NO_COMMUNICATION のままであれば、ユーザ側の要求を
- *          その場で再集計する（ComM_ComputeAggregatedMode()、
- *          ComM_RequestComMode()/ComM_DCM_ActiveDiagnostic() が更新する
- *          ComM_UserRequest[]/ComM_DcmActiveDiagnostic[] をそのまま再評価）。
- *          その結果がなお COMM_FULL_COMMUNICATION であれば直ちに
- *          CanSM_RequestComMode(FULL_COM) を発行する。個別の「保留」状態を
- *          別途記憶しないため、Allowed=FALSE の間に要求が出た後で撤回
- *          された場合でも、撤回後の最新の要求だけが正しく反映される
- *          （2026-09、/code-review で個別保留フラグ方式の状態不整合を複数
- *          発見し設計変更。ComM_RequestFullComOrPend() 参照）。
- *          Nm 起因の FULL_COM 遷移（ComM_Nm_NetworkMode() 等）はこの
- *          再集計の対象外（それぞれの Doxygen 参照）。Allowed=FALSE への
- *          変更は既に COMM_FULL_COMMUNICATION のチャネルには影響しない
- *          （[SWS_ComM_00896] のとおり評価対象は NO_COM からの遷移時のみ）。
- *
- * \param[in]  Channel  対象ネットワークハンドル。
- * \param[in]  Allowed  TRUE: 通信を許可する。FALSE: 通信を許可しない。
- *
- * \AUTOSARReq     {SWS_ComM_00871, SWS_ComM_00884, SWS_ComM_00885, SWS_ComM_00895}
- * \ServiceID      {0x35}
- * \Reentrancy     {Non Reentrant}
- * \Synchronicity  {Synchronous}
- */
-void ComM_CommunicationAllowed(NetworkHandleType Channel, boolean Allowed)
-{
-    DET_LOGT(TAG, "called");
-    if (!ComM_Initialized)
-    {
-        Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_COMMUNICATION_ALLOWED, COMM_E_UNINIT);
-        return;
-    }
-
-    if (Channel >= COMM_CHANNEL_COUNT)
-    {
-        Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_COMMUNICATION_ALLOWED, COMM_E_WRONG_PARAMETERS);
-        return;
-    }
-
-    ComM_CommunicationAllowedFlag[Channel] = Allowed;
-    DET_LOGI(TAG, "ch%u CommunicationAllowed=%u", (unsigned)Channel, (unsigned)Allowed);
-
-    if (Allowed)
-    {
-        /* [SWS_ComM_00895]: Allowed=TRUE になった時点で、ユーザ要求の集約結果を
-         * 改めて評価する。ComM_DCM_ActiveDiagnostic()/InactiveDiagnostic() と
-         * 全く同じ「トリガーが変わっただけで、適用ロジックは共通」パターン
-         * （ComM_ApplyAggregatedRequest() 参照。「NO_COM かつ集約結果が
-         * FULL_COM か」を個別に判定するコードをここに複製しない —
-         * ComM_ApplyAggregatedRequest() 自身の早期 return 群がそれを兼ねる。
-         * 2026-09、/code-review で条件の二重実装を指摘）。既に希望通りの
-         * 状態（channel==FULL_COM、または誰も FULL_COM を望んでいない）なら
-         * 内部の早期 return で何も起きない。 */
-        (void)ComM_ApplyAggregatedRequest(ComM_ComputeAggregatedMode());
-    }
-}
-
-/**
- * \brief   Dcm から、対象チャネルで診断セッションが進行中であることを通知する。
- *
- * \details [SWS_ComM_00876]。実ユーザの要求に関わらず、以降
- *          ComM_DCM_InactiveDiagnostic() が呼ばれるまで常に
- *          COMM_FULL_COMMUNICATION を要求する仮想ユーザとして扱う
- *          （ComM_ComputeAggregatedMode() 参照）。
- *
- * \param[in]  Channel  診断通信が必要になったチャネル。
- *
- * \AUTOSARReq     {SWS_ComM_00873}
- * \ServiceID      {0x1F}
- * \Reentrancy     {Reentrant}
- * \Synchronicity  {Synchronous}
- */
-void ComM_DCM_ActiveDiagnostic(NetworkHandleType Channel)
-{
-    DET_LOGT(TAG, "called");
-    if (!ComM_Initialized)
-    {
-        Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_DCM_ACTIVE_DIAGNOSTIC, COMM_E_UNINIT);
-        return;
-    }
-
-    if (Channel >= COMM_CHANNEL_COUNT)
-    {
-        Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_DCM_ACTIVE_DIAGNOSTIC, COMM_E_WRONG_PARAMETERS);
-        return;
-    }
-
-    ComM_DcmActiveDiagnostic[Channel] = 1U;
-
-    ComM_ModeType aggregated = ComM_ComputeAggregatedMode();
-    DET_LOGI(TAG, "DCM ActiveDiagnostic ch=%u -> aggregated=%u", (unsigned)Channel, (unsigned)aggregated);
-    (void)ComM_ApplyAggregatedRequest(aggregated);
-}
-
-/**
- * \brief   Dcm から、対象チャネルで診断セッションが終了したことを通知する。
- *
- * \details [SWS_ComM_00876]。ComM_DCM_ActiveDiagnostic() が課していた仮想
- *          COMM_FULL_COMMUNICATION 要求を解除する。他の実ユーザがまだ
- *          COMM_FULL_COMMUNICATION を要求していれば、チャネルは維持される。
- *
- * \param[in]  Channel  診断通信が不要になったチャネル。
- *
- * \AUTOSARReq     {SWS_ComM_00874}
- * \ServiceID      {0x20}
- * \Reentrancy     {Reentrant}
- * \Synchronicity  {Synchronous}
- */
-void ComM_DCM_InactiveDiagnostic(NetworkHandleType Channel)
-{
-    DET_LOGT(TAG, "called");
-    if (!ComM_Initialized)
-    {
-        Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_DCM_INACTIVE_DIAGNOSTIC, COMM_E_UNINIT);
-        return;
-    }
-
-    if (Channel >= COMM_CHANNEL_COUNT)
-    {
-        Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_DCM_INACTIVE_DIAGNOSTIC, COMM_E_WRONG_PARAMETERS);
-        return;
-    }
-
-    ComM_DcmActiveDiagnostic[Channel] = 0U;
-
-    ComM_ModeType aggregated = ComM_ComputeAggregatedMode();
-    DET_LOGI(TAG, "DCM InactiveDiagnostic ch=%u -> aggregated=%u", (unsigned)Channel, (unsigned)aggregated);
-    (void)ComM_ApplyAggregatedRequest(aggregated);
-}
 
 /**
  * \brief   Bus-Off 回復エコー時に Nm 協調スリープの解放要求を仕切り直す。
@@ -716,441 +1322,3 @@ static void ComM_RetryNmReleaseAfterBusOff(uint8 Network, const char* modeLabel)
     (void)CanSM_RequestComMode(Network, COMM_NO_COMMUNICATION);
 }
 
-/**
- * \brief   CanSM からの通信モード変化通知コールバック（下位層 → 上位層）。
- *
- * \details CanSM が実際の CAN バス状態を変化させた後に呼ぶ。
- *          ComM はチャネル状態を更新し EcuM の RUN 要求を操作する。
- *
- *          ComM_UserRequest[COMM_USER_0] の再同期:
- *          この通知は CanSM がユーザの要求とは独立に（ウェイクアップ検証成功や
- *          Bus-Off 回復等）チャネルを変化させた場合にも呼ばれる。
- *          これは「どのユーザの要求でもない」変化のため、放置すると
- *          ComM_UserRequest[COMM_USER_0] が古い値のまま残り、次に別ユーザが
- *          ComM_RequestComMode() を呼んだ瞬間に古い値と誤って再集約されてしまう
- *          （実機で確認された不具合: ウェイクアップ直後、App_EngineManager が
- *          まだ 1 周期も再評価していない間に Dcm が defaultSession へ戻ると、
- *          User0 の古い NO_COM 要求と集約されて即座に再スリープしていた）。
- *          COMM_USER_0（App_EngineManager）はチャネルの実状態が「暫定的な自分の
- *          要求」であるとみなし、次回 App_EngineManager_Run() が実際の
- *          エンジン状態に基づいて改めて要求し直すまではこの値を使う。
- *          Dcm の診断アクティブ通知（ComM_DCM_ActiveDiagnostic/
- *          InactiveDiagnostic、ComM_DcmActiveDiagnostic[]）はセッション状態に
- *          基づく独立した判断のため、ここでは同期しない（そもそも
- *          ComM_UserRequest[] とは別の配列のため対象外）。
- *          注意: この再同期は COMM_SILENT_COMMUNICATION を対象にしていない
- *          （CanSM_ControllerBusOff() が Bus-Off 検出時に本関数を SILENT_COM で
- *          呼ぶ経路があるが、Bus-Off 回復中は CanSM_RequestComMode() 自体が
- *          全ユーザ要求を拒否するため現状は無害。将来 SILENT_COM を能動的に
- *          要求するユーザを追加する場合はこの非対称性に注意すること）。
- *
- * \ServiceID      {0x33}
- * \Reentrancy     {Non Reentrant}
- * \Synchronicity  {Synchronous}
- */
-void ComM_BusSM_ModeIndication(NetworkHandleType Network, ComM_ModeType Mode)
-{
-    DET_LOGT(TAG, "called");
-    if (!ComM_Initialized)
-    {
-        Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_BUS_SM_MODE_INDICATION, COMM_E_UNINIT);
-        return;
-    }
-
-    if (Network >= COMM_CHANNEL_COUNT)
-    {
-        Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_BUS_SM_MODE_INDICATION, COMM_E_WRONG_PARAMETERS);
-        return;
-    }
-
-    const ComM_ModeType prevMode = ComM_ChannelMode[Network];
-    ComM_ChannelMode[Network] = Mode;
-    DET_LOGI(TAG, "ch%u ->mode=%u", (unsigned)Network, (unsigned)Mode);
-
-    if (Mode == COMM_FULL_COMMUNICATION || Mode == COMM_NO_COMMUNICATION)
-    {
-        ComM_UserRequest[COMM_USER_0] = Mode;
-    }
-
-    /* EcuM_RequestRUN()/EcuM_ReleaseRUN() は冪等呼び出しを避けるため、
-     * 実際に EcuM の RUN 要求状態（ComM_EcuMRunMode）が変化する時のみ呼ぶ。
-     * CanSM の Bus-Off 回復（L1/L2 バックオフ）はリトライ成功のたびに本関数を
-     * COMM_FULL_COMMUNICATION で呼ぶため、変化を見ずに毎回呼ぶと EcuM 側で
-     * 「同一ユーザからの重複要求」(SWS_EcuM_04125) が不必要に頻発してしまう。
-     * ここで生の prevMode（ComM_ChannelMode）ではなく専用の ComM_EcuMRunMode
-     * を比較対象にしているのは、Bus-Off 中に挟まる COMM_SILENT_COMMUNICATION
-     * （EcuM の RUN 状態には影響しない、下記コメント参照）を挟んだ前後で
-     * FULL⇔NO_COM が実際には変化していないのに変化したと誤判定するのを防ぐ
-     * ため（2026-08 のスペック監査で発見・修正。以前は SILENT_COM を経由した
-     * だけで EcuM_RequestRUN()/EcuM_ReleaseRUN() が二重に呼ばれ、
-     * SWS_EcuM_04125/04127 の誤検知を起こしていた）。 */
-    if (Mode != prevMode)
-    {
-        if (Mode == COMM_FULL_COMMUNICATION)
-        {
-            if (ComM_NmReleasePending[Network])
-            {
-                /* Nm 協調スリープ待ちの最中に Bus-Off が発生し、回復した CanSM が
-                 * 改めて FULL_COMMUNICATION を通知してきたケース（誰かが
-                 * FULL_COM を能動的に再要求したのであれば、その再要求は
-                 * ComM_RequestComMode() の「集約結果が現状と同じ」早期return
-                 * パスが既に処理し ComM_NmReleasePending をクリア済みのはず
-                 * なので、ここへ到達するのは Bus-Off 由来のみ）。詳細は
-                 * ComM_RetryNmReleaseAfterBusOff() 参照。 */
-                ComM_RetryNmReleaseAfterBusOff(Network, "FULL_COM");
-                return;
-            }
-            if (ComM_EcuMRunMode != COMM_FULL_COMMUNICATION)
-            {
-                (void)EcuM_RequestRUN(ECUM_USER_COMM);
-                ComM_EcuMRunMode = COMM_FULL_COMMUNICATION;
-            }
-            (void)Nm_NetworkRequest(NM_MAIN_NETWORK_HANDLE);  /* 通信が必要になったことを Nm へ伝える */
-        }
-        else if (Mode == COMM_NO_COMMUNICATION)
-        {
-            /* Nm_NetworkRelease() はここでは呼ばない。ComM_RequestComMode() が
-             * FULL_COM -> NO_COM 要求の時点で既に呼んでおり（Nm 協調スリープの
-             * 起点、ファイル冒頭コメント参照）、本関数が呼ばれる頃には Nm は
-             * 既に Bus-Sleep Mode へ到達済みのため呼んでも無意味である。
-             * ComM_NmReleasePending は、物理スリープが実際に完了したことが
-             * 確定するこのタイミングでクリアする。 */
-            ComM_NmReleasePending[Network] = 0U;
-            if (ComM_EcuMRunMode != COMM_NO_COMMUNICATION)
-            {
-                (void)EcuM_ReleaseRUN(ECUM_USER_COMM);
-                ComM_EcuMRunMode = COMM_NO_COMMUNICATION;
-            }
-        }
-        else if (Mode == COMM_SILENT_COMMUNICATION)
-        {
-            /* Bus-Off 検出時に CanSM_ControllerBusOff() が CanSM_RequestComMode()
-             * を経由せず直接呼ぶ経路（CanSM.c 参照）。EcuM の RUN 状態は維持
-             * するが（下記コメント参照）、CAN コントローラは Can_T_STOP されて
-             * おり送信できないため、Nm にも通信不要を伝えて送信試行を止める。
-             * これを怠ると、Nm が NM-Timeout Timer 満了のたびに送信を再試行
-             * しては Can_Write() に拒否され、Bus-Off 回復完了まで（L2 バックオフ
-             * のため無期限になり得る）NM_E_NETWORK_TIMEOUT を報告し続ける
-             * （実機で確認された不具合）。回復成功時は CanSM が改めて
-             * ComM_BusSM_ModeIndication(FULL_COMMUNICATION) を呼ぶため、その際に
-             * 上の分岐（ComM_NmReleasePending が立っていなければ）で
-             * Nm_NetworkRequest() が呼ばれ自動的に再開する。 */
-            (void)Nm_NetworkRelease(NM_MAIN_NETWORK_HANDLE);
-        }
-    }
-    else if (Mode == COMM_SILENT_COMMUNICATION && ComM_NmReleasePending[Network])
-    {
-        /* 2026-08 追加: Mode==prevMode==COMM_SILENT_COMMUNICATION（上の
-         * `if (Mode != prevMode)` では捕捉できない再通知）で、かつ Nm 協調
-         * スリープ待ちが残っているケース。SILENT_COM 中にも本当に Bus-Off
-         * しうるようになったことで生まれた、上の FULL_COM 分岐と対称の経路
-         * （詳細は ComM_RetryNmReleaseAfterBusOff() 参照）。 */
-        ComM_RetryNmReleaseAfterBusOff(Network, "SILENT_COM");
-        return;
-    }
-    /* SILENT_COM: EcuM の RUN 状態は維持（受信専用でも ECU は動作継続）。 */
-
-    BswM_ComM_CurrentMode(Network, Mode);  /* BswM へ ComM モード変化を通知 */
-}
-
-/**
- * \brief   Nm が Prepare Bus-Sleep Mode へ入ったことの通知（Nm から呼び出される）。
- *
- * \details [SWS_ComM_00826]。COMM_FULL_COMMUNICATION 中に Nm が Prepare
- *          Bus-Sleep Mode へ入ると、CanSM_RequestComMode(Network,
- *          COMM_SILENT_COMMUNICATION) を呼びチャネルを受信専用へ切り替える。
- *          `ComM_ChannelMode[Network]` が既に COMM_FULL_COMMUNICATION でない
- *          場合（Bus-Off で既に SILENT_COM のケース等）は no-op とし、
- *          Bus-Off 回復シーケンスと衝突させない。
- *
- * \param[in]  Network  ネットワークハンドル（0 〜 COMM_CHANNEL_COUNT-1）。
- *
- * \AUTOSARReq     {SWS_ComM_00391, SWS_ComM_00826}
- * \ServiceID      {0x19}
- * \Reentrancy     {Non Reentrant}
- * \Synchronicity  {Synchronous}
- */
-void ComM_Nm_PrepareBusSleepMode(NetworkHandleType Network)
-{
-    DET_LOGT(TAG, "called");
-    if (!ComM_Initialized)
-    {
-        Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_NM_PREPARE_BUS_SLEEP_MODE, COMM_E_UNINIT);
-        return;
-    }
-
-    if (Network >= COMM_CHANNEL_COUNT)
-    {
-        Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_NM_PREPARE_BUS_SLEEP_MODE, COMM_E_WRONG_PARAMETERS);
-        return;
-    }
-
-    if (ComM_ChannelMode[Network] == COMM_FULL_COMMUNICATION)
-    {
-        (void)CanSM_RequestComMode(Network, COMM_SILENT_COMMUNICATION);
-    }
-}
-
-/**
- * \brief   Bus-Sleep Mode 中に NM PDU を受信したことの通知（Nm から呼び出される、
- *          [SWS_ComM_00383]）。
- *
- * \details [SWS_CanNm_00127]: Nm は Bus-Sleep Mode 中に NM PDU を受信しても
- *          自動的に Network Mode へ遷移せず、上位層（ComM）へ通知するのみで
- *          判断を委ねる。これは「他ノードは既に Network Mode にいる」ことを
- *          示す、レース条件由来のシグナルである（[SWS_ComM_00583] のユース
- *          ケース参照）。
- *
- *          本プロジェクトの同期的な設計では、Nm が `NM_STATE_BUS_SLEEP` へ
- *          到達する時点で通常は `ComM_Nm_BusSleepMode()` 経由の
- *          `CanSM_RequestComMode(NO_COM)` が既に成功しており、物理コントローラ
- *          も `CAN_CS_SLEEP` へ落ちている（＝`Can_MainFunction_Read()` 自体が
- *          停止し `Nm_RxIndication()` は物理的に呼ばれ得ない）。そのため本関数
- *          が実際に到達しうるのは、Bus-Off 回復待ち中に `CanSM_RequestComMode
- *          (NO_COM)` が拒否されて Nm だけが独立したタイマで先に Bus-Sleep
- *          Mode へ到達してしまうケース（コントローラは Bus-Off により
- *          Listen-Only のまま受信は継続、`ComM_Nm_BusSleepMode()` の Doxygen
- *          `BusOffDuringNmWinddown_OK_DoesNotResurrectNm` 相当）にほぼ限られる。
- *
- *          [SWS_ComM_00583]: `ComM_ChannelMode[Network]` が既に
- *          COMM_FULL_COMMUNICATION でなければ `CanSM_RequestComMode(Network,
- *          COMM_FULL_COMMUNICATION)` を試みる。ただし `CommunicationAllowed`
- *          フラグ（[SWS_ComM_00871]、`ComM_CommunicationAllowed()` 参照）が
- *          FALSE の間は CanSM へは伝えず遷移を保留する（Allowed=TRUE 通知時に
- *          `ComM_CommunicationAllowed()` 側が改めて発行する）。
- *          **`ComM_Nm_NetworkMode()` とは異なり
- *          `ComM_NmReleasePending[Network]` は呼び出しが実際に成功した場合
- *          のみクリアする**（`ComM_Nm_BusSleepMode()` の NO_COM 分岐と同じ
- *          「まだ解放が完了していない事実を保持し続ける」方針）。上記の
- *          Bus-Off 回復待ちシナリオでは `CanSM_RequestComMode()` は
- *          `CanSM_State==CANSM_STATE_BUS_OFF` により必ず拒否される（モード
- *          変更は Bus-Off 回復ステートマシンに一本化する設計、CanSM.c
- *          参照）ため、ここで無条件にクリアしてしまうと、後の Bus-Off 回復時に
- *          `ComM_BusSM_ModeIndication()` の SILENT_COM 分岐にある既存の
- *          リトライガード（`ComM_NmReleasePending` が立っていれば
- *          `CanSM_RequestComMode(NO_COM)` を再送する）を迂回させ、ユーザーが
- *          望んでいないのに FULL_COM へ「復活」させてしまう
- *          （`BusOffDuringNmWinddown_OK_DoesNotResurrectNm` と同種の回帰）。
- *
- *          実仕様は `ComMNmVariant=FULL` 構成で `Nm_PassiveStartup()` を要求
- *          するが（[SWS_ComM_00903]）、本 ECU は能動送信ノードでありこの API
- *          自体を実装しない（`CanNm_PassiveStartUp` は既知の対応除外）。
- *          `CanSM_RequestComMode(FULL_COM)` が成功する経路では
- *          `ComM_BusSM_ModeIndication()` が内部で `Nm_NetworkRequest()` を
- *          呼び Nm 自身を起こす（同関数の FULL_COM 分岐参照）ため、本関数は
- *          追加のアクションを取らない。
- *
- * \param[in]  Network  ネットワークハンドル（0 〜 COMM_CHANNEL_COUNT-1）。
- *
- * \AUTOSARReq     {SWS_ComM_00383, SWS_ComM_00583}
- * \ServiceID      {0x15}
- * \Reentrancy     {Reentrant}
- * \Synchronicity  {Asynchronous}
- */
-void ComM_Nm_NetworkStartIndication(NetworkHandleType Network)
-{
-    DET_LOGT(TAG, "called");
-    if (!ComM_Initialized)
-    {
-        Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_NM_NETWORK_START_INDICATION, COMM_E_UNINIT);
-        return;
-    }
-
-    if (Network >= COMM_CHANNEL_COUNT)
-    {
-        Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_NM_NETWORK_START_INDICATION, COMM_E_WRONG_PARAMETERS);
-        return;
-    }
-
-    DET_LOGW(TAG, "ch%u NetworkStartIndication (NM PDU seen while Nm Bus-Sleep, race condition)",
-             (unsigned)Network);
-
-    if (ComM_ChannelMode[Network] != COMM_FULL_COMMUNICATION)
-    {
-        /* 呼び出しが実際に成功した場合のみクリアする（理由は本関数の
-         * \details 参照。ComM_Nm_NetworkMode() と同じ無条件クリアに
-         * 変更しないこと）。CommunicationAllowed ゲート（ComM_RequestFullComOrPend()
-         * 参照）はここでは意図的に通さず直接 CanSM を呼ぶ（理由は
-         * ComM_Nm_NetworkMode() 側の同種コメント参照）。 */
-        if (CanSM_RequestComMode(Network, COMM_FULL_COMMUNICATION) == E_OK)
-        {
-            ComM_NmReleasePending[Network] = 0U;
-        }
-    }
-    /* else: チャネルは既に FULL_COM。本プロジェクトの同期的な設計では
-     * ComM_ChannelMode を FULL_COM にする経路（ComM_BusSM_ModeIndication()の
-     * FULL_COM分岐、ComM_Nm_NetworkMode()）がいずれも呼び出しの中で
-     * Nm_NetworkRequest() を既に呼んでいるため、Nm がこの時点でなお
-     * NM_STATE_BUS_SLEEP のままという状況は本プロジェクトの呼び出し経路
-     * からは到達しない（本関数のDoxygen参照）。 */
-}
-
-/**
- * \brief   Nm が Network Mode へ（再）入ったことの通知（Nm から呼び出される）。
- *
- * \details [SWS_ComM_00296]。典型的には、Prepare Bus-Sleep Mode 中に他ノードの
- *          NM フレームを受信して Nm が自律的にスリープを取りやめたケース
- *          （[SWS_CanNm_00124]）。`ComM_ChannelMode[Network] !=
- *          COMM_FULL_COMMUNICATION` の場合、CanSM_RequestComMode(Network,
- *          COMM_FULL_COMMUNICATION) を呼ぶ前に ComM_NmReleasePending[Network]
- *          を無条件で（この呼び出しが成功するか Bus-Off 回復中で拒否される
- *          かに関わらず）クリアする。
- *
- *          この無条件クリアが安全性の根拠そのものである点に注意（「2 経路が
- *          物理的に排他だから安全」ではない）: CANSM_STATE_BUS_OFF 中も
- *          コントローラは受信を継続する（Can_MainFunction_Read() が RX
- *          ドレインをスキップするのは CanState==CAN_CS_SLEEP のときのみで、
- *          BUS_OFF は CAN_CS_STOPPED）ため、Bus-Off の
- *          最中でも Nm_RxIndication() は普通に発火しうる。つまり本関数が
- *          CanSM_State==CANSM_STATE_BUS_OFF の最中に呼ばれ、
- *          CanSM_RequestComMode() が拒否されるケースは実在する。もしここで
- *          「成功したときだけクリア」としていたら、ComM_NmReleasePending が
- *          立ったまま残り、後の Bus-Off 回復時に ComM_BusSM_ModeIndication() の
- *          FULL_COM 分岐にある既存のリトライガード（ComM_NmReleasePending が
- *          立っていれば CanSM_RequestComMode(NO_COM) を再送する）を誤って
- *          発火させ、Nm が既に Repeat Message State へ復帰して送信中の
- *          コントローラを強制的に再スリープさせてしまう（Nm の内部状態と
- *          物理コントローラの状態が食い違う）。無条件クリアにより、この
- *          リトライガードは本当に「Bus-Off がまだ解放未確認のまま回復した」
- *          ケースにのみ発火する。
- *
- * \param[in]  Network  ネットワークハンドル（0 〜 COMM_CHANNEL_COUNT-1）。
- *
- * \AUTOSARReq     {SWS_ComM_00390, SWS_ComM_00296}
- * \ServiceID      {0x18}
- * \Reentrancy     {Non Reentrant}
- * \Synchronicity  {Synchronous}
- */
-void ComM_Nm_NetworkMode(NetworkHandleType Network)
-{
-    DET_LOGT(TAG, "called");
-    if (!ComM_Initialized)
-    {
-        Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_NM_NETWORK_MODE, COMM_E_UNINIT);
-        return;
-    }
-
-    if (Network >= COMM_CHANNEL_COUNT)
-    {
-        Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_NM_NETWORK_MODE, COMM_E_WRONG_PARAMETERS);
-        return;
-    }
-
-    if (ComM_ChannelMode[Network] != COMM_FULL_COMMUNICATION)
-    {
-        /* CanSM_RequestComMode() 呼び出しの成否に関わらず無条件でクリアする
-         * （理由は上記 \details 参照。ここを条件付きクリアに変更しないこと）。
-         * CommunicationAllowed ゲート（ComM_RequestFullComOrPend()）は意図的に
-         * 通さず直接 CanSM を呼ぶ: 本関数を含む Nm 由来の全コールバック
-         * （ComM_Nm_NetworkMode/NetworkStartIndication/PrepareBusSleepMode/
-         * BusSleepMode）は Nm_Init() 済みでなければ呼ばれ得ないが、
-         * EcuM_Init() は Nm_Init() より必ず前に ComM_CommunicationAllowed(TRUE)
-         * を通知する（EcuM.c 参照）ため、本プロジェクトでは Allowed=FALSE の
-         * 状態でこれらが呼ばれることはあり得ない。もしここでもゲートを通すと、
-         * 「NmReleasePending のクリアと ComM_ChannelMode の FULL_COM 遷移は
-         * 常に同時に起きる」という本関数・ComM_BusSM_ModeIndication() 双方が
-         * 前提とする不変条件が崩れ、CanSM が拒否も成功もしていないのに
-         * NmReleasePending だけが解除された不整合な中間状態
-         * （ComM_ChannelMode==SILENT_COM のまま）を作ってしまい、直後の
-         * ユーザー起因の NO_COM 再要求が Nm の協調スリープを無視して
-         * コントローラを強制的に即座に物理スリープさせる、という
-         * 2026-08 に一度修正した回帰と同種の不具合を再導入する
-         * （2026-09 の CommunicationAllowed 導入時に /code-review で発見・
-         * 実装を戻して回避）。 */
-        ComM_NmReleasePending[Network] = 0U;
-        (void)CanSM_RequestComMode(Network, COMM_FULL_COMMUNICATION);
-    }
-}
-
-/**
- * \brief   Nm が Bus-Sleep Mode へ到達したことの通知（Nm から呼び出される）。
- *
- * \details [SWS_ComM_00392]。ComM_RequestComMode() が FULL_COM -> NO_COM の
- *          要求時に Nm_NetworkRelease() のみを送って以降、Nm の協調スリープが
- *          完了する（[SWS_ComM_00637]）まで ComM_ChannelMode は FULL_COM の
- *          まま据え置かれている（ファイル冒頭コメント参照）。本関数はその
- *          完了通知であり、ここで初めて CanSM_RequestComMode(NO_COM) を呼び、
- *          物理スリープと ComM_ChannelMode の更新（CanSM が呼び返す
- *          ComM_BusSM_ModeIndication 経由）を行う。
- *
- *          Bus-Off 回復中は CanSM_RequestComMode() が E_NOT_OK を返しうる
- *          （CanSM.c 参照）。この場合 ComM_NmReleasePending はクリアしない
- *          （まだ解放が完了していないという事実を保持し続ける必要がある。
- *          クリアするタイミングは対称性のため ComM_BusSM_ModeIndication() の
- *          NO_COM 分岐に一本化している。同分岐の FULL_COM 側コメントも参照）。
- *
- * \param[in]  Network  ネットワークハンドル（0 〜 COMM_CHANNEL_COUNT-1）。
- *
- * \AUTOSARReq     {SWS_ComM_00392, SWS_ComM_00637}
- * \ServiceID      {0x1a}
- * \Reentrancy     {Non Reentrant}
- * \Synchronicity  {Synchronous}
- */
-void ComM_Nm_BusSleepMode(NetworkHandleType Network)
-{
-    DET_LOGT(TAG, "called");
-    if (!ComM_Initialized)
-    {
-        Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_NM_BUS_SLEEP_MODE, COMM_E_UNINIT);
-        return;
-    }
-
-    if (Network >= COMM_CHANNEL_COUNT)
-    {
-        Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_NM_BUS_SLEEP_MODE, COMM_E_WRONG_PARAMETERS);
-        return;
-    }
-
-    (void)CanSM_RequestComMode(Network, COMM_NO_COMMUNICATION);
-}
-
-/**
- * \brief   ComM 周期処理。
- *
- * \details 本実装は意図的な NOP。ComMTMinFullComModeDuration（ECUC_ComM_00557、
- *          FULL_COM 要求解放を一定時間遅らせて要求のチャタリングを防ぐ
- *          ヒステリシスタイマ）は、[SWS_ComM_00888] のとおり
- *          `ComMNmVariant=FULL` の構成では不要（Rationale 原文: "No timer
- *          needed if AUTOSAR NM is used. This avoids redundant functionality
- *          because AUTOSAR NM also ensures this functionality."）。本プロジェクトは
- *          `Nm_NetworkRequest()`/`Nm_NetworkRelease()` を能動的に呼び、CanNm の
- *          協調スリープ（Repeat Message Time → Ready Sleep Time → Prepare
- *          Bus-Sleep、Nm.c 参照）が同じチャタリング防止の役目を既に果たして
- *          いるため、この `ComMNmVariant=FULL` に該当する。そのため本関数で
- *          追加のタイマ処理は行わない（2026-08 のスペック監査で確認・
- *          Os_PBCfg.c への MainFunction 登録漏れも同時に修正済み）。
- *          `ComM_MainFunction()` 自体は AUTOSAR が要求する周期関数のため、
- *          将来 DCM ActiveDiagnostic 監視等の別用途が生じた際に流用できるよう
- *          スケジューラへの登録（Task 19、Os_PBCfg.c 参照）だけは行っている。
- *
- * \AUTOSARReq     {SWS_ComM_00888}
- * \ServiceID      {0x60}
- * \Reentrancy     {Non Reentrant}
- * \Synchronicity  {Synchronous}
- */
-void ComM_MainFunction(void)
-{
-    DET_LOGT(TAG, "called");
-    if (!ComM_Initialized)
-    {
-        Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_MAIN_FUNCTION, COMM_E_UNINIT);
-        return;
-    }
-    /* NOP（理由は上記 \details 参照）。 */
-}
-
-void ComM_GetVersionInfo(Std_VersionInfoType* Versioninfo)
-{
-    DET_LOGT(TAG, "called");
-    if (Versioninfo == NULL)
-    {
-        Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_GET_VERSION_INFO, COMM_E_PARAM_POINTER);
-        return;
-    }
-
-    Versioninfo->vendorID         = COMM_VENDOR_ID;
-    Versioninfo->moduleID         = COMM_MODULE_ID;
-    Versioninfo->sw_major_version = COMM_SW_MAJOR_VERSION;
-    Versioninfo->sw_minor_version = COMM_SW_MINOR_VERSION;
-    Versioninfo->sw_patch_version = COMM_SW_PATCH_VERSION;
-}
