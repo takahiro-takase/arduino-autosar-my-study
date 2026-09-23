@@ -280,6 +280,7 @@ set(NATIVE_CHAIN_STUB_SOURCES
     stub/Bsw/CanIf/Wrap_CanIf.c
     stub/Bsw/Com/Wrap_Com.c
     stub/Bsw/E2E/Wrap_E2E.c
+    stub/Bsw/E2E/Wrap_E2E_P05.c
     stub/Bsw/Dem/Wrap_Dem.c
     stub/Bsw/Dcm/Wrap_Dcm.c
     stub/Bsw/ComM/Wrap_ComM.c
@@ -449,6 +450,12 @@ set(NATIVE_CHAIN_WRAP_SYMBOLS
     E2E_SMCheck
     E2E_SMCheckInit
     E2E_GetVersionInfo
+    # E2E_P05.h の公開API全5関数（Wrap_E2E_P05.h/.c 参照）。
+    E2E_P05Protect
+    E2E_P05ProtectInit
+    E2E_P05Check
+    E2E_P05CheckInit
+    E2E_P05MapStatusToSM
     #
     Dem_SetEventStatus
 
