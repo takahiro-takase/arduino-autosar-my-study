@@ -1,5 +1,5 @@
 /**
- * \file    Bsw_ComStack_RxE2E_test.cpp
+ * \file    Bsw_ComStack_E2E_Rx_test.cpp
  * \brief   README.md「Rx 処理」→「E2E（EngineInfo/AbsInfo 受信）」コールチェーンの
  *          単体テスト（GoogleTest / PlatformIO `[env:native_chain]`）。
  *
@@ -10,7 +10,7 @@
  *                  → E2EXf_InverseTransformP05() → E2E_P05Check()
  *
  *          「通常」の Rx チェーン（Can_Isr() → … → Com_RxIndication()）は
- *          Bsw_ComStack_Rx_test.cpp が既に検証済みのため、本テストは
+ *          Bsw_ComStack_Signal_Rx_test.cpp が既に検証済みのため、本テストは
  *          RxIndicationCbk フックの部分（E2EXf_InverseTransformP05() →
  *          E2E_P05Check() が CRC・カウンタ連続性を正しく検証すること）に絞り、
  *          `Com_RxIndication()` を直接呼ぶところから始める
@@ -19,7 +19,7 @@
  *          本番の RxIndicationCbk（`Rte_COMRxInd_EngineInfo()`）は `Rte.c` に
  *          あるが、`Rte.c` 自体は IoHwAb/FiM/App_EngineManager/
  *          App_WarningIndicator まで巨大な依存グラフを引き込むため
- *          （Bsw_ComStack_Tx_ComSendSignal_test.cpp 冒頭コメントと同じ理由）リンクしない。
+ *          （Bsw_ComStack_Signal_Tx_test.cpp 冒頭コメントと同じ理由）リンクしない。
  *          本ファイル内に、本番の Rte_COMRxInd_EngineInfo() と同じ処理
  *          （Com_ReceiveSignalGroupArray() で生バイト列を取得し
  *          E2EXf_InverseTransformP05() へ渡す）をテスト専用の
@@ -117,7 +117,7 @@ const E2E_P05ConfigType kRefEngineInfoCfg = {
     0U        /* Offset */
 };
 
-class Bsw_RxE2E_Test : public ::testing::Test
+class Bsw_E2E_Rx_Test : public ::testing::Test
 {
 protected:
     void SetUp() override
@@ -155,7 +155,7 @@ protected:
 };
 
 // ------------------------------------------------------------
-TEST_F(Bsw_RxE2E_Test, ComRxIndication_OK_ValidFirstFrameE2EChecksOk)
+TEST_F(Bsw_E2E_Rx_Test, ComRxIndication_OK_ValidFirstFrameE2EChecksOk)
 {
     /* 準備 (Arrange): 独立した基準状態で正しい CRC/Counter を持つフレームを組み立てる */
     uint8 buf[7] = { 0U };
@@ -175,7 +175,7 @@ TEST_F(Bsw_RxE2E_Test, ComRxIndication_OK_ValidFirstFrameE2EChecksOk)
     EXPECT_EQ(g_LastCheckStatus, E2E_P05STATUS_OK);
 }
 
-TEST_F(Bsw_RxE2E_Test, ComRxIndication_OK_SecondConsecutiveFrameE2EChecksOk)
+TEST_F(Bsw_E2E_Rx_Test, ComRxIndication_OK_SecondConsecutiveFrameE2EChecksOk)
 {
     /* 準備 (Arrange): 連続する2フレーム（Counter 0→1）を用意する */
     uint8 buf1[7] = { 0U };
@@ -197,7 +197,7 @@ TEST_F(Bsw_RxE2E_Test, ComRxIndication_OK_SecondConsecutiveFrameE2EChecksOk)
     EXPECT_EQ(g_LastCheckStatus, E2E_P05STATUS_OK);
 }
 
-TEST_F(Bsw_RxE2E_Test, ComRxIndication_NG_CorruptedCrcE2EChecksError)
+TEST_F(Bsw_E2E_Rx_Test, ComRxIndication_NG_CorruptedCrcE2EChecksError)
 {
     /* 準備 (Arrange): 正しいフレームを組み立てた後、CRC バイトを破壊する */
     uint8 buf[7] = { 0U };

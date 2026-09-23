@@ -3,14 +3,28 @@
  * \brief   `src/Bsw/Dcm/Dcm_Cbk.c` 内の関数を対象とした wrap 実体
  *          （Wrap_Dcm.h 参照）。
  */
+
+/* ======================================================================
+ * Includes
+ * ====================================================================== */
+
 #include "Wrap_Dcm.h"
 #include "Det.h"
+
+/* ======================================================================
+ * Definitions
+ * ====================================================================== */
 
 #define TAG "Dcm"
 
 /* ======================================================================
+ * Type Definitions
+ * ====================================================================== */
+
+/* ======================================================================
  * External Variables
  * ====================================================================== */
+
 uint32 CallCount_Dcm_Init                  = 0U;
 uint32 CallCount_Dcm_MainFunction          = 0U;
 uint32 CallCount_Dcm_GetVin                = 0U;
@@ -38,6 +52,7 @@ PduIdType LastRxPduId_Dcm_ComIndication = 0U;
 /* ----------------------------------------------------------------------
  * WrapDcm_Reset — 9関数すべての状態を一括で初期化する（Wrap_Dcm.h 参照）。
  * ---------------------------------------------------------------------- */
+
 void WrapDcm_Reset(void)
 {
     CallCount_Dcm_Init                  = 0U;
@@ -72,6 +87,7 @@ void WrapDcm_Reset(void)
 /* ----------------------------------------------------------------------
  * Dcm_Init
  * ---------------------------------------------------------------------- */
+
 extern
 void __real_Dcm_Init(const Dcm_ConfigType* ConfigPtr);
 void __wrap_Dcm_Init(const Dcm_ConfigType* ConfigPtr)
@@ -85,6 +101,7 @@ void __wrap_Dcm_Init(const Dcm_ConfigType* ConfigPtr)
 /* ----------------------------------------------------------------------
  * Dcm_MainFunction
  * ---------------------------------------------------------------------- */
+
 extern
 void __real_Dcm_MainFunction(void);
 void __wrap_Dcm_MainFunction(void)
@@ -98,6 +115,7 @@ void __wrap_Dcm_MainFunction(void)
 /* ----------------------------------------------------------------------
  * Dcm_GetVin
  * ---------------------------------------------------------------------- */
+
 extern
 Std_ReturnType __real_Dcm_GetVin(uint8* Data);
 Std_ReturnType __wrap_Dcm_GetVin(uint8* Data)
@@ -116,6 +134,7 @@ Std_ReturnType __wrap_Dcm_GetVin(uint8* Data)
 /* ----------------------------------------------------------------------
  * Dcm_GetSesCtrlType
  * ---------------------------------------------------------------------- */
+
 extern
 Std_ReturnType __real_Dcm_GetSesCtrlType(Dcm_SesCtrlType* SesCtrlType);
 Std_ReturnType __wrap_Dcm_GetSesCtrlType(Dcm_SesCtrlType* SesCtrlType)
@@ -134,6 +153,7 @@ Std_ReturnType __wrap_Dcm_GetSesCtrlType(Dcm_SesCtrlType* SesCtrlType)
 /* ----------------------------------------------------------------------
  * Dcm_GetSecurityLevel
  * ---------------------------------------------------------------------- */
+
 extern
 Std_ReturnType __real_Dcm_GetSecurityLevel(Dcm_SecLevelType* SecLevel);
 Std_ReturnType __wrap_Dcm_GetSecurityLevel(Dcm_SecLevelType* SecLevel)
@@ -152,6 +172,7 @@ Std_ReturnType __wrap_Dcm_GetSecurityLevel(Dcm_SecLevelType* SecLevel)
 /* ----------------------------------------------------------------------
  * Dcm_GetActiveProtocol
  * ---------------------------------------------------------------------- */
+
 extern
 Std_ReturnType __real_Dcm_GetActiveProtocol(Dcm_ProtocolType* ActiveProtocolType, uint16* ConnectionId, uint16* TesterSourceAddress);
 Std_ReturnType __wrap_Dcm_GetActiveProtocol(Dcm_ProtocolType* ActiveProtocolType, uint16* ConnectionId, uint16* TesterSourceAddress)
@@ -170,6 +191,7 @@ Std_ReturnType __wrap_Dcm_GetActiveProtocol(Dcm_ProtocolType* ActiveProtocolType
 /* ----------------------------------------------------------------------
  * Dcm_ResetToDefaultSession
  * ---------------------------------------------------------------------- */
+
 extern
 Std_ReturnType __real_Dcm_ResetToDefaultSession(void);
 Std_ReturnType __wrap_Dcm_ResetToDefaultSession(void)
@@ -188,6 +210,7 @@ Std_ReturnType __wrap_Dcm_ResetToDefaultSession(void)
 /* ----------------------------------------------------------------------
  * Dcm_GetVersionInfo
  * ---------------------------------------------------------------------- */
+
 extern
 void __real_Dcm_GetVersionInfo(Std_VersionInfoType* versioninfo);
 void __wrap_Dcm_GetVersionInfo(Std_VersionInfoType* versioninfo)
@@ -201,6 +224,7 @@ void __wrap_Dcm_GetVersionInfo(Std_VersionInfoType* versioninfo)
 /* ----------------------------------------------------------------------
  * Dcm_ComIndication
  * ---------------------------------------------------------------------- */
+
 extern
 void __real_Dcm_ComIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr);
 void __wrap_Dcm_ComIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)

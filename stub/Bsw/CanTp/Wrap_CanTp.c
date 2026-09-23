@@ -3,14 +3,28 @@
  * \brief   `src/Bsw/CanTp/CanTp.c` 内の関数を対象とした wrap 実体
  *          （Wrap_CanTp.h 参照）。
  */
+
+/* ======================================================================
+ * Includes
+ * ====================================================================== */
+
 #include "Wrap_CanTp.h"
 #include "Det.h"
+
+/* ======================================================================
+ * Definitions
+ * ====================================================================== */
 
 #define TAG "CanTp"
 
 /* ======================================================================
+ * Type Definitions
+ * ====================================================================== */
+
+/* ======================================================================
  * External Variables
  * ====================================================================== */
+
 uint32 CallCount_CanTp_Init           = 0U;
 uint32 CallCount_CanTp_GetVersionInfo = 0U;
 uint32 CallCount_CanTp_Transmit       = 0U;
@@ -31,6 +45,7 @@ PduLengthType LastLength_CanTp_Transmit                     = 0U;
 /* ----------------------------------------------------------------------
  * WrapCanTp_Reset — 7関数すべての状態を一括で初期化する（Wrap_CanTp.h 参照）。
  * ---------------------------------------------------------------------- */
+
 void WrapCanTp_Reset(void)
 {
     CallCount_CanTp_Init           = 0U;
@@ -61,6 +76,7 @@ void WrapCanTp_Reset(void)
 /* ----------------------------------------------------------------------
  * CanTp_Init
  * ---------------------------------------------------------------------- */
+
 extern
 void __real_CanTp_Init(const CanTp_ConfigType* CfgPtr);
 void __wrap_CanTp_Init(const CanTp_ConfigType* CfgPtr)
@@ -74,6 +90,7 @@ void __wrap_CanTp_Init(const CanTp_ConfigType* CfgPtr)
 /* ----------------------------------------------------------------------
  * CanTp_GetVersionInfo
  * ---------------------------------------------------------------------- */
+
 extern
 void __real_CanTp_GetVersionInfo(Std_VersionInfoType* versioninfo);
 void __wrap_CanTp_GetVersionInfo(Std_VersionInfoType* versioninfo)
@@ -93,6 +110,7 @@ void __wrap_CanTp_GetVersionInfo(Std_VersionInfoType* versioninfo)
 /* ----------------------------------------------------------------------
  * CanTp_Transmit
  * ---------------------------------------------------------------------- */
+
 extern
 Std_ReturnType __real_CanTp_Transmit(PduIdType TxSduId, const PduInfoType* PduInfoPtr);
 Std_ReturnType __wrap_CanTp_Transmit(PduIdType TxSduId, const PduInfoType* PduInfoPtr)
@@ -147,6 +165,7 @@ Std_ReturnType __wrap_CanTp_Transmit(PduIdType TxSduId, const PduInfoType* PduIn
 /* ----------------------------------------------------------------------
  * CanTp_MainFunction
  * ---------------------------------------------------------------------- */
+
 extern
 void __real_CanTp_MainFunction(void);
 void __wrap_CanTp_MainFunction(void)
@@ -164,6 +183,7 @@ void __wrap_CanTp_MainFunction(void)
 /* ----------------------------------------------------------------------
  * CanTp_RxIndication
  * ---------------------------------------------------------------------- */
+
 extern
 void __real_CanTp_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr);
 void __wrap_CanTp_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
@@ -177,6 +197,7 @@ void __wrap_CanTp_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
 /* ----------------------------------------------------------------------
  * CanTp_TxConfirmation
  * ---------------------------------------------------------------------- */
+
 extern
 void __real_CanTp_TxConfirmation(PduIdType TxPduId, Std_ReturnType result);
 void __wrap_CanTp_TxConfirmation(PduIdType TxPduId, Std_ReturnType result)
@@ -194,6 +215,7 @@ void __wrap_CanTp_TxConfirmation(PduIdType TxPduId, Std_ReturnType result)
 /* ----------------------------------------------------------------------
  * CanTp_IsTxBusy
  * ---------------------------------------------------------------------- */
+
 extern
 boolean __real_CanTp_IsTxBusy(void);
 boolean __wrap_CanTp_IsTxBusy(void)
