@@ -332,10 +332,6 @@ target_link_options(native_chain_tests PRIVATE -static)
 
 # native_chain_tests がリンク時に故障注入する -Wl,--wrap= 対象シンボル一覧。
 set(NATIVE_CHAIN_WRAP_SYMBOLS
-    E2E_SMCheck
-    Dem_SetEventStatus
-    ComM_DCM_ActiveDiagnostic
-    ComM_DCM_InactiveDiagnostic
     # Can.c の AUTOSAR IF 全数（Wrap_Can.h/.c 参照）。
     Can_Init
     Can_GetVersionInfo
@@ -449,6 +445,13 @@ set(NATIVE_CHAIN_WRAP_SYMBOLS
     CanSM_RxIndication
     CanSM_MainFunction
     CanSM_GetVersionInfo
+    # E2E.h の AUTOSAR IF 全3関数（Wrap_E2E.h/.c 参照）。
+    E2E_SMCheck
+    E2E_SMCheckInit
+    E2E_GetVersionInfo
+    #
+    Dem_SetEventStatus
+
 )
 foreach(wrap_symbol IN LISTS NATIVE_CHAIN_WRAP_SYMBOLS)
     target_link_options(native_chain_tests PRIVATE "-Wl,--wrap=${wrap_symbol}")

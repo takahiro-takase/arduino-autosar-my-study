@@ -15,7 +15,7 @@
 #define TAG "PduR"
 
 /* ======================================================================
- * External Variables
+ * Global Variables
  * ====================================================================== */
 uint32 CallCount_PduR_Init                = 0U;
 uint32 CallCount_PduR_GetVersionInfo      = 0U;
@@ -37,6 +37,7 @@ Std_ReturnType ForcedReturn_PduR_SecOcTransmit = E_NOT_OK;
 /* ----------------------------------------------------------------------
  * WrapPduR_Reset — 11関数すべての状態を一括で初期化する（Wrap_PduR.h 参照）。
  * ---------------------------------------------------------------------- */
+
 void WrapPduR_Reset(void)
 {
     CallCount_PduR_Init                = 0U;
