@@ -41,8 +41,23 @@ extern "C" {
 /* ======================================================================
  *  External Variables
  * ====================================================================== */
+
+extern uint32 CallCount_ComM_Init;
+extern uint32 CallCount_ComM_DeInit;
+extern uint32 CallCount_ComM_GetStatus;
+extern uint32 CallCount_ComM_RequestComMode;
+extern uint32 CallCount_ComM_GetRequestedComMode;
+extern uint32 CallCount_ComM_GetCurrentComMode;
+extern uint32 CallCount_ComM_GetVersionInfo;
+extern uint32 CallCount_ComM_Nm_NetworkStartIndication;
+extern uint32 CallCount_ComM_Nm_NetworkMode;
+extern uint32 CallCount_ComM_Nm_PrepareBusSleepMode;
+extern uint32 CallCount_ComM_Nm_BusSleepMode;
 extern uint32 CallCount_ComM_DCM_ActiveDiagnostic;
 extern uint32 CallCount_ComM_DCM_InactiveDiagnostic;
+extern uint32 CallCount_ComM_CommunicationAllowed;
+extern uint32 CallCount_ComM_BusSM_ModeIndication;
+extern uint32 CallCount_ComM_MainFunction;
 
 /** 1: `ComM_DCM_ActiveDiagnostic()`/`ComM_DCM_InactiveDiagnostic()` を
  *  呼ばれても何もしないよう隔離する（`__real_...` を一切呼ばない）。
