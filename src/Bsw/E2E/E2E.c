@@ -35,116 +35,12 @@
  * Function Prototypes
  * ====================================================================== */
 
+static void E2E_SMAddStatus(E2E_PCheckStatusType ProfileStatus, const E2E_SMConfigType* ConfigPtr,
+                             E2E_SMCheckStateType* StatePtr);
+
 /* ======================================================================
  * Functions
  * ====================================================================== */
-
-/* ----------------------------------------------------------------------
- * E2E_GetVersionInfo
- * ---------------------------------------------------------------------- */
-
-void E2E_GetVersionInfo(Std_VersionInfoType* VersionInfo)
-{
-    DET_LOGT(TAG, "called");
-    if (VersionInfo == NULL)
-    {
-        /* [SWS_E2E_00216]: ライブラリは DET/DEM を呼んではならないため、
-         * Det_ReportError() は呼ばずサイレントに戻る（E2E.h 参照）。 */
-        return;
-    }
-
-    VersionInfo->vendorID         = E2E_VENDOR_ID;
-    VersionInfo->moduleID         = E2E_MODULE_ID;
-    VersionInfo->sw_major_version = E2E_SW_MAJOR_VERSION;
-    VersionInfo->sw_minor_version = E2E_SW_MINOR_VERSION;
-    VersionInfo->sw_patch_version = E2E_SW_PATCH_VERSION;
-}
-
-/* ----------------------------------------------------------------------
- * E2E_SMAddStatus
- * ---------------------------------------------------------------------- */
-
-/**
- * \brief   `E2E_SMCheck()` 内部ステップ（[SWS_E2E_00466]）。ProfileStatus を
- *          循環バッファへ記録し、OkCount/ErrorCount を再集計する。
- *
- * \details 仕様書自身が「これは論理ステップであり、別関数として実装する
- *          必要はない」と明記するが、`E2E_SMCheck()` の4状態すべてで同一の
- *          処理が必要なため、共通化のために static ヘルパーとして実装する。
- *
- * \param[in]     ProfileStatus  今回のサイクルの判定結果。
- * \param[in]     ConfigPtr      呼び出し元が NULL でないことを確認済み。
- * \param[in,out] StatePtr       呼び出し元が NULL でないことを確認済み。
- */
-static void E2E_SMAddStatus(E2E_PCheckStatusType ProfileStatus, const E2E_SMConfigType* ConfigPtr,
-                             E2E_SMCheckStateType* StatePtr)
-{
-    StatePtr->ProfileStatusWindow[StatePtr->WindowTopIndex] = (uint8)ProfileStatus;
-
-    uint8 okCount    = 0U;
-    uint8 errorCount = 0U;
-    for (uint8 i = 0U; i < ConfigPtr->WindowSize; i++)
-    {
-        if (StatePtr->ProfileStatusWindow[i] == (uint8)E2E_P_OK)
-            okCount++;
-        else if (StatePtr->ProfileStatusWindow[i] == (uint8)E2E_P_ERROR)
-            errorCount++;
-    }
-    StatePtr->OkCount    = okCount;
-    StatePtr->ErrorCount = errorCount;
-
-    if (StatePtr->WindowTopIndex == (uint8)(ConfigPtr->WindowSize - 1U))
-        StatePtr->WindowTopIndex = 0U;
-    else
-        StatePtr->WindowTopIndex++;
-}
-
-/* ----------------------------------------------------------------------
- * E2E_SMCheckInit
- * ---------------------------------------------------------------------- */
-
-/**
- * \brief   E2E ステートマシンを初期化する（[SWS_E2E_00353]）。
- *
- * \details `StatePtr->ProfileStatusWindow` は呼び出し元が事前に
- *          `ConfigPtr->WindowSize` バイト分の配列を割り当て、ポインタを
- *          設定しておくこと（本関数はポインタ自体は変更しない）。
- *          [SWS_E2E_00370]: `StatePtr`/`ConfigPtr` が NULL の場合は何もせず
- *          `E2E_E_INPUTERR_NULL` を返す。それ以外の場合、
- *          `ProfileStatusWindow[]` を全て `E2E_P_NOTAVAILABLE` で初期化し、
- *          `WindowTopIndex`/`OkCount`/`ErrorCount` を 0、`SMState` を
- *          `E2E_SM_NODATA` に設定する。
- *
- * \param[out]  StatePtr   初期化するステートマシン状態。NULL 禁止。
- * \param[in]   ConfigPtr  ステートマシン設定。NULL 禁止。
- *
- * \retval  E2E_E_OK             正常完了。
- * \retval  E2E_E_INPUTERR_NULL  StatePtr または ConfigPtr が NULL。
- *
- * \note    [SWS_E2E_00216] によりライブラリは DET/DEM を一切呼んではならない
- *          ため、NULL の場合も Det_ReportError() は呼ばない。
- *
- * \AUTOSARReq     {SWS_E2E_00353, SWS_E2E_00370, SWS_E2E_00467}
- * \ServiceID      {0x31}
- * \Reentrancy     {Reentrant}
- * \Synchronicity  {Synchronous}
- */
-Std_ReturnType E2E_SMCheckInit(E2E_SMCheckStateType* StatePtr, const E2E_SMConfigType* ConfigPtr)
-{
-    DET_LOGT(TAG, "called");
-    if (StatePtr == NULL || ConfigPtr == NULL)
-        return E2E_E_INPUTERR_NULL;
-
-    for (uint8 i = 0U; i < ConfigPtr->WindowSize; i++)
-        StatePtr->ProfileStatusWindow[i] = (uint8)E2E_P_NOTAVAILABLE;
-
-    StatePtr->WindowTopIndex = 0U;
-    StatePtr->OkCount        = 0U;
-    StatePtr->ErrorCount     = 0U;
-    StatePtr->SMState        = E2E_SM_NODATA;
-
-    return E2E_E_OK;
-}
 
 /* ----------------------------------------------------------------------
  * E2E_SMCheck
@@ -206,7 +102,6 @@ Std_ReturnType E2E_SMCheckInit(E2E_SMCheckStateType* StatePtr, const E2E_SMConfi
 Std_ReturnType E2E_SMCheck(E2E_PCheckStatusType ProfileStatus, const E2E_SMConfigType* ConfigPtr,
                             E2E_SMCheckStateType* StatePtr)
 {
-    DET_LOGT(TAG, "called");
     if (StatePtr == NULL || ConfigPtr == NULL)
         return E2E_E_INPUTERR_NULL;
 
@@ -259,4 +154,121 @@ Std_ReturnType E2E_SMCheck(E2E_PCheckStatusType ProfileStatus, const E2E_SMConfi
     }
 
     return E2E_E_OK;
+}
+
+/* ----------------------------------------------------------------------
+ * E2E_SMCheckInit
+ * ---------------------------------------------------------------------- */
+
+/**
+ * \brief   E2E ステートマシンを初期化する（[SWS_E2E_00353]）。
+ *
+ * \details `StatePtr->ProfileStatusWindow` は呼び出し元が事前に
+ *          `ConfigPtr->WindowSize` バイト分の配列を割り当て、ポインタを
+ *          設定しておくこと（本関数はポインタ自体は変更しない）。
+ *          [SWS_E2E_00370]: `StatePtr`/`ConfigPtr` が NULL の場合は何もせず
+ *          `E2E_E_INPUTERR_NULL` を返す。それ以外の場合、
+ *          `ProfileStatusWindow[]` を全て `E2E_P_NOTAVAILABLE` で初期化し、
+ *          `WindowTopIndex`/`OkCount`/`ErrorCount` を 0、`SMState` を
+ *          `E2E_SM_NODATA` に設定する。
+ *
+ * \param[out]  StatePtr   初期化するステートマシン状態。NULL 禁止。
+ * \param[in]   ConfigPtr  ステートマシン設定。NULL 禁止。
+ *
+ * \retval  E2E_E_OK             正常完了。
+ * \retval  E2E_E_INPUTERR_NULL  StatePtr または ConfigPtr が NULL。
+ *
+ * \note    [SWS_E2E_00216] によりライブラリは DET/DEM を一切呼んではならない
+ *          ため、NULL の場合も Det_ReportError() は呼ばない。
+ *
+ * \AUTOSARReq     {SWS_E2E_00353, SWS_E2E_00370, SWS_E2E_00467}
+ * \ServiceID      {0x31}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType E2E_SMCheckInit(E2E_SMCheckStateType* StatePtr, const E2E_SMConfigType* ConfigPtr)
+{
+    if (StatePtr == NULL || ConfigPtr == NULL)
+        return E2E_E_INPUTERR_NULL;
+
+    for (uint8 i = 0U; i < ConfigPtr->WindowSize; i++)
+        StatePtr->ProfileStatusWindow[i] = (uint8)E2E_P_NOTAVAILABLE;
+
+    StatePtr->WindowTopIndex = 0U;
+    StatePtr->OkCount        = 0U;
+    StatePtr->ErrorCount     = 0U;
+    StatePtr->SMState        = E2E_SM_NODATA;
+
+    return E2E_E_OK;
+}
+
+/* ----------------------------------------------------------------------
+ * E2E_GetVersionInfo
+ * ---------------------------------------------------------------------- */
+
+void E2E_GetVersionInfo(Std_VersionInfoType* VersionInfo)
+{
+    if (VersionInfo == NULL)
+    {
+        /* [SWS_E2E_00216]: ライブラリは DET/DEM を呼んではならないため、
+         * Det_ReportError() は呼ばずサイレントに戻る（E2E.h 参照）。 */
+        return;
+    }
+
+    VersionInfo->vendorID         = E2E_VENDOR_ID;
+    VersionInfo->moduleID         = E2E_MODULE_ID;
+    VersionInfo->sw_major_version = E2E_SW_MAJOR_VERSION;
+    VersionInfo->sw_minor_version = E2E_SW_MINOR_VERSION;
+    VersionInfo->sw_patch_version = E2E_SW_PATCH_VERSION;
+}
+
+/* ======================================================================
+ * Callback notifications
+ * ====================================================================== */
+
+/* ======================================================================
+ * Scheduled functions
+ * ====================================================================== */
+
+/* ======================================================================
+ * Internal Functions
+ * ====================================================================== */
+
+/* ----------------------------------------------------------------------
+ * E2E_SMAddStatus
+ * ---------------------------------------------------------------------- */
+
+/**
+ * \brief   `E2E_SMCheck()` 内部ステップ（[SWS_E2E_00466]）。ProfileStatus を
+ *          循環バッファへ記録し、OkCount/ErrorCount を再集計する。
+ *
+ * \details 仕様書自身が「これは論理ステップであり、別関数として実装する
+ *          必要はない」と明記するが、`E2E_SMCheck()` の4状態すべてで同一の
+ *          処理が必要なため、共通化のために static ヘルパーとして実装する。
+ *
+ * \param[in]     ProfileStatus  今回のサイクルの判定結果。
+ * \param[in]     ConfigPtr      呼び出し元が NULL でないことを確認済み。
+ * \param[in,out] StatePtr       呼び出し元が NULL でないことを確認済み。
+ */
+static void E2E_SMAddStatus(E2E_PCheckStatusType ProfileStatus, const E2E_SMConfigType* ConfigPtr,
+                             E2E_SMCheckStateType* StatePtr)
+{
+    StatePtr->ProfileStatusWindow[StatePtr->WindowTopIndex] = (uint8)ProfileStatus;
+
+    uint8 okCount    = 0U;
+    uint8 errorCount = 0U;
+    for (uint8 i = 0U; i < ConfigPtr->WindowSize; i++)
+    {
+        if (StatePtr->ProfileStatusWindow[i] == (uint8)E2E_P_OK)
+            okCount++;
+        else if (StatePtr->ProfileStatusWindow[i] == (uint8)E2E_P_ERROR)
+            errorCount++;
+    }
+    StatePtr->OkCount    = okCount;
+    StatePtr->ErrorCount = errorCount;
+
+    if (StatePtr->WindowTopIndex == (uint8)(ConfigPtr->WindowSize - 1U))
+        StatePtr->WindowTopIndex = 0U;
+    else
+        StatePtr->WindowTopIndex++;
 }

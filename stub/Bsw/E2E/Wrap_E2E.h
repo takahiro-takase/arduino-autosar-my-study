@@ -40,6 +40,8 @@ extern "C" {
  * ====================================================================== */
 /** `__wrap_E2E_SMCheck()` が呼ばれた回数。 */
 extern uint32 CallCount_E2E_SMCheck;
+extern uint32 CallCount_E2E_SMCheckInit;
+extern uint32 CallCount_E2E_GetVersionInfo;
 
 /** `WRAP_E2E_FAIL_FROM_CALL_COUNT_DISABLED`（既定）: 常に
  *  `__real_E2E_SMCheck()` へパススルー。それ以外の値を設定すると、
@@ -47,9 +49,11 @@ extern uint32 CallCount_E2E_SMCheck;
  *  `ForcedReturn_E2E_SMCheck` を返す（本物は一切呼ばない、StatePtr にも
  *  触れない）。 */
 extern uint32 FailFromCallCount_E2E_SMCheck;
+extern uint32 FailFromCallCount_E2E_SMCheckInit;
 
 /** 閾値到達後に返す戻り値（既定 E2E_E_WRONGSTATE）。 */
 extern Std_ReturnType ForcedReturn_E2E_SMCheck;
+extern Std_ReturnType ForcedReturn_E2E_SMCheckInit;
 
 /** 呼び出し回数・回数閾値・強制戻り値を初期状態へ戻す。
  *  各テストケースの開始時（SetUp()）に1回呼ぶ。 */

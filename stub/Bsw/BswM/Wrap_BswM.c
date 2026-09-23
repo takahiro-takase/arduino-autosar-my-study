@@ -9,8 +9,9 @@
 #define TAG "BswM"
 
 /* ======================================================================
- * External Variables
+ * Global Variables
  * ====================================================================== */
+
 uint32 CallCount_BswM_Init                                = 0U;
 uint32 CallCount_BswM_Deinit                              = 0U;
 uint32 CallCount_BswM_GetVersionInfo                      = 0U;
