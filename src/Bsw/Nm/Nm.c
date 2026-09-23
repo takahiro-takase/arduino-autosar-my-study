@@ -22,16 +22,32 @@
  *          AUTOSAR 認証済み実装ではなく、製品への適用は想定していません。
  */
 
+/* ======================================================================
+ * Includes
+ * ====================================================================== */
+
 #include "Nm.h"
 #include "Nm_Cfg.h"
 #include "CanIf.h"
 #include "ComM.h"
 #include "Det.h"
 
+/* ======================================================================
+ * Definitions
+ * ====================================================================== */
+
 #define TAG "Nm"
 
 /* Arduino wiring.c（C リンケージ）で定義 */
 extern unsigned long millis(void);
+
+/* ======================================================================
+ * Type Definitions
+ * ====================================================================== */
+
+/* ======================================================================
+ * Global Variables
+ * ====================================================================== */
 
 static uint8 Nm_Initialized = 0U;
 
@@ -62,12 +78,24 @@ static unsigned long Nm_TimeoutTimerMs;
  *  状態ごとに意味が異なる単一目的タイマ（同時に両方使うことはない）。 */
 static unsigned long Nm_StateTimerMs;
 
+/* ======================================================================
+ * Function Prototypes
+ * ====================================================================== */
+
 static void Nm_TransmitPdu(void);
 static void Nm_EnterRepeatMessage(void);
 static void Nm_EnterNormalOperation(void);
 static void Nm_EnterReadySleep(void);
 static void Nm_EnterPrepareBusSleep(void);
 static void Nm_EnterBusSleep(void);
+
+/* ======================================================================
+ * Functions
+ * ====================================================================== */
+
+/* ----------------------------------------------------------------------
+ * Nm_Init
+ * ---------------------------------------------------------------------- */
 
 /**
  * \brief   Nm モジュールを初期化する。Bus-Sleep Mode から開始する。
@@ -99,6 +127,10 @@ void Nm_Init(const Nm_ConfigType* ConfigPtr)
     DET_LOGI(TAG, "Init ok node=0x%02X (Bus-Sleep Mode)", (unsigned)NM_SOURCE_NODE_ID);
 }
 
+/* ----------------------------------------------------------------------
+ * Nm_DeInit
+ * ---------------------------------------------------------------------- */
+
 /**
  * \brief   Nm モジュールを未初期化状態に戻す。
  *
@@ -118,6 +150,10 @@ void Nm_DeInit(void)
     Nm_Initialized = 0U;
     DET_LOGI(TAG, "DeInit ok");
 }
+
+/* ----------------------------------------------------------------------
+ * Nm_TransmitPdu
+ * ---------------------------------------------------------------------- */
 
 /**
  * \brief   NM フレーム（CBV + Source Node ID）を組み立てて CanIf_Transmit() へ渡す。
@@ -146,6 +182,10 @@ static void Nm_TransmitPdu(void)
 
     (void)CanIf_Transmit(NM_CANIF_TX_PDU_ID, &pduInfo);
 }
+
+/* ----------------------------------------------------------------------
+ * Nm_EnterRepeatMessage
+ * ---------------------------------------------------------------------- */
 
 /**
  * \brief   Bus-Sleep/Prepare Bus-Sleep Mode から Network Mode (Repeat Message
@@ -184,6 +224,10 @@ static void Nm_EnterRepeatMessage(void)
         Nm_TransmitPdu();
 }
 
+/* ----------------------------------------------------------------------
+ * Nm_EnterNormalOperation
+ * ---------------------------------------------------------------------- */
+
 /**
  * \brief   Ready Sleep State から Normal Operation State へ入る（[SWS_CanNm_00116]）。
  *
@@ -205,6 +249,10 @@ static void Nm_EnterNormalOperation(void)
         Nm_TransmitPdu();
 }
 
+/* ----------------------------------------------------------------------
+ * Nm_EnterReadySleep
+ * ---------------------------------------------------------------------- */
+
 /** Repeat Message/Normal Operation State から Ready Sleep State へ入る
  *  （[SWS_CanNm_00106]/[SWS_CanNm_00118]）。[SWS_CanNm_00108]: 送信を停止する
  *  （以降 Nm_TransmitPdu() を呼ばないだけで実現する）。 */
@@ -214,6 +262,10 @@ static void Nm_EnterReadySleep(void)
     Nm_State = NM_STATE_READY_SLEEP;
     DET_LOGI(TAG, "-> Network Mode: Ready Sleep State (tx stopped)");
 }
+
+/* ----------------------------------------------------------------------
+ * Nm_EnterPrepareBusSleep
+ * ---------------------------------------------------------------------- */
 
 /**
  * \brief   Ready Sleep State から Prepare Bus-Sleep Mode へ入る（[SWS_CanNm_00109]）。
@@ -233,6 +285,10 @@ static void Nm_EnterPrepareBusSleep(void)
     ComM_Nm_PrepareBusSleepMode(0U);
 }
 
+/* ----------------------------------------------------------------------
+ * Nm_EnterBusSleep
+ * ---------------------------------------------------------------------- */
+
 /**
  * \brief   Prepare Bus-Sleep Mode から Bus-Sleep Mode へ入る（[SWS_CanNm_00115]）。
  *
@@ -250,6 +306,10 @@ static void Nm_EnterBusSleep(void)
     DET_LOGI(TAG, "-> Bus-Sleep Mode");
     ComM_Nm_BusSleepMode(0U);
 }
+
+/* ----------------------------------------------------------------------
+ * Nm_NetworkRequest
+ * ---------------------------------------------------------------------- */
 
 /**
  * \brief   通信が必要であることを Nm へ伝える（[SWS_CanNm_00104] 相当）。
@@ -309,6 +369,10 @@ Std_ReturnType Nm_NetworkRequest(NetworkHandleType Channel)
     return E_OK;
 }
 
+/* ----------------------------------------------------------------------
+ * Nm_NetworkRelease
+ * ---------------------------------------------------------------------- */
+
 /**
  * \brief   通信が不要になったことを Nm へ伝える（[SWS_CanNm_00105] 相当）。
  *
@@ -349,6 +413,10 @@ Std_ReturnType Nm_NetworkRelease(NetworkHandleType Channel)
     DET_LOGI(TAG, "NetworkRelease ok (state=%u)", (unsigned)Nm_State);
     return E_OK;
 }
+
+/* ----------------------------------------------------------------------
+ * Nm_RepeatMessageRequest
+ * ---------------------------------------------------------------------- */
 
 /**
  * \brief   Repeat Message State への遷移を要求する（[SWS_CanNm_00120] 相当）。
@@ -397,6 +465,10 @@ Std_ReturnType Nm_RepeatMessageRequest(NetworkHandleType Channel)
     Nm_EnterRepeatMessage();      /* [SWS_CanNm_00112]（Ready Sleepから）/[SWS_CanNm_00120]（Normal Operationから） */
     return E_OK;
 }
+
+/* ----------------------------------------------------------------------
+ * Nm_RxIndication
+ * ---------------------------------------------------------------------- */
 
 /**
  * \brief   NM フレームの受信を通知する（CanIf から呼ばれる）。
@@ -490,6 +562,10 @@ void Nm_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
     }
 }
 
+/* ----------------------------------------------------------------------
+ * Nm_TxConfirmation
+ * ---------------------------------------------------------------------- */
+
 /**
  * \brief   NM フレームの送信完了を通知する（CanIf から呼ばれる）。
  *
@@ -517,6 +593,10 @@ void Nm_TxConfirmation(PduIdType TxPduId, Std_ReturnType result)
     if (Nm_State == NM_STATE_REPEAT_MESSAGE || Nm_State == NM_STATE_NORMAL_OPERATION)
         Nm_TimeoutTimerMs = millis();
 }
+
+/* ----------------------------------------------------------------------
+ * Nm_MainFunction
+ * ---------------------------------------------------------------------- */
 
 /**
  * \brief   Nm の周期処理。タイマ満了判定と NM フレームの（再）送信を行う。
@@ -614,6 +694,10 @@ void Nm_MainFunction(void)
     }
 }
 
+/* ----------------------------------------------------------------------
+ * Nm_DisableCommunication
+ * ---------------------------------------------------------------------- */
+
 /**
  * \brief   診断 CommunicationControl (UDS SID 0x28) からの NM PDU 送信無効化要求を反映する
  *          （[SWS_CanNm_00215] 相当）。
@@ -668,6 +752,10 @@ Std_ReturnType Nm_DisableCommunication(NetworkHandleType Channel)
     return E_OK;
 }
 
+/* ----------------------------------------------------------------------
+ * Nm_EnableCommunication
+ * ---------------------------------------------------------------------- */
+
 /**
  * \brief   診断 CommunicationControl (UDS SID 0x28) からの NM PDU 送信再有効化要求を反映する
  *          （[SWS_CanNm_00216] 相当）。
@@ -718,6 +806,10 @@ Std_ReturnType Nm_EnableCommunication(NetworkHandleType Channel)
     return E_OK;
 }
 
+/* ----------------------------------------------------------------------
+ * Nm_GetLocalNodeIdentifier
+ * ---------------------------------------------------------------------- */
+
 /**
  * \brief   自ノードに設定されたノード識別子を取得する（[SWS_CanNm_00220]）。
  *
@@ -760,6 +852,10 @@ Std_ReturnType Nm_GetLocalNodeIdentifier(NetworkHandleType Channel, uint8* nmNod
     *nmNodeIdPtr = NM_SOURCE_NODE_ID;
     return E_OK;
 }
+
+/* ----------------------------------------------------------------------
+ * Nm_GetNodeIdentifier
+ * ---------------------------------------------------------------------- */
 
 /**
  * \brief   直近に受信した NM フレームの送信元ノード識別子を取得する（[SWS_CanNm_00219]）。
@@ -806,6 +902,10 @@ Std_ReturnType Nm_GetNodeIdentifier(NetworkHandleType Channel, uint8* nmNodeIdPt
     return E_OK;
 }
 
+/* ----------------------------------------------------------------------
+ * Nm_GetState
+ * ---------------------------------------------------------------------- */
+
 /**
  * \brief   現在の CanNm 状態とモードを取得する（[SWS_CanNm_00091] 相当）。
  *
@@ -851,6 +951,10 @@ Std_ReturnType Nm_GetState(NetworkHandleType Channel, Nm_StateType* StatePtr, Nm
 
     return E_OK;
 }
+
+/* ----------------------------------------------------------------------
+ * Nm_GetVersionInfo
+ * ---------------------------------------------------------------------- */
 
 /**
  * \brief   Nm モジュールのバージョン情報を取得する。

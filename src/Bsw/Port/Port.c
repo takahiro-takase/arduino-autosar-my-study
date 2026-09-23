@@ -16,17 +16,33 @@
  *          AUTOSAR 認証済み実装ではなく、製品への適用は想定していません。
  */
 
+/* ======================================================================
+ * Includes
+ * ====================================================================== */
+
 #include "Port.h"
 #include "Port_Hw.h"
 #include "Det.h"
 
+/* ======================================================================
+ * Definitions
+ * ====================================================================== */
+
 #define TAG "Port"
+
+/* ======================================================================
+ * Type Definitions
+ * ====================================================================== */
 
 typedef struct
 {
     Port_PinType          Pin;
     Port_PinDirectionType Direction;
 } Port_PinConfigType;
+
+/* ======================================================================
+ * Global Variables
+ * ====================================================================== */
 
 /** PORT_PIN_COUNT と要素数が食い違えば初期化子の過不足でコンパイルエラーになる
  *  （Port_Cfg.h にピンを追加する際は両方を同時に更新する必要がある）。 */
@@ -38,6 +54,18 @@ static const Port_PinConfigType Port_PinConfig[PORT_PIN_COUNT] =
     { PORT_PIN_BUTTON,      PORT_PIN_IN_PULLUP },
 };
 
+/* ======================================================================
+ * Function Prototypes
+ * ====================================================================== */
+
+/* ======================================================================
+ * Functions
+ * ====================================================================== */
+
+/* ----------------------------------------------------------------------
+ * Port_ApplyConfiguredDirections
+ * ---------------------------------------------------------------------- */
+
 /** Port_Init() と Port_RefreshPortDirection() の両方から呼ばれる（Port.h 参照）。 */
 static void Port_ApplyConfiguredDirections(void)
 {
@@ -46,6 +74,10 @@ static void Port_ApplyConfiguredDirections(void)
         Port_Hw_SetPinDirection(Port_PinConfig[i].Pin, Port_PinConfig[i].Direction);
     }
 }
+
+/* ----------------------------------------------------------------------
+ * Port_Init
+ * ---------------------------------------------------------------------- */
 
 /**
  * \brief   Port モジュールを初期化する。
@@ -65,6 +97,10 @@ void Port_Init(const Port_ConfigType* ConfigPtr)
     DET_LOGI(TAG, "Init pins=%u", (unsigned)PORT_PIN_COUNT);
 }
 
+/* ----------------------------------------------------------------------
+ * Port_RefreshPortDirection
+ * ---------------------------------------------------------------------- */
+
 /**
  * \brief   全ピンの方向を設定方向へ再適用する（詳細は Port.h 参照）。
  *
@@ -79,6 +115,10 @@ void Port_RefreshPortDirection(void)
     DET_LOGI(TAG, "RefreshPortDirection pins=%u", (unsigned)PORT_PIN_COUNT);
 }
 
+/* ----------------------------------------------------------------------
+ * Port_SetPinDirection
+ * ---------------------------------------------------------------------- */
+
 /**
  * \brief   指定ピンの方向を動的に変更する。
  *
@@ -91,6 +131,10 @@ void Port_SetPinDirection(Port_PinType Pin, Port_PinDirectionType Direction)
     DET_LOGT(TAG, "called");
     Port_Hw_SetPinDirection(Pin, Direction);
 }
+
+/* ----------------------------------------------------------------------
+ * Port_GetVersionInfo
+ * ---------------------------------------------------------------------- */
 
 void Port_GetVersionInfo(Std_VersionInfoType* versioninfo)
 {
@@ -107,6 +151,10 @@ void Port_GetVersionInfo(Std_VersionInfoType* versioninfo)
     versioninfo->sw_minor_version = PORT_SW_MINOR_VERSION;
     versioninfo->sw_patch_version = PORT_SW_PATCH_VERSION;
 }
+
+/* ----------------------------------------------------------------------
+ * Port_SetPinMode
+ * ---------------------------------------------------------------------- */
 
 /**
  * \brief   指定ピンのモードを切り替える（詳細は Port.h 参照）。

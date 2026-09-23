@@ -8,13 +8,30 @@
  * \note    本ファイルは AUTOSAR 4.3.1 仕様を参考にした学習用実装です。
  *          AUTOSAR 認証済み実装ではなく、製品への適用は想定していません。
  */
+
+/* ======================================================================
+ * Includes
+ * ====================================================================== */
+
 #include "Crypto.h"
 #include "Crypto_Aes128.h"
 #include "Crypto_Cmac.h"
 #include "Crypto_PBCfg.h"
 #include "Det.h"
 
+/* ======================================================================
+ * Definitions
+ * ====================================================================== */
+
 #define TAG "Crypto"
+
+/* ======================================================================
+ * Type Definitions
+ * ====================================================================== */
+
+/* ======================================================================
+ * Global Variables
+ * ====================================================================== */
 
 static uint8 Crypto_Initialized = 0U;
 
@@ -31,6 +48,18 @@ static uint8 Crypto_KeyStore[CRYPTO_KEY_COUNT][CRYPTO_AES128_KEY_SIZE];
  *  （[SWS_KeyM_00008]/[SWS_Csm_00958] の「更新した鍵はセッション終了まで無効」
  *  という仕様を、実際に MAC 生成/検証へ反映させる）。 */
 static uint8 Crypto_KeyValid[CRYPTO_KEY_COUNT];
+
+/* ======================================================================
+ * Function Prototypes
+ * ====================================================================== */
+
+/* ======================================================================
+ * Functions
+ * ====================================================================== */
+
+/* ----------------------------------------------------------------------
+ * Crypto_Init
+ * ---------------------------------------------------------------------- */
 
 void Crypto_Init(void)
 {
@@ -57,6 +86,10 @@ void Crypto_Init(void)
     DET_LOGI(TAG, "Init ok");
 }
 
+/* ----------------------------------------------------------------------
+ * Crypto_GetVersionInfo
+ * ---------------------------------------------------------------------- */
+
 void Crypto_GetVersionInfo(Std_VersionInfoType* versioninfo)
 {
     DET_LOGT(TAG, "called");
@@ -72,6 +105,10 @@ void Crypto_GetVersionInfo(Std_VersionInfoType* versioninfo)
     versioninfo->sw_minor_version = CRYPTO_SW_MINOR_VERSION;
     versioninfo->sw_patch_version = CRYPTO_SW_PATCH_VERSION;
 }
+
+/* ----------------------------------------------------------------------
+ * Crypto_ProcessJob
+ * ---------------------------------------------------------------------- */
 
 Std_ReturnType Crypto_ProcessJob(uint32 objectId, Crypto_JobType* job)
 {
@@ -148,6 +185,10 @@ Std_ReturnType Crypto_ProcessJob(uint32 objectId, Crypto_JobType* job)
     return E_NOT_OK;
 }
 
+/* ----------------------------------------------------------------------
+ * Crypto_KeyElementSet
+ * ---------------------------------------------------------------------- */
+
 Std_ReturnType Crypto_KeyElementSet(uint32 cryptoKeyId, uint32 keyElementId,
                                      const uint8* keyPtr, uint32 keyLength)
 {
@@ -192,6 +233,10 @@ Std_ReturnType Crypto_KeyElementSet(uint32 cryptoKeyId, uint32 keyElementId,
     DET_LOGI(TAG, "KeyElementSet ok cryptoKeyId=%u (now pending KeySetValid)", (unsigned)cryptoKeyId);
     return E_OK;
 }
+
+/* ----------------------------------------------------------------------
+ * Crypto_KeyElementGet
+ * ---------------------------------------------------------------------- */
 
 Std_ReturnType Crypto_KeyElementGet(uint32 cryptoKeyId, uint32 keyElementId,
                                      uint8* resultPtr, uint32* resultLengthPtr)
@@ -240,6 +285,10 @@ Std_ReturnType Crypto_KeyElementGet(uint32 cryptoKeyId, uint32 keyElementId,
     *resultLengthPtr = CRYPTO_AES128_KEY_SIZE;
     return E_OK;
 }
+
+/* ----------------------------------------------------------------------
+ * Crypto_KeySetValid
+ * ---------------------------------------------------------------------- */
 
 Std_ReturnType Crypto_KeySetValid(uint32 cryptoKeyId)
 {

@@ -62,6 +62,11 @@
  * \note    本ファイルは AUTOSAR 4.3.1 仕様を参考にした学習用実装です。
  *          AUTOSAR 認証済み実装ではなく、製品への適用は想定していません。
  */
+
+/* ======================================================================
+ * Includes
+ * ====================================================================== */
+
 #include "SecOC.h"
 #include "SecOC_Cfg.h"
 #include "Csm.h"
@@ -69,6 +74,10 @@
 #include "PduR_SecOC.h"
 #include "Det.h"
 #include <string.h>
+
+/* ======================================================================
+ * Definitions
+ * ====================================================================== */
 
 #define TAG "SecOC"
 
@@ -84,6 +93,14 @@
  * 追加された際にも対応できるよう CAN DLC 上限ベースの余裕を持たせたまま
  * 残している。 */
 #define SECOC_TX_AUTH_BUF_MAX  8U
+
+/* ======================================================================
+ * Type Definitions
+ * ====================================================================== */
+
+/* ======================================================================
+ * Global Variables
+ * ====================================================================== */
 
 static const SecOC_ConfigType* SecOC_ConfigPtr = NULL;
 
@@ -131,6 +148,18 @@ static uint8 SecOC_TxAuthenticBuffer[SECOC_TX_STATE_STORAGE_COUNT][SECOC_TX_AUTH
 static uint8 SecOC_TxPending[SECOC_TX_STATE_STORAGE_COUNT];
 static uint8 SecOC_TxFreshness[SECOC_TX_STATE_STORAGE_COUNT];
 
+/* ======================================================================
+ * Function Prototypes
+ * ====================================================================== */
+
+/* ======================================================================
+ * Functions
+ * ====================================================================== */
+
+/* ----------------------------------------------------------------------
+ * SecOC_FindRxPdu
+ * ---------------------------------------------------------------------- */
+
 /**
  * \brief   SecOC_RxPduConfigType テーブルから SecOCRxPduId に一致するエントリを検索する。
  *
@@ -156,6 +185,10 @@ static const SecOC_RxPduConfigType* SecOC_FindRxPdu(PduIdType rxPduId, uint8* ta
     }
     return NULL;
 }
+
+/* ----------------------------------------------------------------------
+ * SecOC_ApplyVerifyStatusOverride
+ * ---------------------------------------------------------------------- */
 
 /**
  * \brief   実際の検証結果に SecOC_VerifyStatusOverride() のオーバーライド設定を適用する。
@@ -200,6 +233,10 @@ static uint8 SecOC_ApplyVerifyStatusOverride(uint8 tableIndex, uint8 actualPass)
     return actualPass;
 }
 
+/* ----------------------------------------------------------------------
+ * SecOC_FindTxPdu
+ * ---------------------------------------------------------------------- */
+
 /**
  * \brief   SecOC_TxPduConfigType テーブルから SecOCTxPduId に一致するエントリを検索する。
  *
@@ -225,6 +262,10 @@ static const SecOC_TxPduConfigType* SecOC_FindTxPdu(PduIdType txPduId, uint8* ta
     }
     return NULL;
 }
+
+/* ----------------------------------------------------------------------
+ * SecOC_Init
+ * ---------------------------------------------------------------------- */
 
 void SecOC_Init(const SecOC_ConfigType* config)
 {
@@ -271,6 +312,10 @@ void SecOC_Init(const SecOC_ConfigType* config)
     DET_LOGI(TAG, "Init ok RX=%u TX=%u", (unsigned)config->RxPduCount, (unsigned)config->TxPduCount);
 }
 
+/* ----------------------------------------------------------------------
+ * SecOC_DeInit
+ * ---------------------------------------------------------------------- */
+
 void SecOC_DeInit(void)
 {
     DET_LOGT(TAG, "called");
@@ -304,6 +349,10 @@ void SecOC_DeInit(void)
     SecOC_ConfigPtr = NULL;
     DET_LOGI(TAG, "DeInit ok");
 }
+
+/* ----------------------------------------------------------------------
+ * SecOC_RxIndication
+ * ---------------------------------------------------------------------- */
 
 void SecOC_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
 {
@@ -488,6 +537,10 @@ void SecOC_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
     Com_RxIndication(cfg->ComRxPduId, &authenticPduInfo);
 }
 
+/* ----------------------------------------------------------------------
+ * SecOC_VerifyStatusOverride
+ * ---------------------------------------------------------------------- */
+
 /**
  * \brief   指定 Freshness Value の VerifyStatus を強制上書きする（[SWS_SecOC_00122]）。
  *
@@ -586,6 +639,10 @@ Std_ReturnType SecOC_VerifyStatusOverride(uint16 freshnessValueID, uint8 overrid
     return E_OK;
 }
 
+/* ----------------------------------------------------------------------
+ * SecOC_IfTransmit
+ * ---------------------------------------------------------------------- */
+
 Std_ReturnType SecOC_IfTransmit(PduIdType TxPduId, const PduInfoType* PduInfoPtr)
 {
     DET_LOGT(TAG, "called");
@@ -628,6 +685,10 @@ Std_ReturnType SecOC_IfTransmit(PduIdType TxPduId, const PduInfoType* PduInfoPtr
     return E_OK;
 }
 
+/* ----------------------------------------------------------------------
+ * SecOC_TxConfirmation
+ * ---------------------------------------------------------------------- */
+
 /**
  * \brief   下位層からの TX 完了通知エントリポイント。
  *
@@ -661,6 +722,10 @@ void SecOC_TxConfirmation(PduIdType TxPduId, Std_ReturnType result)
      * 参照（本実装は既に解放済み扱いのため追加処理不要）。 */
     PduR_SecOCTxConfirmation(cfg->PduRSrcPduId, result);
 }
+
+/* ----------------------------------------------------------------------
+ * SecOC_MainFunctionTx
+ * ---------------------------------------------------------------------- */
 
 void SecOC_MainFunctionTx(void)
 {
@@ -736,6 +801,10 @@ void SecOC_MainFunctionTx(void)
     }
 }
 
+/* ----------------------------------------------------------------------
+ * SecOC_MainFunctionRx
+ * ---------------------------------------------------------------------- */
+
 /**
  * \brief   周期実行関数。RX 方向の認証・検証処理を行う（[SWS_SecOC_00171]）。
  *
@@ -757,6 +826,10 @@ void SecOC_MainFunctionRx(void)
      * 同期実行して検証を完結させる設計のため、本関数が処理すべき保留中の
      * RX ジョブは存在しない（SecOC.h の本関数 Doxygen コメント参照）。 */
 }
+
+/* ----------------------------------------------------------------------
+ * SecOC_GetVersionInfo
+ * ---------------------------------------------------------------------- */
 
 void SecOC_GetVersionInfo(Std_VersionInfoType* versioninfo)
 {

@@ -27,11 +27,40 @@
  * \note    本ファイルは AUTOSAR 4.3.1 仕様を参考にした学習用実装です。
  *          AUTOSAR 認証済み実装ではなく、製品への適用は想定していません。
  */
+
+/* ======================================================================
+ * Includes
+ * ====================================================================== */
+
 #include "MemIf.h"
 #include "Fee.h"
 #include "Det.h"
 
+/* ======================================================================
+ * Definitions
+ * ====================================================================== */
+
 #define TAG "MemIf"
+
+/* ======================================================================
+ * Type Definitions
+ * ====================================================================== */
+
+/* ======================================================================
+ * Global Variables
+ * ====================================================================== */
+
+/* ======================================================================
+ * Function Prototypes
+ * ====================================================================== */
+
+/* ======================================================================
+ * Functions
+ * ====================================================================== */
+
+/* ----------------------------------------------------------------------
+ * MemIf_CheckDevice
+ * ---------------------------------------------------------------------- */
 
 static uint8 MemIf_CheckDevice(MemIf_DeviceType Device, uint8 ApiId)
 {
@@ -44,11 +73,19 @@ static uint8 MemIf_CheckDevice(MemIf_DeviceType Device, uint8 ApiId)
     return 1U;
 }
 
+/* ----------------------------------------------------------------------
+ * MemIf_Init
+ * ---------------------------------------------------------------------- */
+
 void MemIf_Init(void)
 {
     Fee_Init(NULL);
     DET_LOGI(TAG, "Init ok");
 }
+
+/* ----------------------------------------------------------------------
+ * MemIf_GetVersionInfo
+ * ---------------------------------------------------------------------- */
 
 void MemIf_GetVersionInfo(Std_VersionInfoType* versioninfo)
 {
@@ -66,6 +103,10 @@ void MemIf_GetVersionInfo(Std_VersionInfoType* versioninfo)
     versioninfo->sw_patch_version = MEMIF_SW_PATCH_VERSION;
 }
 
+/* ----------------------------------------------------------------------
+ * MemIf_SetMode
+ * ---------------------------------------------------------------------- */
+
 void MemIf_SetMode(MemIf_ModeType Mode)
 {
     /* [SWS_MemIf_00038]: Device 引数を持たない（全下位ドライバへ一括反映する
@@ -75,6 +116,10 @@ void MemIf_SetMode(MemIf_ModeType Mode)
     Fee_SetMode(Mode);
 }
 
+/* ----------------------------------------------------------------------
+ * MemIf_Read
+ * ---------------------------------------------------------------------- */
+
 Std_ReturnType MemIf_Read(MemIf_DeviceType Device, uint16 Address, uint8* DataBufferPtr, uint16 Length)
 {
     DET_LOGT(TAG, "called");
@@ -82,6 +127,10 @@ Std_ReturnType MemIf_Read(MemIf_DeviceType Device, uint16 Address, uint8* DataBu
         return E_NOT_OK;
     return Fee_Read(Address, DataBufferPtr, Length);
 }
+
+/* ----------------------------------------------------------------------
+ * MemIf_Write
+ * ---------------------------------------------------------------------- */
 
 Std_ReturnType MemIf_Write(MemIf_DeviceType Device, uint16 Address, const uint8* DataBufferPtr, uint16 Length)
 {
@@ -91,6 +140,10 @@ Std_ReturnType MemIf_Write(MemIf_DeviceType Device, uint16 Address, const uint8*
     return Fee_Write(Address, DataBufferPtr, Length);
 }
 
+/* ----------------------------------------------------------------------
+ * MemIf_WriteImmediate
+ * ---------------------------------------------------------------------- */
+
 Std_ReturnType MemIf_WriteImmediate(MemIf_DeviceType Device, uint16 Address, const uint8* DataBufferPtr, uint16 Length)
 {
     DET_LOGT(TAG, "called");
@@ -99,6 +152,10 @@ Std_ReturnType MemIf_WriteImmediate(MemIf_DeviceType Device, uint16 Address, con
     return Fee_WriteImmediate(Address, DataBufferPtr, Length);
 }
 
+/* ----------------------------------------------------------------------
+ * MemIf_Cancel
+ * ---------------------------------------------------------------------- */
+
 void MemIf_Cancel(MemIf_DeviceType Device)
 {
     DET_LOGT(TAG, "called");
@@ -106,6 +163,10 @@ void MemIf_Cancel(MemIf_DeviceType Device)
         return;
     Fee_Cancel();
 }
+
+/* ----------------------------------------------------------------------
+ * MemIf_GetStatus
+ * ---------------------------------------------------------------------- */
 
 MemIf_StatusType MemIf_GetStatus(MemIf_DeviceType Device)
 {
@@ -119,6 +180,10 @@ MemIf_StatusType MemIf_GetStatus(MemIf_DeviceType Device)
     return Fee_GetStatus();
 }
 
+/* ----------------------------------------------------------------------
+ * MemIf_GetJobResult
+ * ---------------------------------------------------------------------- */
+
 MemIf_JobResultType MemIf_GetJobResult(MemIf_DeviceType Device)
 {
     /* [SWS_MemIf_00043] の Return value 記述: development error 検出時は
@@ -129,6 +194,10 @@ MemIf_JobResultType MemIf_GetJobResult(MemIf_DeviceType Device)
         return MEMIF_JOB_FAILED;
     return Fee_GetJobResult();
 }
+
+/* ----------------------------------------------------------------------
+ * MemIf_MainFunction
+ * ---------------------------------------------------------------------- */
 
 void MemIf_MainFunction(void)
 {

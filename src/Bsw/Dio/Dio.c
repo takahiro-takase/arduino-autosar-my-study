@@ -12,11 +12,39 @@
  *          AUTOSAR 認証済み実装ではなく、製品への適用は想定していません。
  */
 
+/* ======================================================================
+ * Includes
+ * ====================================================================== */
+
 #include "Dio.h"
 #include "Dio_Hw.h"
 #include "Det.h"
 
+/* ======================================================================
+ * Definitions
+ * ====================================================================== */
+
 #define TAG "Dio"
+
+/* ======================================================================
+ * Type Definitions
+ * ====================================================================== */
+
+/* ======================================================================
+ * Global Variables
+ * ====================================================================== */
+
+/* ======================================================================
+ * Function Prototypes
+ * ====================================================================== */
+
+/* ======================================================================
+ * Functions
+ * ====================================================================== */
+
+/* ----------------------------------------------------------------------
+ * Dio_WriteChannel
+ * ---------------------------------------------------------------------- */
 
 /**
  * \brief   指定チャネルへ出力レベルを書き込む。
@@ -36,6 +64,10 @@ void Dio_WriteChannel(Dio_ChannelType channelId, Dio_LevelType level)
     Dio_Hw_WriteChannel(channelId, level);
 }
 
+/* ----------------------------------------------------------------------
+ * Dio_ReadChannel
+ * ---------------------------------------------------------------------- */
+
 /**
  * \brief   指定チャネルの入力レベルを読み取る。
  *
@@ -54,6 +86,10 @@ Dio_LevelType Dio_ReadChannel(Dio_ChannelType channelId)
     DET_LOGT(TAG, "called");
     return Dio_Hw_ReadChannel(channelId);
 }
+
+/* ----------------------------------------------------------------------
+ * Dio_FlipChannel
+ * ---------------------------------------------------------------------- */
 
 /**
  * \brief   指定チャネルの出力レベルを反転し、反転後のレベルを返す。
@@ -111,6 +147,10 @@ const Dio_ChannelGroupType Dio_ChannelGroupRunFault =
     DIO_CHANNELGROUP_RUN_FAULT_OFFSET
 };
 
+/* ----------------------------------------------------------------------
+ * Dio_GetPortChannels
+ * ---------------------------------------------------------------------- */
+
 /**
  * \brief   PortId に対応するチャネル配列とその幅を取得する。
  * \param[out] widthOut  チャネル数の格納先（PortId が範囲外の場合は未変更）。
@@ -127,6 +167,10 @@ static const Dio_ChannelType* Dio_GetPortChannels(Dio_PortType PortId, uint8* wi
     return Dio_PortConfig[PortId].channels;
 }
 
+/* ----------------------------------------------------------------------
+ * Dio_ReadPortLevel
+ * ---------------------------------------------------------------------- */
+
 /** channels[0..width) を bit0 起点で読み取り、1つの Dio_PortLevelType へ合成する。 */
 static Dio_PortLevelType Dio_ReadPortLevel(const Dio_ChannelType* channels, uint8 width)
 {
@@ -141,6 +185,10 @@ static Dio_PortLevelType Dio_ReadPortLevel(const Dio_ChannelType* channels, uint
     return level;
 }
 
+/* ----------------------------------------------------------------------
+ * Dio_WritePortLevel
+ * ---------------------------------------------------------------------- */
+
 /** level の bit0 起点の各ビットを channels[0..width) へ順に書き込む。 */
 static void Dio_WritePortLevel(const Dio_ChannelType* channels, uint8 width, Dio_PortLevelType level)
 {
@@ -149,6 +197,10 @@ static void Dio_WritePortLevel(const Dio_ChannelType* channels, uint8 width, Dio
         Dio_Hw_WriteChannel(channels[i], ((level >> i) & 0x01U) ? DIO_HIGH : DIO_LOW);
     }
 }
+
+/* ----------------------------------------------------------------------
+ * Dio_ResolvePortOrReportDet
+ * ---------------------------------------------------------------------- */
 
 /**
  * \brief   PortId を解決し、失敗時は DET へ DIO_E_PARAM_INVALID_PORT_ID を報告する。
@@ -168,6 +220,10 @@ static const Dio_ChannelType* Dio_ResolvePortOrReportDet(Dio_PortType PortId, ui
     }
     return channels;
 }
+
+/* ----------------------------------------------------------------------
+ * Dio_ResolveGroupChannels
+ * ---------------------------------------------------------------------- */
 
 /**
  * \brief   group の port を解決し、(mask << offset) がポート幅に収まっているか検証する。
@@ -205,6 +261,10 @@ static const Dio_ChannelType* Dio_ResolveGroupChannels(const Dio_ChannelGroupTyp
     return channels;
 }
 
+/* ----------------------------------------------------------------------
+ * Dio_ResolveGroupOrReportDet
+ * ---------------------------------------------------------------------- */
+
 /**
  * \brief   ChannelGroupIdPtr を解決し、失敗時は DET へ報告する。
  * \details Dio_ReadChannelGroup/Dio_WriteChannelGroup で共通の
@@ -232,6 +292,10 @@ static const Dio_ChannelType* Dio_ResolveGroupOrReportDet(const Dio_ChannelGroup
     return channels;
 }
 
+/* ----------------------------------------------------------------------
+ * Dio_ReadPort
+ * ---------------------------------------------------------------------- */
+
 Dio_PortLevelType Dio_ReadPort(Dio_PortType PortId)
 {
     DET_LOGT(TAG, "called");
@@ -245,6 +309,10 @@ Dio_PortLevelType Dio_ReadPort(Dio_PortType PortId)
     return Dio_ReadPortLevel(channels, width);
 }
 
+/* ----------------------------------------------------------------------
+ * Dio_WritePort
+ * ---------------------------------------------------------------------- */
+
 void Dio_WritePort(Dio_PortType PortId, Dio_PortLevelType Level)
 {
     DET_LOGT(TAG, "called");
@@ -257,6 +325,10 @@ void Dio_WritePort(Dio_PortType PortId, Dio_PortLevelType Level)
 
     Dio_WritePortLevel(channels, width, Level);
 }
+
+/* ----------------------------------------------------------------------
+ * Dio_ReadChannelGroup
+ * ---------------------------------------------------------------------- */
 
 Dio_PortLevelType Dio_ReadChannelGroup(const Dio_ChannelGroupType* ChannelGroupIdPtr)
 {
@@ -272,6 +344,10 @@ Dio_PortLevelType Dio_ReadChannelGroup(const Dio_ChannelGroupType* ChannelGroupI
     Dio_PortLevelType portLevel = Dio_ReadPortLevel(channels, width);
     return (Dio_PortLevelType)((portLevel >> ChannelGroupIdPtr->offset) & ChannelGroupIdPtr->mask);
 }
+
+/* ----------------------------------------------------------------------
+ * Dio_WriteChannelGroup
+ * ---------------------------------------------------------------------- */
 
 void Dio_WriteChannelGroup(const Dio_ChannelGroupType* ChannelGroupIdPtr, Dio_PortLevelType Level)
 {
@@ -293,6 +369,10 @@ void Dio_WriteChannelGroup(const Dio_ChannelGroupType* ChannelGroupIdPtr, Dio_Po
 
     Dio_WritePortLevel(channels, width, newLevel);
 }
+
+/* ----------------------------------------------------------------------
+ * Dio_GetVersionInfo
+ * ---------------------------------------------------------------------- */
 
 void Dio_GetVersionInfo(Std_VersionInfoType* VersionInfo)
 {

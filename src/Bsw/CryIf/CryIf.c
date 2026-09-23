@@ -8,20 +8,53 @@
  * \note    本ファイルは AUTOSAR 4.3.1 仕様を参考にした学習用実装です。
  *          AUTOSAR 認証済み実装ではなく、製品への適用は想定していません。
  */
+
+/* ======================================================================
+ * Includes
+ * ====================================================================== */
+
 #include "CryIf.h"
 #include "Crypto.h"
 #include "Crypto_Cfg.h"
 #include "Det.h"
 
+/* ======================================================================
+ * Definitions
+ * ====================================================================== */
+
 #define TAG "CryIf"
 
+/* ======================================================================
+ * Type Definitions
+ * ====================================================================== */
+
+/* ======================================================================
+ * Global Variables
+ * ====================================================================== */
+
 static uint8 CryIf_Initialized = 0U;
+
+/* ======================================================================
+ * Function Prototypes
+ * ====================================================================== */
+
+/* ======================================================================
+ * Functions
+ * ====================================================================== */
+
+/* ----------------------------------------------------------------------
+ * CryIf_Init
+ * ---------------------------------------------------------------------- */
 
 void CryIf_Init(void)
 {
     CryIf_Initialized = 1U;
     DET_LOGI(TAG, "Init ok");
 }
+
+/* ----------------------------------------------------------------------
+ * CryIf_IsInitialized
+ * ---------------------------------------------------------------------- */
 
 /**
  * \brief   CryIf モジュールが初期化済みかを返す。
@@ -46,6 +79,10 @@ boolean CryIf_IsInitialized(void)
     return (boolean)(CryIf_Initialized != 0U);
 }
 
+/* ----------------------------------------------------------------------
+ * CryIf_GetVersionInfo
+ * ---------------------------------------------------------------------- */
+
 void CryIf_GetVersionInfo(Std_VersionInfoType* versioninfo)
 {
     DET_LOGT(TAG, "called");
@@ -67,6 +104,10 @@ void CryIf_GetVersionInfo(Std_VersionInfoType* versioninfo)
     versioninfo->sw_minor_version = CRYIF_SW_MINOR_VERSION;
     versioninfo->sw_patch_version = CRYIF_SW_PATCH_VERSION;
 }
+
+/* ----------------------------------------------------------------------
+ * CryIf_ProcessJob
+ * ---------------------------------------------------------------------- */
 
 Std_ReturnType CryIf_ProcessJob(uint32 channelId, Crypto_JobType* job)
 {
@@ -94,6 +135,10 @@ Std_ReturnType CryIf_ProcessJob(uint32 channelId, Crypto_JobType* job)
      * CRYPTO_OBJECT_ID の 1 個のみのため固定で渡す。 */
     return Crypto_ProcessJob(CRYPTO_OBJECT_ID, job);
 }
+
+/* ----------------------------------------------------------------------
+ * CryIf_KeyElementSet
+ * ---------------------------------------------------------------------- */
 
 Std_ReturnType CryIf_KeyElementSet(uint32 cryIfKeyId, uint32 keyElementId,
                                     const uint8* keyPtr, uint32 keyLength)
@@ -136,6 +181,10 @@ Std_ReturnType CryIf_KeyElementSet(uint32 cryIfKeyId, uint32 keyElementId,
     return Crypto_KeyElementSet(cryIfKeyId, keyElementId, keyPtr, keyLength);
 }
 
+/* ----------------------------------------------------------------------
+ * CryIf_KeySetValid
+ * ---------------------------------------------------------------------- */
+
 Std_ReturnType CryIf_KeySetValid(uint32 cryIfKeyId)
 {
     DET_LOGT(TAG, "called");
@@ -156,6 +205,10 @@ Std_ReturnType CryIf_KeySetValid(uint32 cryIfKeyId)
     /* [SWS_CryIf_00058]: 単一 Crypto Driver Object へのパススルー。 */
     return Crypto_KeySetValid(cryIfKeyId);
 }
+
+/* ----------------------------------------------------------------------
+ * CryIf_KeyElementGet
+ * ---------------------------------------------------------------------- */
 
 Std_ReturnType CryIf_KeyElementGet(uint32 cryIfKeyId, uint32 keyElementId,
                                     uint8* resultPtr, uint32* resultLengthPtr)

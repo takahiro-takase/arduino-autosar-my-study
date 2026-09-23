@@ -8,11 +8,27 @@
  * \note    本ファイルは AUTOSAR 4.3.1/4.2.1 仕様を参考にした学習用実装です。
  *          AUTOSAR 認証済み実装ではなく、製品への適用は想定していません。
  */
+/* ======================================================================
+ * Includes
+ * ====================================================================== */
+
 #include "E2EXf.h"
 #include "E2E.h"
 #include "Det.h"
 
+/* ======================================================================
+ * Definitions
+ * ====================================================================== */
+
 #define TAG "E2EXf"
+
+/* ======================================================================
+ * Type Definitions
+ * ====================================================================== */
+
+/* ======================================================================
+ * Global Variables
+ * ====================================================================== */
 
 /* E2EXf モジュール自身の初期化状態（SWS_E2EXf_00130 準拠）。
  * E2E_P01CheckStateType/E2E_P01ProtectStateType（下位の Profile 層）の
@@ -24,6 +40,18 @@
  * 本プロジェクトの他 BSW モジュール（Com_ConfigPtr 等）と同じ
  * 「未初期化アクセスを防ぐ」方針に合わせている。 */
 static uint8 E2EXf_Initialized = 0U;
+
+/* ======================================================================
+ * Function Prototypes
+ * ====================================================================== */
+
+/* ======================================================================
+ * Functions
+ * ====================================================================== */
+
+/* ----------------------------------------------------------------------
+ * E2EXf_ReportSMVerdict
+ * ---------------------------------------------------------------------- */
 
 /**
  * \brief   [SWS_E2EXf_00028]/[00029] の共通部分（P01/P05 いずれからも呼ばれる、
@@ -87,6 +115,10 @@ static Std_ReturnType E2EXf_ReportSMVerdict(Dem_EventIdType DemEventId, E2E_PChe
     return E2E_E_OK;
 }
 
+/* ----------------------------------------------------------------------
+ * E2EXf_Init
+ * ---------------------------------------------------------------------- */
+
 /**
  * \AUTOSARReq     {SWS_E2EXf_00035}
  * \ServiceID      {0x01}
@@ -99,6 +131,10 @@ void E2EXf_Init(const E2EXf_ConfigType* ConfigPtr)
     (void)ConfigPtr;  /* 常に NULL（post-build 設定を持たないため。E2EXf.h 参照） */
     E2EXf_Initialized = 1U;
 }
+
+/* ----------------------------------------------------------------------
+ * E2EXf_DeInit
+ * ---------------------------------------------------------------------- */
 
 void E2EXf_DeInit(void)
 {
@@ -113,6 +149,10 @@ void E2EXf_DeInit(void)
 
     DET_LOGI(TAG, "DeInit ok");
 }
+
+/* ----------------------------------------------------------------------
+ * E2EXf_InverseTransform
+ * ---------------------------------------------------------------------- */
 
 Std_ReturnType E2EXf_InverseTransform(const E2EXf_RxConfigType* Config, const uint8* Buffer, uint8 Length,
                                       E2E_P01StatusType* CheckStatus)
@@ -204,6 +244,10 @@ Std_ReturnType E2EXf_InverseTransform(const E2EXf_RxConfigType* Config, const ui
     return acceptable ? E_OK : E_NOT_OK;
 }
 
+/* ----------------------------------------------------------------------
+ * E2EXf_InverseTransformP05
+ * ---------------------------------------------------------------------- */
+
 Std_ReturnType E2EXf_InverseTransformP05(const E2EXf_RxConfigTypeP05* Config, const uint8* Buffer, uint8 Length,
                                           E2E_P05StatusType* CheckStatus)
 {
@@ -289,6 +333,10 @@ Std_ReturnType E2EXf_InverseTransformP05(const E2EXf_RxConfigTypeP05* Config, co
     return acceptable ? E_OK : E_NOT_OK;
 }
 
+/* ----------------------------------------------------------------------
+ * E2EXf_Transform
+ * ---------------------------------------------------------------------- */
+
 Std_ReturnType E2EXf_Transform(const E2EXf_TxConfigType* Config, uint8* Buffer, uint8 Length)
 {
     DET_LOGT(TAG, "called");
@@ -321,6 +369,10 @@ Std_ReturnType E2EXf_Transform(const E2EXf_TxConfigType* Config, uint8* Buffer, 
     return E_OK;
 }
 
+/* ----------------------------------------------------------------------
+ * E2EXf_TransformP05
+ * ---------------------------------------------------------------------- */
+
 Std_ReturnType E2EXf_TransformP05(const E2EXf_TxConfigTypeP05* Config, uint8* Buffer, uint8 Length)
 {
     DET_LOGT(TAG, "called");
@@ -341,6 +393,10 @@ Std_ReturnType E2EXf_TransformP05(const E2EXf_TxConfigTypeP05* Config, uint8* Bu
     (void)E2E_P05Protect(Config->E2EConfig, Config->ProtectState, Buffer, Length);
     return E_OK;
 }
+
+/* ----------------------------------------------------------------------
+ * E2EXf_GetVersionInfo
+ * ---------------------------------------------------------------------- */
 
 void E2EXf_GetVersionInfo(Std_VersionInfoType* versioninfo)
 {
