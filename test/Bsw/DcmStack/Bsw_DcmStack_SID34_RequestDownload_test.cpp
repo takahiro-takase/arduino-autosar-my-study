@@ -1,25 +1,28 @@
 /**
- * \file    Bsw_DcmStack_SID14_ClearDtc_test.cpp
- * \brief   UDS SID 0x14 ClearDiagnosticInformation の、物理層（Can_Hw
- *          フェイク）を起点・終点とするフルコールチェーンテスト
- *          （GoogleTest / CMake native_chain_tests）。
+ * \file    Bsw_DcmStack_SID34_RequestDownload_test.cpp
+ * \brief   UDS SID 0x34 RequestDownload の、物理層（Can_Hw フェイク）を
+ *          起点・終点とするフルコールチェーンテスト（GoogleTest /
+ *          CMake native_chain_tests）。
  *
  * \details Bsw_DcmStack_SID19_SF01_ReadDtcCount_test.cpp 系列で確立した
  *          チェーンの型を適用する。リクエスト・応答とも Single Frame に
  *          収まるため、CanTp のマルチフレーム分割は関与しない。
  *
- *          0x14 は extendedSession かつ SecurityAccess Level1 のアンロック
- *          が必須のため、`UnlockSecurityAccessLevel1()` で
- *          [0x10,0x03]→[0x27,0x01](requestSeed)→[0x27,0x02](sendKey) を
- *          実際に Can_Hw から受信させ、seed/key のやり取りも含めて実チェーン
- *          経由でアンロックする（旧 Bsw_Dcm_ReadDtcInfo_test.cpp の同名
- *          ヘルパーをチェーン化したもの。seed は物理応答フレームから読み
- *          取る）。
+ *          0x34 は extendedSession かつ SecurityAccess Level1 の
+ *          アンロックが必須のため、`UnlockSecurityAccessLevel1()`
+ *          （Bsw_DcmStack_SID14_ClearDtc_test.cpp と同じ手順）で事前に
+ *          アンロックする。
  *
- *          旧 Bsw_Dcm_ReadDtcInfo_test.cpp の
- *          `ClearDtc_NG_ExtraByteReturnsIncorrectMessageLength`
- *          （固定長サービスの上限長チェック、2026-09 是正の回帰確認）を
- *          ここへ移植する。
+ *          0x34/0x36/0x37（RequestDownload/TransferData/
+ *          RequestTransferExit）は IDLE/DOWNLOADING の2状態を持つ一連の
+ *          ソフトウェア転送シーケンスだが、命名規則（1 SID = 1 ファイル）に
+ *          従い SID ごとに分割する。0x36/0x37 は
+ *          Bsw_DcmStack_SID36_TransferData_test.cpp /
+ *          Bsw_DcmStack_SID37_RequestTransferExit_test.cpp を参照。
+ *
+ *          本ファイルは本プロジェクトでこの SID を対象とする初めての
+ *          テストファイル（従来は単体・チェーンいずれのテストも存在せず、
+ *          移植元は無い。ゼロから新設）。
  */
 #include <gtest/gtest.h>
 
@@ -103,7 +106,7 @@ const PduR_PBConfigType kTestPduRConfig = {
     /* TxPathCount */ 1U
 };
 
-class Bsw_DcmStack_SID14_ClearDtc_Test : public ::testing::Test
+class Bsw_DcmStack_SID34_RequestDownload_Test : public ::testing::Test
 {
 protected:
     void SetUp() override
@@ -143,7 +146,7 @@ protected:
         CanTp_Init(NULL);
         Dem_Init(NULL);
         Dcm_Init(NULL);
-        UnlockSecurityAccessLevel1();  // 0x14 は extendedSession かつ Level1 アンロック必須
+        UnlockSecurityAccessLevel1();  // 0x34 は extendedSession かつ Level1 アンロック必須
 
         FakeDetHw_LogSuppressed = 0U;  // ここから各 TEST_F の実行(Act)区間
     }
@@ -157,8 +160,8 @@ protected:
 
     /* [0x10,0x03]→[0x27,0x01](requestSeed)→[0x27,0x02](sendKey) を実際に
      * Can_Hw から受信させ、extendedSession への遷移と SecurityAccess Level1
-     * のアンロックを行う（seed/key の計算式は本番コードと同じ
-     * `seed ^ DCM_SECURITY_KEY_MASK`。ファイル冒頭コメント参照）。 */
+     * のアンロックを行う（Bsw_DcmStack_SID14_ClearDtc_test.cpp と同じ
+     * ヘルパー）。 */
     void UnlockSecurityAccessLevel1()
     {
         FakeCanHw_Reset();
@@ -202,103 +205,116 @@ protected:
         ASSERT_EQ(FakeCanHw_LastSendData[1], 0x67U) << "security unlock must succeed as a test precondition";
     }
 
+    /* [0x34, 0x00, 0x11, addr(1byte), size(1byte)] を Can_Hw から受信させ、
+     * チェーン全体を駆動する（Act）。addressAndLengthFormatIdentifier=0x11
+     * は addrBytes=1, sizeBytes=1（下位/上位 nibble）を表す。 */
+    void SendRequestDownload(uint8 addr, uint8 size)
+    {
+        FakeCanHw_Reset();
+        FakeCanHw_RxId  = 0x7E0U;
+        FakeCanHw_RxDlc = 8U;
+        FakeCanHw_RxData[0] = 5U;
+        FakeCanHw_RxData[1] = DCM_SID_REQUEST_DOWNLOAD;
+        FakeCanHw_RxData[2] = DCM_TRANSFER_DATA_FORMAT_RAW;
+        FakeCanHw_RxData[3] = 0x11U;  // addrBytes=1, sizeBytes=1
+        FakeCanHw_RxData[4] = addr;
+        FakeCanHw_RxData[5] = size;
+        for (uint8 i = 6U; i < 8U; i++)
+            FakeCanHw_RxData[i] = 0U;
+        FakeCanHw_RxPendingCount = 1U;
+
+        Can_MainFunction_Read();
+    }
+
     Can_ConfigType canConfig;
 };
 
 // ------------------------------------------------------------
-// NG: groupOfDTC(3byte)の後に余分な1バイトが付いた要求
-// （[0x14, 0xFF,0xFF,0xFF, 0x00]、4バイト厳密一致のため上限超過）は
-// incorrectMessageLength (NRC 0x13) になる。
+// OK: 妥当な memorySize での RequestDownload は正応答
+// [0x74, 0x20, maxNumberOfBlockLengthH, maxNumberOfBlockLengthL] を返す。
 // ------------------------------------------------------------
-TEST_F(Bsw_DcmStack_SID14_ClearDtc_Test,
-       ClearDtc_NG_ExtraByteProducesIncorrectMessageLengthResponseOnCanHw)
+TEST_F(Bsw_DcmStack_SID34_RequestDownload_Test,
+       RequestDownload_OK_ValidSizeProducesMaxBlockLengthResponseOnCanHw)
 {
-    /* 準備 (Arrange): [0x14, 0xFF,0xFF,0xFF, 0x00] を 0x7E0 の受信バッファへ
-     * セットする（SF: 05 14 FF FF FF 00）。 */
+    /* 実行 (Act): addr=0x10, size=0x40（64バイト、DCM_TRANSFER_MAX_SIZE 以内） */
+    SendRequestDownload(0x10U, 0x40U);
+
+    /* 評価 (Assert) */
+    ASSERT_EQ(FakeCanHw_SendCount, 1U);
+    EXPECT_EQ(FakeCanHw_LastSendId, 0x7E8U);
+    EXPECT_EQ(FakeCanHw_LastSendData[0], 0x04U);  // SF PCI（UDSペイロード長=4）
+    EXPECT_EQ(FakeCanHw_LastSendData[1], 0x74U);
+    EXPECT_EQ(FakeCanHw_LastSendData[2], 0x20U);  // lengthFormatIdentifier
+    EXPECT_EQ(FakeCanHw_LastSendData[3], (uint8)(DCM_TRANSFER_MAX_BLOCK_LENGTH >> 8U));
+    EXPECT_EQ(FakeCanHw_LastSendData[4], (uint8)(DCM_TRANSFER_MAX_BLOCK_LENGTH & 0xFFU));
+}
+
+// ------------------------------------------------------------
+// NG: memorySize=0 は NRC 0x31 requestOutOfRange になる。
+// ------------------------------------------------------------
+TEST_F(Bsw_DcmStack_SID34_RequestDownload_Test,
+       RequestDownload_NG_ZeroSizeReturnsRequestOutOfRangeOnCanHw)
+{
+    SendRequestDownload(0x10U, 0x00U);
+
+    ASSERT_EQ(FakeCanHw_SendCount, 1U);
+    EXPECT_EQ(FakeCanHw_LastSendData[0], 0x03U);
+    EXPECT_EQ(FakeCanHw_LastSendData[1], DCM_SID_NEGATIVE_RESP);
+    EXPECT_EQ(FakeCanHw_LastSendData[2], DCM_SID_REQUEST_DOWNLOAD);
+    EXPECT_EQ(FakeCanHw_LastSendData[3], DCM_NRC_REQUEST_OUT_OF_RANGE);
+}
+
+// ------------------------------------------------------------
+// NG: DOWNLOADING 中（前回の RequestDownload 未完了）の再要求は
+// NRC 0x22 conditionsNotCorrect になる。
+// ------------------------------------------------------------
+TEST_F(Bsw_DcmStack_SID34_RequestDownload_Test,
+       RequestDownload_NG_AlreadyDownloadingReturnsConditionsNotCorrectOnCanHw)
+{
+    /* 準備 (Arrange): 一度正常に RequestDownload を受理させておく。 */
+    SendRequestDownload(0x10U, 0x40U);
+    ASSERT_EQ(FakeCanHw_LastSendData[1], 0x74U);  // 前提確認
+
+    /* 実行 (Act): 再度 RequestDownload を送る。 */
+    SendRequestDownload(0x20U, 0x10U);
+
+    /* 評価 (Assert) */
+    ASSERT_EQ(FakeCanHw_SendCount, 1U);
+    EXPECT_EQ(FakeCanHw_LastSendData[1], DCM_SID_NEGATIVE_RESP);
+    EXPECT_EQ(FakeCanHw_LastSendData[2], DCM_SID_REQUEST_DOWNLOAD);
+    EXPECT_EQ(FakeCanHw_LastSendData[3], DCM_NRC_CONDITIONS_NOT_CORRECT);
+}
+
+// ------------------------------------------------------------
+// NG: dataFormatIdentifier が RAW(0x00) 以外は NRC 0x31 requestOutOfRange
+// になる。
+// ------------------------------------------------------------
+TEST_F(Bsw_DcmStack_SID34_RequestDownload_Test,
+       RequestDownload_NG_NonRawDataFormatReturnsRequestOutOfRangeOnCanHw)
+{
+    /* 準備 (Arrange): dataFormatIdentifier=0x01（非RAW）を 0x7E0 の受信
+     * バッファへセットする（SF: 05 34 01 11 10 40）。 */
     FakeCanHw_Reset();
     FakeCanHw_RxId  = 0x7E0U;
     FakeCanHw_RxDlc = 8U;
     FakeCanHw_RxData[0] = 5U;
-    FakeCanHw_RxData[1] = DCM_SID_CLEAR_DTC;
-    FakeCanHw_RxData[2] = 0xFFU;
-    FakeCanHw_RxData[3] = 0xFFU;
-    FakeCanHw_RxData[4] = 0xFFU;
-    FakeCanHw_RxData[5] = 0x00U;
-    FakeCanHw_RxData[6] = 0U;
-    FakeCanHw_RxData[7] = 0U;
+    FakeCanHw_RxData[1] = DCM_SID_REQUEST_DOWNLOAD;
+    FakeCanHw_RxData[2] = 0x01U;  // 非RAW
+    FakeCanHw_RxData[3] = 0x11U;
+    FakeCanHw_RxData[4] = 0x10U;
+    FakeCanHw_RxData[5] = 0x40U;
+    for (uint8 i = 6U; i < 8U; i++)
+        FakeCanHw_RxData[i] = 0U;
     FakeCanHw_RxPendingCount = 1U;
 
     /* 実行 (Act) */
     Can_MainFunction_Read();
 
-    /* 評価 (Assert): 否定応答 [0x7F, 0x14, 0x13] が Can_Hw まで到達すること。 */
+    /* 評価 (Assert) */
     ASSERT_EQ(FakeCanHw_SendCount, 1U);
-    EXPECT_EQ(FakeCanHw_LastSendId, 0x7E8U);
-    EXPECT_EQ(FakeCanHw_LastSendData[0], 0x03U);
     EXPECT_EQ(FakeCanHw_LastSendData[1], DCM_SID_NEGATIVE_RESP);
-    EXPECT_EQ(FakeCanHw_LastSendData[2], DCM_SID_CLEAR_DTC);
-    EXPECT_EQ(FakeCanHw_LastSendData[3], DCM_NRC_INCORRECT_MESSAGE_LENGTH);
-}
-
-// ------------------------------------------------------------
-// OK: groupOfDTC=0xFFFFFF（全DTCクリア）は正応答 [0x54] を返す。
-// ------------------------------------------------------------
-TEST_F(Bsw_DcmStack_SID14_ClearDtc_Test,
-       ClearDtc_OK_AllDtcsGroupProducesPositiveResponseOnCanHw)
-{
-    /* 準備 (Arrange): [0x14, 0xFF,0xFF,0xFF] を 0x7E0 の受信バッファへ
-     * セットする（SF: 04 14 FF FF FF）。 */
-    FakeCanHw_Reset();
-    FakeCanHw_RxId  = 0x7E0U;
-    FakeCanHw_RxDlc = 8U;
-    FakeCanHw_RxData[0] = 4U;
-    FakeCanHw_RxData[1] = DCM_SID_CLEAR_DTC;
-    FakeCanHw_RxData[2] = 0xFFU;
-    FakeCanHw_RxData[3] = 0xFFU;
-    FakeCanHw_RxData[4] = 0xFFU;
-    for (uint8 i = 5U; i < 8U; i++)
-        FakeCanHw_RxData[i] = 0U;
-    FakeCanHw_RxPendingCount = 1U;
-
-    /* 実行 (Act) */
-    Can_MainFunction_Read();
-
-    /* 評価 (Assert): 正応答 [0x54] が Can_Hw まで到達すること。 */
-    ASSERT_EQ(FakeCanHw_SendCount, 1U);
-    EXPECT_EQ(FakeCanHw_LastSendId, 0x7E8U);
-    EXPECT_EQ(FakeCanHw_LastSendDlc, 8U);
-    EXPECT_EQ(FakeCanHw_LastSendData[0], 0x01U);  // SF PCI（UDSペイロード長=1）
-    EXPECT_EQ(FakeCanHw_LastSendData[1], 0x54U);
-}
-
-// ------------------------------------------------------------
-// OK: 登録済みの特定 DTC（DEM_DTC_ENGINE_OVERHEAT = 0x000101）を指定した
-// クリアも正応答 [0x54] を返す（全クリアとは異なる Dem_ClearOneDtc() 経路）。
-// ------------------------------------------------------------
-TEST_F(Bsw_DcmStack_SID14_ClearDtc_Test,
-       ClearDtc_OK_SpecificRegisteredDtcProducesPositiveResponseOnCanHw)
-{
-    /* 準備 (Arrange): [0x14, 0x00,0x01,0x01]（DEM_DTC_ENGINE_OVERHEAT）を
-     * 0x7E0 の受信バッファへセットする（SF: 04 14 00 01 01）。 */
-    FakeCanHw_Reset();
-    FakeCanHw_RxId  = 0x7E0U;
-    FakeCanHw_RxDlc = 8U;
-    FakeCanHw_RxData[0] = 4U;
-    FakeCanHw_RxData[1] = DCM_SID_CLEAR_DTC;
-    FakeCanHw_RxData[2] = 0x00U;
-    FakeCanHw_RxData[3] = 0x01U;
-    FakeCanHw_RxData[4] = 0x01U;
-    for (uint8 i = 5U; i < 8U; i++)
-        FakeCanHw_RxData[i] = 0U;
-    FakeCanHw_RxPendingCount = 1U;
-
-    /* 実行 (Act) */
-    Can_MainFunction_Read();
-
-    /* 評価 (Assert): 正応答 [0x54] が Can_Hw まで到達すること。 */
-    ASSERT_EQ(FakeCanHw_SendCount, 1U);
-    EXPECT_EQ(FakeCanHw_LastSendData[0], 0x01U);
-    EXPECT_EQ(FakeCanHw_LastSendData[1], 0x54U);
+    EXPECT_EQ(FakeCanHw_LastSendData[2], DCM_SID_REQUEST_DOWNLOAD);
+    EXPECT_EQ(FakeCanHw_LastSendData[3], DCM_NRC_REQUEST_OUT_OF_RANGE);
 }
 
 }  // namespace
