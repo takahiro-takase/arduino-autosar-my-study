@@ -143,9 +143,6 @@
 
 #define TAG "CanSM"
 
-/* Arduino wiring.c（C リンケージ）で定義 */
-extern unsigned long millis(void);
-
 /* ======================================================================
  * Type Definitions
  * ====================================================================== */
@@ -190,6 +187,11 @@ static uint8 CanSM_Initialized = 0U;
  * Function Prototypes
  * ====================================================================== */
 
+/* Arduino wiring.c（C リンケージ）で定義 */
+extern unsigned long millis(void);
+
+static void CanSM_SetPduModeOnlineBestEffort(const char* callerTag);
+
 /* ======================================================================
  * Functions
  * ====================================================================== */
@@ -223,8 +225,6 @@ void CanSM_Init(const CanSM_ConfigType* ConfigPtr)
 
 void CanSM_DeInit(void)
 {
-    DET_LOGT(TAG, "called");
-
     if (!CanSM_Initialized)
     {
         Det_ReportError(CANSM_MODULE_ID, 0U, CANSM_API_ID_DEINIT, CANSM_E_UNINIT);
@@ -233,34 +233,6 @@ void CanSM_DeInit(void)
 
     CanSM_Initialized = 0U;
     DET_LOGI(TAG, "DeInit ok");
-}
-
-/* ----------------------------------------------------------------------
- * CanSM_SetPduModeOnlineBestEffort
- * ---------------------------------------------------------------------- */
-
-/**
- * \brief   FULL_COM 確定直前に CanIf の PDU モードを CANIF_ONLINE へ戻す
- *          （ベストエフォート）。
- *
- * \details CanIf_SetPduMode() は本プロジェクトでは ControllerId=0/
- *          CANIF_ONLINE のいずれも常に妥当なため実質失敗しない（到達しない
- *          はず）。万一失敗しても、呼び出し元は既にコントローラが物理的に
- *          稼働していることを確認済みの状態でこれを呼ぶため、ここで状態遷移
- *          そのものを諦めると CanSM/ComM/EcuM が「まだ FULL_COM でない」と
- *          誤認したまま実際には動いているコントローラを放置することになり、
- *          かえって実害が大きい。DET のみ記録して呼び出し元は続行する
- *          （2026-08 のレビュー方針を踏襲。CanSM_RequestComMode()/
- *          CanSM_RxIndication()/CanSM_MainFunction() の 3 箇所から呼ぶ）。
- *
- * \param[in]  callerTag  DET ログに残す呼び出し元の名前（例: "RequestComMode"）。
- */
-static void CanSM_SetPduModeOnlineBestEffort(const char* callerTag)
-{
-    if (CanIf_SetPduMode(0U, CANIF_ONLINE) != E_OK)
-    {
-        DET_LOGE(TAG, "%s E: CanIf_SetPduMode(ONLINE) failed, proceeding anyway", callerTag);
-    }
 }
 
 /* ----------------------------------------------------------------------
@@ -278,8 +250,6 @@ static void CanSM_SetPduModeOnlineBestEffort(const char* callerTag)
  */
 Std_ReturnType CanSM_RequestComMode(NetworkHandleType network, ComM_ModeType mode)
 {
-    DET_LOGT(TAG, "called");
-
     if (!CanSM_Initialized)
     {
         Det_ReportError(CANSM_MODULE_ID, 0U, CANSM_API_ID_REQUEST_COM_MODE, CANSM_E_UNINIT);
@@ -399,8 +369,6 @@ Std_ReturnType CanSM_RequestComMode(NetworkHandleType network, ComM_ModeType mod
  */
 Std_ReturnType CanSM_GetCurrentComMode(NetworkHandleType network, ComM_ModeType* mode)
 {
-    DET_LOGT(TAG, "called");
-
     if (!CanSM_Initialized)
     {
         Det_ReportError(CANSM_MODULE_ID, 0U, CANSM_API_ID_GET_CURRENT_COM_MODE, CANSM_E_UNINIT);
@@ -427,6 +395,59 @@ Std_ReturnType CanSM_GetCurrentComMode(NetworkHandleType network, ComM_ModeType*
     }
     return E_OK;
 }
+
+/* ----------------------------------------------------------------------
+ * CanSM_StartWakeupSource
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ----------------------------------------------------------------------
+ * CanSM_StopWakeupSource
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ----------------------------------------------------------------------
+ * CanSM_GetVersionInfo
+ * ---------------------------------------------------------------------- */
+
+void CanSM_GetVersionInfo(Std_VersionInfoType* VersionInfo)
+{
+    if (VersionInfo == NULL)
+    {
+        Det_ReportError(CANSM_MODULE_ID, 0U, CANSM_API_ID_GET_VERSION_INFO, CANSM_E_PARAM_POINTER);
+        return;
+    }
+
+    VersionInfo->vendorID         = CANSM_VENDOR_ID;
+    VersionInfo->moduleID         = CANSM_MODULE_ID;
+    VersionInfo->sw_major_version = CANSM_SW_MAJOR_VERSION;
+    VersionInfo->sw_minor_version = CANSM_SW_MINOR_VERSION;
+    VersionInfo->sw_patch_version = CANSM_SW_PATCH_VERSION;
+}
+
+/* ----------------------------------------------------------------------
+ * CanSM_SetBaudrate
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ----------------------------------------------------------------------
+ * CanSM_SetIcomConfiguration
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ----------------------------------------------------------------------
+ * CanSM_SetEcuPassive
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ======================================================================
+ * Call-back notifications
+ * ====================================================================== */
 
 /* ----------------------------------------------------------------------
  * CanSM_ControllerBusOff
@@ -486,8 +507,6 @@ Std_ReturnType CanSM_GetCurrentComMode(NetworkHandleType network, ComM_ModeType*
  */
 void CanSM_ControllerBusOff(uint8 ControllerId)
 {
-    DET_LOGT(TAG, "called");
-
     if (!CanSM_Initialized)
     {
         Det_ReportError(CANSM_MODULE_ID, 0U, CANSM_API_ID_CONTROLLER_BUSOFF, CANSM_E_UNINIT);
@@ -587,8 +606,6 @@ void CanSM_ControllerModeIndication(uint8 ControllerId, Can_ControllerStateType 
 {
     (void)ControllerMode;
 
-    DET_LOGT(TAG, "called");
-
     if (!CanSM_Initialized)
     {
         Det_ReportError(CANSM_MODULE_ID, 0U, CANSM_API_ID_CONTROLLER_MODE_INDICATION, CANSM_E_UNINIT);
@@ -631,72 +648,44 @@ void CanSM_ControllerModeIndication(uint8 ControllerId, Can_ControllerStateType 
 }
 
 /* ----------------------------------------------------------------------
- * CanSM_RxIndication
+ * CanSM_TransceiverModeIndication
  * ---------------------------------------------------------------------- */
 
-/**
- * \brief   受信通知コールバック（CanIf から全受信フレームについて呼び出される）。
- *
- * \details AUTOSAR SWS_CanSM の CanSMRxIndicationUsed 設定に相当し、CanIf が
- *          フレームを受信するたびに（上位 PDU への振り分け結果に関わらず）
- *          通知される。通常運用中（CANSM_STATE_FULL_COM 等）は何もしない。
- *
- *          CANSM_STATE_WAKEUP_VALIDATING 中にのみ意味を持つ: 有効な CAN
- *          フレームを実際に受信できたことは、直前のウェイクアップがノイズ
- *          ではなく本物のバス活動だったことの確証となる。これを検証成功と
- *          判断し、CAN_T_START で FULL_COM へ確定して EcuM を RUN へ復帰させる。
- *
- * \param[in]  ControllerId  受信したコントローラ ID。
- *
- * \note    実仕様には存在しない本プロジェクト独自の拡張関数のため、対応する
- *          \AUTOSARReq は無い（CanSM_Cfg.h の CANSM_API_ID_RX_INDICATION
- *          コメント参照）。ServiceID は以前 0x07 だったが、
- *          `CanSM_ControllerModeIndication`（旧 CanSM_ControllerWakeup）の
- *          正しい ServiceID が実は 0x07 だったと判明したため、2026-09-05 に
- *          0x15 へ変更した（自己割当値、実仕様との衝突を避けるため）。
- * \ServiceID      {0x15}
- * \Reentrancy     {Non Reentrant}
- * \Synchronicity  {Synchronous}
- */
-void CanSM_RxIndication(uint8 ControllerId)
-{
-    (void)ControllerId;
+/* 未実装 */
 
-    DET_LOGT(TAG, "called");
+/* ----------------------------------------------------------------------
+ * CanSM_TxTimeoutException
+ * ---------------------------------------------------------------------- */
 
-    if (!CanSM_Initialized)
-    {
-        Det_ReportError(CANSM_MODULE_ID, 0U, CANSM_API_ID_RX_INDICATION, CANSM_E_UNINIT);
-        return;
-    }
+/* 未実装 */
 
-    if (CanSM_State != CANSM_STATE_WAKEUP_VALIDATING)
-        return;
+/* ----------------------------------------------------------------------
+ * CanSM_ClearTrcvWufFlagIndication
+ * ---------------------------------------------------------------------- */
 
-    DET_LOGI(TAG, "Wakeup validated (RX confirmed) -> FULL_COM");
-    if (CanIf_SetControllerMode(0U, CAN_CS_STARTED) != E_OK)   /* CAN_CS_STOPPED -> CAN_CS_STARTED */
-    {
-        /* 到達しないはずの経路（CANSM_STATE_WAKEUP_VALIDATING に入っている
-         * 時点で CanState==CAN_CS_STOPPED のはず）。失敗した場合に
-         * CanSM_State を FULL_COM へ進めてしまうと、CanSM/ComM/EcuM は
-         * 「成功した」と誤認したまま MCP2515 は Listen-Only のままで送信
-         * できず、実害が静かに進行する（レビュー指摘の症状そのもの）。
-         * WAKEUP_VALIDATING に留まり、タイムアウトで再スリープする
-         * 既存のフェイルセーフ（CanSM_MainFunction）に委ねる。 */
-        DET_LOGE(TAG, "RxIndication E: CanIf_SetControllerMode(STARTED) failed, staying in WAKEUP_VALIDATING");
-        return;
-    }
-    /* WAKEUP_VALIDATING に入る直前の状態が SILENT_COM だった場合（眠る前に
-     * TX を抑制していた）、CanIf の PDU モードは CANIF_TX_OFFLINE のまま
-     * 変化していない。ここで明示的に CANIF_ONLINE へ戻さないと、起床後
-     * FULL_COM に確定したのに TX だけ永久に塞がったままという静かなバグに
-     * なる（2026-08 のレビュー方針同様、失敗しても DET のみで続行）。 */
-    CanSM_SetPduModeOnlineBestEffort("RxIndication");
-    CanSM_State         = CANSM_STATE_FULL_COM;
-    CanSM_BusOffRetries = 0U;
-    (void)Dem_SetEventStatus(DEM_EVENT_CAN_BUSOFF, DEM_EVENT_STATUS_PASSED);
-    ComM_BusSM_ModeIndication(0U, COMM_FULL_COMMUNICATION);
-}
+/* 未実装 */
+
+/* ----------------------------------------------------------------------
+ * CanSM_CheckTransceiverWakeFlagIndication
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ----------------------------------------------------------------------
+ * CanSM_ConfirmPnAvailability
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ----------------------------------------------------------------------
+ * CanSM_CurrentIcomConfiguration
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ======================================================================
+ * Scheduled functions
+ * ====================================================================== */
 
 /* ----------------------------------------------------------------------
  * CanSM_MainFunction
@@ -739,8 +728,6 @@ void CanSM_RxIndication(uint8 ControllerId)
  */
 void CanSM_MainFunction(void)
 {
-    DET_LOGT(TAG, "called");
-
     if (!CanSM_Initialized)
     {
         Det_ReportError(CANSM_MODULE_ID, 0U, CANSM_API_ID_MAIN_FUNCTION, CANSM_E_UNINIT);
@@ -848,23 +835,100 @@ void CanSM_MainFunction(void)
     /* 再度 Bus-Off が発生すれば CanIf → CanSM_ControllerBusOff() が呼ばれる */
 }
 
+/* ======================================================================
+ * Internal Functions
+ * ====================================================================== */
+
 /* ----------------------------------------------------------------------
- * CanSM_GetVersionInfo
+ * CanSM_RxIndication
  * ---------------------------------------------------------------------- */
 
-void CanSM_GetVersionInfo(Std_VersionInfoType* VersionInfo)
+/**
+ * \brief   受信通知コールバック（CanIf から全受信フレームについて呼び出される）。
+ *
+ * \details AUTOSAR SWS_CanSM の CanSMRxIndicationUsed 設定に相当し、CanIf が
+ *          フレームを受信するたびに（上位 PDU への振り分け結果に関わらず）
+ *          通知される。通常運用中（CANSM_STATE_FULL_COM 等）は何もしない。
+ *
+ *          CANSM_STATE_WAKEUP_VALIDATING 中にのみ意味を持つ: 有効な CAN
+ *          フレームを実際に受信できたことは、直前のウェイクアップがノイズ
+ *          ではなく本物のバス活動だったことの確証となる。これを検証成功と
+ *          判断し、CAN_T_START で FULL_COM へ確定して EcuM を RUN へ復帰させる。
+ *
+ * \param[in]  ControllerId  受信したコントローラ ID。
+ *
+ * \note    実仕様には存在しない本プロジェクト独自の拡張関数のため、対応する
+ *          \AUTOSARReq は無い（CanSM_Cfg.h の CANSM_API_ID_RX_INDICATION
+ *          コメント参照）。ServiceID は以前 0x07 だったが、
+ *          `CanSM_ControllerModeIndication`（旧 CanSM_ControllerWakeup）の
+ *          正しい ServiceID が実は 0x07 だったと判明したため、2026-09-05 に
+ *          0x15 へ変更した（自己割当値、実仕様との衝突を避けるため）。
+ * \ServiceID      {0x15}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void CanSM_RxIndication(uint8 ControllerId)
 {
-    DET_LOGT(TAG, "called");
+    (void)ControllerId;
 
-    if (VersionInfo == NULL)
+    if (!CanSM_Initialized)
     {
-        Det_ReportError(CANSM_MODULE_ID, 0U, CANSM_API_ID_GET_VERSION_INFO, CANSM_E_PARAM_POINTER);
+        Det_ReportError(CANSM_MODULE_ID, 0U, CANSM_API_ID_RX_INDICATION, CANSM_E_UNINIT);
         return;
     }
 
-    VersionInfo->vendorID         = CANSM_VENDOR_ID;
-    VersionInfo->moduleID         = CANSM_MODULE_ID;
-    VersionInfo->sw_major_version = CANSM_SW_MAJOR_VERSION;
-    VersionInfo->sw_minor_version = CANSM_SW_MINOR_VERSION;
-    VersionInfo->sw_patch_version = CANSM_SW_PATCH_VERSION;
+    if (CanSM_State != CANSM_STATE_WAKEUP_VALIDATING)
+        return;
+
+    DET_LOGI(TAG, "Wakeup validated (RX confirmed) -> FULL_COM");
+    if (CanIf_SetControllerMode(0U, CAN_CS_STARTED) != E_OK)   /* CAN_CS_STOPPED -> CAN_CS_STARTED */
+    {
+        /* 到達しないはずの経路（CANSM_STATE_WAKEUP_VALIDATING に入っている
+         * 時点で CanState==CAN_CS_STOPPED のはず）。失敗した場合に
+         * CanSM_State を FULL_COM へ進めてしまうと、CanSM/ComM/EcuM は
+         * 「成功した」と誤認したまま MCP2515 は Listen-Only のままで送信
+         * できず、実害が静かに進行する（レビュー指摘の症状そのもの）。
+         * WAKEUP_VALIDATING に留まり、タイムアウトで再スリープする
+         * 既存のフェイルセーフ（CanSM_MainFunction）に委ねる。 */
+        DET_LOGE(TAG, "RxIndication E: CanIf_SetControllerMode(STARTED) failed, staying in WAKEUP_VALIDATING");
+        return;
+    }
+    /* WAKEUP_VALIDATING に入る直前の状態が SILENT_COM だった場合（眠る前に
+     * TX を抑制していた）、CanIf の PDU モードは CANIF_TX_OFFLINE のまま
+     * 変化していない。ここで明示的に CANIF_ONLINE へ戻さないと、起床後
+     * FULL_COM に確定したのに TX だけ永久に塞がったままという静かなバグに
+     * なる（2026-08 のレビュー方針同様、失敗しても DET のみで続行）。 */
+    CanSM_SetPduModeOnlineBestEffort("RxIndication");
+    CanSM_State         = CANSM_STATE_FULL_COM;
+    CanSM_BusOffRetries = 0U;
+    (void)Dem_SetEventStatus(DEM_EVENT_CAN_BUSOFF, DEM_EVENT_STATUS_PASSED);
+    ComM_BusSM_ModeIndication(0U, COMM_FULL_COMMUNICATION);
+}
+
+/* ----------------------------------------------------------------------
+ * CanSM_SetPduModeOnlineBestEffort
+ * ---------------------------------------------------------------------- */
+
+/**
+ * \brief   FULL_COM 確定直前に CanIf の PDU モードを CANIF_ONLINE へ戻す
+ *          （ベストエフォート）。
+ *
+ * \details CanIf_SetPduMode() は本プロジェクトでは ControllerId=0/
+ *          CANIF_ONLINE のいずれも常に妥当なため実質失敗しない（到達しない
+ *          はず）。万一失敗しても、呼び出し元は既にコントローラが物理的に
+ *          稼働していることを確認済みの状態でこれを呼ぶため、ここで状態遷移
+ *          そのものを諦めると CanSM/ComM/EcuM が「まだ FULL_COM でない」と
+ *          誤認したまま実際には動いているコントローラを放置することになり、
+ *          かえって実害が大きい。DET のみ記録して呼び出し元は続行する
+ *          （2026-08 のレビュー方針を踏襲。CanSM_RequestComMode()/
+ *          CanSM_RxIndication()/CanSM_MainFunction() の 3 箇所から呼ぶ）。
+ *
+ * \param[in]  callerTag  DET ログに残す呼び出し元の名前（例: "RequestComMode"）。
+ */
+static void CanSM_SetPduModeOnlineBestEffort(const char* callerTag)
+{
+    if (CanIf_SetPduMode(0U, CANIF_ONLINE) != E_OK)
+    {
+        DET_LOGE(TAG, "%s E: CanIf_SetPduMode(ONLINE) failed, proceeding anyway", callerTag);
+    }
 }

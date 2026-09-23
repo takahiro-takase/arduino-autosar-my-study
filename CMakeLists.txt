@@ -228,6 +228,7 @@ set(NATIVE_CHAIN_INCLUDE_DIRS
     src/Hal
     stub/Bsw/BswM
     stub/Bsw/Can
+    stub/Bsw/CanSM
     stub/Bsw/CanIf
     stub/Bsw/CanTp
     stub/Bsw/Com
@@ -282,6 +283,7 @@ set(NATIVE_CHAIN_STUB_SOURCES
     stub/Bsw/Dem/Wrap_Dem.c
     stub/Bsw/Dcm/Wrap_Dcm.c
     stub/Bsw/ComM/Wrap_ComM.c
+    stub/Bsw/CanSM/Wrap_CanSM.c
     stub/Bsw/BswM/Wrap_BswM.c
     stub/Bsw/EcuM/Fake_Bsw_EcuM.c
     stub/Bsw/CanTp/Wrap_CanTp.c
@@ -437,6 +439,16 @@ set(NATIVE_CHAIN_WRAP_SYMBOLS
     ComM_CommunicationAllowed
     ComM_BusSM_ModeIndication
     ComM_MainFunction
+    # CanSM.h の AUTOSAR IF 全9関数（Wrap_CanSM.h/.c 参照）。
+    CanSM_Init
+    CanSM_DeInit
+    CanSM_RequestComMode
+    CanSM_GetCurrentComMode
+    CanSM_ControllerBusOff
+    CanSM_ControllerModeIndication
+    CanSM_RxIndication
+    CanSM_MainFunction
+    CanSM_GetVersionInfo
 )
 foreach(wrap_symbol IN LISTS NATIVE_CHAIN_WRAP_SYMBOLS)
     target_link_options(native_chain_tests PRIVATE "-Wl,--wrap=${wrap_symbol}")
