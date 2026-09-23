@@ -3,7 +3,7 @@
  * \brief   UDS SID 0x19 ReadDTCInformation の単体テスト（GoogleTest /
  *          PlatformIO `[env:native_chain]`。2026-08新設時は専用環境`[env:native_dcm]`だったが、2026-09にnative_chainへ統合した）。
  *
- * \details 本プロジェクトで Dcm_Cbk.c/Dem.c を対象とする初めてのユニット
+ * \details 本プロジェクトで Dcm.c/Dem.c を対象とする初めてのユニット
  *          テスト。
  *          GitHub Issue #122（subFunc 0x0A reportSupportedDTC の追加要望）
  *          への対応をきっかけに新設した。
@@ -95,7 +95,7 @@ protected:
 };
 
 // ------------------------------------------------------------
-// Dem_GetDTCStatusAvailabilityMask（Dcm_Cbk.c が DEM_STATUS_AVAILABILITY_MASK に
+// Dem_GetDTCStatusAvailabilityMask（Dcm.c が DEM_STATUS_AVAILABILITY_MASK に
 // 直接アクセスしていたレイヤ違反を解消するために追加。上記 SID 0x19 各テストの
 // TxBuf[2] 検証が間接的な回帰検知になっているため、ここでは API 自体の
 // 直接呼び出しのみ検証する）
@@ -267,7 +267,7 @@ TEST_F(Bsw_Dcm_ReadDtcInfo_Test, GetVin_NG_NullPointerReturnsError)
 // のため削除）。
 
 // ------------------------------------------------------------
-// Dcm_GetSesCtrlType/Dcm_GetSecurityLevel（Dcm_Cbk.c 内部の static フィールド
+// Dcm_GetSesCtrlType/Dcm_GetSecurityLevel（Dcm.c 内部のモジュール状態
 // Dcm_CurrentSession/Dcm_SecurityLevel を読み出すだけの新規 getter API）
 // ------------------------------------------------------------
 

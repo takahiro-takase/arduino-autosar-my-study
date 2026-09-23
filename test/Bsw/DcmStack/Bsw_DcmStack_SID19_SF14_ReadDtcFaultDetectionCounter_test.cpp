@@ -15,7 +15,7 @@
  *          0x14 の応答ヘッダは [0x59, subFunc] の2バイトのみ（0x01/0x0A の
  *          ような DTCStatusAvailabilityMask バイトを含まない）点、DTC
  *          レコードが (DTC_H, DTC_M, DTC_L, FaultDetectionCounter) の
- *          4バイト構成である点に注意（Dcm_Cbk.c の
+ *          4バイト構成である点に注意（Dcm.c の
  *          Dcm_HandleReadDtcFaultDetectionCounter() 参照）。
  *
  *          期待値は Bsw_Dcm_ReadDtcInfo_test.cpp の

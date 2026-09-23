@@ -71,8 +71,8 @@
 #define CANTP_RX_BUFFER_SIZE      32U
 
 /** TX N-SDU バッファサイズ (FF/CF 分割用): 76 バイト
- *  Dcm_Cbk.c の DCM_TX_BUF_SIZE（3 + DEM_EVENT_COUNT*4、subFunc 0x0A の
- *  DTC一覧応答の最大長）以上でなければならない。この制約は Dcm_Cbk.c 側
+ *  Dcm.c の DCM_TX_BUF_SIZE（3 + DEM_EVENT_COUNT*4、subFunc 0x0A の
+ *  DTC一覧応答の最大長）以上でなければならない。この制約は Dcm.c 側
  *  （DCM_TX_BUF_SIZE 定義の直後）の静的アサートでビルド時に強制している。
  *
  *  DEM_EVENT_COUNT 増加にこの値が追従せず実機の UDS 0x19 応答が無応答に

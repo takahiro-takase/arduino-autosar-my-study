@@ -1,6 +1,6 @@
 /**
  * \file    Fake_KeyM.c
- * \brief   Dcm_Cbk.c の KeyM 依存（SID 0x2E CryptoKeyUpdate DID）を満たす
+ * \brief   Dcm.c の KeyM 依存（SID 0x2E CryptoKeyUpdate DID）を満たす
  *          だけの最小リンクスタブ。SID 0x19 の処理には関与しない。
  */
 #include "KeyM.h"

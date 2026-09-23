@@ -46,10 +46,10 @@
  *              実際のフラッシュ書き換えは行わない学習用シミュレーションで、
  *              受信データは保持せず、ブロックシーケンスカウンタの検証・
  *              受信バイト数の集計・簡易チェックサム（XOR）の計算のみ行う
- *              （詳細は Dcm_Cbk.c 冒頭のコメント参照）
+ *              （詳細は Dcm.c 冒頭のコメント参照）
  *            0x3E TesterPresent (S3 タイマ維持)
  *
- *          SID × セッション許可は Dcm_Cbk.c の Dcm_SidSessionTable[]
+ *          SID × セッション許可は Dcm.c の Dcm_SidSessionTable[]
  *          (AUTOSAR DcmDspSessionRow に相当) で一元管理する。テーブルに掲載のない
  *          SID はセッション制約なし（全セッションで許可）とみなす。
  *
@@ -136,7 +136,7 @@
 
 /* -----------------------------------------------------------------------
  * SID × セッション許可マスク (AUTOSAR DcmDspSessionRow に相当)
- * Dcm_SidSessionTable[] (Dcm_Cbk.c) の AllowedSessionMask 列で使用する。
+ * Dcm_SidSessionTable[] (Dcm.c) の AllowedSessionMask 列で使用する。
  * ----------------------------------------------------------------------- */
 #define DCM_SESSION_MASK_DEFAULT   0x01U  /**< bit0: defaultSession で許可            */
 #define DCM_SESSION_MASK_EXTENDED  0x02U  /**< bit1: extendedDiagnosticSession で許可 */
@@ -365,7 +365,7 @@
 /* -----------------------------------------------------------------------
  * RequestDownload/TransferData/RequestTransferExit (SID 0x34/0x36/0x37)
  * 実際のフラッシュ書き換えは行わない学習用シミュレーション。詳細は
- * Dcm_Cbk.c 冒頭のコメント参照。
+ * Dcm.c 冒頭のコメント参照。
  * ----------------------------------------------------------------------- */
 
 /** dataFormatIdentifier: 本実装が受け付ける唯一の値（圧縮なし・暗号化なし）。

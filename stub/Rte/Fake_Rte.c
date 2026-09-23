@@ -1,6 +1,6 @@
 /**
  * \file    Fake_Rte.c
- * \brief   Dcm_Cbk.c の Rte 依存（SID 0x22/0x2F 用の Read/IoControl ポート）を
+ * \brief   Dcm.c の Rte 依存（SID 0x22/0x2F/0x31 用の Read/IoControl ポート）を
  *          満たすだけの最小リンクスタブ。SID 0x19 の処理には関与しない。
  *          本物の Rte.c は Com/E2E/SecOC/App_* まで巨大な依存グラフを
  *          引き込むため（他 chain テストと同じ理由）リンクしない。
