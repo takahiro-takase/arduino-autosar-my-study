@@ -9,14 +9,28 @@
  *          Functions バナー方式に倣った構成。今後新規追加する `Wrap_XXX.c` は
  *          本ファイルと同じ構成へ統一する）。
  */
+
+/* ======================================================================
+ * Includes
+ * ====================================================================== */
+
 #include "Wrap_Com.h"
 #include "Det.h"
+
+/* ======================================================================
+ * Definitions
+ * ====================================================================== */
 
 #define TAG "Com"
 
 /* ======================================================================
+ * Type Definitions
+ * ====================================================================== */
+
+/* ======================================================================
  * External Variables
  * ====================================================================== */
+
 uint32 CallCount_Com_Init                    = 0U;
 uint32 CallCount_Com_DeInit                  = 0U;
 uint32 CallCount_Com_IpduGroupStart          = 0U;
@@ -47,6 +61,7 @@ Std_ReturnType ForcedReturn_Com_TriggerIPDUSend = E_NOT_OK;
 /* ----------------------------------------------------------------------
  * WrapCom_Reset — 11関数すべての状態を一括で初期化する（Wrap_Com.h 参照）。
  * ---------------------------------------------------------------------- */
+
 void WrapCom_Reset(void)
 {
     CallCount_Com_Init                    = 0U;
@@ -84,6 +99,7 @@ void WrapCom_Reset(void)
 /* ----------------------------------------------------------------------
  * Com_Init
  * ---------------------------------------------------------------------- */
+
 extern
 void __real_Com_Init(const Com_ConfigType* Config);
 void __wrap_Com_Init(const Com_ConfigType* Config)
@@ -97,6 +113,7 @@ void __wrap_Com_Init(const Com_ConfigType* Config)
 /* ----------------------------------------------------------------------
  * Com_DeInit
  * ---------------------------------------------------------------------- */
+
 extern 
 void __real_Com_DeInit(void);
 void __wrap_Com_DeInit(void)
@@ -110,6 +127,7 @@ void __wrap_Com_DeInit(void)
 /* ----------------------------------------------------------------------
  * Com_IpduGroupStart
  * ---------------------------------------------------------------------- */
+
 extern 
 void __real_Com_IpduGroupStart(Com_IpduGroupIdType IpduGroupId, boolean initialize);
 void __wrap_Com_IpduGroupStart(Com_IpduGroupIdType IpduGroupId, boolean initialize)
@@ -123,6 +141,7 @@ void __wrap_Com_IpduGroupStart(Com_IpduGroupIdType IpduGroupId, boolean initiali
 /* ----------------------------------------------------------------------
  * Com_IpduGroupStop
  * ---------------------------------------------------------------------- */
+
 extern 
 void __real_Com_IpduGroupStop(Com_IpduGroupIdType IpduGroupId);
 void __wrap_Com_IpduGroupStop(Com_IpduGroupIdType IpduGroupId)
@@ -136,6 +155,7 @@ void __wrap_Com_IpduGroupStop(Com_IpduGroupIdType IpduGroupId)
 /* ----------------------------------------------------------------------
  * Com_EnableReceptionDM
  * ---------------------------------------------------------------------- */
+
 extern 
 void __real_Com_EnableReceptionDM(Com_IpduGroupIdType IpduGroupId);
 void __wrap_Com_EnableReceptionDM(Com_IpduGroupIdType IpduGroupId)
@@ -149,6 +169,7 @@ void __wrap_Com_EnableReceptionDM(Com_IpduGroupIdType IpduGroupId)
 /* ----------------------------------------------------------------------
  * Com_DisableReceptionDM
  * ---------------------------------------------------------------------- */
+
 extern 
 void __real_Com_DisableReceptionDM(Com_IpduGroupIdType IpduGroupId);
 void __wrap_Com_DisableReceptionDM(Com_IpduGroupIdType IpduGroupId)
@@ -162,6 +183,7 @@ void __wrap_Com_DisableReceptionDM(Com_IpduGroupIdType IpduGroupId)
 /* ----------------------------------------------------------------------
  * Com_GetStatus
  * ---------------------------------------------------------------------- */
+
 extern 
 Com_StatusType __real_Com_GetStatus(void);
 Com_StatusType __wrap_Com_GetStatus(void)
@@ -175,6 +197,7 @@ Com_StatusType __wrap_Com_GetStatus(void)
 /* ----------------------------------------------------------------------
  * Com_GetVersionInfo
  * ---------------------------------------------------------------------- */
+
 extern
 void __real_Com_GetVersionInfo(Std_VersionInfoType* versioninfo);
 void __wrap_Com_GetVersionInfo(Std_VersionInfoType* versioninfo)
@@ -188,6 +211,7 @@ void __wrap_Com_GetVersionInfo(Std_VersionInfoType* versioninfo)
 /* ----------------------------------------------------------------------
  * Com_SendSignal
  * ---------------------------------------------------------------------- */
+
 extern 
 uint8 __real_Com_SendSignal(Com_SignalIdType SignalId, const void* SignalDataPtr);
 uint8 __wrap_Com_SendSignal(Com_SignalIdType SignalId, const void* SignalDataPtr)
@@ -202,9 +226,12 @@ uint8 __wrap_Com_SendSignal(Com_SignalIdType SignalId, const void* SignalDataPtr
  * Com_SendDynSignal
  * ---------------------------------------------------------------------- */
 
+/* 未実装 */
+
 /* ----------------------------------------------------------------------
  * Com_ReceiveSignal
  * ---------------------------------------------------------------------- */
+
 extern 
 uint8 __real_Com_ReceiveSignal(Com_SignalIdType SignalId, void* SignalDataPtr);
 uint8 __wrap_Com_ReceiveSignal(Com_SignalIdType SignalId, void* SignalDataPtr)
@@ -219,9 +246,12 @@ uint8 __wrap_Com_ReceiveSignal(Com_SignalIdType SignalId, void* SignalDataPtr)
  * Com_ReceiveDynSignal
  * ---------------------------------------------------------------------- */
 
+/* 未実装 */
+
 /* ----------------------------------------------------------------------
  * Com_SendSignalGroup
  * ---------------------------------------------------------------------- */
+
 extern 
 uint8 __real_Com_SendSignalGroup(Com_SignalGroupIdType SignalGroupId);
 uint8 __wrap_Com_SendSignalGroup(Com_SignalGroupIdType SignalGroupId)
@@ -235,6 +265,7 @@ uint8 __wrap_Com_SendSignalGroup(Com_SignalGroupIdType SignalGroupId)
 /* ----------------------------------------------------------------------
  * Com_ReceiveSignalGroup
  * ---------------------------------------------------------------------- */
+
 extern 
 uint8 __real_Com_ReceiveSignalGroup(Com_SignalGroupIdType SignalGroupId);
 uint8 __wrap_Com_ReceiveSignalGroup(Com_SignalGroupIdType SignalGroupId)
@@ -248,6 +279,7 @@ uint8 __wrap_Com_ReceiveSignalGroup(Com_SignalGroupIdType SignalGroupId)
 /* ----------------------------------------------------------------------
  * Com_SendSignalGroupArray
  * ---------------------------------------------------------------------- */
+
 extern 
 uint8 __real_Com_SendSignalGroupArray(Com_SignalGroupIdType SignalGroupId, const uint8* DataPtr);
 uint8 __wrap_Com_SendSignalGroupArray(Com_SignalGroupIdType SignalGroupId, const uint8* DataPtr)
@@ -261,6 +293,7 @@ uint8 __wrap_Com_SendSignalGroupArray(Com_SignalGroupIdType SignalGroupId, const
 /* ----------------------------------------------------------------------
  * Com_ReceiveSignalGroupArray
  * ---------------------------------------------------------------------- */
+
 extern 
 uint8 __real_Com_ReceiveSignalGroupArray(Com_SignalGroupIdType SignalGroupId, uint8* DataPtr);
 uint8 __wrap_Com_ReceiveSignalGroupArray(Com_SignalGroupIdType SignalGroupId, uint8* DataPtr)
@@ -274,6 +307,7 @@ uint8 __wrap_Com_ReceiveSignalGroupArray(Com_SignalGroupIdType SignalGroupId, ui
 /* ----------------------------------------------------------------------
  * Com_InvalidateSignal
  * ---------------------------------------------------------------------- */
+
 extern 
 uint8 __real_Com_InvalidateSignal(Com_SignalIdType SignalId);
 uint8 __wrap_Com_InvalidateSignal(Com_SignalIdType SignalId)
@@ -287,6 +321,7 @@ uint8 __wrap_Com_InvalidateSignal(Com_SignalIdType SignalId)
 /* ----------------------------------------------------------------------
  * Com_InvalidateSignalGroup
  * ---------------------------------------------------------------------- */
+
 extern 
 uint8 __real_Com_InvalidateSignalGroup(Com_SignalGroupIdType SignalGroupId);
 uint8 __wrap_Com_InvalidateSignalGroup(Com_SignalGroupIdType SignalGroupId)
@@ -300,6 +335,7 @@ uint8 __wrap_Com_InvalidateSignalGroup(Com_SignalGroupIdType SignalGroupId)
 /* ----------------------------------------------------------------------
  * Com_TriggerIPDUSend
  * ---------------------------------------------------------------------- */
+
 extern 
 Std_ReturnType __real_Com_TriggerIPDUSend(Com_IPduIdType PduId);
 Std_ReturnType __wrap_Com_TriggerIPDUSend(Com_IPduIdType PduId)
@@ -318,9 +354,12 @@ Std_ReturnType __wrap_Com_TriggerIPDUSend(Com_IPduIdType PduId)
  * Com_TriggerIPDUSendWithMetaData
  * ---------------------------------------------------------------------- */
 
+/* 未実装 */
+
 /* ----------------------------------------------------------------------
  * Com_SwitchIpduTxMode
  * ---------------------------------------------------------------------- */
+
 extern 
 void __real_Com_SwitchIpduTxMode(Com_IPduIdType PduId, boolean Mode);
 void __wrap_Com_SwitchIpduTxMode(Com_IPduIdType PduId, boolean Mode)
@@ -339,9 +378,12 @@ void __wrap_Com_SwitchIpduTxMode(Com_IPduIdType PduId, boolean Mode)
  * Com_TriggerTransmit
  * ---------------------------------------------------------------------- */
 
+/* 未実装 */
+
 /* ----------------------------------------------------------------------
  * Com_RxIndication
  * ---------------------------------------------------------------------- */
+
 extern 
 void __real_Com_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr);
 void __wrap_Com_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
@@ -356,9 +398,12 @@ void __wrap_Com_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
  * Com_TpRxIndication
  * ---------------------------------------------------------------------- */
 
+/* 未実装 */
+
 /* ----------------------------------------------------------------------
  * Com_TxConfirmation
  * ---------------------------------------------------------------------- */
+
 extern 
 void __real_Com_TxConfirmation(PduIdType TxPduId, Std_ReturnType result);
 void __wrap_Com_TxConfirmation(PduIdType TxPduId, Std_ReturnType result)
@@ -373,17 +418,25 @@ void __wrap_Com_TxConfirmation(PduIdType TxPduId, Std_ReturnType result)
  * Com_TpTxConfirmation
  * ---------------------------------------------------------------------- */
 
+/* 未実装 */
+
 /* ----------------------------------------------------------------------
  * Com_StartOfReception
  * ---------------------------------------------------------------------- */
+
+/* 未実装 */
 
 /* ----------------------------------------------------------------------
  * Com_CopyRxData
  * ---------------------------------------------------------------------- */
 
+/* 未実装 */
+
 /* ----------------------------------------------------------------------
  * Com_CopyTxData
  * ---------------------------------------------------------------------- */
+
+/* 未実装 */
  
 /* ======================================================================
  * Scheduled Functions
@@ -392,6 +445,7 @@ void __wrap_Com_TxConfirmation(PduIdType TxPduId, Std_ReturnType result)
 /* ----------------------------------------------------------------------
  * Com_MainFunctionRx
  * ---------------------------------------------------------------------- */
+
 extern 
 void __real_Com_MainFunctionRx(void);
 void __wrap_Com_MainFunctionRx(void)
@@ -405,6 +459,7 @@ void __wrap_Com_MainFunctionRx(void)
 /* ----------------------------------------------------------------------
  * Com_MainFunctionTx
  * ---------------------------------------------------------------------- */
+
 extern 
 void __real_Com_MainFunctionTx(void);
 void __wrap_Com_MainFunctionTx(void)
@@ -419,18 +474,25 @@ void __wrap_Com_MainFunctionTx(void)
  * Com_MainFunctionRouteSignals
  * ---------------------------------------------------------------------- */
 
+/* 未実装 */
+
 /* ----------------------------------------------------------------------
  * PduR_SecOCTxConfirmation
  * ---------------------------------------------------------------------- */
+
+/* 未実装 */
 
 /* ----------------------------------------------------------------------
  * PduR_<User:Lo>TxConfirmation
  * ---------------------------------------------------------------------- */
 
+/* 未実装 */
+
 /* ----------------------------------------------------------------------
  * PduR_<User:Lo>TriggerTransmit
  * ---------------------------------------------------------------------- */
 
+/* 未実装 */
 
 /* ======================================================================
  * Internal Functions

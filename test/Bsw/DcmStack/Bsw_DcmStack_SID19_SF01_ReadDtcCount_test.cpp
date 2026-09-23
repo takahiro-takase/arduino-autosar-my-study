@@ -30,7 +30,7 @@
  *          `CanIf_PBCfg.c`/`PduR_PBCfg.c`（CanId=0x7E0 request / 0x7E8
  *          response、CanTp_Cfg.h の CANTP_RX_SDU_ID=0/CANTP_PDUR_TX_SDU_ID=1）
  *          と同じ値を使うが、他の native_chain フルチェーンテスト
- *          （Bsw_ComStack_Rx_test.cpp 等）と同じ流儀で、本番の
+ *          （Bsw_ComStack_Signal_Rx_test.cpp 等）と同じ流儀で、本番の
  *          `Can_Config`/`CanIf_Config`/`PduR_Config` は使わず対象PDUのみに
  *          絞ったテスト専用ローカル設定を組む（本番PBCfgの変更から独立させ、
  *          既存の全チェーンテストと作法を揃えるため）。
@@ -143,17 +143,17 @@ protected:
         CanIf_Init(&kTestCanIfConfig);
         /* CanIf_Init() 直後は CanIf_ControllerMode[] が CAN_CS_STOPPED に
          * 巻き戻るため、CanIf_SetControllerMode() 経由で明示的に起動する
-         * （Bsw_ComStack_Rx_test.cpp と同じ理由）。 */
+         * （Bsw_ComStack_Signal_Rx_test.cpp と同じ理由）。 */
         CanIf_SetControllerMode(0U, CAN_CS_STARTED);
         /* 本テストは CanSM 経由で FULL_COM を確立しないため、CanIf_Init()
          * 直後の既定値 CANIF_OFFLINE のままだと応答側の CanIf_Transmit() が
-         * 常に E_NOT_OK になってしまう（Bsw_ComStack_Tx_SendSignal_test.cpp
+         * 常に E_NOT_OK になってしまう（Bsw_ComStack_Signal_Tx_test.cpp
          * と同じ理由）。 */
         CanIf_SetPduMode(0U, CANIF_ONLINE);
         PduR_Init(&kTestPduRConfig);
         /* CanIf_RxIndication() は無条件に CanSM_RxIndication() を呼ぶため、
          * CanSM 未初期化のままだと DET_E_UNINIT が毎回報告される
-         * （Bsw_ComStack_Rx_test.cpp と同じ理由。CanSM 自体の状態機械は
+         * （Bsw_ComStack_Signal_Rx_test.cpp と同じ理由。CanSM 自体の状態機械は
          * 本テストの対象外）。 */
         CanSM_Init(NULL);
         CanTp_Init(NULL);

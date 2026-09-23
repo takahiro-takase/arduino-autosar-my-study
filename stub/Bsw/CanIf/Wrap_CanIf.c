@@ -3,14 +3,28 @@
  * \brief   `src/Bsw/CanIf/CanIf.c` 内の関数を対象とした wrap 実体
  *          （Wrap_CanIf.h 参照）。
  */
+
+/* ======================================================================
+ * Includes
+ * ====================================================================== */
+
 #include "Wrap_CanIf.h"
 #include "Det.h"
+
+/* ======================================================================
+ * Definitions
+ * ====================================================================== */
 
 #define TAG "CanIf"
 
 /* ======================================================================
+ * Type Definitions
+ * ====================================================================== */
+
+/* ======================================================================
  * External Variables
  * ====================================================================== */
+
 uint32 CallCount_CanIf_Init                    = 0U;
 uint32 CallCount_CanIf_DeInit                  = 0U;
 uint32 CallCount_CanIf_SetControllerMode       = 0U;
@@ -59,6 +73,7 @@ uint8         LastControllerId_CanIf_ControllerBusOff = 0U;
 /* ----------------------------------------------------------------------
  * WrapCanIf_Reset — すべての関数状態を一括で初期化する（Wrap_CanIf.h 参照）。
  * ---------------------------------------------------------------------- */
+
 void WrapCanIf_Reset(void)
 {
     CallCount_CanIf_Init                    = 0U;
@@ -115,6 +130,7 @@ void WrapCanIf_Reset(void)
 /* ----------------------------------------------------------------------
  * CanIf_Init
  * ---------------------------------------------------------------------- */
+
 extern
 void __real_CanIf_Init(const CanIf_ConfigType* ConfigPtr);
 void __wrap_CanIf_Init(const CanIf_ConfigType* ConfigPtr)
@@ -128,6 +144,7 @@ void __wrap_CanIf_Init(const CanIf_ConfigType* ConfigPtr)
 /* ----------------------------------------------------------------------
  * CanIf_DeInit
  * ---------------------------------------------------------------------- */
+
 extern
 void __real_CanIf_DeInit(void);
 void __wrap_CanIf_DeInit(void)
@@ -141,6 +158,7 @@ void __wrap_CanIf_DeInit(void)
 /* ----------------------------------------------------------------------
  * CanIf_SetControllerMode
  * ---------------------------------------------------------------------- */
+
 extern
 Std_ReturnType __real_CanIf_SetControllerMode(uint8 ControllerId, Can_ControllerStateType ControllerMode);
 Std_ReturnType __wrap_CanIf_SetControllerMode(uint8 ControllerId, Can_ControllerStateType ControllerMode)
@@ -158,6 +176,7 @@ Std_ReturnType __wrap_CanIf_SetControllerMode(uint8 ControllerId, Can_Controller
 /* ----------------------------------------------------------------------
  * CanIf_GetControllerMode
  * ---------------------------------------------------------------------- */
+
 extern
 Std_ReturnType __real_CanIf_GetControllerMode(uint8 ControllerId, Can_ControllerStateType* ControllerModePtr);
 Std_ReturnType __wrap_CanIf_GetControllerMode(uint8 ControllerId, Can_ControllerStateType* ControllerModePtr)
@@ -175,6 +194,7 @@ Std_ReturnType __wrap_CanIf_GetControllerMode(uint8 ControllerId, Can_Controller
 /* ----------------------------------------------------------------------
  * CanIf_GetControllerErrorState
  * ---------------------------------------------------------------------- */
+
 extern
 Std_ReturnType __real_CanIf_GetControllerErrorState(uint8 ControllerId, Can_ErrorStateType* ErrorStatePtr);
 Std_ReturnType __wrap_CanIf_GetControllerErrorState(uint8 ControllerId, Can_ErrorStateType* ErrorStatePtr)
@@ -192,6 +212,7 @@ Std_ReturnType __wrap_CanIf_GetControllerErrorState(uint8 ControllerId, Can_Erro
 /* ----------------------------------------------------------------------
  * CanIf_Transmit
  * ---------------------------------------------------------------------- */
+
 extern
 Std_ReturnType __real_CanIf_Transmit(PduIdType TxPduId, const PduInfoType* PduInfoPtr);
 Std_ReturnType __wrap_CanIf_Transmit(PduIdType TxPduId, const PduInfoType* PduInfoPtr)
@@ -210,9 +231,12 @@ Std_ReturnType __wrap_CanIf_Transmit(PduIdType TxPduId, const PduInfoType* PduIn
  * CanIf_CancelTransmit
  * ---------------------------------------------------------------------- */
 
+/* 未実装 */
+
 /* ----------------------------------------------------------------------
  * CanIf_ReadRxPduData
  * ---------------------------------------------------------------------- */
+
 extern
 Std_ReturnType __real_CanIf_ReadRxPduData(PduIdType CanIfRxSduId, PduInfoType* CanIfRxInfoPtr);
 Std_ReturnType __wrap_CanIf_ReadRxPduData(PduIdType CanIfRxSduId, PduInfoType* CanIfRxInfoPtr)
@@ -230,6 +254,7 @@ Std_ReturnType __wrap_CanIf_ReadRxPduData(PduIdType CanIfRxSduId, PduInfoType* C
 /* ----------------------------------------------------------------------
  * CanIf_ReadTxNotifStatus
  * ---------------------------------------------------------------------- */
+
 extern
 CanIf_NotifStatusType __real_CanIf_ReadTxNotifStatus(PduIdType CanIfTxSduId);
 CanIf_NotifStatusType __wrap_CanIf_ReadTxNotifStatus(PduIdType CanIfTxSduId)
@@ -247,6 +272,7 @@ CanIf_NotifStatusType __wrap_CanIf_ReadTxNotifStatus(PduIdType CanIfTxSduId)
 /* ----------------------------------------------------------------------
  * CanIf_ReadRxNotifStatus
  * ---------------------------------------------------------------------- */
+
 extern
 CanIf_NotifStatusType __real_CanIf_ReadRxNotifStatus(PduIdType CanIfRxSduId);
 CanIf_NotifStatusType __wrap_CanIf_ReadRxNotifStatus(PduIdType CanIfRxSduId)
@@ -264,6 +290,7 @@ CanIf_NotifStatusType __wrap_CanIf_ReadRxNotifStatus(PduIdType CanIfRxSduId)
 /* ----------------------------------------------------------------------
  * CanIf_SetPduMode
  * ---------------------------------------------------------------------- */
+
 extern
 Std_ReturnType __real_CanIf_SetPduMode(uint8 ControllerId, CanIf_PduModeType PduModeRequest);
 Std_ReturnType __wrap_CanIf_SetPduMode(uint8 ControllerId, CanIf_PduModeType PduModeRequest)
@@ -282,6 +309,7 @@ Std_ReturnType __wrap_CanIf_SetPduMode(uint8 ControllerId, CanIf_PduModeType Pdu
 /* ----------------------------------------------------------------------
  * CanIf_GetPduMode
  * ---------------------------------------------------------------------- */
+
 extern
 Std_ReturnType __real_CanIf_GetPduMode(uint8 ControllerId, CanIf_PduModeType* PduModePtr);
 Std_ReturnType __wrap_CanIf_GetPduMode(uint8 ControllerId, CanIf_PduModeType* PduModePtr)
@@ -299,6 +327,7 @@ Std_ReturnType __wrap_CanIf_GetPduMode(uint8 ControllerId, CanIf_PduModeType* Pd
 /* ----------------------------------------------------------------------
  * CanIf_GetVersionInfo
  * ---------------------------------------------------------------------- */
+
 extern 
 void __real_CanIf_GetVersionInfo(Std_VersionInfoType* versioninfo);
 void __wrap_CanIf_GetVersionInfo(Std_VersionInfoType* versioninfo)
@@ -313,33 +342,48 @@ void __wrap_CanIf_GetVersionInfo(Std_VersionInfoType* versioninfo)
  * CanIf_SetDynamicTxId
  * ---------------------------------------------------------------------- */
 
+/* 未実装 */
+
 /* ----------------------------------------------------------------------
  * CanIf_SetTrcvMode
  * ---------------------------------------------------------------------- */
+
+/* 未実装 */
 
 /* ----------------------------------------------------------------------
  * CanIf_GetTrcvMode
  * ---------------------------------------------------------------------- */
 
+/* 未実装 */
+
 /* ----------------------------------------------------------------------
  * CanIf_GetTrcvWakeupReason
  * ---------------------------------------------------------------------- */
+
+/* 未実装 */
 
 /* ----------------------------------------------------------------------
  * CanIf_SetTrcvWakeupMode
  * ---------------------------------------------------------------------- */
 
+/* 未実装 */
+
 /* ----------------------------------------------------------------------
  * CanIf_CheckWakeup
  * ---------------------------------------------------------------------- */
+
+/* 未実装 */
 
 /* ----------------------------------------------------------------------
  * CanIf_CheckValidation
  * ---------------------------------------------------------------------- */
 
+/* 未実装 */
+
 /* ----------------------------------------------------------------------
  * CanIf_GetTxConfirmationState
  * ---------------------------------------------------------------------- */
+
 extern 
 CanIf_NotifStatusType __real_CanIf_GetTxConfirmationState(uint8 ControllerId);
 CanIf_NotifStatusType __wrap_CanIf_GetTxConfirmationState(uint8 ControllerId)
@@ -358,17 +402,25 @@ CanIf_NotifStatusType __wrap_CanIf_GetTxConfirmationState(uint8 ControllerId)
  * CanIf_ClearTrcvWufFlag
  * ---------------------------------------------------------------------- */
 
+/* 未実装 */
+
 /* ----------------------------------------------------------------------
  * CanIf_CheckTrcvWakeFlag
  * ---------------------------------------------------------------------- */
+
+/* 未実装 */
 
 /* ----------------------------------------------------------------------
  * CanIf_SetBaudrate
  * ---------------------------------------------------------------------- */
 
+/* 未実装 */
+
 /* ----------------------------------------------------------------------
  * CanIf_SetIcomConfiguration
  * ---------------------------------------------------------------------- */
+
+/* 未実装 */
 
 /* ======================================================================
  * Callback notifications
@@ -378,9 +430,12 @@ CanIf_NotifStatusType __wrap_CanIf_GetTxConfirmationState(uint8 ControllerId)
  * CanIf_TriggerTransmit
  * ---------------------------------------------------------------------- */
 
+/* 未実装 */
+
  /* ----------------------------------------------------------------------
  * CanIf_TxConfirmation
  * ---------------------------------------------------------------------- */
+
 extern
 void __real_CanIf_TxConfirmation(PduIdType CanTxPduId);
 void __wrap_CanIf_TxConfirmation(PduIdType CanTxPduId)
@@ -396,6 +451,7 @@ void __wrap_CanIf_TxConfirmation(PduIdType CanTxPduId)
 /* ----------------------------------------------------------------------
  * CanIf_RxIndication
  * ---------------------------------------------------------------------- */
+
 extern
 void __real_CanIf_RxIndication(const Can_HwType* Mailbox, const PduInfoType* PduInfoPtr);
 void __wrap_CanIf_RxIndication(const Can_HwType* Mailbox, const PduInfoType* PduInfoPtr)
@@ -414,6 +470,7 @@ void __wrap_CanIf_RxIndication(const Can_HwType* Mailbox, const PduInfoType* Pdu
 /* ----------------------------------------------------------------------
  * CanIf_ControllerBusOff
  * ---------------------------------------------------------------------- */
+
 extern
 void __real_CanIf_ControllerBusOff(uint8 ControllerId);
 void __wrap_CanIf_ControllerBusOff(uint8 ControllerId)
@@ -430,22 +487,34 @@ void __wrap_CanIf_ControllerBusOff(uint8 ControllerId)
  * CanIf_ConfirmPnAvailability
  * ---------------------------------------------------------------------- */
 
+/* 未実装 */
+
 /* ----------------------------------------------------------------------
  * CanIf_ClearTrcvWufFlagIndication
  * ---------------------------------------------------------------------- */
+
+/* 未実装 */
 
 /* ----------------------------------------------------------------------
  * CanIf_CheckTrcvWakeFlagIndication
  * ---------------------------------------------------------------------- */
 
+/* 未実装 */
+
 /* ----------------------------------------------------------------------
  * CanIf_ControllerModeIndication
  * ---------------------------------------------------------------------- */
+
+/* 未実装 */
 
 /* ----------------------------------------------------------------------
  * CanIf_TrcvModeIndication
  * ---------------------------------------------------------------------- */
 
+/* 未実装 */
+
 /* ----------------------------------------------------------------------
  * CanIf_CurrentIcomConfiguration
  * ---------------------------------------------------------------------- */
+
+/* 未実装 */

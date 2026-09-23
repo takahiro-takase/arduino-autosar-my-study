@@ -9,14 +9,28 @@
  *          Functions バナー方式に倣った構成。今後新規追加する `Wrap_XXX.c` は
  *          本ファイルと同じ構成へ統一する）。
  */
+
+/* ======================================================================
+ * Includes
+ * ====================================================================== */
+
 #include "Wrap_Can.h"
 #include "Det.h"
+
+/* ======================================================================
+ * Definitions
+ * ====================================================================== */
 
 #define TAG "Can"
 
 /* ======================================================================
+ * Type Definitions
+ * ====================================================================== */
+
+/* ======================================================================
  * External Variables
  * ====================================================================== */
+
 uint32 CallCount_Can_Init                         = 0U;
 uint32 CallCount_Can_GetVersionInfo               = 0U;
 uint32 CallCount_Can_SetControllerMode            = 0U;
@@ -40,6 +54,7 @@ Can_ReturnType ForcedReturn_Can_Write                   = CAN_NOT_OK;
 /* ----------------------------------------------------------------------
  * WrapCan_Reset — 11関数すべての状態を一括で初期化する（Wrap_Can.h 参照）。
  * ---------------------------------------------------------------------- */
+
 void WrapCan_Reset(void)
 {
     CallCount_Can_Init                        = 0U;
@@ -70,6 +85,7 @@ void WrapCan_Reset(void)
 /* ----------------------------------------------------------------------
  * Can_Init
  * ---------------------------------------------------------------------- */
+
 extern
 void __real_Can_Init(const Can_ConfigType* Config);
 void __wrap_Can_Init(const Can_ConfigType* Config)
@@ -83,7 +99,8 @@ void __wrap_Can_Init(const Can_ConfigType* Config)
 /* ----------------------------------------------------------------------
  * Can_GetVersionInfo
  * ---------------------------------------------------------------------- */
-extern
+
+ extern
 void __real_Can_GetVersionInfo(Std_VersionInfoType* versioninfo);
 void __wrap_Can_GetVersionInfo(Std_VersionInfoType* versioninfo)
 {
@@ -97,17 +114,24 @@ void __wrap_Can_GetVersionInfo(Std_VersionInfoType* versioninfo)
  * Can_CheckBaudrate
  * ---------------------------------------------------------------------- */
 
+/* 未実装 */
+
 /* ----------------------------------------------------------------------
  * Can_ChangeBaudrate
  * ---------------------------------------------------------------------- */
+
+/* 未実装 */
 
 /* ----------------------------------------------------------------------
  * Can_SetBaudrate
  * ---------------------------------------------------------------------- */
 
+/* 未実装 */
+
 /* ----------------------------------------------------------------------
  * Can_SetControllerMode
  * ---------------------------------------------------------------------- */
+
 extern
 Can_ReturnType __real_Can_SetControllerMode(uint8 Controller, Can_StateTransitionType Transition);
 Can_ReturnType __wrap_Can_SetControllerMode(uint8 Controller, Can_StateTransitionType Transition)
@@ -126,6 +150,7 @@ Can_ReturnType __wrap_Can_SetControllerMode(uint8 Controller, Can_StateTransitio
 /* ----------------------------------------------------------------------
  * Can_DisableControllerInterrupts
  * ---------------------------------------------------------------------- */
+
 extern
 void __real_Can_DisableControllerInterrupts(uint8 Controller);
 void __wrap_Can_DisableControllerInterrupts(uint8 Controller)
@@ -139,6 +164,7 @@ void __wrap_Can_DisableControllerInterrupts(uint8 Controller)
 /* ----------------------------------------------------------------------
  * Can_EnableControllerInterrupts
  * ---------------------------------------------------------------------- */
+
 extern
 void __real_Can_EnableControllerInterrupts(uint8 Controller);
 void __wrap_Can_EnableControllerInterrupts(uint8 Controller)
@@ -153,9 +179,12 @@ void __wrap_Can_EnableControllerInterrupts(uint8 Controller)
  * Can_CheckWakeup
  * ---------------------------------------------------------------------- */
 
+/* 未実装 */
+
 /* ----------------------------------------------------------------------
  * Can_Write
  * ---------------------------------------------------------------------- */
+
 extern
 Can_ReturnType __real_Can_Write(Can_HwHandleType Hth, const Can_PduType* PduInfo);
 Can_ReturnType __wrap_Can_Write(Can_HwHandleType Hth, const Can_PduType* PduInfo)
@@ -182,6 +211,7 @@ Can_ReturnType __wrap_Can_Write(Can_HwHandleType Hth, const Can_PduType* PduInfo
 /* ----------------------------------------------------------------------
  * Can_MainFunction_Write
  * ---------------------------------------------------------------------- */
+
 extern
 void __real_Can_MainFunction_Write(void);
 void __wrap_Can_MainFunction_Write(void)
@@ -195,6 +225,7 @@ void __wrap_Can_MainFunction_Write(void)
 /* ----------------------------------------------------------------------
  * Can_MainFunction_Read
  * ---------------------------------------------------------------------- */
+
 extern
 void __real_Can_MainFunction_Read(void);
 void __wrap_Can_MainFunction_Read(void)
@@ -208,6 +239,7 @@ void __wrap_Can_MainFunction_Read(void)
 /* ----------------------------------------------------------------------
  * Can_MainFunction_BusOff
  * ---------------------------------------------------------------------- */
+
 extern
 void __real_Can_MainFunction_BusOff(void);
 void __wrap_Can_MainFunction_BusOff(void)
@@ -221,6 +253,7 @@ void __wrap_Can_MainFunction_BusOff(void)
 /* ----------------------------------------------------------------------
  * Can_MainFunction_Wakeup
  * ---------------------------------------------------------------------- */
+
 extern
 void __real_Can_MainFunction_Wakeup(void);
 void __wrap_Can_MainFunction_Wakeup(void)
@@ -235,6 +268,8 @@ void __wrap_Can_MainFunction_Wakeup(void)
  * Can_MainFunction_Mode
  * ---------------------------------------------------------------------- */
 
+/* 未実装 */
+
 /* ======================================================================
  * Internal Functions
  * ====================================================================== */
@@ -242,6 +277,7 @@ void __wrap_Can_MainFunction_Wakeup(void)
 /* ----------------------------------------------------------------------
  * Can_GetControllerErrorState
  * ---------------------------------------------------------------------- */
+
 extern
 Std_ReturnType __real_Can_GetControllerErrorState(uint8 Controller, Can_ErrorStateType* ErrorStatePtr);
 Std_ReturnType __wrap_Can_GetControllerErrorState(uint8 Controller, Can_ErrorStateType* ErrorStatePtr)

@@ -21,7 +21,7 @@
  *
  *          CanIf_RxIndication() は無条件に CanSM_RxIndication() を呼ぶため
  *          （CanIf.c 参照）、feedback_native_chain_shared_static_hang の
- *          教訓通り CanSM_Init(NULL)（Bsw_ComStack_Rx_test.cpp と同じ安全な
+ *          教訓通り CanSM_Init(NULL)（Bsw_ComStack_Signal_Rx_test.cpp と同じ安全な
  *          no-op パターン）で既知の状態に初期化してから検証する。
  */
 #include <gtest/gtest.h>

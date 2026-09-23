@@ -1,5 +1,5 @@
 /**
- * \file    Bsw_ComStack_TxE2E_test.cpp
+ * \file    Bsw_ComStack_E2E_Tx_test.cpp
  * \brief   README.md「Tx 処理」→「E2E（E2EHealthStatus 送信）」コールチェーンの
  *          単体テスト（GoogleTest / PlatformIO `[env:native_chain]`）。
  *
@@ -11,24 +11,24 @@
  *                → PduR_ComTransmit() → CanIf_Transmit() → Can_Write()   （以降は「通常」と同じ）
  *
  *          「通常」の Tx チェーン（Com_MainFunctionTx() → PduR_ComTransmit() →
- *          CanIf_Transmit() → Can_Write()）は Bsw_ComStack_Tx_ComSendSignal_test.cpp が既に検証
+ *          CanIf_Transmit() → Can_Write()）は Bsw_ComStack_Signal_Tx_test.cpp が既に検証
  *          済みのため、本テストは TxTransformCbk フックの部分（E2EXf_TransformP05()
  *          → E2E_P05Protect() が Counter・CRC16 を正しく書き込むこと）に絞る。
  *          ただし「フックが正しく呼ばれて最終的に CAN フレームまで届くこと」
- *          自体は Bsw_ComStack_Tx_ComSendSignal_test.cpp の対象外（TxTransformCbk=NULL の設定）
+ *          自体は Bsw_ComStack_Signal_Tx_test.cpp の対象外（TxTransformCbk=NULL の設定）
  *          のため、本テストでも Can_Hw（フェイク）まで通して確認する。
  *
  *          本番の TxTransformCbk（`Rte_COMTransform_E2EHealthStatus()`）は
  *          `Rte.c` にあるが、`Rte.c` 自体は IoHwAb/FiM/App_EngineManager/
  *          App_WarningIndicator まで巨大な依存グラフを引き込むため
- *          （Bsw_ComStack_Tx_ComSendSignal_test.cpp 冒頭コメントと同じ理由）リンクしない。
+ *          （Bsw_ComStack_Signal_Tx_test.cpp 冒頭コメントと同じ理由）リンクしない。
  *          本ファイル内に、本番と同じ1行の委譲呼び出し
  *          （`E2EXf_TransformP05(&E2EXf_E2EHealthStatusTxCfgP05, Data, Length)`）
  *          をテスト専用の TxTransformCbk として定義し、そこから先
  *          （E2EXf.c/E2EXf_PBCfg.c/E2E_P05.c）は実体をそのまま検証する。
  *          E2EXf_PBCfg.c の本番設定（`E2EXf_E2EHealthStatusTxCfgP05`,
  *          DataID=0x220, DataLength=5）をそのまま使う（Rte.c と異なり
- *          E2EXf_PBCfg.c 自体は Rte 依存を持たないため、Bsw_ComStack_Tx_ComSendSignal_test.cpp
+ *          E2EXf_PBCfg.c 自体は Rte 依存を持たないため、Bsw_ComStack_Signal_Tx_test.cpp
  *          のように専用の最小設定を別途定義する必要がない）。
  *
  *          期待値の算出は、E2E_P05.c の CRC16 実装を手でコピーせず、本テストの
@@ -69,7 +69,7 @@ void TestTxTransform_E2EHealthStatus(uint8* Data, uint8 Length)
 }
 
 // -----------------------------------------------------------------------
-// テスト専用の最小 Com/PduR/CanIf 設定（Bsw_ComStack_Tx_ComSendSignal_test.cpp と同じ方針）。
+// テスト専用の最小 Com/PduR/CanIf 設定（Bsw_ComStack_Signal_Tx_test.cpp と同じ方針）。
 // SignalId=0 (TX, 16bit BigEndian) をバイト3-4（E2E ヘッダ CRC16(2B)+
 // Counter(1B) の直後）に配置した、IPduId=0・DLC=5 の TX I-PDU
 // （E2EXf_E2EHealthStatusTxCfgP05 の DataLength=5 と一致させる）。
@@ -173,7 +173,7 @@ const E2E_P05ConfigType kRefE2EHealthStatusCfg = {
     0U        /* Offset */
 };
 
-class Bsw_TxE2E_Test : public ::testing::Test
+class Bsw_E2E_Tx_Test : public ::testing::Test
 {
 protected:
     void SetUp() override
@@ -227,7 +227,7 @@ protected:
 };
 
 // ------------------------------------------------------------
-TEST_F(Bsw_TxE2E_Test, ComMainFunction_OK_E2EProtectsAndReachesCanHw)
+TEST_F(Bsw_E2E_Tx_Test, ComMainFunction_OK_E2EProtectsAndReachesCanHw)
 {
     /* 準備 (Arrange) */
     uint16_t value = 0xABCDU;
@@ -251,7 +251,7 @@ TEST_F(Bsw_TxE2E_Test, ComMainFunction_OK_E2EProtectsAndReachesCanHw)
         EXPECT_EQ(FakeCanHw_LastSendData[i], refBuf[i]) << "byte index " << (int)i;
 }
 
-TEST_F(Bsw_TxE2E_Test, ComMainFunction_OK_CounterIncrementsAcrossSends)
+TEST_F(Bsw_E2E_Tx_Test, ComMainFunction_OK_CounterIncrementsAcrossSends)
 {
     /* 準備 (Arrange) */
     uint16_t value = 0x0000U;
