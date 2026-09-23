@@ -281,6 +281,7 @@ set(NATIVE_CHAIN_STUB_SOURCES
     stub/Bsw/Com/Wrap_Com.c
     stub/Bsw/E2E/Wrap_E2E.c
     stub/Bsw/E2E/Wrap_E2E_P05.c
+    stub/Bsw/E2E/Wrap_E2E_P01.c
     stub/Bsw/Dem/Wrap_Dem.c
     stub/Bsw/Dcm/Wrap_Dcm.c
     stub/Bsw/ComM/Wrap_ComM.c
@@ -333,6 +334,13 @@ target_link_options(native_chain_tests PRIVATE -static)
 
 # native_chain_tests がリンク時に故障注入する -Wl,--wrap= 対象シンボル一覧。
 set(NATIVE_CHAIN_WRAP_SYMBOLS
+    # BswM.h の AUTOSAR IF 全6関数（Wrap_BswM.h/.c 参照）。
+    BswM_Init
+    BswM_Deinit
+    BswM_GetVersionInfo
+    BswM_EcuM_CurrentState
+    BswM_ComM_CurrentMode
+    BswM_Dcm_CommunicationMode_CurrentState
     # Can.c の AUTOSAR IF 全数（Wrap_Can.h/.c 参照）。
     Can_Init
     Can_GetVersionInfo
@@ -362,15 +370,24 @@ set(NATIVE_CHAIN_WRAP_SYMBOLS
     CanIf_TxConfirmation
     CanIf_RxIndication
     CanIf_ControllerBusOff
-    # PduR.c の AUTOSAR IF 全数（Wrap_PduR.h/.c 参照）。
-    PduR_Init
-    PduR_GetVersionInfo
-    PduR_ComTransmit
-    PduR_CanTpTransmit
-    PduR_SecOCTransmit
-    PduR_ComRxIndication
-    PduR_CanIfTxConfirmation
-    PduR_SecOCTxConfirmation
+    # CanSM.h の AUTOSAR IF 全9関数（Wrap_CanSM.h/.c 参照）。
+    CanSM_Init
+    CanSM_DeInit
+    CanSM_RequestComMode
+    CanSM_GetCurrentComMode
+    CanSM_ControllerBusOff
+    CanSM_ControllerModeIndication
+    CanSM_RxIndication
+    CanSM_MainFunction
+    CanSM_GetVersionInfo
+    # CanTp.c の AUTOSAR IF 全数（Wrap_CanTp.h/.c 参照）。
+    CanTp_Init
+    CanTp_Transmit
+    CanTp_IsTxBusy
+    CanTp_RxIndication
+    CanTp_TxConfirmation
+    CanTp_MainFunction
+    CanTp_GetVersionInfo
     # Com.c の AUTOSAR IF 全数（Wrap_Com.h/.c 参照）。
     Com_Init
     Com_DeInit
@@ -394,31 +411,6 @@ set(NATIVE_CHAIN_WRAP_SYMBOLS
     Com_TxConfirmation
     Com_MainFunctionRx
     Com_MainFunctionTx
-    # CanTp.c の AUTOSAR IF 全数（Wrap_CanTp.h/.c 参照）。
-    CanTp_Init
-    CanTp_Transmit
-    CanTp_IsTxBusy
-    CanTp_RxIndication
-    CanTp_TxConfirmation
-    CanTp_MainFunction
-    CanTp_GetVersionInfo
-    # Dcm.h の AUTOSAR IF 全8関数 + Dcm_ComIndication（Wrap_Dcm.h/.c 参照）。
-    Dcm_Init
-    Dcm_MainFunction
-    Dcm_GetVin
-    Dcm_GetSesCtrlType
-    Dcm_GetSecurityLevel
-    Dcm_GetActiveProtocol
-    Dcm_ResetToDefaultSession
-    Dcm_GetVersionInfo
-    Dcm_ComIndication
-    # BswM.h の AUTOSAR IF 全6関数（Wrap_BswM.h/.c 参照）。
-    BswM_Init
-    BswM_Deinit
-    BswM_GetVersionInfo
-    BswM_EcuM_CurrentState
-    BswM_ComM_CurrentMode
-    BswM_Dcm_CommunicationMode_CurrentState
     # ComM.h の AUTOSAR IF 全16関数（Wrap_ComM.h/.c 参照）。
     ComM_Init
     ComM_DeInit
@@ -436,26 +428,41 @@ set(NATIVE_CHAIN_WRAP_SYMBOLS
     ComM_CommunicationAllowed
     ComM_BusSM_ModeIndication
     ComM_MainFunction
-    # CanSM.h の AUTOSAR IF 全9関数（Wrap_CanSM.h/.c 参照）。
-    CanSM_Init
-    CanSM_DeInit
-    CanSM_RequestComMode
-    CanSM_GetCurrentComMode
-    CanSM_ControllerBusOff
-    CanSM_ControllerModeIndication
-    CanSM_RxIndication
-    CanSM_MainFunction
-    CanSM_GetVersionInfo
+    # Dcm.h の AUTOSAR IF 全8関数 + Dcm_ComIndication（Wrap_Dcm.h/.c 参照）。
+    Dcm_Init
+    Dcm_MainFunction
+    Dcm_GetVin
+    Dcm_GetSesCtrlType
+    Dcm_GetSecurityLevel
+    Dcm_GetActiveProtocol
+    Dcm_ResetToDefaultSession
+    Dcm_GetVersionInfo
+    Dcm_ComIndication
     # E2E.h の AUTOSAR IF 全3関数（Wrap_E2E.h/.c 参照）。
     E2E_SMCheck
     E2E_SMCheckInit
     E2E_GetVersionInfo
+    # E2E_P01.h の公開API全5関数（Wrap_E2E_P01.h/.c 参照）。
+    E2E_P01Protect
+    E2E_P01ProtectInit
+    E2E_P01Check
+    E2E_P01CheckInit
+    E2E_P01MapStatusToSM
     # E2E_P05.h の公開API全5関数（Wrap_E2E_P05.h/.c 参照）。
     E2E_P05Protect
     E2E_P05ProtectInit
     E2E_P05Check
     E2E_P05CheckInit
     E2E_P05MapStatusToSM
+    # PduR.c の AUTOSAR IF 全数（Wrap_PduR.h/.c 参照）。
+    PduR_Init
+    PduR_GetVersionInfo
+    PduR_ComTransmit
+    PduR_CanTpTransmit
+    PduR_SecOCTransmit
+    PduR_ComRxIndication
+    PduR_CanIfTxConfirmation
+    PduR_SecOCTxConfirmation
     #
     Dem_SetEventStatus
 
