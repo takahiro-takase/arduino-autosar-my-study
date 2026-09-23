@@ -43,6 +43,10 @@
  *          AUTOSAR 認証済み実装ではなく、製品への適用は想定していません。
  */
 
+/* ======================================================================
+ * Includes
+ * ====================================================================== */
+
 #include "BswM.h"
 #include "BswM_Cfg.h"
 #include "Os.h"
@@ -51,7 +55,19 @@
 #include "Nm.h"
 #include "Det.h"
 
+/* ======================================================================
+ * Definitions
+ * ====================================================================== */
+
 #define TAG "BswM"
+
+/* ======================================================================
+ * Type Definitions
+ * ====================================================================== */
+
+/* ======================================================================
+ * Global Variables
+ * ====================================================================== */
 
 /* -----------------------------------------------------------------------
  * モジュール内部変数
@@ -69,9 +85,21 @@ static uint8 BswM_ModeSrcCache[BSWM_MODE_SRC_COUNT];
  *  ときのみ実行する。 */
 static uint8 BswM_RuleLastResult[BSWM_RULE_COUNT];
 
+/* ======================================================================
+ * Function Prototypes
+ * ====================================================================== */
+
+/* ======================================================================
+ * Functions
+ * ====================================================================== */
+
 /* -----------------------------------------------------------------------
  * 内部関数
  * ----------------------------------------------------------------------- */
+
+/* ----------------------------------------------------------------------
+ * BswM_EvaluateCondition
+ * ---------------------------------------------------------------------- */
 
 /** 単一条件（ModeSrc の現在キャッシュ値が ModeValue と一致するか）を評価する。 */
 static uint8 BswM_EvaluateCondition(const BswM_ConditionType* cond)
@@ -79,6 +107,10 @@ static uint8 BswM_EvaluateCondition(const BswM_ConditionType* cond)
     DET_LOGT(TAG, "called");
     return (BswM_ModeSrcCache[cond->ModeSrc] == cond->ModeValue) ? 1U : 0U;
 }
+
+/* ----------------------------------------------------------------------
+ * BswM_EvaluateRule
+ * ---------------------------------------------------------------------- */
 
 /**
  * \brief   ルールの Condition[] を Operator で組み合わせて評価する。
@@ -103,6 +135,10 @@ static uint8 BswM_EvaluateRule(const BswM_RuleType* rule)
     }
     return !isOr;
 }
+
+/* ----------------------------------------------------------------------
+ * BswM_ApplyDcmCommMode
+ * ---------------------------------------------------------------------- */
 
 /**
  * \brief   `BSWM_MODE_SRC_DCM_COMM` の現在キャッシュ値を Com/Nm への具体的な
@@ -137,6 +173,10 @@ static void BswM_ApplyDcmCommMode(void)
             : Nm_DisableCommunication(NM_MAIN_NETWORK_HANDLE));
     }
 }
+
+/* ----------------------------------------------------------------------
+ * BswM_ExecuteRules
+ * ---------------------------------------------------------------------- */
 
 /**
  * \brief   モード変化をトリガとしてルールテーブルを評価し、アクションを実行する。
@@ -206,6 +246,10 @@ static void BswM_ExecuteRules(BswM_ModeSrcType src, uint8 newValue)
  * 公開 API
  * ----------------------------------------------------------------------- */
 
+/* ----------------------------------------------------------------------
+ * BswM_Init
+ * ---------------------------------------------------------------------- */
+
 void BswM_Init(const BswM_ConfigType* ConfigPtr)
 {
     DET_LOGT(TAG, "called");
@@ -230,6 +274,10 @@ void BswM_Init(const BswM_ConfigType* ConfigPtr)
     DET_LOGI(TAG, "Init ok rules=%u", (unsigned)ConfigPtr->RuleCount);
 }
 
+/* ----------------------------------------------------------------------
+ * BswM_Deinit
+ * ---------------------------------------------------------------------- */
+
 void BswM_Deinit(void)
 {
     DET_LOGT(TAG, "called");
@@ -246,6 +294,10 @@ void BswM_Deinit(void)
     DET_LOGI(TAG, "DeInit ok");
 }
 
+/* ----------------------------------------------------------------------
+ * BswM_GetVersionInfo
+ * ---------------------------------------------------------------------- */
+
 void BswM_GetVersionInfo(Std_VersionInfoType* VersionInfo)
 {
     DET_LOGT(TAG, "called");
@@ -261,6 +313,10 @@ void BswM_GetVersionInfo(Std_VersionInfoType* VersionInfo)
     VersionInfo->sw_minor_version = BSWM_SW_MINOR_VERSION;
     VersionInfo->sw_patch_version = BSWM_SW_PATCH_VERSION;
 }
+
+/* ----------------------------------------------------------------------
+ * BswM_EcuM_CurrentState
+ * ---------------------------------------------------------------------- */
 
 void BswM_EcuM_CurrentState(EcuM_StateType state)
 {
@@ -284,6 +340,10 @@ void BswM_EcuM_CurrentState(EcuM_StateType state)
     BswM_ExecuteRules(BSWM_MODE_SRC_ECUM, (uint8)state);
 }
 
+/* ----------------------------------------------------------------------
+ * BswM_ComM_CurrentMode
+ * ---------------------------------------------------------------------- */
+
 void BswM_ComM_CurrentMode(NetworkHandleType channel, ComM_ModeType mode)
 {
     DET_LOGT(TAG, "called");
@@ -306,6 +366,10 @@ void BswM_ComM_CurrentMode(NetworkHandleType channel, ComM_ModeType mode)
 
     BswM_ExecuteRules(BSWM_MODE_SRC_COMM, (uint8)mode);
 }
+
+/* ----------------------------------------------------------------------
+ * BswM_Dcm_CommunicationMode_CurrentState
+ * ---------------------------------------------------------------------- */
 
 /**
  * \brief   Dcm からの UDS 0x28 CommunicationControl 通知コールバック。

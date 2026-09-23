@@ -8,6 +8,11 @@
  * \note    本ファイルは AUTOSAR 4.4.0 仕様を参考にした学習用実装です。
  *          AUTOSAR 認証済み実装ではなく、製品への適用は想定していません。
  */
+
+/* ======================================================================
+ * Includes
+ * ====================================================================== */
+
 #include "KeyM.h"
 #include "KeyM_PBCfg.h"
 #include "Csm.h"
@@ -15,7 +20,19 @@
 #include "Crypto_Aes128.h"
 #include "Det.h"
 
+/* ======================================================================
+ * Definitions
+ * ====================================================================== */
+
 #define TAG "KeyM"
+
+/* ======================================================================
+ * Type Definitions
+ * ====================================================================== */
+
+/* ======================================================================
+ * Global Variables
+ * ====================================================================== */
 
 static uint8 KeyM_Initialized = 0U;
 
@@ -27,6 +44,18 @@ static uint8 KeyM_SessionOpen = 0U;
  *  いない鍵のマーカー（KeyM_CryptoKeyConfigData の添字と対応）。
  *  [SWS_KeyM_00016]/[SWS_KeyM_00103] 相当。 */
 static uint8 KeyM_PendingValidate[KEYM_CRYPTO_KEY_COUNT];
+
+/* ======================================================================
+ * Function Prototypes
+ * ====================================================================== */
+
+/* ======================================================================
+ * Functions
+ * ====================================================================== */
+
+/* ----------------------------------------------------------------------
+ * KeyM_FindKeyByName
+ * ---------------------------------------------------------------------- */
 
 static const KeyM_CryptoKeyConfigType* KeyM_FindKeyByName(const uint8* keyNamePtr, uint16 keyNameLength)
 {
@@ -42,6 +71,10 @@ static const KeyM_CryptoKeyConfigType* KeyM_FindKeyByName(const uint8* keyNamePt
     return NULL;
 }
 
+/* ----------------------------------------------------------------------
+ * KeyM_Init
+ * ---------------------------------------------------------------------- */
+
 void KeyM_Init(const KeyM_ConfigType* ConfigPtr)
 {
     DET_LOGT(TAG, "called");
@@ -54,6 +87,10 @@ void KeyM_Init(const KeyM_ConfigType* ConfigPtr)
     KeyM_Initialized = 1U;
     DET_LOGI(TAG, "Init ok keys=%u", (unsigned)KEYM_CRYPTO_KEY_COUNT);
 }
+
+/* ----------------------------------------------------------------------
+ * KeyM_Deinit
+ * ---------------------------------------------------------------------- */
 
 void KeyM_Deinit(void)
 {
@@ -100,6 +137,10 @@ void KeyM_Deinit(void)
     DET_LOGI(TAG, "Deinit ok");
 }
 
+/* ----------------------------------------------------------------------
+ * KeyM_GetVersionInfo
+ * ---------------------------------------------------------------------- */
+
 void KeyM_GetVersionInfo(Std_VersionInfoType* versioninfo)
 {
     DET_LOGT(TAG, "called");
@@ -122,6 +163,10 @@ void KeyM_GetVersionInfo(Std_VersionInfoType* versioninfo)
     versioninfo->sw_patch_version = KEYM_SW_PATCH_VERSION;
 }
 
+/* ----------------------------------------------------------------------
+ * KeyM_Start
+ * ---------------------------------------------------------------------- */
+
 Std_ReturnType KeyM_Start(KeyM_StartType StartType,
                           const uint8* RequestData, uint16 RequestDataLength,
                           uint8* ResponseData, uint16* ResponseDataLength)
@@ -143,6 +188,10 @@ Std_ReturnType KeyM_Start(KeyM_StartType StartType,
     DET_LOGI(TAG, "Start ok mode=%u", (unsigned)StartType);
     return E_OK;
 }
+
+/* ----------------------------------------------------------------------
+ * KeyM_Update
+ * ---------------------------------------------------------------------- */
 
 Std_ReturnType KeyM_Update(const uint8* KeyNamePtr, uint16 KeyNameLength,
                            const uint8* RequestDataPtr, uint16 RequestDataLength,
@@ -204,6 +253,10 @@ Std_ReturnType KeyM_Update(const uint8* KeyNamePtr, uint16 KeyNameLength,
     DET_LOGI(TAG, "Update ok keyName=0x%02X (pending Finalize)", (unsigned)KeyNamePtr[0]);
     return E_OK;
 }
+
+/* ----------------------------------------------------------------------
+ * KeyM_Finalize
+ * ---------------------------------------------------------------------- */
 
 Std_ReturnType KeyM_Finalize(const uint8* RequestDataPtr, uint16 RequestDataLength,
                              uint8* ResponseDataPtr, uint16 ResponseMaxDataLength)

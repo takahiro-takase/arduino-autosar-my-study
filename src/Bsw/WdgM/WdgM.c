@@ -160,6 +160,10 @@
  *          AUTOSAR 認証済み実装ではなく、製品への適用は想定していません。
  */
 
+/* ======================================================================
+ * Includes
+ * ====================================================================== */
+
 #include "WdgM.h"
 #include "WdgIf.h"
 #include "Det.h"
@@ -168,7 +172,19 @@
 /* millis() is declared in Arduino wiring.c with C linkage. */
 extern unsigned long millis(void);
 
+/* ======================================================================
+ * Definitions
+ * ====================================================================== */
+
 #define TAG "WdgM"
+
+/* ======================================================================
+ * Type Definitions
+ * ====================================================================== */
+
+/* ======================================================================
+ * Global Variables
+ * ====================================================================== */
 
 /* -----------------------------------------------------------------------
  * モジュール内部変数
@@ -305,9 +321,21 @@ static uint8 WdgM_ResetRequested = 0U;
 static WdgM_SupervisedEntityIdType WdgM_FirstExpiredSEID    __attribute__((section(".noinit")));
 static WdgM_SupervisedEntityIdType WdgM_FirstExpiredSEIDInv __attribute__((section(".noinit")));
 
+/* ======================================================================
+ * Function Prototypes
+ * ====================================================================== */
+
+/* ======================================================================
+ * Functions
+ * ====================================================================== */
+
 /* -----------------------------------------------------------------------
  * 公開 API
  * ----------------------------------------------------------------------- */
+
+/* ----------------------------------------------------------------------
+ * WdgM_Init
+ * ---------------------------------------------------------------------- */
 
 /**
  * \brief   WdgM モジュールを初期化する。
@@ -356,6 +384,10 @@ void WdgM_Init(const WdgM_ConfigType* ConfigPtr)
     DET_LOGI(TAG, "Init ok entities=%u", (unsigned)ConfigPtr->EntityCount);
 }
 
+/* ----------------------------------------------------------------------
+ * WdgM_DeInit
+ * ---------------------------------------------------------------------- */
+
 void WdgM_DeInit(void)
 {
     DET_LOGT(TAG, "called");
@@ -368,6 +400,10 @@ void WdgM_DeInit(void)
     WdgM_Cfg = NULL;
     DET_LOGI(TAG, "DeInit ok");
 }
+
+/* ----------------------------------------------------------------------
+ * WdgM_SetMode
+ * ---------------------------------------------------------------------- */
 
 /**
  * \brief   WdgM の現在のモードを設定する（[SWS_WdgM_00154]）。
@@ -397,6 +433,10 @@ Std_ReturnType WdgM_SetMode(WdgM_ModeType Mode)
     return E_OK;
 }
 
+/* ----------------------------------------------------------------------
+ * WdgM_GetMode
+ * ---------------------------------------------------------------------- */
+
 /**
  * \brief   WdgM の現在のモードを取得する（[SWS_WdgM_00168]）。
  *
@@ -425,6 +465,10 @@ Std_ReturnType WdgM_GetMode(WdgM_ModeType* Mode)
     return E_OK;
 }
 
+/* ----------------------------------------------------------------------
+ * WdgM_EnableHwWatchdog
+ * ---------------------------------------------------------------------- */
+
 /**
  * \brief   実 HW ウォッチドッグを WDGM_HW_WATCHDOG_TIMEOUT_MS (4000ms) で有効化する。
  *
@@ -441,6 +485,10 @@ void WdgM_EnableHwWatchdog(void)
     WdgM_SupervisionSuppressed = 0U;
     DET_LOGI(TAG, "HW watchdog enabled (4000ms)");
 }
+
+/* ----------------------------------------------------------------------
+ * WdgM_DisableHwWatchdog
+ * ---------------------------------------------------------------------- */
 
 /**
  * \brief   実 HW ウォッチドッグを無効化する。
@@ -462,6 +510,10 @@ void WdgM_DisableHwWatchdog(void)
     WdgM_SupervisionSuppressed = 1U;
     DET_LOGI(TAG, "HW watchdog disabled");
 }
+
+/* ----------------------------------------------------------------------
+ * WdgM_ResumeSupervision
+ * ---------------------------------------------------------------------- */
 
 /**
  * \brief   全エンティティのチェックポイント追跡基準・Alive Supervision 状態をリセットする。
@@ -544,6 +596,10 @@ void WdgM_ResumeSupervision(void)
     DET_LOGI(TAG, "Supervision resumed (checkpoint baseline reset) entities=%u",
              (unsigned)WdgM_Cfg->EntityCount);
 }
+
+/* ----------------------------------------------------------------------
+ * WdgM_CheckpointReached
+ * ---------------------------------------------------------------------- */
 
 /**
  * \brief   Supervised Entity がチェックポイントに到達したことを報告する。
@@ -631,6 +687,10 @@ Std_ReturnType WdgM_CheckpointReached(WdgM_SupervisedEntityIdType SEID, WdgM_Che
     return E_OK;
 }
 
+/* ----------------------------------------------------------------------
+ * WdgM_GetLocalStatus
+ * ---------------------------------------------------------------------- */
+
 /**
  * \brief   Supervised Entity の現在のローカルステータスを取得する。
  *
@@ -695,6 +755,10 @@ Std_ReturnType WdgM_GetLocalStatus(WdgM_SupervisedEntityIdType SEID, WdgM_LocalS
     return E_OK;
 }
 
+/* ----------------------------------------------------------------------
+ * WdgM_AnyEntityNotOk
+ * ---------------------------------------------------------------------- */
+
 /**
  * \brief   全エンティティのうち、いずれか一つでも WdgM_GetLocalStatus() が
  *          OK でないかを判定する。
@@ -717,6 +781,10 @@ static uint8 WdgM_AnyEntityNotOk(void)
     }
     return 0U;
 }
+
+/* ----------------------------------------------------------------------
+ * WdgM_AnyEntityExpired
+ * ---------------------------------------------------------------------- */
 
 /**
  * \brief   全エンティティのうち、いずれか一つでも Local Status が
@@ -743,6 +811,10 @@ static uint8 WdgM_AnyEntityExpired(void)
     }
     return 0U;
 }
+
+/* ----------------------------------------------------------------------
+ * WdgM_GetGlobalStatus
+ * ---------------------------------------------------------------------- */
 
 /**
  * \brief   WdgM 全体のグローバル supervision ステータスを取得する。
@@ -814,6 +886,10 @@ Std_ReturnType WdgM_GetGlobalStatus(WdgM_GlobalStatusType* Status)
     return E_OK;
 }
 
+/* ----------------------------------------------------------------------
+ * WdgM_EnterGlobalStopped
+ * ---------------------------------------------------------------------- */
+
 /**
  * \brief   Global Supervision Status を WDGM_GLOBAL_STATUS_STOPPED へ遷移させる
  *          （[SWS_WdgM_00117]/[00220]、STOPPED への2つの遷移元で共通の処理）。
@@ -854,6 +930,10 @@ static void WdgM_EnterGlobalStopped(const char* reason, uint8 firstNotOkFound, u
 
     DET_LOGE(TAG, "Global supervision STOPPED (%s) [HW WDT reset pending]", reason);
 }
+
+/* ----------------------------------------------------------------------
+ * WdgM_MainFunction
+ * ---------------------------------------------------------------------- */
 
 /**
  * \brief   WdgM 周期処理。Alive Supervision を評価する。
@@ -1113,6 +1193,10 @@ void WdgM_MainFunction(void)
     }
 }
 
+/* ----------------------------------------------------------------------
+ * WdgM_TriggerHwWatchdog
+ * ---------------------------------------------------------------------- */
+
 /**
  * \brief   HW ウォッチドッグの trigger（リフレッシュ）処理。
  *
@@ -1161,6 +1245,10 @@ void WdgM_TriggerHwWatchdog(void)
     }
 }
 
+/* ----------------------------------------------------------------------
+ * WdgM_PerformReset
+ * ---------------------------------------------------------------------- */
+
 /**
  * \brief   HW ウォッチドッグの trigger を永続的に止め、リセットさせる。
  *
@@ -1190,6 +1278,10 @@ void WdgM_PerformReset(void)
     WdgM_ResetRequested = 1U;
     DET_LOGE(TAG, "PerformReset called - HW watchdog refresh stopped permanently [HW WDT reset pending]");
 }
+
+/* ----------------------------------------------------------------------
+ * WdgM_GetFirstExpiredSEID
+ * ---------------------------------------------------------------------- */
 
 /**
  * \brief   直近の HW ウォッチドッグリセットの原因となった Supervised Entity の
@@ -1228,12 +1320,20 @@ Std_ReturnType WdgM_GetFirstExpiredSEID(WdgM_SupervisedEntityIdType* SEID)
 }
 
 #ifdef WDGM_UNIT_TEST
+/* ----------------------------------------------------------------------
+ * WdgM_Test_SetFirstExpiredSEIDRaw
+ * ---------------------------------------------------------------------- */
+
 void WdgM_Test_SetFirstExpiredSEIDRaw(WdgM_SupervisedEntityIdType value, WdgM_SupervisedEntityIdType inv)
 {
     WdgM_FirstExpiredSEID    = value;
     WdgM_FirstExpiredSEIDInv = inv;
 }
 #endif
+
+/* ----------------------------------------------------------------------
+ * WdgM_GetVersionInfo
+ * ---------------------------------------------------------------------- */
 
 void WdgM_GetVersionInfo(Std_VersionInfoType* VersionInfo)
 {

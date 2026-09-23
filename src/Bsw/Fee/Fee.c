@@ -19,11 +19,27 @@
  * \note    本ファイルは AUTOSAR 4.3.1 仕様を参考にした学習用実装です。
  *          AUTOSAR 認証済み実装ではなく、製品への適用は想定していません。
  */
+/* ======================================================================
+ * Includes
+ * ====================================================================== */
+
 #include "Fee.h"
 #include "Fee_Hw.h"
 #include "Det.h"
 
+/* ======================================================================
+ * Definitions
+ * ====================================================================== */
+
 #define TAG "Fee"
+
+/* ======================================================================
+ * Type Definitions
+ * ====================================================================== */
+
+/* ======================================================================
+ * Global Variables
+ * ====================================================================== */
 
 static uint8 Fee_Initialized = 0U;
 
@@ -45,6 +61,18 @@ static Fee_JobType Fee_Job;
  *  Fee_Cancel() で MEMIF_JOB_CANCELED になる。 */
 static MemIf_JobResultType Fee_LastResult = MEMIF_JOB_OK;
 
+/* ======================================================================
+ * Function Prototypes
+ * ====================================================================== */
+
+/* ======================================================================
+ * Functions
+ * ====================================================================== */
+
+/* ----------------------------------------------------------------------
+ * Fee_Init
+ * ---------------------------------------------------------------------- */
+
 void Fee_Init(const Fee_ConfigType* ConfigPtr)
 {
     (void)ConfigPtr; /* 本プロジェクトは post-build 設定を持たない（Fee.h 参照） */
@@ -53,6 +81,10 @@ void Fee_Init(const Fee_ConfigType* ConfigPtr)
     Fee_Initialized = 1U;
     DET_LOGI(TAG, "Init ok");
 }
+
+/* ----------------------------------------------------------------------
+ * Fee_GetVersionInfo
+ * ---------------------------------------------------------------------- */
 
 void Fee_GetVersionInfo(Std_VersionInfoType* versioninfo)
 {
@@ -69,6 +101,10 @@ void Fee_GetVersionInfo(Std_VersionInfoType* versioninfo)
     versioninfo->sw_minor_version = FEE_SW_MINOR_VERSION;
     versioninfo->sw_patch_version = FEE_SW_PATCH_VERSION;
 }
+
+/* ----------------------------------------------------------------------
+ * Fee_SetMode
+ * ---------------------------------------------------------------------- */
 
 void Fee_SetMode(MemIf_ModeType Mode)
 {
@@ -101,6 +137,10 @@ void Fee_SetMode(MemIf_ModeType Mode)
     (void)Mode;
 }
 
+/* ----------------------------------------------------------------------
+ * Fee_Read
+ * ---------------------------------------------------------------------- */
+
 Std_ReturnType Fee_Read(uint16 Address, uint8* DataBufferPtr, uint16 Length)
 {
     DET_LOGT(TAG, "called");
@@ -132,6 +172,10 @@ Std_ReturnType Fee_Read(uint16 Address, uint8* DataBufferPtr, uint16 Length)
     Fee_Hw_ReadBlock(DataBufferPtr, Address, Length);
     return E_OK;
 }
+
+/* ----------------------------------------------------------------------
+ * Fee_Write
+ * ---------------------------------------------------------------------- */
 
 Std_ReturnType Fee_Write(uint16 Address, const uint8* DataBufferPtr, uint16 Length)
 {
@@ -166,6 +210,10 @@ Std_ReturnType Fee_Write(uint16 Address, const uint8* DataBufferPtr, uint16 Leng
     return E_OK;
 }
 
+/* ----------------------------------------------------------------------
+ * Fee_WriteImmediate
+ * ---------------------------------------------------------------------- */
+
 Std_ReturnType Fee_WriteImmediate(uint16 Address, const uint8* DataBufferPtr, uint16 Length)
 {
     DET_LOGT(TAG, "called");
@@ -198,6 +246,10 @@ Std_ReturnType Fee_WriteImmediate(uint16 Address, const uint8* DataBufferPtr, ui
     return E_OK;
 }
 
+/* ----------------------------------------------------------------------
+ * Fee_Cancel
+ * ---------------------------------------------------------------------- */
+
 void Fee_Cancel(void)
 {
     DET_LOGT(TAG, "called");
@@ -224,6 +276,10 @@ void Fee_Cancel(void)
     Fee_LastResult = MEMIF_JOB_CANCELED;
 }
 
+/* ----------------------------------------------------------------------
+ * Fee_GetStatus
+ * ---------------------------------------------------------------------- */
+
 MemIf_StatusType Fee_GetStatus(void)
 {
     DET_LOGT(TAG, "called");
@@ -231,6 +287,10 @@ MemIf_StatusType Fee_GetStatus(void)
         return MEMIF_UNINIT;
     return Fee_Job.Active ? MEMIF_BUSY : MEMIF_IDLE;
 }
+
+/* ----------------------------------------------------------------------
+ * Fee_GetJobResult
+ * ---------------------------------------------------------------------- */
 
 MemIf_JobResultType Fee_GetJobResult(void)
 {
@@ -246,6 +306,10 @@ MemIf_JobResultType Fee_GetJobResult(void)
     }
     return Fee_LastResult;
 }
+
+/* ----------------------------------------------------------------------
+ * Fee_MainFunction
+ * ---------------------------------------------------------------------- */
 
 void Fee_MainFunction(void)
 {

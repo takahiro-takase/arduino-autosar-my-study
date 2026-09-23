@@ -69,6 +69,10 @@
  *          AUTOSAR 認証済み実装ではなく、製品への適用は想定していません。
  */
 
+/* ======================================================================
+ * Includes
+ * ====================================================================== */
+
 #include "NvM.h"
 #include "NvM_PBCfg.h"
 #include "MemIf.h"
@@ -76,12 +80,24 @@
 #include "Dem.h"
 #include <string.h>
 
+/* ======================================================================
+ * Definitions
+ * ====================================================================== */
+
 #define TAG "NvM"
 
 /** AUTOSAR Crc8 (SAE J1850) パラメータ */
 #define NVM_CRC8_INITIAL  0xFFU
 #define NVM_CRC8_POLY     0x1DU
 #define NVM_CRC8_XOR_OUT  0xFFU
+
+/* ======================================================================
+ * Type Definitions
+ * ====================================================================== */
+
+/* ======================================================================
+ * Global Variables
+ * ====================================================================== */
 
 static const NvM_ConfigType* NvM_Cfg = NULL;
 
@@ -176,9 +192,21 @@ static uint8 NvM_QueueHead = 0U;  /**< 次に取り出すエントリの index *
 static uint8 NvM_QueueTail = 0U;  /**< 次に積むエントリの index     */
 static uint8 NvM_QueueLen  = 0U;  /**< キュー内の有効エントリ数     */
 
+/* ======================================================================
+ * Function Prototypes
+ * ====================================================================== */
+
+/* ======================================================================
+ * Functions
+ * ====================================================================== */
+
 /* -----------------------------------------------------------------------
  * 内部ヘルパー
  * ----------------------------------------------------------------------- */
+
+/* ----------------------------------------------------------------------
+ * NvM_GetBlock
+ * ---------------------------------------------------------------------- */
 
 static const NvM_BlockDescriptorType* NvM_GetBlock(NvM_BlockIdType id)
 {
@@ -187,6 +215,10 @@ static const NvM_BlockDescriptorType* NvM_GetBlock(NvM_BlockIdType id)
         return NULL;
     return &NvM_Cfg->Blocks[id];
 }
+
+/* ----------------------------------------------------------------------
+ * NvM_CalcCrc8
+ * ---------------------------------------------------------------------- */
 
 /**
  * \brief   AUTOSAR Crc8 (SAE J1850) アルゴリズムでブロックの CRC を計算する。
@@ -214,6 +246,10 @@ static uint8 NvM_CalcCrc8(const uint8* data, uint16 length)
     return (uint8)(crc ^ NVM_CRC8_XOR_OUT);
 }
 
+/* ----------------------------------------------------------------------
+ * NvM_CrcAddressForBase
+ * ---------------------------------------------------------------------- */
+
 /** 指定ベースアドレスに対する CRC 保存先 (データ本体直後の 1 バイト)。
  *  冗長ブロックはプライマリ／ミラーそれぞれのベースアドレスに対して呼ぶ。 */
 static uint16 NvM_CrcAddressForBase(uint16 base, uint16 length)
@@ -221,6 +257,10 @@ static uint16 NvM_CrcAddressForBase(uint16 base, uint16 length)
     DET_LOGT(TAG, "called");
     return (uint16)(base + length);
 }
+
+/* ----------------------------------------------------------------------
+ * NvM_WriteCopySync
+ * ---------------------------------------------------------------------- */
 
 /**
  * \brief   RAM ミラーの内容を、指定した 1 つの EEPROM コピー（データ本体+CRC）へ
@@ -238,6 +278,10 @@ static void NvM_WriteCopySync(uint16 base, const void* data, uint16 length)
     uint8 crc = NvM_CalcCrc8((const uint8*)data, length);
     (void)MemIf_WriteImmediate(MEMIF_DEVICE_0, NvM_CrcAddressForBase(base, length), &crc, 1U);
 }
+
+/* ----------------------------------------------------------------------
+ * NvM_ApplyDefaultSync
+ * ---------------------------------------------------------------------- */
 
 /**
  * \brief   ブロックの RAM ミラーへデフォルト値を適用し、CRC とともに
@@ -303,6 +347,10 @@ static void NvM_ApplyDefaultSync(NvM_BlockIdType id, const NvM_BlockDescriptorTy
         NvM_LastCrc[id] = NvM_CalcCrc8((const uint8*)blk->RamBlockDataAddress, blk->NvMNvBlockLength);
     }
 }
+
+/* ----------------------------------------------------------------------
+ * NvM_LoadAndVerifyBlock
+ * ---------------------------------------------------------------------- */
 
 /**
  * \brief   ブロックを EEPROM から読み込み、CRC 検証・（冗長ブロックなら）
@@ -468,6 +516,10 @@ static void NvM_LoadAndVerifyBlock(NvM_BlockIdType id, const NvM_BlockDescriptor
     NvM_WriteStartIsMirror[id] = 0U;
 }
 
+/* ----------------------------------------------------------------------
+ * NvM_MarkPending
+ * ---------------------------------------------------------------------- */
+
 /**
  * \brief   ブロックの EEPROM 書き込みジョブを保留キューへ積む（RAM ミラー
  *          自体は呼び出し元が既に更新済みであること）。
@@ -529,6 +581,10 @@ static void NvM_MarkPending(NvM_BlockIdType id)
  * 公開 API
  * ----------------------------------------------------------------------- */
 
+/* ----------------------------------------------------------------------
+ * NvM_Init
+ * ---------------------------------------------------------------------- */
+
 /**
  * \brief   全ブロックの EEPROM 内容を RAM ミラーへ一括ロードする。
  *
@@ -579,6 +635,10 @@ void NvM_Init(const NvM_ConfigType* ConfigPtr)
 
     DET_LOGI(TAG, "Init ok blocks=%u", (unsigned)NvM_Config.NumBlocks);
 }
+
+/* ----------------------------------------------------------------------
+ * NvM_ReportBootDiagnosticsToDem
+ * ---------------------------------------------------------------------- */
 
 /**
  * \brief   NvM_Init() 時点で検出した CRC 不整合・冗長性喪失を Dem へ報告する。
@@ -643,6 +703,10 @@ void NvM_ReportBootDiagnosticsToDem(void)
         (void)Dem_SetEventStatus(DEM_EVENT_NVM_LOSS_OF_REDUNDANCY, DEM_EVENT_STATUS_PASSED);
 }
 
+/* ----------------------------------------------------------------------
+ * NvM_ReadBlock
+ * ---------------------------------------------------------------------- */
+
 /**
  * \brief   RAM ミラーの内容を NvM_DstPtr へコピーする。
  *
@@ -702,6 +766,10 @@ Std_ReturnType NvM_ReadBlock(NvM_BlockIdType BlockId, void* NvM_DstPtr)
     memcpy(NvM_DstPtr, blk->RamBlockDataAddress, blk->NvMNvBlockLength);
     return E_OK;
 }
+
+/* ----------------------------------------------------------------------
+ * NvM_WriteBlock
+ * ---------------------------------------------------------------------- */
 
 /**
  * \brief   NvM_SrcPtr の内容を RAM ミラーへコピーし、EEPROM 書き込みジョブを
@@ -825,6 +893,10 @@ Std_ReturnType NvM_WriteBlock(NvM_BlockIdType BlockId, const void* NvM_SrcPtr)
     return E_OK;
 }
 
+/* ----------------------------------------------------------------------
+ * NvM_RestoreBlockDefaults
+ * ---------------------------------------------------------------------- */
+
 /**
  * \brief   指定ブロックを ROM デフォルト値へ復元する。
  *
@@ -905,6 +977,10 @@ Std_ReturnType NvM_RestoreBlockDefaults(NvM_BlockIdType BlockId, void* NvM_DestP
     return E_OK;
 }
 
+/* ----------------------------------------------------------------------
+ * NvM_SetBlockProtection
+ * ---------------------------------------------------------------------- */
+
 /**
  * \brief   ブロックの書き込み保護を設定/解除する（[SWS_NvM_00450]）。
  *
@@ -970,6 +1046,10 @@ Std_ReturnType NvM_SetBlockProtection(NvM_BlockIdType BlockId, boolean Protectio
     return E_OK;
 }
 
+/* ----------------------------------------------------------------------
+ * NvM_GetErrorStatus
+ * ---------------------------------------------------------------------- */
+
 /**
  * \brief   ブロックの直近のジョブ結果を取得する。
  *
@@ -1004,6 +1084,10 @@ Std_ReturnType NvM_GetErrorStatus(NvM_BlockIdType BlockId, NvM_RequestResultType
     *RequestResultPtr = NvM_BlockResult[BlockId];
     return E_OK;
 }
+
+/* ----------------------------------------------------------------------
+ * NvM_MainFunction
+ * ---------------------------------------------------------------------- */
 
 /**
  * \brief   NvM 周期処理。保留中のブロックについて MemIf ジョブの開始・完了待ちを
@@ -1144,6 +1228,10 @@ void NvM_MainFunction(void)
     NvM_ActivePhase         = NVM_PHASE_NONE;
     NvM_ActiveCopyIsMirror  = 0U;
 }
+
+/* ----------------------------------------------------------------------
+ * NvM_GetVersionInfo
+ * ---------------------------------------------------------------------- */
 
 void NvM_GetVersionInfo(Std_VersionInfoType* versioninfo)
 {

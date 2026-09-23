@@ -87,11 +87,27 @@
  *          AUTOSAR 認証済み実装ではなく、製品への適用は想定していません。
  */
 
+/* ======================================================================
+ * Includes
+ * ====================================================================== */
+
 #include "Dem.h"
 #include "Det.h"
 #include "NvM.h"
 
+/* ======================================================================
+ * Definitions
+ * ====================================================================== */
+
 #define TAG "Dem"
+
+/* ======================================================================
+ * Type Definitions
+ * ====================================================================== */
+
+/* ======================================================================
+ * Global Variables
+ * ====================================================================== */
 
 /* -----------------------------------------------------------------------
  * モジュール内部状態
@@ -181,6 +197,18 @@ static uint8 Dem_Initialized = 0U;
  *  既定で有効。無効化中は Dem_SetEventStatus() を丸ごと無視する。 */
 static uint8 Dem_DTCSettingEnabled = 1U;
 
+/* ======================================================================
+ * Function Prototypes
+ * ====================================================================== */
+
+/* ======================================================================
+ * Functions
+ * ====================================================================== */
+
+/* ----------------------------------------------------------------------
+ * Dem_EvaluateAging
+ * ---------------------------------------------------------------------- */
+
 /**
  * \brief   経年回復 (Aging) を判定する。
  *
@@ -236,6 +264,10 @@ static void Dem_EvaluateAging(Dem_EventIdType EventId)
     }
 }
 
+/* ----------------------------------------------------------------------
+ * Dem_EvaluatePendingClear
+ * ---------------------------------------------------------------------- */
+
 /**
  * \brief   PendingDTC (UDS status bit2) を操作サイクル境界で判定する。
  *
@@ -272,6 +304,10 @@ static void Dem_EvaluatePendingClear(Dem_EventIdType EventId)
 /* -----------------------------------------------------------------------
  * 公開 API
  * ----------------------------------------------------------------------- */
+
+/* ----------------------------------------------------------------------
+ * Dem_Init
+ * ---------------------------------------------------------------------- */
 
 /**
  * \brief   DEM を初期化する。NvM から前回起動の DTC 状態を復元する。
@@ -363,6 +399,10 @@ void Dem_Init(const Dem_ConfigType* ConfigPtr)
 
     Dem_Initialized = 1U;
 }
+
+/* ----------------------------------------------------------------------
+ * Dem_SetEventStatus
+ * ---------------------------------------------------------------------- */
 
 /**
  * \brief   イベントの発生/消滅を DEM に通知する (モニタからの生のテスト結果、
@@ -555,6 +595,10 @@ Std_ReturnType Dem_SetEventStatus(Dem_EventIdType EventId,
     return E_OK;
 }
 
+/* ----------------------------------------------------------------------
+ * Dem_GetDTCStatusAvailabilityMask
+ * ---------------------------------------------------------------------- */
+
 /**
  * \brief   DTC ステータス availability mask を取得する。
  *
@@ -589,6 +633,10 @@ Std_ReturnType Dem_GetDTCStatusAvailabilityMask(uint8 ClientId, Dem_UdsStatusByt
     *DTCStatusMask = DEM_STATUS_AVAILABILITY_MASK;
     return E_OK;
 }
+
+/* ----------------------------------------------------------------------
+ * Dem_GetEventUdsStatus
+ * ---------------------------------------------------------------------- */
 
 /**
  * \brief   指定イベントの UDS DTC ステータスバイトを取得する（[SWS_Dem_91008]）。
@@ -637,6 +685,10 @@ Std_ReturnType Dem_GetEventUdsStatus(Dem_EventIdType EventId, Dem_UdsStatusByteT
     *UDSStatusByte = Dem_StatusTable[EventId] & DEM_STATUS_AVAILABILITY_MASK;
     return E_OK;
 }
+
+/* ----------------------------------------------------------------------
+ * Dem_GetDTCOfEvent
+ * ---------------------------------------------------------------------- */
 
 /**
  * \brief   イベント ID から DTC コードを取得する（[SWS_Dem_00198]/[SWS_Dem_00269]）。
@@ -694,6 +746,10 @@ Std_ReturnType Dem_GetDTCOfEvent(Dem_EventIdType EventId, Dem_DTCFormatType DTCF
     return E_OK;
 }
 
+/* ----------------------------------------------------------------------
+ * Dem_ClearOne
+ * ---------------------------------------------------------------------- */
+
 /**
  * \brief   指定イベントの DTC ステータス・デバウンスカウンタ・経年回復カウンタ・
  *          ExtendedData・FreezeFrame を初期状態に戻す（NvM 書き込みは呼び出し元が行う）。
@@ -710,6 +766,10 @@ static void Dem_ClearOne(Dem_EventIdType EventId)
     Dem_OccurrenceCounter[EventId]  = 0U;
     Dem_FreezeFrameValid[EventId]   = 0U;
 }
+
+/* ----------------------------------------------------------------------
+ * Dem_ClearAllDTCs
+ * ---------------------------------------------------------------------- */
 
 /**
  * \brief   全 DTC をクリアし、NvM (EEPROM) を初期状態へ戻す。
@@ -747,6 +807,10 @@ Std_ReturnType Dem_ClearAllDTCs(void)
     DET_LOGI(TAG, "ClearAll ok");
     return E_OK;
 }
+
+/* ----------------------------------------------------------------------
+ * Dem_ClearOneDtc
+ * ---------------------------------------------------------------------- */
 
 /**
  * \brief   指定イベントの DTC のみをクリアし、NvM (EEPROM) へ反映する。
@@ -799,6 +863,10 @@ Std_ReturnType Dem_ClearOneDtc(Dem_EventIdType EventId)
     return E_OK;
 }
 
+/* ----------------------------------------------------------------------
+ * Dem_GetAllDTCs
+ * ---------------------------------------------------------------------- */
+
 /**
  * \brief   ステータスマスクに一致する全 DTC を列挙する。
  *
@@ -849,6 +917,10 @@ void Dem_GetAllDTCs(uint32* dtcBuf, uint8* statusBuf,
     }
 }
 
+/* ----------------------------------------------------------------------
+ * Dem_GetSupportedDTCs
+ * ---------------------------------------------------------------------- */
+
 /**
  * \brief   ステータスに関わらず、本 ECU が対応する全 DTC を列挙する。
  *
@@ -893,6 +965,10 @@ void Dem_GetSupportedDTCs(uint32* dtcBuf, uint8* statusBuf, uint8* count)
     *count = DEM_EVENT_COUNT;
 }
 
+/* ----------------------------------------------------------------------
+ * Dem_SetFreezeFrameContext
+ * ---------------------------------------------------------------------- */
+
 /**
  * \brief   FreezeFrame として保存する現在値を更新する。
  *
@@ -916,6 +992,10 @@ void Dem_SetFreezeFrameContext(uint16 EngineSpeed, uint8 CoolantTemp, uint8 Engi
     Dem_CurrentContext.CoolantTemp = CoolantTemp;
     Dem_CurrentContext.EngineState = EngineState;
 }
+
+/* ----------------------------------------------------------------------
+ * Dem_GetFreezeFrameOfEvent
+ * ---------------------------------------------------------------------- */
 
 /**
  * \brief   指定イベントに保存された FreezeFrame を取得する。
@@ -952,6 +1032,10 @@ Std_ReturnType Dem_GetFreezeFrameOfEvent(Dem_EventIdType EventId, Dem_FreezeFram
     return E_OK;
 }
 
+/* ----------------------------------------------------------------------
+ * Dem_GetEventIdOfDTC
+ * ---------------------------------------------------------------------- */
+
 /**
  * \brief   DTC コード (24-bit) から EventId を逆引きする。
  *
@@ -984,6 +1068,10 @@ Std_ReturnType Dem_GetEventIdOfDTC(uint32 DTC, Dem_EventIdType* EventId)
     }
     return E_NOT_OK;
 }
+
+/* ----------------------------------------------------------------------
+ * Dem_GetOccurrenceCounterOfEvent
+ * ---------------------------------------------------------------------- */
 
 /**
  * \brief   指定イベントの ExtendedData（故障確定回数）を取得する。
@@ -1036,6 +1124,10 @@ Std_ReturnType Dem_GetOccurrenceCounterOfEvent(Dem_EventIdType EventId, uint8* C
     return E_OK;
 }
 
+/* ----------------------------------------------------------------------
+ * Dem_MapDebounceCounterToFdc
+ * ---------------------------------------------------------------------- */
+
 /**
  * \brief   デバウンスカウンタ生値 (-limit〜+limit) を UDS の Fault Detection
  *          Counter 値域 (-128〜+127) へ線形写像する。
@@ -1058,6 +1150,10 @@ static sint8 Dem_MapDebounceCounterToFdc(sint8 counter, sint8 limit)
     else
         return (sint8)(((sint16)counter * 128) / limit);
 }
+
+/* ----------------------------------------------------------------------
+ * Dem_GetFaultDetectionCounter
+ * ---------------------------------------------------------------------- */
 
 /**
  * \brief   指定イベントの Fault Detection Counter を取得する。
@@ -1095,6 +1191,10 @@ Std_ReturnType Dem_GetFaultDetectionCounter(Dem_EventIdType EventId, sint8* Faul
     *FaultDetectionCounter = Dem_MapDebounceCounterToFdc(Dem_DebounceCounter[EventId], Dem_DebounceLimitTable[EventId]);
     return E_OK;
 }
+
+/* ----------------------------------------------------------------------
+ * Dem_GetPrefailedDTCs
+ * ---------------------------------------------------------------------- */
 
 /**
  * \brief   ステータスが「prefailed」の DTC のみを、対応する Fault Detection
@@ -1138,6 +1238,10 @@ void Dem_GetPrefailedDTCs(uint32* dtcBuf, uint8* fdcBuf, uint8* count)
     }
 }
 
+/* ----------------------------------------------------------------------
+ * Dem_GetTranslationType
+ * ---------------------------------------------------------------------- */
+
 /**
  * \brief   本 ECU が構成する DTC 翻訳フォーマットを取得する。
  *
@@ -1167,6 +1271,10 @@ Dem_DTCTranslationFormatType Dem_GetTranslationType(uint8 ClientId)
     return DEM_DTC_TRANSLATION_ISO14229_1;
 }
 
+/* ----------------------------------------------------------------------
+ * Dem_EnableDTCSetting
+ * ---------------------------------------------------------------------- */
+
 Std_ReturnType Dem_EnableDTCSetting(uint8 ClientId)
 {
     DET_LOGT(TAG, "called");
@@ -1183,6 +1291,10 @@ Std_ReturnType Dem_EnableDTCSetting(uint8 ClientId)
     return E_OK;
 }
 
+/* ----------------------------------------------------------------------
+ * Dem_DisableDTCSetting
+ * ---------------------------------------------------------------------- */
+
 Std_ReturnType Dem_DisableDTCSetting(uint8 ClientId)
 {
     DET_LOGT(TAG, "called");
@@ -1198,6 +1310,10 @@ Std_ReturnType Dem_DisableDTCSetting(uint8 ClientId)
     DET_LOGI(TAG, "DTC setting disabled");
     return E_OK;
 }
+
+/* ----------------------------------------------------------------------
+ * Dem_GetVersionInfo
+ * ---------------------------------------------------------------------- */
 
 void Dem_GetVersionInfo(Std_VersionInfoType* versioninfo)
 {

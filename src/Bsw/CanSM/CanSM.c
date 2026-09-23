@@ -128,15 +128,27 @@
  *          AUTOSAR 認証済み実装ではなく、製品への適用は想定していません。
  */
 
+/* ======================================================================
+ * Includes
+ * ====================================================================== */
+
 #include "CanSM.h"
 #include "CanIf.h"
 #include "Dem.h"
 #include "Det.h"
 
+/* ======================================================================
+ * Definitions
+ * ====================================================================== */
+
 #define TAG "CanSM"
 
 /* Arduino wiring.c（C リンケージ）で定義 */
 extern unsigned long millis(void);
+
+/* ======================================================================
+ * Type Definitions
+ * ====================================================================== */
 
 /* -----------------------------------------------------------------------
  * 内部型定義
@@ -149,6 +161,10 @@ typedef enum
     CANSM_STATE_BUS_OFF,             /* Bus-Off 回復中 */
     CANSM_STATE_WAKEUP_VALIDATING    /* ウェイクアップ検証中（Listen-Only、RX確認待ち） */
 } CanSM_InternalStateType;
+
+/* ======================================================================
+ * Global Variables
+ * ====================================================================== */
 
 /* -----------------------------------------------------------------------
  * モジュール内部変数
@@ -170,6 +186,18 @@ static CanSM_InternalStateType CanSM_PreBusOffState;
  *  (CANSM_STATE_NO_COM=0) は「未初期化」と区別が付かないため別途持つ。 */
 static uint8 CanSM_Initialized = 0U;
 
+/* ======================================================================
+ * Function Prototypes
+ * ====================================================================== */
+
+/* ======================================================================
+ * Functions
+ * ====================================================================== */
+
+/* ----------------------------------------------------------------------
+ * CanSM_Init
+ * ---------------------------------------------------------------------- */
+
 /**
  * \brief   CanSM モジュールを初期化する。
  *
@@ -189,6 +217,10 @@ void CanSM_Init(const CanSM_ConfigType* ConfigPtr)
     DET_LOGI(TAG, "Init");
 }
 
+/* ----------------------------------------------------------------------
+ * CanSM_DeInit
+ * ---------------------------------------------------------------------- */
+
 void CanSM_DeInit(void)
 {
     DET_LOGT(TAG, "called");
@@ -202,6 +234,10 @@ void CanSM_DeInit(void)
     CanSM_Initialized = 0U;
     DET_LOGI(TAG, "DeInit ok");
 }
+
+/* ----------------------------------------------------------------------
+ * CanSM_SetPduModeOnlineBestEffort
+ * ---------------------------------------------------------------------- */
 
 /**
  * \brief   FULL_COM 確定直前に CanIf の PDU モードを CANIF_ONLINE へ戻す
@@ -226,6 +262,10 @@ static void CanSM_SetPduModeOnlineBestEffort(const char* callerTag)
         DET_LOGE(TAG, "%s E: CanIf_SetPduMode(ONLINE) failed, proceeding anyway", callerTag);
     }
 }
+
+/* ----------------------------------------------------------------------
+ * CanSM_RequestComMode
+ * ---------------------------------------------------------------------- */
 
 /**
  * \brief   ネットワークの通信モード遷移を要求する。
@@ -344,6 +384,10 @@ Std_ReturnType CanSM_RequestComMode(NetworkHandleType network, ComM_ModeType mod
     return E_OK;
 }
 
+/* ----------------------------------------------------------------------
+ * CanSM_GetCurrentComMode
+ * ---------------------------------------------------------------------- */
+
 /**
  * \brief   ネットワークの現在の通信モードを取得する。
  *
@@ -383,6 +427,10 @@ Std_ReturnType CanSM_GetCurrentComMode(NetworkHandleType network, ComM_ModeType*
     }
     return E_OK;
 }
+
+/* ----------------------------------------------------------------------
+ * CanSM_ControllerBusOff
+ * ---------------------------------------------------------------------- */
 
 /**
  * \brief   Bus-Off 通知コールバック（CanIf → CanSM の通知経路）。
@@ -488,6 +536,10 @@ void CanSM_ControllerBusOff(uint8 ControllerId)
              inL2 ? (unsigned long)CANSM_BUSOFF_RECOVERY_L2_MS : (unsigned long)CANSM_BUSOFF_RECOVERY_L1_MS);
 }
 
+/* ----------------------------------------------------------------------
+ * CanSM_ControllerModeIndication
+ * ---------------------------------------------------------------------- */
+
 /**
  * \brief   コントローラモード変化通知コールバック（[SWS_CanSM_00396]）。旧
  *          `CanSM_ControllerWakeup`（2026-09-05、実仕様名・シグネチャへ
@@ -578,6 +630,10 @@ void CanSM_ControllerModeIndication(uint8 ControllerId, Can_ControllerStateType 
     CanSM_ValidationTimerMs = millis();
 }
 
+/* ----------------------------------------------------------------------
+ * CanSM_RxIndication
+ * ---------------------------------------------------------------------- */
+
 /**
  * \brief   受信通知コールバック（CanIf から全受信フレームについて呼び出される）。
  *
@@ -641,6 +697,10 @@ void CanSM_RxIndication(uint8 ControllerId)
     (void)Dem_SetEventStatus(DEM_EVENT_CAN_BUSOFF, DEM_EVENT_STATUS_PASSED);
     ComM_BusSM_ModeIndication(0U, COMM_FULL_COMMUNICATION);
 }
+
+/* ----------------------------------------------------------------------
+ * CanSM_MainFunction
+ * ---------------------------------------------------------------------- */
 
 /**
  * \brief   CanSM 周期処理（Bus-Off 回復タイマ管理）。
@@ -787,6 +847,10 @@ void CanSM_MainFunction(void)
     }
     /* 再度 Bus-Off が発生すれば CanIf → CanSM_ControllerBusOff() が呼ばれる */
 }
+
+/* ----------------------------------------------------------------------
+ * CanSM_GetVersionInfo
+ * ---------------------------------------------------------------------- */
 
 void CanSM_GetVersionInfo(Std_VersionInfoType* VersionInfo)
 {

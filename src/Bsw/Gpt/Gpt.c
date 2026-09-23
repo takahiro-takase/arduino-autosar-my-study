@@ -24,12 +24,25 @@
  * \note    本ファイルは AUTOSAR 4.3.1 仕様を参考にした学習用実装です。
  *          AUTOSAR 認証済み実装ではなく、製品への適用は想定していません。
  */
+
+/* ======================================================================
+ * Includes
+ * ====================================================================== */
+
 #include "Gpt.h"
 #include "Gpt_Hw.h"
 #include "SchM.h"
 #include "Det.h"
 
+/* ======================================================================
+ * Definitions
+ * ====================================================================== */
+
 #define TAG "Gpt"
+
+/* ======================================================================
+ * Type Definitions
+ * ====================================================================== */
 
 /** チャネル状態機械（Gpt.h 冒頭のコメント参照）。 */
 typedef enum
@@ -39,6 +52,10 @@ typedef enum
     GPT_CH_STATE_STOPPED,
     GPT_CH_STATE_EXPIRED            /**< ONESHOT のみ: 目標時間到達で自動停止 */
 } Gpt_ChannelStateType;
+
+/* ======================================================================
+ * Global Variables
+ * ====================================================================== */
 
 static const Gpt_ConfigType* Gpt_Cfg = NULL;
 
@@ -56,9 +73,21 @@ static volatile Gpt_ValueType        Gpt_TargetValue[GPT_CHANNEL_COUNT];
  *  保持するための別配列は不要）。 */
 static volatile Gpt_ValueType        Gpt_ElapsedTicks[GPT_CHANNEL_COUNT];
 
+/* ======================================================================
+ * Function Prototypes
+ * ====================================================================== */
+
+/* ======================================================================
+ * Functions
+ * ====================================================================== */
+
 /* -----------------------------------------------------------------------
  * 内部ヘルパ
  * ----------------------------------------------------------------------- */
+
+/* ----------------------------------------------------------------------
+ * Gpt_IsValidChannel
+ * ---------------------------------------------------------------------- */
 
 static uint8 Gpt_IsValidChannel(Gpt_ChannelType Channel)
 {
@@ -69,6 +98,10 @@ static uint8 Gpt_IsValidChannel(Gpt_ChannelType Channel)
 /* -----------------------------------------------------------------------
  * Gpt_Hw から呼ばれる ISR コンテキスト関数
  * ----------------------------------------------------------------------- */
+
+/* ----------------------------------------------------------------------
+ * Gpt_OnTick
+ * ---------------------------------------------------------------------- */
 
 /**
  * \brief   Gpt_Hw 層の HW タイマ割り込みから、チャネルの TickFrequencyHz
@@ -110,6 +143,10 @@ void Gpt_OnTick(Gpt_ChannelType Channel)
 /* -----------------------------------------------------------------------
  * 公開 API
  * ----------------------------------------------------------------------- */
+
+/* ----------------------------------------------------------------------
+ * Gpt_Init
+ * ---------------------------------------------------------------------- */
 
 void Gpt_Init(const Gpt_ConfigType* ConfigPtr)
 {
@@ -154,6 +191,10 @@ void Gpt_Init(const Gpt_ConfigType* ConfigPtr)
     DET_LOGI(TAG, "Init ok channels=%u", (unsigned)ConfigPtr->ChannelCount);
 }
 
+/* ----------------------------------------------------------------------
+ * Gpt_DeInit
+ * ---------------------------------------------------------------------- */
+
 void Gpt_DeInit(void)
 {
     DET_LOGT(TAG, "called");
@@ -177,6 +218,10 @@ void Gpt_DeInit(void)
 
     DET_LOGI(TAG, "DeInit ok");
 }
+
+/* ----------------------------------------------------------------------
+ * Gpt_GetTimeElapsed
+ * ---------------------------------------------------------------------- */
 
 Gpt_ValueType Gpt_GetTimeElapsed(Gpt_ChannelType Channel)
 {
@@ -204,6 +249,10 @@ Gpt_ValueType Gpt_GetTimeElapsed(Gpt_ChannelType Channel)
     return result;
 }
 
+/* ----------------------------------------------------------------------
+ * Gpt_GetTimeRemaining
+ * ---------------------------------------------------------------------- */
+
 Gpt_ValueType Gpt_GetTimeRemaining(Gpt_ChannelType Channel)
 {
     DET_LOGT(TAG, "called");
@@ -228,6 +277,10 @@ Gpt_ValueType Gpt_GetTimeRemaining(Gpt_ChannelType Channel)
     SchM_Exit_Gpt_CHANNEL_EXCLUSIVE_AREA();
     return result;
 }
+
+/* ----------------------------------------------------------------------
+ * Gpt_StartTimer
+ * ---------------------------------------------------------------------- */
 
 void Gpt_StartTimer(Gpt_ChannelType Channel, Gpt_ValueType Value)
 {
@@ -289,6 +342,10 @@ void Gpt_StartTimer(Gpt_ChannelType Channel, Gpt_ValueType Value)
     DET_LOGI(TAG, "StartTimer ch=%u value=%lu", (unsigned)Channel, (unsigned long)Value);
 }
 
+/* ----------------------------------------------------------------------
+ * Gpt_StopTimer
+ * ---------------------------------------------------------------------- */
+
 void Gpt_StopTimer(Gpt_ChannelType Channel)
 {
     DET_LOGT(TAG, "called");
@@ -325,6 +382,10 @@ void Gpt_StopTimer(Gpt_ChannelType Channel)
     DET_LOGI(TAG, "StopTimer ch=%u elapsed=%lu", (unsigned)Channel, (unsigned long)Gpt_ElapsedTicks[Channel]);
 }
 
+/* ----------------------------------------------------------------------
+ * Gpt_EnableNotification
+ * ---------------------------------------------------------------------- */
+
 void Gpt_EnableNotification(Gpt_ChannelType Channel)
 {
     DET_LOGT(TAG, "called");
@@ -342,6 +403,10 @@ void Gpt_EnableNotification(Gpt_ChannelType Channel)
     Gpt_NotificationEnabled[Channel] = 1U;
 }
 
+/* ----------------------------------------------------------------------
+ * Gpt_DisableNotification
+ * ---------------------------------------------------------------------- */
+
 void Gpt_DisableNotification(Gpt_ChannelType Channel)
 {
     DET_LOGT(TAG, "called");
@@ -358,6 +423,10 @@ void Gpt_DisableNotification(Gpt_ChannelType Channel)
 
     Gpt_NotificationEnabled[Channel] = 0U;
 }
+
+/* ----------------------------------------------------------------------
+ * Gpt_GetVersionInfo
+ * ---------------------------------------------------------------------- */
 
 void Gpt_GetVersionInfo(Std_VersionInfoType* versioninfo)
 {

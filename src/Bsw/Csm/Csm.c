@@ -8,6 +8,11 @@
  * \note    本ファイルは AUTOSAR 4.3.1 仕様を参考にした学習用実装です。
  *          AUTOSAR 認証済み実装ではなく、製品への適用は想定していません。
  */
+
+/* ======================================================================
+ * Includes
+ * ====================================================================== */
+
 #include "Csm.h"
 #include "Csm_PBCfg.h"
 #include "CryIf.h"
@@ -15,9 +20,33 @@
 #include "Crypto_Cmac.h"
 #include "Det.h"
 
+/* ======================================================================
+ * Definitions
+ * ====================================================================== */
+
 #define TAG "Csm"
 
+/* ======================================================================
+ * Type Definitions
+ * ====================================================================== */
+
+/* ======================================================================
+ * Global Variables
+ * ====================================================================== */
+
 static uint8 Csm_Initialized = 0U;
+
+/* ======================================================================
+ * Function Prototypes
+ * ====================================================================== */
+
+/* ======================================================================
+ * Functions
+ * ====================================================================== */
+
+/* ----------------------------------------------------------------------
+ * Csm_FindJob
+ * ---------------------------------------------------------------------- */
 
 /**
  * \brief   Csm_JobConfigData から jobId かつ期待するプリミティブ種別に
@@ -37,11 +66,19 @@ static const Csm_JobConfigType* Csm_FindJob(uint32 jobId, Crypto_ServiceInfoType
     return NULL;
 }
 
+/* ----------------------------------------------------------------------
+ * Csm_Init
+ * ---------------------------------------------------------------------- */
+
 void Csm_Init(void)
 {
     Csm_Initialized = 1U;
     DET_LOGI(TAG, "Init ok jobs=%u", (unsigned)CSM_JOB_COUNT);
 }
+
+/* ----------------------------------------------------------------------
+ * Csm_GetVersionInfo
+ * ---------------------------------------------------------------------- */
 
 void Csm_GetVersionInfo(Std_VersionInfoType* versioninfo)
 {
@@ -64,6 +101,10 @@ void Csm_GetVersionInfo(Std_VersionInfoType* versioninfo)
     versioninfo->sw_minor_version = CSM_SW_MINOR_VERSION;
     versioninfo->sw_patch_version = CSM_SW_PATCH_VERSION;
 }
+
+/* ----------------------------------------------------------------------
+ * Csm_MacGenerate
+ * ---------------------------------------------------------------------- */
 
 Std_ReturnType Csm_MacGenerate(uint32 jobId, Crypto_OperationModeType mode,
                                 const uint8* dataPtr, uint32 dataLength,
@@ -140,6 +181,10 @@ Std_ReturnType Csm_MacGenerate(uint32 jobId, Crypto_OperationModeType mode,
     return ret;
 }
 
+/* ----------------------------------------------------------------------
+ * Csm_MacVerify
+ * ---------------------------------------------------------------------- */
+
 Std_ReturnType Csm_MacVerify(uint32 jobId, Crypto_OperationModeType mode,
                               const uint8* dataPtr, uint32 dataLength,
                               const uint8* macPtr, uint32 macLength,
@@ -198,6 +243,10 @@ Std_ReturnType Csm_MacVerify(uint32 jobId, Crypto_OperationModeType mode,
     return CryIf_ProcessJob(CRYIF_CHANNEL_ID, &job);
 }
 
+/* ----------------------------------------------------------------------
+ * Csm_KeyElementSet
+ * ---------------------------------------------------------------------- */
+
 Std_ReturnType Csm_KeyElementSet(uint32 keyId, uint32 keyElementId,
                                   const uint8* keyPtr, uint32 keyLength)
 {
@@ -244,6 +293,10 @@ Std_ReturnType Csm_KeyElementSet(uint32 keyId, uint32 keyElementId,
     return CryIf_KeyElementSet(keyId, keyElementId, keyPtr, keyLength);
 }
 
+/* ----------------------------------------------------------------------
+ * Csm_KeySetValid
+ * ---------------------------------------------------------------------- */
+
 Std_ReturnType Csm_KeySetValid(uint32 keyId)
 {
     DET_LOGT(TAG, "called");
@@ -272,6 +325,10 @@ Std_ReturnType Csm_KeySetValid(uint32 keyId)
     /* [SWS_Csm_01003]: 単一 CryIf チャネルへの実質パススルー。 */
     return CryIf_KeySetValid(keyId);
 }
+
+/* ----------------------------------------------------------------------
+ * Csm_KeyElementGet
+ * ---------------------------------------------------------------------- */
 
 Std_ReturnType Csm_KeyElementGet(uint32 keyId, uint32 keyElementId,
                                   uint8* keyPtr, uint32* keyLengthPtr)
