@@ -1,6 +1,6 @@
 /**
  * \file    Wrap_Dcm.c
- * \brief   `src/Bsw/Dcm/Dcm_Cbk.c` 内の関数を対象とした wrap 実体
+ * \brief   `src/Bsw/Dcm/Dcm.c` 内の関数を対象とした wrap 実体
  *          （Wrap_Dcm.h 参照）。
  */
 
@@ -81,7 +81,7 @@ void WrapDcm_Reset(void)
 }
 
 /* ======================================================================
- * Functions
+ * Functions provided for other BSW components
  * ====================================================================== */
 
 /* ----------------------------------------------------------------------
@@ -99,18 +99,24 @@ void __wrap_Dcm_Init(const Dcm_ConfigType* ConfigPtr)
 }
 
 /* ----------------------------------------------------------------------
- * Dcm_MainFunction
+ * Dcm_GetVersionInfo
  * ---------------------------------------------------------------------- */
 
 extern
-void __real_Dcm_MainFunction(void);
-void __wrap_Dcm_MainFunction(void)
+void __real_Dcm_GetVersionInfo(Std_VersionInfoType* versioninfo);
+void __wrap_Dcm_GetVersionInfo(Std_VersionInfoType* versioninfo)
 {
-    CallCount_Dcm_MainFunction++;
-    Log_Write(LOG_T, TAG, "Dcm_MainFunction", "called %u times", CallCount_Dcm_MainFunction);
+    CallCount_Dcm_GetVersionInfo++;
+    Log_Write(LOG_T, TAG, "Dcm_GetVersionInfo", "called %u times", CallCount_Dcm_GetVersionInfo);
 
-    __real_Dcm_MainFunction();
+    __real_Dcm_GetVersionInfo(versioninfo);
 }
+
+/* -----------------------------------------------------------------------
+ * Dcm_DemTriggerOnDTCStatus
+ * ----------------------------------------------------------------------- */
+
+/* 未実装 */
 
 /* ----------------------------------------------------------------------
  * Dcm_GetVin
@@ -131,24 +137,9 @@ Std_ReturnType __wrap_Dcm_GetVin(uint8* Data)
     return __real_Dcm_GetVin(Data);
 }
 
-/* ----------------------------------------------------------------------
- * Dcm_GetSesCtrlType
- * ---------------------------------------------------------------------- */
-
-extern
-Std_ReturnType __real_Dcm_GetSesCtrlType(Dcm_SesCtrlType* SesCtrlType);
-Std_ReturnType __wrap_Dcm_GetSesCtrlType(Dcm_SesCtrlType* SesCtrlType)
-{
-    CallCount_Dcm_GetSesCtrlType++;
-    Log_Write(LOG_T, TAG, "Dcm_GetSesCtrlType", "called %u times", CallCount_Dcm_GetSesCtrlType);
-
-    if (CallCount_Dcm_GetSesCtrlType >= FailFromCallCount_Dcm_GetSesCtrlType)
-    {
-        return ForcedReturn_Dcm_GetSesCtrlType;
-    }
-
-    return __real_Dcm_GetSesCtrlType(SesCtrlType);
-}
+/* ======================================================================
+ * Functions provided to BSW modules and to SW-Cs
+ * ====================================================================== */
 
 /* ----------------------------------------------------------------------
  * Dcm_GetSecurityLevel
@@ -167,6 +158,25 @@ Std_ReturnType __wrap_Dcm_GetSecurityLevel(Dcm_SecLevelType* SecLevel)
     }
 
     return __real_Dcm_GetSecurityLevel(SecLevel);
+}
+
+/* ----------------------------------------------------------------------
+ * Dcm_GetSesCtrlType
+ * ---------------------------------------------------------------------- */
+
+extern
+Std_ReturnType __real_Dcm_GetSesCtrlType(Dcm_SesCtrlType* SesCtrlType);
+Std_ReturnType __wrap_Dcm_GetSesCtrlType(Dcm_SesCtrlType* SesCtrlType)
+{
+    CallCount_Dcm_GetSesCtrlType++;
+    Log_Write(LOG_T, TAG, "Dcm_GetSesCtrlType", "called %u times", CallCount_Dcm_GetSesCtrlType);
+
+    if (CallCount_Dcm_GetSesCtrlType >= FailFromCallCount_Dcm_GetSesCtrlType)
+    {
+        return ForcedReturn_Dcm_GetSesCtrlType;
+    }
+
+    return __real_Dcm_GetSesCtrlType(SesCtrlType);
 }
 
 /* ----------------------------------------------------------------------
@@ -207,19 +217,149 @@ Std_ReturnType __wrap_Dcm_ResetToDefaultSession(void)
     return __real_Dcm_ResetToDefaultSession();
 }
 
+/* -----------------------------------------------------------------------
+ * Dcm_TriggerOnEvent
+ * ----------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* -----------------------------------------------------------------------
+ * Dcm_SetActiveDiagnostic
+ * ----------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ======================================================================
+ * Callback notifications
+ * ====================================================================== */
+
+/* -----------------------------------------------------------------------
+ * Dcm_StartOfReception
+ * ----------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* -----------------------------------------------------------------------
+ * Dcm_CopyRxData
+ * ----------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* -----------------------------------------------------------------------
+ * Dcm_TpRxIndication
+ * ----------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* -----------------------------------------------------------------------
+ * Dcm_CopyTxData
+ * ----------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* -----------------------------------------------------------------------
+ * Dcm_TpTxConfirmation
+ * ----------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* -----------------------------------------------------------------------
+ * Dcm_TxConfirmation
+ * ----------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* -----------------------------------------------------------------------
+ * Dcm_ComM_NoComModeEntered
+ * ----------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* -----------------------------------------------------------------------
+ * Dcm_ComM_SilentComModeEntered
+ * ----------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* -----------------------------------------------------------------------
+ * Dcm_ComM_FullComModeEntered
+ * ----------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ======================================================================
+ * Callout Definitions
+ * ====================================================================== */
+
+/* -----------------------------------------------------------------------
+ * Dcm_ReadMemory
+ * ----------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* -----------------------------------------------------------------------
+ * Dcm_WriteMemory
+ * ----------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* -----------------------------------------------------------------------
+ * Dcm_SetProgConditions
+ * ----------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* -----------------------------------------------------------------------
+ * Dcm_GetProgConditions
+ * ----------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* -----------------------------------------------------------------------
+ * Dcm_ProcessRequestTransferExit
+ * ----------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* -----------------------------------------------------------------------
+ * Dcm_ProcessRequestUpload
+ * ----------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* -----------------------------------------------------------------------
+ * Dcm_ProcessRequestDownload
+ * ----------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* -----------------------------------------------------------------------
+ * Dcm_ProcessRequestFileTransfer
+ * ----------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ======================================================================
+ * Scheduled functions
+ * ====================================================================== */
+
 /* ----------------------------------------------------------------------
- * Dcm_GetVersionInfo
+ * Dcm_MainFunction
  * ---------------------------------------------------------------------- */
 
 extern
-void __real_Dcm_GetVersionInfo(Std_VersionInfoType* versioninfo);
-void __wrap_Dcm_GetVersionInfo(Std_VersionInfoType* versioninfo)
+void __real_Dcm_MainFunction(void);
+void __wrap_Dcm_MainFunction(void)
 {
-    CallCount_Dcm_GetVersionInfo++;
-    Log_Write(LOG_T, TAG, "Dcm_GetVersionInfo", "called %u times", CallCount_Dcm_GetVersionInfo);
+    CallCount_Dcm_MainFunction++;
+    Log_Write(LOG_T, TAG, "Dcm_MainFunction", "called %u times", CallCount_Dcm_MainFunction);
 
-    __real_Dcm_GetVersionInfo(versioninfo);
+    __real_Dcm_MainFunction();
 }
+
+/* ======================================================================
+ * Internal functions
+ * ====================================================================== */
 
 /* ----------------------------------------------------------------------
  * Dcm_ComIndication

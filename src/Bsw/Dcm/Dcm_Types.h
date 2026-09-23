@@ -28,7 +28,7 @@ extern "C" {
  *          communicationType（normal/networkManagement/両方、3 通り）の
  *          全 12 通りの組み合わせを表す。値は
  *          `controlType + (communicationType - 1) * 4` で一意に決まる
- *          （`DCM_COMMCTRL_*`/`DCM_COMMTYPE_*` は `Dcm_Cbk.c` 参照）。
+ *          （`DCM_COMMCTRL_*`/`DCM_COMMTYPE_*` は `Dcm.c` 参照）。
  *          `BswM_Dcm_CommunicationMode_CurrentState()` へ渡す。
  */
 typedef uint8 Dcm_CommunicationModeType;

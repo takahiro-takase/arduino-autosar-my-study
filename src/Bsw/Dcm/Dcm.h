@@ -39,7 +39,7 @@ typedef uint8 Dcm_SesCtrlType;
  * \details 実仕様は `SecurityLevel = (SecurityAccessType + 1) / 2` という
  *          変換式を規定するが、本プロジェクトは SecurityAccess Level1 のみ
  *          対応する簡略実装のため、内部状態をそのまま 0(Locked)/1(Unlocked)
- *          の2値で表す（`Dcm_Cbk.c` の `Dcm_SecurityLevel` 参照）。
+ *          の2値で表す（`Dcm.c` の `Dcm_SecurityLevel` 参照）。
  */
 typedef uint8 Dcm_SecLevelType;
 

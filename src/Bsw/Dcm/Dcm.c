@@ -1,7 +1,17 @@
 /**
- * \file    Dcm_Cbk.c
+ * \file    Dcm.c
  * \brief   DCM モジュール実装 (AUTOSAR SWS_DCM 準拠, UDS ISO 14229-1)
- * \details CanTp から配信された UDS 診断ペイロードを解析し、
+ * \details `Dcm.h` が宣言する標準API全8関数（`Dcm_Init`/`Dcm_MainFunction`等）
+ *          と、`Dcm_Cbk.h` が宣言する受信コールバック `Dcm_ComIndication`
+ *          （SIDディスパッチ本体）を、本ファイル1つにまとめて実装する
+ *          （2026-09、旧ファイル名 `Dcm_Cbk.c` から改名。`Dcm_MainFunction`等の
+ *          標準API群が「コールバック専用のはず」の名前のファイルに入っている
+ *          ことへの指摘を受け、実装は1ファイルのまま、モジュール名と一致する
+ *          `Dcm.c` へ改名した。AUTOSAR SWS_Dcm 自体はソースファイル名を
+ *          "Dcm*.c" とワイルドカードで記載しており、複数ヘッダの実装を
+ *          1ファイルで担う構成自体は仕様の対象外かつ一般的なパターン）。
+ *
+ *          CanTp から配信された UDS 診断ペイロードを解析し、
  *          以下の UDS サービスを処理して CAN 0x7E8 で応答する。
  *
  *          対応サービス:
@@ -146,6 +156,10 @@
  *          AUTOSAR 認証済み実装ではなく、製品への適用は想定していません。
  */
 
+/* ======================================================================
+ * Includes
+ * ====================================================================== */
+
 #include "Dcm.h"
 #include "Dcm_Cfg.h"
 #include "Dem.h"
@@ -157,10 +171,19 @@
 #include "BswM.h"
 #include "Det.h"
 
-/* millis() is declared in Arduino wiring.c with C linkage. */
-extern unsigned long millis(void);
+/* ======================================================================
+ * Definitions
+ * ====================================================================== */
 
 #define TAG "Dcm"
+
+/* ======================================================================
+ * Type Definitions
+ * ====================================================================== */
+
+/* ======================================================================
+ * External Variables
+ * ====================================================================== */
 
 /* -----------------------------------------------------------------------
  * モジュール内部状態
@@ -286,6 +309,13 @@ static uint8 Dcm_Vin[DCM_VIN_LENGTH];
 /** CanTp_Transmit に渡す PDU 情報構造体 */
 static PduInfoType Dcm_TxPdu;
 
+/* ======================================================================
+ * Function Prototypes
+ * ====================================================================== */
+
+/* millis() is declared in Arduino wiring.c with C linkage. */
+extern unsigned long millis(void);
+
 /* -----------------------------------------------------------------------
  * 内部関数プロトタイプ
  * ----------------------------------------------------------------------- */
@@ -326,6 +356,10 @@ static void Dcm_HandleRequestDownload(const uint8* uds, uint8 udsLen);
 static void Dcm_HandleTransferData(const uint8* uds, uint8 udsLen);
 static void Dcm_HandleRequestTransferExit(const uint8* uds, uint8 udsLen);
 static void Dcm_TransferAbort(void);
+
+/* ======================================================================
+ * Functions provided for other BSW components
+ * ====================================================================== */
 
 /* -----------------------------------------------------------------------
  * Dcm_Init
@@ -368,6 +402,47 @@ void Dcm_Init(const Dcm_ConfigType* ConfigPtr)
     DET_LOGI(TAG, "Init ok");
 }
 
+/* -----------------------------------------------------------------------
+ * Dcm_GetVersionInfo
+ * ----------------------------------------------------------------------- */
+
+/**
+ * \brief   DCM モジュールのバージョン情報を取得する。
+ *
+ * \details Dcm_Init と並び、未初期化時でも DCM_E_UNINIT を報告しない
+ *          例外 API（他 BSW モジュールと共通の慣例）のため、初期化状態は
+ *          確認せず NULL ポインタチェックのみ行う。
+ *
+ * \ServiceID      {0x24}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void Dcm_GetVersionInfo(Std_VersionInfoType* versioninfo)
+{
+    DET_LOGT(TAG, "called");
+    if (versioninfo == NULL)
+    {
+        Det_ReportError(DCM_MODULE_ID, 0U, DCM_API_ID_GET_VERSION_INFO, DCM_E_PARAM_POINTER);
+        return;
+    }
+
+    versioninfo->vendorID         = DCM_VENDOR_ID;
+    versioninfo->moduleID         = DCM_MODULE_ID;
+    versioninfo->sw_major_version = DCM_SW_MAJOR_VERSION;
+    versioninfo->sw_minor_version = DCM_SW_MINOR_VERSION;
+    versioninfo->sw_patch_version = DCM_SW_PATCH_VERSION;
+}
+
+/* -----------------------------------------------------------------------
+ * Dcm_DemTriggerOnDTCStatus
+ * ----------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* -----------------------------------------------------------------------
+ * Dcm_GetVin
+ * ----------------------------------------------------------------------- */
+
 /**
  * \brief   VIN (Vehicle Identification Number) を取得する（[SWS_Dcm_00950]）。
  *
@@ -397,32 +472,13 @@ Std_ReturnType Dcm_GetVin(uint8* Data)
     return E_OK;
 }
 
-/**
- * \brief   現在アクティブなセッション制御タイプを取得する。
- *
- * \AUTOSARReq     {SWS_Dcm_00339}
- * \ServiceID      {0x06}
- * \Reentrancy     {Reentrant}
- * \Synchronicity  {Synchronous}
- */
-Std_ReturnType Dcm_GetSesCtrlType(Dcm_SesCtrlType* SesCtrlType)
-{
-    DET_LOGT(TAG, "called");
-    if (!Dcm_Initialized)
-    {
-        Det_ReportError(DCM_MODULE_ID, 0U, DCM_API_ID_GET_SES_CTRL_TYPE, DCM_E_UNINIT);
-        return E_NOT_OK;
-    }
+/* ======================================================================
+ * Functions provided to BSW modules and to SW-Cs
+ * ====================================================================== */
 
-    if (SesCtrlType == NULL)
-    {
-        Det_ReportError(DCM_MODULE_ID, 0U, DCM_API_ID_GET_SES_CTRL_TYPE, DCM_E_PARAM_POINTER);
-        return E_NOT_OK;
-    }
-
-    *SesCtrlType = Dcm_CurrentSession;
-    return E_OK;
-}
+/* -----------------------------------------------------------------------
+ * Dcm_GetSecurityLevel
+ * ----------------------------------------------------------------------- */
 
 /**
  * \brief   現在アクティブなセキュリティレベルを取得する。
@@ -450,6 +506,41 @@ Std_ReturnType Dcm_GetSecurityLevel(Dcm_SecLevelType* SecLevel)
     *SecLevel = Dcm_SecurityLevel;
     return E_OK;
 }
+
+/* -----------------------------------------------------------------------
+ * Dcm_GetSesCtrlType
+ * ----------------------------------------------------------------------- */
+
+/**
+ * \brief   現在アクティブなセッション制御タイプを取得する。
+ *
+ * \AUTOSARReq     {SWS_Dcm_00339}
+ * \ServiceID      {0x06}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType Dcm_GetSesCtrlType(Dcm_SesCtrlType* SesCtrlType)
+{
+    DET_LOGT(TAG, "called");
+    if (!Dcm_Initialized)
+    {
+        Det_ReportError(DCM_MODULE_ID, 0U, DCM_API_ID_GET_SES_CTRL_TYPE, DCM_E_UNINIT);
+        return E_NOT_OK;
+    }
+
+    if (SesCtrlType == NULL)
+    {
+        Det_ReportError(DCM_MODULE_ID, 0U, DCM_API_ID_GET_SES_CTRL_TYPE, DCM_E_PARAM_POINTER);
+        return E_NOT_OK;
+    }
+
+    *SesCtrlType = Dcm_CurrentSession;
+    return E_OK;
+}
+
+/* -----------------------------------------------------------------------
+ * Dcm_GetActiveProtocol
+ * ----------------------------------------------------------------------- */
 
 /**
  * \brief   現在アクティブなプロトコル・コネクション・テスター送信元アドレスを取得する。
@@ -494,32 +585,9 @@ Std_ReturnType Dcm_GetActiveProtocol(Dcm_ProtocolType* ActiveProtocolType, uint1
     return E_OK;
 }
 
-/**
- * \brief   DCM モジュールのバージョン情報を取得する。
- *
- * \details Dcm_Init と並び、未初期化時でも DCM_E_UNINIT を報告しない
- *          例外 API（他 BSW モジュールと共通の慣例）のため、初期化状態は
- *          確認せず NULL ポインタチェックのみ行う。
- *
- * \ServiceID      {0x24}
- * \Reentrancy     {Reentrant}
- * \Synchronicity  {Synchronous}
- */
-void Dcm_GetVersionInfo(Std_VersionInfoType* versioninfo)
-{
-    DET_LOGT(TAG, "called");
-    if (versioninfo == NULL)
-    {
-        Det_ReportError(DCM_MODULE_ID, 0U, DCM_API_ID_GET_VERSION_INFO, DCM_E_PARAM_POINTER);
-        return;
-    }
-
-    versioninfo->vendorID         = DCM_VENDOR_ID;
-    versioninfo->moduleID         = DCM_MODULE_ID;
-    versioninfo->sw_major_version = DCM_SW_MAJOR_VERSION;
-    versioninfo->sw_minor_version = DCM_SW_MINOR_VERSION;
-    versioninfo->sw_patch_version = DCM_SW_PATCH_VERSION;
-}
+/* -----------------------------------------------------------------------
+ * Dcm_ResetToDefaultSession
+ * ----------------------------------------------------------------------- */
 
 /**
  * \brief   現在のセッションを defaultSession へ強制的に戻す。
@@ -560,6 +628,136 @@ Std_ReturnType Dcm_ResetToDefaultSession(void)
     Dcm_UpdateComMRequest(DCM_SESSION_DEFAULT);
     return E_OK;
 }
+
+/* -----------------------------------------------------------------------
+ * Dcm_TriggerOnEvent
+ * ----------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* -----------------------------------------------------------------------
+ * Dcm_SetActiveDiagnostic
+ * ----------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ======================================================================
+ * Callback notifications
+ * ====================================================================== */
+
+/* -----------------------------------------------------------------------
+ * Dcm_StartOfReception
+ * ----------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* -----------------------------------------------------------------------
+ * Dcm_CopyRxData
+ * ----------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* -----------------------------------------------------------------------
+ * Dcm_TpRxIndication
+ * ----------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* -----------------------------------------------------------------------
+ * Dcm_CopyTxData
+ * ----------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* -----------------------------------------------------------------------
+ * Dcm_TpTxConfirmation
+ * ----------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* -----------------------------------------------------------------------
+ * Dcm_TxConfirmation
+ * ----------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* -----------------------------------------------------------------------
+ * Dcm_ComM_NoComModeEntered
+ * ----------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* -----------------------------------------------------------------------
+ * Dcm_ComM_SilentComModeEntered
+ * ----------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* -----------------------------------------------------------------------
+ * Dcm_ComM_FullComModeEntered
+ * ----------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ======================================================================
+ * Callout Definitions
+ * ====================================================================== */
+
+/* -----------------------------------------------------------------------
+ * Dcm_ReadMemory
+ * ----------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* -----------------------------------------------------------------------
+ * Dcm_WriteMemory
+ * ----------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* -----------------------------------------------------------------------
+ * Dcm_SetProgConditions
+ * ----------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* -----------------------------------------------------------------------
+ * Dcm_GetProgConditions
+ * ----------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* -----------------------------------------------------------------------
+ * Dcm_ProcessRequestTransferExit
+ * ----------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* -----------------------------------------------------------------------
+ * Dcm_ProcessRequestUpload
+ * ----------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* -----------------------------------------------------------------------
+ * Dcm_ProcessRequestDownload
+ * ----------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* -----------------------------------------------------------------------
+ * Dcm_ProcessRequestFileTransfer
+ * ----------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ======================================================================
+ * Scheduled functions
+ * ====================================================================== */
+
+/* ----------------------------------------------------------------------
+ * Dcm_MainFunction
+ * ---------------------------------------------------------------------- */
 
 /**
  * \brief   DCM 周期処理。S3 タイマ (セッションタイムアウト) を監視する。
@@ -629,6 +827,10 @@ void Dcm_MainFunction(void)
         (void)Dcm_ResetToDefaultSession();
     }
 }
+
+/* ======================================================================
+ * Internal functions
+ * ====================================================================== */
 
 /**
  * \brief   セッション状態に応じて ComM への診断アクティブ通知を更新する。
@@ -2781,7 +2983,7 @@ typedef struct
  *  0x34/0x36/0x37 (RequestDownload/TransferData/RequestTransferExit) は
  *  0x14/0x2E と同じ「誤操作・悪用の影響が大きい」保護レベルのため
  *  extendedSession 限定とする（SecurityAccess は 0x34 のみで判定する。
- *  Dcm_Cbk.c 冒頭のコメント参照）。
+ *  Dcm.c 冒頭のコメント参照）。
  *  0x85 (ControlDTCSetting) も 0x28/0x2F/0x31 と同じ保護レベル
  *  （DTC 記録という診断上重要な機能への操作的な影響はあるが、車両制御や
  *  NVM 書き換えは伴わないため SecurityAccess までは要求しない）で

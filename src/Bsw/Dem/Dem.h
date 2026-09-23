@@ -504,7 +504,7 @@ Std_ReturnType Dem_GetOccurrenceCounterOfEvent(Dem_EventIdType EventId, uint8* C
  *
  * \details DCM SID 0x19 subFunc 0x01（reportNumberOfDTCByStatusMask）の
  *          応答に含まれる DTCFormatIdentifier バイトの取得元
- *          （[SWS_Dcm_00376]、Dcm_Cbk.c 参照）。エラー戻り値の定義が
+ *          （[SWS_Dcm_00376]、Dcm.c 参照）。エラー戻り値の定義が
  *          実仕様に存在しないため
  *          （[SWS_Dem_00231]）、ClientId・初期化状態に関わらず常に
  *          `DEM_DTC_TRANSLATION_ISO14229_1` を返す（本プロジェクトが

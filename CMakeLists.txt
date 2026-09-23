@@ -125,6 +125,15 @@
 # （stub/Bsw/ComM/Wrap_ComM.c参照。CanIf/E2E/Dem の wrap とは異なり、
 # 既定パススルーではなく常時no-op という特殊ケース）。
 #
+# 2026-09、上記時点ではファイル名が Dcm_Cbk.c だったが、Dcm.h の標準API全8関数
+# （Dcm_Init/Dcm_MainFunction 等）を含む実装全体を1ファイルに持つ構成自体は
+# 変えず、ファイル名のみ Dcm.c へ改名した（Dcm_MainFunction 等が
+# 「コールバック専用のはず」の Dcm_Cbk.c という名前のファイルに入っている
+# ことへのユーザー指摘。Dcm.h/Dcm_Cbk.h の2ヘッダを実装は1ファイルで担う点は
+# 他の多くの実際の AUTOSAR 実装でも一般的なパターンであり、AUTOSAR
+# 仕様側もソースファイル名を"Dcm*.c"とワイルドカードで書いているため
+# ファイル分割自体は仕様の対象外）。
+#
 # test_native（2026-09、旧 [env:native]/[env:native_coverage] から統合。
 # test_native/test_dcm/test_wdgm/test_fim を test_chain へ統合するという長期
 # ゴールの最終回）。Gpt/Dio/Port は他モジュールと無縁の末端モジュールのため、
@@ -255,7 +264,7 @@ set(NATIVE_CHAIN_SRC_SOURCES
     src/Bsw/Dem/Dem.c
     src/Bsw/FiM/FiM.c
     src/Bsw/FiM/FiM_PBCfg.c
-    src/Bsw/Dcm/Dcm_Cbk.c
+    src/Bsw/Dcm/Dcm.c
     src/Bsw/CanTp/CanTp.c
     src/Bsw/BswM/BswM.c
     src/Os/Os.c

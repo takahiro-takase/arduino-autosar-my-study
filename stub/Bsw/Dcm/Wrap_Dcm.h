@@ -1,6 +1,6 @@
 /**
  * \file    Wrap_Dcm.h
- * \brief   `src/Bsw/Dcm/Dcm_Cbk.c` 内の関数を対象とした `-Wl,--wrap=<symbol>`
+ * \brief   `src/Bsw/Dcm/Dcm.c` 内の関数を対象とした `-Wl,--wrap=<symbol>`
  *          フォールトインジェクションのアクセサ群。
  *
  * \details `stub/` 配下の構成規則は `stub/Bsw/CanIf/Wrap_CanIf.h`
@@ -11,7 +11,7 @@
  *
  *          AUTOSAR 仕様（SWS_Dcm）が定義する `Dcm.h` の公開 IF 関数8個に加え、
  *          本プロジェクト独自の受信コールバック `Dcm_ComIndication()`
- *          （`Dcm_Cbk.h` 参照）も対象に含める（いずれも実体は `Dcm_Cbk.c`
+ *          （`Dcm_Cbk.h` 参照）も対象に含める（いずれも実体は `Dcm.c`
  *          1ファイルに定義されている）。DcmStack コールチェーンテストで、
  *          CanTp から Dcm への境界（`Dcm_ComIndication()`）を検証する用途を
  *          想定する。
