@@ -62,7 +62,7 @@ static CanIf_NotifStatusType CanIf_RxNotifStatus[CANIF_RX_PDU_MAX];
  * コントローラ単位の状態。CanIf_Transmit() はここが CANIF_ONLINE のときのみ
  * Can_Write() まで到達させる。RX 側（CanIf_RxIndication() の上位層通知）は
  * 意図的にこの状態でゲートしない: 本プロジェクトが必要とする唯一の用途
- * （CanSM の SILENT_COMMUNICATION、Nm/Com の受信処理は継続させたい）では
+ * （CanSM の SILENT_COMMUNICATION、CanNm/Com の受信処理は継続させたい）では
  * CANIF_OFFLINE を実際には使わないため（CanIf_RxIndication() の doc コメント
  * 参照）。 */
 static CanIf_PduModeType CanIf_ControllerPduMode[CANIF_CONTROLLER_MAX];

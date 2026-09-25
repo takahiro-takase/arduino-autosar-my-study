@@ -95,7 +95,7 @@
 /** TX PDU テーブルのエントリ数（送信 CAN フレーム種別数）
  *  TxPduId=0: EngineState    (CAN 0x200, COM)
  *  TxPduId=1: UDS 診断応答   (CAN 0x7E8, DCM)
- *  TxPduId=2: NM フレーム    (CAN 0x400, Nm。PduR/Com を経由せず直接呼び出す)
+ *  TxPduId=2: NM フレーム    (CAN 0x400, CanNm。PduR/Com を経由せず直接呼び出す)
  *  TxPduId=3: WarningStatus  (CAN 0x210, COM Signal Group)
  *  TxPduId=4: E2EHealthStatus (CAN 0x220, COM PERIODIC)
  *  TxPduId=5: ImmobilizerStatus (CAN 0x230, COM DIRECT。Signal Gateway 転送先) */
@@ -107,7 +107,7 @@
  *  RxPduId=1: UDS 診断要求   (CAN 0x7E0, DCM)   診断ツール
  *  RxPduId=2: AbsInfo        (CAN 0x110, COM)   ABS ECU
  *  RxPduId=3: ImmobilizerCmd (CAN 0x120, SecOC) KeyFobEcu 想定
- *  RxPduId=4: NM フレーム    (CAN 0x400, Nm。PduR/Com を経由せず直接呼び出す) */
+ *  RxPduId=4: NM フレーム    (CAN 0x400, CanNm。PduR/Com を経由せず直接呼び出す) */
 #define CANIF_RX_PDU_COUNT  5U
 
 /** CanIf_ReadRxPduData()（2026-08 追加）の内部バッファ配列サイズ。

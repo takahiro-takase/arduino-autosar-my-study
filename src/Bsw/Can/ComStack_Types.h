@@ -15,8 +15,8 @@
 #include "Std_Types.h"
 
 // AUTOSAR SWS_ComStackTypes
-// ネットワーク（チャネル）の識別子。CanSM/ComM/Nm 等が共通で使う
-// （2026-08-30、Nm 対応時に新設。当初は CanSM 独自の CanSM_NetworkHandleType
+// ネットワーク（チャネル）の識別子。CanSM/ComM/CanNm 等が共通で使う
+// （2026-08-30、CanNm 対応時に新設。当初は CanSM 独自の CanSM_NetworkHandleType
 // と二重定義のまま残していたが、実仕様も CanSM_RequestComMode 等の引数型に
 // この共通 NetworkHandleType をそのまま使う設計のため、CanSM 側もこちらへ
 // 統合済み（CanSM.h 参照）。今後ネットワークハンドルを扱う新規モジュールは

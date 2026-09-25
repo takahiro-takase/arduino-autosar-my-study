@@ -80,7 +80,7 @@ CanSM/CanTp/ComM/Dcm/Dem/Fee/Port/IoHwAb の8モジュールについて、`KeyM
 内部実装は `(void)ConfigPtr;` で無視するのみ（post-build データの実体は作らない）。
 呼び出し元（`EcuM.c`、Fee のみ `MemIf.c`）も `NULL` 引数で更新済み。
 `test/test_chain/` の `CanSM_Init()` 呼び出し3箇所（Bsw_ComStack_RxChain_test.cpp/
-Bsw_SleepChain_test.cpp/Bsw_NmStack_WakeupChain_test.cpp）も追随済み。
+Bsw_SleepChain_test.cpp/Bsw_CanNmStack_WakeupChain_test.cpp）も追随済み。
 `pio test -e native`(62件)/`pio test -e native_chain`(19件)/`pio run -e uno_r4`
 いずれも成功を確認済み。コミット `444b7a0`（"modified: init function parameter"）で
 確定（`docs: modified README.md` 等とは別コミット）。
@@ -168,7 +168,7 @@ post-build方式の意味を持つ設計と整合）。
 
 | モジュール | 備考 |
 |---|---|
-| Nm | 2026-08-30 対応済み。`Nm_Init`/`NetworkRequest`/`NetworkRelease`/`RepeatMessageRequest`/`GetState` の5関数に SWS_CanNm_00208/00213/00214/00221/00223 準拠の ConfigPtr/NetworkHandleType 引数を追加（`NM_MAIN_NETWORK_HANDLE`、`NM_E_INVALID_CHANNEL` [SWS_CanNm_00192] による範囲チェック含む）。「Nm自体が実AUTOSARの正式なモジュールではないため対象外」という旧判断を、IFシグネチャは仕様準拠という方針のもとで上書きした |
+| CanNm | 2026-08-30 対応済み。`CanNm_Init`/`NetworkRequest`/`NetworkRelease`/`RepeatMessageRequest`/`GetState` の5関数に SWS_CanNm_00208/00213/00214/00221/00223 準拠の ConfigPtr/NetworkHandleType 引数を追加（`CANNM_MAIN_NETWORK_HANDLE`、`CANNM_E_INVALID_CHANNEL` [SWS_CanNm_00192] による範囲チェック含む）。「CanNm自体が実AUTOSARの正式なモジュールではないため対象外」という旧判断を、IFシグネチャは仕様準拠という方針のもとで上書きした |
 
 ### 対象外（仕様上 Init を持たない、または意図的簡略化として既にヘッダに明記済み）
 
@@ -290,7 +290,7 @@ AUTOSAR SWS_Dcm はこれを深く再規定していないため、手元の SWS
 | BswM.c | 914c041 | **修正済み**: `SWS_BswM_00808` として引用していたのは実際には `ECUC_BswM_00820`（BswMArgumentRef、コンフィグ項目 ID）だった。`\AUTOSARReq` 系ではなく `ECUC_` 系番号を `SWS_` として誤記していたパターン。また「ConditionCount=1 なら Operator によらず単一条件と等価」の根拠として引用していた `SWS_BswM_00814` は仕様書に存在しない番号（grep 0件）だったが、調べたところ実際には `ECUC_BswM_00814`（BswMLogicalOperator の説明文「If the logical operator is set to something other than BSWM_NOT, and the expression only consists of a single condition, then this parameter will have no effect」）が本文まで含めて正確に一致する内容だったため、`SWS_` → `ECUC_` へ修正して正しい引用として復元した。`SWS_BswM_00245`/`SWS_BswM_00247`（AND/OR 評価定義）・`SWS_BswM_00273`（PduGroupSwitch、Com_IpduGroupStart/Stop 呼び出し。仕様注記が「厳密な順序が必要なら 1 ルール=1 グループの個別アクションに分ける」と明記しており、本実装の 1 ルール=1 グループの簡略化そのものを公式に裏付けている）は正確（コミット後に SHA 更新要） |
 | BswM_Cfg.h | 914c041 | **修正済み**: 同種の `SWS_BswM_00808` → `ECUC_BswM_00820`（BswMArgumentRef、Multiplicity=1..* の記述箇所）（コミット後に SHA 更新要） |
 | BswM_PBCfg.h | 914c041 | **修正済み**: 3 箇所で同様の `SWS_`/`ECUC_` 誤記。`SWS_BswM_00807`→`ECUC_BswM_00807`（BswMModeCondition コンテナ）、`SWS_BswM_00814`→`ECUC_BswM_00814`（BswMLogicalOperator、2 箇所）、`SWS_BswM_00808`→`ECUC_BswM_00808`（BswMLogicalExpression コンテナ）（コミット後に SHA 更新要） |
-| BswM_PBCfg.c | 914c041 | 問題なし。Rule3 が AND 複合条件になった経緯（Nm 導入後 ComM チャネルモードが EcuM の RUN/POST_RUN と独立に変化しうるため）、Rule5 の OR 条件との対称設計、いずれもコメント記載どおりで矛盾なし |
+| BswM_PBCfg.c | 914c041 | 問題なし。Rule3 が AND 複合条件になった経緯（CanNm 導入後 ComM チャネルモードが EcuM の RUN/POST_RUN と独立に変化しうるため）、Rule5 の OR 条件との対称設計、いずれもコメント記載どおりで矛盾なし |
 
 **教訓**: BswM は AUTOSAR の `SWS_<Module>_NNNNN`（挙動仕様）と `ECUC_<Module>_NNNNN`
 （コンフィグパラメータ定義）という 2 系統の独立した番号体系を持つモジュールで、
@@ -515,28 +515,28 @@ Can レビューに続き、この手の多段組み DET 表は必ず複数の�
 **総括**: MemIf は誤引用ゼロ（かつ過去に発見済みの誤りが正しく修正済みであることも
 確認）。Csm/CryIf/E2EXf/Gpt/Mcu に続き6件目の「誤引用が見つからなかった」モジュール。
 
-## 台帳: Nm 仕様引用レビュー
+## 台帳: CanNm 仕様引用レビュー
 
 **観点**: 独自簡略実装（単一チャネル、Partial Networking/NM Coordinator Sync/User Data/
-Remote Sleep Indication/Passive Mode 対応除外）である Nm の CanNm 状態機械実装が、
+Remote Sleep Indication/Passive Mode 対応除外）である CanNm の CanNm 状態機械実装が、
 `AUTOSAR_SWS_CANNetworkManagement.pdf` の該当要求と正しく対応しているか、43件の
 固有 `SWS_CanNm_NNNNN` 引用（全件が仕様書に実在することは確認済み）を一件ずつ内容
 突き合わせで検証。**確認日**: 2026-08-15。
 
 | 対象ファイル | SHA（変更前） | 結果 |
 |---|---|---|
-| Nm.h | 75f8007 | **修正済み**: (1) `Nm_NetworkRequest()` の `\AUTOSARReq {SWS_CanNm_00208}` は実際には `CanNm_Init` の Service description block（8.3.1 章、ApiId 0x00）であり、`Nm_NetworkRequest`（ApiId 0x02）の正しい引用は `SWS_CanNm_00213`（8.3.4 章、Service ID[hex] 0x02 で一致確認）。(2) `Nm_RxIndication()` の Bus-Sleep Mode 中受信の説明が引用する `SWS_CanNm_00126`（Bus-Sleep Mode に**進入した時**の Nm_BusSleepMode 通知要求）は、ここで説明している「Bus-Sleep Mode 中に NM PDU を**受信した**」という別事象とは無関係。正しくは `SWS_CanNm_00127`（Bus-Sleep Mode 中の受信 → 上位層通知）に訂正 |
-| Nm.c | 914c041 | **修正済み**: (1) 上記と同一の `00126`→`00127` 誤りが `Nm_RxIndication()` 本体にも重複していたため同様に修正（Nm.h とは異なり `00127` は元々併記されていたため、`00126` のみ除去）。(2) `Nm_RepeatMessageRequest()` は `SWS_CanNm_00137` のガードにより到達可能な状態が Normal Operation/Ready Sleep の2状態のみだが、コメントは Normal Operation 分の番号（`00121`=ビットセット、`00120`=状態遷移）のみを引用し、かつ状態遷移側は `00119`（Repeat Message Request **Bit を受信**した場合の要求。関数呼び出しではなく他ノードからの受信イベント）という無関係な番号を誤って併記していた。Ready Sleep 分の `00113`（ビットセット）/`00112`（状態遷移）を追加し、`00119` を `00112` に訂正 |
-| Nm_Cfg.h | 75f8007 | **修正済み**: `NM_DLC` のバイト配置コメントが「byte[0]=CBV/byte[1]=NID は `SWS_CanNm_00074`/`00075` の**デフォルト**配置」と主張していたが、仕様のデフォルトは逆順（`CanNmPduNidPosition` 既定 Byte 0 = NID、`CanNmPduCbvPosition` 既定 Byte 1 = CBV）であり、本プロジェクトの配置はデフォルトの反転である。「デフォルト配置」という誤った言い切りを、仕様上の配置可能値の言及＋非デフォルトを選択している旨の説明に訂正（コミット後に SHA 更新要） |
+| CanNm.h | 75f8007 | **修正済み**: (1) `CanNm_NetworkRequest()` の `\AUTOSARReq {SWS_CanNm_00208}` は実際には `CanNm_Init` の Service description block（8.3.1 章、ApiId 0x00）であり、`CanNm_NetworkRequest`（ApiId 0x02）の正しい引用は `SWS_CanNm_00213`（8.3.4 章、Service ID[hex] 0x02 で一致確認）。(2) `CanNm_RxIndication()` の Bus-Sleep Mode 中受信の説明が引用する `SWS_CanNm_00126`（Bus-Sleep Mode に**進入した時**の CanNm_BusSleepMode 通知要求）は、ここで説明している「Bus-Sleep Mode 中に NM PDU を**受信した**」という別事象とは無関係。正しくは `SWS_CanNm_00127`（Bus-Sleep Mode 中の受信 → 上位層通知）に訂正 |
+| CanNm.c | 914c041 | **修正済み**: (1) 上記と同一の `00126`→`00127` 誤りが `CanNm_RxIndication()` 本体にも重複していたため同様に修正（CanNm.h とは異なり `00127` は元々併記されていたため、`00126` のみ除去）。(2) `CanNm_RepeatMessageRequest()` は `SWS_CanNm_00137` のガードにより到達可能な状態が Normal Operation/Ready Sleep の2状態のみだが、コメントは Normal Operation 分の番号（`00121`=ビットセット、`00120`=状態遷移）のみを引用し、かつ状態遷移側は `00119`（Repeat Message Request **Bit を受信**した場合の要求。関数呼び出しではなく他ノードからの受信イベント）という無関係な番号を誤って併記していた。Ready Sleep 分の `00113`（ビットセット）/`00112`（状態遷移）を追加し、`00119` を `00112` に訂正 |
+| CanNm_Cfg.h | 75f8007 | **修正済み**: `CANNM_DLC` のバイト配置コメントが「byte[0]=CBV/byte[1]=NID は `SWS_CanNm_00074`/`00075` の**デフォルト**配置」と主張していたが、仕様のデフォルトは逆順（`CanNmPduNidPosition` 既定 Byte 0 = NID、`CanNmPduCbvPosition` 既定 Byte 1 = CBV）であり、本プロジェクトの配置はデフォルトの反転である。「デフォルト配置」という誤った言い切りを、仕様上の配置可能値の言及＋非デフォルトを選択している旨の説明に訂正（コミット後に SHA 更新要） |
 
-**検証**: DET エラーコード4件（`NM_E_UNINIT=0x01`/`NM_E_NET_START_IND=0x04`/
-`NM_E_NETWORK_TIMEOUT=0x11`/`NM_E_PARAM_POINTER=0x12`、7.14.1 Development Errors 表と
+**検証**: DET エラーコード4件（`CANNM_E_UNINIT=0x01`/`CANNM_E_NET_START_IND=0x04`/
+`CANNM_E_NETWORK_TIMEOUT=0x11`/`CANNM_E_PARAM_POINTER=0x12`、7.14.1 Development Errors 表と
 一致）・ApiId 全11件（Init=0x00/NetworkRequest=0x02/NetworkRelease=0x03/
 RepeatMessageRequest=0x08/GetState=0x0B/SetTxEnabled=0x0C(CanNm_DisableCommunication
 代用と明記済み)/MainFunction=0x13/TxConfirmation=0x40/RxIndication=0x42/DeInit=0x10/
 GetVersionInfo=0xF1）いずれも各 Service ID[hex] 記載と一致。
 
-**総括**: Nm は43件中4件（内訳: 別APIの番号を誤引用1件、無関係な事象の番号を誤引用2件、
+**総括**: CanNm は43件中4件（内訳: 別APIの番号を誤引用1件、無関係な事象の番号を誤引用2件、
 「デフォルト」の事実誤認1件）に実引用ミスがあり、修正後 `native`(62/62)・`native_chain`
 (23/23) とも全パスを確認。
 
@@ -633,7 +633,7 @@ GetVersionInfo/DeInit 未実装ギャップ監査。Det/IoHwAb/Adc_DeInit は意
 値バグは今回のドキュメント訂正主体のレビューの中で唯一「実際に報告される DET エラー値が
 間違っていた」という機能面のバグ。修正後 `native`(62/62)・`native_chain`(23/23) とも
 全パスを確認。これで2026-08-15セッションで候補提示していた未レビューモジュール
-（Nm/E2E/EcuM/Wdg/IoHwAb/Adc/Det/Dio/Port）がすべて完了。
+（CanNm/E2E/EcuM/Wdg/IoHwAb/Adc/Det/Dio/Port）がすべて完了。
 
 ## 経緯（Why）
 

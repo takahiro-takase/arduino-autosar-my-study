@@ -166,7 +166,7 @@
 #include "CanTp.h"
 #include "Rte.h"
 #include "ComM.h"
-#include "Nm.h"
+#include "CanNm.h"
 #include "KeyM.h"
 #include "BswM.h"
 #include "Det.h"
@@ -1964,22 +1964,22 @@ static void Dcm_HandleIoControl(const uint8* uds, uint8 udsLen)
  *          したままテスターが切断された場合、ECU が defaultSession に
  *          戻っても通信不能のまま残ってしまう。
  *
- * \note    2026-09-05、Com_SetCommunicationEnabled()/Nm_EnableCommunication()
+ * \note    2026-09-05、Com_SetCommunicationEnabled()/CanNm_EnableCommunication()
  *          の直接呼び出しから `BswM_Dcm_CommunicationMode_CurrentState()`
  *          経由へ変更（本関数と `Dcm_HandleCommunicationControl()` の
  *          両方が唯一の適用経路である BswM を必ず通るようにするため。
- *          BswM 側のルールテーブルが実際に Com/Nm へ反映する）。
+ *          BswM 側のルールテーブルが実際に Com/CanNm へ反映する）。
  */
 static void Dcm_CommControlReset(void)
 {
-    BswM_Dcm_CommunicationMode_CurrentState(NM_MAIN_NETWORK_HANDLE, DCM_ENABLE_RX_TX_NORM_NM);
+    BswM_Dcm_CommunicationMode_CurrentState(CANNM_MAIN_NETWORK_HANDLE, DCM_ENABLE_RX_TX_NORM_NM);
 }
 
 /**
  * \brief   UDS 0x28 CommunicationControl を処理する。
  *
  * \details controlType（サブ機能）で Rx/Tx の有効/無効を、communicationType で
- *          対象（通常通信=Com / ネットワークマネジメント通信=Nm）を指定する。
+ *          対象（通常通信=Com / ネットワークマネジメント通信=CanNm）を指定する。
  *          診断通信（CanTp/Dcm 自体）は対象外で本サービスの影響を受けない
  *          （通信を無効化中でもテスター自身は再有効化できる必要があるため）。
  *
@@ -1992,7 +1992,7 @@ static void Dcm_CommControlReset(void)
  *
  *          対応 communicationType（サブネット指定は非対応）:
  *            0x01 normal communication messages（Com へ適用）
- *            0x02 network management communication messages（Nm へ適用）
+ *            0x02 network management communication messages（CanNm へ適用）
  *            0x03 両方
  *
  *          セキュリティ方針: 0x2F と同様に SecurityAccess は要求しない
@@ -2006,16 +2006,16 @@ static void Dcm_CommControlReset(void)
  *          実装方針（2026-09-05、シグネチャ準拠サーベイで是正）: 実仕様
  *          （[SWS_Dcm_00785]）は本サービス受理時に
  *          `BswM_Dcm_CommunicationMode_CurrentState(Network, RequestedMode)`
- *          を呼んで通知するだけで、実際の Com/Nm への反映は BswM のルール
+ *          を呼んで通知するだけで、実際の Com/CanNm への反映は BswM のルール
  *          テーブル（`BswM_PBCfg.c` の Dcm_CommunicationModeType 別ルール）が
  *          担う設計。従来は本関数が `Com_SetCommunicationEnabled()`/
- *          `Nm_EnableCommunication()`/`Nm_DisableCommunication()` を直接
+ *          `CanNm_EnableCommunication()`/`CanNm_DisableCommunication()` を直接
  *          呼んでいたが（レイヤ違反）、この本来の経路へ是正した。
  *          `BswM_Dcm_CommunicationMode_CurrentState()` は戻り値を持たない
- *          （void）ため、旧実装にあった「Nm が失敗したら NRC 0x22」という
+ *          （void）ため、旧実装にあった「CanNm が失敗したら NRC 0x22」という
  *          防御的分岐は原理的に組めなくなった。ただし当該分岐は
- *          `NM_MAIN_NETWORK_HANDLE`（常に有効な定数）以外の Channel を
- *          渡すことがなく、`Nm_Initialized` も本サービスが呼ばれる時点
+ *          `CANNM_MAIN_NETWORK_HANDLE`（常に有効な定数）以外の Channel を
+ *          渡すことがなく、`CanNm_Initialized` も本サービスが呼ばれる時点
  *          （診断セッション確立後）では必ず真であるため、実運用上は
  *          到達しない防御コードだった（値としては失われるが、実害はない）。
  *
@@ -2074,7 +2074,7 @@ static void Dcm_HandleCommunicationControl(const uint8* uds, uint8 udsLen)
     Dcm_CommunicationModeType mode =
         (Dcm_CommunicationModeType)(controlType + (uint8)((communicationType - 1U) * 4U));
 
-    BswM_Dcm_CommunicationMode_CurrentState(NM_MAIN_NETWORK_HANDLE, mode);
+    BswM_Dcm_CommunicationMode_CurrentState(CANNM_MAIN_NETWORK_HANDLE, mode);
 
     DET_LOGI(TAG, "28 controlType=0x%02X commType=0x%02X mode=0x%02X",
              (unsigned)controlType, (unsigned)communicationType, (unsigned)mode);

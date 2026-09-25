@@ -18,7 +18,7 @@
  *          検証対象に含む。BswM.c 自体は実体でリンクされるが `BswM_Init()`
  *          は本テストでは呼ばないため `BswM_Cfg==NULL` ガードでルール評価
  *          自体は走らない。よって「Dcm が正しい Dcm_CommunicationModeType
- *          値で BswM を呼んだか」のみを検証し、Com/Nm への実際の反映
+ *          値で BswM を呼んだか」のみを検証し、Com/CanNm への実際の反映
  *          （`BswM_ApplyDcmCommMode()`）は対象外とする
  *          （旧 Bsw_Dcm_CommunicationControl_test.cpp 冒頭コメント参照）。
  *
@@ -122,7 +122,7 @@ protected:
         WrapPduR_Reset();
         WrapCanTp_Reset();
         WrapBswM_Reset();
-        Suppressed_ComM_DcmDiagnostic = 1U;  // 本テストは通信管理(ComM/CanSM/Nm)が対象外
+        Suppressed_ComM_DcmDiagnostic = 1U;  // 本テストは通信管理(ComM/CanSM/CanNm)が対象外
         FakeDetHw_LogSuppressed = 1U;  // Init() のログはノイズになるため抑制
 
         canConfig.filter.filterId = 0x0000U;

@@ -28,11 +28,11 @@
 # Fake_Bsw_EcuM.h 参照）、CanSM.c は実体・フェイクのいずれかをこのバイナリ
 # 全体で選ぶ必要がある。Tx/Rx チェーン（Bsw_ComStack_Tx_test.cpp/
 # Bsw_ComStack_Signal_Rx_test.cpp）は CanSM の状態遷移に関与しないが、CanSM 自身の
-# コールチェーン（Bsw_NmStack_Wakeup_test.cpp）や Nm↔CanSM↔ComM 協調スリープ
-# （Bsw_NmStack_SleepCoordination_test.cpp）を同じバイナリで検証するため、CanSM.c は
+# コールチェーン（Bsw_CanNmStack_Wakeup_test.cpp）や CanNm↔CanSM↔ComM 協調スリープ
+# （Bsw_CanNmStack_SleepCoordination_test.cpp）を同じバイナリで検証するため、CanSM.c は
 # 実体をリンクしている。
 #
-# ComM.c/Nm.c も実体でリンクする（2026-08、当初は Nm/CanSM/ComM 協調スリープの
+# ComM.c/CanNm.c も実体でリンクする（2026-08、当初は CanNm/CanSM/ComM 協調スリープの
 # 移管作業のリスクを既存5チェーンテストから切り離すため一時的に
 # `[env:native_sleep_chain]` という別envに分離していたが、実機検証まで完了し
 # 安定したため本バイナリへ統合した）。ComM.c が呼ぶ EcuM_RequestRUN()/
@@ -42,7 +42,7 @@
 # 下記「BswM は...」の段落参照）。
 # Dem は実体でリンクし、Dem_SetEventStatus() のみ `--wrap` で観測・故障注入する
 # （stub/Bsw/Dem/Wrap_Dem.h 参照、2026-09 に完全フェイクから切り替え）。
-# CanSM 状態遷移に関与しない Tx/Rx/E2E チェーンのテストは ComM_Init()/Nm_Init()
+# CanSM 状態遷移に関与しない Tx/Rx/E2E チェーンのテストは ComM_Init()/CanNm_Init()
 # を呼ばないため、これらのモジュールの実体は未初期化のまま（呼ばれない）で無害。
 #
 # E2E チェーン（README「Tx 処理」「Rx 処理」それぞれの「E2E」節、
@@ -76,7 +76,7 @@
 #
 # WdgM（2026-09、旧 [env:native_wdgm] から統合）。WdgM.c は WdgIf.h（下位
 # ディスパッチ層）と Det.h/Dem.h にしか依存せず、native_chain の他モジュール
-# （Can/CanIf/CanSM/ComM/Nm 等）と一切コールチェーンを共有しないため、
+# （Can/CanIf/CanSM/ComM/CanNm 等）と一切コールチェーンを共有しないため、
 # test_native/test_dcm/test_fim/test_wdgm を test_chain へ統合するという長期
 # ゴールの中で最も依存が軽い候補として最初に統合した。WdgIf は他 env に同種
 # モジュールが無いため専用フェイク（stub/Bsw/WdgIf/Fake_WdgIf.c/h）を
@@ -119,10 +119,10 @@
 # Os.c 単体のみ追加した。既存テストは BswM_Init() も呼ばないため、実際の
 # ルール評価は走らず、wrap 境界での呼び出し回数・引数キャプチャのみで
 # 旧フェイクと同じ検証範囲を維持する）。ComM は
-# native_chain が既に実体をリンクしているため（Nm↔CanSM↔ComM 協調スリープ
+# native_chain が既に実体をリンクしているため（CanNm↔CanSM↔ComM 協調スリープ
 # 検証用）、Dcm_Cbk.c が呼ぶ `ComM_DCM_ActiveDiagnostic()`/
 # `ComM_DCM_InactiveDiagnostic()` を実体へ到達させると、Dcm のテスト対象外
-# である通信管理（Nm/CanSM 経由の実際のモード遷移）まで連鎖してしまう。
+# である通信管理（CanNm/CanSM 経由の実際のモード遷移）まで連鎖してしまう。
 # `-Wl,--wrap=` でこの2関数を「常に何もしない」よう隔離した
 # （stub/Bsw/ComM/Wrap_ComM.c参照。CanIf/E2E/Dem の wrap とは異なり、
 # 既定パススルーではなく常時no-op という特殊ケース）。
@@ -170,7 +170,7 @@
 #
 # 2026-09-23、続けて17個のモジュール別サブフォルダも、`src/Bsw/<Module>/`・
 # `stub/Bsw/<Module>/` と同じ構成に揃えるため `test/Bsw/<Module>/` へ1段
-# 追加した。`ComStack`/`DcmStack`/`NmStack` は単一の `src/Bsw/<Module>` には
+# 追加した。`ComStack`/`DcmStack`/`CanNmStack` は単一の `src/Bsw/<Module>` には
 # 対応しない（複数モジュールを跨ぐチェーンテストのため）が、Bsw層を検証する
 # テストであることに変わりないため、同じく `test/Bsw/` 配下に置いている。
 # `test/` と同階層のリポジトリ直下へ移設した。
@@ -207,7 +207,7 @@ set(NATIVE_CHAIN_INCLUDE_DIRS
     src/Bsw/ComM
     src/Bsw/Com
     src/Bsw/PduR
-    src/Bsw/Nm
+    src/Bsw/CanNm
     src/Bsw/EcuM
     src/Bsw/BswM
     src/Bsw/Dcm
@@ -241,6 +241,7 @@ set(NATIVE_CHAIN_INCLUDE_DIRS
     stub/Bsw/E2EXf
     stub/Bsw/EcuM
     stub/Bsw/KeyM
+    stub/Bsw/CanNm
     stub/Bsw/NvM
     stub/Bsw/PduR
     stub/Bsw/WdgIf
@@ -257,7 +258,7 @@ set(NATIVE_CHAIN_SRC_SOURCES
     src/Bsw/Can/Can.c
     src/Bsw/CanSM/CanSM.c
     src/Bsw/ComM/ComM.c
-    src/Bsw/Nm/Nm.c
+    src/Bsw/CanNm/CanNm.c
     src/Bsw/E2EXf/E2EXf.c
     src/Bsw/E2EXf/E2EXf_PBCfg.c
     src/Bsw/E2E/E2E_P05.c
@@ -290,6 +291,7 @@ set(NATIVE_CHAIN_STUB_SOURCES
     stub/Bsw/Dcm/Wrap_Dcm.c
     stub/Bsw/ComM/Wrap_ComM.c
     stub/Bsw/CanSM/Wrap_CanSM.c
+    stub/Bsw/CanNm/Wrap_CanNm.c
     stub/Bsw/BswM/Wrap_BswM.c
     stub/Bsw/EcuM/Fake_Bsw_EcuM.c
     stub/Bsw/CanTp/Wrap_CanTp.c
@@ -465,6 +467,21 @@ set(NATIVE_CHAIN_WRAP_SYMBOLS
     E2EXf_Inv_AbsInfo
     E2EXf_E2EHealthStatus
     E2EXf_GetVersionInfo
+    # CanNm.h の AUTOSAR IF 全14関数（Wrap_CanNm.h/.c 参照）。
+    CanNm_Init
+    CanNm_DeInit
+    CanNm_NetworkRequest
+    CanNm_NetworkRelease
+    CanNm_RepeatMessageRequest
+    CanNm_RxIndication
+    CanNm_TxConfirmation
+    CanNm_MainFunction
+    CanNm_DisableCommunication
+    CanNm_EnableCommunication
+    CanNm_GetLocalNodeIdentifier
+    CanNm_GetNodeIdentifier
+    CanNm_GetState
+    CanNm_GetVersionInfo
     # PduR.c の AUTOSAR IF 全数（Wrap_PduR.h/.c 参照）。
     PduR_Init
     PduR_GetVersionInfo

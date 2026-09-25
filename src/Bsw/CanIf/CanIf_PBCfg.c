@@ -13,7 +13,7 @@
  *              byte[5]=CoolantTempミラー), HTH=0
  *            TX PDU (TxPduId=1): UDS 診断応答
  *              CanId=0x7E8, DLC=8, HTH=0
- *            TX PDU (TxPduId=2): NM フレーム (Nm、PduR/Com を経由せず直接呼び出す)
+ *            TX PDU (TxPduId=2): NM フレーム (CanNm、PduR/Com を経由せず直接呼び出す)
  *              CanId=0x400, DLC=2, HTH=0
  *            TX PDU (TxPduId=3): WarningStatus (COM Signal Group)
  *              CanId=0x210, DLC=1, HTH=0
@@ -29,8 +29,8 @@
  *              CanId=0x110, HRH=0 → PduR RxPduId=2 → COM IPduId=1
  *            RX PDU (RxPduId=3): ImmobilizerCmd (KeyFobEcu 想定、SecOC 保護)
  *              CanId=0x120, HRH=0 → PduR RxPduId=3 → SecOC → (検証成功時) COM IPduId=2
- *            RX PDU (RxPduId=4): NM フレーム (仮想他 ECU、Nm。PduR/Com を経由せず直接呼び出す)
- *              CanId=0x400, HRH=0 → Nm_RxIndication
+ *            RX PDU (RxPduId=4): NM フレーム (仮想他 ECU、CanNm。PduR/Com を経由せず直接呼び出す)
+ *              CanId=0x400, HRH=0 → CanNm_RxIndication
  *
  * =====================================================================
  * DaVinci Configurator 対応表
@@ -63,7 +63,7 @@
 #include "CanIf_PBCfg.h"
 #include "CanIf_Cfg.h"
 #include "PduR_CanIf.h"
-#include "Nm.h"
+#include "CanNm.h"
 
 /* -----------------------------------------------------------------------
  * TX PDU ルーティングテーブル
@@ -105,15 +105,15 @@ static const CanIf_TxPduConfigType CanIf_TxPduConfigData[CANIF_TX_PDU_COUNT] = {
     {
         /* ---------------------------------------------------------------
          * TxPduId=2: NM フレーム
-         * DaVinci: /ActiveEcuC/CanIf/CanIfInitCfg/CanIfTxPduCfg/Nm_Tx
-         * Nm.c は PduR/Com を経由せず CanIf_Transmit(NM_CANIF_TX_PDU_ID, ...) を
+         * DaVinci: /ActiveEcuC/CanIf/CanIfInitCfg/CanIfTxPduCfg/CanNm_Tx
+         * CanNm.c は PduR/Com を経由せず CanIf_Transmit(CANNM_CANIF_TX_PDU_ID, ...) を
          * 直接呼び出す（実車の CanNm と同じく Com スタックとは独立して動作する）。
          * --------------------------------------------------------------- */
-        .UpperLayerTxPduId = 2U,          /* DaVinci: CanIfTxPduId (Nm_Cfg.h の NM_CANIF_TX_PDU_ID と一致させること) */
+        .UpperLayerTxPduId = 2U,          /* DaVinci: CanIfTxPduId (CanNm_Cfg.h の CANNM_CANIF_TX_PDU_ID と一致させること) */
         .CanId             = 0x400U,      /* DaVinci: CanIfTxPduCanId */
         .Dlc               = 2U,          /* DaVinci: CanIfTxPduDlc (Control Bit Vector 1B + Source Node ID 1B) */
         .Hth               = 0U,          /* DaVinci: CanIfTxPduHthIdRef */
-        .TxConfirmFct      = Nm_TxConfirmation /* DaVinci: CanIfTxPduUserTxConfirmationName
+        .TxConfirmFct      = CanNm_TxConfirmation /* DaVinci: CanIfTxPduUserTxConfirmationName
                                                 *          ([SWS_CanNm_00099] NM-Timeout Timer 再起動に使用) */
     },
     {
@@ -222,17 +222,17 @@ static const CanIf_RxPduConfigType CanIf_RxPduConfigData[CANIF_RX_PDU_COUNT] = {
     {
         /* ---------------------------------------------------------------
          * RxPduId=4: NM フレーム (仮想他 ECU → メータ ECU)
-         * DaVinci: /ActiveEcuC/CanIf/CanIfInitCfg/CanIfRxPduCfg/Nm_Rx
-         * Nm.c は PduR/Com を経由せず CanIf から直接呼ばれる（実車の CanNm と
+         * DaVinci: /ActiveEcuC/CanIf/CanIfInitCfg/CanIfRxPduCfg/CanNm_Rx
+         * CanNm.c は PduR/Com を経由せず CanIf から直接呼ばれる（実車の CanNm と
          * 同様、TxPduId=2 の NM フレーム送信と対になる受信経路）。
          * --------------------------------------------------------------- */
         .CanId             = 0x400U,      /* DaVinci: CanIfRxPduCanId */
         .Hrh               = 0U,          /* DaVinci: CanIfRxPduHrhIdRef */
         .UpperLayerRxPduId = 4U,          /* DaVinci: CanIfRxPduUpperLayerPduId
-                                           *          (Nm_Cfg.h の NM_CANIF_RX_PDU_ID と一致させること。
-                                           *          単一チャネルのため Nm 側では実質未使用) */
+                                           *          (CanNm_Cfg.h の CANNM_CANIF_RX_PDU_ID と一致させること。
+                                           *          単一チャネルのため CanNm 側では実質未使用) */
         .Dlc               = 2U,          /* DaVinci: CanIfRxPduDataLength (Control Bit Vector 1B + Source Node ID 1B) */
-        .RxIndicationFct   = Nm_RxIndication /* DaVinci: CanIfRxPduUserRxIndicationName */
+        .RxIndicationFct   = CanNm_RxIndication /* DaVinci: CanIfRxPduUserRxIndicationName */
     }
 };
 

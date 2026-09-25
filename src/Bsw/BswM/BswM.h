@@ -115,8 +115,8 @@ void BswM_ComM_CurrentMode(NetworkHandleType channel, ComM_ModeType mode);
  * \details Dcm_HandleCommunicationControl()/Dcm_CommControlReset() が呼ぶ。
  *          BswM は受け取った Dcm_CommunicationModeType 値に一致する
  *          `BSWM_ACTION_DCM_COMM_APPLY` ルール（`BswM_PBCfg.c`）を発火させ、
- *          `BswM_ApplyDcmCommMode()` 経由で実際に Com/Nm へ反映する
- *          （2026-09-05、シグネチャ準拠サーベイで、Dcm 側が Com/Nm を直接
+ *          `BswM_ApplyDcmCommMode()` 経由で実際に Com/CanNm へ反映する
+ *          （2026-09-05、シグネチャ準拠サーベイで、Dcm 側が Com/CanNm を直接
  *          呼んでいたレイヤ違反を是正した際に新設）。
  *
  * \param[in]  Network        通信チャネル（本プロジェクトは単一ネットワーク

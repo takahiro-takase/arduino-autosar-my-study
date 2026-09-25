@@ -27,7 +27,7 @@
  *            Task 9: Dcm_MainFunction            1000 ms  — S3 セッションタイムアウト監視
  *            Task 10: FiM_MainFunction             100 ms  — 機能抑止状態の再評価
  *            Task 11: WdgM_TriggerHwWatchdog      1000 ms  — HW ウォッチドッグ trigger（リフレッシュ）
- *            Task 12: Nm_MainFunction             1000 ms  — NM フレーム送信（ComM FULL_COM 中のみ）
+ *            Task 12: CanNm_MainFunction             1000 ms  — NM フレーム送信（ComM FULL_COM 中のみ）
  *            Task 13: NvM_MainFunction             10 ms  — 保留中 EEPROM 書き込みジョブを1バイトずつ処理
  *            Task 14: Can_MainFunction_Write        1 ms  — 保留中 TX 確認 (CanIf_TxConfirmation) をドレイン
  *            Task 15: Can_MainFunction_BusOff       1 ms  — Bus-Off (EFLG.TXBO) ポーリング
@@ -67,9 +67,9 @@
  *            タイムアウト（約 5592ms）が判定サイクル (6000ms) より短く、
  *            判定サイクルに直接同期できないための分離（詳細は WdgM_Cfg.h の
  *            WDGM_HW_WATCHDOG_TIMEOUT_MS コメントを参照）。
- *            Nm_MainFunction は MeterStatus (3000ms) より高頻度な 1000 ms とし、
+ *            CanNm_MainFunction は MeterStatus (3000ms) より高頻度な 1000 ms とし、
  *            WdgM_TriggerHwWatchdog と同じ「中頻度の BSW ハウスキーピング」
- *            周期に揃えている（詳細は Nm_Cfg.h を参照）。
+ *            周期に揃えている（詳細は CanNm_Cfg.h を参照）。
  *            NvM_MainFunction は CanSM_MainFunction / IoHwAb_MainFunction と同じ
  *            10 ms とする（ブロック・CRC・冗長化のオーケストレーションのみで
  *            EEPROM I/O は発生しないため軽量）。MemIf_MainFunction も同じ
@@ -139,7 +139,7 @@ extern void WdgM_MainFunction(void);
 extern void Dcm_MainFunction(void);
 extern void FiM_MainFunction(void);
 extern void WdgM_TriggerHwWatchdog(void);
-extern void Nm_MainFunction(void);
+extern void CanNm_MainFunction(void);
 extern void NvM_MainFunction(void);
 extern void Can_MainFunction_Write(void);
 extern void Can_MainFunction_BusOff(void);
@@ -169,7 +169,7 @@ static const Os_TaskType Os_TaskTable[OS_TASK_COUNT] =
     /* Task 9 */ { Dcm_MainFunction,             1000U },  /* 1000 ms : S3 セッションタイムアウト監視 */
     /* Task 10 */ { FiM_MainFunction,             100U  },  /* 100 ms  : 機能抑止状態の再評価      */
     /* Task 11 */ { WdgM_TriggerHwWatchdog,      1000U },  /* 1000 ms : HW ウォッチドッグ trigger */
-    /* Task 12 */ { Nm_MainFunction,             1000U },  /* 1000 ms : NM フレーム送信           */
+    /* Task 12 */ { CanNm_MainFunction,             1000U },  /* 1000 ms : NM フレーム送信           */
     /* Task 13 */ { NvM_MainFunction,              10U  },  /* 10 ms   : 保留中 EEPROM ジョブ処理  */
     /* Task 14 */ { Can_MainFunction_Write,          1U  },  /* 1 ms    : 保留中 TX 確認をドレイン  */
     /* Task 15 */ { Can_MainFunction_BusOff,         1U  },  /* 1 ms    : Bus-Off ポーリング        */

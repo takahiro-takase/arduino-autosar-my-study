@@ -105,13 +105,13 @@ Std_ReturnType ComM_GetStatus(ComM_InitStatusType* Status);
  *          最高優先モードに調停する (AUTOSAR SWS_ComM_00686、"highest wins" 戦略)。
  *
  *          FULL_COM -> NO_COM の場合のみ特別扱いする（[SWS_ComM_00133]）:
- *          Can_SetControllerMode() は呼ばず、Nm_NetworkRelease() のみを送って
+ *          Can_SetControllerMode() は呼ばず、CanNm_NetworkRelease() のみを送って
  *          即座に E_OK を返す。実際の CanSM_RequestComMode() 呼び出しと
- *          ComM_ChannelMode の更新は、Nm が協調スリープを完了して
+ *          ComM_ChannelMode の更新は、CanNm が協調スリープを完了して
  *          ComM_Nm_BusSleepMode() を呼ぶまで遅延する（ComM.c ファイル冒頭
- *          コメント参照）。SILENT_COM 中（Nm が既に Prepare Bus-Sleep Mode
+ *          コメント参照）。SILENT_COM 中（CanNm が既に Prepare Bus-Sleep Mode
  *          へ到達済み）に NO_COM が再要求された場合も同様に何もしない
- *          （CanSM へ素通りさせると Nm 未到達のまま物理スリープしてしまう
+ *          （CanSM へ素通りさせると CanNm 未到達のまま物理スリープしてしまう
  *          回帰があったため、2026-08 に修正。ComM.c 参照）。それ以外の遷移
  *          （NO_COM -> FULL_COM 等）は従来どおり即座に CanSM_RequestComMode()
  *          へ転送する。
@@ -121,7 +121,7 @@ Std_ReturnType ComM_GetStatus(ComM_InitStatusType* Status);
  *                      (COMM_NO_COMMUNICATION / COMM_SILENT_COMMUNICATION /
  *                       COMM_FULL_COMMUNICATION)。
  *
- * \retval  E_OK      モード遷移（または Nm への解放要求送信）を受理した。
+ * \retval  E_OK      モード遷移（または CanNm への解放要求送信）を受理した。
  * \retval  E_NOT_OK  User が範囲外、または不正な ComMode。
  *
  * \ServiceID      {0x05}
@@ -188,7 +188,7 @@ Std_ReturnType ComM_GetCurrentComMode(ComM_UserHandleType User, ComM_ModeType* C
  *          通知された時点でチャネルがまだ NO_COM のままなら、ユーザ要求を
  *          その場で再集計し、なお FULL_COM が望まれていれば
  *          `CanSM_RequestComMode(FULL_COM)` を発行する（ComM.c 参照）。
- *          Nm 側の再起床通知（ComM_Nm_NetworkMode() 等）や
+ *          CanNm 側の再起床通知（ComM_Nm_NetworkMode() 等）や
  *          COMM_SILENT_COMMUNICATION 要求はこのゲートの対象外（各関数の
  *          Doxygen 参照）。既に COMM_FULL_COMMUNICATION であるチャネルには
  *          影響しない（[SWS_ComM_00896] のとおり評価対象は NO_COM からの
@@ -245,7 +245,7 @@ void ComM_DCM_InactiveDiagnostic(NetworkHandleType Channel);
  * \brief   ComM 周期処理（バス通信状態の監視）。
  *
  * \details 意図的な NOP。[SWS_ComM_00888] のとおり `ComMNmVariant=FULL`
- *          （本プロジェクトのように Nm_NetworkRequest()/Nm_NetworkRelease() を
+ *          （本プロジェクトのように CanNm_NetworkRequest()/CanNm_NetworkRelease() を
  *          能動的に呼び、CanNm の協調スリープでチャタリングを防止する構成）
  *          では ComMTMinFullComModeDuration ヒステリシスタイマは不要と
  *          明記されている。詳細な根拠は ComM.c の実装コメント参照。
@@ -277,14 +277,14 @@ void ComM_MainFunction(void);
  *          残らないようにするため。詳細は ComM.c の実装コメントを参照）。
  *
  *          FULL_COM 通知時、`ComM_NmReleasePending[]` が立っていれば
- *          （Nm 協調スリープ待ちの最中に Bus-Off が発生し、回復して CanSM が
- *          FULL_COM へ戻ってきたケース）Nm_NetworkRequest() は呼ばず、
+ *          （CanNm 協調スリープ待ちの最中に Bus-Off が発生し、回復して CanSM が
+ *          FULL_COM へ戻ってきたケース）CanNm_NetworkRequest() は呼ばず、
  *          代わりに CanSM_RequestComMode(NO_COM) を再度呼んで解放を
  *          仕切り直す（詳細は ComM.c の実装コメント参照）。
  *
  *          呼び出しタイミング:
  *            - CanSM_RequestComMode 成功後 (NO_COM -> FULL_COM 遷移時、および
- *              Nm が協調スリープを完了して ComM_Nm_BusSleepMode() 経由で
+ *              CanNm が協調スリープを完了して ComM_Nm_BusSleepMode() 経由で
  *              呼ばれた NO_COM 確定時)
  *            - Bus-Off 検出時・回復試行時 (SILENT_COMMUNICATION / FULL_COMMUNICATION)
  *            - ウェイクアップ検証成功時 (FULL_COM)
@@ -300,7 +300,7 @@ void ComM_MainFunction(void);
 void ComM_BusSM_ModeIndication(NetworkHandleType Network, ComM_ModeType Mode);
 
 /**
- * \brief   Nm が Prepare Bus-Sleep Mode へ入ったことの通知（Nm から呼び出される）。
+ * \brief   CanNm が Prepare Bus-Sleep Mode へ入ったことの通知（CanNm から呼び出される）。
  *
  * \details [SWS_ComM_00826]。COMM_FULL_COMMUNICATION 中に呼ばれた場合のみ
  *          CanSM_RequestComMode(Network, COMM_SILENT_COMMUNICATION) を呼び、
@@ -317,22 +317,22 @@ void ComM_BusSM_ModeIndication(NetworkHandleType Network, ComM_ModeType Mode);
 void ComM_Nm_PrepareBusSleepMode(NetworkHandleType Network);
 
 /**
- * \brief   Bus-Sleep Mode 中に NM PDU を受信したことの通知（Nm から呼び出される、
+ * \brief   Bus-Sleep Mode 中に NM PDU を受信したことの通知（CanNm から呼び出される、
  *          [SWS_ComM_00383]）。
  *
- * \details [SWS_CanNm_00127]: Nm は Bus-Sleep Mode 中に NM PDU を受信しても
+ * \details [SWS_CanNm_00127]: CanNm は Bus-Sleep Mode 中に NM PDU を受信しても
  *          自動的に Network Mode へ遷移せず、上位層（ComM）へ通知するのみで
  *          判断を委ねる。これは「他ノードは既に Network Mode にいる」ことを
  *          示す、レース条件由来のシグナルである（[SWS_ComM_00583] のユース
  *          ケース参照）。
  *
- *          本プロジェクトの同期的な設計では、Nm が `NM_STATE_BUS_SLEEP` へ
+ *          本プロジェクトの同期的な設計では、CanNm が `CANNM_STATE_BUS_SLEEP` へ
  *          到達する時点で通常は `ComM_Nm_BusSleepMode()` 経由の
  *          `CanSM_RequestComMode(NO_COM)` が既に成功しており、物理コントローラ
  *          も `CAN_CS_SLEEP` へ落ちている（＝`Can_MainFunction_Read()` 自体が
- *          停止し `Nm_RxIndication()` は物理的に呼ばれ得ない）。そのため本関数
+ *          停止し `CanNm_RxIndication()` は物理的に呼ばれ得ない）。そのため本関数
  *          が実際に到達しうるのは、Bus-Off 回復待ち中に `CanSM_RequestComMode
- *          (NO_COM)` が拒否されて Nm だけが独立したタイマで先に Bus-Sleep
+ *          (NO_COM)` が拒否されて CanNm だけが独立したタイマで先に Bus-Sleep
  *          Mode へ到達してしまうケース（コントローラは Bus-Off により
  *          Listen-Only のまま受信は継続、`ComM_Nm_BusSleepMode()` の Doxygen
  *          `BusOffDuringNmWinddown_OK_DoesNotResurrectNm` 相当）にほぼ限られる。
@@ -357,12 +357,12 @@ void ComM_Nm_PrepareBusSleepMode(NetworkHandleType Network);
  *          望んでいないのに FULL_COM へ「復活」させてしまう
  *          （`BusOffDuringNmWinddown_OK_DoesNotResurrectNm` と同種の回帰）。
  *
- *          実仕様は `ComMNmVariant=FULL` 構成で `Nm_PassiveStartup()` を要求
+ *          実仕様は `ComMNmVariant=FULL` 構成で `CanNm_PassiveStartup()` を要求
  *          するが（[SWS_ComM_00903]）、本 ECU は能動送信ノードでありこの API
  *          自体を実装しない（`CanNm_PassiveStartUp` は既知の対応除外）。
  *          `CanSM_RequestComMode(FULL_COM)` が成功する経路では
- *          `ComM_BusSM_ModeIndication()` が内部で `Nm_NetworkRequest()` を
- *          呼び Nm 自身を起こす（同関数の FULL_COM 分岐参照）ため、本関数は
+ *          `ComM_BusSM_ModeIndication()` が内部で `CanNm_NetworkRequest()` を
+ *          呼び CanNm 自身を起こす（同関数の FULL_COM 分岐参照）ため、本関数は
  *          追加のアクションを取らない。
  *
  * \param[in]  Network  ネットワークハンドル（0 〜 COMM_CHANNEL_COUNT-1）。
@@ -375,10 +375,10 @@ void ComM_Nm_PrepareBusSleepMode(NetworkHandleType Network);
 void ComM_Nm_NetworkStartIndication(NetworkHandleType Network);
 
 /**
- * \brief   Nm が Network Mode へ（再）入ったことの通知（Nm から呼び出される）。
+ * \brief   CanNm が Network Mode へ（再）入ったことの通知（CanNm から呼び出される）。
  *
  * \details [SWS_ComM_00296]。典型的には、Prepare Bus-Sleep Mode 中に他ノードの
- *          NM フレームを受信して Nm が自律的にスリープを取りやめたケース
+ *          NM フレームを受信して CanNm が自律的にスリープを取りやめたケース
  *          （[SWS_CanNm_00124]）。COMM_FULL_COMMUNICATION でない場合、
  *          CanSM_RequestComMode(Network, COMM_FULL_COMMUNICATION) を呼ぶ
  *          **前に** ComM_NmReleasePending[Network] を **無条件で**（この
@@ -396,10 +396,10 @@ void ComM_Nm_NetworkStartIndication(NetworkHandleType Network);
 void ComM_Nm_NetworkMode(NetworkHandleType Network);
 
 /**
- * \brief   Nm が Bus-Sleep Mode へ到達したことの通知（Nm から呼び出される）。
+ * \brief   CanNm が Bus-Sleep Mode へ到達したことの通知（CanNm から呼び出される）。
  *
  * \details [SWS_ComM_00392]。ComM_RequestComMode() が FULL_COM -> NO_COM の
- *          要求時に送った Nm_NetworkRelease() を受けて Nm が協調スリープ
+ *          要求時に送った CanNm_NetworkRelease() を受けて CanNm が協調スリープ
  *          （Repeat Message → Ready Sleep → Prepare Bus-Sleep → Bus-Sleep Mode）
  *          を完了したときに呼ばれる。ここで初めて CanSM_RequestComMode(NO_COM)
  *          を呼び、物理スリープと ComM_ChannelMode の更新を行う
