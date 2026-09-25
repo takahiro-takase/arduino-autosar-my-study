@@ -47,15 +47,17 @@
 #
 # E2E チェーン（README「Tx 処理」「Rx 処理」それぞれの「E2E」節、
 # Bsw_ComStack_E2E_Tx_test.cpp/Bsw_ComStack_E2E_Rx_test.cpp）は E2EXf.c/
-# E2EXf_PBCfg.c/E2E_P05.c/E2E_P01.c（E2EXf.c が両 Profile を参照するため）を
-# 実体でリンクする。本番の TxTransformCbk/RxIndicationCbk
+# E2EXf_PBCfg.c/E2E_P05.c（実配線先）を実体でリンクする（E2E_P01.c は実 PDU
+# を持たない参考実装のため、E2EXf.h/.c 側の対応するインスタンス専用関数は
+# 廃止済み。E2E_P01.c 自体の検証は Bsw_E2E_test.cpp の E2EP01Test が独立して
+# 担う）。本番の TxTransformCbk/RxIndicationCbk
 # （Rte_COMTransform_E2EHealthStatus()/Rte_COMCbk_EngineInfo() 等）は Rte.c
 # 内にあるが、Rte.c 自体は IoHwAb/FiM/App_EngineManager/App_WarningIndicator
 # まで巨大な依存グラフを引き込むため（Bsw_ComStack_Tx_test.cpp 冒頭コメント
 # と同じ理由）リンクしない。各テストファイル内に、本番の
 # Rte_COMTransform_E2EHealthStatus()/Rte_COMCbk_EngineInfo() と同じ1行の委譲
 # 呼び出しをテスト専用の TxTransformCbk/RxIndicationCbk として定義し、
-# E2EXf_TransformP05()/E2EXf_InverseTransformP05() から先は実体をそのまま
+# E2EXf_E2EHealthStatus()/E2EXf_Inv_EngineInfo() から先は実体をそのまま
 # 検証する。E2EMon（E2E 検証結果のテレメトリ集計）はこのチェーンの対象外
 # （README の「E2E」節の図に含めていない別軸のため）。
 #
@@ -236,6 +238,7 @@ set(NATIVE_CHAIN_INCLUDE_DIRS
     stub/Bsw/ComM
     stub/Bsw/Dem
     stub/Bsw/E2E
+    stub/Bsw/E2EXf
     stub/Bsw/EcuM
     stub/Bsw/KeyM
     stub/Bsw/NvM
@@ -282,6 +285,7 @@ set(NATIVE_CHAIN_STUB_SOURCES
     stub/Bsw/E2E/Wrap_E2E.c
     stub/Bsw/E2E/Wrap_E2E_P05.c
     stub/Bsw/E2E/Wrap_E2E_P01.c
+    stub/Bsw/E2EXf/Wrap_E2EXf.c
     stub/Bsw/Dem/Wrap_Dem.c
     stub/Bsw/Dcm/Wrap_Dcm.c
     stub/Bsw/ComM/Wrap_ComM.c
@@ -454,6 +458,13 @@ set(NATIVE_CHAIN_WRAP_SYMBOLS
     E2E_P05Check
     E2E_P05CheckInit
     E2E_P05MapStatusToSM
+    # E2EXf.h の公開API全7関数（Wrap_E2EXf.h/.c 参照）。
+    E2EXf_Init
+    E2EXf_DeInit
+    E2EXf_Inv_EngineInfo
+    E2EXf_Inv_AbsInfo
+    E2EXf_E2EHealthStatus
+    E2EXf_GetVersionInfo
     # PduR.c の AUTOSAR IF 全数（Wrap_PduR.h/.c 参照）。
     PduR_Init
     PduR_GetVersionInfo

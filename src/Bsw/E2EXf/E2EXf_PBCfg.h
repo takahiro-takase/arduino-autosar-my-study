@@ -2,9 +2,12 @@
  * \file    E2EXf_PBCfg.h
  * \brief   E2E Transformer ポストビルド設定 公開インタフェース
  *
- * \details 各 I-PDU に対応する E2EXf_RxConfigType/E2EXf_TxConfigType
- *          インスタンスを公開する。Rte.c が RxIndicationCbk/TxTransformCbk
- *          の実体（Rte_COMCbk_ 系 / Rte_COMTransform_ 系）から参照する。
+ * \details 各 I-PDU に対応する E2EXf_RxConfigTypeP05/E2EXf_TxConfigTypeP05
+ *          インスタンスを公開する。`E2EXf.c` の各インスタンス専用関数
+ *          （`E2EXf_Inv_EngineInfo()`等）が内部で直接参照する
+ *          （2026-09 是正、以前は Rte.c 側の RxIndicationCbk/TxTransformCbk
+ *          実体が直接参照していたが、Config を引数に取らないインスタンス
+ *          専用関数へ変更したため、参照元は E2EXf.c 内へ移った）。
  *
  * \copyright  Copyright (c) 2025 T_T
  * \license    MIT License - 詳細は LICENSE ファイルを参照。

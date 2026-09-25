@@ -2,12 +2,16 @@
  * \file    E2EXf_PBCfg.c
  * \brief   E2E Transformer ポストビルド設定データ
  *
- * \details E2E Profile 01/05 の設定・ステートを I-PDU 単位で定義し、
- *          E2EXf_RxConfigType(P01)/E2EXf_RxConfigTypeP05/E2EXf_TxConfigTypeP05
- *          としてまとめる。EngineInfo/AbsInfo(RX)/E2EHealthStatus(TX)は
- *          いずれも Profile05 を使用しており、E2EXf_RxConfigType(P01)自体は
- *          呼び出し元ゼロの参考実装として残している（E2EXf_TxConfigType と
- *          同じ理由）。
+ * \details E2E Profile 05 の設定・ステートを I-PDU 単位で定義し、
+ *          E2EXf_RxConfigTypeP05/E2EXf_TxConfigTypeP05 としてまとめる
+ *          （EngineInfo/AbsInfo(RX)/E2EHealthStatus(TX)、いずれも Profile05）。
+ *          これらの struct は `E2EXf.c` の各インスタンス専用関数
+ *          （`E2EXf_Inv_EngineInfo()`等）が内部で直接参照する表現であり、
+ *          公開 API の引数には登場しない（2026-09 是正、E2EXf.h 冒頭コメント
+ *          参照）。E2E Profile 01（`E2E_P01.c`）は実 PDU を持たない参考実装
+ *          のため、対応する Config struct・インスタンスはここに存在しない
+ *          （`test/Bsw/E2E/Bsw_E2E_test.cpp` の `E2EP01Test` が
+ *          `E2E_P01.c` 単体を直接検証する）。
  *          以前は Com_PBCfg.c が Com_IPduConfigType の E2EConfig/
  *          E2ECheckState/E2EProtectState/E2EDemEventId フィールドとして
  *          直接保持していたが、E2E Transformer 方式への移行に伴い
@@ -151,7 +155,7 @@ void E2EXf_PBCfg_Init(void)
     E2E_P05ProtectInit(&E2EXf_E2EHealthStatusStateP05);
 
     /* 各 State の初期化が完了した最後に、E2EXf モジュール自身の初期化状態
-     * (SWS_E2EXf_00130) を TRUE にする。E2EXf_InverseTransform()/
-     * E2EXf_Transform() はこれより前に呼ばれても安全側で早期 return する。 */
+     * (SWS_E2EXf_00130) を TRUE にする。E2EXf_Inv_EngineInfo()等の各
+     * インスタンス関数はこれより前に呼ばれても安全側で早期 return する。 */
     E2EXf_Init(NULL);
 }

@@ -2385,7 +2385,7 @@ void Com_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
          * 説明参照）。デッドライン監視タイマは本関数の冒頭で既にリセット
          * 済み（[SWS_Com_00872] 段階1、上記参照）。ペイロードの妥当性検証・
          * 破棄判断はすべて RxIndicationCbk 側（例: RTE 経由の
-         * E2EXf_InverseTransform）の責務であり、Com はそれがあることすら
+         * E2EXf_Inv_EngineInfo() 等）の責務であり、Com はそれがあることすら
          * 知らない。E2E 保護された I-PDU では、部分受信で新旧バイトが
          * 混在した内容はほぼ確実に CRC 不一致となり、E2EXf 側で別途
          * 棄却される。Com 層の部分受理（本要求）と E2E 層の整合性検証は

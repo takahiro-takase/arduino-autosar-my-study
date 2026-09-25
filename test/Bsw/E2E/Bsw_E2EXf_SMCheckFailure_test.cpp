@@ -17,7 +17,7 @@
  *          E2EXf.c から見た `E2E_SMCheck()` の戻り値だけをピンポイントで
  *          差し替えられる（Wrap_E2E.h 参照）。
  *
- *          Com/PduR/CanIf 等は経由せず、`E2EXf_InverseTransformP05()` を
+ *          Com/PduR/CanIf 等は経由せず、`E2EXf_Inv_EngineInfo()` を
  *          直接呼ぶところから始める（`test/Bsw/ComStack/Bsw_ComStack_E2E_Rx_test.cpp`
  *          と同じ粒度・同じ本番設定 `E2EXf_EngineInfoRxCfg` を使う）。
  */
@@ -84,7 +84,7 @@ protected:
 // 正常系（回帰確認）: SMCheck が素通りする場合、CRC/Counter が正しい初回
 // フレームは受理され、Dem へ PASSED が報告される。
 // ------------------------------------------------------------
-TEST_F(Bsw_E2EXf_SMCheckFailure_Test, InverseTransformP05_OK_ValidFrameReportsPassedViaDem)
+TEST_F(Bsw_E2EXf_SMCheckFailure_Test, Inv_EngineInfo_OK_ValidFrameReportsPassedViaDem)
 {
     /* 準備 (Arrange): E2E_SMCheck() の状態機械は1回目の呼び出しで
      * NODATA→INITに遷移するだけでカウントを取らず(E2E.c参照)、2回目以降
@@ -101,10 +101,11 @@ TEST_F(Bsw_E2EXf_SMCheckFailure_Test, InverseTransformP05_OK_ValidFrameReportsPa
 
     /* 実行 (Act) */
     E2E_P05StatusType checkStatus = E2E_P05STATUS_ERROR;
-    (void)E2EXf_InverseTransformP05(&E2EXf_EngineInfoRxCfg, buf1, 7U, &checkStatus);
-    (void)E2EXf_InverseTransformP05(&E2EXf_EngineInfoRxCfg, buf2, 7U, &checkStatus);
-    const Std_ReturnType ret =
-        E2EXf_InverseTransformP05(&E2EXf_EngineInfoRxCfg, buf3, 7U, &checkStatus);
+    uint32 bufferLength;
+    (void)E2EXf_Inv_EngineInfo(buf1, &bufferLength, NULL, 0U, &checkStatus);
+    (void)E2EXf_Inv_EngineInfo(buf2, &bufferLength, NULL, 0U, &checkStatus);
+    const uint8 ret =
+        E2EXf_Inv_EngineInfo(buf3, &bufferLength, NULL, 0U, &checkStatus);
 
     /* 評価 (Assert) */
     EXPECT_EQ(ret, E_OK);
@@ -122,7 +123,7 @@ TEST_F(Bsw_E2EXf_SMCheckFailure_Test, InverseTransformP05_OK_ValidFrameReportsPa
 // ため書き換わらず、Dem への PASSED/FAILED 報告だけが保留される
 // （フェイルセーフ側）。
 // ------------------------------------------------------------
-TEST_F(Bsw_E2EXf_SMCheckFailure_Test, InverseTransformP05_NG_SMCheckFailureReturnsSafetySoftRuntimeErrorAndSkipsDemReport)
+TEST_F(Bsw_E2EXf_SMCheckFailure_Test, Inv_EngineInfo_NG_SMCheckFailureReturnsSafetySoftRuntimeErrorAndSkipsDemReport)
 {
     /* 準備 (Arrange): CRC/Counter は正しいフレームを用意した上で、
      * E2E_SMCheck() だけを強制失敗させる。 */
@@ -136,8 +137,9 @@ TEST_F(Bsw_E2EXf_SMCheckFailure_Test, InverseTransformP05_NG_SMCheckFailureRetur
 
     /* 実行 (Act) */
     E2E_P05StatusType checkStatus = E2E_P05STATUS_ERROR;
-    const Std_ReturnType ret =
-        E2EXf_InverseTransformP05(&E2EXf_EngineInfoRxCfg, buf, 7U, &checkStatus);
+    uint32 bufferLength;
+    const uint8 ret =
+        E2EXf_Inv_EngineInfo(buf, &bufferLength, NULL, 0U, &checkStatus);
 
     /* 評価 (Assert): [SWS_E2EXf_00027] 準拠で戻り値は
      * E_SAFETY_SOFT_RUNTIMEERROR（2026-09 追加、以前は誤って通常の
@@ -156,7 +158,7 @@ TEST_F(Bsw_E2EXf_SMCheckFailure_Test, InverseTransformP05_NG_SMCheckFailureRetur
 // 上のテストの直後、SMCheck が正常に戻れば通常通り報告を再開する
 // （一時的な防御分岐であり、以降の呼び出しへ悪影響を残さないことの確認）。
 // ------------------------------------------------------------
-TEST_F(Bsw_E2EXf_SMCheckFailure_Test, InverseTransformP05_OK_ResumesReportingAfterSMCheckRecovers)
+TEST_F(Bsw_E2EXf_SMCheckFailure_Test, Inv_EngineInfo_OK_ResumesReportingAfterSMCheckRecovers)
 {
     /* 準備 (Arrange): 1回目は SMCheck を強制失敗させる。この間 E2E_SMCheck()
      * の実体は一切呼ばれない（wrap がパススルーせず即座に戻り値を返す
@@ -177,14 +179,15 @@ TEST_F(Bsw_E2EXf_SMCheckFailure_Test, InverseTransformP05_OK_ResumesReportingAft
 
     FailFromCallCount_E2E_SMCheck = 1U;
     E2E_P05StatusType checkStatus = E2E_P05STATUS_ERROR;
-    (void)E2EXf_InverseTransformP05(&E2EXf_EngineInfoRxCfg, buf1, 7U, &checkStatus);
+    uint32 bufferLength;
+    (void)E2EXf_Inv_EngineInfo(buf1, &bufferLength, NULL, 0U, &checkStatus);
     ASSERT_EQ(CallCount_Dem_SetEventStatus, 0U);
     FailFromCallCount_E2E_SMCheck = WRAP_E2E_FAIL_FROM_CALL_COUNT_DISABLED;  // 以降はパススルー（実体成功）
 
     /* 実行 (Act) */
-    (void)E2EXf_InverseTransformP05(&E2EXf_EngineInfoRxCfg, buf2, 7U, &checkStatus);
-    (void)E2EXf_InverseTransformP05(&E2EXf_EngineInfoRxCfg, buf3, 7U, &checkStatus);
-    (void)E2EXf_InverseTransformP05(&E2EXf_EngineInfoRxCfg, buf4, 7U, &checkStatus);
+    (void)E2EXf_Inv_EngineInfo(buf2, &bufferLength, NULL, 0U, &checkStatus);
+    (void)E2EXf_Inv_EngineInfo(buf3, &bufferLength, NULL, 0U, &checkStatus);
+    (void)E2EXf_Inv_EngineInfo(buf4, &bufferLength, NULL, 0U, &checkStatus);
 
     /* 評価 (Assert): 強制失敗が悪影響を残さず、実フレーム3回分で通常通り
      * Dem へ PASSED を報告する */
