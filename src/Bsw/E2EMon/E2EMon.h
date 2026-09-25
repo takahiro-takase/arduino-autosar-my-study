@@ -81,8 +81,8 @@ void E2EMon_NotifyCheckResult(E2E_P01StatusType status);
  * \brief   E2E Profile05 のチェック結果を通知する。
  *
  * \details EngineInfo/AbsInfo（いずれも E2E Profile05、Rte.c の
- *          Rte_COMRxInd_EngineInfo()/AbsInfo() から E2EXf_InverseTransformP05()
- *          呼び出し直後に呼ばれる）向け。P05 には Profile01 の WRONGCRC に
+ *          Rte_COMRxInd_EngineInfo()/AbsInfo() から E2EXf_Inv_EngineInfo()/
+ *          E2EXf_Inv_AbsInfo() 呼び出し直後に呼ばれる）向け。P05 には Profile01 の WRONGCRC に
  *          相当する単独状態が無く、CRC 不一致は ERROR（NULL/長さ不正とも
  *          共用）にまとまる（E2E_P05.c 参照）ため、ERROR を CRC 不一致
  *          カウンタの契機として扱う。

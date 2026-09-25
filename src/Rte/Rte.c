@@ -55,8 +55,8 @@ static EngineState_t Rte_EngineStateMirror = ENGINE_STATE_OFF;
  *
  * E2E Transformer 方式では、Com はペイロードの妥当性を一切検証しない
  * （Com_Types.h の RxIndicationCbk 説明参照）。かわりに、フレーム受信の
- * 都度呼ばれる Rte_COMCbk_*() が E2EXf_InverseTransformP05()（EngineInfo/
- * AbsInfo とも E2E Profile05 使用）で検証し、合格した場合のみここのミラーを
+ * 都度呼ばれる Rte_COMCbk_*() が E2EXf_Inv_EngineInfo()/E2EXf_Inv_AbsInfo()
+ * （とも E2E Profile05 使用）で検証し、合格した場合のみここのミラーを
  * 更新する。Rte_Read_*() はタイムアウト判定 (Com_IsRxTimedOut()) だけを
  * Com に問い合わせ、値自体はこのミラーから返す。
  *
@@ -66,15 +66,32 @@ static EngineState_t Rte_EngineStateMirror = ENGINE_STATE_OFF;
  * フェイルセーフの実体になる（Com_RxTimedOut は物理フレームが本当に
  * 途絶えた場合にのみ発火する別軸の保護）。
  *
+ * 2026-09 是正: E2EXf_Inv_EngineInfo()/E2EXf_Inv_AbsInfo() の戻り値は
+ * [SWS_E2EXf_00027] 準拠のニブルパック値（上位=E2E_SMStateType、
+ * 下位=プロファイル非依存チェック結果）へ変更された。`ret == E_OK`（両
+ * ニブルとも0）は「SMState=VALID かつ今回のフレームも合格」を意味する
+ * ため、`if (ret != E_OK) return;` は自然に [SWS_E2E_00345] の
+ * "do NOT use data" 規定（SMState が NODATA/INIT/INVALID の間はデータを
+ * 使わない）も満たすようになった。以前は個々のフレームの合否のみで
+ * ミラーを更新しており、起動直後（SM が WindowSize 回分の履歴を
+ * 蓄積し VALID に確定するまでの間）でもフレーム単体が正常なら即座に
+ * 更新していたが、これは仕様の規定より早すぎる更新だった（是正後は
+ * 起動直後のミラー更新がその分遅れる）。
+ *
  * Rte_EngineInfoStatus / Rte_AbsInfoStatus（Rte_IStatusType）:
  * 上記のミラー更新可否とは別に、直近の E2E_P05Check() 結果を
  * RTE_E_OK / RTE_E_SOFT_TRANSFORMER_ERROR（OKSOMELOST）/
  * RTE_E_HARD_TRANSFORMER_ERROR（それ以外の異常）へ分類して保持する
  * （Profile05 には Profile01 の SYNC/INITIAL に相当する状態が無いため、
  * OK に分類されるのは E2E_P05STATUS_OK 単独。ただし起動直後の最初の
- * フレームは E2EXf_InverseTransformP05() 側で OK に格上げされるため
- * ここでは通常の OK と区別されない。詳細は E2EXf_RxConfigTypeP05 の
- * WaitForFirstData 宣言コメント参照）。
+ * フレームは E2EXf_Inv_EngineInfo()/E2EXf_Inv_AbsInfo() 側で OK に
+ * 格上げされるためここでは通常の OK と区別されない。詳細は
+ * E2EXf_RxConfigTypeP05 の WaitForFirstData 宣言コメント参照）。
+ * `CheckStatus`（この生ステータス）は仕様の Syntax には無い本プロジェクト
+ * 独自の追加出力引数であり、上記ニブルパック済み戻り値では失われる
+ * OKSOMELOST 等の詳細を Rte 層のこの分類のためだけに残している
+ * （E2EXf_Inv_EngineInfo() の \note 参照。将来グローバル変数経由での
+ * 公開へ置き換える予定）。
  * Rte_Read_*() はこれを Com_IsRxTimedOut() と合成し、SWC が「タイムアウト
  * なのか」「E2E で弾かれたのか（データは信頼できないので前回値のまま）」
  * 「E2E 上は使用可だが一部フレーム消失があったのか」を区別できるようにする
@@ -125,7 +142,7 @@ static Rte_IStatusType Rte_AbsInfoStatus = RTE_E_OK;
  *          OKSOMELOST は「データ信頼可だが一部消失あり」として
  *          RTE_E_SOFT_TRANSFORMER_ERROR。それ以外（REPEATED/WRONGCRC/
  *          WRONGSEQUENCE/ERROR）は「データ不信」として
- *          RTE_E_HARD_TRANSFORMER_ERROR。E2EXf_InverseTransform() の
+ *          RTE_E_HARD_TRANSFORMER_ERROR。E2EXf_Inv_EngineInfo() 等の
  *          PASSED/FAILED 二値判定（Dem 報告用）とは独立した、SWC 向けの
  *          より詳細な分類である点に注意。
  */
@@ -170,7 +187,7 @@ static Rte_IStatusType Rte_MapE2EStatusP05(E2E_P05StatusType status)
  * \brief   EngineInfo (RX IPduId=0) フレーム受信の都度呼ばれる E2E Transformer フック。
  *
  * \details Com_PBCfg.c の RxIndicationCbk として登録される。
- *          E2EXf_InverseTransformP05() が失敗した場合はミラーを更新せず、
+ *          E2EXf_Inv_EngineInfo() が失敗した場合はミラーを更新せず、
  *          前回の有効値をそのまま使い続けさせる。E2E チェックの生の結果は
  *          `E2EMon_NotifyCheckResultP05()`（CDD 相当の独立モジュール、
  *          src/Bsw/E2EMon/）へも通知する。これは実 AUTOSAR で言う
@@ -192,9 +209,14 @@ void Rte_COMRxInd_EngineInfo(void)
         return;
 
     E2E_P05StatusType checkStatus;
-    const Std_ReturnType ret = E2EXf_InverseTransformP05(&E2EXf_EngineInfoRxCfg, buf, 7U, &checkStatus);
+    uint32 bufferLength;
+    const uint8 ret = E2EXf_Inv_EngineInfo(buf, &bufferLength, NULL, 0U, &checkStatus);
     Rte_EngineInfoStatus = Rte_MapE2EStatusP05(checkStatus);
     E2EMon_NotifyCheckResultP05(checkStatus);
+    /* ret==E_OK(0x00)は「SMState=VALID かつ今回のフレームも合格」を意味する
+     * ([SWS_E2EXf_00027]のニブルパック、E2EXf_Inv_EngineInfo()のコメント参照)。
+     * [SWS_E2E_00345]の"do NOT use data"規定により、SMがVALIDに確定するまで
+     * （起動直後のNODATA/INIT中を含む）はミラーを更新しない。 */
     if (ret != E_OK)
         return;
 
@@ -663,9 +685,12 @@ void Rte_COMRxInd_AbsInfo(void)
         return;
 
     E2E_P05StatusType checkStatus;
-    const Std_ReturnType ret = E2EXf_InverseTransformP05(&E2EXf_AbsInfoRxCfg, buf, 6U, &checkStatus);
+    uint32 bufferLength;
+    const uint8 ret = E2EXf_Inv_AbsInfo(buf, &bufferLength, NULL, 0U, &checkStatus);
     Rte_AbsInfoStatus = Rte_MapE2EStatusP05(checkStatus);
     E2EMon_NotifyCheckResultP05(checkStatus);
+    /* Rte_COMRxInd_EngineInfo() と同じ理由（[SWS_E2EXf_00027]のニブルパック、
+     * [SWS_E2E_00345]の"do NOT use data"規定）。 */
     if (ret != E_OK)
         return;
 
@@ -695,13 +720,15 @@ void Rte_COMRxInd_AbsInfo(void)
 void Rte_COMTransform_E2EHealthStatus(uint8* Data, uint8 Length)
 {
     DET_LOGT(TAG, "called");
-    /* E2EXf_TransformP05() の戻り値（2026-09-20 追加）は現状の起動順序
-     * （EcuM_Init() が E2EXf_PBCfg_Init() を Com_MainFunctionTx() 呼び出しより
-     * 前に完了させる）では E_SAFETY_HARD_RUNTIMEERROR を観測していないが、
-     * TxTransformCbk 自体の型が void のまま（Com_Types.h 参照）で受け渡す
-     * 経路が無いため、ここで破棄する（/code-review 指摘: 起動順序が将来
-     * 変わった場合の再検証はこの破棄では検知できない点に注意）。 */
-    (void)E2EXf_TransformP05(&E2EXf_E2EHealthStatusTxCfgP05, Data, Length);
+    (void)Length;  /* E2EXf_E2EHealthStatus() は固定長PDU用にDataLengthを内部で保持するため未使用 */
+    /* E2EXf_E2EHealthStatus() の戻り値は現状の起動順序（EcuM_Init() が
+     * E2EXf_PBCfg_Init() を Com_MainFunctionTx() 呼び出しより前に完了させる）
+     * では E_SAFETY_HARD_RUNTIMEERROR を観測していないが、TxTransformCbk
+     * 自体の型が void のまま（Com_Types.h 参照）で受け渡す経路が無いため、
+     * ここで破棄する（/code-review 指摘: 起動順序が将来変わった場合の
+     * 再検証はこの破棄では検知できない点に注意）。 */
+    uint32 bufferLength;
+    (void)E2EXf_E2EHealthStatus(Data, &bufferLength, NULL, 0U);
 }
 
 /* -----------------------------------------------------------------------

@@ -7,12 +7,12 @@
  *
  *              Com_MainFunctionTx()
  *                → TxTransformCbk があれば呼ぶ    ← Rte_COMTransform_E2EHealthStatus()
- *                                                    → E2EXf_TransformP05() → E2E_P05Protect()
+ *                                                    → E2EXf_E2EHealthStatus() → E2E_P05Protect()
  *                → PduR_ComTransmit() → CanIf_Transmit() → Can_Write()   （以降は「通常」と同じ）
  *
  *          「通常」の Tx チェーン（Com_MainFunctionTx() → PduR_ComTransmit() →
  *          CanIf_Transmit() → Can_Write()）は Bsw_ComStack_Signal_Tx_test.cpp が既に検証
- *          済みのため、本テストは TxTransformCbk フックの部分（E2EXf_TransformP05()
+ *          済みのため、本テストは TxTransformCbk フックの部分（E2EXf_E2EHealthStatus()
  *          → E2E_P05Protect() が Counter・CRC16 を正しく書き込むこと）に絞る。
  *          ただし「フックが正しく呼ばれて最終的に CAN フレームまで届くこと」
  *          自体は Bsw_ComStack_Signal_Tx_test.cpp の対象外（TxTransformCbk=NULL の設定）
@@ -23,12 +23,13 @@
  *          App_WarningIndicator まで巨大な依存グラフを引き込むため
  *          （Bsw_ComStack_Signal_Tx_test.cpp 冒頭コメントと同じ理由）リンクしない。
  *          本ファイル内に、本番と同じ1行の委譲呼び出し
- *          （`E2EXf_TransformP05(&E2EXf_E2EHealthStatusTxCfgP05, Data, Length)`）
+ *          （`E2EXf_E2EHealthStatus(Data, &bufferLength, NULL, 0U)`）
  *          をテスト専用の TxTransformCbk として定義し、そこから先
  *          （E2EXf.c/E2EXf_PBCfg.c/E2E_P05.c）は実体をそのまま検証する。
  *          E2EXf_PBCfg.c の本番設定（`E2EXf_E2EHealthStatusTxCfgP05`,
- *          DataID=0x220, DataLength=5）をそのまま使う（Rte.c と異なり
- *          E2EXf_PBCfg.c 自体は Rte 依存を持たないため、Bsw_ComStack_Signal_Tx_test.cpp
+ *          DataID=0x220, DataLength=5、`E2EXf_E2EHealthStatus()` が内部で
+ *          直接参照）をそのまま使う（Rte.c と異なり E2EXf_PBCfg.c 自体は
+ *          Rte 依存を持たないため、Bsw_ComStack_Signal_Tx_test.cpp
  *          のように専用の最小設定を別途定義する必要がない）。
  *
  *          期待値の算出は、E2E_P05.c の CRC16 実装を手でコピーせず、本テストの
@@ -65,7 +66,9 @@ namespace
 // -----------------------------------------------------------------------
 void TestTxTransform_E2EHealthStatus(uint8* Data, uint8 Length)
 {
-    (void)E2EXf_TransformP05(&E2EXf_E2EHealthStatusTxCfgP05, Data, Length);
+    (void)Length;  /* E2EXf_E2EHealthStatus() は固定長PDU用にDataLengthを内部で保持するため未使用 */
+    uint32 bufferLength;
+    (void)E2EXf_E2EHealthStatus(Data, &bufferLength, NULL, 0U);
 }
 
 // -----------------------------------------------------------------------

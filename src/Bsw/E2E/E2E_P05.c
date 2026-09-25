@@ -122,8 +122,8 @@ Std_ReturnType E2E_P05Check(
     {
         /* [SWS_E2E_00411/00412]: "wrong input" 分岐は E2E_E_INPUTERR_WRONG を
          * 返さなければならない（2026-09-06 是正。以前は E2E_E_OK を返して
-         * いた）。呼び出し元 E2EXf_InverseTransformP05() は元々 E2E_E_OK 以外
-         * を NULL 相当の防御分岐として扱う実装になっているため、この修正で
+         * いた）。呼び出し元 E2EXf_Inv_EngineInfo()/E2EXf_Inv_AbsInfo() は
+         * 元々 E2E_E_OK 以外を NULL 相当の防御分岐として扱う実装になっているため、この修正で
          * 下流の分岐構造は変わらない（EngineInfo/AbsInfo は固定長でしか
          * 呼ばないため、この分岐自体は現状到達しない）。 */
         State->Status = E2E_P05STATUS_ERROR;

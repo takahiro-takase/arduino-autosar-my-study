@@ -7,11 +7,11 @@
  *
  *              Com_RxIndication()                 ← EngineInfo/AbsInfo（RxIndicationCbk 経由）
  *                → Rte_COMRxInd_EngineInfo/AbsInfo()
- *                  → E2EXf_InverseTransformP05() → E2E_P05Check()
+ *                  → E2EXf_Inv_EngineInfo() → E2E_P05Check()
  *
  *          「通常」の Rx チェーン（Can_Isr() → … → Com_RxIndication()）は
  *          Bsw_ComStack_Signal_Rx_test.cpp が既に検証済みのため、本テストは
- *          RxIndicationCbk フックの部分（E2EXf_InverseTransformP05() →
+ *          RxIndicationCbk フックの部分（E2EXf_Inv_EngineInfo() →
  *          E2E_P05Check() が CRC・カウンタ連続性を正しく検証すること）に絞り、
  *          `Com_RxIndication()` を直接呼ぶところから始める
  *          （README の図もこの粒度で揃えている）。
@@ -22,11 +22,12 @@
  *          （Bsw_ComStack_Signal_Tx_test.cpp 冒頭コメントと同じ理由）リンクしない。
  *          本ファイル内に、本番の Rte_COMRxInd_EngineInfo() と同じ処理
  *          （Com_ReceiveSignalGroupArray() で生バイト列を取得し
- *          E2EXf_InverseTransformP05() へ渡す）をテスト専用の
+ *          E2EXf_Inv_EngineInfo() へ渡す）をテスト専用の
  *          RxIndicationCbk として定義し、そこから先（E2EXf.c/
  *          E2EXf_PBCfg.c/E2E_P05.c）は実体をそのまま検証する。E2EXf_PBCfg.c
- *          の本番設定（`E2EXf_EngineInfoRxCfg`、DataID=0x100、DataLength=7）
- *          をそのまま使う。E2EMon への通知（`E2EMon_NotifyCheckResultP05()`）
+ *          の本番設定（`E2EXf_EngineInfoRxCfg`、DataID=0x100、DataLength=7、
+ *          `E2EXf_Inv_EngineInfo()` が内部で直接参照）をそのまま使う。
+ *          E2EMon への通知（`E2EMon_NotifyCheckResultP05()`）
  *          は README の「E2E」節の図に含めていないため対象外
  *          （E2EMon 自体はテレメトリ集計という別軸の話であり、CRC/カウンタ
  *          検証というこのコールチェーンの本題ではないため）。
@@ -67,7 +68,8 @@ void TestRxIndication_EngineInfo(void)
         return;
 
     E2E_P05StatusType checkStatus = E2E_P05STATUS_ERROR;
-    (void)E2EXf_InverseTransformP05(&E2EXf_EngineInfoRxCfg, buf, 7U, &checkStatus);
+    uint32 bufferLength;
+    (void)E2EXf_Inv_EngineInfo(buf, &bufferLength, NULL, 0U, &checkStatus);
     g_LastCheckStatus = checkStatus;
 }
 
@@ -170,7 +172,7 @@ TEST_F(Bsw_E2E_Rx_Test, ComRxIndication_OK_ValidFirstFrameE2EChecksOk)
 
     /* 評価 (Assert) */
     EXPECT_EQ(g_CallbackCallCount, 1U);
-    // 初回受信は E2EXf_InverseTransformP05() の WaitForFirstData 特別扱いで
+    // 初回受信は E2EXf_Inv_EngineInfo() の WaitForFirstData 特別扱いで
     // OK に格上げされる（CRC が正しい前提。E2EXf.c 参照）。
     EXPECT_EQ(g_LastCheckStatus, E2E_P05STATUS_OK);
 }
