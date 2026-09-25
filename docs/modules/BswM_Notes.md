@@ -2,7 +2,7 @@
 
 > [README](../../README.md) の「[ECU 管理層](../../README.md#ecu-management)」節から分離。
 > なお「CAN コントローラの実スリープ」「ボランタリスリープとウェイクアップ」の2節は
-> 実質的に Can/CanSM/Nm の解説であるため、README側にそのまま残しています。
+> 実質的に Can/CanSM/CanNm の解説であるため、README側にそのまま残しています。
 
 BswM (BSW Mode Manager) は、EcuM や ComM からのモード変化通知を受け取り、
 ルールテーブルに従って Os タスクの有効・無効を切り替えるルールエンジンです。
@@ -18,13 +18,13 @@ EcuM が「今どのフェーズか」を決めるのに対し、BswM は「そ�
 |----|------------------|-----------|------|
 | 0 | EcuM==RUN | ACTIVATE | 全タスク（`BSWM_TASK_MASK_ALL`） |
 | 1 | EcuM==POST_RUN | DEACTIVATE | アプリタスクのみ（`BSWM_TASK_MASK_APP`） |
-| 2 | EcuM==SHUTDOWN | DEACTIVATE | `BSWM_TASK_MASK_SHUTDOWN`（WdgM_TriggerHwWatchdog・Can_MainFunction_Read・Can_MainFunction_Wakeup・CanSM_MainFunction・NvM_MainFunction・MemIf_MainFunction・Nm_MainFunction を除く） |
+| 2 | EcuM==SHUTDOWN | DEACTIVATE | `BSWM_TASK_MASK_SHUTDOWN`（WdgM_TriggerHwWatchdog・Can_MainFunction_Read・Can_MainFunction_Wakeup・CanSM_MainFunction・NvM_MainFunction・MemIf_MainFunction・CanNm_MainFunction を除く） |
 | 3 | **EcuM==RUN `AND` ComM==FULL_COMMUNICATION** | PDU_GROUP_START | I-PDU Group「テレメトリ」(E2EHealthStatus) |
 | 4 | EcuM==POST_RUN | PDU_GROUP_STOP | I-PDU Group「テレメトリ」 |
 | 5 | **ComM==SILENT_COMMUNICATION `OR` ComM==NO_COMMUNICATION** | PDU_GROUP_STOP | I-PDU Group「テレメトリ」 |
 | 6 | EcuM==RUN `AND` ComM==FULL_COMMUNICATION | PDU_GROUP_START | I-PDU Group「センサーRX」(EngineInfo/AbsInfo) |
 | 7 | ComM==NO_COMMUNICATION | PDU_GROUP_STOP | I-PDU Group「センサーRX」 |
-| 8-19 | Dcm_CommunicationModeType の12通り（Dcm==各値） | `BSWM_ACTION_DCM_COMM_APPLY` | `BswM_ApplyDcmCommMode()` 経由で Com_SetCommunicationEnabled()/Nm_EnableCommunication()/DisableCommunication() |
+| 8-19 | Dcm_CommunicationModeType の12通り（Dcm==各値） | `BSWM_ACTION_DCM_COMM_APPLY` | `BswM_ApplyDcmCommMode()` 経由で Com_SetCommunicationEnabled()/CanNm_EnableCommunication()/DisableCommunication() |
 
 Rule 8-19 は UDS 0x28 CommunicationControl（2026-09-05 追加）専用です。
 `Dcm_HandleCommunicationControl()`/`Dcm_CommControlReset()` が
@@ -33,7 +33,7 @@ Rule 8-19 は UDS 0x28 CommunicationControl（2026-09-05 追加）専用です�
 `BSWM_MODE_SRC_DCM_COMM` としてキャッシュ・評価します。12通りの条件は
 互いに排他的なため常にちょうど1本だけが発火し、`BswM_ApplyDcmCommMode()`
 が発火時点のキャッシュ値を `mode/4`（対象: normal/NM/両方）・`mode%4`
-（Rx/Tx の有効/無効パターン）に分解して実際の Com/Nm 呼び出しへ変換します
+（Rx/Tx の有効/無効パターン）に分解して実際の Com/CanNm 呼び出しへ変換します
 （他の PDU_GROUP 系ルールと異なりルール行自体には専用パラメータを持たない
 点に注意）。詳細（Dcm 側の変換式・値の一覧）は
 [`Dcm_Notes.md`](./Dcm_Notes.md) の「CommunicationControl（SID 0x28）」を
@@ -43,7 +43,7 @@ Rule 3/5 が複合条件（`BswM_ConditionType` の配列を `BswM_LogicalOperat
 (`BSWM_OP_AND`/`BSWM_OP_OR`) で組み合わせる、[SWS_BswM_00808]
 BswMLogicalExpression の簡略版）を使う唯一の例です。以前は単一条件ルール
 しか組めない設計（AND/OR の LogicalExpression 相当が未実装）でしたが、
-Nm（CanNm 状態機械）導入により ComM のチャネルモードが EcuM の RUN/POST_RUN
+CanNm（CanNm 状態機械）導入により ComM のチャネルモードが EcuM の RUN/POST_RUN
 とは独立に変化しうるようになったため、「EcuM が RUN でも CAN チャネルが
 実際には使えない（Bus-Off 中の SILENT_COMMUNICATION 等）」場合を正しく
 扱うために複合条件対応を追加しました。Rule 3（AND、開始条件）と Rule 5
@@ -82,7 +82,7 @@ true が続く間の重複実行や true→false への遷移では実行しま�
 | 9 | `BSWM_OS_TASK_DCM_MAIN` | `Dcm_MainFunction` | 1000 ms |
 | 10 | `BSWM_OS_TASK_FIM_MAIN` | `FiM_MainFunction` | 100 ms |
 | 11 | `BSWM_OS_TASK_WDGM_TRIGGER` | `WdgM_TriggerHwWatchdog` | 1000 ms |
-| 12 | `BSWM_OS_TASK_NM_MAIN` | `Nm_MainFunction` | 1000 ms |
+| 12 | `BSWM_OS_TASK_CANNM_MAIN` | `CanNm_MainFunction` | 1000 ms |
 | 13 | `BSWM_OS_TASK_NVM_MAIN` | `NvM_MainFunction` | 10 ms |
 | 14 | `BSWM_OS_TASK_CAN_TX_CONF` | `Can_MainFunction_Write` | 1 ms |
 | 15 | `BSWM_OS_TASK_CAN_BUSOFF` | `Can_MainFunction_BusOff` | 1 ms |
@@ -101,16 +101,16 @@ Task 17（`SecOC_MainFunctionTx`）が同一 `Os_SchedulerStep()` パス内で C
 `Os_PBCfg.c`/`BswM_Cfg.h` 参照）。
 
 `BSWM_TASK_MASK_APP = 0x00C`（bit2=Rte_Engine, bit3=Rte_Warning）がアプリタスクマスクです。
-POST_RUN ではこの 2 タスクだけを停止し、BSW タスク（Can_MainFunction_Read/BusOff/Wakeup・CanTp・CanSM・Com・IoHwAb・WdgM・Dcm・FiM・WdgM_TriggerHwWatchdog・Nm・NvM・MemIf・SecOC・Can_MainFunction_Write）は継続させます。
+POST_RUN ではこの 2 タスクだけを停止し、BSW タスク（Can_MainFunction_Read/BusOff/Wakeup・CanTp・CanSM・Com・IoHwAb・WdgM・Dcm・FiM・WdgM_TriggerHwWatchdog・CanNm・NvM・MemIf・SecOC・Can_MainFunction_Write）は継続させます。
 Dcm を継続させることで、POST_RUN 中も S3 タイマ監視（セッションの自動失効）が動作し続けます。
-Nm は POST_RUN 中も動き続けますが、POST_RUN へ遷移する経路（エンジン OFF 継続による
+CanNm は POST_RUN 中も動き続けますが、POST_RUN へ遷移する経路（エンジン OFF 継続による
 ボランタリスリープ突入。Bus-Off は L1/L2 バックオフで無期限に回復を試みるため
 POST_RUN 遷移の原因にはならない）では ComM は既に NO_COM になっているため、
 実際には送信を行いません。
 
 `BSWM_TASK_MASK_SHUTDOWN = 0x163EE`（`BSWM_TASK_MASK_ALL` から bit10=WdgM_TriggerHwWatchdog・
 bit0=Can_MainFunction_Read・bit15=Can_MainFunction_Wakeup・bit4=CanSM_MainFunction・
-bit12=NvM_MainFunction・bit17=MemIf_MainFunction・bit11=Nm_MainFunction を除いたもの）が
+bit12=NvM_MainFunction・bit17=MemIf_MainFunction・bit11=CanNm_MainFunction を除いたもの）が
 SHUTDOWN 時の無効化対象マスクです。SecOC_MainFunctionTx（bit16）はこの除外リストに
 含まれないため（POST_RUN 中に Com_MainFunctionTx が止まり SecOC の送信要求自体が
 発生しなくなるのと同じ理由で、無効化しておくのが本来の設計意図）、
@@ -155,7 +155,7 @@ POST_RUN 中も動き続けるタスク:
   WdgM_TriggerHwWatchdog → HW ウォッチドッグのリフレッシュは継続（判定結果を無視して
                         無条件にリフレッシュするため、実際のリセットは発生しない）
   Dcm_Main           → S3 タイマ監視を継続（拡張セッションも正しく失効する）
-  Nm_MainFunction    → タスク自体は動き続けるが、ComM が既に NO_COM のため送信しない
+  CanNm_MainFunction    → タスク自体は動き続けるが、ComM が既に NO_COM のため送信しない
 
 POST_RUN 中に停止するタスク:
   Rte_ScheduleRunnables          → エンジン状態更新・DTC 登録を停止
@@ -178,15 +178,15 @@ POST_RUN 中に停止するタスク:
             │           Com_IpduGroupStop(テレメトリ)  ← ComM==FULL_COM 前提の
             │           Rule 3 (AND条件) が既に false になっているため
             │           冪等（テレメトリが既に停止済みなら何もしない）
-            └→ Nm_NetworkRelease()
-                  → Nm: Normal Operation → Ready Sleep State（送信停止）
+            └→ CanNm_NetworkRelease()
+                  → CanNm: Normal Operation → Ready Sleep State（送信停止）
                   → NM-Timeout Timer 満了 → Prepare Bus-Sleep Mode
                   → Wait-Bus-Sleep Timer 満了（他ノードからの NM フレーム受信が
                     なければ）→ Bus-Sleep Mode へ到達
                         → CanSM_NmBusSleepMode()
                               → Can_SetControllerMode(CAN_T_SLEEP)  ← ここで初めて
                                 MCP2515 を実際にスリープさせる（詳細は
-                                [`Nm_Notes.md`](./Nm_Notes.md) 参照）
+                                [`CanNm_Notes.md`](./CanNm_Notes.md) 参照）
 
 POST_RUN 5秒後
   EcuM: POST_RUN → SHUTDOWN
@@ -194,19 +194,19 @@ POST_RUN 5秒後
           └→ Rule 2 発火: Os_SetTaskActive(WdgM_TriggerHwWatchdog / Can_MainFunction_Read /
                                           Can_MainFunction_Wakeup / CanSM_MainFunction /
                                           NvM_MainFunction / MemIf_MainFunction /
-                                          Nm_MainFunction 以外, OFF)
+                                          CanNm_MainFunction 以外, OFF)
                           （この 7 タスクだけは HW ウォッチドッグ維持 / CAN ウェイクアップ検出・
                             検証中フレーム処理 / ウェイクアップ検証タイムアウト監視 /
                             DTC永続化（ジョブ開始は NvM_MainFunction、物理バイト書き込みの
-                            進行は MemIf_MainFunction） / Nm状態機械継続のため動き続ける。特に
-                            Nm_MainFunction を止めてしまうと Nm が二度と Bus-Sleep Mode へ
+                            進行は MemIf_MainFunction） / CanNm状態機械継続のため動き続ける。特に
+                            CanNm_MainFunction を止めてしまうと CanNm が二度と Bus-Sleep Mode へ
                             到達できず、CAN コントローラが永久に物理スリープしなくなる不具合が
                             あったため SHUTDOWN 中も継続するよう変更した）
 ```
 
 CAN コントローラの実スリープ処理・ボランタリスリープ〜ウェイクアップ検証の詳細シーケンスは
 README の「CAN コントローラの実スリープ」「ボランタリスリープとウェイクアップ」節を参照
-してください（Can/CanSM/Nm 横断のため README 側に残しています）。
+してください（Can/CanSM/CanNm 横断のため README 側に残しています）。
 
 ## BswM 設定の変更方法
 

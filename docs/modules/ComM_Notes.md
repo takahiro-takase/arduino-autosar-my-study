@@ -120,9 +120,9 @@ CanSM がウェイクアップ検証成功時に `ComM_BusSM_ModeIndication(FULL
 used. This avoids redundant functionality because AUTOSAR NM also ensures this
 functionality."*）。
 
-本プロジェクトは `Nm_NetworkRequest()`/`Nm_NetworkRelease()` を能動的に呼び、
+本プロジェクトは `CanNm_NetworkRequest()`/`CanNm_NetworkRelease()` を能動的に呼び、
 CanNm の協調スリープ（Repeat Message Time → Ready Sleep Time → Prepare
-Bus-Sleep、[Nm_Notes.md](Nm_Notes.md) 参照）が同じチャタリング防止の役目を
+Bus-Sleep、[CanNm_Notes.md](CanNm_Notes.md) 参照）が同じチャタリング防止の役目を
 既に果たしているため、この `ComMNmVariant=FULL` に該当します。そのため
 ヒステリシスタイマの追加は見送り、`ComM_MainFunction()` は NOP のままとしました
 （2026-08、実装前にヒステリシス追加を検討したが、仕様書確認の結果、追加すると

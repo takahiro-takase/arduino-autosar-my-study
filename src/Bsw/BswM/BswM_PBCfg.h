@@ -50,7 +50,7 @@ typedef enum
     BSWM_ACTION_PDU_GROUP_START,  /**< Com_IpduGroupStart(IpduGroupId, Initialize) を呼ぶ */
     BSWM_ACTION_PDU_GROUP_STOP,   /**< Com_IpduGroupStop(IpduGroupId) を呼ぶ */
     /** `BSWM_MODE_SRC_DCM_COMM` の現在値（本ルール発火時点で既にキャッシュ
-     *  済みの `Dcm_CommunicationModeType`）を Com/Nm への具体的な有効/無効
+     *  済みの `Dcm_CommunicationModeType`）を Com/CanNm への具体的な有効/無効
      *  呼び出しへ変換する（[SWS_BswM_00048]、`BswMDcmComModeRequest`
      *  コンフィグ相当）。PDU_GROUP 系と異なりルール行に専用パラメータを
      *  持たず、発火時にキャッシュを読み直す方式（`BswM_ExecuteRules()` 参照。

@@ -3,7 +3,7 @@
  * \brief   EcuM.h（ComM の RUN 要求先／Can のウェイクアップ通知先）のテスト用
  *          スパイ実装の宣言
  * \details ComM.c は FULL_COM/NO_COM 確定のたびに EcuM_RequestRUN()/
- *          EcuM_ReleaseRUN() を呼ぶ。本テストの対象は Nm↔CanSM↔ComM の
+ *          EcuM_ReleaseRUN() を呼ぶ。本テストの対象は CanNm↔CanSM↔ComM の
  *          協調スリープ状態遷移ロジックであり、EcuM 側の RUN/POST_RUN/
  *          SHUTDOWN 状態機械までは対象に含めないため、呼び出し回数・引数を
  *          記録するだけのフェイクに差し替える（Bsw_ComM_fake.h と同じ境界の

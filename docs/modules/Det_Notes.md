@@ -75,7 +75,7 @@ ApiId は各関数の Doxygen `\ServiceID` タグ（以前から記録されて�
 
 当初は Com モジュールのみの対応でしたが、その後全 BSW モジュール
 （Can, CanIf, PduR, CanTp, Dcm, Dem, FiM, NvM, EcuM, BswM, WdgM, WdgIf, Wdg,
-ComM, CanSM, Nm, IoHwAb, Dio, Port, Adc, SecOC, E2E, E2EXf, Fee, MemIf の
+ComM, CanSM, CanNm, IoHwAb, Dio, Port, Adc, SecOC, E2E, E2EXf, Fee, MemIf の
 25 モジュール）へ同じ方針で展開しました。DET_LOGE で既に報告されていた
 箇所（NULL/範囲/未登録チェック）に加え、ログを一切出していなかった暗黙の
 NULL/未初期化チェックにも同じ基準で追加しています。

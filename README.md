@@ -33,9 +33,9 @@ ARXML や設定ツールは使用せず、コードで階層構造・型定義�
       - [呼び出し元は BswM（実 AUTOSAR の標準構成）](#ipdu-group-caller)
       - [Com_IpduGroupStart/Stop が実際に行うこと](#ipdu-group-behavior)
       - [動作確認方法](#ipdu-group-verification)
-    - [CAN 通信状態管理（ComM / CanSM / Nm）](#can-comm-management)
+    - [CAN 通信状態管理（ComM / CanSM / CanNm）](#can-comm-management)
       - [処理の流れ（コールチェーン）](#processing-flow-comm)
-      - [CAN コントローラのスリープ制御（Can / CanSM / Nm 横断）](#can-controller-sleep)
+      - [CAN コントローラのスリープ制御（Can / CanSM / CanNm 横断）](#can-controller-sleep)
   - [診断スタック（CanTp / Dcm / Dem / FiM / NvM）](#diag-stack)
     - [UDS ボタン送信ツール（tools/can_tool）](#uds-tester-tool)
   - [ECU 管理層（EcuM / BswM / WdgM）](#ecu-management)
@@ -172,7 +172,7 @@ pio device monitor
 ASW ─── App_EngineManager / App_WarningIndicator / App_GptDemo
 RTE ─── Rte（ポートベース S/R API + E2E Transformer 呼び出しグルー）
 OS  ─── Os（タイムトリガスケジューラ）
-BSW ─── EcuM / BswM / WdgM / WdgIf / Wdg / ComM / CanSM / Nm / E2EXf / E2E / Com / PduR / SecOC / Csm / CryIf / Crypto / KeyM / CanIf / Can
+BSW ─── EcuM / BswM / WdgM / WdgIf / Wdg / ComM / CanSM / CanNm / E2EXf / E2E / Com / PduR / SecOC / Csm / CryIf / Crypto / KeyM / CanIf / Can
         CanTp / Dcm / Dem / NvM / MemIf / Fee / IoHwAb / Dio / Port / Adc / SchM / Det / Mcu / Gpt
 HAL ─── Can_Hw / Dio_Hw / Port_Hw / Adc_Hw / Mcu_Hw / Fee_Hw / Wdg_Hw / Gpt_Hw（src/Hal/ に集約）
 ```
@@ -192,7 +192,8 @@ HAL ─── Can_Hw / Dio_Hw / Port_Hw / Adc_Hw / Mcu_Hw / Fee_Hw / Wdg_Hw / Gp
 |  | BswM | 42 | SWS_BswM<br>主要機能実装<br>(一部意図的に簡略化) | BSW モード管理・状態遷移の一元制御<br>（[詳細](docs/modules/BswM_Notes.md)） |
 |  | Can | 80 | SWS_Can<br>主要機能実装 | CAN コントローラドライバ (MCP2515)<br>（[詳細](docs/modules/Can_Notes.md)） |
 |  | CanIf | 60 | SWS_CanIf<br>主要機能実装 | CAN コントローラ抽象化層<br>（[詳細](docs/modules/CanIf_Notes.md)） |
-|  | CanSM | 140 | SWS_CanSM<br>主要機能実装 | CAN ネットワーク状態管理 (Bus-Off 回復・Nm 連携)<br>（[詳細](docs/modules/CanSM_Notes.md)） |
+|  | CanNm | 31 | SWS_CanNM<br>主要機能実装 | ネットワークマネジメント (CAN NM)<br>（[詳細](docs/modules/CanNm_Notes.md)） |
+|  | CanSM | 140 | SWS_CanSM<br>主要機能実装 | CAN ネットワーク状態管理 (Bus-Off 回復・CanNm 連携)<br>（[詳細](docs/modules/CanSM_Notes.md)） |
 |  | CanTp | 35 | SWS_CanTp<br>主要機能実装<br>(一部意図的に簡略化) | ISO 15765-2 トランスポートプロトコル<br>（[詳細](docs/modules/CanTp_Notes.md)） |
 |  | Com | 50 | SWS_Com<br>主要機能実装 | シグナルベース通信管理<br>（[詳細](docs/modules/Com_Notes.md)） |
 |  | ComM | 12 | SWS_ComM<br>主要機能実装 | 通信マネージャ (チャネル状態集約)<br>（[詳細](docs/modules/ComM_Notes.md)） |
@@ -214,7 +215,6 @@ HAL ─── Can_Hw / Dio_Hw / Port_Hw / Adc_Hw / Mcu_Hw / Fee_Hw / Wdg_Hw / Gp
 |  | KeyM | 116<br>(仮) | SWS_KeyManager<br>(Release 4.4.0)<br>主要機能実装<br>(一部意図的に簡略化) | 鍵管理マネージャ<br>（[詳細](docs/modules/KeyM_Notes.md)） |
 |  | Mcu | 101 | SWS_Mcu<br>主要機能実装<br>(一部意図的に簡略化) | マイコン初期化・リセット要因管理<br>（[詳細](docs/modules/Mcu_Notes.md)） |
 |  | MemIf | 22 | SWS_MemIf<br>パススルー<br>(下位が1個のため) | 不揮発メモリ抽象化層<br>（[詳細](docs/modules/MemIf_Notes.md)） |
-|  | Nm | 31 | SWS_CANNM<br>主要機能実装 | ネットワークマネジメント (CAN NM)<br>（[詳細](docs/modules/Nm_Notes.md)） |
 |  | NvM | 20 | SWS_NvM<br>主要機能実装<br>(一部意図的に簡略化) | 不揮発メモリマネージャ<br>（[詳細](docs/modules/NvM_Notes.md)） |
 |  | PduR | 51 | SWS_PduR<br>主要機能実装<br>(一部意図的に簡略化) | PDU ルーティング層<br>（[詳細](docs/modules/PduR_Notes.md)） |
 |  | Port | — | SWS_Port<br>主要機能実装<br>(一部意図的に簡略化) | ピン設定管理<br>（[詳細](docs/modules/Port_Notes.md)） |
@@ -356,10 +356,10 @@ ModuleId の出典は `docs/AUTOSAR_TR_BSWModuleList.pdf`（Release 4.3.1、「L
 │   │   │   ├── FiM_PBCfg.c       # FID×イベント対応テーブル実体
 │   │   │   ├── FiM.h             # 公開インタフェース（FiM_Init / FiM_MainFunction / GetFunctionPermission / SetFunctionAvailable）
 │   │   │   └── FiM.c             # 許可状態の再評価・キャッシュ
-│   │   ├── Nm/                   # ネットワークマネジメント（CanNm 状態機械）
-│   │   │   ├── Nm_Cfg.h          # DET 定数・NM フレーム周期/DLC/ノードID・状態機械タイマ値
-│   │   │   ├── Nm.h              # 公開インタフェース（Nm_NetworkRequest/Release/RxIndication/TxConfirmation 等）
-│   │   │   └── Nm.c              # Network Mode(Repeat Message/Normal Operation/Ready Sleep)/Prepare Bus-Sleep/Bus-Sleep の状態機械。PduR/Com 非経由で CanIf と直接やり取り
+│   │   ├── CanNm/                   # ネットワークマネジメント（CanNm 状態機械）
+│   │   │   ├── CanNm_Cfg.h          # DET 定数・NM フレーム周期/DLC/ノードID・状態機械タイマ値
+│   │   │   ├── CanNm.h              # 公開インタフェース（CanNm_NetworkRequest/Release/RxIndication/TxConfirmation 等）
+│   │   │   └── CanNm.c              # Network Mode(Repeat Message/Normal Operation/Ready Sleep)/Prepare Bus-Sleep/Bus-Sleep の状態機械。PduR/Com 非経由で CanIf と直接やり取り
 │   │   ├── NvM/                  # Non-Volatile Memory Manager（EEPROM 抽象化）
 │   │   │   ├── NvM_Cfg.h         # ブロック ID・EEPROM アドレス・ブロックサイズ定義
 │   │   │   ├── NvM_PBCfg.h       # ブロック設定構造体型定義・NvM_Config 宣言
@@ -742,15 +742,15 @@ UDS 0x28 実装は「全 I-PDU 一括」のままの方が既存のテストが�
 「I-PDU Group 開始/停止（RUN/POST_RUN/SHUTDOWN 連動）」を参照してください。
 
 <a id="can-comm-management"></a>
-#### CAN 通信状態管理（ComM / CanSM / Nm）
+#### CAN 通信状態管理（ComM / CanSM / CanNm）
 
 CAN バス通信の有効・無効（NO_COM/FULL_COM）を管理する ComM、CAN コントローラの
 状態遷移（Bus-Off 回復・スリープ/ウェイクアップ）を担う CanSM、ネットワーク
-マネジメント（CanNm 相当）を担う Nm の3モジュールをまとめます。実 AUTOSAR でも
+マネジメント（CanNm 相当）を担う CanNm の3モジュールをまとめます。実 AUTOSAR でも
 これらは Com/PduR と同じ「Communication Services」クラスタに属し、EcuM/BswM/WdgM
 （System Services、[ECU 管理層](#ecu-management)参照）とは別グループです。
 
-このスタックを構成する各モジュール（ComM/CanSM/Nm）の本プロジェクトでの役割は、
+このスタックを構成する各モジュール（ComM/CanSM/CanNm）の本プロジェクトでの役割は、
 上記「[モジュール一覧](#module-list)」表の「概要」列（リンク先の `docs/modules/`
 配下の個別ノート）を参照してください。CanSM は6状態・多数の条件分岐を持つ
 状態機械のため、状態遷移図を
@@ -760,7 +760,7 @@ CAN バス通信の有効・無効（NO_COM/FULL_COM）を管理する ComM、CA
 ##### 処理の流れ（コールチェーン）
 
 AUTOSAR では「上から下への要求 (Request)」と「下から上への通知 (Indication)」が分離されています。
-Bus-Off 回復・ウェイクアップ検証は CanSM が中心となって EcuM/ComM/Nm/Can と連携するため、
+Bus-Off 回復・ウェイクアップ検証は CanSM が中心となって EcuM/ComM/CanNm/Can と連携するため、
 特定の 1 モジュールに閉じた話ではなく、ここでモジュール横断のコールチェーンとしてまとめます。
 EcuM/BswM が関わる箇所は「← EcuM が ComM へ要求」のように図中に個別注釈しています。
 
@@ -774,7 +774,7 @@ EcuM_Init → ComM_RequestComMode(FULL_COM)   ← EcuM が ComM へ要求（上�
 【Bus-Off 検出時（回復試行の前、SWS_CanSM_00521）】
 CanIf_ControllerBusOff → CanSM_ControllerBusOff
   受け付けるのは CANSM_STATE_FULL_COM と CANSM_STATE_NO_COM_PENDING_SLEEP
-  （Nm の Bus-Sleep Mode 到達待ちでコントローラがまだ稼働中の状態）の 2 つのみ
+  （CanNm の Bus-Sleep Mode 到達待ちでコントローラがまだ稼働中の状態）の 2 つのみ
   （NO_COM_PENDING_SLEEP 中もコントローラは稼働中で Bus-Off が発生しうるため、
    FULL_COM だけを受け付ける設計では回復シーケンスが一切起動せず、
    コントローラが HW 的に Bus-Off し続けてしまう）
@@ -791,7 +791,7 @@ CanSM_MainFunction（10ms タスク）
           │    └→ ComM_BusSM_ModeIndication(FULL_COM)  ← CanSM が ComM へ通知（下→上）
           │         └→ ComM_EcuMRunMode が既に FULL_COMMUNICATION のため
           │            EcuM_RequestRUN() は呼ばない（RUN は Bus-Off 中も維持
-          │            されたまま）。Nm へは Nm_NetworkRequest() のみ送る
+          │            されたまま）。CanNm へは CanNm_NetworkRequest() のみ送る
           └─ 発生時 NO_COM_PENDING_SLEEP だった場合: CanSM state →
                NO_COM_PENDING_SLEEP（FULL_COM へは戻さない。ComM は既に
                NO_COM を要求済みで、戻すと誰も再要求せず取り残されるため）
@@ -839,12 +839,12 @@ CanSM_MainFunction（10ms タスク、SHUTDOWN 中も動き続ける）
 ```
 
 <a id="can-controller-sleep"></a>
-##### CAN コントローラのスリープ制御（Can / CanSM / Nm 横断）
+##### CAN コントローラのスリープ制御（Can / CanSM / CanNm 横断）
 
-ComM/CanSM/Nm 各モジュールの本プロジェクトでの役割は、上記
+ComM/CanSM/CanNm 各モジュールの本プロジェクトでの役割は、上記
 「[モジュール一覧](#module-list)」表の「概要」列（リンク先の `docs/modules/`
 配下の個別ノート）を参照してください。以下の2節（CAN コントローラの実スリープ・
-ボランタリスリープとウェイクアップ）は Can/CanSM/Nm 横断の内容ですが、
+ボランタリスリープとウェイクアップ）は Can/CanSM/CanNm 横断の内容ですが、
 スリープ判断の起点（`App_EngineManager_Run()` → `ComM_RequestComMode`）や
 ウェイクアップ成功時の `EcuM_RequestRUN()` など、EcuM/BswM が関わる箇所は
 以下のコールチェーン図中に個別に注釈しています。
@@ -853,19 +853,19 @@ ComM/CanSM/Nm 各モジュールの本プロジェクトでの役割は、上記
 
 `Can.c` の `CAN_T_SLEEP`/`CAN_T_WAKEUP` 遷移（MCP2515 を実際にスリープさせる
 `Can_Hw_SetMode(CAN_HW_MODE_SLEEP)`）は、唯一の経路として ComM の NO_COM
-要求に端を発する `Nm`（CanNm 状態機械）の協調スリープから実際にスリープします。
+要求に端を発する `CanNm`（CanNm 状態機械）の協調スリープから実際にスリープします。
 
 `App_EngineManager_Run()` が `ENGINE_STATE_OFF` の継続を検知して
 `ComM_RequestComMode(COMM_USER_0, NO_COM)` を要求し、ComM の集約結果が実際に
 NO_COM になった場合（`Dcm` も extendedSession でないことが条件）、
-`ComM_BusSM_ModeIndication()` が `Nm_NetworkRelease()` を呼びます。ここで CanSM は
-まだ物理スリープしません。`Nm` が Ready Sleep → Prepare Bus-Sleep → Bus-Sleep
+`ComM_BusSM_ModeIndication()` が `CanNm_NetworkRelease()` を呼びます。ここで CanSM は
+まだ物理スリープしません。`CanNm` が Ready Sleep → Prepare Bus-Sleep → Bus-Sleep
 Mode と自律的に遷移し（他ノードからの NM フレーム受信があればその都度延期
 される）、実際に Bus-Sleep Mode へ到達した時点で `CanSM_NmBusSleepMode()` を
 呼んで初めて CanSM が実スリープを行います。MCP2515 の CAN バス活動による
 ウェイクアップ割り込み（`mcp_can` の `setSleepWakeup()`）を事前に有効化して
 からスリープするため、バス活動があれば自律的に起床できます。詳細は次項
-「ボランタリスリープとウェイクアップ」および後述「Nm（ネットワークマネジメント）」
+「ボランタリスリープとウェイクアップ」および後述「CanNm（ネットワークマネジメント）」
 を参照してください。
 
 > Bus-Off 回復（後述の「Bus-Off 回復シーケンス」参照）は L1/L2 バックオフで
@@ -1050,12 +1050,12 @@ EcuM が状態遷移を決定し、BswM がその状態に応じたタスクの�
 
 > CAN バス通信の有効・無効（NO_COM/FULL_COM）を管理する ComM・CAN コントローラの
 > 状態遷移（Bus-Off 回復・スリープ/ウェイクアップ）を担う CanSM・ネットワーク
-> マネジメントを担う Nm は、実 AUTOSAR では EcuM/BswM/WdgM（System Services）とは
+> マネジメントを担う CanNm は、実 AUTOSAR では EcuM/BswM/WdgM（System Services）とは
 > 別クラスタ（Communication Services、Com/PduR と同じ側）に属します。本プロジェクトの
 > 実装でも、`BswM.c` は `BswM_ComM_CurrentMode()` という受動的なコールバックのみで
 > ComM/CanSM を呼ばず、`WdgM.c` は ComM/CanSM と一切無関係、`EcuM.c` からの呼び出しも
 > Init 時と `ComM_RequestComMode()` の2箇所に限られます。実際のコールグラフの密度は
-> CanIf/Can 側にあるため、ComM/CanSM/Nm は
+> CanIf/Can 側にあるため、ComM/CanSM/CanNm は
 > 「[CAN 通信状態管理](#can-comm-management)」として CAN 通信スタック側にまとめ、
 > EcuM/BswM が関わる箇所はそちらのコールチェーン図中に個別に注釈しています。
 
@@ -1480,7 +1480,7 @@ LEVEL は ERROR / WARN  / INFO  / DEBUG の 5 文字固定幅で列が揃いま�
 [11ms] INFO  ComM: Init ch=1
 [12ms] INFO  CanSM: ->FULL_COM            # CanSM_RequestComMode 成功
 [12ms] INFO  ComM: ch0 ->mode=2           # ComM_BusSM_ModeIndication(FULL_COM) → EcuM_RequestRUN
-[13ms] INFO  Nm: Init ok node=0x01
+[13ms] INFO  CanNm: Init ok node=0x01
 [14ms] INFO  AppEng: Init->OFF
 [15ms] INFO  IoHwAb: Init                 # LED 消灯（ピン方向は Port_Init 済み）
 [16ms] INFO  WarnInd: Init

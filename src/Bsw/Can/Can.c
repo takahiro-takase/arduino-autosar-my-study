@@ -319,7 +319,7 @@ void Can_GetVersionInfo(Std_VersionInfoType* versioninfo)
  *          - CAN_T_STOP   : CAN_CS_STARTED → CAN_CS_STOPPED (受信専用モード)
  *          - CAN_T_SLEEP  : CAN_CS_STOPPED → CAN_CS_SLEEP   (スリープモード)。
  *                           CAN_CS_STARTED からの直接遷移も許可する
- *                           （Nm 協調スリープ: ComM は Nm が実際に Bus-Sleep
+ *                           （CanNm 協調スリープ: ComM は CanNm が実際に Bus-Sleep
  *                           Mode へ到達するまで CanSM へ NO_COM を伝えず
  *                           コントローラを稼働させ続け、到達した瞬間に
  *                           CanSM_RequestComMode(NO_COM) 経由で CAN_T_STOP を

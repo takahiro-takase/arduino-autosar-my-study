@@ -1,5 +1,5 @@
 /**
- * \file    Bsw_NmStack_Wakeup_test.cpp
+ * \file    Bsw_CanNmStack_Wakeup_test.cpp
  * \brief   README.md「ウェイクアップ検出とウェイクアップ検証」コールチェーンの
  *          単体テスト（GoogleTest / PlatformIO `[env:native_chain]`）。
  *
@@ -36,7 +36,7 @@
  *                  （ComM/EcuM への通知なし）
  *
  *          ComM（CanSM が呼び返す通知の宛先）は 2026-08 の協調スリープ移管
- *          （Bsw_NmStack_SleepCoordination_test.cpp 参照）で本 env に実体として
+ *          （Bsw_CanNmStack_SleepCoordination_test.cpp 参照）で本 env に実体として
  *          統合された。本テストは ComM_RequestComMode() を経由せず CanSM の
  *          API を直接叩くため、ComM の内部状態（ComM_Init() 直後の既定値
  *          NO_COM）がそのまま「ボランタリスリープ済み」の前提と一致する。
@@ -67,7 +67,7 @@ extern "C" {
 #include "Can.h"
 #include "Can_Hw.h"
 #include "ComM.h"
-#include "Nm.h"
+#include "CanNm.h"
 #include "Fake_Can_Hw.h"
 #include "Fake_Millis.h"
 #include "Fake_Bsw_EcuM.h"
@@ -114,7 +114,7 @@ protected:
         CanIf_Init(&kTestCanIfConfig);
         CanSM_Init(NULL);
         ComM_Init(NULL);
-        Nm_Init(NULL);
+        CanNm_Init(NULL);
 
         // ボランタリスリープ済みの状態を Arrange する（README のとおり、
         // ウェイクアップ検証は CANSM_STATE_NO_COM からの起床のみを受け付ける）。
@@ -130,7 +130,7 @@ protected:
     void TearDown() override
     {
         FakeDetHw_LogSuppressed = 1U;  // DeInit() のログを抑制
-        Nm_DeInit();
+        CanNm_DeInit();
         ComM_DeInit();
         CanSM_DeInit();
         CanIf_DeInit();

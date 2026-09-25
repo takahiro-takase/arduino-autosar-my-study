@@ -13,7 +13,7 @@
  *                                       Can_MainFunction_Read・
  *                                       Can_MainFunction_Wakeup・
  *                                       CanSM_MainFunction・NvM_MainFunction・
- *                                       MemIf_MainFunction・Nm_MainFunction
+ *                                       MemIf_MainFunction・CanNm_MainFunction
  *                                       だけは除外)
  *
  * \copyright  Copyright (c) 2025 T_T
@@ -80,7 +80,7 @@
 #define BSWM_OS_TASK_DCM_MAIN       9U  /**< Dcm_MainFunction     (1000 ms) */
 #define BSWM_OS_TASK_FIM_MAIN       10U /**< FiM_MainFunction     (100 ms)  */
 #define BSWM_OS_TASK_WDGM_TRIGGER   11U /**< WdgM_TriggerHwWatchdog (1000 ms) */
-#define BSWM_OS_TASK_NM_MAIN        12U /**< Nm_MainFunction        (200 ms)  */
+#define BSWM_OS_TASK_CANNM_MAIN     12U /**< CanNm_MainFunction        (200 ms)  */
 #define BSWM_OS_TASK_NVM_MAIN       13U /**< NvM_MainFunction       (10 ms)   */
 #define BSWM_OS_TASK_CAN_TX_CONF    14U /**< Can_MainFunction_Write (1 ms)    */
 #define BSWM_OS_TASK_CAN_BUSOFF     15U /**< Can_MainFunction_BusOff (1 ms)   */
@@ -113,7 +113,7 @@
 
 /**
  * SHUTDOWN 時に停止するタスク = ALL & ~WDGM_TRIGGER & ~CAN_READ & ~CAN_WAKEUP
- *                                & ~CANSM_MAIN & ~NVM_MAIN & ~NM_MAIN。
+ *                                & ~CANSM_MAIN & ~NVM_MAIN & ~CANNM_MAIN。
  *
  * WdgM_TriggerHwWatchdog だけは SHUTDOWN 後も動かし続ける必要がある。
  * Renesas RA の IWDT は一度有効化すると無効化する手段がなく
@@ -153,17 +153,17 @@
  * 止めてしまうと、NvM がジョブを開始したまま永久に MEMIF_JOB_PENDING を
  * 待ち続け、EEPROM への永続化が完了しない（詳細は NvM.c / MemIf.c を参照）。
  *
- * Nm_MainFunction も SHUTDOWN 中動かし続ける必要がある。CanSM の実物理
- * スリープ（Can_SetControllerMode(CAN_T_SLEEP)）は Nm が Bus-Sleep Mode へ
+ * CanNm_MainFunction も SHUTDOWN 中動かし続ける必要がある。CanSM の実物理
+ * スリープ（Can_SetControllerMode(CAN_T_SLEEP)）は CanNm が Bus-Sleep Mode へ
  * 到達した通知（ComM_Nm_BusSleepMode() 経由で CanSM_RequestComMode(NO_COM)
- * が呼ばれる）を受けて初めて行われる設計（協調スリープ、Nm.c/ComM.c/
- * CanSM.c 参照）に変更したため、Nm の状態機械タイマ
+ * が呼ばれる）を受けて初めて行われる設計（協調スリープ、CanNm.c/ComM.c/
+ * CanSM.c 参照）に変更したため、CanNm の状態機械タイマ
  * （Prepare Bus-Sleep Mode の Wait-Bus-Sleep Timer 等）がここで停止すると
- * Nm が Bus-Sleep Mode へ二度と到達できず、CAN コントローラが永久に
+ * CanNm が Bus-Sleep Mode へ二度と到達できず、CAN コントローラが永久に
  * 物理スリープしなくなる。また Bus-Sleep/Prepare Bus-Sleep 中に他ノードの
  * NM フレームを受信して Repeat Message State へ戻った場合も、その後の
  * 周期送信・状態遷移判定は本タスクの中でしか行われないため、これを止めると
- * Nm がその状態に永久に固着してしまう（実機で確認された不具合）。
+ * CanNm がその状態に永久に固着してしまう（実機で確認された不具合）。
  *
  * SecOC_MainFunctionTx はこの「動かし続ける」リストに含まれない
  * （Com_MainFunctionTx 等と同様、SHUTDOWN 中は停止してよいタスクの扱い。
@@ -179,7 +179,7 @@
                                                         | (1UL << BSWM_OS_TASK_CANSM_MAIN) \
                                                         | (1UL << BSWM_OS_TASK_NVM_MAIN) \
                                                         | (1UL << BSWM_OS_TASK_MEMIF_MAIN) \
-                                                        | (1UL << BSWM_OS_TASK_NM_MAIN)))))
+                                                        | (1UL << BSWM_OS_TASK_CANNM_MAIN)))))
 
 /* -----------------------------------------------------------------------
  * ルール数

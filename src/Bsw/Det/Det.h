@@ -69,7 +69,7 @@ typedef enum
  *          プロジェクトは単一 ECU 構成で post-build バリアント切替を持たず、
  *          かつ Det 自身が初期化を要する内部状態（コールアウトフック登録先
  *          等）を一切持たないため、中身を定義しない不透明型とし、ポインタ
- *          としてのみ扱う（`Nm_ConfigType`/`CanSM_ConfigType` と同じ簡略化
+ *          としてのみ扱う（`CanNm_ConfigType`/`CanSM_ConfigType` と同じ簡略化
  *          パターン）。
  */
 typedef struct Det_ConfigType_Tag Det_ConfigType;

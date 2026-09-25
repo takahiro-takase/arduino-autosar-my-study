@@ -10,7 +10,7 @@
  *            Rule 2: EcuM → SHUTDOWN → WdgM_TriggerHwWatchdog・Can_MainFunction_Read・
  *                                      Can_MainFunction_Wakeup・CanSM_MainFunction・
  *                                      NvM_MainFunction・MemIf_MainFunction・
- *                                      Nm_MainFunction 以外を無効化
+ *                                      CanNm_MainFunction 以外を無効化
  *            Rule 3: EcuM==RUN AND ComM==FULL_COMMUNICATION
  *                                    → I-PDU Group「テレメトリ」(E2EHealthStatus) を起動
  *            Rule 4: EcuM → POST_RUN → I-PDU Group「テレメトリ」(E2EHealthStatus) を停止
@@ -23,7 +23,7 @@
  *            Rule 8-19: Dcm_CommunicationModeType（UDS 0x28 CommunicationControl）の
  *                                    全 12 通りそれぞれに対応し、BswM_ApplyDcmCommMode()
  *                                    経由で Com_SetCommunicationEnabled()/
- *                                    Nm_EnableCommunication()/DisableCommunication() へ
+ *                                    CanNm_EnableCommunication()/DisableCommunication() へ
  *                                    反映する（2026-09-05 追加、[SWS_BswM_00048]。
  *                                    Dcm_HandleCommunicationControl()/
  *                                    Dcm_CommControlReset() が
@@ -64,7 +64,7 @@
  *          docs/modules/Com_Notes.md 参照。
  *
  *          Rule 3 が単一条件（EcuM==RUN のみ）ではなく AND 複合条件になった
- *          理由: Nm（CanNm 状態機械）導入後、ComM のチャネルモードは EcuM の
+ *          理由: CanNm（CanNm 状態機械）導入後、ComM のチャネルモードは EcuM の
  *          RUN/POST_RUN とは独立して変化しうる（Bus-Off 中の SILENT_COMMUNICATION
  *          等）。EcuM が RUN のままでも CAN チャネルが実際には FULL_COMMUNICATION
  *          でなければ、E2EHealthStatus を送信してもバスに届かない。Rule 5 の OR
@@ -124,7 +124,7 @@ static const BswM_RuleType BswM_Rules[BSWM_RULE_COUNT] =
     },
     /* Rule 2: EcuM → SHUTDOWN: WdgM_TriggerHwWatchdog・Can_MainFunction_Read・
      * Can_MainFunction_Wakeup・CanSM_MainFunction・NvM_MainFunction・
-     * MemIf_MainFunction・Nm_MainFunction 以外を無効化 */
+     * MemIf_MainFunction・CanNm_MainFunction 以外を無効化 */
     {
         .Operator       = BSWM_OP_AND,
         .Condition       = {{ BSWM_MODE_SRC_ECUM, (uint8)ECUM_STATE_SHUTDOWN }},

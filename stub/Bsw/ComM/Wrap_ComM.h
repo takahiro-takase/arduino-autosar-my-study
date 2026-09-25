@@ -12,16 +12,16 @@
  * \par ComM_DCM_ActiveDiagnostic / ComM_DCM_InactiveDiagnostic
  * 2026-09、test_dcm を native_chain へ統合した際に新設。既定（`Reset()`後）は
  * `Wrap_CanIf.h`/`Wrap_E2E.h`/`Wrap_Dem.h` と同じく `__real_...` への
- * パススルーで、`Bsw_NmStack_SleepCoordination_test.cpp` の
+ * パススルーで、`Bsw_CanNmStack_SleepCoordination_test.cpp` の
  * `DcmActiveDiagnostic_OK_KeepsFullComEvenWhenUser0RequestsNoCom` 等が
  * 検証する「診断アクティブ中は FULL_COM を維持する」という実際の
  * 通信管理連鎖（ComM_ComputeAggregatedMode()→ComM_ApplyAggregatedRequest()→
- * 場合により Nm/CanSM まで）はそのまま機能する。
+ * 場合により CanNm/CanSM まで）はそのまま機能する。
  *
  * 一方、`test/Bsw_Dcm_*_test.cpp`（UDS 診断シーケンス自体の検証が
  * 目的で、通信管理は対象外）は `Suppressed_ComM_DcmDiagnostic` を
  * `SetUp()`で1に立て、`TearDown()`で0に戻すことで、自分のテスト実行中
- * だけこの2関数を無害化する（Can/CanIf/CanSM/Nm の初期化有無に依存させない
+ * だけこの2関数を無害化する（Can/CanIf/CanSM/CanNm の初期化有無に依存させない
  * ため）。他 wrap ファイルの回数閾値故障注入（`FailFromCallCount_Xxx`）とは
  * 異なり、既定パススルーではなく常時no-opという特殊ケースのため、本ファイル
  * だけは bool のトグルのまま維持する（呼び出し回数は他ファイルと同様

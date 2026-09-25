@@ -3,7 +3,7 @@
  * \brief   CanIf_SetControllerMode/CanIf_GetControllerMode の単体テスト
  *          （GoogleTest / PlatformIO `[env:native_chain]`）。
  *
- * \details 2026-08-30、IF シグネチャは仕様準拠という方針のもと、CanSM/ComM/Nm が
+ * \details 2026-08-30、IF シグネチャは仕様準拠という方針のもと、CanSM/ComM/CanNm が
  *          CanIf 層を素通りして Can_SetControllerMode() を直接呼んでいたレイヤ
  *          違反を是正し、CanIf_SetControllerMode()/CanIf_GetControllerMode()
  *          （[SWS_CANIF_00003]/[SWS_CANIF_00229]）を新設した際に追加。

@@ -56,12 +56,12 @@
  *                                EcuM/Fixed 相当（動的な許可制御は未導入）の
  *                                ため、起動時に一度だけ許可し以後は常時許可のまま
  *                                運用する（ComM.c 冒頭のコメント参照）
- *           23. Nm_Init        — CanNm 状態機械初期化 (Bus-Sleep Mode で開始)。
+ *           23. CanNm_Init        — CanNm 状態機械初期化 (Bus-Sleep Mode で開始)。
  *                                ComM_RequestComMode(FULL_COM) より必ず前に置くこと。
  *                                同要求は同期的に CanSM_RequestComMode →
- *                                ComM_BusSM_ModeIndication(FULL_COM) → Nm_NetworkRequest()
- *                                まで連鎖するため、これより後だと Nm 未初期化のまま
- *                                呼ばれて失敗し、Nm が Bus-Sleep Mode に固着する
+ *                                ComM_BusSM_ModeIndication(FULL_COM) → CanNm_NetworkRequest()
+ *                                まで連鎖するため、これより後だと CanNm 未初期化のまま
+ *                                呼ばれて失敗し、CanNm が Bus-Sleep Mode に固着する
  *                                （実機で確認された不具合）
  *           24. ComM_RequestComMode(FULL_COM) — CAN バス通信開始
  *                               （全上位層初期化後に開始することで
@@ -145,7 +145,7 @@
 #include "Gpt_PBCfg.h"
 #include "CanSM.h"
 #include "ComM.h"
-#include "Nm.h"
+#include "CanNm.h"
 #include "Rte.h"
 #include "IoHwAb.h"
 #include "App_EngineManager.h"
@@ -275,12 +275,12 @@ void EcuM_Init(void)
                                * 参照）。本プロジェクトは EcuM/Fixed 相当で
                                * 動的な許可制御を持たないため、起動時に一度
                                * だけ許可する。 */
-    Nm_Init(NULL);             /* ComM_RequestComMode() より必ず前に置くこと。
+    CanNm_Init(NULL);             /* ComM_RequestComMode() より必ず前に置くこと。
                                * ComM_RequestComMode(FULL_COM) は同期的に
                                * CanSM_RequestComMode → ComM_BusSM_ModeIndication(FULL_COM)
-                               * → Nm_NetworkRequest() まで連鎖するため、ここより後に
-                               * 置くと Nm 未初期化のため Nm_NetworkRequest() が
-                               * NM_E_UNINIT で失敗し、Nm が Bus-Sleep Mode に
+                               * → CanNm_NetworkRequest() まで連鎖するため、ここより後に
+                               * 置くと CanNm 未初期化のため CanNm_NetworkRequest() が
+                               * CANNM_E_UNINIT で失敗し、CanNm が Bus-Sleep Mode に
                                * 固着したまま起動する（実機で確認された不具合）。 */
     ComM_RequestComMode(COMM_USER_0, COMM_FULL_COMMUNICATION);/* 全層初期化後に開通 */
     Rte_Start();                /* RTE 自身の初期化（[SWS_Rte_02569]）。SW-C の

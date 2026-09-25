@@ -1457,7 +1457,7 @@ I-PDU 単位ループがシグナル単位ループより先に実行される�
 （Bus-Sleep）のたびにも成立してしまう**という副作用がありました。
 `EngineInfo`/`AbsInfo` は元々 `COM_IPDU_GROUP_NONE`（[SWS_Com_00840]:
 どの I-PDU Group にも属さない I-PDU は常に起動済み）だったため、ComM が
-`FULL_COMMUNICATION` から `NO_COMMUNICATION`（Nm 協調スリープによる
+`FULL_COMMUNICATION` から `NO_COMMUNICATION`（CanNm 協調スリープによる
 意図的な Bus-Sleep、真の物理スリープ）へ離脱しても受信デッドライン監視が
 止まりませんでした。相手 ECU もスリープ中は送信を止めるため、
 `FirstTimeoutMs`/`TimeoutMs`（5000ms）を超えるスリープは全く珍しくなく、
@@ -1638,7 +1638,7 @@ dispatch/confirmation の同期性に依存しない設計にしている**: `Ca
 溢れて確認通知だけが握りつぶされるケース（`Can_Write()` の既存コメント
 「万一キューが満杯の場合は、この確認通知だけを諦める」参照）ですが、
 `Can_MainFunction_Write()` が 1ms 周期でこのキューをドレインしており、
-本プロジェクトの実際の送信頻度（最速でも Nm フレームの 1000ms 間隔）では
+本プロジェクトの実際の送信頻度（最速でも CanNm フレームの 1000ms 間隔）では
 天文学的に起こりにくく、事実上到達不能です。`Com_CbkTxErr`（TxErrCbk）と
 同じ位置づけ——仕様忠実性とユニットテストによる検証を目的とした実装であり、
 実機での動作確認は行っていません。この結論は `WarningStatus`（Signal Group）
@@ -2069,7 +2069,7 @@ Tx 抑制中を検出した時点で `Com_TxUpdatePending`/`Com_TxCyclesSinceSen
 上記「CommunicationControl 実装時の仕様不整合」と**全く同じ種類のバグ**が、
 きっかけを変えて再発した。CommunicationControl（UDS 0x28）は
 `Com_RxEnabled` という単一フラグで「意図的な受信無効化」を表現していたが、
-今回問題になった Bus-Sleep（Nm 協調スリープによる ComM の
+今回問題になった Bus-Sleep（CanNm 協調スリープによる ComM の
 NO_COMMUNICATION 遷移、真の物理スリープ）は、`EngineInfo`/`AbsInfo`
 がそもそも `COM_IPDU_GROUP_NONE`（常に有効）だったため、意図的な受信断
 であるにもかかわらずそれを表現する状態そのものが存在しなかった。結果、

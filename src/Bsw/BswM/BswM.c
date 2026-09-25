@@ -52,7 +52,7 @@
 #include "Os.h"
 #include "Os_Cfg.h"
 #include "Com.h"
-#include "Nm.h"
+#include "CanNm.h"
 #include "Det.h"
 
 /* ======================================================================
@@ -141,7 +141,7 @@ static uint8 BswM_EvaluateRule(const BswM_RuleType* rule)
  * ---------------------------------------------------------------------- */
 
 /**
- * \brief   `BSWM_MODE_SRC_DCM_COMM` の現在キャッシュ値を Com/Nm への具体的な
+ * \brief   `BSWM_MODE_SRC_DCM_COMM` の現在キャッシュ値を Com/CanNm への具体的な
  *          有効/無効呼び出しへ変換して適用する（[SWS_BswM_00048]、
  *          `BswMDcmComModeRequest` コンフィグ相当）。
  *
@@ -169,8 +169,8 @@ static void BswM_ApplyDcmCommMode(void)
     if (group == 1U || group == 2U)
     {
         (void)(txEnabled
-            ? Nm_EnableCommunication(NM_MAIN_NETWORK_HANDLE)
-            : Nm_DisableCommunication(NM_MAIN_NETWORK_HANDLE));
+            ? CanNm_EnableCommunication(CANNM_MAIN_NETWORK_HANDLE)
+            : CanNm_DisableCommunication(CANNM_MAIN_NETWORK_HANDLE));
     }
 }
 
@@ -266,7 +266,7 @@ void BswM_Init(const BswM_ConfigType* ConfigPtr)
     BswM_ModeSrcCache[BSWM_MODE_SRC_COMM]     = (uint8)COMM_NO_COMMUNICATION;
     /* 起動直後は UDS 0x28 が一度も要求されていない状態 = Rx/Tx とも
      * 通常通信・NM通信ともに有効（Com_SetCommunicationEnabled()/
-     * Nm_EnableCommunication() の既定値と一致させる）。 */
+     * CanNm_EnableCommunication() の既定値と一致させる）。 */
     BswM_ModeSrcCache[BSWM_MODE_SRC_DCM_COMM] = (uint8)DCM_ENABLE_RX_TX_NORM_NM;
     for (uint8 i = 0U; i < ConfigPtr->RuleCount; i++)
         BswM_RuleLastResult[i] = 0U;
@@ -377,7 +377,7 @@ void BswM_ComM_CurrentMode(NetworkHandleType channel, ComM_ModeType mode)
  * \details Dcm_HandleCommunicationControl()/Dcm_CommControlReset() が呼ぶ。
  *          BswM は受け取った Dcm_CommunicationModeType 値に一致する
  *          `BSWM_ACTION_DCM_COMM_APPLY` ルール（`BswM_PBCfg.c`）を発火させ、
- *          `BswM_ApplyDcmCommMode()` 経由で実際に Com/Nm へ反映する。
+ *          `BswM_ApplyDcmCommMode()` 経由で実際に Com/CanNm へ反映する。
  *
  * \param[in]  Network        通信チャネル（本プロジェクトは単一ネットワーク
  *                            構成のため受け取るだけで検証・使用しない）。
