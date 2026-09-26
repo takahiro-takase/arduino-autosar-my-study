@@ -104,7 +104,6 @@ static const Dio_ChannelType* Dio_ResolveGroupOrReportDet(const Dio_ChannelGroup
  */
 Dio_LevelType Dio_ReadChannel(Dio_ChannelType channelId)
 {
-    DET_LOGT(TAG, "called");
     return Dio_Hw_ReadChannel(channelId);
 }
 
@@ -126,7 +125,6 @@ Dio_LevelType Dio_ReadChannel(Dio_ChannelType channelId)
  */
 void Dio_WriteChannel(Dio_ChannelType channelId, Dio_LevelType level)
 {
-    DET_LOGT(TAG, "called");
     Dio_Hw_WriteChannel(channelId, level);
 }
 
@@ -136,7 +134,6 @@ void Dio_WriteChannel(Dio_ChannelType channelId, Dio_LevelType level)
 
 Dio_PortLevelType Dio_ReadPort(Dio_PortType PortId)
 {
-    DET_LOGT(TAG, "called");
     uint8 width = 0U;
     const Dio_ChannelType* channels = Dio_ResolvePortOrReportDet(PortId, DIO_API_ID_READ_PORT, &width);
     if (channels == NULL)
@@ -153,7 +150,6 @@ Dio_PortLevelType Dio_ReadPort(Dio_PortType PortId)
 
 void Dio_WritePort(Dio_PortType PortId, Dio_PortLevelType Level)
 {
-    DET_LOGT(TAG, "called");
     uint8 width = 0U;
     const Dio_ChannelType* channels = Dio_ResolvePortOrReportDet(PortId, DIO_API_ID_WRITE_PORT, &width);
     if (channels == NULL)
@@ -170,7 +166,6 @@ void Dio_WritePort(Dio_PortType PortId, Dio_PortLevelType Level)
 
 Dio_PortLevelType Dio_ReadChannelGroup(const Dio_ChannelGroupType* ChannelGroupIdPtr)
 {
-    DET_LOGT(TAG, "called");
     uint8 width = 0U;
     const Dio_ChannelType* channels =
         Dio_ResolveGroupOrReportDet(ChannelGroupIdPtr, DIO_API_ID_READ_CHANNEL_GROUP, &width, NULL);
@@ -189,7 +184,6 @@ Dio_PortLevelType Dio_ReadChannelGroup(const Dio_ChannelGroupType* ChannelGroupI
 
 void Dio_WriteChannelGroup(const Dio_ChannelGroupType* ChannelGroupIdPtr, Dio_PortLevelType Level)
 {
-    DET_LOGT(TAG, "called");
     uint8 width = 0U;
     Dio_PortLevelType shiftedMask = 0U;
     const Dio_ChannelType* channels =
@@ -214,7 +208,6 @@ void Dio_WriteChannelGroup(const Dio_ChannelGroupType* ChannelGroupIdPtr, Dio_Po
 
 void Dio_GetVersionInfo(Std_VersionInfoType* VersionInfo)
 {
-    DET_LOGT(TAG, "called");
     if (VersionInfo == NULL)
     {
         Det_ReportError(DIO_MODULE_ID, 0U, DIO_API_ID_GET_VERSION_INFO, DIO_E_PARAM_POINTER);
@@ -248,7 +241,6 @@ void Dio_GetVersionInfo(Std_VersionInfoType* VersionInfo)
  */
 Dio_LevelType Dio_FlipChannel(Dio_ChannelType channelId)
 {
-    DET_LOGT(TAG, "called");
     Dio_LevelType level = (Dio_Hw_ReadChannel(channelId) == DIO_HIGH) ? DIO_LOW : DIO_HIGH;
     Dio_Hw_WriteChannel(channelId, level);
     return level;

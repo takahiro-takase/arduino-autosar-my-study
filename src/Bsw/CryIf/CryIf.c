@@ -75,7 +75,6 @@ void CryIf_Init(void)
  */
 boolean CryIf_IsInitialized(void)
 {
-    DET_LOGT(TAG, "called");
     return (boolean)(CryIf_Initialized != 0U);
 }
 
@@ -85,7 +84,6 @@ boolean CryIf_IsInitialized(void)
 
 void CryIf_GetVersionInfo(Std_VersionInfoType* versioninfo)
 {
-    DET_LOGT(TAG, "called");
     if (!CryIf_Initialized)
     {
         Det_ReportError(CRYIF_MODULE_ID, 0U, CRYIF_API_ID_GET_VERSION_INFO, CRYIF_E_UNINIT);
@@ -111,7 +109,6 @@ void CryIf_GetVersionInfo(Std_VersionInfoType* versioninfo)
 
 Std_ReturnType CryIf_ProcessJob(uint32 channelId, Crypto_JobType* job)
 {
-    DET_LOGT(TAG, "called");
     if (!CryIf_Initialized)
     {
         Det_ReportError(CRYIF_MODULE_ID, 0U, CRYIF_API_ID_PROCESS_JOB, CRYIF_E_UNINIT);
@@ -143,7 +140,6 @@ Std_ReturnType CryIf_ProcessJob(uint32 channelId, Crypto_JobType* job)
 Std_ReturnType CryIf_KeyElementSet(uint32 cryIfKeyId, uint32 keyElementId,
                                     const uint8* keyPtr, uint32 keyLength)
 {
-    DET_LOGT(TAG, "called");
     if (!CryIf_Initialized)
     {
         Det_ReportError(CRYIF_MODULE_ID, 0U, CRYIF_API_ID_KEY_ELEMENT_SET, CRYIF_E_UNINIT);
@@ -187,7 +183,6 @@ Std_ReturnType CryIf_KeyElementSet(uint32 cryIfKeyId, uint32 keyElementId,
 
 Std_ReturnType CryIf_KeySetValid(uint32 cryIfKeyId)
 {
-    DET_LOGT(TAG, "called");
     if (!CryIf_Initialized)
     {
         Det_ReportError(CRYIF_MODULE_ID, 0U, CRYIF_API_ID_KEY_SET_VALID, CRYIF_E_UNINIT);
@@ -213,7 +208,6 @@ Std_ReturnType CryIf_KeySetValid(uint32 cryIfKeyId)
 Std_ReturnType CryIf_KeyElementGet(uint32 cryIfKeyId, uint32 keyElementId,
                                     uint8* resultPtr, uint32* resultLengthPtr)
 {
-    DET_LOGT(TAG, "called");
     if (!CryIf_Initialized)
     {
         Det_ReportError(CRYIF_MODULE_ID, 0U, CRYIF_API_ID_KEY_ELEMENT_GET, CRYIF_E_UNINIT);

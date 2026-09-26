@@ -235,7 +235,6 @@ static unsigned long   EcuM_PostRunTimerMs = 0UL;
  */
 void EcuM_Init(void)
 {
-    DET_LOGT(TAG, "called");
     Det_Init(NULL);  /* 他の全 BSW モジュール初期化より前（それらの Init 内での
                        * 初期化前エラーも report できる必要があるため）。Det.h 参照 */
     Det_Start();
@@ -339,7 +338,6 @@ void EcuM_Init(void)
  */
 void EcuM_MainFunction(void)
 {
-    DET_LOGT(TAG, "called");
     switch (EcuM_State)
     {
         case ECUM_STATE_RUN:
@@ -379,7 +377,6 @@ void EcuM_MainFunction(void)
 
 EcuM_StateType EcuM_GetState(void)
 {
-    DET_LOGT(TAG, "called");
     return EcuM_State;
 }
 
@@ -389,7 +386,6 @@ EcuM_StateType EcuM_GetState(void)
 
 Std_ReturnType EcuM_RequestRUN(EcuM_UserType user)
 {
-    DET_LOGT(TAG, "called");
     if (user >= ECUM_USER_COUNT)
     {
         Det_ReportError(ECUM_MODULE_ID, 0U, ECUM_API_ID_REQUEST_RUN, ECUM_E_INVALID_PAR);
@@ -458,7 +454,6 @@ Std_ReturnType EcuM_RequestRUN(EcuM_UserType user)
 
 Std_ReturnType EcuM_ReleaseRUN(EcuM_UserType user)
 {
-    DET_LOGT(TAG, "called");
     if (user >= ECUM_USER_COUNT)
     {
         Det_ReportError(ECUM_MODULE_ID, 0U, ECUM_API_ID_RELEASE_RUN, ECUM_E_INVALID_PAR);
@@ -517,7 +512,6 @@ Std_ReturnType EcuM_ReleaseRUN(EcuM_UserType user)
  */
 Std_ReturnType EcuM_RequestPOST_RUN(EcuM_UserType user)
 {
-    DET_LOGT(TAG, "called");
     if (user >= ECUM_USER_COUNT)
     {
         Det_ReportError(ECUM_MODULE_ID, 0U, ECUM_API_ID_REQUEST_POST_RUN, ECUM_E_INVALID_PAR);
@@ -555,7 +549,6 @@ Std_ReturnType EcuM_RequestPOST_RUN(EcuM_UserType user)
  */
 Std_ReturnType EcuM_ReleasePOST_RUN(EcuM_UserType user)
 {
-    DET_LOGT(TAG, "called");
     if (user >= ECUM_USER_COUNT)
     {
         Det_ReportError(ECUM_MODULE_ID, 0U, ECUM_API_ID_RELEASE_POST_RUN, ECUM_E_INVALID_PAR);
@@ -624,7 +617,6 @@ Std_ReturnType EcuM_ReleasePOST_RUN(EcuM_UserType user)
  */
 void EcuM_CheckWakeup(EcuM_WakeupSourceType wakeupSource)
 {
-    DET_LOGT(TAG, "called");
 
     if ((wakeupSource & ECUM_WKSOURCE_CAN) == 0U)
     {
@@ -643,7 +635,6 @@ void EcuM_CheckWakeup(EcuM_WakeupSourceType wakeupSource)
 
 void EcuM_GetVersionInfo(Std_VersionInfoType* versioninfo)
 {
-    DET_LOGT(TAG, "called");
     if (versioninfo == NULL)
     {
         Det_ReportError(ECUM_MODULE_ID, 0U, ECUM_API_ID_GET_VERSION_INFO, ECUM_E_NULL_POINTER);

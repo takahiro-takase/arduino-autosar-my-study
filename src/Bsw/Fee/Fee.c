@@ -88,7 +88,6 @@ void Fee_Init(const Fee_ConfigType* ConfigPtr)
 
 void Fee_GetVersionInfo(Std_VersionInfoType* versioninfo)
 {
-    DET_LOGT(TAG, "called");
     if (versioninfo == NULL)
     {
         Det_ReportError(FEE_MODULE_ID, 0U, FEE_API_ID_GET_VERSION_INFO, FEE_E_PARAM_POINTER);
@@ -108,7 +107,6 @@ void Fee_GetVersionInfo(Std_VersionInfoType* versioninfo)
 
 void Fee_SetMode(MemIf_ModeType Mode)
 {
-    DET_LOGT(TAG, "called");
     if (!Fee_Initialized)
     {
         /* [SWS_Fee_00121]: 未初期化時は development error FEE_E_UNINIT を
@@ -143,7 +141,6 @@ void Fee_SetMode(MemIf_ModeType Mode)
 
 Std_ReturnType Fee_Read(uint16 Address, uint8* DataBufferPtr, uint16 Length)
 {
-    DET_LOGT(TAG, "called");
     if (!Fee_Initialized)
     {
         Det_ReportError(FEE_MODULE_ID, 0U, FEE_API_ID_READ, FEE_E_UNINIT);
@@ -179,7 +176,6 @@ Std_ReturnType Fee_Read(uint16 Address, uint8* DataBufferPtr, uint16 Length)
 
 Std_ReturnType Fee_Write(uint16 Address, const uint8* DataBufferPtr, uint16 Length)
 {
-    DET_LOGT(TAG, "called");
     if (!Fee_Initialized)
     {
         Det_ReportError(FEE_MODULE_ID, 0U, FEE_API_ID_WRITE, FEE_E_UNINIT);
@@ -216,7 +212,6 @@ Std_ReturnType Fee_Write(uint16 Address, const uint8* DataBufferPtr, uint16 Leng
 
 Std_ReturnType Fee_WriteImmediate(uint16 Address, const uint8* DataBufferPtr, uint16 Length)
 {
-    DET_LOGT(TAG, "called");
     if (!Fee_Initialized)
     {
         Det_ReportError(FEE_MODULE_ID, 0U, FEE_API_ID_WRITE_IMMEDIATE, FEE_E_UNINIT);
@@ -252,7 +247,6 @@ Std_ReturnType Fee_WriteImmediate(uint16 Address, const uint8* DataBufferPtr, ui
 
 void Fee_Cancel(void)
 {
-    DET_LOGT(TAG, "called");
     if (!Fee_Initialized)
     {
         /* [SWS_Fee_00124]: 未初期化時は何も変更せず開発エラーのみ報告する。 */
@@ -282,7 +276,6 @@ void Fee_Cancel(void)
 
 MemIf_StatusType Fee_GetStatus(void)
 {
-    DET_LOGT(TAG, "called");
     if (!Fee_Initialized)
         return MEMIF_UNINIT;
     return Fee_Job.Active ? MEMIF_BUSY : MEMIF_IDLE;
@@ -294,7 +287,6 @@ MemIf_StatusType Fee_GetStatus(void)
 
 MemIf_JobResultType Fee_GetJobResult(void)
 {
-    DET_LOGT(TAG, "called");
     if (!Fee_Initialized)
     {
         /* [SWS_Fee_00125]: 未初期化時は FEE_E_UNINIT を報告し
@@ -313,7 +305,6 @@ MemIf_JobResultType Fee_GetJobResult(void)
 
 void Fee_MainFunction(void)
 {
-    DET_LOGT(TAG, "called");
     if (!Fee_Initialized || !Fee_Job.Active)
         return;
 

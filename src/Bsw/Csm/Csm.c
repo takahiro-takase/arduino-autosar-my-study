@@ -57,7 +57,6 @@ static uint8 Csm_Initialized = 0U;
  */
 static const Csm_JobConfigType* Csm_FindJob(uint32 jobId, Crypto_ServiceInfoType expectedService)
 {
-    DET_LOGT(TAG, "called");
     for (uint8 i = 0U; i < CSM_JOB_COUNT; i++)
     {
         if (Csm_JobConfigData[i].JobId == jobId && Csm_JobConfigData[i].Service == expectedService)
@@ -82,7 +81,6 @@ void Csm_Init(void)
 
 void Csm_GetVersionInfo(Std_VersionInfoType* versioninfo)
 {
-    DET_LOGT(TAG, "called");
     if (!Csm_Initialized)
     {
         Det_ReportError(CSM_MODULE_ID, 0U, CSM_API_ID_GET_VERSION_INFO, CSM_E_UNINIT);
@@ -110,7 +108,6 @@ Std_ReturnType Csm_MacGenerate(uint32 jobId, Crypto_OperationModeType mode,
                                 const uint8* dataPtr, uint32 dataLength,
                                 uint8* macPtr, uint32* macLengthPtr)
 {
-    DET_LOGT(TAG, "called");
     if (!Csm_Initialized)
     {
         Det_ReportError(CSM_MODULE_ID, 0U, CSM_API_ID_MAC_GENERATE, CSM_E_UNINIT);
@@ -190,7 +187,6 @@ Std_ReturnType Csm_MacVerify(uint32 jobId, Crypto_OperationModeType mode,
                               const uint8* macPtr, uint32 macLength,
                               Crypto_VerifyResultType* verifyPtr)
 {
-    DET_LOGT(TAG, "called");
     if (!Csm_Initialized)
     {
         Det_ReportError(CSM_MODULE_ID, 0U, CSM_API_ID_MAC_VERIFY, CSM_E_UNINIT);
@@ -250,7 +246,6 @@ Std_ReturnType Csm_MacVerify(uint32 jobId, Crypto_OperationModeType mode,
 Std_ReturnType Csm_KeyElementSet(uint32 keyId, uint32 keyElementId,
                                   const uint8* keyPtr, uint32 keyLength)
 {
-    DET_LOGT(TAG, "called");
     if (!Csm_Initialized)
     {
         Det_ReportError(CSM_MODULE_ID, 0U, CSM_API_ID_KEY_ELEMENT_SET, CSM_E_UNINIT);
@@ -299,7 +294,6 @@ Std_ReturnType Csm_KeyElementSet(uint32 keyId, uint32 keyElementId,
 
 Std_ReturnType Csm_KeySetValid(uint32 keyId)
 {
-    DET_LOGT(TAG, "called");
     if (!Csm_Initialized)
     {
         Det_ReportError(CSM_MODULE_ID, 0U, CSM_API_ID_KEY_SET_VALID, CSM_E_UNINIT);
@@ -333,7 +327,6 @@ Std_ReturnType Csm_KeySetValid(uint32 keyId)
 Std_ReturnType Csm_KeyElementGet(uint32 keyId, uint32 keyElementId,
                                   uint8* keyPtr, uint32* keyLengthPtr)
 {
-    DET_LOGT(TAG, "called");
     if (!Csm_Initialized)
     {
         Det_ReportError(CSM_MODULE_ID, 0U, CSM_API_ID_KEY_ELEMENT_GET, CSM_E_UNINIT);

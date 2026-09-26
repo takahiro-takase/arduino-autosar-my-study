@@ -50,7 +50,6 @@
  */
 static uint8 Crypto_Cmac_LeftShiftOneBit(const uint8 in[16], uint8 out[16])
 {
-    DET_LOGT(TAG, "called");
     const uint8 msb = (uint8)((in[0] & 0x80U) != 0U ? 1U : 0U);
     uint8 carry = 0U;
     for (sint8 i = 15; i >= 0; i--)
@@ -71,7 +70,6 @@ static uint8 Crypto_Cmac_LeftShiftOneBit(const uint8 in[16], uint8 out[16])
  */
 static void Crypto_Cmac_GenerateSubkey(const uint8 in[16], uint8 out[16])
 {
-    DET_LOGT(TAG, "called");
     const uint8 msb = Crypto_Cmac_LeftShiftOneBit(in, out);
     if (msb != 0U)
         out[15] ^= CRYPTO_CMAC_RB;
@@ -83,7 +81,6 @@ static void Crypto_Cmac_GenerateSubkey(const uint8 in[16], uint8 out[16])
 
 static void Crypto_Cmac_XorBlock(const uint8 a[16], const uint8 b[16], uint8 out[16])
 {
-    DET_LOGT(TAG, "called");
     for (uint8 i = 0U; i < 16U; i++)
         out[i] = (uint8)(a[i] ^ b[i]);
 }
@@ -97,7 +94,6 @@ void Crypto_Cmac_Calculate(const uint8 key[CRYPTO_AES128_KEY_SIZE],
                             uint16       messageLen,
                             uint8        mac[CRYPTO_CMAC_SIZE])
 {
-    DET_LOGT(TAG, "called");
     uint8 zero[16] = { 0U };
     uint8 l[16];
     uint8 k1[16];
