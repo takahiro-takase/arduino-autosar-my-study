@@ -437,6 +437,8 @@ set(NATIVE_CHAIN_WRAP_SYMBOLS
     Com_TxConfirmation
     Com_MainFunctionRx
     Com_MainFunctionTx
+    Com_IsRxTimedOut
+    Com_SetCommunicationEnabled
     # ComM.h の AUTOSAR IF 全16関数（Wrap_ComM.h/.c 参照）。
     ComM_Init
     ComM_DeInit
@@ -500,7 +502,7 @@ set(NATIVE_CHAIN_WRAP_SYMBOLS
     E2E_P05Check
     E2E_P05CheckInit
     E2E_P05MapStatusToSM
-    # E2EXf.h の公開API全7関数（Wrap_E2EXf.h/.c 参照）。
+    # E2EXf.h の公開API全6関数（Wrap_E2EXf.h/.c 参照）。
     E2EXf_Init
     E2EXf_DeInit
     E2EXf_Inv_EngineInfo

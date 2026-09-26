@@ -1,22 +1,21 @@
 /**
  * \file    Wrap_PduR.h
- * \brief   `src/Bsw/Can/Can.c` 内の関数を対象とした `-Wl,--wrap=<symbol>`
+ * \brief   `src/Bsw/PduR/PduR.c` 内の関数を対象とした `-Wl,--wrap=<symbol>`
  *          フォールトインジェクションのアクセサ群。
  *
- * \details `stub/` 配下の構成規則は `stub/Bsw/CanIf/Wrap_PduRIf.h`
+ * \details `stub/` 配下の構成規則は `stub/Bsw/CanIf/Wrap_CanIf.h`
  *          冒頭コメント参照（「wrap 対象の関数が定義されている元の src ファイル
  *          1 つにつき 1 ファイル」）。既定動作は `__real_...` へのパススルー。
  *
- *          AUTOSAR 仕様（SWS_Can）が定義する Can.c の公開 IF 関数を全数 wrap
- *          対象とする（2026-09-20 導入。`Can_Test_*` はテスト専用の拡張関数
- *          であり AUTOSAR 標準外のため対象外）。
+ *          PduR.c の実際に実体化された IF 全8関数を wrap 対象とする
+ *          （`PduR_<User:Xxx>` テンプレート名の未実装分は対象外）。
  *
- *          戻り値を持つ3関数（SetControllerMode/GetControllerErrorState/
- *          Write）には「指定した呼び出し回数以降は常に失敗を返す」という
- *          回数閾値方式の故障注入を実装する。`FailFromCallCount_Can_Xxx`
+ *          戻り値を持つ3関数（ComTransmit/CanTpTransmit/SecOCTransmit）には
+ *          「指定した呼び出し回数以降は常に失敗を返す」という回数閾値方式の
+ *          故障注入を実装する。`FailFromCallCount_PduR_Xxx`
  *          （既定 `Wrap_PduR_FAIL_FROM_CALL_COUNT_DISABLED`）に N を設定すると、
- *          `CallCount_Can_Xxx` が N 以上になった回から（その回を含め、
- *          以降ずっと）`ForcedReturn_Can_Xxx` を返すようになる。N=1 を
+ *          `CallCount_PduR_Xxx` が N 以上になった回から（その回を含め、
+ *          以降ずっと）`ForcedReturn_PduR_Xxx` を返すようになる。N=1 を
  *          設定すれば「次の呼び出しから即座に失敗」という単純な即時強制失敗
  *          としても使える（他 wrap ファイルの `ForceFail` 相当）ため、本ファイル
  *          では `ForceFail` 単体のフラグは持たない（2026-09-20、ユーザーとの
@@ -25,9 +24,8 @@
  *          呼び出し側の判定を `CallCount >= FailFromCallCount` の1条件だけに
  *          単純化できる（2026-09-20、ユーザー提案により `!= 0` ガードを撤去）。
  *
- *          戻り値を持たない8関数（Init/GetVersionInfo/
- *          DisableControllerInterrupts/EnableControllerInterrupts/
- *          MainFunction_Read/Write/BusOff/Wakeup）は故障注入する戻り値が
+ *          戻り値を持たない5関数（Init/GetVersionInfo/ComRxIndication/
+ *          CanIfTxConfirmation/SecOCTxConfirmation）は故障注入する戻り値が
  *          無いため、呼び出し回数のみを記録する。
  *
  *          変数名は `<種類>_<Module>_<関数名>`（種類=CallCount/
@@ -38,12 +36,12 @@
  *          接頭辞は冗長なため付けない。今後新規追加する `Wrap_XXX.c` は
  *          本ファイルと同じ命名規則へ統一する）。
  *
- *          11関数すべて本ファイル1つが対象で、実際に使うテスト（想定:
- *          `Bsw_Can_test.cpp`）も1つに閉じるため、他 wrap ファイルのような
+ *          8関数すべて本ファイル1つが対象で、実際に使うテスト（想定:
+ *          `Bsw_PduR_test.cpp`）も1つに閉じるため、他 wrap ファイルのような
  *          関数ごとの個別 `Reset()` ではなく、全状態を一括で初期状態へ戻す
- *          `WrapCan_Reset()` を1つだけ持つ（2026-09-20、ユーザー提案により
+ *          `WrapPduR_Reset()` を1つだけ持つ（2026-09-20、ユーザー提案により
  *          個別 Reset の代わりに採用）。各テストケースは SetUp() で
- *          `WrapCan_Reset()` を1回呼び、`FailFromCallCount_Can_Xxx` を
+ *          `WrapPduR_Reset()` を1回呼び、`FailFromCallCount_PduR_Xxx` を
  *          Arrange 区間でのみ立てること（他のテストケースの挙動を暗黙に
  *          変えないため）。
  */
@@ -57,12 +55,12 @@
 extern "C" {
 #endif
 
-/** `FailFromCallCount_Can_Xxx` の「無効（常にパススルー）」を表す番兵値。
+/** `FailFromCallCount_PduR_Xxx` の「無効（常にパススルー）」を表す番兵値。
  *  `uint32` の最大値のため、テストの呼び出し回数が現実的に到達することはない。 */
 #define Wrap_PduR_FAIL_FROM_CALL_COUNT_DISABLED 0xFFFFFFFFU
 
 /* ----------------------------------------------------------------------
- * 呼び出し回数（AUTOSAR IF 全11関数共通）
+ * 呼び出し回数（実体化済みIF全8関数共通）
  * ---------------------------------------------------------------------- */
 extern uint32 CallCount_PduR_Init;
 extern uint32 CallCount_PduR_GetVersionInfo;
@@ -77,9 +75,9 @@ extern uint32 CallCount_PduR_SecOCTxConfirmation;
  * 回数閾値故障注入（戻り値を持つ3関数のみ）
  * ---------------------------------------------------------------------- */
 /** `Wrap_PduR_FAIL_FROM_CALL_COUNT_DISABLED`（既定）: 常に対応する
- *  `__real_Can_Xxx()` へパススルー。それ以外の値を設定すると、対応する
- *  `CallCount_Can_Xxx` がこの値に達した回から（以降ずっと）
- *  対応する `ForcedReturn_Can_Xxx` を返す。 */
+ *  `__real_PduR_Xxx()` へパススルー。それ以外の値を設定すると、対応する
+ *  `CallCount_PduR_Xxx` がこの値に達した回から（以降ずっと）
+ *  対応する `ForcedReturn_PduR_Xxx` を返す。 */
 extern uint32 FailFromCallCount_PduR_ComTransmit;
 extern uint32 FailFromCallCount_PduR_CanTpTransmit;
 extern uint32 FailFromCallCount_PduR_SecOCTransmit;
@@ -89,7 +87,7 @@ extern uint32 FailFromCallCount_PduR_SecOCTransmit;
  * ---------------------------------------------------------------------- */
 extern Std_ReturnType ForcedReturn_PduR_ComTransmit;
 extern Std_ReturnType ForcedReturn_PduR_CanTpTransmit;
-extern Std_ReturnType ForcedReturn_PduR_SecOcTransmit;
+extern Std_ReturnType ForcedReturn_PduR_SecOCTransmit;
 
 /** すべての関数呼び出し回数・回数閾値・強制戻り値を初期状態へ戻す。
  *  各テストケースの開始時（SetUp()）に1回呼ぶ。 */

@@ -32,7 +32,7 @@ uint32 FailFromCallCount_PduR_SecOCTransmit = Wrap_PduR_FAIL_FROM_CALL_COUNT_DIS
 
 Std_ReturnType ForcedReturn_PduR_ComTransmit   = E_NOT_OK;
 Std_ReturnType ForcedReturn_PduR_CanTpTransmit = E_NOT_OK;
-Std_ReturnType ForcedReturn_PduR_SecOcTransmit = E_NOT_OK;
+Std_ReturnType ForcedReturn_PduR_SecOCTransmit = E_NOT_OK;
 
 /* ----------------------------------------------------------------------
  * WrapPduR_Reset — 11関数すべての状態を一括で初期化する（Wrap_PduR.h 参照）。
@@ -55,7 +55,7 @@ void WrapPduR_Reset(void)
 
     ForcedReturn_PduR_ComTransmit   = E_NOT_OK;
     ForcedReturn_PduR_CanTpTransmit = E_NOT_OK;
-    ForcedReturn_PduR_SecOcTransmit = E_NOT_OK;
+    ForcedReturn_PduR_SecOCTransmit = E_NOT_OK;
 }
 
 /* ======================================================================
@@ -151,7 +151,7 @@ Std_ReturnType __wrap_PduR_SecOCTransmit(PduIdType SrcPduId, const PduInfoType* 
 
     if (CallCount_PduR_SecOCTransmit >= FailFromCallCount_PduR_SecOCTransmit)
     {
-        return ForcedReturn_PduR_SecOcTransmit;
+        return ForcedReturn_PduR_SecOCTransmit;
     }
     return __real_PduR_SecOCTransmit(SrcPduId, PduInfoPtr);
 }
