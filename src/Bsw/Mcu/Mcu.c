@@ -30,9 +30,8 @@
 
 #define TAG "Mcu"
 
-/* Mcu_Init() だけは DET_LOGT を含め DET_LOGx を一切呼ばない。
- * 理由は上記ファイル冒頭のコメント参照（Serial.begin() 前に呼ばれるため）。
- * 他の関数は Serial.begin() 後にのみ呼ばれるため TRACE を追加している。 */
+/* Mcu_Init() だけは DET_LOGx を一切呼ばない
+ * （Serial.begin() 前に呼ばれるため、上記ファイル冒頭のコメント参照）。 */
 
 /* ======================================================================
  * Type Definitions
@@ -114,7 +113,6 @@ void Mcu_Init(const Mcu_ConfigType* ConfigPtr)
 
 Mcu_ResetType Mcu_GetResetReason(void)
 {
-    DET_LOGT(TAG, "called");
     if (!Mcu_Initialized)
     {
         Det_ReportError(MCU_MODULE_ID, 0U, MCU_API_ID_GET_RESET_REASON, MCU_E_UNINIT);
@@ -137,7 +135,6 @@ Mcu_ResetType Mcu_GetResetReason(void)
 
 Mcu_RawResetType Mcu_GetResetRawValue(void)
 {
-    DET_LOGT(TAG, "called");
     if (!Mcu_Initialized)
     {
         Det_ReportError(MCU_MODULE_ID, 0U, MCU_API_ID_GET_RESET_RAW_VALUE, MCU_E_UNINIT);
@@ -153,7 +150,6 @@ Mcu_RawResetType Mcu_GetResetRawValue(void)
 
 void Mcu_GetVersionInfo(Std_VersionInfoType* versioninfo)
 {
-    DET_LOGT(TAG, "called");
     if (versioninfo == NULL)
     {
         Det_ReportError(MCU_MODULE_ID, 0U, MCU_API_ID_GET_VERSION_INFO, MCU_E_PARAM_POINTER);

@@ -114,7 +114,6 @@ static uint8 FiM_EvaluatePermission(const FiM_FunctionCfgType* fn)
  */
 void FiM_Init(const FiM_ConfigType* ConfigPtr)
 {
-    DET_LOGT(TAG, "called");
     if (ConfigPtr == NULL)
     {
         DET_LOGE(TAG, "Init: NULL ConfigPtr");
@@ -156,7 +155,6 @@ void FiM_Init(const FiM_ConfigType* ConfigPtr)
  */
 Std_ReturnType FiM_GetFunctionPermission(FiM_FunctionIdType FunctionId, boolean* Permission)
 {
-    DET_LOGT(TAG, "called");
     if (Permission == NULL)
     {
         Det_ReportError(FIM_MODULE_ID, 0U, FIM_API_ID_GET_FUNCTION_PERMISSION, FIM_E_PARAM_POINTER);
@@ -215,7 +213,6 @@ Std_ReturnType FiM_GetFunctionPermission(FiM_FunctionIdType FunctionId, boolean*
  */
 Std_ReturnType FiM_SetFunctionAvailable(FiM_FunctionIdType FID, boolean Availability)
 {
-    DET_LOGT(TAG, "called");
     if (FiM_Cfg == NULL)
     {
         Det_ReportError(FIM_MODULE_ID, 0U, FIM_API_ID_SET_FUNCTION_AVAILABLE, FIM_E_UNINIT);
@@ -262,7 +259,6 @@ Std_ReturnType FiM_SetFunctionAvailable(FiM_FunctionIdType FID, boolean Availabi
 
 void FiM_GetVersionInfo(Std_VersionInfoType* versioninfo)
 {
-    DET_LOGT(TAG, "called");
     if (versioninfo == NULL)
     {
         Det_ReportError(FIM_MODULE_ID, 0U, FIM_API_ID_GET_VERSION_INFO, FIM_E_PARAM_POINTER);
@@ -289,7 +285,6 @@ void FiM_GetVersionInfo(Std_VersionInfoType* versioninfo)
  */
 void FiM_MainFunction(void)
 {
-    DET_LOGT(TAG, "called");
     if (FiM_Cfg == NULL)
         return;
 

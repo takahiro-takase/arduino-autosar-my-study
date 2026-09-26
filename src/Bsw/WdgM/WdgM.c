@@ -353,7 +353,6 @@ static WdgM_SupervisedEntityIdType WdgM_FirstExpiredSEIDInv __attribute__((secti
  */
 void WdgM_Init(const WdgM_ConfigType* ConfigPtr)
 {
-    DET_LOGT(TAG, "called");
     if (ConfigPtr == NULL)
     {
         DET_LOGE(TAG, "Init: NULL ConfigPtr");
@@ -390,7 +389,6 @@ void WdgM_Init(const WdgM_ConfigType* ConfigPtr)
 
 void WdgM_DeInit(void)
 {
-    DET_LOGT(TAG, "called");
     if (WdgM_Cfg == NULL)
     {
         Det_ReportError(WDGM_MODULE_ID, 0U, WDGM_API_ID_DEINIT, WDGM_E_NO_INIT);
@@ -407,7 +405,6 @@ void WdgM_DeInit(void)
 
 void WdgM_GetVersionInfo(Std_VersionInfoType* VersionInfo)
 {
-    DET_LOGT(TAG, "called");
     if (VersionInfo == NULL)
     {
         Det_ReportError(WDGM_MODULE_ID, 0U, WDGM_API_ID_GET_VERSION_INFO, WDGM_E_INV_POINTER);
@@ -435,7 +432,6 @@ void WdgM_GetVersionInfo(Std_VersionInfoType* VersionInfo)
  */
 Std_ReturnType WdgM_SetMode(WdgM_ModeType Mode)
 {
-    DET_LOGT(TAG, "called");
     if (WdgM_Cfg == NULL)
     {
         Det_ReportError(WDGM_MODULE_ID, 0U, WDGM_API_ID_SET_MODE, WDGM_E_NO_INIT);
@@ -467,7 +463,6 @@ Std_ReturnType WdgM_SetMode(WdgM_ModeType Mode)
  */
 Std_ReturnType WdgM_GetMode(WdgM_ModeType* Mode)
 {
-    DET_LOGT(TAG, "called");
     if (Mode == NULL)
     {
         Det_ReportError(WDGM_MODULE_ID, 0U, WDGM_API_ID_GET_MODE, WDGM_E_INV_POINTER);
@@ -500,7 +495,6 @@ Std_ReturnType WdgM_GetMode(WdgM_ModeType* Mode)
  */
 void WdgM_EnableHwWatchdog(void)
 {
-    DET_LOGT(TAG, "called");
     (void)WdgIf_SetMode(WDGIF_DEVICE_0, WDGIF_FAST_MODE);  /* WDGM_HW_WATCHDOG_TIMEOUT_MS (4000ms) に対応 */
     WdgM_SupervisionSuppressed = 0U;
     DET_LOGI(TAG, "HW watchdog enabled (4000ms)");
@@ -521,7 +515,6 @@ void WdgM_EnableHwWatchdog(void)
  */
 void WdgM_DisableHwWatchdog(void)
 {
-    DET_LOGT(TAG, "called");
     /* WdgIf_SetMode(OFF) は本プロジェクトの HW 制約により常に E_NOT_OK を
      * 返す（Wdg.c の Wdg_SetMode() コメント参照）が、ここで行いたいのは
      * 「WdgM が FAILED 判定の結果を無視する」ことであり、HW が物理的に
@@ -599,7 +592,6 @@ void WdgM_DisableHwWatchdog(void)
  */
 void WdgM_ResumeSupervision(void)
 {
-    DET_LOGT(TAG, "called");
     if (WdgM_Cfg == NULL)
         return;
 
@@ -641,7 +633,6 @@ void WdgM_ResumeSupervision(void)
  */
 Std_ReturnType WdgM_CheckpointReached(WdgM_SupervisedEntityIdType SEID, WdgM_CheckpointIdType CheckpointId)
 {
-    DET_LOGT(TAG, "called");
     if (WdgM_Cfg == NULL)
     {
         Det_ReportError(WDGM_MODULE_ID, 0U, WDGM_API_ID_CHECKPOINT_REACHED, WDGM_E_NO_INIT);
@@ -732,7 +723,6 @@ Std_ReturnType WdgM_CheckpointReached(WdgM_SupervisedEntityIdType SEID, WdgM_Che
  */
 Std_ReturnType WdgM_GetLocalStatus(WdgM_SupervisedEntityIdType SEID, WdgM_LocalStatusType* Status)
 {
-    DET_LOGT(TAG, "called");
     if (Status == NULL)
     {
         Det_ReportError(WDGM_MODULE_ID, 0U, WDGM_API_ID_GET_LOCAL_STATUS, WDGM_E_INV_POINTER);
@@ -867,7 +857,6 @@ static uint8 WdgM_AnyEntityExpired(void)
  */
 Std_ReturnType WdgM_GetGlobalStatus(WdgM_GlobalStatusType* Status)
 {
-    DET_LOGT(TAG, "called");
     if (Status == NULL)
     {
         Det_ReportError(WDGM_MODULE_ID, 0U, WDGM_API_ID_GET_GLOBAL_STATUS, WDGM_E_INV_POINTER);
@@ -1004,7 +993,6 @@ static void WdgM_EnterGlobalStopped(const char* reason, uint8 firstNotOkFound, u
  */
 void WdgM_MainFunction(void)
 {
-    DET_LOGT(TAG, "called");
     if (WdgM_Cfg == NULL)
         return;
 
@@ -1253,7 +1241,6 @@ void WdgM_MainFunction(void)
  */
 void WdgM_TriggerHwWatchdog(void)
 {
-    DET_LOGT(TAG, "called");
     if (!WdgM_ResetRequested && (!WdgM_GlobalStopped || WdgM_SupervisionSuppressed))
     {
         WdgIf_SetTriggerCondition(WDGIF_DEVICE_0, (uint16)WDGM_HW_WATCHDOG_TIMEOUT_MS);
@@ -1288,7 +1275,6 @@ void WdgM_TriggerHwWatchdog(void)
  */
 void WdgM_PerformReset(void)
 {
-    DET_LOGT(TAG, "called");
     if (WdgM_Cfg == NULL)
     {
         Det_ReportError(WDGM_MODULE_ID, 0U, WDGM_API_ID_PERFORM_RESET, WDGM_E_NO_INIT);
@@ -1322,7 +1308,6 @@ void WdgM_PerformReset(void)
  */
 Std_ReturnType WdgM_GetFirstExpiredSEID(WdgM_SupervisedEntityIdType* SEID)
 {
-    DET_LOGT(TAG, "called");
     if (SEID == NULL)
     {
         Det_ReportError(WDGM_MODULE_ID, 0U, WDGM_API_ID_GET_FIRST_EXPIRED_SEID, WDGM_E_INV_POINTER);

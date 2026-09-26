@@ -174,7 +174,6 @@ static uint8 SecOC_TxFreshness[SECOC_TX_STATE_STORAGE_COUNT];
  */
 static const SecOC_RxPduConfigType* SecOC_FindRxPdu(PduIdType rxPduId, uint8* tableIndex)
 {
-    DET_LOGT(TAG, "called");
     for (uint8 i = 0U; i < SecOC_ConfigPtr->RxPduCount; i++)
     {
         if (SecOC_ConfigPtr->RxPdus[i].SecOCRxPduId == rxPduId)
@@ -251,7 +250,6 @@ static uint8 SecOC_ApplyVerifyStatusOverride(uint8 tableIndex, uint8 actualPass)
  */
 static const SecOC_TxPduConfigType* SecOC_FindTxPdu(PduIdType txPduId, uint8* tableIndex)
 {
-    DET_LOGT(TAG, "called");
     for (uint8 i = 0U; i < SecOC_ConfigPtr->TxPduCount; i++)
     {
         if (SecOC_ConfigPtr->TxPdus[i].SecOCTxPduId == txPduId)
@@ -269,7 +267,6 @@ static const SecOC_TxPduConfigType* SecOC_FindTxPdu(PduIdType txPduId, uint8* ta
 
 void SecOC_Init(const SecOC_ConfigType* config)
 {
-    DET_LOGT(TAG, "called");
     if (config == NULL)
     {
         DET_LOGE(TAG, "Init E: config NULL");
@@ -318,7 +315,6 @@ void SecOC_Init(const SecOC_ConfigType* config)
 
 void SecOC_DeInit(void)
 {
-    DET_LOGT(TAG, "called");
     if (SecOC_ConfigPtr == NULL)
     {
         Det_ReportError(SECOC_MODULE_ID, 0U, SECOC_API_ID_DEINIT, SECOC_E_UNINIT);
@@ -356,7 +352,6 @@ void SecOC_DeInit(void)
 
 void SecOC_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
 {
-    DET_LOGT(TAG, "called");
     if (SecOC_ConfigPtr == NULL)
     {
         Det_ReportError(SECOC_MODULE_ID, 0U, SECOC_API_ID_RX_INDICATION, SECOC_E_UNINIT);
@@ -588,7 +583,6 @@ void SecOC_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
 Std_ReturnType SecOC_VerifyStatusOverride(uint16 freshnessValueID, uint8 overrideStatus,
                                           uint8 numberOfMessagesToOverride)
 {
-    DET_LOGT(TAG, "called");
     if (SecOC_ConfigPtr == NULL)
     {
         Det_ReportError(SECOC_MODULE_ID, 0U, SECOC_API_ID_VERIFY_STATUS_OVERRIDE, SECOC_E_UNINIT);
@@ -645,7 +639,6 @@ Std_ReturnType SecOC_VerifyStatusOverride(uint16 freshnessValueID, uint8 overrid
 
 Std_ReturnType SecOC_IfTransmit(PduIdType TxPduId, const PduInfoType* PduInfoPtr)
 {
-    DET_LOGT(TAG, "called");
     if (SecOC_ConfigPtr == NULL)
     {
         Det_ReportError(SECOC_MODULE_ID, 0U, SECOC_API_ID_IF_TRANSMIT, SECOC_E_UNINIT);
@@ -699,7 +692,6 @@ Std_ReturnType SecOC_IfTransmit(PduIdType TxPduId, const PduInfoType* PduInfoPtr
  */
 void SecOC_TxConfirmation(PduIdType TxPduId, Std_ReturnType result)
 {
-    DET_LOGT(TAG, "called");
     if (SecOC_ConfigPtr == NULL)
     {
         Det_ReportError(SECOC_MODULE_ID, 0U, SECOC_API_ID_TX_CONFIRMATION, SECOC_E_UNINIT);
@@ -729,7 +721,6 @@ void SecOC_TxConfirmation(PduIdType TxPduId, Std_ReturnType result)
 
 void SecOC_MainFunctionTx(void)
 {
-    DET_LOGT(TAG, "called");
     if (SecOC_ConfigPtr == NULL)
     {
         Det_ReportError(SECOC_MODULE_ID, 0U, SECOC_API_ID_MAIN_FUNCTION_TX, SECOC_E_UNINIT);
@@ -815,7 +806,6 @@ void SecOC_MainFunctionTx(void)
  */
 void SecOC_MainFunctionRx(void)
 {
-    DET_LOGT(TAG, "called");
     if (SecOC_ConfigPtr == NULL)
     {
         Det_ReportError(SECOC_MODULE_ID, 0U, SECOC_API_ID_MAIN_FUNCTION_RX, SECOC_E_UNINIT);
@@ -833,7 +823,6 @@ void SecOC_MainFunctionRx(void)
 
 void SecOC_GetVersionInfo(Std_VersionInfoType* versioninfo)
 {
-    DET_LOGT(TAG, "called");
     if (versioninfo == NULL)
     {
         Det_ReportError(SECOC_MODULE_ID, 0U, SECOC_API_ID_GET_VERSION_INFO, SECOC_E_PARAM_POINTER);

@@ -63,7 +63,6 @@ static uint8 Crypto_KeyValid[CRYPTO_KEY_COUNT];
 
 void Crypto_Init(void)
 {
-    DET_LOGT(TAG, "called");
     if (Crypto_Aes128_SelfTest() != E_OK)
     {
         /* [SWS_Crypto_00045]: 自己診断に失敗した場合は CRYPTO_E_INIT_FAILED を
@@ -92,7 +91,6 @@ void Crypto_Init(void)
 
 void Crypto_GetVersionInfo(Std_VersionInfoType* versioninfo)
 {
-    DET_LOGT(TAG, "called");
     if (versioninfo == NULL)
     {
         Det_ReportError(CRYPTO_MODULE_ID, 0U, CRYPTO_API_ID_GET_VERSION_INFO, CRYPTO_E_PARAM_POINTER);
@@ -112,7 +110,6 @@ void Crypto_GetVersionInfo(Std_VersionInfoType* versioninfo)
 
 Std_ReturnType Crypto_ProcessJob(uint32 objectId, Crypto_JobType* job)
 {
-    DET_LOGT(TAG, "called");
     if (!Crypto_Initialized)
     {
         Det_ReportError(CRYPTO_MODULE_ID, 0U, CRYPTO_API_ID_PROCESS_JOB, CRYPTO_E_UNINIT);
@@ -192,7 +189,6 @@ Std_ReturnType Crypto_ProcessJob(uint32 objectId, Crypto_JobType* job)
 Std_ReturnType Crypto_KeyElementSet(uint32 cryptoKeyId, uint32 keyElementId,
                                      const uint8* keyPtr, uint32 keyLength)
 {
-    DET_LOGT(TAG, "called");
     if (!Crypto_Initialized)
     {
         Det_ReportError(CRYPTO_MODULE_ID, 0U, CRYPTO_API_ID_KEY_ELEMENT_SET, CRYPTO_E_UNINIT);
@@ -241,7 +237,6 @@ Std_ReturnType Crypto_KeyElementSet(uint32 cryptoKeyId, uint32 keyElementId,
 Std_ReturnType Crypto_KeyElementGet(uint32 cryptoKeyId, uint32 keyElementId,
                                      uint8* resultPtr, uint32* resultLengthPtr)
 {
-    DET_LOGT(TAG, "called");
     if (!Crypto_Initialized)
     {
         Det_ReportError(CRYPTO_MODULE_ID, 0U, CRYPTO_API_ID_KEY_ELEMENT_GET, CRYPTO_E_UNINIT);
@@ -292,7 +287,6 @@ Std_ReturnType Crypto_KeyElementGet(uint32 cryptoKeyId, uint32 keyElementId,
 
 Std_ReturnType Crypto_KeySetValid(uint32 cryptoKeyId)
 {
-    DET_LOGT(TAG, "called");
     if (!Crypto_Initialized)
     {
         Det_ReportError(CRYPTO_MODULE_ID, 0U, CRYPTO_API_ID_KEY_SET_VALID, CRYPTO_E_UNINIT);

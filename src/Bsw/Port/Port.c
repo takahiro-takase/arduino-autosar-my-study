@@ -91,7 +91,6 @@ static void Port_ApplyConfiguredDirections(void)
  */
 void Port_Init(const Port_ConfigType* ConfigPtr)
 {
-    DET_LOGT(TAG, "called");
     (void)ConfigPtr; /* 本プロジェクトは Port_Cfg.h の静的テーブルを直接参照する（Port.h 参照） */
     Port_ApplyConfiguredDirections();
     DET_LOGI(TAG, "Init pins=%u", (unsigned)PORT_PIN_COUNT);
@@ -110,7 +109,6 @@ void Port_Init(const Port_ConfigType* ConfigPtr)
  */
 void Port_SetPinDirection(Port_PinType Pin, Port_PinDirectionType Direction)
 {
-    DET_LOGT(TAG, "called");
     Port_Hw_SetPinDirection(Pin, Direction);
 }
 
@@ -127,7 +125,6 @@ void Port_SetPinDirection(Port_PinType Pin, Port_PinDirectionType Direction)
  */
 void Port_RefreshPortDirection(void)
 {
-    DET_LOGT(TAG, "called");
     Port_ApplyConfiguredDirections();
     DET_LOGI(TAG, "RefreshPortDirection pins=%u", (unsigned)PORT_PIN_COUNT);
 }
@@ -138,7 +135,6 @@ void Port_RefreshPortDirection(void)
 
 void Port_GetVersionInfo(Std_VersionInfoType* versioninfo)
 {
-    DET_LOGT(TAG, "called");
     if (versioninfo == NULL)
     {
         Det_ReportError(PORT_MODULE_ID, 0U, PORT_API_ID_GET_VERSION_INFO, PORT_E_PARAM_POINTER);
@@ -165,7 +161,6 @@ void Port_GetVersionInfo(Std_VersionInfoType* versioninfo)
  */
 void Port_SetPinMode(Port_PinType Pin, Port_PinModeType Mode)
 {
-    DET_LOGT(TAG, "called");
     (void)Pin;
     (void)Mode;
     /* [SWS_Port_00223]: 本プロジェクトは全ピンが PortPinModeChangeable=FALSE

@@ -75,7 +75,6 @@
 void Det_Init(const Det_ConfigType* ConfigPtr)
 {
     (void)ConfigPtr;  /* 常に NULL（Det.h 参照）。初期化を要する内部変数を持たないため no-op */
-    DET_LOGT(TAG, "called");
     DET_LOGI(TAG, "Init ok");
 }
 
@@ -166,7 +165,6 @@ Std_ReturnType Det_ReportError(uint16 ModuleId, uint8 InstanceId, uint8 ApiId, u
  */
 void Det_Start(void)
 {
-    DET_LOGT(TAG, "called");
     /* セルフテスト機構を持たないため no-op（Det.h 参照）。 */
 }
 
@@ -284,7 +282,6 @@ void Log_HexStr(char* dst, uint8_t dstSize,
  */
 void Det_GetVersionInfo(Std_VersionInfoType* versioninfo)
 {
-    DET_LOGT(TAG, "called");
     if (versioninfo == NULL)
     {
         Det_ReportError(DET_MODULE_ID, 0U, DET_API_ID_GET_VERSION_INFO, DET_E_PARAM_POINTER);

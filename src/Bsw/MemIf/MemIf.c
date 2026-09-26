@@ -64,7 +64,6 @@
 
 static uint8 MemIf_CheckDevice(MemIf_DeviceType Device, uint8 ApiId)
 {
-    DET_LOGT(TAG, "called");
     if (Device != MEMIF_DEVICE_0)
     {
         Det_ReportError(MEMIF_MODULE_ID, 0U, ApiId, MEMIF_E_PARAM_DEVICE);
@@ -89,7 +88,6 @@ void MemIf_Init(void)
 
 void MemIf_GetVersionInfo(Std_VersionInfoType* versioninfo)
 {
-    DET_LOGT(TAG, "called");
     if (versioninfo == NULL)
     {
         Det_ReportError(MEMIF_MODULE_ID, 0U, MEMIF_API_ID_GET_VERSION_INFO, MEMIF_E_PARAM_POINTER);
@@ -112,7 +110,6 @@ void MemIf_SetMode(MemIf_ModeType Mode)
     /* [SWS_MemIf_00038]: Device 引数を持たない（全下位ドライバへ一括反映する
      * ため）。本プロジェクトは下位ドライバが Fee 1 個のみのため、そのまま
      * 1 回呼ぶだけで「全下位ドライバへの一括反映」になる。 */
-    DET_LOGT(TAG, "called");
     Fee_SetMode(Mode);
 }
 
@@ -122,7 +119,6 @@ void MemIf_SetMode(MemIf_ModeType Mode)
 
 Std_ReturnType MemIf_Read(MemIf_DeviceType Device, uint16 Address, uint8* DataBufferPtr, uint16 Length)
 {
-    DET_LOGT(TAG, "called");
     if (!MemIf_CheckDevice(Device, MEMIF_API_ID_READ))
         return E_NOT_OK;
     return Fee_Read(Address, DataBufferPtr, Length);
@@ -134,7 +130,6 @@ Std_ReturnType MemIf_Read(MemIf_DeviceType Device, uint16 Address, uint8* DataBu
 
 Std_ReturnType MemIf_Write(MemIf_DeviceType Device, uint16 Address, const uint8* DataBufferPtr, uint16 Length)
 {
-    DET_LOGT(TAG, "called");
     if (!MemIf_CheckDevice(Device, MEMIF_API_ID_WRITE))
         return E_NOT_OK;
     return Fee_Write(Address, DataBufferPtr, Length);
@@ -146,7 +141,6 @@ Std_ReturnType MemIf_Write(MemIf_DeviceType Device, uint16 Address, const uint8*
 
 Std_ReturnType MemIf_WriteImmediate(MemIf_DeviceType Device, uint16 Address, const uint8* DataBufferPtr, uint16 Length)
 {
-    DET_LOGT(TAG, "called");
     if (!MemIf_CheckDevice(Device, MEMIF_API_ID_WRITE_IMMEDIATE))
         return E_NOT_OK;
     return Fee_WriteImmediate(Address, DataBufferPtr, Length);
@@ -158,7 +152,6 @@ Std_ReturnType MemIf_WriteImmediate(MemIf_DeviceType Device, uint16 Address, con
 
 void MemIf_Cancel(MemIf_DeviceType Device)
 {
-    DET_LOGT(TAG, "called");
     if (!MemIf_CheckDevice(Device, MEMIF_API_ID_CANCEL))
         return;
     Fee_Cancel();
@@ -174,7 +167,6 @@ MemIf_StatusType MemIf_GetStatus(MemIf_DeviceType Device)
      * DeviceIndex を検査し MEMIF_E_PARAM_DEVICE を報告することを要求して
      * おり、GetStatus/GetJobResult も対象に含まれる（Read/Write/Cancel と
      * 同じ MemIf_CheckDevice() を通す）。 */
-    DET_LOGT(TAG, "called");
     if (!MemIf_CheckDevice(Device, MEMIF_API_ID_GET_STATUS))
         return MEMIF_UNINIT;
     return Fee_GetStatus();
@@ -189,7 +181,6 @@ MemIf_JobResultType MemIf_GetJobResult(MemIf_DeviceType Device)
     /* [SWS_MemIf_00043] の Return value 記述: development error 検出時は
      * （[SWS_MemIf_00022] に従いエラー報告した上で）MEMIF_JOB_FAILED を
      * 返す。MemIf_GetStatus() と同じ理由で MemIf_CheckDevice() を通す。 */
-    DET_LOGT(TAG, "called");
     if (!MemIf_CheckDevice(Device, MEMIF_API_ID_GET_JOB_RESULT))
         return MEMIF_JOB_FAILED;
     return Fee_GetJobResult();
@@ -201,6 +192,5 @@ MemIf_JobResultType MemIf_GetJobResult(MemIf_DeviceType Device)
 
 void MemIf_MainFunction(void)
 {
-    DET_LOGT(TAG, "called");
     Fee_MainFunction();
 }

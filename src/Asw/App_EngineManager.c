@@ -78,7 +78,6 @@ static void State_Fault(EngineSpeed_t speed, CoolantTemp_t temp, EngineOnFlag_t 
  */
 void App_EngineManager_Init(void)
 {
-    DET_LOGT(TAG, "called");
     s_state           = ENGINE_STATE_OFF;
     s_startingEnterMs = 0UL;
     s_offCycles       = 0U;
@@ -123,7 +122,6 @@ void App_EngineManager_Init(void)
  */
 void App_EngineManager_Run(void)
 {
-    DET_LOGT(TAG, "called");
     EngineSpeed_t  speed      = 0U;
     CoolantTemp_t  temp       = 0U;
     EngineOnFlag_t flag       = 0U;
@@ -322,7 +320,6 @@ void App_EngineManager_Run(void)
  */
 EngineState_t App_EngineManager_GetState(void)
 {
-    DET_LOGT(TAG, "called");
     return s_state;
 }
 
@@ -347,7 +344,6 @@ EngineState_t App_EngineManager_GetState(void)
  */
 static void State_Off(EngineSpeed_t speed, CoolantTemp_t temp, EngineOnFlag_t flag)
 {
-    DET_LOGT(TAG, "called");
     (void)temp;
 
     if (flag == 1U)
@@ -387,7 +383,6 @@ static void State_Off(EngineSpeed_t speed, CoolantTemp_t temp, EngineOnFlag_t fl
  */
 static void State_Starting(EngineSpeed_t speed, CoolantTemp_t temp, EngineOnFlag_t flag)
 {
-    DET_LOGT(TAG, "called");
     (void)temp;
 
     if (flag == 0U)
@@ -430,7 +425,6 @@ static void State_Starting(EngineSpeed_t speed, CoolantTemp_t temp, EngineOnFlag
  */
 static void State_Running(EngineSpeed_t speed, CoolantTemp_t temp, EngineOnFlag_t flag)
 {
-    DET_LOGT(TAG, "called");
     if (flag == 0U)
     {
         s_state = ENGINE_STATE_OFF;
@@ -481,7 +475,6 @@ static void State_Running(EngineSpeed_t speed, CoolantTemp_t temp, EngineOnFlag_
  */
 static void State_Fault(EngineSpeed_t speed, CoolantTemp_t temp, EngineOnFlag_t flag)
 {
-    DET_LOGT(TAG, "called");
     (void)speed;
     (void)temp;
 

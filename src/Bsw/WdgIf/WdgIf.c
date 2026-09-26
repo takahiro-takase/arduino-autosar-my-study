@@ -60,7 +60,6 @@
 
 static uint8 WdgIf_CheckDevice(WdgIf_DeviceType Device, uint8 ApiId)
 {
-    DET_LOGT(TAG, "called");
     if (Device != WDGIF_DEVICE_0)
     {
         Det_ReportError(WDGIF_MODULE_ID, 0U, ApiId, WDGIF_E_PARAM_DEVICE);
@@ -75,7 +74,6 @@ static uint8 WdgIf_CheckDevice(WdgIf_DeviceType Device, uint8 ApiId)
 
 Std_ReturnType WdgIf_SetMode(WdgIf_DeviceType Device, WdgIf_ModeType WdgMode)
 {
-    DET_LOGT(TAG, "called");
     if (!WdgIf_CheckDevice(Device, WDGIF_API_ID_SET_MODE))
         return E_NOT_OK;
     return Wdg_SetMode(WdgMode);
@@ -87,7 +85,6 @@ Std_ReturnType WdgIf_SetMode(WdgIf_DeviceType Device, WdgIf_ModeType WdgMode)
 
 void WdgIf_SetTriggerCondition(WdgIf_DeviceType Device, uint16 Timeout)
 {
-    DET_LOGT(TAG, "called");
     if (!WdgIf_CheckDevice(Device, WDGIF_API_ID_SET_TRIGGER_CONDITION))
         return;
     Wdg_SetTriggerCondition(Timeout);
@@ -99,7 +96,6 @@ void WdgIf_SetTriggerCondition(WdgIf_DeviceType Device, uint16 Timeout)
 
 void WdgIf_GetVersionInfo(Std_VersionInfoType* VersionInfoPtr)
 {
-    DET_LOGT(TAG, "called");
     if (VersionInfoPtr == NULL)
     {
         Det_ReportError(WDGIF_MODULE_ID, 0U, WDGIF_API_ID_GET_VERSION_INFO, WDGIF_E_PARAM_POINTER);

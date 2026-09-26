@@ -245,7 +245,6 @@ void CanIf_DeInit(void)
  */
 Std_ReturnType CanIf_SetControllerMode(uint8 ControllerId, Can_ControllerStateType ControllerMode)
 {
-    DET_LOGT(TAG, "called");
 
     if (CanIf_ConfigPtr == NULL)
         return E_NOT_OK;
@@ -310,7 +309,6 @@ Std_ReturnType CanIf_SetControllerMode(uint8 ControllerId, Can_ControllerStateTy
  */
 Std_ReturnType CanIf_GetControllerMode(uint8 ControllerId, Can_ControllerStateType* ControllerModePtr)
 {
-    DET_LOGT(TAG, "called");
 
     if (CanIf_ConfigPtr == NULL)
         return E_NOT_OK;
@@ -771,7 +769,6 @@ Std_ReturnType CanIf_GetPduMode(uint8 ControllerId, CanIf_PduModeType* PduModePt
  */
 void CanIf_GetVersionInfo(Std_VersionInfoType* versioninfo)
 {
-    DET_LOGT(TAG, "called");
 
     if (versioninfo == NULL)
     {
@@ -872,7 +869,6 @@ void CanIf_GetVersionInfo(Std_VersionInfoType* versioninfo)
  */
 CanIf_NotifStatusType CanIf_GetTxConfirmationState(uint8 ControllerId)
 {
-    DET_LOGT(TAG, "called");
 
     if (CanIf_ConfigPtr == NULL)
         return CANIF_NO_NOTIFICATION;  /* CanIf の他 API と同じ方針、CanIf_Cfg.h 冒頭コメント参照 */

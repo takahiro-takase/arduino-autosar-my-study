@@ -148,7 +148,6 @@ static Rte_IStatusType Rte_AbsInfoStatus = RTE_E_OK;
  */
 static Rte_IStatusType Rte_MapE2EStatus(E2E_P01StatusType status)
 {
-    DET_LOGT(TAG, "called");
     switch (status)
     {
         case E2E_P01STATUS_OK:
@@ -171,7 +170,6 @@ static Rte_IStatusType Rte_MapE2EStatus(E2E_P01StatusType status)
  */
 static Rte_IStatusType Rte_MapE2EStatusP05(E2E_P05StatusType status)
 {
-    DET_LOGT(TAG, "called");
     switch (status)
     {
         case E2E_P05STATUS_OK:
@@ -203,7 +201,6 @@ static Rte_IStatusType Rte_MapE2EStatusP05(E2E_P05StatusType status)
  */
 void Rte_COMRxInd_EngineInfo(void)
 {
-    DET_LOGT(TAG, "called");
     uint8 buf[7];
     if (Com_ReceiveSignalGroupArray(0U, buf) != E_OK)
         return;
@@ -261,7 +258,6 @@ void Rte_COMRxInd_EngineInfo(void)
  */
 void Rte_COMInvalidNotify_CoolantTemp(void)
 {
-    DET_LOGT(TAG, "called");
     DET_LOGW(TAG, "CoolantTemp invalid value received (sensor fault pattern)");
     (void)Rte_Invalidate_MeterStatus_CoolantTemp();
 }
@@ -285,7 +281,6 @@ void Rte_COMInvalidNotify_CoolantTemp(void)
  */
 void Rte_COMFilterReject_EngineSpeed(void)
 {
-    DET_LOGT(TAG, "called");
     DET_LOGW(TAG, "EngineSpeed out of plausible range, rejected by RX filter (kept last valid value)");
 }
 
@@ -498,7 +493,6 @@ void Rte_COMCbkRxTOut_AbsInfo(void)
  */
 void Rte_COMRxInd_SecureCommand(void)
 {
-    DET_LOGT(TAG, "called");
     uint8 cmd = 0U;
     if (Com_ReceiveSignal(COM_SIGNAL_IMMOBILIZER_CMD, &cmd) != E_OK)
         return;
@@ -539,7 +533,6 @@ void Rte_COMRxInd_SecureCommand(void)
  */
 void Rte_SecOCVerificationStatus_ImmobilizerCmd(SecOC_VerificationStatusType status)
 {
-    DET_LOGT(TAG, "called");
     switch (status.verificationStatus)
     {
     case SECOC_VERIFICATIONSUCCESS:
@@ -679,7 +672,6 @@ boolean Rte_COMTxIpduCallout_ImmobilizerStatus(const uint8* SduDataPtr, uint8 Sd
  */
 void Rte_COMRxInd_AbsInfo(void)
 {
-    DET_LOGT(TAG, "called");
     uint8 buf[6];
     if (Com_ReceiveSignalGroupArray(1U, buf) != E_OK)
         return;
@@ -719,7 +711,6 @@ void Rte_COMRxInd_AbsInfo(void)
  */
 void Rte_COMTransform_E2EHealthStatus(uint8* Data, uint8 Length)
 {
-    DET_LOGT(TAG, "called");
     (void)Length;  /* E2EXf_E2EHealthStatus() は固定長PDU用にDataLengthを内部で保持するため未使用 */
     /* E2EXf_E2EHealthStatus() の戻り値は現状の起動順序（EcuM_Init() が
      * E2EXf_PBCfg_Init() を Com_MainFunctionTx() 呼び出しより前に完了させる）
@@ -758,7 +749,6 @@ static uint8 Rte_LampLastLevel[RTE_LAMP_COUNT];
  */
 static Std_ReturnType Rte_Lamp_WriteHw(Rte_LampIdType lamp, uint8 level)
 {
-    DET_LOGT(TAG, "called");
     switch (lamp)
     {
     case RTE_LAMP_RUN:   return IoHwAb_LedRunning_SetLevel(level);
@@ -779,7 +769,6 @@ static Std_ReturnType Rte_Lamp_WriteHw(Rte_LampIdType lamp, uint8 level)
  */
 static Std_ReturnType Rte_Lamp_ArbitrateAndWrite(Rte_LampIdType lamp, uint8 aswLevel)
 {
-    DET_LOGT(TAG, "called");
     const uint8 effectiveLevel = Rte_LampOverrideActive[lamp]
                                   ? Rte_LampOverrideValue[lamp] : aswLevel;
     Rte_LampLastLevel[lamp] = effectiveLevel;
@@ -796,7 +785,6 @@ static Std_ReturnType Rte_Lamp_ArbitrateAndWrite(Rte_LampIdType lamp, uint8 aswL
  */
 static Std_ReturnType Rte_Lamp_ForceAndWrite(Rte_LampIdType lamp, uint8 level)
 {
-    DET_LOGT(TAG, "called");
     Rte_LampOverrideActive[lamp] = 1U;
     Rte_LampOverrideValue[lamp]  = level;
     Rte_LampLastLevel[lamp]      = level;
@@ -830,7 +818,6 @@ static Std_ReturnType Rte_Lamp_ForceAndWrite(Rte_LampIdType lamp, uint8 level)
  */
 Rte_IStatusType Rte_Read_SpeedSensor_EngineSpeed(EngineSpeed_t* data)
 {
-    DET_LOGT(TAG, "called");
     SchM_Enter_Rte_MIRROR_EXCLUSIVE_AREA();
     *data = Rte_EngineInfoMirror.speed;
     SchM_Exit_Rte_MIRROR_EXCLUSIVE_AREA();
@@ -859,7 +846,6 @@ Rte_IStatusType Rte_Read_SpeedSensor_EngineSpeed(EngineSpeed_t* data)
  */
 Rte_IStatusType Rte_Read_TempSensor_CoolantTemp(CoolantTemp_t* data)
 {
-    DET_LOGT(TAG, "called");
     SchM_Enter_Rte_MIRROR_EXCLUSIVE_AREA();
     *data = Rte_EngineInfoMirror.temp;
     SchM_Exit_Rte_MIRROR_EXCLUSIVE_AREA();
@@ -889,7 +875,6 @@ Rte_IStatusType Rte_Read_TempSensor_CoolantTemp(CoolantTemp_t* data)
  */
 Rte_IStatusType Rte_Read_EngineStatus_EngineOnFlag(EngineOnFlag_t* data)
 {
-    DET_LOGT(TAG, "called");
     SchM_Enter_Rte_MIRROR_EXCLUSIVE_AREA();
     *data = Rte_EngineInfoMirror.onFlag;
     SchM_Exit_Rte_MIRROR_EXCLUSIVE_AREA();
@@ -923,7 +908,6 @@ Rte_IStatusType Rte_Read_EngineStatus_EngineOnFlag(EngineOnFlag_t* data)
  */
 Std_ReturnType Rte_Write_EngineStatus_EngineState(EngineState_t state)
 {
-    DET_LOGT(TAG, "called");
     SchM_Enter_Rte_MIRROR_EXCLUSIVE_AREA();
     Rte_EngineStateMirror = state;
     SchM_Exit_Rte_MIRROR_EXCLUSIVE_AREA();
@@ -948,7 +932,6 @@ Std_ReturnType Rte_Write_EngineStatus_EngineState(EngineState_t state)
  */
 Std_ReturnType Rte_Read_EngineStatus_EngineState(EngineState_t* data)
 {
-    DET_LOGT(TAG, "called");
     if (data == NULL)
         return E_NOT_OK;
     SchM_Enter_Rte_MIRROR_EXCLUSIVE_AREA();
@@ -975,7 +958,6 @@ Std_ReturnType Rte_Read_EngineStatus_EngineState(EngineState_t* data)
  */
 void Rte_ScheduleRunnables(void)
 {
-    DET_LOGT(TAG, "called");
     App_EngineManager_Run();
 }
 
@@ -998,7 +980,6 @@ void Rte_ScheduleRunnables(void)
  */
 Std_ReturnType Rte_Read_WarningIndicator_EngineState(EngineState_t* data)
 {
-    DET_LOGT(TAG, "called");
     return Rte_Read_EngineStatus_EngineState(data);
 }
 
@@ -1016,7 +997,6 @@ Std_ReturnType Rte_Read_WarningIndicator_EngineState(EngineState_t* data)
  */
 void Rte_ScheduleWarningIndicator(void)
 {
-    DET_LOGT(TAG, "called");
     App_WarningIndicator_Run();
 }
 
@@ -1040,7 +1020,6 @@ void Rte_ScheduleWarningIndicator(void)
  */
 Std_ReturnType Rte_Call_Led_SetLevel(uint8 level)
 {
-    DET_LOGT(TAG, "called");
     return Rte_Lamp_ArbitrateAndWrite(RTE_LAMP_ABS, level);
 }
 
@@ -1061,7 +1040,6 @@ Std_ReturnType Rte_Call_Led_SetLevel(uint8 level)
  */
 Std_ReturnType Rte_Call_LedRunning_SetLevel(uint8 level)
 {
-    DET_LOGT(TAG, "called");
     return Rte_Lamp_ArbitrateAndWrite(RTE_LAMP_RUN, level);
 }
 
@@ -1082,7 +1060,6 @@ Std_ReturnType Rte_Call_LedRunning_SetLevel(uint8 level)
  */
 Std_ReturnType Rte_Call_LedFault_SetLevel(uint8 level)
 {
-    DET_LOGT(TAG, "called");
     return Rte_Lamp_ArbitrateAndWrite(RTE_LAMP_FAULT, level);
 }
 
@@ -1106,7 +1083,6 @@ Std_ReturnType Rte_Call_LedFault_SetLevel(uint8 level)
  */
 Std_ReturnType Rte_IoControl_Lamp_ReturnControlToEcu(Rte_LampIdType lamp)
 {
-    DET_LOGT(TAG, "called");
     if (lamp >= RTE_LAMP_COUNT)
         return E_NOT_OK;
     Rte_LampOverrideActive[lamp] = 0U;
@@ -1131,7 +1107,6 @@ Std_ReturnType Rte_IoControl_Lamp_ReturnControlToEcu(Rte_LampIdType lamp)
  */
 Std_ReturnType Rte_IoControl_Lamp_ResetToDefault(Rte_LampIdType lamp)
 {
-    DET_LOGT(TAG, "called");
     if (lamp >= RTE_LAMP_COUNT)
         return E_NOT_OK;
     return Rte_Lamp_ForceAndWrite(lamp, 0U);
@@ -1156,7 +1131,6 @@ Std_ReturnType Rte_IoControl_Lamp_ResetToDefault(Rte_LampIdType lamp)
  */
 Std_ReturnType Rte_IoControl_Lamp_FreezeCurrentState(Rte_LampIdType lamp)
 {
-    DET_LOGT(TAG, "called");
     if (lamp >= RTE_LAMP_COUNT)
         return E_NOT_OK;
     Rte_LampOverrideValue[lamp]  = Rte_LampLastLevel[lamp];
@@ -1181,7 +1155,6 @@ Std_ReturnType Rte_IoControl_Lamp_FreezeCurrentState(Rte_LampIdType lamp)
  */
 Std_ReturnType Rte_IoControl_Lamp_ShortTermAdjustment(Rte_LampIdType lamp, uint8 level)
 {
-    DET_LOGT(TAG, "called");
     if (lamp >= RTE_LAMP_COUNT)
         return E_NOT_OK;
     return Rte_Lamp_ForceAndWrite(lamp, level);
@@ -1204,7 +1177,6 @@ Std_ReturnType Rte_IoControl_Lamp_ShortTermAdjustment(Rte_LampIdType lamp, uint8
  */
 Std_ReturnType Rte_IoControl_Lamp_GetCurrentLevel(Rte_LampIdType lamp, uint8* level)
 {
-    DET_LOGT(TAG, "called");
     if (lamp >= RTE_LAMP_COUNT || level == NULL)
         return E_NOT_OK;
     *level = Rte_LampLastLevel[lamp];
@@ -1229,7 +1201,6 @@ Std_ReturnType Rte_IoControl_Lamp_GetCurrentLevel(Rte_LampIdType lamp, uint8* le
  */
 Std_ReturnType Rte_Call_Button_GetLevel(uint8* level)
 {
-    DET_LOGT(TAG, "called");
     return IoHwAb_Button_GetLevel(level);
 }
 
@@ -1251,7 +1222,6 @@ Std_ReturnType Rte_Call_Button_GetLevel(uint8* level)
  */
 Std_ReturnType Rte_Call_Adc_GetValue_mV(uint16* mv)
 {
-    DET_LOGT(TAG, "called");
     return IoHwAb_Adc_GetValue_mV(mv);
 }
 
@@ -1275,7 +1245,6 @@ Std_ReturnType Rte_Call_Adc_GetValue_mV(uint16* mv)
  */
 Std_ReturnType Rte_Call_FiM_GetFunctionPermission(uint8 functionId, boolean* permission)
 {
-    DET_LOGT(TAG, "called");
     return FiM_GetFunctionPermission(functionId, permission);
 }
 
@@ -1298,7 +1267,6 @@ Std_ReturnType Rte_Call_FiM_GetFunctionPermission(uint8 functionId, boolean* per
  */
 Rte_IStatusType Rte_Read_VehicleSensor_VehicleSpeed(VehicleSpeed_t* data)
 {
-    DET_LOGT(TAG, "called");
     SchM_Enter_Rte_MIRROR_EXCLUSIVE_AREA();
     *data = Rte_AbsInfoMirror.speed;
     SchM_Exit_Rte_MIRROR_EXCLUSIVE_AREA();
@@ -1326,7 +1294,6 @@ Rte_IStatusType Rte_Read_VehicleSensor_VehicleSpeed(VehicleSpeed_t* data)
  */
 Rte_IStatusType Rte_Read_BrakeSensor_BrakeActive(BrakeActive_t* data)
 {
-    DET_LOGT(TAG, "called");
     SchM_Enter_Rte_MIRROR_EXCLUSIVE_AREA();
     *data = Rte_AbsInfoMirror.brake;
     SchM_Exit_Rte_MIRROR_EXCLUSIVE_AREA();
@@ -1354,7 +1321,6 @@ Rte_IStatusType Rte_Read_BrakeSensor_BrakeActive(BrakeActive_t* data)
  */
 Rte_IStatusType Rte_Read_AbsSensor_AbsActive(AbsActive_t* data)
 {
-    DET_LOGT(TAG, "called");
     SchM_Enter_Rte_MIRROR_EXCLUSIVE_AREA();
     *data = Rte_AbsInfoMirror.abs;
     SchM_Exit_Rte_MIRROR_EXCLUSIVE_AREA();
@@ -1388,7 +1354,6 @@ Rte_IStatusType Rte_Read_AbsSensor_AbsActive(AbsActive_t* data)
  */
 Std_ReturnType Rte_Write_WarningStatus_RunLamp(uint8 level)
 {
-    DET_LOGT(TAG, "called");
     return Com_SendSignal(COM_SIGNAL_RUN_LAMP, &level);
 }
 
@@ -1410,7 +1375,6 @@ Std_ReturnType Rte_Write_WarningStatus_RunLamp(uint8 level)
  */
 Std_ReturnType Rte_Write_WarningStatus_FaultLamp(uint8 level)
 {
-    DET_LOGT(TAG, "called");
     return Com_SendSignal(COM_SIGNAL_FAULT_LAMP, &level);
 }
 
@@ -1432,7 +1396,6 @@ Std_ReturnType Rte_Write_WarningStatus_FaultLamp(uint8 level)
  */
 Std_ReturnType Rte_Write_WarningStatus_AbsLamp(uint8 level)
 {
-    DET_LOGT(TAG, "called");
     return Com_SendSignal(COM_SIGNAL_ABS_LAMP, &level);
 }
 
@@ -1460,7 +1423,6 @@ Std_ReturnType Rte_Write_WarningStatus_AbsLamp(uint8 level)
  */
 Std_ReturnType Rte_SendSignalGroup_WarningStatus(void)
 {
-    DET_LOGT(TAG, "called");
     return Com_SendSignalGroup(1U);
 }
 
@@ -1489,7 +1451,6 @@ Std_ReturnType Rte_SendSignalGroup_WarningStatus(void)
  */
 Std_ReturnType Rte_Write_MeterStatus_EngineSpeed(EngineSpeed_t speed)
 {
-    DET_LOGT(TAG, "called");
     return Com_SendSignal(COM_SIGNAL_METER_ENGINE_SPEED, &speed);
 }
 
@@ -1513,7 +1474,6 @@ Std_ReturnType Rte_Write_MeterStatus_EngineSpeed(EngineSpeed_t speed)
  */
 Std_ReturnType Rte_Write_MeterStatus_RunLamp(uint8 level)
 {
-    DET_LOGT(TAG, "called");
     return Com_SendSignal(COM_SIGNAL_METER_RUN_LAMP, &level);
 }
 
@@ -1536,7 +1496,6 @@ Std_ReturnType Rte_Write_MeterStatus_RunLamp(uint8 level)
  */
 Std_ReturnType Rte_Write_MeterStatus_FaultLamp(uint8 level)
 {
-    DET_LOGT(TAG, "called");
     return Com_SendSignal(COM_SIGNAL_METER_FAULT_LAMP, &level);
 }
 
@@ -1559,7 +1518,6 @@ Std_ReturnType Rte_Write_MeterStatus_FaultLamp(uint8 level)
  */
 Std_ReturnType Rte_Write_MeterStatus_AbsLamp(uint8 level)
 {
-    DET_LOGT(TAG, "called");
     return Com_SendSignal(COM_SIGNAL_METER_ABS_LAMP, &level);
 }
 
@@ -1584,7 +1542,6 @@ Std_ReturnType Rte_Write_MeterStatus_AbsLamp(uint8 level)
  */
 Std_ReturnType Rte_Write_MeterStatus_CoolantTemp(CoolantTemp_t temp)
 {
-    DET_LOGT(TAG, "called");
     return Com_SendSignal(COM_SIGNAL_METER_COOLANT_TEMP, &temp);
 }
 
@@ -1609,7 +1566,6 @@ Std_ReturnType Rte_Write_MeterStatus_CoolantTemp(CoolantTemp_t temp)
  */
 uint8 Rte_Invalidate_MeterStatus_CoolantTemp(void)
 {
-    DET_LOGT(TAG, "called");
     return Com_InvalidateSignal(COM_SIGNAL_METER_COOLANT_TEMP);
 }
 
@@ -1632,7 +1588,6 @@ uint8 Rte_Invalidate_MeterStatus_CoolantTemp(void)
  */
 Std_ReturnType Rte_Call_ComM_RequestComMode(ComM_ModeType mode)
 {
-    DET_LOGT(TAG, "called");
     return ComM_RequestComMode(COMM_USER_0, mode);
 }
 
@@ -1654,7 +1609,6 @@ Std_ReturnType Rte_Call_ComM_RequestComMode(ComM_ModeType mode)
  */
 Std_ReturnType Rte_Call_ComM_GetCurrentComMode(ComM_ModeType* mode)
 {
-    DET_LOGT(TAG, "called");
     return ComM_GetCurrentComMode(COMM_USER_0, mode);
 }
 
@@ -1713,7 +1667,6 @@ Std_ReturnType Rte_Call_ComM_GetCurrentComMode(ComM_ModeType* mode)
  */
 Std_ReturnType Rte_Start(void)
 {
-    DET_LOGT(TAG, "called");
 
     /* [SWS_Rte_CONSTR_09035]で規定される呼び出し順序上、本関数の直前に
      * ComM_RequestComMode(FULL_COM)が完了しCAN通信が有効化されているため
@@ -1764,7 +1717,6 @@ Std_ReturnType Rte_Start(void)
  */
 void Rte_Init_EngineManager(void)
 {
-    DET_LOGT(TAG, "called");
     App_EngineManager_Init();
 }
 
@@ -1783,7 +1735,6 @@ void Rte_Init_EngineManager(void)
  */
 void Rte_Init_WarningIndicator(void)
 {
-    DET_LOGT(TAG, "called");
     App_WarningIndicator_Init();
 }
 
@@ -1809,7 +1760,6 @@ void Rte_Init_WarningIndicator(void)
  */
 Std_ReturnType Rte_Stop(void)
 {
-    DET_LOGT(TAG, "called");
     DET_LOGI(TAG, "Stop ok");
     return E_OK;
 }

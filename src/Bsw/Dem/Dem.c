@@ -519,7 +519,6 @@ Std_ReturnType Dem_GetDTCOfEvent(Dem_EventIdType EventId, Dem_DTCFormatType DTCF
  */
 Std_ReturnType Dem_GetFaultDetectionCounter(Dem_EventIdType EventId, sint8* FaultDetectionCounter)
 {
-    DET_LOGT(TAG, "called");
     if (!Dem_Initialized)
     {
         Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_GET_FAULT_DETECTION_COUNTER, DEM_E_UNINIT);
