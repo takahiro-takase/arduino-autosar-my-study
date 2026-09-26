@@ -12,7 +12,7 @@
  *          CanIf/Can HW 抽象化では到達しないはず」という防御的コードとして
  *          2026-08 のレビュー以降コメントだけが残り、一度もテストで踏まれた
  *          ことがなかった（`test/` を検索しても Bus-Off 回復の
- *          正常系（`Bsw_CanNmStack_SleepCoordination_test.cpp` の
+ *          正常系（`Bsw_NmStack_SleepCoordination_test.cpp` の
  *          `ReRequestFullComDuringBusOff_OK_RestoresFullComAfterRecovery` 等）
  *          しか存在しない）。
  *
@@ -104,7 +104,7 @@ protected:
         CanNm_Init(NULL);
         Nm_Init(NULL);
 
-        // FULL_COM を Arrange する（Bsw_CanNmStack_SleepCoordination_test.cpp の
+        // FULL_COM を Arrange する（Bsw_NmStack_SleepCoordination_test.cpp の
         // ArrangeFullCom() と同じ流儀。CanNm を Repeat Message State から
         // 抜けさせておかないと、この後の CanSM_ControllerBusOff() が
         // ComM 経由で動かす CanNm 協調ロジックが未検証の中途半端な状態から

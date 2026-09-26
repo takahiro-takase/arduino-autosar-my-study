@@ -1,5 +1,5 @@
 /**
- * \file    Bsw_CanNmStack_Wakeup_test.cpp
+ * \file    Bsw_NmStack_Wakeup_test.cpp
  * \brief   README.md「ウェイクアップ検出とウェイクアップ検証」コールチェーンの
  *          単体テスト（GoogleTest / PlatformIO `[env:native_chain]`）。
  *
@@ -36,7 +36,7 @@
  *                  （ComM/EcuM への通知なし）
  *
  *          ComM（CanSM が呼び返す通知の宛先）は 2026-08 の協調スリープ移管
- *          （Bsw_CanNmStack_SleepCoordination_test.cpp 参照）で本 env に実体として
+ *          （Bsw_NmStack_SleepCoordination_test.cpp 参照）で本 env に実体として
  *          統合された。本テストは ComM_RequestComMode() を経由せず CanSM の
  *          API を直接叩くため、ComM の内部状態（ComM_Init() 直後の既定値
  *          NO_COM）がそのまま「ボランタリスリープ済み」の前提と一致する。

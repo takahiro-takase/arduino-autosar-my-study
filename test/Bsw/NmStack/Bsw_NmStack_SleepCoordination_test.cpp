@@ -1,5 +1,5 @@
 /**
- * \file    Bsw_CanNmStack_SleepCoordination_test.cpp
+ * \file    Bsw_NmStack_SleepCoordination_test.cpp
  * \brief   CanNm↔CanSM↔ComM 協調スリープ通知（2026-08、CanSM仲介からComM経由への
  *          移管、および同年の ComM_Nm_PrepareBusSleepMode()/
  *          ComM_Nm_NetworkMode() 追加）の単体テスト
@@ -77,7 +77,7 @@
  *          `Wrap_BswM.h` の呼び出し回数・引数キャプチャのみを検証に使う。
  *          CanIf は CanNm が CanIf_Transmit() を直接呼ぶために実体で
  *          リンクするが、既定は TxPduCount=0 の空設定を渡す
- *          （Bsw_CanNmStack_Wakeup_test.cpp の kTestCanIfConfig と同じパターン）ため
+ *          （Bsw_NmStack_Wakeup_test.cpp の kTestCanIfConfig と同じパターン）ため
  *          送信は毎回 E_NOT_OK で終わり、Com/PduR は不要。テスト6のみ、
  *          実際に送信が HW まで到達したことを検証するため
  *          `kTestCanIfConfigWithNmTx`（CANNM_CANIF_TX_PDU_ID のみ有効化）に
@@ -86,7 +86,7 @@
  *          本ファイルは当初 `[env:native_sleep_chain]` という別envに分離して
  *          いたが（協調スリープ移管作業のリスクを既存チェーンテストから
  *          切り離すため）、実機検証まで完了し安定したため `[env:native_chain]`
- *          へ統合した（Bsw_ComStack_Signal_Tx_test.cpp/Bsw_CanNmStack_Wakeup_test.cpp 等と
+ *          へ統合した（Bsw_ComStack_Signal_Tx_test.cpp/Bsw_NmStack_Wakeup_test.cpp 等と
  *          CanSM.c/ComM.c/CanNm.c の実体を共有する）。
  */
 #include <gtest/gtest.h>
