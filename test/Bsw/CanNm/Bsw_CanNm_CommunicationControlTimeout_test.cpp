@@ -28,6 +28,7 @@ extern "C" {
 #include "CanSM.h"
 #include "ComM.h"
 #include "CanNm.h"
+#include "Nm.h"
 #include "CanNm_Cfg.h"
 #include "Fake_Can_Hw.h"
 #include "Fake_Millis.h"
@@ -91,6 +92,7 @@ protected:
         ComM_Init(NULL);
         ComM_CommunicationAllowed(COMM_CHANNEL_0, TRUE);  // 実 EcuM_Init() と同じく起動時に許可
         CanNm_Init(NULL);
+        Nm_Init(NULL);
 
         // NORMAL_OPERATION State まで進める(Bsw_CanNmStack_SleepCoordination_test.cpp の
         // ArrangeFullCom() と同じ流儀)。

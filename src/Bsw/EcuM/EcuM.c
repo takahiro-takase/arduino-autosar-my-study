@@ -59,31 +59,35 @@
  *           23. CanNm_Init        — CanNm 状態機械初期化 (Bus-Sleep Mode で開始)。
  *                                ComM_RequestComMode(FULL_COM) より必ず前に置くこと。
  *                                同要求は同期的に CanSM_RequestComMode →
- *                                ComM_BusSM_ModeIndication(FULL_COM) → CanNm_NetworkRequest()
- *                                まで連鎖するため、これより後だと CanNm 未初期化のまま
- *                                呼ばれて失敗し、CanNm が Bus-Sleep Mode に固着する
- *                                （実機で確認された不具合）
- *           24. ComM_RequestComMode(FULL_COM) — CAN バス通信開始
+ *                                ComM_BusSM_ModeIndication(FULL_COM) → Nm_NetworkRequest()
+ *                                → CanNm_NetworkRequest() まで連鎖するため、これより後だと
+ *                                CanNm 未初期化のまま呼ばれて失敗し、CanNm が Bus-Sleep
+ *                                Mode に固着する（実機で確認された不具合）
+ *           24. Nm_Init           — 汎用 Nm 層初期化。CanNm_Init の直後、
+ *                                ComM_RequestComMode(FULL_COM) より必ず前に置くこと
+ *                                （上記と同じ理由。Nm_NetworkRequest() が NM_E_UNINIT
+ *                                で失敗すると Nm 層より下の CanNm まで要求が届かない）
+ *           25. ComM_RequestComMode(FULL_COM) — CAN バス通信開始
  *                               （全上位層初期化後に開始することで
  *                                 フレーム到着時の未初期化アクセスを防ぐ。
  *                                 ComM_BusSM_ModeIndication 経由で BswM_ExecuteRules が
  *                                 同期的に呼ばれるため BswM_Init 済みである必要がある）
- *           25. Rte_Start/Rte_Init_EngineManager — RTE 自身の初期化と
+ *           26. Rte_Start/Rte_Init_EngineManager — RTE 自身の初期化と
  *                                EngineManager SW-C の Init Runnable 起動
  *                                （[SWS_Rte_02569]/[SWS_Rte_06749]、2026-09
  *                                追加。以前は EcuM がApp_EngineManager_Init()
  *                                を直接呼んでいた。Rte.c 末尾の「RTE
  *                                ライフサイクル API」コメント参照）
- *           26. IoHwAb_Init    — I/O ハードウェア抽象化層初期化 (LED チャネル設定)
- *           27. Rte_Init_WarningIndicator — 警告灯 SW-C の Init Runnable 起動
+ *           27. IoHwAb_Init    — I/O ハードウェア抽象化層初期化 (LED チャネル設定)
+ *           28. Rte_Init_WarningIndicator — 警告灯 SW-C の Init Runnable 起動
  *                                (IoHwAb_Init() の後であること、同上)
- *           28. Wdg_Init       — Watchdog Driver 初期化（WdgM_Init より前。
+ *           29. Wdg_Init       — Watchdog Driver 初期化（WdgM_Init より前。
  *                                コンフィグの記録のみ行い、HW はまだ有効化しない）
- *           29. WdgM_Init      — Alive/Logical Supervision 初期化。
+ *           30. WdgM_Init      — Alive/Logical Supervision 初期化。
  *                                実 HW ウォッチドッグもここで有効化する
  *                                （他の全モジュール初期化完了後、最後に有効化することで
  *                                  初期化処理自体がタイムアウトの影響を受けないようにする）
- *           30. Os_Init        — タスクスケジューラ初期化 (全モジュール初期化後)。
+ *           31. Os_Init        — タスクスケジューラ初期化 (全モジュール初期化後)。
  *                                自身の Gpt チャネル (GPT_CHANNEL_1) を起動し、
  *                                以後のタスク周期判定は millis() ではなくこの
  *                                チャネルのティック値で行う（Os.c 冒頭のコメント参照）
@@ -146,6 +150,7 @@
 #include "CanSM.h"
 #include "ComM.h"
 #include "CanNm.h"
+#include "Nm.h"
 #include "Rte.h"
 #include "IoHwAb.h"
 #include "App_EngineManager.h"
@@ -278,10 +283,15 @@ void EcuM_Init(void)
     CanNm_Init(NULL);             /* ComM_RequestComMode() より必ず前に置くこと。
                                * ComM_RequestComMode(FULL_COM) は同期的に
                                * CanSM_RequestComMode → ComM_BusSM_ModeIndication(FULL_COM)
-                               * → CanNm_NetworkRequest() まで連鎖するため、ここより後に
-                               * 置くと CanNm 未初期化のため CanNm_NetworkRequest() が
-                               * CANNM_E_UNINIT で失敗し、CanNm が Bus-Sleep Mode に
-                               * 固着したまま起動する（実機で確認された不具合）。 */
+                               * → Nm_NetworkRequest() → CanNm_NetworkRequest() まで
+                               * 連鎖するため、ここより後に置くと CanNm 未初期化のため
+                               * CanNm_NetworkRequest() が CANNM_E_UNINIT で失敗し、
+                               * CanNm が Bus-Sleep Mode に固着したまま起動する
+                               * （実機で確認された不具合）。 */
+    Nm_Init(NULL);                /* CanNm_Init() の直後、ComM_RequestComMode() より
+                               * 必ず前に置くこと（上記と同じ理由。Nm_NetworkRequest()
+                               * が NM_E_UNINIT で失敗すると Nm 層より下の CanNm
+                               * まで要求が届かない）。 */
     ComM_RequestComMode(COMM_USER_0, COMM_FULL_COMMUNICATION);/* 全層初期化後に開通 */
     Rte_Start();                /* RTE 自身の初期化（[SWS_Rte_02569]）。SW-C の
                                   * Init Runnable 起動より必ず前に置くこと

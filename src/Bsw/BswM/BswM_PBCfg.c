@@ -23,7 +23,7 @@
  *            Rule 8-19: Dcm_CommunicationModeType（UDS 0x28 CommunicationControl）の
  *                                    全 12 通りそれぞれに対応し、BswM_ApplyDcmCommMode()
  *                                    経由で Com_SetCommunicationEnabled()/
- *                                    CanNm_EnableCommunication()/DisableCommunication() へ
+ *                                    Nm_EnableCommunication()/DisableCommunication() へ
  *                                    反映する（2026-09-05 追加、[SWS_BswM_00048]。
  *                                    Dcm_HandleCommunicationControl()/
  *                                    Dcm_CommControlReset() が

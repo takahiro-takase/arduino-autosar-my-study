@@ -18,6 +18,7 @@
 extern "C" {
 #include "CanNm.h"
 #include "ComM.h"
+#include "Nm.h"
 #include "Fake_Millis.h"
 #include "Fake_Det_Hw.h"
 }
@@ -38,6 +39,7 @@ protected:
          * （未初期化なら DET 報告のみで無害に即 return）。 */
         ComM_DeInit();
         CanNm_Init(NULL);
+        Nm_Init(NULL);
         FakeDetHw_Reset();             // Init 自体の記録を後続の検証対象から除く
         FakeDetHw_LogSuppressed = 0U;  // ここから各 TEST_F の実行(Act)区間
     }

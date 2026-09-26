@@ -8,19 +8,25 @@
  *          CanIf_RxIndication() を直接やり取りするため、本モジュールも
  *          PduR/Com を介さない。
  *
- *          呼び出し関係（ComM が「通信の要否」を CanNm に伝える）:
+ *          呼び出し関係（ComM が「通信の要否」を、汎用 Nm 層（`src/Bsw/Nm/`、
+ *          [[AUTOSAR_SWS_NetworkManagementInterface.pdf]] 準拠）経由で
+ *          CanNm に伝える。実 AUTOSAR の階層 ComM→Nm→CanNm→CanIf をそのまま
+ *          反映しており、Nm 自身は単一チャネル構成のためほぼ素通しの薄い層）:
  *            NO_COM 方向: ComM_RequestComMode() がユーザ要求を FULL_COM から
- *            NO_COM へ集約した「その場で」CanNm_NetworkRelease() を呼ぶ
- *            （[SWS_ComM_00133] 準拠。ComM のチャネルモードはこの時点では
- *            まだ FULL_COM のまま。ComM.c ファイル冒頭コメント参照）。
+ *            NO_COM へ集約した「その場で」Nm_NetworkRelease() を呼び、Nm が
+ *            CanNm_NetworkRelease() へ委譲する（[SWS_ComM_00133] 準拠。ComM の
+ *            チャネルモードはこの時点ではまだ FULL_COM のまま。ComM.c
+ *            ファイル冒頭コメント参照）。
  *            FULL_COM 方向: ComM_BusSM_ModeIndication() がチャネルモードを
- *            FULL_COM へ確定させたときに CanNm_NetworkRequest() を呼ぶ。
- *            以降の実際の送受信・タイマ管理・状態遷移は本モジュールが
- *            自律的に行う（ComM は毎周期ポーリングしない）。
+ *            FULL_COM へ確定させたときに Nm_NetworkRequest() を呼び、Nm が
+ *            CanNm_NetworkRequest() へ委譲する。以降の実際の送受信・タイマ
+ *            管理・状態遷移は本モジュールが自律的に行う（ComM は毎周期
+ *            ポーリングしない）。
  *
  *          Bus-Sleep Mode への到達通知（協調スリープの要）:
- *            CanNm が実際に Bus-Sleep Mode へ遷移した瞬間、ComM_Nm_BusSleepMode()
- *            （[SWS_ComM_00392]）を呼ぶ。ComM はこれを受けて初めて
+ *            CanNm が実際に Bus-Sleep Mode へ遷移した瞬間、`Nm_BusSleepMode()`
+ *            （[SWS_Nm_00162]）を呼び、Nm が ComM_Nm_BusSleepMode()
+ *            （[SWS_ComM_00392]）へ転送する。ComM はこれを受けて初めて
  *            CanSM_RequestComMode(NO_COM) を呼び、CanSM が
  *            Can_SetControllerMode(CAN_T_SLEEP) で実際に CAN コントローラを
  *            スリープさせる（ComM.c/CanSM.c 参照）。これにより、他ノード
@@ -29,8 +35,12 @@
  *
  *          使い方:
  *            1. EcuM_Init 内で CanNm_Init() を呼ぶ（ComM_Init 完了後）。
+ *               続けて Nm_Init() を呼ぶ（Nm.c 参照。ComM_RequestComMode() より
+ *               必ず前に置くこと）。
  *            2. Os スケジューラが CANNM_CYCLE_MS ごとに CanNm_MainFunction() を呼ぶ
- *               （タイマ満了判定・PDU 再送信）。
+ *               （タイマ満了判定・PDU 再送信。Nm_MainFunction() は NM
+ *               Coordinator 機能専用のため本プロジェクトには存在しない、
+ *               Nm_Cfg.h 冒頭コメント参照）。
  *            3. CanIf が CAN 0x400 受信のたびに CanNm_RxIndication() を、
  *               送信完了のたびに CanNm_TxConfirmation() を呼ぶ。
  *
@@ -176,10 +186,10 @@ Std_ReturnType CanNm_RepeatMessageRequest(NetworkHandleType Channel);
  *          （[SWS_CanNm_00098]）。Prepare Bus-Sleep Mode 中は Network Mode
  *          （Repeat Message State）へ自動遷移する（[SWS_CanNm_00124]）。
  *          Bus-Sleep Mode 中は CanNm 自身は状態遷移せず、CANNM_E_NET_START_IND
- *          の DET 報告に加え ComM_Nm_NetworkStartIndication() で上位層
- *          （ComM）へ通知する（[SWS_CanNm_00127]/[SWS_CanNm_00336]。実際に
- *          ネットワークへ復帰させ CanNm 自身を起こす処理は
- *          ComM_Nm_NetworkStartIndication() 側が行う、同関数の Doxygen 参照）。
+ *          の DET 報告に加え `Nm_NetworkStartIndication()`（[SWS_Nm_00154]）
+ *          で上位層へ通知する（[SWS_CanNm_00127]/[SWS_CanNm_00336]。実際に
+ *          ネットワークへ復帰させ CanNm 自身を起こす処理は Nm 経由で ComM
+ *          側が行う、Nm_NetworkStartIndication() の Doxygen 参照）。
  *
  * \param[in]  RxPduId     受信 PDU ID（本プロジェクトでは単一チャネルのため未使用）。
  * \param[in]  PduInfoPtr  受信データ。NULL 禁止。

@@ -34,33 +34,33 @@ uint32 CallCount_CanNm_Init                     = 0U;
 uint32 CallCount_CanNm_DeInit                   = 0U;
 uint32 CallCount_CanNm_NetworkRequest           = 0U;
 uint32 CallCount_CanNm_NetworkRelease           = 0U;
-uint32 CallCount_CanNm_RepeatMessageRequest     = 0U;
-uint32 CallCount_CanNm_RxIndication             = 0U;
-uint32 CallCount_CanNm_TxConfirmation           = 0U;
-uint32 CallCount_CanNm_MainFunction             = 0U;
 uint32 CallCount_CanNm_DisableCommunication     = 0U;
 uint32 CallCount_CanNm_EnableCommunication      = 0U;
-uint32 CallCount_CanNm_GetLocalNodeIdentifier   = 0U;
 uint32 CallCount_CanNm_GetNodeIdentifier        = 0U;
+uint32 CallCount_CanNm_GetLocalNodeIdentifier   = 0U;
+uint32 CallCount_CanNm_RepeatMessageRequest     = 0U;
 uint32 CallCount_CanNm_GetState                 = 0U;
 uint32 CallCount_CanNm_GetVersionInfo           = 0U;
+uint32 CallCount_CanNm_TxConfirmation           = 0U;
+uint32 CallCount_CanNm_RxIndication             = 0U;
+uint32 CallCount_CanNm_MainFunction             = 0U;
 
 uint32 FailFromCallCount_CanNm_NetworkRequest         = WRAP_CANNM_FAIL_FROM_CALL_COUNT_DISABLED;
 uint32 FailFromCallCount_CanNm_NetworkRelease         = WRAP_CANNM_FAIL_FROM_CALL_COUNT_DISABLED;
-uint32 FailFromCallCount_CanNm_RepeatMessageRequest   = WRAP_CANNM_FAIL_FROM_CALL_COUNT_DISABLED;
 uint32 FailFromCallCount_CanNm_DisableCommunication   = WRAP_CANNM_FAIL_FROM_CALL_COUNT_DISABLED;
 uint32 FailFromCallCount_CanNm_EnableCommunication    = WRAP_CANNM_FAIL_FROM_CALL_COUNT_DISABLED;
-uint32 FailFromCallCount_CanNm_GetLocalNodeIdentifier = WRAP_CANNM_FAIL_FROM_CALL_COUNT_DISABLED;
 uint32 FailFromCallCount_CanNm_GetNodeIdentifier      = WRAP_CANNM_FAIL_FROM_CALL_COUNT_DISABLED;
+uint32 FailFromCallCount_CanNm_GetLocalNodeIdentifier = WRAP_CANNM_FAIL_FROM_CALL_COUNT_DISABLED;
+uint32 FailFromCallCount_CanNm_RepeatMessageRequest   = WRAP_CANNM_FAIL_FROM_CALL_COUNT_DISABLED;
 uint32 FailFromCallCount_CanNm_GetState               = WRAP_CANNM_FAIL_FROM_CALL_COUNT_DISABLED;
 
 Std_ReturnType ForcedReturn_CanNm_NetworkRequest         = E_NOT_OK;
 Std_ReturnType ForcedReturn_CanNm_NetworkRelease         = E_NOT_OK;
-Std_ReturnType ForcedReturn_CanNm_RepeatMessageRequest   = E_NOT_OK;
 Std_ReturnType ForcedReturn_CanNm_DisableCommunication   = E_NOT_OK;
 Std_ReturnType ForcedReturn_CanNm_EnableCommunication    = E_NOT_OK;
-Std_ReturnType ForcedReturn_CanNm_GetLocalNodeIdentifier = E_NOT_OK;
 Std_ReturnType ForcedReturn_CanNm_GetNodeIdentifier      = E_NOT_OK;
+Std_ReturnType ForcedReturn_CanNm_GetLocalNodeIdentifier = E_NOT_OK;
+Std_ReturnType ForcedReturn_CanNm_RepeatMessageRequest   = E_NOT_OK;
 Std_ReturnType ForcedReturn_CanNm_GetState               = E_NOT_OK;
 
 /* ----------------------------------------------------------------------
@@ -73,33 +73,33 @@ void WrapCanNm_Reset(void)
     CallCount_CanNm_DeInit                 = 0U;
     CallCount_CanNm_NetworkRequest         = 0U;
     CallCount_CanNm_NetworkRelease         = 0U;
-    CallCount_CanNm_RepeatMessageRequest   = 0U;
-    CallCount_CanNm_RxIndication           = 0U;
-    CallCount_CanNm_TxConfirmation         = 0U;
-    CallCount_CanNm_MainFunction           = 0U;
     CallCount_CanNm_DisableCommunication   = 0U;
     CallCount_CanNm_EnableCommunication    = 0U;
-    CallCount_CanNm_GetLocalNodeIdentifier = 0U;
     CallCount_CanNm_GetNodeIdentifier      = 0U;
+    CallCount_CanNm_GetLocalNodeIdentifier = 0U;
+    CallCount_CanNm_RepeatMessageRequest   = 0U;
     CallCount_CanNm_GetState               = 0U;
     CallCount_CanNm_GetVersionInfo         = 0U;
+    CallCount_CanNm_TxConfirmation         = 0U;
+    CallCount_CanNm_RxIndication           = 0U;
+    CallCount_CanNm_MainFunction           = 0U;
 
     FailFromCallCount_CanNm_NetworkRequest         = WRAP_CANNM_FAIL_FROM_CALL_COUNT_DISABLED;
     FailFromCallCount_CanNm_NetworkRelease         = WRAP_CANNM_FAIL_FROM_CALL_COUNT_DISABLED;
-    FailFromCallCount_CanNm_RepeatMessageRequest   = WRAP_CANNM_FAIL_FROM_CALL_COUNT_DISABLED;
     FailFromCallCount_CanNm_DisableCommunication   = WRAP_CANNM_FAIL_FROM_CALL_COUNT_DISABLED;
     FailFromCallCount_CanNm_EnableCommunication    = WRAP_CANNM_FAIL_FROM_CALL_COUNT_DISABLED;
-    FailFromCallCount_CanNm_GetLocalNodeIdentifier = WRAP_CANNM_FAIL_FROM_CALL_COUNT_DISABLED;
     FailFromCallCount_CanNm_GetNodeIdentifier      = WRAP_CANNM_FAIL_FROM_CALL_COUNT_DISABLED;
+    FailFromCallCount_CanNm_GetLocalNodeIdentifier = WRAP_CANNM_FAIL_FROM_CALL_COUNT_DISABLED;
+    FailFromCallCount_CanNm_RepeatMessageRequest   = WRAP_CANNM_FAIL_FROM_CALL_COUNT_DISABLED;
     FailFromCallCount_CanNm_GetState               = WRAP_CANNM_FAIL_FROM_CALL_COUNT_DISABLED;
 
     ForcedReturn_CanNm_NetworkRequest         = E_NOT_OK;
     ForcedReturn_CanNm_NetworkRelease         = E_NOT_OK;
-    ForcedReturn_CanNm_RepeatMessageRequest   = E_NOT_OK;
     ForcedReturn_CanNm_DisableCommunication   = E_NOT_OK;
     ForcedReturn_CanNm_EnableCommunication    = E_NOT_OK;
-    ForcedReturn_CanNm_GetLocalNodeIdentifier = E_NOT_OK;
     ForcedReturn_CanNm_GetNodeIdentifier      = E_NOT_OK;
+    ForcedReturn_CanNm_GetLocalNodeIdentifier = E_NOT_OK;
+    ForcedReturn_CanNm_RepeatMessageRequest   = E_NOT_OK;
     ForcedReturn_CanNm_GetState               = E_NOT_OK;
 }
 
@@ -134,6 +134,12 @@ void __wrap_CanNm_DeInit(void)
 
     __real_CanNm_DeInit();
 }
+
+/* ----------------------------------------------------------------------
+ * CanNm_PassiveStartUp
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
 
 /* ----------------------------------------------------------------------
  * CanNm_NetworkRequest
@@ -171,67 +177,6 @@ Std_ReturnType __wrap_CanNm_NetworkRelease(NetworkHandleType Channel)
     }
 
     return __real_CanNm_NetworkRelease(Channel);
-}
-
-/* ----------------------------------------------------------------------
- * CanNm_RepeatMessageRequest
- * ---------------------------------------------------------------------- */
-
-extern
-Std_ReturnType __real_CanNm_RepeatMessageRequest(NetworkHandleType Channel);
-Std_ReturnType __wrap_CanNm_RepeatMessageRequest(NetworkHandleType Channel)
-{
-    CallCount_CanNm_RepeatMessageRequest++;
-    Log_Write(LOG_T, TAG, "CanNm_RepeatMessageRequest", "called %u times", CallCount_CanNm_RepeatMessageRequest);
-
-    if (CallCount_CanNm_RepeatMessageRequest >= FailFromCallCount_CanNm_RepeatMessageRequest)
-    {
-        return ForcedReturn_CanNm_RepeatMessageRequest;
-    }
-
-    return __real_CanNm_RepeatMessageRequest(Channel);
-}
-
-/* ----------------------------------------------------------------------
- * CanNm_RxIndication
- * ---------------------------------------------------------------------- */
-
-extern
-void __real_CanNm_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr);
-void __wrap_CanNm_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
-{
-    CallCount_CanNm_RxIndication++;
-    Log_Write(LOG_T, TAG, "CanNm_RxIndication", "called %u times", CallCount_CanNm_RxIndication);
-
-    __real_CanNm_RxIndication(RxPduId, PduInfoPtr);
-}
-
-/* ----------------------------------------------------------------------
- * CanNm_TxConfirmation
- * ---------------------------------------------------------------------- */
-
-extern
-void __real_CanNm_TxConfirmation(PduIdType TxPduId, Std_ReturnType result);
-void __wrap_CanNm_TxConfirmation(PduIdType TxPduId, Std_ReturnType result)
-{
-    CallCount_CanNm_TxConfirmation++;
-    Log_Write(LOG_T, TAG, "CanNm_TxConfirmation", "called %u times", CallCount_CanNm_TxConfirmation);
-
-    __real_CanNm_TxConfirmation(TxPduId, result);
-}
-
-/* ----------------------------------------------------------------------
- * CanNm_MainFunction
- * ---------------------------------------------------------------------- */
-
-extern
-void __real_CanNm_MainFunction(void);
-void __wrap_CanNm_MainFunction(void)
-{
-    CallCount_CanNm_MainFunction++;
-    Log_Write(LOG_T, TAG, "CanNm_MainFunction", "called %u times", CallCount_CanNm_MainFunction);
-
-    __real_CanNm_MainFunction();
 }
 
 /* ----------------------------------------------------------------------
@@ -273,23 +218,22 @@ Std_ReturnType __wrap_CanNm_EnableCommunication(NetworkHandleType Channel)
 }
 
 /* ----------------------------------------------------------------------
- * CanNm_GetLocalNodeIdentifier
+ * CanNm_SetUserData
  * ---------------------------------------------------------------------- */
 
-extern
-Std_ReturnType __real_CanNm_GetLocalNodeIdentifier(NetworkHandleType Channel, uint8* nmNodeIdPtr);
-Std_ReturnType __wrap_CanNm_GetLocalNodeIdentifier(NetworkHandleType Channel, uint8* nmNodeIdPtr)
-{
-    CallCount_CanNm_GetLocalNodeIdentifier++;
-    Log_Write(LOG_T, TAG, "CanNm_GetLocalNodeIdentifier", "called %u times", CallCount_CanNm_GetLocalNodeIdentifier);
+/* 未実装 */
 
-    if (CallCount_CanNm_GetLocalNodeIdentifier >= FailFromCallCount_CanNm_GetLocalNodeIdentifier)
-    {
-        return ForcedReturn_CanNm_GetLocalNodeIdentifier;
-    }
+/* ----------------------------------------------------------------------
+ * CanNm_GetUserData
+ * ---------------------------------------------------------------------- */
 
-    return __real_CanNm_GetLocalNodeIdentifier(Channel, nmNodeIdPtr);
-}
+/* 未実装 */
+
+/* ----------------------------------------------------------------------
+ * CanNm_Transmit
+ * ---------------------------------------------------------------------- */
+
+ /* 未実装 */
 
 /* ----------------------------------------------------------------------
  * CanNm_GetNodeIdentifier
@@ -309,6 +253,50 @@ Std_ReturnType __wrap_CanNm_GetNodeIdentifier(NetworkHandleType Channel, uint8* 
 
     return __real_CanNm_GetNodeIdentifier(Channel, nmNodeIdPtr);
 }
+
+/* ----------------------------------------------------------------------
+ * CanNm_GetLocalNodeIdentifier
+ * ---------------------------------------------------------------------- */
+
+extern
+Std_ReturnType __real_CanNm_GetLocalNodeIdentifier(NetworkHandleType Channel, uint8* nmNodeIdPtr);
+Std_ReturnType __wrap_CanNm_GetLocalNodeIdentifier(NetworkHandleType Channel, uint8* nmNodeIdPtr)
+{
+    CallCount_CanNm_GetLocalNodeIdentifier++;
+    Log_Write(LOG_T, TAG, "CanNm_GetLocalNodeIdentifier", "called %u times", CallCount_CanNm_GetLocalNodeIdentifier);
+
+    if (CallCount_CanNm_GetLocalNodeIdentifier >= FailFromCallCount_CanNm_GetLocalNodeIdentifier)
+    {
+        return ForcedReturn_CanNm_GetLocalNodeIdentifier;
+    }
+
+    return __real_CanNm_GetLocalNodeIdentifier(Channel, nmNodeIdPtr);
+}
+
+/* ----------------------------------------------------------------------
+ * CanNm_RepeatMessageRequest
+ * ---------------------------------------------------------------------- */
+
+extern
+Std_ReturnType __real_CanNm_RepeatMessageRequest(NetworkHandleType Channel);
+Std_ReturnType __wrap_CanNm_RepeatMessageRequest(NetworkHandleType Channel)
+{
+    CallCount_CanNm_RepeatMessageRequest++;
+    Log_Write(LOG_T, TAG, "CanNm_RepeatMessageRequest", "called %u times", CallCount_CanNm_RepeatMessageRequest);
+
+    if (CallCount_CanNm_RepeatMessageRequest >= FailFromCallCount_CanNm_RepeatMessageRequest)
+    {
+        return ForcedReturn_CanNm_RepeatMessageRequest;
+    }
+
+    return __real_CanNm_RepeatMessageRequest(Channel);
+}
+
+/* ----------------------------------------------------------------------
+ * CanNm_GetPduData
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
 
 /* ----------------------------------------------------------------------
  * CanNm_GetState
@@ -342,3 +330,87 @@ void __wrap_CanNm_GetVersionInfo(Std_VersionInfoType* versioninfo)
 
     __real_CanNm_GetVersionInfo(versioninfo);
 }
+
+/* ----------------------------------------------------------------------
+ * CanNm_RequestBusSynchronization
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ----------------------------------------------------------------------
+ * CanNm_CheckRemoteSleepIndication
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ----------------------------------------------------------------------
+ * CanNm_SetSleepReadyBit
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ======================================================================
+ * Call-back Notifications
+ * ====================================================================== */
+
+/* ----------------------------------------------------------------------
+ * CanNm_TxConfirmation
+ * ---------------------------------------------------------------------- */
+
+extern
+void __real_CanNm_TxConfirmation(PduIdType TxPduId, Std_ReturnType result);
+void __wrap_CanNm_TxConfirmation(PduIdType TxPduId, Std_ReturnType result)
+{
+    CallCount_CanNm_TxConfirmation++;
+    Log_Write(LOG_T, TAG, "CanNm_TxConfirmation", "called %u times", CallCount_CanNm_TxConfirmation);
+
+    __real_CanNm_TxConfirmation(TxPduId, result);
+}
+
+/* ----------------------------------------------------------------------
+ * CanNm_RxIndication
+ * ---------------------------------------------------------------------- */
+
+extern
+void __real_CanNm_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr);
+void __wrap_CanNm_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
+{
+    CallCount_CanNm_RxIndication++;
+    Log_Write(LOG_T, TAG, "CanNm_RxIndication", "called %u times", CallCount_CanNm_RxIndication);
+
+    __real_CanNm_RxIndication(RxPduId, PduInfoPtr);
+}
+
+/* ----------------------------------------------------------------------
+ * CanNm_ConfirmPnAvailability
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ----------------------------------------------------------------------
+ * CanNm_TriggerTransmit
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ======================================================================
+ * Scheduled Functions
+ * ====================================================================== */
+
+/* ----------------------------------------------------------------------
+ * CanNm_MainFunction
+ * ---------------------------------------------------------------------- */
+
+extern
+void __real_CanNm_MainFunction(void);
+void __wrap_CanNm_MainFunction(void)
+{
+    CallCount_CanNm_MainFunction++;
+    Log_Write(LOG_T, TAG, "CanNm_MainFunction", "called %u times", CallCount_CanNm_MainFunction);
+
+    __real_CanNm_MainFunction();
+}
+
+/* ======================================================================
+ * Internal Functions
+ * ====================================================================== */

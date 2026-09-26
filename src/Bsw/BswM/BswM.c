@@ -52,7 +52,7 @@
 #include "Os.h"
 #include "Os_Cfg.h"
 #include "Com.h"
-#include "CanNm.h"
+#include "Nm.h"
 #include "Det.h"
 
 /* ======================================================================
@@ -169,8 +169,8 @@ static void BswM_ApplyDcmCommMode(void)
     if (group == 1U || group == 2U)
     {
         (void)(txEnabled
-            ? CanNm_EnableCommunication(CANNM_MAIN_NETWORK_HANDLE)
-            : CanNm_DisableCommunication(CANNM_MAIN_NETWORK_HANDLE));
+            ? Nm_EnableCommunication(NM_MAIN_NETWORK_HANDLE)
+            : Nm_DisableCommunication(NM_MAIN_NETWORK_HANDLE));
     }
 }
 
@@ -266,7 +266,7 @@ void BswM_Init(const BswM_ConfigType* ConfigPtr)
     BswM_ModeSrcCache[BSWM_MODE_SRC_COMM]     = (uint8)COMM_NO_COMMUNICATION;
     /* 起動直後は UDS 0x28 が一度も要求されていない状態 = Rx/Tx とも
      * 通常通信・NM通信ともに有効（Com_SetCommunicationEnabled()/
-     * CanNm_EnableCommunication() の既定値と一致させる）。 */
+     * Nm_EnableCommunication() の既定値と一致させる）。 */
     BswM_ModeSrcCache[BSWM_MODE_SRC_DCM_COMM] = (uint8)DCM_ENABLE_RX_TX_NORM_NM;
     for (uint8 i = 0U; i < ConfigPtr->RuleCount; i++)
         BswM_RuleLastResult[i] = 0U;
