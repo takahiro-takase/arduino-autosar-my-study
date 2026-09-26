@@ -28,8 +28,8 @@
 # Fake_Bsw_EcuM.h 参照）、CanSM.c は実体・フェイクのいずれかをこのバイナリ
 # 全体で選ぶ必要がある。Tx/Rx チェーン（Bsw_ComStack_Tx_test.cpp/
 # Bsw_ComStack_Signal_Rx_test.cpp）は CanSM の状態遷移に関与しないが、CanSM 自身の
-# コールチェーン（Bsw_CanNmStack_Wakeup_test.cpp）や CanNm↔CanSM↔ComM 協調スリープ
-# （Bsw_CanNmStack_SleepCoordination_test.cpp）を同じバイナリで検証するため、CanSM.c は
+# コールチェーン（Bsw_NmStack_Wakeup_test.cpp）や CanNm↔CanSM↔ComM 協調スリープ
+# （Bsw_NmStack_SleepCoordination_test.cpp）を同じバイナリで検証するため、CanSM.c は
 # 実体をリンクしている。
 #
 # ComM.c/CanNm.c も実体でリンクする（2026-08、当初は CanNm/CanSM/ComM 協調スリープの
@@ -40,8 +40,9 @@
 # （stub/Bsw/EcuM/Fake_Bsw_EcuM.h 参照）。BswM_ComM_CurrentMode() は
 # 2026-09-22 に実体リンク+wrap化した（stub/Bsw/BswM/Wrap_BswM.h 参照、
 # 下記「BswM は...」の段落参照）。
-# Dem は実体でリンクし、Dem_SetEventStatus() のみ `--wrap` で観測・故障注入する
-# （stub/Bsw/Dem/Wrap_Dem.h 参照、2026-09 に完全フェイクから切り替え）。
+# Dem は実体でリンクし、公開API全19関数を `--wrap` で観測・故障注入する
+# （stub/Bsw/Dem/Wrap_Dem.h 参照、2026-09 に完全フェイクから切り替え、直後は
+# Dem_SetEventStatus() のみ、後日残り18関数も追加）。
 # CanSM 状態遷移に関与しない Tx/Rx/E2E チェーンのテストは ComM_Init()/CanNm_Init()
 # を呼ばないため、これらのモジュールの実体は未初期化のまま（呼ばれない）で無害。
 #
@@ -463,6 +464,26 @@ set(NATIVE_CHAIN_WRAP_SYMBOLS
     Dcm_ResetToDefaultSession
     Dcm_GetVersionInfo
     Dcm_ComIndication
+    # Dem.h の公開API全19関数（Wrap_Dem.h/.c 参照）。
+    Dem_Init
+    Dem_SetEventStatus
+    Dem_GetDTCStatusAvailabilityMask
+    Dem_GetEventUdsStatus
+    Dem_GetDTCOfEvent
+    Dem_ClearAllDTCs
+    Dem_ClearOneDtc
+    Dem_GetAllDTCs
+    Dem_GetSupportedDTCs
+    Dem_GetPrefailedDTCs
+    Dem_SetFreezeFrameContext
+    Dem_GetFreezeFrameOfEvent
+    Dem_GetEventIdOfDTC
+    Dem_GetOccurrenceCounterOfEvent
+    Dem_GetTranslationType
+    Dem_GetFaultDetectionCounter
+    Dem_EnableDTCSetting
+    Dem_DisableDTCSetting
+    Dem_GetVersionInfo
     # E2E.h の AUTOSAR IF 全3関数（Wrap_E2E.h/.c 参照）。
     E2E_SMCheck
     E2E_SMCheckInit
@@ -510,9 +531,6 @@ set(NATIVE_CHAIN_WRAP_SYMBOLS
     PduR_ComRxIndication
     PduR_CanIfTxConfirmation
     PduR_SecOCTxConfirmation
-    #
-    Dem_SetEventStatus
-
 )
 foreach(wrap_symbol IN LISTS NATIVE_CHAIN_WRAP_SYMBOLS)
     target_link_options(native_chain_tests PRIVATE "-Wl,--wrap=${wrap_symbol}")

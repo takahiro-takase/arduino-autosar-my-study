@@ -11,7 +11,7 @@
  *          追加した際に新設。/code-review で「新設した検証パスに対する
  *          テストが無い」と指摘され追加した。
  *          CanNm.c 単体（Can/CanIf/CanSM/ComM は不要）で検証できるため、
- *          Bsw_CanNmStack_SleepCoordination_test.cpp より軽量なフィクスチャで足りる。
+ *          Bsw_NmStack_SleepCoordination_test.cpp より軽量なフィクスチャで足りる。
  */
 #include <gtest/gtest.h>
 
@@ -66,7 +66,7 @@ TEST_F(Bsw_CanNm_ChannelValidation_Test, NetworkRequest_NG_InvalidChannelReturns
  * ComM_Nm_NetworkMode() へカスケードする（本ファイルは CanNm.c 単体の検証が
  * 目的のため ComM_Init() を呼ばない軽量フィクスチャであり、意図的に
  * ComM 側は未初期化のまま。カスケード後の挙動検証は
- * Bsw_CanNmStack_SleepCoordination_test.cpp の責務）。そのため本ファイルでは
+ * Bsw_NmStack_SleepCoordination_test.cpp の責務）。そのため本ファイルでは
  * NG（Channel 不正時に即座に拒否される）側のみを検証する。 */
 
 TEST_F(Bsw_CanNm_ChannelValidation_Test, NetworkRelease_NG_InvalidChannelReturnsErrorAndReportsDet)
@@ -209,7 +209,7 @@ TEST_F(Bsw_CanNm_ChannelValidation_Test, GetNodeIdentifier_OK_ReflectsMostRecent
      * CanNm_NetworkRequest() 経由）が、SetUp() の ComM_DeInit() により本テスト
      * では ComM は必ず未初期化（＝カスケードせず COMM_E_UNINIT の DET 報告
      * のみで即 return）。カスケード時の挙動検証自体は
-     * Bsw_CanNmStack_SleepCoordination_test.cpp の責務。 */
+     * Bsw_NmStack_SleepCoordination_test.cpp の責務。 */
     uint8 pdu[2] = { 0x00U, 0x2AU };  // CBV=0, sourceNodeId=0x2A
     PduInfoType pduInfo = { pdu, 2U };
     CanNm_RxIndication(0U, &pduInfo);

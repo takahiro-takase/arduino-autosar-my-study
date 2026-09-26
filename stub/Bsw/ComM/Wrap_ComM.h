@@ -12,7 +12,7 @@
  * \par ComM_DCM_ActiveDiagnostic / ComM_DCM_InactiveDiagnostic
  * 2026-09、test_dcm を native_chain へ統合した際に新設。既定（`Reset()`後）は
  * `Wrap_CanIf.h`/`Wrap_E2E.h`/`Wrap_Dem.h` と同じく `__real_...` への
- * パススルーで、`Bsw_CanNmStack_SleepCoordination_test.cpp` の
+ * パススルーで、`Bsw_NmStack_SleepCoordination_test.cpp` の
  * `DcmActiveDiagnostic_OK_KeepsFullComEvenWhenUser0RequestsNoCom` 等が
  * 検証する「診断アクティブ中は FULL_COM を維持する」という実際の
  * 通信管理連鎖（ComM_ComputeAggregatedMode()→ComM_ApplyAggregatedRequest()→

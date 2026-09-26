@@ -201,109 +201,43 @@ static uint8 Dem_DTCSettingEnabled = 1U;
  * Function Prototypes
  * ====================================================================== */
 
+static void Dem_ClearOne(Dem_EventIdType EventId);
+static sint8 Dem_MapDebounceCounterToFdc(sint8 counter, sint8 limit);
+static void Dem_EvaluateAging(Dem_EventIdType EventId);
+static void Dem_EvaluatePendingClear(Dem_EventIdType EventId);
+
 /* ======================================================================
  * Functions
  * ====================================================================== */
 
 /* ----------------------------------------------------------------------
- * Dem_EvaluateAging
+ * Dem_GetVersionInfo
  * ---------------------------------------------------------------------- */
 
-/**
- * \brief   経年回復 (Aging) を判定する。
- *
- * \details 直前の操作サイクルの最終ステータス（TF/TFTOC/TNCTC が新サイクル用に
- *          リセットされる前の値）を評価し、Dem_AgingCounter[EventId] を更新する。
- *          Dem_AgingThresholdTable[EventId]（イベントごとの閾値）に達したら
- *          CONFIRMED を自動解除する。
- *          Dem_Init() からのみ呼び出すこと（呼び出し順序に依存するため非公開）。
- *
- * \param[in]  EventId  イベント ID。範囲チェックは呼び出し元の責務。
- */
-static void Dem_EvaluateAging(Dem_EventIdType EventId)
+void Dem_GetVersionInfo(Std_VersionInfoType* versioninfo)
 {
-    DET_LOGT(TAG, "called");
-    const uint8 status    = Dem_StatusTable[EventId];
-    const uint8 threshold = Dem_AgingThresholdTable[EventId];
+    if (versioninfo == NULL)
+    {
+        Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_GET_VERSION_INFO, DEM_E_PARAM_POINTER);
+        return;
+    }
 
-    if ((status & DEM_STATUS_CONFIRMED) == 0U)
-    {
-        /* 確定故障なし: エージング対象外 */
-        Dem_AgingCounter[EventId] = 0U;
-    }
-    else if ((status & DEM_STATUS_TEST_FAILED) != 0U)
-    {
-        /* 直前サイクル中に再度 FAILED 確定: 連続性が途切れたためリセット */
-        if (Dem_AgingCounter[EventId] != 0U)
-        {
-            DET_LOGI(TAG, "ev=%u aging reset (re-failed)", (unsigned)EventId);
-        }
-        Dem_AgingCounter[EventId] = 0U;
-    }
-    else if ((status & DEM_STATUS_NOT_COMPLETED_THIS_CYCLE) != 0U)
-    {
-        /* 直前サイクル中に一度もテストされなかった: このサイクルは数えない（カウンタ維持） */
-    }
-    else
-    {
-        /* 確定故障あり、かつ直前サイクルは故障なし・テスト済み: クリーンな操作サイクル */
-        Dem_AgingCounter[EventId]++;
-
-        if (Dem_AgingCounter[EventId] >= threshold)
-        {
-            Dem_StatusTable[EventId] &= (uint8)(~DEM_STATUS_CONFIRMED);
-            Dem_AgingCounter[EventId] = 0U;
-            DET_LOGI(TAG, "ev=%u healed (aging complete) dtc=0x%06lX",
-                     (unsigned)EventId, (unsigned long)Dem_DtcTable[EventId]);
-        }
-        else
-        {
-            DET_LOGI(TAG, "ev=%u aging=%u/%u", (unsigned)EventId,
-                     (unsigned)Dem_AgingCounter[EventId], (unsigned)threshold);
-        }
-    }
+    versioninfo->vendorID         = DEM_VENDOR_ID;
+    versioninfo->moduleID         = DEM_MODULE_ID;
+    versioninfo->sw_major_version = DEM_SW_MAJOR_VERSION;
+    versioninfo->sw_minor_version = DEM_SW_MINOR_VERSION;
+    versioninfo->sw_patch_version = DEM_SW_PATCH_VERSION;
 }
+
+/* ======================================================================
+ * Interface ECU State Manager <=> Dem
+ * ====================================================================== */
 
 /* ----------------------------------------------------------------------
- * Dem_EvaluatePendingClear
+ * Dem_PreInit
  * ---------------------------------------------------------------------- */
 
-/**
- * \brief   PendingDTC (UDS status bit2) を操作サイクル境界で判定する。
- *
- * \details SWS_Dem_00390 (Figure 7.19): PendingDTC は
- *          「NOT TestFailedThisOperationCycle AND NOT TestNotCompletedThisOperationCycle
- *          かつ操作サイクルの END/RESTART」または ClearDTC でクリアされる。
- *          CONFIRMED (bit3) のような多サイクルのエージングは行わず、直前サイクルが
- *          1 回でもクリーン（そのサイクル中に FAILED 確定が無く、かつテスト済み）
- *          であれば即座にクリアする点が Dem_EvaluateAging() との違い。
- *          Dem_EvaluateAging() と同じく、TF/TFTOC/TNCTC が新サイクル用に
- *          リセットされる前の値を見る必要があるため、Dem_Init() からのみ、
- *          かつそのリセットより前に呼び出すこと（呼び出し順序に依存するため非公開）。
- *
- * \param[in]  EventId  イベント ID。範囲チェックは呼び出し元の責務。
- */
-static void Dem_EvaluatePendingClear(Dem_EventIdType EventId)
-{
-    DET_LOGT(TAG, "called");
-    const uint8 status = Dem_StatusTable[EventId];
-
-    if ((status & DEM_STATUS_PENDING) == 0U)
-        return; /* 既にクリア済み: 対象外 */
-
-    const uint8 cleanCycle = ((status & DEM_STATUS_TF_THIS_OP_CYCLE) == 0U)
-                           && ((status & DEM_STATUS_NOT_COMPLETED_THIS_CYCLE) == 0U);
-
-    if (cleanCycle)
-    {
-        Dem_StatusTable[EventId] &= (uint8)(~DEM_STATUS_PENDING);
-        DET_LOGI(TAG, "ev=%u pendingDTC cleared (clean operation cycle)", (unsigned)EventId);
-    }
-}
-
-/* -----------------------------------------------------------------------
- * 公開 API
- * ----------------------------------------------------------------------- */
+/* 未実装 */
 
 /* ----------------------------------------------------------------------
  * Dem_Init
@@ -331,7 +265,6 @@ static void Dem_EvaluatePendingClear(Dem_EventIdType EventId)
  */
 void Dem_Init(const Dem_ConfigType* ConfigPtr)
 {
-    DET_LOGT(TAG, "called");
     (void)ConfigPtr; /* 本プロジェクトは post-build 設定を持たない（Dem.h 参照） */
     uint8 magic = 0U;
     (void)NvM_ReadBlock(NVM_BLOCK_ID_DEM_MAGIC, &magic);
@@ -401,6 +334,299 @@ void Dem_Init(const Dem_ConfigType* ConfigPtr)
 }
 
 /* ----------------------------------------------------------------------
+ * Dem_Shutdown
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ======================================================================
+ * Interface BSW modules / SW-Components <=> Dem
+ * ====================================================================== */
+
+/* ----------------------------------------------------------------------
+ * Dem_ClearDTC
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ----------------------------------------------------------------------
+ * Dem_ClearPrestoredFreezeFrame
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ----------------------------------------------------------------------
+ * Dem_GetComponentFailed
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ----------------------------------------------------------------------
+ * Dem_GetDTCSelectionResult
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ----------------------------------------------------------------------
+ * Dem_GetDTCSelectionResultForClearDTC
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ----------------------------------------------------------------------
+ * Dem_GetEventUdsStatus
+ * ---------------------------------------------------------------------- */
+
+/**
+ * \brief   指定イベントの UDS DTC ステータスバイトを取得する（[SWS_Dem_91008]）。
+ *
+ * \details 実仕様は本関数を SW-C や FiM 等の BSW モジュールがイベント単位で
+ *          使うためのものと位置づけ、Dcm は DTC 単位の `Dem_GetStatusOfDTC`
+ *          を使うと規定する（同関数の Note 参照）。本プロジェクトは
+ *          `Dem_GetStatusOfDTC`（DTC→EventId 変換を内蔵する別 API）を持たず、
+ *          Dcm 側は既に解決済みの EventId で直接本関数を呼ぶ既存の簡略化を
+ *          そのまま踏襲する（本関数の改名以前から変わらない設計）。
+ *
+ * \param[in]   EventId        イベント ID (DEM_EVENT_* 定数)。
+ * \param[out]  UDSStatusByte  取得したステータスバイト（statusAvailabilityMask
+ *                             でマスク済み）の格納先。NULL 禁止。
+ *                             戻り値が E_NOT_OK の場合は不定。
+ *
+ * \retval  E_OK      正常取得。
+ * \retval  E_NOT_OK  未初期化、EventId が範囲外、または UDSStatusByte が NULL。
+ *
+ * \AUTOSARReq     {SWS_Dem_91008, SWS_Dem_00051}
+ * \ServiceID      {0xb6}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType Dem_GetEventUdsStatus(Dem_EventIdType EventId, Dem_UdsStatusByteType* UDSStatusByte)
+{
+    if (!Dem_Initialized)
+    {
+        Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_GET_EVENT_UDS_STATUS, DEM_E_UNINIT);
+        return E_NOT_OK;
+    }
+
+    if (EventId >= DEM_EVENT_COUNT)
+    {
+        Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_GET_EVENT_UDS_STATUS, DEM_E_WRONG_CONFIGURATION);
+        return E_NOT_OK;
+    }
+
+    if (UDSStatusByte == NULL)
+    {
+        Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_GET_EVENT_UDS_STATUS, DEM_E_PARAM_POINTER);
+        return E_NOT_OK;
+    }
+
+    *UDSStatusByte = Dem_StatusTable[EventId] & DEM_STATUS_AVAILABILITY_MASK;
+    return E_OK;
+}
+
+/* ----------------------------------------------------------------------
+ * Dem_GetMonitorStatus
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ----------------------------------------------------------------------
+ * Dem_GetDebouncingOfEvent
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ----------------------------------------------------------------------
+ * Dem_GetDTCOfEvent
+ * ---------------------------------------------------------------------- */
+
+/**
+ * \brief   イベント ID から DTC コードを取得する（[SWS_Dem_00198]/[SWS_Dem_00269]）。
+ *
+ * \details 本プロジェクトの `Dem_DtcTable[]`（Dem_Cfg.h）は UDS 3-byte 形式の
+ *          DTC 値のみを構成しており、OBD/J1939 形式は一切保持しないため、
+ *          `DTCFormat` に `DEM_DTC_FORMAT_UDS` 以外を渡された場合は
+ *          `DEM_E_NO_DTC_AVAILABLE`（要求フォーマットの DTC が構成されていない）
+ *          を返す。
+ *
+ * \param[in]   EventId     イベント ID (DEM_EVENT_* 定数)。
+ * \param[in]   DTCFormat   取得する DTC 値のフォーマット。本プロジェクトは
+ *                          `DEM_DTC_FORMAT_UDS` のみ対応。
+ * \param[out]  DTCOfEvent  24-bit DTC コードの格納先。NULL 禁止。
+ *                          戻り値が E_OK 以外の場合は不定。
+ *
+ * \retval  E_OK                   正常取得。
+ * \retval  E_NOT_OK               未初期化、EventId が範囲外、または
+ *                                 DTCOfEvent が NULL。
+ * \retval  DEM_E_NO_DTC_AVAILABLE DTCFormat が DEM_DTC_FORMAT_UDS 以外
+ *                                 （要求フォーマットの DTC は構成されていない）。
+ *
+ * \AUTOSARReq     {SWS_Dem_00198, SWS_Dem_00269}
+ * \ServiceID      {0x0D}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType Dem_GetDTCOfEvent(Dem_EventIdType EventId, Dem_DTCFormatType DTCFormat, uint32* DTCOfEvent)
+{
+    if (!Dem_Initialized)
+    {
+        Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_GET_DTC_OF_EVENT, DEM_E_UNINIT);
+        return E_NOT_OK;
+    }
+
+    if (EventId >= DEM_EVENT_COUNT)
+    {
+        Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_GET_DTC_OF_EVENT, DEM_E_WRONG_CONFIGURATION);
+        return E_NOT_OK;
+    }
+
+    if (DTCOfEvent == NULL)
+    {
+        Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_GET_DTC_OF_EVENT, DEM_E_PARAM_POINTER);
+        return E_NOT_OK;
+    }
+
+    if (DTCFormat != DEM_DTC_FORMAT_UDS)
+    {
+        return DEM_E_NO_DTC_AVAILABLE;
+    }
+
+    *DTCOfEvent = Dem_DtcTable[EventId];
+    return E_OK;
+}
+
+/* ----------------------------------------------------------------------
+ * Dem_GetDTCSuppression
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ----------------------------------------------------------------------
+ * Dem_GetFaultDetectionCounter
+ * ---------------------------------------------------------------------- */
+
+/**
+ * \brief   指定イベントの Fault Detection Counter を取得する。
+ *
+ * \details デバウンスカウンタ生値を [SWS_Dem_00415] 通り -128〜127 へ
+ *          線形写像して返す (`Dem_MapDebounceCounterToFdc()`参照)。
+ *
+ * \AUTOSARReq     {SWS_Dem_00203}
+ * \AUTOSARReq     {SWS_Dem_00415}
+ * \ServiceID      {0x3e}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType Dem_GetFaultDetectionCounter(Dem_EventIdType EventId, sint8* FaultDetectionCounter)
+{
+    DET_LOGT(TAG, "called");
+    if (!Dem_Initialized)
+    {
+        Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_GET_FAULT_DETECTION_COUNTER, DEM_E_UNINIT);
+        return E_NOT_OK;
+    }
+
+    if (EventId >= DEM_EVENT_COUNT)
+    {
+        Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_GET_FAULT_DETECTION_COUNTER, DEM_E_WRONG_CONFIGURATION);
+        return E_NOT_OK;
+    }
+
+    if (FaultDetectionCounter == NULL)
+    {
+        Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_GET_FAULT_DETECTION_COUNTER, DEM_E_PARAM_POINTER);
+        return E_NOT_OK;
+    }
+
+    *FaultDetectionCounter = Dem_MapDebounceCounterToFdc(Dem_DebounceCounter[EventId], Dem_DebounceLimitTable[EventId]);
+    return E_OK;
+}
+
+/* ----------------------------------------------------------------------
+ * Dem_GetIndicatorStatus
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ----------------------------------------------------------------------
+ * Dem_GetEventFreezeFrameDataEx
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ----------------------------------------------------------------------
+ * Dem_GetEventExtendedDataRecordEx
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ----------------------------------------------------------------------
+ * Dem_GetEventMemoryOverflow
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ----------------------------------------------------------------------
+ * Dem_GetNumberOfEventMemoryEntries
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ----------------------------------------------------------------------
+ * Dem_ResetEventDebounceStatus
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ----------------------------------------------------------------------
+ * Dem_ResetEventStatus
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ----------------------------------------------------------------------
+ * Dem_PrestoreFreezeFrame
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ----------------------------------------------------------------------
+ * Dem_SelectDTC
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ----------------------------------------------------------------------
+ * Dem_SetComponentAvailable
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ----------------------------------------------------------------------
+ * Dem_SetDTCSuppression
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ----------------------------------------------------------------------
+ * Dem_SetEnableCondition
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ----------------------------------------------------------------------
+ * Dem_SetEventAvailable
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ----------------------------------------------------------------------
+ * Dem_SetEventFailureCycleCounterThreshold
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ----------------------------------------------------------------------
  * Dem_SetEventStatus
  * ---------------------------------------------------------------------- */
 
@@ -449,7 +675,6 @@ void Dem_Init(const Dem_ConfigType* ConfigPtr)
 Std_ReturnType Dem_SetEventStatus(Dem_EventIdType EventId,
                                    Dem_EventStatusType EventStatus)
 {
-    DET_LOGT(TAG, "called");
     /* [SWS_Dem_00124]: Dem_SetEventStatus 相当のため未初期化チェック対象外。 */
 
     if (EventId >= DEM_EVENT_COUNT)
@@ -596,6 +821,66 @@ Std_ReturnType Dem_SetEventStatus(Dem_EventIdType EventId,
 }
 
 /* ----------------------------------------------------------------------
+ * Dem_SetOperationCycleState
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ----------------------------------------------------------------------
+ * Dem_GetOperationCycleState
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ----------------------------------------------------------------------
+ * Dem_SetStorageCondition
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ----------------------------------------------------------------------
+ * Dem_SetWIRStatus
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ======================================================================
+ * Interface Dcm <=> Dem
+ * ====================================================================== */
+
+/* ----------------------------------------------------------------------
+ * Dem_GetTranslationType
+ * ---------------------------------------------------------------------- */
+
+/**
+ * \brief   本 ECU が構成する DTC 翻訳フォーマットを取得する。
+ *
+ * \details エラー戻り値の定義が実仕様に存在しないため（[SWS_Dem_00231]）、
+ *          ClientId・初期化状態に関わらず常に `DEM_DTC_TRANSLATION_ISO14229_1`
+ *          を返す（本プロジェクトが `DemTypeOfDTCSupported` として構成する
+ *          唯一の形式）。
+ *
+ * \param[in]  ClientId  クライアント ID。単一診断クライアント構成のため未使用。
+ *
+ * \return  構成済み DTC 翻訳フォーマット。
+ *
+ * \AUTOSARReq     {SWS_Dem_00230}
+ * \AUTOSARReq     {SWS_Dem_00231}
+ * \ServiceID      {0x3c}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Dem_DTCTranslationFormatType Dem_GetTranslationType(uint8 ClientId)
+{
+    (void)ClientId;  /* 単一ECU・単一診断クライアント構成のため未使用（Dem.h 冒頭コメント参照） */
+
+    /* [SWS_Dem_00231]: DemTypeOfDTCSupported の構成値を返す。本プロジェクトは
+     * ISO 14229-1 形式のみ構成するため常にこの値（エラー戻り値は実仕様に
+     * 定義が無いため未初期化チェックは行わない）。 */
+    return DEM_DTC_TRANSLATION_ISO14229_1;
+}
+
+/* ----------------------------------------------------------------------
  * Dem_GetDTCStatusAvailabilityMask
  * ---------------------------------------------------------------------- */
 
@@ -615,7 +900,6 @@ Std_ReturnType Dem_SetEventStatus(Dem_EventIdType EventId,
  */
 Std_ReturnType Dem_GetDTCStatusAvailabilityMask(uint8 ClientId, Dem_UdsStatusByteType* DTCStatusMask)
 {
-    DET_LOGT(TAG, "called");
     (void)ClientId;  /* 単一ECU・単一診断クライアント構成のため未使用（Dem.h 冒頭コメント参照） */
 
     if (!Dem_Initialized)
@@ -635,116 +919,480 @@ Std_ReturnType Dem_GetDTCStatusAvailabilityMask(uint8 ClientId, Dem_UdsStatusByt
 }
 
 /* ----------------------------------------------------------------------
- * Dem_GetEventUdsStatus
+ * Dem_GetStatusOfDTC
  * ---------------------------------------------------------------------- */
 
-/**
- * \brief   指定イベントの UDS DTC ステータスバイトを取得する（[SWS_Dem_91008]）。
- *
- * \details 実仕様は本関数を SW-C や FiM 等の BSW モジュールがイベント単位で
- *          使うためのものと位置づけ、Dcm は DTC 単位の `Dem_GetStatusOfDTC`
- *          を使うと規定する（同関数の Note 参照）。本プロジェクトは
- *          `Dem_GetStatusOfDTC`（DTC→EventId 変換を内蔵する別 API）を持たず、
- *          Dcm 側は既に解決済みの EventId で直接本関数を呼ぶ既存の簡略化を
- *          そのまま踏襲する（本関数の改名以前から変わらない設計）。
- *
- * \param[in]   EventId        イベント ID (DEM_EVENT_* 定数)。
- * \param[out]  UDSStatusByte  取得したステータスバイト（statusAvailabilityMask
- *                             でマスク済み）の格納先。NULL 禁止。
- *                             戻り値が E_NOT_OK の場合は不定。
- *
- * \retval  E_OK      正常取得。
- * \retval  E_NOT_OK  未初期化、EventId が範囲外、または UDSStatusByte が NULL。
- *
- * \AUTOSARReq     {SWS_Dem_91008, SWS_Dem_00051}
- * \ServiceID      {0xb6}
- * \Reentrancy     {Reentrant}
- * \Synchronicity  {Synchronous}
- */
-Std_ReturnType Dem_GetEventUdsStatus(Dem_EventIdType EventId, Dem_UdsStatusByteType* UDSStatusByte)
+/* 未実装 */
+
+/* ----------------------------------------------------------------------
+ * Dem_GetSeverityOfDTC
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ----------------------------------------------------------------------
+ * Dem_GetFunctionalUnitOfDTC
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ----------------------------------------------------------------------
+ * Dem_SetDTCFilter
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ----------------------------------------------------------------------
+ * Dem_GetNumberOfFilteredDTC
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ----------------------------------------------------------------------
+ * Dem_GetNextFilteredDTC
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ----------------------------------------------------------------------
+ * Dem_GetNextFilteredDTCAndFDC
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ----------------------------------------------------------------------
+ * Dem_GetNextFilteredDTCAndSeverity
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ----------------------------------------------------------------------
+ * Dem_SetFreezeFrameRecordFilter
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ----------------------------------------------------------------------
+ * Dem_GetNextFilteredRecord
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ----------------------------------------------------------------------
+ * Dem_GetDTCByOccurrenceTime
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ----------------------------------------------------------------------
+ * Dem_DisableDTCRecordUpdate
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ----------------------------------------------------------------------
+ * Dem_EnableDTCRecordUpdate
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ----------------------------------------------------------------------
+ * Dem_GetSizeOfExtendedDataRecordSelection
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ----------------------------------------------------------------------
+ * Dem_GetSizeOfFreezeFrameSelection
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ----------------------------------------------------------------------
+ * Dem_GetNextExtendedDataRecord
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ----------------------------------------------------------------------
+ * Dem_GetNextFreezeFrameData
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ----------------------------------------------------------------------
+ * Dem_SelectExtendedDataRecord
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ----------------------------------------------------------------------
+ * Dem_SelectFreezeFrameData
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ----------------------------------------------------------------------
+ * Dem_DisableDTCSetting
+ * ---------------------------------------------------------------------- */
+
+Std_ReturnType Dem_DisableDTCSetting(uint8 ClientId)
 {
-    DET_LOGT(TAG, "called");
+    (void)ClientId;  /* 単一ECU・単一診断クライアント構成のため未使用（Dem.h 冒頭コメント参照） */
+
     if (!Dem_Initialized)
     {
-        Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_GET_EVENT_UDS_STATUS, DEM_E_UNINIT);
+        Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_DISABLE_DTC_SETTING, DEM_E_UNINIT);
         return E_NOT_OK;
     }
 
-    if (EventId >= DEM_EVENT_COUNT)
-    {
-        Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_GET_EVENT_UDS_STATUS, DEM_E_WRONG_CONFIGURATION);
-        return E_NOT_OK;
-    }
-
-    if (UDSStatusByte == NULL)
-    {
-        Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_GET_EVENT_UDS_STATUS, DEM_E_PARAM_POINTER);
-        return E_NOT_OK;
-    }
-
-    *UDSStatusByte = Dem_StatusTable[EventId] & DEM_STATUS_AVAILABILITY_MASK;
+    Dem_DTCSettingEnabled = 0U;
+    DET_LOGI(TAG, "DTC setting disabled");
     return E_OK;
 }
 
 /* ----------------------------------------------------------------------
- * Dem_GetDTCOfEvent
+ * Dem_EnableDTCSetting
  * ---------------------------------------------------------------------- */
 
-/**
- * \brief   イベント ID から DTC コードを取得する（[SWS_Dem_00198]/[SWS_Dem_00269]）。
- *
- * \details 本プロジェクトの `Dem_DtcTable[]`（Dem_Cfg.h）は UDS 3-byte 形式の
- *          DTC 値のみを構成しており、OBD/J1939 形式は一切保持しないため、
- *          `DTCFormat` に `DEM_DTC_FORMAT_UDS` 以外を渡された場合は
- *          `DEM_E_NO_DTC_AVAILABLE`（要求フォーマットの DTC が構成されていない）
- *          を返す。
- *
- * \param[in]   EventId     イベント ID (DEM_EVENT_* 定数)。
- * \param[in]   DTCFormat   取得する DTC 値のフォーマット。本プロジェクトは
- *                          `DEM_DTC_FORMAT_UDS` のみ対応。
- * \param[out]  DTCOfEvent  24-bit DTC コードの格納先。NULL 禁止。
- *                          戻り値が E_OK 以外の場合は不定。
- *
- * \retval  E_OK                   正常取得。
- * \retval  E_NOT_OK               未初期化、EventId が範囲外、または
- *                                 DTCOfEvent が NULL。
- * \retval  DEM_E_NO_DTC_AVAILABLE DTCFormat が DEM_DTC_FORMAT_UDS 以外
- *                                 （要求フォーマットの DTC は構成されていない）。
- *
- * \AUTOSARReq     {SWS_Dem_00198, SWS_Dem_00269}
- * \ServiceID      {0x0D}
- * \Reentrancy     {Reentrant}
- * \Synchronicity  {Synchronous}
- */
-Std_ReturnType Dem_GetDTCOfEvent(Dem_EventIdType EventId, Dem_DTCFormatType DTCFormat, uint32* DTCOfEvent)
+Std_ReturnType Dem_EnableDTCSetting(uint8 ClientId)
 {
-    DET_LOGT(TAG, "called");
+    (void)ClientId;  /* 単一ECU・単一診断クライアント構成のため未使用（Dem.h 冒頭コメント参照） */
+
     if (!Dem_Initialized)
     {
-        Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_GET_DTC_OF_EVENT, DEM_E_UNINIT);
+        Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_ENABLE_DTC_SETTING, DEM_E_UNINIT);
         return E_NOT_OK;
     }
 
-    if (EventId >= DEM_EVENT_COUNT)
-    {
-        Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_GET_DTC_OF_EVENT, DEM_E_WRONG_CONFIGURATION);
-        return E_NOT_OK;
-    }
-
-    if (DTCOfEvent == NULL)
-    {
-        Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_GET_DTC_OF_EVENT, DEM_E_PARAM_POINTER);
-        return E_NOT_OK;
-    }
-
-    if (DTCFormat != DEM_DTC_FORMAT_UDS)
-    {
-        return DEM_E_NO_DTC_AVAILABLE;
-    }
-
-    *DTCOfEvent = Dem_DtcTable[EventId];
+    Dem_DTCSettingEnabled = 1U;
+    DET_LOGI(TAG, "DTC setting enabled");
     return E_OK;
 }
+
+/* ======================================================================
+ * OBD-specific Dcm <=> Dem Interfaces
+ * ====================================================================== */
+
+/* ----------------------------------------------------------------------
+ * Dem_DcmGetInfoTypeValue08
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ----------------------------------------------------------------------
+ * Dem_DcmGetInfoTypeValue0B
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ----------------------------------------------------------------------
+ * Dem_DcmReadDataOfPID01
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ----------------------------------------------------------------------
+ * Dem_DcmReadDataOfPID1C
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ----------------------------------------------------------------------
+ * Dem_DcmReadDataOfPID21
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ----------------------------------------------------------------------
+ * Dem_DcmReadDataOfPID30
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ----------------------------------------------------------------------
+ * Dem_DcmReadDataOfPID31
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ----------------------------------------------------------------------
+ * Dem_DcmReadDataOfPID41
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ----------------------------------------------------------------------
+ * Dem_DcmReadDataOfPID4D
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ----------------------------------------------------------------------
+ * Dem_DcmReadDataOfPID4E
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ----------------------------------------------------------------------
+ * Dem_DcmReadDataOfPID91
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ----------------------------------------------------------------------
+ * Dem_DcmReadDataOfOBDFreezeFrame
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ----------------------------------------------------------------------
+ * Dem_DcmGetDTCOfOBDFreezeFrame
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ----------------------------------------------------------------------
+ * Dem_DcmGetAvailableOBDMIDs
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ----------------------------------------------------------------------
+ * Dem_DcmGetNumTIDsOfOBDMID
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ----------------------------------------------------------------------
+ * Dem_DcmGetDTRData
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ======================================================================
+ * Interface J1939Dcm <=> Dem
+ * ====================================================================== */
+
+/* ----------------------------------------------------------------------
+ * Dem_J1939DcmSetDTCFilter
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ----------------------------------------------------------------------
+ * Dem_J1939DcmGetNumberOfFilteredDTC
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ----------------------------------------------------------------------
+ * Dem_J1939DcmGetNextFilteredDTC
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ----------------------------------------------------------------------
+ * Dem_J1939DcmFirstDTCwithLampStatus
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ----------------------------------------------------------------------
+ * Dem_J1939DcmGetNextDTCwithLampStatus
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ----------------------------------------------------------------------
+ * Dem_J1939DcmClearDTC
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ----------------------------------------------------------------------
+ * Dem_J1939DcmSetFreezeFrameFilter
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ----------------------------------------------------------------------
+ * Dem_J1939DcmGetNextFreezeFrame
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ----------------------------------------------------------------------
+ * Dem_J1939DcmGetNextSPNInFreezeFrame
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ----------------------------------------------------------------------
+ * Dem_J1939DcmSetRatioFilter
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ----------------------------------------------------------------------
+ * Dem_J1939DcmGetNextFilteredRatio
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ----------------------------------------------------------------------
+ * Dem_J1939DcmReadDiagnosticReadiness1
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ----------------------------------------------------------------------
+ * Dem_J1939DcmReadDiagnosticReadiness2
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ----------------------------------------------------------------------
+ * Dem_J1939DcmReadDiagnosticReadiness3
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ======================================================================
+ * Interface Dlt <=> Dem
+ * ====================================================================== */
+
+/* ----------------------------------------------------------------------
+ * Dem_DltGetMostRecentFreezeFrameRecordData
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ----------------------------------------------------------------------
+ * Dem_DltGetAllExtendedDataRecords
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ======================================================================
+ * OBD-specific Interfaces
+ * ====================================================================== */
+
+/* ----------------------------------------------------------------------
+ * Dem_SetEventDisabled
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ----------------------------------------------------------------------
+ * Dem_RepIUMPRFaultDetect
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ----------------------------------------------------------------------
+ * Dem_SetIUMPRDenCondition
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ----------------------------------------------------------------------
+ * Dem_GetIUMPRDenCondition
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ----------------------------------------------------------------------
+ * Dem_RepIUMPRDenLock
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ----------------------------------------------------------------------
+ * Dem_RepIUMPRDenRelease
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ----------------------------------------------------------------------
+ * Dem_SetPtoStatus
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ----------------------------------------------------------------------
+ * Dem_ReadDataOfPID01
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ----------------------------------------------------------------------
+ * Dem_GetDataOfPID21
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ----------------------------------------------------------------------
+ * Dem_SetDataOfPID21
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ----------------------------------------------------------------------
+ * Dem_SetDataOfPID31
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ----------------------------------------------------------------------
+ * Dem_SetDataOfPID4D
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ----------------------------------------------------------------------
+ * Dem_SetDataOfPID4E
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ----------------------------------------------------------------------
+ * Dem_GetCycleQualified
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ----------------------------------------------------------------------
+ * Dem_SetCycleQualified
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ----------------------------------------------------------------------
+ * Dem_GetDTCSeverityAvailabilityMask
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ----------------------------------------------------------------------
+ * Dem_GetB1Counter
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ----------------------------------------------------------------------
+ * Dem_SetDTR
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ======================================================================
+ * Internal Functions
+ * ====================================================================== */
+
+/* -----------------------------------------------------------------------
+ * 公開 API
+ * ----------------------------------------------------------------------- */
 
 /* ----------------------------------------------------------------------
  * Dem_ClearOne
@@ -758,7 +1406,6 @@ Std_ReturnType Dem_GetDTCOfEvent(Dem_EventIdType EventId, Dem_DTCFormatType DTCF
  */
 static void Dem_ClearOne(Dem_EventIdType EventId)
 {
-    DET_LOGT(TAG, "called");
     Dem_StatusTable[EventId] = DEM_STATUS_NOT_COMPLETED_SINCE_CLEAR
                              | DEM_STATUS_NOT_COMPLETED_THIS_CYCLE;
     Dem_DebounceCounter[EventId]    = 0;
@@ -790,7 +1437,6 @@ static void Dem_ClearOne(Dem_EventIdType EventId)
  */
 Std_ReturnType Dem_ClearAllDTCs(void)
 {
-    DET_LOGT(TAG, "called");
     if (!Dem_Initialized)
     {
         Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_CLEAR_ALL_DTCS, DEM_E_UNINIT);
@@ -842,7 +1488,6 @@ Std_ReturnType Dem_ClearAllDTCs(void)
  */
 Std_ReturnType Dem_ClearOneDtc(Dem_EventIdType EventId)
 {
-    DET_LOGT(TAG, "called");
     if (!Dem_Initialized)
     {
         Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_CLEAR_DTC, DEM_E_UNINIT);
@@ -891,7 +1536,6 @@ Std_ReturnType Dem_ClearOneDtc(Dem_EventIdType EventId)
 void Dem_GetAllDTCs(uint32* dtcBuf, uint8* statusBuf,
                      uint8* count, uint8 statusMask)
 {
-    DET_LOGT(TAG, "called");
     if (!Dem_Initialized)
     {
         Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_GET_ALL_DTCS, DEM_E_UNINIT);
@@ -944,7 +1588,6 @@ void Dem_GetAllDTCs(uint32* dtcBuf, uint8* statusBuf,
  */
 void Dem_GetSupportedDTCs(uint32* dtcBuf, uint8* statusBuf, uint8* count)
 {
-    DET_LOGT(TAG, "called");
     if (!Dem_Initialized)
     {
         Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_GET_SUPPORTED_DTCS, DEM_E_UNINIT);
@@ -981,7 +1624,6 @@ void Dem_GetSupportedDTCs(uint32* dtcBuf, uint8* statusBuf, uint8* count)
  */
 void Dem_SetFreezeFrameContext(uint16 EngineSpeed, uint8 CoolantTemp, uint8 EngineState)
 {
-    DET_LOGT(TAG, "called");
     if (!Dem_Initialized)
     {
         Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_SET_FREEZE_FRAME_CONTEXT, DEM_E_UNINIT);
@@ -1006,7 +1648,6 @@ void Dem_SetFreezeFrameContext(uint16 EngineSpeed, uint8 CoolantTemp, uint8 Engi
  */
 Std_ReturnType Dem_GetFreezeFrameOfEvent(Dem_EventIdType EventId, Dem_FreezeFrameType* Frame)
 {
-    DET_LOGT(TAG, "called");
     if (!Dem_Initialized)
     {
         Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_GET_FREEZE_FRAME_OF_EVENT, DEM_E_UNINIT);
@@ -1045,7 +1686,6 @@ Std_ReturnType Dem_GetFreezeFrameOfEvent(Dem_EventIdType EventId, Dem_FreezeFram
  */
 Std_ReturnType Dem_GetEventIdOfDTC(uint32 DTC, Dem_EventIdType* EventId)
 {
-    DET_LOGT(TAG, "called");
     if (!Dem_Initialized)
     {
         Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_GET_EVENT_ID_OF_DTC, DEM_E_UNINIT);
@@ -1098,7 +1738,6 @@ Std_ReturnType Dem_GetEventIdOfDTC(uint32 DTC, Dem_EventIdType* EventId)
  */
 Std_ReturnType Dem_GetOccurrenceCounterOfEvent(Dem_EventIdType EventId, uint8* Counter)
 {
-    DET_LOGT(TAG, "called");
     if (!Dem_Initialized)
     {
         Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_GET_OCCURRENCE_COUNTER_OF_EVENT, DEM_E_UNINIT);
@@ -1152,47 +1791,6 @@ static sint8 Dem_MapDebounceCounterToFdc(sint8 counter, sint8 limit)
 }
 
 /* ----------------------------------------------------------------------
- * Dem_GetFaultDetectionCounter
- * ---------------------------------------------------------------------- */
-
-/**
- * \brief   指定イベントの Fault Detection Counter を取得する。
- *
- * \details デバウンスカウンタ生値を [SWS_Dem_00415] 通り -128〜127 へ
- *          線形写像して返す (`Dem_MapDebounceCounterToFdc()`参照)。
- *
- * \AUTOSARReq     {SWS_Dem_00203}
- * \AUTOSARReq     {SWS_Dem_00415}
- * \ServiceID      {0x3e}
- * \Reentrancy     {Non Reentrant}
- * \Synchronicity  {Synchronous}
- */
-Std_ReturnType Dem_GetFaultDetectionCounter(Dem_EventIdType EventId, sint8* FaultDetectionCounter)
-{
-    DET_LOGT(TAG, "called");
-    if (!Dem_Initialized)
-    {
-        Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_GET_FAULT_DETECTION_COUNTER, DEM_E_UNINIT);
-        return E_NOT_OK;
-    }
-
-    if (EventId >= DEM_EVENT_COUNT)
-    {
-        Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_GET_FAULT_DETECTION_COUNTER, DEM_E_WRONG_CONFIGURATION);
-        return E_NOT_OK;
-    }
-
-    if (FaultDetectionCounter == NULL)
-    {
-        Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_GET_FAULT_DETECTION_COUNTER, DEM_E_PARAM_POINTER);
-        return E_NOT_OK;
-    }
-
-    *FaultDetectionCounter = Dem_MapDebounceCounterToFdc(Dem_DebounceCounter[EventId], Dem_DebounceLimitTable[EventId]);
-    return E_OK;
-}
-
-/* ----------------------------------------------------------------------
  * Dem_GetPrefailedDTCs
  * ---------------------------------------------------------------------- */
 
@@ -1212,7 +1810,6 @@ Std_ReturnType Dem_GetFaultDetectionCounter(Dem_EventIdType EventId, sint8* Faul
  */
 void Dem_GetPrefailedDTCs(uint32* dtcBuf, uint8* fdcBuf, uint8* count)
 {
-    DET_LOGT(TAG, "called");
     if (!Dem_Initialized)
     {
         Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_GET_PREFAILED_DTCS, DEM_E_UNINIT);
@@ -1239,94 +1836,95 @@ void Dem_GetPrefailedDTCs(uint32* dtcBuf, uint8* fdcBuf, uint8* count)
 }
 
 /* ----------------------------------------------------------------------
- * Dem_GetTranslationType
+ * Dem_EvaluateAging
  * ---------------------------------------------------------------------- */
 
 /**
- * \brief   本 ECU が構成する DTC 翻訳フォーマットを取得する。
+ * \brief   経年回復 (Aging) を判定する。
  *
- * \details エラー戻り値の定義が実仕様に存在しないため（[SWS_Dem_00231]）、
- *          ClientId・初期化状態に関わらず常に `DEM_DTC_TRANSLATION_ISO14229_1`
- *          を返す（本プロジェクトが `DemTypeOfDTCSupported` として構成する
- *          唯一の形式）。
+ * \details 直前の操作サイクルの最終ステータス（TF/TFTOC/TNCTC が新サイクル用に
+ *          リセットされる前の値）を評価し、Dem_AgingCounter[EventId] を更新する。
+ *          Dem_AgingThresholdTable[EventId]（イベントごとの閾値）に達したら
+ *          CONFIRMED を自動解除する。
+ *          Dem_Init() からのみ呼び出すこと（呼び出し順序に依存するため非公開）。
  *
- * \param[in]  ClientId  クライアント ID。単一診断クライアント構成のため未使用。
- *
- * \return  構成済み DTC 翻訳フォーマット。
- *
- * \AUTOSARReq     {SWS_Dem_00230}
- * \AUTOSARReq     {SWS_Dem_00231}
- * \ServiceID      {0x3c}
- * \Reentrancy     {Reentrant}
- * \Synchronicity  {Synchronous}
+ * \param[in]  EventId  イベント ID。範囲チェックは呼び出し元の責務。
  */
-Dem_DTCTranslationFormatType Dem_GetTranslationType(uint8 ClientId)
+static void Dem_EvaluateAging(Dem_EventIdType EventId)
 {
-    DET_LOGT(TAG, "called");
-    (void)ClientId;  /* 単一ECU・単一診断クライアント構成のため未使用（Dem.h 冒頭コメント参照） */
+    const uint8 status    = Dem_StatusTable[EventId];
+    const uint8 threshold = Dem_AgingThresholdTable[EventId];
 
-    /* [SWS_Dem_00231]: DemTypeOfDTCSupported の構成値を返す。本プロジェクトは
-     * ISO 14229-1 形式のみ構成するため常にこの値（エラー戻り値は実仕様に
-     * 定義が無いため未初期化チェックは行わない）。 */
-    return DEM_DTC_TRANSLATION_ISO14229_1;
+    if ((status & DEM_STATUS_CONFIRMED) == 0U)
+    {
+        /* 確定故障なし: エージング対象外 */
+        Dem_AgingCounter[EventId] = 0U;
+    }
+    else if ((status & DEM_STATUS_TEST_FAILED) != 0U)
+    {
+        /* 直前サイクル中に再度 FAILED 確定: 連続性が途切れたためリセット */
+        if (Dem_AgingCounter[EventId] != 0U)
+        {
+            DET_LOGI(TAG, "ev=%u aging reset (re-failed)", (unsigned)EventId);
+        }
+        Dem_AgingCounter[EventId] = 0U;
+    }
+    else if ((status & DEM_STATUS_NOT_COMPLETED_THIS_CYCLE) != 0U)
+    {
+        /* 直前サイクル中に一度もテストされなかった: このサイクルは数えない（カウンタ維持） */
+    }
+    else
+    {
+        /* 確定故障あり、かつ直前サイクルは故障なし・テスト済み: クリーンな操作サイクル */
+        Dem_AgingCounter[EventId]++;
+
+        if (Dem_AgingCounter[EventId] >= threshold)
+        {
+            Dem_StatusTable[EventId] &= (uint8)(~DEM_STATUS_CONFIRMED);
+            Dem_AgingCounter[EventId] = 0U;
+            DET_LOGI(TAG, "ev=%u healed (aging complete) dtc=0x%06lX",
+                     (unsigned)EventId, (unsigned long)Dem_DtcTable[EventId]);
+        }
+        else
+        {
+            DET_LOGI(TAG, "ev=%u aging=%u/%u", (unsigned)EventId,
+                     (unsigned)Dem_AgingCounter[EventId], (unsigned)threshold);
+        }
+    }
 }
 
 /* ----------------------------------------------------------------------
- * Dem_EnableDTCSetting
+ * Dem_EvaluatePendingClear
  * ---------------------------------------------------------------------- */
 
-Std_ReturnType Dem_EnableDTCSetting(uint8 ClientId)
+/**
+ * \brief   PendingDTC (UDS status bit2) を操作サイクル境界で判定する。
+ *
+ * \details SWS_Dem_00390 (Figure 7.19): PendingDTC は
+ *          「NOT TestFailedThisOperationCycle AND NOT TestNotCompletedThisOperationCycle
+ *          かつ操作サイクルの END/RESTART」または ClearDTC でクリアされる。
+ *          CONFIRMED (bit3) のような多サイクルのエージングは行わず、直前サイクルが
+ *          1 回でもクリーン（そのサイクル中に FAILED 確定が無く、かつテスト済み）
+ *          であれば即座にクリアする点が Dem_EvaluateAging() との違い。
+ *          Dem_EvaluateAging() と同じく、TF/TFTOC/TNCTC が新サイクル用に
+ *          リセットされる前の値を見る必要があるため、Dem_Init() からのみ、
+ *          かつそのリセットより前に呼び出すこと（呼び出し順序に依存するため非公開）。
+ *
+ * \param[in]  EventId  イベント ID。範囲チェックは呼び出し元の責務。
+ */
+static void Dem_EvaluatePendingClear(Dem_EventIdType EventId)
 {
-    DET_LOGT(TAG, "called");
-    (void)ClientId;  /* 単一ECU・単一診断クライアント構成のため未使用（Dem.h 冒頭コメント参照） */
+    const uint8 status = Dem_StatusTable[EventId];
 
-    if (!Dem_Initialized)
+    if ((status & DEM_STATUS_PENDING) == 0U)
+        return; /* 既にクリア済み: 対象外 */
+
+    const uint8 cleanCycle = ((status & DEM_STATUS_TF_THIS_OP_CYCLE) == 0U)
+                           && ((status & DEM_STATUS_NOT_COMPLETED_THIS_CYCLE) == 0U);
+
+    if (cleanCycle)
     {
-        Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_ENABLE_DTC_SETTING, DEM_E_UNINIT);
-        return E_NOT_OK;
+        Dem_StatusTable[EventId] &= (uint8)(~DEM_STATUS_PENDING);
+        DET_LOGI(TAG, "ev=%u pendingDTC cleared (clean operation cycle)", (unsigned)EventId);
     }
-
-    Dem_DTCSettingEnabled = 1U;
-    DET_LOGI(TAG, "DTC setting enabled");
-    return E_OK;
-}
-
-/* ----------------------------------------------------------------------
- * Dem_DisableDTCSetting
- * ---------------------------------------------------------------------- */
-
-Std_ReturnType Dem_DisableDTCSetting(uint8 ClientId)
-{
-    DET_LOGT(TAG, "called");
-    (void)ClientId;  /* 単一ECU・単一診断クライアント構成のため未使用（Dem.h 冒頭コメント参照） */
-
-    if (!Dem_Initialized)
-    {
-        Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_DISABLE_DTC_SETTING, DEM_E_UNINIT);
-        return E_NOT_OK;
-    }
-
-    Dem_DTCSettingEnabled = 0U;
-    DET_LOGI(TAG, "DTC setting disabled");
-    return E_OK;
-}
-
-/* ----------------------------------------------------------------------
- * Dem_GetVersionInfo
- * ---------------------------------------------------------------------- */
-
-void Dem_GetVersionInfo(Std_VersionInfoType* versioninfo)
-{
-    DET_LOGT(TAG, "called");
-    if (versioninfo == NULL)
-    {
-        Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_GET_VERSION_INFO, DEM_E_PARAM_POINTER);
-        return;
-    }
-
-    versioninfo->vendorID         = DEM_VENDOR_ID;
-    versioninfo->moduleID         = DEM_MODULE_ID;
-    versioninfo->sw_major_version = DEM_SW_MAJOR_VERSION;
-    versioninfo->sw_minor_version = DEM_SW_MINOR_VERSION;
-    versioninfo->sw_patch_version = DEM_SW_PATCH_VERSION;
 }
