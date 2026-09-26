@@ -145,6 +145,26 @@ void Gpt_OnTick(Gpt_ChannelType Channel)
  * ----------------------------------------------------------------------- */
 
 /* ----------------------------------------------------------------------
+ * Gpt_GetVersionInfo
+ * ---------------------------------------------------------------------- */
+
+void Gpt_GetVersionInfo(Std_VersionInfoType* versioninfo)
+{
+    DET_LOGT(TAG, "called");
+    if (versioninfo == NULL)
+    {
+        Det_ReportError(GPT_MODULE_ID, 0U, GPT_API_ID_GET_VERSION_INFO, GPT_E_PARAM_POINTER);
+        return;
+    }
+
+    versioninfo->vendorID         = GPT_VENDOR_ID;
+    versioninfo->moduleID         = GPT_MODULE_ID;
+    versioninfo->sw_major_version = GPT_SW_MAJOR_VERSION;
+    versioninfo->sw_minor_version = GPT_SW_MINOR_VERSION;
+    versioninfo->sw_patch_version = GPT_SW_PATCH_VERSION;
+}
+
+/* ----------------------------------------------------------------------
  * Gpt_Init
  * ---------------------------------------------------------------------- */
 
@@ -425,21 +445,31 @@ void Gpt_DisableNotification(Gpt_ChannelType Channel)
 }
 
 /* ----------------------------------------------------------------------
- * Gpt_GetVersionInfo
+ * Gpt_SetMode
  * ---------------------------------------------------------------------- */
 
-void Gpt_GetVersionInfo(Std_VersionInfoType* versioninfo)
-{
-    DET_LOGT(TAG, "called");
-    if (versioninfo == NULL)
-    {
-        Det_ReportError(GPT_MODULE_ID, 0U, GPT_API_ID_GET_VERSION_INFO, GPT_E_PARAM_POINTER);
-        return;
-    }
+/* 未実装 */
 
-    versioninfo->vendorID         = GPT_VENDOR_ID;
-    versioninfo->moduleID         = GPT_MODULE_ID;
-    versioninfo->sw_major_version = GPT_SW_MAJOR_VERSION;
-    versioninfo->sw_minor_version = GPT_SW_MINOR_VERSION;
-    versioninfo->sw_patch_version = GPT_SW_PATCH_VERSION;
-}
+/* ----------------------------------------------------------------------
+ * Gpt_DisableWakeup
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ----------------------------------------------------------------------
+ * Gpt_EnableWakeup
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ----------------------------------------------------------------------
+ * Gpt_CheckWakeup
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ----------------------------------------------------------------------
+ * Gpt_GetPredefTimerValue
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */

@@ -148,6 +148,29 @@ Std_ReturnType Det_ReportError(uint16 ModuleId, uint8 InstanceId, uint8 ApiId, u
 }
 
 /* ----------------------------------------------------------------------
+ * Det_Start
+ * ---------------------------------------------------------------------- */
+
+/**
+ * \brief   Det モジュールを起動する（[SWS_Det_00010]）。
+ *
+ * \details 実仕様は「Det の環境（統合者）が Det 自身のセルフテストを
+ *          トリガする」用途を想定するが、本プロジェクトはそのようなセルフ
+ *          テスト機構を持たないため no-op とする（実仕様自身も「起動時
+ *          呼び出しを要しない Det 実装では空でよい」と明記している）。
+ *
+ * \AUTOSARReq     {SWS_Det_00010}
+ * \ServiceID      {0x02}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void Det_Start(void)
+{
+    DET_LOGT(TAG, "called");
+    /* セルフテスト機構を持たないため no-op（Det.h 参照）。 */
+}
+
+/* ----------------------------------------------------------------------
  * Det_ReportRuntimeError
  * ---------------------------------------------------------------------- */
 
@@ -220,29 +243,6 @@ Std_ReturnType Det_ReportTransientFault(uint16 ModuleId, uint8 InstanceId, uint8
 
     /* [SWS_Det_01003]: コールアウト機構を持たないため常に E_OK。 */
     return E_OK;
-}
-
-/* ----------------------------------------------------------------------
- * Det_Start
- * ---------------------------------------------------------------------- */
-
-/**
- * \brief   Det モジュールを起動する（[SWS_Det_00010]）。
- *
- * \details 実仕様は「Det の環境（統合者）が Det 自身のセルフテストを
- *          トリガする」用途を想定するが、本プロジェクトはそのようなセルフ
- *          テスト機構を持たないため no-op とする（実仕様自身も「起動時
- *          呼び出しを要しない Det 実装では空でよい」と明記している）。
- *
- * \AUTOSARReq     {SWS_Det_00010}
- * \ServiceID      {0x02}
- * \Reentrancy     {Non Reentrant}
- * \Synchronicity  {Synchronous}
- */
-void Det_Start(void)
-{
-    DET_LOGT(TAG, "called");
-    /* セルフテスト機構を持たないため no-op（Det.h 参照）。 */
 }
 
 /* ----------------------------------------------------------------------

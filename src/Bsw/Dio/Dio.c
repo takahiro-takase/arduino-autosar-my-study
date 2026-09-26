@@ -30,17 +30,83 @@
  * Type Definitions
  * ====================================================================== */
 
+/** ポート1個分の設定（チャネル配列の先頭とその幅）。 */
+typedef struct
+{
+    const Dio_ChannelType* channels;
+    uint8                  count;
+} Dio_PortConfigType;
+
 /* ======================================================================
  * Global Variables
  * ====================================================================== */
+
+/** DIO_PORT_LED_GROUP を構成するチャネル（配列インデックス = bit位置、LSBが先頭）。
+ *  Dio_Cfg.h の DIO_PORT_LED_GROUP 設定コメント参照。 */
+static const Dio_ChannelType Dio_PortLedGroupChannels[] =
+{
+    DIO_CHANNEL_LED_RUNNING,  /* bit0 */
+    DIO_CHANNEL_LED_FAULT,    /* bit1 */
+    DIO_CHANNEL_LED_WARNING   /* bit2 */
+};
+
+/** Dio_PortType の値をそのまま添字とするポート設定テーブル（Port.c の
+ *  Port_PinConfig[PORT_PIN_COUNT] と同じ設計）。要素数が Dio_Cfg.h の
+ *  DIO_PORT_COUNT と食い違えば初期化子の過不足でコンパイルエラーになる。
+ *  ポートを追加する際は Dio_Cfg.h の DIO_PORT_ 定数と DIO_PORT_COUNT の
+ *  両方をここと同時に更新すること。 */
+static const Dio_PortConfigType Dio_PortConfig[DIO_PORT_COUNT] =
+{
+    /* DIO_PORT_LED_GROUP */
+    { Dio_PortLedGroupChannels, (uint8)(sizeof(Dio_PortLedGroupChannels) / sizeof(Dio_PortLedGroupChannels[0])) }
+};
+
+const Dio_ChannelGroupType Dio_ChannelGroupRunFault =
+{
+    DIO_CHANNELGROUP_RUN_FAULT_PORT,
+    DIO_CHANNELGROUP_RUN_FAULT_MASK,
+    DIO_CHANNELGROUP_RUN_FAULT_OFFSET
+};
 
 /* ======================================================================
  * Function Prototypes
  * ====================================================================== */
 
+static const Dio_ChannelType* Dio_GetPortChannels(Dio_PortType PortId, uint8* widthOut);
+static Dio_PortLevelType Dio_ReadPortLevel(const Dio_ChannelType* channels, uint8 width);
+static void Dio_WritePortLevel(const Dio_ChannelType* channels, uint8 width, Dio_PortLevelType level);
+static const Dio_ChannelType* Dio_ResolvePortOrReportDet(Dio_PortType PortId, uint8 ApiId, uint8* widthOut);
+static const Dio_ChannelType* Dio_ResolveGroupChannels(const Dio_ChannelGroupType* group, uint8* widthOut,
+                                                        Dio_PortLevelType* shiftedMaskOut);
+static const Dio_ChannelType* Dio_ResolveGroupOrReportDet(const Dio_ChannelGroupType* group, uint8 ApiId,
+                                                           uint8* widthOut, Dio_PortLevelType* shiftedMaskOut);
+
 /* ======================================================================
  * Functions
  * ====================================================================== */
+
+/* ----------------------------------------------------------------------
+ * Dio_ReadChannel
+ * ---------------------------------------------------------------------- */
+
+/**
+ * \brief   指定チャネルの入力レベルを読み取る。
+ *
+ * \param[in]  channelId  読み取り元チャネル ID (Arduino ピン番号)。
+ *
+ * \return  DIO_HIGH または DIO_LOW。
+ *
+ * \pre        Port_Init() で対象チャネルを入力モードに設定済みであること。
+ *
+ * \ServiceID      {0x00}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Dio_LevelType Dio_ReadChannel(Dio_ChannelType channelId)
+{
+    DET_LOGT(TAG, "called");
+    return Dio_Hw_ReadChannel(channelId);
+}
 
 /* ----------------------------------------------------------------------
  * Dio_WriteChannel
@@ -65,26 +131,101 @@ void Dio_WriteChannel(Dio_ChannelType channelId, Dio_LevelType level)
 }
 
 /* ----------------------------------------------------------------------
- * Dio_ReadChannel
+ * Dio_ReadPort
  * ---------------------------------------------------------------------- */
 
-/**
- * \brief   指定チャネルの入力レベルを読み取る。
- *
- * \param[in]  channelId  読み取り元チャネル ID (Arduino ピン番号)。
- *
- * \return  DIO_HIGH または DIO_LOW。
- *
- * \pre        Port_Init() で対象チャネルを入力モードに設定済みであること。
- *
- * \ServiceID      {0x00}
- * \Reentrancy     {Reentrant}
- * \Synchronicity  {Synchronous}
- */
-Dio_LevelType Dio_ReadChannel(Dio_ChannelType channelId)
+Dio_PortLevelType Dio_ReadPort(Dio_PortType PortId)
 {
     DET_LOGT(TAG, "called");
-    return Dio_Hw_ReadChannel(channelId);
+    uint8 width = 0U;
+    const Dio_ChannelType* channels = Dio_ResolvePortOrReportDet(PortId, DIO_API_ID_READ_PORT, &width);
+    if (channels == NULL)
+    {
+        return 0U;
+    }
+
+    return Dio_ReadPortLevel(channels, width);
+}
+
+/* ----------------------------------------------------------------------
+ * Dio_WritePort
+ * ---------------------------------------------------------------------- */
+
+void Dio_WritePort(Dio_PortType PortId, Dio_PortLevelType Level)
+{
+    DET_LOGT(TAG, "called");
+    uint8 width = 0U;
+    const Dio_ChannelType* channels = Dio_ResolvePortOrReportDet(PortId, DIO_API_ID_WRITE_PORT, &width);
+    if (channels == NULL)
+    {
+        return;
+    }
+
+    Dio_WritePortLevel(channels, width, Level);
+}
+
+/* ----------------------------------------------------------------------
+ * Dio_ReadChannelGroup
+ * ---------------------------------------------------------------------- */
+
+Dio_PortLevelType Dio_ReadChannelGroup(const Dio_ChannelGroupType* ChannelGroupIdPtr)
+{
+    DET_LOGT(TAG, "called");
+    uint8 width = 0U;
+    const Dio_ChannelType* channels =
+        Dio_ResolveGroupOrReportDet(ChannelGroupIdPtr, DIO_API_ID_READ_CHANNEL_GROUP, &width, NULL);
+    if (channels == NULL)
+    {
+        return 0U;
+    }
+
+    Dio_PortLevelType portLevel = Dio_ReadPortLevel(channels, width);
+    return (Dio_PortLevelType)((portLevel >> ChannelGroupIdPtr->offset) & ChannelGroupIdPtr->mask);
+}
+
+/* ----------------------------------------------------------------------
+ * Dio_WriteChannelGroup
+ * ---------------------------------------------------------------------- */
+
+void Dio_WriteChannelGroup(const Dio_ChannelGroupType* ChannelGroupIdPtr, Dio_PortLevelType Level)
+{
+    DET_LOGT(TAG, "called");
+    uint8 width = 0U;
+    Dio_PortLevelType shiftedMask = 0U;
+    const Dio_ChannelType* channels =
+        Dio_ResolveGroupOrReportDet(ChannelGroupIdPtr, DIO_API_ID_WRITE_CHANNEL_GROUP, &width, &shiftedMask);
+    if (channels == NULL)
+    {
+        return;
+    }
+
+    /* 読み取り→マスク合成→書き込み（非アトミック。Dio_FlipChannel と同じ制約）。
+     * mask外のチャネルは元の値のまま保持する（[SWS_Dio_00040]）。 */
+    Dio_PortLevelType current      = Dio_ReadPortLevel(channels, width);
+    Dio_PortLevelType shiftedLevel = (Dio_PortLevelType)((Level & ChannelGroupIdPtr->mask) << ChannelGroupIdPtr->offset);
+    Dio_PortLevelType newLevel     = (Dio_PortLevelType)((current & (Dio_PortLevelType)~shiftedMask) | shiftedLevel);
+
+    Dio_WritePortLevel(channels, width, newLevel);
+}
+
+/* ----------------------------------------------------------------------
+ * Dio_GetVersionInfo
+ * ---------------------------------------------------------------------- */
+
+void Dio_GetVersionInfo(Std_VersionInfoType* VersionInfo)
+{
+    DET_LOGT(TAG, "called");
+    if (VersionInfo == NULL)
+    {
+        Det_ReportError(DIO_MODULE_ID, 0U, DIO_API_ID_GET_VERSION_INFO, DIO_E_PARAM_POINTER);
+        return;
+    }
+
+    VersionInfo->vendorID         = DIO_VENDOR_ID;
+    VersionInfo->moduleID         = DIO_MODULE_ID;
+    VersionInfo->sw_major_version = DIO_SW_MAJOR_VERSION;
+    VersionInfo->sw_minor_version = DIO_SW_MINOR_VERSION;
+    VersionInfo->sw_patch_version = DIO_SW_PATCH_VERSION;
 }
 
 /* ----------------------------------------------------------------------
@@ -113,39 +254,9 @@ Dio_LevelType Dio_FlipChannel(Dio_ChannelType channelId)
     return level;
 }
 
-/** ポート1個分の設定（チャネル配列の先頭とその幅）。 */
-typedef struct
-{
-    const Dio_ChannelType* channels;
-    uint8                  count;
-} Dio_PortConfigType;
-
-/** DIO_PORT_LED_GROUP を構成するチャネル（配列インデックス = bit位置、LSBが先頭）。
- *  Dio_Cfg.h の DIO_PORT_LED_GROUP 設定コメント参照。 */
-static const Dio_ChannelType Dio_PortLedGroupChannels[] =
-{
-    DIO_CHANNEL_LED_RUNNING,  /* bit0 */
-    DIO_CHANNEL_LED_FAULT,    /* bit1 */
-    DIO_CHANNEL_LED_WARNING   /* bit2 */
-};
-
-/** Dio_PortType の値をそのまま添字とするポート設定テーブル（Port.c の
- *  Port_PinConfig[PORT_PIN_COUNT] と同じ設計）。要素数が Dio_Cfg.h の
- *  DIO_PORT_COUNT と食い違えば初期化子の過不足でコンパイルエラーになる。
- *  ポートを追加する際は Dio_Cfg.h の DIO_PORT_ 定数と DIO_PORT_COUNT の
- *  両方をここと同時に更新すること。 */
-static const Dio_PortConfigType Dio_PortConfig[DIO_PORT_COUNT] =
-{
-    /* DIO_PORT_LED_GROUP */
-    { Dio_PortLedGroupChannels, (uint8)(sizeof(Dio_PortLedGroupChannels) / sizeof(Dio_PortLedGroupChannels[0])) }
-};
-
-const Dio_ChannelGroupType Dio_ChannelGroupRunFault =
-{
-    DIO_CHANNELGROUP_RUN_FAULT_PORT,
-    DIO_CHANNELGROUP_RUN_FAULT_MASK,
-    DIO_CHANNELGROUP_RUN_FAULT_OFFSET
-};
+/* ======================================================================
+ * Internal Functions
+ * ====================================================================== */
 
 /* ----------------------------------------------------------------------
  * Dio_GetPortChannels
@@ -290,102 +401,4 @@ static const Dio_ChannelType* Dio_ResolveGroupOrReportDet(const Dio_ChannelGroup
         Det_ReportError(DIO_MODULE_ID, 0U, ApiId, DIO_E_PARAM_INVALID_GROUP);
     }
     return channels;
-}
-
-/* ----------------------------------------------------------------------
- * Dio_ReadPort
- * ---------------------------------------------------------------------- */
-
-Dio_PortLevelType Dio_ReadPort(Dio_PortType PortId)
-{
-    DET_LOGT(TAG, "called");
-    uint8 width = 0U;
-    const Dio_ChannelType* channels = Dio_ResolvePortOrReportDet(PortId, DIO_API_ID_READ_PORT, &width);
-    if (channels == NULL)
-    {
-        return 0U;
-    }
-
-    return Dio_ReadPortLevel(channels, width);
-}
-
-/* ----------------------------------------------------------------------
- * Dio_WritePort
- * ---------------------------------------------------------------------- */
-
-void Dio_WritePort(Dio_PortType PortId, Dio_PortLevelType Level)
-{
-    DET_LOGT(TAG, "called");
-    uint8 width = 0U;
-    const Dio_ChannelType* channels = Dio_ResolvePortOrReportDet(PortId, DIO_API_ID_WRITE_PORT, &width);
-    if (channels == NULL)
-    {
-        return;
-    }
-
-    Dio_WritePortLevel(channels, width, Level);
-}
-
-/* ----------------------------------------------------------------------
- * Dio_ReadChannelGroup
- * ---------------------------------------------------------------------- */
-
-Dio_PortLevelType Dio_ReadChannelGroup(const Dio_ChannelGroupType* ChannelGroupIdPtr)
-{
-    DET_LOGT(TAG, "called");
-    uint8 width = 0U;
-    const Dio_ChannelType* channels =
-        Dio_ResolveGroupOrReportDet(ChannelGroupIdPtr, DIO_API_ID_READ_CHANNEL_GROUP, &width, NULL);
-    if (channels == NULL)
-    {
-        return 0U;
-    }
-
-    Dio_PortLevelType portLevel = Dio_ReadPortLevel(channels, width);
-    return (Dio_PortLevelType)((portLevel >> ChannelGroupIdPtr->offset) & ChannelGroupIdPtr->mask);
-}
-
-/* ----------------------------------------------------------------------
- * Dio_WriteChannelGroup
- * ---------------------------------------------------------------------- */
-
-void Dio_WriteChannelGroup(const Dio_ChannelGroupType* ChannelGroupIdPtr, Dio_PortLevelType Level)
-{
-    DET_LOGT(TAG, "called");
-    uint8 width = 0U;
-    Dio_PortLevelType shiftedMask = 0U;
-    const Dio_ChannelType* channels =
-        Dio_ResolveGroupOrReportDet(ChannelGroupIdPtr, DIO_API_ID_WRITE_CHANNEL_GROUP, &width, &shiftedMask);
-    if (channels == NULL)
-    {
-        return;
-    }
-
-    /* 読み取り→マスク合成→書き込み（非アトミック。Dio_FlipChannel と同じ制約）。
-     * mask外のチャネルは元の値のまま保持する（[SWS_Dio_00040]）。 */
-    Dio_PortLevelType current      = Dio_ReadPortLevel(channels, width);
-    Dio_PortLevelType shiftedLevel = (Dio_PortLevelType)((Level & ChannelGroupIdPtr->mask) << ChannelGroupIdPtr->offset);
-    Dio_PortLevelType newLevel     = (Dio_PortLevelType)((current & (Dio_PortLevelType)~shiftedMask) | shiftedLevel);
-
-    Dio_WritePortLevel(channels, width, newLevel);
-}
-
-/* ----------------------------------------------------------------------
- * Dio_GetVersionInfo
- * ---------------------------------------------------------------------- */
-
-void Dio_GetVersionInfo(Std_VersionInfoType* VersionInfo)
-{
-    DET_LOGT(TAG, "called");
-    if (VersionInfo == NULL)
-    {
-        Det_ReportError(DIO_MODULE_ID, 0U, DIO_API_ID_GET_VERSION_INFO, DIO_E_PARAM_POINTER);
-        return;
-    }
-
-    VersionInfo->vendorID         = DIO_VENDOR_ID;
-    VersionInfo->moduleID         = DIO_MODULE_ID;
-    VersionInfo->sw_major_version = DIO_SW_MAJOR_VERSION;
-    VersionInfo->sw_minor_version = DIO_SW_MINOR_VERSION;
-    VersionInfo->sw_patch_version = DIO_SW_PATCH_VERSION;
 }
