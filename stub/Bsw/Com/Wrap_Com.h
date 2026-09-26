@@ -1,20 +1,21 @@
 /**
  * \file    Wrap_Com.h
- * \brief   `src/Bsw/Can/Can.c` 内の関数を対象とした `-Wl,--wrap=<symbol>`
+ * \brief   `src/Bsw/Com/Com.c` 内の関数を対象とした `-Wl,--wrap=<symbol>`
  *          フォールトインジェクションのアクセサ群。
  *
- * \details `stub/` 配下の構成規則は `stub/Bsw/CanIf/Wrap_ComIf.h`
+ * \details `stub/` 配下の構成規則は `stub/Bsw/CanIf/Wrap_CanIf.h`
  *          冒頭コメント参照（「wrap 対象の関数が定義されている元の src ファイル
  *          1 つにつき 1 ファイル」）。既定動作は `__real_...` へのパススルー。
  *
- *          AUTOSAR 仕様（SWS_Can）が定義する Can.c の公開 IF 関数を全数 wrap
- *          対象とする（2026-09-20 導入。`Can_Test_*` はテスト専用の拡張関数
- *          であり AUTOSAR 標準外のため対象外）。
+ *          Com.c の公開 IF 全24関数を wrap 対象とする（2026-09-20 導入時は
+ *          11関数のみだったが、その後の Com.c 拡張に追随して随時追加している。
+ *          `Com_Test_*` はテスト専用の拡張関数であり AUTOSAR 標準外のため
+ *          対象外）。
  *
- *          戻り値を持つ3関数（SetControllerMode/GetControllerErrorState/
- *          Write）には「指定した呼び出し回数以降は常に失敗を返す」という
- *          回数閾値方式の故障注入を実装する。`FailFromCallCount_Com_Xxx`
- *          （既定 `Wrap_Com_FAIL_FROM_CALL_COUNT_DISABLED`）に N を設定すると、
+ *          戻り値を持つ関数のうち `Com_TriggerIPDUSend` のみ「指定した
+ *          呼び出し回数以降は常に失敗を返す」という回数閾値方式の故障注入を
+ *          実装する。`FailFromCallCount_Com_Xxx`（既定
+ *          `Wrap_Com_FAIL_FROM_CALL_COUNT_DISABLED`）に N を設定すると、
  *          `CallCount_Com_Xxx` が N 以上になった回から（その回を含め、
  *          以降ずっと）`ForcedReturn_Com_Xxx` を返すようになる。N=1 を
  *          設定すれば「次の呼び出しから即座に失敗」という単純な即時強制失敗
@@ -25,10 +26,9 @@
  *          呼び出し側の判定を `CallCount >= FailFromCallCount` の1条件だけに
  *          単純化できる（2026-09-20、ユーザー提案により `!= 0` ガードを撤去）。
  *
- *          戻り値を持たない8関数（Init/GetVersionInfo/
- *          DisableControllerInterrupts/EnableControllerInterrupts/
- *          MainFunction_Read/Write/BusOff/Wakeup）は故障注入する戻り値が
- *          無いため、呼び出し回数のみを記録する。
+ *          `Com_TriggerIPDUSend` 以外の戻り値を持つ関数（SendSignal系/
+ *          ReceiveSignal系/InvalidateSignal系/IsRxTimedOut等）は故障注入を
+ *          実装せず、呼び出し回数のみを記録する。
  *
  *          変数名は `<種類>_<Module>_<関数名>`（種類=CallCount/
  *          FailFromCallCount/ForcedReturn を先頭側に置く）で統一する
@@ -38,12 +38,12 @@
  *          接頭辞は冗長なため付けない。今後新規追加する `Wrap_XXX.c` は
  *          本ファイルと同じ命名規則へ統一する）。
  *
- *          11関数すべて本ファイル1つが対象で、実際に使うテスト（想定:
+ *          24関数すべて本ファイル1つが対象で、実際に使うテスト（想定:
  *          `Bsw_Com_test.cpp`）も1つに閉じるため、他 wrap ファイルのような
  *          関数ごとの個別 `Reset()` ではなく、全状態を一括で初期状態へ戻す
- *          `WrapCan_Reset()` を1つだけ持つ（2026-09-20、ユーザー提案により
+ *          `WrapCom_Reset()` を1つだけ持つ（2026-09-20、ユーザー提案により
  *          個別 Reset の代わりに採用）。各テストケースは SetUp() で
- *          `WrapCan_Reset()` を1回呼び、`FailFromCallCount_Com_Xxx` を
+ *          `WrapCom_Reset()` を1回呼び、`FailFromCallCount_Com_Xxx` を
  *          Arrange 区間でのみ立てること（他のテストケースの挙動を暗黙に
  *          変えないため）。
  */
@@ -62,7 +62,7 @@ extern "C" {
 #define Wrap_Com_FAIL_FROM_CALL_COUNT_DISABLED 0xFFFFFFFFU
 
 /* ----------------------------------------------------------------------
- * 呼び出し回数（AUTOSAR IF 全11関数共通）
+ * 呼び出し回数（AUTOSAR IF 全24関数共通）
  * ---------------------------------------------------------------------- */
 extern uint32 CallCount_Com_Init;
 extern uint32 CallCount_Com_DeInit;
@@ -77,13 +77,17 @@ extern uint32 CallCount_Com_ReceiveSignal;
 extern uint32 CallCount_Com_SendSignalGroup;
 extern uint32 CallCount_Com_ReceiveSignalGroup;
 extern uint32 CallCount_Com_SendSignalGroupArray;
+extern uint32 CallCount_Com_ReceiveSignalGroupArray;
 extern uint32 CallCount_Com_InvalidateSignal;
+extern uint32 CallCount_Com_InvalidateSignalGroup;
 extern uint32 CallCount_Com_TriggerIPDUSend;
 extern uint32 CallCount_Com_SwitchIpduTxMode;
 extern uint32 CallCount_Com_RxIndication;
 extern uint32 CallCount_Com_TxConfirmation;
 extern uint32 CallCount_Com_MainFunctionRx;
 extern uint32 CallCount_Com_MainFunctionTx;
+extern uint32 CallCount_Com_IsRxTimedOut;
+extern uint32 CallCount_Com_SetCommunicationEnabled;
 
 /* ----------------------------------------------------------------------
  * 回数閾値故障注入（戻り値を持つ3関数のみ）

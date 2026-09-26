@@ -1,6 +1,6 @@
 /**
  * \file    Wrap_Com.c
- * \brief   `src/Bsw/Can/Can.c` 内の関数を対象とした wrap 実体
+ * \brief   `src/Bsw/Com/Com.c` 内の関数を対象とした wrap 実体
  *          （Wrap_Com.h 参照）。
  *
  * \details 変数を先頭の External Variables セクションへ集約し、その後に
@@ -53,13 +53,15 @@ uint32 CallCount_Com_RxIndication            = 0U;
 uint32 CallCount_Com_TxConfirmation          = 0U;
 uint32 CallCount_Com_MainFunctionRx          = 0U;
 uint32 CallCount_Com_MainFunctionTx          = 0U;
+uint32 CallCount_Com_IsRxTimedOut            = 0U;
+uint32 CallCount_Com_SetCommunicationEnabled = 0U;
 
 uint32 FailFromCallCount_Com_TriggerIPDUSend = Wrap_Com_FAIL_FROM_CALL_COUNT_DISABLED;
 
 Std_ReturnType ForcedReturn_Com_TriggerIPDUSend = E_NOT_OK;
 
 /* ----------------------------------------------------------------------
- * WrapCom_Reset — 11関数すべての状態を一括で初期化する（Wrap_Com.h 参照）。
+ * WrapCom_Reset — 24関数すべての状態を一括で初期化する（Wrap_Com.h 参照）。
  * ---------------------------------------------------------------------- */
 
 void WrapCom_Reset(void)
@@ -86,6 +88,8 @@ void WrapCom_Reset(void)
     CallCount_Com_TxConfirmation          = 0U;
     CallCount_Com_MainFunctionRx          = 0U;
     CallCount_Com_MainFunctionTx          = 0U;
+    CallCount_Com_IsRxTimedOut            = 0U;
+    CallCount_Com_SetCommunicationEnabled = 0U;
 
     FailFromCallCount_Com_TriggerIPDUSend = Wrap_Com_FAIL_FROM_CALL_COUNT_DISABLED;
 
@@ -203,7 +207,7 @@ void __real_Com_GetVersionInfo(Std_VersionInfoType* versioninfo);
 void __wrap_Com_GetVersionInfo(Std_VersionInfoType* versioninfo)
 {
     CallCount_Com_GetVersionInfo++;
-    Log_Write(LOG_T, TAG, "PduR_GetVersionInfo", "called %u times", CallCount_Com_GetVersionInfo);
+    Log_Write(LOG_T, TAG, "Com_GetVersionInfo", "called %u times", CallCount_Com_GetVersionInfo);
 
     __real_Com_GetVersionInfo(versioninfo);
 }
@@ -477,22 +481,32 @@ void __wrap_Com_MainFunctionTx(void)
 /* 未実装 */
 
 /* ----------------------------------------------------------------------
- * PduR_SecOCTxConfirmation
+ * Com_IsRxTimedOut
  * ---------------------------------------------------------------------- */
 
-/* 未実装 */
+extern
+uint8 __real_Com_IsRxTimedOut(Com_IPduIdType IPduId);
+uint8 __wrap_Com_IsRxTimedOut(Com_IPduIdType IPduId)
+{
+    CallCount_Com_IsRxTimedOut++;
+    Log_Write(LOG_T, TAG, "Com_IsRxTimedOut", "called %u times", CallCount_Com_IsRxTimedOut);
+
+    return __real_Com_IsRxTimedOut(IPduId);
+}
 
 /* ----------------------------------------------------------------------
- * PduR_<User:Lo>TxConfirmation
+ * Com_SetCommunicationEnabled
  * ---------------------------------------------------------------------- */
 
-/* 未実装 */
+extern
+void __real_Com_SetCommunicationEnabled(uint8 RxEnabled, uint8 TxEnabled);
+void __wrap_Com_SetCommunicationEnabled(uint8 RxEnabled, uint8 TxEnabled)
+{
+    CallCount_Com_SetCommunicationEnabled++;
+    Log_Write(LOG_T, TAG, "Com_SetCommunicationEnabled", "called %u times", CallCount_Com_SetCommunicationEnabled);
 
-/* ----------------------------------------------------------------------
- * PduR_<User:Lo>TriggerTransmit
- * ---------------------------------------------------------------------- */
-
-/* 未実装 */
+    __real_Com_SetCommunicationEnabled(RxEnabled, TxEnabled);
+}
 
 /* ======================================================================
  * Internal Functions
