@@ -132,7 +132,7 @@
 #include "CanSM.h"
 #include "EcuM.h"
 #include "BswM.h"
-#include "CanNm.h"
+#include "Nm.h"
 #include "Det.h"
 
 /* ======================================================================
@@ -1004,11 +1004,11 @@ void ComM_BusSM_ModeIndication(NetworkHandleType Network, ComM_ModeType Mode)
                 (void)EcuM_RequestRUN(ECUM_USER_COMM);
                 ComM_EcuMRunMode = COMM_FULL_COMMUNICATION;
             }
-            (void)CanNm_NetworkRequest(CANNM_MAIN_NETWORK_HANDLE);  /* 通信が必要になったことを CanNm へ伝える */
+            (void)Nm_NetworkRequest(NM_MAIN_NETWORK_HANDLE);  /* 通信が必要になったことを Nm(→CanNm) へ伝える */
         }
         else if (Mode == COMM_NO_COMMUNICATION)
         {
-            /* CanNm_NetworkRelease() はここでは呼ばない。ComM_RequestComMode() が
+            /* Nm_NetworkRelease() はここでは呼ばない。ComM_RequestComMode() が
              * FULL_COM -> NO_COM 要求の時点で既に呼んでおり（CanNm 協調スリープの
              * 起点、ファイル冒頭コメント参照）、本関数が呼ばれる頃には CanNm は
              * 既に Bus-Sleep Mode へ到達済みのため呼んでも無意味である。
@@ -1033,8 +1033,8 @@ void ComM_BusSM_ModeIndication(NetworkHandleType Network, ComM_ModeType Mode)
              * （実機で確認された不具合）。回復成功時は CanSM が改めて
              * ComM_BusSM_ModeIndication(FULL_COMMUNICATION) を呼ぶため、その際に
              * 上の分岐（ComM_NmReleasePending が立っていなければ）で
-             * CanNm_NetworkRequest() が呼ばれ自動的に再開する。 */
-            (void)CanNm_NetworkRelease(CANNM_MAIN_NETWORK_HANDLE);
+             * Nm_NetworkRequest() が呼ばれ自動的に再開する。 */
+            (void)Nm_NetworkRelease(NM_MAIN_NETWORK_HANDLE);
         }
     }
     else if (Mode == COMM_SILENT_COMMUNICATION && ComM_NmReleasePending[Network])
@@ -1186,10 +1186,12 @@ static Std_ReturnType ComM_ApplyAggregatedRequest(ComM_ModeType aggregated)
      * PrepareBusSleepMode()）で SILENT_COM になっているケース、Bus-Off で
      * 一時的に SILENT_COM になっているケースのいずれであっても）に関わらず、
      * 要求元の最新の意思は「もう眠らなくていい」なので、まず解放を取り消す。
-     * 本関数自身はここで CanSM を直接呼ばないが、直後の CanNm_NetworkRequest() の
-     * 呼び出し結果として間接的に CanSM へ届く場合がある: CanNm が既に Prepare
+     * 本関数自身はここで CanSM を直接呼ばないが、直後の Nm_NetworkRequest()
+     * （Nm 経由で CanNm_NetworkRequest() へ委譲される）の呼び出し結果として
+     * 間接的に CanSM へ届く場合がある: CanNm が既に Prepare
      * Bus-Sleep Mode へ到達済みであれば、CanNm_NetworkRequest() は
-     * CanNm_EnterRepeatMessage() を呼び、そこから同期的に ComM_Nm_NetworkMode()
+     * CanNm_EnterRepeatMessage() を呼び、そこから同期的に Nm_NetworkMode() →
+     * ComM_Nm_NetworkMode()
      * → CanSM_RequestComMode(FULL_COM) まで到達し、この関数へ戻ってくる時点
      * には ComM_ChannelMode は既に FULL_COM へ更新済みになっている（下記
      * channel==aggregated のチェックで捕捉される）。CanSM へ届かないのは
@@ -1210,7 +1212,7 @@ static Std_ReturnType ComM_ApplyAggregatedRequest(ComM_ModeType aggregated)
     if (aggregated == COMM_FULL_COMMUNICATION && ComM_NmReleasePending[0U])
     {
         ComM_NmReleasePending[0U] = 0U;
-        (void)CanNm_NetworkRequest(CANNM_MAIN_NETWORK_HANDLE);
+        (void)Nm_NetworkRequest(NM_MAIN_NETWORK_HANDLE);
         DET_LOGI(TAG, "FULL_COM re-requested during CanNm release wait -> cancelled");
         /* ComM_ChannelMode が既に FULL_COM へ更新済み（上記コメントの通常
          * ケース）か、まだ Bus-Off 回復待ち中で FULL_COM でないか、いずれの
@@ -1251,19 +1253,20 @@ static Std_ReturnType ComM_ApplyAggregatedRequest(ComM_ModeType aggregated)
         return E_OK;
 
     /* FULL_COM -> NO_COM（初回）: CanSM へは何も伝えない。[SWS_ComM_00133]
-     * のとおり CanNm_NetworkRelease() のみを直接呼び、ComM_ChannelMode は
-     * FULL_COM のまま据え置く（CanNm の協調スリープが完了するまでの間、実
-     * AUTOSAR の COMM_FULL_COM_READY_SLEEP サブステートに相当）。実際の
-     * 物理スリープと ComM_ChannelMode の更新は、CanNm が Bus-Sleep Mode へ
-     * 到達して呼ぶ ComM_Nm_BusSleepMode() まで遅延する（詳細はファイル
-     * 冒頭コメント参照）。2 回目以降の冗長な再要求は上の
+     * のとおり Nm_NetworkRelease()（Nm 経由で CanNm_NetworkRelease() へ委譲
+     * される）のみを直接呼び、ComM_ChannelMode は FULL_COM のまま据え置く
+     * （CanNm の協調スリープが完了するまでの間、実 AUTOSAR の
+     * COMM_FULL_COM_READY_SLEEP サブステートに相当）。実際の物理スリープと
+     * ComM_ChannelMode の更新は、CanNm が Bus-Sleep Mode へ到達して呼ぶ
+     * Nm_BusSleepMode()（→ ComM_Nm_BusSleepMode()）まで遅延する（詳細は
+     * ファイル冒頭コメント参照）。2 回目以降の冗長な再要求は上の
      * ComM_NmReleasePending チェックで既に無視されているため、ここへ来るのは
      * 常に初回のみ。 */
     if (ComM_ChannelMode[0U] == COMM_FULL_COMMUNICATION && aggregated == COMM_NO_COMMUNICATION)
     {
         ComM_NmReleasePending[0U] = 1U;
-        (void)CanNm_NetworkRelease(CANNM_MAIN_NETWORK_HANDLE);
-        DET_LOGI(TAG, "FULL_COM -> NO_COM requested: CanNm_NetworkRelease() sent, awaiting Bus-Sleep Mode");
+        (void)Nm_NetworkRelease(NM_MAIN_NETWORK_HANDLE);
+        DET_LOGI(TAG, "FULL_COM -> NO_COM requested: Nm_NetworkRelease() sent, awaiting Bus-Sleep Mode");
         return E_OK;
     }
 

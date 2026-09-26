@@ -208,6 +208,7 @@ set(NATIVE_CHAIN_INCLUDE_DIRS
     src/Bsw/Com
     src/Bsw/PduR
     src/Bsw/CanNm
+    src/Bsw/Nm
     src/Bsw/EcuM
     src/Bsw/BswM
     src/Bsw/Dcm
@@ -230,18 +231,19 @@ set(NATIVE_CHAIN_INCLUDE_DIRS
     src/Hal
     stub/Bsw/BswM
     stub/Bsw/Can
-    stub/Bsw/CanSM
     stub/Bsw/CanIf
+    stub/Bsw/CanNm
+    stub/Bsw/CanSM
     stub/Bsw/CanTp
     stub/Bsw/Com
-    stub/Bsw/Dcm
     stub/Bsw/ComM
+    stub/Bsw/Dcm
     stub/Bsw/Dem
     stub/Bsw/E2E
     stub/Bsw/E2EXf
     stub/Bsw/EcuM
     stub/Bsw/KeyM
-    stub/Bsw/CanNm
+    stub/Bsw/Nm
     stub/Bsw/NvM
     stub/Bsw/PduR
     stub/Bsw/WdgIf
@@ -251,51 +253,53 @@ set(NATIVE_CHAIN_INCLUDE_DIRS
 
 # native_chain_tests が実体でリンクする src/ 配下のソース。
 set(NATIVE_CHAIN_SRC_SOURCES
-    src/Bsw/Det/Det.c
-    src/Bsw/Com/Com.c
-    src/Bsw/PduR/PduR.c
-    src/Bsw/CanIf/CanIf.c
+    src/Bsw/BswM/BswM.c
     src/Bsw/Can/Can.c
-    src/Bsw/CanSM/CanSM.c
-    src/Bsw/ComM/ComM.c
+    src/Bsw/CanIf/CanIf.c
     src/Bsw/CanNm/CanNm.c
+    src/Bsw/CanSM/CanSM.c
+    src/Bsw/CanTp/CanTp.c
+    src/Bsw/Com/Com.c
+    src/Bsw/ComM/ComM.c
+    src/Bsw/Dcm/Dcm.c
+    src/Bsw/Dem/Dem.c
+    src/Bsw/Det/Det.c
+    src/Bsw/Dio/Dio.c
     src/Bsw/E2EXf/E2EXf.c
     src/Bsw/E2EXf/E2EXf_PBCfg.c
     src/Bsw/E2E/E2E_P05.c
     src/Bsw/E2E/E2E_P01.c
     src/Bsw/E2E/E2E.c
-    src/Bsw/WdgM/WdgM.c
-    src/Bsw/WdgM/WdgM_PBCfg.c
-    src/Bsw/Dem/Dem.c
     src/Bsw/FiM/FiM.c
     src/Bsw/FiM/FiM_PBCfg.c
-    src/Bsw/Dcm/Dcm.c
-    src/Bsw/CanTp/CanTp.c
-    src/Bsw/BswM/BswM.c
-    src/Os/Os.c
     src/Bsw/Gpt/Gpt.c
-    src/Bsw/Dio/Dio.c
+    src/Bsw/Nm/Nm.c
+    src/Bsw/PduR/PduR.c
     src/Bsw/Port/Port.c
+    src/Bsw/WdgM/WdgM.c
+    src/Bsw/WdgM/WdgM_PBCfg.c
+    src/Os/Os.c
 )
 
 # 同じくリンクする stub/ 配下のフェイク/wrapソース。
 set(NATIVE_CHAIN_STUB_SOURCES
+    stub/Bsw/BswM/Wrap_BswM.c
     stub/Bsw/Can/Wrap_Can.c
     stub/Bsw/CanIf/Wrap_CanIf.c
+    stub/Bsw/CanNm/Wrap_CanNm.c
+    stub/Bsw/CanTp/Wrap_CanTp.c
+    stub/Bsw/CanSM/Wrap_CanSM.c
     stub/Bsw/Com/Wrap_Com.c
+    stub/Bsw/ComM/Wrap_ComM.c
+    stub/Bsw/Dcm/Wrap_Dcm.c
+    stub/Bsw/Dem/Wrap_Dem.c
     stub/Bsw/E2E/Wrap_E2E.c
     stub/Bsw/E2E/Wrap_E2E_P05.c
     stub/Bsw/E2E/Wrap_E2E_P01.c
     stub/Bsw/E2EXf/Wrap_E2EXf.c
-    stub/Bsw/Dem/Wrap_Dem.c
-    stub/Bsw/Dcm/Wrap_Dcm.c
-    stub/Bsw/ComM/Wrap_ComM.c
-    stub/Bsw/CanSM/Wrap_CanSM.c
-    stub/Bsw/CanNm/Wrap_CanNm.c
-    stub/Bsw/BswM/Wrap_BswM.c
     stub/Bsw/EcuM/Fake_Bsw_EcuM.c
-    stub/Bsw/CanTp/Wrap_CanTp.c
     stub/Bsw/KeyM/Fake_KeyM.c
+    stub/Bsw/Nm/Wrap_Nm.c
     stub/Bsw/NvM/Fake_NvM.c
     stub/Bsw/PduR/Wrap_PduR.c
     stub/Bsw/WdgIf/Fake_WdgIf.c
@@ -376,6 +380,21 @@ set(NATIVE_CHAIN_WRAP_SYMBOLS
     CanIf_TxConfirmation
     CanIf_RxIndication
     CanIf_ControllerBusOff
+    # CanNm.h の AUTOSAR IF 全14関数（Wrap_CanNm.h/.c 参照）。
+    CanNm_Init
+    CanNm_DeInit
+    CanNm_NetworkRequest
+    CanNm_NetworkRelease
+    CanNm_RepeatMessageRequest
+    CanNm_RxIndication
+    CanNm_TxConfirmation
+    CanNm_MainFunction
+    CanNm_DisableCommunication
+    CanNm_EnableCommunication
+    CanNm_GetLocalNodeIdentifier
+    CanNm_GetNodeIdentifier
+    CanNm_GetState
+    CanNm_GetVersionInfo
     # CanSM.h の AUTOSAR IF 全9関数（Wrap_CanSM.h/.c 参照）。
     CanSM_Init
     CanSM_DeInit
@@ -467,21 +486,21 @@ set(NATIVE_CHAIN_WRAP_SYMBOLS
     E2EXf_Inv_AbsInfo
     E2EXf_E2EHealthStatus
     E2EXf_GetVersionInfo
-    # CanNm.h の AUTOSAR IF 全14関数（Wrap_CanNm.h/.c 参照）。
-    CanNm_Init
-    CanNm_DeInit
-    CanNm_NetworkRequest
-    CanNm_NetworkRelease
-    CanNm_RepeatMessageRequest
-    CanNm_RxIndication
-    CanNm_TxConfirmation
-    CanNm_MainFunction
-    CanNm_DisableCommunication
-    CanNm_EnableCommunication
-    CanNm_GetLocalNodeIdentifier
-    CanNm_GetNodeIdentifier
-    CanNm_GetState
-    CanNm_GetVersionInfo
+    # Nm.h の公開API全14関数（Wrap_Nm.h/.c 参照）。
+    Nm_Init
+    Nm_NetworkRequest
+    Nm_NetworkRelease
+    Nm_DisableCommunication
+    Nm_EnableCommunication
+    Nm_RepeatMessageRequest
+    Nm_GetNodeIdentifier
+    Nm_GetLocalNodeIdentifier
+    Nm_GetState
+    Nm_GetVersionInfo
+    Nm_NetworkStartIndication
+    Nm_NetworkMode
+    Nm_BusSleepMode
+    Nm_PrepareBusSleepMode
     # PduR.c の AUTOSAR IF 全数（Wrap_PduR.h/.c 参照）。
     PduR_Init
     PduR_GetVersionInfo

@@ -68,6 +68,7 @@ extern "C" {
 #include "Can_Hw.h"
 #include "ComM.h"
 #include "CanNm.h"
+#include "Nm.h"
 #include "Fake_Can_Hw.h"
 #include "Fake_Millis.h"
 #include "Fake_Bsw_EcuM.h"
@@ -115,6 +116,7 @@ protected:
         CanSM_Init(NULL);
         ComM_Init(NULL);
         CanNm_Init(NULL);
+        Nm_Init(NULL);
 
         // ボランタリスリープ済みの状態を Arrange する（README のとおり、
         // ウェイクアップ検証は CANSM_STATE_NO_COM からの起床のみを受け付ける）。

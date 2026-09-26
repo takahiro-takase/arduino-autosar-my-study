@@ -29,7 +29,7 @@
 #include "CanNm.h"
 #include "CanNm_Cfg.h"
 #include "CanIf.h"
-#include "ComM.h"
+#include "Nm.h"
 #include "Det.h"
 
 /* ======================================================================
@@ -37,9 +37,6 @@
  * ====================================================================== */
 
 #define TAG "CanNm"
-
-/* Arduino wiring.c（C リンケージ）で定義 */
-extern unsigned long millis(void);
 
 /* ======================================================================
  * Type Definitions
@@ -82,6 +79,9 @@ static unsigned long CanNm_StateTimerMs;
  * Function Prototypes
  * ====================================================================== */
 
+/* Arduino wiring.c（C リンケージ）で定義 */
+extern unsigned long millis(void);
+
 static void CanNm_TransmitPdu(void);
 static void CanNm_EnterRepeatMessage(void);
 static void CanNm_EnterNormalOperation(void);
@@ -114,7 +114,6 @@ static void CanNm_EnterBusSleep(void);
  */
 void CanNm_Init(const CanNm_ConfigType* ConfigPtr)
 {
-    DET_LOGT(TAG, "called");
     (void)ConfigPtr;  /* 常に NULL（post-build 設定を持たないため。CanNm.h 参照） */
     CanNm_State               = CANNM_STATE_BUS_SLEEP;
     CanNm_NetworkRequested     = 0U;
@@ -140,7 +139,6 @@ void CanNm_Init(const CanNm_ConfigType* ConfigPtr)
  */
 void CanNm_DeInit(void)
 {
-    DET_LOGT(TAG, "called");
     if (!CanNm_Initialized)
     {
         Det_ReportError(CANNM_MODULE_ID, 0U, CANNM_API_ID_DEINIT, CANNM_E_UNINIT);
@@ -152,160 +150,10 @@ void CanNm_DeInit(void)
 }
 
 /* ----------------------------------------------------------------------
- * CanNm_TransmitPdu
+ * CanNm_PassiveStartUp
  * ---------------------------------------------------------------------- */
 
-/**
- * \brief   NM フレーム（CBV + Source Node ID）を組み立てて CanIf_Transmit() へ渡す。
- *
- * \details PduR/Com を経由せず CanIf_Transmit() を直接呼び出す（実車の CanNm
- *          と同じ構造）。送信成功時の NM-Timeout Timer 再起動は
- *          CanNm_TxConfirmation() 側で行うが、`Can.c` の TX 確認は Can_Write() と
- *          同一スタックフレームでは完了しない非同期設計（TX 確認保留キュー
- *          → 別タスク Can_MainFunction_Write() まで遅延。送信失敗時やキュー
- *          満杯時は確認自体が来ないこともある）。そのため呼び出し元
- *          （CanNm_EnterRepeatMessage() 等）は、この呼び出しの完了だけを頼りに
- *          NM-Timeout Timer が再起動された前提を置いてはならない。呼び出し元
- *          自身が状態進入時点で明示的にタイマを起動/再起動すること。
- */
-static void CanNm_TransmitPdu(void)
-{
-    DET_LOGT(TAG, "called");
-    uint8 pdu[CANNM_DLC];
-    pdu[0] = CanNm_RepeatMessageBitSet ? CANNM_CBV_BIT_REPEAT_MESSAGE_REQUEST : 0x00U;
-    pdu[1] = CANNM_SOURCE_NODE_ID;
-
-    PduInfoType pduInfo = {
-        .SduDataPtr = pdu,
-        .SduLength  = CANNM_DLC
-    };
-
-    (void)CanIf_Transmit(CANNM_CANIF_TX_PDU_ID, &pduInfo);
-}
-
-/* ----------------------------------------------------------------------
- * CanNm_EnterRepeatMessage
- * ---------------------------------------------------------------------- */
-
-/**
- * \brief   Bus-Sleep/Prepare Bus-Sleep Mode から Network Mode (Repeat Message
- *          State) へ入る（[SWS_CanNm_00314]/[SWS_CanNm_00315]）。
- *
- * \details [SWS_CanNm_00096]: Network Mode 進入時に NM-Timeout Timer を起動。
- *          [SWS_CanNm_00100]: 送信有効なら NM フレームの (再)送信を開始する。
- *
- *          上位層（本プロジェクトでは ComM）への通知として
- *          ComM_Nm_NetworkMode()（[SWS_ComM_00296]）を呼ぶ。呼び出す順序が
- *          2 つの理由で重要（変更する場合は両方を再検証すること）:
- *            1. 送信の正しさ: ComM_Nm_NetworkMode() は CanSM_RequestComMode()
- *               経由で同期的に物理コントローラを再起動しうる（Prepare
- *               Bus-Sleep Mode 中で SILENT_COM だった場合）。下の
- *               CanNm_TransmitPdu() より後に置くと、この直後の
- *               (再)アナウンスフレームの送信が（コントローラがまだ
- *               Listen-Only のため）静かに失敗する。
- *            2. 再入安全性: ComM_Nm_NetworkMode() → CanSM_RequestComMode()
- *               → ComM_BusSM_ModeIndication() → CanNm_NetworkRequest() という経路で
- *               本ファイルへ同期的に再入しうる。CanNm_State を先に
- *               CANNM_STATE_REPEAT_MESSAGE へ更新済みだからこそ、再入した
- *               CanNm_NetworkRequest() は「既に要求済み」の default 分岐に
- *               落ちて CanNm_EnterRepeatMessage() への再帰を起こさない。
- */
-static void CanNm_EnterRepeatMessage(void)
-{
-    DET_LOGT(TAG, "called");
-    CanNm_State          = CANNM_STATE_REPEAT_MESSAGE;
-    CanNm_StateTimerMs    = millis();
-    CanNm_TimeoutTimerMs  = millis();
-    DET_LOGI(TAG, "-> Network Mode: Repeat Message State");
-
-    ComM_Nm_NetworkMode(0U);
-
-    if (CanNm_TxEnabled)
-        CanNm_TransmitPdu();
-}
-
-/* ----------------------------------------------------------------------
- * CanNm_EnterNormalOperation
- * ---------------------------------------------------------------------- */
-
-/**
- * \brief   Ready Sleep State から Normal Operation State へ入る（[SWS_CanNm_00116]）。
- *
- * \details CanNm_EnterRepeatMessage() と同様、状態進入時点で NM-Timeout Timer を
- *          明示的に再武装する。TX 確認（CanNm_TxConfirmation() 経由）に頼ると、
- *          `Can.c` の TX 確認が非同期（別タスクへ遅延、失敗時やキュー満杯時は
- *          確認自体が来ない）であるため、進入直後に送信した PDU の確認が
- *          届かない間タイマが古いまま残り、本来より早く NM-Timeout Timer が
- *          満了したと誤判定してしまう（CanNm_TransmitPdu() のコメント参照）。
- */
-static void CanNm_EnterNormalOperation(void)
-{
-    DET_LOGT(TAG, "called");
-    CanNm_State          = CANNM_STATE_NORMAL_OPERATION;
-    CanNm_TimeoutTimerMs  = millis();
-    DET_LOGI(TAG, "-> Network Mode: Normal Operation State");
-
-    if (CanNm_TxEnabled)
-        CanNm_TransmitPdu();
-}
-
-/* ----------------------------------------------------------------------
- * CanNm_EnterReadySleep
- * ---------------------------------------------------------------------- */
-
-/** Repeat Message/Normal Operation State から Ready Sleep State へ入る
- *  （[SWS_CanNm_00106]/[SWS_CanNm_00118]）。[SWS_CanNm_00108]: 送信を停止する
- *  （以降 CanNm_TransmitPdu() を呼ばないだけで実現する）。 */
-static void CanNm_EnterReadySleep(void)
-{
-    DET_LOGT(TAG, "called");
-    CanNm_State = CANNM_STATE_READY_SLEEP;
-    DET_LOGI(TAG, "-> Network Mode: Ready Sleep State (tx stopped)");
-}
-
-/* ----------------------------------------------------------------------
- * CanNm_EnterPrepareBusSleep
- * ---------------------------------------------------------------------- */
-
-/**
- * \brief   Ready Sleep State から Prepare Bus-Sleep Mode へ入る（[SWS_CanNm_00109]）。
- *
- * \details 上位層（本プロジェクトでは ComM）への通知として
- *          ComM_Nm_PrepareBusSleepMode()（[SWS_ComM_00826]）を呼ぶ。ComM は
- *          これを受けて CanSM_RequestComMode(SILENT_COM) を呼び、CAN
- *          コントローラを受信専用（Listen-Only）へ切り替える（ComM.c ファイル
- *          冒頭コメント参照）。
- */
-static void CanNm_EnterPrepareBusSleep(void)
-{
-    DET_LOGT(TAG, "called");
-    CanNm_State       = CANNM_STATE_PREPARE_BUS_SLEEP;
-    CanNm_StateTimerMs = millis();
-    DET_LOGI(TAG, "-> Prepare Bus-Sleep Mode");
-    ComM_Nm_PrepareBusSleepMode(0U);
-}
-
-/* ----------------------------------------------------------------------
- * CanNm_EnterBusSleep
- * ---------------------------------------------------------------------- */
-
-/**
- * \brief   Prepare Bus-Sleep Mode から Bus-Sleep Mode へ入る（[SWS_CanNm_00115]）。
- *
- * \details [SWS_CanNm_00126]: 上位層（本プロジェクトでは ComM）への通知として
- *          ComM_Nm_BusSleepMode()（[SWS_ComM_00392]）を呼ぶ。ComM は
- *          ComM_RequestComMode(FULL_COM->NO_COM) の時点では CanNm_NetworkRelease()
- *          を送るのみでチャネルを FULL_COM のまま据え置いており（協調スリープの
- *          起点、ComM.c ファイル冒頭コメント参照）、この通知を受けて初めて
- *          CanSM へ NO_COM を伝え、CAN コントローラを実際にスリープさせる。
- */
-static void CanNm_EnterBusSleep(void)
-{
-    DET_LOGT(TAG, "called");
-    CanNm_State = CANNM_STATE_BUS_SLEEP;
-    DET_LOGI(TAG, "-> Bus-Sleep Mode");
-    ComM_Nm_BusSleepMode(0U);
-}
+/* 未実装 */
 
 /* ----------------------------------------------------------------------
  * CanNm_NetworkRequest
@@ -331,7 +179,6 @@ static void CanNm_EnterBusSleep(void)
  */
 Std_ReturnType CanNm_NetworkRequest(NetworkHandleType Channel)
 {
-    DET_LOGT(TAG, "called");
     if (!CanNm_Initialized)
     {
         Det_ReportError(CANNM_MODULE_ID, 0U, CANNM_API_ID_NETWORK_REQUEST, CANNM_E_UNINIT);
@@ -392,7 +239,6 @@ Std_ReturnType CanNm_NetworkRequest(NetworkHandleType Channel)
  */
 Std_ReturnType CanNm_NetworkRelease(NetworkHandleType Channel)
 {
-    DET_LOGT(TAG, "called");
     if (!CanNm_Initialized)
     {
         Det_ReportError(CANNM_MODULE_ID, 0U, CANNM_API_ID_NETWORK_RELEASE, CANNM_E_UNINIT);
@@ -411,6 +257,228 @@ Std_ReturnType CanNm_NetworkRelease(NetworkHandleType Channel)
         CanNm_EnterReadySleep();  /* [SWS_CanNm_00118] */
 
     DET_LOGI(TAG, "NetworkRelease ok (state=%u)", (unsigned)CanNm_State);
+    return E_OK;
+}
+
+/* ----------------------------------------------------------------------
+ * CanNm_DisableCommunication
+ * ---------------------------------------------------------------------- */
+
+/**
+ * \brief   診断 CommunicationControl (UDS SID 0x28) からの NM PDU 送信無効化要求を反映する
+ *          （[SWS_CanNm_00215] 相当）。
+ *
+ * \details 無効化中は Repeat Message/Normal Operation State でも NM フレームを
+ *          送信しない（[SWS_CanNm_00100] の passive mode 相当の抑制。状態機械
+ *          自体は通常どおり遷移する）。実仕様（[SWS_CanNm_00172]）は現在
+ *          Network Mode でない場合に E_NOT_OK を要求するが、本プロジェクトは
+ *          そのゲートを実装しない（Bus-Sleep 中に呼ばれても抑制フラグ自体は
+ *          そのまま更新して良く、次回 Network Mode 復帰時に正しく反映される
+ *          ため。CanNm_NetworkRequest/Release と同じ「現在の状態に関わらず常に
+ *          受理する」簡略方針）。
+ *
+ *          2026-09 追加: [SWS_CanNm_00174] により、送信無効化中は NM-Timeout
+ *          Timer も停止しなければならない。本関数自体はフラグ(`CanNm_TxEnabled`)
+ *          を落とすだけで、実際の停止（満了判定のスキップ）は
+ *          `CanNm_MainFunction()` 側の各 State で `CanNm_TxEnabled` を条件に加える
+ *          形で行う（以前はこのタイマーが無効化中も動き続け、他ノードが
+ *          存在しない/自ノードの送信も止まっている状況で
+ *          `CANNM_E_NETWORK_TIMEOUT` の DET 報告が周期的に空しく繰り返されて
+ *          いた不具合の是正）。再有効化時の再起動（[SWS_CanNm_00179]）は
+ *          `CanNm_EnableCommunication()` 側で行う。
+ *
+ * \param[in]  Channel  NM チャネルハンドル（CANNM_MAIN_NETWORK_HANDLE 以外は拒否）。
+ *
+ * \retval  E_OK      要求を受理した。
+ * \retval  E_NOT_OK  未初期化、または Channel が不正。
+ *
+ * \AUTOSARReq     {SWS_CanNm_00215, SWS_CanNm_00192, SWS_CanNm_00174}
+ * \ServiceID      {0x0C}
+ * \Reentrancy     {Reentrant (but not for the same NM-channel)}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType CanNm_DisableCommunication(NetworkHandleType Channel)
+{
+    if (!CanNm_Initialized)
+    {
+        Det_ReportError(CANNM_MODULE_ID, 0U, CANNM_API_ID_DISABLE_COMMUNICATION, CANNM_E_UNINIT);
+        return E_NOT_OK;
+    }
+
+    if (Channel != CANNM_MAIN_NETWORK_HANDLE)
+    {
+        Det_ReportError(CANNM_MODULE_ID, 0U, CANNM_API_ID_DISABLE_COMMUNICATION, CANNM_E_INVALID_CHANNEL);
+        return E_NOT_OK;
+    }
+
+    if (CanNm_TxEnabled != 0U)
+        DET_LOGI(TAG, "CommunicationControl tx=%u->0", (unsigned)CanNm_TxEnabled);
+    CanNm_TxEnabled = 0U;
+    return E_OK;
+}
+
+/* ----------------------------------------------------------------------
+ * CanNm_EnableCommunication
+ * ---------------------------------------------------------------------- */
+
+/**
+ * \brief   診断 CommunicationControl (UDS SID 0x28) からの NM PDU 送信再有効化要求を反映する
+ *          （[SWS_CanNm_00216] 相当）。
+ *
+ * \details `CanNm_DisableCommunication()` で立てた抑制を解除する。ゲート省略の
+ *          方針は同関数のコメントを参照。
+ *
+ *          2026-09 追加: [SWS_CanNm_00179] により、再有効化時に NM-Timeout
+ *          Timer を再起動する（`CanNm_DisableCommunication()` の同名コメント
+ *          参照）。
+ *
+ * \param[in]  Channel  NM チャネルハンドル（CANNM_MAIN_NETWORK_HANDLE 以外は拒否）。
+ *
+ * \retval  E_OK      要求を受理した。
+ * \retval  E_NOT_OK  未初期化、または Channel が不正。
+ *
+ * \AUTOSARReq     {SWS_CanNm_00216, SWS_CanNm_00192, SWS_CanNm_00179}
+ * \ServiceID      {0x0D}
+ * \Reentrancy     {Reentrant (but not for the same NM-channel)}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType CanNm_EnableCommunication(NetworkHandleType Channel)
+{
+    if (!CanNm_Initialized)
+    {
+        Det_ReportError(CANNM_MODULE_ID, 0U, CANNM_API_ID_ENABLE_COMMUNICATION, CANNM_E_UNINIT);
+        return E_NOT_OK;
+    }
+
+    if (Channel != CANNM_MAIN_NETWORK_HANDLE)
+    {
+        Det_ReportError(CANNM_MODULE_ID, 0U, CANNM_API_ID_ENABLE_COMMUNICATION, CANNM_E_INVALID_CHANNEL);
+        return E_NOT_OK;
+    }
+
+    if (CanNm_TxEnabled != 1U)
+    {
+        DET_LOGI(TAG, "CommunicationControl tx=%u->1", (unsigned)CanNm_TxEnabled);
+        /* [SWS_CanNm_00179]: 再有効化時に NM-Timeout Timer を再起動する。
+         * 無効化中は CanNm_MainFunction() 側で満了判定自体を止めている
+         * （CanNm_DisableCommunication() の Doxygen 参照）ため、ここで
+         * millis() を取り直さないと、無効化されていた間の経過時間が
+         * そのまま残り再有効化直後に見かけ上の満了が起きてしまう。 */
+        CanNm_TimeoutTimerMs = millis();
+    }
+    CanNm_TxEnabled = 1U;
+    return E_OK;
+}
+
+/* ----------------------------------------------------------------------
+ * CanNm_SetUserData
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ----------------------------------------------------------------------
+ * CanNm_GetUserData
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ----------------------------------------------------------------------
+ * CanNm_Transmit
+ * ---------------------------------------------------------------------- */
+
+ /* 未実装 */
+
+/* ----------------------------------------------------------------------
+ * CanNm_GetNodeIdentifier
+ * ---------------------------------------------------------------------- */
+
+/**
+ * \brief   直近に受信した NM フレームの送信元ノード識別子を取得する（[SWS_CanNm_00219]）。
+ *
+ * \details `CanNm_RxIndication()` が受信の都度更新するキャッシュ値をそのまま
+ *          返す。一度も NM フレームを受信していない場合は 0 を返す
+ *          （実仕様は「未設定/取得失敗時は E_NOT_OK」も許容するが、本
+ *          プロジェクトは他の getter 系 API と同じく既定値を返すだけの
+ *          簡略実装とする）。
+ *
+ * \param[in]   Channel      NM チャネルハンドル（CANNM_MAIN_NETWORK_HANDLE 以外は拒否）。
+ * \param[out]  nmNodeIdPtr  直近受信 NM フレームの送信元 ID の格納先。NULL 禁止。
+ *
+ * \retval  E_OK      正常に取得した。
+ * \retval  E_NOT_OK  未初期化、Channel が不正、または nmNodeIdPtr が NULL。
+ *
+ * \AUTOSARReq     {SWS_CanNm_00219, SWS_CanNm_00192}
+ * \ServiceID      {0x06}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType CanNm_GetNodeIdentifier(NetworkHandleType Channel, uint8* nmNodeIdPtr)
+{
+    if (!CanNm_Initialized)
+    {
+        Det_ReportError(CANNM_MODULE_ID, 0U, CANNM_API_ID_GET_NODE_IDENTIFIER, CANNM_E_UNINIT);
+        return E_NOT_OK;
+    }
+
+    if (Channel != CANNM_MAIN_NETWORK_HANDLE)
+    {
+        Det_ReportError(CANNM_MODULE_ID, 0U, CANNM_API_ID_GET_NODE_IDENTIFIER, CANNM_E_INVALID_CHANNEL);
+        return E_NOT_OK;
+    }
+
+    if (nmNodeIdPtr == NULL)
+    {
+        Det_ReportError(CANNM_MODULE_ID, 0U, CANNM_API_ID_GET_NODE_IDENTIFIER, CANNM_E_PARAM_POINTER);
+        return E_NOT_OK;
+    }
+
+    *nmNodeIdPtr = CanNm_LastRxNodeId;
+    return E_OK;
+}
+
+/* ----------------------------------------------------------------------
+ * CanNm_GetLocalNodeIdentifier
+ * ---------------------------------------------------------------------- */
+
+/**
+ * \brief   自ノードに設定されたノード識別子を取得する（[SWS_CanNm_00220]）。
+ *
+ * \details 送信する NM フレームに乗せる自ノードの ID（`CANNM_SOURCE_NODE_ID`）を
+ *          そのまま返す。受信した NM フレームの送信元 ID を返す
+ *          `CanNm_GetNodeIdentifier()` とは区別されるので注意。
+ *
+ * \param[in]   Channel      NM チャネルハンドル（CANNM_MAIN_NETWORK_HANDLE 以外は拒否）。
+ * \param[out]  nmNodeIdPtr  自ノードの ID の格納先。NULL 禁止。
+ *
+ * \retval  E_OK      正常に取得した。
+ * \retval  E_NOT_OK  未初期化、Channel が不正、または nmNodeIdPtr が NULL。
+ *
+ * \AUTOSARReq     {SWS_CanNm_00220, SWS_CanNm_00192}
+ * \ServiceID      {0x07}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType CanNm_GetLocalNodeIdentifier(NetworkHandleType Channel, uint8* nmNodeIdPtr)
+{
+    if (!CanNm_Initialized)
+    {
+        Det_ReportError(CANNM_MODULE_ID, 0U, CANNM_API_ID_GET_LOCAL_NODE_IDENTIFIER, CANNM_E_UNINIT);
+        return E_NOT_OK;
+    }
+
+    if (Channel != CANNM_MAIN_NETWORK_HANDLE)
+    {
+        Det_ReportError(CANNM_MODULE_ID, 0U, CANNM_API_ID_GET_LOCAL_NODE_IDENTIFIER, CANNM_E_INVALID_CHANNEL);
+        return E_NOT_OK;
+    }
+
+    if (nmNodeIdPtr == NULL)
+    {
+        Det_ReportError(CANNM_MODULE_ID, 0U, CANNM_API_ID_GET_LOCAL_NODE_IDENTIFIER, CANNM_E_PARAM_POINTER);
+        return E_NOT_OK;
+    }
+
+    *nmNodeIdPtr = CANNM_SOURCE_NODE_ID;
     return E_OK;
 }
 
@@ -438,7 +506,6 @@ Std_ReturnType CanNm_NetworkRelease(NetworkHandleType Channel)
  */
 Std_ReturnType CanNm_RepeatMessageRequest(NetworkHandleType Channel)
 {
-    DET_LOGT(TAG, "called");
     if (!CanNm_Initialized)
     {
         Det_ReportError(CANNM_MODULE_ID, 0U, CANNM_API_ID_REPEAT_MESSAGE_REQUEST, CANNM_E_UNINIT);
@@ -467,6 +534,147 @@ Std_ReturnType CanNm_RepeatMessageRequest(NetworkHandleType Channel)
 }
 
 /* ----------------------------------------------------------------------
+ * CanNm_GetPduData
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ----------------------------------------------------------------------
+ * CanNm_GetState
+ * ---------------------------------------------------------------------- */
+
+/**
+ * \brief   現在の CanNm 状態とモードを取得する（[SWS_CanNm_00091] 相当）。
+ *
+ * \param[in]   Channel   NM チャネルハンドル（CANNM_MAIN_NETWORK_HANDLE 以外は拒否）。
+ * \param[out]  StatePtr  現在の内部状態の格納先。NULL 可（不要なら渡さなくてよい）。
+ * \param[out]  ModePtr   現在の操作モードの格納先。NULL 可。
+ *
+ * \retval  E_OK      取得した。
+ * \retval  E_NOT_OK  未初期化、または Channel が不正。
+ *
+ * \AUTOSARReq     {SWS_CanNm_00223, SWS_CanNm_00192}
+ * \ServiceID      {0x0B}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType CanNm_GetState(NetworkHandleType Channel, CanNm_StateType* StatePtr, CanNm_ModeType* ModePtr)
+{
+    if (!CanNm_Initialized)
+    {
+        Det_ReportError(CANNM_MODULE_ID, 0U, CANNM_API_ID_GET_STATE, CANNM_E_UNINIT);
+        return E_NOT_OK;
+    }
+
+    if (Channel != CANNM_MAIN_NETWORK_HANDLE)
+    {
+        Det_ReportError(CANNM_MODULE_ID, 0U, CANNM_API_ID_GET_STATE, CANNM_E_INVALID_CHANNEL);
+        return E_NOT_OK;
+    }
+
+    if (StatePtr != NULL)
+        *StatePtr = CanNm_State;
+
+    if (ModePtr != NULL)
+    {
+        if (CanNm_State == CANNM_STATE_BUS_SLEEP)
+            *ModePtr = CANNM_MODE_BUS_SLEEP;
+        else if (CanNm_State == CANNM_STATE_PREPARE_BUS_SLEEP)
+            *ModePtr = CANNM_MODE_PREPARE_BUS_SLEEP;
+        else
+            *ModePtr = CANNM_MODE_NETWORK;
+    }
+
+    return E_OK;
+}
+
+/* ----------------------------------------------------------------------
+ * CanNm_GetVersionInfo
+ * ---------------------------------------------------------------------- */
+
+/**
+ * \brief   CanNm モジュールのバージョン情報を取得する。
+ *
+ * \details CanNm_Init と並び、未初期化時でも CANNM_E_UNINIT を報告しない例外 API
+ *          （他 BSW モジュールと共通の慣例）のため、初期化状態は確認せず
+ *          NULL ポインタチェックのみ行う。
+ *
+ * \param[out]  versioninfo  バージョン情報の格納先。NULL 禁止。
+ *
+ * \ServiceID      {0xF1}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void CanNm_GetVersionInfo(Std_VersionInfoType* versioninfo)
+{
+    if (versioninfo == NULL)
+    {
+        Det_ReportError(CANNM_MODULE_ID, 0U, CANNM_API_ID_GET_VERSION_INFO, CANNM_E_PARAM_POINTER);
+        return;
+    }
+
+    versioninfo->vendorID         = CANNM_VENDOR_ID;
+    versioninfo->moduleID         = CANNM_MODULE_ID;
+    versioninfo->sw_major_version = CANNM_SW_MAJOR_VERSION;
+    versioninfo->sw_minor_version = CANNM_SW_MINOR_VERSION;
+    versioninfo->sw_patch_version = CANNM_SW_PATCH_VERSION;
+}
+
+/* ----------------------------------------------------------------------
+ * CanNm_RequestBusSynchronization
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ----------------------------------------------------------------------
+ * CanNm_CheckRemoteSleepIndication
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ----------------------------------------------------------------------
+ * CanNm_SetSleepReadyBit
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ======================================================================
+ * Call-back Notifications
+ * ====================================================================== */
+
+/* ----------------------------------------------------------------------
+ * CanNm_TxConfirmation
+ * ---------------------------------------------------------------------- */
+
+/**
+ * \brief   NM フレームの送信完了を通知する（CanIf から呼ばれる）。
+ *
+ * \details 送信成功時、Network Mode 中は NM-Timeout Timer を再起動する
+ *          （[SWS_CanNm_00099]）。
+ *
+ * \param[in]  TxPduId  送信完了した PDU ID（本プロジェクトでは単一チャネルのため未使用）。
+ * \param[in]  result   E_OK=送信成功。
+ *
+ * \ServiceID      {0x40}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void CanNm_TxConfirmation(PduIdType TxPduId, Std_ReturnType result)
+{
+    (void)TxPduId;
+
+    if (!CanNm_Initialized || result != E_OK)
+        return;
+
+    /* [SWS_CanNm_00099]: Network Mode（Repeat Message/Normal Operation State）
+     * での送信成功時に NM-Timeout Timer を再起動する。Ready Sleep State は
+     * 送信自体を行わないため対象外。 */
+    if (CanNm_State == CANNM_STATE_REPEAT_MESSAGE || CanNm_State == CANNM_STATE_NORMAL_OPERATION)
+        CanNm_TimeoutTimerMs = millis();
+}
+
+
+/* ----------------------------------------------------------------------
  * CanNm_RxIndication
  * ---------------------------------------------------------------------- */
 
@@ -478,10 +686,12 @@ Std_ReturnType CanNm_RepeatMessageRequest(NetworkHandleType Channel)
  *          transmission ability is enabled" を反映）。Prepare Bus-Sleep Mode 中は Network Mode
  *          （Repeat Message State）へ自動遷移する（[SWS_CanNm_00124]）。
  *          Bus-Sleep Mode 中は CanNm 自身は状態遷移せず、CANNM_E_NET_START_IND
- *          の DET 報告に加え ComM_Nm_NetworkStartIndication() で上位層
- *          （ComM）へ通知する（[SWS_CanNm_00127]/[SWS_CanNm_00336]。実際に
- *          ネットワークへ復帰させ CanNm 自身を起こす処理は
- *          ComM_Nm_NetworkStartIndication() 側が行う、同関数の Doxygen 参照）。
+ *          の DET 報告に加え `Nm_NetworkStartIndication()`（[SWS_Nm_00154]、
+ *          汎用 Nm 層経由で最終的に ComM_Nm_NetworkStartIndication() へ転送
+ *          される）で上位層へ通知する（[SWS_CanNm_00127]/[SWS_CanNm_00336]。
+ *          実際にネットワークへ復帰させ CanNm 自身を起こす処理は ComM 側が
+ *          行う、Nm_NetworkStartIndication()/ComM_Nm_NetworkStartIndication()
+ *          の Doxygen 参照）。
  *
  * \param[in]  RxPduId     受信 PDU ID（本プロジェクトでは単一チャネルのため未使用）。
  * \param[in]  PduInfoPtr  受信データ。NULL 禁止。
@@ -492,7 +702,6 @@ Std_ReturnType CanNm_RepeatMessageRequest(NetworkHandleType Channel)
  */
 void CanNm_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
 {
-    DET_LOGT(TAG, "called");
     (void)RxPduId;
 
     if (!CanNm_Initialized)
@@ -518,15 +727,15 @@ void CanNm_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
     {
         case CANNM_STATE_BUS_SLEEP:
             /* [SWS_CanNm_00127]/[SWS_CanNm_00336]: CanNm 自身はここで状態遷移
-             * せず、DET 通知と共に上位層（ComM）へ ComM_Nm_NetworkStartIndication()
-             * で通知する（[SWS_CanNm_00127] が要求する呼び出しそのもの）。
+             * せず、DET 通知と共に `Nm_NetworkStartIndication()` で上位層へ
+             * 通知する（[SWS_CanNm_00127] が要求する呼び出しそのもの）。
              * 実際にネットワークへ復帰するかどうかの判断・CanNm 自身を起こす
-             * 処理は ComM_Nm_NetworkStartIndication() 側が行う（同関数の
-             * Doxygen 参照）。 */
+             * 処理は ComM 側が行う（Nm_NetworkStartIndication()/
+             * ComM_Nm_NetworkStartIndication() の Doxygen 参照）。 */
             DET_LOGW(TAG, "RxIndication W: NM PDU received in Bus-Sleep Mode (node=0x%02X)",
                      (unsigned)sourceNodeId);
             Det_ReportError(CANNM_MODULE_ID, 0U, CANNM_API_ID_RX_INDICATION, CANNM_E_NET_START_IND);
-            ComM_Nm_NetworkStartIndication(CANNM_MAIN_NETWORK_HANDLE);
+            Nm_NetworkStartIndication(CANNM_MAIN_NETWORK_HANDLE);
             break;
 
         case CANNM_STATE_PREPARE_BUS_SLEEP:
@@ -563,36 +772,20 @@ void CanNm_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
 }
 
 /* ----------------------------------------------------------------------
- * CanNm_TxConfirmation
+ * CanNm_ConfirmPnAvailability
  * ---------------------------------------------------------------------- */
 
-/**
- * \brief   NM フレームの送信完了を通知する（CanIf から呼ばれる）。
- *
- * \details 送信成功時、Network Mode 中は NM-Timeout Timer を再起動する
- *          （[SWS_CanNm_00099]）。
- *
- * \param[in]  TxPduId  送信完了した PDU ID（本プロジェクトでは単一チャネルのため未使用）。
- * \param[in]  result   E_OK=送信成功。
- *
- * \ServiceID      {0x40}
- * \Reentrancy     {Reentrant}
- * \Synchronicity  {Synchronous}
- */
-void CanNm_TxConfirmation(PduIdType TxPduId, Std_ReturnType result)
-{
-    DET_LOGT(TAG, "called");
-    (void)TxPduId;
+/* 未実装 */
 
-    if (!CanNm_Initialized || result != E_OK)
-        return;
+/* ----------------------------------------------------------------------
+ * CanNm_TriggerTransmit
+ * ---------------------------------------------------------------------- */
 
-    /* [SWS_CanNm_00099]: Network Mode（Repeat Message/Normal Operation State）
-     * での送信成功時に NM-Timeout Timer を再起動する。Ready Sleep State は
-     * 送信自体を行わないため対象外。 */
-    if (CanNm_State == CANNM_STATE_REPEAT_MESSAGE || CanNm_State == CANNM_STATE_NORMAL_OPERATION)
-        CanNm_TimeoutTimerMs = millis();
-}
+/* 未実装 */
+
+/* ======================================================================
+ * Scheduled Functions
+ * ====================================================================== */
 
 /* ----------------------------------------------------------------------
  * CanNm_MainFunction
@@ -607,7 +800,6 @@ void CanNm_TxConfirmation(PduIdType TxPduId, Std_ReturnType result)
  */
 void CanNm_MainFunction(void)
 {
-    DET_LOGT(TAG, "called");
     if (!CanNm_Initialized)
     {
         Det_ReportError(CANNM_MODULE_ID, 0U, CANNM_API_ID_MAIN_FUNCTION, CANNM_E_UNINIT);
@@ -694,293 +886,160 @@ void CanNm_MainFunction(void)
     }
 }
 
+/* ======================================================================
+ * Internal Functions
+ * ====================================================================== */
+
 /* ----------------------------------------------------------------------
- * CanNm_DisableCommunication
+ * CanNm_TransmitPdu
  * ---------------------------------------------------------------------- */
 
 /**
- * \brief   診断 CommunicationControl (UDS SID 0x28) からの NM PDU 送信無効化要求を反映する
- *          （[SWS_CanNm_00215] 相当）。
+ * \brief   NM フレーム（CBV + Source Node ID）を組み立てて CanIf_Transmit() へ渡す。
  *
- * \details 無効化中は Repeat Message/Normal Operation State でも NM フレームを
- *          送信しない（[SWS_CanNm_00100] の passive mode 相当の抑制。状態機械
- *          自体は通常どおり遷移する）。実仕様（[SWS_CanNm_00172]）は現在
- *          Network Mode でない場合に E_NOT_OK を要求するが、本プロジェクトは
- *          そのゲートを実装しない（Bus-Sleep 中に呼ばれても抑制フラグ自体は
- *          そのまま更新して良く、次回 Network Mode 復帰時に正しく反映される
- *          ため。CanNm_NetworkRequest/Release と同じ「現在の状態に関わらず常に
- *          受理する」簡略方針）。
- *
- *          2026-09 追加: [SWS_CanNm_00174] により、送信無効化中は NM-Timeout
- *          Timer も停止しなければならない。本関数自体はフラグ(`CanNm_TxEnabled`)
- *          を落とすだけで、実際の停止（満了判定のスキップ）は
- *          `CanNm_MainFunction()` 側の各 State で `CanNm_TxEnabled` を条件に加える
- *          形で行う（以前はこのタイマーが無効化中も動き続け、他ノードが
- *          存在しない/自ノードの送信も止まっている状況で
- *          `CANNM_E_NETWORK_TIMEOUT` の DET 報告が周期的に空しく繰り返されて
- *          いた不具合の是正）。再有効化時の再起動（[SWS_CanNm_00179]）は
- *          `CanNm_EnableCommunication()` 側で行う。
- *
- * \param[in]  Channel  NM チャネルハンドル（CANNM_MAIN_NETWORK_HANDLE 以外は拒否）。
- *
- * \retval  E_OK      要求を受理した。
- * \retval  E_NOT_OK  未初期化、または Channel が不正。
- *
- * \AUTOSARReq     {SWS_CanNm_00215, SWS_CanNm_00192, SWS_CanNm_00174}
- * \ServiceID      {0x0C}
- * \Reentrancy     {Reentrant (but not for the same NM-channel)}
- * \Synchronicity  {Synchronous}
+ * \details PduR/Com を経由せず CanIf_Transmit() を直接呼び出す（実車の CanNm
+ *          と同じ構造）。送信成功時の NM-Timeout Timer 再起動は
+ *          CanNm_TxConfirmation() 側で行うが、`Can.c` の TX 確認は Can_Write() と
+ *          同一スタックフレームでは完了しない非同期設計（TX 確認保留キュー
+ *          → 別タスク Can_MainFunction_Write() まで遅延。送信失敗時やキュー
+ *          満杯時は確認自体が来ないこともある）。そのため呼び出し元
+ *          （CanNm_EnterRepeatMessage() 等）は、この呼び出しの完了だけを頼りに
+ *          NM-Timeout Timer が再起動された前提を置いてはならない。呼び出し元
+ *          自身が状態進入時点で明示的にタイマを起動/再起動すること。
  */
-Std_ReturnType CanNm_DisableCommunication(NetworkHandleType Channel)
+static void CanNm_TransmitPdu(void)
 {
-    DET_LOGT(TAG, "called");
-    if (!CanNm_Initialized)
-    {
-        Det_ReportError(CANNM_MODULE_ID, 0U, CANNM_API_ID_DISABLE_COMMUNICATION, CANNM_E_UNINIT);
-        return E_NOT_OK;
-    }
+    uint8 pdu[CANNM_DLC];
+    pdu[0] = CanNm_RepeatMessageBitSet ? CANNM_CBV_BIT_REPEAT_MESSAGE_REQUEST : 0x00U;
+    pdu[1] = CANNM_SOURCE_NODE_ID;
 
-    if (Channel != CANNM_MAIN_NETWORK_HANDLE)
-    {
-        Det_ReportError(CANNM_MODULE_ID, 0U, CANNM_API_ID_DISABLE_COMMUNICATION, CANNM_E_INVALID_CHANNEL);
-        return E_NOT_OK;
-    }
+    PduInfoType pduInfo = {
+        .SduDataPtr = pdu,
+        .SduLength  = CANNM_DLC
+    };
 
-    if (CanNm_TxEnabled != 0U)
-        DET_LOGI(TAG, "CommunicationControl tx=%u->0", (unsigned)CanNm_TxEnabled);
-    CanNm_TxEnabled = 0U;
-    return E_OK;
+    (void)CanIf_Transmit(CANNM_CANIF_TX_PDU_ID, &pduInfo);
 }
 
 /* ----------------------------------------------------------------------
- * CanNm_EnableCommunication
+ * CanNm_EnterRepeatMessage
  * ---------------------------------------------------------------------- */
 
 /**
- * \brief   診断 CommunicationControl (UDS SID 0x28) からの NM PDU 送信再有効化要求を反映する
- *          （[SWS_CanNm_00216] 相当）。
+ * \brief   Bus-Sleep/Prepare Bus-Sleep Mode から Network Mode (Repeat Message
+ *          State) へ入る（[SWS_CanNm_00314]/[SWS_CanNm_00315]）。
  *
- * \details `CanNm_DisableCommunication()` で立てた抑制を解除する。ゲート省略の
- *          方針は同関数のコメントを参照。
+ * \details [SWS_CanNm_00096]: Network Mode 進入時に NM-Timeout Timer を起動。
+ *          [SWS_CanNm_00100]: 送信有効なら NM フレームの (再)送信を開始する。
  *
- *          2026-09 追加: [SWS_CanNm_00179] により、再有効化時に NM-Timeout
- *          Timer を再起動する（`CanNm_DisableCommunication()` の同名コメント
- *          参照）。
- *
- * \param[in]  Channel  NM チャネルハンドル（CANNM_MAIN_NETWORK_HANDLE 以外は拒否）。
- *
- * \retval  E_OK      要求を受理した。
- * \retval  E_NOT_OK  未初期化、または Channel が不正。
- *
- * \AUTOSARReq     {SWS_CanNm_00216, SWS_CanNm_00192, SWS_CanNm_00179}
- * \ServiceID      {0x0D}
- * \Reentrancy     {Reentrant (but not for the same NM-channel)}
- * \Synchronicity  {Synchronous}
+ *          上位層への通知として `Nm_NetworkMode()`（[SWS_Nm_00156]、汎用
+ *          Nm 層経由で最終的に ComM_Nm_NetworkMode()（[SWS_ComM_00296]）へ
+ *          転送される）を呼ぶ。呼び出す順序が2つの理由で重要（変更する場合は
+ *          両方を再検証すること）:
+ *            1. 送信の正しさ: `Nm_NetworkMode()` は CanSM_RequestComMode()
+ *               経由で同期的に物理コントローラを再起動しうる（Prepare
+ *               Bus-Sleep Mode 中で SILENT_COM だった場合）。下の
+ *               CanNm_TransmitPdu() より後に置くと、この直後の
+ *               (再)アナウンスフレームの送信が（コントローラがまだ
+ *               Listen-Only のため）静かに失敗する。
+ *            2. 再入安全性: `Nm_NetworkMode()` → ComM_Nm_NetworkMode() →
+ *               CanSM_RequestComMode() → ComM_BusSM_ModeIndication() →
+ *               CanNm_NetworkRequest() という経路で本ファイルへ同期的に
+ *               再入しうる。CanNm_State を先に CANNM_STATE_REPEAT_MESSAGE
+ *               へ更新済みだからこそ、再入した CanNm_NetworkRequest() は
+ *               「既に要求済み」の default 分岐に落ちて
+ *               CanNm_EnterRepeatMessage() への再帰を起こさない。
  */
-Std_ReturnType CanNm_EnableCommunication(NetworkHandleType Channel)
+static void CanNm_EnterRepeatMessage(void)
 {
-    DET_LOGT(TAG, "called");
-    if (!CanNm_Initialized)
-    {
-        Det_ReportError(CANNM_MODULE_ID, 0U, CANNM_API_ID_ENABLE_COMMUNICATION, CANNM_E_UNINIT);
-        return E_NOT_OK;
-    }
+    CanNm_State          = CANNM_STATE_REPEAT_MESSAGE;
+    CanNm_StateTimerMs    = millis();
+    CanNm_TimeoutTimerMs  = millis();
+    DET_LOGI(TAG, "-> Network Mode: Repeat Message State");
 
-    if (Channel != CANNM_MAIN_NETWORK_HANDLE)
-    {
-        Det_ReportError(CANNM_MODULE_ID, 0U, CANNM_API_ID_ENABLE_COMMUNICATION, CANNM_E_INVALID_CHANNEL);
-        return E_NOT_OK;
-    }
+    Nm_NetworkMode(0U);
 
-    if (CanNm_TxEnabled != 1U)
-    {
-        DET_LOGI(TAG, "CommunicationControl tx=%u->1", (unsigned)CanNm_TxEnabled);
-        /* [SWS_CanNm_00179]: 再有効化時に NM-Timeout Timer を再起動する。
-         * 無効化中は CanNm_MainFunction() 側で満了判定自体を止めている
-         * （CanNm_DisableCommunication() の Doxygen 参照）ため、ここで
-         * millis() を取り直さないと、無効化されていた間の経過時間が
-         * そのまま残り再有効化直後に見かけ上の満了が起きてしまう。 */
-        CanNm_TimeoutTimerMs = millis();
-    }
-    CanNm_TxEnabled = 1U;
-    return E_OK;
+    if (CanNm_TxEnabled)
+        CanNm_TransmitPdu();
 }
 
 /* ----------------------------------------------------------------------
- * CanNm_GetLocalNodeIdentifier
+ * CanNm_EnterNormalOperation
  * ---------------------------------------------------------------------- */
 
 /**
- * \brief   自ノードに設定されたノード識別子を取得する（[SWS_CanNm_00220]）。
+ * \brief   Ready Sleep State から Normal Operation State へ入る（[SWS_CanNm_00116]）。
  *
- * \details 送信する NM フレームに乗せる自ノードの ID（`CANNM_SOURCE_NODE_ID`）を
- *          そのまま返す。受信した NM フレームの送信元 ID を返す
- *          `CanNm_GetNodeIdentifier()` とは区別されるので注意。
- *
- * \param[in]   Channel      NM チャネルハンドル（CANNM_MAIN_NETWORK_HANDLE 以外は拒否）。
- * \param[out]  nmNodeIdPtr  自ノードの ID の格納先。NULL 禁止。
- *
- * \retval  E_OK      正常に取得した。
- * \retval  E_NOT_OK  未初期化、Channel が不正、または nmNodeIdPtr が NULL。
- *
- * \AUTOSARReq     {SWS_CanNm_00220, SWS_CanNm_00192}
- * \ServiceID      {0x07}
- * \Reentrancy     {Reentrant}
- * \Synchronicity  {Synchronous}
+ * \details CanNm_EnterRepeatMessage() と同様、状態進入時点で NM-Timeout Timer を
+ *          明示的に再武装する。TX 確認（CanNm_TxConfirmation() 経由）に頼ると、
+ *          `Can.c` の TX 確認が非同期（別タスクへ遅延、失敗時やキュー満杯時は
+ *          確認自体が来ない）であるため、進入直後に送信した PDU の確認が
+ *          届かない間タイマが古いまま残り、本来より早く NM-Timeout Timer が
+ *          満了したと誤判定してしまう（CanNm_TransmitPdu() のコメント参照）。
  */
-Std_ReturnType CanNm_GetLocalNodeIdentifier(NetworkHandleType Channel, uint8* nmNodeIdPtr)
+static void CanNm_EnterNormalOperation(void)
 {
-    DET_LOGT(TAG, "called");
-    if (!CanNm_Initialized)
-    {
-        Det_ReportError(CANNM_MODULE_ID, 0U, CANNM_API_ID_GET_LOCAL_NODE_IDENTIFIER, CANNM_E_UNINIT);
-        return E_NOT_OK;
-    }
+    CanNm_State          = CANNM_STATE_NORMAL_OPERATION;
+    CanNm_TimeoutTimerMs  = millis();
+    DET_LOGI(TAG, "-> Network Mode: Normal Operation State");
 
-    if (Channel != CANNM_MAIN_NETWORK_HANDLE)
-    {
-        Det_ReportError(CANNM_MODULE_ID, 0U, CANNM_API_ID_GET_LOCAL_NODE_IDENTIFIER, CANNM_E_INVALID_CHANNEL);
-        return E_NOT_OK;
-    }
-
-    if (nmNodeIdPtr == NULL)
-    {
-        Det_ReportError(CANNM_MODULE_ID, 0U, CANNM_API_ID_GET_LOCAL_NODE_IDENTIFIER, CANNM_E_PARAM_POINTER);
-        return E_NOT_OK;
-    }
-
-    *nmNodeIdPtr = CANNM_SOURCE_NODE_ID;
-    return E_OK;
+    if (CanNm_TxEnabled)
+        CanNm_TransmitPdu();
 }
 
 /* ----------------------------------------------------------------------
- * CanNm_GetNodeIdentifier
+ * CanNm_EnterReadySleep
  * ---------------------------------------------------------------------- */
 
-/**
- * \brief   直近に受信した NM フレームの送信元ノード識別子を取得する（[SWS_CanNm_00219]）。
- *
- * \details `CanNm_RxIndication()` が受信の都度更新するキャッシュ値をそのまま
- *          返す。一度も NM フレームを受信していない場合は 0 を返す
- *          （実仕様は「未設定/取得失敗時は E_NOT_OK」も許容するが、本
- *          プロジェクトは他の getter 系 API と同じく既定値を返すだけの
- *          簡略実装とする）。
- *
- * \param[in]   Channel      NM チャネルハンドル（CANNM_MAIN_NETWORK_HANDLE 以外は拒否）。
- * \param[out]  nmNodeIdPtr  直近受信 NM フレームの送信元 ID の格納先。NULL 禁止。
- *
- * \retval  E_OK      正常に取得した。
- * \retval  E_NOT_OK  未初期化、Channel が不正、または nmNodeIdPtr が NULL。
- *
- * \AUTOSARReq     {SWS_CanNm_00219, SWS_CanNm_00192}
- * \ServiceID      {0x06}
- * \Reentrancy     {Reentrant}
- * \Synchronicity  {Synchronous}
- */
-Std_ReturnType CanNm_GetNodeIdentifier(NetworkHandleType Channel, uint8* nmNodeIdPtr)
+/** Repeat Message/Normal Operation State から Ready Sleep State へ入る
+ *  （[SWS_CanNm_00106]/[SWS_CanNm_00118]）。[SWS_CanNm_00108]: 送信を停止する
+ *  （以降 CanNm_TransmitPdu() を呼ばないだけで実現する）。 */
+static void CanNm_EnterReadySleep(void)
 {
-    DET_LOGT(TAG, "called");
-    if (!CanNm_Initialized)
-    {
-        Det_ReportError(CANNM_MODULE_ID, 0U, CANNM_API_ID_GET_NODE_IDENTIFIER, CANNM_E_UNINIT);
-        return E_NOT_OK;
-    }
-
-    if (Channel != CANNM_MAIN_NETWORK_HANDLE)
-    {
-        Det_ReportError(CANNM_MODULE_ID, 0U, CANNM_API_ID_GET_NODE_IDENTIFIER, CANNM_E_INVALID_CHANNEL);
-        return E_NOT_OK;
-    }
-
-    if (nmNodeIdPtr == NULL)
-    {
-        Det_ReportError(CANNM_MODULE_ID, 0U, CANNM_API_ID_GET_NODE_IDENTIFIER, CANNM_E_PARAM_POINTER);
-        return E_NOT_OK;
-    }
-
-    *nmNodeIdPtr = CanNm_LastRxNodeId;
-    return E_OK;
+    CanNm_State = CANNM_STATE_READY_SLEEP;
+    DET_LOGI(TAG, "-> Network Mode: Ready Sleep State (tx stopped)");
 }
 
 /* ----------------------------------------------------------------------
- * CanNm_GetState
+ * CanNm_EnterPrepareBusSleep
  * ---------------------------------------------------------------------- */
 
 /**
- * \brief   現在の CanNm 状態とモードを取得する（[SWS_CanNm_00091] 相当）。
+ * \brief   Ready Sleep State から Prepare Bus-Sleep Mode へ入る（[SWS_CanNm_00109]）。
  *
- * \param[in]   Channel   NM チャネルハンドル（CANNM_MAIN_NETWORK_HANDLE 以外は拒否）。
- * \param[out]  StatePtr  現在の内部状態の格納先。NULL 可（不要なら渡さなくてよい）。
- * \param[out]  ModePtr   現在の操作モードの格納先。NULL 可。
- *
- * \retval  E_OK      取得した。
- * \retval  E_NOT_OK  未初期化、または Channel が不正。
- *
- * \AUTOSARReq     {SWS_CanNm_00223, SWS_CanNm_00192}
- * \ServiceID      {0x0B}
- * \Reentrancy     {Reentrant}
- * \Synchronicity  {Synchronous}
+ * \details 上位層への通知として `Nm_PrepareBusSleepMode()`（[SWS_Nm_00159]、
+ *          汎用 Nm 層経由で最終的に ComM_Nm_PrepareBusSleepMode()
+ *          （[SWS_ComM_00826]）へ転送される）を呼ぶ。ComM は
+ *          これを受けて CanSM_RequestComMode(SILENT_COM) を呼び、CAN
+ *          コントローラを受信専用（Listen-Only）へ切り替える（ComM.c ファイル
+ *          冒頭コメント参照）。
  */
-Std_ReturnType CanNm_GetState(NetworkHandleType Channel, CanNm_StateType* StatePtr, CanNm_ModeType* ModePtr)
+static void CanNm_EnterPrepareBusSleep(void)
 {
-    DET_LOGT(TAG, "called");
-    if (!CanNm_Initialized)
-    {
-        Det_ReportError(CANNM_MODULE_ID, 0U, CANNM_API_ID_GET_STATE, CANNM_E_UNINIT);
-        return E_NOT_OK;
-    }
-
-    if (Channel != CANNM_MAIN_NETWORK_HANDLE)
-    {
-        Det_ReportError(CANNM_MODULE_ID, 0U, CANNM_API_ID_GET_STATE, CANNM_E_INVALID_CHANNEL);
-        return E_NOT_OK;
-    }
-
-    if (StatePtr != NULL)
-        *StatePtr = CanNm_State;
-
-    if (ModePtr != NULL)
-    {
-        if (CanNm_State == CANNM_STATE_BUS_SLEEP)
-            *ModePtr = CANNM_MODE_BUS_SLEEP;
-        else if (CanNm_State == CANNM_STATE_PREPARE_BUS_SLEEP)
-            *ModePtr = CANNM_MODE_PREPARE_BUS_SLEEP;
-        else
-            *ModePtr = CANNM_MODE_NETWORK;
-    }
-
-    return E_OK;
+    CanNm_State       = CANNM_STATE_PREPARE_BUS_SLEEP;
+    CanNm_StateTimerMs = millis();
+    DET_LOGI(TAG, "-> Prepare Bus-Sleep Mode");
+    Nm_PrepareBusSleepMode(0U);
 }
 
 /* ----------------------------------------------------------------------
- * CanNm_GetVersionInfo
+ * CanNm_EnterBusSleep
  * ---------------------------------------------------------------------- */
 
 /**
- * \brief   CanNm モジュールのバージョン情報を取得する。
+ * \brief   Prepare Bus-Sleep Mode から Bus-Sleep Mode へ入る（[SWS_CanNm_00115]）。
  *
- * \details CanNm_Init と並び、未初期化時でも CANNM_E_UNINIT を報告しない例外 API
- *          （他 BSW モジュールと共通の慣例）のため、初期化状態は確認せず
- *          NULL ポインタチェックのみ行う。
- *
- * \param[out]  versioninfo  バージョン情報の格納先。NULL 禁止。
- *
- * \ServiceID      {0xF1}
- * \Reentrancy     {Reentrant}
- * \Synchronicity  {Synchronous}
+ * \details [SWS_CanNm_00126]: 上位層への通知として `Nm_BusSleepMode()`
+ *          （[SWS_Nm_00162]、汎用 Nm 層経由で最終的に ComM_Nm_BusSleepMode()
+ *          （[SWS_ComM_00392]）へ転送される）を呼ぶ。ComM は
+ *          ComM_RequestComMode(FULL_COM->NO_COM) の時点では CanNm_NetworkRelease()
+ *          を送るのみでチャネルを FULL_COM のまま据え置いており（協調スリープの
+ *          起点、ComM.c ファイル冒頭コメント参照）、この通知を受けて初めて
+ *          CanSM へ NO_COM を伝え、CAN コントローラを実際にスリープさせる。
  */
-void CanNm_GetVersionInfo(Std_VersionInfoType* versioninfo)
+static void CanNm_EnterBusSleep(void)
 {
-    DET_LOGT(TAG, "called");
-    if (versioninfo == NULL)
-    {
-        Det_ReportError(CANNM_MODULE_ID, 0U, CANNM_API_ID_GET_VERSION_INFO, CANNM_E_PARAM_POINTER);
-        return;
-    }
-
-    versioninfo->vendorID         = CANNM_VENDOR_ID;
-    versioninfo->moduleID         = CANNM_MODULE_ID;
-    versioninfo->sw_major_version = CANNM_SW_MAJOR_VERSION;
-    versioninfo->sw_minor_version = CANNM_SW_MINOR_VERSION;
-    versioninfo->sw_patch_version = CANNM_SW_PATCH_VERSION;
+    CanNm_State = CANNM_STATE_BUS_SLEEP;
+    DET_LOGI(TAG, "-> Bus-Sleep Mode");
+    Nm_BusSleepMode(0U);
 }
