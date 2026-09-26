@@ -402,6 +402,26 @@ void WdgM_DeInit(void)
 }
 
 /* ----------------------------------------------------------------------
+ * WdgM_GetVersionInfo
+ * ---------------------------------------------------------------------- */
+
+void WdgM_GetVersionInfo(Std_VersionInfoType* VersionInfo)
+{
+    DET_LOGT(TAG, "called");
+    if (VersionInfo == NULL)
+    {
+        Det_ReportError(WDGM_MODULE_ID, 0U, WDGM_API_ID_GET_VERSION_INFO, WDGM_E_INV_POINTER);
+        return;
+    }
+
+    VersionInfo->vendorID         = WDGM_VENDOR_ID;
+    VersionInfo->moduleID         = WDGM_MODULE_ID;
+    VersionInfo->sw_major_version = WDGM_SW_MAJOR_VERSION;
+    VersionInfo->sw_minor_version = WDGM_SW_MINOR_VERSION;
+    VersionInfo->sw_patch_version = WDGM_SW_PATCH_VERSION;
+}
+
+/* ----------------------------------------------------------------------
  * WdgM_SetMode
  * ---------------------------------------------------------------------- */
 
@@ -1330,23 +1350,3 @@ void WdgM_Test_SetFirstExpiredSEIDRaw(WdgM_SupervisedEntityIdType value, WdgM_Su
     WdgM_FirstExpiredSEIDInv = inv;
 }
 #endif
-
-/* ----------------------------------------------------------------------
- * WdgM_GetVersionInfo
- * ---------------------------------------------------------------------- */
-
-void WdgM_GetVersionInfo(Std_VersionInfoType* VersionInfo)
-{
-    DET_LOGT(TAG, "called");
-    if (VersionInfo == NULL)
-    {
-        Det_ReportError(WDGM_MODULE_ID, 0U, WDGM_API_ID_GET_VERSION_INFO, WDGM_E_INV_POINTER);
-        return;
-    }
-
-    VersionInfo->vendorID         = WDGM_VENDOR_ID;
-    VersionInfo->moduleID         = WDGM_MODULE_ID;
-    VersionInfo->sw_major_version = WDGM_SW_MAJOR_VERSION;
-    VersionInfo->sw_minor_version = WDGM_SW_MINOR_VERSION;
-    VersionInfo->sw_patch_version = WDGM_SW_PATCH_VERSION;
-}

@@ -98,6 +98,23 @@ void Port_Init(const Port_ConfigType* ConfigPtr)
 }
 
 /* ----------------------------------------------------------------------
+ * Port_SetPinDirection
+ * ---------------------------------------------------------------------- */
+
+/**
+ * \brief   指定ピンの方向を動的に変更する。
+ *
+ * \ServiceID      {0x01}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void Port_SetPinDirection(Port_PinType Pin, Port_PinDirectionType Direction)
+{
+    DET_LOGT(TAG, "called");
+    Port_Hw_SetPinDirection(Pin, Direction);
+}
+
+/* ----------------------------------------------------------------------
  * Port_RefreshPortDirection
  * ---------------------------------------------------------------------- */
 
@@ -113,23 +130,6 @@ void Port_RefreshPortDirection(void)
     DET_LOGT(TAG, "called");
     Port_ApplyConfiguredDirections();
     DET_LOGI(TAG, "RefreshPortDirection pins=%u", (unsigned)PORT_PIN_COUNT);
-}
-
-/* ----------------------------------------------------------------------
- * Port_SetPinDirection
- * ---------------------------------------------------------------------- */
-
-/**
- * \brief   指定ピンの方向を動的に変更する。
- *
- * \ServiceID      {0x01}
- * \Reentrancy     {Non Reentrant}
- * \Synchronicity  {Synchronous}
- */
-void Port_SetPinDirection(Port_PinType Pin, Port_PinDirectionType Direction)
-{
-    DET_LOGT(TAG, "called");
-    Port_Hw_SetPinDirection(Pin, Direction);
 }
 
 /* ----------------------------------------------------------------------

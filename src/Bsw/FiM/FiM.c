@@ -143,45 +143,6 @@ void FiM_Init(const FiM_ConfigType* ConfigPtr)
 }
 
 /* ----------------------------------------------------------------------
- * FiM_MainFunction
- * ---------------------------------------------------------------------- */
-
-/**
- * \brief   FiM 周期処理。各 FID の許可状態を再評価する。
- *
- * \ServiceID      {0x05}
- * \Reentrancy     {Non Reentrant}
- * \Synchronicity  {Synchronous}
- */
-void FiM_MainFunction(void)
-{
-    DET_LOGT(TAG, "called");
-    if (FiM_Cfg == NULL)
-        return;
-
-    for (uint8 i = 0U; i < FiM_Cfg->FunctionCount; i++)
-    {
-        const FiM_FunctionCfgType* fn = &FiM_Cfg->Functions[i];
-        const uint8 newPermitted = FiM_EvaluatePermission(fn);
-
-        if (newPermitted != FiM_Permitted[fn->FunctionId])
-        {
-            FiM_Permitted[fn->FunctionId] = newPermitted;
-
-            if (newPermitted == 0U)
-            {
-                DET_LOGW(TAG, "FID%u inhibited (ev=%u)",
-                         (unsigned)fn->FunctionId, (unsigned)fn->EventId);
-            }
-            else
-            {
-                DET_LOGI(TAG, "FID%u permitted again", (unsigned)fn->FunctionId);
-            }
-        }
-    }
-}
-
-/* ----------------------------------------------------------------------
  * FiM_GetFunctionPermission
  * ---------------------------------------------------------------------- */
 
@@ -278,6 +239,24 @@ Std_ReturnType FiM_SetFunctionAvailable(FiM_FunctionIdType FID, boolean Availabi
 }
 
 /* ----------------------------------------------------------------------
+ * FiM_DemTriggerOnMonitorStatus
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ----------------------------------------------------------------------
+ * FiM_DemTriggerOnComponentStatus
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ----------------------------------------------------------------------
+ * FiM_DemInit
+ * ---------------------------------------------------------------------- */
+
+/* 未実装 */
+
+/* ----------------------------------------------------------------------
  * FiM_GetVersionInfo
  * ---------------------------------------------------------------------- */
 
@@ -295,4 +274,43 @@ void FiM_GetVersionInfo(Std_VersionInfoType* versioninfo)
     versioninfo->sw_major_version = FIM_SW_MAJOR_VERSION;
     versioninfo->sw_minor_version = FIM_SW_MINOR_VERSION;
     versioninfo->sw_patch_version = FIM_SW_PATCH_VERSION;
+}
+
+/* ----------------------------------------------------------------------
+ * FiM_MainFunction
+ * ---------------------------------------------------------------------- */
+
+/**
+ * \brief   FiM 周期処理。各 FID の許可状態を再評価する。
+ *
+ * \ServiceID      {0x05}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void FiM_MainFunction(void)
+{
+    DET_LOGT(TAG, "called");
+    if (FiM_Cfg == NULL)
+        return;
+
+    for (uint8 i = 0U; i < FiM_Cfg->FunctionCount; i++)
+    {
+        const FiM_FunctionCfgType* fn = &FiM_Cfg->Functions[i];
+        const uint8 newPermitted = FiM_EvaluatePermission(fn);
+
+        if (newPermitted != FiM_Permitted[fn->FunctionId])
+        {
+            FiM_Permitted[fn->FunctionId] = newPermitted;
+
+            if (newPermitted == 0U)
+            {
+                DET_LOGW(TAG, "FID%u inhibited (ev=%u)",
+                         (unsigned)fn->FunctionId, (unsigned)fn->EventId);
+            }
+            else
+            {
+                DET_LOGI(TAG, "FID%u permitted again", (unsigned)fn->FunctionId);
+            }
+        }
+    }
 }

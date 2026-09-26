@@ -820,7 +820,7 @@ void CanIf_GetVersionInfo(Std_VersionInfoType* versioninfo)
  * CanIf_CheckWakeup
  * ---------------------------------------------------------------------- */
 
- /* 未実装 */
+/* 未実装 */
 
 /* ----------------------------------------------------------------------
  * CanIf_CheckValidation
@@ -890,7 +890,7 @@ CanIf_NotifStatusType CanIf_GetTxConfirmationState(uint8 ControllerId)
  * CanIf_ClearTrcvWufFlag
  * ---------------------------------------------------------------------- */
 
- /* 未実装 */
+/* 未実装 */
 
 /* ----------------------------------------------------------------------
  * CanIf_CheckTrcvWakeFlag
