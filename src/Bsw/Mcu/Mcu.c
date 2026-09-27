@@ -177,3 +177,15 @@ void Mcu_GetVersionInfo(Std_VersionInfoType* versioninfo)
     versioninfo->sw_minor_version = MCU_SW_MINOR_VERSION;
     versioninfo->sw_patch_version = MCU_SW_PATCH_VERSION;
 }
+
+/* ======================================================================
+ * Test Functions
+ * ====================================================================== */
+
+#ifdef MCU_UNIT_TEST
+void Mcu_Test_ResetInitState(void)
+{
+    Mcu_Initialized    = 0U;
+    Mcu_CachedRawReset = 0U;
+}
+#endif

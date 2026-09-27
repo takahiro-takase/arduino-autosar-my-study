@@ -1,5 +1,43 @@
 /**
- * \file    Bsw_CanSM_BusOffRecovery_test.cpp
+ * \file    Bsw_CanSM_test.cpp
+ * \brief   CanSM.c（src/Bsw/CanSM/CanSM.c）の単体テスト（GoogleTest / PlatformIO
+ *          `[env:native_chain]`）。
+ *
+ * \details 2026-09、モジュール単位のテストファイルを1モジュール1ファイルへ
+ *          集約する方針のもと、`Bsw_CanSM_BusOffRecovery_test.cpp` と旧
+ *          `Bsw_CanSM_test.cpp`（NG系のみ）の2ファイルを本ファイルへ統合した。
+ *          各セクションの経緯は元ファイルのコメントをそのまま引き継ぐ。
+ */
+#include <gtest/gtest.h>
+
+extern "C" {
+#include "Can.h"
+#include "Can_Hw.h"
+#include "CanIf.h"
+#include "CanSM.h"
+#include "CanSM_Cfg.h"
+#include "ComM.h"
+#include "CanNm.h"
+#include "Nm.h"
+#include "Fake_Can_Hw.h"
+#include "Fake_Millis.h"
+#include "Fake_Det_Hw.h"
+#include "Wrap_Dem.h"
+#include "Fake_Bsw_EcuM.h"
+#include "Wrap_BswM.h"
+#include "Wrap_CanIf.h"
+#include "Wrap_Can.h"
+}
+
+namespace
+{
+
+// ============================================================================
+// CanSM_MainFunction() の Bus-Off 回復リトライ（旧
+// Bsw_CanSM_BusOffRecovery_test.cpp）
+// ============================================================================
+
+/**
  * \brief   コールチェーン方式 + `-Wl,--wrap` フォールトインジェクション
  *          （GoogleTest / PlatformIO `[env:native_chain]`。2026-09、
  *          試作環境 `[env:native_chain_wrap]` として2ラウンドの実績を
@@ -42,32 +80,15 @@
  *          `MainFunction_OK_RecoversOnNextAttemptAfterPriorFailure` は
  *          是正後の正しい挙動（2回目の試行にも L1 周期の待機が必要）を
  *          検証するよう更新済み。
+ *
+ *          このセクションは「CanIf_SetControllerMode() だけをピンポイントで
+ *          故障させ、それ以外は実チェーンのまま」という、まさに wrap を
+ *          活用したコールチェーン方式の実例であり、モジュール単体の分離
+ *          テストへ縮退させる余地はない（2026-09、モジュール単位のテスト
+ *          集約を検討した際に再確認・現状維持を確認済み）。
  */
-#include <gtest/gtest.h>
 
-extern "C" {
-#include "Can.h"
-#include "Can_Hw.h"
-#include "CanIf.h"
-#include "CanSM.h"
-#include "CanSM_Cfg.h"
-#include "ComM.h"
-#include "CanNm.h"
-#include "Nm.h"
-#include "Fake_Can_Hw.h"
-#include "Fake_Millis.h"
-#include "Fake_Det_Hw.h"
-#include "Wrap_Dem.h"
-#include "Fake_Bsw_EcuM.h"
-#include "Wrap_BswM.h"
-#include "Wrap_CanIf.h"
-#include "Wrap_Can.h"
-}
-
-namespace
-{
-
-const CanIf_ConfigType kTestCanIfConfig = {
+const CanIf_ConfigType kBusOffRecoveryCanIfConfig = {
     /* TxPduConfig */ NULL,
     /* TxPduCount */  0U,
     /* RxPduConfig */ NULL,
@@ -97,7 +118,7 @@ protected:
         canConfig.crystalFreq     = CAN_CRYSTAL_16MHZ;
 
         Can_Init(&canConfig);
-        CanIf_Init(&kTestCanIfConfig);
+        CanIf_Init(&kBusOffRecoveryCanIfConfig);
         CanSM_Init(NULL);
         ComM_Init(NULL);
         ComM_CommunicationAllowed(COMM_CHANNEL_0, TRUE);  // 実 EcuM_Init() と同じく起動時に許可
@@ -228,6 +249,191 @@ TEST_F(Bsw_CanSM_BusOffRecovery_Test, MainFunction_OK_RecoversOnNextAttemptAfter
     EXPECT_EQ(mode, static_cast<ComM_ModeType>(COMM_FULL_COMMUNICATION));
     EXPECT_EQ(CallCount_Dem_SetEventStatus, 1U);
     EXPECT_EQ(LastEventStatus_Dem_SetEventStatus, DEM_EVENT_STATUS_PASSED);
+}
+
+// ============================================================================
+// その他公開APIの NG系（旧 Bsw_CanSM_test.cpp）
+// ============================================================================
+
+/**
+ * \details 上記セクションは Bus-Off 回復のリトライ/バックオフ状態機械のみを
+ *          検証しており、`Det_ReportError()` の報告内容はどこからも
+ *          検証されていなかった。本セクションは CanSM.c の全
+ *          `Det_ReportError()` 呼び出し箇所（NG ケースのみ）をまとめ、
+ *          報告される ErrorId が仕様どおり正しい値になっていることを
+ *          `Fake_Det_Hw.h`（`FakeDetHw_LastErrorId`）で検証する。
+ *
+ *          CanSM には `CanSM_DeInit()` が存在するため、Mcu/PduR/CanTp と
+ *          異なり「未初期化状態」の検証にテスト専用のリセット関数は不要
+ *          （各テストが明示的に `CanSM_DeInit()` を呼んでから検証する）。
+ *
+ *          検証対象はいずれも Can/CanIf への実処理カスケードへ到達する前に
+ *          reject される分岐のみのため（CanSM.c 参照）、Can_Init()/CanIf_Init()
+ *          は不要（他モジュールのテストの残留 static 状態と競合しない）。
+ */
+
+class Bsw_CanSM_Test : public ::testing::Test
+{
+protected:
+    void SetUp() override
+    {
+        FakeDetHw_LogSuppressed = 1U;  // Init() のログはノイズになるため抑制
+        CanSM_Init(NULL);
+        FakeDetHw_Reset();              // Init 自体の記録を後続の検証対象から除く
+        FakeDetHw_LogSuppressed = 0U;  // ここから各 TEST_F の実行(Act)区間
+    }
+
+    void TearDown() override
+    {
+        FakeDetHw_LogSuppressed = 1U;
+        CanSM_DeInit();
+    }
+};
+
+// ------------------------------------------------------------
+// CanSM_DeInit()
+// ------------------------------------------------------------
+
+TEST_F(Bsw_CanSM_Test, CanSM_DeInit_NG_Uninit)
+{
+    CanSM_DeInit();  // 1回目: SetUp() の Init を正常に解除する
+    FakeDetHw_Reset();
+
+    CanSM_DeInit();  // 2回目: 既に未初期化のため NG
+
+    EXPECT_EQ(FakeDetHw_LastErrorId, CANSM_E_UNINIT);
+}
+
+// ------------------------------------------------------------
+// CanSM_RequestComMode()
+// ------------------------------------------------------------
+
+TEST_F(Bsw_CanSM_Test, CanSM_RequestComMode_NG_Uninit)
+{
+    CanSM_DeInit();
+
+    Std_ReturnType ret = CanSM_RequestComMode(0U, COMM_FULL_COMMUNICATION);
+
+    EXPECT_EQ(ret, E_NOT_OK);
+    EXPECT_EQ(FakeDetHw_LastErrorId, CANSM_E_UNINIT);
+}
+
+TEST_F(Bsw_CanSM_Test, CanSM_RequestComMode_NG_InvalidNetworkHandle)
+{
+    Std_ReturnType ret = CanSM_RequestComMode(CANSM_CHANNEL_COUNT, COMM_FULL_COMMUNICATION);
+
+    EXPECT_EQ(ret, E_NOT_OK);
+    EXPECT_EQ(FakeDetHw_LastErrorId, CANSM_E_INVALID_NETWORK_HANDLE);
+}
+
+// ------------------------------------------------------------
+// CanSM_GetCurrentComMode()
+// ------------------------------------------------------------
+
+TEST_F(Bsw_CanSM_Test, CanSM_GetCurrentComMode_NG_Uninit)
+{
+    CanSM_DeInit();
+    ComM_ModeType mode;
+
+    Std_ReturnType ret = CanSM_GetCurrentComMode(0U, &mode);
+
+    EXPECT_EQ(ret, E_NOT_OK);
+    EXPECT_EQ(FakeDetHw_LastErrorId, CANSM_E_UNINIT);
+}
+
+TEST_F(Bsw_CanSM_Test, CanSM_GetCurrentComMode_NG_InvalidNetworkHandle)
+{
+    ComM_ModeType mode;
+
+    Std_ReturnType ret = CanSM_GetCurrentComMode(CANSM_CHANNEL_COUNT, &mode);
+
+    EXPECT_EQ(ret, E_NOT_OK);
+    EXPECT_EQ(FakeDetHw_LastErrorId, CANSM_E_INVALID_NETWORK_HANDLE);
+}
+
+TEST_F(Bsw_CanSM_Test, CanSM_GetCurrentComMode_NG_NullPointer)
+{
+    Std_ReturnType ret = CanSM_GetCurrentComMode(0U, NULL);
+
+    EXPECT_EQ(ret, E_NOT_OK);
+    EXPECT_EQ(FakeDetHw_LastErrorId, CANSM_E_PARAM_POINTER);
+}
+
+// ------------------------------------------------------------
+// CanSM_GetVersionInfo()
+// ------------------------------------------------------------
+
+TEST_F(Bsw_CanSM_Test, CanSM_GetVersionInfo_NG_NullPointer)
+{
+    CanSM_GetVersionInfo(NULL);
+
+    EXPECT_EQ(FakeDetHw_LastErrorId, CANSM_E_PARAM_POINTER);
+}
+
+// ------------------------------------------------------------
+// CanSM_ControllerBusOff()
+// ------------------------------------------------------------
+
+TEST_F(Bsw_CanSM_Test, CanSM_ControllerBusOff_NG_Uninit)
+{
+    CanSM_DeInit();
+
+    CanSM_ControllerBusOff(0U);
+
+    EXPECT_EQ(FakeDetHw_LastErrorId, CANSM_E_UNINIT);
+}
+
+TEST_F(Bsw_CanSM_Test, CanSM_ControllerBusOff_NG_InvalidController)
+{
+    CanSM_ControllerBusOff(1U);
+
+    EXPECT_EQ(FakeDetHw_LastErrorId, CANSM_E_PARAM_CONTROLLER);
+}
+
+// ------------------------------------------------------------
+// CanSM_ControllerModeIndication()
+// ------------------------------------------------------------
+
+TEST_F(Bsw_CanSM_Test, CanSM_ControllerModeIndication_NG_Uninit)
+{
+    CanSM_DeInit();
+
+    CanSM_ControllerModeIndication(0U, CAN_CS_STARTED);
+
+    EXPECT_EQ(FakeDetHw_LastErrorId, CANSM_E_UNINIT);
+}
+
+TEST_F(Bsw_CanSM_Test, CanSM_ControllerModeIndication_NG_InvalidController)
+{
+    CanSM_ControllerModeIndication(1U, CAN_CS_STARTED);
+
+    EXPECT_EQ(FakeDetHw_LastErrorId, CANSM_E_PARAM_CONTROLLER);
+}
+
+// ------------------------------------------------------------
+// CanSM_RxIndication()
+// ------------------------------------------------------------
+
+TEST_F(Bsw_CanSM_Test, CanSM_RxIndication_NG_Uninit)
+{
+    CanSM_DeInit();
+
+    CanSM_RxIndication(0U);
+
+    EXPECT_EQ(FakeDetHw_LastErrorId, CANSM_E_UNINIT);
+}
+
+// ------------------------------------------------------------
+// CanSM_MainFunction()
+// ------------------------------------------------------------
+
+TEST_F(Bsw_CanSM_Test, CanSM_MainFunction_NG_Uninit)
+{
+    CanSM_DeInit();
+
+    CanSM_MainFunction();
+
+    EXPECT_EQ(FakeDetHw_LastErrorId, CANSM_E_UNINIT);
 }
 
 }  // namespace

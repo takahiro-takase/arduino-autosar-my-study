@@ -195,8 +195,11 @@ FetchContent_MakeAvailable(googletest)
 
 add_compile_definitions(
     CAN_UNIT_TEST
+    CANTP_UNIT_TEST
     COM_UNIT_TEST
     DET_LOG_LEVEL=LOG_T
+    MCU_UNIT_TEST
+    PDUR_UNIT_TEST
     WDGM_UNIT_TEST
 )
 

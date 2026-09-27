@@ -26,6 +26,7 @@ extern "C" {
 #include "E2E.h"
 #include "E2E_P01.h"
 #include "E2E_P05.h"
+#include "Wrap_E2E.h"
 }
 
 namespace
@@ -523,6 +524,16 @@ protected:
 
     void SetUp() override
     {
+        /* E2E_SMCheck() は -Wl,--wrap=E2E_SMCheck 経由でリンクされるため、
+         * 他ファイル（Bsw_E2EXf_SMCheckFailure_test.cpp 等）が
+         * FailFromCallCount_E2E_SMCheck を設定したまま（自身の次のテストの
+         * SetUp() でのみリセットする設計）だと、native_chain_tests 全体の
+         * 実行順序によっては本フィクスチャへ漏れ伝わる（2026-09、
+         * --gtest_shuffle でのみ顕在化する形で発見。他モジュールのテストと
+         * 同じ「他ファイルの故障注入が漏れ伝わらないよう防御的にリセット」
+         * 方針をここにも適用する）。 */
+        WrapE2E_Reset();
+
         config.WindowSize           = 3U;
         config.MinOkStateInit       = 3U;
         config.MaxErrorStateInit    = 0U;

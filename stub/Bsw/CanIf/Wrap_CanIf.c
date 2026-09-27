@@ -459,10 +459,17 @@ void __wrap_CanIf_RxIndication(const Can_HwType* Mailbox, const PduInfoType* Pdu
     CallCount_CanIf_RxIndication++;
     Log_Write(LOG_T, TAG, "CanIf_RxIndication", "called %u times", CallCount_CanIf_RxIndication);
 
-    LastMailbox_CanIf_RxIndication = *Mailbox;
-    LastLength_CanIf_RxIndication  = PduInfoPtr->SduLength;
-    for (uint8 i = 0U; i < PduInfoPtr->SduLength && i < 8U; i++)
-        LastData_CanIf_RxIndication[i] = PduInfoPtr->SduDataPtr[i];
+    /* CanIf_RxIndication() 自身が Mailbox/PduInfoPtr/PduInfoPtr->SduDataPtr の
+     * NULL を許容し Det_ReportError() で拒否する契約のため（CanIf.c 参照）、
+     * ここで無条件に読み取ると NULL 引数のテストがそのままクラッシュする
+     * （2026-09 の NG系単体テスト追加で発覚・修正）。 */
+    if (Mailbox != NULL && PduInfoPtr != NULL && PduInfoPtr->SduDataPtr != NULL)
+    {
+        LastMailbox_CanIf_RxIndication = *Mailbox;
+        LastLength_CanIf_RxIndication  = PduInfoPtr->SduLength;
+        for (uint8 i = 0U; i < PduInfoPtr->SduLength && i < 8U; i++)
+            LastData_CanIf_RxIndication[i] = PduInfoPtr->SduDataPtr[i];
+    }
 
     __real_CanIf_RxIndication(Mailbox, PduInfoPtr);
 }

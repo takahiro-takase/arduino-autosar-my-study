@@ -36,6 +36,11 @@ uint32 CallCount_Det_ReportTransientFault   = 0U;
 uint32 CallCount_Det_Start                  = 0U;
 uint32 CallCount_Det_GetVersionInfo         = 0U;
 
+uint16 LastModuleId_Det_ReportError   = 0xFFFFU;
+uint8  LastInstanceId_Det_ReportError = 0xFFU;
+uint8  LastApiId_Det_ReportError      = 0xFFU;
+uint8  LastErrorId_Det_ReportError    = 0xFFU;
+
 uint32 FailFromCallCount_Det_ReportError          = WRAP_DET_FAIL_FROM_CALL_COUNT_DISABLED;
 uint32 FailFromCallCount_Det_ReportRuntimeError   = WRAP_DET_FAIL_FROM_CALL_COUNT_DISABLED;
 uint32 FailFromCallCount_Det_ReportTransientFault = WRAP_DET_FAIL_FROM_CALL_COUNT_DISABLED;
@@ -56,6 +61,11 @@ void WrapDet_Reset(void)
     CallCount_Det_ReportTransientFault = 0U;
     CallCount_Det_Start                = 0U;
     CallCount_Det_GetVersionInfo       = 0U;
+
+    LastModuleId_Det_ReportError   = 0xFFFFU;
+    LastInstanceId_Det_ReportError = 0xFFU;
+    LastApiId_Det_ReportError      = 0xFFU;
+    LastErrorId_Det_ReportError    = 0xFFU;
 
     FailFromCallCount_Det_ReportError          = WRAP_DET_FAIL_FROM_CALL_COUNT_DISABLED;
     FailFromCallCount_Det_ReportRuntimeError   = WRAP_DET_FAIL_FROM_CALL_COUNT_DISABLED;
@@ -93,6 +103,10 @@ Std_ReturnType __real_Det_ReportError(uint16 ModuleId, uint8 InstanceId, uint8 A
 Std_ReturnType __wrap_Det_ReportError(uint16 ModuleId, uint8 InstanceId, uint8 ApiId, uint8 ErrorId)
 {
     CallCount_Det_ReportError++;
+    LastModuleId_Det_ReportError   = ModuleId;
+    LastInstanceId_Det_ReportError = InstanceId;
+    LastApiId_Det_ReportError      = ApiId;
+    LastErrorId_Det_ReportError    = ErrorId;
     Log_Write(LOG_T, TAG, "Det_ReportError", "called %u times", CallCount_Det_ReportError);
 
     if (CallCount_Det_ReportError >= FailFromCallCount_Det_ReportError)

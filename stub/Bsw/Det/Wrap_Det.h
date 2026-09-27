@@ -12,6 +12,13 @@
  *          ロギング基盤であり、これを wrap すると `__wrap_Log_Write` 内で
  *          トレース出力に `Log_Write()` を使うと無限再帰になるため対象外とする）。
  *
+ *          `Det_ReportError()` のみ、直近の呼び出し引数
+ *          （ModuleId/InstanceId/ApiId/ErrorId）も `LastXxx_Det_ReportError`
+ *          へ記録する（2026-09 追加。他モジュールのエラー系単体テストが
+ *          「エラー種別に応じて正しい ApiId/ErrorId が報告されたか」を
+ *          直接検証できるようにするための特別扱い。`Wrap_Dem.h` の
+ *          `LastEventId_Dem_SetEventStatus` と同じ設計）。
+ *
  *          戻り値を持つ3関数（ReportError/ReportRuntimeError/
  *          ReportTransientFault）には「指定した呼び出し回数以降は常に失敗を
  *          返す」という回数閾値方式の故障注入を実装する。
@@ -49,6 +56,12 @@ extern uint32 CallCount_Det_Start;
 extern uint32 CallCount_Det_ReportRuntimeError;
 extern uint32 CallCount_Det_ReportTransientFault;
 extern uint32 CallCount_Det_GetVersionInfo;
+
+/** `Det_ReportError()` のみの直近呼び出し引数（既存の特別扱い、上記コメント参照）。 */
+extern uint16 LastModuleId_Det_ReportError;
+extern uint8  LastInstanceId_Det_ReportError;
+extern uint8  LastApiId_Det_ReportError;
+extern uint8  LastErrorId_Det_ReportError;
 
 /* ----------------------------------------------------------------------
  * 回数閾値故障注入（戻り値を持つ3関数のみ）
