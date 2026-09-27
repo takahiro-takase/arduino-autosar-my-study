@@ -134,6 +134,12 @@
  *  しかし、Tester Present メッセージの受信ログが多くなるため、60s にする。 */
 #define DCM_S3_TIMEOUT_MS  60000UL
 
+/** UDS 0x11 ECUReset: 正応答 [0x51, subFunc] 送信後、実際に Mcu_PerformReset()
+ *  を呼ぶまでの遅延（Dcm_HandleEcuReset() 参照）。CAN コントローラの物理送信
+ *  自体は Can_Write() が返った時点で完了しているため大きな値は不要だが、
+ *  テスター側の受信処理・バス調停のリトライに対する余裕として置く。 */
+#define DCM_ECU_RESET_DELAY_MS  50UL
+
 /* -----------------------------------------------------------------------
  * SID × セッション許可マスク (AUTOSAR DcmDspSessionRow に相当)
  * Dcm_SidSessionTable[] (Dcm.c) の AllowedSessionMask 列で使用する。

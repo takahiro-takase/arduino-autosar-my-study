@@ -215,6 +215,7 @@ set(NATIVE_CHAIN_INCLUDE_DIRS
     src/Bsw/Dcm
     src/Bsw/Dem
     src/Bsw/Det
+    src/Bsw/Mcu
     src/Bsw/SchM
     src/Bsw/E2EXf
     src/Bsw/E2E
@@ -281,6 +282,8 @@ set(NATIVE_CHAIN_SRC_SOURCES
     src/Bsw/FiM/FiM.c
     src/Bsw/FiM/FiM_PBCfg.c
     src/Bsw/Gpt/Gpt.c
+    src/Bsw/Mcu/Mcu.c
+    src/Bsw/Mcu/Mcu_PBCfg.c
     src/Bsw/Nm/Nm.c
     src/Bsw/PduR/PduR.c
     src/Bsw/Port/Port.c
@@ -326,6 +329,7 @@ set(NATIVE_CHAIN_STUB_SOURCES
     stub/Hal/Fake_Dio_Hw.c
     stub/Hal/Fake_Gpt_Hw.c
     stub/Hal/Fake_Port_Hw.c
+    stub/Hal/Fake_Mcu_Hw.c
 )
 
 # test/ 配下のテストファイル（Bsw_{Module|Stack}_{シナリオ}_test.cpp）を自動収集する。

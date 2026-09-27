@@ -169,6 +169,7 @@
 #include "CanNm.h"
 #include "KeyM.h"
 #include "BswM.h"
+#include "Mcu.h"
 #include "Det.h"
 
 /* ======================================================================
@@ -313,8 +314,9 @@ static PduInfoType Dcm_TxPdu;
  * Function Prototypes
  * ====================================================================== */
 
-/* millis() is declared in Arduino wiring.c with C linkage. */
+/* millis()/delay() are declared in Arduino wiring.c with C linkage. */
 extern unsigned long millis(void);
+extern void delay(unsigned long ms);
 
 /* -----------------------------------------------------------------------
  * 内部関数プロトタイプ
@@ -1007,10 +1009,21 @@ static void Dcm_HandleSessionControl(const uint8* uds, uint8 udsLen)
 /**
  * \brief   UDS 0x11 ECUReset を処理する。
  *
- * \details 正応答送信後、セッションを defaultSession に戻す。
- *          Arduino UNO にはウォッチドッグタイマがあるが、本実装では
- *          ハードウェアリセットを発行せずログのみで代替する（学習用簡略化）。
- *          対応: 0x01=hardReset, 0x03=softReset
+ * \details 正応答送信後、セッションを defaultSession に戻したうえで、実際に
+ *          Mcu_PerformReset() を呼んで MCU をリセットする（2026-09 追加。
+ *          以前は実機のリセットボタン押下と違い、ログのみで実際の
+ *          ハードウェアリセットを発行しない学習用簡略化だった。テスター側が
+ *          UDS 経由でリセットボタン相当のことをしたいという要望から実装した）。
+ *          対応: 0x01=hardReset, 0x03=softReset（Mcu_PerformReset() 自体は
+ *          リセット種別を区別しないため、両方とも同じ扱いになる）。
+ *
+ *          正応答 [0x51, subFunc] の物理送信（Can_Write() が返った時点で
+ *          CAN コントローラの TX メールボックスへの書き込みは完了している）
+ *          から DCM_ECU_RESET_DELAY_MS だけ delay() で待ってから
+ *          Mcu_PerformReset() を呼ぶ。実車のECUも同様の理由で、正応答が
+ *          テスター側に届く前にリセットしてしまわないよう猶予を置くのが
+ *          一般的（Mcu_PerformReset() は戻らないため、本関数もこれが最後の
+ *          呼び出しになる）。
  *
  *          subFunction バイトの bit7 (suppressPosRspMsgIndicationBit) が
  *          立っている場合は正応答を送信しない（[SWS_Dcm_00200]/
@@ -1064,9 +1077,16 @@ static void Dcm_HandleEcuReset(const uint8* uds, uint8 udsLen)
      * が Dcm_SecurityLock() 等の一式を実行する。他の defaultSession 遷移経路
      * （明示要求・S3 タイムアウト）と同じ処理列を通ることで、0x27 で unlock ->
      * 0x11 ECUReset -> 0x10 で extendedSession へ戻る、という経路で再認証なしに
-     * Dcm_SecurityLevel が unlocked のまま残ってしまう問題を防ぐ）。 */
+     * Dcm_SecurityLevel が unlocked のまま残ってしまう問題を防ぐ）。実際には
+     * この直後に MCU 自体がリセットされ本関数のローカル/静的状態は失われるが、
+     * delay() の間に何らかの理由で他の処理が割り込む可能性への保険として
+     * そのまま残す（コスト無視できるほど小さい）。 */
     (void)Dcm_ResetToDefaultSession();
     DET_LOGI(TAG, "11 session->Default");
+
+    /* 正応答の物理送信完了後の猶予（ファイル冒頭 Doxygen 参照）。 */
+    delay(DCM_ECU_RESET_DELAY_MS);
+    Mcu_PerformReset();
 }
 
 /* -----------------------------------------------------------------------

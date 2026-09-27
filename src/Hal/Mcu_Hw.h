@@ -62,6 +62,16 @@ Mcu_Hw_ResetReasonType Mcu_Hw_ReadAndClearResetReason(void);
  */
 void Mcu_Hw_DisableWatchdogAtBoot(void);
 
+/**
+ * \brief   Cortex-M4 の NVIC_SystemReset() を発行し、MCU を即座に
+ *          ソフトウェアリセットする。
+ *
+ * \details 呼び出し元へは戻らない。呼び出し元（Mcu.c の Mcu_PerformReset()）
+ *          は、CAN 等への送信が既に完了していることを確認した後にのみ
+ *          呼ぶこと（本関数自体は送信完了を待たない）。
+ */
+void Mcu_Hw_PerformReset(void);
+
 #ifdef __cplusplus
 }
 #endif

@@ -145,6 +145,21 @@ Mcu_RawResetType Mcu_GetResetRawValue(void)
 }
 
 /* ----------------------------------------------------------------------
+ * Mcu_PerformReset
+ * ---------------------------------------------------------------------- */
+
+void Mcu_PerformReset(void)
+{
+    if (!Mcu_Initialized)
+    {
+        Det_ReportError(MCU_MODULE_ID, 0U, MCU_API_ID_PERFORM_RESET, MCU_E_UNINIT);
+        return;
+    }
+
+    Mcu_Hw_PerformReset();
+}
+
+/* ----------------------------------------------------------------------
  * Mcu_GetVersionInfo
  * ---------------------------------------------------------------------- */
 

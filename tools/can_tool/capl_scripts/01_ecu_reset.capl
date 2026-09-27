@@ -1,0 +1,33 @@
+// CAPL 風 DSL のサンプル (.capl)。
+//
+// UDS 0x11 ECUReset を送信し、実際に ECU（Arduino UNO R4）をハードウェア
+// リセットする（実機のリセットボタン押下と同等。2026-09 に Dcm_HandleEcuReset()
+// が Mcu_PerformReset()（Cortex-M4 の NVIC_SystemReset()）を実際に呼ぶよう
+// 変更済み。以前は正応答を返すだけでリセットを発行しない簡略実装だった）。
+//
+// ECUReset (SID 0x11) は Dcm.c の Dcm_SidSessionTable[] に掲載が無く
+// セッション制約を受けない（defaultSession のままで実行可）。SecurityAccess
+// も不要なため、他のサンプル（example_session_check.capl）と違い
+// send(0x10, ...) や security_unlock() は使わずいきなり送信できる。
+//
+// subFunction は 0x01=hardReset / 0x03=softReset のどちらでもよい
+// （Mcu_PerformReset() 自体がリセット種別を区別しないため、本プロジェクトの
+// 実装ではどちらも同じ挙動になる。Dcm.h/Dcm_Cfg.h 参照）。
+//
+// リセット後、CAN バス・Serial 接続自体は切れない（切れるのは ECU 側が
+// 一時的に応答しなくなるだけ）。Serial 接続をしたまま実行すると、起動
+// シーケンスのログ（"Main: setup: ResetReason ..." 等）がそのまま
+// Serialログパネルへ流れてくるので、リブートしたことを確認できる。
+
+on start
+{
+    write("=== UDS 0x11 ECUReset (hardReset) ===");
+
+    send(0x11, 0x01);
+    wait_response();
+    assert_positive();
+
+    write("正応答受信。ECU がリセットされます。");
+    write("Serial 接続を継続していれば、数秒後に起動シーケンスのログが");
+    write("流れ始めるはずです（Serialログパネル参照）。");
+}

@@ -12,15 +12,28 @@
  *          2026-09、`test_chain`/`test_dcm`/`test_fim`/`test_wdgm` の4envで
  *          内容が重複していたため、`Fake_Det_Hw.h` と同じ理由で
  *          `stub/Hal/` へ集約した。
+ *
+ *          2026-09、Dcm_HandleEcuReset()（UDS 0x11 ECUReset、実際に
+ *          Mcu_PerformReset() を呼ぶよう変更）が正応答送信後に呼ぶ
+ *          `extern void delay(unsigned long);` も同じ理由（native 環境に
+ *          この関数自体が存在しない）で追加。テストを実時間で待たせても
+ *          意味がないため、実際には待たない no-op（呼び出し回数・最後の
+ *          引数だけ記録する）。
  */
 #ifndef FAKE_MILLIS_H
 #define FAKE_MILLIS_H
+
+#include "Std_Types.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 extern unsigned long FakeMillis_Value;
+
+/** delay() の呼び出し回数・最後に渡された ms（no-op のため実際には待たない）。 */
+extern uint32         FakeMillis_DelayCallCount;
+extern unsigned long  FakeMillis_LastDelayMs;
 
 /** 各テストケースの開始時に呼び、0 に戻す。 */
 void FakeMillis_Reset(void);

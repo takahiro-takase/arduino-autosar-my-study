@@ -277,6 +277,28 @@ class UdsTesterFrame(ttk.Frame):
         # SecurityAccess レベル等を追加しやすいよう、専用パネルとして独立させる） ----
         state_frame = ttk.LabelFrame(self, text="ECU 状態（シリアルログより）")
         state_frame.pack(fill="x", padx=8, pady=4)
+
+        # UDS 0x11 ECUReset (hardReset) を1回送信するだけのショートカット。
+        # config.json の buttons 配列（type="multiframe"）と同じ送受信ロジック
+        # （_send_worker）をそのまま再利用し、送受信処理を重複させない。
+        # ECUReset は Dcm_SidSessionTable[] に掲載が無くセッション制約・
+        # SecurityAccess いずれも不要なため、これ単体で完結する
+        # （tools/can_tool/capl_scripts/01_ecu_reset.capl と同じ内容）。
+        # 状態ラベルより先（左端）に置くのは、クリック直後に視線を動かさず
+        # そのままリセット後の状態遷移（EcuM/ComM/CanSM）を確認できるようにする
+        # ため（2026-09、右端配置から変更）。
+        ecu_reset_btn = ttk.Button(
+            state_frame, text="ECU Reset",
+            command=lambda: self._on_send_click(
+                {"type": "multiframe", "label": "ECU Reset", "payload": [0x11, 0x01]}, -1
+            ),
+        )
+        ecu_reset_btn.pack(side="left", padx=(8, 16), pady=4)
+        _Tooltip(ecu_reset_btn,
+                 "UDS 0x11 ECUReset (hardReset) を送信します。\n"
+                 "セッション制約・SecurityAccessは不要で、送信すると即座にECUが\n"
+                 "リセットされます（実機のリセットボタン押下と同等）。")
+
         for tag, label, _rules in self._STATE_DEFS:
             ttk.Label(state_frame, text=f"{label}:",
                       font=("", 9, "bold")).pack(side="left", padx=(8, 2), pady=4)
