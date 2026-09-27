@@ -148,6 +148,23 @@ class UdsTesterFrame(ttk.Frame):
         self._serial_thread: threading.Thread | None = None
         self.serial_log_queue: "queue.Queue[str]" = queue.Queue()
         self._serial_log_visible = tk.BooleanVar(value=False)
+        # Serialログのファイル保存（表示中の全行を、書式そのままファイルへ追記する）。
+        # 「Serialログ」チェックボックス（表示/非表示）とは独立で、常時有効
+        # （オプトインのトグルは持たない。実機ログを見返す・チャットで確認して
+        # もらう用途がほぼ全てで、保存したくない接続の方が稀なため）。ファイルへの
+        # 書き込みはメインスレッド（_poll_queues）でのみ行うため、ワーカースレッド
+        # との排他は不要（serial_log_queue 経由で受け渡すのと同じ設計）。
+        #
+        # 保存先は毎回尋ねず、Connect のたびに self.serial_log_dir 配下へ
+        # タイムスタンプ付きファイル名を自動生成する（接続1回につき1ファイル、
+        # _serial_connect/_serial_disconnect 参照）。
+        self.serial_log_file: "TextIO | None" = None
+        self.serial_log_file_path: "str | None" = None
+        log_dir_cfg = self.cfg.get("serial", {}).get("log_dir", "logs")
+        self.serial_log_dir = (
+            os.path.normpath(log_dir_cfg) if os.path.isabs(log_dir_cfg)
+            else os.path.normpath(os.path.join(_THIS_DIR, "..", log_dir_cfg))
+        )
         # CanSM/EcuM の最新状態表示用 StringVar（ログ行から正規表現で抽出、
         # _parse_serial_state 参照）。tk.StringVar は Tk ルート作成後にしか
         # 生成できないためインスタンス属性だが、キー・表示順・ラベルは
@@ -1069,6 +1086,11 @@ class UdsTesterFrame(ttk.Frame):
         self.serial_status_var.set("● Connected")
         self.serial_status_label.configure(foreground="green")
         self.serial_connect_btn.configure(text="Disconnect")
+        # 「接続しました」自体も含めて丸ごとファイルへ残すため、キューへ積む前に
+        # 開始しておく（キューの中身は _poll_queues が後でまとめて捌くので、
+        # ここで先に self.serial_log_file を用意しておけばそのタイミングで
+        # 一緒に書き込まれる）。
+        self._open_serial_log_file()
         self.serial_log_queue.put(f"接続しました ({port} @ {baud}bps)")
         self._serial_stop.clear()
         self._serial_thread = threading.Thread(
@@ -1082,6 +1104,12 @@ class UdsTesterFrame(ttk.Frame):
         self._serial_thread = None
         self._serial_mark_disconnected()
         self.serial_log_queue.put("切断しました")
+        if self.serial_log_file is not None:
+            # 「切断しました」もファイルへ残したいので、_poll_queues が上記の
+            # キュー内容を実際に書き込み終わった後（次の poll サイクル以降）に
+            # クローズする。ここで同期的に閉じると、まだキューに積んだだけで
+            # 未書き込みの「切断しました」がファイルから欠落してしまう。
+            self.after(150, self._close_serial_log_file)
 
     def _serial_mark_disconnected(self):
         """serial_port を close して GUI を切断状態に戻す（表示のリセットのみ、
@@ -1102,6 +1130,40 @@ class UdsTesterFrame(ttk.Frame):
         self.serial_status_var.set("● Disconnected")
         self.serial_status_label.configure(foreground="red")
         self.serial_connect_btn.configure(text="Connect")
+
+    def _open_serial_log_file(self):
+        """self.serial_log_dir 配下へタイムスタンプ付きファイル名で新規作成し、
+        以後の Serialログをそこへ追記する（接続1回につき1ファイル、常時有効。
+        _serial_connect から呼ぶ）。フォルダ作成やファイルオープンに失敗しても
+        Serial 接続自体は継続する（ログ保存はあくまで補助機能のため、
+        失敗時にエラーダイアログで接続そのものをブロックしたくない）。"""
+        try:
+            os.makedirs(self.serial_log_dir, exist_ok=True)
+        except OSError as exc:
+            messagebox.showerror("保存失敗", f"ログフォルダを作成できません: {exc}")
+            return
+        filename = f"serial_log_{time.strftime('%Y%m%d_%H%M%S')}.txt"
+        path = os.path.join(self.serial_log_dir, filename)
+        try:
+            self.serial_log_file = open(path, "a", encoding="utf-8")
+        except OSError as exc:
+            messagebox.showerror("保存失敗", str(exc))
+            return
+        self.serial_log_file_path = path
+        self.serial_log_queue.put(f"[Serialログ] ファイル保存を開始しました: {path}")
+
+    def _close_serial_log_file(self):
+        """開いている Serialログ保存先ファイルを閉じる（best-effort。
+        _serial_mark_disconnected と同じ理由でエラーは無視する）。"""
+        if self.serial_log_file is not None:
+            path = self.serial_log_file_path
+            try:
+                self.serial_log_file.close()
+            except OSError:
+                pass
+            self.serial_log_file = None
+            self.serial_log_file_path = None
+            self.serial_log_queue.put(f"[Serialログ] ファイル保存を終了しました: {path}")
 
     def _serial_reader_worker(self, ser: "serial.Serial", stop_ev: threading.Event):
         """シリアルログを行単位で読み、生ログは serial_log_queue へ、
@@ -2130,6 +2192,19 @@ class UdsTesterFrame(ttk.Frame):
             self.serial_log_text.insert("end", "\n".join(serial_lines) + "\n")
             self.serial_log_text.see("end")
             self.serial_log_text.configure(state="disabled")
+
+            if self.serial_log_file is not None:
+                # 画面表示と全く同じ行をそのままファイルへ追記する。1行ごとに
+                # flush することで、アプリが正常終了しなかった場合（強制終了等）
+                # でもそこまでの内容は失われない（この学習用ツールでは
+                # 明示的なクローズ処理より単純さを優先する）。
+                try:
+                    self.serial_log_file.write("\n".join(serial_lines) + "\n")
+                    self.serial_log_file.flush()
+                except OSError as exc:
+                    self.serial_log_queue.put(
+                        f"[Serialログ] ファイル書き込みエラーのため保存を停止しました: {exc}")
+                    self._close_serial_log_file()
 
         while True:
             try:
