@@ -579,3 +579,14 @@ static const PduR_TxRoutingPathType* PduR_FindTxPath(PduIdType SrcPduId)
     }
     return NULL;
 }
+
+/* ======================================================================
+ * Test Functions
+ * ====================================================================== */
+
+#ifdef PDUR_UNIT_TEST
+void PduR_Test_ResetInitState(void)
+{
+    PduR_ConfigPtr = NULL;
+}
+#endif

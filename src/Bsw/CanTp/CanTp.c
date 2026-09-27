@@ -804,3 +804,14 @@ boolean CanTp_IsTxBusy(void)
 {
     return (boolean)(CanTp_Tx.state != CANTP_TX_IDLE);
 }
+
+/* ======================================================================
+ * Test Functions
+ * ====================================================================== */
+
+#ifdef CANTP_UNIT_TEST
+void CanTp_Test_ResetInitState(void)
+{
+    CanTp_Initialized = 0U;
+}
+#endif

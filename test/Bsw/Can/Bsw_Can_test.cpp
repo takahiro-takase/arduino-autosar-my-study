@@ -6,6 +6,13 @@
  * \details Can.c は実 HW 依存の無い自己完結したロジックのため、フェイク
  *          実装は不要で公開 API (Can_Write/Can_Read とその Init) を
  *          直接呼んで検証する。
+ *
+ *          2026-09、既存の NG系テストは戻り値/内部状態のみを検証しており
+ *          `Det_ReportError()` の報告内容が未検証だったため、`Fake_Det_Hw.h`
+ *          （`FakeDetHw_LastErrorId`）によるアサーションを追加した
+ *          （エラー種別に応じて正しい ErrorId が報告されているかの検証）。
+ *          `Can_SetControllerMode_NG_OtherTransition`（`#if 0` で無効化済み）は
+ *          既存の判断のため対象外。
  */
 #include <gtest/gtest.h>
 
@@ -14,6 +21,7 @@ extern "C" {
 #include "Can_Cfg.h"
 #include "Can_Hw.h"
 #include "Fake_Can_Hw.h"
+#include "Fake_Det_Hw.h"
 #include "Wrap_CanIf.h"
 #include "Wrap_Can.h"
 #include "Fake_Bsw_EcuM.h"
@@ -31,6 +39,7 @@ protected:
         WrapCanIf_Reset();
         WrapCan_Reset();  // 他ファイルの故障注入が漏れ伝わらないよう防御的にリセット
         FakeEcuM_Reset();
+        FakeDetHw_Reset();
         Can_Test_SetConfigPtr(NULL);  // 初期化前状態に戻す
         Can_Test_SetControllerState(CAN_CS_UNINIT);  // 初期化前状態に戻す
         Can_Test_ResetTxErrCount();  // Can_Init() ではリセットされないため明示的に戻す
@@ -57,6 +66,7 @@ TEST_F(Bsw_Can_Test, Can_Init_NG_NullConfig)
 
     /* 評価 (Assert) */
     EXPECT_EQ(Can_Test_GetControllerState(), CAN_CS_UNINIT);
+    EXPECT_EQ(FakeDetHw_LastErrorId, CAN_E_PARAM_POINTER);
 }
 
 TEST_F(Bsw_Can_Test, Can_Init_Ok)
@@ -84,6 +94,7 @@ TEST_F(Bsw_Can_Test, Can_SetControllerMode_NG_NullConfig)
     /* 評価 (Assert) */
     EXPECT_EQ(ret, CAN_NOT_OK);
     EXPECT_EQ(Can_Test_GetControllerState(), CAN_CS_UNINIT);
+    EXPECT_EQ(FakeDetHw_LastErrorId, CAN_E_UNINIT);
 }
 
 TEST_F(Bsw_Can_Test, Can_SetControllerMode_NG_Start)
@@ -97,6 +108,7 @@ TEST_F(Bsw_Can_Test, Can_SetControllerMode_NG_Start)
     /* 評価 (Assert) */
     EXPECT_EQ(ret, CAN_NOT_OK);
     EXPECT_EQ(Can_Test_GetControllerState(), CAN_CS_STOPPED);
+    EXPECT_EQ(FakeDetHw_LastErrorId, CAN_E_PARAM_CONTROLLER);
 }
 
 TEST_F(Bsw_Can_Test, Can_SetControllerMode_OK_Start)
@@ -124,6 +136,7 @@ TEST_F(Bsw_Can_Test, Can_SetControllerMode_NG_Start_On_Sleep)
     /* 評価 (Assert) */
     EXPECT_EQ(ret, CAN_NOT_OK);
     EXPECT_EQ(Can_Test_GetControllerState(), CAN_CS_SLEEP);
+    EXPECT_EQ(FakeDetHw_LastErrorId, CAN_E_TRANSITION);
 }
 
 TEST_F(Bsw_Can_Test, Can_SetControllerMode_OK_Stop)
@@ -151,6 +164,7 @@ TEST_F(Bsw_Can_Test, Can_SetControllerMode_NG_Stop_On_Sleep)
     /* 評価 (Assert) */
     EXPECT_EQ(ret, CAN_NOT_OK);
     EXPECT_EQ(Can_Test_GetControllerState(), CAN_CS_SLEEP);
+    EXPECT_EQ(FakeDetHw_LastErrorId, CAN_E_TRANSITION);
 }
 
 TEST_F(Bsw_Can_Test, Can_SetControllerMode_OK_Wakeup_On_Sleep)
@@ -179,6 +193,7 @@ TEST_F(Bsw_Can_Test, Can_SetControllerMode_NG_Wakeup)
     /* 評価 (Assert) */
     EXPECT_EQ(ret, CAN_NOT_OK);
     EXPECT_EQ(Can_Test_GetControllerState(), CAN_CS_STARTED);
+    EXPECT_EQ(FakeDetHw_LastErrorId, CAN_E_TRANSITION);
 }
 
 TEST_F(Bsw_Can_Test, Can_SetControllerMode_OK_Sleep)
@@ -220,6 +235,7 @@ TEST_F(Bsw_Can_Test, Can_DisableControllerInterrupts_NG_NullConfig)
     Can_DisableControllerInterrupts(0U);
 
     EXPECT_EQ(FakeCanHw_DisableRxIsrCount, 0U);
+    EXPECT_EQ(FakeDetHw_LastErrorId, CAN_E_UNINIT);
 }
 
 TEST_F(Bsw_Can_Test, Can_DisableControllerInterrupts_NG_InvalidController)
@@ -229,6 +245,7 @@ TEST_F(Bsw_Can_Test, Can_DisableControllerInterrupts_NG_InvalidController)
     Can_DisableControllerInterrupts(1U);
 
     EXPECT_EQ(FakeCanHw_DisableRxIsrCount, 0U);
+    EXPECT_EQ(FakeDetHw_LastErrorId, CAN_E_PARAM_CONTROLLER);
 }
 
 TEST_F(Bsw_Can_Test, Can_DisableControllerInterrupts_OK_FirstCallDisablesHw)
@@ -255,6 +272,7 @@ TEST_F(Bsw_Can_Test, Can_EnableControllerInterrupts_NG_NullConfig)
     Can_EnableControllerInterrupts(0U);
 
     EXPECT_EQ(FakeCanHw_EnableRxIsrCount, 0U);
+    EXPECT_EQ(FakeDetHw_LastErrorId, CAN_E_UNINIT);
 }
 
 TEST_F(Bsw_Can_Test, Can_EnableControllerInterrupts_NG_InvalidController)
@@ -265,6 +283,7 @@ TEST_F(Bsw_Can_Test, Can_EnableControllerInterrupts_NG_InvalidController)
     Can_EnableControllerInterrupts(1U);
 
     EXPECT_EQ(FakeCanHw_EnableRxIsrCount, 0U);
+    EXPECT_EQ(FakeDetHw_LastErrorId, CAN_E_PARAM_CONTROLLER);
 }
 
 TEST_F(Bsw_Can_Test, Can_EnableControllerInterrupts_NG_UnmatchedCallIsNoOp)
@@ -311,6 +330,7 @@ TEST_F(Bsw_Can_Test, Can_Write_NG_NullConfig)
 
     /* 評価 (Assert) */
     EXPECT_EQ(ret, CAN_NOT_OK);
+    EXPECT_EQ(FakeDetHw_LastErrorId, CAN_E_UNINIT);
 }
 
 TEST_F(Bsw_Can_Test, Can_Write_NG_NullPduInfo)
@@ -323,6 +343,7 @@ TEST_F(Bsw_Can_Test, Can_Write_NG_NullPduInfo)
 
     /* 評価 (Assert) */
     EXPECT_EQ(ret, CAN_NOT_OK);
+    EXPECT_EQ(FakeDetHw_LastErrorId, CAN_E_PARAM_POINTER);
 }
 
 TEST_F(Bsw_Can_Test, Can_Write_NG_NullPduInfoSdu)
@@ -341,6 +362,7 @@ TEST_F(Bsw_Can_Test, Can_Write_NG_NullPduInfoSdu)
 
     /* 評価 (Assert) */
     EXPECT_EQ(ret, CAN_NOT_OK);
+    EXPECT_EQ(FakeDetHw_LastErrorId, CAN_E_PARAM_POINTER);
 }
 
 TEST_F(Bsw_Can_Test, Can_Write_NG_LengthExceeds)
@@ -360,6 +382,7 @@ TEST_F(Bsw_Can_Test, Can_Write_NG_LengthExceeds)
 
     /* 評価 (Assert) */
     EXPECT_EQ(ret, CAN_NOT_OK);
+    EXPECT_EQ(FakeDetHw_LastErrorId, CAN_E_PARAM_DLC);
 }
 
 TEST_F(Bsw_Can_Test, Can_Write_NG_notStarted)
@@ -497,6 +520,7 @@ TEST_F(Bsw_Can_Test, Can_MainFunction_Write_NG_NullConfig)
 
     /* 評価 (Assert) */
     EXPECT_EQ(Can_Test_GetControllerState(), CAN_CS_UNINIT);
+    EXPECT_EQ(FakeDetHw_LastErrorId, CAN_E_UNINIT);
 }
 
 TEST_F(Bsw_Can_Test, Can_MainFunction_Write_OK)
@@ -537,6 +561,7 @@ TEST_F(Bsw_Can_Test, Can_MainFunction_Read_NG_NullConfig)
 
     /* 評価 (Assert) */
     EXPECT_EQ(Can_Test_GetControllerState(), CAN_CS_UNINIT);
+    EXPECT_EQ(FakeDetHw_LastErrorId, CAN_E_UNINIT);
 }
 
 TEST_F(Bsw_Can_Test, Can_MainFunction_Read_NG_On_Sleep)
@@ -609,6 +634,7 @@ TEST_F(Bsw_Can_Test, Can_MainFunction_Wakeup_NG_NullConfig)
 
     /* 評価 (Assert) */
     EXPECT_EQ(Can_Test_GetControllerState(), CAN_CS_UNINIT);
+    EXPECT_EQ(FakeDetHw_LastErrorId, CAN_E_UNINIT);
 }
 
 TEST_F(Bsw_Can_Test, Can_MainFunction_Wakeup_NG_NotOnSleep)
@@ -668,6 +694,7 @@ TEST_F(Bsw_Can_Test, Can_MainFunction_BusOff_NG_NullConfig)
 
     /* 評価 (Assert) */
     EXPECT_EQ(Can_Test_GetControllerState(), CAN_CS_UNINIT);
+    EXPECT_EQ(FakeDetHw_LastErrorId, CAN_E_UNINIT);
 }
 
 TEST_F(Bsw_Can_Test, Can_MainFunction_BusOff_NG_NotOnStarted)
@@ -728,6 +755,7 @@ TEST_F(Bsw_Can_Test, Can_GetVersionInfo_NG_NullPointer)
 
     /* 評価 (Assert) */
     EXPECT_EQ(Can_Test_GetControllerState(), CAN_CS_STOPPED);
+    EXPECT_EQ(FakeDetHw_LastErrorId, CAN_E_PARAM_POINTER);
 }
 
 TEST_F(Bsw_Can_Test, Can_GetVersionInfo_OK)
@@ -759,6 +787,7 @@ TEST_F(Bsw_Can_Test, Can_GetControllerErrorState_NG_NullConfig)
 
     /* 評価 (Assert) */
     EXPECT_EQ(ret, E_NOT_OK);
+    EXPECT_EQ(FakeDetHw_LastErrorId, CAN_E_UNINIT);
 }
 
 TEST_F(Bsw_Can_Test, Can_GetControllerErrorState_NG_InvalidController)
@@ -772,6 +801,7 @@ TEST_F(Bsw_Can_Test, Can_GetControllerErrorState_NG_InvalidController)
 
     /* 評価 (Assert) */
     EXPECT_EQ(ret, E_NOT_OK);
+    EXPECT_EQ(FakeDetHw_LastErrorId, CAN_E_PARAM_CONTROLLER);
 }
 
 TEST_F(Bsw_Can_Test, Can_GetControllerErrorState_NG_NullPointer)
@@ -784,6 +814,7 @@ TEST_F(Bsw_Can_Test, Can_GetControllerErrorState_NG_NullPointer)
 
     /* 評価 (Assert) */
     EXPECT_EQ(ret, E_NOT_OK);
+    EXPECT_EQ(FakeDetHw_LastErrorId, CAN_E_PARAM_POINTER);
 }
 
 TEST_F(Bsw_Can_Test, Can_GetControllerErrorState_OK_ReturnsActiveByDefault)

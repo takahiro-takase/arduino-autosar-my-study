@@ -194,6 +194,25 @@ void Mcu_PerformReset(void);
  */
 void Mcu_GetVersionInfo(Std_VersionInfoType* versioninfo);
 
+#ifdef MCU_UNIT_TEST
+/**
+ * \brief   [テスト専用] Mcu_Initialized/Mcu_CachedRawReset を未初期化状態へ戻す。
+ *
+ * \details 実 AUTOSAR SWS_Mcu には Mcu_DeInit() に相当する API が無く（本実装も
+ *          意図的に追加していない、ファイル冒頭コメント参照）、他のテスト
+ *          ファイル（例: Bsw_DcmStack_SID11_EcuReset_test.cpp）がそれぞれの
+ *          SetUp() で Mcu_Init() を呼ぶため、native_chain_tests のリンク順・
+ *          実行順に関わらず「未初期化状態からの呼び出し」を確実に再現するには
+ *          本関数が必要（`Mcu_Init()` は一度呼ぶと二度と未初期化へ戻せない）。
+ *          native 環境のホストテストからのみ使用する。`MCU_UNIT_TEST` は
+ *          CMakeLists.txt の native_chain ターゲットでのみ定義され、実機ビルド
+ *          （`uno_r4`）では定義されないため、実機の `Mcu.h`/`Mcu.c` には一切
+ *          含まれない（AUTOSAR 標準外の関数。`Can_Test_SetControllerState()`
+ *          等と同じ設計方針）。
+ */
+void Mcu_Test_ResetInitState(void);
+#endif
+
 #ifdef __cplusplus
 }
 #endif
