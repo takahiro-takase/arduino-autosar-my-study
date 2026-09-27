@@ -10,11 +10,13 @@
  *              実装しない。Arduino フレームワークが setup() 呼び出し前に
  *              クロック初期化を完了させており、本プロジェクトは複数電源
  *              モードや RAM セクション初期化もモデル化しないため。
- *            - Mcu_PerformReset() も未実装。本プロジェクトでソフトウェア
- *              起因のリセットを要求する箇所が存在しないため（WdgM による
- *              HW ウォッチドッグリセットのみを使う）。
+ *            - Mcu_PerformReset() は実装する（2026-09 追加）。UDS 0x11
+ *              ECUReset（Dcm_HandleEcuReset()）から、正応答送信後に呼ぶ
+ *              唯一の呼び出し元。Cortex-M4 の NVIC_SystemReset() を発行する
+ *              薄いラッパー（実処理は Mcu_Hw.c 参照）。
  *            - 上記により対応 API は Mcu_Init() / Mcu_GetResetReason() /
- *              Mcu_GetResetRawValue() / Mcu_GetVersionInfo() の 4 つのみ。
+ *              Mcu_GetResetRawValue() / Mcu_PerformReset() / Mcu_GetVersionInfo()
+ *              の 5 つのみ。
  *
  *          Mcu_Hw との呼び出し順序（重要）:
  *            Mcu_Hw_ReadAndClearResetReason()（Mcu_Hw.h 参照）はリセット
@@ -66,8 +68,14 @@ extern "C" {
  * \brief   リセット種別（[SWS_Mcu_00252] Mcu_ResetType の値域）。
  *
  * \details MCU_SW_RESET は本実装では返されない（Mcu_Hw がソフトウェア
- *          リセットを検出しないため。Mcu_Hw.h 参照）。BrownOut/External
- *          単独検出時の扱いは Mcu_GetResetReason() のコメント参照。
+ *          リセットを検出しないため。Mcu_Hw.h 参照）。Mcu_PerformReset()
+ *          （NVIC_SystemReset() 発行）による再起動後も同様で、Renesas RA の
+ *          RSTSR1.SWRF フラグを Mcu_Hw_ReadAndClearResetReason() が読んで
+ *          いないため、次回起動時は他の要因（Watchdog/PowerOn 等）が
+ *          立っていなければ MCU_RESET_UNDEFINED になる（UDS 0x11 ECUReset
+ *          由来か物理リセットボタン由来かを起動後ログから区別したい場合は
+ *          将来的な拡張が必要、現状は非対応）。BrownOut/External 単独検出時の
+ *          扱いは Mcu_GetResetReason() のコメント参照。
  */
 typedef enum
 {
@@ -148,6 +156,28 @@ Mcu_ResetType Mcu_GetResetReason(void);
  * \Synchronicity  {Synchronous}
  */
 Mcu_RawResetType Mcu_GetResetRawValue(void);
+
+/**
+ * \brief   MCU をハードウェア機能でリセットする（[SWS_Mcu_00160]）。
+ *
+ * \details 呼び出し元へ戻らない（Cortex-M4 の NVIC_SystemReset() 発行後、
+ *          MCU 全体が再起動するため。実処理は Mcu_Hw_PerformReset() 参照）。
+ *          現状唯一の呼び出し元は UDS 0x11 ECUReset
+ *          （Dcm_HandleEcuReset()。実車のリセットボタン押下と同等の効果を
+ *          UDS 経由で起こしたいという要望から 2026-09 追加。Dcm 側が正応答
+ *          送信後に短い遅延を挟んでから呼ぶことで、応答フレームの物理送信を
+ *          先に完了させる）。
+ *
+ * \retval  なし（戻らない）。
+ * \retval  （エラー時のみ戻る）未初期化の場合は MCU_E_UNINIT を報告して
+ *          即座にリターンする（[SWS_Mcu_00125]、[SWS_Mcu_00145]）。
+ *
+ * \AUTOSARReq     {SWS_Mcu_00160, SWS_Mcu_00143, SWS_Mcu_00144, SWS_Mcu_00145}
+ * \ServiceID      {0x07}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void Mcu_PerformReset(void);
 
 /**
  * \brief   Mcu モジュールのバージョン情報を取得する。

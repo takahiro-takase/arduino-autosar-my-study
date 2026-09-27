@@ -51,6 +51,7 @@
 #define MCU_API_ID_INIT                   0x00U
 #define MCU_API_ID_GET_RESET_REASON       0x05U
 #define MCU_API_ID_GET_RESET_RAW_VALUE    0x06U
+#define MCU_API_ID_PERFORM_RESET          0x07U
 #define MCU_API_ID_GET_VERSION_INFO       0x09U
 
 /** バージョン情報（Wdg/Com/PduR 等の既存モジュールと同じ命名規則） */

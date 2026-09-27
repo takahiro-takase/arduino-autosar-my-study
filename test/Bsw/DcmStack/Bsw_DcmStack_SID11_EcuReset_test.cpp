@@ -25,8 +25,10 @@ extern "C" {
 #include "Dcm.h"
 #include "Dcm_Cfg.h"
 #include "Dem.h"
+#include "Mcu.h"
 #include "Fake_Can_Hw.h"
 #include "Fake_Det_Hw.h"
+#include "Fake_Mcu_Hw.h"
 #include "Fake_Millis.h"
 #include "Wrap_Can.h"
 #include "Wrap_CanIf.h"
@@ -101,6 +103,7 @@ protected:
     {
         FakeMillis_Reset();
         FakeCanHw_Reset();
+        FakeMcuHw_Reset();
         WrapCan_Reset();
         WrapCanIf_Reset();
         WrapPduR_Reset();
@@ -133,6 +136,10 @@ protected:
         CanSM_Init(NULL);
         CanTp_Init(NULL);
         Dem_Init(NULL);
+        /* Dcm_HandleEcuReset() が実際に Mcu_PerformReset() を呼ぶようになった
+         * ため（2026-09 追加）、未初期化のまま MCU_E_UNINIT を報告させない
+         * よう Mcu_Init() を追加。 */
+        Mcu_Init(&Mcu_Config);
         Dcm_Init(NULL);
 
         FakeDetHw_LogSuppressed = 0U;  // ここから各 TEST_F の実行(Act)区間
@@ -183,8 +190,9 @@ TEST_F(Bsw_DcmStack_SID11_EcuReset_Test,
 // ------------------------------------------------------------
 // OK: [0x11, 0x01] hardReset は extendedSession 中でも正応答
 // [0x51, 0x01] を返し、応答後にセッションが defaultSession へ自動的に
-// 戻る（Dcm_ResetToDefaultSession() 経由。ファイル冒頭で参照している
-// Dcm_HandleEcuReset() の \details 参照）。
+// 戻り（Dcm_ResetToDefaultSession() 経由）、さらに実際に
+// Mcu_PerformReset() が呼ばれる（Fake_Mcu_Hw 経由で観測。2026-09 追加。
+// ファイル冒頭で参照している Dcm_HandleEcuReset() の \details 参照）。
 // ------------------------------------------------------------
 TEST_F(Bsw_DcmStack_SID11_EcuReset_Test,
        EcuReset_OK_HardResetFromExtendedSessionReturnsToDefaultSessionOnCanHw)
@@ -229,6 +237,12 @@ TEST_F(Bsw_DcmStack_SID11_EcuReset_Test,
     Dcm_SesCtrlType session = 0U;
     ASSERT_EQ(Dcm_GetSesCtrlType(&session), E_OK);
     EXPECT_EQ(session, DCM_SESSION_DEFAULT);
+
+    /* 正応答送信後、実際に MCU リセット（Mcu_PerformReset() 経由の
+     * NVIC_SystemReset() 相当）が要求されたこと。Fake_Mcu_Hw は実HWと違い
+     * プロセスを終了させずに戻ってくるため、ここまで到達できる
+     * （Fake_Mcu_Hw.h 参照）。 */
+    EXPECT_EQ(FakeMcuHw_PerformResetCount, 1U);
 }
 
 // ------------------------------------------------------------

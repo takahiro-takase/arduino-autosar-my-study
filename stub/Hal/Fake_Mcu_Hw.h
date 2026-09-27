@@ -1,0 +1,37 @@
+/**
+ * \file    Fake_Mcu_Hw.h
+ * \brief   Mcu_Hw.h（Renesas RA レジスタ境界）のテスト用フェイク実装の宣言
+ * \details Mcu.c のロジックだけを検証したいので、実 HW（RSTSR レジスタ・
+ *          NVIC_SystemReset()）は使わず、呼び出し回数・戻り値を記録する
+ *          だけのフェイクに差し替える。
+ *
+ *          Mcu_Hw_PerformReset() は実 HW では呼び出し元へ戻らないが、本フェイクは
+ *          テストプロセスを終了させるわけにはいかないため、呼び出し回数を
+ *          記録するだけで普通に return する（呼び出し元の Dcm_HandleEcuReset()
+ *          から見て「戻ってくる」点だけが実機と異なる。この差を踏まえて、
+ *          Mcu_PerformReset() 呼び出しは常に処理の最後に置くこと）。
+ */
+#ifndef FAKE_MCU_HW_H
+#define FAKE_MCU_HW_H
+
+#include "Mcu_Hw.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/** 次回の Mcu_Hw_ReadAndClearResetReason() が返す値（テストが差し替える）。 */
+extern Mcu_Hw_ResetReasonType FakeMcuHw_ResetReason;
+
+extern uint32 FakeMcuHw_ReadAndClearResetReasonCount;
+extern uint32 FakeMcuHw_DisableWatchdogAtBootCount;
+extern uint32 FakeMcuHw_PerformResetCount;
+
+/** 各テストケースの開始時に呼び、記録・戻り値設定をすべて初期状態に戻す。 */
+void FakeMcuHw_Reset(void);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif /* FAKE_MCU_HW_H */

@@ -55,3 +55,12 @@ void Mcu_Hw_DisableWatchdogAtBoot(void)
     /* Renesas RA の WDT は WDTimer::begin() を呼ぶまで動作しないため、
      * 起動直後に無効化すべき有効な WDT が存在しない。 */
 }
+
+void Mcu_Hw_PerformReset(void)
+{
+    /* CMSIS-Core の標準 API。bsp_api.h が renesas.h 経由でデバイスヘッダ
+     * (R7FA4M1AB.h 等) を辿って core_cm4.h を間接的に include しているため、
+     * 本ファイルは追加の include なしで呼び出せる（R_SYSTEM-> アクセスと
+     * 同じ経路）。AIRCR.SYSRESETREQ を立てて MCU 全体をリセットする。 */
+    NVIC_SystemReset();
+}
