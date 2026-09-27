@@ -3137,3 +3137,14 @@ void Dcm_ComIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
         break;
     }
 }
+
+/* ======================================================================
+ * Test Functions
+ * ====================================================================== */
+
+#ifdef DCM_UNIT_TEST
+void Dcm_Test_ResetInitState(void)
+{
+    Dcm_Initialized = 0U;
+}
+#endif

@@ -200,6 +200,22 @@ Std_ReturnType Dcm_ResetToDefaultSession(void);
  */
 void Dcm_GetVersionInfo(Std_VersionInfoType* versioninfo);
 
+#ifdef DCM_UNIT_TEST
+/**
+ * \brief   [テスト専用] Dcm_Initialized を未初期化状態へ戻す。
+ *
+ * \details Dcm には DeInit() に相当する API が無く、`Dcm_Initialized` は
+ *          native_chain_tests バイナリ全体で共有される static のため、
+ *          一度 `Dcm_Init()` を呼ぶと他のテストファイルの実行順に関わらず
+ *          「未初期化状態」を再現できなくなる。native 環境のホストテストから
+ *          のみ使用する。`DCM_UNIT_TEST` は CMakeLists.txt の native_chain
+ *          ターゲットでのみ定義され、実機ビルド（`uno_r4`）では定義されない
+ *          ため、実機の `Dcm.h`/`Dcm.c` には一切含まれない（AUTOSAR
+ *          標準外の関数。`Mcu_Test_ResetInitState()` と同じ設計方針）。
+ */
+void Dcm_Test_ResetInitState(void);
+#endif
+
 #ifdef __cplusplus
 }
 #endif

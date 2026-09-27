@@ -10,7 +10,9 @@
  */
 #include <gtest/gtest.h>
 #include "WdgM.h"
-#include "Fake_WdgIf.h"
+#include "Wdg.h"
+#include "Wdg_PBCfg.h"
+#include "Fake_Wdg_Hw.h"
 #include "Wrap_Dem.h"
 #include "Fake_Det_Hw.h"
 #include "Fake_Millis.h"
@@ -22,9 +24,10 @@ protected:
     {
         FakeMillis_Reset();
         FakeDetHw_Reset();
-        FakeWdgIf_Reset();
+        FakeWdgHw_Reset();
         WrapDem_Reset();
         Dem_Init(NULL);  // Demの内部状態を毎テスト決定的にリセットする（Fake_NvM.cにより常に「初回起動」）
+        Wdg_Init(&Wdg_Config);  // WdgIf/Wdg を実体リンクへ切り替えた際に追加（EcuM_Init() と同じ順序）
         WdgM_Init(&WdgM_Config);
         FakeDetHw_Reset();  /* Init 自体が出す DET ログ・記録を後続の検証対象から除く */
     }

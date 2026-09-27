@@ -1887,3 +1887,14 @@ static void Dem_EvaluatePendingClear(Dem_EventIdType EventId)
         DET_LOGI(TAG, "ev=%u pendingDTC cleared (clean operation cycle)", (unsigned)EventId);
     }
 }
+
+/* ======================================================================
+ * Test Functions
+ * ====================================================================== */
+
+#ifdef DEM_UNIT_TEST
+void Dem_Test_ResetInitState(void)
+{
+    Dem_Initialized = 0U;
+}
+#endif

@@ -437,6 +437,22 @@ void NvM_MainFunction(void);
  */
 void NvM_GetVersionInfo(Std_VersionInfoType* versioninfo);
 
+#ifdef NVM_UNIT_TEST
+/**
+ * \brief   [テスト専用] NvM_Cfg を未初期化状態（NULL）へ戻す。
+ *
+ * \details NvM には DeInit() に相当する API が無く、`NvM_Cfg` は
+ *          native_chain_tests バイナリ全体で共有される static のため、
+ *          一度 `NvM_Init()` を呼ぶと他のテストファイルの実行順に関わらず
+ *          「未初期化状態」を再現できなくなる。native 環境のホストテストから
+ *          のみ使用する。`NVM_UNIT_TEST` は CMakeLists.txt の native_chain
+ *          ターゲットでのみ定義され、実機ビルド（`uno_r4`）では定義されない
+ *          ため、実機の `NvM.h`/`NvM.c` には一切含まれない（AUTOSAR
+ *          標準外の関数。`Mcu_Test_ResetInitState()` と同じ設計方針）。
+ */
+void NvM_Test_ResetInitState(void);
+#endif
+
 #ifdef __cplusplus
 }
 #endif
