@@ -240,14 +240,21 @@ set(NATIVE_CHAIN_INCLUDE_DIRS
     stub/Bsw/ComM
     stub/Bsw/Dcm
     stub/Bsw/Dem
+    stub/Bsw/Det
+    stub/Bsw/Dio
     stub/Bsw/E2E
     stub/Bsw/E2EXf
     stub/Bsw/EcuM
+    stub/Bsw/FiM
+    stub/Bsw/Gpt
     stub/Bsw/KeyM
     stub/Bsw/Nm
     stub/Bsw/NvM
     stub/Bsw/PduR
+    stub/Bsw/Port
     stub/Bsw/WdgIf
+    stub/Bsw/WdgM
+    stub/Os
     stub/Rte
     stub/Hal
 )
@@ -294,16 +301,23 @@ set(NATIVE_CHAIN_STUB_SOURCES
     stub/Bsw/ComM/Wrap_ComM.c
     stub/Bsw/Dcm/Wrap_Dcm.c
     stub/Bsw/Dem/Wrap_Dem.c
+    stub/Bsw/Det/Wrap_Det.c
+    stub/Bsw/Dio/Wrap_Dio.c
     stub/Bsw/E2E/Wrap_E2E.c
     stub/Bsw/E2E/Wrap_E2E_P05.c
     stub/Bsw/E2E/Wrap_E2E_P01.c
     stub/Bsw/E2EXf/Wrap_E2EXf.c
     stub/Bsw/EcuM/Fake_Bsw_EcuM.c
+    stub/Bsw/FiM/Wrap_FiM.c
+    stub/Bsw/Gpt/Wrap_Gpt.c
     stub/Bsw/KeyM/Fake_KeyM.c
     stub/Bsw/Nm/Wrap_Nm.c
     stub/Bsw/NvM/Fake_NvM.c
     stub/Bsw/PduR/Wrap_PduR.c
+    stub/Bsw/Port/Wrap_Port.c
     stub/Bsw/WdgIf/Fake_WdgIf.c
+    stub/Bsw/WdgM/Wrap_WdgM.c
+    stub/Os/Wrap_Os.c
     stub/Rte/Fake_Rte.c
     stub/Hal/Fake_Can_Hw.c
     stub/Hal/Fake_Det_Hw.c
@@ -486,6 +500,23 @@ set(NATIVE_CHAIN_WRAP_SYMBOLS
     Dem_EnableDTCSetting
     Dem_DisableDTCSetting
     Dem_GetVersionInfo
+    # Det.h の Det_Xxx 公開API全6関数（Log_Write/Log_HexStr は無限再帰回避のため
+    # 対象外、Wrap_Det.h/.c 参照）。
+    Det_Init
+    Det_ReportError
+    Det_Start
+    Det_ReportRuntimeError
+    Det_ReportTransientFault
+    Det_GetVersionInfo
+    # Dio.h の公開API全8関数（Wrap_Dio.h/.c 参照）。
+    Dio_ReadChannel
+    Dio_WriteChannel
+    Dio_ReadPort
+    Dio_WritePort
+    Dio_ReadChannelGroup
+    Dio_WriteChannelGroup
+    Dio_GetVersionInfo
+    Dio_FlipChannel
     # E2E.h の AUTOSAR IF 全3関数（Wrap_E2E.h/.c 参照）。
     E2E_SMCheck
     E2E_SMCheckInit
@@ -509,6 +540,26 @@ set(NATIVE_CHAIN_WRAP_SYMBOLS
     E2EXf_Inv_AbsInfo
     E2EXf_E2EHealthStatus
     E2EXf_GetVersionInfo
+    # FiM.h が宣言する実装済み全5関数（DemTriggerOnMonitorStatus/
+    # DemTriggerOnComponentStatus/DemInitは未実装のため対象外、
+    # Wrap_FiM.h/.c 参照）。
+    FiM_Init
+    FiM_GetFunctionPermission
+    FiM_SetFunctionAvailable
+    FiM_GetVersionInfo
+    FiM_MainFunction
+    # Gpt.h が宣言する実装済み全9関数（SetMode/DisableWakeup/EnableWakeup/
+    # CheckWakeup/GetPredefTimerValueは未実装のため対象外、
+    # Wrap_Gpt.h/.c 参照）。
+    Gpt_GetVersionInfo
+    Gpt_Init
+    Gpt_DeInit
+    Gpt_GetTimeElapsed
+    Gpt_GetTimeRemaining
+    Gpt_StartTimer
+    Gpt_StopTimer
+    Gpt_EnableNotification
+    Gpt_DisableNotification
     # Nm.h の公開API全14関数（Wrap_Nm.h/.c 参照）。
     Nm_Init
     Nm_NetworkRequest
@@ -533,6 +584,34 @@ set(NATIVE_CHAIN_WRAP_SYMBOLS
     PduR_ComRxIndication
     PduR_CanIfTxConfirmation
     PduR_SecOCTxConfirmation
+    # Port.h の公開API全5関数（Wrap_Port.h/.c 参照）。
+    Port_Init
+    Port_SetPinDirection
+    Port_RefreshPortDirection
+    Port_GetVersionInfo
+    Port_SetPinMode
+    # WdgM.h の公開API全15関数（AUTOSAR IF 11関数 + 本プロジェクト独自拡張4関数、
+    # WdgM_Test_SetFirstExpiredSEIDRawはテスト専用のため対象外、
+    # Wrap_WdgM.h/.c 参照）。
+    WdgM_Init
+    WdgM_DeInit
+    WdgM_GetVersionInfo
+    WdgM_SetMode
+    WdgM_GetMode
+    WdgM_EnableHwWatchdog
+    WdgM_DisableHwWatchdog
+    WdgM_ResumeSupervision
+    WdgM_CheckpointReached
+    WdgM_GetLocalStatus
+    WdgM_GetGlobalStatus
+    WdgM_MainFunction
+    WdgM_TriggerHwWatchdog
+    WdgM_PerformReset
+    WdgM_GetFirstExpiredSEID
+    # Os.h の公開API全3関数（Wrap_Os.h/.c 参照）。
+    Os_Init
+    Os_SchedulerStep
+    Os_SetTaskActive
 )
 foreach(wrap_symbol IN LISTS NATIVE_CHAIN_WRAP_SYMBOLS)
     target_link_options(native_chain_tests PRIVATE "-Wl,--wrap=${wrap_symbol}")
