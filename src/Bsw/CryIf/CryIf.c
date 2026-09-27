@@ -237,3 +237,14 @@ Std_ReturnType CryIf_KeyElementGet(uint32 cryIfKeyId, uint32 keyElementId,
     /* [SWS_CryIf_00065]: 単一 Crypto Driver Object へのパススルー。 */
     return Crypto_KeyElementGet(cryIfKeyId, keyElementId, resultPtr, resultLengthPtr);
 }
+
+/* ======================================================================
+ * Test Functions
+ * ====================================================================== */
+
+#ifdef CRYIF_UNIT_TEST
+void CryIf_Test_ResetInitState(void)
+{
+    CryIf_Initialized = 0U;
+}
+#endif

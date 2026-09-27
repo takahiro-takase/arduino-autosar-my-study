@@ -197,6 +197,9 @@ add_compile_definitions(
     CAN_UNIT_TEST
     CANTP_UNIT_TEST
     COM_UNIT_TEST
+    CRYIF_UNIT_TEST
+    CRYPTO_UNIT_TEST
+    CSM_UNIT_TEST
     DCM_UNIT_TEST
     DEM_UNIT_TEST
     DET_LOG_LEVEL=LOG_T
@@ -236,6 +239,10 @@ set(NATIVE_CHAIN_INCLUDE_DIRS
     src/Bsw/MemIf
     src/Bsw/CanTp
     src/Bsw/KeyM
+    src/Bsw/Crypto
+    src/Bsw/CryIf
+    src/Bsw/Csm
+    src/Bsw/SecOC
     src/Bsw/Gpt
     src/Bsw/Dio
     src/Bsw/Port
@@ -282,6 +289,13 @@ set(NATIVE_CHAIN_SRC_SOURCES
     src/Bsw/CanTp/CanTp.c
     src/Bsw/Com/Com.c
     src/Bsw/ComM/ComM.c
+    src/Bsw/CryIf/CryIf.c
+    src/Bsw/Crypto/Crypto.c
+    src/Bsw/Crypto/Crypto_Aes128.c
+    src/Bsw/Crypto/Crypto_Cmac.c
+    src/Bsw/Crypto/Crypto_PBCfg.c
+    src/Bsw/Csm/Csm.c
+    src/Bsw/Csm/Csm_PBCfg.c
     src/Bsw/Dcm/Dcm.c
     src/Bsw/Dem/Dem.c
     src/Bsw/Det/Det.c
@@ -301,8 +315,12 @@ set(NATIVE_CHAIN_SRC_SOURCES
     src/Bsw/Nm/Nm.c
     src/Bsw/NvM/NvM.c
     src/Bsw/NvM/NvM_PBCfg.c
+    src/Bsw/KeyM/KeyM.c
+    src/Bsw/KeyM/KeyM_PBCfg.c
     src/Bsw/PduR/PduR.c
     src/Bsw/Port/Port.c
+    src/Bsw/SecOC/SecOC.c
+    src/Bsw/SecOC/SecOC_PBCfg.c
     src/Bsw/Wdg/Wdg.c
     src/Bsw/Wdg/Wdg_PBCfg.c
     src/Bsw/WdgIf/WdgIf.c
@@ -332,7 +350,6 @@ set(NATIVE_CHAIN_STUB_SOURCES
     stub/Bsw/EcuM/Fake_Bsw_EcuM.c
     stub/Bsw/FiM/Wrap_FiM.c
     stub/Bsw/Gpt/Wrap_Gpt.c
-    stub/Bsw/KeyM/Fake_KeyM.c
     stub/Bsw/Nm/Wrap_Nm.c
     stub/Bsw/PduR/Wrap_PduR.c
     stub/Bsw/Port/Wrap_Port.c
