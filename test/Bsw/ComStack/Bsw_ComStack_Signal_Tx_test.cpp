@@ -309,6 +309,8 @@ class Bsw_ComStack_Signal_Tx_Test : public ::testing::Test
 protected:
     void SetUp() override
     {
+        FakeDetHw_LogSuppressed = 1U;  // Init() のログはノイズになるため抑制
+
         FakeMillis_Reset();  // Com_Init() が millis() を Com_TxLastSentMs[] へ
                               // 取り込むため、Com_Init() より前にリセットする
         FakeCanHw_Reset();
@@ -316,7 +318,6 @@ protected:
         WrapCanIf_Reset();
         WrapPduR_Reset();
         WrapCom_Reset();
-        FakeDetHw_LogSuppressed = 1U;  // Init() のログはノイズになるため抑制
 
         canConfig.filter.filterId = 0x0220U;
         canConfig.filter.mask     = 0x1FFFU;
@@ -346,8 +347,6 @@ protected:
         s_txCalloutAccept      = 1U;
         s_txCalloutInvokeCount = 0U;
         s_txCalloutLastByte0   = 0U;
-
-        FakeDetHw_LogSuppressed = 0U;  // ここから各 TEST_F の実行(Act)区間
     }
 
     void TearDown() override
@@ -450,7 +449,9 @@ TEST_F(Bsw_ComStack_Signal_Tx_Test, ComSendSignal_NG_UnknownSignalId_DoesNotSetP
     uint16_t value = 0x1234U;
 
     /* 実行 (Act) */
+    FakeDetHw_LogSuppressed = 0U;  // ログ出力
     uint8 ret = Com_SendSignal(99U, &value);  // 設定に存在しない SignalId
+    FakeDetHw_LogSuppressed = 1U;  // ログ抑制
 
     /* 評価 (Assert) */
     EXPECT_EQ(ret, E_NOT_OK);

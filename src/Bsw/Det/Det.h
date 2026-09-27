@@ -45,10 +45,10 @@ extern "C" {
 
 typedef enum
 {
-    LOG_E = 0,  /**< Error   — エラー (abort / NRC / NULL ptr) */
+    LOG_T = 0,  /**< Trace   — テストコード専用トレース確認（関数先頭で機械的に出す） */
+    LOG_E,      /**< Error   — エラー (abort / NRC / NULL ptr) */
     LOG_W,      /**< Warning — 警告  (BUSY / no route)         */
     LOG_I,      /**< Info    — 通常情報 (Init / 状態遷移)      */
-    LOG_T,      /**< Trace   — 関数コールチェーンの確認専用（関数先頭で機械的に出す） */
     LOG_D       /**< Debug   — 詳細  (フレームデータ等)        */
 } LogLevel;
 
@@ -99,7 +99,6 @@ void Log_HexStr(char* dst, uint8_t dstSize,
 #define DET_LOGE(tag, fmt, ...)  Log_Write(LOG_E, tag, __func__, fmt, ##__VA_ARGS__)
 #define DET_LOGW(tag, fmt, ...)  Log_Write(LOG_W, tag, __func__, fmt, ##__VA_ARGS__)
 #define DET_LOGI(tag, fmt, ...)  Log_Write(LOG_I, tag, __func__, fmt, ##__VA_ARGS__)
-#define DET_LOGT(tag, fmt, ...)  Log_Write(LOG_T, tag, __func__, fmt, ##__VA_ARGS__)
 #define DET_LOGD(tag, fmt, ...)  Log_Write(LOG_D, tag, __func__, fmt, ##__VA_ARGS__)
 
 /**

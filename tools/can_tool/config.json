@@ -5,7 +5,8 @@
         "bitrate": 500000
     },
     "serial": {
-        "baudrate": 115200
+        "baudrate": 115200,
+        "log_dir": "logs"
     },
     "buttons": [
         { "type": "group_header", "label": "メータECU" },
