@@ -303,3 +303,14 @@ Std_ReturnType Crypto_KeySetValid(uint32 cryptoKeyId)
     DET_LOGI(TAG, "KeySetValid ok cryptoKeyId=%u", (unsigned)cryptoKeyId);
     return E_OK;
 }
+
+/* ======================================================================
+ * Test Functions
+ * ====================================================================== */
+
+#ifdef CRYPTO_UNIT_TEST
+void Crypto_Test_ResetInitState(void)
+{
+    Crypto_Initialized = 0U;
+}
+#endif

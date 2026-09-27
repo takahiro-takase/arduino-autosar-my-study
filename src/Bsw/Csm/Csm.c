@@ -369,3 +369,14 @@ Std_ReturnType Csm_KeyElementGet(uint32 keyId, uint32 keyElementId,
     }
     return ret;
 }
+
+/* ======================================================================
+ * Test Functions
+ * ====================================================================== */
+
+#ifdef CSM_UNIT_TEST
+void Csm_Test_ResetInitState(void)
+{
+    Csm_Initialized = 0U;
+}
+#endif
