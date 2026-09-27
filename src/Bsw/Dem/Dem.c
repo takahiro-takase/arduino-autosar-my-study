@@ -347,7 +347,61 @@ void Dem_Init(const Dem_ConfigType* ConfigPtr)
  * Dem_ClearDTC
  * ---------------------------------------------------------------------- */
 
-/* 未実装 */
+/**
+ * \brief   指定 DTC（または全 DTC）をクリアし、NvM (EEPROM) を初期状態へ戻す
+ *          （[SWS_Dem_00665]、Dem.h 参照）。
+ *
+ * \ServiceID      {0x23}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType Dem_ClearDTC(uint8 ClientId, uint32 DTC, Dem_DTCFormatType DTCFormat, Dem_DTCOriginType DTCOrigin)
+{
+    (void)ClientId;
+
+    if (!Dem_Initialized)
+    {
+        Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_CLEAR_DTC, DEM_E_UNINIT);
+        return E_NOT_OK;
+    }
+
+    if (DTCFormat != DEM_DTC_FORMAT_UDS)
+    {
+        return DEM_E_NO_DTC_AVAILABLE;
+    }
+
+    if (DTCOrigin != DEM_DTC_ORIGIN_PRIMARY_MEMORY)
+    {
+        Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_CLEAR_DTC, DEM_E_WRONG_CONFIGURATION);
+        return E_NOT_OK;
+    }
+
+    if (DTC == DEM_GROUP_ALL_DTCS)
+    {
+        for (uint8 i = 0U; i < DEM_EVENT_COUNT; i++)
+        {
+            Dem_ClearOne(i);
+        }
+        DET_LOGI(TAG, "ClearDTC all ok");
+    }
+    else
+    {
+        Dem_EventIdType eventId = 0U;
+
+        if (Dem_GetEventIdOfDTC(DTC, &eventId) != E_OK)
+        {
+            return E_NOT_OK;
+        }
+
+        Dem_ClearOne(eventId);
+        DET_LOGI(TAG, "ClearDTC dtc=0x%06lX ok", (unsigned long)DTC);
+    }
+
+    (void)NvM_WriteBlock(NVM_BLOCK_ID_DEM_STATUS,   Dem_StatusTable);
+    (void)NvM_WriteBlock(NVM_BLOCK_ID_DEM_AGING,    Dem_AgingCounter);
+    (void)NvM_WriteBlock(NVM_BLOCK_ID_DEM_EXTENDED, Dem_OccurrenceCounter);
+    return E_OK;
+}
 
 /* ----------------------------------------------------------------------
  * Dem_ClearPrestoredFreezeFrame
@@ -1411,100 +1465,6 @@ static void Dem_ClearOne(Dem_EventIdType EventId)
     Dem_AgingCounter[EventId]       = 0U;
     Dem_OccurrenceCounter[EventId]  = 0U;
     Dem_FreezeFrameValid[EventId]   = 0U;
-}
-
-/* ----------------------------------------------------------------------
- * Dem_ClearAllDTCs
- * ---------------------------------------------------------------------- */
-
-/**
- * \brief   全 DTC をクリアし、NvM (EEPROM) を初期状態へ戻す。
- *
- * \details 全イベントのステータスを TNCLC | TNCTOC にリセットし、
- *          経年回復カウンタ・ExtendedData も 0 に戻して NvM_WriteBlock() で永続化する。
- *          マジックバイトは保持する（再初期化は不要）。
- *
- * \retval  E_OK  常に成功。
- *
- * \note    本プロジェクト独自関数のため ApiId は任意の値のはずだったが、
- *          以前の 0x23 は実仕様の `Dem_ClearDTC`（[SWS_Dem_00665]）と衝突して
- *          いたため 0x2D へ 2026-09-06 に付け替えた（Dem_Cfg.h 参照）。
- *
- * \ServiceID      {0x2D}
- * \Reentrancy     {Non Reentrant}
- * \Synchronicity  {Synchronous}
- */
-Std_ReturnType Dem_ClearAllDTCs(void)
-{
-    if (!Dem_Initialized)
-    {
-        Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_CLEAR_ALL_DTCS, DEM_E_UNINIT);
-        return E_NOT_OK;
-    }
-
-    for (uint8 i = 0U; i < DEM_EVENT_COUNT; i++)
-    {
-        Dem_ClearOne(i);
-    }
-    (void)NvM_WriteBlock(NVM_BLOCK_ID_DEM_STATUS,   Dem_StatusTable);
-    (void)NvM_WriteBlock(NVM_BLOCK_ID_DEM_AGING,    Dem_AgingCounter);
-    (void)NvM_WriteBlock(NVM_BLOCK_ID_DEM_EXTENDED, Dem_OccurrenceCounter);
-    DET_LOGI(TAG, "ClearAll ok");
-    return E_OK;
-}
-
-/* ----------------------------------------------------------------------
- * Dem_ClearOneDtc
- * ---------------------------------------------------------------------- */
-
-/**
- * \brief   指定イベントの DTC のみをクリアし、NvM (EEPROM) へ反映する。
- *
- * \details SID 0x14 ClearDiagnosticInformation のグループ指定クリア
- *          (特定の DTC コードのみを指定するケース) から呼び出す。
- *          ステータスを TNCLC | TNCTOC にリセットし、デバウンスカウンタ・
- *          経年回復カウンタ・ExtendedData・FreezeFrame も未記録状態に戻す。
- *
- * \note    本プロジェクト独自の関数名（2026-09-05 是正）。以前は
- *          `Dem_ClearDTC` という名前だったが、実仕様には全く同名・別内容の
- *          `Dem_ClearDTC(uint8 ClientId)`（[SWS_Dem_00665]、ServiceID 0x23）
- *          ——事前に `Dem_SelectDTC()` で選択した DTC を ClientId 単位で
- *          非同期にクリアする API——が実在するため、実仕様に対応物が無い
- *          独自関数だと誤って説明していた（同名衝突）。実仕様の select+clear
- *          非同期方式は単一クライアント・同期処理のみの本プロジェクトには
- *          過剰なため実装せず、単純に衝突しない名前へ改名して対応する。
- *          ServiceID 0x28 は実仕様のどの Dem 関数にも使われていない値である
- *          ことを確認済みのためそのまま踏襲する。
- *
- * \param[in]  EventId  イベント ID (DEM_EVENT_* 定数)。
- *
- * \retval  E_OK      正常クリア。
- * \retval  E_NOT_OK  EventId が範囲外。
- *
- * \ServiceID      {0x28}
- * \Reentrancy     {Non Reentrant}
- * \Synchronicity  {Synchronous}
- */
-Std_ReturnType Dem_ClearOneDtc(Dem_EventIdType EventId)
-{
-    if (!Dem_Initialized)
-    {
-        Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_CLEAR_DTC, DEM_E_UNINIT);
-        return E_NOT_OK;
-    }
-
-    if (EventId >= DEM_EVENT_COUNT)
-    {
-        Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_CLEAR_DTC, DEM_E_WRONG_CONFIGURATION);
-        return E_NOT_OK;
-    }
-
-    Dem_ClearOne(EventId);
-    (void)NvM_WriteBlock(NVM_BLOCK_ID_DEM_STATUS,   Dem_StatusTable);
-    (void)NvM_WriteBlock(NVM_BLOCK_ID_DEM_AGING,    Dem_AgingCounter);
-    (void)NvM_WriteBlock(NVM_BLOCK_ID_DEM_EXTENDED, Dem_OccurrenceCounter);
-    DET_LOGI(TAG, "Clear ev=%u ok", (unsigned)EventId);
-    return E_OK;
 }
 
 /* ----------------------------------------------------------------------

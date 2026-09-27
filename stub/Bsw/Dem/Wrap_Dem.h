@@ -9,7 +9,7 @@
  *          [[reference_wrap_stub_naming_convention]] の標準テンプレートへ
  *          統一する（`<種類>_<Module>_<関数名>`）。
  *
- *          `Dem.h` が宣言する公開API全19関数を wrap 対象とする。
+ *          `Dem.h` が宣言する公開API全18関数を wrap 対象とする。
  *
  * \par Dem_SetEventStatus
  * 2026-09、`native_chain` を「Dem をフェイクにする」から「実体の `Dem.c` を
@@ -26,8 +26,8 @@
  * 個別に記録するのも本関数だけの特別扱い（他の19関数は呼び出し回数のみ）。
  *
  * \par 2026-09、残り18関数を追加
- * 戻り値を持つ11関数（GetDTCStatusAvailabilityMask/GetEventUdsStatus/
- * GetDTCOfEvent/ClearAllDTCs/ClearOneDtc/GetFreezeFrameOfEvent/
+ * 戻り値を持つ10関数（GetDTCStatusAvailabilityMask/GetEventUdsStatus/
+ * GetDTCOfEvent/ClearDTC/GetFreezeFrameOfEvent/
  * GetEventIdOfDTC/GetOccurrenceCounterOfEvent/GetFaultDetectionCounter/
  * EnableDTCSetting/DisableDTCSetting）には他モジュールの Wrap_XXX.c と同じ
  * 「指定した呼び出し回数以降は常に失敗を返す」回数閾値方式の故障注入を
@@ -41,6 +41,12 @@
  * 実装せず呼び出し回数のみ記録する（`Init`/`GetAllDTCs`/`GetSupportedDTCs`/
  * `GetPrefailedDTCs`/`SetFreezeFrameContext`/`GetVersionInfo` の6つの
  * void 関数と同じ扱い）。
+ *
+ * \par 2026-09-27、ClearAllDTCs/ClearOneDtc を ClearDTC へ統合
+ * 独自関数 `Dem_ClearAllDTCs`/`Dem_ClearOneDtc` を実仕様の `Dem_ClearDTC`
+ * （Dem.h 参照）へ統合したことに伴い、wrap 対象もこの1関数へ差し替えた
+ * （`CallCount_Dem_ClearAllDTCs`/`CallCount_Dem_ClearOneDtc` 等は廃止し
+ * `CallCount_Dem_ClearDTC` 等へ一本化）。
  *
  * 呼び出し記録（`CallCount_Dem_Xxx` 等）は各テストファイルが `SetUp()` の
  * 外（テスト本体の途中）でも「ここまでの呼び出し回数をリセットし、以降だけを
@@ -78,8 +84,7 @@ extern uint32 CallCount_Dem_GetTranslationType;
 extern uint32 CallCount_Dem_GetDTCStatusAvailabilityMask;
 extern uint32 CallCount_Dem_DisableDTCSetting;
 extern uint32 CallCount_Dem_EnableDTCSetting;
-extern uint32 CallCount_Dem_ClearAllDTCs;
-extern uint32 CallCount_Dem_ClearOneDtc;
+extern uint32 CallCount_Dem_ClearDTC;
 extern uint32 CallCount_Dem_GetAllDTCs;
 extern uint32 CallCount_Dem_GetSupportedDTCs;
 extern uint32 CallCount_Dem_GetPrefailedDTCs;
@@ -106,8 +111,7 @@ extern uint32 FailFromCallCount_Dem_GetFaultDetectionCounter;
 extern uint32 FailFromCallCount_Dem_GetDTCStatusAvailabilityMask;
 extern uint32 FailFromCallCount_Dem_DisableDTCSetting;
 extern uint32 FailFromCallCount_Dem_EnableDTCSetting;
-extern uint32 FailFromCallCount_Dem_ClearAllDTCs;
-extern uint32 FailFromCallCount_Dem_ClearOneDtc;
+extern uint32 FailFromCallCount_Dem_ClearDTC;
 extern uint32 FailFromCallCount_Dem_GetFreezeFrameOfEvent;
 extern uint32 FailFromCallCount_Dem_GetEventIdOfDTC;
 extern uint32 FailFromCallCount_Dem_GetOccurrenceCounterOfEvent;
@@ -121,8 +125,7 @@ extern Std_ReturnType ForcedReturn_Dem_GetFaultDetectionCounter;       /**< 既�
 extern Std_ReturnType ForcedReturn_Dem_GetDTCStatusAvailabilityMask;   /**< 既定 E_NOT_OK */
 extern Std_ReturnType ForcedReturn_Dem_DisableDTCSetting;              /**< 既定 E_NOT_OK */
 extern Std_ReturnType ForcedReturn_Dem_EnableDTCSetting;               /**< 既定 E_NOT_OK */
-extern Std_ReturnType ForcedReturn_Dem_ClearAllDTCs;                   /**< 既定 E_NOT_OK */
-extern Std_ReturnType ForcedReturn_Dem_ClearOneDtc;                    /**< 既定 E_NOT_OK */
+extern Std_ReturnType ForcedReturn_Dem_ClearDTC;                       /**< 既定 E_NOT_OK */
 extern Std_ReturnType ForcedReturn_Dem_GetFreezeFrameOfEvent;          /**< 既定 E_NOT_OK */
 extern Std_ReturnType ForcedReturn_Dem_GetEventIdOfDTC;                /**< 既定 E_NOT_OK */
 extern Std_ReturnType ForcedReturn_Dem_GetOccurrenceCounterOfEvent;    /**< 既定 E_NOT_OK */

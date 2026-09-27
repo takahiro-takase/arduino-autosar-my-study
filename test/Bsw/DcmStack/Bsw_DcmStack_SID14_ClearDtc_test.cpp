@@ -273,7 +273,7 @@ TEST_F(Bsw_DcmStack_SID14_ClearDtc_Test,
 
 // ------------------------------------------------------------
 // OK: 登録済みの特定 DTC（DEM_DTC_ENGINE_OVERHEAT = 0x000101）を指定した
-// クリアも正応答 [0x54] を返す（全クリアとは異なる Dem_ClearOneDtc() 経路）。
+// クリアも正応答 [0x54] を返す（全クリアとは異なる Dem_ClearDTC() の単一DTC経路）。
 // ------------------------------------------------------------
 TEST_F(Bsw_DcmStack_SID14_ClearDtc_Test,
        ClearDtc_OK_SpecificRegisteredDtcProducesPositiveResponseOnCanHw)

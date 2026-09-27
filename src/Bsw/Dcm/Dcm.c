@@ -1076,12 +1076,12 @@ static void Dcm_HandleEcuReset(const uint8* uds, uint8 udsLen)
 /**
  * \brief   UDS 0x14 ClearDiagnosticInformation を処理する。
  *
- * \details groupOfDTC=0xFFFFFF なら Dem_ClearAllDTCs() で全 DTC をクリアする。
- *          それ以外の値は特定の DTC コードとみなし、Dem_GetEventIdOfDTC() で
- *          一致するイベントを探して Dem_ClearOneDtc()（旧 Dem_ClearDTC、
- *          2026-09-05 に実仕様との名前衝突を避けて改名。Dem.h 参照）で
- *          1 件だけクリアする（該当イベントがなければ NRC 0x31）。
- *          いずれの場合も正応答 [0x54] を返す。
+ * \details groupOfDTC をそのまま Dem_ClearDTC() の DTC 引数へ渡す。
+ *          0xFFFFFF (DEM_GROUP_ALL_DTCS) なら全 DTC を、それ以外は特定の
+ *          DTC コード 1 件をクリアする（内部での分岐は Dem_ClearDTC() 側が
+ *          行う。2026-09-27 是正: 従来の Dem_ClearAllDTCs()/Dem_ClearOneDtc()
+ *          2関数呼び分けを Dem_ClearDTC() 1関数へ統合。Dem.h 参照）。
+ *          該当する DTC が無ければ NRC 0x31。いずれの場合も正応答 [0x54] を返す。
  *          DTC 履歴の消去は誤操作・悪用の影響が大きいため二重に保護する:
  *            ・extendedSession 限定（Dcm_ComIndication の Dcm_SidSessionTable[] が判定、
  *              defaultSession では本関数に到達する前に NRC 0x7F で拒否される）
@@ -1110,25 +1110,14 @@ static void Dcm_HandleClearDtc(const uint8* uds, uint8 udsLen)
                  | ((uint32)uds[2] <<  8U)
                  | (uint32)uds[3];
 
-    if (group == DEM_GROUP_ALL_DTCS)
+    if (Dem_ClearDTC(DCM_DEM_CLIENT_ID, group, DEM_DTC_FORMAT_UDS, DEM_DTC_ORIGIN_PRIMARY_MEMORY) != E_OK)
     {
-        DET_LOGI(TAG, "14 ClearAllDTC");
-        Dem_ClearAllDTCs();
+        /* 指定された DTC コードに一致するイベントがない */
+        Dcm_SendNegativeResponse(DCM_SID_CLEAR_DTC, DCM_NRC_REQUEST_OUT_OF_RANGE);
+        return;
     }
-    else
-    {
-        Dem_EventIdType eventId = 0U;
 
-        if (Dem_GetEventIdOfDTC(group, &eventId) != E_OK)
-        {
-            /* 指定された DTC コードに一致するイベントがない */
-            Dcm_SendNegativeResponse(DCM_SID_CLEAR_DTC, DCM_NRC_REQUEST_OUT_OF_RANGE);
-            return;
-        }
-
-        DET_LOGI(TAG, "14 ClearDTC dtc=0x%06lX", (unsigned long)group);
-        Dem_ClearOneDtc(eventId);
-    }
+    DET_LOGI(TAG, "14 ClearDTC dtc=0x%06lX", (unsigned long)group);
 
     /* 正応答: [0x54] */
     Dcm_TxBuf[0] = 0x54U;               /* SID 0x14 + 0x40 */

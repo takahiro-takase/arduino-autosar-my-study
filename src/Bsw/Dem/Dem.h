@@ -11,7 +11,7 @@
  *          CONFIRMED した DTC は、再故障せずに複数回の操作サイクル（起動〜次回
  *          起動）を経ると Dem_Init() が経年回復 (Aging) を判定し自動的に
  *          CONFIRMED を解除する（詳細は Dem.c / Dem_Cfg.h を参照）。
- *          DCM は Dem_GetAllDTCs() / Dem_ClearAllDTCs() 経由で UDS SID 0x19 / 0x14
+ *          DCM は Dem_GetAllDTCs() / Dem_ClearDTC() 経由で UDS SID 0x19 / 0x14
  *          に応答する。FreezeFrame（故障時点のスナップショット）に加え、
  *          ExtendedData（累積故障確定回数、Dem_GetOccurrenceCounterOfEvent()）
  *          も SID 0x19 subFunc 0x06 経由で提供する。
@@ -57,6 +57,21 @@ typedef enum
     DEM_DTC_FORMAT_UDS   = 1U, /**< 3-byte UDS DTC 形式（本プロジェクトが唯一対応する形式）*/
     DEM_DTC_FORMAT_J1939 = 2U  /**< SPN+FMI を合成した 3-byte J1939 形式（本プロジェクトは非対応）*/
 } Dem_DTCFormatType;
+
+/**
+ * \brief   イベントメモリ（DTC の格納先）を指定する型（[SWS_Dem_00775]、
+ *          `Dem_ClearDTC()` 等が対象メモリを選ぶために使う）。
+ * \details 本プロジェクトはイベントメモリを1つ（プライマリメモリ相当、
+ *          `Dem_StatusTable[]` 等）しか持たないため、`Dem_ClearDTC()` は
+ *          `DEM_DTC_ORIGIN_PRIMARY_MEMORY` 以外を拒否する。値そのものは
+ *          実仕様 [SWS_Dem_00775] の定義をそのまま使う。
+ */
+typedef enum
+{
+    DEM_DTC_ORIGIN_PRIMARY_MEMORY   = 0x0001U, /**< 本プロジェクトが唯一構成するイベントメモリ */
+    DEM_DTC_ORIGIN_MIRROR_MEMORY    = 0x0002U, /**< ミラーメモリ（本プロジェクトは非対応）      */
+    DEM_DTC_ORIGIN_PERMANENT_MEMORY = 0x0003U  /**< 永続メモリ（本プロジェクトは非対応）        */
+} Dem_DTCOriginType;
 
 /**
  * \brief   DTC 翻訳フォーマット型（[SWS_Dem_00936]、`Dem_GetTranslationType()`
@@ -273,54 +288,48 @@ Std_ReturnType Dem_GetEventUdsStatus(Dem_EventIdType EventId, Dem_UdsStatusByteT
 Std_ReturnType Dem_GetDTCOfEvent(Dem_EventIdType EventId, Dem_DTCFormatType DTCFormat, uint32* DTCOfEvent);
 
 /**
- * \brief   全 DTC をクリアし、EEPROM を初期状態へ戻す。
- * \details DCM SID 0x14 (ClearDiagnosticInformation) から呼び出す。
- *          全イベントのステータスを TNCLC | TNCTOC にリセットする。
+ * \brief   指定 DTC（または全 DTC）をクリアし、EEPROM を初期状態へ戻す
+ *          （[SWS_Dem_00665]）。DCM SID 0x14 (ClearDiagnosticInformation) から
+ *          呼び出す。
  *
- * \note    本プロジェクト独自の関数（実 AUTOSAR に対応する関数は無い）のため
- *          ApiId は任意の値のはずだったが、以前の 0x23 は実仕様の
- *          `Dem_ClearDTC(uint8 ClientId)`（[SWS_Dem_00665]）と衝突していた
- *          ことが判明したため、実仕様のどの Dem 関数の Service ID とも
- *          一致しないことを確認済みの 0x2D へ 2026-09-06 に付け替えた
- *          （Dem_Cfg.h 冒頭コメント参照）。
+ * \details 実仕様は `Dem_SelectDTC(ClientId, DTC, DTCFormat, DTCOrigin)`
+ *          [SWS_Dem_91016] で対象 DTC を選択したうえで `Dem_ClearDTC(ClientId)`
+ *          [SWS_Dem_00665] を呼ぶ、非同期対応の2段階プロトコル（複数クライアント・
+ *          `DEM_PENDING`/`DEM_BUSY` によるポーリングを前提とする）だが、本プロジェクトは
+ *          単一クライアント・常に同期処理のみのため、`Dem_SelectDTC()` 側の3引数
+ *          （DTC/DTCFormat/DTCOrigin）を本関数に統合し、選択と同時にクリアまで
+ *          一度に行う（2026-09-27 是正: 従来の独自関数 `Dem_ClearAllDTCs`/
+ *          `Dem_ClearOneDtc` を本関数へ統合し、衝突回避のため避けていた実仕様の
+ *          関数名 `Dem_ClearDTC` と ServiceID 0x23 を採用した。Dem_Cfg.h
+ *          冒頭コメント参照）。
  *
- * \retval  E_OK  常に成功。
+ *          `DTC` に予約値 `DEM_GROUP_ALL_DTCS`（0xFFFFFF、ISO 14229-1 Annex D.1
+ *          の "all DTCs" グループ）を渡すと、実仕様 [SWS_Dem_01203] のとおり
+ *          `DTCOrigin` が示すメモリの全イベントをクリアする。それ以外の値は
+ *          特定の DTC コードとみなし、`Dem_GetEventIdOfDTC()` で一致する
+ *          イベントを探して 1 件だけクリアする（一致するイベントが無ければ
+ *          E_NOT_OK）。
  *
- * \ServiceID      {0x2D}
+ * \param[in]  ClientId   呼び出し元のクライアント識別子。本実装では未使用。
+ * \param[in]  DTC        クリア対象の DTC（24-bit UDS 形式）、または
+ *                        `DEM_GROUP_ALL_DTCS`（全 DTC 一括クリア）。
+ * \param[in]  DTCFormat  DTC のフォーマット。本プロジェクトは
+ *                        `DEM_DTC_FORMAT_UDS` のみ対応。
+ * \param[in]  DTCOrigin  クリア対象のイベントメモリ。本プロジェクトは
+ *                        `DEM_DTC_ORIGIN_PRIMARY_MEMORY` のみ構成する。
+ *
+ * \retval  E_OK                   正常クリア。
+ * \retval  E_NOT_OK               未初期化、DTCOrigin が非対応、または DTC
+ *                                 に一致するイベントが無い。
+ * \retval  DEM_E_NO_DTC_AVAILABLE DTCFormat が DEM_DTC_FORMAT_UDS 以外
+ *                                 （要求フォーマットの DTC は構成されていない）。
+ *
+ * \AUTOSARReq     {SWS_Dem_00665, SWS_Dem_91016, SWS_Dem_01203}
+ * \ServiceID      {0x23}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
  */
-Std_ReturnType Dem_ClearAllDTCs(void);
-
-/**
- * \brief   指定イベントの DTC のみをクリアし、EEPROM へ反映する。
- *
- * \details DCM SID 0x14 (ClearDiagnosticInformation) のグループ指定クリア
- *          (特定の DTC コードのみを指定するケース) から呼び出す。
- *          対象イベントのステータスを TNCLC | TNCTOC にリセットし、
- *          デバウンスカウンタと FreezeFrame も未記録状態に戻す。
- *
- * \note    本プロジェクト独自の関数名（2026-09-05 是正）。以前は
- *          `Dem_ClearDTC` という名前だったが、実仕様には全く同名・別内容の
- *          `Dem_ClearDTC(uint8 ClientId)`（[SWS_Dem_00665]、ServiceID 0x23）
- *          ——事前に `Dem_SelectDTC()` で選択した DTC を ClientId 単位で
- *          非同期にクリアする API——が実在するため、実仕様に対応物が無い
- *          独自関数だと誤って説明していた（同名衝突）。実仕様の select+clear
- *          非同期方式は単一クライアント・同期処理のみの本プロジェクトには
- *          過剰なため実装せず、単純に衝突しない名前へ改名して対応する。
- *          ServiceID 0x28 は実仕様のどの Dem 関数にも使われていない値である
- *          ことを確認済みのためそのまま踏襲する。
- *
- * \param[in]  EventId  イベント ID (DEM_EVENT_* 定数)。
- *
- * \retval  E_OK      正常クリア。
- * \retval  E_NOT_OK  EventId が範囲外。
- *
- * \ServiceID      {0x28}
- * \Reentrancy     {Non Reentrant}
- * \Synchronicity  {Synchronous}
- */
-Std_ReturnType Dem_ClearOneDtc(Dem_EventIdType EventId);
+Std_ReturnType Dem_ClearDTC(uint8 ClientId, uint32 DTC, Dem_DTCFormatType DTCFormat, Dem_DTCOriginType DTCOrigin);
 
 /**
  * \brief   ステータスマスクに一致する全 DTC を列挙する。
