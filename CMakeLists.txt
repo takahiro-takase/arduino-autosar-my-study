@@ -480,14 +480,13 @@ set(NATIVE_CHAIN_WRAP_SYMBOLS
     Dcm_ResetToDefaultSession
     Dcm_GetVersionInfo
     Dcm_ComIndication
-    # Dem.h の公開API全19関数（Wrap_Dem.h/.c 参照）。
+    # Dem.h の公開API全18関数（Wrap_Dem.h/.c 参照）。
     Dem_Init
     Dem_SetEventStatus
     Dem_GetDTCStatusAvailabilityMask
     Dem_GetEventUdsStatus
     Dem_GetDTCOfEvent
-    Dem_ClearAllDTCs
-    Dem_ClearOneDtc
+    Dem_ClearDTC
     Dem_GetAllDTCs
     Dem_GetSupportedDTCs
     Dem_GetPrefailedDTCs

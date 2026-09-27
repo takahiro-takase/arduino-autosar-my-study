@@ -40,8 +40,7 @@ uint32 CallCount_Dem_GetTranslationType               = 0U;
 uint32 CallCount_Dem_GetDTCStatusAvailabilityMask     = 0U;
 uint32 CallCount_Dem_DisableDTCSetting                = 0U;
 uint32 CallCount_Dem_EnableDTCSetting                 = 0U;
-uint32 CallCount_Dem_ClearAllDTCs                     = 0U;
-uint32 CallCount_Dem_ClearOneDtc                      = 0U;
+uint32 CallCount_Dem_ClearDTC                         = 0U;
 uint32 CallCount_Dem_GetAllDTCs                       = 0U;
 uint32 CallCount_Dem_GetSupportedDTCs                 = 0U;
 uint32 CallCount_Dem_GetPrefailedDTCs                 = 0U;
@@ -59,8 +58,7 @@ uint32 FailFromCallCount_Dem_GetFaultDetectionCounter      = WRAP_DEM_FAIL_FROM_
 uint32 FailFromCallCount_Dem_GetDTCStatusAvailabilityMask  = WRAP_DEM_FAIL_FROM_CALL_COUNT_DISABLED;
 uint32 FailFromCallCount_Dem_DisableDTCSetting             = WRAP_DEM_FAIL_FROM_CALL_COUNT_DISABLED;
 uint32 FailFromCallCount_Dem_EnableDTCSetting              = WRAP_DEM_FAIL_FROM_CALL_COUNT_DISABLED;
-uint32 FailFromCallCount_Dem_ClearAllDTCs                  = WRAP_DEM_FAIL_FROM_CALL_COUNT_DISABLED;
-uint32 FailFromCallCount_Dem_ClearOneDtc                   = WRAP_DEM_FAIL_FROM_CALL_COUNT_DISABLED;
+uint32 FailFromCallCount_Dem_ClearDTC                      = WRAP_DEM_FAIL_FROM_CALL_COUNT_DISABLED;
 uint32 FailFromCallCount_Dem_GetFreezeFrameOfEvent         = WRAP_DEM_FAIL_FROM_CALL_COUNT_DISABLED;
 uint32 FailFromCallCount_Dem_GetEventIdOfDTC               = WRAP_DEM_FAIL_FROM_CALL_COUNT_DISABLED;
 uint32 FailFromCallCount_Dem_GetOccurrenceCounterOfEvent   = WRAP_DEM_FAIL_FROM_CALL_COUNT_DISABLED;
@@ -71,14 +69,13 @@ Std_ReturnType ForcedReturn_Dem_GetFaultDetectionCounter     = E_NOT_OK;
 Std_ReturnType ForcedReturn_Dem_GetDTCStatusAvailabilityMask = E_NOT_OK;
 Std_ReturnType ForcedReturn_Dem_DisableDTCSetting            = E_NOT_OK;
 Std_ReturnType ForcedReturn_Dem_EnableDTCSetting             = E_NOT_OK;
-Std_ReturnType ForcedReturn_Dem_ClearAllDTCs                 = E_NOT_OK;
-Std_ReturnType ForcedReturn_Dem_ClearOneDtc                  = E_NOT_OK;
+Std_ReturnType ForcedReturn_Dem_ClearDTC                     = E_NOT_OK;
 Std_ReturnType ForcedReturn_Dem_GetFreezeFrameOfEvent        = E_NOT_OK;
 Std_ReturnType ForcedReturn_Dem_GetEventIdOfDTC              = E_NOT_OK;
 Std_ReturnType ForcedReturn_Dem_GetOccurrenceCounterOfEvent  = E_NOT_OK;
 
 /* ----------------------------------------------------------------------
- * WrapDem_Reset — 19関数すべての状態を一括で初期化する（Wrap_Dem.h 参照）。
+ * WrapDem_Reset — 18関数すべての状態を一括で初期化する（Wrap_Dem.h 参照）。
  * ---------------------------------------------------------------------- */
 
 void WrapDem_Reset(void)
@@ -89,8 +86,7 @@ void WrapDem_Reset(void)
     CallCount_Dem_GetDTCOfEvent                = 0U;
     CallCount_Dem_SetEventStatus               = 0U;
     CallCount_Dem_GetDTCStatusAvailabilityMask = 0U;
-    CallCount_Dem_ClearAllDTCs                 = 0U;
-    CallCount_Dem_ClearOneDtc                  = 0U;
+    CallCount_Dem_ClearDTC                     = 0U;
     CallCount_Dem_GetAllDTCs                   = 0U;
     CallCount_Dem_GetSupportedDTCs             = 0U;
     CallCount_Dem_GetPrefailedDTCs             = 0U;
@@ -109,8 +105,7 @@ void WrapDem_Reset(void)
     FailFromCallCount_Dem_GetEventUdsStatus            = WRAP_DEM_FAIL_FROM_CALL_COUNT_DISABLED;
     FailFromCallCount_Dem_GetDTCOfEvent                = WRAP_DEM_FAIL_FROM_CALL_COUNT_DISABLED;
     FailFromCallCount_Dem_GetDTCStatusAvailabilityMask = WRAP_DEM_FAIL_FROM_CALL_COUNT_DISABLED;
-    FailFromCallCount_Dem_ClearAllDTCs                 = WRAP_DEM_FAIL_FROM_CALL_COUNT_DISABLED;
-    FailFromCallCount_Dem_ClearOneDtc                  = WRAP_DEM_FAIL_FROM_CALL_COUNT_DISABLED;
+    FailFromCallCount_Dem_ClearDTC                     = WRAP_DEM_FAIL_FROM_CALL_COUNT_DISABLED;
     FailFromCallCount_Dem_GetFreezeFrameOfEvent        = WRAP_DEM_FAIL_FROM_CALL_COUNT_DISABLED;
     FailFromCallCount_Dem_GetEventIdOfDTC              = WRAP_DEM_FAIL_FROM_CALL_COUNT_DISABLED;
     FailFromCallCount_Dem_GetOccurrenceCounterOfEvent  = WRAP_DEM_FAIL_FROM_CALL_COUNT_DISABLED;
@@ -121,8 +116,7 @@ void WrapDem_Reset(void)
     ForcedReturn_Dem_GetEventUdsStatus            = E_NOT_OK;
     ForcedReturn_Dem_GetDTCOfEvent                = E_NOT_OK;
     ForcedReturn_Dem_GetDTCStatusAvailabilityMask = E_NOT_OK;
-    ForcedReturn_Dem_ClearAllDTCs                 = E_NOT_OK;
-    ForcedReturn_Dem_ClearOneDtc                  = E_NOT_OK;
+    ForcedReturn_Dem_ClearDTC                     = E_NOT_OK;
     ForcedReturn_Dem_GetFreezeFrameOfEvent        = E_NOT_OK;
     ForcedReturn_Dem_GetEventIdOfDTC              = E_NOT_OK;
     ForcedReturn_Dem_GetOccurrenceCounterOfEvent  = E_NOT_OK;
@@ -187,7 +181,20 @@ void __wrap_Dem_Init(const Dem_ConfigType* ConfigPtr)
  * Dem_ClearDTC
  * ---------------------------------------------------------------------- */
 
-/* 未実装 */
+extern
+Std_ReturnType __real_Dem_ClearDTC(uint8 ClientId, uint32 DTC, Dem_DTCFormatType DTCFormat, Dem_DTCOriginType DTCOrigin);
+Std_ReturnType __wrap_Dem_ClearDTC(uint8 ClientId, uint32 DTC, Dem_DTCFormatType DTCFormat, Dem_DTCOriginType DTCOrigin)
+{
+    CallCount_Dem_ClearDTC++;
+    Log_Write(LOG_T, TAG, "Dem_ClearDTC", "called %u times", CallCount_Dem_ClearDTC);
+
+    if (CallCount_Dem_ClearDTC >= FailFromCallCount_Dem_ClearDTC)
+    {
+        return ForcedReturn_Dem_ClearDTC;
+    }
+
+    return __real_Dem_ClearDTC(ClientId, DTC, DTCFormat, DTCOrigin);
+}
 
 /* ----------------------------------------------------------------------
  * Dem_ClearPrestoredFreezeFrame
@@ -703,44 +710,6 @@ Std_ReturnType __wrap_Dem_EnableDTCSetting(uint8 ClientId)
  * ---------------------------------------------------------------------- */
 
 /* 未実装 */
-
-/* ----------------------------------------------------------------------
- * Dem_ClearAllDTCs
- * ---------------------------------------------------------------------- */
-
-extern
-Std_ReturnType __real_Dem_ClearAllDTCs(void);
-Std_ReturnType __wrap_Dem_ClearAllDTCs(void)
-{
-    CallCount_Dem_ClearAllDTCs++;
-    Log_Write(LOG_T, TAG, "Dem_ClearAllDTCs", "called %u times", CallCount_Dem_ClearAllDTCs);
-
-    if (CallCount_Dem_ClearAllDTCs >= FailFromCallCount_Dem_ClearAllDTCs)
-    {
-        return ForcedReturn_Dem_ClearAllDTCs;
-    }
-
-    return __real_Dem_ClearAllDTCs();
-}
-
-/* ----------------------------------------------------------------------
- * Dem_ClearOneDtc
- * ---------------------------------------------------------------------- */
-
-extern
-Std_ReturnType __real_Dem_ClearOneDtc(Dem_EventIdType EventId);
-Std_ReturnType __wrap_Dem_ClearOneDtc(Dem_EventIdType EventId)
-{
-    CallCount_Dem_ClearOneDtc++;
-    Log_Write(LOG_T, TAG, "Dem_ClearOneDtc", "called %u times", CallCount_Dem_ClearOneDtc);
-
-    if (CallCount_Dem_ClearOneDtc >= FailFromCallCount_Dem_ClearOneDtc)
-    {
-        return ForcedReturn_Dem_ClearOneDtc;
-    }
-
-    return __real_Dem_ClearOneDtc(EventId);
-}
 
 /* ----------------------------------------------------------------------
  * Dem_GetAllDTCs
