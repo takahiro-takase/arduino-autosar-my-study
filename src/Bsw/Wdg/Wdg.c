@@ -147,3 +147,15 @@ void Wdg_GetVersionInfo(Std_VersionInfoType* versioninfo)
     versioninfo->sw_minor_version = WDG_SW_MINOR_VERSION;
     versioninfo->sw_patch_version = WDG_SW_PATCH_VERSION;
 }
+
+/* ======================================================================
+ * Test Functions
+ * ====================================================================== */
+
+#ifdef WDG_UNIT_TEST
+void Wdg_Test_ResetInitState(void)
+{
+    Wdg_Initialized         = 0U;
+    Wdg_ConfiguredTimeoutMs = 0U;
+}
+#endif

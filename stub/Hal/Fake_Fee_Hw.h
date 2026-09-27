@@ -1,0 +1,43 @@
+/**
+ * \file    Fake_Fee_Hw.h
+ * \brief   Fee_Hw.h（Renesas RA EEPROM.h 境界）のテスト用フェイク実装の宣言
+ * \details Fee.c/MemIf.c/NvM.c のロジックだけを検証したいので、実 HW
+ *          （EEPROM.h のフラッシュエミュレーション）は使わず、RAM 上の
+ *          バッファで模擬する。
+ *
+ *          バッファの既定値は消去済みフラッシュを模した `0xFF` で埋める
+ *          （Renesas RA の EEPROM.h も消去済み領域は 0xFF を返す）。この
+ *          既定値のままだと、`NvM_Init()` が読み込むどのブロックも CRC が
+ *          一致せず「初回起動」として扱われる（NvM.c の
+ *          `NvM_LoadAndVerifyBlock()` 参照）。
+ *
+ *          `native_chain` は元々 `stub/Bsw/NvM/Fake_NvM.c`
+ *          （`NvM_ReadBlock()` が常に `E_NOT_OK` を返すだけの単純なフェイク）
+ *          により、`Dem_Init()` を呼ぶ全テストファイル（`test/Bsw/DcmStack/`
+ *          等、約36ファイル）が「毎回必ず初回起動」という前提に暗黙に乗って
+ *          いた。2026-09、NvM/Fee/MemIf 自身の `Det_ReportError()` を検証する
+ *          ため実体の `NvM.c`/`MemIf.c`/`Fee.c` を実体リンクへ切り替えた際、
+ *          本フェイクは実際に内容を「記憶」してしまう（Fake_NvM.c と異なり
+ *          状態を持つ）ため、この前提を壊さないよう `test/test_main.cpp` の
+ *          `GoogleTest` カスタムリスナーが毎テストケース開始前に
+ *          `FakeFeeHw_Reset()` を自動的に呼ぶ（test_main.cpp 参照。
+ *          既存36ファイルの `SetUp()` 側は一切変更不要）。
+ */
+#ifndef FAKE_FEE_HW_H
+#define FAKE_FEE_HW_H
+
+#include "Std_Types.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/** バッファ全体を消去済み値 (0xFF) へ戻す。test_main.cpp のカスタムリスナーが
+ *  毎テストケース開始前に自動的に呼ぶ（本ファイル冒頭コメント参照）。 */
+void FakeFeeHw_Reset(void);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif /* FAKE_FEE_HW_H */

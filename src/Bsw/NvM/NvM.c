@@ -1340,3 +1340,14 @@ void NvM_GetVersionInfo(Std_VersionInfoType* versioninfo)
  * ---------------------------------------------------------------------- */
 
 /* 未実装 */
+
+/* ======================================================================
+ * Test Functions
+ * ====================================================================== */
+
+#ifdef NVM_UNIT_TEST
+void NvM_Test_ResetInitState(void)
+{
+    NvM_Cfg = NULL;
+}
+#endif

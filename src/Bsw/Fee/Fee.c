@@ -317,3 +317,14 @@ void Fee_MainFunction(void)
         Fee_LastResult = MEMIF_JOB_OK;
     }
 }
+
+/* ======================================================================
+ * Test Functions
+ * ====================================================================== */
+
+#ifdef FEE_UNIT_TEST
+void Fee_Test_ResetInitState(void)
+{
+    Fee_Initialized = 0U;
+}
+#endif
