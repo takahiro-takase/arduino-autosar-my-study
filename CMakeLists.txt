@@ -676,3 +676,26 @@ endif()
 # `native_chain_tests --gtest_filter=...` を直接呼べばよい）。
 enable_testing()
 add_test(NAME native_chain_tests COMMAND native_chain_tests)
+
+# MISRA C:2012 静的解析（Cppcheck + misra アドオン、tools/misra/run_misra.py 参照）。
+# `cmake --build --preset native-chain --target misra_check` で実行する
+# （ALL には含めず、通常のビルド・テストとは独立）。Cppcheck は PlatformIO の
+# ツールパッケージ（`pio pkg install -g --tool platformio/tool-cppcheck`）、
+# Python（misra アドオンの実行に必要）は PlatformIO 同梱の penv を既定で探す。
+# いずれもユーザー環境依存のためパスはハードコードせず、見つからない場合は
+# CPPCHECK_EXECUTABLE / MISRA_PYTHON をキャッシュ変数で指定する。
+find_program(CPPCHECK_EXECUTABLE cppcheck
+    HINTS "$ENV{USERPROFILE}/.platformio/packages/tool-cppcheck")
+find_program(MISRA_PYTHON NAMES python python3
+    HINTS "$ENV{USERPROFILE}/.platformio/penv/Scripts")
+if(CPPCHECK_EXECUTABLE AND MISRA_PYTHON)
+    add_custom_target(misra_check
+        COMMAND "${MISRA_PYTHON}" "${CMAKE_SOURCE_DIR}/tools/misra/run_misra.py"
+                --cppcheck "${CPPCHECK_EXECUTABLE}"
+                --output-dir "${CMAKE_BINARY_DIR}/misra"
+        WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+        USES_TERMINAL
+        VERBATIM)
+else()
+    message(STATUS "misra_check: cppcheck または Python が見つからないため無効")
+endif()
