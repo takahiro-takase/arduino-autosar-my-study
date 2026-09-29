@@ -46,6 +46,7 @@ protected:
     void TearDown() override
     {
         FakeDetHw_LogSuppressed = 1U;
+        FiM_Test_ResetInitState();
     }
 
     static boolean GetPermission(FiM_FunctionIdType fid)
@@ -123,6 +124,79 @@ TEST_F(Bsw_FiM_Test, Init_OK_SetFunctionAvailableStillOverridesAfterInitEvaluati
     /* 評価 (Assert) */
     ASSERT_EQ(ret, E_OK);
     EXPECT_EQ(GetPermission(FIM_FID_BUTTON_ACK), FALSE);
+}
+
+// ------------------------------------------------------------
+// NG系: 各公開APIの Det_ReportError() 呼び出し箇所を検証する
+// （FakeDetHw_LastErrorId）。
+// ------------------------------------------------------------
+
+TEST_F(Bsw_FiM_Test, FiM_Init_NG_NullConfigPtr)
+{
+    FiM_Init(NULL);
+
+    EXPECT_EQ(FakeDetHw_LastErrorId, FIM_E_PARAM_POINTER);
+}
+
+TEST_F(Bsw_FiM_Test, FiM_GetFunctionPermission_NG_NullPointer)
+{
+    FiM_Init(&FiM_Config);
+
+    Std_ReturnType ret = FiM_GetFunctionPermission(FIM_FID_RUNNING_LED, NULL);
+
+    EXPECT_EQ(ret, E_NOT_OK);
+    EXPECT_EQ(FakeDetHw_LastErrorId, FIM_E_PARAM_POINTER);
+}
+
+TEST_F(Bsw_FiM_Test, FiM_GetFunctionPermission_NG_Uninit)
+{
+    // FiM_Init() を意図的に呼ばない（SetUp() は Dem_Init() のみ実行）。
+    boolean permission = TRUE;
+
+    Std_ReturnType ret = FiM_GetFunctionPermission(FIM_FID_RUNNING_LED, &permission);
+
+    EXPECT_EQ(ret, E_NOT_OK);
+    EXPECT_EQ(permission, FALSE);  // フェールセーフ: 未初期化中は抑止扱い
+    EXPECT_EQ(FakeDetHw_LastErrorId, FIM_E_UNINIT);
+}
+
+TEST_F(Bsw_FiM_Test, FiM_GetFunctionPermission_NG_FidOutOfRange)
+{
+    FiM_Init(&FiM_Config);
+    boolean permission = TRUE;
+
+    Std_ReturnType ret = FiM_GetFunctionPermission(FiM_Config.FunctionCount, &permission);
+
+    EXPECT_EQ(ret, E_NOT_OK);
+    EXPECT_EQ(permission, FALSE);  // フェールセーフ: 不明な FID は抑止扱い
+    EXPECT_EQ(FakeDetHw_LastErrorId, FIM_E_FID_OUT_OF_RANGE);
+}
+
+TEST_F(Bsw_FiM_Test, FiM_SetFunctionAvailable_NG_Uninit)
+{
+    // FiM_Init() を意図的に呼ばない。
+
+    Std_ReturnType ret = FiM_SetFunctionAvailable(FIM_FID_RUNNING_LED, FALSE);
+
+    EXPECT_EQ(ret, E_NOT_OK);
+    EXPECT_EQ(FakeDetHw_LastErrorId, FIM_E_UNINIT);
+}
+
+TEST_F(Bsw_FiM_Test, FiM_SetFunctionAvailable_NG_FidOutOfRange)
+{
+    FiM_Init(&FiM_Config);
+
+    Std_ReturnType ret = FiM_SetFunctionAvailable(FiM_Config.FunctionCount, FALSE);
+
+    EXPECT_EQ(ret, E_NOT_OK);
+    EXPECT_EQ(FakeDetHw_LastErrorId, FIM_E_FID_OUT_OF_RANGE);
+}
+
+TEST_F(Bsw_FiM_Test, FiM_GetVersionInfo_NG_NullPointer)
+{
+    FiM_GetVersionInfo(NULL);
+
+    EXPECT_EQ(FakeDetHw_LastErrorId, FIM_E_PARAM_POINTER);
 }
 
 }  // namespace

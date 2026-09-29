@@ -309,3 +309,14 @@ void FiM_MainFunction(void)
         }
     }
 }
+
+/* ======================================================================
+ * Test Functions
+ * ====================================================================== */
+
+#ifdef FIM_UNIT_TEST
+void FiM_Test_ResetInitState(void)
+{
+    FiM_Cfg = NULL;
+}
+#endif

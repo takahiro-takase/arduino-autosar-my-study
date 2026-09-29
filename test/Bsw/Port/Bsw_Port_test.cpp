@@ -56,6 +56,13 @@ TEST_F(PortTest, RefreshPortDirectionOverridesDirectionChangedByRuntimeApi)
     EXPECT_EQ(FakePortHw_GetLastDirection(PORT_PIN_LED_RUNNING), PORT_PIN_OUT);
 }
 
+TEST_F(PortTest, GetVersionInfo_NG_NullPointer)
+{
+    Port_GetVersionInfo(NULL);
+
+    EXPECT_EQ(FakeDetHw_LastErrorId, PORT_E_PARAM_POINTER);
+}
+
 TEST_F(PortTest, SetPinModeAlwaysReportsModeUnchangeableAndHasNoEffect)
 {
     Port_Init(NULL);
