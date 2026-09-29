@@ -117,7 +117,7 @@ void FiM_Init(const FiM_ConfigType* ConfigPtr)
     if (ConfigPtr == NULL)
     {
         DET_LOGE(TAG, "Init: NULL ConfigPtr");
-        Det_ReportError(FIM_MODULE_ID, 0U, FIM_API_ID_INIT, FIM_E_PARAM_POINTER);
+        (void)Det_ReportError(FIM_MODULE_ID, 0U, FIM_API_ID_INIT, FIM_E_PARAM_POINTER);
         return;
     }
 
@@ -157,21 +157,21 @@ Std_ReturnType FiM_GetFunctionPermission(FiM_FunctionIdType FunctionId, boolean*
 {
     if (Permission == NULL)
     {
-        Det_ReportError(FIM_MODULE_ID, 0U, FIM_API_ID_GET_FUNCTION_PERMISSION, FIM_E_PARAM_POINTER);
+        (void)Det_ReportError(FIM_MODULE_ID, 0U, FIM_API_ID_GET_FUNCTION_PERMISSION, FIM_E_PARAM_POINTER);
         return E_NOT_OK;
     }
 
     if (FiM_Cfg == NULL)
     {
         *Permission = FALSE;  /* フェールセーフ: 未初期化中は抑止扱いとする */
-        Det_ReportError(FIM_MODULE_ID, 0U, FIM_API_ID_GET_FUNCTION_PERMISSION, FIM_E_UNINIT);
+        (void)Det_ReportError(FIM_MODULE_ID, 0U, FIM_API_ID_GET_FUNCTION_PERMISSION, FIM_E_UNINIT);
         return E_NOT_OK;
     }
 
     if (FunctionId >= FiM_Cfg->FunctionCount)
     {
         *Permission = FALSE;  /* フェールセーフ: 不明な FID は抑止扱いとする */
-        Det_ReportError(FIM_MODULE_ID, 0U, FIM_API_ID_GET_FUNCTION_PERMISSION, FIM_E_FID_OUT_OF_RANGE);
+        (void)Det_ReportError(FIM_MODULE_ID, 0U, FIM_API_ID_GET_FUNCTION_PERMISSION, FIM_E_FID_OUT_OF_RANGE);
         return E_NOT_OK;
     }
 
@@ -215,22 +215,24 @@ Std_ReturnType FiM_SetFunctionAvailable(FiM_FunctionIdType FID, boolean Availabi
 {
     if (FiM_Cfg == NULL)
     {
-        Det_ReportError(FIM_MODULE_ID, 0U, FIM_API_ID_SET_FUNCTION_AVAILABLE, FIM_E_UNINIT);
+        (void)Det_ReportError(FIM_MODULE_ID, 0U, FIM_API_ID_SET_FUNCTION_AVAILABLE, FIM_E_UNINIT);
         return E_NOT_OK;
     }
 
     if (FID >= FiM_Cfg->FunctionCount)
     {
-        Det_ReportError(FIM_MODULE_ID, 0U, FIM_API_ID_SET_FUNCTION_AVAILABLE, FIM_E_FID_OUT_OF_RANGE);
+        (void)Det_ReportError(FIM_MODULE_ID, 0U, FIM_API_ID_SET_FUNCTION_AVAILABLE, FIM_E_FID_OUT_OF_RANGE);
         return E_NOT_OK;
     }
 
     FiM_Available[FID] = Availability ? 1U : 0U;
 
-    if (!Availability)
+    if (!Availability) {
         DET_LOGW(TAG, "FID%u made unavailable (forced)", (unsigned)FID);
-    else
+    }
+    else {
         DET_LOGI(TAG, "FID%u made available again", (unsigned)FID);
+    }
 
     return E_OK;
 }
@@ -261,7 +263,7 @@ void FiM_GetVersionInfo(Std_VersionInfoType* versioninfo)
 {
     if (versioninfo == NULL)
     {
-        Det_ReportError(FIM_MODULE_ID, 0U, FIM_API_ID_GET_VERSION_INFO, FIM_E_PARAM_POINTER);
+        (void)Det_ReportError(FIM_MODULE_ID, 0U, FIM_API_ID_GET_VERSION_INFO, FIM_E_PARAM_POINTER);
         return;
     }
 
@@ -285,8 +287,9 @@ void FiM_GetVersionInfo(Std_VersionInfoType* versioninfo)
  */
 void FiM_MainFunction(void)
 {
-    if (FiM_Cfg == NULL)
+    if (FiM_Cfg == NULL) {
         return;
+    }
 
     for (uint8 i = 0U; i < FiM_Cfg->FunctionCount; i++)
     {

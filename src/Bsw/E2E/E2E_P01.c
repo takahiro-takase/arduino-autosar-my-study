@@ -91,8 +91,9 @@ Std_ReturnType E2E_P01Protect(
     E2E_P01ProtectStateType *State,
     uint8                   *Data)
 {
-    if (Config == NULL || State == NULL || Data == NULL)
+    if ((Config == NULL) || (State == NULL) || (Data == NULL)) {
         return E2E_E_INPUTERR_NULL;
+    }
 
     /* Counter 書き込み (下位 4bit のみ使用。今回送信する値を書き込んでから
      * 次回用に進める)。SWS_E2E_00075: 14 (0xE) に達したら次は 0 に戻る
@@ -126,8 +127,9 @@ Std_ReturnType E2E_P01Protect(
 
 Std_ReturnType E2E_P01ProtectInit(E2E_P01ProtectStateType *State)
 {
-    if (State == NULL)
+    if (State == NULL) {
         return E2E_E_INPUTERR_NULL;
+    }
     State->Counter = 0U;
     return E2E_E_OK;
 }
@@ -141,8 +143,9 @@ Std_ReturnType E2E_P01Check(
     E2E_P01CheckStateType   *State,
     const uint8             *Data)
 {
-    if (Config == NULL || State == NULL || Data == NULL)
+    if ((Config == NULL) || (State == NULL) || (Data == NULL)) {
         return E2E_E_INPUTERR_NULL;
+    }
 
     /* ------------------------------------------------------------------
      * CRC 検証
@@ -175,7 +178,7 @@ Std_ReturnType E2E_P01Check(
         const uint8 received = Data[Config->CounterOffset] & 0x0FU;
 
         /* 初回受信: カウンタ基準を設定して INITIAL を返す */
-        if (State->WaitForFirstData)
+        if ((State->WaitForFirstData) != 0U)
         {
             State->LastValidCounter = received;
             State->WaitForFirstData = 0U;
@@ -250,8 +253,9 @@ Std_ReturnType E2E_P01Check(
 
 Std_ReturnType E2E_P01CheckInit(E2E_P01CheckStateType *State)
 {
-    if (State == NULL)
+    if (State == NULL) {
         return E2E_E_INPUTERR_NULL;
+    }
     State->LastValidCounter = 0U;
     /* [SWS_E2E_00389] Status は NONEWDATA が正しい初期値（2026-09-06 是正。
      * 以前は INITIAL だった）。WaitForFirstData=1 により初回チェックは別途
@@ -275,8 +279,9 @@ E2E_PCheckStatusType E2E_P01MapStatusToSM(
     /* [SWS_E2E_00216] によりライブラリは Det/Dem を呼ばない方針のため
      * Det_ReportError() は呼ばない（本関数は値渡しのみで NULL チェックの
      * 概念自体が無い）。 */
-    if (CheckReturn != E2E_E_OK)
+    if (CheckReturn != E2E_E_OK) {
         return E2E_P_ERROR;  /* [SWS_E2E_00384]: Status に関わらず優先 */
+    }
 
     /* [SWS_E2E_00383]/[SWS_E2E_00476]: TRUE(R4.2以降)/FALSE(それ以前)で
      * SYNC/INITIAL の帰属がちょうど入れ替わる点だけが違うため、両表で
@@ -338,10 +343,12 @@ static uint8 E2E_CalcCrc8(uint8 crc, const uint8 *data, uint8 len)
         crc ^= data[i];
         for (bit = 0U; bit < 8U; bit++)
         {
-            if (crc & 0x80U)
+            if ((crc & 0x80U) != 0U) {
                 crc = (uint8)((crc << 1U) ^ 0x1DU);
-            else
+            }
+            else {
                 crc = (uint8)(crc << 1U);
+            }
         }
     }
     return crc;
@@ -370,12 +377,15 @@ static uint8 E2E_CalcCrc8(uint8 crc, const uint8 *data, uint8 len)
 static uint8 E2E_CalcCrc8OverDataExcludingCrcByte(
     uint8 crc, const uint8 *Data, uint8 DataLength, uint8 CRCOffset)
 {
-    if (CRCOffset > 0U)
+    if (CRCOffset > 0U) {
         crc = E2E_CalcCrc8(crc, Data, CRCOffset);
+    }
 
     if ((uint8)(CRCOffset + 1U) < DataLength)
+    {
         crc = E2E_CalcCrc8(crc, &Data[CRCOffset + 1U],
                             (uint8)(DataLength - CRCOffset - 1U));
+    }
 
     return crc;
 }

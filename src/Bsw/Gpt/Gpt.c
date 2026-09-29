@@ -113,8 +113,14 @@ static uint8 Gpt_IsValidChannel(Gpt_ChannelType Channel)
  */
 void Gpt_OnTick(Gpt_ChannelType Channel)
 {
-    if (!Gpt_IsValidChannel(Channel)) return;
-    if (Gpt_ChannelState[Channel] != GPT_CH_STATE_RUNNING) return;
+    if (!Gpt_IsValidChannel(Channel))
+    {
+        return;
+    }
+    if (Gpt_ChannelState[Channel] != GPT_CH_STATE_RUNNING)
+    {
+        return;
+    }
 
     Gpt_ElapsedTicks[Channel]++;
 
@@ -151,7 +157,7 @@ void Gpt_GetVersionInfo(Std_VersionInfoType* versioninfo)
 {
     if (versioninfo == NULL)
     {
-        Det_ReportError(GPT_MODULE_ID, 0U, GPT_API_ID_GET_VERSION_INFO, GPT_E_PARAM_POINTER);
+        (void)Det_ReportError(GPT_MODULE_ID, 0U, GPT_API_ID_GET_VERSION_INFO, GPT_E_PARAM_POINTER);
         return;
     }
 
@@ -171,13 +177,13 @@ void Gpt_Init(const Gpt_ConfigType* ConfigPtr)
     if (ConfigPtr == NULL)
     {
         DET_LOGE(TAG, "Init: NULL ConfigPtr");
-        Det_ReportError(GPT_MODULE_ID, 0U, GPT_API_ID_INIT, GPT_E_PARAM_POINTER);
+        (void)Det_ReportError(GPT_MODULE_ID, 0U, GPT_API_ID_INIT, GPT_E_PARAM_POINTER);
         return;
     }
 
     if (Gpt_Cfg != NULL)
     {
-        Det_ReportError(GPT_MODULE_ID, 0U, GPT_API_ID_INIT, GPT_E_ALREADY_INITIALIZED);
+        (void)Det_ReportError(GPT_MODULE_ID, 0U, GPT_API_ID_INIT, GPT_E_ALREADY_INITIALIZED);
         return;
     }
 
@@ -189,7 +195,7 @@ void Gpt_Init(const Gpt_ConfigType* ConfigPtr)
          * 通常到達しないが、防御的にチェックする。 */
         DET_LOGE(TAG, "Init: ChannelCount %u exceeds GPT_CHANNEL_COUNT %u",
                  (unsigned)ConfigPtr->ChannelCount, (unsigned)GPT_CHANNEL_COUNT);
-        Det_ReportError(GPT_MODULE_ID, 0U, GPT_API_ID_INIT, GPT_E_INIT_FAILED);
+        (void)Det_ReportError(GPT_MODULE_ID, 0U, GPT_API_ID_INIT, GPT_E_INIT_FAILED);
         return;
     }
 
@@ -216,7 +222,7 @@ void Gpt_DeInit(void)
 {
     if (Gpt_Cfg == NULL)
     {
-        Det_ReportError(GPT_MODULE_ID, 0U, GPT_API_ID_DE_INIT, GPT_E_UNINIT);
+        (void)Det_ReportError(GPT_MODULE_ID, 0U, GPT_API_ID_DE_INIT, GPT_E_UNINIT);
         return;
     }
 
@@ -224,7 +230,7 @@ void Gpt_DeInit(void)
     {
         if (Gpt_ChannelState[i] == GPT_CH_STATE_RUNNING)
         {
-            Det_ReportError(GPT_MODULE_ID, 0U, GPT_API_ID_DE_INIT, GPT_E_BUSY);
+            (void)Det_ReportError(GPT_MODULE_ID, 0U, GPT_API_ID_DE_INIT, GPT_E_BUSY);
             return;
         }
     }
@@ -243,12 +249,12 @@ Gpt_ValueType Gpt_GetTimeElapsed(Gpt_ChannelType Channel)
 {
     if (Gpt_Cfg == NULL)
     {
-        Det_ReportError(GPT_MODULE_ID, 0U, GPT_API_ID_GET_TIME_ELAPSED, GPT_E_UNINIT);
+        (void)Det_ReportError(GPT_MODULE_ID, 0U, GPT_API_ID_GET_TIME_ELAPSED, GPT_E_UNINIT);
         return 0U;
     }
     if (!Gpt_IsValidChannel(Channel))
     {
-        Det_ReportError(GPT_MODULE_ID, 0U, GPT_API_ID_GET_TIME_ELAPSED, GPT_E_PARAM_CHANNEL);
+        (void)Det_ReportError(GPT_MODULE_ID, 0U, GPT_API_ID_GET_TIME_ELAPSED, GPT_E_PARAM_CHANNEL);
         return 0U;
     }
 
@@ -272,12 +278,12 @@ Gpt_ValueType Gpt_GetTimeRemaining(Gpt_ChannelType Channel)
 {
     if (Gpt_Cfg == NULL)
     {
-        Det_ReportError(GPT_MODULE_ID, 0U, GPT_API_ID_GET_TIME_REMAINING, GPT_E_UNINIT);
+        (void)Det_ReportError(GPT_MODULE_ID, 0U, GPT_API_ID_GET_TIME_REMAINING, GPT_E_UNINIT);
         return 0U;
     }
     if (!Gpt_IsValidChannel(Channel))
     {
-        Det_ReportError(GPT_MODULE_ID, 0U, GPT_API_ID_GET_TIME_REMAINING, GPT_E_PARAM_CHANNEL);
+        (void)Det_ReportError(GPT_MODULE_ID, 0U, GPT_API_ID_GET_TIME_REMAINING, GPT_E_PARAM_CHANNEL);
         return 0U;
     }
 
@@ -300,12 +306,12 @@ void Gpt_StartTimer(Gpt_ChannelType Channel, Gpt_ValueType Value)
 {
     if (Gpt_Cfg == NULL)
     {
-        Det_ReportError(GPT_MODULE_ID, 0U, GPT_API_ID_START_TIMER, GPT_E_UNINIT);
+        (void)Det_ReportError(GPT_MODULE_ID, 0U, GPT_API_ID_START_TIMER, GPT_E_UNINIT);
         return;
     }
     if (!Gpt_IsValidChannel(Channel))
     {
-        Det_ReportError(GPT_MODULE_ID, 0U, GPT_API_ID_START_TIMER, GPT_E_PARAM_CHANNEL);
+        (void)Det_ReportError(GPT_MODULE_ID, 0U, GPT_API_ID_START_TIMER, GPT_E_PARAM_CHANNEL);
         return;
     }
 
@@ -318,12 +324,12 @@ void Gpt_StartTimer(Gpt_ChannelType Channel, Gpt_ValueType Value)
      * 追加した際に必要になる（Gpt_PBCfg.c 参照）。 */
     if ((Value == 0U) || (Value > chCfg->TickValueMax))
     {
-        Det_ReportError(GPT_MODULE_ID, 0U, GPT_API_ID_START_TIMER, GPT_E_PARAM_VALUE);
+        (void)Det_ReportError(GPT_MODULE_ID, 0U, GPT_API_ID_START_TIMER, GPT_E_PARAM_VALUE);
         return;
     }
     if (Gpt_ChannelState[Channel] == GPT_CH_STATE_RUNNING)
     {
-        Det_ReportError(GPT_MODULE_ID, 0U, GPT_API_ID_START_TIMER, GPT_E_BUSY);
+        (void)Det_ReportError(GPT_MODULE_ID, 0U, GPT_API_ID_START_TIMER, GPT_E_BUSY);
         return;
     }
 
@@ -363,12 +369,12 @@ void Gpt_StopTimer(Gpt_ChannelType Channel)
 {
     if (Gpt_Cfg == NULL)
     {
-        Det_ReportError(GPT_MODULE_ID, 0U, GPT_API_ID_STOP_TIMER, GPT_E_UNINIT);
+        (void)Det_ReportError(GPT_MODULE_ID, 0U, GPT_API_ID_STOP_TIMER, GPT_E_UNINIT);
         return;
     }
     if (!Gpt_IsValidChannel(Channel))
     {
-        Det_ReportError(GPT_MODULE_ID, 0U, GPT_API_ID_STOP_TIMER, GPT_E_PARAM_CHANNEL);
+        (void)Det_ReportError(GPT_MODULE_ID, 0U, GPT_API_ID_STOP_TIMER, GPT_E_PARAM_CHANNEL);
         return;
     }
 
@@ -387,7 +393,10 @@ void Gpt_StopTimer(Gpt_ChannelType Channel)
     SchM_Exit_Gpt_CHANNEL_EXCLUSIVE_AREA();
 
     /* initialized/stopped/expired での呼び出しは無害 (状態変化なし、[SWS_Gpt_00344]) */
-    if (wasRunning == 0U) return;
+    if (wasRunning == 0U)
+    {
+        return;
+    }
 
     Gpt_Hw_StopTimer(Channel);
 
@@ -402,12 +411,12 @@ void Gpt_EnableNotification(Gpt_ChannelType Channel)
 {
     if (Gpt_Cfg == NULL)
     {
-        Det_ReportError(GPT_MODULE_ID, 0U, GPT_API_ID_ENABLE_NOTIFICATION, GPT_E_UNINIT);
+        (void)Det_ReportError(GPT_MODULE_ID, 0U, GPT_API_ID_ENABLE_NOTIFICATION, GPT_E_UNINIT);
         return;
     }
     if (!Gpt_IsValidChannel(Channel) || (Gpt_Cfg->Channels[Channel].Notification == NULL))
     {
-        Det_ReportError(GPT_MODULE_ID, 0U, GPT_API_ID_ENABLE_NOTIFICATION, GPT_E_PARAM_CHANNEL);
+        (void)Det_ReportError(GPT_MODULE_ID, 0U, GPT_API_ID_ENABLE_NOTIFICATION, GPT_E_PARAM_CHANNEL);
         return;
     }
 
@@ -422,12 +431,12 @@ void Gpt_DisableNotification(Gpt_ChannelType Channel)
 {
     if (Gpt_Cfg == NULL)
     {
-        Det_ReportError(GPT_MODULE_ID, 0U, GPT_API_ID_DISABLE_NOTIFICATION, GPT_E_UNINIT);
+        (void)Det_ReportError(GPT_MODULE_ID, 0U, GPT_API_ID_DISABLE_NOTIFICATION, GPT_E_UNINIT);
         return;
     }
     if (!Gpt_IsValidChannel(Channel) || (Gpt_Cfg->Channels[Channel].Notification == NULL))
     {
-        Det_ReportError(GPT_MODULE_ID, 0U, GPT_API_ID_DISABLE_NOTIFICATION, GPT_E_PARAM_CHANNEL);
+        (void)Det_ReportError(GPT_MODULE_ID, 0U, GPT_API_ID_DISABLE_NOTIFICATION, GPT_E_PARAM_CHANNEL);
         return;
     }
 

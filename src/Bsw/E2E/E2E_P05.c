@@ -60,11 +60,13 @@ Std_ReturnType E2E_P05Protect(
     uint8                   *Data,
     uint16                   Length)
 {
-    if (Config == NULL || State == NULL || Data == NULL)
+    if ((Config == NULL) || (State == NULL) || (Data == NULL)) {
         return E2E_E_INPUTERR_NULL;
+    }
 
-    if (Length < Config->DataLength)
+    if (Length < Config->DataLength) {
         return E2E_E_INPUTERR_WRONG;
+    }
 
     /* Write Counter (SWS_E2E_00405) */
     Data[Config->Offset + 2U] = State->Counter;
@@ -90,8 +92,9 @@ Std_ReturnType E2E_P05Protect(
 
 Std_ReturnType E2E_P05ProtectInit(E2E_P05ProtectStateType *State)
 {
-    if (State == NULL)
+    if (State == NULL) {
         return E2E_E_INPUTERR_NULL;
+    }
     State->Counter = 0U;
     return E2E_E_OK;
 }
@@ -106,19 +109,20 @@ Std_ReturnType E2E_P05Check(
     const uint8              *Data,
     uint16                    Length)
 {
-    if (Config == NULL || State == NULL)
+    if ((Config == NULL) || (State == NULL)) {
         return E2E_E_INPUTERR_NULL;
+    }
 
     /* Verify inputs (SWS_E2E_00412)。本プロジェクトの呼び出し方式 (フレーム
      * 受信時にのみ Check を呼ぶ) では Data==NULL/Length==0 の組は到達しない
      * 想定だが、擬似コード通り NONEWDATA として扱う (E2E_P01STATUS_NONEWDATA
      * と同じ位置づけ)。 */
-    if (Data == NULL && Length == 0U)
+    if ((Data == NULL) && (Length == 0U))
     {
         State->Status = E2E_P05STATUS_NONEWDATA;
         return E2E_E_OK;
     }
-    if (Data == NULL || Length != Config->DataLength)
+    if ((Data == NULL) || (Length != Config->DataLength))
     {
         /* [SWS_E2E_00411/00412]: "wrong input" 分岐は E2E_E_INPUTERR_WRONG を
          * 返さなければならない（2026-09-06 是正。以前は E2E_E_OK を返して
@@ -183,8 +187,9 @@ Std_ReturnType E2E_P05Check(
 
 Std_ReturnType E2E_P05CheckInit(E2E_P05CheckStateType *State)
 {
-    if (State == NULL)
+    if (State == NULL) {
         return E2E_E_INPUTERR_NULL;
+    }
     /* [SWS_E2E_00451] Counter=0xFF/Status=ERROR が正しい初期値
      * （2026-09-06 是正。以前は 0/NONEWDATA だった）。本プロジェクトの
      * 呼び出し元（EngineInfo/AbsInfo）は WaitForFirstData フラグにより
@@ -205,8 +210,9 @@ E2E_PCheckStatusType E2E_P05MapStatusToSM(
 {
     /* [SWS_E2E_00216] によりライブラリは Det/Dem を呼ばない方針のため
      * Det_ReportError() は呼ばない（値渡しのみで NULL チェックの概念自体が無い）。 */
-    if (CheckReturn != E2E_E_OK)
+    if (CheckReturn != E2E_E_OK) {
         return E2E_P_ERROR;  /* [SWS_E2E_00454]: Status に関わらず優先 */
+    }
 
     /* [SWS_E2E_00453] */
     switch (Status)
@@ -257,10 +263,12 @@ static uint16 E2E_CalcCrc16(uint16 crc, const uint8 *data, uint8 len)
         crc ^= (uint16)((uint16)data[i] << 8U);
         for (bit = 0U; bit < 8U; bit++)
         {
-            if (crc & 0x8000U)
+            if ((crc & 0x8000U) != 0U) {
                 crc = (uint16)((crc << 1U) ^ 0x1021U);
-            else
+            }
+            else {
                 crc = (uint16)(crc << 1U);
+            }
         }
     }
     return crc;

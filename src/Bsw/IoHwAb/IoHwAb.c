@@ -289,7 +289,7 @@ Std_ReturnType IoHwAb_Button_GetLevel(uint8* level)
 {
     if (level == NULL)
     {
-        Det_ReportError(IOHWAB_MODULE_ID, 0U, IOHWAB_API_ID_BUTTON_GET_LEVEL, IOHWAB_E_PARAM_POINTER);
+        (void)Det_ReportError(IOHWAB_MODULE_ID, 0U, IOHWAB_API_ID_BUTTON_GET_LEVEL, IOHWAB_E_PARAM_POINTER);
         return E_NOT_OK;
     }
     *level = s_confirmedLevel;
@@ -318,7 +318,7 @@ Std_ReturnType IoHwAb_Adc_GetValue_mV(uint16* mv)
 {
     if (mv == NULL)
     {
-        Det_ReportError(IOHWAB_MODULE_ID, 0U, IOHWAB_API_ID_ADC_GET_VALUE_MV, IOHWAB_E_PARAM_POINTER);
+        (void)Det_ReportError(IOHWAB_MODULE_ID, 0U, IOHWAB_API_ID_ADC_GET_VALUE_MV, IOHWAB_E_PARAM_POINTER);
         return E_NOT_OK;
     }
     *mv = s_adcMv;

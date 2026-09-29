@@ -218,7 +218,7 @@ void Dem_GetVersionInfo(Std_VersionInfoType* versioninfo)
 {
     if (versioninfo == NULL)
     {
-        Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_GET_VERSION_INFO, DEM_E_PARAM_POINTER);
+        (void)Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_GET_VERSION_INFO, DEM_E_PARAM_POINTER);
         return;
     }
 
@@ -361,7 +361,7 @@ Std_ReturnType Dem_ClearDTC(uint8 ClientId, uint32 DTC, Dem_DTCFormatType DTCFor
 
     if (!Dem_Initialized)
     {
-        Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_CLEAR_DTC, DEM_E_UNINIT);
+        (void)Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_CLEAR_DTC, DEM_E_UNINIT);
         return E_NOT_OK;
     }
 
@@ -372,7 +372,7 @@ Std_ReturnType Dem_ClearDTC(uint8 ClientId, uint32 DTC, Dem_DTCFormatType DTCFor
 
     if (DTCOrigin != DEM_DTC_ORIGIN_PRIMARY_MEMORY)
     {
-        Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_CLEAR_DTC, DEM_E_WRONG_CONFIGURATION);
+        (void)Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_CLEAR_DTC, DEM_E_WRONG_CONFIGURATION);
         return E_NOT_OK;
     }
 
@@ -458,19 +458,19 @@ Std_ReturnType Dem_GetEventUdsStatus(Dem_EventIdType EventId, Dem_UdsStatusByteT
 {
     if (!Dem_Initialized)
     {
-        Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_GET_EVENT_UDS_STATUS, DEM_E_UNINIT);
+        (void)Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_GET_EVENT_UDS_STATUS, DEM_E_UNINIT);
         return E_NOT_OK;
     }
 
     if (EventId >= DEM_EVENT_COUNT)
     {
-        Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_GET_EVENT_UDS_STATUS, DEM_E_WRONG_CONFIGURATION);
+        (void)Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_GET_EVENT_UDS_STATUS, DEM_E_WRONG_CONFIGURATION);
         return E_NOT_OK;
     }
 
     if (UDSStatusByte == NULL)
     {
-        Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_GET_EVENT_UDS_STATUS, DEM_E_PARAM_POINTER);
+        (void)Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_GET_EVENT_UDS_STATUS, DEM_E_PARAM_POINTER);
         return E_NOT_OK;
     }
 
@@ -524,19 +524,19 @@ Std_ReturnType Dem_GetDTCOfEvent(Dem_EventIdType EventId, Dem_DTCFormatType DTCF
 {
     if (!Dem_Initialized)
     {
-        Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_GET_DTC_OF_EVENT, DEM_E_UNINIT);
+        (void)Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_GET_DTC_OF_EVENT, DEM_E_UNINIT);
         return E_NOT_OK;
     }
 
     if (EventId >= DEM_EVENT_COUNT)
     {
-        Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_GET_DTC_OF_EVENT, DEM_E_WRONG_CONFIGURATION);
+        (void)Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_GET_DTC_OF_EVENT, DEM_E_WRONG_CONFIGURATION);
         return E_NOT_OK;
     }
 
     if (DTCOfEvent == NULL)
     {
-        Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_GET_DTC_OF_EVENT, DEM_E_PARAM_POINTER);
+        (void)Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_GET_DTC_OF_EVENT, DEM_E_PARAM_POINTER);
         return E_NOT_OK;
     }
 
@@ -575,19 +575,19 @@ Std_ReturnType Dem_GetFaultDetectionCounter(Dem_EventIdType EventId, sint8* Faul
 {
     if (!Dem_Initialized)
     {
-        Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_GET_FAULT_DETECTION_COUNTER, DEM_E_UNINIT);
+        (void)Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_GET_FAULT_DETECTION_COUNTER, DEM_E_UNINIT);
         return E_NOT_OK;
     }
 
     if (EventId >= DEM_EVENT_COUNT)
     {
-        Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_GET_FAULT_DETECTION_COUNTER, DEM_E_WRONG_CONFIGURATION);
+        (void)Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_GET_FAULT_DETECTION_COUNTER, DEM_E_WRONG_CONFIGURATION);
         return E_NOT_OK;
     }
 
     if (FaultDetectionCounter == NULL)
     {
-        Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_GET_FAULT_DETECTION_COUNTER, DEM_E_PARAM_POINTER);
+        (void)Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_GET_FAULT_DETECTION_COUNTER, DEM_E_PARAM_POINTER);
         return E_NOT_OK;
     }
 
@@ -732,12 +732,12 @@ Std_ReturnType Dem_SetEventStatus(Dem_EventIdType EventId,
 
     if (EventId >= DEM_EVENT_COUNT)
     {
-        Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_SET_EVENT_STATUS, DEM_E_WRONG_CONFIGURATION);
+        (void)Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_SET_EVENT_STATUS, DEM_E_WRONG_CONFIGURATION);
         return E_NOT_OK;
     }
-    if (EventStatus != DEM_EVENT_STATUS_FAILED && EventStatus != DEM_EVENT_STATUS_PASSED)
+    if ((EventStatus != DEM_EVENT_STATUS_FAILED) && (EventStatus != DEM_EVENT_STATUS_PASSED))
     {
-        Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_SET_EVENT_STATUS, DEM_E_PARAM_DATA);
+        (void)Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_SET_EVENT_STATUS, DEM_E_PARAM_DATA);
         return E_NOT_OK;
     }
 
@@ -761,18 +761,22 @@ Std_ReturnType Dem_SetEventStatus(Dem_EventIdType EventId,
          * そうしないと、反対側の確定状態から数え始めるせいで
          * 反転に 2*limit 回分の報告が必要になってしまう
          * (limit=1 の「1 回で即確定」が実質機能しなくなる)。 */
-        if (counter < 0)
+        if (counter < 0) {
             counter = 0;
-        if (counter < limit)
+        }
+        if (counter < limit) {
             counter++;
+        }
     }
     else /* DEM_EVENT_STATUS_PASSED */
     {
         /* 確定 FAILED 側 (正) からの遷移も同様に中立からやり直す */
-        if (counter > 0)
+        if (counter > 0) {
             counter = 0;
-        if (counter > -limit)
+        }
+        if (counter > -limit) {
             counter--;
+        }
     }
 
     if (counter == prevCounter)
@@ -848,7 +852,7 @@ Std_ReturnType Dem_SetEventStatus(Dem_EventIdType EventId,
     {
         Dem_StatusTable[EventId] = status;
 
-        if (nowFailedConfirmed)
+        if ((nowFailedConfirmed) != 0U)
         {
             /* デバウンス確定 FAILED の瞬間にのみ FreezeFrame を更新する */
             Dem_FreezeFrameTable[EventId] = Dem_CurrentContext;
@@ -860,8 +864,9 @@ Std_ReturnType Dem_SetEventStatus(Dem_EventIdType EventId,
                      (unsigned)Dem_CurrentContext.EngineState);
 
             /* ExtendedData: 確定 FAILED の累積回数を +1 (0xFF で飽和) */
-            if (Dem_OccurrenceCounter[EventId] < 0xFFU)
+            if (Dem_OccurrenceCounter[EventId] < 0xFFU) {
                 Dem_OccurrenceCounter[EventId]++;
+            }
             (void)NvM_WriteBlock(NVM_BLOCK_ID_DEM_EXTENDED, Dem_OccurrenceCounter);
             DET_LOGI(TAG, "ExtendedData ev=%u occurrence=%u",
                      (unsigned)EventId, (unsigned)Dem_OccurrenceCounter[EventId]);
@@ -957,13 +962,13 @@ Std_ReturnType Dem_GetDTCStatusAvailabilityMask(uint8 ClientId, Dem_UdsStatusByt
 
     if (!Dem_Initialized)
     {
-        Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_GET_DTC_STATUS_AVAILABILITY_MASK, DEM_E_UNINIT);
+        (void)Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_GET_DTC_STATUS_AVAILABILITY_MASK, DEM_E_UNINIT);
         return E_NOT_OK;
     }
 
     if (DTCStatusMask == NULL)
     {
-        Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_GET_DTC_STATUS_AVAILABILITY_MASK, DEM_E_PARAM_POINTER);
+        (void)Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_GET_DTC_STATUS_AVAILABILITY_MASK, DEM_E_PARAM_POINTER);
         return E_NOT_OK;
     }
 
@@ -1095,7 +1100,7 @@ Std_ReturnType Dem_DisableDTCSetting(uint8 ClientId)
 
     if (!Dem_Initialized)
     {
-        Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_DISABLE_DTC_SETTING, DEM_E_UNINIT);
+        (void)Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_DISABLE_DTC_SETTING, DEM_E_UNINIT);
         return E_NOT_OK;
     }
 
@@ -1114,7 +1119,7 @@ Std_ReturnType Dem_EnableDTCSetting(uint8 ClientId)
 
     if (!Dem_Initialized)
     {
-        Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_ENABLE_DTC_SETTING, DEM_E_UNINIT);
+        (void)Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_ENABLE_DTC_SETTING, DEM_E_UNINIT);
         return E_NOT_OK;
     }
 
@@ -1497,13 +1502,13 @@ void Dem_GetAllDTCs(uint32* dtcBuf, uint8* statusBuf,
 {
     if (!Dem_Initialized)
     {
-        Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_GET_ALL_DTCS, DEM_E_UNINIT);
+        (void)Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_GET_ALL_DTCS, DEM_E_UNINIT);
         return;
     }
 
-    if (dtcBuf == NULL || statusBuf == NULL || count == NULL)
+    if ((dtcBuf == NULL) || (statusBuf == NULL) || (count == NULL))
     {
-        Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_GET_ALL_DTCS, DEM_E_PARAM_POINTER);
+        (void)Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_GET_ALL_DTCS, DEM_E_PARAM_POINTER);
         return;
     }
 
@@ -1549,13 +1554,13 @@ void Dem_GetSupportedDTCs(uint32* dtcBuf, uint8* statusBuf, uint8* count)
 {
     if (!Dem_Initialized)
     {
-        Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_GET_SUPPORTED_DTCS, DEM_E_UNINIT);
+        (void)Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_GET_SUPPORTED_DTCS, DEM_E_UNINIT);
         return;
     }
 
-    if (dtcBuf == NULL || statusBuf == NULL || count == NULL)
+    if ((dtcBuf == NULL) || (statusBuf == NULL) || (count == NULL))
     {
-        Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_GET_SUPPORTED_DTCS, DEM_E_PARAM_POINTER);
+        (void)Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_GET_SUPPORTED_DTCS, DEM_E_PARAM_POINTER);
         return;
     }
 
@@ -1585,7 +1590,7 @@ void Dem_SetFreezeFrameContext(uint16 EngineSpeed, uint8 CoolantTemp, uint8 Engi
 {
     if (!Dem_Initialized)
     {
-        Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_SET_FREEZE_FRAME_CONTEXT, DEM_E_UNINIT);
+        (void)Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_SET_FREEZE_FRAME_CONTEXT, DEM_E_UNINIT);
         return;
     }
 
@@ -1609,24 +1614,25 @@ Std_ReturnType Dem_GetFreezeFrameOfEvent(Dem_EventIdType EventId, Dem_FreezeFram
 {
     if (!Dem_Initialized)
     {
-        Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_GET_FREEZE_FRAME_OF_EVENT, DEM_E_UNINIT);
+        (void)Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_GET_FREEZE_FRAME_OF_EVENT, DEM_E_UNINIT);
         return E_NOT_OK;
     }
 
     if (EventId >= DEM_EVENT_COUNT)
     {
-        Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_GET_FREEZE_FRAME_OF_EVENT, DEM_E_WRONG_CONFIGURATION);
+        (void)Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_GET_FREEZE_FRAME_OF_EVENT, DEM_E_WRONG_CONFIGURATION);
         return E_NOT_OK;
     }
 
     if (Frame == NULL)
     {
-        Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_GET_FREEZE_FRAME_OF_EVENT, DEM_E_PARAM_POINTER);
+        (void)Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_GET_FREEZE_FRAME_OF_EVENT, DEM_E_PARAM_POINTER);
         return E_NOT_OK;
     }
 
-    if (Dem_FreezeFrameValid[EventId] == 0U)
+    if (Dem_FreezeFrameValid[EventId] == 0U) {
         return E_NOT_OK;  /* 未記録: DET 対象外（正常な「記録なし」状態） */
+    }
 
     *Frame = Dem_FreezeFrameTable[EventId];
     return E_OK;
@@ -1647,13 +1653,13 @@ Std_ReturnType Dem_GetEventIdOfDTC(uint32 DTC, Dem_EventIdType* EventId)
 {
     if (!Dem_Initialized)
     {
-        Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_GET_EVENT_ID_OF_DTC, DEM_E_UNINIT);
+        (void)Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_GET_EVENT_ID_OF_DTC, DEM_E_UNINIT);
         return E_NOT_OK;
     }
 
     if (EventId == NULL)
     {
-        Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_GET_EVENT_ID_OF_DTC, DEM_E_PARAM_POINTER);
+        (void)Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_GET_EVENT_ID_OF_DTC, DEM_E_PARAM_POINTER);
         return E_NOT_OK;
     }
 
@@ -1699,24 +1705,25 @@ Std_ReturnType Dem_GetOccurrenceCounterOfEvent(Dem_EventIdType EventId, uint8* C
 {
     if (!Dem_Initialized)
     {
-        Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_GET_OCCURRENCE_COUNTER_OF_EVENT, DEM_E_UNINIT);
+        (void)Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_GET_OCCURRENCE_COUNTER_OF_EVENT, DEM_E_UNINIT);
         return E_NOT_OK;
     }
 
     if (EventId >= DEM_EVENT_COUNT)
     {
-        Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_GET_OCCURRENCE_COUNTER_OF_EVENT, DEM_E_WRONG_CONFIGURATION);
+        (void)Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_GET_OCCURRENCE_COUNTER_OF_EVENT, DEM_E_WRONG_CONFIGURATION);
         return E_NOT_OK;
     }
 
     if (Counter == NULL)
     {
-        Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_GET_OCCURRENCE_COUNTER_OF_EVENT, DEM_E_PARAM_POINTER);
+        (void)Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_GET_OCCURRENCE_COUNTER_OF_EVENT, DEM_E_PARAM_POINTER);
         return E_NOT_OK;
     }
 
-    if (Dem_OccurrenceCounter[EventId] == 0U)
+    if (Dem_OccurrenceCounter[EventId] == 0U) {
         return E_NOT_OK;  /* 未記録: DET 対象外（正常な「記録なし」状態） */
+    }
 
     *Counter = Dem_OccurrenceCounter[EventId];
     return E_OK;
@@ -1740,13 +1747,16 @@ Std_ReturnType Dem_GetOccurrenceCounterOfEvent(Dem_EventIdType EventId, uint8* C
  */
 static sint8 Dem_MapDebounceCounterToFdc(sint8 counter, sint8 limit)
 {
-    if (limit <= 0)
+    if (limit <= 0) {
         return 0;  /* 未到達コード想定 (Dem_DebounceLimitTable[] は全て1以上) */
+    }
 
-    if (counter >= 0)
+    if (counter >= 0) {
         return (sint8)(((sint16)counter * 127) / limit);
-    else
+    }
+    else {
         return (sint8)(((sint16)counter * 128) / limit);
+    }
 }
 
 /* ----------------------------------------------------------------------
@@ -1771,13 +1781,13 @@ void Dem_GetPrefailedDTCs(uint32* dtcBuf, uint8* fdcBuf, uint8* count)
 {
     if (!Dem_Initialized)
     {
-        Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_GET_PREFAILED_DTCS, DEM_E_UNINIT);
+        (void)Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_GET_PREFAILED_DTCS, DEM_E_UNINIT);
         return;
     }
 
-    if (dtcBuf == NULL || fdcBuf == NULL || count == NULL)
+    if ((dtcBuf == NULL) || (fdcBuf == NULL) || (count == NULL))
     {
-        Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_GET_PREFAILED_DTCS, DEM_E_PARAM_POINTER);
+        (void)Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_GET_PREFAILED_DTCS, DEM_E_PARAM_POINTER);
         return;
     }
 
@@ -1785,7 +1795,7 @@ void Dem_GetPrefailedDTCs(uint32* dtcBuf, uint8* fdcBuf, uint8* count)
     for (uint8 i = 0U; i < DEM_EVENT_COUNT; i++)
     {
         sint8 fdc = Dem_MapDebounceCounterToFdc(Dem_DebounceCounter[i], Dem_DebounceLimitTable[i]);
-        if (fdc >= 1 && fdc <= 0x7E)
+        if ((fdc >= 1) && (fdc <= 0x7E))
         {
             dtcBuf[*count] = Dem_DtcTable[i];
             fdcBuf[*count] = (uint8)fdc;
@@ -1875,13 +1885,14 @@ static void Dem_EvaluatePendingClear(Dem_EventIdType EventId)
 {
     const uint8 status = Dem_StatusTable[EventId];
 
-    if ((status & DEM_STATUS_PENDING) == 0U)
+    if ((status & DEM_STATUS_PENDING) == 0U) {
         return; /* 既にクリア済み: 対象外 */
+    }
 
     const uint8 cleanCycle = ((status & DEM_STATUS_TF_THIS_OP_CYCLE) == 0U)
                            && ((status & DEM_STATUS_NOT_COMPLETED_THIS_CYCLE) == 0U);
 
-    if (cleanCycle)
+    if ((cleanCycle) != 0U)
     {
         Dem_StatusTable[EventId] &= (uint8)(~DEM_STATUS_PENDING);
         DET_LOGI(TAG, "ev=%u pendingDTC cleared (clean operation cycle)", (unsigned)EventId);

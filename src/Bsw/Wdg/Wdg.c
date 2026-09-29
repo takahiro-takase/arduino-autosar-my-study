@@ -56,7 +56,7 @@ void Wdg_Init(const Wdg_ConfigType* ConfigPtr)
     if (ConfigPtr == NULL)
     {
         DET_LOGE(TAG, "Init: NULL ConfigPtr");
-        Det_ReportError(WDG_MODULE_ID, 0U, WDG_API_ID_INIT, WDG_E_PARAM_POINTER);
+        (void)Det_ReportError(WDG_MODULE_ID, 0U, WDG_API_ID_INIT, WDG_E_PARAM_POINTER);
         return;
     }
 
@@ -74,7 +74,7 @@ Std_ReturnType Wdg_SetMode(WdgIf_ModeType Mode)
 {
     if (!Wdg_Initialized)
     {
-        Det_ReportError(WDG_MODULE_ID, 0U, WDG_API_ID_SET_MODE, WDG_E_DRIVER_STATE);
+        (void)Det_ReportError(WDG_MODULE_ID, 0U, WDG_API_ID_SET_MODE, WDG_E_DRIVER_STATE);
         return E_NOT_OK;
     }
 
@@ -98,7 +98,7 @@ Std_ReturnType Wdg_SetMode(WdgIf_ModeType Mode)
 
     case WDGIF_SLOW_MODE:
     default:
-        Det_ReportError(WDG_MODULE_ID, 0U, WDG_API_ID_SET_MODE, WDG_E_PARAM_MODE);
+        (void)Det_ReportError(WDG_MODULE_ID, 0U, WDG_API_ID_SET_MODE, WDG_E_PARAM_MODE);
         return E_NOT_OK;
     }
 }
@@ -111,13 +111,13 @@ void Wdg_SetTriggerCondition(uint16 timeout)
 {
     if (!Wdg_Initialized)
     {
-        Det_ReportError(WDG_MODULE_ID, 0U, WDG_API_ID_SET_TRIGGER_CONDITION, WDG_E_DRIVER_STATE);
+        (void)Det_ReportError(WDG_MODULE_ID, 0U, WDG_API_ID_SET_TRIGGER_CONDITION, WDG_E_DRIVER_STATE);
         return;
     }
 
     if (timeout > Wdg_ConfiguredTimeoutMs)
     {
-        Det_ReportError(WDG_MODULE_ID, 0U, WDG_API_ID_SET_TRIGGER_CONDITION, WDG_E_PARAM_TIMEOUT);
+        (void)Det_ReportError(WDG_MODULE_ID, 0U, WDG_API_ID_SET_TRIGGER_CONDITION, WDG_E_PARAM_TIMEOUT);
         return;
     }
 
@@ -137,7 +137,7 @@ void Wdg_GetVersionInfo(Std_VersionInfoType* versioninfo)
 {
     if (versioninfo == NULL)
     {
-        Det_ReportError(WDG_MODULE_ID, 0U, WDG_API_ID_GET_VERSION_INFO, WDG_E_PARAM_POINTER);
+        (void)Det_ReportError(WDG_MODULE_ID, 0U, WDG_API_ID_GET_VERSION_INFO, WDG_E_PARAM_POINTER);
         return;
     }
 

@@ -64,10 +64,12 @@ void E2EMon_Init(void)
  * 両カウンタを Com シグナルへ反映する。Profile01/05 で共通の後段処理。 */
 static void E2EMon_Publish(uint8 crcErr, uint8 seqErr)
 {
-    if (crcErr && (E2EMon_CrcErrorCount < 0xFFU))
+    if (crcErr && (E2EMon_CrcErrorCount < 0xFFU)) {
         E2EMon_CrcErrorCount++;
-    if (seqErr && (E2EMon_SequenceErrorCount < 0xFFU))
+    }
+    if (seqErr && (E2EMon_SequenceErrorCount < 0xFFU)) {
         E2EMon_SequenceErrorCount++;
+    }
 
     /* 値をセットするだけで、送信タイミングには一切関与しない。実際に
      * CAN へ送信するかどうか・いつ送信するかは Com 自身の PERIODIC

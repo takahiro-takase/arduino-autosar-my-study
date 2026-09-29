@@ -59,8 +59,9 @@ static const Csm_JobConfigType* Csm_FindJob(uint32 jobId, Crypto_ServiceInfoType
 {
     for (uint8 i = 0U; i < CSM_JOB_COUNT; i++)
     {
-        if (Csm_JobConfigData[i].JobId == jobId && Csm_JobConfigData[i].Service == expectedService)
+        if ((Csm_JobConfigData[i].JobId == jobId) && (Csm_JobConfigData[i].Service == expectedService)) {
             return &Csm_JobConfigData[i];
+        }
     }
     return NULL;
 }
@@ -83,13 +84,13 @@ void Csm_GetVersionInfo(Std_VersionInfoType* versioninfo)
 {
     if (!Csm_Initialized)
     {
-        Det_ReportError(CSM_MODULE_ID, 0U, CSM_API_ID_GET_VERSION_INFO, CSM_E_UNINIT);
+        (void)Det_ReportError(CSM_MODULE_ID, 0U, CSM_API_ID_GET_VERSION_INFO, CSM_E_UNINIT);
         return;
     }
 
     if (versioninfo == NULL)
     {
-        Det_ReportError(CSM_MODULE_ID, 0U, CSM_API_ID_GET_VERSION_INFO, CSM_E_PARAM_POINTER);
+        (void)Det_ReportError(CSM_MODULE_ID, 0U, CSM_API_ID_GET_VERSION_INFO, CSM_E_PARAM_POINTER);
         return;
     }
 
@@ -110,13 +111,13 @@ Std_ReturnType Csm_MacGenerate(uint32 jobId, Crypto_OperationModeType mode,
 {
     if (!Csm_Initialized)
     {
-        Det_ReportError(CSM_MODULE_ID, 0U, CSM_API_ID_MAC_GENERATE, CSM_E_UNINIT);
+        (void)Det_ReportError(CSM_MODULE_ID, 0U, CSM_API_ID_MAC_GENERATE, CSM_E_UNINIT);
         return E_NOT_OK;
     }
 
-    if (dataPtr == NULL || macPtr == NULL || macLengthPtr == NULL)
+    if ((dataPtr == NULL) || (macPtr == NULL) || (macLengthPtr == NULL))
     {
-        Det_ReportError(CSM_MODULE_ID, 0U, CSM_API_ID_MAC_GENERATE, CSM_E_PARAM_POINTER);
+        (void)Det_ReportError(CSM_MODULE_ID, 0U, CSM_API_ID_MAC_GENERATE, CSM_E_PARAM_POINTER);
         return E_NOT_OK;
     }
 
@@ -126,7 +127,7 @@ Std_ReturnType Csm_MacGenerate(uint32 jobId, Crypto_OperationModeType mode,
          * ため、DET報告(CSM_E_SMALL_BUFFER、既存のまま変更なし)に加えて戻り値
          * 自体も拡張値で返す（2026-09 是正。以前は素の E_NOT_OK だった）。 */
         DET_LOGE(TAG, "MacGenerate E: macLength=%u exceeds CMAC size", (unsigned)*macLengthPtr);
-        Det_ReportError(CSM_MODULE_ID, 0U, CSM_API_ID_MAC_GENERATE, CSM_E_SMALL_BUFFER);
+        (void)Det_ReportError(CSM_MODULE_ID, 0U, CSM_API_ID_MAC_GENERATE, CSM_E_SMALL_BUFFER);
         return CRYPTO_E_SMALL_BUFFER;
     }
 
@@ -134,7 +135,7 @@ Std_ReturnType Csm_MacGenerate(uint32 jobId, Crypto_OperationModeType mode,
     if (jobCfg == NULL)
     {
         DET_LOGW(TAG, "MacGenerate W: no matching CRYPTO_MACGENERATE job for id=%u", (unsigned)jobId);
-        Det_ReportError(CSM_MODULE_ID, 0U, CSM_API_ID_MAC_GENERATE, CSM_E_PARAM_HANDLE);
+        (void)Det_ReportError(CSM_MODULE_ID, 0U, CSM_API_ID_MAC_GENERATE, CSM_E_PARAM_HANDLE);
         return E_NOT_OK;
     }
 
@@ -146,7 +147,7 @@ Std_ReturnType Csm_MacGenerate(uint32 jobId, Crypto_OperationModeType mode,
          * CRYIF_E_UNINIT に委ねていたが、それは CryIf 自身の診断義務であって
          * Csm 自身の診断義務を代替しない）。 */
         DET_LOGW(TAG, "MacGenerate W: CryIf not initialized");
-        Det_ReportError(CSM_MODULE_ID, 0U, CSM_API_ID_MAC_GENERATE, CSM_E_SERVICE_NOT_STARTED);
+        (void)Det_ReportError(CSM_MODULE_ID, 0U, CSM_API_ID_MAC_GENERATE, CSM_E_SERVICE_NOT_STARTED);
         return E_NOT_OK;
     }
 
@@ -189,23 +190,23 @@ Std_ReturnType Csm_MacVerify(uint32 jobId, Crypto_OperationModeType mode,
 {
     if (!Csm_Initialized)
     {
-        Det_ReportError(CSM_MODULE_ID, 0U, CSM_API_ID_MAC_VERIFY, CSM_E_UNINIT);
+        (void)Det_ReportError(CSM_MODULE_ID, 0U, CSM_API_ID_MAC_VERIFY, CSM_E_UNINIT);
         return E_NOT_OK;
     }
 
-    if (dataPtr == NULL || macPtr == NULL || verifyPtr == NULL)
+    if ((dataPtr == NULL) || (macPtr == NULL) || (verifyPtr == NULL))
     {
-        Det_ReportError(CSM_MODULE_ID, 0U, CSM_API_ID_MAC_VERIFY, CSM_E_PARAM_POINTER);
+        (void)Det_ReportError(CSM_MODULE_ID, 0U, CSM_API_ID_MAC_VERIFY, CSM_E_PARAM_POINTER);
         return E_NOT_OK;
     }
 
     /* [SWS_Csm_01050] macLength はビット単位（Csm_MacGenerate の
      * macLengthPtr がバイト単位なのと非対称。実測で確認済み）。8 の倍数で
      * ない値は本プロジェクトのバイト境界前提と矛盾するため拒否する。 */
-    if ((macLength % 8U) != 0U || (macLength / 8U) > CRYPTO_CMAC_SIZE)
+    if (((macLength % 8U) != 0U) || (macLength / 8U) > CRYPTO_CMAC_SIZE)
     {
         DET_LOGE(TAG, "MacVerify E: macLength=%u bit is invalid", (unsigned)macLength);
-        Det_ReportError(CSM_MODULE_ID, 0U, CSM_API_ID_MAC_VERIFY, CSM_E_PARAM_HANDLE);
+        (void)Det_ReportError(CSM_MODULE_ID, 0U, CSM_API_ID_MAC_VERIFY, CSM_E_PARAM_HANDLE);
         return E_NOT_OK;
     }
 
@@ -213,7 +214,7 @@ Std_ReturnType Csm_MacVerify(uint32 jobId, Crypto_OperationModeType mode,
     if (jobCfg == NULL)
     {
         DET_LOGW(TAG, "MacVerify W: no matching CRYPTO_MACVERIFY job for id=%u", (unsigned)jobId);
-        Det_ReportError(CSM_MODULE_ID, 0U, CSM_API_ID_MAC_VERIFY, CSM_E_PARAM_HANDLE);
+        (void)Det_ReportError(CSM_MODULE_ID, 0U, CSM_API_ID_MAC_VERIFY, CSM_E_PARAM_HANDLE);
         return E_NOT_OK;
     }
 
@@ -221,7 +222,7 @@ Std_ReturnType Csm_MacVerify(uint32 jobId, Crypto_OperationModeType mode,
     {
         /* [SWS_Csm_91010]（Csm_MacGenerate と同じ理由。2026-09 是正） */
         DET_LOGW(TAG, "MacVerify W: CryIf not initialized");
-        Det_ReportError(CSM_MODULE_ID, 0U, CSM_API_ID_MAC_VERIFY, CSM_E_SERVICE_NOT_STARTED);
+        (void)Det_ReportError(CSM_MODULE_ID, 0U, CSM_API_ID_MAC_VERIFY, CSM_E_SERVICE_NOT_STARTED);
         return E_NOT_OK;
     }
 
@@ -248,13 +249,13 @@ Std_ReturnType Csm_KeyElementSet(uint32 keyId, uint32 keyElementId,
 {
     if (!Csm_Initialized)
     {
-        Det_ReportError(CSM_MODULE_ID, 0U, CSM_API_ID_KEY_ELEMENT_SET, CSM_E_UNINIT);
+        (void)Det_ReportError(CSM_MODULE_ID, 0U, CSM_API_ID_KEY_ELEMENT_SET, CSM_E_UNINIT);
         return E_NOT_OK;
     }
 
     if (keyPtr == NULL)
     {
-        Det_ReportError(CSM_MODULE_ID, 0U, CSM_API_ID_KEY_ELEMENT_SET, CSM_E_PARAM_POINTER);
+        (void)Det_ReportError(CSM_MODULE_ID, 0U, CSM_API_ID_KEY_ELEMENT_SET, CSM_E_PARAM_POINTER);
         return E_NOT_OK;
     }
 
@@ -270,7 +271,7 @@ Std_ReturnType Csm_KeyElementSet(uint32 keyId, uint32 keyElementId,
          * CRYPTO_KEY_COUNT を直接参照する（Csm_PBCfg.c の CryptoKeyId
          * フィールドが既に CRYPTO_KEY_* を直接使っているのと同じ方針）。 */
         DET_LOGW(TAG, "KeyElementSet W: keyId=%u out of range", (unsigned)keyId);
-        Det_ReportError(CSM_MODULE_ID, 0U, CSM_API_ID_KEY_ELEMENT_SET, CSM_E_PARAM_HANDLE);
+        (void)Det_ReportError(CSM_MODULE_ID, 0U, CSM_API_ID_KEY_ELEMENT_SET, CSM_E_PARAM_HANDLE);
         return E_NOT_OK;
     }
 
@@ -278,7 +279,7 @@ Std_ReturnType Csm_KeyElementSet(uint32 keyId, uint32 keyElementId,
     {
         /* [SWS_Csm_91010]（Csm_MacGenerate と同じ理由。2026-09 是正） */
         DET_LOGW(TAG, "KeyElementSet W: CryIf not initialized");
-        Det_ReportError(CSM_MODULE_ID, 0U, CSM_API_ID_KEY_ELEMENT_SET, CSM_E_SERVICE_NOT_STARTED);
+        (void)Det_ReportError(CSM_MODULE_ID, 0U, CSM_API_ID_KEY_ELEMENT_SET, CSM_E_SERVICE_NOT_STARTED);
         return E_NOT_OK;
     }
 
@@ -296,7 +297,7 @@ Std_ReturnType Csm_KeySetValid(uint32 keyId)
 {
     if (!Csm_Initialized)
     {
-        Det_ReportError(CSM_MODULE_ID, 0U, CSM_API_ID_KEY_SET_VALID, CSM_E_UNINIT);
+        (void)Det_ReportError(CSM_MODULE_ID, 0U, CSM_API_ID_KEY_SET_VALID, CSM_E_UNINIT);
         return E_NOT_OK;
     }
 
@@ -304,7 +305,7 @@ Std_ReturnType Csm_KeySetValid(uint32 keyId)
     {
         /* [SWS_Csm_91011]（Csm_KeyElementSet と同じ理由。2026-09 是正） */
         DET_LOGW(TAG, "KeySetValid W: keyId=%u out of range", (unsigned)keyId);
-        Det_ReportError(CSM_MODULE_ID, 0U, CSM_API_ID_KEY_SET_VALID, CSM_E_PARAM_HANDLE);
+        (void)Det_ReportError(CSM_MODULE_ID, 0U, CSM_API_ID_KEY_SET_VALID, CSM_E_PARAM_HANDLE);
         return E_NOT_OK;
     }
 
@@ -312,7 +313,7 @@ Std_ReturnType Csm_KeySetValid(uint32 keyId)
     {
         /* [SWS_Csm_91010]（Csm_MacGenerate と同じ理由。2026-09 是正） */
         DET_LOGW(TAG, "KeySetValid W: CryIf not initialized");
-        Det_ReportError(CSM_MODULE_ID, 0U, CSM_API_ID_KEY_SET_VALID, CSM_E_SERVICE_NOT_STARTED);
+        (void)Det_ReportError(CSM_MODULE_ID, 0U, CSM_API_ID_KEY_SET_VALID, CSM_E_SERVICE_NOT_STARTED);
         return E_NOT_OK;
     }
 
@@ -329,13 +330,13 @@ Std_ReturnType Csm_KeyElementGet(uint32 keyId, uint32 keyElementId,
 {
     if (!Csm_Initialized)
     {
-        Det_ReportError(CSM_MODULE_ID, 0U, CSM_API_ID_KEY_ELEMENT_GET, CSM_E_UNINIT);
+        (void)Det_ReportError(CSM_MODULE_ID, 0U, CSM_API_ID_KEY_ELEMENT_GET, CSM_E_UNINIT);
         return E_NOT_OK;
     }
 
-    if (keyPtr == NULL || keyLengthPtr == NULL)
+    if ((keyPtr == NULL) || (keyLengthPtr == NULL))
     {
-        Det_ReportError(CSM_MODULE_ID, 0U, CSM_API_ID_KEY_ELEMENT_GET, CSM_E_PARAM_POINTER);
+        (void)Det_ReportError(CSM_MODULE_ID, 0U, CSM_API_ID_KEY_ELEMENT_GET, CSM_E_PARAM_POINTER);
         return E_NOT_OK;
     }
 
@@ -343,7 +344,7 @@ Std_ReturnType Csm_KeyElementGet(uint32 keyId, uint32 keyElementId,
     {
         /* [SWS_Csm_91011]（Csm_KeyElementSet と同じ理由。2026-09 是正） */
         DET_LOGW(TAG, "KeyElementGet W: keyId=%u out of range", (unsigned)keyId);
-        Det_ReportError(CSM_MODULE_ID, 0U, CSM_API_ID_KEY_ELEMENT_GET, CSM_E_PARAM_HANDLE);
+        (void)Det_ReportError(CSM_MODULE_ID, 0U, CSM_API_ID_KEY_ELEMENT_GET, CSM_E_PARAM_HANDLE);
         return E_NOT_OK;
     }
 
@@ -351,7 +352,7 @@ Std_ReturnType Csm_KeyElementGet(uint32 keyId, uint32 keyElementId,
     {
         /* [SWS_Csm_91010]（Csm_MacGenerate と同じ理由。2026-09 是正） */
         DET_LOGW(TAG, "KeyElementGet W: CryIf not initialized");
-        Det_ReportError(CSM_MODULE_ID, 0U, CSM_API_ID_KEY_ELEMENT_GET, CSM_E_SERVICE_NOT_STARTED);
+        (void)Det_ReportError(CSM_MODULE_ID, 0U, CSM_API_ID_KEY_ELEMENT_GET, CSM_E_SERVICE_NOT_STARTED);
         return E_NOT_OK;
     }
 
@@ -365,7 +366,7 @@ Std_ReturnType Csm_KeyElementGet(uint32 keyId, uint32 keyElementId,
          * ならない（2026-09 追加。以前は下位層の戻り値を素通しするだけで、
          * Csm_MacGenerate() が既に満たしているこの義務が本関数だけ抜けて
          * いた）。 */
-        Det_ReportError(CSM_MODULE_ID, 0U, CSM_API_ID_KEY_ELEMENT_GET, CSM_E_SMALL_BUFFER);
+        (void)Det_ReportError(CSM_MODULE_ID, 0U, CSM_API_ID_KEY_ELEMENT_GET, CSM_E_SMALL_BUFFER);
     }
     return ret;
 }

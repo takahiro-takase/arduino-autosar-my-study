@@ -227,7 +227,7 @@ void CanSM_DeInit(void)
 {
     if (!CanSM_Initialized)
     {
-        Det_ReportError(CANSM_MODULE_ID, 0U, CANSM_API_ID_DEINIT, CANSM_E_UNINIT);
+        (void)Det_ReportError(CANSM_MODULE_ID, 0U, CANSM_API_ID_DEINIT, CANSM_E_UNINIT);
         return;
     }
 
@@ -252,13 +252,13 @@ Std_ReturnType CanSM_RequestComMode(NetworkHandleType network, ComM_ModeType mod
 {
     if (!CanSM_Initialized)
     {
-        Det_ReportError(CANSM_MODULE_ID, 0U, CANSM_API_ID_REQUEST_COM_MODE, CANSM_E_UNINIT);
+        (void)Det_ReportError(CANSM_MODULE_ID, 0U, CANSM_API_ID_REQUEST_COM_MODE, CANSM_E_UNINIT);
         return E_NOT_OK;
     }
 
     if (network >= CANSM_CHANNEL_COUNT)
     {
-        Det_ReportError(CANSM_MODULE_ID, 0U, CANSM_API_ID_REQUEST_COM_MODE, CANSM_E_INVALID_NETWORK_HANDLE);
+        (void)Det_ReportError(CANSM_MODULE_ID, 0U, CANSM_API_ID_REQUEST_COM_MODE, CANSM_E_INVALID_NETWORK_HANDLE);
         return E_NOT_OK;
     }
 
@@ -371,19 +371,19 @@ Std_ReturnType CanSM_GetCurrentComMode(NetworkHandleType network, ComM_ModeType*
 {
     if (!CanSM_Initialized)
     {
-        Det_ReportError(CANSM_MODULE_ID, 0U, CANSM_API_ID_GET_CURRENT_COM_MODE, CANSM_E_UNINIT);
+        (void)Det_ReportError(CANSM_MODULE_ID, 0U, CANSM_API_ID_GET_CURRENT_COM_MODE, CANSM_E_UNINIT);
         return E_NOT_OK;
     }
 
     if (network >= CANSM_CHANNEL_COUNT)
     {
-        Det_ReportError(CANSM_MODULE_ID, 0U, CANSM_API_ID_GET_CURRENT_COM_MODE, CANSM_E_INVALID_NETWORK_HANDLE);
+        (void)Det_ReportError(CANSM_MODULE_ID, 0U, CANSM_API_ID_GET_CURRENT_COM_MODE, CANSM_E_INVALID_NETWORK_HANDLE);
         return E_NOT_OK;
     }
 
     if (mode == NULL)
     {
-        Det_ReportError(CANSM_MODULE_ID, 0U, CANSM_API_ID_GET_CURRENT_COM_MODE, CANSM_E_PARAM_POINTER);
+        (void)Det_ReportError(CANSM_MODULE_ID, 0U, CANSM_API_ID_GET_CURRENT_COM_MODE, CANSM_E_PARAM_POINTER);
         return E_NOT_OK;
     }
 
@@ -416,7 +416,7 @@ void CanSM_GetVersionInfo(Std_VersionInfoType* VersionInfo)
 {
     if (VersionInfo == NULL)
     {
-        Det_ReportError(CANSM_MODULE_ID, 0U, CANSM_API_ID_GET_VERSION_INFO, CANSM_E_PARAM_POINTER);
+        (void)Det_ReportError(CANSM_MODULE_ID, 0U, CANSM_API_ID_GET_VERSION_INFO, CANSM_E_PARAM_POINTER);
         return;
     }
 
@@ -509,18 +509,19 @@ void CanSM_ControllerBusOff(uint8 ControllerId)
 {
     if (!CanSM_Initialized)
     {
-        Det_ReportError(CANSM_MODULE_ID, 0U, CANSM_API_ID_CONTROLLER_BUSOFF, CANSM_E_UNINIT);
+        (void)Det_ReportError(CANSM_MODULE_ID, 0U, CANSM_API_ID_CONTROLLER_BUSOFF, CANSM_E_UNINIT);
         return;
     }
 
     if (ControllerId != 0U)
     {
-        Det_ReportError(CANSM_MODULE_ID, 0U, CANSM_API_ID_CONTROLLER_BUSOFF, CANSM_E_PARAM_CONTROLLER);
+        (void)Det_ReportError(CANSM_MODULE_ID, 0U, CANSM_API_ID_CONTROLLER_BUSOFF, CANSM_E_PARAM_CONTROLLER);
         return;
     }
 
-    if (CanSM_State != CANSM_STATE_FULL_COM && CanSM_State != CANSM_STATE_SILENT_COM)
+    if ((CanSM_State != CANSM_STATE_FULL_COM) && (CanSM_State != CANSM_STATE_SILENT_COM)) {
         return;
+    }
 
     /* 回復成功時にどちらへ戻すかの記録（CanSM_MainFunction() 参照）。
      * SILENT_COM 由来の場合、CanIf 側の PDU モード（CANIF_TX_OFFLINE）は
@@ -608,14 +609,14 @@ void CanSM_ControllerModeIndication(uint8 ControllerId, Can_ControllerStateType 
 
     if (!CanSM_Initialized)
     {
-        Det_ReportError(CANSM_MODULE_ID, 0U, CANSM_API_ID_CONTROLLER_MODE_INDICATION, CANSM_E_UNINIT);
+        (void)Det_ReportError(CANSM_MODULE_ID, 0U, CANSM_API_ID_CONTROLLER_MODE_INDICATION, CANSM_E_UNINIT);
         return;
     }
 
     if (ControllerId != 0U)
     {
         /* [SWS_CanSM_00397] */
-        Det_ReportError(CANSM_MODULE_ID, 0U, CANSM_API_ID_CONTROLLER_MODE_INDICATION, CANSM_E_PARAM_CONTROLLER);
+        (void)Det_ReportError(CANSM_MODULE_ID, 0U, CANSM_API_ID_CONTROLLER_MODE_INDICATION, CANSM_E_PARAM_CONTROLLER);
         return;
     }
 
@@ -730,7 +731,7 @@ void CanSM_MainFunction(void)
 {
     if (!CanSM_Initialized)
     {
-        Det_ReportError(CANSM_MODULE_ID, 0U, CANSM_API_ID_MAIN_FUNCTION, CANSM_E_UNINIT);
+        (void)Det_ReportError(CANSM_MODULE_ID, 0U, CANSM_API_ID_MAIN_FUNCTION, CANSM_E_UNINIT);
         return;
     }
 
@@ -748,15 +749,17 @@ void CanSM_MainFunction(void)
         return;
     }
 
-    if (CanSM_State != CANSM_STATE_BUS_OFF)
+    if (CanSM_State != CANSM_STATE_BUS_OFF) {
         return;
+    }
 
     const uint8 inL2 = (CanSM_BusOffRetries >= CANSM_BUSOFF_L1_TO_L2_COUNT) ? 1U : 0U;
     const unsigned long interval = inL2 ? (unsigned long)CANSM_BUSOFF_RECOVERY_L2_MS
                                          : (unsigned long)CANSM_BUSOFF_RECOVERY_L1_MS;
 
-    if ((millis() - CanSM_BusOffTimerMs) < interval)
+    if ((millis() - CanSM_BusOffTimerMs) < interval) {
         return;
+    }
 
     /* L1/L2 周期経過: 回復試行。この試行自体の時刻を基準点として更新する
      * （2026-09 是正: 以前は本行が無く、CanSM_BusOffTimerMs が
@@ -873,12 +876,13 @@ void CanSM_RxIndication(uint8 ControllerId)
 
     if (!CanSM_Initialized)
     {
-        Det_ReportError(CANSM_MODULE_ID, 0U, CANSM_API_ID_RX_INDICATION, CANSM_E_UNINIT);
+        (void)Det_ReportError(CANSM_MODULE_ID, 0U, CANSM_API_ID_RX_INDICATION, CANSM_E_UNINIT);
         return;
     }
 
-    if (CanSM_State != CANSM_STATE_WAKEUP_VALIDATING)
+    if (CanSM_State != CANSM_STATE_WAKEUP_VALIDATING) {
         return;
+    }
 
     DET_LOGI(TAG, "Wakeup validated (RX confirmed) -> FULL_COM");
     if (CanIf_SetControllerMode(0U, CAN_CS_STARTED) != E_OK)   /* CAN_CS_STOPPED -> CAN_CS_STARTED */

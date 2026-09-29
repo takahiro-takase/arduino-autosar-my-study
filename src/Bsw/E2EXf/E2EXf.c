@@ -70,21 +70,21 @@ uint8 E2EXf_E2EHealthStatus(uint8* buffer, uint32* bufferLength, const uint8* in
     if (bufferLength == NULL)
     {
         /* [SWS_E2EXf_00150] */
-        Det_ReportError(E2EXF_MODULE_ID, 0U, E2EXF_API_ID_TRANSFORM, E2EXF_E_PARAM_POINTER);
+        (void)Det_ReportError(E2EXF_MODULE_ID, 0U, E2EXF_API_ID_TRANSFORM, E2EXF_E_PARAM_POINTER);
         return E_SAFETY_HARD_RUNTIMEERROR;
     }
 
     if (!E2EXf_Initialized)
     {
         /* [SWS_E2EXf_00151] */
-        Det_ReportError(E2EXF_MODULE_ID, 0U, E2EXF_API_ID_TRANSFORM, E2EXF_E_UNINIT);
+        (void)Det_ReportError(E2EXF_MODULE_ID, 0U, E2EXF_API_ID_TRANSFORM, E2EXF_E_UNINIT);
         return E_SAFETY_HARD_RUNTIMEERROR;
     }
 
     if (buffer == NULL)
     {
         /* [SWS_E2EXf_00150] */
-        Det_ReportError(E2EXF_MODULE_ID, 0U, E2EXF_API_ID_TRANSFORM, E2EXF_E_PARAM_POINTER);
+        (void)Det_ReportError(E2EXF_MODULE_ID, 0U, E2EXF_API_ID_TRANSFORM, E2EXF_E_PARAM_POINTER);
         return E_SAFETY_HARD_RUNTIMEERROR;
     }
 
@@ -108,17 +108,17 @@ uint8 E2EXf_Inv_EngineInfo(uint8* buffer, uint32* bufferLength, const uint8* inp
     (void)inputBuffer;        /* out-of-place 変換は使用しない（E2EXf.h 冒頭 \note 参照） */
     (void)inputBufferLength;
 
-    if (CheckStatus == NULL || bufferLength == NULL)
+    if ((CheckStatus == NULL) || (bufferLength == NULL))
     {
         /* [SWS_E2EXf_00152] */
-        Det_ReportError(E2EXF_MODULE_ID, 0U, E2EXF_API_ID_INVERSE_TRANSFORM, E2EXF_E_PARAM_POINTER);
+        (void)Det_ReportError(E2EXF_MODULE_ID, 0U, E2EXF_API_ID_INVERSE_TRANSFORM, E2EXF_E_PARAM_POINTER);
         return E_SAFETY_HARD_RUNTIMEERROR;
     }
 
     if (!E2EXf_Initialized)
     {
         /* [SWS_E2EXf_00153] */
-        Det_ReportError(E2EXF_MODULE_ID, 0U, E2EXF_API_ID_INVERSE_TRANSFORM, E2EXF_E_UNINIT);
+        (void)Det_ReportError(E2EXF_MODULE_ID, 0U, E2EXF_API_ID_INVERSE_TRANSFORM, E2EXF_E_UNINIT);
         *CheckStatus = E2E_P05STATUS_ERROR;
         return E_SAFETY_HARD_RUNTIMEERROR;
     }
@@ -126,7 +126,7 @@ uint8 E2EXf_Inv_EngineInfo(uint8* buffer, uint32* bufferLength, const uint8* inp
     if (buffer == NULL)
     {
         /* [SWS_E2EXf_00152] */
-        Det_ReportError(E2EXF_MODULE_ID, 0U, E2EXF_API_ID_INVERSE_TRANSFORM, E2EXF_E_PARAM_POINTER);
+        (void)Det_ReportError(E2EXF_MODULE_ID, 0U, E2EXF_API_ID_INVERSE_TRANSFORM, E2EXF_E_PARAM_POINTER);
         *CheckStatus = E2E_P05STATUS_ERROR;
         return E_SAFETY_HARD_RUNTIMEERROR;
     }
@@ -137,7 +137,7 @@ uint8 E2EXf_Inv_EngineInfo(uint8* buffer, uint32* bufferLength, const uint8* inp
         /* buffer/CheckState/E2EConfig はここまでで NULL でないことを確認
          * 済みのため、通常は到達しない（E2E_E_INPUTERR_NULL の防御）。
          * [SWS_E2EXf_00152] */
-        Det_ReportError(E2EXF_MODULE_ID, 0U, E2EXF_API_ID_INVERSE_TRANSFORM, E2EXF_E_PARAM_POINTER);
+        (void)Det_ReportError(E2EXF_MODULE_ID, 0U, E2EXF_API_ID_INVERSE_TRANSFORM, E2EXF_E_PARAM_POINTER);
         *CheckStatus = E2E_P05STATUS_ERROR;
         return E_SAFETY_HARD_RUNTIMEERROR;
     }
@@ -168,8 +168,10 @@ uint8 E2EXf_Inv_EngineInfo(uint8* buffer, uint32* bufferLength, const uint8* inp
     const uint8 acceptable = (profileStatus == E2E_P_OK);
 
     if (!acceptable)
+    {
         DET_LOGW(TAG, "Inv_EngineInfo NG DemEvent=%u st=%u",
                  (unsigned)E2EXf_EngineInfoRxCfg.DemEventId, (unsigned)status);
+    }
 
     /* [SWS_E2EXf_00028]/[00029]: 通信路全体の直近 WindowSize 回分の健全性を
      * E2E_SMCheck() のステートマシンで判定し、その結果が VALID/INVALID に
@@ -204,22 +206,22 @@ uint8 E2EXf_Inv_AbsInfo(uint8* buffer, uint32* bufferLength, const uint8* inputB
     (void)inputBuffer;
     (void)inputBufferLength;
 
-    if (CheckStatus == NULL || bufferLength == NULL)
+    if ((CheckStatus == NULL) || (bufferLength == NULL))
     {
-        Det_ReportError(E2EXF_MODULE_ID, 0U, E2EXF_API_ID_INVERSE_TRANSFORM, E2EXF_E_PARAM_POINTER);
+        (void)Det_ReportError(E2EXF_MODULE_ID, 0U, E2EXF_API_ID_INVERSE_TRANSFORM, E2EXF_E_PARAM_POINTER);
         return E_SAFETY_HARD_RUNTIMEERROR;
     }
 
     if (!E2EXf_Initialized)
     {
-        Det_ReportError(E2EXF_MODULE_ID, 0U, E2EXF_API_ID_INVERSE_TRANSFORM, E2EXF_E_UNINIT);
+        (void)Det_ReportError(E2EXF_MODULE_ID, 0U, E2EXF_API_ID_INVERSE_TRANSFORM, E2EXF_E_UNINIT);
         *CheckStatus = E2E_P05STATUS_ERROR;
         return E_SAFETY_HARD_RUNTIMEERROR;
     }
 
     if (buffer == NULL)
     {
-        Det_ReportError(E2EXF_MODULE_ID, 0U, E2EXF_API_ID_INVERSE_TRANSFORM, E2EXF_E_PARAM_POINTER);
+        (void)Det_ReportError(E2EXF_MODULE_ID, 0U, E2EXF_API_ID_INVERSE_TRANSFORM, E2EXF_E_PARAM_POINTER);
         *CheckStatus = E2E_P05STATUS_ERROR;
         return E_SAFETY_HARD_RUNTIMEERROR;
     }
@@ -227,7 +229,7 @@ uint8 E2EXf_Inv_AbsInfo(uint8* buffer, uint32* bufferLength, const uint8* inputB
     if (E2E_P05Check(E2EXf_AbsInfoRxCfg.E2EConfig, E2EXf_AbsInfoRxCfg.CheckState, buffer,
                       E2EXf_AbsInfoRxCfg.E2EConfig->DataLength) != E2E_E_OK)
     {
-        Det_ReportError(E2EXF_MODULE_ID, 0U, E2EXF_API_ID_INVERSE_TRANSFORM, E2EXF_E_PARAM_POINTER);
+        (void)Det_ReportError(E2EXF_MODULE_ID, 0U, E2EXF_API_ID_INVERSE_TRANSFORM, E2EXF_E_PARAM_POINTER);
         *CheckStatus = E2E_P05STATUS_ERROR;
         return E_SAFETY_HARD_RUNTIMEERROR;
     }
@@ -246,8 +248,9 @@ uint8 E2EXf_Inv_AbsInfo(uint8* buffer, uint32* bufferLength, const uint8* inputB
     const E2E_PCheckStatusType profileStatus = E2E_P05MapStatusToSM(E2E_E_OK, status);
     const uint8 acceptable = (profileStatus == E2E_P_OK);
 
-    if (!acceptable)
+    if (!acceptable) {
         DET_LOGW(TAG, "Inv_AbsInfo NG DemEvent=%u st=%u", (unsigned)E2EXf_AbsInfoRxCfg.DemEventId, (unsigned)status);
+    }
 
     const Std_ReturnType smVerdict = E2EXf_ReportSMVerdict(E2EXf_AbsInfoRxCfg.DemEventId, profileStatus,
                                                             E2EXf_AbsInfoRxCfg.SMConfig,
@@ -284,7 +287,7 @@ void E2EXf_DeInit(void)
 {
     if (!E2EXf_Initialized)
     {
-        Det_ReportError(E2EXF_MODULE_ID, 0U, E2EXF_API_ID_DEINIT, E2EXF_E_UNINIT);
+        (void)Det_ReportError(E2EXF_MODULE_ID, 0U, E2EXF_API_ID_DEINIT, E2EXF_E_UNINIT);
         return;
     }
 
@@ -302,7 +305,7 @@ void E2EXf_GetVersionInfo(Std_VersionInfoType* versioninfo)
 {
     if (versioninfo == NULL)
     {
-        Det_ReportError(E2EXF_MODULE_ID, 0U, E2EXF_API_ID_GET_VERSION_INFO, E2EXF_E_PARAM_POINTER);
+        (void)Det_ReportError(E2EXF_MODULE_ID, 0U, E2EXF_API_ID_GET_VERSION_INFO, E2EXF_E_PARAM_POINTER);
         return;
     }
 

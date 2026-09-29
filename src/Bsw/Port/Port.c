@@ -137,7 +137,7 @@ void Port_GetVersionInfo(Std_VersionInfoType* versioninfo)
 {
     if (versioninfo == NULL)
     {
-        Det_ReportError(PORT_MODULE_ID, 0U, PORT_API_ID_GET_VERSION_INFO, PORT_E_PARAM_POINTER);
+        (void)Det_ReportError(PORT_MODULE_ID, 0U, PORT_API_ID_GET_VERSION_INFO, PORT_E_PARAM_POINTER);
         return;
     }
 
@@ -166,5 +166,5 @@ void Port_SetPinMode(Port_PinType Pin, Port_PinModeType Mode)
     /* [SWS_Port_00223]: 本プロジェクトは全ピンが PortPinModeChangeable=FALSE
      * 相当（Port.h の Port_SetPinMode() ドキュメント参照）のため、常にこの
      * エラーを報告するだけで他には何もしない。 */
-    Det_ReportError(PORT_MODULE_ID, 0U, PORT_API_ID_SET_PIN_MODE, PORT_E_MODE_UNCHANGEABLE);
+    (void)Det_ReportError(PORT_MODULE_ID, 0U, PORT_API_ID_SET_PIN_MODE, PORT_E_MODE_UNCHANGEABLE);
 }

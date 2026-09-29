@@ -216,7 +216,7 @@ void Can_Init(const Can_ConfigType* Config)
     if (Config == NULL)
     {
         DET_LOGE(TAG, "Init: NULL Config");
-        Det_ReportError(CAN_MODULE_ID, 0U, CAN_API_ID_INIT, CAN_E_PARAM_POINTER);
+        (void)Det_ReportError(CAN_MODULE_ID, 0U, CAN_API_ID_INIT, CAN_E_PARAM_POINTER);
         return;
     }
 
@@ -229,29 +229,31 @@ void Can_Init(const Can_ConfigType* Config)
     if (Can_Hw_Init(Config->csPin, Config->baudrate, Config->crystalFreq) != CAN_HW_OK)
     {
         DET_LOGE(TAG, "Init FAIL");
-        while (1)
+        for (;;)
+        {
             ;
+        }
     }
 
     DET_LOGI(TAG, "Init ok");
 
-    Can_Hw_InitMask(0, 0, Config->filter.mask << 16);
-    Can_Hw_InitFilter(0, 0, Config->filter.filterId << 16);
-    Can_Hw_InitFilter(1, 0, Config->filter.filterId << 16);
-    Can_Hw_InitMask(1, 0, Config->filter.mask << 16);
-    Can_Hw_InitFilter(2, 0, Config->filter.filterId << 16);
-    Can_Hw_InitFilter(3, 0, Config->filter.filterId << 16);
-    Can_Hw_InitFilter(4, 0, Config->filter.filterId << 16);
-    Can_Hw_InitFilter(5, 0, Config->filter.filterId << 16);
+    (void)Can_Hw_InitMask(0, 0, Config->filter.mask << 16);
+    (void)Can_Hw_InitFilter(0, 0, Config->filter.filterId << 16);
+    (void)Can_Hw_InitFilter(1, 0, Config->filter.filterId << 16);
+    (void)Can_Hw_InitMask(1, 0, Config->filter.mask << 16);
+    (void)Can_Hw_InitFilter(2, 0, Config->filter.filterId << 16);
+    (void)Can_Hw_InitFilter(3, 0, Config->filter.filterId << 16);
+    (void)Can_Hw_InitFilter(4, 0, Config->filter.filterId << 16);
+    (void)Can_Hw_InitFilter(5, 0, Config->filter.filterId << 16);
 
-    Can_Hw_SetMode(CAN_HW_MODE_LISTEN_ONLY);
+    (void)Can_Hw_SetMode(CAN_HW_MODE_LISTEN_ONLY);
     CanState = CAN_CS_STOPPED;
 
     /* Can_ConfigPtr 設定・CanState 初期値確定後に登録する。
      * これより前に INT ピンが立ち下がっても Can_Isr() は Can_ConfigPtr==NULL
      * で即座に return するため安全だが、登録自体をここまで遅らせることで
      * 「ISR が有効な時点では Can モジュールは必ず初期化済み」を保証する。 */
-    Can_Hw_AttachRxIsr(Config->intPin, Can_Isr);
+    (void)Can_Hw_AttachRxIsr(Config->intPin, Can_Isr);
 }
 
 /* ----------------------------------------------------------------------
@@ -275,7 +277,7 @@ void Can_GetVersionInfo(Std_VersionInfoType* versioninfo)
 {
     if (versioninfo == NULL)
     {
-        Det_ReportError(CAN_MODULE_ID, 0U, CAN_API_ID_GET_VERSION_INFO, CAN_E_PARAM_POINTER);
+        (void)Det_ReportError(CAN_MODULE_ID, 0U, CAN_API_ID_GET_VERSION_INFO, CAN_E_PARAM_POINTER);
         return;
     }
 
@@ -367,13 +369,13 @@ Can_ReturnType Can_SetControllerMode(uint8 Controller, Can_StateTransitionType T
 {
     if (Can_ConfigPtr == NULL)
     {
-        Det_ReportError(CAN_MODULE_ID, 0U, CAN_API_ID_SET_CONTROLLER_MODE, CAN_E_UNINIT);
+        (void)Det_ReportError(CAN_MODULE_ID, 0U, CAN_API_ID_SET_CONTROLLER_MODE, CAN_E_UNINIT);
         return CAN_NOT_OK;
     }
 
     if (Controller != 0U)
     {
-        Det_ReportError(CAN_MODULE_ID, 0U, CAN_API_ID_SET_CONTROLLER_MODE, CAN_E_PARAM_CONTROLLER);
+        (void)Det_ReportError(CAN_MODULE_ID, 0U, CAN_API_ID_SET_CONTROLLER_MODE, CAN_E_PARAM_CONTROLLER);
         return CAN_NOT_OK;
     }
 
@@ -383,10 +385,10 @@ Can_ReturnType Can_SetControllerMode(uint8 Controller, Can_StateTransitionType T
         if (CanState == CAN_CS_SLEEP)
         {
             DET_LOGE(TAG, "SetControllerMode E: T_START invalid from SLEEP (WAKEUP required first)");
-            Det_ReportError(CAN_MODULE_ID, 0U, CAN_API_ID_SET_CONTROLLER_MODE, CAN_E_TRANSITION);
+            (void)Det_ReportError(CAN_MODULE_ID, 0U, CAN_API_ID_SET_CONTROLLER_MODE, CAN_E_TRANSITION);
             return CAN_NOT_OK;
         }
-        Can_Hw_SetMode(CAN_HW_MODE_NORMAL);
+        (void)Can_Hw_SetMode(CAN_HW_MODE_NORMAL);
         //Can_Hw_SetMode(CAN_HW_MODE_LOOPBACK);  // ← 単体テスト用（通常はコメントアウト）
         CanState = CAN_CS_STARTED;
         break;
@@ -394,7 +396,7 @@ Can_ReturnType Can_SetControllerMode(uint8 Controller, Can_StateTransitionType T
         if (CanState == CAN_CS_SLEEP)
         {
             DET_LOGE(TAG, "SetControllerMode E: T_STOP invalid from SLEEP (WAKEUP required first)");
-            Det_ReportError(CAN_MODULE_ID, 0U, CAN_API_ID_SET_CONTROLLER_MODE, CAN_E_TRANSITION);
+            (void)Det_ReportError(CAN_MODULE_ID, 0U, CAN_API_ID_SET_CONTROLLER_MODE, CAN_E_TRANSITION);
             return CAN_NOT_OK;
         }
         Can_EnterListenOnly();
@@ -404,17 +406,17 @@ Can_ReturnType Can_SetControllerMode(uint8 Controller, Can_StateTransitionType T
         {
             DET_LOGE(TAG, "SetControllerMode E: T_WAKEUP invalid from state=%u (not SLEEP)",
                      (unsigned)CanState);
-            Det_ReportError(CAN_MODULE_ID, 0U, CAN_API_ID_SET_CONTROLLER_MODE, CAN_E_TRANSITION);
+            (void)Det_ReportError(CAN_MODULE_ID, 0U, CAN_API_ID_SET_CONTROLLER_MODE, CAN_E_TRANSITION);
             return CAN_NOT_OK;
         }
         Can_EnterListenOnly();
         break;
     case CAN_T_SLEEP:
-        Can_Hw_SetMode(CAN_HW_MODE_SLEEP);
+        (void)Can_Hw_SetMode(CAN_HW_MODE_SLEEP);
         CanState = CAN_CS_SLEEP;
         break;
     default:
-        Det_ReportError(CAN_MODULE_ID, 0U, CAN_API_ID_SET_CONTROLLER_MODE, CAN_E_TRANSITION);
+        (void)Det_ReportError(CAN_MODULE_ID, 0U, CAN_API_ID_SET_CONTROLLER_MODE, CAN_E_TRANSITION);
         return CAN_NOT_OK;
     }
 
@@ -448,20 +450,21 @@ void Can_DisableControllerInterrupts(uint8 Controller)
 {
     if (Can_ConfigPtr == NULL)
     {
-        Det_ReportError(CAN_MODULE_ID, 0U, CAN_API_ID_DISABLE_CONTROLLER_INTERRUPTS, CAN_E_UNINIT);
+        (void)Det_ReportError(CAN_MODULE_ID, 0U, CAN_API_ID_DISABLE_CONTROLLER_INTERRUPTS, CAN_E_UNINIT);
         return;
     }
 
     if (Controller != 0U)
     {
-        Det_ReportError(CAN_MODULE_ID, 0U, CAN_API_ID_DISABLE_CONTROLLER_INTERRUPTS, CAN_E_PARAM_CONTROLLER);
+        (void)Det_ReportError(CAN_MODULE_ID, 0U, CAN_API_ID_DISABLE_CONTROLLER_INTERRUPTS, CAN_E_PARAM_CONTROLLER);
         return;
     }
 
     /* [SWS_Can_00202]: N 回 Disable したら N 回 Enable するまで実際には
      * 再有効化しない。最初の1回だけ実際に切り離す。 */
-    if (Can_InterruptDisableNestCount == 0U)
+    if (Can_InterruptDisableNestCount == 0U) {
         (void)Can_Hw_DisableRxIsr();
+    }
     Can_InterruptDisableNestCount++;
 }
 
@@ -487,22 +490,24 @@ void Can_EnableControllerInterrupts(uint8 Controller)
 {
     if (Can_ConfigPtr == NULL)
     {
-        Det_ReportError(CAN_MODULE_ID, 0U, CAN_API_ID_ENABLE_CONTROLLER_INTERRUPTS, CAN_E_UNINIT);
+        (void)Det_ReportError(CAN_MODULE_ID, 0U, CAN_API_ID_ENABLE_CONTROLLER_INTERRUPTS, CAN_E_UNINIT);
         return;
     }
 
     if (Controller != 0U)
     {
-        Det_ReportError(CAN_MODULE_ID, 0U, CAN_API_ID_ENABLE_CONTROLLER_INTERRUPTS, CAN_E_PARAM_CONTROLLER);
+        (void)Det_ReportError(CAN_MODULE_ID, 0U, CAN_API_ID_ENABLE_CONTROLLER_INTERRUPTS, CAN_E_PARAM_CONTROLLER);
         return;
     }
 
-    if (Can_InterruptDisableNestCount == 0U)
+    if (Can_InterruptDisableNestCount == 0U) {
         return;  /* 対応する Disable より多く呼ばれた分は無視する */
+    }
 
     Can_InterruptDisableNestCount--;
-    if (Can_InterruptDisableNestCount == 0U)
+    if (Can_InterruptDisableNestCount == 0U) {
         (void)Can_Hw_EnableRxIsr();
+    }
 }
 
 /* ----------------------------------------------------------------------
@@ -554,14 +559,14 @@ Can_ReturnType Can_Write(Can_HwHandleType Hth, const Can_PduType* PduInfo)
 
     if (Can_ConfigPtr == NULL)
     {
-        Det_ReportError(CAN_MODULE_ID, 0U, CAN_API_ID_WRITE, CAN_E_UNINIT);
+        (void)Det_ReportError(CAN_MODULE_ID, 0U, CAN_API_ID_WRITE, CAN_E_UNINIT);
         return CAN_NOT_OK;
     }
 
-    if (PduInfo == NULL || PduInfo->sdu == NULL)
+    if ((PduInfo == NULL) || (PduInfo->sdu == NULL))
     {
         DET_LOGE(TAG, "Write: NULL PduInfo/sdu");
-        Det_ReportError(CAN_MODULE_ID, 0U, CAN_API_ID_WRITE, CAN_E_PARAM_POINTER);
+        (void)Det_ReportError(CAN_MODULE_ID, 0U, CAN_API_ID_WRITE, CAN_E_PARAM_POINTER);
         return CAN_NOT_OK;
     }
 
@@ -575,12 +580,13 @@ Can_ReturnType Can_Write(Can_HwHandleType Hth, const Can_PduType* PduInfo)
          * リードになりうる（2026-08 のスペック監査で指摘、安全網として追加）。 */
         DET_LOGE(TAG, "Write E: length=%u exceeds %u bytes",
                  (unsigned)PduInfo->length, (unsigned)CAN_FRAME_MAX_DLC);
-        Det_ReportError(CAN_MODULE_ID, 0U, CAN_API_ID_WRITE, CAN_E_PARAM_DLC);
+        (void)Det_ReportError(CAN_MODULE_ID, 0U, CAN_API_ID_WRITE, CAN_E_PARAM_DLC);
         return CAN_NOT_OK;
     }
 
-    if (CanState != CAN_CS_STARTED)
+    if (CanState != CAN_CS_STARTED) {
         return CAN_NOT_OK;
+    }
 
     if (Can_Hw_Send(PduInfo->id, PduInfo->length, PduInfo->sdu) != CAN_HW_OK)
     {
@@ -653,7 +659,7 @@ void Can_MainFunction_Write(void)
 {
     if (Can_ConfigPtr == NULL)
     {
-        Det_ReportError(CAN_MODULE_ID, 0U, CAN_API_ID_MAIN_FUNCTION_WRITE, CAN_E_UNINIT);
+        (void)Det_ReportError(CAN_MODULE_ID, 0U, CAN_API_ID_MAIN_FUNCTION_WRITE, CAN_E_UNINIT);
         return;
     }
 
@@ -700,12 +706,13 @@ void Can_MainFunction_Read(void)
 {
     if (Can_ConfigPtr == NULL)
     {
-        Det_ReportError(CAN_MODULE_ID, 0U, CAN_API_ID_MAIN_FUNCTION_READ, CAN_E_UNINIT);
+        (void)Det_ReportError(CAN_MODULE_ID, 0U, CAN_API_ID_MAIN_FUNCTION_READ, CAN_E_UNINIT);
         return;
     }
 
-    if (CanState == CAN_CS_SLEEP)
+    if (CanState == CAN_CS_SLEEP) {
         return;
+    }
 
     SchM_Enter_Can_IRQFLAG_EXCLUSIVE_AREA();
     Can_RxIrqPending = 0U;
@@ -717,8 +724,9 @@ void Can_MainFunction_Read(void)
         uint8  len;
         uint8  buf[8];
 
-        if (Can_Hw_Read(&rxId, &len, buf) != CAN_HW_OK)
+        if (Can_Hw_Read(&rxId, &len, buf) != CAN_HW_OK) {
             break;
+        }
 
         Can_HwType  mailbox = { .CanId = rxId, .Hoh = 0U, .ControllerId = 0U };
         PduInfoType pduInfo = { .SduDataPtr = buf, .SduLength = (PduLengthType)len };
@@ -749,11 +757,11 @@ void Can_MainFunction_BusOff(void)
 {
     if (Can_ConfigPtr == NULL)
     {
-        Det_ReportError(CAN_MODULE_ID, 0U, CAN_API_ID_MAIN_FUNCTION_BUSOFF, CAN_E_UNINIT);
+        (void)Det_ReportError(CAN_MODULE_ID, 0U, CAN_API_ID_MAIN_FUNCTION_BUSOFF, CAN_E_UNINIT);
         return;
     }
 
-    if (CanState == CAN_CS_STARTED && Can_Hw_IsBusOff() == CAN_HW_OK)
+    if ((CanState == CAN_CS_STARTED) && Can_Hw_IsBusOff() == CAN_HW_OK)
     {
         CanIf_ControllerBusOff(0U);
     }
@@ -797,12 +805,13 @@ void Can_MainFunction_Wakeup(void)
 {
     if (Can_ConfigPtr == NULL)
     {
-        Det_ReportError(CAN_MODULE_ID, 0U, CAN_API_ID_MAIN_FUNCTION_WAKEUP, CAN_E_UNINIT);
+        (void)Det_ReportError(CAN_MODULE_ID, 0U, CAN_API_ID_MAIN_FUNCTION_WAKEUP, CAN_E_UNINIT);
         return;
     }
 
-    if (CanState != CAN_CS_SLEEP)
+    if (CanState != CAN_CS_SLEEP) {
         return;
+    }
 
     uint8 pending;
     SchM_Enter_Can_IRQFLAG_EXCLUSIVE_AREA();
@@ -810,10 +819,11 @@ void Can_MainFunction_Wakeup(void)
     Can_WakeupIrqPending = 0U;
     SchM_Exit_Can_IRQFLAG_EXCLUSIVE_AREA();
 
-    if (!pending && Can_Hw_IsWakeupPending() == CAN_HW_OK)
+    if (!pending && Can_Hw_IsWakeupPending() == CAN_HW_OK) {
         pending = 1U;
+    }
 
-    if (pending)
+    if ((pending) != 0U)
     {
         DET_LOGI(TAG, "Wakeup detected (INT asserted during SLEEP)");
         EcuM_CheckWakeup(ECUM_WKSOURCE_CAN);
@@ -877,8 +887,9 @@ void Can_MainFunction_Wakeup(void)
  */
 static void Can_Isr(void)
 {
-    if (Can_ConfigPtr == NULL)
+    if (Can_ConfigPtr == NULL) {
         return;
+    }
 
     if (CanState == CAN_CS_SLEEP)
     {
@@ -918,25 +929,26 @@ Std_ReturnType Can_GetControllerErrorState(uint8 Controller, Can_ErrorStateType*
 {
     if (Can_ConfigPtr == NULL)
     {
-        Det_ReportError(CAN_MODULE_ID, 0U, CAN_API_ID_GET_CONTROLLER_ERROR_STATE, CAN_E_UNINIT);
+        (void)Det_ReportError(CAN_MODULE_ID, 0U, CAN_API_ID_GET_CONTROLLER_ERROR_STATE, CAN_E_UNINIT);
         return E_NOT_OK;
     }
 
     if (Controller != 0U)
     {
-        Det_ReportError(CAN_MODULE_ID, 0U, CAN_API_ID_GET_CONTROLLER_ERROR_STATE, CAN_E_PARAM_CONTROLLER);
+        (void)Det_ReportError(CAN_MODULE_ID, 0U, CAN_API_ID_GET_CONTROLLER_ERROR_STATE, CAN_E_PARAM_CONTROLLER);
         return E_NOT_OK;
     }
 
     if (ErrorStatePtr == NULL)
     {
-        Det_ReportError(CAN_MODULE_ID, 0U, CAN_API_ID_GET_CONTROLLER_ERROR_STATE, CAN_E_PARAM_POINTER);
+        (void)Det_ReportError(CAN_MODULE_ID, 0U, CAN_API_ID_GET_CONTROLLER_ERROR_STATE, CAN_E_PARAM_POINTER);
         return E_NOT_OK;
     }
 
     uint8_t rawState;
-    if (Can_Hw_GetErrorState(&rawState) != CAN_HW_OK)
+    if (Can_Hw_GetErrorState(&rawState) != CAN_HW_OK) {
         return E_NOT_OK;
+    }
 
     *ErrorStatePtr = (Can_ErrorStateType)rawState;
     return E_OK;
@@ -956,7 +968,7 @@ Std_ReturnType Can_GetControllerErrorState(uint8 Controller, Can_ErrorStateType*
  */
 static void Can_EnterListenOnly(void)
 {
-    Can_Hw_SetMode(CAN_HW_MODE_LISTEN_ONLY);
+    (void)Can_Hw_SetMode(CAN_HW_MODE_LISTEN_ONLY);
     CanState = CAN_CS_STOPPED;
 }
 

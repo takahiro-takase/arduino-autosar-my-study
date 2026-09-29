@@ -128,8 +128,9 @@ static uint8 BswM_EvaluateRule(const BswM_RuleType* rule)
 
     for (uint8 c = 0U; c < rule->ConditionCount; c++)
     {
-        if (BswM_EvaluateCondition(&rule->Condition[c]) == isOr)
+        if (BswM_EvaluateCondition(&rule->Condition[c]) == isOr) {
             return isOr;
+        }
     }
     return !isOr;
 }
@@ -158,13 +159,14 @@ static void BswM_ApplyDcmCommMode(void)
     const uint8 mode  = BswM_ModeSrcCache[BSWM_MODE_SRC_DCM_COMM];
     const uint8 group = mode / 4U;  /* 0=normal, 1=NM, 2=両方 */
     const uint8 op    = mode % 4U;  /* 0=enableRxTx/1=enableRxDisableTx/2=disableRxEnableTx/3=disableRxTx */
-    const uint8 rxEnabled = (op == 0U || op == 1U) ? 1U : 0U;
-    const uint8 txEnabled = (op == 0U || op == 2U) ? 1U : 0U;
+    const uint8 rxEnabled = ((op == 0U) || (op == 1U)) ? 1U : 0U;
+    const uint8 txEnabled = ((op == 0U) || (op == 2U)) ? 1U : 0U;
 
-    if (group == 0U || group == 2U)
+    if ((group == 0U) || (group == 2U)) {
         Com_SetCommunicationEnabled(rxEnabled, txEnabled);
+    }
 
-    if (group == 1U || group == 2U)
+    if ((group == 1U) || (group == 2U))
     {
         (void)(txEnabled
             ? Nm_EnableCommunication(NM_MAIN_NETWORK_HANDLE)
@@ -184,8 +186,9 @@ static void BswM_ApplyDcmCommMode(void)
  */
 static void BswM_ExecuteRules(BswM_ModeSrcType src, uint8 newValue)
 {
-    if (BswM_Cfg == NULL)
+    if (BswM_Cfg == NULL) {
         return;  /* BswM_Init() 未実行 (呼び出し順序の誤りに対する保険) */
+    }
 
     /* 複合条件ルールが他方のソースの最新値を参照できるよう、ルール評価前に
      * 必ずキャッシュを更新する。 */
@@ -199,23 +202,26 @@ static void BswM_ExecuteRules(BswM_ModeSrcType src, uint8 newValue)
          * result == BswM_RuleLastResult[i] で自然にスキップされる。 */
         uint8 result = BswM_EvaluateRule(rule);
 
-        if (result == BswM_RuleLastResult[i])
+        if (result == BswM_RuleLastResult[i]) {
             continue;  /* 結果が変化していなければ Action を再実行しない */
+        }
         BswM_RuleLastResult[i] = result;
 
-        if (!result)
+        if (!result) {
             continue;  /* false→true へ遷移したときのみ Action を実行する */
+        }
 
         DET_LOGI(TAG, "Rule%u fired op=%u conds=%u act=%u mask=0x%05lX",
                  (unsigned)i, (unsigned)rule->Operator, (unsigned)rule->ConditionCount,
                  (unsigned)rule->Action, (unsigned long)rule->TaskMask);
 
-        if (rule->Action == BSWM_ACTION_ACTIVATE || rule->Action == BSWM_ACTION_DEACTIVATE)
+        if ((rule->Action == BSWM_ACTION_ACTIVATE) || (rule->Action == BSWM_ACTION_DEACTIVATE))
         {
             for (uint8 t = 0U; t < OS_TASK_COUNT; t++)
             {
-                if ((rule->TaskMask & (uint32)(1UL << t)) == 0U)
+                if ((rule->TaskMask & (uint32)(1UL << t)) == 0U) {
                     continue;
+                }
 
                 Os_SetTaskActive(t, (rule->Action == BSWM_ACTION_ACTIVATE) ? 1U : 0U);
             }
@@ -252,7 +258,7 @@ void BswM_Init(const BswM_ConfigType* ConfigPtr)
     if (ConfigPtr == NULL)
     {
         DET_LOGE(TAG, "Init: NULL ConfigPtr");
-        Det_ReportError(BSWM_MODULE_ID, 0U, BSWM_API_ID_INIT, BSWM_E_PARAM_CONFIG);
+        (void)Det_ReportError(BSWM_MODULE_ID, 0U, BSWM_API_ID_INIT, BSWM_E_PARAM_CONFIG);
         return;
     }
 
@@ -264,8 +270,9 @@ void BswM_Init(const BswM_ConfigType* ConfigPtr)
      * 通常通信・NM通信ともに有効（Com_SetCommunicationEnabled()/
      * Nm_EnableCommunication() の既定値と一致させる）。 */
     BswM_ModeSrcCache[BSWM_MODE_SRC_DCM_COMM] = (uint8)DCM_ENABLE_RX_TX_NORM_NM;
-    for (uint8 i = 0U; i < ConfigPtr->RuleCount; i++)
+    for (uint8 i = 0U; i < ConfigPtr->RuleCount; i++) {
         BswM_RuleLastResult[i] = 0U;
+    }
 
     DET_LOGI(TAG, "Init ok rules=%u", (unsigned)ConfigPtr->RuleCount);
 }
@@ -278,7 +285,7 @@ void BswM_Deinit(void)
 {
     if (BswM_Cfg == NULL)
     {
-        Det_ReportError(BSWM_MODULE_ID, 0U, BSWM_API_ID_DEINIT, BSWM_E_NO_INIT);
+        (void)Det_ReportError(BSWM_MODULE_ID, 0U, BSWM_API_ID_DEINIT, BSWM_E_NO_INIT);
         return;
     }
 
@@ -297,7 +304,7 @@ void BswM_GetVersionInfo(Std_VersionInfoType* VersionInfo)
 {
     if (VersionInfo == NULL)
     {
-        Det_ReportError(BSWM_MODULE_ID, 0U, BSWM_API_ID_GET_VERSION_INFO, BSWM_E_PARAM_POINTER);
+        (void)Det_ReportError(BSWM_MODULE_ID, 0U, BSWM_API_ID_GET_VERSION_INFO, BSWM_E_PARAM_POINTER);
         return;
     }
 
@@ -316,19 +323,20 @@ void BswM_EcuM_CurrentState(EcuM_StateType state)
 {
     if (BswM_Cfg == NULL)
     {
-        Det_ReportError(BSWM_MODULE_ID, 0U, BSWM_API_ID_ECUM_CURRENT_STATE, BSWM_E_NO_INIT);
+        (void)Det_ReportError(BSWM_MODULE_ID, 0U, BSWM_API_ID_ECUM_CURRENT_STATE, BSWM_E_NO_INIT);
         return;
     }
 
-    if (state != ECUM_STATE_STARTUP && state != ECUM_STATE_RUN
-        && state != ECUM_STATE_POST_RUN && state != ECUM_STATE_SHUTDOWN)
+    if ((state != ECUM_STATE_STARTUP) && (state != ECUM_STATE_RUN)
+        && (state != ECUM_STATE_POST_RUN) && (state != ECUM_STATE_SHUTDOWN))
     {
-        Det_ReportError(BSWM_MODULE_ID, 0U, BSWM_API_ID_ECUM_CURRENT_STATE, BSWM_E_REQ_MODE_OUT_OF_RANGE);
+        (void)Det_ReportError(BSWM_MODULE_ID, 0U, BSWM_API_ID_ECUM_CURRENT_STATE, BSWM_E_REQ_MODE_OUT_OF_RANGE);
         return;
     }
 
-    if (BswM_ModeSrcCache[BSWM_MODE_SRC_ECUM] == (uint8)state)
+    if (BswM_ModeSrcCache[BSWM_MODE_SRC_ECUM] == (uint8)state) {
         return;
+    }
 
     BswM_ExecuteRules(BSWM_MODE_SRC_ECUM, (uint8)state);
 }
@@ -343,18 +351,19 @@ void BswM_ComM_CurrentMode(NetworkHandleType channel, ComM_ModeType mode)
 
     if (BswM_Cfg == NULL)
     {
-        Det_ReportError(BSWM_MODULE_ID, 0U, BSWM_API_ID_COMM_CURRENT_MODE, BSWM_E_NO_INIT);
+        (void)Det_ReportError(BSWM_MODULE_ID, 0U, BSWM_API_ID_COMM_CURRENT_MODE, BSWM_E_NO_INIT);
         return;
     }
 
     if (mode > COMM_FULL_COMMUNICATION)
     {
-        Det_ReportError(BSWM_MODULE_ID, 0U, BSWM_API_ID_COMM_CURRENT_MODE, BSWM_E_REQ_MODE_OUT_OF_RANGE);
+        (void)Det_ReportError(BSWM_MODULE_ID, 0U, BSWM_API_ID_COMM_CURRENT_MODE, BSWM_E_REQ_MODE_OUT_OF_RANGE);
         return;
     }
 
-    if (BswM_ModeSrcCache[BSWM_MODE_SRC_COMM] == (uint8)mode)
+    if (BswM_ModeSrcCache[BSWM_MODE_SRC_COMM] == (uint8)mode) {
         return;
+    }
 
     BswM_ExecuteRules(BSWM_MODE_SRC_COMM, (uint8)mode);
 }
@@ -393,18 +402,19 @@ void BswM_Dcm_CommunicationMode_CurrentState(NetworkHandleType Network, Dcm_Comm
 
     if (BswM_Cfg == NULL)
     {
-        Det_ReportError(BSWM_MODULE_ID, 0U, BSWM_API_ID_DCM_COMMUNICATION_MODE_CURRENT_STATE, BSWM_E_NO_INIT);
+        (void)Det_ReportError(BSWM_MODULE_ID, 0U, BSWM_API_ID_DCM_COMMUNICATION_MODE_CURRENT_STATE, BSWM_E_NO_INIT);
         return;
     }
 
     if (RequestedMode > DCM_DISABLE_RX_TX_NORM_NM)
     {
-        Det_ReportError(BSWM_MODULE_ID, 0U, BSWM_API_ID_DCM_COMMUNICATION_MODE_CURRENT_STATE, BSWM_E_REQ_MODE_OUT_OF_RANGE);
+        (void)Det_ReportError(BSWM_MODULE_ID, 0U, BSWM_API_ID_DCM_COMMUNICATION_MODE_CURRENT_STATE, BSWM_E_REQ_MODE_OUT_OF_RANGE);
         return;
     }
 
-    if (BswM_ModeSrcCache[BSWM_MODE_SRC_DCM_COMM] == (uint8)RequestedMode)
+    if (BswM_ModeSrcCache[BSWM_MODE_SRC_DCM_COMM] == (uint8)RequestedMode) {
         return;
+    }
 
     BswM_ExecuteRules(BSWM_MODE_SRC_DCM_COMM, (uint8)RequestedMode);
 }

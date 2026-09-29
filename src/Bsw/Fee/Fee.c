@@ -90,7 +90,7 @@ void Fee_GetVersionInfo(Std_VersionInfoType* versioninfo)
 {
     if (versioninfo == NULL)
     {
-        Det_ReportError(FEE_MODULE_ID, 0U, FEE_API_ID_GET_VERSION_INFO, FEE_E_PARAM_POINTER);
+        (void)Det_ReportError(FEE_MODULE_ID, 0U, FEE_API_ID_GET_VERSION_INFO, FEE_E_PARAM_POINTER);
         return;
     }
 
@@ -113,11 +113,11 @@ void Fee_SetMode(MemIf_ModeType Mode)
          * 報告しモード切替を実行せず戻る（2026-09 追加。Fee_Read/Write等の
          * 他APIと同じチェックがなぜかFee_SetMode()だけ抜けていた非対称な
          * 実装だった）。 */
-        Det_ReportError(FEE_MODULE_ID, 0U, FEE_API_ID_SET_MODE, FEE_E_UNINIT);
+        (void)Det_ReportError(FEE_MODULE_ID, 0U, FEE_API_ID_SET_MODE, FEE_E_UNINIT);
         return;
     }
 
-    if (Fee_Job.Active)
+    if ((Fee_Job.Active) != 0U)
     {
         /* [SWS_Fee_00170]: ジョブ処理中は runtime error FEE_E_BUSY を報告し
          * モード切替を実行せず戻る（2026-09 追加）。[SWS_Fee_00190]は
@@ -125,7 +125,7 @@ void Fee_SetMode(MemIf_ModeType Mode)
          * 実装はMEMIF_BUSY_INTERNAL相当の状態を持たない（Fee_Job.Active
          * のみで管理する簡略化、他APIと同じ2値モデル）ため、この判定のみで
          * 十分。 */
-        Det_ReportError(FEE_MODULE_ID, 0U, FEE_API_ID_SET_MODE, FEE_E_BUSY);
+        (void)Det_ReportError(FEE_MODULE_ID, 0U, FEE_API_ID_SET_MODE, FEE_E_BUSY);
         return;
     }
 
@@ -143,26 +143,26 @@ Std_ReturnType Fee_Read(uint16 Address, uint8* DataBufferPtr, uint16 Length)
 {
     if (!Fee_Initialized)
     {
-        Det_ReportError(FEE_MODULE_ID, 0U, FEE_API_ID_READ, FEE_E_UNINIT);
+        (void)Det_ReportError(FEE_MODULE_ID, 0U, FEE_API_ID_READ, FEE_E_UNINIT);
         return E_NOT_OK;
     }
     if (DataBufferPtr == NULL)
     {
-        Det_ReportError(FEE_MODULE_ID, 0U, FEE_API_ID_READ, FEE_E_PARAM_POINTER);
+        (void)Det_ReportError(FEE_MODULE_ID, 0U, FEE_API_ID_READ, FEE_E_PARAM_POINTER);
         return E_NOT_OK;
     }
     if (Length == 0U)
     {
-        Det_ReportError(FEE_MODULE_ID, 0U, FEE_API_ID_READ, FEE_E_INVALID_BLOCK_LEN);
+        (void)Det_ReportError(FEE_MODULE_ID, 0U, FEE_API_ID_READ, FEE_E_INVALID_BLOCK_LEN);
         return E_NOT_OK;
     }
-    if (Fee_Job.Active)
+    if ((Fee_Job.Active) != 0U)
     {
         /* [SWS_Fee_00133]/[SWS_Fee_00172]: ジョブ処理中の読み込み要求は
          * 拒否する（実行時エラー、[SWS_Fee_00162]により module status/job
          * result は変更しない）。2026-09 追加。Fee_Write() には既に同種の
          * チェックがあったが Fee_Read() には欠けていた（非対称）。 */
-        Det_ReportError(FEE_MODULE_ID, 0U, FEE_API_ID_READ, FEE_E_BUSY);
+        (void)Det_ReportError(FEE_MODULE_ID, 0U, FEE_API_ID_READ, FEE_E_BUSY);
         return E_NOT_OK;
     }
 
@@ -178,22 +178,22 @@ Std_ReturnType Fee_Write(uint16 Address, const uint8* DataBufferPtr, uint16 Leng
 {
     if (!Fee_Initialized)
     {
-        Det_ReportError(FEE_MODULE_ID, 0U, FEE_API_ID_WRITE, FEE_E_UNINIT);
+        (void)Det_ReportError(FEE_MODULE_ID, 0U, FEE_API_ID_WRITE, FEE_E_UNINIT);
         return E_NOT_OK;
     }
     if (DataBufferPtr == NULL)
     {
-        Det_ReportError(FEE_MODULE_ID, 0U, FEE_API_ID_WRITE, FEE_E_PARAM_POINTER);
+        (void)Det_ReportError(FEE_MODULE_ID, 0U, FEE_API_ID_WRITE, FEE_E_PARAM_POINTER);
         return E_NOT_OK;
     }
     if (Length == 0U)
     {
-        Det_ReportError(FEE_MODULE_ID, 0U, FEE_API_ID_WRITE, FEE_E_INVALID_BLOCK_LEN);
+        (void)Det_ReportError(FEE_MODULE_ID, 0U, FEE_API_ID_WRITE, FEE_E_INVALID_BLOCK_LEN);
         return E_NOT_OK;
     }
-    if (Fee_Job.Active)
+    if ((Fee_Job.Active) != 0U)
     {
-        Det_ReportError(FEE_MODULE_ID, 0U, FEE_API_ID_WRITE, FEE_E_BUSY);
+        (void)Det_ReportError(FEE_MODULE_ID, 0U, FEE_API_ID_WRITE, FEE_E_BUSY);
         return E_NOT_OK;
     }
 
@@ -214,26 +214,26 @@ Std_ReturnType Fee_WriteImmediate(uint16 Address, const uint8* DataBufferPtr, ui
 {
     if (!Fee_Initialized)
     {
-        Det_ReportError(FEE_MODULE_ID, 0U, FEE_API_ID_WRITE_IMMEDIATE, FEE_E_UNINIT);
+        (void)Det_ReportError(FEE_MODULE_ID, 0U, FEE_API_ID_WRITE_IMMEDIATE, FEE_E_UNINIT);
         return E_NOT_OK;
     }
     if (DataBufferPtr == NULL)
     {
-        Det_ReportError(FEE_MODULE_ID, 0U, FEE_API_ID_WRITE_IMMEDIATE, FEE_E_PARAM_POINTER);
+        (void)Det_ReportError(FEE_MODULE_ID, 0U, FEE_API_ID_WRITE_IMMEDIATE, FEE_E_PARAM_POINTER);
         return E_NOT_OK;
     }
     if (Length == 0U)
     {
-        Det_ReportError(FEE_MODULE_ID, 0U, FEE_API_ID_WRITE_IMMEDIATE, FEE_E_INVALID_BLOCK_LEN);
+        (void)Det_ReportError(FEE_MODULE_ID, 0U, FEE_API_ID_WRITE_IMMEDIATE, FEE_E_INVALID_BLOCK_LEN);
         return E_NOT_OK;
     }
-    if (Fee_Job.Active)
+    if ((Fee_Job.Active) != 0U)
     {
         /* Fee_Write() の非同期ジョブと物理アドレス空間が重なりうるため、
          * Fee_Write() と同じ排他を取る（Fee.h の Fee_WriteImmediate() 説明
          * 参照）。呼び出し元は「Os スケジューラ開始前のみ」という運用規約に
          * 加え、この戻り値でも保護される。 */
-        Det_ReportError(FEE_MODULE_ID, 0U, FEE_API_ID_WRITE_IMMEDIATE, FEE_E_BUSY);
+        (void)Det_ReportError(FEE_MODULE_ID, 0U, FEE_API_ID_WRITE_IMMEDIATE, FEE_E_BUSY);
         return E_NOT_OK;
     }
 
@@ -250,7 +250,7 @@ void Fee_Cancel(void)
     if (!Fee_Initialized)
     {
         /* [SWS_Fee_00124]: 未初期化時は何も変更せず開発エラーのみ報告する。 */
-        Det_ReportError(FEE_MODULE_ID, 0U, FEE_API_ID_CANCEL, FEE_E_UNINIT);
+        (void)Det_ReportError(FEE_MODULE_ID, 0U, FEE_API_ID_CANCEL, FEE_E_UNINIT);
         return;
     }
 
@@ -260,7 +260,7 @@ void Fee_Cancel(void)
          * (MEMIF_BUSY でない) 場合は module status/job result を一切変更せず、
          * 実行時エラー FEE_E_INVALID_CANCEL のみ報告する（2026-09 是正。
          * 以前は呼び出しのたびに無条件で Fee_LastResult を上書きしていた）。 */
-        Det_ReportError(FEE_MODULE_ID, 0U, FEE_API_ID_CANCEL, FEE_E_INVALID_CANCEL);
+        (void)Det_ReportError(FEE_MODULE_ID, 0U, FEE_API_ID_CANCEL, FEE_E_INVALID_CANCEL);
         return;
     }
 
@@ -276,8 +276,9 @@ void Fee_Cancel(void)
 
 MemIf_StatusType Fee_GetStatus(void)
 {
-    if (!Fee_Initialized)
+    if (!Fee_Initialized) {
         return MEMIF_UNINIT;
+    }
     return Fee_Job.Active ? MEMIF_BUSY : MEMIF_IDLE;
 }
 
@@ -293,7 +294,7 @@ MemIf_JobResultType Fee_GetJobResult(void)
          * MEMIF_JOB_FAILED を返す（2026-09 是正。以前はチェックが無く
          * Fee_Init() 前でも初期値 MEMIF_JOB_OK をそのまま返していた。
          * Fee_GetStatus() の MEMIF_UNINIT 分岐と対称にする）。 */
-        Det_ReportError(FEE_MODULE_ID, 0U, FEE_API_ID_GET_JOB_RESULT, FEE_E_UNINIT);
+        (void)Det_ReportError(FEE_MODULE_ID, 0U, FEE_API_ID_GET_JOB_RESULT, FEE_E_UNINIT);
         return MEMIF_JOB_FAILED;
     }
     return Fee_LastResult;
@@ -305,8 +306,9 @@ MemIf_JobResultType Fee_GetJobResult(void)
 
 void Fee_MainFunction(void)
 {
-    if (!Fee_Initialized || !Fee_Job.Active)
+    if (!Fee_Initialized || !Fee_Job.Active) {
         return;
+    }
 
     Fee_Hw_WriteByte((uint16)(Fee_Job.Address + Fee_Job.Pos), Fee_Job.DataPtr[Fee_Job.Pos]);
     Fee_Job.Pos++;

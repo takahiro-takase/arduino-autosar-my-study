@@ -143,7 +143,7 @@ static uint8 SecOC_OverrideRemaining[SECOC_RX_PDU_COUNT];
  * 有効要素数は変わらず SECOC_TX_PDU_COUNT のままで、全ループがこれを上限に
  * するため、確保だけされた添字0は SECOC_TX_PDU_COUNT>0 になるまで一切
  * 参照されない（無害）。 */
-#define SECOC_TX_STATE_STORAGE_COUNT  ((SECOC_TX_PDU_COUNT) > 0U ? (SECOC_TX_PDU_COUNT) : 1U)
+#define SECOC_TX_STATE_STORAGE_COUNT  (((SECOC_TX_PDU_COUNT) > 0U) ? (SECOC_TX_PDU_COUNT) : 1U)
 static uint8 SecOC_TxAuthenticBuffer[SECOC_TX_STATE_STORAGE_COUNT][SECOC_TX_AUTH_BUF_MAX];
 static uint8 SecOC_TxPending[SECOC_TX_STATE_STORAGE_COUNT];
 static uint8 SecOC_TxFreshness[SECOC_TX_STATE_STORAGE_COUNT];
@@ -211,11 +211,13 @@ static uint8 SecOC_ApplyVerifyStatusOverride(uint8 tableIndex, uint8 actualPass)
 {
     const uint8 ov = SecOC_OverrideStatus[tableIndex];
 
-    if (ov == SECOC_OVERRIDE_NONE)
+    if (ov == SECOC_OVERRIDE_NONE) {
         return actualPass;
+    }
 
-    if (ov == SECOC_OVERRIDE_FAIL_INDEFINITE)
+    if (ov == SECOC_OVERRIDE_FAIL_INDEFINITE) {
         return 0U;
+    }
 
     /* ここに来るのは SECOC_OVERRIDE_FAIL_COUNTED のみ
      * (41=Pass 強制は SecOC_VerifyStatusOverride() 側で常に拒否するため、
@@ -223,8 +225,9 @@ static uint8 SecOC_ApplyVerifyStatusOverride(uint8 tableIndex, uint8 actualPass)
     if (SecOC_OverrideRemaining[tableIndex] > 0U)
     {
         SecOC_OverrideRemaining[tableIndex]--;
-        if (SecOC_OverrideRemaining[tableIndex] == 0U)
+        if (SecOC_OverrideRemaining[tableIndex] == 0U) {
             SecOC_OverrideStatus[tableIndex] = SECOC_OVERRIDE_NONE;
+        }
         return 0U;
     }
 
@@ -270,7 +273,7 @@ void SecOC_Init(const SecOC_ConfigType* config)
     if (config == NULL)
     {
         DET_LOGE(TAG, "Init E: config NULL");
-        Det_ReportError(SECOC_MODULE_ID, 0U, SECOC_API_ID_INIT, SECOC_E_PARAM_POINTER);
+        (void)Det_ReportError(SECOC_MODULE_ID, 0U, SECOC_API_ID_INIT, SECOC_E_PARAM_POINTER);
         return;
     }
     if (config->RxPduCount > SECOC_RX_PDU_COUNT)
@@ -279,14 +282,14 @@ void SecOC_Init(const SecOC_ConfigType* config)
          * 報告する（2026-09 追加。以前はログのみでDET報告していなかった。
          * SecOC_Cfg.h の SECOC_E_INIT_FAILED コメント参照）。 */
         DET_LOGE(TAG, "Init E: RxPduCount>max");
-        Det_ReportError(SECOC_MODULE_ID, 0U, SECOC_API_ID_INIT, SECOC_E_INIT_FAILED);
+        (void)Det_ReportError(SECOC_MODULE_ID, 0U, SECOC_API_ID_INIT, SECOC_E_INIT_FAILED);
         return;
     }
     if (config->TxPduCount > SECOC_TX_PDU_COUNT)
     {
         /* [SWS_SecOC_00101]（RxPduCount と同じ理由。2026-09 追加） */
         DET_LOGE(TAG, "Init E: TxPduCount>max");
-        Det_ReportError(SECOC_MODULE_ID, 0U, SECOC_API_ID_INIT, SECOC_E_INIT_FAILED);
+        (void)Det_ReportError(SECOC_MODULE_ID, 0U, SECOC_API_ID_INIT, SECOC_E_INIT_FAILED);
         return;
     }
 
@@ -317,7 +320,7 @@ void SecOC_DeInit(void)
 {
     if (SecOC_ConfigPtr == NULL)
     {
-        Det_ReportError(SECOC_MODULE_ID, 0U, SECOC_API_ID_DEINIT, SECOC_E_UNINIT);
+        (void)Det_ReportError(SECOC_MODULE_ID, 0U, SECOC_API_ID_DEINIT, SECOC_E_UNINIT);
         return;
     }
 
@@ -340,7 +343,7 @@ void SecOC_DeInit(void)
         SecOC_TxPending[i]   = 0U;
         SecOC_TxFreshness[i] = 0U;
     }
-    memset(SecOC_TxAuthenticBuffer, 0, sizeof(SecOC_TxAuthenticBuffer));
+    (void)memset(SecOC_TxAuthenticBuffer, 0, sizeof(SecOC_TxAuthenticBuffer));
 
     SecOC_ConfigPtr = NULL;
     DET_LOGI(TAG, "DeInit ok");
@@ -354,13 +357,13 @@ void SecOC_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
 {
     if (SecOC_ConfigPtr == NULL)
     {
-        Det_ReportError(SECOC_MODULE_ID, 0U, SECOC_API_ID_RX_INDICATION, SECOC_E_UNINIT);
+        (void)Det_ReportError(SECOC_MODULE_ID, 0U, SECOC_API_ID_RX_INDICATION, SECOC_E_UNINIT);
         return;
     }
 
-    if (PduInfoPtr == NULL || PduInfoPtr->SduDataPtr == NULL)
+    if ((PduInfoPtr == NULL) || (PduInfoPtr->SduDataPtr == NULL))
     {
-        Det_ReportError(SECOC_MODULE_ID, 0U, SECOC_API_ID_RX_INDICATION, SECOC_E_PARAM_POINTER);
+        (void)Det_ReportError(SECOC_MODULE_ID, 0U, SECOC_API_ID_RX_INDICATION, SECOC_E_PARAM_POINTER);
         return;
     }
 
@@ -369,7 +372,7 @@ void SecOC_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
     if (cfg == NULL)
     {
         DET_LOGW(TAG, "RxInd W: no matching SecOC RX PDU for id=%u", (unsigned)RxPduId);
-        Det_ReportError(SECOC_MODULE_ID, 0U, SECOC_API_ID_RX_INDICATION, SECOC_E_INVALID_PDU_SDU_ID);
+        (void)Det_ReportError(SECOC_MODULE_ID, 0U, SECOC_API_ID_RX_INDICATION, SECOC_E_INVALID_PDU_SDU_ID);
         return;
     }
 
@@ -397,10 +400,12 @@ void SecOC_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
     uint8 authInput[SECOC_AUTH_INPUT_MAX];
     authInput[0] = (uint8)(cfg->DataId >> 8);
     authInput[1] = (uint8)(cfg->DataId & 0xFFU);
-    for (uint8 b = 0U; b < cfg->AuthenticPduLength; b++)
+    for (uint8 b = 0U; b < cfg->AuthenticPduLength; b++) {
         authInput[2U + b] = secured[b];
-    for (uint8 b = 0U; b < cfg->FreshnessLength; b++)
+    }
+    for (uint8 b = 0U; b < cfg->FreshnessLength; b++) {
         authInput[2U + cfg->AuthenticPduLength + b] = secured[cfg->FreshnessOffset + b];
+    }
 
     /* 切り詰め MAC は AES-CMAC 128bit 出力の上位（MSB側）MacTxLength バイトを
      * 比較する（[SWS_SecOC_00192]、Figure 5 "truncated down to the most
@@ -421,11 +426,11 @@ void SecOC_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
          * 報告する（2026-09 追加。以前はこの区別をせず両者を「MAC
          * verification failed」の WARN ログに一括していた）。 */
         DET_LOGE(TAG, "RxInd E: iPdu=%u Csm_MacVerify() service failed", (unsigned)RxPduId);
-        Det_ReportError(SECOC_MODULE_ID, 0U, SECOC_API_ID_RX_INDICATION, SECOC_E_CRYPTO_FAILURE);
+        (void)Det_ReportError(SECOC_MODULE_ID, 0U, SECOC_API_ID_RX_INDICATION, SECOC_E_CRYPTO_FAILURE);
     }
 
-    const uint8 macOk = (csmRet == E_OK && verifyResult == CRYPTO_E_VER_OK) ? 1U : 0U;
-    if (macOk == 0U && csmRet == E_OK)
+    const uint8 macOk = (csmRet == E_OK && (verifyResult == CRYPTO_E_VER_OK)) ? 1U : 0U;
+    if ((macOk == 0U) && (csmRet == E_OK))
     {
         DET_LOGW(TAG, "RxInd W: iPdu=%u MAC verification failed (tampered or wrong key)",
                  (unsigned)RxPduId);
@@ -450,7 +455,7 @@ void SecOC_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
         if (SecOC_HasBaseline[tableIndex] != 0U)
         {
             const uint8 delta = (uint8)(freshness - SecOC_LastFreshness[tableIndex]);
-            if (delta == 0U || delta >= 128U)
+            if ((delta == 0U) || (delta >= 128U))
             {
                 freshnessOk = 0U;
                 DET_LOGW(TAG, "RxInd W: iPdu=%u freshness check failed (replay or stale, got=%u last=%u)",
@@ -480,14 +485,14 @@ void SecOC_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
     {
         const SecOC_VerificationResultType verificationStatus =
             (effectivePass != 0U)  ? SECOC_VERIFICATIONSUCCESS :
-            (freshnessOk == 0U && actualPass == 0U && macOk != 0U) ? SECOC_FRESHNESSFAILURE :
+            ((freshnessOk == 0U) && (actualPass == 0U) && (macOk != 0U)) ? SECOC_FRESHNESSFAILURE :
             SECOC_VERIFICATIONFAILURE;
 
         const uint8 propagate =
             (cfg->VerificationStatusPropagationMode == SECOC_VERIFICATION_STATUS_PROPAGATION_BOTH)
             || ((cfg->VerificationStatusPropagationMode == SECOC_VERIFICATION_STATUS_PROPAGATION_FAILURE_ONLY)
                 && (verificationStatus != SECOC_VERIFICATIONSUCCESS));
-        if (propagate)
+        if ((propagate) != 0U)
         {
             const SecOC_VerificationStatusType status = {
                 .freshnessValueID  = (uint16)RxPduId,  /* SecOC_VerifyStatusOverride()と同じ簡略化 */
@@ -585,7 +590,7 @@ Std_ReturnType SecOC_VerifyStatusOverride(uint16 freshnessValueID, uint8 overrid
 {
     if (SecOC_ConfigPtr == NULL)
     {
-        Det_ReportError(SECOC_MODULE_ID, 0U, SECOC_API_ID_VERIFY_STATUS_OVERRIDE, SECOC_E_UNINIT);
+        (void)Det_ReportError(SECOC_MODULE_ID, 0U, SECOC_API_ID_VERIFY_STATUS_OVERRIDE, SECOC_E_UNINIT);
         return E_NOT_OK;
     }
 
@@ -594,7 +599,7 @@ Std_ReturnType SecOC_VerifyStatusOverride(uint16 freshnessValueID, uint8 overrid
     {
         DET_LOGW(TAG, "VerifyStatusOverride W: no matching SecOC RX PDU for freshnessValueID=%u",
                  (unsigned)freshnessValueID);
-        Det_ReportError(SECOC_MODULE_ID, 0U, SECOC_API_ID_VERIFY_STATUS_OVERRIDE, SECOC_E_INVALID_PDU_SDU_ID);
+        (void)Det_ReportError(SECOC_MODULE_ID, 0U, SECOC_API_ID_VERIFY_STATUS_OVERRIDE, SECOC_E_INVALID_PDU_SDU_ID);
         return E_NOT_OK;
     }
 
@@ -641,13 +646,13 @@ Std_ReturnType SecOC_IfTransmit(PduIdType TxPduId, const PduInfoType* PduInfoPtr
 {
     if (SecOC_ConfigPtr == NULL)
     {
-        Det_ReportError(SECOC_MODULE_ID, 0U, SECOC_API_ID_IF_TRANSMIT, SECOC_E_UNINIT);
+        (void)Det_ReportError(SECOC_MODULE_ID, 0U, SECOC_API_ID_IF_TRANSMIT, SECOC_E_UNINIT);
         return E_NOT_OK;
     }
 
-    if (PduInfoPtr == NULL || PduInfoPtr->SduDataPtr == NULL)
+    if ((PduInfoPtr == NULL) || (PduInfoPtr->SduDataPtr == NULL))
     {
-        Det_ReportError(SECOC_MODULE_ID, 0U, SECOC_API_ID_IF_TRANSMIT, SECOC_E_PARAM_POINTER);
+        (void)Det_ReportError(SECOC_MODULE_ID, 0U, SECOC_API_ID_IF_TRANSMIT, SECOC_E_PARAM_POINTER);
         return E_NOT_OK;
     }
 
@@ -656,12 +661,12 @@ Std_ReturnType SecOC_IfTransmit(PduIdType TxPduId, const PduInfoType* PduInfoPtr
     if (cfg == NULL)
     {
         DET_LOGW(TAG, "IfTransmit W: no matching SecOC TX PDU for id=%u", (unsigned)TxPduId);
-        Det_ReportError(SECOC_MODULE_ID, 0U, SECOC_API_ID_IF_TRANSMIT, SECOC_E_INVALID_PDU_SDU_ID);
+        (void)Det_ReportError(SECOC_MODULE_ID, 0U, SECOC_API_ID_IF_TRANSMIT, SECOC_E_INVALID_PDU_SDU_ID);
         return E_NOT_OK;
     }
 
-    if (PduInfoPtr->SduLength != cfg->AuthenticPduLength
-        || cfg->AuthenticPduLength > SECOC_TX_AUTH_BUF_MAX)
+    if ((PduInfoPtr->SduLength != cfg->AuthenticPduLength)
+        || (cfg->AuthenticPduLength > SECOC_TX_AUTH_BUF_MAX))
     {
         DET_LOGE(TAG, "IfTransmit E: iPdu=%u length %u != expected %u",
                  (unsigned)TxPduId, (unsigned)PduInfoPtr->SduLength, (unsigned)cfg->AuthenticPduLength);
@@ -671,8 +676,9 @@ Std_ReturnType SecOC_IfTransmit(PduIdType TxPduId, const PduInfoType* PduInfoPtr
     /* [SWS_SecOC_00058]: Authentic I-PDU を内部バッファへコピーするだけに
      * 留め、Freshness/MAC の計算は次回 SecOC_MainFunctionTx() まで遅延する
      * （[SWS_SecOC_00060]〜[SWS_SecOC_00062]）。 */
-    for (uint8 b = 0U; b < cfg->AuthenticPduLength; b++)
+    for (uint8 b = 0U; b < cfg->AuthenticPduLength; b++) {
         SecOC_TxAuthenticBuffer[tableIndex][b] = PduInfoPtr->SduDataPtr[b];
+    }
     SecOC_TxPending[tableIndex] = 1U;
 
     return E_OK;
@@ -694,7 +700,7 @@ void SecOC_TxConfirmation(PduIdType TxPduId, Std_ReturnType result)
 {
     if (SecOC_ConfigPtr == NULL)
     {
-        Det_ReportError(SECOC_MODULE_ID, 0U, SECOC_API_ID_TX_CONFIRMATION, SECOC_E_UNINIT);
+        (void)Det_ReportError(SECOC_MODULE_ID, 0U, SECOC_API_ID_TX_CONFIRMATION, SECOC_E_UNINIT);
         return;
     }
 
@@ -703,7 +709,7 @@ void SecOC_TxConfirmation(PduIdType TxPduId, Std_ReturnType result)
     if (cfg == NULL)
     {
         DET_LOGW(TAG, "TxConfirmation W: no matching SecOC TX PDU for id=%u", (unsigned)TxPduId);
-        Det_ReportError(SECOC_MODULE_ID, 0U, SECOC_API_ID_TX_CONFIRMATION, SECOC_E_INVALID_PDU_SDU_ID);
+        (void)Det_ReportError(SECOC_MODULE_ID, 0U, SECOC_API_ID_TX_CONFIRMATION, SECOC_E_INVALID_PDU_SDU_ID);
         return;
     }
 
@@ -723,14 +729,15 @@ void SecOC_MainFunctionTx(void)
 {
     if (SecOC_ConfigPtr == NULL)
     {
-        Det_ReportError(SECOC_MODULE_ID, 0U, SECOC_API_ID_MAIN_FUNCTION_TX, SECOC_E_UNINIT);
+        (void)Det_ReportError(SECOC_MODULE_ID, 0U, SECOC_API_ID_MAIN_FUNCTION_TX, SECOC_E_UNINIT);
         return;
     }
 
     for (uint8 t = 0U; t < SecOC_ConfigPtr->TxPduCount; t++)
     {
-        if (!SecOC_TxPending[t])
+        if (!SecOC_TxPending[t]) {
             continue;
+        }
 
         SecOC_TxPending[t] = 0U;
 
@@ -757,19 +764,23 @@ void SecOC_MainFunctionTx(void)
         uint8 authInput[SECOC_AUTH_INPUT_MAX];
         authInput[0] = (uint8)(cfg->DataId >> 8);
         authInput[1] = (uint8)(cfg->DataId & 0xFFU);
-        for (uint8 b = 0U; b < cfg->AuthenticPduLength; b++)
+        for (uint8 b = 0U; b < cfg->AuthenticPduLength; b++) {
             authInput[2U + b] = SecOC_TxAuthenticBuffer[t][b];
-        for (uint8 b = 0U; b < cfg->FreshnessLength; b++)
+        }
+        for (uint8 b = 0U; b < cfg->FreshnessLength; b++) {
             authInput[2U + cfg->AuthenticPduLength + b] = freshness;
+        }
 
         /* Secured I-PDU = Authentic Payload | Freshness Value | 切り詰め MAC
          * （SecOC_RxPduConfigType の FreshnessOffset/MacOffset と同じレイアウト
          * 規約。Authentic のすぐ後ろに Freshness、その後ろに MAC が続く）。 */
         uint8 secured[SECOC_TX_AUTH_BUF_MAX];
-        for (uint8 b = 0U; b < cfg->AuthenticPduLength; b++)
+        for (uint8 b = 0U; b < cfg->AuthenticPduLength; b++) {
             secured[b] = SecOC_TxAuthenticBuffer[t][b];
-        for (uint8 b = 0U; b < cfg->FreshnessLength; b++)
+        }
+        for (uint8 b = 0U; b < cfg->FreshnessLength; b++) {
             secured[cfg->FreshnessOffset + b] = freshness;
+        }
 
         /* Csm_MacGenerate() が AES-128-CMAC を計算し、切り詰め済み MAC を
          * secured[MacOffset..] へ直接書き込む（Csm/CryIf/Crypto レイヤ経由。
@@ -808,7 +819,7 @@ void SecOC_MainFunctionRx(void)
 {
     if (SecOC_ConfigPtr == NULL)
     {
-        Det_ReportError(SECOC_MODULE_ID, 0U, SECOC_API_ID_MAIN_FUNCTION_RX, SECOC_E_UNINIT);
+        (void)Det_ReportError(SECOC_MODULE_ID, 0U, SECOC_API_ID_MAIN_FUNCTION_RX, SECOC_E_UNINIT);
         return;
     }
 
@@ -825,7 +836,7 @@ void SecOC_GetVersionInfo(Std_VersionInfoType* versioninfo)
 {
     if (versioninfo == NULL)
     {
-        Det_ReportError(SECOC_MODULE_ID, 0U, SECOC_API_ID_GET_VERSION_INFO, SECOC_E_PARAM_POINTER);
+        (void)Det_ReportError(SECOC_MODULE_ID, 0U, SECOC_API_ID_GET_VERSION_INFO, SECOC_E_PARAM_POINTER);
         return;
     }
 

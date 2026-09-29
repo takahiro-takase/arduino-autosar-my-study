@@ -105,7 +105,7 @@ void App_WarningIndicator_Run(void)
     {
         runPermitted = FALSE;
     }
-    const uint8 runLevel = (state == ENGINE_STATE_RUNNING && runPermitted) ? 1U : 0U;
+    const uint8 runLevel = ((state == ENGINE_STATE_RUNNING) && runPermitted) ? 1U : 0U;
     (void)Rte_Call_LedRunning_SetLevel(runLevel);
 
     /* D7: FAULT LED — ENGINE_STATE_FAULT のとき 500 ms ごとにトグル */

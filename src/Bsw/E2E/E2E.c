@@ -102,8 +102,9 @@ static void E2E_SMAddStatus(E2E_PCheckStatusType ProfileStatus, const E2E_SMConf
 Std_ReturnType E2E_SMCheck(E2E_PCheckStatusType ProfileStatus, const E2E_SMConfigType* ConfigPtr,
                             E2E_SMCheckStateType* StatePtr)
 {
-    if (StatePtr == NULL || ConfigPtr == NULL)
+    if ((StatePtr == NULL) || (ConfigPtr == NULL)) {
         return E2E_E_INPUTERR_NULL;
+    }
 
     switch (StatePtr->SMState)
     {
@@ -111,14 +112,15 @@ Std_ReturnType E2E_SMCheck(E2E_PCheckStatusType ProfileStatus, const E2E_SMConfi
             return E2E_E_WRONGSTATE;
 
         case E2E_SM_NODATA:
-            if (ProfileStatus != E2E_P_ERROR && ProfileStatus != E2E_P_NONEWDATA)
+            if ((ProfileStatus != E2E_P_ERROR) && (ProfileStatus != E2E_P_NONEWDATA)) {
                 StatePtr->SMState = E2E_SM_INIT;
+            }
             break;
 
         case E2E_SM_INIT:
             E2E_SMAddStatus(ProfileStatus, ConfigPtr, StatePtr);
-            if (StatePtr->ErrorCount <= ConfigPtr->MaxErrorStateInit
-                && StatePtr->OkCount >= ConfigPtr->MinOkStateInit)
+            if ((StatePtr->ErrorCount <= ConfigPtr->MaxErrorStateInit)
+                && (StatePtr->OkCount >= ConfigPtr->MinOkStateInit))
             {
                 StatePtr->SMState = E2E_SM_VALID;
             }
@@ -131,8 +133,8 @@ Std_ReturnType E2E_SMCheck(E2E_PCheckStatusType ProfileStatus, const E2E_SMConfi
 
         case E2E_SM_VALID:
             E2E_SMAddStatus(ProfileStatus, ConfigPtr, StatePtr);
-            if (!(StatePtr->ErrorCount <= ConfigPtr->MaxErrorStateValid
-                  && StatePtr->OkCount >= ConfigPtr->MinOkStateValid))
+            if (!((StatePtr->ErrorCount <= ConfigPtr->MaxErrorStateValid)
+                  && (StatePtr->OkCount >= ConfigPtr->MinOkStateValid)))
             {
                 StatePtr->SMState = E2E_SM_INVALID;
             }
@@ -141,8 +143,8 @@ Std_ReturnType E2E_SMCheck(E2E_PCheckStatusType ProfileStatus, const E2E_SMConfi
 
         case E2E_SM_INVALID:
             E2E_SMAddStatus(ProfileStatus, ConfigPtr, StatePtr);
-            if (StatePtr->ErrorCount <= ConfigPtr->MaxErrorStateInvalid
-                && StatePtr->OkCount >= ConfigPtr->MinOkStateInvalid)
+            if ((StatePtr->ErrorCount <= ConfigPtr->MaxErrorStateInvalid)
+                && (StatePtr->OkCount >= ConfigPtr->MinOkStateInvalid))
             {
                 StatePtr->SMState = E2E_SM_VALID;
             }
@@ -188,11 +190,13 @@ Std_ReturnType E2E_SMCheck(E2E_PCheckStatusType ProfileStatus, const E2E_SMConfi
  */
 Std_ReturnType E2E_SMCheckInit(E2E_SMCheckStateType* StatePtr, const E2E_SMConfigType* ConfigPtr)
 {
-    if (StatePtr == NULL || ConfigPtr == NULL)
+    if ((StatePtr == NULL) || (ConfigPtr == NULL)) {
         return E2E_E_INPUTERR_NULL;
+    }
 
-    for (uint8 i = 0U; i < ConfigPtr->WindowSize; i++)
+    for (uint8 i = 0U; i < ConfigPtr->WindowSize; i++) {
         StatePtr->ProfileStatusWindow[i] = (uint8)E2E_P_NOTAVAILABLE;
+    }
 
     StatePtr->WindowTopIndex = 0U;
     StatePtr->OkCount        = 0U;
@@ -259,16 +263,20 @@ static void E2E_SMAddStatus(E2E_PCheckStatusType ProfileStatus, const E2E_SMConf
     uint8 errorCount = 0U;
     for (uint8 i = 0U; i < ConfigPtr->WindowSize; i++)
     {
-        if (StatePtr->ProfileStatusWindow[i] == (uint8)E2E_P_OK)
+        if (StatePtr->ProfileStatusWindow[i] == (uint8)E2E_P_OK) {
             okCount++;
-        else if (StatePtr->ProfileStatusWindow[i] == (uint8)E2E_P_ERROR)
+        }
+        else if (StatePtr->ProfileStatusWindow[i] == (uint8)E2E_P_ERROR) {
             errorCount++;
+        }
     }
     StatePtr->OkCount    = okCount;
     StatePtr->ErrorCount = errorCount;
 
-    if (StatePtr->WindowTopIndex == (uint8)(ConfigPtr->WindowSize - 1U))
+    if (StatePtr->WindowTopIndex == (uint8)(ConfigPtr->WindowSize - 1U)) {
         StatePtr->WindowTopIndex = 0U;
-    else
+    }
+    else {
         StatePtr->WindowTopIndex++;
+    }
 }
