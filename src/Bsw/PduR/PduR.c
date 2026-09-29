@@ -74,16 +74,16 @@ void PduR_Init(const PduR_PBConfigType* ConfigPtr)
     if (ConfigPtr == NULL)
     {
         DET_LOGE(TAG, "Init E: config NULL");
-        Det_ReportError(PDUR_MODULE_ID, 0U, PDUR_API_ID_INIT, PDUR_E_INIT_FAILED);
+        (void)Det_ReportError(PDUR_MODULE_ID, 0U, PDUR_API_ID_INIT, PDUR_E_INIT_FAILED);
         return;
     }
 
     for (uint8 i = 0; i < ConfigPtr->RxPathCount; i++)
     {
-        if (ConfigPtr->RxPaths[i].Dests == NULL || ConfigPtr->RxPaths[i].DestCount == 0)
+        if ((ConfigPtr->RxPaths[i].Dests == NULL) || (ConfigPtr->RxPaths[i].DestCount == 0))
         {
             DET_LOGE(TAG, "Init E: RxPath[%u] no dests", (unsigned)i);
-            Det_ReportError(PDUR_MODULE_ID, 0U, PDUR_API_ID_INIT, PDUR_E_INIT_FAILED);
+            (void)Det_ReportError(PDUR_MODULE_ID, 0U, PDUR_API_ID_INIT, PDUR_E_INIT_FAILED);
             return;
         }
     }
@@ -115,7 +115,7 @@ void PduR_GetVersionInfo(Std_VersionInfoType* versioninfo)
 {
     if (versioninfo == NULL)
     {
-        Det_ReportError(PDUR_MODULE_ID, 0U, PDUR_API_ID_GET_VERSION_INFO, PDUR_E_PARAM_POINTER);
+        (void)Det_ReportError(PDUR_MODULE_ID, 0U, PDUR_API_ID_GET_VERSION_INFO, PDUR_E_PARAM_POINTER);
         return;
     }
 
@@ -184,14 +184,14 @@ Std_ReturnType PduR_ComTransmit(PduIdType SrcPduId, const PduInfoType* PduInfoPt
 {
     if (PduR_ConfigPtr == NULL)
     {
-        Det_ReportError(PDUR_MODULE_ID, 0U, PDUR_API_ID_TRANSMIT, PDUR_E_UNINIT);
+        (void)Det_ReportError(PDUR_MODULE_ID, 0U, PDUR_API_ID_TRANSMIT, PDUR_E_UNINIT);
         return E_NOT_OK;
     }
 
     if (PduInfoPtr == NULL)
     {
         DET_LOGE(TAG, "TX E: PduInfoPtr NULL");
-        Det_ReportError(PDUR_MODULE_ID, 0U, PDUR_API_ID_TRANSMIT, PDUR_E_PARAM_POINTER);
+        (void)Det_ReportError(PDUR_MODULE_ID, 0U, PDUR_API_ID_TRANSMIT, PDUR_E_PARAM_POINTER);
         return E_NOT_OK;
     }
 
@@ -200,7 +200,7 @@ Std_ReturnType PduR_ComTransmit(PduIdType SrcPduId, const PduInfoType* PduInfoPt
     if (path == NULL)
     {
         DET_LOGW(TAG, "TX no route src=%u", (unsigned)SrcPduId);
-        Det_ReportError(PDUR_MODULE_ID, 0U, PDUR_API_ID_TRANSMIT, PDUR_E_PDU_ID_INVALID);
+        (void)Det_ReportError(PDUR_MODULE_ID, 0U, PDUR_API_ID_TRANSMIT, PDUR_E_PDU_ID_INVALID);
         return E_NOT_OK;
     }
 
@@ -290,14 +290,14 @@ Std_ReturnType PduR_SecOCTransmit(PduIdType SrcPduId, const PduInfoType* PduInfo
 {
     if (PduR_ConfigPtr == NULL)
     {
-        Det_ReportError(PDUR_MODULE_ID, 0U, PDUR_API_ID_SECOC_TRANSMIT, PDUR_E_UNINIT);
+        (void)Det_ReportError(PDUR_MODULE_ID, 0U, PDUR_API_ID_SECOC_TRANSMIT, PDUR_E_UNINIT);
         return E_NOT_OK;
     }
 
     if (PduInfoPtr == NULL)
     {
         DET_LOGE(TAG, "TX(SecOC) E: PduInfoPtr NULL");
-        Det_ReportError(PDUR_MODULE_ID, 0U, PDUR_API_ID_SECOC_TRANSMIT, PDUR_E_PARAM_POINTER);
+        (void)Det_ReportError(PDUR_MODULE_ID, 0U, PDUR_API_ID_SECOC_TRANSMIT, PDUR_E_PARAM_POINTER);
         return E_NOT_OK;
     }
 
@@ -306,7 +306,7 @@ Std_ReturnType PduR_SecOCTransmit(PduIdType SrcPduId, const PduInfoType* PduInfo
     if (path == NULL)
     {
         DET_LOGW(TAG, "TX(SecOC) no route src=%u", (unsigned)SrcPduId);
-        Det_ReportError(PDUR_MODULE_ID, 0U, PDUR_API_ID_SECOC_TRANSMIT, PDUR_E_PDU_ID_INVALID);
+        (void)Det_ReportError(PDUR_MODULE_ID, 0U, PDUR_API_ID_SECOC_TRANSMIT, PDUR_E_PDU_ID_INVALID);
         return E_NOT_OK;
     }
 
@@ -378,14 +378,14 @@ void PduR_ComRxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
 {
     if (PduR_ConfigPtr == NULL)
     {
-        Det_ReportError(PDUR_MODULE_ID, 0U, PDUR_API_ID_RX_INDICATION, PDUR_E_UNINIT);
+        (void)Det_ReportError(PDUR_MODULE_ID, 0U, PDUR_API_ID_RX_INDICATION, PDUR_E_UNINIT);
         return;
     }
 
-    if (PduInfoPtr == NULL || PduInfoPtr->SduDataPtr == NULL)
+    if ((PduInfoPtr == NULL) || (PduInfoPtr->SduDataPtr == NULL))
     {
         DET_LOGE(TAG, "RxInd E: PduInfoPtr NULL");
-        Det_ReportError(PDUR_MODULE_ID, 0U, PDUR_API_ID_RX_INDICATION, PDUR_E_PARAM_POINTER);
+        (void)Det_ReportError(PDUR_MODULE_ID, 0U, PDUR_API_ID_RX_INDICATION, PDUR_E_PARAM_POINTER);
         return;
     }
 
@@ -393,8 +393,9 @@ void PduR_ComRxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
     {
         const PduR_RxRoutingPathType* path = &PduR_ConfigPtr->RxPaths[i];
 
-        if (path->SrcPduId != RxPduId)
+        if (path->SrcPduId != RxPduId) {
             continue;
+        }
 
         for (uint8 d = 0; d < path->DestCount; d++)
         {
@@ -404,14 +405,15 @@ void PduR_ComRxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
                      (unsigned)RxPduId, (unsigned)dest->Module,
                      (unsigned)dest->DestPduId);
 
-            if (dest->RxIndFct != NULL)
+            if (dest->RxIndFct != NULL) {
                 dest->RxIndFct(dest->DestPduId, PduInfoPtr);
+            }
         }
         return;
     }
 
     DET_LOGW(TAG, "RxInd no route src=%u", (unsigned)RxPduId);
-    Det_ReportError(PDUR_MODULE_ID, 0U, PDUR_API_ID_RX_INDICATION, PDUR_E_PDU_ID_INVALID);
+    (void)Det_ReportError(PDUR_MODULE_ID, 0U, PDUR_API_ID_RX_INDICATION, PDUR_E_PDU_ID_INVALID);
 }
 
 /* ----------------------------------------------------------------------
@@ -448,7 +450,7 @@ void PduR_CanIfTxConfirmation(PduIdType TxPduId, Std_ReturnType result)
 {
     if (PduR_ConfigPtr == NULL)
     {
-        Det_ReportError(PDUR_MODULE_ID, 0U, PDUR_API_ID_TX_CONFIRMATION, PDUR_E_UNINIT);
+        (void)Det_ReportError(PDUR_MODULE_ID, 0U, PDUR_API_ID_TX_CONFIRMATION, PDUR_E_UNINIT);
         return;
     }
 
@@ -457,15 +459,16 @@ void PduR_CanIfTxConfirmation(PduIdType TxPduId, Std_ReturnType result)
     if (path == NULL)
     {
         DET_LOGW(TAG, "TxConf no route src=%u", (unsigned)TxPduId);
-        Det_ReportError(PDUR_MODULE_ID, 0U, PDUR_API_ID_TX_CONFIRMATION, PDUR_E_PDU_ID_INVALID);
+        (void)Det_ReportError(PDUR_MODULE_ID, 0U, PDUR_API_ID_TX_CONFIRMATION, PDUR_E_PDU_ID_INVALID);
         return;
     }
 
     DET_LOGI(TAG, "TxConf src=%u dst=%u",
              (unsigned)TxPduId, (unsigned)path->ConfDestPduId);
 
-    if (path->ConfFct != NULL)
+    if (path->ConfFct != NULL) {
         path->ConfFct(path->ConfDestPduId, result);
+    }
 }
 
 /* ----------------------------------------------------------------------
@@ -574,8 +577,9 @@ static const PduR_TxRoutingPathType* PduR_FindTxPath(PduIdType SrcPduId)
 {
     for (uint8 i = 0; i < PduR_ConfigPtr->TxPathCount; i++)
     {
-        if (PduR_ConfigPtr->TxPaths[i].SrcPduId == SrcPduId)
+        if (PduR_ConfigPtr->TxPaths[i].SrcPduId == SrcPduId) {
             return &PduR_ConfigPtr->TxPaths[i];
+        }
     }
     return NULL;
 }

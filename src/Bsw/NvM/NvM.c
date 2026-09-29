@@ -210,8 +210,9 @@ static uint8 NvM_QueueLen  = 0U;  /**< キュー内の有効エントリ数     
 
 static const NvM_BlockDescriptorType* NvM_GetBlock(NvM_BlockIdType id)
 {
-    if (NvM_Cfg == NULL || id >= NvM_Cfg->NumBlocks)
+    if ((NvM_Cfg == NULL) || (id >= NvM_Cfg->NumBlocks)) {
         return NULL;
+    }
     return &NvM_Cfg->Blocks[id];
 }
 
@@ -296,14 +297,17 @@ static void NvM_ApplyDefaultSync(NvM_BlockIdType id, const NvM_BlockDescriptorTy
 {
     const boolean hasRomDefault = (boolean)(blk->RomBlockDataAddress != NULL);
 
-    if (hasRomDefault)
-        memcpy(blk->RamBlockDataAddress, blk->RomBlockDataAddress, blk->NvMNvBlockLength);
-    else
-        memset(blk->RamBlockDataAddress, 0, blk->NvMNvBlockLength);
+    if (hasRomDefault) {
+        (void)memcpy(blk->RamBlockDataAddress, blk->RomBlockDataAddress, blk->NvMNvBlockLength);
+    }
+    else {
+        (void)memset(blk->RamBlockDataAddress, 0, blk->NvMNvBlockLength);
+    }
 
     NvM_WriteCopySync(blk->NvMNvBlockBaseNumber, blk->RamBlockDataAddress, blk->NvMNvBlockLength);
-    if (blk->Redundant != 0U)
+    if (blk->Redundant != 0U) {
         NvM_WriteCopySync(blk->NvMNvBlockBaseNumberMirror, blk->RamBlockDataAddress, blk->NvMNvBlockLength);
+    }
 
     if (hasRomDefault)
     {
@@ -386,8 +390,9 @@ static void NvM_ApplyDefaultSync(NvM_BlockIdType id, const NvM_BlockDescriptorTy
  */
 static void NvM_LoadAndVerifyBlock(NvM_BlockIdType id, const NvM_BlockDescriptorType* blk)
 {
-    if (blk->RamBlockDataAddress == NULL)
+    if (blk->RamBlockDataAddress == NULL) {
         return;
+    }
 
     (void)MemIf_Read(MEMIF_DEVICE_0, blk->NvMNvBlockBaseNumber,
                       (uint8*)blk->RamBlockDataAddress, blk->NvMNvBlockLength);
@@ -433,7 +438,7 @@ static void NvM_LoadAndVerifyBlock(NvM_BlockIdType id, const NvM_BlockDescriptor
     const uint8 calcCrcMirror = NvM_CalcCrc8(mirrorBuf, blk->NvMNvBlockLength);
     const uint8 mirrorValid = (storedCrcMirror == calcCrcMirror) ? 1U : 0U;
 
-    if (primaryValid)
+    if ((primaryValid) != 0U)
     {
         if (!mirrorValid)
         {
@@ -468,10 +473,10 @@ static void NvM_LoadAndVerifyBlock(NvM_BlockIdType id, const NvM_BlockDescriptor
         return;
     }
 
-    if (mirrorValid)
+    if ((mirrorValid) != 0U)
     {
         DET_LOGW(TAG, "block=%u redundant: primary CRC mismatch, recovered from mirror", (unsigned)id);
-        memcpy(blk->RamBlockDataAddress, mirrorBuf, blk->NvMNvBlockLength);
+        (void)memcpy(blk->RamBlockDataAddress, mirrorBuf, blk->NvMNvBlockLength);
         NvM_WriteCopySync(blk->NvMNvBlockBaseNumber, blk->RamBlockDataAddress, blk->NvMNvBlockLength);
 
         /* [SWS_NvM_00868]: 1面目(プライマリ)が読めず2面目(ミラー)が読めた
@@ -560,8 +565,9 @@ static void NvM_MarkPending(NvM_BlockIdType id)
          * （2026-09 是正）ため、完全に正常な NvM 内部の巻き戻しのたびに
          * 紛らわしい実行時エラーログが出てしまう（/code-review で指摘）。
          * 実際にキャンセルすべきジョブがあるときだけ呼ぶよう先に確認する。 */
-        if (MemIf_GetStatus(MEMIF_DEVICE_0) == MEMIF_BUSY)
+        if (MemIf_GetStatus(MEMIF_DEVICE_0) == MEMIF_BUSY) {
             MemIf_Cancel(MEMIF_DEVICE_0);
+        }
         NvM_ActivePhase        = NVM_PHASE_NONE;
         /* [SWS_NvM_00761]: 巻き戻し先は「このブロックのジョブが本来
          * 開始すべき面」であり、必ずしもプライマリとは限らない
@@ -609,7 +615,7 @@ void NvM_Init(const NvM_ConfigType* ConfigPtr)
 
     NvM_Cfg = &NvM_Config;
 
-    for (uint8 i = 0U; i < NvM_Config.NumBlocks && i < NVM_BLOCK_COUNT; i++)
+    for (uint8 i = 0U; (i < NvM_Config.NumBlocks) && (i < NVM_BLOCK_COUNT); i++)
     {
         NvM_BlockPending[i]   = 0U;
         NvM_BlockResult[i]    = NVM_REQ_OK;
@@ -670,28 +676,36 @@ void NvM_ReportBootDiagnosticsToDem(void)
 
     for (uint8 i = 0U; i < NVM_BLOCK_COUNT; i++)
     {
-        if (NvM_IntegrityFailedReport[i] == NVM_DEM_REPORT_FAILED)
+        if (NvM_IntegrityFailedReport[i] == NVM_DEM_REPORT_FAILED) {
             anyIntegrityFailed = 1U;
-        else if (NvM_IntegrityFailedReport[i] == NVM_DEM_REPORT_PASSED)
+        }
+        else if (NvM_IntegrityFailedReport[i] == NVM_DEM_REPORT_PASSED) {
             anyIntegrityPassed = 1U;
+        }
         NvM_IntegrityFailedReport[i] = NVM_DEM_REPORT_NONE;
 
-        if (NvM_LossOfRedundancyReport[i] == NVM_DEM_REPORT_FAILED)
+        if (NvM_LossOfRedundancyReport[i] == NVM_DEM_REPORT_FAILED) {
             anyRedundancyFailed = 1U;
-        else if (NvM_LossOfRedundancyReport[i] == NVM_DEM_REPORT_PASSED)
+        }
+        else if (NvM_LossOfRedundancyReport[i] == NVM_DEM_REPORT_PASSED) {
             anyRedundancyPassed = 1U;
+        }
         NvM_LossOfRedundancyReport[i] = NVM_DEM_REPORT_NONE;
     }
 
-    if (anyIntegrityFailed)
+    if ((anyIntegrityFailed) != 0U) {
         (void)Dem_SetEventStatus(DEM_EVENT_NVM_INTEGRITY_FAILED, DEM_EVENT_STATUS_FAILED);
-    else if (anyIntegrityPassed)
+    }
+    else if ((anyIntegrityPassed) != 0U) {
         (void)Dem_SetEventStatus(DEM_EVENT_NVM_INTEGRITY_FAILED, DEM_EVENT_STATUS_PASSED);
+    }
 
-    if (anyRedundancyFailed)
+    if ((anyRedundancyFailed) != 0U) {
         (void)Dem_SetEventStatus(DEM_EVENT_NVM_LOSS_OF_REDUNDANCY, DEM_EVENT_STATUS_FAILED);
-    else if (anyRedundancyPassed)
+    }
+    else if ((anyRedundancyPassed) != 0U) {
         (void)Dem_SetEventStatus(DEM_EVENT_NVM_LOSS_OF_REDUNDANCY, DEM_EVENT_STATUS_PASSED);
+    }
 }
 
 /* ----------------------------------------------------------------------
@@ -720,13 +734,13 @@ Std_ReturnType NvM_ReadBlock(NvM_BlockIdType BlockId, void* NvM_DstPtr)
 {
     if (NvM_Cfg == NULL)
     {
-        Det_ReportError(NVM_MODULE_ID, 0U, NVM_API_ID_READ_BLOCK, NVM_E_NOT_INITIALIZED);
+        (void)Det_ReportError(NVM_MODULE_ID, 0U, NVM_API_ID_READ_BLOCK, NVM_E_NOT_INITIALIZED);
         return E_NOT_OK;
     }
 
     if (BlockId >= NvM_Cfg->NumBlocks)
     {
-        Det_ReportError(NVM_MODULE_ID, 0U, NVM_API_ID_READ_BLOCK, NVM_E_PARAM_BLOCK_ID);
+        (void)Det_ReportError(NVM_MODULE_ID, 0U, NVM_API_ID_READ_BLOCK, NVM_E_PARAM_BLOCK_ID);
         return E_NOT_OK;
     }
 
@@ -739,7 +753,7 @@ Std_ReturnType NvM_ReadBlock(NvM_BlockIdType BlockId, void* NvM_DstPtr)
             /* [SWS_NvM_00616]: 恒久RAMブロックも明示同期も設定されていない
              * ブロック（本プロジェクトには存在しないが念のため）へNULLを
              * 渡した場合のみ development error。 */
-            Det_ReportError(NVM_MODULE_ID, 0U, NVM_API_ID_READ_BLOCK, NVM_E_PARAM_ADDRESS);
+            (void)Det_ReportError(NVM_MODULE_ID, 0U, NVM_API_ID_READ_BLOCK, NVM_E_PARAM_ADDRESS);
         }
         return E_NOT_OK;
     }
@@ -753,7 +767,7 @@ Std_ReturnType NvM_ReadBlock(NvM_BlockIdType BlockId, void* NvM_DstPtr)
     }
 
     /* [SWS_NvM_00278]: 非 NULL は「追加でこのバッファにもコピーする」の意。 */
-    memcpy(NvM_DstPtr, blk->RamBlockDataAddress, blk->NvMNvBlockLength);
+    (void)memcpy(NvM_DstPtr, blk->RamBlockDataAddress, blk->NvMNvBlockLength);
     return E_OK;
 }
 
@@ -789,13 +803,13 @@ Std_ReturnType NvM_WriteBlock(NvM_BlockIdType BlockId, const void* NvM_SrcPtr)
 {
     if (NvM_Cfg == NULL)
     {
-        Det_ReportError(NVM_MODULE_ID, 0U, NVM_API_ID_WRITE_BLOCK, NVM_E_NOT_INITIALIZED);
+        (void)Det_ReportError(NVM_MODULE_ID, 0U, NVM_API_ID_WRITE_BLOCK, NVM_E_NOT_INITIALIZED);
         return E_NOT_OK;
     }
 
     if (BlockId >= NvM_Cfg->NumBlocks)
     {
-        Det_ReportError(NVM_MODULE_ID, 0U, NVM_API_ID_WRITE_BLOCK, NVM_E_PARAM_BLOCK_ID);
+        (void)Det_ReportError(NVM_MODULE_ID, 0U, NVM_API_ID_WRITE_BLOCK, NVM_E_PARAM_BLOCK_ID);
         return E_NOT_OK;
     }
 
@@ -817,7 +831,7 @@ Std_ReturnType NvM_WriteBlock(NvM_BlockIdType BlockId, const void* NvM_SrcPtr)
             /* [SWS_NvM_00622]: 恒久RAMブロックも明示同期も設定されていない
              * ブロック（本プロジェクトには存在しないが念のため）へNULLを
              * 渡した場合のみ development error。 */
-            Det_ReportError(NVM_MODULE_ID, 0U, NVM_API_ID_WRITE_BLOCK, NVM_E_PARAM_ADDRESS);
+            (void)Det_ReportError(NVM_MODULE_ID, 0U, NVM_API_ID_WRITE_BLOCK, NVM_E_PARAM_ADDRESS);
         }
         return E_NOT_OK;
     }
@@ -832,12 +846,12 @@ Std_ReturnType NvM_WriteBlock(NvM_BlockIdType BlockId, const void* NvM_SrcPtr)
     {
         /* [SWS_NvM_00280]: 非 NULL は RAM ミラーをこのデータで更新してから
          * 書き込む、の意（従来からの本実装の挙動）。 */
-        memcpy(blk->RamBlockDataAddress, NvM_SrcPtr, blk->NvMNvBlockLength);
+        (void)memcpy(blk->RamBlockDataAddress, NvM_SrcPtr, blk->NvMNvBlockLength);
     }
 
-    if (blk->UseCrcCompMechanism != 0U
-        && blk->Redundant == 0U
-        && NvM_BlockPending[BlockId] == 0U
+    if ((blk->UseCrcCompMechanism != 0U)
+        && (blk->Redundant == 0U)
+        && (NvM_BlockPending[BlockId] == 0U)
         && NvM_CalcCrc8((const uint8*)blk->RamBlockDataAddress, blk->NvMNvBlockLength) == NvM_LastCrc[BlockId])
     {
         /* [SWS_NvM_00852]: NvMBlockUseCRCCompMechanism が有効なブロックに限り、
@@ -906,13 +920,13 @@ Std_ReturnType NvM_RestoreBlockDefaults(NvM_BlockIdType BlockId, void* NvM_DestP
 {
     if (NvM_Cfg == NULL)
     {
-        Det_ReportError(NVM_MODULE_ID, 0U, NVM_API_ID_RESTORE_BLOCK_DEFAULTS, NVM_E_NOT_INITIALIZED);
+        (void)Det_ReportError(NVM_MODULE_ID, 0U, NVM_API_ID_RESTORE_BLOCK_DEFAULTS, NVM_E_NOT_INITIALIZED);
         return E_NOT_OK;
     }
 
     if (BlockId >= NvM_Cfg->NumBlocks)
     {
-        Det_ReportError(NVM_MODULE_ID, 0U, NVM_API_ID_RESTORE_BLOCK_DEFAULTS, NVM_E_PARAM_BLOCK_ID);
+        (void)Det_ReportError(NVM_MODULE_ID, 0U, NVM_API_ID_RESTORE_BLOCK_DEFAULTS, NVM_E_PARAM_BLOCK_ID);
         return E_NOT_OK;
     }
 
@@ -932,7 +946,7 @@ Std_ReturnType NvM_RestoreBlockDefaults(NvM_BlockIdType BlockId, void* NvM_DestP
             /* [SWS_NvM_00629]: 恒久RAMブロックも明示同期も設定されていない
              * ブロック（本プロジェクトには存在しないが念のため）へNULLを
              * 渡した場合のみ development error。 */
-            Det_ReportError(NVM_MODULE_ID, 0U, NVM_API_ID_RESTORE_BLOCK_DEFAULTS, NVM_E_PARAM_ADDRESS);
+            (void)Det_ReportError(NVM_MODULE_ID, 0U, NVM_API_ID_RESTORE_BLOCK_DEFAULTS, NVM_E_PARAM_ADDRESS);
         }
         return E_NOT_OK;
     }
@@ -946,17 +960,18 @@ Std_ReturnType NvM_RestoreBlockDefaults(NvM_BlockIdType BlockId, void* NvM_DestP
          * 全 0 埋め＋非同期書き込みジョブを積み E_OK を返していたが、実際には
          * 存在しないデフォルト値を「復元できた」かのように扱う誤りだった）。 */
         DET_LOGW(TAG, "block=%u restore rejected (no ROM default configured)", (unsigned)BlockId);
-        Det_ReportError(NVM_MODULE_ID, 0U, NVM_API_ID_RESTORE_BLOCK_DEFAULTS, NVM_E_BLOCK_WITHOUT_DEFAULTS);
+        (void)Det_ReportError(NVM_MODULE_ID, 0U, NVM_API_ID_RESTORE_BLOCK_DEFAULTS, NVM_E_BLOCK_WITHOUT_DEFAULTS);
         return E_NOT_OK;
     }
 
-    memcpy(blk->RamBlockDataAddress, blk->RomBlockDataAddress, blk->NvMNvBlockLength);
+    (void)memcpy(blk->RamBlockDataAddress, blk->RomBlockDataAddress, blk->NvMNvBlockLength);
 
     /* [SWS_NvM_00435]: 呼び出し元が RAM ブロックアドレスを指定した場合は、
      * それも使う（本実装では常時保持している RAM ミラーへの反映に加えて、
      * 呼び出し元バッファへも同じ内容をコピーする形で対応する）。 */
-    if (NvM_DestPtr != NULL)
-        memcpy(NvM_DestPtr, blk->RamBlockDataAddress, blk->NvMNvBlockLength);
+    if (NvM_DestPtr != NULL) {
+        (void)memcpy(NvM_DestPtr, blk->RamBlockDataAddress, blk->NvMNvBlockLength);
+    }
 
     DET_LOGW(TAG, "block=%u defaults restored, write queued", (unsigned)BlockId);
 
@@ -1008,13 +1023,13 @@ Std_ReturnType NvM_SetBlockProtection(NvM_BlockIdType BlockId, boolean Protectio
 {
     if (NvM_Cfg == NULL)
     {
-        Det_ReportError(NVM_MODULE_ID, 0U, NVM_API_ID_SET_BLOCK_PROTECTION, NVM_E_NOT_INITIALIZED);
+        (void)Det_ReportError(NVM_MODULE_ID, 0U, NVM_API_ID_SET_BLOCK_PROTECTION, NVM_E_NOT_INITIALIZED);
         return E_NOT_OK;
     }
 
     if (BlockId >= NvM_Cfg->NumBlocks)
     {
-        Det_ReportError(NVM_MODULE_ID, 0U, NVM_API_ID_SET_BLOCK_PROTECTION, NVM_E_PARAM_BLOCK_ID);
+        (void)Det_ReportError(NVM_MODULE_ID, 0U, NVM_API_ID_SET_BLOCK_PROTECTION, NVM_E_PARAM_BLOCK_ID);
         return E_NOT_OK;
     }
 
@@ -1023,7 +1038,7 @@ Std_ReturnType NvM_SetBlockProtection(NvM_BlockIdType BlockId, boolean Protectio
         /* [SWS_NvM_00607]/[SWS_NvM_00704]: 処理中(キュー投入済みまたは
          * 実行中)のブロックに対する管理ブロック変更操作は許可しない
          * （2026-09 追加。以前は無条件で保護フラグを反転させていた）。 */
-        Det_ReportError(NVM_MODULE_ID, 0U, NVM_API_ID_SET_BLOCK_PROTECTION, NVM_E_BLOCK_PENDING);
+        (void)Det_ReportError(NVM_MODULE_ID, 0U, NVM_API_ID_SET_BLOCK_PROTECTION, NVM_E_BLOCK_PENDING);
         return E_NOT_OK;
     }
 
@@ -1049,20 +1064,20 @@ Std_ReturnType NvM_GetErrorStatus(NvM_BlockIdType BlockId, NvM_RequestResultType
 {
     if (RequestResultPtr == NULL)
     {
-        Det_ReportError(NVM_MODULE_ID, 0U, NVM_API_ID_GET_ERROR_STATUS, NVM_E_PARAM_DATA);
+        (void)Det_ReportError(NVM_MODULE_ID, 0U, NVM_API_ID_GET_ERROR_STATUS, NVM_E_PARAM_DATA);
         return E_NOT_OK;
     }
 
     if (NvM_Cfg == NULL)
     {
-        Det_ReportError(NVM_MODULE_ID, 0U, NVM_API_ID_GET_ERROR_STATUS, NVM_E_NOT_INITIALIZED);
+        (void)Det_ReportError(NVM_MODULE_ID, 0U, NVM_API_ID_GET_ERROR_STATUS, NVM_E_NOT_INITIALIZED);
         *RequestResultPtr = NVM_REQ_NOT_OK;
         return E_NOT_OK;
     }
 
     if (BlockId >= NVM_BLOCK_COUNT)
     {
-        Det_ReportError(NVM_MODULE_ID, 0U, NVM_API_ID_GET_ERROR_STATUS, NVM_E_PARAM_BLOCK_ID);
+        (void)Det_ReportError(NVM_MODULE_ID, 0U, NVM_API_ID_GET_ERROR_STATUS, NVM_E_PARAM_BLOCK_ID);
         *RequestResultPtr = NVM_REQ_NOT_OK;
         return E_NOT_OK;
     }
@@ -1100,7 +1115,7 @@ void NvM_MainFunction(void)
 {
     if (NvM_Cfg == NULL)
     {
-        Det_ReportError(NVM_MODULE_ID, 0U, NVM_API_ID_MAIN_FUNCTION, NVM_E_NOT_INITIALIZED);
+        (void)Det_ReportError(NVM_MODULE_ID, 0U, NVM_API_ID_MAIN_FUNCTION, NVM_E_NOT_INITIALIZED);
         return;
     }
 
@@ -1111,8 +1126,9 @@ void NvM_MainFunction(void)
          * 呼び出し元が意図した書き込み順序（例: Dem が MAGIC バイトを
          * 最後に書くことで電源断時の整合性を担保している設計）を
          * 壊してしまうため、必ず投入順で処理する。 */
-        if (NvM_QueueLen == 0U)
+        if (NvM_QueueLen == 0U) {
             return;  /* 保留ジョブなし */
+        }
 
         NvM_ActiveBlockId = NvM_PendingQueue[NvM_QueueHead];
         NvM_QueueHead = (uint8)((NvM_QueueHead + 1U) % NVM_BLOCK_COUNT);
@@ -1127,7 +1143,7 @@ void NvM_MainFunction(void)
     /* 冗長ブロックでミラー面を処理中ならミラーのベースアドレスを、
      * それ以外（非冗長、または冗長のプライマリ面処理中）はプライマリの
      * ベースアドレスを使う。 */
-    const uint16 activeBase = (blk->Redundant != 0U && NvM_ActiveCopyIsMirror != 0U)
+    const uint16 activeBase = ((blk->Redundant != 0U) && (NvM_ActiveCopyIsMirror != 0U))
                                ? blk->NvMNvBlockBaseNumberMirror
                                : blk->NvMNvBlockBaseNumber;
 
@@ -1147,13 +1163,16 @@ void NvM_MainFunction(void)
          * ジョブが実際には始まっていないのに完了したと誤認しかねないため）。 */
         if (MemIf_Write(MEMIF_DEVICE_0, activeBase,
                          (const uint8*)blk->RamBlockDataAddress, blk->NvMNvBlockLength) == E_OK)
+        {
             NvM_ActivePhase = NVM_PHASE_BODY;
+        }
         return;
     }
 
     const MemIf_JobResultType result = MemIf_GetJobResult(MEMIF_DEVICE_0);
-    if (result == MEMIF_JOB_PENDING)
+    if (result == MEMIF_JOB_PENDING) {
         return;  /* まだ物理書き込み中 (MemIf_MainFunction() 側が進めている) */
+    }
 
     if (result != MEMIF_JOB_OK)
     {
@@ -1180,13 +1199,15 @@ void NvM_MainFunction(void)
         NvM_ActiveCrc = NvM_CalcCrc8((const uint8*)blk->RamBlockDataAddress, blk->NvMNvBlockLength);
         if (MemIf_Write(MEMIF_DEVICE_0, NvM_CrcAddressForBase(activeBase, blk->NvMNvBlockLength),
                          &NvM_ActiveCrc, 1U) == E_OK)
+        {
             NvM_ActivePhase = NVM_PHASE_CRC;
+        }
         return;
     }
 
     /* NvM_ActivePhase == NVM_PHASE_CRC かつ result == MEMIF_JOB_OK: この面
      * (プライマリ/ミラー) を書き終えた。 */
-    if (blk->Redundant != 0U && NvM_ActiveCopyIsMirror == NvM_WriteStartIsMirror[NvM_ActiveBlockId])
+    if ((blk->Redundant != 0U) && (NvM_ActiveCopyIsMirror == NvM_WriteStartIsMirror[NvM_ActiveBlockId]))
     {
         /* 冗長ブロックの開始面（NvM_WriteStartIsMirror[]、[SWS_NvM_00761]）を
          * 書き終えた: 続けてもう一方の面を先頭（データ本体フェーズ）から
@@ -1222,7 +1243,7 @@ void NvM_GetVersionInfo(Std_VersionInfoType* versioninfo)
 {
     if (versioninfo == NULL)
     {
-        Det_ReportError(NVM_MODULE_ID, 0U, NVM_API_ID_GET_VERSION_INFO, NVM_E_PARAM_POINTER);
+        (void)Det_ReportError(NVM_MODULE_ID, 0U, NVM_API_ID_GET_VERSION_INFO, NVM_E_PARAM_POINTER);
         return;
     }
 

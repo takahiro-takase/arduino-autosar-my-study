@@ -141,7 +141,7 @@ void CanNm_DeInit(void)
 {
     if (!CanNm_Initialized)
     {
-        Det_ReportError(CANNM_MODULE_ID, 0U, CANNM_API_ID_DEINIT, CANNM_E_UNINIT);
+        (void)Det_ReportError(CANNM_MODULE_ID, 0U, CANNM_API_ID_DEINIT, CANNM_E_UNINIT);
         return;
     }
 
@@ -181,13 +181,13 @@ Std_ReturnType CanNm_NetworkRequest(NetworkHandleType Channel)
 {
     if (!CanNm_Initialized)
     {
-        Det_ReportError(CANNM_MODULE_ID, 0U, CANNM_API_ID_NETWORK_REQUEST, CANNM_E_UNINIT);
+        (void)Det_ReportError(CANNM_MODULE_ID, 0U, CANNM_API_ID_NETWORK_REQUEST, CANNM_E_UNINIT);
         return E_NOT_OK;
     }
 
     if (Channel != CANNM_MAIN_NETWORK_HANDLE)
     {
-        Det_ReportError(CANNM_MODULE_ID, 0U, CANNM_API_ID_NETWORK_REQUEST, CANNM_E_INVALID_CHANNEL);
+        (void)Det_ReportError(CANNM_MODULE_ID, 0U, CANNM_API_ID_NETWORK_REQUEST, CANNM_E_INVALID_CHANNEL);
         return E_NOT_OK;
     }
 
@@ -241,20 +241,21 @@ Std_ReturnType CanNm_NetworkRelease(NetworkHandleType Channel)
 {
     if (!CanNm_Initialized)
     {
-        Det_ReportError(CANNM_MODULE_ID, 0U, CANNM_API_ID_NETWORK_RELEASE, CANNM_E_UNINIT);
+        (void)Det_ReportError(CANNM_MODULE_ID, 0U, CANNM_API_ID_NETWORK_RELEASE, CANNM_E_UNINIT);
         return E_NOT_OK;
     }
 
     if (Channel != CANNM_MAIN_NETWORK_HANDLE)
     {
-        Det_ReportError(CANNM_MODULE_ID, 0U, CANNM_API_ID_NETWORK_RELEASE, CANNM_E_INVALID_CHANNEL);
+        (void)Det_ReportError(CANNM_MODULE_ID, 0U, CANNM_API_ID_NETWORK_RELEASE, CANNM_E_INVALID_CHANNEL);
         return E_NOT_OK;
     }
 
     CanNm_NetworkRequested = 0U;
 
-    if (CanNm_State == CANNM_STATE_NORMAL_OPERATION)
+    if (CanNm_State == CANNM_STATE_NORMAL_OPERATION) {
         CanNm_EnterReadySleep();  /* [SWS_CanNm_00118] */
+    }
 
     DET_LOGI(TAG, "NetworkRelease ok (state=%u)", (unsigned)CanNm_State);
     return E_OK;
@@ -301,18 +302,19 @@ Std_ReturnType CanNm_DisableCommunication(NetworkHandleType Channel)
 {
     if (!CanNm_Initialized)
     {
-        Det_ReportError(CANNM_MODULE_ID, 0U, CANNM_API_ID_DISABLE_COMMUNICATION, CANNM_E_UNINIT);
+        (void)Det_ReportError(CANNM_MODULE_ID, 0U, CANNM_API_ID_DISABLE_COMMUNICATION, CANNM_E_UNINIT);
         return E_NOT_OK;
     }
 
     if (Channel != CANNM_MAIN_NETWORK_HANDLE)
     {
-        Det_ReportError(CANNM_MODULE_ID, 0U, CANNM_API_ID_DISABLE_COMMUNICATION, CANNM_E_INVALID_CHANNEL);
+        (void)Det_ReportError(CANNM_MODULE_ID, 0U, CANNM_API_ID_DISABLE_COMMUNICATION, CANNM_E_INVALID_CHANNEL);
         return E_NOT_OK;
     }
 
-    if (CanNm_TxEnabled != 0U)
+    if (CanNm_TxEnabled != 0U) {
         DET_LOGI(TAG, "CommunicationControl tx=%u->0", (unsigned)CanNm_TxEnabled);
+    }
     CanNm_TxEnabled = 0U;
     return E_OK;
 }
@@ -346,13 +348,13 @@ Std_ReturnType CanNm_EnableCommunication(NetworkHandleType Channel)
 {
     if (!CanNm_Initialized)
     {
-        Det_ReportError(CANNM_MODULE_ID, 0U, CANNM_API_ID_ENABLE_COMMUNICATION, CANNM_E_UNINIT);
+        (void)Det_ReportError(CANNM_MODULE_ID, 0U, CANNM_API_ID_ENABLE_COMMUNICATION, CANNM_E_UNINIT);
         return E_NOT_OK;
     }
 
     if (Channel != CANNM_MAIN_NETWORK_HANDLE)
     {
-        Det_ReportError(CANNM_MODULE_ID, 0U, CANNM_API_ID_ENABLE_COMMUNICATION, CANNM_E_INVALID_CHANNEL);
+        (void)Det_ReportError(CANNM_MODULE_ID, 0U, CANNM_API_ID_ENABLE_COMMUNICATION, CANNM_E_INVALID_CHANNEL);
         return E_NOT_OK;
     }
 
@@ -416,19 +418,19 @@ Std_ReturnType CanNm_GetNodeIdentifier(NetworkHandleType Channel, uint8* nmNodeI
 {
     if (!CanNm_Initialized)
     {
-        Det_ReportError(CANNM_MODULE_ID, 0U, CANNM_API_ID_GET_NODE_IDENTIFIER, CANNM_E_UNINIT);
+        (void)Det_ReportError(CANNM_MODULE_ID, 0U, CANNM_API_ID_GET_NODE_IDENTIFIER, CANNM_E_UNINIT);
         return E_NOT_OK;
     }
 
     if (Channel != CANNM_MAIN_NETWORK_HANDLE)
     {
-        Det_ReportError(CANNM_MODULE_ID, 0U, CANNM_API_ID_GET_NODE_IDENTIFIER, CANNM_E_INVALID_CHANNEL);
+        (void)Det_ReportError(CANNM_MODULE_ID, 0U, CANNM_API_ID_GET_NODE_IDENTIFIER, CANNM_E_INVALID_CHANNEL);
         return E_NOT_OK;
     }
 
     if (nmNodeIdPtr == NULL)
     {
-        Det_ReportError(CANNM_MODULE_ID, 0U, CANNM_API_ID_GET_NODE_IDENTIFIER, CANNM_E_PARAM_POINTER);
+        (void)Det_ReportError(CANNM_MODULE_ID, 0U, CANNM_API_ID_GET_NODE_IDENTIFIER, CANNM_E_PARAM_POINTER);
         return E_NOT_OK;
     }
 
@@ -462,19 +464,19 @@ Std_ReturnType CanNm_GetLocalNodeIdentifier(NetworkHandleType Channel, uint8* nm
 {
     if (!CanNm_Initialized)
     {
-        Det_ReportError(CANNM_MODULE_ID, 0U, CANNM_API_ID_GET_LOCAL_NODE_IDENTIFIER, CANNM_E_UNINIT);
+        (void)Det_ReportError(CANNM_MODULE_ID, 0U, CANNM_API_ID_GET_LOCAL_NODE_IDENTIFIER, CANNM_E_UNINIT);
         return E_NOT_OK;
     }
 
     if (Channel != CANNM_MAIN_NETWORK_HANDLE)
     {
-        Det_ReportError(CANNM_MODULE_ID, 0U, CANNM_API_ID_GET_LOCAL_NODE_IDENTIFIER, CANNM_E_INVALID_CHANNEL);
+        (void)Det_ReportError(CANNM_MODULE_ID, 0U, CANNM_API_ID_GET_LOCAL_NODE_IDENTIFIER, CANNM_E_INVALID_CHANNEL);
         return E_NOT_OK;
     }
 
     if (nmNodeIdPtr == NULL)
     {
-        Det_ReportError(CANNM_MODULE_ID, 0U, CANNM_API_ID_GET_LOCAL_NODE_IDENTIFIER, CANNM_E_PARAM_POINTER);
+        (void)Det_ReportError(CANNM_MODULE_ID, 0U, CANNM_API_ID_GET_LOCAL_NODE_IDENTIFIER, CANNM_E_PARAM_POINTER);
         return E_NOT_OK;
     }
 
@@ -508,21 +510,21 @@ Std_ReturnType CanNm_RepeatMessageRequest(NetworkHandleType Channel)
 {
     if (!CanNm_Initialized)
     {
-        Det_ReportError(CANNM_MODULE_ID, 0U, CANNM_API_ID_REPEAT_MESSAGE_REQUEST, CANNM_E_UNINIT);
+        (void)Det_ReportError(CANNM_MODULE_ID, 0U, CANNM_API_ID_REPEAT_MESSAGE_REQUEST, CANNM_E_UNINIT);
         return E_NOT_OK;
     }
 
     if (Channel != CANNM_MAIN_NETWORK_HANDLE)
     {
-        Det_ReportError(CANNM_MODULE_ID, 0U, CANNM_API_ID_REPEAT_MESSAGE_REQUEST, CANNM_E_INVALID_CHANNEL);
+        (void)Det_ReportError(CANNM_MODULE_ID, 0U, CANNM_API_ID_REPEAT_MESSAGE_REQUEST, CANNM_E_INVALID_CHANNEL);
         return E_NOT_OK;
     }
 
     /* [SWS_CanNm_00137]: Repeat Message State / Prepare Bus-Sleep / Bus-Sleep
      * からの呼び出しは受理しない。 */
-    if (CanNm_State == CANNM_STATE_REPEAT_MESSAGE
-        || CanNm_State == CANNM_STATE_PREPARE_BUS_SLEEP
-        || CanNm_State == CANNM_STATE_BUS_SLEEP)
+    if ((CanNm_State == CANNM_STATE_REPEAT_MESSAGE)
+        || (CanNm_State == CANNM_STATE_PREPARE_BUS_SLEEP)
+        || (CanNm_State == CANNM_STATE_BUS_SLEEP))
     {
         DET_LOGW(TAG, "RepeatMessageRequest W: rejected in state=%u", (unsigned)CanNm_State);
         return E_NOT_OK;
@@ -562,27 +564,31 @@ Std_ReturnType CanNm_GetState(NetworkHandleType Channel, CanNm_StateType* StateP
 {
     if (!CanNm_Initialized)
     {
-        Det_ReportError(CANNM_MODULE_ID, 0U, CANNM_API_ID_GET_STATE, CANNM_E_UNINIT);
+        (void)Det_ReportError(CANNM_MODULE_ID, 0U, CANNM_API_ID_GET_STATE, CANNM_E_UNINIT);
         return E_NOT_OK;
     }
 
     if (Channel != CANNM_MAIN_NETWORK_HANDLE)
     {
-        Det_ReportError(CANNM_MODULE_ID, 0U, CANNM_API_ID_GET_STATE, CANNM_E_INVALID_CHANNEL);
+        (void)Det_ReportError(CANNM_MODULE_ID, 0U, CANNM_API_ID_GET_STATE, CANNM_E_INVALID_CHANNEL);
         return E_NOT_OK;
     }
 
-    if (StatePtr != NULL)
+    if (StatePtr != NULL) {
         *StatePtr = CanNm_State;
+    }
 
     if (ModePtr != NULL)
     {
-        if (CanNm_State == CANNM_STATE_BUS_SLEEP)
+        if (CanNm_State == CANNM_STATE_BUS_SLEEP) {
             *ModePtr = CANNM_MODE_BUS_SLEEP;
-        else if (CanNm_State == CANNM_STATE_PREPARE_BUS_SLEEP)
+        }
+        else if (CanNm_State == CANNM_STATE_PREPARE_BUS_SLEEP) {
             *ModePtr = CANNM_MODE_PREPARE_BUS_SLEEP;
-        else
+        }
+        else {
             *ModePtr = CANNM_MODE_NETWORK;
+        }
     }
 
     return E_OK;
@@ -609,7 +615,7 @@ void CanNm_GetVersionInfo(Std_VersionInfoType* versioninfo)
 {
     if (versioninfo == NULL)
     {
-        Det_ReportError(CANNM_MODULE_ID, 0U, CANNM_API_ID_GET_VERSION_INFO, CANNM_E_PARAM_POINTER);
+        (void)Det_ReportError(CANNM_MODULE_ID, 0U, CANNM_API_ID_GET_VERSION_INFO, CANNM_E_PARAM_POINTER);
         return;
     }
 
@@ -663,14 +669,16 @@ void CanNm_TxConfirmation(PduIdType TxPduId, Std_ReturnType result)
 {
     (void)TxPduId;
 
-    if (!CanNm_Initialized || result != E_OK)
+    if (!CanNm_Initialized || (result != E_OK)) {
         return;
+    }
 
     /* [SWS_CanNm_00099]: Network Mode（Repeat Message/Normal Operation State）
      * での送信成功時に NM-Timeout Timer を再起動する。Ready Sleep State は
      * 送信自体を行わないため対象外。 */
-    if (CanNm_State == CANNM_STATE_REPEAT_MESSAGE || CanNm_State == CANNM_STATE_NORMAL_OPERATION)
+    if ((CanNm_State == CANNM_STATE_REPEAT_MESSAGE) || (CanNm_State == CANNM_STATE_NORMAL_OPERATION)) {
         CanNm_TimeoutTimerMs = millis();
+    }
 }
 
 
@@ -706,13 +714,13 @@ void CanNm_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
 
     if (!CanNm_Initialized)
     {
-        Det_ReportError(CANNM_MODULE_ID, 0U, CANNM_API_ID_RX_INDICATION, CANNM_E_UNINIT);
+        (void)Det_ReportError(CANNM_MODULE_ID, 0U, CANNM_API_ID_RX_INDICATION, CANNM_E_UNINIT);
         return;
     }
 
-    if (PduInfoPtr == NULL || PduInfoPtr->SduDataPtr == NULL)
+    if ((PduInfoPtr == NULL) || (PduInfoPtr->SduDataPtr == NULL))
     {
-        Det_ReportError(CANNM_MODULE_ID, 0U, CANNM_API_ID_RX_INDICATION, CANNM_E_PARAM_POINTER);
+        (void)Det_ReportError(CANNM_MODULE_ID, 0U, CANNM_API_ID_RX_INDICATION, CANNM_E_PARAM_POINTER);
         return;
     }
 
@@ -734,7 +742,7 @@ void CanNm_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
              * ComM_Nm_NetworkStartIndication() の Doxygen 参照）。 */
             DET_LOGW(TAG, "RxIndication W: NM PDU received in Bus-Sleep Mode (node=0x%02X)",
                      (unsigned)sourceNodeId);
-            Det_ReportError(CANNM_MODULE_ID, 0U, CANNM_API_ID_RX_INDICATION, CANNM_E_NET_START_IND);
+            (void)Det_ReportError(CANNM_MODULE_ID, 0U, CANNM_API_ID_RX_INDICATION, CANNM_E_NET_START_IND);
             Nm_NetworkStartIndication(CANNM_MAIN_NETWORK_HANDLE);
             break;
 
@@ -754,10 +762,11 @@ void CanNm_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
              * （[SWS_CanNm_00174]、`CanNm_MainFunction()` 参照）は
              * `CanNm_TimeoutTimerMs` の値自体がタイムアウト判定に使われないため
              * 実害は無かったが、条文への厳密な準拠のため明示的にガードする。 */
-            if (CanNm_TxEnabled)
+            if ((CanNm_TxEnabled) != 0U) {
                 CanNm_TimeoutTimerMs = millis();
+            }
 
-            if ((cbv & CANNM_CBV_BIT_REPEAT_MESSAGE_REQUEST) != 0U && CanNm_State != CANNM_STATE_REPEAT_MESSAGE)
+            if (((cbv & CANNM_CBV_BIT_REPEAT_MESSAGE_REQUEST) != 0U) && (CanNm_State != CANNM_STATE_REPEAT_MESSAGE))
             {
                 /* [SWS_CanNm_00111]/[SWS_CanNm_00119]: 他ノードの Repeat
                  * Message Request Bit を受信 -> 自ノードも再announce する
@@ -802,7 +811,7 @@ void CanNm_MainFunction(void)
 {
     if (!CanNm_Initialized)
     {
-        Det_ReportError(CANNM_MODULE_ID, 0U, CANNM_API_ID_MAIN_FUNCTION, CANNM_E_UNINIT);
+        (void)Det_ReportError(CANNM_MODULE_ID, 0U, CANNM_API_ID_MAIN_FUNCTION, CANNM_E_UNINIT);
         return;
     }
 
@@ -815,8 +824,9 @@ void CanNm_MainFunction(void)
             break;
 
         case CANNM_STATE_PREPARE_BUS_SLEEP:
-            if ((now - CanNm_StateTimerMs) >= CANNM_WAIT_BUS_SLEEP_MS)
+            if ((now - CanNm_StateTimerMs) >= CANNM_WAIT_BUS_SLEEP_MS) {
                 CanNm_EnterBusSleep();  /* [SWS_CanNm_00115] */
+            }
             break;
 
         case CANNM_STATE_REPEAT_MESSAGE:
@@ -837,7 +847,7 @@ void CanNm_MainFunction(void)
                  * このタイマーが先に再起動されるため、通常はここへ到達しない
                  * （到達した場合は Bus-Off 等の異常を示す。本ファイル冒頭の
                  * CANNM_E_NETWORK_TIMEOUT の説明参照）。 */
-                Det_ReportError(CANNM_MODULE_ID, 0U, CANNM_API_ID_MAIN_FUNCTION, CANNM_E_NETWORK_TIMEOUT);
+                (void)Det_ReportError(CANNM_MODULE_ID, 0U, CANNM_API_ID_MAIN_FUNCTION, CANNM_E_NETWORK_TIMEOUT);
                 CanNm_TimeoutTimerMs = now;
             }
 
@@ -846,17 +856,20 @@ void CanNm_MainFunction(void)
              * 周期 CANNM_CYCLE_MS をそのまま周期として使う簡略化）による周期送信。
              * NM-Timeout Timer とは独立に、Repeat Message/Normal Operation
              * State の間は毎周期送信する。 */
-            if (CanNm_TxEnabled)
+            if ((CanNm_TxEnabled) != 0U) {
                 CanNm_TransmitPdu();
+            }
 
             if ((now - CanNm_StateTimerMs) >= CANNM_REPEAT_MESSAGE_MS)
             {
                 /* [SWS_CanNm_00102]/[SWS_CanNm_00103]/[SWS_CanNm_00106] */
                 CanNm_RepeatMessageBitSet = 0U;  /* [SWS_CanNm_00107] */
-                if (CanNm_NetworkRequested)
+                if ((CanNm_NetworkRequested) != 0U) {
                     CanNm_EnterNormalOperation();
-                else
+                }
+                else {
                     CanNm_EnterReadySleep();
+                }
             }
             break;
 
@@ -866,13 +879,14 @@ void CanNm_MainFunction(void)
             {
                 /* [SWS_CanNm_00194]/[SWS_CanNm_00117]: 上記 Repeat Message State
                  * と同じ理由で、ここでは送信を行わない。 */
-                Det_ReportError(CANNM_MODULE_ID, 0U, CANNM_API_ID_MAIN_FUNCTION, CANNM_E_NETWORK_TIMEOUT);
+                (void)Det_ReportError(CANNM_MODULE_ID, 0U, CANNM_API_ID_MAIN_FUNCTION, CANNM_E_NETWORK_TIMEOUT);
                 CanNm_TimeoutTimerMs = now;
             }
 
             /* Message Cycle Timer による周期送信（上記 Repeat Message State と同じ）。 */
-            if (CanNm_TxEnabled)
+            if ((CanNm_TxEnabled) != 0U) {
                 CanNm_TransmitPdu();
+            }
             break;
 
         case CANNM_STATE_READY_SLEEP:
@@ -880,8 +894,9 @@ void CanNm_MainFunction(void)
              * Sleep State でも同一のタイマーであり（[SWS_CanNm_00109]自身が
              * "When the NM-Timeout Timer expires in the Ready Sleep..." と
              * 明記）、送信無効化中は同様に停止する。 */
-            if (CanNm_TxEnabled && (now - CanNm_TimeoutTimerMs) >= CANNM_TIMEOUT_MS)
+            if (CanNm_TxEnabled && (now - CanNm_TimeoutTimerMs) >= CANNM_TIMEOUT_MS) {
                 CanNm_EnterPrepareBusSleep();  /* [SWS_CanNm_00109] */
+            }
             break;
     }
 }
@@ -959,8 +974,9 @@ static void CanNm_EnterRepeatMessage(void)
 
     Nm_NetworkMode(0U);
 
-    if (CanNm_TxEnabled)
+    if ((CanNm_TxEnabled) != 0U) {
         CanNm_TransmitPdu();
+    }
 }
 
 /* ----------------------------------------------------------------------
@@ -983,8 +999,9 @@ static void CanNm_EnterNormalOperation(void)
     CanNm_TimeoutTimerMs  = millis();
     DET_LOGI(TAG, "-> Network Mode: Normal Operation State");
 
-    if (CanNm_TxEnabled)
+    if ((CanNm_TxEnabled) != 0U) {
         CanNm_TransmitPdu();
+    }
 }
 
 /* ----------------------------------------------------------------------

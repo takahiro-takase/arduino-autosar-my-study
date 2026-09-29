@@ -157,7 +157,7 @@ void App_EngineManager_Run(void)
     {
         ComM_ModeType comModeNow = COMM_NO_COMMUNICATION;
         (void)Rte_Call_ComM_GetCurrentComMode(&comModeNow);
-        if (comModeNow == COMM_FULL_COMMUNICATION && s_lastComMode == COMM_NO_COMMUNICATION)
+        if ((comModeNow == COMM_FULL_COMMUNICATION) && (s_lastComMode == COMM_NO_COMMUNICATION))
         {
             justResumed = 1U;
             DET_LOGI(TAG, "ComM FULL_COM resumed -> sleep countdown reset (grace cycle)");
@@ -184,8 +184,8 @@ void App_EngineManager_Run(void)
      * Rte_COMRxInd_EngineInfo が DEM_EVENT_E2E_ENGINEINFO へ直接行うため
      * ここでは行わない。SWC（本 Runnable）が Rte 経由で E2E の異常を
      * 直接観測できることを示す目的のログ。 */
-    if (speedRet == RTE_E_HARD_TRANSFORMER_ERROR || tempRet == RTE_E_HARD_TRANSFORMER_ERROR
-        || flagRet == RTE_E_HARD_TRANSFORMER_ERROR)
+    if ((speedRet == RTE_E_HARD_TRANSFORMER_ERROR) || (tempRet == RTE_E_HARD_TRANSFORMER_ERROR)
+        || (flagRet == RTE_E_HARD_TRANSFORMER_ERROR))
     {
         DET_LOGW(TAG, "EngineInfo E2E hard error this cycle, using last valid value");
     }
@@ -198,9 +198,9 @@ void App_EngineManager_Run(void)
      * Dem への FAILED 報告・FAULT 遷移のいずれも行わない（ここで報告して
      * しまうと、エンジン OFF を放置するたびにボランタリスリープで
      * DEM_EVENT_COMM_TIMEOUT が確定してしまう）。 */
-    if (speedRet == RTE_E_COM_STOPPED || tempRet == RTE_E_COM_STOPPED || flagRet == RTE_E_COM_STOPPED)
+    if ((speedRet == RTE_E_COM_STOPPED) || (tempRet == RTE_E_COM_STOPPED) || (flagRet == RTE_E_COM_STOPPED))
     {
-        if (s_state == ENGINE_STATE_STARTING || s_state == ENGINE_STATE_RUNNING)
+        if ((s_state == ENGINE_STATE_STARTING) || (s_state == ENGINE_STATE_RUNNING))
         {
             (void)Dem_SetEventStatus(DEM_EVENT_COMM_TIMEOUT, DEM_EVENT_STATUS_FAILED);
             s_state = ENGINE_STATE_FAULT;
@@ -234,14 +234,15 @@ void App_EngineManager_Run(void)
         s_offCycles = 0U;
         (void)Rte_Call_ComM_RequestComMode(COMM_FULL_COMMUNICATION);
     }
-    else if (justResumed)
+    else if ((justResumed) != 0U)
     {
         s_offCycles = 0U;  /* 復帰直後の猶予サイクル: 今回は判断をスキップする */
     }
     else
     {
-        if (s_offCycles < 0xFFU)
+        if (s_offCycles < 0xFFU) {
             s_offCycles++;
+        }
         if (s_offCycles >= APP_ENGINE_SLEEP_OFF_CYCLES)
         {
             DET_LOGI(TAG, "OFF continued %u cycles -> release COMM_USER_0 (voluntary sleep)",
@@ -260,7 +261,7 @@ void App_EngineManager_Run(void)
      * ここで独立してチェックする。
      * ただし FiM が抑止中（ボタン固着確定中）は、押下が物理的固着による
      * 偽信号である可能性を排除できないため受理しない。 */
-    if (s_state == ENGINE_STATE_FAULT && btnPressed == 1U)
+    if ((s_state == ENGINE_STATE_FAULT) && (btnPressed == 1U))
     {
         /* フェールセーフ既定値: 許可状態を確認できない間は抑止扱いとする
          * (FiM_GetFunctionPermission は失敗時も Permission=FALSE を書き込むが、
@@ -398,7 +399,7 @@ static void State_Starting(EngineSpeed_t speed, CoolantTemp_t temp, EngineOnFlag
         DET_LOGI(TAG, "STARTING->RUNNING");
         return;
     }
-    if (millis() - s_startingEnterMs >= STARTING_TIMEOUT_MS)
+    if ((millis() - s_startingEnterMs) >= STARTING_TIMEOUT_MS)
     {
         s_state = ENGINE_STATE_FAULT;
         (void)Dem_SetEventStatus(DEM_EVENT_STARTING_TIMEOUT, DEM_EVENT_STATUS_FAILED);

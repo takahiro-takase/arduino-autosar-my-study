@@ -182,7 +182,7 @@ void CanTp_GetVersionInfo(Std_VersionInfoType* versioninfo)
 {
     if (versioninfo == NULL)
     {
-        Det_ReportError(CANTP_MODULE_ID, 0U, CANTP_API_ID_GET_VERSION_INFO, CANTP_E_PARAM_POINTER);
+        (void)Det_ReportError(CANTP_MODULE_ID, 0U, CANTP_API_ID_GET_VERSION_INFO, CANTP_E_PARAM_POINTER);
         return;
     }
 
@@ -223,27 +223,27 @@ Std_ReturnType CanTp_Transmit(PduIdType TxSduId, const PduInfoType* PduInfoPtr)
 {
     if (!CanTp_Initialized)
     {
-        Det_ReportError(CANTP_MODULE_ID, 0U, CANTP_API_ID_TRANSMIT, CANTP_E_UNINIT);
+        (void)Det_ReportError(CANTP_MODULE_ID, 0U, CANTP_API_ID_TRANSMIT, CANTP_E_UNINIT);
         return E_NOT_OK;
     }
 
     if (TxSduId != CANTP_TX_SDU_ID)
     {
         DET_LOGE(TAG, "TX E: invalid TxSduId=%u", (unsigned)TxSduId);
-        Det_ReportError(CANTP_MODULE_ID, 0U, CANTP_API_ID_TRANSMIT, CANTP_E_INVALID_TX_ID);
+        (void)Det_ReportError(CANTP_MODULE_ID, 0U, CANTP_API_ID_TRANSMIT, CANTP_E_INVALID_TX_ID);
         return E_NOT_OK;
     }
 
-    if (PduInfoPtr == NULL || PduInfoPtr->SduDataPtr == NULL)
+    if ((PduInfoPtr == NULL) || (PduInfoPtr->SduDataPtr == NULL))
     {
         DET_LOGE(TAG, "TX E: NULL PduInfoPtr");
-        Det_ReportError(CANTP_MODULE_ID, 0U, CANTP_API_ID_TRANSMIT, CANTP_E_PARAM_POINTER);
+        (void)Det_ReportError(CANTP_MODULE_ID, 0U, CANTP_API_ID_TRANSMIT, CANTP_E_PARAM_POINTER);
         return E_NOT_OK;
     }
 
     uint16 msgLen = (uint16)PduInfoPtr->SduLength;
 
-    if (msgLen == 0U || msgLen > (uint16)CANTP_TX_BUFFER_SIZE)
+    if ((msgLen == 0U) || (msgLen > (uint16)CANTP_TX_BUFFER_SIZE))
     {
         DET_LOGE(TAG, "TX E: invalid len");
         return E_NOT_OK;
@@ -268,10 +268,12 @@ Std_ReturnType CanTp_Transmit(PduIdType TxSduId, const PduInfoType* PduInfoPtr)
         /* ---- Single Frame ---- */
         CanTp_TxFrameBuf[0] = (uint8)msgLen;   /* SF PCI: 0x0N */
         uint8 i;
-        for (i = 0U; i < (uint8)msgLen; i++)
+        for (i = 0U; i < (uint8)msgLen; i++) {
             CanTp_TxFrameBuf[1U + i] = PduInfoPtr->SduDataPtr[i];
-        for (; i < CANTP_SF_MAX_DATA; i++)
+        }
+        for (; i < CANTP_SF_MAX_DATA; i++) {
             CanTp_TxFrameBuf[1U + i] = 0x00U;
+        }
 
         DET_LOGI(TAG, "TX SF len=%u", (unsigned)msgLen);
 
@@ -289,8 +291,9 @@ Std_ReturnType CanTp_Transmit(PduIdType TxSduId, const PduInfoType* PduInfoPtr)
     /* ---- Multi Frame: First Frame ---- */
     /* メッセージ全体を TX バッファへコピー */
     uint16 i;
-    for (i = 0U; i < msgLen; i++)
+    for (i = 0U; i < msgLen; i++) {
         CanTp_Tx.buf[i] = PduInfoPtr->SduDataPtr[i];
+    }
     CanTp_Tx.msgLen = msgLen;
     CanTp_Tx.pos    = (uint16)CANTP_FF_DATA;   /* FF で送信済みバイト数 */
     CanTp_Tx.sn     = 1U;
@@ -299,8 +302,9 @@ Std_ReturnType CanTp_Transmit(PduIdType TxSduId, const PduInfoType* PduInfoPtr)
     CanTp_TxFrameBuf[0] = (uint8)(0x10U | (uint8)((msgLen >> 8U) & 0x0FU));
     CanTp_TxFrameBuf[1] = (uint8)(msgLen & 0xFFU);
     uint8 k;
-    for (k = 0U; k < CANTP_FF_DATA; k++)
+    for (k = 0U; k < CANTP_FF_DATA; k++) {
         CanTp_TxFrameBuf[2U + k] = CanTp_Tx.buf[k];
+    }
 
     DET_LOGI(TAG, "TX FF len=%u", (unsigned)msgLen);
 
@@ -359,7 +363,7 @@ void CanTp_MainFunction(void)
 {
     if (!CanTp_Initialized)
     {
-        Det_ReportError(CANTP_MODULE_ID, 0U, CANTP_API_ID_MAIN_FUNCTION, CANTP_E_UNINIT);
+        (void)Det_ReportError(CANTP_MODULE_ID, 0U, CANTP_API_ID_MAIN_FUNCTION, CANTP_E_UNINIT);
         return;
     }
 
@@ -368,7 +372,7 @@ void CanTp_MainFunction(void)
     /* ---- TX: N_Bs タイムアウト (WAIT_FC) ---- */
     if (CanTp_Tx.state == CANTP_TX_WAIT_FC)
     {
-        if (now - CanTp_Tx.bsTimer >= CANTP_N_BS_TIMEOUT_MS)
+        if ((now - CanTp_Tx.bsTimer) >= CANTP_N_BS_TIMEOUT_MS)
         {
             DET_LOGE(TAG, "TX N_Bs timeout abort");
             CanTp_Tx.state = CANTP_TX_IDLE;
@@ -378,7 +382,7 @@ void CanTp_MainFunction(void)
     /* ---- TX: CF 送信 (SEND_CF) ---- */
     if (CanTp_Tx.state == CANTP_TX_SEND_CF)
     {
-        if (now - CanTp_Tx.cfTimer >= (unsigned long)CanTp_Tx.stMin)
+        if ((now - CanTp_Tx.cfTimer) >= (unsigned long)CanTp_Tx.stMin)
         {
             CanTp_SendNextCF();
             CanTp_Tx.cfTimer = now;
@@ -388,7 +392,7 @@ void CanTp_MainFunction(void)
     /* ---- RX: N_Cr タイムアウト (WAIT_CF) ---- */
     if (CanTp_Rx.state == CANTP_RX_WAIT_CF)
     {
-        if (now - CanTp_Rx.timer >= CANTP_N_CR_TIMEOUT_MS)
+        if ((now - CanTp_Rx.timer) >= CANTP_N_CR_TIMEOUT_MS)
         {
             DET_LOGE(TAG, "RX N_Cr timeout abort");
             CanTp_Rx.state = CANTP_RX_IDLE;
@@ -422,26 +426,27 @@ void CanTp_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
 {
     if (!CanTp_Initialized)
     {
-        Det_ReportError(CANTP_MODULE_ID, 0U, CANTP_API_ID_RX_INDICATION, CANTP_E_UNINIT);
+        (void)Det_ReportError(CANTP_MODULE_ID, 0U, CANTP_API_ID_RX_INDICATION, CANTP_E_UNINIT);
         return;
     }
 
     if (RxPduId != CANTP_RX_SDU_ID)
     {
         DET_LOGE(TAG, "RX E: invalid RxPduId=%u", (unsigned)RxPduId);
-        Det_ReportError(CANTP_MODULE_ID, 0U, CANTP_API_ID_RX_INDICATION, CANTP_E_INVALID_RX_ID);
+        (void)Det_ReportError(CANTP_MODULE_ID, 0U, CANTP_API_ID_RX_INDICATION, CANTP_E_INVALID_RX_ID);
         return;
     }
 
-    if (PduInfoPtr == NULL || PduInfoPtr->SduDataPtr == NULL)
+    if ((PduInfoPtr == NULL) || (PduInfoPtr->SduDataPtr == NULL))
     {
         DET_LOGE(TAG, "RX E: NULL PduInfoPtr");
-        Det_ReportError(CANTP_MODULE_ID, 0U, CANTP_API_ID_RX_INDICATION, CANTP_E_PARAM_POINTER);
+        (void)Det_ReportError(CANTP_MODULE_ID, 0U, CANTP_API_ID_RX_INDICATION, CANTP_E_PARAM_POINTER);
         return;
     }
 
-    if (PduInfoPtr->SduLength == 0U)
+    if (PduInfoPtr->SduLength == 0U) {
         return;  /* 空フレームは DET 対象外（NULL ポインタではないため） */
+    }
 
     const uint8* data      = PduInfoPtr->SduDataPtr;
     uint8        pci       = data[0];
@@ -454,13 +459,16 @@ void CanTp_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
     {
         uint8 udsLen = pci & 0x0FU;
 
-        if (udsLen == 0U || udsLen > CANTP_SF_MAX_DATA
-            || PduInfoPtr->SduLength < (PduLengthType)(1U + udsLen))
+        if ((udsLen == 0U) || (udsLen > CANTP_SF_MAX_DATA)
+            || (PduInfoPtr->SduLength < (PduLengthType)(1U + udsLen)))
+        {
             break;
+        }
 
         uint8 i;
-        for (i = 0U; i < udsLen; i++)
+        for (i = 0U; i < udsLen; i++) {
             CanTp_Rx.buf[i] = data[1U + i];
+        }
 
         CanTp_Rx.state = CANTP_RX_IDLE;   /* 受信中の MF があれば中断 */
 
@@ -495,8 +503,9 @@ void CanTp_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
         uint16 msgLen = (uint16)(((uint16)(pci & 0x0FU) << 8U)
                                  | (uint16)data[1]);
 
-        if (msgLen <= CANTP_SF_MAX_DATA || PduInfoPtr->SduLength < 8U)
+        if ((msgLen <= CANTP_SF_MAX_DATA) || (PduInfoPtr->SduLength < 8U)) {
             break;
+        }
 
         if (msgLen > (uint16)CANTP_RX_BUFFER_SIZE)
         {
@@ -514,8 +523,9 @@ void CanTp_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
         uint16 copyLen = (msgLen < (uint16)CANTP_FF_DATA)
                          ? msgLen : (uint16)CANTP_FF_DATA;
         uint8 i;
-        for (i = 0U; i < (uint8)copyLen; i++)
+        for (i = 0U; i < (uint8)copyLen; i++) {
             CanTp_Rx.buf[i] = data[2U + i];
+        }
         CanTp_Rx.pos = copyLen;
 
         DET_LOGI(TAG, "RX FF len=%u", (unsigned)msgLen);
@@ -527,8 +537,9 @@ void CanTp_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
     /* ------------------------------------------------------------------ */
     case CANTP_FRAME_CF:
     {
-        if (CanTp_Rx.state != CANTP_RX_WAIT_CF)
+        if (CanTp_Rx.state != CANTP_RX_WAIT_CF) {
             break;
+        }
 
         /* CanTp_SendNextCF() は常に 8 バイトへパディングして送信する規約のため、
          * 受信側もこれ未満は不正フレームとして破棄する（SF/FF と同様の防御。
@@ -555,8 +566,9 @@ void CanTp_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
         uint8  copyLen   = (remaining > (uint16)CANTP_CF_DATA)
                            ? CANTP_CF_DATA : (uint8)remaining;
         uint8 i;
-        for (i = 0U; i < copyLen; i++)
+        for (i = 0U; i < copyLen; i++) {
             CanTp_Rx.buf[CanTp_Rx.pos + i] = data[1U + i];
+        }
 
         CanTp_Rx.pos += (uint16)copyLen;
         CanTp_Rx.sn   = (uint8)((CanTp_Rx.sn + 1U) & 0x0FU);
@@ -582,8 +594,9 @@ void CanTp_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
     /* ------------------------------------------------------------------ */
     case CANTP_FRAME_FC:
     {
-        if (CanTp_Tx.state != CANTP_TX_WAIT_FC)
+        if (CanTp_Tx.state != CANTP_TX_WAIT_FC) {
             break;
+        }
 
         /* CanTp_SendFlowControl() は常に 8 バイトへパディングして送信する規約
          * のため、受信側もこれ未満は不正フレームとして破棄する（SF/FF/CF と
@@ -656,7 +669,7 @@ void CanTp_TxConfirmation(PduIdType TxPduId, Std_ReturnType result)
 
     if (!CanTp_Initialized)
     {
-        Det_ReportError(CANTP_MODULE_ID, 0U, CANTP_API_ID_TX_CONFIRMATION, CANTP_E_UNINIT);
+        (void)Det_ReportError(CANTP_MODULE_ID, 0U, CANTP_API_ID_TX_CONFIRMATION, CANTP_E_UNINIT);
         return;
     }
 }
@@ -695,11 +708,13 @@ static Std_ReturnType CanTp_SendFrame(void)
  */
 static uint8 CanTp_DecodeStMin(uint8 raw)
 {
-    if (raw <= 0x7FU)
+    if (raw <= 0x7FU) {
         return raw;
+    }
 
-    if (raw >= 0xF1U && raw <= 0xF9U)
+    if ((raw >= 0xF1U) && (raw <= 0xF9U)) {
         return 0U;
+    }
 
     DET_LOGW(TAG, "STmin reserved value 0x%02X -> clamp 127ms", (unsigned)raw);
     return 127U;
@@ -749,10 +764,12 @@ static void CanTp_SendNextCF(void)
 
     CanTp_TxFrameBuf[0] = (uint8)(0x20U | (CanTp_Tx.sn & 0x0FU));
     uint8 i;
-    for (i = 0U; i < copyLen; i++)
+    for (i = 0U; i < copyLen; i++) {
         CanTp_TxFrameBuf[1U + i] = CanTp_Tx.buf[CanTp_Tx.pos + i];
-    for (; i < CANTP_CF_DATA; i++)
+    }
+    for (; i < CANTP_CF_DATA; i++) {
         CanTp_TxFrameBuf[1U + i] = 0x00U;
+    }
 
     DET_LOGI(TAG, "TX CF sn=%u pos=%u", (unsigned)CanTp_Tx.sn, (unsigned)CanTp_Tx.pos);
 
@@ -760,8 +777,9 @@ static void CanTp_SendNextCF(void)
     {
         unsigned long now = millis();
 
-        if (CanTp_Tx.asFailTimer == 0UL)
+        if (CanTp_Tx.asFailTimer == 0UL) {
             CanTp_Tx.asFailTimer = now;   /* 失敗継続の開始時刻を記録 */
+        }
 
         if ((now - CanTp_Tx.asFailTimer) >= CANTP_N_AS_TIMEOUT_MS)
         {

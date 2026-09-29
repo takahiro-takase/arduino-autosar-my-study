@@ -59,7 +59,7 @@ void Adc_Init(const Adc_ConfigType* ConfigPtr)
 Std_ReturnType Adc_ReadChannel(uint8 channel, uint16* raw)
 {
     if (raw == NULL) {
-        Det_ReportError(ADC_MODULE_ID, 0U, ADC_API_ID_READ_CHANNEL, ADC_E_PARAM_POINTER);
+        (void)Det_ReportError(ADC_MODULE_ID, 0U, ADC_API_ID_READ_CHANNEL, ADC_E_PARAM_POINTER);
         return E_NOT_OK;
     }
     *raw = Adc_Hw_ReadChannel(channel);
@@ -73,7 +73,7 @@ Std_ReturnType Adc_ReadChannel(uint8 channel, uint16* raw)
 void Adc_GetVersionInfo(Std_VersionInfoType* versioninfo)
 {
     if (versioninfo == NULL) {
-        Det_ReportError(ADC_MODULE_ID, 0U, ADC_API_ID_GET_VERSION_INFO, ADC_E_PARAM_POINTER);
+        (void)Det_ReportError(ADC_MODULE_ID, 0U, ADC_API_ID_GET_VERSION_INFO, ADC_E_PARAM_POINTER);
         return;
     }
 

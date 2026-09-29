@@ -143,8 +143,8 @@ const E2EXf_TxConfigTypeP05 E2EXf_E2EHealthStatusTxCfgP05 = {
 
 void E2EXf_PBCfg_Init(void)
 {
-    E2E_P05CheckInit(&E2EXf_EngineInfoStateP05);
-    E2E_P05CheckInit(&E2EXf_AbsInfoStateP05);
+    (void)E2E_P05CheckInit(&E2EXf_EngineInfoStateP05);
+    (void)E2E_P05CheckInit(&E2EXf_AbsInfoStateP05);
     E2EXf_EngineInfoWaitForFirstDataP05 = 1U;
     E2EXf_AbsInfoWaitForFirstDataP05    = 1U;
     /* [SWS_E2E_00353]: E2E_SMCheckInit() を明示的に呼ぶ（呼ばないまま
@@ -152,7 +152,7 @@ void E2EXf_PBCfg_Init(void)
      * E2E_SMCheck() 宣言側コメント参照）。 */
     (void)E2E_SMCheckInit(&E2EXf_EngineInfoSMState, &E2EXf_SMConfigDefault);
     (void)E2E_SMCheckInit(&E2EXf_AbsInfoSMState, &E2EXf_SMConfigDefault);
-    E2E_P05ProtectInit(&E2EXf_E2EHealthStatusStateP05);
+    (void)E2E_P05ProtectInit(&E2EXf_E2EHealthStatusStateP05);
 
     /* 各 State の初期化が完了した最後に、E2EXf モジュール自身の初期化状態
      * (SWS_E2EXf_00130) を TRUE にする。E2EXf_Inv_EngineInfo()等の各

@@ -84,12 +84,15 @@ void Det_Init(const Det_ConfigType* ConfigPtr)
 
 void Log_Write(LogLevel lvl, const char* tag, const char* func, const char* fmt, ...)
 {
-    if (lvl > DET_LOG_LEVEL) return;  /* DET_LOG_LEVEL より重要度が低いログは抑制 */
+    if (lvl > DET_LOG_LEVEL)
+    {
+        return;  /* DET_LOG_LEVEL より重要度が低いログは抑制 */
+    }
 
     char buf[LOG_BUF_SIZE];
     va_list args;
     va_start(args, fmt);
-    vsnprintf(buf, sizeof(buf), fmt, args);
+    (void)vsnprintf(buf, sizeof(buf), fmt, args);
     va_end(args);
 
     Det_Hw_PrintLogLine(lvl, tag, func, buf);
@@ -252,9 +255,12 @@ void Log_HexStr(char* dst, uint8_t dstSize,
 {
     static const char hex[] = "0123456789ABCDEF";
     uint8_t pos = 0U;
-    for (uint8_t i = 0U; i < srcLen && (pos + 3U) < dstSize; i++)
+    for (uint8_t i = 0U; (i < srcLen) && (pos + 3U) < dstSize; i++)
     {
-        if (i > 0U) dst[pos++] = ' ';
+        if (i > 0U)
+        {
+            dst[pos++] = ' ';
+        }
         dst[pos++] = hex[src[i] >> 4U];
         dst[pos++] = hex[src[i] & 0x0FU];
     }
@@ -284,7 +290,7 @@ void Det_GetVersionInfo(Std_VersionInfoType* versioninfo)
 {
     if (versioninfo == NULL)
     {
-        Det_ReportError(DET_MODULE_ID, 0U, DET_API_ID_GET_VERSION_INFO, DET_E_PARAM_POINTER);
+        (void)Det_ReportError(DET_MODULE_ID, 0U, DET_API_ID_GET_VERSION_INFO, DET_E_PARAM_POINTER);
         return;
     }
 

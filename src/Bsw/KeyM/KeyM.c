@@ -59,13 +59,15 @@ static uint8 KeyM_PendingValidate[KEYM_CRYPTO_KEY_COUNT];
 
 static const KeyM_CryptoKeyConfigType* KeyM_FindKeyByName(const uint8* keyNamePtr, uint16 keyNameLength)
 {
-    if (keyNameLength != 1U)
+    if (keyNameLength != 1U) {
         return NULL;
+    }
 
     for (uint8 i = 0U; i < KEYM_CRYPTO_KEY_COUNT; i++)
     {
-        if (KeyM_CryptoKeyConfigData[i].KeyName == keyNamePtr[0])
+        if (KeyM_CryptoKeyConfigData[i].KeyName == keyNamePtr[0]) {
             return &KeyM_CryptoKeyConfigData[i];
+        }
     }
     return NULL;
 }
@@ -79,8 +81,9 @@ void KeyM_Init(const KeyM_ConfigType* ConfigPtr)
     (void)ConfigPtr; /* [SWS_KeyM_00158]: 常に NULL_PTR の想定。内容は使わない。 */
 
     KeyM_SessionOpen = 0U;
-    for (uint8 i = 0U; i < KEYM_CRYPTO_KEY_COUNT; i++)
+    for (uint8 i = 0U; i < KEYM_CRYPTO_KEY_COUNT; i++) {
         KeyM_PendingValidate[i] = 0U;
+    }
 
     KeyM_Initialized = 1U;
     DET_LOGI(TAG, "Init ok keys=%u", (unsigned)KEYM_CRYPTO_KEY_COUNT);
@@ -101,7 +104,7 @@ void KeyM_Deinit(void)
      * 未使用だった、/code-review で指摘）。 */
     if (!KeyM_Initialized)
     {
-        Det_ReportError(KEYM_MODULE_ID, 0U, KEYM_API_ID_DEINIT, KEYM_E_UNINIT);
+        (void)Det_ReportError(KEYM_MODULE_ID, 0U, KEYM_API_ID_DEINIT, KEYM_E_UNINIT);
         return;
     }
 
@@ -127,8 +130,9 @@ void KeyM_Deinit(void)
     }
 
     KeyM_SessionOpen = 0U;
-    for (uint8 i = 0U; i < KEYM_CRYPTO_KEY_COUNT; i++)
+    for (uint8 i = 0U; i < KEYM_CRYPTO_KEY_COUNT; i++) {
         KeyM_PendingValidate[i] = 0U;
+    }
 
     KeyM_Initialized = 0U;
     DET_LOGI(TAG, "Deinit ok");
@@ -142,13 +146,13 @@ void KeyM_GetVersionInfo(Std_VersionInfoType* versioninfo)
 {
     if (!KeyM_Initialized)
     {
-        Det_ReportError(KEYM_MODULE_ID, 0U, KEYM_API_ID_GET_VERSION_INFO, KEYM_E_UNINIT);
+        (void)Det_ReportError(KEYM_MODULE_ID, 0U, KEYM_API_ID_GET_VERSION_INFO, KEYM_E_UNINIT);
         return;
     }
 
     if (versioninfo == NULL)
     {
-        Det_ReportError(KEYM_MODULE_ID, 0U, KEYM_API_ID_GET_VERSION_INFO, KEYM_E_PARAM_POINTER);
+        (void)Det_ReportError(KEYM_MODULE_ID, 0U, KEYM_API_ID_GET_VERSION_INFO, KEYM_E_PARAM_POINTER);
         return;
     }
 
@@ -174,7 +178,7 @@ Std_ReturnType KeyM_Start(KeyM_StartType StartType,
 
     if (!KeyM_Initialized)
     {
-        Det_ReportError(KEYM_MODULE_ID, 0U, KEYM_API_ID_START, KEYM_E_UNINIT);
+        (void)Det_ReportError(KEYM_MODULE_ID, 0U, KEYM_API_ID_START, KEYM_E_UNINIT);
         return E_NOT_OK;
     }
 
@@ -203,13 +207,13 @@ Std_ReturnType KeyM_Update(const uint8* KeyNamePtr, uint16 KeyNameLength,
 
     if (!KeyM_Initialized)
     {
-        Det_ReportError(KEYM_MODULE_ID, 0U, KEYM_API_ID_UPDATE, KEYM_E_UNINIT);
+        (void)Det_ReportError(KEYM_MODULE_ID, 0U, KEYM_API_ID_UPDATE, KEYM_E_UNINIT);
         return E_NOT_OK;
     }
 
-    if (KeyNamePtr == NULL || RequestDataPtr == NULL)
+    if ((KeyNamePtr == NULL) || (RequestDataPtr == NULL))
     {
-        Det_ReportError(KEYM_MODULE_ID, 0U, KEYM_API_ID_UPDATE, KEYM_E_PARAM_POINTER);
+        (void)Det_ReportError(KEYM_MODULE_ID, 0U, KEYM_API_ID_UPDATE, KEYM_E_PARAM_POINTER);
         return E_NOT_OK;
     }
 
@@ -268,7 +272,7 @@ Std_ReturnType KeyM_Finalize(const uint8* RequestDataPtr, uint16 RequestDataLeng
 
     if (!KeyM_Initialized)
     {
-        Det_ReportError(KEYM_MODULE_ID, 0U, KEYM_API_ID_FINALIZE, KEYM_E_UNINIT);
+        (void)Det_ReportError(KEYM_MODULE_ID, 0U, KEYM_API_ID_FINALIZE, KEYM_E_UNINIT);
         return E_NOT_OK;
     }
 
@@ -282,8 +286,9 @@ Std_ReturnType KeyM_Finalize(const uint8* RequestDataPtr, uint16 RequestDataLeng
     uint8 allOk = 1U;
     for (uint8 i = 0U; i < KEYM_CRYPTO_KEY_COUNT; i++)
     {
-        if (!KeyM_PendingValidate[i])
+        if (!KeyM_PendingValidate[i]) {
             continue;
+        }
 
         if (Csm_KeySetValid(KeyM_CryptoKeyConfigData[i].CsmKeyTargetRef) != E_OK)
         {

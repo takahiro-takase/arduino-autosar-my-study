@@ -62,7 +62,7 @@ static uint8 WdgIf_CheckDevice(WdgIf_DeviceType Device, uint8 ApiId)
 {
     if (Device != WDGIF_DEVICE_0)
     {
-        Det_ReportError(WDGIF_MODULE_ID, 0U, ApiId, WDGIF_E_PARAM_DEVICE);
+        (void)Det_ReportError(WDGIF_MODULE_ID, 0U, ApiId, WDGIF_E_PARAM_DEVICE);
         return 0U;
     }
     return 1U;
@@ -74,8 +74,9 @@ static uint8 WdgIf_CheckDevice(WdgIf_DeviceType Device, uint8 ApiId)
 
 Std_ReturnType WdgIf_SetMode(WdgIf_DeviceType Device, WdgIf_ModeType WdgMode)
 {
-    if (!WdgIf_CheckDevice(Device, WDGIF_API_ID_SET_MODE))
+    if (!WdgIf_CheckDevice(Device, WDGIF_API_ID_SET_MODE)) {
         return E_NOT_OK;
+    }
     return Wdg_SetMode(WdgMode);
 }
 
@@ -85,8 +86,9 @@ Std_ReturnType WdgIf_SetMode(WdgIf_DeviceType Device, WdgIf_ModeType WdgMode)
 
 void WdgIf_SetTriggerCondition(WdgIf_DeviceType Device, uint16 Timeout)
 {
-    if (!WdgIf_CheckDevice(Device, WDGIF_API_ID_SET_TRIGGER_CONDITION))
+    if (!WdgIf_CheckDevice(Device, WDGIF_API_ID_SET_TRIGGER_CONDITION)) {
         return;
+    }
     Wdg_SetTriggerCondition(Timeout);
 }
 
@@ -98,7 +100,7 @@ void WdgIf_GetVersionInfo(Std_VersionInfoType* VersionInfoPtr)
 {
     if (VersionInfoPtr == NULL)
     {
-        Det_ReportError(WDGIF_MODULE_ID, 0U, WDGIF_API_ID_GET_VERSION_INFO, WDGIF_E_PARAM_POINTER);
+        (void)Det_ReportError(WDGIF_MODULE_ID, 0U, WDGIF_API_ID_GET_VERSION_INFO, WDGIF_E_PARAM_POINTER);
         return;
     }
 

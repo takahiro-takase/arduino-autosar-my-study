@@ -86,13 +86,13 @@ void CryIf_GetVersionInfo(Std_VersionInfoType* versioninfo)
 {
     if (!CryIf_Initialized)
     {
-        Det_ReportError(CRYIF_MODULE_ID, 0U, CRYIF_API_ID_GET_VERSION_INFO, CRYIF_E_UNINIT);
+        (void)Det_ReportError(CRYIF_MODULE_ID, 0U, CRYIF_API_ID_GET_VERSION_INFO, CRYIF_E_UNINIT);
         return;
     }
 
     if (versioninfo == NULL)
     {
-        Det_ReportError(CRYIF_MODULE_ID, 0U, CRYIF_API_ID_GET_VERSION_INFO, CRYIF_E_PARAM_POINTER);
+        (void)Det_ReportError(CRYIF_MODULE_ID, 0U, CRYIF_API_ID_GET_VERSION_INFO, CRYIF_E_PARAM_POINTER);
         return;
     }
 
@@ -111,19 +111,19 @@ Std_ReturnType CryIf_ProcessJob(uint32 channelId, Crypto_JobType* job)
 {
     if (!CryIf_Initialized)
     {
-        Det_ReportError(CRYIF_MODULE_ID, 0U, CRYIF_API_ID_PROCESS_JOB, CRYIF_E_UNINIT);
+        (void)Det_ReportError(CRYIF_MODULE_ID, 0U, CRYIF_API_ID_PROCESS_JOB, CRYIF_E_UNINIT);
         return E_NOT_OK;
     }
 
     if (channelId != CRYIF_CHANNEL_ID)
     {
-        Det_ReportError(CRYIF_MODULE_ID, 0U, CRYIF_API_ID_PROCESS_JOB, CRYIF_E_PARAM_HANDLE);
+        (void)Det_ReportError(CRYIF_MODULE_ID, 0U, CRYIF_API_ID_PROCESS_JOB, CRYIF_E_PARAM_HANDLE);
         return E_NOT_OK;
     }
 
     if (job == NULL)
     {
-        Det_ReportError(CRYIF_MODULE_ID, 0U, CRYIF_API_ID_PROCESS_JOB, CRYIF_E_PARAM_POINTER);
+        (void)Det_ReportError(CRYIF_MODULE_ID, 0U, CRYIF_API_ID_PROCESS_JOB, CRYIF_E_PARAM_POINTER);
         return E_NOT_OK;
     }
 
@@ -142,19 +142,19 @@ Std_ReturnType CryIf_KeyElementSet(uint32 cryIfKeyId, uint32 keyElementId,
 {
     if (!CryIf_Initialized)
     {
-        Det_ReportError(CRYIF_MODULE_ID, 0U, CRYIF_API_ID_KEY_ELEMENT_SET, CRYIF_E_UNINIT);
+        (void)Det_ReportError(CRYIF_MODULE_ID, 0U, CRYIF_API_ID_KEY_ELEMENT_SET, CRYIF_E_UNINIT);
         return E_NOT_OK;
     }
 
     if (keyPtr == NULL)
     {
-        Det_ReportError(CRYIF_MODULE_ID, 0U, CRYIF_API_ID_KEY_ELEMENT_SET, CRYIF_E_PARAM_POINTER);
+        (void)Det_ReportError(CRYIF_MODULE_ID, 0U, CRYIF_API_ID_KEY_ELEMENT_SET, CRYIF_E_PARAM_POINTER);
         return E_NOT_OK;
     }
 
     if (keyLength == 0U)
     {
-        Det_ReportError(CRYIF_MODULE_ID, 0U, CRYIF_API_ID_KEY_ELEMENT_SET, CRYIF_E_PARAM_VALUE);
+        (void)Det_ReportError(CRYIF_MODULE_ID, 0U, CRYIF_API_ID_KEY_ELEMENT_SET, CRYIF_E_PARAM_VALUE);
         return E_NOT_OK;
     }
 
@@ -169,7 +169,7 @@ Std_ReturnType CryIf_KeyElementSet(uint32 cryIfKeyId, uint32 keyElementId,
          * CryIf は独自の鍵 ID 空間を持たず Crypto と共有しているため
          * CRYPTO_KEY_COUNT を直接参照する。 */
         DET_LOGW(TAG, "KeyElementSet W: cryIfKeyId=%u out of range", (unsigned)cryIfKeyId);
-        Det_ReportError(CRYIF_MODULE_ID, 0U, CRYIF_API_ID_KEY_ELEMENT_SET, CRYIF_E_PARAM_HANDLE);
+        (void)Det_ReportError(CRYIF_MODULE_ID, 0U, CRYIF_API_ID_KEY_ELEMENT_SET, CRYIF_E_PARAM_HANDLE);
         return E_NOT_OK;
     }
 
@@ -185,7 +185,7 @@ Std_ReturnType CryIf_KeySetValid(uint32 cryIfKeyId)
 {
     if (!CryIf_Initialized)
     {
-        Det_ReportError(CRYIF_MODULE_ID, 0U, CRYIF_API_ID_KEY_SET_VALID, CRYIF_E_UNINIT);
+        (void)Det_ReportError(CRYIF_MODULE_ID, 0U, CRYIF_API_ID_KEY_SET_VALID, CRYIF_E_UNINIT);
         return E_NOT_OK;
     }
 
@@ -193,7 +193,7 @@ Std_ReturnType CryIf_KeySetValid(uint32 cryIfKeyId)
     {
         /* [SWS_CryIf_00057]（CryIf_KeyElementSet と同じ理由。2026-09 追加） */
         DET_LOGW(TAG, "KeySetValid W: cryIfKeyId=%u out of range", (unsigned)cryIfKeyId);
-        Det_ReportError(CRYIF_MODULE_ID, 0U, CRYIF_API_ID_KEY_SET_VALID, CRYIF_E_PARAM_HANDLE);
+        (void)Det_ReportError(CRYIF_MODULE_ID, 0U, CRYIF_API_ID_KEY_SET_VALID, CRYIF_E_PARAM_HANDLE);
         return E_NOT_OK;
     }
 
@@ -210,19 +210,19 @@ Std_ReturnType CryIf_KeyElementGet(uint32 cryIfKeyId, uint32 keyElementId,
 {
     if (!CryIf_Initialized)
     {
-        Det_ReportError(CRYIF_MODULE_ID, 0U, CRYIF_API_ID_KEY_ELEMENT_GET, CRYIF_E_UNINIT);
+        (void)Det_ReportError(CRYIF_MODULE_ID, 0U, CRYIF_API_ID_KEY_ELEMENT_GET, CRYIF_E_UNINIT);
         return E_NOT_OK;
     }
 
-    if (resultPtr == NULL || resultLengthPtr == NULL)
+    if ((resultPtr == NULL) || (resultLengthPtr == NULL))
     {
-        Det_ReportError(CRYIF_MODULE_ID, 0U, CRYIF_API_ID_KEY_ELEMENT_GET, CRYIF_E_PARAM_POINTER);
+        (void)Det_ReportError(CRYIF_MODULE_ID, 0U, CRYIF_API_ID_KEY_ELEMENT_GET, CRYIF_E_PARAM_POINTER);
         return E_NOT_OK;
     }
 
     if (*resultLengthPtr == 0U)
     {
-        Det_ReportError(CRYIF_MODULE_ID, 0U, CRYIF_API_ID_KEY_ELEMENT_GET, CRYIF_E_PARAM_VALUE);
+        (void)Det_ReportError(CRYIF_MODULE_ID, 0U, CRYIF_API_ID_KEY_ELEMENT_GET, CRYIF_E_PARAM_VALUE);
         return E_NOT_OK;
     }
 
@@ -230,7 +230,7 @@ Std_ReturnType CryIf_KeyElementGet(uint32 cryIfKeyId, uint32 keyElementId,
     {
         /* [SWS_CryIf_00060]（CryIf_KeyElementSet と同じ理由。2026-09 追加） */
         DET_LOGW(TAG, "KeyElementGet W: cryIfKeyId=%u out of range", (unsigned)cryIfKeyId);
-        Det_ReportError(CRYIF_MODULE_ID, 0U, CRYIF_API_ID_KEY_ELEMENT_GET, CRYIF_E_PARAM_HANDLE);
+        (void)Det_ReportError(CRYIF_MODULE_ID, 0U, CRYIF_API_ID_KEY_ELEMENT_GET, CRYIF_E_PARAM_HANDLE);
         return E_NOT_OK;
     }
 

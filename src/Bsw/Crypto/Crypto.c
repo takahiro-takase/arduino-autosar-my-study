@@ -69,15 +69,16 @@ void Crypto_Init(void)
          * DET へ報告し、初期化未完了のまま return する（Crypto_Initialized は
          * 0U のまま）。以降の全 API 呼び出しは CRYPTO_E_UNINIT で一律拒否される
          * （fail-open で「Init ok」を騙らない）。 */
-        Det_ReportError(CRYPTO_MODULE_ID, 0U, CRYPTO_API_ID_INIT, CRYPTO_E_INIT_FAILED);
+        (void)Det_ReportError(CRYPTO_MODULE_ID, 0U, CRYPTO_API_ID_INIT, CRYPTO_E_INIT_FAILED);
         DET_LOGE(TAG, "Init E: AES-128 self-test failed");
         return;
     }
 
     for (uint32 k = 0U; k < CRYPTO_KEY_COUNT; k++)
     {
-        for (uint32 b = 0U; b < CRYPTO_AES128_KEY_SIZE; b++)
+        for (uint32 b = 0U; b < CRYPTO_AES128_KEY_SIZE; b++) {
             Crypto_KeyStore[k][b] = Crypto_KeyTable[k][b];
+        }
         Crypto_KeyValid[k] = 1U;
     }
 
@@ -93,7 +94,7 @@ void Crypto_GetVersionInfo(Std_VersionInfoType* versioninfo)
 {
     if (versioninfo == NULL)
     {
-        Det_ReportError(CRYPTO_MODULE_ID, 0U, CRYPTO_API_ID_GET_VERSION_INFO, CRYPTO_E_PARAM_POINTER);
+        (void)Det_ReportError(CRYPTO_MODULE_ID, 0U, CRYPTO_API_ID_GET_VERSION_INFO, CRYPTO_E_PARAM_POINTER);
         return;
     }
 
@@ -112,25 +113,25 @@ Std_ReturnType Crypto_ProcessJob(uint32 objectId, Crypto_JobType* job)
 {
     if (!Crypto_Initialized)
     {
-        Det_ReportError(CRYPTO_MODULE_ID, 0U, CRYPTO_API_ID_PROCESS_JOB, CRYPTO_E_UNINIT);
+        (void)Det_ReportError(CRYPTO_MODULE_ID, 0U, CRYPTO_API_ID_PROCESS_JOB, CRYPTO_E_UNINIT);
         return E_NOT_OK;
     }
 
     if (objectId != CRYPTO_OBJECT_ID)
     {
-        Det_ReportError(CRYPTO_MODULE_ID, 0U, CRYPTO_API_ID_PROCESS_JOB, CRYPTO_E_PARAM_HANDLE);
+        (void)Det_ReportError(CRYPTO_MODULE_ID, 0U, CRYPTO_API_ID_PROCESS_JOB, CRYPTO_E_PARAM_HANDLE);
         return E_NOT_OK;
     }
 
-    if (job == NULL || job->inputPtr == NULL || job->macPtr == NULL)
+    if ((job == NULL) || (job->inputPtr == NULL) || (job->macPtr == NULL))
     {
-        Det_ReportError(CRYPTO_MODULE_ID, 0U, CRYPTO_API_ID_PROCESS_JOB, CRYPTO_E_PARAM_POINTER);
+        (void)Det_ReportError(CRYPTO_MODULE_ID, 0U, CRYPTO_API_ID_PROCESS_JOB, CRYPTO_E_PARAM_POINTER);
         return E_NOT_OK;
     }
 
-    if (job->cryptoKeyId >= CRYPTO_KEY_COUNT || job->macLength > CRYPTO_CMAC_SIZE)
+    if ((job->cryptoKeyId >= CRYPTO_KEY_COUNT) || (job->macLength > CRYPTO_CMAC_SIZE))
     {
-        Det_ReportError(CRYPTO_MODULE_ID, 0U, CRYPTO_API_ID_PROCESS_JOB, CRYPTO_E_PARAM_HANDLE);
+        (void)Det_ReportError(CRYPTO_MODULE_ID, 0U, CRYPTO_API_ID_PROCESS_JOB, CRYPTO_E_PARAM_HANDLE);
         return E_NOT_OK;
     }
 
@@ -152,8 +153,9 @@ Std_ReturnType Crypto_ProcessJob(uint32 objectId, Crypto_JobType* job)
 
     if (job->service == CRYPTO_MACGENERATE)
     {
-        for (uint32 b = 0U; b < job->macLength; b++)
+        for (uint32 b = 0U; b < job->macLength; b++) {
             job->macPtr[b] = fullMac[b];
+        }
         return E_OK;
     }
 
@@ -161,7 +163,7 @@ Std_ReturnType Crypto_ProcessJob(uint32 objectId, Crypto_JobType* job)
     {
         if (job->verifyResultPtr == NULL)
         {
-            Det_ReportError(CRYPTO_MODULE_ID, 0U, CRYPTO_API_ID_PROCESS_JOB, CRYPTO_E_PARAM_POINTER);
+            (void)Det_ReportError(CRYPTO_MODULE_ID, 0U, CRYPTO_API_ID_PROCESS_JOB, CRYPTO_E_PARAM_POINTER);
             return E_NOT_OK;
         }
 
@@ -171,8 +173,9 @@ Std_ReturnType Crypto_ProcessJob(uint32 objectId, Crypto_JobType* job)
          * （元 SecOC_RxIndication() が行っていた比較ロジックを、責務として
          * 正しい Crypto Driver 層へ移設した）。 */
         uint8 macDiff = 0U;
-        for (uint32 b = 0U; b < job->macLength; b++)
+        for (uint32 b = 0U; b < job->macLength; b++) {
             macDiff |= (uint8)(fullMac[b] ^ job->macPtr[b]);
+        }
 
         *job->verifyResultPtr = (macDiff == 0U) ? CRYPTO_E_VER_OK : CRYPTO_E_VER_NOT_OK;
         return E_OK;
@@ -191,19 +194,19 @@ Std_ReturnType Crypto_KeyElementSet(uint32 cryptoKeyId, uint32 keyElementId,
 {
     if (!Crypto_Initialized)
     {
-        Det_ReportError(CRYPTO_MODULE_ID, 0U, CRYPTO_API_ID_KEY_ELEMENT_SET, CRYPTO_E_UNINIT);
+        (void)Det_ReportError(CRYPTO_MODULE_ID, 0U, CRYPTO_API_ID_KEY_ELEMENT_SET, CRYPTO_E_UNINIT);
         return E_NOT_OK;
     }
 
-    if (cryptoKeyId >= CRYPTO_KEY_COUNT || keyElementId != CRYPTO_KEY_ELEMENT_ID_CIPHER_KEY)
+    if ((cryptoKeyId >= CRYPTO_KEY_COUNT) || (keyElementId != CRYPTO_KEY_ELEMENT_ID_CIPHER_KEY))
     {
-        Det_ReportError(CRYPTO_MODULE_ID, 0U, CRYPTO_API_ID_KEY_ELEMENT_SET, CRYPTO_E_PARAM_HANDLE);
+        (void)Det_ReportError(CRYPTO_MODULE_ID, 0U, CRYPTO_API_ID_KEY_ELEMENT_SET, CRYPTO_E_PARAM_HANDLE);
         return E_NOT_OK;
     }
 
     if (keyPtr == NULL)
     {
-        Det_ReportError(CRYPTO_MODULE_ID, 0U, CRYPTO_API_ID_KEY_ELEMENT_SET, CRYPTO_E_PARAM_POINTER);
+        (void)Det_ReportError(CRYPTO_MODULE_ID, 0U, CRYPTO_API_ID_KEY_ELEMENT_SET, CRYPTO_E_PARAM_POINTER);
         return E_NOT_OK;
     }
 
@@ -216,12 +219,13 @@ Std_ReturnType Crypto_KeyElementSet(uint32 cryptoKeyId, uint32 keyElementId,
      * 変更しない。 */
     if (keyLength != CRYPTO_AES128_KEY_SIZE)
     {
-        Det_ReportError(CRYPTO_MODULE_ID, 0U, CRYPTO_API_ID_KEY_ELEMENT_SET, CRYPTO_E_PARAM_VALUE);
+        (void)Det_ReportError(CRYPTO_MODULE_ID, 0U, CRYPTO_API_ID_KEY_ELEMENT_SET, CRYPTO_E_PARAM_VALUE);
         return CRYPTO_E_KEY_SIZE_MISMATCH;
     }
 
-    for (uint32 b = 0U; b < CRYPTO_AES128_KEY_SIZE; b++)
+    for (uint32 b = 0U; b < CRYPTO_AES128_KEY_SIZE; b++) {
         Crypto_KeyStore[cryptoKeyId][b] = keyPtr[b];
+    }
 
     /* [SWS_KeyM_00016] 相当: 鍵内容を書き換えた直後は無効化し、
      * Crypto_KeySetValid() が呼ばれるまで ProcessJob() での使用を拒否する。 */
@@ -239,19 +243,19 @@ Std_ReturnType Crypto_KeyElementGet(uint32 cryptoKeyId, uint32 keyElementId,
 {
     if (!Crypto_Initialized)
     {
-        Det_ReportError(CRYPTO_MODULE_ID, 0U, CRYPTO_API_ID_KEY_ELEMENT_GET, CRYPTO_E_UNINIT);
+        (void)Det_ReportError(CRYPTO_MODULE_ID, 0U, CRYPTO_API_ID_KEY_ELEMENT_GET, CRYPTO_E_UNINIT);
         return E_NOT_OK;
     }
 
-    if (cryptoKeyId >= CRYPTO_KEY_COUNT || keyElementId != CRYPTO_KEY_ELEMENT_ID_CIPHER_KEY)
+    if ((cryptoKeyId >= CRYPTO_KEY_COUNT) || (keyElementId != CRYPTO_KEY_ELEMENT_ID_CIPHER_KEY))
     {
-        Det_ReportError(CRYPTO_MODULE_ID, 0U, CRYPTO_API_ID_KEY_ELEMENT_GET, CRYPTO_E_PARAM_HANDLE);
+        (void)Det_ReportError(CRYPTO_MODULE_ID, 0U, CRYPTO_API_ID_KEY_ELEMENT_GET, CRYPTO_E_PARAM_HANDLE);
         return E_NOT_OK;
     }
 
-    if (resultPtr == NULL || resultLengthPtr == NULL)
+    if ((resultPtr == NULL) || (resultLengthPtr == NULL))
     {
-        Det_ReportError(CRYPTO_MODULE_ID, 0U, CRYPTO_API_ID_KEY_ELEMENT_GET, CRYPTO_E_PARAM_POINTER);
+        (void)Det_ReportError(CRYPTO_MODULE_ID, 0U, CRYPTO_API_ID_KEY_ELEMENT_GET, CRYPTO_E_PARAM_POINTER);
         return E_NOT_OK;
     }
 
@@ -265,17 +269,18 @@ Std_ReturnType Crypto_KeyElementGet(uint32 cryptoKeyId, uint32 keyElementId,
      * E_NOT_OK のままとする。 */
     if (*resultLengthPtr < CRYPTO_AES128_KEY_SIZE)
     {
-        Det_ReportError(CRYPTO_MODULE_ID, 0U, CRYPTO_API_ID_KEY_ELEMENT_GET, CRYPTO_E_PARAM_VALUE);
+        (void)Det_ReportError(CRYPTO_MODULE_ID, 0U, CRYPTO_API_ID_KEY_ELEMENT_GET, CRYPTO_E_PARAM_VALUE);
         return CRYPTO_E_SMALL_BUFFER;
     }
     if (*resultLengthPtr != CRYPTO_AES128_KEY_SIZE)
     {
-        Det_ReportError(CRYPTO_MODULE_ID, 0U, CRYPTO_API_ID_KEY_ELEMENT_GET, CRYPTO_E_PARAM_VALUE);
+        (void)Det_ReportError(CRYPTO_MODULE_ID, 0U, CRYPTO_API_ID_KEY_ELEMENT_GET, CRYPTO_E_PARAM_VALUE);
         return E_NOT_OK;
     }
 
-    for (uint32 b = 0U; b < CRYPTO_AES128_KEY_SIZE; b++)
+    for (uint32 b = 0U; b < CRYPTO_AES128_KEY_SIZE; b++) {
         resultPtr[b] = Crypto_KeyStore[cryptoKeyId][b];
+    }
 
     *resultLengthPtr = CRYPTO_AES128_KEY_SIZE;
     return E_OK;
@@ -289,13 +294,13 @@ Std_ReturnType Crypto_KeySetValid(uint32 cryptoKeyId)
 {
     if (!Crypto_Initialized)
     {
-        Det_ReportError(CRYPTO_MODULE_ID, 0U, CRYPTO_API_ID_KEY_SET_VALID, CRYPTO_E_UNINIT);
+        (void)Det_ReportError(CRYPTO_MODULE_ID, 0U, CRYPTO_API_ID_KEY_SET_VALID, CRYPTO_E_UNINIT);
         return E_NOT_OK;
     }
 
     if (cryptoKeyId >= CRYPTO_KEY_COUNT)
     {
-        Det_ReportError(CRYPTO_MODULE_ID, 0U, CRYPTO_API_ID_KEY_SET_VALID, CRYPTO_E_PARAM_HANDLE);
+        (void)Det_ReportError(CRYPTO_MODULE_ID, 0U, CRYPTO_API_ID_KEY_SET_VALID, CRYPTO_E_PARAM_HANDLE);
         return E_NOT_OK;
     }
 

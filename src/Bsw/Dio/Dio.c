@@ -210,7 +210,7 @@ void Dio_GetVersionInfo(Std_VersionInfoType* VersionInfo)
 {
     if (VersionInfo == NULL)
     {
-        Det_ReportError(DIO_MODULE_ID, 0U, DIO_API_ID_GET_VERSION_INFO, DIO_E_PARAM_POINTER);
+        (void)Det_ReportError(DIO_MODULE_ID, 0U, DIO_API_ID_GET_VERSION_INFO, DIO_E_PARAM_POINTER);
         return;
     }
 
@@ -319,7 +319,7 @@ static const Dio_ChannelType* Dio_ResolvePortOrReportDet(Dio_PortType PortId, ui
     const Dio_ChannelType* channels = Dio_GetPortChannels(PortId, widthOut);
     if (channels == NULL)
     {
-        Det_ReportError(DIO_MODULE_ID, 0U, ApiId, DIO_E_PARAM_INVALID_PORT_ID);
+        (void)Det_ReportError(DIO_MODULE_ID, 0U, ApiId, DIO_E_PARAM_INVALID_PORT_ID);
     }
     return channels;
 }
@@ -383,14 +383,14 @@ static const Dio_ChannelType* Dio_ResolveGroupOrReportDet(const Dio_ChannelGroup
 {
     if (group == NULL)
     {
-        Det_ReportError(DIO_MODULE_ID, 0U, ApiId, DIO_E_PARAM_POINTER);
+        (void)Det_ReportError(DIO_MODULE_ID, 0U, ApiId, DIO_E_PARAM_POINTER);
         return NULL;
     }
 
     const Dio_ChannelType* channels = Dio_ResolveGroupChannels(group, widthOut, shiftedMaskOut);
     if (channels == NULL)
     {
-        Det_ReportError(DIO_MODULE_ID, 0U, ApiId, DIO_E_PARAM_INVALID_GROUP);
+        (void)Det_ReportError(DIO_MODULE_ID, 0U, ApiId, DIO_E_PARAM_INVALID_GROUP);
     }
     return channels;
 }

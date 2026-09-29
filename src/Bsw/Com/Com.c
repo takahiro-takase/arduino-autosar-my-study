@@ -343,19 +343,19 @@ void Com_Init(const Com_ConfigType* config)
     if (config == NULL)
     {
         DET_LOGE(TAG, "Init E: config NULL");
-        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_INIT, COM_E_PARAM_POINTER);
+        (void)Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_INIT, COM_E_PARAM_POINTER);
         return;
     }
     if (config->RxIPduCount > COM_RX_IPDU_MAX)
     {
         DET_LOGE(TAG, "Init E: RxIPduCount>max");
-        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_INIT, COM_E_INIT_FAILED);
+        (void)Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_INIT, COM_E_INIT_FAILED);
         return;
     }
     if (config->TxIPduCount > COM_TX_IPDU_MAX)
     {
         DET_LOGE(TAG, "Init E: TxIPduCount>max");
-        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_INIT, COM_E_INIT_FAILED);
+        (void)Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_INIT, COM_E_INIT_FAILED);
         return;
     }
 
@@ -415,15 +415,17 @@ void Com_Init(const Com_ConfigType* config)
     for (uint8 i = 0; i < config->RxIPduCount; i++)
     {
         const Com_IPduConfigType* ipdu = &config->RxIPdus[i];
-        if (ipdu->IpduGroupId != COM_IPDU_GROUP_NONE)
+        if (ipdu->IpduGroupId != COM_IPDU_GROUP_NONE) {
             Com_RxIPduStarted[ipdu->IPduId] = 0U;
+        }
         Com_RxIPduIsGroup[ipdu->IPduId] = ipdu->IsSignalGroup;
     }
     for (uint8 i = 0; i < config->TxIPduCount; i++)
     {
         const Com_IPduConfigType* ipdu = &config->TxIPdus[i];
-        if (ipdu->IpduGroupId != COM_IPDU_GROUP_NONE)
+        if (ipdu->IpduGroupId != COM_IPDU_GROUP_NONE) {
             Com_TxIPduStarted[ipdu->IPduId] = 0U;
+        }
     }
 
     /* [SWS_Com_00217]: 上のゼロクリアに続けて、I-PDU バッファをビット単位で
@@ -438,15 +440,17 @@ void Com_Init(const Com_ConfigType* config)
     {
         const Com_IPduConfigType* ipdu = &config->RxIPdus[i];
         Com_PackInitValues(Com_RxBuffer[ipdu->IPduId], ipdu->IPduId, COM_SIGNAL_DIRECTION_RX);
-        if (ipdu->IsSignalGroup != 0U)
+        if (ipdu->IsSignalGroup != 0U) {
             Com_PackInitValues(Com_RxShadowBuffer[ipdu->IPduId], ipdu->IPduId, COM_SIGNAL_DIRECTION_RX);
+        }
     }
     for (uint8 i = 0; i < config->TxIPduCount; i++)
     {
         const Com_IPduConfigType* ipdu = &config->TxIPdus[i];
         Com_PackInitValues(Com_TxBuffer[ipdu->IPduId], ipdu->IPduId, COM_SIGNAL_DIRECTION_TX);
-        if (ipdu->IsSignalGroup != 0U)
+        if (ipdu->IsSignalGroup != 0U) {
             Com_PackInitValues(Com_TxShadowBuffer[ipdu->IPduId], ipdu->IPduId, COM_SIGNAL_DIRECTION_TX);
+        }
     }
 
     for (uint8 s = 0; s < config->SignalCount; s++)
@@ -498,14 +502,16 @@ void Com_DeInit(void)
 {
     if (Com_ConfigPtr == NULL)
     {
-        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_DEINIT, COM_E_UNINIT);
+        (void)Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_DEINIT, COM_E_UNINIT);
         return;
     }
 
-    for (uint8 i = 0U; i < COM_RX_IPDU_MAX; i++)
+    for (uint8 i = 0U; i < COM_RX_IPDU_MAX; i++) {
         Com_RxIPduStarted[i] = 0U;
-    for (uint8 i = 0U; i < COM_TX_IPDU_MAX; i++)
+    }
+    for (uint8 i = 0U; i < COM_TX_IPDU_MAX; i++) {
         Com_TxIPduStarted[i] = 0U;
+    }
 
     Com_ConfigPtr = NULL;
 
@@ -542,7 +548,7 @@ void Com_IpduGroupStart(Com_IpduGroupIdType IpduGroupId, boolean initialize)
 {
     if (Com_ConfigPtr == NULL)
     {
-        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_IPDU_GROUP_START, COM_E_UNINIT);
+        (void)Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_IPDU_GROUP_START, COM_E_UNINIT);
         return;
     }
 
@@ -551,8 +557,9 @@ void Com_IpduGroupStart(Com_IpduGroupIdType IpduGroupId, boolean initialize)
     for (uint8 i = 0U; i < Com_ConfigPtr->RxIPduCount; i++)
     {
         const Com_IPduConfigType* ipdu = &Com_ConfigPtr->RxIPdus[i];
-        if (ipdu->IpduGroupId != IpduGroupId)
+        if (ipdu->IpduGroupId != IpduGroupId) {
             continue;
+        }
 
         const Com_IPduIdType id = ipdu->IPduId;
         Com_RxIPduStarted[id] = 1U;
@@ -574,8 +581,9 @@ void Com_IpduGroupStart(Com_IpduGroupIdType IpduGroupId, boolean initialize)
             for (uint8 s = 0U; s < Com_ConfigPtr->SignalCount; s++)
             {
                 const Com_SignalConfigType* rsig = &Com_ConfigPtr->Signals[s];
-                if (rsig->Direction == COM_SIGNAL_DIRECTION_RX && rsig->IPduId == id)
+                if ((rsig->Direction == COM_SIGNAL_DIRECTION_RX) && (rsig->IPduId == id)) {
                     Com_RxLastValidValue[s] = rsig->InitValue;
+                }
             }
 
             if (ipdu->IsSignalGroup != 0U)
@@ -594,8 +602,9 @@ void Com_IpduGroupStart(Com_IpduGroupIdType IpduGroupId, boolean initialize)
     for (uint8 i = 0U; i < Com_ConfigPtr->TxIPduCount; i++)
     {
         const Com_IPduConfigType* ipdu = &Com_ConfigPtr->TxIPdus[i];
-        if (ipdu->IpduGroupId != IpduGroupId)
+        if (ipdu->IpduGroupId != IpduGroupId) {
             continue;
+        }
 
         const Com_IPduIdType id = ipdu->IPduId;
         Com_TxIPduStarted[id] = 1U;
@@ -619,8 +628,9 @@ void Com_IpduGroupStart(Com_IpduGroupIdType IpduGroupId, boolean initialize)
         Com_TxUsingFirstTimeout[id]  = 1U;
 
         /* [SWS_Com_00787] 項目4: update-bit をクリアする。 */
-        if (ipdu->UpdateBitPosition != 0xFFU)
+        if (ipdu->UpdateBitPosition != 0xFFU) {
             Com_PackSignal(Com_TxBuffer[id], ipdu->UpdateBitPosition, 1U, COM_BIG_ENDIAN, 0U);
+        }
 
         if (initialize)
         {
@@ -635,8 +645,9 @@ void Com_IpduGroupStart(Com_IpduGroupIdType IpduGroupId, boolean initialize)
             for (uint8 s = 0U; s < Com_ConfigPtr->SignalCount; s++)
             {
                 const Com_SignalConfigType* tsig = &Com_ConfigPtr->Signals[s];
-                if (tsig->Direction == COM_SIGNAL_DIRECTION_TX && tsig->IPduId == id)
+                if ((tsig->Direction == COM_SIGNAL_DIRECTION_TX) && (tsig->IPduId == id)) {
                     Com_FilterLastValue[s] = tsig->InitValue;
+                }
             }
 
             if (ipdu->IsSignalGroup != 0U)
@@ -693,15 +704,16 @@ void Com_IpduGroupStop(Com_IpduGroupIdType IpduGroupId)
 {
     if (Com_ConfigPtr == NULL)
     {
-        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_IPDU_GROUP_STOP, COM_E_UNINIT);
+        (void)Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_IPDU_GROUP_STOP, COM_E_UNINIT);
         return;
     }
 
     for (uint8 i = 0U; i < Com_ConfigPtr->RxIPduCount; i++)
     {
         const Com_IPduConfigType* ipdu = &Com_ConfigPtr->RxIPdus[i];
-        if (ipdu->IpduGroupId != IpduGroupId)
+        if (ipdu->IpduGroupId != IpduGroupId) {
             continue;
+        }
 
         /* [SWS_Com_00684]/[SWS_Com_00685]: 受信処理・デッドライン監視の両方を
          * 無効化する。Com_RxTimedOut は意図的にクリアしない（Started==0 の間
@@ -715,8 +727,9 @@ void Com_IpduGroupStop(Com_IpduGroupIdType IpduGroupId)
     for (uint8 i = 0U; i < Com_ConfigPtr->TxIPduCount; i++)
     {
         const Com_IPduConfigType* ipdu = &Com_ConfigPtr->TxIPdus[i];
-        if (ipdu->IpduGroupId != IpduGroupId)
+        if (ipdu->IpduGroupId != IpduGroupId) {
             continue;
+        }
 
         const Com_IPduIdType id = ipdu->IPduId;
         Com_TxIPduStarted[id] = 0U;
@@ -729,7 +742,7 @@ void Com_IpduGroupStop(Com_IpduGroupIdType IpduGroupId)
          * コメント参照）。呼び出し後は確認待ちでなくなるためフラグをクリア
          * する（後から届く Com_TxConfirmation() は Com_TxIPduStarted[id]==0
          * により無視される、上記参照）。 */
-        if (Com_TxConfPending[id])
+        if ((Com_TxConfPending[id]) != 0U)
         {
             Com_InvokeTxNotification(ipdu, id, COM_TX_NOTIFY_ERR);
             Com_TxConfPending[id] = 0U;
@@ -803,11 +816,11 @@ void Com_EnableReceptionDM(Com_IpduGroupIdType IpduGroupId)
 {
     if (Com_ConfigPtr == NULL)
     {
-        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_ENABLE_RECEPTION_DM, COM_E_UNINIT);
+        (void)Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_ENABLE_RECEPTION_DM, COM_E_UNINIT);
         return;
     }
 
-    if (Com_IpduGroupHasTxMember(IpduGroupId))
+    if ((Com_IpduGroupHasTxMember(IpduGroupId)) != 0U)
     {
         /* [SWS_Com_00534]: 要求全体を無視する（RX 側も一切変更しない）。 */
         DET_LOGW(TAG, "EnableReceptionDM grp=%u ignored: group contains TX I-PDU(s)",
@@ -820,8 +833,9 @@ void Com_EnableReceptionDM(Com_IpduGroupIdType IpduGroupId)
     for (uint8 i = 0U; i < Com_ConfigPtr->RxIPduCount; i++)
     {
         const Com_IPduConfigType* ipdu = &Com_ConfigPtr->RxIPdus[i];
-        if (ipdu->IpduGroupId != IpduGroupId)
+        if (ipdu->IpduGroupId != IpduGroupId) {
             continue;
+        }
 
         Com_RxDmEnabled[ipdu->IPduId] = 1U;
 
@@ -863,11 +877,11 @@ void Com_DisableReceptionDM(Com_IpduGroupIdType IpduGroupId)
 {
     if (Com_ConfigPtr == NULL)
     {
-        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_DISABLE_RECEPTION_DM, COM_E_UNINIT);
+        (void)Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_DISABLE_RECEPTION_DM, COM_E_UNINIT);
         return;
     }
 
-    if (Com_IpduGroupHasTxMember(IpduGroupId))
+    if ((Com_IpduGroupHasTxMember(IpduGroupId)) != 0U)
     {
         /* [SWS_Com_00534]: 要求全体を無視する（RX 側も一切変更しない）。 */
         DET_LOGW(TAG, "DisableReceptionDM grp=%u ignored: group contains TX I-PDU(s)",
@@ -878,8 +892,9 @@ void Com_DisableReceptionDM(Com_IpduGroupIdType IpduGroupId)
     for (uint8 i = 0U; i < Com_ConfigPtr->RxIPduCount; i++)
     {
         const Com_IPduConfigType* ipdu = &Com_ConfigPtr->RxIPdus[i];
-        if (ipdu->IpduGroupId != IpduGroupId)
+        if (ipdu->IpduGroupId != IpduGroupId) {
             continue;
+        }
 
         Com_RxDmEnabled[ipdu->IPduId] = 0U;
 
@@ -928,13 +943,13 @@ void Com_GetVersionInfo(Std_VersionInfoType* versioninfo)
 {
     if (Com_ConfigPtr == NULL)
     {
-        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_GET_VERSION_INFO, COM_E_UNINIT);
+        (void)Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_GET_VERSION_INFO, COM_E_UNINIT);
         return;
     }
 
     if (versioninfo == NULL)
     {
-        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_GET_VERSION_INFO, COM_E_PARAM_POINTER);
+        (void)Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_GET_VERSION_INFO, COM_E_PARAM_POINTER);
         return;
     }
 
@@ -1019,12 +1034,12 @@ uint8 Com_SendSignal(Com_SignalIdType SignalId, const void* SignalDataPtr)
 {
     if (Com_ConfigPtr == NULL)
     {
-        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_SEND_SIGNAL, COM_E_UNINIT);
+        (void)Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_SEND_SIGNAL, COM_E_UNINIT);
         return E_NOT_OK;
     }
     if (SignalDataPtr == NULL)
     {
-        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_SEND_SIGNAL, COM_E_PARAM_POINTER);
+        (void)Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_SEND_SIGNAL, COM_E_PARAM_POINTER);
         return E_NOT_OK;
     }
 
@@ -1046,7 +1061,7 @@ uint8 Com_SendSignal(Com_SignalIdType SignalId, const void* SignalDataPtr)
         {
             DET_LOGE(TAG, "SendSignal E: sig=%u IPduId=%u out of range (max=%u)",
                      (unsigned)SignalId, (unsigned)sig->IPduId, (unsigned)COM_TX_IPDU_MAX);
-            Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_SEND_SIGNAL, COM_E_PARAM);
+            (void)Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_SEND_SIGNAL, COM_E_PARAM);
             return E_NOT_OK;
         }
 
@@ -1055,7 +1070,7 @@ uint8 Com_SendSignal(Com_SignalIdType SignalId, const void* SignalDataPtr)
         {
             DET_LOGE(TAG, "SendSignal E: sig=%u IPduId=%u not a registered TX I-PDU",
                      (unsigned)SignalId, (unsigned)sig->IPduId);
-            Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_SEND_SIGNAL, COM_E_PARAM);
+            (void)Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_SEND_SIGNAL, COM_E_PARAM);
             return E_NOT_OK;
         }
 
@@ -1084,8 +1099,8 @@ uint8 Com_SendSignal(Com_SignalIdType SignalId, const void* SignalDataPtr)
              * しない。TMS 再評価は Com_SendSignalGroup() 側で行う）。
              * PENDING のメンバーは Com_GroupTriggerPending へ一切書き込まない
              * （＝自身の変化だけでは送信を引き起こさない。SWS_Com_00743）。 */
-            if (sig->TransferProperty == COM_TRANSFER_PROPERTY_TRIGGERED_ON_CHANGE
-                && value != Com_FilterLastValue[s])
+            if ((sig->TransferProperty == COM_TRANSFER_PROPERTY_TRIGGERED_ON_CHANGE)
+                && (value != Com_FilterLastValue[s]))
             {
                 Com_GroupTriggerPending[sig->IPduId] = 1U;
             }
@@ -1150,8 +1165,9 @@ uint8 Com_SendSignal(Com_SignalIdType SignalId, const void* SignalDataPtr)
          * EngineSpeed/RunLamp 等のミラーシグナルを追加した際、それらの
          * 変化だけで EngineState 用の update-bit が誤って立つ不具合が
          * 見つかり対応した）。 */
-        if (passesFilter && ipdu->UpdateBitPosition != 0xFFU && sig->UpdateBitContributor == 1U)
+        if (passesFilter && (ipdu->UpdateBitPosition != 0xFFU) && (sig->UpdateBitContributor == 1U)) {
             Com_PackSignal(Com_TxBuffer[sig->IPduId], ipdu->UpdateBitPosition, 1U, COM_BIG_ENDIAN, 1U);
+        }
 
         /* [SWS_Com_00334]/Table 3: I-PDU Group 停止中もバッファ更新・TMS/
          * フィルタ評価は続けるが、戻り値は COM_SERVICE_NOT_AVAILABLE にする。 */
@@ -1159,7 +1175,7 @@ uint8 Com_SendSignal(Com_SignalIdType SignalId, const void* SignalDataPtr)
     }
 
     DET_LOGE(TAG, "SendSignal E: sig=%u not found", (unsigned)SignalId);
-    Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_SEND_SIGNAL, COM_E_PARAM);
+    (void)Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_SEND_SIGNAL, COM_E_PARAM);
     return E_NOT_OK;
 }
 
@@ -1232,12 +1248,12 @@ uint8 Com_ReceiveSignal(Com_SignalIdType SignalId, void* SignalDataPtr)
 {
     if (Com_ConfigPtr == NULL)
     {
-        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_RECEIVE_SIGNAL, COM_E_UNINIT);
+        (void)Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_RECEIVE_SIGNAL, COM_E_UNINIT);
         return E_NOT_OK;
     }
     if (SignalDataPtr == NULL)
     {
-        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_RECEIVE_SIGNAL, COM_E_PARAM_POINTER);
+        (void)Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_RECEIVE_SIGNAL, COM_E_PARAM_POINTER);
         return E_NOT_OK;
     }
 
@@ -1258,7 +1274,7 @@ uint8 Com_ReceiveSignal(Com_SignalIdType SignalId, void* SignalDataPtr)
         {
             DET_LOGE(TAG, "ReceiveSignal E: sig=%u IPduId=%u out of range (max=%u)",
                      (unsigned)SignalId, (unsigned)sig->IPduId, (unsigned)COM_RX_IPDU_MAX);
-            Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_RECEIVE_SIGNAL, COM_E_PARAM);
+            (void)Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_RECEIVE_SIGNAL, COM_E_PARAM);
             return E_NOT_OK;
         }
 
@@ -1267,7 +1283,7 @@ uint8 Com_ReceiveSignal(Com_SignalIdType SignalId, void* SignalDataPtr)
         {
             DET_LOGE(TAG, "ReceiveSignal E: sig=%u IPduId=%u not a registered RX I-PDU",
                      (unsigned)SignalId, (unsigned)sig->IPduId);
-            Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_RECEIVE_SIGNAL, COM_E_PARAM);
+            (void)Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_RECEIVE_SIGNAL, COM_E_PARAM);
             return E_NOT_OK;
         }
 
@@ -1367,8 +1383,8 @@ uint8 Com_ReceiveSignal(Com_SignalIdType SignalId, void* SignalDataPtr)
          * 同じ状態を指す。1 つのシグナルに両方を設定する構成は想定していない）。
          * FilterRejectCbk の実呼び出しは Com_RxInvalidNotifyPending と同じ理由
          * で次回 Com_MainFunctionRx() まで遅延する。 */
-        if (sig->FilterAlgorithm == COM_FILTER_NEW_IS_WITHIN
-            && (value < sig->FilterMin || value > sig->FilterMax))
+        if ((sig->FilterAlgorithm == COM_FILTER_NEW_IS_WITHIN)
+            && ((value < sig->FilterMin) || (value > sig->FilterMax)))
         {
             Com_RxFilterRejectPending[s] = 1U;
 
@@ -1382,7 +1398,7 @@ uint8 Com_ReceiveSignal(Com_SignalIdType SignalId, void* SignalDataPtr)
     }
 
     DET_LOGE(TAG, "ReceiveSignal E: sig=%u not found", (unsigned)SignalId);
-    Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_RECEIVE_SIGNAL, COM_E_PARAM);
+    (void)Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_RECEIVE_SIGNAL, COM_E_PARAM);
     return E_NOT_OK;
 }
 
@@ -1447,7 +1463,7 @@ uint8 Com_SendSignalGroup(Com_SignalGroupIdType SignalGroupId)
 {
     if (Com_ConfigPtr == NULL)
     {
-        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_SEND_SIGNAL_GROUP, COM_E_UNINIT);
+        (void)Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_SEND_SIGNAL_GROUP, COM_E_UNINIT);
         return E_NOT_OK;
     }
 
@@ -1459,16 +1475,16 @@ uint8 Com_SendSignalGroup(Com_SignalGroupIdType SignalGroupId)
     {
         DET_LOGE(TAG, "SendSignalGroup E: SignalGroupId=%u out of range (max=%u)",
                  (unsigned)SignalGroupId, (unsigned)COM_TX_IPDU_MAX);
-        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_SEND_SIGNAL_GROUP, COM_E_PARAM);
+        (void)Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_SEND_SIGNAL_GROUP, COM_E_PARAM);
         return E_NOT_OK;
     }
 
     const Com_IPduConfigType* ipdu = Com_FindTxIPdu(SignalGroupId);
-    if (ipdu == NULL || ipdu->IsSignalGroup == 0U)
+    if ((ipdu == NULL) || (ipdu->IsSignalGroup == 0U))
     {
         DET_LOGE(TAG, "SendSignalGroup E: SignalGroupId=%u not found or not a Signal Group",
                  (unsigned)SignalGroupId);
-        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_SEND_SIGNAL_GROUP, COM_E_PARAM);
+        (void)Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_SEND_SIGNAL_GROUP, COM_E_PARAM);
         return E_NOT_OK;
     }
 
@@ -1523,7 +1539,7 @@ uint8 Com_SendSignalGroup(Com_SignalGroupIdType SignalGroupId)
      * 同種コメント・README「Update Bit」節参照。TMS 遷移のみによる即時送信
      * （tmsChanged）はグループメンバーの値更新を意味しないため、update-bit
      * の条件には含めない（groupTriggered のみで判定する）。 */
-    if (groupTriggered && ipdu->UpdateBitPosition != 0xFFU)
+    if (groupTriggered && (ipdu->UpdateBitPosition != 0xFFU))
     {
         Com_PackSignal(Com_TxBuffer[SignalGroupId], ipdu->UpdateBitPosition, 1U, COM_BIG_ENDIAN, 1U);
     }
@@ -1606,7 +1622,7 @@ uint8 Com_ReceiveSignalGroup(Com_SignalGroupIdType SignalGroupId)
 {
     if (Com_ConfigPtr == NULL)
     {
-        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_RECEIVE_SIGNAL_GROUP, COM_E_UNINIT);
+        (void)Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_RECEIVE_SIGNAL_GROUP, COM_E_UNINIT);
         return E_NOT_OK;
     }
 
@@ -1618,16 +1634,16 @@ uint8 Com_ReceiveSignalGroup(Com_SignalGroupIdType SignalGroupId)
     {
         DET_LOGE(TAG, "ReceiveSignalGroup E: SignalGroupId=%u out of range (max=%u)",
                  (unsigned)SignalGroupId, (unsigned)COM_RX_IPDU_MAX);
-        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_RECEIVE_SIGNAL_GROUP, COM_E_PARAM);
+        (void)Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_RECEIVE_SIGNAL_GROUP, COM_E_PARAM);
         return E_NOT_OK;
     }
 
     const Com_IPduConfigType* ipdu = Com_FindRxIPdu(SignalGroupId);
-    if (ipdu == NULL || ipdu->IsSignalGroup == 0U)
+    if ((ipdu == NULL) || (ipdu->IsSignalGroup == 0U))
     {
         DET_LOGE(TAG, "ReceiveSignalGroup E: SignalGroupId=%u not found or not a Signal Group",
                  (unsigned)SignalGroupId);
-        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_RECEIVE_SIGNAL_GROUP, COM_E_PARAM);
+        (void)Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_RECEIVE_SIGNAL_GROUP, COM_E_PARAM);
         return E_NOT_OK;
     }
 
@@ -1643,19 +1659,22 @@ uint8 Com_ReceiveSignalGroup(Com_SignalGroupIdType SignalGroupId)
     {
         const uint32 updateBit = Com_UnpackSignal(Com_RxBuffer[SignalGroupId],
                                                     ipdu->UpdateBitPosition, 1U, COM_BIG_ENDIAN);
-        if (updateBit == 0U)
+        if (updateBit == 0U) {
             return Com_ServiceResult(started);
+        }
     }
 
     /* [SWS_Com_00461]: 停止中でも常にコピーする（「最後に受信した値」を
      * シャドウバッファへ反映し続ける）。 */
-    for (uint8 b = 0U; b < ipdu->DLC; b++)
+    for (uint8 b = 0U; b < ipdu->DLC; b++) {
         Com_RxShadowBuffer[SignalGroupId][b] = Com_RxBuffer[SignalGroupId][b];
+    }
 
     Com_RxShadowTimedOut[SignalGroupId] = Com_RxTimedOut[SignalGroupId];
 
-    if (!started)
+    if (!started) {
         return COM_SERVICE_NOT_AVAILABLE;
+    }
 
     return Com_RxShadowTimedOut[SignalGroupId] ? E_NOT_OK : E_OK;
 }
@@ -1731,12 +1750,12 @@ uint8 Com_SendSignalGroupArray(Com_SignalGroupIdType SignalGroupId, const uint8*
 {
     if (Com_ConfigPtr == NULL)
     {
-        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_SEND_SIGNAL_GROUP_ARRAY, COM_E_UNINIT);
+        (void)Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_SEND_SIGNAL_GROUP_ARRAY, COM_E_UNINIT);
         return E_NOT_OK;
     }
     if (DataPtr == NULL)
     {
-        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_SEND_SIGNAL_GROUP_ARRAY, COM_E_PARAM_POINTER);
+        (void)Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_SEND_SIGNAL_GROUP_ARRAY, COM_E_PARAM_POINTER);
         return E_NOT_OK;
     }
 
@@ -1747,16 +1766,16 @@ uint8 Com_SendSignalGroupArray(Com_SignalGroupIdType SignalGroupId, const uint8*
     {
         DET_LOGE(TAG, "SendSignalGroupArray E: SignalGroupId=%u out of range (max=%u)",
                  (unsigned)SignalGroupId, (unsigned)COM_TX_IPDU_MAX);
-        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_SEND_SIGNAL_GROUP_ARRAY, COM_E_PARAM);
+        (void)Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_SEND_SIGNAL_GROUP_ARRAY, COM_E_PARAM);
         return E_NOT_OK;
     }
 
     const Com_IPduConfigType* ipdu = Com_FindTxIPdu(SignalGroupId);
-    if (ipdu == NULL || ipdu->IsSignalGroup == 0U)
+    if ((ipdu == NULL) || (ipdu->IsSignalGroup == 0U))
     {
         DET_LOGE(TAG, "SendSignalGroupArray E: SignalGroupId=%u not found or not a Signal Group",
                  (unsigned)SignalGroupId);
-        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_SEND_SIGNAL_GROUP_ARRAY, COM_E_PARAM);
+        (void)Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_SEND_SIGNAL_GROUP_ARRAY, COM_E_PARAM);
         return E_NOT_OK;
     }
 
@@ -1773,7 +1792,7 @@ uint8 Com_SendSignalGroupArray(Com_SignalGroupIdType SignalGroupId, const uint8*
     for (uint8 s = 0U; s < Com_ConfigPtr->SignalCount; s++)
     {
         const Com_SignalConfigType* sig = &Com_ConfigPtr->Signals[s];
-        if (sig->Direction == COM_SIGNAL_DIRECTION_TX && sig->IPduId == SignalGroupId)
+        if ((sig->Direction == COM_SIGNAL_DIRECTION_TX) && (sig->IPduId == SignalGroupId))
         {
             Com_FilterLastValue[s] = Com_UnpackSignal(Com_TxBuffer[SignalGroupId],
                                                         sig->BitPosition, sig->BitSize, sig->Endian);
@@ -1845,12 +1864,12 @@ uint8 Com_ReceiveSignalGroupArray(Com_SignalGroupIdType SignalGroupId, uint8* Da
 {
     if (Com_ConfigPtr == NULL)
     {
-        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_RECEIVE_SIGNAL_GROUP_ARRAY, COM_E_UNINIT);
+        (void)Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_RECEIVE_SIGNAL_GROUP_ARRAY, COM_E_UNINIT);
         return E_NOT_OK;
     }
     if (DataPtr == NULL)
     {
-        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_RECEIVE_SIGNAL_GROUP_ARRAY, COM_E_PARAM_POINTER);
+        (void)Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_RECEIVE_SIGNAL_GROUP_ARRAY, COM_E_PARAM_POINTER);
         return E_NOT_OK;
     }
 
@@ -1858,12 +1877,13 @@ uint8 Com_ReceiveSignalGroupArray(Com_SignalGroupIdType SignalGroupId, uint8* Da
     if (ipdu == NULL)
     {
         DET_LOGE(TAG, "ReceiveSignalGroupArray E: SignalGroupId=%u not found", (unsigned)SignalGroupId);
-        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_RECEIVE_SIGNAL_GROUP_ARRAY, COM_E_PARAM);
+        (void)Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_RECEIVE_SIGNAL_GROUP_ARRAY, COM_E_PARAM);
         return E_NOT_OK;
     }
 
-    for (uint8 b = 0; b < ipdu->DLC; b++)
+    for (uint8 b = 0; b < ipdu->DLC; b++) {
         DataPtr[b] = Com_RxBuffer[SignalGroupId][b];
+    }
 
     /* [SWS_Com_00857]/Table 3: I-PDU Group 停止中もコピーは行うが、
      * 戻り値は COM_SERVICE_NOT_AVAILABLE にする。 */
@@ -1913,7 +1933,7 @@ uint8 Com_InvalidateSignal(Com_SignalIdType SignalId)
 {
     if (Com_ConfigPtr == NULL)
     {
-        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_INVALIDATE_SIGNAL, COM_E_UNINIT);
+        (void)Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_INVALIDATE_SIGNAL, COM_E_UNINIT);
         return E_NOT_OK;
     }
 
@@ -1924,7 +1944,7 @@ uint8 Com_InvalidateSignal(Com_SignalIdType SignalId)
          * シグナルを解決する必要があり、Com_SendSignal() 側の同種チェックを
          * 先取りする形になる（DET 報告の内容は Com_SendSignal() と同じ）。 */
         DET_LOGE(TAG, "InvalidateSignal E: sig=%u not found", (unsigned)SignalId);
-        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_INVALIDATE_SIGNAL, COM_E_PARAM);
+        (void)Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_INVALIDATE_SIGNAL, COM_E_PARAM);
         return E_NOT_OK;
     }
 
@@ -1940,7 +1960,7 @@ uint8 Com_InvalidateSignal(Com_SignalIdType SignalId)
          * 側は元々メンバー走査時に Direction==TX で絞っているため、この
          * チェックはそちらと対称にするための是正（/code-review 指摘）。 */
         DET_LOGE(TAG, "InvalidateSignal E: sig=%u is not a TX signal", (unsigned)SignalId);
-        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_INVALIDATE_SIGNAL, COM_E_PARAM);
+        (void)Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_INVALIDATE_SIGNAL, COM_E_PARAM);
         return E_NOT_OK;
     }
     if (sig->InvalidValueConfigured == 0U)
@@ -1997,7 +2017,7 @@ uint8 Com_InvalidateSignalGroup(Com_SignalGroupIdType SignalGroupId)
 {
     if (Com_ConfigPtr == NULL)
     {
-        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_INVALIDATE_SIGNAL_GROUP, COM_E_UNINIT);
+        (void)Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_INVALIDATE_SIGNAL_GROUP, COM_E_UNINIT);
         return E_NOT_OK;
     }
 
@@ -2005,24 +2025,24 @@ uint8 Com_InvalidateSignalGroup(Com_SignalGroupIdType SignalGroupId)
     {
         DET_LOGE(TAG, "InvalidateSignalGroup E: SignalGroupId=%u out of range (max=%u)",
                  (unsigned)SignalGroupId, (unsigned)COM_TX_IPDU_MAX);
-        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_INVALIDATE_SIGNAL_GROUP, COM_E_PARAM);
+        (void)Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_INVALIDATE_SIGNAL_GROUP, COM_E_PARAM);
         return E_NOT_OK;
     }
 
     const Com_IPduConfigType* ipdu = Com_FindTxIPdu(SignalGroupId);
-    if (ipdu == NULL || ipdu->IsSignalGroup == 0U)
+    if ((ipdu == NULL) || (ipdu->IsSignalGroup == 0U))
     {
         DET_LOGE(TAG, "InvalidateSignalGroup E: SignalGroupId=%u not found or not a Signal Group",
                  (unsigned)SignalGroupId);
-        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_INVALIDATE_SIGNAL_GROUP, COM_E_PARAM);
+        (void)Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_INVALIDATE_SIGNAL_GROUP, COM_E_PARAM);
         return E_NOT_OK;
     }
 
     for (uint8 s = 0U; s < Com_ConfigPtr->SignalCount; s++)
     {
         const Com_SignalConfigType* sig = &Com_ConfigPtr->Signals[s];
-        if (sig->Direction == COM_SIGNAL_DIRECTION_TX && sig->IPduId == SignalGroupId
-            && sig->InvalidValueConfigured == 0U)
+        if ((sig->Direction == COM_SIGNAL_DIRECTION_TX) && (sig->IPduId == SignalGroupId)
+            && (sig->InvalidValueConfigured == 0U))
         {
             /* [SWS_Com_00557] 原文どおり COM_SERVICE_NOT_AVAILABLE を返す
              * （Com_InvalidateSignal() の同種是正と対、2026-09-20）。 */
@@ -2036,7 +2056,7 @@ uint8 Com_InvalidateSignalGroup(Com_SignalGroupIdType SignalGroupId)
     for (uint8 s = 0U; s < Com_ConfigPtr->SignalCount; s++)
     {
         const Com_SignalConfigType* sig = &Com_ConfigPtr->Signals[s];
-        if (sig->Direction == COM_SIGNAL_DIRECTION_TX && sig->IPduId == SignalGroupId)
+        if ((sig->Direction == COM_SIGNAL_DIRECTION_TX) && (sig->IPduId == SignalGroupId))
         {
             (void)Com_SendSignal(sig->SignalId, &sig->InvalidValue);
         }
@@ -2096,7 +2116,7 @@ Std_ReturnType Com_TriggerIPDUSend(Com_IPduIdType PduId)
 {
     if (Com_ConfigPtr == NULL)
     {
-        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_TRIGGER_IPDU_SEND, COM_E_UNINIT);
+        (void)Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_TRIGGER_IPDU_SEND, COM_E_UNINIT);
         return E_NOT_OK;
     }
 
@@ -2104,7 +2124,7 @@ Std_ReturnType Com_TriggerIPDUSend(Com_IPduIdType PduId)
     {
         DET_LOGE(TAG, "TriggerIPDUSend E: PduId=%u out of range (max=%u)",
                  (unsigned)PduId, (unsigned)COM_TX_IPDU_MAX);
-        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_TRIGGER_IPDU_SEND, COM_E_PARAM);
+        (void)Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_TRIGGER_IPDU_SEND, COM_E_PARAM);
         return E_NOT_OK;
     }
 
@@ -2112,7 +2132,7 @@ Std_ReturnType Com_TriggerIPDUSend(Com_IPduIdType PduId)
     if (ipdu == NULL)
     {
         DET_LOGE(TAG, "TriggerIPDUSend E: PduId=%u not a registered TX I-PDU", (unsigned)PduId);
-        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_TRIGGER_IPDU_SEND, COM_E_PARAM);
+        (void)Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_TRIGGER_IPDU_SEND, COM_E_PARAM);
         return E_NOT_OK;
     }
 
@@ -2163,7 +2183,7 @@ void Com_SwitchIpduTxMode(Com_IPduIdType PduId, boolean Mode)
 {
     if (Com_ConfigPtr == NULL)
     {
-        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_SWITCH_IPDU_TX_MODE, COM_E_UNINIT);
+        (void)Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_SWITCH_IPDU_TX_MODE, COM_E_UNINIT);
         return;
     }
 
@@ -2171,7 +2191,7 @@ void Com_SwitchIpduTxMode(Com_IPduIdType PduId, boolean Mode)
     {
         DET_LOGE(TAG, "SwitchIpduTxMode E: PduId=%u out of range (max=%u)",
                  (unsigned)PduId, (unsigned)COM_TX_IPDU_MAX);
-        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_SWITCH_IPDU_TX_MODE, COM_E_PARAM);
+        (void)Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_SWITCH_IPDU_TX_MODE, COM_E_PARAM);
         return;
     }
 
@@ -2179,13 +2199,14 @@ void Com_SwitchIpduTxMode(Com_IPduIdType PduId, boolean Mode)
     if (ipdu == NULL)
     {
         DET_LOGE(TAG, "SwitchIpduTxMode E: PduId=%u not a registered TX I-PDU", (unsigned)PduId);
-        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_SWITCH_IPDU_TX_MODE, COM_E_PARAM);
+        (void)Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_SWITCH_IPDU_TX_MODE, COM_E_PARAM);
         return;
     }
 
     const uint8 newState = Mode ? 1U : 0U;
-    if (Com_TmsState[PduId] == newState)
+    if (Com_TmsState[PduId] == newState) {
         return;  /* spec 原文: "the call will have no effect" */
+    }
 
     Com_TmsState[PduId] = newState;
 
@@ -2279,12 +2300,12 @@ void Com_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
 {
     if (Com_ConfigPtr == NULL)
     {
-        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_RX_INDICATION, COM_E_UNINIT);
+        (void)Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_RX_INDICATION, COM_E_UNINIT);
         return;
     }
-    if (PduInfoPtr == NULL || PduInfoPtr->SduDataPtr == NULL)
+    if ((PduInfoPtr == NULL) || (PduInfoPtr->SduDataPtr == NULL))
     {
-        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_RX_INDICATION, COM_E_PARAM_POINTER);
+        (void)Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_RX_INDICATION, COM_E_PARAM_POINTER);
         return;
     }
 
@@ -2300,8 +2321,9 @@ void Com_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
     for (uint8 i = 0; i < Com_ConfigPtr->RxIPduCount; i++)
     {
         const Com_IPduConfigType* ipdu = &Com_ConfigPtr->RxIPdus[i];
-        if (ipdu->PduRId != RxPduId)
+        if (ipdu->PduRId != RxPduId) {
             continue;
+        }
 
         /* I-PDU Group が停止中（Com_IpduGroupStop() 参照）: 受信処理自体を
          * 無効化する（[SWS_Com_00684]）。バッファ・タイムアウトタイマとも
@@ -2343,7 +2365,7 @@ void Com_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
          * 生バイト列をそのまま渡して呼ぶ。FALSE を返したら、
          * この受信は以降一切処理しない（デッドライン監視タイマは上で
          * 既にリセット済みのため、これ以降の reject では巻き戻さない）。 */
-        if (ipdu->RxIpduCalloutCbk != NULL &&
+        if ((ipdu->RxIpduCalloutCbk != NULL) &&
             !ipdu->RxIpduCalloutCbk(PduInfoPtr->SduDataPtr, (uint8)PduInfoPtr->SduLength))
         {
             /* 具体的な拒否理由は RxIpduCalloutCbk 自身が WARN で既に出力
@@ -2363,7 +2385,7 @@ void Com_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
          * メンバーだけ新しい値、残りは古い値」という一貫性のない
          * スナップショットを公開しないための要求であり、非 Signal Group の
          * 部分受理（下記）とは意図的に異なる扱いとなる。 */
-        if (ipdu->IsSignalGroup != 0U && PduInfoPtr->SduLength < ipdu->DLC)
+        if ((ipdu->IsSignalGroup != 0U) && (PduInfoPtr->SduLength < ipdu->DLC))
         {
             DET_LOGW(TAG, "RX iPdu=%u(group) length mismatch got=%u exp=%u -> discarded",
                      (unsigned)ipdu->IPduId, (unsigned)PduInfoPtr->SduLength,
@@ -2399,15 +2421,17 @@ void Com_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
          * 棄却される。Com 層の部分受理（本要求）と E2E 層の整合性検証は
          * 独立した層であり、両者が別々の役割を担う構造は実 AUTOSAR と
          * 同じである。 */
-        for (uint8 b = 0; b < recvLen; b++)
+        for (uint8 b = 0; b < recvLen; b++) {
             Com_RxBuffer[ipdu->IPduId][b] = PduInfoPtr->SduDataPtr[b];
+        }
 
         /* Com_CbkRxAck（SWS_Com_00555）: Signal Group はメンバー単位ではなく
          * グループ単位で 1 回だけ呼ぶ（詳細は docs/modules/Com_Notes.md 参照）。
          * 短フレーム破棄（[SWS_Com_00575]、上の return）を通過していれば
          * 必ずグループ全体が格納済みのため、ここで無条件に呼んでよい。 */
-        if (ipdu->IsSignalGroup != 0U && ipdu->RxAckCbk != NULL)
+        if ((ipdu->IsSignalGroup != 0U) && (ipdu->RxAckCbk != NULL)) {
             ipdu->RxAckCbk();
+        }
 
         /* シグナル単位のデッドライン監視（非 Signal Group のみ意味を持つ）は、
          * このシグナルの全ビット範囲が recvLen バイト以内に収まっている
@@ -2423,15 +2447,17 @@ void Com_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
         for (uint8 s = 0U; s < Com_ConfigPtr->SignalCount; s++)
         {
             const Com_SignalConfigType* sig = &Com_ConfigPtr->Signals[s];
-            if (sig->Direction != COM_SIGNAL_DIRECTION_RX || sig->IPduId != ipdu->IPduId)
+            if ((sig->Direction != COM_SIGNAL_DIRECTION_RX) || (sig->IPduId != ipdu->IPduId)) {
                 continue;
+            }
 
             const uint8 lastByte = (uint8)((sig->BitPosition + sig->BitSize + 7U) / 8U);
             if (lastByte <= recvLen)
             {
                 Com_SigTimedOut[s] = 0U;
-                if (ipdu->IsSignalGroup == 0U && sig->RxAckCbk != NULL)
+                if ((ipdu->IsSignalGroup == 0U) && (sig->RxAckCbk != NULL)) {
                     sig->RxAckCbk();
+                }
             }
         }
 
@@ -2442,8 +2468,9 @@ void Com_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
         /* フレーム受信の都度呼ばれる汎用フック（E2E Transformer 等）。
          * バッファ更新後・return 前に呼ぶことで、上位層が最新データを
          * 参照できる状態にしてから通知する。 */
-        if (ipdu->RxIndicationCbk != NULL)
+        if (ipdu->RxIndicationCbk != NULL) {
             ipdu->RxIndicationCbk();
+        }
 
         /* Signal Gateway（[SWS_Com_00872]: I-PDU callout の次の処理段階）。
          * SWC/Rte を一切介さず、この I-PDU に紐づくゲートウェイ設定があれば
@@ -2531,7 +2558,7 @@ void Com_TxConfirmation(PduIdType TxPduId, Std_ReturnType result)
 
     if (Com_ConfigPtr == NULL)
     {
-        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_TX_CONFIRMATION, COM_E_UNINIT);
+        (void)Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_TX_CONFIRMATION, COM_E_UNINIT);
         return;
     }
 
@@ -2539,7 +2566,7 @@ void Com_TxConfirmation(PduIdType TxPduId, Std_ReturnType result)
      * TxPduId は Com の TX IPduId 空間（Com_FindTxIPdu() 参照）。
      * Com_IpduGroupStop() が既に Com_TxConfPending[] をクリアして
      * TxErrCbk 発火済みのため、ここでは重ねて処理しない。 */
-    if (TxPduId < COM_TX_IPDU_MAX && !Com_TxIPduStarted[TxPduId])
+    if ((TxPduId < COM_TX_IPDU_MAX) && !Com_TxIPduStarted[TxPduId])
     {
         DET_LOGD(TAG, "TxConf ignored (I-PDU Group stopped) iPdu=%u", (unsigned)TxPduId);
         return;
@@ -2558,8 +2585,9 @@ void Com_TxConfirmation(PduIdType TxPduId, Std_ReturnType result)
         Com_TxUsingFirstTimeout[TxPduId] = 0U;
     }
 
-    if (result != E_OK)
+    if (result != E_OK) {
         return;
+    }
 
     const Com_IPduConfigType* ipdu = Com_FindTxIPdu(TxPduId);
     Com_InvokeTxNotification(ipdu, TxPduId, COM_TX_NOTIFY_ACK);
@@ -2644,7 +2672,7 @@ void Com_MainFunctionRx(void)
 {
     if (Com_ConfigPtr == NULL)
     {
-        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_MAIN_FUNCTION_RX, COM_E_UNINIT);
+        (void)Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_MAIN_FUNCTION_RX, COM_E_UNINIT);
         return;
     }
 
@@ -2656,12 +2684,14 @@ void Com_MainFunctionRx(void)
      * 禁止区間の外）で行う。 */
     for (uint8 s = 0U; s < Com_ConfigPtr->SignalCount; s++)
     {
-        if (!Com_RxInvalidNotifyPending[s])
+        if (!Com_RxInvalidNotifyPending[s]) {
             continue;
+        }
 
         Com_RxInvalidNotifyPending[s] = 0U;
-        if (Com_ConfigPtr->Signals[s].InvalidNotificationCbk != NULL)
+        if (Com_ConfigPtr->Signals[s].InvalidNotificationCbk != NULL) {
             Com_ConfigPtr->Signals[s].InvalidNotificationCbk();
+        }
     }
 
     /* RX ComFilterAlgorithm=NEW_IS_WITHIN の FilterRejectCbk ディスパッチ
@@ -2669,12 +2699,14 @@ void Com_MainFunctionRx(void)
      * 全く同じ理由・同じ仕組みで、必ずここ（割り込み禁止区間の外）で呼ぶ。 */
     for (uint8 s = 0U; s < Com_ConfigPtr->SignalCount; s++)
     {
-        if (!Com_RxFilterRejectPending[s])
+        if (!Com_RxFilterRejectPending[s]) {
             continue;
+        }
 
         Com_RxFilterRejectPending[s] = 0U;
-        if (Com_ConfigPtr->Signals[s].FilterRejectCbk != NULL)
+        if (Com_ConfigPtr->Signals[s].FilterRejectCbk != NULL) {
             Com_ConfigPtr->Signals[s].FilterRejectCbk();
+        }
     }
 
     if (Com_RxEnabled != 0U)
@@ -2682,16 +2714,18 @@ void Com_MainFunctionRx(void)
         for (uint8 i = 0; i < Com_ConfigPtr->RxIPduCount; i++)
         {
             const Com_IPduConfigType* ipdu = &Com_ConfigPtr->RxIPdus[i];
-            if (ipdu->TimeoutMs == 0U)
+            if (ipdu->TimeoutMs == 0U) {
                 continue;  /* [SWS_Com_00333]: 監視無効（FirstTimeoutMs も無視） */
+            }
 
             /* I-PDU Group が停止中はデッドライン監視自体を評価しない
              * （[SWS_Com_00685]。Com_RxEnabled==0 の場合と同じ理由：意図的に
              * 止めているだけの通信を「通信異常」として誤って伝えないため）。
              * Com_DisableReceptionDM() による個別無効化も同じ扱い
              * （SRS_Com_00192、2026-08 追加）。 */
-            if (!Com_RxIPduStarted[ipdu->IPduId] || !Com_RxDmEnabled[ipdu->IPduId])
+            if (!Com_RxIPduStarted[ipdu->IPduId] || !Com_RxDmEnabled[ipdu->IPduId]) {
                 continue;
+            }
 
             const Com_IPduIdType id = ipdu->IPduId;
 
@@ -2703,8 +2737,9 @@ void Com_MainFunctionRx(void)
              * 適用され、初回受信後の定常監視には影響しない）。 */
             const uint16 threshold = Com_SelectTimeoutThreshold(
                 Com_RxUsingFirstTimeout[id], ipdu->FirstTimeoutMs, ipdu->TimeoutMs);
-            if (threshold == 0U)
+            if (threshold == 0U) {
                 continue;
+            }
 
             if (!Com_RxTimedOut[id] &&
                 (now - Com_RxLastMs[id]) >= (unsigned long)threshold)
@@ -2719,8 +2754,9 @@ void Com_MainFunctionRx(void)
                  * として扱われるため、このI-PDU単位ループがグループの
                  * 発火点になる。非 Signal Group の発火は下のシグナル単位
                  * ループが別途担う）。 */
-                if (ipdu->IsSignalGroup != 0U && ipdu->RxTOutCbk != NULL)
+                if ((ipdu->IsSignalGroup != 0U) && (ipdu->RxTOutCbk != NULL)) {
                     ipdu->RxTOutCbk();
+                }
             }
         }
 
@@ -2736,20 +2772,25 @@ void Com_MainFunctionRx(void)
         for (uint8 s = 0U; s < Com_ConfigPtr->SignalCount; s++)
         {
             const Com_SignalConfigType* sig = &Com_ConfigPtr->Signals[s];
-            if (sig->Direction != COM_SIGNAL_DIRECTION_RX || sig->TimeoutMs == 0U)
+            if ((sig->Direction != COM_SIGNAL_DIRECTION_RX) || (sig->TimeoutMs == 0U)) {
                 continue;  /* [SWS_Com_00333]: 監視無効（FirstTimeoutMs も無視） */
+            }
 
-            if (sig->IPduId >= COM_RX_IPDU_MAX || !Com_RxIPduStarted[sig->IPduId]
+            if ((sig->IPduId >= COM_RX_IPDU_MAX) || !Com_RxIPduStarted[sig->IPduId]
                 || !Com_RxDmEnabled[sig->IPduId])
+            {
                 continue;
+            }
 
-            if (Com_RxIPduIsGroup[sig->IPduId] != 0U)
+            if (Com_RxIPduIsGroup[sig->IPduId] != 0U) {
                 continue;  /* Signal Group メンバーは対象外（上記コメント参照） */
+            }
 
             const uint16 sigThreshold = Com_SelectTimeoutThreshold(
                 Com_RxUsingFirstTimeout[sig->IPduId], sig->FirstTimeoutMs, sig->TimeoutMs);
-            if (sigThreshold == 0U)
+            if (sigThreshold == 0U) {
                 continue;  /* [SWS_Com_00716]: 初回受信までは監視しない */
+            }
 
             if (!Com_SigTimedOut[s] &&
                 (now - Com_RxLastMs[sig->IPduId]) >= (unsigned long)sigThreshold)
@@ -2761,8 +2802,9 @@ void Com_MainFunctionRx(void)
                          Com_RxUsingFirstTimeout[sig->IPduId] ? "first" : "steady");
                 /* [SWS_Com_00536]/[SWS_Com_00556] (Com_CbkRxTOut)、非 Signal
                  * Group のシグナル単位。 */
-                if (sig->RxTOutCbk != NULL)
+                if (sig->RxTOutCbk != NULL) {
                     sig->RxTOutCbk();
+                }
             }
         }
     }
@@ -2857,7 +2899,7 @@ void Com_MainFunctionTx(void)
 {
     if (Com_ConfigPtr == NULL)
     {
-        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_MAIN_FUNCTION_TX, COM_E_UNINIT);
+        (void)Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_MAIN_FUNCTION_TX, COM_E_UNINIT);
         return;
     }
 
@@ -2871,8 +2913,9 @@ void Com_MainFunctionTx(void)
         /* I-PDU Group が停止中は due 判定自体を行わない。保留中の送信要求は
          * Com_IpduGroupStop() が既にキャンセル済み（[SWS_Com_00777]）のため、
          * ここで due=1 になることはないはずだが、防御的に早期 continue する。 */
-        if (!Com_TxIPduStarted[id])
+        if (!Com_TxIPduStarted[id]) {
             continue;
+        }
 
         const Com_TxModeModeType  mode   = Com_EffectiveTxModeMode(ipdu);
         const uint16              period = Com_EffectiveTxPeriodMs(ipdu);
@@ -2919,8 +2962,9 @@ void Com_MainFunctionTx(void)
             due = changeDue || floorDue || repeatDue || triggerDue;
         }
 
-        if (!due)
+        if (!due) {
             continue;
+        }
 
         Com_TxPending[id]    = 0U;
         Com_TxTriggerPending[id] = 0U;
@@ -2944,8 +2988,9 @@ void Com_MainFunctionTx(void)
          * 送信の時点で偶然 repeatDue も真になりうる（changeDue と同時に真）。
          * これを再送1回分と誤カウントすると、計 N+1 回ではなく N 回で
          * 止まってしまう。 */
-        if (repeatDue && !changeDue)
+        if (repeatDue && !changeDue) {
             Com_TxRepeatsRemaining[id]--;
+        }
 
         (void)Com_DoTransmit(ipdu, now);
     }
@@ -2963,17 +3008,20 @@ void Com_MainFunctionTx(void)
         for (uint8 i = 0; i < Com_ConfigPtr->TxIPduCount; i++)
         {
             const Com_IPduConfigType* ipdu = &Com_ConfigPtr->TxIPdus[i];
-            if (ipdu->TxTimeoutMs == 0U)
+            if (ipdu->TxTimeoutMs == 0U) {
                 continue;
+            }
 
             const Com_IPduIdType id = ipdu->IPduId;
-            if (!Com_TxIPduStarted[id] || Com_TxConfPending[id] == 0U)
+            if (!Com_TxIPduStarted[id] || (Com_TxConfPending[id] == 0U)) {
                 continue;  /* 未送信、または既に確認済みの I-PDU は対象外 */
+            }
 
             const uint16 threshold = Com_SelectTimeoutThreshold(
                 Com_TxUsingFirstTimeout[id], ipdu->TxFirstTimeoutMs, ipdu->TxTimeoutMs);
-            if (threshold == 0U)
+            if (threshold == 0U) {
                 continue;
+            }
 
             if (!Com_TxTimedOut[id] &&
                 (now - Com_TxConfPendingSinceMs[id]) >= (unsigned long)threshold)
@@ -3042,14 +3090,14 @@ void Com_MainFunctionTx(void)
  */
 void Com_SetCommunicationEnabled(uint8 RxEnabled, uint8 TxEnabled)
 {
-    if (Com_RxEnabled != RxEnabled || Com_TxEnabled != TxEnabled)
+    if ((Com_RxEnabled != RxEnabled) || (Com_TxEnabled != TxEnabled))
     {
         DET_LOGI(TAG, "CommunicationControl rx=%u->%u tx=%u->%u",
                  (unsigned)Com_RxEnabled, (unsigned)RxEnabled,
                  (unsigned)Com_TxEnabled, (unsigned)TxEnabled);
     }
 
-    if (Com_RxEnabled == 0U && RxEnabled != 0U && Com_ConfigPtr != NULL)
+    if ((Com_RxEnabled == 0U) && (RxEnabled != 0U) && (Com_ConfigPtr != NULL))
     {
         const unsigned long now = millis();
         for (uint8 i = 0U; i < Com_ConfigPtr->RxIPduCount; i++)
@@ -3095,10 +3143,12 @@ static uint32 Com_UnpackSignal(const uint8* buf,
     {
         const uint8 pos = bitPos + i;
         const uint8 bit = (buf[pos / 8U] >> (7U - (pos % 8U))) & 1U;
-        if (endian == COM_BIG_ENDIAN)
+        if (endian == COM_BIG_ENDIAN) {
             value = (value << 1U) | bit;
-        else
+        }
+        else {
             value |= ((uint32)bit << i);
+        }
     }
     return value;
 }
@@ -3137,10 +3187,12 @@ static void Com_PackSignal(uint8* buf,
                             : (uint8)((value >> i) & 1U);
         const uint8 pos   = bitPos + i;
         const uint8 shift = 7U - (pos % 8U);
-        if (bit)
+        if ((bit) != 0U) {
             buf[pos / 8U] |=  (uint8)(1U << shift);
-        else
+        }
+        else {
             buf[pos / 8U] &= (uint8)~(1U << shift);
+        }
     }
 }
 
@@ -3162,8 +3214,9 @@ static void Com_PackSignal(uint8* buf,
  */
 static void Com_WriteSignalBytes(uint8* dataPtr, uint8 byteCount, uint32 value)
 {
-    for (uint8 b = 0U; b < byteCount; b++)
+    for (uint8 b = 0U; b < byteCount; b++) {
         dataPtr[b] = (uint8)(value >> (8U * b));
+    }
 }
 
 /* ----------------------------------------------------------------------
@@ -3223,7 +3276,7 @@ static void Com_PackInitValues(uint8* buf, Com_IPduIdType id, Com_SignalDirectio
     for (uint8 s = 0U; s < Com_ConfigPtr->SignalCount; s++)
     {
         const Com_SignalConfigType* sig = &Com_ConfigPtr->Signals[s];
-        if (sig->Direction == dir && sig->IPduId == id)
+        if ((sig->Direction == dir) && (sig->IPduId == id))
         {
             Com_PackSignal(buf, sig->BitPosition, sig->BitSize, sig->Endian, sig->InitValue);
         }
@@ -3251,8 +3304,9 @@ static void Com_PackInitValues(uint8* buf, Com_IPduIdType id, Com_SignalDirectio
  */
 static void Com_ResetBufferToInitValues(uint8* buf, Com_IPduIdType id, Com_SignalDirectionType dir)
 {
-    for (uint8 b = 0U; b < COM_IPDU_MAX_DLC; b++)
+    for (uint8 b = 0U; b < COM_IPDU_MAX_DLC; b++) {
         buf[b] = 0U;
+    }
     Com_PackInitValues(buf, id, dir);
 }
 
@@ -3299,14 +3353,15 @@ static void Com_GatewayRoute(Com_IPduIdType rxIPduId)
         for (uint8 s = 0U; s < Com_ConfigPtr->SignalCount; s++)
         {
             const Com_SignalConfigType* cand = &Com_ConfigPtr->Signals[s];
-            if (cand->SignalId == gw->SrcSignalId && cand->Direction == COM_SIGNAL_DIRECTION_RX)
+            if ((cand->SignalId == gw->SrcSignalId) && (cand->Direction == COM_SIGNAL_DIRECTION_RX))
             {
                 srcSig = cand;
                 break;
             }
         }
-        if (srcSig == NULL || srcSig->IPduId != rxIPduId)
+        if ((srcSig == NULL) || (srcSig->IPduId != rxIPduId)) {
             continue;
+        }
 
         /* [SWS_Com_00360]: エンディアン変換はアンパック（Src の Endian）と
          * パック（Com_SendSignal() 内、Dest の Endian）をそれぞれ独立に
@@ -3350,8 +3405,9 @@ static const Com_IPduConfigType* Com_FindTxIPdu(Com_IPduIdType IPduId)
 {
     for (uint8 i = 0; i < Com_ConfigPtr->TxIPduCount; i++)
     {
-        if (Com_ConfigPtr->TxIPdus[i].IPduId == IPduId)
+        if (Com_ConfigPtr->TxIPdus[i].IPduId == IPduId) {
             return &Com_ConfigPtr->TxIPdus[i];
+        }
     }
     return NULL;
 }
@@ -3381,8 +3437,9 @@ static const Com_IPduConfigType* Com_FindRxIPdu(Com_IPduIdType IPduId)
 {
     for (uint8 i = 0; i < Com_ConfigPtr->RxIPduCount; i++)
     {
-        if (Com_ConfigPtr->RxIPdus[i].IPduId == IPduId)
+        if (Com_ConfigPtr->RxIPdus[i].IPduId == IPduId) {
             return &Com_ConfigPtr->RxIPdus[i];
+        }
     }
     return NULL;
 }
@@ -3411,8 +3468,9 @@ static uint8 Com_FindSignalIndex(Com_SignalIdType SignalId)
 {
     for (uint8 s = 0; s < Com_ConfigPtr->SignalCount; s++)
     {
-        if (Com_ConfigPtr->Signals[s].SignalId == SignalId)
+        if (Com_ConfigPtr->Signals[s].SignalId == SignalId) {
             return s;
+        }
     }
     return Com_ConfigPtr->SignalCount;
 }
@@ -3471,10 +3529,11 @@ static uint8 Com_FindSignalIndex(Com_SignalIdType SignalId)
  */
 static Std_ReturnType Com_DoTransmit(const Com_IPduConfigType* ipdu, unsigned long now)
 {
-    if (ipdu->TxTransformCbk != NULL)
+    if (ipdu->TxTransformCbk != NULL) {
         ipdu->TxTransformCbk(Com_TxBuffer[ipdu->IPduId], ipdu->DLC);
+    }
 
-    if (ipdu->TxIpduCalloutCbk != NULL &&
+    if ((ipdu->TxIpduCalloutCbk != NULL) &&
         !ipdu->TxIpduCalloutCbk(Com_TxBuffer[ipdu->IPduId], ipdu->DLC))
     {
         /* [SWS_Com_00346] false: 送信そのものを行わない。具体的な拒否理由は
@@ -3504,8 +3563,9 @@ static Std_ReturnType Com_DoTransmit(const Com_IPduConfigType* ipdu, unsigned lo
      * Com_TxConfPending==1）はタイマを延命しない。 */
     if (ret == E_OK)
     {
-        if (Com_TxConfPending[ipdu->IPduId] == 0U)
+        if (Com_TxConfPending[ipdu->IPduId] == 0U) {
             Com_TxConfPendingSinceMs[ipdu->IPduId] = now;
+        }
         Com_TxConfPending[ipdu->IPduId] = 1U;
     }
 
@@ -3527,8 +3587,9 @@ static Std_ReturnType Com_DoTransmit(const Com_IPduConfigType* ipdu, unsigned lo
      * `.UpdateBitPosition = 0xFFU` を明示設定する」という Com_PBCfg.c 側の
      * 規約が守られていることが前提（C の既定初期化 0 のまま放置すると、
      * その I-PDU のバッファ bit0 を毎回誤ってクリアし、シグナル値を破壊する）。 */
-    if (ret == E_OK && ipdu->UpdateBitPosition != 0xFFU)
+    if (ret == E_OK && (ipdu->UpdateBitPosition != 0xFFU)) {
         Com_PackSignal(Com_TxBuffer[ipdu->IPduId], ipdu->UpdateBitPosition, 1U, COM_BIG_ENDIAN, 0U);
+    }
 
     return ret;
 }
@@ -3699,13 +3760,15 @@ static uint8 Com_RecalcTms(Com_IPduIdType ipduId)
     for (uint8 s = 0; s < Com_ConfigPtr->SignalCount; s++)
     {
         const Com_SignalConfigType* sig = &Com_ConfigPtr->Signals[s];
-        if (sig->IPduId != ipduId || sig->TmsContributor == 0U)
+        if ((sig->IPduId != ipduId) || (sig->TmsContributor == 0U)) {
             continue;
+        }
 
         const uint32 value = Com_UnpackSignal(Com_TxBuffer[ipduId],
                                                sig->BitPosition, sig->BitSize, sig->Endian);
-        if ((value & sig->Mask) != sig->FilterX)
+        if ((value & sig->Mask) != sig->FilterX) {
             tmsTrue = 1U;
+        }
     }
 
     const uint8 changed = (Com_TmsState[ipduId] != tmsTrue) ? 1U : 0U;
@@ -3764,8 +3827,9 @@ static uint8 Com_RecalcTms(Com_IPduIdType ipduId)
 static void Com_RequestTxOnChange(const Com_IPduConfigType* ipdu)
 {
     const Com_TxModeModeType mode = Com_EffectiveTxModeMode(ipdu);
-    if (mode == COM_TX_MODE_PERIODIC)
+    if (mode == COM_TX_MODE_PERIODIC) {
         return;
+    }
 
     Com_TxPending[ipdu->IPduId] = 1U;
     /* [SWS_Com_00279]: 新規送信要求は進行中の再送シーケンスをキャンセルして
@@ -3807,7 +3871,7 @@ uint8 Com_IsRxTimedOut(Com_IPduIdType IPduId)
 {
     if (IPduId >= COM_RX_IPDU_MAX)
     {
-        Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_IS_RX_TIMED_OUT, COM_E_PARAM);
+        (void)Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_IS_RX_TIMED_OUT, COM_E_PARAM);
         return 1U;
     }
     return Com_RxTimedOut[IPduId];
@@ -3853,7 +3917,7 @@ void Com_InvokeTxNotification(const Com_IPduConfigType* ipdu,
                                       Com_IPduIdType TxPduId,
                                       Com_TxNotifyKindType kind)
 {
-    if (ipdu != NULL && ipdu->IsSignalGroup != 0U)
+    if ((ipdu != NULL) && (ipdu->IsSignalGroup != 0U))
     {
         Com_VoidCbkType groupCbk = NULL;
         switch (kind)
@@ -3862,8 +3926,9 @@ void Com_InvokeTxNotification(const Com_IPduConfigType* ipdu,
         case COM_TX_NOTIFY_ERR:  groupCbk = ipdu->TxErrCbk;  break;
         case COM_TX_NOTIFY_TOUT: groupCbk = ipdu->TxTOutCbk; break;
         }
-        if (groupCbk != NULL)
+        if (groupCbk != NULL) {
             groupCbk();
+        }
         return;
     }
 
@@ -3874,8 +3939,9 @@ void Com_InvokeTxNotification(const Com_IPduConfigType* ipdu,
          * 別々の値空間（どちらも 0 始まり）のため、IPduId の一致だけでは
          * 方向を判別できない（例: RX の EngineInfo=0 と TX の
          * MeterStatus=0）。詳細は Com_SignalDirectionType の宣言コメント参照。 */
-        if (sig->Direction != COM_SIGNAL_DIRECTION_TX || sig->IPduId != TxPduId)
+        if ((sig->Direction != COM_SIGNAL_DIRECTION_TX) || (sig->IPduId != TxPduId)) {
             continue;
+        }
 
         Com_VoidCbkType cbk = NULL;
         switch (kind)
@@ -3884,8 +3950,9 @@ void Com_InvokeTxNotification(const Com_IPduConfigType* ipdu,
         case COM_TX_NOTIFY_ERR:  cbk = sig->TxErrCbk;  break;
         case COM_TX_NOTIFY_TOUT: cbk = sig->TxTOutCbk; break;
         }
-        if (cbk != NULL)
+        if (cbk != NULL) {
             cbk();
+        }
     }
 }
 
@@ -3919,8 +3986,8 @@ static void Com_ResetRxDeadlineMonitoring(Com_IPduIdType id, unsigned long now)
 
     for (uint8 s = 0U; s < Com_ConfigPtr->SignalCount; s++)
     {
-        if (Com_ConfigPtr->Signals[s].Direction == COM_SIGNAL_DIRECTION_RX
-            && Com_ConfigPtr->Signals[s].IPduId == id)
+        if ((Com_ConfigPtr->Signals[s].Direction == COM_SIGNAL_DIRECTION_RX)
+            && (Com_ConfigPtr->Signals[s].IPduId == id))
         {
             Com_SigTimedOut[s] = 0U;
         }
@@ -3953,8 +4020,9 @@ static uint8 Com_IpduGroupHasTxMember(Com_IpduGroupIdType IpduGroupId)
 {
     for (uint8 i = 0U; i < Com_ConfigPtr->TxIPduCount; i++)
     {
-        if (Com_ConfigPtr->TxIPdus[i].IpduGroupId == IpduGroupId)
+        if (Com_ConfigPtr->TxIPdus[i].IpduGroupId == IpduGroupId) {
             return 1U;
+        }
     }
     return 0U;
 }
@@ -3966,29 +4034,33 @@ static uint8 Com_IpduGroupHasTxMember(Com_IpduGroupIdType IpduGroupId)
 #ifdef COM_UNIT_TEST
 uint8 Com_Test_GetTxPending(Com_IPduIdType ipduId)
 {
-    if (ipduId >= COM_TX_IPDU_MAX)
+    if (ipduId >= COM_TX_IPDU_MAX) {
         return 0U;
+    }
     return Com_TxPending[ipduId];
 }
 
 uint8 Com_Test_GetTxTriggerPending(Com_IPduIdType ipduId)
 {
-    if (ipduId >= COM_TX_IPDU_MAX)
+    if (ipduId >= COM_TX_IPDU_MAX) {
         return 0U;
+    }
     return Com_TxTriggerPending[ipduId];
 }
 
 uint8 Com_Test_GetTmsState(Com_IPduIdType ipduId)
 {
-    if (ipduId >= COM_TX_IPDU_MAX)
+    if (ipduId >= COM_TX_IPDU_MAX) {
         return 0U;
+    }
     return Com_TmsState[ipduId];
 }
 
 const uint8* Com_Test_GetTxBuffer(Com_IPduIdType ipduId)
 {
-    if (ipduId >= COM_TX_IPDU_MAX)
+    if (ipduId >= COM_TX_IPDU_MAX) {
         return NULL;
+    }
     return Com_TxBuffer[ipduId];
 }
 
@@ -3999,60 +4071,69 @@ uint8 Com_Test_GetSigTimedOut(Com_SignalIdType SignalId)
      * Com_FindSignalIndex() で変換が必要。Com_Test_GetTxPending() 等の
      * IPduId 直接添字とは事情が異なる。IPduId は Com_TxBuffer[] 等の
      * 添字として直接使う設計だが、SignalId は配列内位置とは無関係な ID）。 */
-    if (Com_ConfigPtr == NULL)
+    if (Com_ConfigPtr == NULL) {
         return 0U;
+    }
     const uint8 s = Com_FindSignalIndex(SignalId);
-    if (s >= Com_ConfigPtr->SignalCount)
+    if (s >= Com_ConfigPtr->SignalCount) {
         return 0U;
+    }
     return Com_SigTimedOut[s];
 }
 
 void Com_Test_SetTxConfPending(Com_IPduIdType ipduId, uint8 value)
 {
-    if (ipduId >= COM_TX_IPDU_MAX)
+    if (ipduId >= COM_TX_IPDU_MAX) {
         return;
+    }
     Com_TxConfPending[ipduId] = value;
 }
 
 uint8 Com_Test_GetTxRepeatsRemaining(Com_IPduIdType ipduId)
 {
-    if (ipduId >= COM_TX_IPDU_MAX)
+    if (ipduId >= COM_TX_IPDU_MAX) {
         return 0U;
+    }
     return Com_TxRepeatsRemaining[ipduId];
 }
 
 void Com_Test_SetTxRepeatsRemaining(Com_IPduIdType ipduId, uint8 value)
 {
-    if (ipduId >= COM_TX_IPDU_MAX)
+    if (ipduId >= COM_TX_IPDU_MAX) {
         return;
+    }
     Com_TxRepeatsRemaining[ipduId] = value;
 }
 
 uint8 Com_Test_GetTxTimedOut(Com_IPduIdType ipduId)
 {
-    if (ipduId >= COM_TX_IPDU_MAX)
+    if (ipduId >= COM_TX_IPDU_MAX) {
         return 0U;
+    }
     return Com_TxTimedOut[ipduId];
 }
 
 uint8 Com_Test_GetTxConfPending(Com_IPduIdType ipduId)
 {
-    if (ipduId >= COM_TX_IPDU_MAX)
+    if (ipduId >= COM_TX_IPDU_MAX) {
         return 0U;
+    }
     return Com_TxConfPending[ipduId];
 }
 
 void Com_Test_SetTxConfPendingSinceMs(Com_IPduIdType ipduId, unsigned long value)
 {
-    if (ipduId >= COM_TX_IPDU_MAX)
+    if (ipduId >= COM_TX_IPDU_MAX) {
         return;
+    }
     Com_TxConfPendingSinceMs[ipduId] = value;
 }
 
 uint8 Com_Test_GetRxDmEnabled(Com_IPduIdType ipduId)
 {
-    if (ipduId >= COM_RX_IPDU_MAX)
+    if (ipduId >= COM_RX_IPDU_MAX) {
         return 0U;
+    }
     return Com_RxDmEnabled[ipduId];
 }
 #endif

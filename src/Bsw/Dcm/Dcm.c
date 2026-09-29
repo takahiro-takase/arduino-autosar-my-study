@@ -422,7 +422,7 @@ void Dcm_GetVersionInfo(Std_VersionInfoType* versioninfo)
 {
     if (versioninfo == NULL)
     {
-        Det_ReportError(DCM_MODULE_ID, 0U, DCM_API_ID_GET_VERSION_INFO, DCM_E_PARAM_POINTER);
+        (void)Det_ReportError(DCM_MODULE_ID, 0U, DCM_API_ID_GET_VERSION_INFO, DCM_E_PARAM_POINTER);
         return;
     }
 
@@ -455,7 +455,7 @@ Std_ReturnType Dcm_GetVin(uint8* Data)
 {
     if (Data == NULL)
     {
-        Det_ReportError(DCM_MODULE_ID, 0U, DCM_API_ID_GET_VIN, DCM_E_PARAM_POINTER);
+        (void)Det_ReportError(DCM_MODULE_ID, 0U, DCM_API_ID_GET_VIN, DCM_E_PARAM_POINTER);
         return E_NOT_OK;
     }
 
@@ -465,8 +465,9 @@ Std_ReturnType Dcm_GetVin(uint8* Data)
         { 'A','R','D','U','N','0','A','U','T','0','S','A','R','2','0','2','6' };
 
     uint8 i;
-    for (i = 0U; i < DCM_VIN_LENGTH; i++)
+    for (i = 0U; i < DCM_VIN_LENGTH; i++) {
         Data[i] = kFixedVin[i];
+    }
 
     return E_OK;
 }
@@ -491,13 +492,13 @@ Std_ReturnType Dcm_GetSecurityLevel(Dcm_SecLevelType* SecLevel)
 {
     if (!Dcm_Initialized)
     {
-        Det_ReportError(DCM_MODULE_ID, 0U, DCM_API_ID_GET_SECURITY_LEVEL, DCM_E_UNINIT);
+        (void)Det_ReportError(DCM_MODULE_ID, 0U, DCM_API_ID_GET_SECURITY_LEVEL, DCM_E_UNINIT);
         return E_NOT_OK;
     }
 
     if (SecLevel == NULL)
     {
-        Det_ReportError(DCM_MODULE_ID, 0U, DCM_API_ID_GET_SECURITY_LEVEL, DCM_E_PARAM_POINTER);
+        (void)Det_ReportError(DCM_MODULE_ID, 0U, DCM_API_ID_GET_SECURITY_LEVEL, DCM_E_PARAM_POINTER);
         return E_NOT_OK;
     }
 
@@ -521,13 +522,13 @@ Std_ReturnType Dcm_GetSesCtrlType(Dcm_SesCtrlType* SesCtrlType)
 {
     if (!Dcm_Initialized)
     {
-        Det_ReportError(DCM_MODULE_ID, 0U, DCM_API_ID_GET_SES_CTRL_TYPE, DCM_E_UNINIT);
+        (void)Det_ReportError(DCM_MODULE_ID, 0U, DCM_API_ID_GET_SES_CTRL_TYPE, DCM_E_UNINIT);
         return E_NOT_OK;
     }
 
     if (SesCtrlType == NULL)
     {
-        Det_ReportError(DCM_MODULE_ID, 0U, DCM_API_ID_GET_SES_CTRL_TYPE, DCM_E_PARAM_POINTER);
+        (void)Det_ReportError(DCM_MODULE_ID, 0U, DCM_API_ID_GET_SES_CTRL_TYPE, DCM_E_PARAM_POINTER);
         return E_NOT_OK;
     }
 
@@ -565,13 +566,13 @@ Std_ReturnType Dcm_GetActiveProtocol(Dcm_ProtocolType* ActiveProtocolType, uint1
 {
     if (!Dcm_Initialized)
     {
-        Det_ReportError(DCM_MODULE_ID, 0U, DCM_API_ID_GET_ACTIVE_PROTOCOL, DCM_E_UNINIT);
+        (void)Det_ReportError(DCM_MODULE_ID, 0U, DCM_API_ID_GET_ACTIVE_PROTOCOL, DCM_E_UNINIT);
         return E_NOT_OK;
     }
 
-    if (ActiveProtocolType == NULL || ConnectionId == NULL || TesterSourceAddress == NULL)
+    if ((ActiveProtocolType == NULL) || (ConnectionId == NULL) || (TesterSourceAddress == NULL))
     {
-        Det_ReportError(DCM_MODULE_ID, 0U, DCM_API_ID_GET_ACTIVE_PROTOCOL, DCM_E_PARAM_POINTER);
+        (void)Det_ReportError(DCM_MODULE_ID, 0U, DCM_API_ID_GET_ACTIVE_PROTOCOL, DCM_E_PARAM_POINTER);
         return E_NOT_OK;
     }
 
@@ -610,7 +611,7 @@ Std_ReturnType Dcm_ResetToDefaultSession(void)
 {
     if (!Dcm_Initialized)
     {
-        Det_ReportError(DCM_MODULE_ID, 0U, DCM_API_ID_RESET_TO_DEFAULT_SESSION, DCM_E_UNINIT);
+        (void)Det_ReportError(DCM_MODULE_ID, 0U, DCM_API_ID_RESET_TO_DEFAULT_SESSION, DCM_E_UNINIT);
         return E_NOT_OK;
     }
 
@@ -772,7 +773,7 @@ void Dcm_MainFunction(void)
 {
     if (!Dcm_Initialized)
     {
-        Det_ReportError(DCM_MODULE_ID, 0U, DCM_API_ID_MAIN_FUNCTION, DCM_E_UNINIT);
+        (void)Det_ReportError(DCM_MODULE_ID, 0U, DCM_API_ID_MAIN_FUNCTION, DCM_E_UNINIT);
         return;
     }
 
@@ -780,16 +781,16 @@ void Dcm_MainFunction(void)
      * DCM_ROUTINE_DURATION_MS 経過したら合否を判定して COMPLETED へ遷移する。
      * RUNNING になれるのは extendedSession 限定のため、defaultSession 中に
      * この分岐へ来ることはない (Dcm_RoutineAbort() が退出時に IDLE へ戻す)。 */
-    if (Dcm_RoutineState == DCM_ROUTINE_STATE_RUNNING
+    if ((Dcm_RoutineState == DCM_ROUTINE_STATE_RUNNING)
         && (millis() - Dcm_RoutineStartMs) >= DCM_ROUTINE_DURATION_MS)
     {
         EngineSpeed_t speed = 0U;
         CoolantTemp_t temp  = 0U;
-        Rte_Read_SpeedSensor_EngineSpeed(&speed);
-        Rte_Read_TempSensor_CoolantTemp(&temp);
+        (void)Rte_Read_SpeedSensor_EngineSpeed(&speed);
+        (void)Rte_Read_TempSensor_CoolantTemp(&temp);
 
-        Dcm_RoutineResult = (speed <= DCM_ROUTINE_MAX_ENGINE_SPEED
-                              && temp <= DCM_ROUTINE_MAX_COOLANT_TEMP)
+        Dcm_RoutineResult = ((speed <= DCM_ROUTINE_MAX_ENGINE_SPEED)
+                              && (temp <= DCM_ROUTINE_MAX_COOLANT_TEMP))
                              ? DCM_ROUTINE_PASS : DCM_ROUTINE_FAIL;
         Dcm_RoutineState = DCM_ROUTINE_STATE_COMPLETED;
 
@@ -797,8 +798,9 @@ void Dcm_MainFunction(void)
                  (unsigned)Dcm_RoutineResult, (unsigned)speed, (unsigned)temp);
     }
 
-    if (Dcm_CurrentSession == DCM_SESSION_DEFAULT)
+    if (Dcm_CurrentSession == DCM_SESSION_DEFAULT) {
         return;
+    }
 
     if (CanTp_IsTxBusy())
     {
@@ -861,7 +863,7 @@ static void Dcm_UpdateComMRequest(uint8 session)
  */
 static void Dcm_Transmit(void)
 {
-    CanTp_Transmit(CANTP_TX_SDU_ID, &Dcm_TxPdu);
+    (void)CanTp_Transmit(CANTP_TX_SDU_ID, &Dcm_TxPdu);
 }
 
 /**
@@ -877,7 +879,7 @@ static void Dcm_Transmit(void)
  */
 static void Dcm_TransmitPositiveResponse(void)
 {
-    if (Dcm_SuppressPosRsp)
+    if ((Dcm_SuppressPosRsp) != 0U)
     {
         DET_LOGI(TAG, "positive response suppressed (suppressPosRspMsgIndicationBit)");
         return;
@@ -961,7 +963,7 @@ static void Dcm_HandleSessionControl(const uint8* uds, uint8 udsLen)
      * Dcm_TransmitPositiveResponse() 参照）。 */
     uint8 subFunc = Dcm_ExtractSubFunc(uds[1]);
 
-    if (subFunc != DCM_SESSION_DEFAULT && subFunc != DCM_SESSION_EXTENDED)
+    if ((subFunc != DCM_SESSION_DEFAULT) && (subFunc != DCM_SESSION_EXTENDED))
     {
         Dcm_SendNegativeResponse(DCM_SID_SESSION_CTRL, DCM_NRC_SUB_FUNC_NOT_SUPPORTED);
         return;
@@ -1050,7 +1052,7 @@ static void Dcm_HandleEcuReset(const uint8* uds, uint8 udsLen)
      * 実害あるバグでもあった。Dcm_HandleSessionControl 等と同じ方針へ統一）。 */
     uint8 subFunc = Dcm_ExtractSubFunc(uds[1]);
 
-    if (subFunc != DCM_RESET_HARD && subFunc != DCM_RESET_SOFT)
+    if ((subFunc != DCM_RESET_HARD) && (subFunc != DCM_RESET_SOFT))
     {
         Dcm_SendNegativeResponse(DCM_SID_ECU_RESET, DCM_NRC_SUB_FUNC_NOT_SUPPORTED);
         return;
@@ -1413,8 +1415,8 @@ static void Dcm_HandleReadDtcSnapshot(const uint8* uds, uint8 udsLen)
     Dem_FreezeFrameType frame;
 
     if (Dem_GetEventIdOfDTC(dtc, &eventId) != E_OK
-        || (recordNumber != DCM_FREEZEFRAME_RECORD_NUMBER
-            && recordNumber != DCM_RECORD_NUMBER_ALL)
+        || ((recordNumber != DCM_FREEZEFRAME_RECORD_NUMBER)
+            && (recordNumber != DCM_RECORD_NUMBER_ALL))
         || Dem_GetFreezeFrameOfEvent(eventId, &frame) != E_OK)
     {
         /* DTC 不明・レコード番号不一致・FreezeFrame 未記録 (一度も FAILED していない) */
@@ -1486,8 +1488,8 @@ static void Dcm_HandleReadDtcExtendedData(const uint8* uds, uint8 udsLen)
     uint8           occurrenceCounter = 0U;
 
     if (Dem_GetEventIdOfDTC(dtc, &eventId) != E_OK
-        || (recordNumber != DCM_EXTENDED_DATA_RECORD_NUMBER
-            && recordNumber != DCM_RECORD_NUMBER_ALL)
+        || ((recordNumber != DCM_EXTENDED_DATA_RECORD_NUMBER)
+            && (recordNumber != DCM_RECORD_NUMBER_ALL))
         || Dem_GetOccurrenceCounterOfEvent(eventId, &occurrenceCounter) != E_OK)
     {
         /* DTC 不明、レコード番号不一致、または ExtendedData 未記録
@@ -1597,7 +1599,7 @@ static Std_ReturnType Dcm_ReadDid(uint16 did, uint8* buf, uint8* dataLen)
     case DCM_DID_ENGINE_SPEED:
     {
         EngineSpeed_t speed = 0U;
-        Rte_Read_SpeedSensor_EngineSpeed(&speed);
+        (void)Rte_Read_SpeedSensor_EngineSpeed(&speed);
         buf[0]   = (uint8)(speed >> 8U);   /* MSB first (big-endian) */
         buf[1]   = (uint8)(speed & 0xFFU);
         *dataLen = 2U;
@@ -1606,7 +1608,7 @@ static Std_ReturnType Dcm_ReadDid(uint16 did, uint8* buf, uint8* dataLen)
     case DCM_DID_COOLANT_TEMP:
     {
         CoolantTemp_t temp = 0U;
-        Rte_Read_TempSensor_CoolantTemp(&temp);
+        (void)Rte_Read_TempSensor_CoolantTemp(&temp);
         buf[0]   = temp;
         *dataLen = 1U;
         return E_OK;
@@ -1614,7 +1616,7 @@ static Std_ReturnType Dcm_ReadDid(uint16 did, uint8* buf, uint8* dataLen)
     case DCM_DID_ENGINE_STATE:
     {
         EngineState_t state = ENGINE_STATE_OFF;
-        Rte_Read_EngineStatus_EngineState(&state);
+        (void)Rte_Read_EngineStatus_EngineState(&state);
         buf[0]   = (uint8)state;
         *dataLen = 1U;
         return E_OK;
@@ -1622,16 +1624,18 @@ static Std_ReturnType Dcm_ReadDid(uint16 did, uint8* buf, uint8* dataLen)
     case DCM_DID_TEST_PATTERN:
     {
         uint8 i;
-        for (i = 0U; i < DCM_DID_TEST_PATTERN_LENGTH; i++)
+        for (i = 0U; i < DCM_DID_TEST_PATTERN_LENGTH; i++) {
             buf[i] = Dcm_TestPattern[i];
+        }
         *dataLen = DCM_DID_TEST_PATTERN_LENGTH;
         return E_OK;
     }
     case DCM_DID_VIN:
     {
         uint8 i;
-        for (i = 0U; i < DCM_VIN_LENGTH; i++)
+        for (i = 0U; i < DCM_VIN_LENGTH; i++) {
             buf[i] = Dcm_Vin[i];
+        }
         *dataLen = DCM_VIN_LENGTH;
         return E_OK;
     }
@@ -1686,8 +1690,9 @@ static void Dcm_HandleReadDataById(const uint8* uds, uint8 udsLen)
     Dcm_TxBuf[2] = (uint8)(did & 0xFFU);
 
     uint8 i;
-    for (i = 0U; i < dataLen; i++)
+    for (i = 0U; i < dataLen; i++) {
         Dcm_TxBuf[3U + i] = dataBuf[i];
+    }
 
     Dcm_TxPdu.SduLength = (PduLengthType)(3U + dataLen);
 
@@ -1717,8 +1722,9 @@ static void Dcm_HandleReadDataById(const uint8* uds, uint8 udsLen)
 static Std_ReturnType Dcm_UpdateCryptoKey(uint8 keyName, const uint8* keyData)
 {
     Std_ReturnType ret = KeyM_Start(KEYM_START_WORKSHOPMODE, NULL, 0U, NULL, NULL);
-    if (ret != E_OK)
+    if (ret != E_OK) {
         return E_NOT_OK;
+    }
 
     ret = KeyM_Update(&keyName, 1U, keyData, DCM_DID_CRYPTO_KEY_UPDATE_LENGTH - 1U, NULL, 0U);
     if (ret != E_OK)
@@ -1778,8 +1784,9 @@ static void Dcm_HandleWriteDataById(const uint8* uds, uint8 udsLen)
         }
 
         uint8 i;
-        for (i = 0U; i < DCM_DID_TEST_PATTERN_LENGTH; i++)
+        for (i = 0U; i < DCM_DID_TEST_PATTERN_LENGTH; i++) {
             Dcm_TestPattern[i] = uds[3U + i];
+        }
 
         DET_LOGI(TAG, "2E did=0x%04X len=%u (multi-frame request)",
                  (unsigned)did, (unsigned)DCM_DID_TEST_PATTERN_LENGTH);
@@ -1931,7 +1938,7 @@ static void Dcm_HandleIoControl(const uint8* uds, uint8 udsLen)
             Dcm_SendNegativeResponse(DCM_SID_IO_CONTROL, DCM_NRC_INCORRECT_MESSAGE_LENGTH);
             return;
         }
-        if (uds[4] != 0U && uds[4] != 1U)
+        if ((uds[4] != 0U) && (uds[4] != 1U))
         {
             Dcm_SendNegativeResponse(DCM_SID_IO_CONTROL, DCM_NRC_REQUEST_OUT_OF_RANGE);
             return;
@@ -2068,9 +2075,9 @@ static void Dcm_HandleCommunicationControl(const uint8* uds, uint8 udsLen)
 
     uint8 communicationType = uds[2];
 
-    if (communicationType != DCM_COMMTYPE_NORMAL
-        && communicationType != DCM_COMMTYPE_NM
-        && communicationType != DCM_COMMTYPE_NORMAL_AND_NM)
+    if ((communicationType != DCM_COMMTYPE_NORMAL)
+        && (communicationType != DCM_COMMTYPE_NM)
+        && (communicationType != DCM_COMMTYPE_NORMAL_AND_NM))
     {
         Dcm_SendNegativeResponse(DCM_SID_COMM_CONTROL, DCM_NRC_REQUEST_OUT_OF_RANGE);
         return;
@@ -2116,7 +2123,7 @@ static void Dcm_HandleCommunicationControl(const uint8* uds, uint8 udsLen)
  */
 static void Dcm_DTCSettingReset(void)
 {
-    if (Dcm_DTCSettingDisabled)
+    if ((Dcm_DTCSettingDisabled) != 0U)
     {
         if (Dem_EnableDTCSetting(DCM_DEM_CLIENT_ID) == E_OK)
         {
@@ -2182,7 +2189,7 @@ static void Dcm_HandleControlDTCSetting(const uint8* uds, uint8 udsLen)
      * 方針。2026-09 是正: 以前は読み取って捨てるだけで実際には抑制していなかった） */
     uint8 subFunc = Dcm_ExtractSubFunc(uds[1]);
 
-    if (subFunc != DCM_DTCSETTING_ON && subFunc != DCM_DTCSETTING_OFF)
+    if ((subFunc != DCM_DTCSETTING_ON) && (subFunc != DCM_DTCSETTING_OFF))
     {
         Dcm_SendNegativeResponse(DCM_SID_CONTROL_DTC_SETTING, DCM_NRC_SUB_FUNC_NOT_SUPPORTED);
         return;
@@ -2251,8 +2258,9 @@ static uint16 Dcm_ComputeSecurityKey(uint16 seed)
  */
 static void Dcm_SecurityLock(void)
 {
-    if (Dcm_SecurityLevel != 0U)
+    if (Dcm_SecurityLevel != 0U) {
         DET_LOGI(TAG, "27 Security locked (session change)");
+    }
 
     Dcm_SecurityLevel       = 0U;
     Dcm_SecuritySeedPending = 0U;
@@ -2443,8 +2451,9 @@ static void Dcm_HandleSecurityAccess(const uint8* uds, uint8 udsLen)
  */
 static void Dcm_RoutineAbort(void)
 {
-    if (Dcm_RoutineState != DCM_ROUTINE_STATE_IDLE)
+    if (Dcm_RoutineState != DCM_ROUTINE_STATE_IDLE) {
         DET_LOGI(TAG, "31 EngineHealthCheck aborted (session change)");
+    }
 
     Dcm_RoutineState = DCM_ROUTINE_STATE_IDLE;
 }
@@ -2694,8 +2703,8 @@ static void Dcm_HandleRequestDownload(const uint8* uds, uint8 udsLen)
         return;
     }
 
-    if (addrBytes < DCM_TRANSFER_ADDR_LEN_MIN || addrBytes > DCM_TRANSFER_ADDR_LEN_MAX
-        || sizeBytes < DCM_TRANSFER_ADDR_LEN_MIN || sizeBytes > DCM_TRANSFER_ADDR_LEN_MAX)
+    if ((addrBytes < DCM_TRANSFER_ADDR_LEN_MIN) || (addrBytes > DCM_TRANSFER_ADDR_LEN_MAX)
+        || (sizeBytes < DCM_TRANSFER_ADDR_LEN_MIN) || (sizeBytes > DCM_TRANSFER_ADDR_LEN_MAX))
     {
         Dcm_SendNegativeResponse(DCM_SID_REQUEST_DOWNLOAD, DCM_NRC_REQUEST_OUT_OF_RANGE);
         return;
@@ -2709,14 +2718,16 @@ static void Dcm_HandleRequestDownload(const uint8* uds, uint8 udsLen)
 
     uint32 memAddr = 0UL;
     uint8 i;
-    for (i = 0U; i < addrBytes; i++)
+    for (i = 0U; i < addrBytes; i++) {
         memAddr = (memAddr << 8U) | (uint32)uds[3U + i];
+    }
 
     uint32 memSize = 0UL;
-    for (i = 0U; i < sizeBytes; i++)
+    for (i = 0U; i < sizeBytes; i++) {
         memSize = (memSize << 8U) | (uint32)uds[3U + addrBytes + i];
+    }
 
-    if (memSize == 0UL || memSize > DCM_TRANSFER_MAX_SIZE)
+    if ((memSize == 0UL) || (memSize > DCM_TRANSFER_MAX_SIZE))
     {
         Dcm_SendNegativeResponse(DCM_SID_REQUEST_DOWNLOAD, DCM_NRC_REQUEST_OUT_OF_RANGE);
         return;
@@ -2795,8 +2806,9 @@ static void Dcm_HandleTransferData(const uint8* uds, uint8 udsLen)
     }
 
     uint8 i;
-    for (i = 0U; i < dataLen; i++)
+    for (i = 0U; i < dataLen; i++) {
         Dcm_TransferChecksum ^= uds[2U + i];
+    }
     Dcm_TransferReceivedSize += (uint32)dataLen;
 
     /* ISO 14229-1: 0x01 から開始し 0xFF の次は 0x00、その次はまた 0x01 */
@@ -3028,18 +3040,19 @@ void Dcm_ComIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
 
     if (!Dcm_Initialized)
     {
-        Det_ReportError(DCM_MODULE_ID, 0U, DCM_API_ID_COM_INDICATION, DCM_E_UNINIT);
+        (void)Det_ReportError(DCM_MODULE_ID, 0U, DCM_API_ID_COM_INDICATION, DCM_E_UNINIT);
         return;
     }
 
-    if (PduInfoPtr == NULL || PduInfoPtr->SduDataPtr == NULL)
+    if ((PduInfoPtr == NULL) || (PduInfoPtr->SduDataPtr == NULL))
     {
-        Det_ReportError(DCM_MODULE_ID, 0U, DCM_API_ID_COM_INDICATION, DCM_E_PARAM_POINTER);
+        (void)Det_ReportError(DCM_MODULE_ID, 0U, DCM_API_ID_COM_INDICATION, DCM_E_PARAM_POINTER);
         return;
     }
 
-    if (PduInfoPtr->SduLength == 0U)
+    if (PduInfoPtr->SduLength == 0U) {
         return;  /* 空フレームは DET 対象外（NULL ポインタではないため） */
+    }
 
     /* CanTp が PCI を除去済み: 先頭バイトは UDS SID */
     const uint8* uds    = PduInfoPtr->SduDataPtr;

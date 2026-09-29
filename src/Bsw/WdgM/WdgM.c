@@ -356,7 +356,7 @@ void WdgM_Init(const WdgM_ConfigType* ConfigPtr)
     if (ConfigPtr == NULL)
     {
         DET_LOGE(TAG, "Init: NULL ConfigPtr");
-        Det_ReportError(WDGM_MODULE_ID, 0U, WDGM_API_ID_INIT, WDGM_E_INV_POINTER);
+        (void)Det_ReportError(WDGM_MODULE_ID, 0U, WDGM_API_ID_INIT, WDGM_E_INV_POINTER);
         return;
     }
 
@@ -391,7 +391,7 @@ void WdgM_DeInit(void)
 {
     if (WdgM_Cfg == NULL)
     {
-        Det_ReportError(WDGM_MODULE_ID, 0U, WDGM_API_ID_DEINIT, WDGM_E_NO_INIT);
+        (void)Det_ReportError(WDGM_MODULE_ID, 0U, WDGM_API_ID_DEINIT, WDGM_E_NO_INIT);
         return;
     }
 
@@ -407,7 +407,7 @@ void WdgM_GetVersionInfo(Std_VersionInfoType* VersionInfo)
 {
     if (VersionInfo == NULL)
     {
-        Det_ReportError(WDGM_MODULE_ID, 0U, WDGM_API_ID_GET_VERSION_INFO, WDGM_E_INV_POINTER);
+        (void)Det_ReportError(WDGM_MODULE_ID, 0U, WDGM_API_ID_GET_VERSION_INFO, WDGM_E_INV_POINTER);
         return;
     }
 
@@ -434,13 +434,13 @@ Std_ReturnType WdgM_SetMode(WdgM_ModeType Mode)
 {
     if (WdgM_Cfg == NULL)
     {
-        Det_ReportError(WDGM_MODULE_ID, 0U, WDGM_API_ID_SET_MODE, WDGM_E_NO_INIT);
+        (void)Det_ReportError(WDGM_MODULE_ID, 0U, WDGM_API_ID_SET_MODE, WDGM_E_NO_INIT);
         return E_NOT_OK;
     }
 
     if (Mode != WDGM_MODE_DEFAULT)
     {
-        Det_ReportError(WDGM_MODULE_ID, 0U, WDGM_API_ID_SET_MODE, WDGM_E_PARAM_MODE);
+        (void)Det_ReportError(WDGM_MODULE_ID, 0U, WDGM_API_ID_SET_MODE, WDGM_E_PARAM_MODE);
         return E_NOT_OK;
     }
 
@@ -465,13 +465,13 @@ Std_ReturnType WdgM_GetMode(WdgM_ModeType* Mode)
 {
     if (Mode == NULL)
     {
-        Det_ReportError(WDGM_MODULE_ID, 0U, WDGM_API_ID_GET_MODE, WDGM_E_INV_POINTER);
+        (void)Det_ReportError(WDGM_MODULE_ID, 0U, WDGM_API_ID_GET_MODE, WDGM_E_INV_POINTER);
         return E_NOT_OK;
     }
 
     if (WdgM_Cfg == NULL)
     {
-        Det_ReportError(WDGM_MODULE_ID, 0U, WDGM_API_ID_GET_MODE, WDGM_E_NO_INIT);
+        (void)Det_ReportError(WDGM_MODULE_ID, 0U, WDGM_API_ID_GET_MODE, WDGM_E_NO_INIT);
         *Mode = WDGM_MODE_DEFAULT;
         return E_NOT_OK;
     }
@@ -592,8 +592,9 @@ void WdgM_DisableHwWatchdog(void)
  */
 void WdgM_ResumeSupervision(void)
 {
-    if (WdgM_Cfg == NULL)
+    if (WdgM_Cfg == NULL) {
         return;
+    }
 
     const unsigned long now = millis();
     for (uint8 i = 0U; i < WdgM_Cfg->EntityCount; i++)
@@ -635,13 +636,13 @@ Std_ReturnType WdgM_CheckpointReached(WdgM_SupervisedEntityIdType SEID, WdgM_Che
 {
     if (WdgM_Cfg == NULL)
     {
-        Det_ReportError(WDGM_MODULE_ID, 0U, WDGM_API_ID_CHECKPOINT_REACHED, WDGM_E_NO_INIT);
+        (void)Det_ReportError(WDGM_MODULE_ID, 0U, WDGM_API_ID_CHECKPOINT_REACHED, WDGM_E_NO_INIT);
         return E_NOT_OK;
     }
 
     if (SEID >= WdgM_Cfg->EntityCount)
     {
-        Det_ReportError(WDGM_MODULE_ID, 0U, WDGM_API_ID_CHECKPOINT_REACHED, WDGM_E_PARAM_SEID);
+        (void)Det_ReportError(WDGM_MODULE_ID, 0U, WDGM_API_ID_CHECKPOINT_REACHED, WDGM_E_PARAM_SEID);
         return E_NOT_OK;
     }
 
@@ -654,8 +655,8 @@ Std_ReturnType WdgM_CheckpointReached(WdgM_SupervisedEntityIdType SEID, WdgM_Che
 
     for (uint8 i = 0U; i < entity->TransitionCount; i++)
     {
-        if (entity->Transitions[i].FromCheckpointId == fromCp
-            && entity->Transitions[i].ToCheckpointId == CheckpointId)
+        if ((entity->Transitions[i].FromCheckpointId == fromCp)
+            && (entity->Transitions[i].ToCheckpointId == CheckpointId))
         {
             allowed = 1U;
             break;
@@ -677,11 +678,12 @@ Std_ReturnType WdgM_CheckpointReached(WdgM_SupervisedEntityIdType SEID, WdgM_Che
         for (uint8 d = 0U; d < entity->DeadlineCount; d++)
         {
             const WdgM_DeadlineCfgType* dl = &entity->Deadlines[d];
-            if (dl->FromCheckpointId != fromCp || dl->ToCheckpointId != CheckpointId)
+            if ((dl->FromCheckpointId != fromCp) || (dl->ToCheckpointId != CheckpointId)) {
                 continue;
+            }
 
             unsigned long elapsed = now - WdgM_LastCheckpointTimeMs[SEID];
-            if (elapsed < dl->MinMs || elapsed > dl->MaxMs)
+            if ((elapsed < dl->MinMs) || (elapsed > dl->MaxMs))
             {
                 WdgM_DeadlineStatus[SEID] = WDGM_LOCAL_STATUS_EXPIRED;
                 DET_LOGW(TAG, "SE%u deadline EXPIRED cp %u->%u elapsed=%lu (exp %lu..%lu) [HW WDT reset pending]",
@@ -725,26 +727,26 @@ Std_ReturnType WdgM_GetLocalStatus(WdgM_SupervisedEntityIdType SEID, WdgM_LocalS
 {
     if (Status == NULL)
     {
-        Det_ReportError(WDGM_MODULE_ID, 0U, WDGM_API_ID_GET_LOCAL_STATUS, WDGM_E_INV_POINTER);
+        (void)Det_ReportError(WDGM_MODULE_ID, 0U, WDGM_API_ID_GET_LOCAL_STATUS, WDGM_E_INV_POINTER);
         return E_NOT_OK;
     }
 
     if (WdgM_Cfg == NULL)
     {
-        Det_ReportError(WDGM_MODULE_ID, 0U, WDGM_API_ID_GET_LOCAL_STATUS, WDGM_E_NO_INIT);
+        (void)Det_ReportError(WDGM_MODULE_ID, 0U, WDGM_API_ID_GET_LOCAL_STATUS, WDGM_E_NO_INIT);
         *Status = WDGM_LOCAL_STATUS_DEACTIVATED;
         return E_NOT_OK;
     }
 
     if (SEID >= WdgM_Cfg->EntityCount)
     {
-        Det_ReportError(WDGM_MODULE_ID, 0U, WDGM_API_ID_GET_LOCAL_STATUS, WDGM_E_PARAM_SEID);
+        (void)Det_ReportError(WDGM_MODULE_ID, 0U, WDGM_API_ID_GET_LOCAL_STATUS, WDGM_E_PARAM_SEID);
         *Status = WDGM_LOCAL_STATUS_DEACTIVATED;
         return E_NOT_OK;
     }
 
-    if (WdgM_LogicalStatus[SEID]  == WDGM_LOCAL_STATUS_EXPIRED
-        || WdgM_DeadlineStatus[SEID] == WDGM_LOCAL_STATUS_EXPIRED)
+    if ((WdgM_LogicalStatus[SEID]  == WDGM_LOCAL_STATUS_EXPIRED)
+        || (WdgM_DeadlineStatus[SEID] == WDGM_LOCAL_STATUS_EXPIRED))
     {
         /* [SWS_WdgM_00202]/[SWS_WdgM_00206]: Logical/Deadline は猶予なしで
          * 即 EXPIRED (WdgM_CheckpointReached() 側で既に確定済み)。 */
@@ -786,8 +788,9 @@ static uint8 WdgM_AnyEntityNotOk(void)
     for (uint8 i = 0U; i < WdgM_Cfg->EntityCount; i++)
     {
         WdgM_LocalStatusType status;
-        if (WdgM_GetLocalStatus(i, &status) != E_OK || status != WDGM_LOCAL_STATUS_OK)
+        if (WdgM_GetLocalStatus(i, &status) != E_OK || (status != WDGM_LOCAL_STATUS_OK)) {
             return 1U;
+        }
     }
     return 0U;
 }
@@ -816,8 +819,9 @@ static uint8 WdgM_AnyEntityExpired(void)
     for (uint8 i = 0U; i < WdgM_Cfg->EntityCount; i++)
     {
         WdgM_LocalStatusType status;
-        if (WdgM_GetLocalStatus(i, &status) != E_OK || status == WDGM_LOCAL_STATUS_EXPIRED)
+        if (WdgM_GetLocalStatus(i, &status) != E_OK || (status == WDGM_LOCAL_STATUS_EXPIRED)) {
             return 1U;
+        }
     }
     return 0U;
 }
@@ -859,38 +863,42 @@ Std_ReturnType WdgM_GetGlobalStatus(WdgM_GlobalStatusType* Status)
 {
     if (Status == NULL)
     {
-        Det_ReportError(WDGM_MODULE_ID, 0U, WDGM_API_ID_GET_GLOBAL_STATUS, WDGM_E_INV_POINTER);
+        (void)Det_ReportError(WDGM_MODULE_ID, 0U, WDGM_API_ID_GET_GLOBAL_STATUS, WDGM_E_INV_POINTER);
         return E_NOT_OK;
     }
 
     if (WdgM_Cfg == NULL)
     {
-        Det_ReportError(WDGM_MODULE_ID, 0U, WDGM_API_ID_GET_GLOBAL_STATUS, WDGM_E_NO_INIT);
+        (void)Det_ReportError(WDGM_MODULE_ID, 0U, WDGM_API_ID_GET_GLOBAL_STATUS, WDGM_E_NO_INIT);
         *Status = WDGM_GLOBAL_STATUS_DEACTIVATED;
         return E_NOT_OK;
     }
 
-    if (WdgM_SupervisionSuppressed)
+    if ((WdgM_SupervisionSuppressed) != 0U)
     {
         *Status = WDGM_GLOBAL_STATUS_OK;
         return E_OK;
     }
 
-    if (WdgM_GlobalStopped)
+    if ((WdgM_GlobalStopped) != 0U)
     {
         *Status = WDGM_GLOBAL_STATUS_STOPPED;
         return E_OK;
     }
 
-    if (WdgM_GlobalExpired)
+    if ((WdgM_GlobalExpired) != 0U)
+    {
         /* [SWS_WdgM_00219]: 一度ラッチしたら、猶予サイクルを消費し尽くして
          * STOPPED に至るまで EXPIRED のまま（2026-09 是正、WdgM_GlobalExpired
          * のコメント参照）。 */
         *Status = WDGM_GLOBAL_STATUS_EXPIRED;
-    else if (!WdgM_AnyEntityNotOk())
+    }
+    else if (!WdgM_AnyEntityNotOk()) {
         *Status = WDGM_GLOBAL_STATUS_OK;
-    else
+    }
+    else {
         *Status = WDGM_GLOBAL_STATUS_FAILED;
+    }
 
     return E_OK;
 }
@@ -929,7 +937,7 @@ static void WdgM_EnterGlobalStopped(const char* reason, uint8 firstNotOkFound, u
 {
     WdgM_GlobalStopped = 1U;
 
-    if (firstNotOkFound)
+    if ((firstNotOkFound) != 0U)
     {
         WdgM_FirstExpiredSEID    = (WdgM_SupervisedEntityIdType)firstNotOkSeid;
         WdgM_FirstExpiredSEIDInv = (WdgM_SupervisedEntityIdType)(~firstNotOkSeid);
@@ -993,10 +1001,11 @@ static void WdgM_EnterGlobalStopped(const char* reason, uint8 firstNotOkFound, u
  */
 void WdgM_MainFunction(void)
 {
-    if (WdgM_Cfg == NULL)
+    if (WdgM_Cfg == NULL) {
         return;
+    }
 
-    if (WdgM_SkipNextAliveJudgment)
+    if ((WdgM_SkipNextAliveJudgment) != 0U)
     {
         WdgM_SkipNextAliveJudgment = 0U;
         DET_LOGI(TAG, "Alive judgment skipped once (resume grace period)");
@@ -1050,30 +1059,33 @@ void WdgM_MainFunction(void)
          * WDGM_EXPIRED_SUPERVISION_CYCLE_TOL 判定サイクル分以上続いただけで、
          * resume 直後の想定内の 1 回だけの Alive 不足が
          * いきなり EXPIRED と誤判定されてしまう）。 */
-        if (WdgM_AliveStatus[i] != WDGM_LOCAL_STATUS_OK && WdgM_SupervisionSuppressed)
+        if ((WdgM_AliveStatus[i] != WDGM_LOCAL_STATUS_OK) && WdgM_SupervisionSuppressed)
         {
             /* 凍結: 進めも回復させもしない。 */
         }
         else if (WdgM_AliveStatus[i] != WDGM_LOCAL_STATUS_OK)
         {
-            if (WdgM_EntityExpiredCycleCount[i] < WDGM_EXPIRED_SUPERVISION_CYCLE_TOL)
+            if (WdgM_EntityExpiredCycleCount[i] < WDGM_EXPIRED_SUPERVISION_CYCLE_TOL) {
                 WdgM_EntityExpiredCycleCount[i]++;
+            }
         }
         else
         {
             WdgM_EntityExpiredCycleCount[i] = 0U;
         }
 
-        if (WdgM_LogicalStatus[i] != WDGM_LOCAL_STATUS_OK)
+        if (WdgM_LogicalStatus[i] != WDGM_LOCAL_STATUS_OK) {
             DET_LOGW(TAG, "SE%u logical still EXPIRED (latched since violation)", (unsigned)i);
+        }
 
-        if (WdgM_DeadlineStatus[i] != WDGM_LOCAL_STATUS_OK)
+        if (WdgM_DeadlineStatus[i] != WDGM_LOCAL_STATUS_OK) {
             DET_LOGW(TAG, "SE%u deadline still EXPIRED (latched since violation)", (unsigned)i);
+        }
 
         if (!firstNotOkFound
-            && (WdgM_AliveStatus[i] != WDGM_LOCAL_STATUS_OK
-                || WdgM_LogicalStatus[i] != WDGM_LOCAL_STATUS_OK
-                || WdgM_DeadlineStatus[i] != WDGM_LOCAL_STATUS_OK))
+            && ((WdgM_AliveStatus[i] != WDGM_LOCAL_STATUS_OK)
+                || (WdgM_LogicalStatus[i] != WDGM_LOCAL_STATUS_OK)
+                || (WdgM_DeadlineStatus[i] != WDGM_LOCAL_STATUS_OK)))
         {
             firstNotOkFound = 1U;
             firstNotOkSeid  = i;
@@ -1111,13 +1123,13 @@ void WdgM_MainFunction(void)
     {
         /* 抑制中は状態遷移そのものを凍結する。 */
     }
-    else if (anyNotOk)
+    else if ((anyNotOk) != 0U)
     {
-        if (WdgM_GlobalStopped)
+        if ((WdgM_GlobalStopped) != 0U)
         {
             /* [SWS_WdgM_00221]: STOPPED は最終状態、そのまま。 */
         }
-        else if (WdgM_GlobalExpired)
+        else if ((WdgM_GlobalExpired) != 0U)
         {
             /* [SWS_WdgM_00219]/[00220]: 既に EXPIRED。仕様上 EXPIRED から
              * OK/FAILED への直接遷移は定義されていないため、この時点の
@@ -1134,7 +1146,7 @@ void WdgM_MainFunction(void)
                 WdgM_EnterGlobalStopped("tolerance exhausted", firstNotOkFound, firstNotOkSeid);
             }
         }
-        else if (WdgM_AnyEntityExpired())
+        else if ((WdgM_AnyEntityExpired()) != 0U)
         {
             if (WDGM_EXPIRED_SUPERVISION_CYCLE_TOL == 0U)
             {
@@ -1161,7 +1173,7 @@ void WdgM_MainFunction(void)
              * 何もしない。 */
         }
     }
-    else if (WdgM_ExpiredCycleCount > 0U || WdgM_GlobalStopped || WdgM_GlobalExpired)
+    else if ((WdgM_ExpiredCycleCount > 0U) || WdgM_GlobalStopped || WdgM_GlobalExpired)
     {
         /* [SWS_WdgM_00129]/[00375]: DEM_EVENT_WDGM_SUPERVISION の Fail 条件は
          * 「WDGM_GLOBAL_STATUS_STOPPED に到達した」ことであり、EXPIRED から
@@ -1178,8 +1190,9 @@ void WdgM_MainFunction(void)
          * 目的）、この PASSED 報告はその独自拡張シナリオに対する、仕様の
          * 想定範囲を超えた本プロジェクト独自の対応付けである（自己仕様引用
          * 裏取りで指摘・追記）。 */
-        if (WdgM_GlobalStopped)
+        if ((WdgM_GlobalStopped) != 0U) {
             (void)Dem_SetEventStatus(DEM_EVENT_WDGM_SUPERVISION, DEM_EVENT_STATUS_PASSED);
+        }
 
         WdgM_GlobalExpired     = 0U;
         WdgM_ExpiredCycleCount = 0U;
@@ -1277,7 +1290,7 @@ void WdgM_PerformReset(void)
 {
     if (WdgM_Cfg == NULL)
     {
-        Det_ReportError(WDGM_MODULE_ID, 0U, WDGM_API_ID_PERFORM_RESET, WDGM_E_NO_INIT);
+        (void)Det_ReportError(WDGM_MODULE_ID, 0U, WDGM_API_ID_PERFORM_RESET, WDGM_E_NO_INIT);
         return;
     }
 
@@ -1310,7 +1323,7 @@ Std_ReturnType WdgM_GetFirstExpiredSEID(WdgM_SupervisedEntityIdType* SEID)
 {
     if (SEID == NULL)
     {
-        Det_ReportError(WDGM_MODULE_ID, 0U, WDGM_API_ID_GET_FIRST_EXPIRED_SEID, WDGM_E_INV_POINTER);
+        (void)Det_ReportError(WDGM_MODULE_ID, 0U, WDGM_API_ID_GET_FIRST_EXPIRED_SEID, WDGM_E_INV_POINTER);
         return E_NOT_OK;
     }
 

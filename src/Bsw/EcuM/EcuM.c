@@ -291,8 +291,8 @@ void EcuM_Init(void)
                                * 必ず前に置くこと（上記と同じ理由。Nm_NetworkRequest()
                                * が NM_E_UNINIT で失敗すると Nm 層より下の CanNm
                                * まで要求が届かない）。 */
-    ComM_RequestComMode(COMM_USER_0, COMM_FULL_COMMUNICATION);/* 全層初期化後に開通 */
-    Rte_Start();                /* RTE 自身の初期化（[SWS_Rte_02569]）。SW-C の
+    (void)ComM_RequestComMode(COMM_USER_0, COMM_FULL_COMMUNICATION);/* 全層初期化後に開通 */
+    (void)Rte_Start();                /* RTE 自身の初期化（[SWS_Rte_02569]）。SW-C の
                                   * Init Runnable 起動より必ず前に置くこと
                                   * （[SWS_Rte_CONSTR_09035]、詳細は Rte.c 末尾の
                                   * 「RTE ライフサイクル API」コメント参照） */
@@ -388,7 +388,7 @@ Std_ReturnType EcuM_RequestRUN(EcuM_UserType user)
 {
     if (user >= ECUM_USER_COUNT)
     {
-        Det_ReportError(ECUM_MODULE_ID, 0U, ECUM_API_ID_REQUEST_RUN, ECUM_E_INVALID_PAR);
+        (void)Det_ReportError(ECUM_MODULE_ID, 0U, ECUM_API_ID_REQUEST_RUN, ECUM_E_INVALID_PAR);
         return E_NOT_OK;
     }
 
@@ -403,7 +403,7 @@ Std_ReturnType EcuM_RequestRUN(EcuM_UserType user)
          * 全ユーザ解放後にのみ到達するため、この分岐に来た時点で
          * user のビットが立っているなら状態遷移の余地はない）。 */
         DET_LOGW(TAG, "RequestRUN E: multiple request user=%u", (unsigned)user);
-        Det_ReportError(ECUM_MODULE_ID, 0U, ECUM_API_ID_REQUEST_RUN, ECUM_E_MULTIPLE_RUN_REQUESTS);
+        (void)Det_ReportError(ECUM_MODULE_ID, 0U, ECUM_API_ID_REQUEST_RUN, ECUM_E_MULTIPLE_RUN_REQUESTS);
         return E_NOT_OK;
     }
 
@@ -456,7 +456,7 @@ Std_ReturnType EcuM_ReleaseRUN(EcuM_UserType user)
 {
     if (user >= ECUM_USER_COUNT)
     {
-        Det_ReportError(ECUM_MODULE_ID, 0U, ECUM_API_ID_RELEASE_RUN, ECUM_E_INVALID_PAR);
+        (void)Det_ReportError(ECUM_MODULE_ID, 0U, ECUM_API_ID_RELEASE_RUN, ECUM_E_INVALID_PAR);
         return E_NOT_OK;
     }
 
@@ -467,7 +467,7 @@ Std_ReturnType EcuM_ReleaseRUN(EcuM_UserType user)
         /* SWS_EcuM_04127: 対応する要求なしの解放は DET
          * (ECUM_E_MISMATCHED_RUN_RELEASE) へ報告し、E_NOT_OK を返す。 */
         DET_LOGW(TAG, "ReleaseRUN E: mismatched release user=%u", (unsigned)user);
-        Det_ReportError(ECUM_MODULE_ID, 0U, ECUM_API_ID_RELEASE_RUN, ECUM_E_MISMATCHED_RUN_RELEASE);
+        (void)Det_ReportError(ECUM_MODULE_ID, 0U, ECUM_API_ID_RELEASE_RUN, ECUM_E_MISMATCHED_RUN_RELEASE);
         return E_NOT_OK;
     }
 
@@ -514,7 +514,7 @@ Std_ReturnType EcuM_RequestPOST_RUN(EcuM_UserType user)
 {
     if (user >= ECUM_USER_COUNT)
     {
-        Det_ReportError(ECUM_MODULE_ID, 0U, ECUM_API_ID_REQUEST_POST_RUN, ECUM_E_INVALID_PAR);
+        (void)Det_ReportError(ECUM_MODULE_ID, 0U, ECUM_API_ID_REQUEST_POST_RUN, ECUM_E_INVALID_PAR);
         return E_NOT_OK;
     }
 
@@ -523,7 +523,7 @@ Std_ReturnType EcuM_RequestPOST_RUN(EcuM_UserType user)
     if ((EcuM_PostRunUsers & mask) != 0U)
     {
         DET_LOGW(TAG, "RequestPOST_RUN E: multiple request user=%u", (unsigned)user);
-        Det_ReportError(ECUM_MODULE_ID, 0U, ECUM_API_ID_REQUEST_POST_RUN, ECUM_E_MULTIPLE_RUN_REQUESTS);
+        (void)Det_ReportError(ECUM_MODULE_ID, 0U, ECUM_API_ID_REQUEST_POST_RUN, ECUM_E_MULTIPLE_RUN_REQUESTS);
         return E_NOT_OK;
     }
 
@@ -551,7 +551,7 @@ Std_ReturnType EcuM_ReleasePOST_RUN(EcuM_UserType user)
 {
     if (user >= ECUM_USER_COUNT)
     {
-        Det_ReportError(ECUM_MODULE_ID, 0U, ECUM_API_ID_RELEASE_POST_RUN, ECUM_E_INVALID_PAR);
+        (void)Det_ReportError(ECUM_MODULE_ID, 0U, ECUM_API_ID_RELEASE_POST_RUN, ECUM_E_INVALID_PAR);
         return E_NOT_OK;
     }
 
@@ -560,7 +560,7 @@ Std_ReturnType EcuM_ReleasePOST_RUN(EcuM_UserType user)
     if ((EcuM_PostRunUsers & mask) == 0U)
     {
         DET_LOGW(TAG, "ReleasePOST_RUN E: mismatched release user=%u", (unsigned)user);
-        Det_ReportError(ECUM_MODULE_ID, 0U, ECUM_API_ID_RELEASE_POST_RUN, ECUM_E_MISMATCHED_RUN_RELEASE);
+        (void)Det_ReportError(ECUM_MODULE_ID, 0U, ECUM_API_ID_RELEASE_POST_RUN, ECUM_E_MISMATCHED_RUN_RELEASE);
         return E_NOT_OK;
     }
 
@@ -621,7 +621,7 @@ void EcuM_CheckWakeup(EcuM_WakeupSourceType wakeupSource)
     if ((wakeupSource & ECUM_WKSOURCE_CAN) == 0U)
     {
         DET_LOGW(TAG, "CheckWakeup: unknown source=0x%08lX", (unsigned long)wakeupSource);
-        Det_ReportError(ECUM_MODULE_ID, 0U, ECUM_API_ID_CHECK_WAKEUP, ECUM_E_INVALID_PAR);
+        (void)Det_ReportError(ECUM_MODULE_ID, 0U, ECUM_API_ID_CHECK_WAKEUP, ECUM_E_INVALID_PAR);
         return;
     }
 
@@ -637,7 +637,7 @@ void EcuM_GetVersionInfo(Std_VersionInfoType* versioninfo)
 {
     if (versioninfo == NULL)
     {
-        Det_ReportError(ECUM_MODULE_ID, 0U, ECUM_API_ID_GET_VERSION_INFO, ECUM_E_NULL_POINTER);
+        (void)Det_ReportError(ECUM_MODULE_ID, 0U, ECUM_API_ID_GET_VERSION_INFO, ECUM_E_NULL_POINTER);
         return;
     }
 

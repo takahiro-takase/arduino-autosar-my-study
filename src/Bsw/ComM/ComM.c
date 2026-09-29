@@ -232,8 +232,9 @@ void ComM_Init(const ComM_ConfigType* ConfigPtr)
         ComM_DcmActiveDiagnostic[i]      = 0U;
         ComM_CommunicationAllowedFlag[i] = FALSE;  /* [SWS_ComM_00884] 既定値 */
     }
-    for (i = 0U; i < COMM_USER_COUNT; i++)
+    for (i = 0U; i < COMM_USER_COUNT; i++) {
         ComM_UserRequest[i] = COMM_NO_COMMUNICATION;
+    }
     ComM_EcuMRunMode = COMM_NO_COMMUNICATION;
     ComM_Initialized = 1U;
     DET_LOGI(TAG, "Init ch=%u", (unsigned)COMM_CHANNEL_COUNT);
@@ -254,7 +255,7 @@ void ComM_DeInit(void)
 {
     if (!ComM_Initialized)
     {
-        Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_DEINIT, COMM_E_UNINIT);
+        (void)Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_DEINIT, COMM_E_UNINIT);
         return;
     }
 
@@ -283,7 +284,7 @@ Std_ReturnType ComM_GetStatus(ComM_InitStatusType* Status)
 {
     if (Status == NULL)
     {
-        Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_GET_STATUS, COMM_E_PARAM_POINTER);
+        (void)Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_GET_STATUS, COMM_E_PARAM_POINTER);
         return E_NOT_OK;
     }
 
@@ -328,13 +329,13 @@ Std_ReturnType ComM_RequestComMode(ComM_UserHandleType User, ComM_ModeType ComMo
 {
     if (!ComM_Initialized)
     {
-        Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_REQUEST_COM_MODE, COMM_E_UNINIT);
+        (void)Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_REQUEST_COM_MODE, COMM_E_UNINIT);
         return E_NOT_OK;
     }
 
-    if (User >= COMM_USER_COUNT || ComMode > COMM_FULL_COMMUNICATION)
+    if ((User >= COMM_USER_COUNT) || (ComMode > COMM_FULL_COMMUNICATION))
     {
-        Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_REQUEST_COM_MODE, COMM_E_WRONG_PARAMETERS);
+        (void)Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_REQUEST_COM_MODE, COMM_E_WRONG_PARAMETERS);
         return E_NOT_OK;
     }
 
@@ -371,19 +372,19 @@ Std_ReturnType ComM_GetRequestedComMode(ComM_UserHandleType User, ComM_ModeType*
 {
     if (!ComM_Initialized)
     {
-        Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_GET_REQUESTED_COM_MODE, COMM_E_UNINIT);
+        (void)Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_GET_REQUESTED_COM_MODE, COMM_E_UNINIT);
         return E_NOT_OK;
     }
 
     if (User >= COMM_USER_COUNT)
     {
-        Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_GET_REQUESTED_COM_MODE, COMM_E_WRONG_PARAMETERS);
+        (void)Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_GET_REQUESTED_COM_MODE, COMM_E_WRONG_PARAMETERS);
         return E_NOT_OK;
     }
 
     if (ComMode == NULL)
     {
-        Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_GET_REQUESTED_COM_MODE, COMM_E_PARAM_POINTER);
+        (void)Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_GET_REQUESTED_COM_MODE, COMM_E_PARAM_POINTER);
         return E_NOT_OK;
     }
 
@@ -406,19 +407,19 @@ Std_ReturnType ComM_GetCurrentComMode(ComM_UserHandleType User, ComM_ModeType* C
 {
     if (!ComM_Initialized)
     {
-        Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_GET_CURRENT_COM_MODE, COMM_E_UNINIT);
+        (void)Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_GET_CURRENT_COM_MODE, COMM_E_UNINIT);
         return E_NOT_OK;
     }
 
     if (User >= COMM_USER_COUNT)
     {
-        Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_GET_CURRENT_COM_MODE, COMM_E_WRONG_PARAMETERS);
+        (void)Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_GET_CURRENT_COM_MODE, COMM_E_WRONG_PARAMETERS);
         return E_NOT_OK;
     }
 
     if (ComMode == NULL)
     {
-        Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_GET_CURRENT_COM_MODE, COMM_E_PARAM_POINTER);
+        (void)Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_GET_CURRENT_COM_MODE, COMM_E_PARAM_POINTER);
         return E_NOT_OK;
     }
 
@@ -471,7 +472,7 @@ void ComM_GetVersionInfo(Std_VersionInfoType* Versioninfo)
 {
     if (Versioninfo == NULL)
     {
-        Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_GET_VERSION_INFO, COMM_E_PARAM_POINTER);
+        (void)Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_GET_VERSION_INFO, COMM_E_PARAM_POINTER);
         return;
     }
 
@@ -550,13 +551,13 @@ void ComM_Nm_NetworkStartIndication(NetworkHandleType Network)
 {
     if (!ComM_Initialized)
     {
-        Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_NM_NETWORK_START_INDICATION, COMM_E_UNINIT);
+        (void)Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_NM_NETWORK_START_INDICATION, COMM_E_UNINIT);
         return;
     }
 
     if (Network >= COMM_CHANNEL_COUNT)
     {
-        Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_NM_NETWORK_START_INDICATION, COMM_E_WRONG_PARAMETERS);
+        (void)Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_NM_NETWORK_START_INDICATION, COMM_E_WRONG_PARAMETERS);
         return;
     }
 
@@ -627,13 +628,13 @@ void ComM_Nm_NetworkMode(NetworkHandleType Network)
 {
     if (!ComM_Initialized)
     {
-        Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_NM_NETWORK_MODE, COMM_E_UNINIT);
+        (void)Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_NM_NETWORK_MODE, COMM_E_UNINIT);
         return;
     }
 
     if (Network >= COMM_CHANNEL_COUNT)
     {
-        Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_NM_NETWORK_MODE, COMM_E_WRONG_PARAMETERS);
+        (void)Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_NM_NETWORK_MODE, COMM_E_WRONG_PARAMETERS);
         return;
     }
 
@@ -688,13 +689,13 @@ void ComM_Nm_PrepareBusSleepMode(NetworkHandleType Network)
 {
     if (!ComM_Initialized)
     {
-        Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_NM_PREPARE_BUS_SLEEP_MODE, COMM_E_UNINIT);
+        (void)Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_NM_PREPARE_BUS_SLEEP_MODE, COMM_E_UNINIT);
         return;
     }
 
     if (Network >= COMM_CHANNEL_COUNT)
     {
-        Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_NM_PREPARE_BUS_SLEEP_MODE, COMM_E_WRONG_PARAMETERS);
+        (void)Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_NM_PREPARE_BUS_SLEEP_MODE, COMM_E_WRONG_PARAMETERS);
         return;
     }
 
@@ -736,13 +737,13 @@ void ComM_Nm_BusSleepMode(NetworkHandleType Network)
 {
     if (!ComM_Initialized)
     {
-        Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_NM_BUS_SLEEP_MODE, COMM_E_UNINIT);
+        (void)Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_NM_BUS_SLEEP_MODE, COMM_E_UNINIT);
         return;
     }
 
     if (Network >= COMM_CHANNEL_COUNT)
     {
-        Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_NM_BUS_SLEEP_MODE, COMM_E_WRONG_PARAMETERS);
+        (void)Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_NM_BUS_SLEEP_MODE, COMM_E_WRONG_PARAMETERS);
         return;
     }
 
@@ -778,13 +779,13 @@ void ComM_DCM_ActiveDiagnostic(NetworkHandleType Channel)
 {
     if (!ComM_Initialized)
     {
-        Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_DCM_ACTIVE_DIAGNOSTIC, COMM_E_UNINIT);
+        (void)Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_DCM_ACTIVE_DIAGNOSTIC, COMM_E_UNINIT);
         return;
     }
 
     if (Channel >= COMM_CHANNEL_COUNT)
     {
-        Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_DCM_ACTIVE_DIAGNOSTIC, COMM_E_WRONG_PARAMETERS);
+        (void)Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_DCM_ACTIVE_DIAGNOSTIC, COMM_E_WRONG_PARAMETERS);
         return;
     }
 
@@ -817,13 +818,13 @@ void ComM_DCM_InactiveDiagnostic(NetworkHandleType Channel)
 {
     if (!ComM_Initialized)
     {
-        Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_DCM_INACTIVE_DIAGNOSTIC, COMM_E_UNINIT);
+        (void)Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_DCM_INACTIVE_DIAGNOSTIC, COMM_E_UNINIT);
         return;
     }
 
     if (Channel >= COMM_CHANNEL_COUNT)
     {
-        Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_DCM_INACTIVE_DIAGNOSTIC, COMM_E_WRONG_PARAMETERS);
+        (void)Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_DCM_INACTIVE_DIAGNOSTIC, COMM_E_WRONG_PARAMETERS);
         return;
     }
 
@@ -884,13 +885,13 @@ void ComM_CommunicationAllowed(NetworkHandleType Channel, boolean Allowed)
 {
     if (!ComM_Initialized)
     {
-        Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_COMMUNICATION_ALLOWED, COMM_E_UNINIT);
+        (void)Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_COMMUNICATION_ALLOWED, COMM_E_UNINIT);
         return;
     }
 
     if (Channel >= COMM_CHANNEL_COUNT)
     {
-        Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_COMMUNICATION_ALLOWED, COMM_E_WRONG_PARAMETERS);
+        (void)Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_COMMUNICATION_ALLOWED, COMM_E_WRONG_PARAMETERS);
         return;
     }
 
@@ -952,13 +953,13 @@ void ComM_BusSM_ModeIndication(NetworkHandleType Network, ComM_ModeType Mode)
 {
     if (!ComM_Initialized)
     {
-        Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_BUS_SM_MODE_INDICATION, COMM_E_UNINIT);
+        (void)Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_BUS_SM_MODE_INDICATION, COMM_E_UNINIT);
         return;
     }
 
     if (Network >= COMM_CHANNEL_COUNT)
     {
-        Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_BUS_SM_MODE_INDICATION, COMM_E_WRONG_PARAMETERS);
+        (void)Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_BUS_SM_MODE_INDICATION, COMM_E_WRONG_PARAMETERS);
         return;
     }
 
@@ -966,7 +967,7 @@ void ComM_BusSM_ModeIndication(NetworkHandleType Network, ComM_ModeType Mode)
     ComM_ChannelMode[Network] = Mode;
     DET_LOGI(TAG, "ch%u ->mode=%u", (unsigned)Network, (unsigned)Mode);
 
-    if (Mode == COMM_FULL_COMMUNICATION || Mode == COMM_NO_COMMUNICATION)
+    if ((Mode == COMM_FULL_COMMUNICATION) || (Mode == COMM_NO_COMMUNICATION))
     {
         ComM_UserRequest[COMM_USER_0] = Mode;
     }
@@ -987,7 +988,7 @@ void ComM_BusSM_ModeIndication(NetworkHandleType Network, ComM_ModeType Mode)
     {
         if (Mode == COMM_FULL_COMMUNICATION)
         {
-            if (ComM_NmReleasePending[Network])
+            if ((ComM_NmReleasePending[Network]) != 0U)
             {
                 /* CanNm 協調スリープ待ちの最中に Bus-Off が発生し、回復した CanSM が
                  * 改めて FULL_COMMUNICATION を通知してきたケース（誰かが
@@ -1037,7 +1038,7 @@ void ComM_BusSM_ModeIndication(NetworkHandleType Network, ComM_ModeType Mode)
             (void)Nm_NetworkRelease(NM_MAIN_NETWORK_HANDLE);
         }
     }
-    else if (Mode == COMM_SILENT_COMMUNICATION && ComM_NmReleasePending[Network])
+    else if ((Mode == COMM_SILENT_COMMUNICATION) && ComM_NmReleasePending[Network])
     {
         /* 2026-08 追加: Mode==prevMode==COMM_SILENT_COMMUNICATION（上の
          * `if (Mode != prevMode)` では捕捉できない再通知）で、かつ CanNm 協調
@@ -1094,7 +1095,7 @@ void ComM_MainFunction(void)
 {
     if (!ComM_Initialized)
     {
-        Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_MAIN_FUNCTION, COMM_E_UNINIT);
+        (void)Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_MAIN_FUNCTION, COMM_E_UNINIT);
         return;
     }
     /* NOP（理由は上記 \details 参照）。 */
@@ -1122,11 +1123,13 @@ static ComM_ModeType ComM_ComputeAggregatedMode(void)
     uint8 i;
     for (i = 0U; i < COMM_USER_COUNT; i++)
     {
-        if (ComM_UserRequest[i] > aggregated)
+        if (ComM_UserRequest[i] > aggregated) {
             aggregated = ComM_UserRequest[i];
+        }
     }
-    if (ComM_DcmActiveDiagnostic[0U])
+    if ((ComM_DcmActiveDiagnostic[0U]) != 0U) {
         aggregated = COMM_FULL_COMMUNICATION;
+    }
     return aggregated;
 }
 
@@ -1209,7 +1212,7 @@ static Std_ReturnType ComM_ApplyAggregatedRequest(ComM_ModeType aggregated)
      * 眠らせてしまい、CAN_CS_SLEEP からの CAN_T_START は Can.c が拒否する
      * （SWS_Can_00200/00409-00412）ため、外部からの CAN ウェイクアップ割り込みが
      * 来るまで ECU が誤って眠り続ける（/code-review で指摘・検証済み）。 */
-    if (aggregated == COMM_FULL_COMMUNICATION && ComM_NmReleasePending[0U])
+    if ((aggregated == COMM_FULL_COMMUNICATION) && ComM_NmReleasePending[0U])
     {
         ComM_NmReleasePending[0U] = 0U;
         (void)Nm_NetworkRequest(NM_MAIN_NETWORK_HANDLE);
@@ -1223,8 +1226,9 @@ static Std_ReturnType ComM_ApplyAggregatedRequest(ComM_ModeType aggregated)
 
     /* 集約結果が現在のチャネル状態と同じなら何もしない
      * （要求元の要求変化が他の要求元の要求に埋もれて無効化されたケースを含む）。 */
-    if (ComM_ChannelMode[0U] == aggregated)
+    if (ComM_ChannelMode[0U] == aggregated) {
         return E_OK;
+    }
 
     /* NO_COM が（再）要求され、かつ既に CanNm 協調スリープ待ち
      * （ComM_NmReleasePending）が進行中なら、チャネルが現在 FULL_COM
@@ -1249,8 +1253,9 @@ static Std_ReturnType ComM_ApplyAggregatedRequest(ComM_ModeType aggregated)
      * ComM_NmReleasePending が立っていない場合（Bus-Off で SILENT_COM に
      * なっているだけで Stage 1 の巻き戻り待ちではない場合を含む）はここに
      * 該当せず、下の各分岐へ進む。 */
-    if (aggregated == COMM_NO_COMMUNICATION && ComM_NmReleasePending[0U])
+    if ((aggregated == COMM_NO_COMMUNICATION) && ComM_NmReleasePending[0U]) {
         return E_OK;
+    }
 
     /* FULL_COM -> NO_COM（初回）: CanSM へは何も伝えない。[SWS_ComM_00133]
      * のとおり Nm_NetworkRelease()（Nm 経由で CanNm_NetworkRelease() へ委譲
@@ -1262,7 +1267,7 @@ static Std_ReturnType ComM_ApplyAggregatedRequest(ComM_ModeType aggregated)
      * ファイル冒頭コメント参照）。2 回目以降の冗長な再要求は上の
      * ComM_NmReleasePending チェックで既に無視されているため、ここへ来るのは
      * 常に初回のみ。 */
-    if (ComM_ChannelMode[0U] == COMM_FULL_COMMUNICATION && aggregated == COMM_NO_COMMUNICATION)
+    if ((ComM_ChannelMode[0U] == COMM_FULL_COMMUNICATION) && (aggregated == COMM_NO_COMMUNICATION))
     {
         ComM_NmReleasePending[0U] = 1U;
         (void)Nm_NetworkRelease(NM_MAIN_NETWORK_HANDLE);
@@ -1280,8 +1285,9 @@ static Std_ReturnType ComM_ApplyAggregatedRequest(ComM_ModeType aggregated)
      * 落ちてくる）はゲートの対象外とし、これまでどおり CanSM へそのまま
      * 転送する（Bus-Off 中は CanSM 自身が拒否する。/code-review で
      * 対象範囲の逸脱を指摘）。 */
-    if (aggregated == COMM_FULL_COMMUNICATION && ComM_ChannelMode[0U] == COMM_NO_COMMUNICATION)
+    if ((aggregated == COMM_FULL_COMMUNICATION) && (ComM_ChannelMode[0U] == COMM_NO_COMMUNICATION)) {
         return ComM_RequestFullComOrPend(0U);
+    }
     return CanSM_RequestComMode(0U, aggregated);
 }
 

@@ -98,8 +98,9 @@ static uint8 Os_UseMillisFallback = 0U;
  */
 static unsigned long Os_GetTimeMs(void)
 {
-    if (Os_UseMillisFallback != 0U)
+    if (Os_UseMillisFallback != 0U) {
         return millis();
+    }
     return (unsigned long)Gpt_GetTimeElapsed(OS_GPT_CHANNEL);
 }
 
@@ -132,13 +133,15 @@ static unsigned long Os_GetTimeMs(void)
  */
 static void Os_CrossCheckTickSource(void)
 {
-    if (Os_UseMillisFallback != 0U)
+    if (Os_UseMillisFallback != 0U) {
         return;  /* 既にフォールバック済み: これ以上チェックする意味がない */
+    }
 
     const unsigned long nowMillis = millis();
 
-    if ((nowMillis - Os_LastCrossCheckMillis) < OS_TICK_CROSSCHECK_PERIOD_MS)
+    if ((nowMillis - Os_LastCrossCheckMillis) < OS_TICK_CROSSCHECK_PERIOD_MS) {
         return;
+    }
 
     const unsigned long nowTick     = Os_GetTimeMs();
     const unsigned long millisDelta = nowMillis - Os_LastCrossCheckMillis;
@@ -230,8 +233,9 @@ void Os_SchedulerStep(void)
 {
     for (uint8 i = 0U; i < Os_Cfg->TaskCount; i++)
     {
-        if (Os_TaskActive[i] == 0U)
+        if (Os_TaskActive[i] == 0U) {
             continue;
+        }
 
         unsigned long now = Os_GetTimeMs();
         if ((now - Os_LastRunMs[i]) >= (unsigned long)Os_Cfg->Tasks[i].PeriodMs)
@@ -268,11 +272,13 @@ void Os_SchedulerStep(void)
  */
 void Os_SetTaskActive(uint8 TaskId, uint8 Active)
 {
-    if (Os_Cfg == NULL || TaskId >= Os_Cfg->TaskCount)
+    if ((Os_Cfg == NULL) || (TaskId >= Os_Cfg->TaskCount)) {
         return;  /* Os_Init() 未実行 (呼び出し順序の誤りに対する保険) */
+    }
 
-    if (Active != 0U && Os_TaskActive[TaskId] == 0U)
+    if ((Active != 0U) && (Os_TaskActive[TaskId] == 0U)) {
         Os_LastRunMs[TaskId] = Os_GetTimeMs();
+    }
 
     Os_TaskActive[TaskId] = Active;
 }

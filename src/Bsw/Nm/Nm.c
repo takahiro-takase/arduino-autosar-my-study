@@ -77,13 +77,13 @@ Std_ReturnType Nm_NetworkRequest(NetworkHandleType Channel)
 {
     if (!Nm_Initialized)
     {
-        Det_ReportError(NM_MODULE_ID, 0U, NM_API_ID_NETWORK_REQUEST, NM_E_UNINIT);
+        (void)Det_ReportError(NM_MODULE_ID, 0U, NM_API_ID_NETWORK_REQUEST, NM_E_UNINIT);
         return E_NOT_OK;
     }
 
     if (Channel != NM_MAIN_NETWORK_HANDLE)
     {
-        Det_ReportError(NM_MODULE_ID, 0U, NM_API_ID_NETWORK_REQUEST, NM_E_INVALID_CHANNEL);
+        (void)Det_ReportError(NM_MODULE_ID, 0U, NM_API_ID_NETWORK_REQUEST, NM_E_INVALID_CHANNEL);
         return E_NOT_OK;
     }
 
@@ -103,13 +103,13 @@ Std_ReturnType Nm_NetworkRelease(NetworkHandleType Channel)
 {
     if (!Nm_Initialized)
     {
-        Det_ReportError(NM_MODULE_ID, 0U, NM_API_ID_NETWORK_RELEASE, NM_E_UNINIT);
+        (void)Det_ReportError(NM_MODULE_ID, 0U, NM_API_ID_NETWORK_RELEASE, NM_E_UNINIT);
         return E_NOT_OK;
     }
 
     if (Channel != NM_MAIN_NETWORK_HANDLE)
     {
-        Det_ReportError(NM_MODULE_ID, 0U, NM_API_ID_NETWORK_RELEASE, NM_E_INVALID_CHANNEL);
+        (void)Det_ReportError(NM_MODULE_ID, 0U, NM_API_ID_NETWORK_RELEASE, NM_E_INVALID_CHANNEL);
         return E_NOT_OK;
     }
 
@@ -133,13 +133,13 @@ Std_ReturnType Nm_DisableCommunication(NetworkHandleType Channel)
 {
     if (!Nm_Initialized)
     {
-        Det_ReportError(NM_MODULE_ID, 0U, NM_API_ID_DISABLE_COMMUNICATION, NM_E_UNINIT);
+        (void)Det_ReportError(NM_MODULE_ID, 0U, NM_API_ID_DISABLE_COMMUNICATION, NM_E_UNINIT);
         return E_NOT_OK;
     }
 
     if (Channel != NM_MAIN_NETWORK_HANDLE)
     {
-        Det_ReportError(NM_MODULE_ID, 0U, NM_API_ID_DISABLE_COMMUNICATION, NM_E_INVALID_CHANNEL);
+        (void)Det_ReportError(NM_MODULE_ID, 0U, NM_API_ID_DISABLE_COMMUNICATION, NM_E_INVALID_CHANNEL);
         return E_NOT_OK;
     }
 
@@ -159,13 +159,13 @@ Std_ReturnType Nm_EnableCommunication(NetworkHandleType Channel)
 {
     if (!Nm_Initialized)
     {
-        Det_ReportError(NM_MODULE_ID, 0U, NM_API_ID_ENABLE_COMMUNICATION, NM_E_UNINIT);
+        (void)Det_ReportError(NM_MODULE_ID, 0U, NM_API_ID_ENABLE_COMMUNICATION, NM_E_UNINIT);
         return E_NOT_OK;
     }
 
     if (Channel != NM_MAIN_NETWORK_HANDLE)
     {
-        Det_ReportError(NM_MODULE_ID, 0U, NM_API_ID_ENABLE_COMMUNICATION, NM_E_INVALID_CHANNEL);
+        (void)Det_ReportError(NM_MODULE_ID, 0U, NM_API_ID_ENABLE_COMMUNICATION, NM_E_INVALID_CHANNEL);
         return E_NOT_OK;
     }
 
@@ -207,13 +207,13 @@ Std_ReturnType Nm_RepeatMessageRequest(NetworkHandleType Channel)
 {
     if (!Nm_Initialized)
     {
-        Det_ReportError(NM_MODULE_ID, 0U, NM_API_ID_REPEAT_MESSAGE_REQUEST, NM_E_UNINIT);
+        (void)Det_ReportError(NM_MODULE_ID, 0U, NM_API_ID_REPEAT_MESSAGE_REQUEST, NM_E_UNINIT);
         return E_NOT_OK;
     }
 
     if (Channel != NM_MAIN_NETWORK_HANDLE)
     {
-        Det_ReportError(NM_MODULE_ID, 0U, NM_API_ID_REPEAT_MESSAGE_REQUEST, NM_E_INVALID_CHANNEL);
+        (void)Det_ReportError(NM_MODULE_ID, 0U, NM_API_ID_REPEAT_MESSAGE_REQUEST, NM_E_INVALID_CHANNEL);
         return E_NOT_OK;
     }
 
@@ -233,19 +233,19 @@ Std_ReturnType Nm_GetNodeIdentifier(NetworkHandleType Channel, uint8* nmNodeIdPt
 {
     if (nmNodeIdPtr == NULL)
     {
-        Det_ReportError(NM_MODULE_ID, 0U, NM_API_ID_GET_NODE_IDENTIFIER, NM_E_PARAM_POINTER);
+        (void)Det_ReportError(NM_MODULE_ID, 0U, NM_API_ID_GET_NODE_IDENTIFIER, NM_E_PARAM_POINTER);
         return E_NOT_OK;
     }
 
     if (!Nm_Initialized)
     {
-        Det_ReportError(NM_MODULE_ID, 0U, NM_API_ID_GET_NODE_IDENTIFIER, NM_E_UNINIT);
+        (void)Det_ReportError(NM_MODULE_ID, 0U, NM_API_ID_GET_NODE_IDENTIFIER, NM_E_UNINIT);
         return E_NOT_OK;
     }
 
     if (Channel != NM_MAIN_NETWORK_HANDLE)
     {
-        Det_ReportError(NM_MODULE_ID, 0U, NM_API_ID_GET_NODE_IDENTIFIER, NM_E_INVALID_CHANNEL);
+        (void)Det_ReportError(NM_MODULE_ID, 0U, NM_API_ID_GET_NODE_IDENTIFIER, NM_E_INVALID_CHANNEL);
         return E_NOT_OK;
     }
 
@@ -260,19 +260,19 @@ Std_ReturnType Nm_GetLocalNodeIdentifier(NetworkHandleType Channel, uint8* nmNod
 {
     if (nmNodeIdPtr == NULL)
     {
-        Det_ReportError(NM_MODULE_ID, 0U, NM_API_ID_GET_LOCAL_NODE_IDENTIFIER, NM_E_PARAM_POINTER);
+        (void)Det_ReportError(NM_MODULE_ID, 0U, NM_API_ID_GET_LOCAL_NODE_IDENTIFIER, NM_E_PARAM_POINTER);
         return E_NOT_OK;
     }
 
     if (!Nm_Initialized)
     {
-        Det_ReportError(NM_MODULE_ID, 0U, NM_API_ID_GET_LOCAL_NODE_IDENTIFIER, NM_E_UNINIT);
+        (void)Det_ReportError(NM_MODULE_ID, 0U, NM_API_ID_GET_LOCAL_NODE_IDENTIFIER, NM_E_UNINIT);
         return E_NOT_OK;
     }
 
     if (Channel != NM_MAIN_NETWORK_HANDLE)
     {
-        Det_ReportError(NM_MODULE_ID, 0U, NM_API_ID_GET_LOCAL_NODE_IDENTIFIER, NM_E_INVALID_CHANNEL);
+        (void)Det_ReportError(NM_MODULE_ID, 0U, NM_API_ID_GET_LOCAL_NODE_IDENTIFIER, NM_E_INVALID_CHANNEL);
         return E_NOT_OK;
     }
 
@@ -293,13 +293,13 @@ Std_ReturnType Nm_GetState(NetworkHandleType Channel, Nm_StateType* nmStatePtr, 
 {
     if (!Nm_Initialized)
     {
-        Det_ReportError(NM_MODULE_ID, 0U, NM_API_ID_GET_STATE, NM_E_UNINIT);
+        (void)Det_ReportError(NM_MODULE_ID, 0U, NM_API_ID_GET_STATE, NM_E_UNINIT);
         return E_NOT_OK;
     }
 
     if (Channel != NM_MAIN_NETWORK_HANDLE)
     {
-        Det_ReportError(NM_MODULE_ID, 0U, NM_API_ID_GET_STATE, NM_E_INVALID_CHANNEL);
+        (void)Det_ReportError(NM_MODULE_ID, 0U, NM_API_ID_GET_STATE, NM_E_INVALID_CHANNEL);
         return E_NOT_OK;
     }
 
@@ -330,7 +330,7 @@ void Nm_GetVersionInfo(Std_VersionInfoType* nmVerInfoPtr)
 {
     if (nmVerInfoPtr == NULL)
     {
-        Det_ReportError(NM_MODULE_ID, 0U, NM_API_ID_GET_VERSION_INFO, NM_E_PARAM_POINTER);
+        (void)Det_ReportError(NM_MODULE_ID, 0U, NM_API_ID_GET_VERSION_INFO, NM_E_PARAM_POINTER);
         return;
     }
 

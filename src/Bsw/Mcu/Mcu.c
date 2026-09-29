@@ -89,10 +89,22 @@ void Mcu_Init(const Mcu_ConfigType* ConfigPtr)
     const Mcu_Hw_ResetReasonType hwReason = Mcu_Hw_ReadAndClearResetReason();
 
     Mcu_CachedRawReset = 0U;
-    if (hwReason.Watchdog) Mcu_CachedRawReset |= MCU_RAW_RESET_WATCHDOG_BIT;
-    if (hwReason.BrownOut) Mcu_CachedRawReset |= MCU_RAW_RESET_BROWNOUT_BIT;
-    if (hwReason.External) Mcu_CachedRawReset |= MCU_RAW_RESET_EXTERNAL_BIT;
-    if (hwReason.PowerOn)  Mcu_CachedRawReset |= MCU_RAW_RESET_POWERON_BIT;
+    if ((hwReason.Watchdog) != 0U)
+    {
+        Mcu_CachedRawReset |= MCU_RAW_RESET_WATCHDOG_BIT;
+    }
+    if ((hwReason.BrownOut) != 0U)
+    {
+        Mcu_CachedRawReset |= MCU_RAW_RESET_BROWNOUT_BIT;
+    }
+    if ((hwReason.External) != 0U)
+    {
+        Mcu_CachedRawReset |= MCU_RAW_RESET_EXTERNAL_BIT;
+    }
+    if ((hwReason.PowerOn) != 0U)
+    {
+        Mcu_CachedRawReset |= MCU_RAW_RESET_POWERON_BIT;
+    }
 
     /* ConfigPtr が NULL の場合は上記のキャッシュ更新までは行うが、モジュール
      * を「初期化済み」とはみなさない（現状唯一の呼び出し元 main.cpp は常に
@@ -115,14 +127,16 @@ Mcu_ResetType Mcu_GetResetReason(void)
 {
     if (!Mcu_Initialized)
     {
-        Det_ReportError(MCU_MODULE_ID, 0U, MCU_API_ID_GET_RESET_REASON, MCU_E_UNINIT);
+        (void)Det_ReportError(MCU_MODULE_ID, 0U, MCU_API_ID_GET_RESET_REASON, MCU_E_UNINIT);
         return MCU_RESET_UNDEFINED;
     }
 
-    if (Mcu_CachedRawReset & MCU_RAW_RESET_WATCHDOG_BIT)
+    if ((Mcu_CachedRawReset & MCU_RAW_RESET_WATCHDOG_BIT) != 0U) {
         return MCU_WATCHDOG_RESET;
-    if (Mcu_CachedRawReset & MCU_RAW_RESET_POWERON_BIT)
+    }
+    if ((Mcu_CachedRawReset & MCU_RAW_RESET_POWERON_BIT) != 0U) {
         return MCU_POWER_ON_RESET;
+    }
 
     /* BrownOut/External が単独で立っている場合を含む。Mcu_ResetType の
      * 値域にはこれらに対応する値がないため（Mcu.h 冒頭のコメント参照）。 */
@@ -137,7 +151,7 @@ Mcu_RawResetType Mcu_GetResetRawValue(void)
 {
     if (!Mcu_Initialized)
     {
-        Det_ReportError(MCU_MODULE_ID, 0U, MCU_API_ID_GET_RESET_RAW_VALUE, MCU_E_UNINIT);
+        (void)Det_ReportError(MCU_MODULE_ID, 0U, MCU_API_ID_GET_RESET_RAW_VALUE, MCU_E_UNINIT);
         return MCU_RAW_RESET_UNINIT_VALUE;
     }
 
@@ -152,7 +166,7 @@ void Mcu_PerformReset(void)
 {
     if (!Mcu_Initialized)
     {
-        Det_ReportError(MCU_MODULE_ID, 0U, MCU_API_ID_PERFORM_RESET, MCU_E_UNINIT);
+        (void)Det_ReportError(MCU_MODULE_ID, 0U, MCU_API_ID_PERFORM_RESET, MCU_E_UNINIT);
         return;
     }
 
@@ -167,7 +181,7 @@ void Mcu_GetVersionInfo(Std_VersionInfoType* versioninfo)
 {
     if (versioninfo == NULL)
     {
-        Det_ReportError(MCU_MODULE_ID, 0U, MCU_API_ID_GET_VERSION_INFO, MCU_E_PARAM_POINTER);
+        (void)Det_ReportError(MCU_MODULE_ID, 0U, MCU_API_ID_GET_VERSION_INFO, MCU_E_PARAM_POINTER);
         return;
     }
 
