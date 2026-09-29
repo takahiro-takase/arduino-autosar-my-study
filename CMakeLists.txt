@@ -204,7 +204,9 @@ add_compile_definitions(
     DEM_UNIT_TEST
     DET_LOG_LEVEL=LOG_T
     FEE_UNIT_TEST
+    FIM_UNIT_TEST
     MCU_UNIT_TEST
+    NM_UNIT_TEST
     NVM_UNIT_TEST
     PDUR_UNIT_TEST
     WDGM_UNIT_TEST
@@ -243,6 +245,8 @@ set(NATIVE_CHAIN_INCLUDE_DIRS
     src/Bsw/CryIf
     src/Bsw/Csm
     src/Bsw/SecOC
+    src/Bsw/Adc
+    src/Bsw/IoHwAb
     src/Bsw/Gpt
     src/Bsw/Dio
     src/Bsw/Port
@@ -280,6 +284,7 @@ set(NATIVE_CHAIN_INCLUDE_DIRS
 
 # native_chain_tests が実体でリンクする src/ 配下のソース。
 set(NATIVE_CHAIN_SRC_SOURCES
+    src/Bsw/Adc/Adc.c
     src/Bsw/BswM/BswM.c
     src/Bsw/BswM/BswM_PBCfg.c
     src/Bsw/Can/Can.c
@@ -309,6 +314,7 @@ set(NATIVE_CHAIN_SRC_SOURCES
     src/Bsw/FiM/FiM.c
     src/Bsw/FiM/FiM_PBCfg.c
     src/Bsw/Gpt/Gpt.c
+    src/Bsw/IoHwAb/IoHwAb.c
     src/Bsw/Mcu/Mcu.c
     src/Bsw/Mcu/Mcu_PBCfg.c
     src/Bsw/MemIf/MemIf.c
@@ -366,6 +372,7 @@ set(NATIVE_CHAIN_STUB_SOURCES
     stub/Hal/Fake_Mcu_Hw.c
     stub/Hal/Fake_Fee_Hw.c
     stub/Hal/Fake_Wdg_Hw.c
+    stub/Hal/Fake_Adc_Hw.c
 )
 
 # test/ 配下のテストファイル（Bsw_{Module|Stack}_{シナリオ}_test.cpp）を自動収集する。

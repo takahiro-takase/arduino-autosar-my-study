@@ -526,3 +526,14 @@ static Nm_ModeType Nm_MapCanNmMode(CanNm_ModeType canNmMode)
             return NM_MODE_BUS_SLEEP;
     }
 }
+
+/* ======================================================================
+ * Test Functions
+ * ====================================================================== */
+
+#ifdef NM_UNIT_TEST
+void Nm_Test_ResetInitState(void)
+{
+    Nm_Initialized = 0U;
+}
+#endif
