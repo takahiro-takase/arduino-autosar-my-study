@@ -761,20 +761,24 @@ Std_ReturnType Dem_SetEventStatus(Dem_EventIdType EventId,
          * そうしないと、反対側の確定状態から数え始めるせいで
          * 反転に 2*limit 回分の報告が必要になってしまう
          * (limit=1 の「1 回で即確定」が実質機能しなくなる)。 */
-        if (counter < 0) {
+        if (counter < 0)
+        {
             counter = 0;
         }
-        if (counter < limit) {
+        if (counter < limit)
+        {
             counter++;
         }
     }
     else /* DEM_EVENT_STATUS_PASSED */
     {
         /* 確定 FAILED 側 (正) からの遷移も同様に中立からやり直す */
-        if (counter > 0) {
+        if (counter > 0)
+        {
             counter = 0;
         }
-        if (counter > -limit) {
+        if (counter > -limit)
+        {
             counter--;
         }
     }
@@ -864,7 +868,8 @@ Std_ReturnType Dem_SetEventStatus(Dem_EventIdType EventId,
                      (unsigned)Dem_CurrentContext.EngineState);
 
             /* ExtendedData: 確定 FAILED の累積回数を +1 (0xFF で飽和) */
-            if (Dem_OccurrenceCounter[EventId] < 0xFFU) {
+            if (Dem_OccurrenceCounter[EventId] < 0xFFU)
+            {
                 Dem_OccurrenceCounter[EventId]++;
             }
             (void)NvM_WriteBlock(NVM_BLOCK_ID_DEM_EXTENDED, Dem_OccurrenceCounter);
@@ -1630,7 +1635,8 @@ Std_ReturnType Dem_GetFreezeFrameOfEvent(Dem_EventIdType EventId, Dem_FreezeFram
         return E_NOT_OK;
     }
 
-    if (Dem_FreezeFrameValid[EventId] == 0U) {
+    if (Dem_FreezeFrameValid[EventId] == 0U)
+    {
         return E_NOT_OK;  /* 未記録: DET 対象外（正常な「記録なし」状態） */
     }
 
@@ -1721,7 +1727,8 @@ Std_ReturnType Dem_GetOccurrenceCounterOfEvent(Dem_EventIdType EventId, uint8* C
         return E_NOT_OK;
     }
 
-    if (Dem_OccurrenceCounter[EventId] == 0U) {
+    if (Dem_OccurrenceCounter[EventId] == 0U)
+    {
         return E_NOT_OK;  /* 未記録: DET 対象外（正常な「記録なし」状態） */
     }
 
@@ -1747,14 +1754,17 @@ Std_ReturnType Dem_GetOccurrenceCounterOfEvent(Dem_EventIdType EventId, uint8* C
  */
 static sint8 Dem_MapDebounceCounterToFdc(sint8 counter, sint8 limit)
 {
-    if (limit <= 0) {
+    if (limit <= 0)
+    {
         return 0;  /* 未到達コード想定 (Dem_DebounceLimitTable[] は全て1以上) */
     }
 
-    if (counter >= 0) {
+    if (counter >= 0)
+    {
         return (sint8)(((sint16)counter * 127) / limit);
     }
-    else {
+    else
+    {
         return (sint8)(((sint16)counter * 128) / limit);
     }
 }
@@ -1885,7 +1895,8 @@ static void Dem_EvaluatePendingClear(Dem_EventIdType EventId)
 {
     const uint8 status = Dem_StatusTable[EventId];
 
-    if ((status & DEM_STATUS_PENDING) == 0U) {
+    if ((status & DEM_STATUS_PENDING) == 0U)
+    {
         return; /* 既にクリア済み: 対象外 */
     }
 

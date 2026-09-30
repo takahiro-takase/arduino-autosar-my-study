@@ -519,7 +519,8 @@ void CanSM_ControllerBusOff(uint8 ControllerId)
         return;
     }
 
-    if ((CanSM_State != CANSM_STATE_FULL_COM) && (CanSM_State != CANSM_STATE_SILENT_COM)) {
+    if ((CanSM_State != CANSM_STATE_FULL_COM) && (CanSM_State != CANSM_STATE_SILENT_COM))
+    {
         return;
     }
 
@@ -749,7 +750,8 @@ void CanSM_MainFunction(void)
         return;
     }
 
-    if (CanSM_State != CANSM_STATE_BUS_OFF) {
+    if (CanSM_State != CANSM_STATE_BUS_OFF)
+    {
         return;
     }
 
@@ -757,7 +759,8 @@ void CanSM_MainFunction(void)
     const unsigned long interval = inL2 ? (unsigned long)CANSM_BUSOFF_RECOVERY_L2_MS
                                          : (unsigned long)CANSM_BUSOFF_RECOVERY_L1_MS;
 
-    if ((millis() - CanSM_BusOffTimerMs) < interval) {
+    if ((millis() - CanSM_BusOffTimerMs) < interval)
+    {
         return;
     }
 
@@ -880,7 +883,8 @@ void CanSM_RxIndication(uint8 ControllerId)
         return;
     }
 
-    if (CanSM_State != CANSM_STATE_WAKEUP_VALIDATING) {
+    if (CanSM_State != CANSM_STATE_WAKEUP_VALIDATING)
+    {
         return;
     }
 

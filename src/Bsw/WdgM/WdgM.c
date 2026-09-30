@@ -592,7 +592,8 @@ void WdgM_DisableHwWatchdog(void)
  */
 void WdgM_ResumeSupervision(void)
 {
-    if (WdgM_Cfg == NULL) {
+    if (WdgM_Cfg == NULL)
+    {
         return;
     }
 
@@ -678,7 +679,8 @@ Std_ReturnType WdgM_CheckpointReached(WdgM_SupervisedEntityIdType SEID, WdgM_Che
         for (uint8 d = 0U; d < entity->DeadlineCount; d++)
         {
             const WdgM_DeadlineCfgType* dl = &entity->Deadlines[d];
-            if ((dl->FromCheckpointId != fromCp) || (dl->ToCheckpointId != CheckpointId)) {
+            if ((dl->FromCheckpointId != fromCp) || (dl->ToCheckpointId != CheckpointId))
+            {
                 continue;
             }
 
@@ -788,7 +790,8 @@ static uint8 WdgM_AnyEntityNotOk(void)
     for (uint8 i = 0U; i < WdgM_Cfg->EntityCount; i++)
     {
         WdgM_LocalStatusType status;
-        if (WdgM_GetLocalStatus(i, &status) != E_OK || (status != WDGM_LOCAL_STATUS_OK)) {
+        if (WdgM_GetLocalStatus(i, &status) != E_OK || (status != WDGM_LOCAL_STATUS_OK))
+        {
             return 1U;
         }
     }
@@ -819,7 +822,8 @@ static uint8 WdgM_AnyEntityExpired(void)
     for (uint8 i = 0U; i < WdgM_Cfg->EntityCount; i++)
     {
         WdgM_LocalStatusType status;
-        if (WdgM_GetLocalStatus(i, &status) != E_OK || (status == WDGM_LOCAL_STATUS_EXPIRED)) {
+        if (WdgM_GetLocalStatus(i, &status) != E_OK || (status == WDGM_LOCAL_STATUS_EXPIRED))
+        {
             return 1U;
         }
     }
@@ -893,10 +897,12 @@ Std_ReturnType WdgM_GetGlobalStatus(WdgM_GlobalStatusType* Status)
          * のコメント参照）。 */
         *Status = WDGM_GLOBAL_STATUS_EXPIRED;
     }
-    else if (!WdgM_AnyEntityNotOk()) {
+    else if (!WdgM_AnyEntityNotOk())
+    {
         *Status = WDGM_GLOBAL_STATUS_OK;
     }
-    else {
+    else
+    {
         *Status = WDGM_GLOBAL_STATUS_FAILED;
     }
 
@@ -1001,7 +1007,8 @@ static void WdgM_EnterGlobalStopped(const char* reason, uint8 firstNotOkFound, u
  */
 void WdgM_MainFunction(void)
 {
-    if (WdgM_Cfg == NULL) {
+    if (WdgM_Cfg == NULL)
+    {
         return;
     }
 
@@ -1065,7 +1072,8 @@ void WdgM_MainFunction(void)
         }
         else if (WdgM_AliveStatus[i] != WDGM_LOCAL_STATUS_OK)
         {
-            if (WdgM_EntityExpiredCycleCount[i] < WDGM_EXPIRED_SUPERVISION_CYCLE_TOL) {
+            if (WdgM_EntityExpiredCycleCount[i] < WDGM_EXPIRED_SUPERVISION_CYCLE_TOL)
+            {
                 WdgM_EntityExpiredCycleCount[i]++;
             }
         }
@@ -1074,11 +1082,13 @@ void WdgM_MainFunction(void)
             WdgM_EntityExpiredCycleCount[i] = 0U;
         }
 
-        if (WdgM_LogicalStatus[i] != WDGM_LOCAL_STATUS_OK) {
+        if (WdgM_LogicalStatus[i] != WDGM_LOCAL_STATUS_OK)
+        {
             DET_LOGW(TAG, "SE%u logical still EXPIRED (latched since violation)", (unsigned)i);
         }
 
-        if (WdgM_DeadlineStatus[i] != WDGM_LOCAL_STATUS_OK) {
+        if (WdgM_DeadlineStatus[i] != WDGM_LOCAL_STATUS_OK)
+        {
             DET_LOGW(TAG, "SE%u deadline still EXPIRED (latched since violation)", (unsigned)i);
         }
 
@@ -1190,7 +1200,8 @@ void WdgM_MainFunction(void)
          * 目的）、この PASSED 報告はその独自拡張シナリオに対する、仕様の
          * 想定範囲を超えた本プロジェクト独自の対応付けである（自己仕様引用
          * 裏取りで指摘・追記）。 */
-        if ((WdgM_GlobalStopped) != 0U) {
+        if ((WdgM_GlobalStopped) != 0U)
+        {
             (void)Dem_SetEventStatus(DEM_EVENT_WDGM_SUPERVISION, DEM_EVENT_STATUS_PASSED);
         }
 

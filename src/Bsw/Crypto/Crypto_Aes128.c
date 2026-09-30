@@ -96,12 +96,14 @@ static uint8 Crypto_Aes128_GMul(uint8 a, uint8 b)
     uint8 p = 0U;
     for (uint8 i = 0U; i < 8U; i++)
     {
-        if ((b & 1U) != 0U) {
+        if ((b & 1U) != 0U)
+        {
             p ^= a;
         }
         const uint8 hiBitSet = (uint8)(a & 0x80U);
         a = (uint8)(a << 1);
-        if (hiBitSet != 0U) {
+        if (hiBitSet != 0U)
+        {
             a ^= 0x1BU;
         }
         b = (uint8)(b >> 1);
@@ -123,7 +125,8 @@ static void Crypto_Aes128_KeyExpansion(const uint8 key[CRYPTO_AES128_KEY_SIZE],
     uint8 temp[4];
 
     /* 先頭 Nk word はそのまま鍵をコピー */
-    for (uint8 i = 0U; i < (AES128_NK * 4U); i++) {
+    for (uint8 i = 0U; i < (AES128_NK * 4U); i++)
+    {
         expandedKey[i] = key[i];
     }
 
@@ -172,7 +175,8 @@ static void Crypto_Aes128_KeyExpansion(const uint8 key[CRYPTO_AES128_KEY_SIZE],
 
 static void Crypto_Aes128_AddRoundKey(uint8 state[16], const uint8* roundKey)
 {
-    for (uint8 i = 0U; i < 16U; i++) {
+    for (uint8 i = 0U; i < 16U; i++)
+    {
         state[i] ^= roundKey[i];
     }
 }
@@ -183,7 +187,8 @@ static void Crypto_Aes128_AddRoundKey(uint8 state[16], const uint8* roundKey)
 
 static void Crypto_Aes128_SubBytes(uint8 state[16])
 {
-    for (uint8 i = 0U; i < 16U; i++) {
+    for (uint8 i = 0U; i < 16U; i++)
+    {
         state[i] = Crypto_Aes128_Sbox[state[i]];
     }
 }
@@ -203,7 +208,8 @@ static void Crypto_Aes128_ShiftRows(uint8 state[16])
             tmp[row + (4U * col)] = state[row + (4U * ((col + row) % 4U))];
         }
     }
-    for (uint8 i = 0U; i < 16U; i++) {
+    for (uint8 i = 0U; i < 16U; i++)
+    {
         state[i] = tmp[i];
     }
 }
@@ -241,7 +247,8 @@ void Crypto_Aes128_EncryptBlock(const uint8 key[CRYPTO_AES128_KEY_SIZE],
 
     Crypto_Aes128_KeyExpansion(key, expandedKey);
 
-    for (uint8 i = 0U; i < 16U; i++) {
+    for (uint8 i = 0U; i < 16U; i++)
+    {
         state[i] = plaintext[i];
     }
 
@@ -260,7 +267,8 @@ void Crypto_Aes128_EncryptBlock(const uint8 key[CRYPTO_AES128_KEY_SIZE],
     Crypto_Aes128_ShiftRows(state);
     Crypto_Aes128_AddRoundKey(state, &expandedKey[AES128_NR * 16U]);
 
-    for (uint8 i = 0U; i < 16U; i++) {
+    for (uint8 i = 0U; i < 16U; i++)
+    {
         ciphertext[i] = state[i];
     }
 }

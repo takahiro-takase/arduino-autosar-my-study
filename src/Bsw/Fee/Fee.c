@@ -276,7 +276,8 @@ void Fee_Cancel(void)
 
 MemIf_StatusType Fee_GetStatus(void)
 {
-    if (!Fee_Initialized) {
+    if (!Fee_Initialized)
+    {
         return MEMIF_UNINIT;
     }
     return Fee_Job.Active ? MEMIF_BUSY : MEMIF_IDLE;
@@ -306,7 +307,8 @@ MemIf_JobResultType Fee_GetJobResult(void)
 
 void Fee_MainFunction(void)
 {
-    if (!Fee_Initialized || !Fee_Job.Active) {
+    if (!Fee_Initialized || !Fee_Job.Active)
+    {
         return;
     }
 

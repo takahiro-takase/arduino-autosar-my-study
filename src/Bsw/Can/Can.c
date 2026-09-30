@@ -462,7 +462,8 @@ void Can_DisableControllerInterrupts(uint8 Controller)
 
     /* [SWS_Can_00202]: N 回 Disable したら N 回 Enable するまで実際には
      * 再有効化しない。最初の1回だけ実際に切り離す。 */
-    if (Can_InterruptDisableNestCount == 0U) {
+    if (Can_InterruptDisableNestCount == 0U)
+    {
         (void)Can_Hw_DisableRxIsr();
     }
     Can_InterruptDisableNestCount++;
@@ -500,12 +501,14 @@ void Can_EnableControllerInterrupts(uint8 Controller)
         return;
     }
 
-    if (Can_InterruptDisableNestCount == 0U) {
+    if (Can_InterruptDisableNestCount == 0U)
+    {
         return;  /* 対応する Disable より多く呼ばれた分は無視する */
     }
 
     Can_InterruptDisableNestCount--;
-    if (Can_InterruptDisableNestCount == 0U) {
+    if (Can_InterruptDisableNestCount == 0U)
+    {
         (void)Can_Hw_EnableRxIsr();
     }
 }
@@ -584,7 +587,8 @@ Can_ReturnType Can_Write(Can_HwHandleType Hth, const Can_PduType* PduInfo)
         return CAN_NOT_OK;
     }
 
-    if (CanState != CAN_CS_STARTED) {
+    if (CanState != CAN_CS_STARTED)
+    {
         return CAN_NOT_OK;
     }
 
@@ -710,7 +714,8 @@ void Can_MainFunction_Read(void)
         return;
     }
 
-    if (CanState == CAN_CS_SLEEP) {
+    if (CanState == CAN_CS_SLEEP)
+    {
         return;
     }
 
@@ -724,7 +729,8 @@ void Can_MainFunction_Read(void)
         uint8  len;
         uint8  buf[8];
 
-        if (Can_Hw_Read(&rxId, &len, buf) != CAN_HW_OK) {
+        if (Can_Hw_Read(&rxId, &len, buf) != CAN_HW_OK)
+        {
             break;
         }
 
@@ -809,7 +815,8 @@ void Can_MainFunction_Wakeup(void)
         return;
     }
 
-    if (CanState != CAN_CS_SLEEP) {
+    if (CanState != CAN_CS_SLEEP)
+    {
         return;
     }
 
@@ -819,7 +826,8 @@ void Can_MainFunction_Wakeup(void)
     Can_WakeupIrqPending = 0U;
     SchM_Exit_Can_IRQFLAG_EXCLUSIVE_AREA();
 
-    if (!pending && Can_Hw_IsWakeupPending() == CAN_HW_OK) {
+    if (!pending && Can_Hw_IsWakeupPending() == CAN_HW_OK)
+    {
         pending = 1U;
     }
 
@@ -887,7 +895,8 @@ void Can_MainFunction_Wakeup(void)
  */
 static void Can_Isr(void)
 {
-    if (Can_ConfigPtr == NULL) {
+    if (Can_ConfigPtr == NULL)
+    {
         return;
     }
 
@@ -946,7 +955,8 @@ Std_ReturnType Can_GetControllerErrorState(uint8 Controller, Can_ErrorStateType*
     }
 
     uint8_t rawState;
-    if (Can_Hw_GetErrorState(&rawState) != CAN_HW_OK) {
+    if (Can_Hw_GetErrorState(&rawState) != CAN_HW_OK)
+    {
         return E_NOT_OK;
     }
 

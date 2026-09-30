@@ -240,7 +240,8 @@ void App_EngineManager_Run(void)
     }
     else
     {
-        if (s_offCycles < 0xFFU) {
+        if (s_offCycles < 0xFFU)
+        {
             s_offCycles++;
         }
         if (s_offCycles >= APP_ENGINE_SLEEP_OFF_CYCLES)

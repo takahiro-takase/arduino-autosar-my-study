@@ -131,10 +131,12 @@ Mcu_ResetType Mcu_GetResetReason(void)
         return MCU_RESET_UNDEFINED;
     }
 
-    if ((Mcu_CachedRawReset & MCU_RAW_RESET_WATCHDOG_BIT) != 0U) {
+    if ((Mcu_CachedRawReset & MCU_RAW_RESET_WATCHDOG_BIT) != 0U)
+    {
         return MCU_WATCHDOG_RESET;
     }
-    if ((Mcu_CachedRawReset & MCU_RAW_RESET_POWERON_BIT) != 0U) {
+    if ((Mcu_CachedRawReset & MCU_RAW_RESET_POWERON_BIT) != 0U)
+    {
         return MCU_POWER_ON_RESET;
     }
 

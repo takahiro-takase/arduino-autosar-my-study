@@ -393,7 +393,8 @@ void PduR_ComRxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
     {
         const PduR_RxRoutingPathType* path = &PduR_ConfigPtr->RxPaths[i];
 
-        if (path->SrcPduId != RxPduId) {
+        if (path->SrcPduId != RxPduId)
+        {
             continue;
         }
 
@@ -405,7 +406,8 @@ void PduR_ComRxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
                      (unsigned)RxPduId, (unsigned)dest->Module,
                      (unsigned)dest->DestPduId);
 
-            if (dest->RxIndFct != NULL) {
+            if (dest->RxIndFct != NULL)
+            {
                 dest->RxIndFct(dest->DestPduId, PduInfoPtr);
             }
         }
@@ -466,7 +468,8 @@ void PduR_CanIfTxConfirmation(PduIdType TxPduId, Std_ReturnType result)
     DET_LOGI(TAG, "TxConf src=%u dst=%u",
              (unsigned)TxPduId, (unsigned)path->ConfDestPduId);
 
-    if (path->ConfFct != NULL) {
+    if (path->ConfFct != NULL)
+    {
         path->ConfFct(path->ConfDestPduId, result);
     }
 }
@@ -577,7 +580,8 @@ static const PduR_TxRoutingPathType* PduR_FindTxPath(PduIdType SrcPduId)
 {
     for (uint8 i = 0; i < PduR_ConfigPtr->TxPathCount; i++)
     {
-        if (PduR_ConfigPtr->TxPaths[i].SrcPduId == SrcPduId) {
+        if (PduR_ConfigPtr->TxPaths[i].SrcPduId == SrcPduId)
+        {
             return &PduR_ConfigPtr->TxPaths[i];
         }
     }

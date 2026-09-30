@@ -202,7 +202,8 @@ static Rte_IStatusType Rte_MapE2EStatusP05(E2E_P05StatusType status)
 void Rte_COMRxInd_EngineInfo(void)
 {
     uint8 buf[7];
-    if (Com_ReceiveSignalGroupArray(0U, buf) != E_OK) {
+    if (Com_ReceiveSignalGroupArray(0U, buf) != E_OK)
+    {
         return;
     }
 
@@ -215,7 +216,8 @@ void Rte_COMRxInd_EngineInfo(void)
      * ([SWS_E2EXf_00027]のニブルパック、E2EXf_Inv_EngineInfo()のコメント参照)。
      * [SWS_E2E_00345]の"do NOT use data"規定により、SMがVALIDに確定するまで
      * （起動直後のNODATA/INIT中を含む）はミラーを更新しない。 */
-    if (ret != E_OK) {
+    if (ret != E_OK)
+    {
         return;
     }
 
@@ -496,14 +498,17 @@ void Rte_COMCbkRxTOut_AbsInfo(void)
 void Rte_COMRxInd_SecureCommand(void)
 {
     uint8 cmd = 0U;
-    if (Com_ReceiveSignal(COM_SIGNAL_IMMOBILIZER_CMD, &cmd) != E_OK) {
+    if (Com_ReceiveSignal(COM_SIGNAL_IMMOBILIZER_CMD, &cmd) != E_OK)
+    {
         return;
     }
 
-    if (cmd == 0x01U) {
+    if (cmd == 0x01U)
+    {
         DET_LOGW(TAG, "ImmobilizerCmd: UNLOCK (authenticated via SecOC)");
     }
-    else {
+    else
+    {
         DET_LOGW(TAG, "ImmobilizerCmd: LOCK (authenticated via SecOC)");
     }
 }
@@ -678,7 +683,8 @@ boolean Rte_COMTxIpduCallout_ImmobilizerStatus(const uint8* SduDataPtr, uint8 Sd
 void Rte_COMRxInd_AbsInfo(void)
 {
     uint8 buf[6];
-    if (Com_ReceiveSignalGroupArray(1U, buf) != E_OK) {
+    if (Com_ReceiveSignalGroupArray(1U, buf) != E_OK)
+    {
         return;
     }
 
@@ -689,7 +695,8 @@ void Rte_COMRxInd_AbsInfo(void)
     E2EMon_NotifyCheckResultP05(checkStatus);
     /* Rte_COMRxInd_EngineInfo() と同じ理由（[SWS_E2EXf_00027]のニブルパック、
      * [SWS_E2E_00345]の"do NOT use data"規定）。 */
-    if (ret != E_OK) {
+    if (ret != E_OK)
+    {
         return;
     }
 
@@ -829,7 +836,8 @@ Rte_IStatusType Rte_Read_SpeedSensor_EngineSpeed(EngineSpeed_t* data)
     *data = Rte_EngineInfoMirror.speed;
     SchM_Exit_Rte_MIRROR_EXCLUSIVE_AREA();
 
-    if ((Com_IsRxTimedOut(0U)) != 0U) {
+    if ((Com_IsRxTimedOut(0U)) != 0U)
+    {
         return RTE_E_COM_STOPPED;
     }
     return Rte_EngineInfoStatus;
@@ -858,7 +866,8 @@ Rte_IStatusType Rte_Read_TempSensor_CoolantTemp(CoolantTemp_t* data)
     *data = Rte_EngineInfoMirror.temp;
     SchM_Exit_Rte_MIRROR_EXCLUSIVE_AREA();
 
-    if ((Com_IsRxTimedOut(0U)) != 0U) {
+    if ((Com_IsRxTimedOut(0U)) != 0U)
+    {
         return RTE_E_COM_STOPPED;
     }
     return Rte_EngineInfoStatus;
@@ -888,7 +897,8 @@ Rte_IStatusType Rte_Read_EngineStatus_EngineOnFlag(EngineOnFlag_t* data)
     *data = Rte_EngineInfoMirror.onFlag;
     SchM_Exit_Rte_MIRROR_EXCLUSIVE_AREA();
 
-    if ((Com_IsRxTimedOut(0U)) != 0U) {
+    if ((Com_IsRxTimedOut(0U)) != 0U)
+    {
         return RTE_E_COM_STOPPED;
     }
     return Rte_EngineInfoStatus;
@@ -942,7 +952,8 @@ Std_ReturnType Rte_Write_EngineStatus_EngineState(EngineState_t state)
  */
 Std_ReturnType Rte_Read_EngineStatus_EngineState(EngineState_t* data)
 {
-    if (data == NULL) {
+    if (data == NULL)
+    {
         return E_NOT_OK;
     }
     SchM_Enter_Rte_MIRROR_EXCLUSIVE_AREA();
@@ -1094,7 +1105,8 @@ Std_ReturnType Rte_Call_LedFault_SetLevel(uint8 level)
  */
 Std_ReturnType Rte_IoControl_Lamp_ReturnControlToEcu(Rte_LampIdType lamp)
 {
-    if (lamp >= RTE_LAMP_COUNT) {
+    if (lamp >= RTE_LAMP_COUNT)
+    {
         return E_NOT_OK;
     }
     Rte_LampOverrideActive[lamp] = 0U;
@@ -1119,7 +1131,8 @@ Std_ReturnType Rte_IoControl_Lamp_ReturnControlToEcu(Rte_LampIdType lamp)
  */
 Std_ReturnType Rte_IoControl_Lamp_ResetToDefault(Rte_LampIdType lamp)
 {
-    if (lamp >= RTE_LAMP_COUNT) {
+    if (lamp >= RTE_LAMP_COUNT)
+    {
         return E_NOT_OK;
     }
     return Rte_Lamp_ForceAndWrite(lamp, 0U);
@@ -1144,7 +1157,8 @@ Std_ReturnType Rte_IoControl_Lamp_ResetToDefault(Rte_LampIdType lamp)
  */
 Std_ReturnType Rte_IoControl_Lamp_FreezeCurrentState(Rte_LampIdType lamp)
 {
-    if (lamp >= RTE_LAMP_COUNT) {
+    if (lamp >= RTE_LAMP_COUNT)
+    {
         return E_NOT_OK;
     }
     Rte_LampOverrideValue[lamp]  = Rte_LampLastLevel[lamp];
@@ -1169,7 +1183,8 @@ Std_ReturnType Rte_IoControl_Lamp_FreezeCurrentState(Rte_LampIdType lamp)
  */
 Std_ReturnType Rte_IoControl_Lamp_ShortTermAdjustment(Rte_LampIdType lamp, uint8 level)
 {
-    if (lamp >= RTE_LAMP_COUNT) {
+    if (lamp >= RTE_LAMP_COUNT)
+    {
         return E_NOT_OK;
     }
     return Rte_Lamp_ForceAndWrite(lamp, level);
@@ -1192,7 +1207,8 @@ Std_ReturnType Rte_IoControl_Lamp_ShortTermAdjustment(Rte_LampIdType lamp, uint8
  */
 Std_ReturnType Rte_IoControl_Lamp_GetCurrentLevel(Rte_LampIdType lamp, uint8* level)
 {
-    if ((lamp >= RTE_LAMP_COUNT) || (level == NULL)) {
+    if ((lamp >= RTE_LAMP_COUNT) || (level == NULL))
+    {
         return E_NOT_OK;
     }
     *level = Rte_LampLastLevel[lamp];
@@ -1287,7 +1303,8 @@ Rte_IStatusType Rte_Read_VehicleSensor_VehicleSpeed(VehicleSpeed_t* data)
     *data = Rte_AbsInfoMirror.speed;
     SchM_Exit_Rte_MIRROR_EXCLUSIVE_AREA();
 
-    if ((Com_IsRxTimedOut(1U)) != 0U) {
+    if ((Com_IsRxTimedOut(1U)) != 0U)
+    {
         return RTE_E_COM_STOPPED;
     }
     return Rte_AbsInfoStatus;
@@ -1315,7 +1332,8 @@ Rte_IStatusType Rte_Read_BrakeSensor_BrakeActive(BrakeActive_t* data)
     *data = Rte_AbsInfoMirror.brake;
     SchM_Exit_Rte_MIRROR_EXCLUSIVE_AREA();
 
-    if ((Com_IsRxTimedOut(1U)) != 0U) {
+    if ((Com_IsRxTimedOut(1U)) != 0U)
+    {
         return RTE_E_COM_STOPPED;
     }
     return Rte_AbsInfoStatus;
@@ -1343,7 +1361,8 @@ Rte_IStatusType Rte_Read_AbsSensor_AbsActive(AbsActive_t* data)
     *data = Rte_AbsInfoMirror.abs;
     SchM_Exit_Rte_MIRROR_EXCLUSIVE_AREA();
 
-    if ((Com_IsRxTimedOut(1U)) != 0U) {
+    if ((Com_IsRxTimedOut(1U)) != 0U)
+    {
         return RTE_E_COM_STOPPED;
     }
     return Rte_AbsInfoStatus;

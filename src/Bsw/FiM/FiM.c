@@ -227,10 +227,12 @@ Std_ReturnType FiM_SetFunctionAvailable(FiM_FunctionIdType FID, boolean Availabi
 
     FiM_Available[FID] = Availability ? 1U : 0U;
 
-    if (!Availability) {
+    if (!Availability)
+    {
         DET_LOGW(TAG, "FID%u made unavailable (forced)", (unsigned)FID);
     }
-    else {
+    else
+    {
         DET_LOGI(TAG, "FID%u made available again", (unsigned)FID);
     }
 
@@ -287,7 +289,8 @@ void FiM_GetVersionInfo(Std_VersionInfoType* versioninfo)
  */
 void FiM_MainFunction(void)
 {
-    if (FiM_Cfg == NULL) {
+    if (FiM_Cfg == NULL)
+    {
         return;
     }
 

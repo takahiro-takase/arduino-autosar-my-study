@@ -248,7 +248,8 @@ uint8 E2EXf_Inv_AbsInfo(uint8* buffer, uint32* bufferLength, const uint8* inputB
     const E2E_PCheckStatusType profileStatus = E2E_P05MapStatusToSM(E2E_E_OK, status);
     const uint8 acceptable = (profileStatus == E2E_P_OK);
 
-    if (!acceptable) {
+    if (!acceptable)
+    {
         DET_LOGW(TAG, "Inv_AbsInfo NG DemEvent=%u st=%u", (unsigned)E2EXf_AbsInfoRxCfg.DemEventId, (unsigned)status);
     }
 
