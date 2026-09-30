@@ -465,7 +465,8 @@ Std_ReturnType Dcm_GetVin(uint8* Data)
         { 'A','R','D','U','N','0','A','U','T','0','S','A','R','2','0','2','6' };
 
     uint8 i;
-    for (i = 0U; i < DCM_VIN_LENGTH; i++) {
+    for (i = 0U; i < DCM_VIN_LENGTH; i++)
+    {
         Data[i] = kFixedVin[i];
     }
 
@@ -798,7 +799,8 @@ void Dcm_MainFunction(void)
                  (unsigned)Dcm_RoutineResult, (unsigned)speed, (unsigned)temp);
     }
 
-    if (Dcm_CurrentSession == DCM_SESSION_DEFAULT) {
+    if (Dcm_CurrentSession == DCM_SESSION_DEFAULT)
+    {
         return;
     }
 
@@ -1624,7 +1626,8 @@ static Std_ReturnType Dcm_ReadDid(uint16 did, uint8* buf, uint8* dataLen)
     case DCM_DID_TEST_PATTERN:
     {
         uint8 i;
-        for (i = 0U; i < DCM_DID_TEST_PATTERN_LENGTH; i++) {
+        for (i = 0U; i < DCM_DID_TEST_PATTERN_LENGTH; i++)
+        {
             buf[i] = Dcm_TestPattern[i];
         }
         *dataLen = DCM_DID_TEST_PATTERN_LENGTH;
@@ -1633,7 +1636,8 @@ static Std_ReturnType Dcm_ReadDid(uint16 did, uint8* buf, uint8* dataLen)
     case DCM_DID_VIN:
     {
         uint8 i;
-        for (i = 0U; i < DCM_VIN_LENGTH; i++) {
+        for (i = 0U; i < DCM_VIN_LENGTH; i++)
+        {
             buf[i] = Dcm_Vin[i];
         }
         *dataLen = DCM_VIN_LENGTH;
@@ -1690,7 +1694,8 @@ static void Dcm_HandleReadDataById(const uint8* uds, uint8 udsLen)
     Dcm_TxBuf[2] = (uint8)(did & 0xFFU);
 
     uint8 i;
-    for (i = 0U; i < dataLen; i++) {
+    for (i = 0U; i < dataLen; i++)
+    {
         Dcm_TxBuf[3U + i] = dataBuf[i];
     }
 
@@ -1722,7 +1727,8 @@ static void Dcm_HandleReadDataById(const uint8* uds, uint8 udsLen)
 static Std_ReturnType Dcm_UpdateCryptoKey(uint8 keyName, const uint8* keyData)
 {
     Std_ReturnType ret = KeyM_Start(KEYM_START_WORKSHOPMODE, NULL, 0U, NULL, NULL);
-    if (ret != E_OK) {
+    if (ret != E_OK)
+    {
         return E_NOT_OK;
     }
 
@@ -1784,7 +1790,8 @@ static void Dcm_HandleWriteDataById(const uint8* uds, uint8 udsLen)
         }
 
         uint8 i;
-        for (i = 0U; i < DCM_DID_TEST_PATTERN_LENGTH; i++) {
+        for (i = 0U; i < DCM_DID_TEST_PATTERN_LENGTH; i++)
+        {
             Dcm_TestPattern[i] = uds[3U + i];
         }
 
@@ -2258,7 +2265,8 @@ static uint16 Dcm_ComputeSecurityKey(uint16 seed)
  */
 static void Dcm_SecurityLock(void)
 {
-    if (Dcm_SecurityLevel != 0U) {
+    if (Dcm_SecurityLevel != 0U)
+    {
         DET_LOGI(TAG, "27 Security locked (session change)");
     }
 
@@ -2451,7 +2459,8 @@ static void Dcm_HandleSecurityAccess(const uint8* uds, uint8 udsLen)
  */
 static void Dcm_RoutineAbort(void)
 {
-    if (Dcm_RoutineState != DCM_ROUTINE_STATE_IDLE) {
+    if (Dcm_RoutineState != DCM_ROUTINE_STATE_IDLE)
+    {
         DET_LOGI(TAG, "31 EngineHealthCheck aborted (session change)");
     }
 
@@ -2718,12 +2727,14 @@ static void Dcm_HandleRequestDownload(const uint8* uds, uint8 udsLen)
 
     uint32 memAddr = 0UL;
     uint8 i;
-    for (i = 0U; i < addrBytes; i++) {
+    for (i = 0U; i < addrBytes; i++)
+    {
         memAddr = (memAddr << 8U) | (uint32)uds[3U + i];
     }
 
     uint32 memSize = 0UL;
-    for (i = 0U; i < sizeBytes; i++) {
+    for (i = 0U; i < sizeBytes; i++)
+    {
         memSize = (memSize << 8U) | (uint32)uds[3U + addrBytes + i];
     }
 
@@ -2806,7 +2817,8 @@ static void Dcm_HandleTransferData(const uint8* uds, uint8 udsLen)
     }
 
     uint8 i;
-    for (i = 0U; i < dataLen; i++) {
+    for (i = 0U; i < dataLen; i++)
+    {
         Dcm_TransferChecksum ^= uds[2U + i];
     }
     Dcm_TransferReceivedSize += (uint32)dataLen;
@@ -3050,7 +3062,8 @@ void Dcm_ComIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
         return;
     }
 
-    if (PduInfoPtr->SduLength == 0U) {
+    if (PduInfoPtr->SduLength == 0U)
+    {
         return;  /* 空フレームは DET 対象外（NULL ポインタではないため） */
     }
 

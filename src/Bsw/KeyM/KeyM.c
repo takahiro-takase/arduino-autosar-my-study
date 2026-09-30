@@ -59,13 +59,15 @@ static uint8 KeyM_PendingValidate[KEYM_CRYPTO_KEY_COUNT];
 
 static const KeyM_CryptoKeyConfigType* KeyM_FindKeyByName(const uint8* keyNamePtr, uint16 keyNameLength)
 {
-    if (keyNameLength != 1U) {
+    if (keyNameLength != 1U)
+    {
         return NULL;
     }
 
     for (uint8 i = 0U; i < KEYM_CRYPTO_KEY_COUNT; i++)
     {
-        if (KeyM_CryptoKeyConfigData[i].KeyName == keyNamePtr[0]) {
+        if (KeyM_CryptoKeyConfigData[i].KeyName == keyNamePtr[0])
+        {
             return &KeyM_CryptoKeyConfigData[i];
         }
     }
@@ -81,7 +83,8 @@ void KeyM_Init(const KeyM_ConfigType* ConfigPtr)
     (void)ConfigPtr; /* [SWS_KeyM_00158]: 常に NULL_PTR の想定。内容は使わない。 */
 
     KeyM_SessionOpen = 0U;
-    for (uint8 i = 0U; i < KEYM_CRYPTO_KEY_COUNT; i++) {
+    for (uint8 i = 0U; i < KEYM_CRYPTO_KEY_COUNT; i++)
+    {
         KeyM_PendingValidate[i] = 0U;
     }
 
@@ -130,7 +133,8 @@ void KeyM_Deinit(void)
     }
 
     KeyM_SessionOpen = 0U;
-    for (uint8 i = 0U; i < KEYM_CRYPTO_KEY_COUNT; i++) {
+    for (uint8 i = 0U; i < KEYM_CRYPTO_KEY_COUNT; i++)
+    {
         KeyM_PendingValidate[i] = 0U;
     }
 
@@ -286,7 +290,8 @@ Std_ReturnType KeyM_Finalize(const uint8* RequestDataPtr, uint16 RequestDataLeng
     uint8 allOk = 1U;
     for (uint8 i = 0U; i < KEYM_CRYPTO_KEY_COUNT; i++)
     {
-        if (!KeyM_PendingValidate[i]) {
+        if (!KeyM_PendingValidate[i])
+        {
             continue;
         }
 

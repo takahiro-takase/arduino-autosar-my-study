@@ -119,7 +119,8 @@ void MemIf_SetMode(MemIf_ModeType Mode)
 
 Std_ReturnType MemIf_Read(MemIf_DeviceType Device, uint16 Address, uint8* DataBufferPtr, uint16 Length)
 {
-    if (!MemIf_CheckDevice(Device, MEMIF_API_ID_READ)) {
+    if (!MemIf_CheckDevice(Device, MEMIF_API_ID_READ))
+    {
         return E_NOT_OK;
     }
     return Fee_Read(Address, DataBufferPtr, Length);
@@ -131,7 +132,8 @@ Std_ReturnType MemIf_Read(MemIf_DeviceType Device, uint16 Address, uint8* DataBu
 
 Std_ReturnType MemIf_Write(MemIf_DeviceType Device, uint16 Address, const uint8* DataBufferPtr, uint16 Length)
 {
-    if (!MemIf_CheckDevice(Device, MEMIF_API_ID_WRITE)) {
+    if (!MemIf_CheckDevice(Device, MEMIF_API_ID_WRITE))
+    {
         return E_NOT_OK;
     }
     return Fee_Write(Address, DataBufferPtr, Length);
@@ -143,7 +145,8 @@ Std_ReturnType MemIf_Write(MemIf_DeviceType Device, uint16 Address, const uint8*
 
 Std_ReturnType MemIf_WriteImmediate(MemIf_DeviceType Device, uint16 Address, const uint8* DataBufferPtr, uint16 Length)
 {
-    if (!MemIf_CheckDevice(Device, MEMIF_API_ID_WRITE_IMMEDIATE)) {
+    if (!MemIf_CheckDevice(Device, MEMIF_API_ID_WRITE_IMMEDIATE))
+    {
         return E_NOT_OK;
     }
     return Fee_WriteImmediate(Address, DataBufferPtr, Length);
@@ -155,7 +158,8 @@ Std_ReturnType MemIf_WriteImmediate(MemIf_DeviceType Device, uint16 Address, con
 
 void MemIf_Cancel(MemIf_DeviceType Device)
 {
-    if (!MemIf_CheckDevice(Device, MEMIF_API_ID_CANCEL)) {
+    if (!MemIf_CheckDevice(Device, MEMIF_API_ID_CANCEL))
+    {
         return;
     }
     Fee_Cancel();
@@ -171,7 +175,8 @@ MemIf_StatusType MemIf_GetStatus(MemIf_DeviceType Device)
      * DeviceIndex を検査し MEMIF_E_PARAM_DEVICE を報告することを要求して
      * おり、GetStatus/GetJobResult も対象に含まれる（Read/Write/Cancel と
      * 同じ MemIf_CheckDevice() を通す）。 */
-    if (!MemIf_CheckDevice(Device, MEMIF_API_ID_GET_STATUS)) {
+    if (!MemIf_CheckDevice(Device, MEMIF_API_ID_GET_STATUS))
+    {
         return MEMIF_UNINIT;
     }
     return Fee_GetStatus();
@@ -186,7 +191,8 @@ MemIf_JobResultType MemIf_GetJobResult(MemIf_DeviceType Device)
     /* [SWS_MemIf_00043] の Return value 記述: development error 検出時は
      * （[SWS_MemIf_00022] に従いエラー報告した上で）MEMIF_JOB_FAILED を
      * 返す。MemIf_GetStatus() と同じ理由で MemIf_CheckDevice() を通す。 */
-    if (!MemIf_CheckDevice(Device, MEMIF_API_ID_GET_JOB_RESULT)) {
+    if (!MemIf_CheckDevice(Device, MEMIF_API_ID_GET_JOB_RESULT))
+    {
         return MEMIF_JOB_FAILED;
     }
     return Fee_GetJobResult();

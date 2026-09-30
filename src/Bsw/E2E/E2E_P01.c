@@ -91,7 +91,8 @@ Std_ReturnType E2E_P01Protect(
     E2E_P01ProtectStateType *State,
     uint8                   *Data)
 {
-    if ((Config == NULL) || (State == NULL) || (Data == NULL)) {
+    if ((Config == NULL) || (State == NULL) || (Data == NULL))
+    {
         return E2E_E_INPUTERR_NULL;
     }
 
@@ -127,7 +128,8 @@ Std_ReturnType E2E_P01Protect(
 
 Std_ReturnType E2E_P01ProtectInit(E2E_P01ProtectStateType *State)
 {
-    if (State == NULL) {
+    if (State == NULL)
+    {
         return E2E_E_INPUTERR_NULL;
     }
     State->Counter = 0U;
@@ -143,7 +145,8 @@ Std_ReturnType E2E_P01Check(
     E2E_P01CheckStateType   *State,
     const uint8             *Data)
 {
-    if ((Config == NULL) || (State == NULL) || (Data == NULL)) {
+    if ((Config == NULL) || (State == NULL) || (Data == NULL))
+    {
         return E2E_E_INPUTERR_NULL;
     }
 
@@ -253,7 +256,8 @@ Std_ReturnType E2E_P01Check(
 
 Std_ReturnType E2E_P01CheckInit(E2E_P01CheckStateType *State)
 {
-    if (State == NULL) {
+    if (State == NULL)
+    {
         return E2E_E_INPUTERR_NULL;
     }
     State->LastValidCounter = 0U;
@@ -279,7 +283,8 @@ E2E_PCheckStatusType E2E_P01MapStatusToSM(
     /* [SWS_E2E_00216] によりライブラリは Det/Dem を呼ばない方針のため
      * Det_ReportError() は呼ばない（本関数は値渡しのみで NULL チェックの
      * 概念自体が無い）。 */
-    if (CheckReturn != E2E_E_OK) {
+    if (CheckReturn != E2E_E_OK)
+    {
         return E2E_P_ERROR;  /* [SWS_E2E_00384]: Status に関わらず優先 */
     }
 
@@ -343,10 +348,12 @@ static uint8 E2E_CalcCrc8(uint8 crc, const uint8 *data, uint8 len)
         crc ^= data[i];
         for (bit = 0U; bit < 8U; bit++)
         {
-            if ((crc & 0x80U) != 0U) {
+            if ((crc & 0x80U) != 0U)
+            {
                 crc = (uint8)((crc << 1U) ^ 0x1DU);
             }
-            else {
+            else
+            {
                 crc = (uint8)(crc << 1U);
             }
         }
@@ -377,7 +384,8 @@ static uint8 E2E_CalcCrc8(uint8 crc, const uint8 *data, uint8 len)
 static uint8 E2E_CalcCrc8OverDataExcludingCrcByte(
     uint8 crc, const uint8 *Data, uint8 DataLength, uint8 CRCOffset)
 {
-    if (CRCOffset > 0U) {
+    if (CRCOffset > 0U)
+    {
         crc = E2E_CalcCrc8(crc, Data, CRCOffset);
     }
 

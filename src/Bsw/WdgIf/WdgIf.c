@@ -74,7 +74,8 @@ static uint8 WdgIf_CheckDevice(WdgIf_DeviceType Device, uint8 ApiId)
 
 Std_ReturnType WdgIf_SetMode(WdgIf_DeviceType Device, WdgIf_ModeType WdgMode)
 {
-    if (!WdgIf_CheckDevice(Device, WDGIF_API_ID_SET_MODE)) {
+    if (!WdgIf_CheckDevice(Device, WDGIF_API_ID_SET_MODE))
+    {
         return E_NOT_OK;
     }
     return Wdg_SetMode(WdgMode);
@@ -86,7 +87,8 @@ Std_ReturnType WdgIf_SetMode(WdgIf_DeviceType Device, WdgIf_ModeType WdgMode)
 
 void WdgIf_SetTriggerCondition(WdgIf_DeviceType Device, uint16 Timeout)
 {
-    if (!WdgIf_CheckDevice(Device, WDGIF_API_ID_SET_TRIGGER_CONDITION)) {
+    if (!WdgIf_CheckDevice(Device, WDGIF_API_ID_SET_TRIGGER_CONDITION))
+    {
         return;
     }
     Wdg_SetTriggerCondition(Timeout);

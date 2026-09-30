@@ -232,7 +232,8 @@ void ComM_Init(const ComM_ConfigType* ConfigPtr)
         ComM_DcmActiveDiagnostic[i]      = 0U;
         ComM_CommunicationAllowedFlag[i] = FALSE;  /* [SWS_ComM_00884] 既定値 */
     }
-    for (i = 0U; i < COMM_USER_COUNT; i++) {
+    for (i = 0U; i < COMM_USER_COUNT; i++)
+    {
         ComM_UserRequest[i] = COMM_NO_COMMUNICATION;
     }
     ComM_EcuMRunMode = COMM_NO_COMMUNICATION;
@@ -1123,11 +1124,13 @@ static ComM_ModeType ComM_ComputeAggregatedMode(void)
     uint8 i;
     for (i = 0U; i < COMM_USER_COUNT; i++)
     {
-        if (ComM_UserRequest[i] > aggregated) {
+        if (ComM_UserRequest[i] > aggregated)
+        {
             aggregated = ComM_UserRequest[i];
         }
     }
-    if ((ComM_DcmActiveDiagnostic[0U]) != 0U) {
+    if ((ComM_DcmActiveDiagnostic[0U]) != 0U)
+    {
         aggregated = COMM_FULL_COMMUNICATION;
     }
     return aggregated;
@@ -1226,7 +1229,8 @@ static Std_ReturnType ComM_ApplyAggregatedRequest(ComM_ModeType aggregated)
 
     /* 集約結果が現在のチャネル状態と同じなら何もしない
      * （要求元の要求変化が他の要求元の要求に埋もれて無効化されたケースを含む）。 */
-    if (ComM_ChannelMode[0U] == aggregated) {
+    if (ComM_ChannelMode[0U] == aggregated)
+    {
         return E_OK;
     }
 
@@ -1253,7 +1257,8 @@ static Std_ReturnType ComM_ApplyAggregatedRequest(ComM_ModeType aggregated)
      * ComM_NmReleasePending が立っていない場合（Bus-Off で SILENT_COM に
      * なっているだけで Stage 1 の巻き戻り待ちではない場合を含む）はここに
      * 該当せず、下の各分岐へ進む。 */
-    if ((aggregated == COMM_NO_COMMUNICATION) && ComM_NmReleasePending[0U]) {
+    if ((aggregated == COMM_NO_COMMUNICATION) && ComM_NmReleasePending[0U])
+    {
         return E_OK;
     }
 
@@ -1285,7 +1290,8 @@ static Std_ReturnType ComM_ApplyAggregatedRequest(ComM_ModeType aggregated)
      * 落ちてくる）はゲートの対象外とし、これまでどおり CanSM へそのまま
      * 転送する（Bus-Off 中は CanSM 自身が拒否する。/code-review で
      * 対象範囲の逸脱を指摘）。 */
-    if ((aggregated == COMM_FULL_COMMUNICATION) && (ComM_ChannelMode[0U] == COMM_NO_COMMUNICATION)) {
+    if ((aggregated == COMM_FULL_COMMUNICATION) && (ComM_ChannelMode[0U] == COMM_NO_COMMUNICATION))
+    {
         return ComM_RequestFullComOrPend(0U);
     }
     return CanSM_RequestComMode(0U, aggregated);

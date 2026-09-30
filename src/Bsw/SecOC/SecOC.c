@@ -211,11 +211,13 @@ static uint8 SecOC_ApplyVerifyStatusOverride(uint8 tableIndex, uint8 actualPass)
 {
     const uint8 ov = SecOC_OverrideStatus[tableIndex];
 
-    if (ov == SECOC_OVERRIDE_NONE) {
+    if (ov == SECOC_OVERRIDE_NONE)
+    {
         return actualPass;
     }
 
-    if (ov == SECOC_OVERRIDE_FAIL_INDEFINITE) {
+    if (ov == SECOC_OVERRIDE_FAIL_INDEFINITE)
+    {
         return 0U;
     }
 
@@ -225,7 +227,8 @@ static uint8 SecOC_ApplyVerifyStatusOverride(uint8 tableIndex, uint8 actualPass)
     if (SecOC_OverrideRemaining[tableIndex] > 0U)
     {
         SecOC_OverrideRemaining[tableIndex]--;
-        if (SecOC_OverrideRemaining[tableIndex] == 0U) {
+        if (SecOC_OverrideRemaining[tableIndex] == 0U)
+        {
             SecOC_OverrideStatus[tableIndex] = SECOC_OVERRIDE_NONE;
         }
         return 0U;
@@ -400,10 +403,12 @@ void SecOC_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
     uint8 authInput[SECOC_AUTH_INPUT_MAX];
     authInput[0] = (uint8)(cfg->DataId >> 8);
     authInput[1] = (uint8)(cfg->DataId & 0xFFU);
-    for (uint8 b = 0U; b < cfg->AuthenticPduLength; b++) {
+    for (uint8 b = 0U; b < cfg->AuthenticPduLength; b++)
+    {
         authInput[2U + b] = secured[b];
     }
-    for (uint8 b = 0U; b < cfg->FreshnessLength; b++) {
+    for (uint8 b = 0U; b < cfg->FreshnessLength; b++)
+    {
         authInput[2U + cfg->AuthenticPduLength + b] = secured[cfg->FreshnessOffset + b];
     }
 
@@ -676,7 +681,8 @@ Std_ReturnType SecOC_IfTransmit(PduIdType TxPduId, const PduInfoType* PduInfoPtr
     /* [SWS_SecOC_00058]: Authentic I-PDU を内部バッファへコピーするだけに
      * 留め、Freshness/MAC の計算は次回 SecOC_MainFunctionTx() まで遅延する
      * （[SWS_SecOC_00060]〜[SWS_SecOC_00062]）。 */
-    for (uint8 b = 0U; b < cfg->AuthenticPduLength; b++) {
+    for (uint8 b = 0U; b < cfg->AuthenticPduLength; b++)
+    {
         SecOC_TxAuthenticBuffer[tableIndex][b] = PduInfoPtr->SduDataPtr[b];
     }
     SecOC_TxPending[tableIndex] = 1U;
@@ -735,7 +741,8 @@ void SecOC_MainFunctionTx(void)
 
     for (uint8 t = 0U; t < SecOC_ConfigPtr->TxPduCount; t++)
     {
-        if (!SecOC_TxPending[t]) {
+        if (!SecOC_TxPending[t])
+        {
             continue;
         }
 
@@ -764,10 +771,12 @@ void SecOC_MainFunctionTx(void)
         uint8 authInput[SECOC_AUTH_INPUT_MAX];
         authInput[0] = (uint8)(cfg->DataId >> 8);
         authInput[1] = (uint8)(cfg->DataId & 0xFFU);
-        for (uint8 b = 0U; b < cfg->AuthenticPduLength; b++) {
+        for (uint8 b = 0U; b < cfg->AuthenticPduLength; b++)
+        {
             authInput[2U + b] = SecOC_TxAuthenticBuffer[t][b];
         }
-        for (uint8 b = 0U; b < cfg->FreshnessLength; b++) {
+        for (uint8 b = 0U; b < cfg->FreshnessLength; b++)
+        {
             authInput[2U + cfg->AuthenticPduLength + b] = freshness;
         }
 
@@ -775,10 +784,12 @@ void SecOC_MainFunctionTx(void)
          * （SecOC_RxPduConfigType の FreshnessOffset/MacOffset と同じレイアウト
          * 規約。Authentic のすぐ後ろに Freshness、その後ろに MAC が続く）。 */
         uint8 secured[SECOC_TX_AUTH_BUF_MAX];
-        for (uint8 b = 0U; b < cfg->AuthenticPduLength; b++) {
+        for (uint8 b = 0U; b < cfg->AuthenticPduLength; b++)
+        {
             secured[b] = SecOC_TxAuthenticBuffer[t][b];
         }
-        for (uint8 b = 0U; b < cfg->FreshnessLength; b++) {
+        for (uint8 b = 0U; b < cfg->FreshnessLength; b++)
+        {
             secured[cfg->FreshnessOffset + b] = freshness;
         }
 

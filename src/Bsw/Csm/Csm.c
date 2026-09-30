@@ -59,7 +59,8 @@ static const Csm_JobConfigType* Csm_FindJob(uint32 jobId, Crypto_ServiceInfoType
 {
     for (uint8 i = 0U; i < CSM_JOB_COUNT; i++)
     {
-        if ((Csm_JobConfigData[i].JobId == jobId) && (Csm_JobConfigData[i].Service == expectedService)) {
+        if ((Csm_JobConfigData[i].JobId == jobId) && (Csm_JobConfigData[i].Service == expectedService))
+        {
             return &Csm_JobConfigData[i];
         }
     }

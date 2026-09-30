@@ -210,7 +210,8 @@ static uint8 NvM_QueueLen  = 0U;  /**< キュー内の有効エントリ数     
 
 static const NvM_BlockDescriptorType* NvM_GetBlock(NvM_BlockIdType id)
 {
-    if ((NvM_Cfg == NULL) || (id >= NvM_Cfg->NumBlocks)) {
+    if ((NvM_Cfg == NULL) || (id >= NvM_Cfg->NumBlocks))
+    {
         return NULL;
     }
     return &NvM_Cfg->Blocks[id];
@@ -297,15 +298,18 @@ static void NvM_ApplyDefaultSync(NvM_BlockIdType id, const NvM_BlockDescriptorTy
 {
     const boolean hasRomDefault = (boolean)(blk->RomBlockDataAddress != NULL);
 
-    if (hasRomDefault) {
+    if (hasRomDefault)
+    {
         (void)memcpy(blk->RamBlockDataAddress, blk->RomBlockDataAddress, blk->NvMNvBlockLength);
     }
-    else {
+    else
+    {
         (void)memset(blk->RamBlockDataAddress, 0, blk->NvMNvBlockLength);
     }
 
     NvM_WriteCopySync(blk->NvMNvBlockBaseNumber, blk->RamBlockDataAddress, blk->NvMNvBlockLength);
-    if (blk->Redundant != 0U) {
+    if (blk->Redundant != 0U)
+    {
         NvM_WriteCopySync(blk->NvMNvBlockBaseNumberMirror, blk->RamBlockDataAddress, blk->NvMNvBlockLength);
     }
 
@@ -390,7 +394,8 @@ static void NvM_ApplyDefaultSync(NvM_BlockIdType id, const NvM_BlockDescriptorTy
  */
 static void NvM_LoadAndVerifyBlock(NvM_BlockIdType id, const NvM_BlockDescriptorType* blk)
 {
-    if (blk->RamBlockDataAddress == NULL) {
+    if (blk->RamBlockDataAddress == NULL)
+    {
         return;
     }
 
@@ -565,7 +570,8 @@ static void NvM_MarkPending(NvM_BlockIdType id)
          * （2026-09 是正）ため、完全に正常な NvM 内部の巻き戻しのたびに
          * 紛らわしい実行時エラーログが出てしまう（/code-review で指摘）。
          * 実際にキャンセルすべきジョブがあるときだけ呼ぶよう先に確認する。 */
-        if (MemIf_GetStatus(MEMIF_DEVICE_0) == MEMIF_BUSY) {
+        if (MemIf_GetStatus(MEMIF_DEVICE_0) == MEMIF_BUSY)
+        {
             MemIf_Cancel(MEMIF_DEVICE_0);
         }
         NvM_ActivePhase        = NVM_PHASE_NONE;
@@ -676,34 +682,42 @@ void NvM_ReportBootDiagnosticsToDem(void)
 
     for (uint8 i = 0U; i < NVM_BLOCK_COUNT; i++)
     {
-        if (NvM_IntegrityFailedReport[i] == NVM_DEM_REPORT_FAILED) {
+        if (NvM_IntegrityFailedReport[i] == NVM_DEM_REPORT_FAILED)
+        {
             anyIntegrityFailed = 1U;
         }
-        else if (NvM_IntegrityFailedReport[i] == NVM_DEM_REPORT_PASSED) {
+        else if (NvM_IntegrityFailedReport[i] == NVM_DEM_REPORT_PASSED)
+        {
             anyIntegrityPassed = 1U;
         }
         NvM_IntegrityFailedReport[i] = NVM_DEM_REPORT_NONE;
 
-        if (NvM_LossOfRedundancyReport[i] == NVM_DEM_REPORT_FAILED) {
+        if (NvM_LossOfRedundancyReport[i] == NVM_DEM_REPORT_FAILED)
+        {
             anyRedundancyFailed = 1U;
         }
-        else if (NvM_LossOfRedundancyReport[i] == NVM_DEM_REPORT_PASSED) {
+        else if (NvM_LossOfRedundancyReport[i] == NVM_DEM_REPORT_PASSED)
+        {
             anyRedundancyPassed = 1U;
         }
         NvM_LossOfRedundancyReport[i] = NVM_DEM_REPORT_NONE;
     }
 
-    if ((anyIntegrityFailed) != 0U) {
+    if ((anyIntegrityFailed) != 0U)
+    {
         (void)Dem_SetEventStatus(DEM_EVENT_NVM_INTEGRITY_FAILED, DEM_EVENT_STATUS_FAILED);
     }
-    else if ((anyIntegrityPassed) != 0U) {
+    else if ((anyIntegrityPassed) != 0U)
+    {
         (void)Dem_SetEventStatus(DEM_EVENT_NVM_INTEGRITY_FAILED, DEM_EVENT_STATUS_PASSED);
     }
 
-    if ((anyRedundancyFailed) != 0U) {
+    if ((anyRedundancyFailed) != 0U)
+    {
         (void)Dem_SetEventStatus(DEM_EVENT_NVM_LOSS_OF_REDUNDANCY, DEM_EVENT_STATUS_FAILED);
     }
-    else if ((anyRedundancyPassed) != 0U) {
+    else if ((anyRedundancyPassed) != 0U)
+    {
         (void)Dem_SetEventStatus(DEM_EVENT_NVM_LOSS_OF_REDUNDANCY, DEM_EVENT_STATUS_PASSED);
     }
 }
@@ -969,7 +983,8 @@ Std_ReturnType NvM_RestoreBlockDefaults(NvM_BlockIdType BlockId, void* NvM_DestP
     /* [SWS_NvM_00435]: 呼び出し元が RAM ブロックアドレスを指定した場合は、
      * それも使う（本実装では常時保持している RAM ミラーへの反映に加えて、
      * 呼び出し元バッファへも同じ内容をコピーする形で対応する）。 */
-    if (NvM_DestPtr != NULL) {
+    if (NvM_DestPtr != NULL)
+    {
         (void)memcpy(NvM_DestPtr, blk->RamBlockDataAddress, blk->NvMNvBlockLength);
     }
 
@@ -1126,7 +1141,8 @@ void NvM_MainFunction(void)
          * 呼び出し元が意図した書き込み順序（例: Dem が MAGIC バイトを
          * 最後に書くことで電源断時の整合性を担保している設計）を
          * 壊してしまうため、必ず投入順で処理する。 */
-        if (NvM_QueueLen == 0U) {
+        if (NvM_QueueLen == 0U)
+        {
             return;  /* 保留ジョブなし */
         }
 
@@ -1170,7 +1186,8 @@ void NvM_MainFunction(void)
     }
 
     const MemIf_JobResultType result = MemIf_GetJobResult(MEMIF_DEVICE_0);
-    if (result == MEMIF_JOB_PENDING) {
+    if (result == MEMIF_JOB_PENDING)
+    {
         return;  /* まだ物理書き込み中 (MemIf_MainFunction() 側が進めている) */
     }
 

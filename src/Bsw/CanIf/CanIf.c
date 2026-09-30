@@ -246,7 +246,8 @@ void CanIf_DeInit(void)
 Std_ReturnType CanIf_SetControllerMode(uint8 ControllerId, Can_ControllerStateType ControllerMode)
 {
 
-    if (CanIf_ConfigPtr == NULL) {
+    if (CanIf_ConfigPtr == NULL)
+    {
         return E_NOT_OK;
     }
 
@@ -273,7 +274,8 @@ Std_ReturnType CanIf_SetControllerMode(uint8 ControllerId, Can_ControllerStateTy
             return E_NOT_OK;
     }
 
-    if (Can_SetControllerMode(ControllerId, transition) != CAN_OK) {
+    if (Can_SetControllerMode(ControllerId, transition) != CAN_OK)
+    {
         return E_NOT_OK;
     }
 
@@ -285,7 +287,8 @@ Std_ReturnType CanIf_SetControllerMode(uint8 ControllerId, Can_ControllerStateTy
      * [SWS_CANIF_00739]: 停止時にもバッファ済み情報をクリアする（本プロジェクトは
      * 同要求が求める「未確認 TX への <User_TxConfirmation>(id, E_NOT_OK)」の
      * 一括通知までは実装しないが、状態クリア自体は該当箇所のみ反映する）。 */
-    if ((ControllerMode == CAN_CS_STARTED) || (ControllerMode == CAN_CS_STOPPED)) {
+    if ((ControllerMode == CAN_CS_STARTED) || (ControllerMode == CAN_CS_STOPPED))
+    {
         CanIf_TxConfirmationState[ControllerId] = CANIF_NO_NOTIFICATION;
     }
 
@@ -313,7 +316,8 @@ Std_ReturnType CanIf_SetControllerMode(uint8 ControllerId, Can_ControllerStateTy
 Std_ReturnType CanIf_GetControllerMode(uint8 ControllerId, Can_ControllerStateType* ControllerModePtr)
 {
 
-    if (CanIf_ConfigPtr == NULL) {
+    if (CanIf_ConfigPtr == NULL)
+    {
         return E_NOT_OK;
     }
 
@@ -358,7 +362,8 @@ Std_ReturnType CanIf_GetControllerMode(uint8 ControllerId, Can_ControllerStateTy
  */
 Std_ReturnType CanIf_GetControllerErrorState(uint8 ControllerId, Can_ErrorStateType* ErrorStatePtr)
 {
-    if (CanIf_ConfigPtr == NULL) {
+    if (CanIf_ConfigPtr == NULL)
+    {
         return E_NOT_OK;
     }
 
@@ -408,7 +413,8 @@ Std_ReturnType CanIf_GetControllerErrorState(uint8 ControllerId, Can_ErrorStateT
  */
 Std_ReturnType CanIf_Transmit(PduIdType TxPduId, const PduInfoType* PduInfoPtr)
 {
-    if (CanIf_ConfigPtr == NULL) {
+    if (CanIf_ConfigPtr == NULL)
+    {
         return E_NOT_OK;
     }
 
@@ -456,7 +462,8 @@ Std_ReturnType CanIf_Transmit(PduIdType TxPduId, const PduInfoType* PduInfoPtr)
 
     Can_ReturnType ret = Can_Write(txCfg->Hth, &canPdu);
 
-    if (ret == CAN_BUSY) {
+    if (ret == CAN_BUSY)
+    {
         DET_LOGW(TAG, "TX BUSY");
     }
 
@@ -532,7 +539,8 @@ Std_ReturnType CanIf_Transmit(PduIdType TxPduId, const PduInfoType* PduInfoPtr)
  */
 Std_ReturnType CanIf_ReadRxPduData(PduIdType CanIfRxSduId, PduInfoType* CanIfRxInfoPtr)
 {
-    if (CanIf_ConfigPtr == NULL) {
+    if (CanIf_ConfigPtr == NULL)
+    {
         return E_NOT_OK;  /* CanIf の他 API と同じ方針、CanIf_Cfg.h 冒頭コメント参照 */
     }
 
@@ -568,7 +576,8 @@ Std_ReturnType CanIf_ReadRxPduData(PduIdType CanIfRxSduId, PduInfoType* CanIfRxI
     }
 
     const uint8 len = CanIf_RxPduDataLength[CanIfRxSduId];
-    for (uint8 b = 0U; b < len; b++) {
+    for (uint8 b = 0U; b < len; b++)
+    {
         CanIfRxInfoPtr->SduDataPtr[b] = CanIf_RxPduDataBuffer[CanIfRxSduId][b];
     }
     CanIfRxInfoPtr->SduLength = len;
@@ -607,7 +616,8 @@ Std_ReturnType CanIf_ReadRxPduData(PduIdType CanIfRxSduId, PduInfoType* CanIfRxI
  */
 CanIf_NotifStatusType CanIf_ReadTxNotifStatus(PduIdType CanIfTxSduId)
 {
-    if (CanIf_ConfigPtr == NULL) {
+    if (CanIf_ConfigPtr == NULL)
+    {
         return CANIF_NO_NOTIFICATION;  /* CanIf の他 API と同じ方針、CanIf_Cfg.h 冒頭コメント参照 */
     }
 
@@ -655,7 +665,8 @@ CanIf_NotifStatusType CanIf_ReadTxNotifStatus(PduIdType CanIfTxSduId)
  */
 CanIf_NotifStatusType CanIf_ReadRxNotifStatus(PduIdType CanIfRxSduId)
 {
-    if (CanIf_ConfigPtr == NULL) {
+    if (CanIf_ConfigPtr == NULL)
+    {
         return CANIF_NO_NOTIFICATION;  /* CanIf の他 API と同じ方針、CanIf_Cfg.h 冒頭コメント参照 */
     }
 
@@ -706,7 +717,8 @@ CanIf_NotifStatusType CanIf_ReadRxNotifStatus(PduIdType CanIfRxSduId)
  */
 Std_ReturnType CanIf_SetPduMode(uint8 ControllerId, CanIf_PduModeType PduModeRequest)
 {
-    if (CanIf_ConfigPtr == NULL) {
+    if (CanIf_ConfigPtr == NULL)
+    {
         return E_NOT_OK;
     }
 
@@ -747,7 +759,8 @@ Std_ReturnType CanIf_SetPduMode(uint8 ControllerId, CanIf_PduModeType PduModeReq
  */
 Std_ReturnType CanIf_GetPduMode(uint8 ControllerId, CanIf_PduModeType* PduModePtr)
 {
-    if (CanIf_ConfigPtr == NULL) {
+    if (CanIf_ConfigPtr == NULL)
+    {
         return E_NOT_OK;
     }
 
@@ -883,7 +896,8 @@ void CanIf_GetVersionInfo(Std_VersionInfoType* versioninfo)
 CanIf_NotifStatusType CanIf_GetTxConfirmationState(uint8 ControllerId)
 {
 
-    if (CanIf_ConfigPtr == NULL) {
+    if (CanIf_ConfigPtr == NULL)
+    {
         return CANIF_NO_NOTIFICATION;  /* CanIf の他 API と同じ方針、CanIf_Cfg.h 冒頭コメント参照 */
     }
 
@@ -954,7 +968,8 @@ CanIf_NotifStatusType CanIf_GetTxConfirmationState(uint8 ControllerId)
  */
 void CanIf_TxConfirmation(PduIdType CanTxPduId)
 {
-    if (CanIf_ConfigPtr == NULL) {
+    if (CanIf_ConfigPtr == NULL)
+    {
         return;
     }
 
@@ -982,11 +997,13 @@ void CanIf_TxConfirmation(PduIdType CanTxPduId)
      * 頃には CanIf_SetControllerMode(STOPPED) 済み（Bus-Off 等）ということが
      * ありうる（/code-review で発見: 状態チェックが無いと、停止後に届いた
      * 古い通知で「起動後に TX 確認あり」と誤認しうる）。 */
-    if (CanIf_ControllerMode[0] == CAN_CS_STARTED) {
+    if (CanIf_ControllerMode[0] == CAN_CS_STARTED)
+    {
         CanIf_TxConfirmationState[0] = CANIF_TX_RX_NOTIFICATION;
     }
 
-    if (txCfg->TxConfirmFct != NULL) {
+    if (txCfg->TxConfirmFct != NULL)
+    {
         txCfg->TxConfirmFct(txCfg->UpperLayerTxPduId, E_OK);
     }
 }
@@ -1032,7 +1049,8 @@ void CanIf_TxConfirmation(PduIdType CanTxPduId)
  */
 void CanIf_RxIndication(const Can_HwType* Mailbox, const PduInfoType* PduInfoPtr)
 {
-    if (CanIf_ConfigPtr == NULL) {
+    if (CanIf_ConfigPtr == NULL)
+    {
         return;  /* [SWS_CANIF_00421]: 未初期化時は黙って何もしない（DET 報告なし） */
     }
 
@@ -1054,13 +1072,15 @@ void CanIf_RxIndication(const Can_HwType* Mailbox, const PduInfoType* PduInfoPtr
     {
         const CanIf_RxPduConfigType* rxCfg = &CanIf_ConfigPtr->RxPduConfig[i];
 
-        if (rxCfg->Hrh != Mailbox->Hoh) {
+        if (rxCfg->Hrh != Mailbox->Hoh)
+        {
             continue;
         }
 
         hohMatched = 1U;
 
-        if (rxCfg->CanId != Mailbox->CanId) {
+        if (rxCfg->CanId != Mailbox->CanId)
+        {
             continue;
         }
 
@@ -1103,7 +1123,8 @@ void CanIf_RxIndication(const Can_HwType* Mailbox, const PduInfoType* PduInfoPtr
             const uint8 copyLen = (PduInfoPtr->SduLength <= rxCfg->Dlc)
                                        ? (uint8)PduInfoPtr->SduLength
                                        : rxCfg->Dlc;
-            for (uint8 b = 0U; b < copyLen; b++) {
+            for (uint8 b = 0U; b < copyLen; b++)
+            {
                 CanIf_RxPduDataBuffer[i][b] = PduInfoPtr->SduDataPtr[b];
             }
             CanIf_RxPduDataLength[i] = copyLen;
@@ -1114,7 +1135,8 @@ void CanIf_RxIndication(const Can_HwType* Mailbox, const PduInfoType* PduInfoPtr
          * （CanIf_ReadRxNotifStatus() の Doxygen 参照）。 */
         CanIf_RxNotifStatus[i] = CANIF_TX_RX_NOTIFICATION;
 
-        if (rxCfg->RxIndicationFct != NULL) {
+        if (rxCfg->RxIndicationFct != NULL)
+        {
             rxCfg->RxIndicationFct(rxCfg->UpperLayerRxPduId, PduInfoPtr);
         }
 
@@ -1122,10 +1144,12 @@ void CanIf_RxIndication(const Can_HwType* Mailbox, const PduInfoType* PduInfoPtr
     }
 
     DET_LOGW(TAG, "RX no match can=0x%lX", (unsigned long)Mailbox->CanId);
-    if ((hohMatched) != 0U) {
+    if ((hohMatched) != 0U)
+    {
         (void)Det_ReportError(CANIF_MODULE_ID, 0U, CANIF_API_ID_RX_INDICATION, CANIF_E_PARAM_CANID);
     }
-    else {
+    else
+    {
         (void)Det_ReportError(CANIF_MODULE_ID, 0U, CANIF_API_ID_RX_INDICATION, CANIF_E_PARAM_HOH);
     }
 }

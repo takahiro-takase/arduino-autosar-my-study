@@ -76,7 +76,8 @@ void Crypto_Init(void)
 
     for (uint32 k = 0U; k < CRYPTO_KEY_COUNT; k++)
     {
-        for (uint32 b = 0U; b < CRYPTO_AES128_KEY_SIZE; b++) {
+        for (uint32 b = 0U; b < CRYPTO_AES128_KEY_SIZE; b++)
+        {
             Crypto_KeyStore[k][b] = Crypto_KeyTable[k][b];
         }
         Crypto_KeyValid[k] = 1U;
@@ -153,7 +154,8 @@ Std_ReturnType Crypto_ProcessJob(uint32 objectId, Crypto_JobType* job)
 
     if (job->service == CRYPTO_MACGENERATE)
     {
-        for (uint32 b = 0U; b < job->macLength; b++) {
+        for (uint32 b = 0U; b < job->macLength; b++)
+        {
             job->macPtr[b] = fullMac[b];
         }
         return E_OK;
@@ -173,7 +175,8 @@ Std_ReturnType Crypto_ProcessJob(uint32 objectId, Crypto_JobType* job)
          * （元 SecOC_RxIndication() が行っていた比較ロジックを、責務として
          * 正しい Crypto Driver 層へ移設した）。 */
         uint8 macDiff = 0U;
-        for (uint32 b = 0U; b < job->macLength; b++) {
+        for (uint32 b = 0U; b < job->macLength; b++)
+        {
             macDiff |= (uint8)(fullMac[b] ^ job->macPtr[b]);
         }
 
@@ -223,7 +226,8 @@ Std_ReturnType Crypto_KeyElementSet(uint32 cryptoKeyId, uint32 keyElementId,
         return CRYPTO_E_KEY_SIZE_MISMATCH;
     }
 
-    for (uint32 b = 0U; b < CRYPTO_AES128_KEY_SIZE; b++) {
+    for (uint32 b = 0U; b < CRYPTO_AES128_KEY_SIZE; b++)
+    {
         Crypto_KeyStore[cryptoKeyId][b] = keyPtr[b];
     }
 
@@ -278,7 +282,8 @@ Std_ReturnType Crypto_KeyElementGet(uint32 cryptoKeyId, uint32 keyElementId,
         return E_NOT_OK;
     }
 
-    for (uint32 b = 0U; b < CRYPTO_AES128_KEY_SIZE; b++) {
+    for (uint32 b = 0U; b < CRYPTO_AES128_KEY_SIZE; b++)
+    {
         resultPtr[b] = Crypto_KeyStore[cryptoKeyId][b];
     }
 

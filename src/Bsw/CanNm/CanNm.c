@@ -253,7 +253,8 @@ Std_ReturnType CanNm_NetworkRelease(NetworkHandleType Channel)
 
     CanNm_NetworkRequested = 0U;
 
-    if (CanNm_State == CANNM_STATE_NORMAL_OPERATION) {
+    if (CanNm_State == CANNM_STATE_NORMAL_OPERATION)
+    {
         CanNm_EnterReadySleep();  /* [SWS_CanNm_00118] */
     }
 
@@ -312,7 +313,8 @@ Std_ReturnType CanNm_DisableCommunication(NetworkHandleType Channel)
         return E_NOT_OK;
     }
 
-    if (CanNm_TxEnabled != 0U) {
+    if (CanNm_TxEnabled != 0U)
+    {
         DET_LOGI(TAG, "CommunicationControl tx=%u->0", (unsigned)CanNm_TxEnabled);
     }
     CanNm_TxEnabled = 0U;
@@ -574,19 +576,23 @@ Std_ReturnType CanNm_GetState(NetworkHandleType Channel, CanNm_StateType* StateP
         return E_NOT_OK;
     }
 
-    if (StatePtr != NULL) {
+    if (StatePtr != NULL)
+    {
         *StatePtr = CanNm_State;
     }
 
     if (ModePtr != NULL)
     {
-        if (CanNm_State == CANNM_STATE_BUS_SLEEP) {
+        if (CanNm_State == CANNM_STATE_BUS_SLEEP)
+        {
             *ModePtr = CANNM_MODE_BUS_SLEEP;
         }
-        else if (CanNm_State == CANNM_STATE_PREPARE_BUS_SLEEP) {
+        else if (CanNm_State == CANNM_STATE_PREPARE_BUS_SLEEP)
+        {
             *ModePtr = CANNM_MODE_PREPARE_BUS_SLEEP;
         }
-        else {
+        else
+        {
             *ModePtr = CANNM_MODE_NETWORK;
         }
     }
@@ -669,14 +675,16 @@ void CanNm_TxConfirmation(PduIdType TxPduId, Std_ReturnType result)
 {
     (void)TxPduId;
 
-    if (!CanNm_Initialized || (result != E_OK)) {
+    if (!CanNm_Initialized || (result != E_OK))
+    {
         return;
     }
 
     /* [SWS_CanNm_00099]: Network Mode（Repeat Message/Normal Operation State）
      * での送信成功時に NM-Timeout Timer を再起動する。Ready Sleep State は
      * 送信自体を行わないため対象外。 */
-    if ((CanNm_State == CANNM_STATE_REPEAT_MESSAGE) || (CanNm_State == CANNM_STATE_NORMAL_OPERATION)) {
+    if ((CanNm_State == CANNM_STATE_REPEAT_MESSAGE) || (CanNm_State == CANNM_STATE_NORMAL_OPERATION))
+    {
         CanNm_TimeoutTimerMs = millis();
     }
 }
@@ -762,7 +770,8 @@ void CanNm_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
              * （[SWS_CanNm_00174]、`CanNm_MainFunction()` 参照）は
              * `CanNm_TimeoutTimerMs` の値自体がタイムアウト判定に使われないため
              * 実害は無かったが、条文への厳密な準拠のため明示的にガードする。 */
-            if ((CanNm_TxEnabled) != 0U) {
+            if ((CanNm_TxEnabled) != 0U)
+            {
                 CanNm_TimeoutTimerMs = millis();
             }
 
@@ -824,7 +833,8 @@ void CanNm_MainFunction(void)
             break;
 
         case CANNM_STATE_PREPARE_BUS_SLEEP:
-            if ((now - CanNm_StateTimerMs) >= CANNM_WAIT_BUS_SLEEP_MS) {
+            if ((now - CanNm_StateTimerMs) >= CANNM_WAIT_BUS_SLEEP_MS)
+            {
                 CanNm_EnterBusSleep();  /* [SWS_CanNm_00115] */
             }
             break;
@@ -856,7 +866,8 @@ void CanNm_MainFunction(void)
              * 周期 CANNM_CYCLE_MS をそのまま周期として使う簡略化）による周期送信。
              * NM-Timeout Timer とは独立に、Repeat Message/Normal Operation
              * State の間は毎周期送信する。 */
-            if ((CanNm_TxEnabled) != 0U) {
+            if ((CanNm_TxEnabled) != 0U)
+            {
                 CanNm_TransmitPdu();
             }
 
@@ -864,10 +875,12 @@ void CanNm_MainFunction(void)
             {
                 /* [SWS_CanNm_00102]/[SWS_CanNm_00103]/[SWS_CanNm_00106] */
                 CanNm_RepeatMessageBitSet = 0U;  /* [SWS_CanNm_00107] */
-                if ((CanNm_NetworkRequested) != 0U) {
+                if ((CanNm_NetworkRequested) != 0U)
+                {
                     CanNm_EnterNormalOperation();
                 }
-                else {
+                else
+                {
                     CanNm_EnterReadySleep();
                 }
             }
@@ -884,7 +897,8 @@ void CanNm_MainFunction(void)
             }
 
             /* Message Cycle Timer による周期送信（上記 Repeat Message State と同じ）。 */
-            if ((CanNm_TxEnabled) != 0U) {
+            if ((CanNm_TxEnabled) != 0U)
+            {
                 CanNm_TransmitPdu();
             }
             break;
@@ -894,7 +908,8 @@ void CanNm_MainFunction(void)
              * Sleep State でも同一のタイマーであり（[SWS_CanNm_00109]自身が
              * "When the NM-Timeout Timer expires in the Ready Sleep..." と
              * 明記）、送信無効化中は同様に停止する。 */
-            if (CanNm_TxEnabled && (now - CanNm_TimeoutTimerMs) >= CANNM_TIMEOUT_MS) {
+            if (CanNm_TxEnabled && (now - CanNm_TimeoutTimerMs) >= CANNM_TIMEOUT_MS)
+            {
                 CanNm_EnterPrepareBusSleep();  /* [SWS_CanNm_00109] */
             }
             break;
@@ -974,7 +989,8 @@ static void CanNm_EnterRepeatMessage(void)
 
     Nm_NetworkMode(0U);
 
-    if ((CanNm_TxEnabled) != 0U) {
+    if ((CanNm_TxEnabled) != 0U)
+    {
         CanNm_TransmitPdu();
     }
 }
@@ -999,7 +1015,8 @@ static void CanNm_EnterNormalOperation(void)
     CanNm_TimeoutTimerMs  = millis();
     DET_LOGI(TAG, "-> Network Mode: Normal Operation State");
 
-    if ((CanNm_TxEnabled) != 0U) {
+    if ((CanNm_TxEnabled) != 0U)
+    {
         CanNm_TransmitPdu();
     }
 }

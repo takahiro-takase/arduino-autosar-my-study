@@ -268,10 +268,12 @@ Std_ReturnType CanTp_Transmit(PduIdType TxSduId, const PduInfoType* PduInfoPtr)
         /* ---- Single Frame ---- */
         CanTp_TxFrameBuf[0] = (uint8)msgLen;   /* SF PCI: 0x0N */
         uint8 i;
-        for (i = 0U; i < (uint8)msgLen; i++) {
+        for (i = 0U; i < (uint8)msgLen; i++)
+        {
             CanTp_TxFrameBuf[1U + i] = PduInfoPtr->SduDataPtr[i];
         }
-        for (; i < CANTP_SF_MAX_DATA; i++) {
+        for (; i < CANTP_SF_MAX_DATA; i++)
+        {
             CanTp_TxFrameBuf[1U + i] = 0x00U;
         }
 
@@ -291,7 +293,8 @@ Std_ReturnType CanTp_Transmit(PduIdType TxSduId, const PduInfoType* PduInfoPtr)
     /* ---- Multi Frame: First Frame ---- */
     /* メッセージ全体を TX バッファへコピー */
     uint16 i;
-    for (i = 0U; i < msgLen; i++) {
+    for (i = 0U; i < msgLen; i++)
+    {
         CanTp_Tx.buf[i] = PduInfoPtr->SduDataPtr[i];
     }
     CanTp_Tx.msgLen = msgLen;
@@ -302,7 +305,8 @@ Std_ReturnType CanTp_Transmit(PduIdType TxSduId, const PduInfoType* PduInfoPtr)
     CanTp_TxFrameBuf[0] = (uint8)(0x10U | (uint8)((msgLen >> 8U) & 0x0FU));
     CanTp_TxFrameBuf[1] = (uint8)(msgLen & 0xFFU);
     uint8 k;
-    for (k = 0U; k < CANTP_FF_DATA; k++) {
+    for (k = 0U; k < CANTP_FF_DATA; k++)
+    {
         CanTp_TxFrameBuf[2U + k] = CanTp_Tx.buf[k];
     }
 
@@ -444,7 +448,8 @@ void CanTp_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
         return;
     }
 
-    if (PduInfoPtr->SduLength == 0U) {
+    if (PduInfoPtr->SduLength == 0U)
+    {
         return;  /* 空フレームは DET 対象外（NULL ポインタではないため） */
     }
 
@@ -466,7 +471,8 @@ void CanTp_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
         }
 
         uint8 i;
-        for (i = 0U; i < udsLen; i++) {
+        for (i = 0U; i < udsLen; i++)
+        {
             CanTp_Rx.buf[i] = data[1U + i];
         }
 
@@ -503,7 +509,8 @@ void CanTp_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
         uint16 msgLen = (uint16)(((uint16)(pci & 0x0FU) << 8U)
                                  | (uint16)data[1]);
 
-        if ((msgLen <= CANTP_SF_MAX_DATA) || (PduInfoPtr->SduLength < 8U)) {
+        if ((msgLen <= CANTP_SF_MAX_DATA) || (PduInfoPtr->SduLength < 8U))
+        {
             break;
         }
 
@@ -523,7 +530,8 @@ void CanTp_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
         uint16 copyLen = (msgLen < (uint16)CANTP_FF_DATA)
                          ? msgLen : (uint16)CANTP_FF_DATA;
         uint8 i;
-        for (i = 0U; i < (uint8)copyLen; i++) {
+        for (i = 0U; i < (uint8)copyLen; i++)
+        {
             CanTp_Rx.buf[i] = data[2U + i];
         }
         CanTp_Rx.pos = copyLen;
@@ -537,7 +545,8 @@ void CanTp_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
     /* ------------------------------------------------------------------ */
     case CANTP_FRAME_CF:
     {
-        if (CanTp_Rx.state != CANTP_RX_WAIT_CF) {
+        if (CanTp_Rx.state != CANTP_RX_WAIT_CF)
+        {
             break;
         }
 
@@ -566,7 +575,8 @@ void CanTp_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
         uint8  copyLen   = (remaining > (uint16)CANTP_CF_DATA)
                            ? CANTP_CF_DATA : (uint8)remaining;
         uint8 i;
-        for (i = 0U; i < copyLen; i++) {
+        for (i = 0U; i < copyLen; i++)
+        {
             CanTp_Rx.buf[CanTp_Rx.pos + i] = data[1U + i];
         }
 
@@ -594,7 +604,8 @@ void CanTp_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
     /* ------------------------------------------------------------------ */
     case CANTP_FRAME_FC:
     {
-        if (CanTp_Tx.state != CANTP_TX_WAIT_FC) {
+        if (CanTp_Tx.state != CANTP_TX_WAIT_FC)
+        {
             break;
         }
 
@@ -708,11 +719,13 @@ static Std_ReturnType CanTp_SendFrame(void)
  */
 static uint8 CanTp_DecodeStMin(uint8 raw)
 {
-    if (raw <= 0x7FU) {
+    if (raw <= 0x7FU)
+    {
         return raw;
     }
 
-    if ((raw >= 0xF1U) && (raw <= 0xF9U)) {
+    if ((raw >= 0xF1U) && (raw <= 0xF9U))
+    {
         return 0U;
     }
 
@@ -764,10 +777,12 @@ static void CanTp_SendNextCF(void)
 
     CanTp_TxFrameBuf[0] = (uint8)(0x20U | (CanTp_Tx.sn & 0x0FU));
     uint8 i;
-    for (i = 0U; i < copyLen; i++) {
+    for (i = 0U; i < copyLen; i++)
+    {
         CanTp_TxFrameBuf[1U + i] = CanTp_Tx.buf[CanTp_Tx.pos + i];
     }
-    for (; i < CANTP_CF_DATA; i++) {
+    for (; i < CANTP_CF_DATA; i++)
+    {
         CanTp_TxFrameBuf[1U + i] = 0x00U;
     }
 
@@ -777,7 +792,8 @@ static void CanTp_SendNextCF(void)
     {
         unsigned long now = millis();
 
-        if (CanTp_Tx.asFailTimer == 0UL) {
+        if (CanTp_Tx.asFailTimer == 0UL)
+        {
             CanTp_Tx.asFailTimer = now;   /* 失敗継続の開始時刻を記録 */
         }
 
