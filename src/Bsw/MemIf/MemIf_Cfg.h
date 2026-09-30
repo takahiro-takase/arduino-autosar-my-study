@@ -45,8 +45,10 @@
  *  [SWS_MemIf_00038]〜[SWS_MemIf_00046] の Service ID[hex] と一致させた。
  *  MemIf_Init/MemIf_MainFunction は実 AUTOSAR の MemIf には存在しない
  *  （EcuM/Os が Fee_Init/Fee_MainFunction 等を直接呼ぶ設計。MemIf.c 冒頭の
- *  コメント参照）本プロジェクト独自の拡張のため、実仕様が 0x01〜0x09 を
- *  使い切った範囲の外側 (0x00, 0x0A) を割り当てる。 */
+ *  コメント参照）本プロジェクト独自の拡張で、DET 報告も行わないため ApiId
+ *  定数は持たない。独自拡張 API には、実仕様が 0x01〜0x09 を使い切った範囲の
+ *  外側の値を割り当てる。 */
+/* cppcheck-suppress misra-c2012-2.5 */
 #define MEMIF_API_ID_SET_MODE          0x01U
 #define MEMIF_API_ID_READ              0x02U
 #define MEMIF_API_ID_WRITE             0x03U
@@ -54,8 +56,6 @@
 #define MEMIF_API_ID_GET_STATUS        0x05U
 #define MEMIF_API_ID_GET_JOB_RESULT    0x06U
 #define MEMIF_API_ID_GET_VERSION_INFO  0x08U
-#define MEMIF_API_ID_INIT              0x00U  /**< AUTOSAR 非標準（MemIf.c 参照） */
-#define MEMIF_API_ID_MAIN_FUNCTION     0x0AU  /**< AUTOSAR 非標準（MemIf.c 参照） */
 #define MEMIF_API_ID_WRITE_IMMEDIATE   0x0BU  /**< AUTOSAR 非標準（Fee.h 参照） */
 
 /** バージョン情報（Com/E2EXf/PduR 等の既存モジュールと同じ命名規則） */

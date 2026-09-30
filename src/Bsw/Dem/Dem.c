@@ -1900,8 +1900,8 @@ static void Dem_EvaluatePendingClear(Dem_EventIdType EventId)
         return; /* 既にクリア済み: 対象外 */
     }
 
-    const uint8 cleanCycle = ((status & DEM_STATUS_TF_THIS_OP_CYCLE) == 0U)
-                           && ((status & DEM_STATUS_NOT_COMPLETED_THIS_CYCLE) == 0U);
+    const uint8 cleanCycle = (((status & DEM_STATUS_TF_THIS_OP_CYCLE) == 0U)
+                            && ((status & DEM_STATUS_NOT_COMPLETED_THIS_CYCLE) == 0U)) ? 1U : 0U;
 
     if ((cleanCycle) != 0U)
     {

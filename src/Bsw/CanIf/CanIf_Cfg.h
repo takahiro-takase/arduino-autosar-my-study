@@ -66,6 +66,7 @@
 /** ApiId（各関数の Doxygen \ServiceID タグと一致させること。値は SWS 8.x 章の
  *  「Service ID[hex]」記載を実測して確認済み） */
 #define CANIF_API_ID_INIT                0x01U
+/* cppcheck-suppress misra-c2012-2.5 */
 #define CANIF_API_ID_DEINIT              0x02U
 #define CANIF_API_ID_TRANSMIT            0x49U
 #define CANIF_API_ID_TX_CONFIRMATION     0x13U

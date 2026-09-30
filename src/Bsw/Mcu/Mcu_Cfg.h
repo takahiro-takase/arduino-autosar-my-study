@@ -39,6 +39,7 @@
 #define MCU_MODULE_ID  101U
 
 /** 開発エラーコード（[SWS_Mcu_00012] 7.2.1 表より、実際に使用する分のみ） */
+/* cppcheck-suppress misra-c2012-2.5 */
 #define MCU_E_PARAM_CONFIG   0x0AU  /**< Mcu_Init() の ConfigPtr が NULL              */
 #define MCU_E_UNINIT         0x0FU  /**< [SWS_Mcu_00125]: Mcu_Init 前の API 呼び出し
                                       *   （Mcu_GetVersionInfo を除く）                */
@@ -48,6 +49,7 @@
 
 /** ApiId（各関数の Doxygen \ServiceID タグと一致させること。
  *  8.3 章の Service ID[hex] を実測して確認済み） */
+/* cppcheck-suppress misra-c2012-2.5 */
 #define MCU_API_ID_INIT                   0x00U
 #define MCU_API_ID_GET_RESET_REASON       0x05U
 #define MCU_API_ID_GET_RESET_RAW_VALUE    0x06U

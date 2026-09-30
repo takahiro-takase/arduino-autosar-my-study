@@ -83,6 +83,7 @@
 #define WDGM_API_ID_CHECKPOINT_REACHED   0x0EU
 #define WDGM_API_ID_GET_LOCAL_STATUS     0x0CU
 #define WDGM_API_ID_GET_GLOBAL_STATUS    0x0DU
+/* cppcheck-suppress misra-c2012-2.5 */
 #define WDGM_API_ID_MAIN_FUNCTION        0x08U
 #define WDGM_API_ID_DEINIT               0x01U
 #define WDGM_API_ID_GET_VERSION_INFO     0x02U
@@ -171,6 +172,7 @@
  * WDGM_SUPERVISION_CYCLE_MS（Alive/Logical/Deadline の判定サイクル）とは
  * 意図的に分離している。理由は WDGM_HW_WATCHDOG_TIMEOUT_MS のコメントを参照。
  */
+/* cppcheck-suppress misra-c2012-2.5 */
 #define WDGM_HW_TRIGGER_CYCLE_MS     1000UL
 
 /**

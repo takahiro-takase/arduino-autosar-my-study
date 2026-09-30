@@ -42,6 +42,7 @@
 
 /** ApiId（各関数の Doxygen \ServiceID タグと一致させること。値は SWS 8.x 章の
  *  「Service ID[hex]」記載を実測して確認済み） */
+/* cppcheck-suppress misra-c2012-2.5 */
 #define ECUM_API_ID_INIT           0x01U
 #define ECUM_API_ID_REQUEST_RUN    0x03U
 #define ECUM_API_ID_RELEASE_RUN    0x04U

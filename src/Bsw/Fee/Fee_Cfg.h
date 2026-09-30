@@ -49,14 +49,17 @@
  *  Fee_WriteImmediate は AUTOSAR 非標準（実 AUTOSAR では FeeImmediateData
  *  ブロック属性として Fee_Write に統合される。Fee.h 冒頭のコメント参照）の
  *  ため、実仕様が 0x00〜0x09 を使い切った直後の未使用値 0x0A を割り当てる。 */
+/* cppcheck-suppress misra-c2012-2.5 */
 #define FEE_API_ID_INIT              0x00U
 #define FEE_API_ID_SET_MODE           0x01U
 #define FEE_API_ID_READ               0x02U
 #define FEE_API_ID_WRITE              0x03U
 #define FEE_API_ID_CANCEL             0x04U
+/* cppcheck-suppress misra-c2012-2.5 */
 #define FEE_API_ID_GET_STATUS         0x05U
 #define FEE_API_ID_GET_JOB_RESULT     0x06U
 #define FEE_API_ID_GET_VERSION_INFO   0x08U
+/* cppcheck-suppress misra-c2012-2.5 */
 #define FEE_API_ID_MAIN_FUNCTION      0x12U
 #define FEE_API_ID_WRITE_IMMEDIATE    0x0AU  /**< AUTOSAR 非標準（Fee.h 参照） */
 

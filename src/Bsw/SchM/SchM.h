@@ -60,24 +60,6 @@ extern "C" {
 #define SchM_Exit_Rte_MIRROR_EXCLUSIVE_AREA()   SchM_Hw_ExitExclusiveArea()
 
 /* -----------------------------------------------------------------------
- * Com モジュール — RX/TX シグナルバッファの保護
- *
- * 保護対象: Com 内部の RX/TX I-PDU バッファ
- * 書き込み: Com_ReceiveSignal() / Com_SendSignal() — 各タスク
- * 読み出し: 同上
- *
- * Com_RxIndication() は Can_MainFunction_Read()（メインループのタスク）
- * からのみ呼ばれ、割り込みコンテキストからは呼ばれない設計とした
- * （Can_Isr() 自体は SPI 通信や Serial ログを伴う重い処理をせず、
- * ペンディングフラグを立てるだけに留めている。理由は Can.c ファイル
- * 冒頭のコメントを参照）。そのため Com のバッファは実際には
- * まだ割り込みと競合しないが、Rte 側と同じ理由で Enter/Exit を
- * 用意しておく。
- * ----------------------------------------------------------------------- */
-#define SchM_Enter_Com_SIGNAL_EXCLUSIVE_AREA()  SchM_Hw_EnterExclusiveArea()
-#define SchM_Exit_Com_SIGNAL_EXCLUSIVE_AREA()   SchM_Hw_ExitExclusiveArea()
-
-/* -----------------------------------------------------------------------
  * Can モジュール — 割り込みペンディングフラグの保護
  *
  * 保護対象: Can_RxIrqPending / Can_WakeupIrqPending (Can.c)

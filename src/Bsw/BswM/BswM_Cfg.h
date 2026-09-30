@@ -62,10 +62,12 @@
  * Os タスク ID (Os_PBCfg.c のインデックスと一致させること)
  * ----------------------------------------------------------------------- */
 #define BSWM_OS_TASK_CAN_READ       0U  /**< Can_MainFunction_Read (1 ms)   */
+/* cppcheck-suppress misra-c2012-2.5 */
 #define BSWM_OS_TASK_CANTP_MAIN     1U  /**< CanTp_MainFunction   (1 ms)    */
 #define BSWM_OS_TASK_RTE_ENGINE     2U  /**< Rte_ScheduleRunnables (3000 ms) */
 #define BSWM_OS_TASK_RTE_WARNING    3U  /**< Rte_ScheduleWarningIndicator (500 ms) */
 #define BSWM_OS_TASK_CANSM_MAIN     4U  /**< CanSM_MainFunction   (10 ms)   */
+/* cppcheck-suppress misra-c2012-2.5 */
 #define BSWM_OS_TASK_COM_MAIN       5U  /**< Com_MainFunctionRx   (100 ms)  */
 /* Task 6 (Com_MainFunctionTx) は Com_MainFunctionRx（bit 5）の直後に挿入した
  * （2026-08、単体だった Com_MainFunction を実仕様準拠の Rx/Tx へ分割した際に
@@ -74,17 +76,25 @@
  * 末尾ではなくここへ挿入し、Task 6 以降を全て 1 つずつ後ろへずらした
  * （/code-review で「末尾に追加すると SecOC より後に実行され、1 ティック分
  * 余計な遅延が生じる」と指摘され是正）。 */
+/* cppcheck-suppress misra-c2012-2.5 */
 #define BSWM_OS_TASK_COM_MAIN_TX    6U  /**< Com_MainFunctionTx   (100 ms)  */
+/* cppcheck-suppress misra-c2012-2.5 */
 #define BSWM_OS_TASK_IOHWAB_MAIN    7U  /**< IoHwAb_MainFunction  (10 ms)   */
+/* cppcheck-suppress misra-c2012-2.5 */
 #define BSWM_OS_TASK_WDGM_MAIN      8U  /**< WdgM_MainFunction    (6000 ms) */
+/* cppcheck-suppress misra-c2012-2.5 */
 #define BSWM_OS_TASK_DCM_MAIN       9U  /**< Dcm_MainFunction     (1000 ms) */
+/* cppcheck-suppress misra-c2012-2.5 */
 #define BSWM_OS_TASK_FIM_MAIN       10U /**< FiM_MainFunction     (100 ms)  */
 #define BSWM_OS_TASK_WDGM_TRIGGER   11U /**< WdgM_TriggerHwWatchdog (1000 ms) */
 #define BSWM_OS_TASK_CANNM_MAIN     12U /**< CanNm_MainFunction        (200 ms)  */
 #define BSWM_OS_TASK_NVM_MAIN       13U /**< NvM_MainFunction       (10 ms)   */
+/* cppcheck-suppress misra-c2012-2.5 */
 #define BSWM_OS_TASK_CAN_TX_CONF    14U /**< Can_MainFunction_Write (1 ms)    */
+/* cppcheck-suppress misra-c2012-2.5 */
 #define BSWM_OS_TASK_CAN_BUSOFF     15U /**< Can_MainFunction_BusOff (1 ms)   */
 #define BSWM_OS_TASK_CAN_WAKEUP     16U /**< Can_MainFunction_Wakeup (1 ms)   */
+/* cppcheck-suppress misra-c2012-2.5 */
 #define BSWM_OS_TASK_SECOC_MAIN     17U /**< SecOC_MainFunctionTx     (100 ms)  */
 #define BSWM_OS_TASK_MEMIF_MAIN     18U /**< MemIf_MainFunction     (10 ms)   */
 /* Task 19 (App_GptDemo_Run)・20 (ComM_MainFunction)・21 (SecOC_MainFunctionRx)
@@ -109,6 +119,7 @@
                                       (1UL << BSWM_OS_TASK_RTE_WARNING)))
 
 /** BSW タスク = ALL & ~APP (後処理・診断・CAN 受信を継続するため残す) */
+/* cppcheck-suppress misra-c2012-2.5 */
 #define BSWM_TASK_MASK_BSW  ((uint32)(BSWM_TASK_MASK_ALL & (uint32)(~BSWM_TASK_MASK_APP)))
 
 /**

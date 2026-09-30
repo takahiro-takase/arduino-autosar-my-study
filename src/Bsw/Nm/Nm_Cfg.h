@@ -63,6 +63,7 @@
 #define NM_E_PARAM_POINTER    0x02U  /* NULL ポインタチェック */
 
 /** ApiId（値は 8.3/8.4 章の「Service ID[hex]」記載を実測して確認済み） */
+/* cppcheck-suppress misra-c2012-2.5 */
 #define NM_API_ID_INIT                       0x00U
 #define NM_API_ID_NETWORK_REQUEST            0x02U
 #define NM_API_ID_NETWORK_RELEASE            0x03U
@@ -73,9 +74,13 @@
 #define NM_API_ID_GET_LOCAL_NODE_IDENTIFIER  0x0BU
 #define NM_API_ID_GET_STATE                  0x0EU
 #define NM_API_ID_GET_VERSION_INFO           0x0FU
+/* cppcheck-suppress misra-c2012-2.5 */
 #define NM_API_ID_NETWORK_START_INDICATION   0x11U
+/* cppcheck-suppress misra-c2012-2.5 */
 #define NM_API_ID_NETWORK_MODE               0x12U
+/* cppcheck-suppress misra-c2012-2.5 */
 #define NM_API_ID_PREPARE_BUS_SLEEP_MODE     0x13U
+/* cppcheck-suppress misra-c2012-2.5 */
 #define NM_API_ID_BUS_SLEEP_MODE             0x14U
 
 /** バージョン情報（CanNm 等の既存モジュールと同じ命名規則） */

@@ -2974,33 +2974,33 @@ void Com_MainFunctionTx(void)
              * TxModeMode によらず効く必要があるため、PERIODIC I-PDU でも
              * MDT のみ尊重して OR する（Com_TxTriggerPending 宣言コメント
              * 参照）。 */
-            const uint8 triggerDue = Com_TxTriggerPending[id]
-                                      && (elapsed >= (unsigned long)ipdu->MinDelayMs);
-            due = (elapsed >= (unsigned long)period) || triggerDue;
+            const uint8 triggerDue = (Com_TxTriggerPending[id]
+                                       && (elapsed >= (unsigned long)ipdu->MinDelayMs)) ? 1U : 0U;
+            due = ((elapsed >= (unsigned long)period) || (triggerDue != 0U)) ? 1U : 0U;
         }
         else
         {
             const unsigned long elapsed  = now - Com_TxLastSentMs[id];
-            const uint8         floorDue = (mode == COM_TX_MODE_MIXED)
-                                    && (elapsed >= (unsigned long)period);
+            const uint8         floorDue = ((mode == COM_TX_MODE_MIXED)
+                                    && (elapsed >= (unsigned long)period)) ? 1U : 0U;
             /* MDT（ComMinimumDelayTime）: 変化時送信（Com_TxPending 経由）にのみ
              * 適用し、MIXED の周期フロア（floorDue）には適用しない
              * （SWS_Com_00789 の既定動作。MinDelayMs=0 なら常に満了扱いのため
              * MDT 未設定の I-PDU では以前と同じ挙動になる）。満了前に変化検知が
              * あっても Com_TxPending は立てたまま保持し、破棄しない
              * （次回 Com_MainFunctionTx() で再判定する）。 */
-            const uint8 mdtElapsed = elapsed >= (unsigned long)ipdu->MinDelayMs;
-            changeDue = (Com_TxPending[id] != 0U) && mdtElapsed;
+            const uint8 mdtElapsed = (elapsed >= (unsigned long)ipdu->MinDelayMs) ? 1U : 0U;
+            changeDue = ((Com_TxPending[id] != 0U) && (mdtElapsed != 0U)) ? 1U : 0U;
             /* ComTxModeNumberOfRepetitions（SWS_Com_00305）。再送専用の
              * タイマーは持たず、changeDue/floorDue と同じ Com_TxLastSentMs/
              * elapsed を流用する。減算条件の詳細は下のコメント参照。 */
-            repeatDue = Com_TxRepeatApplicable(mode)
+            repeatDue = ((Com_TxRepeatApplicable(mode) != 0U)
                         && (Com_TxRepeatsRemaining[id] > 0U)
-                        && (elapsed >= (unsigned long)ipdu->RepetitionPeriodMs);
+                        && (elapsed >= (unsigned long)ipdu->RepetitionPeriodMs)) ? 1U : 0U;
             /* changeDue には混ぜない — 宣言コメント（本ファイル冒頭の
              * Com_TxTriggerPending）の repeatDue/changeDue 分離理由を参照。 */
-            const uint8 triggerDue = Com_TxTriggerPending[id] && mdtElapsed;
-            due = changeDue || floorDue || repeatDue || triggerDue;
+            const uint8 triggerDue = ((Com_TxTriggerPending[id] != 0U) && (mdtElapsed != 0U)) ? 1U : 0U;
+            due = ((changeDue != 0U) || (floorDue != 0U) || (repeatDue != 0U) || (triggerDue != 0U)) ? 1U : 0U;
         }
 
         if (!due)
@@ -3987,6 +3987,10 @@ void Com_InvokeTxNotification(const Com_IPduConfigType* ipdu,
         case COM_TX_NOTIFY_ACK:  groupCbk = ipdu->TxAckCbk;  break;
         case COM_TX_NOTIFY_ERR:  groupCbk = ipdu->TxErrCbk;  break;
         case COM_TX_NOTIFY_TOUT: groupCbk = ipdu->TxTOutCbk; break;
+        default:
+            /* Com_TxNotifyKindType の全列挙値を上記で網羅済みのため到達しない
+             * （MISRA 16.4 準拠のための防御的な明示）。 */
+            break;
         }
         if (groupCbk != NULL)
         {
@@ -4013,6 +4017,10 @@ void Com_InvokeTxNotification(const Com_IPduConfigType* ipdu,
         case COM_TX_NOTIFY_ACK:  cbk = sig->TxAckCbk;  break;
         case COM_TX_NOTIFY_ERR:  cbk = sig->TxErrCbk;  break;
         case COM_TX_NOTIFY_TOUT: cbk = sig->TxTOutCbk; break;
+        default:
+            /* Com_TxNotifyKindType の全列挙値を上記で網羅済みのため到達しない
+             * （MISRA 16.4 準拠のための防御的な明示）。 */
+            break;
         }
         if (cbk != NULL)
         {

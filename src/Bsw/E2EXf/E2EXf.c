@@ -165,7 +165,7 @@ uint8 E2EXf_Inv_EngineInfo(uint8* buffer, uint32* bufferLength, const uint8* inp
     /* 「今回のフレームが使えるか」の判定（acceptable、戻り値下位ニブル）は
      * Dem への報告方針とは別物（下記参照）。 */
     const E2E_PCheckStatusType profileStatus = E2E_P05MapStatusToSM(E2E_E_OK, status);
-    const uint8 acceptable = (profileStatus == E2E_P_OK);
+    const uint8 acceptable = (profileStatus == E2E_P_OK) ? 1U : 0U;
 
     if (!acceptable)
     {
@@ -246,7 +246,7 @@ uint8 E2EXf_Inv_AbsInfo(uint8* buffer, uint32* bufferLength, const uint8* inputB
     *bufferLength = E2EXf_AbsInfoRxCfg.E2EConfig->DataLength;
 
     const E2E_PCheckStatusType profileStatus = E2E_P05MapStatusToSM(E2E_E_OK, status);
-    const uint8 acceptable = (profileStatus == E2E_P_OK);
+    const uint8 acceptable = (profileStatus == E2E_P_OK) ? 1U : 0U;
 
     if (!acceptable)
     {

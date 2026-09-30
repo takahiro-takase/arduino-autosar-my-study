@@ -24,6 +24,7 @@
 
 /** 開発エラーコード（docs/AUTOSAR_SWS_CryptoInterface.pdf を実測して確認済み） */
 #define CRYIF_E_UNINIT        0x00U  /* [SWS_CryIf_00027 等]: 未初期化時の API 呼び出し */
+/* cppcheck-suppress misra-c2012-2.5 */
 #define CRYIF_E_INIT_FAILED   0x01U
 #define CRYIF_E_PARAM_POINTER 0x02U  /* [SWS_CryIf_00029 等]: NULL ポインタチェック */
 #define CRYIF_E_PARAM_HANDLE  0x03U  /* [SWS_CryIf_00028 等]: channelId が範囲外。
@@ -33,6 +34,7 @@
 
 /** ApiId（値は docs/AUTOSAR_SWS_CryptoInterface.pdf の「Service ID[hex]」記載を
  *  実測して確認済み） */
+/* cppcheck-suppress misra-c2012-2.5 */
 #define CRYIF_API_ID_INIT              0x00U
 #define CRYIF_API_ID_GET_VERSION_INFO  0x01U
 #define CRYIF_API_ID_KEY_ELEMENT_SET   0x04U

@@ -130,7 +130,11 @@ Std_ReturnType E2E_SMCheck(E2E_PCheckStatusType ProfileStatus, const E2E_SMConfi
             {
                 StatePtr->SMState = E2E_SM_INVALID;
             }
-            /* else: INIT に留まる（まだ OK 件数が閾値未達） */
+            else
+            {
+                /* INIT に留まる（まだ OK 件数が閾値未達、MISRA 15.7 準拠のための
+                 * 防御的な明示）。 */
+            }
             break;
 
         case E2E_SM_VALID:
@@ -274,6 +278,12 @@ static void E2E_SMAddStatus(E2E_PCheckStatusType ProfileStatus, const E2E_SMConf
         else if (StatePtr->ProfileStatusWindow[i] == (uint8)E2E_P_ERROR)
         {
             errorCount++;
+        }
+        else
+        {
+            /* E2E_P_NONEWDATA 等、OK/ERROR いずれでもない値はどちらの
+             * カウンタにも加算しない（意図した設計。MISRA 15.7 準拠のための
+             * 防御的な明示）。 */
         }
     }
     StatePtr->OkCount    = okCount;

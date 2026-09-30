@@ -786,6 +786,11 @@ void CanNm_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
                 CanNm_EnterRepeatMessage();
             }
             break;
+
+        default:
+            /* CanNm_StateType の全列挙値を上記で網羅済みのため到達しない
+             * （MISRA 16.4 準拠のための防御的な明示）。 */
+            break;
     }
 }
 
@@ -912,6 +917,11 @@ void CanNm_MainFunction(void)
             {
                 CanNm_EnterPrepareBusSleep();  /* [SWS_CanNm_00109] */
             }
+            break;
+
+        default:
+            /* CanNm_StateType の全列挙値を上記で網羅済みのため到達しない
+             * （MISRA 16.4 準拠のための防御的な明示）。 */
             break;
     }
 }

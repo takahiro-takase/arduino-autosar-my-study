@@ -32,11 +32,13 @@
 #define CSM_E_SMALL_BUFFER       0x03U  /* [SWS_Csm_91012]: 出力バッファ不足 */
 #define CSM_E_PARAM_HANDLE       0x04U  /* [SWS_Csm_91011]: jobId が範囲外 */
 #define CSM_E_UNINIT             0x05U  /* [SWS_Csm_91008]: 未初期化時の API 呼び出し */
+/* cppcheck-suppress misra-c2012-2.5 */
 #define CSM_E_INIT_FAILED        0x07U
 #define CSM_E_SERVICE_NOT_STARTED 0x09U /* [SWS_Csm_91010]: CryIf が未初期化 */
 
 /** ApiId（値は docs/AUTOSAR_SWS_CryptoServiceManager.pdf の「Service ID[hex]」
  *  記載を実測して確認済み） */
+/* cppcheck-suppress misra-c2012-2.5 */
 #define CSM_API_ID_INIT               0x00U
 #define CSM_API_ID_GET_VERSION_INFO   0x3BU
 #define CSM_API_ID_MAC_GENERATE       0x60U

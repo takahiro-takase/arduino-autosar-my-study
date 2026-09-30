@@ -80,7 +80,7 @@ void PduR_Init(const PduR_PBConfigType* ConfigPtr)
 
     for (uint8 i = 0; i < ConfigPtr->RxPathCount; i++)
     {
-        if ((ConfigPtr->RxPaths[i].Dests == NULL) || (ConfigPtr->RxPaths[i].DestCount == 0))
+        if ((ConfigPtr->RxPaths[i].Dests == NULL) || (ConfigPtr->RxPaths[i].DestCount == 0U))
         {
             DET_LOGE(TAG, "Init E: RxPath[%u] no dests", (unsigned)i);
             (void)Det_ReportError(PDUR_MODULE_ID, 0U, PDUR_API_ID_INIT, PDUR_E_INIT_FAILED);

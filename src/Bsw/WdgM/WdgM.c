@@ -1223,6 +1223,11 @@ void WdgM_MainFunction(void)
 
         DET_LOGI(TAG, "Global status recovered (all entities OK)");
     }
+    else
+    {
+        /* 全エンティティ OK かつ回復処理も不要な通常ケース（MISRA 15.7 準拠の
+         * ための防御的な明示）。 */
+    }
 }
 
 /* ----------------------------------------------------------------------

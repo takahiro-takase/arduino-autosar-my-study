@@ -37,7 +37,9 @@
 
 /** ApiId（各関数の Doxygen \ServiceID タグと一致させること。SWS_Det_00011 の
  *  「Service ID[hex]」記載を実測して確認済み） */
+/* cppcheck-suppress misra-c2012-2.5 */
 #define DET_API_ID_INIT               0x00U
+/* cppcheck-suppress misra-c2012-2.5 */
 #define DET_API_ID_START              0x02U
 #define DET_API_ID_GET_VERSION_INFO  0x03U
 
