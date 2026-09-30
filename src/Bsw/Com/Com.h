@@ -25,6 +25,7 @@ extern "C" {
  *  I-PDU（Transport Protocol 経由）専用で、本プロジェクトは TP を実装せず
  *  該当条件が存在しないため未使用（値の定義のみ）。 */
 #define COM_SERVICE_NOT_AVAILABLE  0x80U
+/* cppcheck-suppress misra-c2012-2.5 */
 #define COM_BUSY                   0x81U
 
 /* SWS_Com_00432 */

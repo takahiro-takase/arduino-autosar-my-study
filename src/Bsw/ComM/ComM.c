@@ -1038,6 +1038,12 @@ void ComM_BusSM_ModeIndication(NetworkHandleType Network, ComM_ModeType Mode)
              * Nm_NetworkRequest() が呼ばれ自動的に再開する。 */
             (void)Nm_NetworkRelease(NM_MAIN_NETWORK_HANDLE);
         }
+        else
+        {
+            /* ComM_ModeType は uint8 typedef（本ファイル冒頭 ComM.h 参照）だが
+             * 呼び出し元は CanSM に限定され、上記3値以外は渡されない
+             * （MISRA 15.7 準拠のための防御的な明示）。 */
+        }
     }
     else if ((Mode == COMM_SILENT_COMMUNICATION) && ComM_NmReleasePending[Network])
     {
@@ -1048,6 +1054,12 @@ void ComM_BusSM_ModeIndication(NetworkHandleType Network, ComM_ModeType Mode)
          * （詳細は ComM_RetryNmReleaseAfterBusOff() 参照）。 */
         ComM_RetryNmReleaseAfterBusOff(Network, "SILENT_COM");
         return;
+    }
+    else
+    {
+        /* Mode == prevMode（変化なし）、または SILENT_COM への再通知でも
+         * CanNm 協調スリープ待ちが残っていない通常ケース。何もせず下記の
+         * BswM 通知のみ行う（MISRA 15.7 準拠のための防御的な明示）。 */
     }
     /* SILENT_COM: EcuM の RUN 状態は維持（受信専用でも ECU は動作継続）。 */
 

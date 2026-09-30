@@ -39,14 +39,17 @@
 
 /** 開発エラーコード（docs/4.4.0/AUTOSAR_SWS_KeyManager.pdf を実測して確認済み） */
 #define KEYM_E_PARAM_POINTER  0x01U  /* [SWS_KeyM_00146]: NULL ポインタチェック */
+/* cppcheck-suppress misra-c2012-2.5 */
 #define KEYM_E_SMALL_BUFFER   0x02U  /* [SWS_KeyM_00145]: 出力バッファ不足 */
 #define KEYM_E_UNINIT         0x03U  /* [SWS_KeyM_00144]: 未初期化時の API 呼び出し */
+/* cppcheck-suppress misra-c2012-2.5 */
 #define KEYM_E_INIT_FAILED    0x04U
 
 /** ApiId（値は docs/4.4.0/AUTOSAR_SWS_KeyManager.pdf の「Service ID[hex]」記載を
  *  実測して確認済み。KeyM_Init が 0x01 から始まる点に注意（他の多くのモジュールは
  *  Init=0x00）。KeyM_Prepare(0x05)/KeyM_Verify(0x08) は本プロジェクトでは
  *  未実装のため定義しない。 */
+/* cppcheck-suppress misra-c2012-2.5 */
 #define KEYM_API_ID_INIT              0x01U
 #define KEYM_API_ID_DEINIT            0x02U
 #define KEYM_API_ID_GET_VERSION_INFO  0x03U

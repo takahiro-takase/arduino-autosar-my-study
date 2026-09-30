@@ -48,6 +48,7 @@
 
 /** ApiId（各関数の Doxygen \ServiceID タグと一致させること。値は SWS 8.x 章の
  *  「Service ID[hex]」記載を実測して確認済み） */
+/* cppcheck-suppress misra-c2012-2.5 */
 #define CANTP_API_ID_INIT              0x01U
 #define CANTP_API_ID_TRANSMIT          0x49U
 #define CANTP_API_ID_RX_INDICATION     0x42U

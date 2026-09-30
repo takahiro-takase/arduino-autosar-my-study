@@ -490,13 +490,13 @@ void SecOC_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
     {
         const SecOC_VerificationResultType verificationStatus =
             (effectivePass != 0U)  ? SECOC_VERIFICATIONSUCCESS :
-            ((freshnessOk == 0U) && (actualPass == 0U) && (macOk != 0U)) ? SECOC_FRESHNESSFAILURE :
+            ((freshnessOk == 0U) && (macOk != 0U)) ? SECOC_FRESHNESSFAILURE :
             SECOC_VERIFICATIONFAILURE;
 
         const uint8 propagate =
-            (cfg->VerificationStatusPropagationMode == SECOC_VERIFICATION_STATUS_PROPAGATION_BOTH)
-            || ((cfg->VerificationStatusPropagationMode == SECOC_VERIFICATION_STATUS_PROPAGATION_FAILURE_ONLY)
-                && (verificationStatus != SECOC_VERIFICATIONSUCCESS));
+            ((cfg->VerificationStatusPropagationMode == SECOC_VERIFICATION_STATUS_PROPAGATION_BOTH)
+             || ((cfg->VerificationStatusPropagationMode == SECOC_VERIFICATION_STATUS_PROPAGATION_FAILURE_ONLY)
+                 && (verificationStatus != SECOC_VERIFICATIONSUCCESS))) ? 1U : 0U;
         if ((propagate) != 0U)
         {
             const SecOC_VerificationStatusType status = {

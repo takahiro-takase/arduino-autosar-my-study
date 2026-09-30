@@ -99,6 +99,7 @@
 /** ApiId（Dcm_Init/Dcm_MainFunction は SWS 8.x 章の「Service ID[hex]」記載を
  *  実測して確認済み。Dcm_ComIndication は AUTOSAR 標準の単一関数に対応しない
  *  本プロジェクト独自のエントリポイントのため、既存の非標準値 0xF0 を踏襲する） */
+/* cppcheck-suppress misra-c2012-2.5 */
 #define DCM_API_ID_INIT           0x01U
 #define DCM_API_ID_GET_VIN        0x07U
 #define DCM_API_ID_GET_SES_CTRL_TYPE 0x06U
@@ -146,7 +147,6 @@
  * ----------------------------------------------------------------------- */
 #define DCM_SESSION_MASK_DEFAULT   0x01U  /**< bit0: defaultSession で許可            */
 #define DCM_SESSION_MASK_EXTENDED  0x02U  /**< bit1: extendedDiagnosticSession で許可 */
-#define DCM_SESSION_MASK_ALL       (DCM_SESSION_MASK_DEFAULT | DCM_SESSION_MASK_EXTENDED)
 
 /* -----------------------------------------------------------------------
  * UDS サービス識別子 (ISO 14229-1 Table 3)
@@ -321,9 +321,6 @@
  * ゲートウェイではなく単一ネットワークのみのため、サブネット別制御は不要
  * （Dcm_HandleCommunicationControl() 参照）。
  * ----------------------------------------------------------------------- */
-#define DCM_COMMCTRL_ENABLE_RX_TX           0x00U  /**< enableRxAndTx           */
-#define DCM_COMMCTRL_ENABLE_RX_DISABLE_TX   0x01U  /**< enableRxAndDisableTx    */
-#define DCM_COMMCTRL_DISABLE_RX_ENABLE_TX   0x02U  /**< disableRxAndEnableTx    */
 #define DCM_COMMCTRL_DISABLE_RX_TX          0x03U  /**< disableRxAndTx          */
 
 /* -----------------------------------------------------------------------

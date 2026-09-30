@@ -77,6 +77,7 @@ typedef struct E2EXf_ConfigType_Tag E2EXf_ConfigType;
  *  E2EXF_E_PARAM は非ポインタ引数（Length 等）の異常、E2EXF_E_PARAM_POINTER
  *  はポインタ引数の NULL に対応する（表の記載どおり区別する）。 */
 #define E2EXF_E_UNINIT        0x01U
+/* cppcheck-suppress misra-c2012-2.5 */
 #define E2EXF_E_PARAM         0x03U
 #define E2EXF_E_PARAM_POINTER 0x04U
 
@@ -103,6 +104,7 @@ typedef struct E2EXf_ConfigType_Tag E2EXf_ConfigType;
 #define E_SAFETY_SOFT_RUNTIMEERROR ((Std_ReturnType)0x77U)
 
 /** ApiId（値は SWS 8.x 章の「Service ID[hex]」記載を実測して確認済み） */
+/* cppcheck-suppress misra-c2012-2.5 */
 #define E2EXF_API_ID_INIT               0x01U
 #define E2EXF_API_ID_DEINIT             0x02U
 #define E2EXF_API_ID_TRANSFORM          0x03U

@@ -690,6 +690,11 @@ void NvM_ReportBootDiagnosticsToDem(void)
         {
             anyIntegrityPassed = 1U;
         }
+        else
+        {
+            /* NVM_DEM_REPORT_NONE: 今サイクルは報告なし（MISRA 15.7 準拠の
+             * ための防御的な明示）。 */
+        }
         NvM_IntegrityFailedReport[i] = NVM_DEM_REPORT_NONE;
 
         if (NvM_LossOfRedundancyReport[i] == NVM_DEM_REPORT_FAILED)
@@ -699,6 +704,11 @@ void NvM_ReportBootDiagnosticsToDem(void)
         else if (NvM_LossOfRedundancyReport[i] == NVM_DEM_REPORT_PASSED)
         {
             anyRedundancyPassed = 1U;
+        }
+        else
+        {
+            /* NVM_DEM_REPORT_NONE: 今サイクルは報告なし（MISRA 15.7 準拠の
+             * ための防御的な明示）。 */
         }
         NvM_LossOfRedundancyReport[i] = NVM_DEM_REPORT_NONE;
     }
@@ -711,6 +721,10 @@ void NvM_ReportBootDiagnosticsToDem(void)
     {
         (void)Dem_SetEventStatus(DEM_EVENT_NVM_INTEGRITY_FAILED, DEM_EVENT_STATUS_PASSED);
     }
+    else
+    {
+        /* どのブロックも報告なし（MISRA 15.7 準拠のための防御的な明示）。 */
+    }
 
     if ((anyRedundancyFailed) != 0U)
     {
@@ -719,6 +733,10 @@ void NvM_ReportBootDiagnosticsToDem(void)
     else if ((anyRedundancyPassed) != 0U)
     {
         (void)Dem_SetEventStatus(DEM_EVENT_NVM_LOSS_OF_REDUNDANCY, DEM_EVENT_STATUS_PASSED);
+    }
+    else
+    {
+        /* どのブロックも報告なし（MISRA 15.7 準拠のための防御的な明示）。 */
     }
 }
 

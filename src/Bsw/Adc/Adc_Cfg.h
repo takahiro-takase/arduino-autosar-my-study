@@ -37,6 +37,7 @@
 #define ADC_E_PARAM_POINTER  0x14U
 
 /** ApiId（既存の Doxygen \ServiceID タグと一致させる） */
+/* cppcheck-suppress misra-c2012-2.5 */
 #define ADC_API_ID_INIT  0x00U          /**< [SWS_Adc_00365] Adc_Init と同じ ServiceID */
 #define ADC_API_ID_READ_CHANNEL  0xD0U
 #define ADC_API_ID_GET_VERSION_INFO  0x0AU

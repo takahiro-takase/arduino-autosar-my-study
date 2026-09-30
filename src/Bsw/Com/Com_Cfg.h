@@ -88,13 +88,13 @@
 #define COM_API_ID_SEND_SIGNAL_GROUP_ARRAY      0x23U
 /* [SWS_Com_00881] Com_SwitchIpduTxMode の実 Service ID。 */
 #define COM_API_ID_SWITCH_IPDU_TX_MODE          0x27U
-#define COM_API_ID_SET_COMMUNICATION_ENABLED    0x30U
 /* Com_TxConfirmation/Com_RxIndication の実 Service ID は 0x40/0x42（SWS 本文の
  * "Service ID[hex]" 記載を実測して確認済み）。旧実装は 0x11/0x10 という誤った
  * 値を使っていた（0x10 は Com_InvalidateSignal の実 ID と衝突していた）。 */
 #define COM_API_ID_TX_CONFIRMATION               0x40U
 #define COM_API_ID_RX_INDICATION                0x42U
 #define COM_API_ID_DEINIT                       0x02U
+/* cppcheck-suppress misra-c2012-2.5 */
 #define COM_API_ID_GET_STATUS                   0x07U
 #define COM_API_ID_GET_VERSION_INFO             0x09U
 /* 本プロジェクト独自 API（実 AUTOSAR に対応関数なし）。Dcm_Cfg.h の同種

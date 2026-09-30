@@ -445,6 +445,11 @@ Std_ReturnType EcuM_RequestRUN(EcuM_UserType user)
         BswM_EcuM_CurrentState(ECUM_STATE_RUN);  /* Rule 0: 全タスク再有効化 */
         EcuM_PostRunUsers = 0U;  /* 前回 POST_RUN サイクルの残留要求をクリア（上記と同じ理由） */
     }
+    else
+    {
+        /* EcuM_State == ECUM_STATE_RUN: 既に RUN 中の別ユーザからの追加要求
+         * のため、状態遷移は不要（MISRA 15.7 準拠のための防御的な明示）。 */
+    }
     return E_OK;
 }
 

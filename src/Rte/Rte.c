@@ -1728,7 +1728,7 @@ Std_ReturnType Rte_Start(void)
 
     SchM_Exit_Rte_MIRROR_EXCLUSIVE_AREA();
 
-    for (uint8 i = 0U; i < RTE_LAMP_COUNT; i++)
+    for (uint8 i = 0U; i < (uint8)RTE_LAMP_COUNT; i++)
     {
         Rte_LampOverrideActive[i] = 0U;
         Rte_LampOverrideValue[i]  = 0U;

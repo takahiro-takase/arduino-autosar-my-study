@@ -101,6 +101,7 @@
  *  空けた値）へ入れ替えて衝突を回避した） */
 /** ServiceID 0x01 は実仕様では未実装の Dem_PreInit（[SWS_Dem_00180]）に
  *  割り当てられているため、Dem_Init は正しくは 0x02 を使う（2026-09-05 是正）。 */
+/* cppcheck-suppress misra-c2012-2.5 */
 #define DEM_API_ID_INIT                          0x02U
 #define DEM_API_ID_SET_EVENT_STATUS              0x04U
 #define DEM_API_ID_GET_DTC_STATUS_AVAILABILITY_MASK 0x16U

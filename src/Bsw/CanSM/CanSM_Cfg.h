@@ -35,6 +35,7 @@
 
 /** ApiId（各関数の Doxygen \ServiceID タグと一致させること。値は SWS 8.x 章の
  *  「Service ID[hex]」記載を実測して確認済み） */
+/* cppcheck-suppress misra-c2012-2.5 */
 #define CANSM_API_ID_INIT                  0x00U
 #define CANSM_API_ID_REQUEST_COM_MODE       0x02U
 #define CANSM_API_ID_GET_CURRENT_COM_MODE  0x03U

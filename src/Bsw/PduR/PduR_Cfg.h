@@ -53,22 +53,6 @@
  *  そのまま使う（0x4A は PduR_<User:Up>CancelTransmit の Service ID であり
  *  「未使用の隣接値」ではないため、以前の割り当ては誤りだった）。 */
 #define PDUR_API_ID_SECOC_TRANSMIT      PDUR_API_ID_TRANSMIT
-/** CanTp 向け TX エントリポイント（PduR_CanTpTransmit）。同じく generic な
- *  PduR_<User:Up>Transmit テンプレート（Service ID 0x49）の実体化であり、
- *  内部動作は PDUR_API_ID_TRANSMIT が使う Com 向けエントリポイント
- *  （PduR_ComTransmit）と完全に同一（PduR_ComTransmit へそのまま委譲する）
- *  ため、同じ値を使う。PDUR_API_ID_SECOC_TX_CONFIRMATION と同様、委譲元の
- *  PduR_CanTpTransmit() 自体は Det_ReportError() を呼ばない（委譲先の
- *  PduR_ComTransmit() 側で報告される）ため、このマクロ自体はコード上どこからも
- *  参照されない。あくまで「各関数の ServiceID に対応する ApiId 定数を用意する」
- *  という本ファイルの規約に合わせ、ドキュメント上の対応関係を明示するために
- *  定義している。 */
-#define PDUR_API_ID_CANTP_TRANSMIT      PDUR_API_ID_TRANSMIT
-/** SecOC 向け TX 確認エントリポイント（PduR_SecOCTxConfirmation）。CanIf 向け
- *  の PduR_CanIfTxConfirmation と同じく generic な PduR_<Lo>TxConfirmation
- *  テンプレート（Service ID 0x40）の実体化のため、PDUR_API_ID_TX_CONFIRMATION
- *  と同じ値を使う。 */
-#define PDUR_API_ID_SECOC_TX_CONFIRMATION PDUR_API_ID_TX_CONFIRMATION
 #define PDUR_API_ID_GET_VERSION_INFO    0xF1U
 
 /** バージョン情報（SWS_PduR_00338、Com/E2EXf 等の既存モジュールと同じ命名規則） */

@@ -248,6 +248,11 @@ static void BswM_ExecuteRules(BswM_ModeSrcType src, uint8 newValue)
         {
             BswM_ApplyDcmCommMode();
         }
+        else
+        {
+            /* BswM_ActionType の全列挙値を上記で網羅済みのため到達しない
+             * （MISRA 15.7 準拠のための防御的な明示）。 */
+        }
     }
 }
 

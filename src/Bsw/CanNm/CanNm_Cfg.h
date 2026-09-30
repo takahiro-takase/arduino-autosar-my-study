@@ -66,6 +66,7 @@
 
 /** ApiId（値は docs/4.3.1/AUTOSAR_SWS_CANNetworkManagement.pdf の
  *  「Service ID[hex]」記載を実測して確認済み） */
+/* cppcheck-suppress misra-c2012-2.5 */
 #define CANNM_API_ID_INIT                     0x00U
 #define CANNM_API_ID_GET_NODE_IDENTIFIER       0x06U
 #define CANNM_API_ID_GET_LOCAL_NODE_IDENTIFIER 0x07U
@@ -79,6 +80,7 @@
 #define CANNM_API_ID_DISABLE_COMMUNICATION    0x0CU
 #define CANNM_API_ID_ENABLE_COMMUNICATION     0x0DU
 #define CANNM_API_ID_MAIN_FUNCTION            0x13U
+/* cppcheck-suppress misra-c2012-2.5 */
 #define CANNM_API_ID_TX_CONFIRMATION          0x40U
 #define CANNM_API_ID_RX_INDICATION            0x42U
 #define CANNM_API_ID_DEINIT                   0x10U
@@ -104,6 +106,7 @@
  *  CANNM_TIMEOUT_MS よりも十分短い専用のタイマにすべきだが、本プロジェクトは
  *  CanNm_MainFunction() 自体の呼び出し周期をそのまま Message Cycle Time として
  *  流用する（CanNm.c 参照）。 */
+/* cppcheck-suppress misra-c2012-2.5 */
 #define CANNM_CYCLE_MS  1000UL
 
 /** NM PDU のバイト長。byte[0]=Control Bit Vector, byte[1]=Source Node Identifier
@@ -141,6 +144,7 @@
  * CanNm_RxIndication() を直接呼ぶため、この値自体は CanNm 側では単一チャネル
  * ゆえ実質未使用（受信ログ表示にのみ使う）。
  */
+/* cppcheck-suppress misra-c2012-2.5 */
 #define CANNM_CANIF_RX_PDU_ID  4U
 
 /* -----------------------------------------------------------------------

@@ -67,6 +67,7 @@
  * ----------------------------------------------------------------------- */
 
 /** CAN コントローラ数（本実装は MCP2515 を 1 個使用） */
+/* cppcheck-suppress misra-c2012-2.5 */
 #define CAN_CONTROLLER_COUNT   1U
 
 /** MCP2515 チップセレクト (CS) ピン番号 */
@@ -81,20 +82,34 @@
  * ここで同等の定数を定義し、BSW 設定ファイルから参照できるようにする。
  * ----------------------------------------------------------------------- */
 /* mcp_can @ 1.5.1 (mcp_can_dfs.h) の定義値と一致させること */
+/* cppcheck-suppress misra-c2012-2.5 */
 #define CAN_BAUDRATE_4K096BPS  0U
+/* cppcheck-suppress misra-c2012-2.5 */
 #define CAN_BAUDRATE_5KBPS     1U
+/* cppcheck-suppress misra-c2012-2.5 */
 #define CAN_BAUDRATE_10KBPS    2U
+/* cppcheck-suppress misra-c2012-2.5 */
 #define CAN_BAUDRATE_20KBPS    3U
+/* cppcheck-suppress misra-c2012-2.5 */
 #define CAN_BAUDRATE_31K25BPS  4U
+/* cppcheck-suppress misra-c2012-2.5 */
 #define CAN_BAUDRATE_33K3BPS   5U
+/* cppcheck-suppress misra-c2012-2.5 */
 #define CAN_BAUDRATE_40KBPS    6U
+/* cppcheck-suppress misra-c2012-2.5 */
 #define CAN_BAUDRATE_50KBPS    7U
+/* cppcheck-suppress misra-c2012-2.5 */
 #define CAN_BAUDRATE_80KBPS    8U
+/* cppcheck-suppress misra-c2012-2.5 */
 #define CAN_BAUDRATE_100KBPS   9U
+/* cppcheck-suppress misra-c2012-2.5 */
 #define CAN_BAUDRATE_125KBPS   10U
+/* cppcheck-suppress misra-c2012-2.5 */
 #define CAN_BAUDRATE_200KBPS   11U
+/* cppcheck-suppress misra-c2012-2.5 */
 #define CAN_BAUDRATE_250KBPS   12U
 #define CAN_BAUDRATE_500KBPS   13U
+/* cppcheck-suppress misra-c2012-2.5 */
 #define CAN_BAUDRATE_1000KBPS  14U
 
 /* -----------------------------------------------------------------------
@@ -105,7 +120,9 @@
 typedef uint8 Can_CrystalFreqType;
 
 #define CAN_CRYSTAL_8MHZ   ((Can_CrystalFreqType)8U)   /**< 8 MHz 水晶 */
+/* cppcheck-suppress misra-c2012-2.5 */
 #define CAN_CRYSTAL_16MHZ  ((Can_CrystalFreqType)16U)  /**< 16 MHz 水晶 */
+/* cppcheck-suppress misra-c2012-2.5 */
 #define CAN_CRYSTAL_20MHZ  ((Can_CrystalFreqType)20U)  /**< 20 MHz 水晶 */
 
 /* -----------------------------------------------------------------------

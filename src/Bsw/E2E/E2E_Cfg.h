@@ -16,8 +16,11 @@
 #define E2E_MODULE_ID  207U
 
 /** ApiId（各 SWS 番号の Service ID[hex] を実測して確認済み） */
+/* cppcheck-suppress misra-c2012-2.5 */
 #define E2E_API_ID_GET_VERSION_INFO  0x14U
+/* cppcheck-suppress misra-c2012-2.5 */
 #define E2E_API_ID_SM_CHECK          0x30U
+/* cppcheck-suppress misra-c2012-2.5 */
 #define E2E_API_ID_SM_CHECK_INIT     0x31U
 
 /** バージョン情報（Com/E2EXf/PduR 等の既存モジュールと同じ命名規則） */
