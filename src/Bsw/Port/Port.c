@@ -46,6 +46,7 @@ typedef struct
 
 /** PORT_PIN_COUNT と要素数が食い違えば初期化子の過不足でコンパイルエラーになる
  *  （Port_Cfg.h にピンを追加する際は両方を同時に更新する必要がある）。 */
+/* cppcheck-suppress misra-c2012-8.9 */
 static const Port_PinConfigType Port_PinConfig[PORT_PIN_COUNT] =
 {
     { PORT_PIN_LED_RUNNING, PORT_PIN_OUT },

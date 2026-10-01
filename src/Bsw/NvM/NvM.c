@@ -141,6 +141,7 @@ static NvM_JobPhaseType NvM_ActivePhase = NVM_PHASE_NONE;
 /** CRC フェーズで MemIf_Write() へ渡す 1 バイトの送信元。MemIf_Write() は
  *  ジョブ完了までポインタを保持し続ける（Fee.h の Fee_Write() 説明
  *  参照）ため、スタック変数ではなく static でなければならない。 */
+/* cppcheck-suppress misra-c2012-8.9 */
 static uint8 NvM_ActiveCrc = 0U;
 
 /** 冗長ブロック（Redundant=1）処理中、現在どちらのコピーを書き込んでいるか。

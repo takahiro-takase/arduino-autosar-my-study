@@ -47,6 +47,7 @@
  * ----------------------------------------------------------------------- */
 #define E2EXF_SM_WINDOW_SIZE 3U
 
+/* cppcheck-suppress misra-c2012-8.9 */
 static const E2E_SMConfigType E2EXf_SMConfigDefault = {
     E2EXF_SM_WINDOW_SIZE, /* WindowSize */
     2U, /* MinOkStateInit       */
@@ -74,12 +75,15 @@ static const E2E_P05ConfigType E2EXf_EngineInfoCfgP05 = {
     1U,       /* MaxDeltaCounter : 許容カウンタ飛び幅 (1=連続受信を前提) */
     0U        /* Offset          : E2E ヘッダ(CRC16+Counter)は PDU 先頭 */
 };
+/* cppcheck-suppress misra-c2012-8.9 */
 static E2E_P05CheckStateType E2EXf_EngineInfoStateP05;
 /* Profile05にはINITIAL相当が無いため、E2EXf層で初回受信の特別扱いを行う
  * ためのフラグ(E2EXf_RxConfigTypeP05.WaitForFirstData 宣言コメント参照)。 */
+/* cppcheck-suppress misra-c2012-8.9 */
 static uint8 E2EXf_EngineInfoWaitForFirstDataP05;
 /* E2E ステートマシン状態（E2EXf_SMConfigDefault 参照）。 */
 static uint8 E2EXf_EngineInfoSMWindow[E2EXF_SM_WINDOW_SIZE];
+/* cppcheck-suppress misra-c2012-8.9 */
 static E2E_SMCheckStateType E2EXf_EngineInfoSMState = { E2EXf_EngineInfoSMWindow, 0U, 0U, 0U, E2E_SM_DEINIT };
 
 const E2EXf_RxConfigTypeP05 E2EXf_EngineInfoRxCfg = {
@@ -103,11 +107,14 @@ static const E2E_P05ConfigType E2EXf_AbsInfoCfgP05 = {
     1U,       /* MaxDeltaCounter : 許容カウンタ飛び幅 (1=連続受信を前提) */
     0U        /* Offset          : E2E ヘッダ(CRC16+Counter)は PDU 先頭 */
 };
+/* cppcheck-suppress misra-c2012-8.9 */
 static E2E_P05CheckStateType E2EXf_AbsInfoStateP05;
 /* EngineInfo と同じ理由(E2EXf_EngineInfoWaitForFirstDataP05 参照)。 */
+/* cppcheck-suppress misra-c2012-8.9 */
 static uint8 E2EXf_AbsInfoWaitForFirstDataP05;
 /* EngineInfo と同じ理由(E2EXf_EngineInfoSMState 参照)。 */
 static uint8 E2EXf_AbsInfoSMWindow[E2EXF_SM_WINDOW_SIZE];
+/* cppcheck-suppress misra-c2012-8.9 */
 static E2E_SMCheckStateType E2EXf_AbsInfoSMState = { E2EXf_AbsInfoSMWindow, 0U, 0U, 0U, E2E_SM_DEINIT };
 
 const E2EXf_RxConfigTypeP05 E2EXf_AbsInfoRxCfg = {
@@ -134,6 +141,7 @@ static const E2E_P05ConfigType E2EXf_E2EHealthStatusCfgP05 = {
     0U,       /* MaxDeltaCounter : Protect 側では未使用 */
     0U        /* Offset          : E2E ヘッダ(CRC16+Counter)は PDU 先頭 */
 };
+/* cppcheck-suppress misra-c2012-8.9 */
 static E2E_P05ProtectStateType E2EXf_E2EHealthStatusStateP05;
 
 const E2EXf_TxConfigTypeP05 E2EXf_E2EHealthStatusTxCfgP05 = {

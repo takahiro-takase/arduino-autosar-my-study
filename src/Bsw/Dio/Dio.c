@@ -55,6 +55,7 @@ static const Dio_ChannelType Dio_PortLedGroupChannels[] =
  *  DIO_PORT_COUNT と食い違えば初期化子の過不足でコンパイルエラーになる。
  *  ポートを追加する際は Dio_Cfg.h の DIO_PORT_ 定数と DIO_PORT_COUNT の
  *  両方をここと同時に更新すること。 */
+/* cppcheck-suppress misra-c2012-8.9 */
 static const Dio_PortConfigType Dio_PortConfig[DIO_PORT_COUNT] =
 {
     /* DIO_PORT_LED_GROUP */
