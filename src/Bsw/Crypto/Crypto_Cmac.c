@@ -98,7 +98,7 @@ void Crypto_Cmac_Calculate(const uint8 key[CRYPTO_AES128_KEY_SIZE],
                             uint16       messageLen,
                             uint8        mac[CRYPTO_CMAC_SIZE])
 {
-    uint8 zero[16] = { 0U };
+    uint8 zero[16] = { 0 };
     uint8 l[16];
     uint8 k1[16];
     uint8 k2[16];
@@ -122,7 +122,7 @@ void Crypto_Cmac_Calculate(const uint8 key[CRYPTO_AES128_KEY_SIZE],
     }
 
     /* Step 5: 最終ブロック Mn* を用意（完全なら K1、不完全なら 0x80+ゼロ埋め後 K2 を XOR） */
-    uint8 mLast[16] = { 0U };
+    uint8 mLast[16] = { 0 };
     const uint16 lastBlockOffset = (uint16)((blockCount - 1U) * 16U);
     const uint16 lastBlockLen    = (uint16)(messageLen - lastBlockOffset);
 

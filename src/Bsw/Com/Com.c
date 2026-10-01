@@ -606,6 +606,7 @@ void Com_IpduGroupStart(Com_IpduGroupIdType IpduGroupId, boolean initialize)
             }
         }
 
+        /* cppcheck-suppress misra-c2012-10.5 */
         DET_LOGI(TAG, "IpduGroupStart grp=%u iPdu=%u(RX) init=%u",
                  (unsigned)IpduGroupId, (unsigned)id, (unsigned)initialize);
     }
@@ -676,6 +677,7 @@ void Com_IpduGroupStart(Com_IpduGroupIdType IpduGroupId, boolean initialize)
          * SWS_Com_00495（送信トリガー）の対象ではないため戻り値は使わない。 */
         (void)Com_RecalcTms(id);
 
+        /* cppcheck-suppress misra-c2012-10.5 */
         DET_LOGI(TAG, "IpduGroupStart grp=%u iPdu=%u(TX) init=%u",
                  (unsigned)IpduGroupId, (unsigned)id, (unsigned)initialize);
     }

@@ -120,7 +120,7 @@ void KeyM_Deinit(void)
      * 万一 Deinit 後に古い呼び出し元が残っていても鍵は「ゼロ埋め・無効」の
      * 二重の安全側状態になる。1件失敗しても他の鍵の消去は継続する
      * （KeyM_Finalize() の「1件失敗しても残りは継続」と同じ方針）。 */
-    static const uint8 zeroKey[CRYPTO_AES128_KEY_SIZE] = { 0U };
+    static const uint8 zeroKey[CRYPTO_AES128_KEY_SIZE] = { 0 };
     for (uint8 i = 0U; i < KEYM_CRYPTO_KEY_COUNT; i++)
     {
         if (Csm_KeyElementSet(KeyM_CryptoKeyConfigData[i].CsmKeyTargetRef,

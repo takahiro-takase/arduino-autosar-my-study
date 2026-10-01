@@ -104,6 +104,7 @@
  * ルールテーブル
  * ----------------------------------------------------------------------- */
 
+/* cppcheck-suppress misra-c2012-9.3 */
 static const BswM_RuleType BswM_Rules[BSWM_RULE_COUNT] =
 {
     /* Rule 0: EcuM → RUN: 全タスクを有効化 */

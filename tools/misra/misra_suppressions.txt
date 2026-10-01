@@ -80,3 +80,20 @@ misra-c2012-7.3
 #   NvM_WriteBlock の NvM_DstPtr/NvM_SrcPtr と NvMRamBlockDataAddress）、
 #   バイト単位の CRC 計算・コピー・MemIf への受け渡しのために uint8* へ
 #   変換せざるを得ないため。変換はこれらの境界にのみ限定している。
+
+# Rule 10.5 / 9.3 / 17.1 / 21.6 — インライン抑制（2026-10 方針確定）
+#   (10.5) ログ出力の可変長引数に boolean を渡すための `(unsigned)` キャスト
+#          （ComM.c、NvM.c、Com.c の DET_LOGI 計4件）。printf 系の %u は整数型を
+#          要求するため。boolean 値そのものを表示するだけで、演算には使わない。
+#          なお boolean 式を uint8 へキャストしていた箇所（SecOC.c、Dcm.c）は
+#          逸脱にせず `? 1U : 0U` に書き換えて解消した。
+#   (9.3)  BswM_Rules[]（BswM_PBCfg.c）は designated initializer で、ルールごとに
+#          使わないメンバ（IpduGroupId 等）を省略する設定テーブル。全要素
+#          （BSWM_RULE_COUNT=20）は明示している。ツールは省略メンバのある
+#          要素を部分初期化とみなす。零初期化の `{ 0U }` は MISRA が例外として
+#          認める書式 `{ 0 }` に改めて解消した。
+#   (17.1/21.6) Det.c の Log_Write()。ログ書式化に <stdarg.h> の va_list と
+#          vsnprintf を使うのは、可変長引数を取る printf 風ログ関数の
+#          設計上必須。AUTOSAR Det 自体にはログ書式化の規定は無く、
+#          本プロジェクト独自のデバッグ出力。製品コードの機能境界ではなく
+#          Det モジュール内に限定している。
