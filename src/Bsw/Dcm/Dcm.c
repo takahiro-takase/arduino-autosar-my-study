@@ -2980,6 +2980,7 @@ typedef struct
  *  extendedSession 限定とする。
  *  実際の AUTOSAR では DcmDspSessionRow がサービス・サブ機能単位で
  *  この表をコンフィギュレーションツールから生成する。 */
+/* cppcheck-suppress misra-c2012-8.9 */
 static const Dcm_SidSessionRowType Dcm_SidSessionTable[] =
 {
     { DCM_SID_CLEAR_DTC,             DCM_SESSION_MASK_EXTENDED },

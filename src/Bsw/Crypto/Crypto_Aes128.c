@@ -64,11 +64,6 @@ static const uint8 Crypto_Aes128_Sbox[256] = {
     0x8c,0xa1,0x89,0x0d,0xbf,0xe6,0x42,0x68,0x41,0x99,0x2d,0x0f,0xb0,0x54,0xbb,0x16
 };
 
-/* FIPS-197 5.2: AES-128 のラウンド定数 Rcon[1..10]（word の先頭バイトのみ非ゼロ） */
-static const uint8 Crypto_Aes128_Rcon[10] = {
-    0x01,0x02,0x04,0x08,0x10,0x20,0x40,0x80,0x1B,0x36
-};
-
 /* ======================================================================
  * Function Prototypes
  * ====================================================================== */
@@ -153,6 +148,11 @@ static void Crypto_Aes128_KeyExpansion(const uint8 key[CRYPTO_AES128_KEY_SIZE],
             temp[2] = Crypto_Aes128_Sbox[temp[2]];
             temp[3] = Crypto_Aes128_Sbox[temp[3]];
 
+            /* FIPS-197 5.2: AES-128 のラウンド定数 Rcon[1..10]（word の先頭バイトのみ
+             * 非ゼロ）。ここでしか使わないためブロックスコープに置く（MISRA 8.9）。 */
+            static const uint8 Crypto_Aes128_Rcon[10] = {
+                0x01,0x02,0x04,0x08,0x10,0x20,0x40,0x80,0x1B,0x36
+            };
             temp[0] ^= Crypto_Aes128_Rcon[(wordIdx / AES128_NK) - 1U];
         }
 

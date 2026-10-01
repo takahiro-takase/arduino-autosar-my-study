@@ -146,6 +146,7 @@ static volatile uint8 Can_WakeupIrqPending = 0U;
  *     TEC が 256（Bus-Off 閾値）に到達する前に TX リトライを止めるため、
  *     TXBO=1 が発生しない MCP2515 + mcp_can 環境向けの補完。
  * ----------------------------------------------------------------------- */
+/* cppcheck-suppress misra-c2012-8.9 */
 static uint8 Can_TxErrCount = 0U;
 #define CAN_BUSOFF_TX_ERR_THRESHOLD  5U
 

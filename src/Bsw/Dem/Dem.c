@@ -153,6 +153,7 @@ static const sint8 Dem_DebounceLimitTable[DEM_EVENT_COUNT] = {
 };
 
 /** イベント ID → 経年回復(Aging)閾値 変換テーブル (Dem_Cfg.h の DEM_AGING_THRESHOLD_*) */
+/* cppcheck-suppress misra-c2012-8.9 */
 static const uint8 Dem_AgingThresholdTable[DEM_EVENT_COUNT] = {
     DEM_AGING_THRESHOLD_ENGINE_OVERHEAT,       /* event 0 */
     DEM_AGING_THRESHOLD_ENGINE_STALL,          /* event 1 */
