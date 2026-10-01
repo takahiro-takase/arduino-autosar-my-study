@@ -48,9 +48,9 @@
 #include "SecOC_Cfg.h"
 #include "Csm_Cfg.h"
 
-/* Rte.c 側の実体（他の *_PBCfg.c と同じく、循環インクルードを避けるため
- * Rte.h は include せずローカルに extern 宣言する）。 */
-extern void Rte_SecOCVerificationStatus_ImmobilizerCmd(SecOC_VerificationStatusType status);
+/* Rte.c 側の実体のプロトタイプ（Rte.h ではなくコールバック専用の
+ * Rte_Cbk.h を使うため、循環インクルードにはならない）。 */
+#include "Rte_Cbk.h"
 
 static const SecOC_RxPduConfigType SecOC_RxPduConfigData[SECOC_RX_PDU_COUNT] = {
     {
