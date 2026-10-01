@@ -86,8 +86,10 @@ static const uint8 Crypto_Aes128_Sbox[256] = {
  *          使わず素直に計算する（可読性優先。1 ブロックあたり最大 16 回×8bit
  *          ループなので RA4M1 では無視できるコスト）。
  */
-static uint8 Crypto_Aes128_GMul(uint8 a, uint8 b)
+static uint8 Crypto_Aes128_GMul(uint8 aIn, uint8 bIn)
 {
+    uint8 a = aIn;
+    uint8 b = bIn;
     uint8 p = 0U;
     for (uint8 i = 0U; i < 8U; i++)
     {
