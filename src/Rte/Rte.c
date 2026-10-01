@@ -31,18 +31,12 @@
 #include "E2EMon.h"
 #include "SecOC_Types.h"
 #include "Det.h"
+#include "App_EngineManager.h"
+#include "App_WarningIndicator.h"
 
 #define TAG "Rte"
 
 /* シグナル ID は Com_Cfg.h の COM_SIGNAL_* を使用（重複定義を排除） */
-
-/* App_EngineManager.c が定義する SW-C Runnable の前方宣言 */
-extern void App_EngineManager_Run(void);
-extern void App_EngineManager_Init(void);
-
-/* App_WarningIndicator.c が定義する SW-C Runnable の前方宣言 */
-extern void App_WarningIndicator_Run(void);
-extern void App_WarningIndicator_Init(void);
 
 /* EngineState の内部ミラー変数。
  * Rte_Write_EngineStatus_EngineState() が書き込み、

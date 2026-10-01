@@ -271,6 +271,9 @@ static uint8 Com_GroupTriggerPending[COM_TX_IPDU_MAX];
  * ====================================================================== */
 
 /* millis() は Arduino wiring.c で C リンケージ定義されている */
+/* Arduino コアの関数。AUTOSAR に対応する共通ヘッダは無いため各所で宣言している
+ * （将来 Os の時間源 API へ置換する予定）。 */
+/* cppcheck-suppress misra-c2012-8.5 */
 extern unsigned long millis(void);
 
 static uint32 Com_UnpackSignal(const uint8* buf,
