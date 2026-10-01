@@ -70,9 +70,9 @@
  * Function Prototypes
  * ====================================================================== */
 
-static uint8 E2E_CalcCrc8(uint8 crc, const uint8 *data, uint8 len);
+static uint8 E2E_CalcCrc8(uint8 crcStart, const uint8 *data, uint8 len);
 static uint8 E2E_CalcCrc8OverDataExcludingCrcByte(
-    uint8 crc, const uint8 *Data, uint8 DataLength, uint8 CRCOffset);
+    uint8 crcStart, const uint8 *Data, uint8 DataLength, uint8 CRCOffset);
 
 /* ======================================================================
  * Functions
@@ -334,13 +334,14 @@ E2E_PCheckStatusType E2E_P01MapStatusToSM(
  *         SWS_E2E_00083 が要求する開始値・最終 XOR とも 0x00 の
  *         CRC8-SAE-J1850 バリアントとそのまま一致する。
  *
- * \param[in] crc   現在の CRC 値。
- * \param[in] data  処理するバイト列。
- * \param[in] len   バイト数。
+ * \param[in] crcStart  現在の CRC 値（更新は内部のローカル変数で行う）。
+ * \param[in] data      処理するバイト列。
+ * \param[in] len       バイト数。
  * \return    更新後 CRC 値。
  */
-static uint8 E2E_CalcCrc8(uint8 crc, const uint8 *data, uint8 len)
+static uint8 E2E_CalcCrc8(uint8 crcStart, const uint8 *data, uint8 len)
 {
+    uint8 crc = crcStart;
     uint8 i;
     uint8 bit;
     for (i = 0U; i < len; i++)
@@ -375,15 +376,17 @@ static uint8 E2E_CalcCrc8(uint8 crc, const uint8 *data, uint8 len)
  *          前区間が 0 バイトになり、CRC が末尾バイトの場合は後区間が 0 バイトになる。
  *          これにより CRCOffset が PDU 内のどの位置にあっても正しく計算できる。
  *
- * \param[in] crc         DataID 分まで計算済みの CRC 値。
+ * \param[in] crcStart    DataID 分まで計算済みの CRC 値（更新は内部のローカル変数で行う）。
  * \param[in] Data        対象 PDU バッファ。
  * \param[in] DataLength  PDU 全体バイト数 (CRC バイトを含む)。
  * \param[in] CRCOffset   CRC バイトの PDU 内オフセット。
  * \return    Data 全体分まで計算した CRC 値。
  */
 static uint8 E2E_CalcCrc8OverDataExcludingCrcByte(
-    uint8 crc, const uint8 *Data, uint8 DataLength, uint8 CRCOffset)
+    uint8 crcStart, const uint8 *Data, uint8 DataLength, uint8 CRCOffset)
 {
+    uint8 crc = crcStart;
+
     if (CRCOffset > 0U)
     {
         crc = E2E_CalcCrc8(crc, Data, CRCOffset);

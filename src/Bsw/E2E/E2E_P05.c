@@ -39,7 +39,7 @@
  * Function Prototypes
  * ====================================================================== */
 
-static uint16 E2E_CalcCrc16(uint16 crc, const uint8 *data, uint8 len);
+static uint16 E2E_CalcCrc16(uint16 crcStart, const uint8 *data, uint8 len);
 static uint16 E2E_CalcCrc16Body(const uint8 *Data, uint8 DataLength, uint8 Offset, uint16 DataID);
 
 /* ======================================================================
@@ -255,13 +255,14 @@ E2E_PCheckStatusType E2E_P05MapStatusToSM(
  *         内部ルーティン。内部で自動的な開始値・XOR 補正は一切行わない
  *         素の実装 (E2E_P01.c の E2E_CalcCrc8() と同じ考え方)。
  *
- * \param[in] crc   現在の CRC 値。
- * \param[in] data  処理するバイト列。
- * \param[in] len   バイト数。
+ * \param[in] crcStart  現在の CRC 値（更新は内部のローカル変数で行う）。
+ * \param[in] data      処理するバイト列。
+ * \param[in] len       バイト数。
  * \return    更新後 CRC 値。
  */
-static uint16 E2E_CalcCrc16(uint16 crc, const uint8 *data, uint8 len)
+static uint16 E2E_CalcCrc16(uint16 crcStart, const uint8 *data, uint8 len)
 {
+    uint16 crc = crcStart;
     uint8 i;
     uint8 bit;
     for (i = 0U; i < len; i++)
