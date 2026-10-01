@@ -21,6 +21,7 @@ typedef uint32_t uint32;
 
 typedef int8_t   sint8;
 typedef int16_t  sint16;
+/* cppcheck-suppress misra-c2012-2.3 */
 typedef int32_t  sint32;
 
 /**

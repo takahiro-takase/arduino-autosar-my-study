@@ -97,3 +97,14 @@ misra-c2012-7.3
 #          設計上必須。AUTOSAR Det 自体にはログ書式化の規定は無く、
 #          本プロジェクト独自のデバッグ出力。製品コードの機能境界ではなく
 #          Det モジュール内に限定している。
+
+# Rule 2.3 / constParameterPointer — インライン抑制（2026-10 方針確定）
+#   (2.3) Platform_Types.h の `sint32`: AUTOSAR Platform_Types が規定する標準型を
+#         全数そろえるため、現構成で参照されなくても残す。
+#         Dcm.c の `Dcm_TxBuf_Must_Fit_In_CanTp_TxBuffer`: 配列サイズが負になる
+#         ことを利用したコンパイル時アサーション（_Static_assert 相当）。型を
+#         使うことが目的ではなく、宣言されること自体が検査になる。
+#         内部向けで未使用の `ButtonState_t`（Rte_Type.h）は逸脱にせず削除した。
+#   (constParameterPointer) E2EXf_Inv_EngineInfo/E2EXf_Inv_AbsInfo の `buffer`:
+#         [SWS_E2EXf] が規定するシグネチャ（uint8* buffer）。本プロジェクトの
+#         実装は in-place 版のため buffer を書き換えないが、仕様の型を保つ。

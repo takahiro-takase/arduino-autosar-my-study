@@ -34,6 +34,7 @@
 #include <stdint.h>
 #include "Platform_Types.h"
 #include "Std_Types.h"
+#include "Det_Cfg.h"  /* DET_LOG_LEVEL は LOG_* をマクロ展開時に参照するだけのため、LogLevel より前でよい */
 
 #ifdef __cplusplus
 extern "C" {
@@ -51,8 +52,6 @@ typedef enum
     LOG_I,      /**< Info    — 通常情報 (Init / 状態遷移)      */
     LOG_D       /**< Debug   — 詳細  (フレームデータ等)        */
 } LogLevel;
-
-#include "Det_Cfg.h"
 
 /* -----------------------------------------------------------------------
  * バッファサイズ (メッセージ部; ヘッダは Serial で直接出力)
