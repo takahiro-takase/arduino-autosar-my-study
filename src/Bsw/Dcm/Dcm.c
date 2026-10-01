@@ -296,6 +296,7 @@ static uint8 Dcm_TxBuf[DCM_TX_BUF_SIZE];
 
 /** CANTP_TX_BUFFER_SIZE 追従し忘れの再発防止（経緯は CanTp_Cfg.h 参照）。
  *  AVR/native 両ビルドで有効な C89 互換の静的アサート（負配列サイズは違法）。 */
+/* cppcheck-suppress misra-c2012-2.3 */
 typedef char Dcm_TxBuf_Must_Fit_In_CanTp_TxBuffer[(CANTP_TX_BUFFER_SIZE >= DCM_TX_BUF_SIZE) ? 1 : -1];
 
 /** DID 0x0104 (TestPattern) の格納領域。CanTp の複数フレーム要求受信を

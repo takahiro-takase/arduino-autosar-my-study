@@ -102,6 +102,7 @@ uint8 E2EXf_E2EHealthStatus(uint8* buffer, uint32* bufferLength, const uint8* in
  * E2EXf_Inv_EngineInfo
  * ---------------------------------------------------------------------- */
 
+/* cppcheck-suppress constParameterPointer */
 uint8 E2EXf_Inv_EngineInfo(uint8* buffer, uint32* bufferLength, const uint8* inputBuffer, uint32 inputBufferLength,
                             E2E_P05StatusType* CheckStatus)
 {
@@ -200,6 +201,7 @@ uint8 E2EXf_Inv_EngineInfo(uint8* buffer, uint32* bufferLength, const uint8* inp
  * E2EXf_Inv_AbsInfo
  * ---------------------------------------------------------------------- */
 
+/* cppcheck-suppress constParameterPointer */
 uint8 E2EXf_Inv_AbsInfo(uint8* buffer, uint32* bufferLength, const uint8* inputBuffer, uint32 inputBufferLength,
                          E2E_P05StatusType* CheckStatus)
 {
