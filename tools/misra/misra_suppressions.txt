@@ -71,3 +71,12 @@ misra-c2012-7.3
 #         （*_UNIT_TEST 配下）からも参照するもの（Can_TxErrCount）。
 #   上記以外（アルゴリズム定数等）はブロックスコープへ移動して解消する
 #   （例: Crypto_Aes128_Rcon）。
+
+# Rule 11.5（void* からオブジェクトへのポインタへの変換をしない）
+#   インライン抑制（`/* cppcheck-suppress misra-c2012-11.5 */`）で個別に逸脱とする。
+#   対象は NvM.c と Com.c の `(const uint8*)`/`(uint8*)` キャスト計10件。
+#   AUTOSAR SWS が引数・RAM ブロックの型を void* と規定しており
+#   （Com_SendSignal/Com_ReceiveSignal の SignalDataPtr、NvM_ReadBlock/
+#   NvM_WriteBlock の NvM_DstPtr/NvM_SrcPtr と NvMRamBlockDataAddress）、
+#   バイト単位の CRC 計算・コピー・MemIf への受け渡しのために uint8* へ
+#   変換せざるを得ないため。変換はこれらの境界にのみ限定している。

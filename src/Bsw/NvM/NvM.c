@@ -273,7 +273,9 @@ static uint16 NvM_CrcAddressForBase(uint16 base, uint16 length)
  */
 static void NvM_WriteCopySync(uint16 base, const void* data, uint16 length)
 {
+    /* cppcheck-suppress misra-c2012-11.5 */
     (void)MemIf_WriteImmediate(MEMIF_DEVICE_0, base, (const uint8*)data, length);
+    /* cppcheck-suppress misra-c2012-11.5 */
     uint8 crc = NvM_CalcCrc8((const uint8*)data, length);
     (void)MemIf_WriteImmediate(MEMIF_DEVICE_0, NvM_CrcAddressForBase(base, length), &crc, 1U);
 }
@@ -348,6 +350,7 @@ static void NvM_ApplyDefaultSync(NvM_BlockIdType id, const NvM_BlockDescriptorTy
          * NvM_WriteBlock() の書き込みスキップ判定が Redundant==0U を
          * 前提条件にしており本配列を一切参照しないため、更新しない
          * （/simplify で指摘: 冗長ブロックでの更新は死んだ書き込みだった）。 */
+        /* cppcheck-suppress misra-c2012-11.5 */
         NvM_LastCrc[id] = NvM_CalcCrc8((const uint8*)blk->RamBlockDataAddress, blk->NvMNvBlockLength);
     }
 }
@@ -401,11 +404,13 @@ static void NvM_LoadAndVerifyBlock(NvM_BlockIdType id, const NvM_BlockDescriptor
     }
 
     (void)MemIf_Read(MEMIF_DEVICE_0, blk->NvMNvBlockBaseNumber,
+                      /* cppcheck-suppress misra-c2012-11.5 */
                       (uint8*)blk->RamBlockDataAddress, blk->NvMNvBlockLength);
     uint8 storedCrcPrimary = 0U;
     (void)MemIf_Read(MEMIF_DEVICE_0,
                       NvM_CrcAddressForBase(blk->NvMNvBlockBaseNumber, blk->NvMNvBlockLength),
                       &storedCrcPrimary, 1U);
+    /* cppcheck-suppress misra-c2012-11.5 */
     const uint8 calcCrcPrimary = NvM_CalcCrc8((const uint8*)blk->RamBlockDataAddress, blk->NvMNvBlockLength);
     const uint8 primaryValid = (storedCrcPrimary == calcCrcPrimary) ? 1U : 0U;
 
@@ -885,6 +890,7 @@ Std_ReturnType NvM_WriteBlock(NvM_BlockIdType BlockId, const void* NvM_SrcPtr)
     if ((blk->UseCrcCompMechanism != 0U)
         && (blk->Redundant == 0U)
         && (NvM_BlockPending[BlockId] == 0U)
+        /* cppcheck-suppress misra-c2012-11.5 */
         && NvM_CalcCrc8((const uint8*)blk->RamBlockDataAddress, blk->NvMNvBlockLength) == NvM_LastCrc[BlockId])
     {
         /* [SWS_NvM_00852]: NvMBlockUseCRCCompMechanism が有効なブロックに限り、
@@ -1197,6 +1203,7 @@ void NvM_MainFunction(void)
          * 次回 tick で同じジョブ開始を再試行する（フェーズを進めてしまうと、
          * ジョブが実際には始まっていないのに完了したと誤認しかねないため）。 */
         if (MemIf_Write(MEMIF_DEVICE_0, activeBase,
+                         /* cppcheck-suppress misra-c2012-11.5 */
                          (const uint8*)blk->RamBlockDataAddress, blk->NvMNvBlockLength) == E_OK)
         {
             NvM_ActivePhase = NVM_PHASE_BODY;
@@ -1232,6 +1239,7 @@ void NvM_MainFunction(void)
          * 分岐と同じ理由（成功するまで同じフェーズを再試行する。result は
          * 次にジョブが開始されるまで MEMIF_JOB_OK のままなので、この分岐へ
          * 再度到達できる）。 */
+        /* cppcheck-suppress misra-c2012-11.5 */
         NvM_ActiveCrc = NvM_CalcCrc8((const uint8*)blk->RamBlockDataAddress, blk->NvMNvBlockLength);
         if (MemIf_Write(MEMIF_DEVICE_0, NvM_CrcAddressForBase(activeBase, blk->NvMNvBlockLength),
                          &NvM_ActiveCrc, 1U) == E_OK)
