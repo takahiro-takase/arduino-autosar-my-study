@@ -115,8 +115,8 @@
 
 /** アプリ Runnable タスク: RTE_ENGINE + RTE_WARNING
  *  POST_RUN 時に停止し、アプリロジックを凍結する */
-#define BSWM_TASK_MASK_APP  ((uint32)((1UL << BSWM_OS_TASK_RTE_ENGINE) | \
-                                      (1UL << BSWM_OS_TASK_RTE_WARNING)))
+#define BSWM_TASK_MASK_APP  (((uint32)1U << BSWM_OS_TASK_RTE_ENGINE) | \
+                             ((uint32)1U << BSWM_OS_TASK_RTE_WARNING))
 
 /** BSW タスク = ALL & ~APP (後処理・診断・CAN 受信を継続するため残す) */
 /* cppcheck-suppress misra-c2012-2.5 */

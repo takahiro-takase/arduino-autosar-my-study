@@ -129,7 +129,7 @@ static void Crypto_Aes128_KeyExpansion(const uint8 key[CRYPTO_AES128_KEY_SIZE],
 
     for (uint8 wordIdx = AES128_NK; wordIdx < (AES128_NB * (AES128_NR + 1U)); wordIdx++)
     {
-        const uint16 prevOffset = (uint16)((wordIdx - 1U) * 4U);
+        const uint16 prevOffset = (uint16)(((uint16)wordIdx - 1U) * 4U);
         temp[0] = expandedKey[prevOffset + 0U];
         temp[1] = expandedKey[prevOffset + 1U];
         temp[2] = expandedKey[prevOffset + 2U];
@@ -158,8 +158,8 @@ static void Crypto_Aes128_KeyExpansion(const uint8 key[CRYPTO_AES128_KEY_SIZE],
             temp[0] ^= Crypto_Aes128_Rcon[(wordIdx / AES128_NK) - 1U];
         }
 
-        const uint16 curOffset  = (uint16)(wordIdx * 4U);
-        const uint16 backOffset = (uint16)((wordIdx - AES128_NK) * 4U);
+        const uint16 curOffset  = (uint16)((uint16)wordIdx * 4U);
+        const uint16 backOffset = (uint16)(((uint16)wordIdx - AES128_NK) * 4U);
         expandedKey[curOffset + 0U] = (uint8)(expandedKey[backOffset + 0U] ^ temp[0]);
         expandedKey[curOffset + 1U] = (uint8)(expandedKey[backOffset + 1U] ^ temp[1]);
         expandedKey[curOffset + 2U] = (uint8)(expandedKey[backOffset + 2U] ^ temp[2]);

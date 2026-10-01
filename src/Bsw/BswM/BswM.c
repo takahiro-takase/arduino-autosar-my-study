@@ -170,9 +170,14 @@ static void BswM_ApplyDcmCommMode(void)
 
     if ((group == 1U) || (group == 2U))
     {
-        (void)(txEnabled
-            ? Nm_EnableCommunication(NM_MAIN_NETWORK_HANDLE)
-            : Nm_DisableCommunication(NM_MAIN_NETWORK_HANDLE));
+        if (txEnabled != 0U)
+        {
+            (void)Nm_EnableCommunication(NM_MAIN_NETWORK_HANDLE);
+        }
+        else
+        {
+            (void)Nm_DisableCommunication(NM_MAIN_NETWORK_HANDLE);
+        }
     }
 }
 
