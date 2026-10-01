@@ -1061,6 +1061,7 @@ uint8 Com_SendSignal(Com_SignalIdType SignalId, const void* SignalDataPtr)
         return E_NOT_OK;
     }
 
+    /* cppcheck-suppress misra-c2012-11.5 */
     const uint8* dataPtr = (const uint8*)SignalDataPtr;
 
     const uint8 s = Com_FindSignalIndex(SignalId);
@@ -1276,6 +1277,7 @@ uint8 Com_ReceiveSignal(Com_SignalIdType SignalId, void* SignalDataPtr)
         return E_NOT_OK;
     }
 
+    /* cppcheck-suppress misra-c2012-11.5 */
     uint8* dataPtr = (uint8*)SignalDataPtr;
 
     const uint8 s = Com_FindSignalIndex(SignalId);
