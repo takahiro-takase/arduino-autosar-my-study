@@ -33,6 +33,7 @@
 #include "Det.h"
 #include "App_EngineManager.h"
 #include "App_WarningIndicator.h"
+#include "Rte_Cbk.h"
 
 #define TAG "Rte"
 

@@ -182,25 +182,10 @@
 #include "Com_PBCfg.h"
 #include "Com_Cfg.h"
 
-/* Rte 層の E2E Transformer 呼び出しグルー関数（Rte.c で定義）。
- * Os_PBCfg.c 等と同じく、レイヤ違反（Com が Rte.h を include する）を
- * 避けるためローカル extern 宣言で参照する。 */
-extern void Rte_COMRxInd_EngineInfo(void);
-extern void Rte_COMRxInd_AbsInfo(void);
-extern void Rte_COMTransform_E2EHealthStatus(uint8* Data, uint8 Length);
-extern void Rte_COMInvalidNotify_CoolantTemp(void);
-extern void Rte_COMFilterReject_EngineSpeed(void);
-extern void Rte_COMCbkTAck_EngineState(void);
-extern void Rte_COMCbkTxTOut_EngineState(void);
-extern void Rte_COMCbkTAck_WarningStatus(void);
-extern void Rte_COMCbkTxTOut_WarningStatus(void);
-extern void Rte_COMCbk_EngineOnFlag(void);
-extern void Rte_COMCbk_AbsInfo(void);
-extern void Rte_COMRxInd_SecureCommand(void);
-extern void Rte_COMCbkRxTOut_EngineOnFlag(void);
-extern void Rte_COMCbkRxTOut_AbsInfo(void);
-extern boolean Rte_COMRxIpduCallout_SecureCommand(const uint8* SduDataPtr, uint8 SduLength);
-extern boolean Rte_COMTxIpduCallout_ImmobilizerStatus(const uint8* SduDataPtr, uint8 SduLength);
+/* Rte が提供するコールバック関数のプロトタイプ（[SWS_Rte_03795]/[SWS_Rte_03796]、
+ * Com から見ては [SWS_Com_00220] のユーザコールバックヘッダに相当）。Rte.h とは
+ * 別ファイルのため、Com が Rte.h をインクルードするレイヤ違反にはならない。 */
+#include "Rte_Cbk.h"
 
 /* -----------------------------------------------------------------------
  * RX I-PDU テーブル
