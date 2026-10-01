@@ -1236,10 +1236,14 @@ static void Dcm_SendDtcList(uint8 subFunc, uint8 headerLen, const uint32* dtcBuf
                      (unsigned)subFunc, (unsigned)i, (unsigned)count);
             break;
         }
-        Dcm_TxBuf[offset++] = (uint8)(dtcBuf[i] >> 16U);   /* DTC 上位バイト */
-        Dcm_TxBuf[offset++] = (uint8)(dtcBuf[i] >>  8U);   /* DTC 中位バイト */
-        Dcm_TxBuf[offset++] = (uint8)(dtcBuf[i]);           /* DTC 下位バイト */
-        Dcm_TxBuf[offset++] = valueBuf[i];                  /* DTC ステータス or FDC */
+        Dcm_TxBuf[offset] = (uint8)(dtcBuf[i] >> 16U);   /* DTC 上位バイト */
+        offset++;
+        Dcm_TxBuf[offset] = (uint8)(dtcBuf[i] >>  8U);   /* DTC 中位バイト */
+        offset++;
+        Dcm_TxBuf[offset] = (uint8)(dtcBuf[i]);           /* DTC 下位バイト */
+        offset++;
+        Dcm_TxBuf[offset] = valueBuf[i];                  /* DTC ステータス or FDC */
+        offset++;
     }
     Dcm_TxPdu.SduLength = (PduLengthType)offset;
 

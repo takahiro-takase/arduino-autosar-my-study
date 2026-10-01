@@ -259,10 +259,13 @@ void Log_HexStr(char* dst, uint8_t dstSize,
     {
         if (i > 0U)
         {
-            dst[pos++] = ' ';
+            dst[pos] = ' ';
+            pos++;
         }
-        dst[pos++] = hex[src[i] >> 4U];
-        dst[pos++] = hex[src[i] & 0x0FU];
+        dst[pos] = hex[src[i] >> 4U];
+        pos++;
+        dst[pos] = hex[src[i] & 0x0FU];
+        pos++;
     }
     dst[pos] = '\0';
 }
