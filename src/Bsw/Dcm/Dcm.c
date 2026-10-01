@@ -1702,7 +1702,7 @@ static void Dcm_HandleReadDataById(const uint8* uds, uint8 udsLen)
         Dcm_TxBuf[3U + i] = dataBuf[i];
     }
 
-    Dcm_TxPdu.SduLength = (PduLengthType)(3U + dataLen);
+    Dcm_TxPdu.SduLength = (PduLengthType)((PduLengthType)dataLen + 3U);
 
     Dcm_Transmit();
 }

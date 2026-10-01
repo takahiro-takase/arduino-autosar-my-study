@@ -949,7 +949,7 @@ static void WdgM_EnterGlobalStopped(const char* reason, uint8 firstNotOkFound, u
     if ((firstNotOkFound) != 0U)
     {
         WdgM_FirstExpiredSEID    = (WdgM_SupervisedEntityIdType)firstNotOkSeid;
-        WdgM_FirstExpiredSEIDInv = (WdgM_SupervisedEntityIdType)(~firstNotOkSeid);
+        WdgM_FirstExpiredSEIDInv = (WdgM_SupervisedEntityIdType)(~(WdgM_SupervisedEntityIdType)firstNotOkSeid);
     }
 
     (void)Dem_SetEventStatus(DEM_EVENT_WDGM_SUPERVISION, DEM_EVENT_STATUS_FAILED);

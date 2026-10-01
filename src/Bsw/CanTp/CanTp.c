@@ -468,7 +468,7 @@ void CanTp_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
         uint8 udsLen = pci & 0x0FU;
 
         if ((udsLen == 0U) || (udsLen > CANTP_SF_MAX_DATA)
-            || (PduInfoPtr->SduLength < (PduLengthType)(1U + udsLen)))
+            || (PduInfoPtr->SduLength < (PduLengthType)((PduLengthType)udsLen + 1U)))
         {
             break;
         }
@@ -509,7 +509,7 @@ void CanTp_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
             DET_LOGW(TAG, "RX FF aborts in-progress reception, starting new");
         }
 
-        uint16 msgLen = (uint16)(((uint16)(pci & 0x0FU) << 8U)
+        uint16 msgLen = (uint16)((((uint16)pci & 0x0FU) << 8U)
                                  | (uint16)data[1]);
 
         if ((msgLen <= CANTP_SF_MAX_DATA) || (PduInfoPtr->SduLength < 8U))
