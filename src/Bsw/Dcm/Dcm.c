@@ -2767,7 +2767,7 @@ static void Dcm_HandleRequestDownload(const uint8* uds, uint8 udsLen)
      * 符号化）、下位nibble=0（予約）。 */
     Dcm_TxBuf[0] = 0x74U;               /* SID + 0x40 */
     Dcm_TxBuf[1] = 0x20U;
-    Dcm_TxBuf[2] = (uint8)(DCM_TRANSFER_MAX_BLOCK_LENGTH >> 8U);
+    Dcm_TxBuf[2] = (uint8)((uint16)DCM_TRANSFER_MAX_BLOCK_LENGTH >> 8U);
     Dcm_TxBuf[3] = (uint8)(DCM_TRANSFER_MAX_BLOCK_LENGTH & 0xFFU);
     Dcm_TxPdu.SduLength = 4U;
 

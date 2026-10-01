@@ -108,3 +108,20 @@ misra-c2012-7.3
 #   (constParameterPointer) E2EXf_Inv_EngineInfo/E2EXf_Inv_AbsInfo の `buffer`:
 #         [SWS_E2EXf] が規定するシグネチャ（uint8* buffer）。本プロジェクトの
 #         実装は in-place 版のため buffer を書き換えないが、仕様の型を保つ。
+
+# Rule 10.7 / unsignedLessThanZero — インライン抑制（2026-10 方針確定）
+#   (10.7) Com.c のシグナル読み書きのシフト量 `(8U * b)`、`(bitSize - 1U - i)`。
+#          Cppcheck アドオンはシフト演算子も「算術演算子」として扱い、左オペランド
+#          （uint32）より狭いシフト量（uint8）の複合式を指摘する。MISRA の 10.7 は
+#          「通常の算術型変換が行われる演算子」が対象であり、シフトのオペランド
+#          間には通常の算術型変換は行われない（シフト量の型は結果に影響しない）
+#          ため、ツールの過剰指摘として逸脱とする。
+#   (unsignedLessThanZero) SecOC.c の TX 状態初期化ループ。SECOC_TX_PDU_COUNT が
+#          現構成では 0U（TX 方向で SecOC を使う PDU が無い、SecOC_Cfg.h 参照）の
+#          ため `i < 0U` は常に偽になる。TX PDU を追加すれば有効になる汎用の
+#          ループであり、構成依存の結果として残す。
+# Rule 11.8 / 12.2 は逸脱にせず修正して解消した。
+#   (11.8) SecOC_RxIndication() が Com へ渡す PduInfoType.SduDataPtr に、const を
+#          付けた別名を経由せず PduInfoPtr->SduDataPtr をそのまま渡すようにした。
+#   (12.2) Dcm.c の `DCM_TRANSFER_MAX_BLOCK_LENGTH >> 8U` は、定数の値（16）から
+#          ツールが本質的型を 8bit と見なすため、先に 16bit へ広げてからシフトする。

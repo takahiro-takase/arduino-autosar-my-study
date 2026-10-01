@@ -306,6 +306,7 @@ void SecOC_Init(const SecOC_ConfigType* config)
         SecOC_OverrideRemaining[i] = 0U;
     }
 
+    /* cppcheck-suppress unsignedLessThanZero */
     for (uint8 i = 0U; i < SECOC_TX_PDU_COUNT; i++)
     {
         SecOC_TxPending[i]    = 0U;
@@ -341,6 +342,7 @@ void SecOC_DeInit(void)
         SecOC_OverrideRemaining[i] = 0U;
     }
 
+    /* cppcheck-suppress unsignedLessThanZero */
     for (uint8 i = 0U; i < SECOC_TX_STATE_STORAGE_COUNT; i++)
     {
         SecOC_TxPending[i]   = 0U;
@@ -536,7 +538,7 @@ void SecOC_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
      * ではない（E2E Transformer 方式で Com が E2E の存在を知らないのと
      * 同じ設計思想）。 */
     PduInfoType authenticPduInfo = {
-        .SduDataPtr = (uint8*)secured,
+        .SduDataPtr = PduInfoPtr->SduDataPtr,
         .SduLength  = cfg->AuthenticPduLength
     };
     Com_RxIndication(cfg->ComRxPduId, &authenticPduInfo);

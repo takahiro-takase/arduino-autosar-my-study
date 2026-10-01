@@ -1103,6 +1103,7 @@ uint8 Com_SendSignal(Com_SignalIdType SignalId, const void* SignalDataPtr)
         uint32 value = 0U;
         for (uint8 b = 0U; b < byteCount; b++)
         {
+            /* cppcheck-suppress misra-c2012-10.7 */
             value |= ((uint32)dataPtr[b]) << (8U * b);
         }
 
@@ -3238,6 +3239,7 @@ static void Com_PackSignal(uint8* buf,
     for (uint8 i = 0; i < bitSize; i++)
     {
         const uint8 bit   = (endian == COM_BIG_ENDIAN)
+                            /* cppcheck-suppress misra-c2012-10.7 */
                             ? (uint8)((value >> (bitSize - 1U - i)) & 1U)
                             : (uint8)((value >> i) & 1U);
         const uint8 pos   = bitPos + i;
@@ -3273,6 +3275,7 @@ static void Com_WriteSignalBytes(uint8* dataPtr, uint8 byteCount, uint32 value)
 {
     for (uint8 b = 0U; b < byteCount; b++)
     {
+        /* cppcheck-suppress misra-c2012-10.7 */
         dataPtr[b] = (uint8)(value >> (8U * b));
     }
 }
