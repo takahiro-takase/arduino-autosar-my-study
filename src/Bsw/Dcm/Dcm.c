@@ -315,6 +315,9 @@ static PduInfoType Dcm_TxPdu;
  * ====================================================================== */
 
 /* millis()/delay() are declared in Arduino wiring.c with C linkage. */
+/* Arduino コアの関数。AUTOSAR に対応する共通ヘッダは無いため各所で宣言している
+ * （将来 Os の時間源 API へ置換する予定）。 */
+/* cppcheck-suppress misra-c2012-8.5 */
 extern unsigned long millis(void);
 extern void delay(unsigned long ms);
 

@@ -33,10 +33,9 @@
 
 #include "Gpt_PBCfg.h"
 
-/* 通知関数の前方宣言 (Gpt が個々の Asw モジュールに依存しないよう、
- * App_GptDemo.h をインクルードする代わりに extern 宣言を使う。
- * Os_PBCfg.c がタスク関数を extern 宣言するのと同じ考え方)。 */
-extern void App_GptDemo_OnTick(void);
+/* 通知関数 App_GptDemo_OnTick() の宣言（Os_PBCfg.c と同様、設定ファイルは
+ * 参照先のヘッダを直接インクルードする）。 */
+#include "App_GptDemo.h"
 
 /* -----------------------------------------------------------------------
  * チャネルテーブル

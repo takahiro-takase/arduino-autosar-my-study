@@ -125,30 +125,25 @@
 #include "Os_PBCfg.h"
 #include "Os_Cfg.h"
 
-/* タスク本体の前方宣言 (各モジュールのヘッダをここでインクルードする代わりに
- * extern 宣言を使用し、Os が各 BSW モジュールに依存しないようにする)  */
-extern void Can_MainFunction_Read(void);
-extern void CanTp_MainFunction(void);
-extern void Rte_ScheduleRunnables(void);
-extern void Rte_ScheduleWarningIndicator(void);
-extern void CanSM_MainFunction(void);
-extern void Com_MainFunctionRx(void);
-extern void Com_MainFunctionTx(void);
-extern void IoHwAb_MainFunction(void);
-extern void WdgM_MainFunction(void);
-extern void Dcm_MainFunction(void);
-extern void FiM_MainFunction(void);
-extern void WdgM_TriggerHwWatchdog(void);
-extern void CanNm_MainFunction(void);
-extern void NvM_MainFunction(void);
-extern void Can_MainFunction_Write(void);
-extern void Can_MainFunction_BusOff(void);
-extern void Can_MainFunction_Wakeup(void);
-extern void SecOC_MainFunctionTx(void);
-extern void MemIf_MainFunction(void);
-extern void App_GptDemo_Run(void);
-extern void ComM_MainFunction(void);
-extern void SecOC_MainFunctionRx(void);
+/* タスク本体（各モジュールの MainFunction 等）は各モジュール自身のヘッダで宣言
+ * されている（AUTOSAR SWS の Header File Structure と同様、呼び出し側が
+ * 当該ヘッダをインクルードする）。宣言を重複させると署名の食い違いを
+ * コンパイラが検出できないため、extern ではなくヘッダ経由とする。 */
+#include "Can.h"
+#include "CanTp.h"
+#include "Rte.h"
+#include "CanSM.h"
+#include "Com.h"
+#include "IoHwAb.h"
+#include "WdgM.h"
+#include "Dcm.h"
+#include "FiM.h"
+#include "CanNm.h"
+#include "NvM.h"
+#include "SecOC.h"
+#include "MemIf.h"
+#include "ComM.h"
+#include "App_GptDemo.h"
 
 /* -----------------------------------------------------------------------
  * タスクテーブル

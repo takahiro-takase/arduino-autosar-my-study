@@ -80,6 +80,9 @@ static unsigned long CanNm_StateTimerMs;
  * ====================================================================== */
 
 /* Arduino wiring.c（C リンケージ）で定義 */
+/* Arduino コアの関数。AUTOSAR に対応する共通ヘッダは無いため各所で宣言している
+ * （将来 Os の時間源 API へ置換する予定）。 */
+/* cppcheck-suppress misra-c2012-8.5 */
 extern unsigned long millis(void);
 
 static void CanNm_TransmitPdu(void);

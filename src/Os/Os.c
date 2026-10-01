@@ -69,6 +69,9 @@
  *  差分自体はブロッキングの影響を受けない）。 */
 #define OS_TICK_CROSSCHECK_PERIOD_MS  500UL
 
+/* Arduino コアの関数。AUTOSAR に対応する共通ヘッダは無いため各所で宣言している
+ * （将来 Os の時間源 API へ置換する予定）。 */
+/* cppcheck-suppress misra-c2012-8.5 */
 extern unsigned long millis(void);
 
 static const Os_ConfigType* Os_Cfg = NULL;
