@@ -906,7 +906,7 @@ static void Dcm_TransmitPositiveResponse(void)
  */
 static uint8 Dcm_ExtractSubFunc(uint8 subFuncByte)
 {
-    Dcm_SuppressPosRsp = (uint8)((subFuncByte & 0x80U) != 0U);
+    Dcm_SuppressPosRsp = (((subFuncByte & 0x80U) != 0U) ? 1U : 0U);
     return (uint8)(subFuncByte & 0x7FU);
 }
 

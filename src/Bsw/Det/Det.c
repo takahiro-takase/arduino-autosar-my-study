@@ -90,9 +90,13 @@ void Log_Write(LogLevel lvl, const char* tag, const char* func, const char* fmt,
     }
 
     char buf[LOG_BUF_SIZE];
+    /* cppcheck-suppress misra-c2012-17.1 */
     va_list args;
+    /* cppcheck-suppress misra-c2012-17.1 */
     va_start(args, fmt);
+    /* cppcheck-suppress misra-c2012-21.6 */
     (void)vsnprintf(buf, sizeof(buf), fmt, args);
+    /* cppcheck-suppress misra-c2012-17.1 */
     va_end(args);
 
     Det_Hw_PrintLogLine(lvl, tag, func, buf);

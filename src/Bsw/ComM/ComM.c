@@ -897,6 +897,7 @@ void ComM_CommunicationAllowed(NetworkHandleType Channel, boolean Allowed)
     }
 
     ComM_CommunicationAllowedFlag[Channel] = Allowed;
+    /* cppcheck-suppress misra-c2012-10.5 */
     DET_LOGI(TAG, "ch%u CommunicationAllowed=%u", (unsigned)Channel, (unsigned)Allowed);
 
     if (Allowed)

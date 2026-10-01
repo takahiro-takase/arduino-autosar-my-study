@@ -1083,6 +1083,7 @@ Std_ReturnType NvM_SetBlockProtection(NvM_BlockIdType BlockId, boolean Protectio
     }
 
     NvM_BlockProtected[BlockId] = ProtectionEnabled;
+    /* cppcheck-suppress misra-c2012-10.5 */
     DET_LOGI(TAG, "block=%u protection=%u", (unsigned)BlockId, (unsigned)ProtectionEnabled);
 
     return E_OK;

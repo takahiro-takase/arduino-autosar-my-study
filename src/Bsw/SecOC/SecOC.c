@@ -472,7 +472,7 @@ void SecOC_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
     /* [SWS_SecOC_00122]: SecOC_VerifyStatusOverride() が設定した強制状態を、
      * 実際の検証結果 (actualPass) に適用して最終判定 (effectivePass) を得る
      * (SecOC_ApplyVerifyStatusOverride() の Doxygen 参照)。 */
-    const uint8 actualPass    = (uint8)((macOk != 0U) && (freshnessOk != 0U));
+    const uint8 actualPass    = (((macOk != 0U) && (freshnessOk != 0U)) ? 1U : 0U);
     const uint8 effectivePass = SecOC_ApplyVerifyStatusOverride(tableIndex, actualPass);
 
     /* [SWS_SecOC_00048]/[SWS_SecOC_00119]: 検証の都度、設定済みなら
