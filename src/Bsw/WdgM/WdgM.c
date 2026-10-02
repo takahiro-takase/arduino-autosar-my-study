@@ -168,12 +168,8 @@
 #include "WdgIf.h"
 #include "Det.h"
 #include "Dem.h"
+#include "Os.h"
 
-/* millis() is declared in Arduino wiring.c with C linkage. */
-/* Arduino コアの関数。AUTOSAR に対応する共通ヘッダは無いため各所で宣言している
- * （将来 Os の時間源 API へ置換する予定）。 */
-/* cppcheck-suppress misra-c2012-8.5 */
-extern unsigned long millis(void);
 
 /* ======================================================================
  * Definitions
@@ -328,6 +324,8 @@ static WdgM_SupervisedEntityIdType WdgM_FirstExpiredSEIDInv __attribute__((secti
  * Function Prototypes
  * ====================================================================== */
 
+static unsigned long WdgM_GetNowMs(void);
+
 /* ======================================================================
  * Functions
  * ====================================================================== */
@@ -372,7 +370,7 @@ void WdgM_Init(const WdgM_ConfigType* ConfigPtr)
         WdgM_DeadlineStatus[i]      = WDGM_LOCAL_STATUS_OK;
         WdgM_EntityExpiredCycleCount[i] = 0U;
         WdgM_LastCheckpoint[i]      = WDGM_CP_INITIAL;
-        WdgM_LastCheckpointTimeMs[i] = millis();
+        WdgM_LastCheckpointTimeMs[i] = WdgM_GetNowMs();
     }
     WdgM_SkipNextAliveJudgment = 0U;
     WdgM_GlobalExpired         = 0U;
@@ -600,7 +598,7 @@ void WdgM_ResumeSupervision(void)
         return;
     }
 
-    const unsigned long now = millis();
+    const unsigned long now = WdgM_GetNowMs();
     for (uint8 i = 0U; i < WdgM_Cfg->EntityCount; i++)
     {
         WdgM_LastCheckpoint[i]       = WDGM_CP_INITIAL;
@@ -654,7 +652,7 @@ Std_ReturnType WdgM_CheckpointReached(WdgM_SupervisedEntityIdType SEID, WdgM_Che
 
     const WdgM_EntityCfgType* entity = &WdgM_Cfg->Entities[SEID];
     const WdgM_CheckpointIdType fromCp = WdgM_LastCheckpoint[SEID];
-    const unsigned long now = millis();
+    const unsigned long now = WdgM_GetNowMs();
     uint8 allowed = 0U;
 
     for (uint8 i = 0U; i < entity->TransitionCount; i++)
@@ -1354,6 +1352,28 @@ Std_ReturnType WdgM_GetFirstExpiredSEID(WdgM_SupervisedEntityIdType* SEID)
 
     *SEID = WdgM_FirstExpiredSEID;
     return E_OK;
+}
+
+
+/* ======================================================================
+ * Internal Functions
+ * ====================================================================== */
+
+/* ----------------------------------------------------------------------
+ * WdgM_GetNowMs
+ * ---------------------------------------------------------------------- */
+
+/**
+ * \brief   現在時刻 [ms] を返す（Os カウンタ SYSTEM_COUNTER の tick 値）。
+ * \details millis() を直接呼ばず Os の GetCounterValue() を介する。値は Os_Init() の
+ *          前後や millis() フォールバックの前後でも飛ばない（Os.h 参照）ため、
+ *          本モジュールが保持する「前回時刻」との差分計算にそのまま使える。
+ */
+static unsigned long WdgM_GetNowMs(void)
+{
+    TickType now = 0U;
+    (void)GetCounterValue(SYSTEM_COUNTER, &now);
+    return (unsigned long)now;
 }
 
 #ifdef WDGM_UNIT_TEST

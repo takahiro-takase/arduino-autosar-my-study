@@ -48,6 +48,7 @@
 #include "PduR.h"
 #include "Dcm_Cbk.h"
 #include "Det.h"
+#include "Os.h"
 
 /* ======================================================================
  * Definitions
@@ -137,10 +138,7 @@ static uint8 CanTp_TxFrameBuf[8];
  * Function Prototypes
  * ====================================================================== */
 
-/* Arduino コアの関数。AUTOSAR に対応する共通ヘッダは無いため各所で宣言している
- * （将来 Os の時間源 API へ置換する予定）。 */
-/* cppcheck-suppress misra-c2012-8.5 */
-extern unsigned long millis(void);
+static unsigned long CanTp_GetNowMs(void);
 
 /* -----------------------------------------------------------------------
  * 内部関数プロトタイプ
@@ -323,7 +321,7 @@ Std_ReturnType CanTp_Transmit(PduIdType TxSduId, const PduInfoType* PduInfoPtr)
     }
 
     CanTp_Tx.state   = CANTP_TX_WAIT_FC;
-    CanTp_Tx.bsTimer = millis();
+    CanTp_Tx.bsTimer = CanTp_GetNowMs();
 
     return E_OK;
 }
@@ -374,7 +372,7 @@ void CanTp_MainFunction(void)
         return;
     }
 
-    unsigned long now = millis();
+    unsigned long now = CanTp_GetNowMs();
 
     /* ---- TX: N_Bs タイムアウト (WAIT_FC) ---- */
     if (CanTp_Tx.state == CANTP_TX_WAIT_FC)
@@ -527,7 +525,7 @@ void CanTp_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
         CanTp_Rx.msgLen = msgLen;
         CanTp_Rx.sn     = 1U;
         CanTp_Rx.state  = CANTP_RX_WAIT_CF;
-        CanTp_Rx.timer  = millis();
+        CanTp_Rx.timer  = CanTp_GetNowMs();
 
         /* FF の先頭 6 バイトをコピー */
         uint16 copyLen = (msgLen < (uint16)CANTP_FF_DATA)
@@ -585,7 +583,7 @@ void CanTp_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
 
         CanTp_Rx.pos += (uint16)copyLen;
         CanTp_Rx.sn   = (uint8)((CanTp_Rx.sn + 1U) & 0x0FU);
-        CanTp_Rx.timer = millis();
+        CanTp_Rx.timer = CanTp_GetNowMs();
 
         DET_LOGI(TAG, "RX CF sn=%u pos=%u", (unsigned)sn, (unsigned)CanTp_Rx.pos);
 
@@ -632,11 +630,11 @@ void CanTp_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
             CanTp_Tx.stMin   = CanTp_DecodeStMin(data[2]);
             CanTp_Tx.bsCnt   = CanTp_Tx.bs;
             CanTp_Tx.state   = CANTP_TX_SEND_CF;
-            CanTp_Tx.cfTimer = millis();
+            CanTp_Tx.cfTimer = CanTp_GetNowMs();
         }
         else if (fs == CANTP_FC_WAIT)
         {
-            CanTp_Tx.bsTimer = millis();   /* N_Bs タイマリセット */
+            CanTp_Tx.bsTimer = CanTp_GetNowMs();   /* N_Bs タイマリセット */
         }
         else   /* OVFLW */
         {
@@ -691,6 +689,23 @@ void CanTp_TxConfirmation(PduIdType TxPduId, Std_ReturnType result)
 /* ======================================================================
  * Internal Functions
  * ====================================================================== */
+
+/* ----------------------------------------------------------------------
+ * CanTp_GetNowMs
+ * ---------------------------------------------------------------------- */
+
+/**
+ * \brief   現在時刻 [ms] を返す（Os カウンタ SYSTEM_COUNTER の tick 値）。
+ * \details millis() を直接呼ばず Os の GetCounterValue() を介する。値は Os_Init() の
+ *          前後や millis() フォールバックの前後でも飛ばない（Os.h 参照）ため、
+ *          本モジュールが保持する「前回時刻」との差分計算にそのまま使える。
+ */
+static unsigned long CanTp_GetNowMs(void)
+{
+    TickType now = 0U;
+    (void)GetCounterValue(SYSTEM_COUNTER, &now);
+    return (unsigned long)now;
+}
 
 /* -----------------------------------------------------------------------
  * 内部ヘルパー: フレーム送信
@@ -793,7 +808,7 @@ static void CanTp_SendNextCF(void)
 
     if (CanTp_SendFrame() != E_OK)
     {
-        unsigned long now = millis();
+        unsigned long now = CanTp_GetNowMs();
 
         if (CanTp_Tx.asFailTimer == 0UL)
         {
@@ -832,7 +847,7 @@ static void CanTp_SendNextCF(void)
         {
             DET_LOGI(TAG, "TX block done wait FC");
             CanTp_Tx.state   = CANTP_TX_WAIT_FC;
-            CanTp_Tx.bsTimer = millis();
+            CanTp_Tx.bsTimer = CanTp_GetNowMs();
         }
     }
 }

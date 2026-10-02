@@ -31,14 +31,10 @@
 #include "Det.h"
 #include "WdgM.h"
 #include "FiM_Cfg.h"
+#include "Os.h"
 
 #define TAG "AppEng"
 
-/* millis() is declared in Arduino wiring.c with C linkage. */
-/* Arduino コアの関数。AUTOSAR に対応する共通ヘッダは無いため各所で宣言している
- * （将来 Os の時間源 API へ置換する予定）。 */
-/* cppcheck-suppress misra-c2012-8.5 */
-extern unsigned long millis(void);
 
 #define ENGINE_SPEED_RUNNING_THRESHOLD  ((EngineSpeed_t)500U)
 #define ENGINE_SPEED_STALL_THRESHOLD    ((EngineSpeed_t)100U)
@@ -63,6 +59,7 @@ static void State_Off(EngineSpeed_t speed, CoolantTemp_t temp, EngineOnFlag_t fl
 static void State_Starting(EngineSpeed_t speed, CoolantTemp_t temp, EngineOnFlag_t flag);
 static void State_Running(EngineSpeed_t speed, CoolantTemp_t temp, EngineOnFlag_t flag);
 static void State_Fault(EngineSpeed_t speed, CoolantTemp_t temp, EngineOnFlag_t flag);
+static unsigned long App_EngineManager_GetNowMs(void);
 
 /**
  * \brief   エンジンマネージャ SW-Component を初期化する。
@@ -354,7 +351,7 @@ static void State_Off(EngineSpeed_t speed, CoolantTemp_t temp, EngineOnFlag_t fl
     if (flag == 1U)
     {
         s_state           = ENGINE_STATE_STARTING;
-        s_startingEnterMs = millis();
+        s_startingEnterMs = App_EngineManager_GetNowMs();
         (void)Dem_SetEventStatus(DEM_EVENT_ENGINE_SPEED_NO_FLAG, DEM_EVENT_STATUS_PASSED);
         DET_LOGI(TAG, "OFF->STARTING");
     }
@@ -403,7 +400,7 @@ static void State_Starting(EngineSpeed_t speed, CoolantTemp_t temp, EngineOnFlag
         DET_LOGI(TAG, "STARTING->RUNNING");
         return;
     }
-    if ((millis() - s_startingEnterMs) >= STARTING_TIMEOUT_MS)
+    if ((App_EngineManager_GetNowMs() - s_startingEnterMs) >= STARTING_TIMEOUT_MS)
     {
         s_state = ENGINE_STATE_FAULT;
         (void)Dem_SetEventStatus(DEM_EVENT_STARTING_TIMEOUT, DEM_EVENT_STATUS_FAILED);
@@ -492,4 +489,21 @@ static void State_Fault(EngineSpeed_t speed, CoolantTemp_t temp, EngineOnFlag_t 
     {
         DET_LOGD(TAG, "FAULT wait flag=0 or btn");
     }
+}
+
+/* ----------------------------------------------------------------------
+ * App_EngineManager_GetNowMs
+ * ---------------------------------------------------------------------- */
+
+/**
+ * \brief   現在時刻 [ms] を返す（Os カウンタ SYSTEM_COUNTER の tick 値）。
+ * \details millis() を直接呼ばず Os の GetCounterValue() を介する。値は Os_Init() の
+ *          前後や millis() フォールバックの前後でも飛ばない（Os.h 参照）ため、
+ *          本モジュールが保持する「前回時刻」との差分計算にそのまま使える。
+ */
+static unsigned long App_EngineManager_GetNowMs(void)
+{
+    TickType now = 0U;
+    (void)GetCounterValue(SYSTEM_COUNTER, &now);
+    return (unsigned long)now;
 }

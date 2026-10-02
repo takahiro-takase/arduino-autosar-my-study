@@ -33,9 +33,11 @@
 uint32 CallCount_Os_Init             = 0U;
 uint32 CallCount_Os_SchedulerStep    = 0U;
 uint32 CallCount_Os_SetTaskActive    = 0U;
+uint32 CallCount_GetCounterValue     = 0U;
+uint32 CallCount_GetElapsedValue     = 0U;
 
 /* ----------------------------------------------------------------------
- * WrapOs_Reset — 3関数すべての状態を一括で初期化する（Wrap_Os.h 参照）。
+ * WrapOs_Reset — 5関数すべての状態を一括で初期化する（Wrap_Os.h 参照）。
  * ---------------------------------------------------------------------- */
 
 void WrapOs_Reset(void)
@@ -43,6 +45,8 @@ void WrapOs_Reset(void)
     CallCount_Os_Init          = 0U;
     CallCount_Os_SchedulerStep = 0U;
     CallCount_Os_SetTaskActive = 0U;
+    CallCount_GetCounterValue  = 0U;
+    CallCount_GetElapsedValue  = 0U;
 }
 
 /* ======================================================================
@@ -89,6 +93,34 @@ void __wrap_Os_SetTaskActive(uint8 TaskId, uint8 Active)
     Log_Write(LOG_T, TAG, "Os_SetTaskActive", "called %u times", CallCount_Os_SetTaskActive);
 
     __real_Os_SetTaskActive(TaskId, Active);
+}
+
+/* ----------------------------------------------------------------------
+ * GetCounterValue
+ * ---------------------------------------------------------------------- */
+
+extern
+StatusType __real_GetCounterValue(CounterType CounterID, TickRefType Value);
+StatusType __wrap_GetCounterValue(CounterType CounterID, TickRefType Value)
+{
+    CallCount_GetCounterValue++;
+    Log_Write(LOG_T, TAG, "GetCounterValue", "called %u times", CallCount_GetCounterValue);
+
+    return __real_GetCounterValue(CounterID, Value);
+}
+
+/* ----------------------------------------------------------------------
+ * GetElapsedValue
+ * ---------------------------------------------------------------------- */
+
+extern
+StatusType __real_GetElapsedValue(CounterType CounterID, TickRefType Value, TickRefType ElapsedValue);
+StatusType __wrap_GetElapsedValue(CounterType CounterID, TickRefType Value, TickRefType ElapsedValue)
+{
+    CallCount_GetElapsedValue++;
+    Log_Write(LOG_T, TAG, "GetElapsedValue", "called %u times", CallCount_GetElapsedValue);
+
+    return __real_GetElapsedValue(CounterID, Value, ElapsedValue);
 }
 
 /* ======================================================================
