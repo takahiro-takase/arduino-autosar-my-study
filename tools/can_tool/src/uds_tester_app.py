@@ -283,7 +283,7 @@ class UdsTesterFrame(ttk.Frame):
         # （_send_worker）をそのまま再利用し、送受信処理を重複させない。
         # ECUReset は Dcm_SidSessionTable[] に掲載が無くセッション制約・
         # SecurityAccess いずれも不要なため、これ単体で完結する
-        # （tools/can_tool/capl_scripts/01_ecu_reset.capl と同じ内容）。
+        # （tools/can_tool/capl_scripts/001_ecu_reset.capl と同じ内容）。
         # 状態ラベルより先（左端）に置くのは、クリック直後に視線を動かさず
         # そのままリセット後の状態遷移（EcuM/ComM/CanSM）を確認できるようにする
         # ため（2026-09、右端配置から変更）。
