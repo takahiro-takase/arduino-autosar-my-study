@@ -328,6 +328,7 @@ static void Dcm_TransmitPositiveResponse(void);
 static uint8 Dcm_ExtractSubFunc(uint8 subFuncByte);
 static void Dcm_SendNegativeResponse(uint8 sid, uint8 nrc);
 static void Dcm_HandleSessionControl(const uint8* uds, uint8 udsLen);
+static void Dcm_DispatchService(uint8 sid, const uint8* uds, uint8 udsLen);
 static void Dcm_HandleEcuReset(const uint8* uds, uint8 udsLen);
 static void Dcm_HandleClearDtc(const uint8* uds, uint8 udsLen);
 static void Dcm_HandleReadDtcInfo(const uint8* uds, uint8 udsLen);
@@ -3255,14 +3256,46 @@ void Dcm_ComIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
 
     DET_LOGI(TAG, "req SID=0x%02X", (unsigned)sid);
 
+    /* [SWS_Dcm_01376]: 診断要求を受理するたびに ComM へ診断アクティブを通知する。
+     * 拡張セッション中の通知（Dcm_UpdateComMRequest()）とは別に、デフォルト
+     * セッションの要求にも必要: CanNm の協調スリープ中（SILENT_COM）に届いた
+     * 要求の応答は CanIf が TX_OFFLINE で拒否して無言で失われるが、ここで通知すれば
+     * ComM が協調スリープを取り消して FULL_COM へ復帰させ、応答が送信できる。
+     * CanTp 送信ビジーで無視する並行要求には呼ばない（[SWS_Dcm_01050]）。 */
+    ComM_DCM_ActiveDiagnostic(0U);
+
     /* SID × セッション許可チェック (Dcm_SidSessionTable[]) を全 SID 共通で先に行う。
      * 各ハンドラ個別の特例チェックに分散させず、ここで一元的に拒否する。 */
     if (Dcm_IsServiceAllowedInSession(sid, Dcm_CurrentSession) == 0U)
     {
         Dcm_SendNegativeResponse(sid, DCM_NRC_SERVICE_NOT_SUPPORTED_IN_SESSION);
-        return;
+    }
+    else
+    {
+        Dcm_DispatchService(sid, uds, udsLen);
     }
 
+    /* [SWS_Dcm_01374]/[SWS_Dcm_01377]: 要求の処理が終わり、かつデフォルトセッション
+     * なら診断インアクティブを通知する（拡張セッション中はアクティブのまま。S3
+     * タイムアウトやデフォルト復帰時は Dcm_UpdateComMRequest() が通知する）。
+     * 厳密な「処理完了」は応答の送信確認（Dcm_TpTxConfirmation、未実装）だが、
+     * 本実装では応答の送信開始時点で代用する。多フレーム応答の残りの CF は
+     * CanNm の NM-Timeout（既定 3000ms）が働くため完走できる。 */
+    if (Dcm_CurrentSession == DCM_SESSION_DEFAULT)
+    {
+        ComM_DCM_InactiveDiagnostic(0U);
+    }
+}
+
+/**
+ * \brief   SID に対応するサービスハンドラを呼び出す。
+ *
+ * \param[in]  sid     UDS サービス ID。
+ * \param[in]  uds     UDS ペイロード先頭ポインタ。
+ * \param[in]  udsLen  UDS ペイロード長。
+ */
+static void Dcm_DispatchService(uint8 sid, const uint8* uds, uint8 udsLen)
+{
     /* --- UDS サービスディスパッチ --- */
     switch (sid)
     {

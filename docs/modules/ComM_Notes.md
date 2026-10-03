@@ -68,8 +68,18 @@ FULL_COM のまま維持されます。
 
 | タイミング | 呼び出し |
 |-----------|---------------|
-| extendedSession に入ったとき（SID 0x10/0x03） | `ComM_DCM_ActiveDiagnostic(0)` |
+| 診断要求を受理するたび（`Dcm_ComIndication()`。CanTp 送信ビジーで無視する並行要求を除く。[SWS_Dcm_01376]） | `ComM_DCM_ActiveDiagnostic(0)` |
+| デフォルトセッションの要求の処理が終わったとき（応答の送信開始時点で代用。[SWS_Dcm_01374]/[SWS_Dcm_01377]） | `ComM_DCM_InactiveDiagnostic(0)` |
+| extendedSession に入ったとき（SID 0x10/0x03） | `ComM_DCM_ActiveDiagnostic(0)`（拡張セッションの間はアクティブを維持し、要求の処理後に Inactive は呼ばない） |
 | defaultSession へ戻ったとき（明示要求・S3タイムアウト・ECUReset のいずれも） | `ComM_DCM_InactiveDiagnostic(0)` |
+
+デフォルトセッションの要求でも Active を通知するのは、CanNm の協調スリープ中（Prepare Bus-Sleep Mode、
+チャネルは SILENT_COM で CanIf が TX を拒否）に届いた要求の応答が失われるのを防ぐためです。通知を受けた
+ComM は協調スリープを取り消し、CanNm を Repeat Message State へ戻してチャネルを FULL_COM に復帰させるので、
+応答を送信できます（`Bsw_DcmStack_ActiveDiagnosticWake_test.cpp` で検証）。応答が終わるとデフォルトセッション
+では Inactive を通知し、エンジン OFF が続いていれば `App_EngineManager` の次の周期で再びスリープに入ります。
+`Dcm_TpTxConfirmation`（未実装）による厳密な「処理完了」の検出は行っておらず、多フレーム応答の残りの CF は
+CanNm の NM-Timeout（既定 3000ms）の間に送信されます。
 
 「診断ツールが繋がっている間はバスを落とさない」という実車でもよくある要件を、
 [SWS_ComM_00873]/[SWS_ComM_00874] が規定する専用 API 経由で、EcuM
