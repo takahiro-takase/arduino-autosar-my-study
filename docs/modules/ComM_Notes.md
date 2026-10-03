@@ -1,6 +1,6 @@
 # ComM（通信マネージャ）
 
-> [README](../../README.md) の「[CAN 通信状態管理](../can_stack.md#can-comm-management)」節から分離
+> [CAN 通信スタック 詳細](../can_stack.md) の「[CAN 通信状態管理](../can_stack.md#can-comm-management)」節から分離
 > （旧「ECU 管理層」節から移動。実 AUTOSAR では EcuM/BswM/WdgM とは別クラスタ
 > [Communication Services] に属するため）。
 
@@ -62,8 +62,8 @@ FULL_COM のまま維持されます。
 当初は EcuM が起動時に要求した FULL_COM を一度も解放しない「実質固定」でしたが、
 `App_EngineManager_Run()` が `ENGINE_STATE_OFF` の継続（既定 5 周期、実質15秒）を
 検知すると `Rte_Call_ComM_RequestComMode(NO_COM)` 経由で `COMM_USER_0` の要求を
-実際に解放するようになりました（ボランタリスリープ。詳細は README の「CAN 通信スタック」
-セクションの「ボランタリスリープとウェイクアップ」を参照）。
+実際に解放するようになりました（ボランタリスリープ。詳細は [CAN 通信スタック 詳細](../can_stack.md#can-controller-sleep)の
+「ボランタリスリープとウェイクアップ」を参照）。
 
 これにより、ユーザ要求と Dcm の診断アクティブ通知の調停が実際に意味を持つ場面が
 生まれました。「エンジンが止まっていて（`COMM_USER_0` が NO_COM 要求）、かつ

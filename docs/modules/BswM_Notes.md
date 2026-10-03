@@ -2,7 +2,7 @@
 
 > [README](../../README.md) の「[ECU 管理層](../../README.md#ecu-management)」節から分離。
 > なお「CAN コントローラの実スリープ」「ボランタリスリープとウェイクアップ」の2節は
-> 実質的に Can/CanSM/CanNm の解説であるため、README側にそのまま残しています。
+> 実質的に Can/CanSM/CanNm の解説であるため、[CAN 通信スタック 詳細](../can_stack.md#can-controller-sleep)に置いています。
 
 BswM (BSW Mode Manager) は、EcuM や ComM からのモード変化通知を受け取り、
 ルールテーブルに従って Os タスクの有効・無効を切り替えるルールエンジンです。
@@ -127,7 +127,7 @@ Can_MainFunction_Read・Can_MainFunction_Wakeup は、CAN バスのボランタ�
 のために SHUTDOWN 後も動かし続けます（`Can_Isr()` は BswM の無効化に関わらず常に起動する
 真のハードウェア割り込みだが、正しさをこの割り込みの成否だけに委ねない設計にしているため、
 実際の SPI 読み出しと上位層への通知を担うこの 2 タスク自体を無効化するわけにはいかない。
-詳細は [`Can_Notes.md`](./Can_Notes.md) の「RX の割り込み化」を参照）。CanSM_MainFunction は、ウェイクアップ検証（README の「CAN コントローラの実スリープ」参照）の検証タイムアウトを
+詳細は [`Can_Notes.md`](./Can_Notes.md) の「RX の割り込み化」を参照）。CanSM_MainFunction は、ウェイクアップ検証（[CAN 通信スタック 詳細](../can_stack.md#can-controller-sleep)の「CAN コントローラの実スリープ」参照）の検証タイムアウトを
 監視するために SHUTDOWN 後も動かし続けます。
 NvM_MainFunction は、SHUTDOWN 直前に Dem が新規 DTC を確定して書き込みジョブが保留中の
 まま残る可能性があるため、SHUTDOWN 後も動かし続けて永続化を完了させます。
@@ -206,8 +206,9 @@ POST_RUN 5秒後
 ```
 
 CAN コントローラの実スリープ処理・ボランタリスリープ〜ウェイクアップ検証の詳細シーケンスは
-README の「CAN コントローラの実スリープ」「ボランタリスリープとウェイクアップ」節を参照
-してください（Can/CanSM/CanNm 横断のため README 側に残しています）。
+[CAN 通信スタック 詳細](../can_stack.md#can-controller-sleep)の「CAN コントローラの実スリープ」
+「ボランタリスリープとウェイクアップ」節を参照してください（Can/CanSM/CanNm 横断のため
+同ドキュメントに置いています）。
 
 ## BswM 設定の変更方法
 

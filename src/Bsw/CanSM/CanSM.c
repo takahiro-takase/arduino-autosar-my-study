@@ -15,8 +15,9 @@
  *              ↓ L1/L2 周期経過 (MainFunction)                │
  *              → CanIf_SetControllerMode(CAN_CS_STARTED) ────┘
  *              （回復に失敗すれば CanSM_ControllerBusOff() が再度呼ばれ、
- *                リトライを継続する。無期限に諦めない。回復成功時は常に
- *                CANSM_STATE_FULL_COM へ戻る）
+ *                リトライを継続する。無期限に諦めない。回復成功時は Bus-Off 発生直前の
+ *                状態（CANSM_STATE_FULL_COM、または CANSM_STATE_SILENT_COM）へ戻る。
+ *                図は FULL_COM 経由のみを示す）
  *
  *          RequestComMode(NO_COM) が CanSM へ届く時点で、上位層（ComM）は
  *          既に CanNm の協調スリープ完了を確認済みである（[SWS_ComM_00133]/
@@ -32,7 +33,7 @@
  *          CanSMEnableBusOffDelay=FALSE 相当の L1/L2 バックオフ）:
  *            1. Bus-Off 検出 → コントローラ停止・タイマ起動
  *            2. CANSM_BUSOFF_RECOVERY_L1_MS（短い周期）待機（CanSM_MainFunction が監視）
- *            3. コントローラ再起動 → FULL_COM に復帰 → Dem へ PASSED 報告
+ *            3. コントローラ再起動 → Bus-Off 前の状態（FULL_COM / SILENT_COM）に復帰 → Dem へ PASSED 報告
  *            4. 再度 Bus-Off が発生した場合は試行回数をカウント
  *            5. 試行回数が CANSM_BUSOFF_L1_TO_L2_COUNT を超えたら、一時的な
  *               バス障害ではなく持続的な Bus-Off と判断し、Dem へ FAILED 報告

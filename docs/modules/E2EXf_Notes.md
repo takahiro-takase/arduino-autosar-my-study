@@ -1,6 +1,6 @@
 # E2EXf（E2E Transformer 統合層）
 
-> [README](../../README.md) の「[E2E 保護](../can_stack.md#e2e-p01)」節から分離。
+> [CAN 通信スタック 詳細](../can_stack.md) の「[E2E 保護](../can_stack.md#e2e-p01)」節から分離。
 > E2E Profile01/05 のCRC/カウンタアルゴリズム自体の学習ノートは
 > [`docs/E2E_Profile1_Notes.md`](./E2E_Profile1_Notes.md) /
 > [`docs/E2E_Profile5_Notes.md`](./E2E_Profile5_Notes.md) を参照してください。
@@ -26,7 +26,7 @@ E2E チェックの仕組み自体は両フレームで完全に共通（`E2E_P0
 設定テーブルだけ変えて使い回す）のため、以下では区別せず一つの仕組みとして説明し、
 フレームレイアウトと設定値のみ個別に示します。2026-08 に Profile01(CRC8+4bitカウンタ)
 から Profile05(CRC16+8bitカウンタ) へ移行しました（Profile01 用の設定・実装は
-`E2E_P01.c`/`E2EXf_RxConfigType` として参考実装のまま残っています）。
+`E2E_P01.c` として参考実装のまま残っています。E2EXf 層の Profile01 用の型・関数は撤去済み）。
 
 ### フレームレイアウト
 
@@ -97,8 +97,9 @@ Com は EngineInfo/AbsInfo のペイロード内容を一切検証しません�
 
 実際の検証は `Rte` 層に置かれたグルー関数（`Rte_COMRxInd_EngineInfo()` /
 `Rte_COMRxInd_AbsInfo()`、`src/Rte/Rte.c`）が担い、`Com_ReceiveSignalGroupArray()` で
-I-PDU の生バイト列を取得した上で `E2EXf_InverseTransformP05()`（`src/Bsw/E2EXf/E2EXf.c`、
-中身は `E2E_P05Check()` への薄いラッパー）へ渡します。検証に合格した場合のみ、Rte 内部の
+I-PDU の生バイト列を取得した上で `E2EXf_Inv_EngineInfo()` / `E2EXf_Inv_AbsInfo()`
+（`src/Bsw/E2EXf/E2EXf.c`、実 AUTOSAR の `E2EXf_Inv_<transformerId>` に相当するインスタンス専用関数。
+中身は `E2E_P05Check()` とステートマシン `E2E_SMCheck()`）へ渡します。検証に合格した場合のみ、Rte 内部の
 ミラー変数（`Rte_EngineInfoMirror` / `Rte_AbsInfoMirror`）へ最新値を反映します。
 検証に失敗した場合はミラーを更新せず、直前の正常値がシグナルとして残り続けます
 （＝これが E2E 違反時のフェイルセーフの実体）。
@@ -109,7 +110,7 @@ Com_RxIndication() (RxIndicationCbk が設定された I-PDU。現状 IPduId=0/1
   RxIndicationCbk() を呼び出す
     = Rte_COMRxInd_EngineInfo() / Rte_COMRxInd_AbsInfo() （Rte.c）
         Com_ReceiveSignalGroupArray() で生バイト列を取得
-        E2EXf_InverseTransformP05() を呼び出す（CheckStatus 出力引数で生の6状態も受け取る）
+        E2EXf_Inv_EngineInfo() / E2EXf_Inv_AbsInfo() を呼び出す（CheckStatus 出力引数で生の6状態も受け取る）
           → E2E_P05Check() を実行
             OK / OKSOMELOST
                       → E_OK を返す → Rte ミラーを更新（今回のフレームは使ってよい）
@@ -304,7 +305,7 @@ E2E 保護の対象は、実際にはエンジン状態フレーム（MeterStatu
 適用しています（MeterStatus は E2E 保護なしの単純な直接送信に単純化しています）。
 
 E2EHealthStatus は以前 E2E Profile01（CRC8）+ SecOC の二重保護でしたが、E2E 単体の
-検出能力を高めるため **E2E Profile05（CRC16、`docs/AUTOSAR_SWS_E2ELibrary.pdf` 7.6節）**
+検出能力を高めるため **E2E Profile05（CRC16、`docs/autosar/4.3.1/AUTOSAR_SWS_E2ELibrary.pdf` 7.6節）**
 に切り替え、SecOC は撤去しました（Profile05 はヘッダが CRC16(2byte)+Counter(1byte)=
 3byte で、Profile01(2byte 相当)より1byte 増えるため、classic CAN の DLC=8 上限内に
 SecOC のFreshness/MAC 分の余地が無くなったのが理由。詳細は
@@ -350,9 +351,8 @@ Com は E2EHealthStatus のペイロードにも一切関知しません。E2EHe
 `Com_MainFunctionTx()` から呼ばれるため、「送信直前の最終変換」の仕組みを
 そのまま再利用しています）。実際に Counter・
 CRC16 を書き込むのは `Rte_COMTransform_E2EHealthStatus()`（`src/Rte/Rte.c`）で、
-中身は `E2EXf_TransformP05()`（`E2E_P05Protect()` への薄いラッパー。E2EXf.h には
-Profile01 用の `E2EXf_Transform()` と並行して Profile05 専用の型・関数を追加している。
-実 AUTOSAR の E2E Transformer が ARXML からプロファイルごとに専用コードを生成する
+中身は `E2EXf_E2EHealthStatus()`（`E2E_P05Protect()` を呼ぶインスタンス専用関数。
+実 AUTOSAR の E2E Transformer が ARXML から変換対象ごとに専用コードを生成する
 方式に倣ったもので、汎用的なプロファイル切り替え機構は導入していない）を呼ぶだけです。
 AbsInfo の Check とは逆に、失敗や再送は発生しません（送信側なので検証すべき
 前提がないため）。E2EMon（データの生産者）はこの E2E 保護の存在を一切知りません。
@@ -361,7 +361,7 @@ AbsInfo の Check とは逆に、失敗や再送は発生しません（送信�
 Com_MainFunctionTx()（PERIODIC モードの I-PDU。現状 IPduId=2 が対象）:
   TxTransformCbk(Com_TxBuffer[PduId], DLC) を呼び出す
     = Rte_COMTransform_E2EHealthStatus() （Rte.c）
-        E2EXf_TransformP05() を呼び出す
+        E2EXf_E2EHealthStatus() を呼び出す
           → E2E_P05Protect() を実行
             Counter を書き込み +1、CRC16 を計算して書き込む
   PduR_ComTransmit() で送信（SecOC 等の中間モジュールは挟まらず CanIf へ直結）

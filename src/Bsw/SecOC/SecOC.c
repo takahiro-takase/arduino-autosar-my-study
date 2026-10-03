@@ -400,7 +400,7 @@ void SecOC_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
 
     /* DataToAuthenticator = DataId(2byte, Big Endian) | Authentic Payload |
      * Complete Freshness Value
-     * (docs/AUTOSAR_SWS_SecureOnboardCommunication.pdf [7.1.1.2] 1707行、
+     * (docs/autosar/4.3.1/AUTOSAR_SWS_SecureOnboardCommunication.pdf [7.1.1.2] 1707行、
      * Big Endian は [SWS_SecOC_00011]) */
     uint8 authInput[SECOC_AUTH_INPUT_MAX];
     authInput[0] = (uint8)(cfg->DataId >> 8);

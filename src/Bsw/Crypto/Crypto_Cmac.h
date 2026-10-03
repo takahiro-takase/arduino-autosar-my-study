@@ -3,7 +3,7 @@
  * \brief   AES-CMAC (NIST SP 800-38B) 実装
  * \details AES-128 をブロック暗号プリミティブとして使う CMAC（Cipher-based
  *          Message Authentication Code）。SecOC Profile 1
- *          (24Bit-CMAC-8Bit-FV、docs/AUTOSAR_SWS_SecureOnboardCommunication.pdf
+ *          (24Bit-CMAC-8Bit-FV、docs/autosar/4.3.1/AUTOSAR_SWS_SecureOnboardCommunication.pdf
  *          の [SWS_SecOC_00192]) が規定する認証アルゴリズムそのもの。
  *
  *          元は SecOC モジュール内に直接持っていた実装（SecOC_Cmac.c）を、

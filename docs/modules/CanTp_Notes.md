@@ -2,7 +2,7 @@
 
 > [README](../../README.md) の「[診断スタック](../../README.md#diag-stack)」節から分離。
 > `tools/can_tool`/CAPL風DSLの解説はモジュール非依存のツール文書のため
-> README側にそのまま残しています。
+> [tools/can_tool/README.md](../../tools/can_tool/README.md) にあります。
 
 CanTp モジュールが ISO 15765-2 のフレーム処理を担い、
 DCM は PCI バイトを意識せず生 UDS ペイロードのみを扱います。

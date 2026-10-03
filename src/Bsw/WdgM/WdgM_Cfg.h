@@ -133,7 +133,7 @@
  * グローバルレベルの EXPIRED 許容判定サイクル数
  * （AUTOSAR WdgMExpiredSupervisionCycleTol [ECUC_WdgM_00329] 相当）。
  *
- * AUTOSAR 実仕様（docs/AUTOSAR_SWS_WatchdogManager.pdf で確認済み）では、
+ * AUTOSAR 実仕様（docs/autosar/4.3.1/AUTOSAR_SWS_WatchdogManager.pdf で確認済み）では、
  * いずれかのエンティティが FAILED/EXPIRED になっても HW ウォッチドッグへの
  * リフレッシュ（WdgIf_SetTriggerCondition）は即座には止まらない:
  *   - SWS_WdgM_00119/00120/00121: Global Supervision Status が

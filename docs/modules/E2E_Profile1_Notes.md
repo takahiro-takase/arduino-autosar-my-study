@@ -201,5 +201,5 @@ CRC がフレーム末尾に固定されていなくても正しく動作する�
 ## 関連資料
 
 - [`docs/REFERENCES.md`](../autosar/REFERENCES.md) — 本プロジェクトが参照する AUTOSAR 仕様書の入手先一覧
-- `docs/AUTOSAR_SWS_E2ELibrary.pdf` — 本ノートの一次資料（ローカルのみ、gitignore 対象）
-- `docs/AUTOSAR_SRS_E2E.pdf` — E2E の上位要求仕様（脅威モデル）。本ノートでは未要約
+- `docs/autosar/4.3.1/AUTOSAR_SWS_E2ELibrary.pdf` — 本ノートの一次資料（ローカルのみ、gitignore 対象）
+- `docs/autosar/4.3.1/AUTOSAR_SRS_E2E.pdf` — E2E の上位要求仕様（脅威モデル）。本ノートでは未要約

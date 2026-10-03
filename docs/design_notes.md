@@ -10,11 +10,16 @@
 
 | ファイル | 言語 | 理由 |
 |---------|------|------|
+| `Adc_Hw.cpp` | C++ | Arduino の `analogRead` API を使用 |
 | `Can_Hw.cpp` | C++ | MCP_CAN クラスのインスタンス化に placement new が必要 |
 | `Det_Hw.cpp` | C++ | Arduino の `Serial` API を使用 |
 | `Dio_Hw.cpp` | C++ | Arduino の `digitalWrite` API を使用 |
+| `Fee_Hw.cpp` | C++ | `EEPROM.h` の `EEPROMClass`（C++ クラス）を使用 |
+| `Gpt_Hw.cpp` | C++ | Renesas RA の `FspTimer` クラスを使用 |
 | `Port_Hw.cpp` | C++ | Arduino の `pinMode` API を使用 |
+| `SchM_Hw.cpp` | C++ | Arduino の `noInterrupts()` / `interrupts()` を使用 |
 | `Wdg_Hw.cpp` | C++ | Renesas RA の WDT ライブラリ（`WDTimer` クラス、グローバルインスタンス `WDT`）を使用 |
+| `main.cpp` | C++ | Arduino の `setup()` / `loop()` と `Serial.begin()` |
 | その他すべて | C | AUTOSAR CP の標準に準拠 |
 
 C ファイルから C++ 関数を呼ぶすべてのヘッダに `extern "C"` ガードを設けています。
@@ -25,7 +30,7 @@ C ファイルから C++ 関数を呼ぶすべてのヘッダに `extern "C"` �
 ## ログレベルの抑制 (Det_Cfg.h)
 
 `Det_Cfg.h` の `DET_LOG_LEVEL`（既定値 `LOG_I`）以下の重要度のログのみ出力されます
-（`LogLevel` は数値が小さいほど重要度が高い: `LOG_E`=0 < `LOG_W` < `LOG_I` < `LOG_D`）。
+（`LogLevel` は数値が小さいほど重要度が高い: `LOG_T`=0（テスト専用トレース）< `LOG_E` < `LOG_W` < `LOG_I` < `LOG_D`）。
 既定では ERROR/WARN/INFO のみ出力し、DEBUG（例: IoHwAb の ADC 電圧低下デバウンス過程など、
 毎サイクル出力されうる詳細ログ）を抑制します。全レベル出力したい場合は
 `platformio.ini` の `build_flags` に `-D DET_LOG_LEVEL=LOG_D` を追加してください。
@@ -33,7 +38,7 @@ C ファイルから C++ 関数を呼ぶすべてのヘッダに `extern "C"` �
 <a id="fixed-buffer-size"></a>
 ## 固定長バッファのサイズは設定定数から計算する
 
-`Dcm_Cbk.c` の UDS 応答バッファ `Dcm_TxBuf` は、当初 `DEM_EVENT_COUNT`（その時点では 6）
+`Dcm.c`（旧 `Dcm_Cbk.c`）の UDS 応答バッファ `Dcm_TxBuf` は、当初 `DEM_EVENT_COUNT`（その時点では 6）
 から手計算した値に余裕を持たせた固定値 32 バイトで確保していました。
 その後 `DEM_EVENT_COUNT` が 8 に増えた際、最大応答サイズの計算（SID 0x19/02 が
 全イベント一致した場合 `3 + DEM_EVENT_COUNT×4` バイト）を更新し忘れ、
@@ -99,8 +104,8 @@ TX 側と同じ検証を RX の各層境界（CanIf → PduR → Com）にも追
 | ADC チャネル・分解能・基準電圧・電圧低下閾値 | `Adc_Cfg.h` / `IoHwAb.c`（`IOHWAB_ADC_LOW_VOLT_THRESHOLD_MV`） |
 | Dcm S3 タイマのタイムアウト時間変更 | `Dcm_Cfg.h` の `DCM_S3_TIMEOUT_MS` |
 | Dcm SecurityAccess の鍵・試行回数・ロックアウト時間変更 | `Dcm_Cfg.h` の `DCM_SECURITY_KEY_MASK` / `DCM_SECURITY_MAX_ATTEMPTS` / `DCM_SECURITY_DELAY_MS` |
-| SecurityAccess で保護するサービスの追加 | `Dcm_Cbk.c` の各ハンドラ先頭で `Dcm_SecurityLevel == 0U` をチェック（`Dcm_HandleClearDtc` 参照） |
-| SID にセッション制約を追加・変更 | `Dcm_Cbk.c` の `Dcm_SidSessionTable[]` に行を追加（`DCM_SESSION_MASK_DEFAULT` / `_EXTENDED` / `_ALL`） |
+| SecurityAccess で保護するサービスの追加 | `Dcm.c` の各ハンドラ先頭で `Dcm_SecurityLevel == 0U` をチェック（`Dcm_HandleClearDtc` 参照） |
+| SID にセッション制約を追加・変更 | `Dcm.c` の `Dcm_SidSessionTable[]` に行を追加（`DCM_SESSION_MASK_DEFAULT` / `_EXTENDED` / `_ALL`） |
 | IOControl (0x2F) 対象ランプの追加 | `Dcm_Cfg.h` に `DCM_DID_*` を追加、`Dcm_LampIdOfDid()` に分岐を追加、`Rte.h` の `Rte_LampIdType` に列挙値を追加し `Rte_Call_*_SetLevel()` を `Rte_Lamp_ArbitrateAndWrite()` 経由にする |
 | ComM ユーザの追加 | `ComM_Cfg.h` に `COMM_USER_*` を追加し `COMM_USER_COUNT` を更新。要求元モジュールから `ComM_RequestComMode(新ユーザID, モード)` を呼ぶだけで `ComM_RequestComMode()` の集約ロジックが自動的に対応する |
 | FiM の抑止対象機能・イベントの追加・変更 | `FiM_Cfg.h` に `FIM_FID_*` を追加し、`FiM_PBCfg.c` の `FiM_Functions[]` に行を追加 |

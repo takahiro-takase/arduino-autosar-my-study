@@ -22,7 +22,7 @@ Com_MainFunctionTx()                        ← ここから下は同期呼び�
 > `TransmitOverrideFct`（PduR の TX 経路に SecOC 等の中間モジュールを挟む機構）を
 > 使う TX I-PDU は現状ない。E2EHealthStatus は Profile05（CRC16）保護により DLC が
 > classic CAN の 8byte 上限を超えるため、SecOC を介在させる余地がない（詳細は
-> 「E2E 保護」「SecOC」の各セクション参照）。それでも `PduR_TxRoutingPathType.
+> 「E2E 保護」節および [SecOC_Notes.md](modules/SecOC_Notes.md) 参照）。それでも `PduR_TxRoutingPathType.
 > TransmitOverrideFct` フィールド・`SecOC_IfTransmit()` 自体は削除せず、
 > 学習用リファレンス実装として残している。
 
@@ -36,7 +36,7 @@ Protect 処理が通常のチェーンへ割り込みます。TxTransformCbk を
 ```
 Com_MainFunctionTx()
   → TxTransformCbk があれば呼ぶ    ← Rte_COMTransform_E2EHealthStatus()
-                                     → E2EXf_TransformP05() → E2E_P05Protect()
+                                     → E2EXf_E2EHealthStatus() → E2E_P05Protect()
   → PduR_ComTransmit() → CanIf_Transmit() → Can_Write()   （以降は「通常」と同じ）
 ```
 
@@ -75,7 +75,7 @@ Check 処理が通常のチェーンへ割り込みます。EngineInfo/AbsInfo �
 ```
 Com_RxIndication()                 ← EngineInfo/AbsInfo（RxIndicationCbk 経由）
   → Rte_COMRxInd_EngineInfo/AbsInfo()
-    → E2EXf_InverseTransformP05() → E2E_P05Check()
+    → E2EXf_Inv_EngineInfo()/E2EXf_Inv_AbsInfo() → E2E_P05Check()
 ```
 
 <a id="rx-processing-timeout"></a>
@@ -141,12 +141,11 @@ E2EHealthStatus の送信いずれも `src/Bsw/E2E/E2E_P05.c` の CRC16+8bit カ
 **Profile05** を使用します。
 
 > CRC8+4bit カウンタの **Profile01**（`src/Bsw/E2E/E2E_P01.c`）用の
-> `E2EXf_RxConfigType`/`E2EXf_InverseTransform()`/`E2EMon_NotifyCheckResult()`/
-> `Rte_MapE2EStatus()` は削除せず、学習用リファレンス実装として意図的に
+> `E2EMon_NotifyCheckResult()`/`Rte_MapE2EStatus()` は削除せず、学習用リファレンス実装として意図的に
 > 残しています（現在は呼び出し元がゼロ）。
 
 > **統合方式（E2E Transformer）:** Com は E2E の存在を一切関知しません。AUTOSAR が定義する
-> 3 通りの E2E 統合方式のうち「E2E Transformer」（`docs/AUTOSAR_SWS_E2ELibrary.pdf` 12.4 節、
+> 3 通りの E2E 統合方式のうち「E2E Transformer」（`docs/autosar/4.3.1/AUTOSAR_SWS_E2ELibrary.pdf` 12.4 節、
 > R4.2.1 以降）を模しており、CRC/Counter の検証・付与は Com の外側（`Rte` 層 +
 > `src/Bsw/E2EXf/`）が担います。Com から BSW 層をまたいだ責務を切り離す設計です
 > （詳細は本セクション内の「Com モジュールとの統合」を参照）。
@@ -156,8 +155,8 @@ E2EHealthStatus の送信いずれも `src/Bsw/E2E/E2E_P05.c` の CRC16+8bit カ
 > とは別に、「E2EXf_Init() が呼ばれたか」というモジュール自身の初期化状態を
 > `E2EXf.c` の静的フラグで保持します。`E2EXf_PBCfg_Init()`（`EcuM_Init()` から
 > `Com_Init()` の直後に呼ばれる）が各 I-PDU の State を初期化した最後に
-> `E2EXf_Init()` を呼んでこのフラグを立てます。`E2EXf_InverseTransform()`/
-> `E2EXf_Transform()` はこのフラグが立つ前に呼ばれると安全側（E_NOT_OK／no-op）で
+> `E2EXf_Init()` を呼んでこのフラグを立てます。`E2EXf_Inv_EngineInfo()`/
+> `E2EXf_Inv_AbsInfo()`/`E2EXf_E2EHealthStatus()` はこのフラグが立つ前に呼ばれると安全側（E_NOT_OK／no-op）で
 > 早期 return するため、将来 `EcuM_Init()` の呼び出し順序が変わって初期化前に
 > フレーム受信経路が有効になっても、未初期化 State（ゼロクリアされた BSS のまま）
 > を使って誤判定することがありません。
@@ -209,7 +208,7 @@ BswM が FULL_COM 到達で起動・NO_COMMUNICATION 到達で停止するよう
 <a id="ipdu-group-caller"></a>
 ### 呼び出し元は BswM（実 AUTOSAR の標準構成）
 
-`docs/AUTOSAR_SWS_Com.pdf` [7.3.5.1] は次のように述べています。
+`docs/autosar/4.3.1/AUTOSAR_SWS_COM.pdf` [7.3.5.1] は次のように述べています。
 
 ```
 Once again, the COM module does not know or handle any grouping of I-PDUs...
@@ -219,7 +218,7 @@ outside of the AUTOSAR COM module, e.g. within the Basic Software Mode Manager.
 
 つまり「どの I-PDU がどの Group に属するか」は Com の設定（`Com_PBCfg.c`）が持ち、
 「いつ Group を起動/停止するか」は **BswM が呼ぶ**、というのが実 AUTOSAR の標準的な
-役割分担です。実際、`docs/AUTOSAR_SWS_BSWModeManager.pdf` にも
+役割分担です。実際、`docs/autosar/4.3.1/AUTOSAR_SWS_BSWModeManager.pdf` にも
 `BswMPduGroupSwitch` という専用の ActionList 項目種別が定義されています。
 
 ```
@@ -231,13 +230,16 @@ Com_IpduGroupStop for each BswMDisabledPduGroupRef.
 これに倣い、`BswM_ActionType` に `BSWM_ACTION_PDU_GROUP_START`/`_STOP`
 （既存の `BSWM_ACTION_ACTIVATE`/`_DEACTIVATE`——Os タスクの有効/無効化——とは別の
 アクション種別）を用意し、以下のルールで I-PDU Group「テレメトリ」
-（E2EHealthStatus）を制御しています（`src/Bsw/BswM/BswM_PBCfg.c`）。
+（E2EHealthStatus、Rule 3〜5）と「センサーRX」（EngineInfo/AbsInfo、Rule 6/7）を
+制御しています（`src/Bsw/BswM/BswM_PBCfg.c`）。
 
 | Rule | トリガ | アクション |
 |---|---|---|
 | Rule 3 | EcuM==RUN `AND` ComM==FULL_COMMUNICATION | `Com_IpduGroupStart(TELEMETRY, initialize=false)` |
 | Rule 4 | EcuM → POST_RUN | `Com_IpduGroupStop(TELEMETRY)` |
 | Rule 5 | ComM==SILENT_COMMUNICATION `OR` ComM==NO_COMMUNICATION | `Com_IpduGroupStop(TELEMETRY)` |
+| Rule 6 | EcuM==RUN `AND` ComM==FULL_COMMUNICATION | `Com_IpduGroupStart(SENSOR_RX, initialize=false)` |
+| Rule 7 | ComM==NO_COMMUNICATION（真の物理スリープのみ） | `Com_IpduGroupStop(SENSOR_RX)` |
 
 既存の Rule 0（RUN→全タスク有効化）・Rule 1（POST_RUN→アプリタスク無効化）への
 変更はありません（`BswM_ExecuteRules()` は条件を満たす全ルールを実行するため、
@@ -246,7 +248,9 @@ AND 複合条件なのは、ComM のチャネルモードが EcuM の RUN/POST_R
 変化しうるため（Bus-Off 中の SILENT_COMMUNICATION 等）、CAN チャネルが実際に
 FULL_COMMUNICATION でなければ E2EHealthStatus を送信してもバスに届かないから
 です。Rule 5 はその対になる停止条件（ComM がチャネルを離脱したら即座にテレメトリ
-を止める）です。
+を止める）です。Rule 6/7（受信側）は、受信専用の SILENT_COMMUNICATION 中も受信は生きているため
+停止条件を NO_COMMUNICATION だけに絞り、POST_RUN でも止めません（Rule 4 に相当するルールは
+ありません）。
 
 <a id="ipdu-group-behavior"></a>
 ### Com_IpduGroupStart/Stop が実際に行うこと
@@ -307,49 +311,57 @@ EcuM/BswM が関わる箇所は「← EcuM が ComM へ要求」のように図�
 ```
 【起動時】
 EcuM_Init → ComM_RequestComMode(FULL_COM)   ← EcuM が ComM へ要求（上→下）
-              └→ CanSM_RequestComMode(FULL_COM)
+              └→ CanSM_RequestComMode(FULL_COM)（→ CanIf_SetControllerMode(CAN_CS_STARTED)）
                    └→ ComM_BusSM_ModeIndication(FULL_COM)  ← CanSM が ComM へ通知（下→上）
-                        └→ EcuM_RequestRUN(ECUM_USER_COMM)
+                        ├→ EcuM_RequestRUN(ECUM_USER_COMM)
+                        └→ Nm_NetworkRequest() → CanNm_NetworkRequest()
 
 【Bus-Off 検出時（回復試行の前、SWS_CanSM_00521）】
 CanIf_ControllerBusOff → CanSM_ControllerBusOff
-  受け付けるのは CANSM_STATE_FULL_COM と CANSM_STATE_NO_COM_PENDING_SLEEP
-  （CanNm の Bus-Sleep Mode 到達待ちでコントローラがまだ稼働中の状態）の 2 つのみ
-  （NO_COM_PENDING_SLEEP 中もコントローラは稼働中で Bus-Off が発生しうるため、
-   FULL_COM だけを受け付ける設計では回復シーケンスが一切起動せず、
-   コントローラが HW 的に Bus-Off し続けてしまう）
-  └→ Can_SetControllerMode(CAN_T_STOP)
+  受け付けるのは CANSM_STATE_FULL_COM と CANSM_STATE_SILENT_COM の 2 つのみ
+  （SILENT_COM は PDU チャネルの TX 抑制だけでコントローラは稼働中のため、
+   この状態でも Bus-Off は実際に起こりうる）。直前の状態は CanSM_PreBusOffState に記録する
+  └→ CanIf_SetControllerMode(CAN_CS_STOPPED)（→ Can_SetControllerMode(CAN_T_STOP)）
        └→ ComM_BusSM_ModeIndication(SILENT_COM)  ← CanSM が ComM へ通知（下→上）
-            （SILENT_COM は EcuM_RequestRUN/ReleaseRUN いずれも呼ばない → RUN 維持）
+            ├→ Nm_NetworkRelease()  ← CanNm の送信試行を止める（Can_Write() に拒否され続けて
+            │                          NM-Timeout を報告し続けるのを防ぐ）
+            └→ （EcuM_RequestRUN/ReleaseRUN はいずれも呼ばない → RUN 維持）
 
 【Bus-Off 回復試行時（L1/L2 バックオフで無期限に継続）】
 CanSM_MainFunction（10ms タスク）
-  └→ Can_SetControllerMode(CAN_T_START) で再起動を試行
-       └→ 復帰先は Bus-Off 発生時点の状態で分岐する
-          （CanSM_BusOffFromPendingSleep フラグ、CanSM.c 参照）
-          ├─ 発生時 FULL_COM だった場合: CanSM state → FULL_COM
+  └→ CanIf_SetControllerMode(CAN_CS_STARTED)（→ Can_SetControllerMode(CAN_T_START)）で再起動を試行
+       └→ 復帰先は Bus-Off 発生直前の状態（CanSM_PreBusOffState）で分岐する
+          ├─ 発生時 FULL_COM だった場合: PDU モードを CANIF_ONLINE へ戻し CanSM state → FULL_COM
           │    └→ ComM_BusSM_ModeIndication(FULL_COM)  ← CanSM が ComM へ通知（下→上）
-          │         └→ ComM_EcuMRunMode が既に FULL_COMMUNICATION のため
-          │            EcuM_RequestRUN() は呼ばない（RUN は Bus-Off 中も維持
-          │            されたまま）。CanNm へは Nm 経由（Nm_NetworkRequest() → CanNm_NetworkRequest()）で要求のみ送る
-          └─ 発生時 NO_COM_PENDING_SLEEP だった場合: CanSM state →
-               NO_COM_PENDING_SLEEP（FULL_COM へは戻さない。ComM は既に
-               NO_COM を要求済みで、戻すと誰も再要求せず取り残されるため）
-               └→ ComM_BusSM_ModeIndication(NO_COM)  ← CanSM が ComM へ通知（下→上）
-                    └→ ComM_EcuMRunMode が既に NO_COMMUNICATION のため
-                       EcuM_ReleaseRUN() は呼ばない（RUN は既にボランタリ
-                       スリープ突入時点で解放済み）
-  （L1 リトライ超過時は Dem へ FAILED を報告するのみで、RUN の状態には影響しない）
+          │         ├→ ComM_EcuMRunMode が既に FULL_COMMUNICATION のため
+          │         │  EcuM_RequestRUN() は呼ばない（RUN は Bus-Off 中も維持されたまま）
+          │         └→ Nm_NetworkRequest() → CanNm_NetworkRequest()  ← 送信再開
+          │            （Bus-Off 発生時に CanNm の協調スリープ待ち = ComM_NmReleasePending
+          │             だった場合は、CanNm を起こさず ComM_RetryNmReleaseAfterBusOff() で
+          │             解放をやり直す）
+          └─ 発生時 SILENT_COM だった場合: CanSM state → SILENT_COM
+               （PDU モードは Bus-Off 中も触っていないため CANIF_TX_OFFLINE のまま）
+               └→ ComM_BusSM_ModeIndication(SILENT_COM)
+  （L1 リトライ超過で L2 へ降格した時点で Dem へ FAILED、回復成功時に PASSED を報告する。
+    RUN の状態には影響しない）
 
 【ボランタリスリープ突入時（エンジン OFF 継続、復帰経路あり）】
 App_EngineManager_Run（3000ms タスク、ENGINE_STATE_OFF が5周期継続）
   └→ Rte_Call_ComM_RequestComMode(NO_COM)   ← ASW が ComM へ要求（上→下）
        └→ ComM_RequestComMode(COMM_USER_0, NO_COM)
             └→ 集約結果が NO_COM（Dcm も extendedSession でない場合のみ）
-                 └→ CanSM_RequestComMode(NO_COM) → Can_SetControllerMode(CAN_T_SLEEP)
-                      └→ ComM_BusSM_ModeIndication(NO_COM)
-                           └→ EcuM_ReleaseRUN(ECUM_USER_COMM)
-                                └→ EcuM: RUN → POST_RUN → (5秒後) → SHUTDOWN
+                 └→ Nm_NetworkRelease() → CanNm_NetworkRelease() のみ送る
+                    （ComM_ChannelMode は FULL_COM のまま。CanSM はまだ何もしない）
+                      CanNm が Repeat Message → Ready Sleep → Prepare Bus-Sleep → Bus-Sleep Mode と
+                      自律的に遷移する（他ノードの NM フレームがあれば延期される）
+                      ├→ Prepare Bus-Sleep 到達: Nm_PrepareBusSleepMode() → ComM_Nm_PrepareBusSleepMode()
+                      │    └→ CanSM_RequestComMode(SILENT_COM)  ← PDU の TX を停止
+                      └→ Bus-Sleep Mode 到達: Nm_BusSleepMode() → ComM_Nm_BusSleepMode()
+                           └→ CanSM_RequestComMode(NO_COM) → CanIf_SetControllerMode(CAN_CS_SLEEP)
+                                （→ Can_SetControllerMode(CAN_T_SLEEP)）
+                                └→ ComM_BusSM_ModeIndication(NO_COM)
+                                     └→ EcuM_ReleaseRUN(ECUM_USER_COMM)
+                                          └→ EcuM: RUN → POST_RUN → (5秒後) → SHUTDOWN
 
 【ボランタリスリープからのウェイクアップ時 — 1st phase: 検知（CAN バス活動を検知）】
 Can_Isr（INT ピン立ち下がりの真のハードウェア割り込み。SHUTDOWN 中も常に有効）
@@ -403,7 +415,8 @@ ComM が `Nm_NetworkRelease()`（→ `CanNm_NetworkRelease()`）を呼びます�
 Mode と自律的に遷移し（他ノードからの NM フレーム受信があればその都度延期
 される）、実際に Bus-Sleep Mode へ到達した時点で CanNm が `Nm_BusSleepMode()` →
 `ComM_Nm_BusSleepMode()` で ComM へ通知し、ComM が `CanSM_RequestComMode(NO_COM)` を呼んで
-初めて CanSM が実スリープを行います。MCP2515 の CAN バス活動による
+初めて CanSM が実スリープを行います（その手前の Prepare Bus-Sleep 到達時には、
+`ComM_Nm_PrepareBusSleepMode()` が `CanSM_RequestComMode(SILENT_COM)` で TX だけを先に止めます）。MCP2515 の CAN バス活動による
 ウェイクアップ割り込み（`mcp_can` の `setSleepWakeup()`）を事前に有効化して
 からスリープするため、バス活動があれば自律的に起床できます。詳細は次項
 「ボランタリスリープとウェイクアップ」および後述「CanNm（ネットワークマネジメント）」

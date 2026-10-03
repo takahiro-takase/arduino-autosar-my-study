@@ -1919,7 +1919,7 @@ RX 側判定ロジック（discard）のみを説明します。
 
 ## Signal Gateway（Com_GatewayRoute、SWC を介さないシグナル転送）
 
-`docs/AUTOSAR_SWS_COM.pdf` 7.2.5/7.11 章が定義する **Signal Gateway** を実装しました。
+`docs/autosar/4.3.1/AUTOSAR_SWS_COM.pdf` 7.2.5/7.11 章が定義する **Signal Gateway** を実装しました。
 RX シグナルの値を、SWC/Rte を一切介さずに Com 内部で直接 TX シグナルへ転送する
 仕組みです。
 

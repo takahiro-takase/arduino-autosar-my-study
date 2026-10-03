@@ -9,7 +9,7 @@
  *            RX Secured I-PDU 0: ImmobilizerCmd (CAN ID 0x120, DLC=6,
  *              新規想定ノード KeyFobEcu からのイモビライザー解除コマンド)
  *              SecOC Profile 1 (24Bit-CMAC-8Bit-FV、
- *              docs/AUTOSAR_SWS_SecureOnboardCommunication.pdf [SWS_SecOC_00192]) 準拠:
+ *              docs/autosar/4.3.1/AUTOSAR_SWS_SecureOnboardCommunication.pdf [SWS_SecOC_00192]) 準拠:
  *                byte[0]   : ImmobilizerCmd (Authentic payload, 0x00=LOCK/0x01=UNLOCK)
  *                byte[1]   : Reserved (Authentic payload, 常に 0x00。将来の鍵ID等を想定)
  *                byte[2]   : Freshness Value (8bit、切り詰めなし)
