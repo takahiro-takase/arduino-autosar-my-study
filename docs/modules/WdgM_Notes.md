@@ -481,12 +481,12 @@ delay(1000);  /* 動作確認用: 500ms の許容上限を超えさせる */
 | `WDGM_SUPERVISED_ENTITY_COUNT` | 2 | 監視対象エンティティ数（ENGINE/WARNING） |
 | `WDGM_ENTITY_ENGINE` / `WDGM_ENTITY_WARNING` | 0 / 1 | App_EngineManager_Run / App_WarningIndicator_Run のエンティティ ID |
 | `WDGM_SUPERVISION_CYCLE_MS` | 6000 ms | Alive Supervision サイクル（WdgM_MainFunction 周期と一致、両エンティティ共通） |
-| `WDGM_EXPECTED_ALIVE_INDICATIONS` (ENGINE) / `WDGM_WARNING_EXPECTED_ALIVE_INDICATIONS` | 1 / 6 | サイクル内の最小 CheckpointReached 呼び出し回数 |
+| `WDGM_ENGINE_EXPECTED_ALIVE_INDICATIONS` / `WDGM_WARNING_EXPECTED_ALIVE_INDICATIONS` | 1 / 6 | サイクル内の最小 CheckpointReached 呼び出し回数 |
 | `WDGM_CP_ENGINE_START` / `_END` | 0 / 1 | ENGINE の Run() 開始直後・終了直前のチェックポイント ID |
 | `WDGM_CP_WARNING_START` / `_END` | 0 / 1 | WARNING の Run() 開始直後・終了直前のチェックポイント ID |
 | `WDGM_CP_INITIAL` | 0xFF | 起動直後（まだチェックポイント未報告）を示す特別な遷移元 ID |
-| `WDGM_DEADLINE_START_TO_END_MIN_MS` / `_MAX_MS`（ENGINE） | 0 / 500 ms | START→END（Run() 1 回分）の許容経過時間 |
-| `WDGM_DEADLINE_END_TO_START_MIN_MS` / `_MAX_MS`（ENGINE） | 2500 / 4500 ms | END→START（次サイクルまでの間隔）の許容経過時間 |
+| `WDGM_ENGINE_DEADLINE_START_TO_END_MIN_MS` / `_MAX_MS` | 0 / 500 ms | START→END（Run() 1 回分）の許容経過時間 |
+| `WDGM_ENGINE_DEADLINE_END_TO_START_MIN_MS` / `_MAX_MS` | 2500 / 4500 ms | END→START（次サイクルまでの間隔）の許容経過時間 |
 | `WDGM_WARNING_DEADLINE_START_TO_END_MIN_MS` / `_MAX_MS` | 0 / 200 ms | WARNING の START→END 許容経過時間 |
 | `WDGM_WARNING_DEADLINE_END_TO_START_MIN_MS` / `_MAX_MS` | 300 / 1500 ms | WARNING の END→START 許容経過時間 |
 | `WDGM_EXPIRED_SUPERVISION_CYCLE_TOL` | 2 | グローバルレベルの連続 FAILED 判定サイクル許容回数（超過で `WdgM_GlobalStopped`） |
@@ -575,7 +575,7 @@ Deadline の閾値をいくら調整してもこの問題は解消できず、`n
 
 上記の修正後、今度はボランタリスリープ → SHUTDOWN → CAN ウェイクアップに
 よる RUN 復帰の直後に `WARN WdgM: SE1 alive FAILED alive=2 (exp>=6)` が
-発生し、実際にリセットした。原因は `WdgM_MainFunction`（Task 7、6000ms 周期）
+発生し、実際にリセットした。原因は `WdgM_MainFunction`（Task 8、6000ms 周期）
 自身が SHUTDOWN 中は `BSWM_TASK_MASK_SHUTDOWN` により無効化されており、
 その `Os_LastRunMs[]` が無効化前の古い時刻のまま残っていたことである。
 SHUTDOWN が 6000ms 以上続いた後に RUN へ復帰すると、`Os_SchedulerStep()` は
@@ -713,7 +713,7 @@ RUN 復帰直後は `WdgM_EnableHwWatchdog()` により `WdgM_SupervisionSuppres
 バス活動を検知して即座にウェイクアップし RUN へ復帰する、という短い
 POST_RUN のシナリオで、再度実際に HW ウォッチドッグリセットが発生した。
 
-原因は `WdgM_MainFunction()`（Task 7、Alive/Logical/Deadline を判定する
+原因は `WdgM_MainFunction()`（Task 8、Alive/Logical/Deadline を判定する
 タスク自身）が POST_RUN 中も継続動作するタスクであるため、その呼び出し
 タイミング（Os の内部スケジュール `Os_LastRunMs[7]`）が
 `WdgM_ResumeSupervision()` の `WdgM_AliveCount[]` リセットと同期していない

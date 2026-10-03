@@ -131,7 +131,7 @@ NvM_WriteBlock(id, data) / NvM_RestoreBlockDefaults(id):
   該当ブロックを「保留」としてマークする（NvM_BlockPending[id] = 1）
   → 即座に E_OK を返す（書き込み完了を意味しない）
 
-NvM_MainFunction()（10ms 周期、Os_PBCfg.c Task 12。ブロック単位のオーケストレーションのみ）:
+NvM_MainFunction()（10ms 周期、Os_PBCfg.c Task 13。ブロック単位のオーケストレーションのみ）:
   現在処理中のブロックがない ?
     YES → 保留中のブロックを FIFO キューの先頭から 1 つ取り出し処理開始
           （投入順。ブロック ID 昇順ではない — 下記参照）
@@ -142,12 +142,12 @@ NvM_MainFunction()（10ms 周期、Os_PBCfg.c Task 12。ブロック単位のオ
   データ本体ジョブが完了 → CRC ジョブを開始
   CRC ジョブも完了       → このブロックの保留フラグを下ろし、次のブロックへ
 
-MemIf_MainFunction()（10ms 周期、Os_PBCfg.c Task 17。実体は Fee_MainFunction）:
+MemIf_MainFunction()（10ms 周期、Os_PBCfg.c Task 18。実体は Fee_MainFunction）:
   NvM_MainFunction() が MemIf_Write() で開始したジョブについて、
   1 回の呼び出しにつき未書き込みの 1 バイトだけを物理 EEPROM へ書く
 ```
 
-Task 12（NvM）と Task 17（MemIf）はどちらも同じ 10ms 周期で、同一パス内を
+Task 13（NvM）と Task 18（MemIf）はどちらも同じ 10ms 周期で、同一パス内を
 インデックス昇順で実行されるため、NvM がジョブを開始した tick のうちに
 MemIf 側の最初の 1 バイトも書かれます。最大 11 バイト（データ本体 10 バイト
 + CRC 1 バイト）のブロックでも、1 回の `MemIf_MainFunction()` 呼び出しで

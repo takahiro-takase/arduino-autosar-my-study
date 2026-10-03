@@ -60,7 +60,7 @@ CAN 0x100（EngineInfo）・0x110（AbsInfo）・0x7E0（診断要求）は PduR
 |  |  |  | 0x06<br>(ExtendedData取得) | `06 19 06 HH MM LL RR 00` | byte3-5=DTCコード<br>byte6=recordNumber（固定0x01） |
 |  |  |  | 0x0A<br>(サポートDTC一覧取得) | `02 19 0A 00 00 00 00 00` | 追加パラメータなし。statusMask による絞り込みを一切行わず、本 ECU が対応する DEM_EVENT_COUNT 件全てを返す（後述） |
 |  |  |  | 0x14<br>(FaultDetectionCounter取得) | `02 19 14 00 00 00 00 00` | 追加パラメータなし。DTC 候補一覧は 0x0A と同じ取得元だが「prefailed」(FDC値1〜0x7E)のみへ絞り込む点、応答に statusAvailMask を含まない点が 0x02/0x0A と異なる（後述） |
-| 0x22<br>ReadDataByIdentifier | ○ | ○ | — | `03 22 HH LL 00 00 00 00` | byte2-3=DID（0x0101/0x0102/0x0103/0x0104） |
+| 0x22<br>ReadDataByIdentifier | ○ | ○ | — | `03 22 HH LL 00 00 00 00` | byte2-3=DID（0x0101/0x0102/0x0103/0x0104/0xF190=VIN） |
 | 0x27<br>SecurityAccess | × | ○ | 0x01<br>(requestSeed) | `02 27 01 00 00 00 00 00` | seed 2 バイト |
 |  |  |  | 0x02<br>(sendKey) | `04 27 02 HH LL 00 00 00` | byte2-3=key（big-endian） |
 | 0x2E<br>WriteDataByIdentifier | × | ○ | — | FF+CF（後述、SF 不可） | DID=0x0104 (TestPattern) 固定 8 バイト、DID=0x0108 (CryptoKeyUpdate) keyName(1)+key(16)=17バイトのみ対応<br>**SecurityAccess Level1 必須**（未認証は NRC 0x33） |
@@ -73,8 +73,10 @@ CAN 0x100（EngineInfo）・0x110（AbsInfo）・0x7E0（診断要求）は PduR
 | 0x36<br>TransferData | × | ○ | — | `0N 36 CC DD DD ...`（データ長により SF/FF+CF） | byte2=blockSequenceCounter（0x01開始）<br>byte3-=転送データ（実データは保持せずチェックサムのみ計算、後述） |
 | 0x37<br>RequestTransferExit | × | ○ | — | `01 37 00 00 00 00 00 00` | 応答にチェックサム（後述） |
 | 0x3E<br>TesterPresent | ○ | ○ | 0x00 | `02 3E 00 00 00 00 00 00` | S3タイマ維持 |
+| 0x85<br>ControlDTCSetting | × | ○ | 0x01<br>(on) | `02 85 01 00 00 00 00 00` | DTC の記録を有効化（`Dem_EnableDTCSetting()`） |
+|  |  |  | 0x02<br>(off) | `02 85 02 00 00 00 00 00` | DTC の記録を無効化（`Dem_DisableDTCSetting()`）。`DTCSettingControlOptionRecord` 付きの要求は受け付けない（NRC 0x13） |
 
-Def/Ext 列は `Dcm_SidSessionTable[]`（Dcm_Cbk.c）の設定そのもので、SID 単位
+Def/Ext 列は `Dcm_SidSessionTable[]`（Dcm.c）の設定そのもので、SID 単位
 （SubFunc 単位ではない）の制約のため SID 行にのみ記載する。×の場合、該当セッションで
 要求すると各ハンドラに到達する前に NRC 0x7F（serviceNotSupportedInActiveSession）で拒否される。
 非対応サービスは NRC 0x11（serviceNotSupported）で応答します。
@@ -146,7 +148,7 @@ FF（len=43）が受理され、CF×6（sn=1〜6）まで正しく送信完了
 ステータス概念を扱わないため）。実装当初 subFunc 値を 0x0B と誤って
 割り当てていたが、ISO 14229-1 では 0x0B は別サービス
 （reportFirstTestFailedDTC）であるため `/code-review` の指摘で 0x14 に
-訂正した（`Dcm_Cfg.h`/`Dcm_Cbk.c` 参照）。
+訂正した（`Dcm_Cfg.h`/`Dcm.c` 参照）。
 
 **2026-09-20、仕様乖離2件を修正**（詳細は [`Dem_Notes.md`](./Dem_Notes.md) 参照）:
 1. `Dem_GetFaultDetectionCounter()` は当初デバウンスカウンタの生値
@@ -181,7 +183,7 @@ ISO15031-6、0x01 が ISO14229-1）と判明したため削除し、新設した
 実仕様（[SWS_Dcm_00950]/[SWS_Dcm_01174]）は「ECU 統合者が `Dcm_GetVin()` を
 実装し、Dcm が起動時に一度だけ呼び出してキャッシュする」という、Dcm が
 呼び出す側の関数として定義されている。本プロジェクトは車両情報の実体を
-外部に持たないため、`Dcm_GetVin()` 自体を `Dcm_Cbk.c` 内に固定値を返す
+外部に持たないため、`Dcm_GetVin()` 自体を `Dcm.c` 内に固定値を返す
 簡略実装として置き、`Dcm_Init()` が同じ「起動時に一度だけ取得しキャッシュ
 する」呼び出しパターンを踏襲する。DID 0xF190 (VIN) の 0x22 応答はこの
 キャッシュ（`Dcm_Vin[]`）から返す。
@@ -528,7 +530,7 @@ ECU が自動的に defaultSession へ復帰します。SID 0x3E（TesterPresent
 Dcm_ComIndication（要求受信時、SID を問わず毎回）:
   Dcm_LastActivityMs = millis()        ← S3 タイマをリセット
 
-Dcm_MainFunction（1000ms 周期、Os Task 8）:
+Dcm_MainFunction（1000ms 周期、Os Task 9）:
   session != Default かつ
   millis() - Dcm_LastActivityMs >= 5000ms (DCM_S3_TIMEOUT_MS) ?
     YES → session = Default
@@ -584,7 +586,7 @@ SecurityAccess の Level1（subFunc 0x01/0x02）でアンロックしないと N
 `Dcm_ComIndication()` が SID ディスパッチの**前**に全 SID 共通で判定するようにしました。
 
 ```c
-/* Dcm_Cbk.c */
+/* Dcm.c */
 static const Dcm_SidSessionRowType Dcm_SidSessionTable[] =
 {
     { DCM_SID_CLEAR_DTC,        DCM_SESSION_MASK_EXTENDED },

@@ -39,7 +39,7 @@ Can_Write(Hth, PduInfo):
   Can_Hw_Send() が成功したら、PduInfo->swPduHandle を TX 確認保留キューへ積むだけで
   即座に E_OK 相当（CAN_OK）を返す（CanIf_TxConfirmation() はまだ呼ばない）
 
-Can_MainFunction_Write()（1ms 周期、Os_PBCfg.c Task 13）:
+Can_MainFunction_Write()（1ms 周期、Os_PBCfg.c Task 14）:
   保留キューが空になるまで、投入順に CanIf_TxConfirmation() を呼び出す
 ```
 
@@ -49,7 +49,7 @@ NvM の非同期ジョブキュー（1 呼び出し 1 バイトずつ）とは�
 保留分を全件処理してよい。
 
 **動作への影響**: `CanIf_TxConfirmation()` の呼び出しタイミングが `Can_Write()` から
-最大 1ms（Task 13 の周期）遅延するようになるが、`Com_TxConfirmation()`・
+最大 1ms（Task 14 の周期）遅延するようになるが、`Com_TxConfirmation()`・
 `CanTp_TxConfirmation()` のいずれも受け取った結果を使わない no-op のため、
 体感できる動作変化はない（この経路は常に E_OK 固定でもある。詳細は
 [`CanTp_Notes.md`](./CanTp_Notes.md) の N_As タイムアウトの説明を参照）。
@@ -114,11 +114,11 @@ NOT_OK を返すまで継続する。MCP2515 の INT はレベル方式（未読
 受信フレーム・ウェイクアップ通知を取りこぼす。これを防ぐため `SchM.h` に新しい排他エリア
 `SchM_Enter/Exit_Can_IRQFLAG_EXCLUSIVE_AREA()` を追加し、実体を
 `SchM_Hw_EnterExclusiveArea()`/`ExitExclusiveArea()`（`src/Hal/SchM_Hw.cpp`、
-`noInterrupts()`/`interrupts()` を呼ぶだけ）とした。既存の `Rte_MIRROR`・`Com_SIGNAL`
-排他エリアも同じ実体を指すように変更し、NOP のままだった `SchM.h` が実際に機能するように
+`noInterrupts()`/`interrupts()` を呼ぶだけ）とした。既存の `Rte_MIRROR`
+排他エリア（導入当時は `Com_SIGNAL` もあったが、現在の `SchM.h` には存在しない）も同じ実体を指すように変更し、NOP のままだった `SchM.h` が実際に機能するように
 なった（Com の RX/TX バッファ自体は現状 `Can_MainFunction_Read()` というメインループの
 タスクからのみ触られる設計にしたため、まだ割り込みと競合しないが、Rte 側と同様
-将来のための保険として Enter/Exit を残してある）。
+将来のための保険として Enter/Exit を残してある。Com 側の `Com_SIGNAL` は現在の `SchM.h` に無く、Com は排他エリアを使っていない）。
 
 > **意図的な二重化**: `Can_MainFunction_Read()`/`Can_MainFunction_Wakeup()` は
 > 「割り込みが本当に発火するか」に正しさを依存させない設計にしている。

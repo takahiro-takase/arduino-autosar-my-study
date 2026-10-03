@@ -91,6 +91,7 @@ true が続く間の重複実行や true→false への遷移では実行しま�
 | 18 | `BSWM_OS_TASK_MEMIF_MAIN` | `MemIf_MainFunction` | 10 ms |
 | 19 | (マスク対象外) | `App_GptDemo_Run` | 2000 ms |
 | 20 | (マスク対象外) | `ComM_MainFunction` | 100 ms |
+| 21 | (マスク対象外) | `SecOC_MainFunctionRx` | 100 ms |
 
 Task 6（`Com_MainFunctionTx`）は 2026-08、単体だった `Com_MainFunction` を
 実仕様準拠の `Com_MainFunctionRx`/`Com_MainFunctionTx` へ分割した際に追加。
