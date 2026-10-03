@@ -8,14 +8,14 @@
 - 本ファイルは仕様書の**逐語訳ではなく**、当プロジェクトの実装（`src/Bsw/E2E/E2E_P05.*`,
   `src/Bsw/E2EXf/E2EXf.*` の Profile05 統合部分）を理解するための技術的まとめです。
   [`E2E_Profile1_Notes.md`](./E2E_Profile1_Notes.md) と対の位置づけで、Profile01 との
-  差分を中心にまとめています。仕様書原文は著作権保護対象のため `docs/*.pdf`
-  （gitignore 対象）としてローカルにのみ保持し、本ファイルには転載していません。
+  差分を中心にまとめています。仕様書原文は著作権保護対象のため `docs/autosar/4.3.1/`
+  （gitignore 対象）にローカルのみ保持し、本ファイルには転載していません。
 
 ---
 
 ## なぜ Profile01 から Profile05 へ切り替えたか
 
-`EngineHealthStatus`（CAN 0x220）は当初 E2E Profile01 + SecOC の二重保護
+`E2EHealthStatus`（CAN 0x220、当時の名称は EngineHealthStatus）は当初 E2E Profile01 + SecOC の二重保護
 （内側=E2E で意図しない誤りを検出、外側=SecOC で意図的な改ざん・なりすましを
 検出）でした。E2E の検出能力を高める（CRC8→CRC16）ために Profile05 へ切り替えた
 ところ、Profile05 のヘッダは CRC16(2byte)+Counter(1byte)=3byte で Profile01 の
@@ -122,7 +122,7 @@ Profile01 の `E2E_P01CheckStateType` は `WaitForFirstData`（初回受信の�
   `delta=0` の `REPEATED` と誤判定されていた）。仕様通りの `0xFF` 初期値
   により、`ProtectState`（`Counter=0` から送信開始）からの初回フレームは
   `delta=1`（`0 - 0xFF` の mod-256 引き算）となり **`OK` と判定される**
-  （`test/test_native/Bsw_E2E_test.cpp` の
+  （`test/Bsw/E2E/Bsw_E2E_test.cpp` の
   `FirstCheckAfterInitIsOkBecauseCheckStateStartsAtCounter0xFF` で確認済み）。
 - `WRONGSEQUENCE` 検知後も、Profile01 のような「SyncCounterInit 回分は
   `SYNC` を返し続ける再ロック期間」は無く、次のフレームで `delta` が
@@ -154,11 +154,11 @@ Profile01 (`E2E_P01StatusType`) とはビットパターンが異なる点に注
 
 ## 8. 本実装での設計判断メモ
 
-- **Check側は当初(EngineHealthStatus TX単体の時期)は本プロジェクト内に呼び出し元が
+- **Check側は当初(E2EHealthStatus TX単体の時期)は本プロジェクト内に呼び出し元が
   無かった**。対称性のため Protect と同じ構成で先に実装し、正しさは
-  `test/test_native/Bsw_E2E_test.cpp`（GoogleTest、`env:native`）の
+  `test/Bsw/E2E/Bsw_E2E_test.cpp`（GoogleTest、`native_chain` 環境）の
   ホストテストのみで検証していた。その後 2026-08 に EngineInfo(RX,0x100)/
-  AbsInfo(RX,0x110) を Profile01 から Profile05 へ移行し、`E2EXf_InverseTransformP05()`
+  AbsInfo(RX,0x110) を Profile01 から Profile05 へ移行し、`E2EXf_Inv_EngineInfo()`/`E2EXf_Inv_AbsInfo()`
   （`src/Bsw/E2EXf/E2EXf.c`）経由で `E2E_P05Check()` の実際の呼び出し元になった
   （`src/Rte/Rte.c` の `Rte_COMRxInd_EngineInfo()`/`Rte_COMRxInd_AbsInfo()`）。
   次に検証結果を確認する場合は、送信側（他 ECU 役の uds_tester/CAPL スクリプト）が
@@ -174,11 +174,11 @@ Profile01 (`E2E_P01StatusType`) とはビットパターンが異なる点に注
   と相まって毎回の電源投入直後に誤った DTC が確定してしまう（`E2E_P05CheckInit()`
   の初期値を仕様通り `Counter=0xFF` に是正した後も、送信元の Counter が
   たまたま 0 から始まる場合を除き一般には解消しない、本質的に別の問題）。
-  `E2E_P05.c` 自体は仕様に忠実なまま変更せず（`test/test_native/
+  `E2E_P05.c` 自体は仕様に忠実なまま変更せず（`test/Bsw/E2E/
   Bsw_E2E_test.cpp` の
   `FirstCheckAfterInitIsOkBecauseCheckStateStartsAtCounter0xFF` が反する変更を
   検出する）、統合層である `E2EXf_RxConfigTypeP05.WaitForFirstData` フラグと
-  `E2EXf_InverseTransformP05()` 側の格上げ処理で対処した。CRC が正しい最初の
+  `E2EXf_Inv_EngineInfo()`/`E2EXf_Inv_AbsInfo()` 側の格上げ処理で対処した。CRC が正しい最初の
   1 フレームに限り判定結果を `OK` に格上げして Dem/E2EMon/Rte ステータスの
   いずれにも誤検出が伝播しないようにし、2 フレーム目以降は
   `E2E_P05Check()` が内部で `State->Counter` を受信値へ同期済みのため通常の
@@ -199,4 +199,4 @@ Profile01 (`E2E_P01StatusType`) とはビットパターンが異なる点に注
 - [`docs/E2E_Profile1_Notes.md`](./E2E_Profile1_Notes.md) — Profile01 の学習ノート（対の関係）
 - [`docs/REFERENCES.md`](../autosar/REFERENCES.md) — 本プロジェクトが参照する AUTOSAR 仕様書の入手先一覧
 - `docs/autosar/4.3.1/AUTOSAR_SWS_E2ELibrary.pdf` — 本ノートの一次資料（ローカルのみ、gitignore 対象）
-- `test/test_native/Bsw_E2E_test.cpp` — CRC16・Protect/Check のホストテスト
+- `test/Bsw/E2E/Bsw_E2E_test.cpp` — CRC16・Protect/Check のホストテスト

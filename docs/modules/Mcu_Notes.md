@@ -5,11 +5,13 @@
 `main.cpp` の `setup()` 冒頭（`Serial.begin()` より前）で `Mcu_Init()` を呼び、
 起動直後のリセット原因（Watchdog/BrownOut/External/PowerOn）を一度だけ読み取って
 キャッシュする（Mcu_Hw のレジスタ読み取りは 1 起動につき 1 回しか呼べないため）。
-`Mcu_InitClock`/`Mcu_SetMode`/`Mcu_InitRamSection`/`Mcu_PerformReset` 等は
+`Mcu_InitClock`/`Mcu_SetMode`/`Mcu_InitRamSection` 等は
 Arduino フレームワークがクロック初期化を担い複数電源モードもモデル化しないため
 未実装。`Mcu_GetResetReason()`（単一の `Mcu_ResetType`）に加え、複数要因の同時
 検出を診断できるよう `Mcu_GetResetRawValue()`（4 フラグをビット詰めした本
-プロジェクト独自の生値）も提供する。
+プロジェクト独自の生値）も提供する。`Mcu_PerformReset()` は実装済みで
+（`Mcu_Hw_PerformReset()` 経由でソフトウェアリセット）、UDS 0x11 ECUReset の
+hardReset / softReset から呼ばれます（[`Dcm_Notes.md`](./Dcm_Notes.md) 参照）。
 
 ## Mcu_Hw（下位ドライバ実装）
 

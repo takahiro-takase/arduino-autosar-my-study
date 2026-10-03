@@ -43,7 +43,7 @@ namespace
  *          試作環境 `[env:native_chain_wrap]` として2ラウンドの実績を
  *          積んだ後、本 env へ統合した）。
  *
- * \details 対象は `CanSM_MainFunction()` の Bus-Off 回復リトライ（README
+ * \details 対象は `CanSM_MainFunction()` の Bus-Off 回復リトライ（docs/can_stack.md
  *          「CAN コントローラの Bus-Off 検出/回復」節、CanSM.c 内
  *          `CanIf_SetControllerMode(CAN_CS_STARTED)` 失敗時の分岐、
  *          `CanSM.c` 726〜736 行目）。この分岐は「本プロジェクトの簡略化された

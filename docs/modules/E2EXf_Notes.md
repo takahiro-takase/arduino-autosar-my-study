@@ -115,7 +115,7 @@ Com_RxIndication() (RxIndicationCbk が設定された I-PDU。現状 IPduId=0/1
             OK / OKSOMELOST
                       → E_OK を返す → Rte ミラーを更新（今回のフレームは使ってよい）
             REPEATED / WRONGSEQUENCE / ERROR
-                      → DET_LOGW(TAG="E2EXf", "InverseTransformP05 NG DemEvent=%u st=%u")
+                      → DET_LOGW(TAG="E2EXf", "Inv_EngineInfo NG DemEvent=%u st=%u"（AbsInfo は "Inv_AbsInfo NG ..."）)
                         E_NOT_OK を返す → Rte ミラー非更新（前回値を維持）
           → E2E_SMCheck() で通信路全体の健全性（直近 WindowSize 回分の
             OK/ERROR 件数）を判定（[SWS_E2EXf_00028]/[00029]、2026-09 追加）
@@ -256,14 +256,14 @@ E2E の設定・状態実体は Com から独立し、`E2EXf_PBCfg.c` で保持�
 
 **CRC 不一致発生時（AbsInfo、旧挙動のログ。単発異常では現在は FAILED まで進まない）:**
 ```
-[7001ms] WARN  E2EXf: InverseTransformP05 NG DemEvent=8 st=7  ← st=7: ERROR（CRC 不一致）
+[7001ms] WARN  E2EXf: Inv_AbsInfo NG DemEvent=8 st=7  ← st=7: ERROR（CRC 不一致）
 [7002ms] DEBUG Dem: ev=8 debounce=1 (PREFAILED)  ← limit=1 のため次回確定
 [7003ms] WARN  Dem: FAILED ev=8 dtc=0x000109     ← 即座に確定・EEPROM に保存
 ```
 
 **CRC 不一致発生時（EngineInfo、旧挙動のログ。単発異常では現在は FAILED まで進まない）:**
 ```
-[8001ms] WARN  E2EXf: InverseTransformP05 NG DemEvent=9 st=7  ← st=7: ERROR（CRC 不一致）
+[8001ms] WARN  E2EXf: Inv_EngineInfo NG DemEvent=9 st=7  ← st=7: ERROR（CRC 不一致）
 [8002ms] DEBUG Dem: ev=9 debounce=1 (PREFAILED)  ← limit=1 のため次回確定
 [8003ms] WARN  Dem: FAILED ev=9 dtc=0x00010A     ← 即座に確定・EEPROM に保存
 ```
@@ -275,7 +275,7 @@ Profile05 には Profile01 の SyncCounter 再ロック機構が無いため、�
 （SYNC 状態を経由した複数フレームの再ロック待ちは発生しません）。
 
 ```
-[30824ms] WARN  E2EXf: InverseTransformP05 NG DemEvent=8 st=64  ← WRONGSEQUENCE（カウンタ飛び検知）
+[30824ms] WARN  E2EXf: Inv_AbsInfo NG DemEvent=8 st=64  ← WRONGSEQUENCE（カウンタ飛び検知）
 [30827ms] WARN  Dem: FAILED ev=8 dtc=0x000109      ← このフレームは不採用（ミラー非更新）
 [31038ms]                                          ← 次のフレームが delta==1 なら無ログ = 即座に OK 復帰
 ```

@@ -154,17 +154,42 @@ E2E Profile05 単体保護に切り替えました（`E2EXf_PBCfg.c`/`SecOC_PBCf
   SHE M1M2M3 形式の鍵更新、`KEYM_DERIVE_KEY` は未対応）。鍵材料は NVM に
   永続化されないため、再起動すれば `Crypto_PBCfg.c` の初期値に戻ります
   （詳細は `src/Bsw/KeyM/KeyM.h` 冒頭コメント参照）。
-- **リプレイ判定（RX）は単調増加チェックのみ**（`(uint8)(received -
-  lastAccepted) < 128` という折り返し許容の「半区間」判定）で、実車の
+- **リプレイ判定（RX）は単調増加チェックのみ**（`delta = (uint8)(received -
+  lastAccepted)` が 1〜127 なら正当、0（同じ値の再送）と 128 以上（戻り）は
+  リプレイ/古いものとして拒否する、折り返し許容の「半区間」判定。初回の
+  1 フレームは基準が無いため MAC が正しければ受理し、基準値にする）で、実車の
   Freshness Manager（11 章、複数カウンタ・マスタースレーブ同期プロトコル）は
   実装していません。
-- **TX の送信確認（TxConfirmation）経路は SecOC を経由しません**（実
-  AUTOSAR は `[SWS_SecOC_00063]`/`[SWS_SecOC_00064]` で SecOC が確認結果を
-  中継し、動的に確保した Secured I-PDU バッファを解放することを要求しますが、
-  本実装は固定長静的バッファ（`SecOC_TxAuthenticBuffer[]`）のみを使い動的確保を
-  行わないため、解放処理自体が不要です。したがって `CanIf_TxConfirmation` は
-  従来どおり `PduR_CanIfTxConfirmation()` から直接 `Com_TxConfirmation()` へ
-  届き、SecOC は一切関与しません）。
+- **TX の送信確認（TxConfirmation）は SecOC が中継します**（`SecOC_TxConfirmation()`
+  [SWS_SecOC_00126]。結果を `PduR_SecOCTxConfirmation()` 経由で元の送信元（Com 等）へ
+  転送する。[SWS_SecOC_00063]）。実 AUTOSAR が要求する、動的に確保した Secured I-PDU
+  バッファの解放（`[SWS_SecOC_00064]`）は、本実装が固定長静的バッファ
+  （`SecOC_TxAuthenticBuffer[]`）のみを使い動的確保をしないため不要です。なお、現状
+  SecOC で保護している TX I-PDU は無いため、この経路は実機では動いていません。
+- **`SecOC_MainFunctionRx()` は NOP** です（RX の検証は `SecOC_RxIndication()` の中で
+  同期的に完了するため。周期タスクとしては登録しています）。
+
+## 検証結果の通知とオーバーライド
+
+**検証ステータスの通知（`VerificationStatusCallout`、[SWS_SecOC_00048]/[SWS_SecOC_00119]）**:
+RX Secured I-PDU ごとにコールアウトを設定でき、`SecOC_RxIndication()` が MAC・フレッシュネスを
+検証するたびに、結果（`SECOC_VERIFICATIONSUCCESS` / `SECOC_FRESHNESSFAILURE` /
+`SECOC_VERIFICATIONFAILURE`）を通知します。成功も通知するか失敗だけかは
+`VerificationStatusPropagationMode`（BOTH / FAILURE_ONLY）で選べます。本プロジェクトでは
+ImmobilizerCmd に `Rte_SecOCVerificationStatus_ImmobilizerCmd()`（ログ出力のみのデモ。
+`BOTH` なので成功・失敗とも毎回呼ばれる）を設定しています。`Com` へ転送された事実を知らせる
+`Rte_COMRxInd_SecureCommand()` とは別の関心事で、MAC 不一致やリプレイで拒否されたときも
+こちらは呼ばれます（長さ不足など、検証に進む前に捨てるフレームは対象外）。
+
+**検証結果の強制（`SecOC_VerifyStatusOverride()`、[SWS_SecOC_00122]）**: 実際の MAC・
+フレッシュネス検証は常に行ったうえで、最終判定だけを「Fail」に強制できます
+（`overrideStatus`: 0=無期限に Fail、1=指定メッセージ数だけ Fail、2=解除）。Fail に強制された
+フレームは Com へ転送しません。実際に検証が成功したフレームのフレッシュネス基準値は、強制中でも
+進めます（解除後に正当なメッセージを誤ってリプレイ扱いしないため）。`overrideStatus=41`
+（Pass への強制）は、未検証のデータを無条件に信頼させる危険な機能で、実仕様でも既定で無効の
+機能（`SecOCEnableForcedPassOverride`）のため、本プロジェクトは常に拒否します（`E_NOT_OK`）。
+`freshnessValueID` は RX Secured I-PDU の ID と同一視しています（学習用簡略化）。
+本番コードにこの関数を呼ぶ箇所はなく、ユニットテストで確認しています。
 
 ## 検証
 

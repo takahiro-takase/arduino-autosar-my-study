@@ -26,8 +26,8 @@
  *          SecOC_Cfg.h/SecOC_PBCfg.c 参照）。以前は E2EHealthStatus（CAN 0x220）
  *          がこの経路で保護されていたが、E2E を Profile01（CRC8）から
  *          Profile05（CRC16）へ強化した際に DLC が classic CAN の 8byte 上限を
- *          超えるため撤去した（詳細は README.md「SecOC」セクション、
- *          docs/E2E_Profile5_Notes.md 参照）。TX Pdu が実際に追加されるまで、
+ *          超えるため撤去した（詳細は docs/modules/SecOC_Notes.md、
+ *          docs/modules/E2E_Profile5_Notes.md 参照）。TX Pdu が実際に追加されるまで、
  *          `SecOC_MainFunctionTx()` の TX ループは毎回 0 回実行で終わる。
  *          RX とは異なり PduR の TX 経路
  *          （PduR_TxRoutingPathType.TransmitOverrideFct）に中間モジュールとして

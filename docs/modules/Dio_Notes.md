@@ -2,7 +2,10 @@
 
 > [README](../../README.md) の「[IO スタック](../../README.md#io-stack)」節から分離。
 
-MCAL。方向設定は Port が担い、Dio は `Dio_WriteChannel` / `Dio_ReadChannel` による値の読み書きのみを行う。
+MCAL。方向設定は Port が担い、Dio は値の読み書きのみを行う。本番コードが使うのは
+`Dio_WriteChannel` / `Dio_ReadChannel`（IoHwAb 経由）だけで、`Dio_FlipChannel` /
+`Dio_ReadPort` / `Dio_WritePort` / `Dio_ReadChannelGroup` / `Dio_WriteChannelGroup` は
+IF シグネチャ準拠のために実装してあり、ユニットテストのみで検証しています。
 
 <a id="channel-assignment"></a>
 ## チャネル割り当て（`Dio_Cfg.h`）

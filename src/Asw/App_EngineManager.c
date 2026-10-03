@@ -109,7 +109,7 @@ void App_EngineManager_Init(void)
  *          OFF / FAULT 中は通信不在が正常のためタイムアウトを無視する。
  *          RTE_E_HARD_TRANSFORMER_ERROR（E2E 検証不合格）は FAULT 遷移させず
  *          WARN ログのみ出す（DTC 報告は E2EXf が別途行う。詳細は
- *          README の「E2E 検証ステータスの Rte 経由での公開」参照）。
+ *          docs/modules/E2EXf_Notes.md の「E2E 検証ステータスの Rte 経由での公開」参照）。
  *
  *          警告確認ボタンによる FAULT 解除は FiM_FID_BUTTON_ACK が抑止中
  *          （ボタン固着確定中）の間は受理しない。

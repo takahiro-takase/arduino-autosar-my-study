@@ -77,8 +77,7 @@ uds_tester の受信モニター双方で 1 ずつ増えることが確認でき
 [1019ms] INFO  Com: TX iPdu=2 [XX XX 00 00 00]  # E2EHealthStatus、6000ms 周期で自動送信
 [7019ms] INFO  Com: TX iPdu=2 [YY YY 01 00 00]  # Counter が 1 に進む
 
-# EngineInfo の CRC を意図的に誤らせて送信した直後
-[8501ms] WARN  E2EXf: InverseTransformP05 NG DemEvent=9 st=7  ← st=7: ERROR（CRC不一致）
-[8502ms] INFO  E2EMon: (内部カウンタ更新、次回 PERIODIC 送信まではログなし)
+# EngineInfo の CRC を意図的に誤らせて送信した直後（E2EMon 自身はログを出さない）
+[8501ms] WARN  E2EXf: Inv_EngineInfo NG DemEvent=9 st=7  ← st=7: ERROR（CRC不一致）
 [13019ms] INFO  Com: TX iPdu=2 [ZZ ZZ 02 01 00]  # crcErr が 0→1 に増加
 ```

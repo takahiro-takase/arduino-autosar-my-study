@@ -89,7 +89,7 @@ uint8 Com_ReceiveSignal(Com_SignalIdType SignalId, void* SignalDataPtr);
  * \brief   RX Signal Group を I-PDU バッファから RX シャドウバッファへ確定コピーする。
  *
  * \details Com_SendSignalGroup() の RX 側対称版（詳細は Com.c の実装コメント、
- *          および README.md の「RX Signal Group」節を参照）。所属 I-PDU が
+ *          および docs/modules/Com_Notes.md の「RX Signal Group」節を参照）。所属 I-PDU が
  *          IsSignalGroup=1 の場合、この呼び出し以降 Com_ReceiveSignal() は
  *          当該 I-PDU のメンバーシグナルを RX シャドウバッファから読む
  *          （呼び出し前は Com_Init() 直後の初期値のまま、または前回コミット
@@ -478,7 +478,7 @@ const uint8* Com_Test_GetTxBuffer(Com_IPduIdType ipduId);
 /** [テスト専用] RX シグナルの Com_SigTimedOut（デッドライン監視のタイムアウト
  *  検知フラグ）を取得する。`Com_MainFunctionRx()` がしきい値超過を検知した後、
  *  `Com_ReceiveSignal()` が `RxDataTimeoutAction` を適用して消費するまでの間
- *  立っている（[「Rx 処理」の「デッドライン監視」](../../README.md#rx-processing-timeout)
+ *  立っている（[「Rx 処理」の「デッドライン監視」](../../../docs/can_stack.md#rx-processing-timeout)
  *  参照）。範囲外の `SignalId` は 0 を返す。 */
 uint8 Com_Test_GetSigTimedOut(Com_SignalIdType SignalId);
 

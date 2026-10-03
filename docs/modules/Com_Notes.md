@@ -541,7 +541,7 @@ TX I-PDU の送信完了のたびにそのコールバックが静かに誤発�
 現れた走査パターンだったために問題が顕在化しました。
 
 修正として `Com_SignalConfigType` に `Direction`（`Com_SignalDirectionType`:
-`COM_SIGNAL_DIRECTION_RX`/`_TX`）フィールドを新設し、全 12 シグナルへ明示的に
+`COM_SIGNAL_DIRECTION_RX`/`_TX`）フィールドを新設し、全シグナル（当時は 12 個、現在は 19 個）へ明示的に
 設定したうえで、`Com_TxConfirmation()` の走査条件に
 `sig->Direction == COM_SIGNAL_DIRECTION_TX` を追加しました。実 AUTOSAR には
 対応パラメータがありません（ComSignal は必ずどちらか一方の ComIPdu に構造的に
@@ -558,7 +558,7 @@ the message"）。`EngineState` が変化していなくても、`MeterStatus` �
 呼ばれます。
 
 **割り込み安全性について（前節の教訓を踏まえた確認）**: `Com_TxConfirmation()`
-は `Can_MainFunction_Write()`（Os の 100ms タスク）→ `CanIf_TxConfirmation()`
+は `Can_MainFunction_Write()`（Os の 1ms タスク）→ `CanIf_TxConfirmation()`
 → `PduR_CanIfTxConfirmation()` という経路で同期的に呼ばれます。前節の
 `ComInvalidNotification` とは異なり、この経路上には SchM 排他エリア
 （割り込み禁止区間）が存在しないことを実際にコードを辿って確認済みです。
@@ -818,7 +818,7 @@ CAN RX フレームを受信するたびに `Signals[]` を 2 回走査するこ
 FAULT/ABS 点灯による TMS=true（MIXED 切り替え）中、警告灯が実際に変化した
 送信は `upd=1`、`COM_TX_PERIOD_WARNINGSTATUS_TRUE_FLOOR_MS` 間隔の周期フロア
 再送は `upd=0` になります。Cangaroo で CAN 0x200 の byte[1] bit0（生の 2 バイト
-目、MSB）・CAN 0x210 の byte[0] bit4 を直接観察することでも同様に確認できます。
+目、MSB）・CAN 0x210 の byte[0] bit3 を直接観察することでも同様に確認できます。
 
 **レビューで見つかった問題（非 Signal Group の update-bit が常に 1 のままだった）**:
 初期実装は SWS_Com_00061 の原文どおり「`Com_SendSignal()` が呼ばれるたびに
@@ -1023,7 +1023,7 @@ RX 受信デッドライン監視（次節）がタイムアウトを検出し�
 根拠要求は対象が非グループシグナルか Signal Group メンバーかで異なり、前者は
 SWS_Com_00875、後者（今回の VehicleSpeed）は SWS_Com_00876 です。
 
-本プロジェクトはこれまで NONE 相当の動作（`Com_ReceiveSignal()` が値を書き込まず
+本プロジェクトは当初 NONE 相当の動作（`Com_ReceiveSignal()` が値を書き込まず
 `E_NOT_OK` を返すだけ）のみをサポートしており、「タイムアウト中は安全な代替値を
 返す」判断は常に呼び出し元（ASW/RTE）任せでした。これに `COM_RX_TIMEOUT_ACTION_SUBSTITUTE`
 を追加し、`AbsInfo` の `VehicleSpeed`（RX Signal Group メンバー）に適用しました。
@@ -1040,12 +1040,15 @@ Com_ReceiveSignal(VEHICLE_SPEED, &out)  ← AbsInfo がタイムアウト中の�
     COM_RX_TIMEOUT_ACTION_NONE（既定） → 何も書き込まず E_NOT_OK を返す（既存の全シグナルの挙動）
 ```
 
-**なぜ REPLACE ではなく SUBSTITUTE を実装したか**: 本プロジェクトは
-`ComSignalInitValue` という設定概念自体を持たず、RX バッファは `Com_Init()` で
-単純にゼロクリアするのみです。REPLACE は「タイムアウト時 = 起動直後と同じ
-初期値（0）」を返すだけなので、停車中で本当に速度が 0 の場合と区別がつきません。
-SUBSTITUTE なら 0xFFFF のような、通常運用では絶対に出現しない値を割り当てられる
-ため、「値が来ていない」ことを呼び出し元が確実に判別できます。
+**SUBSTITUTE と REPLACE の使い分け**: 本プロジェクトは当初 SUBSTITUTE のみを実装し、
+`ComSignalInitValue`（`Com_SignalConfigType.InitValue`）は後から追加しました。現在は
+`COM_RX_TIMEOUT_ACTION_REPLACE`（タイムアウト時に `InitValue` を返す）も実装済みで、
+どちらも使えます（REPLACE は実機では原理的に検証できないため、ユニットテストで
+検証しています）。違いは次のとおりです。REPLACE は
+「タイムアウト時 = 起動直後と同じ初期値」を返すだけなので、`VehicleSpeed` のように
+停車中の本当の 0 と区別がつきません。SUBSTITUTE なら 0xFFFF のような、通常運用では
+絶対に出現しない値を割り当てられるため、「値が来ていない」ことを呼び出し元が
+確実に判別できます。そこで `VehicleSpeed` には SUBSTITUTE を適用しています。
 
 **この実装で実際に SUBSTITUTE が発動する場面はあるか**: 正直に言うと、
 現状はありません。`VehicleSpeed` を読む `Com_ReceiveSignal()` 呼び出しは
@@ -1112,12 +1115,11 @@ Com_MainFunctionRx()  ← 次回の Os 100ms タスク呼び出し
   InvalidNotificationCbk()（Rte_COMInvalidNotify_CoolantTemp）を呼ぶ
 ```
 
-**なぜ REPLACE ではなく NOTIFY を実装したか**: `ComRxDataTimeoutAction` の
-REPLACE を実装しなかった理由と全く同じです。実 AUTOSAR の REPLACE
-（SWS_Com_00681）はシグナルを `ComSignalInitValue` へ置き換えますが、本
-プロジェクトはその設定概念自体を持ちません。NOTIFY（SWS_Com_00680/00717）は
-「シグナルオブジェクトへ格納しない＝直近の有効値を返し続ける」という、
-`ComSignalInitValue` に依存しない動作のため、こちらのみ実装しています。
+**NOTIFY と REPLACE の違い**: `DataInvalidAction` は NOTIFY / REPLACE の両方を実装済みです
+（REPLACE は [SWS_Com_00681] どおり、無効値を `InitValue` を受信したものとして通常処理します）。
+本プロジェクトで `CoolantTemp` に適用しているのは NOTIFY です。NOTIFY（SWS_Com_00680/00717）は
+「シグナルオブジェクトへ格納しない＝直近の有効値を返し続ける」動作で、メータ表示のように
+値が飛ばない方が望ましい用途に合うためです。
 
 **なぜ「直近の有効値」を返せるのか（新規追加した内部状態）**: これまでの
 `Com_ReceiveSignal()` は I-PDU バッファ（または RX シャドウバッファ）を毎回
@@ -1356,7 +1358,7 @@ COM モジュールが各 RX I-PDU の受信間隔を監視し、設定タイム
 ```
 エンジン ECU がフレームを送り続けている間
   ↓ 受信のたびに
-  Com_RxIndication() → Com_RxLastMs[0] = millis()   ← タイマリセット
+  Com_RxIndication() → Com_RxLastMs[0] = 現在時刻（Os のカウンタ値）   ← タイマリセット
 
 100 ms ごとに（Task 5）
   Com_MainFunctionRx()
@@ -1385,7 +1387,7 @@ COM モジュールが各 RX I-PDU の受信間隔を監視し、設定タイム
 ### タイムアウト確認手順
 
 1. RUNNING 状態に遷移させてから EngineInfo の送信を止める
-2. 5 秒後：`WARN Com: RX timeout iPdu=0 (5000ms)` が出力される
+2. 5 秒後：`WARN Com: ... RX timeout iPdu=0 (5000ms, first)` が出力される（初回のみ `first`、以降は `steady`）
 3. さらに最大 3 秒後（次の Runnable 起動時）：`WARN AppEng: ->FAULT comm timeout` が出力される
 4. LED が点滅に変わる
 5. UDS SID 0x19 で DTC 0x000105 (COMM_TIMEOUT) が取得できる
@@ -1435,12 +1437,12 @@ AbsInfo（Signal Group、グループ単位）:
 (EngineOnFlag)`/`Rte: AbsInfo RX deadline timeout (group)` が出力される
 ことを確認できます。実機ログ抜粋:
 ```
-[6157ms] WARN  Com: Com_MainFunction: RX timeout iPdu=0 (5000ms, first)
-[6163ms] WARN  Com: Com_MainFunction: RX timeout iPdu=1 (5000ms, first)
+[6157ms] WARN  Com: Com_MainFunctionRx: RX timeout iPdu=0 (5000ms, first)
+[6163ms] WARN  Com: Com_MainFunctionRx: RX timeout iPdu=1 (5000ms, first)
 [6169ms] WARN  Rte: Rte_COMCbkRxTOut_AbsInfo: AbsInfo RX deadline timeout (group)
-[6177ms] WARN  Com: Com_MainFunction: RX timeout sig=0 iPdu=0 (5000ms, first)
-[6183ms] WARN  Com: Com_MainFunction: RX timeout sig=1 iPdu=0 (5000ms, first)
-[6190ms] WARN  Com: Com_MainFunction: RX timeout sig=2 iPdu=0 (5000ms, first)
+[6177ms] WARN  Com: Com_MainFunctionRx: RX timeout sig=0 iPdu=0 (5000ms, first)
+[6183ms] WARN  Com: Com_MainFunctionRx: RX timeout sig=1 iPdu=0 (5000ms, first)
+[6190ms] WARN  Com: Com_MainFunctionRx: RX timeout sig=2 iPdu=0 (5000ms, first)
 [6197ms] WARN  Rte: Rte_COMCbkRxTOut_EngineOnFlag: EngineInfo RX deadline timeout (EngineOnFlag)
 ```
 I-PDU 単位ループがシグナル単位ループより先に実行されるため、グループ単位
@@ -1476,8 +1478,10 @@ Rule7（`ComM==NO_COMMUNICATION` で停止）を追加し、`Com_IpduGroupStart`
 指摘・是正）**: 実装当初は Rule3/4/5 と全く同じ構造（`SILENT_COMMUNICATION`
 も停止条件に含める・POST_RUN でも停止する）で機械的に対称化していました。
 しかし `CanSM.c` を確認すると、`SILENT_COMMUNICATION`（Bus-Off 等）は
-「受信専用モード」（`Can_SetControllerMode(CAN_T_STOP)`、送信のみ禁止）
-であり、`EngineInfo`/`AbsInfo` の受信自体は生きたまま続きます。TX は
+「受信専用モード」（現在は `CanIf_SetPduMode(CANIF_TX_OFFLINE)` で PDU の送信
+だけを止め、コントローラは稼働したまま。Bus-Off 検出時は `CanIf_SetControllerMode(STOPPED)`
+で Listen-Only になる。いずれも受信は継続する）であり、`EngineInfo`/`AbsInfo` の
+受信自体は生きたまま続きます。TX は
 送信できないため `SILENT_COMMUNICATION` でも停止して正しいのに対し、
 RX 側で同じ条件を流用すると、**実際に届いているフレームを
 `Com_RxIndication()` が黙って捨ててしまう**という新たなバグになります。
@@ -1521,9 +1525,11 @@ ON/OFF する専用 API）でしたが、実装を進める過程で以下の理
 実機ログでは ComM が起動後まもなく FULL_COM に達するため、体感できる
 差はごくわずかです。
 
-**この機能は実際に発動するか**: 実機での再確認は未実施です（`NO_COMMUNICATION`
-への Bus-Sleep 自体は既に何度も実機確認済みの経路のため新規リスクは低いと
-判断）。`Com_IpduGroupStart`/`Stop` の RX 側コード自体は既存の共通実装
+**この機能は実際に発動するか**: Rule7 による RX 側 `Com_IpduGroupStop`
+（`IpduGroupStop grp=1 iPdu=0(RX)`/`iPdu=1(RX)`）の実行は、実機ログで Bus-Sleep 突入直後に
+確認済みです（2026-10-03）。誤検知の再発が無いこと自体の長時間観察はしていません
+（`NO_COMMUNICATION` への Bus-Sleep は既に何度も実機確認済みの経路のため新規リスクは
+低いと判断）。`Com_IpduGroupStart`/`Stop` の RX 側コード自体は既存の共通実装
 （元々 TX 専用グループでのみ実運用されていた）を流用しており、
 `Com.c` 側の変更は一切ありません。回帰テストとして
 `test/Bsw/ComStack/Bsw_ComStack_SignalGroup_Rx_test.cpp` の
@@ -1628,7 +1634,7 @@ dispatch/confirmation の同期性に依存しない設計にしている**: `Ca
 `PduR_ComTransmit()` → `CanIf_Transmit()` → `Can_Write()` は同期的に完結し
 （SPI 送信自体は MCP2515 とのブロッキング通信）、Bus-Off 中は `Can_Write()`
 が `CanState != CAN_CS_STARTED` により**送信そのものを同期的に失敗**させます
-（`Can.c:404-405`）。つまり Bus-Off 中は `Com_DoTransmit()` の `ret` が
+（`Can_Write()` 冒頭のガード）。つまり Bus-Off 中は `Com_DoTransmit()` の `ret` が
 `E_NOT_OK` となり、`Com_TxConfPending[]` はそもそもセットされず、「送信済み・
 未確認」という監視対象状態自体が発生しません。当初「Bus-Off 中に確認が
 届かなくなるため実機で発火しうる」と考えてこの機能を選定しましたが、
@@ -2021,6 +2027,18 @@ Signal Gateway 自体（`ImmobilizerCmd`→`ImmobilizerStatus`）は `SecureComm
 [NNNNms] INFO  CanIf: TX id=5 can=0x230
 [NNNNms] INFO  Can_Hw: TX OK id=0x230 dlc=1 [01]
 ```
+
+## その他の送受信制御 API
+
+| API | 内容 | 本番コードからの呼び出し |
+|-----|------|------------------------|
+| `Com_TriggerIPDUSend(PduId)` | [SWS_Com_00861]/[SWS_Com_00388]。値の変化や送信モードに関わらず、TX I-PDU を今すぐ送信要求する。MDT（`ComMinimumDelayTime`）だけは尊重し、`ComTxModeNumberOfRepetitions` など他の TxMode パラメータは考慮しない。実送信は `Com_MainFunctionTx()` が行う（PERIODIC の I-PDU でも、周期を待たず MDT 満了後に送る）。I-PDU が停止中なら `E_NOT_OK`。`Com_SetCommunicationEnabled` で TX が抑制されている間は、トリガーを受け付けても送信されないまま消費される | なし（ユニットテストのみ） |
+| `Com_EnableReceptionDM(grp)` / `Com_DisableReceptionDM(grp)` | I-PDU Group は起動したまま、受信デッドライン監視（タイムアウト判定・`RxDataTimeoutAction`・`Com_CbkRxTOut`）だけを止める／再開する（SRS_Com_00192）。有効化の際は監視タイマを再始動する。TX I-PDU を含むグループへの呼び出しは、[SWS_Com_00534] どおり黙って無視する（本プロジェクトの `COM_IPDU_GROUP_NONE` は RX/TX 混在のため、実際に無視が起こりうる）。Bus-Sleep 中の誤検知対策（前述）では、`Com_IpduGroupStart/Stop` を使う方式を採用したため、この API は使っていない | なし（ユニットテストのみ） |
+| `Com_SetCommunicationEnabled(Rx, Tx)` | UDS 0x28 CommunicationControl からの、全 I-PDU 一括の送受信の有効・無効。Rx 無効の間は受信フレームを捨て、受信デッドライン監視も止める（再開時は監視タイマを再始動）。Tx 無効の間は実送信を抑制し、保留中の送信要求は破棄する（再開しただけで古い要求が送信されることはない）。I-PDU Group の起動/停止とは独立（両方が有効なときだけ送受信する）。BswM のルール 8〜19 が `BswM_ApplyDcmCommMode()` 経由で呼ぶ（[`BswM_Notes.md`](./BswM_Notes.md)、[`Dcm_Notes.md`](./Dcm_Notes.md) の CommunicationControl 参照） | あり（BswM / Dcm） |
+| `Com_IsRxTimedOut(IPduId)` | 本プロジェクト独自（ServiceID 0xF0）。RX I-PDU が現在タイムアウト中かを返す軽量アクセサ。E2E Transformer 方式で Rte がミラーから値を読むとき、`Com_ReceiveSignal()` を介さずにゲートとして使う | あり（Rte、`Com_PBCfg.c`） |
+| `Com_DeInit()` / `Com_GetStatus()` | `Com_DeInit()` は全 I-PDU を停止して未初期化状態に戻す（[SWS_Com_00129]）。以降 `Com_GetStatus()` は `COM_UNINIT` を返し、`Com_Init()` 以外の API は `COM_E_UNINIT` を報告する | なし（ユニットテストのみ） |
+
+`Com_SwitchIpduTxMode()`（前述）も、本番コードからは呼ばれていません。
 
 ## 開発の経緯（実機で見つかった不具合・設計変更）
 

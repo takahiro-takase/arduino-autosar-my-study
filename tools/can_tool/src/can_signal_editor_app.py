@@ -1,7 +1,7 @@
 """
 CAN 信号定義エディタ (GUI)
 
-data/can_signals.json（README.md の「CAN フレーム仕様」表を一元管理するための
+data/can_signals.json（docs/can_frame_spec.md の表を一元管理するための
 データソース）を Excel 風の表形式で表示・編集する。フレーム一覧とフィールド
 一覧を2段のグリッドで表示し、セルのダブルクリックでインライン編集する。
 

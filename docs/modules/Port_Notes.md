@@ -7,3 +7,4 @@
 アナログ専用ピンのため Port 設定不要）。`Port_RefreshPortDirection`（AUTOSAR
 [SWS_Port_00142] 準拠、同じ設定を再適用するのみ）も公開していますが、本プロジェクトの
 本番コードからは呼び出していません（IF シグネチャ準拠のための追加、テストのみで検証）。
+`Port_SetPinDirection` / `Port_SetPinMode` も同様に本番からの呼び出しはありません。

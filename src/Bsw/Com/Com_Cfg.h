@@ -240,7 +240,7 @@
  * 保留する（破棄はしない。満了次第送信する）。バス輻輳防止のための保護的な
  * 既定値であり、本プロジェクトの ASW（App_WarningIndicator_Run、500ms 周期）
  * は現状これより速く値を変化させないため、通常運用でこの下限に達することは
- * ない（詳細は README の「MDT」セクション参照）。MIXED の周期フロア送信には
+ * ない（詳細は docs/modules/Com_Notes.md の「MDT」セクション参照）。MIXED の周期フロア送信には
  * 適用しない（Com_Cfg.h の COM_TX_PERIOD_WARNINGSTATUS_TRUE_FLOOR_MS 参照）。
  */
 #define COM_TX_MIN_DELAY_WARNINGSTATUS_MS  100U

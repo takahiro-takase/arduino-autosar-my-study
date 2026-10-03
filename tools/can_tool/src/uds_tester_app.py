@@ -899,7 +899,7 @@ class UdsTesterFrame(ttk.Frame):
         """AES-128-CMAC (NIST SP 800-38B) を計算し、上位 trunc_len バイトを返す。
         pycryptodome の実装を使う（Arduino 側は src/Bsw/SecOC/SecOC_Cmac.c に
         自前実装があり、RFC 4493 の公式テストベクタで本実装と一致することを
-        開発時に確認済み。詳細は README.md の「SecOC」節を参照）。"""
+        開発時に確認済み。詳細は docs/modules/SecOC_Notes.md を参照）。"""
         mac = CMAC.new(key, ciphermod=AES)
         mac.update(data)
         return mac.digest()[:trunc_len]
@@ -1226,7 +1226,7 @@ class UdsTesterFrame(ttk.Frame):
                     self.state_queue.put(("serial_state", parsed))
 
     # ログ行 "[<ms>ms] LEVEL TAG: func: message" から TAG と残りを取り出す
-    # （Det_Hw.cpp の出力フォーマット。README「シリアルモニタ出力例」参照）。
+    # （Det_Hw.cpp の出力フォーマット。docs/archive/README_2026-10-03.md「シリアルモニタ出力例」参照）。
     _SERIAL_LOG_RE = re.compile(r"^\[\d+ms\]\s+\S+\s+(\w+):\s+(.*)$")
 
     # CanSM/EcuM の状態遷移ログに現れる部分文字列 → 表示する状態名。
@@ -1268,7 +1268,7 @@ class UdsTesterFrame(ttk.Frame):
     #
     # 表示ラベルは対応する AUTOSAR の公式型がある場合はそれに合わせる（EcuM→
     # "ECU State"、ComM→"Comm Mode"）。CanSM だけ公式型がなく「CanSM」のまま
-    # な理由は README「UDS ボタン送信ツール」節の該当パラグラフを参照。
+    # な理由は tools/can_tool/README.md「UDS ボタン送信ツール」節の該当パラグラフを参照。
     #
     _STATE_DEFS = (
         ("EcuM", "ECU State", _ECUM_STATE_RULES),

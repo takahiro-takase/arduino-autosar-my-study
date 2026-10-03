@@ -87,7 +87,7 @@
 /* cppcheck-suppress misra-c2012-2.5 */
 #define BSWM_OS_TASK_FIM_MAIN       10U /**< FiM_MainFunction     (100 ms)  */
 #define BSWM_OS_TASK_WDGM_TRIGGER   11U /**< WdgM_TriggerHwWatchdog (1000 ms) */
-#define BSWM_OS_TASK_CANNM_MAIN     12U /**< CanNm_MainFunction        (200 ms)  */
+#define BSWM_OS_TASK_CANNM_MAIN     12U /**< CanNm_MainFunction        (1000 ms)  */
 #define BSWM_OS_TASK_NVM_MAIN       13U /**< NvM_MainFunction       (10 ms)   */
 /* cppcheck-suppress misra-c2012-2.5 */
 #define BSWM_OS_TASK_CAN_TX_CONF    14U /**< Can_MainFunction_Write (1 ms)    */

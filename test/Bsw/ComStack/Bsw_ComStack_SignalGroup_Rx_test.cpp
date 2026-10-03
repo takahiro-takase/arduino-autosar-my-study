@@ -1,6 +1,6 @@
 /**
  * \file    Bsw_ComStack_SignalGroup_Rx_test.cpp
- * \brief   README.md「Rx 処理」および「デッドライン監視（受信タイムアウト）」
+ * \brief   docs/can_stack.md「Rx 処理」および「デッドライン監視（受信タイムアウト）」
  *          コールチェーンのうち、Signal Group（IsSignalGroup=1）関連・
  *          I-PDU Group 制御（Com_IpduGroupStart/Stop、Com_Enable/
  *          DisableReceptionDM）関連の受信シナリオ専用の単体テスト

@@ -6,8 +6,13 @@
   8.2.1 節「E2E Profile 1 types」（p.144-149）を要約したもの。
 - 本ファイルは仕様書の**逐語訳ではなく**、当プロジェクトの実装（`src/Bsw/E2E/E2E_P01.*`,
   `src/Bsw/E2EXf/E2EXf.*` の E2E Transformer 統合部分）を理解するための技術的まとめです。
-  仕様書原文は著作権保護対象のため `docs/*.pdf`（gitignore 対象）としてローカルにのみ保持し、
+  仕様書原文は著作権保護対象のため `docs/autosar/4.3.1/`（gitignore 対象）にローカルのみ保持し、
   本ファイルには転載していません。正確な文言が必要な場合は原典を参照してください。
+
+> **現在の位置づけ**: Profile 1 を使う I-PDU は現在ありません（EngineInfo/AbsInfo/E2EHealthStatus は
+> すべて Profile 5 へ移行済み。[`E2E_Profile5_Notes.md`](./E2E_Profile5_Notes.md)）。`E2E_P01.c` は
+> 本プロジェクト内に呼び出し元の無い参考実装で、ユニットテストのみで検証しています。以下の "当初"、
+> "MeterStatus / AbsInfo とも" といった記述は、Profile 1 を実際に使っていた当時の経緯です。
 
 ---
 

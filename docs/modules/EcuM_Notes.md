@@ -15,7 +15,8 @@ SHUTDOWN）を管理するモジュールです。`main.cpp` は `EcuM_Init()` �
 STARTUP ──────────────────→ RUN ── 全 RUN ユーザが解放 ──→ POST_RUN
                              ↑                                  │
                     EcuM_RequestRUN が来たら ←──────────────────┘
-                    (POST_RUN 中の場合のみ)       ECUM_POST_RUN_TIMEOUT_MS (5秒) 経過
+                    (POST_RUN 中の場合のみ)       POST_RUN 要求ユーザが無く、かつ
+                                                  ECUM_POST_RUN_TIMEOUT_MS (5秒) 経過
                                                                ↓
                                                            SHUTDOWN
                             (WdgM_TriggerHwWatchdog / Can_MainFunction_Read /
@@ -31,8 +32,8 @@ STARTUP ──────────────────→ RUN ── 全
 |------|:-------------------:|---------|
 | STARTUP | 停止 | `EcuM_Init()` 末尾で RUN へ自動遷移 |
 | RUN | **実行** | 全 RUN ユーザが `EcuM_ReleaseRUN` → POST_RUN |
-| POST_RUN | **実行**（後処理継続） | タイムアウト → SHUTDOWN / `EcuM_RequestRUN` → RUN |
-| SHUTDOWN | **実行**（`WdgM_TriggerHwWatchdog` / `Can_MainFunction_Read` / `Can_MainFunction_Wakeup` / `CanSM_MainFunction` / `NvM_MainFunction` / `MemIf_MainFunction` / `CanNm_MainFunction` のみ有効） | Arduino では電源断不可のためアイドル待機するが、`EcuM_RequestRUN` が来れば RUN へ復帰できる（CAN バスのウェイクアップ経由）。`Os_SchedulerStep()` 自体は呼ばれ続けるが、BswM Rule 2 がこの 7 タスク以外を無効化するため実質アイドル。HW ウォッチドッグ維持のため `WdgM_TriggerHwWatchdog`、CAN ウェイクアップ検出・検証中フレーム処理のため `Can_MainFunction_Read`/`Can_MainFunction_Wakeup`、ウェイクアップ検証タイムアウト監視のため `CanSM_MainFunction`、保留中の DTC 永続化のため `NvM_MainFunction`/`MemIf_MainFunction`（NvM がジョブを開始するだけの `NvM_MainFunction` だけを動かしても、物理バイト書き込みを進める `MemIf_MainFunction` を止めてしまうとジョブが永久に完了しない）、CanNm 状態機械（Bus-Sleep Mode への到達判定・他ノードの NM フレーム受信によるスリープ延期の継続処理）のため `CanNm_MainFunction` だけは動き続ける（CAN 受信自体は真のハードウェア割り込み `Can_Isr()` のため、この無効化に関わらず常に起動する） |
+| POST_RUN | **実行**（後処理継続） | POST_RUN 要求ユーザが無く、かつタイムアウト → SHUTDOWN / `EcuM_RequestRUN` → RUN |
+| SHUTDOWN | **実行**（`WdgM_TriggerHwWatchdog` / `Can_MainFunction_Read` / `Can_MainFunction_Wakeup` / `CanSM_MainFunction` / `NvM_MainFunction` / `MemIf_MainFunction` / `CanNm_MainFunction` のみ有効） | Arduino では電源断不可のためアイドル待機するが、`EcuM_RequestRUN` が来れば RUN へ復帰できる（CAN バスのウェイクアップ経由）。`Os_SchedulerStep()` 自体は呼ばれ続けるが、BswM Rule 2 がこの 7 タスク以外を無効化するため実質アイドル（マスク対象外の `App_GptDemo_Run`/`ComM_MainFunction`/`SecOC_MainFunctionRx` を除く。詳細は [`BswM_Notes.md`](./BswM_Notes.md)）。HW ウォッチドッグ維持のため `WdgM_TriggerHwWatchdog`、CAN ウェイクアップ検出・検証中フレーム処理のため `Can_MainFunction_Read`/`Can_MainFunction_Wakeup`、ウェイクアップ検証タイムアウト監視のため `CanSM_MainFunction`、保留中の DTC 永続化のため `NvM_MainFunction`/`MemIf_MainFunction`（NvM がジョブを開始するだけの `NvM_MainFunction` だけを動かしても、物理バイト書き込みを進める `MemIf_MainFunction` を止めてしまうとジョブが永久に完了しない）、CanNm 状態機械（Bus-Sleep Mode への到達判定・他ノードの NM フレーム受信によるスリープ延期の継続処理）のため `CanNm_MainFunction` だけは動き続ける（CAN 受信自体は真のハードウェア割り込み `Can_Isr()` のため、この無効化に関わらず常に起動する） |
 
 SHUTDOWN は CAN バスのウェイクアップにより常に RUN へ復帰できます。実機リセットが
 必要な終端状態は存在しません。Bus-Off 回復は後述の通り L1/L2 バックオフで無期限に
@@ -83,6 +84,13 @@ AUTOSAR OS の OsCounter が HW タイマ割り込みで駆動される構成に
 が過去に繰り返し踏んだ「監視対象タスクに実行機会がほとんどないまま判定される」
 誤検知と同種の事故になりうるため避けている）。
 
+**各モジュールの時刻（Os のカウンタ API）:** スケジューラ以外のモジュール（CanSM/CanNm/CanTp/Com/
+Dcm/WdgM/EcuM/App_EngineManager など）も、`millis()` を直接呼ばず `GetCounterValue(SYSTEM_COUNTER, &tick)`
+（SWS_Os_00383）で時刻を得ます（各モジュールの `<Mod>_GetNowMs()`）。この値は `Os_Init()` より前は
+`millis()` を返し、`Os_Init()` の時点で「Gpt 時間源と `millis()` の差」をオフセットとして確定するため、
+`Os_Init()` の前後で値が飛びません。Gpt ティックの停滞を検知して `millis()` へフォールバックするときも、
+オフセットを付け替えて値が連続するようにしています（上の「実機での確認」参照）。
+
 初版（2026-08 最初のコミット）ではクロスチェック周期を 5000ms、フォールバック
 無しの「ログのみ」としていましたが、いずれも問題があるとレビューで指摘され
 修正しました。5000ms は 4000ms の HW ウォッチドッグタイムアウトより長く、
@@ -113,7 +121,7 @@ RUN フェーズを継続するために「誰かが使っている」ことを�
 
 | ユーザ | 定数 | `EcuM_RequestRUN` タイミング | `EcuM_ReleaseRUN` タイミング |
 |-------|------|--------------------------|--------------------------|
-| ComM | `ECUM_USER_COMM` | CAN バスが FULL_COM になったとき（起動時 / Bus-Off 回復試行時 / ボランタリスリープからのウェイクアップ時） | CAN バスが NO_COM になったとき（エンジン OFF 継続によるボランタリスリープ突入時。NO_COM_PENDING_SLEEP 中に Bus-Off が発生し回復した場合も `ComM_BusSM_ModeIndication(NO_COM)` は呼ばれ直すが、RUN は既に解放済みのため `EcuM_ReleaseRUN()` が再度呼ばれることはない） |
+| ComM | `ECUM_USER_COMM` | CAN バスが FULL_COM になったとき（起動時 / Bus-Off 回復試行時 / ボランタリスリープからのウェイクアップ時） | CAN バスが NO_COM になったとき（エンジン OFF 継続によるボランタリスリープで、CanNm が Bus-Sleep Mode へ到達して `CanSM` が物理スリープした直後。CanNm の協調スリープ待ち中に Bus-Off が発生した場合は、回復時に ComM が解放をやり直す。RUN の要求状態が変化したときだけ呼ぶため、`EcuM_ReleaseRUN()` が重複して呼ばれることはない） |
 
 **重複要求・対応しない解放の検知（SWS_EcuM_04125/04127）:**
 `EcuM_RequestRUN()`/`EcuM_ReleaseRUN()` は、AUTOSAR の実 EcuM と同様に
@@ -135,6 +143,35 @@ Bus-Off 検出時に一時的に挟まる `COMM_SILENT_COMMUNICATION`（EcuM の
 FULL/NO_COM の別。SILENT_COM では更新しない）という専用の内部状態で判定しており、
 Bus-Off 回復中に SILENT_COM を何度挟んでも、EcuM への再通知は本当に FULL⇔NO_COM が
 変化したときだけに限られます。
+
+## 状態遷移に伴う WdgM・BswM との連携
+
+| 遷移 | EcuM が行うこと |
+|------|----------------|
+| STARTUP → RUN（`EcuM_Init()` 末尾） | `BswM_EcuM_CurrentState(RUN)`（Rule 0: 全タスク有効化） |
+| RUN → POST_RUN（最後の RUN ユーザが解放） | POST_RUN の起算時刻を記録 → `WdgM_DisableHwWatchdog()`（アプリタスクが止まり Alive が必ず不足するため、SHUTDOWN を待たずここで HW ウォッチドッグを無効化扱いにする）→ `BswM_EcuM_CurrentState(POST_RUN)`（Rule 1: アプリタスク無効化） |
+| POST_RUN → SHUTDOWN | `BswM_EcuM_CurrentState(SHUTDOWN)`（Rule 2: 動かし続けるタスク以外を無効化） |
+| POST_RUN / SHUTDOWN → RUN（`EcuM_RequestRUN`） | `WdgM_ResumeSupervision()`（チェックポイント基準のリセット。止まっていた時間を Deadline 違反と誤認しないため）→ `WdgM_EnableHwWatchdog()` → `BswM_EcuM_CurrentState(RUN)`。POST_RUN 要求も全てクリアする（残すと次回の SHUTDOWN が永久に保留されるため） |
+
+## POST_RUN 要求（`EcuM_RequestPOST_RUN` / `EcuM_ReleasePOST_RUN`）
+
+[SWS_EcuM_04128]/[SWS_EcuM_04129]。RUN 要求とは別に、POST_RUN フェーズの継続を要求するしくみです
+（`EcuM_PostRunUsers` のビットマスクで RUN 要求とは独立に管理）。POST_RUN 中に 1 件でも要求が
+残っていると、`ECUM_POST_RUN_TIMEOUT_MS` が経過しても SHUTDOWN へ遷移しません。最後の 1 件を
+解放した時点から、改めてタイムアウトを起算します。RUN 中に呼んだ場合はビットを記録するだけで、
+その場での状態遷移は起きません。同一ユーザの重複要求・対応しない解放の扱いは、RUN 系と同じ
+エラーコード（`ECUM_E_MULTIPLE_RUN_REQUESTS` / `ECUM_E_MISMATCHED_RUN_RELEASE`）を共用します。
+**本プロジェクトの本番コードにこの 2 関数を呼ぶ箇所はありません**（ユニットテストのみ）。
+
+## ウェイクアップ通知（`EcuM_CheckWakeup`）
+
+[SWS_Can_00271]。Can ドライバの `Can_MainFunction_Wakeup()` が、スリープ中の CAN バス活動を
+検出すると `EcuM_CheckWakeup(ECUM_WKSOURCE_CAN)` を呼びます（旧 `CanIf_ControllerWakeup()` の
+役割を引き継ぐ）。EcuM は CAN 以外の要因を持たないため、`ECUM_WKSOURCE_CAN` 以外には
+`ECUM_E_INVALID_PAR` を報告します。CAN の場合は `CanSM_ControllerModeIndication()` を呼んで
+ウェイクアップ検証（CanSM の `WAKEUP_VALIDATING`）を始め、検証に成功すると ComM 経由で
+`EcuM_RequestRUN()` が呼ばれて SHUTDOWN から RUN へ戻ります
+（詳細は [`CanSM_Notes.md`](./CanSM_Notes.md) と [can_stack.md](../can_stack.md#can-controller-sleep)）。
 
 ## EcuM 設定（`EcuM_Cfg.h`）
 

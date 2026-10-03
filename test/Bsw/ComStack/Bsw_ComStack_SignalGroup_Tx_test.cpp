@@ -1,6 +1,6 @@
 /**
  * \file    Bsw_ComStack_SignalGroup_Tx_test.cpp
- * \brief   README.md「Tx 処理」コールチェーンのうち、Signal Group
+ * \brief   docs/can_stack.md「Tx 処理」コールチェーンのうち、Signal Group
  *          （IsSignalGroup=1）関連の送信シナリオ専用の単体テスト
  *          （GoogleTest / CMake native_chain_tests）。
  *

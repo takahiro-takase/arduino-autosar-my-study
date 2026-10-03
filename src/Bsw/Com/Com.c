@@ -1165,7 +1165,7 @@ uint8 Com_SendSignal(Com_SignalIdType SignalId, const void* SignalDataPtr)
         /* update-bit セット（SWS_Com_00061 相当）。仕様原文は「Com_SendSignal
          * が呼ばれるたびに無条件でセットする」だが、本プロジェクトの ASW は
          * 毎サイクル無条件に Com_SendSignal() を呼び、「値が実際に変化したか」
-         * の判定は Com の ComFilterAlgorithm に委ねる設計（README「責務分離の
+         * の判定は Com の ComFilterAlgorithm に委ねる設計（docs/modules/Com_Notes.md「責務分離の
          * 効果」参照）。そのため文字どおり無条件にセットすると、次の実送信
          * （周期フロア含む）までの間に必ず ASW が再度 Com_SendSignal() を
          * 呼んでビットを再セットしてしまい、update-bit が常に 1 のまま
@@ -1553,11 +1553,11 @@ uint8 Com_SendSignalGroup(Com_SignalGroupIdType SignalGroupId)
      * Com_RequestTxOnChange() を呼ぶかどうかと同じ判断軸）に条件づける。
      * App_WarningIndicator_Run() は毎サイクル無条件に
      * Rte_SendSignalGroup_WarningStatus()（→本関数）を呼ぶ設計（ASW は
-     * 値を書くだけ、Com が送信要否を判断する責務分離。README「責務分離
+     * 値を書くだけ、Com が送信要否を判断する責務分離。docs/modules/Com_Notes.md「責務分離
      * の効果」参照）のため、無条件セットのままだと次の実送信までの間に
      * 必ず ASW が本関数を再度呼んでビットを再セットしてしまい、
      * update-bit が常に 1 のままになる。詳細は Com_SendSignal() の
-     * 同種コメント・README「Update Bit」節参照。TMS 遷移のみによる即時送信
+     * 同種コメント・docs/modules/Com_Notes.md「Update Bit」節参照。TMS 遷移のみによる即時送信
      * （tmsChanged）はグループメンバーの値更新を意味しないため、update-bit
      * の条件には含めない（groupTriggered のみで判定する）。 */
     if (groupTriggered && (ipdu->UpdateBitPosition != 0xFFU))

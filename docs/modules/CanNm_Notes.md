@@ -29,6 +29,17 @@ Network Mode: Ready Sleep State ←─CanNm_NetworkRelease()── Normal Operat
               Repeat Message State（Network Mode への進入は必ずここを経由）
 ```
 
+図に無い遷移（実装済み）:
+
+| 契機 | 遷移 |
+|------|------|
+| `CanNm_NetworkRequest()`（Bus-Sleep / Prepare Bus-Sleep 中） | → Repeat Message State |
+| `CanNm_NetworkRequest()`（Ready Sleep 中） | → Normal Operation State（[SWS_CanNm_00110]） |
+| `CanNm_NetworkRelease()`（Normal Operation 中） | → Ready Sleep State（[SWS_CanNm_00118]）。Repeat Message 中は要求フラグを下ろすだけで、Repeat Message Time 満了時に Ready Sleep へ進む |
+| `CanNm_RepeatMessageRequest()`（Ready Sleep / Normal Operation 中） | → Repeat Message State。送信する NM フレームの Repeat Message Request ビットを立てる（[SWS_CanNm_00112]/[00120]）。Repeat Message / Prepare Bus-Sleep / Bus-Sleep 中は `E_NOT_OK` で拒否 |
+| 他ノードの NM フレーム受信（Prepare Bus-Sleep 中） | → Repeat Message State（[SWS_CanNm_00124]） |
+| 他ノードの NM フレーム受信で Repeat Message Request ビットが立っている（Normal Operation / Ready Sleep 中） | → Repeat Message State（再アナウンス） |
+
 3つのタイマ（`CanNm_Cfg.h`）で駆動します。
 
 | 定数 | 既定値 | 意味 |
@@ -37,6 +48,10 @@ Network Mode: Ready Sleep State ←─CanNm_NetworkRelease()── Normal Operat
 | `CANNM_REPEAT_MESSAGE_MS` | 1500 ms | Repeat Message State の滞在時間 |
 | `CANNM_WAIT_BUS_SLEEP_MS` | 1500 ms | Prepare Bus-Sleep Mode の滞在時間 |
 | `CANNM_CYCLE_MS` | 1000 ms | `CanNm_MainFunction()` の呼び出し周期。実 CanNm の Message Cycle Timer（`CanNmMsgCycleTime`、[SWS_CanNm_00032]/[SWS_CanNm_00040]。NM-Timeout Timer とは独立に Repeat Message/Normal Operation State の周期送信を駆動する専用タイマ）をこの呼び出し周期自体で兼用する簡略化 |
+
+時刻は `GetCounterValue(SYSTEM_COUNTER)`（Os のカウンタ、[`EcuM_Notes.md`](./EcuM_Notes.md) 参照）から取得します。
+`CanNm_MainFunction()` は Os タスク（1000 ms 周期）で、BswM のどのモードでも無効化されません
+（SHUTDOWN 中も動かし続けるタスク。協調スリープを進めるため）。
 
 Message Cycle Timer と NM-Timeout Timer は独立している点に注意してください。
 健全な通信中は毎周期の送信成功が NM-Timeout Timer を先回りして再起動し続ける
@@ -48,9 +63,22 @@ NM-Timeout Timer 満了そのものを再送信のトリガとしてしまって
 という2つの不具合が実機ログから見つかり修正した経緯があります）。
 
 **対応除外**（実 AUTOSAR CanNm が持つが本プロジェクトでは実装しない機能）:
-Partial Networking（7.11章）、NM Coordinator Sync（7.9.7章）、User Data
-（7.9.2章）、Remote Sleep Indication（`CanNm_CheckRemoteSleepIndication`、
-7.9.1章）、Passive Mode（7.9.3章）。
+Partial Networking（7.11章）、NM Coordinator Sync（7.9.7章。`CanNm_RequestBusSynchronization` / `CanNm_SetSleepReadyBit`）、User Data
+（7.9.2章。`CanNm_GetPduData`）、Remote Sleep Indication（`CanNm_CheckRemoteSleepIndication`、
+7.9.1章）、Passive Mode（7.9.3章。`CanNm_PassiveStartUp`）。これらの関数は `CanNm.c` に宣言も
+実装も無く、「未実装」のコメントだけが残っています。
+
+**ノード識別子 API**: `CanNm_GetNodeIdentifier()` は「最後に受信した NM フレームの Source Node ID」
+（他ノードの ID。受信前は 0）を返し、`CanNm_GetLocalNodeIdentifier()` は自ノードの
+`CANNM_SOURCE_NODE_ID`（0x01）を返します。
+
+## 通信の停止・再開（`CanNm_DisableCommunication()` / `CanNm_EnableCommunication()`）
+
+BswM のルール（[`BswM_Notes.md`](./BswM_Notes.md) 参照）が `Nm_DisableCommunication()` /
+`Nm_EnableCommunication()` 経由で呼びます（UDS 0x28 の CommunicationControl に連動）。
+Disable 中は NM フレームを**送信せず**、NM-Timeout Timer の判定も止まります
+（受信でもタイマを再起動しません）。そのため Ready Sleep で Disable されるとスリープにも
+進まず、Enable した時点でタイマを起算し直して再開します。状態機械の状態自体は変わりません。
 
 ## MeterStatus との違い（なぜ Com を経由しないか）
 
@@ -72,7 +100,8 @@ CanNm(RX):      Can_Isr → CanIf_RxIndication → CanNm_RxIndication
 
 ```
 byte[0] : Control Bit Vector（Bit0=Repeat Message Request のみ使用。他ビットは
-          対応除外の機能に対応するため常に 0）
+          対応除外の機能に対応するため常に 0）。Bit0 は `CanNm_RepeatMessageRequest()` で
+          Repeat Message State へ入ったときだけ 1 になり、その Repeat Message Time 満了で 0 に戻る
 byte[1] : Source Node Identifier（本 ECU は 0x01）
 ```
 
@@ -81,11 +110,20 @@ byte[1] : Source Node Identifier（本 ECU は 0x01）
 
 ## ComM との連携（エッジトリガ方式）
 
+ComM は CanNm を直接ではなく **Nm 層（`Nm_NetworkRequest()` / `Nm_NetworkRelease()`）経由**で呼びます
+（Nm はチャネルを確認して CanNm へ委譲するだけ。[Nm 層](#nm-層ネットワークマネジメントインタフェース) 参照）。
+
 ```
-ComM_BusSM_ModeIndication() がチャネルモードを確定させるたびに:
-  FULL_COM へ変化 → CanNm_NetworkRequest()
-  NO_COM   へ変化 → CanNm_NetworkRelease()
+ComM_BusSM_ModeIndication() で FULL_COM が確定したとき:
+  Nm_NetworkRequest()  → CanNm_NetworkRequest()
+ComM_RequestComMode() で FULL_COM → NO_COM が要求されたとき（CanSM は呼ばない）:
+  Nm_NetworkRelease()  → CanNm_NetworkRelease()      ← 協調スリープの起点
+ComM_BusSM_ModeIndication() で SILENT_COM が確定したとき（Bus-Off 検出経路）:
+  Nm_NetworkRelease()    ← Bus-Off 中の NM 送信リトライと CANNM_E_NETWORK_TIMEOUT 連発を防ぐ
 ```
+
+NO_COM が確定した時点（`ComM_BusSM_ModeIndication(NO_COM)`）では Release を呼びません
+（要求の時点で既に呼んでいるため）。
 
 以前は `CanNm_MainFunction()` が毎周期 `ComM_GetCurrentComMode()` をポーリングして
 送信可否だけを判断する簡易設計でしたが、現在は ComM からのエッジトリガ通知を
@@ -115,6 +153,24 @@ NM-Timeout Timer が再起動される（実質的にスリープが延期され
 復帰すると同時に `ComM_Nm_NetworkMode()`（`[SWS_ComM_00296]`、2026-08 追加）が
 呼ばれ、`CanSM_RequestComMode(FULL_COM)` でコントローラを送受信可能な状態へ
 戻します。
+
+## Nm 層（ネットワークマネジメントインタフェース）
+
+<a id="nm-層ネットワークマネジメントインタフェース"></a>
+`src/Bsw/Nm/Nm.c` は、ComM と CanNm の間に置く薄い仲介層です（実 AUTOSAR の Nm Interface。
+本プロジェクトは CAN 1 チャネルのみで、`NM_MAIN_NETWORK_HANDLE` 以外のチャネルは
+`NM_E_INVALID_CHANNEL` で拒否）。専用ノートは無く、役割は次の 2 方向の中継だけです。
+
+| 方向 | 関数 | 中継先 |
+|------|------|-------|
+| 下向き（ComM/BswM → CanNm） | `Nm_NetworkRequest` / `Nm_NetworkRelease` / `Nm_DisableCommunication` / `Nm_EnableCommunication` / `Nm_RepeatMessageRequest` / `Nm_GetNodeIdentifier` / `Nm_GetLocalNodeIdentifier` / `Nm_GetState` | `CanNm_*` |
+| 上向き（CanNm → ComM） | `Nm_NetworkMode` / `Nm_PrepareBusSleepMode` / `Nm_BusSleepMode` / `Nm_NetworkStartIndication` | `ComM_Nm_NetworkMode` / `ComM_Nm_PrepareBusSleepMode` / `ComM_Nm_BusSleepMode` / `ComM_Nm_NetworkStartIndication` |
+
+上向きの `Nm_NetworkStartIndication()` は、CanNm が Bus-Sleep Mode 中に NM フレームを受信したとき
+（`CANNM_E_NET_START_IND` を DET へ報告するのと同時に）呼ばれ、ComM へ「バス上で通信が始まった」
+ことを知らせます（[SWS_ComM_00383]）。ComM 側は追加のアクションを取らず、物理ウェイクアップは
+CanSM のウェイクアップ検証経路で処理されます。上向きの各関数は、呼ばれるたびに
+`Nm: ... -> ComM_Nm_...()` のログを出します（下のログ例では省略しています）。
 
 ## ログ例（協調スリープにより物理スリープが延期される様子）
 
