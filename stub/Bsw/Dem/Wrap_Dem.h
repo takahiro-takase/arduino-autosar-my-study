@@ -85,9 +85,10 @@ extern uint32 CallCount_Dem_GetDTCStatusAvailabilityMask;
 extern uint32 CallCount_Dem_DisableDTCSetting;
 extern uint32 CallCount_Dem_EnableDTCSetting;
 extern uint32 CallCount_Dem_ClearDTC;
-extern uint32 CallCount_Dem_GetAllDTCs;
-extern uint32 CallCount_Dem_GetSupportedDTCs;
-extern uint32 CallCount_Dem_GetPrefailedDTCs;
+extern uint32 CallCount_Dem_SetDTCFilter;
+extern uint32 CallCount_Dem_GetNumberOfFilteredDTC;
+extern uint32 CallCount_Dem_GetNextFilteredDTC;
+extern uint32 CallCount_Dem_GetNextFilteredDTCAndFDC;
 extern uint32 CallCount_Dem_SetFreezeFrameContext;
 extern uint32 CallCount_Dem_GetFreezeFrameOfEvent;
 extern uint32 CallCount_Dem_GetEventIdOfDTC;
@@ -98,7 +99,7 @@ extern Dem_EventIdType     LastEventId_Dem_SetEventStatus;
 extern Dem_EventStatusType LastEventStatus_Dem_SetEventStatus;
 
 /* ----------------------------------------------------------------------
- * 回数閾値故障注入（戻り値を持つ11関数のみ。Dem_SetEventStatus と
+ * 回数閾値故障注入（戻り値を持つ15関数のみ。Dem_SetEventStatus と
  * Dem_GetTranslationType は対象外、上記コメント参照）
  * ---------------------------------------------------------------------- */
 /** `WRAP_DEM_FAIL_FROM_CALL_COUNT_DISABLED`（既定）: 常に対応する
@@ -115,9 +116,13 @@ extern uint32 FailFromCallCount_Dem_ClearDTC;
 extern uint32 FailFromCallCount_Dem_GetFreezeFrameOfEvent;
 extern uint32 FailFromCallCount_Dem_GetEventIdOfDTC;
 extern uint32 FailFromCallCount_Dem_GetOccurrenceCounterOfEvent;
+extern uint32 FailFromCallCount_Dem_SetDTCFilter;
+extern uint32 FailFromCallCount_Dem_GetNumberOfFilteredDTC;
+extern uint32 FailFromCallCount_Dem_GetNextFilteredDTC;
+extern uint32 FailFromCallCount_Dem_GetNextFilteredDTCAndFDC;
 
 /* ----------------------------------------------------------------------
- * 閾値到達後の強制戻り値（戻り値を持つ11関数のみ）
+ * 閾値到達後の強制戻り値（戻り値を持つ15関数のみ）
  * ---------------------------------------------------------------------- */
 extern Std_ReturnType ForcedReturn_Dem_GetEventUdsStatus;              /**< 既定 E_NOT_OK */
 extern Std_ReturnType ForcedReturn_Dem_GetDTCOfEvent;                  /**< 既定 E_NOT_OK */
@@ -129,6 +134,10 @@ extern Std_ReturnType ForcedReturn_Dem_ClearDTC;                       /**< 既�
 extern Std_ReturnType ForcedReturn_Dem_GetFreezeFrameOfEvent;          /**< 既定 E_NOT_OK */
 extern Std_ReturnType ForcedReturn_Dem_GetEventIdOfDTC;                /**< 既定 E_NOT_OK */
 extern Std_ReturnType ForcedReturn_Dem_GetOccurrenceCounterOfEvent;    /**< 既定 E_NOT_OK */
+extern Std_ReturnType ForcedReturn_Dem_SetDTCFilter;    /**< 既定 E_NOT_OK */
+extern Std_ReturnType ForcedReturn_Dem_GetNumberOfFilteredDTC;    /**< 既定 E_NOT_OK */
+extern Std_ReturnType ForcedReturn_Dem_GetNextFilteredDTC;    /**< 既定 E_NOT_OK */
+extern Std_ReturnType ForcedReturn_Dem_GetNextFilteredDTCAndFDC;    /**< 既定 E_NOT_OK */
 
 /** すべての呼び出し回数・回数閾値・強制戻り値を初期状態へ戻す
  *  （Dem 自体の内部状態には触れない）。各テストケースの開始時（SetUp()）に

@@ -259,54 +259,115 @@ TEST_F(Bsw_Dem_Test, Dem_EnableDTCSetting_NG_Uninit)
 }
 
 // ------------------------------------------------------------
-// Dem_GetAllDTCs()
+// Dem_SetDTCFilter()
 // ------------------------------------------------------------
 
-TEST_F(Bsw_Dem_Test, Dem_GetAllDTCs_NG_Uninit)
+TEST_F(Bsw_Dem_Test, Dem_SetDTCFilter_NG_Uninit)
 {
     Dem_Test_ResetInitState();
-    uint32 dtcBuf[DEM_EVENT_COUNT];
-    uint8  statusBuf[DEM_EVENT_COUNT];
-    uint8  count;
 
-    Dem_GetAllDTCs(dtcBuf, statusBuf, &count, 0xFFU);
+    Std_ReturnType ret = Dem_SetDTCFilter(0U, 0xFFU, DEM_DTC_FORMAT_UDS, DEM_DTC_ORIGIN_PRIMARY_MEMORY, FALSE, 0U, FALSE);
 
+    EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, DEM_E_UNINIT);
 }
 
-TEST_F(Bsw_Dem_Test, Dem_GetAllDTCs_NG_NullPointer)
+TEST_F(Bsw_Dem_Test, Dem_SetDTCFilter_NG_UnsupportedFormat)
 {
-    uint8 statusBuf[DEM_EVENT_COUNT];
-    uint8 count;
+    Std_ReturnType ret = Dem_SetDTCFilter(0U, 0xFFU, DEM_DTC_FORMAT_OBD, DEM_DTC_ORIGIN_PRIMARY_MEMORY, FALSE, 0U, FALSE);
 
-    Dem_GetAllDTCs(NULL, statusBuf, &count, 0xFFU);
+    EXPECT_EQ(ret, E_NOT_OK);
+    EXPECT_EQ(FakeDetHw_LastErrorId, DEM_E_WRONG_CONFIGURATION);
+}
 
+TEST_F(Bsw_Dem_Test, Dem_SetDTCFilter_NG_UnsupportedOrigin)
+{
+    Std_ReturnType ret = Dem_SetDTCFilter(0U, 0xFFU, DEM_DTC_FORMAT_UDS, DEM_DTC_ORIGIN_MIRROR_MEMORY, FALSE, 0U, FALSE);
+
+    EXPECT_EQ(ret, E_NOT_OK);
+    EXPECT_EQ(FakeDetHw_LastErrorId, DEM_E_WRONG_CONFIGURATION);
+}
+
+TEST_F(Bsw_Dem_Test, Dem_SetDTCFilter_NG_FilterWithSeverityNotSupported)
+{
+    Std_ReturnType ret = Dem_SetDTCFilter(0U, 0xFFU, DEM_DTC_FORMAT_UDS, DEM_DTC_ORIGIN_PRIMARY_MEMORY, TRUE, 0x01U, FALSE);
+
+    EXPECT_EQ(ret, E_NOT_OK);
+    EXPECT_EQ(FakeDetHw_LastErrorId, DEM_E_WRONG_CONFIGURATION);
+}
+
+// ------------------------------------------------------------
+// Dem_GetNumberOfFilteredDTC()
+// ------------------------------------------------------------
+
+TEST_F(Bsw_Dem_Test, Dem_GetNumberOfFilteredDTC_NG_Uninit)
+{
+    Dem_Test_ResetInitState();
+    uint16 count = 0U;
+
+    Std_ReturnType ret = Dem_GetNumberOfFilteredDTC(0U, &count);
+
+    EXPECT_EQ(ret, E_NOT_OK);
+    EXPECT_EQ(FakeDetHw_LastErrorId, DEM_E_UNINIT);
+}
+
+TEST_F(Bsw_Dem_Test, Dem_GetNumberOfFilteredDTC_NG_NullPointer)
+{
+    Std_ReturnType ret = Dem_GetNumberOfFilteredDTC(0U, NULL);
+
+    EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, DEM_E_PARAM_POINTER);
 }
 
 // ------------------------------------------------------------
-// Dem_GetSupportedDTCs()
+// Dem_GetNextFilteredDTC()
 // ------------------------------------------------------------
 
-TEST_F(Bsw_Dem_Test, Dem_GetSupportedDTCs_NG_Uninit)
+TEST_F(Bsw_Dem_Test, Dem_GetNextFilteredDTC_NG_Uninit)
 {
     Dem_Test_ResetInitState();
-    uint32 dtcBuf[DEM_EVENT_COUNT];
-    uint8  statusBuf[DEM_EVENT_COUNT];
-    uint8  count;
+    uint32 dtc = 0U;
+    uint8  status = 0U;
 
-    Dem_GetSupportedDTCs(dtcBuf, statusBuf, &count);
+    Std_ReturnType ret = Dem_GetNextFilteredDTC(0U, &dtc, &status);
 
+    EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, DEM_E_UNINIT);
 }
 
-TEST_F(Bsw_Dem_Test, Dem_GetSupportedDTCs_NG_NullPointer)
+TEST_F(Bsw_Dem_Test, Dem_GetNextFilteredDTC_NG_NullPointer)
 {
-    uint8 statusBuf[DEM_EVENT_COUNT];
-    uint8 count;
+    uint8 status = 0U;
 
-    Dem_GetSupportedDTCs(NULL, statusBuf, &count);
+    Std_ReturnType ret = Dem_GetNextFilteredDTC(0U, NULL, &status);
 
+    EXPECT_EQ(ret, E_NOT_OK);
+    EXPECT_EQ(FakeDetHw_LastErrorId, DEM_E_PARAM_POINTER);
+}
+
+// ------------------------------------------------------------
+// Dem_GetNextFilteredDTCAndFDC()
+// ------------------------------------------------------------
+
+TEST_F(Bsw_Dem_Test, Dem_GetNextFilteredDTCAndFDC_NG_Uninit)
+{
+    Dem_Test_ResetInitState();
+    uint32 dtc = 0U;
+    sint8  fdc = 0;
+
+    Std_ReturnType ret = Dem_GetNextFilteredDTCAndFDC(0U, &dtc, &fdc);
+
+    EXPECT_EQ(ret, E_NOT_OK);
+    EXPECT_EQ(FakeDetHw_LastErrorId, DEM_E_UNINIT);
+}
+
+TEST_F(Bsw_Dem_Test, Dem_GetNextFilteredDTCAndFDC_NG_NullPointer)
+{
+    sint8 fdc = 0;
+
+    Std_ReturnType ret = Dem_GetNextFilteredDTCAndFDC(0U, NULL, &fdc);
+
+    EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, DEM_E_PARAM_POINTER);
 }
 
@@ -409,32 +470,6 @@ TEST_F(Bsw_Dem_Test, Dem_GetOccurrenceCounterOfEvent_NG_NullPointer)
     Std_ReturnType ret = Dem_GetOccurrenceCounterOfEvent(0U, NULL);
 
     EXPECT_EQ(ret, E_NOT_OK);
-    EXPECT_EQ(FakeDetHw_LastErrorId, DEM_E_PARAM_POINTER);
-}
-
-// ------------------------------------------------------------
-// Dem_GetPrefailedDTCs()
-// ------------------------------------------------------------
-
-TEST_F(Bsw_Dem_Test, Dem_GetPrefailedDTCs_NG_Uninit)
-{
-    Dem_Test_ResetInitState();
-    uint32 dtcBuf[DEM_EVENT_COUNT];
-    uint8  fdcBuf[DEM_EVENT_COUNT];
-    uint8  count;
-
-    Dem_GetPrefailedDTCs(dtcBuf, fdcBuf, &count);
-
-    EXPECT_EQ(FakeDetHw_LastErrorId, DEM_E_UNINIT);
-}
-
-TEST_F(Bsw_Dem_Test, Dem_GetPrefailedDTCs_NG_NullPointer)
-{
-    uint8 fdcBuf[DEM_EVENT_COUNT];
-    uint8 count;
-
-    Dem_GetPrefailedDTCs(NULL, fdcBuf, &count);
-
     EXPECT_EQ(FakeDetHw_LastErrorId, DEM_E_PARAM_POINTER);
 }
 

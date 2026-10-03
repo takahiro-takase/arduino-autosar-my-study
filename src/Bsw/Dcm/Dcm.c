@@ -332,6 +332,9 @@ static void Dcm_HandleEcuReset(const uint8* uds, uint8 udsLen);
 static void Dcm_HandleClearDtc(const uint8* uds, uint8 udsLen);
 static void Dcm_HandleReadDtcInfo(const uint8* uds, uint8 udsLen);
 static void Dcm_HandleReadDtcCount(const uint8* uds, uint8 udsLen);
+static Std_ReturnType Dcm_CountFilteredDtcs(uint8 statusMask, uint16* count);
+static Std_ReturnType Dcm_CollectFilteredDtcs(uint8 statusMask, uint8 filterForFdc, uint32* dtcBuf,
+                                              uint8* valueBuf, uint8* count);
 static void Dcm_HandleReadDtcByMask(const uint8* uds, uint8 udsLen);
 static void Dcm_HandleReadDtcSnapshot(const uint8* uds, uint8 udsLen);
 static void Dcm_HandleReadDtcExtendedData(const uint8* uds, uint8 udsLen);
@@ -1193,13 +1196,7 @@ static void Dcm_HandleReadDtcCount(const uint8* uds, uint8 udsLen)
     }
 
     uint8  statusMask = uds[2];
-    uint32 dtcBuf[DEM_EVENT_COUNT];
-    uint8  statusBuf[DEM_EVENT_COUNT];
-    uint8  count = 0U;
-
-    Dem_GetAllDTCs(dtcBuf, statusBuf, &count, statusMask);
-
-    DET_LOGI(TAG, "19/01 mask=0x%02X cnt=%u", (unsigned)statusMask, (unsigned)count);
+    uint16 count = 0U;
 
     /* 正応答: [0x59, 0x01, statusAvailMask, dtcFormat, countH, countL] */
     Dcm_TxBuf[0] = 0x59U;                        /* SID 0x19 + 0x40 */
@@ -1212,12 +1209,116 @@ static void Dcm_HandleReadDtcCount(const uint8* uds, uint8 udsLen)
         Dcm_SendNegativeResponse(DCM_SID_READ_DTC_INFO, DCM_NRC_CONDITIONS_NOT_CORRECT);
         return;
     }
+
+    /* [SWS_Dcm_00377]: 要求の statusMask と availabilityMask の AND が 0 なら、Dem を
+     * 呼ばずに 0 件で肯定応答する（statusMask=0x00 は Dem 側では「絞り込みなし」を
+     * 意味する AUTOSAR 独自値のため、UDS の要求としては Dem へ渡さない）。 */
+    if ((statusMask & Dcm_TxBuf[2]) != 0U)
+    {
+        if (Dcm_CountFilteredDtcs(statusMask, &count) != E_OK)
+        {
+            /* [SWS_Dcm_01255]: Dem_SetDTCFilter() が E_NOT_OK なら NRC 0x31 */
+            Dcm_SendNegativeResponse(DCM_SID_READ_DTC_INFO, DCM_NRC_REQUEST_OUT_OF_RANGE);
+            return;
+        }
+    }
+
+    DET_LOGI(TAG, "19/01 mask=0x%02X cnt=%u", (unsigned)statusMask, (unsigned)count);
+
     Dcm_TxBuf[3] = (uint8)Dem_GetTranslationType(DCM_DEM_CLIENT_ID);
-    Dcm_TxBuf[4] = 0x00U;                        /* countH */
-    Dcm_TxBuf[5] = count;                        /* countL */
+    Dcm_TxBuf[4] = (uint8)(count >> 8U);         /* countH */
+    Dcm_TxBuf[5] = (uint8)(count & 0xFFU);       /* countL */
     Dcm_TxPdu.SduLength = 6U;
 
     Dcm_TransmitPositiveResponse();
+}
+
+/**
+ * \brief   Dem_SetDTCFilter() でフィルタを設定し、一致する DTC の件数を取得する。
+ *
+ * \details [SWS_Dcm_00293]: subFunc 0x01 の件数は、Dem_SetDTCFilter()
+ *          （DTCStatusMask は要求の値、DTCFormat=UDS、DTCOrigin=PRIMARY_MEMORY、
+ *          FilterWithSeverity=NO、FilterForFaultDetectionCounter=NO）の後に
+ *          Dem_GetNumberOfFilteredDTC() で求める。
+ *
+ * \param[in]   statusMask  要求の DTCStatusMask。
+ * \param[out]  count       一致した DTC の件数。
+ *
+ * \retval  E_OK      取得できた。
+ * \retval  E_NOT_OK  Dem がフィルタ設定または件数取得を拒否した（呼び出し元は NRC 0x31）。
+ */
+static Std_ReturnType Dcm_CountFilteredDtcs(uint8 statusMask, uint16* count)
+{
+    if (Dem_SetDTCFilter(DCM_DEM_CLIENT_ID, statusMask, DEM_DTC_FORMAT_UDS, DEM_DTC_ORIGIN_PRIMARY_MEMORY,
+                         FALSE, 0U, FALSE) != E_OK)
+    {
+        return E_NOT_OK;
+    }
+    return Dem_GetNumberOfFilteredDTC(DCM_DEM_CLIENT_ID, count);
+}
+
+/**
+ * \brief   Dem_SetDTCFilter() でフィルタを設定し、一致する DTC を 1 件ずつ取り出して配列へ集める。
+ *
+ * \details [SWS_Dcm_00378]/[SWS_Dcm_00465]: subFunc 0x02/0x0A は
+ *          Dem_GetNextFilteredDTC()、0x14 は Dem_GetNextFilteredDTCAndFDC()
+ *          を、Dem_GetNextFilteredDTC 系が DEM_NO_SUCH_ELEMENT を返すまで
+ *          繰り返し呼ぶ。Dem_SetDTCFilter() の引数は subFunc ごとに仕様の
+ *          Table 7.11（0x02/0x0A）/Table 7.23（0x14）のとおり: 0x0A は
+ *          DTCStatusMask=0x00（絞り込みなし）、0x14 は DTCStatusMask=0x00 と
+ *          FilterForFaultDetectionCounter=YES。
+ *
+ * \param[in]   statusMask     Dem_SetDTCFilter() へ渡す DTCStatusMask。
+ * \param[in]   filterForFdc   TRUE（0x14）なら FDC 付きの取得 API を使い、prefailed のみに絞る。
+ * \param[out]  dtcBuf         DTC 値（24-bit）の格納先。DEM_EVENT_COUNT 要素以上。
+ * \param[out]  valueBuf       DTC ごとの 4 バイト目（status、または FDC）の格納先。同サイズ。
+ * \param[out]  count          集めた DTC の件数。
+ *
+ * \retval  E_OK      最後まで取り出せた。
+ * \retval  E_NOT_OK  Dem がフィルタ設定または取り出しを拒否した（呼び出し元は NRC 0x31）。
+ */
+static Std_ReturnType Dcm_CollectFilteredDtcs(uint8 statusMask, uint8 filterForFdc, uint32* dtcBuf,
+                                              uint8* valueBuf, uint8* count)
+{
+    *count = 0U;
+
+    if (Dem_SetDTCFilter(DCM_DEM_CLIENT_ID, statusMask, DEM_DTC_FORMAT_UDS, DEM_DTC_ORIGIN_PRIMARY_MEMORY,
+                         FALSE, 0U, (filterForFdc != 0U) ? TRUE : FALSE) != E_OK)
+    {
+        return E_NOT_OK;
+    }
+
+    while (*count < DEM_EVENT_COUNT)
+    {
+        uint32         dtc = 0U;
+        uint8          status = 0U;
+        sint8          fdc = 0;
+        Std_ReturnType ret;
+
+        if (filterForFdc != 0U)
+        {
+            ret = Dem_GetNextFilteredDTCAndFDC(DCM_DEM_CLIENT_ID, &dtc, &fdc);
+            status = (uint8)fdc;  /* FDC は -128〜127 のため符号なし 1 バイトへそのまま詰める */
+        }
+        else
+        {
+            ret = Dem_GetNextFilteredDTC(DCM_DEM_CLIENT_ID, &dtc, &status);
+        }
+
+        if (ret == DEM_NO_SUCH_ELEMENT)
+        {
+            break;
+        }
+        if (ret != E_OK)
+        {
+            return E_NOT_OK;
+        }
+
+        dtcBuf[*count]   = dtc;
+        valueBuf[*count] = status;
+        (*count)++;
+    }
+    return E_OK;
 }
 
 /**
@@ -1293,10 +1394,6 @@ static void Dcm_HandleReadDtcByMask(const uint8* uds, uint8 udsLen)
     uint8  statusBuf[DEM_EVENT_COUNT];
     uint8  count = 0U;
 
-    Dem_GetAllDTCs(dtcBuf, statusBuf, &count, statusMask);
-
-    DET_LOGI(TAG, "19/02 mask=0x%02X found=%u", (unsigned)statusMask, (unsigned)count);
-
     Dcm_TxBuf[0] = 0x59U;
     Dcm_TxBuf[1] = DCM_DTC_SUBFUNC_REPORT_BY_MASK;
     if (Dem_GetDTCStatusAvailabilityMask(DCM_DEM_CLIENT_ID, &Dcm_TxBuf[2]) != E_OK)
@@ -1304,6 +1401,27 @@ static void Dcm_HandleReadDtcByMask(const uint8* uds, uint8 udsLen)
         Dcm_SendNegativeResponse(DCM_SID_READ_DTC_INFO, DCM_NRC_CONDITIONS_NOT_CORRECT);
         return;
     }
+
+    /* [SWS_Dcm_00377]: statusMask と availabilityMask の AND が 0 なら、Dem を呼ばずに
+     * 0 件（[0x59, 0x02, statusAvailMask] のみ）で肯定応答する（0x19/01 と同じ理由。
+     * statusMask=0x00 は Dem 側では「絞り込みなし」を意味する AUTOSAR 独自値のため、
+     * UDS の要求としては Dem へ渡さない）。 */
+    if ((statusMask & Dcm_TxBuf[2]) == 0U)
+    {
+        DET_LOGI(TAG, "19/02 mask=0x%02X found=0", (unsigned)statusMask);
+        Dcm_TxPdu.SduLength = 3U;
+        Dcm_TransmitPositiveResponse();
+        return;
+    }
+
+    if (Dcm_CollectFilteredDtcs(statusMask, 0U, dtcBuf, statusBuf, &count) != E_OK)
+    {
+        /* [SWS_Dcm_01255]: Dem_SetDTCFilter() が E_NOT_OK なら NRC 0x31 */
+        Dcm_SendNegativeResponse(DCM_SID_READ_DTC_INFO, DCM_NRC_REQUEST_OUT_OF_RANGE);
+        return;
+    }
+
+    DET_LOGI(TAG, "19/02 mask=0x%02X found=%u", (unsigned)statusMask, (unsigned)count);
 
     Dcm_SendDtcList(DCM_DTC_SUBFUNC_REPORT_BY_MASK, 3U, dtcBuf, statusBuf, count);
 }
@@ -1315,7 +1433,7 @@ static void Dcm_HandleReadDtcByMask(const uint8* uds, uint8 udsLen)
  *          ISO 14229-1: "the server shall report ... regardless of their
  *          status"）。subFunc 0x02 reportDTCByStatusMask と応答フォーマットは
  *          同じだが、`statusMask` によるフィルタリングを一切行わない点が
- *          異なる（`Dem_GetSupportedDTCs()` 参照）。要求パラメータは無し
+ *          異なる（Dem_SetDTCFilter() の DTCStatusMask=0x00、Dem.h 参照）。要求パラメータは無し
  *          （[0x19, 0x0A] のみ）。
  *          応答 (n 件、n = DEM_EVENT_COUNT): [0x59, 0x0A, statusAvailMask,
  *                        DTC1_H, DTC1_M, DTC1_L, S1,
@@ -1340,10 +1458,6 @@ static void Dcm_HandleReadDtcSupported(const uint8* uds, uint8 udsLen)
     uint8  statusBuf[DEM_EVENT_COUNT];
     uint8  count = 0U;
 
-    Dem_GetSupportedDTCs(dtcBuf, statusBuf, &count);
-
-    DET_LOGI(TAG, "19/0A supported=%u", (unsigned)count);
-
     Dcm_TxBuf[0] = 0x59U;
     Dcm_TxBuf[1] = DCM_DTC_SUBFUNC_REPORT_SUPPORTED;
     if (Dem_GetDTCStatusAvailabilityMask(DCM_DEM_CLIENT_ID, &Dcm_TxBuf[2]) != E_OK)
@@ -1351,6 +1465,15 @@ static void Dcm_HandleReadDtcSupported(const uint8* uds, uint8 udsLen)
         Dcm_SendNegativeResponse(DCM_SID_READ_DTC_INFO, DCM_NRC_CONDITIONS_NOT_CORRECT);
         return;
     }
+
+    /* [SWS_Dcm_00378]/Table 7.11: DTCStatusMask=0x00（絞り込みなし）で本 ECU が対応する全 DTC を取得する */
+    if (Dcm_CollectFilteredDtcs(0x00U, 0U, dtcBuf, statusBuf, &count) != E_OK)
+    {
+        Dcm_SendNegativeResponse(DCM_SID_READ_DTC_INFO, DCM_NRC_REQUEST_OUT_OF_RANGE);
+        return;
+    }
+
+    DET_LOGI(TAG, "19/0A supported=%u", (unsigned)count);
 
     Dcm_SendDtcList(DCM_DTC_SUBFUNC_REPORT_SUPPORTED, 3U, dtcBuf, statusBuf, count);
 }
@@ -1360,11 +1483,11 @@ static void Dcm_HandleReadDtcSupported(const uint8* uds, uint8 udsLen)
  *
  * \details [SWS_Dcm_00465]: ステータスが「prefailed」の DTC のみを対象に
  *          Fault Detection Counter（[SWS_Dem_00415]により -128〜127へ
- *          線形写像済みの値）を返す。絞り込み自体は Dem 内部のデバウンス
- *          状態に基づく Dem 側の知識のため、`Dem_GetSupportedDTCs()`
- *          （0x0A）と対になる `Dem_GetPrefailedDTCs()` へ委譲する
- *          （`Dem_GetAllDTCs()` の statusMask 絞り込みと同じ設計、詳細は
- *          Dem.h 参照）。ISO 14229-1 上、本サブ機能の応答は 0x02/0x0A と
+ *          線形写像済みの値）を返す。Dem_SetDTCFilter()
+ *          （DTCStatusMask=0x00、FilterForFaultDetectionCounter=YES）の後に
+ *          Dem_GetNextFilteredDTCAndFDC() を繰り返し呼んで取得する
+ *          （Dcm_CollectFilteredDtcs()、詳細は Dem.h 参照）。
+ *          ISO 14229-1 上、本サブ機能の応答は 0x02/0x0A と
  *          異なり DTCStatusAvailabilityMask を含まない（SID/subFunc の
  *          2バイトの直後から DTC 一覧が始まる）点に注意。
  *
@@ -1390,7 +1513,13 @@ static void Dcm_HandleReadDtcFaultDetectionCounter(const uint8* uds, uint8 udsLe
     uint8  fdcBuf[DEM_EVENT_COUNT];
     uint8  count = 0U;
 
-    Dem_GetPrefailedDTCs(dtcBuf, fdcBuf, &count);
+    /* [SWS_Dcm_00465]/Table 7.23: DTCStatusMask=0x00、FilterForFaultDetectionCounter=YES で
+     * prefailed の DTC のみを Dem_GetNextFilteredDTCAndFDC() で取得する。 */
+    if (Dcm_CollectFilteredDtcs(0x00U, 1U, dtcBuf, fdcBuf, &count) != E_OK)
+    {
+        Dcm_SendNegativeResponse(DCM_SID_READ_DTC_INFO, DCM_NRC_REQUEST_OUT_OF_RANGE);
+        return;
+    }
 
     DET_LOGI(TAG, "19/14 prefailed=%u", (unsigned)count);
 

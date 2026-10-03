@@ -92,16 +92,15 @@ statusMask の代表値: `0x08`=confirmedDTC のみ / `0xFF`=全件。
 **statusMask による絞り込みを一切行わない**点が異なります
 （"the server shall report ... regardless of their status"）。
 
-`Dem_GetAllDTCs()`（0x01/0x02 が使う既存関数）はステータスバイトと
-`statusMask` の AND が非ゼロの DTC のみを返すため、一度も故障判定が
-完了していない（`DEM_STATUS_NOT_COMPLETED_SINCE_CLEAR` 以外のビットが
-すべて 0 の）DTC は、どんな `statusMask` を渡しても列挙できません
+ステータスバイトと `statusMask` の AND が非ゼロの DTC のみを返す絞り込みでは、
+一度も故障判定が完了していない（`DEM_STATUS_NOT_COMPLETED_SINCE_CLEAR` 以外の
+ビットがすべて 0 の）DTC は、どんな `statusMask` を渡しても列挙できません
 （`(status & statusMask)` は該当ビットが 0 なら常に 0 のため）。
-「本 ECU がそもそもどの DTC に対応しているか」を問う 0x0A の要求には
-これでは応えられないため、絞り込みを一切行わず `Dem_DtcTable[]` の
-全件（`DEM_EVENT_COUNT` 件）を無条件に返す `Dem_GetSupportedDTCs()`
-を新設し、`Dcm_HandleReadDtcSupported()` から呼んでいます
-（詳細は `Dem.h`/`Dem.c` の該当コメント参照）。
+「本 ECU がそもそもどの DTC に対応しているか」を問う 0x0A の要求は、
+実仕様の `Dem_SetDTCFilter()` に `DTCStatusMask=0x00`（絞り込みなし）を
+渡すことで実現します（Table 7.11、`Dcm_HandleReadDtcSupported()`）。
+2026-10 までは本プロジェクト独自の `Dem_GetSupportedDTCs()` で実現して
+いましたが、実仕様のフィルタ API へ置き換えました（下記参照）。
 
 **ユニットテストについて**: 本プロジェクトは従来、Dcm/Dem を実機 +
 `uds_tester` の手動検証のみで確認しており、ユニットテストが存在
@@ -141,8 +140,8 @@ FF（len=43）が受理され、CF×6（sn=1〜6）まで正しく送信完了
 
 ### 0x19/0x14 reportDTCFaultDetectionCounter（2026-09 追加、2026-09-20 仕様乖離を修正）
 
-`Dem_GetFaultDetectionCounter()`（[SWS_Dem_00203]）新設に伴い追加。DTC 候補
-一覧の取得自体は 0x0A と同じ `Dem_GetSupportedDTCs()` を使うが、応答
+`Dem_GetFaultDetectionCounter()`（[SWS_Dem_00203]）新設に伴い追加。DTC の
+取得は `Dem_SetDTCFilter()` + `Dem_GetNextFilteredDTCAndFDC()`（下記）で、応答
 フォーマットが 0x02/0x0A と異なり `DTCStatusAvailabilityMask` バイトを
 含まない（ISO 14229-1 の `reportDTCFaultDetectionCounter` はそもそも
 ステータス概念を扱わないため）。実装当初 subFunc 値を 0x0B と誤って
@@ -158,14 +157,14 @@ FF（len=43）が受理され、CF×6（sn=1〜6）まで正しく送信完了
 2. 本ハンドラは [SWS_Dcm_00465] が要求する「ステータスが『prefailed』
    （Dem_SetDTCFilter の FilterForFaultDetectionCounter 説明により
    FDC値が1〜0x7E の意）の DTC のみ」という絞り込みを行わず、常に
-   `DEM_EVENT_COUNT` 件全てを返していた。本プロジェクトは
-   `Dem_SetDTCFilter()`/`Dem_GetNextFilteredDTCAndFDC()` を実装せず
-   `Dem_GetSupportedDTCs()` で代替している。絞り込み条件（FDC値域）は
-   Dem 内部のデバウンス状態に基づく Dem 側の知識のため、`/simplify`
-   の指摘（`Dem_GetAllDTCs()` の statusMask 絞り込みと同じ設計に
-   揃えるべき）を受けて、当初 Dcm ハンドラ内に実装した絞り込みロジックを
-   `Dem_GetPrefailedDTCs()`（新設）へ移設した。ハンドラ側は一括取得済みの
-   結果をそのまま応答へ整形するだけになった。
+   `DEM_EVENT_COUNT` 件全てを返していた。絞り込み条件（FDC値域）は Dem 内部の
+   デバウンス状態に基づく Dem 側の知識のため、`/simplify` の指摘を受けて、
+   当初 Dcm ハンドラ内に実装した絞り込みロジックを Dem の独自関数
+   `Dem_GetPrefailedDTCs()`（新設）へ移設した。2026-10 には、この独自関数を
+   実仕様の `Dem_SetDTCFilter()`（`DTCStatusMask=0x00`、
+   `FilterForFaultDetectionCounter=TRUE`）+ `Dem_GetNextFilteredDTCAndFDC()` の
+   反復呼び出しへ置き換えた（[`Dem_Notes.md`](./Dem_Notes.md#dtc-filter) 参照）。
+   ハンドラ側は取り出した結果をそのまま応答へ整形するだけである。
    この結果、故障が一件も進行していない平常時は DTC 列挙部分の無い
    `[0x59, 0x14]` のみを返すようになった（以前は平常時でも
    `DEM_EVENT_COUNT` 件全てを FDC=0 で列挙していた）。

@@ -11,7 +11,7 @@
  *          CONFIRMED した DTC は、再故障せずに複数回の操作サイクル（起動〜次回
  *          起動）を経ると Dem_Init() が経年回復 (Aging) を判定し自動的に
  *          CONFIRMED を解除する（詳細は Dem.c / Dem_Cfg.h を参照）。
- *          DCM は Dem_GetAllDTCs() / Dem_ClearDTC() 経由で UDS SID 0x19 / 0x14
+ *          DCM は Dem_SetDTCFilter() / Dem_GetNextFilteredDTC() / Dem_ClearDTC() 経由で UDS SID 0x19 / 0x14
  *          に応答する。FreezeFrame（故障時点のスナップショット）に加え、
  *          ExtendedData（累積故障確定回数、Dem_GetOccurrenceCounterOfEvent()）
  *          も SID 0x19 subFunc 0x06 経由で提供する。
@@ -331,90 +331,120 @@ Std_ReturnType Dem_GetDTCOfEvent(Dem_EventIdType EventId, Dem_DTCFormatType DTCF
  */
 Std_ReturnType Dem_ClearDTC(uint8 ClientId, uint32 DTC, Dem_DTCFormatType DTCFormat, Dem_DTCOriginType DTCOrigin);
 
-/**
- * \brief   ステータスマスクに一致する全 DTC を列挙する。
- * \details DCM SID 0x19 サブ機能 0x01 / 0x02 から呼び出す。
- *
- * \param[out]  dtcBuf     DTC コード (24-bit) の格納先。DEM_EVENT_COUNT 要素以上。
- * \param[out]  statusBuf  DTC ステータスバイトの格納先。同サイズ。
- * \param[out]  count      マッチした DTC 数。
- * \param[in]   statusMask 絞り込みマスク。0xFF で全件取得。
- *
- * \note    本プロジェクト独自の関数（実 AUTOSAR に対応する関数は無い）のため
- *          ApiId は任意の値。Dem_EnableDTCSetting/DisableDTCSetting を実仕様の
- *          ServiceID(0x25/0x24) に合わせた際、元々そこにあった 0x24 から
- *          空いていた 0x2B へ移した（Dem_Cfg.h 冒頭コメント参照）。ところが
- *          その移設先 0x2B 自体が実仕様の `Dem_SetComponentAvailable`
- *          （[SWS_Dem_01117]）と衝突していたことが判明したため、実仕様の
- *          どの Dem 関数の Service ID とも一致しないことを確認済みの 0x31 へ
- *          2026-09-06 に再度付け替えた。
- *
- * \ServiceID      {0x31}
- * \Reentrancy     {Reentrant}
- * \Synchronicity  {Synchronous}
- */
-void Dem_GetAllDTCs(uint32* dtcBuf, uint8* statusBuf, uint8* count, uint8 statusMask);
+/** [SWS_Dem_00057] Dem_SetDTCFilter() の DTCSeverityMask の型（uint8）。
+ *  本プロジェクトは DTC の Severity を持たないため、FilterWithSeverity=TRUE は
+ *  受け付けない。 */
+typedef uint8 Dem_DTCSeverityType;
+
+/** [SWS_Dem_00215] Dem_GetNextFilteredDTC() 系の戻り値: フィルタ条件に一致する
+ *  次の要素が無い。実仕様の Service Interface DiagnosticInfo（値表、
+ *  DEM_NO_SUCH_ELEMENT = 48）に基づく数値。 */
+#define DEM_NO_SUCH_ELEMENT  48U
 
 /**
- * \brief   ステータスに関わらず、本 ECU が対応する全 DTC を列挙する。
+ * \brief   DTC フィルタ条件を設定する（[SWS_Dem_00208]）。
  *
- * \details `Dem_GetAllDTCs()` はステータスバイトが `statusMask` と一致した
- *          DTC のみを返すため、一度も FAILED になっていない（status=0x00）
- *          DTC はどんな `statusMask` を渡しても列挙できない
- *          （`(status & statusMask)` は status=0 なら常に 0 のため）。
- *          UDS SID 0x19 サブ機能 0x0A reportSupportedDTC は「ステータスに
- *          関わらず本 ECU がサポートする DTC 一覧」を返す要求のため、
- *          この関数は絞り込みを一切行わず `Dem_DtcTable[]` の全件を返す。
+ * \details 以降の Dem_GetNumberOfFilteredDTC() / Dem_GetNextFilteredDTC() /
+ *          Dem_GetNextFilteredDTCAndFDC() が、この条件に一致する DTC だけを
+ *          対象にする（[SWS_Dem_00057]）。条件は次回の本関数呼び出しまで有効で、
+ *          呼び出すたびに「次に返す DTC」の位置が先頭へ戻る。
  *
- * \param[out]  dtcBuf     DTC コード (24-bit) の格納先。DEM_EVENT_COUNT 要素以上。
- * \param[out]  statusBuf  DTC ステータスバイトの格納先。同サイズ。
- * \param[out]  count      列挙した DTC 数（常に DEM_EVENT_COUNT）。
+ *          `DTCStatusMask` が 0x00 のときはステータスバイトによる絞り込みを
+ *          しない（本 ECU が対応する全 DTC を対象にする。UDS 0x19/0x0A 用）。
+ *          0x01〜0xFF のときは `(statusOfDTC & DTCStatusMask) != 0` の DTC のみ。
+ *          `FilterForFaultDetectionCounter` が TRUE のときは、Fault Detection
+ *          Counter が 1〜0x7E（prefailed）の DTC のみを対象にする
+ *          （UDS 0x19/0x14 用。値は Dem_GetFaultDetectionCounter() と同じ写像）。
  *
- * \note    本プロジェクト独自の関数（実 AUTOSAR に対応する関数は無い）のため
- *          ApiId は任意の値のはずだったが、以前の 0x2A は実仕様の
- *          `Dem_GetComponentFailed`（[SWS_Dem_01115]）と衝突していたことが
- *          判明したため、実仕様のどの Dem 関数の Service ID とも一致しない
- *          ことを確認済みの 0x2F へ 2026-09-06 に付け替えた（Dem_Cfg.h
- *          冒頭コメント参照）。
+ *          本プロジェクトは単一ECU・単一診断クライアント構成のため、フィルタ条件は
+ *          1 組だけ保持し、`ClientId` は区別に使わない。また Severity を持たない
+ *          ため `FilterWithSeverity` に TRUE を渡された場合は拒否する。
  *
- * \ServiceID      {0x2F}
- * \Reentrancy     {Reentrant}
+ * \param[in]  ClientId                       クライアント識別子。本実装では未使用。
+ * \param[in]  DTCStatusMask                  ステータスバイトのマスク（0x00=絞り込みなし）。
+ * \param[in]  DTCFormat                      `DEM_DTC_FORMAT_UDS` のみ対応。
+ * \param[in]  DTCOrigin                      `DEM_DTC_ORIGIN_PRIMARY_MEMORY` のみ構成する。
+ * \param[in]  FilterWithSeverity             TRUE は非対応（Severity を持たない）。
+ * \param[in]  DTCSeverityMask                FilterWithSeverity が FALSE のとき無視する。
+ * \param[in]  FilterForFaultDetectionCounter TRUE で prefailed の DTC のみを対象にする。
+ *
+ * \retval  E_OK      フィルタを設定した。
+ * \retval  E_NOT_OK  未初期化、または DTCFormat / DTCOrigin / FilterWithSeverity が
+ *                    非対応の値（後 3 者は DEM_E_WRONG_CONFIGURATION も報告する）。
+ *
+ * \AUTOSARReq     {SWS_Dem_00208, SWS_Dem_00057}
+ * \ServiceID      {0x13}
+ * \Reentrancy     {Reentrant for different ClientIds, Non Reentrant for the same ClientId}
  * \Synchronicity  {Synchronous}
  */
-void Dem_GetSupportedDTCs(uint32* dtcBuf, uint8* statusBuf, uint8* count);
+Std_ReturnType Dem_SetDTCFilter(uint8 ClientId, uint8 DTCStatusMask, Dem_DTCFormatType DTCFormat,
+                                Dem_DTCOriginType DTCOrigin, boolean FilterWithSeverity,
+                                Dem_DTCSeverityType DTCSeverityMask, boolean FilterForFaultDetectionCounter);
 
 /**
- * \brief   ステータスが「prefailed」の DTC のみを、対応する Fault Detection
- *          Counter と共に列挙する。
+ * \brief   現在のフィルタ条件に一致する DTC の件数を取得する（[SWS_Dem_00214]）。
  *
- * \details [SWS_Dcm_00465] は UDS SID 0x19 サブ機能 0x14
- *          reportDTCFaultDetectionCounter に対し、実仕様では
- *          `Dem_SetDTCFilter()`(FilterForFaultDetectionCounter=TRUE) +
- *          `Dem_GetNextFilteredDTCAndFDC()` の反復呼び出しで「prefailed」
- *          （Fault Detection Counter の値が 1〜0x7E）の DTC のみを取得する
- *          ことを要求する。本プロジェクトはこのフィルタ問い合わせ API 対
- *          （`Dem_SetDTCFilter()`/`Dem_GetNextFilteredDTCAndFDC()`）を
- *          実装せず、`Dem_GetAllDTCs()`/`Dem_GetSupportedDTCs()` と同様に
- *          「一括取得＋Dem内部で絞り込み」方式で代替する。
- *          絞り込み条件（FDC値域）は Dem 内部のデバウンス状態に基づく
- *          Dem 側の知識であるため、Dcm 層ではなく本関数側で判定する
- *          （`Dem_GetAllDTCs()` の statusMask 絞り込みと同じ設計）。
+ * \details 「次に返す DTC」の位置は進めない（件数を数えるだけ）。常に同期的に
+ *          完了する（DEM_PENDING は返さない）。
  *
- * \param[out]  dtcBuf   DTC コード (24-bit) の格納先。DEM_EVENT_COUNT 要素以上。
- * \param[out]  fdcBuf   `Dem_GetFaultDetectionCounter()` と同じ写像済み
- *                       Fault Detection Counter の格納先。同サイズ。
- * \param[out]  count    prefailed だった DTC 数。
+ * \param[in]   ClientId             クライアント識別子。本実装では未使用。
+ * \param[out]  NumberOfFilteredDTC  一致した DTC の件数。NULL 禁止。
  *
- * \note    本プロジェクト独自の関数（実 AUTOSAR に対応する関数は無い）の
- *          ため ApiId は任意の値。実仕様のどの Dem 関数の Service ID
- *          （`Dem_GetNextFilteredDTCAndFDC`=0x3b 含む）とも一致しないことを
- *          `pdftotext`で確認済みの 0x43 を使う。
+ * \retval  E_OK      正常取得。
+ * \retval  E_NOT_OK  未初期化、NumberOfFilteredDTC が NULL、または Dem_SetDTCFilter()
+ *                    でフィルタが設定されていない。
  *
- * \ServiceID      {0x43}
- * \Reentrancy     {Reentrant}
- * \Synchronicity  {Synchronous}
+ * \AUTOSARReq     {SWS_Dem_00214}
+ * \ServiceID      {0x17}
+ * \Reentrancy     {Reentrant for different ClientIds, Non Reentrant for the same ClientId}
+ * \Synchronicity  {Asynchronous（本実装は同期的に完了するため DEM_PENDING は返さない）}
  */
-void Dem_GetPrefailedDTCs(uint32* dtcBuf, uint8* fdcBuf, uint8* count);
+Std_ReturnType Dem_GetNumberOfFilteredDTC(uint8 ClientId, uint16* NumberOfFilteredDTC);
+
+/**
+ * \brief   フィルタ条件に一致する次の DTC とそのステータスを取得する（[SWS_Dem_00215]）。
+ *
+ * \details 呼ぶたびに一致する DTC を 1 件ずつ返し、全件返し終えたら
+ *          DEM_NO_SUCH_ELEMENT を返す。常に同期的に完了する（DEM_PENDING は返さない）。
+ *
+ * \param[in]   ClientId   クライアント識別子。本実装では未使用。
+ * \param[out]  DTC        DTC 値（UDS 形式、24-bit）。NULL 禁止。E_OK 以外のときは不定。
+ * \param[out]  DTCStatus  DTC のステータスバイト。NULL 禁止。E_OK 以外のときは不定。
+ *
+ * \retval  E_OK                次の DTC を返した。
+ * \retval  E_NOT_OK            未初期化、ポインタが NULL、またはフィルタが設定されていない。
+ * \retval  DEM_NO_SUCH_ELEMENT 一致する DTC をすべて返し終えた。
+ *
+ * \AUTOSARReq     {SWS_Dem_00215}
+ * \ServiceID      {0x18}
+ * \Reentrancy     {Reentrant for different ClientIds, Non Reentrant for the same ClientId}
+ * \Synchronicity  {Synchronous（本実装は DEM_PENDING を返さない）}
+ */
+Std_ReturnType Dem_GetNextFilteredDTC(uint8 ClientId, uint32* DTC, uint8* DTCStatus);
+
+/**
+ * \brief   フィルタ条件に一致する次の DTC と Fault Detection Counter を取得する
+ *          （[SWS_Dem_00227]）。
+ *
+ * \details Dem_GetNextFilteredDTC() と同じ要領で 1 件ずつ返す。FDC は
+ *          Dem_GetFaultDetectionCounter() と同じ写像（-128〜127）。
+ *          UDS 0x19/0x14 では Dem_SetDTCFilter() に
+ *          FilterForFaultDetectionCounter=TRUE を渡して prefailed のみに絞る。
+ *
+ * \param[in]   ClientId                 クライアント識別子。本実装では未使用。
+ * \param[out]  DTC                      DTC 値（UDS 形式、24-bit）。NULL 禁止。
+ * \param[out]  DTCFaultDetectionCounter Fault Detection Counter。NULL 禁止。
+ *
+ * \retval  E_OK                次の DTC を返した。
+ * \retval  E_NOT_OK            未初期化、ポインタが NULL、またはフィルタが設定されていない。
+ * \retval  DEM_NO_SUCH_ELEMENT 一致する DTC をすべて返し終えた。
+ *
+ * \AUTOSARReq     {SWS_Dem_00227}
+ * \ServiceID      {0x3b}
+ * \Reentrancy     {Reentrant for different ClientIds, Non Reentrant for the same ClientId}
+ * \Synchronicity  {Asynchronous（本実装は同期的に完了するため DEM_PENDING は返さない）}
+ */
+Std_ReturnType Dem_GetNextFilteredDTCAndFDC(uint8 ClientId, uint32* DTC, sint8* DTCFaultDetectionCounter);
 
 /**
  * \brief   FreezeFrame として保存する現在値を更新する。

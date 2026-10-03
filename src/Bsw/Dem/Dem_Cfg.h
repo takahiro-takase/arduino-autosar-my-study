@@ -125,16 +125,23 @@
  *  2026-09-27 是正: 独自関数 Dem_ClearAllDTCs(0x2D)/Dem_ClearOneDtc(0x28) を
  *  実仕様の Dem_ClearDTC（[SWS_Dem_00665]、ServiceID 0x23）へ統合したため、
  *  この2つの ApiId は廃止し DEM_API_ID_CLEAR_DTC = 0x23 に一本化した
- *  （Dem.h 冒頭コメント参照）。 */
+ *  （Dem.h 冒頭コメント参照）。
+ *
+ *  2026-10 是正: 独自関数 Dem_GetAllDTCs(0x31)/Dem_GetSupportedDTCs(0x2F)/
+ *  Dem_GetPrefailedDTCs(0x43) を実仕様のフィルタ API（Dem_SetDTCFilter 0x13/
+ *  Dem_GetNumberOfFilteredDTC 0x17/Dem_GetNextFilteredDTC 0x18/
+ *  Dem_GetNextFilteredDTCAndFDC 0x3b）へ置き換えたため、この3つの ApiId は
+ *  廃止した。 */
 #define DEM_API_ID_DISABLE_DTC_SETTING              0x24U
 #define DEM_API_ID_ENABLE_DTC_SETTING               0x25U
 #define DEM_API_ID_GET_FREEZE_FRAME_OF_EVENT        0x26U
 #define DEM_API_ID_GET_EVENT_ID_OF_DTC              0x27U
 #define DEM_API_ID_CLEAR_DTC                        0x23U
 #define DEM_API_ID_GET_OCCURRENCE_COUNTER_OF_EVENT  0x2EU
-#define DEM_API_ID_GET_SUPPORTED_DTCS               0x2FU
-#define DEM_API_ID_GET_ALL_DTCS                    0x31U
-#define DEM_API_ID_GET_PREFAILED_DTCS               0x43U
+#define DEM_API_ID_SET_DTC_FILTER                   0x13U
+#define DEM_API_ID_GET_NUMBER_OF_FILTERED_DTC       0x17U
+#define DEM_API_ID_GET_NEXT_FILTERED_DTC            0x18U
+#define DEM_API_ID_GET_NEXT_FILTERED_DTC_AND_FDC    0x3BU
 #define DEM_API_ID_SET_FREEZE_FRAME_CONTEXT        0x2CU
 #define DEM_API_ID_GET_FAULT_DETECTION_COUNTER      0x3EU
 #define DEM_API_ID_GET_VERSION_INFO                 0x00U
