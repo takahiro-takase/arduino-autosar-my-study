@@ -1,6 +1,6 @@
 # ComM（通信マネージャ）
 
-> [README](../../README.md) の「[CAN 通信状態管理](../../README.md#can-comm-management)」節から分離
+> [README](../../README.md) の「[CAN 通信状態管理](../can_stack.md#can-comm-management)」節から分離
 > （旧「ECU 管理層」節から移動。実 AUTOSAR では EcuM/BswM/WdgM とは別クラスタ
 > [Communication Services] に属するため）。
 

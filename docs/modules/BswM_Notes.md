@@ -178,12 +178,13 @@ POST_RUN 中に停止するタスク:
             │           Com_IpduGroupStop(テレメトリ)  ← ComM==FULL_COM 前提の
             │           Rule 3 (AND条件) が既に false になっているため
             │           冪等（テレメトリが既に停止済みなら何もしない）
-            └→ CanNm_NetworkRelease()
+            └→ Nm_NetworkRelease() → CanNm_NetworkRelease()
                   → CanNm: Normal Operation → Ready Sleep State（送信停止）
                   → NM-Timeout Timer 満了 → Prepare Bus-Sleep Mode
                   → Wait-Bus-Sleep Timer 満了（他ノードからの NM フレーム受信が
                     なければ）→ Bus-Sleep Mode へ到達
-                        → CanSM_NmBusSleepMode()
+                        → Nm_BusSleepMode() → ComM_Nm_BusSleepMode()
+                          → CanSM_RequestComMode(NO_COM)
                               → Can_SetControllerMode(CAN_T_SLEEP)  ← ここで初めて
                                 MCP2515 を実際にスリープさせる（詳細は
                                 [`CanNm_Notes.md`](./CanNm_Notes.md) 参照）

@@ -1,6 +1,6 @@
 # E2EMon（ネットワーク健全性モニタ、独自 CDD 相当）
 
-> [README](../../README.md) の「[E2E 保護](../../README.md#e2e-p01)」節から分離。
+> [README](../../README.md) の「[E2E 保護](../can_stack.md#e2e-p01)」節から分離。
 
 `E2EXf_InverseTransformP05()`（[`E2EXf_Notes.md`](./E2EXf_Notes.md) 参照）が検出した E2E エラーは、
 これまで Dem への DTC 報告にしか使われていませんでした。これとは別に、

@@ -1,6 +1,6 @@
 # CanSM
 
-> [README](../../README.md) の「[CAN 通信状態管理](../../README.md#can-comm-management)」節から分離
+> [README](../../README.md) の「[CAN 通信状態管理](../can_stack.md#can-comm-management)」節から分離
 > （旧「ECU 管理層」節から移動。実 AUTOSAR では EcuM/BswM/WdgM とは別クラスタ
 > [Communication Services] に属するため）。
 
@@ -16,7 +16,8 @@ Bus-Off 検出直後（回復試行の前）に `ComM_BusSM_ModeIndication(SILEN
 再起動試行のたびに、Bus-Off 発生時点の状態（FULL_COM か NO_COM_PENDING_SLEEP か）
 へ復帰させる（`CanSM_BusOffFromPendingSleep`、後者の場合は誤って FULL_COM へ
 戻さない）。ComM の NO_COM 要求によるボランタリスリープでは即座にはスリープせず、
-CanNm（CanNm 状態機械）が Bus-Sleep Mode へ到達した通知（`CanSM_NmBusSleepMode()`）を
+CanNm（CanNm 状態機械）が Bus-Sleep Mode へ到達した通知（`Nm_BusSleepMode()` →
+`ComM_Nm_BusSleepMode()` を経て ComM が呼ぶ `CanSM_RequestComMode(NO_COM)`）を
 受けてから `Can_SetControllerMode(CAN_T_SLEEP)` で実 HW を実際にスリープさせる
 （協調スリープ、詳細は [`CanNm_Notes.md`](./CanNm_Notes.md) 参照）。`CanSM_ControllerModeIndication()`
 による復帰経路を持ち、復帰は即座に確定せず、ウェイクアップ検証（Wakeup Validation
@@ -103,7 +104,7 @@ ComM のチャネル状態が回復完了まで FULL_COM のまま古い情報�
 なった。これを避けるため `ComM_BusSM_ModeIndication()` はチャネルモードが実際に
 変化した時のみ `EcuM_RequestRUN()`/`EcuM_ReleaseRUN()` を呼ぶよう修正した。
 
-（README 該当箇所: [CAN コントローラの実スリープ](../../README.md#can-コントローラの実スリープcan_setcontrollermodecan_t_sleep)）
+（README 該当箇所: [CAN コントローラの実スリープ](../can_stack.md#can-コントローラの実スリープcan_setcontrollermodecan_t_sleep)）
 
 ### NO_COM_PENDING_SLEEP 中の Bus-Off 見逃し
 
@@ -155,4 +156,4 @@ FULL_COM 経路（相手ノード不在による自然発生 Bus-Off、実機で
 実証済み。EcuM 側の DET 誤検知なしも確認）と同一のコードパスを通ることに
 よる間接的な検証と、コードレビューをもって十分と判断した。
 
-（README 該当箇所: [CAN 通信状態管理（ComM / CanSM / CanNm）](../../README.md#can-comm-management)）
+（README 該当箇所: [CAN 通信状態管理（ComM / CanSM / CanNm）](../can_stack.md#can-comm-management)）
