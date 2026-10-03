@@ -527,6 +527,20 @@ delay(1000);  /* 動作確認用: 500ms の許容上限を超えさせる */
 
 ## 明示する簡略化
 
+- **Alive Supervision は下限だけを判定します**（`WdgMMinMargin`/`WdgMMaxMargin` 相当の許容幅は持たない）。
+  [SWS_WdgM_00074] は Alive カウンタが `[Expected − MinMargin, Expected + MaxMargin]` に収まることを
+  求めますが、本実装は `ExpectedAliveIndications`（`WDGM_ENGINE_EXPECTED_ALIVE_INDICATIONS` 等）を
+  下限とし、`AliveCount >= Expected` だけを見ます。上限（呼び出しが多すぎる暴走）は見ていませんが、
+  Deadline Supervision の最小経過時間（END→START の下限。ENGINE 2500ms / WARNING 300ms）が、
+  周期より速く呼ばれる暴走を即座に EXPIRED として検出するため、実質的に補われています。
+  また `WdgMSupervisionReferenceCycle`（複数の監視サイクルにまたがる Alive 判定）は持たず、
+  判定は常に 1 サイクル（`WDGM_SUPERVISION_CYCLE_MS`）ごとです。
+- **ソフトウェアリセット（`WdgM_PerformReset()`）の本番の呼び出し元はありません**（テストのみ）。
+  本番でリセットに至る経路は、STOPPED によるリフレッシュ停止（HW ウォッチドッグ満了）と、
+  UDS 0x11 ECUReset の 2 つです。前者は STOPPED で報告した Dem イベントを、NvM が動き続けて
+  リセットまでの約 4 秒の間に書き込みます（スケジューラ自体が止まった場合は書けません）。後者は
+  `NvM_WriteAll()` で書き切ってからリセットします。
+
 - **`WdgM_SetMode()` は複数モード切替に対応していません**（本プロジェクトは
   `WdgM_ConfigType`/`WdgM_EntityCfgType` が単一の静的コンフィグのみを保持する
   構造で、`WDGM_MODE_DEFAULT` (0) 以外の `Mode` を渡すと常にエラー拒否する

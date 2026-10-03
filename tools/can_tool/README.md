@@ -76,7 +76,7 @@ CAN 送受信の観測からの推測値だったため撤去した旧「トラ�
 1回送信するショートカットです。セッション制約・SecurityAccess のどちらも
 不要なため単独で完結し、送信すると実機のリセットボタン押下と同等に ECU が
 即座にリセットされます（`Mcu_PerformReset()` 経由、[シリアルモニタ出力例](../../docs/archive/README_2026-10-03.md#serial-log-example)
-参照。`tools/can_tool/capl_scripts/01_ecu_reset.capl` と同じ内容を
+参照。`tools/can_tool/capl_scripts/001_ecu_reset.capl` と同じ内容を
 ボタン1つで実行できるようにしたもの）。
 
 ボタンの追加・変更はコードを触らず `config.json` の `buttons` 配列に項目を
