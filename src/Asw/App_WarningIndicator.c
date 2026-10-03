@@ -37,7 +37,7 @@ static uint8 s_blinkState = 0U;
  * \brief   警告灯インジケータ SW-C を初期化する。
  *
  * \details LED を消灯状態にし、点滅用内部状態を初期化する。
- *          LED チャネルの方向設定は IoHwAb_Init() が担うため、
+ *          LED チャネルの方向設定は Port_Init() が担い、IoHwAb_Init() が初期状態（消灯）にするため、
  *          本関数では行わない。
  *
  * \pre        IoHwAb_Init() が正常完了していること。

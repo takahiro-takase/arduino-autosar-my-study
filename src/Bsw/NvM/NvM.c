@@ -240,7 +240,7 @@ static const NvM_BlockDescriptorType* NvM_GetBlock(NvM_BlockIdType id)
  * \brief   AUTOSAR Crc8 (SAE J1850) アルゴリズムでブロックの CRC を計算する。
  *
  * \details 多項式 0x1D、初期値 0xFF、入力/出力の反転なし、最終 XOR 0xFF。
- *          ブロックは最大 8 バイトと小さいため、テーブルなしのビット単位
+ *          ブロックは最大 15 バイト（`NVM_MAX_BLOCK_LENGTH`）と小さいため、テーブルなしのビット単位
  *          計算で十分な速度が得られる。
  */
 static uint8 NvM_CalcCrc8(const uint8* data, uint16 length)
