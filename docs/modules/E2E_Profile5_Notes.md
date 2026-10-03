@@ -22,8 +22,9 @@
 実質2byte より1byte 増え、SecOC の Freshness(1byte)+MAC(3byte) を足すと
 classic CAN の DLC=8 上限（4+1+3=8byte だったところへ、E2E だけで5byte になり
 5+1+3=9byte で超過）を超えてしまうため、SecOC 側を撤去し E2E Profile05 単体
-保護に一本化した。詳細な経緯・代替案（SecOC を ImmobilizerStatus へ移す案）の
-検討は [SecOC_Notes.md](./SecOC_Notes.md) を参照。
+保護に一本化した。SecOC 側の経緯と撤去後の状況は
+[SecOC_Notes.md](./SecOC_Notes.md) を参照（現在 SecOC を使う TX I-PDU は無く、
+`ImmobilizerStatus` も E2E/SecOC いずれの保護も付与していない）。
 
 ## 1. Profile 5 が提供する 3 つのメカニズム（表 7-4 / SWS_E2E_00394）
 
@@ -187,7 +188,7 @@ Profile01 (`E2E_P01StatusType`) とはビットパターンが異なる点に注
   実 AUTOSAR の E2E Transformer は ARXML 設定から RTE 生成コードが
   「トランスフォーマーインスタンスごとに専用コード」を生成する方式であり、
   プロファイルをまたいだ汎用的な切り替え機構を持たないため、この方式に倣った
-  （`E2EXf_Initialized` フラグ・`EEXF_API_ID_TRANSFORM` は Profile01/05 で共用）。
+  （`E2EXf_Initialized` フラグ・`E2EXF_API_ID_TRANSFORM` は Profile01/05 で共用）。
 - **CRC16計算の一次資料**: `Crc_StartValue16=0xFFFF`・DataID投入順（下位→上位、
   データの後）はいずれも SWS_E2E_00406 の擬似コードで確認済み（推測ではない）。
 

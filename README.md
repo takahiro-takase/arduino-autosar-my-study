@@ -16,8 +16,8 @@ ARXML や設定ツールは使用せず、コードで階層構造・型定義�
   - [ビルドと書き込み](#build-and-flash)
 - [アーキテクチャ（何を学べるか）](#architecture)
   - [層構造](#layer-structure)
-  - [モジュール一覧](#module-list)
   - [ディレクトリ構成](#directory-structure)
+  - [モジュール一覧](#module-list)
 - [テスト（動作確認）](#testing)
   - [静的解析（MISRA C:2012、API 実装数の集計）](#static-analysis)
   - [PC 上の単体テスト（実機不要）](#unit-test)
@@ -45,6 +45,8 @@ ARXML や設定ツールは使用せず、コードで階層構造・型定義�
 本プロジェクトは、学習目的で AUTOSAR CP の ASW / RTE / BSW の 3 層アーキテクチャを
 Arduino UNO 上に最小構成で再現しています。
 その上でメータ ECU（インストルメントクラスタ）相当のアプリケーションを動作させることを目的としています。
+CAN 通信と UDS 診断（ISO 15765-2 / ISO 14229-1）を、PC 上のテストでも実機でも動かして確認できます
+（対応する UDS サービスは「[診断スタック](#diag-stack)」を参照）。
 
 ![仮想メータ表示（can_tool の UDS Tester タブ）でエンジン回転数・RUN/FAULT/ABS 警告灯の動作を確認する様子](docs/images/MeterEcuAnimation.gif)
 
@@ -141,12 +143,48 @@ pio device monitor
 ASW ─── App_EngineManager / App_WarningIndicator / App_GptDemo
 RTE ─── Rte（ポートベース S/R API + E2E Transformer 呼び出しグルー）
 OS  ─── Os（タイムトリガスケジューラ）
-BSW ─── EcuM / BswM / WdgM / WdgIf / Wdg / ComM / CanSM / Nm / CanNm / E2EXf / E2E / Com / PduR / SecOC / Csm / CryIf / Crypto / KeyM / CanIf / Can
-        CanTp / Dcm / Dem / NvM / MemIf / Fee / IoHwAb / Dio / Port / Adc / SchM / Det / Mcu / Gpt
-HAL ─── Can_Hw / Dio_Hw / Port_Hw / Adc_Hw / Mcu_Hw / Fee_Hw / Wdg_Hw / Gpt_Hw（src/Hal/ に集約）
+BSW ─── 通信（Com / PduR / CanIf / Can / CanNm / ComM ほか）、診断（Dcm / Dem / CanTp ほか）、
+        ECU 管理（EcuM / BswM / WdgM ほか）、IO・ストレージ（Dio / Adc / NvM / Fee ほか）、
+        セキュリティ（SecOC / Csm ほか）、基盤（Det / Mcu / Gpt ほか）
+        ※ モジュールの全一覧は「モジュール一覧」を参照
+HAL ─── MCU 依存の最下層（Can_Hw / Dio_Hw ほか、src/Hal/ に集約）
 ```
 
 各層は上位層のヘッダのみに依存し、下位層の実装詳細を知りません。
+
+<a id="directory-structure"></a>
+### ディレクトリ構成
+
+```
+├── src/                    # 製品コード
+│   ├── main.cpp            # EcuM_Init / EcuM_MainFunction を呼ぶだけのエントリポイント
+│   ├── Asw/                # アプリケーション SW-C（App_EngineManager / App_WarningIndicator / App_GptDemo）
+│   ├── Rte/                # RTE（Rte.c、型定義 Rte_Type.h、COM コールバックのプロトタイプ Rte_Cbk.h）
+│   ├── Os/                 # タイムトリガスケジューラ、カウンタ API（GetCounterValue / GetElapsedValue）
+│   ├── Bsw/<Module>/       # BSW 各モジュール（<Module>.h/.c、<Module>_Cfg.h、<Module>_PBCfg.h/.c）
+│   └── Hal/                # HW 依存部分（Can_Hw / Dio_Hw / Port_Hw / Adc_Hw / Mcu_Hw / Fee_Hw / Wdg_Hw / Gpt_Hw / Det_Hw / SchM_Hw）
+├── test/                   # 単体テスト（GoogleTest、ホスト上で実行）
+│   ├── test_main.cpp       # GoogleTest の main()（全テストで共通）
+│   └── Bsw/<Module>/       # モジュール別のテストファイル（複数モジュールにまたがるものは <X>Stack/ など）
+├── stub/                   # テスト用の差し替え（src/ と同じ構成。Fake_*=HW 差し替え、Wrap_*=--wrap による呼び出し記録）
+├── tools/
+│   ├── can_tool/           # UDS ボタン送信 / CAPL 風スクリプト / 信号エディタ（Python）
+│   ├── misra/              # MISRA C:2012 静的解析（run_misra.py、逸脱リスト misra_suppressions.txt）
+│   ├── api_coverage/       # AUTOSAR API の実装数の集計（api_coverage.py、仕様書の API 一覧 autosar_api_list.json）
+│   └── coverage/           # テストのカバレッジレポート生成（generate_coverage_report.sh）
+├── docs/
+│   ├── modules/            # モジュール別ノート（<Module>_Notes.md）
+│   ├── autosar/            # AUTOSAR 仕様書 PDF の置き場（.gitignore 対象）
+│   ├── images/             # README 用の図
+│   └── archive/            # 分割前の README（全文）
+├── dbc/                    # CAN の DBC ファイル
+├── data/                   # can_signal_editor の信号定義
+├── platformio.ini          # 実機ビルド（env: uno_r4）
+├── CMakeLists.txt          # ホスト上のテスト・静的解析（プリセットは CMakePresets.json）
+└── CMakePresets.json
+```
+
+各モジュールのファイルの役割は、後述の「[モジュール一覧](#module-list)」表の各リンク先（`docs/modules/`）を参照してください。
 
 <a id="module-list"></a>
 ### モジュール一覧
@@ -208,39 +246,6 @@ HAL ─── Can_Hw / Dio_Hw / Port_Hw / Adc_Hw / Mcu_Hw / Fee_Hw / Wdg_Hw / Gp
 
 ModuleId の出典は `docs/autosar/4.3.1/AUTOSAR_TR_BSWModuleList.pdf`（Release 4.3.1、「List of Basic Software Modules」表）。
 AUTOSAR 仕様書 PDF は著作権のためリポジトリに含めていません（`.gitignore` 対象）。公式サイトの Release 4.3.1 から入手して配置してください。
-
-<a id="directory-structure"></a>
-### ディレクトリ構成
-
-```
-├── src/                    # 製品コード
-│   ├── main.cpp            # EcuM_Init / EcuM_MainFunction を呼ぶだけのエントリポイント
-│   ├── Asw/                # アプリケーション SW-C（App_EngineManager / App_WarningIndicator / App_GptDemo）
-│   ├── Rte/                # RTE（Rte.c、型定義 Rte_Type.h、COM コールバックのプロトタイプ Rte_Cbk.h）
-│   ├── Os/                 # タイムトリガスケジューラ、カウンタ API（GetCounterValue / GetElapsedValue）
-│   ├── Bsw/<Module>/       # BSW 各モジュール（<Module>.h/.c、<Module>_Cfg.h、<Module>_PBCfg.h/.c）
-│   └── Hal/                # HW 依存部分（Can_Hw / Dio_Hw / Port_Hw / Adc_Hw / Mcu_Hw / Fee_Hw / Wdg_Hw / Gpt_Hw / Det_Hw / SchM_Hw）
-├── test/                   # 単体テスト（GoogleTest、ホスト上で実行）
-│   ├── test_main.cpp       # GoogleTest の main()（全テストで共通）
-│   └── Bsw/<Module>/       # モジュール別のテストファイル（複数モジュールにまたがるものは <X>Stack/ など）
-├── stub/                   # テスト用の差し替え（src/ と同じ構成。Fake_*=HW 差し替え、Wrap_*=--wrap による呼び出し記録）
-├── tools/
-│   ├── can_tool/           # UDS ボタン送信 / CAPL 風スクリプト / 信号エディタ（Python）
-│   ├── misra/              # MISRA C:2012 静的解析（run_misra.py、逸脱リスト misra_suppressions.txt）
-│   ├── api_coverage/       # AUTOSAR API の実装数の集計（api_coverage.py、仕様書の API 一覧 autosar_api_list.json）
-├── docs/
-│   ├── modules/            # モジュール別ノート（<Module>_Notes.md）
-│   ├── autosar/            # AUTOSAR 仕様書 PDF の置き場（.gitignore 対象）
-│   ├── images/             # README 用の図
-│   └── archive/            # 分割前の README（全文）
-├── dbc/                    # CAN の DBC ファイル
-├── data/                   # can_signal_editor の信号定義
-├── platformio.ini          # 実機ビルド（env: uno_r4）
-├── CMakeLists.txt          # ホスト上のテスト・静的解析（プリセットは CMakePresets.json）
-└── CMakePresets.json
-```
-
-各モジュールのファイルの役割は、上記「[モジュール一覧](#module-list)」表の各リンク先（`docs/modules/`）を参照してください。
 
 <a id="testing"></a>
 ## テスト（動作確認）
@@ -369,6 +374,28 @@ CanTp が ISO 15765-2 のフレーム分割・組立を担い、Dcm が UDS サ�
 Dem は故障情報を DTC として管理し、NvM 経由で EEPROM に永続化します。
 FiM は Dem が確定した DTC をもとにアプリ機能の実行許可を判定します。
 診断フレームはアプリデータ（0x100 / 0x110 / 0x200）とは独立した CAN ID（0x7E0 / 0x7E8）で通信します。
+
+**対応している UDS サービス**（Def=デフォルトセッション、Ext=拡張セッション。拡張セッション限定のサービスを
+デフォルトセッションで要求すると NRC 0x7F で拒否します。送信フレームの詳細は
+[docs/modules/Dcm_Notes.md](docs/modules/Dcm_Notes.md#対応-uds-サービス) を参照）:
+
+| SID | サービス | Def | Ext | 対応範囲 |
+|---|---|---|---|---|
+| 0x10 | DiagnosticSessionControl | ○ | ○ | 0x01 Default / 0x03 Extended |
+| 0x11 | ECUReset | ○ | ○ | 0x01 hardReset / 0x03 softReset |
+| 0x14 | ClearDiagnosticInformation | × | ○ | 全 DTC または 1 件を指定してクリア（SecurityAccess が必要） |
+| 0x19 | ReadDTCInformation | ○ | ○ | 0x01 件数 / 0x02 DTC 一覧 / 0x04 FreezeFrame / 0x06 ExtendedData / 0x0A サポート DTC 一覧 / 0x14 FaultDetectionCounter |
+| 0x22 | ReadDataByIdentifier | ○ | ○ | DID 0x0101 回転数 / 0x0102 冷却水温 / 0x0103 エンジン状態 / 0x0104 テストパターン / 0xF190 VIN |
+| 0x27 | SecurityAccess | × | ○ | 0x01 requestSeed / 0x02 sendKey |
+| 0x28 | CommunicationControl | × | ○ | controlType 0x00〜0x03 |
+| 0x2E | WriteDataByIdentifier | × | ○ | DID 0x0104 テストパターン / 0x0108 暗号鍵更新（SecurityAccess が必要） |
+| 0x2F | InputOutputControlByIdentifier | × | ○ | DID 0x0105〜0x0107 の警告灯（RUN / FAULT / ABS） |
+| 0x31 | RoutineControl | × | ○ | RID 0x0203 EngineHealthCheck の start / stop / requestResults |
+| 0x34 / 0x36 / 0x37 | RequestDownload / TransferData / RequestTransferExit | × | ○ | 転送データは保持せずチェックサムのみ計算する模擬実装（0x34 は SecurityAccess が必要） |
+| 0x3E | TesterPresent | ○ | ○ | 0x00（S3 タイマ維持） |
+| 0x85 | ControlDTCSetting | × | ○ | 0x01 on / 0x02 off |
+
+上記以外のサービスには NRC 0x11（serviceNotSupported）を返します。
 
 このスタックを構成する各モジュール（CanTp/Dcm/Dem/FiM/NvM）の本プロジェクトでの役割は、
 上記「[モジュール一覧](#module-list)」表の「概要」列（リンク先の `docs/modules/` 配下の

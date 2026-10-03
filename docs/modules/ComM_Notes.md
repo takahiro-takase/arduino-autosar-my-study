@@ -41,7 +41,7 @@ FULL_COM のまま維持されます。
 
 ## Dcm との連携（`ComM_DCM_ActiveDiagnostic`/`InactiveDiagnostic`）
 
-`Dcm_Cbk.c` は診断セッションの状態に応じて ComM への診断アクティブ通知を更新します
+`Dcm.c` は診断セッションの状態に応じて ComM への診断アクティブ通知を更新します
 （`Dcm_UpdateComMRequest()`、セッション遷移が起こるすべての経路から呼ばれる）。
 
 | タイミング | 呼び出し |
@@ -108,7 +108,7 @@ CanSM がウェイクアップ検証成功時に `ComM_BusSM_ModeIndication(FULL
 
 | 定数 | 既定値 | 意味 |
 |------|--------|------|
-| `COMM_USER_COUNT` | 1 | 通信モードを要求できるユーザ数（Dcm は `COMM_DCM_ActiveDiagnostic`/`InactiveDiagnostic` 経由のため対象外） |
+| `COMM_USER_COUNT` | 1 | 通信モードを要求できるユーザ数（Dcm は `ComM_DCM_ActiveDiagnostic()`/`ComM_DCM_InactiveDiagnostic()` 経由のため対象外） |
 | `COMM_USER_0` | 0 | EcuM/App_EngineManager（エンジン運転中は FULL_COM、OFF 継続時は NO_COM を要求） |
 
 ## ComM_MainFunction が NOP である理由
@@ -130,7 +130,7 @@ Bus-Sleep、[CanNm_Notes.md](CanNm_Notes.md) 参照）が同じチャタリン�
 
 ただし `ComM_MainFunction()` 自体は AUTOSAR が要求する周期関数であり、かつ
 以前はスケジューラに未登録で一度も呼ばれていなかった（2026-08 のスペック監査で
-発見）ため、`Os_PBCfg.c` の Task 19 として 100ms 周期で登録するところまでは
+発見）ため、`Os_PBCfg.c` の Task 20 として 100ms 周期で登録するところまでは
 修正しました。周期自体は Com_MainFunctionRx/Tx 等と同じ「100ms ティア」に揃えた
 だけで、NOP である以上この値に現状の意味はありません。
 
