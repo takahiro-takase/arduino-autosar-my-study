@@ -7,7 +7,7 @@
  * \details Bsw_DcmStack_SID19_SF01_ReadDtcCount_test.cpp でチェーンの型
  *          （Can_ConfigType/CanIf_ConfigType/PduR_PBConfigType のテスト専用
  *          ローカル設定、Init() の呼び出し順序）を確立した続き。本ファイルは
- *          応答が `3 + DEM_EVENT_COUNT*4 = 59` バイト（7バイト超）になる
+ *          応答が `3 + DEM_EVENT_COUNT*4`（現在 63）バイト（7バイト超）になる
  *          reportSupportedDTC を対象とし、CanTp のマルチフレーム送信
  *          （FF → WAIT_FC → Flow Control 受信 → SEND_CF → CanTp_MainFunction()
  *          の反復呼び出しによる CF 送出）を実際の CAN フレーム単位で検証する。
@@ -15,7 +15,7 @@
  *          手順の要点:
  *            1. [0x19, 0x0A] を Single Frame として 0x7E0 から受信させる
  *               （リクエスト自体は SID19_SF01 と同じ SF）。
- *            2. Dcm の応答生成 → CanTp_Transmit(59バイト) は SF に収まらない
+ *            2. Dcm の応答生成 → CanTp_Transmit(3+DEM_EVENT_COUNT*4 バイト) は SF に収まらない
  *               ため First Frame を送信して WAIT_FC へ遷移する（この FF 送信
  *               は手順1の Can_MainFunction_Read() 呼び出し内で同期的に
  *               完了する）。
@@ -24,13 +24,13 @@
  *               これを受けて SEND_CF へ遷移するが、この時点ではまだ CF は
  *               送信しない（CanTp.c 参照）。
  *            4. `CanTp_MainFunction()` を Os の周期呼び出しに見立てて8回
- *               （59バイト中 FF が運ぶ6バイトを除く53バイトを7バイトずつ、
- *               ceil(53/7)=8 フレーム）呼び、その都度 Can_Hw へ送信された
+ *               （応答全体から FF が運ぶ6バイトを除いた残りを7バイトずつ、
+ *               DEM_EVENT_COUNT=15 なら 57 バイトで ceil(57/7)=9 フレーム）呼び、その都度 Can_Hw へ送信された
  *               Consecutive Frame を蓄積する。STmin=0 のため、待ち時間の
  *               シミュレーション（FakeMillis 操作）は不要。
  *            5. FF+全CFの実ペイロードを結合し、`Wrap_CanTp.h` が境界で
  *               キャプチャした `LastData_CanTp_Transmit`（Dcm が生成した
- *               元の59バイト UDS ペイロード）と完全一致することを確認する。
+ *               元の UDS ペイロード）と完全一致することを確認する。
  *               これにより「Dcm が正しいバイト列を生成したか」
  *               （Bsw_Dcm_ReadDtcInfo_test.cpp が既に検証済み）とは別に、
  *               「CanTp が実際の CAN フレームへ正しく分割・送出したか」を
@@ -66,6 +66,12 @@ extern "C" {
 
 namespace
 {
+
+// 0x19/0x0A の応答長（[0x59, subFunc, availMask] + DTC 3byte + status 1byte を DEM_EVENT_COUNT 件）と、
+// それを FF（6 バイト）＋ CF（7 バイトずつ）で運ぶのに必要な CF の本数。
+// DEM_EVENT_COUNT が増減しても追従するよう定数から導出する。
+constexpr uint16 kResponseLen = static_cast<uint16>(3U + DEM_EVENT_COUNT * 4U);
+constexpr uint8  kCfCount     = static_cast<uint8>((kResponseLen - 6U + 6U) / 7U);
 
 // -----------------------------------------------------------------------
 // テスト専用の最小 CanIf/PduR 設定（Bsw_DcmStack_SID19_SF01_ReadDtcCount_test.cpp
@@ -191,7 +197,7 @@ TEST_F(Bsw_DcmStack_SID19_SF0A_ReadDtcSupported_Test,
     FakeCanHw_RxData[2] = DCM_DTC_SUBFUNC_REPORT_SUPPORTED;
     FakeCanHw_RxPendingCount = 1U;
 
-    /* 実行 (Act 1): リクエスト受信 → Dcm 応答生成 → CanTp_Transmit(59バイト)
+    /* 実行 (Act 1): リクエスト受信 → Dcm 応答生成 → CanTp_Transmit(kResponseLen バイト)
      * → First Frame 送信（WAIT_FC へ遷移）まで同期的に進む。 */
     Can_MainFunction_Read();
 
@@ -199,7 +205,7 @@ TEST_F(Bsw_DcmStack_SID19_SF0A_ReadDtcSupported_Test,
      * Bsw_Dcm_ReadDtcInfo_test.cpp と同じ期待値（境界は Wrap_CanTp.h で
      * キャプチャ）。 */
     ASSERT_EQ(CallCount_CanTp_Transmit, 1U);
-    ASSERT_EQ(LastLength_CanTp_Transmit, (uint8)(3U + DEM_EVENT_COUNT * 4U));  // 59
+    ASSERT_EQ(LastLength_CanTp_Transmit, kResponseLen);
     EXPECT_EQ(LastData_CanTp_Transmit[0], 0x59U);
     EXPECT_EQ(LastData_CanTp_Transmit[1], DCM_DTC_SUBFUNC_REPORT_SUPPORTED);
     EXPECT_EQ(LastData_CanTp_Transmit[2], DEM_STATUS_AVAILABILITY_MASK);
@@ -210,10 +216,10 @@ TEST_F(Bsw_DcmStack_SID19_SF0A_ReadDtcSupported_Test,
     ASSERT_EQ(FakeCanHw_SendCount, 1U);
     EXPECT_EQ(FakeCanHw_LastSendId, 0x7E8U);
     EXPECT_EQ(FakeCanHw_LastSendDlc, 8U);
-    EXPECT_EQ(FakeCanHw_LastSendData[0], 0x10U);  // FF PCI（len=59<256のため上位ニブルのみ）
-    EXPECT_EQ(FakeCanHw_LastSendData[1], 59U);    // len 下位8bit
+    EXPECT_EQ(FakeCanHw_LastSendData[0], 0x10U);  // FF PCI（len<256のため上位ニブルのみ）
+    EXPECT_EQ(FakeCanHw_LastSendData[1], static_cast<uint8>(kResponseLen));  // len 下位8bit
 
-    uint8 reassembled[64] = { 0U };
+    uint8 reassembled[kResponseLen] = { 0U };
     uint8 pos = 0U;
     for (uint8 i = 0U; i < 6U; i++)
         reassembled[pos++] = FakeCanHw_LastSendData[2U + i];
@@ -234,10 +240,10 @@ TEST_F(Bsw_DcmStack_SID19_SF0A_ReadDtcSupported_Test,
     Can_MainFunction_Read();
     ASSERT_EQ(FakeCanHw_SendCount, 1U);  // FC 受信自体は Can_Hw への送信を生まない
 
-    /* 実行 (Act 3): Os から周期的に呼ばれる CanTp_MainFunction() を、59バイト
-     * 中の残り53バイトを7バイトずつ運ぶ Consecutive Frame の数（ceil(53/7)=8）
-     * だけ繰り返し駆動し、その都度 Can_Hw へ送信された内容を蓄積する。 */
-    for (uint8 cf = 0U; cf < 8U; cf++)
+    /* 実行 (Act 3): Os から周期的に呼ばれる CanTp_MainFunction() を、応答全体
+     * の残り（FF が運ぶ6バイトを除く分）を7バイトずつ運ぶ Consecutive Frame の数
+     * （kCfCount）だけ繰り返し駆動し、その都度 Can_Hw へ送信された内容を蓄積する。 */
+    for (uint8 cf = 0U; cf < kCfCount; cf++)
     {
         CanTp_MainFunction();
 
@@ -247,23 +253,23 @@ TEST_F(Bsw_DcmStack_SID19_SF0A_ReadDtcSupported_Test,
         EXPECT_EQ(FakeCanHw_LastSendData[0], (uint8)(0x20U | ((cf + 1U) & 0x0FU)))
             << "CF #" << (unsigned)(cf + 1U) << " の SN 不一致";
 
-        uint16 remaining = 59U - pos;
+        uint16 remaining = static_cast<uint16>(kResponseLen - pos);
         uint8  copyLen   = (remaining > 7U) ? 7U : (uint8)remaining;
         for (uint8 i = 0U; i < copyLen; i++)
             reassembled[pos++] = FakeCanHw_LastSendData[1U + i];
     }
 
-    /* 評価 (Assert 2): 8本の CF 送信で全53バイトを運び終え、CanTp は
+    /* 評価 (Assert 2): kCfCount 本の CF 送信で全バイトを運び終え、CanTp は
      * IDLE（ビジーでない）へ戻っていること。 */
-    ASSERT_EQ(pos, 59U);
-    EXPECT_EQ(FakeCanHw_SendCount, 9U);  // FF 1 + CF 8
+    ASSERT_EQ(pos, kResponseLen);
+    EXPECT_EQ(FakeCanHw_SendCount, static_cast<uint32>(1U + kCfCount));  // FF 1 + CF
     EXPECT_EQ(CanTp_IsTxBusy(), (boolean)0U);
 
     /* 評価 (Assert 3): 実際に CAN フレームへ分割・送出された内容を結合すると、
-     * Dcm が生成した元の59バイト UDS ペイロード（Assert 1 で確認済み）と
+     * Dcm が生成した元の UDS ペイロード（Assert 1 で確認済み）と
      * 完全一致すること。「CanTp が正しく分割・送出したか」を検証する
      * 本テスト最大の目的。 */
-    for (uint8 i = 0U; i < 59U; i++)
+    for (uint16 i = 0U; i < kResponseLen; i++)
     {
         EXPECT_EQ(reassembled[i], LastData_CanTp_Transmit[i]) << "byte " << (unsigned)i;
     }

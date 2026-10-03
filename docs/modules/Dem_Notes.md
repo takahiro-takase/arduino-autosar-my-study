@@ -23,6 +23,11 @@ FreezeFrame、ExtendedData、EEPROM レイアウトの詳細を以下にまと�
 | 7 | CAN_BUSOFF | CAN Bus-Off が持続（L1 リトライ超過、L2 へ降格、CanSM が検出。回復試行自体は継続） | 0x000108 |
 | 8 | E2E_ABSINFO | AbsInfo (CAN 0x110) の E2E エラー（CRC 不一致・カウンタ異常）（Rte 層の E2E Transformer が検出） | 0x000109 |
 | 9 | E2E_ENGINEINFO | EngineInfo (CAN 0x100) の E2E エラー（CRC 不一致・カウンタ異常）（Rte 層の E2E Transformer が検出） | 0x00010A |
+| 10 | WDGM_SUPERVISION | WdgM の Global Supervision Status が STOPPED に到達（実 HW ウォッチドッグリセットが確実に迫っている） | 0x00010B |
+| 11 | WDG_DISABLE_REJECTED | `Wdg_SetMode(WDGIF_OFF_MODE)` が HW 制約により拒否された | 0x00010C |
+| 12 | NVM_INTEGRITY_FAILED | `NvM_Init()` の読み込みで CRC 不整合を検出 | 0x00010D |
+| 13 | NVM_LOSS_OF_REDUNDANCY | 冗長ブロックの片面が破損し自己修復した | 0x00010E |
+| 14 | NVM_REQ_FAILED | `NvM_WriteBlock()` の書き込みがリトライ上限（`NVM_MAX_NUM_OF_WRITE_RETRIES`）を超えても成功しなかった | 0x00010F |
 
 ## デバウンス (Counter-based Debouncing)
 
@@ -286,51 +291,27 @@ Dem_Init()（起動時、TF/TFTOC/TNCTC を新サイクル用にリセットす�
 
 ## EEPROM レイアウト
 
-Arduino UNO の内蔵 EEPROM 先頭 46 バイトを使用します（NvM の CRC バイトを含む。
+Arduino UNO の内蔵 EEPROM 先頭 66 バイトを使用します（NvM の CRC バイトを含む。
 詳細は [`NvM_Notes.md`](./NvM_Notes.md) 参照）。
 アドレス割り当ては NvM_Cfg.h (`NVM_BLOCK_DEM_*_EEPROM_ADDR`) で一元管理しています。
 Dem は NvM_BlockIdType (NVM_BLOCK_ID_DEM_MAGIC / _DEM_STATUS / _DEM_AGING / _DEM_EXTENDED)
-でのみアクセスします。
+でのみアクセスします。STATUS/AGING/EXTENDED は、EventId 0〜14 を先頭から 1 バイトずつ
+並べた `DEM_EVENT_COUNT`（15）バイトのブロックです（イベント数が増えるとブロック長と
+後続アドレスがずれるため、増減の際は NvM_Cfg.h の長さも合わせます。ずれた直後の起動では
+保存済みの内容が CRC 不一致になり、初期値で再構築されます）。
 
 | アドレス | NvM ブロック | 内容 |
 |---------|-------------|------|
 | 0x00 | NVM_BLOCK_ID_DEM_MAGIC (1 byte) | マジックバイト（0xDE = 有効データあり） |
 | 0x01 | 〃 CRC (1 byte) | MAGIC ブロックの CRC8 |
-| 0x02 | NVM_BLOCK_ID_DEM_STATUS (10 bytes) | EVENT_ENGINE_OVERHEAT ステータス |
-| 0x03 | 〃 | EVENT_ENGINE_STALL ステータス |
-| 0x04 | 〃 | EVENT_ENGINE_SPEED_NO_FLAG ステータス |
-| 0x05 | 〃 | EVENT_STARTING_TIMEOUT ステータス |
-| 0x06 | 〃 | EVENT_COMM_TIMEOUT ステータス |
-| 0x07 | 〃 | EVENT_BUTTON_STUCK ステータス |
-| 0x08 | 〃 | EVENT_ADC_VOLT_LOW ステータス |
-| 0x09 | 〃 | EVENT_CAN_BUSOFF ステータス |
-| 0x0A | 〃 | EVENT_E2E_ABSINFO ステータス |
-| 0x0B | 〃 | EVENT_E2E_ENGINEINFO ステータス |
-| 0x0C | 〃 CRC (1 byte) | STATUS ブロックの CRC8 |
-| 0x0D | NVM_BLOCK_ID_DEM_AGING (10 bytes) | EVENT_ENGINE_OVERHEAT 経年回復カウンタ |
-| 0x0E | 〃 | EVENT_ENGINE_STALL 経年回復カウンタ |
-| 0x0F | 〃 | EVENT_ENGINE_SPEED_NO_FLAG 経年回復カウンタ |
-| 0x10 | 〃 | EVENT_STARTING_TIMEOUT 経年回復カウンタ |
-| 0x11 | 〃 | EVENT_COMM_TIMEOUT 経年回復カウンタ |
-| 0x12 | 〃 | EVENT_BUTTON_STUCK 経年回復カウンタ |
-| 0x13 | 〃 | EVENT_ADC_VOLT_LOW 経年回復カウンタ |
-| 0x14 | 〃 | EVENT_CAN_BUSOFF 経年回復カウンタ |
-| 0x15 | 〃 | EVENT_E2E_ABSINFO 経年回復カウンタ |
-| 0x16 | 〃 | EVENT_E2E_ENGINEINFO 経年回復カウンタ |
-| 0x17 | 〃 CRC (1 byte) | AGING ブロックの CRC8 |
-| 0x18 | NVM_BLOCK_ID_DEM_EXTENDED (10 bytes) | EVENT_ENGINE_OVERHEAT 故障確定回数 |
-| 0x19 | 〃 | EVENT_ENGINE_STALL 故障確定回数 |
-| 0x1A | 〃 | EVENT_ENGINE_SPEED_NO_FLAG 故障確定回数 |
-| 0x1B | 〃 | EVENT_STARTING_TIMEOUT 故障確定回数 |
-| 0x1C | 〃 | EVENT_COMM_TIMEOUT 故障確定回数 |
-| 0x1D | 〃 | EVENT_BUTTON_STUCK 故障確定回数 |
-| 0x1E | 〃 | EVENT_ADC_VOLT_LOW 故障確定回数 |
-| 0x1F | 〃 | EVENT_CAN_BUSOFF 故障確定回数 |
-| 0x20 | 〃 | EVENT_E2E_ABSINFO 故障確定回数 |
-| 0x21 | 〃 | EVENT_E2E_ENGINEINFO 故障確定回数 |
-| 0x22 | 〃 CRC (1 byte) | EXTENDED ブロックの CRC8（プライマリ面） |
-| 0x23 | NVM_BLOCK_ID_DEM_EXTENDED ミラー面 (10 bytes) | 故障確定回数（プライマリと同一内容の 2 面目、冗長ブロック） |
-| 0x2D | 〃 CRC (1 byte) | EXTENDED ブロックの CRC8（ミラー面） |
+| 0x02〜0x10 | NVM_BLOCK_ID_DEM_STATUS (15 bytes) | EventId 0〜14 のステータスバイト |
+| 0x11 | 〃 CRC (1 byte) | STATUS ブロックの CRC8 |
+| 0x12〜0x20 | NVM_BLOCK_ID_DEM_AGING (15 bytes) | EventId 0〜14 の経年回復カウンタ |
+| 0x21 | 〃 CRC (1 byte) | AGING ブロックの CRC8 |
+| 0x22〜0x30 | NVM_BLOCK_ID_DEM_EXTENDED (15 bytes) | EventId 0〜14 の故障確定回数（プライマリ面） |
+| 0x31 | 〃 CRC (1 byte) | EXTENDED ブロックの CRC8（プライマリ面） |
+| 0x32〜0x40 | NVM_BLOCK_ID_DEM_EXTENDED ミラー面 (15 bytes) | 故障確定回数（プライマリと同一内容の 2 面目、冗長ブロック） |
+| 0x41 | 〃 CRC (1 byte) | EXTENDED ブロックの CRC8（ミラー面） |
 
 DEM_EXTENDED のみ冗長ブロック（2 面化）にしています。理由・仕組みは
 [`NvM_Notes.md`](./NvM_Notes.md) の「冗長ブロック」参照。

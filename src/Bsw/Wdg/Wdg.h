@@ -92,12 +92,19 @@ Std_ReturnType Wdg_SetMode(WdgIf_ModeType Mode);
  * \details 実 AUTOSAR は timeout 引数でトリガカウンタの残り時間を動的に
  *          再設定できるが、本プロジェクトの HW（Renesas RA4M1 IWDT）は
  *          API 経由でのタイムアウト窓の動的変更に対応しないため、timeout
- *          の値によらず Wdg_Hw_Refresh() で単純にリフレッシュするのみ
- *          （学習用簡略化）。timeout が WdgM_Cfg.h の
+ *          が 0 以外なら、その値によらず Wdg_Hw_Refresh() で単純に
+ *          リフレッシュするのみ（学習用簡略化）。
+ *
+ *          timeout=0 は [SWS_Wdg_00140] のとおり「トリガを止めて ECU を
+ *          （ほぼ）即座にリセットする」要求で、Wdg_Hw_ForceReset()
+ *          （ソフトウェアリセット）を呼ぶ。一度 0 を受けた後の呼び出しは
+ *          何もしない（同仕様の「カウンタ値が 0 のときは無視する」に相当）。
+ *
+ *          timeout が WdgM_Cfg.h の
  *          WDGM_HW_WATCHDOG_TIMEOUT_MS（Wdg_Config.DefaultTimeoutMs）を
  *          超える場合は WDG_E_PARAM_TIMEOUT を報告する（[SWS_Wdg_00146]）。
  *
- * \param[in]  timeout  トリガカウンタに設定するタイムアウト値 [ms]。
+ * \param[in]  timeout  トリガカウンタに設定するタイムアウト値 [ms]。0 はリセット要求。
  *
  * \ServiceID      {0x03}
  * \Reentrancy     {Non Reentrant}

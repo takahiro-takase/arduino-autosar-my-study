@@ -41,6 +41,16 @@ void Wdg_Hw_Disable(void);
 /** \brief  HW ウォッチドッグのタイムアウトカウンタをリフレッシュする。 */
 void Wdg_Hw_Refresh(void);
 
+/**
+ * \brief   ECU を（ほぼ）即座にリセットする。
+ *
+ * \\details Wdg_SetTriggerCondition(0)（[SWS_Wdg_00140]）の「トリガを止め、ほぼ
+ *          即座に ECU をリセットする」要求の実体。IWDT は有効化後に窓の変更や
+ *          強制発火の手段がないため、ソフトウェアリセット（NVIC_SystemReset）で
+ *          代替する。実 HW では戻らない。
+ */
+void Wdg_Hw_ForceReset(void);
+
 #ifdef __cplusplus
 }
 #endif

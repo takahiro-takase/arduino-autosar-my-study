@@ -131,7 +131,8 @@ static const uint32 Dem_DtcTable[DEM_EVENT_COUNT] = {
     DEM_DTC_WDGM_SUPERVISION,        /* event 10 */
     DEM_DTC_WDG_DISABLE_REJECTED,    /* event 11 */
     DEM_DTC_NVM_INTEGRITY_FAILED,    /* event 12 */
-    DEM_DTC_NVM_LOSS_OF_REDUNDANCY   /* event 13 */
+    DEM_DTC_NVM_LOSS_OF_REDUNDANCY,  /* event 13 */
+    DEM_DTC_NVM_REQ_FAILED           /* event 14 */
 };
 
 /** イベント ID → デバウンス確定閾値 変換テーブル (Dem_Cfg.h の DEM_DEBOUNCE_LIMIT_*) */
@@ -149,7 +150,8 @@ static const sint8 Dem_DebounceLimitTable[DEM_EVENT_COUNT] = {
     DEM_DEBOUNCE_LIMIT_WDGM_SUPERVISION,      /* event 10 */
     DEM_DEBOUNCE_LIMIT_WDG_DISABLE_REJECTED,  /* event 11 */
     DEM_DEBOUNCE_LIMIT_NVM_INTEGRITY_FAILED,  /* event 12 */
-    DEM_DEBOUNCE_LIMIT_NVM_LOSS_OF_REDUNDANCY /* event 13 */
+    DEM_DEBOUNCE_LIMIT_NVM_LOSS_OF_REDUNDANCY, /* event 13 */
+    DEM_DEBOUNCE_LIMIT_NVM_REQ_FAILED          /* event 14 */
 };
 
 /** イベント ID → 経年回復(Aging)閾値 変換テーブル (Dem_Cfg.h の DEM_AGING_THRESHOLD_*) */
@@ -168,7 +170,8 @@ static const uint8 Dem_AgingThresholdTable[DEM_EVENT_COUNT] = {
     DEM_AGING_THRESHOLD_WDGM_SUPERVISION,      /* event 10 */
     DEM_AGING_THRESHOLD_WDG_DISABLE_REJECTED,  /* event 11 */
     DEM_AGING_THRESHOLD_NVM_INTEGRITY_FAILED,  /* event 12 */
-    DEM_AGING_THRESHOLD_NVM_LOSS_OF_REDUNDANCY /* event 13 */
+    DEM_AGING_THRESHOLD_NVM_LOSS_OF_REDUNDANCY, /* event 13 */
+    DEM_AGING_THRESHOLD_NVM_REQ_FAILED          /* event 14 */
 };
 
 /** イベントごとの FreezeFrame (故障時スナップショット)。RAM のみ保持 */

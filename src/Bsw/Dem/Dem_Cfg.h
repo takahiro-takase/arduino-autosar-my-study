@@ -29,6 +29,9 @@
  *            DEM_EVENT_NVM_LOSS_OF_REDUNDANCY — 冗長ブロックの片面が破損し
  *                                             自己修復した
  *                                             ([SWS_NvM_00595]/[00868])
+ *            DEM_EVENT_NVM_REQ_FAILED       — NvM_WriteBlock() の書き込みが
+ *                                             リトライ上限を超えても成功しなかった
+ *                                             ([SWS_NvM_00659]/[00865])
  *
  *          EEPROM レイアウト (Arduino UNO 内蔵 EEPROM 1KB の先頭 62 バイト使用。
  *          各ブロックには NvM が CRC8 を 1 バイト付加するため、詳細なアドレスは
@@ -170,7 +173,11 @@
                                                     *   自己修復した
                                                     *   ([SWS_NvM_00595]/[00868]、
                                                     *   2026-09 追加) */
-#define DEM_EVENT_COUNT                      14U /**< イベント総数                     */
+#define DEM_EVENT_NVM_REQ_FAILED             14U /**< NvM_WriteBlock() が書き込み
+                                                    *   リトライ上限を超えて失敗
+                                                    *   ([SWS_NvM_00659]/[00865]、
+                                                    *   2026-10 追加) */
+#define DEM_EVENT_COUNT                      15U /**< イベント総数                     */
 
 /* -----------------------------------------------------------------------
  * DTC コード (24-bit, ISO 14229-1)
@@ -190,6 +197,7 @@
 #define DEM_DTC_WDG_DISABLE_REJECTED    0x00010CUL  /**< Wdg_SetMode(OFF) 無効化拒否 */
 #define DEM_DTC_NVM_INTEGRITY_FAILED        0x00010DUL  /**< NvM 読み込みCRC不整合 */
 #define DEM_DTC_NVM_LOSS_OF_REDUNDANCY       0x00010EUL  /**< NvM 冗長ブロック片面破損 */
+#define DEM_DTC_NVM_REQ_FAILED               0x00010FUL  /**< NvM 書き込みがリトライ上限超過で失敗 */
 
 /* -----------------------------------------------------------------------
  * デバウンス (counter-based debouncing)
@@ -229,6 +237,8 @@
                                                            *   不一致は即確定 */
 #define DEM_DEBOUNCE_LIMIT_NVM_LOSS_OF_REDUNDANCY    1  /**< CRC比較は決定論的。
                                                            *   不一致は即確定 */
+#define DEM_DEBOUNCE_LIMIT_NVM_REQ_FAILED            1  /**< NvM 内でリトライを使い切った後に
+                                                           *   報告されるため二重チェック不要 */
 
 /* -----------------------------------------------------------------------
  * 経年回復 (Aging)
@@ -253,6 +263,7 @@
 #define DEM_AGING_THRESHOLD_WDG_DISABLE_REJECTED  5U  /**< 安全上重要な無効化拒否。誤って早期回復しないよう慎重に */
 #define DEM_AGING_THRESHOLD_NVM_INTEGRITY_FAILED     5U  /**< EEPROM データ破損。誤って早期回復しないよう慎重に */
 #define DEM_AGING_THRESHOLD_NVM_LOSS_OF_REDUNDANCY   5U  /**< EEPROM データ破損。誤って早期回復しないよう慎重に */
+#define DEM_AGING_THRESHOLD_NVM_REQ_FAILED           5U  /**< EEPROM 書き込み不良。誤って早期回復しないよう慎重に */
 
 /* -----------------------------------------------------------------------
  * DTC ステータスビットマスク (ISO 14229-1 Annex B)
