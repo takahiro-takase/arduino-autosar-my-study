@@ -1,0 +1,115 @@
+// CAPL 風 DSL のスクリプト (.capl): ECUReset 直前の NvM 書き切り (NvM_WriteAll) の実機確認。
+//
+// 背景: NvM_WriteBlock() は書き込みを積むだけで、EEPROM への実書き込みは
+// NvM_MainFunction()/MemIf_MainFunction() が 10ms 周期で 1 バイトずつ進める。
+// SID 0x14 (全クリア) は STATUS 16B + AGING 16B + EXTENDED 32B (冗長 2 面) を書くため、
+// 最短でも約 0.6 秒かかる。以前は 0x14 の直後に 0x11 (ECUReset) を送ると、書き込みの途中で
+// リセットされ、クリアしたはずの DTC が復活していた。Dcm_HandleEcuReset() がリセット前に
+// NvM_WriteAll() で書き切るようになったので、復活しないことを確認する。
+//
+// 前提:
+//   - 確定済み (statusMask 0x08) の DTC が 1 つ以上ある。ただし 0x000107 (ADC_VOLT_LOW) は
+//     起動直後に再び確定するので数えない。DTC が無いときは、エンジン OFF のまま放置して
+//     ボランタリスリープに入れる (0x00010C WDG_DISABLE_REJECTED が確定する) か、EngineInfo の
+//     プリセット (過熱など) で FAULT にして DTC を確定させてから実行する。
+//   - Serial 接続をしておくと、書き切りのログ "NvM: WriteAll done (iterations=N)" が確認できる。
+//     "WriteAll timed out" が出る場合は、書き込みが想定より遅い (上限 2000ms)。
+//
+// 手順: 確定 DTC を表示 → extendedSession + SecurityAccess → 0x14 全クリア →
+//       すぐに 0x11 ECUReset (最も厳しいタイミング) → 再起動を待つ → 確定 DTC を再表示して比較。
+//
+// 注意: 0x14 は DTC の履歴を実際に消去する。
+
+variables
+{
+    int before;
+    int after;
+}
+
+// 確定済み (statusMask 0x08) の DTC を一覧表示し、0x000107 (ADC_VOLT_LOW) 以外の件数を返す。
+// 応答を受け取れない・否定応答のときは -1 を返す。
+// (0x19/02 の正応答は 59 02 <availabilityMask> の後に <DTC 3 バイト + status 1 バイト> が並ぶ)
+int scanConfirmedDtcs()
+{
+    int i;
+    int base;
+    int dtc;
+    int other;
+
+    send(0x19, 0x02, 0x08);
+    wait_response(3.0);
+    if (respSid() != 0x59)
+    {
+        write("  0x19/02 が正応答ではありません (SID=0x%x NRC=0x%x)", respSid(), respNrc());
+        return -1;
+    }
+
+    for (i = 0; i < 15; i++)
+    {
+        base = 3 + 4 * i;
+        dtc = (respByte(base) << 16) | (respByte(base + 1) << 8) | respByte(base + 2);
+        if (dtc != 0)
+        {
+            write("  DTC=0x%06x status=0x%02x", dtc, respByte(base + 3));
+            if (dtc != 0x000107)
+            {
+                other++;
+            }
+        }
+    }
+    write("  ADC_VOLT_LOW (0x000107) 以外の確定 DTC: %d 件", other);
+    return other;
+}
+
+on start
+{
+    write("=== ECUReset 直前の NvM 書き切りの確認 ===");
+
+    write("[1] クリア前の確定 DTC");
+    before = scanConfirmedDtcs();
+
+    if (before < 0)
+    {
+        write("中止: 診断応答を取得できませんでした (ECU が眠っていないか、接続を確認してください)");
+    }
+    else if (before == 0)
+    {
+        write("中止: ADC_VOLT_LOW 以外の確定 DTC がありません。前提を満たしていません (先頭のコメント参照)");
+    }
+    else
+    {
+        write("[2] extendedSession へ遷移し、SecurityAccess を通す");
+        send(0x10, 0x03);
+        wait_response();
+        assert_positive();
+        security_unlock();
+        assert_positive();
+
+        write("[3] 0x14 全クリアの直後に 0x11 ECUReset を送る (間に待ちを入れない)");
+        send(0x14, 0xFF, 0xFF, 0xFF);
+        wait_response();
+        assert_positive();
+        send(0x11, 0x01);
+        wait_response();
+        assert_positive();
+
+        write("[4] 再起動を待つ (6 秒)");
+        wait(6.0);
+
+        write("[5] リセット後の確定 DTC");
+        after = scanConfirmedDtcs();
+
+        if (after < 0)
+        {
+            write("判定不能: リセット後に診断応答を取得できませんでした。もう一度 0x19/02 を送って確認してください");
+        }
+        else if (after == 0)
+        {
+            write("結果: PASS - クリアした DTC は復活していません (%d 件 -> %d 件)", before, after);
+        }
+        else
+        {
+            write("結果: FAIL - クリアしたはずの DTC が %d 件復活しています (%d 件 -> %d 件)", after, before, after);
+        }
+    }
+}

@@ -196,6 +196,25 @@ Dem へ FAILED 報告します（[SWS_NvM_00865]）。以前はこの上限が�
 書き直す場合があり、そのブロックの書き込みが失敗している状況では、再書き込みも同様に
 リトライ上限まで試して諦めます。
 
+## リセット直前の書き切り（NvM_WriteAll）
+
+`NvM_WriteBlock()` は書き込みをキューに積むだけで、実際の EEPROM 書き込みは `NvM_MainFunction()` /
+`MemIf_MainFunction()` が 10ms 周期で 1 バイトずつ進めます。このため、DTC の確定や消去の直後に
+リセットすると、書き込みの途中で失われます（例: SID 0x14 の全クリアは STATUS 16B + AGING 16B +
+EXTENDED 32B〔冗長で 2 面〕を書くので、最短でも約 0.6 秒かかる）。
+
+実仕様では、EcuM のシャットダウンが `NvM_WriteAll()` を呼んで全ブロックを書き切ります
+（[SWS_NvM_00018]、[SWS_Dem_00341]）。本実装の `NvM_WriteAll()` は、仕様の非同期要求ではなく、
+**積まれた書き込みがすべて終わるまで `NvM_MainFunction()` / `MemIf_MainFunction()` を自分で回す同期処理**
+です（リセット直前は Os に処理を任せられないため）。`NVM_WRITEALL_TIMEOUT_MS`（2000ms）または
+`NVM_WRITEALL_MAX_ITERATIONS` 回で打ち切り（HW ウォッチドッグ 4000ms 内に収めるため）、打ち切ったときは
+ログ `WriteAll timed out` を出します。呼び出し元は UDS 0x11 ECUReset のみで、正応答の送信後・
+`delay(50)` の前に呼ぶので、テスターを待たせません。WdgM のリセットや HW ウォッチドッグのリセット
+（故障時の経路）、電源断では書き切れません。
+
+テスト: `Bsw_NvM_WriteAll_test.cpp`（単体）、`Bsw_DcmStack_SID11_EcuResetFlushesNvm_test.cpp`
+（ECUReset のフルチェーン）。
+
 ## 書き込みスキップ・書き込み保護・NvM_ReadBlock
 
 **CRC 一致時の書き込みスキップ（[SWS_NvM_00852]、`UseCrcCompMechanism`）**: `NvM_WriteBlock()` は、

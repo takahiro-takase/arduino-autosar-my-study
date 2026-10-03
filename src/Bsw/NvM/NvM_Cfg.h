@@ -87,6 +87,7 @@
 #define NVM_API_ID_INIT                     0x00U
 #define NVM_API_ID_SET_BLOCK_PROTECTION     0x03U
 #define NVM_API_ID_GET_ERROR_STATUS         0x04U
+#define NVM_API_ID_WRITE_ALL                0x0DU
 #define NVM_API_ID_READ_BLOCK               0x06U
 #define NVM_API_ID_WRITE_BLOCK              0x07U
 #define NVM_API_ID_RESTORE_BLOCK_DEFAULTS   0x08U
@@ -153,5 +154,13 @@
  *  NVM_E_REQ_FAILED（DEM_EVENT_NVM_REQ_FAILED）を Dem へ報告する
  *  （[SWS_NvM_00213]/[00659]）。全ブロック共通（ブロックごとの設定は持たない）。 */
 #define NVM_MAX_NUM_OF_WRITE_RETRIES  3U
+
+/** NvM_WriteAll() が書き込みの完了を待つ時間の上限 [ms]（Os のカウンタで計測）。
+ *  HW ウォッチドッグ（WDGM_HW_WATCHDOG_TIMEOUT_MS=4000ms）の最後のリフレッシュが
+ *  最大 WDGM_HW_TRIGGER_CYCLE_MS（1000ms）前であることを見込み、それより十分短くする。 */
+#define NVM_WRITEALL_TIMEOUT_MS  2000UL
+
+/** NvM_WriteAll() のループ回数の上限（時刻が進まない環境でも必ず終わらせるための安全弁）。 */
+#define NVM_WRITEALL_MAX_ITERATIONS  4096U
 
 #endif /* NVM_CFG_H */

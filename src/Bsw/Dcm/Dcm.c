@@ -166,6 +166,7 @@
 #include "CanTp.h"
 #include "Rte.h"
 #include "ComM.h"
+#include "NvM.h"
 #include "CanNm.h"
 #include "KeyM.h"
 #include "BswM.h"
@@ -1110,6 +1111,14 @@ static void Dcm_HandleEcuReset(const uint8* uds, uint8 udsLen)
      * そのまま残す（コスト無視できるほど小さい）。 */
     (void)Dcm_ResetToDefaultSession();
     DET_LOGI(TAG, "11 session->Default");
+
+    /* リセット直前に、書き込み待ちの NvM ジョブ（直前に確定した DTC や SID 0x14 の
+     * クリア結果など）を EEPROM へ書き切る。delay() の間は Os が止まって
+     * NvM_MainFunction() が進まないため、これを怠ると保存途中でリセットされて
+     * クリアしたはずの DTC が復活する（[SWS_Dem_00341]、EcuM のシャットダウンで
+     * NvM_WriteAll() を呼ぶことに相当）。正応答は上で送信済みなので、テスターを
+     * 待たせない。 */
+    NvM_WriteAll();
 
     /* 正応答の物理送信完了後の猶予（ファイル冒頭 Doxygen 参照）。 */
     delay(DCM_ECU_RESET_DELAY_MS);

@@ -223,7 +223,7 @@ HAL ─── MCU 依存の最下層（Can_Hw / Dio_Hw ほか、src/Hal/ に集�
 |  | Mcu | 101 | SWS_Mcu<br>API実装: 5 / 11<br>(一部意図的に簡略化) | マイコン初期化・リセット要因管理<br>（[詳細](docs/modules/Mcu_Notes.md)） |
 |  | MemIf | 22 | SWS_MemIf<br>API実装: 7 / 9<br>パススルー<br>(下位が1個のため) | 不揮発メモリ抽象化層<br>（[詳細](docs/modules/MemIf_Notes.md)） |
 |  | Nm | 29 | SWS_NetworkManagementInterface<br>API実装: 14 / 30<br>(一部意図的に簡略化) | ネットワークマネジメントインタフェース (ComM と CanNm の中継層。単一ネットワーク構成のため NM Coordinator は対応除外) |
-|  | NvM | 20 | SWS_NvM<br>API実装: 7 / 23<br>(一部意図的に簡略化) | 不揮発メモリマネージャ<br>（[詳細](docs/modules/NvM_Notes.md)） |
+|  | NvM | 20 | SWS_NvM<br>API実装: 8 / 23<br>(一部意図的に簡略化) | 不揮発メモリマネージャ<br>（[詳細](docs/modules/NvM_Notes.md)） |
 |  | PduR | 51 | SWS_PduR<br>API 数は対象外<br>(一部意図的に簡略化) | PDU ルーティング層<br>（[詳細](docs/modules/PduR_Notes.md)） |
 |  | Port | — | SWS_Port<br>API実装: 5 / 5<br>(一部意図的に簡略化) | ピン設定管理<br>（[詳細](docs/modules/Port_Notes.md)） |
 |  | SchM | — | SWS_SchM<br>API 数は対象外<br>(一部意図的に簡略化) | 排他制御 (スケジューラマネージャ)<br>（[詳細](docs/modules/SchM_Notes.md)） |
@@ -290,7 +290,7 @@ python tools/api_coverage/api_coverage.py --update-readme # README の表の数�
 
 実 HW を使わず、BSW モジュールのロジックを PC 上で GoogleTest により検証します。
 単一モジュールのテストも、複数モジュールにまたがる関数コールチェーンのテストも、
-`native_chain_tests` という 1 つのテストバイナリにまとめています（2026-10 時点で 890 件）。
+`native_chain_tests` という 1 つのテストバイナリにまとめています（2026-10 時点で 894 件）。
 
 ビルドは PlatformIO ではなく CMake + clang++（llvm-mingw）です。事前に環境変数
 `LLVM_MINGW_BIN` へ llvm-mingw の `bin` ディレクトリを設定してください。
