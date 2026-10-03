@@ -19,7 +19,7 @@
  *          旧 Bsw_Dcm_ReadDtcInfo_test.cpp の `ComIndication_NG/OK_*` は、
  *          いずれも `Wrap_CanTp.h`（`FailFromCallCount_CanTp_IsTxBusy`）で
  *          CanTp のビジー状態を人工的に強制注入していたが、本ファイルでは
- *          SID 0x19/0x0A reportSupportedDTC（応答59バイト、マルチフレーム
+ *          SID 0x19/0x0A reportSupportedDTC（応答 3+DEM_EVENT_COUNT*4 バイト、マルチフレーム
  *          必須。Bsw_DcmStack_SID19_SF0A_ReadDtcSupported_test.cpp と
  *          同じ理由で選定）を実際に送信させ、First Frame 送信後・
  *          Consecutive Frame 送信完了前という「CanTp が本当にビジーな状態」
@@ -59,6 +59,11 @@ extern "C" {
 
 namespace
 {
+
+// 0x19/0x0A の応答長と、FF（6 バイト）＋ CF（7 バイトずつ）で運ぶのに必要な CF の本数
+// （DEM_EVENT_COUNT に追従するよう定数から導出する）。
+constexpr uint16 kResponseLen = static_cast<uint16>(3U + DEM_EVENT_COUNT * 4U);
+constexpr uint8  kCfCount     = static_cast<uint8>((kResponseLen - 6U + 6U) / 7U);
 
 // -----------------------------------------------------------------------
 // テスト専用の最小 CanIf/PduR 設定（Bsw_DcmStack_SID19_SF01_ReadDtcCount_test.cpp
@@ -191,7 +196,7 @@ protected:
         WrapCanTp_Reset();  // CallCount_CanTp_Transmit 等を以降の本題シナリオ用に0へ戻す
     }
 
-    /* SID 0x19/0x0A reportSupportedDTC（応答59バイト）を Can_Hw から受信
+    /* SID 0x19/0x0A reportSupportedDTC（応答 3+DEM_EVENT_COUNT*4 バイト）を Can_Hw から受信
      * させ、First Frame 送信まで進める。CanTp はこの時点で WAIT_FC
      * （本当にビジー）になる
      * （Bsw_DcmStack_SID19_SF0A_ReadDtcSupported_test.cpp と同じ手順）。 */
@@ -210,12 +215,12 @@ protected:
         Can_MainFunction_Read();
 
         ASSERT_EQ(FakeCanHw_SendCount, 1U);
-        ASSERT_EQ(FakeCanHw_LastSendData[0], 0x10U);  // First Frame（応答59バイト、SFに収まらない）
+        ASSERT_EQ(FakeCanHw_LastSendData[0], 0x10U);  // First Frame（応答は SF に収まらない長さ）
         ASSERT_EQ(CanTp_IsTxBusy(), (boolean)1U);      // 本当にビジーであることの前提確認
     }
 
-    /* Flow Control（CTS, BS=0, STmin=0）を注入し、残り8本の Consecutive
-     * Frame を CanTp_MainFunction() の反復呼び出しで排出しきる
+    /* Flow Control（CTS, BS=0, STmin=0）を注入し、残りの Consecutive
+     * Frame（kCfCount 本）を CanTp_MainFunction() の反復呼び出しで排出しきる
      * （Bsw_DcmStack_SID19_SF0A_ReadDtcSupported_test.cpp と同じ手順。
      * CanTp を本当に IDLE へ戻すために使う）。 */
     void FinishRealMultiFrameTransfer()
@@ -230,7 +235,7 @@ protected:
         FakeCanHw_RxPendingCount = 1U;
         Can_MainFunction_Read();
 
-        for (uint8 cf = 0U; cf < 8U; cf++)
+        for (uint8 cf = 0U; cf < kCfCount; cf++)
             CanTp_MainFunction();
 
         ASSERT_EQ(CanTp_IsTxBusy(), (boolean)0U);  // 本当に IDLE へ戻ったことの確認

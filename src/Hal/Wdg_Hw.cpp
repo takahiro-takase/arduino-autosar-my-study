@@ -57,3 +57,9 @@ void Wdg_Hw_Refresh(void)
 {
     WDT.refresh();
 }
+
+void Wdg_Hw_ForceReset(void)
+{
+    /* IWDT は強制発火の手段がないため、ソフトウェアリセットで代替する。 */
+    NVIC_SystemReset();
+}

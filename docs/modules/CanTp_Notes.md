@@ -168,6 +168,12 @@ NVM_INTEGRITY_FAILED/NVM_LOSS_OF_REDUNDANCY 追加）した際、この値を
 本プロジェクト初の静的アサート（負のサイズの配列は違法という
 C89 以降常に有効な性質を利用、AVR/native 両ビルドで動作）を追加し、
 `CANTP_TX_BUFFER_SIZE` 不足時はビルドエラーで機械的に検知できるようにした。
+
+2026-10 に `DEM_EVENT_COUNT` が 14→15（NVM_REQ_FAILED 追加）に増えたときは、この静的
+アサートを通過し（`DCM_TX_BUF_SIZE` は 0x0A で 63 バイト、上限 76 バイト以内）、
+`CANTP_TX_BUFFER_SIZE` は据え置きとした。なお、63 バイトの応答を FF(6 バイト) + CF で運ぶ
+CF の本数は 8 本から 9 本へ増えるため、CF 数を固定値で持っていたマルチフレームの
+テストは `DEM_EVENT_COUNT` から計算する形へ改めた。
 テスト側の `Fake_CanTp.c`（`test/stub/Bsw/CanTp/`）も実体と同じ長さ
 チェックを持たない設計だったため、`CANTP_FAKE_TX_BUF_SIZE` を実体の
 `CANTP_TX_BUFFER_SIZE` に連動させ、この種のバグを native テストでも

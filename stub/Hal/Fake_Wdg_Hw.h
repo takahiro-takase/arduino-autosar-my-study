@@ -16,6 +16,7 @@ extern "C" {
 extern uint32 FakeWdgHw_EnableCount;
 extern uint32 FakeWdgHw_DisableCount;
 extern uint32 FakeWdgHw_RefreshCount;
+extern uint32 FakeWdgHw_ForceResetCount;
 extern uint16 FakeWdgHw_LastEnableTimeoutMs;
 
 /** 各テストケースの開始時に呼び、記録をすべて初期状態に戻す。 */

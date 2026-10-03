@@ -39,6 +39,11 @@
 static uint8 Wdg_Initialized = 0U;
 static uint16 Wdg_ConfiguredTimeoutMs = 0U;
 
+/* 関数をまたいで状態を保持するラッチのため、ブロックスコープ化できない（テスト用リセットからも参照） */
+/* cppcheck-suppress misra-c2012-8.9 */
+/** Wdg_SetTriggerCondition(0) を受けてトリガを止めたか（ラッチ。[SWS_Wdg_00140]） */
+static uint8 Wdg_TriggerStopped = 0U;
+
 /* ======================================================================
  * Function Prototypes
  * ====================================================================== */
@@ -121,11 +126,30 @@ void Wdg_SetTriggerCondition(uint16 timeout)
         return;
     }
 
+    /* [SWS_Wdg_00140]: 既に timeout=0 でトリガを止めている場合は何もしない
+     * （以降に渡された timeout は無視する）。 */
+    if (Wdg_TriggerStopped != 0U)
+    {
+        return;
+    }
+
+    /* [SWS_Wdg_00140]: timeout=0 は「トリガの（ほぼ）即時停止と ECU の
+     * （ほぼ）即時リセット」の要求。以前は timeout の値によらずリフレッシュ
+     * していたため、0 を渡すと逆にウォッチドッグがリフレッシュされていた。 */
+    if (timeout == 0U)
+    {
+        Wdg_TriggerStopped = 1U;
+        DET_LOGE(TAG, "SetTriggerCondition(0): trigger stopped, forcing ECU reset");
+        Wdg_Hw_ForceReset();
+        return;
+    }
+
     /* 本プロジェクトの HW は API 経由でのタイムアウト窓の動的変更に対応
-     * しないため、timeout の値によらずリフレッシュのみ行う（Wdg.h 冒頭の
-     * コメント参照）。現在のモードの確認も行わない（WdgM_TriggerHwWatchdog()
-     * は WdgM_SupervisionSuppressed 中も含め常にリフレッシュを要求し続ける
-     * 設計のため、Wdg 側で再度モードを判定する必要はない）。 */
+     * しないため、timeout が 0 以外なら、その値によらずリフレッシュのみ行う
+     * （Wdg.h 冒頭のコメント参照）。現在のモードの確認も行わない
+     * （WdgM_TriggerHwWatchdog() は WdgM_SupervisionSuppressed 中も含め常に
+     * リフレッシュを要求し続ける設計のため、Wdg 側で再度モードを判定する
+     * 必要はない）。 */
     Wdg_Hw_Refresh();
 }
 
@@ -157,5 +181,6 @@ void Wdg_Test_ResetInitState(void)
 {
     Wdg_Initialized         = 0U;
     Wdg_ConfiguredTimeoutMs = 0U;
+    Wdg_TriggerStopped      = 0U;
 }
 #endif

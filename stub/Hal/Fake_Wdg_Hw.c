@@ -9,6 +9,7 @@
 uint32 FakeWdgHw_EnableCount        = 0U;
 uint32 FakeWdgHw_DisableCount       = 0U;
 uint32 FakeWdgHw_RefreshCount       = 0U;
+uint32 FakeWdgHw_ForceResetCount    = 0U;
 uint16 FakeWdgHw_LastEnableTimeoutMs = 0U;
 
 void FakeWdgHw_Reset(void)
@@ -16,6 +17,7 @@ void FakeWdgHw_Reset(void)
     FakeWdgHw_EnableCount        = 0U;
     FakeWdgHw_DisableCount       = 0U;
     FakeWdgHw_RefreshCount       = 0U;
+    FakeWdgHw_ForceResetCount    = 0U;
     FakeWdgHw_LastEnableTimeoutMs = 0U;
 }
 
@@ -33,4 +35,9 @@ void Wdg_Hw_Disable(void)
 void Wdg_Hw_Refresh(void)
 {
     FakeWdgHw_RefreshCount++;
+}
+
+void Wdg_Hw_ForceReset(void)
+{
+    FakeWdgHw_ForceResetCount++;
 }

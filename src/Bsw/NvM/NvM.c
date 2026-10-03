@@ -152,6 +152,20 @@ static uint8 NvM_ActiveCrc = 0U;
  *  是正、[SWS_NvM_00761]。以前は常に 0=プライマリで固定していた）。 */
 static uint8 NvM_ActiveCopyIsMirror = 0U;
 
+/** 処理中ブロックの書き込みジョブで、これまでに MemIf が書き込みを拒否した／
+ *  ジョブが失敗した回数（書き込みリトライカウンタ、[SWS_NvM_00213]/[00659]）。
+ *  NVM_MAX_NUM_OF_WRITE_RETRIES を超えたらジョブを諦める。ブロックを
+ *  キューから取り出した時、書き込みをやり直した時、完了した時に 0 へ戻す。 */
+static uint8 NvM_ActiveWriteRetries = 0U;
+
+/** 書き込みの失敗（NVM_E_REQ_FAILED）を Dem へ FAILED 報告済みか。
+ *  報告済みの間だけ、次にいずれかのブロックの書き込みが成功した時点で
+ *  PASSED を報告する（[SWS_NvM_00873]）。毎回の書き込み成功で PASSED を
+ *  報告すると、初回に Dem のステータスが変わって余計な EEPROM 書き込みが
+ *  Dem の MAGIC ブロック書き込み（最後に書く設計）の後ろへ割り込むため、
+ *  失敗からの回復時に限った（学習用簡略化）。 */
+static uint8 NvM_WriteFailureReported = 0U;
+
 /** 冗長ブロックの次回書き込みジョブが「先頭でどちらの面から書き始める
  *  べきか」（[SWS_NvM_00761]: 直近の読み込みジョブで実際には読まれ
  *  なかった＝RAM ミラーへ採用されなかった側から書き始め、その後もう
@@ -585,7 +599,54 @@ static void NvM_MarkPending(NvM_BlockIdType id)
          * 開始すべき面」であり、必ずしもプライマリとは限らない
          * （2026-09 是正、NvM_WriteStartIsMirror[] 参照）。 */
         NvM_ActiveCopyIsMirror = NvM_WriteStartIsMirror[id];
+        NvM_ActiveWriteRetries = 0U;  /* 新しいデータでやり直すため、リトライ回数も数え直す */
     }
+}
+
+/* ----------------------------------------------------------------------
+ * NvM_HandleWriteFailure
+ * ---------------------------------------------------------------------- */
+
+/**
+ * \brief   処理中ブロックの書き込みジョブが失敗した（MemIf が書き込みを拒否した、
+ *          またはジョブが失敗した）ときのリトライ判定。
+ *
+ * \details [SWS_NvM_00213]/[SWS_NvM_00659]: 書き込みリトライカウンタを +1 し、
+ *          NVM_MAX_NUM_OF_WRITE_RETRIES 以内なら現在の面のジョブを先頭
+ *          （データ本体フェーズ）からやり直す。上限を超えたら、そのブロックの
+ *          要求結果を NVM_REQ_NOT_OK にして処理を打ち切り、NVM_E_REQ_FAILED
+ *          （DEM_EVENT_NVM_REQ_FAILED）を Dem へ報告する（[SWS_NvM_00865]）。
+ *          以前はリトライ上限が無く、失敗が続くと同じジョブを永久に再試行し
+ *          （要求結果も PENDING のまま）、後続のブロックも処理されなかった。
+ *
+ * \param[in]  reason  ログ用の失敗理由。
+ */
+static void NvM_HandleWriteFailure(const char* reason)
+{
+    NvM_ActiveWriteRetries++;
+
+    if (NvM_ActiveWriteRetries <= NVM_MAX_NUM_OF_WRITE_RETRIES)
+    {
+        DET_LOGW(TAG, "block=%u write failed (%s), retry %u/%u", (unsigned)NvM_ActiveBlockId, reason,
+                 (unsigned)NvM_ActiveWriteRetries, (unsigned)NVM_MAX_NUM_OF_WRITE_RETRIES);
+        NvM_ActivePhase = NVM_PHASE_NONE;
+        return;
+    }
+
+    const NvM_BlockIdType failedId = (NvM_BlockIdType)NvM_ActiveBlockId;
+    DET_LOGE(TAG, "block=%u write failed (%s), retries exhausted -> NVM_REQ_NOT_OK", (unsigned)failedId, reason);
+
+    NvM_BlockPending[failedId] = 0U;
+    NvM_BlockResult[failedId]  = NVM_REQ_NOT_OK;
+    NvM_ActiveBlockId          = NVM_BLOCK_COUNT;
+    NvM_ActivePhase            = NVM_PHASE_NONE;
+    NvM_ActiveCopyIsMirror     = 0U;
+    NvM_ActiveWriteRetries     = 0U;
+    NvM_WriteFailureReported   = 1U;
+
+    /* 状態を整理し終えてから報告する（Dem が NvM_WriteBlock() を呼んでも
+     * 整合した状態で受け付けられるように）。 */
+    (void)Dem_SetEventStatus(DEM_EVENT_NVM_REQ_FAILED, DEM_EVENT_STATUS_FAILED);
 }
 
 /* -----------------------------------------------------------------------
@@ -639,6 +700,8 @@ void NvM_Init(const NvM_ConfigType* ConfigPtr)
     NvM_ActiveBlockId      = NVM_BLOCK_COUNT;
     NvM_ActivePhase         = NVM_PHASE_NONE;
     NvM_ActiveCopyIsMirror  = 0U;
+    NvM_ActiveWriteRetries  = 0U;
+    NvM_WriteFailureReported = 0U;
     NvM_QueueHead = 0U;
     NvM_QueueTail = 0U;
     NvM_QueueLen  = 0U;
@@ -1179,6 +1242,7 @@ void NvM_MainFunction(void)
          * から書き始める（2026-09 是正、非冗長ブロックは常に 0）。 */
         NvM_ActiveCopyIsMirror = NvM_WriteStartIsMirror[NvM_ActiveBlockId];
         NvM_ActivePhase        = NVM_PHASE_NONE;
+        NvM_ActiveWriteRetries = 0U;
     }
 
     const NvM_BlockDescriptorType* blk = &NvM_Cfg->Blocks[NvM_ActiveBlockId];
@@ -1202,12 +1266,18 @@ void NvM_MainFunction(void)
          * 進まないため）が、MemIf_Write() が E_NOT_OK を返した場合に備えて
          * 戻り値を確認する。失敗時は NvM_ActivePhase を NONE のまま据え置き、
          * 次回 tick で同じジョブ開始を再試行する（フェーズを進めてしまうと、
-         * ジョブが実際には始まっていないのに完了したと誤認しかねないため）。 */
+         * ジョブが実際には始まっていないのに完了したと誤認しかねないため）。
+         * 拒否が NVM_MAX_NUM_OF_WRITE_RETRIES を超えて続いたら諦める
+         * （NvM_HandleWriteFailure() 参照）。 */
         if (MemIf_Write(MEMIF_DEVICE_0, activeBase,
                          /* cppcheck-suppress misra-c2012-11.5 */
                          (const uint8*)blk->RamBlockDataAddress, blk->NvMNvBlockLength) == E_OK)
         {
             NvM_ActivePhase = NVM_PHASE_BODY;
+        }
+        else
+        {
+            NvM_HandleWriteFailure("MemIf_Write rejected");
         }
         return;
     }
@@ -1220,16 +1290,17 @@ void NvM_MainFunction(void)
 
     if (result != MEMIF_JOB_OK)
     {
-        /* MEMIF_JOB_CANCELED 等。NvM_MarkPending() 経由の正常な中断は
-         * NvM_ActivePhase を NONE へ戻した上で Fee/Ea 側もジョブを破棄する
-         * ため、その場合は上の NVM_PHASE_NONE 分岐に来て本来ここには
+        /* MEMIF_JOB_FAILED/MEMIF_JOB_CANCELED 等。NvM_MarkPending() 経由の
+         * 正常な中断は NvM_ActivePhase を NONE へ戻した上で Fee/Ea 側もジョブを
+         * 破棄するため、その場合は上の NVM_PHASE_NONE 分岐に来て本来ここには
          * 到達しない。ここに来るのは何らかの理由でジョブが期待どおり
          * 完了しなかった想定外のケースであり、成功したものとして次の
-         * フェーズへ進めるとサイレントなデータ不整合を招くため、
-         * ログのみ残してこの tick では何もしない（NvM_ActivePhase は
-         * 据え置き、次回 tick で同じ判定を再試行する）。 */
-        DET_LOGE(TAG, "block=%u unexpected MemIf job result=%u, holding phase", (unsigned)NvM_ActiveBlockId,
+         * フェーズへ進めるとサイレントなデータ不整合を招く。書き込みジョブの
+         * 失敗として扱い、リトライ上限まで現在の面を先頭からやり直す
+         * （以前はフェーズを据え置いたまま無期限に同じ判定を繰り返していた）。 */
+        DET_LOGE(TAG, "block=%u unexpected MemIf job result=%u", (unsigned)NvM_ActiveBlockId,
                  (unsigned)result);
+        NvM_HandleWriteFailure("MemIf job failed");
         return;
     }
 
@@ -1246,6 +1317,10 @@ void NvM_MainFunction(void)
                          &NvM_ActiveCrc, 1U) == E_OK)
         {
             NvM_ActivePhase = NVM_PHASE_CRC;
+        }
+        else
+        {
+            NvM_HandleWriteFailure("MemIf_Write(CRC) rejected");
         }
         return;
     }
@@ -1278,6 +1353,15 @@ void NvM_MainFunction(void)
     NvM_ActiveBlockId      = NVM_BLOCK_COUNT;
     NvM_ActivePhase         = NVM_PHASE_NONE;
     NvM_ActiveCopyIsMirror  = 0U;
+    NvM_ActiveWriteRetries  = 0U;
+
+    /* 失敗（NVM_E_REQ_FAILED）を報告済みなら、書き込みが成功した今、回復を
+     * 報告する（[SWS_NvM_00873]）。状態を整理し終えてから呼ぶ。 */
+    if (NvM_WriteFailureReported != 0U)
+    {
+        NvM_WriteFailureReported = 0U;
+        (void)Dem_SetEventStatus(DEM_EVENT_NVM_REQ_FAILED, DEM_EVENT_STATUS_PASSED);
+    }
 }
 
 /* ----------------------------------------------------------------------
