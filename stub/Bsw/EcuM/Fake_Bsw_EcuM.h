@@ -20,6 +20,11 @@
  *          ウェイクアップ検証チェーン全体（CanSM の状態機械）がここで
  *          途切れてしまう。他の RUN/POST_RUN 系 API（本物の状態機械を持つ）
  *          とは境界の性質が異なると判断し、この関数だけ委譲する。
+ *
+ *          上記 3 関数は `--wrap` 方式（`__wrap_EcuM_*`）で差し替えており、
+ *          `FakeEcuM_PassThrough` を TRUE にすると実 `EcuM.c` へ素通しする。
+ *          これにより実 EcuM.c を native_chain へリンクしつつ、既存テストは
+ *          従来どおりスパイとして使える。
  */
 #ifndef FAKE_BSW_ECUM_H
 #define FAKE_BSW_ECUM_H
@@ -30,6 +35,13 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+/**
+ * TRUE の間、RequestRUN/ReleaseRUN/CheckWakeup は記録せず実 EcuM.c へ素通しする
+ * （EcuM 自体の単体テスト用。既定は FALSE = 従来どおりスパイ動作）。
+ * FakeEcuM_Reset() で FALSE へ戻る。
+ */
+extern uint8 FakeEcuM_PassThrough;
 
 extern uint32 FakeEcuM_RequestRUNCount;
 extern uint32 FakeEcuM_ReleaseRUNCount;

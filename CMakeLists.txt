@@ -203,6 +203,7 @@ add_compile_definitions(
     DCM_UNIT_TEST
     DEM_UNIT_TEST
     DET_LOG_LEVEL=LOG_T
+    ECUM_UNIT_TEST
     FEE_UNIT_TEST
     FIM_UNIT_TEST
     MCU_UNIT_TEST
@@ -233,6 +234,7 @@ set(NATIVE_CHAIN_INCLUDE_DIRS
     src/Bsw/SchM
     src/Bsw/E2EXf
     src/Bsw/E2E
+    src/Bsw/E2EMon
     src/Bsw/WdgM
     src/Bsw/WdgIf
     src/Bsw/Wdg
@@ -252,6 +254,7 @@ set(NATIVE_CHAIN_INCLUDE_DIRS
     src/Bsw/Dio
     src/Bsw/Port
     src/Os
+    src/Asw
     src/Rte
     src/Hal
     stub/Bsw/BswM
@@ -305,6 +308,7 @@ set(NATIVE_CHAIN_SRC_SOURCES
     src/Bsw/Dcm/Dcm.c
     src/Bsw/Dem/Dem.c
     src/Bsw/Det/Det.c
+    src/Bsw/EcuM/EcuM.c
     src/Bsw/Dio/Dio.c
     src/Bsw/E2EXf/E2EXf.c
     src/Bsw/E2EXf/E2EXf_PBCfg.c
@@ -355,6 +359,7 @@ set(NATIVE_CHAIN_STUB_SOURCES
     stub/Bsw/E2E/Wrap_E2E_P01.c
     stub/Bsw/E2EXf/Wrap_E2EXf.c
     stub/Bsw/EcuM/Fake_Bsw_EcuM.c
+    stub/Bsw/EcuM/Fake_EcuM_Deps.c
     stub/Bsw/FiM/Wrap_FiM.c
     stub/Bsw/Gpt/Wrap_Gpt.c
     stub/Bsw/Nm/Wrap_Nm.c
@@ -661,6 +666,10 @@ set(NATIVE_CHAIN_WRAP_SYMBOLS
     Os_SetTaskActive
     GetCounterValue
     GetElapsedValue
+    # EcuM の RUN/POST_RUN/ウェイクアップ API（Fake_Bsw_EcuM.c 参照。素通し切替あり）。
+    EcuM_RequestRUN
+    EcuM_ReleaseRUN
+    EcuM_CheckWakeup
 )
 foreach(wrap_symbol IN LISTS NATIVE_CHAIN_WRAP_SYMBOLS)
     target_link_options(native_chain_tests PRIVATE "-Wl,--wrap=${wrap_symbol}")

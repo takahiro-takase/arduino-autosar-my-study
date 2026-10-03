@@ -949,3 +949,17 @@ static unsigned long EcuM_GetNowMs(void)
     (void)GetCounterValue(SYSTEM_COUNTER, &now);
     return (unsigned long)now;
 }
+
+/* ======================================================================
+ * Test Functions
+ * ====================================================================== */
+
+#ifdef ECUM_UNIT_TEST
+void EcuM_Test_ResetInitState(void)
+{
+    EcuM_State          = ECUM_STATE_STARTUP;
+    EcuM_RunUsers       = 0U;
+    EcuM_PostRunUsers   = 0U;
+    EcuM_PostRunTimerMs = 0UL;
+}
+#endif
