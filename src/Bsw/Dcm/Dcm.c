@@ -171,6 +171,7 @@
 #include "BswM.h"
 #include "Mcu.h"
 #include "Det.h"
+#include "Os.h"
 
 /* ======================================================================
  * Definitions
@@ -222,9 +223,9 @@ static uint16 Dcm_SecuritySeed;
 /** sendKey の連続失敗回数 (DCM_SECURITY_MAX_ATTEMPTS でロックアウト) */
 static uint8 Dcm_SecurityAttemptCount;
 
-/** ロックアウト中か (1=ロックアウト中)。(millis() - Dcm_SecurityLockoutStartMs)
+/** ロックアウト中か (1=ロックアウト中)。(現在時刻 - Dcm_SecurityLockoutStartMs)
  *  が DCM_SECURITY_DELAY_MS 以上経過するまで requestSeed を NRC 0x37 で拒否する。
- *  millis() オーバフロー (約49.7日) でも正しく動作する差分計算にするため、
+ *  時刻カウンタのオーバフロー (約49.7日) でも正しく動作する差分計算にするため、
  *  絶対時刻ではなく開始時刻+フラグで持つ。 */
 static uint8 Dcm_SecurityLockoutActive;
 
@@ -315,11 +316,8 @@ static PduInfoType Dcm_TxPdu;
  * Function Prototypes
  * ====================================================================== */
 
-/* millis()/delay() are declared in Arduino wiring.c with C linkage. */
-/* Arduino コアの関数。AUTOSAR に対応する共通ヘッダは無いため各所で宣言している
- * （将来 Os の時間源 API へ置換する予定）。 */
-/* cppcheck-suppress misra-c2012-8.5 */
-extern unsigned long millis(void);
+static unsigned long Dcm_GetNowMs(void);
+/* delay() is declared in Arduino wiring.c with C linkage. */
 extern void delay(unsigned long ms);
 
 /* -----------------------------------------------------------------------
@@ -388,7 +386,7 @@ void Dcm_Init(const Dcm_ConfigType* ConfigPtr)
     Dcm_CurrentSession   = DCM_SESSION_DEFAULT;
     Dcm_TxPdu.SduDataPtr = Dcm_TxBuf;
     Dcm_TxPdu.SduLength  = 0U;   /* 各ハンドラで送信長を設定する */
-    Dcm_LastActivityMs   = millis();
+    Dcm_LastActivityMs   = Dcm_GetNowMs();
 
     Dcm_SecurityLevel         = 0U;
     Dcm_SecuritySeedPending   = 0U;
@@ -787,7 +785,7 @@ void Dcm_MainFunction(void)
      * RUNNING になれるのは extendedSession 限定のため、defaultSession 中に
      * この分岐へ来ることはない (Dcm_RoutineAbort() が退出時に IDLE へ戻す)。 */
     if ((Dcm_RoutineState == DCM_ROUTINE_STATE_RUNNING)
-        && (millis() - Dcm_RoutineStartMs) >= DCM_ROUTINE_DURATION_MS)
+        && (Dcm_GetNowMs() - Dcm_RoutineStartMs) >= DCM_ROUTINE_DURATION_MS)
     {
         EngineSpeed_t speed = 0U;
         CoolantTemp_t temp  = 0U;
@@ -819,11 +817,11 @@ void Dcm_MainFunction(void)
          * （2026-09 追加。以前はこのチェックが無く、応答送信が長時間かかった
          * 場合（gs_usb の TX スタック不具合等）に、送信継続中でも S3
          * タイムアウトが誤発火しうる状態だった）。 */
-        Dcm_LastActivityMs = millis();
+        Dcm_LastActivityMs = Dcm_GetNowMs();
         return;
     }
 
-    if ((millis() - Dcm_LastActivityMs) >= DCM_S3_TIMEOUT_MS)
+    if ((Dcm_GetNowMs() - Dcm_LastActivityMs) >= DCM_S3_TIMEOUT_MS)
     {
         DET_LOGI(TAG, "S3 timeout -> session=Default");
         (void)Dcm_ResetToDefaultSession();
@@ -833,6 +831,23 @@ void Dcm_MainFunction(void)
 /* ======================================================================
  * Internal functions
  * ====================================================================== */
+
+/* ----------------------------------------------------------------------
+ * Dcm_GetNowMs
+ * ---------------------------------------------------------------------- */
+
+/**
+ * \brief   現在時刻 [ms] を返す（Os カウンタ SYSTEM_COUNTER の tick 値）。
+ * \details millis() を直接呼ばず Os の GetCounterValue() を介する。値は Os_Init() の
+ *          前後や millis() フォールバックの前後でも飛ばない（Os.h 参照）ため、
+ *          本モジュールが保持する「前回時刻」との差分計算にそのまま使える。
+ */
+static unsigned long Dcm_GetNowMs(void)
+{
+    TickType now = 0U;
+    (void)GetCounterValue(SYSTEM_COUNTER, &now);
+    return (unsigned long)now;
+}
 
 /**
  * \brief   セッション状態に応じて ComM への診断アクティブ通知を更新する。
@@ -2285,7 +2300,7 @@ static void Dcm_SecurityLock(void)
 /**
  * \brief   SID 0x27 subFunc 0x01 requestSeed を処理する。
  *
- * \details Locked 中はロックアウト中でなければ新しい seed (millis() 由来) を発行し、
+ * \details Locked 中はロックアウト中でなければ新しい seed (Os カウンタ由来) を発行し、
  *          「seed 発行済み・key 未受信」状態にする。ロックアウト中は NRC 0x37。
  *          Unlocked 済みの場合は ISO 14229-1 の作法に従い allZeroSeed
  *          (seed=0x0000) を返し、sendKey が不要であることを示す。
@@ -2322,7 +2337,7 @@ static void Dcm_HandleSecurityRequestSeed(uint8 subFunc, uint8 udsLen)
 
     if (Dcm_SecurityLockoutActive != 0U)
     {
-        if ((millis() - Dcm_SecurityLockoutStartMs) < DCM_SECURITY_DELAY_MS)
+        if ((Dcm_GetNowMs() - Dcm_SecurityLockoutStartMs) < DCM_SECURITY_DELAY_MS)
         {
             Dcm_SendNegativeResponse(DCM_SID_SECURITY_ACCESS, DCM_NRC_REQUIRED_TIME_DELAY_NOT_EXPIRED);
             return;
@@ -2330,7 +2345,7 @@ static void Dcm_HandleSecurityRequestSeed(uint8 subFunc, uint8 udsLen)
         Dcm_SecurityLockoutActive = 0U;  /* 待機時間経過、ロックアウト解除 */
     }
 
-    Dcm_SecuritySeed        = (uint16)millis();
+    Dcm_SecuritySeed        = (uint16)Dcm_GetNowMs();
     Dcm_SecuritySeedPending = 1U;
 
     DET_LOGI(TAG, "27/%02X seed=0x%04X", (unsigned)subFunc, (unsigned)Dcm_SecuritySeed);
@@ -2388,7 +2403,7 @@ static void Dcm_HandleSecuritySendKey(uint8 subFunc, const uint8* uds, uint8 uds
         if (Dcm_SecurityAttemptCount >= DCM_SECURITY_MAX_ATTEMPTS)
         {
             Dcm_SecurityLockoutActive  = 1U;
-            Dcm_SecurityLockoutStartMs = millis();
+            Dcm_SecurityLockoutStartMs = Dcm_GetNowMs();
             Dcm_SecurityAttemptCount   = 0U;
             DET_LOGW(TAG, "27 lockout %lums", DCM_SECURITY_DELAY_MS);
             Dcm_SendNegativeResponse(DCM_SID_SECURITY_ACCESS, DCM_NRC_EXCEEDED_NUM_ATTEMPTS);
@@ -2493,7 +2508,7 @@ static void Dcm_HandleRoutineStart(uint16 rid)
     }
 
     Dcm_RoutineState   = DCM_ROUTINE_STATE_RUNNING;
-    Dcm_RoutineStartMs = millis();
+    Dcm_RoutineStartMs = Dcm_GetNowMs();
 
     DET_LOGI(TAG, "31/01 EngineHealthCheck started");
 
@@ -3096,7 +3111,7 @@ void Dcm_ComIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
          * ビジー判定で黙って消えていた）。S3 タイマは
          * [SWS_Dcm_00557]のTesterPresent特例と同じ理由で更新する
          * （要求が届いたこと自体がテスター生存の証跡）。 */
-        Dcm_LastActivityMs = millis();
+        Dcm_LastActivityMs = Dcm_GetNowMs();
         DET_LOGW(TAG, "req SID=0x%02X ignored (CanTp TX busy)", (unsigned)sid);
         return;
     }
@@ -3107,7 +3122,7 @@ void Dcm_ComIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
     Dcm_SuppressPosRsp = 0U;
 
     /* 診断要求を受信した時点で S3 タイマをリセットする（NRC になる要求も対象） */
-    Dcm_LastActivityMs = millis();
+    Dcm_LastActivityMs = Dcm_GetNowMs();
 
     DET_LOGI(TAG, "req SID=0x%02X", (unsigned)sid);
 

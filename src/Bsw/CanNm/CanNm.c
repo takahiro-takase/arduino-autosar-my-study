@@ -31,6 +31,7 @@
 #include "CanIf.h"
 #include "Nm.h"
 #include "Det.h"
+#include "Os.h"
 
 /* ======================================================================
  * Definitions
@@ -79,11 +80,7 @@ static unsigned long CanNm_StateTimerMs;
  * Function Prototypes
  * ====================================================================== */
 
-/* Arduino wiring.c（C リンケージ）で定義 */
-/* Arduino コアの関数。AUTOSAR に対応する共通ヘッダは無いため各所で宣言している
- * （将来 Os の時間源 API へ置換する予定）。 */
-/* cppcheck-suppress misra-c2012-8.5 */
-extern unsigned long millis(void);
+static unsigned long CanNm_GetNowMs(void);
 
 static void CanNm_TransmitPdu(void);
 static void CanNm_EnterRepeatMessage(void);
@@ -123,8 +120,8 @@ void CanNm_Init(const CanNm_ConfigType* ConfigPtr)
     CanNm_TxEnabled            = 1U;
     CanNm_RepeatMessageBitSet  = 0U;
     CanNm_LastRxNodeId         = 0U;
-    CanNm_TimeoutTimerMs       = millis();
-    CanNm_StateTimerMs         = millis();
+    CanNm_TimeoutTimerMs       = CanNm_GetNowMs();
+    CanNm_StateTimerMs         = CanNm_GetNowMs();
     CanNm_Initialized          = 1U;
     DET_LOGI(TAG, "Init ok node=0x%02X (Bus-Sleep Mode)", (unsigned)CANNM_SOURCE_NODE_ID);
 }
@@ -369,9 +366,9 @@ Std_ReturnType CanNm_EnableCommunication(NetworkHandleType Channel)
         /* [SWS_CanNm_00179]: 再有効化時に NM-Timeout Timer を再起動する。
          * 無効化中は CanNm_MainFunction() 側で満了判定自体を止めている
          * （CanNm_DisableCommunication() の Doxygen 参照）ため、ここで
-         * millis() を取り直さないと、無効化されていた間の経過時間が
+         * 現在時刻を取り直さないと、無効化されていた間の経過時間が
          * そのまま残り再有効化直後に見かけ上の満了が起きてしまう。 */
-        CanNm_TimeoutTimerMs = millis();
+        CanNm_TimeoutTimerMs = CanNm_GetNowMs();
     }
     CanNm_TxEnabled = 1U;
     return E_OK;
@@ -688,7 +685,7 @@ void CanNm_TxConfirmation(PduIdType TxPduId, Std_ReturnType result)
      * 送信自体を行わないため対象外。 */
     if ((CanNm_State == CANNM_STATE_REPEAT_MESSAGE) || (CanNm_State == CANNM_STATE_NORMAL_OPERATION))
     {
-        CanNm_TimeoutTimerMs = millis();
+        CanNm_TimeoutTimerMs = CanNm_GetNowMs();
     }
 }
 
@@ -775,7 +772,7 @@ void CanNm_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
              * 実害は無かったが、条文への厳密な準拠のため明示的にガードする。 */
             if ((CanNm_TxEnabled) != 0U)
             {
-                CanNm_TimeoutTimerMs = millis();
+                CanNm_TimeoutTimerMs = CanNm_GetNowMs();
             }
 
             if (((cbv & CANNM_CBV_BIT_REPEAT_MESSAGE_REQUEST) != 0U) && (CanNm_State != CANNM_STATE_REPEAT_MESSAGE))
@@ -832,7 +829,7 @@ void CanNm_MainFunction(void)
         return;
     }
 
-    const unsigned long now = millis();
+    const unsigned long now = CanNm_GetNowMs();
 
     switch (CanNm_State)
     {
@@ -934,6 +931,23 @@ void CanNm_MainFunction(void)
  * ====================================================================== */
 
 /* ----------------------------------------------------------------------
+ * CanNm_GetNowMs
+ * ---------------------------------------------------------------------- */
+
+/**
+ * \brief   現在時刻 [ms] を返す（Os カウンタ SYSTEM_COUNTER の tick 値）。
+ * \details millis() を直接呼ばず Os の GetCounterValue() を介する。値は Os_Init() の
+ *          前後や millis() フォールバックの前後でも飛ばない（Os.h 参照）ため、
+ *          本モジュールが保持する「前回時刻」との差分計算にそのまま使える。
+ */
+static unsigned long CanNm_GetNowMs(void)
+{
+    TickType now = 0U;
+    (void)GetCounterValue(SYSTEM_COUNTER, &now);
+    return (unsigned long)now;
+}
+
+/* ----------------------------------------------------------------------
  * CanNm_TransmitPdu
  * ---------------------------------------------------------------------- */
 
@@ -996,8 +1010,8 @@ static void CanNm_TransmitPdu(void)
 static void CanNm_EnterRepeatMessage(void)
 {
     CanNm_State          = CANNM_STATE_REPEAT_MESSAGE;
-    CanNm_StateTimerMs    = millis();
-    CanNm_TimeoutTimerMs  = millis();
+    CanNm_StateTimerMs    = CanNm_GetNowMs();
+    CanNm_TimeoutTimerMs  = CanNm_GetNowMs();
     DET_LOGI(TAG, "-> Network Mode: Repeat Message State");
 
     Nm_NetworkMode(0U);
@@ -1025,7 +1039,7 @@ static void CanNm_EnterRepeatMessage(void)
 static void CanNm_EnterNormalOperation(void)
 {
     CanNm_State          = CANNM_STATE_NORMAL_OPERATION;
-    CanNm_TimeoutTimerMs  = millis();
+    CanNm_TimeoutTimerMs  = CanNm_GetNowMs();
     DET_LOGI(TAG, "-> Network Mode: Normal Operation State");
 
     if ((CanNm_TxEnabled) != 0U)
@@ -1064,7 +1078,7 @@ static void CanNm_EnterReadySleep(void)
 static void CanNm_EnterPrepareBusSleep(void)
 {
     CanNm_State       = CANNM_STATE_PREPARE_BUS_SLEEP;
-    CanNm_StateTimerMs = millis();
+    CanNm_StateTimerMs = CanNm_GetNowMs();
     DET_LOGI(TAG, "-> Prepare Bus-Sleep Mode");
     Nm_PrepareBusSleepMode(0U);
 }

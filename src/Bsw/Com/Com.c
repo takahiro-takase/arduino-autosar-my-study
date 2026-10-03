@@ -35,6 +35,7 @@
 #include "Com.h"
 #include "PduR.h"
 #include "Det.h"
+#include "Os.h"
 
 /* ======================================================================
  * Definitions
@@ -270,11 +271,7 @@ static uint8 Com_GroupTriggerPending[COM_TX_IPDU_MAX];
  * Function Prototypes
  * ====================================================================== */
 
-/* millis() は Arduino wiring.c で C リンケージ定義されている */
-/* Arduino コアの関数。AUTOSAR に対応する共通ヘッダは無いため各所で宣言している
- * （将来 Os の時間源 API へ置換する予定）。 */
-/* cppcheck-suppress misra-c2012-8.5 */
-extern unsigned long millis(void);
+static unsigned long Com_GetNowMs(void);
 
 static uint32 Com_UnpackSignal(const uint8* buf,
                                 uint8 bitPos,
@@ -366,7 +363,7 @@ void Com_Init(const Com_ConfigType* config)
     Com_RxEnabled = 1U;
     Com_TxEnabled = 1U;
 
-    const unsigned long now = millis();
+    const unsigned long now = Com_GetNowMs();
     for (uint8 i = 0; i < COM_RX_IPDU_MAX; i++)
     {
         for (uint8 j = 0; j < COM_IPDU_MAX_DLC; j++)
@@ -561,7 +558,7 @@ void Com_IpduGroupStart(Com_IpduGroupIdType IpduGroupId, boolean initialize)
         return;
     }
 
-    const unsigned long now = millis();
+    const unsigned long now = Com_GetNowMs();
 
     for (uint8 i = 0U; i < Com_ConfigPtr->RxIPduCount; i++)
     {
@@ -846,7 +843,7 @@ void Com_EnableReceptionDM(Com_IpduGroupIdType IpduGroupId)
         return;
     }
 
-    const unsigned long now = millis();
+    const unsigned long now = Com_GetNowMs();
 
     for (uint8 i = 0U; i < Com_ConfigPtr->RxIPduCount; i++)
     {
@@ -2247,7 +2244,7 @@ void Com_SwitchIpduTxMode(Com_IPduIdType PduId, boolean Mode)
      * 誤判定されて遅延してしまうため。 */
     if (Com_EffectiveTxModeMode(ipdu) == COM_TX_MODE_PERIODIC)
     {
-        Com_TxLastSentMs[PduId] = millis();
+        Com_TxLastSentMs[PduId] = Com_GetNowMs();
     }
     else
     {
@@ -2386,7 +2383,7 @@ void Com_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
          *       ではなく「Com_RxIndication() が呼ばれたこと」であるため）。
          * バッファの更新はここでは行わない（＝「受信の事実」と「値の反映」
          * は別軸）。 */
-        Com_RxLastMs[ipdu->IPduId]  = millis();
+        Com_RxLastMs[ipdu->IPduId]  = Com_GetNowMs();
         Com_RxTimedOut[ipdu->IPduId] = 0U;
         Com_RxUsingFirstTimeout[ipdu->IPduId] = 0U;
 
@@ -2712,7 +2709,7 @@ void Com_MainFunctionRx(void)
         return;
     }
 
-    const unsigned long now = millis();
+    const unsigned long now = Com_GetNowMs();
 
     /* ComInvalidNotification のディスパッチ（Com_RxInvalidNotifyPending 参照）。
      * Com_ReceiveSignal() が割り込み禁止区間から呼ばれた場合でも安全なように、
@@ -2951,7 +2948,7 @@ void Com_MainFunctionTx(void)
         return;
     }
 
-    const unsigned long now = millis();
+    const unsigned long now = Com_GetNowMs();
 
     for (uint8 i = 0; i < Com_ConfigPtr->TxIPduCount; i++)
     {
@@ -3101,6 +3098,23 @@ void Com_MainFunctionTx(void)
  * ====================================================================== */
 
 /* ----------------------------------------------------------------------
+ * Com_GetNowMs
+ * ---------------------------------------------------------------------- */
+
+/**
+ * \brief   現在時刻 [ms] を返す（Os カウンタ SYSTEM_COUNTER の tick 値）。
+ * \details millis() を直接呼ばず Os の GetCounterValue() を介する。値は Os_Init() の
+ *          前後や millis() フォールバックの前後でも飛ばない（Os.h 参照）ため、
+ *          本モジュールが保持する「前回時刻」との差分計算にそのまま使える。
+ */
+static unsigned long Com_GetNowMs(void)
+{
+    TickType now = 0U;
+    (void)GetCounterValue(SYSTEM_COUNTER, &now);
+    return (unsigned long)now;
+}
+
+/* ----------------------------------------------------------------------
  * Com_SetCommunicationEnabled
  * ---------------------------------------------------------------------- */
 
@@ -3153,7 +3167,7 @@ void Com_SetCommunicationEnabled(uint8 RxEnabled, uint8 TxEnabled)
 
     if ((Com_RxEnabled == 0U) && (RxEnabled != 0U) && (Com_ConfigPtr != NULL))
     {
-        const unsigned long now = millis();
+        const unsigned long now = Com_GetNowMs();
         for (uint8 i = 0U; i < Com_ConfigPtr->RxIPduCount; i++)
         {
             Com_ResetRxDeadlineMonitoring(Com_ConfigPtr->RxIPdus[i].IPduId, now);
@@ -3579,8 +3593,8 @@ static uint8 Com_FindSignalIndex(Com_SignalIdType SignalId)
  *          Com_Types.h の TxIpduCalloutCbk 参照）。
  *
  * \param[in]  ipdu  送信する TX I-PDU 設定。NULL 禁止（呼び出し元で保証する）。
- * \param[in]  now   Com_MainFunctionTx() が計算済みの現在時刻 [ms]（millis()
- *                   を再度呼ばず再利用する。TX 送信デッドライン監視の
+ * \param[in]  now   Com_MainFunctionTx() が計算済みの現在時刻 [ms]（Os カウンタ
+ *                   を再度読まず再利用する。TX 送信デッドライン監視の
  *                   アーム時刻記録に使う）。
  *
  * \retval  E_OK      PduR_ComTransmit() が成功した。
@@ -4057,7 +4071,7 @@ void Com_InvokeTxNotification(const Com_IPduConfigType* ipdu,
  *          から監視を始める。
  *
  * \param[in]  id   対象 RX I-PDU の ID。
- * \param[in]  now  基準時刻（millis()）。
+ * \param[in]  now  基準時刻（Os カウンタの現在値 [ms]）。
  *
  * \pre        Com_ConfigPtr が NULL でないこと。
  */

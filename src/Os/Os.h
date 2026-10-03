@@ -41,6 +41,25 @@ extern "C" {
  * 型定義
  * ----------------------------------------------------------------------- */
 
+/** Os API の戻り値型 (AUTOSAR Os の StatusType)。E_OK は Std_Types.h。 */
+typedef uint8 StatusType;
+
+/** Os カウンタの ID 型 (AUTOSAR Os の CounterType)。 */
+typedef uint8 CounterType;
+
+/** Os カウンタの tick 値の型 (AUTOSAR Os の TickType。仕様は 24bit 以上)。 */
+typedef uint32 TickType;
+
+/** TickType への参照型 (AUTOSAR Os の TickRefType)。 */
+typedef TickType* TickRefType;
+
+/* [SWS_Os_00376]/[SWS_Os_00381]: 不正な CounterID。
+ * [SWS_Os_00391]: 不正な Value。
+ * 数値は SWS 4.3.1 では規定されないため本プロジェクトでの割り当て
+ * （呼び出し側はシンボルで比較すること）。 */
+#define E_OS_ID     3U
+#define E_OS_VALUE  8U
+
 /** タスク本体関数の型 (AUTOSAR Os の TASK マクロに相当) */
 typedef void (*Os_TaskFuncType)(void);
 
@@ -119,6 +138,68 @@ void Os_SchedulerStep(void);
  * \Synchronicity  {Synchronous}
  */
 void Os_SetTaskActive(uint8 TaskId, uint8 Active);
+
+/**
+ * \brief   Os カウンタの現在の tick 値を読み出す。
+ *
+ * \details [SWS_Os_00383]。SYSTEM_COUNTER は 1 tick = 1 ms で、Arduino の
+ *          millis() と同じ座標系の値を返す。BSW モジュールが millis() を直接
+ *          呼ばずに時刻を取得するための窓口（[SWS_Os_00377]）。
+ *
+ *          連続性: 値は Os_Init() の前後、および Gpt ティック停滞による
+ *          millis() フォールバックの前後でも飛ばない。Os_Init() 前は
+ *          millis() をそのまま返す。Os_Init() で Gpt 駆動の時間源との
+ *          オフセットを確定し、フォールバック時にオフセットを更新する
+ *          （Os.c 参照）。これにより、モジュールが保持する「前回時刻」を
+ *          時間源の切り替えをまたいで差分計算してよい。
+ *
+ *          32bit でラップアラウンドする（約 49 日）。差分は unsigned の
+ *          引き算で正しく求まる（GetElapsedValue() 参照）。
+ *
+ * \param[in]  CounterID  カウンタ ID（SYSTEM_COUNTER のみ有効）。
+ * \param[out] Value      現在の tick 値。
+ * \return     E_OK、または E_OS_ID（CounterID 不正）。Value が NULL の場合は
+ *              E_OS_VALUE（SWS には無い防御的な追加）。
+ *
+ * \ServiceID      {0x10}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+StatusType GetCounterValue(CounterType CounterID, TickRefType Value);
+
+/**
+ * \brief   前回読み出した tick 値からの経過 tick 数を求める。
+ *
+ * \details [SWS_Os_00392]。*Value に前回の tick 値を渡すと、*ElapsedValue に
+ *          経過 tick 数が入り、*Value は現在の tick 値に更新される
+ *          （[SWS_Os_00382]/[SWS_Os_00460]）。32bit ラップアラウンドをまたいでも
+ *          正しい（ただし 2 周以上経過した場合は検出できない、[SWS_Os_00533]）。
+ *          SYSTEM_COUNTER の最大値は 0xFFFFFFFF のため、[SWS_Os_00391] の
+ *          E_OS_VALUE（Value が最大値超過）は発生し得ない。
+ *
+ * \param[in]     CounterID     カウンタ ID（SYSTEM_COUNTER のみ有効）。
+ * \param[in,out] Value         in: 前回の tick 値 / out: 現在の tick 値。
+ * \param[out]    ElapsedValue  前回からの経過 tick 数。
+ * \return        E_OK、または E_OS_ID（CounterID 不正）。Value / ElapsedValue が
+ *                 NULL の場合は E_OS_VALUE（SWS には無い防御的な追加）。
+ *
+ * \ServiceID      {0x11}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+StatusType GetElapsedValue(CounterType CounterID, TickRefType Value, TickRefType ElapsedValue);
+
+#ifdef OS_UNIT_TEST
+/**
+ * \brief   Os の初期化状態を未初期化へ戻す（単体テスト専用）。
+ *
+ * \details Os に DeInit 相当の API が無く、Os_Cfg・カウンタのオフセット・
+ *          フォールバック状態が static のままテストケースをまたいで残るため、
+ *          各テストの SetUp で呼ぶ（標準外の関数。Wdg_Test_ResetInitState() と
+ *          同じ設計方針）。
+ */
+void Os_Test_ResetInitState(void);
+#endif
 
 #ifdef __cplusplus
 }

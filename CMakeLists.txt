@@ -208,6 +208,7 @@ add_compile_definitions(
     MCU_UNIT_TEST
     NM_UNIT_TEST
     NVM_UNIT_TEST
+    OS_UNIT_TEST
     PDUR_UNIT_TEST
     WDGM_UNIT_TEST
     WDG_UNIT_TEST
@@ -654,10 +655,12 @@ set(NATIVE_CHAIN_WRAP_SYMBOLS
     WdgM_TriggerHwWatchdog
     WdgM_PerformReset
     WdgM_GetFirstExpiredSEID
-    # Os.h の公開API全3関数（Wrap_Os.h/.c 参照）。
+    # Os.h の公開API全5関数（Wrap_Os.h/.c 参照）。
     Os_Init
     Os_SchedulerStep
     Os_SetTaskActive
+    GetCounterValue
+    GetElapsedValue
 )
 foreach(wrap_symbol IN LISTS NATIVE_CHAIN_WRAP_SYMBOLS)
     target_link_options(native_chain_tests PRIVATE "-Wl,--wrap=${wrap_symbol}")

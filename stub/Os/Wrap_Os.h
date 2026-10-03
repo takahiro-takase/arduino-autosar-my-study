@@ -7,8 +7,10 @@
  *          参照（「wrap 対象の関数が定義されている元の src ファイル 1 つにつき
  *          1 ファイル」）。既定動作は `__real_...` へのパススルー。
  *
- *          `Os.h` が宣言する公開API全3関数を wrap 対象とする。全関数の戻り値
- *          は `void` のため、故障注入は実装せず呼び出し回数のみ記録する。
+ *          `Os.h` が宣言する公開API全5関数を wrap 対象とする。戻り値を持つ
+ *          GetCounterValue / GetElapsedValue も、現時点では故障注入を実装せず
+ *          呼び出し回数のみ記録する（必要になった時点で `Wrap_Can.c` と同じ
+ *          方式を足す）。
  *
  *          変数名・Reset方針は
  *          `[[reference_wrap_stub_naming_convention]]` に統一する。
@@ -29,6 +31,8 @@ extern "C" {
 extern uint32 CallCount_Os_Init;
 extern uint32 CallCount_Os_SchedulerStep;
 extern uint32 CallCount_Os_SetTaskActive;
+extern uint32 CallCount_GetCounterValue;
+extern uint32 CallCount_GetElapsedValue;
 
 /** すべての関数呼び出し回数を初期状態へ戻す。
  *  各テストケースの開始時（SetUp()）に1回呼ぶ。 */

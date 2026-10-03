@@ -172,11 +172,6 @@
  * Global Variables
  * ====================================================================== */
 
-/* Arduino wiring.c（C リンケージ）で定義 */
-/* Arduino コアの関数。AUTOSAR に対応する共通ヘッダは無いため各所で宣言している
- * （将来 Os の時間源 API へ置換する予定）。 */
-/* cppcheck-suppress misra-c2012-8.5 */
-extern unsigned long millis(void);
 
 /* -----------------------------------------------------------------------
  * モジュール内部変数
@@ -199,6 +194,8 @@ static unsigned long   EcuM_PostRunTimerMs = 0UL;
 /* ======================================================================
  * Function Prototypes
  * ====================================================================== */
+
+static unsigned long EcuM_GetNowMs(void);
 
 /* ======================================================================
  * Functions
@@ -351,7 +348,7 @@ void EcuM_MainFunction(void)
             Os_SchedulerStep();
             /* EcuM_PostRunUsers に1件でも要求が残っていれば SHUTDOWN への
              * 自動タイムアウトを保留する（[SWS_EcuM_04128]）。 */
-            if ((EcuM_PostRunUsers == 0U) && (millis() - EcuM_PostRunTimerMs) >= ECUM_POST_RUN_TIMEOUT_MS)
+            if ((EcuM_PostRunUsers == 0U) && (EcuM_GetNowMs() - EcuM_PostRunTimerMs) >= ECUM_POST_RUN_TIMEOUT_MS)
             {
                 EcuM_State = ECUM_STATE_SHUTDOWN;
                 DET_LOGI(TAG, "->SHUTDOWN");
@@ -485,7 +482,7 @@ Std_ReturnType EcuM_ReleaseRUN(EcuM_UserType user)
     if ((EcuM_RunUsers == 0U) && (EcuM_State == ECUM_STATE_RUN))
     {
         EcuM_State          = ECUM_STATE_POST_RUN;
-        EcuM_PostRunTimerMs = millis();
+        EcuM_PostRunTimerMs = EcuM_GetNowMs();
         DET_LOGI(TAG, "->POST_RUN timeout=%lums", ECUM_POST_RUN_TIMEOUT_MS);
         /* Rule 1 で Rte_Engine / Rte_Warning タスク（WdgM の監視対象、
          * Entity 0/1 双方）が停止するため、ここで HW ウォッチドッグも
@@ -578,7 +575,7 @@ Std_ReturnType EcuM_ReleasePOST_RUN(EcuM_UserType user)
      * 分だけ SHUTDOWN までの猶予を必ず確保するため）。 */
     if ((EcuM_PostRunUsers == 0U) && (EcuM_State == ECUM_STATE_POST_RUN))
     {
-        EcuM_PostRunTimerMs = millis();
+        EcuM_PostRunTimerMs = EcuM_GetNowMs();
         DET_LOGI(TAG, "POST_RUN released user=%u, timeout restarted", (unsigned)user);
     }
     return E_OK;
@@ -931,3 +928,24 @@ void EcuM_GetVersionInfo(Std_VersionInfoType* versioninfo)
  * ---------------------------------------------------------------------- */
 
 /* 未実装 */
+
+/* ======================================================================
+ * Internal Functions
+ * ====================================================================== */
+
+/* ----------------------------------------------------------------------
+ * EcuM_GetNowMs
+ * ---------------------------------------------------------------------- */
+
+/**
+ * \brief   現在時刻 [ms] を返す（Os カウンタ SYSTEM_COUNTER の tick 値）。
+ * \details millis() を直接呼ばず Os の GetCounterValue() を介する。値は Os_Init() の
+ *          前後や millis() フォールバックの前後でも飛ばない（Os.h 参照）ため、
+ *          本モジュールが保持する「前回時刻」との差分計算にそのまま使える。
+ */
+static unsigned long EcuM_GetNowMs(void)
+{
+    TickType now = 0U;
+    (void)GetCounterValue(SYSTEM_COUNTER, &now);
+    return (unsigned long)now;
+}

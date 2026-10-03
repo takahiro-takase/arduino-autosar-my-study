@@ -69,9 +69,9 @@
  *  差分自体はブロッキングの影響を受けない）。 */
 #define OS_TICK_CROSSCHECK_PERIOD_MS  500UL
 
-/* Arduino コアの関数。AUTOSAR に対応する共通ヘッダは無いため各所で宣言している
- * （将来 Os の時間源 API へ置換する予定）。 */
-/* cppcheck-suppress misra-c2012-8.5 */
+/* Arduino コアの関数（wiring.c、C リンケージ）。AUTOSAR に対応する共通ヘッダは無い。
+ * 他の BSW モジュールは millis() を直接呼ばず GetCounterValue() を使うため、
+ * millis() を直接呼ぶのは Os（時間源とそのクロスチェック）だけである。 */
 extern unsigned long millis(void);
 
 static const Os_ConfigType* Os_Cfg = NULL;
@@ -90,6 +90,12 @@ static unsigned long Os_LastCrossCheckTick   = 0UL;
  *  （ラッチ式。一度フォールバックしたら、この起動中は millis() を使い
  *  続ける。DET ログのスパム防止も兼ねる）。 */
 static uint8 Os_UseMillisFallback = 0U;
+
+/** GetCounterValue() が返す値と Os_GetTimeMs() の差（unsigned の差分）。
+ *  Os_Init() で「カウンタ値 = Os_Init() 時点の millis()」になるよう確定し、
+ *  millis() フォールバックの瞬間に、値が飛ばないよう再計算する。
+ *  Os_Init() 前（Os_Cfg == NULL）は使われず、GetCounterValue() は millis() を返す。 */
+static unsigned long Os_CounterOffsetMs = 0UL;
 
 /**
  * \brief   Os スケジューラの時間源 (ms)。
@@ -157,6 +163,9 @@ static void Os_CrossCheckTickSource(void)
     {
         DET_LOGE(TAG, "Gpt tick stalled: tickDelta=%lu millisDelta=%lu -> fallback to millis()",
                  tickDelta, millisDelta);
+        /* GetCounterValue() の値が飛ばないよう、切り替え前の値を保ったままオフセットを
+         * millis() 基準に付け替える（切り替え後も millis() + offset が連続する）。 */
+        Os_CounterOffsetMs   = (nowTick + Os_CounterOffsetMs) - nowMillis;
         Os_UseMillisFallback = 1U;
 
         for (uint8 i = 0U; i < Os_Cfg->TaskCount; i++)
@@ -209,6 +218,10 @@ void Os_Init(const Os_ConfigType* ConfigPtr)
     Os_LastCrossCheckMillis = millis();
     Os_LastCrossCheckTick   = now;
     Os_UseMillisFallback    = 0U;
+
+    /* カウンタ値を「Os_Init() 時点の millis()」から始める（Os_Init() 前に
+     * GetCounterValue() が返していた millis() の値と連続させる）。 */
+    Os_CounterOffsetMs = Os_LastCrossCheckMillis - now;
 
     DET_LOGI(TAG, "Init ok tasks=%u", (unsigned)ConfigPtr->TaskCount);
 }
@@ -291,3 +304,113 @@ void Os_SetTaskActive(uint8 TaskId, uint8 Active)
 
     Os_TaskActive[TaskId] = Active;
 }
+
+/**
+ * \brief   Os カウンタの現在の tick 値を読み出す。
+ *
+ * \details [SWS_Os_00383]。SYSTEM_COUNTER は 1 tick = 1 ms で、Arduino の
+ *          millis() と同じ座標系の値を返す。BSW モジュールが millis() を直接
+ *          呼ばずに時刻を取得するための窓口（[SWS_Os_00377]）。
+ *
+ *          連続性: 値は Os_Init() の前後、および Gpt ティック停滞による
+ *          millis() フォールバックの前後でも飛ばない。Os_Init() 前は
+ *          millis() をそのまま返す。Os_Init() で Gpt 駆動の時間源との
+ *          オフセットを確定し、フォールバック時にオフセットを更新する
+ *          （Os_CounterOffsetMs 参照）。これにより、モジュールが保持する
+ *          「前回時刻」を時間源の切り替えをまたいで差分計算してよい。
+ *
+ *          32bit でラップアラウンドする（約 49 日）。差分は unsigned の
+ *          引き算で正しく求まる（GetElapsedValue() 参照）。
+ *
+ * \param[in]  CounterID  カウンタ ID（SYSTEM_COUNTER のみ有効）。
+ * \param[out] Value      現在の tick 値。
+ * \return     E_OK、または E_OS_ID（CounterID 不正）。Value が NULL の場合は
+ *             E_OS_VALUE（SWS には無い防御的な追加）。
+ *
+ * \ServiceID      {0x10}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+StatusType GetCounterValue(CounterType CounterID, TickRefType Value)
+{
+    if (CounterID != SYSTEM_COUNTER)
+    {
+        return E_OS_ID;
+    }
+
+    if (Value == NULL)
+    {
+        return E_OS_VALUE;
+    }
+
+    if (Os_Cfg == NULL)
+    {
+        *Value = (TickType)millis();
+    }
+    else
+    {
+        *Value = (TickType)(Os_GetTimeMs() + Os_CounterOffsetMs);
+    }
+
+    return E_OK;
+}
+
+/**
+ * \brief   前回読み出した tick 値からの経過 tick 数を求める。
+ *
+ * \details [SWS_Os_00392]。*Value に前回の tick 値を渡すと、*ElapsedValue に
+ *          経過 tick 数が入り、*Value は現在の tick 値に更新される
+ *          （[SWS_Os_00382]/[SWS_Os_00460]）。32bit ラップアラウンドをまたいでも
+ *          正しい（ただし 2 周以上経過した場合は検出できない、[SWS_Os_00533]）。
+ *          SYSTEM_COUNTER の最大値は 0xFFFFFFFF のため、[SWS_Os_00391] の
+ *          E_OS_VALUE（Value が最大値超過）は発生し得ない。
+ *
+ * \param[in]     CounterID     カウンタ ID（SYSTEM_COUNTER のみ有効）。
+ * \param[in,out] Value         in: 前回の tick 値 / out: 現在の tick 値。
+ * \param[out]    ElapsedValue  前回からの経過 tick 数。
+ * \return        E_OK、または E_OS_ID（CounterID 不正）。Value / ElapsedValue が
+ *                NULL の場合は E_OS_VALUE（SWS には無い防御的な追加）。
+ *
+ * \ServiceID      {0x11}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+StatusType GetElapsedValue(CounterType CounterID, TickRefType Value, TickRefType ElapsedValue)
+{
+    if (CounterID != SYSTEM_COUNTER)
+    {
+        return E_OS_ID;
+    }
+
+    if ((Value == NULL) || (ElapsedValue == NULL))
+    {
+        return E_OS_VALUE;
+    }
+
+    TickType current = 0U;
+    const StatusType ret = GetCounterValue(CounterID, &current);
+    if (ret != E_OK)
+    {
+        return ret;
+    }
+
+    *ElapsedValue = current - *Value;
+    *Value        = current;
+
+    return E_OK;
+}
+
+/* ======================================================================
+ * Test Functions
+ * ====================================================================== */
+
+#ifdef OS_UNIT_TEST
+void Os_Test_ResetInitState(void)
+{
+    Os_Cfg                  = NULL;
+    Os_CounterOffsetMs      = 0UL;
+    Os_UseMillisFallback    = 0U;
+    Os_LastCrossCheckMillis = 0UL;
+    Os_LastCrossCheckTick   = 0UL;
+}
+#endif

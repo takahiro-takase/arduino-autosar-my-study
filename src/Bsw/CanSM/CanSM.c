@@ -136,6 +136,7 @@
 #include "CanIf.h"
 #include "Dem.h"
 #include "Det.h"
+#include "Os.h"
 
 /* ======================================================================
  * Definitions
@@ -187,11 +188,7 @@ static uint8 CanSM_Initialized = 0U;
  * Function Prototypes
  * ====================================================================== */
 
-/* Arduino wiring.c（C リンケージ）で定義 */
-/* Arduino コアの関数。AUTOSAR に対応する共通ヘッダは無いため各所で宣言している
- * （将来 Os の時間源 API へ置換する予定）。 */
-/* cppcheck-suppress misra-c2012-8.5 */
-extern unsigned long millis(void);
+static unsigned long CanSM_GetNowMs(void);
 
 static void CanSM_SetPduModeOnlineBestEffort(const char* callerTag);
 
@@ -549,7 +546,7 @@ void CanSM_ControllerBusOff(uint8 ControllerId)
     }
 
     CanSM_State         = CANSM_STATE_BUS_OFF;
-    CanSM_BusOffTimerMs = millis();
+    CanSM_BusOffTimerMs = CanSM_GetNowMs();
 
     ComM_BusSM_ModeIndication(0U, COMM_SILENT_COMMUNICATION);
 
@@ -649,7 +646,7 @@ void CanSM_ControllerModeIndication(uint8 ControllerId, Can_ControllerStateType 
         return;
     }
     CanSM_State             = CANSM_STATE_WAKEUP_VALIDATING;
-    CanSM_ValidationTimerMs = millis();
+    CanSM_ValidationTimerMs = CanSM_GetNowMs();
 }
 
 /* ----------------------------------------------------------------------
@@ -741,7 +738,7 @@ void CanSM_MainFunction(void)
 
     if (CanSM_State == CANSM_STATE_WAKEUP_VALIDATING)
     {
-        if ((millis() - CanSM_ValidationTimerMs) >= CANSM_WAKEUP_VALIDATION_MS)
+        if ((CanSM_GetNowMs() - CanSM_ValidationTimerMs) >= CANSM_WAKEUP_VALIDATION_MS)
         {
             DET_LOGW(TAG, "Wakeup validation timeout (%lums, no confirmed RX) -> back to SLEEP",
                      (unsigned long)CANSM_WAKEUP_VALIDATION_MS);
@@ -762,7 +759,7 @@ void CanSM_MainFunction(void)
     const unsigned long interval = inL2 ? (unsigned long)CANSM_BUSOFF_RECOVERY_L2_MS
                                          : (unsigned long)CANSM_BUSOFF_RECOVERY_L1_MS;
 
-    if ((millis() - CanSM_BusOffTimerMs) < interval)
+    if ((CanSM_GetNowMs() - CanSM_BusOffTimerMs) < interval)
     {
         return;
     }
@@ -784,7 +781,7 @@ void CanSM_MainFunction(void)
      * 再Bus-Off相当とみなせ、両者は事実上一致する。自己spec-citation検証で
      * 確認済みの意図的な近似）。 */
     CanSM_BusOffRetries++;
-    CanSM_BusOffTimerMs = millis();
+    CanSM_BusOffTimerMs = CanSM_GetNowMs();
 
     if (CanSM_BusOffRetries == (CANSM_BUSOFF_L1_TO_L2_COUNT + 1U))
     {
@@ -847,6 +844,23 @@ void CanSM_MainFunction(void)
 /* ======================================================================
  * Internal Functions
  * ====================================================================== */
+
+/* ----------------------------------------------------------------------
+ * CanSM_GetNowMs
+ * ---------------------------------------------------------------------- */
+
+/**
+ * \brief   現在時刻 [ms] を返す（Os カウンタ SYSTEM_COUNTER の tick 値）。
+ * \details millis() を直接呼ばず Os の GetCounterValue() を介する。値は Os_Init() の
+ *          前後や millis() フォールバックの前後でも飛ばない（Os.h 参照）ため、
+ *          本モジュールが保持する「前回時刻」との差分計算にそのまま使える。
+ */
+static unsigned long CanSM_GetNowMs(void)
+{
+    TickType now = 0U;
+    (void)GetCounterValue(SYSTEM_COUNTER, &now);
+    return (unsigned long)now;
+}
 
 /* ----------------------------------------------------------------------
  * CanSM_RxIndication
