@@ -75,4 +75,16 @@ TEST_F(Bsw_Wdg_SetTriggerCondition_Test, Wdg_SetTriggerCondition_OK_CallsAfterZe
     EXPECT_EQ(FakeWdgHw_RefreshCount, 0U);     // 0 を受けた後はリフレッシュしない
 }
 
+TEST_F(Bsw_Wdg_SetTriggerCondition_Test, Wdg_SetTriggerCondition_OK_ReInitClearsStoppedState)
+{
+    FakeDetHw_LogSuppressed = 1U;
+    Wdg_SetTriggerCondition(0U);
+    ASSERT_EQ(FakeWdgHw_ForceResetCount, 1U);
+
+    Wdg_Init(&Wdg_Config);  // 初期化し直すと timeout=0 によるトリガ停止も解除される
+    Wdg_SetTriggerCondition(Wdg_Config.DefaultTimeoutMs);
+
+    EXPECT_EQ(FakeWdgHw_RefreshCount, 1U);
+}
+
 }  // namespace

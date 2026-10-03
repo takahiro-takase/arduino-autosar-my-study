@@ -1289,11 +1289,18 @@ void WdgM_TriggerHwWatchdog(void)
 /**
  * \brief   HW ウォッチドッグの trigger を永続的に止め、リセットさせる。
  *
- * \details WdgM_ResetRequested を立てるだけで、実際のリフレッシュ拒否は
- *          WdgM_TriggerHwWatchdog() が次回呼び出し時に反映する
- *          （[SWS_WdgM_00232]: 全 Watchdog Driver の trigger condition を
- *          0 にする、の意）。WdgM_GlobalStopped とは独立した専用フラグに
- *          しているのは、WdgM_MainFunction() 末尾の自然回復判定（全エンティティ
+ * \details [SWS_WdgM_00232]: 呼び出された時点で、同期的に Watchdog Driver の
+ *          trigger condition を 0 にする（WdgIf_SetTriggerCondition(0)）。
+ *          Wdg 側が [SWS_Wdg_00140] に従い、トリガを止めて ECU を（ほぼ）即座に
+ *          リセットする（本プロジェクトではソフトウェアリセット）。以前は
+ *          WdgM_ResetRequested を立てるだけで、リセットはその後の
+ *          WdgM_TriggerHwWatchdog() によるリフレッシュ停止から HW ウォッチドッグの
+ *          期限切れ（最大 WDGM_HW_WATCHDOG_TIMEOUT_MS）まで待っていた。
+ *
+ *          あわせて WdgM_ResetRequested も立てる。実際にリセットされず戻って
+ *          きた場合（Wdg が未初期化など）でも WdgM_TriggerHwWatchdog() が
+ *          リフレッシュを二度と行わなくするためで、WdgM_GlobalStopped とは
+ *          独立した専用フラグにしているのは、WdgM_MainFunction() 末尾の自然回復判定（全エンティティ
  *          OK で WdgM_GlobalStopped を 0 に戻す）が本 API の効果を巻き戻して
  *          しまわないようにするため（[SWS_WdgM_00233]: 呼び出し後は二度と
  *          トリガ条件を更新しない）。
@@ -1312,7 +1319,8 @@ void WdgM_PerformReset(void)
     }
 
     WdgM_ResetRequested = 1U;
-    DET_LOGE(TAG, "PerformReset called - HW watchdog refresh stopped permanently [HW WDT reset pending]");
+    DET_LOGE(TAG, "PerformReset called - trigger condition set to 0, HW watchdog refresh stopped permanently");
+    WdgIf_SetTriggerCondition(WDGIF_DEVICE_0, 0U);
 }
 
 /* ----------------------------------------------------------------------

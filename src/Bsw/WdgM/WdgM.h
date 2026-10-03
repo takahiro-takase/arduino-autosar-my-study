@@ -434,18 +434,17 @@ void WdgM_TriggerHwWatchdog(void);
 /**
  * \brief   HW ウォッチドッグの trigger を永続的に止め、リセットさせる。
  *
- * \details 呼び出し時点で WdgM_ResetRequested フラグを立てる。実際に全
- *          Watchdog Driver の trigger condition を 0 にする（[SWS_WdgM_00232]）
- *          のは、このフラグを見る WdgM_TriggerHwWatchdog() の次回呼び出し
- *          （最大 WDGM_HW_TRIGGER_CYCLE_MS 後）であり、本関数自体は
- *          WdgIf/Wdg を同期的には一切呼ばない（WdgM_MainFunction/
- *          WdgM_TriggerHwWatchdog の周期分離という本プロジェクトの既存設計に
- *          合わせている）。以降 WdgM_TriggerHwWatchdog() は Global
- *          Supervision Status に関わらずリフレッシュを二度と行わなくなる
- *          （次回 WdgM_Init() が呼ばれるまで）。本プロジェクトの HW
- *          ウォッチドッグ（Renesas RA の IWDT）は一度有効化するとソフトウェア
- *          から無効化できないため、リフレッシュ停止から
- *          WDGM_HW_WATCHDOG_TIMEOUT_MS 以内に確実に実 MCU リセットへ至る。
+ * \details 呼び出し時点で、同期的に Watchdog Driver の trigger condition を 0 に
+ *          する（[SWS_WdgM_00232]、WdgIf_SetTriggerCondition(0)）。Wdg は
+ *          [SWS_Wdg_00140] に従い、トリガを止めて ECU を（ほぼ）即座にリセット
+ *          する（本プロジェクトではソフトウェアリセット）。あわせて
+ *          WdgM_ResetRequested フラグを立て、以降 WdgM_TriggerHwWatchdog() は
+ *          Global Supervision Status に関わらずリフレッシュを二度と行わなく
+ *          なる（次回 WdgM_Init() が呼ばれるまで。[SWS_WdgM_00233]）。
+ *          本プロジェクトの HW ウォッチドッグ（Renesas RA の IWDT）は一度
+ *          有効化するとソフトウェアから無効化できないため、Wdg が未初期化など
+ *          で即時リセットできなかった場合でも、リフレッシュ停止から
+ *          WDGM_HW_WATCHDOG_TIMEOUT_MS 以内に実 MCU リセットへ至る。
  *
  * \note    WdgM が未初期化（WDGM_GLOBAL_STATUS_DEACTIVATED）の場合は
  *          WDGM_E_NO_INIT を報告し、何もせず戻る（[SWS_WdgM_00270]）。

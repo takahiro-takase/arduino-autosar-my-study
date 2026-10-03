@@ -66,6 +66,7 @@ void Wdg_Init(const Wdg_ConfigType* ConfigPtr)
     }
 
     Wdg_ConfiguredTimeoutMs = ConfigPtr->DefaultTimeoutMs;
+    Wdg_TriggerStopped      = 0U;  /* 初期化し直したら、timeout=0 によるトリガ停止（ラッチ）も解除する */
     Wdg_Initialized         = 1U;
 
     DET_LOGI(TAG, "Init ok timeout=%ums", (unsigned)Wdg_ConfiguredTimeoutMs);

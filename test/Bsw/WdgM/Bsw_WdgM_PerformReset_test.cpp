@@ -64,6 +64,26 @@ TEST_F(Bsw_WdgM_PerformReset_Test, PerformReset_OK_StopsHwWatchdogRefreshImmedia
     EXPECT_EQ(FakeWdgHw_RefreshCount, 1U);
 }
 
+TEST_F(Bsw_WdgM_PerformReset_Test, PerformReset_OK_RequestsImmediateHwResetViaTriggerConditionZero)
+{
+    /* [SWS_WdgM_00232]: 呼び出された時点で同期的に trigger condition を 0 にする。
+     * Wdg は [SWS_Wdg_00140] に従い ECU を強制リセットする（Wdg_Hw_ForceReset）。
+     * 以前はフラグを立てるだけで、リセットは WdgM_TriggerHwWatchdog() の以後の
+     * リフレッシュ停止から HW ウォッチドッグの期限切れまで待っていた。 */
+    EXPECT_EQ(FakeWdgHw_ForceResetCount, 0U);
+
+    WdgM_PerformReset();
+
+    EXPECT_EQ(FakeWdgHw_ForceResetCount, 1U);
+    EXPECT_EQ(FakeWdgHw_RefreshCount, 0U);
+
+    /* 再度の呼び出し・以後のリフレッシュ要求でリセット要求を重ねない。 */
+    WdgM_PerformReset();
+    WdgM_TriggerHwWatchdog();
+    EXPECT_EQ(FakeWdgHw_ForceResetCount, 1U);
+    EXPECT_EQ(FakeWdgHw_RefreshCount, 0U);
+}
+
 TEST_F(Bsw_WdgM_PerformReset_Test, PerformReset_OK_OverridesSupervisionSuppression)
 {
     /* POST_RUN 相当（WdgM_SupervisionSuppressed 中）は本来 refresh を継続する。 */

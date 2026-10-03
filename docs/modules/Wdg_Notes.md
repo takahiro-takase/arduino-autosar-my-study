@@ -20,8 +20,9 @@ Renesas RA の実 HW ウォッチドッグ（IWDT、RA WDT ライブラリ経由
 ため、値によらず単純にリフレッシュします（学習用簡略化。`Wdg_Config.DefaultTimeoutMs`
 を超える値は `WDG_E_PARAM_TIMEOUT`）。以前の実装は値によらずリフレッシュしていたため、
 0 を渡すと逆にウォッチドッグがリフレッシュされていました。現在この API を `0` で
-呼ぶ呼び出し元はありません（WdgM は常に `WDGM_HW_WATCHDOG_TIMEOUT_MS` を渡し、
-`WdgM_PerformReset()` はリフレッシュを止める方式でリセットさせる）。
+呼ぶ呼び出し元は `WdgM_PerformReset()` だけです（WdgM_PerformReset → `WdgIf_SetTriggerCondition(0)`
+→ `Wdg_SetTriggerCondition(0)` → ソフトウェアリセット）。通常のリフレッシュは
+`WDGM_HW_WATCHDOG_TIMEOUT_MS` を渡します。
 
 ## Wdg_Hw（下位ドライバ実装）
 
