@@ -296,7 +296,7 @@ CAN バス通信の有効・無効（NO_COM/FULL_COM）を管理する ComM、CA
 
 このスタックを構成する各モジュール（ComM/CanSM/CanNm）の本プロジェクトでの役割は、
 上記「[モジュール一覧](../README.md#module-list)」表の「概要」列（リンク先の `docs/modules/`
-配下の個別ノート）を参照してください。CanSM は6状態・多数の条件分岐を持つ
+配下の個別ノート）を参照してください。CanSM は5状態・多数の条件分岐を持つ
 状態機械のため、状態遷移図を
 [`CanSM_Notes.md`（状態遷移）](modules/CanSM_Notes.md#状態遷移)に用意しています。
 
@@ -419,10 +419,10 @@ Mode と自律的に遷移し（他ノードからの NM フレーム受信が�
 `ComM_Nm_PrepareBusSleepMode()` が `CanSM_RequestComMode(SILENT_COM)` で TX だけを先に止めます）。MCP2515 の CAN バス活動による
 ウェイクアップ割り込み（`mcp_can` の `setSleepWakeup()`）を事前に有効化して
 からスリープするため、バス活動があれば自律的に起床できます。詳細は次項
-「ボランタリスリープとウェイクアップ」および後述「CanNm（ネットワークマネジメント）」
+「ボランタリスリープとウェイクアップ」および [`CanNm_Notes.md`](modules/CanNm_Notes.md)
 を参照してください。
 
-> Bus-Off 回復（後述の「Bus-Off 回復シーケンス」参照）は L1/L2 バックオフで
+> Bus-Off 回復（前述の「Bus-Off 回復試行時」のコールチェーン参照）は L1/L2 バックオフで
 > 無期限にリトライを継続する設計のため、CAN コントローラを実際にスリープさせる
 > ことはありません（`Can_T_STOP`/`Can_T_START` の間を往復するのみ）。AUTOSAR
 > 仕様（SWS_CanSM_00514/00515/00636）には「回復を諦めて二度と復帰しない」状態は
@@ -447,7 +447,7 @@ App_EngineManager_Run()（3000ms 周期）:
 
 `ComM_RequestComMode(COMM_USER_0, NO_COM)` は、Dcm が `ComM_DCM_ActiveDiagnostic()`
 で extendedSession 中を通知し続けている間は無効化されます
-（ComM のユーザ・診断アクティブ通知調停、前述の「ComM（通信マネージャ）」セクション参照）。
+（ComM のユーザ・診断アクティブ通知調停は [`ComM_Notes.md`](modules/ComM_Notes.md) 参照）。
 つまり「エンジンが止まっていて、かつ診断ツールも繋がっていない」ときだけ
 実際にスリープします。
 
