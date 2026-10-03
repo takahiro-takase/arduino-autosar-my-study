@@ -403,6 +403,35 @@ Std_ReturnType NvM_SetBlockProtection(NvM_BlockIdType BlockId, boolean Protectio
 Std_ReturnType NvM_GetErrorStatus(NvM_BlockIdType BlockId, NvM_RequestResultType* RequestResultPtr);
 
 /**
+ * \brief   保留中の EEPROM 書き込みをすべて完了させる（シャットダウン時の同期書き出し）。
+ *
+ * \details [SWS_NvM_00018] の「RAM ブロックを NV ブロックへ同期させる」を、
+ *          ECU リセット直前に呼ぶ用途に絞って実装したもの。実仕様の NvM_WriteAll()
+ *          は非同期（要求を通知して即座に戻り、結果は NvM_GetErrorStatus() で確認）
+ *          だが、本実装は要求した時点で全ブロックの書き込みが既に NvM_WriteBlock()
+ *          で FIFO キューに積まれているため、キューが空になる（処理中のブロックも
+ *          完了する）まで NvM_MainFunction()/MemIf_MainFunction() を自分で回して
+ *          戻る同期処理にしている。リセット直前はスケジューラ（Os）に処理を
+ *          委ねられないため。
+ *
+ *          NVM_WRITEALL_TIMEOUT_MS（Os のカウンタで計測）または
+ *          NVM_WRITEALL_MAX_ITERATIONS 回で打ち切る（HW ウォッチドッグ
+ *          WDGM_HW_WATCHDOG_TIMEOUT_MS=4000ms 内に収めるため）。打ち切った場合は
+ *          未完了のブロックを残したまま戻る（ログに WARN を出す）。
+ *          書き込みの失敗（リトライ上限超過）はブロックごとに諦められるため、
+ *          このループが無限に回ることはない。
+ *
+ *          未初期化の場合は DET エラー NVM_E_NOT_INITIALIZED を報告して戻る
+ *          （[SWS_NvM_00647]）。
+ *
+ * \AUTOSARReq     {SWS_NvM_00461, SWS_NvM_00018, SWS_NvM_00647}
+ * \ServiceID      {0x0D}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous（仕様は Asynchronous。上記参照）}
+ */
+void NvM_WriteAll(void);
+
+/**
  * \brief   NvM 周期処理。保留中の書き込みジョブを進める。
  *
  * \details Os スケジューラから周期的に呼び出す。保留ジョブが無ければ

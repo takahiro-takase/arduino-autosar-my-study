@@ -274,3 +274,6 @@ on message 0x200
 評価する前に本体を必ず1回実行すること、`break` で途中脱出できること、
 TesterPresent を成功する/上限回数に達するまで送信するリトライ処理での
 実用例）を参照してください。
+`tools/can_tool/capl_scripts/100_verify_nvm_writeall_on_reset.capl` は実機の確認用スクリプトです
+（0x14 全クリアの直後に 0x11 ECUReset を送り、リセット後にクリアした DTC が復活しないことを確認する。
+ECUReset 直前の `NvM_WriteAll()` の動作確認。[`NvM_Notes.md`](../../docs/modules/NvM_Notes.md) 参照）。

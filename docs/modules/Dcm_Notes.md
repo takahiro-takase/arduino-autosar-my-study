@@ -296,7 +296,9 @@ BSW/RTE が決める」という責務分離を、通信スタックだけでな
 対応は 0x01（hardReset）と 0x03（softReset）で、`Mcu_PerformReset()` はリセット種別を区別しないため
 どちらも同じ扱いです。正応答 `[0x51, subFunc]` を送ってセッションを defaultSession に戻した後、
 `DCM_ECU_RESET_DELAY_MS`（50ms）待ってから `Mcu_PerformReset()` を呼んで MCU を実際にリセットします
-（正応答がテスターに届く前にリセットしてしまわないための猶予）。subFunction の bit7
+（正応答がテスターに届く前にリセットしてしまわないための猶予）。この待ちの前に `NvM_WriteAll()` で
+NvM の書き込み待ちを EEPROM へ書き切ります（`delay()` の間は Os が止まるため、これが無いと、直前に確定・消去した
+DTC が保存途中で失われる。[`NvM_Notes.md`](./NvM_Notes.md) の「リセット直前の書き切り」参照）。subFunction の bit7
 （suppressPosRspMsgIndicationBit）が立っているときは正応答を送らずにリセットします。
 
 ## CommunicationControl（SID 0x28）

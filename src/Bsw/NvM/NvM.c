@@ -78,6 +78,7 @@
 #include "MemIf.h"
 #include "Det.h"
 #include "Dem.h"
+#include "Os.h"
 #include <string.h>
 
 /* ======================================================================
@@ -1362,6 +1363,70 @@ void NvM_MainFunction(void)
         NvM_WriteFailureReported = 0U;
         (void)Dem_SetEventStatus(DEM_EVENT_NVM_REQ_FAILED, DEM_EVENT_STATUS_PASSED);
     }
+}
+
+/* ----------------------------------------------------------------------
+ * NvM_WriteAll
+ * ---------------------------------------------------------------------- */
+
+/**
+ * \brief   保留中の EEPROM 書き込みをすべて完了させる（シャットダウン時の同期書き出し）。
+ *
+ * \details [SWS_NvM_00018] の「RAM ブロックを NV ブロックへ同期させる」を、
+ *          ECU リセット直前に呼ぶ用途に絞って実装したもの。実仕様の NvM_WriteAll()
+ *          は非同期（要求を通知して即座に戻り、結果は NvM_GetErrorStatus() で確認）
+ *          だが、本実装は要求した時点で全ブロックの書き込みが既に NvM_WriteBlock()
+ *          で FIFO キューに積まれているため、キューが空になる（処理中のブロックも
+ *          完了する）まで NvM_MainFunction()/MemIf_MainFunction() を自分で回して
+ *          戻る同期処理にしている。リセット直前はスケジューラ（Os）に処理を
+ *          委ねられないため。
+ *
+ *          NVM_WRITEALL_TIMEOUT_MS（Os のカウンタで計測）または
+ *          NVM_WRITEALL_MAX_ITERATIONS 回で打ち切る（HW ウォッチドッグ
+ *          WDGM_HW_WATCHDOG_TIMEOUT_MS=4000ms 内に収めるため）。打ち切った場合は
+ *          未完了のブロックを残したまま戻る（ログに WARN を出す）。
+ *          書き込みの失敗（リトライ上限超過）はブロックごとに諦められるため、
+ *          このループが無限に回ることはない。
+ *
+ *          未初期化の場合は DET エラー NVM_E_NOT_INITIALIZED を報告して戻る
+ *          （[SWS_NvM_00647]）。
+ *
+ * \AUTOSARReq     {SWS_NvM_00461, SWS_NvM_00018, SWS_NvM_00647}
+ * \ServiceID      {0x0D}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous（仕様は Asynchronous。上記参照）}
+ */
+void NvM_WriteAll(void)
+{
+    if (NvM_Cfg == NULL)
+    {
+        (void)Det_ReportError(NVM_MODULE_ID, 0U, NVM_API_ID_WRITE_ALL, NVM_E_NOT_INITIALIZED);
+        return;
+    }
+
+    TickType startTick = 0U;
+    (void)GetCounterValue(SYSTEM_COUNTER, &startTick);
+
+    uint16 iterations = 0U;
+    while ((NvM_QueueLen != 0U) || (NvM_ActiveBlockId < NVM_BLOCK_COUNT))
+    {
+        TickType nowTick = startTick;
+        (void)GetCounterValue(SYSTEM_COUNTER, &nowTick);
+
+        if ((iterations >= NVM_WRITEALL_MAX_ITERATIONS)
+            || ((nowTick - startTick) >= (TickType)NVM_WRITEALL_TIMEOUT_MS))
+        {
+            DET_LOGW(TAG, "WriteAll timed out (queued=%u iterations=%u)", (unsigned)NvM_QueueLen,
+                     (unsigned)iterations);
+            return;
+        }
+
+        NvM_MainFunction();
+        MemIf_MainFunction();
+        iterations++;
+    }
+
+    DET_LOGI(TAG, "WriteAll done (iterations=%u)", (unsigned)iterations);
 }
 
 /* ----------------------------------------------------------------------
