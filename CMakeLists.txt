@@ -540,9 +540,10 @@ set(NATIVE_CHAIN_WRAP_SYMBOLS
     Dem_GetEventUdsStatus
     Dem_GetDTCOfEvent
     Dem_ClearDTC
-    Dem_GetAllDTCs
-    Dem_GetSupportedDTCs
-    Dem_GetPrefailedDTCs
+    Dem_SetDTCFilter
+    Dem_GetNumberOfFilteredDTC
+    Dem_GetNextFilteredDTC
+    Dem_GetNextFilteredDTCAndFDC
     Dem_SetFreezeFrameContext
     Dem_GetFreezeFrameOfEvent
     Dem_GetEventIdOfDTC

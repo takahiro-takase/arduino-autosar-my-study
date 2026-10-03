@@ -29,6 +29,41 @@ FreezeFrame、ExtendedData、EEPROM レイアウトの詳細を以下にまと�
 | 13 | NVM_LOSS_OF_REDUNDANCY | 冗長ブロックの片面が破損し自己修復した | 0x00010E |
 | 14 | NVM_REQ_FAILED | `NvM_WriteBlock()` の書き込みがリトライ上限（`NVM_MAX_NUM_OF_WRITE_RETRIES`）を超えても成功しなかった | 0x00010F |
 
+<a id="dtc-filter"></a>
+## DTC フィルタ API（UDS 0x19 の一覧取得）
+
+Dcm は UDS 0x19 の DTC 一覧・件数を、実仕様のフィルタ API で取得します
+（[SWS_Dcm_00293]/[SWS_Dcm_00378]/[SWS_Dcm_00465]）。2026-10 に、本プロジェクト
+独自の一括取得関数（`Dem_GetAllDTCs`/`Dem_GetSupportedDTCs`/
+`Dem_GetPrefailedDTCs`）から置き換えました。
+
+```
+Dem_SetDTCFilter(ClientId, DTCStatusMask, DTCFormat, DTCOrigin,
+                 FilterWithSeverity, DTCSeverityMask, FilterForFaultDetectionCounter)
+  → 条件を保持し、走査位置を先頭へ戻す
+Dem_GetNumberOfFilteredDTC(ClientId, &count)      ← 件数だけ数える（走査位置は進めない）
+Dem_GetNextFilteredDTC(ClientId, &dtc, &status)   ← 1 件ずつ。最後は DEM_NO_SUCH_ELEMENT (48)
+Dem_GetNextFilteredDTCAndFDC(ClientId, &dtc, &fdc)← 同上。FDC は Dem_GetFaultDetectionCounter と同じ写像
+```
+
+| UDS 0x19 | Dem_SetDTCFilter の引数 | 取得 API |
+|---|---|---|
+| 0x01 件数 | `DTCStatusMask`=要求の値 | `Dem_GetNumberOfFilteredDTC` |
+| 0x02 DTC 一覧 | `DTCStatusMask`=要求の値 | `Dem_GetNextFilteredDTC` |
+| 0x0A サポート DTC | `DTCStatusMask`=0x00（絞り込みなし＝全件） | `Dem_GetNextFilteredDTC` |
+| 0x14 FDC | `DTCStatusMask`=0x00、`FilterForFaultDetectionCounter`=TRUE（FDC が 1〜0x7E の DTC のみ） | `Dem_GetNextFilteredDTCAndFDC` |
+
+要求の `statusMask` と availabilityMask の AND が 0 のときは、Dcm が Dem を呼ばずに
+0 件で肯定応答します（[SWS_Dcm_00377]。`DTCStatusMask=0x00` は Dem では「絞り込みなし」を
+意味する AUTOSAR 独自値のため、UDS の要求としては Dem へ渡しません）。`Dem_SetDTCFilter()`
+が `E_NOT_OK` を返したときは NRC 0x31（[SWS_Dcm_01255]）です。
+
+簡略化: フィルタ条件は 1 組だけ保持し（単一ECU・単一診断クライアント）、`ClientId` は
+区別に使いません。`DTCFormat` は UDS、`DTCOrigin` は PRIMARY_MEMORY のみ、
+`FilterWithSeverity=TRUE` は非対応（Severity を持たない）で、いずれも
+`DEM_E_WRONG_CONFIGURATION` を報告して `E_NOT_OK` を返します。常に同期的に完了し、
+`DEM_PENDING` は返しません。
+
 ## デバウンス (Counter-based Debouncing)
 
 各イベントは `Dem_Cfg.h` の `DEM_DEBOUNCE_LIMIT_*` で**イベントごとに個別設定**する
@@ -473,10 +508,10 @@ BUTTON_STUCK は「固着で+1、解放で-1」を繰り返すだけで確定（
 （[SWS_Dcm_00465]）が「ステータスが『prefailed』(FDC値1〜0x7E) の DTC
 のみ」という絞り込みを行わず常に全イベントを返していた乖離も修正した
 （詳細は [`Dcm_Notes.md`](./Dcm_Notes.md) 参照）。この絞り込み条件は
-Dem 内部のデバウンス状態に基づく知識のため、`Dem_GetAllDTCs()`
-（statusMask 絞り込み）/`Dem_GetSupportedDTCs()`（無条件全件）と同じ
-「Dem 側で判定し、フィルタ済みの結果だけを返す」設計に揃え、
-新設した `Dem_GetPrefailedDTCs()` に実装している
+Dem 内部のデバウンス状態に基づく知識のため、Dem 側で判定し、フィルタ済みの
+結果だけを返す設計にした。当初は独自関数 `Dem_GetPrefailedDTCs()` に実装して
+いたが、2026-10 に実仕様の `Dem_SetDTCFilter()`（`FilterForFaultDetectionCounter=
+TRUE`）+ `Dem_GetNextFilteredDTCAndFDC()`（下記「DTC フィルタ API」）へ置き換えた
 （`/simplify` のaltitude観点で「Dcmハンドラに直接実装すると
 既存の設計パターンから外れる」と指摘され是正）。
 
