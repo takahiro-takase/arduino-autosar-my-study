@@ -94,12 +94,9 @@ true が続く間の重複実行や true→false への遷移では実行しま�
 | 21 | (マスク対象外) | `SecOC_MainFunctionRx` | 100 ms |
 
 Task 6（`Com_MainFunctionTx`）は 2026-08、単体だった `Com_MainFunction` を
-実仕様準拠の `Com_MainFunctionRx`/`Com_MainFunctionTx` へ分割した際に追加。
-Task 17（`SecOC_MainFunctionTx`）が同一 `Os_SchedulerStep()` パス内で Com の
-ディスパッチ結果を同じティックで拾えるよう、末尾ではなく Task 5 の直後へ
-挿入し、Task 7 以降を 1 つずつ後ろへずらした（`/code-review` で「末尾に
-追加すると 1 ティック分の遅延が生じる」と指摘され是正。詳細は
-`Os_PBCfg.c`/`BswM_Cfg.h` 参照）。
+実仕様準拠の `Com_MainFunctionRx`/`Com_MainFunctionTx` へ分割した際に追加しました。
+タスクは `Os_SchedulerStep()` 内でインデックス昇順に実行されるため、Task 6 の Com の送信結果は、
+同じパス内で後ろのタスク（Task 17 の `SecOC_MainFunctionTx` 等）が拾えます。
 
 `BSWM_TASK_MASK_APP = 0x00C`（bit2=Rte_Engine, bit3=Rte_Warning）がアプリタスクマスクです。
 POST_RUN ではこの 2 タスクだけを停止し、BSW タスク（Can_MainFunction_Read/BusOff/Wakeup・CanTp・CanSM・Com・IoHwAb・WdgM・Dcm・FiM・WdgM_TriggerHwWatchdog・CanNm・NvM・MemIf・SecOC・Can_MainFunction_Write）は継続させます。

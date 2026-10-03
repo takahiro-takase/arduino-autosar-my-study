@@ -105,7 +105,8 @@ statusMask の代表値: `0x08`=confirmedDTC のみ / `0xFF`=全件。
 **ユニットテストについて**: 本プロジェクトは従来、Dcm/Dem を実機 +
 `uds_tester` の手動検証のみで確認しており、ユニットテストが存在
 しませんでした（Com/Can とは異なる扱い）。今回、この状況を変えて
-`[env:native_dcm]`（`platformio.ini`・`test/test_dcm/` 参照）を新設し、
+ホスト上のユニットテスト環境（当時は `[env:native_dcm]`。現在は `[env:native_chain]` に統合済みで、
+テストは `test/Bsw/Dcm/` と `test/Bsw/DcmStack/`）を新設し、
 `Dcm_ComIndication()` に生の UDS バイト列を渡して `CanTp_Transmit()`
 （フェイクでキャプチャ）の応答を検証する形で 0x19 の主要 subFunc を
 カバーしました。実機での動作確認はこれとは別に行います。
@@ -123,7 +124,7 @@ subFunc 0x0A の応答が一切送信されない不具合が見つかりまし�
 `Dcm_TxBuf` は `DEM_EVENT_COUNT` 変化に自動追従するサイズだった一方、
 下流の `CanTp_Transmit()` が独自に持つ TX バッファ上限（固定値 32 バイト）
 が連動しておらず、`DEM_EVENT_COUNT=10` での 0x0A 応答（43 バイト）を
-常に「invalid len」で拒否していました。`[env:native_dcm]` のユニット
+常に「invalid len」で拒否していました。当時の `[env:native_dcm]` のユニット
 テストは `Fake_CanTp.c` を使うためこの層のチェックを再現しておらず、
 検出できませんでした。詳細と修正内容は
 [`CanTp_Notes.md`](./CanTp_Notes.md) の該当節を参照してください。
@@ -289,6 +290,14 @@ BSW/RTE が決める」という責務分離を、通信スタックだけでな
   （`Rte_LampLastLevel`）をそのまま固定する。FAULT LED が点滅中に発行すると、
   その瞬間の点灯/消灯状態で止まる。
 - `shortTermAdjustment`（0x03）: `controlState`（1 バイト、0/1）で明示的に値を指定する。
+
+## ECUReset（SID 0x11）
+
+対応は 0x01（hardReset）と 0x03（softReset）で、`Mcu_PerformReset()` はリセット種別を区別しないため
+どちらも同じ扱いです。正応答 `[0x51, subFunc]` を送ってセッションを defaultSession に戻した後、
+`DCM_ECU_RESET_DELAY_MS`（50ms）待ってから `Mcu_PerformReset()` を呼んで MCU を実際にリセットします
+（正応答がテスターに届く前にリセットしてしまわないための猶予）。subFunction の bit7
+（suppressPosRspMsgIndicationBit）が立っているときは正応答を送らずにリセットします。
 
 ## CommunicationControl（SID 0x28）
 
@@ -590,17 +599,21 @@ SecurityAccess の Level1（subFunc 0x01/0x02）でアンロックしないと N
 /* Dcm.c */
 static const Dcm_SidSessionRowType Dcm_SidSessionTable[] =
 {
-    { DCM_SID_CLEAR_DTC,        DCM_SESSION_MASK_EXTENDED },
-    { DCM_SID_SECURITY_ACCESS,  DCM_SESSION_MASK_EXTENDED },
-    { DCM_SID_WRITE_DATA,       DCM_SESSION_MASK_EXTENDED },
-    { DCM_SID_IO_CONTROL,       DCM_SESSION_MASK_EXTENDED },
-    { DCM_SID_COMM_CONTROL,     DCM_SESSION_MASK_EXTENDED },
-    { DCM_SID_ROUTINE_CONTROL,  DCM_SESSION_MASK_EXTENDED },
+    { DCM_SID_CLEAR_DTC,             DCM_SESSION_MASK_EXTENDED },
+    { DCM_SID_SECURITY_ACCESS,       DCM_SESSION_MASK_EXTENDED },
+    { DCM_SID_WRITE_DATA,            DCM_SESSION_MASK_EXTENDED },
+    { DCM_SID_IO_CONTROL,            DCM_SESSION_MASK_EXTENDED },
+    { DCM_SID_COMM_CONTROL,          DCM_SESSION_MASK_EXTENDED },
+    { DCM_SID_ROUTINE_CONTROL,       DCM_SESSION_MASK_EXTENDED },
+    { DCM_SID_REQUEST_DOWNLOAD,      DCM_SESSION_MASK_EXTENDED },
+    { DCM_SID_TRANSFER_DATA,         DCM_SESSION_MASK_EXTENDED },
+    { DCM_SID_REQUEST_TRANSFER_EXIT, DCM_SESSION_MASK_EXTENDED },
+    { DCM_SID_CONTROL_DTC_SETTING,   DCM_SESSION_MASK_EXTENDED },
 };
 ```
 
 テーブルに掲載のない SID はセッション制約なしとみなされ、defaultSession でも応答します。
-0x14・0x27・0x28・0x2E・0x2F・0x31 のみ extendedSession 限定とし、defaultSession で要求すると各ハンドラに
+0x14・0x27・0x28・0x2E・0x2F・0x31・0x34・0x36・0x37・0x85 のみ extendedSession 限定とし、defaultSession で要求すると各ハンドラに
 到達する前に NRC 0x7F（serviceNotSupportedInActiveSession）で拒否されます
 （各 SID の制約は前述の「対応 UDS サービス」表の Def/Ext 列を参照）。
 

@@ -134,7 +134,7 @@ UDS 0x19 subFunc 0x0A（reportSupportedDTC、statusMask による絞り込みを
 `DEM_EVENT_COUNT=10` での応答長は `3+10*4=43` バイトとなり、
 32 バイトの `CANTP_TX_BUFFER_SIZE` を常に超えるため、実機で
 subFunc 0x0A を送るたびに以下のように応答が一切送信されない状態に
-なっていた（ユニットテストでは検出できなかった。`[env:native_dcm]` は
+なっていた（ユニットテストでは検出できなかった。当時のテスト環境 `[env:native_dcm]` は
 `Fake_CanTp.c` で長さチェックを行わないため）:
 
 ```
@@ -143,7 +143,7 @@ subFunc 0x0A を送るたびに以下のように応答が一切送信されな�
 [CanTp] CanTp_Transmit: TX E: invalid len   ← 応答が送信されない
 ```
 
-**対応**: `CANTP_TX_BUFFER_SIZE` を 48 バイトに引き上げ、`Dcm_Cbk.c` の
+**対応**: `CANTP_TX_BUFFER_SIZE` を 48 バイトに引き上げ、`Dcm.c`（当時は `Dcm_Cbk.c`）の
 `DCM_TX_BUF_SIZE`（43バイト）を上回るようにした。48 は FF(6) + CF×6(7×6)
 という ISO-TP のフレーム境界にちょうど一致する値で、最後の CF に
 パディングの無駄が出ない。43 への最小限の対応（44 等）ではなく、
@@ -181,7 +181,7 @@ NVM_INTEGRITY_FAILED/NVM_LOSS_OF_REDUNDANCY 追加）した際、この値を
 **対応**: `CANTP_TX_BUFFER_SIZE` を 76 バイト（FF(6)+CF×10(7×10)、
 `DEM_EVENT_COUNT` が今後 18 まで増えても再度触らずに済む余裕）へ
 再拡張。さらに、コメントによる注意喚起だけでは同じ見落としが
-三度目も起こりうるため、`Dcm_Cbk.c` の `DCM_TX_BUF_SIZE` 定義直後に
+三度目も起こりうるため、`Dcm.c`（当時は `Dcm_Cbk.c`）の `DCM_TX_BUF_SIZE` 定義直後に
 本プロジェクト初の静的アサート（負のサイズの配列は違法という
 C89 以降常に有効な性質を利用、AVR/native 両ビルドで動作）を追加し、
 `CANTP_TX_BUFFER_SIZE` 不足時はビルドエラーで機械的に検知できるようにした。

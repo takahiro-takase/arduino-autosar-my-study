@@ -42,6 +42,16 @@
 |  |  |  |  | 24–39 | 16 bit | VehicleSpeed | 0.01 km/h（raw 0x0064 = 1.00 km/h） |
 |  |  |  |  | 40 | 1 bit | BrakeActive | 0=解除 / 1=作動 |
 |  |  |  |  | 41 | 1 bit | AbsActive | 0=非作動 / 1=ABS 作動中 |
+| Rx | ImmobilizerCmd | 0x120 | 6 | ↓ | ↓ | ↓ | ↓ |
+|  |  |  |  | 0–7 | 8 bit | ImmobilizerCmd | 0=LOCK / 1=UNLOCK |
+|  |  |  |  | 8–15 | 8 bit | Reserved | 常に 0x00（0 以外は Com_RxIpduCallout が棄却） |
+|  |  |  |  | 16–23 | 8 bit | SecOC Freshness Value | 8bit 単調増加カウンタ（切り詰めなし） |
+|  |  |  |  | 24–47 | 24 bit | SecOC MAC | AES-128-CMAC の上位 24bit |
+| Tx | ImmobilizerStatus | 0x230 | 1 | ↓ | ↓ | ↓ | ↓ |
+|  |  |  |  | 0–7 | 8 bit | ImmobilizerStatus | ImmobilizerCmd と同値（Signal Gateway が転送。E2E/SecOC 保護なし） |
+| Tx<br>Rx | NM (CanNm) | 0x400 | 2 | ↓ | ↓ | ↓ | ↓ |
+|  |  |  |  | 0–7 | 8 bit | Control Bit Vector | bit0=Repeat Message Request のみ使用 |
+|  |  |  |  | 8–15 | 8 bit | Source Node Identifier | 本 ECU は 0x01 |
 
 ### TX フレーム（Arduino → 外部）
 
@@ -62,7 +72,7 @@ byte[2] の警告灯3bitと byte[3-4] の EngineSpeed・byte[5] の CoolantTemp 
 付与していません（EngineInfo/AbsInfo を Com が既に検証した**後**にメータ ECU 自身が
 導出する二次データであり、実車でも一次センサ値ほど厳密な保護が付与されないことが
 多いため、素の（E2E 保護なしの）シグナル送信の実装例として意図的に残しています。
-詳細は「E2E P01 保護」セクション参照）。MIXED を選んだ理由: `EngineState` は他 ECU
+詳細は [`docs/can_stack.md`](can_stack.md#e2e-p01) の「E2E 保護」節参照）。MIXED を選んだ理由: `EngineState` は他 ECU
 （盗難防止・ボディ制御等）が判断材料に使いうるデータのため、起動直後の受信側や
 瞬断から復帰した受信側がいつまでも古い値を握り続けないよう、周期フロアによる
 再送を残しています。
@@ -124,3 +134,16 @@ byte[0] byte[1] byte[2] byte[3] byte[4] byte[5]
 > E2E Counter と CRC は uds_tester ツールが自動計算して付加します。
 > Cangaroo から手動送信する場合は byte[0-1]=CRC16 の計算値（リトルエンディアン）、
 > byte[2]=Counter 値を手動で付加してください。
+
+**ImmobilizerCmd（KeyFobEcu 想定 / CAN ID 0x120 / DLC=6 / SecOC Profile 1 保護）** と
+**ImmobilizerStatus（CAN ID 0x230 / DLC=1）**: SecOC の MAC・フレッシュネス検証に成功した
+ImmobilizerCmd だけが Com へ届き、Signal Gateway がそのまま ImmobilizerStatus として送信します
+（`ComTxModeNumberOfRepetitions` により計 3 回、約 100ms 間隔で送信）。バイトレイアウトと検証の
+詳細は [`docs/modules/SecOC_Notes.md`](modules/SecOC_Notes.md)、ゲートウェイは
+[`docs/modules/Com_Notes.md`](modules/Com_Notes.md) の Signal Gateway 節を参照してください。
+
+**NM フレーム（CAN ID 0x400 / DLC=2）**: CanNm が Com を経由せず `CanIf_Transmit()` で直接送信し、
+受信は `CanNm_RxIndication()` へ直接渡します（[`CanNm_Notes.md`](modules/CanNm_Notes.md) 参照）。
+
+**診断フレーム（CAN ID 0x7E0 要求 / 0x7E8 応答）**: ISO 15765-2 の PCI を含む UDS フレームです
+（[`Dcm_Notes.md`](modules/Dcm_Notes.md)、[`CanTp_Notes.md`](modules/CanTp_Notes.md) 参照）。

@@ -419,7 +419,8 @@ EcuM が状態遷移を決定し、BswM がその状態に応じたタスクの�
 > 別クラスタ（Communication Services、Com/PduR と同じ側）に属します。本プロジェクトの
 > 実装でも、`BswM.c` は `BswM_ComM_CurrentMode()` という受動的なコールバックのみで
 > ComM/CanSM を呼ばず、`WdgM.c` は ComM/CanSM と一切無関係、`EcuM.c` からの呼び出しも
-> Init 時と `ComM_RequestComMode()` の2箇所に限られます。実際のコールグラフの密度は
+> 起動時（`ComM_Init()` / `ComM_CommunicationAllowed()` / `ComM_RequestComMode()`）と、
+> ウェイクアップ通知（`CanSM_ControllerModeIndication()`）に限られます。実際のコールグラフの密度は
 > CanIf/Can 側にあるため、ComM/CanSM/CanNm は
 > 「[CAN 通信状態管理](docs/can_stack.md#can-comm-management)」として CAN 通信スタック側にまとめ、
 > EcuM/BswM が関わる箇所はそちらのコールチェーン図中に個別に注釈しています。
