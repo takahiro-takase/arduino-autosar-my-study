@@ -1,0 +1,3145 @@
+{
+ "release": "4.3.1",
+ "note": "AUTOSAR CP R4.3.1 の各 SWS から抽出した API 名と Service ID（関数名と ID のみ。仕様書の記述は含まない）。tools/api_coverage/api_coverage.py が参照する。",
+ "modules": {
+  "Adc": {
+   "spec": "AUTOSAR_SWS_ADCDriver.pdf",
+   "sources": [
+    "src/Bsw/Adc/Adc.c"
+   ],
+   "apis": [
+    {
+     "name": "Adc_Init",
+     "id": "0x00"
+    },
+    {
+     "name": "Adc_SetupResultBuffer",
+     "id": "0x0c"
+    },
+    {
+     "name": "Adc_DeInit",
+     "id": "0x01"
+    },
+    {
+     "name": "Adc_StartGroupConversion",
+     "id": "0x02"
+    },
+    {
+     "name": "Adc_StopGroupConversion",
+     "id": "0x03"
+    },
+    {
+     "name": "Adc_ReadGroup",
+     "id": "0x04"
+    },
+    {
+     "name": "Adc_EnableHardwareTrigger",
+     "id": "0x05"
+    },
+    {
+     "name": "Adc_DisableHardwareTrigger",
+     "id": "0x06"
+    },
+    {
+     "name": "Adc_EnableGroupNotification",
+     "id": "0x07"
+    },
+    {
+     "name": "Adc_DisableGroupNotification",
+     "id": "0x08"
+    },
+    {
+     "name": "Adc_GetGroupStatus",
+     "id": "0x09"
+    },
+    {
+     "name": "Adc_GetStreamLastPointer",
+     "id": "0x0b"
+    },
+    {
+     "name": "Adc_GetVersionInfo",
+     "id": "0x0a"
+    },
+    {
+     "name": "Adc_SetPowerState",
+     "id": "0x10"
+    },
+    {
+     "name": "Adc_GetCurrentPowerState",
+     "id": "0x11"
+    },
+    {
+     "name": "Adc_GetTargetPowerState",
+     "id": "0x12"
+    },
+    {
+     "name": "Adc_PreparePowerState",
+     "id": "0x13"
+    },
+    {
+     "name": "Adc_Main_PowerTransitionManager",
+     "id": "0x14"
+    }
+   ]
+  },
+  "BswM": {
+   "spec": "AUTOSAR_SWS_BSWModeManager.pdf",
+   "sources": [
+    "src/Bsw/BswM/BswM.c"
+   ],
+   "apis": [
+    {
+     "name": "BswM_BswMPartitionRestarted",
+     "id": "0x1e"
+    },
+    {
+     "name": "BswM_CanSM_CurrentIcomConfiguration",
+     "id": "0x1a"
+    },
+    {
+     "name": "BswM_CanSM_CurrentState",
+     "id": "0x05"
+    },
+    {
+     "name": "BswM_ComM_CurrentMode",
+     "id": "0x0e"
+    },
+    {
+     "name": "BswM_ComM_CurrentPNCMode",
+     "id": "0x15"
+    },
+    {
+     "name": "BswM_ComM_InitiateReset",
+     "id": "0x22"
+    },
+    {
+     "name": "BswM_Dcm_ApplicationUpdated",
+     "id": "0x14"
+    },
+    {
+     "name": "BswM_Dcm_CommunicationMode_CurrentState",
+     "id": "0x06"
+    },
+    {
+     "name": "BswM_Deinit",
+     "id": "0x04"
+    },
+    {
+     "name": "BswM_EcuM_CurrentState",
+     "id": "0x0f"
+    },
+    {
+     "name": "BswM_EcuM_CurrentWakeup",
+     "id": "0x10"
+    },
+    {
+     "name": "BswM_EcuM_RequestedState",
+     "id": null
+    },
+    {
+     "name": "BswM_EthIf_PortGroupLinkStateChg",
+     "id": "0x26"
+    },
+    {
+     "name": "BswM_EthSM_CurrentState",
+     "id": "0x0d"
+    },
+    {
+     "name": "BswM_FrSM_CurrentState",
+     "id": "0x0c"
+    },
+    {
+     "name": "BswM_GetVersionInfo",
+     "id": "0x01"
+    },
+    {
+     "name": "BswM_Init",
+     "id": "0x00"
+    },
+    {
+     "name": "BswM_J1939DcmBroadcastStatus",
+     "id": "0x1b"
+    },
+    {
+     "name": "BswM_J1939Nm_StateChangeNotification",
+     "id": "0x18"
+    },
+    {
+     "name": "BswM_LinSM_CurrentSchedule",
+     "id": "0x0a"
+    },
+    {
+     "name": "BswM_LinSM_CurrentState",
+     "id": "0x09"
+    },
+    {
+     "name": "BswM_LinTp_RequestMode",
+     "id": "0x0b"
+    },
+    {
+     "name": "BswM_Nm_CarWakeUpIndication",
+     "id": "0x24"
+    },
+    {
+     "name": "BswM_NvM_CurrentBlockMode",
+     "id": "0x16"
+    },
+    {
+     "name": "BswM_NvM_CurrentJobMode",
+     "id": "0x17"
+    },
+    {
+     "name": "BswM_RequestMode",
+     "id": "0x02"
+    },
+    {
+     "name": "BswM_Sd_ClientServiceCurrentState",
+     "id": "0x1f"
+    },
+    {
+     "name": "BswM_Sd_ConsumedEventGroupCurrentState",
+     "id": "0x21"
+    },
+    {
+     "name": "BswM_Sd_EventHandlerCurrentState",
+     "id": "0x20"
+    },
+    {
+     "name": "BswM_WdgM_RequestPartitionReset",
+     "id": "0x11"
+    },
+    {
+     "name": "BswM_MainFunction",
+     "id": "0x03"
+    },
+    {
+     "name": "BswM_modeSwitchPort",
+     "id": "0x25"
+    }
+   ]
+  },
+  "Can": {
+   "spec": "AUTOSAR_SWS_CANDriver.pdf",
+   "sources": [
+    "src/Bsw/Can/Can.c"
+   ],
+   "apis": [
+    {
+     "name": "Can_Init",
+     "id": "0x00"
+    },
+    {
+     "name": "Can_GetVersionInfo",
+     "id": "0x07"
+    },
+    {
+     "name": "Can_CheckBaudrate",
+     "id": null
+    },
+    {
+     "name": "Can_ChangeBaudrate",
+     "id": null
+    },
+    {
+     "name": "Can_SetBaudrate",
+     "id": null
+    },
+    {
+     "name": "Can_SetControllerMode",
+     "id": null
+    },
+    {
+     "name": "Can_DisableControllerInterrupts",
+     "id": "0x04"
+    },
+    {
+     "name": "Can_EnableControllerInterrupts",
+     "id": "0x05"
+    },
+    {
+     "name": "Can_CheckWakeup",
+     "id": "0x0b"
+    },
+    {
+     "name": "Can_Write",
+     "id": null
+    },
+    {
+     "name": "Can_MainFunction_Write",
+     "id": "0x01"
+    },
+    {
+     "name": "Can_MainFunction_Read",
+     "id": "0x08"
+    },
+    {
+     "name": "Can_MainFunction_BusOff",
+     "id": "0x09"
+    },
+    {
+     "name": "Can_MainFunction_Wakeup",
+     "id": "0x0a"
+    },
+    {
+     "name": "Can_MainFunction_Mode",
+     "id": "0x0c"
+    },
+    {
+     "name": "Can_SetIcomConfiguration",
+     "id": "0xf"
+    }
+   ]
+  },
+  "CanIf": {
+   "spec": "AUTOSAR_SWS_CANInterface.pdf",
+   "sources": [
+    "src/Bsw/CanIf/CanIf.c"
+   ],
+   "apis": [
+    {
+     "name": "CanIf_Init",
+     "id": "0x01"
+    },
+    {
+     "name": "CanIf_DeInit",
+     "id": "0x02"
+    },
+    {
+     "name": "CanIf_SetControllerMode",
+     "id": null
+    },
+    {
+     "name": "CanIf_GetControllerMode",
+     "id": "0x04"
+    },
+    {
+     "name": "CanIf_GetControllerErrorState",
+     "id": "0x4b"
+    },
+    {
+     "name": "CanIf_Transmit",
+     "id": "0x49"
+    },
+    {
+     "name": "CanIf_CancelTransmit",
+     "id": "0x4a"
+    },
+    {
+     "name": "CanIf_ReadRxPduData",
+     "id": null
+    },
+    {
+     "name": "CanIf_ReadTxNotifStatus",
+     "id": "0x07"
+    },
+    {
+     "name": "CanIf_ReadRxNotifStatus",
+     "id": "0x08"
+    },
+    {
+     "name": "CanIf_SetPduMode",
+     "id": null
+    },
+    {
+     "name": "CanIf_GetPduMode",
+     "id": "0x0a"
+    },
+    {
+     "name": "CanIf_GetVersionInfo",
+     "id": "0x0b"
+    },
+    {
+     "name": "CanIf_SetDynamicTxId",
+     "id": null
+    },
+    {
+     "name": "CanIf_SetTrcvMode",
+     "id": null
+    },
+    {
+     "name": "CanIf_GetTrcvMode",
+     "id": "0x0e"
+    },
+    {
+     "name": "CanIf_GetTrcvWakeupReason",
+     "id": "0x0f"
+    },
+    {
+     "name": "CanIf_SetTrcvWakeupMode",
+     "id": null
+    },
+    {
+     "name": "CanIf_CheckWakeup",
+     "id": "0x11"
+    },
+    {
+     "name": "CanIf_CheckValidation",
+     "id": "0x12"
+    },
+    {
+     "name": "CanIf_GetTxConfirmationState",
+     "id": "0x19"
+    },
+    {
+     "name": "CanIf_ClearTrcvWufFlag",
+     "id": "0x1e"
+    },
+    {
+     "name": "CanIf_CheckTrcvWakeFlag",
+     "id": "0x1f"
+    },
+    {
+     "name": "CanIf_SetBaudrate",
+     "id": null
+    },
+    {
+     "name": "CanIf_SetIcomConfiguration",
+     "id": null
+    },
+    {
+     "name": "CanIf_TriggerTransmit",
+     "id": null
+    },
+    {
+     "name": "CanIf_TxConfirmation",
+     "id": "0x13"
+    },
+    {
+     "name": "CanIf_RxIndication",
+     "id": "0x14"
+    },
+    {
+     "name": "CanIf_ControllerBusOff",
+     "id": "0x16"
+    },
+    {
+     "name": "CanIf_ConfirmPnAvailability",
+     "id": "0x1a"
+    },
+    {
+     "name": "CanIf_ClearTrcvWufFlagIndication",
+     "id": "0x20"
+    },
+    {
+     "name": "CanIf_CheckTrcvWakeFlagIndication",
+     "id": "0x21"
+    },
+    {
+     "name": "CanIf_ControllerModeIndication",
+     "id": null
+    },
+    {
+     "name": "CanIf_TrcvModeIndication",
+     "id": null
+    },
+    {
+     "name": "CanIf_CurrentIcomConfiguration",
+     "id": null
+    }
+   ]
+  },
+  "CanNm": {
+   "spec": "AUTOSAR_SWS_CANNetworkManagement.pdf",
+   "sources": [
+    "src/Bsw/CanNm/CanNm.c"
+   ],
+   "apis": [
+    {
+     "name": "CanNm_Init",
+     "id": "0x00"
+    },
+    {
+     "name": "CanNm_DeInit",
+     "id": "0x10"
+    },
+    {
+     "name": "CanNm_PassiveStartUp",
+     "id": "0x01"
+    },
+    {
+     "name": "CanNm_NetworkRequest",
+     "id": "0x02"
+    },
+    {
+     "name": "CanNm_NetworkRelease",
+     "id": "0x03"
+    },
+    {
+     "name": "CanNm_DisableCommunication",
+     "id": "0x0c"
+    },
+    {
+     "name": "CanNm_EnableCommunication",
+     "id": "0x0d"
+    },
+    {
+     "name": "CanNm_SetUserData",
+     "id": "0x04"
+    },
+    {
+     "name": "CanNm_GetUserData",
+     "id": "0x05"
+    },
+    {
+     "name": "CanNm_Transmit",
+     "id": "0x49"
+    },
+    {
+     "name": "CanNm_GetNodeIdentifier",
+     "id": "0x06"
+    },
+    {
+     "name": "CanNm_GetLocalNodeIdentifier",
+     "id": "0x07"
+    },
+    {
+     "name": "CanNm_RepeatMessageRequest",
+     "id": "0x08"
+    },
+    {
+     "name": "CanNm_GetPduData",
+     "id": "0x0a"
+    },
+    {
+     "name": "CanNm_GetState",
+     "id": "0x0b"
+    },
+    {
+     "name": "CanNm_GetVersionInfo",
+     "id": "0xf1"
+    },
+    {
+     "name": "CanNm_RequestBusSynchronization",
+     "id": "0xc0"
+    },
+    {
+     "name": "CanNm_CheckRemoteSleepIndication",
+     "id": "0xd0"
+    },
+    {
+     "name": "CanNm_SetSleepReadyBit",
+     "id": "0x17"
+    },
+    {
+     "name": "CanNm_TxConfirmation",
+     "id": "0x40"
+    },
+    {
+     "name": "CanNm_RxIndication",
+     "id": "0x42"
+    },
+    {
+     "name": "CanNm_ConfirmPnAvailability",
+     "id": "0x16"
+    },
+    {
+     "name": "CanNm_TriggerTransmit",
+     "id": "0x41"
+    },
+    {
+     "name": "CanNm_MainFunction",
+     "id": "0x13"
+    }
+   ]
+  },
+  "CanSM": {
+   "spec": "AUTOSAR_SWS_CANStateManager.pdf",
+   "sources": [
+    "src/Bsw/CanSM/CanSM.c"
+   ],
+   "apis": [
+    {
+     "name": "CanSM_Init",
+     "id": "0x00"
+    },
+    {
+     "name": "CanSM_DeInit",
+     "id": "0x14"
+    },
+    {
+     "name": "CanSM_RequestComMode",
+     "id": "0x02"
+    },
+    {
+     "name": "CanSM_GetCurrentComMode",
+     "id": "0x03"
+    },
+    {
+     "name": "CanSM_StartWakeupSource",
+     "id": "0x11"
+    },
+    {
+     "name": "CanSM_StopWakeupSource",
+     "id": "0x12"
+    },
+    {
+     "name": "CanSM_GetVersionInfo",
+     "id": "0x01"
+    },
+    {
+     "name": "CanSM_SetBaudrate",
+     "id": "0x0d"
+    },
+    {
+     "name": "CanSM_SetIcomConfiguration",
+     "id": "0x0f"
+    },
+    {
+     "name": "CanSM_SetEcuPassive",
+     "id": "0x13"
+    },
+    {
+     "name": "CanSM_ControllerBusOff",
+     "id": "0x04"
+    },
+    {
+     "name": "CanSM_ControllerModeIndication",
+     "id": "0x07"
+    },
+    {
+     "name": "CanSM_TransceiverModeIndication",
+     "id": "0x09"
+    },
+    {
+     "name": "CanSM_TxTimeoutException",
+     "id": "0x0b"
+    },
+    {
+     "name": "CanSM_ClearTrcvWufFlagIndication",
+     "id": "0x08"
+    },
+    {
+     "name": "CanSM_CheckTransceiverWakeFlagIndication",
+     "id": "0x0a"
+    },
+    {
+     "name": "CanSM_ConfirmPnAvailability",
+     "id": "0x06"
+    },
+    {
+     "name": "CanSM_CurrentIcomConfiguration",
+     "id": "0x10"
+    },
+    {
+     "name": "CanSM_MainFunction",
+     "id": "0x05"
+    }
+   ]
+  },
+  "CanTp": {
+   "spec": "AUTOSAR_SWS_CANTransportLayer.pdf",
+   "sources": [
+    "src/Bsw/CanTp/CanTp.c"
+   ],
+   "apis": [
+    {
+     "name": "CanTp_Init",
+     "id": "0x01"
+    },
+    {
+     "name": "CanTp_Shutdown",
+     "id": "0x02"
+    },
+    {
+     "name": "CanTp_Transmit",
+     "id": "0x49"
+    },
+    {
+     "name": "CanTp_CancelTransmit",
+     "id": "0x4a"
+    },
+    {
+     "name": "CanTp_CancelReceive",
+     "id": "0x4c"
+    },
+    {
+     "name": "CanTp_ChangeParameter",
+     "id": "0x4b"
+    },
+    {
+     "name": "CanTp_ReadParameter",
+     "id": "0x0b"
+    },
+    {
+     "name": "CanTp_RxIndication",
+     "id": "0x42"
+    },
+    {
+     "name": "CanTp_TxConfirmation",
+     "id": "0x40"
+    }
+   ]
+  },
+  "Com": {
+   "spec": "AUTOSAR_SWS_COM.pdf",
+   "sources": [
+    "src/Bsw/Com/Com.c"
+   ],
+   "apis": [
+    {
+     "name": "Com_Init",
+     "id": "0x01"
+    },
+    {
+     "name": "Com_DeInit",
+     "id": "0x02"
+    },
+    {
+     "name": "Com_IpduGroupStart",
+     "id": "0x03"
+    },
+    {
+     "name": "Com_IpduGroupStop",
+     "id": "0x04"
+    },
+    {
+     "name": "Com_EnableReceptionDM",
+     "id": "0x06"
+    },
+    {
+     "name": "Com_DisableReceptionDM",
+     "id": "0x05"
+    },
+    {
+     "name": "Com_GetStatus",
+     "id": "0x07"
+    },
+    {
+     "name": "Com_GetVersionInfo",
+     "id": "0x09"
+    },
+    {
+     "name": "Com_SendSignal",
+     "id": "0x0a"
+    },
+    {
+     "name": "Com_SendDynSignal",
+     "id": "0x21"
+    },
+    {
+     "name": "Com_ReceiveSignal",
+     "id": "0x0b"
+    },
+    {
+     "name": "Com_ReceiveDynSignal",
+     "id": "0x22"
+    },
+    {
+     "name": "Com_SendSignalGroup",
+     "id": "0x0d"
+    },
+    {
+     "name": "Com_ReceiveSignalGroup",
+     "id": "0x0e"
+    },
+    {
+     "name": "Com_SendSignalGroupArray",
+     "id": "0x23"
+    },
+    {
+     "name": "Com_ReceiveSignalGroupArray",
+     "id": "0x24"
+    },
+    {
+     "name": "Com_InvalidateSignal",
+     "id": "0x10"
+    },
+    {
+     "name": "Com_InvalidateSignalGroup",
+     "id": "0x1b"
+    },
+    {
+     "name": "Com_TriggerIPDUSend",
+     "id": "0x17"
+    },
+    {
+     "name": "Com_TriggerIPDUSendWithMetaData",
+     "id": "0x28"
+    },
+    {
+     "name": "Com_SwitchIpduTxMode",
+     "id": "0x27"
+    },
+    {
+     "name": "Com_TriggerTransmit",
+     "id": "0x41"
+    },
+    {
+     "name": "Com_RxIndication",
+     "id": "0x42"
+    },
+    {
+     "name": "Com_TpRxIndication",
+     "id": "0x45"
+    },
+    {
+     "name": "Com_TxConfirmation",
+     "id": "0x40"
+    },
+    {
+     "name": "Com_TpTxConfirmation",
+     "id": "0x48"
+    },
+    {
+     "name": "Com_StartOfReception",
+     "id": "0x46"
+    },
+    {
+     "name": "Com_CopyRxData",
+     "id": "0x44"
+    },
+    {
+     "name": "Com_CopyTxData",
+     "id": "0x43"
+    },
+    {
+     "name": "Com_MainFunctionRx",
+     "id": "0x18"
+    },
+    {
+     "name": "Com_MainFunctionTx",
+     "id": "0x19"
+    },
+    {
+     "name": "Com_MainFunctionRouteSignals",
+     "id": "0x1a"
+    }
+   ]
+  },
+  "ComM": {
+   "spec": "AUTOSAR_SWS_COMManager.pdf",
+   "sources": [
+    "src/Bsw/ComM/ComM.c"
+   ],
+   "apis": [
+    {
+     "name": "ComM_Init",
+     "id": "0x01"
+    },
+    {
+     "name": "ComM_DeInit",
+     "id": "0x02"
+    },
+    {
+     "name": "ComM_GetState",
+     "id": "0x34"
+    },
+    {
+     "name": "ComM_GetStatus",
+     "id": "0x03"
+    },
+    {
+     "name": "ComM_GetInhibitionStatus",
+     "id": "0x04"
+    },
+    {
+     "name": "ComM_RequestComMode",
+     "id": "0x05"
+    },
+    {
+     "name": "ComM_GetMaxComMode",
+     "id": "0x06"
+    },
+    {
+     "name": "ComM_GetRequestedComMode",
+     "id": "0x07"
+    },
+    {
+     "name": "ComM_GetCurrentComMode",
+     "id": "0x08"
+    },
+    {
+     "name": "ComM_PreventWakeUp",
+     "id": "0x09"
+    },
+    {
+     "name": "ComM_LimitChannelToNoComMode",
+     "id": "0x0b"
+    },
+    {
+     "name": "ComM_LimitECUToNoComMode",
+     "id": "0x0c"
+    },
+    {
+     "name": "ComM_ReadInhibitCounter",
+     "id": "0x0d"
+    },
+    {
+     "name": "ComM_ResetInhibitCounter",
+     "id": "0x0e"
+    },
+    {
+     "name": "ComM_SetECUGroupClassification",
+     "id": "0x0f"
+    },
+    {
+     "name": "ComM_GetVersionInfo",
+     "id": "0x10"
+    },
+    {
+     "name": "ComM_Nm_NetworkStartIndication",
+     "id": "0x15"
+    },
+    {
+     "name": "ComM_Nm_NetworkMode",
+     "id": "0x18"
+    },
+    {
+     "name": "ComM_Nm_PrepareBusSleepMode",
+     "id": "0x19"
+    },
+    {
+     "name": "ComM_Nm_BusSleepMode",
+     "id": "0x1a"
+    },
+    {
+     "name": "ComM_Nm_RestartIndication",
+     "id": "0x1b"
+    },
+    {
+     "name": "ComM_DCM_ActiveDiagnostic",
+     "id": "0x1f"
+    },
+    {
+     "name": "ComM_DCM_InactiveDiagnostic",
+     "id": "0x20"
+    },
+    {
+     "name": "ComM_EcuM_WakeUpIndication",
+     "id": "0x2a"
+    },
+    {
+     "name": "ComM_EcuM_PNCWakeUpIndication",
+     "id": "0x37"
+    },
+    {
+     "name": "ComM_CommunicationAllowed",
+     "id": "0x35"
+    },
+    {
+     "name": "ComM_BusSM_ModeIndication",
+     "id": "0x33"
+    },
+    {
+     "name": "ComM_MainFunction",
+     "id": "0x60"
+    }
+   ]
+  },
+  "Crypto": {
+   "spec": "AUTOSAR_SWS_CryptoDriver.pdf",
+   "sources": [
+    "src/Bsw/Crypto/Crypto.c"
+   ],
+   "apis": [
+    {
+     "name": "Crypto_Init",
+     "id": "0x00"
+    },
+    {
+     "name": "Crypto_GetVersionInfo",
+     "id": "0x01"
+    },
+    {
+     "name": "Crypto_ProcessJob",
+     "id": "0x03"
+    },
+    {
+     "name": "Crypto_CancelJob",
+     "id": "0x0e"
+    },
+    {
+     "name": "Crypto_KeyElementSet",
+     "id": "0x04"
+    },
+    {
+     "name": "Crypto_KeySetValid",
+     "id": "0x05"
+    },
+    {
+     "name": "Crypto_KeyElementGet",
+     "id": "0x06"
+    },
+    {
+     "name": "Crypto_KeyElementCopy",
+     "id": "0x0f"
+    },
+    {
+     "name": "Crypto_KeyCopy",
+     "id": "0x10"
+    },
+    {
+     "name": "Crypto_KeyElementIdsGet",
+     "id": "0x11"
+    },
+    {
+     "name": "Crypto_RandomSeed",
+     "id": "0x0d"
+    },
+    {
+     "name": "Crypto_KeyGenerate",
+     "id": "0x07"
+    },
+    {
+     "name": "Crypto_KeyDerive",
+     "id": "0x08"
+    },
+    {
+     "name": "Crypto_KeyExchangeCalcPubVal",
+     "id": "0x09"
+    },
+    {
+     "name": "Crypto_KeyExchangeCalcSecret",
+     "id": "0x0a"
+    },
+    {
+     "name": "Crypto_CertificateParse",
+     "id": "0x0b"
+    },
+    {
+     "name": "Crypto_CertificateVerify",
+     "id": "0x12"
+    },
+    {
+     "name": "Crypto_MainFunction",
+     "id": "0x0c"
+    }
+   ]
+  },
+  "CryIf": {
+   "spec": "AUTOSAR_SWS_CryptoInterface.pdf",
+   "sources": [
+    "src/Bsw/CryIf/CryIf.c"
+   ],
+   "apis": [
+    {
+     "name": "CryIf_Init",
+     "id": "0x00"
+    },
+    {
+     "name": "CryIf_GetVersionInfo",
+     "id": "0x01"
+    },
+    {
+     "name": "CryIf_ProcessJob",
+     "id": "0x03"
+    },
+    {
+     "name": "CryIf_CancelJob",
+     "id": "0x0e"
+    },
+    {
+     "name": "CryIf_KeyElementSet",
+     "id": "0x04"
+    },
+    {
+     "name": "CryIf_KeySetValid",
+     "id": "0x05"
+    },
+    {
+     "name": "CryIf_KeyElementGet",
+     "id": "0x06"
+    },
+    {
+     "name": "CryIf_KeyElementCopy",
+     "id": "0x0f"
+    },
+    {
+     "name": "CryIf_KeyCopy",
+     "id": "0x10"
+    },
+    {
+     "name": "CryIf_RandomSeed",
+     "id": "0x07"
+    },
+    {
+     "name": "CryIf_KeyGenerate",
+     "id": "0x08"
+    },
+    {
+     "name": "CryIf_KeyDerive",
+     "id": "0x09"
+    },
+    {
+     "name": "CryIf_KeyExchangeCalcPubVal",
+     "id": "0x0a"
+    },
+    {
+     "name": "CryIf_KeyExchangeCalcSecret",
+     "id": "0x0b"
+    },
+    {
+     "name": "CryIf_CertificateParse",
+     "id": "0x0c"
+    },
+    {
+     "name": "CryIf_CertificateVerify",
+     "id": "0x11"
+    },
+    {
+     "name": "CryIf_CallbackNotification",
+     "id": "0x0d"
+    }
+   ]
+  },
+  "Csm": {
+   "spec": "AUTOSAR_SWS_CryptoServiceManager.pdf",
+   "sources": [
+    "src/Bsw/Csm/Csm.c"
+   ],
+   "apis": [
+    {
+     "name": "Csm_Init",
+     "id": "0x00"
+    },
+    {
+     "name": "Csm_GetVersionInfo",
+     "id": "0x3b"
+    },
+    {
+     "name": "Csm_Hash",
+     "id": "0x5d"
+    },
+    {
+     "name": "Csm_HashStart",
+     "id": "0x03"
+    },
+    {
+     "name": "Csm_HashUpdate",
+     "id": "0x04"
+    },
+    {
+     "name": "Csm_HashFinish",
+     "id": "0x05"
+    },
+    {
+     "name": "Csm_ChecksumStart",
+     "id": "0x28"
+    },
+    {
+     "name": "Csm_ChecksumUpdate",
+     "id": "0x29"
+    },
+    {
+     "name": "Csm_ChecksumFinish",
+     "id": "0x2a"
+    },
+    {
+     "name": "Csm_MacGenerate",
+     "id": "0x60"
+    },
+    {
+     "name": "Csm_MacGenerateStart",
+     "id": "0x06"
+    },
+    {
+     "name": "Csm_MacGenerateUpdate",
+     "id": "0x07"
+    },
+    {
+     "name": "Csm_MacGenerateFinish",
+     "id": "0x08"
+    },
+    {
+     "name": "Csm_MacVerify",
+     "id": "0x61"
+    },
+    {
+     "name": "Csm_MacVerifyStart",
+     "id": "0x09"
+    },
+    {
+     "name": "Csm_MacVerifyUpdate",
+     "id": "0x0a"
+    },
+    {
+     "name": "Csm_MacVerifyFinish",
+     "id": "0x0b"
+    },
+    {
+     "name": "Csm_Encrypt",
+     "id": "0x5e"
+    },
+    {
+     "name": "Csm_Decrypt",
+     "id": "0x5f"
+    },
+    {
+     "name": "Csm_SymBlockEncryptStart",
+     "id": "0x10"
+    },
+    {
+     "name": "Csm_SymBlockEncryptUpdate",
+     "id": "0x11"
+    },
+    {
+     "name": "Csm_SymBlockEncryptFinish",
+     "id": "0x12"
+    },
+    {
+     "name": "Csm_SymBlockDecryptStart",
+     "id": "0x13"
+    },
+    {
+     "name": "Csm_SymBlockDecryptUpdate",
+     "id": "0x14"
+    },
+    {
+     "name": "Csm_SymBlockDecryptFinish",
+     "id": "0x15"
+    },
+    {
+     "name": "Csm_SymEncryptStart",
+     "id": "0x16"
+    },
+    {
+     "name": "Csm_SymEncryptUpdate",
+     "id": "0x17"
+    },
+    {
+     "name": "Csm_SymEncryptFinish",
+     "id": "0x18"
+    },
+    {
+     "name": "Csm_SymDecryptStart",
+     "id": "0x19"
+    },
+    {
+     "name": "Csm_SymDecryptUpdate",
+     "id": "0x1a"
+    },
+    {
+     "name": "Csm_SymDecryptFinish",
+     "id": "0x1b"
+    },
+    {
+     "name": "Csm_AsymEncryptStart",
+     "id": null
+    },
+    {
+     "name": "Csm_AsymEncryptUpdate",
+     "id": "0x1d"
+    },
+    {
+     "name": "Csm_AsymEncryptFinish",
+     "id": "0x1e"
+    },
+    {
+     "name": "Csm_AsymDecryptStart",
+     "id": null
+    },
+    {
+     "name": "Csm_AsymDecryptUpdate",
+     "id": "0x20"
+    },
+    {
+     "name": "Csm_AsymDecryptFinish",
+     "id": "0x21"
+    },
+    {
+     "name": "Csm_AEADEncrypt",
+     "id": "0x62"
+    },
+    {
+     "name": "Csm_AEADDecrypt",
+     "id": "0x63"
+    },
+    {
+     "name": "Csm_SignatureGenerate",
+     "id": "0x76"
+    },
+    {
+     "name": "Csm_SignatureGenerateStart",
+     "id": "0x22"
+    },
+    {
+     "name": "Csm_SignatureGenerateUpdate",
+     "id": "0x23"
+    },
+    {
+     "name": "Csm_SignatureGenerateFinish",
+     "id": "0x24"
+    },
+    {
+     "name": "Csm_SignatureVerify",
+     "id": "0x64"
+    },
+    {
+     "name": "Csm_SignatureVerifyStart",
+     "id": "0x25"
+    },
+    {
+     "name": "Csm_SignatureVerifyUpdate",
+     "id": "0x26"
+    },
+    {
+     "name": "Csm_SignatureVerifyFinish",
+     "id": "0x27"
+    },
+    {
+     "name": "Csm_SecureCounterIncrement",
+     "id": "0x65"
+    },
+    {
+     "name": "Csm_SecureCounterRead",
+     "id": "0x66"
+    },
+    {
+     "name": "Csm_RandomGenerate",
+     "id": "0x72"
+    },
+    {
+     "name": "Csm_KeyElementSet",
+     "id": "0x78"
+    },
+    {
+     "name": "Csm_KeySetValid",
+     "id": "0x67"
+    },
+    {
+     "name": "Csm_KeyElementGet",
+     "id": "0x68"
+    },
+    {
+     "name": "Csm_AsymPublicKeyExtractStart",
+     "id": "0x35"
+    },
+    {
+     "name": "Csm_AsymPublicKeyExtractUpdate",
+     "id": "0x36"
+    },
+    {
+     "name": "Csm_AsymPublicKeyExtractFinish",
+     "id": "0x37"
+    },
+    {
+     "name": "Csm_SymKeyExtractStart",
+     "id": "0x32"
+    },
+    {
+     "name": "Csm_SymKeyExtractUpdate",
+     "id": "0x33"
+    },
+    {
+     "name": "Csm_SymKeyExtractFinish",
+     "id": "0x34"
+    },
+    {
+     "name": "Csm_KeyElementCopy",
+     "id": "0x71"
+    },
+    {
+     "name": "Csm_KeyCopy",
+     "id": "0x73"
+    },
+    {
+     "name": "Csm_RandomSeed",
+     "id": "0x69"
+    },
+    {
+     "name": "Csm_RandomSeedStart",
+     "id": "0x0c"
+    },
+    {
+     "name": "Csm_RandomSeedUpdate",
+     "id": "0x0d"
+    },
+    {
+     "name": "Csm_RandomSeedFinish",
+     "id": "0x0e"
+    },
+    {
+     "name": "Csm_KeyGenerate",
+     "id": "0x6a"
+    },
+    {
+     "name": "Csm_KeyDerive",
+     "id": "0x6b"
+    },
+    {
+     "name": "Csm_KeyExchangeCalcPubVal",
+     "id": "0x6c"
+    },
+    {
+     "name": "Csm_KeyExchangeCalcSecret",
+     "id": "0x6d"
+    },
+    {
+     "name": "Csm_CertificateParse",
+     "id": "0x6e"
+    },
+    {
+     "name": "Csm_CertificateVerify",
+     "id": "0x74"
+    },
+    {
+     "name": "Csm_CancelJob",
+     "id": "0x6f"
+    },
+    {
+     "name": "Csm_CallbackNotification",
+     "id": "0x70"
+    },
+    {
+     "name": "Csm_MainFunction",
+     "id": "0x01"
+    }
+   ]
+  },
+  "Dcm": {
+   "spec": "AUTOSAR_SWS_DiagnosticCommunicationManager.pdf",
+   "sources": [
+    "src/Bsw/Dcm/Dcm.c"
+   ],
+   "apis": [
+    {
+     "name": "Dcm_Init",
+     "id": "0x01"
+    },
+    {
+     "name": "Dcm_GetVersionInfo",
+     "id": "0x24"
+    },
+    {
+     "name": "Dcm_DemTriggerOnDTCStatus",
+     "id": null
+    },
+    {
+     "name": "Dcm_GetVin",
+     "id": "0x07"
+    },
+    {
+     "name": "Dcm_GetSecurityLevel",
+     "id": "0x0d"
+    },
+    {
+     "name": "Dcm_GetSesCtrlType",
+     "id": "0x06"
+    },
+    {
+     "name": "Dcm_GetActiveProtocol",
+     "id": "0x0f"
+    },
+    {
+     "name": "Dcm_ResetToDefaultSession",
+     "id": "0x2a"
+    },
+    {
+     "name": "Dcm_TriggerOnEvent",
+     "id": "0x2D"
+    },
+    {
+     "name": "Dcm_StartOfReception",
+     "id": null
+    },
+    {
+     "name": "Dcm_CopyRxData",
+     "id": null
+    },
+    {
+     "name": "Dcm_TpRxIndication",
+     "id": null
+    },
+    {
+     "name": "Dcm_CopyTxData",
+     "id": null
+    },
+    {
+     "name": "Dcm_TpTxConfirmation",
+     "id": null
+    },
+    {
+     "name": "Dcm_TxConfirmation",
+     "id": null
+    },
+    {
+     "name": "Dcm_ComM_NoComModeEntered",
+     "id": "0x21"
+    },
+    {
+     "name": "Dcm_ComM_SilentComModeEntered",
+     "id": "0x22"
+    },
+    {
+     "name": "Dcm_ComM_FullComModeEntered",
+     "id": "0x23"
+    },
+    {
+     "name": "Dcm_ReadMemory",
+     "id": null
+    },
+    {
+     "name": "Dcm_WriteMemory",
+     "id": null
+    },
+    {
+     "name": "Dcm_SetProgConditions",
+     "id": "0x61"
+    },
+    {
+     "name": "Dcm_GetProgConditions",
+     "id": "0x62"
+    },
+    {
+     "name": "Dcm_ProcessRequestTransferExit",
+     "id": null
+    },
+    {
+     "name": "Dcm_ProcessRequestUpload",
+     "id": null
+    },
+    {
+     "name": "Dcm_ProcessRequestDownload",
+     "id": null
+    },
+    {
+     "name": "Dcm_MainFunction",
+     "id": "0x25"
+    }
+   ]
+  },
+  "Dem": {
+   "spec": "AUTOSAR_SWS_DiagnosticEventManager.pdf",
+   "sources": [
+    "src/Bsw/Dem/Dem.c"
+   ],
+   "apis": [
+    {
+     "name": "Dem_GetVersionInfo",
+     "id": "0x00"
+    },
+    {
+     "name": "Dem_PreInit",
+     "id": "0x01"
+    },
+    {
+     "name": "Dem_Init",
+     "id": "0x02"
+    },
+    {
+     "name": "Dem_Shutdown",
+     "id": "0x03"
+    },
+    {
+     "name": "Dem_ClearDTC",
+     "id": "0x23"
+    },
+    {
+     "name": "Dem_ClearPrestoredFreezeFrame",
+     "id": "0x07"
+    },
+    {
+     "name": "Dem_GetComponentFailed",
+     "id": null
+    },
+    {
+     "name": "Dem_GetDTCSelectionResult",
+     "id": "0xb8"
+    },
+    {
+     "name": "Dem_GetDTCSelectionResultForClearDTC",
+     "id": "0xbb"
+    },
+    {
+     "name": "Dem_GetEventUdsStatus",
+     "id": null
+    },
+    {
+     "name": "Dem_GetMonitorStatus",
+     "id": "0xb5"
+    },
+    {
+     "name": "Dem_GetDebouncingOfEvent",
+     "id": null
+    },
+    {
+     "name": "Dem_GetDTCOfEvent",
+     "id": null
+    },
+    {
+     "name": "Dem_GetDTCSuppression",
+     "id": "0xbc"
+    },
+    {
+     "name": "Dem_GetFaultDetectionCounter",
+     "id": "0x3e"
+    },
+    {
+     "name": "Dem_GetIndicatorStatus",
+     "id": null
+    },
+    {
+     "name": "Dem_GetEventFreezeFrameDataEx",
+     "id": null
+    },
+    {
+     "name": "Dem_GetEventExtendedDataRecordEx",
+     "id": null
+    },
+    {
+     "name": "Dem_GetEventMemoryOverflow",
+     "id": "0x32"
+    },
+    {
+     "name": "Dem_GetNumberOfEventMemoryEntries",
+     "id": null
+    },
+    {
+     "name": "Dem_ResetEventDebounceStatus",
+     "id": null
+    },
+    {
+     "name": "Dem_ResetEventStatus",
+     "id": "0x05"
+    },
+    {
+     "name": "Dem_PrestoreFreezeFrame",
+     "id": "0x06"
+    },
+    {
+     "name": "Dem_SelectDTC",
+     "id": "0xb7"
+    },
+    {
+     "name": "Dem_SetComponentAvailable",
+     "id": null
+    },
+    {
+     "name": "Dem_SetDTCSuppression",
+     "id": null
+    },
+    {
+     "name": "Dem_SetEnableCondition",
+     "id": "0x39"
+    },
+    {
+     "name": "Dem_SetEventAvailable",
+     "id": null
+    },
+    {
+     "name": "Dem_SetEventFailureCycleCounterThreshold",
+     "id": null
+    },
+    {
+     "name": "Dem_SetEventStatus",
+     "id": null
+    },
+    {
+     "name": "Dem_SetOperationCycleState",
+     "id": null
+    },
+    {
+     "name": "Dem_GetOperationCycleState",
+     "id": null
+    },
+    {
+     "name": "Dem_SetStorageCondition",
+     "id": null
+    },
+    {
+     "name": "Dem_SetWIRStatus",
+     "id": null
+    },
+    {
+     "name": "Dem_GetTranslationType",
+     "id": "0x3c"
+    },
+    {
+     "name": "Dem_GetDTCStatusAvailabilityMask",
+     "id": null
+    },
+    {
+     "name": "Dem_GetStatusOfDTC",
+     "id": "0x15"
+    },
+    {
+     "name": "Dem_GetSeverityOfDTC",
+     "id": null
+    },
+    {
+     "name": "Dem_GetFunctionalUnitOfDTC",
+     "id": "0x34"
+    },
+    {
+     "name": "Dem_SetDTCFilter",
+     "id": null
+    },
+    {
+     "name": "Dem_GetNumberOfFilteredDTC",
+     "id": "0x17"
+    },
+    {
+     "name": "Dem_GetNextFilteredDTC",
+     "id": null
+    },
+    {
+     "name": "Dem_GetNextFilteredDTCAndFDC",
+     "id": null
+    },
+    {
+     "name": "Dem_GetNextFilteredDTCAndSeverity",
+     "id": null
+    },
+    {
+     "name": "Dem_SetFreezeFrameRecordFilter",
+     "id": null
+    },
+    {
+     "name": "Dem_GetNextFilteredRecord",
+     "id": null
+    },
+    {
+     "name": "Dem_GetDTCByOccurrenceTime",
+     "id": null
+    },
+    {
+     "name": "Dem_DisableDTCRecordUpdate",
+     "id": "0x1a"
+    },
+    {
+     "name": "Dem_EnableDTCRecordUpdate",
+     "id": "0x1b"
+    },
+    {
+     "name": "Dem_GetSizeOfExtendedDataRecordSelection",
+     "id": null
+    },
+    {
+     "name": "Dem_GetSizeOfFreezeFrameSelection",
+     "id": null
+    },
+    {
+     "name": "Dem_GetNextExtendedDataRecord",
+     "id": null
+    },
+    {
+     "name": "Dem_GetNextFreezeFrameData",
+     "id": null
+    },
+    {
+     "name": "Dem_SelectExtendedDataRecord",
+     "id": null
+    },
+    {
+     "name": "Dem_SelectFreezeFrameData",
+     "id": null
+    },
+    {
+     "name": "Dem_DisableDTCSetting",
+     "id": "0x24"
+    },
+    {
+     "name": "Dem_EnableDTCSetting",
+     "id": "0x25"
+    },
+    {
+     "name": "Dem_DcmGetInfoTypeValue08",
+     "id": null
+    },
+    {
+     "name": "Dem_DcmGetInfoTypeValue0B",
+     "id": "0x6c"
+    },
+    {
+     "name": "Dem_DcmReadDataOfPID01",
+     "id": "0x61"
+    },
+    {
+     "name": "Dem_DcmReadDataOfPID1C",
+     "id": "0x63"
+    },
+    {
+     "name": "Dem_DcmReadDataOfPID21",
+     "id": "0x64"
+    },
+    {
+     "name": "Dem_DcmReadDataOfPID30",
+     "id": "0x65"
+    },
+    {
+     "name": "Dem_DcmReadDataOfPID31",
+     "id": "0x66"
+    },
+    {
+     "name": "Dem_DcmReadDataOfPID41",
+     "id": "0x67"
+    },
+    {
+     "name": "Dem_DcmReadDataOfPID4D",
+     "id": "0x68"
+    },
+    {
+     "name": "Dem_DcmReadDataOfPID4E",
+     "id": "0x69"
+    },
+    {
+     "name": "Dem_DcmReadDataOfPID91",
+     "id": "0x6a"
+    },
+    {
+     "name": "Dem_DcmReadDataOfOBDFreezeFrame",
+     "id": null
+    },
+    {
+     "name": "Dem_DcmGetDTCOfOBDFreezeFrame",
+     "id": null
+    },
+    {
+     "name": "Dem_DcmGetAvailableOBDMIDs",
+     "id": "0xa3"
+    },
+    {
+     "name": "Dem_DcmGetNumTIDsOfOBDMID",
+     "id": null
+    },
+    {
+     "name": "Dem_DcmGetDTRData",
+     "id": null
+    },
+    {
+     "name": "Dem_J1939DcmSetDTCFilter",
+     "id": null
+    },
+    {
+     "name": "Dem_J1939DcmGetNumberOfFilteredDTC",
+     "id": "0x91"
+    },
+    {
+     "name": "Dem_J1939DcmGetNextFilteredDTC",
+     "id": null
+    },
+    {
+     "name": "Dem_J1939DcmFirstDTCwithLampStatus",
+     "id": "0x93"
+    },
+    {
+     "name": "Dem_J1939DcmGetNextDTCwithLampStatus",
+     "id": null
+    },
+    {
+     "name": "Dem_J1939DcmClearDTC",
+     "id": "0x95"
+    },
+    {
+     "name": "Dem_J1939DcmSetFreezeFrameFilter",
+     "id": null
+    },
+    {
+     "name": "Dem_J1939DcmGetNextFreezeFrame",
+     "id": null
+    },
+    {
+     "name": "Dem_J1939DcmGetNextSPNInFreezeFrame",
+     "id": null
+    },
+    {
+     "name": "Dem_J1939DcmSetRatioFilter",
+     "id": "0x99"
+    },
+    {
+     "name": "Dem_J1939DcmGetNextFilteredRatio",
+     "id": null
+    },
+    {
+     "name": "Dem_J1939DcmReadDiagnosticReadiness1",
+     "id": null
+    },
+    {
+     "name": "Dem_J1939DcmReadDiagnosticReadiness2",
+     "id": "0x9c"
+    },
+    {
+     "name": "Dem_J1939DcmReadDiagnosticReadiness3",
+     "id": null
+    },
+    {
+     "name": "Dem_DltGetMostRecentFreezeFrameRecordData",
+     "id": null
+    },
+    {
+     "name": "Dem_DltGetAllExtendedDataRecords",
+     "id": null
+    },
+    {
+     "name": "Dem_SetEventDisabled",
+     "id": "0x51"
+    },
+    {
+     "name": "Dem_RepIUMPRFaultDetect",
+     "id": "0x73"
+    },
+    {
+     "name": "Dem_SetIUMPRDenCondition",
+     "id": null
+    },
+    {
+     "name": "Dem_GetIUMPRDenCondition",
+     "id": null
+    },
+    {
+     "name": "Dem_RepIUMPRDenLock",
+     "id": "0x71"
+    },
+    {
+     "name": "Dem_RepIUMPRDenRelease",
+     "id": "0x72"
+    },
+    {
+     "name": "Dem_SetPtoStatus",
+     "id": "0x79"
+    },
+    {
+     "name": "Dem_ReadDataOfPID01",
+     "id": "0xb3"
+    },
+    {
+     "name": "Dem_GetDataOfPID21",
+     "id": "0xb1"
+    },
+    {
+     "name": "Dem_SetDataOfPID21",
+     "id": "0xa6"
+    },
+    {
+     "name": "Dem_SetDataOfPID31",
+     "id": "0xa7"
+    },
+    {
+     "name": "Dem_SetDataOfPID4D",
+     "id": "0xa8"
+    },
+    {
+     "name": "Dem_SetDataOfPID4E",
+     "id": "0xa9"
+    },
+    {
+     "name": "Dem_GetCycleQualified",
+     "id": null
+    },
+    {
+     "name": "Dem_SetCycleQualified",
+     "id": "0x56"
+    },
+    {
+     "name": "Dem_GetDTCSeverityAvailabilityMask",
+     "id": null
+    },
+    {
+     "name": "Dem_GetB1Counter",
+     "id": "0xb4"
+    },
+    {
+     "name": "Dem_SetDTR",
+     "id": null
+    },
+    {
+     "name": "Dem_MainFunction",
+     "id": "0x55"
+    }
+   ]
+  },
+  "Det": {
+   "spec": "AUTOSAR_SWS_DefaultErrorTracer.pdf",
+   "sources": [
+    "src/Bsw/Det/Det.c"
+   ],
+   "apis": [
+    {
+     "name": "Det_Init",
+     "id": "0x00"
+    },
+    {
+     "name": "Det_ReportError",
+     "id": "0x01"
+    },
+    {
+     "name": "Det_Start",
+     "id": "0x02"
+    },
+    {
+     "name": "Det_ReportRuntimeError",
+     "id": "0x04"
+    },
+    {
+     "name": "Det_ReportTransientFault",
+     "id": "0x05"
+    },
+    {
+     "name": "Det_GetVersionInfo",
+     "id": "0x03"
+    }
+   ]
+  },
+  "Dio": {
+   "spec": "AUTOSAR_SWS_DIODriver.pdf",
+   "sources": [
+    "src/Bsw/Dio/Dio.c"
+   ],
+   "apis": [
+    {
+     "name": "Dio_ReadChannel",
+     "id": "0x00"
+    },
+    {
+     "name": "Dio_WriteChannel",
+     "id": "0x01"
+    },
+    {
+     "name": "Dio_ReadPort",
+     "id": "0x02"
+    },
+    {
+     "name": "Dio_WritePort",
+     "id": "0x03"
+    },
+    {
+     "name": "Dio_ReadChannelGroup",
+     "id": "0x04"
+    },
+    {
+     "name": "Dio_WriteChannelGroup",
+     "id": "0x05"
+    },
+    {
+     "name": "Dio_GetVersionInfo",
+     "id": "0x12"
+    },
+    {
+     "name": "Dio_FlipChannel",
+     "id": "0x11"
+    }
+   ]
+  },
+  "E2E": {
+   "spec": "AUTOSAR_SWS_E2ELibrary.pdf",
+   "sources": [
+    "src/Bsw/E2E/E2E.c",
+    "src/Bsw/E2E/E2E_P01.c",
+    "src/Bsw/E2E/E2E_P05.c"
+   ],
+   "apis": [
+    {
+     "name": "E2E_P01Protect",
+     "id": "0x01"
+    },
+    {
+     "name": "E2E_P01ProtectInit",
+     "id": "0x1b"
+    },
+    {
+     "name": "E2E_P01Check",
+     "id": "0x02"
+    },
+    {
+     "name": "E2E_P01CheckInit",
+     "id": "0x1c"
+    },
+    {
+     "name": "E2E_P01MapStatusToSM",
+     "id": "0x1d"
+    },
+    {
+     "name": "E2E_P02Protect",
+     "id": "0x03"
+    },
+    {
+     "name": "E2E_P02ProtectInit",
+     "id": "0x1e"
+    },
+    {
+     "name": "E2E_P02Check",
+     "id": "0x04"
+    },
+    {
+     "name": "E2E_P02CheckInit",
+     "id": "0x1f"
+    },
+    {
+     "name": "E2E_P02MapStatusToSM",
+     "id": "0x20"
+    },
+    {
+     "name": "E2E_P04Protect",
+     "id": "0x21"
+    },
+    {
+     "name": "E2E_P04ProtectInit",
+     "id": "0x22"
+    },
+    {
+     "name": "E2E_P04Check",
+     "id": "0x23"
+    },
+    {
+     "name": "E2E_P04CheckInit",
+     "id": "0x24"
+    },
+    {
+     "name": "E2E_P04MapStatusToSM",
+     "id": "0x25"
+    },
+    {
+     "name": "E2E_P05Protect",
+     "id": "0x26"
+    },
+    {
+     "name": "E2E_P05ProtectInit",
+     "id": "0x27"
+    },
+    {
+     "name": "E2E_P05Check",
+     "id": "0x28"
+    },
+    {
+     "name": "E2E_P05CheckInit",
+     "id": "0x29"
+    },
+    {
+     "name": "E2E_P05MapStatusToSM",
+     "id": "0x2a"
+    },
+    {
+     "name": "E2E_P06Protect",
+     "id": "0x2b"
+    },
+    {
+     "name": "E2E_P06ProtectInit",
+     "id": "0x2c"
+    },
+    {
+     "name": "E2E_P06Check",
+     "id": "0x2d"
+    },
+    {
+     "name": "E2E_P06CheckInit",
+     "id": "0x2e"
+    },
+    {
+     "name": "E2E_P06MapStatusToSM",
+     "id": "0x2f"
+    },
+    {
+     "name": "E2E_P07Protect",
+     "id": "0x21"
+    },
+    {
+     "name": "E2E_P07ProtectInit",
+     "id": "0x22"
+    },
+    {
+     "name": "E2E_P07Check",
+     "id": "0x23"
+    },
+    {
+     "name": "E2E_P07CheckInit",
+     "id": "0x24"
+    },
+    {
+     "name": "E2E_P07MapStatusToSM",
+     "id": "0x25"
+    },
+    {
+     "name": "E2E_P11Protect",
+     "id": "0x3b"
+    },
+    {
+     "name": "E2E_P11ProtectInit",
+     "id": "0x3c"
+    },
+    {
+     "name": "E2E_P11Check",
+     "id": null
+    },
+    {
+     "name": "E2E_P11CheckInit",
+     "id": "0x39"
+    },
+    {
+     "name": "E2E_P11MapStatusToSM",
+     "id": "0x3a"
+    },
+    {
+     "name": "E2E_P22Protect",
+     "id": "0x40"
+    },
+    {
+     "name": "E2E_P22ProtectInit",
+     "id": "0x41"
+    },
+    {
+     "name": "E2E_P22Check",
+     "id": null
+    },
+    {
+     "name": "E2E_P22CheckInit",
+     "id": "0x3e"
+    },
+    {
+     "name": "E2E_P22MapStatusToSM",
+     "id": "0x3f"
+    },
+    {
+     "name": "E2E_SMCheck",
+     "id": "0x30"
+    },
+    {
+     "name": "E2E_SMCheckInit",
+     "id": "0x31"
+    },
+    {
+     "name": "E2E_GetVersionInfo",
+     "id": "0x14"
+    }
+   ]
+  },
+  "EcuM": {
+   "spec": "AUTOSAR_SWS_ECUStateManager.pdf",
+   "sources": [
+    "src/Bsw/EcuM/EcuM.c"
+   ],
+   "apis": [
+    {
+     "name": "EcuM_GetVersionInfo",
+     "id": "0x00"
+    },
+    {
+     "name": "EcuM_GoDown",
+     "id": "0x1f"
+    },
+    {
+     "name": "EcuM_GoHalt",
+     "id": "0x20"
+    },
+    {
+     "name": "EcuM_GoPoll",
+     "id": "0x21"
+    },
+    {
+     "name": "EcuM_Init",
+     "id": "0x01"
+    },
+    {
+     "name": "EcuM_StartupTwo",
+     "id": "0x1a"
+    },
+    {
+     "name": "EcuM_Shutdown",
+     "id": "0x02"
+    },
+    {
+     "name": "EcuM_RequestRUN",
+     "id": "0x03"
+    },
+    {
+     "name": "EcuM_ReleaseRUN",
+     "id": "0x04"
+    },
+    {
+     "name": "EcuM_RequestPOST_RUN",
+     "id": "0x0a"
+    },
+    {
+     "name": "EcuM_ReleasePOST_RUN",
+     "id": "0x0b"
+    },
+    {
+     "name": "EcuM_SelectShutdownTarget",
+     "id": "0x06"
+    },
+    {
+     "name": "EcuM_GetShutdownTarget",
+     "id": "0x09"
+    },
+    {
+     "name": "EcuM_GetLastShutdownTarget",
+     "id": "0x08"
+    },
+    {
+     "name": "EcuM_SelectShutdownCause",
+     "id": "0x1b"
+    },
+    {
+     "name": "EcuM_GetShutdownCause",
+     "id": "0x1c"
+    },
+    {
+     "name": "EcuM_GetPendingWakeupEvents",
+     "id": "0x0d"
+    },
+    {
+     "name": "EcuM_ClearWakeupEvent",
+     "id": "0x16"
+    },
+    {
+     "name": "EcuM_GetValidatedWakeupEvents",
+     "id": "0x15"
+    },
+    {
+     "name": "EcuM_GetExpiredWakeupEvents",
+     "id": "0x19"
+    },
+    {
+     "name": "EcuM_SetRelWakeupAlarm",
+     "id": "0x22"
+    },
+    {
+     "name": "EcuM_SetAbsWakeupAlarm",
+     "id": "0x23"
+    },
+    {
+     "name": "EcuM_AbortWakeupAlarm",
+     "id": "0x24"
+    },
+    {
+     "name": "EcuM_GetCurrentTime",
+     "id": "0x25"
+    },
+    {
+     "name": "EcuM_GetWakeupTime",
+     "id": "0x26"
+    },
+    {
+     "name": "EcuM_SetClock",
+     "id": "0x27"
+    },
+    {
+     "name": "EcuM_SelectBootTarget",
+     "id": "0x12"
+    },
+    {
+     "name": "EcuM_GetBootTarget",
+     "id": "0x13"
+    },
+    {
+     "name": "EcuM_MainFunction",
+     "id": "0x18"
+    },
+    {
+     "name": "EcuM_SetWakeupEvent",
+     "id": "0x0c"
+    },
+    {
+     "name": "EcuM_ValidateWakeupEvent",
+     "id": "0x14"
+    },
+    {
+     "name": "EcuM_ErrorHook",
+     "id": "0x30"
+    },
+    {
+     "name": "EcuM_AL_SetProgrammableInterrupts",
+     "id": "0x4A"
+    },
+    {
+     "name": "EcuM_AL_DriverInitZero",
+     "id": "0x31"
+    },
+    {
+     "name": "EcuM_DeterminePbConfiguration",
+     "id": "0x32"
+    },
+    {
+     "name": "EcuM_AL_DriverInitOne",
+     "id": "0x33"
+    },
+    {
+     "name": "EcuM_LoopDetection",
+     "id": "0x4B"
+    },
+    {
+     "name": "EcuM_OnGoOffOne",
+     "id": "0x3C"
+    },
+    {
+     "name": "EcuM_OnGoOffTwo",
+     "id": "0x3D"
+    },
+    {
+     "name": "EcuM_AL_SwitchOff",
+     "id": "0x3E"
+    },
+    {
+     "name": "EcuM_AL_Reset",
+     "id": "0x4C"
+    },
+    {
+     "name": "EcuM_EnableWakeupSources",
+     "id": "0x3F"
+    },
+    {
+     "name": "EcuM_GenerateRamHash",
+     "id": "0x40"
+    },
+    {
+     "name": "EcuM_SleepActivity",
+     "id": "0x41"
+    },
+    {
+     "name": "EcuM_StartCheckWakeup",
+     "id": "0x00"
+    },
+    {
+     "name": "EcuM_CheckWakeup",
+     "id": "0x42"
+    },
+    {
+     "name": "EcuM_EndCheckWakeup",
+     "id": "0x00"
+    },
+    {
+     "name": "EcuM_CheckRamHash",
+     "id": "0x43"
+    },
+    {
+     "name": "EcuM_DisableWakeupSources",
+     "id": "0x44"
+    },
+    {
+     "name": "EcuM_AL_DriverRestart",
+     "id": "0x45"
+    },
+    {
+     "name": "EcuM_StartWakeupSources",
+     "id": "0x46"
+    },
+    {
+     "name": "EcuM_CheckValidation",
+     "id": "0x47"
+    },
+    {
+     "name": "EcuM_StopWakeupSources",
+     "id": "0x48"
+    }
+   ]
+  },
+  "Fee": {
+   "spec": "AUTOSAR_SWS_FlashEEPROMEmulation.pdf",
+   "sources": [
+    "src/Bsw/Fee/Fee.c"
+   ],
+   "apis": [
+    {
+     "name": "Fee_Init",
+     "id": "0x00"
+    },
+    {
+     "name": "Fee_SetMode",
+     "id": "0x01"
+    },
+    {
+     "name": "Fee_Read",
+     "id": "0x02"
+    },
+    {
+     "name": "Fee_Write",
+     "id": "0x03"
+    },
+    {
+     "name": "Fee_Cancel",
+     "id": "0x04"
+    },
+    {
+     "name": "Fee_GetStatus",
+     "id": "0x05"
+    },
+    {
+     "name": "Fee_GetJobResult",
+     "id": "0x06"
+    },
+    {
+     "name": "Fee_InvalidateBlock",
+     "id": "0x07"
+    },
+    {
+     "name": "Fee_GetVersionInfo",
+     "id": "0x08"
+    },
+    {
+     "name": "Fee_EraseImmediateBlock",
+     "id": "0x09"
+    },
+    {
+     "name": "Fee_JobEndNotification",
+     "id": "0x10"
+    },
+    {
+     "name": "Fee_JobErrorNotification",
+     "id": "0x11"
+    },
+    {
+     "name": "Fee_MainFunction",
+     "id": "0x12"
+    }
+   ]
+  },
+  "FiM": {
+   "spec": "AUTOSAR_SWS_FunctionInhibitionManager.pdf",
+   "sources": [
+    "src/Bsw/FiM/FiM.c"
+   ],
+   "apis": [
+    {
+     "name": "FiM_Init",
+     "id": "0x00"
+    },
+    {
+     "name": "FiM_GetFunctionPermission",
+     "id": null
+    },
+    {
+     "name": "FiM_DemTriggerOnMonitorStatus",
+     "id": "0x02"
+    },
+    {
+     "name": "FiM_DemInit",
+     "id": "0x03"
+    },
+    {
+     "name": "FiM_GetVersionInfo",
+     "id": "0x04"
+    },
+    {
+     "name": "FiM_MainFunction",
+     "id": "0x05"
+    }
+   ]
+  },
+  "Gpt": {
+   "spec": "AUTOSAR_SWS_GPTDriver.pdf",
+   "sources": [
+    "src/Bsw/Gpt/Gpt.c"
+   ],
+   "apis": [
+    {
+     "name": "Gpt_GetVersionInfo",
+     "id": "0x00"
+    },
+    {
+     "name": "Gpt_Init",
+     "id": "0x01"
+    },
+    {
+     "name": "Gpt_DeInit",
+     "id": "0x02"
+    },
+    {
+     "name": "Gpt_GetTimeElapsed",
+     "id": "0x03"
+    },
+    {
+     "name": "Gpt_GetTimeRemaining",
+     "id": "0x04"
+    },
+    {
+     "name": "Gpt_StartTimer",
+     "id": "0x05"
+    },
+    {
+     "name": "Gpt_StopTimer",
+     "id": "0x06"
+    },
+    {
+     "name": "Gpt_EnableNotification",
+     "id": "0x07"
+    },
+    {
+     "name": "Gpt_DisableNotification",
+     "id": "0x08"
+    },
+    {
+     "name": "Gpt_SetMode",
+     "id": "0x09"
+    },
+    {
+     "name": "Gpt_DisableWakeup",
+     "id": "0x0a"
+    },
+    {
+     "name": "Gpt_EnableWakeup",
+     "id": "0x0b"
+    },
+    {
+     "name": "Gpt_CheckWakeup",
+     "id": "0x0c"
+    },
+    {
+     "name": "Gpt_GetPredefTimerValue",
+     "id": "0x0d"
+    }
+   ]
+  },
+  "Mcu": {
+   "spec": "AUTOSAR_SWS_MCUDriver.pdf",
+   "sources": [
+    "src/Bsw/Mcu/Mcu.c"
+   ],
+   "apis": [
+    {
+     "name": "Mcu_Init",
+     "id": "0x00"
+    },
+    {
+     "name": "Mcu_InitRamSection",
+     "id": "0x01"
+    },
+    {
+     "name": "Mcu_InitClock",
+     "id": "0x02"
+    },
+    {
+     "name": "Mcu_DistributePllClock",
+     "id": "0x03"
+    },
+    {
+     "name": "Mcu_GetPllStatus",
+     "id": "0x04"
+    },
+    {
+     "name": "Mcu_GetResetReason",
+     "id": "0x05"
+    },
+    {
+     "name": "Mcu_GetResetRawValue",
+     "id": "0x06"
+    },
+    {
+     "name": "Mcu_PerformReset",
+     "id": "0x07"
+    },
+    {
+     "name": "Mcu_SetMode",
+     "id": "0x08"
+    },
+    {
+     "name": "Mcu_GetVersionInfo",
+     "id": "0x09"
+    },
+    {
+     "name": "Mcu_GetRamState",
+     "id": "0x0a"
+    }
+   ]
+  },
+  "MemIf": {
+   "spec": "AUTOSAR_SWS_MemoryAbstractionInterface.pdf",
+   "sources": [
+    "src/Bsw/MemIf/MemIf.c"
+   ],
+   "apis": [
+    {
+     "name": "MemIf_SetMode",
+     "id": "0x01"
+    },
+    {
+     "name": "MemIf_Read",
+     "id": "0x02"
+    },
+    {
+     "name": "MemIf_Write",
+     "id": "0x03"
+    },
+    {
+     "name": "MemIf_Cancel",
+     "id": "0x04"
+    },
+    {
+     "name": "MemIf_GetStatus",
+     "id": "0x05"
+    },
+    {
+     "name": "MemIf_GetJobResult",
+     "id": "0x06"
+    },
+    {
+     "name": "MemIf_InvalidateBlock",
+     "id": "0x07"
+    },
+    {
+     "name": "MemIf_GetVersionInfo",
+     "id": "0x08"
+    },
+    {
+     "name": "MemIf_EraseImmediateBlock",
+     "id": "0x09"
+    }
+   ]
+  },
+  "Nm": {
+   "spec": "AUTOSAR_SWS_NetworkManagementInterface.pdf",
+   "sources": [
+    "src/Bsw/Nm/Nm.c"
+   ],
+   "apis": [
+    {
+     "name": "Nm_Init",
+     "id": "0x00"
+    },
+    {
+     "name": "Nm_PassiveStartUp",
+     "id": "0x01"
+    },
+    {
+     "name": "Nm_NetworkRequest",
+     "id": "0x02"
+    },
+    {
+     "name": "Nm_NetworkRelease",
+     "id": "0x03"
+    },
+    {
+     "name": "Nm_DisableCommunication",
+     "id": "0x04"
+    },
+    {
+     "name": "Nm_EnableCommunication",
+     "id": "0x05"
+    },
+    {
+     "name": "Nm_SetUserData",
+     "id": "0x06"
+    },
+    {
+     "name": "Nm_GetUserData",
+     "id": "0x07"
+    },
+    {
+     "name": "Nm_GetPduData",
+     "id": "0x08"
+    },
+    {
+     "name": "Nm_RepeatMessageRequest",
+     "id": "0x09"
+    },
+    {
+     "name": "Nm_GetNodeIdentifier",
+     "id": "0x0a"
+    },
+    {
+     "name": "Nm_GetLocalNodeIdentifier",
+     "id": null
+    },
+    {
+     "name": "Nm_CheckRemoteSleepIndication",
+     "id": null
+    },
+    {
+     "name": "Nm_GetState",
+     "id": null
+    },
+    {
+     "name": "Nm_GetVersionInfo",
+     "id": "0x0f"
+    },
+    {
+     "name": "Nm_NetworkStartIndication",
+     "id": "0x11"
+    },
+    {
+     "name": "Nm_NetworkMode",
+     "id": "0x12"
+    },
+    {
+     "name": "Nm_BusSleepMode",
+     "id": "0x14"
+    },
+    {
+     "name": "Nm_PrepareBusSleepMode",
+     "id": "0x13"
+    },
+    {
+     "name": "Nm_RemoteSleepIndication",
+     "id": "0x17"
+    },
+    {
+     "name": "Nm_RemoteSleepCancellation",
+     "id": "0x18"
+    },
+    {
+     "name": "Nm_SynchronizationPoint",
+     "id": "0x19"
+    },
+    {
+     "name": "Nm_CoordReadyToSleepIndication",
+     "id": "0x1e"
+    },
+    {
+     "name": "Nm_CoordReadyToSleepCancellation",
+     "id": "0x1f"
+    },
+    {
+     "name": "Nm_PduRxIndication",
+     "id": "0x15"
+    },
+    {
+     "name": "Nm_StateChangeNotification",
+     "id": null
+    },
+    {
+     "name": "Nm_RepeatMessageIndication",
+     "id": "0x1a"
+    },
+    {
+     "name": "Nm_TxTimeoutException",
+     "id": "0x1b"
+    },
+    {
+     "name": "Nm_CarWakeUpIndication",
+     "id": "0x1d"
+    },
+    {
+     "name": "Nm_MainFunction",
+     "id": "0x10"
+    }
+   ]
+  },
+  "NvM": {
+   "spec": "AUTOSAR_SWS_NVRAMManager.pdf",
+   "sources": [
+    "src/Bsw/NvM/NvM.c"
+   ],
+   "apis": [
+    {
+     "name": "NvM_Init",
+     "id": "0x00"
+    },
+    {
+     "name": "NvM_SetDataIndex",
+     "id": "0x01"
+    },
+    {
+     "name": "NvM_GetDataIndex",
+     "id": "0x02"
+    },
+    {
+     "name": "NvM_SetBlockProtection",
+     "id": "0x03"
+    },
+    {
+     "name": "NvM_GetErrorStatus",
+     "id": "0x04"
+    },
+    {
+     "name": "NvM_GetVersionInfo",
+     "id": "0x0f"
+    },
+    {
+     "name": "NvM_SetRamBlockStatus",
+     "id": "0x05"
+    },
+    {
+     "name": "NvM_SetBlockLockStatus",
+     "id": "0x13"
+    },
+    {
+     "name": "NvM_CancelJobs",
+     "id": "0x10"
+    },
+    {
+     "name": "NvM_GetActiveService",
+     "id": "0x15"
+    },
+    {
+     "name": "NvM_ReadBlock",
+     "id": "0x06"
+    },
+    {
+     "name": "NvM_WriteBlock",
+     "id": "0x07"
+    },
+    {
+     "name": "NvM_RestoreBlockDefaults",
+     "id": "0x08"
+    },
+    {
+     "name": "NvM_EraseNvBlock",
+     "id": "0x09"
+    },
+    {
+     "name": "NvM_CancelWriteAll",
+     "id": "0x0a"
+    },
+    {
+     "name": "NvM_InvalidateNvBlock",
+     "id": "0x0b"
+    },
+    {
+     "name": "NvM_ReadPRAMBlock",
+     "id": "0x16"
+    },
+    {
+     "name": "NvM_WritePRAMBlock",
+     "id": "0x17"
+    },
+    {
+     "name": "NvM_RestorePRAMBlockDefaults",
+     "id": "0x18"
+    },
+    {
+     "name": "NvM_ReadAll",
+     "id": "0x0c"
+    },
+    {
+     "name": "NvM_WriteAll",
+     "id": "0x0d"
+    },
+    {
+     "name": "NvM_ValidateAll",
+     "id": "0x19"
+    },
+    {
+     "name": "NvM_FirstInitAll",
+     "id": "0x14"
+    }
+   ]
+  },
+  "Port": {
+   "spec": "AUTOSAR_SWS_PortDriver.pdf",
+   "sources": [
+    "src/Bsw/Port/Port.c"
+   ],
+   "apis": [
+    {
+     "name": "Port_Init",
+     "id": "0x00"
+    },
+    {
+     "name": "Port_SetPinDirection",
+     "id": "0x01"
+    },
+    {
+     "name": "Port_RefreshPortDirection",
+     "id": "0x02"
+    },
+    {
+     "name": "Port_GetVersionInfo",
+     "id": "0x03"
+    },
+    {
+     "name": "Port_SetPinMode",
+     "id": "0x04"
+    }
+   ]
+  },
+  "SecOC": {
+   "spec": "AUTOSAR_SWS_SecureOnboardCommunication.pdf",
+   "sources": [
+    "src/Bsw/SecOC/SecOC.c"
+   ],
+   "apis": [
+    {
+     "name": "SecOC_DeInit",
+     "id": "0x05"
+    },
+    {
+     "name": "SecOC_GetVersionInfo",
+     "id": "0x02"
+    },
+    {
+     "name": "SecOC_IfTransmit",
+     "id": "0x49"
+    },
+    {
+     "name": "SecOC_TpTransmit",
+     "id": "0x49"
+    },
+    {
+     "name": "SecOC_CancelReceive",
+     "id": "0x4c"
+    },
+    {
+     "name": "SecOC_IfCancelTransmit",
+     "id": "0x4a"
+    },
+    {
+     "name": "SecOC_TpCancelTransmit",
+     "id": "0x4a"
+    },
+    {
+     "name": "SecOC_ChangeParameter",
+     "id": "0x4b"
+    },
+    {
+     "name": "SecOC_AssociateKey",
+     "id": "0x07"
+    },
+    {
+     "name": "SecOC_FreshnessValueRead",
+     "id": "0x08"
+    },
+    {
+     "name": "SecOC_FreshnessValueWrite",
+     "id": "0x09"
+    },
+    {
+     "name": "SecOC_RxIndication",
+     "id": "0x42"
+    },
+    {
+     "name": "SecOC_TpRxIndication",
+     "id": "0x45"
+    },
+    {
+     "name": "SecOC_TxConfirmation",
+     "id": "0x40"
+    },
+    {
+     "name": "SecOC_TpTxConfirmation",
+     "id": "0x48"
+    },
+    {
+     "name": "SecOC_TriggerTransmit",
+     "id": "0x41"
+    },
+    {
+     "name": "SecOC_CopyRxData",
+     "id": "0x44"
+    },
+    {
+     "name": "SecOC_CopyTxData",
+     "id": "0x43"
+    },
+    {
+     "name": "SecOC_StartOfReception",
+     "id": "0x46"
+    },
+    {
+     "name": "SecOC_GetRxFreshness",
+     "id": "0x4f"
+    },
+    {
+     "name": "SecOC_GetRxFreshnessAuthData",
+     "id": "0x4e"
+    },
+    {
+     "name": "SecOC_GetTxFreshness",
+     "id": "0x52"
+    },
+    {
+     "name": "SecOC_GetTxFreshnessTruncData",
+     "id": "0x51"
+    },
+    {
+     "name": "SecOC_SPduTxConfirmation",
+     "id": "0x4d"
+    },
+    {
+     "name": "SecOC_MainFunctionRx",
+     "id": "0x06"
+    },
+    {
+     "name": "SecOC_MainFunctionTx",
+     "id": "0x03"
+    },
+    {
+     "name": "SecOC_VerificationStatusCallout",
+     "id": "0x50"
+    }
+   ]
+  },
+  "Wdg": {
+   "spec": "AUTOSAR_SWS_WatchdogDriver.pdf",
+   "sources": [
+    "src/Bsw/Wdg/Wdg.c"
+   ],
+   "apis": [
+    {
+     "name": "Wdg_Init",
+     "id": "0x00"
+    },
+    {
+     "name": "Wdg_SetMode",
+     "id": "0x01"
+    },
+    {
+     "name": "Wdg_SetTriggerCondition",
+     "id": "0x03"
+    },
+    {
+     "name": "Wdg_GetVersionInfo",
+     "id": "0x04"
+    }
+   ]
+  },
+  "WdgIf": {
+   "spec": "AUTOSAR_SWS_WatchdogInterface.pdf",
+   "sources": [
+    "src/Bsw/WdgIf/WdgIf.c"
+   ],
+   "apis": [
+    {
+     "name": "WdgIf_SetMode",
+     "id": "0x01"
+    },
+    {
+     "name": "WdgIf_SetTriggerCondition",
+     "id": "0x02"
+    },
+    {
+     "name": "WdgIf_GetVersionInfo",
+     "id": "0x03"
+    }
+   ]
+  },
+  "WdgM": {
+   "spec": "AUTOSAR_SWS_WatchdogManager.pdf",
+   "sources": [
+    "src/Bsw/WdgM/WdgM.c"
+   ],
+   "apis": [
+    {
+     "name": "WdgM_Init",
+     "id": "0x00"
+    },
+    {
+     "name": "WdgM_DeInit",
+     "id": "0x01"
+    },
+    {
+     "name": "WdgM_GetVersionInfo",
+     "id": "0x02"
+    },
+    {
+     "name": "WdgM_SetMode",
+     "id": "0x03"
+    },
+    {
+     "name": "WdgM_GetMode",
+     "id": "0x0b"
+    },
+    {
+     "name": "WdgM_CheckpointReached",
+     "id": "0x0e"
+    },
+    {
+     "name": "WdgM_GetLocalStatus",
+     "id": "0x0c"
+    },
+    {
+     "name": "WdgM_GetGlobalStatus",
+     "id": "0x0d"
+    },
+    {
+     "name": "WdgM_PerformReset",
+     "id": "0x0f"
+    },
+    {
+     "name": "WdgM_GetFirstExpiredSEID",
+     "id": "0x10"
+    },
+    {
+     "name": "WdgM_MainFunction",
+     "id": "0x08"
+    }
+   ]
+  }
+ },
+ "excluded": {
+  "PduR": "テンプレート型 API（PduR_<User:Up>Transmit 等）が多く、実装側の関数名と 1 対 1 に対応しないため対象外",
+  "E2EXf": "API 名が変換 ID を含むテンプレート型（E2EXf_<transformerId> 等）のため対象外",
+  "IoHwAb": "AUTOSAR が API 名を標準化していない抽象化層のため対象外",
+  "Rte": "API 名が設定から生成される（Rte_Read_<p>_<o> 等）ため対象外",
+  "Os": "OSEK/AUTOSAR OS の API 全体を仕様書から機械抽出できず、本プロジェクトの Os は協調スケジューラのため対象外（カウンタ API のみ実装）",
+  "KeyM": "R4.3.1 に仕様書が存在しない（R4.4.0 で新設）ため対象外",
+  "SchM": "専用の仕様書がなく RTE 仕様に統合されているため対象外"
+ }
+}

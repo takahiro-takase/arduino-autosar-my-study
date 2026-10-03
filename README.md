@@ -177,48 +177,48 @@ HAL ─── Can_Hw / Dio_Hw / Port_Hw / Adc_Hw / Mcu_Hw / Fee_Hw / Wdg_Hw / Gp
 <a id="module-list"></a>
 #### モジュール一覧
 
-| 層 | モジュール | Id | AUTOSAR 仕様<br>仕様準拠度 | 概要 |
+| 層 | モジュール | Id | AUTOSAR 仕様<br>API 実装数 | 概要 |
 |---|---|---|---|---|
 | ASW | App_<br>EngineManager | — | — | エンジン状態遷移 SWC (RUNNING/FAULT 等)<br>（[詳細](docs/modules/App_EngineManager_Notes.md)） |
 |  | App_<br>WarningIndicator | — | — | 警告灯制御 SWC (LED 3灯)<br>（[詳細](docs/modules/App_WarningIndicator_Notes.md)） |
 | RTE | Rte | — | — | SWC 間シグナル仲介 (RTE ミラー)・COM コールバック (`Rte_Cbk.h`)<br>（[詳細](docs/modules/Rte_Notes.md)） |
-| OS | Os | — | SWS_Os<br>主要機能実装<br>(一部意図的に簡略化) | タイムトリガスケジューラ・カウンタ API (`GetCounterValue` / `GetElapsedValue`、BSW の時刻取得窓口)<br>（[詳細](docs/modules/Os_Notes.md)） |
-| BSW | Adc | 123 | SWS_Adc<br>主要機能実装<br>(一部意図的に簡略化) | アナログ入力ドライバ<br>（[詳細](docs/modules/Adc_Notes.md)） |
-|  | BswM | 42 | SWS_BswM<br>主要機能実装<br>(一部意図的に簡略化) | BSW モード管理・状態遷移の一元制御<br>（[詳細](docs/modules/BswM_Notes.md)） |
-|  | Can | 80 | SWS_Can<br>主要機能実装 | CAN コントローラドライバ (MCP2515)<br>（[詳細](docs/modules/Can_Notes.md)） |
-|  | CanIf | 60 | SWS_CanIf<br>主要機能実装 | CAN コントローラ抽象化層<br>（[詳細](docs/modules/CanIf_Notes.md)） |
-|  | CanNm | 31 | SWS_CanNM<br>主要機能実装 | ネットワークマネジメント (CAN NM)<br>（[詳細](docs/modules/CanNm_Notes.md)） |
-|  | CanSM | 140 | SWS_CanSM<br>主要機能実装 | CAN ネットワーク状態管理 (Bus-Off 回復・CanNm 連携)<br>（[詳細](docs/modules/CanSM_Notes.md)） |
-|  | CanTp | 35 | SWS_CanTp<br>主要機能実装<br>(一部意図的に簡略化) | ISO 15765-2 トランスポートプロトコル<br>（[詳細](docs/modules/CanTp_Notes.md)） |
-|  | Com | 50 | SWS_Com<br>主要機能実装 | シグナルベース通信管理<br>（[詳細](docs/modules/Com_Notes.md)） |
-|  | ComM | 12 | SWS_ComM<br>主要機能実装 | 通信マネージャ (チャネル状態集約)<br>（[詳細](docs/modules/ComM_Notes.md)） |
-|  | CryIf | 112 | SWS_CryptoInterface<br>パススルー<br>(下位が1個のため) | 暗号ドライバへのルーティング層<br>（[詳細](docs/modules/CryIf_Notes.md)） |
-|  | Crypto | 114 | SWS_CryptoDriver<br>主要機能実装<br>(一部意図的に簡略化) | 暗号処理ドライバ (AES-128-CMAC)<br>（[詳細](docs/modules/Crypto_Notes.md)） |
-|  | Csm | 110 | SWS_CryptoServiceManager<br>主要機能実装<br>(一部意図的に簡略化) | 暗号サービスマネージャ<br>（[詳細](docs/modules/Csm_Notes.md)） |
-|  | Dcm | 53 | SWS_Dcm<br>主要機能実装<br>(一部意図的に簡略化) | UDS 診断通信マネージャ<br>（[詳細](docs/modules/Dcm_Notes.md)） |
-|  | Dem | 54 | SWS_Dem<br>主要機能実装 | 診断イベント管理 (DTC)<br>（[詳細](docs/modules/Dem_Notes.md)） |
-|  | Det | — | SWS_Det<br>主要機能実装<br>(一部意図的に簡略化) | 開発時エラー検出・ロギング<br>（[詳細](docs/modules/Det_Notes.md)） |
-|  | Dio | — | SWS_Dio<br>主要機能実装<br>(一部意図的に簡略化) | デジタル入出力ドライバ<br>（[詳細](docs/modules/Dio_Notes.md)） |
-|  | E2E | — | SWS_E2E<br>主要機能実装<br>(一部意図的に簡略化) | エンドツーエンド保護ライブラリ (Profile01/05)<br>（[詳細](docs/modules/E2E_Notes.md)） |
-|  | E2EXf | 176 | SWS_E2ELibrary 12.4<br>(E2E Transformer)<br>主要機能実装<br>(一部意図的に簡略化) | E2E トランスフォーマ (Rte⇔E2E ライブラリ統合)<br>（[詳細](docs/modules/E2EXf_Notes.md)） |
+| OS | Os | — | SWS_Os<br>API 数は対象外<br>(協調スケジューラ。OSEK の API は未実装で、カウンタ API のみ実装) | タイムトリガスケジューラ・カウンタ API (`GetCounterValue` / `GetElapsedValue`、BSW の時刻取得窓口)<br>（[詳細](docs/modules/Os_Notes.md)） |
+| BSW | Adc | 123 | SWS_Adc<br>API実装: 2 / 18<br>(一部意図的に簡略化) | アナログ入力ドライバ<br>（[詳細](docs/modules/Adc_Notes.md)） |
+|  | BswM | 42 | SWS_BswM<br>API実装: 6 / 32<br>(一部意図的に簡略化) | BSW モード管理・状態遷移の一元制御<br>（[詳細](docs/modules/BswM_Notes.md)） |
+|  | Can | 80 | SWS_Can<br>API実装: 10 / 16 | CAN コントローラドライバ (MCP2515)<br>（[詳細](docs/modules/Can_Notes.md)） |
+|  | CanIf | 60 | SWS_CanIf<br>API実装: 16 / 35 | CAN コントローラ抽象化層<br>（[詳細](docs/modules/CanIf_Notes.md)） |
+|  | CanNm | 31 | SWS_CanNM<br>API実装: 14 / 24 | ネットワークマネジメント (CAN NM)<br>（[詳細](docs/modules/CanNm_Notes.md)） |
+|  | CanSM | 140 | SWS_CanSM<br>API実装: 8 / 19 | CAN ネットワーク状態管理 (Bus-Off 回復・CanNm 連携)<br>（[詳細](docs/modules/CanSM_Notes.md)） |
+|  | CanTp | 35 | SWS_CanTp<br>API実装: 4 / 9<br>(一部意図的に簡略化) | ISO 15765-2 トランスポートプロトコル<br>（[詳細](docs/modules/CanTp_Notes.md)） |
+|  | Com | 50 | SWS_Com<br>API実装: 22 / 32 | シグナルベース通信管理<br>（[詳細](docs/modules/Com_Notes.md)） |
+|  | ComM | 12 | SWS_ComM<br>API実装: 16 / 28 | 通信マネージャ (チャネル状態集約)<br>（[詳細](docs/modules/ComM_Notes.md)） |
+|  | CryIf | 112 | SWS_CryptoInterface<br>API実装: 6 / 17<br>パススルー<br>(下位が1個のため) | 暗号ドライバへのルーティング層<br>（[詳細](docs/modules/CryIf_Notes.md)） |
+|  | Crypto | 114 | SWS_CryptoDriver<br>API実装: 6 / 18<br>(一部意図的に簡略化) | 暗号処理ドライバ (AES-128-CMAC)<br>（[詳細](docs/modules/Crypto_Notes.md)） |
+|  | Csm | 110 | SWS_CryptoServiceManager<br>API実装: 7 / 74<br>(一部意図的に簡略化) | 暗号サービスマネージャ<br>（[詳細](docs/modules/Csm_Notes.md)） |
+|  | Dcm | 53 | SWS_Dcm<br>API実装: 8 / 26<br>(一部意図的に簡略化) | UDS 診断通信マネージャ<br>（[詳細](docs/modules/Dcm_Notes.md)） |
+|  | Dem | 54 | SWS_Dem<br>API実装: 11 / 108 | 診断イベント管理 (DTC)<br>（[詳細](docs/modules/Dem_Notes.md)） |
+|  | Det | — | SWS_Det<br>API実装: 6 / 6<br>(一部意図的に簡略化) | 開発時エラー検出・ロギング<br>（[詳細](docs/modules/Det_Notes.md)） |
+|  | Dio | — | SWS_Dio<br>API実装: 8 / 8<br>(一部意図的に簡略化) | デジタル入出力ドライバ<br>（[詳細](docs/modules/Dio_Notes.md)） |
+|  | E2E | — | SWS_E2E<br>API実装: 13 / 43<br>(一部意図的に簡略化) | エンドツーエンド保護ライブラリ (Profile01/05)<br>（[詳細](docs/modules/E2E_Notes.md)） |
+|  | E2EXf | 176 | SWS_E2ELibrary 12.4<br>(E2E Transformer)<br>API 数は対象外<br>(一部意図的に簡略化) | E2E トランスフォーマ (Rte⇔E2E ライブラリ統合)<br>（[詳細](docs/modules/E2EXf_Notes.md)） |
 |  | E2EMon | — | — (独自 CDD 相当) | ネットワーク健全性モニタ (独自 CDD)<br>（[詳細](docs/modules/E2EMon_Notes.md)） |
-|  | EcuM | 10 | SWS_EcuStateManager<br>主要機能実装 | ECU ステートマネージャ (起動・シャットダウン制御)<br>（[詳細](docs/modules/EcuM_Notes.md)） |
-|  | Fee | 21 | SWS_Fee<br>主要機能実装<br>(一部意図的に簡略化) | フラッシュエミュレーション EEPROM ドライバ<br>（[詳細](docs/modules/Fee_Notes.md)） |
-|  | FiM | 11 | SWS_FiM<br>主要機能実装<br>(一部意図的に簡略化) | 機能抑止マネージャ<br>（[詳細](docs/modules/FiM_Notes.md)） |
-|  | Gpt | 100 | SWS_Gpt<br>主要機能実装<br>(一部意図的に簡略化) | 汎用タイマドライバ<br>（[詳細](docs/modules/Gpt_Notes.md)） |
+|  | EcuM | 10 | SWS_EcuStateManager<br>API実装: 8 / 53 | ECU ステートマネージャ (起動・シャットダウン制御)<br>（[詳細](docs/modules/EcuM_Notes.md)） |
+|  | Fee | 21 | SWS_Fee<br>API実装: 9 / 13<br>(一部意図的に簡略化) | フラッシュエミュレーション EEPROM ドライバ<br>（[詳細](docs/modules/Fee_Notes.md)） |
+|  | FiM | 11 | SWS_FiM<br>API実装: 4 / 6<br>(一部意図的に簡略化) | 機能抑止マネージャ<br>（[詳細](docs/modules/FiM_Notes.md)） |
+|  | Gpt | 100 | SWS_Gpt<br>API実装: 9 / 14<br>(一部意図的に簡略化) | 汎用タイマドライバ<br>（[詳細](docs/modules/Gpt_Notes.md)） |
 |  | IoHwAb | 254 | AUTOSAR 抽象化層 | ボタン入力・センサ電圧のハードウェア抽象化<br>（[詳細](docs/modules/IoHwAb_Notes.md)） |
-|  | KeyM | 116<br>(仮) | SWS_KeyManager<br>(Release 4.4.0)<br>主要機能実装<br>(一部意図的に簡略化) | 鍵管理マネージャ<br>（[詳細](docs/modules/KeyM_Notes.md)） |
-|  | Mcu | 101 | SWS_Mcu<br>主要機能実装<br>(一部意図的に簡略化) | マイコン初期化・リセット要因管理<br>（[詳細](docs/modules/Mcu_Notes.md)） |
-|  | MemIf | 22 | SWS_MemIf<br>パススルー<br>(下位が1個のため) | 不揮発メモリ抽象化層<br>（[詳細](docs/modules/MemIf_Notes.md)） |
-|  | Nm | 29 | SWS_NetworkManagementInterface<br>主要機能実装<br>(一部意図的に簡略化) | ネットワークマネジメントインタフェース (ComM と CanNm の中継層。単一ネットワーク構成のため NM Coordinator は対応除外) |
-|  | NvM | 20 | SWS_NvM<br>主要機能実装<br>(一部意図的に簡略化) | 不揮発メモリマネージャ<br>（[詳細](docs/modules/NvM_Notes.md)） |
-|  | PduR | 51 | SWS_PduR<br>主要機能実装<br>(一部意図的に簡略化) | PDU ルーティング層<br>（[詳細](docs/modules/PduR_Notes.md)） |
-|  | Port | — | SWS_Port<br>主要機能実装<br>(一部意図的に簡略化) | ピン設定管理<br>（[詳細](docs/modules/Port_Notes.md)） |
-|  | SchM | — | SWS_SchM<br>主要機能実装<br>(一部意図的に簡略化) | 排他制御 (スケジューラマネージャ)<br>（[詳細](docs/modules/SchM_Notes.md)） |
-|  | SecOC | 150 | SWS_SecureOnboard<br>Communication<br>主要機能実装<br>(一部意図的に簡略化) | メッセージ認証 (改ざん・なりすまし対策)<br>（[詳細](docs/modules/SecOC_Notes.md)） |
-|  | Wdg | 102 | SWS_Wdg<br>主要機能実装<br>(一部意図的に簡略化) | ウォッチドッグドライバ<br>（[詳細](docs/modules/Wdg_Notes.md)） |
-|  | WdgIf | 43 | SWS_WdgIf<br>パススルー<br>(下位が1個のため) | ウォッチドッグ抽象化層<br>（[詳細](docs/modules/WdgIf_Notes.md)） |
-|  | WdgM | 13 | SWS_WdgM<br>主要機能実装 | ウォッチドッグマネージャ (生存監視)<br>（[詳細](docs/modules/WdgM_Notes.md)） |
+|  | KeyM | 116<br>(仮) | SWS_KeyManager<br>(Release 4.4.0)<br>API 数は対象外<br>(一部意図的に簡略化) | 鍵管理マネージャ<br>（[詳細](docs/modules/KeyM_Notes.md)） |
+|  | Mcu | 101 | SWS_Mcu<br>API実装: 5 / 11<br>(一部意図的に簡略化) | マイコン初期化・リセット要因管理<br>（[詳細](docs/modules/Mcu_Notes.md)） |
+|  | MemIf | 22 | SWS_MemIf<br>API実装: 7 / 9<br>パススルー<br>(下位が1個のため) | 不揮発メモリ抽象化層<br>（[詳細](docs/modules/MemIf_Notes.md)） |
+|  | Nm | 29 | SWS_NetworkManagementInterface<br>API実装: 14 / 30<br>(一部意図的に簡略化) | ネットワークマネジメントインタフェース (ComM と CanNm の中継層。単一ネットワーク構成のため NM Coordinator は対応除外) |
+|  | NvM | 20 | SWS_NvM<br>API実装: 7 / 23<br>(一部意図的に簡略化) | 不揮発メモリマネージャ<br>（[詳細](docs/modules/NvM_Notes.md)） |
+|  | PduR | 51 | SWS_PduR<br>API 数は対象外<br>(一部意図的に簡略化) | PDU ルーティング層<br>（[詳細](docs/modules/PduR_Notes.md)） |
+|  | Port | — | SWS_Port<br>API実装: 5 / 5<br>(一部意図的に簡略化) | ピン設定管理<br>（[詳細](docs/modules/Port_Notes.md)） |
+|  | SchM | — | SWS_SchM<br>API 数は対象外<br>(一部意図的に簡略化) | 排他制御 (スケジューラマネージャ)<br>（[詳細](docs/modules/SchM_Notes.md)） |
+|  | SecOC | 150 | SWS_SecureOnboard<br>Communication<br>API実装: 7 / 27<br>(一部意図的に簡略化) | メッセージ認証 (改ざん・なりすまし対策)<br>（[詳細](docs/modules/SecOC_Notes.md)） |
+|  | Wdg | 102 | SWS_Wdg<br>API実装: 4 / 4<br>(一部意図的に簡略化) | ウォッチドッグドライバ<br>（[詳細](docs/modules/Wdg_Notes.md)） |
+|  | WdgIf | 43 | SWS_WdgIf<br>API実装: 3 / 3<br>パススルー<br>(下位が1個のため) | ウォッチドッグ抽象化層<br>（[詳細](docs/modules/WdgIf_Notes.md)） |
+|  | WdgM | 13 | SWS_WdgM<br>API実装: 11 / 11 | ウォッチドッグマネージャ (生存監視)<br>（[詳細](docs/modules/WdgM_Notes.md)） |
 | HAL | Can_Hw | — | — | MCP2515 SPI ドライバ<br>（[詳細](docs/modules/Can_Notes.md)） |
 |  | Dio_Hw | — | — | Arduino `digitalWrite`/`digitalRead` ラッパー |
 |  | Port_Hw | — | — | Arduino `pinMode` ラッパー |
@@ -229,7 +229,8 @@ HAL ─── Can_Hw / Dio_Hw / Port_Hw / Adc_Hw / Mcu_Hw / Fee_Hw / Wdg_Hw / Gp
 |  | Wdg_Hw | — | — | 実 HW ウォッチドッグ制御 |
 |  | Gpt_Hw | — | — | Renesas RA `FspTimer` ラッパー |
 
-> 「仕様準拠度」の凡例: **主要機能実装**=対象 SWS 仕様の主要要求を実質的に満たす／**主要機能実装(一部意図的に簡略化)**=中核機能は実装済みだが特定の API・モードを対応除外／**パススルー**=下位ドライバが1個のみのため実質的に素通し／**—**=対応する AUTOSAR 仕様が無い（ASW・RTE・HAL 層、または独自 CDD 相当）。各モジュールの具体的な簡略化内容は上表「概要」列のリンク先または各モジュール詳細節を参照。
+> 「API 実装数」の凡例: **API実装: N / M**=AUTOSAR SWS 4.3.1 が定義する API（コールバック・周期関数を含む）M 個のうち、関数本体を実装済みの数 N。残りはソースに `/* 未実装 */` と明記している／**(一部意図的に簡略化)**=実装済みの API にも、特定のモード・引数を対応除外したものがある（詳細は各モジュールのノート）／**パススルー**=下位ドライバが1個のみのため実質的に素通し／**API 数は対象外**=API 名がテンプレート型・設定依存、または仕様書が無いなどの理由で数えていない／**—**=対応する AUTOSAR 仕様が無い（ASW・RTE・HAL 層、または独自 CDD 相当）。
+> 数字は `python tools/api_coverage/api_coverage.py` で集計し（`--update-readme` でこの表を更新、`--check-readme` で一致を検証）、仕様書の API 一覧は [tools/api_coverage/autosar_api_list.json](tools/api_coverage/autosar_api_list.json) に保存している。
 
 ModuleId の出典は `docs/autosar/4.3.1/AUTOSAR_TR_BSWModuleList.pdf`（Release 4.3.1、「List of Basic Software Modules」表）。
 AUTOSAR 仕様書 PDF は著作権のためリポジトリに含めていません（`.gitignore` 対象）。公式サイトの Release 4.3.1 から入手して配置してください。
@@ -251,7 +252,8 @@ AUTOSAR 仕様書 PDF は著作権のためリポジトリに含めていませ�
 ├── stub/                   # テスト用の差し替え（src/ と同じ構成。Fake_*=HW 差し替え、Wrap_*=--wrap による呼び出し記録）
 ├── tools/
 │   ├── can_tool/           # UDS ボタン送信 / CAPL 風スクリプト / 信号エディタ（Python）
-│   └── misra/              # MISRA C:2012 静的解析（run_misra.py、逸脱リスト misra_suppressions.txt）
+│   ├── misra/              # MISRA C:2012 静的解析（run_misra.py、逸脱リスト misra_suppressions.txt）
+│   └── api_coverage/       # AUTOSAR API の実装数の集計（api_coverage.py、仕様書の API 一覧 autosar_api_list.json）
 ├── docs/
 │   ├── modules/            # モジュール別ノート（<Module>_Notes.md）
 │   ├── autosar/            # AUTOSAR 仕様書 PDF の置き場（.gitignore 対象）
