@@ -22,7 +22,7 @@
  *            いる。そのため E2E ライブラリ側は、外部から見た「実効開始値・
  *            XOR 値 0x00」を実現するために、呼び出しごとに 0xFF を渡す/XOR
  *            し返すという多段の相殺トリックを使う（詳細は
- *            docs/AUTOSAR_SWS_E2ELibrary.pdf の Figure 7-6、および
+ *            docs/autosar/4.3.1/AUTOSAR_SWS_E2ELibrary.pdf の Figure 7-6、および
  *            SWS_E2E_00190 のコメント参照）。
  *            本実装の E2E_CalcCrc8() はそのような内部自動 XOR を行わない
  *            素の CRC8（渡された crc をそのままレジスタ初期値として使い、

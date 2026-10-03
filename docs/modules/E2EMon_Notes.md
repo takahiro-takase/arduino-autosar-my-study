@@ -1,8 +1,8 @@
 # E2EMon（ネットワーク健全性モニタ、独自 CDD 相当）
 
-> [README](../../README.md) の「[E2E 保護](../can_stack.md#e2e-p01)」節から分離。
+> [CAN 通信スタック 詳細](../can_stack.md) の「[E2E 保護](../can_stack.md#e2e-p01)」節から分離。
 
-`E2EXf_InverseTransformP05()`（[`E2EXf_Notes.md`](./E2EXf_Notes.md) 参照）が検出した E2E エラーは、
+`E2EXf_Inv_EngineInfo()`/`E2EXf_Inv_AbsInfo()`（[`E2EXf_Notes.md`](./E2EXf_Notes.md) 参照）が検出した E2E エラーは、
 これまで Dem への DTC 報告にしか使われていませんでした。これとは別に、
 EngineInfo/AbsInfo 受信の E2E 検証結果を集計し、CAN バス上へブロードキャストする
 「ネットワーク健全性テレメトリ」を独立したモジュール `E2EMon`（`src/Bsw/E2EMon/`）
@@ -20,7 +20,7 @@ E2E Transformer（E2EXf）はいずれも ARXML 設定からコード生成ツ�
 すら改変せず、独立した CDD 相当のモジュールとして追加しています。
 
 ```
-Rte_COMRxInd_EngineInfo()/AbsInfo()（Rte.c、E2EXf_InverseTransformP05() 呼び出し直後）:
+Rte_COMRxInd_EngineInfo()/AbsInfo()（Rte.c、E2EXf_Inv_EngineInfo()/E2EXf_Inv_AbsInfo() 呼び出し直後）:
   E2EMon_NotifyCheckResultP05(checkStatus) を呼ぶ
     ← 実 AUTOSAR で言う「ARXML で設定した OnDataReceived 通知フックが RTE から
        生成され、独自 CDD の関数を呼ぶ」という接続方式を模したもの

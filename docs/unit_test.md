@@ -34,7 +34,7 @@ cmake --build --preset native-chain
 # native-chain-coverage プリセット: 同じ対象を MC/DC 含む source-based coverage
 # 計測付きでビルドする。使い方は tools/coverage/generate_coverage_report.sh 参照。
 
-$env:DET_LOG_VERBOSE = "1"; ./build/native_chain/native_chain_tests.exe # TRACE ログ出力
+DET_LOG_VERBOSE=1 ./build/native_chain/native_chain_tests.exe  # TRACE ログ出力（PowerShell は $env:DET_LOG_VERBOSE = "1"）
 ```
 
 > **Windows 環境固有の注意（MinGW-w64 のランタイム不整合）**:
@@ -56,15 +56,14 @@ $env:DET_LOG_VERBOSE = "1"; ./build/native_chain/native_chain_tests.exe # TRACE 
 [「Tx 処理」コールチェーン](can_stack.md#tx-processing)（`Com_SendSignal()` → …
 → `Com_MainFunctionTx()` → `PduR_ComTransmit()` → `CanIf_Transmit()` →
 `Can_Write()`）を複数モジュールにわたって実体（Com.c/PduR.c/CanIf.c/Can.c）で
-リンクし、そのまま検証する `Bsw_ComStack_TxChain_{Scenario}_test.cpp` 群（2026-09-20、
-シナリオごとに分割。`ComSendSignal`/`SendSignalGroupArray`/`ComMainFunction`/
-`RepetitionSequence`/`TxTOut` 等）を `test/Bsw/ComStack/` に用意しています（`Com.c`/`PduR.c`/
-`CanIf.c` それぞれ単体のテストではなく、[CAN 通信スタック詳細](can_stack.md) のコールチェーン図そのものを
-実行して理解・確認するのが主目的）。
+リンクし、そのまま検証するテストを `test/Bsw/ComStack/` に用意しています
+（通常のシグナルは `Bsw_ComStack_Signal_Tx_test.cpp`、Signal Group や I-PDU Group の停止まわりは
+`Bsw_ComStack_SignalGroup_Tx_test.cpp`。`Com.c`/`PduR.c`/`CanIf.c` それぞれ単体のテストではなく、
+[CAN 通信スタック詳細](can_stack.md) のコールチェーン図そのものを実行して理解・確認するのが主目的）。
 コールチェーン図に明示されている非同期の切れ目
 （`Com_TxPending` というキュー経由で次回 `Com_MainFunctionTx()` まで待機する
 箇所）でテストを2つのセグメントに分け、それぞれを個別に実行可能な
-`TEST_F` ケースとしている（`--gtest_filter=Bsw_ComStack_TxChain_ComSendSignal_Test.*` 等で
+`TEST_F` ケースとしている（`--gtest_filter=Bsw_ComStack_Signal_Tx_Test.*` 等で
 絞り込み可）。フェイクは最下層の `Can_Hw` のみ（`stub/Hal/
 Fake_Can_Hw.c`）で、CanIf.c が呼ぶ `CanSM_RxIndication()`/
 `CanSM_ControllerModeIndication()` 等は CanSM.c 自身を実体でリンクして
@@ -74,13 +73,13 @@ Fake_Can_Hw.c`）で、CanIf.c が呼ぶ `CanSM_RxIndication()`/
 状態遷移を検証対象にしていないが、実体を混在させても副作用はない）。
 
 [「Tx 処理」の「E2E」](can_stack.md#tx-processing-e2e)（`Com_MainFunctionTx()` →
-TxTransformCbk → `E2EXf_TransformP05()` → `E2E_P05Protect()`）は
-`Bsw_ComStack_TxE2EChain_test.cpp` で別途検証している。本番の TxTransformCbk
+TxTransformCbk → `E2EXf_E2EHealthStatus()` → `E2E_P05Protect()`）は
+`Bsw_ComStack_E2E_Tx_test.cpp` で別途検証している。本番の TxTransformCbk
 （`Rte_COMTransform_E2EHealthStatus()`）は `Rte.c` にあるが、`Rte.c` 自体は
 IoHwAb/FiM/App_EngineManager/App_WarningIndicator まで巨大な依存グラフを
 引き込むためリンクせず、本番と同じ1行の委譲呼び出しをテスト専用の
 TxTransformCbk として定義し、そこから先（E2EXf.c/E2EXf_PBCfg.c/E2E_P05.c）は
-実体をそのまま検証する（詳細は `Bsw_ComStack_TxE2EChain_test.cpp` 冒頭のコメント参照）。
+実体をそのまま検証する（詳細は `Bsw_ComStack_E2E_Tx_test.cpp` 冒頭のコメント参照）。
 
 <a id="unit-test-rx"></a>
 ### Rx 処理（Can → CanIf → PduR → Com の順）
@@ -88,7 +87,8 @@ TxTransformCbk として定義し、そこから先（E2EXf.c/E2EXf_PBCfg.c/E2E_
 同じ `test/Bsw/ComStack/` に、[「Rx 処理」コールチェーン](can_stack.md#rx-processing)
 （`Can_MainFunction_Read()` → `CanIf_RxIndication()` →
 `PduR_CanIfRxIndication()`（`PduR_ComRxIndication()` の `#define` エイリアス）→
-`Com_RxIndication()`）を検証する `Bsw_ComStack_RxChain_test.cpp` もある。Tx処理と異なり
+`Com_RxIndication()`）を検証する `Bsw_ComStack_Signal_Rx_test.cpp`（通常のシグナル）と
+`Bsw_ComStack_SignalGroup_Rx_test.cpp`（Signal Group・I-PDU Group）もある。Tx処理と異なり
 1セグメントにまとめている理由がある: 図中の非同期境界を担う `Can_Isr()` は
 `Can.c` 内の `static` 関数でテストから直接呼べず、かつ `Can_MainFunction_Read()`
 自身も `Can_RxIrqPending` フラグの有無に関わらず無条件にポーリングする設計
@@ -96,21 +96,21 @@ TxTransformCbk として定義し、そこから先（E2EXf.c/E2EXf_PBCfg.c/E2E_
 二重防御、`Can.c` 冒頭のコメント参照）のため、フラグは `Com_TxPending` の
 ような「後続処理の前提条件」ではない。したがって `Can_MainFunction_Read()` を
 起点とする1つのコールチェーンとして検証している（詳細は
-`Bsw_ComStack_RxChain_test.cpp` 冒頭のコメント参照）。
+`Bsw_ComStack_Signal_Rx_test.cpp` 冒頭のコメント参照）。
 
 [「Rx 処理」の「E2E」](can_stack.md#rx-processing-e2e)（`Com_RxIndication()` →
-RxIndicationCbk → `E2EXf_InverseTransformP05()` → `E2E_P05Check()`）は
-`Bsw_ComStack_RxE2EChain_test.cpp` で別途検証している。`Com_RxIndication()` を直接
+RxIndicationCbk → `E2EXf_Inv_EngineInfo()`/`E2EXf_Inv_AbsInfo()` → `E2E_P05Check()`）は
+`Bsw_ComStack_E2E_Rx_test.cpp` で別途検証している。`Com_RxIndication()` を直接
 呼ぶところから始め（コールチェーン図もこの粒度で揃えている）、Tx 側と同じ理由で
 `Rte.c` はリンクせず、本番の RxIndicationCbk（`Rte_COMRxInd_EngineInfo()`）と
 同じ処理をテスト専用の RxIndicationCbk として定義している。CRC 破損時に
 `E2E_P05STATUS_ERROR` になることも含めて検証する（詳細は
-`Bsw_ComStack_RxE2EChain_test.cpp` 冒頭のコメント参照）。
+`Bsw_ComStack_E2E_Rx_test.cpp` 冒頭のコメント参照）。
 
 [「Rx 処理」の「デッドライン監視」](can_stack.md#rx-processing-timeout)（`Com_MainFunctionRx()`
 がしきい値超過を検知 → `Com_SigTimedOut` フラグ経由 → `Com_ReceiveSignal()` が
-`ComRxDataTimeoutAction` を適用）は `Bsw_ComStack_RxTimeoutChain_test.cpp` で別途検証
-している。この非同期境界は Tx 処理の `Com_TxPending` と構造が同じだが、
+`ComRxDataTimeoutAction` を適用）は `Bsw_ComStack_Signal_Rx_test.cpp`（`Timeout` フィクスチャ）と
+`Bsw_ComStack_SignalGroup_Rx_test.cpp` で別途検証している。この非同期境界は Tx 処理の `Com_TxPending` と構造が同じだが、
 「立てる側／読む側」が逆（周期タスクが立てて on-demand 呼び出しが読む）ため、
 PduR/CanIf/Can/CanSM を一切経由せず Com.c 単体で完結する。フェイクは
 `millis()`（`stub/Hal/Fake_Millis.c`）のみで、`Com_RxIndication()`を
@@ -118,7 +118,7 @@ PduR/CanIf/Can/CanSM を一切経由せず Com.c 単体で完結する。フェ�
 しきい値超過まで進めてから検証する。Tx チェーンと同じくフラグの前後で
 2セグメントに分け、フラグの状態自体はテスト専用アクセサ
 `Com_Test_GetSigTimedOut()`（`COM_UNIT_TEST` 定義時のみ）で直接観測する
-（詳細は `Bsw_ComStack_RxTimeoutChain_test.cpp` 冒頭のコメント参照）。
+（詳細は `Bsw_ComStack_Signal_Rx_test.cpp` 冒頭のコメント参照）。
 
 <a id="unit-test-single"></a>
 ## 単一モジュールのテスト
@@ -131,11 +131,13 @@ PduR/CanIf/Can/CanSM を一切経由せず Com.c 単体で完結する。フェ�
 統合済み）。ファイル名は、テストは `test/Bsw/{Module}/` に
 `Bsw_{Module}_{Scenario}_test.cpp`（複数モジュールを跨ぐ統合テストは
 `Bsw_{Stack}Stack_{Scenario}_test.cpp`、上記「コールチェーンのテスト」参照）で、
-`{Scenario}` は**1つの正常系（OK）シナリオ単位**とする（2026-09-20、
+`{Scenario}` は**1つの正常系（OK）シナリオ単位**を基本とする（2026-09-20、
 `Bsw_ComStack_TxChain_test.cpp` が1ファイルに多数のシナリオを詰め込んで
-肥大化していたのを`ComSendSignal`/`SendSignalGroupArray`/`TxTOut` 等15ファイルへ
-分割した経緯を踏まえ、以後の新規テストファイルもこの粒度を守る。そのシナリオの
-派生 NG ケースは同じファイルに同居させる）。
+肥大化していたのを分割した経緯を踏まえ、新規テストファイルもこの粒度を守る。
+そのシナリオの派生 NG ケースは同じファイルに同居させる。`DcmStack` は SID 単位）。
+例外が `ComStack` で、同年9月にメッセージの種類（Signal / SignalGroup / E2E）×
+方向（Tx / Rx）の `Bsw_ComStack_{MsgType}_{Tx|Rx}_test.cpp` 6 ファイルへ再編している
+（COM_TX_IPDU_MAX の制約で、分割するたびに共有設定を複製する必要があったため）。
 フェイク/`--wrap` は `stub/` 配下に `src/` のディレクトリ構成を
 ミラーリングして `Fake_{Module}.c`/`Wrap_{Module}.c`（HAL 層はフォルダ名
 との重複を避け `Fake_{Module}_Hw.c`）で統一している。`Gpt_OnTick()`
@@ -164,8 +166,10 @@ CanIf/CanSM 側の未初期化ガードにより、本テストが
 
 - **初期化状態のリセット**: DeInit 相当の API が無いモジュールは、`*_UNIT_TEST` が定義された
   ときだけ有効になる `<Module>_Test_ResetInitState()` を持ち、各テストの `SetUp` で未初期化へ戻す
-  （対象: Can / CanTp / Com / CryIf / Crypto / Csm / Dcm / Dem / Fee / FiM / Mcu / Nm / NvM / Os /
-  PduR / Wdg / WdgM。定義は `CMakeLists.txt` の `add_compile_definitions()`）。
+  （対象: CanTp / CryIf / Crypto / Csm / Dcm / Dem / EcuM / Fee / FiM / Mcu / Nm / NvM / Os /
+  PduR / Wdg。定義は `CMakeLists.txt` の `add_compile_definitions()`。Can / Com / WdgM も
+  `*_UNIT_TEST` を定義しているが、リセット関数ではなく `Can_Test_*` / `Com_Test_*` /
+  `WdgM_Test_*` の状態取得・設定用アクセサを持つ）。
   本番ビルド（`pio run -e uno_r4`）ではこれらの関数は含まれない。
 - **模擬 EEPROM の自動リセット**: Fee/NvM を実体リンクしているため、`test/test_main.cpp` の
   `FeeHwAutoResetListener`（GoogleTest の `TestEventListener`）が、すべてのテストの開始前に模擬

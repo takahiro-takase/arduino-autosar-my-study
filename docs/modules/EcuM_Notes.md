@@ -38,10 +38,11 @@ SHUTDOWN は CAN バスのウェイクアップにより常に RUN へ復帰で�
 必要な終端状態は存在しません。Bus-Off 回復は後述の通り L1/L2 バックオフで無期限に
 継続するため、Bus-Off の検出・回復だけを理由に新たに RUN が解放されて SHUTDOWN へ
 向かうことはなく、SHUTDOWN は ComM の NO_COM 要求による正常系（ボランタリ）スリープ
-からのみ到達します（NO_COM_PENDING_SLEEP 中に実際に Bus-Off が発生した場合、回復時に
-`ComM_BusSM_ModeIndication(NO_COM)` が呼ばれ直すことはありますが、RUN は既にボランタリ
-スリープ突入時点で解放済みのため、これによって新たに `EcuM_ReleaseRUN()` が呼ばれる
-ことはありません。詳細は CanSM.c の `CanSM_BusOffFromPendingSleep` 参照）。
+からのみ到達します（CanNm の協調スリープ待ち中に実際に Bus-Off が発生した場合、回復時に
+ComM が `ComM_RetryNmReleaseAfterBusOff()` で解放をやり直します。ComM は RUN 要求状態
+（`ComM_EcuMRunMode`）が実際に変化したときだけ `EcuM_RequestRUN()`/`EcuM_ReleaseRUN()` を
+呼ぶため、Bus-Off 回復によって `EcuM_ReleaseRUN()` が重複して呼ばれることはありません。
+詳細は ComM.c の `ComM_BusSM_ModeIndication()` 参照）。
 
 ## Os のスケジューラティック（Gpt 駆動）
 

@@ -27,7 +27,7 @@
 /** AUTOSAR Crypto Service Manager の ModuleId（AUTOSAR_TR_BSWModuleList 参照、固定値 110） */
 #define CSM_MODULE_ID  110U
 
-/** 開発エラーコード（docs/AUTOSAR_SWS_CryptoServiceManager.pdf を実測して確認済み） */
+/** 開発エラーコード（docs/autosar/4.3.1/AUTOSAR_SWS_CryptoServiceManager.pdf を実測して確認済み） */
 #define CSM_E_PARAM_POINTER      0x01U  /* [SWS_Csm_91009]: NULL ポインタチェック */
 #define CSM_E_SMALL_BUFFER       0x03U  /* [SWS_Csm_91012]: 出力バッファ不足 */
 #define CSM_E_PARAM_HANDLE       0x04U  /* [SWS_Csm_91011]: jobId が範囲外 */
@@ -36,7 +36,7 @@
 #define CSM_E_INIT_FAILED        0x07U
 #define CSM_E_SERVICE_NOT_STARTED 0x09U /* [SWS_Csm_91010]: CryIf が未初期化 */
 
-/** ApiId（値は docs/AUTOSAR_SWS_CryptoServiceManager.pdf の「Service ID[hex]」
+/** ApiId（値は docs/autosar/4.3.1/AUTOSAR_SWS_CryptoServiceManager.pdf の「Service ID[hex]」
  *  記載を実測して確認済み） */
 /* cppcheck-suppress misra-c2012-2.5 */
 #define CSM_API_ID_INIT               0x00U

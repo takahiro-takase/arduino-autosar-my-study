@@ -22,7 +22,7 @@
 /** AUTOSAR Crypto Interface の ModuleId（AUTOSAR_TR_BSWModuleList 参照、固定値 112） */
 #define CRYIF_MODULE_ID  112U
 
-/** 開発エラーコード（docs/AUTOSAR_SWS_CryptoInterface.pdf を実測して確認済み） */
+/** 開発エラーコード（docs/autosar/4.3.1/AUTOSAR_SWS_CryptoInterface.pdf を実測して確認済み） */
 #define CRYIF_E_UNINIT        0x00U  /* [SWS_CryIf_00027 等]: 未初期化時の API 呼び出し */
 /* cppcheck-suppress misra-c2012-2.5 */
 #define CRYIF_E_INIT_FAILED   0x01U
@@ -32,7 +32,7 @@
                                       * 範囲外（2026-09 追加）も同じコードを使う */
 #define CRYIF_E_PARAM_VALUE   0x04U  /* [SWS_CryIf_00053]: keyLength=0 等の不正値 */
 
-/** ApiId（値は docs/AUTOSAR_SWS_CryptoInterface.pdf の「Service ID[hex]」記載を
+/** ApiId（値は docs/autosar/4.3.1/AUTOSAR_SWS_CryptoInterface.pdf の「Service ID[hex]」記載を
  *  実測して確認済み） */
 /* cppcheck-suppress misra-c2012-2.5 */
 #define CRYIF_API_ID_INIT              0x00U

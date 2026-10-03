@@ -16,7 +16,7 @@
  *          Com_IPduConfigType.RxIndicationCbk / TxTransformCbk という汎用
  *          フック経由で、Com の外側（Rte 層 + E2EXf モジュール）が担う。
  *          これは AUTOSAR が定義する 3 つの E2E 統合方式のうち「E2E
- *          Transformer」（docs/AUTOSAR_SWS_E2ELibrary.pdf 12.4 節）に相当し、
+ *          Transformer」（docs/autosar/4.3.1/AUTOSAR_SWS_E2ELibrary.pdf 12.4 節）に相当し、
  *          Com に E2E ロジックを直接埋め込む「COM E2E Callout」方式（かつて
  *          このファイルが採用していた設計）とは異なる。詳細は
  *          src/Bsw/E2EXf/E2EXf.c のファイル冒頭コメントを参照。

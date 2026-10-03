@@ -26,7 +26,7 @@
 /** AUTOSAR Crypto Driver の ModuleId（AUTOSAR_TR_BSWModuleList 参照、固定値 114） */
 #define CRYPTO_MODULE_ID  114U
 
-/** 開発エラーコード（docs/AUTOSAR_SWS_CryptoDriver.pdf を実測して確認済み） */
+/** 開発エラーコード（docs/autosar/4.3.1/AUTOSAR_SWS_CryptoDriver.pdf を実測して確認済み） */
 #define CRYPTO_E_UNINIT        0x00U  /* [SWS_Crypto_00057]: 未初期化時の API 呼び出し */
 #define CRYPTO_E_INIT_FAILED   0x01U
 #define CRYPTO_E_PARAM_POINTER 0x02U  /* [SWS_Crypto_00047 等]: NULL ポインタチェック */
@@ -42,7 +42,7 @@
  * 「実際には使わない」という説明付きの重複定義が残っており、実際に返す
  * ようになった Crypto_Types.h 側の定義とマクロ再定義警告を起こしていた）。 */
 
-/** ApiId（値は docs/AUTOSAR_SWS_CryptoDriver.pdf の「Service ID[hex]」記載を
+/** ApiId（値は docs/autosar/4.3.1/AUTOSAR_SWS_CryptoDriver.pdf の「Service ID[hex]」記載を
  *  実測して確認済み） */
 #define CRYPTO_API_ID_INIT              0x00U
 #define CRYPTO_API_ID_GET_VERSION_INFO  0x01U

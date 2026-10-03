@@ -6,7 +6,7 @@
  *          8 ビットカウンタ (0-255 循環、予約値なし) によりデータ化け・消失・
  *          重複を検出する。
  *
- *          Profile 01 との主な違い（docs/AUTOSAR_SWS_E2ELibrary.pdf 7.6節参照）:
+ *          Profile 01 との主な違い（docs/autosar/4.3.1/AUTOSAR_SWS_E2ELibrary.pdf 7.6節参照）:
  *            - CRC が 8bit → 16bit になり、オーバーヘッドが 2byte → 3byte
  *              (CRC16 2byte + Counter 1byte) に増える。
  *            - Counter が 4bit(0-14循環、15は予約値) → 8bit(0-255循環、

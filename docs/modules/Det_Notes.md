@@ -12,7 +12,7 @@
 当初すべて `DET_LOGE(TAG, "自由文字列")`（`Det.h`、Serial 出力用の自作ロガー）のみで
 報告していました。しかし AUTOSAR の各モジュール SWS は、開発エラー検出時に標準化された
 `Det_ReportError()` 呼び出しを個別に要求しています。最初に対応した Com モジュールの
-要求（`docs/AUTOSAR_SWS_COM.pdf` `[SWS_Com_00442]`、7.13 章 Error Notification）を
+要求（`docs/autosar/4.3.1/AUTOSAR_SWS_COM.pdf` `[SWS_Com_00442]`、7.13 章 Error Notification）を
 例に示すと次の通りです。
 
 ```
@@ -26,7 +26,7 @@ Default Error Tracer shall be called with:
 ```
 
 自作ロガーの`DET_LOGE`はこの標準化された `Det_ReportError(ModuleId, InstanceId,
-ApiId, ErrorId)` 呼び出し（`docs/AUTOSAR_SWS_DefaultErrorTracer.pdf`
+ApiId, ErrorId)` 呼び出し（`docs/autosar/4.3.1/AUTOSAR_SWS_DefaultErrorTracer.pdf`
 `[SWS_Det_00009]`）とは全くの別物で、上位の診断ツール・DET フックから
 機械可読な形で捕捉できる手段が存在していませんでした。この非適合は個々の
 機能追加時には指摘してこなかった、プロジェクト全体に及ぶ体系的なギャップ
@@ -53,7 +53,7 @@ ERR=0x<ErrorId>` という 1 行を出力します（本実装は実 AUTOSAR の
 フック登録・実行停止等の高度な機能は持たない学習用の簡略実装）。
 
 エラーコードは該当 SWS PDF の章から検証した値をそのまま `<Module>_Cfg.h` に
-定数化しています。例えば Com の場合は `docs/AUTOSAR_SWS_COM.pdf` 7.12.1 章から
+定数化しています。例えば Com の場合は `docs/autosar/4.3.1/AUTOSAR_SWS_COM.pdf` 7.12.1 章から
 検証した値を `Com_Cfg.h` に次のように定数化しています。
 
 | エラーコード | 値 | 意味（要求番号） |
@@ -82,7 +82,7 @@ NULL/未初期化チェックにも同じ基準で追加しています。
 
 **ModuleId の出典**: Com 以外のほとんどのモジュールは SWS 本文に
 ModuleId の固定値が明記されていません（Com の `[SWS_Com_00442]` は
-例外的な明記）。そのため `docs/AUTOSAR_TR_BSWModuleList.pdf`
+例外的な明記）。そのため `docs/autosar/4.3.1/AUTOSAR_TR_BSWModuleList.pdf`
 （Release 4.3.1、「List of Basic Software Modules」表）から各モジュールの
 ModuleId を検証・転記しています。この値は Com=50 という既知の値と
 独立に一致したため、出典として信頼できることを確認済みです。各モジュールの
@@ -93,7 +93,7 @@ ModuleId は README の「[モジュール一覧](../../README.md#module-list)�
 
 **対象外・チェック追加なしと判断したモジュール**:
 
-- **E2E（`src/Bsw/E2E/E2E_P01.c`）**: `docs/AUTOSAR_SWS_E2ELibrary.pdf`
+- **E2E（`src/Bsw/E2E/E2E_P01.c`）**: `docs/autosar/4.3.1/AUTOSAR_SWS_E2ELibrary.pdf`
   `[SWS_E2E_00216]` が「E2E Library は DET/DEM/RTE を一切呼び出しては
   ならない」と明記しており、エラーは戻り値（`E2E_P01STATUS_*`）のみで
   呼び出し元（E2EXf）に伝達する設計です。Det_ReportError の追加は仕様

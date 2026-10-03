@@ -140,7 +140,7 @@ WdgM_TriggerHwWatchdog()（1000ms 周期）:
 >
 > `Os_SchedulerStep()` は各タスクの周期判定のたびに時間源（Os 専用の Gpt
 > チャネル、`Os_GetTimeMs()` 経由の `Gpt_GetTimeElapsed()`。2026-08 に
-> `millis()` から置き換え、詳細は README の「Os のスケジューラティック」参照）を
+> `millis()` から置き換え、詳細は [`EcuM_Notes.md`](./EcuM_Notes.md) の「Os のスケジューラティック」参照）を
 > 都度取得し直します（ループ先頭で 1 回だけ取得して使い回す実装だと、同一
 > スキャン内で他タスクがブロッキングした際に後続タスクの `Os_LastRunMs[]`
 > へ不正確な時刻が記録され、Deadline 判定を誤らせます）。また `Os_SetTaskActive()` は
@@ -593,7 +593,7 @@ SHUTDOWN が 6000ms 以上続いた後に RUN へ復帰すると、`Os_Scheduler
 ### グローバル EXPIRED 許容サイクルの追加
 
 当初、`WdgM_TriggerHwWatchdog()` は「1 つでもエンティティが FAILED ならその場で
-リフレッシュを止める」設計だった。しかし `docs/AUTOSAR_SWS_WatchdogManager.pdf`
+リフレッシュを止める」設計だった。しかし `docs/autosar/4.3.1/AUTOSAR_SWS_WatchdogManager.pdf`
 を確認すると、`[SWS_WdgM_00119]`〜`[SWS_WdgM_00121]` は Global Supervision
 Status が `WDGM_GLOBAL_STATUS_OK`・`FAILED`・`EXPIRED` のいずれであっても
 `WdgIf_SetTriggerCondition`（リフレッシュ相当）を同一に呼び続けることを

@@ -23,7 +23,7 @@
 classic CAN の DLC=8 上限（4+1+3=8byte だったところへ、E2E だけで5byte になり
 5+1+3=9byte で超過）を超えてしまうため、SecOC 側を撤去し E2E Profile05 単体
 保護に一本化した。詳細な経緯・代替案（SecOC を ImmobilizerStatus へ移す案）の
-検討は README.md の「SecOC」セクション参照。
+検討は [SecOC_Notes.md](./SecOC_Notes.md) を参照。
 
 ## 1. Profile 5 が提供する 3 つのメカニズム（表 7-4 / SWS_E2E_00394）
 
@@ -197,5 +197,5 @@ Profile01 (`E2E_P01StatusType`) とはビットパターンが異なる点に注
 
 - [`docs/E2E_Profile1_Notes.md`](./E2E_Profile1_Notes.md) — Profile01 の学習ノート（対の関係）
 - [`docs/REFERENCES.md`](../autosar/REFERENCES.md) — 本プロジェクトが参照する AUTOSAR 仕様書の入手先一覧
-- `docs/AUTOSAR_SWS_E2ELibrary.pdf` — 本ノートの一次資料（ローカルのみ、gitignore 対象）
+- `docs/autosar/4.3.1/AUTOSAR_SWS_E2ELibrary.pdf` — 本ノートの一次資料（ローカルのみ、gitignore 対象）
 - `test/test_native/Bsw_E2E_test.cpp` — CRC16・Protect/Check のホストテスト

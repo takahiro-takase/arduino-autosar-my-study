@@ -1,14 +1,14 @@
 # SecOC（Secure Onboard Communication、メッセージ認証）
 
-> [README](../../README.md) の「[CAN 通信スタック](../../README.md#can-stack)」節から分離。
+> [README](../../README.md) の「[モジュール一覧](../../README.md#module-list)」節から分離。
 
-E2E（README参照）は CRC・カウンタによる「意図しない通信エラー」の検出が目的で、
+E2E（[CAN 通信スタック 詳細](../can_stack.md#e2e-p01)参照）は CRC・カウンタによる「意図しない通信エラー」の検出が目的で、
 アルゴリズム自体が公開されており秘密鍵を使わないため、悪意ある攻撃者が正しい
 CRC/カウンタを計算して偽のフレームを送ること自体は防げません。**SecOC** は
 これとは別の軸として、秘密鍵ベースの MAC（Message Authentication Code）と
 フレッシュネス値（リプレイ攻撃対策）で「意図的な改ざん・なりすまし」を検出する
 AUTOSAR モジュールです。ユーザーが実際に AUTOSAR CP R4.3.1 の SWS/SRS 仕様書
-PDF（`docs/AUTOSAR_SWS_SecureOnboardCommunication.pdf`）を入手したため、
+PDF（`docs/autosar/4.3.1/AUTOSAR_SWS_SecureOnboardCommunication.pdf`）を入手したため、
 これまでの Com 機能と同様、実 PDF から検証した要求番号を引用しながら実装
 しています。
 
@@ -79,7 +79,7 @@ Profile05 へ切り替えた現在も、この点は変わりません）。
 
 ## Secured I-PDU バイトレイアウト（SecOC Profile 1 準拠）
 
-`docs/AUTOSAR_SWS_SecureOnboardCommunication.pdf` の **SecOC Profile 1
+`docs/autosar/4.3.1/AUTOSAR_SWS_SecureOnboardCommunication.pdf` の **SecOC Profile 1
 (24Bit-CMAC-8Bit-FV)**（`[SWS_SecOC_00192]`）に忠実に、CMAC/AES-128・8bit
 フレッシュネス・24bit 切り詰め MAC を採用しています。対象フレーム
 「ImmobilizerCmd」（CAN ID 0x120、イモビライザー解除コマンドという実車でも

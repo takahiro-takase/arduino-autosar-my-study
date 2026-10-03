@@ -1,6 +1,6 @@
 # CanSM
 
-> [README](../../README.md) の「[CAN 通信状態管理](../can_stack.md#can-comm-management)」節から分離
+> [CAN 通信スタック 詳細](../can_stack.md) の「[CAN 通信状態管理](../can_stack.md#can-comm-management)」節から分離
 > （旧「ECU 管理層」節から移動。実 AUTOSAR では EcuM/BswM/WdgM とは別クラスタ
 > [Communication Services] に属するため）。
 
@@ -8,29 +8,32 @@ Bus-Off 検出直後（回復試行の前）に `ComM_BusSM_ModeIndication(SILEN
 呼び、ComM のチャネル状態が回復完了まで FULL_COM のまま古い情報として残ることを
 防ぐ（SWS_CanSM_00521。SILENT_COM は EcuM の RUN を維持するため回復中も RUN は
 落ちない）。受け付ける Bus-Off はコントローラが物理的に稼働中の状態（FULL_COM、
-および CanNm の Bus-Sleep Mode 到達待ちで HW が稼働継続する NO_COM_PENDING_SLEEP）
+および PDU の TX 抑制だけでコントローラは `CAN_CS_STARTED` のままの SILENT_COM）
 のみで、回復シーケンスは L1/L2 バックオフ（SWS_CanSM_00514/00515 準拠）で実施し、
 試行回数が `CANSM_BUSOFF_L1_TO_L2_COUNT` を超えるまでは短い周期（L1）でリトライし、
 超えたら Dem へ DTC を報告（limit=1 のため即座に確定）した上で長い周期（L2）へ
 切り替えて無期限にリトライを継続する（回復を諦めて停止する状態は存在しない）。
-再起動試行のたびに、Bus-Off 発生時点の状態（FULL_COM か NO_COM_PENDING_SLEEP か）
-へ復帰させる（`CanSM_BusOffFromPendingSleep`、後者の場合は誤って FULL_COM へ
+再起動試行に成功したら、Bus-Off 発生直前の状態（FULL_COM か SILENT_COM か）へ
+復帰させる（`CanSM_PreBusOffState`、SILENT_COM だった場合は誤って FULL_COM へ
 戻さない）。ComM の NO_COM 要求によるボランタリスリープでは即座にはスリープせず、
-CanNm（CanNm 状態機械）が Bus-Sleep Mode へ到達した通知（`Nm_BusSleepMode()` →
+CanNm（CanNm 状態機械）が Prepare Bus-Sleep Mode へ入ると ComM 経由で SILENT_COM
+（TX 停止）へ移り、Bus-Sleep Mode へ到達した通知（`Nm_BusSleepMode()` →
 `ComM_Nm_BusSleepMode()` を経て ComM が呼ぶ `CanSM_RequestComMode(NO_COM)`）を
-受けてから `Can_SetControllerMode(CAN_T_SLEEP)` で実 HW を実際にスリープさせる
+受けてから `CanIf_SetControllerMode(CAN_CS_SLEEP)`（→ `Can_SetControllerMode(CAN_T_SLEEP)`）で
+実 HW を実際にスリープさせる
 （協調スリープ、詳細は [`CanNm_Notes.md`](./CanNm_Notes.md) 参照）。`CanSM_ControllerModeIndication()`
 による復帰経路を持ち、復帰は即座に確定せず、ウェイクアップ検証（Wakeup Validation
 Protocol 相当）により有効な CAN フレーム受信を確認してから FULL_COM へ確定する。
 
 ## 状態遷移
 
-`CanSM_InternalStateType`（`CanSM.c`）が持つ6状態と、意図された遷移を図示します
+`CanSM_InternalStateType`（`CanSM.c`）が持つ5状態と、意図された遷移を図示します
 （実装上到達可能な、図にない遷移が1点あります。図の直後の注記を参照）。
-`NO_COM` と `NO_COM_PENDING_SLEEP` は見た目が近いですが別状態です。前者は
-コントローラが物理的にスリープ済み（または未起動）、後者は NO_COM 要求済みだが
-CanNm が Bus-Sleep Mode に到達するまでコントローラが稼働継続中、という違いがあります
-（詳細は上記本文および [`CanNm_Notes.md`](./CanNm_Notes.md) 参照）。`BUS_OFF` 中は
+`NO_COM` はコントローラが物理的にスリープ済み（または未起動）の状態で、
+`SILENT_COM` はコントローラは稼働したまま PDU の TX だけを止めた状態です
+（CanNm の協調スリープ中、Prepare Bus-Sleep Mode に入ってから Bus-Sleep Mode へ
+到達するまでがこの状態。詳細は上記本文および [`CanNm_Notes.md`](./CanNm_Notes.md) 参照）。
+`BUS_OFF` 中は
 `CanSM_RequestComMode()` 冒頭のガードにより ComM からの要求を一切受け付けません
 （`RequestComMode` からの遷移元に `BUS_OFF` が登場しないのはそのため）。
 
@@ -42,20 +45,16 @@ stateDiagram-v2
     NO_COM --> SILENT_COM: RequestComMode(SILENT_COM)
     NO_COM --> WAKEUP_VALIDATING: ControllerModeIndication()
 
-    NO_COM_PENDING_SLEEP --> FULL_COM: RequestComMode(FULL_COM)
-    NO_COM_PENDING_SLEEP --> SILENT_COM: RequestComMode(SILENT_COM)
-    NO_COM_PENDING_SLEEP --> NO_COM: NmBusSleepMode()\n(CanNm が Bus-Sleep Mode 到達、物理スリープ)
-    NO_COM_PENDING_SLEEP --> BUS_OFF: ControllerBusOff()
-
     SILENT_COM --> FULL_COM: RequestComMode(FULL_COM)
-    SILENT_COM --> NO_COM: RequestComMode(NO_COM)
+    SILENT_COM --> NO_COM: RequestComMode(NO_COM)\n(CanNm が Bus-Sleep Mode 到達、物理スリープ)
+    SILENT_COM --> BUS_OFF: ControllerBusOff()
 
-    FULL_COM --> NO_COM_PENDING_SLEEP: RequestComMode(NO_COM)
+    FULL_COM --> NO_COM: RequestComMode(NO_COM)
     FULL_COM --> SILENT_COM: RequestComMode(SILENT_COM)
     FULL_COM --> BUS_OFF: ControllerBusOff()
 
     BUS_OFF --> FULL_COM: MainFunction()\nL1/L2 回復成功（Bus-Off 発生時 FULL_COM）
-    BUS_OFF --> NO_COM_PENDING_SLEEP: MainFunction()\nL1/L2 回復成功（Bus-Off 発生時 NO_COM_PENDING_SLEEP）
+    BUS_OFF --> SILENT_COM: MainFunction()\nL1/L2 回復成功（Bus-Off 発生時 SILENT_COM）
 
     WAKEUP_VALIDATING --> FULL_COM: RxIndication()\n(有効フレーム受信、検証成功)
     WAKEUP_VALIDATING --> NO_COM: MainFunction()\n(検証タイムアウト、再スリープ)
@@ -68,7 +67,7 @@ stateDiagram-v2
 > を呼ばないまま状態だけ `NO_COM` にしてしまい、コントローラが Listen-Only
 > （`CAN_CS_STOPPED`）のまま起きた状態で残る（`NO_COM` の「物理的にスリープ済み」
 > という不変条件と矛盾する）。ただし `ComM_RequestComMode()` の呼び出し元
-> （`App_EngineManager.c`/`Dcm_Cbk.c`）はいずれも `BswM_Cfg.h` の
+> （`App_EngineManager.c`/`Dcm.c`）はいずれも `BswM_Cfg.h` の
 > `BSWM_TASK_MASK_SHUTDOWN` により SHUTDOWN 中（`WAKEUP_VALIDATING` が
 > 発生しうる唯一の期間）は駆動タスクごと無効化されるため、現状この経路は
 > 実機到達不能である（2026-08 のレビューで発見。コード側のガードは、この
@@ -104,9 +103,15 @@ ComM のチャネル状態が回復完了まで FULL_COM のまま古い情報�
 なった。これを避けるため `ComM_BusSM_ModeIndication()` はチャネルモードが実際に
 変化した時のみ `EcuM_RequestRUN()`/`EcuM_ReleaseRUN()` を呼ぶよう修正した。
 
-（README 該当箇所: [CAN コントローラの実スリープ](../can_stack.md#can-コントローラの実スリープcan_setcontrollermodecan_t_sleep)）
+（can_stack.md 該当箇所: [CAN コントローラの実スリープ](../can_stack.md#can-コントローラの実スリープcan_setcontrollermodecan_t_sleep)）
 
 ### NO_COM_PENDING_SLEEP 中の Bus-Off 見逃し
+
+> **後日談（2026-08〜09）**: 本節で扱う `CANSM_STATE_NO_COM_PENDING_SLEEP` は、その後
+> ComM が CanNm の協調スリープ完了（`ComM_Nm_BusSleepMode()`）を待ってから初めて
+> `CanSM_RequestComMode(NO_COM)` を呼ぶ設計へ変わったため削除された。現在は FULL_COM から
+> 物理スリープまで一気に遷移し、受け付ける Bus-Off は FULL_COM と SILENT_COM、
+> 回復時の復元は `CanSM_PreBusOffState` が担う。以下は当時の経緯の記録。
 
 AUTOSAR 仕様書（SWS_CanSM）とのスペック監査で、`CanSM_ControllerBusOff()` が
 `CANSM_STATE_FULL_COM` からの Bus-Off しか受け付けていないことが判明した。
@@ -156,4 +161,4 @@ FULL_COM 経路（相手ノード不在による自然発生 Bus-Off、実機で
 実証済み。EcuM 側の DET 誤検知なしも確認）と同一のコードパスを通ることに
 よる間接的な検証と、コードレビューをもって十分と判断した。
 
-（README 該当箇所: [CAN 通信状態管理（ComM / CanSM / CanNm）](../can_stack.md#can-comm-management)）
+（can_stack.md 該当箇所: [CAN 通信状態管理（ComM / CanSM / CanNm）](../can_stack.md#can-comm-management)）
