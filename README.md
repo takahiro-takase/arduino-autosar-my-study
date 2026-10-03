@@ -14,22 +14,21 @@ ARXML や設定ツールは使用せず、コードで階層構造・型定義�
     - [MCP2515 接続（Arduino UNO）](#mcp2515-connection)
   - [ビルド環境・設定](#build-environment)
   - [ビルドと書き込み](#build-and-flash)
-  - [ホスト上のテストと静的解析](#host-build)
-- [ソフトウェア](#software)
-  - [アーキテクチャ](#architecture)
-    - [層構造](#layer-structure)
-    - [モジュール一覧](#module-list)
-    - [ディレクトリ構成](#directory-structure)
+- [アーキテクチャ（何を学べるか）](#architecture)
+  - [層構造](#layer-structure)
+  - [モジュール一覧](#module-list)
+  - [ディレクトリ構成](#directory-structure)
+- [テスト（動作確認）](#testing)
+  - [静的解析（MISRA C:2012、API 実装数の集計）](#static-analysis)
+  - [PC 上の単体テスト（実機不要）](#unit-test)
+  - [実機テスト（tools/can_tool からシナリオを送信）](#can-tool-scenarios)
+- [各スタックの詳細](#stack-details)
   - [CAN 通信スタック（Can_Hw / Can / CanIf / PduR / Com / E2E / E2EXf / E2EMon / Rte）](#can-stack)
   - [診断スタック（CanTp / Dcm / Dem / FiM / NvM）](#diag-stack)
   - [ECU 管理層（EcuM / BswM / WdgM）](#ecu-management)
   - [IO スタック（IoHwAb / Dio / Port / Adc）](#io-stack)
     - [処理の流れ（コールチェーン）](#processing-flow-io)
   - [アプリケーション（App_EngineManager / App_WarningIndicator）](#application)
-- [テスト（動作確認）](#testing)
-  - [単体テスト（ホスト上でのロジック検証）](#unit-test)
-  - [静的解析（MISRA C:2012）](#static-analysis)
-  - [実機へのシナリオ送信（tools/can_tool）](#can-tool-scenarios)
 - [補足](#appendix)
 
 <a id="motivation"></a>
@@ -132,36 +131,11 @@ pio run --target upload
 pio device monitor
 ```
 
-<a id="host-build"></a>
-### ホスト上のテストと静的解析
-
-実機を使わず、PC 上で単体テストと MISRA C:2012 静的解析を実行できます
-（CMake プリセット `native-chain` を使用。事前に環境変数 `LLVM_MINGW_BIN` へ
-llvm-mingw の `bin` ディレクトリを設定してください）。
-
-```bash
-# 設定とビルド
-cmake --preset native-chain
-cmake --build --preset native-chain
-
-# 単体テスト（GoogleTest）
-build/native_chain/native_chain_tests.exe
-
-# MISRA C:2012 静的解析（Cppcheck + misra アドオン）。レポートは build/native_chain/misra/ に出力
-cmake --build --preset native-chain --target misra_check
-```
-
-テストの構成は [単体テスト](docs/unit_test.md)、MISRA の運用（逸脱の方針）は
-`tools/misra/misra_suppressions.txt` を参照してください。
-
-<a id="software"></a>
-## ソフトウェア
-
 <a id="architecture"></a>
-### アーキテクチャ
+## アーキテクチャ（何を学べるか）
 
 <a id="layer-structure"></a>
-#### 層構造
+### 層構造
 
 ```
 ASW ─── App_EngineManager / App_WarningIndicator / App_GptDemo
@@ -175,7 +149,7 @@ HAL ─── Can_Hw / Dio_Hw / Port_Hw / Adc_Hw / Mcu_Hw / Fee_Hw / Wdg_Hw / Gp
 各層は上位層のヘッダのみに依存し、下位層の実装詳細を知りません。
 
 <a id="module-list"></a>
-#### モジュール一覧
+### モジュール一覧
 
 | 層 | モジュール | Id | AUTOSAR 仕様<br>API 実装数 | 概要 |
 |---|---|---|---|---|
@@ -236,7 +210,7 @@ ModuleId の出典は `docs/autosar/4.3.1/AUTOSAR_TR_BSWModuleList.pdf`（Releas
 AUTOSAR 仕様書 PDF は著作権のためリポジトリに含めていません（`.gitignore` 対象）。公式サイトの Release 4.3.1 から入手して配置してください。
 
 <a id="directory-structure"></a>
-#### ディレクトリ構成
+### ディレクトリ構成
 
 ```
 ├── src/                    # 製品コード
@@ -269,7 +243,89 @@ AUTOSAR 仕様書 PDF は著作権のためリポジトリに含めていませ�
 
 各モジュールのファイルの役割は、上記「[モジュール一覧](#module-list)」表の各リンク先（`docs/modules/`）を参照してください。
 
----
+<a id="testing"></a>
+## テスト（動作確認）
+
+コードの品質を、実行しない検査から実機での確認まで、次の 3 段階で確かめます。
+
+1. [静的解析](#static-analysis)（MISRA C:2012、AUTOSAR API の実装数の集計）
+2. [PC 上の単体テスト](#unit-test)（実機不要）
+3. [実機テスト](#can-tool-scenarios)（`tools/can_tool` から CAN でシナリオを送信）
+
+<a id="static-analysis"></a>
+### 静的解析（MISRA C:2012、API 実装数の集計）
+
+Cppcheck の MISRA アドオンで、`src/` 配下の C ソース（`src/Hal/` と C++ は対象外）を解析します。
+
+```bash
+# MISRA C:2012 静的解析。レポートは build/native_chain/misra/ に出力
+cmake --build --preset native-chain --target misra_check
+```
+
+- **ツール**: Cppcheck + misra アドオン。PlatformIO のツールパッケージ
+  （`pio pkg install -g --tool platformio/tool-cppcheck`）と、その Python を使う。
+  事前の設定（`cmake --preset native-chain`）は「[PC 上の単体テスト](#unit-test)」を参照
+- **結果**: 指摘ごとのルール別件数が標準出力に出る。詳細は `build/native_chain/misra/misra_report.txt`。
+  現在の指摘は 0 件で、新しい指摘が出た場合は、修正するか逸脱として記録する
+- **逸脱（deviation）**: ルール単位の逸脱は `tools/misra/misra_suppressions.txt`、個別箇所の逸脱は
+  該当行の直前に `/* cppcheck-suppress <ルール> */` を置いて記録する。いずれも理由を併記し、判断基準
+  （AUTOSAR 仕様で規定されている、ツールの過剰指摘、など）は `misra_suppressions.txt` に書いている
+- **注意**: MISRA の規則文は著作権のためツールに含まれず、ルール番号のみが表示される
+
+AUTOSAR API の実装数（上記「[モジュール一覧](#module-list)」の「API 実装数」列）も、ソースを解析して
+数えます。数字は手で書かず、スクリプトで集計・検証します。
+
+```bash
+python tools/api_coverage/api_coverage.py                 # 集計結果を表示
+python tools/api_coverage/api_coverage.py --check-readme  # README の表と一致するか検証
+python tools/api_coverage/api_coverage.py --update-readme # README の表の数字を更新
+```
+
+<a id="unit-test"></a>
+### PC 上の単体テスト（実機不要）
+
+実 HW を使わず、BSW モジュールのロジックを PC 上で GoogleTest により検証します。
+単一モジュールのテストも、複数モジュールにまたがる関数コールチェーンのテストも、
+`native_chain_tests` という 1 つのテストバイナリにまとめています（2026-10 時点で 858 件）。
+
+ビルドは PlatformIO ではなく CMake + clang++（llvm-mingw）です。事前に環境変数
+`LLVM_MINGW_BIN` へ llvm-mingw の `bin` ディレクトリを設定してください。
+
+```bash
+# 設定とビルド
+cmake --preset native-chain
+cmake --build --preset native-chain
+
+# 単体テスト（GoogleTest）
+build/native_chain/native_chain_tests.exe
+```
+
+- **配置**: テストは `test/Bsw/<Module>/`、差し替え（HAL の Fake、`--wrap` による呼び出し記録）は
+  `src/` と同じ構成で `stub/` に置く
+- **粒度**: ファイル名は `Bsw_<Module>_<Scenario>_test.cpp`。1 つの正常系（OK）シナリオにつき
+  1 ファイルとし、そのシナリオから派生する異常系（NG）は同じファイルに置く
+- **コールチェーンのテスト**: Tx/Rx 処理（通常・E2E・デッドライン監視）、診断（UDS）、ネットワーク
+  管理（スリープ協調）などを、実モジュールをリンクして関数呼び出しの連なりごと検証する
+- **カバレッジ**: `native-chain-coverage` プリセットで MC/DC を含むカバレッジを計測できる
+  （`scripts/generate_coverage_report.sh`）
+
+テスト構成の詳細、初期化状態のリセット、Det エラー報告の NG テストなどは
+[docs/unit_test.md](docs/unit_test.md) を参照してください。
+
+<a id="can-tool-scenarios"></a>
+### 実機テスト（tools/can_tool からシナリオを送信）
+
+PC から CAN 経由で診断要求や EngineInfo/AbsInfo を送り、実機の挙動をシリアルログで確認します。
+ボタン送信や CAPL 風スクリプトによる手順化は [tools/can_tool/README.md](tools/can_tool/README.md) を
+参照してください。実機のシリアルログの例は、分割前の README
+（[旧 README](docs/archive/README_2026-10-03.md#serial-log-example)）に残しています。
+
+
+<a id="stack-details"></a>
+## 各スタックの詳細
+
+アーキテクチャで挙げた各モジュールを、データの流れ（スタック）ごとにまとめた詳細です。
+
 <a id="can-stack"></a>
 ### CAN 通信スタック（Can_Hw / Can / CanIf / PduR / Com / E2E / E2EXf / E2EMon / Rte）
 
@@ -334,7 +390,6 @@ EcuM が状態遷移を決定し、BswM がその状態に応じたタスクの�
 > 「[CAN 通信状態管理](docs/can_stack.md#can-comm-management)」として CAN 通信スタック側にまとめ、
 > EcuM/BswM が関わる箇所はそちらのコールチェーン図中に個別に注釈しています。
 
----
 <a id="io-stack"></a>
 ### IO スタック（IoHwAb / Dio / Port / Adc）
 
@@ -379,58 +434,6 @@ EcuM の POST_RUN 遷移時に Rte_Engine タスクと Rte_Warning タスクが�
 このスタックを構成する各モジュール（App_EngineManager/App_WarningIndicator）の本プロジェクト
 での役割は、上記「[モジュール一覧](#module-list)」表の「概要」列（リンク先の `docs/modules/`
 配下の個別ノート）を参照してください。
-
----
-<a id="testing"></a>
-## テスト（動作確認）
-
-ホスト上での単体テスト、MISRA C:2012 静的解析、`tools/can_tool` による実機へのシナリオ送信、
-の 3 つの手段で検証します。
-
-<a id="unit-test"></a>
-### 単体テスト（ホスト上でのロジック検証）
-
-実 HW を使わず、BSW モジュールのロジックを PC 上で GoogleTest により検証します。
-単一モジュールのテストも、複数モジュールにまたがる関数コールチェーンのテストも、
-`native_chain_tests` という 1 つのテストバイナリにまとめています（2026-10 時点で 858 件）。
-
-- **ビルド**: PlatformIO ではなく CMake + clang++（llvm-mingw）。手順は
-  「[ホスト上のテストと静的解析](#host-build)」を参照
-- **配置**: テストは `test/Bsw/<Module>/`、差し替え（HAL の Fake、`--wrap` による呼び出し記録）は
-  `src/` と同じ構成で `stub/` に置く
-- **粒度**: ファイル名は `Bsw_<Module>_<Scenario>_test.cpp`。1 つの正常系（OK）シナリオにつき
-  1 ファイルとし、そのシナリオから派生する異常系（NG）は同じファイルに置く
-- **コールチェーンのテスト**: Tx/Rx 処理（通常・E2E・デッドライン監視）、診断（UDS）、ネットワーク
-  管理（スリープ協調）などを、実モジュールをリンクして関数呼び出しの連なりごと検証する
-- **カバレッジ**: `native-chain-coverage` プリセットで MC/DC を含むカバレッジを計測できる
-  （`scripts/generate_coverage_report.sh`）
-
-テスト構成の詳細、初期化状態のリセット、Det エラー報告の NG テストなどは
-[docs/unit_test.md](docs/unit_test.md) を参照してください。
-
-<a id="static-analysis"></a>
-### 静的解析（MISRA C:2012）
-
-Cppcheck の MISRA アドオンで、`src/` 配下の C ソース（`src/Hal/` と C++ は対象外）を解析します。
-実行方法は「[ホスト上のテストと静的解析](#host-build)」を参照してください
-（`cmake --build --preset native-chain --target misra_check`）。
-
-- **ツール**: Cppcheck + misra アドオン。PlatformIO のツールパッケージ
-  （`pio pkg install -g --tool platformio/tool-cppcheck`）と、その Python を使う
-- **結果**: 指摘ごとのルール別件数が標準出力に出る。詳細は `build/native_chain/misra/misra_report.txt`。
-  現在の指摘は 0 件で、新しい指摘が出た場合は、修正するか逸脱として記録する
-- **逸脱（deviation）**: ルール単位の逸脱は `tools/misra/misra_suppressions.txt`、個別箇所の逸脱は
-  該当行の直前に `/* cppcheck-suppress <ルール> */` を置いて記録する。いずれも理由を併記し、判断基準
-  （AUTOSAR 仕様で規定されている、ツールの過剰指摘、など）は `misra_suppressions.txt` に書いている
-- **注意**: MISRA の規則文は著作権のためツールに含まれず、ルール番号のみが表示される
-
-<a id="can-tool-scenarios"></a>
-### 実機へのシナリオ送信（tools/can_tool）
-
-PC から CAN 経由で診断要求や EngineInfo/AbsInfo を送り、実機の挙動をシリアルログで確認します。
-ボタン送信や CAPL 風スクリプトによる手順化は [tools/can_tool/README.md](tools/can_tool/README.md) を
-参照してください。実機のシリアルログの例は、分割前の README
-（[旧 README](docs/archive/README_2026-10-03.md#serial-log-example)）に残しています。
 
 <a id="appendix"></a>
 ## 補足
