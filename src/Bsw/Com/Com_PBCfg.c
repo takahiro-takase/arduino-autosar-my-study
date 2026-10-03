@@ -230,8 +230,8 @@ static const Com_IPduConfigType Com_RxIPduConfigData[COM_RX_IPDU_COUNT] = {
          * 実車の ABS/車輪速フレームは常に高頻度・固定周期で新鮮なセンサ値を
          * 送り続けるのが通常で「今回は更新なし」という状況が起きにくいため、
          * この I-PDU への適用は見送った（鮮度管理は既存の受信デッドライン
-         * 監視で十分カバーされる）。詳細は README.md の
-         * 「Group Signal Update Bit」節を参照。
+         * 監視で十分カバーされる）。詳細は docs/modules/Com_Notes.md の
+         * 「Update Bit」節を参照。
          * --------------------------------------------------------------- */
         .IPduId    = 1U,                       /* DaVinci: ComIPduHandleId  - I-PDU 識別番号 */
         .DLC       = 6U,                       /* DaVinci: ComIPduLength    - I-PDU バイト長
@@ -357,7 +357,7 @@ static const Com_IPduConfigType Com_TxIPduConfigData[COM_TX_IPDU_COUNT] = {
          * 不要）に配置。TMS=true 時の MIXED 周期フロア再送と、実際に警告灯が
          * 変化したことによる送信とを受信側が区別できる（MeterStatus/
          * EngineState の非 Signal Group 版と対になる、Signal Group 単位の
-         * 実装例）。詳細は README.md の「Update Bit」節を参照。
+         * 実装例）。詳細は docs/modules/Com_Notes.md の「Update Bit」節を参照。
          * TxAckCbk（Signal Group 単位、SWS_Com_00468）: Rte_COMCbkTAck_WarningStatus
          * を設定し、グループ全体の送信成功をまとめて 1 回通知する
          * （MeterStatus/EngineState の TxAckCbk と対になる、Signal Group
@@ -613,7 +613,7 @@ static const Com_SignalConfigType Com_SignalConfigData[COM_SIGNAL_COUNT] = {
          * これは Signal Group が「Com_ReceiveSignal() はシャドウバッファのみ
          * を読む」という設計だからであり、ASW の呼び出しタイミングを変えた
          * だけでは解消しない構造的な性質である。動機は実利より仕様忠実性。
-         * 詳細は README.md の「ComRxDataTimeoutAction」節を参照。
+         * 詳細は docs/modules/Com_Notes.md の「ComRxDataTimeoutAction」節を参照。
          * FirstTimeoutMs/TimeoutMs（シグナル単位）は本メンバーおよび他の
          * AbsInfo グループメンバーいずれも意図的に未設定（0）のままとする。
          * [7.3.6] "handled like a signal" のとおり、Signal Group は個々の

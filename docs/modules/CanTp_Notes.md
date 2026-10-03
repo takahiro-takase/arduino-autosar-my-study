@@ -68,6 +68,23 @@ TX 確認経路（`Can.c`/`CanIf.c`）が常に成功固定で真の送信失敗
 永久に拒否され続けてしまう。SF/FF は送信失敗が同期的にその場で判明するため、
 タイムアウトを待たず即座に中断・`E_NOT_OK` を返す。
 
+## バッファ上限（FC OVFLW）とビジー判定
+
+**受信側（FF の総長が大きすぎる場合）**: FF が示す総長が `CANTP_RX_BUFFER_SIZE`（32 バイト）を
+超えるときは、再組立を始めず `FC(OVFLW)` を返して拒否します（ログ: `RX FF overflow FC_OVFLW`）。
+**送信側**: 自 ECU が FF を送った後に相手から `FC(OVFLW)` を受け取った場合は、送信を中断して
+IDLE に戻ります（ログ: `TX FC OVFLW abort`）。FC(WAIT) を受け取ったときは N_Bs タイマを
+リセットして待ちます。送信できる応答の最大長は `CANTP_TX_BUFFER_SIZE`（76 バイト）で、
+超える `CanTp_Transmit()` は `invalid len` で拒否します（Dcm 側の `DCM_TX_BUF_SIZE` との関係は
+後述の「TX バッファサイズと上位層(Dcm)のペイロード長の不整合」参照）。
+
+**送信中かどうかの問い合わせ（`CanTp_IsTxBusy()`）**: 複数フレームの応答を送信中
+（FF 送信後の WAIT_FC から最後の CF まで）は `TRUE` を返します。Dcm はこれを使って、
+応答送信中は S3 タイマを毎周期更新し続けて進めず（[SWS_Dcm_00141] の代用）、送信中に届いた
+新しい要求は処理せず無視します（ログ: `req SID=0x.. ignored (CanTp TX busy)`。要求が届いたこと
+自体はテスターの生存の証拠として S3 タイマを更新します。[SWS_Dcm_00557]。
+`Bsw_DcmStack_CanTpBusy_test.cpp` 参照）。
+
 ## フロー制御パラメータ（BS / STmin）
 
 FC フレームの byte[1] が BS（Block Size）、byte[2] が STmin（Separation Time minimum）です。
@@ -189,9 +206,9 @@ CF の本数は 8 本から 9 本へ増えるため、CF 数を固定値で持�
 送信 → 0x7E0: [03 19 02 FF 00 00 00 00]
 
 # 応答 FF（総長 11 バイト = 3 ヘッダ + 2 DTC × 4 バイト）
-受信 ← 0x7E8: [10 0B 59 02 2D 00 01 03]
+受信 ← 0x7E8: [10 0B 59 02 3D 00 01 03]
                └──┘ └──────────────────┘
-               FF    59=応答SID 02=subFunc 2D=availMask
+               FF    59=応答SID 02=subFunc 3D=availMask
                総長  00 01 03 = DTC1コード(ENGINE_SPEED_NO_FLAG)
 
 # FC 送信（Cangaroo 等で手動送信 / 自動応答）

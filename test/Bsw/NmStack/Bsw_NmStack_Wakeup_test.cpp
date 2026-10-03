@@ -1,9 +1,9 @@
 /**
  * \file    Bsw_NmStack_Wakeup_test.cpp
- * \brief   README.md「ウェイクアップ検出とウェイクアップ検証」コールチェーンの
+ * \brief   docs/can_stack.md「ウェイクアップ検出とウェイクアップ検証」コールチェーンの
  *          単体テスト（GoogleTest / PlatformIO `[env:native_chain]`）。
  *
- * \details 本テストは README の以下のコールチェーンをそのまま実行して確認する：
+ * \details 本テストは docs/can_stack.md の以下のコールチェーンをそのまま実行して確認する：
  *
  *              Can_MainFunction_Wakeup()（SLEEP 中、INT ピンのウェイクアップ
  *                                          要因を検出。本テストでは
@@ -55,7 +55,7 @@
  *          振り分けより前に無条件で呼ばれる、CanIf.c 参照）、CanIf の RxPdu
  *          設定は 0 件のまま使う。
  *
- *          Bsw_ComStack_Signal_Tx_test.cpp/Bsw_ComStack_Signal_Rx_test.cpp（README「Tx/Rx処理」の
+ *          Bsw_ComStack_Signal_Tx_test.cpp/Bsw_ComStack_Signal_Rx_test.cpp（docs/can_stack.md「Tx/Rx処理」の
  *          コールチェーン）と同じ `[env:native_chain]` 上で CanSM.c の実体を
  *          共有する（詳細は Bsw_ComStack_Signal_Tx_test.cpp 冒頭コメント参照）。
  */
@@ -118,7 +118,7 @@ protected:
         CanNm_Init(NULL);
         Nm_Init(NULL);
 
-        // ボランタリスリープ済みの状態を Arrange する（README のとおり、
+        // ボランタリスリープ済みの状態を Arrange する（docs/can_stack.md のとおり、
         // ウェイクアップ検証は CANSM_STATE_NO_COM からの起床のみを受け付ける）。
         // ComM_Init() 直後の既定値は NO_COM のため、ComM 側は別途要求しなくても
         // この前提と一致する。

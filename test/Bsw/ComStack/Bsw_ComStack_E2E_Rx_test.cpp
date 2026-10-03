@@ -1,9 +1,9 @@
 /**
  * \file    Bsw_ComStack_E2E_Rx_test.cpp
- * \brief   README.md「Rx 処理」→「E2E（EngineInfo/AbsInfo 受信）」コールチェーンの
+ * \brief   docs/can_stack.md「Rx 処理」→「E2E（EngineInfo/AbsInfo 受信）」コールチェーンの
  *          単体テスト（GoogleTest / PlatformIO `[env:native_chain]`）。
  *
- * \details README の該当コールチェーン図：
+ * \details docs/can_stack.md の該当コールチェーン図：
  *
  *              Com_RxIndication()                 ← EngineInfo/AbsInfo（RxIndicationCbk 経由）
  *                → Rte_COMRxInd_EngineInfo/AbsInfo()
@@ -14,7 +14,7 @@
  *          RxIndicationCbk フックの部分（E2EXf_Inv_EngineInfo() →
  *          E2E_P05Check() が CRC・カウンタ連続性を正しく検証すること）に絞り、
  *          `Com_RxIndication()` を直接呼ぶところから始める
- *          （README の図もこの粒度で揃えている）。
+ *          （docs/can_stack.md の図もこの粒度で揃えている）。
  *
  *          本番の RxIndicationCbk（`Rte_COMRxInd_EngineInfo()`）は `Rte.c` に
  *          あるが、`Rte.c` 自体は IoHwAb/FiM/App_EngineManager/
@@ -28,7 +28,7 @@
  *          の本番設定（`E2EXf_EngineInfoRxCfg`、DataID=0x100、DataLength=7、
  *          `E2EXf_Inv_EngineInfo()` が内部で直接参照）をそのまま使う。
  *          E2EMon への通知（`E2EMon_NotifyCheckResultP05()`）
- *          は README の「E2E」節の図に含めていないため対象外
+ *          は docs/can_stack.md の「E2E」節の図に含めていないため対象外
  *          （E2EMon 自体はテレメトリ集計という別軸の話であり、CRC/カウンタ
  *          検証というこのコールチェーンの本題ではないため）。
  *

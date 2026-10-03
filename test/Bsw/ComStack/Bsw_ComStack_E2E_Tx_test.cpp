@@ -1,9 +1,9 @@
 /**
  * \file    Bsw_ComStack_E2E_Tx_test.cpp
- * \brief   README.md「Tx 処理」→「E2E（E2EHealthStatus 送信）」コールチェーンの
+ * \brief   docs/can_stack.md「Tx 処理」→「E2E（E2EHealthStatus 送信）」コールチェーンの
  *          単体テスト（GoogleTest / PlatformIO `[env:native_chain]`）。
  *
- * \details README の該当コールチェーン図：
+ * \details docs/can_stack.md の該当コールチェーン図：
  *
  *              Com_MainFunctionTx()
  *                → TxTransformCbk があれば呼ぶ    ← Rte_COMTransform_E2EHealthStatus()

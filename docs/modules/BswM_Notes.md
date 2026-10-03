@@ -39,9 +39,9 @@ Rule 8-19 は UDS 0x28 CommunicationControl（2026-09-05 追加）専用です�
 [`Dcm_Notes.md`](./Dcm_Notes.md) の「CommunicationControl（SID 0x28）」を
 参照してください。
 
-Rule 3/5 が複合条件（`BswM_ConditionType` の配列を `BswM_LogicalOperatorType`
+Rule 3/5/6 が複合条件（`BswM_ConditionType` の配列を `BswM_LogicalOperatorType`
 (`BSWM_OP_AND`/`BSWM_OP_OR`) で組み合わせる、[SWS_BswM_00808]
-BswMLogicalExpression の簡略版）を使う唯一の例です。以前は単一条件ルール
+BswMLogicalExpression の簡略版）を使う例です（Rule 3 と 6 が AND、Rule 5 が OR）。以前は単一条件ルール
 しか組めない設計（AND/OR の LogicalExpression 相当が未実装）でしたが、
 CanNm（CanNm 状態機械）導入により ComM のチャネルモードが EcuM の RUN/POST_RUN
 とは独立に変化しうるようになったため、「EcuM が RUN でも CAN チャネルが
@@ -109,13 +109,13 @@ CanNm は POST_RUN 中も動き続けますが、POST_RUN へ遷移する経路�
 POST_RUN 遷移の原因にはならない）では ComM は既に NO_COM になっているため、
 実際には送信を行いません。
 
-`BSWM_TASK_MASK_SHUTDOWN = 0x163EE`（`BSWM_TASK_MASK_ALL` から bit10=WdgM_TriggerHwWatchdog・
-bit0=Can_MainFunction_Read・bit15=Can_MainFunction_Wakeup・bit4=CanSM_MainFunction・
-bit12=NvM_MainFunction・bit17=MemIf_MainFunction・bit11=CanNm_MainFunction を除いたもの）が
-SHUTDOWN 時の無効化対象マスクです。SecOC_MainFunctionTx（bit16）はこの除外リストに
+`BSWM_TASK_MASK_SHUTDOWN = 0x2C7EE`（`BSWM_TASK_MASK_ALL` から bit11=WdgM_TriggerHwWatchdog・
+bit0=Can_MainFunction_Read・bit16=Can_MainFunction_Wakeup・bit4=CanSM_MainFunction・
+bit13=NvM_MainFunction・bit18=MemIf_MainFunction・bit12=CanNm_MainFunction を除いたもの）が
+SHUTDOWN 時の無効化対象マスクです。SecOC_MainFunctionTx（bit17）はこの除外リストに
 含まれないため（POST_RUN 中に Com_MainFunctionTx が止まり SecOC の送信要求自体が
 発生しなくなるのと同じ理由で、無効化しておくのが本来の設計意図）、
-Can_MainFunction_Write（bit13）・Can_MainFunction_BusOff（bit14）と同様に
+Can_MainFunction_Write（bit14）・Can_MainFunction_BusOff（bit15）と同様に
 SHUTDOWN 中は停止します。BusOff ポーリングは `CanState==CAN_CS_STARTED` が条件のため
 SHUTDOWN 中（SLEEP か Listen-Only）はどのみち無意味であり、TX 確認も SHUTDOWN 中は
 新規送信が発生しないため停止して問題ありません（詳細は [`Can_Notes.md`](./Can_Notes.md) の
@@ -140,6 +140,10 @@ MemIf_Write() でジョブを「開始」するだけで、実際の物理バイ
 （詳細は [`NvM_Notes.md`](./NvM_Notes.md) の非同期書き込みジョブキュー参照）。
 この 7 タスクの存在により、SHUTDOWN は HW ウォッチドッグを維持しつつ CAN バス活動
 （ボランタリスリープからのウェイクアップ）で常に RUN へ復帰できる状態になっています。
+
+なお、`BSWM_TASK_MASK_ALL`（bit0〜18）に含まれない 3 タスク（bit19=App_GptDemo_Run、
+bit20=ComM_MainFunction、bit21=SecOC_MainFunctionRx）は、BswM のルールで止められないため、
+RUN・POST_RUN・SHUTDOWN のいずれでも動き続けます（ComM と SecOC_Rx の周期関数は現状 NOP）。
 
 ## POST_RUN でアプリタスクのみ停止する理由
 

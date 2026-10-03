@@ -136,6 +136,39 @@ NOT_OK を返すまで継続する。MCP2515 の INT はレベル方式（未読
 > 正しさを委ねず、独立したポーリングでも動作を保証する設計にした経緯は
 > 後述の「[開発の経緯](#rx-割り込み化の実機検証で得られた教訓)」を参照。
 
+<a id="can-controller-states"></a>
+## コントローラの状態遷移と Bus-Off の検出
+
+**状態遷移（`Can_SetControllerMode()`）**: AUTOSAR の状態遷移を MCP2515 の動作モードへ
+対応づけています。標準の 4 遷移に加え、協調スリープのための遷移を 1 つ持ちます。
+
+| 要求 | 遷移 | MCP2515 |
+|------|------|---------|
+| `CAN_T_START` | `CAN_CS_STOPPED` → `CAN_CS_STARTED`（`STARTED` からの再要求は何もせず許可する） | 通常モード |
+| `CAN_T_STOP` | `CAN_CS_STARTED` → `CAN_CS_STOPPED` | 受信専用（Listen-Only） |
+| `CAN_T_SLEEP` | `CAN_CS_STOPPED` → `CAN_CS_SLEEP`。**`CAN_CS_STARTED` からの直接遷移も許可する**（本プロジェクト固有の拡張） | スリープ |
+| `CAN_T_WAKEUP` | `CAN_CS_SLEEP` → `CAN_CS_STOPPED` | 受信専用 |
+
+`STARTED` から直接スリープできるのは、CanNm の協調スリープのためです。ComM は CanNm が
+実際に Bus-Sleep Mode へ到達するまで CanSM に NO_COM を伝えずコントローラを稼働させ続け、
+到達した瞬間に `CanSM_RequestComMode(NO_COM)` が `CAN_T_STOP` を経由せず直接スリープさせます
+（[`CanSM_Notes.md`](./CanSM_Notes.md) 参照）。`CAN_CS_SLEEP` からは、まず `CAN_T_WAKEUP` で
+`CAN_CS_STOPPED` へ戻らないと `CAN_T_START` / `CAN_T_STOP` へ到達できません。
+`Can_Write()` は `CAN_CS_STARTED` 以外では送信を拒否します（`CAN_NOT_OK`）。
+
+**Bus-Off の検出は 2 経路あります**（どちらも `CanIf_ControllerBusOff()` で上位へ通知する）:
+
+1. **一次検出（`Can_MainFunction_BusOff()`、1ms 周期）**: MCP2515 の ERRIE がデフォルトで無効で、
+   Bus-Off が起きても INT ピンがアサートされないため、EFLG レジスタの TXBO ビット
+   （`Can_Hw_IsBusOff()`）を毎回ポーリングします。`CAN_CS_STARTED` のときだけ見ます。
+2. **二次検出（`Can_Write()` 内のソフトウェア代替）**: `mcp_can` 環境では、送信失敗が続いても
+   TXBO が立たないことがあります（`Can.c` の該当コメント参照）。そのため `Can_Write()` が連続で
+   `CAN_BUSOFF_TX_ERR_THRESHOLD`（5）回送信に失敗したら、Bus-Off とみなして通知します
+   （ログ: `SW BusOff fallback: 5 consecutive TX failures`）。送信が成功するとカウンタは 0 に戻ります。
+   バス上に他のノードが居ない（ACK が返らない）状況でも、この経路で Bus-Off と判定されます。
+
+Bus-Off 検出後の回復は CanSM が L1/L2 バックオフで行います（[`CanSM_Notes.md`](./CanSM_Notes.md)）。
+
 ## Can_Hw（下位ドライバ実装）
 
 MCP2515 / `mcp_can` C++ ラッパー（RX 割り込み登録 `Can_Hw_AttachRxIsr` を含む）。

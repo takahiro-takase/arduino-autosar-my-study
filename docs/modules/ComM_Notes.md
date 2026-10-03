@@ -30,10 +30,32 @@ ComM_ComputeAggregatedMode():
 ComM_RequestComMode(User, ComMode):
   ComM_UserRequest[User] = ComMode
   aggregated = ComM_ComputeAggregatedMode()
-  aggregated == 現在のチャネルモード ?
-    YES → 何もしない（要求は記録されたがチャネルへの反映は不要）
-    NO  → CanSM_RequestComMode(0, aggregated) ← チャネルへ実際に反映
+  ComM_ApplyAggregatedRequest(aggregated):
+    FULL_COM が再要求され、CanNm の協調スリープ待ち中（ComM_NmReleasePending）なら
+      → 待ちを取り消し Nm_NetworkRequest()（CanSM は呼ばない）
+    aggregated == 現在のチャネルモード            → 何もしない
+    NO_COM 要求で、既に協調スリープ待ち中         → 何もしない（再要求は無視）
+    FULL_COM → NO_COM（初回）
+      → CanSM は呼ばず Nm_NetworkRelease() だけを送る。チャネルモードは FULL_COM のまま
+        （CanNm が Bus-Sleep Mode へ到達するまで待つ。[SWS_ComM_00133]）
+    NO_COM → FULL_COM
+      → CommunicationAllowed ゲートを通して CanSM_RequestComMode(FULL_COM)
+    それ以外 → CanSM_RequestComMode(aggregated)
 ```
+
+NO_COM への遷移だけは、ここで CanSM を呼びません。物理スリープは CanNm の状態機械が
+Prepare Bus-Sleep → Bus-Sleep へ進み、`ComM_Nm_PrepareBusSleepMode()`（SILENT_COM へ）、
+`ComM_Nm_BusSleepMode()`（`CanSM_RequestComMode(NO_COM)` で物理スリープ）の順に呼ばれて
+初めて起きます。途中で他ノードの NM フレームを受信すれば `ComM_Nm_NetworkMode()` が呼ばれ、
+チャネルは FULL_COM へ戻ります（詳細は [`CanNm_Notes.md`](./CanNm_Notes.md) の
+「ComM との連携」節）。
+
+**CommunicationAllowed ゲート（[SWS_ComM_00871]/[00895]）**: ユーザ起因の NO_COM → FULL_COM は、
+`ComM_CommunicationAllowed(TRUE)` が呼ばれるまで CanSM へ転送せず保留します（既定は FALSE）。
+本プロジェクトでは `EcuM_Init()` が `ComM_Init()` 直後・`CanNm_Init()` より前に一度だけ TRUE を通知し、
+以後は常時許可です。保留した要求は個別に記憶せず、TRUE 通知時に集約結果を再評価して発行します。
+CanNm 起因の復帰（`ComM_Nm_NetworkMode()` 等）はこのゲートを通しません。BswM からの動的な
+切り替えは配線していません。
 
 「誰か一人でも通信を必要としていればバスは落とさない」という考え方で、
 ユーザが NO_COM を要求しても Dcm が診断中を通知していればチャネルは
@@ -79,7 +101,9 @@ INFO ComM: User0 req=0 -> aggregated=2 (channel=2)   ← DcmがActiveDiagnostic�
 [Extended Session 終了後、なおエンジン OFF が継続していた場合]
 INFO Dcm: S3 timeout -> session=Default
 INFO ComM: DCM InactiveDiagnostic ch=0 -> aggregated=0   ← User0も既にNO_COM要求済みのため今度こそ集約結果が変化
-INFO CanSM: ->NO_COM (CAN controller SLEEP)
+INFO ComM: FULL_COM -> NO_COM requested: Nm_NetworkRelease() sent, awaiting Bus-Sleep Mode
+   （CanNm が Ready Sleep → Prepare Bus-Sleep → Bus-Sleep と進む。以降の流れは CanNm_Notes.md のログ例）
+INFO CanSM: ->NO_COM (physical sleep)   ← CanNm が Bus-Sleep Mode へ到達してから
 ```
 
 ## ウェイクアップ時の User0 要求の再同期

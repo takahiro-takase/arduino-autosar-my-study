@@ -94,7 +94,7 @@ DEM_STATUS のデフォルト値定義に `Dem_Cfg.h` の定数を使ってい�
 ```c
 #include <EEPROM.h>
 // ...
-EEPROM.write(0x0DU, EEPROM.read(0x0DU) ^ 0xFFU);  // DEM_AGING ブロックの先頭バイトを破壊
+EEPROM.write(0x12U, EEPROM.read(0x12U) ^ 0xFFU);  // DEM_AGING ブロックの先頭バイトを破壊（NVM_BLOCK_DEM_AGING_EEPROM_ADDR）
 ```
 
 > **動作確認の前に**: 上記を追加して再アップロードすると、`NvM_Init()` が
@@ -149,11 +149,12 @@ MemIf_MainFunction()（10ms 周期、Os_PBCfg.c Task 18。実体は Fee_MainFunc
 
 Task 13（NvM）と Task 18（MemIf）はどちらも同じ 10ms 周期で、同一パス内を
 インデックス昇順で実行されるため、NvM がジョブを開始した tick のうちに
-MemIf 側の最初の 1 バイトも書かれます。最大 11 バイト（データ本体 10 バイト
-+ CRC 1 バイト）のブロックでも、1 回の `MemIf_MainFunction()` 呼び出しで
-ブロッキングするのは EEPROM 1 バイト分の書き込み時間のみです。DTC 確定から
-永続化完了までは最大 11 サイクル（10ms 周期なので 110ms 程度、フェーズ切替
-待ちの分だけ数 tick 余分にかかることがあります）かかりますが、Dem や
+MemIf 側の最初の 1 バイトも書かれます。最大 16 バイト（データ本体 15 バイト
++ CRC 1 バイト。Dem の 3 ブロックはイベント数 `DEM_EVENT_COUNT`=15 と同じ長さ）のブロックでも、
+1 回の `MemIf_MainFunction()` 呼び出しでブロッキングするのは EEPROM 1 バイト分の
+書き込み時間のみです。DTC 確定から永続化完了までは 1 ブロックで最大 16 サイクル
+（10ms 周期なので 160ms 程度、フェーズ切替待ちの分だけ数 tick 余分にかかることが
+あります。冗長ブロックの DEM_EXTENDED は 2 面を順に書くため約 2 倍）かかりますが、Dem や
 呼び出し元は結果を待たない fire-and-forget 設計（`(void)NvM_WriteBlock(...)`）
 のため、この遅延は実用上問題になりません。
 
@@ -195,6 +196,25 @@ Dem へ FAILED 報告します（[SWS_NvM_00865]）。以前はこの上限が�
 書き直す場合があり、そのブロックの書き込みが失敗している状況では、再書き込みも同様に
 リトライ上限まで試して諦めます。
 
+## 書き込みスキップ・書き込み保護・NvM_ReadBlock
+
+**CRC 一致時の書き込みスキップ（[SWS_NvM_00852]、`UseCrcCompMechanism`）**: `NvM_WriteBlock()` は、
+書き込むデータの CRC が、直近の読み込み／書き込みで確定した CRC と一致したとき、EEPROM へ
+物理書き込みをせず即座に `NVM_REQ_OK` で完了します（ログ: `write skipped (CRC unchanged)`）。
+EEPROM の書き換え回数（寿命）を節約するための機能で、`NvM_PBCfg.c` で
+`UseCrcCompMechanism=1` にした非冗長ブロック（MAGIC / STATUS / AGING）にだけ有効です。冗長ブロック
+（DEM_EXTENDED）は片面だけ壊れている状態を区別できないため対象外にしています。そのブロックの
+書き込みジョブが進行中のときは、スキップせず必ず通常の書き込み経路（進行中ジョブの中断と巻き戻し）を
+通します。比較は 8bit CRC のみなので、衝突確率（1/256）は許容しています。
+
+**書き込み保護（`NvM_SetBlockProtection()`）**: 保護を有効にしたブロックへの `NvM_WriteBlock()` /
+`NvM_RestoreBlockDefaults()` は `E_NOT_OK` で拒否されます（ログ: `write rejected (write-protected)`）。
+そのブロックの書き込みジョブが進行中の間は保護を切り替えられません（`NVM_E_BLOCK_PENDING`）。
+現状、本番コードから保護を有効にする呼び出しはありません。
+
+**`NvM_ReadBlock()`**: EEPROM を読み直さず、`NvM_Init()` が起動時に RAM ミラーへ
+ロード・検証済みの内容を返すだけです（`NvM_DstPtr` が NULL ならコピーせず `E_OK`）。
+
 ## 冗長ブロック（Redundant Block）
 
 CRC は「壊れたことを検出する」機能ですが、壊れてしまった後に救えるのは
@@ -233,17 +253,17 @@ DEM_AGING（経年回復カウンタ）は、たとえ CRC 不一致でデフォ
 その後の操作サイクル・エンジンサイクルの経過で内容が自然に再構築されていく
 性質のデータです。一方 DEM_EXTENDED の故障確定回数は「車両の生涯を通じた
 累積値」であり、一度失われた過去の回数は二度と再現できません。冗長化の
-投資対効果（EEPROM 11 バイトの追加消費と書き込み時間 2 倍）が明確に
+投資対効果（EEPROM 16 バイトの追加消費と書き込み時間 2 倍）が明確に
 見合うのはこのブロックだけと判断しました。
 
 **動作確認方法**: 前述の CRC 不一致確認と同様、`main.cpp` の `setup()`
 冒頭（`EcuM_Init()` より前）に DEM_EXTENDED のプライマリ面（アドレス
-0x18）を破壊するコードを一時的に追加して再アップロードします。
+0x22。`NVM_BLOCK_DEM_EXTENDED_EEPROM_ADDR`）を破壊するコードを一時的に追加して再アップロードします。
 
 ```c
 #include <EEPROM.h>
 // ...
-EEPROM.write(0x18U, EEPROM.read(0x18U) ^ 0xFFU);  // DEM_EXTENDED プライマリ面の先頭バイトを破壊
+EEPROM.write(0x22U, EEPROM.read(0x22U) ^ 0xFFU);  // DEM_EXTENDED プライマリ面の先頭バイトを破壊
 ```
 
 `NvM: block=3 redundant: primary CRC mismatch, recovered from mirror`

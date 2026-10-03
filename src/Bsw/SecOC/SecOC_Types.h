@@ -32,7 +32,7 @@
  *                           送信される 8bit がそのまま Complete Freshness Value
  *                           となる（Profile 1 の SecOCFreshnessValueTxLength=8bit
  *                           と一致させ、実車のような「送信されない上位ビットの
- *                           推定復元」を不要にする簡略化。詳細は README 参照）。
+ *                           推定復元」を不要にする簡略化。詳細は docs/modules/SecOC_Notes.md 参照）。
  *   MacOffset/TxLength    : Secured I-PDU 内での切り詰め MAC の位置・長さ。
  *                           SecOC Profile 1（[SWS_SecOC_00192]）に倣い
  *                           TxLength=3byte（24bit、AES-CMAC 128bit 出力の

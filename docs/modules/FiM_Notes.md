@@ -66,17 +66,17 @@ FiM_GetFunctionPermission(FID):
 ```
 # CAN Bus-Off が確定（3 回のリトライ断念）→ RUNNING LED が抑止される
 [30313ms] WARN  Dem: FAILED ev=7 dtc=0x000108
-[30400ms] WARN  FiM: FID0 inhibited (ev=7 status=0x2D)
+[30400ms] WARN  FiM: FID0 inhibited (ev=7)
 [30900ms] INFO  WarnInd: [RUN:0 FAULT:0 ABS:0]   # state=RUNNING でも D6 は消灯のまま
 
 # UDS 0x14 で全 DTC クリア → 抑止解除
-[31000ms] INFO  Dcm: 14 ClearAllDTC
+[31000ms] INFO  Dcm: 14 ClearDTC dtc=0xFFFFFF
 [31100ms] INFO  FiM: FID0 permitted again
 [31600ms] INFO  WarnInd: [RUN:1 FAULT:0 ABS:0]   # state=RUNNING なら D6 が再点灯
 
 # 警告確認ボタンが 5 秒以上押されたまま固着確定 → FAULT 解除ボタンが無効化
 [40000ms] WARN  IoHwAb: Button stuck dtc=0x000106
-[40100ms] WARN  FiM: FID1 inhibited (ev=5 status=0x2D)
+[40100ms] WARN  FiM: FID1 inhibited (ev=5)
 [40500ms] WARN  AppEng: FAULT->OFF btn=1 inhibited (FiM)   # 押下を受理しない
 ```
 

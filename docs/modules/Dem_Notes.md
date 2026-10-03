@@ -100,7 +100,7 @@ counter == -limit に達した瞬間のみ → 確定 PASSED（TF クリア。CD
 
 | limit | 対象イベント | 理由 |
 |---|---|---|
-| 1（即確定） | BUTTON_STUCK, CAN_BUSOFF, E2E_ABSINFO, E2E_ENGINEINFO | IoHwAb の 5 秒固着判定／CanSM の 3 回リトライ後の断念は、それ自体が「十分粘った結果」。E2E は CRC 計算自体がエラー判定のため単発で確定。Dem 側で重ねてデバウンスすると二重チェックになり、確定が不必要に遅れる（または構造的に確定不可能になる） |
+| 1（即確定） | BUTTON_STUCK, CAN_BUSOFF, E2E_ABSINFO, E2E_ENGINEINFO, WDGM_SUPERVISION, WDG_DISABLE_REJECTED, NVM_INTEGRITY_FAILED, NVM_LOSS_OF_REDUNDANCY, NVM_REQ_FAILED | IoHwAb の 5 秒固着判定／CanSM の 3 回リトライ後の断念は、それ自体が「十分粘った結果」。E2E は E2EXf が `E2E_SMCheck()` の窓判定（直近 3 回中の ERROR 件数）で通信路の異常を確定してから 1 回報告する。WdgM の STOPPED、Wdg の無効化拒否、NvM の CRC 不整合・書き込み失敗は決定論的な判定で、モジュール側で既に確定している。Dem 側で重ねてデバウンスすると二重チェックになり、確定が不必要に遅れる（または構造的に確定不可能になる） |
 | 2（複数回要求） | ENGINE_OVERHEAT, ENGINE_STALL, ENGINE_SPEED_NO_FLAG, STARTING_TIMEOUT, COMM_TIMEOUT, ADC_VOLT_LOW | モニタは瞬時のしきい値超え（temp≥100 等）をそのまま報告するだけで、持続性チェックを行っていない。単発の誤検出で確定させないために Dem 側でデバウンスする |
 
 > イベントごとの閾値にした経緯（当初は全イベント共通の単一閾値だった）は
@@ -118,7 +118,10 @@ counter == -limit に達した瞬間のみ → 確定 PASSED（TF クリア。CD
 ## 複数 DTC を発生させる手順
 
 各操作後は 3〜4 秒待ってシリアルモニタで状態遷移を確認してください（Runnable は 3 秒周期）。
-フレーム表記は `<CAN ID>#<byte0>.<byte1>...`（Cangaroo 等の送信フォーマット）。
+EngineInfo（0x100）は E2E Profile05 保護付きのため、Cangaroo 等で生フレームを送っても CRC16・Counter が
+合わず Com が破棄します。以下の `data: [...]` は uds_tester の「EngineInfo (0x100)」ボタンに設定する
+シグナル部 4 バイト（回転数 H・L / 水温 / フラグ。0x80 が EngineOnFlag=1）で、E2E ヘッダは
+ボタンが自動付加します。
 
 デバウンス（前述）により、ENGINE_OVERHEAT / ENGINE_STALL / ENGINE_SPEED_NO_FLAG / STARTING_TIMEOUT は
 **同じ故障を別々の機会に 2 回**発生させないと DTC が確定（CDTC セット）しません。
@@ -126,28 +129,28 @@ counter == -limit に達した瞬間のみ → 確定 PASSED（TF クリア。CD
 
 | 順序 | 操作 | 状態 | デバウンス進行・登録 DTC |
 |-----|------|------|------------------------|
-| 1 | `100#01.F4.19.00` 送信（speed=500, flag=0） | OFF→FAULT | SPEED_NO_FLAG: cnt 0→1（PRE-FAILED） |
-| 2 | `100#00.00.19.00` 送信（flag=0） | FAULT→OFF | — |
-| 3 | `100#01.F4.19.00` 再送信（speed=500, flag=0） | OFF→FAULT | SPEED_NO_FLAG: cnt 1→2 → **確定** |
-| 4 | `100#00.00.19.00` 送信（flag=0） | FAULT→OFF | — |
-| 5 | `100#00.64.19.80` 送信（speed=100, flag=1）→ 6 秒待つ | OFF→STARTING→FAULT | STARTING_TIMEOUT: cnt 0→1（PRE-FAILED） |
-| 6 | `100#00.00.19.00` 送信（flag=0） | FAULT→OFF | — |
-| 7 | `100#00.64.19.80` 再送信（speed=100, flag=1）→ 6 秒待つ | OFF→STARTING→FAULT | STARTING_TIMEOUT: cnt 1→2 → **確定** |
-| 8 | `100#00.00.19.00` 送信（flag=0） | FAULT→OFF | — |
-| 9 | `100#03.E8.19.80` 送信（speed=1000, flag=1） | OFF→STARTING→RUNNING | — |
+| 1 | `data: [0x01, 0xF4, 0x19, 0x00]` 送信（speed=500, flag=0） | OFF→FAULT | SPEED_NO_FLAG: cnt 0→1（PRE-FAILED） |
+| 2 | `data: [0x00, 0x00, 0x19, 0x00]` 送信（flag=0） | FAULT→OFF | — |
+| 3 | `data: [0x01, 0xF4, 0x19, 0x00]` 再送信（speed=500, flag=0） | OFF→FAULT | SPEED_NO_FLAG: cnt 1→2 → **確定** |
+| 4 | `data: [0x00, 0x00, 0x19, 0x00]` 送信（flag=0） | FAULT→OFF | — |
+| 5 | `data: [0x00, 0x64, 0x19, 0x80]` 送信（speed=100, flag=1）→ 6 秒待つ | OFF→STARTING→FAULT | STARTING_TIMEOUT: cnt 0→1（PRE-FAILED） |
+| 6 | `data: [0x00, 0x00, 0x19, 0x00]` 送信（flag=0） | FAULT→OFF | — |
+| 7 | `data: [0x00, 0x64, 0x19, 0x80]` 再送信（speed=100, flag=1）→ 6 秒待つ | OFF→STARTING→FAULT | STARTING_TIMEOUT: cnt 1→2 → **確定** |
+| 8 | `data: [0x00, 0x00, 0x19, 0x00]` 送信（flag=0） | FAULT→OFF | — |
+| 9 | `data: [0x03, 0xE8, 0x19, 0x80]` 送信（speed=1000, flag=1） | OFF→STARTING→RUNNING | — |
 | 10 | EngineInfo の送信を止めて 8〜11 秒待つ（Runnable 周期との位相次第） | RUNNING→FAULT | COMM_TIMEOUT: 毎サイクル報告のため 2 サイクル目で自然に**確定** |
-| 11 | `100#00.00.00.00` 送信（flag=0, speed=0）で復帰→ OFF へ | FAULT→OFF | — |
-| 12 | `100#03.E8.19.80` 送信（speed=1000, flag=1） | OFF→STARTING→RUNNING | — |
-| 13 | `100#03.E8.64.80` 送信（temp=100, flag=1） | RUNNING→FAULT | ENGINE_OVERHEAT: cnt 0→1（PRE-FAILED） |
-| 14 | `100#00.00.19.00` 送信（flag=0） | FAULT→OFF | — |
-| 15 | `100#03.E8.19.80` 送信（speed=1000, flag=1） | OFF→STARTING→RUNNING | — |
-| 16 | `100#03.E8.64.80` 再送信（temp=100, flag=1） | RUNNING→FAULT | ENGINE_OVERHEAT: cnt 1→2 → **確定** |
-| 17 | `100#00.00.19.00` 送信（flag=0） | FAULT→OFF | — |
-| 18 | `100#03.E8.19.80` 送信（speed=1000, flag=1） | OFF→STARTING→RUNNING | — |
-| 19 | `100#00.32.19.80` 送信（speed=50, flag=1） | RUNNING→FAULT | ENGINE_STALL: cnt 0→1（PRE-FAILED） |
-| 20 | `100#00.00.19.00` 送信（flag=0） | FAULT→OFF | — |
-| 21 | `100#03.E8.19.80` 送信（speed=1000, flag=1） | OFF→STARTING→RUNNING | — |
-| 22 | `100#00.32.19.80` 再送信（speed=50, flag=1） | RUNNING→FAULT | ENGINE_STALL: cnt 1→2 → **確定** |
+| 11 | `data: [0x00, 0x00, 0x00, 0x00]` 送信（flag=0, speed=0）で復帰→ OFF へ | FAULT→OFF | — |
+| 12 | `data: [0x03, 0xE8, 0x19, 0x80]` 送信（speed=1000, flag=1） | OFF→STARTING→RUNNING | — |
+| 13 | `data: [0x03, 0xE8, 0x64, 0x80]` 送信（temp=100, flag=1） | RUNNING→FAULT | ENGINE_OVERHEAT: cnt 0→1（PRE-FAILED） |
+| 14 | `data: [0x00, 0x00, 0x19, 0x00]` 送信（flag=0） | FAULT→OFF | — |
+| 15 | `data: [0x03, 0xE8, 0x19, 0x80]` 送信（speed=1000, flag=1） | OFF→STARTING→RUNNING | — |
+| 16 | `data: [0x03, 0xE8, 0x64, 0x80]` 再送信（temp=100, flag=1） | RUNNING→FAULT | ENGINE_OVERHEAT: cnt 1→2 → **確定** |
+| 17 | `data: [0x00, 0x00, 0x19, 0x00]` 送信（flag=0） | FAULT→OFF | — |
+| 18 | `data: [0x03, 0xE8, 0x19, 0x80]` 送信（speed=1000, flag=1） | OFF→STARTING→RUNNING | — |
+| 19 | `data: [0x00, 0x32, 0x19, 0x80]` 送信（speed=50, flag=1） | RUNNING→FAULT | ENGINE_STALL: cnt 0→1（PRE-FAILED） |
+| 20 | `data: [0x00, 0x00, 0x19, 0x00]` 送信（flag=0） | FAULT→OFF | — |
+| 21 | `data: [0x03, 0xE8, 0x19, 0x80]` 送信（speed=1000, flag=1） | OFF→STARTING→RUNNING | — |
+| 22 | `data: [0x00, 0x32, 0x19, 0x80]` 再送信（speed=50, flag=1） | RUNNING→FAULT | ENGINE_STALL: cnt 1→2 → **確定** |
 
 ## ABS LED 動作確認手順
 
@@ -178,7 +181,7 @@ SID 0x19 の応答に含まれるステータスバイトの各ビットの意�
 | bit4 | 0x10 | TNCLC | testNotCompletedSinceLastClear — クリア後未テスト |
 | bit5 | 0x20 | TFSLC | testFailedSinceLastClear — クリア後に失敗あり |
 
-statusAvailabilityMask = **0x2D**（本実装がサポートするビットの OR）。
+statusAvailabilityMask = **0x3D**（本実装がサポートするビットの OR）。
 
 ## DTC ライフサイクル
 
@@ -209,7 +212,7 @@ statusAvailabilityMask = **0x2D**（本実装がサポートするビットの O
 **DTC 件数を確認（confirmedDTC のみ = statusMask 0x08）:**
 ```
 送信 → 0x7E0: [03 19 01 08 00 00 00 00]
-受信 ← 0x7E8: [06 59 01 2D 01 00 NN 00]
+受信 ← 0x7E8: [06 59 01 3D 01 00 NN 00]
                                    ↑ byte[5] が DTC 件数
 ```
 
@@ -218,7 +221,7 @@ statusAvailabilityMask = **0x2D**（本実装がサポートするビットの O
 1 件の場合（SF 応答）:
 ```
 送信 → 0x7E0: [03 19 02 FF 00 00 00 00]
-受信 ← 0x7E8: [07 59 02 2D D1 D2 D3 SS]
+受信 ← 0x7E8: [07 59 02 3D D1 D2 D3 SS]
                             └────────┘ └── byte[7]: DTC ステータス
                             byte[4-6]: DTC コード (例: 00 01 01 = EngineOverheat)
 ```
@@ -226,7 +229,7 @@ statusAvailabilityMask = **0x2D**（本実装がサポートするビットの O
 2 件以上の場合（マルチフレーム応答 → FC 要）:
 ```
 送信 → 0x7E0: [03 19 02 FF 00 00 00 00]
-受信 ← 0x7E8: [10 0B 59 02 2D D1 D2 D3]  FF（総長 0x0B=11 バイト）
+受信 ← 0x7E8: [10 0B 59 02 3D D1 D2 D3]  FF（総長 0x0B=11 バイト）
 送信 → 0x7E0: [30 00 00 00 00 00 00 00]  FC(CTS)
 受信 ← 0x7E8: [21 SS D1 D2 D3 SS 00 00]  CF（残りの DTC）
 ```
@@ -308,6 +311,7 @@ Dem_Init()（起動時、TF/TFTOC/TNCTC を新サイクル用にリセットす�
 | ENGINE_OVERHEAT / ENGINE_STALL / CAN_BUSOFF | 5 | 重大故障・通信路の重大故障。誤って早期回復しないよう慎重に |
 | ENGINE_SPEED_NO_FLAG / COMM_TIMEOUT / BUTTON_STUCK / ADC_VOLT_LOW / E2E_ABSINFO / E2E_ENGINEINFO | 3 | 標準 |
 | STARTING_TIMEOUT | 2 | 起動時の一過性要因の可能性が高い |
+| WDGM_SUPERVISION / WDG_DISABLE_REJECTED / NVM_INTEGRITY_FAILED / NVM_LOSS_OF_REDUNDANCY / NVM_REQ_FAILED | 5 | 実 HW リセット直前・安全上重要な拒否・EEPROM データ破損や書き込み不良。誤って早期回復しないよう慎重に |
 
 **ログ例（ENGINE_OVERHEAT は閾値 5。再故障せず 5 回起動した場合）：**
 ```

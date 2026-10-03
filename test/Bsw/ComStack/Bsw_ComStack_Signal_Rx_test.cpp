@@ -1,6 +1,6 @@
 /**
  * \file    Bsw_ComStack_Signal_Rx_test.cpp
- * \brief   README.md「Rx 処理（Can → CanIf → PduR → Com の順）」および
+ * \brief   docs/can_stack.md「Rx 処理（Can → CanIf → PduR → Com の順）」および
  *          「デッドライン監視（受信タイムアウト）」コールチェーンの単体テスト
  *          （GoogleTest / CMake native_chain_tests）。通常のシグナル
  *          （非 Signal Group）受信シナリオ専用。

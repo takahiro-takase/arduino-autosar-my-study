@@ -521,22 +521,24 @@ RequestTransferExit の順に送信すると、上記のシーケンスが実機
 ## S3 タイマ（セッションタイムアウト）
 
 ISO 14229-1 では、defaultSession 以外（本実装では ExtendedDiagnosticSession）の間に
-診断要求が一定時間（S3、既定 5000ms）途絶えると、テスターが離脱したとみなして
+診断要求が一定時間（S3）途絶えると、テスターが離脱したとみなして
 ECU が自動的に defaultSession へ復帰します。SID 0x3E（TesterPresent）は、
 他に送るべき要求がないときにこの自動失効を防ぐためだけに存在するサービスです。
+S3 の時間は、仕様（[SWS_Dcm_00143]）では 5 秒固定ですが、TesterPresent の受信ログが
+増えすぎるため、本プロジェクトは `DCM_S3_TIMEOUT_MS`（`Dcm_Cfg.h`）を 60 秒にしています。
 
 ```
 Dcm_ComIndication（要求受信時、SID を問わず毎回）:
-  Dcm_LastActivityMs = millis()        ← S3 タイマをリセット
+  Dcm_LastActivityMs = Dcm_GetNowMs()   ← S3 タイマをリセット（Os のカウンタ値）
 
 Dcm_MainFunction（1000ms 周期、Os Task 9）:
   session != Default かつ
-  millis() - Dcm_LastActivityMs >= 5000ms (DCM_S3_TIMEOUT_MS) ?
+  Dcm_GetNowMs() - Dcm_LastActivityMs >= DCM_S3_TIMEOUT_MS（既定 60000ms）?
     YES → session = Default
           INFO: "S3 timeout -> session=Default"
 ```
 
-ExtendedDiagnosticSession に切り替えた後、5 秒以上どの診断要求も送らずに放置すると、
+ExtendedDiagnosticSession に切り替えた後、60 秒以上どの診断要求も送らずに放置すると、
 セッションが自動的に Default に戻ります。SID 0x22 等のセッション依存サービスは
 本実装ではセッションを問わず応答するため動作に影響しませんが、シリアルログで
 S3 タイマの遷移を確認できます。
@@ -550,7 +552,7 @@ SecurityAccess の Level1（subFunc 0x01/0x02）でアンロックしないと N
 
 ```
 1. requestSeed (27 01)
-     ECU が seed（millis() 由来、毎回変化）を発行し、
+     ECU が seed（Os のカウンタ値〔ms〕の下位 16 ビット、毎回変化）を発行し、
      「seed 発行済み・key 未受信」状態にする。
      既にアンロック済みなら ISO 14229-1 の作法通り allZeroSeed (0x0000) を返す
      （sendKey は不要、テスター側はこれを見てアンロック済みと判断する）。

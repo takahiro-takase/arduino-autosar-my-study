@@ -30,7 +30,8 @@ WdgM は監視対象（Supervised Entity）に「生存報告」を埋め込み�
 WdgM_MainFunction (6000ms 周期) が評価:
   AliveCount >= WDGM_ENGINE_EXPECTED_ALIVE_INDICATIONS (1) ?
     YES → LOCAL_STATUS_OK  → "SE0 OK alive=4"   ← 6000ms の間に Run() が 2 回 × 2 チェックポイント
-    NO  → LOCAL_STATUS_FAILED → "SE0 FAILED alive=0 [HW WDT reset pending]"
+    NO  → LOCAL_STATUS_FAILED → "SE0 alive FAILED alive=0 (exp>=1)"
+          （この不足が WDGM_EXPIRED_SUPERVISION_CYCLE_TOL 周期連続すると EXPIRED。後述）
 
 評価後: AliveCount = 0 にリセットして次サイクル開始
   （HW ウォッチドッグへのリフレッシュはここでは行わない。別タスクの
@@ -59,7 +60,7 @@ Entity 0（App_EngineManager_Run）で許可される遷移グラフ:
 ```
 
 上記以外の遷移（例: START の連続呼び出し、起動直後に END が来る等）は順序違反として
-即座に `LOCAL_STATUS_FAILED` にし、WARN ログを出力します。
+即座に `LOCAL_STATUS_EXPIRED`（猶予なし。[SWS_WdgM_00202]）にラッチし、WARN ログを出力します。
 
 ## Deadline Supervision の仕組み
 
@@ -67,7 +68,7 @@ Alive（来たかどうか）・Logical（正しい順序か）に続く、AUTOS
 アルゴリズムです。チェックポイント間の**実際の経過時間**が許容範囲内かを検査します。
 
 `WdgM_CheckpointReached()` が呼ばれた瞬間に、直前のチェックポイントからの経過時間
-(`millis()` の差分) を計算し、許容テーブル（`WdgM_PBCfg.c` の `WdgM_EngineDeadlines[]`）
+(Os のカウンタ値の差分) を計算し、許容テーブル（`WdgM_PBCfg.c` の `WdgM_EngineDeadlines[]`）
 に設定された `[MinMs, MaxMs]` と比較します。範囲外（遅すぎる、または速すぎる）なら
 `Logical Supervision` と同様に `WdgM_MainFunction` の周期を待たず即座に検出します。
 
@@ -177,8 +178,8 @@ WdgM_Init()（起動シーケンス末尾、Os_Init の直前）:
 
 WdgM_MainFunction()（6000ms 周期、判定のみ）:
   各エンティティの Alive/Logical/Deadline を評価し WdgM_AliveStatus 等に反映する。
-  1 つでも FAILED な判定サイクルが続くたびに WdgM_ExpiredCycleCount を進め、
-  WDGM_EXPIRED_SUPERVISION_CYCLE_TOL（既定 2）回を超えて初めて
+  いずれかのエンティティが EXPIRED になるとグローバル状態が EXPIRED になり、その後
+  WDGM_EXPIRED_SUPERVISION_CYCLE_TOL（既定 2）周期を使い切って初めて
   WdgM_GlobalStopped を立てる（詳細は次項）。ここでは HW ウォッチドッグに触れない。
 
 WdgM_TriggerHwWatchdog()（1000ms 周期、リフレッシュのみ）:
@@ -230,27 +231,40 @@ Status が `WDGM_GLOBAL_STATUS_OK`・`FAILED`・`EXPIRED` のいずれであっ�
 分の判定サイクルを消費する必要があり（`[SWS_WdgM_00216]`/`[SWS_WdgM_00217]`
 等）、単発の異常でいきなりリフレッシュを止めることは想定されていません。
 
-これを表現するため、`WdgM_ExpiredCycleCount`（グローバルレベルの連続 FAILED
-判定サイクル数）と `WdgM_GlobalStopped`（AUTOSAR の `WDGM_GLOBAL_STATUS_STOPPED`
-相当）を持たせています。本実装は Local Supervision Status を OK/FAILED の
-2 値に簡略化しており（仕様本来の FAILED/EXPIRED の区別や、per-SE の
-`WdgMFailedAliveSupervisionRefCycleTol` は実装していません）、その代わりに
-この 1 段のグローバル許容サイクル数（`WDGM_EXPIRED_SUPERVISION_CYCLE_TOL`、
-既定 2）だけを持たせています（この機構を追加するに至った実機不具合の経緯は
-後述の「[開発の経緯](#グローバル-expired-許容サイクルの追加)」参照）。
+これを表現するため、仕様の状態機械（[SWS_WdgM_00076]/[00215]〜[00221]）に沿って
+Local / Global の Supervision Status を持たせています（2026-09 に Local の
+EXPIRED と Global の EXPIRED ラッチを追加した。当初は OK/FAILED の 2 値と
+グローバルの猶予カウンタ 1 つだけの簡略版だった。経緯は後述の
+「[開発の経緯](#グローバル-expired-許容サイクルの追加)」参照）。
+
+- **Local Status**（`WdgM_GetLocalStatus()`）: Logical / Deadline の違反は検出した
+  瞬間に猶予なしで `EXPIRED` になりラッチされる。Alive の不足は最初の周期で
+  `FAILED`、`WdgM_EntityExpiredCycleCount` が `WDGM_EXPIRED_SUPERVISION_CYCLE_TOL`
+  （既定 2）に達すると `EXPIRED` になる（Alive が足りれば OK へ戻り、カウンタも 0 に戻る）。
+- **Global Status**（`WdgM_GetGlobalStatus()`）: 全エンティティが OK なら `OK`。
+  EXPIRED なエンティティが無くいずれかが FAILED なら `FAILED`（猶予を消費せず、
+  無期限に維持できる。[SWS_WdgM_00217]）。いずれかのエンティティが EXPIRED になると
+  `WdgM_GlobalExpired` がラッチされて `EXPIRED` になり、以後は判定サイクルごとに
+  `WdgM_ExpiredCycleCount` を進め、`WDGM_EXPIRED_SUPERVISION_CYCLE_TOL` を使い
+  切った周期で `STOPPED`（`WdgM_GlobalStopped`）になる。`STOPPED` が HW ウォッチドッグの
+  リフレッシュ停止（＝実リセット）の条件。per-SE の
+  `WdgMFailedAliveSupervisionRefCycleTol` は実装していない（周期数は全エンティティ共通）。
 
 ```
 WdgM_MainFunction()（6000ms 周期）:
-  いずれかのエンティティが FAILED ?
-    YES → WdgM_ExpiredCycleCount < TOL ?
-            YES → WdgM_ExpiredCycleCount++          （猶予中、リフレッシュ継続）
-            NO  → WdgM_GlobalStopped = 1             （猶予を使い切った）
-    NO  → WdgM_ExpiredCycleCount = 0, WdgM_GlobalStopped = 0   （全回復）
+  いずれかのエンティティが OK 以外 ?
+    YES → 既に STOPPED ?  → そのまま（最終状態）
+          既に Global EXPIRED ? → WdgM_ExpiredCycleCount < TOL ?
+                                    YES → WdgM_ExpiredCycleCount++   （猶予中、リフレッシュ継続）
+                                    NO  → WdgM_GlobalStopped = 1      （猶予を使い切った）
+          いずれかが Local EXPIRED ? → WdgM_GlobalExpired = 1, WdgM_ExpiredCycleCount = 0
+          （EXPIRED なエンティティが無い = FAILED だけなら、何も消費せず維持）
+    NO  → 全回復（WdgM_ExpiredCycleCount = 0, WdgM_GlobalExpired = 0, WdgM_GlobalStopped = 0）
 
 WdgM_TriggerHwWatchdog()（1000ms 周期）:
   WdgM_GlobalStopped ?
     YES → リフレッシュしない（HW タイムアウト後に実際にリセット）
-    NO  → リフレッシュする（FAILED 判定中でも、猶予の範囲内なら継続）
+    NO  → リフレッシュする（FAILED/EXPIRED 判定中でも、猶予の範囲内なら継続）
 ```
 
 `WdgM_GetLocalStatus()` 自体（各エンティティの真の Supervision 結果）は
@@ -283,12 +297,13 @@ Alive 不足が、POST_RUN の頻度や長さ次第でグローバル猶予を�
 ```
 WdgM_ResumeSupervision()（RUN 復帰のたびに呼ばれる）:
   AliveCount/AliveStatus  ← リセットする（POST_RUN 中の想定内の不足のため）
-  ExpiredCycleCount/GlobalStopped ← リセットしない（恒久的な違反を見逃さないため）
+  ExpiredCycleCount/GlobalExpired/GlobalStopped ← リセットしない（恒久的な違反を見逃さないため）
 
 WdgM_MainFunction()（6000ms 周期の判定サイクル）:
-  いずれかのエンティティが FAILED ?
-    かつ WdgM_SupervisionSuppressed 中 → 猶予カウンタは凍結（進めない）
-    かつ 抑制されていない            → 猶予カウンタを消費（上記の通常フロー）
+  いずれかのエンティティが OK 以外 ?
+    かつ WdgM_SupervisionSuppressed 中 → グローバルの状態遷移（猶予カウンタ含む）と
+                                         エンティティの EXPIRED 猶予カウンタは凍結（進めない）
+    かつ 抑制されていない            → 猶予を消費（上記の通常フロー）
     （全 OK）                        → 猶予カウンタをクリア
 ```
 
@@ -373,8 +388,10 @@ Logical/Deadline のラッチ済み FAILED 状態、およびグローバル猶�
 
 Alive・Logical・Deadline の 3 つの Supervision は、それぞれ独立したステータス
 （`WdgM_AliveStatus[]` / `WdgM_LogicalStatus[]` / `WdgM_DeadlineStatus[]`）で
-管理されます。`WdgM_GetLocalStatus()` と HW ウォッチドッグの refresh 判定は、
-いずれか一つでも FAILED なら FAILED として扱います。
+管理されます。`WdgM_GetLocalStatus()` はこの 3 つを統合し、Logical / Deadline の
+いずれかが EXPIRED なら EXPIRED、そうでなく Alive が OK 以外なら（猶予を使い切って
+いれば EXPIRED、そうでなければ）FAILED を返します。HW ウォッチドッグの refresh 判定は、
+この結果から求めるグローバル状態（STOPPED かどうか）で行います。
 
 - `WdgM_AliveStatus` は周期ごとに再評価され、Alive 条件を満たせば OK に戻ります。
 - `WdgM_LogicalStatus` / `WdgM_DeadlineStatus` は `WdgM_Init()` までラッチされ、
@@ -405,14 +422,14 @@ MainFunction の次サイクルを待たずにリセットに至るため、ス�
 ```
 [30312ms] INFO  EcuM: ->POST_RUN timeout=5000ms
 [30313ms] INFO  WdgM: HW watchdog disabled
-[36312ms] WARN  WdgM: SE0 alive FAILED alive=0 (exp>=1) [HW WDT reset pending]  ← ソフト的には FAILED と記録されるが
+[36312ms] WARN  WdgM: SE0 alive FAILED alive=0 (exp>=1)  ← ソフト的には FAILED と記録されるが
                                                                                 ← 無効化済みのため実際にはリセットしない
 ```
 
 **Alive 失敗検知（RUN 中に実際の異常が起きた場合 — 後述の動作確認方法）:**
 ```
 [5019ms]  DEBUG WdgM: HW watchdog refreshed          ← 最後に成功したリフレッシュ
-[6017ms]  WARN  WdgM: SE0 alive FAILED alive=0 (exp>=1) [HW WDT reset pending]
+[6017ms]  WARN  WdgM: SE0 alive FAILED alive=0 (exp>=1)
 [6018ms]  ERROR WdgM: HW watchdog NOT refreshed - reset imminent
                         ↑ 6000ms は 1000ms の倍数のため、同じ Os_SchedulerStep 内で
                           WdgM_MainFunction(Task7) → WdgM_TriggerHwWatchdog(Task10)
@@ -425,7 +442,7 @@ MainFunction の次サイクルを待たずにリセットに至るため、ス�
 
 **Logical 失敗検知（後述の動作確認方法で START 呼び出しを止めた場合）:**
 ```
-[3010ms] WARN  WdgM: SE0 logical FAILED cp 1->1 (unexpected) [HW WDT reset pending]
+[3010ms] WARN  WdgM: SE0 logical EXPIRED cp 1->1 (unexpected) [HW WDT reset pending]
                                   └┘  └┘
                                   前回END  今回END（START がスキップされ END→END になった）
 [4019ms] ERROR WdgM: HW watchdog NOT refreshed - reset imminent
@@ -433,13 +450,13 @@ MainFunction の次サイクルを待たずにリセットに至るため、ス�
               検知して停止する（WdgM_MainFunction の 6000ms 周期を待たない）
 （最後の成功リフレッシュから HW ウォッチドッグのタイムアウト 4000ms 後に MCU が実際に
  リセットされる。もし MainFunction の次サイクルがその前に実行されれば
- [6017ms] WARN WdgM: SE0 logical still FAILED (latched since violation) [HW WDT reset pending]
+ [6017ms] WARN WdgM: SE0 logical still EXPIRED (latched since violation)
  も見えることがあるが、リフレッシュ停止の判定自体は WdgM_TriggerHwWatchdog が行う）
 ```
 
 **Deadline 失敗検知（後述の動作確認方法で START→END に人為的な遅延を入れた場合）:**
 ```
-[3011ms] WARN  WdgM: SE0 deadline FAILED cp 0->1 elapsed=1003 (exp 0..500) [HW WDT reset pending]
+[3011ms] WARN  WdgM: SE0 deadline EXPIRED cp 0->1 elapsed=1003 (exp 0..500) [HW WDT reset pending]
                                                   └┘            └──────┘
                                                   実際の経過時間   許容範囲 (START_TO_END)
 （以降は Logical 失敗検知と同様、次の WdgM_TriggerHwWatchdog（最短 1000ms 以内）で
@@ -489,7 +506,7 @@ delay(1000);  /* 動作確認用: 500ms の許容上限を超えさせる */
 | `WDGM_ENGINE_DEADLINE_END_TO_START_MIN_MS` / `_MAX_MS` | 2500 / 4500 ms | END→START（次サイクルまでの間隔）の許容経過時間 |
 | `WDGM_WARNING_DEADLINE_START_TO_END_MIN_MS` / `_MAX_MS` | 0 / 200 ms | WARNING の START→END 許容経過時間 |
 | `WDGM_WARNING_DEADLINE_END_TO_START_MIN_MS` / `_MAX_MS` | 300 / 1500 ms | WARNING の END→START 許容経過時間 |
-| `WDGM_EXPIRED_SUPERVISION_CYCLE_TOL` | 2 | グローバルレベルの連続 FAILED 判定サイクル許容回数（超過で `WdgM_GlobalStopped`） |
+| `WDGM_EXPIRED_SUPERVISION_CYCLE_TOL` | 2 | EXPIRED の許容判定サイクル数。Alive 不足が連続してこの回数に達すると Local EXPIRED、Global EXPIRED になってからこの回数を使い切ると `WdgM_GlobalStopped` |
 | `WDGM_HW_TRIGGER_CYCLE_MS` | 1000 ms | HW ウォッチドッグへの実際のリフレッシュ周期（WdgM_TriggerHwWatchdog 周期と一致）。判定サイクル（`WDGM_SUPERVISION_CYCLE_MS`）とは意図的に分離 |
 | `WDGM_HW_WATCHDOG_TIMEOUT_MS` | 4000 ms | 実 HW ウォッチドッグのタイムアウト。`Wdg_PBCfg.c` がこの値を直接引用して `Wdg_Config.DefaultTimeoutMs` を組み立て、`Wdg_Hw_Enable(timeoutMs)`（`Wdg_Hw.cpp`、`WDT.begin(timeoutMs)`）まで渡る。`WDGM_HW_TRIGGER_CYCLE_MS` より十分長く設定すること（RA4M1 の IWDT 最大タイムアウト ≒5592ms 未満という制約もある） |
 
@@ -510,8 +527,10 @@ delay(1000);  /* 動作確認用: 500ms の許容上限を超えさせる */
   散在しており、この Notes.md には記載が無かったため「未実装ギャップ」として
   何度か再発見されるリスクがあった）。
   - 未実装の要求: [SWS_WdgM_00186]（`WdgIf_SetMode()` によるモードごとの
-    監視パラメータ一式の適用。本プロジェクトはそもそも `WdgIf_SetMode()` を
-    呼んでいない）、[SWS_WdgM_00139]/[SWS_WdgM_00142]（`WdgIf_SetMode()`
+    監視パラメータ一式の適用。`WdgM_SetMode()` からは `WdgIf_SetMode()` を
+    呼んでいない。なお `WdgM_EnableHwWatchdog()`/`WdgM_DisableHwWatchdog()` は
+    HW ウォッチドッグの有効化・無効化のために `WdgIf_SetMode()` を呼ぶが、
+    モードごとの監視パラメータの適用とは別物）、[SWS_WdgM_00139]/[SWS_WdgM_00142]（`WdgIf_SetMode()`
     失敗時の Global Status STOPPED 遷移・Dem `WDGM_E_SET_MODE` 報告。
     呼び出し自体が無いためこの失敗パス自体が発生しえない）、
     [SWS_WdgM_00145]/[SWS_WdgM_00316]（Global Status が OK/FAILED 以外の

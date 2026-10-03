@@ -110,7 +110,7 @@ if/while/for/switch の全分岐を無条件に (実際にその回の呼び出�
 _declare_local() 参照)。仮引数・ローカル変数とも on start/on timer/on message や
 variables{} の中では書けない (関数の中限定)。
 
-利用できる関数は Interpreter._make_builtins() を参照 (README.md にも一覧表がある)。
+利用できる関数は Interpreter._make_builtins() を参照 (tools/can_tool/README.md にも一覧表がある)。
 write(fmt, ...)/log(fmt, ...) は、第1引数が '%' を含む文字列かつ他に引数がある場合、
 CAPL の write() と同様 printf 風の書式文字列 (%d/%f/%s/%x/%X/%%) として扱う。それ以外
 (引数1つだけ、または '%' を含まない) は従来通りスペース区切りで連結する。
@@ -1479,7 +1479,7 @@ class Interpreter:
             # 直近の wait_response()/security_unlock() で受信した UDS 応答を読む関数群。
             # msgData()/msgId() 等 (on message で受信した生 CAN フレーム用) とは別物で、
             # 応答フレーム自体は wait_response() の受信ループが直接消費するため
-            # _last_message には流れてこない (README「on message は UDS 応答以外の
+            # _last_message には流れてこない (tools/can_tool/README.md「on message は UDS 応答以外の
             # 監視向き」参照)。switch(respNrc()) のような分岐に使う。
             "respSid": (0, lambda args: self._resp_sid()),
             "respNrc": (0, lambda args: self._resp_nrc()),

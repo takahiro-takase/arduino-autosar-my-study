@@ -1,6 +1,6 @@
 /**
  * \file    Bsw_ComStack_Signal_Tx_test.cpp
- * \brief   README.md「Tx 処理（Com → PduR → CanIf → Can の順）」コールチェーンの
+ * \brief   docs/can_stack.md「Tx 処理（Com → PduR → CanIf → Can の順）」コールチェーンの
  *          単体テスト（GoogleTest / CMake native_chain_tests）。通常のシグナル
  *          （非 Signal Group）送信シナリオ専用。
  *
