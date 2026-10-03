@@ -1,6 +1,6 @@
 # E2EXf（E2E Transformer 統合層）
 
-> [README](../../README.md) の「[E2E 保護](../../README.md#e2e-p01)」節から分離。
+> [README](../../README.md) の「[E2E 保護](../can_stack.md#e2e-p01)」節から分離。
 > E2E Profile01/05 のCRC/カウンタアルゴリズム自体の学習ノートは
 > [`docs/E2E_Profile1_Notes.md`](./E2E_Profile1_Notes.md) /
 > [`docs/E2E_Profile5_Notes.md`](./E2E_Profile5_Notes.md) を参照してください。
