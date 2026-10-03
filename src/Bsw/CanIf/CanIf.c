@@ -498,10 +498,11 @@ Std_ReturnType CanIf_Transmit(PduIdType TxPduId, const PduInfoType* PduInfoPtr)
  *
  * \note    本プロジェクトは [SWS_CANIF_00324]（コントローラが
  *          CAN_CS_STARTED かつ受信パスが online でなければ E_NOT_OK）は
- *          実装しない。CanIf 自身はコントローラ状態を一切追跡しておらず
+ *          実装しない。CanIf は `CanIf_SetControllerMode()` の結果を
+ *          `CanIf_ControllerMode[]` に記録するが、受信パスでは参照せず
  *          （Can_MainFunction_Read() から渡されたフレームをそのまま
- *          振り分けるだけの設計）、この状態管理は CanSM の責務のため
- *          スコープ外とする。「一度も受信していない PDU は E_NOT_OK」
+ *          振り分けるだけの設計）、状態に応じた受信可否の管理は CanSM の
+ *          責務のためスコープ外とする。「一度も受信していない PDU は E_NOT_OK」
  *          （spec 原文 "No valid data has been received"）のみ実装する。
  *
  * \param[in]   CanIfRxSduId    データを取得する RX PDU の ID
@@ -696,8 +697,10 @@ CanIf_NotifStatusType CanIf_ReadRxNotifStatus(PduIdType CanIfRxSduId)
  *          `CAN_CS_STARTED` のまま、送信のみを禁止する）。
  *          [SWS_CANIF_00874] は「対象コントローラが `CAN_CS_STARTED` でない
  *          場合は `E_NOT_OK`」と規定するが、本プロジェクトの CanIf は
- *          コントローラ状態を一切追跡しない既存方針（`CanIf_ReadRxPduData()`
- *          の doc コメント参照）のため、このチェックは実装しない。
+ *          `CanIf_ControllerMode[]` を持つが、送信要求・受信パスでは参照しない（TX 確認通知の
+ *          状態更新にのみ使う）既存方針
+ *          （`CanIf_ReadRxPduData()` の doc コメント参照）のため、このチェックは
+ *          実装しない。
  *
  *          RX 側（`CanIf_RxIndication()` の上位層通知抑制）は本 API では
  *          制御しない（本ファイル冒頭の `CanIf_ControllerPduMode` 宣言コメント
