@@ -272,6 +272,18 @@ void EcuM_CheckWakeup(EcuM_WakeupSourceType wakeupSource);
  */
 void EcuM_GetVersionInfo(Std_VersionInfoType* versioninfo);
 
+#ifdef ECUM_UNIT_TEST
+/**
+ * \brief   EcuM の内部状態（状態・RUN/POST_RUN 要求ビット・POST_RUN タイマ）を
+ *          初期値へ戻す（単体テスト専用）。
+ *
+ * \details EcuM に DeInit 相当の API が無く、状態が static のままテストケースを
+ *          またいで残るため、各テストの SetUp で呼ぶ（標準外の関数。
+ *          Wdg_Test_ResetInitState() と同じ設計方針）。
+ */
+void EcuM_Test_ResetInitState(void);
+#endif
+
 #ifdef __cplusplus
 }
 #endif

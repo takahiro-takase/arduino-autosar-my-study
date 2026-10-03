@@ -227,7 +227,7 @@ AUTOSAR 仕様書 PDF は著作権のためリポジトリに含めていませ�
 ├── tools/
 │   ├── can_tool/           # UDS ボタン送信 / CAPL 風スクリプト / 信号エディタ（Python）
 │   ├── misra/              # MISRA C:2012 静的解析（run_misra.py、逸脱リスト misra_suppressions.txt）
-│   └── api_coverage/       # AUTOSAR API の実装数の集計（api_coverage.py、仕様書の API 一覧 autosar_api_list.json）
+│   ├── api_coverage/       # AUTOSAR API の実装数の集計（api_coverage.py、仕様書の API 一覧 autosar_api_list.json）
 ├── docs/
 │   ├── modules/            # モジュール別ノート（<Module>_Notes.md）
 │   ├── autosar/            # AUTOSAR 仕様書 PDF の置き場（.gitignore 対象）
@@ -235,7 +235,6 @@ AUTOSAR 仕様書 PDF は著作権のためリポジトリに含めていませ�
 │   └── archive/            # 分割前の README（全文）
 ├── dbc/                    # CAN の DBC ファイル
 ├── data/                   # can_signal_editor の信号定義
-├── scripts/                # カバレッジレポート生成
 ├── platformio.ini          # 実機ビルド（env: uno_r4）
 ├── CMakeLists.txt          # ホスト上のテスト・静的解析（プリセットは CMakePresets.json）
 └── CMakePresets.json
@@ -286,7 +285,7 @@ python tools/api_coverage/api_coverage.py --update-readme # README の表の数�
 
 実 HW を使わず、BSW モジュールのロジックを PC 上で GoogleTest により検証します。
 単一モジュールのテストも、複数モジュールにまたがる関数コールチェーンのテストも、
-`native_chain_tests` という 1 つのテストバイナリにまとめています（2026-10 時点で 858 件）。
+`native_chain_tests` という 1 つのテストバイナリにまとめています（2026-10 時点で 868 件）。
 
 ビルドは PlatformIO ではなく CMake + clang++（llvm-mingw）です。事前に環境変数
 `LLVM_MINGW_BIN` へ llvm-mingw の `bin` ディレクトリを設定してください。
@@ -300,14 +299,21 @@ cmake --build --preset native-chain
 build/native_chain/native_chain_tests.exe
 ```
 
-- **配置**: テストは `test/Bsw/<Module>/`、差し替え（HAL の Fake、`--wrap` による呼び出し記録）は
+- **配置: テストは `test/Bsw/<Module>/`、差し替え（HAL の Fake、`--wrap` による呼び出し記録）は
   `src/` と同じ構成で `stub/` に置く
 - **粒度**: ファイル名は `Bsw_<Module>_<Scenario>_test.cpp`。1 つの正常系（OK）シナリオにつき
   1 ファイルとし、そのシナリオから派生する異常系（NG）は同じファイルに置く
 - **コールチェーンのテスト**: Tx/Rx 処理（通常・E2E・デッドライン監視）、診断（UDS）、ネットワーク
   管理（スリープ協調）などを、実モジュールをリンクして関数呼び出しの連なりごと検証する
 - **カバレッジ**: `native-chain-coverage` プリセットで MC/DC を含むカバレッジを計測できる
-  （`scripts/generate_coverage_report.sh`）
+  （下記のスクリプト）
+
+カバレッジ（行・分岐・MC/DC）は、次のスクリプトで計測して HTML レポートを出力します。
+
+```bash
+bash tools/coverage/generate_coverage_report.sh
+# → coverage_html/index.html をブラウザで開く（コンソールにもサマリを表示）
+```
 
 テスト構成の詳細、初期化状態のリセット、Det エラー報告の NG テストなどは
 [docs/unit_test.md](docs/unit_test.md) を参照してください。

@@ -9,7 +9,7 @@
 #
 # 使い方（事前に環境変数を設定してから呼ぶこと）:
 #   export LLVM_MINGW_BIN="/c/Users/<you>/llvm-mingw-YYYYMMDD-ucrt-x86_64/bin"
-#   bash scripts/generate_coverage_report.sh
+#   bash tools/coverage/generate_coverage_report.sh
 set -euo pipefail
 
 if [ -z "${LLVM_MINGW_BIN:-}" ]; then
@@ -18,7 +18,7 @@ if [ -z "${LLVM_MINGW_BIN:-}" ]; then
     exit 1
 fi
 
-PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$PROJECT_ROOT"
 
 BUILD_DIR="build/native_chain_coverage"

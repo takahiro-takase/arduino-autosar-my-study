@@ -32,7 +32,7 @@ cmake --build --preset native-chain
                                               # Dcm/Dem/WdgM/FiM 等すべて含む
 
 # native-chain-coverage プリセット: 同じ対象を MC/DC 含む source-based coverage
-# 計測付きでビルドする。使い方は scripts/generate_coverage_report.sh 参照。
+# 計測付きでビルドする。使い方は tools/coverage/generate_coverage_report.sh 参照。
 
 $env:DET_LOG_VERBOSE = "1"; ./build/native_chain/native_chain_tests.exe # TRACE ログ出力
 ```
