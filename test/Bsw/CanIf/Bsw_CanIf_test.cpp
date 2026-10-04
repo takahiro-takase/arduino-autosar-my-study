@@ -24,6 +24,11 @@
  *          しておく）。NG 系（Det エラー報告の契約自体の検証）は呼び出し元の
  *          有無に関わらず価値があるため、通常どおり有効のままとする。
  */
+
+/* ======================================================================
+ * Includes
+ * ====================================================================== */
+
 #include <gtest/gtest.h>
 
 extern "C" {
@@ -36,6 +41,18 @@ extern "C" {
 #include "Wrap_CanIf.h"
 #include "Wrap_Can.h"
 }
+
+/* ======================================================================
+ * Definitions
+ * ====================================================================== */
+
+/* ======================================================================
+ * Type Definitions
+ * ====================================================================== */
+
+/* ======================================================================
+ * Global Variables
+ * ====================================================================== */
 
 namespace
 {
@@ -64,6 +81,10 @@ const CanIf_ConfigType kControllerModeCanIfConfig = {
     /* RxPduConfig */ NULL,
     /* RxPduCount */  0U
 };
+
+/* ======================================================================
+ * Test Fixture
+ * ====================================================================== */
 
 class Bsw_CanIf_ControllerMode_Test : public ::testing::Test
 {
@@ -96,6 +117,10 @@ protected:
 
     Can_ConfigType canConfig;
 };
+
+/* ======================================================================
+ * Test Functions
+ * ====================================================================== */
 
 TEST_F(Bsw_CanIf_ControllerMode_Test, SetControllerMode_NG_InvalidControllerIdReturnsErrorAndReportsDet)
 {
@@ -290,6 +315,10 @@ const CanIf_ConfigType kNotifStatusCanIfConfig = {
     /* RxPduConfig */ &kNotifStatusCanIfRxPdu,
     /* RxPduCount */  1U
 };
+
+/* ======================================================================
+ * Test Fixture
+ * ====================================================================== */
 
 class Bsw_CanIf_NotifStatus_Test : public ::testing::Test
 {
@@ -528,6 +557,10 @@ const CanIf_ConfigType kTestCanIfConfig = {
     &kTestTxPdu, 1U,
     &kTestRxPdu, 1U
 };
+
+/* ======================================================================
+ * Test Fixture
+ * ====================================================================== */
 
 class Bsw_CanIf_Test : public ::testing::Test
 {

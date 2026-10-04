@@ -33,6 +33,11 @@
  *          （非グループ、kTestTxIPdu）をこのファイルのconfigにも
  *          追加で含めている。
  */
+
+/* ======================================================================
+ * Includes
+ * ====================================================================== */
+
 #include <gtest/gtest.h>
 
 extern "C" {
@@ -40,6 +45,18 @@ extern "C" {
 #include "Fake_Millis.h"
 #include "Fake_Det_Hw.h"
 }
+
+/* ======================================================================
+ * Definitions
+ * ====================================================================== */
+
+/* ======================================================================
+ * Type Definitions
+ * ====================================================================== */
+
+/* ======================================================================
+ * Global Variables
+ * ====================================================================== */
 
 namespace
 {
@@ -267,6 +284,10 @@ const Com_ConfigType kTestComConfig = {
     /* GwMappingCount */ 0U
 };
 
+/* ======================================================================
+ * Test Fixture
+ * ====================================================================== */
+
 class Bsw_ComStack_SignalGroup_Tx_Base : public ::testing::Test
 {
 protected:
@@ -300,6 +321,10 @@ class Bsw_ComStack_SignalGroup_Tx_TxConfirmation_Test : public Bsw_ComStack_Sign
 class Bsw_ComStack_SignalGroup_Tx_IpduGroupStop_Test : public Bsw_ComStack_SignalGroup_Tx_Base {};
 class Bsw_ComStack_SignalGroup_Tx_TxTOut_Test : public Bsw_ComStack_SignalGroup_Tx_Base {};
 class Bsw_ComStack_SignalGroup_Tx_TriggerIPDUSend_Test : public Bsw_ComStack_SignalGroup_Tx_Base {};
+
+/* ======================================================================
+ * Test Functions
+ * ====================================================================== */
 
 // ------------------------------------------------------------
 // SWS_Com_00495（TMS 遷移時の無条件即時送信、Signal Group 側経路）

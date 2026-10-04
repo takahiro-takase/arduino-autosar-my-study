@@ -3,14 +3,26 @@
  * \brief   Wdg_Hw.h の呼び出し記録フェイク実装（Fake_Wdg_Hw.h 参照）。
  */
 
+/* ======================================================================
+ * Includes
+ * ====================================================================== */
+
 #include "Wdg_Hw.h"
 #include "Fake_Wdg_Hw.h"
+
+/* ======================================================================
+ * Global Variables
+ * ====================================================================== */
 
 uint32 FakeWdgHw_EnableCount        = 0U;
 uint32 FakeWdgHw_DisableCount       = 0U;
 uint32 FakeWdgHw_RefreshCount       = 0U;
 uint32 FakeWdgHw_ForceResetCount    = 0U;
 uint16 FakeWdgHw_LastEnableTimeoutMs = 0U;
+
+/* ======================================================================
+ * Functions
+ * ====================================================================== */
 
 void FakeWdgHw_Reset(void)
 {

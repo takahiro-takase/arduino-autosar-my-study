@@ -395,6 +395,10 @@ class Bsw_ComStack_Signal_Tx_InvalidateSignal_Test : public Bsw_ComStack_Signal_
 class Bsw_ComStack_Signal_Tx_NonGroupTmsTransition_Test : public Bsw_ComStack_Signal_Tx_Base {};
 class Bsw_ComStack_Signal_Tx_TriggerIPDUSend_Test : public Bsw_ComStack_Signal_Tx_Base {};
 
+/* ======================================================================
+ * Test Functions
+ * ====================================================================== */
+
 /* ----------------------------------------------------------------------
  * 送信 → 確認通知
  *   Com_SendSignal() / Com_MainFunctionTx() / Can_MainFunction_Write() の
@@ -1099,6 +1103,10 @@ TEST_F(Bsw_ComStack_Signal_Tx_TriggerIPDUSend_Test, NG_Step01_ComTriggerIPDUSend
     EXPECT_EQ(Com_TriggerIPDUSend(99U), E_NOT_OK);
 }
 
+
+/* ======================================================================
+ * Test Fixture
+ * ====================================================================== */
 
 // ------------------------------------------------------------
 // Com_SwitchIpduTxMode/Com_TriggerIPDUSend が実効 TxModeMode を PERIODIC に

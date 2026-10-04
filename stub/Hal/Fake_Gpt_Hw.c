@@ -3,14 +3,27 @@
  * \brief   Gpt_Hw.h のテスト用フェイク実装
  * \details Fake_Gpt_Hw.h 冒頭のコメント参照。
  */
+
+/* ======================================================================
+ * Includes
+ * ====================================================================== */
+
 #include "Fake_Gpt_Hw.h"
 #include "Gpt_Hw.h"
+
+/* ======================================================================
+ * Global Variables
+ * ====================================================================== */
 
 uint32          FakeGptHw_StartCount          = 0U;
 uint32          FakeGptHw_StopCount           = 0U;
 Gpt_ChannelType FakeGptHw_LastStartChannel    = 0U;
 uint32          FakeGptHw_LastTickFrequencyHz = 0U;
 uint8           FakeGptHw_StartShouldFail     = 0U;
+
+/* ======================================================================
+ * Functions
+ * ====================================================================== */
 
 void FakeGptHw_Reset(void)
 {

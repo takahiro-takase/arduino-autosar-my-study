@@ -9,11 +9,20 @@
  *          途中で実際にどの関数が呼ばれたかをテスト実行結果から確認する用途）。
  *          値の検証自体は引き続き Det_Hw_PrintDetError() 側のスパイで行う。
  */
+
+/* ======================================================================
+ * Includes
+ * ====================================================================== */
+
 #include "Fake_Det_Hw.h"
 #include "Det_Hw.h"
 #include "Fake_Millis.h"
 #include <stdio.h>
 #include <stdlib.h>
+
+/* ======================================================================
+ * Global Variables
+ * ====================================================================== */
 
 uint16 FakeDetHw_LastModuleId  = 0xFFFFU;
 uint8  FakeDetHw_LastApiId     = 0xFFU;
@@ -21,24 +30,16 @@ uint8  FakeDetHw_LastErrorId   = 0xFFU;
 uint32 FakeDetHw_ReportCount   = 0U;
 uint8  FakeDetHw_LogSuppressed = 1U;
 
-static int FakeDetHw_IsVerbose(void)
-{
-    if (FakeDetHw_LogSuppressed) return 0;
-    const char* v = getenv("DET_LOG_VERBOSE");
-    return (v != NULL) && (v[0] != '\0') && (v[0] != '0');
-}
+/* ======================================================================
+ * Function Prototypes
+ * ====================================================================== */
 
-static const char* FakeDetHw_LevelName(LogLevel lvl)
-{
-    switch (lvl)
-    {
-        case LOG_T: return "TRACE";
-        case LOG_E: return "ERROR";
-        case LOG_W: return "WARN ";
-        case LOG_I: return "INFO ";
-        default:    return "DEBUG";
-    }
-}
+static int FakeDetHw_IsVerbose(void);
+static const char* FakeDetHw_LevelName(LogLevel lvl);
+
+/* ======================================================================
+ * Functions
+ * ====================================================================== */
 
 void FakeDetHw_Reset(void)
 {
@@ -73,3 +74,25 @@ void Det_Hw_PrintDetError(uint16 ModuleId, uint8 InstanceId, uint8 ApiId, uint8 
     }
 }
 
+/* ======================================================================
+ * Internal Functions
+ * ====================================================================== */
+
+static int FakeDetHw_IsVerbose(void)
+{
+    if (FakeDetHw_LogSuppressed) return 0;
+    const char* v = getenv("DET_LOG_VERBOSE");
+    return (v != NULL) && (v[0] != '\0') && (v[0] != '0');
+}
+
+static const char* FakeDetHw_LevelName(LogLevel lvl)
+{
+    switch (lvl)
+    {
+        case LOG_T: return "TRACE";
+        case LOG_E: return "ERROR";
+        case LOG_W: return "WARN ";
+        case LOG_I: return "INFO ";
+        default:    return "DEBUG";
+    }
+}

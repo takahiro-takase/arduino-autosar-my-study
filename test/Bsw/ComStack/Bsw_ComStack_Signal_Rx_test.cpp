@@ -34,6 +34,11 @@
  *          `CanSM_Init()`/`CanSM_DeInit()` を呼ぶ（呼ばないと DET_E_UNINIT が
  *          報告される）。
  */
+
+/* ======================================================================
+ * Includes
+ * ====================================================================== */
+
 #include <gtest/gtest.h>
 
 extern "C" {
@@ -51,6 +56,18 @@ extern "C" {
 #include "Wrap_PduR.h"
 #include "Wrap_Com.h"
 }
+
+/* ======================================================================
+ * Definitions
+ * ====================================================================== */
+
+/* ======================================================================
+ * Type Definitions
+ * ====================================================================== */
+
+/* ======================================================================
+ * Global Variables
+ * ====================================================================== */
 
 namespace
 {
@@ -307,6 +324,10 @@ const CanIf_ConfigType kTestCanIfRxConfig = {
     /* RxPduCount */  3U
 };
 
+/* ======================================================================
+ * Test Fixture
+ * ====================================================================== */
+
 class Bsw_ComStack_Signal_Rx_Base : public ::testing::Test
 {
 protected:
@@ -364,6 +385,10 @@ class Bsw_ComStack_Signal_Rx_CanIfReadRxPduData_Test : public Bsw_ComStack_Signa
 class Bsw_ComStack_Signal_Rx_CanIfInit_Test : public Bsw_ComStack_Signal_Rx_Base {};
 class Bsw_ComStack_Signal_Rx_RxIpduCallout_Test : public Bsw_ComStack_Signal_Rx_Base {};
 class Bsw_ComStack_Signal_Rx_RxAck_Test : public Bsw_ComStack_Signal_Rx_Base {};
+
+/* ======================================================================
+ * Test Functions
+ * ====================================================================== */
 
 /* ----------------------------------------------------------------------
  * 受信 → 読み出し
@@ -890,6 +915,10 @@ const Com_ConfigType kTestComRxTimeoutConfig = {
     /* GwMappings */    NULL,
     /* GwMappingCount */ 0U
 };
+
+/* ======================================================================
+ * Test Fixture
+ * ====================================================================== */
 
 class Bsw_ComStack_Signal_Rx_Timeout_Test : public ::testing::Test
 {

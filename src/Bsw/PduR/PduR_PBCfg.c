@@ -61,18 +61,25 @@
  *          AUTOSAR 認証済み実装ではなく、製品への適用は想定していません。
  */
 
+/* ======================================================================
+ * Includes
+ * ====================================================================== */
+
 #include "PduR_PBCfg.h"
 #include "PduR_Cfg.h"
 #include "Com.h"
 #include "CanTp.h"
 #include "SecOC.h"
 
+/* ======================================================================
+ * Global Variables
+ * ====================================================================== */
+
 /* -----------------------------------------------------------------------
  * RX 配信先テーブル（パスごと）
  * DaVinci: /ActiveEcuC/PduR/PduRConfig/PduRRoutingTable/[PduRRoutingPath]/
  *           PduRDestPdu
  * ----------------------------------------------------------------------- */
-
 /* パス 0: CAN 0x100 → COM (EngineInfo)
  * DaVinci: /ActiveEcuC/PduR/PduRConfig/PduRRoutingTable/EngineInfo_Rx */
 static const PduR_RxDestType PduR_RxDests_Path0[PDUR_RX_DEST_COUNT_PATH0] = {

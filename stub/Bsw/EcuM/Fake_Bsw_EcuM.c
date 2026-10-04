@@ -3,13 +3,17 @@
  * \brief   EcuM.h のテスト用スパイ実装
  * \details Fake_Bsw_EcuM.h 冒頭のコメント参照。
  */
+
+/* ======================================================================
+ * Includes
+ * ====================================================================== */
+
 #include "Fake_Bsw_EcuM.h"
 #include "CanSM.h"
 
-/* --wrap 用の本物（EcuM.c の実体）。FakeEcuM_PassThrough が TRUE のときだけ呼ぶ。 */
-Std_ReturnType __real_EcuM_RequestRUN(EcuM_UserType user);
-Std_ReturnType __real_EcuM_ReleaseRUN(EcuM_UserType user);
-void __real_EcuM_CheckWakeup(EcuM_WakeupSourceType wakeupSource);
+/* ======================================================================
+ * Global Variables
+ * ====================================================================== */
 
 uint8 FakeEcuM_PassThrough = 0U;
 
@@ -20,6 +24,19 @@ uint32 FakeEcuM_CheckWakeupCount = 0U;
 EcuM_UserType FakeEcuM_LastRequestUser = 0xFFU;
 EcuM_UserType FakeEcuM_LastReleaseUser = 0xFFU;
 EcuM_WakeupSourceType FakeEcuM_LastWakeupSource = 0U;
+
+/* ======================================================================
+ * Function Prototypes
+ * ====================================================================== */
+
+/* --wrap 用の本物（EcuM.c の実体）。FakeEcuM_PassThrough が TRUE のときだけ呼ぶ。 */
+Std_ReturnType __real_EcuM_RequestRUN(EcuM_UserType user);
+Std_ReturnType __real_EcuM_ReleaseRUN(EcuM_UserType user);
+void __real_EcuM_CheckWakeup(EcuM_WakeupSourceType wakeupSource);
+
+/* ======================================================================
+ * Functions
+ * ====================================================================== */
 
 void FakeEcuM_Reset(void)
 {

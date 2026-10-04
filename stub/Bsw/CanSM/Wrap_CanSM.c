@@ -3,7 +3,7 @@
  * \brief   `src/Bsw/CanSM/CanSM.c` 内の関数を対象とした wrap 実体
  *          （Wrap_CanSM.h 参照）。
  *
- * \details 変数を先頭の External Variables セクションへ集約し、その後に
+ * \details 変数を先頭の Global Variables セクションへ集約し、その後に
  *          Functions セクションで各 `__wrap_...` の実装をまとめる
  *          （`Wrap_Can.c` と同じ構成。`[[reference_wrap_stub_naming_convention]]`
  *          参照）。
@@ -27,7 +27,7 @@
  * ====================================================================== */
 
 /* ======================================================================
- * External Variables
+ * Global Variables
  * ====================================================================== */
 
 uint32 CallCount_CanSM_Init                       = 0U;

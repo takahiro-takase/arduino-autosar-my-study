@@ -3,7 +3,16 @@
  * \brief   Can_Hw.h（MCP2515 境界）のテスト用フェイク実装
  * \details Fake_Can_Hw.h 冒頭のコメント参照。
  */
+
+/* ======================================================================
+ * Includes
+ * ====================================================================== */
+
 #include "Fake_Can_Hw.h"
+
+/* ======================================================================
+ * Global Variables
+ * ====================================================================== */
 
 uint32 FakeCanHw_InitCount            = 0U;
 uint32 FakeCanHw_SendCount            = 0U;
@@ -39,6 +48,10 @@ Can_Hw_ReturnType FakeCanHw_IsWakeupPendingReturn = CAN_HW_FAIL;
 
 uint8_t           FakeCanHw_ErrorState           = 0U;
 Can_Hw_ReturnType FakeCanHw_GetErrorStateReturn   = CAN_HW_OK;
+
+/* ======================================================================
+ * Functions
+ * ====================================================================== */
 
 void FakeCanHw_Reset(void)
 {

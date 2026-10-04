@@ -23,6 +23,11 @@
  *          IsSignalGroup の値によらず一律に効くこと」自体が主張の核心のため、
  *          Signal Group 制御の回帰一式として本ファイルにまとめて置いている。
  */
+
+/* ======================================================================
+ * Includes
+ * ====================================================================== */
+
 #include <gtest/gtest.h>
 
 extern "C" {
@@ -30,6 +35,18 @@ extern "C" {
 #include "Fake_Millis.h"
 #include "Fake_Det_Hw.h"
 }
+
+/* ======================================================================
+ * Definitions
+ * ====================================================================== */
+
+/* ======================================================================
+ * Type Definitions
+ * ====================================================================== */
+
+/* ======================================================================
+ * Global Variables
+ * ====================================================================== */
 
 namespace
 {
@@ -205,6 +222,10 @@ const Com_ConfigType kTestComConfig = {
     /* GwMappingCount */ 0U
 };
 
+/* ======================================================================
+ * Test Fixture
+ * ====================================================================== */
+
 class Bsw_ComStack_SignalGroup_Rx_Base : public ::testing::Test
 {
 protected:
@@ -249,6 +270,10 @@ protected:
 // シナリオごとのフィクスチャ（共通の準備は Bsw_ComStack_SignalGroup_Rx_Base）
 class Bsw_ComStack_SignalGroup_Rx_GroupAck_Test : public Bsw_ComStack_SignalGroup_Rx_Base {};
 class Bsw_ComStack_SignalGroup_Rx_GroupRxTOut_Test : public Bsw_ComStack_SignalGroup_Rx_Base {};
+
+/* ======================================================================
+ * Test Functions
+ * ====================================================================== */
 
 // ------------------------------------------------------------
 // SWS_Com_00555（Com_CbkRxAck、Signal Group 側経路）
@@ -561,6 +586,10 @@ const Com_ConfigType kTestRxIpduGroupConfig = {
     /* GwMappings */    NULL,
     /* GwMappingCount */ 0U
 };
+
+/* ======================================================================
+ * Test Fixture
+ * ====================================================================== */
 
 class Bsw_ComStack_SignalGroup_RxIpduGroup_Base : public ::testing::Test
 {

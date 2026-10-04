@@ -89,6 +89,11 @@
  *          へ統合した（Bsw_ComStack_Signal_Tx_test.cpp/Bsw_NmStack_Wakeup_test.cpp 等と
  *          CanSM.c/ComM.c/CanNm.c の実体を共有する）。
  */
+
+/* ======================================================================
+ * Includes
+ * ====================================================================== */
+
 #include <gtest/gtest.h>
 
 extern "C" {
@@ -109,6 +114,18 @@ extern "C" {
 #include "Wrap_Can.h"
 #include "Wrap_ComM.h"
 }
+
+/* ======================================================================
+ * Definitions
+ * ====================================================================== */
+
+/* ======================================================================
+ * Type Definitions
+ * ====================================================================== */
+
+/* ======================================================================
+ * Global Variables
+ * ====================================================================== */
 
 namespace
 {
@@ -141,6 +158,10 @@ const CanIf_ConfigType kTestCanIfConfigWithNmTx = {
     /* RxPduConfig */ NULL,
     /* RxPduCount */  0U
 };
+
+/* ======================================================================
+ * Test Fixture
+ * ====================================================================== */
 
 class Bsw_NmStack_SleepCoordination_Base : public ::testing::Test
 {
@@ -260,6 +281,10 @@ class Bsw_NmStack_SleepCoordination_ReRequestFullCom_Test : public Bsw_NmStack_S
 class Bsw_NmStack_SleepCoordination_DcmDiagnostic_Test : public Bsw_NmStack_SleepCoordination_Base {};
 class Bsw_NmStack_SleepCoordination_BusOff_Test : public Bsw_NmStack_SleepCoordination_Base {};
 class Bsw_NmStack_SleepCoordination_CommunicationAllowed_Test : public Bsw_NmStack_SleepCoordination_Base {};
+
+/* ======================================================================
+ * Test Functions
+ * ====================================================================== */
 
 TEST_F(Bsw_NmStack_SleepCoordination_VoluntarySleep_Test, OK_DefersPhysicalSleepUntilNmReachesBusSleepMode)
 {

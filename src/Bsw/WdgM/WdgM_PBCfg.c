@@ -33,12 +33,19 @@
  *          AUTOSAR 認証済み実装ではなく、製品への適用は想定していません。
  */
 
+/* ======================================================================
+ * Includes
+ * ====================================================================== */
+
 #include "WdgM_PBCfg.h"
+
+/* ======================================================================
+ * Global Variables
+ * ====================================================================== */
 
 /* -----------------------------------------------------------------------
  * 論理監視 (Logical Supervision) 許可遷移テーブル — Entity 0 用
  * ----------------------------------------------------------------------- */
-
 /**
  * Entity 0 (App_EngineManager_Run) のプログラムフロー:
  *   (起動直後) → START → END → START → END → ...
@@ -54,7 +61,6 @@ static const WdgM_TransitionCfgType WdgM_EngineTransitions[] =
 /* -----------------------------------------------------------------------
  * 時間監視 (Deadline Supervision) 許容テーブル — Entity 0 用
  * ----------------------------------------------------------------------- */
-
 /**
  * Entity 0 (App_EngineManager_Run) の 2 つのチェックポイント間隔を監視する:
  *   START→END : Run() 1 回分の処理時間（無限ループ・ブロッキング処理の検出）
@@ -71,7 +77,6 @@ static const WdgM_DeadlineCfgType WdgM_EngineDeadlines[] =
 /* -----------------------------------------------------------------------
  * 論理監視 (Logical Supervision) 許可遷移テーブル — Entity 1 用
  * ----------------------------------------------------------------------- */
-
 /**
  * Entity 1 (App_WarningIndicator_Run) のプログラムフロー:
  *   (起動直後) → START → END → START → END → ...
@@ -88,7 +93,6 @@ static const WdgM_TransitionCfgType WdgM_WarningTransitions[] =
 /* -----------------------------------------------------------------------
  * 時間監視 (Deadline Supervision) 許容テーブル — Entity 1 用
  * ----------------------------------------------------------------------- */
-
 static const WdgM_DeadlineCfgType WdgM_WarningDeadlines[] =
 {
     { WDGM_CP_WARNING_START, WDGM_CP_WARNING_END,
@@ -100,7 +104,6 @@ static const WdgM_DeadlineCfgType WdgM_WarningDeadlines[] =
 /* -----------------------------------------------------------------------
  * Supervised Entity テーブル
  * ----------------------------------------------------------------------- */
-
 static const WdgM_EntityCfgType WdgM_Entities[WDGM_SUPERVISED_ENTITY_COUNT] =
 {
     /* Entity 0: App_EngineManager_Run
@@ -134,7 +137,6 @@ static const WdgM_EntityCfgType WdgM_Entities[WDGM_SUPERVISED_ENTITY_COUNT] =
 /* -----------------------------------------------------------------------
  * ポストビルドコンフィグインスタンス (EcuM が WdgM_Init に渡す)
  * ----------------------------------------------------------------------- */
-
 const WdgM_ConfigType WdgM_Config =
 {
     WdgM_Entities,

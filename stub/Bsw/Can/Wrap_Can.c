@@ -3,7 +3,7 @@
  * \brief   `src/Bsw/Can/Can.c` 内の関数を対象とした wrap 実体
  *          （Wrap_Can.h 参照）。
  *
- * \details 変数を先頭の External Variables セクションへ集約し、その後に
+ * \details 変数を先頭の Global Variables セクションへ集約し、その後に
  *          External Functions セクションで各 `__wrap_...` の実装をまとめる
  *          （2026-09-20、`src/Bsw/Can/Can.c` の External/Internal/Test
  *          Functions バナー方式に倣った構成。今後新規追加する `Wrap_XXX.c` は
