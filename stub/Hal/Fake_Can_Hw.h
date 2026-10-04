@@ -13,12 +13,28 @@
 #ifndef FAKE_CAN_HW_H
 #define FAKE_CAN_HW_H
 
+/* ======================================================================
+ * Includes
+ * ====================================================================== */
+
 #include "Std_Types.h"
 #include "Can_Hw.h"
+
+/* ======================================================================
+ * Definitions
+ * ====================================================================== */
+
+/* ======================================================================
+ * Type Definitions
+ * ====================================================================== */
 
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+/* ======================================================================
+ * Global Variables
+ * ====================================================================== */
 
 extern uint32 FakeCanHw_InitCount;
 extern uint32 FakeCanHw_SendCount;
@@ -41,10 +57,6 @@ extern uint8_t  FakeCanHw_LastSendData[8];
 
 /** 直近の Can_Hw_SetMode() の引数。 */
 extern Can_Hw_Mode FakeCanHw_LastMode;
-
-/** Can_Hw_AttachRxIsr() に渡された ISR 関数ポインタ（テストから直接呼び出し、
- *  真の割り込みを模擬するために使う）。 */
-extern void (*FakeCanHw_AttachedIsr)(void);
 
 /**
  * \brief   受信フレームの模擬キュー件数。
@@ -76,8 +88,24 @@ extern Can_Hw_ReturnType FakeCanHw_IsWakeupPendingReturn;
 extern uint8_t            FakeCanHw_ErrorState;
 extern Can_Hw_ReturnType  FakeCanHw_GetErrorStateReturn;
 
+/* ======================================================================
+ * Functions
+ * ====================================================================== */
+
+/** Can_Hw_AttachRxIsr() に渡された ISR 関数ポインタ（テストから直接呼び出し、
+ *  真の割り込みを模擬するために使う）。 */
+extern void (*FakeCanHw_AttachedIsr)(void);
+
 /** 各テストケースの開始時に呼び、記録・戻り値設定をすべて初期状態に戻す。 */
 void FakeCanHw_Reset(void);
+
+/* ======================================================================
+ * Callback Functions and Notifications
+ * ====================================================================== */
+
+/* ======================================================================
+ * Test Functions
+ * ====================================================================== */
 
 #ifdef __cplusplus
 }

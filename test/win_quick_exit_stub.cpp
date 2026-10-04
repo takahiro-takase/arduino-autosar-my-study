@@ -29,9 +29,32 @@
  *          （2026-09 追加、`[env:native_coverage]` の clang/llvm-mingw
  *          ビルドで実際に踏んだ）。
  */
+
+/* ======================================================================
+ * Includes
+ * ====================================================================== */
+
 #include <cstdlib>
 
 #ifndef _UCRT
+
+/* ======================================================================
+ * Function Prototypes
+ * ====================================================================== */
+
+extern "C" void QuickExitStub(int status);
+extern "C" void UnderscoreExitStub(int status);
+
+/* ======================================================================
+ * Global Variables
+ * ====================================================================== */
+
+extern "C" void (*__imp_quick_exit)(int) = QuickExitStub;
+extern "C" void (*__imp__Exit)(int)      = UnderscoreExitStub;
+
+/* ======================================================================
+ * Functions
+ * ====================================================================== */
 
 extern "C" void QuickExitStub(int status)
 {
@@ -42,8 +65,5 @@ extern "C" void UnderscoreExitStub(int status)
 {
     std::exit(status);
 }
-
-extern "C" void (*__imp_quick_exit)(int) = QuickExitStub;
-extern "C" void (*__imp__Exit)(int)      = UnderscoreExitStub;
 
 #endif /* _UCRT */

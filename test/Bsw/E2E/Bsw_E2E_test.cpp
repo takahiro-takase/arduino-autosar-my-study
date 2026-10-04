@@ -20,6 +20,11 @@
  *          GoogleTest の main() は test_main.cpp に集約しているため、
  *          本ファイルでは定義しない。
  */
+
+/* ======================================================================
+ * Includes
+ * ====================================================================== */
+
 #include <gtest/gtest.h>
 
 extern "C" {
@@ -28,6 +33,18 @@ extern "C" {
 #include "E2E_P05.h"
 #include "Wrap_E2E.h"
 }
+
+/* ======================================================================
+ * Definitions
+ * ====================================================================== */
+
+/* ======================================================================
+ * Type Definitions
+ * ====================================================================== */
+
+/* ======================================================================
+ * Global Variables
+ * ====================================================================== */
 
 namespace
 {
@@ -66,6 +83,10 @@ uint16_t ReferenceCrcForFrame(const uint8_t *data, uint8_t dataLength, uint8_t o
     return crc;
 }
 
+/* ======================================================================
+ * Test Fixture
+ * ====================================================================== */
+
 class E2EP05Test : public ::testing::Test
 {
 protected:
@@ -79,6 +100,10 @@ protected:
         config.Offset           = 0U;
     }
 };
+
+/* ======================================================================
+ * Test Functions
+ * ====================================================================== */
 
 TEST_F(E2EP05Test, E2E_P05Protect_OK_ComputesCrcMatchingReferenceImplementation)
 {
@@ -295,6 +320,10 @@ uint8_t ReferenceCrc8ForFrame(const uint8_t *data, uint8_t dataLength, uint8_t c
     return crc;
 }
 
+/* ======================================================================
+ * Test Fixture
+ * ====================================================================== */
+
 class E2EP01Test : public ::testing::Test
 {
 protected:
@@ -484,6 +513,10 @@ TEST_F(E2EP01Test, MapStatusToSM_NG_NonOkCheckReturnAlwaysMapsToErrorRegardlessO
     EXPECT_EQ(E2E_P01MapStatusToSM(E2E_E_INPUTERR_NULL, E2E_P01STATUS_OK, 0U), E2E_P_ERROR);
 }
 
+/* ======================================================================
+ * Test Fixture
+ * ====================================================================== */
+
 class E2ETest : public ::testing::Test
 {
 };
@@ -507,6 +540,10 @@ TEST_F(E2ETest, E2E_GetVersionInfo_NG_SilentlyIgnoresNullPointer)
      * 十分検証になる）。 */
     E2E_GetVersionInfo(nullptr);
 }
+
+/* ======================================================================
+ * Test Fixture
+ * ====================================================================== */
 
 /**
  * \brief  E2E_SMCheck()/E2E_SMCheckInit() の単体テスト（[SWS_E2E_00340]/

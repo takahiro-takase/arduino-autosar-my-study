@@ -7,6 +7,11 @@
  *          EcuM_Init() からのみ参照されるシンボルを、リンクを通すためだけの
  *          空定義として置く。EcuM_Init() 自体はテストから呼ばないこと。
  */
+
+/* ======================================================================
+ * Includes
+ * ====================================================================== */
+
 #include "Std_Types.h"
 #include "Can_PBCfg.h"
 #include "CanIf_PBCfg.h"
@@ -18,12 +23,20 @@
 #include "Rte.h"
 #include "App_GptDemo.h"
 
+/* ======================================================================
+ * Global Variables
+ * ====================================================================== */
+
 const Can_ConfigType       Can_Config;
 const CanIf_ConfigType     CanIf_Config;
 const Com_ConfigType       Com_Config;
 const Gpt_ConfigType       Gpt_Config;
 const PduR_PBConfigType    PduR_Config;
 const Os_ConfigType        Os_Config;
+
+/* ======================================================================
+ * Functions
+ * ====================================================================== */
 
 void E2EMon_Init(void)
 {

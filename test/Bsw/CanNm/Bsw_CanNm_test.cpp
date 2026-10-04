@@ -9,6 +9,11 @@
  *          `Bsw_CanNm_test.cpp`（NG系のみ）の3ファイルを本ファイルへ統合した。
  *          各セクションの経緯は元ファイルのコメントをそのまま引き継ぐ。
  */
+
+/* ======================================================================
+ * Includes
+ * ====================================================================== */
+
 #include <gtest/gtest.h>
 
 extern "C" {
@@ -30,6 +35,18 @@ extern "C" {
 #include "Wrap_Can.h"
 }
 
+/* ======================================================================
+ * Definitions
+ * ====================================================================== */
+
+/* ======================================================================
+ * Type Definitions
+ * ====================================================================== */
+
+/* ======================================================================
+ * Global Variables
+ * ====================================================================== */
+
 namespace
 {
 
@@ -49,6 +66,10 @@ namespace
  *          CanNm.c 単体（Can/CanIf/CanSM/ComM は不要）で検証できるため、
  *          Bsw_NmStack_SleepCoordination_test.cpp より軽量なフィクスチャで足りる。
  */
+
+/* ======================================================================
+ * Test Fixture
+ * ====================================================================== */
 
 class Bsw_CanNm_ChannelValidation_Test : public ::testing::Test
 {
@@ -79,6 +100,10 @@ protected:
 
     static const NetworkHandleType kInvalidChannel = CANNM_MAIN_NETWORK_HANDLE + 1U;
 };
+
+/* ======================================================================
+ * Test Functions
+ * ====================================================================== */
 
 TEST_F(Bsw_CanNm_ChannelValidation_Test, NetworkRequest_NG_InvalidChannelReturnsErrorAndReportsDet)
 {
@@ -292,6 +317,10 @@ const CanIf_ConfigType kCommControlTimeoutCanIfConfig = {
     /* RxPduCount */  0U
 };
 
+/* ======================================================================
+ * Test Fixture
+ * ====================================================================== */
+
 class Bsw_CanNm_CommunicationControlTimeout_Test : public ::testing::Test
 {
 protected:
@@ -486,6 +515,10 @@ TEST_F(Bsw_CanNm_CommunicationControlTimeout_Test, MainFunction_OK_DoesNotEnterP
  *          （[SWS_CanNm_00127]）を避けるため ComM は明示的に未初期化のまま
  *          にする（`feedback_native_chain_shared_static_hang` 参照）。
  */
+
+/* ======================================================================
+ * Test Fixture
+ * ====================================================================== */
 
 class Bsw_CanNm_Test : public ::testing::Test
 {

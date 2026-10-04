@@ -6,8 +6,17 @@
  *          本物の Rte.c は Com/E2E/SecOC/App_* まで巨大な依存グラフを
  *          引き込むため（他 chain テストと同じ理由）リンクしない。
  */
+
+/* ======================================================================
+ * Includes
+ * ====================================================================== */
+
 #include "Rte.h"
 #include "SecOC_Types.h"
+
+/* ======================================================================
+ * Functions
+ * ====================================================================== */
 
 Rte_IStatusType Rte_Read_SpeedSensor_EngineSpeed(EngineSpeed_t* data)
 {
@@ -68,6 +77,10 @@ Std_ReturnType Rte_Call_LedRunning_SetLevel(uint8 level)
     (void)level;
     return E_OK;
 }
+
+/* ======================================================================
+ * Callback Functions and Notifications
+ * ====================================================================== */
 
 /* SecOC_PBCfg.c から extern 宣言経由で VerificationStatusCallout として
  * 参照される（Rte.c 本体側の同名関数コメント参照）。ここでは呼び出し記録の

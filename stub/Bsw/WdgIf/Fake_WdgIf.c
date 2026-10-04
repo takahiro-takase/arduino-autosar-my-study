@@ -2,7 +2,16 @@
  * \file    Fake_WdgIf.c
  * \brief   WdgIf.h のテスト用フェイク実装（Fake_WdgIf.h 冒頭のコメント参照）
  */
+
+/* ======================================================================
+ * Includes
+ * ====================================================================== */
+
 #include "Fake_WdgIf.h"
+
+/* ======================================================================
+ * Global Variables
+ * ====================================================================== */
 
 uint32 FakeWdgIf_SetModeCount             = 0U;
 uint32 FakeWdgIf_SetTriggerConditionCount = 0U;
@@ -13,6 +22,10 @@ WdgIf_DeviceType FakeWdgIf_LastTriggerDevice = 0U;
 uint16           FakeWdgIf_LastTriggerTimeout = 0U;
 
 Std_ReturnType FakeWdgIf_SetModeReturn = E_OK;
+
+/* ======================================================================
+ * Functions
+ * ====================================================================== */
 
 void FakeWdgIf_Reset(void)
 {
