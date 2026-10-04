@@ -25,17 +25,35 @@
 #ifndef DEM_H
 #define DEM_H
 
+/* ======================================================================
+ * Includes
+ * ====================================================================== */
+
 #include "Std_Types.h"
 #include "Dem_Cfg.h"
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+/* ======================================================================
+ * Definitions
+ * ====================================================================== */
+
+/** [SWS_Dem_00198] `Dem_GetDTCOfEvent()` の拡張戻り値（要求フォーマットに
+ *  対応する DTC が構成されていない場合）。実仕様の Service Interface
+ *  DiagnosticInfo（値表）に基づく数値。Dem_Cfg.h の `DEM_E_*`（Det_ReportError
+ *  に渡す開発エラー ID）とは別の値域（本関数の戻り値そのもの）である点に注意。 */
+#define DEM_E_NO_DTC_AVAILABLE  0x0AU
+
+/** [SWS_Dem_00215] Dem_GetNextFilteredDTC() 系の戻り値: フィルタ条件に一致する
+ *  次の要素が無い。実仕様の Service Interface DiagnosticInfo（値表、
+ *  DEM_NO_SUCH_ELEMENT = 48）に基づく数値。 */
+#define DEM_NO_SUCH_ELEMENT  48U
+
+/* ======================================================================
+ * Type Definitions
+ * ====================================================================== */
 
 /* -----------------------------------------------------------------------
  * 型定義
  * ----------------------------------------------------------------------- */
-
 /** イベント ID 型 (DEM_EVENT_* 定数を渡す) */
 typedef uint8 Dem_EventIdType;
 
@@ -90,12 +108,6 @@ typedef enum
     DEM_DTC_TRANSLATION_SAE_J2012_DA_DTCFORMAT_04 = 4U /**< SAE J2012-DA_DTCFormat_04（本プロジェクトは非対応）*/
 } Dem_DTCTranslationFormatType;
 
-/** [SWS_Dem_00198] `Dem_GetDTCOfEvent()` の拡張戻り値（要求フォーマットに
- *  対応する DTC が構成されていない場合）。実仕様の Service Interface
- *  DiagnosticInfo（値表）に基づく数値。Dem_Cfg.h の `DEM_E_*`（Det_ReportError
- *  に渡す開発エラー ID）とは別の値域（本関数の戻り値そのもの）である点に注意。 */
-#define DEM_E_NO_DTC_AVAILABLE  0x0AU
-
 /**
  * \brief   イベントステータス型 (Dem_EventStatusType は AUTOSAR SWS_Dem_00926 で定義)
  *
@@ -142,7 +154,6 @@ typedef struct
 /* -----------------------------------------------------------------------
  * 公開 API
  * ----------------------------------------------------------------------- */
-
 /**
  * \brief   Dem_Init() の設定引数型（不透明型）。
  *
@@ -152,6 +163,23 @@ typedef struct
  *          （`KeyM_ConfigType` と同じ簡略化パターン。KeyM.h 冒頭コメント参照）。
  */
 typedef struct Dem_ConfigType_Tag Dem_ConfigType;
+
+/** [SWS_Dem_00057] Dem_SetDTCFilter() の DTCSeverityMask の型（uint8）。
+ *  本プロジェクトは DTC の Severity を持たないため、FilterWithSeverity=TRUE は
+ *  受け付けない。 */
+typedef uint8 Dem_DTCSeverityType;
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* ======================================================================
+ * Global Variables
+ * ====================================================================== */
+
+/* ======================================================================
+ * Functions
+ * ====================================================================== */
 
 /**
  * \brief   DEM を初期化する。
@@ -330,16 +358,6 @@ Std_ReturnType Dem_GetDTCOfEvent(Dem_EventIdType EventId, Dem_DTCFormatType DTCF
  * \Synchronicity  {Synchronous}
  */
 Std_ReturnType Dem_ClearDTC(uint8 ClientId, uint32 DTC, Dem_DTCFormatType DTCFormat, Dem_DTCOriginType DTCOrigin);
-
-/** [SWS_Dem_00057] Dem_SetDTCFilter() の DTCSeverityMask の型（uint8）。
- *  本プロジェクトは DTC の Severity を持たないため、FilterWithSeverity=TRUE は
- *  受け付けない。 */
-typedef uint8 Dem_DTCSeverityType;
-
-/** [SWS_Dem_00215] Dem_GetNextFilteredDTC() 系の戻り値: フィルタ条件に一致する
- *  次の要素が無い。実仕様の Service Interface DiagnosticInfo（値表、
- *  DEM_NO_SUCH_ELEMENT = 48）に基づく数値。 */
-#define DEM_NO_SUCH_ELEMENT  48U
 
 /**
  * \brief   DTC フィルタ条件を設定する（[SWS_Dem_00208]）。
@@ -649,6 +667,14 @@ Std_ReturnType Dem_DisableDTCSetting(uint8 ClientId);
  * \Synchronicity  {Synchronous}
  */
 void Dem_GetVersionInfo(Std_VersionInfoType* versioninfo);
+
+/* ======================================================================
+ * Callback Functions and Notifications
+ * ====================================================================== */
+
+/* ======================================================================
+ * Test Functions
+ * ====================================================================== */
 
 #ifdef DEM_UNIT_TEST
 /**

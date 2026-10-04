@@ -14,11 +14,32 @@
 #ifndef DCM_TYPES_H
 #define DCM_TYPES_H
 
+/* ======================================================================
+ * Includes
+ * ====================================================================== */
+
 #include "Platform_Types.h"
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+/* ======================================================================
+ * Definitions
+ * ====================================================================== */
+
+#define DCM_ENABLE_RX_TX_NORM             0x00U  /**< normal: Rx/Tx とも有効化 */
+#define DCM_ENABLE_RX_DISABLE_TX_NORM     0x01U  /**< normal: Rx 有効化・Tx 無効化 */
+#define DCM_DISABLE_RX_ENABLE_TX_NORM     0x02U  /**< normal: Rx 無効化・Tx 有効化 */
+#define DCM_DISABLE_RX_TX_NORM            0x03U  /**< normal: Rx/Tx とも無効化 */
+#define DCM_ENABLE_RX_TX_NM               0x04U  /**< NM通信: Rx/Tx とも有効化 */
+#define DCM_ENABLE_RX_DISABLE_TX_NM       0x05U  /**< NM通信: Rx 有効化・Tx 無効化 */
+#define DCM_DISABLE_RX_ENABLE_TX_NM       0x06U  /**< NM通信: Rx 無効化・Tx 有効化 */
+#define DCM_DISABLE_RX_TX_NM              0x07U  /**< NM通信: Rx/Tx とも無効化 */
+#define DCM_ENABLE_RX_TX_NORM_NM          0x08U  /**< normal+NM: Rx/Tx とも有効化 */
+#define DCM_ENABLE_RX_DISABLE_TX_NORM_NM  0x09U  /**< normal+NM: Rx 有効化・Tx 無効化 */
+#define DCM_DISABLE_RX_ENABLE_TX_NORM_NM  0x0AU  /**< normal+NM: Rx 無効化・Tx 有効化 */
+#define DCM_DISABLE_RX_TX_NORM_NM         0x0BU  /**< normal+NM: Rx/Tx とも無効化 */
+
+/* ======================================================================
+ * Type Definitions
+ * ====================================================================== */
 
 /**
  * \brief   UDS SID 0x28 (CommunicationControl) の要求内容を表す通信モード型
@@ -33,18 +54,25 @@ extern "C" {
  */
 typedef uint8 Dcm_CommunicationModeType;
 
-#define DCM_ENABLE_RX_TX_NORM             0x00U  /**< normal: Rx/Tx とも有効化 */
-#define DCM_ENABLE_RX_DISABLE_TX_NORM     0x01U  /**< normal: Rx 有効化・Tx 無効化 */
-#define DCM_DISABLE_RX_ENABLE_TX_NORM     0x02U  /**< normal: Rx 無効化・Tx 有効化 */
-#define DCM_DISABLE_RX_TX_NORM            0x03U  /**< normal: Rx/Tx とも無効化 */
-#define DCM_ENABLE_RX_TX_NM               0x04U  /**< NM通信: Rx/Tx とも有効化 */
-#define DCM_ENABLE_RX_DISABLE_TX_NM       0x05U  /**< NM通信: Rx 有効化・Tx 無効化 */
-#define DCM_DISABLE_RX_ENABLE_TX_NM       0x06U  /**< NM通信: Rx 無効化・Tx 有効化 */
-#define DCM_DISABLE_RX_TX_NM              0x07U  /**< NM通信: Rx/Tx とも無効化 */
-#define DCM_ENABLE_RX_TX_NORM_NM          0x08U  /**< normal+NM: Rx/Tx とも有効化 */
-#define DCM_ENABLE_RX_DISABLE_TX_NORM_NM  0x09U  /**< normal+NM: Rx 有効化・Tx 無効化 */
-#define DCM_DISABLE_RX_ENABLE_TX_NORM_NM  0x0AU  /**< normal+NM: Rx 無効化・Tx 有効化 */
-#define DCM_DISABLE_RX_TX_NORM_NM         0x0BU  /**< normal+NM: Rx/Tx とも無効化 */
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* ======================================================================
+ * Global Variables
+ * ====================================================================== */
+
+/* ======================================================================
+ * Functions
+ * ====================================================================== */
+
+/* ======================================================================
+ * Callback Functions and Notifications
+ * ====================================================================== */
+
+/* ======================================================================
+ * Test Functions
+ * ====================================================================== */
 
 #ifdef __cplusplus
 }

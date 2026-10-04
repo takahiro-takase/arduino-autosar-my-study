@@ -37,14 +37,22 @@
 #ifndef NM_H
 #define NM_H
 
+/* ======================================================================
+ * Includes
+ * ====================================================================== */
+
 #include "Platform_Types.h"
 #include "Std_Types.h"
 #include "ComStack_Types.h"
 #include "Nm_Cfg.h"
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+/* ======================================================================
+ * Definitions
+ * ====================================================================== */
+
+/* ======================================================================
+ * Type Definitions
+ * ====================================================================== */
 
 /**
  * \brief   Nm の操作モード（[SWS_Nm_00274]、4値）。
@@ -93,6 +101,18 @@ typedef enum
  *          パターンで中身を定義しない不透明型とする）。
  */
 typedef struct Nm_ConfigType_Tag Nm_ConfigType;
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* ======================================================================
+ * Global Variables
+ * ====================================================================== */
+
+/* ======================================================================
+ * Functions
+ * ====================================================================== */
 
 /**
  * \brief   Nm モジュールを初期化する。
@@ -284,6 +304,10 @@ Std_ReturnType Nm_GetState(NetworkHandleType Channel, Nm_StateType* nmStatePtr, 
  */
 void Nm_GetVersionInfo(Std_VersionInfoType* nmVerInfoPtr);
 
+/* ======================================================================
+ * Callback Functions and Notifications
+ * ====================================================================== */
+
 /**
  * \brief   Bus-Sleep Mode 中に NM フレーム受信を通知するコールバック
  *          （CanNm から呼ばれる、[SWS_Nm_00154]）。
@@ -347,6 +371,10 @@ void Nm_PrepareBusSleepMode(NetworkHandleType Channel);
  * \Synchronicity  {Asynchronous}
  */
 void Nm_BusSleepMode(NetworkHandleType Channel);
+
+/* ======================================================================
+ * Test Functions
+ * ====================================================================== */
 
 #ifdef NM_UNIT_TEST
 /**

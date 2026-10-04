@@ -11,12 +11,16 @@
 #ifndef COM_H
 #define COM_H
 
+/* ======================================================================
+ * Includes
+ * ====================================================================== */
+
 #include "Com_Types.h"
 #include "Com_Cfg.h"
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+/* ======================================================================
+ * Definitions
+ * ====================================================================== */
 
 /** E_OK/E_NOT_OK に加えた Com 独自の拡張戻り値（uint8、Std_ReturnType とは
  *  別の値域。値は `pdftotext -table` で実測確認済み）。
@@ -27,6 +31,22 @@ extern "C" {
 #define COM_SERVICE_NOT_AVAILABLE  0x80U
 /* cppcheck-suppress misra-c2012-2.5 */
 #define COM_BUSY                   0x81U
+
+/* ======================================================================
+ * Type Definitions
+ * ====================================================================== */
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* ======================================================================
+ * Global Variables
+ * ====================================================================== */
+
+/* ======================================================================
+ * Functions
+ * ====================================================================== */
 
 /* SWS_Com_00432 */
 void Com_Init(const Com_ConfigType* config);
@@ -79,9 +99,6 @@ Com_StatusType Com_GetStatus(void);
  * \Synchronicity  {Synchronous}
  */
 void Com_GetVersionInfo(Std_VersionInfoType* versioninfo);
-
-/* SWS_Com_00123 */
-void Com_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr);
 /* SWS_Com_00198 */
 uint8 Com_ReceiveSignal(Com_SignalIdType SignalId, void* SignalDataPtr);
 
@@ -287,9 +304,6 @@ Std_ReturnType Com_TriggerIPDUSend(Com_IPduIdType PduId);
  * \Synchronicity  {Synchronous}
  */
 void Com_SwitchIpduTxMode(Com_IPduIdType PduId, boolean Mode);
-
-/* SWS_Com_00124 */
-void Com_TxConfirmation(PduIdType TxPduId, Std_ReturnType result);
 /* [SWS_Com_00398]: 受信デッドライン監視タイムアウト検出。Os の 100ms タスクから呼び出す。
  * 実仕様は Com_MainFunctionRx/Tx/RouteSignals の3関数に分かれており（単体の
  * Com_MainFunction は4.3.1仕様書に存在しない）、本プロジェクトも合わせて
@@ -447,6 +461,20 @@ void Com_EnableReceptionDM(Com_IpduGroupIdType IpduGroupId);
  * \Synchronicity  {Synchronous}
  */
 void Com_DisableReceptionDM(Com_IpduGroupIdType IpduGroupId);
+
+/* ======================================================================
+ * Callback Functions and Notifications
+ * ====================================================================== */
+
+/* SWS_Com_00123 */
+void Com_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr);
+
+/* SWS_Com_00124 */
+void Com_TxConfirmation(PduIdType TxPduId, Std_ReturnType result);
+
+/* ======================================================================
+ * Test Functions
+ * ====================================================================== */
 
 #ifdef COM_UNIT_TEST
 /**

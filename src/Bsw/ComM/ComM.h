@@ -15,13 +15,28 @@
 #ifndef COMM_H
 #define COMM_H
 
+/* ======================================================================
+ * Includes
+ * ====================================================================== */
+
 #include "Std_Types.h"
 #include "ComStack_Types.h"
 #include "ComM_Cfg.h"
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+/* ======================================================================
+ * Definitions
+ * ====================================================================== */
+
+#define COMM_NO_COMMUNICATION      0U  /**< 通信停止（CAN バス非アクティブ） */
+#define COMM_SILENT_COMMUNICATION  1U  /**< 受信専用（TX 停止） */
+#define COMM_FULL_COMMUNICATION    2U  /**< 全二重通信（TX/RX 有効） */
+
+#define COMM_UNINIT  0U  /**< ComM は未初期化（Init 前、または DeInit 後） */
+#define COMM_INIT    1U  /**< ComM は初期化済みで使用可能 */
+
+/* ======================================================================
+ * Type Definitions
+ * ====================================================================== */
 
 /** ユーザハンドル型 */
 typedef uint8 ComM_UserHandleType;
@@ -29,15 +44,8 @@ typedef uint8 ComM_UserHandleType;
 /** 通信モード型 */
 typedef uint8 ComM_ModeType;
 
-#define COMM_NO_COMMUNICATION      0U  /**< 通信停止（CAN バス非アクティブ） */
-#define COMM_SILENT_COMMUNICATION  1U  /**< 受信専用（TX 停止） */
-#define COMM_FULL_COMMUNICATION    2U  /**< 全二重通信（TX/RX 有効） */
-
 /** ComM モジュール自身の初期化状態型 (AUTOSAR ComM_InitStatusType) */
 typedef uint8 ComM_InitStatusType;
-
-#define COMM_UNINIT  0U  /**< ComM は未初期化（Init 前、または DeInit 後） */
-#define COMM_INIT    1U  /**< ComM は初期化済みで使用可能 */
 
 /**
  * \brief   ComM_Init() の設定引数型（不透明型）。
@@ -48,6 +56,18 @@ typedef uint8 ComM_InitStatusType;
  *          （`KeyM_ConfigType` と同じ簡略化パターン。KeyM.h 冒頭コメント参照）。
  */
 typedef struct ComM_ConfigType_Tag ComM_ConfigType;
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* ======================================================================
+ * Global Variables
+ * ====================================================================== */
+
+/* ======================================================================
+ * Functions
+ * ====================================================================== */
 
 /**
  * \brief   ComM モジュールを初期化する。
@@ -166,6 +186,41 @@ Std_ReturnType ComM_GetRequestedComMode(ComM_UserHandleType User, ComM_ModeType*
 Std_ReturnType ComM_GetCurrentComMode(ComM_UserHandleType User, ComM_ModeType* ComMode);
 
 /**
+ * \brief   ComM 周期処理（バス通信状態の監視）。
+ *
+ * \details 意図的な NOP。[SWS_ComM_00888] のとおり `ComMNmVariant=FULL`
+ *          （本プロジェクトのように CanNm_NetworkRequest()/CanNm_NetworkRelease() を
+ *          能動的に呼び、CanNm の協調スリープでチャタリングを防止する構成）
+ *          では ComMTMinFullComModeDuration ヒステリシスタイマは不要と
+ *          明記されている。詳細な根拠は ComM.c の実装コメント参照。
+ *
+ * \AUTOSARReq     {SWS_ComM_00888}
+ * \ServiceID      {0x60}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void ComM_MainFunction(void);
+
+/**
+ * \brief   ComM モジュールのバージョン情報を取得する。
+ *
+ * \details ComM_Init と並び、未初期化時でも COMM_E_UNINIT を報告しない
+ *          例外 API（他 BSW モジュールと共通の慣例）のため、初期化状態は
+ *          確認せず NULL ポインタチェックのみ行う。
+ *
+ * \param[out]  Versioninfo  バージョン情報の格納先。NULL 禁止。
+ *
+ * \ServiceID      {0x10}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void ComM_GetVersionInfo(Std_VersionInfoType* Versioninfo);
+
+/* ======================================================================
+ * Callback Functions and Notifications
+ * ====================================================================== */
+
+/**
  * \brief   対象チャネルの通信可否を通知する（[SWS_ComM_00871]）。仕様上の
  *          呼び出し元は EcuM または BswM だが、\b 本プロジェクトで実際に
  *          呼ぶのは EcuM_Init() のみ（起動時に一度きり）。BswM からの動的な
@@ -240,22 +295,6 @@ void ComM_DCM_ActiveDiagnostic(NetworkHandleType Channel);
  * \Synchronicity  {Synchronous}
  */
 void ComM_DCM_InactiveDiagnostic(NetworkHandleType Channel);
-
-/**
- * \brief   ComM 周期処理（バス通信状態の監視）。
- *
- * \details 意図的な NOP。[SWS_ComM_00888] のとおり `ComMNmVariant=FULL`
- *          （本プロジェクトのように CanNm_NetworkRequest()/CanNm_NetworkRelease() を
- *          能動的に呼び、CanNm の協調スリープでチャタリングを防止する構成）
- *          では ComMTMinFullComModeDuration ヒステリシスタイマは不要と
- *          明記されている。詳細な根拠は ComM.c の実装コメント参照。
- *
- * \AUTOSARReq     {SWS_ComM_00888}
- * \ServiceID      {0x60}
- * \Reentrancy     {Non Reentrant}
- * \Synchronicity  {Synchronous}
- */
-void ComM_MainFunction(void);
 
 /**
  * \brief   CanSM からの通信モード変化通知コールバック（下位層 → 上位層）。
@@ -414,20 +453,9 @@ void ComM_Nm_NetworkMode(NetworkHandleType Network);
  */
 void ComM_Nm_BusSleepMode(NetworkHandleType Network);
 
-/**
- * \brief   ComM モジュールのバージョン情報を取得する。
- *
- * \details ComM_Init と並び、未初期化時でも COMM_E_UNINIT を報告しない
- *          例外 API（他 BSW モジュールと共通の慣例）のため、初期化状態は
- *          確認せず NULL ポインタチェックのみ行う。
- *
- * \param[out]  Versioninfo  バージョン情報の格納先。NULL 禁止。
- *
- * \ServiceID      {0x10}
- * \Reentrancy     {Reentrant}
- * \Synchronicity  {Synchronous}
- */
-void ComM_GetVersionInfo(Std_VersionInfoType* Versioninfo);
+/* ======================================================================
+ * Test Functions
+ * ====================================================================== */
 
 #ifdef __cplusplus
 }

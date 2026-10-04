@@ -14,8 +14,16 @@
 #ifndef GPT_PBCFG_H
 #define GPT_PBCFG_H
 
+/* ======================================================================
+ * Includes
+ * ====================================================================== */
+
 #include "Std_Types.h"
 #include "Gpt_Cfg.h"
+
+/* ======================================================================
+ * Definitions
+ * ====================================================================== */
 
 /** 管理チャネル総数 (Gpt_PBCfg.c の Gpt_ChannelTable 要素数と一致させること) */
 #define GPT_CHANNEL_COUNT  2U
@@ -27,6 +35,10 @@
  *  (src/Os/Os.c 参照)。Notification は使わず、Os は Gpt_GetTimeElapsed() を
  *  ポーリングするだけなので、他モジュールはこのチャネルに触れないこと。 */
 #define GPT_CHANNEL_1  1U
+
+/* ======================================================================
+ * Type Definitions
+ * ====================================================================== */
 
 /**
  * \brief   GPT チャネル 1 本の設定（AUTOSAR GptChannelConfiguration コンテナ相当）。
@@ -48,6 +60,10 @@ typedef struct
     const Gpt_ChannelConfigType* Channels;      /**< チャネル設定配列の先頭 */
     uint8                        ChannelCount;  /**< チャネル数 */
 } Gpt_ConfigType;
+
+/* ======================================================================
+ * Global Variables
+ * ====================================================================== */
 
 /** Gpt_PBCfg.c で定義されるポストビルドコンフィグインスタンス */
 extern const Gpt_ConfigType Gpt_Config;

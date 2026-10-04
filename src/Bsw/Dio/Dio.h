@@ -15,12 +15,23 @@
 #ifndef DIO_H
 #define DIO_H
 
+/* ======================================================================
+ * Includes
+ * ====================================================================== */
+
 #include "Std_Types.h"
 #include "Dio_Cfg.h"
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+/* ======================================================================
+ * Definitions
+ * ====================================================================== */
+
+#define DIO_HIGH  1U  /**< 出力 HIGH (3.3V / 5V) */
+#define DIO_LOW   0U  /**< 出力 LOW  (GND) */
+
+/* ======================================================================
+ * Type Definitions
+ * ====================================================================== */
 
 /** チャネル ID 型 (Arduino ピン番号に対応) */
 typedef uint8 Dio_ChannelType;
@@ -48,13 +59,22 @@ typedef struct
     uint8        offset;  /**< ポート内でのグループの位置（LSBから数えたビット位置） */
 } Dio_ChannelGroupType;
 
-#define DIO_HIGH  1U  /**< 出力 HIGH (3.3V / 5V) */
-#define DIO_LOW   0U  /**< 出力 LOW  (GND) */
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* ======================================================================
+ * Global Variables
+ * ====================================================================== */
 
 /** ChannelGroup 例の事前定義済みインスタンス（Dio_Cfg.h の
  *  DIO_CHANNELGROUP_RUN_FAULT_* から Dio.c が構築、実 AUTOSAR の
  *  コンフィグツールが生成する `DioConf_DioChannelGroup_*` に相当）。 */
 extern const Dio_ChannelGroupType Dio_ChannelGroupRunFault;
+
+/* ======================================================================
+ * Functions
+ * ====================================================================== */
 
 /**
  * \brief   指定チャネルへ出力レベルを書き込む。
@@ -203,6 +223,14 @@ void Dio_WriteChannelGroup(const Dio_ChannelGroupType* ChannelGroupIdPtr, Dio_Po
  * \Synchronicity  {Synchronous}
  */
 void Dio_GetVersionInfo(Std_VersionInfoType* VersionInfo);
+
+/* ======================================================================
+ * Callback Functions and Notifications
+ * ====================================================================== */
+
+/* ======================================================================
+ * Test Functions
+ * ====================================================================== */
 
 #ifdef __cplusplus
 }

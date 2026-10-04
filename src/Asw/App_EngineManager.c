@@ -25,6 +25,10 @@
  *          AUTOSAR 認証済み実装ではなく、製品への適用は想定していません。
  */
 
+/* ======================================================================
+ * Includes
+ * ====================================================================== */
+
 #include "App_EngineManager.h"
 #include "Rte.h"
 #include "Dem.h"
@@ -33,8 +37,11 @@
 #include "FiM_Cfg.h"
 #include "Os.h"
 
-#define TAG "AppEng"
+/* ======================================================================
+ * Definitions
+ * ====================================================================== */
 
+#define TAG "AppEng"
 
 #define ENGINE_SPEED_RUNNING_THRESHOLD  ((EngineSpeed_t)500U)
 #define ENGINE_SPEED_STALL_THRESHOLD    ((EngineSpeed_t)100U)
@@ -45,6 +52,14 @@
  *  判断し、ComM_USER_0 の FULL_COM 要求を解放する（ボランタリ CAN スリープ）。
  *  Run は 3000ms 周期のため、既定値 5 は実質 15 秒。 */
 #define APP_ENGINE_SLEEP_OFF_CYCLES     5U
+
+/* ======================================================================
+ * Type Definitions
+ * ====================================================================== */
+
+/* ======================================================================
+ * Global Variables
+ * ====================================================================== */
 
 static EngineState_t  s_state           = ENGINE_STATE_OFF;
 static unsigned long  s_startingEnterMs = 0UL;
@@ -60,6 +75,14 @@ static void State_Starting(EngineSpeed_t speed, CoolantTemp_t temp, EngineOnFlag
 static void State_Running(EngineSpeed_t speed, CoolantTemp_t temp, EngineOnFlag_t flag);
 static void State_Fault(EngineSpeed_t speed, CoolantTemp_t temp, EngineOnFlag_t flag);
 static unsigned long App_EngineManager_GetNowMs(void);
+
+/* ======================================================================
+ * Function Prototypes
+ * ====================================================================== */
+
+/* ======================================================================
+ * Functions
+ * ====================================================================== */
 
 /**
  * \brief   エンジンマネージャ SW-Component を初期化する。

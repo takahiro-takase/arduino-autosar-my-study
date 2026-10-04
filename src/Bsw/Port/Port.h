@@ -18,23 +18,31 @@
 #ifndef PORT_H
 #define PORT_H
 
+/* ======================================================================
+ * Includes
+ * ====================================================================== */
+
 #include "Std_Types.h"
 #include "Port_Cfg.h"
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+/* ======================================================================
+ * Definitions
+ * ====================================================================== */
+
+/* cppcheck-suppress misra-c2012-2.5 */
+#define PORT_PIN_IN          0U  /**< 入力方向 (フローティング) */
+#define PORT_PIN_OUT         1U  /**< 出力方向 */
+#define PORT_PIN_IN_PULLUP   2U  /**< 入力方向（内部プルアップ有効）ボタン等に使用 */
+
+/* ======================================================================
+ * Type Definitions
+ * ====================================================================== */
 
 /** ピン番号型（Arduino ピン番号に対応）*/
 typedef uint8 Port_PinType;
 
 /** ピン方向型 */
 typedef uint8 Port_PinDirectionType;
-
-/* cppcheck-suppress misra-c2012-2.5 */
-#define PORT_PIN_IN          0U  /**< 入力方向 (フローティング) */
-#define PORT_PIN_OUT         1U  /**< 出力方向 */
-#define PORT_PIN_IN_PULLUP   2U  /**< 入力方向（内部プルアップ有効）ボタン等に使用 */
 
 /**
  * \brief   ピンモード型（[SWS_Port_00231]。UART/SPI 等への切替を表す
@@ -54,6 +62,18 @@ typedef uint8 Port_PinModeType;
  *          扱う（`KeyM_ConfigType` と同じパターン。KeyM.h 冒頭コメント参照）。
  */
 typedef struct Port_ConfigType_Tag Port_ConfigType;
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* ======================================================================
+ * Global Variables
+ * ====================================================================== */
+
+/* ======================================================================
+ * Functions
+ * ====================================================================== */
 
 /**
  * \brief   Port モジュールを初期化する。
@@ -140,6 +160,14 @@ void Port_GetVersionInfo(Std_VersionInfoType* versioninfo);
  * \Synchronicity  {Synchronous}
  */
 void Port_SetPinMode(Port_PinType Pin, Port_PinModeType Mode);
+
+/* ======================================================================
+ * Callback Functions and Notifications
+ * ====================================================================== */
+
+/* ======================================================================
+ * Test Functions
+ * ====================================================================== */
 
 #ifdef __cplusplus
 }

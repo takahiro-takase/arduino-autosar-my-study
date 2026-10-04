@@ -53,14 +53,22 @@
 #ifndef CANNM_H
 #define CANNM_H
 
+/* ======================================================================
+ * Includes
+ * ====================================================================== */
+
 #include "Platform_Types.h"
 #include "Std_Types.h"
 #include "ComStack_Types.h"
 #include "CanNm_Cfg.h"
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+/* ======================================================================
+ * Definitions
+ * ====================================================================== */
+
+/* ======================================================================
+ * Type Definitions
+ * ====================================================================== */
 
 /**
  * \brief   CanNm の3つの操作モード ([SWS_CanNm_00092])。
@@ -93,6 +101,18 @@ typedef enum
  *          扱う（`CanSM_ConfigType`/`KeyM_ConfigType` と同じ簡略化パターン）。
  */
 typedef struct CanNm_ConfigType_Tag CanNm_ConfigType;
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* ======================================================================
+ * Global Variables
+ * ====================================================================== */
+
+/* ======================================================================
+ * Functions
+ * ====================================================================== */
 
 /**
  * \brief   CanNm モジュールを初期化する。Bus-Sleep Mode から開始する。
@@ -178,42 +198,6 @@ Std_ReturnType CanNm_NetworkRelease(NetworkHandleType Channel);
  * \Synchronicity  {Synchronous}
  */
 Std_ReturnType CanNm_RepeatMessageRequest(NetworkHandleType Channel);
-
-/**
- * \brief   NM フレームの受信を通知する（CanIf から呼ばれる）。
- *
- * \details Network Mode 中は NM-Timeout Timer を再起動する
- *          （[SWS_CanNm_00098]）。Prepare Bus-Sleep Mode 中は Network Mode
- *          （Repeat Message State）へ自動遷移する（[SWS_CanNm_00124]）。
- *          Bus-Sleep Mode 中は CanNm 自身は状態遷移せず、CANNM_E_NET_START_IND
- *          の DET 報告に加え `Nm_NetworkStartIndication()`（[SWS_Nm_00154]）
- *          で上位層へ通知する（[SWS_CanNm_00127]/[SWS_CanNm_00336]。実際に
- *          ネットワークへ復帰させ CanNm 自身を起こす処理は Nm 経由で ComM
- *          側が行う、Nm_NetworkStartIndication() の Doxygen 参照）。
- *
- * \param[in]  RxPduId     受信 PDU ID（本プロジェクトでは単一チャネルのため未使用）。
- * \param[in]  PduInfoPtr  受信データ。NULL 禁止。
- *
- * \ServiceID      {0x42}
- * \Reentrancy     {Reentrant}
- * \Synchronicity  {Synchronous}
- */
-void CanNm_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr);
-
-/**
- * \brief   NM フレームの送信完了を通知する（CanIf から呼ばれる）。
- *
- * \details 送信成功時、Network Mode 中は NM-Timeout Timer を再起動する
- *          （[SWS_CanNm_00099]）。
- *
- * \param[in]  TxPduId  送信完了した PDU ID（本プロジェクトでは単一チャネルのため未使用）。
- * \param[in]  result   E_OK=送信成功。
- *
- * \ServiceID      {0x40}
- * \Reentrancy     {Reentrant}
- * \Synchronicity  {Synchronous}
- */
-void CanNm_TxConfirmation(PduIdType TxPduId, Std_ReturnType result);
 
 /**
  * \brief   CanNm の周期処理。タイマ満了判定と NM フレームの（再）送信を行う。
@@ -341,6 +325,50 @@ Std_ReturnType CanNm_GetState(NetworkHandleType Channel, CanNm_StateType* StateP
  * \Synchronicity  {Synchronous}
  */
 void CanNm_GetVersionInfo(Std_VersionInfoType* versioninfo);
+
+/* ======================================================================
+ * Callback Functions and Notifications
+ * ====================================================================== */
+
+/**
+ * \brief   NM フレームの受信を通知する（CanIf から呼ばれる）。
+ *
+ * \details Network Mode 中は NM-Timeout Timer を再起動する
+ *          （[SWS_CanNm_00098]）。Prepare Bus-Sleep Mode 中は Network Mode
+ *          （Repeat Message State）へ自動遷移する（[SWS_CanNm_00124]）。
+ *          Bus-Sleep Mode 中は CanNm 自身は状態遷移せず、CANNM_E_NET_START_IND
+ *          の DET 報告に加え `Nm_NetworkStartIndication()`（[SWS_Nm_00154]）
+ *          で上位層へ通知する（[SWS_CanNm_00127]/[SWS_CanNm_00336]。実際に
+ *          ネットワークへ復帰させ CanNm 自身を起こす処理は Nm 経由で ComM
+ *          側が行う、Nm_NetworkStartIndication() の Doxygen 参照）。
+ *
+ * \param[in]  RxPduId     受信 PDU ID（本プロジェクトでは単一チャネルのため未使用）。
+ * \param[in]  PduInfoPtr  受信データ。NULL 禁止。
+ *
+ * \ServiceID      {0x42}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void CanNm_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr);
+
+/**
+ * \brief   NM フレームの送信完了を通知する（CanIf から呼ばれる）。
+ *
+ * \details 送信成功時、Network Mode 中は NM-Timeout Timer を再起動する
+ *          （[SWS_CanNm_00099]）。
+ *
+ * \param[in]  TxPduId  送信完了した PDU ID（本プロジェクトでは単一チャネルのため未使用）。
+ * \param[in]  result   E_OK=送信成功。
+ *
+ * \ServiceID      {0x40}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void CanNm_TxConfirmation(PduIdType TxPduId, Std_ReturnType result);
+
+/* ======================================================================
+ * Test Functions
+ * ====================================================================== */
 
 #ifdef __cplusplus
 }

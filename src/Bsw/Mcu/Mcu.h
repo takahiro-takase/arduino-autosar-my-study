@@ -56,13 +56,31 @@
 #ifndef MCU_H
 #define MCU_H
 
+/* ======================================================================
+ * Includes
+ * ====================================================================== */
+
 #include "Std_Types.h"
 #include "Mcu_Cfg.h"
 #include "Mcu_PBCfg.h"
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+/* ======================================================================
+ * Definitions
+ * ====================================================================== */
+
+/** Mcu_RawResetType のビット割当。Mcu.c（エンコード側）と、診断ログで
+ *  個別フラグへデコードする呼び出し元（main.cpp 等）の両方がこの定義を
+ *  共有する（2026-08 のレビューで、main.cpp 側がシフト量をハードコードで
+ *  複製しており Mcu.c 側の割当と結びついていない問題を指摘され、この
+ *  単一の定義に統一した）。 */
+#define MCU_RAW_RESET_WATCHDOG_BIT  (1U << 0)
+#define MCU_RAW_RESET_BROWNOUT_BIT  (1U << 1)
+#define MCU_RAW_RESET_EXTERNAL_BIT  (1U << 2)
+#define MCU_RAW_RESET_POWERON_BIT   (1U << 3)
+
+/* ======================================================================
+ * Type Definitions
+ * ====================================================================== */
 
 /**
  * \brief   リセット種別（[SWS_Mcu_00252] Mcu_ResetType の値域）。
@@ -91,15 +109,17 @@ typedef enum
  */
 typedef uint8 Mcu_RawResetType;
 
-/** Mcu_RawResetType のビット割当。Mcu.c（エンコード側）と、診断ログで
- *  個別フラグへデコードする呼び出し元（main.cpp 等）の両方がこの定義を
- *  共有する（2026-08 のレビューで、main.cpp 側がシフト量をハードコードで
- *  複製しており Mcu.c 側の割当と結びついていない問題を指摘され、この
- *  単一の定義に統一した）。 */
-#define MCU_RAW_RESET_WATCHDOG_BIT  (1U << 0)
-#define MCU_RAW_RESET_BROWNOUT_BIT  (1U << 1)
-#define MCU_RAW_RESET_EXTERNAL_BIT  (1U << 2)
-#define MCU_RAW_RESET_POWERON_BIT   (1U << 3)
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* ======================================================================
+ * Global Variables
+ * ====================================================================== */
+
+/* ======================================================================
+ * Functions
+ * ====================================================================== */
 
 /**
  * \brief   Mcu モジュールを初期化し、リセット原因を読み取る。
@@ -193,6 +213,14 @@ void Mcu_PerformReset(void);
  * \Synchronicity  {Synchronous}
  */
 void Mcu_GetVersionInfo(Std_VersionInfoType* versioninfo);
+
+/* ======================================================================
+ * Callback Functions and Notifications
+ * ====================================================================== */
+
+/* ======================================================================
+ * Test Functions
+ * ====================================================================== */
 
 #ifdef MCU_UNIT_TEST
 /**

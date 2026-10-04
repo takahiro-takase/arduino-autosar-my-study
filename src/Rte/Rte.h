@@ -11,14 +11,51 @@
 #ifndef RTE_H
 #define RTE_H
 
+/* ======================================================================
+ * Includes
+ * ====================================================================== */
+
 #include "Rte_Type.h"
 #include "Std_Types.h"
 #include "Com_Types.h"
 #include "ComM.h"
 
+/* ======================================================================
+ * Definitions
+ * ====================================================================== */
+
+/* ======================================================================
+ * Type Definitions
+ * ====================================================================== */
+
+/* ----------------------------------------------------------------------
+ * ランプ IOControl（Dcm SID 0x2F InputOutputControlByIdentifier 用）
+ *
+ * App_WarningIndicator は 500ms 周期で Rte_Call_LedRunning_SetLevel() 等を
+ * 呼び続けるが、Dcm が診断制御中（オーバーライド中）の間は、その呼び出しの
+ * 引数を無視して固定値を出力し続ける。ASW は Dcm の存在を一切知らない
+ * （Com の ComFilterAlgorithm と同じ「BSW/RTE が実際の反映要否を決める」
+ * 責務分離を、CAN 送信ではなく物理出力の調停に適用したもの）。
+ * ----------------------------------------------------------------------- */
+typedef enum
+{
+    RTE_LAMP_RUN   = 0,
+    RTE_LAMP_FAULT = 1,
+    RTE_LAMP_ABS   = 2,
+    RTE_LAMP_COUNT
+} Rte_LampIdType;
+
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+/* ======================================================================
+ * Global Variables
+ * ====================================================================== */
+
+/* ======================================================================
+ * Functions
+ * ====================================================================== */
 
 /* ======================================================================
  * AUTOSAR_SWS_RTE 5.6  RTE API Reference（ポート API）
@@ -131,23 +168,6 @@ void           Rte_Init_WarningIndicator(void);
  * (Com_SendSignalGroup へ委譲) */
 Std_ReturnType Rte_SendSignalGroup_WarningStatus(void);
 
-/* ----------------------------------------------------------------------
- * ランプ IOControl（Dcm SID 0x2F InputOutputControlByIdentifier 用）
- *
- * App_WarningIndicator は 500ms 周期で Rte_Call_LedRunning_SetLevel() 等を
- * 呼び続けるが、Dcm が診断制御中（オーバーライド中）の間は、その呼び出しの
- * 引数を無視して固定値を出力し続ける。ASW は Dcm の存在を一切知らない
- * （Com の ComFilterAlgorithm と同じ「BSW/RTE が実際の反映要否を決める」
- * 責務分離を、CAN 送信ではなく物理出力の調停に適用したもの）。
- * ----------------------------------------------------------------------- */
-typedef enum
-{
-    RTE_LAMP_RUN   = 0,
-    RTE_LAMP_FAULT = 1,
-    RTE_LAMP_ABS   = 2,
-    RTE_LAMP_COUNT
-} Rte_LampIdType;
-
 /** 診断制御を解除し、ASW (App_WarningIndicator) に制御を返す。 */
 Std_ReturnType Rte_IoControl_Lamp_ReturnControlToEcu(Rte_LampIdType lamp);
 /** デフォルト値 (消灯) に固定する。returnControlToEcu まで ASW の値は無視される。 */
@@ -163,8 +183,16 @@ Std_ReturnType Rte_IoControl_Lamp_GetCurrentLevel(Rte_LampIdType lamp, uint8* le
 void Rte_ScheduleRunnables(void);
 void Rte_ScheduleWarningIndicator(void);
 
+/* ======================================================================
+ * Callback Functions and Notifications
+ * ====================================================================== */
+
+/* ======================================================================
+ * Test Functions
+ * ====================================================================== */
+
 #ifdef __cplusplus
 }
 #endif
 
-#endif
+#endif /* RTE_H */

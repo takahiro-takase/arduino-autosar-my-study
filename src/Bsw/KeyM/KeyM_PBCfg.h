@@ -15,12 +15,20 @@
 #ifndef KEYM_PBCFG_H
 #define KEYM_PBCFG_H
 
+/* ======================================================================
+ * Includes
+ * ====================================================================== */
+
 #include "Platform_Types.h"
 #include "KeyM_Cfg.h"
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+/* ======================================================================
+ * Definitions
+ * ====================================================================== */
+
+/* ======================================================================
+ * Type Definitions
+ * ====================================================================== */
 
 /**
  * \brief   鍵名 1 件分の設定（DaVinci KeyMCryptoKey コンテナの簡略版）。
@@ -37,6 +45,14 @@ typedef struct
     uint8  KeyName;         /**< KEYM_CRYPTO_KEY_NAME_* 定数（1 バイト ASCII） */
     uint32 CsmKeyTargetRef; /**< Csm/CryIf/Crypto 側の鍵 ID（CRYPTO_KEY_* 定数） */
 } KeyM_CryptoKeyConfigType;
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* ======================================================================
+ * Global Variables
+ * ====================================================================== */
 
 /** 鍵名テーブル（KeyM_PBCfg.c で定義）。KEYM_CRYPTO_KEY_COUNT 件。 */
 extern const KeyM_CryptoKeyConfigType KeyM_CryptoKeyConfigData[KEYM_CRYPTO_KEY_COUNT];

@@ -11,9 +11,29 @@
 #ifndef COM_TYPES_H
 #define COM_TYPES_H
 
+/* ======================================================================
+ * Includes
+ * ====================================================================== */
+
 #include "Platform_Types.h"
 #include "Std_Types.h"
 #include "ComStack_Types.h"
+
+/* ======================================================================
+ * Definitions
+ * ====================================================================== */
+
+/* I-PDU が所属する I-PDU Group を持たないことを示すセンチネル値
+ * （UpdateBitPosition の 0xFF センチネルと同じ規約）。
+ * [SWS_Com_00840]: I-PDU Group に属さない I-PDU は Com_Init() 時に常に
+ * 開始済み（Started）として扱われ、Com_IpduGroupStart/Stop() の対象になる
+ * ことも、Com_IpduGroupStop() で停止されることも一切ない（永久に有効）。
+ * Com_IPduConfigType.IpduGroupId 参照。 */
+#define COM_IPDU_GROUP_NONE  0xFFU
+
+/* ======================================================================
+ * Type Definitions
+ * ====================================================================== */
 
 // -------------------------------------------------------
 // 基本ID型
@@ -30,14 +50,6 @@ typedef uint8 Com_IpduGroupIdType;
  *  `Com_ReceiveSignalGroup` の引数型として素の `Com_IPduIdType` を直接使って
  *  いたが、実仕様が要求する専用の型名としてシグネチャを合わせた）。 */
 typedef uint8 Com_SignalGroupIdType;
-
-/* I-PDU が所属する I-PDU Group を持たないことを示すセンチネル値
- * （UpdateBitPosition の 0xFF センチネルと同じ規約）。
- * [SWS_Com_00840]: I-PDU Group に属さない I-PDU は Com_Init() 時に常に
- * 開始済み（Started）として扱われ、Com_IpduGroupStart/Stop() の対象になる
- * ことも、Com_IpduGroupStop() で停止されることも一切ない（永久に有効）。
- * Com_IPduConfigType.IpduGroupId 参照。 */
-#define COM_IPDU_GROUP_NONE  0xFFU
 
 /**
  * \brief   COM モジュールの初期化状態型 (AUTOSAR Com_StatusType)

@@ -25,6 +25,14 @@
 #ifndef BSWM_CFG_H
 #define BSWM_CFG_H
 
+/* ======================================================================
+ * Includes
+ * ====================================================================== */
+
+/* ======================================================================
+ * Definitions
+ * ====================================================================== */
+
 /* -----------------------------------------------------------------------
  * DET（Default Error Tracer）関連定数
  *
@@ -33,7 +41,6 @@
  * （Release 4.3.1、docs/ 配下）の「List of Basic Software Modules」表で
  * BSW Mode Manager (BswM) に割り当てられた固定値 42 を使う。
  * ----------------------------------------------------------------------- */
-
 /** AUTOSAR BSW Mode Manager の ModuleId（AUTOSAR_TR_BSWModuleList 参照、固定値 42） */
 #define BSWM_MODULE_ID  42U
 
@@ -97,10 +104,10 @@
 /* cppcheck-suppress misra-c2012-2.5 */
 #define BSWM_OS_TASK_SECOC_MAIN     17U /**< SecOC_MainFunctionTx     (100 ms)  */
 #define BSWM_OS_TASK_MEMIF_MAIN     18U /**< MemIf_MainFunction     (10 ms)   */
+
 /* Task 19 (App_GptDemo_Run)・20 (ComM_MainFunction)・21 (SecOC_MainFunctionRx)
  * は意図的にマスク対象外（Os_PBCfg.c 冒頭コメント参照）のため、BswM 用の
  * Task ID 定数を持たない。 */
-
 /* -----------------------------------------------------------------------
  * タスクビットマスク (1ビット = 1タスク; ビット位置 = タスク ID)
  * タスク数が 16 を超えるため uint32 を使用する（BswM_PBCfg.h の
@@ -108,7 +115,6 @@
  * 追加時に uint16 では bit 16 を表現できず、いかなる BswM ルールからも
  * 制御不能になっていたバグを修正した経緯がある）。
  * ----------------------------------------------------------------------- */
-
 /** 全タスク (bits 0〜18。bit 19/20/21 = App_GptDemo_Run/ComM_MainFunction/
  *  SecOC_MainFunctionRx は意図的に除外——上記の注記参照）。 */
 #define BSWM_TASK_MASK_ALL  0x7FFFFUL
