@@ -14,6 +14,11 @@
  *          本ファイルに併記する（本プロジェクトのまとめ方であり、
  *          SWS_Rte_03796 が直接規定する対象は COM コールバックのみ）。
  *
+ *          並び順は仕様書の章節番号順（RTE 5.9.2.1.1〜12 → COM 8.6.3.2 → SecOC 8.7.3.1）で、
+ *          最後に仕様書に対応しない本プロジェクト独自の関数を置く。`<sn>`/`<sg>` を含む型は
+ *          信号ごとに数が変わるため、帯には型と節番号だけを書き、実装済みの関数名は帯の下の
+ *          宣言を見る（未実装の型だけ帯に明記する）。
+ *
  * \copyright  Copyright (c) 2025 T_T
  * \license    MIT License - 詳細は LICENSE ファイルを参照。
  *
@@ -31,23 +36,139 @@ ote    本ファイルは AUTOSAR 4.3.1 仕様を参考にした学習用実装�
 extern "C" {
 #endif
 
+/* ======================================================================
+ * AUTOSAR_SWS_RTE 5.9.2.1  Call-backs for communication over AUTOSAR COM
+ *   名前は <sn>（COM シグナル名）/ <sg>（COM シグナルグループ名）で決まる。
+ *   本プロジェクトで使うシグナル・グループの関数だけを定義する。
+ * ====================================================================== */
+
+/* ----------------------------------------------------------------------
+ * Rte_COMCbk_<sn>  (RTE 5.9.2.1.1, SWS_Rte_03001)
+ *   Com_CbkRxAck（SWS_Com_00555）に対応。ComNotification（受信確認）。
+ * ---------------------------------------------------------------------- */
+void    Rte_COMCbk_EngineOnFlag(void);
+
+/* ----------------------------------------------------------------------
+ * Rte_COMCbkTAck_<sn>  (RTE 5.9.2.1.2, SWS_Rte_03002)
+ *   Com_CbkTxAck（SWS_Com_00468）に対応。ComNotification（送信確認）。
+ * ---------------------------------------------------------------------- */
+void    Rte_COMCbkTAck_EngineState(void);
+
+/* ----------------------------------------------------------------------
+ * Rte_COMCbkTErr_<sn>  (RTE 5.9.2.1.3, SWS_Rte_03775)
+ *   Com_CbkTxErr（SWS_Com_00491）に対応。ComErrorNotification（送信エラー通知）。
+ *   未実装（使用するシグナルが無い）。
+ * ---------------------------------------------------------------------- */
+
+/* ----------------------------------------------------------------------
+ * Rte_COMCbkInv_<sn>  (RTE 5.9.2.1.4, SWS_Rte_02612)
+ *   Com_CbkInv（SWS_Com_00536）に対応。ComInvalidNotification（無効値受信通知）。
+ * ---------------------------------------------------------------------- */
+void    Rte_COMCbkInv_CoolantTemp(void);
+
+/* ----------------------------------------------------------------------
+ * Rte_COMCbkRxTOut_<sn>  (RTE 5.9.2.1.5, SWS_Rte_02610)
+ *   Com_CbkRxTOut（SWS_Com_00556）に対応。受信デッドライン超過通知。
+ * ---------------------------------------------------------------------- */
+void    Rte_COMCbkRxTOut_EngineOnFlag(void);
+
+/* ----------------------------------------------------------------------
+ * Rte_COMCbkTxTOut_<sn>  (RTE 5.9.2.1.6, SWS_Rte_05084)
+ *   Com_CbkTxTOut（SWS_Com_00554）に対応。送信デッドライン超過通知。
+ * ---------------------------------------------------------------------- */
+void    Rte_COMCbkTxTOut_EngineState(void);
+
+/* ----------------------------------------------------------------------
+ * Rte_COMCbk_<sg>  (RTE 5.9.2.1.7, SWS_Rte_03004)
+ *   Com_CbkRxAck（SWS_Com_00555）に対応。ComNotification（受信確認）。
+ * ---------------------------------------------------------------------- */
+void    Rte_COMCbk_AbsInfo(void);
+
+/* ----------------------------------------------------------------------
+ * Rte_COMCbkTAck_<sg>  (RTE 5.9.2.1.8, SWS_Rte_03005)
+ *   Com_CbkTxAck（SWS_Com_00468）に対応。ComNotification（送信確認）。
+ * ---------------------------------------------------------------------- */
+void    Rte_COMCbkTAck_WarningStatus(void);
+
+/* ----------------------------------------------------------------------
+ * Rte_COMCbkTErr_<sg>  (RTE 5.9.2.1.9, SWS_Rte_03776)
+ *   Com_CbkTxErr（SWS_Com_00491）に対応。ComErrorNotification（送信エラー通知）。
+ *   未実装（使用するシグナルグループが無い）。
+ * ---------------------------------------------------------------------- */
+
+/* ----------------------------------------------------------------------
+ * Rte_COMCbkInv_<sg>  (RTE 5.9.2.1.10, SWS_Rte_05065)
+ *   Com_CbkInv（SWS_Com_00536）に対応。ComInvalidNotification（無効値受信通知）。
+ *   未実装（使用するシグナルグループが無い）。
+ * ---------------------------------------------------------------------- */
+
+/* ----------------------------------------------------------------------
+ * Rte_COMCbkRxTOut_<sg>  (RTE 5.9.2.1.11, SWS_Rte_02611)
+ *   Com_CbkRxTOut（SWS_Com_00556）に対応。受信デッドライン超過通知。
+ * ---------------------------------------------------------------------- */
+void    Rte_COMCbkRxTOut_AbsInfo(void);
+
+/* ----------------------------------------------------------------------
+ * Rte_COMCbkTxTOut_<sg>  (RTE 5.9.2.1.12, SWS_Rte_05085)
+ *   Com_CbkTxTOut（SWS_Com_00554）に対応。送信デッドライン超過通知。
+ * ---------------------------------------------------------------------- */
+void    Rte_COMCbkTxTOut_WarningStatus(void);
+
+/* ======================================================================
+ * AUTOSAR_SWS_COM 8.6.3.2  I-PDU Callout Functions
+ *   関数名は ComIPduCallout（ECUC_Com_00387）で自由に設定する。
+ *   署名は boolean (PduIdType, const PduInfoType*) だが、本プロジェクトは
+ *   PduId を持たず (const uint8*, uint8) で受ける簡略版。
+ * ====================================================================== */
+
+/* ----------------------------------------------------------------------
+ * Com_RxIpduCallout  (COM 8.6.3.2, SWS_Com_00700)
+ *   受信 I-PDU のフィルタリングフック。false を返すと I-PDU を処理しない。
+ * ---------------------------------------------------------------------- */
+boolean Rte_COMRxIpduCallout_SecureCommand(const uint8* SduDataPtr, uint8 SduLength);
+
+/* ----------------------------------------------------------------------
+ * Com_TxIpduCallout  (COM 8.6.3.2, SWS_Com_00346)
+ *   送信 I-PDU のフィルタリングフック。false を返すと PduR_ComTransmit を呼ばない。
+ * ---------------------------------------------------------------------- */
+boolean Rte_COMTxIpduCallout_ImmobilizerStatus(const uint8* SduDataPtr, uint8 SduLength);
+
+/* ======================================================================
+ * AUTOSAR_SWS_SecureOnboardCommunication 8.7.3  Configurable Interfaces
+ *   関数名は SecOCVerificationStatusCallout（ECUC_SecOC_00004）で設定する。
+ * ====================================================================== */
+
+/* ----------------------------------------------------------------------
+ * SecOC_VerificationStatusCallout  (SecOC 8.7.3.1, SWS_SecOC_00119)
+ *   検証結果（成功/失敗）の通知。
+ * ---------------------------------------------------------------------- */
+void    Rte_SecOCVerificationStatus_ImmobilizerCmd(SecOC_VerificationStatusType status);
+
+/* ======================================================================
+ * 本プロジェクト独自（AUTOSAR 仕様書に対応する関数なし）
+ *   E2E Transformer の呼び出しグルーなど、Com の汎用フックに登録する関数。
+ * ====================================================================== */
+
+/* ----------------------------------------------------------------------
+ * RxIndicationCbk（Com_IPduConfigType）
+ *   I-PDU 単位の受信通知フック。E2E 検証（E2EXf）や SecOC 検証済みの通知に使う。
+ *   仕様の Rte_COMCbk_<sn> と名前が衝突しないよう Rte_COMRxInd_ としている。
+ * ---------------------------------------------------------------------- */
 void    Rte_COMRxInd_EngineInfo(void);
 void    Rte_COMRxInd_AbsInfo(void);
-void    Rte_COMTransform_E2EHealthStatus(uint8* Data, uint8 Length);
-void    Rte_COMInvalidNotify_CoolantTemp(void);
-void    Rte_COMFilterReject_EngineSpeed(void);
-void    Rte_COMCbkTAck_EngineState(void);
-void    Rte_COMCbkTxTOut_EngineState(void);
-void    Rte_COMCbkTAck_WarningStatus(void);
-void    Rte_COMCbkTxTOut_WarningStatus(void);
-void    Rte_COMCbk_EngineOnFlag(void);
-void    Rte_COMCbk_AbsInfo(void);
 void    Rte_COMRxInd_SecureCommand(void);
-void    Rte_COMCbkRxTOut_EngineOnFlag(void);
-void    Rte_COMCbkRxTOut_AbsInfo(void);
-boolean Rte_COMRxIpduCallout_SecureCommand(const uint8* SduDataPtr, uint8 SduLength);
-boolean Rte_COMTxIpduCallout_ImmobilizerStatus(const uint8* SduDataPtr, uint8 SduLength);
-void    Rte_SecOCVerificationStatus_ImmobilizerCmd(SecOC_VerificationStatusType status);
+
+/* ----------------------------------------------------------------------
+ * TxTransformCbk（Com_IPduConfigType）
+ *   送信前の変換フック。E2E Profile05 の Protect を付加する。
+ * ---------------------------------------------------------------------- */
+void    Rte_COMTransform_E2EHealthStatus(uint8* Data, uint8 Length);
+
+/* ----------------------------------------------------------------------
+ * FilterRejectCbk（Com_SignalConfigType）
+ *   ComFilterAlgorithm（NEW_IS_WITHIN）が受信値を棄却したときの通知。
+ * ---------------------------------------------------------------------- */
+void    Rte_COMFilterReject_EngineSpeed(void);
 
 #ifdef __cplusplus
 }

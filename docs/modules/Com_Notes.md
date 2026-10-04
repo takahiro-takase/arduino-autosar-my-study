@@ -1098,7 +1098,7 @@ Com_ReceiveSignal(VEHICLE_SPEED, &out)  ← AbsInfo がタイムアウト中の�
 Com_SignalConfigType (CoolantTemp):
   DataInvalidAction      = COM_DATA_INVALID_ACTION_NOTIFY
   InvalidValue           = 0xFF  （水温センサ異常マーカー）
-  InvalidNotificationCbk = Rte_COMInvalidNotify_CoolantTemp
+  InvalidNotificationCbk = Rte_COMCbkInv_CoolantTemp
 
 Com_ReceiveSignal(COOLANT_TEMP, &out)  ← CoolantTemp のバイトが 0xFF の場合
   DataInvalidAction を確認
@@ -1112,7 +1112,7 @@ Com_ReceiveSignal(COOLANT_TEMP, &out)  ← CoolantTemp のバイトが 0xFF の�
 
 Com_MainFunctionRx()  ← 次回の Os 100ms タスク呼び出し
   Com_RxInvalidNotifyPending[] が立っているシグナルについて
-  InvalidNotificationCbk()（Rte_COMInvalidNotify_CoolantTemp）を呼ぶ
+  InvalidNotificationCbk()（Rte_COMCbkInv_CoolantTemp）を呼ぶ
 ```
 
 **NOTIFY と REPLACE の違い**: `DataInvalidAction` は NOTIFY / REPLACE の両方を実装済みです
@@ -1145,7 +1145,7 @@ EngineInfo プリセットに「水温センサ異常 (0xFF)」を追加済み�
 
 **実機検証で見つかった障害（コールバックを即時実行しない理由）**: 開発初期の
 実装は、`Com_ReceiveSignal()` が無効値を検知した、まさにその場で
-`InvalidNotificationCbk()`（`Rte_COMInvalidNotify_CoolantTemp()`、中身は
+`InvalidNotificationCbk()`（`Rte_COMCbkInv_CoolantTemp()`、中身は
 `DET_LOGW` による Serial 出力）を同期的に呼んでいました。実機で
 `CoolantTemp=0xFF` のフレームを送信したところ、フレーム受信直後に
 WDT（ウォッチドッグタイマ）リセットが発生しました。
@@ -1214,7 +1214,7 @@ I-PDU 処理（TMS 評価等）は行わない」と明記されています。`
 
 **適用例 — `MeterStatus.CoolantTemp`（メータ表示ミラー）の無効化**:
 `EngineInfo.CoolantTemp`（RX）が 0xFF（無効値マーカー）で届いたことは
-既に `Rte_COMInvalidNotify_CoolantTemp()` が検知していました（前節）が、
+既に `Rte_COMCbkInv_CoolantTemp()` が検知していました（前節）が、
 従来はログ出力のみで、メータ表示側の `MeterStatus.CoolantTemp`
 （TX、`COM_SIGNAL_METER_COOLANT_TEMP`）は「直近の有効値をミラーし続ける」
 だけで、無効という事実そのものは下流（`uds_tester` 等）に伝わりません
@@ -1226,7 +1226,7 @@ Com_PBCfg.c（MeterStatus.CoolantTemp、TX、Signal 18）
   InvalidValue           = 0xFF   （RX 側 CoolantTemp と同じマーカー値）
   InvalidValueConfigured = 1
 
-Rte_COMInvalidNotify_CoolantTemp()  ← EngineInfo.CoolantTemp=0xFF 検知時
+Rte_COMCbkInv_CoolantTemp()  ← EngineInfo.CoolantTemp=0xFF 検知時
   DET_LOGW(...)                                    ← 既存のログ出力
   Rte_Invalidate_MeterStatus_CoolantTemp()  ← 新規追加。他の
     Rte_Write_<Port>_<Signal>() と同じポートラッパー規約に揃え、
@@ -1252,7 +1252,7 @@ Rte_COMInvalidNotify_CoolantTemp()  ← EngineInfo.CoolantTemp=0xFF 検知時
 **この機能は実際に発動するか**: `Com_InvalidateSignal` 経由の
 `MeterStatus.CoolantTemp` 無効化は、`Rx無効値検知`節と同じ理由で実際に
 発動します——E2E 検証に成功したすべての `EngineInfo` フレームに対して
-`Rte_COMInvalidNotify_CoolantTemp()` が呼ばれる経路自体は既に実機検証済み
+`Rte_COMCbkInv_CoolantTemp()` が呼ばれる経路自体は既に実機検証済み
 であり、今回追加したのはその中の 1 行だけです。`Com_InvalidateSignalGroup`
 （Signal Group 版）は本番設定では未使用（本プロジェクトの唯一の TX Signal
 Group である `WarningStatus` に `ComSignalDataInvalidValue` を設定した
@@ -1667,6 +1667,7 @@ dispatch/confirmation の同期性に依存しない設計にしている**: `Ca
 | `Com_CbkTxErr` | [SWS_Com_00491] | `Rte_COMCbkTErr_<sn>`/`<sg>` | （本番未使用） | （変更なし、本番未使用のまま） |
 | `Com_CbkTxTOut` | [SWS_Com_00554] | `Rte_COMCbkTxTOut_<sn>`/`<sg>` | `Rte_COMTxTOut_*` | `Rte_COMCbkTxTOut_*`（仕様どおり） |
 | `Com_CbkRxAck` | [SWS_Com_00555] | `Rte_COMCbk_<sn>`/`<sg>` | `Rte_COMRxAck_*` | `Rte_COMCbk_*`（仕様どおり） |
+| `Com_CbkInv`（ComInvalidNotification） | RTE 5.9.2.1.4、[SWS_Rte_02612] | `Rte_COMCbkInv_<sn>`/`<sg>` | `Rte_COMInvalidNotify_CoolantTemp`（2026-08 の是正で取り残されていた） | `Rte_COMCbkInv_CoolantTemp`（2026-10 に改名、仕様どおり） |
 
 `Com_CbkRxAck` が仕様どおりの `Rte_COMCbk_<sn>/<sg>` を名乗るには、その名前を
 先に使っていた `RxIndicationCbk`（実 AUTOSAR の標準コールバックではない、

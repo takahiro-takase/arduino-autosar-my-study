@@ -76,8 +76,8 @@
  *                                EngineManager SW-C の Init Runnable 起動
  *                                （[SWS_Rte_02569]/[SWS_Rte_06749]、2026-09
  *                                追加。以前は EcuM がApp_EngineManager_Init()
- *                                を直接呼んでいた。Rte.c 末尾の「RTE
- *                                ライフサイクル API」コメント参照）
+ *                                を直接呼んでいた。Rte.c の Rte_Start() 付近の
+ *                                「RTE ライフサイクル API」コメント参照）
  *           27. IoHwAb_Init    — I/O ハードウェア抽象化層初期化 (LED チャネル設定)
  *           28. Rte_Init_WarningIndicator — 警告灯 SW-C の Init Runnable 起動
  *                                (IoHwAb_Init() の後であること、同上)
@@ -294,8 +294,8 @@ void EcuM_Init(void)
     (void)ComM_RequestComMode(COMM_USER_0, COMM_FULL_COMMUNICATION);/* 全層初期化後に開通 */
     (void)Rte_Start();                /* RTE 自身の初期化（[SWS_Rte_02569]）。SW-C の
                                   * Init Runnable 起動より必ず前に置くこと
-                                  * （[SWS_Rte_CONSTR_09035]、詳細は Rte.c 末尾の
-                                  * 「RTE ライフサイクル API」コメント参照） */
+                                  * （[SWS_Rte_CONSTR_09035]、詳細は Rte.c の
+                                  * Rte_Start() 付近の「RTE ライフサイクル API」コメント参照） */
     Rte_Init_EngineManager();   /* App_EngineManager_Init() を Rte 経由で起動
                                   * （[SWS_Rte_06749]相当、2026-09 是正。以前は
                                   * EcuM_Init() が直接呼んでいた） */
@@ -305,7 +305,7 @@ void EcuM_Init(void)
     App_GptDemo_Init();  /* Gpt_Init 済みが前提。実 HW タイマの動作確認用デモ。
                            * Rte のポートを経由しない単独モジュールのため、他の
                            * BSW モジュール Init と同じく EcuM が直接呼ぶ
-                           * （Rte.c 末尾の「RTE ライフサイクル API」コメント参照）。 */
+                           * （Rte.c の Rte_Start() 付近の「RTE ライフサイクル API」コメント参照）。 */
     Wdg_Init(&Wdg_Config);    /* WdgM_Init より前: Watchdog Driver 初期化 (HW はまだ有効化しない) */
     WdgM_Init(&WdgM_Config);  /* Alive Supervision 初期化 (Os_Init より前) */
     Os_Init(&Os_Config);      /* タスクテーブル初期化 (全タスク有効で起動)。

@@ -288,7 +288,7 @@ static const Com_IPduConfigType Com_RxIPduConfigData[COM_RX_IPDU_COUNT] = {
         .UpdateBitPosition = 0xFFU,            /* update-bit なし（Signal Group 専用機能のため未使用） */
         .IpduGroupId = COM_IPDU_GROUP_NONE,    /* I-PDU Group に属さない（常に有効） */
         .RxIndicationCbk = Rte_COMRxInd_SecureCommand, /* ログ出力のみの最小デモ
-                                                *   （Rte_COMInvalidNotify_CoolantTemp と同じパターン） */
+                                                *   （Rte_COMCbkInv_CoolantTemp と同じパターン） */
         .RxIpduCalloutCbk = Rte_COMRxIpduCallout_SecureCommand
     }
 };
@@ -513,7 +513,7 @@ static const Com_SignalConfigType Com_SignalConfigData[COM_SIGNAL_COUNT] = {
          * あり、Rte_COMRxInd_EngineInfo() 経由で毎回のフレーム受信時に実際に
          * 評価される（他の SUBSTITUTE/RX Signal Group 系の機能と異なり、
          * uds_tester で CoolantTemp=0xFF のフレームを送れば実機で検証できる）。
-         * Rte_COMInvalidNotify_CoolantTemp() の実呼び出しは次回
+         * Rte_COMCbkInv_CoolantTemp() の実呼び出しは次回
          * Com_MainFunctionRx() まで遅延される（Com_RxInvalidNotifyPending
          * 参照。割り込み禁止区間からの直接呼び出しで WDT リセットを起こした
          * 実機障害の教訓）。
@@ -526,7 +526,7 @@ static const Com_SignalConfigType Com_SignalConfigData[COM_SIGNAL_COUNT] = {
         .Endian      = COM_BIG_ENDIAN,          /* DaVinci: ComSignalEndianness = OPAQUE */
         .DataInvalidAction      = COM_DATA_INVALID_ACTION_NOTIFY, /* DaVinci: ComDataInvalidAction */
         .InvalidValue           = 0xFFU,                          /* DaVinci: ComSignalDataInvalidValue */
-        .InvalidNotificationCbk = Rte_COMInvalidNotify_CoolantTemp, /* DaVinci: ComInvalidNotification */
+        .InvalidNotificationCbk = Rte_COMCbkInv_CoolantTemp, /* DaVinci: ComInvalidNotification */
         .FirstTimeoutMs = COM_TIMEOUT_ENGINE_INFO_MS, /* DaVinci: ComFirstTimeout（シグナル単位）
                                                  *          EngineSpeed と同じ理由・同じ値 */
         .TimeoutMs      = COM_TIMEOUT_ENGINE_INFO_MS  /* DaVinci: ComTimeout（シグナル単位） */
@@ -857,7 +857,7 @@ static const Com_SignalConfigType Com_SignalConfigData[COM_SIGNAL_COUNT] = {
          * そのままミラー送信する（uds_tester の仮想メータ表示タブ向け、
          * EngineSpeed(Signal 14) と同じ設計）。
          * InvalidValue/InvalidValueConfigured（2026-08 Com_InvalidateSignal 対応）:
-         * Rte_COMInvalidNotify_CoolantTemp() が EngineInfo 側の 0xFF 無効値
+         * Rte_COMCbkInv_CoolantTemp() が EngineInfo 側の 0xFF 無効値
          * マーカーを検知した際、この TX シグナル自体を Com_InvalidateSignal()
          * で無効化するために使う（Rte.c 参照。同じ 0xFF マーカーを RX/TX
          * 双方で使うことで、メータ側も「センサ値が信頼できない」ことを
