@@ -259,8 +259,11 @@ protected:
 TEST_F(Bsw_DcmStack_SID37_RequestTransferExit_Test,
        RequestTransferExit_OK_CompletedTransferProducesChecksumResponseOnCanHw)
 {
-    /* 準備 (Arrange): SetUp() の StartDownload(0x0A) は10バイト宣言のため、
-     * 5バイト×2回で送り切る。 */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // SetUp() の StartDownload(0x0A) は10バイト宣言のため、
+    // 5バイト×2回で送り切る。
     const uint8 kBlock1[5] = { 0x01U, 0x02U, 0x03U, 0x04U, 0x05U };
     const uint8 kBlock2[5] = { 0x06U, 0x07U, 0x08U, 0x09U, 0x0AU };
     SendTransferData(0x01U, kBlock1, 5U);
@@ -268,12 +271,17 @@ TEST_F(Bsw_DcmStack_SID37_RequestTransferExit_Test,
     SendTransferData(0x02U, kBlock2, 5U);
     ASSERT_EQ(FakeCanHw_LastSendData[1], 0x76U);  // 前提確認
 
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     SendRequestTransferExit();
 
-    /* 評価 (Assert): checksum は 0x01^0x02^...^0x0A = 0x00
-     * （0x01^0x02=0x03, ^0x03=0x00, ^0x04=0x04, ^0x05=0x01, ^0x06=0x07,
-     *   ^0x07=0x00, ^0x08=0x08, ^0x09=0x01, ^0x0A=0x0B）。 */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // checksum は 0x01^0x02^...^0x0A = 0x00
+    // （0x01^0x02=0x03, ^0x03=0x00, ^0x04=0x04, ^0x05=0x01, ^0x06=0x07,
+    //   ^0x07=0x00, ^0x08=0x08, ^0x09=0x01, ^0x0A=0x0B）。
     uint8 expectedChecksum = 0U;
     const uint8 kAllBytes[10] = { 0x01U, 0x02U, 0x03U, 0x04U, 0x05U, 0x06U, 0x07U, 0x08U, 0x09U, 0x0AU };
     for (uint8 i = 0U; i < 10U; i++)
@@ -294,14 +302,20 @@ TEST_F(Bsw_DcmStack_SID37_RequestTransferExit_Test,
 TEST_F(Bsw_DcmStack_SID37_RequestTransferExit_Test,
        RequestTransferExit_OK_AllowsNewRequestDownloadAfterCompletionOnCanHw)
 {
-    /* 準備 (Arrange): 10バイトを送り切って RequestTransferExit する。 */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // 10バイトを送り切って RequestTransferExit する。
     const uint8 kData[10] = { 0U, 0U, 0U, 0U, 0U, 0U, 0U, 0U, 0U, 0U };
     SendTransferData(0x01U, &kData[0], 5U);
     SendTransferData(0x02U, &kData[5], 5U);
     SendRequestTransferExit();
     ASSERT_EQ(FakeCanHw_LastSendData[1], 0x77U);  // 前提確認
 
-    /* 実行 (Act): 新たに RequestDownload を送る。 */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    // 新たに RequestDownload を送る。
     FakeCanHw_Reset();
     FakeCanHw_RxId  = 0x7E0U;
     FakeCanHw_RxDlc = 8U;
@@ -316,7 +330,10 @@ TEST_F(Bsw_DcmStack_SID37_RequestTransferExit_Test,
     FakeCanHw_RxPendingCount = 1U;
     Can_MainFunction_Read();
 
-    /* 評価 (Assert): 再度正応答 [0x74, ...] を受理できること。 */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // 再度正応答 [0x74, ...] を受理できること。
     ASSERT_EQ(FakeCanHw_SendCount, 1U);
     EXPECT_EQ(FakeCanHw_LastSendData[1], 0x74U);
 }
@@ -328,16 +345,23 @@ TEST_F(Bsw_DcmStack_SID37_RequestTransferExit_Test,
 TEST_F(Bsw_DcmStack_SID37_RequestTransferExit_Test,
        RequestTransferExit_NG_IncompleteTransferReturnsConditionsNotCorrectOnCanHw)
 {
-    /* 準備 (Arrange): SetUp() の StartDownload(0x0A) は10バイト宣言だが、
-     * 5バイトしか送らない。 */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // SetUp() の StartDownload(0x0A) は10バイト宣言だが、
+    // 5バイトしか送らない。
     const uint8 kBlock[5] = { 0x01U, 0x02U, 0x03U, 0x04U, 0x05U };
     SendTransferData(0x01U, kBlock, 5U);
     ASSERT_EQ(FakeCanHw_LastSendData[1], 0x76U);  // 前提確認
 
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     SendRequestTransferExit();
 
-    /* 評価 (Assert) */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     ASSERT_EQ(FakeCanHw_SendCount, 1U);
     EXPECT_EQ(FakeCanHw_LastSendData[0], 0x03U);
     EXPECT_EQ(FakeCanHw_LastSendData[1], DCM_SID_NEGATIVE_RESP);
@@ -353,17 +377,25 @@ TEST_F(Bsw_DcmStack_SID37_RequestTransferExit_Test,
 TEST_F(Bsw_DcmStack_SID37_RequestTransferExit_Test,
        RequestTransferExit_NG_AlreadyCompletedReturnsRequestSequenceErrorOnCanHw)
 {
-    /* 準備 (Arrange): 一度正常に転送を完了させておく。 */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // 一度正常に転送を完了させておく。
     const uint8 kData[10] = { 0U, 0U, 0U, 0U, 0U, 0U, 0U, 0U, 0U, 0U };
     SendTransferData(0x01U, &kData[0], 5U);
     SendTransferData(0x02U, &kData[5], 5U);
     SendRequestTransferExit();
     ASSERT_EQ(FakeCanHw_LastSendData[1], 0x77U);  // 前提確認（IDLE へ遷移済み）
 
-    /* 実行 (Act): IDLE 状態で RequestTransferExit を再送する。 */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    // IDLE 状態で RequestTransferExit を再送する。
     SendRequestTransferExit();
 
-    /* 評価 (Assert) */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     ASSERT_EQ(FakeCanHw_SendCount, 1U);
     EXPECT_EQ(FakeCanHw_LastSendData[1], DCM_SID_NEGATIVE_RESP);
     EXPECT_EQ(FakeCanHw_LastSendData[2], DCM_SID_REQUEST_TRANSFER_EXIT);

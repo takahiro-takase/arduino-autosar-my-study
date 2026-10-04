@@ -168,9 +168,12 @@ protected:
 TEST_F(Bsw_DcmStack_SID11_EcuResetFlushesNvm_Test,
        EcuReset_OK_PendingDtcWritesAreCompletedBeforeMcuReset)
 {
-    /* 準備 (Arrange): limit=1 のイベントを FAILED にして DTC を確定させる
-     * （Dem が STATUS と EXTENDED の書き込みを NvM に積む）。まだ NvM_MainFunction() は
-     * 一度も回していないので、書き込みは PENDING のまま。 */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // limit=1 のイベントを FAILED にして DTC を確定させる
+    // （Dem が STATUS と EXTENDED の書き込みを NvM に積む）。まだ NvM_MainFunction() は
+    // 一度も回していないので、書き込みは PENDING のまま。
     ASSERT_EQ(Dem_SetEventStatus(DEM_EVENT_BUTTON_STUCK, DEM_EVENT_STATUS_FAILED), E_OK);
     ASSERT_EQ(ResultOf(NVM_BLOCK_ID_DEM_STATUS), NVM_REQ_PENDING);
     ASSERT_EQ(ResultOf(NVM_BLOCK_ID_DEM_EXTENDED), NVM_REQ_PENDING);
@@ -185,10 +188,15 @@ TEST_F(Bsw_DcmStack_SID11_EcuResetFlushesNvm_Test,
         FakeCanHw_RxData[i] = 0U;
     FakeCanHw_RxPendingCount = 1U;
 
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Can_MainFunction_Read();
 
-    /* 評価 (Assert): 正応答が出て、リセットが要求され、書き込みが完了していること。 */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // 正応答が出て、リセットが要求され、書き込みが完了していること。
     ASSERT_EQ(FakeCanHw_SendCount, 1U);
     EXPECT_EQ(FakeCanHw_LastSendData[1], 0x51U);
     EXPECT_EQ(FakeMcuHw_PerformResetCount, 1U);

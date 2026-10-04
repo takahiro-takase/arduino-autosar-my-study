@@ -67,7 +67,10 @@ protected:
 // ------------------------------------------------------------
 TEST_F(Bsw_NvM_WriteAll_Test, NvM_WriteAll_OK_DrainsAllPendingBlocksIncludingRedundant)
 {
-    /* 準備 (Arrange): 3 ブロックの書き込みを積む（まだ 1 バイトも書かれていない）。 */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // 3 ブロックの書き込みを積む（まだ 1 バイトも書かれていない）。
     ASSERT_EQ(NvM_WriteBlock(NVM_BLOCK_ID_DEM_STATUS, statusData), E_OK);
     ASSERT_EQ(NvM_WriteBlock(NVM_BLOCK_ID_DEM_AGING, agingData), E_OK);
     ASSERT_EQ(NvM_WriteBlock(NVM_BLOCK_ID_DEM_EXTENDED, extendedData), E_OK);
@@ -75,10 +78,15 @@ TEST_F(Bsw_NvM_WriteAll_Test, NvM_WriteAll_OK_DrainsAllPendingBlocksIncludingRed
     ASSERT_EQ(ResultOf(NVM_BLOCK_ID_DEM_AGING), NVM_REQ_PENDING);
     ASSERT_EQ(ResultOf(NVM_BLOCK_ID_DEM_EXTENDED), NVM_REQ_PENDING);
 
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     NvM_WriteAll();
 
-    /* 評価 (Assert): 全ブロックが完了し、Dem へ失敗も報告されていないこと。 */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // 全ブロックが完了し、Dem へ失敗も報告されていないこと。
     EXPECT_EQ(ResultOf(NVM_BLOCK_ID_DEM_STATUS), NVM_REQ_OK);
     EXPECT_EQ(ResultOf(NVM_BLOCK_ID_DEM_AGING), NVM_REQ_OK);
     EXPECT_EQ(ResultOf(NVM_BLOCK_ID_DEM_EXTENDED), NVM_REQ_OK);
@@ -90,10 +98,14 @@ TEST_F(Bsw_NvM_WriteAll_Test, NvM_WriteAll_OK_DrainsAllPendingBlocksIncludingRed
 // ------------------------------------------------------------
 TEST_F(Bsw_NvM_WriteAll_Test, NvM_WriteAll_OK_ReturnsImmediatelyWhenNothingIsPending)
 {
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     NvM_WriteAll();
 
-    /* 評価 (Assert) */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeDetHw_ReportCount, 0U);
     EXPECT_EQ(CallCount_Dem_SetEventStatus, 0U);
 }
@@ -103,14 +115,20 @@ TEST_F(Bsw_NvM_WriteAll_Test, NvM_WriteAll_OK_ReturnsImmediatelyWhenNothingIsPen
 // ------------------------------------------------------------
 TEST_F(Bsw_NvM_WriteAll_Test, NvM_WriteAll_NG_NotInitializedReportsDet)
 {
-    /* 準備 (Arrange) */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     NvM_Test_ResetInitState();
     FakeDetHw_Reset();
 
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     NvM_WriteAll();
 
-    /* 評価 (Assert) */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeDetHw_ReportCount, 1U);
     EXPECT_EQ(FakeDetHw_LastApiId, NVM_API_ID_WRITE_ALL);
     EXPECT_EQ(FakeDetHw_LastErrorId, NVM_E_NOT_INITIALIZED);

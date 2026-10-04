@@ -251,29 +251,45 @@ protected:
 // ------------------------------------------------------------
 TEST_F(Bsw_ComStack_SignalGroup_Rx_Test, ComRxIndication_OK_GroupAck_FiresOnceRegardlessOfMemberCount)
 {
-    /* 準備 (Arrange): IPduId=1（Signal Group、メンバー2本）をフル DLC で受信 */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // IPduId=1（Signal Group、メンバー2本）をフル DLC で受信
     uint8 buf[1] = { 0x03U };
     PduInfoType pduInfo = { buf, 1U };
 
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Com_RxIndication(1U, &pduInfo);
 
-    /* 評価 (Assert): メンバー数（2）に関わらず、グループ単位で厳密に1回 */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // メンバー数（2）に関わらず、グループ単位で厳密に1回
     EXPECT_EQ(s_groupRxAckCount, 1U);
 }
 
 
 TEST_F(Bsw_ComStack_SignalGroup_Rx_Test, ComRxIndication_NG_GroupAck_DoesNotFireOnShortFrameDiscard)
 {
-    /* 準備 (Arrange): IPduId=1 の DLC(1) 未満の受信長
-     * （[SWS_Com_00575] によりグループ全体が不採用になる） */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // IPduId=1 の DLC(1) 未満の受信長
+    // （[SWS_Com_00575] によりグループ全体が不採用になる）
     uint8 buf[1] = { 0x00U };
     PduInfoType pduInfo = { buf, 0U };
 
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Com_RxIndication(1U, &pduInfo);
 
-    /* 評価 (Assert): バッファへ格納されていないため RxAckCbk も呼ばれない */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // バッファへ格納されていないため RxAckCbk も呼ばれない
     EXPECT_EQ(s_groupRxAckCount, 0U);
 }
 
@@ -283,20 +299,28 @@ TEST_F(Bsw_ComStack_SignalGroup_Rx_Test, ComRxIndication_NG_GroupAck_DoesNotFire
 // ------------------------------------------------------------
 TEST_F(Bsw_ComStack_SignalGroup_Rx_Test, ComMainFunction_NG_GroupShortFrameDiscardStillResetsDeadlineTimer)
 {
-    /* 準備 (Arrange): t=300ms で IPduId=1（グループ）へ短小フレームが届き
-     * [SWS_Com_00575] によりグループ全体が不採用になる。もしタイマが
-     * リセットされていなければ、Com_Init() 時点(t=0)を起点に t=600ms で
-     * 500ms しきい値を超えてタイムアウトしてしまう。 */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // t=300ms で IPduId=1（グループ）へ短小フレームが届き
+    // [SWS_Com_00575] によりグループ全体が不採用になる。もしタイマが
+    // リセットされていなければ、Com_Init() 時点(t=0)を起点に t=600ms で
+    // 500ms しきい値を超えてタイムアウトしてしまう。
     FakeMillis_Value = 300UL;
     ReceiveOnceGroupShort();
 
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     FakeMillis_Value = 600UL;
     Com_MainFunctionRx();
 
-    /* 評価 (Assert): [SWS_Com_00738]（無効なシグナルグループ受信時も
-     * タイマは再始動される）どおり、拒否された t=300ms を起点にまだ
-     * 300ms しか経過しておらず、タイムアウトしない。 */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // [SWS_Com_00738]（無効なシグナルグループ受信時も
+    // タイマは再始動される）どおり、拒否された t=300ms を起点にまだ
+    // 300ms しか経過しておらず、タイムアウトしない。
     EXPECT_EQ(Com_IsRxTimedOut(2U), 0U);
     EXPECT_EQ(s_groupRxTOutCount, 0U);
 }
@@ -304,18 +328,25 @@ TEST_F(Bsw_ComStack_SignalGroup_Rx_Test, ComMainFunction_NG_GroupShortFrameDisca
 
 TEST_F(Bsw_ComStack_SignalGroup_Rx_Test, ComMainFunction_OK_GroupRxTOutFiresAfterThresholdElapsed)
 {
-    /* 準備 (Arrange) */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     ReceiveOnceGroup();
     FakeMillis_Value = 600UL;
 
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Com_MainFunctionRx();
 
-    /* 評価 (Assert): グループ単位のコールバックが発火する。IPduId=0 側の
-     * シグナル単位監視は本テストでは検証対象外（同じ 500ms しきい値かつ
-     * 一度も受信させていないため Com_Init() 起点で同時に満了し、
-     * s_sigRxTOutCount 側も独立に発火しうる——これは IPduId=0/1 が別々の
-     * I-PDU である以上正しい挙動であり、本テストの主張ではない） */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // グループ単位のコールバックが発火する。IPduId=0 側の
+    // シグナル単位監視は本テストでは検証対象外（同じ 500ms しきい値かつ
+    // 一度も受信させていないため Com_Init() 起点で同時に満了し、
+    // s_sigRxTOutCount 側も独立に発火しうる——これは IPduId=0/1 が別々の
+    // I-PDU である以上正しい挙動であり、本テストの主張ではない）
     EXPECT_EQ(Com_IsRxTimedOut(2U), 1U);
     EXPECT_EQ(s_groupRxTOutCount, 1U);
 }
@@ -323,14 +354,20 @@ TEST_F(Bsw_ComStack_SignalGroup_Rx_Test, ComMainFunction_OK_GroupRxTOutFiresAfte
 
 TEST_F(Bsw_ComStack_SignalGroup_Rx_Test, ComMainFunction_NG_GroupBeforeThreshold_DoesNotFire)
 {
-    /* 準備 (Arrange) */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     ReceiveOnceGroup();
     FakeMillis_Value = 400UL;
 
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Com_MainFunctionRx();
 
-    /* 評価 (Assert) */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(Com_IsRxTimedOut(2U), 0U);
     EXPECT_EQ(s_groupRxTOutCount, 0U);
 }
@@ -338,20 +375,28 @@ TEST_F(Bsw_ComStack_SignalGroup_Rx_Test, ComMainFunction_NG_GroupBeforeThreshold
 
 TEST_F(Bsw_ComStack_SignalGroup_Rx_Test, ComMainFunction_NG_MisconfiguredGroupMemberDoesNotDoubleFire)
 {
-    /* 準備 (Arrange): kTestRxTimeoutGroupSignal は Signal Group メンバー
-     * （IPduId=1、IsSignalGroup=1）でありながら、非 Signal Group シグナルの
-     * ようにコピペ設定されてしまった状態（FirstTimeoutMs/TimeoutMs/RxTOutCbk
-     * が設定済み）を模している。ipdu->IsSignalGroup のランタイムガードが
-     * 無ければ、シグナル単位ループでもこのメンバーの RxTOutCbk が誤って
-     * 発火してしまう（/code-review で指摘された二重発火シナリオ）。 */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // kTestRxTimeoutGroupSignal は Signal Group メンバー
+    // （IPduId=1、IsSignalGroup=1）でありながら、非 Signal Group シグナルの
+    // ようにコピペ設定されてしまった状態（FirstTimeoutMs/TimeoutMs/RxTOutCbk
+    // が設定済み）を模している。ipdu->IsSignalGroup のランタイムガードが
+    // 無ければ、シグナル単位ループでもこのメンバーの RxTOutCbk が誤って
+    // 発火してしまう（/code-review で指摘された二重発火シナリオ）。
     ReceiveOnceGroup();
     FakeMillis_Value = 600UL;
 
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Com_MainFunctionRx();
 
-    /* 評価 (Assert): グループ単位のコールバックは正しく1回発火するが、
-     * 誤設定されたメンバー側のシグナル単位コールバックは発火しない */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // グループ単位のコールバックは正しく1回発火するが、
+    // 誤設定されたメンバー側のシグナル単位コールバックは発火しない
     EXPECT_EQ(s_groupRxTOutCount, 1U);
     EXPECT_EQ(s_misconfiguredGroupMemberRxTOutCount, 0U);
 }
@@ -546,41 +591,62 @@ protected:
 // ------------------------------------------------------------
 TEST_F(Bsw_ComStack_SignalGroup_RxIpduGroup_Test, ComMainFunction_NG_StoppedGroupedIPduNeverTimesOutRegardlessOfElapsed)
 {
-    /* 準備 (Arrange): Com_IpduGroupStart() を一度も呼ばない
-     * （[SWS_Com_00444]: I-PDU Group は既定で停止状態） */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // Com_IpduGroupStart() を一度も呼ばない
+    // （[SWS_Com_00444]: I-PDU Group は既定で停止状態）
 
-    /* 実行 (Act): TimeoutMs(500ms) を大幅に超えて経過させる */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    // TimeoutMs(500ms) を大幅に超えて経過させる
     FakeMillis_Value += 5000U;
     Com_MainFunctionRx();
     Com_MainFunctionTx();
 
-    /* 評価 (Assert): 停止中はデッドライン監視自体が評価されないため
-     * （[SWS_Com_00685]）、いくら経過しても RxTOutCbk は発火しない
-     * （本番の Bus-Sleep 中に EngineInfo/AbsInfo の RX タイムアウトが
-     * 誤って発火しないことの裏付け）。 */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // 停止中はデッドライン監視自体が評価されないため
+    // （[SWS_Com_00685]）、いくら経過しても RxTOutCbk は発火しない
+    // （本番の Bus-Sleep 中に EngineInfo/AbsInfo の RX タイムアウトが
+    // 誤って発火しないことの裏付け）。
     EXPECT_EQ(s_groupedRxTOutCount, 0U);
 }
 
 
 TEST_F(Bsw_ComStack_SignalGroup_RxIpduGroup_Test, ComIpduGroupStart_OK_GroupedIPduBeginsMonitoringAfterExplicitStart)
 {
-    /* 準備 (Arrange): 明示的に開始する（BswM の FULL_COM 遷移ルート相当） */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // 明示的に開始する（BswM の FULL_COM 遷移ルート相当）
     Com_IpduGroupStart(COM_IPDU_GROUP_SENSOR_RX, 0U);
 
-    /* 実行 (Act): TimeoutMs(500ms) 経過 */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    // TimeoutMs(500ms) 経過
     FakeMillis_Value += 500U;
     Com_MainFunctionRx();
     Com_MainFunctionTx();
 
-    /* 評価 (Assert): 開始後は通常どおり監視が働き、タイムアウトが発火する */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // 開始後は通常どおり監視が働き、タイムアウトが発火する
     EXPECT_EQ(s_groupedRxTOutCount, 1U);
 }
 
 
 TEST_F(Bsw_ComStack_SignalGroup_RxIpduGroup_Test, ComIpduGroupStop_OK_StoppingAgainSuppressesTimeoutEvenAfterElapsed)
 {
-    /* 準備 (Arrange): 一度開始してから、しきい値に達する前に停止する
-     * （本番の Bus-Sleep 遷移相当: FULL_COM → NO_COMMUNICATION）。 */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // 一度開始してから、しきい値に達する前に停止する
+    // （本番の Bus-Sleep 遷移相当: FULL_COM → NO_COMMUNICATION）。
     Com_IpduGroupStart(COM_IPDU_GROUP_SENSOR_RX, 0U);
     FakeMillis_Value += 100U;
     Com_MainFunctionRx();
@@ -589,22 +655,31 @@ TEST_F(Bsw_ComStack_SignalGroup_RxIpduGroup_Test, ComIpduGroupStop_OK_StoppingAg
 
     Com_IpduGroupStop(COM_IPDU_GROUP_SENSOR_RX);
 
-    /* 実行 (Act): 停止中にしきい値を大幅に超えて経過させる */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    // 停止中にしきい値を大幅に超えて経過させる
     FakeMillis_Value += 5000U;
     Com_MainFunctionRx();
     Com_MainFunctionTx();
 
-    /* 評価 (Assert): 停止中は評価されないため発火しない
-     * （意図的なスリープのたびに誤って RX timeout が記録されていた
-     * 問題が解消されていることの直接的な裏付け）。 */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // 停止中は評価されないため発火しない
+    // （意図的なスリープのたびに誤って RX timeout が記録されていた
+    // 問題が解消されていることの直接的な裏付け）。
     EXPECT_EQ(s_groupedRxTOutCount, 0U);
 }
 
 
 TEST_F(Bsw_ComStack_SignalGroup_RxIpduGroup_Test, ComIpduGroupStop_OK_NonGroupSignalFreezesInsteadOfSubstitutingWhileStopped)
 {
-    /* 準備 (Arrange): 開始→実受信→しきい値未満で停止
-     * （本番の Bus-Sleep 遷移相当: FULL_COM → NO_COMMUNICATION）。 */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // 開始→実受信→しきい値未満で停止
+    // （本番の Bus-Sleep 遷移相当: FULL_COM → NO_COMMUNICATION）。
     Com_IpduGroupStart(COM_IPDU_GROUP_SENSOR_RX, 0U);
     ReceiveOnceNonGroup(0x1234U);
     FakeMillis_Value += 100U;
@@ -614,21 +689,27 @@ TEST_F(Bsw_ComStack_SignalGroup_RxIpduGroup_Test, ComIpduGroupStop_OK_NonGroupSi
 
     Com_IpduGroupStop(COM_IPDU_GROUP_SENSOR_RX);
 
-    /* 実行 (Act): 停止中にしきい値を大幅に超えて経過させる */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    // 停止中にしきい値を大幅に超えて経過させる
     FakeMillis_Value += 5000U;
     Com_MainFunctionRx();
     Com_MainFunctionTx();
 
-    /* 評価 (Assert): 停止中はシグナル単位ループも評価されないため
-     * RxTOutCbk は発火しない。Com_ReceiveSignal() も SUBSTITUTE
-     * （0xFFFF）へ切り替わらず、停止直前の実受信値（0x1234）が
-     * 凍結されたまま返り続ける。これが本来の目的（Bus-Sleep 中に
-     * 「通信異常」として誤って上位層へ伝わらないようにする）だが、
-     * 裏を返せば「本当に通信異常が起きても、再開までは検知されない」
-     * ことも意味する（意図的な停止期間中は当然の仕様）。戻り値は
-     * [SWS_Com_00684]/[SWS_Com_00685]/Table 3 のとおり
-     * COM_SERVICE_NOT_AVAILABLE（2026-09-20 是正。以前は
-     * COM_SERVICE_NOT_AVAILABLE 定数が存在せず E_OK のままだった）。 */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // 停止中はシグナル単位ループも評価されないため
+    // RxTOutCbk は発火しない。Com_ReceiveSignal() も SUBSTITUTE
+    // （0xFFFF）へ切り替わらず、停止直前の実受信値（0x1234）が
+    // 凍結されたまま返り続ける。これが本来の目的（Bus-Sleep 中に
+    // 「通信異常」として誤って上位層へ伝わらないようにする）だが、
+    // 裏を返せば「本当に通信異常が起きても、再開までは検知されない」
+    // ことも意味する（意図的な停止期間中は当然の仕様）。戻り値は
+    // [SWS_Com_00684]/[SWS_Com_00685]/Table 3 のとおり
+    // COM_SERVICE_NOT_AVAILABLE（2026-09-20 是正。以前は
+    // COM_SERVICE_NOT_AVAILABLE 定数が存在せず E_OK のままだった）。
     EXPECT_EQ(s_nonGroupRxTOutCount, 0U);
     uint16_t value = 0U;
     uint8 ret = Com_ReceiveSignal(0U, &value);
@@ -642,36 +723,52 @@ TEST_F(Bsw_ComStack_SignalGroup_RxIpduGroup_Test, ComIpduGroupStop_OK_NonGroupSi
 // ------------------------------------------------------------
 TEST_F(Bsw_ComStack_SignalGroup_RxIpduGroup_Test, ComReceiveSignalGroup_OK_ReturnsServiceNotAvailableWhenGroupStopped)
 {
-    /* 準備 (Arrange): 開始してから停止する（Com_Init() 直後の未開始状態との
-     * 区別のため、明示的に一度開始してから止める）。 */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // 開始してから停止する（Com_Init() 直後の未開始状態との
+    // 区別のため、明示的に一度開始してから止める）。
     Com_IpduGroupStart(COM_IPDU_GROUP_SENSOR_RX, 0U);
     Com_IpduGroupStop(COM_IPDU_GROUP_SENSOR_RX);
 
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     uint8 ret = Com_ReceiveSignalGroup(0U);
 
-    /* 評価 (Assert): [SWS_Com_00461] 停止中でもシャドウバッファへの
-     * コピー自体は行うが、戻り値は COM_SERVICE_NOT_AVAILABLE。 */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // [SWS_Com_00461] 停止中でもシャドウバッファへの
+    // コピー自体は行うが、戻り値は COM_SERVICE_NOT_AVAILABLE。
     EXPECT_EQ(ret, COM_SERVICE_NOT_AVAILABLE);
 }
 
 
 TEST_F(Bsw_ComStack_SignalGroup_RxIpduGroup_Test, ComReceiveSignalGroupArray_OK_ReturnsServiceNotAvailableWhenGroupStoppedButStillCopies)
 {
-    /* 準備 (Arrange): 開始して実受信させてから停止する（受信値が
-     * 凍結されたまま返ることも合わせて確認する）。 */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // 開始して実受信させてから停止する（受信値が
+    // 凍結されたまま返ることも合わせて確認する）。
     Com_IpduGroupStart(COM_IPDU_GROUP_SENSOR_RX, 0U);
     uint8 data[1] = { 0xABU };
     PduInfoType pdu = { data, 1U };
     Com_RxIndication(0U, &pdu);
     Com_IpduGroupStop(COM_IPDU_GROUP_SENSOR_RX);
 
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     uint8 out[1] = { 0U };
     uint8 ret = Com_ReceiveSignalGroupArray(0U, out);
 
-    /* 評価 (Assert): [SWS_Com_00857] 停止中でも最後の受信値をそのまま
-     * コピーするが、戻り値は COM_SERVICE_NOT_AVAILABLE。 */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // [SWS_Com_00857] 停止中でも最後の受信値をそのまま
+    // コピーするが、戻り値は COM_SERVICE_NOT_AVAILABLE。
     EXPECT_EQ(ret, COM_SERVICE_NOT_AVAILABLE);
     EXPECT_EQ(out[0], 0xABU);
 }
@@ -679,17 +776,26 @@ TEST_F(Bsw_ComStack_SignalGroup_RxIpduGroup_Test, ComReceiveSignalGroupArray_OK_
 
 TEST_F(Bsw_ComStack_SignalGroup_RxIpduGroup_Test, ComIpduGroupStart_OK_NonGroupSignalTimesOutAndSubstitutesAfterExplicitStart)
 {
-    /* 準備 (Arrange): 明示的に開始してから実受信させる */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // 明示的に開始してから実受信させる
     Com_IpduGroupStart(COM_IPDU_GROUP_SENSOR_RX, 0U);
     ReceiveOnceNonGroup(0x1234U);
 
-    /* 実行 (Act): TimeoutMs(500ms) 経過 */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    // TimeoutMs(500ms) 経過
     FakeMillis_Value += 500U;
     Com_MainFunctionRx();
     Com_MainFunctionTx();
 
-    /* 評価 (Assert): 開始後は通常どおり監視が働き、RxTOutCbk が発火し
-     * Com_ReceiveSignal() も SUBSTITUTE 値を返すようになる。 */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // 開始後は通常どおり監視が働き、RxTOutCbk が発火し
+    // Com_ReceiveSignal() も SUBSTITUTE 値を返すようになる。
     EXPECT_EQ(s_nonGroupRxTOutCount, 1U);
     uint16_t value = 0U;
     uint8 ret = Com_ReceiveSignal(0U, &value);
@@ -703,17 +809,26 @@ TEST_F(Bsw_ComStack_SignalGroup_RxIpduGroup_Test, ComIpduGroupStart_OK_NonGroupS
 // ------------------------------------------------------------
 TEST_F(Bsw_ComStack_SignalGroup_RxIpduGroup_Test, ComEnableDisableReceptionDM_OK_TogglesFlagForMatchingGroupIPdusOnly)
 {
-    /* 評価 (Assert): Com_Init() 直後は既定で有効 */
+    /* ----------------------------------- */
+    /* ---- 評価 (Assert) ---------------- */
+    /* ----------------------------------- */
+    // Com_Init() 直後は既定で有効
     EXPECT_EQ(Com_Test_GetRxDmEnabled(0U), 1U);
     EXPECT_EQ(Com_Test_GetRxDmEnabled(1U), 1U);
 
-    /* 実行 (Act) + 評価 (Assert): 無効化すると両方とも 0 になる
-     * （IPduId=0/1 いずれも COM_IPDU_GROUP_SENSOR_RX 所属） */
+    /* ----------------------------------- */
+    /* ---- 実行 (Act) + 評価 (Assert) --- */
+    /* ----------------------------------- */
+    // 無効化すると両方とも 0 になる
+    // （IPduId=0/1 いずれも COM_IPDU_GROUP_SENSOR_RX 所属）
     Com_DisableReceptionDM(COM_IPDU_GROUP_SENSOR_RX);
     EXPECT_EQ(Com_Test_GetRxDmEnabled(0U), 0U);
     EXPECT_EQ(Com_Test_GetRxDmEnabled(1U), 0U);
 
-    /* 実行 (Act) + 評価 (Assert): 再度有効化すると両方とも 1 に戻る */
+    /* ----------------------------------- */
+    /* ---- 実行 (Act) + 評価 (Assert) --- */
+    /* ----------------------------------- */
+    // 再度有効化すると両方とも 1 に戻る
     Com_EnableReceptionDM(COM_IPDU_GROUP_SENSOR_RX);
     EXPECT_EQ(Com_Test_GetRxDmEnabled(0U), 1U);
     EXPECT_EQ(Com_Test_GetRxDmEnabled(1U), 1U);
@@ -722,22 +837,34 @@ TEST_F(Bsw_ComStack_SignalGroup_RxIpduGroup_Test, ComEnableDisableReceptionDM_OK
 
 TEST_F(Bsw_ComStack_SignalGroup_RxIpduGroup_Test, DisableReceptionDM_OK_SuppressesGroupTimeoutWhileIpduGroupStaysStarted)
 {
-    /* 準備 (Arrange): 開始してからデッドライン監視のみ無効化する
-     * （Com_IpduGroupStop() とは異なり、I-PDU Group 自体は起動済みのまま）。 */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // 開始してからデッドライン監視のみ無効化する
+    // （Com_IpduGroupStop() とは異なり、I-PDU Group 自体は起動済みのまま）。
     Com_IpduGroupStart(COM_IPDU_GROUP_SENSOR_RX, 0U);
     Com_DisableReceptionDM(COM_IPDU_GROUP_SENSOR_RX);
 
-    /* 実行 (Act): しきい値(500ms)を大幅に超えて経過させる */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    // しきい値(500ms)を大幅に超えて経過させる
     FakeMillis_Value += 5000U;
     Com_MainFunctionRx();
     Com_MainFunctionTx();
 
-    /* 評価 (Assert): デッドライン監視のみ抑制され、RxTOutCbk は発火しない */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // デッドライン監視のみ抑制され、RxTOutCbk は発火しない
     EXPECT_EQ(s_groupedRxTOutCount, 0U);
 
-    /* 評価 (Assert): Com_IpduGroupStop() と違い、受信処理自体は継続している
-     * ことを確認する（IPduId=1、非 Signal Group側で実際に受信させ、
-     * Com_ReceiveSignal() が新しい値を返すことで検証）。 */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // Com_IpduGroupStop() と違い、受信処理自体は継続している
+    // ことを確認する（IPduId=1、非 Signal Group側で実際に受信させ、
+    // Com_ReceiveSignal() が新しい値を返すことで検証）。
     ReceiveOnceNonGroup(0x5678U);
     uint16_t value = 0U;
     uint8 ret = Com_ReceiveSignal(0U, &value);
@@ -748,8 +875,11 @@ TEST_F(Bsw_ComStack_SignalGroup_RxIpduGroup_Test, DisableReceptionDM_OK_Suppress
 
 TEST_F(Bsw_ComStack_SignalGroup_RxIpduGroup_Test, EnableReceptionDM_OK_ResetsTimerAndResumesDetectionWithoutImmediateFalseTimeout)
 {
-    /* 準備 (Arrange): 開始→実受信→デッドライン監視を無効化したまま
-     * しきい値を大幅に超えて放置する。 */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // 開始→実受信→デッドライン監視を無効化したまま
+    // しきい値を大幅に超えて放置する。
     Com_IpduGroupStart(COM_IPDU_GROUP_SENSOR_RX, 0U);
     ReceiveOnceNonGroup(0x1234U);
     Com_DisableReceptionDM(COM_IPDU_GROUP_SENSOR_RX);
@@ -758,34 +888,55 @@ TEST_F(Bsw_ComStack_SignalGroup_RxIpduGroup_Test, EnableReceptionDM_OK_ResetsTim
     Com_MainFunctionTx();
     ASSERT_EQ(s_nonGroupRxTOutCount, 0U);  // 無効化中は評価されない
 
-    /* 実行 (Act): 再度有効化した直後に Com_MainFunctionRx() を呼ぶ */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    // 再度有効化した直後に Com_MainFunctionRx() を呼ぶ
     Com_EnableReceptionDM(COM_IPDU_GROUP_SENSOR_RX);
     Com_MainFunctionRx();
     Com_MainFunctionTx();
 
-    /* 評価 (Assert): タイマが再始動されているため、無効化中に「経過して
-     * いた」5000ms を理由に即座にタイムアウト判定されない
-     * （Com_IpduGroupStart() の [SWS_Com_00787] 項目2と同じ理由）。 */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // タイマが再始動されているため、無効化中に「経過して
+    // いた」5000ms を理由に即座にタイムアウト判定されない
+    // （Com_IpduGroupStart() の [SWS_Com_00787] 項目2と同じ理由）。
     EXPECT_EQ(s_nonGroupRxTOutCount, 0U);
 
-    /* 実行 (Act): 再有効化後、改めて TimeoutMs(500ms) 経過させる */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    // 再有効化後、改めて TimeoutMs(500ms) 経過させる
     FakeMillis_Value += 500U;
     Com_MainFunctionRx();
     Com_MainFunctionTx();
 
-    /* 評価 (Assert): 通常どおり監視が再開されていること */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // 通常どおり監視が再開されていること
     EXPECT_EQ(s_nonGroupRxTOutCount, 1U);
 }
 
 
 TEST_F(Bsw_ComStack_SignalGroup_RxIpduGroup_Test, DisableReceptionDM_NG_UnknownIpduGroupIdHasNoEffect)
 {
-    /* 準備 (Arrange): 不要。既定で有効なまま */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // 不要。既定で有効なまま
 
-    /* 実行 (Act): どの I-PDU にも一致しない IpduGroupId を指定する */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    // どの I-PDU にも一致しない IpduGroupId を指定する
     Com_DisableReceptionDM(static_cast<Com_IpduGroupIdType>(0xAAU));
 
-    /* 評価 (Assert): 何も変化しない */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // 何も変化しない
     EXPECT_EQ(Com_Test_GetRxDmEnabled(0U), 1U);
     EXPECT_EQ(Com_Test_GetRxDmEnabled(1U), 1U);
 }
@@ -796,27 +947,41 @@ TEST_F(Bsw_ComStack_SignalGroup_RxIpduGroup_Test, DisableReceptionDM_NG_UnknownI
 // ------------------------------------------------------------
 TEST_F(Bsw_ComStack_SignalGroup_RxIpduGroup_Test, DisableReceptionDM_NG_MixedRxTxGroupIsIgnoredEntirely)
 {
-    /* 準備 (Arrange): 不要。既定で有効なまま */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // 不要。既定で有効なまま
     ASSERT_EQ(Com_Test_GetRxDmEnabled(2U), 1U);
 
-    /* 実行 (Act): RX/TX 混在グループ（COM_IPDU_GROUP_NONE）を指定する */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    // RX/TX 混在グループ（COM_IPDU_GROUP_NONE）を指定する
     Com_DisableReceptionDM(COM_IPDU_GROUP_NONE);
 
-    /* 評価 (Assert): 要求全体が無視され、RX メンバー（IPduId=2）のフラグも
-     * 変化しない。 */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // 要求全体が無視され、RX メンバー（IPduId=2）のフラグも
+    // 変化しない。
     EXPECT_EQ(Com_Test_GetRxDmEnabled(2U), 1U);
 }
 
 
 TEST_F(Bsw_ComStack_SignalGroup_RxIpduGroup_Test, EnableReceptionDM_NG_MixedRxTxGroupIsIgnoredEntirely)
 {
-    /* 準備 (Arrange): 不要。既定で有効なため Enable 側だけでは差が出ない。
-     * Disable 側が [SWS_Com_00534] のガードにより無視されて 1 のままである
-     * こと自体は上のテストで確認済みのため、ここでは Enable 単体を呼んでも
-     * DET_LOGW 以外の副作用が無い（クラッシュ・範囲外アクセスしない）ことを
-     * 確認する（境界条件としての最小限の呼び出し安全性の検証）。 */
+    /* ----------------------------------- */
+    /* ---- 準備 (Arrange) --------------- */
+    /* ----------------------------------- */
+    // 不要。既定で有効なため Enable 側だけでは差が出ない。
+    // Disable 側が [SWS_Com_00534] のガードにより無視されて 1 のままである
+    // こと自体は上のテストで確認済みのため、ここでは Enable 単体を呼んでも
+    // DET_LOGW 以外の副作用が無い（クラッシュ・範囲外アクセスしない）ことを
+    // 確認する（境界条件としての最小限の呼び出し安全性の検証）。
 
-    /* 実行 (Act) + 評価 (Assert) */
+    /* ----------------------------------- */
+    /* ---- 実行 (Act) + 評価 (Assert) --- */
+    /* ----------------------------------- */
     Com_EnableReceptionDM(COM_IPDU_GROUP_NONE);
     EXPECT_EQ(Com_Test_GetRxDmEnabled(2U), 1U);
 }

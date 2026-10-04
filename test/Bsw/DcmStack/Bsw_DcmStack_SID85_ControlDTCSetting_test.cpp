@@ -230,7 +230,10 @@ TEST_F(Bsw_DcmStack_SID85_ControlDTCSetting_Test,
 
     SendControlDTCSetting(DCM_DTCSETTING_OFF);
 
-    /* 評価 (Assert): [0xC5, 0x02] が Can_Hw まで到達すること。 */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // [0xC5, 0x02] が Can_Hw まで到達すること。
     ASSERT_EQ(FakeCanHw_SendCount, 1U);
     EXPECT_EQ(FakeCanHw_LastSendData[0], 0x02U);  // SF PCI（UDSペイロード長=2）
     EXPECT_EQ(FakeCanHw_LastSendData[1], 0xC5U);
@@ -259,21 +262,33 @@ TEST_F(Bsw_DcmStack_SID85_ControlDTCSetting_Test,
 {
     EnterExtendedSession();
 
-    /* 実行 (Act): off にしてから、通常なら即確定するはずの FAILED を報告する */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    // off にしてから、通常なら即確定するはずの FAILED を報告する
     SendControlDTCSetting(DCM_DTCSETTING_OFF);
     ReportBusOffFailed();
 
-    /* 評価 (Assert): 記録無効化中のため testFailed/confirmedDTC ビットとも
-     * 立っていない（DEM_STATUS_NOT_COMPLETED_SINCE_CLEAR 等の初期ビットのみ）。 */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // 記録無効化中のため testFailed/confirmedDTC ビットとも
+    // 立っていない（DEM_STATUS_NOT_COMPLETED_SINCE_CLEAR 等の初期ビットのみ）。
     EXPECT_EQ(BusOffStatus() & DEM_STATUS_TEST_FAILED, 0U);
     EXPECT_EQ(BusOffStatus() & DEM_STATUS_CONFIRMED, 0U);
 
-    /* 実行 (Act): on に戻してから同じ報告をする */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    // on に戻してから同じ報告をする
     SendControlDTCSetting(DCM_DTCSETTING_ON);
     ReportBusOffFailed();
 
-    /* 評価 (Assert): 再有効化後は通常どおり即確定する
-     * (DEM_DEBOUNCE_LIMIT_CAN_BUSOFF=1)。 */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // 再有効化後は通常どおり即確定する
+    // (DEM_DEBOUNCE_LIMIT_CAN_BUSOFF=1)。
     EXPECT_NE(BusOffStatus() & DEM_STATUS_TEST_FAILED, 0U);
     EXPECT_NE(BusOffStatus() & DEM_STATUS_CONFIRMED, 0U);
 }
@@ -288,7 +303,10 @@ TEST_F(Bsw_DcmStack_SID85_ControlDTCSetting_Test,
     EnterExtendedSession();
     SendControlDTCSetting(DCM_DTCSETTING_OFF);
 
-    /* 実行 (Act): [0x10, 0x01] defaultSession へ明示的に戻る */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    // [0x10, 0x01] defaultSession へ明示的に戻る
     FakeCanHw_Reset();
     FakeCanHw_RxId  = 0x7E0U;
     FakeCanHw_RxDlc = 8U;
@@ -299,8 +317,11 @@ TEST_F(Bsw_DcmStack_SID85_ControlDTCSetting_Test,
     Can_MainFunction_Read();
     ASSERT_EQ(FakeCanHw_LastSendData[1], 0x50U);  // 正応答確認
 
-    /* 評価 (Assert): 明示的に on を送っていないにも関わらず、defaultSession
-     * への遷移だけで自動的に記録が再開される。 */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // 明示的に on を送っていないにも関わらず、defaultSession
+    // への遷移だけで自動的に記録が再開される。
     ReportBusOffFailed();
     EXPECT_NE(BusOffStatus() & DEM_STATUS_TEST_FAILED, 0U);
 }
@@ -311,14 +332,20 @@ TEST_F(Bsw_DcmStack_SID85_ControlDTCSetting_Test,
     EnterExtendedSession();
     SendControlDTCSetting(DCM_DTCSETTING_OFF);
 
-    /* 実行 (Act): S3 タイムアウトで defaultSession へ自動遷移させる
-     * (明示的な 0x10 要求を送らない経路。Dcm_MainFunction() は Os から
-     * 周期的に呼ばれる関数であり、CAN イベントではないため Can_Hw 経由に
-     * しない)。 */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    // S3 タイムアウトで defaultSession へ自動遷移させる
+    // (明示的な 0x10 要求を送らない経路。Dcm_MainFunction() は Os から
+    // 周期的に呼ばれる関数であり、CAN イベントではないため Can_Hw 経由に
+    // しない)。
     FakeMillis_Value += DCM_S3_TIMEOUT_MS + 1UL;
     Dcm_MainFunction();
 
-    /* 評価 (Assert): S3 タイムアウト経由でも自動的に記録が再開される。 */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // S3 タイムアウト経由でも自動的に記録が再開される。
     ReportBusOffFailed();
     EXPECT_NE(BusOffStatus() & DEM_STATUS_TEST_FAILED, 0U);
 }
@@ -329,8 +356,11 @@ TEST_F(Bsw_DcmStack_SID85_ControlDTCSetting_Test,
     EnterExtendedSession();
     SendControlDTCSetting(DCM_DTCSETTING_OFF);
 
-    /* 実行 (Act): [0x11, 0x01] hardReset（本実装は実際のリセットは行わず
-     * セッションを defaultSession へ戻すのみ）。 */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    // [0x11, 0x01] hardReset（本実装は実際のリセットは行わず
+    // セッションを defaultSession へ戻すのみ）。
     FakeCanHw_Reset();
     FakeCanHw_RxId  = 0x7E0U;
     FakeCanHw_RxDlc = 8U;
@@ -341,7 +371,10 @@ TEST_F(Bsw_DcmStack_SID85_ControlDTCSetting_Test,
     Can_MainFunction_Read();
     ASSERT_EQ(FakeCanHw_LastSendData[1], 0x51U);  // 正応答確認
 
-    /* 評価 (Assert): ECUReset 経由でも自動的に記録が再開される。 */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // ECUReset 経由でも自動的に記録が再開される。
     ReportBusOffFailed();
     EXPECT_NE(BusOffStatus() & DEM_STATUS_TEST_FAILED, 0U);
 }
@@ -349,7 +382,10 @@ TEST_F(Bsw_DcmStack_SID85_ControlDTCSetting_Test,
 TEST_F(Bsw_DcmStack_SID85_ControlDTCSetting_Test,
        ControlDTCSetting_NG_DoesNotReEnableWhenNotDisabledOnCanHw)
 {
-    /* 準備 (Arrange): 一度も off にしていない状態で defaultSession へ戻る。 */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // 一度も off にしていない状態で defaultSession へ戻る。
     EnterExtendedSession();
     FakeCanHw_Reset();
     FakeCanHw_RxId  = 0x7E0U;
@@ -359,11 +395,16 @@ TEST_F(Bsw_DcmStack_SID85_ControlDTCSetting_Test,
     FakeCanHw_RxData[2] = DCM_SESSION_DEFAULT;
     FakeCanHw_RxPendingCount = 1U;
 
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Can_MainFunction_Read();
 
-    /* 評価 (Assert): 記録が有効なままであること（冗長呼び出しでないことの
-     * 間接確認）。 */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // 記録が有効なままであること（冗長呼び出しでないことの
+    // 間接確認）。
     ReportBusOffFailed();
     EXPECT_NE(BusOffStatus() & DEM_STATUS_TEST_FAILED, 0U);
 }
@@ -375,14 +416,22 @@ TEST_F(Bsw_DcmStack_SID85_ControlDTCSetting_Test,
 TEST_F(Bsw_DcmStack_SID85_ControlDTCSetting_Test,
        ControlDTCSetting_NG_DefaultSessionProducesServiceNotSupportedInSessionResponseOnCanHw)
 {
-    /* 準備 (Arrange): Dcm_Init() 直後は defaultSession のまま
-     * （EnterExtendedSession() を呼ばない）。 */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // Dcm_Init() 直後は defaultSession のまま
+    // （EnterExtendedSession() を呼ばない）。
 
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     SendControlDTCSetting(DCM_DTCSETTING_OFF);
 
-    /* 評価 (Assert): [0x7F, 0x85, 0x7F serviceNotSupportedInActiveSession]
-     * が Can_Hw まで到達すること。 */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // [0x7F, 0x85, 0x7F serviceNotSupportedInActiveSession]
+    // が Can_Hw まで到達すること。
     ASSERT_EQ(FakeCanHw_SendCount, 1U);
     EXPECT_EQ(FakeCanHw_LastSendData[0], 0x03U);  // SF PCI（UDSペイロード長=3）
     EXPECT_EQ(FakeCanHw_LastSendData[1], DCM_SID_NEGATIVE_RESP);
@@ -400,11 +449,17 @@ TEST_F(Bsw_DcmStack_SID85_ControlDTCSetting_Test,
 {
     EnterExtendedSession();
 
-    /* 実行 (Act): 0x01/0x02 以外のサブ機能 */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    // 0x01/0x02 以外のサブ機能
     SendControlDTCSetting(0x03U);
 
-    /* 評価 (Assert): [0x7F, 0x85, 0x12 subFunctionNotSupported] が Can_Hw
-     * まで到達すること。 */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // [0x7F, 0x85, 0x12 subFunctionNotSupported] が Can_Hw
+    // まで到達すること。
     ASSERT_EQ(FakeCanHw_SendCount, 1U);
     EXPECT_EQ(FakeCanHw_LastSendData[0], 0x03U);
     EXPECT_EQ(FakeCanHw_LastSendData[1], DCM_SID_NEGATIVE_RESP);
@@ -416,9 +471,12 @@ TEST_F(Bsw_DcmStack_SID85_ControlDTCSetting_Test,
 {
     EnterExtendedSession();
 
-    /* 準備 (Arrange): [SWS_Dcm_01399] 相当。DTCSettingControlOptionRecord
-     * (0xFFFFFF 以外) を付けた5バイト要求を 0x7E0 の受信バッファへセットする
-     * （SF: 05 85 02 12 34 56）。 */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // [SWS_Dcm_01399] 相当。DTCSettingControlOptionRecord
+    // (0xFFFFFF 以外) を付けた5バイト要求を 0x7E0 の受信バッファへセットする
+    // （SF: 05 85 02 12 34 56）。
     FakeCanHw_Reset();
     FakeCanHw_RxId  = 0x7E0U;
     FakeCanHw_RxDlc = 8U;
@@ -432,11 +490,16 @@ TEST_F(Bsw_DcmStack_SID85_ControlDTCSetting_Test,
     FakeCanHw_RxData[7] = 0U;
     FakeCanHw_RxPendingCount = 1U;
 
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Can_MainFunction_Read();
 
-    /* 評価 (Assert): [0x7F, 0x85, 0x13 incorrectMessageLength] が Can_Hw
-     * まで到達すること。 */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // [0x7F, 0x85, 0x13 incorrectMessageLength] が Can_Hw
+    // まで到達すること。
     ASSERT_EQ(FakeCanHw_SendCount, 1U);
     EXPECT_EQ(FakeCanHw_LastSendData[0], 0x03U);
     EXPECT_EQ(FakeCanHw_LastSendData[1], DCM_SID_NEGATIVE_RESP);

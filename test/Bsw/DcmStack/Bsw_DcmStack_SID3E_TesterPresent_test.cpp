@@ -156,8 +156,11 @@ protected:
 TEST_F(Bsw_DcmStack_SID3E_TesterPresent_Test,
        TesterPresent_NG_ExtraByteProducesIncorrectMessageLengthResponseOnCanHw)
 {
-    /* 準備 (Arrange): [0x3E, 0x00, 0x00] を 0x7E0 の受信バッファへセットする
-     * （SF: 03 3E 00 00）。 */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // [0x3E, 0x00, 0x00] を 0x7E0 の受信バッファへセットする
+    // （SF: 03 3E 00 00）。
     FakeCanHw_RxId  = 0x7E0U;
     FakeCanHw_RxDlc = 8U;
     FakeCanHw_RxData[0] = 3U;
@@ -168,10 +171,15 @@ TEST_F(Bsw_DcmStack_SID3E_TesterPresent_Test,
         FakeCanHw_RxData[i] = 0U;
     FakeCanHw_RxPendingCount = 1U;
 
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Can_MainFunction_Read();
 
-    /* 評価 (Assert): 否定応答 [0x7F, 0x3E, 0x13] が Can_Hw まで到達すること。 */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // 否定応答 [0x7F, 0x3E, 0x13] が Can_Hw まで到達すること。
     ASSERT_EQ(FakeCanHw_SendCount, 1U);
     EXPECT_EQ(FakeCanHw_LastSendId, 0x7E8U);
     EXPECT_EQ(FakeCanHw_LastSendDlc, 8U);
@@ -187,8 +195,11 @@ TEST_F(Bsw_DcmStack_SID3E_TesterPresent_Test,
 TEST_F(Bsw_DcmStack_SID3E_TesterPresent_Test,
        TesterPresent_OK_ZeroSubFunctionProducesPositiveResponseOnCanHw)
 {
-    /* 準備 (Arrange): [0x3E, 0x00] を 0x7E0 の受信バッファへセットする
-     * （SF: 02 3E 00）。 */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // [0x3E, 0x00] を 0x7E0 の受信バッファへセットする
+    // （SF: 02 3E 00）。
     FakeCanHw_RxId  = 0x7E0U;
     FakeCanHw_RxDlc = 8U;
     FakeCanHw_RxData[0] = 2U;
@@ -198,10 +209,15 @@ TEST_F(Bsw_DcmStack_SID3E_TesterPresent_Test,
         FakeCanHw_RxData[i] = 0U;
     FakeCanHw_RxPendingCount = 1U;
 
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Can_MainFunction_Read();
 
-    /* 評価 (Assert): 正応答 [0x7E, 0x00] が Can_Hw まで到達すること。 */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // 正応答 [0x7E, 0x00] が Can_Hw まで到達すること。
     ASSERT_EQ(FakeCanHw_SendCount, 1U);
     EXPECT_EQ(FakeCanHw_LastSendId, 0x7E8U);
     EXPECT_EQ(FakeCanHw_LastSendDlc, 8U);
@@ -219,7 +235,10 @@ TEST_F(Bsw_DcmStack_SID3E_TesterPresent_Test,
 TEST_F(Bsw_DcmStack_SID3E_TesterPresent_Test,
        TesterPresent_OK_ResetsS3TimerPreventingSessionTimeoutOnCanHw)
 {
-    /* 準備 (Arrange 1): extendedSession へ遷移させておく。 */
+    /* ------------------------- */
+    /* ---- 準備 (Arrange 1) --- */
+    /* ------------------------- */
+    // extendedSession へ遷移させておく。
     FakeCanHw_RxId  = 0x7E0U;
     FakeCanHw_RxDlc = 8U;
     FakeCanHw_RxData[0] = 2U;
@@ -232,8 +251,11 @@ TEST_F(Bsw_DcmStack_SID3E_TesterPresent_Test,
     ASSERT_EQ(FakeCanHw_LastSendData[1], 0x50U);  // 前提確認
     FakeCanHw_Reset();
 
-    /* 準備 (Arrange 2): S3 タイムアウト(60000ms)の直前まで経過させてから
-     * TesterPresent を送る。 */
+    /* ------------------------- */
+    /* ---- 準備 (Arrange 2) --- */
+    /* ------------------------- */
+    // S3 タイムアウト(60000ms)の直前まで経過させてから
+    // TesterPresent を送る。
     FakeMillis_Value += (DCM_S3_TIMEOUT_MS - 100UL);
     FakeCanHw_RxId  = 0x7E0U;
     FakeCanHw_RxDlc = 8U;
@@ -246,14 +268,20 @@ TEST_F(Bsw_DcmStack_SID3E_TesterPresent_Test,
     Can_MainFunction_Read();
     ASSERT_EQ(FakeCanHw_LastSendData[1], 0x7EU);  // 前提確認
 
-    /* 実行 (Act): TesterPresent 送信時点からさらに 59900ms 経過させて
-     * Dcm_MainFunction() を呼ぶ（TesterPresent が S3 タイマをリセットして
-     * いなければ、Init 起点で合計 119800ms 経過し確実にタイムアウトする）。 */
+    /* ------------------------- */
+    /* ---- 実行 (Act) --------- */
+    /* ------------------------- */
+    // TesterPresent 送信時点からさらに 59900ms 経過させて
+    // Dcm_MainFunction() を呼ぶ（TesterPresent が S3 タイマをリセットして
+    // いなければ、Init 起点で合計 119800ms 経過し確実にタイムアウトする）。
     FakeMillis_Value += (DCM_S3_TIMEOUT_MS - 100UL);
     Dcm_MainFunction();
 
-    /* 評価 (Assert): TesterPresent がタイマをリセットしているため、まだ
-     * extendedSession のまま（S3 タイムアウトしていない）こと。 */
+    /* ------------------------- */
+    /* ---- 評価 (Assert) ------ */
+    /* ------------------------- */
+    // TesterPresent がタイマをリセットしているため、まだ
+    // extendedSession のまま（S3 タイムアウトしていない）こと。
     Dcm_SesCtrlType session = 0U;
     ASSERT_EQ(Dcm_GetSesCtrlType(&session), E_OK);
     EXPECT_EQ(session, DCM_SESSION_EXTENDED);

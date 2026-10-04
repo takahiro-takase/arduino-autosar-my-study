@@ -232,7 +232,9 @@ protected:
 // ------------------------------------------------------------
 TEST_F(Bsw_E2E_Tx_Test, ComMainFunction_OK_E2EProtectsAndReachesCanHw)
 {
-    /* 準備 (Arrange) */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     uint16_t value = 0xABCDU;
     Com_SendSignal(0U, &value);
 
@@ -243,10 +245,14 @@ TEST_F(Bsw_E2E_Tx_Test, ComMainFunction_OK_E2EProtectsAndReachesCanHw)
     E2E_P05ProtectInit(&refState);
     E2E_P05Protect(&kRefE2EHealthStatusCfg, &refState, refBuf, 5U);
 
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Com_MainFunctionTx();
 
-    /* 評価 (Assert) */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeCanHw_SendCount, 1U);
     EXPECT_EQ(FakeCanHw_LastSendId, 0x220U);
     EXPECT_EQ(FakeCanHw_LastSendDlc, 5U);
@@ -256,20 +262,28 @@ TEST_F(Bsw_E2E_Tx_Test, ComMainFunction_OK_E2EProtectsAndReachesCanHw)
 
 TEST_F(Bsw_E2E_Tx_Test, ComMainFunction_OK_CounterIncrementsAcrossSends)
 {
-    /* 準備 (Arrange) */
+    /* -------------------------- */
+    /* ---- 準備 (Arrange) ------ */
+    /* -------------------------- */
     uint16_t value = 0x0000U;
 
-    /* 実行 (Act) 1 回目 */
+    /* -------------------------- */
+    /* ---- 実行 (Act) 1 回目 --- */
+    /* -------------------------- */
     Com_SendSignal(0U, &value);
     Com_MainFunctionTx();
     const uint8 firstCounter = FakeCanHw_LastSendData[2];  // Offset+2 = Counter
 
-    /* 実行 (Act) 2 回目 */
+    /* -------------------------- */
+    /* ---- 実行 (Act) 2 回目 --- */
+    /* -------------------------- */
     Com_SendSignal(0U, &value);
     Com_MainFunctionTx();
     const uint8 secondCounter = FakeCanHw_LastSendData[2];
 
-    /* 評価 (Assert) */
+    /* -------------------------- */
+    /* ---- 評価 (Assert) ------- */
+    /* -------------------------- */
     EXPECT_EQ(firstCounter, 0U);
     EXPECT_EQ(secondCounter, 1U);
 }

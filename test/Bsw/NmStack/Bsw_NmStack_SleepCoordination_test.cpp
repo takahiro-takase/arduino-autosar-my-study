@@ -258,11 +258,16 @@ TEST_F(Bsw_SleepCoordination_Test, VoluntarySleep_OK_DefersPhysicalSleepUntilNmR
 {
     ArrangeFullCom();
 
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = ComM_RequestComMode(COMM_USER_0, COMM_NO_COMMUNICATION);
     ASSERT_EQ(ret, E_OK);
 
-    /* 評価 (Assert): 要求直後は何も物理的に変化していない */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // 要求直後は何も物理的に変化していない
     EXPECT_EQ(Can_Test_GetControllerState(), CAN_CS_STARTED);
     EXPECT_EQ(FakeCanHw_SetModeCount, 0U);
     EXPECT_EQ(FakeEcuM_ReleaseRUNCount, 0U);
@@ -270,10 +275,16 @@ TEST_F(Bsw_SleepCoordination_Test, VoluntarySleep_OK_DefersPhysicalSleepUntilNmR
     ASSERT_EQ(ComM_GetCurrentComMode(COMM_USER_0, &mode), E_OK);
     EXPECT_EQ(mode, static_cast<ComM_ModeType>(COMM_FULL_COMMUNICATION));
 
-    /* 実行 (Act): CanNm を Bus-Sleep Mode まで進める */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    // CanNm を Bus-Sleep Mode まで進める
     DriveNmUntil(CANNM_STATE_BUS_SLEEP);
 
-    /* 評価 (Assert): ここで初めて物理スリープと ComM/EcuM の更新が起きる */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // ここで初めて物理スリープと ComM/EcuM の更新が起きる
     EXPECT_EQ(Can_Test_GetControllerState(), CAN_CS_SLEEP);
     EXPECT_EQ(FakeEcuM_ReleaseRUNCount, 1U);
     ASSERT_EQ(ComM_GetCurrentComMode(COMM_USER_0, &mode), E_OK);
@@ -284,15 +295,21 @@ TEST_F(Bsw_SleepCoordination_Test, ReRequestFullCom_OK_CancelsPendingNmRelease)
 {
     ArrangeFullCom();
 
-    /* 実行 (Act): NO_COM 要求後、CanNm が眠り切る前に FULL_COM を再要求する */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    // NO_COM 要求後、CanNm が眠り切る前に FULL_COM を再要求する
     ASSERT_EQ(ComM_RequestComMode(COMM_USER_0, COMM_NO_COMMUNICATION), E_OK);
     FakeMillis_Value += CANNM_CYCLE_MS;
     CanNm_MainFunction();
     ASSERT_EQ(ComM_RequestComMode(COMM_USER_0, COMM_FULL_COMMUNICATION), E_OK);
 
-    /* 評価 (Assert): 十分な時間 CanNm_MainFunction を回しても Bus-Sleep Mode へは
-     * 到達しない（再要求でキャンセルされているはず）。コントローラも
-     * 一度も物理スリープしない。 */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // 十分な時間 CanNm_MainFunction を回しても Bus-Sleep Mode へは
+    // 到達しない（再要求でキャンセルされているはず）。コントローラも
+    // 一度も物理スリープしない。
     CanNm_StateType state;
     CanNm_ModeType  mode;
     for (int i = 0; i < 15; i++)
@@ -311,13 +328,19 @@ TEST_F(Bsw_SleepCoordination_Test, DcmActiveDiagnostic_OK_KeepsFullComEvenWhenUs
     ArrangeFullCom();
     ComM_DCM_ActiveDiagnostic(0U);
 
-    /* 実行 (Act): 唯一の実ユーザ (COMM_USER_0) が NO_COM を要求しても、
-     * Dcm の診断アクティブ通知 ([SWS_ComM_00876]) が集約結果を FULL_COM に
-     * 強制するはず。 */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    // 唯一の実ユーザ (COMM_USER_0) が NO_COM を要求しても、
+    // Dcm の診断アクティブ通知 ([SWS_ComM_00876]) が集約結果を FULL_COM に
+    // 強制するはず。
     ASSERT_EQ(ComM_RequestComMode(COMM_USER_0, COMM_NO_COMMUNICATION), E_OK);
 
-    /* 評価 (Assert): CanNm を何周期回しても Bus-Sleep へは向かわない
-     * （CanNm_NetworkRelease() 自体が送られていないはず）。 */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // CanNm を何周期回しても Bus-Sleep へは向かわない
+    // （CanNm_NetworkRelease() 自体が送られていないはず）。
     CanNm_StateType state;
     CanNm_ModeType  nmMode;
     for (int i = 0; i < 15; i++)
@@ -338,9 +361,12 @@ TEST_F(Bsw_SleepCoordination_Test, DcmInactiveDiagnostic_OK_AllowsSleepOnceUser0
     ComM_DCM_ActiveDiagnostic(0U);
     ASSERT_EQ(ComM_RequestComMode(COMM_USER_0, COMM_NO_COMMUNICATION), E_OK);
 
-    /* 実行 (Act): Dcm が診断セッションを終える（S3 タイムアウト等に相当）。
-     * 唯一の実ユーザも既に NO_COM 要求済みのため、今度こそ集約結果が変化し
-     * CanNm の協調スリープが進むはず。 */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    // Dcm が診断セッションを終える（S3 タイムアウト等に相当）。
+    // 唯一の実ユーザも既に NO_COM 要求済みのため、今度こそ集約結果が変化し
+    // CanNm の協調スリープが進むはず。
     ComM_DCM_InactiveDiagnostic(0U);
     DriveNmUntil(CANNM_STATE_BUS_SLEEP);
 
@@ -355,7 +381,10 @@ TEST_F(Bsw_SleepCoordination_Test, BusOffDuringNmWinddown_OK_DoesNotResurrectNm)
     ArrangeFullCom();
     ASSERT_EQ(ComM_RequestComMode(COMM_USER_0, COMM_NO_COMMUNICATION), E_OK);
 
-    /* 実行 (Act): CanNm の協調スリープ待ち中に Bus-Off が発生する */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    // CanNm の協調スリープ待ち中に Bus-Off が発生する
     CanSM_ControllerBusOff(0U);
 
     /* CanNm 自身は Bus-Off とは無関係な独立したタイマで動き続け、
@@ -367,8 +396,11 @@ TEST_F(Bsw_SleepCoordination_Test, BusOffDuringNmWinddown_OK_DoesNotResurrectNm)
     FakeMillis_Value += CANSM_BUSOFF_RECOVERY_L1_MS + 1UL;
     CanSM_MainFunction();
 
-    /* 評価 (Assert): CanNm は誤って再起床していない（Bus-Sleep Mode のまま）。
-     * チャネルは最終的に NO_COM へ正しく収束し、物理的にも実際にスリープする。 */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // CanNm は誤って再起床していない（Bus-Sleep Mode のまま）。
+    // チャネルは最終的に NO_COM へ正しく収束し、物理的にも実際にスリープする。
     CanNm_StateType state;
     CanNm_ModeType  nmMode;
     ASSERT_EQ(CanNm_GetState(CANNM_MAIN_NETWORK_HANDLE, &state, &nmMode), E_OK);
@@ -400,7 +432,10 @@ TEST_F(Bsw_SleepCoordination_Test, ReRequestFullComDuringBusOff_OK_RestoresFullC
     ArrangeFullCom();
     ASSERT_EQ(ComM_RequestComMode(COMM_USER_0, COMM_NO_COMMUNICATION), E_OK);
 
-    /* 実行 (Act): CanNm の協調スリープ待ち中に Bus-Off が発生する */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    // CanNm の協調スリープ待ち中に Bus-Off が発生する
     CanSM_ControllerBusOff(0U);
     ComM_ModeType comMode = COMM_FULL_COMMUNICATION;
     ASSERT_EQ(ComM_GetCurrentComMode(COMM_USER_0, &comMode), E_OK);
@@ -416,8 +451,11 @@ TEST_F(Bsw_SleepCoordination_Test, ReRequestFullComDuringBusOff_OK_RestoresFullC
     FakeMillis_Value += CANSM_BUSOFF_RECOVERY_L1_MS + 1UL;
     CanSM_MainFunction();
 
-    /* 評価 (Assert): 誰も望んでいないのにコントローラが眠ってしまうことなく、
-     * FULL_COM へ正しく復帰する。CanNm も再起床（送信再開）している。 */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // 誰も望んでいないのにコントローラが眠ってしまうことなく、
+    // FULL_COM へ正しく復帰する。CanNm も再起床（送信再開）している。
     ASSERT_EQ(ComM_GetCurrentComMode(COMM_USER_0, &comMode), E_OK);
     EXPECT_EQ(comMode, static_cast<ComM_ModeType>(COMM_FULL_COMMUNICATION));
     EXPECT_EQ(Can_Test_GetControllerState(), CAN_CS_STARTED);
@@ -438,17 +476,29 @@ TEST_F(Bsw_SleepCoordination_Test, VoluntarySleep_OK_SilencesChannelAtPrepareBus
 {
     ArrangeFullCom();
 
-    /* 実行 (Act): CanNm を Prepare Bus-Sleep Mode まで進める */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    // CanNm を Prepare Bus-Sleep Mode まで進める
     ArrangeSilentComAtPrepareBusSleep();
 
-    /* 評価 (Assert): SILENT_COM（受信専用）へ切り替わり済みだが、まだ物理
-     * スリープはしておらず EcuM RUN も維持されている。 */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // SILENT_COM（受信専用）へ切り替わり済みだが、まだ物理
+    // スリープはしておらず EcuM RUN も維持されている。
     EXPECT_EQ(FakeEcuM_ReleaseRUNCount, 0U);
 
-    /* 実行 (Act): CanNm を Bus-Sleep Mode まで進める */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    // CanNm を Bus-Sleep Mode まで進める
     DriveNmUntil(CANNM_STATE_BUS_SLEEP);
 
-    /* 評価 (Assert): 既存テスト（VoluntarySleep_OK_...）と同じ最終状態へ収束する */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // 既存テスト（VoluntarySleep_OK_...）と同じ最終状態へ収束する
     EXPECT_EQ(Can_Test_GetControllerState(), CAN_CS_SLEEP);
     EXPECT_EQ(FakeEcuM_ReleaseRUNCount, 1U);
     ComM_ModeType mode = COMM_SILENT_COMMUNICATION;
@@ -476,10 +526,15 @@ TEST_F(Bsw_SleepCoordination_Test, RxCancelsPrepareBusSleep_OK_RestoresFullComAn
     FakeEcuM_Reset();
     WrapBswM_Reset();
 
-    /* 実行 (Act): 他ノード(node=0x02)の NM フレーム受信を模擬する */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    // 他ノード(node=0x02)の NM フレーム受信を模擬する
     SimulateOtherNodeNmRx();
 
-    /* 評価 (Assert) */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     CanNm_StateType state;
     CanNm_ModeType  nmMode;
     ASSERT_EQ(CanNm_GetState(CANNM_MAIN_NETWORK_HANDLE, &state, &nmMode), E_OK);
@@ -538,10 +593,13 @@ TEST_F(Bsw_SleepCoordination_Test, RxDuringBusOffAfterNmBusSleep_OK_DoesNotResur
     FakeEcuM_Reset();
     WrapBswM_Reset();
 
-    /* 実行 (Act): Bus-Off 中(コントローラは Listen-Only で受信継続)に他
-     * ノードの NM フレームを受信する。CanSM_RequestComMode(FULL_COM) は
-     * Bus-Off 中ガードにより拒否されるため、CanNm は Bus-Sleep Mode のまま
-     * 変化しない。 */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    // Bus-Off 中(コントローラは Listen-Only で受信継続)に他
+    // ノードの NM フレームを受信する。CanSM_RequestComMode(FULL_COM) は
+    // Bus-Off 中ガードにより拒否されるため、CanNm は Bus-Sleep Mode のまま
+    // 変化しない。
     SimulateOtherNodeNmRx();
 
     CanNm_StateType state;
@@ -553,10 +611,13 @@ TEST_F(Bsw_SleepCoordination_Test, RxDuringBusOffAfterNmBusSleep_OK_DoesNotResur
     FakeMillis_Value += CANSM_BUSOFF_RECOVERY_L1_MS + 1UL;
     CanSM_MainFunction();
 
-    /* 評価 (Assert): ComM_NmReleasePending が正しく保持されていれば、
-     * BusOffDuringNmWinddown_OK_DoesNotResurrectNm と同じ最終状態（NO_COM、
-     * 物理スリープ）へ収束する。誤ってクリアされていると FULL_COM へ
-     * 「復活」してしまう（回帰時の症状）。 */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // ComM_NmReleasePending が正しく保持されていれば、
+    // BusOffDuringNmWinddown_OK_DoesNotResurrectNm と同じ最終状態（NO_COM、
+    // 物理スリープ）へ収束する。誤ってクリアされていると FULL_COM へ
+    // 「復活」してしまう（回帰時の症状）。
     ComM_ModeType comMode = COMM_FULL_COMMUNICATION;
     ASSERT_EQ(ComM_GetCurrentComMode(COMM_USER_0, &comMode), E_OK);
     EXPECT_EQ(comMode, static_cast<ComM_ModeType>(COMM_NO_COMMUNICATION));
@@ -576,10 +637,15 @@ TEST_F(Bsw_SleepCoordination_Test, ReRequestFullComAfterPrepareBusSleep_OK_Resto
     ArrangeFullCom();
     ArrangeSilentComAtPrepareBusSleep();
 
-    /* 実行 (Act): ユーザー API 経由で FULL_COM を再要求する */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    // ユーザー API 経由で FULL_COM を再要求する
     ASSERT_EQ(ComM_RequestComMode(COMM_USER_0, COMM_FULL_COMMUNICATION), E_OK);
 
-    /* 評価 (Assert) */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     ComM_ModeType mode = COMM_SILENT_COMMUNICATION;
     ASSERT_EQ(ComM_GetCurrentComMode(COMM_USER_0, &mode), E_OK);
     EXPECT_EQ(mode, static_cast<ComM_ModeType>(COMM_FULL_COMMUNICATION));
@@ -617,13 +683,19 @@ TEST_F(Bsw_SleepCoordination_Test, RedundantNoComRequestDuringSilentCom_OK_DoesN
     ArrangeFullCom();
     ArrangeSilentComAtPrepareBusSleep();
 
-    /* 実行 (Act): App_EngineManager が実機で行う冗長な再要求を模擬する */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    // App_EngineManager が実機で行う冗長な再要求を模擬する
     ASSERT_EQ(ComM_RequestComMode(COMM_USER_0, COMM_NO_COMMUNICATION), E_OK);
 
-    /* 評価 (Assert): まだ物理スリープしていない。CanNm もまだ Prepare Bus-Sleep
-     * Mode のまま（他ノードの NM フレームによるキャンセルをまだ待てる）。
-     * SILENT_COM 中はコントローラ自体は CAN_CS_STARTED のまま
-     * （CanIf_SetPduMode(CANIF_TX_OFFLINE) で TX のみ抑制、2026-08 変更）。 */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // まだ物理スリープしていない。CanNm もまだ Prepare Bus-Sleep
+    // Mode のまま（他ノードの NM フレームによるキャンセルをまだ待てる）。
+    // SILENT_COM 中はコントローラ自体は CAN_CS_STARTED のまま
+    // （CanIf_SetPduMode(CANIF_TX_OFFLINE) で TX のみ抑制、2026-08 変更）。
     EXPECT_EQ(Can_Test_GetControllerState(), CAN_CS_STARTED);
     ComM_ModeType mode = COMM_FULL_COMMUNICATION;
     ASSERT_EQ(ComM_GetCurrentComMode(COMM_USER_0, &mode), E_OK);
@@ -633,10 +705,16 @@ TEST_F(Bsw_SleepCoordination_Test, RedundantNoComRequestDuringSilentCom_OK_DoesN
     ASSERT_EQ(CanNm_GetState(CANNM_MAIN_NETWORK_HANDLE, &state, &nmMode), E_OK);
     EXPECT_EQ(state, CANNM_STATE_PREPARE_BUS_SLEEP);
 
-    /* 実行 (Act): CanNm を Bus-Sleep Mode まで進める */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    // CanNm を Bus-Sleep Mode まで進める
     DriveNmUntil(CANNM_STATE_BUS_SLEEP);
 
-    /* 評価 (Assert): ここで初めて物理スリープする */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // ここで初めて物理スリープする
     EXPECT_EQ(Can_Test_GetControllerState(), CAN_CS_SLEEP);
     ASSERT_EQ(ComM_GetCurrentComMode(COMM_USER_0, &mode), E_OK);
     EXPECT_EQ(mode, static_cast<ComM_ModeType>(COMM_NO_COMMUNICATION));
@@ -660,7 +738,10 @@ TEST_F(Bsw_SleepCoordination_Test, BusOffDuringRxCancelledPrepareBusSleep_OK_Con
     ArrangeFullCom();
     ASSERT_EQ(ComM_RequestComMode(COMM_USER_0, COMM_NO_COMMUNICATION), E_OK);
 
-    /* 実行 (Act): CanNm が Network Mode 中に Bus-Off が発生する */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    // CanNm が Network Mode 中に Bus-Off が発生する
     CanSM_ControllerBusOff(0U);
     ComM_ModeType mode = COMM_FULL_COMMUNICATION;
     ASSERT_EQ(ComM_GetCurrentComMode(COMM_USER_0, &mode), E_OK);
@@ -677,8 +758,11 @@ TEST_F(Bsw_SleepCoordination_Test, BusOffDuringRxCancelledPrepareBusSleep_OK_Con
      * Listen-Only で受信は継続している）。 */
     SimulateOtherNodeNmRx();
 
-    /* 評価 (Assert): CanNm はローカルに自律復帰したが、CanSM は Bus-Off 中の
-     * ため FULL_COM 要求を拒否し、チャネルは SILENT_COM のまま。 */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // CanNm はローカルに自律復帰したが、CanSM は Bus-Off 中の
+    // ため FULL_COM 要求を拒否し、チャネルは SILENT_COM のまま。
     CanNm_StateType state;
     CanNm_ModeType  nmMode;
     ASSERT_EQ(CanNm_GetState(CANNM_MAIN_NETWORK_HANDLE, &state, &nmMode), E_OK);
@@ -686,12 +770,18 @@ TEST_F(Bsw_SleepCoordination_Test, BusOffDuringRxCancelledPrepareBusSleep_OK_Con
     ASSERT_EQ(ComM_GetCurrentComMode(COMM_USER_0, &mode), E_OK);
     EXPECT_EQ(mode, static_cast<ComM_ModeType>(COMM_SILENT_COMMUNICATION));
 
-    /* 実行 (Act): Bus-Off から回復させる（L1 周期経過） */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    // Bus-Off から回復させる（L1 周期経過）
     FakeMillis_Value += CANSM_BUSOFF_RECOVERY_L1_MS + 1UL;
     CanSM_MainFunction();
 
-    /* 評価 (Assert): ComM_NmReleasePending が無条件クリアされていたおかげで、
-     * 既存のリトライガードは誤発火せず、FULL_COM へ正しく収束する。 */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // ComM_NmReleasePending が無条件クリアされていたおかげで、
+    // 既存のリトライガードは誤発火せず、FULL_COM へ正しく収束する。
     ASSERT_EQ(ComM_GetCurrentComMode(COMM_USER_0, &mode), E_OK);
     EXPECT_EQ(mode, static_cast<ComM_ModeType>(COMM_FULL_COMMUNICATION));
     EXPECT_EQ(Can_Test_GetControllerState(), CAN_CS_STARTED);
@@ -726,31 +816,46 @@ TEST_F(Bsw_SleepCoordination_Test, BusOffDuringSilentCom_OK_RestoresSilentComAft
     ASSERT_EQ(CanSM_RequestComMode(0U, COMM_SILENT_COMMUNICATION), E_OK);
     ASSERT_EQ(Can_Test_GetControllerState(), CAN_CS_STARTED);
 
-    /* 実行 (Act): 本当に SILENT_COM 状態（コントローラ CAN_CS_STARTED）の
-     * 最中に Bus-Off が発生する。 */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    // 本当に SILENT_COM 状態（コントローラ CAN_CS_STARTED）の
+    // 最中に Bus-Off が発生する。
     CanSM_ControllerBusOff(0U);
 
-    /* 評価 (Assert): 無視されず処理され、コントローラは Listen-Only
-     * (CAN_CS_STOPPED) へ落ちる。SILENT_COM 自体は Can_SetControllerMode()
-     * を一切呼ばない設計のため、ここで STOPPED になったことは Bus-Off が
-     * 正しく処理された証拠になる（ガードで無視されていれば STARTED のまま）。 */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // 無視されず処理され、コントローラは Listen-Only
+    // (CAN_CS_STOPPED) へ落ちる。SILENT_COM 自体は Can_SetControllerMode()
+    // を一切呼ばない設計のため、ここで STOPPED になったことは Bus-Off が
+    // 正しく処理された証拠になる（ガードで無視されていれば STARTED のまま）。
     EXPECT_EQ(Can_Test_GetControllerState(), CAN_CS_STOPPED);
     ComM_ModeType mode = COMM_FULL_COMMUNICATION;
     ASSERT_EQ(ComM_GetCurrentComMode(COMM_USER_0, &mode), E_OK);
     EXPECT_EQ(mode, static_cast<ComM_ModeType>(COMM_SILENT_COMMUNICATION));
 
-    /* 実行 (Act): Bus-Off から回復させる（L1 周期経過） */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    // Bus-Off から回復させる（L1 周期経過）
     FakeMillis_Value += CANSM_BUSOFF_RECOVERY_L1_MS + 1UL;
     CanSM_MainFunction();
 
-    /* 評価 (Assert): FULL_COM ではなく、Bus-Off 発生直前の SILENT_COM へ
-     * 戻ること。コントローラは CAN_CS_STARTED（TX は CanIf 側で抑制されたまま）。 */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // FULL_COM ではなく、Bus-Off 発生直前の SILENT_COM へ
+    // 戻ること。コントローラは CAN_CS_STARTED（TX は CanIf 側で抑制されたまま）。
     ASSERT_EQ(ComM_GetCurrentComMode(COMM_USER_0, &mode), E_OK);
     EXPECT_EQ(mode, static_cast<ComM_ModeType>(COMM_SILENT_COMMUNICATION));
     EXPECT_EQ(Can_Test_GetControllerState(), CAN_CS_STARTED);
 
-    /* 評価 (Assert): CanIf 側の PDU モードは Bus-Off 中も再設定不要で
-     * CANIF_TX_OFFLINE のまま保持されていること（設計の核心）。 */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // CanIf 側の PDU モードは Bus-Off 中も再設定不要で
+    // CANIF_TX_OFFLINE のまま保持されていること（設計の核心）。
     CanIf_PduModeType pduMode = CANIF_ONLINE;
     ASSERT_EQ(CanIf_GetPduMode(0U, &pduMode), E_OK);
     EXPECT_EQ(pduMode, CANIF_TX_OFFLINE);
@@ -773,7 +878,10 @@ TEST_F(Bsw_SleepCoordination_Test, BusOffDuringSilentCom_OK_ConvergesToNoComWhen
     ArrangeFullCom();
     ArrangeSilentComAtPrepareBusSleep();
 
-    /* 実行 (Act): 本当に SILENT_COM 状態の最中に Bus-Off が発生する。 */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    // 本当に SILENT_COM 状態の最中に Bus-Off が発生する。
     CanSM_ControllerBusOff(0U);
     ASSERT_EQ(Can_Test_GetControllerState(), CAN_CS_STOPPED);
 
@@ -785,13 +893,19 @@ TEST_F(Bsw_SleepCoordination_Test, BusOffDuringSilentCom_OK_ConvergesToNoComWhen
     ASSERT_EQ(ComM_GetCurrentComMode(COMM_USER_0, &mode), E_OK);
     EXPECT_EQ(mode, static_cast<ComM_ModeType>(COMM_SILENT_COMMUNICATION));  // まだ収束していない
 
-    /* 実行 (Act): Bus-Off から回復させる（L1 周期経過） */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    // Bus-Off から回復させる（L1 周期経過）
     FakeMillis_Value += CANSM_BUSOFF_RECOVERY_L1_MS + 1UL;
     CanSM_MainFunction();
 
-    /* 評価 (Assert): CanSM は Bus-Off 発生直前の SILENT_COM へ復帰するが、
-     * ComM 側のリトライにより CanNm の解放要求が仕切り直され、最終的に
-     * NO_COM（物理スリープ）へ正しく収束する。取り残されない。 */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // CanSM は Bus-Off 発生直前の SILENT_COM へ復帰するが、
+    // ComM 側のリトライにより CanNm の解放要求が仕切り直され、最終的に
+    // NO_COM（物理スリープ）へ正しく収束する。取り残されない。
     ASSERT_EQ(ComM_GetCurrentComMode(COMM_USER_0, &mode), E_OK);
     EXPECT_EQ(mode, static_cast<ComM_ModeType>(COMM_NO_COMMUNICATION));
     EXPECT_EQ(Can_Test_GetControllerState(), CAN_CS_SLEEP);
@@ -809,10 +923,15 @@ TEST_F(Bsw_SleepCoordination_Test, CommunicationAllowed_OK_HoldsFullComPendingWh
 {
     ComM_CommunicationAllowed(COMM_CHANNEL_0, FALSE);
 
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     ASSERT_EQ(ComM_RequestComMode(COMM_USER_0, COMM_FULL_COMMUNICATION), E_OK);
 
-    /* 評価 (Assert): 保留されており CanSM へは届いていない。 */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // 保留されており CanSM へは届いていない。
     ComM_ModeType mode = COMM_FULL_COMMUNICATION;
     ASSERT_EQ(ComM_GetCurrentComMode(COMM_USER_0, &mode), E_OK);
     EXPECT_EQ(mode, static_cast<ComM_ModeType>(COMM_NO_COMMUNICATION));
@@ -829,10 +948,14 @@ TEST_F(Bsw_SleepCoordination_Test, CommunicationAllowed_OK_DispatchesPendingFull
     ComM_CommunicationAllowed(COMM_CHANNEL_0, FALSE);
     ASSERT_EQ(ComM_RequestComMode(COMM_USER_0, COMM_FULL_COMMUNICATION), E_OK);
 
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     ComM_CommunicationAllowed(COMM_CHANNEL_0, TRUE);
 
-    /* 評価 (Assert) */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     ComM_ModeType mode = COMM_NO_COMMUNICATION;
     ASSERT_EQ(ComM_GetCurrentComMode(COMM_USER_0, &mode), E_OK);
     EXPECT_EQ(mode, static_cast<ComM_ModeType>(COMM_FULL_COMMUNICATION));
@@ -846,11 +969,16 @@ TEST_F(Bsw_SleepCoordination_Test, CommunicationAllowed_OK_DispatchesPendingFull
  */
 TEST_F(Bsw_SleepCoordination_Test, CommunicationAllowed_OK_NoPendingRequestDoesNothing)
 {
-    /* 実行 (Act): SetUp() は既に TRUE を通知済み。保留中の要求もないまま
-     * 冗長に再通知する。 */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    // SetUp() は既に TRUE を通知済み。保留中の要求もないまま
+    // 冗長に再通知する。
     ComM_CommunicationAllowed(COMM_CHANNEL_0, TRUE);
 
-    /* 評価 (Assert) */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     ComM_ModeType mode = COMM_FULL_COMMUNICATION;
     ASSERT_EQ(ComM_GetCurrentComMode(COMM_USER_0, &mode), E_OK);
     EXPECT_EQ(mode, static_cast<ComM_ModeType>(COMM_NO_COMMUNICATION));

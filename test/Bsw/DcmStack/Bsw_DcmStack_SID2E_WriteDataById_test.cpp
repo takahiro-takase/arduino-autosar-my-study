@@ -259,12 +259,17 @@ protected:
 TEST_F(Bsw_DcmStack_SID2E_WriteDataById_Test,
        WriteDataById_OK_TestPatternWriteProducesPositiveResponseOnCanHw)
 {
-    /* 準備 (Arrange) + 実行 (Act) */
+    /* ------------------------------------ */
+    /* ---- 準備 (Arrange) + 実行 (Act) --- */
+    /* ------------------------------------ */
     const uint8 kPattern[DCM_DID_TEST_PATTERN_LENGTH] =
         { 0x11U, 0x22U, 0x33U, 0x44U, 0x55U, 0x66U, 0x77U, 0x88U };
     SendWriteTestPattern(kPattern);
 
-    /* 評価 (Assert): 正応答 [0x6E, 0x01, 0x04] が Can_Hw まで到達すること。 */
+    /* ------------------------------------ */
+    /* ---- 評価 (Assert) ----------------- */
+    /* ------------------------------------ */
+    // 正応答 [0x6E, 0x01, 0x04] が Can_Hw まで到達すること。
     ASSERT_EQ(FakeCanHw_SendCount, 1U);
     EXPECT_EQ(FakeCanHw_LastSendId, 0x7E8U);
     EXPECT_EQ(FakeCanHw_LastSendData[0], 0x03U);  // SF PCI（UDSペイロード長=3）
@@ -280,14 +285,20 @@ TEST_F(Bsw_DcmStack_SID2E_WriteDataById_Test,
 TEST_F(Bsw_DcmStack_SID2E_WriteDataById_Test,
        WriteDataById_OK_WrittenValueIsReflectedInSubsequentReadDataByIdOnCanHw)
 {
-    /* 準備 (Arrange 1) + 実行 (Act 1): TestPattern を書き込む。 */
+    /* ---------------------------------------- */
+    /* ---- 準備 (Arrange 1) + 実行 (Act 1) --- */
+    /* ---------------------------------------- */
+    // TestPattern を書き込む。
     const uint8 kPattern[DCM_DID_TEST_PATTERN_LENGTH] =
         { 0xAAU, 0xBBU, 0xCCU, 0xDDU, 0xEEU, 0xFFU, 0x01U, 0x02U };
     SendWriteTestPattern(kPattern);
     ASSERT_EQ(FakeCanHw_LastSendData[1], 0x6EU);  // 前提確認
 
-    /* 準備 (Arrange 2): [0x22, 0x01,0x04] を 0x7E0 の受信バッファへセットする
-     * （SF: 03 22 01 04）。 */
+    /* ---------------------------------------- */
+    /* ---- 準備 (Arrange 2) ------------------ */
+    /* ---------------------------------------- */
+    // [0x22, 0x01,0x04] を 0x7E0 の受信バッファへセットする
+    // （SF: 03 22 01 04）。
     FakeCanHw_Reset();
     FakeCanHw_RxId  = 0x7E0U;
     FakeCanHw_RxDlc = 8U;
@@ -299,13 +310,18 @@ TEST_F(Bsw_DcmStack_SID2E_WriteDataById_Test,
         FakeCanHw_RxData[i] = 0U;
     FakeCanHw_RxPendingCount = 1U;
 
-    /* 実行 (Act 2) */
+    /* ---------------------------------------- */
+    /* ---- 実行 (Act 2) ---------------------- */
+    /* ---------------------------------------- */
     Can_MainFunction_Read();
 
-    /* 評価 (Assert): 正応答 [0x62, 0x01,0x04, 直前に書き込んだ8バイト] が
-     * Can_Hw まで到達すること（SF: 0B 62 01 04 ... + FC/CF 経由で残り）。
-     * 応答自体は12バイトで CanTp の SF 上限(7)を超えるためマルチフレーム
-     * になる。ここでは初回フレーム（FF）の先頭のみ確認する。 */
+    /* ---------------------------------------- */
+    /* ---- 評価 (Assert) --------------------- */
+    /* ---------------------------------------- */
+    // 正応答 [0x62, 0x01,0x04, 直前に書き込んだ8バイト] が
+    // Can_Hw まで到達すること（SF: 0B 62 01 04 ... + FC/CF 経由で残り）。
+    // 応答自体は12バイトで CanTp の SF 上限(7)を超えるためマルチフレーム
+    // になる。ここでは初回フレーム（FF）の先頭のみ確認する。
     ASSERT_EQ(FakeCanHw_SendCount, 1U);  // FF のみ（FC 待ち）
     EXPECT_EQ(FakeCanHw_LastSendData[0], 0x10U);  // FF PCI 上位
     EXPECT_EQ(FakeCanHw_LastSendData[1], 0x0BU);  // DataLength=11（SID+DID2+data8）
@@ -325,8 +341,11 @@ TEST_F(Bsw_DcmStack_SID2E_WriteDataById_Test,
 TEST_F(Bsw_DcmStack_SID2E_WriteDataById_Test,
        WriteDataById_NG_CryptoKeyUpdateFailsDueToKeyMStubBoundaryOnCanHw)
 {
-    /* 準備 (Arrange): [0x2E, 0x01,0x08, keyName, key0..key15]
-     * （DCM_DID_CRYPTO_KEY_UPDATE、20バイト）を FF+CF×2 で受信させる。 */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // [0x2E, 0x01,0x08, keyName, key0..key15]
+    // （DCM_DID_CRYPTO_KEY_UPDATE、20バイト）を FF+CF×2 で受信させる。
     FakeCanHw_Reset();
     FakeCanHw_RxId  = 0x7E0U;
     FakeCanHw_RxDlc = 8U;
@@ -360,10 +379,15 @@ TEST_F(Bsw_DcmStack_SID2E_WriteDataById_Test,
         FakeCanHw_RxData[i] = 0x00U;
     FakeCanHw_RxPendingCount = 1U;
 
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Can_MainFunction_Read();
 
-    /* 評価 (Assert): 否定応答 [0x7F, 0x2E, 0x31] が Can_Hw まで到達すること。 */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // 否定応答 [0x7F, 0x2E, 0x31] が Can_Hw まで到達すること。
     ASSERT_EQ(FakeCanHw_SendCount, 1U);
     EXPECT_EQ(FakeCanHw_LastSendData[0], 0x03U);
     EXPECT_EQ(FakeCanHw_LastSendData[1], DCM_SID_NEGATIVE_RESP);
@@ -377,8 +401,11 @@ TEST_F(Bsw_DcmStack_SID2E_WriteDataById_Test,
 TEST_F(Bsw_DcmStack_SID2E_WriteDataById_Test,
        WriteDataById_NG_UnknownDidReturnsRequestOutOfRangeOnCanHw)
 {
-    /* 準備 (Arrange): [0x2E, 0x00,0x01, 0x00]（未対応DID）を 0x7E0 の
-     * 受信バッファへセットする（SF: 04 2E 00 01 00）。 */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // [0x2E, 0x00,0x01, 0x00]（未対応DID）を 0x7E0 の
+    // 受信バッファへセットする（SF: 04 2E 00 01 00）。
     FakeCanHw_Reset();
     FakeCanHw_RxId  = 0x7E0U;
     FakeCanHw_RxDlc = 8U;
@@ -391,10 +418,14 @@ TEST_F(Bsw_DcmStack_SID2E_WriteDataById_Test,
         FakeCanHw_RxData[i] = 0U;
     FakeCanHw_RxPendingCount = 1U;
 
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Can_MainFunction_Read();
 
-    /* 評価 (Assert) */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     ASSERT_EQ(FakeCanHw_SendCount, 1U);
     EXPECT_EQ(FakeCanHw_LastSendData[0], 0x03U);
     EXPECT_EQ(FakeCanHw_LastSendData[1], DCM_SID_NEGATIVE_RESP);

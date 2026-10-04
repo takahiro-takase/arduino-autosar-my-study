@@ -156,8 +156,11 @@ protected:
 TEST_F(Bsw_DcmStack_SID22_ReadDataById_Test,
        ReadDataById_OK_VinMultiFrameResponseReassemblesToExpectedPayloadOnCanHw)
 {
-    /* 準備 (Arrange): [0x22, 0xF1, 0x90] を 0x7E0 の受信バッファへセットする
-     * （SF: 03 22 F1 90）。 */
+    /* ------------------------- */
+    /* ---- 準備 (Arrange) ----- */
+    /* ------------------------- */
+    // [0x22, 0xF1, 0x90] を 0x7E0 の受信バッファへセットする
+    // （SF: 03 22 F1 90）。
     FakeCanHw_RxId  = 0x7E0U;
     FakeCanHw_RxDlc = 8U;
     FakeCanHw_RxData[0] = 3U;
@@ -168,12 +171,18 @@ TEST_F(Bsw_DcmStack_SID22_ReadDataById_Test,
         FakeCanHw_RxData[i] = 0U;
     FakeCanHw_RxPendingCount = 1U;
 
-    /* 実行 (Act 1): リクエスト受信 → Dcm 応答生成 → CanTp_Transmit(20バイト)
-     * → First Frame 送信（WAIT_FC へ遷移）まで同期的に進む。 */
+    /* ------------------------- */
+    /* ---- 実行 (Act 1) ------- */
+    /* ------------------------- */
+    // リクエスト受信 → Dcm 応答生成 → CanTp_Transmit(20バイト)
+    // → First Frame 送信（WAIT_FC へ遷移）まで同期的に進む。
     Can_MainFunction_Read();
 
-    /* 評価 (Assert 1): Dcm が生成した UDS ペイロード自体は
-     * Bsw_Dcm_ReadDtcInfo_test.cpp と同じ期待値。 */
+    /* ------------------------- */
+    /* ---- 評価 (Assert 1) ---- */
+    /* ------------------------- */
+    // Dcm が生成した UDS ペイロード自体は
+    // Bsw_Dcm_ReadDtcInfo_test.cpp と同じ期待値。
     ASSERT_EQ(CallCount_CanTp_Transmit, 1U);
     ASSERT_EQ(LastLength_CanTp_Transmit, (uint8)(3U + DCM_VIN_LENGTH));  // 20
     EXPECT_EQ(LastData_CanTp_Transmit[0], 0x62U);
@@ -190,8 +199,11 @@ TEST_F(Bsw_DcmStack_SID22_ReadDataById_Test,
     for (uint8 i = 0U; i < 6U; i++)
         reassembled[pos++] = FakeCanHw_LastSendData[2U + i];
 
-    /* 準備 (Arrange 2): テスター役として Flow Control（CTS, BS=0, STmin=0）を
-     * 0x7E0 から追加で受信させる。 */
+    /* ------------------------- */
+    /* ---- 準備 (Arrange 2) --- */
+    /* ------------------------- */
+    // テスター役として Flow Control（CTS, BS=0, STmin=0）を
+    // 0x7E0 から追加で受信させる。
     FakeCanHw_RxId  = 0x7E0U;
     FakeCanHw_RxDlc = 8U;
     FakeCanHw_RxData[0] = 0x30U;
@@ -201,12 +213,17 @@ TEST_F(Bsw_DcmStack_SID22_ReadDataById_Test,
         FakeCanHw_RxData[i] = 0U;
     FakeCanHw_RxPendingCount = 1U;
 
-    /* 実行 (Act 2) */
+    /* ------------------------- */
+    /* ---- 実行 (Act 2) ------- */
+    /* ------------------------- */
     Can_MainFunction_Read();
     ASSERT_EQ(FakeCanHw_SendCount, 1U);  // FC 受信自体は Can_Hw への送信を生まない
 
-    /* 実行 (Act 3): 残り14バイトは Consecutive Frame 2本（7+7バイト）で
-     * ちょうど運びきれる（ceil((20-6)/7)=2）。 */
+    /* ------------------------- */
+    /* ---- 実行 (Act 3) ------- */
+    /* ------------------------- */
+    // 残り14バイトは Consecutive Frame 2本（7+7バイト）で
+    // ちょうど運びきれる（ceil((20-6)/7)=2）。
     for (uint8 cf = 0U; cf < 2U; cf++)
     {
         CanTp_MainFunction();
@@ -223,9 +240,12 @@ TEST_F(Bsw_DcmStack_SID22_ReadDataById_Test,
             reassembled[pos++] = FakeCanHw_LastSendData[1U + i];
     }
 
-    /* 評価 (Assert 2): CanTp が IDLE へ戻り、CAN フレームへ分割・送出された
-     * 内容を結合すると Dcm が生成した元の20バイト UDS ペイロードと完全
-     * 一致すること。 */
+    /* ------------------------- */
+    /* ---- 評価 (Assert 2) ---- */
+    /* ------------------------- */
+    // CanTp が IDLE へ戻り、CAN フレームへ分割・送出された
+    // 内容を結合すると Dcm が生成した元の20バイト UDS ペイロードと完全
+    // 一致すること。
     ASSERT_EQ(pos, 20U);
     EXPECT_EQ(FakeCanHw_SendCount, 3U);  // FF 1 + CF 2
     EXPECT_EQ(CanTp_IsTxBusy(), (boolean)0U);
@@ -242,8 +262,11 @@ TEST_F(Bsw_DcmStack_SID22_ReadDataById_Test,
 TEST_F(Bsw_DcmStack_SID22_ReadDataById_Test,
        ReadDataById_NG_TooShortRequestProducesIncorrectMessageLengthResponseOnCanHw)
 {
-    /* 準備 (Arrange): [0x22, 0xF1] を 0x7E0 の受信バッファへセットする
-     * （SF: 02 22 F1）。 */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // [0x22, 0xF1] を 0x7E0 の受信バッファへセットする
+    // （SF: 02 22 F1）。
     FakeCanHw_RxId  = 0x7E0U;
     FakeCanHw_RxDlc = 8U;
     FakeCanHw_RxData[0] = 2U;
@@ -251,10 +274,15 @@ TEST_F(Bsw_DcmStack_SID22_ReadDataById_Test,
     FakeCanHw_RxData[2] = (uint8)(DCM_DID_VIN >> 8U);
     FakeCanHw_RxPendingCount = 1U;
 
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Can_MainFunction_Read();
 
-    /* 評価 (Assert): 否定応答 [0x7F, 0x22, 0x13] が Can_Hw まで到達すること。 */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // 否定応答 [0x7F, 0x22, 0x13] が Can_Hw まで到達すること。
     ASSERT_EQ(FakeCanHw_SendCount, 1U);
     EXPECT_EQ(FakeCanHw_LastSendId, 0x7E8U);
     EXPECT_EQ(FakeCanHw_LastSendData[0], 0x03U);  // SF PCI（UDSペイロード長=3）
@@ -270,8 +298,11 @@ TEST_F(Bsw_DcmStack_SID22_ReadDataById_Test,
 TEST_F(Bsw_DcmStack_SID22_ReadDataById_Test,
        ReadDataById_NG_MultipleDidRequestProducesIncorrectMessageLengthResponseOnCanHw)
 {
-    /* 準備 (Arrange): [0x22, 0xF1,0x90, 0xF1,0x90] を 0x7E0 の受信バッファへ
-     * セットする（SF: 05 22 F1 90 F1）。 */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // [0x22, 0xF1,0x90, 0xF1,0x90] を 0x7E0 の受信バッファへ
+    // セットする（SF: 05 22 F1 90 F1）。
     FakeCanHw_RxId  = 0x7E0U;
     FakeCanHw_RxDlc = 8U;
     FakeCanHw_RxData[0] = 5U;
@@ -284,10 +315,15 @@ TEST_F(Bsw_DcmStack_SID22_ReadDataById_Test,
     FakeCanHw_RxData[7] = 0U;
     FakeCanHw_RxPendingCount = 1U;
 
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Can_MainFunction_Read();
 
-    /* 評価 (Assert): 否定応答 [0x7F, 0x22, 0x13] が Can_Hw まで到達すること。 */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // 否定応答 [0x7F, 0x22, 0x13] が Can_Hw まで到達すること。
     ASSERT_EQ(FakeCanHw_SendCount, 1U);
     EXPECT_EQ(FakeCanHw_LastSendId, 0x7E8U);
     EXPECT_EQ(FakeCanHw_LastSendData[0], 0x03U);

@@ -177,8 +177,11 @@ protected:
 TEST_F(Bsw_DcmStack_SID19_SF01_ReadDtcCount_Test,
        ReadDtcCount_OK_RequestFromCanHwProducesExpectedSingleFrameResponseOnCanHw)
 {
-    /* 準備 (Arrange): [0x19, 0x01, statusMask=testFailedのみ] を 0x7E0 の
-     * 受信バッファへセットする（SF: 03 19 01 01）。 */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // [0x19, 0x01, statusMask=testFailedのみ] を 0x7E0 の
+    // 受信バッファへセットする（SF: 03 19 01 01）。
     FakeCanHw_RxId  = 0x7E0U;
     FakeCanHw_RxDlc = 8U;
     FakeCanHw_RxData[0] = 3U;
@@ -187,15 +190,21 @@ TEST_F(Bsw_DcmStack_SID19_SF01_ReadDtcCount_Test,
     FakeCanHw_RxData[3] = DEM_STATUS_TEST_FAILED;
     FakeCanHw_RxPendingCount = 1U;
 
-    /* 実行 (Act): Os から周期的に呼ばれる Can_MainFunction_Read() を1回
-     * 駆動する。Can_Hw 受信 → Can → CanIf → PduR → CanTp → Dcm →
-     * （復路）CanTp → PduR → CanIf → Can → Can_Hw 送信、まで同期的に進む。 */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    // Os から周期的に呼ばれる Can_MainFunction_Read() を1回
+    // 駆動する。Can_Hw 受信 → Can → CanIf → PduR → CanTp → Dcm →
+    // （復路）CanTp → PduR → CanIf → Can → Can_Hw 送信、まで同期的に進む。
     Can_MainFunction_Read();
 
-    /* 評価 (Assert): 応答が実際に Can_Hw（物理層）まで到達したことを確認する。
-     * UDS 応答本体 [0x59, 0x01, DEM_STATUS_AVAILABILITY_MASK, formatId, countHi, countLo]
-     * （Bsw_Dcm_ReadDtcInfo_test.cpp の同シナリオと同じ期待値）が
-     * Single Frame（PCI=0x06 + 6バイト）として 0x7E8 へ送信されるはず。 */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // 応答が実際に Can_Hw（物理層）まで到達したことを確認する。
+    // UDS 応答本体 [0x59, 0x01, DEM_STATUS_AVAILABILITY_MASK, formatId, countHi, countLo]
+    // （Bsw_Dcm_ReadDtcInfo_test.cpp の同シナリオと同じ期待値）が
+    // Single Frame（PCI=0x06 + 6バイト）として 0x7E8 へ送信されるはず。
     ASSERT_EQ(FakeCanHw_SendCount, 1U);
     EXPECT_EQ(FakeCanHw_LastSendId, 0x7E8U);
     EXPECT_EQ(FakeCanHw_LastSendDlc, 8U);
@@ -220,11 +229,14 @@ TEST_F(Bsw_DcmStack_SID19_SF01_ReadDtcCount_Test,
 TEST_F(Bsw_DcmStack_SID19_SF01_ReadDtcCount_Test,
        ReadDtcCount_OK_OneRegisteredDtcMatchingStatusMaskIsReflectedInCountOnCanHw)
 {
-    /* 準備 (Arrange): DEM_EVENT_ENGINE_OVERHEAT を FAILED（testFailed ビット
-     * が立つ）にしてから、[0x19, 0x01, statusMask=testFailedのみ] を 0x7E0 の
-     * 受信バッファへセットする（SF: 03 19 01 01）。DEM_DEBOUNCE_LIMIT_ENGINE_OVERHEAT
-     * =2（Dem_Cfg.h参照）のため、確定させるには2回呼ぶ必要がある
-     * （Bsw_Dcm_ReadDtcInfo_test.cpp の同パターン参照）。 */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // DEM_EVENT_ENGINE_OVERHEAT を FAILED（testFailed ビット
+    // が立つ）にしてから、[0x19, 0x01, statusMask=testFailedのみ] を 0x7E0 の
+    // 受信バッファへセットする（SF: 03 19 01 01）。DEM_DEBOUNCE_LIMIT_ENGINE_OVERHEAT
+    // =2（Dem_Cfg.h参照）のため、確定させるには2回呼ぶ必要がある
+    // （Bsw_Dcm_ReadDtcInfo_test.cpp の同パターン参照）。
     (void)Dem_SetEventStatus(DEM_EVENT_ENGINE_OVERHEAT, DEM_EVENT_STATUS_FAILED);
     (void)Dem_SetEventStatus(DEM_EVENT_ENGINE_OVERHEAT, DEM_EVENT_STATUS_FAILED);
 
@@ -236,10 +248,15 @@ TEST_F(Bsw_DcmStack_SID19_SF01_ReadDtcCount_Test,
     FakeCanHw_RxData[3] = DEM_STATUS_TEST_FAILED;
     FakeCanHw_RxPendingCount = 1U;
 
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Can_MainFunction_Read();
 
-    /* 評価 (Assert): countL が 1 件を反映して Can_Hw まで到達すること。 */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // countL が 1 件を反映して Can_Hw まで到達すること。
     ASSERT_EQ(FakeCanHw_SendCount, 1U);
     EXPECT_EQ(FakeCanHw_LastSendId, 0x7E8U);
     EXPECT_EQ(FakeCanHw_LastSendDlc, 8U);
@@ -262,9 +279,12 @@ TEST_F(Bsw_DcmStack_SID19_SF01_ReadDtcCount_Test,
 TEST_F(Bsw_DcmStack_SID19_SF01_ReadDtcCount_Test,
        ReadDtcCount_OK_StatusMask0xFFMatchesNotCompletedSinceClearOnCanHw)
 {
-    /* 準備 (Arrange): Dem_SetEventStatus() を一切呼ばない（Dem_Init() 直後の
-     * 初期状態のまま）で [0x19, 0x01, statusMask=0xFF] を 0x7E0 の受信
-     * バッファへセットする（SF: 03 19 01 FF）。 */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // Dem_SetEventStatus() を一切呼ばない（Dem_Init() 直後の
+    // 初期状態のまま）で [0x19, 0x01, statusMask=0xFF] を 0x7E0 の受信
+    // バッファへセットする（SF: 03 19 01 FF）。
     FakeCanHw_RxId  = 0x7E0U;
     FakeCanHw_RxDlc = 8U;
     FakeCanHw_RxData[0] = 3U;
@@ -273,11 +293,16 @@ TEST_F(Bsw_DcmStack_SID19_SF01_ReadDtcCount_Test,
     FakeCanHw_RxData[3] = 0xFFU;
     FakeCanHw_RxPendingCount = 1U;
 
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Can_MainFunction_Read();
 
-    /* 評価 (Assert): countL が DEM_EVENT_COUNT 件全てを反映して Can_Hw まで
-     * 到達すること。 */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // countL が DEM_EVENT_COUNT 件全てを反映して Can_Hw まで
+    // 到達すること。
     ASSERT_EQ(FakeCanHw_SendCount, 1U);
     EXPECT_EQ(FakeCanHw_LastSendId, 0x7E8U);
     EXPECT_EQ(FakeCanHw_LastSendDlc, 8U);
@@ -297,8 +322,11 @@ TEST_F(Bsw_DcmStack_SID19_SF01_ReadDtcCount_Test,
 TEST_F(Bsw_DcmStack_SID19_SF01_ReadDtcCount_Test,
        ReadDtcCount_NG_MissingStatusMaskProducesIncorrectMessageLengthResponseOnCanHw)
 {
-    /* 準備 (Arrange): statusMask を欠落させた [0x19, 0x01] を 0x7E0 の
-     * 受信バッファへセットする（SF: 02 19 01）。 */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // statusMask を欠落させた [0x19, 0x01] を 0x7E0 の
+    // 受信バッファへセットする（SF: 02 19 01）。
     FakeCanHw_RxId  = 0x7E0U;
     FakeCanHw_RxDlc = 8U;
     FakeCanHw_RxData[0] = 2U;
@@ -306,10 +334,15 @@ TEST_F(Bsw_DcmStack_SID19_SF01_ReadDtcCount_Test,
     FakeCanHw_RxData[2] = DCM_DTC_SUBFUNC_REPORT_COUNT;
     FakeCanHw_RxPendingCount = 1U;
 
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Can_MainFunction_Read();
 
-    /* 評価 (Assert): 否定応答 [0x7F, 0x19, 0x13] が Can_Hw まで到達すること。 */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // 否定応答 [0x7F, 0x19, 0x13] が Can_Hw まで到達すること。
     ASSERT_EQ(FakeCanHw_SendCount, 1U);
     EXPECT_EQ(FakeCanHw_LastSendId, 0x7E8U);
     EXPECT_EQ(FakeCanHw_LastSendDlc, 8U);

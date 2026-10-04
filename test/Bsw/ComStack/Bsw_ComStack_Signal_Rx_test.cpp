@@ -362,17 +362,24 @@ protected:
 // ------------------------------------------------------------
 TEST_F(Bsw_ComStack_Signal_Rx_Test, CanMainFunctionRead_OK_DrivesToComReceiveSignal)
 {
-    /* 準備 (Arrange): フェイク Can_Hw に受信フレーム1件を積む */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // フェイク Can_Hw に受信フレーム1件を積む
     FakeCanHw_RxPendingCount = 1U;
     FakeCanHw_RxId  = 0x100U;
     FakeCanHw_RxDlc = 2U;
     FakeCanHw_RxData[0] = 0x56U;
     FakeCanHw_RxData[1] = 0x78U;
 
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Can_MainFunction_Read();
 
-    /* 評価 (Assert) */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeCanHw_RxPendingCount, 0U);  // ドレインし尽くしたこと
     uint16_t value = 0U;
     uint8 ret = Com_ReceiveSignal(0U, &value);
@@ -383,13 +390,21 @@ TEST_F(Bsw_ComStack_Signal_Rx_Test, CanMainFunctionRead_OK_DrivesToComReceiveSig
 
 TEST_F(Bsw_ComStack_Signal_Rx_Test, CanMainFunctionRead_NG_NothingReceived_LeavesInitValue)
 {
-    /* 準備 (Arrange): 受信フレームなし */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // 受信フレームなし
     FakeCanHw_RxPendingCount = 0U;
 
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Can_MainFunction_Read();
 
-    /* 評価 (Assert): Com_SignalConfigType.InitValue（既定 0）のまま */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // Com_SignalConfigType.InitValue（既定 0）のまま
     uint16_t value = 0xFFFFU;  // 上書きされていないことが分かるよう非0で初期化
     uint8 ret = Com_ReceiveSignal(0U, &value);
     EXPECT_EQ(ret, E_OK);
@@ -399,18 +414,26 @@ TEST_F(Bsw_ComStack_Signal_Rx_Test, CanMainFunctionRead_NG_NothingReceived_Leave
 
 TEST_F(Bsw_ComStack_Signal_Rx_Test, CanMainFunctionRead_NG_InsufficientDlcIsDiscardedAndReportsRuntimeError)
 {
-    /* 準備 (Arrange): 設定 Dlc(2) に満たない 1byte フレームを積む */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // 設定 Dlc(2) に満たない 1byte フレームを積む
     FakeCanHw_RxPendingCount = 1U;
     FakeCanHw_RxId  = 0x100U;
     FakeCanHw_RxDlc = 1U;
     FakeCanHw_RxData[0] = 0x56U;
     FakeDetHw_Reset();
 
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Can_MainFunction_Read();
 
-    /* 評価 (Assert): 上位層(Com)へは渡らず InitValue のまま、かつ
-     * CANIF_E_INVALID_DATA_LENGTH がランタイムエラーとして報告される */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // 上位層(Com)へは渡らず InitValue のまま、かつ
+    // CANIF_E_INVALID_DATA_LENGTH がランタイムエラーとして報告される
     uint16_t value = 0xFFFFU;
     uint8 ret = Com_ReceiveSignal(0U, &value);
     EXPECT_EQ(ret, E_OK);
@@ -427,9 +450,12 @@ TEST_F(Bsw_ComStack_Signal_Rx_Test, CanMainFunctionRead_NG_InsufficientDlcIsDisc
 // ------------------------------------------------------------
 TEST_F(Bsw_ComStack_Signal_Rx_Test, CanIfReadRxPduData_OK_ReturnsBufferedDataAfterReceive)
 {
-    /* 準備 (Arrange): CanMainFunctionRead_OK_DrivesToComReceiveSignal と
-     * 同じ手順で実際に1フレーム受信させる（CanIf_RxIndication() の内部で
-     * バッファへ複製される）。 */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // CanMainFunctionRead_OK_DrivesToComReceiveSignal と
+    // 同じ手順で実際に1フレーム受信させる（CanIf_RxIndication() の内部で
+    // バッファへ複製される）。
     FakeCanHw_RxPendingCount = 1U;
     FakeCanHw_RxId  = 0x100U;
     FakeCanHw_RxDlc = 2U;
@@ -437,12 +463,16 @@ TEST_F(Bsw_ComStack_Signal_Rx_Test, CanIfReadRxPduData_OK_ReturnsBufferedDataAft
     FakeCanHw_RxData[1] = 0x78U;
     Can_MainFunction_Read();
 
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     uint8 buf[CANIF_MAX_DLC] = {0U};
     PduInfoType info = { buf, 0U };
     Std_ReturnType ret = CanIf_ReadRxPduData(0U, &info);
 
-    /* 評価 (Assert) */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_OK);
     ASSERT_EQ(info.SduLength, 2U);
     EXPECT_EQ(buf[0], 0x56U);
@@ -452,9 +482,15 @@ TEST_F(Bsw_ComStack_Signal_Rx_Test, CanIfReadRxPduData_OK_ReturnsBufferedDataAft
 
 TEST_F(Bsw_ComStack_Signal_Rx_Test, CanIfReadRxPduData_NG_ReturnsErrorBeforeAnyReceive)
 {
-    /* 準備 (Arrange): 一切受信させない */
+    /* ----------------------------------- */
+    /* ---- 準備 (Arrange) --------------- */
+    /* ----------------------------------- */
+    // 一切受信させない
 
-    /* 実行 (Act) + 評価 (Assert): spec 原文 "No valid data has been received" */
+    /* ----------------------------------- */
+    /* ---- 実行 (Act) + 評価 (Assert) --- */
+    /* ----------------------------------- */
+    // spec 原文 "No valid data has been received"
     uint8 buf[CANIF_MAX_DLC] = {0U};
     PduInfoType info = { buf, 0U };
     EXPECT_EQ(CanIf_ReadRxPduData(0U, &info), E_NOT_OK);
@@ -463,8 +499,11 @@ TEST_F(Bsw_ComStack_Signal_Rx_Test, CanIfReadRxPduData_NG_ReturnsErrorBeforeAnyR
 
 TEST_F(Bsw_ComStack_Signal_Rx_Test, CanIfReadRxPduData_NG_NotOptedInReturnsErrorEvenAfterReceive)
 {
-    /* 準備 (Arrange): kTestCanIfRxPduNoBuffer（CanIfRxSduId=1、CAN 0x101、
-     * ReadRxPduDataEnabled=0）を実際に受信させる。 */
+    /* ----------------------------------- */
+    /* ---- 準備 (Arrange) --------------- */
+    /* ----------------------------------- */
+    // kTestCanIfRxPduNoBuffer（CanIfRxSduId=1、CAN 0x101、
+    // ReadRxPduDataEnabled=0）を実際に受信させる。
     FakeCanHw_RxPendingCount = 1U;
     FakeCanHw_RxId  = 0x101U;
     FakeCanHw_RxDlc = 2U;
@@ -472,8 +511,11 @@ TEST_F(Bsw_ComStack_Signal_Rx_Test, CanIfReadRxPduData_NG_NotOptedInReturnsError
     FakeCanHw_RxData[1] = 0xBBU;
     Can_MainFunction_Read();
 
-    /* 実行 (Act) + 評価 (Assert): [SWS_CANIF_00325] opt-in されていない
-     * PDU への要求は E_NOT_OK（受信済みかどうかによらない）。 */
+    /* ----------------------------------- */
+    /* ---- 実行 (Act) + 評価 (Assert) --- */
+    /* ----------------------------------- */
+    // [SWS_CANIF_00325] opt-in されていない
+    // PDU への要求は E_NOT_OK（受信済みかどうかによらない）。
     uint8 buf[CANIF_MAX_DLC] = {0U};
     PduInfoType info = { buf, 0U };
     EXPECT_EQ(CanIf_ReadRxPduData(1U, &info), E_NOT_OK);
@@ -482,7 +524,9 @@ TEST_F(Bsw_ComStack_Signal_Rx_Test, CanIfReadRxPduData_NG_NotOptedInReturnsError
 
 TEST_F(Bsw_ComStack_Signal_Rx_Test, CanIfReadRxPduData_NG_UnknownPduIdReturnsError)
 {
-    /* 実行 (Act) + 評価 (Assert) */
+    /* ----------------------------------- */
+    /* ---- 実行 (Act) + 評価 (Assert) --- */
+    /* ----------------------------------- */
     uint8 buf[CANIF_MAX_DLC] = {0U};
     PduInfoType info = { buf, 0U };
     EXPECT_EQ(CanIf_ReadRxPduData(99U, &info), E_NOT_OK);
@@ -491,16 +535,21 @@ TEST_F(Bsw_ComStack_Signal_Rx_Test, CanIfReadRxPduData_NG_UnknownPduIdReturnsErr
 
 TEST_F(Bsw_ComStack_Signal_Rx_Test, CanIfReadRxPduData_NG_NullPointerReturnsError)
 {
-    /* 実行 (Act) + 評価 (Assert) */
+    /* ----------------------------------- */
+    /* ---- 実行 (Act) + 評価 (Assert) --- */
+    /* ----------------------------------- */
     EXPECT_EQ(CanIf_ReadRxPduData(0U, NULL), E_NOT_OK);
 }
 
 
 TEST_F(Bsw_ComStack_Signal_Rx_Test, CanIfReadRxPduData_OK_ClampsBufferedLengthToPduDlcNotModuleMax)
 {
-    /* 準備 (Arrange): kTestCanIfRxPduSmallDlc（CanIfRxSduId=2、Dlc=2）に対し、
-     * 設定 Dlc(2) より長い 8byte フレームを受信させる。既存の長さチェックは
-     * 不足のみ棄却するため、この受信自体は素通りする。 */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // kTestCanIfRxPduSmallDlc（CanIfRxSduId=2、Dlc=2）に対し、
+    // 設定 Dlc(2) より長い 8byte フレームを受信させる。既存の長さチェックは
+    // 不足のみ棄却するため、この受信自体は素通りする。
     FakeCanHw_RxPendingCount = 1U;
     FakeCanHw_RxId  = 0x102U;
     FakeCanHw_RxDlc = 8U;
@@ -508,15 +557,20 @@ TEST_F(Bsw_ComStack_Signal_Rx_Test, CanIfReadRxPduData_OK_ClampsBufferedLengthTo
         FakeCanHw_RxData[b] = (uint8_t)(0xC0U + b);
     Can_MainFunction_Read();
 
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     uint8 buf[CANIF_MAX_DLC] = {0U};
     PduInfoType info = { buf, 0U };
     Std_ReturnType ret = CanIf_ReadRxPduData(2U, &info);
 
-    /* 評価 (Assert): /code-review 指摘の是正確認。バッファ長はこの PDU
-     * 自身の設定 Dlc(2) でクランプされ、モジュール共通の CANIF_MAX_DLC(8)
-     * までは届かない——CanIfRxSduId=2 の呼び出し元が Dlc(2) 分だけ確保した
-     * バッファでも安全であることの検証。 */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // /code-review 指摘の是正確認。バッファ長はこの PDU
+    // 自身の設定 Dlc(2) でクランプされ、モジュール共通の CANIF_MAX_DLC(8)
+    // までは届かない——CanIfRxSduId=2 の呼び出し元が Dlc(2) 分だけ確保した
+    // バッファでも安全であることの検証。
     EXPECT_EQ(ret, E_OK);
     ASSERT_EQ(info.SduLength, 2U);
     EXPECT_EQ(buf[0], 0xC0U);
@@ -526,14 +580,17 @@ TEST_F(Bsw_ComStack_Signal_Rx_Test, CanIfReadRxPduData_OK_ClampsBufferedLengthTo
 
 TEST_F(Bsw_ComStack_Signal_Rx_Test, CanIfInit_NG_RejectsConfigWithRxPduCountAboveMaxWithoutActivating)
 {
-    /* 準備 (Arrange): CanIf_RxPduDataBuffer[]/Length[]/Valid[] は
-     * CANIF_RX_PDU_MAX（native_chain バイナリ全体で共有される固定サイズ）
-     * でしか確保されていない（/code-review・/simplify 指摘）。それを超える
-     * RxPduCount を渡した場合に初期化自体が拒否されることを確認する。
-     * RxPduConfig 自体は CanIf_Init() 内で走査されないため NULL のままでよい
-     * （範囲チェックのみで早期 return するため、その後の配列アクセスは
-     * 一切発生しない）。まず SetUp() が設定した有効な状態を DeInit() で
-     * クリアしておく。 */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // CanIf_RxPduDataBuffer[]/Length[]/Valid[] は
+    // CANIF_RX_PDU_MAX（native_chain バイナリ全体で共有される固定サイズ）
+    // でしか確保されていない（/code-review・/simplify 指摘）。それを超える
+    // RxPduCount を渡した場合に初期化自体が拒否されることを確認する。
+    // RxPduConfig 自体は CanIf_Init() 内で走査されないため NULL のままでよい
+    // （範囲チェックのみで早期 return するため、その後の配列アクセスは
+    // 一切発生しない）。まず SetUp() が設定した有効な状態を DeInit() で
+    // クリアしておく。
     CanIf_DeInit();
     const CanIf_ConfigType kOversizedConfig = {
         /* TxPduConfig */ NULL,
@@ -542,12 +599,17 @@ TEST_F(Bsw_ComStack_Signal_Rx_Test, CanIfInit_NG_RejectsConfigWithRxPduCountAbov
         /* RxPduCount */  (uint8_t)(CANIF_RX_PDU_MAX + 1U)
     };
 
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     CanIf_Init(&kOversizedConfig);
 
-    /* 評価 (Assert): 拒否されて未初期化のままのため、他の API は
-     * CanIf_ConfigPtr==NULL の早期 return 経路（DET 報告なし）を通り、
-     * E_NOT_OK を返す。 */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // 拒否されて未初期化のままのため、他の API は
+    // CanIf_ConfigPtr==NULL の早期 return 経路（DET 報告なし）を通り、
+    // E_NOT_OK を返す。
     uint8 buf[CANIF_MAX_DLC] = {0U};
     PduInfoType info = { buf, 0U };
     EXPECT_EQ(CanIf_ReadRxPduData(0U, &info), E_NOT_OK);
@@ -563,15 +625,23 @@ TEST_F(Bsw_ComStack_Signal_Rx_Test, CanIfInit_NG_RejectsConfigWithRxPduCountAbov
 // ------------------------------------------------------------
 TEST_F(Bsw_ComStack_Signal_Rx_Test, ComRxIndication_OK_AcceptedByCalloutProcessesNormally)
 {
-    /* 準備 (Arrange): コールバックは受理（既定の s_calloutAccept=1U） */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // コールバックは受理（既定の s_calloutAccept=1U）
     uint8 buf[2] = { 0x12U, 0x34U };
     PduInfoType pduInfo = { buf, 2U };
 
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Com_RxIndication(0U, &pduInfo);
 
-    /* 評価 (Assert): コールアウトは1回、生バイト列そのまま呼ばれ、
-     * 通常どおりバッファへ格納され RxAckCbk も発火する */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // コールアウトは1回、生バイト列そのまま呼ばれ、
+    // 通常どおりバッファへ格納され RxAckCbk も発火する
     EXPECT_EQ(s_calloutInvokeCount, 1U);
     EXPECT_EQ(s_calloutLastByte1, 0x34U);
     EXPECT_EQ(s_rxAckCount, 1U);
@@ -583,17 +653,25 @@ TEST_F(Bsw_ComStack_Signal_Rx_Test, ComRxIndication_OK_AcceptedByCalloutProcesse
 
 TEST_F(Bsw_ComStack_Signal_Rx_Test, ComRxIndication_NG_RejectedByCalloutDiscardsFrameEntirely)
 {
-    /* 準備 (Arrange): コールバックが拒否する設定にする */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // コールバックが拒否する設定にする
     s_calloutAccept = 0U;
     uint8 buf[2] = { 0x12U, 0x34U };
     PduInfoType pduInfo = { buf, 2U };
 
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Com_RxIndication(0U, &pduInfo);
 
-    /* 評価 (Assert): [SWS_Com_00700] "false: I-PDU will not be processed any
-     * further" のとおり、バッファは更新されず（InitValue のまま）、
-     * RxAckCbk（バッファ格納後の通知）も発火しない */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // [SWS_Com_00700] "false: I-PDU will not be processed any
+    // further" のとおり、バッファは更新されず（InitValue のまま）、
+    // RxAckCbk（バッファ格納後の通知）も発火しない
     EXPECT_EQ(s_calloutInvokeCount, 1U);
     EXPECT_EQ(s_rxAckCount, 0U);
     uint16_t value = 0xFFFFU;
@@ -607,45 +685,68 @@ TEST_F(Bsw_ComStack_Signal_Rx_Test, ComRxIndication_NG_RejectedByCalloutDiscards
 // ------------------------------------------------------------
 TEST_F(Bsw_ComStack_Signal_Rx_Test, ComRxIndication_OK_NonGroupAck_FiresOnFullReception)
 {
-    /* 準備 (Arrange): IPduId=0 を DLC 分フルで受信 */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // IPduId=0 を DLC 分フルで受信
     uint8 buf[2] = { 0x12U, 0x34U };
     PduInfoType pduInfo = { buf, 2U };
 
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Com_RxIndication(0U, &pduInfo);
 
-    /* 評価 (Assert) */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(s_rxAckCount, 1U);
 }
 
 
 TEST_F(Bsw_ComStack_Signal_Rx_Test, ComRxIndication_OK_NonGroupAck_FiresOncePerFrame)
 {
-    /* 準備 (Arrange) */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     uint8 buf[2] = { 0x12U, 0x34U };
     PduInfoType pduInfo = { buf, 2U };
 
-    /* 実行 (Act): 2フレーム受信 */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    // 2フレーム受信
     Com_RxIndication(0U, &pduInfo);
     Com_RxIndication(0U, &pduInfo);
 
-    /* 評価 (Assert): フレーム数と同じ回数だけ呼ばれる */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // フレーム数と同じ回数だけ呼ばれる
     EXPECT_EQ(s_rxAckCount, 2U);
 }
 
 
 TEST_F(Bsw_ComStack_Signal_Rx_Test, ComRxIndication_OK_PartialReception_OnlyAcksSignalsWithinRecvLen)
 {
-    /* 準備 (Arrange): IPduId=2（DLC=2、byte0/byte1 それぞれ専用シグナル）を
-     * byte0 のみ（SduLength=1）で受信する部分受信シナリオ */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // IPduId=2（DLC=2、byte0/byte1 それぞれ専用シグナル）を
+    // byte0 のみ（SduLength=1）で受信する部分受信シナリオ
     uint8 buf[1] = { 0xABU };
     PduInfoType pduInfo = { buf, 1U };
 
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Com_RxIndication(2U, &pduInfo);
 
-    /* 評価 (Assert): recvLen(1) 以内に収まる byte0 側のみ RxAckCbk が発火し、
-     * 範囲外の byte1 側は発火しない（[SWS_Com_00574]）。 */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // recvLen(1) 以内に収まる byte0 側のみ RxAckCbk が発火し、
+    // 範囲外の byte1 側は発火しない（[SWS_Com_00574]）。
     EXPECT_EQ(s_partialAckCount0, 1U);
     EXPECT_EQ(s_partialAckCount1, 0U);
 }
@@ -814,15 +915,23 @@ protected:
 // ------------------------------------------------------------
 TEST_F(Bsw_ComStack_Signal_Rx_Timeout_Test, ComMainFunction_OK_DetectsTimeoutAfterThresholdElapsed)
 {
-    /* 準備 (Arrange): 一度受信させてから、しきい値(500ms)を超えて時間を進める */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // 一度受信させてから、しきい値(500ms)を超えて時間を進める
     ReceiveOnce(0x1234U);
     FakeMillis_Value = 600UL;
 
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Com_MainFunctionRx();
 
-    /* 評価 (Assert): フラグに加えて SWS_Com_00536/00556 (Com_CbkRxTOut) の
-     * シグナル単位コールバックも新規検出の瞬間に1回だけ呼ばれる */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // フラグに加えて SWS_Com_00536/00556 (Com_CbkRxTOut) の
+    // シグナル単位コールバックも新規検出の瞬間に1回だけ呼ばれる
     EXPECT_EQ(Com_Test_GetSigTimedOut(0U), 1U);
     EXPECT_EQ(s_sigRxTOutCount, 1U);
 }
@@ -830,14 +939,22 @@ TEST_F(Bsw_ComStack_Signal_Rx_Timeout_Test, ComMainFunction_OK_DetectsTimeoutAft
 
 TEST_F(Bsw_ComStack_Signal_Rx_Timeout_Test, ComMainFunction_NG_BeforeThreshold_LeavesSigTimedOutClear)
 {
-    /* 準備 (Arrange): 一度受信させるが、しきい値(500ms)未満しか時間を進めない */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // 一度受信させるが、しきい値(500ms)未満しか時間を進めない
     ReceiveOnce(0x1234U);
     FakeMillis_Value = 400UL;
 
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Com_MainFunctionRx();
 
-    /* 評価 (Assert): まだ検知しない。コールバックも呼ばれない */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // まだ検知しない。コールバックも呼ばれない
     EXPECT_EQ(Com_Test_GetSigTimedOut(0U), 0U);
     EXPECT_EQ(s_sigRxTOutCount, 0U);
 }
@@ -845,18 +962,26 @@ TEST_F(Bsw_ComStack_Signal_Rx_Timeout_Test, ComMainFunction_NG_BeforeThreshold_L
 
 TEST_F(Bsw_ComStack_Signal_Rx_Timeout_Test, ComMainFunction_OK_SigRxTOutCbkFiresOnlyOnceAcrossRepeatedCalls)
 {
-    /* 準備 (Arrange): しきい値超過を検出させたあと、時間をさらに進めて
-     * Com_MainFunctionRx() を再度呼ぶ（エッジトリガのため2回目は発火しない） */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // しきい値超過を検出させたあと、時間をさらに進めて
+    // Com_MainFunctionRx() を再度呼ぶ（エッジトリガのため2回目は発火しない）
     ReceiveOnce(0x1234U);
     FakeMillis_Value = 600UL;
     Com_MainFunctionRx();
     ASSERT_EQ(s_sigRxTOutCount, 1U);
 
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     FakeMillis_Value = 700UL;
     Com_MainFunctionRx();
 
-    /* 評価 (Assert): 新規検出時のみ発火するため回数は増えない */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // 新規検出時のみ発火するため回数は増えない
     EXPECT_EQ(s_sigRxTOutCount, 1U);
 }
 
@@ -866,34 +991,45 @@ TEST_F(Bsw_ComStack_Signal_Rx_Timeout_Test, ComMainFunction_OK_SigRxTOutCbkFires
 // ------------------------------------------------------------
 TEST_F(Bsw_ComStack_Signal_Rx_Timeout_Test, ComMainFunction_NG_RejectedFrameStillResetsDeadlineTimer)
 {
-    /* 準備 (Arrange): t=300ms でフレーム到着→callout に拒否される。
-     * もしタイマがリセットされていなければ、Com_Init() 時点(t=0)を
-     * 起点に t=600ms で 500ms しきい値を超えてタイムアウトしてしまう。
-     * タイマが正しくリセットされていれば、拒否された t=300ms を起点に
-     * t=600ms 時点ではまだ 300ms しか経過しておらず、タイムアウトしない。 */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // t=300ms でフレーム到着→callout に拒否される。
+    // もしタイマがリセットされていなければ、Com_Init() 時点(t=0)を
+    // 起点に t=600ms で 500ms しきい値を超えてタイムアウトしてしまう。
+    // タイマが正しくリセットされていれば、拒否された t=300ms を起点に
+    // t=600ms 時点ではまだ 300ms しか経過しておらず、タイムアウトしない。
     FakeMillis_Value = 300UL;
     ReceiveOnceRejected();
     ASSERT_EQ(s_rejectCalloutInvokeCount, 1U);  // 拒否経路を通ったことの裏付け
 
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     FakeMillis_Value = 600UL;
     Com_MainFunctionRx();
 
-    /* 評価 (Assert): 実 AUTOSAR ならタイムアウトしない状況
-     * （バスは正常、ペイロードが拒否されただけ）で、実際にタイムアウト
-     * しないことを確認する。 */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // 実 AUTOSAR ならタイムアウトしない状況
+    // （バスは正常、ペイロードが拒否されただけ）で、実際にタイムアウト
+    // しないことを確認する。
     EXPECT_EQ(Com_IsRxTimedOut(2U), 0U);
 }
 
 
 TEST_F(Bsw_ComStack_Signal_Rx_Timeout_Test, ComMainFunction_OK_RejectedFrameStillTransitionsToSteadyTimeout)
 {
-    /* 準備 (Arrange): IPduId=2 の初回受信（t=300ms）が callout に拒否される。
-     * [SWS_Com_00715]（Com_RxIndication 呼び出し自体でタイマ再始動）と
-     * [SWS_Com_00738]（シグナル値を考慮しない）により、拒否されても
-     * First→steady の状態遷移自体は起きるはず。しきい値を FirstTimeoutMs
-     * (1000ms) ではなく steady の TimeoutMs (500ms) に切り替えさせて
-     * 検証する。 */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // IPduId=2 の初回受信（t=300ms）が callout に拒否される。
+    // [SWS_Com_00715]（Com_RxIndication 呼び出し自体でタイマ再始動）と
+    // [SWS_Com_00738]（シグナル値を考慮しない）により、拒否されても
+    // First→steady の状態遷移自体は起きるはず。しきい値を FirstTimeoutMs
+    // (1000ms) ではなく steady の TimeoutMs (500ms) に切り替えさせて
+    // 検証する。
     FakeMillis_Value = 300UL;
     ReceiveOnceRejected();
     ASSERT_EQ(s_rejectCalloutInvokeCount, 1U);
@@ -904,14 +1040,20 @@ TEST_F(Bsw_ComStack_Signal_Rx_Timeout_Test, ComMainFunction_OK_RejectedFrameStil
     Com_MainFunctionRx();
     ASSERT_EQ(Com_IsRxTimedOut(2U), 0U);
 
-    /* 実行 (Act): t=850ms（拒否からの経過 550ms） */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    // t=850ms（拒否からの経過 550ms）
     FakeMillis_Value = 850UL;
     Com_MainFunctionRx();
 
-    /* 評価 (Assert): steady の 500ms は超えているためタイムアウトする。
-     * もし拒否によって First(1000ms) のまま据え置かれていたら、
-     * 550ms < 1000ms でタイムアウトしないはずなので、この違いで
-     * 状態遷移の有無を判別できる。 */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // steady の 500ms は超えているためタイムアウトする。
+    // もし拒否によって First(1000ms) のまま据え置かれていたら、
+    // 550ms < 1000ms でタイムアウトしないはずなので、この違いで
+    // 状態遷移の有無を判別できる。
     EXPECT_EQ(Com_IsRxTimedOut(2U), 1U);
 }
 
@@ -921,17 +1063,25 @@ TEST_F(Bsw_ComStack_Signal_Rx_Timeout_Test, ComMainFunction_OK_RejectedFrameStil
 // ------------------------------------------------------------
 TEST_F(Bsw_ComStack_Signal_Rx_Timeout_Test, ComReceiveSignal_OK_SubstitutesValueAfterTimeout)
 {
-    /* 準備 (Arrange): セグメント①の終端状態（Com_SigTimedOut が立った状態）を用意する */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // セグメント①の終端状態（Com_SigTimedOut が立った状態）を用意する
     ReceiveOnce(0x1234U);
     FakeMillis_Value = 600UL;
     Com_MainFunctionRx();
     ASSERT_EQ(Com_Test_GetSigTimedOut(0U), 1U);
 
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     uint16_t value = 0U;
     uint8 ret = Com_ReceiveSignal(0U, &value);
 
-    /* 評価 (Assert): 実受信値(0x1234)ではなく TimeoutSubstitutionValue が返る */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // 実受信値(0x1234)ではなく TimeoutSubstitutionValue が返る
     EXPECT_EQ(ret, E_OK);
     EXPECT_EQ(value, 0xFFFFU);
 }
@@ -939,17 +1089,25 @@ TEST_F(Bsw_ComStack_Signal_Rx_Timeout_Test, ComReceiveSignal_OK_SubstitutesValue
 
 TEST_F(Bsw_ComStack_Signal_Rx_Timeout_Test, ComReceiveSignal_NG_BeforeTimeout_ReturnsLastReceivedValue)
 {
-    /* 準備 (Arrange): 受信直後、まだタイムアウトしきい値に達していない */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // 受信直後、まだタイムアウトしきい値に達していない
     ReceiveOnce(0x1234U);
     FakeMillis_Value = 400UL;
     Com_MainFunctionRx();
     ASSERT_EQ(Com_Test_GetSigTimedOut(0U), 0U);
 
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     uint16_t value = 0U;
     uint8 ret = Com_ReceiveSignal(0U, &value);
 
-    /* 評価 (Assert): 実受信値がそのまま返る（置換されない） */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // 実受信値がそのまま返る（置換されない）
     EXPECT_EQ(ret, E_OK);
     EXPECT_EQ(value, 0x1234U);
 }

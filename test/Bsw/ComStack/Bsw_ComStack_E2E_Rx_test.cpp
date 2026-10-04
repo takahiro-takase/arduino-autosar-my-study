@@ -159,7 +159,10 @@ protected:
 // ------------------------------------------------------------
 TEST_F(Bsw_E2E_Rx_Test, ComRxIndication_OK_ValidFirstFrameE2EChecksOk)
 {
-    /* 準備 (Arrange): 独立した基準状態で正しい CRC/Counter を持つフレームを組み立てる */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // 独立した基準状態で正しい CRC/Counter を持つフレームを組み立てる
     uint8 buf[7] = { 0U };
     E2E_P05ProtectStateType refState;
     E2E_P05ProtectInit(&refState);
@@ -167,10 +170,14 @@ TEST_F(Bsw_E2E_Rx_Test, ComRxIndication_OK_ValidFirstFrameE2EChecksOk)
 
     PduInfoType pduInfo = { .SduDataPtr = buf, .SduLength = 7U };
 
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Com_RxIndication(0U, &pduInfo);
 
-    /* 評価 (Assert) */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(g_CallbackCallCount, 1U);
     // 初回受信は E2EXf_Inv_EngineInfo() の WaitForFirstData 特別扱いで
     // OK に格上げされる（CRC が正しい前提。E2EXf.c 参照）。
@@ -179,7 +186,10 @@ TEST_F(Bsw_E2E_Rx_Test, ComRxIndication_OK_ValidFirstFrameE2EChecksOk)
 
 TEST_F(Bsw_E2E_Rx_Test, ComRxIndication_OK_SecondConsecutiveFrameE2EChecksOk)
 {
-    /* 準備 (Arrange): 連続する2フレーム（Counter 0→1）を用意する */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // 連続する2フレーム（Counter 0→1）を用意する
     uint8 buf1[7] = { 0U };
     uint8 buf2[7] = { 0U };
     E2E_P05ProtectStateType refState;
@@ -190,18 +200,25 @@ TEST_F(Bsw_E2E_Rx_Test, ComRxIndication_OK_SecondConsecutiveFrameE2EChecksOk)
     PduInfoType pduInfo1 = { .SduDataPtr = buf1, .SduLength = 7U };
     PduInfoType pduInfo2 = { .SduDataPtr = buf2, .SduLength = 7U };
 
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Com_RxIndication(0U, &pduInfo1);  // 1回目: WaitForFirstData により OK
     Com_RxIndication(0U, &pduInfo2);  // 2回目: 純粋な delta=1 判定で OK
 
-    /* 評価 (Assert) */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(g_CallbackCallCount, 2U);
     EXPECT_EQ(g_LastCheckStatus, E2E_P05STATUS_OK);
 }
 
 TEST_F(Bsw_E2E_Rx_Test, ComRxIndication_NG_CorruptedCrcE2EChecksError)
 {
-    /* 準備 (Arrange): 正しいフレームを組み立てた後、CRC バイトを破壊する */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // 正しいフレームを組み立てた後、CRC バイトを破壊する
     uint8 buf[7] = { 0U };
     E2E_P05ProtectStateType refState;
     E2E_P05ProtectInit(&refState);
@@ -210,11 +227,16 @@ TEST_F(Bsw_E2E_Rx_Test, ComRxIndication_NG_CorruptedCrcE2EChecksError)
 
     PduInfoType pduInfo = { .SduDataPtr = buf, .SduLength = 7U };
 
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Com_RxIndication(0U, &pduInfo);
 
-    /* 評価 (Assert): CRC 不一致は WaitForFirstData の対象外（E2EXf.c 参照）で
-     * 必ず ERROR になる */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // CRC 不一致は WaitForFirstData の対象外（E2EXf.c 参照）で
+    // 必ず ERROR になる
     EXPECT_EQ(g_CallbackCallCount, 1U);
     EXPECT_EQ(g_LastCheckStatus, E2E_P05STATUS_ERROR);
 }

@@ -63,7 +63,7 @@ DET_LOG_VERBOSE=1 ./build/native_chain/native_chain_tests.exe  # TRACE ログ出
 コールチェーン図に明示されている非同期の切れ目
 （`Com_TxPending` というキュー経由で次回 `Com_MainFunctionTx()` まで待機する
 箇所）でテストを2つのセグメントに分け、それぞれを個別に実行可能な
-`TEST_F` ケースとしている（`--gtest_filter=Bsw_ComStack_Signal_Tx_Test.*` 等で
+`TEST_F` ケースとしている（`--gtest_filter=Bsw_ComStack_Signal_Tx_*` 等で
 絞り込み可）。フェイクは最下層の `Can_Hw` のみ（`stub/Hal/
 Fake_Can_Hw.c`）で、CanIf.c が呼ぶ `CanSM_RxIndication()`/
 `CanSM_ControllerModeIndication()` 等は CanSM.c 自身を実体でリンクして

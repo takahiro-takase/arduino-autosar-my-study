@@ -188,8 +188,11 @@ protected:
 TEST_F(Bsw_DcmStack_SID19_SF0A_ReadDtcSupported_Test,
        ReadDtcSupported_OK_MultiFrameResponseReassemblesToExpectedPayloadOnCanHw)
 {
-    /* 準備 (Act 1): [0x19, 0x0A] を 0x7E0 の受信バッファへセットする
-     * （SF: 02 19 0A）。 */
+    /* ------------------------- */
+    /* ---- 準備 (Act 1) ------- */
+    /* ------------------------- */
+    // [0x19, 0x0A] を 0x7E0 の受信バッファへセットする
+    // （SF: 02 19 0A）。
     FakeCanHw_RxId  = 0x7E0U;
     FakeCanHw_RxDlc = 8U;
     FakeCanHw_RxData[0] = 2U;
@@ -197,13 +200,19 @@ TEST_F(Bsw_DcmStack_SID19_SF0A_ReadDtcSupported_Test,
     FakeCanHw_RxData[2] = DCM_DTC_SUBFUNC_REPORT_SUPPORTED;
     FakeCanHw_RxPendingCount = 1U;
 
-    /* 実行 (Act 1): リクエスト受信 → Dcm 応答生成 → CanTp_Transmit(kResponseLen バイト)
-     * → First Frame 送信（WAIT_FC へ遷移）まで同期的に進む。 */
+    /* ------------------------- */
+    /* ---- 実行 (Act 1) ------- */
+    /* ------------------------- */
+    // リクエスト受信 → Dcm 応答生成 → CanTp_Transmit(kResponseLen バイト)
+    // → First Frame 送信（WAIT_FC へ遷移）まで同期的に進む。
     Can_MainFunction_Read();
 
-    /* 評価 (Assert 1): Dcm が生成した UDS ペイロード自体は
-     * Bsw_Dcm_ReadDtcInfo_test.cpp と同じ期待値（境界は Wrap_CanTp.h で
-     * キャプチャ）。 */
+    /* ------------------------- */
+    /* ---- 評価 (Assert 1) ---- */
+    /* ------------------------- */
+    // Dcm が生成した UDS ペイロード自体は
+    // Bsw_Dcm_ReadDtcInfo_test.cpp と同じ期待値（境界は Wrap_CanTp.h で
+    // キャプチャ）。
     ASSERT_EQ(CallCount_CanTp_Transmit, 1U);
     ASSERT_EQ(LastLength_CanTp_Transmit, kResponseLen);
     EXPECT_EQ(LastData_CanTp_Transmit[0], 0x59U);
@@ -224,8 +233,11 @@ TEST_F(Bsw_DcmStack_SID19_SF0A_ReadDtcSupported_Test,
     for (uint8 i = 0U; i < 6U; i++)
         reassembled[pos++] = FakeCanHw_LastSendData[2U + i];
 
-    /* 準備 (Arrange 2): テスター役として Flow Control（CTS, BS=0, STmin=0）を
-     * 0x7E0 から追加で受信させる（SF ではなく生の8バイトフレームを直接送る）。 */
+    /* ------------------------- */
+    /* ---- 準備 (Arrange 2) --- */
+    /* ------------------------- */
+    // テスター役として Flow Control（CTS, BS=0, STmin=0）を
+    // 0x7E0 から追加で受信させる（SF ではなく生の8バイトフレームを直接送る）。
     FakeCanHw_RxId  = 0x7E0U;
     FakeCanHw_RxDlc = 8U;
     FakeCanHw_RxData[0] = 0x30U;  // FC PCI（fs=CTS）
@@ -235,14 +247,20 @@ TEST_F(Bsw_DcmStack_SID19_SF0A_ReadDtcSupported_Test,
         FakeCanHw_RxData[i] = 0U;
     FakeCanHw_RxPendingCount = 1U;
 
-    /* 実行 (Act 2): FC 受信により CanTp は SEND_CF へ遷移するが、この時点
-     * ではまだ CF は送信しない（CanTp.c 参照）。 */
+    /* ------------------------- */
+    /* ---- 実行 (Act 2) ------- */
+    /* ------------------------- */
+    // FC 受信により CanTp は SEND_CF へ遷移するが、この時点
+    // ではまだ CF は送信しない（CanTp.c 参照）。
     Can_MainFunction_Read();
     ASSERT_EQ(FakeCanHw_SendCount, 1U);  // FC 受信自体は Can_Hw への送信を生まない
 
-    /* 実行 (Act 3): Os から周期的に呼ばれる CanTp_MainFunction() を、応答全体
-     * の残り（FF が運ぶ6バイトを除く分）を7バイトずつ運ぶ Consecutive Frame の数
-     * （kCfCount）だけ繰り返し駆動し、その都度 Can_Hw へ送信された内容を蓄積する。 */
+    /* ------------------------- */
+    /* ---- 実行 (Act 3) ------- */
+    /* ------------------------- */
+    // Os から周期的に呼ばれる CanTp_MainFunction() を、応答全体
+    // の残り（FF が運ぶ6バイトを除く分）を7バイトずつ運ぶ Consecutive Frame の数
+    // （kCfCount）だけ繰り返し駆動し、その都度 Can_Hw へ送信された内容を蓄積する。
     for (uint8 cf = 0U; cf < kCfCount; cf++)
     {
         CanTp_MainFunction();
@@ -259,16 +277,22 @@ TEST_F(Bsw_DcmStack_SID19_SF0A_ReadDtcSupported_Test,
             reassembled[pos++] = FakeCanHw_LastSendData[1U + i];
     }
 
-    /* 評価 (Assert 2): kCfCount 本の CF 送信で全バイトを運び終え、CanTp は
-     * IDLE（ビジーでない）へ戻っていること。 */
+    /* ------------------------- */
+    /* ---- 評価 (Assert 2) ---- */
+    /* ------------------------- */
+    // kCfCount 本の CF 送信で全バイトを運び終え、CanTp は
+    // IDLE（ビジーでない）へ戻っていること。
     ASSERT_EQ(pos, kResponseLen);
     EXPECT_EQ(FakeCanHw_SendCount, static_cast<uint32>(1U + kCfCount));  // FF 1 + CF
     EXPECT_EQ(CanTp_IsTxBusy(), (boolean)0U);
 
-    /* 評価 (Assert 3): 実際に CAN フレームへ分割・送出された内容を結合すると、
-     * Dcm が生成した元の UDS ペイロード（Assert 1 で確認済み）と
-     * 完全一致すること。「CanTp が正しく分割・送出したか」を検証する
-     * 本テスト最大の目的。 */
+    /* ------------------------- */
+    /* ---- 評価 (Assert 3) ---- */
+    /* ------------------------- */
+    // 実際に CAN フレームへ分割・送出された内容を結合すると、
+    // Dcm が生成した元の UDS ペイロード（Assert 1 で確認済み）と
+    // 完全一致すること。「CanTp が正しく分割・送出したか」を検証する
+    // 本テスト最大の目的。
     for (uint16 i = 0U; i < kResponseLen; i++)
     {
         EXPECT_EQ(reassembled[i], LastData_CanTp_Transmit[i]) << "byte " << (unsigned)i;
