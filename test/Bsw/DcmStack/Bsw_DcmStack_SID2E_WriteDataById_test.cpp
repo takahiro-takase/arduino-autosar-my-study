@@ -257,7 +257,7 @@ protected:
 // [0x6E, 0x01,0x04] を返す。
 // ------------------------------------------------------------
 TEST_F(Bsw_DcmStack_SID2E_WriteDataById_Test,
-       WriteDataById_OK_TestPatternWriteProducesPositiveResponseOnCanHw)
+       OK_TestPatternWriteProducesPositiveResponse)
 {
     /* ------------------------------------ */
     /* ---- 準備 (Arrange) + 実行 (Act) --- */
@@ -283,7 +283,7 @@ TEST_F(Bsw_DcmStack_SID2E_WriteDataById_Test,
 // （0x2E/0x22 間の実際のデータ経路の確認）。
 // ------------------------------------------------------------
 TEST_F(Bsw_DcmStack_SID2E_WriteDataById_Test,
-       WriteDataById_OK_WrittenValueIsReflectedInSubsequentReadDataByIdOnCanHw)
+       OK_WrittenValueIsReflectedInSubsequentReadDataById)
 {
     /* ---------------------------------------- */
     /* ---- 準備 (Arrange 1) + 実行 (Act 1) --- */
@@ -339,7 +339,7 @@ TEST_F(Bsw_DcmStack_SID2E_WriteDataById_Test,
 // 参照）。
 // ------------------------------------------------------------
 TEST_F(Bsw_DcmStack_SID2E_WriteDataById_Test,
-       WriteDataById_NG_CryptoKeyUpdateFailsDueToKeyMStubBoundaryOnCanHw)
+       NG_RequestOutOfRange_CryptoKeyUpdateKeyMStubBoundary)
 {
     /* ----------------------- */
     /* ---- 準備 (Arrange) --- */
@@ -399,7 +399,7 @@ TEST_F(Bsw_DcmStack_SID2E_WriteDataById_Test,
 // NG: 未対応 DID への書き込みは NRC 0x31 requestOutOfRange になる。
 // ------------------------------------------------------------
 TEST_F(Bsw_DcmStack_SID2E_WriteDataById_Test,
-       WriteDataById_NG_UnknownDidReturnsRequestOutOfRangeOnCanHw)
+       NG_RequestOutOfRange_UnknownDid)
 {
     /* ----------------------- */
     /* ---- 準備 (Arrange) --- */

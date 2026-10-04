@@ -185,7 +185,7 @@ protected:
 
 // ------------------------------------------------------------
 TEST_F(Bsw_DcmStack_SID31_RoutineControl_Test,
-       RoutineControl_OK_StartWithExactLengthProducesExpectedResponseOnCanHw)
+       OK_StartWithExactLengthProducesExpectedResponse)
 {
     EnterExtendedSession();
 
@@ -224,7 +224,7 @@ TEST_F(Bsw_DcmStack_SID31_RoutineControl_Test,
 
 // ------------------------------------------------------------
 TEST_F(Bsw_DcmStack_SID31_RoutineControl_Test,
-       RoutineControl_OK_StopAfterStartProducesExpectedResponseOnCanHw)
+       OK_StopAfterStartProducesExpectedResponse)
 {
     EnterExtendedSession();
 
@@ -279,7 +279,7 @@ TEST_F(Bsw_DcmStack_SID31_RoutineControl_Test,
 // 3バイト）は incorrectMessageLength (NRC 0x13) になる。
 // ------------------------------------------------------------
 TEST_F(Bsw_DcmStack_SID31_RoutineControl_Test,
-       RoutineControl_NG_TooShortProducesIncorrectMessageLengthResponseOnCanHw)
+       NG_IncorrectMessageLength_TooShort)
 {
     EnterExtendedSession();
 
@@ -321,7 +321,7 @@ TEST_F(Bsw_DcmStack_SID31_RoutineControl_Test,
 // で拒否されるはず。
 // ------------------------------------------------------------
 TEST_F(Bsw_DcmStack_SID31_RoutineControl_Test,
-       RoutineControl_NG_ExtraTrailingByteProducesIncorrectMessageLengthAndLeavesRoutineNotStartedOnCanHw)
+       NG_IncorrectMessageLength_ExtraTrailingByte_AndLeavesRoutineNotStarted)
 {
     EnterExtendedSession();
 
@@ -393,7 +393,7 @@ TEST_F(Bsw_DcmStack_SID31_RoutineControl_Test,
 // serviceNotSupportedInSession (NRC 0x7F) になる。
 // ------------------------------------------------------------
 TEST_F(Bsw_DcmStack_SID31_RoutineControl_Test,
-       RoutineControl_NG_DefaultSessionProducesServiceNotSupportedInSessionResponseOnCanHw)
+       NG_ServiceNotSupportedInSession_DefaultSession)
 {
     /* ----------------------- */
     /* ---- 準備 (Arrange) --- */
@@ -430,7 +430,7 @@ TEST_F(Bsw_DcmStack_SID31_RoutineControl_Test,
 // NG: 未対応の RID（0xFFFF）は requestOutOfRange (NRC 0x31) になる。
 // ------------------------------------------------------------
 TEST_F(Bsw_DcmStack_SID31_RoutineControl_Test,
-       RoutineControl_NG_UnsupportedRidProducesRequestOutOfRangeResponseOnCanHw)
+       NG_RequestOutOfRange_UnsupportedRid)
 {
     EnterExtendedSession();
 

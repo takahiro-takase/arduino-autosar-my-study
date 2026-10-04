@@ -51,7 +51,7 @@ protected:
     }
 };
 
-TEST_F(Bsw_ComM_CommunicationAllowed_Test, NG_InvalidChannelReportsDet)
+TEST_F(Bsw_ComM_CommunicationAllowed_Test, ComM_CommunicationAllowed_NG_InvalidChannelReportsDet)
 {
     ComM_CommunicationAllowed(COMM_CHANNEL_COUNT, TRUE);
 
@@ -59,7 +59,7 @@ TEST_F(Bsw_ComM_CommunicationAllowed_Test, NG_InvalidChannelReportsDet)
     EXPECT_EQ(FakeDetHw_ReportCount, 1U);
 }
 
-TEST_F(Bsw_ComM_CommunicationAllowed_Test, NG_UninitializedReportsDet)
+TEST_F(Bsw_ComM_CommunicationAllowed_Test, ComM_CommunicationAllowed_NG_UninitializedReportsDet)
 {
     ComM_DeInit();
     FakeDetHw_Reset();
@@ -77,7 +77,7 @@ TEST_F(Bsw_ComM_CommunicationAllowed_Test, NG_UninitializedReportsDet)
  *          CanSM/CanIf/Can はこのフィクスチャでは未初期化のままだが、
  *          保留経路はそれらを一切呼ばないため安全に検証できる。
  */
-TEST_F(Bsw_ComM_CommunicationAllowed_Test, OK_DefaultIsFalseAfterInitAndHoldsFullComRequest)
+TEST_F(Bsw_ComM_CommunicationAllowed_Test, ComM_CommunicationAllowed_OK_DefaultIsFalseAfterInitAndHoldsFullComRequest)
 {
     Std_ReturnType ret = ComM_RequestComMode(COMM_USER_0, COMM_FULL_COMMUNICATION);
 
@@ -91,7 +91,7 @@ TEST_F(Bsw_ComM_CommunicationAllowed_Test, OK_DefaultIsFalseAfterInitAndHoldsFul
  * \brief   Allowed=FALSE のまま（保留中の要求もない）場合は DET も CanSM 転送も
  *          起きず、単にフラグが記録されるだけであること。
  */
-TEST_F(Bsw_ComM_CommunicationAllowed_Test, OK_ExplicitFalseReportsNoDet)
+TEST_F(Bsw_ComM_CommunicationAllowed_Test, ComM_CommunicationAllowed_OK_ExplicitFalseReportsNoDet)
 {
     ComM_CommunicationAllowed(COMM_CHANNEL_0, FALSE);
 
@@ -107,7 +107,7 @@ TEST_F(Bsw_ComM_CommunicationAllowed_Test, OK_ExplicitFalseReportsNoDet)
  *          呼ばれないため安全に検証できる（誤って呼ばれれば未初期化アクセスで
  *          落ちるはずなので、その意味でも回帰検出になる）。
  */
-TEST_F(Bsw_ComM_CommunicationAllowed_Test, OK_AbandonedPendingRequestDoesNotResurrectOnLaterAllow)
+TEST_F(Bsw_ComM_CommunicationAllowed_Test, ComM_CommunicationAllowed_OK_AbandonedPendingRequestDoesNotResurrectOnLaterAllow)
 {
     ComM_CommunicationAllowed(COMM_CHANNEL_0, FALSE);
     ASSERT_EQ(ComM_RequestComMode(COMM_USER_0, COMM_FULL_COMMUNICATION), E_OK);
@@ -160,7 +160,7 @@ protected:
     static const ComM_UserHandleType kInvalidUser = COMM_USER_COUNT;
 };
 
-TEST_F(Bsw_ComM_GetRequestedComMode_Test, NG_InvalidUserReturnsErrorAndReportsDet)
+TEST_F(Bsw_ComM_GetRequestedComMode_Test, ComM_GetRequestedComMode_NG_InvalidUserReturnsErrorAndReportsDet)
 {
     ComM_ModeType mode = COMM_FULL_COMMUNICATION;
 
@@ -171,7 +171,7 @@ TEST_F(Bsw_ComM_GetRequestedComMode_Test, NG_InvalidUserReturnsErrorAndReportsDe
     EXPECT_EQ(FakeDetHw_ReportCount, 1U);
 }
 
-TEST_F(Bsw_ComM_GetRequestedComMode_Test, NG_NullPointerReturnsErrorAndReportsDet)
+TEST_F(Bsw_ComM_GetRequestedComMode_Test, ComM_GetRequestedComMode_NG_NullPointerReturnsErrorAndReportsDet)
 {
     Std_ReturnType ret = ComM_GetRequestedComMode(COMM_USER_0, NULL);
 
@@ -179,7 +179,7 @@ TEST_F(Bsw_ComM_GetRequestedComMode_Test, NG_NullPointerReturnsErrorAndReportsDe
     EXPECT_EQ(FakeDetHw_LastErrorId, COMM_E_PARAM_POINTER);
 }
 
-TEST_F(Bsw_ComM_GetRequestedComMode_Test, NG_UninitializedReturnsErrorAndReportsDet)
+TEST_F(Bsw_ComM_GetRequestedComMode_Test, ComM_GetRequestedComMode_NG_UninitializedReturnsErrorAndReportsDet)
 {
     ComM_DeInit();
     FakeDetHw_Reset();
@@ -191,7 +191,7 @@ TEST_F(Bsw_ComM_GetRequestedComMode_Test, NG_UninitializedReturnsErrorAndReports
     EXPECT_EQ(FakeDetHw_LastErrorId, COMM_E_UNINIT);
 }
 
-TEST_F(Bsw_ComM_GetRequestedComMode_Test, OK_ReturnsNoComRightAfterInit)
+TEST_F(Bsw_ComM_GetRequestedComMode_Test, ComM_GetRequestedComMode_OK_ReturnsNoComRightAfterInit)
 {
     ComM_ModeType mode = COMM_FULL_COMMUNICATION;
 

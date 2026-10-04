@@ -205,7 +205,7 @@ const Com_ConfigType kTestComConfig = {
     /* GwMappingCount */ 0U
 };
 
-class Bsw_ComStack_SignalGroup_Rx_Test : public ::testing::Test
+class Bsw_ComStack_SignalGroup_Rx_Base : public ::testing::Test
 {
 protected:
     void SetUp() override
@@ -246,10 +246,14 @@ protected:
     }
 };
 
+// シナリオごとのフィクスチャ（共通の準備は Bsw_ComStack_SignalGroup_Rx_Base）
+class Bsw_ComStack_SignalGroup_Rx_GroupAck_Test : public Bsw_ComStack_SignalGroup_Rx_Base {};
+class Bsw_ComStack_SignalGroup_Rx_GroupRxTOut_Test : public Bsw_ComStack_SignalGroup_Rx_Base {};
+
 // ------------------------------------------------------------
 // SWS_Com_00555（Com_CbkRxAck、Signal Group 側経路）
 // ------------------------------------------------------------
-TEST_F(Bsw_ComStack_SignalGroup_Rx_Test, ComRxIndication_OK_GroupAck_FiresOnceRegardlessOfMemberCount)
+TEST_F(Bsw_ComStack_SignalGroup_Rx_GroupAck_Test, OK_FiresOnceRegardlessOfMemberCount)
 {
     /* ----------------------- */
     /* ---- 準備 (Arrange) --- */
@@ -271,7 +275,7 @@ TEST_F(Bsw_ComStack_SignalGroup_Rx_Test, ComRxIndication_OK_GroupAck_FiresOnceRe
 }
 
 
-TEST_F(Bsw_ComStack_SignalGroup_Rx_Test, ComRxIndication_NG_GroupAck_DoesNotFireOnShortFrameDiscard)
+TEST_F(Bsw_ComStack_SignalGroup_Rx_GroupAck_Test, NG_Step01_ComRxIndication_ShortFrameDiscard)
 {
     /* ----------------------- */
     /* ---- 準備 (Arrange) --- */
@@ -297,7 +301,33 @@ TEST_F(Bsw_ComStack_SignalGroup_Rx_Test, ComRxIndication_NG_GroupAck_DoesNotFire
 // ------------------------------------------------------------
 // SWS_Com_00536/00556（Com_CbkRxTOut、グループ単位経路）
 // ------------------------------------------------------------
-TEST_F(Bsw_ComStack_SignalGroup_Rx_Test, ComMainFunction_NG_GroupShortFrameDiscardStillResetsDeadlineTimer)
+TEST_F(Bsw_ComStack_SignalGroup_Rx_GroupRxTOut_Test, OK_FiresAfterThresholdElapsed)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    ReceiveOnceGroup();
+    FakeMillis_Value = 600UL;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Com_MainFunctionRx();
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // グループ単位のコールバックが発火する。IPduId=0 側の
+    // シグナル単位監視は本テストでは検証対象外（同じ 500ms しきい値かつ
+    // 一度も受信させていないため Com_Init() 起点で同時に満了し、
+    // s_sigRxTOutCount 側も独立に発火しうる——これは IPduId=0/1 が別々の
+    // I-PDU である以上正しい挙動であり、本テストの主張ではない）
+    EXPECT_EQ(Com_IsRxTimedOut(2U), 1U);
+    EXPECT_EQ(s_groupRxTOutCount, 1U);
+}
+
+
+TEST_F(Bsw_ComStack_SignalGroup_Rx_GroupRxTOut_Test, NG_Step01_ComRxIndication_ShortFrameDiscardStillResetsDeadlineTimer)
 {
     /* ----------------------- */
     /* ---- 準備 (Arrange) --- */
@@ -326,33 +356,7 @@ TEST_F(Bsw_ComStack_SignalGroup_Rx_Test, ComMainFunction_NG_GroupShortFrameDisca
 }
 
 
-TEST_F(Bsw_ComStack_SignalGroup_Rx_Test, ComMainFunction_OK_GroupRxTOutFiresAfterThresholdElapsed)
-{
-    /* ----------------------- */
-    /* ---- 準備 (Arrange) --- */
-    /* ----------------------- */
-    ReceiveOnceGroup();
-    FakeMillis_Value = 600UL;
-
-    /* ----------------------- */
-    /* ---- 実行 (Act) ------- */
-    /* ----------------------- */
-    Com_MainFunctionRx();
-
-    /* ----------------------- */
-    /* ---- 評価 (Assert) ---- */
-    /* ----------------------- */
-    // グループ単位のコールバックが発火する。IPduId=0 側の
-    // シグナル単位監視は本テストでは検証対象外（同じ 500ms しきい値かつ
-    // 一度も受信させていないため Com_Init() 起点で同時に満了し、
-    // s_sigRxTOutCount 側も独立に発火しうる——これは IPduId=0/1 が別々の
-    // I-PDU である以上正しい挙動であり、本テストの主張ではない）
-    EXPECT_EQ(Com_IsRxTimedOut(2U), 1U);
-    EXPECT_EQ(s_groupRxTOutCount, 1U);
-}
-
-
-TEST_F(Bsw_ComStack_SignalGroup_Rx_Test, ComMainFunction_NG_GroupBeforeThreshold_DoesNotFire)
+TEST_F(Bsw_ComStack_SignalGroup_Rx_GroupRxTOut_Test, NG_Step01_ComMainFunctionRx_BeforeThreshold)
 {
     /* ----------------------- */
     /* ---- 準備 (Arrange) --- */
@@ -373,7 +377,7 @@ TEST_F(Bsw_ComStack_SignalGroup_Rx_Test, ComMainFunction_NG_GroupBeforeThreshold
 }
 
 
-TEST_F(Bsw_ComStack_SignalGroup_Rx_Test, ComMainFunction_NG_MisconfiguredGroupMemberDoesNotDoubleFire)
+TEST_F(Bsw_ComStack_SignalGroup_Rx_GroupRxTOut_Test, NG_Step01_ComMainFunctionRx_MisconfiguredGroupMember)
 {
     /* ----------------------- */
     /* ---- 準備 (Arrange) --- */
@@ -558,7 +562,7 @@ const Com_ConfigType kTestRxIpduGroupConfig = {
     /* GwMappingCount */ 0U
 };
 
-class Bsw_ComStack_SignalGroup_RxIpduGroup_Test : public ::testing::Test
+class Bsw_ComStack_SignalGroup_RxIpduGroup_Base : public ::testing::Test
 {
 protected:
     void SetUp() override
@@ -586,37 +590,15 @@ protected:
     }
 };
 
+// シナリオごとのフィクスチャ（共通の準備は Bsw_ComStack_SignalGroup_RxIpduGroup_Base）
+class Bsw_ComStack_SignalGroup_RxIpduGroup_IpduGroupStartStop_Test : public Bsw_ComStack_SignalGroup_RxIpduGroup_Base {};
+class Bsw_ComStack_SignalGroup_RxIpduGroup_ReceiveWhileStopped_Test : public Bsw_ComStack_SignalGroup_RxIpduGroup_Base {};
+class Bsw_ComStack_SignalGroup_RxIpduGroup_ReceptionDM_Test : public Bsw_ComStack_SignalGroup_RxIpduGroup_Base {};
+
 // ------------------------------------------------------------
 // Com_IpduGroupStart/Stop（[SWS_Com_00444]/[SWS_Com_00685] 等）
 // ------------------------------------------------------------
-TEST_F(Bsw_ComStack_SignalGroup_RxIpduGroup_Test, ComMainFunction_NG_StoppedGroupedIPduNeverTimesOutRegardlessOfElapsed)
-{
-    /* ----------------------- */
-    /* ---- 準備 (Arrange) --- */
-    /* ----------------------- */
-    // Com_IpduGroupStart() を一度も呼ばない
-    // （[SWS_Com_00444]: I-PDU Group は既定で停止状態）
-
-    /* ----------------------- */
-    /* ---- 実行 (Act) ------- */
-    /* ----------------------- */
-    // TimeoutMs(500ms) を大幅に超えて経過させる
-    FakeMillis_Value += 5000U;
-    Com_MainFunctionRx();
-    Com_MainFunctionTx();
-
-    /* ----------------------- */
-    /* ---- 評価 (Assert) ---- */
-    /* ----------------------- */
-    // 停止中はデッドライン監視自体が評価されないため
-    // （[SWS_Com_00685]）、いくら経過しても RxTOutCbk は発火しない
-    // （本番の Bus-Sleep 中に EngineInfo/AbsInfo の RX タイムアウトが
-    // 誤って発火しないことの裏付け）。
-    EXPECT_EQ(s_groupedRxTOutCount, 0U);
-}
-
-
-TEST_F(Bsw_ComStack_SignalGroup_RxIpduGroup_Test, ComIpduGroupStart_OK_GroupedIPduBeginsMonitoringAfterExplicitStart)
+TEST_F(Bsw_ComStack_SignalGroup_RxIpduGroup_IpduGroupStartStop_Test, OK_GroupedIPduBeginsMonitoringAfterExplicitStart)
 {
     /* ----------------------- */
     /* ---- 準備 (Arrange) --- */
@@ -640,7 +622,7 @@ TEST_F(Bsw_ComStack_SignalGroup_RxIpduGroup_Test, ComIpduGroupStart_OK_GroupedIP
 }
 
 
-TEST_F(Bsw_ComStack_SignalGroup_RxIpduGroup_Test, ComIpduGroupStop_OK_StoppingAgainSuppressesTimeoutEvenAfterElapsed)
+TEST_F(Bsw_ComStack_SignalGroup_RxIpduGroup_IpduGroupStartStop_Test, OK_StoppingAgainSuppressesTimeoutEvenAfterElapsed)
 {
     /* ----------------------- */
     /* ---- 準備 (Arrange) --- */
@@ -673,7 +655,7 @@ TEST_F(Bsw_ComStack_SignalGroup_RxIpduGroup_Test, ComIpduGroupStop_OK_StoppingAg
 }
 
 
-TEST_F(Bsw_ComStack_SignalGroup_RxIpduGroup_Test, ComIpduGroupStop_OK_NonGroupSignalFreezesInsteadOfSubstitutingWhileStopped)
+TEST_F(Bsw_ComStack_SignalGroup_RxIpduGroup_IpduGroupStartStop_Test, OK_NonGroupSignalFreezesInsteadOfSubstitutingWhileStopped)
 {
     /* ----------------------- */
     /* ---- 準備 (Arrange) --- */
@@ -718,10 +700,37 @@ TEST_F(Bsw_ComStack_SignalGroup_RxIpduGroup_Test, ComIpduGroupStop_OK_NonGroupSi
 }
 
 
+TEST_F(Bsw_ComStack_SignalGroup_RxIpduGroup_IpduGroupStartStop_Test, NG_Step01_ComMainFunctionRx_StoppedGroupedIPdu)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // Com_IpduGroupStart() を一度も呼ばない
+    // （[SWS_Com_00444]: I-PDU Group は既定で停止状態）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    // TimeoutMs(500ms) を大幅に超えて経過させる
+    FakeMillis_Value += 5000U;
+    Com_MainFunctionRx();
+    Com_MainFunctionTx();
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // 停止中はデッドライン監視自体が評価されないため
+    // （[SWS_Com_00685]）、いくら経過しても RxTOutCbk は発火しない
+    // （本番の Bus-Sleep 中に EngineInfo/AbsInfo の RX タイムアウトが
+    // 誤って発火しないことの裏付け）。
+    EXPECT_EQ(s_groupedRxTOutCount, 0U);
+}
+
+
 // ------------------------------------------------------------
 // COM_SERVICE_NOT_AVAILABLE（[SWS_Com_00461]/[SWS_Com_00857]/Table 3）
 // ------------------------------------------------------------
-TEST_F(Bsw_ComStack_SignalGroup_RxIpduGroup_Test, ComReceiveSignalGroup_OK_ReturnsServiceNotAvailableWhenGroupStopped)
+TEST_F(Bsw_ComStack_SignalGroup_RxIpduGroup_ReceiveWhileStopped_Test, OK_ReceiveSignalGroupReturnsServiceNotAvailable)
 {
     /* ----------------------- */
     /* ---- 準備 (Arrange) --- */
@@ -745,7 +754,7 @@ TEST_F(Bsw_ComStack_SignalGroup_RxIpduGroup_Test, ComReceiveSignalGroup_OK_Retur
 }
 
 
-TEST_F(Bsw_ComStack_SignalGroup_RxIpduGroup_Test, ComReceiveSignalGroupArray_OK_ReturnsServiceNotAvailableWhenGroupStoppedButStillCopies)
+TEST_F(Bsw_ComStack_SignalGroup_RxIpduGroup_ReceiveWhileStopped_Test, OK_ReceiveSignalGroupArrayReturnsServiceNotAvailableButStillCopies)
 {
     /* ----------------------- */
     /* ---- 準備 (Arrange) --- */
@@ -774,7 +783,7 @@ TEST_F(Bsw_ComStack_SignalGroup_RxIpduGroup_Test, ComReceiveSignalGroupArray_OK_
 }
 
 
-TEST_F(Bsw_ComStack_SignalGroup_RxIpduGroup_Test, ComIpduGroupStart_OK_NonGroupSignalTimesOutAndSubstitutesAfterExplicitStart)
+TEST_F(Bsw_ComStack_SignalGroup_RxIpduGroup_IpduGroupStartStop_Test, OK_NonGroupSignalTimesOutAndSubstitutesAfterExplicitStart)
 {
     /* ----------------------- */
     /* ---- 準備 (Arrange) --- */
@@ -807,7 +816,7 @@ TEST_F(Bsw_ComStack_SignalGroup_RxIpduGroup_Test, ComIpduGroupStart_OK_NonGroupS
 // ------------------------------------------------------------
 // Com_EnableReceptionDM/Com_DisableReceptionDM（SRS_Com_00192）
 // ------------------------------------------------------------
-TEST_F(Bsw_ComStack_SignalGroup_RxIpduGroup_Test, ComEnableDisableReceptionDM_OK_TogglesFlagForMatchingGroupIPdusOnly)
+TEST_F(Bsw_ComStack_SignalGroup_RxIpduGroup_ReceptionDM_Test, OK_TogglesFlagForMatchingGroupIPdusOnly)
 {
     /* ----------------------------------- */
     /* ---- 評価 (Assert) ---------------- */
@@ -835,7 +844,7 @@ TEST_F(Bsw_ComStack_SignalGroup_RxIpduGroup_Test, ComEnableDisableReceptionDM_OK
 }
 
 
-TEST_F(Bsw_ComStack_SignalGroup_RxIpduGroup_Test, DisableReceptionDM_OK_SuppressesGroupTimeoutWhileIpduGroupStaysStarted)
+TEST_F(Bsw_ComStack_SignalGroup_RxIpduGroup_ReceptionDM_Test, OK_DisableSuppressesGroupTimeoutWhileIpduGroupStaysStarted)
 {
     /* ----------------------- */
     /* ---- 準備 (Arrange) --- */
@@ -873,7 +882,7 @@ TEST_F(Bsw_ComStack_SignalGroup_RxIpduGroup_Test, DisableReceptionDM_OK_Suppress
 }
 
 
-TEST_F(Bsw_ComStack_SignalGroup_RxIpduGroup_Test, EnableReceptionDM_OK_ResetsTimerAndResumesDetectionWithoutImmediateFalseTimeout)
+TEST_F(Bsw_ComStack_SignalGroup_RxIpduGroup_ReceptionDM_Test, OK_EnableResetsTimerAndResumesDetectionWithoutImmediateFalseTimeout)
 {
     /* ----------------------- */
     /* ---- 準備 (Arrange) --- */
@@ -920,7 +929,7 @@ TEST_F(Bsw_ComStack_SignalGroup_RxIpduGroup_Test, EnableReceptionDM_OK_ResetsTim
 }
 
 
-TEST_F(Bsw_ComStack_SignalGroup_RxIpduGroup_Test, DisableReceptionDM_NG_UnknownIpduGroupIdHasNoEffect)
+TEST_F(Bsw_ComStack_SignalGroup_RxIpduGroup_ReceptionDM_Test, NG_Step01_ComDisableReceptionDM_UnknownIpduGroupId)
 {
     /* ----------------------- */
     /* ---- 準備 (Arrange) --- */
@@ -945,7 +954,7 @@ TEST_F(Bsw_ComStack_SignalGroup_RxIpduGroup_Test, DisableReceptionDM_NG_UnknownI
 // ------------------------------------------------------------
 // [SWS_Com_00534]（RX/TX 混在グループは要求全体を無視する）
 // ------------------------------------------------------------
-TEST_F(Bsw_ComStack_SignalGroup_RxIpduGroup_Test, DisableReceptionDM_NG_MixedRxTxGroupIsIgnoredEntirely)
+TEST_F(Bsw_ComStack_SignalGroup_RxIpduGroup_ReceptionDM_Test, NG_Step01_ComDisableReceptionDM_MixedRxTxGroup)
 {
     /* ----------------------- */
     /* ---- 準備 (Arrange) --- */
@@ -968,7 +977,7 @@ TEST_F(Bsw_ComStack_SignalGroup_RxIpduGroup_Test, DisableReceptionDM_NG_MixedRxT
 }
 
 
-TEST_F(Bsw_ComStack_SignalGroup_RxIpduGroup_Test, EnableReceptionDM_NG_MixedRxTxGroupIsIgnoredEntirely)
+TEST_F(Bsw_ComStack_SignalGroup_RxIpduGroup_ReceptionDM_Test, NG_Step01_ComEnableReceptionDM_MixedRxTxGroup)
 {
     /* ----------------------------------- */
     /* ---- 準備 (Arrange) --------------- */

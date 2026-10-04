@@ -89,7 +89,7 @@ const CanIf_ConfigType kTestCanIfConfig = {
     /* RxPduCount */  0U
 };
 
-class Bsw_Wakeup_Test : public ::testing::Test
+class Bsw_NmStack_Wakeup_Base : public ::testing::Test
 {
 protected:
     void SetUp() override
@@ -164,65 +164,21 @@ protected:
     Can_ConfigType canConfig;
 };
 
-// ------------------------------------------------------------
-// ウェイクアップ検出 → 検証開始（ComM/EcuM へはまだ通知しない）
-// ------------------------------------------------------------
-TEST_F(Bsw_Wakeup_Test, CanMainFunctionWakeup_OK_StartsValidationWithoutNotifyingComM)
+// シナリオごとのフィクスチャ（共通の準備は Bsw_NmStack_Wakeup_Base）
+class Bsw_NmStack_Wakeup_WakeupValidation_Test : public Bsw_NmStack_Wakeup_Base {};
+
+/* ----------------------------------------------------------------------
+ * ウェイクアップ検出 → 検証
+ *   Can_MainFunction_Wakeup() / Can_MainFunction_Read() の 2 つの実行
+ *   （別タスク）を通しで確認する
+ * ---------------------------------------------------------------------- */
+TEST_F(Bsw_NmStack_Wakeup_WakeupValidation_Test, OK)
 {
     /* ----------------------- */
     /* ---- 準備 (Arrange) --- */
     /* ----------------------- */
     // SetUp() で SLEEP 済み
     FakeCanHw_IsWakeupPendingReturn = CAN_HW_OK;
-
-    /* ----------------------- */
-    /* ---- 実行 (Act) ------- */
-    /* ----------------------- */
-    Can_MainFunction_Wakeup();
-
-    /* ----------------------- */
-    /* ---- 評価 (Assert) ---- */
-    /* ----------------------- */
-    // SLEEP → STOPPED (Listen-Only) のみ。FULL_COM へはまだ確定しない
-    EXPECT_EQ(Can_Test_GetControllerState(), CAN_CS_STOPPED);
-    EXPECT_EQ(FakeCanHw_LastMode, CAN_HW_MODE_LISTEN_ONLY);
-    EXPECT_EQ(CurrentComMode(), static_cast<ComM_ModeType>(COMM_NO_COMMUNICATION));
-    EXPECT_EQ(FakeEcuM_RequestRUNCount, 0U);
-    // EcuM_CheckWakeup(ECUM_WKSOURCE_CAN) が入口として実際に呼ばれたことを確認
-    // （旧 CanIf_ControllerWakeup() の役割、2026-09-05 是正）
-    EXPECT_EQ(FakeEcuM_CheckWakeupCount, 1U);
-    EXPECT_EQ(FakeEcuM_LastWakeupSource, static_cast<EcuM_WakeupSourceType>(ECUM_WKSOURCE_CAN));
-}
-
-TEST_F(Bsw_Wakeup_Test, CanMainFunctionWakeup_NG_NoWakeupPending_StaysAsleep)
-{
-    /* ----------------------- */
-    /* ---- 準備 (Arrange) --- */
-    /* ----------------------- */
-    // ウェイクアップ要因なし（既定 CAN_HW_FAIL のまま）
-
-    /* ----------------------- */
-    /* ---- 実行 (Act) ------- */
-    /* ----------------------- */
-    Can_MainFunction_Wakeup();
-
-    /* ----------------------- */
-    /* ---- 評価 (Assert) ---- */
-    /* ----------------------- */
-    EXPECT_EQ(Can_Test_GetControllerState(), CAN_CS_SLEEP);
-    EXPECT_EQ(FakeCanHw_SetModeCount, 0U);
-}
-
-// ------------------------------------------------------------
-// 検証成功: 受信フレームが CanSM_RxIndication() まで届き FULL_COM へ確定する
-// ------------------------------------------------------------
-TEST_F(Bsw_Wakeup_Test, CanMainFunctionRead_OK_ValidatesWakeupAndNotifiesComMFullCom)
-{
-    /* ----------------------- */
-    /* ---- 準備 (Arrange) --- */
-    /* ----------------------- */
-    // セグメント①の終端状態（WAKEUP_VALIDATING）を用意する
-    ArrangeValidating();
     FakeCanHw_RxPendingCount = 1U;
     FakeCanHw_RxId  = 0x100U;
     FakeCanHw_RxDlc = 2U;
@@ -232,6 +188,21 @@ TEST_F(Bsw_Wakeup_Test, CanMainFunctionRead_OK_ValidatesWakeupAndNotifiesComMFul
     /* ----------------------- */
     /* ---- 実行 (Act) ------- */
     /* ----------------------- */
+    // step01: ウェイクアップ検出 → 検証開始
+    Can_MainFunction_Wakeup();
+
+    // SLEEP → STOPPED (Listen-Only) のみ。FULL_COM へはまだ確定しない
+    // （ComM/EcuM へはまだ通知しない）
+    EXPECT_EQ(Can_Test_GetControllerState(), CAN_CS_STOPPED);
+    EXPECT_EQ(FakeCanHw_LastMode, CAN_HW_MODE_LISTEN_ONLY);
+    EXPECT_EQ(CurrentComMode(), static_cast<ComM_ModeType>(COMM_NO_COMMUNICATION));
+    EXPECT_EQ(FakeEcuM_RequestRUNCount, 0U);
+    // EcuM_CheckWakeup(ECUM_WKSOURCE_CAN) が入口として実際に呼ばれたことを確認
+    // （旧 CanIf_ControllerWakeup() の役割、2026-09-05 是正）
+    EXPECT_EQ(FakeEcuM_CheckWakeupCount, 1U);
+    EXPECT_EQ(FakeEcuM_LastWakeupSource, static_cast<EcuM_WakeupSourceType>(ECUM_WKSOURCE_CAN));
+
+    // step02: 受信フレームで検証成功 → FULL_COM へ確定
     Can_MainFunction_Read();
 
     /* ----------------------- */
@@ -248,15 +219,37 @@ TEST_F(Bsw_Wakeup_Test, CanMainFunctionRead_OK_ValidatesWakeupAndNotifiesComMFul
     EXPECT_EQ(LastEventStatus_Dem_SetEventStatus, DEM_EVENT_STATUS_PASSED);
 }
 
-// ------------------------------------------------------------
-// 検証失敗（タイムアウト）: ComM/EcuM への通知なしに再スリープする
-// ------------------------------------------------------------
-TEST_F(Bsw_Wakeup_Test, CanSMMainFunction_NG_ValidationTimeout_ReturnsToSleepSilently)
+
+TEST_F(Bsw_NmStack_Wakeup_WakeupValidation_Test, NG_Step01_CanMainFunctionWakeup_NoWakeupPending)
 {
     /* ----------------------- */
     /* ---- 準備 (Arrange) --- */
     /* ----------------------- */
-    // セグメント①の終端状態（WAKEUP_VALIDATING）から、
+    // ウェイクアップ要因なし（既定 CAN_HW_FAIL のまま）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    // step01: ウェイクアップ検出
+    Can_MainFunction_Wakeup();
+
+    // step02: 受信フレームによる検証
+    // skip（step01 で検証が始まらないため実行しない）
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(Can_Test_GetControllerState(), CAN_CS_SLEEP);
+    EXPECT_EQ(FakeCanHw_SetModeCount, 0U);
+}
+
+
+TEST_F(Bsw_NmStack_Wakeup_WakeupValidation_Test, NG_Step02_CanSMMainFunction_ValidationTimeout)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // step01 の終端状態（WAKEUP_VALIDATING）から、
     // 検証タイマ（CANSM_WAKEUP_VALIDATION_MS=2000ms）を超過させる
     ArrangeValidating();
     FakeMillis_Value = 2001UL;
@@ -264,6 +257,10 @@ TEST_F(Bsw_Wakeup_Test, CanSMMainFunction_NG_ValidationTimeout_ReturnsToSleepSil
     /* ----------------------- */
     /* ---- 実行 (Act) ------- */
     /* ----------------------- */
+    // step01: ウェイクアップ検出
+    // （準備の ArrangeValidating() で実施済み）
+
+    // step02: 検証タイマ超過の判定
     CanSM_MainFunction();
 
     /* ----------------------- */
@@ -276,18 +273,23 @@ TEST_F(Bsw_Wakeup_Test, CanSMMainFunction_NG_ValidationTimeout_ReturnsToSleepSil
     EXPECT_EQ(FakeEcuM_RequestRUNCount, 0U);
 }
 
-TEST_F(Bsw_Wakeup_Test, CanSMMainFunction_NG_ValidationNotYetTimedOut_StaysValidating)
+
+TEST_F(Bsw_NmStack_Wakeup_WakeupValidation_Test, NG_Step02_CanSMMainFunction_NotYetTimedOut)
 {
     /* ----------------------- */
     /* ---- 準備 (Arrange) --- */
     /* ----------------------- */
-    // タイマ超過前
+    // step01 の終端状態（WAKEUP_VALIDATING）から、タイマ超過前の時刻にする
     ArrangeValidating();
     FakeMillis_Value = 1999UL;
 
     /* ----------------------- */
     /* ---- 実行 (Act) ------- */
     /* ----------------------- */
+    // step01: ウェイクアップ検出
+    // （準備の ArrangeValidating() で実施済み）
+
+    // step02: 検証タイマ超過の判定
     CanSM_MainFunction();
 
     /* ----------------------- */

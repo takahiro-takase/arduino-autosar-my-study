@@ -218,7 +218,7 @@ protected:
 // 戻し、応答 [0x7E, 0x00] が Can_Hw まで到達する（以前は応答が無言で失われた）。
 // ------------------------------------------------------------
 TEST_F(Bsw_DcmStack_ActiveDiagnosticWake_Test,
-       Dcm_ComIndication_OK_DefaultSessionRequestDuringSilentComWakesChannelAndResponds)
+       OK_DefaultSessionRequestDuringSilentComWakesChannelAndResponds)
 {
     /* ----------------------- */
     /* ---- 準備 (Arrange) --- */
@@ -253,7 +253,7 @@ TEST_F(Bsw_DcmStack_ActiveDiagnosticWake_Test,
 // InactiveDiagnostic を 1 回ずつ呼び、チャネルモードを乱さない。
 // ------------------------------------------------------------
 TEST_F(Bsw_DcmStack_ActiveDiagnosticWake_Test,
-       Dcm_ComIndication_OK_DefaultSessionRequestNotifiesActiveThenInactive)
+       OK_DefaultSessionRequestNotifiesActiveThenInactive)
 {
     /* ----------------------- */
     /* ---- 実行 (Act) ------- */
@@ -280,7 +280,7 @@ TEST_F(Bsw_DcmStack_ActiveDiagnosticWake_Test,
 // 処理後に InactiveDiagnostic は呼ばれない（拡張セッションの間はアクティブを維持する）。
 // ------------------------------------------------------------
 TEST_F(Bsw_DcmStack_ActiveDiagnosticWake_Test,
-       Dcm_ComIndication_OK_ExtendedSessionKeepsDiagnosticActive)
+       OK_ExtendedSessionKeepsDiagnosticActive)
 {
     /* ----------------------- */
     /* ---- 実行 (Act) ------- */

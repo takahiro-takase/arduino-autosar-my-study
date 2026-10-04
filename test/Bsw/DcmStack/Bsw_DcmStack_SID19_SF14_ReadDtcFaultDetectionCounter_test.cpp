@@ -162,7 +162,7 @@ protected:
 
 // ------------------------------------------------------------
 TEST_F(Bsw_DcmStack_SID19_SF14_ReadDtcFaultDetectionCounter_Test,
-       ReadDtcFdc_OK_NoPrefailedEventProducesHeaderOnlyResponseOnCanHw)
+       OK_NoPrefailedEventProducesHeaderOnlyResponse)
 {
     /* ----------------------- */
     /* ---- 準備 (Arrange) --- */
@@ -199,7 +199,7 @@ TEST_F(Bsw_DcmStack_SID19_SF14_ReadDtcFaultDetectionCounter_Test,
 
 // ------------------------------------------------------------
 TEST_F(Bsw_DcmStack_SID19_SF14_ReadDtcFaultDetectionCounter_Test,
-       ReadDtcFdc_OK_OnePrefailedEventIsReflectedInResponseOnCanHw)
+       OK_OnePrefailedEventIsReflectedInResponse)
 {
     /* ----------------------- */
     /* ---- 準備 (Arrange) --- */
@@ -245,7 +245,7 @@ TEST_F(Bsw_DcmStack_SID19_SF14_ReadDtcFaultDetectionCounter_Test,
 // [[feedback_test_file_one_scenario_per_file]]）。
 // ------------------------------------------------------------
 TEST_F(Bsw_DcmStack_SID19_SF14_ReadDtcFaultDetectionCounter_Test,
-       ReadDtcFdc_NG_ExtraByteProducesIncorrectMessageLengthResponseOnCanHw)
+       NG_IncorrectMessageLength_ExtraByte)
 {
     /* ----------------------- */
     /* ---- 準備 (Arrange) --- */

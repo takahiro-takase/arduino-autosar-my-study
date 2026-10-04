@@ -158,7 +158,7 @@ protected:
 
 // ------------------------------------------------------------
 TEST_F(Bsw_DcmStack_SID19_SF04_ReadDtcSnapshot_Test,
-       ReadDtcSnapshot_OK_MultiFrameResponseReassemblesToExpectedPayloadOnCanHw)
+       OK_MultiFrameResponseReassemblesToExpectedPayload)
 {
     /* ------------------------- */
     /* ---- 準備 (Act 1) ------- */
@@ -269,7 +269,7 @@ TEST_F(Bsw_DcmStack_SID19_SF04_ReadDtcSnapshot_Test,
 // シナリオのため、チェーンテスト側に追加する。
 // ------------------------------------------------------------
 TEST_F(Bsw_DcmStack_SID19_SF04_ReadDtcSnapshot_Test,
-       ReadDtcSnapshot_OK_RecordNumber0xFFAliasReturnsSameMultiFrameResponseOnCanHw)
+       OK_RecordNumber0xFFAliasReturnsSameMultiFrameResponse)
 {
     /* ------------------------- */
     /* ---- 準備 (Act 1) ------- */
@@ -378,7 +378,7 @@ TEST_F(Bsw_DcmStack_SID19_SF04_ReadDtcSnapshot_Test,
 // 同じファイルに同居させる方針、[[feedback_test_file_one_scenario_per_file]]）。
 // ------------------------------------------------------------
 TEST_F(Bsw_DcmStack_SID19_SF04_ReadDtcSnapshot_Test,
-       ReadDtcSnapshot_NG_TooShortRequestProducesIncorrectMessageLengthResponseOnCanHw)
+       NG_IncorrectMessageLength_TooShortRequest)
 {
     /* ----------------------- */
     /* ---- 準備 (Arrange) --- */
@@ -418,7 +418,7 @@ TEST_F(Bsw_DcmStack_SID19_SF04_ReadDtcSnapshot_Test,
 // 未記録の状態のまま）。
 // ------------------------------------------------------------
 TEST_F(Bsw_DcmStack_SID19_SF04_ReadDtcSnapshot_Test,
-       ReadDtcSnapshot_NG_NeverFailedDtcProducesRequestOutOfRangeResponseOnCanHw)
+       NG_RequestOutOfRange_NeverFailedDtc)
 {
     /* ----------------------- */
     /* ---- 準備 (Arrange) --- */

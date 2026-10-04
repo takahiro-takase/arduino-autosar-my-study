@@ -267,7 +267,7 @@ const Com_ConfigType kTestComConfig = {
     /* GwMappingCount */ 0U
 };
 
-class Bsw_ComStack_SignalGroup_Tx_Test : public ::testing::Test
+class Bsw_ComStack_SignalGroup_Tx_Base : public ::testing::Test
 {
 protected:
     void SetUp() override
@@ -290,10 +290,21 @@ protected:
     }
 };
 
+// シナリオごとのフィクスチャ（共通の準備は Bsw_ComStack_SignalGroup_Tx_Base）
+class Bsw_ComStack_SignalGroup_Tx_TmsTransition_Test : public Bsw_ComStack_SignalGroup_Tx_Base {};
+class Bsw_ComStack_SignalGroup_Tx_SwitchIpduTxMode_Test : public Bsw_ComStack_SignalGroup_Tx_Base {};
+class Bsw_ComStack_SignalGroup_Tx_InvalidateSignalGroup_Test : public Bsw_ComStack_SignalGroup_Tx_Base {};
+class Bsw_ComStack_SignalGroup_Tx_SendSignalGroupArray_Test : public Bsw_ComStack_SignalGroup_Tx_Base {};
+class Bsw_ComStack_SignalGroup_Tx_SendSignal_Test : public Bsw_ComStack_SignalGroup_Tx_Base {};
+class Bsw_ComStack_SignalGroup_Tx_TxConfirmation_Test : public Bsw_ComStack_SignalGroup_Tx_Base {};
+class Bsw_ComStack_SignalGroup_Tx_IpduGroupStop_Test : public Bsw_ComStack_SignalGroup_Tx_Base {};
+class Bsw_ComStack_SignalGroup_Tx_TxTOut_Test : public Bsw_ComStack_SignalGroup_Tx_Base {};
+class Bsw_ComStack_SignalGroup_Tx_TriggerIPDUSend_Test : public Bsw_ComStack_SignalGroup_Tx_Base {};
+
 // ------------------------------------------------------------
 // SWS_Com_00495（TMS 遷移時の無条件即時送信、Signal Group 側経路）
 // ------------------------------------------------------------
-TEST_F(Bsw_ComStack_SignalGroup_Tx_Test, TmsTransition_OK_TriggersImmediateSendWithoutGroupTrigger)
+TEST_F(Bsw_ComStack_SignalGroup_Tx_TmsTransition_Test, OK_TriggersImmediateSendWithoutGroupTrigger)
 {
     /* ----------------------- */
     /* ---- 準備 (Arrange) --- */
@@ -328,7 +339,7 @@ TEST_F(Bsw_ComStack_SignalGroup_Tx_Test, TmsTransition_OK_TriggersImmediateSendW
 }
 
 
-TEST_F(Bsw_ComStack_SignalGroup_Tx_Test, TmsUnchanged_OK_DoesNotTriggerSendWithoutGroupTrigger)
+TEST_F(Bsw_ComStack_SignalGroup_Tx_TmsTransition_Test, OK_TmsUnchangedDoesNotTriggerSendWithoutGroupTrigger)
 {
     /* ----------------------- */
     /* ---- 準備 (Arrange) --- */
@@ -354,7 +365,7 @@ TEST_F(Bsw_ComStack_SignalGroup_Tx_Test, TmsUnchanged_OK_DoesNotTriggerSendWitho
 // ------------------------------------------------------------
 // Com_SwitchIpduTxMode（SWS_Com_00244、TMS の外部トグル、Signal Group側）
 // ------------------------------------------------------------
-TEST_F(Bsw_ComStack_SignalGroup_Tx_Test, SwitchIpduTxMode_OK_FlipsStateAndTriggersImmediateSend)
+TEST_F(Bsw_ComStack_SignalGroup_Tx_SwitchIpduTxMode_Test, OK_FlipsStateAndTriggersImmediateSend)
 {
     /* ----------------------- */
     /* ---- 準備 (Arrange) --- */
@@ -377,29 +388,8 @@ TEST_F(Bsw_ComStack_SignalGroup_Tx_Test, SwitchIpduTxMode_OK_FlipsStateAndTrigge
     EXPECT_EQ(Com_Test_GetTxPending(1U), 1U);
 }
 
-TEST_F(Bsw_ComStack_SignalGroup_Tx_Test, SwitchIpduTxMode_NG_NoEffectWhenModeAlreadyActive)
-{
-    /* ----------------------- */
-    /* ---- 準備 (Arrange) --- */
-    /* ----------------------- */
-    // 既定状態(false)と同じ Mode=0 を明示的に要求する。
 
-    /* ----------------------- */
-    /* ---- 実行 (Act) ------- */
-    /* ----------------------- */
-    Com_SwitchIpduTxMode(1U, 0U);
-
-    /* ----------------------- */
-    /* ---- 評価 (Assert) ---- */
-    /* ----------------------- */
-    // spec 原文 "the call will have no effect"。送信要求も
-    // 立たない（状態が変化していないため Com_RequestTxOnChange() は
-    // 呼ばれない）。
-    EXPECT_EQ(Com_Test_GetTmsState(1U), 0U);
-    EXPECT_EQ(Com_Test_GetTxPending(1U), 0U);
-}
-
-TEST_F(Bsw_ComStack_SignalGroup_Tx_Test, SwitchIpduTxMode_OK_TogglingBackTriggersAnotherSend)
+TEST_F(Bsw_ComStack_SignalGroup_Tx_SwitchIpduTxMode_Test, OK_TogglingBackTriggersAnotherSend)
 {
     /* ----------------------- */
     /* ---- 準備 (Arrange) --- */
@@ -424,7 +414,31 @@ TEST_F(Bsw_ComStack_SignalGroup_Tx_Test, SwitchIpduTxMode_OK_TogglingBackTrigger
     EXPECT_EQ(Com_Test_GetTxPending(1U), 1U);
 }
 
-TEST_F(Bsw_ComStack_SignalGroup_Tx_Test, SwitchIpduTxMode_NG_UnknownPduIdHasNoEffect)
+
+TEST_F(Bsw_ComStack_SignalGroup_Tx_SwitchIpduTxMode_Test, NG_Step01_ComSwitchIpduTxMode_ModeAlreadyActive)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // 既定状態(false)と同じ Mode=0 を明示的に要求する。
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Com_SwitchIpduTxMode(1U, 0U);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // spec 原文 "the call will have no effect"。送信要求も
+    // 立たない（状態が変化していないため Com_RequestTxOnChange() は
+    // 呼ばれない）。
+    EXPECT_EQ(Com_Test_GetTmsState(1U), 0U);
+    EXPECT_EQ(Com_Test_GetTxPending(1U), 0U);
+}
+
+
+TEST_F(Bsw_ComStack_SignalGroup_Tx_SwitchIpduTxMode_Test, NG_Step01_ComSwitchIpduTxMode_UnknownPduId)
 {
     /* ----------------------------------- */
     /* ---- 実行 (Act) + 評価 (Assert) --- */
@@ -440,7 +454,7 @@ TEST_F(Bsw_ComStack_SignalGroup_Tx_Test, SwitchIpduTxMode_NG_UnknownPduIdHasNoEf
 // ------------------------------------------------------------
 // Com_InvalidateSignalGroup（SWS_Com_00557/SWS_Com_00645）
 // ------------------------------------------------------------
-TEST_F(Bsw_ComStack_SignalGroup_Tx_Test, InvalidateSignalGroup_OK_WritesMemberInvalidValueAndCommitsToBuffer)
+TEST_F(Bsw_ComStack_SignalGroup_Tx_InvalidateSignalGroup_Test, OK)
 {
     /* ----------------------- */
     /* ---- 準備 (Arrange) --- */
@@ -467,7 +481,7 @@ TEST_F(Bsw_ComStack_SignalGroup_Tx_Test, InvalidateSignalGroup_OK_WritesMemberIn
 }
 
 
-TEST_F(Bsw_ComStack_SignalGroup_Tx_Test, InvalidateSignalGroup_NG_AnyMemberUnconfiguredReturnsServiceNotAvailableWithoutPartialCommit)
+TEST_F(Bsw_ComStack_SignalGroup_Tx_InvalidateSignalGroup_Test, NG_Step01_ComInvalidateSignalGroup_AnyMemberUnconfigured)
 {
     /* ----------------------- */
     /* ---- 準備 (Arrange) --- */
@@ -499,7 +513,7 @@ TEST_F(Bsw_ComStack_SignalGroup_Tx_Test, InvalidateSignalGroup_NG_AnyMemberUncon
 // ------------------------------------------------------------
 // Com_SendSignalGroupArray（SWS_Com_00348 等）
 // ------------------------------------------------------------
-TEST_F(Bsw_ComStack_SignalGroup_Tx_Test, SendSignalGroupArray_OK_WritesBufferTriggersSendAndSetsUpdateBit)
+TEST_F(Bsw_ComStack_SignalGroup_Tx_SendSignalGroupArray_Test, OK_WritesBufferTriggersSendAndSetsUpdateBit)
 {
     /* ----------------------- */
     /* ---- 準備 (Arrange) --- */
@@ -529,7 +543,7 @@ TEST_F(Bsw_ComStack_SignalGroup_Tx_Test, SendSignalGroupArray_OK_WritesBufferTri
 }
 
 
-TEST_F(Bsw_ComStack_SignalGroup_Tx_Test, SendSignalGroupArray_OK_AlwaysTriggersEvenWithoutChange)
+TEST_F(Bsw_ComStack_SignalGroup_Tx_SendSignalGroupArray_Test, OK_AlwaysTriggersEvenWithoutChange)
 {
     /* ----------------------- */
     /* ---- 準備 (Arrange) --- */
@@ -557,33 +571,7 @@ TEST_F(Bsw_ComStack_SignalGroup_Tx_Test, SendSignalGroupArray_OK_AlwaysTriggersE
 }
 
 
-TEST_F(Bsw_ComStack_SignalGroup_Tx_Test, SendSignalGroupArray_NG_NullDataPtrReturnsError)
-{
-    /* ----------------------------------- */
-    /* ---- 実行 (Act) + 評価 (Assert) --- */
-    /* ----------------------------------- */
-    EXPECT_EQ(Com_SendSignalGroupArray(1U, NULL), E_NOT_OK);
-    EXPECT_EQ(Com_Test_GetTxPending(1U), 0U);  // 何も変化しない
-}
-
-
-TEST_F(Bsw_ComStack_SignalGroup_Tx_Test, SendSignalGroupArray_NG_NonSignalGroupIPduReturnsError)
-{
-    /* ----------------------------------- */
-    /* ---- 準備 (Arrange) --------------- */
-    /* ----------------------------------- */
-    // kTestTxIPdu（IPduId=0）は IsSignalGroup=0
-    uint8_t raw[2] = { 0x12U, 0x34U };
-
-    /* ----------------------------------- */
-    /* ---- 実行 (Act) + 評価 (Assert) --- */
-    /* ----------------------------------- */
-    EXPECT_EQ(Com_SendSignalGroupArray(0U, raw), E_NOT_OK);
-    EXPECT_EQ(Com_Test_GetTxPending(0U), 0U);
-}
-
-
-TEST_F(Bsw_ComStack_SignalGroup_Tx_Test, SendSignalGroupArray_OK_SyncsShadowBufferPreventingStaleOverwrite)
+TEST_F(Bsw_ComStack_SignalGroup_Tx_SendSignalGroupArray_Test, OK_SyncsShadowBufferPreventingStaleOverwrite)
 {
     /* ----------------------- */
     /* ---- 準備 (Arrange) --- */
@@ -616,7 +604,7 @@ TEST_F(Bsw_ComStack_SignalGroup_Tx_Test, SendSignalGroupArray_OK_SyncsShadowBuff
 }
 
 
-TEST_F(Bsw_ComStack_SignalGroup_Tx_Test, SendSignalGroupArray_OK_ReturnsServiceNotAvailableWhenGroupStoppedButStillWrites)
+TEST_F(Bsw_ComStack_SignalGroup_Tx_SendSignalGroupArray_Test, OK_ReturnsServiceNotAvailableWhenGroupStoppedButStillWrites)
 {
     /* ----------------------- */
     /* ---- 準備 (Arrange) --- */
@@ -641,10 +629,36 @@ TEST_F(Bsw_ComStack_SignalGroup_Tx_Test, SendSignalGroupArray_OK_ReturnsServiceN
 }
 
 
+TEST_F(Bsw_ComStack_SignalGroup_Tx_SendSignalGroupArray_Test, NG_Step01_ComSendSignalGroupArray_NullDataPtr)
+{
+    /* ----------------------------------- */
+    /* ---- 実行 (Act) + 評価 (Assert) --- */
+    /* ----------------------------------- */
+    EXPECT_EQ(Com_SendSignalGroupArray(1U, NULL), E_NOT_OK);
+    EXPECT_EQ(Com_Test_GetTxPending(1U), 0U);  // 何も変化しない
+}
+
+
+TEST_F(Bsw_ComStack_SignalGroup_Tx_SendSignalGroupArray_Test, NG_Step01_ComSendSignalGroupArray_NonSignalGroupIPdu)
+{
+    /* ----------------------------------- */
+    /* ---- 準備 (Arrange) --------------- */
+    /* ----------------------------------- */
+    // kTestTxIPdu（IPduId=0）は IsSignalGroup=0
+    uint8_t raw[2] = { 0x12U, 0x34U };
+
+    /* ----------------------------------- */
+    /* ---- 実行 (Act) + 評価 (Assert) --- */
+    /* ----------------------------------- */
+    EXPECT_EQ(Com_SendSignalGroupArray(0U, raw), E_NOT_OK);
+    EXPECT_EQ(Com_Test_GetTxPending(0U), 0U);
+}
+
+
 // ------------------------------------------------------------
 // Com_SendSignal（停止中グループのメンバーへの書き込み、SWS_Com_00334）
 // ------------------------------------------------------------
-TEST_F(Bsw_ComStack_SignalGroup_Tx_Test, SendSignal_OK_ReturnsServiceNotAvailableWhenGroupStoppedButStillWritesShadowBuffer)
+TEST_F(Bsw_ComStack_SignalGroup_Tx_SendSignal_Test, OK)
 {
     /* ----------------------- */
     /* ---- 準備 (Arrange) --- */
@@ -679,7 +693,7 @@ TEST_F(Bsw_ComStack_SignalGroup_Tx_Test, SendSignal_OK_ReturnsServiceNotAvailabl
 // SWS_Com_00468/SWS_Com_00491: Signal Group の TxAckCbk/TxErrCbk はグループ
 // 単位で1回だけ呼ばれる（非グループとの比較を含む）
 // ------------------------------------------------------------
-TEST_F(Bsw_ComStack_SignalGroup_Tx_Test, TxConfirmation_OK_CallsSignalGroupAckCbkExactlyOnce)
+TEST_F(Bsw_ComStack_SignalGroup_Tx_TxConfirmation_Test, OK)
 {
     /* ----------------------- */
     /* ---- 準備 (Arrange) --- */
@@ -701,27 +715,7 @@ TEST_F(Bsw_ComStack_SignalGroup_Tx_Test, TxConfirmation_OK_CallsSignalGroupAckCb
 }
 
 
-TEST_F(Bsw_ComStack_SignalGroup_Tx_Test, TxConfirmation_NG_NonGroupIPduDoesNotCallGroupAckCbk)
-{
-    /* ----------------------- */
-    /* ---- 準備 (Arrange) --- */
-    /* ----------------------- */
-    // 不要。IPduId=0 は非 Signal Group（kTestTxIPdu）
-
-    /* ----------------------- */
-    /* ---- 実行 (Act) ------- */
-    /* ----------------------- */
-    Com_TxConfirmation(0U, E_OK);
-
-    /* ----------------------- */
-    /* ---- 評価 (Assert) ---- */
-    /* ----------------------- */
-    // 無関係な Signal Group（IPduId=1）の TxAckCbk は呼ばれない
-    EXPECT_EQ(s_groupTxAckCount, 0U);
-}
-
-
-TEST_F(Bsw_ComStack_SignalGroup_Tx_Test, IpduGroupStop_OK_CallsSignalGroupErrCbkExactlyOnceWhenUnconfirmed)
+TEST_F(Bsw_ComStack_SignalGroup_Tx_IpduGroupStop_Test, OK_CallsSignalGroupErrCbkExactlyOnceWhenUnconfirmed)
 {
     /* ----------------------- */
     /* ---- 準備 (Arrange) --- */
@@ -747,7 +741,27 @@ TEST_F(Bsw_ComStack_SignalGroup_Tx_Test, IpduGroupStop_OK_CallsSignalGroupErrCbk
 }
 
 
-TEST_F(Bsw_ComStack_SignalGroup_Tx_Test, IpduGroupStop_NG_DoesNotCallErrCbkWhenAlreadyConfirmed)
+TEST_F(Bsw_ComStack_SignalGroup_Tx_TxConfirmation_Test, NG_Step01_ComTxConfirmation_NonGroupIPdu)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // 不要。IPduId=0 は非 Signal Group（kTestTxIPdu）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Com_TxConfirmation(0U, E_OK);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // 無関係な Signal Group（IPduId=1）の TxAckCbk は呼ばれない
+    EXPECT_EQ(s_groupTxAckCount, 0U);
+}
+
+
+TEST_F(Bsw_ComStack_SignalGroup_Tx_IpduGroupStop_Test, NG_Step01_ComIpduGroupStop_AlreadyConfirmed)
 {
     /* ----------------------- */
     /* ---- 準備 (Arrange) --- */
@@ -771,7 +785,7 @@ TEST_F(Bsw_ComStack_SignalGroup_Tx_Test, IpduGroupStop_NG_DoesNotCallErrCbkWhenA
 // ------------------------------------------------------------
 // Com_IpduGroupStop の再送シーケンス/送信デッドライン監視への影響
 // ------------------------------------------------------------
-TEST_F(Bsw_ComStack_SignalGroup_Tx_Test, IpduGroupStopRepeatsRemaining_OK_ClearsRepeatsRemaining)
+TEST_F(Bsw_ComStack_SignalGroup_Tx_IpduGroupStop_Test, OK_ClearsRepeatsRemaining)
 {
     /* ----------------------- */
     /* ---- 準備 (Arrange) --- */
@@ -795,7 +809,7 @@ TEST_F(Bsw_ComStack_SignalGroup_Tx_Test, IpduGroupStopRepeatsRemaining_OK_Clears
 }
 
 
-TEST_F(Bsw_ComStack_SignalGroup_Tx_Test, IpduGroupStopTxTOutInteraction_OK_PreventsDoubleFireWithTxErrCbk)
+TEST_F(Bsw_ComStack_SignalGroup_Tx_IpduGroupStop_Test, OK_PreventsDoubleFireWithTxErrCbk)
 {
     /* ----------------------- */
     /* ---- 準備 (Arrange) --- */
@@ -826,7 +840,7 @@ TEST_F(Bsw_ComStack_SignalGroup_Tx_Test, IpduGroupStopTxTOutInteraction_OK_Preve
 // ------------------------------------------------------------
 // Com_CbkTxTOut のグループ単位経路（SWS_Com_00878）
 // ------------------------------------------------------------
-TEST_F(Bsw_ComStack_SignalGroup_Tx_Test, TxTOutGroupLevel_OK_FiresWhenStartedAndOverdue)
+TEST_F(Bsw_ComStack_SignalGroup_Tx_TxTOut_Test, OK)
 {
     /* ----------------------- */
     /* ---- 準備 (Arrange) --- */
@@ -858,7 +872,7 @@ TEST_F(Bsw_ComStack_SignalGroup_Tx_Test, TxTOutGroupLevel_OK_FiresWhenStartedAnd
 // ------------------------------------------------------------
 // Com_TriggerIPDUSend（SWS_Com_00861/SWS_Com_00388、停止可能グループ側）
 // ------------------------------------------------------------
-TEST_F(Bsw_ComStack_SignalGroup_Tx_Test, TriggerIPDUSend_OK_RespectsMinDelayTimeAndDispatchesOnceElapsed)
+TEST_F(Bsw_ComStack_SignalGroup_Tx_TriggerIPDUSend_Test, OK)
 {
     /* ------------------------ */
     /* ---- 準備 (Arrange) ---- */
@@ -903,7 +917,7 @@ TEST_F(Bsw_ComStack_SignalGroup_Tx_Test, TriggerIPDUSend_OK_RespectsMinDelayTime
 }
 
 
-TEST_F(Bsw_ComStack_SignalGroup_Tx_Test, TriggerIPDUSend_NG_StoppedIpduReturnsErrorWithoutTriggering)
+TEST_F(Bsw_ComStack_SignalGroup_Tx_TriggerIPDUSend_Test, NG_Step01_ComTriggerIPDUSend_StoppedIpdu)
 {
     /* ----------------------------------- */
     /* ---- 準備 (Arrange) --------------- */

@@ -241,7 +241,7 @@ protected:
 // TransferData は正応答 [0x76, 0x01] を返す。
 // ------------------------------------------------------------
 TEST_F(Bsw_DcmStack_SID36_TransferData_Test,
-       TransferData_OK_ExpectedBlockCounterProducesPositiveResponseOnCanHw)
+       OK_ExpectedBlockCounterProducesPositiveResponse)
 {
     /* ----------------------- */
     /* ---- 実行 (Act) ------- */
@@ -264,7 +264,7 @@ TEST_F(Bsw_DcmStack_SID36_TransferData_Test,
 // カウンタが正しくインクリメントされる。
 // ------------------------------------------------------------
 TEST_F(Bsw_DcmStack_SID36_TransferData_Test,
-       TransferData_OK_ConsecutiveBlocksIncrementCounterOnCanHw)
+       OK_ConsecutiveBlocksIncrementCounter)
 {
     const uint8 kBlock1[4] = { 0x01U, 0x02U, 0x03U, 0x04U };
     SendTransferData(0x01U, kBlock1, 4U);
@@ -283,7 +283,7 @@ TEST_F(Bsw_DcmStack_SID36_TransferData_Test,
 // NRC 0x73 wrongBlockSequenceCounter になる。
 // ------------------------------------------------------------
 TEST_F(Bsw_DcmStack_SID36_TransferData_Test,
-       TransferData_NG_WrongBlockCounterReturnsWrongBlockSequenceCounterOnCanHw)
+       NG_WrongBlockSequenceCounter_WrongBlockCounter)
 {
     const uint8 kData[4] = { 0x01U, 0x02U, 0x03U, 0x04U };
     SendTransferData(0x02U /* 期待値は0x01 */, kData, 4U);
@@ -301,7 +301,7 @@ TEST_F(Bsw_DcmStack_SID36_TransferData_Test,
 // SF 上限(7バイト、UDSペイロードでは data 5バイトまで)に収める）。
 // ------------------------------------------------------------
 TEST_F(Bsw_DcmStack_SID36_TransferData_Test,
-       TransferData_NG_ExceedsDeclaredSizeReturnsTransferDataSuspendedOnCanHw)
+       NG_TransferDataSuspended_ExceedsDeclaredSize)
 {
     /* ----------------------- */
     /* ---- 準備 (Arrange) --- */
@@ -337,7 +337,7 @@ TEST_F(Bsw_DcmStack_SID36_TransferData_Test,
 // は NRC 0x24 requestSequenceError になる。
 // ------------------------------------------------------------
 TEST_F(Bsw_DcmStack_SID36_TransferData_Test,
-       TransferData_NG_AfterTransferCompleteReturnsRequestSequenceErrorOnCanHw)
+       NG_RequestSequenceError_AfterTransferComplete)
 {
     /* ----------------------- */
     /* ---- 準備 (Arrange) --- */

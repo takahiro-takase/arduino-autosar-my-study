@@ -176,7 +176,7 @@ const E2E_P05ConfigType kRefE2EHealthStatusCfg = {
     0U        /* Offset */
 };
 
-class Bsw_E2E_Tx_Test : public ::testing::Test
+class Bsw_ComStack_E2E_Tx_Protect_Test : public ::testing::Test
 {
 protected:
     void SetUp() override
@@ -230,7 +230,7 @@ protected:
 };
 
 // ------------------------------------------------------------
-TEST_F(Bsw_E2E_Tx_Test, ComMainFunction_OK_E2EProtectsAndReachesCanHw)
+TEST_F(Bsw_ComStack_E2E_Tx_Protect_Test, OK_E2EProtectsAndReachesCanHw)
 {
     /* ----------------------- */
     /* ---- 準備 (Arrange) --- */
@@ -260,7 +260,8 @@ TEST_F(Bsw_E2E_Tx_Test, ComMainFunction_OK_E2EProtectsAndReachesCanHw)
         EXPECT_EQ(FakeCanHw_LastSendData[i], refBuf[i]) << "byte index " << (int)i;
 }
 
-TEST_F(Bsw_E2E_Tx_Test, ComMainFunction_OK_CounterIncrementsAcrossSends)
+
+TEST_F(Bsw_ComStack_E2E_Tx_Protect_Test, OK_CounterIncrementsAcrossSends)
 {
     /* -------------------------- */
     /* ---- 準備 (Arrange) ------ */

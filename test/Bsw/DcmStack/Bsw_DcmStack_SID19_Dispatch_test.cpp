@@ -165,7 +165,7 @@ protected:
 // subFunctionNotSupported (NRC 0x12) になる。
 // ------------------------------------------------------------
 TEST_F(Bsw_DcmStack_SID19_Dispatch_Test,
-       ReadDtcInfo_NG_UnsupportedSubFuncProducesSubFuncNotSupportedResponseOnCanHw)
+       NG_SubFuncNotSupported_UnsupportedSubFunc)
 {
     /* ----------------------- */
     /* ---- 準備 (Arrange) --- */
@@ -203,7 +203,7 @@ TEST_F(Bsw_DcmStack_SID19_Dispatch_Test,
 // は要求長が最小長未満ならNRC 0x13を返す）。
 // ------------------------------------------------------------
 TEST_F(Bsw_DcmStack_SID19_Dispatch_Test,
-       ReadDtcInfo_NG_MissingSubFuncProducesIncorrectMessageLengthResponseOnCanHw)
+       NG_IncorrectMessageLength_MissingSubFunc)
 {
     /* ----------------------- */
     /* ---- 準備 (Arrange) --- */

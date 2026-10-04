@@ -75,7 +75,7 @@ TEST_F(Bsw_Can_Test, Can_Init_NG_NullConfig)
     EXPECT_EQ(FakeDetHw_LastErrorId, CAN_E_PARAM_POINTER);
 }
 
-TEST_F(Bsw_Can_Test, Can_Init_Ok)
+TEST_F(Bsw_Can_Test, Can_Init_OK)
 {
     /* ----------------------- */
     /* ---- 準備 (Arrange) --- */

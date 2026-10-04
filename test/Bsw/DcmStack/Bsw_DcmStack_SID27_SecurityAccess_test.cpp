@@ -173,117 +173,12 @@ protected:
 };
 
 // ------------------------------------------------------------
-// NG: requestSeed に余分な1バイト（[0x27, 0x01, 0x00]、2バイト厳密一致の
-// ため上限超過）は incorrectMessageLength (NRC 0x13) になる。
-// ------------------------------------------------------------
-TEST_F(Bsw_DcmStack_SID27_SecurityAccess_Test,
-       SecurityRequestSeed_NG_ExtraByteProducesIncorrectMessageLengthResponseOnCanHw)
-{
-    /* ----------------------- */
-    /* ---- 準備 (Arrange) --- */
-    /* ----------------------- */
-    // [0x27, 0x01, 0x00] を 0x7E0 の受信バッファへセットする
-    // （SF: 03 27 01 00）。SetUp() の EnterExtendedSession() が残した送信
-    // カウントをリセットしてから使う。
-    FakeCanHw_Reset();
-    FakeCanHw_RxId  = 0x7E0U;
-    FakeCanHw_RxDlc = 8U;
-    FakeCanHw_RxData[0] = 3U;
-    FakeCanHw_RxData[1] = DCM_SID_SECURITY_ACCESS;
-    FakeCanHw_RxData[2] = DCM_SEC_SUBFUNC_REQUEST_SEED;
-    FakeCanHw_RxData[3] = 0x00U;
-    for (uint8 i = 4U; i < 8U; i++)
-        FakeCanHw_RxData[i] = 0U;
-    FakeCanHw_RxPendingCount = 1U;
-
-    /* ----------------------- */
-    /* ---- 実行 (Act) ------- */
-    /* ----------------------- */
-    Can_MainFunction_Read();
-
-    /* ----------------------- */
-    /* ---- 評価 (Assert) ---- */
-    /* ----------------------- */
-    // 否定応答 [0x7F, 0x27, 0x13] が Can_Hw まで到達すること。
-    ASSERT_EQ(FakeCanHw_SendCount, 1U);
-    EXPECT_EQ(FakeCanHw_LastSendId, 0x7E8U);
-    EXPECT_EQ(FakeCanHw_LastSendDlc, 8U);
-    EXPECT_EQ(FakeCanHw_LastSendData[0], 0x03U);  // SF PCI（UDSペイロード長=3）
-    EXPECT_EQ(FakeCanHw_LastSendData[1], DCM_SID_NEGATIVE_RESP);
-    EXPECT_EQ(FakeCanHw_LastSendData[2], DCM_SID_SECURITY_ACCESS);
-    EXPECT_EQ(FakeCanHw_LastSendData[3], DCM_NRC_INCORRECT_MESSAGE_LENGTH);
-}
-
-// ------------------------------------------------------------
-// NG: requestSeed 済みの状態で、sendKey に余分な1バイト
-// （[0x27, 0x02, keyH, keyL, 0x00]、4バイト厳密一致のため上限超過）は
-// incorrectMessageLength (NRC 0x13) になる。長さチェックがキー値の妥当性
-// より先に効くため、キー値自体は不正でも構わない。
-// ------------------------------------------------------------
-TEST_F(Bsw_DcmStack_SID27_SecurityAccess_Test,
-       SecuritySendKey_NG_ExtraByteProducesIncorrectMessageLengthResponseOnCanHw)
-{
-    /* ------------------------- */
-    /* ---- 準備 (Arrange 1) --- */
-    /* ------------------------- */
-    // [0x27, 0x01] requestSeed を送っておく（sendKey の
-    // 前提）。SetUp() の EnterExtendedSession() が残した送信カウントを
-    // リセットしてから使う。
-    FakeCanHw_Reset();
-    FakeCanHw_RxId  = 0x7E0U;
-    FakeCanHw_RxDlc = 8U;
-    FakeCanHw_RxData[0] = 2U;
-    FakeCanHw_RxData[1] = DCM_SID_SECURITY_ACCESS;
-    FakeCanHw_RxData[2] = DCM_SEC_SUBFUNC_REQUEST_SEED;
-    for (uint8 i = 3U; i < 8U; i++)
-        FakeCanHw_RxData[i] = 0U;
-    FakeCanHw_RxPendingCount = 1U;
-    Can_MainFunction_Read();
-    ASSERT_EQ(FakeCanHw_SendCount, 1U);
-    ASSERT_EQ(FakeCanHw_LastSendData[1], 0x67U);  // requestSeed が正応答であること（前提確認）
-    FakeCanHw_Reset();
-
-    /* ------------------------- */
-    /* ---- 準備 (Arrange 2) --- */
-    /* ------------------------- */
-    // 余分な1バイト付きの [0x27, 0x02, 0x00,0x00, 0x00]
-    // を 0x7E0 の受信バッファへセットする（SF: 05 27 02 00 00 00）。
-    FakeCanHw_RxId  = 0x7E0U;
-    FakeCanHw_RxDlc = 8U;
-    FakeCanHw_RxData[0] = 5U;
-    FakeCanHw_RxData[1] = DCM_SID_SECURITY_ACCESS;
-    FakeCanHw_RxData[2] = DCM_SEC_SUBFUNC_SEND_KEY;
-    FakeCanHw_RxData[3] = 0x00U;
-    FakeCanHw_RxData[4] = 0x00U;
-    FakeCanHw_RxData[5] = 0x00U;
-    FakeCanHw_RxData[6] = 0U;
-    FakeCanHw_RxData[7] = 0U;
-    FakeCanHw_RxPendingCount = 1U;
-
-    /* ------------------------- */
-    /* ---- 実行 (Act) --------- */
-    /* ------------------------- */
-    Can_MainFunction_Read();
-
-    /* ------------------------- */
-    /* ---- 評価 (Assert) ------ */
-    /* ------------------------- */
-    // 否定応答 [0x7F, 0x27, 0x13] が Can_Hw まで到達すること。
-    ASSERT_EQ(FakeCanHw_SendCount, 1U);
-    EXPECT_EQ(FakeCanHw_LastSendId, 0x7E8U);
-    EXPECT_EQ(FakeCanHw_LastSendData[0], 0x03U);
-    EXPECT_EQ(FakeCanHw_LastSendData[1], DCM_SID_NEGATIVE_RESP);
-    EXPECT_EQ(FakeCanHw_LastSendData[2], DCM_SID_SECURITY_ACCESS);
-    EXPECT_EQ(FakeCanHw_LastSendData[3], DCM_NRC_INCORRECT_MESSAGE_LENGTH);
-}
-
-// ------------------------------------------------------------
 // OK: requestSeed→sendKey の実チェーンで SecurityAccess Level1 が
 // アンロックされる（key = seed ^ DCM_SECURITY_KEY_MASK、本番コードと同じ
 // 計算式。seed は requestSeed の物理応答フレームから読み取る）。
 // ------------------------------------------------------------
 TEST_F(Bsw_DcmStack_SID27_SecurityAccess_Test,
-       SecurityAccess_OK_RequestSeedThenSendKeyUnlocksLevel1OnCanHw)
+       OK_RequestSeedThenSendKeyUnlocksLevel1)
 {
     /* ------------------------- */
     /* ---- 準備 (Arrange) ----- */
@@ -361,7 +256,7 @@ TEST_F(Bsw_DcmStack_SID27_SecurityAccess_Test,
 // 合図）。
 // ------------------------------------------------------------
 TEST_F(Bsw_DcmStack_SID27_SecurityAccess_Test,
-       SecurityAccess_OK_RequestSeedWhenAlreadyUnlockedReturnsAllZeroSeedOnCanHw)
+       OK_RequestSeedWhenAlreadyUnlockedReturnsAllZeroSeed)
 {
     /* ------------------------- */
     /* ---- 準備 (Arrange 1) --- */
@@ -426,6 +321,111 @@ TEST_F(Bsw_DcmStack_SID27_SecurityAccess_Test,
     EXPECT_EQ(FakeCanHw_LastSendData[2], DCM_SEC_SUBFUNC_REQUEST_SEED);
     EXPECT_EQ(FakeCanHw_LastSendData[3], 0x00U);
     EXPECT_EQ(FakeCanHw_LastSendData[4], 0x00U);
+}
+
+// ------------------------------------------------------------
+// NG: requestSeed に余分な1バイト（[0x27, 0x01, 0x00]、2バイト厳密一致の
+// ため上限超過）は incorrectMessageLength (NRC 0x13) になる。
+// ------------------------------------------------------------
+TEST_F(Bsw_DcmStack_SID27_SecurityAccess_Test,
+       NG_IncorrectMessageLength_ExtraByteOnRequestSeed)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // [0x27, 0x01, 0x00] を 0x7E0 の受信バッファへセットする
+    // （SF: 03 27 01 00）。SetUp() の EnterExtendedSession() が残した送信
+    // カウントをリセットしてから使う。
+    FakeCanHw_Reset();
+    FakeCanHw_RxId  = 0x7E0U;
+    FakeCanHw_RxDlc = 8U;
+    FakeCanHw_RxData[0] = 3U;
+    FakeCanHw_RxData[1] = DCM_SID_SECURITY_ACCESS;
+    FakeCanHw_RxData[2] = DCM_SEC_SUBFUNC_REQUEST_SEED;
+    FakeCanHw_RxData[3] = 0x00U;
+    for (uint8 i = 4U; i < 8U; i++)
+        FakeCanHw_RxData[i] = 0U;
+    FakeCanHw_RxPendingCount = 1U;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Can_MainFunction_Read();
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // 否定応答 [0x7F, 0x27, 0x13] が Can_Hw まで到達すること。
+    ASSERT_EQ(FakeCanHw_SendCount, 1U);
+    EXPECT_EQ(FakeCanHw_LastSendId, 0x7E8U);
+    EXPECT_EQ(FakeCanHw_LastSendDlc, 8U);
+    EXPECT_EQ(FakeCanHw_LastSendData[0], 0x03U);  // SF PCI（UDSペイロード長=3）
+    EXPECT_EQ(FakeCanHw_LastSendData[1], DCM_SID_NEGATIVE_RESP);
+    EXPECT_EQ(FakeCanHw_LastSendData[2], DCM_SID_SECURITY_ACCESS);
+    EXPECT_EQ(FakeCanHw_LastSendData[3], DCM_NRC_INCORRECT_MESSAGE_LENGTH);
+}
+
+// ------------------------------------------------------------
+// NG: requestSeed 済みの状態で、sendKey に余分な1バイト
+// （[0x27, 0x02, keyH, keyL, 0x00]、4バイト厳密一致のため上限超過）は
+// incorrectMessageLength (NRC 0x13) になる。長さチェックがキー値の妥当性
+// より先に効くため、キー値自体は不正でも構わない。
+// ------------------------------------------------------------
+TEST_F(Bsw_DcmStack_SID27_SecurityAccess_Test,
+       NG_IncorrectMessageLength_ExtraByteOnSendKey)
+{
+    /* ------------------------- */
+    /* ---- 準備 (Arrange 1) --- */
+    /* ------------------------- */
+    // [0x27, 0x01] requestSeed を送っておく（sendKey の
+    // 前提）。SetUp() の EnterExtendedSession() が残した送信カウントを
+    // リセットしてから使う。
+    FakeCanHw_Reset();
+    FakeCanHw_RxId  = 0x7E0U;
+    FakeCanHw_RxDlc = 8U;
+    FakeCanHw_RxData[0] = 2U;
+    FakeCanHw_RxData[1] = DCM_SID_SECURITY_ACCESS;
+    FakeCanHw_RxData[2] = DCM_SEC_SUBFUNC_REQUEST_SEED;
+    for (uint8 i = 3U; i < 8U; i++)
+        FakeCanHw_RxData[i] = 0U;
+    FakeCanHw_RxPendingCount = 1U;
+    Can_MainFunction_Read();
+    ASSERT_EQ(FakeCanHw_SendCount, 1U);
+    ASSERT_EQ(FakeCanHw_LastSendData[1], 0x67U);  // requestSeed が正応答であること（前提確認）
+    FakeCanHw_Reset();
+
+    /* ------------------------- */
+    /* ---- 準備 (Arrange 2) --- */
+    /* ------------------------- */
+    // 余分な1バイト付きの [0x27, 0x02, 0x00,0x00, 0x00]
+    // を 0x7E0 の受信バッファへセットする（SF: 05 27 02 00 00 00）。
+    FakeCanHw_RxId  = 0x7E0U;
+    FakeCanHw_RxDlc = 8U;
+    FakeCanHw_RxData[0] = 5U;
+    FakeCanHw_RxData[1] = DCM_SID_SECURITY_ACCESS;
+    FakeCanHw_RxData[2] = DCM_SEC_SUBFUNC_SEND_KEY;
+    FakeCanHw_RxData[3] = 0x00U;
+    FakeCanHw_RxData[4] = 0x00U;
+    FakeCanHw_RxData[5] = 0x00U;
+    FakeCanHw_RxData[6] = 0U;
+    FakeCanHw_RxData[7] = 0U;
+    FakeCanHw_RxPendingCount = 1U;
+
+    /* ------------------------- */
+    /* ---- 実行 (Act) --------- */
+    /* ------------------------- */
+    Can_MainFunction_Read();
+
+    /* ------------------------- */
+    /* ---- 評価 (Assert) ------ */
+    /* ------------------------- */
+    // 否定応答 [0x7F, 0x27, 0x13] が Can_Hw まで到達すること。
+    ASSERT_EQ(FakeCanHw_SendCount, 1U);
+    EXPECT_EQ(FakeCanHw_LastSendId, 0x7E8U);
+    EXPECT_EQ(FakeCanHw_LastSendData[0], 0x03U);
+    EXPECT_EQ(FakeCanHw_LastSendData[1], DCM_SID_NEGATIVE_RESP);
+    EXPECT_EQ(FakeCanHw_LastSendData[2], DCM_SID_SECURITY_ACCESS);
+    EXPECT_EQ(FakeCanHw_LastSendData[3], DCM_NRC_INCORRECT_MESSAGE_LENGTH);
 }
 
 }  // namespace

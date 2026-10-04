@@ -166,7 +166,7 @@ protected:
 
 // ------------------------------------------------------------
 TEST_F(Bsw_DcmStack_SID19_SF02_ReadDtcByMask_Test,
-       ReadDtcByMask_OK_ImpossibleMaskProducesHeaderOnlySingleFrameResponseOnCanHw)
+       OK_ImpossibleMaskProducesHeaderOnlySingleFrameResponse)
 {
     /* ----------------------- */
     /* ---- 準備 (Arrange) --- */
@@ -202,7 +202,7 @@ TEST_F(Bsw_DcmStack_SID19_SF02_ReadDtcByMask_Test,
 
 // ------------------------------------------------------------
 TEST_F(Bsw_DcmStack_SID19_SF02_ReadDtcByMask_Test,
-       ReadDtcByMask_OK_OneMatchingDtcProducesSevenByteSingleFrameResponseOnCanHw)
+       OK_OneMatchingDtcProducesSevenByteSingleFrameResponse)
 {
     /* ----------------------- */
     /* ---- 準備 (Arrange) --- */
@@ -242,7 +242,7 @@ TEST_F(Bsw_DcmStack_SID19_SF02_ReadDtcByMask_Test,
 
 // ------------------------------------------------------------
 TEST_F(Bsw_DcmStack_SID19_SF02_ReadDtcByMask_Test,
-       ReadDtcByMask_OK_TwoMatchingDtcsProduceMultiFrameResponseOnCanHw)
+       OK_TwoMatchingDtcsProduceMultiFrameResponse)
 {
     /* ------------------------- */
     /* ---- 準備 (Act 1) ------- */
@@ -342,7 +342,7 @@ TEST_F(Bsw_DcmStack_SID19_SF02_ReadDtcByMask_Test,
 // 同居させる方針、[[feedback_test_file_one_scenario_per_file]]）。
 // ------------------------------------------------------------
 TEST_F(Bsw_DcmStack_SID19_SF02_ReadDtcByMask_Test,
-       ReadDtcByMask_NG_MissingStatusMaskProducesIncorrectMessageLengthResponseOnCanHw)
+       NG_IncorrectMessageLength_MissingStatusMask)
 {
     /* ----------------------- */
     /* ---- 準備 (Arrange) --- */

@@ -80,7 +80,7 @@ protected:
     }
 };
 
-TEST_F(E2EP05Test, ProtectComputesCrcMatchingReferenceImplementation)
+TEST_F(E2EP05Test, E2E_P05Protect_OK_ComputesCrcMatchingReferenceImplementation)
 {
     E2E_P05ProtectStateType state;
     E2E_P05ProtectInit(&state);
@@ -95,7 +95,7 @@ TEST_F(E2EP05Test, ProtectComputesCrcMatchingReferenceImplementation)
     EXPECT_EQ(data[2], 0U); /* 1回目の Counter は 0 */
 }
 
-TEST_F(E2EP05Test, ProtectIncrementsCounterAndWrapsAt0xFF)
+TEST_F(E2EP05Test, E2E_P05Protect_OK_IncrementsCounterAndWrapsAt0xFF)
 {
     E2E_P05ProtectStateType state;
     E2E_P05ProtectInit(&state);
@@ -108,7 +108,7 @@ TEST_F(E2EP05Test, ProtectIncrementsCounterAndWrapsAt0xFF)
     EXPECT_EQ(state.Counter, 0U); /* 次回用の内部Counterは0に折り返す */
 }
 
-TEST_F(E2EP05Test, FirstCheckAfterInitIsOkBecauseCheckStateStartsAtCounter0xFF)
+TEST_F(E2EP05Test, E2E_P05Check_OK_FirstCheckAfterInitBecauseCheckStateStartsAtCounter0xFF)
 {
     /* [SWS_E2E_00451]: E2E_P05CheckInit() は Counter を 0xFF で初期化する
      * （2026-09-06 是正。以前は 0 だったため、送信側が Counter=0 から
@@ -133,7 +133,7 @@ TEST_F(E2EP05Test, FirstCheckAfterInitIsOkBecauseCheckStateStartsAtCounter0xFF)
     EXPECT_EQ(checkState.Counter, 0U);
 }
 
-TEST_F(E2EP05Test, SecondConsecutiveFrameIsOk)
+TEST_F(E2EP05Test, E2E_P05Check_OK_SecondConsecutiveFrame)
 {
     E2E_P05ProtectStateType protectState;
     E2E_P05CheckStateType   checkState;
@@ -153,7 +153,7 @@ TEST_F(E2EP05Test, SecondConsecutiveFrameIsOk)
     EXPECT_EQ(checkState.Counter, 1U);
 }
 
-TEST_F(E2EP05Test, CounterJumpBeyondMaxDeltaIsWrongSequence)
+TEST_F(E2EP05Test, E2E_P05Check_NG_CounterJumpBeyondMaxDeltaIsWrongSequence)
 {
     E2E_P05ProtectStateType protectState;
     E2E_P05CheckStateType   checkState;
@@ -176,7 +176,7 @@ TEST_F(E2EP05Test, CounterJumpBeyondMaxDeltaIsWrongSequence)
     EXPECT_EQ(checkState.Counter, 2U); /* WRONGSEQUENCEでも状態は受信値へ更新される (CRC正常なため) */
 }
 
-TEST_F(E2EP05Test, CounterWrapsFrom0xFFTo0IsRecognizedAsOk)
+TEST_F(E2EP05Test, E2E_P05Check_OK_CounterWrapsFrom0xFFTo0IsRecognized)
 {
     E2E_P05ProtectStateType protectState;
     E2E_P05CheckStateType   checkState;
@@ -196,7 +196,7 @@ TEST_F(E2EP05Test, CounterWrapsFrom0xFFTo0IsRecognizedAsOk)
     EXPECT_EQ(checkState.Counter, 0U);
 }
 
-TEST_F(E2EP05Test, CrcMismatchReturnsErrorAndDoesNotUpdateState)
+TEST_F(E2EP05Test, E2E_P05Check_NG_CrcMismatchReturnsErrorAndDoesNotUpdateState)
 {
     E2E_P05ProtectStateType protectState;
     E2E_P05CheckStateType   checkState;
@@ -218,7 +218,7 @@ TEST_F(E2EP05Test, CrcMismatchReturnsErrorAndDoesNotUpdateState)
  *         「wrong input」は E2E_E_INPUTERR_WRONG を返さなければならない
  *         （2026-09-06 是正。以前は誤って E2E_E_OK を返していた）。
  */
-TEST_F(E2EP05Test, NG_LengthMismatchReturnsInputErrWrong)
+TEST_F(E2EP05Test, E2E_P05Check_NG_LengthMismatchReturnsInputErrWrong)
 {
     E2E_P05CheckStateType checkState;
     E2E_P05CheckInit(&checkState);
@@ -233,7 +233,7 @@ TEST_F(E2EP05Test, NG_LengthMismatchReturnsInputErrWrong)
  *         （Data==NULL && Length==0 のみが NONEWDATA、それ以外の
  *         Data==NULL は wrong input）。
  */
-TEST_F(E2EP05Test, NG_NullDataWithNonZeroLengthReturnsInputErrWrong)
+TEST_F(E2EP05Test, E2E_P05Check_NG_NullDataWithNonZeroLengthReturnsInputErrWrong)
 {
     E2E_P05CheckStateType checkState;
     E2E_P05CheckInit(&checkState);
@@ -312,7 +312,7 @@ protected:
     }
 };
 
-TEST_F(E2EP01Test, ProtectComputesCrcMatchingReferenceImplementationAndStartsAtCounterZero)
+TEST_F(E2EP01Test, E2E_P01Protect_OK_ComputesCrcMatchingReferenceImplementationAndStartsAtCounterZero)
 {
     E2E_P01ProtectStateType state;
     ASSERT_EQ(E2E_P01ProtectInit(&state), E2E_E_OK);
@@ -325,7 +325,7 @@ TEST_F(E2EP01Test, ProtectComputesCrcMatchingReferenceImplementationAndStartsAtC
     EXPECT_EQ(data[1], 0U); /* 1回目の Counter は 0 */
 }
 
-TEST_F(E2EP01Test, ProtectIncrementsCounterAndWrapsAt14SkippingReservedValue15)
+TEST_F(E2EP01Test, E2E_P01Protect_OK_IncrementsCounterAndWrapsAt14SkippingReservedValue15)
 {
     E2E_P01ProtectStateType state;
     ASSERT_EQ(E2E_P01ProtectInit(&state), E2E_E_OK);
@@ -338,7 +338,7 @@ TEST_F(E2EP01Test, ProtectIncrementsCounterAndWrapsAt14SkippingReservedValue15)
     EXPECT_EQ(state.Counter, 0U); /* 次回用の内部 Counter は 15 を飛ばして 0 */
 }
 
-TEST_F(E2EP01Test, FirstCheckAfterInitReturnsInitial)
+TEST_F(E2EP01Test, E2E_P01Check_OK_FirstCheckAfterInitReturnsInitial)
 {
     E2E_P01ProtectStateType protectState;
     E2E_P01CheckStateType   checkState;
@@ -353,7 +353,7 @@ TEST_F(E2EP01Test, FirstCheckAfterInitReturnsInitial)
     EXPECT_EQ(checkState.LastValidCounter, 0U);
 }
 
-TEST_F(E2EP01Test, SecondConsecutiveFrameIsOk)
+TEST_F(E2EP01Test, E2E_P01Check_OK_SecondConsecutiveFrame)
 {
     E2E_P01ProtectStateType protectState;
     E2E_P01CheckStateType   checkState;
@@ -372,7 +372,7 @@ TEST_F(E2EP01Test, SecondConsecutiveFrameIsOk)
     EXPECT_EQ(checkState.LastValidCounter, 1U);
 }
 
-TEST_F(E2EP01Test, CrcMismatchReturnsWrongCrcAndDoesNotUpdateCounter)
+TEST_F(E2EP01Test, E2E_P01Check_NG_CrcMismatchReturnsWrongCrcAndDoesNotUpdateCounter)
 {
     E2E_P01CheckStateType checkState;
     ASSERT_EQ(E2E_P01CheckInit(&checkState), E2E_E_OK);
@@ -387,7 +387,7 @@ TEST_F(E2EP01Test, CrcMismatchReturnsWrongCrcAndDoesNotUpdateCounter)
     EXPECT_EQ(checkState.LastValidCounter, 3U); /* CRC不一致時は状態を更新しない */
 }
 
-TEST_F(E2EP01Test, CounterJumpBeyondMaxDeltaTriggersWrongSequenceThenSyncUntilRelocked)
+TEST_F(E2EP01Test, E2E_P01Check_NG_CounterJumpBeyondMaxDeltaTriggersWrongSequenceThenSyncUntilRelocked)
 {
     E2E_P01ProtectStateType protectState;
     E2E_P01CheckStateType   checkState;
@@ -423,7 +423,7 @@ TEST_F(E2EP01Test, CounterJumpBeyondMaxDeltaTriggersWrongSequenceThenSyncUntilRe
     EXPECT_EQ(checkState.Status, E2E_P01STATUS_OK);
 }
 
-TEST_F(E2EP01Test, NullPointerReturnsInputErrNullWithoutTouchingState)
+TEST_F(E2EP01Test, E2E_P01Check_NG_NullPointerReturnsInputErrNullWithoutTouchingState)
 {
     E2E_P01CheckStateType   checkState;
     E2E_P01ProtectStateType protectState;
@@ -488,7 +488,7 @@ class E2ETest : public ::testing::Test
 {
 };
 
-TEST_F(E2ETest, GetVersionInfoFillsExpectedModuleId)
+TEST_F(E2ETest, E2E_GetVersionInfo_OK_FillsExpectedModuleId)
 {
     Std_VersionInfoType info;
 
@@ -497,7 +497,7 @@ TEST_F(E2ETest, GetVersionInfoFillsExpectedModuleId)
     EXPECT_EQ(info.moduleID, E2E_MODULE_ID);
 }
 
-TEST_F(E2ETest, GetVersionInfoSilentlyIgnoresNullPointer)
+TEST_F(E2ETest, E2E_GetVersionInfo_NG_SilentlyIgnoresNullPointer)
 {
     /* [SWS_E2E_00216]: ライブラリは DET/DEM を呼んではならないため、NULL
      * でもクラッシュせず何もせず戻ることだけを確認する（報告先が無い）。

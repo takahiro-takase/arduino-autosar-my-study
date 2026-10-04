@@ -234,7 +234,7 @@ protected:
 // [0x74, 0x20, maxNumberOfBlockLengthH, maxNumberOfBlockLengthL] を返す。
 // ------------------------------------------------------------
 TEST_F(Bsw_DcmStack_SID34_RequestDownload_Test,
-       RequestDownload_OK_ValidSizeProducesMaxBlockLengthResponseOnCanHw)
+       OK_ValidSizeProducesMaxBlockLengthResponse)
 {
     /* ----------------------- */
     /* ---- 実行 (Act) ------- */
@@ -258,7 +258,7 @@ TEST_F(Bsw_DcmStack_SID34_RequestDownload_Test,
 // NG: memorySize=0 は NRC 0x31 requestOutOfRange になる。
 // ------------------------------------------------------------
 TEST_F(Bsw_DcmStack_SID34_RequestDownload_Test,
-       RequestDownload_NG_ZeroSizeReturnsRequestOutOfRangeOnCanHw)
+       NG_RequestOutOfRange_ZeroSize)
 {
     SendRequestDownload(0x10U, 0x00U);
 
@@ -274,7 +274,7 @@ TEST_F(Bsw_DcmStack_SID34_RequestDownload_Test,
 // NRC 0x22 conditionsNotCorrect になる。
 // ------------------------------------------------------------
 TEST_F(Bsw_DcmStack_SID34_RequestDownload_Test,
-       RequestDownload_NG_AlreadyDownloadingReturnsConditionsNotCorrectOnCanHw)
+       NG_ConditionsNotCorrect_AlreadyDownloading)
 {
     /* ----------------------- */
     /* ---- 準備 (Arrange) --- */
@@ -303,7 +303,7 @@ TEST_F(Bsw_DcmStack_SID34_RequestDownload_Test,
 // になる。
 // ------------------------------------------------------------
 TEST_F(Bsw_DcmStack_SID34_RequestDownload_Test,
-       RequestDownload_NG_NonRawDataFormatReturnsRequestOutOfRangeOnCanHw)
+       NG_RequestOutOfRange_NonRawDataFormat)
 {
     /* ----------------------- */
     /* ---- 準備 (Arrange) --- */

@@ -31,7 +31,7 @@ protected:
     }
 };
 
-TEST_F(DetTest, GetVersionInfoRejectsNullPointer)
+TEST_F(DetTest, Det_GetVersionInfo_NG_RejectsNullPointer)
 {
     Det_GetVersionInfo(NULL);
 
@@ -39,7 +39,7 @@ TEST_F(DetTest, GetVersionInfoRejectsNullPointer)
     EXPECT_EQ(FakeDetHw_ReportCount, 1U);
 }
 
-TEST_F(DetTest, GetVersionInfoFillsExpectedModuleId)
+TEST_F(DetTest, Det_GetVersionInfo_OK_FillsExpectedModuleId)
 {
     Std_VersionInfoType info;
 
@@ -54,14 +54,14 @@ TEST_F(DetTest, GetVersionInfoFillsExpectedModuleId)
 // 呼び出しても DET エラーを報告しないことだけを確認する）
 // ------------------------------------------------------------
 
-TEST_F(DetTest, InitDoesNotReportError)
+TEST_F(DetTest, Det_Init_OK_DoesNotReportError)
 {
     Det_Init(NULL);
 
     EXPECT_EQ(FakeDetHw_ReportCount, 0U);
 }
 
-TEST_F(DetTest, StartDoesNotReportError)
+TEST_F(DetTest, Det_Start_OK_DoesNotReportError)
 {
     Det_Start();
 
@@ -74,7 +74,7 @@ TEST_F(DetTest, StartDoesNotReportError)
 // Det_ReportError() と同じ形式で報告し常に E_OK を返すことのみ確認する）
 // ------------------------------------------------------------
 
-TEST_F(DetTest, ReportRuntimeErrorReportsAndReturnsOk)
+TEST_F(DetTest, Det_ReportRuntimeError_OK_ReportsAndReturnsOk)
 {
     Std_ReturnType ret = Det_ReportRuntimeError(50U, 0U, 0x12U, 0x34U);
 
@@ -85,7 +85,7 @@ TEST_F(DetTest, ReportRuntimeErrorReportsAndReturnsOk)
     EXPECT_EQ(FakeDetHw_LastErrorId, 0x34U);
 }
 
-TEST_F(DetTest, ReportTransientFaultReportsAndReturnsOk)
+TEST_F(DetTest, Det_ReportTransientFault_OK_ReportsAndReturnsOk)
 {
     Std_ReturnType ret = Det_ReportTransientFault(50U, 0U, 0x56U, 0x78U);
 

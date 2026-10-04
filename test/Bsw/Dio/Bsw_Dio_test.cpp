@@ -32,7 +32,7 @@ protected:
     }
 };
 
-TEST_F(DioTest, FlipChannelTogglesLowToHighAndReturnsNewLevel)
+TEST_F(DioTest, Dio_FlipChannel_OK_TogglesLowToHighAndReturnsNewLevel)
 {
     Dio_WriteChannel(kChannel, DIO_LOW);
     uint32 writeCountBefore = FakeDioHw_WriteCount;
@@ -44,7 +44,7 @@ TEST_F(DioTest, FlipChannelTogglesLowToHighAndReturnsNewLevel)
     EXPECT_EQ(FakeDioHw_WriteCount, writeCountBefore + 1U);  /* 1回だけ書き込むこと（二重書き込み回帰の検出） */
 }
 
-TEST_F(DioTest, FlipChannelTogglesHighToLowAndReturnsNewLevel)
+TEST_F(DioTest, Dio_FlipChannel_OK_TogglesHighToLowAndReturnsNewLevel)
 {
     Dio_WriteChannel(kChannel, DIO_HIGH);
 
@@ -54,7 +54,7 @@ TEST_F(DioTest, FlipChannelTogglesHighToLowAndReturnsNewLevel)
     EXPECT_EQ(Dio_ReadChannel(kChannel), DIO_LOW);
 }
 
-TEST_F(DioTest, FlipChannelCalledTwiceReturnsToOriginalLevel)
+TEST_F(DioTest, Dio_FlipChannel_OK_CalledTwiceReturnsToOriginalLevel)
 {
     Dio_WriteChannel(kChannel, DIO_LOW);
 
