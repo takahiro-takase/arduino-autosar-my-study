@@ -160,10 +160,13 @@ protected:
 TEST_F(Bsw_DcmStack_SID19_SF04_ReadDtcSnapshot_Test,
        ReadDtcSnapshot_OK_MultiFrameResponseReassemblesToExpectedPayloadOnCanHw)
 {
-    /* 準備 (Act 1): DEM_EVENT_ENGINE_OVERHEAT（limit=2、DTC=0x000101）を
-     * FAILED 確定させ FreezeFrame を記録させてから、
-     * [0x19, 0x04, 0x00,0x01,0x01, recordNumber=0x01] を 0x7E0 の受信
-     * バッファへセットする（SF: 06 19 04 00 01 01 01）。 */
+    /* ------------------------- */
+    /* ---- 準備 (Act 1) ------- */
+    /* ------------------------- */
+    // DEM_EVENT_ENGINE_OVERHEAT（limit=2、DTC=0x000101）を
+    // FAILED 確定させ FreezeFrame を記録させてから、
+    // [0x19, 0x04, 0x00,0x01,0x01, recordNumber=0x01] を 0x7E0 の受信
+    // バッファへセットする（SF: 06 19 04 00 01 01 01）。
     (void)Dem_SetEventStatus(DEM_EVENT_ENGINE_OVERHEAT, DEM_EVENT_STATUS_FAILED);
     (void)Dem_SetEventStatus(DEM_EVENT_ENGINE_OVERHEAT, DEM_EVENT_STATUS_FAILED);
 
@@ -178,8 +181,11 @@ TEST_F(Bsw_DcmStack_SID19_SF04_ReadDtcSnapshot_Test,
     FakeCanHw_RxData[6] = DCM_FREEZEFRAME_RECORD_NUMBER;
     FakeCanHw_RxPendingCount = 1U;
 
-    /* 実行 (Act 1): リクエスト受信 → Dcm 応答生成 → CanTp_Transmit(18バイト)
-     * → First Frame 送信（WAIT_FC へ遷移）まで同期的に進む。 */
+    /* ------------------------- */
+    /* ---- 実行 (Act 1) ------- */
+    /* ------------------------- */
+    // リクエスト受信 → Dcm 応答生成 → CanTp_Transmit(18バイト)
+    // → First Frame 送信（WAIT_FC へ遷移）まで同期的に進む。
     Can_MainFunction_Read();
 
     ASSERT_EQ(CallCount_CanTp_Transmit, 1U);
@@ -198,8 +204,11 @@ TEST_F(Bsw_DcmStack_SID19_SF04_ReadDtcSnapshot_Test,
     for (uint8 i = 0U; i < 6U; i++)
         reassembled[pos++] = FakeCanHw_LastSendData[2U + i];
 
-    /* 準備 (Arrange 2): テスター役として Flow Control（CTS, BS=0, STmin=0）を
-     * 0x7E0 から追加で受信させる。 */
+    /* ------------------------- */
+    /* ---- 準備 (Arrange 2) --- */
+    /* ------------------------- */
+    // テスター役として Flow Control（CTS, BS=0, STmin=0）を
+    // 0x7E0 から追加で受信させる。
     FakeCanHw_RxId  = 0x7E0U;
     FakeCanHw_RxDlc = 8U;
     FakeCanHw_RxData[0] = 0x30U;
@@ -209,12 +218,17 @@ TEST_F(Bsw_DcmStack_SID19_SF04_ReadDtcSnapshot_Test,
         FakeCanHw_RxData[i] = 0U;
     FakeCanHw_RxPendingCount = 1U;
 
-    /* 実行 (Act 2) */
+    /* ------------------------- */
+    /* ---- 実行 (Act 2) ------- */
+    /* ------------------------- */
     Can_MainFunction_Read();
     ASSERT_EQ(FakeCanHw_SendCount, 1U);  // FC 受信自体は Can_Hw への送信を生まない
 
-    /* 実行 (Act 3): 残り12バイトは Consecutive Frame 2本（7+5バイト）で
-     * 運びきれる（ceil((18-6)/7)=2）。 */
+    /* ------------------------- */
+    /* ---- 実行 (Act 3) ------- */
+    /* ------------------------- */
+    // 残り12バイトは Consecutive Frame 2本（7+5バイト）で
+    // 運びきれる（ceil((18-6)/7)=2）。
     for (uint8 cf = 0U; cf < 2U; cf++)
     {
         CanTp_MainFunction();
@@ -231,9 +245,12 @@ TEST_F(Bsw_DcmStack_SID19_SF04_ReadDtcSnapshot_Test,
             reassembled[pos++] = FakeCanHw_LastSendData[1U + i];
     }
 
-    /* 評価 (Assert): CanTp が IDLE へ戻り、CAN フレームへ分割・送出された
-     * 内容を結合すると Dcm が生成した元の18バイト UDS ペイロードと完全
-     * 一致すること。 */
+    /* ------------------------- */
+    /* ---- 評価 (Assert) ------ */
+    /* ------------------------- */
+    // CanTp が IDLE へ戻り、CAN フレームへ分割・送出された
+    // 内容を結合すると Dcm が生成した元の18バイト UDS ペイロードと完全
+    // 一致すること。
     ASSERT_EQ(pos, 18U);
     EXPECT_EQ(FakeCanHw_SendCount, 3U);  // FF 1 + CF 2
     EXPECT_EQ(CanTp_IsTxBusy(), (boolean)0U);
@@ -254,9 +271,12 @@ TEST_F(Bsw_DcmStack_SID19_SF04_ReadDtcSnapshot_Test,
 TEST_F(Bsw_DcmStack_SID19_SF04_ReadDtcSnapshot_Test,
        ReadDtcSnapshot_OK_RecordNumber0xFFAliasReturnsSameMultiFrameResponseOnCanHw)
 {
-    /* 準備 (Act 1): DEM_EVENT_ENGINE_OVERHEAT を FAILED 確定させ FreezeFrame
-     * を記録させてから、recordNumber=0xFF ([0x19, 0x04, 0x00,0x01,0x01, 0xFF])
-     * を 0x7E0 の受信バッファへセットする（SF: 06 19 04 00 01 01 FF）。 */
+    /* ------------------------- */
+    /* ---- 準備 (Act 1) ------- */
+    /* ------------------------- */
+    // DEM_EVENT_ENGINE_OVERHEAT を FAILED 確定させ FreezeFrame
+    // を記録させてから、recordNumber=0xFF ([0x19, 0x04, 0x00,0x01,0x01, 0xFF])
+    // を 0x7E0 の受信バッファへセットする（SF: 06 19 04 00 01 01 FF）。
     (void)Dem_SetEventStatus(DEM_EVENT_ENGINE_OVERHEAT, DEM_EVENT_STATUS_FAILED);
     (void)Dem_SetEventStatus(DEM_EVENT_ENGINE_OVERHEAT, DEM_EVENT_STATUS_FAILED);
 
@@ -271,11 +291,16 @@ TEST_F(Bsw_DcmStack_SID19_SF04_ReadDtcSnapshot_Test,
     FakeCanHw_RxData[6] = DCM_RECORD_NUMBER_ALL;
     FakeCanHw_RxPendingCount = 1U;
 
-    /* 実行 (Act 1) */
+    /* ------------------------- */
+    /* ---- 実行 (Act 1) ------- */
+    /* ------------------------- */
     Can_MainFunction_Read();
 
-    /* 評価 (Assert 1): 応答の recordNumber フィールド（LastData_CanTp_Transmit[6]）
-     * が要求値0xFFではなく実レコード番号0x01であること。 */
+    /* ------------------------- */
+    /* ---- 評価 (Assert 1) ---- */
+    /* ------------------------- */
+    // 応答の recordNumber フィールド（LastData_CanTp_Transmit[6]）
+    // が要求値0xFFではなく実レコード番号0x01であること。
     ASSERT_EQ(CallCount_CanTp_Transmit, 1U);
     ASSERT_EQ(LastLength_CanTp_Transmit, 18U);
     EXPECT_EQ(LastData_CanTp_Transmit[0], 0x59U);
@@ -292,8 +317,11 @@ TEST_F(Bsw_DcmStack_SID19_SF04_ReadDtcSnapshot_Test,
     for (uint8 i = 0U; i < 6U; i++)
         reassembled[pos++] = FakeCanHw_LastSendData[2U + i];
 
-    /* 準備 (Arrange 2): テスター役として Flow Control（CTS, BS=0, STmin=0）を
-     * 0x7E0 から追加で受信させる。 */
+    /* ------------------------- */
+    /* ---- 準備 (Arrange 2) --- */
+    /* ------------------------- */
+    // テスター役として Flow Control（CTS, BS=0, STmin=0）を
+    // 0x7E0 から追加で受信させる。
     FakeCanHw_RxId  = 0x7E0U;
     FakeCanHw_RxDlc = 8U;
     FakeCanHw_RxData[0] = 0x30U;
@@ -303,11 +331,15 @@ TEST_F(Bsw_DcmStack_SID19_SF04_ReadDtcSnapshot_Test,
         FakeCanHw_RxData[i] = 0U;
     FakeCanHw_RxPendingCount = 1U;
 
-    /* 実行 (Act 2) */
+    /* ------------------------- */
+    /* ---- 実行 (Act 2) ------- */
+    /* ------------------------- */
     Can_MainFunction_Read();
     ASSERT_EQ(FakeCanHw_SendCount, 1U);  // FC 受信自体は Can_Hw への送信を生まない
 
-    /* 実行 (Act 3) */
+    /* ------------------------- */
+    /* ---- 実行 (Act 3) ------- */
+    /* ------------------------- */
     for (uint8 cf = 0U; cf < 2U; cf++)
     {
         CanTp_MainFunction();
@@ -324,9 +356,12 @@ TEST_F(Bsw_DcmStack_SID19_SF04_ReadDtcSnapshot_Test,
             reassembled[pos++] = FakeCanHw_LastSendData[1U + i];
     }
 
-    /* 評価 (Assert 2): CanTp が IDLE へ戻り、CAN フレームへ分割・送出された
-     * 内容を結合すると Dcm が生成した元の18バイト UDS ペイロード（実レコード
-     * 番号0x01を含む）と完全一致すること。 */
+    /* ------------------------- */
+    /* ---- 評価 (Assert 2) ---- */
+    /* ------------------------- */
+    // CanTp が IDLE へ戻り、CAN フレームへ分割・送出された
+    // 内容を結合すると Dcm が生成した元の18バイト UDS ペイロード（実レコード
+    // 番号0x01を含む）と完全一致すること。
     ASSERT_EQ(pos, 18U);
     EXPECT_EQ(FakeCanHw_SendCount, 3U);  // FF 1 + CF 2
     EXPECT_EQ(CanTp_IsTxBusy(), (boolean)0U);
@@ -345,8 +380,11 @@ TEST_F(Bsw_DcmStack_SID19_SF04_ReadDtcSnapshot_Test,
 TEST_F(Bsw_DcmStack_SID19_SF04_ReadDtcSnapshot_Test,
        ReadDtcSnapshot_NG_TooShortRequestProducesIncorrectMessageLengthResponseOnCanHw)
 {
-    /* 準備 (Arrange): DTC/recordNumber が揃わない [0x19, 0x04, 0x00, 0x01]
-     * を 0x7E0 の受信バッファへセットする（SF: 04 19 04 00 01）。 */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // DTC/recordNumber が揃わない [0x19, 0x04, 0x00, 0x01]
+    // を 0x7E0 の受信バッファへセットする（SF: 04 19 04 00 01）。
     FakeCanHw_RxId  = 0x7E0U;
     FakeCanHw_RxDlc = 8U;
     FakeCanHw_RxData[0] = 4U;
@@ -356,10 +394,15 @@ TEST_F(Bsw_DcmStack_SID19_SF04_ReadDtcSnapshot_Test,
     FakeCanHw_RxData[4] = 0x01U;
     FakeCanHw_RxPendingCount = 1U;
 
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Can_MainFunction_Read();
 
-    /* 評価 (Assert): 否定応答 [0x7F, 0x19, 0x13] が Can_Hw まで到達すること。 */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // 否定応答 [0x7F, 0x19, 0x13] が Can_Hw まで到達すること。
     ASSERT_EQ(FakeCanHw_SendCount, 1U);
     EXPECT_EQ(FakeCanHw_LastSendId, 0x7E8U);
     EXPECT_EQ(FakeCanHw_LastSendDlc, 8U);
@@ -377,9 +420,12 @@ TEST_F(Bsw_DcmStack_SID19_SF04_ReadDtcSnapshot_Test,
 TEST_F(Bsw_DcmStack_SID19_SF04_ReadDtcSnapshot_Test,
        ReadDtcSnapshot_NG_NeverFailedDtcProducesRequestOutOfRangeResponseOnCanHw)
 {
-    /* 準備 (Arrange): FreezeFrame 未記録のまま
-     * [0x19, 0x04, 0x00,0x01,0x01, recordNumber=0x01] を 0x7E0 の受信
-     * バッファへセットする（SF: 06 19 04 00 01 01 01）。 */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // FreezeFrame 未記録のまま
+    // [0x19, 0x04, 0x00,0x01,0x01, recordNumber=0x01] を 0x7E0 の受信
+    // バッファへセットする（SF: 06 19 04 00 01 01 01）。
     FakeCanHw_RxId  = 0x7E0U;
     FakeCanHw_RxDlc = 8U;
     FakeCanHw_RxData[0] = 6U;
@@ -391,10 +437,15 @@ TEST_F(Bsw_DcmStack_SID19_SF04_ReadDtcSnapshot_Test,
     FakeCanHw_RxData[6] = DCM_FREEZEFRAME_RECORD_NUMBER;
     FakeCanHw_RxPendingCount = 1U;
 
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Can_MainFunction_Read();
 
-    /* 評価 (Assert): 否定応答 [0x7F, 0x19, 0x31] が Can_Hw まで到達すること。 */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // 否定応答 [0x7F, 0x19, 0x31] が Can_Hw まで到達すること。
     ASSERT_EQ(FakeCanHw_SendCount, 1U);
     EXPECT_EQ(FakeCanHw_LastSendId, 0x7E8U);
     EXPECT_EQ(FakeCanHw_LastSendDlc, 8U);

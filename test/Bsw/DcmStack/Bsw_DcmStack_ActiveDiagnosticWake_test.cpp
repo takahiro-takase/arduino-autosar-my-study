@@ -220,14 +220,22 @@ protected:
 TEST_F(Bsw_DcmStack_ActiveDiagnosticWake_Test,
        Dcm_ComIndication_OK_DefaultSessionRequestDuringSilentComWakesChannelAndResponds)
 {
-    /* 準備 (Arrange) */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     DriveToSilentCom();
     FakeCanHw_Reset();
 
-    /* 実行 (Act): [0x3E, 0x00] TesterPresent（デフォルトセッションで許可）。 */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    // [0x3E, 0x00] TesterPresent（デフォルトセッションで許可）。
     ReceiveRequest(DCM_SID_TESTER_PRESENT, 0x00U);
 
-    /* 評価 (Assert): チャネルが FULL_COM へ復帰していること。 */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // チャネルが FULL_COM へ復帰していること。
     ComM_ModeType comMode = COMM_NO_COMMUNICATION;
     ASSERT_EQ(ComM_GetCurrentComMode(COMM_USER_0, &comMode), E_OK);
     EXPECT_EQ(comMode, static_cast<ComM_ModeType>(COMM_FULL_COMMUNICATION));
@@ -247,10 +255,14 @@ TEST_F(Bsw_DcmStack_ActiveDiagnosticWake_Test,
 TEST_F(Bsw_DcmStack_ActiveDiagnosticWake_Test,
        Dcm_ComIndication_OK_DefaultSessionRequestNotifiesActiveThenInactive)
 {
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     ReceiveRequest(DCM_SID_TESTER_PRESENT, 0x00U);
 
-    /* 評価 (Assert) */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(CallCount_ComM_DCM_ActiveDiagnostic, 1U);
     EXPECT_EQ(CallCount_ComM_DCM_InactiveDiagnostic, 1U);
 
@@ -270,10 +282,15 @@ TEST_F(Bsw_DcmStack_ActiveDiagnosticWake_Test,
 TEST_F(Bsw_DcmStack_ActiveDiagnosticWake_Test,
        Dcm_ComIndication_OK_ExtendedSessionKeepsDiagnosticActive)
 {
-    /* 実行 (Act): [0x10, 0x03] extendedDiagnosticSession。 */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    // [0x10, 0x03] extendedDiagnosticSession。
     ReceiveRequest(DCM_SID_SESSION_CTRL, DCM_SESSION_EXTENDED);
 
-    /* 評価 (Assert) */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_GE(CallCount_ComM_DCM_ActiveDiagnostic, 2U);
     EXPECT_EQ(CallCount_ComM_DCM_InactiveDiagnostic, 0U);
 

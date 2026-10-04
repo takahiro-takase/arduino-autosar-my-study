@@ -414,7 +414,7 @@ Com_MainFunctionTx() の dispatch 時点で行う理由**: [SWS_Com_00305] の�
    （経過時間が常に 0）ケースしか検証していなかったため検出できませんでした。
    **対応**: デクリメント条件を `repeatDue && !changeDue`（純粋に再送だけが
    理由で dispatch した場合に限る）へ変更。回帰テスト
-   `RepetitionSequence_OK_InitialSendDoesNotConsumeRepeatBudgetEvenWhenElapsedAlreadyExceedsPeriod`
+   `Bsw_ComStack_Signal_Tx_Repetition_Test.OK_InitialSendDoesNotConsumeRepeatBudgetEvenWhenElapsedAlreadyExceedsPeriod`
    を追加。
 2. **CommunicationControl 無効中に残り回数を空費する**: `Com_TxLastSentMs`
    の更新は `Com_TxEnabled==0` でも行われる（既存の SWS_Com_00777 対応と
@@ -427,7 +427,7 @@ Com_MainFunctionTx() の dispatch 時点で行う理由**: [SWS_Com_00305] の�
    しまっては本末転倒です。**対応**: デクリメントを `Com_TxEnabled==0` の
    早期 `continue` より後（＝実際に `Com_DoTransmit()` を呼ぶ直前）へ移動。
    回帰テスト
-   `RepetitionSequence_OK_DoesNotConsumeBudgetWhileCommunicationControlDisabled`
+   `Bsw_ComStack_Signal_Tx_Repetition_Test.OK_DoesNotConsumeBudgetWhileCommunicationControlDisabled`
    を追加。
 
 上記2件はどちらも `Com_TxRepeatsRemaining[]` を「いつ減らすか」の条件だけの
@@ -1258,10 +1258,10 @@ Rte_COMCbkInv_CoolantTemp()  ← EngineInfo.CoolantTemp=0xFF 検知時
 Group である `WarningStatus` に `ComSignalDataInvalidValue` を設定した
 シグナルが無いため）で、ユニットテストのみで検証しています。回帰テストは
 `test/Bsw/ComStack/Bsw_ComStack_Signal_Tx_test.cpp` / `Bsw_ComStack_SignalGroup_Tx_test.cpp` の
-`InvalidateSignal_OK_WritesConfiguredInvalidValueToBuffer`/
-`InvalidateSignal_NG_UnconfiguredInvalidValueReturnsServiceNotAvailableWithoutWriting`/
-`InvalidateSignal_NG_UnknownSignalIdReturnsError`/
-`InvalidateSignal_NG_RxSignalReturnsErrorWithoutReachingSendSignal`/
+`Bsw_ComStack_Signal_Tx_InvalidateSignal_Test.OK`/
+`Bsw_ComStack_Signal_Tx_InvalidateSignal_Test.NG_Step01_ComInvalidateSignal_UnconfiguredInvalidValue`/
+`Bsw_ComStack_Signal_Tx_InvalidateSignal_Test.NG_Step01_ComInvalidateSignal_UnknownSignalId`/
+`Bsw_ComStack_Signal_Tx_InvalidateSignal_Test.NG_Step01_ComInvalidateSignal_RxSignal`/
 `InvalidateSignalGroup_OK_WritesMemberInvalidValueAndCommitsToBuffer`/
 `InvalidateSignalGroup_NG_AnyMemberUnconfiguredReturnsServiceNotAvailableWithoutPartialCommit`
 参照。
@@ -1877,7 +1877,7 @@ SecOC 鍵付き `ImmobilizerCmd=UNLOCK(0x01)` を送ると、ログで
 無く、正規の SecOC 鍵で `0x00`/`0x01` 以外の値を意図的に送る手段が
 `uds_tester` 側に無いため）。回帰テスト
 （`test/Bsw/ComStack/Bsw_ComStack_Signal_Tx_test.cpp` の
-`TxIpduCallout_NG_RejectedDiscardsTransmission`）でのみ
+`Bsw_ComStack_Signal_Tx_TxIpduCallout_Test.NG_Step02_ComTxIpduCallout_Rejected`）でのみ
 検証済みです。
 
 **既知の制約: 拒否が続くと最終的に静かになる（/code-review で指摘）**:

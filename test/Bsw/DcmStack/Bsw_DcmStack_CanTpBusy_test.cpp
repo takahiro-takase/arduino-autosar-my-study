@@ -251,17 +251,26 @@ protected:
 TEST_F(Bsw_DcmStack_CanTpBusy_Test,
        S3Timer_OK_DoesNotTimeOutWhileCanTpReallyBusyWithInFlightMultiFrameTransfer)
 {
-    /* 準備 (Arrange): SID 0x19/0x0A を送らせ、First Frame 送信直後（CanTp
-     * が本当にビジー）の状態を作る。 */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // SID 0x19/0x0A を送らせ、First Frame 送信直後（CanTp
+    // が本当にビジー）の状態を作る。
     StartRealMultiFrameTransferAndLeaveCanTpBusy();
 
-    /* 実行 (Act): CanTp が本当にビジーなまま S3 タイムアウト相当の時間が
-     * 経過しても、[SWS_Dcm_00141] によりタイマは進まないはず。 */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    // CanTp が本当にビジーなまま S3 タイムアウト相当の時間が
+    // 経過しても、[SWS_Dcm_00141] によりタイマは進まないはず。
     FakeMillis_Value += DCM_S3_TIMEOUT_MS + 1UL;
     Dcm_MainFunction();
 
-    /* 評価 (Assert): defaultSession へ落ちていないこと（実体の
-     * CanTp_IsTxBusy() から正しく通知を受け取れている傍証）。 */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // defaultSession へ落ちていないこと（実体の
+    // CanTp_IsTxBusy() から正しく通知を受け取れている傍証）。
     Dcm_SesCtrlType session = 0U;
     ASSERT_EQ(Dcm_GetSesCtrlType(&session), E_OK);
     EXPECT_EQ(session, DCM_SESSION_EXTENDED);
@@ -275,21 +284,30 @@ TEST_F(Bsw_DcmStack_CanTpBusy_Test,
 TEST_F(Bsw_DcmStack_CanTpBusy_Test,
        S3Timer_OK_TimesOutNormallyOnceCanTpReallyIdleAgain)
 {
-    /* 準備 (Arrange): ビジー中はタイムアウトしないことを確認しつつ
-     * （前のテストと同じ前提）、マルチフレーム送信を最後まで完了させて
-     * CanTp を本当に IDLE へ戻す。 */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // ビジー中はタイムアウトしないことを確認しつつ
+    // （前のテストと同じ前提）、マルチフレーム送信を最後まで完了させて
+    // CanTp を本当に IDLE へ戻す。
     StartRealMultiFrameTransferAndLeaveCanTpBusy();
     FakeMillis_Value += DCM_S3_TIMEOUT_MS + 1UL;
     Dcm_MainFunction();
     FinishRealMultiFrameTransfer();
 
-    /* 実行 (Act): CanTp が本当に IDLE へ戻った後、改めて S3 タイムアウト分の
-     * 時間を経過させる。 */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    // CanTp が本当に IDLE へ戻った後、改めて S3 タイムアウト分の
+    // 時間を経過させる。
     Dcm_MainFunction();
     FakeMillis_Value += DCM_S3_TIMEOUT_MS + 1UL;
     Dcm_MainFunction();
 
-    /* 評価 (Assert): 通常通り defaultSession へ落ちていること。 */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // 通常通り defaultSession へ落ちていること。
     Dcm_SesCtrlType session = 0U;
     ASSERT_EQ(Dcm_GetSesCtrlType(&session), E_OK);
     EXPECT_EQ(session, DCM_SESSION_DEFAULT);
@@ -302,13 +320,19 @@ TEST_F(Bsw_DcmStack_CanTpBusy_Test,
 TEST_F(Bsw_DcmStack_CanTpBusy_Test,
        ComIndication_NG_IgnoresNewRequestWhileCanTpReallyBusyWithInFlightMultiFrameTransfer)
 {
-    /* 準備 (Arrange): SID 0x19/0x0A を送らせ、First Frame 送信直後（CanTp
-     * が本当にビジー）の状態を作る。 */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // SID 0x19/0x0A を送らせ、First Frame 送信直後（CanTp
+    // が本当にビジー）の状態を作る。
     StartRealMultiFrameTransferAndLeaveCanTpBusy();
     ASSERT_EQ(CallCount_CanTp_Transmit, 1U);
 
-    /* 実行 (Act): CanTp が本当にビジーなまま、TesterPresent（副作用の無い
-     * 単純なSID）[0x3E, 0x00] を追加で受信させる。 */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    // CanTp が本当にビジーなまま、TesterPresent（副作用の無い
+    // 単純なSID）[0x3E, 0x00] を追加で受信させる。
     FakeCanHw_RxId  = 0x7E0U;
     FakeCanHw_RxDlc = 8U;
     FakeCanHw_RxData[0] = 2U;
@@ -319,9 +343,12 @@ TEST_F(Bsw_DcmStack_CanTpBusy_Test,
     FakeCanHw_RxPendingCount = 1U;
     Can_MainFunction_Read();
 
-    /* 評価 (Assert): [SWS_Dcm_00557] ディスパッチ自体が行われず、新たな
-     * 送信も一切発生しないこと（CanTp_Transmit() 呼び出し回数・Can_Hw への
-     * 送信回数とも進行中の FF 送信1回のまま変化しない）。 */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // [SWS_Dcm_00557] ディスパッチ自体が行われず、新たな
+    // 送信も一切発生しないこと（CanTp_Transmit() 呼び出し回数・Can_Hw への
+    // 送信回数とも進行中の FF 送信1回のまま変化しない）。
     EXPECT_EQ(CallCount_CanTp_Transmit, 1U);
     EXPECT_EQ(FakeCanHw_SendCount, 1U);
 
@@ -332,8 +359,11 @@ TEST_F(Bsw_DcmStack_CanTpBusy_Test,
 TEST_F(Bsw_DcmStack_CanTpBusy_Test,
        ComIndication_OK_ProcessesRequestOnceCanTpReallyIdleAgainOnCanHw)
 {
-    /* 準備 (Arrange): ビジー中に届いた要求は無視されることを確認した後、
-     * マルチフレーム送信を完了させて CanTp を本当に IDLE へ戻す。 */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // ビジー中に届いた要求は無視されることを確認した後、
+    // マルチフレーム送信を完了させて CanTp を本当に IDLE へ戻す。
     StartRealMultiFrameTransferAndLeaveCanTpBusy();
 
     FakeCanHw_RxId  = 0x7E0U;
@@ -350,7 +380,10 @@ TEST_F(Bsw_DcmStack_CanTpBusy_Test,
     FinishRealMultiFrameTransfer();
     FakeCanHw_Reset();  // 後続の送信結果を素直に見るためリセット
 
-    /* 実行 (Act): CanTp TX がアイドルへ戻った後、同じ要求を再送する。 */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    // CanTp TX がアイドルへ戻った後、同じ要求を再送する。
     FakeCanHw_RxId  = 0x7E0U;
     FakeCanHw_RxDlc = 8U;
     FakeCanHw_RxData[0] = 2U;
@@ -361,7 +394,10 @@ TEST_F(Bsw_DcmStack_CanTpBusy_Test,
     FakeCanHw_RxPendingCount = 1U;
     Can_MainFunction_Read();
 
-    /* 評価 (Assert): 通常通り正応答 [0x7E, 0x00] が Can_Hw まで到達すること。 */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // 通常通り正応答 [0x7E, 0x00] が Can_Hw まで到達すること。
     ASSERT_EQ(FakeCanHw_SendCount, 1U);
     EXPECT_EQ(FakeCanHw_LastSendId, 0x7E8U);
     EXPECT_EQ(FakeCanHw_LastSendData[0], 0x02U);  // SF PCI（UDSペイロード長=2）

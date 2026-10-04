@@ -184,14 +184,21 @@ protected:
 // ------------------------------------------------------------
 TEST_F(Bsw_CanSM_BusOffRecovery_Test, MainFunction_NG_RecoveryAttemptFails_StaysInBusOffForNextRetry)
 {
-    /* 準備 (Arrange) */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     ArrangeBusOffPastL1Interval();
     FailFromCallCount_CanIf_SetControllerMode = 1U;
 
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     CanSM_MainFunction();
 
-    /* 評価 (Assert): 回復を試みたが失敗 → BUS_OFF のまま */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // 回復を試みたが失敗 → BUS_OFF のまま
     EXPECT_EQ(CallCount_CanIf_SetControllerMode, 1U);
     EXPECT_EQ(Can_Test_GetControllerState(), CAN_CS_STOPPED);
     ComM_ModeType mode = COMM_FULL_COMMUNICATION;
@@ -206,7 +213,10 @@ TEST_F(Bsw_CanSM_BusOffRecovery_Test, MainFunction_NG_RecoveryAttemptFails_Stays
 // ------------------------------------------------------------
 TEST_F(Bsw_CanSM_BusOffRecovery_Test, MainFunction_OK_DoesNotRetryImmediatelyAfterFailedAttempt)
 {
-    /* 準備 (Arrange): 1 回目は失敗させ、BUS_OFF のまま据え置かれた状態にする */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // 1 回目は失敗させ、BUS_OFF のまま据え置かれた状態にする
     ArrangeBusOffPastL1Interval();
     FailFromCallCount_CanIf_SetControllerMode = 1U;
     CanSM_MainFunction();
@@ -214,12 +224,18 @@ TEST_F(Bsw_CanSM_BusOffRecovery_Test, MainFunction_OK_DoesNotRetryImmediatelyAft
     ASSERT_EQ(CallCount_CanIf_SetControllerMode, 1U);
     FailFromCallCount_CanIf_SetControllerMode = WRAP_CANIF_FAIL_FROM_CALL_COUNT_DISABLED;  // 以降はパススルー（実体成功）
 
-    /* 実行 (Act): FakeMillis_Value を進めずに（＝L1 周期未経過のまま）
-     * 呼ぶ。是正前はここで即座に2回目の試行が発生していた
-     * （ファイル冒頭コメント参照）。 */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    // FakeMillis_Value を進めずに（＝L1 周期未経過のまま）
+    // 呼ぶ。是正前はここで即座に2回目の試行が発生していた
+    // （ファイル冒頭コメント参照）。
     CanSM_MainFunction();
 
-    /* 評価 (Assert): 再試行は発生せず（呼び出し回数据え置き）、BUS_OFF のまま */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // 再試行は発生せず（呼び出し回数据え置き）、BUS_OFF のまま
     EXPECT_EQ(CallCount_CanIf_SetControllerMode, 1U);
     EXPECT_EQ(Can_Test_GetControllerState(), CAN_CS_STOPPED);
 }
@@ -230,19 +246,28 @@ TEST_F(Bsw_CanSM_BusOffRecovery_Test, MainFunction_OK_DoesNotRetryImmediatelyAft
 // ------------------------------------------------------------
 TEST_F(Bsw_CanSM_BusOffRecovery_Test, MainFunction_OK_RecoversOnNextAttemptAfterPriorFailure)
 {
-    /* 準備 (Arrange): 1 回目は失敗させ、BUS_OFF のまま据え置かれた状態にする */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // 1 回目は失敗させ、BUS_OFF のまま据え置かれた状態にする
     ArrangeBusOffPastL1Interval();
     FailFromCallCount_CanIf_SetControllerMode = 1U;
     CanSM_MainFunction();
     ASSERT_EQ(Can_Test_GetControllerState(), CAN_CS_STOPPED);
     FailFromCallCount_CanIf_SetControllerMode = WRAP_CANIF_FAIL_FROM_CALL_COUNT_DISABLED;  // 以降はパススルー（実体成功）
 
-    /* 実行 (Act): 是正後は失敗した試行の時刻が基準点として更新されるため、
-     * 次の試行にも改めて L1 周期分の経過が必要。 */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    // 是正後は失敗した試行の時刻が基準点として更新されるため、
+    // 次の試行にも改めて L1 周期分の経過が必要。
     FakeMillis_Value += static_cast<unsigned long>(CANSM_BUSOFF_RECOVERY_L1_MS) + 1UL;
     CanSM_MainFunction();
 
-    /* 評価 (Assert): FULL_COM へ回復し、Dem へ PASSED を報告する */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // FULL_COM へ回復し、Dem へ PASSED を報告する
     EXPECT_EQ(Can_Test_GetControllerState(), CAN_CS_STARTED);
     ComM_ModeType mode = COMM_NO_COMMUNICATION;
     ASSERT_EQ(ComM_GetCurrentComMode(COMM_USER_0, &mode), E_OK);

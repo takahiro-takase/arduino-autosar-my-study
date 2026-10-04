@@ -86,10 +86,13 @@ protected:
 // ------------------------------------------------------------
 TEST_F(Bsw_E2EXf_SMCheckFailure_Test, Inv_EngineInfo_OK_ValidFrameReportsPassedViaDem)
 {
-    /* 準備 (Arrange): E2E_SMCheck() の状態機械は1回目の呼び出しで
-     * NODATA→INITに遷移するだけでカウントを取らず(E2E.c参照)、2回目以降
-     * ようやくOkCountを積み上げる。MinOkStateInit=2に達するには3回連続の
-     * 正常フレームが要る。 */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // E2E_SMCheck() の状態機械は1回目の呼び出しで
+    // NODATA→INITに遷移するだけでカウントを取らず(E2E.c参照)、2回目以降
+    // ようやくOkCountを積み上げる。MinOkStateInit=2に達するには3回連続の
+    // 正常フレームが要る。
     uint8 buf1[7] = { 0U };
     uint8 buf2[7] = { 0U };
     uint8 buf3[7] = { 0U };
@@ -99,7 +102,9 @@ TEST_F(Bsw_E2EXf_SMCheckFailure_Test, Inv_EngineInfo_OK_ValidFrameReportsPassedV
     BuildFrame(buf2, &refState);
     BuildFrame(buf3, &refState);
 
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     E2E_P05StatusType checkStatus = E2E_P05STATUS_ERROR;
     uint32 bufferLength;
     (void)E2EXf_Inv_EngineInfo(buf1, &bufferLength, NULL, 0U, &checkStatus);
@@ -107,7 +112,9 @@ TEST_F(Bsw_E2EXf_SMCheckFailure_Test, Inv_EngineInfo_OK_ValidFrameReportsPassedV
     const uint8 ret =
         E2EXf_Inv_EngineInfo(buf3, &bufferLength, NULL, 0U, &checkStatus);
 
-    /* 評価 (Assert) */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_OK);
     EXPECT_EQ(checkStatus, E2E_P05STATUS_OK);
     EXPECT_EQ(CallCount_E2E_SMCheck, 3U);
@@ -125,8 +132,11 @@ TEST_F(Bsw_E2EXf_SMCheckFailure_Test, Inv_EngineInfo_OK_ValidFrameReportsPassedV
 // ------------------------------------------------------------
 TEST_F(Bsw_E2EXf_SMCheckFailure_Test, Inv_EngineInfo_NG_SMCheckFailureReturnsSafetySoftRuntimeErrorAndSkipsDemReport)
 {
-    /* 準備 (Arrange): CRC/Counter は正しいフレームを用意した上で、
-     * E2E_SMCheck() だけを強制失敗させる。 */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // CRC/Counter は正しいフレームを用意した上で、
+    // E2E_SMCheck() だけを強制失敗させる。
     uint8 buf[7] = { 0U };
     E2E_P05ProtectStateType refState;
     E2E_P05ProtectInit(&refState);
@@ -135,19 +145,24 @@ TEST_F(Bsw_E2EXf_SMCheckFailure_Test, Inv_EngineInfo_NG_SMCheckFailureReturnsSaf
     FailFromCallCount_E2E_SMCheck    = 1U;
     ForcedReturn_E2E_SMCheck = E2E_E_WRONGSTATE;
 
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     E2E_P05StatusType checkStatus = E2E_P05STATUS_ERROR;
     uint32 bufferLength;
     const uint8 ret =
         E2EXf_Inv_EngineInfo(buf, &bufferLength, NULL, 0U, &checkStatus);
 
-    /* 評価 (Assert): [SWS_E2EXf_00027] 準拠で戻り値は
-     * E_SAFETY_SOFT_RUNTIMEERROR（2026-09 追加、以前は誤って通常の
-     * E_OK/E_NOT_OK を返していた）。CheckStatus は E2E_SMCheck() の前に
-     * 確定済みのため正常系と変わらない（E2EXf.c のコメント「フレームが
-     * 使えるかの判定は Dem 報告方針とは別物」参照）。Dem への報告はゼロ件の
-     * まま（E2EXf_ReportSMVerdict() が SMCheck 失敗を検知して return する
-     * ため）。 */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // [SWS_E2EXf_00027] 準拠で戻り値は
+    // E_SAFETY_SOFT_RUNTIMEERROR（2026-09 追加、以前は誤って通常の
+    // E_OK/E_NOT_OK を返していた）。CheckStatus は E2E_SMCheck() の前に
+    // 確定済みのため正常系と変わらない（E2EXf.c のコメント「フレームが
+    // 使えるかの判定は Dem 報告方針とは別物」参照）。Dem への報告はゼロ件の
+    // まま（E2EXf_ReportSMVerdict() が SMCheck 失敗を検知して return する
+    // ため）。
     EXPECT_EQ(ret, E_SAFETY_SOFT_RUNTIMEERROR);
     EXPECT_EQ(checkStatus, E2E_P05STATUS_OK);
     EXPECT_EQ(CallCount_E2E_SMCheck, 1U);
@@ -160,12 +175,15 @@ TEST_F(Bsw_E2EXf_SMCheckFailure_Test, Inv_EngineInfo_NG_SMCheckFailureReturnsSaf
 // ------------------------------------------------------------
 TEST_F(Bsw_E2EXf_SMCheckFailure_Test, Inv_EngineInfo_OK_ResumesReportingAfterSMCheckRecovers)
 {
-    /* 準備 (Arrange): 1回目は SMCheck を強制失敗させる。この間 E2E_SMCheck()
-     * の実体は一切呼ばれない（wrap がパススルーせず即座に戻り値を返す
-     * ため）ので、実ステートマシンは NODATA のまま進んでいない。以降の
-     * 3フレームは通常通り実体を通し、上のテストと同じ理由で3回連続の
-     * 正常フレームが必要（NODATA→INITへの遷移だけの1回目、OkCount 1回目・
-     * 2回目でようやくVALIDへ）。 */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // 1回目は SMCheck を強制失敗させる。この間 E2E_SMCheck()
+    // の実体は一切呼ばれない（wrap がパススルーせず即座に戻り値を返す
+    // ため）ので、実ステートマシンは NODATA のまま進んでいない。以降の
+    // 3フレームは通常通り実体を通し、上のテストと同じ理由で3回連続の
+    // 正常フレームが必要（NODATA→INITへの遷移だけの1回目、OkCount 1回目・
+    // 2回目でようやくVALIDへ）。
     uint8 buf1[7] = { 0U };
     uint8 buf2[7] = { 0U };
     uint8 buf3[7] = { 0U };
@@ -184,13 +202,18 @@ TEST_F(Bsw_E2EXf_SMCheckFailure_Test, Inv_EngineInfo_OK_ResumesReportingAfterSMC
     ASSERT_EQ(CallCount_Dem_SetEventStatus, 0U);
     FailFromCallCount_E2E_SMCheck = WRAP_E2E_FAIL_FROM_CALL_COUNT_DISABLED;  // 以降はパススルー（実体成功）
 
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     (void)E2EXf_Inv_EngineInfo(buf2, &bufferLength, NULL, 0U, &checkStatus);
     (void)E2EXf_Inv_EngineInfo(buf3, &bufferLength, NULL, 0U, &checkStatus);
     (void)E2EXf_Inv_EngineInfo(buf4, &bufferLength, NULL, 0U, &checkStatus);
 
-    /* 評価 (Assert): 強制失敗が悪影響を残さず、実フレーム3回分で通常通り
-     * Dem へ PASSED を報告する */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // 強制失敗が悪影響を残さず、実フレーム3回分で通常通り
+    // Dem へ PASSED を報告する
     EXPECT_EQ(CallCount_E2E_SMCheck, 4U);
     EXPECT_EQ(CallCount_Dem_SetEventStatus, 1U);
     EXPECT_EQ(LastEventStatus_Dem_SetEventStatus, DEM_EVENT_STATUS_PASSED);

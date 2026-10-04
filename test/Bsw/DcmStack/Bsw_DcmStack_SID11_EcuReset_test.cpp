@@ -162,8 +162,11 @@ protected:
 TEST_F(Bsw_DcmStack_SID11_EcuReset_Test,
        EcuReset_NG_ExtraByteProducesIncorrectMessageLengthResponseOnCanHw)
 {
-    /* 準備 (Arrange): [0x11, 0x01, 0x00] を 0x7E0 の受信バッファへセットする
-     * （SF: 03 11 01 00）。 */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // [0x11, 0x01, 0x00] を 0x7E0 の受信バッファへセットする
+    // （SF: 03 11 01 00）。
     FakeCanHw_RxId  = 0x7E0U;
     FakeCanHw_RxDlc = 8U;
     FakeCanHw_RxData[0] = 3U;
@@ -174,10 +177,15 @@ TEST_F(Bsw_DcmStack_SID11_EcuReset_Test,
         FakeCanHw_RxData[i] = 0U;
     FakeCanHw_RxPendingCount = 1U;
 
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Can_MainFunction_Read();
 
-    /* 評価 (Assert): 否定応答 [0x7F, 0x11, 0x13] が Can_Hw まで到達すること。 */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // 否定応答 [0x7F, 0x11, 0x13] が Can_Hw まで到達すること。
     ASSERT_EQ(FakeCanHw_SendCount, 1U);
     EXPECT_EQ(FakeCanHw_LastSendId, 0x7E8U);
     EXPECT_EQ(FakeCanHw_LastSendDlc, 8U);
@@ -197,8 +205,11 @@ TEST_F(Bsw_DcmStack_SID11_EcuReset_Test,
 TEST_F(Bsw_DcmStack_SID11_EcuReset_Test,
        EcuReset_OK_HardResetFromExtendedSessionReturnsToDefaultSessionOnCanHw)
 {
-    /* 準備 (Arrange 1): 先に extendedSession へ遷移させておく（セッションが
-     * 本当に defaultSession へ戻ったことを確認できるようにするため）。 */
+    /* ------------------------- */
+    /* ---- 準備 (Arrange 1) --- */
+    /* ------------------------- */
+    // 先に extendedSession へ遷移させておく（セッションが
+    // 本当に defaultSession へ戻ったことを確認できるようにするため）。
     FakeCanHw_RxId  = 0x7E0U;
     FakeCanHw_RxDlc = 8U;
     FakeCanHw_RxData[0] = 2U;
@@ -211,8 +222,11 @@ TEST_F(Bsw_DcmStack_SID11_EcuReset_Test,
     ASSERT_EQ(FakeCanHw_LastSendData[1], 0x50U);  // 前提確認
     FakeCanHw_Reset();
 
-    /* 準備 (Arrange 2): [0x11, 0x01] を 0x7E0 の受信バッファへセットする
-     * （SF: 02 11 01）。 */
+    /* ------------------------- */
+    /* ---- 準備 (Arrange 2) --- */
+    /* ------------------------- */
+    // [0x11, 0x01] を 0x7E0 の受信バッファへセットする
+    // （SF: 02 11 01）。
     FakeCanHw_RxId  = 0x7E0U;
     FakeCanHw_RxDlc = 8U;
     FakeCanHw_RxData[0] = 2U;
@@ -222,11 +236,16 @@ TEST_F(Bsw_DcmStack_SID11_EcuReset_Test,
         FakeCanHw_RxData[i] = 0U;
     FakeCanHw_RxPendingCount = 1U;
 
-    /* 実行 (Act) */
+    /* ------------------------- */
+    /* ---- 実行 (Act) --------- */
+    /* ------------------------- */
     Can_MainFunction_Read();
 
-    /* 評価 (Assert): 正応答 [0x51, 0x01] が Can_Hw まで到達し、
-     * セッションが defaultSession へ戻っていること。 */
+    /* ------------------------- */
+    /* ---- 評価 (Assert) ------ */
+    /* ------------------------- */
+    // 正応答 [0x51, 0x01] が Can_Hw まで到達し、
+    // セッションが defaultSession へ戻っていること。
     ASSERT_EQ(FakeCanHw_SendCount, 1U);
     EXPECT_EQ(FakeCanHw_LastSendId, 0x7E8U);
     EXPECT_EQ(FakeCanHw_LastSendDlc, 8U);
@@ -252,8 +271,11 @@ TEST_F(Bsw_DcmStack_SID11_EcuReset_Test,
 TEST_F(Bsw_DcmStack_SID11_EcuReset_Test,
        EcuReset_OK_SoftResetProducesPositiveResponseEchoingSubFuncOnCanHw)
 {
-    /* 準備 (Arrange): [0x11, 0x03] を 0x7E0 の受信バッファへセットする
-     * （SF: 02 11 03）。 */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // [0x11, 0x03] を 0x7E0 の受信バッファへセットする
+    // （SF: 02 11 03）。
     FakeCanHw_RxId  = 0x7E0U;
     FakeCanHw_RxDlc = 8U;
     FakeCanHw_RxData[0] = 2U;
@@ -263,10 +285,14 @@ TEST_F(Bsw_DcmStack_SID11_EcuReset_Test,
         FakeCanHw_RxData[i] = 0U;
     FakeCanHw_RxPendingCount = 1U;
 
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Can_MainFunction_Read();
 
-    /* 評価 (Assert) */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     ASSERT_EQ(FakeCanHw_SendCount, 1U);
     EXPECT_EQ(FakeCanHw_LastSendData[0], 0x02U);
     EXPECT_EQ(FakeCanHw_LastSendData[1], 0x51U);

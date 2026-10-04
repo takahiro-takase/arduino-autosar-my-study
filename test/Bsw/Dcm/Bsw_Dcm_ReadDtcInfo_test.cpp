@@ -402,9 +402,12 @@ TEST_F(Bsw_Dcm_ReadDtcInfo_Test, ResetToDefaultSession_OK_ReturnsSessionToDefaul
 
 TEST_F(Bsw_Dcm_ReadDtcInfo_Test, ReadDtcCount_NG_ExtraByteReturnsIncorrectMessageLength)
 {
-    /* 準備 (Arrange): statusMask の後に余分な1バイト ([0x19, 0x01, mask, 0x00]、
-     * 3バイト厳密一致のため上限超過。2026-09 追加: 以前は下限のみ判定していた
-     * ため黙って受理していた） */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // statusMask の後に余分な1バイト ([0x19, 0x01, mask, 0x00]、
+    // 3バイト厳密一致のため上限超過。2026-09 追加: 以前は下限のみ判定していた
+    // ため黙って受理していた）
     uint8 req[4] = { DCM_SID_READ_DTC_INFO, DCM_DTC_SUBFUNC_REPORT_COUNT, 0x00U, 0x00U };
 
     SendReadDtcInfo(req, sizeof(req));
@@ -417,9 +420,12 @@ TEST_F(Bsw_Dcm_ReadDtcInfo_Test, ReadDtcCount_NG_ExtraByteReturnsIncorrectMessag
 
 TEST_F(Bsw_Dcm_ReadDtcInfo_Test, ReadDtcSupported_NG_ExtraByteReturnsIncorrectMessageLength)
 {
-    /* 準備 (Arrange): 追加パラメータなしの subFunc に余分な1バイト
-     * ([0x19, 0x0A, 0x00]、2バイト厳密一致。2026-09 追加: 以前は udsLen を
-     * 一切見ておらず何バイト付けても黙って受理していた） */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // 追加パラメータなしの subFunc に余分な1バイト
+    // ([0x19, 0x0A, 0x00]、2バイト厳密一致。2026-09 追加: 以前は udsLen を
+    // 一切見ておらず何バイト付けても黙って受理していた）
     uint8 req[3] = { DCM_SID_READ_DTC_INFO, DCM_DTC_SUBFUNC_REPORT_SUPPORTED, 0x00U };
 
     SendReadDtcInfo(req, sizeof(req));
@@ -446,8 +452,11 @@ TEST_F(Bsw_Dcm_ReadDtcInfo_Test, ReadDtcSupported_NG_ExtraByteReturnsIncorrectMe
 
 TEST_F(Bsw_Dcm_ReadDtcInfo_Test, ReadDtcSnapshot_NG_UnsupportedRecordNumberStillRejected)
 {
-    /* 準備 (Arrange): 0x01/0xFF以外のrecordNumber(0x02)は依然として拒否される
-     * ことを確認する(0xFF追加が「何でも受理」への後退でないことの回帰)。 */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // 0x01/0xFF以外のrecordNumber(0x02)は依然として拒否される
+    // ことを確認する(0xFF追加が「何でも受理」への後退でないことの回帰)。
     (void)Dem_SetEventStatus(DEM_EVENT_ENGINE_OVERHEAT, DEM_EVENT_STATUS_FAILED);
 
     uint8 req[6] = { DCM_SID_READ_DTC_INFO, DCM_DTC_SUBFUNC_REPORT_SNAPSHOT,
@@ -471,11 +480,14 @@ TEST_F(Bsw_Dcm_ReadDtcInfo_Test, ReadDtcSnapshot_NG_UnsupportedRecordNumberStill
 
 TEST_F(Bsw_Dcm_ReadDtcInfo_Test, SessionControl_OK_SuppressPosRspBitSuppressesPositiveResponse)
 {
-    /* 準備 (Arrange): subFunc の bit7 (suppressPosRspMsgIndicationBit) を立てた
-     * [0x10, 0x80|DCM_SESSION_EXTENDED]（[SWS_Dcm_00200]/[SWS_Dcm_00201]。
-     * 2026-09 追加: 以前は読み取って捨てるだけで実際には抑制していなかった）。
-     * セッション自体は正常に遷移するはずだが、正応答フレームは一切送信され
-     * ないことを確認する。 */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // subFunc の bit7 (suppressPosRspMsgIndicationBit) を立てた
+    // [0x10, 0x80|DCM_SESSION_EXTENDED]（[SWS_Dcm_00200]/[SWS_Dcm_00201]。
+    // 2026-09 追加: 以前は読み取って捨てるだけで実際には抑制していなかった）。
+    // セッション自体は正常に遷移するはずだが、正応答フレームは一切送信され
+    // ないことを確認する。
     uint8 req[2] = { DCM_SID_SESSION_CTRL, (uint8)(0x80U | DCM_SESSION_EXTENDED) };
 
     PduInfoType pdu = { req, sizeof(req) };
@@ -491,9 +503,12 @@ TEST_F(Bsw_Dcm_ReadDtcInfo_Test, SessionControl_OK_SuppressPosRspBitSuppressesPo
 
 TEST_F(Bsw_Dcm_ReadDtcInfo_Test, TesterPresent_OK_SuppressPosRspBitSuppressesPositiveResponse)
 {
-    /* 準備 (Arrange): zeroSubFunction の bit7 を立てた [0x3E, 0x80]。
-     * TesterPresent は副作用が S3 タイマ更新のみのため、正応答が送信され
-     * ないことだけを確認すればよい。 */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // zeroSubFunction の bit7 を立てた [0x3E, 0x80]。
+    // TesterPresent は副作用が S3 タイマ更新のみのため、正応答が送信され
+    // ないことだけを確認すればよい。
     uint8 req[2] = { DCM_SID_TESTER_PRESENT, 0x80U };
 
     PduInfoType pdu = { req, sizeof(req) };
@@ -504,12 +519,15 @@ TEST_F(Bsw_Dcm_ReadDtcInfo_Test, TesterPresent_OK_SuppressPosRspBitSuppressesPos
 
 TEST_F(Bsw_Dcm_ReadDtcInfo_Test, EcuReset_OK_SuppressPosRspBitAcceptsHardResetWithoutTransmitting)
 {
-    /* 準備 (Arrange): [0x11, 0x80|DCM_RESET_HARD]（本タスクで見つけた実害バグの
-     * 直接的な回帰テスト: 以前は bit7 を一切マスクせず生バイトのまま subFunc
-     * として比較していたため、本ビットを立てただけで hardReset/softReset の
-     * どちらとも不一致になり誤って NRC 0x12 subFunctionNotSupported を返して
-     * いた。是正後は bit7 を無視して正しく hardReset と認識しつつ、正応答は
-     * 抑制されることを確認する）。 */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // [0x11, 0x80|DCM_RESET_HARD]（本タスクで見つけた実害バグの
+    // 直接的な回帰テスト: 以前は bit7 を一切マスクせず生バイトのまま subFunc
+    // として比較していたため、本ビットを立てただけで hardReset/softReset の
+    // どちらとも不一致になり誤って NRC 0x12 subFunctionNotSupported を返して
+    // いた。是正後は bit7 を無視して正しく hardReset と認識しつつ、正応答は
+    // 抑制されることを確認する）。
     uint8 req[2] = { DCM_SID_ECU_RESET, (uint8)(0x80U | DCM_RESET_HARD) };
 
     PduInfoType pdu = { req, sizeof(req) };
@@ -520,10 +538,13 @@ TEST_F(Bsw_Dcm_ReadDtcInfo_Test, EcuReset_OK_SuppressPosRspBitAcceptsHardResetWi
 
 TEST_F(Bsw_Dcm_ReadDtcInfo_Test, SessionControl_NG_SuppressPosRspBitDoesNotSuppressNegativeResponse)
 {
-    /* 準備 (Arrange): bit7 を立てた不正サブ機能 [0x10, 0x80|0x02]（存在しない
-     * subFunc=0x02）。否定応答は suppressPosRspMsgIndicationBit の対象外
-     * （Dcm_SendNegativeResponse() は Dcm_SuppressPosRsp を一切見ない）ため、
-     * bit7 が立っていても NRC は必ず送信されることを確認する。 */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // bit7 を立てた不正サブ機能 [0x10, 0x80|0x02]（存在しない
+    // subFunc=0x02）。否定応答は suppressPosRspMsgIndicationBit の対象外
+    // （Dcm_SendNegativeResponse() は Dcm_SuppressPosRsp を一切見ない）ため、
+    // bit7 が立っていても NRC は必ず送信されることを確認する。
     uint8 req[2] = { DCM_SID_SESSION_CTRL, 0x82U };
 
     PduInfoType pdu = { req, sizeof(req) };
@@ -545,22 +566,31 @@ TEST_F(Bsw_Dcm_ReadDtcInfo_Test, SessionControl_NG_SuppressPosRspBitDoesNotSuppr
 
 TEST_F(Bsw_Dcm_ReadDtcInfo_Test, SessionControl_OK_ReselectingSameSessionRelocksSecurity)
 {
-    /* 準備 (Arrange): extendedSessionへ遷移し、requestSeed→sendKeyで実際に
-     * Unlockする。 */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // extendedSessionへ遷移し、requestSeed→sendKeyで実際に
+    // Unlockする。
     UnlockSecurityAccessLevel1();
 
     Dcm_SecLevelType levelAfterUnlock = 0U;
     ASSERT_EQ(Dcm_GetSecurityLevel(&levelAfterUnlock), E_OK);
     ASSERT_NE(levelAfterUnlock, 0U) << "must be unlocked as a test precondition";
 
-    /* 実行 (Act): 同じextendedSessionを再度選択する
-     * ([0x10, 0x03]、現在アクティブなセッションへの再遷移)。 */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    // 同じextendedSessionを再度選択する
+    // ([0x10, 0x03]、現在アクティブなセッションへの再遷移)。
     uint8 sessionReq[2] = { DCM_SID_SESSION_CTRL, DCM_SESSION_EXTENDED };
     PduInfoType sessionPdu = { sessionReq, sizeof(sessionReq) };
     Dcm_ComIndication(0U, &sessionPdu);
 
-    /* 評価 (Assert): [SWS_Dcm_00139]通りセキュリティレベルがLockedへ
-     * 戻っていること。 */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // [SWS_Dcm_00139]通りセキュリティレベルがLockedへ
+    // 戻っていること。
     Dcm_SecLevelType levelAfterReselect = 0xFFU;
     ASSERT_EQ(Dcm_GetSecurityLevel(&levelAfterReselect), E_OK);
     EXPECT_EQ(levelAfterReselect, 0U) << "re-selecting the same session must re-lock security";

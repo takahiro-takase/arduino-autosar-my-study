@@ -56,9 +56,13 @@ uint32 CallCount_Com_MainFunctionTx          = 0U;
 uint32 CallCount_Com_IsRxTimedOut            = 0U;
 uint32 CallCount_Com_SetCommunicationEnabled = 0U;
 
+uint32 FailFromCallCount_Com_SendSignal = Wrap_Com_FAIL_FROM_CALL_COUNT_DISABLED;
 uint32 FailFromCallCount_Com_TriggerIPDUSend = Wrap_Com_FAIL_FROM_CALL_COUNT_DISABLED;
 
+uint8 ForcedReturn_Com_SendSignal = E_NOT_OK;
 Std_ReturnType ForcedReturn_Com_TriggerIPDUSend = E_NOT_OK;
+
+uint8 Return_Com_SendSignal = E_NOT_OK;
 
 /* ----------------------------------------------------------------------
  * WrapCom_Reset — 24関数すべての状態を一括で初期化する（Wrap_Com.h 参照）。
@@ -91,9 +95,13 @@ void WrapCom_Reset(void)
     CallCount_Com_IsRxTimedOut            = 0U;
     CallCount_Com_SetCommunicationEnabled = 0U;
 
+    FailFromCallCount_Com_SendSignal = Wrap_Com_FAIL_FROM_CALL_COUNT_DISABLED;
     FailFromCallCount_Com_TriggerIPDUSend = Wrap_Com_FAIL_FROM_CALL_COUNT_DISABLED;
 
+    ForcedReturn_Com_SendSignal = E_NOT_OK;
     ForcedReturn_Com_TriggerIPDUSend = E_NOT_OK;
+
+    Return_Com_SendSignal = E_NOT_OK;
 }
 
 /* ======================================================================
@@ -223,7 +231,15 @@ uint8 __wrap_Com_SendSignal(Com_SignalIdType SignalId, const void* SignalDataPtr
     CallCount_Com_SendSignal++;
     Log_Write(LOG_T, TAG, "Com_SendSignal", "called %u times", CallCount_Com_SendSignal);
 
-    return __real_Com_SendSignal(SignalId, SignalDataPtr);
+    if (CallCount_Com_SendSignal >= FailFromCallCount_Com_SendSignal)
+    {
+        Return_Com_SendSignal = ForcedReturn_Com_SendSignal;
+    }
+    else
+    {
+        Return_Com_SendSignal = __real_Com_SendSignal(SignalId, SignalDataPtr);
+    }
+    return Return_Com_SendSignal;
 }
 
 /* ----------------------------------------------------------------------

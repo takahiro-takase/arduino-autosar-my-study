@@ -236,10 +236,15 @@ protected:
 TEST_F(Bsw_DcmStack_SID34_RequestDownload_Test,
        RequestDownload_OK_ValidSizeProducesMaxBlockLengthResponseOnCanHw)
 {
-    /* 実行 (Act): addr=0x10, size=0x40（64バイト、DCM_TRANSFER_MAX_SIZE 以内） */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    // addr=0x10, size=0x40（64バイト、DCM_TRANSFER_MAX_SIZE 以内）
     SendRequestDownload(0x10U, 0x40U);
 
-    /* 評価 (Assert) */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     ASSERT_EQ(FakeCanHw_SendCount, 1U);
     EXPECT_EQ(FakeCanHw_LastSendId, 0x7E8U);
     EXPECT_EQ(FakeCanHw_LastSendData[0], 0x04U);  // SF PCI（UDSペイロード長=4）
@@ -271,14 +276,22 @@ TEST_F(Bsw_DcmStack_SID34_RequestDownload_Test,
 TEST_F(Bsw_DcmStack_SID34_RequestDownload_Test,
        RequestDownload_NG_AlreadyDownloadingReturnsConditionsNotCorrectOnCanHw)
 {
-    /* 準備 (Arrange): 一度正常に RequestDownload を受理させておく。 */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // 一度正常に RequestDownload を受理させておく。
     SendRequestDownload(0x10U, 0x40U);
     ASSERT_EQ(FakeCanHw_LastSendData[1], 0x74U);  // 前提確認
 
-    /* 実行 (Act): 再度 RequestDownload を送る。 */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    // 再度 RequestDownload を送る。
     SendRequestDownload(0x20U, 0x10U);
 
-    /* 評価 (Assert) */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     ASSERT_EQ(FakeCanHw_SendCount, 1U);
     EXPECT_EQ(FakeCanHw_LastSendData[1], DCM_SID_NEGATIVE_RESP);
     EXPECT_EQ(FakeCanHw_LastSendData[2], DCM_SID_REQUEST_DOWNLOAD);
@@ -292,8 +305,11 @@ TEST_F(Bsw_DcmStack_SID34_RequestDownload_Test,
 TEST_F(Bsw_DcmStack_SID34_RequestDownload_Test,
        RequestDownload_NG_NonRawDataFormatReturnsRequestOutOfRangeOnCanHw)
 {
-    /* 準備 (Arrange): dataFormatIdentifier=0x01（非RAW）を 0x7E0 の受信
-     * バッファへセットする（SF: 05 34 01 11 10 40）。 */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // dataFormatIdentifier=0x01（非RAW）を 0x7E0 の受信
+    // バッファへセットする（SF: 05 34 01 11 10 40）。
     FakeCanHw_Reset();
     FakeCanHw_RxId  = 0x7E0U;
     FakeCanHw_RxDlc = 8U;
@@ -307,10 +323,14 @@ TEST_F(Bsw_DcmStack_SID34_RequestDownload_Test,
         FakeCanHw_RxData[i] = 0U;
     FakeCanHw_RxPendingCount = 1U;
 
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Can_MainFunction_Read();
 
-    /* 評価 (Assert) */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     ASSERT_EQ(FakeCanHw_SendCount, 1U);
     EXPECT_EQ(FakeCanHw_LastSendData[1], DCM_SID_NEGATIVE_RESP);
     EXPECT_EQ(FakeCanHw_LastSendData[2], DCM_SID_REQUEST_DOWNLOAD);

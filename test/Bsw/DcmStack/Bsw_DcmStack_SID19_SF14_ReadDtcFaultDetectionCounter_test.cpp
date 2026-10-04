@@ -164,8 +164,11 @@ protected:
 TEST_F(Bsw_DcmStack_SID19_SF14_ReadDtcFaultDetectionCounter_Test,
        ReadDtcFdc_OK_NoPrefailedEventProducesHeaderOnlyResponseOnCanHw)
 {
-    /* 準備 (Arrange): [0x19, 0x14] を 0x7E0 の受信バッファへセットする
-     * （SF: 02 19 14）。Dem_Init() 直後は prefailed イベントが無い。 */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // [0x19, 0x14] を 0x7E0 の受信バッファへセットする
+    // （SF: 02 19 14）。Dem_Init() 直後は prefailed イベントが無い。
     FakeCanHw_RxId  = 0x7E0U;
     FakeCanHw_RxDlc = 8U;
     FakeCanHw_RxData[0] = 2U;
@@ -173,11 +176,16 @@ TEST_F(Bsw_DcmStack_SID19_SF14_ReadDtcFaultDetectionCounter_Test,
     FakeCanHw_RxData[2] = DCM_DTC_SUBFUNC_REPORT_FDC;
     FakeCanHw_RxPendingCount = 1U;
 
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Can_MainFunction_Read();
 
-    /* 評価 (Assert): DTC 列挙部分の無い [0x59, 0x14] のみが Can_Hw まで
-     * 到達すること。 */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // DTC 列挙部分の無い [0x59, 0x14] のみが Can_Hw まで
+    // 到達すること。
     ASSERT_EQ(FakeCanHw_SendCount, 1U);
     EXPECT_EQ(FakeCanHw_LastSendId, 0x7E8U);
     EXPECT_EQ(FakeCanHw_LastSendDlc, 8U);
@@ -193,8 +201,11 @@ TEST_F(Bsw_DcmStack_SID19_SF14_ReadDtcFaultDetectionCounter_Test,
 TEST_F(Bsw_DcmStack_SID19_SF14_ReadDtcFaultDetectionCounter_Test,
        ReadDtcFdc_OK_OnePrefailedEventIsReflectedInResponseOnCanHw)
 {
-    /* 準備 (Arrange): DEM_EVENT_ENGINE_OVERHEAT（limit=2）を1回だけ FAILED
-     * 報告する（生カウンタ1は確定閾値2未満のため prefailed）。 */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // DEM_EVENT_ENGINE_OVERHEAT（limit=2）を1回だけ FAILED
+    // 報告する（生カウンタ1は確定閾値2未満のため prefailed）。
     (void)Dem_SetEventStatus(DEM_EVENT_ENGINE_OVERHEAT, DEM_EVENT_STATUS_FAILED);
 
     FakeCanHw_RxId  = 0x7E0U;
@@ -204,12 +215,17 @@ TEST_F(Bsw_DcmStack_SID19_SF14_ReadDtcFaultDetectionCounter_Test,
     FakeCanHw_RxData[2] = DCM_DTC_SUBFUNC_REPORT_FDC;
     FakeCanHw_RxPendingCount = 1U;
 
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Can_MainFunction_Read();
 
-    /* 評価 (Assert): [0x59, 0x14, DTC_H=0x00, DTC_M=0x01, DTC_L=0x01,
-     * FDC=63]（生カウンタ1を limit=2 で線形写像: (1*127)/2=63）が Can_Hw
-     * まで到達すること。 */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // [0x59, 0x14, DTC_H=0x00, DTC_M=0x01, DTC_L=0x01,
+    // FDC=63]（生カウンタ1を limit=2 で線形写像: (1*127)/2=63）が Can_Hw
+    // まで到達すること。
     ASSERT_EQ(FakeCanHw_SendCount, 1U);
     EXPECT_EQ(FakeCanHw_LastSendId, 0x7E8U);
     EXPECT_EQ(FakeCanHw_LastSendDlc, 8U);
@@ -231,8 +247,11 @@ TEST_F(Bsw_DcmStack_SID19_SF14_ReadDtcFaultDetectionCounter_Test,
 TEST_F(Bsw_DcmStack_SID19_SF14_ReadDtcFaultDetectionCounter_Test,
        ReadDtcFdc_NG_ExtraByteProducesIncorrectMessageLengthResponseOnCanHw)
 {
-    /* 準備 (Arrange): 余分な1バイトを付けた [0x19, 0x14, 0x00] を 0x7E0 の
-     * 受信バッファへセットする（SF: 03 19 14 00）。 */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // 余分な1バイトを付けた [0x19, 0x14, 0x00] を 0x7E0 の
+    // 受信バッファへセットする（SF: 03 19 14 00）。
     FakeCanHw_RxId  = 0x7E0U;
     FakeCanHw_RxDlc = 8U;
     FakeCanHw_RxData[0] = 3U;
@@ -241,10 +260,15 @@ TEST_F(Bsw_DcmStack_SID19_SF14_ReadDtcFaultDetectionCounter_Test,
     FakeCanHw_RxData[3] = 0x00U;
     FakeCanHw_RxPendingCount = 1U;
 
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Can_MainFunction_Read();
 
-    /* 評価 (Assert): 否定応答 [0x7F, 0x19, 0x13] が Can_Hw まで到達すること。 */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // 否定応答 [0x7F, 0x19, 0x13] が Can_Hw まで到達すること。
     ASSERT_EQ(FakeCanHw_SendCount, 1U);
     EXPECT_EQ(FakeCanHw_LastSendId, 0x7E8U);
     EXPECT_EQ(FakeCanHw_LastSendDlc, 8U);

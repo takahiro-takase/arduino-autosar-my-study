@@ -211,11 +211,16 @@ protected:
 TEST_F(Bsw_DcmStack_SID2F_IoControl_Test,
        IoControl_OK_ShortTermAdjustmentEchoesRequestedLevelOnCanHw)
 {
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     SendIoControl(DCM_DID_RUN_LAMP, DCM_IOCTRL_SHORT_TERM_ADJUSTMENT, 1U, 1U);
 
-    /* 評価 (Assert): 正応答 [0x6F, DID_H, DID_L, 0x03, 0x01] が Can_Hw まで
-     * 到達すること。 */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // 正応答 [0x6F, DID_H, DID_L, 0x03, 0x01] が Can_Hw まで
+    // 到達すること。
     ASSERT_EQ(FakeCanHw_SendCount, 1U);
     EXPECT_EQ(FakeCanHw_LastSendId, 0x7E8U);
     EXPECT_EQ(FakeCanHw_LastSendData[0], 0x05U);  // SF PCI（UDSペイロード長=5）

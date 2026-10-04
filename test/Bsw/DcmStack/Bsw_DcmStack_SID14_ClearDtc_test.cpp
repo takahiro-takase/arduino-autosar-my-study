@@ -213,8 +213,11 @@ protected:
 TEST_F(Bsw_DcmStack_SID14_ClearDtc_Test,
        ClearDtc_NG_ExtraByteProducesIncorrectMessageLengthResponseOnCanHw)
 {
-    /* 準備 (Arrange): [0x14, 0xFF,0xFF,0xFF, 0x00] を 0x7E0 の受信バッファへ
-     * セットする（SF: 05 14 FF FF FF 00）。 */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // [0x14, 0xFF,0xFF,0xFF, 0x00] を 0x7E0 の受信バッファへ
+    // セットする（SF: 05 14 FF FF FF 00）。
     FakeCanHw_Reset();
     FakeCanHw_RxId  = 0x7E0U;
     FakeCanHw_RxDlc = 8U;
@@ -228,10 +231,15 @@ TEST_F(Bsw_DcmStack_SID14_ClearDtc_Test,
     FakeCanHw_RxData[7] = 0U;
     FakeCanHw_RxPendingCount = 1U;
 
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Can_MainFunction_Read();
 
-    /* 評価 (Assert): 否定応答 [0x7F, 0x14, 0x13] が Can_Hw まで到達すること。 */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // 否定応答 [0x7F, 0x14, 0x13] が Can_Hw まで到達すること。
     ASSERT_EQ(FakeCanHw_SendCount, 1U);
     EXPECT_EQ(FakeCanHw_LastSendId, 0x7E8U);
     EXPECT_EQ(FakeCanHw_LastSendData[0], 0x03U);
@@ -246,8 +254,11 @@ TEST_F(Bsw_DcmStack_SID14_ClearDtc_Test,
 TEST_F(Bsw_DcmStack_SID14_ClearDtc_Test,
        ClearDtc_OK_AllDtcsGroupProducesPositiveResponseOnCanHw)
 {
-    /* 準備 (Arrange): [0x14, 0xFF,0xFF,0xFF] を 0x7E0 の受信バッファへ
-     * セットする（SF: 04 14 FF FF FF）。 */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // [0x14, 0xFF,0xFF,0xFF] を 0x7E0 の受信バッファへ
+    // セットする（SF: 04 14 FF FF FF）。
     FakeCanHw_Reset();
     FakeCanHw_RxId  = 0x7E0U;
     FakeCanHw_RxDlc = 8U;
@@ -260,10 +271,15 @@ TEST_F(Bsw_DcmStack_SID14_ClearDtc_Test,
         FakeCanHw_RxData[i] = 0U;
     FakeCanHw_RxPendingCount = 1U;
 
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Can_MainFunction_Read();
 
-    /* 評価 (Assert): 正応答 [0x54] が Can_Hw まで到達すること。 */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // 正応答 [0x54] が Can_Hw まで到達すること。
     ASSERT_EQ(FakeCanHw_SendCount, 1U);
     EXPECT_EQ(FakeCanHw_LastSendId, 0x7E8U);
     EXPECT_EQ(FakeCanHw_LastSendDlc, 8U);
@@ -278,8 +294,11 @@ TEST_F(Bsw_DcmStack_SID14_ClearDtc_Test,
 TEST_F(Bsw_DcmStack_SID14_ClearDtc_Test,
        ClearDtc_OK_SpecificRegisteredDtcProducesPositiveResponseOnCanHw)
 {
-    /* 準備 (Arrange): [0x14, 0x00,0x01,0x01]（DEM_DTC_ENGINE_OVERHEAT）を
-     * 0x7E0 の受信バッファへセットする（SF: 04 14 00 01 01）。 */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // [0x14, 0x00,0x01,0x01]（DEM_DTC_ENGINE_OVERHEAT）を
+    // 0x7E0 の受信バッファへセットする（SF: 04 14 00 01 01）。
     FakeCanHw_Reset();
     FakeCanHw_RxId  = 0x7E0U;
     FakeCanHw_RxDlc = 8U;
@@ -292,10 +311,15 @@ TEST_F(Bsw_DcmStack_SID14_ClearDtc_Test,
         FakeCanHw_RxData[i] = 0U;
     FakeCanHw_RxPendingCount = 1U;
 
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Can_MainFunction_Read();
 
-    /* 評価 (Assert): 正応答 [0x54] が Can_Hw まで到達すること。 */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // 正応答 [0x54] が Can_Hw まで到達すること。
     ASSERT_EQ(FakeCanHw_SendCount, 1U);
     EXPECT_EQ(FakeCanHw_LastSendData[0], 0x01U);
     EXPECT_EQ(FakeCanHw_LastSendData[1], 0x54U);

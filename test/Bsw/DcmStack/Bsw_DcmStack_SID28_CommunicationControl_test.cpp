@@ -213,11 +213,16 @@ protected:
 TEST_F(Bsw_DcmStack_SID28_CommunicationControl_Test,
        OK_EnableRxTxNormalMapsToDcmEnableRxTxNormOnCanHw)
 {
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     SendCommunicationControl(0x00U /* enableRxAndTx */, 0x01U /* normal */);
 
-    /* 評価 (Assert): [0x68, 0x00] が Can_Hw まで到達し、BswM へも正しい値で
-     * 通知されること。 */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // [0x68, 0x00] が Can_Hw まで到達し、BswM へも正しい値で
+    // 通知されること。
     ASSERT_EQ(FakeCanHw_SendCount, 1U);
     EXPECT_EQ(FakeCanHw_LastSendData[0], 0x02U);  // SF PCI（UDSペイロード長=2）
     EXPECT_EQ(FakeCanHw_LastSendData[1], 0x68U);
@@ -292,8 +297,11 @@ TEST_F(Bsw_DcmStack_SID28_CommunicationControl_Test,
 TEST_F(Bsw_DcmStack_SID28_CommunicationControl_Test,
        NG_IncorrectLengthProducesIncorrectMessageLengthResponseWithoutCallingBswMOnCanHw)
 {
-    /* 準備 (Arrange): communicationType が無い [0x28, 0x00]（2バイト）を
-     * 0x7E0 の受信バッファへセットする（SF: 02 28 00）。 */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // communicationType が無い [0x28, 0x00]（2バイト）を
+    // 0x7E0 の受信バッファへセットする（SF: 02 28 00）。
     FakeCanHw_RxId  = 0x7E0U;
     FakeCanHw_RxDlc = 8U;
     FakeCanHw_RxData[0] = 2U;
@@ -301,10 +309,14 @@ TEST_F(Bsw_DcmStack_SID28_CommunicationControl_Test,
     FakeCanHw_RxData[2] = 0x00U;
     FakeCanHw_RxPendingCount = 1U;
 
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Can_MainFunction_Read();
 
-    /* 評価 (Assert) */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     ASSERT_EQ(FakeCanHw_SendCount, 1U);
     EXPECT_EQ(FakeCanHw_LastSendData[0], 0x03U);
     EXPECT_EQ(FakeCanHw_LastSendData[1], 0x7FU);
@@ -348,8 +360,11 @@ TEST_F(Bsw_DcmStack_SID28_CommunicationControl_Test,
     WrapBswM_Reset();
     FakeCanHw_Reset();
 
-    /* 準備 (Arrange): [0x10, 0x01] defaultSession を 0x7E0 の受信バッファへ
-     * セットする（SF: 02 10 01）。 */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // [0x10, 0x01] defaultSession を 0x7E0 の受信バッファへ
+    // セットする（SF: 02 10 01）。
     FakeCanHw_RxId  = 0x7E0U;
     FakeCanHw_RxDlc = 8U;
     FakeCanHw_RxData[0] = 2U;
@@ -357,10 +372,14 @@ TEST_F(Bsw_DcmStack_SID28_CommunicationControl_Test,
     FakeCanHw_RxData[2] = DCM_SESSION_DEFAULT;
     FakeCanHw_RxPendingCount = 1U;
 
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Can_MainFunction_Read();
 
-    /* 評価 (Assert) */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(CallCount_BswM_Dcm_CommunicationMode_CurrentState, 1U);
     EXPECT_EQ(LastRequestedMode_BswM_Dcm_CommunicationMode_CurrentState, DCM_ENABLE_RX_TX_NORM_NM);
 }

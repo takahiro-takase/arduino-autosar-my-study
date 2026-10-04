@@ -189,8 +189,11 @@ TEST_F(Bsw_DcmStack_SID31_RoutineControl_Test,
 {
     EnterExtendedSession();
 
-    /* 準備 (Arrange): [0x31, 0x01(start), RID_H=0x02, RID_L=0x03] を 0x7E0 の
-     * 受信バッファへセットする（SF: 04 31 01 02 03）。 */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // [0x31, 0x01(start), RID_H=0x02, RID_L=0x03] を 0x7E0 の
+    // 受信バッファへセットする（SF: 04 31 01 02 03）。
     FakeCanHw_RxId  = 0x7E0U;
     FakeCanHw_RxDlc = 8U;
     FakeCanHw_RxData[0] = 4U;
@@ -200,10 +203,15 @@ TEST_F(Bsw_DcmStack_SID31_RoutineControl_Test,
     FakeCanHw_RxData[4] = (uint8)(DCM_RID_ENGINE_HEALTH_CHECK & 0xFFU);
     FakeCanHw_RxPendingCount = 1U;
 
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Can_MainFunction_Read();
 
-    /* 評価 (Assert): [0x71, 0x01, 0x02, 0x03] が Can_Hw まで到達すること。 */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // [0x71, 0x01, 0x02, 0x03] が Can_Hw まで到達すること。
     ASSERT_EQ(FakeCanHw_SendCount, 1U);
     EXPECT_EQ(FakeCanHw_LastSendId, 0x7E8U);
     EXPECT_EQ(FakeCanHw_LastSendDlc, 8U);
@@ -220,7 +228,10 @@ TEST_F(Bsw_DcmStack_SID31_RoutineControl_Test,
 {
     EnterExtendedSession();
 
-    /* 準備 (Act 1): 先に start を送っておく（stop の前提）。 */
+    /* ------------------------- */
+    /* ---- 準備 (Act 1) ------- */
+    /* ------------------------- */
+    // 先に start を送っておく（stop の前提）。
     FakeCanHw_RxId  = 0x7E0U;
     FakeCanHw_RxDlc = 8U;
     FakeCanHw_RxData[0] = 4U;
@@ -234,8 +245,11 @@ TEST_F(Bsw_DcmStack_SID31_RoutineControl_Test,
     ASSERT_EQ(FakeCanHw_LastSendData[1], 0x71U);  // start が正応答であること（前提確認）
     FakeCanHw_Reset();
 
-    /* 準備 (Arrange 2): [0x31, 0x02(stop), RID_H, RID_L] を 0x7E0 の受信
-     * バッファへセットする（SF: 04 31 02 02 03）。 */
+    /* ------------------------- */
+    /* ---- 準備 (Arrange 2) --- */
+    /* ------------------------- */
+    // [0x31, 0x02(stop), RID_H, RID_L] を 0x7E0 の受信
+    // バッファへセットする（SF: 04 31 02 02 03）。
     FakeCanHw_RxId  = 0x7E0U;
     FakeCanHw_RxDlc = 8U;
     FakeCanHw_RxData[0] = 4U;
@@ -245,10 +259,14 @@ TEST_F(Bsw_DcmStack_SID31_RoutineControl_Test,
     FakeCanHw_RxData[4] = (uint8)(DCM_RID_ENGINE_HEALTH_CHECK & 0xFFU);
     FakeCanHw_RxPendingCount = 1U;
 
-    /* 実行 (Act 2) */
+    /* ------------------------- */
+    /* ---- 実行 (Act 2) ------- */
+    /* ------------------------- */
     Can_MainFunction_Read();
 
-    /* 評価 (Assert) */
+    /* ------------------------- */
+    /* ---- 評価 (Assert) ------ */
+    /* ------------------------- */
     ASSERT_EQ(FakeCanHw_SendCount, 1U);
     EXPECT_EQ(FakeCanHw_LastSendId, 0x7E8U);
     EXPECT_EQ(FakeCanHw_LastSendData[0], 0x04U);
@@ -265,8 +283,11 @@ TEST_F(Bsw_DcmStack_SID31_RoutineControl_Test,
 {
     EnterExtendedSession();
 
-    /* 準備 (Arrange): RID が1byte欠けている [0x31, 0x01, 0x02]（3バイト）を
-     * 0x7E0 の受信バッファへセットする（SF: 03 31 01 02）。 */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // RID が1byte欠けている [0x31, 0x01, 0x02]（3バイト）を
+    // 0x7E0 の受信バッファへセットする（SF: 03 31 01 02）。
     FakeCanHw_RxId  = 0x7E0U;
     FakeCanHw_RxDlc = 8U;
     FakeCanHw_RxData[0] = 3U;
@@ -275,10 +296,15 @@ TEST_F(Bsw_DcmStack_SID31_RoutineControl_Test,
     FakeCanHw_RxData[3] = 0x02U;
     FakeCanHw_RxPendingCount = 1U;
 
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Can_MainFunction_Read();
 
-    /* 評価 (Assert): 否定応答 [0x7F, 0x31, 0x13] が Can_Hw まで到達すること。 */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // 否定応答 [0x7F, 0x31, 0x13] が Can_Hw まで到達すること。
     ASSERT_EQ(FakeCanHw_SendCount, 1U);
     EXPECT_EQ(FakeCanHw_LastSendId, 0x7E8U);
     EXPECT_EQ(FakeCanHw_LastSendData[0], 0x03U);  // SF PCI（UDSペイロード長=3）
@@ -299,8 +325,11 @@ TEST_F(Bsw_DcmStack_SID31_RoutineControl_Test,
 {
     EnterExtendedSession();
 
-    /* 準備 (Arrange 1): 余分な1バイト(0x99)付きの [0x31, 0x01, 0x02, 0x03, 0x99]
-     * （5バイト）を 0x7E0 の受信バッファへセットする（SF: 05 31 01 02 03 99）。 */
+    /* ------------------------- */
+    /* ---- 準備 (Arrange 1) --- */
+    /* ------------------------- */
+    // 余分な1バイト(0x99)付きの [0x31, 0x01, 0x02, 0x03, 0x99]
+    // （5バイト）を 0x7E0 の受信バッファへセットする（SF: 05 31 01 02 03 99）。
     FakeCanHw_RxId  = 0x7E0U;
     FakeCanHw_RxDlc = 8U;
     FakeCanHw_RxData[0] = 5U;
@@ -313,10 +342,15 @@ TEST_F(Bsw_DcmStack_SID31_RoutineControl_Test,
     FakeCanHw_RxData[7] = 0U;
     FakeCanHw_RxPendingCount = 1U;
 
-    /* 実行 (Act 1) */
+    /* ------------------------- */
+    /* ---- 実行 (Act 1) ------- */
+    /* ------------------------- */
     Can_MainFunction_Read();
 
-    /* 評価 (Assert 1): 否定応答 [0x7F, 0x31, 0x13] が Can_Hw まで到達すること。 */
+    /* ------------------------- */
+    /* ---- 評価 (Assert 1) ---- */
+    /* ------------------------- */
+    // 否定応答 [0x7F, 0x31, 0x13] が Can_Hw まで到達すること。
     ASSERT_EQ(FakeCanHw_SendCount, 1U);
     EXPECT_EQ(FakeCanHw_LastSendData[0], 0x03U);
     EXPECT_EQ(FakeCanHw_LastSendData[1], DCM_SID_NEGATIVE_RESP);
@@ -324,8 +358,11 @@ TEST_F(Bsw_DcmStack_SID31_RoutineControl_Test,
     EXPECT_EQ(FakeCanHw_LastSendData[3], DCM_NRC_INCORRECT_MESSAGE_LENGTH);
     FakeCanHw_Reset();
 
-    /* 準備 (Arrange 2): 続けて stop [0x31, 0x02, RID_H, RID_L]（4バイト）を
-     * 0x7E0 の受信バッファへセットする。 */
+    /* ------------------------- */
+    /* ---- 準備 (Arrange 2) --- */
+    /* ------------------------- */
+    // 続けて stop [0x31, 0x02, RID_H, RID_L]（4バイト）を
+    // 0x7E0 の受信バッファへセットする。
     FakeCanHw_RxId  = 0x7E0U;
     FakeCanHw_RxDlc = 8U;
     FakeCanHw_RxData[0] = 4U;
@@ -335,12 +372,17 @@ TEST_F(Bsw_DcmStack_SID31_RoutineControl_Test,
     FakeCanHw_RxData[4] = (uint8)(DCM_RID_ENGINE_HEALTH_CHECK & 0xFFU);
     FakeCanHw_RxPendingCount = 1U;
 
-    /* 実行 (Act 2) */
+    /* ------------------------- */
+    /* ---- 実行 (Act 2) ------- */
+    /* ------------------------- */
     Can_MainFunction_Read();
 
-    /* 評価 (Assert 2): 拒否された start が副作用を持たなかった（ルーチンが
-     * 開始されていない）ことの傍証として、stop が requestSequenceError で
-     * 拒否されること。 */
+    /* ------------------------- */
+    /* ---- 評価 (Assert 2) ---- */
+    /* ------------------------- */
+    // 拒否された start が副作用を持たなかった（ルーチンが
+    // 開始されていない）ことの傍証として、stop が requestSequenceError で
+    // 拒否されること。
     ASSERT_EQ(FakeCanHw_SendCount, 1U);
     EXPECT_EQ(FakeCanHw_LastSendData[1], DCM_SID_NEGATIVE_RESP);
     EXPECT_EQ(FakeCanHw_LastSendData[3], DCM_NRC_REQUEST_SEQUENCE_ERROR);
@@ -353,9 +395,12 @@ TEST_F(Bsw_DcmStack_SID31_RoutineControl_Test,
 TEST_F(Bsw_DcmStack_SID31_RoutineControl_Test,
        RoutineControl_NG_DefaultSessionProducesServiceNotSupportedInSessionResponseOnCanHw)
 {
-    /* 準備 (Arrange): EnterExtendedSession() を呼ばず、defaultSession のまま
-     * [0x31, 0x01, RID_H, RID_L] を 0x7E0 の受信バッファへセットする
-     * （SF: 04 31 01 02 03）。 */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // EnterExtendedSession() を呼ばず、defaultSession のまま
+    // [0x31, 0x01, RID_H, RID_L] を 0x7E0 の受信バッファへセットする
+    // （SF: 04 31 01 02 03）。
     FakeCanHw_RxId  = 0x7E0U;
     FakeCanHw_RxDlc = 8U;
     FakeCanHw_RxData[0] = 4U;
@@ -365,10 +410,15 @@ TEST_F(Bsw_DcmStack_SID31_RoutineControl_Test,
     FakeCanHw_RxData[4] = (uint8)(DCM_RID_ENGINE_HEALTH_CHECK & 0xFFU);
     FakeCanHw_RxPendingCount = 1U;
 
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Can_MainFunction_Read();
 
-    /* 評価 (Assert): 否定応答 [0x7F, 0x31, 0x7F] が Can_Hw まで到達すること。 */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // 否定応答 [0x7F, 0x31, 0x7F] が Can_Hw まで到達すること。
     ASSERT_EQ(FakeCanHw_SendCount, 1U);
     EXPECT_EQ(FakeCanHw_LastSendData[0], 0x03U);
     EXPECT_EQ(FakeCanHw_LastSendData[1], DCM_SID_NEGATIVE_RESP);
@@ -384,8 +434,11 @@ TEST_F(Bsw_DcmStack_SID31_RoutineControl_Test,
 {
     EnterExtendedSession();
 
-    /* 準備 (Arrange): [0x31, 0x01, 0xFF, 0xFF] を 0x7E0 の受信バッファへ
-     * セットする（SF: 04 31 01 FF FF）。 */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // [0x31, 0x01, 0xFF, 0xFF] を 0x7E0 の受信バッファへ
+    // セットする（SF: 04 31 01 FF FF）。
     FakeCanHw_RxId  = 0x7E0U;
     FakeCanHw_RxDlc = 8U;
     FakeCanHw_RxData[0] = 4U;
@@ -395,10 +448,15 @@ TEST_F(Bsw_DcmStack_SID31_RoutineControl_Test,
     FakeCanHw_RxData[4] = 0xFFU;
     FakeCanHw_RxPendingCount = 1U;
 
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Can_MainFunction_Read();
 
-    /* 評価 (Assert): 否定応答 [0x7F, 0x31, 0x31] が Can_Hw まで到達すること。 */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // 否定応答 [0x7F, 0x31, 0x31] が Can_Hw まで到達すること。
     ASSERT_EQ(FakeCanHw_SendCount, 1U);
     EXPECT_EQ(FakeCanHw_LastSendData[0], 0x03U);
     EXPECT_EQ(FakeCanHw_LastSendData[1], DCM_SID_NEGATIVE_RESP);

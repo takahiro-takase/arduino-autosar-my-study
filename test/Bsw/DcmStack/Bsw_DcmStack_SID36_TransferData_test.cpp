@@ -243,11 +243,15 @@ protected:
 TEST_F(Bsw_DcmStack_SID36_TransferData_Test,
        TransferData_OK_ExpectedBlockCounterProducesPositiveResponseOnCanHw)
 {
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     const uint8 kData[4] = { 0x01U, 0x02U, 0x03U, 0x04U };
     SendTransferData(0x01U, kData, 4U);
 
-    /* 評価 (Assert) */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     ASSERT_EQ(FakeCanHw_SendCount, 1U);
     EXPECT_EQ(FakeCanHw_LastSendId, 0x7E8U);
     EXPECT_EQ(FakeCanHw_LastSendData[0], 0x02U);  // SF PCI（UDSペイロード長=2）
@@ -299,8 +303,11 @@ TEST_F(Bsw_DcmStack_SID36_TransferData_Test,
 TEST_F(Bsw_DcmStack_SID36_TransferData_Test,
        TransferData_NG_ExceedsDeclaredSizeReturnsTransferDataSuspendedOnCanHw)
 {
-    /* 準備 (Arrange): SetUp() の StartDownload(0x40) は64バイト宣言のため、
-     * 5バイト×12回=60バイトを送っておく（残り4バイトのみ許容）。 */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // SetUp() の StartDownload(0x40) は64バイト宣言のため、
+    // 5バイト×12回=60バイトを送っておく（残り4バイトのみ許容）。
     const uint8 kBlock[5] = { 0U, 0U, 0U, 0U, 0U };
     uint8 counter = 0x01U;
     for (uint8 i = 0U; i < 12U; i++)
@@ -310,10 +317,15 @@ TEST_F(Bsw_DcmStack_SID36_TransferData_Test,
         counter++;
     }
 
-    /* 実行 (Act): 5バイト送ると 60+5=65 > 64 で超過する。 */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    // 5バイト送ると 60+5=65 > 64 で超過する。
     SendTransferData(counter, kBlock, 5U);
 
-    /* 評価 (Assert) */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     ASSERT_EQ(FakeCanHw_SendCount, 1U);
     EXPECT_EQ(FakeCanHw_LastSendData[1], DCM_SID_NEGATIVE_RESP);
     EXPECT_EQ(FakeCanHw_LastSendData[2], DCM_SID_TRANSFER_DATA);
@@ -327,9 +339,12 @@ TEST_F(Bsw_DcmStack_SID36_TransferData_Test,
 TEST_F(Bsw_DcmStack_SID36_TransferData_Test,
        TransferData_NG_AfterTransferCompleteReturnsRequestSequenceErrorOnCanHw)
 {
-    /* 準備 (Arrange): SetUp() の StartDownload(0x40) が宣言した64バイトを
-     * ちょうど送り切り（5バイト×12回+4バイト×1回=64）、
-     * [0x37] RequestTransferExit で IDLE へ戻す。 */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // SetUp() の StartDownload(0x40) が宣言した64バイトを
+    // ちょうど送り切り（5バイト×12回+4バイト×1回=64）、
+    // [0x37] RequestTransferExit で IDLE へ戻す。
     const uint8 kBlock5[5] = { 0U, 0U, 0U, 0U, 0U };
     const uint8 kBlock4[4] = { 0U, 0U, 0U, 0U };
     uint8 counter = 0x01U;
@@ -353,11 +368,16 @@ TEST_F(Bsw_DcmStack_SID36_TransferData_Test,
     Can_MainFunction_Read();
     ASSERT_EQ(FakeCanHw_LastSendData[1], 0x77U) << "RequestTransferExit must succeed as a test precondition";
 
-    /* 実行 (Act): IDLE に戻った状態で TransferData を再送する。 */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    // IDLE に戻った状態で TransferData を再送する。
     const uint8 kData[4] = { 0x01U, 0x02U, 0x03U, 0x04U };
     SendTransferData(0x01U, kData, 4U);
 
-    /* 評価 (Assert) */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     ASSERT_EQ(FakeCanHw_SendCount, 1U);
     EXPECT_EQ(FakeCanHw_LastSendData[1], DCM_SID_NEGATIVE_RESP);
     EXPECT_EQ(FakeCanHw_LastSendData[2], DCM_SID_TRANSFER_DATA);

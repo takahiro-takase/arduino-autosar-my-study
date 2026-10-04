@@ -167,8 +167,11 @@ protected:
 TEST_F(Bsw_DcmStack_SID19_Dispatch_Test,
        ReadDtcInfo_NG_UnsupportedSubFuncProducesSubFuncNotSupportedResponseOnCanHw)
 {
-    /* 準備 (Arrange): [0x19, 0x55] を 0x7E0 の受信バッファへセットする
-     * （SF: 02 19 55）。 */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // [0x19, 0x55] を 0x7E0 の受信バッファへセットする
+    // （SF: 02 19 55）。
     FakeCanHw_RxId  = 0x7E0U;
     FakeCanHw_RxDlc = 8U;
     FakeCanHw_RxData[0] = 2U;
@@ -176,10 +179,15 @@ TEST_F(Bsw_DcmStack_SID19_Dispatch_Test,
     FakeCanHw_RxData[2] = 0x55U;
     FakeCanHw_RxPendingCount = 1U;
 
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Can_MainFunction_Read();
 
-    /* 評価 (Assert): 否定応答 [0x7F, 0x19, 0x12] が Can_Hw まで到達すること。 */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // 否定応答 [0x7F, 0x19, 0x12] が Can_Hw まで到達すること。
     ASSERT_EQ(FakeCanHw_SendCount, 1U);
     EXPECT_EQ(FakeCanHw_LastSendId, 0x7E8U);
     EXPECT_EQ(FakeCanHw_LastSendDlc, 8U);
@@ -197,18 +205,26 @@ TEST_F(Bsw_DcmStack_SID19_Dispatch_Test,
 TEST_F(Bsw_DcmStack_SID19_Dispatch_Test,
        ReadDtcInfo_NG_MissingSubFuncProducesIncorrectMessageLengthResponseOnCanHw)
 {
-    /* 準備 (Arrange): [0x19] のみを 0x7E0 の受信バッファへセットする
-     * （SF: 01 19）。 */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // [0x19] のみを 0x7E0 の受信バッファへセットする
+    // （SF: 01 19）。
     FakeCanHw_RxId  = 0x7E0U;
     FakeCanHw_RxDlc = 8U;
     FakeCanHw_RxData[0] = 1U;
     FakeCanHw_RxData[1] = DCM_SID_READ_DTC_INFO;
     FakeCanHw_RxPendingCount = 1U;
 
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Can_MainFunction_Read();
 
-    /* 評価 (Assert): 否定応答 [0x7F, 0x19, 0x13] が Can_Hw まで到達すること。 */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // 否定応答 [0x7F, 0x19, 0x13] が Can_Hw まで到達すること。
     ASSERT_EQ(FakeCanHw_SendCount, 1U);
     EXPECT_EQ(FakeCanHw_LastSendId, 0x7E8U);
     EXPECT_EQ(FakeCanHw_LastSendDlc, 8U);

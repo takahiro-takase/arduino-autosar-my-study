@@ -59,24 +59,36 @@ protected:
 // ------------------------------------------------------------
 TEST_F(Bsw_Can_Test, Can_Init_NG_NullConfig)
 {
-    /* 準備 (Arrange) */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
 
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Can_Init(NULL);
 
-    /* 評価 (Assert) */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(Can_Test_GetControllerState(), CAN_CS_UNINIT);
     EXPECT_EQ(FakeDetHw_LastErrorId, CAN_E_PARAM_POINTER);
 }
 
 TEST_F(Bsw_Can_Test, Can_Init_Ok)
 {
-    /* 準備 (Arrange) */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
 
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Can_Init(&config);
 
-    /* 評価 (Assert) */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(Can_Test_GetControllerState(), CAN_CS_STOPPED);
 }
 
@@ -85,13 +97,19 @@ TEST_F(Bsw_Can_Test, Can_Init_Ok)
 // ------------------------------------------------------------
 TEST_F(Bsw_Can_Test, Can_SetControllerMode_NG_NullConfig)
 {
-    /* 準備 (Arrange) */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     // Can_Init(&config);  // 初期化せずに呼ぶ
 
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Can_ReturnType ret = Can_SetControllerMode(0U, CAN_T_START);
 
-    /* 評価 (Assert) */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, CAN_NOT_OK);
     EXPECT_EQ(Can_Test_GetControllerState(), CAN_CS_UNINIT);
     EXPECT_EQ(FakeDetHw_LastErrorId, CAN_E_UNINIT);
@@ -99,13 +117,19 @@ TEST_F(Bsw_Can_Test, Can_SetControllerMode_NG_NullConfig)
 
 TEST_F(Bsw_Can_Test, Can_SetControllerMode_NG_Start)
 {
-    /* 準備 (Arrange) */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     Can_Init(&config);
 
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Can_ReturnType ret = Can_SetControllerMode(1U, CAN_T_START);
 
-    /* 評価 (Assert) */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, CAN_NOT_OK);
     EXPECT_EQ(Can_Test_GetControllerState(), CAN_CS_STOPPED);
     EXPECT_EQ(FakeDetHw_LastErrorId, CAN_E_PARAM_CONTROLLER);
@@ -113,27 +137,39 @@ TEST_F(Bsw_Can_Test, Can_SetControllerMode_NG_Start)
 
 TEST_F(Bsw_Can_Test, Can_SetControllerMode_OK_Start)
 {
-    /* 準備 (Arrange) */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     Can_Init(&config);
 
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Can_ReturnType ret = Can_SetControllerMode(0U, CAN_T_START);
 
-    /* 評価 (Assert) */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, CAN_OK);
     EXPECT_EQ(Can_Test_GetControllerState(), CAN_CS_STARTED);
 }
 
 TEST_F(Bsw_Can_Test, Can_SetControllerMode_NG_Start_On_Sleep)
 {
-    /* 準備 (Arrange) */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     Can_Init(&config);
     Can_SetControllerMode(0U, CAN_T_SLEEP);
 
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Can_ReturnType ret = Can_SetControllerMode(0U, CAN_T_START);
 
-    /* 評価 (Assert) */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, CAN_NOT_OK);
     EXPECT_EQ(Can_Test_GetControllerState(), CAN_CS_SLEEP);
     EXPECT_EQ(FakeDetHw_LastErrorId, CAN_E_TRANSITION);
@@ -141,27 +177,39 @@ TEST_F(Bsw_Can_Test, Can_SetControllerMode_NG_Start_On_Sleep)
 
 TEST_F(Bsw_Can_Test, Can_SetControllerMode_OK_Stop)
 {
-    /* 準備 (Arrange) */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     Can_Init(&config);
 
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Can_ReturnType ret = Can_SetControllerMode(0U, CAN_T_STOP);
 
-    /* 評価 (Assert) */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, CAN_OK);
     EXPECT_EQ(Can_Test_GetControllerState(), CAN_CS_STOPPED);
 }
 
 TEST_F(Bsw_Can_Test, Can_SetControllerMode_NG_Stop_On_Sleep)
 {
-    /* 準備 (Arrange) */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     Can_Init(&config);
     Can_SetControllerMode(0U, CAN_T_SLEEP);
 
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Can_ReturnType ret = Can_SetControllerMode(0U, CAN_T_STOP);
 
-    /* 評価 (Assert) */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, CAN_NOT_OK);
     EXPECT_EQ(Can_Test_GetControllerState(), CAN_CS_SLEEP);
     EXPECT_EQ(FakeDetHw_LastErrorId, CAN_E_TRANSITION);
@@ -169,28 +217,40 @@ TEST_F(Bsw_Can_Test, Can_SetControllerMode_NG_Stop_On_Sleep)
 
 TEST_F(Bsw_Can_Test, Can_SetControllerMode_OK_Wakeup_On_Sleep)
 {
-    /* 準備 (Arrange) */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     Can_Init(&config);
     Can_SetControllerMode(0U, CAN_T_SLEEP);
 
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Can_ReturnType ret = Can_SetControllerMode(0U, CAN_T_WAKEUP);
 
-    /* 評価 (Assert) */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, CAN_OK);
     EXPECT_EQ(Can_Test_GetControllerState(), CAN_CS_STOPPED);
 }
 
 TEST_F(Bsw_Can_Test, Can_SetControllerMode_NG_Wakeup)
 {
-    /* 準備 (Arrange) */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     Can_Init(&config);
     Can_SetControllerMode(0U, CAN_T_START);
 
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Can_ReturnType ret = Can_SetControllerMode(0U, CAN_T_WAKEUP);
 
-    /* 評価 (Assert) */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, CAN_NOT_OK);
     EXPECT_EQ(Can_Test_GetControllerState(), CAN_CS_STARTED);
     EXPECT_EQ(FakeDetHw_LastErrorId, CAN_E_TRANSITION);
@@ -198,14 +258,20 @@ TEST_F(Bsw_Can_Test, Can_SetControllerMode_NG_Wakeup)
 
 TEST_F(Bsw_Can_Test, Can_SetControllerMode_OK_Sleep)
 {
-    /* 準備 (Arrange) */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     Can_Init(&config);
     Can_SetControllerMode(0U, CAN_T_START);
 
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Can_ReturnType ret = Can_SetControllerMode(0U, CAN_T_SLEEP);
 
-    /* 評価 (Assert) */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, CAN_OK);
     EXPECT_EQ(Can_Test_GetControllerState(), CAN_CS_SLEEP);
 }
@@ -213,14 +279,20 @@ TEST_F(Bsw_Can_Test, Can_SetControllerMode_OK_Sleep)
 #if 0 // do not test this case 
 TEST_F(Bsw_Can_Test, Can_SetControllerMode_NG_OtherTransition)
 {
-    /* 準備 (Arrange) */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     Can_Init(&config);
     Can_SetControllerMode(0U, CAN_T_START);
 
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Can_ReturnType ret = Can_SetControllerMode(0U, (Can_ControllerStateType)0xFF);
 
-    /* 評価 (Assert) */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, CAN_NOT_OK);
     EXPECT_EQ(Can_Test_GetControllerState(), CAN_CS_STARTED);
 }
@@ -315,10 +387,14 @@ TEST_F(Bsw_Can_Test, Can_EnableControllerInterrupts_OK_OnlyReEnablesHwAfterMatch
 // ------------------------------------------------------------
 TEST_F(Bsw_Can_Test, Can_Write_NG_NullConfig)
 {
-    /* 準備 (Arrange) */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     // Can_Init(&config);  // 初期化せずに呼ぶ
 
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Can_PduType pdu;
     pdu.id = 0x123U;
     pdu.length = 8U;
@@ -328,30 +404,42 @@ TEST_F(Bsw_Can_Test, Can_Write_NG_NullConfig)
 
     Can_ReturnType ret = Can_Write(0U, &pdu);
 
-    /* 評価 (Assert) */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, CAN_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, CAN_E_UNINIT);
 }
 
 TEST_F(Bsw_Can_Test, Can_Write_NG_NullPduInfo)
 {
-    /* 準備 (Arrange) */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     Can_Init(&config);
 
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Can_ReturnType ret = Can_Write(0U, NULL);
 
-    /* 評価 (Assert) */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, CAN_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, CAN_E_PARAM_POINTER);
 }
 
 TEST_F(Bsw_Can_Test, Can_Write_NG_NullPduInfoSdu)
 {
-    /* 準備 (Arrange) */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     Can_Init(&config);
 
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Can_PduType pdu;
     pdu.id = 0x123U;
     pdu.length = 8U;
@@ -360,17 +448,23 @@ TEST_F(Bsw_Can_Test, Can_Write_NG_NullPduInfoSdu)
 
     Can_ReturnType ret = Can_Write(0U, &pdu);
 
-    /* 評価 (Assert) */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, CAN_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, CAN_E_PARAM_POINTER);
 }
 
 TEST_F(Bsw_Can_Test, Can_Write_NG_LengthExceeds)
 {
-    /* 準備 (Arrange) */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     Can_Init(&config);
 
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Can_PduType pdu;
     pdu.id = 0x123U;
     pdu.length = 9U;  // 8 バイトを超える
@@ -380,18 +474,24 @@ TEST_F(Bsw_Can_Test, Can_Write_NG_LengthExceeds)
 
     Can_ReturnType ret = Can_Write(0U, &pdu);
 
-    /* 評価 (Assert) */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, CAN_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, CAN_E_PARAM_DLC);
 }
 
 TEST_F(Bsw_Can_Test, Can_Write_NG_notStarted)
 {
-    /* 準備 (Arrange) */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     Can_Init(&config);
     // Can_SetControllerMode(0U, CAN_T_START);  // コントローラを START しない
 
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Can_PduType pdu;
     pdu.id = 0x123U;
     pdu.length = 8U;
@@ -401,17 +501,23 @@ TEST_F(Bsw_Can_Test, Can_Write_NG_notStarted)
 
     Can_ReturnType ret = Can_Write(0U, &pdu);
 
-    /* 評価 (Assert) */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, CAN_NOT_OK);
 }
 
 TEST_F(Bsw_Can_Test, Can_Write_NG_HwSendFails)
 {
-    /* 準備 (Arrange) */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     Can_Init(&config);
     Can_SetControllerMode(0U, CAN_T_START);
 
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Can_PduType pdu;
     pdu.id = 0x123U;
     pdu.length = 8U;
@@ -424,7 +530,9 @@ TEST_F(Bsw_Can_Test, Can_Write_NG_HwSendFails)
     FakeCanHw_SendReturn = CAN_HW_FAIL;
     Can_ReturnType ret = Can_Write(0U, &pdu);
 
-    /* 評価 (Assert) */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, CAN_NOT_OK);
     EXPECT_EQ(Can_Test_GetTxErrCount(), 1U);
     EXPECT_EQ(CallCount_CanIf_ControllerBusOff, 0U);  // 閾値未満のため BusOff 通知はまだ来ない
@@ -432,7 +540,9 @@ TEST_F(Bsw_Can_Test, Can_Write_NG_HwSendFails)
 
 TEST_F(Bsw_Can_Test, Can_Write_NG_HwSendFails_ReachesBusOffThreshold)
 {
-    /* 準備 (Arrange) */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     Can_Init(&config);
     Can_SetControllerMode(0U, CAN_T_START);
 
@@ -444,14 +554,19 @@ TEST_F(Bsw_Can_Test, Can_Write_NG_HwSendFails_ReachesBusOffThreshold)
     pdu.swPduHandle = 0U;
     FakeCanHw_SendReturn = CAN_HW_FAIL;
 
-    /* 実行 (Act): CAN_BUSOFF_TX_ERR_THRESHOLD (5) 回連続で送信失敗させる */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    // CAN_BUSOFF_TX_ERR_THRESHOLD (5) 回連続で送信失敗させる
     Can_ReturnType ret = CAN_OK;
     for (int i = 0; i < 5; i++)
     {
         ret = Can_Write(0U, &pdu);
     }
 
-    /* 評価 (Assert) */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, CAN_NOT_OK);
     EXPECT_EQ(Can_Test_GetTxErrCount(), 0U);  // 閾値到達時に 0 へリセットされる（Can.c 実装参照）
     EXPECT_EQ(CallCount_CanIf_ControllerBusOff, 1U);
@@ -460,11 +575,15 @@ TEST_F(Bsw_Can_Test, Can_Write_NG_HwSendFails_ReachesBusOffThreshold)
 
 TEST_F(Bsw_Can_Test, Can_Write_OK)
 {
-    /* 準備 (Arrange) */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     Can_Init(&config);
     Can_SetControllerMode(0U, CAN_T_START);
 
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Can_PduType pdu;
     pdu.id = 0x123U;
     pdu.length = 8U;
@@ -474,7 +593,9 @@ TEST_F(Bsw_Can_Test, Can_Write_OK)
 
     Can_ReturnType ret = Can_Write(0U, &pdu);
 
-    /* 評価 (Assert) */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, CAN_OK);
     EXPECT_EQ(FakeCanHw_SendCount, 1U);
     EXPECT_EQ(FakeCanHw_LastSendId, 0x123U);
@@ -483,7 +604,9 @@ TEST_F(Bsw_Can_Test, Can_Write_OK)
 
 TEST_F(Bsw_Can_Test, Can_Write_OK_ResetsTxErrCountAfterPriorFailure)
 {
-    /* 準備 (Arrange) */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     Can_Init(&config);
     Can_SetControllerMode(0U, CAN_T_START);
 
@@ -498,11 +621,15 @@ TEST_F(Bsw_Can_Test, Can_Write_OK_ResetsTxErrCountAfterPriorFailure)
     Can_Write(0U, &pdu);
     ASSERT_EQ(Can_Test_GetTxErrCount(), 1U);
 
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     FakeCanHw_SendReturn = CAN_HW_OK;
     Can_ReturnType ret = Can_Write(0U, &pdu);
 
-    /* 評価 (Assert) */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, CAN_OK);
     EXPECT_EQ(Can_Test_GetTxErrCount(), 0U);  // 成功で 0 にリセットされる
 }
@@ -512,20 +639,28 @@ TEST_F(Bsw_Can_Test, Can_Write_OK_ResetsTxErrCountAfterPriorFailure)
 //------------------------------------------------------------
 TEST_F(Bsw_Can_Test, Can_MainFunction_Write_NG_NullConfig)
 {
-    /* 準備 (Arrange) */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     // Can_Init(&config);  // 初期化せずに呼ぶ
 
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Can_MainFunction_Write();
 
-    /* 評価 (Assert) */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(Can_Test_GetControllerState(), CAN_CS_UNINIT);
     EXPECT_EQ(FakeDetHw_LastErrorId, CAN_E_UNINIT);
 }
 
 TEST_F(Bsw_Can_Test, Can_MainFunction_Write_OK)
 {
-    /* 準備 (Arrange) */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     Can_Init(&config);
     Can_SetControllerMode(0U, CAN_T_START);
 
@@ -539,10 +674,14 @@ TEST_F(Bsw_Can_Test, Can_MainFunction_Write_OK)
     Can_Write(0U, &pdu);
     ASSERT_EQ(CallCount_CanIf_TxConfirmation, 0U);  // Can_Write 単体ではまだ通知されない
 
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Can_MainFunction_Write();
 
-    /* 評価 (Assert) */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(Can_Test_GetControllerState(), CAN_CS_STARTED);
     EXPECT_EQ(CallCount_CanIf_TxConfirmation, 1U);
     EXPECT_EQ(LastPduId_CanIf_TxConfirmation, 42U);
@@ -553,48 +692,68 @@ TEST_F(Bsw_Can_Test, Can_MainFunction_Write_OK)
 //------------------------------------------------------------
 TEST_F(Bsw_Can_Test, Can_MainFunction_Read_NG_NullConfig)
 {
-    /* 準備 (Arrange) */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     // Can_Init(&config);  // 初期化せずに呼ぶ
 
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Can_MainFunction_Read();
 
-    /* 評価 (Assert) */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(Can_Test_GetControllerState(), CAN_CS_UNINIT);
     EXPECT_EQ(FakeDetHw_LastErrorId, CAN_E_UNINIT);
 }
 
 TEST_F(Bsw_Can_Test, Can_MainFunction_Read_NG_On_Sleep)
 {
-    /* 準備 (Arrange) */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     Can_Init(&config);
     Can_SetControllerMode(0U, CAN_T_SLEEP);
 
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Can_MainFunction_Read();
 
-    /* 評価 (Assert) */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(Can_Test_GetControllerState(), CAN_CS_SLEEP);
 }
 
 TEST_F(Bsw_Can_Test, Can_MainFunction_Read_NG_Can_Hw_CheckReceive_Fails)
 {
-    /* 準備 (Arrange) */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     Can_Init(&config);
     Can_SetControllerMode(0U, CAN_T_START);
 
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     FakeCanHw_RxPendingCount = 0U;  // 受信フレームがない状態にする
     Can_MainFunction_Read();
 
-    /* 評価 (Assert) */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(Can_Test_GetControllerState(), CAN_CS_STARTED);
     EXPECT_EQ(CallCount_CanIf_RxIndication, 0U);  // 受信なしなので上位層通知もされない
 }
 
 TEST_F(Bsw_Can_Test, Can_MainFunction_Read_OK)
 {
-    /* 準備 (Arrange) */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     Can_Init(&config);
     Can_SetControllerMode(0U, CAN_T_START);
 
@@ -606,10 +765,14 @@ TEST_F(Bsw_Can_Test, Can_MainFunction_Read_OK)
     FakeCanHw_RxData[2] = 0xBEU;
     FakeCanHw_RxData[3] = 0xEFU;
 
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Can_MainFunction_Read();
 
-    /* 評価 (Assert) */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(Can_Test_GetControllerState(), CAN_CS_STARTED);
     EXPECT_EQ(FakeCanHw_RxPendingCount, 0U);  // ドレインし尽くしたこと
     EXPECT_EQ(CallCount_CanIf_RxIndication, 1U);
@@ -626,41 +789,59 @@ TEST_F(Bsw_Can_Test, Can_MainFunction_Read_OK)
 //------------------------------------------------------------
 TEST_F(Bsw_Can_Test, Can_MainFunction_Wakeup_NG_NullConfig)
 {
-    /* 準備 (Arrange) */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     // Can_Init(&config);  // 初期化せずに呼ぶ
 
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Can_MainFunction_Wakeup();
 
-    /* 評価 (Assert) */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(Can_Test_GetControllerState(), CAN_CS_UNINIT);
     EXPECT_EQ(FakeDetHw_LastErrorId, CAN_E_UNINIT);
 }
 
 TEST_F(Bsw_Can_Test, Can_MainFunction_Wakeup_NG_NotOnSleep)
 {
-    /* 準備 (Arrange) */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     Can_Init(&config);
     Can_SetControllerMode(0U, CAN_T_START);
 
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Can_MainFunction_Wakeup();
 
-    /* 評価 (Assert) */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(Can_Test_GetControllerState(), CAN_CS_STARTED);
 }
 
 TEST_F(Bsw_Can_Test, Can_MainFunction_Wakeup_OK)
 {
-    /* 準備 (Arrange) */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     Can_Init(&config);
     Can_SetControllerMode(0U, CAN_T_SLEEP);
     FakeCanHw_IsWakeupPendingReturn = CAN_HW_OK;  // INT ピンでウェイクアップ要因を検出させる
 
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Can_MainFunction_Wakeup();
 
-    /* 評価 (Assert) */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(Can_Test_GetControllerState(), CAN_CS_SLEEP);  // 遷移自体は CanSM が行うため状態は変化しない
     EXPECT_EQ(FakeEcuM_CheckWakeupCount, 1U);
     EXPECT_EQ(FakeEcuM_LastWakeupSource, static_cast<EcuM_WakeupSourceType>(ECUM_WKSOURCE_CAN));
@@ -668,15 +849,21 @@ TEST_F(Bsw_Can_Test, Can_MainFunction_Wakeup_OK)
 
 TEST_F(Bsw_Can_Test, Can_MainFunction_Wakeup_NG_NoWakeupDetected)
 {
-    /* 準備 (Arrange) */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     Can_Init(&config);
     Can_SetControllerMode(0U, CAN_T_SLEEP);
     // FakeCanHw_IsWakeupPendingReturn は既定 CAN_HW_FAIL のまま（ウェイクアップ要因なし）
 
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Can_MainFunction_Wakeup();
 
-    /* 評価 (Assert) */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(Can_Test_GetControllerState(), CAN_CS_SLEEP);
     EXPECT_EQ(FakeEcuM_CheckWakeupCount, 0U);
 }
@@ -686,42 +873,60 @@ TEST_F(Bsw_Can_Test, Can_MainFunction_Wakeup_NG_NoWakeupDetected)
 //------------------------------------------------------------
 TEST_F(Bsw_Can_Test, Can_MainFunction_BusOff_NG_NullConfig)
 {
-    /* 準備 (Arrange) */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     // Can_Init(&config);  // 初期化せずに呼ぶ
 
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Can_MainFunction_BusOff();
 
-    /* 評価 (Assert) */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(Can_Test_GetControllerState(), CAN_CS_UNINIT);
     EXPECT_EQ(FakeDetHw_LastErrorId, CAN_E_UNINIT);
 }
 
 TEST_F(Bsw_Can_Test, Can_MainFunction_BusOff_NG_NotOnStarted)
 {
-    /* 準備 (Arrange) */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     Can_Init(&config);
     Can_SetControllerMode(0U, CAN_T_SLEEP);
 
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Can_MainFunction_BusOff();
 
-    /* 評価 (Assert) */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(Can_Test_GetControllerState(), CAN_CS_SLEEP); 
 }
 
 TEST_F(Bsw_Can_Test, Can_MainFunction_BusOff_OK)
 {
-    /* 準備 (Arrange) */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     Can_Init(&config);
     Can_SetControllerMode(0U, CAN_T_START);
     // Can_Hw_IsBusOff が Bus-Off 検出（CAN_HW_OK）を返すようにする
     FakeCanHw_IsBusOffReturn = CAN_HW_OK;
 
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Can_MainFunction_BusOff();
 
-    /* 評価 (Assert) */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(Can_Test_GetControllerState(), CAN_CS_STARTED);  // 遷移自体は CanSM が行うため状態は変化しない
     EXPECT_EQ(CallCount_CanIf_ControllerBusOff, 1U);
     EXPECT_EQ(LastControllerId_CanIf_ControllerBusOff, 0U);
@@ -729,15 +934,21 @@ TEST_F(Bsw_Can_Test, Can_MainFunction_BusOff_OK)
 
 TEST_F(Bsw_Can_Test, Can_MainFunction_BusOff_NG_NoBusOffDetected)
 {
-    /* 準備 (Arrange) */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     Can_Init(&config);
     Can_SetControllerMode(0U, CAN_T_START);
     // FakeCanHw_IsBusOffReturn は既定 CAN_HW_FAIL のまま（Bus-Off 未検出）
 
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Can_MainFunction_BusOff();
 
-    /* 評価 (Assert) */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(Can_Test_GetControllerState(), CAN_CS_STARTED);
     EXPECT_EQ(CallCount_CanIf_ControllerBusOff, 0U);
 }
@@ -747,27 +958,39 @@ TEST_F(Bsw_Can_Test, Can_MainFunction_BusOff_NG_NoBusOffDetected)
 //------------------------------------------------------------
 TEST_F(Bsw_Can_Test, Can_GetVersionInfo_NG_NullPointer)
 {
-    /* 準備 (Arrange) */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     Can_Init(&config);
 
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Can_GetVersionInfo(NULL);
 
-    /* 評価 (Assert) */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(Can_Test_GetControllerState(), CAN_CS_STOPPED);
     EXPECT_EQ(FakeDetHw_LastErrorId, CAN_E_PARAM_POINTER);
 }
 
 TEST_F(Bsw_Can_Test, Can_GetVersionInfo_OK)
 {
-    /* 準備 (Arrange) */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     Can_Init(&config);
 
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_VersionInfoType versioninfo;
     Can_GetVersionInfo(&versioninfo);
 
-    /* 評価 (Assert) */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(versioninfo.vendorID, CAN_VENDOR_ID);
     EXPECT_EQ(versioninfo.moduleID, CAN_MODULE_ID);
     EXPECT_EQ(versioninfo.sw_major_version, CAN_SW_MAJOR_VERSION);
@@ -781,98 +1004,138 @@ TEST_F(Bsw_Can_Test, Can_GetVersionInfo_OK)
 // ------------------------------------------------------------
 TEST_F(Bsw_Can_Test, Can_GetControllerErrorState_NG_NullConfig)
 {
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Can_ErrorStateType state;
     Std_ReturnType ret = Can_GetControllerErrorState(0U, &state);
 
-    /* 評価 (Assert) */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, CAN_E_UNINIT);
 }
 
 TEST_F(Bsw_Can_Test, Can_GetControllerErrorState_NG_InvalidController)
 {
-    /* 準備 (Arrange) */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     Can_Init(&config);
 
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Can_ErrorStateType state;
     Std_ReturnType ret = Can_GetControllerErrorState(1U, &state);
 
-    /* 評価 (Assert) */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, CAN_E_PARAM_CONTROLLER);
 }
 
 TEST_F(Bsw_Can_Test, Can_GetControllerErrorState_NG_NullPointer)
 {
-    /* 準備 (Arrange) */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     Can_Init(&config);
 
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = Can_GetControllerErrorState(0U, NULL);
 
-    /* 評価 (Assert) */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, CAN_E_PARAM_POINTER);
 }
 
 TEST_F(Bsw_Can_Test, Can_GetControllerErrorState_OK_ReturnsActiveByDefault)
 {
-    /* 準備 (Arrange) */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     Can_Init(&config);
     FakeCanHw_ErrorState = 0U;  /* CAN_ERRORSTATE_ACTIVE */
 
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Can_ErrorStateType state = CAN_ERRORSTATE_BUSOFF;  /* 未更新を検出できる初期値 */
     Std_ReturnType ret = Can_GetControllerErrorState(0U, &state);
 
-    /* 評価 (Assert) */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_OK);
     EXPECT_EQ(state, CAN_ERRORSTATE_ACTIVE);
 }
 
 TEST_F(Bsw_Can_Test, Can_GetControllerErrorState_OK_ReflectsPassiveFromHw)
 {
-    /* 準備 (Arrange) */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     Can_Init(&config);
     FakeCanHw_ErrorState = 1U;  /* CAN_ERRORSTATE_PASSIVE */
 
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Can_ErrorStateType state;
     Std_ReturnType ret = Can_GetControllerErrorState(0U, &state);
 
-    /* 評価 (Assert) */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_OK);
     EXPECT_EQ(state, CAN_ERRORSTATE_PASSIVE);
 }
 
 TEST_F(Bsw_Can_Test, Can_GetControllerErrorState_OK_ReflectsBusOffFromHw)
 {
-    /* 準備 (Arrange) */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     Can_Init(&config);
     FakeCanHw_ErrorState = 2U;  /* CAN_ERRORSTATE_BUSOFF */
 
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Can_ErrorStateType state;
     Std_ReturnType ret = Can_GetControllerErrorState(0U, &state);
 
-    /* 評価 (Assert) */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_OK);
     EXPECT_EQ(state, CAN_ERRORSTATE_BUSOFF);
 }
 
 TEST_F(Bsw_Can_Test, Can_GetControllerErrorState_NG_HwFailurePropagates)
 {
-    /* 準備 (Arrange) */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     Can_Init(&config);
     FakeCanHw_GetErrorStateReturn = CAN_HW_FAIL;
 
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Can_ErrorStateType state;
     Std_ReturnType ret = Can_GetControllerErrorState(0U, &state);
 
-    /* 評価 (Assert) */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
 }
 

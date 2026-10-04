@@ -96,12 +96,17 @@ extern uint32 CallCount_Com_SetCommunicationEnabled;
  *  `__real_Com_Xxx()` へパススルー。それ以外の値を設定すると、対応する
  *  `CallCount_Com_Xxx` がこの値に達した回から（以降ずっと）
  *  対応する `ForcedReturn_Com_Xxx` を返す。 */
+extern uint32 FailFromCallCount_Com_SendSignal;
 extern uint32 FailFromCallCount_Com_TriggerIPDUSend;
 
 /* ----------------------------------------------------------------------
  * 閾値到達後の強制戻り値（戻り値を持つ3関数のみ）
  * ---------------------------------------------------------------------- */
+extern uint8 ForcedReturn_Com_SendSignal;
 extern Std_ReturnType ForcedReturn_Com_TriggerIPDUSend;
+
+extern uint8 Return_Com_SendSignal;
+
 
 /** すべての関数呼び出し回数・回数閾値・強制戻り値を初期状態へ戻す。
  *  各テストケースの開始時（SetUp()）に1回呼ぶ。 */

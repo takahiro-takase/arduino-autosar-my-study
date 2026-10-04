@@ -295,16 +295,24 @@ protected:
 // ------------------------------------------------------------
 TEST_F(Bsw_ComStack_SignalGroup_Tx_Test, TmsTransition_OK_TriggersImmediateSendWithoutGroupTrigger)
 {
-    /* 準備 (Arrange): TMS 寄与シグナルを 0(false)→1(true) へ変化させる。
-     * TransferProperty=PENDING のため、この変化だけでは
-     * Com_GroupTriggerPending は立たない。 */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // TMS 寄与シグナルを 0(false)→1(true) へ変化させる。
+    // TransferProperty=PENDING のため、この変化だけでは
+    // Com_GroupTriggerPending は立たない。
     uint8_t value = 1U;
     Com_SendSignal(1U, &value);
 
-    /* 実行 (Act): シャドウバッファを確定コミットし、TMS を再評価させる */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    // シャドウバッファを確定コミットし、TMS を再評価させる
     Std_ReturnType ret = Com_SendSignalGroup(1U);
 
-    /* 評価 (Assert) */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_OK);
     EXPECT_EQ(Com_Test_GetTxPending(1U), 1U);  // TMS 遷移のみで即時送信要求が立つ
 
@@ -322,15 +330,23 @@ TEST_F(Bsw_ComStack_SignalGroup_Tx_Test, TmsTransition_OK_TriggersImmediateSendW
 
 TEST_F(Bsw_ComStack_SignalGroup_Tx_Test, TmsUnchanged_OK_DoesNotTriggerSendWithoutGroupTrigger)
 {
-    /* 準備 (Arrange): 初期状態（TMS=false）から変化させない
-     * （0 のままシグナルグループをコミットする） */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // 初期状態（TMS=false）から変化させない
+    // （0 のままシグナルグループをコミットする）
     uint8_t value = 0U;
     Com_SendSignal(1U, &value);
 
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = Com_SendSignalGroup(1U);
 
-    /* 評価 (Assert): TMS が変化せず、通常トリガーも立たないため送信要求は立たない */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // TMS が変化せず、通常トリガーも立たないため送信要求は立たない
     EXPECT_EQ(ret, E_OK);
     EXPECT_EQ(Com_Test_GetTxPending(1U), 0U);
 }
@@ -340,53 +356,81 @@ TEST_F(Bsw_ComStack_SignalGroup_Tx_Test, TmsUnchanged_OK_DoesNotTriggerSendWitho
 // ------------------------------------------------------------
 TEST_F(Bsw_ComStack_SignalGroup_Tx_Test, SwitchIpduTxMode_OK_FlipsStateAndTriggersImmediateSend)
 {
-    /* 準備 (Arrange): Com_Init() 直後は Com_TmsState[1]==0（既定 false）。 */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // Com_Init() 直後は Com_TmsState[1]==0（既定 false）。
     ASSERT_EQ(Com_Test_GetTmsState(1U), 0U);
 
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Com_SwitchIpduTxMode(1U, 1U);
 
-    /* 評価 (Assert): [SWS_Com_00881] 状態が切り替わり、[SWS_Com_00239]/
-     * [SWS_Com_00495] と同じ経路（Com_RequestTxOnChange()）で次回
-     * Com_MainFunctionTx() 向けの送信要求が立つ。 */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // [SWS_Com_00881] 状態が切り替わり、[SWS_Com_00239]/
+    // [SWS_Com_00495] と同じ経路（Com_RequestTxOnChange()）で次回
+    // Com_MainFunctionTx() 向けの送信要求が立つ。
     EXPECT_EQ(Com_Test_GetTmsState(1U), 1U);
     EXPECT_EQ(Com_Test_GetTxPending(1U), 1U);
 }
 
 TEST_F(Bsw_ComStack_SignalGroup_Tx_Test, SwitchIpduTxMode_NG_NoEffectWhenModeAlreadyActive)
 {
-    /* 準備 (Arrange): 既定状態(false)と同じ Mode=0 を明示的に要求する。 */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // 既定状態(false)と同じ Mode=0 を明示的に要求する。
 
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Com_SwitchIpduTxMode(1U, 0U);
 
-    /* 評価 (Assert): spec 原文 "the call will have no effect"。送信要求も
-     * 立たない（状態が変化していないため Com_RequestTxOnChange() は
-     * 呼ばれない）。 */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // spec 原文 "the call will have no effect"。送信要求も
+    // 立たない（状態が変化していないため Com_RequestTxOnChange() は
+    // 呼ばれない）。
     EXPECT_EQ(Com_Test_GetTmsState(1U), 0U);
     EXPECT_EQ(Com_Test_GetTxPending(1U), 0U);
 }
 
 TEST_F(Bsw_ComStack_SignalGroup_Tx_Test, SwitchIpduTxMode_OK_TogglingBackTriggersAnotherSend)
 {
-    /* 準備 (Arrange): 一旦 true へ切り替え、Com_MainFunctionTx() で
-     * 送信要求を消費させておく。 */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // 一旦 true へ切り替え、Com_MainFunctionTx() で
+    // 送信要求を消費させておく。
     Com_SwitchIpduTxMode(1U, 1U);
     Com_MainFunctionTx();
     ASSERT_EQ(Com_Test_GetTxPending(1U), 0U);
 
-    /* 実行 (Act): false へ戻す（再び実際の変化） */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    // false へ戻す（再び実際の変化）
     Com_SwitchIpduTxMode(1U, 0U);
 
-    /* 評価 (Assert): 戻すのも「変化」であるため、再度送信要求が立つ */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // 戻すのも「変化」であるため、再度送信要求が立つ
     EXPECT_EQ(Com_Test_GetTmsState(1U), 0U);
     EXPECT_EQ(Com_Test_GetTxPending(1U), 1U);
 }
 
 TEST_F(Bsw_ComStack_SignalGroup_Tx_Test, SwitchIpduTxMode_NG_UnknownPduIdHasNoEffect)
 {
-    /* 実行 (Act) + 評価 (Assert): 戻り値が無い（void）API のため、
-     * クラッシュしないこと・既存の状態に影響しないことを確認する。 */
+    /* ----------------------------------- */
+    /* ---- 実行 (Act) + 評価 (Assert) --- */
+    /* ----------------------------------- */
+    // 戻り値が無い（void）API のため、
+    // クラッシュしないこと・既存の状態に影響しないことを確認する。
     Com_SwitchIpduTxMode(99U, 1U);
     EXPECT_EQ(Com_Test_GetTmsState(1U), 0U);
     EXPECT_EQ(Com_Test_GetTxPending(1U), 0U);
@@ -398,16 +442,24 @@ TEST_F(Bsw_ComStack_SignalGroup_Tx_Test, SwitchIpduTxMode_NG_UnknownPduIdHasNoEf
 // ------------------------------------------------------------
 TEST_F(Bsw_ComStack_SignalGroup_Tx_Test, InvalidateSignalGroup_OK_WritesMemberInvalidValueAndCommitsToBuffer)
 {
-    /* 準備 (Arrange): kTestTmsGroupIPdu（IPduId=1）の唯一のメンバー
-     * kTestTmsPendingSignal（SignalId=1、BitPosition=0、BigEndian 1bit＝
-     * 0x80）は InvalidValue=1・InvalidValueConfigured=1。 */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // kTestTmsGroupIPdu（IPduId=1）の唯一のメンバー
+    // kTestTmsPendingSignal（SignalId=1、BitPosition=0、BigEndian 1bit＝
+    // 0x80）は InvalidValue=1・InvalidValueConfigured=1。
 
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     uint8 ret = Com_InvalidateSignalGroup(1U);
 
-    /* 評価 (Assert): [SWS_Com_00645] 内部で Com_SendSignal()（シャドウ
-     * バッファへ書き込み）→ Com_SendSignalGroup()（実バッファへコミット）
-     * の順に呼ばれ、メンバーの InvalidValue が実バッファへ反映される。 */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // [SWS_Com_00645] 内部で Com_SendSignal()（シャドウ
+    // バッファへ書き込み）→ Com_SendSignalGroup()（実バッファへコミット）
+    // の順に呼ばれ、メンバーの InvalidValue が実バッファへ反映される。
     EXPECT_EQ(ret, E_OK);
     const uint8* buf = Com_Test_GetTxBuffer(1U);
     ASSERT_NE(buf, nullptr);
@@ -417,18 +469,26 @@ TEST_F(Bsw_ComStack_SignalGroup_Tx_Test, InvalidateSignalGroup_OK_WritesMemberIn
 
 TEST_F(Bsw_ComStack_SignalGroup_Tx_Test, InvalidateSignalGroup_NG_AnyMemberUnconfiguredReturnsServiceNotAvailableWithoutPartialCommit)
 {
-    /* 準備 (Arrange): kTestErrGroupIPdu（IPduId=3）に、InvalidValueConfigured=1
-     * の SignalId=6 と、あえて未設定のままの SignalId=7 の 2 メンバーを設定
-     * 済み（ファイル冒頭のシグナル定義参照）。 */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // kTestErrGroupIPdu（IPduId=3）に、InvalidValueConfigured=1
+    // の SignalId=6 と、あえて未設定のままの SignalId=7 の 2 メンバーを設定
+    // 済み（ファイル冒頭のシグナル定義参照）。
 
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     uint8 ret = Com_InvalidateSignalGroup(3U);
 
-    /* 評価 (Assert): [SWS_Com_00557] 原文どおり "no ComSignalDataInvalidValue
-     * is configured for any of the group signals" は COM_SERVICE_NOT_AVAILABLE
-     * （2026-09-20 是正、Com_InvalidateSignal() と同様以前は E_NOT_OK で
-     * 代用していた）。1本でも未設定なら all-or-nothing で全体を拒否し、
-     * 設定済みの SignalId=6 側も含めて一切バッファへ書き込まない。 */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // [SWS_Com_00557] 原文どおり "no ComSignalDataInvalidValue
+    // is configured for any of the group signals" は COM_SERVICE_NOT_AVAILABLE
+    // （2026-09-20 是正、Com_InvalidateSignal() と同様以前は E_NOT_OK で
+    // 代用していた）。1本でも未設定なら all-or-nothing で全体を拒否し、
+    // 設定済みの SignalId=6 側も含めて一切バッファへ書き込まない。
     EXPECT_EQ(ret, COM_SERVICE_NOT_AVAILABLE);
     const uint8* buf = Com_Test_GetTxBuffer(3U);
     ASSERT_NE(buf, nullptr);
@@ -441,18 +501,26 @@ TEST_F(Bsw_ComStack_SignalGroup_Tx_Test, InvalidateSignalGroup_NG_AnyMemberUncon
 // ------------------------------------------------------------
 TEST_F(Bsw_ComStack_SignalGroup_Tx_Test, SendSignalGroupArray_OK_WritesBufferTriggersSendAndSetsUpdateBit)
 {
-    /* 準備 (Arrange): TMS ビット(bit0=0x80)を立てた生バイト列 */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // TMS ビット(bit0=0x80)を立てた生バイト列
     uint8_t raw = 0x80U;
 
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = Com_SendSignalGroupArray(1U, &raw);
 
-    /* 評価 (Assert): 個々の Com_SendSignal() を経由しなくても
-     * Com_RecalcTms() が Com_TxBuffer を直接読むため TMS 遷移が検出され、
-     * 無条件で送信要求・update-bit セットが行われる
-     * （Com_SendSignalGroup() は Com_GroupTriggerPending が立っていないと
-     * update-bit をセットしないが、本関数は常にセットする——ドキュメント
-     * コメント参照）。 */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // 個々の Com_SendSignal() を経由しなくても
+    // Com_RecalcTms() が Com_TxBuffer を直接読むため TMS 遷移が検出され、
+    // 無条件で送信要求・update-bit セットが行われる
+    // （Com_SendSignalGroup() は Com_GroupTriggerPending が立っていないと
+    // update-bit をセットしないが、本関数は常にセットする——ドキュメント
+    // コメント参照）。
     EXPECT_EQ(ret, E_OK);
     EXPECT_EQ(Com_Test_GetTxPending(1U), 1U);
     const uint8* buf = Com_Test_GetTxBuffer(1U);
@@ -463,19 +531,27 @@ TEST_F(Bsw_ComStack_SignalGroup_Tx_Test, SendSignalGroupArray_OK_WritesBufferTri
 
 TEST_F(Bsw_ComStack_SignalGroup_Tx_Test, SendSignalGroupArray_OK_AlwaysTriggersEvenWithoutChange)
 {
-    /* 準備 (Arrange): Init 直後の値（0x00、TMS=false のまま）と全く同じ
-     * 内容を書き込む。上の TmsUnchanged_OK_DoesNotTriggerSendWithoutGroupTrigger
-     * （通常経路 Com_SendSignal()+Com_SendSignalGroup()）では、この
-     * 「変化なし」ケースは送信要求を立てない。 */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // Init 直後の値（0x00、TMS=false のまま）と全く同じ
+    // 内容を書き込む。上の TmsUnchanged_OK_DoesNotTriggerSendWithoutGroupTrigger
+    // （通常経路 Com_SendSignal()+Com_SendSignalGroup()）では、この
+    // 「変化なし」ケースは送信要求を立てない。
     uint8_t raw = 0x00U;
 
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = Com_SendSignalGroupArray(1U, &raw);
 
-    /* 評価 (Assert): 本関数は個々のシグナルの変化検知を経由しないため、
-     * 値が変化していなくても常に送信要求が立つ（ドキュメントコメント
-     * 「呼ばれるたびに常に『新しいデータがある』ものとして扱う」の
-     * とおり。通常経路との対比が本テストの主張）。 */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // 本関数は個々のシグナルの変化検知を経由しないため、
+    // 値が変化していなくても常に送信要求が立つ（ドキュメントコメント
+    // 「呼ばれるたびに常に『新しいデータがある』ものとして扱う」の
+    // とおり。通常経路との対比が本テストの主張）。
     EXPECT_EQ(ret, E_OK);
     EXPECT_EQ(Com_Test_GetTxPending(1U), 1U);
 }
@@ -483,7 +559,9 @@ TEST_F(Bsw_ComStack_SignalGroup_Tx_Test, SendSignalGroupArray_OK_AlwaysTriggersE
 
 TEST_F(Bsw_ComStack_SignalGroup_Tx_Test, SendSignalGroupArray_NG_NullDataPtrReturnsError)
 {
-    /* 実行 (Act) + 評価 (Assert) */
+    /* ----------------------------------- */
+    /* ---- 実行 (Act) + 評価 (Assert) --- */
+    /* ----------------------------------- */
     EXPECT_EQ(Com_SendSignalGroupArray(1U, NULL), E_NOT_OK);
     EXPECT_EQ(Com_Test_GetTxPending(1U), 0U);  // 何も変化しない
 }
@@ -491,10 +569,15 @@ TEST_F(Bsw_ComStack_SignalGroup_Tx_Test, SendSignalGroupArray_NG_NullDataPtrRetu
 
 TEST_F(Bsw_ComStack_SignalGroup_Tx_Test, SendSignalGroupArray_NG_NonSignalGroupIPduReturnsError)
 {
-    /* 準備 (Arrange): kTestTxIPdu（IPduId=0）は IsSignalGroup=0 */
+    /* ----------------------------------- */
+    /* ---- 準備 (Arrange) --------------- */
+    /* ----------------------------------- */
+    // kTestTxIPdu（IPduId=0）は IsSignalGroup=0
     uint8_t raw[2] = { 0x12U, 0x34U };
 
-    /* 実行 (Act) + 評価 (Assert) */
+    /* ----------------------------------- */
+    /* ---- 実行 (Act) + 評価 (Assert) --- */
+    /* ----------------------------------- */
     EXPECT_EQ(Com_SendSignalGroupArray(0U, raw), E_NOT_OK);
     EXPECT_EQ(Com_Test_GetTxPending(0U), 0U);
 }
@@ -502,21 +585,30 @@ TEST_F(Bsw_ComStack_SignalGroup_Tx_Test, SendSignalGroupArray_NG_NonSignalGroupI
 
 TEST_F(Bsw_ComStack_SignalGroup_Tx_Test, SendSignalGroupArray_OK_SyncsShadowBufferPreventingStaleOverwrite)
 {
-    /* 準備 (Arrange): 配列APIで一括コミット（個々の Com_SendSignal() は
-     * 一切呼ばない） */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // 配列APIで一括コミット（個々の Com_SendSignal() は
+    // 一切呼ばない）
     uint8_t raw = 0x80U;  // TMS ビット(bit0)のみ
     ASSERT_EQ(Com_SendSignalGroupArray(1U, &raw), E_OK);
     const uint8* bufAfterArray = Com_Test_GetTxBuffer(1U);
     ASSERT_NE(bufAfterArray, nullptr);
     ASSERT_EQ(bufAfterArray[0], 0x81U);  // TMS ビット + update-bit(自動セット)
 
-    /* 実行 (Act): 通常経路のコミット関数を、個別の Com_SendSignal() を
-     * 挟まずそのまま呼ぶ（呼び出し側が API を混在させた状況を再現）。 */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    // 通常経路のコミット関数を、個別の Com_SendSignal() を
+    // 挟まずそのまま呼ぶ（呼び出し側が API を混在させた状況を再現）。
     Std_ReturnType ret = Com_SendSignalGroup(1U);
 
-    /* 評価 (Assert): シャドウバッファが Com_SendSignalGroupArray() 内で
-     * 既に同期済みのため、Com_SendSignalGroup() は同じ内容をそのまま
-     * 再コミットするだけになり、TMS ビットの値（bit0）が保持される。 */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // シャドウバッファが Com_SendSignalGroupArray() 内で
+    // 既に同期済みのため、Com_SendSignalGroup() は同じ内容をそのまま
+    // 再コミットするだけになり、TMS ビットの値（bit0）が保持される。
     EXPECT_EQ(ret, E_OK);
     const uint8* bufAfterGroup = Com_Test_GetTxBuffer(1U);
     ASSERT_NE(bufAfterGroup, nullptr);
@@ -526,14 +618,22 @@ TEST_F(Bsw_ComStack_SignalGroup_Tx_Test, SendSignalGroupArray_OK_SyncsShadowBuff
 
 TEST_F(Bsw_ComStack_SignalGroup_Tx_Test, SendSignalGroupArray_OK_ReturnsServiceNotAvailableWhenGroupStoppedButStillWrites)
 {
-    /* 準備 (Arrange): kTestErrGroupIPdu は既定で停止状態。 */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // kTestErrGroupIPdu は既定で停止状態。
 
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     uint8_t raw = 0xAAU;
     uint8 ret = Com_SendSignalGroupArray(3U, &raw);
 
-    /* 評価 (Assert): [SWS_Com_00334] 停止中でも書き込み自体は行うが、
-     * 戻り値は COM_SERVICE_NOT_AVAILABLE。 */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // [SWS_Com_00334] 停止中でも書き込み自体は行うが、
+    // 戻り値は COM_SERVICE_NOT_AVAILABLE。
     EXPECT_EQ(ret, COM_SERVICE_NOT_AVAILABLE);
     const uint8* buf = Com_Test_GetTxBuffer(3U);
     ASSERT_NE(buf, nullptr);
@@ -546,17 +646,25 @@ TEST_F(Bsw_ComStack_SignalGroup_Tx_Test, SendSignalGroupArray_OK_ReturnsServiceN
 // ------------------------------------------------------------
 TEST_F(Bsw_ComStack_SignalGroup_Tx_Test, SendSignal_OK_ReturnsServiceNotAvailableWhenGroupStoppedButStillWritesShadowBuffer)
 {
-    /* 準備 (Arrange): kTestErrGroupIPdu は既定で停止状態。SignalId=6 は
-     * そのメンバー（BitPosition=0、BitSize=1、big-endian）。 */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // kTestErrGroupIPdu は既定で停止状態。SignalId=6 は
+    // そのメンバー（BitPosition=0、BitSize=1、big-endian）。
 
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     uint8_t value = 1U;
     uint8 ret = Com_SendSignal(6U, &value);
 
-    /* 評価 (Assert): [SWS_Com_00334] 停止中でも戻り値は
-     * COM_SERVICE_NOT_AVAILABLE。シャドウバッファへの書き込み自体は
-     * 停止中でも行われることを、Com_SendSignalGroup() でのコミット結果
-     * （これも停止中は同じく COM_SERVICE_NOT_AVAILABLE を返す）で確認する。 */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // [SWS_Com_00334] 停止中でも戻り値は
+    // COM_SERVICE_NOT_AVAILABLE。シャドウバッファへの書き込み自体は
+    // 停止中でも行われることを、Com_SendSignalGroup() でのコミット結果
+    // （これも停止中は同じく COM_SERVICE_NOT_AVAILABLE を返す）で確認する。
     EXPECT_EQ(ret, COM_SERVICE_NOT_AVAILABLE);
 
     uint8 groupRet = Com_SendSignalGroup(3U);
@@ -573,55 +681,89 @@ TEST_F(Bsw_ComStack_SignalGroup_Tx_Test, SendSignal_OK_ReturnsServiceNotAvailabl
 // ------------------------------------------------------------
 TEST_F(Bsw_ComStack_SignalGroup_Tx_Test, TxConfirmation_OK_CallsSignalGroupAckCbkExactlyOnce)
 {
-    /* 準備 (Arrange): 不要（SetUp() で s_groupTxAckCount は 0 にリセット済み） */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // 不要（SetUp() で s_groupTxAckCount は 0 にリセット済み）
 
-    /* 実行 (Act): IPduId=1（Signal Group）の送信成功を通知する */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    // IPduId=1（Signal Group）の送信成功を通知する
     Com_TxConfirmation(1U, E_OK);
 
-    /* 評価 (Assert): メンバー数（このテストでは 1）に関わらず、
-     * グループ単位で厳密に 1 回だけ呼ばれる */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // メンバー数（このテストでは 1）に関わらず、
+    // グループ単位で厳密に 1 回だけ呼ばれる
     EXPECT_EQ(s_groupTxAckCount, 1U);
 }
 
 
 TEST_F(Bsw_ComStack_SignalGroup_Tx_Test, TxConfirmation_NG_NonGroupIPduDoesNotCallGroupAckCbk)
 {
-    /* 準備 (Arrange): 不要。IPduId=0 は非 Signal Group（kTestTxIPdu） */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // 不要。IPduId=0 は非 Signal Group（kTestTxIPdu）
 
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Com_TxConfirmation(0U, E_OK);
 
-    /* 評価 (Assert): 無関係な Signal Group（IPduId=1）の TxAckCbk は呼ばれない */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // 無関係な Signal Group（IPduId=1）の TxAckCbk は呼ばれない
     EXPECT_EQ(s_groupTxAckCount, 0U);
 }
 
 
 TEST_F(Bsw_ComStack_SignalGroup_Tx_Test, IpduGroupStop_OK_CallsSignalGroupErrCbkExactlyOnceWhenUnconfirmed)
 {
-    /* 準備 (Arrange): 「PduR へは渡した（実送信済み）が Com_TxConfirmation()
-     * がまだ届いていない」状態を直接作る（Com_MainFunctionTx()/PduR を経由
-     * しないための test-only setter、Com.h 参照）。 */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // 「PduR へは渡した（実送信済み）が Com_TxConfirmation()
+    // がまだ届いていない」状態を直接作る（Com_MainFunctionTx()/PduR を経由
+    // しないための test-only setter、Com.h 参照）。
     Com_Test_SetTxConfPending(3U, 1U);
 
-    /* 実行 (Act): kTestErrGroupIPdu（IPduId=3）が所属する I-PDU Group を
-     * 未確認のまま停止する。 */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    // kTestErrGroupIPdu（IPduId=3）が所属する I-PDU Group を
+    // 未確認のまま停止する。
     Com_IpduGroupStop(kTestStoppableGroupId);
 
-    /* 評価 (Assert): メンバー数に関わらず、グループ単位で厳密に 1 回だけ
-     * 呼ばれる。 */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // メンバー数に関わらず、グループ単位で厳密に 1 回だけ
+    // 呼ばれる。
     EXPECT_EQ(s_groupTxErrCount, 1U);
 }
 
 
 TEST_F(Bsw_ComStack_SignalGroup_Tx_Test, IpduGroupStop_NG_DoesNotCallErrCbkWhenAlreadyConfirmed)
 {
-    /* 準備 (Arrange): 不要。「送信済み・未確認」状態を一切作らない
-     * （Com_TxConfPending は Com_Init() で 0 のまま）。 */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // 不要。「送信済み・未確認」状態を一切作らない
+    // （Com_TxConfPending は Com_Init() で 0 のまま）。
 
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Com_IpduGroupStop(kTestStoppableGroupId);
 
-    /* 評価 (Assert): 未確認の送信が無いため TxErrCbk は呼ばれない。 */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // 未確認の送信が無いため TxErrCbk は呼ばれない。
     EXPECT_EQ(s_groupTxErrCount, 0U);
 }
 
@@ -631,35 +773,51 @@ TEST_F(Bsw_ComStack_SignalGroup_Tx_Test, IpduGroupStop_NG_DoesNotCallErrCbkWhenA
 // ------------------------------------------------------------
 TEST_F(Bsw_ComStack_SignalGroup_Tx_Test, IpduGroupStopRepeatsRemaining_OK_ClearsRepeatsRemaining)
 {
-    /* 準備 (Arrange): 再送シーケンス進行中の状態を、実際に NumberOfRepetitions
-     * を設定した停止可能グループの I-PDU を新規に用意しなくても、test-only
-     * setter で直接作る（kTestErrGroupIPdu/kTestStoppableGroupId を流用）。 */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // 再送シーケンス進行中の状態を、実際に NumberOfRepetitions
+    // を設定した停止可能グループの I-PDU を新規に用意しなくても、test-only
+    // setter で直接作る（kTestErrGroupIPdu/kTestStoppableGroupId を流用）。
     Com_Test_SetTxRepeatsRemaining(3U, 2U);
 
-    /* 実行 (Act): [SWS_Com_00392] I-PDU Group の停止は再送シーケンスも
-     * キャンセルする */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    // [SWS_Com_00392] I-PDU Group の停止は再送シーケンスも
+    // キャンセルする
     Com_IpduGroupStop(kTestStoppableGroupId);
 
-    /* 評価 (Assert) */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(Com_Test_GetTxRepeatsRemaining(3U), 0U);
 }
 
 
 TEST_F(Bsw_ComStack_SignalGroup_Tx_Test, IpduGroupStopTxTOutInteraction_OK_PreventsDoubleFireWithTxErrCbk)
 {
-    /* 準備 (Arrange): TxTOutGroupLevel_OK_FiresWhenStartedAndOverdue と同じ
-     * 「送信済み・未確認のまま閾値超過」状態を作るが、Com_MainFunctionTx() で
-     * 評価される前に Com_IpduGroupStop() を先に呼ぶ。 */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // TxTOutGroupLevel_OK_FiresWhenStartedAndOverdue と同じ
+    // 「送信済み・未確認のまま閾値超過」状態を作るが、Com_MainFunctionTx() で
+    // 評価される前に Com_IpduGroupStop() を先に呼ぶ。
     Com_IpduGroupStart(kTestStoppableGroupId, 0U);
     Com_Test_SetTxConfPending(3U, 1U);
     Com_Test_SetTxConfPendingSinceMs(3U, FakeMillis_Value);
     FakeMillis_Value += 101U;
 
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Com_IpduGroupStop(kTestStoppableGroupId);  // TxErrCbk が発火、Started=0 に
     Com_MainFunctionTx();  // Com_TxIPduStarted[3]==0 のため監視ループ自体が対象外
 
-    /* 評価 (Assert): TxErrCbk は発火するが、TxTOutCbk とは二重発火しない */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // TxErrCbk は発火するが、TxTOutCbk とは二重発火しない
     EXPECT_EQ(s_groupTxErrCount, 1U);
     EXPECT_EQ(s_groupTxTOutCount, 0U);
 }
@@ -670,19 +828,28 @@ TEST_F(Bsw_ComStack_SignalGroup_Tx_Test, IpduGroupStopTxTOutInteraction_OK_Preve
 // ------------------------------------------------------------
 TEST_F(Bsw_ComStack_SignalGroup_Tx_Test, TxTOutGroupLevel_OK_FiresWhenStartedAndOverdue)
 {
-    /* 準備 (Arrange): kTestErrGroupIPdu（IPduId=3、Signal Group、
-     * TxFirstTimeoutMs=100U）を起動し、test-only setter で
-     * 「送信済み・未確認」状態を直接注入する（実際に Com_MainFunctionTx()/PduR
-     * を経由させる配線は用意していないため）。 */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // kTestErrGroupIPdu（IPduId=3、Signal Group、
+    // TxFirstTimeoutMs=100U）を起動し、test-only setter で
+    // 「送信済み・未確認」状態を直接注入する（実際に Com_MainFunctionTx()/PduR
+    // を経由させる配線は用意していないため）。
     Com_IpduGroupStart(kTestStoppableGroupId, 0U);
     Com_Test_SetTxConfPending(3U, 1U);
     Com_Test_SetTxConfPendingSinceMs(3U, FakeMillis_Value);
 
-    /* 実行 (Act): TxFirstTimeoutMs(100) を超過させる */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    // TxFirstTimeoutMs(100) を超過させる
     FakeMillis_Value += 101U;
     Com_MainFunctionTx();
 
-    /* 評価 (Assert): グループ単位で発火する。TxErrCbk とは無関係 */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // グループ単位で発火する。TxErrCbk とは無関係
     EXPECT_EQ(s_groupTxTOutCount, 1U);
     EXPECT_EQ(s_groupTxErrCount, 0U);
 }
@@ -693,46 +860,67 @@ TEST_F(Bsw_ComStack_SignalGroup_Tx_Test, TxTOutGroupLevel_OK_FiresWhenStartedAnd
 // ------------------------------------------------------------
 TEST_F(Bsw_ComStack_SignalGroup_Tx_Test, TriggerIPDUSend_OK_RespectsMinDelayTimeAndDispatchesOnceElapsed)
 {
-    /* 準備 (Arrange): kTestErrGroupIPdu（IPduId=3）は IpduGroupId=
-     * kTestStoppableGroupId を持つため、Com_Init() 直後は既定で停止状態
-     * （[SWS_Com_00444]/[SWS_Com_00840]、Com_Init() の実装コメント参照）。
-     * 明示的に起動してから使う（TxTOut_OK_GroupLevelFiresWhenStartedAndOverdue
-     * と同じ手順）。MinDelayMs=100U。Com_IpduGroupStart() が
-     * Com_TxLastSentMs[3] を現在時刻にリセットするため、経過時間はここから
-     * 0 スタートになる。 */
+    /* ------------------------ */
+    /* ---- 準備 (Arrange) ---- */
+    /* ------------------------ */
+    // kTestErrGroupIPdu（IPduId=3）は IpduGroupId=
+    // kTestStoppableGroupId を持つため、Com_Init() 直後は既定で停止状態
+    // （[SWS_Com_00444]/[SWS_Com_00840]、Com_Init() の実装コメント参照）。
+    // 明示的に起動してから使う（TxTOut_OK_GroupLevelFiresWhenStartedAndOverdue
+    // と同じ手順）。MinDelayMs=100U。Com_IpduGroupStart() が
+    // Com_TxLastSentMs[3] を現在時刻にリセットするため、経過時間はここから
+    // 0 スタートになる。
     Com_IpduGroupStart(kTestStoppableGroupId, 0U);
 
-    /* 実行 (Act 1): トリガーは受け付けるが、MDT 未経過のため今回は送信しない
-     * （[SWS_Com_00388] "shall postpone transmissions if necessary"）。 */
+    /* ------------------------ */
+    /* ---- 実行 (Act 1) ------ */
+    /* ------------------------ */
+    // トリガーは受け付けるが、MDT 未経過のため今回は送信しない
+    // （[SWS_Com_00388] "shall postpone transmissions if necessary"）。
     ASSERT_EQ(Com_TriggerIPDUSend(3U), E_OK);
     Com_MainFunctionTx();
 
-    /* 評価 (Assert 1): トリガーは破棄されず、次回以降のために保持される */
+    /* ------------------------ */
+    /* ---- 評価 (Assert 1) --- */
+    /* ------------------------ */
+    // トリガーは破棄されず、次回以降のために保持される
     EXPECT_EQ(Com_Test_GetTxTriggerPending(3U), 1U);
 
-    /* 実行 (Act 2): MDT 経過後に再度 Com_MainFunctionTx() を呼ぶ */
+    /* ------------------------ */
+    /* ---- 実行 (Act 2) ------ */
+    /* ------------------------ */
+    // MDT 経過後に再度 Com_MainFunctionTx() を呼ぶ
     FakeMillis_Value += 100U;
     Com_MainFunctionTx();
 
-    /* 評価 (Assert 2): MDT 経過により消費される（実際の PduR ルートは
-     * 未登録のため CAN 送信までは進まないが、ディスパッチ自体は試行される
-     * ことをフラグのクリアで確認する） */
+    /* ------------------------ */
+    /* ---- 評価 (Assert 2) --- */
+    /* ------------------------ */
+    // MDT 経過により消費される（実際の PduR ルートは
+    // 未登録のため CAN 送信までは進まないが、ディスパッチ自体は試行される
+    // ことをフラグのクリアで確認する）
     EXPECT_EQ(Com_Test_GetTxTriggerPending(3U), 0U);
 }
 
 
 TEST_F(Bsw_ComStack_SignalGroup_Tx_Test, TriggerIPDUSend_NG_StoppedIpduReturnsErrorWithoutTriggering)
 {
-    /* 準備 (Arrange): kTestErrGroupIPdu（IPduId=3）は IpduGroupId=
-     * kTestStoppableGroupId を持つため、Com_Init() 直後は既定で停止状態
-     * （[SWS_Com_00444]/[SWS_Com_00840]）。Com_IpduGroupStart() を一度も
-     * 呼ばないことで「起動されたことがない」状態を明示的に表す
-     * （念のため Com_IpduGroupStop() も呼び、Start 後に Stop された場合と
-     * 同じ経路であることも合わせて確認する）。 */
+    /* ----------------------------------- */
+    /* ---- 準備 (Arrange) --------------- */
+    /* ----------------------------------- */
+    // kTestErrGroupIPdu（IPduId=3）は IpduGroupId=
+    // kTestStoppableGroupId を持つため、Com_Init() 直後は既定で停止状態
+    // （[SWS_Com_00444]/[SWS_Com_00840]）。Com_IpduGroupStart() を一度も
+    // 呼ばないことで「起動されたことがない」状態を明示的に表す
+    // （念のため Com_IpduGroupStop() も呼び、Start 後に Stop された場合と
+    // 同じ経路であることも合わせて確認する）。
     Com_IpduGroupStop(kTestStoppableGroupId);
 
-    /* 実行 (Act) + 評価 (Assert): [SWS_Com_00861] stopped I-PDU は E_NOT_OK。
-     * トリガー自体も記録されない（後で started になっても自動実行されない）。 */
+    /* ----------------------------------- */
+    /* ---- 実行 (Act) + 評価 (Assert) --- */
+    /* ----------------------------------- */
+    // [SWS_Com_00861] stopped I-PDU は E_NOT_OK。
+    // トリガー自体も記録されない（後で started になっても自動実行されない）。
     EXPECT_EQ(Com_TriggerIPDUSend(3U), E_NOT_OK);
     EXPECT_EQ(Com_Test_GetTxTriggerPending(3U), 0U);
 }

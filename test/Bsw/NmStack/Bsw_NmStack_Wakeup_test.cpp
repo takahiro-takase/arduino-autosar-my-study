@@ -169,13 +169,21 @@ protected:
 // ------------------------------------------------------------
 TEST_F(Bsw_Wakeup_Test, CanMainFunctionWakeup_OK_StartsValidationWithoutNotifyingComM)
 {
-    /* 準備 (Arrange): SetUp() で SLEEP 済み */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // SetUp() で SLEEP 済み
     FakeCanHw_IsWakeupPendingReturn = CAN_HW_OK;
 
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Can_MainFunction_Wakeup();
 
-    /* 評価 (Assert): SLEEP → STOPPED (Listen-Only) のみ。FULL_COM へはまだ確定しない */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // SLEEP → STOPPED (Listen-Only) のみ。FULL_COM へはまだ確定しない
     EXPECT_EQ(Can_Test_GetControllerState(), CAN_CS_STOPPED);
     EXPECT_EQ(FakeCanHw_LastMode, CAN_HW_MODE_LISTEN_ONLY);
     EXPECT_EQ(CurrentComMode(), static_cast<ComM_ModeType>(COMM_NO_COMMUNICATION));
@@ -188,12 +196,19 @@ TEST_F(Bsw_Wakeup_Test, CanMainFunctionWakeup_OK_StartsValidationWithoutNotifyin
 
 TEST_F(Bsw_Wakeup_Test, CanMainFunctionWakeup_NG_NoWakeupPending_StaysAsleep)
 {
-    /* 準備 (Arrange): ウェイクアップ要因なし（既定 CAN_HW_FAIL のまま） */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // ウェイクアップ要因なし（既定 CAN_HW_FAIL のまま）
 
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Can_MainFunction_Wakeup();
 
-    /* 評価 (Assert) */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(Can_Test_GetControllerState(), CAN_CS_SLEEP);
     EXPECT_EQ(FakeCanHw_SetModeCount, 0U);
 }
@@ -203,7 +218,10 @@ TEST_F(Bsw_Wakeup_Test, CanMainFunctionWakeup_NG_NoWakeupPending_StaysAsleep)
 // ------------------------------------------------------------
 TEST_F(Bsw_Wakeup_Test, CanMainFunctionRead_OK_ValidatesWakeupAndNotifiesComMFullCom)
 {
-    /* 準備 (Arrange): セグメント①の終端状態（WAKEUP_VALIDATING）を用意する */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // セグメント①の終端状態（WAKEUP_VALIDATING）を用意する
     ArrangeValidating();
     FakeCanHw_RxPendingCount = 1U;
     FakeCanHw_RxId  = 0x100U;
@@ -211,10 +229,14 @@ TEST_F(Bsw_Wakeup_Test, CanMainFunctionRead_OK_ValidatesWakeupAndNotifiesComMFul
     FakeCanHw_RxData[0] = 0x12U;
     FakeCanHw_RxData[1] = 0x34U;
 
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Can_MainFunction_Read();
 
-    /* 評価 (Assert) */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(Can_Test_GetControllerState(), CAN_CS_STARTED);
     EXPECT_EQ(FakeCanHw_LastMode, CAN_HW_MODE_NORMAL);
     EXPECT_EQ(CurrentComMode(), static_cast<ComM_ModeType>(COMM_FULL_COMMUNICATION));
@@ -231,15 +253,23 @@ TEST_F(Bsw_Wakeup_Test, CanMainFunctionRead_OK_ValidatesWakeupAndNotifiesComMFul
 // ------------------------------------------------------------
 TEST_F(Bsw_Wakeup_Test, CanSMMainFunction_NG_ValidationTimeout_ReturnsToSleepSilently)
 {
-    /* 準備 (Arrange): セグメント①の終端状態（WAKEUP_VALIDATING）から、
-     * 検証タイマ（CANSM_WAKEUP_VALIDATION_MS=2000ms）を超過させる */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // セグメント①の終端状態（WAKEUP_VALIDATING）から、
+    // 検証タイマ（CANSM_WAKEUP_VALIDATION_MS=2000ms）を超過させる
     ArrangeValidating();
     FakeMillis_Value = 2001UL;
 
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     CanSM_MainFunction();
 
-    /* 評価 (Assert): ノイズによる誤ウェイクアップとみなし、静かに再スリープする */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // ノイズによる誤ウェイクアップとみなし、静かに再スリープする
     EXPECT_EQ(Can_Test_GetControllerState(), CAN_CS_SLEEP);
     EXPECT_EQ(FakeCanHw_LastMode, CAN_HW_MODE_SLEEP);
     EXPECT_EQ(CurrentComMode(), static_cast<ComM_ModeType>(COMM_NO_COMMUNICATION));
@@ -248,14 +278,22 @@ TEST_F(Bsw_Wakeup_Test, CanSMMainFunction_NG_ValidationTimeout_ReturnsToSleepSil
 
 TEST_F(Bsw_Wakeup_Test, CanSMMainFunction_NG_ValidationNotYetTimedOut_StaysValidating)
 {
-    /* 準備 (Arrange): タイマ超過前 */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // タイマ超過前
     ArrangeValidating();
     FakeMillis_Value = 1999UL;
 
-    /* 実行 (Act) */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     CanSM_MainFunction();
 
-    /* 評価 (Assert): まだ検証継続中（Listen-Only のまま） */
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // まだ検証継続中（Listen-Only のまま）
     EXPECT_EQ(Can_Test_GetControllerState(), CAN_CS_STOPPED);
     EXPECT_EQ(FakeCanHw_SetModeCount, 0U);
     EXPECT_EQ(CurrentComMode(), static_cast<ComM_ModeType>(COMM_NO_COMMUNICATION));
