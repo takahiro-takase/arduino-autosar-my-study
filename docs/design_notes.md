@@ -52,6 +52,28 @@ C ファイルから C++ 関数を呼ぶすべてのヘッダに `extern "C"` �
 - **「Test Functions」の帯は `#ifdef *_UNIT_TEST` の外**に置きます（`*_UNIT_TEST` が未定義でも帯は残ります）。
 - ヘッダの「Functions」「Callback Functions and Notifications」は宣言であることがファイルの種類から自明なので、
   ソースと同じ見出しにしています。
+- **ソースの小見出し**: 「Functions」の中は、モジュールの仕様書の章節名の帯（`Scheduled functions`、
+  `Callback notifications`、`Services affecting ...` など）で小分けしてよい。この形で並べるソースでは、
+  `Internal Functions` をファイルの末尾にまとめる（上の表の順序は、標準の見出し同士の並びのこと）。
+- **前方宣言の例外**: 同じファイルの関数のアドレスで初期化するグローバル変数がある場合は、
+  `Function Prototypes` を `Global Variables` より前に置く（`test/win_quick_exit_stub.cpp`）。
+
+### テストコードの見出し
+
+テストファイル（`test/**/*_test.cpp`）も、ファイル単位で次の帯を持ちます。
+
+| 順 | 見出し | 置くもの |
+|----|--------|----------|
+| 1 | Includes | `#include`（`extern "C"` ブロックを含む） |
+| 2 | Definitions | `#define` |
+| 3 | Type Definitions | `typedef` / 構造体 |
+| 4 | Global Variables | テスト用の設定、カウンタ付きコールバックなど（無名名前空間の中身を含む） |
+| 5 | Test Fixture | フィクスチャクラス（`SetUp()` / `TearDown()`）。クラスごとにその直前へ置く |
+| 6 | Test Functions | `TEST_F` 群（最初のテストの直前） |
+
+- テストの中の「準備 (Arrange) / 実行 (Act) / 評価 (Assert)」は、幅 29 桁（左寄せ・固定幅）の
+  3 行の帯にします。ラベルが長いときは、そのテストケース内の全部の帯の幅をそろえて広げます。
+- テスト名とフィクスチャ名の付け方は [unit_test.md](unit_test.md#test-naming) を参照してください。
 
 <a id="log-level"></a>
 ## ログレベルの抑制 (Det_Cfg.h)

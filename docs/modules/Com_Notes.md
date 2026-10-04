@@ -1005,11 +1005,11 @@ RX 側で新しい問題を作った」のと同種の落とし穴）。その�
 **この機能は実際に発動するか**: 実機での動作確認は未実施です（上記の
 理由により、本番の呼び出し元が存在しないため）。回帰テストとして
 `test/Bsw/ComStack/Bsw_ComStack_SignalGroup_Tx_test.cpp` の
-`SendSignalGroupArray_OK_WritesBufferTriggersSendAndSetsUpdateBit`/
-`SendSignalGroupArray_OK_AlwaysTriggersEvenWithoutChange`/
-`SendSignalGroupArray_NG_NullDataPtrReturnsError`/
-`SendSignalGroupArray_NG_NonSignalGroupIPduReturnsError`/
-`SendSignalGroupArray_OK_SyncsShadowBufferPreventingStaleOverwrite`
+`Bsw_ComStack_SignalGroup_Tx_SendSignalGroupArray_Test.OK_WritesBufferTriggersSendAndSetsUpdateBit`/
+`Bsw_ComStack_SignalGroup_Tx_SendSignalGroupArray_Test.OK_AlwaysTriggersEvenWithoutChange`/
+`Bsw_ComStack_SignalGroup_Tx_SendSignalGroupArray_Test.NG_Step01_ComSendSignalGroupArray_NullDataPtr`/
+`Bsw_ComStack_SignalGroup_Tx_SendSignalGroupArray_Test.NG_Step01_ComSendSignalGroupArray_NonSignalGroupIPdu`/
+`Bsw_ComStack_SignalGroup_Tx_SendSignalGroupArray_Test.OK_SyncsShadowBufferPreventingStaleOverwrite`
 （上記の状態同期の是正確認）を追加し、既存の TMS 用 Signal Group
 （`kTestTmsGroupIPdu`、IPduId=1）を流用して検証しています。
 
@@ -1262,8 +1262,8 @@ Group である `WarningStatus` に `ComSignalDataInvalidValue` を設定した
 `Bsw_ComStack_Signal_Tx_InvalidateSignal_Test.NG_Step01_ComInvalidateSignal_UnconfiguredInvalidValue`/
 `Bsw_ComStack_Signal_Tx_InvalidateSignal_Test.NG_Step01_ComInvalidateSignal_UnknownSignalId`/
 `Bsw_ComStack_Signal_Tx_InvalidateSignal_Test.NG_Step01_ComInvalidateSignal_RxSignal`/
-`InvalidateSignalGroup_OK_WritesMemberInvalidValueAndCommitsToBuffer`/
-`InvalidateSignalGroup_NG_AnyMemberUnconfiguredReturnsServiceNotAvailableWithoutPartialCommit`
+`Bsw_ComStack_SignalGroup_Tx_InvalidateSignalGroup_Test.OK`/
+`Bsw_ComStack_SignalGroup_Tx_InvalidateSignalGroup_Test.NG_Step01_ComInvalidateSignalGroup_AnyMemberUnconfigured`
 参照。
 
 ## RX ComFilterAlgorithm（受信フィルタ、プラウジビリティチェック）
@@ -1533,10 +1533,9 @@ ON/OFF する専用 API）でしたが、実装を進める過程で以下の理
 （元々 TX 専用グループでのみ実運用されていた）を流用しており、
 `Com.c` 側の変更は一切ありません。回帰テストとして
 `test/Bsw/ComStack/Bsw_ComStack_SignalGroup_Rx_test.cpp` の
-`Bsw_ComStack_SignalGroup_RxIpduGroup_Test` フィクスチャ（`ComMainFunction_NG_
-StoppedGroupedIPduNeverTimesOutRegardlessOfElapsed`/
-`ComIpduGroupStart_OK_GroupedIPduBeginsMonitoringAfterExplicitStart`/
-`ComIpduGroupStop_OK_StoppingAgainSuppressesTimeoutEvenAfterElapsed`）
+`Bsw_ComStack_SignalGroup_RxIpduGroup_IpduGroupStartStop_Test` フィクスチャ（`NG_Step01_ComMainFunctionRx_StoppedGroupedIPdu`/
+`OK_GroupedIPduBeginsMonitoringAfterExplicitStart`/
+`OK_StoppingAgainSuppressesTimeoutEvenAfterElapsed`）
 を新設し、「停止中は経過時間に関わらずタイムアウトしない」
 「開始後は通常どおり監視される」「開始後に再度停止すると再びタイムアウト
 しなくなる」の3点を確認しています（`COM_IPDU_GROUP_SENSOR_RX` の
@@ -1746,7 +1745,7 @@ of the signals into account"、無効なシグナル/シグナルグループ受
    でした（コード自体は `[SWS_Com_00738]` を引用しつつ、実際には
    Signal Group の破棄には適用されていなかった、という食い違いが
    存在していました）。回帰テスト
-   `ComMainFunction_NG_GroupShortFrameDiscardStillResetsDeadlineTimer`
+   `Bsw_ComStack_SignalGroup_Rx_GroupRxTOut_Test.NG_Step01_ComRxIndication_ShortFrameDiscardStillResetsDeadlineTimer`
    で検証済みです。
 2. `RxIpduCalloutCbk` に拒否された受信であっても、`Com_RxUsingFirstTimeout`
    は steady 状態へ遷移するようになりました。「初回受信」の定義が
@@ -1755,7 +1754,7 @@ of the signals into account"、無効なシグナル/シグナルグループ受
    `TimeoutMs`（定常状態）に異なる値を設定した I-PDU で、拒否され
    続ける callout を持たせると、2回目以降は `TimeoutMs` 側のしきい値が
    使われます。回帰テスト
-   `ComMainFunction_OK_RejectedFrameStillTransitionsToSteadyTimeout`
+   `Bsw_ComStack_Signal_Rx_Timeout_Test.OK_RejectedFrameStillTransitionsToSteadyTimeout`
    で検証済みです。
 
 ```
