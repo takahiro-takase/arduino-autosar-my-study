@@ -66,21 +66,21 @@ protected:
     }
 };
 
-TEST_F(GptTest, InitSucceedsWithValidConfig)
+TEST_F(GptTest, Gpt_Init_OK_SucceedsWithValidConfig)
 {
     Gpt_Init(&config);
 
     EXPECT_EQ(FakeDetHw_ReportCount, 0U);
 }
 
-TEST_F(GptTest, InitRejectsNullConfig)
+TEST_F(GptTest, Gpt_Init_NG_RejectsNullConfig)
 {
     Gpt_Init(NULL);
 
     EXPECT_EQ(FakeDetHw_LastErrorId, GPT_E_PARAM_POINTER);
 }
 
-TEST_F(GptTest, InitTwiceReportsAlreadyInitialized)
+TEST_F(GptTest, Gpt_Init_NG_TwiceReportsAlreadyInitialized)
 {
     Gpt_Init(&config);
     FakeDetHw_Reset();
@@ -90,7 +90,7 @@ TEST_F(GptTest, InitTwiceReportsAlreadyInitialized)
     EXPECT_EQ(FakeDetHw_LastErrorId, GPT_E_ALREADY_INITIALIZED);
 }
 
-TEST_F(GptTest, ApiCallsBeforeInitReportUninit)
+TEST_F(GptTest, Gpt_ApiCalls_NG_BeforeInitReportUninit)
 {
     EXPECT_EQ(Gpt_GetTimeElapsed(GPT_CHANNEL_0), 0U);
     EXPECT_EQ(FakeDetHw_LastErrorId, GPT_E_UNINIT);
@@ -99,7 +99,7 @@ TEST_F(GptTest, ApiCallsBeforeInitReportUninit)
     EXPECT_EQ(FakeDetHw_LastErrorId, GPT_E_UNINIT);
 }
 
-TEST_F(GptTest, StartTimerRejectsZeroValue)
+TEST_F(GptTest, Gpt_StartTimer_NG_RejectsZeroValue)
 {
     Gpt_Init(&config);
 
@@ -109,7 +109,7 @@ TEST_F(GptTest, StartTimerRejectsZeroValue)
     EXPECT_EQ(FakeGptHw_StartCount, 0U);
 }
 
-TEST_F(GptTest, StartTimerRejectsValueAboveTickValueMax)
+TEST_F(GptTest, Gpt_StartTimer_NG_RejectsValueAboveTickValueMax)
 {
     channels[0].TickValueMax = 100U;
     Gpt_Init(&config);
@@ -120,7 +120,7 @@ TEST_F(GptTest, StartTimerRejectsValueAboveTickValueMax)
     EXPECT_EQ(FakeGptHw_StartCount, 0U);
 }
 
-TEST_F(GptTest, StartTimerRejectsInvalidChannel)
+TEST_F(GptTest, Gpt_StartTimer_NG_RejectsInvalidChannel)
 {
     Gpt_Init(&config);
 
@@ -129,7 +129,7 @@ TEST_F(GptTest, StartTimerRejectsInvalidChannel)
     EXPECT_EQ(FakeDetHw_LastErrorId, GPT_E_PARAM_CHANNEL);
 }
 
-TEST_F(GptTest, StartTimerSucceedsAndDelegatesToHw)
+TEST_F(GptTest, Gpt_StartTimer_OK_SucceedsAndDelegatesToHw)
 {
     Gpt_Init(&config);
 
@@ -143,7 +143,7 @@ TEST_F(GptTest, StartTimerSucceedsAndDelegatesToHw)
     EXPECT_EQ(Gpt_GetTimeRemaining(GPT_CHANNEL_0), 1000U);
 }
 
-TEST_F(GptTest, StartTimerWhileRunningReportsBusy)
+TEST_F(GptTest, Gpt_StartTimer_NG_WhileRunningReportsBusy)
 {
     Gpt_Init(&config);
     Gpt_StartTimer(GPT_CHANNEL_0, 1000U);
@@ -155,7 +155,7 @@ TEST_F(GptTest, StartTimerWhileRunningReportsBusy)
     EXPECT_EQ(FakeGptHw_StartCount, 1U);  /* 2 回目は Hw まで到達しない */
 }
 
-TEST_F(GptTest, StartTimerRollsBackStateWhenHwFails)
+TEST_F(GptTest, Gpt_StartTimer_NG_RollsBackStateWhenHwFails)
 {
     FakeGptHw_StartShouldFail = 1U;
     Gpt_Init(&config);
@@ -170,7 +170,7 @@ TEST_F(GptTest, StartTimerRollsBackStateWhenHwFails)
     EXPECT_EQ(FakeGptHw_StartCount, 2U);
 }
 
-TEST_F(GptTest, OnTickIncrementsElapsedAndDecrementsRemaining)
+TEST_F(GptTest, Gpt_OnTick_OK_IncrementsElapsedAndDecrementsRemaining)
 {
     Gpt_Init(&config);
     Gpt_StartTimer(GPT_CHANNEL_0, 1000U);
@@ -184,7 +184,7 @@ TEST_F(GptTest, OnTickIncrementsElapsedAndDecrementsRemaining)
     EXPECT_EQ(Gpt_GetTimeRemaining(GPT_CHANNEL_0), 500U);
 }
 
-TEST_F(GptTest, ContinuousModeWrapsAtTargetWithoutStoppingHw)
+TEST_F(GptTest, Gpt_OnTick_OK_ContinuousModeWrapsAtTargetWithoutStoppingHw)
 {
     Gpt_Init(&config);
     Gpt_StartTimer(GPT_CHANNEL_0, 1000U);
@@ -198,7 +198,7 @@ TEST_F(GptTest, ContinuousModeWrapsAtTargetWithoutStoppingHw)
     EXPECT_EQ(FakeGptHw_StopCount, 0U);
 }
 
-TEST_F(GptTest, OneshotModeStopsHwAndFreezesAtTarget)
+TEST_F(GptTest, Gpt_OnTick_OK_OneshotModeStopsHwAndFreezesAtTarget)
 {
     channels[0].Mode = GPT_CH_MODE_ONESHOT;
     Gpt_Init(&config);
@@ -220,7 +220,7 @@ TEST_F(GptTest, OneshotModeStopsHwAndFreezesAtTarget)
     EXPECT_EQ(FakeGptHw_StopCount, 1U);
 }
 
-TEST_F(GptTest, StopTimerFreezesElapsedAndIsIdempotent)
+TEST_F(GptTest, Gpt_StopTimer_OK_FreezesElapsedAndIsIdempotent)
 {
     Gpt_Init(&config);
     Gpt_StartTimer(GPT_CHANNEL_0, 1000U);
@@ -240,7 +240,7 @@ TEST_F(GptTest, StopTimerFreezesElapsedAndIsIdempotent)
     EXPECT_EQ(FakeDetHw_ReportCount, 0U);
 }
 
-TEST_F(GptTest, DeInitWhileRunningReportsBusyAndStaysInitialized)
+TEST_F(GptTest, Gpt_DeInit_NG_WhileRunningReportsBusyAndStaysInitialized)
 {
     Gpt_Init(&config);
     Gpt_StartTimer(GPT_CHANNEL_0, 1000U);
@@ -257,7 +257,7 @@ TEST_F(GptTest, DeInitWhileRunningReportsBusyAndStaysInitialized)
     EXPECT_EQ(FakeDetHw_LastErrorId, GPT_E_BUSY);
 }
 
-TEST_F(GptTest, NotificationFiresOnlyWhileEnabled)
+TEST_F(GptTest, Gpt_EnableNotification_OK_FiresOnlyWhileEnabled)
 {
     Gpt_Init(&config);
     Gpt_StartTimer(GPT_CHANNEL_0, 10U);
@@ -283,7 +283,7 @@ TEST_F(GptTest, NotificationFiresOnlyWhileEnabled)
     EXPECT_EQ(g_notifyCount, 1U);  /* 無効化後は増えない */
 }
 
-TEST_F(GptTest, EnableNotificationRejectsChannelWithoutNotificationConfigured)
+TEST_F(GptTest, Gpt_EnableNotification_NG_RejectsChannelWithoutNotificationConfigured)
 {
     channels[0].Notification = NULL;
     Gpt_Init(&config);
@@ -293,14 +293,14 @@ TEST_F(GptTest, EnableNotificationRejectsChannelWithoutNotificationConfigured)
     EXPECT_EQ(FakeDetHw_LastErrorId, GPT_E_PARAM_CHANNEL);
 }
 
-TEST_F(GptTest, GetVersionInfoRejectsNullPointer)
+TEST_F(GptTest, Gpt_GetVersionInfo_NG_RejectsNullPointer)
 {
     Gpt_GetVersionInfo(NULL);
 
     EXPECT_EQ(FakeDetHw_LastErrorId, GPT_E_PARAM_POINTER);
 }
 
-TEST_F(GptTest, GetVersionInfoFillsExpectedModuleId)
+TEST_F(GptTest, Gpt_GetVersionInfo_OK_FillsExpectedModuleId)
 {
     Std_VersionInfoType info;
 

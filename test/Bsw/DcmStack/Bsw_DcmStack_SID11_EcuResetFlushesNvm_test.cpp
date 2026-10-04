@@ -166,7 +166,7 @@ protected:
 // STATUS・EXTENDED（冗長 2 面）の書き込みが完了している。
 // ------------------------------------------------------------
 TEST_F(Bsw_DcmStack_SID11_EcuResetFlushesNvm_Test,
-       EcuReset_OK_PendingDtcWritesAreCompletedBeforeMcuReset)
+       OK_PendingDtcWritesAreCompletedBeforeMcuReset)
 {
     /* ----------------------- */
     /* ---- 準備 (Arrange) --- */

@@ -224,7 +224,7 @@ protected:
 // ------------------------------------------------------------
 
 TEST_F(Bsw_DcmStack_SID85_ControlDTCSetting_Test,
-       ControlDTCSetting_OK_OffIsAcceptedWithPositiveResponseOnCanHw)
+       OK_OffIsAcceptedWithPositiveResponse)
 {
     EnterExtendedSession();
 
@@ -241,7 +241,7 @@ TEST_F(Bsw_DcmStack_SID85_ControlDTCSetting_Test,
 }
 
 TEST_F(Bsw_DcmStack_SID85_ControlDTCSetting_Test,
-       ControlDTCSetting_OK_OnIsAcceptedWithPositiveResponseOnCanHw)
+       OK_OnIsAcceptedWithPositiveResponse)
 {
     EnterExtendedSession();
 
@@ -258,7 +258,7 @@ TEST_F(Bsw_DcmStack_SID85_ControlDTCSetting_Test,
 // ------------------------------------------------------------
 
 TEST_F(Bsw_DcmStack_SID85_ControlDTCSetting_Test,
-       ControlDTCSetting_OK_OffSuppressesDtcRecordingUntilOnOnCanHw)
+       OK_OffSuppressesDtcRecordingUntilOn)
 {
     EnterExtendedSession();
 
@@ -298,7 +298,7 @@ TEST_F(Bsw_DcmStack_SID85_ControlDTCSetting_Test,
 // ------------------------------------------------------------
 
 TEST_F(Bsw_DcmStack_SID85_ControlDTCSetting_Test,
-       ControlDTCSetting_OK_AutoReEnablesOnExplicitDefaultSessionRequestOnCanHw)
+       OK_AutoReEnablesOnExplicitDefaultSessionRequest)
 {
     EnterExtendedSession();
     SendControlDTCSetting(DCM_DTCSETTING_OFF);
@@ -327,7 +327,7 @@ TEST_F(Bsw_DcmStack_SID85_ControlDTCSetting_Test,
 }
 
 TEST_F(Bsw_DcmStack_SID85_ControlDTCSetting_Test,
-       ControlDTCSetting_OK_AutoReEnablesOnS3TimeoutOnCanHw)
+       OK_AutoReEnablesOnS3Timeout)
 {
     EnterExtendedSession();
     SendControlDTCSetting(DCM_DTCSETTING_OFF);
@@ -351,7 +351,7 @@ TEST_F(Bsw_DcmStack_SID85_ControlDTCSetting_Test,
 }
 
 TEST_F(Bsw_DcmStack_SID85_ControlDTCSetting_Test,
-       ControlDTCSetting_OK_AutoReEnablesAfterEcuResetOnCanHw)
+       OK_AutoReEnablesAfterEcuReset)
 {
     EnterExtendedSession();
     SendControlDTCSetting(DCM_DTCSETTING_OFF);
@@ -380,7 +380,7 @@ TEST_F(Bsw_DcmStack_SID85_ControlDTCSetting_Test,
 }
 
 TEST_F(Bsw_DcmStack_SID85_ControlDTCSetting_Test,
-       ControlDTCSetting_NG_DoesNotReEnableWhenNotDisabledOnCanHw)
+       NG_NoEffect_ReEnableWhenNotDisabled)
 {
     /* ----------------------- */
     /* ---- 準備 (Arrange) --- */
@@ -414,7 +414,7 @@ TEST_F(Bsw_DcmStack_SID85_ControlDTCSetting_Test,
 // ------------------------------------------------------------
 
 TEST_F(Bsw_DcmStack_SID85_ControlDTCSetting_Test,
-       ControlDTCSetting_NG_DefaultSessionProducesServiceNotSupportedInSessionResponseOnCanHw)
+       NG_ServiceNotSupportedInSession_DefaultSession)
 {
     /* ----------------------- */
     /* ---- 準備 (Arrange) --- */
@@ -445,7 +445,7 @@ TEST_F(Bsw_DcmStack_SID85_ControlDTCSetting_Test,
 }
 
 TEST_F(Bsw_DcmStack_SID85_ControlDTCSetting_Test,
-       ControlDTCSetting_NG_UnsupportedSubFuncProducesSubFuncNotSupportedResponseOnCanHw)
+       NG_SubFuncNotSupported_UnsupportedSubFunc)
 {
     EnterExtendedSession();
 
@@ -467,7 +467,7 @@ TEST_F(Bsw_DcmStack_SID85_ControlDTCSetting_Test,
 }
 
 TEST_F(Bsw_DcmStack_SID85_ControlDTCSetting_Test,
-       ControlDTCSetting_NG_ExtraOptionRecordProducesIncorrectMessageLengthResponseOnCanHw)
+       NG_IncorrectMessageLength_ExtraOptionRecord)
 {
     EnterExtendedSession();
 
@@ -507,7 +507,7 @@ TEST_F(Bsw_DcmStack_SID85_ControlDTCSetting_Test,
 }
 
 TEST_F(Bsw_DcmStack_SID85_ControlDTCSetting_Test,
-       ControlDTCSetting_NG_UnsupportedSubFuncWithExtraBytePrefersSubFuncNrcOnCanHw)
+       NG_SubFuncNotSupported_UnsupportedSubFuncWithExtraByte)
 {
     EnterExtendedSession();
 

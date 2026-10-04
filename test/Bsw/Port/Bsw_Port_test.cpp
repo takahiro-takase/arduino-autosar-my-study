@@ -32,7 +32,7 @@ protected:
     }
 };
 
-TEST_F(PortTest, RefreshPortDirectionReappliesAllConfiguredPinDirections)
+TEST_F(PortTest, Port_RefreshPortDirection_OK_ReappliesAllConfiguredPinDirections)
 {
     Port_Init(NULL);
     FakePortHw_Reset();  /* Port_Init 自身の適用呼び出しを後続の検証対象から除く */
@@ -46,7 +46,7 @@ TEST_F(PortTest, RefreshPortDirectionReappliesAllConfiguredPinDirections)
     EXPECT_EQ(FakePortHw_SetPinDirectionCount, PORT_PIN_COUNT);
 }
 
-TEST_F(PortTest, RefreshPortDirectionOverridesDirectionChangedByRuntimeApi)
+TEST_F(PortTest, Port_RefreshPortDirection_OK_OverridesDirectionChangedByRuntimeApi)
 {
     Port_Init(NULL);
     Port_SetPinDirection(PORT_PIN_LED_RUNNING, PORT_PIN_IN);  /* 実行時に方向を変更してしまった状態を模擬 */
@@ -63,7 +63,7 @@ TEST_F(PortTest, GetVersionInfo_NG_NullPointer)
     EXPECT_EQ(FakeDetHw_LastErrorId, PORT_E_PARAM_POINTER);
 }
 
-TEST_F(PortTest, SetPinModeAlwaysReportsModeUnchangeableAndHasNoEffect)
+TEST_F(PortTest, Port_SetPinMode_NG_AlwaysReportsModeUnchangeableAndHasNoEffect)
 {
     Port_Init(NULL);
     FakePortHw_Reset();  /* Port_Init 自身の適用呼び出しを後続の検証対象から除く */

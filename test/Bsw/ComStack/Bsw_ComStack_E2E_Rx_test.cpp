@@ -119,7 +119,7 @@ const E2E_P05ConfigType kRefEngineInfoCfg = {
     0U        /* Offset */
 };
 
-class Bsw_E2E_Rx_Test : public ::testing::Test
+class Bsw_ComStack_E2E_Rx_Check_Test : public ::testing::Test
 {
 protected:
     void SetUp() override
@@ -157,7 +157,7 @@ protected:
 };
 
 // ------------------------------------------------------------
-TEST_F(Bsw_E2E_Rx_Test, ComRxIndication_OK_ValidFirstFrameE2EChecksOk)
+TEST_F(Bsw_ComStack_E2E_Rx_Check_Test, OK_ValidFirstFrameE2EChecksOk)
 {
     /* ----------------------- */
     /* ---- 準備 (Arrange) --- */
@@ -184,7 +184,8 @@ TEST_F(Bsw_E2E_Rx_Test, ComRxIndication_OK_ValidFirstFrameE2EChecksOk)
     EXPECT_EQ(g_LastCheckStatus, E2E_P05STATUS_OK);
 }
 
-TEST_F(Bsw_E2E_Rx_Test, ComRxIndication_OK_SecondConsecutiveFrameE2EChecksOk)
+
+TEST_F(Bsw_ComStack_E2E_Rx_Check_Test, OK_SecondConsecutiveFrameE2EChecksOk)
 {
     /* ----------------------- */
     /* ---- 準備 (Arrange) --- */
@@ -213,7 +214,8 @@ TEST_F(Bsw_E2E_Rx_Test, ComRxIndication_OK_SecondConsecutiveFrameE2EChecksOk)
     EXPECT_EQ(g_LastCheckStatus, E2E_P05STATUS_OK);
 }
 
-TEST_F(Bsw_E2E_Rx_Test, ComRxIndication_NG_CorruptedCrcE2EChecksError)
+
+TEST_F(Bsw_ComStack_E2E_Rx_Check_Test, NG_Step01_ComRxIndication_CorruptedCrc)
 {
     /* ----------------------- */
     /* ---- 準備 (Arrange) --- */

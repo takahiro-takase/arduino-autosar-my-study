@@ -175,7 +175,7 @@ protected:
 
 // ------------------------------------------------------------
 TEST_F(Bsw_DcmStack_SID19_SF01_ReadDtcCount_Test,
-       ReadDtcCount_OK_RequestFromCanHwProducesExpectedSingleFrameResponseOnCanHw)
+       OK_RequestFromCanHwProducesExpectedSingleFrameResponse)
 {
     /* ----------------------- */
     /* ---- 準備 (Arrange) --- */
@@ -227,7 +227,7 @@ TEST_F(Bsw_DcmStack_SID19_SF01_ReadDtcCount_Test,
 // 同じ手段で DTC 件数を操作できる）。
 // ------------------------------------------------------------
 TEST_F(Bsw_DcmStack_SID19_SF01_ReadDtcCount_Test,
-       ReadDtcCount_OK_OneRegisteredDtcMatchingStatusMaskIsReflectedInCountOnCanHw)
+       OK_OneRegisteredDtcMatchingStatusMaskIsReflectedInCount)
 {
     /* ----------------------- */
     /* ---- 準備 (Arrange) --- */
@@ -277,7 +277,7 @@ TEST_F(Bsw_DcmStack_SID19_SF01_ReadDtcCount_Test,
 // のため、チェーンテスト側に追加する。
 // ------------------------------------------------------------
 TEST_F(Bsw_DcmStack_SID19_SF01_ReadDtcCount_Test,
-       ReadDtcCount_OK_StatusMask0xFFMatchesNotCompletedSinceClearOnCanHw)
+       OK_StatusMask0xFFMatchesNotCompletedSinceClear)
 {
     /* ----------------------- */
     /* ---- 準備 (Arrange) --- */
@@ -320,7 +320,7 @@ TEST_F(Bsw_DcmStack_SID19_SF01_ReadDtcCount_Test,
 // （[[feedback_test_file_one_scenario_per_file]]、NGは分岐元OKと同居）。
 // ------------------------------------------------------------
 TEST_F(Bsw_DcmStack_SID19_SF01_ReadDtcCount_Test,
-       ReadDtcCount_NG_MissingStatusMaskProducesIncorrectMessageLengthResponseOnCanHw)
+       NG_IncorrectMessageLength_MissingStatusMask)
 {
     /* ----------------------- */
     /* ---- 準備 (Arrange) --- */

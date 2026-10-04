@@ -49,7 +49,7 @@ protected:
 // Mcu_GetResetReason()
 // ------------------------------------------------------------
 
-TEST_F(McuTest, GetResetReasonNgReportsUninitBeforeInit)
+TEST_F(McuTest, Mcu_GetResetReason_NG_ReportsUninitBeforeInit)
 {
     Mcu_ResetType reason = Mcu_GetResetReason();
 
@@ -60,7 +60,7 @@ TEST_F(McuTest, GetResetReasonNgReportsUninitBeforeInit)
     EXPECT_EQ(LastErrorId_Det_ReportError, MCU_E_UNINIT);
 }
 
-TEST_F(McuTest, GetResetReasonOkReturnsWatchdogReset)
+TEST_F(McuTest, Mcu_GetResetReason_OK_ReturnsWatchdogReset)
 {
     FakeMcuHw_ResetReason.Watchdog = 1U;
     Mcu_Init(&Mcu_Config);
@@ -69,7 +69,7 @@ TEST_F(McuTest, GetResetReasonOkReturnsWatchdogReset)
     EXPECT_EQ(CallCount_Det_ReportError, 0U);
 }
 
-TEST_F(McuTest, GetResetReasonOkReturnsPowerOnReset)
+TEST_F(McuTest, Mcu_GetResetReason_OK_ReturnsPowerOnReset)
 {
     FakeMcuHw_ResetReason.PowerOn = 1U;
     Mcu_Init(&Mcu_Config);
@@ -78,7 +78,7 @@ TEST_F(McuTest, GetResetReasonOkReturnsPowerOnReset)
     EXPECT_EQ(CallCount_Det_ReportError, 0U);
 }
 
-TEST_F(McuTest, GetResetReasonOkReturnsUndefinedWhenNoRecognizedFlag)
+TEST_F(McuTest, Mcu_GetResetReason_OK_ReturnsUndefinedWhenNoRecognizedFlag)
 {
     // BrownOut/External が単独で立っている場合、Mcu_ResetType には対応する
     // 値が無いため MCU_RESET_UNDEFINED になる（Mcu.h 冒頭コメント参照）。
@@ -93,7 +93,7 @@ TEST_F(McuTest, GetResetReasonOkReturnsUndefinedWhenNoRecognizedFlag)
 // Mcu_GetResetRawValue()
 // ------------------------------------------------------------
 
-TEST_F(McuTest, GetResetRawValueNgReportsUninitBeforeInit)
+TEST_F(McuTest, Mcu_GetResetRawValue_NG_ReportsUninitBeforeInit)
 {
     Mcu_RawResetType raw = Mcu_GetResetRawValue();
 
@@ -104,7 +104,7 @@ TEST_F(McuTest, GetResetRawValueNgReportsUninitBeforeInit)
     EXPECT_EQ(LastErrorId_Det_ReportError, MCU_E_UNINIT);
 }
 
-TEST_F(McuTest, GetResetRawValueOkReturnsBitPackedFlags)
+TEST_F(McuTest, Mcu_GetResetRawValue_OK_ReturnsBitPackedFlags)
 {
     FakeMcuHw_ResetReason.Watchdog = 1U;
     FakeMcuHw_ResetReason.PowerOn  = 1U;
@@ -119,7 +119,7 @@ TEST_F(McuTest, GetResetRawValueOkReturnsBitPackedFlags)
 // Mcu_PerformReset()
 // ------------------------------------------------------------
 
-TEST_F(McuTest, PerformResetNgReportsUninitAndDoesNotCallHw)
+TEST_F(McuTest, Mcu_PerformReset_NG_ReportsUninitAndDoesNotCallHw)
 {
     Mcu_PerformReset();
 
@@ -130,7 +130,7 @@ TEST_F(McuTest, PerformResetNgReportsUninitAndDoesNotCallHw)
     EXPECT_EQ(LastErrorId_Det_ReportError, MCU_E_UNINIT);
 }
 
-TEST_F(McuTest, PerformResetOkCallsHwPerformReset)
+TEST_F(McuTest, Mcu_PerformReset_OK_CallsHwPerformReset)
 {
     Mcu_Init(&Mcu_Config);
 
@@ -144,7 +144,7 @@ TEST_F(McuTest, PerformResetOkCallsHwPerformReset)
 // Mcu_GetVersionInfo()
 // ------------------------------------------------------------
 
-TEST_F(McuTest, GetVersionInfoNgReportsParamPointerForNull)
+TEST_F(McuTest, Mcu_GetVersionInfo_NG_ReportsParamPointerForNull)
 {
     Mcu_GetVersionInfo(NULL);
 
@@ -154,7 +154,7 @@ TEST_F(McuTest, GetVersionInfoNgReportsParamPointerForNull)
     EXPECT_EQ(LastErrorId_Det_ReportError, MCU_E_PARAM_POINTER);
 }
 
-TEST_F(McuTest, GetVersionInfoOkFillsExpectedModuleId)
+TEST_F(McuTest, Mcu_GetVersionInfo_OK_FillsExpectedModuleId)
 {
     Std_VersionInfoType info;
 
@@ -168,7 +168,7 @@ TEST_F(McuTest, GetVersionInfoOkFillsExpectedModuleId)
 // Mcu_Init()
 // ------------------------------------------------------------
 
-TEST_F(McuTest, InitNgNullConfigLeavesModuleUninitialized)
+TEST_F(McuTest, Mcu_Init_NG_NullConfigLeavesModuleUninitialized)
 {
     // ConfigPtr が NULL の場合、リセット原因キャッシュの更新は行うが
     // 初期化済みとはみなさない（Mcu.c 冒頭コメント参照。現状唯一の
@@ -185,7 +185,7 @@ TEST_F(McuTest, InitNgNullConfigLeavesModuleUninitialized)
     EXPECT_EQ(LastErrorId_Det_ReportError, MCU_E_UNINIT);
 }
 
-TEST_F(McuTest, InitOkMarksInitializedAndCachesResetReason)
+TEST_F(McuTest, Mcu_Init_OK_MarksInitializedAndCachesResetReason)
 {
     FakeMcuHw_ResetReason.Watchdog = 1U;
 

@@ -76,7 +76,7 @@ protected:
      * ため、この制約の影響を受けない。 */
 };
 
-TEST_F(Bsw_PduR_SecOCTxConfirmation_Test, OK_MatchingRouteInvokesConfFctWithConfDestPduId)
+TEST_F(Bsw_PduR_SecOCTxConfirmation_Test, PduR_SecOCTxConfirmation_OK_MatchingRouteInvokesConfFctWithConfDestPduId)
 {
     PduR_Init(&kSecOCTestConfig);
     FakeDetHw_LogSuppressed = 0U;
@@ -89,7 +89,7 @@ TEST_F(Bsw_PduR_SecOCTxConfirmation_Test, OK_MatchingRouteInvokesConfFctWithConf
     EXPECT_EQ(FakeDetHw_ReportCount, 0U);
 }
 
-TEST_F(Bsw_PduR_SecOCTxConfirmation_Test, OK_ForwardsFailureResultUnchanged)
+TEST_F(Bsw_PduR_SecOCTxConfirmation_Test, PduR_SecOCTxConfirmation_OK_ForwardsFailureResultUnchanged)
 {
     PduR_Init(&kSecOCTestConfig);
     FakeDetHw_LogSuppressed = 0U;
@@ -100,7 +100,7 @@ TEST_F(Bsw_PduR_SecOCTxConfirmation_Test, OK_ForwardsFailureResultUnchanged)
     EXPECT_EQ(g_LastResult, E_NOT_OK);
 }
 
-TEST_F(Bsw_PduR_SecOCTxConfirmation_Test, NG_NoMatchingRouteReportsDetAndDoesNotCallConfFct)
+TEST_F(Bsw_PduR_SecOCTxConfirmation_Test, PduR_SecOCTxConfirmation_NG_NoMatchingRouteReportsDetAndDoesNotCallConfFct)
 {
     PduR_Init(&kSecOCTestConfig);
     FakeDetHw_LogSuppressed = 0U;

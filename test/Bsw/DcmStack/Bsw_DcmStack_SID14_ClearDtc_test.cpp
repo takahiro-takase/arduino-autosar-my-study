@@ -206,53 +206,10 @@ protected:
 };
 
 // ------------------------------------------------------------
-// NG: groupOfDTC(3byte)の後に余分な1バイトが付いた要求
-// （[0x14, 0xFF,0xFF,0xFF, 0x00]、4バイト厳密一致のため上限超過）は
-// incorrectMessageLength (NRC 0x13) になる。
-// ------------------------------------------------------------
-TEST_F(Bsw_DcmStack_SID14_ClearDtc_Test,
-       ClearDtc_NG_ExtraByteProducesIncorrectMessageLengthResponseOnCanHw)
-{
-    /* ----------------------- */
-    /* ---- 準備 (Arrange) --- */
-    /* ----------------------- */
-    // [0x14, 0xFF,0xFF,0xFF, 0x00] を 0x7E0 の受信バッファへ
-    // セットする（SF: 05 14 FF FF FF 00）。
-    FakeCanHw_Reset();
-    FakeCanHw_RxId  = 0x7E0U;
-    FakeCanHw_RxDlc = 8U;
-    FakeCanHw_RxData[0] = 5U;
-    FakeCanHw_RxData[1] = DCM_SID_CLEAR_DTC;
-    FakeCanHw_RxData[2] = 0xFFU;
-    FakeCanHw_RxData[3] = 0xFFU;
-    FakeCanHw_RxData[4] = 0xFFU;
-    FakeCanHw_RxData[5] = 0x00U;
-    FakeCanHw_RxData[6] = 0U;
-    FakeCanHw_RxData[7] = 0U;
-    FakeCanHw_RxPendingCount = 1U;
-
-    /* ----------------------- */
-    /* ---- 実行 (Act) ------- */
-    /* ----------------------- */
-    Can_MainFunction_Read();
-
-    /* ----------------------- */
-    /* ---- 評価 (Assert) ---- */
-    /* ----------------------- */
-    // 否定応答 [0x7F, 0x14, 0x13] が Can_Hw まで到達すること。
-    ASSERT_EQ(FakeCanHw_SendCount, 1U);
-    EXPECT_EQ(FakeCanHw_LastSendId, 0x7E8U);
-    EXPECT_EQ(FakeCanHw_LastSendData[0], 0x03U);
-    EXPECT_EQ(FakeCanHw_LastSendData[1], DCM_SID_NEGATIVE_RESP);
-    EXPECT_EQ(FakeCanHw_LastSendData[2], DCM_SID_CLEAR_DTC);
-    EXPECT_EQ(FakeCanHw_LastSendData[3], DCM_NRC_INCORRECT_MESSAGE_LENGTH);
-}
-
-// ------------------------------------------------------------
 // OK: groupOfDTC=0xFFFFFF（全DTCクリア）は正応答 [0x54] を返す。
 // ------------------------------------------------------------
 TEST_F(Bsw_DcmStack_SID14_ClearDtc_Test,
-       ClearDtc_OK_AllDtcsGroupProducesPositiveResponseOnCanHw)
+       OK_AllDtcsGroupProducesPositiveResponse)
 {
     /* ----------------------- */
     /* ---- 準備 (Arrange) --- */
@@ -292,7 +249,7 @@ TEST_F(Bsw_DcmStack_SID14_ClearDtc_Test,
 // クリアも正応答 [0x54] を返す（全クリアとは異なる Dem_ClearDTC() の単一DTC経路）。
 // ------------------------------------------------------------
 TEST_F(Bsw_DcmStack_SID14_ClearDtc_Test,
-       ClearDtc_OK_SpecificRegisteredDtcProducesPositiveResponseOnCanHw)
+       OK_SpecificRegisteredDtcProducesPositiveResponse)
 {
     /* ----------------------- */
     /* ---- 準備 (Arrange) --- */
@@ -323,6 +280,49 @@ TEST_F(Bsw_DcmStack_SID14_ClearDtc_Test,
     ASSERT_EQ(FakeCanHw_SendCount, 1U);
     EXPECT_EQ(FakeCanHw_LastSendData[0], 0x01U);
     EXPECT_EQ(FakeCanHw_LastSendData[1], 0x54U);
+}
+
+// ------------------------------------------------------------
+// NG: groupOfDTC(3byte)の後に余分な1バイトが付いた要求
+// （[0x14, 0xFF,0xFF,0xFF, 0x00]、4バイト厳密一致のため上限超過）は
+// incorrectMessageLength (NRC 0x13) になる。
+// ------------------------------------------------------------
+TEST_F(Bsw_DcmStack_SID14_ClearDtc_Test,
+       NG_IncorrectMessageLength_ExtraByte)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // [0x14, 0xFF,0xFF,0xFF, 0x00] を 0x7E0 の受信バッファへ
+    // セットする（SF: 05 14 FF FF FF 00）。
+    FakeCanHw_Reset();
+    FakeCanHw_RxId  = 0x7E0U;
+    FakeCanHw_RxDlc = 8U;
+    FakeCanHw_RxData[0] = 5U;
+    FakeCanHw_RxData[1] = DCM_SID_CLEAR_DTC;
+    FakeCanHw_RxData[2] = 0xFFU;
+    FakeCanHw_RxData[3] = 0xFFU;
+    FakeCanHw_RxData[4] = 0xFFU;
+    FakeCanHw_RxData[5] = 0x00U;
+    FakeCanHw_RxData[6] = 0U;
+    FakeCanHw_RxData[7] = 0U;
+    FakeCanHw_RxPendingCount = 1U;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Can_MainFunction_Read();
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // 否定応答 [0x7F, 0x14, 0x13] が Can_Hw まで到達すること。
+    ASSERT_EQ(FakeCanHw_SendCount, 1U);
+    EXPECT_EQ(FakeCanHw_LastSendId, 0x7E8U);
+    EXPECT_EQ(FakeCanHw_LastSendData[0], 0x03U);
+    EXPECT_EQ(FakeCanHw_LastSendData[1], DCM_SID_NEGATIVE_RESP);
+    EXPECT_EQ(FakeCanHw_LastSendData[2], DCM_SID_CLEAR_DTC);
+    EXPECT_EQ(FakeCanHw_LastSendData[3], DCM_NRC_INCORRECT_MESSAGE_LENGTH);
 }
 
 }  // namespace

@@ -154,7 +154,7 @@ protected:
 
 // ------------------------------------------------------------
 TEST_F(Bsw_DcmStack_SID22_ReadDataById_Test,
-       ReadDataById_OK_VinMultiFrameResponseReassemblesToExpectedPayloadOnCanHw)
+       OK_VinMultiFrameResponseReassemblesToExpectedPayload)
 {
     /* ------------------------- */
     /* ---- 準備 (Arrange) ----- */
@@ -260,7 +260,7 @@ TEST_F(Bsw_DcmStack_SID22_ReadDataById_Test,
 // リクエストは incorrectMessageLength (NRC 0x13) になる。
 // ------------------------------------------------------------
 TEST_F(Bsw_DcmStack_SID22_ReadDataById_Test,
-       ReadDataById_NG_TooShortRequestProducesIncorrectMessageLengthResponseOnCanHw)
+       NG_IncorrectMessageLength_TooShortRequest)
 {
     /* ----------------------- */
     /* ---- 準備 (Arrange) --- */
@@ -296,7 +296,7 @@ TEST_F(Bsw_DcmStack_SID22_ReadDataById_Test,
 // 対応）は incorrectMessageLength (NRC 0x13) になる。
 // ------------------------------------------------------------
 TEST_F(Bsw_DcmStack_SID22_ReadDataById_Test,
-       ReadDataById_NG_MultipleDidRequestProducesIncorrectMessageLengthResponseOnCanHw)
+       NG_IncorrectMessageLength_MultipleDidRequest)
 {
     /* ----------------------- */
     /* ---- 準備 (Arrange) --- */

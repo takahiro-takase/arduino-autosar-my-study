@@ -257,7 +257,7 @@ protected:
 // 送信した全バイトの XOR。
 // ------------------------------------------------------------
 TEST_F(Bsw_DcmStack_SID37_RequestTransferExit_Test,
-       RequestTransferExit_OK_CompletedTransferProducesChecksumResponseOnCanHw)
+       OK_CompletedTransferProducesChecksumResponse)
 {
     /* ----------------------- */
     /* ---- 準備 (Arrange) --- */
@@ -300,7 +300,7 @@ TEST_F(Bsw_DcmStack_SID37_RequestTransferExit_Test,
 // ソフトウェア転送シーケンスが行える確認）。
 // ------------------------------------------------------------
 TEST_F(Bsw_DcmStack_SID37_RequestTransferExit_Test,
-       RequestTransferExit_OK_AllowsNewRequestDownloadAfterCompletionOnCanHw)
+       OK_AllowsNewRequestDownloadAfterCompletion)
 {
     /* ----------------------- */
     /* ---- 準備 (Arrange) --- */
@@ -343,7 +343,7 @@ TEST_F(Bsw_DcmStack_SID37_RequestTransferExit_Test,
 // は NRC 0x22 conditionsNotCorrect になる。
 // ------------------------------------------------------------
 TEST_F(Bsw_DcmStack_SID37_RequestTransferExit_Test,
-       RequestTransferExit_NG_IncompleteTransferReturnsConditionsNotCorrectOnCanHw)
+       NG_ConditionsNotCorrect_IncompleteTransfer)
 {
     /* ----------------------- */
     /* ---- 準備 (Arrange) --- */
@@ -375,7 +375,7 @@ TEST_F(Bsw_DcmStack_SID37_RequestTransferExit_Test,
 // NRC 0x24 requestSequenceError になる。
 // ------------------------------------------------------------
 TEST_F(Bsw_DcmStack_SID37_RequestTransferExit_Test,
-       RequestTransferExit_NG_AlreadyCompletedReturnsRequestSequenceErrorOnCanHw)
+       NG_RequestSequenceError_AlreadyCompleted)
 {
     /* ----------------------- */
     /* ---- 準備 (Arrange) --- */

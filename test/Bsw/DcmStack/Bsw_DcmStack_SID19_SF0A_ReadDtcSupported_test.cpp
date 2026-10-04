@@ -186,7 +186,7 @@ protected:
 
 // ------------------------------------------------------------
 TEST_F(Bsw_DcmStack_SID19_SF0A_ReadDtcSupported_Test,
-       ReadDtcSupported_OK_MultiFrameResponseReassemblesToExpectedPayloadOnCanHw)
+       OK_MultiFrameResponseReassemblesToExpectedPayload)
 {
     /* ------------------------- */
     /* ---- 準備 (Act 1) ------- */

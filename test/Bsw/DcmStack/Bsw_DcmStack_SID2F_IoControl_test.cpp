@@ -209,7 +209,7 @@ protected:
 // controlStatusRecord として echo する。
 // ------------------------------------------------------------
 TEST_F(Bsw_DcmStack_SID2F_IoControl_Test,
-       IoControl_OK_ShortTermAdjustmentEchoesRequestedLevelOnCanHw)
+       OK_ShortTermAdjustmentEchoesRequestedLevel)
 {
     /* ----------------------- */
     /* ---- 実行 (Act) ------- */
@@ -235,7 +235,7 @@ TEST_F(Bsw_DcmStack_SID2F_IoControl_Test,
 // OK: resetToDefault(0x01) は controlStatusRecord=0（消灯）を返す。
 // ------------------------------------------------------------
 TEST_F(Bsw_DcmStack_SID2F_IoControl_Test,
-       IoControl_OK_ResetToDefaultProducesZeroLevelOnCanHw)
+       OK_ResetToDefaultProducesZeroLevel)
 {
     SendIoControl(DCM_DID_FAULT_LAMP, DCM_IOCTRL_RESET_TO_DEFAULT, 0U, 0U);
 
@@ -253,7 +253,7 @@ TEST_F(Bsw_DcmStack_SID2F_IoControl_Test,
 // Rte_IoControl_Lamp_GetCurrentLevel() 経由の固定応答(level=0)を返す。
 // ------------------------------------------------------------
 TEST_F(Bsw_DcmStack_SID2F_IoControl_Test,
-       IoControl_OK_ReturnControlToEcuProducesPositiveResponseOnCanHw)
+       OK_ReturnControlToEcuProducesPositiveResponse)
 {
     SendIoControl(DCM_DID_ABS_LAMP, DCM_IOCTRL_RETURN_CONTROL_TO_ECU, 0U, 0U);
 
@@ -265,7 +265,7 @@ TEST_F(Bsw_DcmStack_SID2F_IoControl_Test,
 }
 
 TEST_F(Bsw_DcmStack_SID2F_IoControl_Test,
-       IoControl_OK_FreezeCurrentStateProducesPositiveResponseOnCanHw)
+       OK_FreezeCurrentStateProducesPositiveResponse)
 {
     SendIoControl(DCM_DID_RUN_LAMP, DCM_IOCTRL_FREEZE_CURRENT_STATE, 0U, 0U);
 
@@ -278,7 +278,7 @@ TEST_F(Bsw_DcmStack_SID2F_IoControl_Test,
 // NG: 未対応 DID（ランプ用途以外）は NRC 0x31 requestOutOfRange になる。
 // ------------------------------------------------------------
 TEST_F(Bsw_DcmStack_SID2F_IoControl_Test,
-       IoControl_NG_UnknownDidReturnsRequestOutOfRangeOnCanHw)
+       NG_RequestOutOfRange_UnknownDid)
 {
     SendIoControl(0x0001U, DCM_IOCTRL_RETURN_CONTROL_TO_ECU, 0U, 0U);
 
@@ -294,7 +294,7 @@ TEST_F(Bsw_DcmStack_SID2F_IoControl_Test,
 // NRC 0x31 requestOutOfRange になる。
 // ------------------------------------------------------------
 TEST_F(Bsw_DcmStack_SID2F_IoControl_Test,
-       IoControl_NG_InvalidShortTermAdjustmentStateReturnsRequestOutOfRangeOnCanHw)
+       NG_RequestOutOfRange_InvalidShortTermAdjustmentState)
 {
     SendIoControl(DCM_DID_RUN_LAMP, DCM_IOCTRL_SHORT_TERM_ADJUSTMENT, 0x02U, 1U);
 
@@ -309,7 +309,7 @@ TEST_F(Bsw_DcmStack_SID2F_IoControl_Test,
 // ため上限超過）は incorrectMessageLength (NRC 0x13) になる。
 // ------------------------------------------------------------
 TEST_F(Bsw_DcmStack_SID2F_IoControl_Test,
-       IoControl_NG_ResetToDefaultWithExtraByteReturnsIncorrectMessageLengthOnCanHw)
+       NG_IncorrectMessageLength_ResetToDefaultWithExtraByte)
 {
     SendIoControl(DCM_DID_RUN_LAMP, DCM_IOCTRL_RESET_TO_DEFAULT, 0x00U, 1U);
 

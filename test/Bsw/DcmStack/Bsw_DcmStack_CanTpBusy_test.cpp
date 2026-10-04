@@ -249,7 +249,7 @@ protected:
 // ============================================================
 
 TEST_F(Bsw_DcmStack_CanTpBusy_Test,
-       S3Timer_OK_DoesNotTimeOutWhileCanTpReallyBusyWithInFlightMultiFrameTransfer)
+       OK_S3TimerDoesNotTimeOutWhileCanTpReallyBusyWithInFlightMultiFrameTransfer)
 {
     /* ----------------------- */
     /* ---- 準備 (Arrange) --- */
@@ -282,7 +282,7 @@ TEST_F(Bsw_DcmStack_CanTpBusy_Test,
 }
 
 TEST_F(Bsw_DcmStack_CanTpBusy_Test,
-       S3Timer_OK_TimesOutNormallyOnceCanTpReallyIdleAgain)
+       OK_S3TimerTimesOutNormallyOnceCanTpReallyIdleAgain)
 {
     /* ----------------------- */
     /* ---- 準備 (Arrange) --- */
@@ -318,46 +318,7 @@ TEST_F(Bsw_DcmStack_CanTpBusy_Test,
 // ============================================================
 
 TEST_F(Bsw_DcmStack_CanTpBusy_Test,
-       ComIndication_NG_IgnoresNewRequestWhileCanTpReallyBusyWithInFlightMultiFrameTransfer)
-{
-    /* ----------------------- */
-    /* ---- 準備 (Arrange) --- */
-    /* ----------------------- */
-    // SID 0x19/0x0A を送らせ、First Frame 送信直後（CanTp
-    // が本当にビジー）の状態を作る。
-    StartRealMultiFrameTransferAndLeaveCanTpBusy();
-    ASSERT_EQ(CallCount_CanTp_Transmit, 1U);
-
-    /* ----------------------- */
-    /* ---- 実行 (Act) ------- */
-    /* ----------------------- */
-    // CanTp が本当にビジーなまま、TesterPresent（副作用の無い
-    // 単純なSID）[0x3E, 0x00] を追加で受信させる。
-    FakeCanHw_RxId  = 0x7E0U;
-    FakeCanHw_RxDlc = 8U;
-    FakeCanHw_RxData[0] = 2U;
-    FakeCanHw_RxData[1] = DCM_SID_TESTER_PRESENT;
-    FakeCanHw_RxData[2] = 0x00U;
-    for (uint8 i = 3U; i < 8U; i++)
-        FakeCanHw_RxData[i] = 0U;
-    FakeCanHw_RxPendingCount = 1U;
-    Can_MainFunction_Read();
-
-    /* ----------------------- */
-    /* ---- 評価 (Assert) ---- */
-    /* ----------------------- */
-    // [SWS_Dcm_00557] ディスパッチ自体が行われず、新たな
-    // 送信も一切発生しないこと（CanTp_Transmit() 呼び出し回数・Can_Hw への
-    // 送信回数とも進行中の FF 送信1回のまま変化しない）。
-    EXPECT_EQ(CallCount_CanTp_Transmit, 1U);
-    EXPECT_EQ(FakeCanHw_SendCount, 1U);
-
-    /* 後始末: マルチフレーム送信を完了させておく。 */
-    FinishRealMultiFrameTransfer();
-}
-
-TEST_F(Bsw_DcmStack_CanTpBusy_Test,
-       ComIndication_OK_ProcessesRequestOnceCanTpReallyIdleAgainOnCanHw)
+       OK_ComIndicationProcessesRequestOnceCanTpReallyIdleAgain)
 {
     /* ----------------------- */
     /* ---- 準備 (Arrange) --- */
@@ -403,6 +364,45 @@ TEST_F(Bsw_DcmStack_CanTpBusy_Test,
     EXPECT_EQ(FakeCanHw_LastSendData[0], 0x02U);  // SF PCI（UDSペイロード長=2）
     EXPECT_EQ(FakeCanHw_LastSendData[1], (uint8)(DCM_SID_TESTER_PRESENT + 0x40U));
     EXPECT_EQ(FakeCanHw_LastSendData[2], 0x00U);
+}
+
+TEST_F(Bsw_DcmStack_CanTpBusy_Test,
+       NG_NoResponse_NewRequestWhileCanTpBusy)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // SID 0x19/0x0A を送らせ、First Frame 送信直後（CanTp
+    // が本当にビジー）の状態を作る。
+    StartRealMultiFrameTransferAndLeaveCanTpBusy();
+    ASSERT_EQ(CallCount_CanTp_Transmit, 1U);
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    // CanTp が本当にビジーなまま、TesterPresent（副作用の無い
+    // 単純なSID）[0x3E, 0x00] を追加で受信させる。
+    FakeCanHw_RxId  = 0x7E0U;
+    FakeCanHw_RxDlc = 8U;
+    FakeCanHw_RxData[0] = 2U;
+    FakeCanHw_RxData[1] = DCM_SID_TESTER_PRESENT;
+    FakeCanHw_RxData[2] = 0x00U;
+    for (uint8 i = 3U; i < 8U; i++)
+        FakeCanHw_RxData[i] = 0U;
+    FakeCanHw_RxPendingCount = 1U;
+    Can_MainFunction_Read();
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // [SWS_Dcm_00557] ディスパッチ自体が行われず、新たな
+    // 送信も一切発生しないこと（CanTp_Transmit() 呼び出し回数・Can_Hw への
+    // 送信回数とも進行中の FF 送信1回のまま変化しない）。
+    EXPECT_EQ(CallCount_CanTp_Transmit, 1U);
+    EXPECT_EQ(FakeCanHw_SendCount, 1U);
+
+    /* 後始末: マルチフレーム送信を完了させておく。 */
+    FinishRealMultiFrameTransfer();
 }
 
 }  // namespace

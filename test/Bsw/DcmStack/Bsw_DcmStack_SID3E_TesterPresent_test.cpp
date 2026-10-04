@@ -150,50 +150,10 @@ protected:
 };
 
 // ------------------------------------------------------------
-// NG: zeroSubFunction に余分な1バイト（[0x3E, 0x00, 0x00]、2バイト厳密一致
-// のため上限超過）は incorrectMessageLength (NRC 0x13) になる。
-// ------------------------------------------------------------
-TEST_F(Bsw_DcmStack_SID3E_TesterPresent_Test,
-       TesterPresent_NG_ExtraByteProducesIncorrectMessageLengthResponseOnCanHw)
-{
-    /* ----------------------- */
-    /* ---- 準備 (Arrange) --- */
-    /* ----------------------- */
-    // [0x3E, 0x00, 0x00] を 0x7E0 の受信バッファへセットする
-    // （SF: 03 3E 00 00）。
-    FakeCanHw_RxId  = 0x7E0U;
-    FakeCanHw_RxDlc = 8U;
-    FakeCanHw_RxData[0] = 3U;
-    FakeCanHw_RxData[1] = DCM_SID_TESTER_PRESENT;
-    FakeCanHw_RxData[2] = 0x00U;
-    FakeCanHw_RxData[3] = 0x00U;
-    for (uint8 i = 4U; i < 8U; i++)
-        FakeCanHw_RxData[i] = 0U;
-    FakeCanHw_RxPendingCount = 1U;
-
-    /* ----------------------- */
-    /* ---- 実行 (Act) ------- */
-    /* ----------------------- */
-    Can_MainFunction_Read();
-
-    /* ----------------------- */
-    /* ---- 評価 (Assert) ---- */
-    /* ----------------------- */
-    // 否定応答 [0x7F, 0x3E, 0x13] が Can_Hw まで到達すること。
-    ASSERT_EQ(FakeCanHw_SendCount, 1U);
-    EXPECT_EQ(FakeCanHw_LastSendId, 0x7E8U);
-    EXPECT_EQ(FakeCanHw_LastSendDlc, 8U);
-    EXPECT_EQ(FakeCanHw_LastSendData[0], 0x03U);  // SF PCI（UDSペイロード長=3）
-    EXPECT_EQ(FakeCanHw_LastSendData[1], DCM_SID_NEGATIVE_RESP);
-    EXPECT_EQ(FakeCanHw_LastSendData[2], DCM_SID_TESTER_PRESENT);
-    EXPECT_EQ(FakeCanHw_LastSendData[3], DCM_NRC_INCORRECT_MESSAGE_LENGTH);
-}
-
-// ------------------------------------------------------------
 // OK: [0x3E, 0x00] zeroSubFunction は正応答 [0x7E, 0x00] を返す。
 // ------------------------------------------------------------
 TEST_F(Bsw_DcmStack_SID3E_TesterPresent_Test,
-       TesterPresent_OK_ZeroSubFunctionProducesPositiveResponseOnCanHw)
+       OK_ZeroSubFunctionProducesPositiveResponse)
 {
     /* ----------------------- */
     /* ---- 準備 (Arrange) --- */
@@ -233,7 +193,7 @@ TEST_F(Bsw_DcmStack_SID3E_TesterPresent_Test,
 // DCM_S3_TIMEOUT_MS 近く経過しても defaultSession へは戻らない。
 // ------------------------------------------------------------
 TEST_F(Bsw_DcmStack_SID3E_TesterPresent_Test,
-       TesterPresent_OK_ResetsS3TimerPreventingSessionTimeoutOnCanHw)
+       OK_ResetsS3TimerPreventingSessionTimeout)
 {
     /* ------------------------- */
     /* ---- 準備 (Arrange 1) --- */
@@ -285,6 +245,46 @@ TEST_F(Bsw_DcmStack_SID3E_TesterPresent_Test,
     Dcm_SesCtrlType session = 0U;
     ASSERT_EQ(Dcm_GetSesCtrlType(&session), E_OK);
     EXPECT_EQ(session, DCM_SESSION_EXTENDED);
+}
+
+// ------------------------------------------------------------
+// NG: zeroSubFunction に余分な1バイト（[0x3E, 0x00, 0x00]、2バイト厳密一致
+// のため上限超過）は incorrectMessageLength (NRC 0x13) になる。
+// ------------------------------------------------------------
+TEST_F(Bsw_DcmStack_SID3E_TesterPresent_Test,
+       NG_IncorrectMessageLength_ExtraByte)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // [0x3E, 0x00, 0x00] を 0x7E0 の受信バッファへセットする
+    // （SF: 03 3E 00 00）。
+    FakeCanHw_RxId  = 0x7E0U;
+    FakeCanHw_RxDlc = 8U;
+    FakeCanHw_RxData[0] = 3U;
+    FakeCanHw_RxData[1] = DCM_SID_TESTER_PRESENT;
+    FakeCanHw_RxData[2] = 0x00U;
+    FakeCanHw_RxData[3] = 0x00U;
+    for (uint8 i = 4U; i < 8U; i++)
+        FakeCanHw_RxData[i] = 0U;
+    FakeCanHw_RxPendingCount = 1U;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Can_MainFunction_Read();
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // 否定応答 [0x7F, 0x3E, 0x13] が Can_Hw まで到達すること。
+    ASSERT_EQ(FakeCanHw_SendCount, 1U);
+    EXPECT_EQ(FakeCanHw_LastSendId, 0x7E8U);
+    EXPECT_EQ(FakeCanHw_LastSendDlc, 8U);
+    EXPECT_EQ(FakeCanHw_LastSendData[0], 0x03U);  // SF PCI（UDSペイロード長=3）
+    EXPECT_EQ(FakeCanHw_LastSendData[1], DCM_SID_NEGATIVE_RESP);
+    EXPECT_EQ(FakeCanHw_LastSendData[2], DCM_SID_TESTER_PRESENT);
+    EXPECT_EQ(FakeCanHw_LastSendData[3], DCM_NRC_INCORRECT_MESSAGE_LENGTH);
 }
 
 }  // namespace

@@ -211,7 +211,7 @@ protected:
 // ------------------------------------------------------------
 
 TEST_F(Bsw_DcmStack_SID28_CommunicationControl_Test,
-       OK_EnableRxTxNormalMapsToDcmEnableRxTxNormOnCanHw)
+       OK_EnableRxTxNormalMapsToDcmEnableRxTxNorm)
 {
     /* ----------------------- */
     /* ---- 実行 (Act) ------- */
@@ -232,7 +232,7 @@ TEST_F(Bsw_DcmStack_SID28_CommunicationControl_Test,
 }
 
 TEST_F(Bsw_DcmStack_SID28_CommunicationControl_Test,
-       OK_DisableRxTxNmMapsToDcmDisableRxTxNmOnCanHw)
+       OK_DisableRxTxNmMapsToDcmDisableRxTxNm)
 {
     SendCommunicationControl(0x03U /* disableRxAndTx */, 0x02U /* NM */);
 
@@ -245,7 +245,7 @@ TEST_F(Bsw_DcmStack_SID28_CommunicationControl_Test,
 }
 
 TEST_F(Bsw_DcmStack_SID28_CommunicationControl_Test,
-       OK_EnableRxDisableTxNormAndNmMapsToDcmEnableRxDisableTxNormNmOnCanHw)
+       OK_EnableRxDisableTxNormAndNmMapsToDcmEnableRxDisableTxNormNm)
 {
     SendCommunicationControl(0x01U /* enableRxAndDisableTx */, 0x03U /* normal + NM */);
 
@@ -258,7 +258,7 @@ TEST_F(Bsw_DcmStack_SID28_CommunicationControl_Test,
 }
 
 TEST_F(Bsw_DcmStack_SID28_CommunicationControl_Test,
-       OK_DisableRxEnableTxNormMapsToDcmDisableRxEnableTxNormOnCanHw)
+       OK_DisableRxEnableTxNormMapsToDcmDisableRxEnableTxNorm)
 {
     SendCommunicationControl(0x02U /* disableRxAndEnableTx */, 0x01U /* normal */);
 
@@ -271,7 +271,7 @@ TEST_F(Bsw_DcmStack_SID28_CommunicationControl_Test,
 // ------------------------------------------------------------
 
 TEST_F(Bsw_DcmStack_SID28_CommunicationControl_Test,
-       NG_UnsupportedControlTypeProducesSubFuncNotSupportedResponseWithoutCallingBswMOnCanHw)
+       NG_SubFuncNotSupported_UnsupportedControlType_WithoutCallingBswM)
 {
     SendCommunicationControl(0x04U /* enableRxAndDisableTxWithEnhancedAddressInformation、非対応 */, 0x01U);
 
@@ -283,7 +283,7 @@ TEST_F(Bsw_DcmStack_SID28_CommunicationControl_Test,
 }
 
 TEST_F(Bsw_DcmStack_SID28_CommunicationControl_Test,
-       NG_InvalidCommunicationTypeProducesRequestOutOfRangeResponseWithoutCallingBswMOnCanHw)
+       NG_RequestOutOfRange_InvalidCommunicationType_WithoutCallingBswM)
 {
     SendCommunicationControl(0x00U, 0x00U /* 0 は未定義 */);
 
@@ -295,7 +295,7 @@ TEST_F(Bsw_DcmStack_SID28_CommunicationControl_Test,
 }
 
 TEST_F(Bsw_DcmStack_SID28_CommunicationControl_Test,
-       NG_IncorrectLengthProducesIncorrectMessageLengthResponseWithoutCallingBswMOnCanHw)
+       NG_IncorrectMessageLength_IncorrectLength_WithoutCallingBswM)
 {
     /* ----------------------- */
     /* ---- 準備 (Arrange) --- */
@@ -325,7 +325,7 @@ TEST_F(Bsw_DcmStack_SID28_CommunicationControl_Test,
 }
 
 TEST_F(Bsw_DcmStack_SID28_CommunicationControl_Test,
-       NG_UnsupportedControlTypeWithWrongLengthPrefersSubFuncNrcOnCanHw)
+       NG_SubFuncNotSupported_UnsupportedControlTypeWithWrongLength)
 {
     /* [SWS_Dcm_00273]/[SWS_Dcm_00696]: サブ機能サポート確認は最小メッセージ長
      * 確認より先に行う処理順序（2026-09 是正）。controlType(uds[1])が
@@ -353,7 +353,7 @@ TEST_F(Bsw_DcmStack_SID28_CommunicationControl_Test,
 // ------------------------------------------------------------
 
 TEST_F(Bsw_DcmStack_SID28_CommunicationControl_Test,
-       OK_ReturnToDefaultSessionResetsToEnableRxTxNormNmOnCanHw)
+       OK_ReturnToDefaultSessionResetsToEnableRxTxNormNm)
 {
     SendCommunicationControl(0x03U /* disableRxAndTx */, 0x03U /* normal + NM */);
     ASSERT_EQ(LastRequestedMode_BswM_Dcm_CommunicationMode_CurrentState, DCM_DISABLE_RX_TX_NORM_NM);
