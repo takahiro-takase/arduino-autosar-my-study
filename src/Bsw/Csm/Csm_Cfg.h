@@ -11,6 +11,14 @@
 #ifndef CSM_CFG_H
 #define CSM_CFG_H
 
+/* ======================================================================
+ * Includes
+ * ====================================================================== */
+
+/* ======================================================================
+ * Definitions
+ * ====================================================================== */
+
 /* -----------------------------------------------------------------------
  * DET（Default Error Tracer）関連定数
  *
@@ -23,7 +31,6 @@
  * 対象外（＝チェックが必要）である点に注意。他の多くのモジュールで
  * GetVersionInfo が UNINIT 例外になっているのとは異なる（実測で確認済み）。
  * ----------------------------------------------------------------------- */
-
 /** AUTOSAR Crypto Service Manager の ModuleId（AUTOSAR_TR_BSWModuleList 参照、固定値 110） */
 #define CSM_MODULE_ID  110U
 
@@ -59,14 +66,12 @@
  * （CRYPTO_KEY_*）を使うかは Csm_PBCfg.c の Csm_JobConfigData で決める
  * （SecOC は jobId しか知らず、鍵そのものへは一切アクセスしない）。
  * ----------------------------------------------------------------------- */
-
 /** RX Secured I-PDU「ImmobilizerCmd」の MAC 検証ジョブ */
 #define CSM_JOB_ID_IMMOBILIZER_CMD_VERIFY     0U
 
 /* CSM_JOB_ID_E2E_HEALTH_STATUS_GENERATE は E2EHealthStatus の SecOC 撤去に
  * 伴い削除済み（E2E Profile05 単体保護へ切り替えたため、TX 方向で SecOC/Csm
  * の MAC 生成ジョブを使う PDU が現在無い）。 */
-
 /** ジョブテーブルの総数 */
 #define CSM_JOB_COUNT  1U
 

@@ -18,6 +18,14 @@
 #ifndef DET_CFG_H
 #define DET_CFG_H
 
+/* ======================================================================
+ * Includes
+ * ====================================================================== */
+
+/* ======================================================================
+ * Definitions
+ * ====================================================================== */
+
 #ifndef DET_LOG_LEVEL
 #  define DET_LOG_LEVEL  LOG_I  /**< 既定値: ERROR/WARN/INFO を出力、TRACE/DEBUG を抑制 */
 #endif
@@ -28,7 +36,6 @@
  * ModuleId は AUTOSAR_TR_BSWModuleList（Release 4.3.1、docs/ 配下）の
  * 「List of Basic Software Modules」表で Det に割り当てられた固定値 15。
  * ----------------------------------------------------------------------- */
-
 /** AUTOSAR Det の ModuleId（AUTOSAR_TR_BSWModuleList 参照、固定値 15） */
 #define DET_MODULE_ID  15U
 

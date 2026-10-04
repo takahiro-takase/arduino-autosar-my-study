@@ -11,7 +11,26 @@
 #ifndef RTE_TYPE_H
 #define RTE_TYPE_H
 
+/* ======================================================================
+ * Includes
+ * ====================================================================== */
+
 #include "Platform_Types.h"
+
+/* ======================================================================
+ * Definitions
+ * ====================================================================== */
+
+#define RTE_E_OK                      0x00U /**< 正常。データは最新かつ検証済み */
+#define RTE_E_COM_STOPPED             0x01U /**< Com 受信デッドライン監視のタイムアウト中 */
+#define RTE_E_HARD_TRANSFORMER_ERROR  0x02U /**< E2E: WRONGCRC/WRONGSEQUENCE/REPEATED/ERROR相当。
+                                                  データは信頼できず、ミラーは前回の正常値のまま */
+#define RTE_E_SOFT_TRANSFORMER_ERROR  0x03U /**< E2E: OKSOMELOST相当。データは使用可能だが
+                                                  一部フレームの消失を検出した */
+
+/* ======================================================================
+ * Type Definitions
+ * ====================================================================== */
 
 // -------------------------------------------------------
 // アプリケーション Signal の型エイリアス
@@ -68,11 +87,5 @@ typedef enum
  * 返す前提のため、ビット OR による複数トランスフォーマの合成は行わない）。
  * ------------------------------------------------------- */
 typedef uint8 Rte_IStatusType;
-#define RTE_E_OK                      0x00U /**< 正常。データは最新かつ検証済み */
-#define RTE_E_COM_STOPPED             0x01U /**< Com 受信デッドライン監視のタイムアウト中 */
-#define RTE_E_HARD_TRANSFORMER_ERROR  0x02U /**< E2E: WRONGCRC/WRONGSEQUENCE/REPEATED/ERROR相当。
-                                                  データは信頼できず、ミラーは前回の正常値のまま */
-#define RTE_E_SOFT_TRANSFORMER_ERROR  0x03U /**< E2E: OKSOMELOST相当。データは使用可能だが
-                                                  一部フレームの消失を検出した */
 
 #endif

@@ -25,7 +25,15 @@
 #ifndef COM_CFG_H
 #define COM_CFG_H
 
+/* ======================================================================
+ * Includes
+ * ====================================================================== */
+
 #include "Platform_Types.h"
+
+/* ======================================================================
+ * Definitions
+ * ====================================================================== */
 
 /* -----------------------------------------------------------------------
  * DET（Default Error Tracer）関連定数
@@ -39,7 +47,6 @@
  * チャネルであり、両方を呼ぶ（詳細情報を失わずに標準準拠のエラー通知も
  * 行うため）。詳細は Det.h の Det_ReportError() 宣言コメント参照。
  * ----------------------------------------------------------------------- */
-
 /** AUTOSAR COM の ModuleId（[SWS_Com_00442] で固定値 50 と規定） */
 #define COM_MODULE_ID  50U
 
@@ -118,12 +125,10 @@
  * プリコンパイル設定定数
  * DaVinci: /ActiveEcuC/Com/ComConfig/ 配下の ComIPdu ノード数に相当
  * ----------------------------------------------------------------------- */
-
 /* -----------------------------------------------------------------------
  * I-PDU Group ID 定数（Com_IpduGroupIdType、DaVinci: ComIPduGroup）
  * Com_IpduGroupStart() / Com_IpduGroupStop() の引数として使用する。
  * ----------------------------------------------------------------------- */
-
 /** テレメトリ I-PDU Group（E2EHealthStatus のみ）。
  *  診断監視用のネットワーク健全性テレメトリであり、車両の基本動作には
  *  不要なため、独立して停止/再開できる I-PDU Group として分離している
@@ -163,7 +168,6 @@
  * DaVinci: /ActiveEcuC/Com/ComConfig/[ComIPdu]/ComRxDeadlineMonitoringPeriod
  * 0 を設定すると監視無効。単位: ms。
  * ----------------------------------------------------------------------- */
-
 /** EngineInfo (0x100) 受信タイムアウト [ms]
  *  エンジン ECU からの受信が途絶えた場合に FAULT 遷移させる基準時間。
  *  App_EngineManager_Run の周期 (3000ms) より長く設定すること。 */
@@ -288,7 +292,6 @@
  * Com_ReceiveSignal() / Com_SendSignal() の第 1 引数として使用する。
  * RTE は RTE_SIGNAL_* を独自定義せず、これらの定数を参照すること。
  * ----------------------------------------------------------------------- */
-
 /** RX: エンジン回転数シグナル (16 bit, CAN ID 0x100, byte[0-1]) */
 #define COM_SIGNAL_ENGINE_SPEED    0U
 
@@ -309,7 +312,6 @@
  * （値の重複はWarningStatusとの間で許容している。詳細はdocs/modules/
  * Com_Notes.md参照）。
  * ----------------------------------------------------------------------- */
-
 /** TX: エンジン回転数ミラー (16 bit, CAN ID 0x200, byte[3-4]、EngineInfoの
  *  検証済みEngineSpeedと同一値・同一単位) */
 #define COM_SIGNAL_METER_ENGINE_SPEED  14U
@@ -330,7 +332,6 @@
 /* -----------------------------------------------------------------------
  * ABS ECU シグナル (CAN ID 0x110 AbsInfo フレーム)
  * ----------------------------------------------------------------------- */
-
 /** RX: 車速シグナル (16 bit, CAN ID 0x110, byte[0-1], 0.01 km/h) */
 #define COM_SIGNAL_VEHICLE_SPEED   4U
 
@@ -345,7 +346,6 @@
  * App_WarningIndicator が制御する 3 本の警告灯を 1 つの Signal Group として
  * まとめて送信する（Com_SendSignalGroup 経由）。
  * ----------------------------------------------------------------------- */
-
 /** TX: RUNNING LED 状態 (1 bit, CAN ID 0x210, byte[0] bit7) */
 #define COM_SIGNAL_RUN_LAMP        7U
 
@@ -361,7 +361,6 @@
  * 検証結果を集計し、Com_SendSignal() で書き込む。送信タイミング自体は
  * Com 自身の PERIODIC モードが担う（E2EMon は関与しない）。
  * ----------------------------------------------------------------------- */
-
 /** TX: E2E CRC 不一致累積数 (8 bit, CAN ID 0x220, byte[0]、0-255 で飽和) */
 #define COM_SIGNAL_E2E_CRC_ERR_COUNT  10U
 
@@ -373,7 +372,6 @@
  * KeyFobEcu 想定の送信元から、SecOC（src/Bsw/SecOC/）が MAC・フレッシュネス
  * 検証に成功した場合のみ Com_RxIndication() 経由でここへ届く。
  * ----------------------------------------------------------------------- */
-
 /** RX: イモビライザー解除コマンド (8 bit, CAN ID 0x120, byte[0]、
  *  0x00=LOCK/0x01=UNLOCK。SecOC 検証成功後のみ更新される） */
 #define COM_SIGNAL_IMMOBILIZER_CMD  12U
@@ -383,7 +381,6 @@
  * Signal Gateway（Com_PBCfg.c の Com_GwMappingData）が ImmobilizerCmd(RX)から
  * SWC を介さず直接転送する。値は ImmobilizerCmd と同じ 0x00=LOCK/0x01=UNLOCK。
  * ----------------------------------------------------------------------- */
-
 /** TX: イモビライザー状態ブロードキャスト (8 bit, CAN ID 0x230, byte[0]) */
 #define COM_SIGNAL_IMMOBILIZER_STATUS  13U
 

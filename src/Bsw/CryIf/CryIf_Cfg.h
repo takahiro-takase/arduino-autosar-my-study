@@ -11,6 +11,14 @@
 #ifndef CRYIF_CFG_H
 #define CRYIF_CFG_H
 
+/* ======================================================================
+ * Includes
+ * ====================================================================== */
+
+/* ======================================================================
+ * Definitions
+ * ====================================================================== */
+
 /* -----------------------------------------------------------------------
  * DET（Default Error Tracer）関連定数
  *
@@ -18,7 +26,6 @@
  * （Release 4.3.1、docs/ 配下）の「List of Basic Software Modules」表で
  * Crypto Interface (CryIf) に割り当てられた固定値 112 を使う。
  * ----------------------------------------------------------------------- */
-
 /** AUTOSAR Crypto Interface の ModuleId（AUTOSAR_TR_BSWModuleList 参照、固定値 112） */
 #define CRYIF_MODULE_ID  112U
 
@@ -50,7 +57,6 @@
  * \ServiceID {0x02} と直接記載する（実仕様は 0x00〜0x01, 0x03〜0x11 を
  * 使用済みで 0x02 のみ未使用。docs/autosar/4.3.1/AUTOSAR_SWS_CryptoInterface.pdf
  * を実測して確認済み）。 */
-
 /** バージョン情報（Com/E2EXf/PduR 等の既存モジュールと同じ命名規則） */
 #define CRYIF_VENDOR_ID          0U
 #define CRYIF_SW_MAJOR_VERSION   1U

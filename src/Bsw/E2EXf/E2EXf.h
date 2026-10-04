@@ -35,25 +35,18 @@
 #ifndef E2EXF_H
 #define E2EXF_H
 
+/* ======================================================================
+ * Includes
+ * ====================================================================== */
+
 #include "Std_Types.h"
 #include "E2E_Types.h"
 #include "E2E_P05.h"
 #include "Dem.h"
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
-/**
- * \brief   E2EXf_Init() の設定引数型（不透明型）。
- *
- * \details SWS_E2EXf_00035 は post-build 設定構造体へのポインタ（post-build
- *          selectable の場合）または NULL（link-time の場合）を要求する。
- *          本プロジェクトは単一 ECU 構成で post-build バリアント切替を
- *          持たないため、中身を定義しない不透明型とし、ポインタとしてのみ
- *          扱う（`CanSM_ConfigType`/`KeyM_ConfigType` と同じ簡略化パターン）。
- */
-typedef struct E2EXf_ConfigType_Tag E2EXf_ConfigType;
+/* ======================================================================
+ * Definitions
+ * ====================================================================== */
 
 /* -----------------------------------------------------------------------
  * DET（Default Error Tracer）関連定数
@@ -69,7 +62,6 @@ typedef struct E2EXf_ConfigType_Tag E2EXf_ConfigType;
  * 実体化する）に対応するインスタンス専用関数（2026-09 是正、詳細は
  * 各関数の Doxygen 参照）。
  * ----------------------------------------------------------------------- */
-
 /** AUTOSAR E2E Transformer の ModuleId（AUTOSAR_TR_BSWModuleList 参照、固定値 176） */
 #define E2EXF_MODULE_ID  176U
 
@@ -116,6 +108,21 @@ typedef struct E2EXf_ConfigType_Tag E2EXf_ConfigType;
 #define E2EXF_SW_MAJOR_VERSION   1U
 #define E2EXF_SW_MINOR_VERSION   0U
 #define E2EXF_SW_PATCH_VERSION   0U
+
+/* ======================================================================
+ * Type Definitions
+ * ====================================================================== */
+
+/**
+ * \brief   E2EXf_Init() の設定引数型（不透明型）。
+ *
+ * \details SWS_E2EXf_00035 は post-build 設定構造体へのポインタ（post-build
+ *          selectable の場合）または NULL（link-time の場合）を要求する。
+ *          本プロジェクトは単一 ECU 構成で post-build バリアント切替を
+ *          持たないため、中身を定義しない不透明型とし、ポインタとしてのみ
+ *          扱う（`CanSM_ConfigType`/`KeyM_ConfigType` と同じ簡略化パターン）。
+ */
+typedef struct E2EXf_ConfigType_Tag E2EXf_ConfigType;
 
 /* -----------------------------------------------------------------------
  * RX 側（Inverse Transformer）内部状態 — E2E Profile 05
@@ -170,6 +177,18 @@ typedef struct
     const E2E_P05ConfigType* E2EConfig;
     E2E_P05ProtectStateType* ProtectState;
 } E2EXf_TxConfigTypeP05;
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* ======================================================================
+ * Global Variables
+ * ====================================================================== */
+
+/* ======================================================================
+ * Functions
+ * ====================================================================== */
 
 /**
  * \brief   E2EXf モジュール自身を初期化済み状態にする。
@@ -387,6 +406,14 @@ uint8 E2EXf_E2EHealthStatus(uint8* buffer, uint32* bufferLength, const uint8* in
  * \Synchronicity  {Synchronous}
  */
 void E2EXf_GetVersionInfo(Std_VersionInfoType* versioninfo);
+
+/* ======================================================================
+ * Callback Functions and Notifications
+ * ====================================================================== */
+
+/* ======================================================================
+ * Test Functions
+ * ====================================================================== */
 
 #ifdef __cplusplus
 }

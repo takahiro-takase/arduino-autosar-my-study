@@ -11,21 +11,50 @@
 #ifndef PDUR_CANIF_H
 #define PDUR_CANIF_H
 
+/* ======================================================================
+ * Includes
+ * ====================================================================== */
+
 #include "ComStack_Types.h"
 #include "Std_Types.h"
 #include "PduR_COM.h"
+
+/* ======================================================================
+ * Definitions
+ * ====================================================================== */
+
+#define PduR_CanIfRxIndication PduR_ComRxIndication
+
+/* ======================================================================
+ * Type Definitions
+ * ====================================================================== */
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
+/* ======================================================================
+ * Global Variables
+ * ====================================================================== */
+
+/* ======================================================================
+ * Functions
+ * ====================================================================== */
+
 /* SWS_PduR_00362: CanIf->PduR receive indication.
  * Mapped to PduR_ComRxIndication by the #define below. */
 void PduR_CanIfRxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr);
-#define PduR_CanIfRxIndication PduR_ComRxIndication
 
 /* SWS_PduR_00365: CanIf->PduR transmit confirmation. */
 void PduR_CanIfTxConfirmation(PduIdType TxPduId, Std_ReturnType result);
+
+/* ======================================================================
+ * Callback Functions and Notifications
+ * ====================================================================== */
+
+/* ======================================================================
+ * Test Functions
+ * ====================================================================== */
 
 #ifdef __cplusplus
 }

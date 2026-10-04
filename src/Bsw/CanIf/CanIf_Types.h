@@ -11,10 +11,22 @@
 #ifndef CANIF_TYPES_H
 #define CANIF_TYPES_H
 
+/* ======================================================================
+ * Includes
+ * ====================================================================== */
+
 #include "Platform_Types.h"
 #include "Std_Types.h"
 #include "ComStack_Types.h"
 #include "Can_GeneralTypes.h"
+
+/* ======================================================================
+ * Definitions
+ * ====================================================================== */
+
+/* ======================================================================
+ * Type Definitions
+ * ====================================================================== */
 
 /* SWS_CANIF_00012: <User_RxIndication>, upper-layer RX indication callback. */
 typedef void (*CanIf_RxIndicationFctType)(PduIdType RxPduId, const PduInfoType* PduInfoPtr);

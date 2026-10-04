@@ -31,15 +31,23 @@
 #ifndef CANSM_H
 #define CANSM_H
 
+/* ======================================================================
+ * Includes
+ * ====================================================================== */
+
 #include "Std_Types.h"
 #include "ComStack_Types.h"
 #include "Can_GeneralTypes.h"
 #include "ComM.h"
 #include "CanSM_Cfg.h"
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+/* ======================================================================
+ * Definitions
+ * ====================================================================== */
+
+/* ======================================================================
+ * Type Definitions
+ * ====================================================================== */
 
 /**
  * \brief   CanSM_Init() の設定引数型（不透明型）。
@@ -50,6 +58,18 @@ extern "C" {
  *          （`KeyM_ConfigType` と同じ簡略化パターン。KeyM.h 冒頭コメント参照）。
  */
 typedef struct CanSM_ConfigType_Tag CanSM_ConfigType;
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* ======================================================================
+ * Global Variables
+ * ====================================================================== */
+
+/* ======================================================================
+ * Functions
+ * ====================================================================== */
 
 /**
  * \brief   CanSM モジュールを初期化する。
@@ -113,6 +133,63 @@ Std_ReturnType CanSM_RequestComMode(NetworkHandleType network, ComM_ModeType mod
  * \Synchronicity  {Synchronous}
  */
 Std_ReturnType CanSM_GetCurrentComMode(NetworkHandleType network, ComM_ModeType* mode);
+
+/**
+ * \brief   受信通知コールバック（CanIf から全受信フレームについて呼び出される）。
+ *
+ * \details AUTOSAR SWS_CanSM の CanSMRxIndicationUsed 設定に相当。
+ *          ウェイクアップ検証中 (CANSM_STATE_WAKEUP_VALIDATING) にのみ意味を持ち、
+ *          有効な CAN フレームの受信をもって直前のウェイクアップがノイズでは
+ *          ないと判断し、FULL_COM へ確定させる。それ以外の状態では何もしない。
+ *
+ * \note    実仕様には存在しない本プロジェクト独自の拡張関数のため、対応する
+ *          \AUTOSARReq は無い。ServiceID は以前 0x07 だったが、
+ *          `CanSM_ControllerModeIndication`（旧 CanSM_ControllerWakeup）の
+ *          正しい ServiceID が実は 0x07 だったと判明したため、2026-09-05 に
+ *          0x15 へ変更した（自己割当値、実仕様との衝突を避けるため。
+ *          CanSM_Cfg.h の CANSM_API_ID_RX_INDICATION コメント参照）。
+ *
+ * \param[in]  ControllerId  受信したコントローラ ID。
+ *
+ * \ServiceID      {0x15}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void CanSM_RxIndication(uint8 ControllerId);
+
+/**
+ * \brief   CanSM 周期処理（Bus-Off 回復タイマ・ウェイクアップ検証タイマ管理）。
+ *
+ * \details OS タスク (10 ms 周期、SHUTDOWN 中も動作) から呼び出される。
+ *          Bus-Off 状態のとき回復タイマを監視し、L1/L2 いずれかの周期経過後に
+ *          コントローラの再起動を試みる（詳細は CanSM.c 参照）。
+ *          ウェイクアップ検証中は検証タイマを監視し、タイムアウトすれば
+ *          ノイズによる誤ウェイクアップとみなして再スリープさせる。
+ *
+ * \ServiceID      {0x05}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void CanSM_MainFunction(void);
+
+/**
+ * \brief   CanSM モジュールのバージョン情報を取得する。
+ *
+ * \details CanSM_Init と並び、未初期化時でも CANSM_E_UNINIT を報告しない
+ *          例外 API（他 BSW モジュールと共通の慣例）のため、初期化状態は
+ *          確認せず NULL ポインタチェックのみ行う。
+ *
+ * \param[out]  VersionInfo  バージョン情報の格納先。NULL 禁止。
+ *
+ * \ServiceID      {0x01}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void CanSM_GetVersionInfo(Std_VersionInfoType* VersionInfo);
+
+/* ======================================================================
+ * Callback Functions and Notifications
+ * ====================================================================== */
 
 /**
  * \brief   Bus-Off 通知コールバック（CanIf から呼び出される）。
@@ -182,58 +259,9 @@ void CanSM_ControllerBusOff(uint8 ControllerId);
  */
 void CanSM_ControllerModeIndication(uint8 ControllerId, Can_ControllerStateType ControllerMode);
 
-/**
- * \brief   受信通知コールバック（CanIf から全受信フレームについて呼び出される）。
- *
- * \details AUTOSAR SWS_CanSM の CanSMRxIndicationUsed 設定に相当。
- *          ウェイクアップ検証中 (CANSM_STATE_WAKEUP_VALIDATING) にのみ意味を持ち、
- *          有効な CAN フレームの受信をもって直前のウェイクアップがノイズでは
- *          ないと判断し、FULL_COM へ確定させる。それ以外の状態では何もしない。
- *
- * \note    実仕様には存在しない本プロジェクト独自の拡張関数のため、対応する
- *          \AUTOSARReq は無い。ServiceID は以前 0x07 だったが、
- *          `CanSM_ControllerModeIndication`（旧 CanSM_ControllerWakeup）の
- *          正しい ServiceID が実は 0x07 だったと判明したため、2026-09-05 に
- *          0x15 へ変更した（自己割当値、実仕様との衝突を避けるため。
- *          CanSM_Cfg.h の CANSM_API_ID_RX_INDICATION コメント参照）。
- *
- * \param[in]  ControllerId  受信したコントローラ ID。
- *
- * \ServiceID      {0x15}
- * \Reentrancy     {Non Reentrant}
- * \Synchronicity  {Synchronous}
- */
-void CanSM_RxIndication(uint8 ControllerId);
-
-/**
- * \brief   CanSM 周期処理（Bus-Off 回復タイマ・ウェイクアップ検証タイマ管理）。
- *
- * \details OS タスク (10 ms 周期、SHUTDOWN 中も動作) から呼び出される。
- *          Bus-Off 状態のとき回復タイマを監視し、L1/L2 いずれかの周期経過後に
- *          コントローラの再起動を試みる（詳細は CanSM.c 参照）。
- *          ウェイクアップ検証中は検証タイマを監視し、タイムアウトすれば
- *          ノイズによる誤ウェイクアップとみなして再スリープさせる。
- *
- * \ServiceID      {0x05}
- * \Reentrancy     {Non Reentrant}
- * \Synchronicity  {Synchronous}
- */
-void CanSM_MainFunction(void);
-
-/**
- * \brief   CanSM モジュールのバージョン情報を取得する。
- *
- * \details CanSM_Init と並び、未初期化時でも CANSM_E_UNINIT を報告しない
- *          例外 API（他 BSW モジュールと共通の慣例）のため、初期化状態は
- *          確認せず NULL ポインタチェックのみ行う。
- *
- * \param[out]  VersionInfo  バージョン情報の格納先。NULL 禁止。
- *
- * \ServiceID      {0x01}
- * \Reentrancy     {Reentrant}
- * \Synchronicity  {Synchronous}
- */
-void CanSM_GetVersionInfo(Std_VersionInfoType* VersionInfo);
+/* ======================================================================
+ * Test Functions
+ * ====================================================================== */
 
 #ifdef __cplusplus
 }

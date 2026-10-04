@@ -14,6 +14,14 @@
 #ifndef CRYPTO_CFG_H
 #define CRYPTO_CFG_H
 
+/* ======================================================================
+ * Includes
+ * ====================================================================== */
+
+/* ======================================================================
+ * Definitions
+ * ====================================================================== */
+
 /* -----------------------------------------------------------------------
  * DET（Default Error Tracer）関連定数
  *
@@ -22,7 +30,6 @@
  * （Release 4.3.1、docs/ 配下）の「List of Basic Software Modules」表で
  * Crypto Driver (Crypto) に割り当てられた固定値 114 を使う。
  * ----------------------------------------------------------------------- */
-
 /** AUTOSAR Crypto Driver の ModuleId（AUTOSAR_TR_BSWModuleList 参照、固定値 114） */
 #define CRYPTO_MODULE_ID  114U
 
@@ -41,7 +48,6 @@
  * 型置き場）で定義する（2026-09 是正。/code-review で指摘: 以前はここに
  * 「実際には使わない」という説明付きの重複定義が残っており、実際に返す
  * ようになった Crypto_Types.h 側の定義とマクロ再定義警告を起こしていた）。 */
-
 /** ApiId（値は docs/autosar/4.3.1/AUTOSAR_SWS_CryptoDriver.pdf の「Service ID[hex]」記載を
  *  実測して確認済み） */
 #define CRYPTO_API_ID_INIT              0x00U
@@ -72,13 +78,11 @@
  * 鍵テーブル（実車は KeyM 等による鍵のプロビジョニング・保護が必須だが、
  * 本実装は学習のためコンパイル時の固定鍵テーブルに簡略化する）
  * ----------------------------------------------------------------------- */
-
 /** RX Secured I-PDU「ImmobilizerCmd」検証用の鍵（KeyFobEcu と共有） */
 #define CRYPTO_KEY_IMMOBILIZER_CMD    0U
 
 /* CRYPTO_KEY_E2E_HEALTH_STATUS は E2EHealthStatus の SecOC 撤去に伴い削除済み
  * （E2E Profile05 単体保護へ切り替えたため、この鍵を使う PDU が無くなった）。 */
-
 /** 鍵テーブルの総数 */
 #define CRYPTO_KEY_COUNT  1U
 

@@ -14,12 +14,20 @@
 #ifndef CSM_PBCFG_H
 #define CSM_PBCFG_H
 
+/* ======================================================================
+ * Includes
+ * ====================================================================== */
+
 #include "Crypto_Types.h"
 #include "Csm_Cfg.h"
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+/* ======================================================================
+ * Definitions
+ * ====================================================================== */
+
+/* ======================================================================
+ * Type Definitions
+ * ====================================================================== */
 
 /**
  * \brief   CsmJob 1 件分の設定（DaVinci CsmJob コンテナの簡略版）。
@@ -36,6 +44,14 @@ typedef struct
     Crypto_ServiceInfoType Service;     /**< このジョブが実行するプリミティブ */
     uint32                 CryptoKeyId; /**< Crypto Driver 側の鍵テーブル添字 (CRYPTO_KEY_*) */
 } Csm_JobConfigType;
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* ======================================================================
+ * Global Variables
+ * ====================================================================== */
 
 /** ジョブ設定テーブル（Csm_PBCfg.c で定義）。CSM_JOB_COUNT 件。 */
 extern const Csm_JobConfigType Csm_JobConfigData[CSM_JOB_COUNT];

@@ -26,6 +26,33 @@ C ファイルから C++ 関数を呼ぶすべてのヘッダに `extern "C"` �
 
 `Det_Hw.cpp` が唯一 `Serial.print()` を呼ぶファイルです。他の `.c` ファイルは `DET_LOG*` マクロのみを使います。
 
+<a id="file-layout"></a>
+## ヘッダ・ソースの見出し（帯）の構成
+
+モジュールのヘッダ（`<Module>.h`、`src/Hal/*_Hw.h`、`Os.h` など）とソース（`.c`）は、同じ見出し（帯）を
+同じ順序で持ちます。帯は `/* ====…` で囲んだ形で、中身が空の節も省かずに置きます（空であることを明示し、
+後から追加する位置を決めておくため）。
+
+| 順 | 見出し | ヘッダ | ソース |
+|----|--------|--------|--------|
+| 1 | Includes | `#include` | `#include` |
+| 2 | Definitions | `#define` | `#define`（内部用） |
+| 3 | Type Definitions | `typedef`（公開型） | `typedef`（内部型） |
+| 4 | Global Variables | `extern` 宣言 | 変数の定義 |
+| 5 | Function Prototypes | （置かない） | static 関数の前方宣言 |
+| 6 | Functions | 公開 API の宣言（仕様書の章節順） | 公開 API の定義 |
+| 7 | Internal Functions | （置かない） | static 関数の定義 |
+| 8 | Callback Functions and Notifications | コールバックの宣言 | コールバックの定義 |
+| 9 | Test Functions | `*_UNIT_TEST` のブロック | `*_UNIT_TEST` のブロック |
+
+- **`extern "C"` の位置**: C++（`main.cpp`、`*_Hw.cpp`、テスト）から呼ぶときに名前修飾（マングリング）を
+  避けるための指定で、関数と変数の宣言にだけ効きます。`#include` は囲まず、型や `#define` は
+  リンケージに関係がないので、**「Type Definitions」の直後で開き、最後の帯（Test Functions）の後で閉じます**。
+- **見出しを出す範囲**: `extern "C"` を持つヘッダは、中身が空でも 7 見出し（Includes〜Test Functions）を全部出す。`extern "C"` を持たない `*_Cfg.h` / `*_PBCfg.h` / `*_Types.h` は、必要な見出しだけでよい（Cfg は Includes と Definitions、Types は Type Definitions を加え、PBCfg はさらに Global Variables を加える。中身がある見出しは常に出す）。
+- **「Test Functions」の帯は `#ifdef *_UNIT_TEST` の外**に置きます（`*_UNIT_TEST` が未定義でも帯は残ります）。
+- ヘッダの「Functions」「Callback Functions and Notifications」は宣言であることがファイルの種類から自明なので、
+  ソースと同じ見出しにしています。
+
 <a id="log-level"></a>
 ## ログレベルの抑制 (Det_Cfg.h)
 

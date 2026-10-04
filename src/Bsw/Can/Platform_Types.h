@@ -11,9 +11,24 @@
 #ifndef PLATFORM_TYPES_H
 #define PLATFORM_TYPES_H
 
+/* ======================================================================
+ * Includes
+ * ====================================================================== */
+
 #include <stdint.h>
 #include <stddef.h>   /* NULL */
 #include <stdbool.h>  /* boolean 型の実体（下記コメント参照） */
+
+/* ======================================================================
+ * Definitions
+ * ====================================================================== */
+
+#define TRUE  true
+#define FALSE false
+
+/* ======================================================================
+ * Type Definitions
+ * ====================================================================== */
 
 typedef uint8_t  uint8;
 typedef uint16_t uint16;
@@ -47,7 +62,5 @@ typedef int32_t  sint32;
  *          2026-09-05、この構成で native/uno_r4 双方のビルドを実地検証済み。
  */
 typedef bool boolean;
-#define TRUE  true
-#define FALSE false
 
 #endif

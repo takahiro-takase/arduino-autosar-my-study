@@ -11,36 +11,15 @@
 #ifndef GPT_CFG_H
 #define GPT_CFG_H
 
+/* ======================================================================
+ * Includes
+ * ====================================================================== */
+
 #include "Std_Types.h"
 
-/* -----------------------------------------------------------------------
- * 基本型定義
- *
- * Gpt_PBCfg.h（ポストビルドコンフィグ）が Gpt_ChannelConfigType のフィールド
- * 型として必要とするため、Gpt.h ではなくここに置く。Gpt.h は
- * Gpt_Cfg.h → Gpt_PBCfg.h の順にインクルードするので、Gpt_PBCfg.h から
- * Gpt.h を逆参照する循環インクルードを避けられる（WdgM_Cfg.h/WdgM_PBCfg.h
- * と同じ構造）。
- * ----------------------------------------------------------------------- */
-
-/** GPT チャネル番号型。実装は Gpt_PBCfg.c の Channels 配列インデックスに
- *  そのまま対応する（[SWS_Gpt_00358]: 実装依存の numeric ID）。 */
-typedef uint8 Gpt_ChannelType;
-
-/** タイマ値型（tick 単位）。[SWS_Gpt_00359] */
-typedef uint32 Gpt_ValueType;
-
-/** チャネル動作モード。ECUC_Gpt_00309 GptChannelMode */
-typedef enum
-{
-    GPT_CH_MODE_CONTINUOUS = 0U,  /**< 目標時間到達後、0 から再カウントを継続する */
-    GPT_CH_MODE_ONESHOT    = 1U   /**< 目標時間到達後、自動的に停止する */
-} Gpt_ChannelMode;
-
-/** GptNotification（ECUC_Gpt_00312）関数ポインタ型。
- *  ISR コンテキストから直接呼ばれるため、実装は ISR セーフな処理に限定すること
- *  （Gpt.h 冒頭のコメント参照）。 */
-typedef void (*Gpt_NotificationPtrType)(void);
+/* ======================================================================
+ * Definitions
+ * ====================================================================== */
 
 /* -----------------------------------------------------------------------
  * DET（Default Error Tracer）関連定数
@@ -60,7 +39,6 @@ typedef void (*Gpt_NotificationPtrType)(void);
  *                                    相当の機能を丸ごと未実装。
  *   GPT_E_PARAM_PREDEF_TIMER       : Gpt_GetPredefTimerValue 用。未実装。
  * ----------------------------------------------------------------------- */
-
 /** AUTOSAR GPT Driver の ModuleId（AUTOSAR_TR_BSWModuleList 参照、固定値 100） */
 #define GPT_MODULE_ID  100U
 
@@ -95,5 +73,37 @@ typedef void (*Gpt_NotificationPtrType)(void);
 #define GPT_SW_MAJOR_VERSION   1U
 #define GPT_SW_MINOR_VERSION   0U
 #define GPT_SW_PATCH_VERSION   0U
+
+/* ======================================================================
+ * Type Definitions
+ * ====================================================================== */
+
+/* -----------------------------------------------------------------------
+ * 基本型定義
+ *
+ * Gpt_PBCfg.h（ポストビルドコンフィグ）が Gpt_ChannelConfigType のフィールド
+ * 型として必要とするため、Gpt.h ではなくここに置く。Gpt.h は
+ * Gpt_Cfg.h → Gpt_PBCfg.h の順にインクルードするので、Gpt_PBCfg.h から
+ * Gpt.h を逆参照する循環インクルードを避けられる（WdgM_Cfg.h/WdgM_PBCfg.h
+ * と同じ構造）。
+ * ----------------------------------------------------------------------- */
+/** GPT チャネル番号型。実装は Gpt_PBCfg.c の Channels 配列インデックスに
+ *  そのまま対応する（[SWS_Gpt_00358]: 実装依存の numeric ID）。 */
+typedef uint8 Gpt_ChannelType;
+
+/** タイマ値型（tick 単位）。[SWS_Gpt_00359] */
+typedef uint32 Gpt_ValueType;
+
+/** チャネル動作モード。ECUC_Gpt_00309 GptChannelMode */
+typedef enum
+{
+    GPT_CH_MODE_CONTINUOUS = 0U,  /**< 目標時間到達後、0 から再カウントを継続する */
+    GPT_CH_MODE_ONESHOT    = 1U   /**< 目標時間到達後、自動的に停止する */
+} Gpt_ChannelMode;
+
+/** GptNotification（ECUC_Gpt_00312）関数ポインタ型。
+ *  ISR コンテキストから直接呼ばれるため、実装は ISR セーフな処理に限定すること
+ *  （Gpt.h 冒頭のコメント参照）。 */
+typedef void (*Gpt_NotificationPtrType)(void);
 
 #endif /* GPT_CFG_H */

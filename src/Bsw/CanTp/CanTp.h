@@ -23,13 +23,21 @@
 #ifndef CANTP_H
 #define CANTP_H
 
+/* ======================================================================
+ * Includes
+ * ====================================================================== */
+
 #include "CanTp_Cfg.h"
 #include "ComStack_Types.h"
 #include "Std_Types.h"
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+/* ======================================================================
+ * Definitions
+ * ====================================================================== */
+
+/* ======================================================================
+ * Type Definitions
+ * ====================================================================== */
 
 /**
  * \brief   CanTp_Init() の設定引数型（不透明型）。
@@ -40,6 +48,18 @@ extern "C" {
  *          （`KeyM_ConfigType` と同じ簡略化パターン。KeyM.h 冒頭コメント参照）。
  */
 typedef struct CanTp_ConfigType_Tag CanTp_ConfigType;
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* ======================================================================
+ * Global Variables
+ * ====================================================================== */
+
+/* ======================================================================
+ * Functions
+ * ====================================================================== */
 
 /**
  * \brief   CanTp モジュールを初期化する。
@@ -101,6 +121,39 @@ Std_ReturnType CanTp_Transmit(PduIdType TxSduId, const PduInfoType* PduInfoPtr);
 boolean CanTp_IsTxBusy(void);
 
 /**
+ * \brief   タイムアウト監視と CF 送信を周期的に処理する。
+ *
+ * \details EcuM_MainFunction から毎ループ呼び出す。以下を担当する:
+ *          - TX WAIT_FC 状態: N_Bs タイムアウト検出 → TX 中断
+ *          - TX SEND_CF 状態: STmin 経過後に次の CF を送信
+ *          - RX WAIT_CF 状態: N_Cr タイムアウト検出 → RX 中断
+ *
+ * \ServiceID      {0x06}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void CanTp_MainFunction(void);
+
+/**
+ * \brief   CanTp モジュールのバージョン情報を取得する。
+ *
+ * \details CanTp_Init と並び、未初期化時でも CANTP_E_UNINIT を報告しない
+ *          例外 API（CanTp_Cfg.h 冒頭コメント参照）のため、初期化状態は
+ *          確認せず NULL ポインタチェックのみ行う。
+ *
+ * \param[out]  versioninfo  バージョン情報の格納先。NULL 禁止。
+ *
+ * \ServiceID      {0x07}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void CanTp_GetVersionInfo(Std_VersionInfoType* versioninfo);
+
+/* ======================================================================
+ * Callback Functions and Notifications
+ * ====================================================================== */
+
+/**
  * \brief   PduR から配信された受信 CAN フレームを処理する。
  *
  * \details フレームタイプ (SF/FF/CF/FC) を判定し、
@@ -137,34 +190,9 @@ void CanTp_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr);
  */
 void CanTp_TxConfirmation(PduIdType TxPduId, Std_ReturnType result);
 
-/**
- * \brief   タイムアウト監視と CF 送信を周期的に処理する。
- *
- * \details EcuM_MainFunction から毎ループ呼び出す。以下を担当する:
- *          - TX WAIT_FC 状態: N_Bs タイムアウト検出 → TX 中断
- *          - TX SEND_CF 状態: STmin 経過後に次の CF を送信
- *          - RX WAIT_CF 状態: N_Cr タイムアウト検出 → RX 中断
- *
- * \ServiceID      {0x06}
- * \Reentrancy     {Non Reentrant}
- * \Synchronicity  {Synchronous}
- */
-void CanTp_MainFunction(void);
-
-/**
- * \brief   CanTp モジュールのバージョン情報を取得する。
- *
- * \details CanTp_Init と並び、未初期化時でも CANTP_E_UNINIT を報告しない
- *          例外 API（CanTp_Cfg.h 冒頭コメント参照）のため、初期化状態は
- *          確認せず NULL ポインタチェックのみ行う。
- *
- * \param[out]  versioninfo  バージョン情報の格納先。NULL 禁止。
- *
- * \ServiceID      {0x07}
- * \Reentrancy     {Reentrant}
- * \Synchronicity  {Synchronous}
- */
-void CanTp_GetVersionInfo(Std_VersionInfoType* versioninfo);
+/* ======================================================================
+ * Test Functions
+ * ====================================================================== */
 
 #ifdef CANTP_UNIT_TEST
 /**

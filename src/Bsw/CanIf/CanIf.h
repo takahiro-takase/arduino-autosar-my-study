@@ -11,20 +11,37 @@
 #ifndef CANIF_H
 #define CANIF_H
 
+/* ======================================================================
+ * Includes
+ * ====================================================================== */
+
 #include "CanIf_Types.h"
 #include "CanIf_Cfg.h"
+
+/* ======================================================================
+ * Definitions
+ * ====================================================================== */
+
+/* ======================================================================
+ * Type Definitions
+ * ====================================================================== */
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
+/* ======================================================================
+ * Global Variables
+ * ====================================================================== */
+
+/* ======================================================================
+ * Functions
+ * ====================================================================== */
+
 void           CanIf_Init(const CanIf_ConfigType* ConfigPtr);
 void           CanIf_DeInit(void);
 Std_ReturnType CanIf_Transmit(PduIdType TxPduId, const PduInfoType* PduInfoPtr);
-void           CanIf_RxIndication(const Can_HwType* Mailbox, const PduInfoType* PduInfoPtr);
 Std_ReturnType CanIf_ReadRxPduData(PduIdType CanIfRxSduId, PduInfoType* CanIfRxInfoPtr);
-void           CanIf_TxConfirmation(PduIdType CanTxPduId);
-void           CanIf_ControllerBusOff(uint8 ControllerId);
 void           CanIf_GetVersionInfo(Std_VersionInfoType* versioninfo);
 Std_ReturnType CanIf_SetPduMode(uint8 ControllerId, CanIf_PduModeType PduModeRequest);
 Std_ReturnType CanIf_GetPduMode(uint8 ControllerId, CanIf_PduModeType* PduModePtr);
@@ -126,6 +143,18 @@ CanIf_NotifStatusType CanIf_ReadRxNotifStatus(PduIdType CanIfRxSduId);
  * \Synchronicity  {Synchronous}
  */
 CanIf_NotifStatusType CanIf_GetTxConfirmationState(uint8 ControllerId);
+
+/* ======================================================================
+ * Callback Functions and Notifications
+ * ====================================================================== */
+
+void           CanIf_RxIndication(const Can_HwType* Mailbox, const PduInfoType* PduInfoPtr);
+void           CanIf_TxConfirmation(PduIdType CanTxPduId);
+void           CanIf_ControllerBusOff(uint8 ControllerId);
+
+/* ======================================================================
+ * Test Functions
+ * ====================================================================== */
 
 #ifdef __cplusplus
 }
