@@ -176,560 +176,13 @@ static Rte_IStatusType Rte_MapE2EStatusP05(E2E_P05StatusType status)
     }
 }
 
-/**
- * \brief   EngineInfo (RX IPduId=0) フレーム受信の都度呼ばれる E2E Transformer フック。
- *
- * \details Com_PBCfg.c の RxIndicationCbk として登録される。
- *          E2EXf_Inv_EngineInfo() が失敗した場合はミラーを更新せず、
- *          前回の有効値をそのまま使い続けさせる。E2E チェックの生の結果は
- *          `E2EMon_NotifyCheckResultP05()`（CDD 相当の独立モジュール、
- *          src/Bsw/E2EMon/）へも通知する。これは実 AUTOSAR で言う
- *          「ARXML で設定した OnDataReceived 通知フックが RTE から生成され、
- *          独自 CDD の関数を呼ぶ」という接続方式を模したもの（本プロジェクトは
- *          RTE ジェネレータが無いため Rte.c が手書きでこの呼び出しを担う）。
- *          以前は E2E Profile01 だったが、CRC 検出能力を高めるため
- *          Profile05(CRC16+8bitカウンタ、DLC=7) へ切り替えた。
- *
- * \note    Com_PBCfg.c から extern 宣言経由で RxIndicationCbk として
- *          参照されるため non-static。Rte.h には公開しない（RTE の
- *          公式 API ではなく、Com→Rte 間の内部グルーのため）。
- */
-void Rte_COMRxInd_EngineInfo(void)
-{
-    uint8 buf[7];
-    if (Com_ReceiveSignalGroupArray(0U, buf) != E_OK)
-    {
-        return;
-    }
+/* ======================================================================
+ * 内部（static）ヘルパ
+ * ====================================================================== */
 
-    E2E_P05StatusType checkStatus;
-    uint32 bufferLength;
-    const uint8 ret = E2EXf_Inv_EngineInfo(buf, &bufferLength, NULL, 0U, &checkStatus);
-    Rte_EngineInfoStatus = Rte_MapE2EStatusP05(checkStatus);
-    E2EMon_NotifyCheckResultP05(checkStatus);
-    /* ret==E_OK(0x00)は「SMState=VALID かつ今回のフレームも合格」を意味する
-     * ([SWS_E2EXf_00027]のニブルパック、E2EXf_Inv_EngineInfo()のコメント参照)。
-     * [SWS_E2E_00345]の"do NOT use data"規定により、SMがVALIDに確定するまで
-     * （起動直後のNODATA/INIT中を含む）はミラーを更新しない。 */
-    if (ret != E_OK)
-    {
-        return;
-    }
-
-    SchM_Enter_Rte_MIRROR_EXCLUSIVE_AREA();
-    (void)Com_ReceiveSignal(COM_SIGNAL_ENGINE_SPEED,   &Rte_EngineInfoMirror.speed);
-    (void)Com_ReceiveSignal(COM_SIGNAL_COOLANT_TEMP,   &Rte_EngineInfoMirror.temp);
-    (void)Com_ReceiveSignal(COM_SIGNAL_ENGINE_ON_FLAG, &Rte_EngineInfoMirror.onFlag);
-    SchM_Exit_Rte_MIRROR_EXCLUSIVE_AREA();
-}
-
-/**
- * \brief   CoolantTemp が無効値（0xFF）で受信されたことを通知する。
- *
- * \details Com_PBCfg.c の CoolantTemp シグナル設定（DataInvalidAction=
- *          COM_DATA_INVALID_ACTION_NOTIFY）から InvalidNotificationCbk として
- *          登録される（実 AUTOSAR の ComInvalidNotification、ECUC_Com_00315
- *          相当）。Com_ReceiveSignal(COM_SIGNAL_COOLANT_TEMP, ...) が受信値と
- *          InvalidValue の一致を検知した「次回」の Com_MainFunctionRx() から
- *          呼ばれる（SWS_Com_00680/00717。同期呼び出しにしていない理由は
- *          Com.c の Com_RxInvalidNotifyPending 宣言コメント参照 — この関数が
- *          行う Serial 出力は、Com_ReceiveSignal() の呼び出し元によっては
- *          割り込み禁止区間内で実行されると WDT リセットを引き起こしうる
- *          ため）。ログ出力に加え、Rte_Invalidate_MeterStatus_CoolantTemp()
- *          （Com_InvalidateSignal() へ委譲、2026-08 追加、
- *          SWS_Com_00099/SWS_Com_00642）でメータ表示ミラー自体も無効化する。
- *          同じ 0xFF マーカーを RX/TX 双方の ComSignalDataInvalidValue に
- *          設定しているため（Com_PBCfg.c 参照）、uds_tester 側でも同じ意味の
- *          無効値として扱える。
- *
- *          \note   これは「無効を検知した瞬間」の単発通知であり、継続的な
- *          無効状態のフラグではない。App_EngineManager_Run() は毎サイクル
- *          `Rte_EngineInfoMirror.temp`（DataInvalidAction=NOTIFY により、
- *          無効値受信時も直近の有効値のまま更新されない）を
- *          Rte_Write_MeterStatus_CoolantTemp() でそのままミラー送信し続ける
- *          ため、ここで無効化した値は次の周期送信で上書きされる
- *          （TX シグナル自体は変化検知フィルタ付きのため、値が同じなら
- *          再送信は起きないが、無効化パルスとしての意味は保たれる）。
- *
- * \note    Com_PBCfg.c から extern 宣言経由で InvalidNotificationCbk として
- *          参照されるため non-static。Rte.h には公開しない（Rte_COMCbk_*
- *          と同じく Com→Rte 間の内部グルーのため）。
- */
-void Rte_COMInvalidNotify_CoolantTemp(void)
-{
-    DET_LOGW(TAG, "CoolantTemp invalid value received (sensor fault pattern)");
-    (void)Rte_Invalidate_MeterStatus_CoolantTemp();
-}
-
-/**
- * \brief   EngineSpeed が受信フィルタ（NEW_IS_WITHIN、[0,8000]rpm）で
- *          範囲外と判定され、破棄されたことを通知する。
- *
- * \details Com_PBCfg.c の EngineSpeed シグナル設定（FilterAlgorithm=
- *          COM_FILTER_NEW_IS_WITHIN）から FilterRejectCbk として登録される
- *          （実 AUTOSAR の ComNotification 相当）。Com_ReceiveSignal(
- *          COM_SIGNAL_ENGINE_SPEED, ...) が範囲外の値を検知した「次回」の
- *          Com_MainFunctionRx() から呼ばれる（SWS_Com_00273。Rte_COMInvalidNotify_
- *          CoolantTemp と同じ理由で同期呼び出しにしていない。Com.c の
- *          Com_RxFilterRejectPending 宣言コメント参照）。この関数自体は
- *          「異常が起きたことをログへ残す」以上のことは行わない。
- *
- * \note    Com_PBCfg.c から extern 宣言経由で FilterRejectCbk として
- *          参照されるため non-static。Rte.h には公開しない（他の Rte_COM*
- *          グルーと同じ理由）。
- */
-void Rte_COMFilterReject_EngineSpeed(void)
-{
-    DET_LOGW(TAG, "EngineSpeed out of plausible range, rejected by RX filter (kept last valid value)");
-}
-
-/**
- * \brief   MeterStatus フレームの送信成功を通知する（EngineState の TxAck）。
- *
- * \details Com_PBCfg.c の EngineState シグナル設定（TxAckCbk）から登録される
- *          （実 AUTOSAR の Com_CbkTxAck、ComNotification = ECUC_Com_00498
- *          相当）。呼ばれるのは Com_TxConfirmation() が MeterStatus
- *          （TX IPduId=0）の送信成功を検出した直後（SWS_Com_00468）。
- *          Com_TxConfirmation() は Can_MainFunction_Write()（Os の 100ms
- *          タスク）から同期的に呼ばれ、この経路上に割り込み禁止区間は
- *          存在しないため（Com.c の Com_TxConfirmation() doc 参照）、
- *          ここで Serial 出力（DET_LOGI）を行っても Rx 無効値検知で発生した
- *          WDT リセット障害と同じ問題は起きない。
- *
- * \note    Com_PBCfg.c から extern 宣言経由で TxAckCbk として参照されるため
- *          non-static。Rte.h には公開しない（他の Rte_COM* グルーと同じ
- *          理由）。
- */
-void Rte_COMCbkTAck_EngineState(void)
-{
-    DET_LOGI(TAG, "MeterStatus TX ack (EngineState)");
-}
-
-/**
- * \brief   MeterStatus フレームの送信確認タイムアウトを通知する
- *          （EngineState の TxTOut）。
- *
- * \details Com_PBCfg.c の EngineState シグナル設定（TxTOutCbk）から登録
- *          される（実 AUTOSAR の Com_CbkTxTOut、SWS_Com_00878/00879/00880/
- *          00304/00554 相当）。呼ばれるのは Com_MainFunctionTx() が MeterStatus
- *          （TX IPduId=0）の送信確認が COM_TX_TIMEOUT_METERSTATUS_MS 以内に
- *          届かなかったことを検出した直後。
- *
- * \note    実機では発動しない: Com_DoTransmit()→PduR_ComTransmit()→
- *          CanIf_Transmit()→Can_Write() は同期的に完結し、Bus-Off 中は
- *          Can_Write() が「送信済み・未確認」状態自体を作らずに即座に
- *          失敗するため（詳細は docs/modules/Com_Notes.md「TX 送信デッド
- *          ライン監視」参照）。Rte_COMCbkTAck_EngineState() と対になる、
- *          仕様忠実性のためのユニットテスト検証専用の実装。
- *
- * \note    Com_PBCfg.c から extern 宣言経由で TxTOutCbk として参照されるため
- *          non-static。Rte.h には公開しない（他の Rte_COM* グルーと同じ
- *          理由）。
- */
-void Rte_COMCbkTxTOut_EngineState(void)
-{
-    DET_LOGI(TAG, "MeterStatus TX confirmation timeout (EngineState)");
-}
-
-/**
- * \brief   WarningStatus フレームの送信成功を通知する（Signal Group 単位）。
- *
- * \details Com_PBCfg.c の WarningStatus I-PDU 設定（Com_IPduConfigType.
- *          TxAckCbk）から登録される。呼ばれるのは Com_TxConfirmation() が
- *          WarningStatus（TX IPduId=1、Signal Group）の送信成功を検出した
- *          直後（SWS_Com_00468: "It can be configured for signals and
- *          signal groups. Com_CbkTxAck corresponds to Rte_COMCbkTAck_<sn>
- *          or Rte_COMCbkTAck_<sg> respectively."）。RunLamp/FaultLamp/
- *          AbsLamp のどれが変化して送信を引き起こしたかは問わず、グループ
- *          全体で 1 回だけ呼ばれる（`Rte_COMCbkTAck_EngineState()` と対になる、
- *          Signal Group 単位の実装例）。
- *
- *          `Rte_COMCbkTAck_EngineState()` と同じ呼び出しチェーン
- *          （Can_MainFunction_Write() → ... → Com_TxConfirmation()）を経由
- *          するため、割り込み禁止区間の外で呼ばれることも同様に確認済み。
- *
- * \note    Com_PBCfg.c から extern 宣言経由で TxAckCbk として参照されるため
- *          non-static。Rte.h には公開しない（他の Rte_COM* グルーと同じ
- *          理由）。
- */
-void Rte_COMCbkTAck_WarningStatus(void)
-{
-    DET_LOGI(TAG, "WarningStatus TX ack (group)");
-}
-
-/**
- * \brief   WarningStatus フレームの送信確認タイムアウトを通知する
- *          （Signal Group 単位）。
- *
- * \details Com_PBCfg.c の WarningStatus I-PDU 設定（Com_IPduConfigType.
- *          TxTOutCbk）から登録される（実 AUTOSAR の Com_CbkTxTOut、
- *          SWS_Com_00878/00879/00880/00304/00554 相当。SWS_Com_00554の
- *          "Rte_COMCbkTAck_<sn> or Rte_COMCbkTAck_<sg> respectively" と
- *          同じ区別が TxTOut にも適用される）。呼ばれるのは
- *          Com_MainFunctionTx() が WarningStatus（TX IPduId=1、Signal Group）
- *          の送信確認が COM_TX_TIMEOUT_WARNINGSTATUS_MS 以内に届かなかった
- *          ことを検出した直後。`Rte_COMCbkTAck_WarningStatus()` と対になる、
- *          Signal Group 単位の実装例（`Rte_COMCbkTxTOut_EngineState()` の
- *          Signal Group 版）。
- *
- * \note    実機では発動しない: 上記 `Rte_COMCbkTxTOut_EngineState()` と
- *          同じ理由（同関数の Doxygen コメント参照）。
- *
- * \note    Com_PBCfg.c から extern 宣言経由で TxTOutCbk として参照されるため
- *          non-static。Rte.h には公開しない（他の Rte_COM* グルーと同じ
- *          理由）。
- */
-void Rte_COMCbkTxTOut_WarningStatus(void)
-{
-    DET_LOGI(TAG, "WarningStatus TX confirmation timeout (group)");
-}
-
-/**
- * \brief   EngineInfo フレームの受信バッファ格納完了を通知する（非 Signal Group）。
- *
- * \details Com_PBCfg.c の EngineOnFlag シグナル設定（Com_SignalConfigType.
- *          RxAckCbk）から登録される。Com_RxIndication() がこのシグナルの
- *          全ビット範囲を受信バッファへ格納した直後に呼ばれる
- *          （Com_CbkRxAck、SWS_Com_00555）。E2E 検証
- *          （Rte_COMRxInd_EngineInfo、RxIndicationCbk）より前に呼ばれるため、
- *          このログはペイロードの妥当性とは無関係に「バイト列が届いた」
- *          ことのみを意味する（E2E CRC が壊れているフレームでも出力される）。
- *
- * \note    Com_PBCfg.c から extern 宣言経由で RxAckCbk として参照されるため
- *          non-static。Rte.h には公開しない（他の Rte_COM* グルーと同じ
- *          理由）。呼び出しコンテキストは Rte_COMCbkTAck_EngineState() と
- *          同じく割り込み禁止区間の外（Com_RxIndication() 自体がそこから
- *          呼ばれることはない）。
- */
-void Rte_COMCbk_EngineOnFlag(void)
-{
-    DET_LOGI(TAG, "EngineInfo RX ack (EngineOnFlag)");
-}
-
-/**
- * \brief   AbsInfo フレームの受信バッファ格納完了を通知する（Signal Group 単位）。
- *
- * \details Com_PBCfg.c の AbsInfo I-PDU 設定（Com_IPduConfigType.RxAckCbk）
- *          から登録される。VehicleSpeed/BrakeActive/AbsActive のどのメンバー
- *          が変化したかは問わず、グループ全体で 1 回だけ呼ばれる
- *          （Com_CbkRxAck、SWS_Com_00555。TX 側 Rte_COMCbkTAck_WarningStatus()
- *          と対になる、Signal Group 単位の RX 実装例）。E2E 検証・
- *          Com_ReceiveSignalGroup() コミット（Rte_COMRxInd_AbsInfo）より前に
- *          呼ばれるため、E2E 検証に失敗したフレームでもこのログは出力される。
- *
- * \note    Com_PBCfg.c から extern 宣言経由で RxAckCbk として参照されるため
- *          non-static。Rte.h には公開しない。
- */
-void Rte_COMCbk_AbsInfo(void)
-{
-    DET_LOGI(TAG, "AbsInfo RX ack (group)");
-}
-
-/**
- * \brief   EngineInfo フレームの受信デッドライン超過を通知する（EngineOnFlag のRxTOut）。
- *
- * \details Com_PBCfg.c の EngineOnFlag シグナル設定（Com_SignalConfigType.
- *          RxTOutCbk）から登録される。呼ばれるのは Com_MainFunctionRx() が
- *          このシグナルの FirstTimeoutMs/TimeoutMs（EngineInfo と同値）
- *          超過を新規検出した直後（Com_CbkRxTOut、SWS_Com_00536/00556）。
- *          既存の受信デッドライン監視（`Com: RX timeout sig=...` ログ、
- *          `docs/modules/Com_Notes.md` の「受信デッドライン監視」節）が
- *          検出はしていたが通知先を持たなかった箇所に、正式な RTE
- *          コールバックとして接続したもの。EngineInfo 送信元（エンジン
- *          ECU シミュレータ）を止めるだけで実機で確実に発動する。
- *
- * \note    Com_PBCfg.c から extern 宣言経由で RxTOutCbk として参照されるため
- *          non-static。Rte.h には公開しない。呼び出しコンテキストは
- *          Rte_COMCbkTAck_EngineState() と同じく Com_MainFunctionRx()
- *          （割り込み禁止区間の外）のため Serial 出力も安全。
- */
-void Rte_COMCbkRxTOut_EngineOnFlag(void)
-{
-    DET_LOGW(TAG, "EngineInfo RX deadline timeout (EngineOnFlag)");
-}
-
-/**
- * \brief   AbsInfo フレームの受信デッドライン超過を通知する（Signal Group 単位）。
- *
- * \details Com_PBCfg.c の AbsInfo I-PDU 設定（Com_IPduConfigType.RxTOutCbk）
- *          から登録される。VehicleSpeed/BrakeActive/AbsActive のどのメンバー
- *          かは問わず、グループ全体で 1 回だけ呼ばれる（Com_CbkRxTOut、
- *          SWS_Com_00536/00556。`Rte_COMCbkRxTOut_EngineOnFlag()` のシグナル
- *          単位版と対になる、Signal Group 単位の実装例）。
- *
- * \note    Com_PBCfg.c から extern 宣言経由で RxTOutCbk として参照されるため
- *          non-static。Rte.h には公開しない。呼び出しコンテキストは
- *          `Rte_COMCbkRxTOut_EngineOnFlag()` と同じ。
- */
-void Rte_COMCbkRxTOut_AbsInfo(void)
-{
-    DET_LOGW(TAG, "AbsInfo RX deadline timeout (group)");
-}
-
-/**
- * \brief   SecureCommand (RX IPduId=2) 受信の都度呼ばれる。
- *
- * \details Com_PBCfg.c の ImmobilizerCmd シグナル設定（RxIndicationCbk）から
- *          登録される。呼ばれるのは SecOC（src/Bsw/SecOC/）が MAC・フレッシュ
- *          ネス検証に成功し、`Com_RxIndication(2, ...)` を直接呼んだ直後のみ
- *          （検証に失敗したデータは Com へ一切渡らないため、このコールバック
- *          自体が呼ばれない。SecOC_RxIndication() 参照）。すなわちこのログが
- *          出力されること自体が「認証済みコマンドである」ことを意味する。
- *          `Rte_COMCbkTAck_EngineState()` と同じ理由で、ここで Serial 出力
- *          （DET_LOGW）を直接行っても安全（この呼び出しチェーン
- *          Can_MainFunction_Read → ... → SecOC_RxIndication →
- *          Com_RxIndication → このコールバック、の間に割り込み禁止区間は
- *          存在しない）。
- *
- *          この関数自体はログ出力のみを行う。ドア施錠制御等の実ハードウェア
- *          反応は本実装のスコープ外（`Rte_COMInvalidNotify_CoolantTemp` 等と
- *          同じ最小デモパターン。Com/SecOC/PduR のアーキテクチャ学習が主目的
- *          のため、ASW 側の反応まで作り込むことはしない）。
- *
- * \note    Com_PBCfg.c から extern 宣言経由で RxIndicationCbk として
- *          参照されるため non-static。Rte.h には公開しない（他の Rte_COM*
- *          グルーと同じ理由）。
- */
-void Rte_COMRxInd_SecureCommand(void)
-{
-    uint8 cmd = 0U;
-    if (Com_ReceiveSignal(COM_SIGNAL_IMMOBILIZER_CMD, &cmd) != E_OK)
-    {
-        return;
-    }
-
-    if (cmd == 0x01U)
-    {
-        DET_LOGW(TAG, "ImmobilizerCmd: UNLOCK (authenticated via SecOC)");
-    }
-    else
-    {
-        DET_LOGW(TAG, "ImmobilizerCmd: LOCK (authenticated via SecOC)");
-    }
-}
-
-/**
- * \brief   ImmobilizerCmd (SecOC RX Secured I-PDU 0) の検証結果通知
- *          （[SWS_SecOC_00048]/[SWS_SecOC_00119]、2026-09-20 追加）。
- *
- * \details SecOC_PBCfg.c の ImmobilizerCmd エントリに
- *          `VerificationStatusCallout` として登録される
- *          （`VerificationStatusPropagationMode=BOTH` のため成功・失敗とも
- *          都度呼ばれる）。`Rte_COMRxInd_SecureCommand()` と異なり、MAC/
- *          フレッシュネス検証の成否に関わらず呼ばれる点が異なる（ただし
- *          長さ不足・未登録 PDU 等、実際に `Csm_MacVerify()` へ進む前に
- *          `SecOC_RxIndication()` が早期 return するケースは「検証の試行」
- *          自体が発生していないため対象外。SecOC.c 参照）。検証成功時は
- *          `Rte_COMRxInd_SecureCommand()` と合わせて2つの通知が届くことに
- *          なるが、前者は「Com へ転送された事実」、こちらは「SecOC 自身の
- *          検証結果そのもの」という別の関心事のため、重複ではなく意図的な
- *          役割分担）。
- *
- *          この関数自体はログ出力のみを行う（侵入検知システム等への実際の
- *          対応は本実装のスコープ外、`Rte_COMRxInd_SecureCommand()` と同じ
- *          最小デモパターン）。can_tool 等で改ざん/リプレイされたフレームを
- *          送ると、この通知から実際に検証結果を確認できる。
- *
- * \param[in]  status  検証結果（[SWS_SecOC_00160]）。
- *
- * \note    SecOC_PBCfg.c から extern 宣言経由で VerificationStatusCallout
- *          として参照されるため non-static。Rte.h には公開しない（他の
- *          Rte_COM* グループと同じ理由）。
- */
-void Rte_SecOCVerificationStatus_ImmobilizerCmd(SecOC_VerificationStatusType status)
-{
-    switch (status.verificationStatus)
-    {
-    case SECOC_VERIFICATIONSUCCESS:
-        DET_LOGI(TAG, "SecOC VerificationStatus: dataId=0x%04X OK", (unsigned)status.secOCDataId);
-        break;
-    case SECOC_FRESHNESSFAILURE:
-        DET_LOGW(TAG, "SecOC VerificationStatus: dataId=0x%04X FRESHNESS_FAILURE (replay?)",
-                 (unsigned)status.secOCDataId);
-        break;
-    case SECOC_VERIFICATIONFAILURE:
-        DET_LOGW(TAG, "SecOC VerificationStatus: dataId=0x%04X FAILURE (MAC mismatch or crypto service error)",
-                 (unsigned)status.secOCDataId);
-        break;
-    default:
-        /* SECOC_AUTHENTICATIONBUILDFAILURE。本実装では未到達
-         * （SecOC_VerificationResultType 参照）。到達した場合も安全側で
-         * 汎用 FAILURE として扱う。 */
-        DET_LOGW(TAG, "SecOC VerificationStatus: dataId=0x%04X FAILURE (status=%u)",
-                 (unsigned)status.secOCDataId, (unsigned)status.verificationStatus);
-        break;
-    }
-}
-
-/* SecureCommand (RX IPduId=2) の Reserved バイト位置。Com_PBCfg.c の
- * IPduId=2 エントリの .DLC=2U、SecOC_PBCfg.c の .AuthenticPduLength=2U と
- * 一致させること（レイアウトを変える場合はこの3箇所を連動して直す）。 */
-#define SECURECOMMAND_RESERVED_BYTE_OFFSET 1U
-
-/**
- * \brief   SecureCommand (RX IPduId=2) の受理可否を判定する（Reserved バイト検査）。
- *
- * \details Com_PBCfg.c の SecureCommand I-PDU 設定（Com_IPduConfigType.
- *          RxIpduCalloutCbk）から登録される（Com_RxIpduCallout、
- *          SWS_Com_00700/00816）。`Com_RxIndication(2, ...)` の冒頭、
- *          バッファ格納・`Rte_COMRxInd_SecureCommand()` のいずれよりも前に
- *          呼ばれる。SecOC は MAC・フレッシュネスの真正性のみを保証し、
- *          ペイロードの業務レベルの妥当性までは検証しないため、byte[1]
- *          （Reserved、本来は常に 0x00）が非 0 なら受理しない。
- *
- * \param[in]  SduDataPtr  PduR から渡された生バイト列（DLC によるクランプ前）。
- * \param[in]  SduLength   その長さ。
- *
- * \retval  TRUE   受理する（Reserved==0x00）。
- * \retval  FALSE  拒否する（Reserved!=0x00、または Reserved バイトを読める長さが
- *                 無い）。長さ不足を fail-open（受理）にしないのは、非
- *                 Signal Group の SecureCommand には [SWS_Com_00575] の短小
- *                 フレーム破棄（IsSignalGroup 専用）が適用されず、代わりに
- *                 部分受理パス（byte[0] のみ書き込み）へ進んでしまうと、
- *                 この検査自体が一度も評価されないまま「検査済み」として
- *                 通過してしまうため（/code-review で指摘・是正）。
- *
- * \note    Com_PBCfg.c から extern 宣言経由で RxIpduCalloutCbk として
- *          参照されるため non-static。Rte.h には公開しない。呼び出し
- *          コンテキストは `Rte_COMRxInd_SecureCommand()` と同じ
- *          （割り込み禁止区間の外）。
- */
-boolean Rte_COMRxIpduCallout_SecureCommand(const uint8* SduDataPtr, uint8 SduLength)
-{
-    if (SduLength <= SECURECOMMAND_RESERVED_BYTE_OFFSET)
-    {
-        DET_LOGW(TAG, "SecureCommand rejected by RxIpduCallout (len=%u too short)",
-                 (unsigned)SduLength);
-        return FALSE;
-    }
-
-    if (SduDataPtr[SECURECOMMAND_RESERVED_BYTE_OFFSET] != 0x00U)
-    {
-        DET_LOGW(TAG, "SecureCommand rejected by RxIpduCallout (Reserved=0x%02X)",
-                 (unsigned)SduDataPtr[SECURECOMMAND_RESERVED_BYTE_OFFSET]);
-        return FALSE;
-    }
-    return TRUE;
-}
-
-/**
- * \brief   ImmobilizerStatus (TX IPduId=3) の送信可否を判定する（値域検査）。
- *
- * \details Com_PBCfg.c の ImmobilizerStatus I-PDU 設定（Com_IPduConfigType.
- *          TxIpduCalloutCbk）から登録される（Com_TxIpduCallout、
- *          SWS_Com_00346/00719）。Com_DoTransmit() 内、PduR_ComTransmit()
- *          呼び出し直前に呼ばれる。RxIpduCalloutCbk の送信側対
- *          （Rte_COMRxIpduCallout_SecureCommand）。
- *          Signal Gateway（Com_GwMappingData）が SecOC 検証済みの
- *          ImmobilizerCmd を SWC/Rte を介さず直接転送する専用フレームだが、
- *          SecOC は MAC・フレッシュネスの真正性のみを保証し、
- *          ImmobilizerCmd 本体が定義済みの値域（0x00=LOCK/0x01=UNLOCK）に
- *          収まっているかまでは検証しない。RX 側の
- *          Rte_COMRxIpduCallout_SecureCommand も byte[1]（Reserved）しか
- *          見ないため、byte[0]（ImmobilizerCmd）自体の値域はどこでも
- *          検証されないまま素通りしてしまう。送信直前のこの層で最終防衛し、
- *          他 ECU へ意味不明な値をブロードキャストしないようにする。
- *
- * \param[in]  SduDataPtr  送信直前の TX バッファ（TxTransformCbk 適用後）。
- * \param[in]  SduLength   その長さ（本 I-PDU は DLC=1U 固定）。
- *
- * \retval  TRUE   受理する（byte[0]==0x00 または 0x01）。
- * \retval  FALSE  拒否する（それ以外の値）。
- *
- * \note    Com_PBCfg.c から extern 宣言経由で TxIpduCalloutCbk として
- *          参照されるため non-static。Rte.h には公開しない。
- */
-boolean Rte_COMTxIpduCallout_ImmobilizerStatus(const uint8* SduDataPtr, uint8 SduLength)
-{
-    (void)SduLength;  /* TX 呼び出しは常に IPdu の DLC 固定長（=1）で呼ばれる
-                        * ため長さチェックは不要（RX の RxIpduCalloutCbk とは
-                        * 異なり、実際に届いた可変長を心配する必要がない） */
-    if (SduDataPtr[0] > 0x01U)  /* uint8 は負値を取らないため 0x00U/0x01U 以外
-                                  * を1回の比較で判定できる（[0x00,0x01] の
-                                  * 範囲チェック） */
-    {
-        DET_LOGW(TAG, "ImmobilizerStatus rejected by TxIpduCallout (value=0x%02X)",
-                 (unsigned)SduDataPtr[0]);
-        return FALSE;
-    }
-    return TRUE;
-}
-
-/**
- * \brief   AbsInfo (RX IPduId=1) フレーム受信の都度呼ばれる E2E Transformer フック。
- *
- * \details Com_PBCfg.c の RxIndicationCbk として登録される。
- *
- *          AbsInfo は RX Signal Group（IsSignalGroup=1、Com_PBCfg.c 参照）
- *          でもあるため、VehicleSpeed/BrakeActive/AbsActive を読む前に
- *          Com_ReceiveSignalGroup(1U) で I-PDU バッファを RX シャドウバッファへ
- *          確定コピーする（Com_ReceiveSignal() はこのグループのメンバーに
- *          対して、Com_RxBuffer ではなくこのシャドウバッファを読む）。
- *          この呼び出し自体はフレーム受信直後・Com_RxTimedOut リセット後に
- *          同期的に実行されるため、実際にタイムアウト中でこの一貫性保証が
- *          意味を持つ場面はない（既に E2E チェックを通過した新鮮なフレームの
- *          直後であるため）。TMS/MDT/ComTransferProperty と同じく、動機は
- *          実利より仕様忠実性（SWS_Com_00201/00051/00638 相当）。
- *
- * \note    Rte_COMRxInd_EngineInfo() と同じ理由で non-static。以前は E2E
- *          Profile01 だったが、EngineInfo と同じ理由で Profile05
- *          (CRC16+8bitカウンタ、DLC=6) へ切り替えた。
- */
-void Rte_COMRxInd_AbsInfo(void)
-{
-    uint8 buf[6];
-    if (Com_ReceiveSignalGroupArray(1U, buf) != E_OK)
-    {
-        return;
-    }
-
-    E2E_P05StatusType checkStatus;
-    uint32 bufferLength;
-    const uint8 ret = E2EXf_Inv_AbsInfo(buf, &bufferLength, NULL, 0U, &checkStatus);
-    Rte_AbsInfoStatus = Rte_MapE2EStatusP05(checkStatus);
-    E2EMon_NotifyCheckResultP05(checkStatus);
-    /* Rte_COMRxInd_EngineInfo() と同じ理由（[SWS_E2EXf_00027]のニブルパック、
-     * [SWS_E2E_00345]の"do NOT use data"規定）。 */
-    if (ret != E_OK)
-    {
-        return;
-    }
-
-    SchM_Enter_Rte_MIRROR_EXCLUSIVE_AREA();
-    (void)Com_ReceiveSignalGroup(1U);
-    (void)Com_ReceiveSignal(COM_SIGNAL_VEHICLE_SPEED, &Rte_AbsInfoMirror.speed);
-    (void)Com_ReceiveSignal(COM_SIGNAL_BRAKE_ACTIVE,  &Rte_AbsInfoMirror.brake);
-    (void)Com_ReceiveSignal(COM_SIGNAL_ABS_ACTIVE,    &Rte_AbsInfoMirror.abs);
-    SchM_Exit_Rte_MIRROR_EXCLUSIVE_AREA();
-}
-
-/**
- * \brief   E2EHealthStatus (TX IPduId=2) 送信直前に呼ばれる E2E Transformer フック。
- *
- * \details Com_PBCfg.c の TxTransformCbk として登録される。COM_TX_MODE_PERIODIC
- *          のため、Com_MainFunctionTx() が自分の周期タイマで送信を決定した際に
- *          このフックが呼ばれる（DIRECT/MIXED I-PDU のイベント駆動送信と
- *          同じ「送信直前の最終変換」の仕組みをそのまま再利用している）。
- *          実 TX バッファへ Counter・CRC16 を書き込む（E2E Profile05、
- *          以前は Profile01+SecOC の二重保護だったが SecOC は撤去済み）。
- *          E2EMon（CDD 相当）は Com_SendSignal() で値をセットするだけで、
- *          この E2E 保護の存在自体を一切知らない（MeterStatus における
- *          App_EngineManager と同じ関係）。
- *
- * \note    Rte_COMRxInd_EngineInfo() と同じ理由で non-static。
- */
-void Rte_COMTransform_E2EHealthStatus(uint8* Data, uint8 Length)
-{
-    (void)Length;  /* E2EXf_E2EHealthStatus() は固定長PDU用にDataLengthを内部で保持するため未使用 */
-    /* E2EXf_E2EHealthStatus() の戻り値は現状の起動順序（EcuM_Init() が
-     * E2EXf_PBCfg_Init() を Com_MainFunctionTx() 呼び出しより前に完了させる）
-     * では E_SAFETY_HARD_RUNTIMEERROR を観測していないが、TxTransformCbk
-     * 自体の型が void のまま（Com_Types.h 参照）で受け渡す経路が無いため、
-     * ここで破棄する（/code-review 指摘: 起動順序が将来変わった場合の
-     * 再検証はこの破棄では検知できない点に注意）。 */
-    uint32 bufferLength;
-    (void)E2EXf_E2EHealthStatus(Data, &bufferLength, NULL, 0U);
-}
+/* -----------------------------------------------------------------------
+ * ランプ出力の調停（Rte_Call_Led*_SetLevel と Rte_IoControl_Lamp_* が使う）
+ * ----------------------------------------------------------------------- */
 
 /* -----------------------------------------------------------------------
  * ランプ IOControl（Dcm SID 0x2F 用）の内部状態
@@ -800,6 +253,290 @@ static Std_ReturnType Rte_Lamp_ForceAndWrite(Rte_LampIdType lamp, uint8 level)
     return Rte_Lamp_WriteHw(lamp, level);
 }
 
+/* ======================================================================
+ * AUTOSAR_SWS_RTE 5.6  RTE API Reference（ポート API）
+ *   名前は <p>（ポート名）と <o>（データ要素/オペレーション名）で決まる。
+ *   本プロジェクトで使うポート・要素の関数だけを定義する。
+ * ====================================================================== */
+
+/* -----------------------------------------------------------------------
+ * Rte_Write_<p>_<o>  (RTE 5.6.4, SWS_Rte_01071)
+ *   explicit な送信側 S/R（data セマンティクス）。
+ * ----------------------------------------------------------------------- */
+
+/**
+ * \brief   EngineStatus 提供ポートへ EngineState シグナルを書き込む。
+ *
+ * \details Com_SendSignal() 経由で EngineState 値を COM の TX I-PDU バッファへ
+ *          パックする (AUTOSAR SWS_RTE の Rte_Write_<p>_<o> パターン)。
+ *          MeterStatus は TxModeMode=MIXED のため、Com が値の変化を検知した
+ *          場合は次回 Com_MainFunctionTx()（Os の 100ms タスク）で送信される
+ *          （呼び出し元が別途送信をトリガする必要はなく、この呼び出し自体は
+ *          PduR_ComTransmit() を呼ばないため、SPI 送信でブロッキングしない）。
+ *
+ * \param[in]  state  書き込むエンジン状態
+ *                    (OFF / STARTING / RUNNING / FAULT)。
+ *
+ * \retval  E_OK      COM の TX バッファへ正常にパックした。
+ * \retval  E_NOT_OK  COM 未初期化またはシグナル ID が見つからない。
+ *
+ * \pre        Com_Init() が正常に完了していること。
+ *
+ * \ServiceID      {0xF5}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ *
+ * \AUTOSARReq     {SWS_Rte_01071}
+ */
+Std_ReturnType Rte_Write_EngineStatus_EngineState(EngineState_t state)
+{
+    SchM_Enter_Rte_MIRROR_EXCLUSIVE_AREA();
+    Rte_EngineStateMirror = state;
+    SchM_Exit_Rte_MIRROR_EXCLUSIVE_AREA();
+    uint8 val = (uint8)state;
+    return Com_SendSignal(COM_SIGNAL_ENGINE_STATE, &val);
+}
+
+/**
+ * \brief   WarningStatus 提供ポートへ RunLamp シグナルを書き込む。
+ *
+ * \details Com_SendSignal() 経由で RunLamp 値をシャドウバッファへパックする
+ *          (AUTOSAR SWS_RTE の Rte_Write_<p>_<o> パターン)。
+ *          WarningStatus (CAN 0x210) は Signal Group のため、この関数だけでは
+ *          実 TX バッファへ反映されない。RunLamp/FaultLamp/AbsLamp すべてを
+ *          書き込んだ後、Rte_SendSignalGroup_WarningStatus() を呼び出すこと
+ *          （TxModeMode=DIRECT のため、そのコミットで変化があれば即座に
+ *          送信される）。
+ *
+ * \param[in]  level  出力レベル。0 = 消灯、1 = 点灯。
+ *
+ * \retval  E_OK      COM のシャドウバッファへ正常にパックした。
+ * \retval  E_NOT_OK  COM 未初期化またはシグナル ID が見つからない。
+ *
+ * \pre        Com_Init() が正常に完了していること。
+ *
+ * \ServiceID      {0xE0}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ *
+ * \AUTOSARReq     {SWS_Rte_01071}
+ */
+Std_ReturnType Rte_Write_WarningStatus_RunLamp(uint8 level)
+{
+    return Com_SendSignal(COM_SIGNAL_RUN_LAMP, &level);
+}
+
+/**
+ * \brief   WarningStatus 提供ポートへ FaultLamp シグナルを書き込む。
+ *
+ * \details Rte_Write_WarningStatus_RunLamp() と同様。詳細はそちらを参照。
+ *
+ * \param[in]  level  出力レベル。0 = 消灯、1 = 点灯。
+ *
+ * \retval  E_OK      COM のシャドウバッファへ正常にパックした。
+ * \retval  E_NOT_OK  COM 未初期化またはシグナル ID が見つからない。
+ *
+ * \pre        Com_Init() が正常に完了していること。
+ *
+ * \ServiceID      {0xE1}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ *
+ * \AUTOSARReq     {SWS_Rte_01071}
+ */
+Std_ReturnType Rte_Write_WarningStatus_FaultLamp(uint8 level)
+{
+    return Com_SendSignal(COM_SIGNAL_FAULT_LAMP, &level);
+}
+
+/**
+ * \brief   WarningStatus 提供ポートへ AbsLamp シグナルを書き込む。
+ *
+ * \details Rte_Write_WarningStatus_RunLamp() と同様。詳細はそちらを参照。
+ *
+ * \param[in]  level  出力レベル。0 = 消灯、1 = 点灯。
+ *
+ * \retval  E_OK      COM のシャドウバッファへ正常にパックした。
+ * \retval  E_NOT_OK  COM 未初期化またはシグナル ID が見つからない。
+ *
+ * \pre        Com_Init() が正常に完了していること。
+ *
+ * \ServiceID      {0xE2}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ *
+ * \AUTOSARReq     {SWS_Rte_01071}
+ */
+Std_ReturnType Rte_Write_WarningStatus_AbsLamp(uint8 level)
+{
+    return Com_SendSignal(COM_SIGNAL_ABS_LAMP, &level);
+}
+
+/**
+ * \brief   MeterStatus 提供ポートへ EngineSpeed ミラーシグナルを書き込む。
+ *
+ * \details App_EngineManager が EngineInfo(RX) から検証済みで受け取った
+ *          EngineSpeed を、そのまま MeterStatus(CAN 0x200) へミラー送信する
+ *          （uds_tester の仮想メータ表示タブが 1 フレームだけで RPM を
+ *          デコードできるようにするための、本プロジェクト独自の拡張）。
+ *          非 Signal Group のためシャドウバッファを経由せず、
+ *          Com_SendSignal() 呼び出しの都度、値変化があれば次回
+ *          Com_MainFunctionTx() で送信される。
+ *
+ * \param[in]  speed  エンジン回転数 [rpm]。
+ *
+ * \retval  E_OK      COM の実 TX バッファへ正常にパックした。
+ * \retval  E_NOT_OK  COM 未初期化またはシグナル ID が見つからない。
+ *
+ * \pre        Com_Init() が正常に完了していること。
+ *
+ * \note       AUTOSAR 標準外の API（本プロジェクト独自拡張）。
+ * \ServiceID      {0xEB}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ *
+ * \AUTOSARReq     {SWS_Rte_01071}
+ */
+Std_ReturnType Rte_Write_MeterStatus_EngineSpeed(EngineSpeed_t speed)
+{
+    return Com_SendSignal(COM_SIGNAL_METER_ENGINE_SPEED, &speed);
+}
+
+/**
+ * \brief   MeterStatus 提供ポートへ RunLamp ミラーシグナルを書き込む。
+ *
+ * \details App_WarningIndicator が WarningStatus(CAN 0x210) の RunLamp と
+ *          同じ値を、MeterStatus(CAN 0x200) へもミラー送信する。
+ *
+ * \param[in]  level  出力レベル。0 = 消灯、1 = 点灯。
+ *
+ * \retval  E_OK      COM の実 TX バッファへ正常にパックした。
+ * \retval  E_NOT_OK  COM 未初期化またはシグナル ID が見つからない。
+ *
+ * \pre        Com_Init() が正常に完了していること。
+ *
+ * \note       AUTOSAR 標準外の API（本プロジェクト独自拡張）。
+ * \ServiceID      {0xEC}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ *
+ * \AUTOSARReq     {SWS_Rte_01071}
+ */
+Std_ReturnType Rte_Write_MeterStatus_RunLamp(uint8 level)
+{
+    return Com_SendSignal(COM_SIGNAL_METER_RUN_LAMP, &level);
+}
+
+/**
+ * \brief   MeterStatus 提供ポートへ FaultLamp ミラーシグナルを書き込む。
+ *
+ * \details Rte_Write_MeterStatus_RunLamp() と同様。詳細はそちらを参照。
+ *
+ * \param[in]  level  出力レベル。0 = 消灯、1 = 点灯。
+ *
+ * \retval  E_OK      COM の実 TX バッファへ正常にパックした。
+ * \retval  E_NOT_OK  COM 未初期化またはシグナル ID が見つからない。
+ *
+ * \pre        Com_Init() が正常に完了していること。
+ *
+ * \note       AUTOSAR 標準外の API（本プロジェクト独自拡張）。
+ * \ServiceID      {0xED}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ *
+ * \AUTOSARReq     {SWS_Rte_01071}
+ */
+Std_ReturnType Rte_Write_MeterStatus_FaultLamp(uint8 level)
+{
+    return Com_SendSignal(COM_SIGNAL_METER_FAULT_LAMP, &level);
+}
+
+/**
+ * \brief   MeterStatus 提供ポートへ AbsLamp ミラーシグナルを書き込む。
+ *
+ * \details Rte_Write_MeterStatus_RunLamp() と同様。詳細はそちらを参照。
+ *
+ * \param[in]  level  出力レベル。0 = 消灯、1 = 点灯。
+ *
+ * \retval  E_OK      COM の実 TX バッファへ正常にパックした。
+ * \retval  E_NOT_OK  COM 未初期化またはシグナル ID が見つからない。
+ *
+ * \pre        Com_Init() が正常に完了していること。
+ *
+ * \note       AUTOSAR 標準外の API（本プロジェクト独自拡張）。
+ * \ServiceID      {0xEE}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ *
+ * \AUTOSARReq     {SWS_Rte_01071}
+ */
+Std_ReturnType Rte_Write_MeterStatus_AbsLamp(uint8 level)
+{
+    return Com_SendSignal(COM_SIGNAL_METER_ABS_LAMP, &level);
+}
+
+/**
+ * \brief   MeterStatus 提供ポートへ CoolantTemp ミラーシグナルを書き込む。
+ *
+ * \details App_EngineManager が EngineInfo(RX) の検証済み CoolantTemp を、
+ *          MeterStatus(CAN 0x200) へもミラー送信する
+ *          （Rte_Write_MeterStatus_EngineSpeed() と同じ設計）。
+ *
+ * \param[in]  temp  冷却水温 [°C]。
+ *
+ * \retval  E_OK      COM の実 TX バッファへ正常にパックした。
+ * \retval  E_NOT_OK  COM 未初期化またはシグナル ID が見つからない。
+ *
+ * \pre        Com_Init() が正常に完了していること。
+ *
+ * \note       AUTOSAR 標準外の API（本プロジェクト独自拡張）。
+ * \ServiceID      {0xEF}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ *
+ * \AUTOSARReq     {SWS_Rte_01071}
+ */
+Std_ReturnType Rte_Write_MeterStatus_CoolantTemp(CoolantTemp_t temp)
+{
+    return Com_SendSignal(COM_SIGNAL_METER_COOLANT_TEMP, &temp);
+}
+
+/* -----------------------------------------------------------------------
+ * Rte_Invalidate_<p>_<o>  (RTE 5.6.7, SWS_Rte_01206)
+ *   送信側 S/R の無効値マーキング（Com_InvalidateSignal へ委譲）。
+ * ----------------------------------------------------------------------- */
+
+/**
+ * \brief   MeterStatus 提供ポートの CoolantTemp ミラーシグナルを無効化する。
+ *
+ * \details Rte_Write_MeterStatus_CoolantTemp() と対になる無効化版
+ *          （Com_InvalidateSignal() へ委譲、2026-08 追加）。
+ *          Rte_COMCbkInv_CoolantTemp() から呼ばれる（同関数の
+ *          Doxygen コメント参照）。他の Rte_Write_<Port>_<Signal>() と同じく、
+ *          呼び出し元が生の COM_SIGNAL_* 定数を直接扱わずに済むようにする。
+ *
+ * \retval  E_OK      COM の実 TX バッファへ無効値を正常に反映した。
+ * \retval  E_NOT_OK  COM 未初期化、シグナル ID が見つからない、または
+ *                    ComSignalDataInvalidValue が未設定。
+ *
+ * \pre        Com_Init() が正常に完了していること。
+ *
+ * \note       AUTOSAR 標準外の API（本プロジェクト独自拡張）。
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ *
+ * \AUTOSARReq     {SWS_Rte_01206}
+ */
+uint8 Rte_Invalidate_MeterStatus_CoolantTemp(void)
+{
+    return Com_InvalidateSignal(COM_SIGNAL_METER_COOLANT_TEMP);
+}
+
+/* -----------------------------------------------------------------------
+ * Rte_Read_<p>_<o>  (RTE 5.6.10, SWS_Rte_01091)
+ *   受信側 S/R の読み出し。E2E 付きのポートは Rte_IStatusType を返す。
+ * ----------------------------------------------------------------------- */
+
 /**
  * \brief   SpeedSensor 要求ポートから EngineSpeed シグナルを読み取る。
  *
@@ -824,6 +561,8 @@ static Std_ReturnType Rte_Lamp_ForceAndWrite(Rte_LampIdType lamp, uint8 level)
  * \ServiceID      {0xF2}
  * \Reentrancy     {Reentrant}
  * \Synchronicity  {Synchronous}
+ *
+ * \AUTOSARReq     {SWS_Rte_01091}
  */
 Rte_IStatusType Rte_Read_SpeedSensor_EngineSpeed(EngineSpeed_t* data)
 {
@@ -854,6 +593,8 @@ Rte_IStatusType Rte_Read_SpeedSensor_EngineSpeed(EngineSpeed_t* data)
  * \ServiceID      {0xF3}
  * \Reentrancy     {Reentrant}
  * \Synchronicity  {Synchronous}
+ *
+ * \AUTOSARReq     {SWS_Rte_01091}
  */
 Rte_IStatusType Rte_Read_TempSensor_CoolantTemp(CoolantTemp_t* data)
 {
@@ -885,6 +626,8 @@ Rte_IStatusType Rte_Read_TempSensor_CoolantTemp(CoolantTemp_t* data)
  * \ServiceID      {0xF4}
  * \Reentrancy     {Reentrant}
  * \Synchronicity  {Synchronous}
+ *
+ * \AUTOSARReq     {SWS_Rte_01091}
  */
 Rte_IStatusType Rte_Read_EngineStatus_EngineOnFlag(EngineOnFlag_t* data)
 {
@@ -897,37 +640,6 @@ Rte_IStatusType Rte_Read_EngineStatus_EngineOnFlag(EngineOnFlag_t* data)
         return RTE_E_COM_STOPPED;
     }
     return Rte_EngineInfoStatus;
-}
-
-/**
- * \brief   EngineStatus 提供ポートへ EngineState シグナルを書き込む。
- *
- * \details Com_SendSignal() 経由で EngineState 値を COM の TX I-PDU バッファへ
- *          パックする (AUTOSAR SWS_RTE の Rte_Write_<p>_<o> パターン)。
- *          MeterStatus は TxModeMode=MIXED のため、Com が値の変化を検知した
- *          場合は次回 Com_MainFunctionTx()（Os の 100ms タスク）で送信される
- *          （呼び出し元が別途送信をトリガする必要はなく、この呼び出し自体は
- *          PduR_ComTransmit() を呼ばないため、SPI 送信でブロッキングしない）。
- *
- * \param[in]  state  書き込むエンジン状態
- *                    (OFF / STARTING / RUNNING / FAULT)。
- *
- * \retval  E_OK      COM の TX バッファへ正常にパックした。
- * \retval  E_NOT_OK  COM 未初期化またはシグナル ID が見つからない。
- *
- * \pre        Com_Init() が正常に完了していること。
- *
- * \ServiceID      {0xF5}
- * \Reentrancy     {Reentrant}
- * \Synchronicity  {Synchronous}
- */
-Std_ReturnType Rte_Write_EngineStatus_EngineState(EngineState_t state)
-{
-    SchM_Enter_Rte_MIRROR_EXCLUSIVE_AREA();
-    Rte_EngineStateMirror = state;
-    SchM_Exit_Rte_MIRROR_EXCLUSIVE_AREA();
-    uint8 val = (uint8)state;
-    return Com_SendSignal(COM_SIGNAL_ENGINE_STATE, &val);
 }
 
 /**
@@ -944,6 +656,8 @@ Std_ReturnType Rte_Write_EngineStatus_EngineState(EngineState_t state)
  * \ServiceID      {0xF8}
  * \Reentrancy     {Reentrant}
  * \Synchronicity  {Synchronous}
+ *
+ * \AUTOSARReq     {SWS_Rte_01091}
  */
 Std_ReturnType Rte_Read_EngineStatus_EngineState(EngineState_t* data)
 {
@@ -955,27 +669,6 @@ Std_ReturnType Rte_Read_EngineStatus_EngineState(EngineState_t* data)
     *data = Rte_EngineStateMirror;
     SchM_Exit_Rte_MIRROR_EXCLUSIVE_AREA();
     return E_OK;
-}
-
-/**
- * \brief   マッピングされた SW-C Runnable を起動する。
- *
- * \details OS タスク (Task 2, 3000 ms 周期) から呼び出される。
- *          実行周期の管理は Os_PBCfg.c のタスクテーブルが担うため、
- *          この関数は App_EngineManager_Run() を無条件に呼び出すだけでよい。
- *
- *          AUTOSAR OS 環境では OsTask が直接 Runnable を呼び出すが、
- *          本実装では RTE が仲介することで SW-C と OS の直接依存を断つ。
- *
- * \pre        App_EngineManager_Init() が正常に完了していること。
- *
- * \ServiceID      {0xF7}
- * \Reentrancy     {Non Reentrant}
- * \Synchronicity  {Synchronous}
- */
-void Rte_ScheduleRunnables(void)
-{
-    App_EngineManager_Run();
 }
 
 /**
@@ -994,285 +687,12 @@ void Rte_ScheduleRunnables(void)
  * \ServiceID      {0xF9}
  * \Reentrancy     {Reentrant}
  * \Synchronicity  {Synchronous}
+ *
+ * \AUTOSARReq     {SWS_Rte_01091}
  */
 Std_ReturnType Rte_Read_WarningIndicator_EngineState(EngineState_t* data)
 {
     return Rte_Read_EngineStatus_EngineState(data);
-}
-
-/**
- * \brief   WarningIndicator SW-C の Runnable を起動する。
- *
- * \details OS タスク (Task 3, 500 ms 周期) から呼び出される。
- *          App_WarningIndicator_Run() を無条件に呼び出す。
- *
- * \pre        App_WarningIndicator_Init() が正常に完了していること。
- *
- * \ServiceID      {0xFA}
- * \Reentrancy     {Non Reentrant}
- * \Synchronicity  {Synchronous}
- */
-void Rte_ScheduleWarningIndicator(void)
-{
-    App_WarningIndicator_Run();
-}
-
-/**
- * \brief   警告灯 LED レベル設定の Client/Server ポート。
- *
- * \details SW-C (App_WarningIndicator) から呼び出され、
- *          Rte_Lamp_ArbitrateAndWrite() 経由で IoHwAb_Led_SetLevel() へ委譲する。
- *          C/S ポートにより SW-C は IoHwAb の存在を知らない
- *          (AUTOSAR SWS_RTE の Rte_Call_<p>_<o> パターン)。
- *          Dcm が SID 0x2F でこのランプをオーバーライド中の間、level 引数は
- *          無視され、代わりにオーバーライド値が出力される（ASW はこれを知らない）。
- *
- * \param[in]  level  出力レベル。0 = 消灯、1 = 点灯。
- *
- * \retval  E_OK  常に成功。
- *
- * \ServiceID      {0xFB}
- * \Reentrancy     {Reentrant}
- * \Synchronicity  {Synchronous}
- */
-Std_ReturnType Rte_Call_Led_SetLevel(uint8 level)
-{
-    return Rte_Lamp_ArbitrateAndWrite(RTE_LAMP_ABS, level);
-}
-
-/**
- * \brief   RUNNING LED (D6) レベル設定の Client/Server ポート。
- *
- * \details SW-C (App_WarningIndicator) から呼び出され、
- *          Rte_Lamp_ArbitrateAndWrite() 経由で IoHwAb_LedRunning_SetLevel() へ委譲する。
- *          Dcm オーバーライド中の挙動は Rte_Call_Led_SetLevel() と同様。
- *
- * \param[in]  level  出力レベル。0 = 消灯、1 = 点灯。
- *
- * \retval  E_OK  常に成功。
- *
- * \ServiceID      {0xFC}
- * \Reentrancy     {Reentrant}
- * \Synchronicity  {Synchronous}
- */
-Std_ReturnType Rte_Call_LedRunning_SetLevel(uint8 level)
-{
-    return Rte_Lamp_ArbitrateAndWrite(RTE_LAMP_RUN, level);
-}
-
-/**
- * \brief   FAULT LED (D7) レベル設定の Client/Server ポート。
- *
- * \details SW-C (App_WarningIndicator) から呼び出され、
- *          Rte_Lamp_ArbitrateAndWrite() 経由で IoHwAb_LedFault_SetLevel() へ委譲する。
- *          Dcm オーバーライド中の挙動は Rte_Call_Led_SetLevel() と同様。
- *
- * \param[in]  level  出力レベル。0 = 消灯、1 = 点灯。
- *
- * \retval  E_OK  常に成功。
- *
- * \ServiceID      {0xFD}
- * \Reentrancy     {Reentrant}
- * \Synchronicity  {Synchronous}
- */
-Std_ReturnType Rte_Call_LedFault_SetLevel(uint8 level)
-{
-    return Rte_Lamp_ArbitrateAndWrite(RTE_LAMP_FAULT, level);
-}
-
-/**
- * \brief   診断制御 (Dcm SID 0x2F) を解除し、ASW に制御を返す。
- *
- * \details オーバーライドフラグを下ろすのみ。ASW (App_WarningIndicator) が
- *          次回 Runnable 実行時 (最大 500ms 後) に自身の計算値を再度出力する。
- *
- * \param[in]  lamp  対象ランプ。
- *
- * \retval  E_OK      正常に解除した。
- * \retval  E_NOT_OK  lamp が範囲外。
- *
- * \note       AUTOSAR 非標準 API 名。実際の AUTOSAR では DcmDspDidControl の
- *             ReturnControlToEcuFnc として RTE が生成する関数に相当する。
- *
- * \ServiceID      {0xE4}
- * \Reentrancy     {Reentrant}
- * \Synchronicity  {Synchronous}
- */
-Std_ReturnType Rte_IoControl_Lamp_ReturnControlToEcu(Rte_LampIdType lamp)
-{
-    if (lamp >= RTE_LAMP_COUNT)
-    {
-        return E_NOT_OK;
-    }
-    Rte_LampOverrideActive[lamp] = 0U;
-    return E_OK;
-}
-
-/**
- * \brief   診断制御でランプをデフォルト値 (消灯) に固定する。
- *
- * \details returnControlToEcu が呼ばれるまで、ASW の要求値は無視され続ける。
- *
- * \param[in]  lamp  対象ランプ。
- *
- * \retval  E_OK      正常に固定した。
- * \retval  E_NOT_OK  lamp が範囲外。
- *
- * \note       AUTOSAR 非標準 API 名。ResetToDefaultFnc に相当。
- *
- * \ServiceID      {0xE5}
- * \Reentrancy     {Reentrant}
- * \Synchronicity  {Synchronous}
- */
-Std_ReturnType Rte_IoControl_Lamp_ResetToDefault(Rte_LampIdType lamp)
-{
-    if (lamp >= RTE_LAMP_COUNT)
-    {
-        return E_NOT_OK;
-    }
-    return Rte_Lamp_ForceAndWrite(lamp, 0U);
-}
-
-/**
- * \brief   現在の物理出力値のままランプを固定する。
- *
- * \details Rte_LampLastLevel（直前に実際に IoHwAb へ出力された値）を
- *          そのままオーバーライド値として採用する。
- *
- * \param[in]  lamp  対象ランプ。
- *
- * \retval  E_OK      正常に固定した。
- * \retval  E_NOT_OK  lamp が範囲外。
- *
- * \note       AUTOSAR 非標準 API 名。FreezeCurrentStateFnc に相当。
- *
- * \ServiceID      {0xE6}
- * \Reentrancy     {Reentrant}
- * \Synchronicity  {Synchronous}
- */
-Std_ReturnType Rte_IoControl_Lamp_FreezeCurrentState(Rte_LampIdType lamp)
-{
-    if (lamp >= RTE_LAMP_COUNT)
-    {
-        return E_NOT_OK;
-    }
-    Rte_LampOverrideValue[lamp]  = Rte_LampLastLevel[lamp];
-    Rte_LampOverrideActive[lamp] = 1U;
-    return E_OK;
-}
-
-/**
- * \brief   診断制御でランプを指定レベルに固定する。
- *
- * \param[in]  lamp   対象ランプ。
- * \param[in]  level  固定する出力レベル (0/1)。
- *
- * \retval  E_OK      正常に固定した。
- * \retval  E_NOT_OK  lamp が範囲外。
- *
- * \note       AUTOSAR 非標準 API 名。ShortTermAdjustmentFnc に相当。
- *
- * \ServiceID      {0xE7}
- * \Reentrancy     {Reentrant}
- * \Synchronicity  {Synchronous}
- */
-Std_ReturnType Rte_IoControl_Lamp_ShortTermAdjustment(Rte_LampIdType lamp, uint8 level)
-{
-    if (lamp >= RTE_LAMP_COUNT)
-    {
-        return E_NOT_OK;
-    }
-    return Rte_Lamp_ForceAndWrite(lamp, level);
-}
-
-/**
- * \brief   現在 IoHwAb へ出力されている実際のレベルを取得する。
- *
- * \details Dcm が SID 0x2F の正応答 (controlStatusRecord) を構築するために使う。
- *
- * \param[in]   lamp   対象ランプ。
- * \param[out]  level  出力レベルの格納先。NULL 禁止。
- *
- * \retval  E_OK      正常に取得した。
- * \retval  E_NOT_OK  lamp が範囲外、または level が NULL。
- *
- * \ServiceID      {0xE8}
- * \Reentrancy     {Reentrant}
- * \Synchronicity  {Synchronous}
- */
-Std_ReturnType Rte_IoControl_Lamp_GetCurrentLevel(Rte_LampIdType lamp, uint8* level)
-{
-    if ((lamp >= RTE_LAMP_COUNT) || (level == NULL))
-    {
-        return E_NOT_OK;
-    }
-    *level = Rte_LampLastLevel[lamp];
-    return E_OK;
-}
-
-/**
- * \brief   警告確認ボタン押下状態取得の Client/Server ポート。
- *
- * \details SW-C (App_EngineManager) から呼び出され、
- *          IoHwAb_Button_GetLevel() へ委譲する。
- *          C/S ポートにより SW-C は Dio チャネル番号やプルアップ配線を知らない
- *          (AUTOSAR SWS_RTE の Rte_Call_<p>_<o> パターン)。
- *
- * \param[out] level  押下状態 (0=解放, 1=押下)。NULL 禁止。
- *
- * \retval  E_OK  常に成功。
- *
- * \ServiceID      {0xFF}
- * \Reentrancy     {Reentrant}
- * \Synchronicity  {Synchronous}
- */
-Std_ReturnType Rte_Call_Button_GetLevel(uint8* level)
-{
-    return IoHwAb_Button_GetLevel(level);
-}
-
-/**
- * \brief   ADC センサ電圧値取得の Client/Server ポート。
- *
- * \details SW-C (App_EngineManager) から呼び出され、
- *          IoHwAb_Adc_GetValue_mV() へ委譲する。
- *          C/S ポートにより SW-C はチャネル番号や ADC スケーリングを知らない
- *          (AUTOSAR SWS_RTE の Rte_Call_<p>_<o> パターン)。
- *
- * \param[out] mv  変換済み電圧値 [mV]。NULL 禁止。
- *
- * \retval  E_OK  常に成功。
- *
- * \ServiceID      {0xFE}
- * \Reentrancy     {Reentrant}
- * \Synchronicity  {Synchronous}
- */
-Std_ReturnType Rte_Call_Adc_GetValue_mV(uint16* mv)
-{
-    return IoHwAb_Adc_GetValue_mV(mv);
-}
-
-/**
- * \brief   機能許可状態取得の Client/Server ポート。
- *
- * \details SW-C (App_EngineManager / App_WarningIndicator) から呼び出され、
- *          FiM_GetFunctionPermission() へ委譲する。
- *          C/S ポートにより SW-C は FiM の判定テーブル構造を知らない
- *          (AUTOSAR SWS_RTE の Rte_Call_<p>_<o> パターン)。
- *
- * \param[in]   functionId  機能 ID (FIM_FID_*)。
- * \param[out]  permission  TRUE=許可 / FALSE=抑止 の格納先。NULL 禁止。
- *
- * \retval  E_OK      正常取得。
- * \retval  E_NOT_OK  functionId が範囲外、または permission が NULL。
- *
- * \ServiceID      {0xF1}
- * \Reentrancy     {Reentrant}
- * \Synchronicity  {Synchronous}
- */
-Std_ReturnType Rte_Call_FiM_GetFunctionPermission(uint8 functionId, boolean* permission)
-{
-    return FiM_GetFunctionPermission(functionId, permission);
 }
 
 /**
@@ -1291,6 +711,8 @@ Std_ReturnType Rte_Call_FiM_GetFunctionPermission(uint8 functionId, boolean* per
  * \ServiceID      {0xFC}
  * \Reentrancy     {Reentrant}
  * \Synchronicity  {Synchronous}
+ *
+ * \AUTOSARReq     {SWS_Rte_01091}
  */
 Rte_IStatusType Rte_Read_VehicleSensor_VehicleSpeed(VehicleSpeed_t* data)
 {
@@ -1320,6 +742,8 @@ Rte_IStatusType Rte_Read_VehicleSensor_VehicleSpeed(VehicleSpeed_t* data)
  * \ServiceID      {0xFD}
  * \Reentrancy     {Reentrant}
  * \Synchronicity  {Synchronous}
+ *
+ * \AUTOSARReq     {SWS_Rte_01091}
  */
 Rte_IStatusType Rte_Read_BrakeSensor_BrakeActive(BrakeActive_t* data)
 {
@@ -1349,6 +773,8 @@ Rte_IStatusType Rte_Read_BrakeSensor_BrakeActive(BrakeActive_t* data)
  * \ServiceID      {0xFE}
  * \Reentrancy     {Reentrant}
  * \Synchronicity  {Synchronous}
+ *
+ * \AUTOSARReq     {SWS_Rte_01091}
  */
 Rte_IStatusType Rte_Read_AbsSensor_AbsActive(AbsActive_t* data)
 {
@@ -1363,243 +789,149 @@ Rte_IStatusType Rte_Read_AbsSensor_AbsActive(AbsActive_t* data)
     return Rte_AbsInfoStatus;
 }
 
+/* -----------------------------------------------------------------------
+ * Rte_Call_<p>_<o>  (RTE 5.6.13, SWS_Rte_01102)
+ *   Client/Server の呼び出し（BSW サービスへの直接委譲）。
+ * ----------------------------------------------------------------------- */
+
 /**
- * \brief   WarningStatus 提供ポートへ RunLamp シグナルを書き込む。
+ * \brief   警告灯 LED レベル設定の Client/Server ポート。
  *
- * \details Com_SendSignal() 経由で RunLamp 値をシャドウバッファへパックする
- *          (AUTOSAR SWS_RTE の Rte_Write_<p>_<o> パターン)。
- *          WarningStatus (CAN 0x210) は Signal Group のため、この関数だけでは
- *          実 TX バッファへ反映されない。RunLamp/FaultLamp/AbsLamp すべてを
- *          書き込んだ後、Rte_SendSignalGroup_WarningStatus() を呼び出すこと
- *          （TxModeMode=DIRECT のため、そのコミットで変化があれば即座に
- *          送信される）。
+ * \details SW-C (App_WarningIndicator) から呼び出され、
+ *          Rte_Lamp_ArbitrateAndWrite() 経由で IoHwAb_Led_SetLevel() へ委譲する。
+ *          C/S ポートにより SW-C は IoHwAb の存在を知らない
+ *          (AUTOSAR SWS_RTE の Rte_Call_<p>_<o> パターン)。
+ *          Dcm が SID 0x2F でこのランプをオーバーライド中の間、level 引数は
+ *          無視され、代わりにオーバーライド値が出力される（ASW はこれを知らない）。
  *
  * \param[in]  level  出力レベル。0 = 消灯、1 = 点灯。
  *
- * \retval  E_OK      COM のシャドウバッファへ正常にパックした。
- * \retval  E_NOT_OK  COM 未初期化またはシグナル ID が見つからない。
+ * \retval  E_OK  常に成功。
  *
- * \pre        Com_Init() が正常に完了していること。
- *
- * \ServiceID      {0xE0}
+ * \ServiceID      {0xFB}
  * \Reentrancy     {Reentrant}
  * \Synchronicity  {Synchronous}
+ *
+ * \AUTOSARReq     {SWS_Rte_01102}
  */
-Std_ReturnType Rte_Write_WarningStatus_RunLamp(uint8 level)
+Std_ReturnType Rte_Call_Led_SetLevel(uint8 level)
 {
-    return Com_SendSignal(COM_SIGNAL_RUN_LAMP, &level);
+    return Rte_Lamp_ArbitrateAndWrite(RTE_LAMP_ABS, level);
 }
 
 /**
- * \brief   WarningStatus 提供ポートへ FaultLamp シグナルを書き込む。
+ * \brief   RUNNING LED (D6) レベル設定の Client/Server ポート。
  *
- * \details Rte_Write_WarningStatus_RunLamp() と同様。詳細はそちらを参照。
+ * \details SW-C (App_WarningIndicator) から呼び出され、
+ *          Rte_Lamp_ArbitrateAndWrite() 経由で IoHwAb_LedRunning_SetLevel() へ委譲する。
+ *          Dcm オーバーライド中の挙動は Rte_Call_Led_SetLevel() と同様。
  *
  * \param[in]  level  出力レベル。0 = 消灯、1 = 点灯。
  *
- * \retval  E_OK      COM のシャドウバッファへ正常にパックした。
- * \retval  E_NOT_OK  COM 未初期化またはシグナル ID が見つからない。
+ * \retval  E_OK  常に成功。
  *
- * \pre        Com_Init() が正常に完了していること。
- *
- * \ServiceID      {0xE1}
+ * \ServiceID      {0xFC}
  * \Reentrancy     {Reentrant}
  * \Synchronicity  {Synchronous}
+ *
+ * \AUTOSARReq     {SWS_Rte_01102}
  */
-Std_ReturnType Rte_Write_WarningStatus_FaultLamp(uint8 level)
+Std_ReturnType Rte_Call_LedRunning_SetLevel(uint8 level)
 {
-    return Com_SendSignal(COM_SIGNAL_FAULT_LAMP, &level);
+    return Rte_Lamp_ArbitrateAndWrite(RTE_LAMP_RUN, level);
 }
 
 /**
- * \brief   WarningStatus 提供ポートへ AbsLamp シグナルを書き込む。
+ * \brief   FAULT LED (D7) レベル設定の Client/Server ポート。
  *
- * \details Rte_Write_WarningStatus_RunLamp() と同様。詳細はそちらを参照。
+ * \details SW-C (App_WarningIndicator) から呼び出され、
+ *          Rte_Lamp_ArbitrateAndWrite() 経由で IoHwAb_LedFault_SetLevel() へ委譲する。
+ *          Dcm オーバーライド中の挙動は Rte_Call_Led_SetLevel() と同様。
  *
  * \param[in]  level  出力レベル。0 = 消灯、1 = 点灯。
  *
- * \retval  E_OK      COM のシャドウバッファへ正常にパックした。
- * \retval  E_NOT_OK  COM 未初期化またはシグナル ID が見つからない。
+ * \retval  E_OK  常に成功。
  *
- * \pre        Com_Init() が正常に完了していること。
- *
- * \ServiceID      {0xE2}
+ * \ServiceID      {0xFD}
  * \Reentrancy     {Reentrant}
  * \Synchronicity  {Synchronous}
+ *
+ * \AUTOSARReq     {SWS_Rte_01102}
  */
-Std_ReturnType Rte_Write_WarningStatus_AbsLamp(uint8 level)
+Std_ReturnType Rte_Call_LedFault_SetLevel(uint8 level)
 {
-    return Com_SendSignal(COM_SIGNAL_ABS_LAMP, &level);
+    return Rte_Lamp_ArbitrateAndWrite(RTE_LAMP_FAULT, level);
 }
 
 /**
- * \brief   WarningStatus Signal Group をシャドウバッファから確定コミットする。
+ * \brief   警告確認ボタン押下状態取得の Client/Server ポート。
  *
- * \details Com_SendSignalGroup() をラップし、SW-C (App_WarningIndicator) が
- *          COM の I-PDU ID を意識せずに Signal Group をコミットできるようにする
- *          (AUTOSAR 非標準 API)。RunLamp/FaultLamp/AbsLamp すべてを
- *          Rte_Write_WarningStatus_*() で設定した後に呼び出すこと。
- *          WarningStatus は TxModeMode=DIRECT のため、このコミットで変化が
- *          検知されれば次回 Com_MainFunctionTx() で送信される（呼び出し元が
- *          別途送信をトリガする必要はなく、この呼び出し自体は
- *          PduR_ComTransmit() を呼ばないため、SPI 送信でブロッキングしない）。
+ * \details SW-C (App_EngineManager) から呼び出され、
+ *          IoHwAb_Button_GetLevel() へ委譲する。
+ *          C/S ポートにより SW-C は Dio チャネル番号やプルアップ配線を知らない
+ *          (AUTOSAR SWS_RTE の Rte_Call_<p>_<o> パターン)。
  *
- * \retval  E_OK      COM の実 TX バッファへ正常にコミットした。
- * \retval  E_NOT_OK  COM 未初期化、または WarningStatus の I-PDU ID が
- *                    見つからない。
+ * \param[out] level  押下状態 (0=解放, 1=押下)。NULL 禁止。
  *
- * \pre        Com_Init() が正常に完了していること。
+ * \retval  E_OK  常に成功。
  *
- * \ServiceID      {0xE3}
- * \Reentrancy     {Non Reentrant}
+ * \ServiceID      {0xFF}
+ * \Reentrancy     {Reentrant}
  * \Synchronicity  {Synchronous}
+ *
+ * \AUTOSARReq     {SWS_Rte_01102}
  */
-Std_ReturnType Rte_SendSignalGroup_WarningStatus(void)
+Std_ReturnType Rte_Call_Button_GetLevel(uint8* level)
 {
-    return Com_SendSignalGroup(1U);
+    return IoHwAb_Button_GetLevel(level);
 }
 
 /**
- * \brief   MeterStatus 提供ポートへ EngineSpeed ミラーシグナルを書き込む。
+ * \brief   ADC センサ電圧値取得の Client/Server ポート。
  *
- * \details App_EngineManager が EngineInfo(RX) から検証済みで受け取った
- *          EngineSpeed を、そのまま MeterStatus(CAN 0x200) へミラー送信する
- *          （uds_tester の仮想メータ表示タブが 1 フレームだけで RPM を
- *          デコードできるようにするための、本プロジェクト独自の拡張）。
- *          非 Signal Group のためシャドウバッファを経由せず、
- *          Com_SendSignal() 呼び出しの都度、値変化があれば次回
- *          Com_MainFunctionTx() で送信される。
+ * \details SW-C (App_EngineManager) から呼び出され、
+ *          IoHwAb_Adc_GetValue_mV() へ委譲する。
+ *          C/S ポートにより SW-C はチャネル番号や ADC スケーリングを知らない
+ *          (AUTOSAR SWS_RTE の Rte_Call_<p>_<o> パターン)。
  *
- * \param[in]  speed  エンジン回転数 [rpm]。
+ * \param[out] mv  変換済み電圧値 [mV]。NULL 禁止。
  *
- * \retval  E_OK      COM の実 TX バッファへ正常にパックした。
- * \retval  E_NOT_OK  COM 未初期化またはシグナル ID が見つからない。
+ * \retval  E_OK  常に成功。
  *
- * \pre        Com_Init() が正常に完了していること。
- *
- * \note       AUTOSAR 標準外の API（本プロジェクト独自拡張）。
- * \ServiceID      {0xEB}
+ * \ServiceID      {0xFE}
  * \Reentrancy     {Reentrant}
  * \Synchronicity  {Synchronous}
+ *
+ * \AUTOSARReq     {SWS_Rte_01102}
  */
-Std_ReturnType Rte_Write_MeterStatus_EngineSpeed(EngineSpeed_t speed)
+Std_ReturnType Rte_Call_Adc_GetValue_mV(uint16* mv)
 {
-    return Com_SendSignal(COM_SIGNAL_METER_ENGINE_SPEED, &speed);
+    return IoHwAb_Adc_GetValue_mV(mv);
 }
 
 /**
- * \brief   MeterStatus 提供ポートへ RunLamp ミラーシグナルを書き込む。
+ * \brief   機能許可状態取得の Client/Server ポート。
  *
- * \details App_WarningIndicator が WarningStatus(CAN 0x210) の RunLamp と
- *          同じ値を、MeterStatus(CAN 0x200) へもミラー送信する。
+ * \details SW-C (App_EngineManager / App_WarningIndicator) から呼び出され、
+ *          FiM_GetFunctionPermission() へ委譲する。
+ *          C/S ポートにより SW-C は FiM の判定テーブル構造を知らない
+ *          (AUTOSAR SWS_RTE の Rte_Call_<p>_<o> パターン)。
  *
- * \param[in]  level  出力レベル。0 = 消灯、1 = 点灯。
+ * \param[in]   functionId  機能 ID (FIM_FID_*)。
+ * \param[out]  permission  TRUE=許可 / FALSE=抑止 の格納先。NULL 禁止。
  *
- * \retval  E_OK      COM の実 TX バッファへ正常にパックした。
- * \retval  E_NOT_OK  COM 未初期化またはシグナル ID が見つからない。
+ * \retval  E_OK      正常取得。
+ * \retval  E_NOT_OK  functionId が範囲外、または permission が NULL。
  *
- * \pre        Com_Init() が正常に完了していること。
- *
- * \note       AUTOSAR 標準外の API（本プロジェクト独自拡張）。
- * \ServiceID      {0xEC}
+ * \ServiceID      {0xF1}
  * \Reentrancy     {Reentrant}
  * \Synchronicity  {Synchronous}
+ *
+ * \AUTOSARReq     {SWS_Rte_01102}
  */
-Std_ReturnType Rte_Write_MeterStatus_RunLamp(uint8 level)
+Std_ReturnType Rte_Call_FiM_GetFunctionPermission(uint8 functionId, boolean* permission)
 {
-    return Com_SendSignal(COM_SIGNAL_METER_RUN_LAMP, &level);
-}
-
-/**
- * \brief   MeterStatus 提供ポートへ FaultLamp ミラーシグナルを書き込む。
- *
- * \details Rte_Write_MeterStatus_RunLamp() と同様。詳細はそちらを参照。
- *
- * \param[in]  level  出力レベル。0 = 消灯、1 = 点灯。
- *
- * \retval  E_OK      COM の実 TX バッファへ正常にパックした。
- * \retval  E_NOT_OK  COM 未初期化またはシグナル ID が見つからない。
- *
- * \pre        Com_Init() が正常に完了していること。
- *
- * \note       AUTOSAR 標準外の API（本プロジェクト独自拡張）。
- * \ServiceID      {0xED}
- * \Reentrancy     {Reentrant}
- * \Synchronicity  {Synchronous}
- */
-Std_ReturnType Rte_Write_MeterStatus_FaultLamp(uint8 level)
-{
-    return Com_SendSignal(COM_SIGNAL_METER_FAULT_LAMP, &level);
-}
-
-/**
- * \brief   MeterStatus 提供ポートへ AbsLamp ミラーシグナルを書き込む。
- *
- * \details Rte_Write_MeterStatus_RunLamp() と同様。詳細はそちらを参照。
- *
- * \param[in]  level  出力レベル。0 = 消灯、1 = 点灯。
- *
- * \retval  E_OK      COM の実 TX バッファへ正常にパックした。
- * \retval  E_NOT_OK  COM 未初期化またはシグナル ID が見つからない。
- *
- * \pre        Com_Init() が正常に完了していること。
- *
- * \note       AUTOSAR 標準外の API（本プロジェクト独自拡張）。
- * \ServiceID      {0xEE}
- * \Reentrancy     {Reentrant}
- * \Synchronicity  {Synchronous}
- */
-Std_ReturnType Rte_Write_MeterStatus_AbsLamp(uint8 level)
-{
-    return Com_SendSignal(COM_SIGNAL_METER_ABS_LAMP, &level);
-}
-
-/**
- * \brief   MeterStatus 提供ポートへ CoolantTemp ミラーシグナルを書き込む。
- *
- * \details App_EngineManager が EngineInfo(RX) の検証済み CoolantTemp を、
- *          MeterStatus(CAN 0x200) へもミラー送信する
- *          （Rte_Write_MeterStatus_EngineSpeed() と同じ設計）。
- *
- * \param[in]  temp  冷却水温 [°C]。
- *
- * \retval  E_OK      COM の実 TX バッファへ正常にパックした。
- * \retval  E_NOT_OK  COM 未初期化またはシグナル ID が見つからない。
- *
- * \pre        Com_Init() が正常に完了していること。
- *
- * \note       AUTOSAR 標準外の API（本プロジェクト独自拡張）。
- * \ServiceID      {0xEF}
- * \Reentrancy     {Reentrant}
- * \Synchronicity  {Synchronous}
- */
-Std_ReturnType Rte_Write_MeterStatus_CoolantTemp(CoolantTemp_t temp)
-{
-    return Com_SendSignal(COM_SIGNAL_METER_COOLANT_TEMP, &temp);
-}
-
-/**
- * \brief   MeterStatus 提供ポートの CoolantTemp ミラーシグナルを無効化する。
- *
- * \details Rte_Write_MeterStatus_CoolantTemp() と対になる無効化版
- *          （Com_InvalidateSignal() へ委譲、2026-08 追加）。
- *          Rte_COMInvalidNotify_CoolantTemp() から呼ばれる（同関数の
- *          Doxygen コメント参照）。他の Rte_Write_<Port>_<Signal>() と同じく、
- *          呼び出し元が生の COM_SIGNAL_* 定数を直接扱わずに済むようにする。
- *
- * \retval  E_OK      COM の実 TX バッファへ無効値を正常に反映した。
- * \retval  E_NOT_OK  COM 未初期化、シグナル ID が見つからない、または
- *                    ComSignalDataInvalidValue が未設定。
- *
- * \pre        Com_Init() が正常に完了していること。
- *
- * \note       AUTOSAR 標準外の API（本プロジェクト独自拡張）。
- * \Reentrancy     {Reentrant}
- * \Synchronicity  {Synchronous}
- */
-uint8 Rte_Invalidate_MeterStatus_CoolantTemp(void)
-{
-    return Com_InvalidateSignal(COM_SIGNAL_METER_COOLANT_TEMP);
+    return FiM_GetFunctionPermission(functionId, permission);
 }
 
 /**
@@ -1618,6 +950,8 @@ uint8 Rte_Invalidate_MeterStatus_CoolantTemp(void)
  * \ServiceID      {0xE9}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
+ *
+ * \AUTOSARReq     {SWS_Rte_01102}
  */
 Std_ReturnType Rte_Call_ComM_RequestComMode(ComM_ModeType mode)
 {
@@ -1639,11 +973,21 @@ Std_ReturnType Rte_Call_ComM_RequestComMode(ComM_ModeType mode)
  * \ServiceID      {0xEA}
  * \Reentrancy     {Reentrant}
  * \Synchronicity  {Synchronous}
+ *
+ * \AUTOSARReq     {SWS_Rte_01102}
  */
 Std_ReturnType Rte_Call_ComM_GetCurrentComMode(ComM_ModeType* mode)
 {
     return ComM_GetCurrentComMode(COMM_USER_0, mode);
 }
+
+/* ======================================================================
+ * AUTOSAR_SWS_RTE 5.8  RTE Lifecycle API Reference
+ * ====================================================================== */
+
+/* -----------------------------------------------------------------------
+ * Rte_Start  (RTE 5.8.1, SWS_Rte_02569)
+ * ----------------------------------------------------------------------- */
 
 /* -----------------------------------------------------------------------
  * RTE ライフサイクル API ([SWS_Rte_02569]/[SWS_Rte_02570]/[SWS_Rte_06749])
@@ -1734,6 +1078,41 @@ Std_ReturnType Rte_Start(void)
     return E_OK;
 }
 
+/* -----------------------------------------------------------------------
+ * Rte_Stop  (RTE 5.8.2, SWS_Rte_02570)
+ * ----------------------------------------------------------------------- */
+
+/**
+ * \brief   RTE を終了する（[SWS_Rte_02570]）。
+ *
+ * \details 実仕様は「RTE がその core 上で割り当てたシステム・通信資源を
+ *          全て解放する」と規定するが、本プロジェクトは動的資源確保を
+ *          行わないため実質的に何も解放しない（本 API 自体は仕様上
+ *          「常に生成される」ため、契約を満たすために提供する）。
+ *          EcuM 側に BSW 全体のシャットダウンシーケンス自体が無いため、
+ *          本プロジェクトの現在の起動フローからは呼び出されない
+ *          （本プロジェクトには他にも呼び出し元を持たないまま API 契約を
+ *          満たすためだけに提供している関数の前例が複数ある）。
+ *
+ * \retval  E_OK  常に成功（本実装は解放に失敗しうる資源を持たないため、
+ *                実仕様の RTE_E_LIMIT を返すことはない）。
+ *
+ * \AUTOSARReq     {SWS_Rte_02570, SWS_Rte_CONSTR_09038}
+ * \ServiceID      {0x71}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType Rte_Stop(void)
+{
+    DET_LOGI(TAG, "Stop ok");
+    return E_OK;
+}
+
+/* -----------------------------------------------------------------------
+ * Rte_Init_<InitContainer>  (RTE 5.8.6, SWS_Rte_06749)
+ *   本プロジェクトは SW-C 名で直接命名（1 コンテナ = 1 SW-C の簡略化）。
+ * ----------------------------------------------------------------------- */
+
 /**
  * \brief   EngineManager SW-C の Init Runnable を起動する。
  *
@@ -1771,28 +1150,918 @@ void Rte_Init_WarningIndicator(void)
     App_WarningIndicator_Init();
 }
 
+/* ======================================================================
+ * AUTOSAR_SWS_RTE 5.9.2.1  Call-backs for communication over AUTOSAR COM
+ *   Rte_Cbk.h と同じ並び。<sn>=COM シグナル名、<sg>=COM シグナルグループ名。
+ * ====================================================================== */
+
+/* -----------------------------------------------------------------------
+ * Rte_COMCbk_<sn>  (RTE 5.9.2.1.1, SWS_Rte_03001)
+ * ----------------------------------------------------------------------- */
+
 /**
- * \brief   RTE を終了する（[SWS_Rte_02570]）。
+ * \brief   EngineInfo フレームの受信バッファ格納完了を通知する（非 Signal Group）。
  *
- * \details 実仕様は「RTE がその core 上で割り当てたシステム・通信資源を
- *          全て解放する」と規定するが、本プロジェクトは動的資源確保を
- *          行わないため実質的に何も解放しない（本 API 自体は仕様上
- *          「常に生成される」ため、契約を満たすために提供する）。
- *          EcuM 側に BSW 全体のシャットダウンシーケンス自体が無いため、
- *          本プロジェクトの現在の起動フローからは呼び出されない
- *          （本プロジェクトには他にも呼び出し元を持たないまま API 契約を
- *          満たすためだけに提供している関数の前例が複数ある）。
+ * \details Com_PBCfg.c の EngineOnFlag シグナル設定（Com_SignalConfigType.
+ *          RxAckCbk）から登録される。Com_RxIndication() がこのシグナルの
+ *          全ビット範囲を受信バッファへ格納した直後に呼ばれる
+ *          （Com_CbkRxAck、SWS_Com_00555）。E2E 検証
+ *          （Rte_COMRxInd_EngineInfo、RxIndicationCbk）より前に呼ばれるため、
+ *          このログはペイロードの妥当性とは無関係に「バイト列が届いた」
+ *          ことのみを意味する（E2E CRC が壊れているフレームでも出力される）。
  *
- * \retval  E_OK  常に成功（本実装は解放に失敗しうる資源を持たないため、
- *                実仕様の RTE_E_LIMIT を返すことはない）。
+ * \note    Com_PBCfg.c から extern 宣言経由で RxAckCbk として参照されるため
+ *          non-static。Rte.h には公開しない（他の Rte_COM* グルーと同じ
+ *          理由）。呼び出しコンテキストは Rte_COMCbkTAck_EngineState() と
+ *          同じく割り込み禁止区間の外（Com_RxIndication() 自体がそこから
+ *          呼ばれることはない）。
  *
- * \AUTOSARReq     {SWS_Rte_02570, SWS_Rte_CONSTR_09038}
- * \ServiceID      {0x71}
+ * \AUTOSARReq     {SWS_Rte_03001, SWS_Com_00555}
+ */
+void Rte_COMCbk_EngineOnFlag(void)
+{
+    DET_LOGI(TAG, "EngineInfo RX ack (EngineOnFlag)");
+}
+
+/* -----------------------------------------------------------------------
+ * Rte_COMCbkTAck_<sn>  (RTE 5.9.2.1.2, SWS_Rte_03002)
+ * ----------------------------------------------------------------------- */
+
+/**
+ * \brief   MeterStatus フレームの送信成功を通知する（EngineState の TxAck）。
+ *
+ * \details Com_PBCfg.c の EngineState シグナル設定（TxAckCbk）から登録される
+ *          （実 AUTOSAR の Com_CbkTxAck、ComNotification = ECUC_Com_00498
+ *          相当）。呼ばれるのは Com_TxConfirmation() が MeterStatus
+ *          （TX IPduId=0）の送信成功を検出した直後（SWS_Com_00468）。
+ *          Com_TxConfirmation() は Can_MainFunction_Write()（Os の 100ms
+ *          タスク）から同期的に呼ばれ、この経路上に割り込み禁止区間は
+ *          存在しないため（Com.c の Com_TxConfirmation() doc 参照）、
+ *          ここで Serial 出力（DET_LOGI）を行っても Rx 無効値検知で発生した
+ *          WDT リセット障害と同じ問題は起きない。
+ *
+ * \note    Com_PBCfg.c から extern 宣言経由で TxAckCbk として参照されるため
+ *          non-static。Rte.h には公開しない（他の Rte_COM* グルーと同じ
+ *          理由）。
+ *
+ * \AUTOSARReq     {SWS_Rte_03002, SWS_Com_00468}
+ */
+void Rte_COMCbkTAck_EngineState(void)
+{
+    DET_LOGI(TAG, "MeterStatus TX ack (EngineState)");
+}
+
+/* -----------------------------------------------------------------------
+ * Rte_COMCbkTErr_<sn>  (RTE 5.9.2.1.3, SWS_Rte_03775)
+ *   未実装（使用するシグナルが無い）。
+ * ----------------------------------------------------------------------- */
+
+/* -----------------------------------------------------------------------
+ * Rte_COMCbkInv_<sn>  (RTE 5.9.2.1.4, SWS_Rte_02612)
+ * ----------------------------------------------------------------------- */
+
+/**
+ * \brief   CoolantTemp が無効値（0xFF）で受信されたことを通知する。
+ *
+ * \details Com_PBCfg.c の CoolantTemp シグナル設定（DataInvalidAction=
+ *          COM_DATA_INVALID_ACTION_NOTIFY）から InvalidNotificationCbk として
+ *          登録される（実 AUTOSAR の ComInvalidNotification、ECUC_Com_00315
+ *          相当）。Com_ReceiveSignal(COM_SIGNAL_COOLANT_TEMP, ...) が受信値と
+ *          InvalidValue の一致を検知した「次回」の Com_MainFunctionRx() から
+ *          呼ばれる（SWS_Com_00680/00717。同期呼び出しにしていない理由は
+ *          Com.c の Com_RxInvalidNotifyPending 宣言コメント参照 — この関数が
+ *          行う Serial 出力は、Com_ReceiveSignal() の呼び出し元によっては
+ *          割り込み禁止区間内で実行されると WDT リセットを引き起こしうる
+ *          ため）。ログ出力に加え、Rte_Invalidate_MeterStatus_CoolantTemp()
+ *          （Com_InvalidateSignal() へ委譲、2026-08 追加、
+ *          SWS_Com_00099/SWS_Com_00642）でメータ表示ミラー自体も無効化する。
+ *          同じ 0xFF マーカーを RX/TX 双方の ComSignalDataInvalidValue に
+ *          設定しているため（Com_PBCfg.c 参照）、uds_tester 側でも同じ意味の
+ *          無効値として扱える。
+ *
+ *          \note   これは「無効を検知した瞬間」の単発通知であり、継続的な
+ *          無効状態のフラグではない。App_EngineManager_Run() は毎サイクル
+ *          `Rte_EngineInfoMirror.temp`（DataInvalidAction=NOTIFY により、
+ *          無効値受信時も直近の有効値のまま更新されない）を
+ *          Rte_Write_MeterStatus_CoolantTemp() でそのままミラー送信し続ける
+ *          ため、ここで無効化した値は次の周期送信で上書きされる
+ *          （TX シグナル自体は変化検知フィルタ付きのため、値が同じなら
+ *          再送信は起きないが、無効化パルスとしての意味は保たれる）。
+ *
+ * \AUTOSARReq     {SWS_Rte_02612, SWS_Com_00536, SWS_Com_00680}
+ *
+ * \note    Com_PBCfg.c から extern 宣言経由で InvalidNotificationCbk として
+ *          参照されるため non-static。Rte.h には公開しない（Rte_COMCbk_*
+ *          と同じく Com→Rte 間の内部グルーのため）。
+ */
+void Rte_COMCbkInv_CoolantTemp(void)
+{
+    DET_LOGW(TAG, "CoolantTemp invalid value received (sensor fault pattern)");
+    (void)Rte_Invalidate_MeterStatus_CoolantTemp();
+}
+
+/* -----------------------------------------------------------------------
+ * Rte_COMCbkRxTOut_<sn>  (RTE 5.9.2.1.5, SWS_Rte_02610)
+ * ----------------------------------------------------------------------- */
+
+/**
+ * \brief   EngineInfo フレームの受信デッドライン超過を通知する（EngineOnFlag のRxTOut）。
+ *
+ * \details Com_PBCfg.c の EngineOnFlag シグナル設定（Com_SignalConfigType.
+ *          RxTOutCbk）から登録される。呼ばれるのは Com_MainFunctionRx() が
+ *          このシグナルの FirstTimeoutMs/TimeoutMs（EngineInfo と同値）
+ *          超過を新規検出した直後（Com_CbkRxTOut、SWS_Com_00536/00556）。
+ *          既存の受信デッドライン監視（`Com: RX timeout sig=...` ログ、
+ *          `docs/modules/Com_Notes.md` の「受信デッドライン監視」節）が
+ *          検出はしていたが通知先を持たなかった箇所に、正式な RTE
+ *          コールバックとして接続したもの。EngineInfo 送信元（エンジン
+ *          ECU シミュレータ）を止めるだけで実機で確実に発動する。
+ *
+ * \note    Com_PBCfg.c から extern 宣言経由で RxTOutCbk として参照されるため
+ *          non-static。Rte.h には公開しない。呼び出しコンテキストは
+ *          Rte_COMCbkTAck_EngineState() と同じく Com_MainFunctionRx()
+ *          （割り込み禁止区間の外）のため Serial 出力も安全。
+ *
+ * \AUTOSARReq     {SWS_Rte_02610, SWS_Com_00556}
+ */
+void Rte_COMCbkRxTOut_EngineOnFlag(void)
+{
+    DET_LOGW(TAG, "EngineInfo RX deadline timeout (EngineOnFlag)");
+}
+
+/* -----------------------------------------------------------------------
+ * Rte_COMCbkTxTOut_<sn>  (RTE 5.9.2.1.6, SWS_Rte_05084)
+ * ----------------------------------------------------------------------- */
+
+/**
+ * \brief   MeterStatus フレームの送信確認タイムアウトを通知する
+ *          （EngineState の TxTOut）。
+ *
+ * \details Com_PBCfg.c の EngineState シグナル設定（TxTOutCbk）から登録
+ *          される（実 AUTOSAR の Com_CbkTxTOut、SWS_Com_00878/00879/00880/
+ *          00304/00554 相当）。呼ばれるのは Com_MainFunctionTx() が MeterStatus
+ *          （TX IPduId=0）の送信確認が COM_TX_TIMEOUT_METERSTATUS_MS 以内に
+ *          届かなかったことを検出した直後。
+ *
+ * \note    実機では発動しない: Com_DoTransmit()→PduR_ComTransmit()→
+ *          CanIf_Transmit()→Can_Write() は同期的に完結し、Bus-Off 中は
+ *          Can_Write() が「送信済み・未確認」状態自体を作らずに即座に
+ *          失敗するため（詳細は docs/modules/Com_Notes.md「TX 送信デッド
+ *          ライン監視」参照）。Rte_COMCbkTAck_EngineState() と対になる、
+ *          仕様忠実性のためのユニットテスト検証専用の実装。
+ *
+ * \note    Com_PBCfg.c から extern 宣言経由で TxTOutCbk として参照されるため
+ *          non-static。Rte.h には公開しない（他の Rte_COM* グルーと同じ
+ *          理由）。
+ *
+ * \AUTOSARReq     {SWS_Rte_05084, SWS_Com_00554}
+ */
+void Rte_COMCbkTxTOut_EngineState(void)
+{
+    DET_LOGI(TAG, "MeterStatus TX confirmation timeout (EngineState)");
+}
+
+/* -----------------------------------------------------------------------
+ * Rte_COMCbk_<sg>  (RTE 5.9.2.1.7, SWS_Rte_03004)
+ * ----------------------------------------------------------------------- */
+
+/**
+ * \brief   AbsInfo フレームの受信バッファ格納完了を通知する（Signal Group 単位）。
+ *
+ * \details Com_PBCfg.c の AbsInfo I-PDU 設定（Com_IPduConfigType.RxAckCbk）
+ *          から登録される。VehicleSpeed/BrakeActive/AbsActive のどのメンバー
+ *          が変化したかは問わず、グループ全体で 1 回だけ呼ばれる
+ *          （Com_CbkRxAck、SWS_Com_00555。TX 側 Rte_COMCbkTAck_WarningStatus()
+ *          と対になる、Signal Group 単位の RX 実装例）。E2E 検証・
+ *          Com_ReceiveSignalGroup() コミット（Rte_COMRxInd_AbsInfo）より前に
+ *          呼ばれるため、E2E 検証に失敗したフレームでもこのログは出力される。
+ *
+ * \note    Com_PBCfg.c から extern 宣言経由で RxAckCbk として参照されるため
+ *          non-static。Rte.h には公開しない。
+ *
+ * \AUTOSARReq     {SWS_Rte_03004, SWS_Com_00555}
+ */
+void Rte_COMCbk_AbsInfo(void)
+{
+    DET_LOGI(TAG, "AbsInfo RX ack (group)");
+}
+
+/* -----------------------------------------------------------------------
+ * Rte_COMCbkTAck_<sg>  (RTE 5.9.2.1.8, SWS_Rte_03005)
+ * ----------------------------------------------------------------------- */
+
+/**
+ * \brief   WarningStatus フレームの送信成功を通知する（Signal Group 単位）。
+ *
+ * \details Com_PBCfg.c の WarningStatus I-PDU 設定（Com_IPduConfigType.
+ *          TxAckCbk）から登録される。呼ばれるのは Com_TxConfirmation() が
+ *          WarningStatus（TX IPduId=1、Signal Group）の送信成功を検出した
+ *          直後（SWS_Com_00468: "It can be configured for signals and
+ *          signal groups. Com_CbkTxAck corresponds to Rte_COMCbkTAck_<sn>
+ *          or Rte_COMCbkTAck_<sg> respectively."）。RunLamp/FaultLamp/
+ *          AbsLamp のどれが変化して送信を引き起こしたかは問わず、グループ
+ *          全体で 1 回だけ呼ばれる（`Rte_COMCbkTAck_EngineState()` と対になる、
+ *          Signal Group 単位の実装例）。
+ *
+ *          `Rte_COMCbkTAck_EngineState()` と同じ呼び出しチェーン
+ *          （Can_MainFunction_Write() → ... → Com_TxConfirmation()）を経由
+ *          するため、割り込み禁止区間の外で呼ばれることも同様に確認済み。
+ *
+ * \note    Com_PBCfg.c から extern 宣言経由で TxAckCbk として参照されるため
+ *          non-static。Rte.h には公開しない（他の Rte_COM* グルーと同じ
+ *          理由）。
+ *
+ * \AUTOSARReq     {SWS_Rte_03005, SWS_Com_00468}
+ */
+void Rte_COMCbkTAck_WarningStatus(void)
+{
+    DET_LOGI(TAG, "WarningStatus TX ack (group)");
+}
+
+/* -----------------------------------------------------------------------
+ * Rte_COMCbkTErr_<sg>  (RTE 5.9.2.1.9, SWS_Rte_03776)
+ *   未実装（使用するシグナルグループが無い）。
+ * ----------------------------------------------------------------------- */
+
+/* -----------------------------------------------------------------------
+ * Rte_COMCbkInv_<sg>  (RTE 5.9.2.1.10, SWS_Rte_05065)
+ *   未実装（使用するシグナルグループが無い）。
+ * ----------------------------------------------------------------------- */
+
+/* -----------------------------------------------------------------------
+ * Rte_COMCbkRxTOut_<sg>  (RTE 5.9.2.1.11, SWS_Rte_02611)
+ * ----------------------------------------------------------------------- */
+
+/**
+ * \brief   AbsInfo フレームの受信デッドライン超過を通知する（Signal Group 単位）。
+ *
+ * \details Com_PBCfg.c の AbsInfo I-PDU 設定（Com_IPduConfigType.RxTOutCbk）
+ *          から登録される。VehicleSpeed/BrakeActive/AbsActive のどのメンバー
+ *          かは問わず、グループ全体で 1 回だけ呼ばれる（Com_CbkRxTOut、
+ *          SWS_Com_00536/00556。`Rte_COMCbkRxTOut_EngineOnFlag()` のシグナル
+ *          単位版と対になる、Signal Group 単位の実装例）。
+ *
+ * \note    Com_PBCfg.c から extern 宣言経由で RxTOutCbk として参照されるため
+ *          non-static。Rte.h には公開しない。呼び出しコンテキストは
+ *          `Rte_COMCbkRxTOut_EngineOnFlag()` と同じ。
+ *
+ * \AUTOSARReq     {SWS_Rte_02611, SWS_Com_00556}
+ */
+void Rte_COMCbkRxTOut_AbsInfo(void)
+{
+    DET_LOGW(TAG, "AbsInfo RX deadline timeout (group)");
+}
+
+/* -----------------------------------------------------------------------
+ * Rte_COMCbkTxTOut_<sg>  (RTE 5.9.2.1.12, SWS_Rte_05085)
+ * ----------------------------------------------------------------------- */
+
+/**
+ * \brief   WarningStatus フレームの送信確認タイムアウトを通知する
+ *          （Signal Group 単位）。
+ *
+ * \details Com_PBCfg.c の WarningStatus I-PDU 設定（Com_IPduConfigType.
+ *          TxTOutCbk）から登録される（実 AUTOSAR の Com_CbkTxTOut、
+ *          SWS_Com_00878/00879/00880/00304/00554 相当。SWS_Com_00554の
+ *          "Rte_COMCbkTAck_<sn> or Rte_COMCbkTAck_<sg> respectively" と
+ *          同じ区別が TxTOut にも適用される）。呼ばれるのは
+ *          Com_MainFunctionTx() が WarningStatus（TX IPduId=1、Signal Group）
+ *          の送信確認が COM_TX_TIMEOUT_WARNINGSTATUS_MS 以内に届かなかった
+ *          ことを検出した直後。`Rte_COMCbkTAck_WarningStatus()` と対になる、
+ *          Signal Group 単位の実装例（`Rte_COMCbkTxTOut_EngineState()` の
+ *          Signal Group 版）。
+ *
+ * \note    実機では発動しない: 上記 `Rte_COMCbkTxTOut_EngineState()` と
+ *          同じ理由（同関数の Doxygen コメント参照）。
+ *
+ * \note    Com_PBCfg.c から extern 宣言経由で TxTOutCbk として参照されるため
+ *          non-static。Rte.h には公開しない（他の Rte_COM* グルーと同じ
+ *          理由）。
+ *
+ * \AUTOSARReq     {SWS_Rte_05085, SWS_Com_00554}
+ */
+void Rte_COMCbkTxTOut_WarningStatus(void)
+{
+    DET_LOGI(TAG, "WarningStatus TX confirmation timeout (group)");
+}
+
+/* ======================================================================
+ * AUTOSAR_SWS_COM 8.6.3.2  I-PDU Callout Functions
+ *   関数名は ComIPduCallout（ECUC_Com_00387）で自由に設定する。
+ * ====================================================================== */
+
+/* -----------------------------------------------------------------------
+ * Com_RxIpduCallout  (COM 8.6.3.2, SWS_Com_00700)
+ * ----------------------------------------------------------------------- */
+
+/* SecureCommand (RX IPduId=2) の Reserved バイト位置。Com_PBCfg.c の
+ * IPduId=2 エントリの .DLC=2U、SecOC_PBCfg.c の .AuthenticPduLength=2U と
+ * 一致させること（レイアウトを変える場合はこの3箇所を連動して直す）。 */
+#define SECURECOMMAND_RESERVED_BYTE_OFFSET 1U
+
+/**
+ * \brief   SecureCommand (RX IPduId=2) の受理可否を判定する（Reserved バイト検査）。
+ *
+ * \details Com_PBCfg.c の SecureCommand I-PDU 設定（Com_IPduConfigType.
+ *          RxIpduCalloutCbk）から登録される（Com_RxIpduCallout、
+ *          SWS_Com_00700/00816）。`Com_RxIndication(2, ...)` の冒頭、
+ *          バッファ格納・`Rte_COMRxInd_SecureCommand()` のいずれよりも前に
+ *          呼ばれる。SecOC は MAC・フレッシュネスの真正性のみを保証し、
+ *          ペイロードの業務レベルの妥当性までは検証しないため、byte[1]
+ *          （Reserved、本来は常に 0x00）が非 0 なら受理しない。
+ *
+ * \param[in]  SduDataPtr  PduR から渡された生バイト列（DLC によるクランプ前）。
+ * \param[in]  SduLength   その長さ。
+ *
+ * \retval  TRUE   受理する（Reserved==0x00）。
+ * \retval  FALSE  拒否する（Reserved!=0x00、または Reserved バイトを読める長さが
+ *                 無い）。長さ不足を fail-open（受理）にしないのは、非
+ *                 Signal Group の SecureCommand には [SWS_Com_00575] の短小
+ *                 フレーム破棄（IsSignalGroup 専用）が適用されず、代わりに
+ *                 部分受理パス（byte[0] のみ書き込み）へ進んでしまうと、
+ *                 この検査自体が一度も評価されないまま「検査済み」として
+ *                 通過してしまうため（/code-review で指摘・是正）。
+ *
+ * \note    Com_PBCfg.c から extern 宣言経由で RxIpduCalloutCbk として
+ *          参照されるため non-static。Rte.h には公開しない。呼び出し
+ *          コンテキストは `Rte_COMRxInd_SecureCommand()` と同じ
+ *          （割り込み禁止区間の外）。
+ *
+ * \AUTOSARReq     {SWS_Com_00700}
+ * 出典: 形式のみ（関数名は ComIPduCallout で設定する。本プロジェクトは PduId を持たない簡略版）。
+ */
+boolean Rte_COMRxIpduCallout_SecureCommand(const uint8* SduDataPtr, uint8 SduLength)
+{
+    if (SduLength <= SECURECOMMAND_RESERVED_BYTE_OFFSET)
+    {
+        DET_LOGW(TAG, "SecureCommand rejected by RxIpduCallout (len=%u too short)",
+                 (unsigned)SduLength);
+        return FALSE;
+    }
+
+    if (SduDataPtr[SECURECOMMAND_RESERVED_BYTE_OFFSET] != 0x00U)
+    {
+        DET_LOGW(TAG, "SecureCommand rejected by RxIpduCallout (Reserved=0x%02X)",
+                 (unsigned)SduDataPtr[SECURECOMMAND_RESERVED_BYTE_OFFSET]);
+        return FALSE;
+    }
+    return TRUE;
+}
+
+/* -----------------------------------------------------------------------
+ * Com_TxIpduCallout  (COM 8.6.3.2, SWS_Com_00346)
+ * ----------------------------------------------------------------------- */
+
+/**
+ * \brief   ImmobilizerStatus (TX IPduId=3) の送信可否を判定する（値域検査）。
+ *
+ * \details Com_PBCfg.c の ImmobilizerStatus I-PDU 設定（Com_IPduConfigType.
+ *          TxIpduCalloutCbk）から登録される（Com_TxIpduCallout、
+ *          SWS_Com_00346/00719）。Com_DoTransmit() 内、PduR_ComTransmit()
+ *          呼び出し直前に呼ばれる。RxIpduCalloutCbk の送信側対
+ *          （Rte_COMRxIpduCallout_SecureCommand）。
+ *          Signal Gateway（Com_GwMappingData）が SecOC 検証済みの
+ *          ImmobilizerCmd を SWC/Rte を介さず直接転送する専用フレームだが、
+ *          SecOC は MAC・フレッシュネスの真正性のみを保証し、
+ *          ImmobilizerCmd 本体が定義済みの値域（0x00=LOCK/0x01=UNLOCK）に
+ *          収まっているかまでは検証しない。RX 側の
+ *          Rte_COMRxIpduCallout_SecureCommand も byte[1]（Reserved）しか
+ *          見ないため、byte[0]（ImmobilizerCmd）自体の値域はどこでも
+ *          検証されないまま素通りしてしまう。送信直前のこの層で最終防衛し、
+ *          他 ECU へ意味不明な値をブロードキャストしないようにする。
+ *
+ * \param[in]  SduDataPtr  送信直前の TX バッファ（TxTransformCbk 適用後）。
+ * \param[in]  SduLength   その長さ（本 I-PDU は DLC=1U 固定）。
+ *
+ * \retval  TRUE   受理する（byte[0]==0x00 または 0x01）。
+ * \retval  FALSE  拒否する（それ以外の値）。
+ *
+ * \note    Com_PBCfg.c から extern 宣言経由で TxIpduCalloutCbk として
+ *          参照されるため non-static。Rte.h には公開しない。
+ *
+ * \AUTOSARReq     {SWS_Com_00346}
+ * 出典: 形式のみ（関数名は ComIPduCallout で設定する。本プロジェクトは PduId を持たない簡略版）。
+ */
+boolean Rte_COMTxIpduCallout_ImmobilizerStatus(const uint8* SduDataPtr, uint8 SduLength)
+{
+    (void)SduLength;  /* TX 呼び出しは常に IPdu の DLC 固定長（=1）で呼ばれる
+                        * ため長さチェックは不要（RX の RxIpduCalloutCbk とは
+                        * 異なり、実際に届いた可変長を心配する必要がない） */
+    if (SduDataPtr[0] > 0x01U)  /* uint8 は負値を取らないため 0x00U/0x01U 以外
+                                  * を1回の比較で判定できる（[0x00,0x01] の
+                                  * 範囲チェック） */
+    {
+        DET_LOGW(TAG, "ImmobilizerStatus rejected by TxIpduCallout (value=0x%02X)",
+                 (unsigned)SduDataPtr[0]);
+        return FALSE;
+    }
+    return TRUE;
+}
+
+/* ======================================================================
+ * AUTOSAR_SWS_SecureOnboardCommunication 8.7.3  Configurable Interfaces
+ *   関数名は SecOCVerificationStatusCallout（ECUC_SecOC_00004）で設定する。
+ * ====================================================================== */
+
+/* -----------------------------------------------------------------------
+ * SecOC_VerificationStatusCallout  (SecOC 8.7.3.1, SWS_SecOC_00119)
+ * ----------------------------------------------------------------------- */
+
+/**
+ * \brief   ImmobilizerCmd (SecOC RX Secured I-PDU 0) の検証結果通知
+ *          （[SWS_SecOC_00048]/[SWS_SecOC_00119]、2026-09-20 追加）。
+ *
+ * \details SecOC_PBCfg.c の ImmobilizerCmd エントリに
+ *          `VerificationStatusCallout` として登録される
+ *          （`VerificationStatusPropagationMode=BOTH` のため成功・失敗とも
+ *          都度呼ばれる）。`Rte_COMRxInd_SecureCommand()` と異なり、MAC/
+ *          フレッシュネス検証の成否に関わらず呼ばれる点が異なる（ただし
+ *          長さ不足・未登録 PDU 等、実際に `Csm_MacVerify()` へ進む前に
+ *          `SecOC_RxIndication()` が早期 return するケースは「検証の試行」
+ *          自体が発生していないため対象外。SecOC.c 参照）。検証成功時は
+ *          `Rte_COMRxInd_SecureCommand()` と合わせて2つの通知が届くことに
+ *          なるが、前者は「Com へ転送された事実」、こちらは「SecOC 自身の
+ *          検証結果そのもの」という別の関心事のため、重複ではなく意図的な
+ *          役割分担）。
+ *
+ *          この関数自体はログ出力のみを行う（侵入検知システム等への実際の
+ *          対応は本実装のスコープ外、`Rte_COMRxInd_SecureCommand()` と同じ
+ *          最小デモパターン）。can_tool 等で改ざん/リプレイされたフレームを
+ *          送ると、この通知から実際に検証結果を確認できる。
+ *
+ * \param[in]  status  検証結果（[SWS_SecOC_00160]）。
+ *
+ * \note    SecOC_PBCfg.c から extern 宣言経由で VerificationStatusCallout
+ *          として参照されるため non-static。Rte.h には公開しない（他の
+ *          Rte_COM* グループと同じ理由）。
+ *
+ * \AUTOSARReq     {SWS_SecOC_00119}
+ * 出典: 形式のみ（関数名は SecOCVerificationStatusCallout で設定する）。
+ */
+void Rte_SecOCVerificationStatus_ImmobilizerCmd(SecOC_VerificationStatusType status)
+{
+    switch (status.verificationStatus)
+    {
+    case SECOC_VERIFICATIONSUCCESS:
+        DET_LOGI(TAG, "SecOC VerificationStatus: dataId=0x%04X OK", (unsigned)status.secOCDataId);
+        break;
+    case SECOC_FRESHNESSFAILURE:
+        DET_LOGW(TAG, "SecOC VerificationStatus: dataId=0x%04X FRESHNESS_FAILURE (replay?)",
+                 (unsigned)status.secOCDataId);
+        break;
+    case SECOC_VERIFICATIONFAILURE:
+        DET_LOGW(TAG, "SecOC VerificationStatus: dataId=0x%04X FAILURE (MAC mismatch or crypto service error)",
+                 (unsigned)status.secOCDataId);
+        break;
+    default:
+        /* SECOC_AUTHENTICATIONBUILDFAILURE。本実装では未到達
+         * （SecOC_VerificationResultType 参照）。到達した場合も安全側で
+         * 汎用 FAILURE として扱う。 */
+        DET_LOGW(TAG, "SecOC VerificationStatus: dataId=0x%04X FAILURE (status=%u)",
+                 (unsigned)status.secOCDataId, (unsigned)status.verificationStatus);
+        break;
+    }
+}
+
+/* ======================================================================
+ * 本プロジェクト独自（AUTOSAR 仕様書に対応する関数なし）
+ * ====================================================================== */
+
+/* -----------------------------------------------------------------------
+ * RxIndicationCbk（Com_IPduConfigType）
+ *   I-PDU 単位の受信通知フック。E2E 検証や SecOC 検証済みの通知に使う。
+ * ----------------------------------------------------------------------- */
+
+/**
+ * \brief   EngineInfo (RX IPduId=0) フレーム受信の都度呼ばれる E2E Transformer フック。
+ *
+ * \details Com_PBCfg.c の RxIndicationCbk として登録される。
+ *          E2EXf_Inv_EngineInfo() が失敗した場合はミラーを更新せず、
+ *          前回の有効値をそのまま使い続けさせる。E2E チェックの生の結果は
+ *          `E2EMon_NotifyCheckResultP05()`（CDD 相当の独立モジュール、
+ *          src/Bsw/E2EMon/）へも通知する。これは実 AUTOSAR で言う
+ *          「ARXML で設定した OnDataReceived 通知フックが RTE から生成され、
+ *          独自 CDD の関数を呼ぶ」という接続方式を模したもの（本プロジェクトは
+ *          RTE ジェネレータが無いため Rte.c が手書きでこの呼び出しを担う）。
+ *          以前は E2E Profile01 だったが、CRC 検出能力を高めるため
+ *          Profile05(CRC16+8bitカウンタ、DLC=7) へ切り替えた。
+ *
+ * \note    Com_PBCfg.c から extern 宣言経由で RxIndicationCbk として
+ *          参照されるため non-static。Rte.h には公開しない（RTE の
+ *          公式 API ではなく、Com→Rte 間の内部グルーのため）。
+ *
+ * 出典: 本プロジェクト独自（AUTOSAR 仕様書に対応する関数なし。RxIndicationCbk）。
+ */
+void Rte_COMRxInd_EngineInfo(void)
+{
+    uint8 buf[7];
+    if (Com_ReceiveSignalGroupArray(0U, buf) != E_OK)
+    {
+        return;
+    }
+
+    E2E_P05StatusType checkStatus;
+    uint32 bufferLength;
+    const uint8 ret = E2EXf_Inv_EngineInfo(buf, &bufferLength, NULL, 0U, &checkStatus);
+    Rte_EngineInfoStatus = Rte_MapE2EStatusP05(checkStatus);
+    E2EMon_NotifyCheckResultP05(checkStatus);
+    /* ret==E_OK(0x00)は「SMState=VALID かつ今回のフレームも合格」を意味する
+     * ([SWS_E2EXf_00027]のニブルパック、E2EXf_Inv_EngineInfo()のコメント参照)。
+     * [SWS_E2E_00345]の"do NOT use data"規定により、SMがVALIDに確定するまで
+     * （起動直後のNODATA/INIT中を含む）はミラーを更新しない。 */
+    if (ret != E_OK)
+    {
+        return;
+    }
+
+    SchM_Enter_Rte_MIRROR_EXCLUSIVE_AREA();
+    (void)Com_ReceiveSignal(COM_SIGNAL_ENGINE_SPEED,   &Rte_EngineInfoMirror.speed);
+    (void)Com_ReceiveSignal(COM_SIGNAL_COOLANT_TEMP,   &Rte_EngineInfoMirror.temp);
+    (void)Com_ReceiveSignal(COM_SIGNAL_ENGINE_ON_FLAG, &Rte_EngineInfoMirror.onFlag);
+    SchM_Exit_Rte_MIRROR_EXCLUSIVE_AREA();
+}
+
+/**
+ * \brief   AbsInfo (RX IPduId=1) フレーム受信の都度呼ばれる E2E Transformer フック。
+ *
+ * \details Com_PBCfg.c の RxIndicationCbk として登録される。
+ *
+ *          AbsInfo は RX Signal Group（IsSignalGroup=1、Com_PBCfg.c 参照）
+ *          でもあるため、VehicleSpeed/BrakeActive/AbsActive を読む前に
+ *          Com_ReceiveSignalGroup(1U) で I-PDU バッファを RX シャドウバッファへ
+ *          確定コピーする（Com_ReceiveSignal() はこのグループのメンバーに
+ *          対して、Com_RxBuffer ではなくこのシャドウバッファを読む）。
+ *          この呼び出し自体はフレーム受信直後・Com_RxTimedOut リセット後に
+ *          同期的に実行されるため、実際にタイムアウト中でこの一貫性保証が
+ *          意味を持つ場面はない（既に E2E チェックを通過した新鮮なフレームの
+ *          直後であるため）。TMS/MDT/ComTransferProperty と同じく、動機は
+ *          実利より仕様忠実性（SWS_Com_00201/00051/00638 相当）。
+ *
+ * \note    Rte_COMRxInd_EngineInfo() と同じ理由で non-static。以前は E2E
+ *          Profile01 だったが、EngineInfo と同じ理由で Profile05
+ *          (CRC16+8bitカウンタ、DLC=6) へ切り替えた。
+ *
+ * 出典: 本プロジェクト独自（AUTOSAR 仕様書に対応する関数なし。RxIndicationCbk）。
+ */
+void Rte_COMRxInd_AbsInfo(void)
+{
+    uint8 buf[6];
+    if (Com_ReceiveSignalGroupArray(1U, buf) != E_OK)
+    {
+        return;
+    }
+
+    E2E_P05StatusType checkStatus;
+    uint32 bufferLength;
+    const uint8 ret = E2EXf_Inv_AbsInfo(buf, &bufferLength, NULL, 0U, &checkStatus);
+    Rte_AbsInfoStatus = Rte_MapE2EStatusP05(checkStatus);
+    E2EMon_NotifyCheckResultP05(checkStatus);
+    /* Rte_COMRxInd_EngineInfo() と同じ理由（[SWS_E2EXf_00027]のニブルパック、
+     * [SWS_E2E_00345]の"do NOT use data"規定）。 */
+    if (ret != E_OK)
+    {
+        return;
+    }
+
+    SchM_Enter_Rte_MIRROR_EXCLUSIVE_AREA();
+    (void)Com_ReceiveSignalGroup(1U);
+    (void)Com_ReceiveSignal(COM_SIGNAL_VEHICLE_SPEED, &Rte_AbsInfoMirror.speed);
+    (void)Com_ReceiveSignal(COM_SIGNAL_BRAKE_ACTIVE,  &Rte_AbsInfoMirror.brake);
+    (void)Com_ReceiveSignal(COM_SIGNAL_ABS_ACTIVE,    &Rte_AbsInfoMirror.abs);
+    SchM_Exit_Rte_MIRROR_EXCLUSIVE_AREA();
+}
+
+/**
+ * \brief   SecureCommand (RX IPduId=2) 受信の都度呼ばれる。
+ *
+ * \details Com_PBCfg.c の ImmobilizerCmd シグナル設定（RxIndicationCbk）から
+ *          登録される。呼ばれるのは SecOC（src/Bsw/SecOC/）が MAC・フレッシュ
+ *          ネス検証に成功し、`Com_RxIndication(2, ...)` を直接呼んだ直後のみ
+ *          （検証に失敗したデータは Com へ一切渡らないため、このコールバック
+ *          自体が呼ばれない。SecOC_RxIndication() 参照）。すなわちこのログが
+ *          出力されること自体が「認証済みコマンドである」ことを意味する。
+ *          `Rte_COMCbkTAck_EngineState()` と同じ理由で、ここで Serial 出力
+ *          （DET_LOGW）を直接行っても安全（この呼び出しチェーン
+ *          Can_MainFunction_Read → ... → SecOC_RxIndication →
+ *          Com_RxIndication → このコールバック、の間に割り込み禁止区間は
+ *          存在しない）。
+ *
+ *          この関数自体はログ出力のみを行う。ドア施錠制御等の実ハードウェア
+ *          反応は本実装のスコープ外（`Rte_COMCbkInv_CoolantTemp` 等と
+ *          同じ最小デモパターン。Com/SecOC/PduR のアーキテクチャ学習が主目的
+ *          のため、ASW 側の反応まで作り込むことはしない）。
+ *
+ * \note    Com_PBCfg.c から extern 宣言経由で RxIndicationCbk として
+ *          参照されるため non-static。Rte.h には公開しない（他の Rte_COM*
+ *          グルーと同じ理由）。
+ *
+ * 出典: 本プロジェクト独自（AUTOSAR 仕様書に対応する関数なし。RxIndicationCbk）。
+ */
+void Rte_COMRxInd_SecureCommand(void)
+{
+    uint8 cmd = 0U;
+    if (Com_ReceiveSignal(COM_SIGNAL_IMMOBILIZER_CMD, &cmd) != E_OK)
+    {
+        return;
+    }
+
+    if (cmd == 0x01U)
+    {
+        DET_LOGW(TAG, "ImmobilizerCmd: UNLOCK (authenticated via SecOC)");
+    }
+    else
+    {
+        DET_LOGW(TAG, "ImmobilizerCmd: LOCK (authenticated via SecOC)");
+    }
+}
+
+/* -----------------------------------------------------------------------
+ * TxTransformCbk（Com_IPduConfigType）
+ *   送信前の変換フック。E2E Profile05 の Protect を付加する。
+ * ----------------------------------------------------------------------- */
+
+/**
+ * \brief   E2EHealthStatus (TX IPduId=2) 送信直前に呼ばれる E2E Transformer フック。
+ *
+ * \details Com_PBCfg.c の TxTransformCbk として登録される。COM_TX_MODE_PERIODIC
+ *          のため、Com_MainFunctionTx() が自分の周期タイマで送信を決定した際に
+ *          このフックが呼ばれる（DIRECT/MIXED I-PDU のイベント駆動送信と
+ *          同じ「送信直前の最終変換」の仕組みをそのまま再利用している）。
+ *          実 TX バッファへ Counter・CRC16 を書き込む（E2E Profile05、
+ *          以前は Profile01+SecOC の二重保護だったが SecOC は撤去済み）。
+ *          E2EMon（CDD 相当）は Com_SendSignal() で値をセットするだけで、
+ *          この E2E 保護の存在自体を一切知らない（MeterStatus における
+ *          App_EngineManager と同じ関係）。
+ *
+ * \note    Rte_COMRxInd_EngineInfo() と同じ理由で non-static。
+ *
+ * 出典: 本プロジェクト独自（AUTOSAR 仕様書に対応する関数なし。TxTransformCbk）。
+ */
+void Rte_COMTransform_E2EHealthStatus(uint8* Data, uint8 Length)
+{
+    (void)Length;  /* E2EXf_E2EHealthStatus() は固定長PDU用にDataLengthを内部で保持するため未使用 */
+    /* E2EXf_E2EHealthStatus() の戻り値は現状の起動順序（EcuM_Init() が
+     * E2EXf_PBCfg_Init() を Com_MainFunctionTx() 呼び出しより前に完了させる）
+     * では E_SAFETY_HARD_RUNTIMEERROR を観測していないが、TxTransformCbk
+     * 自体の型が void のまま（Com_Types.h 参照）で受け渡す経路が無いため、
+     * ここで破棄する（/code-review 指摘: 起動順序が将来変わった場合の
+     * 再検証はこの破棄では検知できない点に注意）。 */
+    uint32 bufferLength;
+    (void)E2EXf_E2EHealthStatus(Data, &bufferLength, NULL, 0U);
+}
+
+/* -----------------------------------------------------------------------
+ * FilterRejectCbk（Com_SignalConfigType）
+ *   ComFilterAlgorithm（NEW_IS_WITHIN）が受信値を棄却したときの通知。
+ * ----------------------------------------------------------------------- */
+
+/**
+ * \brief   EngineSpeed が受信フィルタ（NEW_IS_WITHIN、[0,8000]rpm）で
+ *          範囲外と判定され、破棄されたことを通知する。
+ *
+ * \details Com_PBCfg.c の EngineSpeed シグナル設定（FilterAlgorithm=
+ *          COM_FILTER_NEW_IS_WITHIN）から FilterRejectCbk として登録される
+ *          （実 AUTOSAR の ComNotification 相当）。Com_ReceiveSignal(
+ *          COM_SIGNAL_ENGINE_SPEED, ...) が範囲外の値を検知した「次回」の
+ *          Com_MainFunctionRx() から呼ばれる（SWS_Com_00273。Rte_COMCbkInv_
+ *          CoolantTemp と同じ理由で同期呼び出しにしていない。Com.c の
+ *          Com_RxFilterRejectPending 宣言コメント参照）。この関数自体は
+ *          「異常が起きたことをログへ残す」以上のことは行わない。
+ *
+ * \note    Com_PBCfg.c から extern 宣言経由で FilterRejectCbk として
+ *          参照されるため non-static。Rte.h には公開しない（他の Rte_COM*
+ *          グルーと同じ理由）。
+ *
+ * 出典: 本プロジェクト独自（AUTOSAR 仕様書に対応する関数なし。FilterRejectCbk）。
+ */
+void Rte_COMFilterReject_EngineSpeed(void)
+{
+    DET_LOGW(TAG, "EngineSpeed out of plausible range, rejected by RX filter (kept last valid value)");
+}
+
+/* -----------------------------------------------------------------------
+ * Rte_SendSignalGroup_<sg>
+ *   TX Signal Group のコミット（Com_SendSignalGroup へ委譲）。
+ * ----------------------------------------------------------------------- */
+
+/**
+ * \brief   WarningStatus Signal Group をシャドウバッファから確定コミットする。
+ *
+ * \details Com_SendSignalGroup() をラップし、SW-C (App_WarningIndicator) が
+ *          COM の I-PDU ID を意識せずに Signal Group をコミットできるようにする
+ *          (AUTOSAR 非標準 API)。RunLamp/FaultLamp/AbsLamp すべてを
+ *          Rte_Write_WarningStatus_*() で設定した後に呼び出すこと。
+ *          WarningStatus は TxModeMode=DIRECT のため、このコミットで変化が
+ *          検知されれば次回 Com_MainFunctionTx() で送信される（呼び出し元が
+ *          別途送信をトリガする必要はなく、この呼び出し自体は
+ *          PduR_ComTransmit() を呼ばないため、SPI 送信でブロッキングしない）。
+ *
+ * \retval  E_OK      COM の実 TX バッファへ正常にコミットした。
+ * \retval  E_NOT_OK  COM 未初期化、または WarningStatus の I-PDU ID が
+ *                    見つからない。
+ *
+ * \pre        Com_Init() が正常に完了していること。
+ *
+ * \ServiceID      {0xE3}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
+ *
+ * 出典: 本プロジェクト独自（AUTOSAR 仕様書に対応する関数なし。Signal Group のコミット）。
  */
-Std_ReturnType Rte_Stop(void)
+Std_ReturnType Rte_SendSignalGroup_WarningStatus(void)
 {
-    DET_LOGI(TAG, "Stop ok");
+    return Com_SendSignalGroup(1U);
+}
+
+/* -----------------------------------------------------------------------
+ * Rte_IoControl_Lamp_*
+ *   UDS 0x2F のランプ制御の調停（Rte_Lamp_* ヘルパ経由）。
+ * ----------------------------------------------------------------------- */
+
+/**
+ * \brief   診断制御 (Dcm SID 0x2F) を解除し、ASW に制御を返す。
+ *
+ * \details オーバーライドフラグを下ろすのみ。ASW (App_WarningIndicator) が
+ *          次回 Runnable 実行時 (最大 500ms 後) に自身の計算値を再度出力する。
+ *
+ * \param[in]  lamp  対象ランプ。
+ *
+ * \retval  E_OK      正常に解除した。
+ * \retval  E_NOT_OK  lamp が範囲外。
+ *
+ * \note       AUTOSAR 非標準 API 名。実際の AUTOSAR では DcmDspDidControl の
+ *             ReturnControlToEcuFnc として RTE が生成する関数に相当する。
+ *
+ * \ServiceID      {0xE4}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ *
+ * 出典: 本プロジェクト独自（AUTOSAR 仕様書に対応する関数なし。IOControl のランプ調停）。
+ */
+Std_ReturnType Rte_IoControl_Lamp_ReturnControlToEcu(Rte_LampIdType lamp)
+{
+    if (lamp >= RTE_LAMP_COUNT)
+    {
+        return E_NOT_OK;
+    }
+    Rte_LampOverrideActive[lamp] = 0U;
     return E_OK;
 }
+
+/**
+ * \brief   診断制御でランプをデフォルト値 (消灯) に固定する。
+ *
+ * \details returnControlToEcu が呼ばれるまで、ASW の要求値は無視され続ける。
+ *
+ * \param[in]  lamp  対象ランプ。
+ *
+ * \retval  E_OK      正常に固定した。
+ * \retval  E_NOT_OK  lamp が範囲外。
+ *
+ * \note       AUTOSAR 非標準 API 名。ResetToDefaultFnc に相当。
+ *
+ * \ServiceID      {0xE5}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ *
+ * 出典: 本プロジェクト独自（AUTOSAR 仕様書に対応する関数なし。IOControl のランプ調停）。
+ */
+Std_ReturnType Rte_IoControl_Lamp_ResetToDefault(Rte_LampIdType lamp)
+{
+    if (lamp >= RTE_LAMP_COUNT)
+    {
+        return E_NOT_OK;
+    }
+    return Rte_Lamp_ForceAndWrite(lamp, 0U);
+}
+
+/**
+ * \brief   現在の物理出力値のままランプを固定する。
+ *
+ * \details Rte_LampLastLevel（直前に実際に IoHwAb へ出力された値）を
+ *          そのままオーバーライド値として採用する。
+ *
+ * \param[in]  lamp  対象ランプ。
+ *
+ * \retval  E_OK      正常に固定した。
+ * \retval  E_NOT_OK  lamp が範囲外。
+ *
+ * \note       AUTOSAR 非標準 API 名。FreezeCurrentStateFnc に相当。
+ *
+ * \ServiceID      {0xE6}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ *
+ * 出典: 本プロジェクト独自（AUTOSAR 仕様書に対応する関数なし。IOControl のランプ調停）。
+ */
+Std_ReturnType Rte_IoControl_Lamp_FreezeCurrentState(Rte_LampIdType lamp)
+{
+    if (lamp >= RTE_LAMP_COUNT)
+    {
+        return E_NOT_OK;
+    }
+    Rte_LampOverrideValue[lamp]  = Rte_LampLastLevel[lamp];
+    Rte_LampOverrideActive[lamp] = 1U;
+    return E_OK;
+}
+
+/**
+ * \brief   診断制御でランプを指定レベルに固定する。
+ *
+ * \param[in]  lamp   対象ランプ。
+ * \param[in]  level  固定する出力レベル (0/1)。
+ *
+ * \retval  E_OK      正常に固定した。
+ * \retval  E_NOT_OK  lamp が範囲外。
+ *
+ * \note       AUTOSAR 非標準 API 名。ShortTermAdjustmentFnc に相当。
+ *
+ * \ServiceID      {0xE7}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ *
+ * 出典: 本プロジェクト独自（AUTOSAR 仕様書に対応する関数なし。IOControl のランプ調停）。
+ */
+Std_ReturnType Rte_IoControl_Lamp_ShortTermAdjustment(Rte_LampIdType lamp, uint8 level)
+{
+    if (lamp >= RTE_LAMP_COUNT)
+    {
+        return E_NOT_OK;
+    }
+    return Rte_Lamp_ForceAndWrite(lamp, level);
+}
+
+/**
+ * \brief   現在 IoHwAb へ出力されている実際のレベルを取得する。
+ *
+ * \details Dcm が SID 0x2F の正応答 (controlStatusRecord) を構築するために使う。
+ *
+ * \param[in]   lamp   対象ランプ。
+ * \param[out]  level  出力レベルの格納先。NULL 禁止。
+ *
+ * \retval  E_OK      正常に取得した。
+ * \retval  E_NOT_OK  lamp が範囲外、または level が NULL。
+ *
+ * \ServiceID      {0xE8}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ *
+ * 出典: 本プロジェクト独自（AUTOSAR 仕様書に対応する関数なし。IOControl のランプ調停）。
+ */
+Std_ReturnType Rte_IoControl_Lamp_GetCurrentLevel(Rte_LampIdType lamp, uint8* level)
+{
+    if ((lamp >= RTE_LAMP_COUNT) || (level == NULL))
+    {
+        return E_NOT_OK;
+    }
+    *level = Rte_LampLastLevel[lamp];
+    return E_OK;
+}
+
+/* -----------------------------------------------------------------------
+ * Rte_Schedule*
+ *   Os タスクの代わりに SW-C の Runnable を起動するスタンドイン。
+ * ----------------------------------------------------------------------- */
+
+/**
+ * \brief   マッピングされた SW-C Runnable を起動する。
+ *
+ * \details OS タスク (Task 2, 3000 ms 周期) から呼び出される。
+ *          実行周期の管理は Os_PBCfg.c のタスクテーブルが担うため、
+ *          この関数は App_EngineManager_Run() を無条件に呼び出すだけでよい。
+ *
+ *          AUTOSAR OS 環境では OsTask が直接 Runnable を呼び出すが、
+ *          本実装では RTE が仲介することで SW-C と OS の直接依存を断つ。
+ *
+ * \pre        App_EngineManager_Init() が正常に完了していること。
+ *
+ * \ServiceID      {0xF7}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ *
+ * 出典: 本プロジェクト独自（AUTOSAR 仕様書に対応する関数なし。Runnable 起動のスタンドイン）。
+ */
+void Rte_ScheduleRunnables(void)
+{
+    App_EngineManager_Run();
+}
+
+/**
+ * \brief   WarningIndicator SW-C の Runnable を起動する。
+ *
+ * \details OS タスク (Task 3, 500 ms 周期) から呼び出される。
+ *          App_WarningIndicator_Run() を無条件に呼び出す。
+ *
+ * \pre        App_WarningIndicator_Init() が正常に完了していること。
+ *
+ * \ServiceID      {0xFA}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ *
+ * 出典: 本プロジェクト独自（AUTOSAR 仕様書に対応する関数なし。Runnable 起動のスタンドイン）。
+ */
+void Rte_ScheduleWarningIndicator(void)
+{
+    App_WarningIndicator_Run();
+}
+

@@ -33,7 +33,7 @@ Transformer を持つ Read ポートは `Std_ReturnType` ではなく `Rte_IStat
 | `Rte_COMCbkRxTOut_EngineOnFlag()` / `Rte_COMCbkRxTOut_AbsInfo()` | `RxTOutCbk` | 受信デッドライン超過通知 |
 | `Rte_COMCbkTAck_EngineState()` / `Rte_COMCbkTAck_WarningStatus()` | `TxAckCbk` | 送信確認通知 |
 | `Rte_COMCbkTxTOut_EngineState()` / `Rte_COMCbkTxTOut_WarningStatus()` | `TxTOutCbk` | 送信確認タイムアウト通知 |
-| `Rte_COMInvalidNotify_CoolantTemp()` | `InvalidNotificationCbk` | 無効値受信通知 |
+| `Rte_COMCbkInv_CoolantTemp()` | `InvalidNotificationCbk` | 無効値受信通知 |
 | `Rte_COMFilterReject_EngineSpeed()` | `FilterRejectCbk` | フィルタで棄却されたことの通知 |
 | `Rte_COMTransform_E2EHealthStatus()` | `TxTransformCbk` | 送信前に E2E Profile05 を付加（E2EHealthStatus） |
 | `Rte_SecOCVerificationStatus_ImmobilizerCmd()` | SecOC の `VerificationStatusCallout` | SecOC の検証結果通知（[`SecOC_Notes.md`](./SecOC_Notes.md)） |
@@ -41,3 +41,22 @@ Transformer を持つ Read ポートは `Std_ReturnType` ではなく `Rte_IStat
 これらは Rte.h には公開せず（`Rte_Cbk.h` に宣言）、Com 設定テーブルからのみ参照されます。
 ミラー変数へのアクセスは `SchM_Enter/Exit_Rte_MIRROR_EXCLUSIVE_AREA()` で保護しています
 （Com の受信割り込み後処理と Runnable の読み出しが競合するため）。
+
+## ソースの並び（仕様書の章節順）
+
+`Rte.h`・`Rte.c`・`Rte_Cbk.h` は、同じ並びで、AUTOSAR 仕様書の章節番号順に関数を置いています
+（仕様書と突き合わせやすくするため）。型ごとに帯（区切りコメント）を置き、帯には仕様書の型・節番号・
+SWS 項番だけを書きます（`<p>`/`<o>`/`<sn>`/`<sg>` を含む型は、使う信号・ポートによって関数の数が変わる
+ため、実装済みの関数名は帯に書かず、帯の下の宣言・定義を見ます。型そのものが未実装の場合だけ帯に明記します）。
+各関数の Doxygen には、`\AUTOSARReq`（仕様書に名前がある場合）か「出典:」（形式だけ、または独自の場合）を
+書いています。
+
+| 順 | 仕様書 | 内容 |
+|----|--------|------|
+| 1 | （内部） | static ヘルパ（ランプ出力の調停。`Rte.c` のみ） |
+| 2 | RTE 5.6.4 / 5.6.7 / 5.6.10 / 5.6.13 | `Rte_Write_*` / `Rte_Invalidate_*` / `Rte_Read_*` / `Rte_Call_*` |
+| 3 | RTE 5.8.1 / 5.8.2 / 5.8.6 | `Rte_Start` / `Rte_Stop` / `Rte_Init_*` |
+| 4 | RTE 5.9.2.1.1〜12 | COM コールバック（`<sn>` が 1〜6、`<sg>` が 7〜12。未実装の型は帯のみ） |
+| 5 | COM 8.6.3.2 | `Com_RxIpduCallout` / `Com_TxIpduCallout` に当たる関数 |
+| 6 | SecOC 8.7.3.1 | `SecOC_VerificationStatusCallout` に当たる関数 |
+| 7 | （独自） | `Rte_COMRxInd_*`、`Rte_COMTransform_*`、`Rte_COMFilterReject_*`、`Rte_SendSignalGroup_*`、`Rte_IoControl_Lamp_*`、`Rte_Schedule*` |
