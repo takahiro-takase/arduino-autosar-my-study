@@ -140,6 +140,9 @@ const PduR_PBConfigType kTestPduRConfig = {
  * Test Fixture
  * ====================================================================== */
 
+/* Dcm の ActiveDiagnostic / InactiveDiagnostic 通知と、SILENT_COM からのウェイクアップ（FULL_COM への復帰）のコールチェーンのテスト用フィクスチャ。
+ * SetUp(): 模擬 Can_Hw・EcuM と wrap をリセットし、Can_Init() → CanIf_Init() → PduR_Init() → CanSM_Init(NULL) → ComM_Init(NULL)（通信を許可）→ CanNm_Init(NULL) → Nm_Init(NULL) → CanTp_Init(NULL) → Dem_Init(NULL) → Dcm_Init(NULL) の順に初期化したうえで、FULL_COM を要求して CanNm を Normal Operation State まで進め、ComM の wrap を戻す。DriveToSilentCom() は、NO_COM を要求して SILENT_COM（Prepare Bus-Sleep Mode）まで進める補助関数。
+ * TearDown(): CanNm・ComM・CanSM・CanIf を未初期化へ戻す。 */
 class Bsw_DcmStack_ActiveDiagnosticWake_Test : public ::testing::Test
 {
 protected:

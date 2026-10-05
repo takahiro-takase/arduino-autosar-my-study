@@ -197,6 +197,9 @@ const E2E_P05ConfigType kRefE2EHealthStatusCfg = {
  * Test Fixture
  * ====================================================================== */
 
+/* E2E Profile05 の送信保護（Com_MainFunctionTx → E2E Transformer → E2E_P05Protect → CAN 送信）のコールチェーンのテスト用フィクスチャ。
+ * SetUp(): 模擬 Can_Hw と wrap をリセットし、Can_Init() → CanIf_Init(&kTestCanIfConfig)（STARTED・ONLINE）→ PduR_Init() → Com_Init(&kTestComConfig) → E2EXf_PBCfg_Init() の順に初期化する（Init 中の DET ログは抑制する）。
+ * TearDown(): E2EXf_DeInit()・Com_DeInit()・CanIf_DeInit() で未初期化へ戻す。 */
 class Bsw_ComStack_E2E_Tx_Protect_Test : public ::testing::Test
 {
 protected:

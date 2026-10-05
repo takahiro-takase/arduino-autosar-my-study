@@ -226,6 +226,9 @@ const Com_ConfigType kTestComConfig = {
  * Test Fixture
  * ====================================================================== */
 
+/* Signal Group の受信（確認通知・デッドライン監視）のコールチェーンのテストで共通のフィクスチャ（シナリオごとの派生クラスの基底）。
+ * SetUp(): 時刻を初期化し、Com_Init(&kTestComConfig) を呼んで、確認通知・デッドライン超過のコールバックの呼び出し回数を初期化する（Init 中の DET ログは抑制する）。ReceiveOnceGroup() などは、I-PDU を 1 回受信させる補助関数。
+ * TearDown(): Com_DeInit() で未初期化へ戻す。 */
 class Bsw_ComStack_SignalGroup_Rx_Base : public ::testing::Test
 {
 protected:
@@ -268,7 +271,9 @@ protected:
 };
 
 // シナリオごとのフィクスチャ（共通の準備は Bsw_ComStack_SignalGroup_Rx_Base）
+/* 受信確認通知（Com_CbkRxAck）のグループ単位の発火（SWS_Com_00555）。 */
 class Bsw_ComStack_SignalGroup_Rx_GroupAck_Test : public Bsw_ComStack_SignalGroup_Rx_Base {};
+/* 受信デッドライン監視（Com_CbkRxTOut）のグループ単位の発火（SWS_Com_00536 / 00556）。 */
 class Bsw_ComStack_SignalGroup_Rx_GroupRxTOut_Test : public Bsw_ComStack_SignalGroup_Rx_Base {};
 
 /* ======================================================================
@@ -591,6 +596,9 @@ const Com_ConfigType kTestRxIpduGroupConfig = {
  * Test Fixture
  * ====================================================================== */
 
+/* I-PDU Group の開始・停止と受信デッドライン監視（Signal Group と通常シグナルの両方）のコールチェーンのテストで共通のフィクスチャ（シナリオごとの派生クラスの基底）。
+ * SetUp(): 時刻を初期化し、I-PDU Group 用の設定（kTestRxIpduGroupConfig）で Com_Init() を呼んで、デッドライン超過のコールバックの呼び出し回数を初期化する。ReceiveOnceNonGroup() は、通常シグナルの I-PDU を 1 回受信させる補助関数。
+ * TearDown(): Com_DeInit() で未初期化へ戻す。 */
 class Bsw_ComStack_SignalGroup_RxIpduGroup_Base : public ::testing::Test
 {
 protected:
@@ -620,8 +628,11 @@ protected:
 };
 
 // シナリオごとのフィクスチャ（共通の準備は Bsw_ComStack_SignalGroup_RxIpduGroup_Base）
+/* Com_IpduGroupStart / Com_IpduGroupStop による、受信監視の開始と停止。 */
 class Bsw_ComStack_SignalGroup_RxIpduGroup_IpduGroupStartStop_Test : public Bsw_ComStack_SignalGroup_RxIpduGroup_Base {};
+/* 停止中のグループに対する Com_ReceiveSignalGroup / Com_ReceiveSignalGroupArray（COM_SERVICE_NOT_AVAILABLE）。 */
 class Bsw_ComStack_SignalGroup_RxIpduGroup_ReceiveWhileStopped_Test : public Bsw_ComStack_SignalGroup_RxIpduGroup_Base {};
+/* Com_EnableReceptionDM / Com_DisableReceptionDM による、受信デッドライン監視の有効・無効。 */
 class Bsw_ComStack_SignalGroup_RxIpduGroup_ReceptionDM_Test : public Bsw_ComStack_SignalGroup_RxIpduGroup_Base {};
 
 // ------------------------------------------------------------

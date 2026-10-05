@@ -110,6 +110,9 @@ const CanIf_ConfigType kTestCanIfConfig = {
  * Test Fixture
  * ====================================================================== */
 
+/* ウェイクアップ検出と検証（Can_MainFunction_Wakeup → EcuM_CheckWakeup → CanSM → … → FULL_COM）のコールチェーンのテストで共通のフィクスチャ（シナリオごとの派生クラスの基底）。
+ * SetUp(): 模擬 Can_Hw・EcuM と wrap をリセットし、Dem_Init(NULL)・Can_Init()（直後は STOPPED）・CanIf_Init(&kTestCanIfConfig)・CanSM_Init(NULL)・ComM_Init(NULL)・CanNm_Init(NULL)・Nm_Init(NULL) の順に初期化したうえで、コントローラを SLEEP にする（スリープ済みの状態から始める）。CurrentComMode() は ComM が把握しているチャネルモードを返す補助関数、ArrangeValidating() は検証開始（WAKEUP_VALIDATING）の状態を用意する補助関数。
+ * TearDown(): CanNm・ComM・CanSM・CanIf を未初期化へ戻す。 */
 class Bsw_NmStack_Wakeup_Base : public ::testing::Test
 {
 protected:
@@ -187,6 +190,7 @@ protected:
 };
 
 // シナリオごとのフィクスチャ（共通の準備は Bsw_NmStack_Wakeup_Base）
+/* ウェイクアップの検出から検証（FULL_COM への確定、または黙って再スリープ）まで。 */
 class Bsw_NmStack_Wakeup_WakeupValidation_Test : public Bsw_NmStack_Wakeup_Base {};
 
 /* ======================================================================

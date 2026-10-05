@@ -118,6 +118,9 @@ const PduR_PBConfigType kTestPduRConfig = {
  * Test Fixture
  * ====================================================================== */
 
+/* SID 0x11 ECUReset のコールチェーンのテスト用フィクスチャ。CAN の受信（0x7E0）から応答の送信（0x7E8）と、応答後の MCU リセット要求までを通して確認する。
+ * SetUp(): 模擬 Can_Hw・模擬 Mcu_Hw と wrap をリセットし、Can_Init() → CanIf_Init(&kTestCanIfConfig)（コントローラを STARTED、PDU を ONLINE にする）→ PduR_Init() → CanSM_Init(NULL)（CanIf_RxIndication() が呼ぶため）→ CanTp_Init(NULL) → Dem_Init(NULL) → Dcm_Init(NULL) の順に初期化する。このうち Dem_Init(NULL) と Dcm_Init(NULL) の間で Mcu_Init() も呼ぶ（Mcu_PerformReset() が未初期化の MCU_E_UNINIT を報告しないようにするため）。
+ * TearDown(): CanSM_DeInit() と CanIf_DeInit() で未初期化へ戻す。 */
 class Bsw_DcmStack_SID11_EcuReset_Test : public ::testing::Test
 {
 protected:

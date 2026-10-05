@@ -116,6 +116,9 @@ const PduR_PBConfigType kTestPduRConfig = {
  * Test Fixture
  * ====================================================================== */
 
+/* SID 0x3E TesterPresent のコールチェーンのテスト用フィクスチャ。CAN の受信（0x7E0）から応答の送信（0x7E8）までを実際に通して確認する。
+ * SetUp(): 模擬 Can_Hw と wrap をリセットし、Can_Init() → CanIf_Init(&kTestCanIfConfig)（コントローラを STARTED、PDU を ONLINE にする）→ PduR_Init() → CanSM_Init(NULL)（CanIf_RxIndication() が呼ぶため）→ CanTp_Init(NULL) → Dem_Init(NULL) → Dcm_Init(NULL) の順に初期化する。
+ * TearDown(): CanSM_DeInit() と CanIf_DeInit() で未初期化へ戻す。 */
 class Bsw_DcmStack_SID3E_TesterPresent_Test : public ::testing::Test
 {
 protected:
