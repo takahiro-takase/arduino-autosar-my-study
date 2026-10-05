@@ -330,6 +330,9 @@ const CanIf_ConfigType kTestCanIfConfig = {
  * Test Fixture
  * ====================================================================== */
 
+/* 通常シグナル（Signal Group でない）の送信のコールチェーン（Com_SendSignal → Com_MainFunctionTx → PduR → CanIf → Can_Write → Can_MainFunction_Write）のテストで共通のフィクスチャ（シナリオごとの派生クラスの基底）。
+ * SetUp(): 時刻と模擬 Can_Hw、wrap をリセットし、Can_Init() → CanIf_Init(&kTestCanIfConfig)（STARTED・ONLINE にする）→ PduR_Init() → Com_Init(&kTestComConfig) の順に初期化して、コールバックの記録を初期化する（Init 中の DET ログは抑制する）。
+ * TearDown(): Com_DeInit() と CanIf_DeInit() で未初期化へ戻す。 */
 class Bsw_ComStack_Signal_Tx_Base : public ::testing::Test
 {
 protected:
@@ -387,12 +390,19 @@ protected:
 };
 
 // シナリオごとのフィクスチャ（共通の準備は Bsw_ComStack_Signal_Tx_Base）
+/* シグナル送信から送信確認通知まで（Com_SendSignal → Com_MainFunctionTx → Can_MainFunction_Write）の通しのシナリオ。 */
 class Bsw_ComStack_Signal_Tx_SendToConfirm_Test : public Bsw_ComStack_Signal_Tx_Base {};
+/* ComTxModeNumberOfRepetitions（SWS_Com_00305）による、送信後の自動リピート。 */
 class Bsw_ComStack_Signal_Tx_Repetition_Test : public Bsw_ComStack_Signal_Tx_Base {};
+/* Com_TxIpduCallout（SWS_Com_00346）による、送信の可否判断。 */
 class Bsw_ComStack_Signal_Tx_TxIpduCallout_Test : public Bsw_ComStack_Signal_Tx_Base {};
+/* 送信デッドライン監視（Com_CbkTxTOut、SWS_Com_00878）。 */
 class Bsw_ComStack_Signal_Tx_TxTOut_Test : public Bsw_ComStack_Signal_Tx_Base {};
+/* Com_InvalidateSignal（SWS_Com_00099）による、無効値の書き込み。 */
 class Bsw_ComStack_Signal_Tx_InvalidateSignal_Test : public Bsw_ComStack_Signal_Tx_Base {};
+/* 非 Signal Group のシグナルによる TMS の遷移時の、即時送信（SWS_Com_00495）。 */
 class Bsw_ComStack_Signal_Tx_NonGroupTmsTransition_Test : public Bsw_ComStack_Signal_Tx_Base {};
+/* Com_TriggerIPDUSend（SWS_Com_00861 / 00388）による、送信の強制。 */
 class Bsw_ComStack_Signal_Tx_TriggerIPDUSend_Test : public Bsw_ComStack_Signal_Tx_Base {};
 
 /* ======================================================================
@@ -1203,6 +1213,8 @@ const Com_ConfigType kTestComConfig = {
     /* GwMappingCount */ 0U
 };
 
+/* Com_SwitchIpduTxMode / Com_TriggerIPDUSend が実効 TxModeMode を PERIODIC へ遷移させるときの、周期タイマの再始動（[SWS_Com_00244]）のテスト用フィクスチャ。
+ * IsolatedComTxFixtureBase に、この名前空間にある最小の Com 設定（kTestComConfig）を渡す。 */
 class Bsw_ComStack_Signal_Tx_SwitchIpduTxModePeriodic_Test : public IsolatedComTxFixtureBase
 {
 protected:
@@ -1282,6 +1294,8 @@ const Com_ConfigType kTestComConfig = {
     /* GwMappingCount */ 0U
 };
 
+/* 周期送信（PERIODIC）の I-PDU に対する Com_TriggerIPDUSend（SWS_Com_00861）が、MDT の経過後は周期の途中でも送信を発火し、周期が経過していない場合はトリガー無しでは発火しないことのテスト用フィクスチャ。
+ * IsolatedComTxFixtureBase に、この名前空間にある最小の Com 設定（kTestComConfig）を渡す。 */
 class Bsw_ComStack_Signal_Tx_TriggerIPDUSendPeriodic_Test : public IsolatedComTxFixtureBase
 {
 protected:

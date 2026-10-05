@@ -2015,7 +2015,13 @@
    "sources": [
     "src/Bsw/E2E/E2E.c",
     "src/Bsw/E2E/E2E_P01.c",
-    "src/Bsw/E2E/E2E_P05.c"
+    "src/Bsw/E2E/E2E_P05.c",
+        "src/Bsw/E2E/E2E_P02.c",
+        "src/Bsw/E2E/E2E_P04.c",
+        "src/Bsw/E2E/E2E_P06.c",
+        "src/Bsw/E2E/E2E_P07.c",
+        "src/Bsw/E2E/E2E_P11.c",
+        "src/Bsw/E2E/E2E_P22.c"
    ],
    "apis": [
     {

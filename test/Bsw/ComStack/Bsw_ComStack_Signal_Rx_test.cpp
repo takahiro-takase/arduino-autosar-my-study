@@ -328,6 +328,9 @@ const CanIf_ConfigType kTestCanIfRxConfig = {
  * Test Fixture
  * ====================================================================== */
 
+/* 通常シグナル（Signal Group でない）の受信のコールチェーン（Can_MainFunction_Read → CanIf → PduR → Com）のテストで共通のフィクスチャ（シナリオごとの派生クラスの基底）。
+ * SetUp(): 模擬 Can_Hw と wrap をリセットし、Can_Init() → CanIf_Init(&kTestCanIfRxConfig) → コントローラを STARTED → PduR_Init() → Com_Init(&kTestComRxConfig) → CanSM_Init(NULL)（CanIf_RxIndication() が呼ぶため）の順に初期化し、コールバックの記録を初期化する（Init 中の DET ログは抑制する）。
+ * TearDown(): CanSM・Com・CanIf を未初期化へ戻す。 */
 class Bsw_ComStack_Signal_Rx_Base : public ::testing::Test
 {
 protected:
@@ -380,10 +383,15 @@ protected:
 };
 
 // シナリオごとのフィクスチャ（共通の準備は Bsw_ComStack_Signal_Rx_Base）
+/* 受信から読み出しまで（Can_MainFunction_Read → … → Com_RxIndication → Com_ReceiveSignal）の通しのシナリオ。 */
 class Bsw_ComStack_Signal_Rx_ReceiveToRead_Test : public Bsw_ComStack_Signal_Rx_Base {};
+/* CanIf_ReadRxPduData（SWS_CANIF_00194）による、受信データの読み出し。 */
 class Bsw_ComStack_Signal_Rx_CanIfReadRxPduData_Test : public Bsw_ComStack_Signal_Rx_Base {};
+/* CanIf_Init が、RX PDU 数の上限を超えた設定を拒否すること。 */
 class Bsw_ComStack_Signal_Rx_CanIfInit_Test : public Bsw_ComStack_Signal_Rx_Base {};
+/* Com_RxIpduCallout（SWS_Com_00700 / 00816）による、受信の可否判断。 */
 class Bsw_ComStack_Signal_Rx_RxIpduCallout_Test : public Bsw_ComStack_Signal_Rx_Base {};
+/* 受信確認通知（Com_CbkRxAck、SWS_Com_00555）。 */
 class Bsw_ComStack_Signal_Rx_RxAck_Test : public Bsw_ComStack_Signal_Rx_Base {};
 
 /* ======================================================================
@@ -950,6 +958,9 @@ const Com_ConfigType kTestComRxTimeoutConfig = {
  * Test Fixture
  * ====================================================================== */
 
+/* 受信デッドライン監視（Com_MainFunctionRx → Com_ReceiveSignal）のテスト用フィクスチャ。Com.c の中で完結し、PduR / CanIf / Can は経由しない。
+ * SetUp(): 時刻を初期化し、専用の最小設定（kTestComRxTimeoutConfig）で Com_Init() を呼んで、コールバックの記録を初期化する（Init 中の DET ログは抑制する）。ReceiveOnce() は、I-PDU を 1 回受信させる補助関数。
+ * TearDown(): Com_DeInit() で未初期化へ戻す。 */
 class Bsw_ComStack_Signal_Rx_Timeout_Test : public ::testing::Test
 {
 protected:

@@ -143,6 +143,9 @@ const PduR_PBConfigType kTestPduRConfig = {
  * Test Fixture
  * ====================================================================== */
 
+/* CanTp が本当にビジー（多フレーム送信の途中）のときの Dcm の動作（S3 タイマの扱い、新規要求の受け付け）のコールチェーンのテスト用フィクスチャ。
+ * SetUp(): 模擬 Can_Hw と wrap をリセットし、Can_Init() → CanIf_Init(&kTestCanIfConfig)（コントローラを STARTED、PDU を ONLINE にする）→ PduR_Init() → CanSM_Init(NULL)（CanIf_RxIndication() が呼ぶため）→ CanTp_Init(NULL) → Dem_Init(NULL) → Dcm_Init(NULL) の順に初期化する。続けて、実際に CAN の受信で extendedSession へ遷移しておく。EnterExtendedSession() は extendedSession へ遷移させる補助関数、StartRealMultiFrameTransferAndLeaveCanTpBusy() は実際の多フレーム送信を始めて CanTp をビジーにする補助関数、FinishRealMultiFrameTransfer() はその送信を終わらせる補助関数。
+ * TearDown(): CanSM_DeInit() と CanIf_DeInit() で未初期化へ戻す。 */
 class Bsw_DcmStack_CanTpBusy_Test : public ::testing::Test
 {
 protected:

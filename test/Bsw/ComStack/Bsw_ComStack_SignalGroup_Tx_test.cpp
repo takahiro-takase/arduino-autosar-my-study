@@ -288,6 +288,9 @@ const Com_ConfigType kTestComConfig = {
  * Test Fixture
  * ====================================================================== */
 
+/* Signal Group の送信（TMS、Com_SendSignalGroupArray、確認通知、デッドライン監視など）のコールチェーンのテストで共通のフィクスチャ（シナリオごとの派生クラスの基底）。
+ * SetUp(): 時刻を初期化し、Com_Init(&kTestComConfig) を呼んで、確認通知・送信エラー・デッドライン超過のコールバックの呼び出し回数を初期化する（Init 中の DET ログは抑制する）。
+ * TearDown(): Com_DeInit() で未初期化へ戻す。 */
 class Bsw_ComStack_SignalGroup_Tx_Base : public ::testing::Test
 {
 protected:
@@ -312,14 +315,23 @@ protected:
 };
 
 // シナリオごとのフィクスチャ（共通の準備は Bsw_ComStack_SignalGroup_Tx_Base）
+/* TMS の遷移時の即時送信（SWS_Com_00495、Signal Group 側）。 */
 class Bsw_ComStack_SignalGroup_Tx_TmsTransition_Test : public Bsw_ComStack_SignalGroup_Tx_Base {};
+/* Com_SwitchIpduTxMode（SWS_Com_00244）による、TMS の外部トグル。 */
 class Bsw_ComStack_SignalGroup_Tx_SwitchIpduTxMode_Test : public Bsw_ComStack_SignalGroup_Tx_Base {};
+/* Com_InvalidateSignalGroup（SWS_Com_00557 / 00645）。 */
 class Bsw_ComStack_SignalGroup_Tx_InvalidateSignalGroup_Test : public Bsw_ComStack_SignalGroup_Tx_Base {};
+/* Com_SendSignalGroupArray（SWS_Com_00348 など）。 */
 class Bsw_ComStack_SignalGroup_Tx_SendSignalGroupArray_Test : public Bsw_ComStack_SignalGroup_Tx_Base {};
+/* 停止中のグループのメンバーへの Com_SendSignal（SWS_Com_00334）。 */
 class Bsw_ComStack_SignalGroup_Tx_SendSignal_Test : public Bsw_ComStack_SignalGroup_Tx_Base {};
+/* 送信確認通知（Com_CbkTxAck、SWS_Com_00468）が、グループ単位で 1 回だけ呼ばれること。 */
 class Bsw_ComStack_SignalGroup_Tx_TxConfirmation_Test : public Bsw_ComStack_SignalGroup_Tx_Base {};
+/* Com_IpduGroupStop による送信エラー通知（SWS_Com_00491）と、再送・デッドライン監視への影響。 */
 class Bsw_ComStack_SignalGroup_Tx_IpduGroupStop_Test : public Bsw_ComStack_SignalGroup_Tx_Base {};
+/* 送信デッドライン監視のグループ単位の発火（SWS_Com_00878）。 */
 class Bsw_ComStack_SignalGroup_Tx_TxTOut_Test : public Bsw_ComStack_SignalGroup_Tx_Base {};
+/* Com_TriggerIPDUSend（停止可能グループ側、SWS_Com_00861 / 00388）。 */
 class Bsw_ComStack_SignalGroup_Tx_TriggerIPDUSend_Test : public Bsw_ComStack_SignalGroup_Tx_Base {};
 
 /* ======================================================================
