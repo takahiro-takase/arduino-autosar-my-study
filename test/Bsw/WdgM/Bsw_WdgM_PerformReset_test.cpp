@@ -61,20 +61,6 @@ protected:
  * Test Functions
  * ====================================================================== */
 
-TEST_F(Bsw_WdgM_PerformReset_Test, PerformReset_NG_UninitializedReportsDetWithoutEffect)
-{
-    WdgM_DeInit();
-    FakeDetHw_Reset();
-
-    WdgM_PerformReset();
-
-    EXPECT_EQ(FakeDetHw_LastErrorId, WDGM_E_NO_INIT);
-    EXPECT_EQ(FakeDetHw_ReportCount, 1U);
-
-    /* 未初期化時は無効果（[SWS_WdgM_00270]）。WdgM_TriggerHwWatchdog() 自体は
-     * Cfg==NULL のガードで別途早期 return するため、ここでは呼ばない。 */
-}
-
 TEST_F(Bsw_WdgM_PerformReset_Test, PerformReset_OK_StopsHwWatchdogRefreshImmediately)
 {
     /* 通常時は refresh される。 */
@@ -135,4 +121,18 @@ TEST_F(Bsw_WdgM_PerformReset_Test, PerformReset_OK_NotUndoneByMainFunctionRecove
 
     WdgM_TriggerHwWatchdog();
     EXPECT_EQ(FakeWdgHw_RefreshCount, 0U);
+}
+
+TEST_F(Bsw_WdgM_PerformReset_Test, PerformReset_NG_UninitializedReportsDetWithoutEffect)
+{
+    WdgM_DeInit();
+    FakeDetHw_Reset();
+
+    WdgM_PerformReset();
+
+    EXPECT_EQ(FakeDetHw_LastErrorId, WDGM_E_NO_INIT);
+    EXPECT_EQ(FakeDetHw_ReportCount, 1U);
+
+    /* 未初期化時は無効果（[SWS_WdgM_00270]）。WdgM_TriggerHwWatchdog() 自体は
+     * Cfg==NULL のガードで別途早期 return するため、ここでは呼ばない。 */
 }

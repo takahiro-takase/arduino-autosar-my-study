@@ -108,6 +108,28 @@ protected:
  * Test Functions
  * ====================================================================== */
 
+TEST_F(Bsw_WdgM_GetFirstExpiredSEID_Test, GetFirstExpiredSEID_OK_ReturnsValueWhenInverseMatches)
+{
+    WdgM_Test_SetFirstExpiredSEIDRaw(WDGM_ENTITY_WARNING, (WdgM_SupervisedEntityIdType)(~WDGM_ENTITY_WARNING));
+
+    WdgM_SupervisedEntityIdType seid = 0xFFU;
+    Std_ReturnType ret = WdgM_GetFirstExpiredSEID(&seid);
+
+    EXPECT_EQ(ret, E_OK);
+    EXPECT_EQ(seid, WDGM_ENTITY_WARNING);
+}
+
+TEST_F(Bsw_WdgM_GetFirstExpiredSEID_Test, GetFirstExpiredSEID_OK_LatchedAutomaticallyWhenGlobalSupervisionStops)
+{
+    DriveEngineToStoppedViaWarningAliveOnly();
+
+    WdgM_SupervisedEntityIdType seid = 0xFFU;
+    Std_ReturnType ret = WdgM_GetFirstExpiredSEID(&seid);
+
+    EXPECT_EQ(ret, E_OK);
+    EXPECT_EQ(seid, WDGM_ENTITY_ENGINE);
+}
+
 TEST_F(Bsw_WdgM_GetFirstExpiredSEID_Test, GetFirstExpiredSEID_NG_NullPointerReturnsErrorAndReportsDet)
 {
     Std_ReturnType ret = WdgM_GetFirstExpiredSEID(NULL);
@@ -133,28 +155,6 @@ TEST_F(Bsw_WdgM_GetFirstExpiredSEID_Test, GetFirstExpiredSEID_NG_UninitializedSt
     EXPECT_EQ(seid, 0U);
     /* 未初期化ガードを行わない仕様のため DET は報告されない。 */
     EXPECT_EQ(FakeDetHw_ReportCount, 0U);
-}
-
-TEST_F(Bsw_WdgM_GetFirstExpiredSEID_Test, GetFirstExpiredSEID_OK_ReturnsValueWhenInverseMatches)
-{
-    WdgM_Test_SetFirstExpiredSEIDRaw(WDGM_ENTITY_WARNING, (WdgM_SupervisedEntityIdType)(~WDGM_ENTITY_WARNING));
-
-    WdgM_SupervisedEntityIdType seid = 0xFFU;
-    Std_ReturnType ret = WdgM_GetFirstExpiredSEID(&seid);
-
-    EXPECT_EQ(ret, E_OK);
-    EXPECT_EQ(seid, WDGM_ENTITY_WARNING);
-}
-
-TEST_F(Bsw_WdgM_GetFirstExpiredSEID_Test, GetFirstExpiredSEID_OK_LatchedAutomaticallyWhenGlobalSupervisionStops)
-{
-    DriveEngineToStoppedViaWarningAliveOnly();
-
-    WdgM_SupervisedEntityIdType seid = 0xFFU;
-    Std_ReturnType ret = WdgM_GetFirstExpiredSEID(&seid);
-
-    EXPECT_EQ(ret, E_OK);
-    EXPECT_EQ(seid, WDGM_ENTITY_ENGINE);
 }
 
 TEST_F(Bsw_WdgM_GetFirstExpiredSEID_Test,

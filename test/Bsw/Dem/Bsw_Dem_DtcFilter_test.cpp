@@ -97,18 +97,6 @@ protected:
  * Test Functions
  * ====================================================================== */
 
-TEST_F(Bsw_Dem_DtcFilter_Test, Dem_GetNextFilteredDTC_NG_NoFilterSetReturnsNotOk)
-{
-    uint32 dtc = 0U;
-    uint8  status = 0U;
-    uint16 count = 0U;
-    sint8  fdc = 0;
-
-    EXPECT_EQ(Dem_GetNumberOfFilteredDTC(0U, &count), E_NOT_OK);
-    EXPECT_EQ(Dem_GetNextFilteredDTC(0U, &dtc, &status), E_NOT_OK);
-    EXPECT_EQ(Dem_GetNextFilteredDTCAndFDC(0U, &dtc, &fdc), E_NOT_OK);
-}
-
 TEST_F(Bsw_Dem_DtcFilter_Test, Dem_GetNextFilteredDTC_OK_MaskZeroReportsAllSupportedDtcs)
 {
     // 0x19/0x0A: DTCStatusMask=0x00 はステータスで絞り込まず、対応する全 DTC を返す。
@@ -154,6 +142,18 @@ TEST_F(Bsw_Dem_DtcFilter_Test, Dem_GetNextFilteredDTC_OK_StatusMaskWithNoMatchRe
     uint8  status = 0U;
 
     EXPECT_EQ(Dem_GetNextFilteredDTC(0U, &dtc, &status), DEM_NO_SUCH_ELEMENT);
+}
+
+TEST_F(Bsw_Dem_DtcFilter_Test, Dem_GetNextFilteredDTC_NG_NoFilterSetReturnsNotOk)
+{
+    uint32 dtc = 0U;
+    uint8  status = 0U;
+    uint16 count = 0U;
+    sint8  fdc = 0;
+
+    EXPECT_EQ(Dem_GetNumberOfFilteredDTC(0U, &count), E_NOT_OK);
+    EXPECT_EQ(Dem_GetNextFilteredDTC(0U, &dtc, &status), E_NOT_OK);
+    EXPECT_EQ(Dem_GetNextFilteredDTCAndFDC(0U, &dtc, &fdc), E_NOT_OK);
 }
 
 TEST_F(Bsw_Dem_DtcFilter_Test, Dem_SetDTCFilter_OK_CallingAgainRestartsFromTheFirstDtc)

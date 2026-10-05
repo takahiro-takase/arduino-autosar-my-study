@@ -178,6 +178,26 @@ TEST_F(E2EP05Test, E2E_P05Check_OK_SecondConsecutiveFrame)
     EXPECT_EQ(checkState.Counter, 1U);
 }
 
+TEST_F(E2EP05Test, E2E_P05Check_OK_CounterWrapsFrom0xFFTo0IsRecognized)
+{
+    E2E_P05ProtectStateType protectState;
+    E2E_P05CheckStateType   checkState;
+    protectState.Counter = 0xFFU;
+    checkState.Counter   = 0xFEU; /* 直前に受け付けた値が0xFEだったと仮定 */
+    checkState.Status    = E2E_P05STATUS_OK;
+
+    uint8_t frame1[5] = {0U, 0U, 0U, 0U, 0U}; /* Counter=0xFF (delta=1 from 0xFE) */
+    uint8_t frame2[5] = {0U, 0U, 0U, 0U, 0U}; /* Counter=0x00 (delta=1 from 0xFF、折り返し) */
+    E2E_P05Protect(&config, &protectState, frame1, sizeof(frame1));
+    E2E_P05Protect(&config, &protectState, frame2, sizeof(frame2));
+
+    ASSERT_EQ(E2E_P05Check(&config, &checkState, frame1, sizeof(frame1)), E2E_E_OK);
+    EXPECT_EQ(checkState.Status, E2E_P05STATUS_OK);
+    ASSERT_EQ(E2E_P05Check(&config, &checkState, frame2, sizeof(frame2)), E2E_E_OK);
+    EXPECT_EQ(checkState.Status, E2E_P05STATUS_OK);
+    EXPECT_EQ(checkState.Counter, 0U);
+}
+
 TEST_F(E2EP05Test, E2E_P05Check_NG_CounterJumpBeyondMaxDeltaIsWrongSequence)
 {
     E2E_P05ProtectStateType protectState;
@@ -199,26 +219,6 @@ TEST_F(E2EP05Test, E2E_P05Check_NG_CounterJumpBeyondMaxDeltaIsWrongSequence)
 
     EXPECT_EQ(status, E2E_P05STATUS_WRONGSEQUENCE);
     EXPECT_EQ(checkState.Counter, 2U); /* WRONGSEQUENCEでも状態は受信値へ更新される (CRC正常なため) */
-}
-
-TEST_F(E2EP05Test, E2E_P05Check_OK_CounterWrapsFrom0xFFTo0IsRecognized)
-{
-    E2E_P05ProtectStateType protectState;
-    E2E_P05CheckStateType   checkState;
-    protectState.Counter = 0xFFU;
-    checkState.Counter   = 0xFEU; /* 直前に受け付けた値が0xFEだったと仮定 */
-    checkState.Status    = E2E_P05STATUS_OK;
-
-    uint8_t frame1[5] = {0U, 0U, 0U, 0U, 0U}; /* Counter=0xFF (delta=1 from 0xFE) */
-    uint8_t frame2[5] = {0U, 0U, 0U, 0U, 0U}; /* Counter=0x00 (delta=1 from 0xFF、折り返し) */
-    E2E_P05Protect(&config, &protectState, frame1, sizeof(frame1));
-    E2E_P05Protect(&config, &protectState, frame2, sizeof(frame2));
-
-    ASSERT_EQ(E2E_P05Check(&config, &checkState, frame1, sizeof(frame1)), E2E_E_OK);
-    EXPECT_EQ(checkState.Status, E2E_P05STATUS_OK);
-    ASSERT_EQ(E2E_P05Check(&config, &checkState, frame2, sizeof(frame2)), E2E_E_OK);
-    EXPECT_EQ(checkState.Status, E2E_P05STATUS_OK);
-    EXPECT_EQ(checkState.Counter, 0U);
 }
 
 TEST_F(E2EP05Test, E2E_P05Check_NG_CrcMismatchReturnsErrorAndDoesNotUpdateState)
@@ -601,28 +601,6 @@ TEST_F(E2ESMTest, CheckInit_NG_NullPointerReturnsInputErrNull)
     EXPECT_EQ(E2E_SMCheckInit(&state, nullptr), E2E_E_INPUTERR_NULL);
 }
 
-TEST_F(E2ESMTest, Check_NG_NullPointerReturnsInputErrNull)
-{
-    ASSERT_EQ(E2E_SMCheckInit(&state, &config), E2E_E_OK);
-
-    EXPECT_EQ(E2E_SMCheck(E2E_P_OK, nullptr, &state), E2E_E_INPUTERR_NULL);
-    EXPECT_EQ(E2E_SMCheck(E2E_P_OK, &config, nullptr), E2E_E_INPUTERR_NULL);
-}
-
-TEST_F(E2ESMTest, Check_NG_DeinitStateReturnsWrongStateWithoutChangingState)
-{
-    /* E2E_SMCheckInit() を一度も呼んでいない場合を模擬するため、State を
-     * 明示的に E2E_SM_DEINIT にする。注意: [SWS_E2E_00343] の値定義は
-     * E2E_SM_VALID=0x00・E2E_SM_DEINIT=0x01 のため、ゼロ初期化しただけでは
-     * DEINIT にはならず（誤って VALID 扱いになってしまう）、呼び出し元は
-     * 必ず E2E_SMCheckInit() を明示的に呼ぶ必要がある（本テストはその
-     * 「明示的な初期化が必須」という前提を裏付けるためのもの）。 */
-    state.SMState = E2E_SM_DEINIT;
-
-    EXPECT_EQ(E2E_SMCheck(E2E_P_OK, &config, &state), E2E_E_WRONGSTATE);
-    EXPECT_EQ(state.SMState, E2E_SM_DEINIT); /* 状態遷移しないこと */
-}
-
 TEST_F(E2ESMTest, Check_OK_NodataStaysUntilFirstGoodStatus)
 {
     ASSERT_EQ(E2E_SMCheckInit(&state, &config), E2E_E_OK);
@@ -718,6 +696,28 @@ TEST_F(E2ESMTest, Check_OK_InvalidRecoversToValidOnceWindowFullOfOk)
     EXPECT_EQ(state.SMState, E2E_SM_VALID);
     EXPECT_EQ(state.OkCount, 3U);
     EXPECT_EQ(state.ErrorCount, 0U);
+}
+
+TEST_F(E2ESMTest, Check_NG_NullPointerReturnsInputErrNull)
+{
+    ASSERT_EQ(E2E_SMCheckInit(&state, &config), E2E_E_OK);
+
+    EXPECT_EQ(E2E_SMCheck(E2E_P_OK, nullptr, &state), E2E_E_INPUTERR_NULL);
+    EXPECT_EQ(E2E_SMCheck(E2E_P_OK, &config, nullptr), E2E_E_INPUTERR_NULL);
+}
+
+TEST_F(E2ESMTest, Check_NG_DeinitStateReturnsWrongStateWithoutChangingState)
+{
+    /* E2E_SMCheckInit() を一度も呼んでいない場合を模擬するため、State を
+     * 明示的に E2E_SM_DEINIT にする。注意: [SWS_E2E_00343] の値定義は
+     * E2E_SM_VALID=0x00・E2E_SM_DEINIT=0x01 のため、ゼロ初期化しただけでは
+     * DEINIT にはならず（誤って VALID 扱いになってしまう）、呼び出し元は
+     * 必ず E2E_SMCheckInit() を明示的に呼ぶ必要がある（本テストはその
+     * 「明示的な初期化が必須」という前提を裏付けるためのもの）。 */
+    state.SMState = E2E_SM_DEINIT;
+
+    EXPECT_EQ(E2E_SMCheck(E2E_P_OK, &config, &state), E2E_E_WRONGSTATE);
+    EXPECT_EQ(state.SMState, E2E_SM_DEINIT); /* 状態遷移しないこと */
 }
 
 }  // namespace

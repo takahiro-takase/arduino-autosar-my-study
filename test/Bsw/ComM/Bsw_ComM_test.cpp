@@ -76,25 +76,6 @@ protected:
  * Test Functions
  * ====================================================================== */
 
-TEST_F(Bsw_ComM_CommunicationAllowed_Test, ComM_CommunicationAllowed_NG_InvalidChannelReportsDet)
-{
-    ComM_CommunicationAllowed(COMM_CHANNEL_COUNT, TRUE);
-
-    EXPECT_EQ(FakeDetHw_LastErrorId, COMM_E_WRONG_PARAMETERS);
-    EXPECT_EQ(FakeDetHw_ReportCount, 1U);
-}
-
-TEST_F(Bsw_ComM_CommunicationAllowed_Test, ComM_CommunicationAllowed_NG_UninitializedReportsDet)
-{
-    ComM_DeInit();
-    FakeDetHw_Reset();
-
-    ComM_CommunicationAllowed(COMM_CHANNEL_0, TRUE);
-
-    EXPECT_EQ(FakeDetHw_LastErrorId, COMM_E_UNINIT);
-    EXPECT_EQ(FakeDetHw_ReportCount, 1U);
-}
-
 /**
  * \brief   [SWS_ComM_00884]: ComM_Init() 直後の既定値は FALSE。この状態で
  *          ユーザが FULL_COM を要求しても E_OK を返す（保留として受理する）が、
@@ -151,6 +132,25 @@ TEST_F(Bsw_ComM_CommunicationAllowed_Test, ComM_CommunicationAllowed_OK_Abandone
     EXPECT_EQ(mode, static_cast<ComM_ModeType>(COMM_NO_COMMUNICATION));
 }
 
+TEST_F(Bsw_ComM_CommunicationAllowed_Test, ComM_CommunicationAllowed_NG_UninitializedReportsDet)
+{
+    ComM_DeInit();
+    FakeDetHw_Reset();
+
+    ComM_CommunicationAllowed(COMM_CHANNEL_0, TRUE);
+
+    EXPECT_EQ(FakeDetHw_LastErrorId, COMM_E_UNINIT);
+    EXPECT_EQ(FakeDetHw_ReportCount, 1U);
+}
+
+TEST_F(Bsw_ComM_CommunicationAllowed_Test, ComM_CommunicationAllowed_NG_InvalidChannelReportsDet)
+{
+    ComM_CommunicationAllowed(COMM_CHANNEL_COUNT, TRUE);
+
+    EXPECT_EQ(FakeDetHw_LastErrorId, COMM_E_WRONG_PARAMETERS);
+    EXPECT_EQ(FakeDetHw_ReportCount, 1U);
+}
+
 // ============================================================================
 // ComM_GetRequestedComMode()（旧 Bsw_ComM_GetRequestedComMode_test.cpp）
 // ============================================================================
@@ -189,6 +189,29 @@ protected:
     static const ComM_UserHandleType kInvalidUser = COMM_USER_COUNT;
 };
 
+TEST_F(Bsw_ComM_GetRequestedComMode_Test, ComM_GetRequestedComMode_OK_ReturnsNoComRightAfterInit)
+{
+    ComM_ModeType mode = COMM_FULL_COMMUNICATION;
+
+    Std_ReturnType ret = ComM_GetRequestedComMode(COMM_USER_0, &mode);
+
+    EXPECT_EQ(ret, E_OK);
+    EXPECT_EQ(mode, COMM_NO_COMMUNICATION);
+    EXPECT_EQ(FakeDetHw_ReportCount, 0U);
+}
+
+TEST_F(Bsw_ComM_GetRequestedComMode_Test, ComM_GetRequestedComMode_NG_UninitializedReturnsErrorAndReportsDet)
+{
+    ComM_DeInit();
+    FakeDetHw_Reset();
+
+    ComM_ModeType mode = COMM_FULL_COMMUNICATION;
+    Std_ReturnType ret = ComM_GetRequestedComMode(COMM_USER_0, &mode);
+
+    EXPECT_EQ(ret, E_NOT_OK);
+    EXPECT_EQ(FakeDetHw_LastErrorId, COMM_E_UNINIT);
+}
+
 TEST_F(Bsw_ComM_GetRequestedComMode_Test, ComM_GetRequestedComMode_NG_InvalidUserReturnsErrorAndReportsDet)
 {
     ComM_ModeType mode = COMM_FULL_COMMUNICATION;
@@ -206,29 +229,6 @@ TEST_F(Bsw_ComM_GetRequestedComMode_Test, ComM_GetRequestedComMode_NG_NullPointe
 
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, COMM_E_PARAM_POINTER);
-}
-
-TEST_F(Bsw_ComM_GetRequestedComMode_Test, ComM_GetRequestedComMode_NG_UninitializedReturnsErrorAndReportsDet)
-{
-    ComM_DeInit();
-    FakeDetHw_Reset();
-
-    ComM_ModeType mode = COMM_FULL_COMMUNICATION;
-    Std_ReturnType ret = ComM_GetRequestedComMode(COMM_USER_0, &mode);
-
-    EXPECT_EQ(ret, E_NOT_OK);
-    EXPECT_EQ(FakeDetHw_LastErrorId, COMM_E_UNINIT);
-}
-
-TEST_F(Bsw_ComM_GetRequestedComMode_Test, ComM_GetRequestedComMode_OK_ReturnsNoComRightAfterInit)
-{
-    ComM_ModeType mode = COMM_FULL_COMMUNICATION;
-
-    Std_ReturnType ret = ComM_GetRequestedComMode(COMM_USER_0, &mode);
-
-    EXPECT_EQ(ret, E_OK);
-    EXPECT_EQ(mode, COMM_NO_COMMUNICATION);
-    EXPECT_EQ(FakeDetHw_ReportCount, 0U);
 }
 
 /* 「ComM_RequestComMode() で設定した値をそのまま返す」という正常系は、

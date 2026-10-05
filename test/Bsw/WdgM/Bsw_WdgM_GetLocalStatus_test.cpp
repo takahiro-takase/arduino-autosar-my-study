@@ -58,38 +58,6 @@ protected:
  * Test Functions
  * ====================================================================== */
 
-TEST_F(Bsw_WdgM_GetLocalStatus_Test, GetLocalStatus_NG_NullPointerReturnsErrorAndReportsDet)
-{
-    Std_ReturnType ret = WdgM_GetLocalStatus(WDGM_ENTITY_ENGINE, NULL);
-
-    EXPECT_EQ(ret, E_NOT_OK);
-    EXPECT_EQ(FakeDetHw_LastErrorId, WDGM_E_INV_POINTER);
-    EXPECT_EQ(FakeDetHw_ReportCount, 1U);
-}
-
-TEST_F(Bsw_WdgM_GetLocalStatus_Test, GetLocalStatus_NG_UninitializedReturnsDeactivatedAndReportsDet)
-{
-    WdgM_DeInit();
-    FakeDetHw_Reset();
-
-    WdgM_LocalStatusType status = WDGM_LOCAL_STATUS_OK;
-    Std_ReturnType ret = WdgM_GetLocalStatus(WDGM_ENTITY_ENGINE, &status);
-
-    EXPECT_EQ(ret, E_NOT_OK);
-    EXPECT_EQ(status, WDGM_LOCAL_STATUS_DEACTIVATED);
-    EXPECT_EQ(FakeDetHw_LastErrorId, WDGM_E_NO_INIT);
-}
-
-TEST_F(Bsw_WdgM_GetLocalStatus_Test, GetLocalStatus_NG_InvalidSeidReturnsDeactivatedAndReportsDet)
-{
-    WdgM_LocalStatusType status = WDGM_LOCAL_STATUS_OK;
-    Std_ReturnType ret = WdgM_GetLocalStatus(WdgM_Config.EntityCount, &status);
-
-    EXPECT_EQ(ret, E_NOT_OK);
-    EXPECT_EQ(status, WDGM_LOCAL_STATUS_DEACTIVATED);
-    EXPECT_EQ(FakeDetHw_LastErrorId, WDGM_E_PARAM_SEID);
-}
-
 TEST_F(Bsw_WdgM_GetLocalStatus_Test, GetLocalStatus_OK_ReturnsOkRightAfterInit)
 {
     WdgM_LocalStatusType status = WDGM_LOCAL_STATUS_FAILED;
@@ -199,4 +167,36 @@ TEST_F(Bsw_WdgM_GetLocalStatus_Test, GetLocalStatus_OK_ReturnsOkAfterAliveRecove
     WdgM_LocalStatusType status = WDGM_LOCAL_STATUS_FAILED;
     ASSERT_EQ(WdgM_GetLocalStatus(WDGM_ENTITY_WARNING, &status), E_OK);
     EXPECT_EQ(status, WDGM_LOCAL_STATUS_OK);
+}
+
+TEST_F(Bsw_WdgM_GetLocalStatus_Test, GetLocalStatus_NG_NullPointerReturnsErrorAndReportsDet)
+{
+    Std_ReturnType ret = WdgM_GetLocalStatus(WDGM_ENTITY_ENGINE, NULL);
+
+    EXPECT_EQ(ret, E_NOT_OK);
+    EXPECT_EQ(FakeDetHw_LastErrorId, WDGM_E_INV_POINTER);
+    EXPECT_EQ(FakeDetHw_ReportCount, 1U);
+}
+
+TEST_F(Bsw_WdgM_GetLocalStatus_Test, GetLocalStatus_NG_UninitializedReturnsDeactivatedAndReportsDet)
+{
+    WdgM_DeInit();
+    FakeDetHw_Reset();
+
+    WdgM_LocalStatusType status = WDGM_LOCAL_STATUS_OK;
+    Std_ReturnType ret = WdgM_GetLocalStatus(WDGM_ENTITY_ENGINE, &status);
+
+    EXPECT_EQ(ret, E_NOT_OK);
+    EXPECT_EQ(status, WDGM_LOCAL_STATUS_DEACTIVATED);
+    EXPECT_EQ(FakeDetHw_LastErrorId, WDGM_E_NO_INIT);
+}
+
+TEST_F(Bsw_WdgM_GetLocalStatus_Test, GetLocalStatus_NG_InvalidSeidReturnsDeactivatedAndReportsDet)
+{
+    WdgM_LocalStatusType status = WDGM_LOCAL_STATUS_OK;
+    Std_ReturnType ret = WdgM_GetLocalStatus(WdgM_Config.EntityCount, &status);
+
+    EXPECT_EQ(ret, E_NOT_OK);
+    EXPECT_EQ(status, WDGM_LOCAL_STATUS_DEACTIVATED);
+    EXPECT_EQ(FakeDetHw_LastErrorId, WDGM_E_PARAM_SEID);
 }

@@ -124,6 +124,29 @@ TEST_F(GptTest, Gpt_ApiCalls_NG_BeforeInitReportUninit)
     EXPECT_EQ(FakeDetHw_LastErrorId, GPT_E_UNINIT);
 }
 
+TEST_F(GptTest, Gpt_StartTimer_OK_SucceedsAndDelegatesToHw)
+{
+    Gpt_Init(&config);
+
+    Gpt_StartTimer(GPT_CHANNEL_0, 1000U);
+
+    EXPECT_EQ(FakeDetHw_ReportCount, 0U);
+    EXPECT_EQ(FakeGptHw_StartCount, 1U);
+    EXPECT_EQ(FakeGptHw_LastStartChannel, GPT_CHANNEL_0);
+    EXPECT_EQ(FakeGptHw_LastTickFrequencyHz, 1000U);
+    EXPECT_EQ(Gpt_GetTimeElapsed(GPT_CHANNEL_0), 0U);
+    EXPECT_EQ(Gpt_GetTimeRemaining(GPT_CHANNEL_0), 1000U);
+}
+
+TEST_F(GptTest, Gpt_StartTimer_NG_RejectsInvalidChannel)
+{
+    Gpt_Init(&config);
+
+    Gpt_StartTimer((Gpt_ChannelType)1U, 1000U);
+
+    EXPECT_EQ(FakeDetHw_LastErrorId, GPT_E_PARAM_CHANNEL);
+}
+
 TEST_F(GptTest, Gpt_StartTimer_NG_RejectsZeroValue)
 {
     Gpt_Init(&config);
@@ -143,29 +166,6 @@ TEST_F(GptTest, Gpt_StartTimer_NG_RejectsValueAboveTickValueMax)
 
     EXPECT_EQ(FakeDetHw_LastErrorId, GPT_E_PARAM_VALUE);
     EXPECT_EQ(FakeGptHw_StartCount, 0U);
-}
-
-TEST_F(GptTest, Gpt_StartTimer_NG_RejectsInvalidChannel)
-{
-    Gpt_Init(&config);
-
-    Gpt_StartTimer((Gpt_ChannelType)1U, 1000U);
-
-    EXPECT_EQ(FakeDetHw_LastErrorId, GPT_E_PARAM_CHANNEL);
-}
-
-TEST_F(GptTest, Gpt_StartTimer_OK_SucceedsAndDelegatesToHw)
-{
-    Gpt_Init(&config);
-
-    Gpt_StartTimer(GPT_CHANNEL_0, 1000U);
-
-    EXPECT_EQ(FakeDetHw_ReportCount, 0U);
-    EXPECT_EQ(FakeGptHw_StartCount, 1U);
-    EXPECT_EQ(FakeGptHw_LastStartChannel, GPT_CHANNEL_0);
-    EXPECT_EQ(FakeGptHw_LastTickFrequencyHz, 1000U);
-    EXPECT_EQ(Gpt_GetTimeElapsed(GPT_CHANNEL_0), 0U);
-    EXPECT_EQ(Gpt_GetTimeRemaining(GPT_CHANNEL_0), 1000U);
 }
 
 TEST_F(GptTest, Gpt_StartTimer_NG_WhileRunningReportsBusy)
@@ -318,13 +318,6 @@ TEST_F(GptTest, Gpt_EnableNotification_NG_RejectsChannelWithoutNotificationConfi
     EXPECT_EQ(FakeDetHw_LastErrorId, GPT_E_PARAM_CHANNEL);
 }
 
-TEST_F(GptTest, Gpt_GetVersionInfo_NG_RejectsNullPointer)
-{
-    Gpt_GetVersionInfo(NULL);
-
-    EXPECT_EQ(FakeDetHw_LastErrorId, GPT_E_PARAM_POINTER);
-}
-
 TEST_F(GptTest, Gpt_GetVersionInfo_OK_FillsExpectedModuleId)
 {
     Std_VersionInfoType info;
@@ -332,6 +325,13 @@ TEST_F(GptTest, Gpt_GetVersionInfo_OK_FillsExpectedModuleId)
     Gpt_GetVersionInfo(&info);
 
     EXPECT_EQ(info.moduleID, GPT_MODULE_ID);
+}
+
+TEST_F(GptTest, Gpt_GetVersionInfo_NG_RejectsNullPointer)
+{
+    Gpt_GetVersionInfo(NULL);
+
+    EXPECT_EQ(FakeDetHw_LastErrorId, GPT_E_PARAM_POINTER);
 }
 
 }  // namespace

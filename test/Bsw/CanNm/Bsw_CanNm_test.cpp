@@ -137,17 +137,6 @@ TEST_F(Bsw_CanNm_ChannelValidation_Test, RepeatMessageRequest_NG_InvalidChannelR
     EXPECT_EQ(FakeDetHw_LastErrorId, CANNM_E_INVALID_CHANNEL);
 }
 
-TEST_F(Bsw_CanNm_ChannelValidation_Test, GetState_NG_InvalidChannelReturnsErrorAndReportsDet)
-{
-    CanNm_StateType state;
-    CanNm_ModeType  mode;
-
-    Std_ReturnType ret = CanNm_GetState(kInvalidChannel, &state, &mode);
-
-    EXPECT_EQ(ret, E_NOT_OK);
-    EXPECT_EQ(FakeDetHw_LastErrorId, CANNM_E_INVALID_CHANNEL);
-}
-
 TEST_F(Bsw_CanNm_ChannelValidation_Test, GetState_OK_ValidChannelIsAccepted)
 {
     CanNm_StateType state;
@@ -159,17 +148,12 @@ TEST_F(Bsw_CanNm_ChannelValidation_Test, GetState_OK_ValidChannelIsAccepted)
     EXPECT_EQ(FakeDetHw_ReportCount, 0U);
 }
 
-TEST_F(Bsw_CanNm_ChannelValidation_Test, DisableCommunication_NG_InvalidChannelReturnsErrorAndReportsDet)
+TEST_F(Bsw_CanNm_ChannelValidation_Test, GetState_NG_InvalidChannelReturnsErrorAndReportsDet)
 {
-    Std_ReturnType ret = CanNm_DisableCommunication(kInvalidChannel);
+    CanNm_StateType state;
+    CanNm_ModeType  mode;
 
-    EXPECT_EQ(ret, E_NOT_OK);
-    EXPECT_EQ(FakeDetHw_LastErrorId, CANNM_E_INVALID_CHANNEL);
-}
-
-TEST_F(Bsw_CanNm_ChannelValidation_Test, EnableCommunication_NG_InvalidChannelReturnsErrorAndReportsDet)
-{
-    Std_ReturnType ret = CanNm_EnableCommunication(kInvalidChannel);
+    Std_ReturnType ret = CanNm_GetState(kInvalidChannel, &state, &mode);
 
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, CANNM_E_INVALID_CHANNEL);
@@ -183,6 +167,14 @@ TEST_F(Bsw_CanNm_ChannelValidation_Test, DisableCommunication_OK_ValidChannelIsA
     EXPECT_EQ(FakeDetHw_ReportCount, 0U);
 }
 
+TEST_F(Bsw_CanNm_ChannelValidation_Test, DisableCommunication_NG_InvalidChannelReturnsErrorAndReportsDet)
+{
+    Std_ReturnType ret = CanNm_DisableCommunication(kInvalidChannel);
+
+    EXPECT_EQ(ret, E_NOT_OK);
+    EXPECT_EQ(FakeDetHw_LastErrorId, CANNM_E_INVALID_CHANNEL);
+}
+
 TEST_F(Bsw_CanNm_ChannelValidation_Test, EnableCommunication_OK_ValidChannelIsAccepted)
 {
     Std_ReturnType ret = CanNm_EnableCommunication(CANNM_MAIN_NETWORK_HANDLE);
@@ -191,10 +183,29 @@ TEST_F(Bsw_CanNm_ChannelValidation_Test, EnableCommunication_OK_ValidChannelIsAc
     EXPECT_EQ(FakeDetHw_ReportCount, 0U);
 }
 
+TEST_F(Bsw_CanNm_ChannelValidation_Test, EnableCommunication_NG_InvalidChannelReturnsErrorAndReportsDet)
+{
+    Std_ReturnType ret = CanNm_EnableCommunication(kInvalidChannel);
+
+    EXPECT_EQ(ret, E_NOT_OK);
+    EXPECT_EQ(FakeDetHw_LastErrorId, CANNM_E_INVALID_CHANNEL);
+}
+
 // ------------------------------------------------------------
 // CanNm_GetLocalNodeIdentifier()/CanNm_GetNodeIdentifier()
 // （[SWS_CanNm_00220]/[SWS_CanNm_00219] 準拠で新設）
 // ------------------------------------------------------------
+
+TEST_F(Bsw_CanNm_ChannelValidation_Test, GetLocalNodeIdentifier_OK_ReturnsConfiguredSourceNodeId)
+{
+    uint8 nodeId = 0U;
+
+    Std_ReturnType ret = CanNm_GetLocalNodeIdentifier(CANNM_MAIN_NETWORK_HANDLE, &nodeId);
+
+    EXPECT_EQ(ret, E_OK);
+    EXPECT_EQ(nodeId, CANNM_SOURCE_NODE_ID);
+    EXPECT_EQ(FakeDetHw_ReportCount, 0U);
+}
 
 TEST_F(Bsw_CanNm_ChannelValidation_Test, GetLocalNodeIdentifier_NG_InvalidChannelReturnsErrorAndReportsDet)
 {
@@ -209,35 +220,6 @@ TEST_F(Bsw_CanNm_ChannelValidation_Test, GetLocalNodeIdentifier_NG_InvalidChanne
 TEST_F(Bsw_CanNm_ChannelValidation_Test, GetLocalNodeIdentifier_NG_NullPointerReturnsErrorAndReportsDet)
 {
     Std_ReturnType ret = CanNm_GetLocalNodeIdentifier(CANNM_MAIN_NETWORK_HANDLE, NULL);
-
-    EXPECT_EQ(ret, E_NOT_OK);
-    EXPECT_EQ(FakeDetHw_LastErrorId, CANNM_E_PARAM_POINTER);
-}
-
-TEST_F(Bsw_CanNm_ChannelValidation_Test, GetLocalNodeIdentifier_OK_ReturnsConfiguredSourceNodeId)
-{
-    uint8 nodeId = 0U;
-
-    Std_ReturnType ret = CanNm_GetLocalNodeIdentifier(CANNM_MAIN_NETWORK_HANDLE, &nodeId);
-
-    EXPECT_EQ(ret, E_OK);
-    EXPECT_EQ(nodeId, CANNM_SOURCE_NODE_ID);
-    EXPECT_EQ(FakeDetHw_ReportCount, 0U);
-}
-
-TEST_F(Bsw_CanNm_ChannelValidation_Test, GetNodeIdentifier_NG_InvalidChannelReturnsErrorAndReportsDet)
-{
-    uint8 nodeId = 0U;
-
-    Std_ReturnType ret = CanNm_GetNodeIdentifier(kInvalidChannel, &nodeId);
-
-    EXPECT_EQ(ret, E_NOT_OK);
-    EXPECT_EQ(FakeDetHw_LastErrorId, CANNM_E_INVALID_CHANNEL);
-}
-
-TEST_F(Bsw_CanNm_ChannelValidation_Test, GetNodeIdentifier_NG_NullPointerReturnsErrorAndReportsDet)
-{
-    Std_ReturnType ret = CanNm_GetNodeIdentifier(CANNM_MAIN_NETWORK_HANDLE, NULL);
 
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, CANNM_E_PARAM_POINTER);
@@ -271,6 +253,24 @@ TEST_F(Bsw_CanNm_ChannelValidation_Test, GetNodeIdentifier_OK_ReflectsMostRecent
 
     EXPECT_EQ(ret, E_OK);
     EXPECT_EQ(nodeId, 0x2AU);
+}
+
+TEST_F(Bsw_CanNm_ChannelValidation_Test, GetNodeIdentifier_NG_InvalidChannelReturnsErrorAndReportsDet)
+{
+    uint8 nodeId = 0U;
+
+    Std_ReturnType ret = CanNm_GetNodeIdentifier(kInvalidChannel, &nodeId);
+
+    EXPECT_EQ(ret, E_NOT_OK);
+    EXPECT_EQ(FakeDetHw_LastErrorId, CANNM_E_INVALID_CHANNEL);
+}
+
+TEST_F(Bsw_CanNm_ChannelValidation_Test, GetNodeIdentifier_NG_NullPointerReturnsErrorAndReportsDet)
+{
+    Std_ReturnType ret = CanNm_GetNodeIdentifier(CANNM_MAIN_NETWORK_HANDLE, NULL);
+
+    EXPECT_EQ(ret, E_NOT_OK);
+    EXPECT_EQ(FakeDetHw_LastErrorId, CANNM_E_PARAM_POINTER);
 }
 
 // ============================================================================
@@ -384,19 +384,6 @@ protected:
 };
 
 // ------------------------------------------------------------
-// 制御群: 送信有効のまま(既定)放置すれば、通常どおり NM-Timeout Timer は
-// 満了して CANNM_E_NETWORK_TIMEOUT が報告される(是正前から変わらない挙動)。
-// ------------------------------------------------------------
-TEST_F(Bsw_CanNm_CommunicationControlTimeout_Test, MainFunction_NG_TimeoutFiresNormallyWhenEnabled)
-{
-    FakeMillis_Value += CANNM_TIMEOUT_MS + 1UL;
-
-    CanNm_MainFunction();
-
-    EXPECT_TRUE(NetworkTimeoutReported());
-}
-
-// ------------------------------------------------------------
 // 2026-09 是正の本題: 送信無効化中は NM-Timeout Timer の満了判定自体を
 // 止めるため、いくら時間が経っても CANNM_E_NETWORK_TIMEOUT は報告されない。
 // ------------------------------------------------------------
@@ -492,6 +479,19 @@ TEST_F(Bsw_CanNm_CommunicationControlTimeout_Test, MainFunction_OK_DoesNotEnterP
      * これも起きないはず。 */
     ASSERT_EQ(CanNm_GetState(CANNM_MAIN_NETWORK_HANDLE, &state, &mode), E_OK);
     EXPECT_EQ(state, CANNM_STATE_READY_SLEEP);
+}
+
+// ------------------------------------------------------------
+// 制御群: 送信有効のまま(既定)放置すれば、通常どおり NM-Timeout Timer は
+// 満了して CANNM_E_NETWORK_TIMEOUT が報告される(是正前から変わらない挙動)。
+// ------------------------------------------------------------
+TEST_F(Bsw_CanNm_CommunicationControlTimeout_Test, MainFunction_NG_TimeoutFiresNormallyWhenEnabled)
+{
+    FakeMillis_Value += CANNM_TIMEOUT_MS + 1UL;
+
+    CanNm_MainFunction();
+
+    EXPECT_TRUE(NetworkTimeoutReported());
 }
 
 // ============================================================================

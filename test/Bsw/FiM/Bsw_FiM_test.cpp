@@ -129,6 +129,28 @@ TEST_F(Bsw_FiM_Test, MainFunction_OK_InhibitsFidWhenDtcConfirmedAfterInit)
 // FiM_Init() 完了時点で既に許可状態が確定していること
 // ------------------------------------------------------------
 
+TEST_F(Bsw_FiM_Test, Init_OK_SetFunctionAvailableStillOverridesAfterInitEvaluation)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // 確定済み DTC は無い状態で初期化
+    FiM_Init(&FiM_Config);
+    ASSERT_EQ(GetPermission(FIM_FID_BUTTON_ACK), TRUE);
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    // [SWS_Fim_00106] 外部からの強制利用不可
+    const Std_ReturnType ret = FiM_SetFunctionAvailable(FIM_FID_BUTTON_ACK, FALSE);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    ASSERT_EQ(ret, E_OK);
+    EXPECT_EQ(GetPermission(FIM_FID_BUTTON_ACK), FALSE);
+}
+
 TEST_F(Bsw_FiM_Test, Init_NG_InhibitsAlreadyConfirmedDtcWithoutWaitingForMainFunction)
 {
     /* ----------------------- */
@@ -155,28 +177,6 @@ TEST_F(Bsw_FiM_Test, Init_NG_InhibitsAlreadyConfirmedDtcWithoutWaitingForMainFun
     // 使用してはならない＝完全初期化の時点で正しい値が確定している）。
     EXPECT_EQ(GetPermission(FIM_FID_RUNNING_LED), FALSE);
     EXPECT_EQ(GetPermission(FIM_FID_BUTTON_ACK), TRUE);
-}
-
-TEST_F(Bsw_FiM_Test, Init_OK_SetFunctionAvailableStillOverridesAfterInitEvaluation)
-{
-    /* ----------------------- */
-    /* ---- 準備 (Arrange) --- */
-    /* ----------------------- */
-    // 確定済み DTC は無い状態で初期化
-    FiM_Init(&FiM_Config);
-    ASSERT_EQ(GetPermission(FIM_FID_BUTTON_ACK), TRUE);
-
-    /* ----------------------- */
-    /* ---- 実行 (Act) ------- */
-    /* ----------------------- */
-    // [SWS_Fim_00106] 外部からの強制利用不可
-    const Std_ReturnType ret = FiM_SetFunctionAvailable(FIM_FID_BUTTON_ACK, FALSE);
-
-    /* ----------------------- */
-    /* ---- 評価 (Assert) ---- */
-    /* ----------------------- */
-    ASSERT_EQ(ret, E_OK);
-    EXPECT_EQ(GetPermission(FIM_FID_BUTTON_ACK), FALSE);
 }
 
 // ------------------------------------------------------------

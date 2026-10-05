@@ -526,6 +526,27 @@ TEST_F(Bsw_Dcm_ReadDtcInfo_Test, SessionControl_OK_SuppressPosRspBitSuppressesPo
     EXPECT_EQ(sesCtrlType, DCM_SESSION_EXTENDED);
 }
 
+TEST_F(Bsw_Dcm_ReadDtcInfo_Test, SessionControl_NG_SuppressPosRspBitDoesNotSuppressNegativeResponse)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // bit7 を立てた不正サブ機能 [0x10, 0x80|0x02]（存在しない
+    // subFunc=0x02）。否定応答は suppressPosRspMsgIndicationBit の対象外
+    // （Dcm_SendNegativeResponse() は Dcm_SuppressPosRsp を一切見ない）ため、
+    // bit7 が立っていても NRC は必ず送信されることを確認する。
+    uint8 req[2] = { DCM_SID_SESSION_CTRL, 0x82U };
+
+    PduInfoType pdu = { req, sizeof(req) };
+    Dcm_ComIndication(0U, &pdu);
+
+    ASSERT_EQ(CallCount_CanTp_Transmit, 1U);
+    ASSERT_EQ(LastLength_CanTp_Transmit, 3U);
+    EXPECT_EQ(LastData_CanTp_Transmit[0], DCM_SID_NEGATIVE_RESP);
+    EXPECT_EQ(LastData_CanTp_Transmit[1], DCM_SID_SESSION_CTRL);
+    EXPECT_EQ(LastData_CanTp_Transmit[2], DCM_NRC_SUB_FUNC_NOT_SUPPORTED);
+}
+
 TEST_F(Bsw_Dcm_ReadDtcInfo_Test, TesterPresent_OK_SuppressPosRspBitSuppressesPositiveResponse)
 {
     /* ----------------------- */
@@ -559,27 +580,6 @@ TEST_F(Bsw_Dcm_ReadDtcInfo_Test, EcuReset_OK_SuppressPosRspBitAcceptsHardResetWi
     Dcm_ComIndication(0U, &pdu);
 
     EXPECT_EQ(CallCount_CanTp_Transmit, 0U);
-}
-
-TEST_F(Bsw_Dcm_ReadDtcInfo_Test, SessionControl_NG_SuppressPosRspBitDoesNotSuppressNegativeResponse)
-{
-    /* ----------------------- */
-    /* ---- 準備 (Arrange) --- */
-    /* ----------------------- */
-    // bit7 を立てた不正サブ機能 [0x10, 0x80|0x02]（存在しない
-    // subFunc=0x02）。否定応答は suppressPosRspMsgIndicationBit の対象外
-    // （Dcm_SendNegativeResponse() は Dcm_SuppressPosRsp を一切見ない）ため、
-    // bit7 が立っていても NRC は必ず送信されることを確認する。
-    uint8 req[2] = { DCM_SID_SESSION_CTRL, 0x82U };
-
-    PduInfoType pdu = { req, sizeof(req) };
-    Dcm_ComIndication(0U, &pdu);
-
-    ASSERT_EQ(CallCount_CanTp_Transmit, 1U);
-    ASSERT_EQ(LastLength_CanTp_Transmit, 3U);
-    EXPECT_EQ(LastData_CanTp_Transmit[0], DCM_SID_NEGATIVE_RESP);
-    EXPECT_EQ(LastData_CanTp_Transmit[1], DCM_SID_SESSION_CTRL);
-    EXPECT_EQ(LastData_CanTp_Transmit[2], DCM_NRC_SUB_FUNC_NOT_SUPPORTED);
 }
 
 // ------------------------------------------------------------

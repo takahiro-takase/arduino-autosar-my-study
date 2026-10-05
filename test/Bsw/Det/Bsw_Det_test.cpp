@@ -56,14 +56,6 @@ protected:
  * Test Functions
  * ====================================================================== */
 
-TEST_F(DetTest, Det_GetVersionInfo_NG_RejectsNullPointer)
-{
-    Det_GetVersionInfo(NULL);
-
-    EXPECT_EQ(FakeDetHw_LastErrorId, DET_E_PARAM_POINTER);
-    EXPECT_EQ(FakeDetHw_ReportCount, 1U);
-}
-
 TEST_F(DetTest, Det_GetVersionInfo_OK_FillsExpectedModuleId)
 {
     Std_VersionInfoType info;
@@ -71,6 +63,14 @@ TEST_F(DetTest, Det_GetVersionInfo_OK_FillsExpectedModuleId)
     Det_GetVersionInfo(&info);
 
     EXPECT_EQ(info.moduleID, DET_MODULE_ID);
+}
+
+TEST_F(DetTest, Det_GetVersionInfo_NG_RejectsNullPointer)
+{
+    Det_GetVersionInfo(NULL);
+
+    EXPECT_EQ(FakeDetHw_LastErrorId, DET_E_PARAM_POINTER);
+    EXPECT_EQ(FakeDetHw_ReportCount, 1U);
 }
 
 // ------------------------------------------------------------
