@@ -50,6 +50,9 @@ namespace
  * Test Fixture
  * ====================================================================== */
 
+/* Fee の単体テスト用フィクスチャ。
+ * SetUp(): Fee_Init(NULL) を呼ぶ（Init 中の DET ログは抑制し、Init 自体の記録は消して後続の検証から除く）。ArrangeJobActive() は、書き込みジョブを 1 件積んで Fee を BUSY にする補助関数。
+ * TearDown(): 未初期化の状態へ戻す。 */
 class Bsw_Fee_Test : public ::testing::Test
 {
 protected:
@@ -86,8 +89,19 @@ protected:
 
 TEST_F(Bsw_Fee_Test, Fee_GetVersionInfo_NG_NullPointer)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Fee_GetVersionInfo(NULL);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeDetHw_LastErrorId, FEE_E_PARAM_POINTER);
 }
 
@@ -97,19 +111,37 @@ TEST_F(Bsw_Fee_Test, Fee_GetVersionInfo_NG_NullPointer)
 
 TEST_F(Bsw_Fee_Test, Fee_SetMode_NG_Uninit)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     Fee_Test_ResetInitState();
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Fee_SetMode(MEMIF_MODE_FAST);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeDetHw_LastErrorId, FEE_E_UNINIT);
 }
 
 TEST_F(Bsw_Fee_Test, Fee_SetMode_NG_Busy)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     ArrangeJobActive();
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Fee_SetMode(MEMIF_MODE_FAST);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeDetHw_LastErrorId, FEE_E_BUSY);
 }
 
@@ -119,40 +151,78 @@ TEST_F(Bsw_Fee_Test, Fee_SetMode_NG_Busy)
 
 TEST_F(Bsw_Fee_Test, Fee_Read_NG_Uninit)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     Fee_Test_ResetInitState();
     uint8 buf[1];
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = Fee_Read(0U, buf, 1U);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, FEE_E_UNINIT);
 }
 
 TEST_F(Bsw_Fee_Test, Fee_Read_NG_NullPointer)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = Fee_Read(0U, NULL, 1U);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, FEE_E_PARAM_POINTER);
 }
 
 TEST_F(Bsw_Fee_Test, Fee_Read_NG_InvalidBlockLen)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     uint8 buf[1];
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = Fee_Read(0U, buf, 0U);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, FEE_E_INVALID_BLOCK_LEN);
 }
 
 TEST_F(Bsw_Fee_Test, Fee_Read_NG_Busy)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     ArrangeJobActive();
     uint8 buf[1];
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = Fee_Read(0U, buf, 1U);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, FEE_E_BUSY);
 }
@@ -163,40 +233,78 @@ TEST_F(Bsw_Fee_Test, Fee_Read_NG_Busy)
 
 TEST_F(Bsw_Fee_Test, Fee_Write_NG_Uninit)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     Fee_Test_ResetInitState();
     const uint8 data[1] = { 0U };
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = Fee_Write(0U, data, 1U);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, FEE_E_UNINIT);
 }
 
 TEST_F(Bsw_Fee_Test, Fee_Write_NG_NullPointer)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = Fee_Write(0U, NULL, 1U);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, FEE_E_PARAM_POINTER);
 }
 
 TEST_F(Bsw_Fee_Test, Fee_Write_NG_InvalidBlockLen)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     const uint8 data[1] = { 0U };
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = Fee_Write(0U, data, 0U);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, FEE_E_INVALID_BLOCK_LEN);
 }
 
 TEST_F(Bsw_Fee_Test, Fee_Write_NG_Busy)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     ArrangeJobActive();
     const uint8 data[1] = { 0U };
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = Fee_Write(0U, data, 1U);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, FEE_E_BUSY);
 }
@@ -207,40 +315,78 @@ TEST_F(Bsw_Fee_Test, Fee_Write_NG_Busy)
 
 TEST_F(Bsw_Fee_Test, Fee_WriteImmediate_NG_Uninit)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     Fee_Test_ResetInitState();
     const uint8 data[1] = { 0U };
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = Fee_WriteImmediate(0U, data, 1U);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, FEE_E_UNINIT);
 }
 
 TEST_F(Bsw_Fee_Test, Fee_WriteImmediate_NG_NullPointer)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = Fee_WriteImmediate(0U, NULL, 1U);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, FEE_E_PARAM_POINTER);
 }
 
 TEST_F(Bsw_Fee_Test, Fee_WriteImmediate_NG_InvalidBlockLen)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     const uint8 data[1] = { 0U };
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = Fee_WriteImmediate(0U, data, 0U);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, FEE_E_INVALID_BLOCK_LEN);
 }
 
 TEST_F(Bsw_Fee_Test, Fee_WriteImmediate_NG_Busy)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     ArrangeJobActive();
     const uint8 data[1] = { 0U };
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = Fee_WriteImmediate(0U, data, 1U);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, FEE_E_BUSY);
 }
@@ -251,20 +397,38 @@ TEST_F(Bsw_Fee_Test, Fee_WriteImmediate_NG_Busy)
 
 TEST_F(Bsw_Fee_Test, Fee_Cancel_NG_Uninit)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     Fee_Test_ResetInitState();
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Fee_Cancel();
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeDetHw_LastErrorId, FEE_E_UNINIT);
 }
 
 TEST_F(Bsw_Fee_Test, Fee_Cancel_NG_InvalidCancel)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     // ジョブが無い(MEMIF_IDLE)状態でのキャンセル要求。
     ASSERT_EQ(Fee_GetStatus(), MEMIF_IDLE);
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Fee_Cancel();
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeDetHw_LastErrorId, FEE_E_INVALID_CANCEL);
 }
 
@@ -274,10 +438,19 @@ TEST_F(Bsw_Fee_Test, Fee_Cancel_NG_InvalidCancel)
 
 TEST_F(Bsw_Fee_Test, Fee_GetJobResult_NG_Uninit)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     Fee_Test_ResetInitState();
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     MemIf_JobResultType result = Fee_GetJobResult();
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(result, MEMIF_JOB_FAILED);
     EXPECT_EQ(FakeDetHw_LastErrorId, FEE_E_UNINIT);
 }

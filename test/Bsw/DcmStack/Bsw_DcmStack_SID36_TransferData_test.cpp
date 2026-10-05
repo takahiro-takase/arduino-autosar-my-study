@@ -269,6 +269,11 @@ TEST_F(Bsw_DcmStack_SID36_TransferData_Test,
        OK_ExpectedBlockCounterProducesPositiveResponse)
 {
     /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
     /* ---- 実行 (Act) ------- */
     /* ----------------------- */
     const uint8 kData[4] = { 0x01U, 0x02U, 0x03U, 0x04U };
@@ -291,13 +296,23 @@ TEST_F(Bsw_DcmStack_SID36_TransferData_Test,
 TEST_F(Bsw_DcmStack_SID36_TransferData_Test,
        OK_ConsecutiveBlocksIncrementCounter)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     const uint8 kBlock1[4] = { 0x01U, 0x02U, 0x03U, 0x04U };
     SendTransferData(0x01U, kBlock1, 4U);
     ASSERT_EQ(FakeCanHw_LastSendData[1], 0x76U);  // 前提確認
 
     const uint8 kBlock2[4] = { 0x05U, 0x06U, 0x07U, 0x08U };
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     SendTransferData(0x02U, kBlock2, 4U);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     ASSERT_EQ(FakeCanHw_SendCount, 1U);
     EXPECT_EQ(FakeCanHw_LastSendData[1], 0x76U);
     EXPECT_EQ(FakeCanHw_LastSendData[2], 0x02U);
@@ -310,9 +325,19 @@ TEST_F(Bsw_DcmStack_SID36_TransferData_Test,
 TEST_F(Bsw_DcmStack_SID36_TransferData_Test,
        NG_WrongBlockSequenceCounter_WrongBlockCounter)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     const uint8 kData[4] = { 0x01U, 0x02U, 0x03U, 0x04U };
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     SendTransferData(0x02U /* 期待値は0x01 */, kData, 4U);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     ASSERT_EQ(FakeCanHw_SendCount, 1U);
     EXPECT_EQ(FakeCanHw_LastSendData[0], 0x03U);
     EXPECT_EQ(FakeCanHw_LastSendData[1], DCM_SID_NEGATIVE_RESP);

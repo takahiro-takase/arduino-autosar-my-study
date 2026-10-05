@@ -56,6 +56,9 @@ namespace
  * Test Fixture
  * ====================================================================== */
 
+/* EcuM の単体テスト用フィクスチャ。
+ * SetUp(): 模擬 EcuM をパススルーにして（実体の EcuM を呼ぶ）EcuM を未初期化へ戻し、DET の記録を初期化する。ExpectDet() は、DET 報告が 1 件で、API ID とエラー ID が一致することを確認する補助関数。
+ * TearDown(): 模擬 EcuM の状態も含めて元に戻す。 */
 class Bsw_EcuM_Test : public ::testing::Test
 {
 protected:
@@ -96,14 +99,33 @@ protected:
 
 TEST_F(Bsw_EcuM_Test, EcuM_RequestRUN_NG_InvalidUser)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = EcuM_RequestRUN(kInvalidUser);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     ExpectDet(ECUM_API_ID_REQUEST_RUN, ECUM_E_INVALID_PAR);
 }
 
 TEST_F(Bsw_EcuM_Test, EcuM_RequestRUN_NG_MultipleRequest)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------------------- */
+    /* ---- 実行 + 評価 (Act + Assert) --- */
+    /* ----------------------------------- */
     ASSERT_EQ(EcuM_RequestRUN(0U), E_OK);
     FakeDetHw_Reset();
 
@@ -119,16 +141,38 @@ TEST_F(Bsw_EcuM_Test, EcuM_RequestRUN_NG_MultipleRequest)
 
 TEST_F(Bsw_EcuM_Test, EcuM_ReleaseRUN_NG_InvalidUser)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = EcuM_ReleaseRUN(kInvalidUser);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     ExpectDet(ECUM_API_ID_RELEASE_RUN, ECUM_E_INVALID_PAR);
 }
 
 TEST_F(Bsw_EcuM_Test, EcuM_ReleaseRUN_NG_MismatchedRelease)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = EcuM_ReleaseRUN(0U);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     ExpectDet(ECUM_API_ID_RELEASE_RUN, ECUM_E_MISMATCHED_RUN_RELEASE);
 }
@@ -139,14 +183,33 @@ TEST_F(Bsw_EcuM_Test, EcuM_ReleaseRUN_NG_MismatchedRelease)
 
 TEST_F(Bsw_EcuM_Test, EcuM_RequestPOST_RUN_NG_InvalidUser)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = EcuM_RequestPOST_RUN(kInvalidUser);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     ExpectDet(ECUM_API_ID_REQUEST_POST_RUN, ECUM_E_INVALID_PAR);
 }
 
 TEST_F(Bsw_EcuM_Test, EcuM_RequestPOST_RUN_NG_MultipleRequest)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------------------- */
+    /* ---- 実行 + 評価 (Act + Assert) --- */
+    /* ----------------------------------- */
     ASSERT_EQ(EcuM_RequestPOST_RUN(0U), E_OK);
     FakeDetHw_Reset();
 
@@ -162,16 +225,38 @@ TEST_F(Bsw_EcuM_Test, EcuM_RequestPOST_RUN_NG_MultipleRequest)
 
 TEST_F(Bsw_EcuM_Test, EcuM_ReleasePOST_RUN_NG_InvalidUser)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = EcuM_ReleasePOST_RUN(kInvalidUser);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     ExpectDet(ECUM_API_ID_RELEASE_POST_RUN, ECUM_E_INVALID_PAR);
 }
 
 TEST_F(Bsw_EcuM_Test, EcuM_ReleasePOST_RUN_NG_MismatchedRelease)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = EcuM_ReleasePOST_RUN(0U);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     ExpectDet(ECUM_API_ID_RELEASE_POST_RUN, ECUM_E_MISMATCHED_RUN_RELEASE);
 }
@@ -182,9 +267,22 @@ TEST_F(Bsw_EcuM_Test, EcuM_ReleasePOST_RUN_NG_MismatchedRelease)
 
 TEST_F(Bsw_EcuM_Test, EcuM_CheckWakeup_NG_InvalidSource)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     EcuM_CheckWakeup(0U);
 
     ExpectDet(ECUM_API_ID_CHECK_WAKEUP, ECUM_E_INVALID_PAR);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // 異常終了せずに戻ること（EXPECT/ASSERT は無い）
 }
 
 // ------------------------------------------------------------
@@ -193,9 +291,22 @@ TEST_F(Bsw_EcuM_Test, EcuM_CheckWakeup_NG_InvalidSource)
 
 TEST_F(Bsw_EcuM_Test, EcuM_GetVersionInfo_NG_NullPointer)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     EcuM_GetVersionInfo(NULL);
 
     ExpectDet(ECUM_API_ID_GET_VERSION_INFO, ECUM_E_NULL_POINTER);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // 異常終了せずに戻ること（EXPECT/ASSERT は無い）
 }
 
 }  // namespace

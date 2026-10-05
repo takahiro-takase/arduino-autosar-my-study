@@ -43,6 +43,8 @@ namespace
  * Test Fixture
  * ====================================================================== */
 
+/* Port の単体テスト用フィクスチャ。
+ * SetUp(): 模擬 Port_Hw と DET の記録を初期化する。 */
 class PortTest : public ::testing::Test
 {
 protected:
@@ -59,11 +61,20 @@ protected:
 
 TEST_F(PortTest, Port_RefreshPortDirection_OK_ReappliesAllConfiguredPinDirections)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     Port_Init(NULL);
     FakePortHw_Reset();  /* Port_Init 自身の適用呼び出しを後続の検証対象から除く */
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Port_RefreshPortDirection();
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakePortHw_GetLastDirection(PORT_PIN_LED_RUNNING), PORT_PIN_OUT);
     EXPECT_EQ(FakePortHw_GetLastDirection(PORT_PIN_LED_FAULT),   PORT_PIN_OUT);
     EXPECT_EQ(FakePortHw_GetLastDirection(PORT_PIN_LED_WARNING), PORT_PIN_OUT);
@@ -73,28 +84,57 @@ TEST_F(PortTest, Port_RefreshPortDirection_OK_ReappliesAllConfiguredPinDirection
 
 TEST_F(PortTest, Port_RefreshPortDirection_OK_OverridesDirectionChangedByRuntimeApi)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     Port_Init(NULL);
     Port_SetPinDirection(PORT_PIN_LED_RUNNING, PORT_PIN_IN);  /* 実行時に方向を変更してしまった状態を模擬 */
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Port_RefreshPortDirection();
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakePortHw_GetLastDirection(PORT_PIN_LED_RUNNING), PORT_PIN_OUT);
 }
 
 TEST_F(PortTest, GetVersionInfo_NG_NullPointer)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Port_GetVersionInfo(NULL);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeDetHw_LastErrorId, PORT_E_PARAM_POINTER);
 }
 
 TEST_F(PortTest, Port_SetPinMode_NG_AlwaysReportsModeUnchangeableAndHasNoEffect)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     Port_Init(NULL);
     FakePortHw_Reset();  /* Port_Init 自身の適用呼び出しを後続の検証対象から除く */
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Port_SetPinMode(PORT_PIN_LED_RUNNING, 0U);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeDetHw_LastErrorId, PORT_E_MODE_UNCHANGEABLE);
     EXPECT_EQ(FakeDetHw_ReportCount, 1U);
     /* [SWS_Port_00223]: エラー報告以外は何もしない（ピン方向は変化しない）。 */

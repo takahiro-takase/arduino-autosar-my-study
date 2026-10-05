@@ -289,6 +289,10 @@ TEST_F(Bsw_DcmStack_SID2E_WriteDataById_Test,
     /* ------------------------------------ */
     const uint8 kPattern[DCM_DID_TEST_PATTERN_LENGTH] =
         { 0x11U, 0x22U, 0x33U, 0x44U, 0x55U, 0x66U, 0x77U, 0x88U };
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     SendWriteTestPattern(kPattern);
 
     /* ------------------------------------ */

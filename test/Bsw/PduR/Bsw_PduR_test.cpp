@@ -76,6 +76,8 @@ const PduR_PBConfigType kSecOCTestConfig = {
  * Test Fixture
  * ====================================================================== */
 
+/* PduR_SecOCTxConfirmation() の単体テスト用フィクスチャ。
+ * SetUp(): DET の記録と、送信確認コールバック（ConfFct）の呼び出し回数・引数の記録を初期化する。 */
 class Bsw_PduR_SecOCTxConfirmation_Test : public ::testing::Test
 {
 protected:
@@ -103,11 +105,20 @@ protected:
 
 TEST_F(Bsw_PduR_SecOCTxConfirmation_Test, PduR_SecOCTxConfirmation_OK_MatchingRouteInvokesConfFctWithConfDestPduId)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     PduR_Init(&kSecOCTestConfig);
     FakeDetHw_LogSuppressed = 0U;
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     PduR_SecOCTxConfirmation(10U, E_OK);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(g_ConfFctCallCount, 1U);
     EXPECT_EQ(g_LastDestPduId, 20U);
     EXPECT_EQ(g_LastResult, E_OK);
@@ -116,22 +127,40 @@ TEST_F(Bsw_PduR_SecOCTxConfirmation_Test, PduR_SecOCTxConfirmation_OK_MatchingRo
 
 TEST_F(Bsw_PduR_SecOCTxConfirmation_Test, PduR_SecOCTxConfirmation_OK_ForwardsFailureResultUnchanged)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     PduR_Init(&kSecOCTestConfig);
     FakeDetHw_LogSuppressed = 0U;
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     PduR_SecOCTxConfirmation(10U, E_NOT_OK);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(g_ConfFctCallCount, 1U);
     EXPECT_EQ(g_LastResult, E_NOT_OK);
 }
 
 TEST_F(Bsw_PduR_SecOCTxConfirmation_Test, PduR_SecOCTxConfirmation_NG_NoMatchingRouteReportsDetAndDoesNotCallConfFct)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     PduR_Init(&kSecOCTestConfig);
     FakeDetHw_LogSuppressed = 0U;
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     PduR_SecOCTxConfirmation(99U, E_OK);  // 99 は kSecOCTestTxPath.SrcPduId と不一致
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(g_ConfFctCallCount, 0U);
     EXPECT_EQ(FakeDetHw_LastErrorId, PDUR_E_PDU_ID_INVALID);
 }
@@ -185,6 +214,8 @@ const PduR_PBConfigType kTestConfig = {
  * Test Fixture
  * ====================================================================== */
 
+/* PduR（上記以外の API）の単体テスト用フィクスチャ。
+ * SetUp(): PduR_Init(&kTestConfig) を呼ぶ（Init 中の DET ログは抑制し、Init 自体の記録は消して後続の検証から除く）。 */
 class Bsw_PduR_Test : public ::testing::Test
 {
 protected:
@@ -207,21 +238,39 @@ protected:
 
 TEST_F(Bsw_PduR_Test, PduR_Init_NG_NullConfigPtr)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     PduR_Test_ResetInitState();
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     PduR_Init(NULL);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeDetHw_LastErrorId, PDUR_E_INIT_FAILED);
 }
 
 TEST_F(Bsw_PduR_Test, PduR_Init_NG_RxPathHasNoDests)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     PduR_Test_ResetInitState();
     const PduR_RxRoutingPathType badRxPath = { 40U, NULL, 0U };
     const PduR_PBConfigType badConfig = { &badRxPath, 1U, NULL, 0U };
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     PduR_Init(&badConfig);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeDetHw_LastErrorId, PDUR_E_INIT_FAILED);
 }
 
@@ -231,8 +280,19 @@ TEST_F(Bsw_PduR_Test, PduR_Init_NG_RxPathHasNoDests)
 
 TEST_F(Bsw_PduR_Test, PduR_GetVersionInfo_NG_NullPointer)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     PduR_GetVersionInfo(NULL);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeDetHw_LastErrorId, PDUR_E_PARAM_POINTER);
 }
 
@@ -242,31 +302,60 @@ TEST_F(Bsw_PduR_Test, PduR_GetVersionInfo_NG_NullPointer)
 
 TEST_F(Bsw_PduR_Test, PduR_ComTransmit_NG_Uninit)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     PduR_Test_ResetInitState();
     uint8 sdu[8] = { 0 };
     PduInfoType info = { sdu, 1U };
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = PduR_ComTransmit(10U, &info);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, PDUR_E_UNINIT);
 }
 
 TEST_F(Bsw_PduR_Test, PduR_ComTransmit_NG_NullPduInfoPtr)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = PduR_ComTransmit(10U, NULL);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, PDUR_E_PARAM_POINTER);
 }
 
 TEST_F(Bsw_PduR_Test, PduR_ComTransmit_NG_NoMatchingRoute)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     uint8 sdu[8] = { 0 };
     PduInfoType info = { sdu, 1U };
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = PduR_ComTransmit(99U, &info);  // 99 は kTestTxPath.SrcPduId と不一致
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, PDUR_E_PDU_ID_INVALID);
 }
@@ -277,31 +366,60 @@ TEST_F(Bsw_PduR_Test, PduR_ComTransmit_NG_NoMatchingRoute)
 
 TEST_F(Bsw_PduR_Test, PduR_SecOCTransmit_NG_Uninit)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     PduR_Test_ResetInitState();
     uint8 sdu[8] = { 0 };
     PduInfoType info = { sdu, 1U };
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = PduR_SecOCTransmit(10U, &info);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, PDUR_E_UNINIT);
 }
 
 TEST_F(Bsw_PduR_Test, PduR_SecOCTransmit_NG_NullPduInfoPtr)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = PduR_SecOCTransmit(10U, NULL);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, PDUR_E_PARAM_POINTER);
 }
 
 TEST_F(Bsw_PduR_Test, PduR_SecOCTransmit_NG_NoMatchingRoute)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     uint8 sdu[8] = { 0 };
     PduInfoType info = { sdu, 1U };
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = PduR_SecOCTransmit(99U, &info);  // 99 は kTestTxPath.SrcPduId と不一致
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, PDUR_E_PDU_ID_INVALID);
 }
@@ -312,29 +430,58 @@ TEST_F(Bsw_PduR_Test, PduR_SecOCTransmit_NG_NoMatchingRoute)
 
 TEST_F(Bsw_PduR_Test, PduR_ComRxIndication_NG_Uninit)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     PduR_Test_ResetInitState();
     uint8 sdu[8] = { 0 };
     PduInfoType info = { sdu, 1U };
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     PduR_ComRxIndication(40U, &info);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeDetHw_LastErrorId, PDUR_E_UNINIT);
 }
 
 TEST_F(Bsw_PduR_Test, PduR_ComRxIndication_NG_NullPduInfoPtr)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     PduR_ComRxIndication(40U, NULL);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeDetHw_LastErrorId, PDUR_E_PARAM_POINTER);
 }
 
 TEST_F(Bsw_PduR_Test, PduR_ComRxIndication_NG_NoMatchingRoute)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     uint8 sdu[8] = { 0 };
     PduInfoType info = { sdu, 1U };
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     PduR_ComRxIndication(99U, &info);  // 99 は kTestRxPath.SrcPduId と不一致
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeDetHw_LastErrorId, PDUR_E_PDU_ID_INVALID);
 }
 
@@ -344,17 +491,37 @@ TEST_F(Bsw_PduR_Test, PduR_ComRxIndication_NG_NoMatchingRoute)
 
 TEST_F(Bsw_PduR_Test, PduR_CanIfTxConfirmation_NG_Uninit)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     PduR_Test_ResetInitState();
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     PduR_CanIfTxConfirmation(10U, E_OK);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeDetHw_LastErrorId, PDUR_E_UNINIT);
 }
 
 TEST_F(Bsw_PduR_Test, PduR_CanIfTxConfirmation_NG_NoMatchingRoute)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     PduR_CanIfTxConfirmation(99U, E_OK);  // 99 は kTestTxPath.SrcPduId と不一致
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeDetHw_LastErrorId, PDUR_E_PDU_ID_INVALID);
 }
 

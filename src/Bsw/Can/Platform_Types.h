@@ -54,7 +54,7 @@ typedef int32_t  sint32;
  *          採用する。理由: 本プロジェクトがターゲットにする Arduino UNO R4
  *          用フレームワーク(`framework-arduinorenesas-uno`)の
  *          `cores/arduino/api/Common.h` が既に `typedef bool boolean;` を
- *          定義しており、`main.cpp`/`src/Hal/*.cpp`（`<Arduino.h>` を直接
+ *          定義しており、`main.cpp` と `src/Hal/` 配下の各 `.cpp`（`<Arduino.h>` を直接
  *          include する唯一の層）はこの定義とも同時にコンパイルされる。
  *          実体を `unsigned char` にすると、これらのファイルで
  *          「同名だが実体が異なる」再定義エラーになる。`bool` に合わせれば

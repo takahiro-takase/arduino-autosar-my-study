@@ -288,6 +288,9 @@ class Bsw_NmStack_SleepCoordination_CommunicationAllowed_Test : public Bsw_NmSta
 
 TEST_F(Bsw_NmStack_SleepCoordination_VoluntarySleep_Test, OK_DefersPhysicalSleepUntilNmReachesBusSleepMode)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     ArrangeFullCom();
 
     /* ----------------------- */
@@ -331,6 +334,9 @@ TEST_F(Bsw_NmStack_SleepCoordination_VoluntarySleep_Test, OK_DefersPhysicalSleep
  */
 TEST_F(Bsw_NmStack_SleepCoordination_VoluntarySleep_Test, OK_SilencesChannelAtPrepareBusSleep)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     ArrangeFullCom();
 
     /* ----------------------- */
@@ -374,6 +380,9 @@ TEST_F(Bsw_NmStack_SleepCoordination_VoluntarySleep_Test, OK_SilencesChannelAtPr
  */
 TEST_F(Bsw_NmStack_SleepCoordination_VoluntarySleep_Test, OK_RedundantNoComRequestDuringSilentComDoesNotSleepEarly)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     ArrangeFullCom();
     ArrangeSilentComAtPrepareBusSleep();
 
@@ -416,6 +425,9 @@ TEST_F(Bsw_NmStack_SleepCoordination_VoluntarySleep_Test, OK_RedundantNoComReque
 
 TEST_F(Bsw_NmStack_SleepCoordination_ReRequestFullCom_Test, OK_CancelsPendingNmRelease)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     ArrangeFullCom();
 
     /* ----------------------- */
@@ -456,6 +468,9 @@ TEST_F(Bsw_NmStack_SleepCoordination_ReRequestFullCom_Test, OK_CancelsPendingNmR
  */
 TEST_F(Bsw_NmStack_SleepCoordination_ReRequestFullCom_Test, OK_RxCancelsPrepareBusSleepRestoresFullComAndTransmits)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     CanIf_Init(&kTestCanIfConfigWithNmTx);
 
     ArrangeFullCom();
@@ -501,6 +516,9 @@ TEST_F(Bsw_NmStack_SleepCoordination_ReRequestFullCom_Test, OK_RxCancelsPrepareB
  */
 TEST_F(Bsw_NmStack_SleepCoordination_ReRequestFullCom_Test, OK_AfterPrepareBusSleepRestoresFullCom)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     ArrangeFullCom();
     ArrangeSilentComAtPrepareBusSleep();
 
@@ -538,6 +556,9 @@ TEST_F(Bsw_NmStack_SleepCoordination_ReRequestFullCom_Test, OK_AfterPrepareBusSl
 
 TEST_F(Bsw_NmStack_SleepCoordination_DcmDiagnostic_Test, OK_ActiveDiagnosticKeepsFullComEvenWhenUser0RequestsNoCom)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     ArrangeFullCom();
     ComM_DCM_ActiveDiagnostic(0U);
 
@@ -570,6 +591,9 @@ TEST_F(Bsw_NmStack_SleepCoordination_DcmDiagnostic_Test, OK_ActiveDiagnosticKeep
 
 TEST_F(Bsw_NmStack_SleepCoordination_DcmDiagnostic_Test, OK_InactiveDiagnosticAllowsSleepOnceUser0AlsoReleased)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     ArrangeFullCom();
     ComM_DCM_ActiveDiagnostic(0U);
     ASSERT_EQ(ComM_RequestComMode(COMM_USER_0, COMM_NO_COMMUNICATION), E_OK);
@@ -584,6 +608,10 @@ TEST_F(Bsw_NmStack_SleepCoordination_DcmDiagnostic_Test, OK_InactiveDiagnosticAl
     DriveNmUntil(CANNM_STATE_BUS_SLEEP);
 
     ComM_ModeType mode = COMM_FULL_COMMUNICATION;
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     ASSERT_EQ(ComM_GetCurrentComMode(COMM_USER_0, &mode), E_OK);
     EXPECT_EQ(mode, static_cast<ComM_ModeType>(COMM_NO_COMMUNICATION));
     EXPECT_EQ(Can_Test_GetControllerState(), CAN_CS_SLEEP);
@@ -591,6 +619,9 @@ TEST_F(Bsw_NmStack_SleepCoordination_DcmDiagnostic_Test, OK_InactiveDiagnosticAl
 
 TEST_F(Bsw_NmStack_SleepCoordination_BusOff_Test, OK_DuringNmWinddownDoesNotResurrectNm)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     ArrangeFullCom();
     ASSERT_EQ(ComM_RequestComMode(COMM_USER_0, COMM_NO_COMMUNICATION), E_OK);
 
@@ -642,6 +673,9 @@ TEST_F(Bsw_NmStack_SleepCoordination_BusOff_Test, OK_DuringNmWinddownDoesNotResu
  */
 TEST_F(Bsw_NmStack_SleepCoordination_BusOff_Test, OK_ReRequestFullComDuringBusOffRestoresFullComAfterRecovery)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     ArrangeFullCom();
     ASSERT_EQ(ComM_RequestComMode(COMM_USER_0, COMM_NO_COMMUNICATION), E_OK);
 
@@ -707,6 +741,9 @@ TEST_F(Bsw_NmStack_SleepCoordination_BusOff_Test, OK_ReRequestFullComDuringBusOf
  */
 TEST_F(Bsw_NmStack_SleepCoordination_BusOff_Test, OK_RxDuringBusOffAfterNmBusSleepDoesNotResurrectNm)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     ArrangeFullCom();
     ASSERT_EQ(ComM_RequestComMode(COMM_USER_0, COMM_NO_COMMUNICATION), E_OK);
 
@@ -768,6 +805,9 @@ TEST_F(Bsw_NmStack_SleepCoordination_BusOff_Test, OK_RxDuringBusOffAfterNmBusSle
  */
 TEST_F(Bsw_NmStack_SleepCoordination_BusOff_Test, OK_DuringRxCancelledPrepareBusSleepConvergesToFullCom)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     ArrangeFullCom();
     ASSERT_EQ(ComM_RequestComMode(COMM_USER_0, COMM_NO_COMMUNICATION), E_OK);
 
@@ -845,6 +885,9 @@ TEST_F(Bsw_NmStack_SleepCoordination_BusOff_Test, OK_DuringRxCancelledPrepareBus
  */
 TEST_F(Bsw_NmStack_SleepCoordination_BusOff_Test, OK_DuringSilentComRestoresSilentComAfterRecovery)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     ArrangeFullCom();
     ASSERT_EQ(CanSM_RequestComMode(0U, COMM_SILENT_COMMUNICATION), E_OK);
     ASSERT_EQ(Can_Test_GetControllerState(), CAN_CS_STARTED);
@@ -909,6 +952,9 @@ TEST_F(Bsw_NmStack_SleepCoordination_BusOff_Test, OK_DuringSilentComRestoresSile
  */
 TEST_F(Bsw_NmStack_SleepCoordination_BusOff_Test, OK_DuringSilentComConvergesToNoComWhenNmReachesBusSleepDuringOutage)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     ArrangeFullCom();
     ArrangeSilentComAtPrepareBusSleep();
 
@@ -955,6 +1001,9 @@ TEST_F(Bsw_NmStack_SleepCoordination_BusOff_Test, OK_DuringSilentComConvergesToN
  */
 TEST_F(Bsw_NmStack_SleepCoordination_CommunicationAllowed_Test, OK_HoldsFullComPendingWhileNotAllowed)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     ComM_CommunicationAllowed(COMM_CHANNEL_0, FALSE);
 
     /* ----------------------- */
@@ -979,6 +1028,9 @@ TEST_F(Bsw_NmStack_SleepCoordination_CommunicationAllowed_Test, OK_HoldsFullComP
  */
 TEST_F(Bsw_NmStack_SleepCoordination_CommunicationAllowed_Test, OK_DispatchesPendingFullComImmediatelyWhenGranted)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     ComM_CommunicationAllowed(COMM_CHANNEL_0, FALSE);
     ASSERT_EQ(ComM_RequestComMode(COMM_USER_0, COMM_FULL_COMMUNICATION), E_OK);
 
@@ -1003,6 +1055,11 @@ TEST_F(Bsw_NmStack_SleepCoordination_CommunicationAllowed_Test, OK_DispatchesPen
  */
 TEST_F(Bsw_NmStack_SleepCoordination_CommunicationAllowed_Test, OK_NoPendingRequestDoesNothing)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
     /* ----------------------- */
     /* ---- 実行 (Act) ------- */
     /* ----------------------- */

@@ -43,6 +43,8 @@ namespace
  * Test Fixture
  * ====================================================================== */
 
+/* Det の単体テスト用フィクスチャ。
+ * SetUp(): DET の記録を初期化する。 */
 class DetTest : public ::testing::Test
 {
 protected:
@@ -58,17 +60,37 @@ protected:
 
 TEST_F(DetTest, Det_GetVersionInfo_OK_FillsExpectedModuleId)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     Std_VersionInfoType info;
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Det_GetVersionInfo(&info);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(info.moduleID, DET_MODULE_ID);
 }
 
 TEST_F(DetTest, Det_GetVersionInfo_NG_RejectsNullPointer)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Det_GetVersionInfo(NULL);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeDetHw_LastErrorId, DET_E_PARAM_POINTER);
     EXPECT_EQ(FakeDetHw_ReportCount, 1U);
 }
@@ -81,15 +103,37 @@ TEST_F(DetTest, Det_GetVersionInfo_NG_RejectsNullPointer)
 
 TEST_F(DetTest, Det_Init_OK_DoesNotReportError)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Det_Init(NULL);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeDetHw_ReportCount, 0U);
 }
 
 TEST_F(DetTest, Det_Start_OK_DoesNotReportError)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Det_Start();
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeDetHw_ReportCount, 0U);
 }
 
@@ -101,8 +145,19 @@ TEST_F(DetTest, Det_Start_OK_DoesNotReportError)
 
 TEST_F(DetTest, Det_ReportRuntimeError_OK_ReportsAndReturnsOk)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = Det_ReportRuntimeError(50U, 0U, 0x12U, 0x34U);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_OK);
     EXPECT_EQ(FakeDetHw_ReportCount, 1U);
     EXPECT_EQ(FakeDetHw_LastModuleId, 50U);
@@ -112,8 +167,19 @@ TEST_F(DetTest, Det_ReportRuntimeError_OK_ReportsAndReturnsOk)
 
 TEST_F(DetTest, Det_ReportTransientFault_OK_ReportsAndReturnsOk)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = Det_ReportTransientFault(50U, 0U, 0x56U, 0x78U);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_OK);
     EXPECT_EQ(FakeDetHw_ReportCount, 1U);
     EXPECT_EQ(FakeDetHw_LastModuleId, 50U);

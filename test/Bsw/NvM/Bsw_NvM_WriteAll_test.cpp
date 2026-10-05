@@ -48,6 +48,9 @@ namespace
  * Test Fixture
  * ====================================================================== */
 
+/* NvM_WriteAll() の単体テスト用フィクスチャ。
+ * SetUp(): MemIf_Init() と NvM_Init(NULL) を呼び、Dem の wrap と DET の記録を初期化する。書き込みデータは、既存の内容と異なる値で埋めておく（書き込みがスキップされないようにするため）。ResultOf() は、ブロックの要求結果を取得する補助関数。
+ * TearDown(): 未初期化の状態へ戻す。 */
 class Bsw_NvM_WriteAll_Test : public ::testing::Test
 {
 protected:

@@ -116,6 +116,8 @@ const CanIf_ConfigType kBusOffRecoveryCanIfConfig = {
  * Test Fixture
  * ====================================================================== */
 
+/* CanSM の Bus-Off 回復（再試行を含む）の単体テスト用フィクスチャ。
+ * SetUp(): 模擬 Can_Hw・Dem・EcuM・BswM と wrap をリセットし、Dem_Init(NULL)・Can_Init()・CanIf_Init(&kBusOffRecoveryCanIfConfig)・CanSM_Init(NULL)・ComM_Init(NULL)（起動時と同じく通信を許可）・CanNm_Init(NULL)・Nm_Init(NULL) の順に呼び、FULL_COM の状態を用意する（Bsw_NmStack_SleepCoordination_test.cpp の ArrangeFullCom() と同じ流儀）。 */
 class Bsw_CanSM_BusOffRecovery_Test : public ::testing::Test
 {
 protected:
@@ -326,6 +328,9 @@ TEST_F(Bsw_CanSM_BusOffRecovery_Test, MainFunction_NG_RecoveryAttemptFails_Stays
  * Test Fixture
  * ====================================================================== */
 
+/* CanSM（Bus-Off 回復以外の API）の単体テスト用フィクスチャ。
+ * SetUp(): CanSM_Init(NULL) を呼ぶ（Init 中の DET ログは抑制し、Init 自体の記録は消して後続の検証から除く）。
+ * TearDown(): CanSM_DeInit() で未初期化へ戻す。 */
 class Bsw_CanSM_Test : public ::testing::Test
 {
 protected:
@@ -350,11 +355,22 @@ protected:
 
 TEST_F(Bsw_CanSM_Test, CanSM_DeInit_NG_Uninit)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     CanSM_DeInit();  // 1回目: SetUp() の Init を正常に解除する
     FakeDetHw_Reset();
 
     CanSM_DeInit();  // 2回目: 既に未初期化のため NG
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeDetHw_LastErrorId, CANSM_E_UNINIT);
 }
 
@@ -364,18 +380,38 @@ TEST_F(Bsw_CanSM_Test, CanSM_DeInit_NG_Uninit)
 
 TEST_F(Bsw_CanSM_Test, CanSM_RequestComMode_NG_Uninit)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     CanSM_DeInit();
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = CanSM_RequestComMode(0U, COMM_FULL_COMMUNICATION);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, CANSM_E_UNINIT);
 }
 
 TEST_F(Bsw_CanSM_Test, CanSM_RequestComMode_NG_InvalidNetworkHandle)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = CanSM_RequestComMode(CANSM_CHANNEL_COUNT, COMM_FULL_COMMUNICATION);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, CANSM_E_INVALID_NETWORK_HANDLE);
 }
@@ -386,29 +422,58 @@ TEST_F(Bsw_CanSM_Test, CanSM_RequestComMode_NG_InvalidNetworkHandle)
 
 TEST_F(Bsw_CanSM_Test, CanSM_GetCurrentComMode_NG_Uninit)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     CanSM_DeInit();
     ComM_ModeType mode;
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = CanSM_GetCurrentComMode(0U, &mode);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, CANSM_E_UNINIT);
 }
 
 TEST_F(Bsw_CanSM_Test, CanSM_GetCurrentComMode_NG_InvalidNetworkHandle)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     ComM_ModeType mode;
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = CanSM_GetCurrentComMode(CANSM_CHANNEL_COUNT, &mode);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, CANSM_E_INVALID_NETWORK_HANDLE);
 }
 
 TEST_F(Bsw_CanSM_Test, CanSM_GetCurrentComMode_NG_NullPointer)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = CanSM_GetCurrentComMode(0U, NULL);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, CANSM_E_PARAM_POINTER);
 }
@@ -419,8 +484,19 @@ TEST_F(Bsw_CanSM_Test, CanSM_GetCurrentComMode_NG_NullPointer)
 
 TEST_F(Bsw_CanSM_Test, CanSM_GetVersionInfo_NG_NullPointer)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     CanSM_GetVersionInfo(NULL);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeDetHw_LastErrorId, CANSM_E_PARAM_POINTER);
 }
 
@@ -430,17 +506,37 @@ TEST_F(Bsw_CanSM_Test, CanSM_GetVersionInfo_NG_NullPointer)
 
 TEST_F(Bsw_CanSM_Test, CanSM_ControllerBusOff_NG_Uninit)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     CanSM_DeInit();
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     CanSM_ControllerBusOff(0U);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeDetHw_LastErrorId, CANSM_E_UNINIT);
 }
 
 TEST_F(Bsw_CanSM_Test, CanSM_ControllerBusOff_NG_InvalidController)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     CanSM_ControllerBusOff(1U);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeDetHw_LastErrorId, CANSM_E_PARAM_CONTROLLER);
 }
 
@@ -450,17 +546,37 @@ TEST_F(Bsw_CanSM_Test, CanSM_ControllerBusOff_NG_InvalidController)
 
 TEST_F(Bsw_CanSM_Test, CanSM_ControllerModeIndication_NG_Uninit)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     CanSM_DeInit();
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     CanSM_ControllerModeIndication(0U, CAN_CS_STARTED);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeDetHw_LastErrorId, CANSM_E_UNINIT);
 }
 
 TEST_F(Bsw_CanSM_Test, CanSM_ControllerModeIndication_NG_InvalidController)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     CanSM_ControllerModeIndication(1U, CAN_CS_STARTED);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeDetHw_LastErrorId, CANSM_E_PARAM_CONTROLLER);
 }
 
@@ -470,10 +586,19 @@ TEST_F(Bsw_CanSM_Test, CanSM_ControllerModeIndication_NG_InvalidController)
 
 TEST_F(Bsw_CanSM_Test, CanSM_RxIndication_NG_Uninit)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     CanSM_DeInit();
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     CanSM_RxIndication(0U);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeDetHw_LastErrorId, CANSM_E_UNINIT);
 }
 
@@ -483,10 +608,19 @@ TEST_F(Bsw_CanSM_Test, CanSM_RxIndication_NG_Uninit)
 
 TEST_F(Bsw_CanSM_Test, CanSM_MainFunction_NG_Uninit)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     CanSM_DeInit();
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     CanSM_MainFunction();
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeDetHw_LastErrorId, CANSM_E_UNINIT);
 }
 

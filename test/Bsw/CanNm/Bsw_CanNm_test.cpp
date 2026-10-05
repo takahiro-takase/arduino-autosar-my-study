@@ -71,6 +71,9 @@ namespace
  * Test Fixture
  * ====================================================================== */
 
+/* CanNm の API が受け取るチャネル引数の検証（範囲外のチャネルなど）用フィクスチャ。
+ * SetUp(): ComM_DeInit()（RxIndication のカスケードを防ぐ）の後、CanNm_Init(NULL) と Nm_Init(NULL) を呼ぶ（Init 中の DET ログは抑制し、Init 自体の記録は消して後続の検証から除く）。
+ * TearDown(): CanNm_DeInit() で未初期化へ戻す。 */
 class Bsw_CanNm_ChannelValidation_Test : public ::testing::Test
 {
 protected:
@@ -107,8 +110,19 @@ protected:
 
 TEST_F(Bsw_CanNm_ChannelValidation_Test, NetworkRequest_NG_InvalidChannelReturnsErrorAndReportsDet)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = CanNm_NetworkRequest(kInvalidChannel);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, CANNM_E_INVALID_CHANNEL);
     EXPECT_EQ(FakeDetHw_ReportCount, 1U);
@@ -123,70 +137,154 @@ TEST_F(Bsw_CanNm_ChannelValidation_Test, NetworkRequest_NG_InvalidChannelReturns
 
 TEST_F(Bsw_CanNm_ChannelValidation_Test, NetworkRelease_NG_InvalidChannelReturnsErrorAndReportsDet)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = CanNm_NetworkRelease(kInvalidChannel);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, CANNM_E_INVALID_CHANNEL);
 }
 
 TEST_F(Bsw_CanNm_ChannelValidation_Test, RepeatMessageRequest_NG_InvalidChannelReturnsErrorAndReportsDet)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = CanNm_RepeatMessageRequest(kInvalidChannel);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, CANNM_E_INVALID_CHANNEL);
 }
 
 TEST_F(Bsw_CanNm_ChannelValidation_Test, GetState_OK_ValidChannelIsAccepted)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     CanNm_StateType state;
     CanNm_ModeType  mode;
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = CanNm_GetState(CANNM_MAIN_NETWORK_HANDLE, &state, &mode);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_OK);
     EXPECT_EQ(FakeDetHw_ReportCount, 0U);
 }
 
 TEST_F(Bsw_CanNm_ChannelValidation_Test, GetState_NG_InvalidChannelReturnsErrorAndReportsDet)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     CanNm_StateType state;
     CanNm_ModeType  mode;
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = CanNm_GetState(kInvalidChannel, &state, &mode);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, CANNM_E_INVALID_CHANNEL);
 }
 
 TEST_F(Bsw_CanNm_ChannelValidation_Test, DisableCommunication_OK_ValidChannelIsAccepted)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = CanNm_DisableCommunication(CANNM_MAIN_NETWORK_HANDLE);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_OK);
     EXPECT_EQ(FakeDetHw_ReportCount, 0U);
 }
 
 TEST_F(Bsw_CanNm_ChannelValidation_Test, DisableCommunication_NG_InvalidChannelReturnsErrorAndReportsDet)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = CanNm_DisableCommunication(kInvalidChannel);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, CANNM_E_INVALID_CHANNEL);
 }
 
 TEST_F(Bsw_CanNm_ChannelValidation_Test, EnableCommunication_OK_ValidChannelIsAccepted)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = CanNm_EnableCommunication(CANNM_MAIN_NETWORK_HANDLE);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_OK);
     EXPECT_EQ(FakeDetHw_ReportCount, 0U);
 }
 
 TEST_F(Bsw_CanNm_ChannelValidation_Test, EnableCommunication_NG_InvalidChannelReturnsErrorAndReportsDet)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = CanNm_EnableCommunication(kInvalidChannel);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, CANNM_E_INVALID_CHANNEL);
 }
@@ -198,10 +296,19 @@ TEST_F(Bsw_CanNm_ChannelValidation_Test, EnableCommunication_NG_InvalidChannelRe
 
 TEST_F(Bsw_CanNm_ChannelValidation_Test, GetLocalNodeIdentifier_OK_ReturnsConfiguredSourceNodeId)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     uint8 nodeId = 0U;
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = CanNm_GetLocalNodeIdentifier(CANNM_MAIN_NETWORK_HANDLE, &nodeId);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_OK);
     EXPECT_EQ(nodeId, CANNM_SOURCE_NODE_ID);
     EXPECT_EQ(FakeDetHw_ReportCount, 0U);
@@ -209,34 +316,66 @@ TEST_F(Bsw_CanNm_ChannelValidation_Test, GetLocalNodeIdentifier_OK_ReturnsConfig
 
 TEST_F(Bsw_CanNm_ChannelValidation_Test, GetLocalNodeIdentifier_NG_InvalidChannelReturnsErrorAndReportsDet)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     uint8 nodeId = 0U;
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = CanNm_GetLocalNodeIdentifier(kInvalidChannel, &nodeId);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, CANNM_E_INVALID_CHANNEL);
 }
 
 TEST_F(Bsw_CanNm_ChannelValidation_Test, GetLocalNodeIdentifier_NG_NullPointerReturnsErrorAndReportsDet)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = CanNm_GetLocalNodeIdentifier(CANNM_MAIN_NETWORK_HANDLE, NULL);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, CANNM_E_PARAM_POINTER);
 }
 
 TEST_F(Bsw_CanNm_ChannelValidation_Test, GetNodeIdentifier_OK_ReturnsZeroBeforeAnyReception)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     uint8 nodeId = 0xFFU;
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = CanNm_GetNodeIdentifier(CANNM_MAIN_NETWORK_HANDLE, &nodeId);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_OK);
     EXPECT_EQ(nodeId, 0U);
 }
 
 TEST_F(Bsw_CanNm_ChannelValidation_Test, GetNodeIdentifier_OK_ReflectsMostRecentlyReceivedFrame)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     /* 2026-09 追加の ComM_Nm_NetworkStartIndication() 呼び出し
      * （[SWS_CanNm_00127]）により、Bus-Sleep Mode 中の受信は ComM が
      * 初期化済みだとカスケードしうる（CanSM_RequestComMode()/
@@ -249,26 +388,53 @@ TEST_F(Bsw_CanNm_ChannelValidation_Test, GetNodeIdentifier_OK_ReflectsMostRecent
     CanNm_RxIndication(0U, &pduInfo);
 
     uint8 nodeId = 0U;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = CanNm_GetNodeIdentifier(CANNM_MAIN_NETWORK_HANDLE, &nodeId);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_OK);
     EXPECT_EQ(nodeId, 0x2AU);
 }
 
 TEST_F(Bsw_CanNm_ChannelValidation_Test, GetNodeIdentifier_NG_InvalidChannelReturnsErrorAndReportsDet)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     uint8 nodeId = 0U;
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = CanNm_GetNodeIdentifier(kInvalidChannel, &nodeId);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, CANNM_E_INVALID_CHANNEL);
 }
 
 TEST_F(Bsw_CanNm_ChannelValidation_Test, GetNodeIdentifier_NG_NullPointerReturnsErrorAndReportsDet)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = CanNm_GetNodeIdentifier(CANNM_MAIN_NETWORK_HANDLE, NULL);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, CANNM_E_PARAM_POINTER);
 }
@@ -321,6 +487,8 @@ const CanIf_ConfigType kCommControlTimeoutCanIfConfig = {
  * Test Fixture
  * ====================================================================== */
 
+/* CanNm の通信制御（DisableCommunication / EnableCommunication）とそのタイムアウトの単体テスト用フィクスチャ。
+ * SetUp(): 模擬 Can_Hw・Dem・EcuM・BswM と wrap をリセットし、Dem_Init(NULL)・Can_Init()・CanIf_Init(&kCommControlTimeoutCanIfConfig)・CanSM_Init(NULL)・ComM_Init(NULL)（起動時と同じく通信を許可）・CanNm_Init(NULL)・Nm_Init(NULL) の順に呼び、CanNm を NORMAL_OPERATION State まで進める（Bsw_NmStack_SleepCoordination_test.cpp の ArrangeFullCom() と同じ流儀）。 */
 class Bsw_CanNm_CommunicationControlTimeout_Test : public ::testing::Test
 {
 protected:
@@ -389,14 +557,23 @@ protected:
 // ------------------------------------------------------------
 TEST_F(Bsw_CanNm_CommunicationControlTimeout_Test, MainFunction_OK_TimeoutDoesNotFireWhileDisabled)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     ASSERT_EQ(CanNm_DisableCommunication(CANNM_MAIN_NETWORK_HANDLE), E_OK);
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     for (uint8 i = 0U; i < 5U; i++)
     {
         FakeMillis_Value += CANNM_TIMEOUT_MS + 1UL;
         CanNm_MainFunction();
     }
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_FALSE(NetworkTimeoutReported());
     EXPECT_EQ(FakeDetHw_ReportCount, 0U);
 
@@ -412,9 +589,20 @@ TEST_F(Bsw_CanNm_CommunicationControlTimeout_Test, MainFunction_OK_TimeoutDoesNo
 // ------------------------------------------------------------
 TEST_F(Bsw_CanNm_CommunicationControlTimeout_Test, MainFunction_OK_TimeoutRestartsOnReEnable)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     ASSERT_EQ(CanNm_DisableCommunication(CANNM_MAIN_NETWORK_HANDLE), E_OK);
     FakeMillis_Value += 3UL * CANNM_TIMEOUT_MS;  // 無効化中に古い基準時刻を大きく経過させる
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     CanNm_MainFunction();
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     ASSERT_FALSE(NetworkTimeoutReported());  // 無効化中は満了しない(前テストと同じ)
 
     ASSERT_EQ(CanNm_EnableCommunication(CANNM_MAIN_NETWORK_HANDLE), E_OK);
@@ -440,6 +628,9 @@ TEST_F(Bsw_CanNm_CommunicationControlTimeout_Test, MainFunction_OK_TimeoutRestar
 // ------------------------------------------------------------
 TEST_F(Bsw_CanNm_CommunicationControlTimeout_Test, MainFunction_OK_TimeoutDoesNotFireWhileDisabledInRepeatMessage)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     ASSERT_EQ(CanNm_RepeatMessageRequest(CANNM_MAIN_NETWORK_HANDLE), E_OK);  // NORMAL_OPERATION -> REPEAT_MESSAGE
     CanNm_StateType state;
     CanNm_ModeType  mode;
@@ -457,13 +648,23 @@ TEST_F(Bsw_CanNm_CommunicationControlTimeout_Test, MainFunction_OK_TimeoutDoesNo
      * その遷移とは独立な「NM-Timeout Timer 満了判定だけは無効化中スキップ
      * された」という点のみ。 */
     FakeMillis_Value += CANNM_TIMEOUT_MS + 1UL;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     CanNm_MainFunction();
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_FALSE(NetworkTimeoutReported());
 }
 
 TEST_F(Bsw_CanNm_CommunicationControlTimeout_Test, MainFunction_OK_DoesNotEnterPrepareBusSleepWhileDisabledInReadySleep)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     ASSERT_EQ(CanNm_NetworkRelease(CANNM_MAIN_NETWORK_HANDLE), E_OK);  // NORMAL_OPERATION -> READY_SLEEP
     CanNm_StateType state;
     CanNm_ModeType  mode;
@@ -472,8 +673,15 @@ TEST_F(Bsw_CanNm_CommunicationControlTimeout_Test, MainFunction_OK_DoesNotEnterP
 
     ASSERT_EQ(CanNm_DisableCommunication(CANNM_MAIN_NETWORK_HANDLE), E_OK);
     FakeMillis_Value += CANNM_TIMEOUT_MS + 1UL;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     CanNm_MainFunction();
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     /* READY_SLEEP の満了アクションは DET 報告ではなく
      * CanNm_EnterPrepareBusSleep() への遷移([SWS_CanNm_00109])。無効化中は
      * これも起きないはず。 */
@@ -487,10 +695,19 @@ TEST_F(Bsw_CanNm_CommunicationControlTimeout_Test, MainFunction_OK_DoesNotEnterP
 // ------------------------------------------------------------
 TEST_F(Bsw_CanNm_CommunicationControlTimeout_Test, MainFunction_NG_TimeoutFiresNormallyWhenEnabled)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     FakeMillis_Value += CANNM_TIMEOUT_MS + 1UL;
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     CanNm_MainFunction();
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_TRUE(NetworkTimeoutReported());
 }
 
@@ -520,6 +737,9 @@ TEST_F(Bsw_CanNm_CommunicationControlTimeout_Test, MainFunction_NG_TimeoutFiresN
  * Test Fixture
  * ====================================================================== */
 
+/* CanNm（上記 2 グループ以外の API）の単体テスト用フィクスチャ。
+ * SetUp(): ComM_DeInit()（RxIndication のカスケードを防ぐ）の後、CanNm_Init(NULL) を呼ぶ（Init 中の DET ログは抑制し、Init 自体の記録は消して後続の検証から除く）。
+ * TearDown(): CanNm_DeInit() で未初期化へ戻す。 */
 class Bsw_CanNm_Test : public ::testing::Test
 {
 protected:
@@ -546,11 +766,22 @@ protected:
 
 TEST_F(Bsw_CanNm_Test, CanNm_DeInit_NG_Uninit)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     CanNm_DeInit();  // 1回目: SetUp() の Init を正常に解除する
     FakeDetHw_Reset();
 
     CanNm_DeInit();  // 2回目: 既に未初期化のため NG
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeDetHw_LastErrorId, CANNM_E_UNINIT);
 }
 
@@ -562,62 +793,116 @@ TEST_F(Bsw_CanNm_Test, CanNm_DeInit_NG_Uninit)
 
 TEST_F(Bsw_CanNm_Test, CanNm_NetworkRequest_NG_Uninit)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     CanNm_DeInit();
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = CanNm_NetworkRequest(CANNM_MAIN_NETWORK_HANDLE);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, CANNM_E_UNINIT);
 }
 
 TEST_F(Bsw_CanNm_Test, CanNm_NetworkRelease_NG_Uninit)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     CanNm_DeInit();
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = CanNm_NetworkRelease(CANNM_MAIN_NETWORK_HANDLE);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, CANNM_E_UNINIT);
 }
 
 TEST_F(Bsw_CanNm_Test, CanNm_DisableCommunication_NG_Uninit)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     CanNm_DeInit();
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = CanNm_DisableCommunication(CANNM_MAIN_NETWORK_HANDLE);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, CANNM_E_UNINIT);
 }
 
 TEST_F(Bsw_CanNm_Test, CanNm_EnableCommunication_NG_Uninit)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     CanNm_DeInit();
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = CanNm_EnableCommunication(CANNM_MAIN_NETWORK_HANDLE);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, CANNM_E_UNINIT);
 }
 
 TEST_F(Bsw_CanNm_Test, CanNm_RepeatMessageRequest_NG_Uninit)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     CanNm_DeInit();
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = CanNm_RepeatMessageRequest(CANNM_MAIN_NETWORK_HANDLE);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, CANNM_E_UNINIT);
 }
 
 TEST_F(Bsw_CanNm_Test, CanNm_GetState_NG_Uninit)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     CanNm_DeInit();
     CanNm_StateType state;
     CanNm_ModeType  mode;
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = CanNm_GetState(CANNM_MAIN_NETWORK_HANDLE, &state, &mode);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, CANNM_E_UNINIT);
 }
@@ -629,22 +914,40 @@ TEST_F(Bsw_CanNm_Test, CanNm_GetState_NG_Uninit)
 
 TEST_F(Bsw_CanNm_Test, CanNm_GetNodeIdentifier_NG_Uninit)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     CanNm_DeInit();
     uint8 nodeId = 0U;
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = CanNm_GetNodeIdentifier(CANNM_MAIN_NETWORK_HANDLE, &nodeId);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, CANNM_E_UNINIT);
 }
 
 TEST_F(Bsw_CanNm_Test, CanNm_GetLocalNodeIdentifier_NG_Uninit)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     CanNm_DeInit();
     uint8 nodeId = 0U;
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = CanNm_GetLocalNodeIdentifier(CANNM_MAIN_NETWORK_HANDLE, &nodeId);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, CANNM_E_UNINIT);
 }
@@ -655,8 +958,19 @@ TEST_F(Bsw_CanNm_Test, CanNm_GetLocalNodeIdentifier_NG_Uninit)
 
 TEST_F(Bsw_CanNm_Test, CanNm_GetVersionInfo_NG_NullPointer)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     CanNm_GetVersionInfo(NULL);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeDetHw_LastErrorId, CANNM_E_PARAM_POINTER);
 }
 
@@ -666,19 +980,39 @@ TEST_F(Bsw_CanNm_Test, CanNm_GetVersionInfo_NG_NullPointer)
 
 TEST_F(Bsw_CanNm_Test, CanNm_RxIndication_NG_Uninit)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     CanNm_DeInit();
     uint8 pdu[2] = { 0x00U, 0x2AU };
     PduInfoType info = { pdu, 2U };
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     CanNm_RxIndication(0U, &info);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeDetHw_LastErrorId, CANNM_E_UNINIT);
 }
 
 TEST_F(Bsw_CanNm_Test, CanNm_RxIndication_NG_NullPduInfoPtr)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     CanNm_RxIndication(0U, NULL);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeDetHw_LastErrorId, CANNM_E_PARAM_POINTER);
 }
 
@@ -688,10 +1022,19 @@ TEST_F(Bsw_CanNm_Test, CanNm_RxIndication_NG_NullPduInfoPtr)
 
 TEST_F(Bsw_CanNm_Test, CanNm_MainFunction_NG_Uninit)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     CanNm_DeInit();
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     CanNm_MainFunction();
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeDetHw_LastErrorId, CANNM_E_UNINIT);
 }
 

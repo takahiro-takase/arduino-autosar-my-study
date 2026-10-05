@@ -51,6 +51,9 @@ namespace
  * Test Fixture
  * ====================================================================== */
 
+/* FiM の単体テスト用フィクスチャ。
+ * SetUp(): 時刻を初期化し、Dem_Init(NULL) を呼ぶ。FiM_Init() は各テストが呼ぶ。GetPermission() は、機能の許可状態を取得して戻り値も確認する補助関数。
+ * TearDown(): FiM を未初期化の状態へ戻す。 */
 class Bsw_FiM_Test : public ::testing::Test
 {
 protected:
@@ -93,7 +96,11 @@ TEST_F(Bsw_FiM_Test, Init_OK_BothFidsPermittedWhenNoConfirmedDtc)
     /* ---- 準備 (Arrange) --- */
     /* ----------------------- */
     // Dem_Init() 直後は全イベント未確定(初回起動)
+    // なし（SetUp() で初期化済み）
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     FiM_Init(&FiM_Config);
 
     /* ----------------------- */
@@ -105,6 +112,9 @@ TEST_F(Bsw_FiM_Test, Init_OK_BothFidsPermittedWhenNoConfirmedDtc)
 
 TEST_F(Bsw_FiM_Test, MainFunction_OK_InhibitsFidWhenDtcConfirmedAfterInit)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     FiM_Init(&FiM_Config);
     ASSERT_EQ(GetPermission(FIM_FID_RUNNING_LED), TRUE);
 
@@ -186,28 +196,57 @@ TEST_F(Bsw_FiM_Test, Init_NG_InhibitsAlreadyConfirmedDtcWithoutWaitingForMainFun
 
 TEST_F(Bsw_FiM_Test, FiM_Init_NG_NullConfigPtr)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     FiM_Init(NULL);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeDetHw_LastErrorId, FIM_E_PARAM_POINTER);
 }
 
 TEST_F(Bsw_FiM_Test, FiM_GetFunctionPermission_NG_NullPointer)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     FiM_Init(&FiM_Config);
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = FiM_GetFunctionPermission(FIM_FID_RUNNING_LED, NULL);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, FIM_E_PARAM_POINTER);
 }
 
 TEST_F(Bsw_FiM_Test, FiM_GetFunctionPermission_NG_Uninit)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     // FiM_Init() を意図的に呼ばない（SetUp() は Dem_Init() のみ実行）。
     boolean permission = TRUE;
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = FiM_GetFunctionPermission(FIM_FID_RUNNING_LED, &permission);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(permission, FALSE);  // フェールセーフ: 未初期化中は抑止扱い
     EXPECT_EQ(FakeDetHw_LastErrorId, FIM_E_UNINIT);
@@ -215,11 +254,20 @@ TEST_F(Bsw_FiM_Test, FiM_GetFunctionPermission_NG_Uninit)
 
 TEST_F(Bsw_FiM_Test, FiM_GetFunctionPermission_NG_FidOutOfRange)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     FiM_Init(&FiM_Config);
     boolean permission = TRUE;
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = FiM_GetFunctionPermission(FiM_Config.FunctionCount, &permission);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(permission, FALSE);  // フェールセーフ: 不明な FID は抑止扱い
     EXPECT_EQ(FakeDetHw_LastErrorId, FIM_E_FID_OUT_OF_RANGE);
@@ -227,28 +275,59 @@ TEST_F(Bsw_FiM_Test, FiM_GetFunctionPermission_NG_FidOutOfRange)
 
 TEST_F(Bsw_FiM_Test, FiM_SetFunctionAvailable_NG_Uninit)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     // FiM_Init() を意図的に呼ばない。
 
     Std_ReturnType ret = FiM_SetFunctionAvailable(FIM_FID_RUNNING_LED, FALSE);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, FIM_E_UNINIT);
 }
 
 TEST_F(Bsw_FiM_Test, FiM_SetFunctionAvailable_NG_FidOutOfRange)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     FiM_Init(&FiM_Config);
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = FiM_SetFunctionAvailable(FiM_Config.FunctionCount, FALSE);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, FIM_E_FID_OUT_OF_RANGE);
 }
 
 TEST_F(Bsw_FiM_Test, FiM_GetVersionInfo_NG_NullPointer)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     FiM_GetVersionInfo(NULL);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeDetHw_LastErrorId, FIM_E_PARAM_POINTER);
 }
 

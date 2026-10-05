@@ -52,6 +52,9 @@ namespace
  * Test Fixture
  * ====================================================================== */
 
+/* CryIf の単体テスト用フィクスチャ。
+ * SetUp(): CryIf_Init() を呼ぶ（Init 中の DET ログは抑制し、Init 自体の記録は消して後続の検証から除く）。
+ * TearDown(): 未初期化の状態へ戻す。 */
 class Bsw_CryIf_Test : public ::testing::Test
 {
 protected:
@@ -80,17 +83,37 @@ protected:
 
 TEST_F(Bsw_CryIf_Test, CryIf_GetVersionInfo_NG_Uninit)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     CryIf_Test_ResetInitState();
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     CryIf_GetVersionInfo(NULL);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeDetHw_LastErrorId, CRYIF_E_UNINIT);
 }
 
 TEST_F(Bsw_CryIf_Test, CryIf_GetVersionInfo_NG_NullPointer)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     CryIf_GetVersionInfo(NULL);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeDetHw_LastErrorId, CRYIF_E_PARAM_POINTER);
 }
 
@@ -100,26 +123,57 @@ TEST_F(Bsw_CryIf_Test, CryIf_GetVersionInfo_NG_NullPointer)
 
 TEST_F(Bsw_CryIf_Test, CryIf_ProcessJob_NG_Uninit)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     CryIf_Test_ResetInitState();
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = CryIf_ProcessJob(CRYIF_CHANNEL_ID, NULL);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, CRYIF_E_UNINIT);
 }
 
 TEST_F(Bsw_CryIf_Test, CryIf_ProcessJob_NG_InvalidChannelId)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = CryIf_ProcessJob(CRYIF_CHANNEL_ID + 1U, NULL);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, CRYIF_E_PARAM_HANDLE);
 }
 
 TEST_F(Bsw_CryIf_Test, CryIf_ProcessJob_NG_NullJobPtr)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = CryIf_ProcessJob(CRYIF_CHANNEL_ID, NULL);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, CRYIF_E_PARAM_POINTER);
 }
@@ -130,39 +184,77 @@ TEST_F(Bsw_CryIf_Test, CryIf_ProcessJob_NG_NullJobPtr)
 
 TEST_F(Bsw_CryIf_Test, CryIf_KeyElementSet_NG_Uninit)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     CryIf_Test_ResetInitState();
     uint8 key[16] = { 0 };
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = CryIf_KeyElementSet(0U, 1U, key, sizeof(key));
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, CRYIF_E_UNINIT);
 }
 
 TEST_F(Bsw_CryIf_Test, CryIf_KeyElementSet_NG_NullKeyPtr)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = CryIf_KeyElementSet(0U, 1U, NULL, 16U);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, CRYIF_E_PARAM_POINTER);
 }
 
 TEST_F(Bsw_CryIf_Test, CryIf_KeyElementSet_NG_ZeroKeyLength)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     uint8 key[16] = { 0 };
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = CryIf_KeyElementSet(0U, 1U, key, 0U);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, CRYIF_E_PARAM_VALUE);
 }
 
 TEST_F(Bsw_CryIf_Test, CryIf_KeyElementSet_NG_InvalidCryIfKeyId)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     uint8 key[16] = { 0 };
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = CryIf_KeyElementSet(CRYPTO_KEY_COUNT, 1U, key, sizeof(key));
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, CRYIF_E_PARAM_HANDLE);
 }
@@ -173,18 +265,38 @@ TEST_F(Bsw_CryIf_Test, CryIf_KeyElementSet_NG_InvalidCryIfKeyId)
 
 TEST_F(Bsw_CryIf_Test, CryIf_KeySetValid_NG_Uninit)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     CryIf_Test_ResetInitState();
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = CryIf_KeySetValid(0U);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, CRYIF_E_UNINIT);
 }
 
 TEST_F(Bsw_CryIf_Test, CryIf_KeySetValid_NG_InvalidCryIfKeyId)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = CryIf_KeySetValid(CRYPTO_KEY_COUNT);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, CRYIF_E_PARAM_HANDLE);
 }
@@ -195,44 +307,80 @@ TEST_F(Bsw_CryIf_Test, CryIf_KeySetValid_NG_InvalidCryIfKeyId)
 
 TEST_F(Bsw_CryIf_Test, CryIf_KeyElementGet_NG_Uninit)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     CryIf_Test_ResetInitState();
     uint8  buf[16];
     uint32 len = sizeof(buf);
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = CryIf_KeyElementGet(0U, 1U, buf, &len);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, CRYIF_E_UNINIT);
 }
 
 TEST_F(Bsw_CryIf_Test, CryIf_KeyElementGet_NG_NullPointer)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     uint32 len = 16U;
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = CryIf_KeyElementGet(0U, 1U, NULL, &len);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, CRYIF_E_PARAM_POINTER);
 }
 
 TEST_F(Bsw_CryIf_Test, CryIf_KeyElementGet_NG_ZeroLength)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     uint8  buf[16];
     uint32 len = 0U;
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = CryIf_KeyElementGet(0U, 1U, buf, &len);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, CRYIF_E_PARAM_VALUE);
 }
 
 TEST_F(Bsw_CryIf_Test, CryIf_KeyElementGet_NG_InvalidCryIfKeyId)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     uint8  buf[16];
     uint32 len = sizeof(buf);
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = CryIf_KeyElementGet(CRYPTO_KEY_COUNT, 1U, buf, &len);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, CRYIF_E_PARAM_HANDLE);
 }

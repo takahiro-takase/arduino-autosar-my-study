@@ -567,13 +567,18 @@ TEST_F(Bsw_ComStack_Signal_Rx_CanIfReadRxPduData_Test, NG_Step01_CanIfReadRxPduD
     /* ----------------------------------- */
     // 一切受信させない
 
-    /* ----------------------------------- */
-    /* ---- 実行 (Act) + 評価 (Assert) --- */
-    /* ----------------------------------- */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     // spec 原文 "No valid data has been received"
     uint8 buf[CANIF_MAX_DLC] = {0U};
     PduInfoType info = { buf, 0U };
-    EXPECT_EQ(CanIf_ReadRxPduData(0U, &info), E_NOT_OK);
+    Std_ReturnType ret = CanIf_ReadRxPduData(0U, &info);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_NOT_OK);
 }
 
 
@@ -591,34 +596,59 @@ TEST_F(Bsw_ComStack_Signal_Rx_CanIfReadRxPduData_Test, NG_Step01_CanIfReadRxPduD
     FakeCanHw_RxData[1] = 0xBBU;
     Can_MainFunction_Read();
 
-    /* ----------------------------------- */
-    /* ---- 実行 (Act) + 評価 (Assert) --- */
-    /* ----------------------------------- */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     // [SWS_CANIF_00325] opt-in されていない
     // PDU への要求は E_NOT_OK（受信済みかどうかによらない）。
     uint8 buf[CANIF_MAX_DLC] = {0U};
     PduInfoType info = { buf, 0U };
-    EXPECT_EQ(CanIf_ReadRxPduData(1U, &info), E_NOT_OK);
+    Std_ReturnType ret = CanIf_ReadRxPduData(1U, &info);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_NOT_OK);
 }
 
 
 TEST_F(Bsw_ComStack_Signal_Rx_CanIfReadRxPduData_Test, NG_Step01_CanIfReadRxPduData_UnknownPduId)
 {
-    /* ----------------------------------- */
-    /* ---- 実行 (Act) + 評価 (Assert) --- */
-    /* ----------------------------------- */
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     uint8 buf[CANIF_MAX_DLC] = {0U};
     PduInfoType info = { buf, 0U };
-    EXPECT_EQ(CanIf_ReadRxPduData(99U, &info), E_NOT_OK);
+    Std_ReturnType ret = CanIf_ReadRxPduData(99U, &info);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_NOT_OK);
 }
 
 
 TEST_F(Bsw_ComStack_Signal_Rx_CanIfReadRxPduData_Test, NG_Step01_CanIfReadRxPduData_NullPointer)
 {
-    /* ----------------------------------- */
-    /* ---- 実行 (Act) + 評価 (Assert) --- */
-    /* ----------------------------------- */
-    EXPECT_EQ(CanIf_ReadRxPduData(0U, NULL), E_NOT_OK);
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Std_ReturnType ret = CanIf_ReadRxPduData(0U, NULL);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_NOT_OK);
 }
 
 

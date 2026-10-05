@@ -281,6 +281,11 @@ TEST_F(Bsw_DcmStack_ActiveDiagnosticWake_Test,
        OK_DefaultSessionRequestNotifiesActiveThenInactive)
 {
     /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
     /* ---- 実行 (Act) ------- */
     /* ----------------------- */
     ReceiveRequest(DCM_SID_TESTER_PRESENT, 0x00U);
@@ -307,6 +312,11 @@ TEST_F(Bsw_DcmStack_ActiveDiagnosticWake_Test,
 TEST_F(Bsw_DcmStack_ActiveDiagnosticWake_Test,
        OK_ExtendedSessionKeepsDiagnosticActive)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
     /* ----------------------- */
     /* ---- 実行 (Act) ------- */
     /* ----------------------- */

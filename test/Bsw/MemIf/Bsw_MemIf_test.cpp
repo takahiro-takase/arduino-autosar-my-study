@@ -49,6 +49,8 @@ const MemIf_DeviceType kInvalidDevice = MEMIF_DEVICE_0 + 1U;
  * Test Fixture
  * ====================================================================== */
 
+/* MemIf の単体テスト用フィクスチャ。
+ * SetUp(): MemIf_Init() を呼ぶ（Init 中の DET ログは抑制し、Init 自体の記録は消して後続の検証から除く）。 */
 class Bsw_MemIf_Test : public ::testing::Test
 {
 protected:
@@ -71,8 +73,19 @@ protected:
 
 TEST_F(Bsw_MemIf_Test, MemIf_GetVersionInfo_NG_NullPointer)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     MemIf_GetVersionInfo(NULL);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeDetHw_LastErrorId, MEMIF_E_PARAM_POINTER);
 }
 
@@ -82,10 +95,19 @@ TEST_F(Bsw_MemIf_Test, MemIf_GetVersionInfo_NG_NullPointer)
 
 TEST_F(Bsw_MemIf_Test, MemIf_Read_NG_InvalidDevice)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     uint8 buf[1];
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = MemIf_Read(kInvalidDevice, 0U, buf, 1U);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, MEMIF_E_PARAM_DEVICE);
     EXPECT_EQ(FakeDetHw_LastApiId, MEMIF_API_ID_READ);
@@ -97,10 +119,19 @@ TEST_F(Bsw_MemIf_Test, MemIf_Read_NG_InvalidDevice)
 
 TEST_F(Bsw_MemIf_Test, MemIf_Write_NG_InvalidDevice)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     const uint8 data[1] = { 0U };
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = MemIf_Write(kInvalidDevice, 0U, data, 1U);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, MEMIF_E_PARAM_DEVICE);
     EXPECT_EQ(FakeDetHw_LastApiId, MEMIF_API_ID_WRITE);
@@ -112,10 +143,19 @@ TEST_F(Bsw_MemIf_Test, MemIf_Write_NG_InvalidDevice)
 
 TEST_F(Bsw_MemIf_Test, MemIf_WriteImmediate_NG_InvalidDevice)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     const uint8 data[1] = { 0U };
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = MemIf_WriteImmediate(kInvalidDevice, 0U, data, 1U);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, MEMIF_E_PARAM_DEVICE);
     EXPECT_EQ(FakeDetHw_LastApiId, MEMIF_API_ID_WRITE_IMMEDIATE);
@@ -127,8 +167,19 @@ TEST_F(Bsw_MemIf_Test, MemIf_WriteImmediate_NG_InvalidDevice)
 
 TEST_F(Bsw_MemIf_Test, MemIf_Cancel_NG_InvalidDevice)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     MemIf_Cancel(kInvalidDevice);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeDetHw_LastErrorId, MEMIF_E_PARAM_DEVICE);
     EXPECT_EQ(FakeDetHw_LastApiId, MEMIF_API_ID_CANCEL);
 }
@@ -139,8 +190,19 @@ TEST_F(Bsw_MemIf_Test, MemIf_Cancel_NG_InvalidDevice)
 
 TEST_F(Bsw_MemIf_Test, MemIf_GetStatus_NG_InvalidDevice)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     MemIf_StatusType status = MemIf_GetStatus(kInvalidDevice);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(status, MEMIF_UNINIT);
     EXPECT_EQ(FakeDetHw_LastErrorId, MEMIF_E_PARAM_DEVICE);
     EXPECT_EQ(FakeDetHw_LastApiId, MEMIF_API_ID_GET_STATUS);
@@ -152,8 +214,19 @@ TEST_F(Bsw_MemIf_Test, MemIf_GetStatus_NG_InvalidDevice)
 
 TEST_F(Bsw_MemIf_Test, MemIf_GetJobResult_NG_InvalidDevice)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     MemIf_JobResultType result = MemIf_GetJobResult(kInvalidDevice);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(result, MEMIF_JOB_FAILED);
     EXPECT_EQ(FakeDetHw_LastErrorId, MEMIF_E_PARAM_DEVICE);
     EXPECT_EQ(FakeDetHw_LastApiId, MEMIF_API_ID_GET_JOB_RESULT);

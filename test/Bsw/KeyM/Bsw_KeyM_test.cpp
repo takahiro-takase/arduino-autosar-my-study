@@ -52,6 +52,9 @@ namespace
  * Test Fixture
  * ====================================================================== */
 
+/* KeyM の単体テスト用フィクスチャ。
+ * SetUp(): KeyM_Init(NULL) を呼ぶ（Init 中の DET ログは抑制し、Init 自体の記録は消して後続の検証から除く）。
+ * TearDown(): KeyM_Deinit() で未初期化へ戻す。 */
 class Bsw_KeyM_Test : public ::testing::Test
 {
 protected:
@@ -80,11 +83,22 @@ protected:
 
 TEST_F(Bsw_KeyM_Test, KeyM_Deinit_NG_Uninit)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     KeyM_Deinit();  // 1回目: SetUp() の Init を正常に解除する
     FakeDetHw_Reset();
 
     KeyM_Deinit();  // 2回目: 既に未初期化のため NG
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeDetHw_LastErrorId, KEYM_E_UNINIT);
 }
 
@@ -94,17 +108,37 @@ TEST_F(Bsw_KeyM_Test, KeyM_Deinit_NG_Uninit)
 
 TEST_F(Bsw_KeyM_Test, KeyM_GetVersionInfo_NG_Uninit)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     KeyM_Deinit();
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     KeyM_GetVersionInfo(NULL);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeDetHw_LastErrorId, KEYM_E_UNINIT);
 }
 
 TEST_F(Bsw_KeyM_Test, KeyM_GetVersionInfo_NG_NullPointer)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     KeyM_GetVersionInfo(NULL);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeDetHw_LastErrorId, KEYM_E_PARAM_POINTER);
 }
 
@@ -114,10 +148,19 @@ TEST_F(Bsw_KeyM_Test, KeyM_GetVersionInfo_NG_NullPointer)
 
 TEST_F(Bsw_KeyM_Test, KeyM_Start_NG_Uninit)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     KeyM_Deinit();
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = KeyM_Start(KEYM_START_OEM_PRODUCTIONMODE, NULL, 0U, NULL, NULL);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, KEYM_E_UNINIT);
 }
@@ -128,32 +171,59 @@ TEST_F(Bsw_KeyM_Test, KeyM_Start_NG_Uninit)
 
 TEST_F(Bsw_KeyM_Test, KeyM_Update_NG_Uninit)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     KeyM_Deinit();
     uint8 keyName = 0x01U;
     uint8 reqData = 0x00U;
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = KeyM_Update(&keyName, 1U, &reqData, 1U, NULL, 0U);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, KEYM_E_UNINIT);
 }
 
 TEST_F(Bsw_KeyM_Test, KeyM_Update_NG_NullKeyNamePtr)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     uint8 reqData = 0x00U;
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = KeyM_Update(NULL, 1U, &reqData, 1U, NULL, 0U);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, KEYM_E_PARAM_POINTER);
 }
 
 TEST_F(Bsw_KeyM_Test, KeyM_Update_NG_NullRequestDataPtr)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     uint8 keyName = 0x01U;
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = KeyM_Update(&keyName, 1U, NULL, 1U, NULL, 0U);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, KEYM_E_PARAM_POINTER);
 }
@@ -164,10 +234,19 @@ TEST_F(Bsw_KeyM_Test, KeyM_Update_NG_NullRequestDataPtr)
 
 TEST_F(Bsw_KeyM_Test, KeyM_Finalize_NG_Uninit)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     KeyM_Deinit();
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = KeyM_Finalize(NULL, 0U, NULL, 0U);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, KEYM_E_UNINIT);
 }

@@ -237,6 +237,11 @@ TEST_F(Bsw_DcmStack_SID2F_IoControl_Test,
        OK_ShortTermAdjustmentEchoesRequestedLevel)
 {
     /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
     /* ---- 実行 (Act) ------- */
     /* ----------------------- */
     SendIoControl(DCM_DID_RUN_LAMP, DCM_IOCTRL_SHORT_TERM_ADJUSTMENT, 1U, 1U);
@@ -262,8 +267,19 @@ TEST_F(Bsw_DcmStack_SID2F_IoControl_Test,
 TEST_F(Bsw_DcmStack_SID2F_IoControl_Test,
        OK_ResetToDefaultProducesZeroLevel)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     SendIoControl(DCM_DID_FAULT_LAMP, DCM_IOCTRL_RESET_TO_DEFAULT, 0U, 0U);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     ASSERT_EQ(FakeCanHw_SendCount, 1U);
     EXPECT_EQ(FakeCanHw_LastSendData[0], 0x05U);
     EXPECT_EQ(FakeCanHw_LastSendData[1], 0x6FU);
@@ -280,8 +296,19 @@ TEST_F(Bsw_DcmStack_SID2F_IoControl_Test,
 TEST_F(Bsw_DcmStack_SID2F_IoControl_Test,
        OK_ReturnControlToEcuProducesPositiveResponse)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     SendIoControl(DCM_DID_ABS_LAMP, DCM_IOCTRL_RETURN_CONTROL_TO_ECU, 0U, 0U);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     ASSERT_EQ(FakeCanHw_SendCount, 1U);
     EXPECT_EQ(FakeCanHw_LastSendData[1], 0x6FU);
     EXPECT_EQ(FakeCanHw_LastSendData[2], (uint8)(DCM_DID_ABS_LAMP >> 8U));
@@ -292,8 +319,19 @@ TEST_F(Bsw_DcmStack_SID2F_IoControl_Test,
 TEST_F(Bsw_DcmStack_SID2F_IoControl_Test,
        OK_FreezeCurrentStateProducesPositiveResponse)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     SendIoControl(DCM_DID_RUN_LAMP, DCM_IOCTRL_FREEZE_CURRENT_STATE, 0U, 0U);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     ASSERT_EQ(FakeCanHw_SendCount, 1U);
     EXPECT_EQ(FakeCanHw_LastSendData[1], 0x6FU);
     EXPECT_EQ(FakeCanHw_LastSendData[4], DCM_IOCTRL_FREEZE_CURRENT_STATE);
@@ -305,8 +343,19 @@ TEST_F(Bsw_DcmStack_SID2F_IoControl_Test,
 TEST_F(Bsw_DcmStack_SID2F_IoControl_Test,
        NG_RequestOutOfRange_UnknownDid)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     SendIoControl(0x0001U, DCM_IOCTRL_RETURN_CONTROL_TO_ECU, 0U, 0U);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     ASSERT_EQ(FakeCanHw_SendCount, 1U);
     EXPECT_EQ(FakeCanHw_LastSendData[0], 0x03U);
     EXPECT_EQ(FakeCanHw_LastSendData[1], DCM_SID_NEGATIVE_RESP);
@@ -321,8 +370,19 @@ TEST_F(Bsw_DcmStack_SID2F_IoControl_Test,
 TEST_F(Bsw_DcmStack_SID2F_IoControl_Test,
        NG_RequestOutOfRange_InvalidShortTermAdjustmentState)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     SendIoControl(DCM_DID_RUN_LAMP, DCM_IOCTRL_SHORT_TERM_ADJUSTMENT, 0x02U, 1U);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     ASSERT_EQ(FakeCanHw_SendCount, 1U);
     EXPECT_EQ(FakeCanHw_LastSendData[1], DCM_SID_NEGATIVE_RESP);
     EXPECT_EQ(FakeCanHw_LastSendData[2], DCM_SID_IO_CONTROL);
@@ -336,8 +396,19 @@ TEST_F(Bsw_DcmStack_SID2F_IoControl_Test,
 TEST_F(Bsw_DcmStack_SID2F_IoControl_Test,
        NG_IncorrectMessageLength_ResetToDefaultWithExtraByte)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     SendIoControl(DCM_DID_RUN_LAMP, DCM_IOCTRL_RESET_TO_DEFAULT, 0x00U, 1U);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     ASSERT_EQ(FakeCanHw_SendCount, 1U);
     EXPECT_EQ(FakeCanHw_LastSendData[1], DCM_SID_NEGATIVE_RESP);
     EXPECT_EQ(FakeCanHw_LastSendData[2], DCM_SID_IO_CONTROL);

@@ -251,8 +251,14 @@ protected:
 TEST_F(Bsw_DcmStack_SID85_ControlDTCSetting_Test,
        OK_OffIsAcceptedWithPositiveResponse)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     EnterExtendedSession();
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     SendControlDTCSetting(DCM_DTCSETTING_OFF);
 
     /* ----------------------- */
@@ -268,10 +274,19 @@ TEST_F(Bsw_DcmStack_SID85_ControlDTCSetting_Test,
 TEST_F(Bsw_DcmStack_SID85_ControlDTCSetting_Test,
        OK_OnIsAcceptedWithPositiveResponse)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     EnterExtendedSession();
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     SendControlDTCSetting(DCM_DTCSETTING_ON);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     ASSERT_EQ(FakeCanHw_SendCount, 1U);
     EXPECT_EQ(FakeCanHw_LastSendData[0], 0x02U);
     EXPECT_EQ(FakeCanHw_LastSendData[1], 0xC5U);
@@ -285,6 +300,9 @@ TEST_F(Bsw_DcmStack_SID85_ControlDTCSetting_Test,
 TEST_F(Bsw_DcmStack_SID85_ControlDTCSetting_Test,
        OK_OffSuppressesDtcRecordingUntilOn)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     EnterExtendedSession();
 
     /* ----------------------- */
@@ -325,6 +343,9 @@ TEST_F(Bsw_DcmStack_SID85_ControlDTCSetting_Test,
 TEST_F(Bsw_DcmStack_SID85_ControlDTCSetting_Test,
        OK_AutoReEnablesOnExplicitDefaultSessionRequest)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     EnterExtendedSession();
     SendControlDTCSetting(DCM_DTCSETTING_OFF);
 
@@ -354,6 +375,9 @@ TEST_F(Bsw_DcmStack_SID85_ControlDTCSetting_Test,
 TEST_F(Bsw_DcmStack_SID85_ControlDTCSetting_Test,
        OK_AutoReEnablesOnS3Timeout)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     EnterExtendedSession();
     SendControlDTCSetting(DCM_DTCSETTING_OFF);
 
@@ -378,6 +402,9 @@ TEST_F(Bsw_DcmStack_SID85_ControlDTCSetting_Test,
 TEST_F(Bsw_DcmStack_SID85_ControlDTCSetting_Test,
        OK_AutoReEnablesAfterEcuReset)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     EnterExtendedSession();
     SendControlDTCSetting(DCM_DTCSETTING_OFF);
 
@@ -472,6 +499,9 @@ TEST_F(Bsw_DcmStack_SID85_ControlDTCSetting_Test,
 TEST_F(Bsw_DcmStack_SID85_ControlDTCSetting_Test,
        NG_SubFuncNotSupported_UnsupportedSubFunc)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     EnterExtendedSession();
 
     /* ----------------------- */
@@ -534,6 +564,9 @@ TEST_F(Bsw_DcmStack_SID85_ControlDTCSetting_Test,
 TEST_F(Bsw_DcmStack_SID85_ControlDTCSetting_Test,
        NG_SubFuncNotSupported_UnsupportedSubFuncWithExtraByte)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     EnterExtendedSession();
 
     /* [SWS_Dcm_00273]/[SWS_Dcm_00696]: サブ機能サポート確認は
@@ -552,8 +585,14 @@ TEST_F(Bsw_DcmStack_SID85_ControlDTCSetting_Test,
         FakeCanHw_RxData[i] = 0U;
     FakeCanHw_RxPendingCount = 1U;
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Can_MainFunction_Read();
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     ASSERT_EQ(FakeCanHw_SendCount, 1U);
     EXPECT_EQ(FakeCanHw_LastSendData[0], 0x03U);
     EXPECT_EQ(FakeCanHw_LastSendData[1], DCM_SID_NEGATIVE_RESP);
