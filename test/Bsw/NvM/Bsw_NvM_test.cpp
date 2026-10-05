@@ -63,6 +63,9 @@ namespace
  * Test Fixture
  * ====================================================================== */
 
+/* NvM（上記以外の API）の単体テスト用フィクスチャ。
+ * SetUp(): MemIf_Init() と NvM_Init(NULL) を呼ぶ（Init 中の DET ログは抑制し、Init 自体の記録は消して後続の検証から除く）。範囲外のブロック ID を表す kInvalidBlockId も用意する。
+ * TearDown(): 未初期化の状態へ戻す。 */
 class Bsw_NvM_Test : public ::testing::Test
 {
 protected:
@@ -94,21 +97,39 @@ protected:
 
 TEST_F(Bsw_NvM_Test, NvM_ReadBlock_NG_NotInitialized)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     NvM_Test_ResetInitState();
     uint8 buf[16];
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = NvM_ReadBlock(NVM_BLOCK_ID_DEM_MAGIC, buf);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, NVM_E_NOT_INITIALIZED);
 }
 
 TEST_F(Bsw_NvM_Test, NvM_ReadBlock_NG_InvalidBlockId)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     uint8 buf[16];
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = NvM_ReadBlock(kInvalidBlockId, buf);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, NVM_E_PARAM_BLOCK_ID);
 }
@@ -119,21 +140,39 @@ TEST_F(Bsw_NvM_Test, NvM_ReadBlock_NG_InvalidBlockId)
 
 TEST_F(Bsw_NvM_Test, NvM_WriteBlock_NG_NotInitialized)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     NvM_Test_ResetInitState();
     uint8 buf[16] = { 0 };
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = NvM_WriteBlock(NVM_BLOCK_ID_DEM_MAGIC, buf);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, NVM_E_NOT_INITIALIZED);
 }
 
 TEST_F(Bsw_NvM_Test, NvM_WriteBlock_NG_InvalidBlockId)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     uint8 buf[16] = { 0 };
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = NvM_WriteBlock(kInvalidBlockId, buf);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, NVM_E_PARAM_BLOCK_ID);
 }
@@ -144,32 +183,59 @@ TEST_F(Bsw_NvM_Test, NvM_WriteBlock_NG_InvalidBlockId)
 
 TEST_F(Bsw_NvM_Test, NvM_RestoreBlockDefaults_NG_NotInitialized)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     NvM_Test_ResetInitState();
     uint8 buf[16];
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = NvM_RestoreBlockDefaults(NVM_BLOCK_ID_DEM_MAGIC, buf);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, NVM_E_NOT_INITIALIZED);
 }
 
 TEST_F(Bsw_NvM_Test, NvM_RestoreBlockDefaults_NG_InvalidBlockId)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     uint8 buf[16];
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = NvM_RestoreBlockDefaults(kInvalidBlockId, buf);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, NVM_E_PARAM_BLOCK_ID);
 }
 
 TEST_F(Bsw_NvM_Test, NvM_RestoreBlockDefaults_NG_BlockWithoutDefaults)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     // NVM_BLOCK_ID_DEM_AGING は RomBlockDataAddress=NULL（NvM_PBCfg.c 参照）。
     uint8 buf[16];
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = NvM_RestoreBlockDefaults(NVM_BLOCK_ID_DEM_AGING, buf);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, NVM_E_BLOCK_WITHOUT_DEFAULTS);
 }
@@ -180,30 +246,59 @@ TEST_F(Bsw_NvM_Test, NvM_RestoreBlockDefaults_NG_BlockWithoutDefaults)
 
 TEST_F(Bsw_NvM_Test, NvM_SetBlockProtection_NG_NotInitialized)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     NvM_Test_ResetInitState();
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = NvM_SetBlockProtection(NVM_BLOCK_ID_DEM_MAGIC, TRUE);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, NVM_E_NOT_INITIALIZED);
 }
 
 TEST_F(Bsw_NvM_Test, NvM_SetBlockProtection_NG_InvalidBlockId)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = NvM_SetBlockProtection(kInvalidBlockId, TRUE);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, NVM_E_PARAM_BLOCK_ID);
 }
 
 TEST_F(Bsw_NvM_Test, NvM_SetBlockProtection_NG_BlockPending)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     // NVM_BLOCK_ID_DEM_EXTENDED は Redundant=1（UseCrcCompMechanism 対象外、
     // NvM_PBCfg.c 参照）のため、内容に関わらず必ず非同期ジョブへ積まれる。
     ASSERT_EQ(NvM_WriteBlock(NVM_BLOCK_ID_DEM_EXTENDED, NULL), E_OK);
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = NvM_SetBlockProtection(NVM_BLOCK_ID_DEM_EXTENDED, TRUE);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, NVM_E_BLOCK_PENDING);
 }
@@ -214,29 +309,58 @@ TEST_F(Bsw_NvM_Test, NvM_SetBlockProtection_NG_BlockPending)
 
 TEST_F(Bsw_NvM_Test, NvM_GetErrorStatus_NG_ParamData)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = NvM_GetErrorStatus(NVM_BLOCK_ID_DEM_MAGIC, NULL);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, NVM_E_PARAM_DATA);
 }
 
 TEST_F(Bsw_NvM_Test, NvM_GetErrorStatus_NG_NotInitialized)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     NvM_Test_ResetInitState();
     NvM_RequestResultType result;
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = NvM_GetErrorStatus(NVM_BLOCK_ID_DEM_MAGIC, &result);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, NVM_E_NOT_INITIALIZED);
 }
 
 TEST_F(Bsw_NvM_Test, NvM_GetErrorStatus_NG_InvalidBlockId)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     NvM_RequestResultType result;
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = NvM_GetErrorStatus(kInvalidBlockId, &result);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, NVM_E_PARAM_BLOCK_ID);
 }
@@ -247,10 +371,19 @@ TEST_F(Bsw_NvM_Test, NvM_GetErrorStatus_NG_InvalidBlockId)
 
 TEST_F(Bsw_NvM_Test, NvM_MainFunction_NG_NotInitialized)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     NvM_Test_ResetInitState();
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     NvM_MainFunction();
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeDetHw_LastErrorId, NVM_E_NOT_INITIALIZED);
 }
 
@@ -260,8 +393,19 @@ TEST_F(Bsw_NvM_Test, NvM_MainFunction_NG_NotInitialized)
 
 TEST_F(Bsw_NvM_Test, NvM_GetVersionInfo_NG_NullPointer)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     NvM_GetVersionInfo(NULL);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeDetHw_LastErrorId, NVM_E_PARAM_POINTER);
 }
 

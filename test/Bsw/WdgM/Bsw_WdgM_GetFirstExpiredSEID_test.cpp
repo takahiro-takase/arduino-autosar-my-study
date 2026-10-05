@@ -39,6 +39,8 @@
  * Global Variables
  * ====================================================================== */
 
+/* WdgM_GetFirstExpiredSEID() の単体テスト用フィクスチャ。
+ * SetUp(): 時刻・模擬 Wdg_Hw・DET・Dem の wrap を初期化し、Dem_Init(NULL)・Wdg_Init()・WdgM_Init() を EcuM_Init() と同じ順序で呼ぶ（Init 自体の DET 記録は消す）。DriveEngineToStoppedViaWarningAliveOnly() は、ENGINE には CheckpointReached を呼ばず Alive Supervision の不足で失敗させ、WARNING は許可された遷移の列だけを繰り返して OK を維持しながら、判定サイクルを重ねて ENGINE を STOPPED まで進める補助関数。 */
 class Bsw_WdgM_GetFirstExpiredSEID_Test : public ::testing::Test
 {
 protected:
@@ -110,30 +112,61 @@ protected:
 
 TEST_F(Bsw_WdgM_GetFirstExpiredSEID_Test, GetFirstExpiredSEID_OK_ReturnsValueWhenInverseMatches)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     WdgM_Test_SetFirstExpiredSEIDRaw(WDGM_ENTITY_WARNING, (WdgM_SupervisedEntityIdType)(~WDGM_ENTITY_WARNING));
 
     WdgM_SupervisedEntityIdType seid = 0xFFU;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = WdgM_GetFirstExpiredSEID(&seid);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_OK);
     EXPECT_EQ(seid, WDGM_ENTITY_WARNING);
 }
 
 TEST_F(Bsw_WdgM_GetFirstExpiredSEID_Test, GetFirstExpiredSEID_OK_LatchedAutomaticallyWhenGlobalSupervisionStops)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     DriveEngineToStoppedViaWarningAliveOnly();
 
     WdgM_SupervisedEntityIdType seid = 0xFFU;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = WdgM_GetFirstExpiredSEID(&seid);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_OK);
     EXPECT_EQ(seid, WDGM_ENTITY_ENGINE);
 }
 
 TEST_F(Bsw_WdgM_GetFirstExpiredSEID_Test, GetFirstExpiredSEID_NG_NullPointerReturnsErrorAndReportsDet)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = WdgM_GetFirstExpiredSEID(NULL);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, WDGM_E_INV_POINTER);
     EXPECT_EQ(FakeDetHw_ReportCount, 1U);
@@ -141,6 +174,9 @@ TEST_F(Bsw_WdgM_GetFirstExpiredSEID_Test, GetFirstExpiredSEID_NG_NullPointerRetu
 
 TEST_F(Bsw_WdgM_GetFirstExpiredSEID_Test, GetFirstExpiredSEID_NG_UninitializedStillWorksAndReturnsError)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     /* [SWS_WdgM_00348]: WdgM_Init() 前でも呼び出せる。ここでは
      * 「不定値のまま（未書き込み）」を模擬し、値/反転値を意図的に
      * 矛盾させて E_NOT_OK を確認する。 */
@@ -149,8 +185,15 @@ TEST_F(Bsw_WdgM_GetFirstExpiredSEID_Test, GetFirstExpiredSEID_NG_UninitializedSt
     FakeDetHw_Reset();
 
     WdgM_SupervisedEntityIdType seid = 0xFFU;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = WdgM_GetFirstExpiredSEID(&seid);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(seid, 0U);
     /* 未初期化ガードを行わない仕様のため DET は報告されない。 */
@@ -160,6 +203,9 @@ TEST_F(Bsw_WdgM_GetFirstExpiredSEID_Test, GetFirstExpiredSEID_NG_UninitializedSt
 TEST_F(Bsw_WdgM_GetFirstExpiredSEID_Test,
        GetFirstExpiredSEID_NG_InvalidatedIfGlobalStatusRecoversBeforeActualReset)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     DriveEngineToStoppedViaWarningAliveOnly();
 
     /* 実 HW リセットに至る前に（本テストは実 HW を持たないため無条件に）
@@ -192,8 +238,15 @@ TEST_F(Bsw_WdgM_GetFirstExpiredSEID_Test,
      * （後で無関係な原因でリセットされた際に誤って ENGINE を疑わないため。
      * /code-review で指摘）。 */
     WdgM_SupervisedEntityIdType seidAfter = 0xFFU;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = WdgM_GetFirstExpiredSEID(&seidAfter);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(seidAfter, 0U);
 }

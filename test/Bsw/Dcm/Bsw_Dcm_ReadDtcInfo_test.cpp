@@ -58,6 +58,10 @@ namespace
  * Test Fixture
  * ====================================================================== */
 
+/* Dcm の UDS サービス処理（0x19 ReadDTCInformation など）を、CAN を通さずに Dcm_ComIndication() へ直接要求を渡して確認する単体テスト用フィクスチャ。
+ * SetUp(): 時刻と CanTp の wrap を初期化し、通信管理（ComM / CanSM / CanNm）は対象外として抑制したうえで、CanTp_Init(NULL)・Dem_Init(NULL)・Dcm_Init(NULL) を呼ぶ。
+ * SendReadDtcInfo() は、要求のバイト列を渡す補助関数。
+ * TearDown(): ComM の wrap を戻して、他のテストファイルへ影響を残さない。 */
 class Bsw_Dcm_ReadDtcInfo_Test : public ::testing::Test
 {
 protected:
@@ -128,8 +132,19 @@ protected:
 
 TEST_F(Bsw_Dcm_ReadDtcInfo_Test, GetDTCStatusAvailabilityMask_NG_NullPointerReturnsError)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = Dem_GetDTCStatusAvailabilityMask(DCM_DEM_CLIENT_ID, NULL);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
 }
 
@@ -148,21 +163,40 @@ TEST_F(Bsw_Dcm_ReadDtcInfo_Test, GetDTCStatusAvailabilityMask_NG_NullPointerRetu
 
 TEST_F(Bsw_Dcm_ReadDtcInfo_Test, GetFaultDetectionCounter_OK_ReturnsZeroForFreshEvent)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     sint8 fdc = 0x7F;  /* 未更新を検出できる初期値 */
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = Dem_GetFaultDetectionCounter(DEM_EVENT_ENGINE_OVERHEAT, &fdc);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_OK);
     EXPECT_EQ(fdc, 0);  /* カウンタ0の写像は0(正負どちらの式でも0) */
 }
 
 TEST_F(Bsw_Dcm_ReadDtcInfo_Test, GetFaultDetectionCounter_OK_ReflectsDebounceCounterAfterFailedReport)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     (void)Dem_SetEventStatus(DEM_EVENT_ENGINE_OVERHEAT, DEM_EVENT_STATUS_FAILED);
 
     sint8 fdc = 0;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = Dem_GetFaultDetectionCounter(DEM_EVENT_ENGINE_OVERHEAT, &fdc);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_OK);
     /* 中立(0)から FAILED 方向へ1回分だけ進んだ生カウンタ1を、
      * limit=2 で線形写像: (1*127)/2 = 63 (整数除算)。 */
@@ -171,17 +205,37 @@ TEST_F(Bsw_Dcm_ReadDtcInfo_Test, GetFaultDetectionCounter_OK_ReflectsDebounceCou
 
 TEST_F(Bsw_Dcm_ReadDtcInfo_Test, GetFaultDetectionCounter_NG_InvalidEventIdReturnsError)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     sint8 fdc = 0;
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = Dem_GetFaultDetectionCounter((Dem_EventIdType)DEM_EVENT_COUNT, &fdc);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
 }
 
 TEST_F(Bsw_Dcm_ReadDtcInfo_Test, GetFaultDetectionCounter_NG_NullPointerReturnsError)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = Dem_GetFaultDetectionCounter(DEM_EVENT_ENGINE_OVERHEAT, NULL);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
 }
 
@@ -193,46 +247,93 @@ TEST_F(Bsw_Dcm_ReadDtcInfo_Test, GetFaultDetectionCounter_NG_NullPointerReturnsE
 
 TEST_F(Bsw_Dcm_ReadDtcInfo_Test, GetDTCOfEvent_OK_ReturnsUdsDtcWhenFormatIsUds)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     uint32 dtc = 0U;
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = Dem_GetDTCOfEvent(DEM_EVENT_ENGINE_OVERHEAT, DEM_DTC_FORMAT_UDS, &dtc);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_OK);
     EXPECT_EQ(dtc, static_cast<uint32>(DEM_DTC_ENGINE_OVERHEAT));
 }
 
-TEST_F(Bsw_Dcm_ReadDtcInfo_Test, GetDTCOfEvent_NG_ObdFormatReturnsNoDtcAvailable)
-{
-    uint32 dtc = 0U;
-
-    Std_ReturnType ret = Dem_GetDTCOfEvent(DEM_EVENT_ENGINE_OVERHEAT, DEM_DTC_FORMAT_OBD, &dtc);
-
-    EXPECT_EQ(ret, DEM_E_NO_DTC_AVAILABLE);
-}
-
-TEST_F(Bsw_Dcm_ReadDtcInfo_Test, GetDTCOfEvent_NG_J1939FormatReturnsNoDtcAvailable)
-{
-    uint32 dtc = 0U;
-
-    Std_ReturnType ret = Dem_GetDTCOfEvent(DEM_EVENT_ENGINE_OVERHEAT, DEM_DTC_FORMAT_J1939, &dtc);
-
-    EXPECT_EQ(ret, DEM_E_NO_DTC_AVAILABLE);
-}
-
 TEST_F(Bsw_Dcm_ReadDtcInfo_Test, GetDTCOfEvent_NG_InvalidEventIdReturnsError)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     uint32 dtc = 0U;
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = Dem_GetDTCOfEvent((Dem_EventIdType)DEM_EVENT_COUNT, DEM_DTC_FORMAT_UDS, &dtc);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
 }
 
 TEST_F(Bsw_Dcm_ReadDtcInfo_Test, GetDTCOfEvent_NG_NullPointerReturnsError)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = Dem_GetDTCOfEvent(DEM_EVENT_ENGINE_OVERHEAT, DEM_DTC_FORMAT_UDS, NULL);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
+}
+
+TEST_F(Bsw_Dcm_ReadDtcInfo_Test, GetDTCOfEvent_NG_ObdFormatReturnsNoDtcAvailable)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    uint32 dtc = 0U;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Std_ReturnType ret = Dem_GetDTCOfEvent(DEM_EVENT_ENGINE_OVERHEAT, DEM_DTC_FORMAT_OBD, &dtc);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, DEM_E_NO_DTC_AVAILABLE);
+}
+
+TEST_F(Bsw_Dcm_ReadDtcInfo_Test, GetDTCOfEvent_NG_J1939FormatReturnsNoDtcAvailable)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    uint32 dtc = 0U;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Std_ReturnType ret = Dem_GetDTCOfEvent(DEM_EVENT_ENGINE_OVERHEAT, DEM_DTC_FORMAT_J1939, &dtc);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, DEM_E_NO_DTC_AVAILABLE);
 }
 
 // ------------------------------------------------------------
@@ -244,8 +345,19 @@ TEST_F(Bsw_Dcm_ReadDtcInfo_Test, GetDTCOfEvent_NG_NullPointerReturnsError)
 
 TEST_F(Bsw_Dcm_ReadDtcInfo_Test, GetVin_NG_NullPointerReturnsError)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = Dcm_GetVin(NULL);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
 }
 
@@ -262,25 +374,61 @@ TEST_F(Bsw_Dcm_ReadDtcInfo_Test, GetVin_NG_NullPointerReturnsError)
 
 TEST_F(Bsw_Dcm_ReadDtcInfo_Test, GetSesCtrlType_OK_ReflectsExtendedSessionAfterRequest)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     uint8 req[2] = { DCM_SID_SESSION_CTRL, DCM_SESSION_EXTENDED };
     SendReadDtcInfo(req, sizeof(req));
     ASSERT_EQ(LastData_CanTp_Transmit[0], 0x50U);  // 正応答確認（前提が崩れていないこと）
 
     Dcm_SesCtrlType session = 0U;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = Dcm_GetSesCtrlType(&session);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_OK);
     EXPECT_EQ(session, DCM_SESSION_EXTENDED);
 }
 
 TEST_F(Bsw_Dcm_ReadDtcInfo_Test, GetSesCtrlType_NG_NullPointerReturnsError)
 {
-    EXPECT_EQ(Dcm_GetSesCtrlType(NULL), E_NOT_OK);
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Std_ReturnType ret = Dcm_GetSesCtrlType(NULL);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_NOT_OK);
 }
 
 TEST_F(Bsw_Dcm_ReadDtcInfo_Test, GetSecurityLevel_NG_NullPointerReturnsError)
 {
-    EXPECT_EQ(Dcm_GetSecurityLevel(NULL), E_NOT_OK);
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Std_ReturnType ret = Dcm_GetSecurityLevel(NULL);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_NOT_OK);
 }
 
 // ------------------------------------------------------------
@@ -290,12 +438,21 @@ TEST_F(Bsw_Dcm_ReadDtcInfo_Test, GetSecurityLevel_NG_NullPointerReturnsError)
 
 TEST_F(Bsw_Dcm_ReadDtcInfo_Test, GetActiveProtocol_OK_ReturnsFixedUdsOnCanValues)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     Dcm_ProtocolType protocol = 0xFFU;
     uint16 connectionId       = 0xFFFFU;
     uint16 testerAddress      = 0xFFFFU;
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = Dcm_GetActiveProtocol(&protocol, &connectionId, &testerAddress);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_OK);
     EXPECT_EQ(protocol, DCM_UDS_ON_CAN);
     EXPECT_EQ(connectionId, DCM_CONNECTION_ID);
@@ -304,26 +461,59 @@ TEST_F(Bsw_Dcm_ReadDtcInfo_Test, GetActiveProtocol_OK_ReturnsFixedUdsOnCanValues
 
 TEST_F(Bsw_Dcm_ReadDtcInfo_Test, GetActiveProtocol_NG_NullActiveProtocolTypeReturnsError)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     uint16 connectionId  = 0U;
     uint16 testerAddress = 0U;
 
-    EXPECT_EQ(Dcm_GetActiveProtocol(NULL, &connectionId, &testerAddress), E_NOT_OK);
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Std_ReturnType ret = Dcm_GetActiveProtocol(NULL, &connectionId, &testerAddress);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_NOT_OK);
 }
 
 TEST_F(Bsw_Dcm_ReadDtcInfo_Test, GetActiveProtocol_NG_NullConnectionIdReturnsError)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     Dcm_ProtocolType protocol = 0U;
     uint16 testerAddress      = 0U;
 
-    EXPECT_EQ(Dcm_GetActiveProtocol(&protocol, NULL, &testerAddress), E_NOT_OK);
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Std_ReturnType ret = Dcm_GetActiveProtocol(&protocol, NULL, &testerAddress);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_NOT_OK);
 }
 
 TEST_F(Bsw_Dcm_ReadDtcInfo_Test, GetActiveProtocol_NG_NullTesterSourceAddressReturnsError)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     Dcm_ProtocolType protocol = 0U;
     uint16 connectionId       = 0U;
 
-    EXPECT_EQ(Dcm_GetActiveProtocol(&protocol, &connectionId, NULL), E_NOT_OK);
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Std_ReturnType ret = Dcm_GetActiveProtocol(&protocol, &connectionId, NULL);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_NOT_OK);
 }
 
 // ------------------------------------------------------------
@@ -336,6 +526,9 @@ TEST_F(Bsw_Dcm_ReadDtcInfo_Test, GetActiveProtocol_NG_NullTesterSourceAddressRet
 
 TEST_F(Bsw_Dcm_ReadDtcInfo_Test, ResetToDefaultSession_OK_ReturnsSessionToDefault)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     uint8 req[2] = { DCM_SID_SESSION_CTRL, DCM_SESSION_EXTENDED };
     SendReadDtcInfo(req, sizeof(req));
     ASSERT_EQ(LastData_CanTp_Transmit[0], 0x50U);  // 前提: extendedSessionへ遷移済み
@@ -343,9 +536,16 @@ TEST_F(Bsw_Dcm_ReadDtcInfo_Test, ResetToDefaultSession_OK_ReturnsSessionToDefaul
     ASSERT_EQ(Dcm_GetSesCtrlType(&sessionBefore), E_OK);
     ASSERT_EQ(sessionBefore, DCM_SESSION_EXTENDED);
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = Dcm_ResetToDefaultSession();
 
     Dcm_SesCtrlType sessionAfter = 0xFFU;  /* 未更新を検出できる初期値 */
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_OK);
     EXPECT_EQ(Dcm_GetSesCtrlType(&sessionAfter), E_OK);
     EXPECT_EQ(sessionAfter, DCM_SESSION_DEFAULT);
@@ -379,8 +579,14 @@ TEST_F(Bsw_Dcm_ReadDtcInfo_Test, ReadDtcCount_NG_ExtraByteReturnsIncorrectMessag
     // ため黙って受理していた）
     uint8 req[4] = { DCM_SID_READ_DTC_INFO, DCM_DTC_SUBFUNC_REPORT_COUNT, 0x00U, 0x00U };
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     SendReadDtcInfo(req, sizeof(req));
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     ASSERT_EQ(CallCount_CanTp_Transmit, 1U);
     ASSERT_EQ(LastLength_CanTp_Transmit, 3U);
     EXPECT_EQ(LastData_CanTp_Transmit[0], DCM_SID_NEGATIVE_RESP);
@@ -397,8 +603,14 @@ TEST_F(Bsw_Dcm_ReadDtcInfo_Test, ReadDtcSupported_NG_ExtraByteReturnsIncorrectMe
     // 一切見ておらず何バイト付けても黙って受理していた）
     uint8 req[3] = { DCM_SID_READ_DTC_INFO, DCM_DTC_SUBFUNC_REPORT_SUPPORTED, 0x00U };
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     SendReadDtcInfo(req, sizeof(req));
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     ASSERT_EQ(CallCount_CanTp_Transmit, 1U);
     ASSERT_EQ(LastLength_CanTp_Transmit, 3U);
     EXPECT_EQ(LastData_CanTp_Transmit[0], DCM_SID_NEGATIVE_RESP);
@@ -430,8 +642,15 @@ TEST_F(Bsw_Dcm_ReadDtcInfo_Test, ReadDtcSnapshot_NG_UnsupportedRecordNumberStill
 
     uint8 req[6] = { DCM_SID_READ_DTC_INFO, DCM_DTC_SUBFUNC_REPORT_SNAPSHOT,
                       0x00U, 0x01U, 0x01U, 0x02U };
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     SendReadDtcInfo(req, sizeof(req));
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     ASSERT_EQ(CallCount_CanTp_Transmit, 1U);
     ASSERT_EQ(LastLength_CanTp_Transmit, 3U);
     EXPECT_EQ(LastData_CanTp_Transmit[0], DCM_SID_NEGATIVE_RESP);
@@ -459,8 +678,15 @@ TEST_F(Bsw_Dcm_ReadDtcInfo_Test, SessionControl_NG_SuppressPosRspBitDoesNotSuppr
     uint8 req[2] = { DCM_SID_SESSION_CTRL, 0x82U };
 
     PduInfoType pdu = { req, sizeof(req) };
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Dcm_ComIndication(0U, &pdu);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     ASSERT_EQ(CallCount_CanTp_Transmit, 1U);
     ASSERT_EQ(LastLength_CanTp_Transmit, 3U);
     EXPECT_EQ(LastData_CanTp_Transmit[0], DCM_SID_NEGATIVE_RESP);

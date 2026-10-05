@@ -1,6 +1,4 @@
 /**
- * \file    Can.c
- * \brief   CAN ドライバ (AUTOSAR SWS_Can 準拠)
  * \file    Bsw_Can_test.cpp
  * \brief   Can.c（src/Bsw/Can/Can.c）の単体テスト（GoogleTest / PlatformIO native環境）
  * \details Can.c は実 HW 依存の無い自己完結したロジックのため、フェイク
@@ -51,6 +49,8 @@ namespace
  * Test Fixture
  * ====================================================================== */
 
+/* Can の単体テスト用フィクスチャ。
+ * SetUp(): 模擬 Can_Hw・wrap・DET の記録をリセットし、Can を未初期化の状態（設定なし・UNINIT・TX エラー数 0）へ戻したうえで、Can_Init() に渡す設定（config）を用意する。Can_Init() は各テストが呼ぶ。 */
 class Bsw_Can_Test : public ::testing::Test
 {
 protected:
@@ -230,20 +230,38 @@ TEST_F(Bsw_Can_Test, Can_SetControllerMode_NG_OtherTransition)
 
 TEST_F(Bsw_Can_Test, Can_DisableControllerInterrupts_OK_FirstCallDisablesHw)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     Can_Init(&config);
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Can_DisableControllerInterrupts(0U);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeCanHw_DisableRxIsrCount, 1U);
 }
 
 TEST_F(Bsw_Can_Test, Can_DisableControllerInterrupts_OK_NestedCallOnlyDisablesHwOnce)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     Can_Init(&config);
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Can_DisableControllerInterrupts(0U);
     Can_DisableControllerInterrupts(0U);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeCanHw_DisableRxIsrCount, 1U);
 }
 
@@ -253,29 +271,59 @@ TEST_F(Bsw_Can_Test, Can_DisableControllerInterrupts_OK_NestedCallOnlyDisablesHw
 // ------------------------------------------------------------
 TEST_F(Bsw_Can_Test, Can_DisableControllerInterrupts_NG_NullConfig)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Can_DisableControllerInterrupts(0U);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeCanHw_DisableRxIsrCount, 0U);
     EXPECT_EQ(FakeDetHw_LastErrorId, CAN_E_UNINIT);
 }
 
 TEST_F(Bsw_Can_Test, Can_DisableControllerInterrupts_NG_InvalidController)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     Can_Init(&config);
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Can_DisableControllerInterrupts(1U);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeCanHw_DisableRxIsrCount, 0U);
     EXPECT_EQ(FakeDetHw_LastErrorId, CAN_E_PARAM_CONTROLLER);
 }
 
 TEST_F(Bsw_Can_Test, Can_EnableControllerInterrupts_OK_OnlyReEnablesHwAfterMatchingDisableCount)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     Can_Init(&config);
     Can_DisableControllerInterrupts(0U);
     Can_DisableControllerInterrupts(0U);  // ネスト2重
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Can_EnableControllerInterrupts(0U);   // 1回目: まだ再有効化しない
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeCanHw_EnableRxIsrCount, 0U);
 
     Can_EnableControllerInterrupts(0U);   // 2回目: ここで再有効化
@@ -284,31 +332,60 @@ TEST_F(Bsw_Can_Test, Can_EnableControllerInterrupts_OK_OnlyReEnablesHwAfterMatch
 
 TEST_F(Bsw_Can_Test, Can_EnableControllerInterrupts_NG_NullConfig)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Can_EnableControllerInterrupts(0U);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeCanHw_EnableRxIsrCount, 0U);
     EXPECT_EQ(FakeDetHw_LastErrorId, CAN_E_UNINIT);
 }
 
 TEST_F(Bsw_Can_Test, Can_EnableControllerInterrupts_NG_InvalidController)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     Can_Init(&config);
     Can_DisableControllerInterrupts(0U);
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Can_EnableControllerInterrupts(1U);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeCanHw_EnableRxIsrCount, 0U);
     EXPECT_EQ(FakeDetHw_LastErrorId, CAN_E_PARAM_CONTROLLER);
 }
 
 TEST_F(Bsw_Can_Test, Can_EnableControllerInterrupts_NG_UnmatchedCallIsNoOp)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     /* 対応する Disable が無い状態で Enable を呼んでも、ネストカウンタを
      * 0 未満へアンダーフローさせず、HW も一切呼ばない ([SWS_Can_00202])。 */
     Can_Init(&config);
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Can_EnableControllerInterrupts(0U);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeCanHw_EnableRxIsrCount, 0U);
 }
 
@@ -968,6 +1045,11 @@ TEST_F(Bsw_Can_Test, Can_GetControllerErrorState_OK_ReflectsBusOffFromHw)
 // ------------------------------------------------------------
 TEST_F(Bsw_Can_Test, Can_GetControllerErrorState_NG_NullConfig)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（Can_Init() を呼ばない未初期化の状態）
+
     /* ----------------------- */
     /* ---- 実行 (Act) ------- */
     /* ----------------------- */

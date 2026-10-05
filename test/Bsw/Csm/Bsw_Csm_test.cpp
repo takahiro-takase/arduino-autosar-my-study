@@ -63,6 +63,9 @@ namespace
  * Test Fixture
  * ====================================================================== */
 
+/* Csm の単体テスト用フィクスチャ。
+ * SetUp(): Csm_Init() を呼ぶ（Init 中の DET ログは抑制し、Init 自体の記録は消して後続の検証から除く）。
+ * TearDown(): Csm・CryIf・Crypto をそれぞれ未初期化の状態へ戻す。 */
 class Bsw_Csm_Test : public ::testing::Test
 {
 protected:
@@ -93,17 +96,37 @@ protected:
 
 TEST_F(Bsw_Csm_Test, Csm_GetVersionInfo_NG_Uninit)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     Csm_Test_ResetInitState();
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Csm_GetVersionInfo(NULL);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeDetHw_LastErrorId, CSM_E_UNINIT);
 }
 
 TEST_F(Bsw_Csm_Test, Csm_GetVersionInfo_NG_NullPointer)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Csm_GetVersionInfo(NULL);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeDetHw_LastErrorId, CSM_E_PARAM_POINTER);
 }
 
@@ -113,53 +136,89 @@ TEST_F(Bsw_Csm_Test, Csm_GetVersionInfo_NG_NullPointer)
 
 TEST_F(Bsw_Csm_Test, Csm_MacGenerate_NG_Uninit)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     Csm_Test_ResetInitState();
     uint8  data[1] = { 0 };
     uint8  mac[CRYPTO_CMAC_SIZE];
     uint32 macLen = sizeof(mac);
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = Csm_MacGenerate(CSM_JOB_ID_IMMOBILIZER_CMD_VERIFY, CRYPTO_OPERATIONMODE_SINGLECALL,
                                           data, sizeof(data), mac, &macLen);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, CSM_E_UNINIT);
 }
 
 TEST_F(Bsw_Csm_Test, Csm_MacGenerate_NG_NullPointer)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     uint32 macLen = CRYPTO_CMAC_SIZE;
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = Csm_MacGenerate(CSM_JOB_ID_IMMOBILIZER_CMD_VERIFY, CRYPTO_OPERATIONMODE_SINGLECALL,
                                           NULL, 1U, NULL, &macLen);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, CSM_E_PARAM_POINTER);
 }
 
 TEST_F(Bsw_Csm_Test, Csm_MacGenerate_NG_SmallBuffer)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     uint8  data[1] = { 0 };
     uint8  mac[CRYPTO_CMAC_SIZE + 1U];
     uint32 macLen = sizeof(mac);  // CRYPTO_CMAC_SIZE を超過
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = Csm_MacGenerate(CSM_JOB_ID_IMMOBILIZER_CMD_VERIFY, CRYPTO_OPERATIONMODE_SINGLECALL,
                                           data, sizeof(data), mac, &macLen);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, CRYPTO_E_SMALL_BUFFER);
     EXPECT_EQ(FakeDetHw_LastErrorId, CSM_E_SMALL_BUFFER);
 }
 
 TEST_F(Bsw_Csm_Test, Csm_MacGenerate_NG_NoMatchingJob)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     // Csm_JobConfigData には CRYPTO_MACGENERATE のジョブが1件も無い
     // （ファイル冒頭コメント参照）ため、どの jobId でも一致しない。
     uint8  data[1] = { 0 };
     uint8  mac[CRYPTO_CMAC_SIZE];
     uint32 macLen = sizeof(mac);
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = Csm_MacGenerate(CSM_JOB_ID_IMMOBILIZER_CMD_VERIFY, CRYPTO_OPERATIONMODE_SINGLECALL,
                                           data, sizeof(data), mac, &macLen);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, CSM_E_PARAM_HANDLE);
 }
@@ -170,78 +229,132 @@ TEST_F(Bsw_Csm_Test, Csm_MacGenerate_NG_NoMatchingJob)
 
 TEST_F(Bsw_Csm_Test, Csm_MacVerify_NG_Uninit)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     Csm_Test_ResetInitState();
     uint8 data[1] = { 0 };
     uint8 mac[CRYPTO_CMAC_SIZE] = { 0 };
     Crypto_VerifyResultType verifyResult;
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = Csm_MacVerify(CSM_JOB_ID_IMMOBILIZER_CMD_VERIFY, CRYPTO_OPERATIONMODE_SINGLECALL,
                                         data, sizeof(data), mac, CRYPTO_CMAC_SIZE * 8U, &verifyResult);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, CSM_E_UNINIT);
 }
 
 TEST_F(Bsw_Csm_Test, Csm_MacVerify_NG_NullPointer)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     Crypto_VerifyResultType verifyResult;
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = Csm_MacVerify(CSM_JOB_ID_IMMOBILIZER_CMD_VERIFY, CRYPTO_OPERATIONMODE_SINGLECALL,
                                         NULL, 1U, NULL, CRYPTO_CMAC_SIZE * 8U, &verifyResult);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, CSM_E_PARAM_POINTER);
 }
 
 TEST_F(Bsw_Csm_Test, Csm_MacVerify_NG_InvalidMacLengthNotByteAligned)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     uint8 data[1] = { 0 };
     uint8 mac[CRYPTO_CMAC_SIZE] = { 0 };
     Crypto_VerifyResultType verifyResult;
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = Csm_MacVerify(CSM_JOB_ID_IMMOBILIZER_CMD_VERIFY, CRYPTO_OPERATIONMODE_SINGLECALL,
                                         data, sizeof(data), mac, 7U, &verifyResult);  // 8の倍数でない
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, CSM_E_PARAM_HANDLE);
 }
 
 TEST_F(Bsw_Csm_Test, Csm_MacVerify_NG_InvalidMacLengthExceedsCmacSize)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     uint8 data[1] = { 0 };
     uint8 mac[CRYPTO_CMAC_SIZE] = { 0 };
     Crypto_VerifyResultType verifyResult;
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = Csm_MacVerify(CSM_JOB_ID_IMMOBILIZER_CMD_VERIFY, CRYPTO_OPERATIONMODE_SINGLECALL,
                                         data, sizeof(data), mac, (CRYPTO_CMAC_SIZE + 1U) * 8U, &verifyResult);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, CSM_E_PARAM_HANDLE);
 }
 
 TEST_F(Bsw_Csm_Test, Csm_MacVerify_NG_NoMatchingJob)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     uint8 data[1] = { 0 };
     uint8 mac[CRYPTO_CMAC_SIZE] = { 0 };
     Crypto_VerifyResultType verifyResult;
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = Csm_MacVerify(CSM_JOB_ID_IMMOBILIZER_CMD_VERIFY + 1U, CRYPTO_OPERATIONMODE_SINGLECALL,
                                         data, sizeof(data), mac, CRYPTO_CMAC_SIZE * 8U, &verifyResult);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, CSM_E_PARAM_HANDLE);
 }
 
 TEST_F(Bsw_Csm_Test, Csm_MacVerify_NG_ServiceNotStarted)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     // CryIf_Init() を意図的に呼ばない（ファイル冒頭コメント参照）。
     uint8 data[1] = { 0 };
     uint8 mac[CRYPTO_CMAC_SIZE] = { 0 };
     Crypto_VerifyResultType verifyResult;
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = Csm_MacVerify(CSM_JOB_ID_IMMOBILIZER_CMD_VERIFY, CRYPTO_OPERATIONMODE_SINGLECALL,
                                         data, sizeof(data), mac, CRYPTO_CMAC_SIZE * 8U, &verifyResult);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, CSM_E_SERVICE_NOT_STARTED);
 }
@@ -252,39 +365,77 @@ TEST_F(Bsw_Csm_Test, Csm_MacVerify_NG_ServiceNotStarted)
 
 TEST_F(Bsw_Csm_Test, Csm_KeyElementSet_NG_Uninit)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     Csm_Test_ResetInitState();
     uint8 key[16] = { 0 };
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = Csm_KeyElementSet(0U, 1U, key, sizeof(key));
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, CSM_E_UNINIT);
 }
 
 TEST_F(Bsw_Csm_Test, Csm_KeyElementSet_NG_NullPointer)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = Csm_KeyElementSet(0U, 1U, NULL, 16U);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, CSM_E_PARAM_POINTER);
 }
 
 TEST_F(Bsw_Csm_Test, Csm_KeyElementSet_NG_InvalidKeyId)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     uint8 key[16] = { 0 };
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = Csm_KeyElementSet(CRYPTO_KEY_COUNT, 1U, key, sizeof(key));
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, CSM_E_PARAM_HANDLE);
 }
 
 TEST_F(Bsw_Csm_Test, Csm_KeyElementSet_NG_ServiceNotStarted)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     uint8 key[16] = { 0 };
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = Csm_KeyElementSet(0U, 1U, key, sizeof(key));
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, CSM_E_SERVICE_NOT_STARTED);
 }
@@ -295,26 +446,57 @@ TEST_F(Bsw_Csm_Test, Csm_KeyElementSet_NG_ServiceNotStarted)
 
 TEST_F(Bsw_Csm_Test, Csm_KeySetValid_NG_Uninit)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     Csm_Test_ResetInitState();
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = Csm_KeySetValid(0U);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, CSM_E_UNINIT);
 }
 
 TEST_F(Bsw_Csm_Test, Csm_KeySetValid_NG_InvalidKeyId)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = Csm_KeySetValid(CRYPTO_KEY_COUNT);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, CSM_E_PARAM_HANDLE);
 }
 
 TEST_F(Bsw_Csm_Test, Csm_KeySetValid_NG_ServiceNotStarted)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = Csm_KeySetValid(0U);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, CSM_E_SERVICE_NOT_STARTED);
 }
@@ -325,50 +507,89 @@ TEST_F(Bsw_Csm_Test, Csm_KeySetValid_NG_ServiceNotStarted)
 
 TEST_F(Bsw_Csm_Test, Csm_KeyElementGet_NG_Uninit)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     Csm_Test_ResetInitState();
     uint8  buf[16];
     uint32 len = sizeof(buf);
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = Csm_KeyElementGet(0U, 1U, buf, &len);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, CSM_E_UNINIT);
 }
 
 TEST_F(Bsw_Csm_Test, Csm_KeyElementGet_NG_NullPointer)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     uint32 len = 16U;
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = Csm_KeyElementGet(0U, 1U, NULL, &len);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, CSM_E_PARAM_POINTER);
 }
 
 TEST_F(Bsw_Csm_Test, Csm_KeyElementGet_NG_InvalidKeyId)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     uint8  buf[16];
     uint32 len = sizeof(buf);
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = Csm_KeyElementGet(CRYPTO_KEY_COUNT, 1U, buf, &len);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, CSM_E_PARAM_HANDLE);
 }
 
 TEST_F(Bsw_Csm_Test, Csm_KeyElementGet_NG_ServiceNotStarted)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     uint8  buf[16];
     uint32 len = sizeof(buf);
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = Csm_KeyElementGet(0U, 1U, buf, &len);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, CSM_E_SERVICE_NOT_STARTED);
 }
 
 TEST_F(Bsw_Csm_Test, Csm_KeyElementGet_NG_SmallBuffer)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     // 下位層まで実チェーンを通す必要があるため、ここでのみ Crypto/CryIf も
     // 初期化する（他のテストは CryIf 未初期化のまま SERVICE_NOT_STARTED で
     // 早期returnするため不要）。
@@ -380,8 +601,14 @@ TEST_F(Bsw_Csm_Test, Csm_KeyElementGet_NG_SmallBuffer)
     uint8  buf[16];
     uint32 len = CRYPTO_AES128_KEY_SIZE - 1U;
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = Csm_KeyElementGet(0U, 1U, buf, &len);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, CRYPTO_E_SMALL_BUFFER);
     EXPECT_EQ(FakeDetHw_LastErrorId, CSM_E_SMALL_BUFFER);
 }

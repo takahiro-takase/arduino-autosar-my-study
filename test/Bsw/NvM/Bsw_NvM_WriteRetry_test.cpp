@@ -53,6 +53,9 @@ namespace
  * Test Fixture
  * ====================================================================== */
 
+/* NvM の書き込みのリトライ（Fee がビジーのとき）の単体テスト用フィクスチャ。
+ * SetUp(): MemIf_Init() と NvM_Init(NULL) を呼び、Dem の wrap と DET の記録を初期化する。MakeFeeBusy() は、Fee を BUSY にする補助関数。
+ * TearDown(): 未初期化の状態へ戻す。 */
 class Bsw_NvM_WriteRetry_Test : public ::testing::Test
 {
 protected:
@@ -123,12 +126,22 @@ protected:
 
 TEST_F(Bsw_NvM_WriteRetry_Test, NvM_MainFunction_OK_WriteRecoversWithinRetryLimitWithoutDemReport)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     MakeFeeBusy();
     ASSERT_EQ(NvM_WriteBlock(NVM_BLOCK_ID_DEM_STATUS, newData), E_OK);
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     // 上限以内の拒否（2 回）の後で Fee が空けば、書き込みは成功する。
     NvM_MainFunction();
     NvM_MainFunction();
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     ASSERT_EQ(ResultOf(NVM_BLOCK_ID_DEM_STATUS), NVM_REQ_PENDING);
     ReleaseFee();
     RunUntilIdle();
@@ -139,9 +152,15 @@ TEST_F(Bsw_NvM_WriteRetry_Test, NvM_MainFunction_OK_WriteRecoversWithinRetryLimi
 
 TEST_F(Bsw_NvM_WriteRetry_Test, NvM_MainFunction_NG_WriteRejectedBeyondRetryLimitFailsBlockAndReportsToDem)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     MakeFeeBusy();
     ASSERT_EQ(NvM_WriteBlock(NVM_BLOCK_ID_DEM_STATUS, newData), E_OK);
 
+    /* ----------------------------------- */
+    /* ---- 実行 + 評価 (Act + Assert) --- */
+    /* ----------------------------------- */
     // 1 回目の拒否〜上限回数までは、まだリトライ中（要求結果は PENDING のまま、Dem へも報告しない）。
     for (uint8 i = 0U; i < NVM_MAX_NUM_OF_WRITE_RETRIES; i++)
     {
@@ -168,14 +187,25 @@ TEST_F(Bsw_NvM_WriteRetry_Test, NvM_MainFunction_NG_WriteRejectedBeyondRetryLimi
 
 TEST_F(Bsw_NvM_WriteRetry_Test, NvM_MainFunction_NG_BlockAfterFailedBlockIsStillProcessed)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     MakeFeeBusy();
     ASSERT_EQ(NvM_WriteBlock(NVM_BLOCK_ID_DEM_STATUS, newData), E_OK);
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     // リトライを使い切り、Dem の再書き込みも含めて諦めるまで回す（前のテストが残した実 Dem の状態に
     // よって再書き込みの有無が変わるため、tick 数を厳密には仮定しない）。
     for (uint8 i = 0U; i < 20U; i++)
     {
         NvM_MainFunction();
     }
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     ASSERT_EQ(ResultOf(NVM_BLOCK_ID_DEM_STATUS), NVM_REQ_NOT_OK);
 
     // Fee が空いた後の別ブロックの書き込みは通常どおり完了する（以前は無限に再試行して詰まっていた）。

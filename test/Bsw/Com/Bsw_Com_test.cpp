@@ -205,6 +205,9 @@ const Com_ConfigType kTestConfig = {
  * Test Fixture
  * ====================================================================== */
 
+/* Com の単体テスト用フィクスチャ。
+ * SetUp(): Com_Init(&kTestConfig) を呼ぶ（Init 中の DET ログは抑制し、Init 自体の記録は消して後続の検証から除く）。
+ * TearDown(): Com_DeInit() で未初期化へ戻す。 */
 class Bsw_Com_Test : public ::testing::Test
 {
 protected:
@@ -233,26 +236,55 @@ protected:
 
 TEST_F(Bsw_Com_Test, Com_Init_NG_NullConfigPtr)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Com_Init(NULL);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeDetHw_LastErrorId, COM_E_PARAM_POINTER);
 }
 
 TEST_F(Bsw_Com_Test, Com_Init_NG_RxIPduCountExceedsMax)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     const Com_ConfigType badConfig = { &kTestRxIPdu, kOutOfRangeIPduId, &kTestTxIPdu, 1U, kTestSignals, 6U, NULL, 0U };
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Com_Init(&badConfig);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeDetHw_LastErrorId, COM_E_INIT_FAILED);
 }
 
 TEST_F(Bsw_Com_Test, Com_Init_NG_TxIPduCountExceedsMax)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     const Com_ConfigType badConfig = { &kTestRxIPdu, 1U, &kTestTxIPdu, kOutOfRangeIPduId, kTestSignals, 6U, NULL, 0U };
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Com_Init(&badConfig);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeDetHw_LastErrorId, COM_E_INIT_FAILED);
 }
 
@@ -262,11 +294,22 @@ TEST_F(Bsw_Com_Test, Com_Init_NG_TxIPduCountExceedsMax)
 
 TEST_F(Bsw_Com_Test, Com_DeInit_NG_Uninit)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Com_DeInit();  // 1回目: SetUp() の Init を正常に解除する
     FakeDetHw_Reset();
 
     Com_DeInit();  // 2回目: 既に未初期化のため NG
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeDetHw_LastErrorId, COM_E_UNINIT);
 }
 
@@ -277,37 +320,73 @@ TEST_F(Bsw_Com_Test, Com_DeInit_NG_Uninit)
 
 TEST_F(Bsw_Com_Test, Com_IpduGroupStart_NG_Uninit)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     Com_DeInit();
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Com_IpduGroupStart(0U, FALSE);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeDetHw_LastErrorId, COM_E_UNINIT);
 }
 
 TEST_F(Bsw_Com_Test, Com_IpduGroupStop_NG_Uninit)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     Com_DeInit();
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Com_IpduGroupStop(0U);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeDetHw_LastErrorId, COM_E_UNINIT);
 }
 
 TEST_F(Bsw_Com_Test, Com_EnableReceptionDM_NG_Uninit)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     Com_DeInit();
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Com_EnableReceptionDM(0U);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeDetHw_LastErrorId, COM_E_UNINIT);
 }
 
 TEST_F(Bsw_Com_Test, Com_DisableReceptionDM_NG_Uninit)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     Com_DeInit();
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Com_DisableReceptionDM(0U);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeDetHw_LastErrorId, COM_E_UNINIT);
 }
 
@@ -317,17 +396,37 @@ TEST_F(Bsw_Com_Test, Com_DisableReceptionDM_NG_Uninit)
 
 TEST_F(Bsw_Com_Test, Com_GetVersionInfo_NG_Uninit)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     Com_DeInit();
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Com_GetVersionInfo(NULL);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeDetHw_LastErrorId, COM_E_UNINIT);
 }
 
 TEST_F(Bsw_Com_Test, Com_GetVersionInfo_NG_NullPointer)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Com_GetVersionInfo(NULL);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeDetHw_LastErrorId, COM_E_PARAM_POINTER);
 }
 
@@ -337,49 +436,96 @@ TEST_F(Bsw_Com_Test, Com_GetVersionInfo_NG_NullPointer)
 
 TEST_F(Bsw_Com_Test, Com_SendSignal_NG_Uninit)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     Com_DeInit();
     uint8 data = 0U;
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     uint8 ret = Com_SendSignal(0U, &data);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, COM_E_UNINIT);
 }
 
 TEST_F(Bsw_Com_Test, Com_SendSignal_NG_NullPointer)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     uint8 ret = Com_SendSignal(0U, NULL);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, COM_E_PARAM_POINTER);
 }
 
 TEST_F(Bsw_Com_Test, Com_SendSignal_NG_IPduIdOutOfRange)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     uint8 data = 0U;
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     uint8 ret = Com_SendSignal(2U, &data);  // kCorruptTxSignal
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, COM_E_PARAM);
 }
 
 TEST_F(Bsw_Com_Test, Com_SendSignal_NG_NotRegisteredTxIPdu)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     uint8 data = 0U;
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     uint8 ret = Com_SendSignal(3U, &data);  // kUnregisteredTxSignal
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, COM_E_PARAM);
 }
 
 TEST_F(Bsw_Com_Test, Com_SendSignal_NG_SignalNotFound)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     uint8 data = 0U;
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     uint8 ret = Com_SendSignal(99U, &data);  // 未登録の SignalId
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, COM_E_PARAM);
 }
@@ -390,49 +536,96 @@ TEST_F(Bsw_Com_Test, Com_SendSignal_NG_SignalNotFound)
 
 TEST_F(Bsw_Com_Test, Com_ReceiveSignal_NG_Uninit)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     Com_DeInit();
     uint8 data = 0U;
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     uint8 ret = Com_ReceiveSignal(1U, &data);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, COM_E_UNINIT);
 }
 
 TEST_F(Bsw_Com_Test, Com_ReceiveSignal_NG_NullPointer)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     uint8 ret = Com_ReceiveSignal(1U, NULL);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, COM_E_PARAM_POINTER);
 }
 
 TEST_F(Bsw_Com_Test, Com_ReceiveSignal_NG_IPduIdOutOfRange)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     uint8 data = 0U;
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     uint8 ret = Com_ReceiveSignal(4U, &data);  // kCorruptRxSignal
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, COM_E_PARAM);
 }
 
 TEST_F(Bsw_Com_Test, Com_ReceiveSignal_NG_NotRegisteredRxIPdu)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     uint8 data = 0U;
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     uint8 ret = Com_ReceiveSignal(5U, &data);  // kUnregisteredRxSignal
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, COM_E_PARAM);
 }
 
 TEST_F(Bsw_Com_Test, Com_ReceiveSignal_NG_SignalNotFound)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     uint8 data = 0U;
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     uint8 ret = Com_ReceiveSignal(99U, &data);  // 未登録の SignalId
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, COM_E_PARAM);
 }
@@ -443,27 +636,58 @@ TEST_F(Bsw_Com_Test, Com_ReceiveSignal_NG_SignalNotFound)
 
 TEST_F(Bsw_Com_Test, Com_SendSignalGroup_NG_Uninit)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     Com_DeInit();
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     uint8 ret = Com_SendSignalGroup(0U);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, COM_E_UNINIT);
 }
 
 TEST_F(Bsw_Com_Test, Com_SendSignalGroup_NG_IdOutOfRange)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     uint8 ret = Com_SendSignalGroup(kOutOfRangeIPduId);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, COM_E_PARAM);
 }
 
 TEST_F(Bsw_Com_Test, Com_SendSignalGroup_NG_NotFoundOrNotGroup)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     // IPduId=0 は登録済みだが IsSignalGroup=0（kTestTxIPdu）。
     uint8 ret = Com_SendSignalGroup(0U);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, COM_E_PARAM);
 }
@@ -474,27 +698,58 @@ TEST_F(Bsw_Com_Test, Com_SendSignalGroup_NG_NotFoundOrNotGroup)
 
 TEST_F(Bsw_Com_Test, Com_ReceiveSignalGroup_NG_Uninit)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     Com_DeInit();
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     uint8 ret = Com_ReceiveSignalGroup(0U);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, COM_E_UNINIT);
 }
 
 TEST_F(Bsw_Com_Test, Com_ReceiveSignalGroup_NG_IdOutOfRange)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     uint8 ret = Com_ReceiveSignalGroup(kOutOfRangeIPduId);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, COM_E_PARAM);
 }
 
 TEST_F(Bsw_Com_Test, Com_ReceiveSignalGroup_NG_NotFoundOrNotGroup)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     // IPduId=0 は登録済みだが IsSignalGroup=0（kTestRxIPdu）。
     uint8 ret = Com_ReceiveSignalGroup(0U);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, COM_E_PARAM);
 }
@@ -505,39 +760,77 @@ TEST_F(Bsw_Com_Test, Com_ReceiveSignalGroup_NG_NotFoundOrNotGroup)
 
 TEST_F(Bsw_Com_Test, Com_SendSignalGroupArray_NG_Uninit)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     Com_DeInit();
     uint8 data[8] = { 0 };
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     uint8 ret = Com_SendSignalGroupArray(0U, data);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, COM_E_UNINIT);
 }
 
 TEST_F(Bsw_Com_Test, Com_SendSignalGroupArray_NG_NullPointer)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     uint8 ret = Com_SendSignalGroupArray(0U, NULL);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, COM_E_PARAM_POINTER);
 }
 
 TEST_F(Bsw_Com_Test, Com_SendSignalGroupArray_NG_IdOutOfRange)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     uint8 data[8] = { 0 };
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     uint8 ret = Com_SendSignalGroupArray(kOutOfRangeIPduId, data);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, COM_E_PARAM);
 }
 
 TEST_F(Bsw_Com_Test, Com_SendSignalGroupArray_NG_NotFoundOrNotGroup)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     uint8 data[8] = { 0 };
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     uint8 ret = Com_SendSignalGroupArray(0U, data);  // IPduId=0 は非グループ
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, COM_E_PARAM);
 }
@@ -548,31 +841,60 @@ TEST_F(Bsw_Com_Test, Com_SendSignalGroupArray_NG_NotFoundOrNotGroup)
 
 TEST_F(Bsw_Com_Test, Com_ReceiveSignalGroupArray_NG_Uninit)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     Com_DeInit();
     uint8 data[8];
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     uint8 ret = Com_ReceiveSignalGroupArray(0U, data);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, COM_E_UNINIT);
 }
 
 TEST_F(Bsw_Com_Test, Com_ReceiveSignalGroupArray_NG_NullPointer)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     uint8 ret = Com_ReceiveSignalGroupArray(0U, NULL);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, COM_E_PARAM_POINTER);
 }
 
 TEST_F(Bsw_Com_Test, Com_ReceiveSignalGroupArray_NG_NotFound)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     // 実装は ipdu==NULL のみを確認し IsSignalGroup は見ないため（Com.c 参照）、
     // RX I-PDU テーブルに一切存在しない ID を渡せば足りる。
     uint8 data[8];
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     uint8 ret = Com_ReceiveSignalGroupArray(kUnregisteredIPduId, data);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, COM_E_PARAM);
 }
@@ -583,26 +905,57 @@ TEST_F(Bsw_Com_Test, Com_ReceiveSignalGroupArray_NG_NotFound)
 
 TEST_F(Bsw_Com_Test, Com_InvalidateSignal_NG_Uninit)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     Com_DeInit();
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     uint8 ret = Com_InvalidateSignal(0U);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, COM_E_UNINIT);
 }
 
 TEST_F(Bsw_Com_Test, Com_InvalidateSignal_NG_SignalNotFound)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     uint8 ret = Com_InvalidateSignal(99U);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, COM_E_PARAM);
 }
 
 TEST_F(Bsw_Com_Test, Com_InvalidateSignal_NG_NotTxSignal)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     uint8 ret = Com_InvalidateSignal(1U);  // kTestRxSignal（Direction=RX）
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, COM_E_PARAM);
 }
@@ -613,26 +966,57 @@ TEST_F(Bsw_Com_Test, Com_InvalidateSignal_NG_NotTxSignal)
 
 TEST_F(Bsw_Com_Test, Com_InvalidateSignalGroup_NG_Uninit)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     Com_DeInit();
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     uint8 ret = Com_InvalidateSignalGroup(0U);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, COM_E_UNINIT);
 }
 
 TEST_F(Bsw_Com_Test, Com_InvalidateSignalGroup_NG_IdOutOfRange)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     uint8 ret = Com_InvalidateSignalGroup(kOutOfRangeIPduId);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, COM_E_PARAM);
 }
 
 TEST_F(Bsw_Com_Test, Com_InvalidateSignalGroup_NG_NotFoundOrNotGroup)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     uint8 ret = Com_InvalidateSignalGroup(0U);  // IPduId=0 は非グループ
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, COM_E_PARAM);
 }
@@ -643,26 +1027,57 @@ TEST_F(Bsw_Com_Test, Com_InvalidateSignalGroup_NG_NotFoundOrNotGroup)
 
 TEST_F(Bsw_Com_Test, Com_TriggerIPDUSend_NG_Uninit)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     Com_DeInit();
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = Com_TriggerIPDUSend(0U);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, COM_E_UNINIT);
 }
 
 TEST_F(Bsw_Com_Test, Com_TriggerIPDUSend_NG_IdOutOfRange)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = Com_TriggerIPDUSend(kOutOfRangeIPduId);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, COM_E_PARAM);
 }
 
 TEST_F(Bsw_Com_Test, Com_TriggerIPDUSend_NG_NotRegisteredTxIPdu)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = Com_TriggerIPDUSend(kUnregisteredIPduId);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, COM_E_PARAM);
 }
@@ -673,24 +1088,55 @@ TEST_F(Bsw_Com_Test, Com_TriggerIPDUSend_NG_NotRegisteredTxIPdu)
 
 TEST_F(Bsw_Com_Test, Com_SwitchIpduTxMode_NG_Uninit)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     Com_DeInit();
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Com_SwitchIpduTxMode(0U, TRUE);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeDetHw_LastErrorId, COM_E_UNINIT);
 }
 
 TEST_F(Bsw_Com_Test, Com_SwitchIpduTxMode_NG_IdOutOfRange)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Com_SwitchIpduTxMode(kOutOfRangeIPduId, TRUE);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeDetHw_LastErrorId, COM_E_PARAM);
 }
 
 TEST_F(Bsw_Com_Test, Com_SwitchIpduTxMode_NG_NotRegisteredTxIPdu)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Com_SwitchIpduTxMode(kUnregisteredIPduId, TRUE);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeDetHw_LastErrorId, COM_E_PARAM);
 }
 
@@ -700,19 +1146,39 @@ TEST_F(Bsw_Com_Test, Com_SwitchIpduTxMode_NG_NotRegisteredTxIPdu)
 
 TEST_F(Bsw_Com_Test, Com_RxIndication_NG_Uninit)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     Com_DeInit();
     uint8 sdu[8] = { 0 };
     PduInfoType info = { sdu, 1U };
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Com_RxIndication(0U, &info);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeDetHw_LastErrorId, COM_E_UNINIT);
 }
 
 TEST_F(Bsw_Com_Test, Com_RxIndication_NG_NullPduInfoPtr)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Com_RxIndication(0U, NULL);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeDetHw_LastErrorId, COM_E_PARAM_POINTER);
 }
 
@@ -722,10 +1188,19 @@ TEST_F(Bsw_Com_Test, Com_RxIndication_NG_NullPduInfoPtr)
 
 TEST_F(Bsw_Com_Test, Com_TxConfirmation_NG_Uninit)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     Com_DeInit();
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Com_TxConfirmation(0U, E_OK);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeDetHw_LastErrorId, COM_E_UNINIT);
 }
 
@@ -735,19 +1210,37 @@ TEST_F(Bsw_Com_Test, Com_TxConfirmation_NG_Uninit)
 
 TEST_F(Bsw_Com_Test, Com_MainFunctionRx_NG_Uninit)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     Com_DeInit();
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Com_MainFunctionRx();
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeDetHw_LastErrorId, COM_E_UNINIT);
 }
 
 TEST_F(Bsw_Com_Test, Com_MainFunctionTx_NG_Uninit)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     Com_DeInit();
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Com_MainFunctionTx();
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeDetHw_LastErrorId, COM_E_UNINIT);
 }
 
@@ -758,8 +1251,19 @@ TEST_F(Bsw_Com_Test, Com_MainFunctionTx_NG_Uninit)
 
 TEST_F(Bsw_Com_Test, Com_IsRxTimedOut_NG_IPduIdOutOfRange)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     uint8 ret = Com_IsRxTimedOut(kOutOfRangeIPduId);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, 1U);  // フェールセーフでタイムアウト扱い（Com.c 参照）
     EXPECT_EQ(FakeDetHw_LastErrorId, COM_E_PARAM);
 }

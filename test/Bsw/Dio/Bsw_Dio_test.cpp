@@ -43,6 +43,8 @@ constexpr Dio_ChannelType kChannel = DIO_CHANNEL_LED_RUNNING;
  * Test Fixture
  * ====================================================================== */
 
+/* Dio の単体テスト用フィクスチャ。
+ * SetUp(): 模擬 Dio_Hw と DET の記録を初期化する。 */
 class DioTest : public ::testing::Test
 {
 protected:
@@ -59,11 +61,20 @@ protected:
 
 TEST_F(DioTest, Dio_FlipChannel_OK_TogglesLowToHighAndReturnsNewLevel)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     Dio_WriteChannel(kChannel, DIO_LOW);
     uint32 writeCountBefore = FakeDioHw_WriteCount;
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Dio_LevelType ret = Dio_FlipChannel(kChannel);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, DIO_HIGH);
     EXPECT_EQ(Dio_ReadChannel(kChannel), DIO_HIGH);
     EXPECT_EQ(FakeDioHw_WriteCount, writeCountBefore + 1U);  /* 1回だけ書き込むこと（二重書き込み回帰の検出） */
@@ -71,40 +82,78 @@ TEST_F(DioTest, Dio_FlipChannel_OK_TogglesLowToHighAndReturnsNewLevel)
 
 TEST_F(DioTest, Dio_FlipChannel_OK_TogglesHighToLowAndReturnsNewLevel)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     Dio_WriteChannel(kChannel, DIO_HIGH);
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Dio_LevelType ret = Dio_FlipChannel(kChannel);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, DIO_LOW);
     EXPECT_EQ(Dio_ReadChannel(kChannel), DIO_LOW);
 }
 
 TEST_F(DioTest, Dio_FlipChannel_OK_CalledTwiceReturnsToOriginalLevel)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     Dio_WriteChannel(kChannel, DIO_LOW);
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Dio_FlipChannel(kChannel);
     Dio_LevelType ret = Dio_FlipChannel(kChannel);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, DIO_LOW);
 }
 
 TEST_F(DioTest, ReadPort_OK_CombinesAllChannelsLsbFirst)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     Dio_WriteChannel(DIO_CHANNEL_LED_RUNNING, DIO_HIGH);  /* bit0 */
     Dio_WriteChannel(DIO_CHANNEL_LED_FAULT, DIO_LOW);     /* bit1 */
     Dio_WriteChannel(DIO_CHANNEL_LED_WARNING, DIO_HIGH);  /* bit2 */
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Dio_PortLevelType level = Dio_ReadPort(DIO_PORT_LED_GROUP);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(level, 0x05U);  /* 0b101 */
     EXPECT_EQ(FakeDetHw_ReportCount, 0U);
 }
 
 TEST_F(DioTest, ReadPort_NG_InvalidPortIdReturnsZeroAndReportsDet)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Dio_PortLevelType level = Dio_ReadPort((Dio_PortType)0xFFU);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(level, 0U);
     EXPECT_EQ(FakeDetHw_LastErrorId, DIO_E_PARAM_INVALID_PORT_ID);
     EXPECT_EQ(FakeDetHw_ReportCount, 1U);
@@ -112,8 +161,19 @@ TEST_F(DioTest, ReadPort_NG_InvalidPortIdReturnsZeroAndReportsDet)
 
 TEST_F(DioTest, WritePort_OK_WritesEachChannelFromLsbFirst)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Dio_WritePort(DIO_PORT_LED_GROUP, 0x06U);  /* 0b110 */
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(Dio_ReadChannel(DIO_CHANNEL_LED_RUNNING), DIO_LOW);
     EXPECT_EQ(Dio_ReadChannel(DIO_CHANNEL_LED_FAULT), DIO_HIGH);
     EXPECT_EQ(Dio_ReadChannel(DIO_CHANNEL_LED_WARNING), DIO_HIGH);
@@ -122,10 +182,19 @@ TEST_F(DioTest, WritePort_OK_WritesEachChannelFromLsbFirst)
 
 TEST_F(DioTest, WritePort_NG_InvalidPortIdHasNoEffectAndReportsDet)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     uint32 writeCountBefore = FakeDioHw_WriteCount;
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Dio_WritePort((Dio_PortType)0xFFU, 0x07U);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeDioHw_WriteCount, writeCountBefore);
     EXPECT_EQ(FakeDetHw_LastErrorId, DIO_E_PARAM_INVALID_PORT_ID);
     EXPECT_EQ(FakeDetHw_ReportCount, 1U);
@@ -133,40 +202,78 @@ TEST_F(DioTest, WritePort_NG_InvalidPortIdHasNoEffectAndReportsDet)
 
 TEST_F(DioTest, ReadChannelGroup_OK_MasksAndShiftsToLsb)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     Dio_WriteChannel(DIO_CHANNEL_LED_RUNNING, DIO_HIGH);  /* bit0 */
     Dio_WriteChannel(DIO_CHANNEL_LED_FAULT, DIO_LOW);     /* bit1 */
     Dio_WriteChannel(DIO_CHANNEL_LED_WARNING, DIO_HIGH);  /* bit2、グループ外 */
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Dio_PortLevelType level = Dio_ReadChannelGroup(&Dio_ChannelGroupRunFault);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(level, 0x01U);  /* bit2(WARNING)はマスク外なので反映されない */
     EXPECT_EQ(FakeDetHw_ReportCount, 0U);
 }
 
 TEST_F(DioTest, ReadChannelGroup_NG_NullPointerReturnsZeroAndReportsDet)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Dio_PortLevelType level = Dio_ReadChannelGroup(NULL);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(level, 0U);
     EXPECT_EQ(FakeDetHw_LastErrorId, DIO_E_PARAM_POINTER);
 }
 
 TEST_F(DioTest, ReadChannelGroup_NG_InvalidPortReturnsZeroAndReportsDet)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     Dio_ChannelGroupType group = { (Dio_PortType)0xFFU, 0x01U, 0U };
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Dio_PortLevelType level = Dio_ReadChannelGroup(&group);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(level, 0U);
     EXPECT_EQ(FakeDetHw_LastErrorId, DIO_E_PARAM_INVALID_GROUP);
 }
 
 TEST_F(DioTest, WriteChannelGroup_OK_LeavesChannelsOutsideMaskUnchanged)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     Dio_WriteChannel(DIO_CHANNEL_LED_WARNING, DIO_HIGH);  /* グループ外、変化しないはず */
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Dio_WriteChannelGroup(&Dio_ChannelGroupRunFault, 0x02U);  /* bit1(FAULT)のみ立てる */
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(Dio_ReadChannel(DIO_CHANNEL_LED_RUNNING), DIO_LOW);
     EXPECT_EQ(Dio_ReadChannel(DIO_CHANNEL_LED_FAULT), DIO_HIGH);
     EXPECT_EQ(Dio_ReadChannel(DIO_CHANNEL_LED_WARNING), DIO_HIGH);  /* 維持される */
@@ -175,34 +282,61 @@ TEST_F(DioTest, WriteChannelGroup_OK_LeavesChannelsOutsideMaskUnchanged)
 
 TEST_F(DioTest, WriteChannelGroup_NG_NullPointerHasNoEffectAndReportsDet)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     uint32 writeCountBefore = FakeDioHw_WriteCount;
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Dio_WriteChannelGroup(NULL, 0x01U);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeDioHw_WriteCount, writeCountBefore);
     EXPECT_EQ(FakeDetHw_LastErrorId, DIO_E_PARAM_POINTER);
 }
 
 TEST_F(DioTest, WriteChannelGroup_NG_OffsetBeyondPortWidthHasNoEffectAndReportsDet)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     uint32 writeCountBefore = FakeDioHw_WriteCount;
     Dio_ChannelGroupType group = { DIO_PORT_LED_GROUP, 0x01U, 3U };  /* ポート幅3(bit0-2)を超える */
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Dio_WriteChannelGroup(&group, 0x01U);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeDioHw_WriteCount, writeCountBefore);
     EXPECT_EQ(FakeDetHw_LastErrorId, DIO_E_PARAM_INVALID_GROUP);
 }
 
 TEST_F(DioTest, WriteChannelGroup_NG_MaskExtendsBeyondPortWidthHasNoEffectAndReportsDet)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     uint32 writeCountBefore = FakeDioHw_WriteCount;
     /* offset(0) 単体はポート幅3内だが、mask=0x0F(4bit)は bit3 まで届き
      * ポート幅3(bit0-2)を超える（offsetだけの旧チェックでは検出できなかった不具合）。 */
     Dio_ChannelGroupType group = { DIO_PORT_LED_GROUP, 0x0FU, 0U };
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Dio_WriteChannelGroup(&group, 0x0FU);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeDioHw_WriteCount, writeCountBefore);
     EXPECT_EQ(FakeDetHw_LastErrorId, DIO_E_PARAM_INVALID_GROUP);
 }

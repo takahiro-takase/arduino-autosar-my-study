@@ -38,6 +38,8 @@
  * Global Variables
  * ====================================================================== */
 
+/* WdgM_GetLocalStatus() の単体テスト用フィクスチャ。
+ * SetUp(): 時刻・模擬 Wdg_Hw・DET・Dem の wrap を初期化し、Dem_Init(NULL)・Wdg_Init()・WdgM_Init() を EcuM_Init() と同じ順序で呼ぶ（Init 自体の DET 記録は消す）。 */
 class Bsw_WdgM_GetLocalStatus_Test : public ::testing::Test
 {
 protected:
@@ -60,26 +62,51 @@ protected:
 
 TEST_F(Bsw_WdgM_GetLocalStatus_Test, GetLocalStatus_OK_ReturnsOkRightAfterInit)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     WdgM_LocalStatusType status = WDGM_LOCAL_STATUS_FAILED;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = WdgM_GetLocalStatus(WDGM_ENTITY_ENGINE, &status);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_OK);
     EXPECT_EQ(status, WDGM_LOCAL_STATUS_OK);
 }
 
 TEST_F(Bsw_WdgM_GetLocalStatus_Test, GetLocalStatus_OK_ReturnsFailedAfterAliveShortfall)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     /* CheckpointReached を一切呼ばずに WdgM_MainFunction() を実行すると、
      * 両エンティティとも Alive Supervision が期待回数を満たせず FAILED になる。 */
     WdgM_MainFunction();
 
     WdgM_LocalStatusType status = WDGM_LOCAL_STATUS_OK;
-    ASSERT_EQ(WdgM_GetLocalStatus(WDGM_ENTITY_WARNING, &status), E_OK);
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Std_ReturnType ret = WdgM_GetLocalStatus(WDGM_ENTITY_WARNING, &status);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    ASSERT_EQ(ret, E_OK);
     EXPECT_EQ(status, WDGM_LOCAL_STATUS_FAILED);
 }
 
 TEST_F(Bsw_WdgM_GetLocalStatus_Test, GetLocalStatus_OK_ReturnsExpiredImmediatelyAfterLogicalViolation)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     /* ENGINE の許可遷移は INITIAL->START/START->END/END->START のみ。
      * INITIAL から直接 END へ遷移させ、Logical Supervision 違反を即座に起こす。
      * WdgM_MainFunction() を待たず、この時点で既に EXPIRED になる
@@ -89,12 +116,24 @@ TEST_F(Bsw_WdgM_GetLocalStatus_Test, GetLocalStatus_OK_ReturnsExpiredImmediately
     ASSERT_EQ(cpRet, E_OK);
 
     WdgM_LocalStatusType status = WDGM_LOCAL_STATUS_OK;
-    ASSERT_EQ(WdgM_GetLocalStatus(WDGM_ENTITY_ENGINE, &status), E_OK);
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Std_ReturnType ret = WdgM_GetLocalStatus(WDGM_ENTITY_ENGINE, &status);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    ASSERT_EQ(ret, E_OK);
     EXPECT_EQ(status, WDGM_LOCAL_STATUS_EXPIRED);
 }
 
 TEST_F(Bsw_WdgM_GetLocalStatus_Test, GetLocalStatus_OK_ReturnsExpiredAfterSustainedAliveShortfall)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     /* Alive Supervision のみは猶予サイクルを持つ簡易実装
      * (WDGM_EXPIRED_SUPERVISION_CYCLE_TOL=2、WdgM_Cfg.h 参照)。
      * 1 回目の判定サイクルは FAILED のまま
@@ -104,12 +143,24 @@ TEST_F(Bsw_WdgM_GetLocalStatus_Test, GetLocalStatus_OK_ReturnsExpiredAfterSustai
     WdgM_MainFunction();
 
     WdgM_LocalStatusType status = WDGM_LOCAL_STATUS_OK;
-    ASSERT_EQ(WdgM_GetLocalStatus(WDGM_ENTITY_WARNING, &status), E_OK);
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Std_ReturnType ret = WdgM_GetLocalStatus(WDGM_ENTITY_WARNING, &status);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    ASSERT_EQ(ret, E_OK);
     EXPECT_EQ(status, WDGM_LOCAL_STATUS_EXPIRED);
 }
 
 TEST_F(Bsw_WdgM_GetLocalStatus_Test, GetLocalStatus_OK_StaysFailedDuringSuppressionRegardlessOfCycleCount)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     /* WdgM_SupervisionSuppressed 中（POST_RUN 中の意図的な Alive 不足）は、
      * エンティティ単位の EXPIRED 猶予カウンタもグローバル側と同じく凍結される
      * べき（/code-review で指摘、修正済み）。猶予サイクル数を大幅に超えて
@@ -121,6 +172,10 @@ TEST_F(Bsw_WdgM_GetLocalStatus_Test, GetLocalStatus_OK_StaysFailedDuringSuppress
         WdgM_MainFunction();
 
     WdgM_LocalStatusType status = WDGM_LOCAL_STATUS_OK;
+
+    /* ----------------------------------- */
+    /* ---- 実行 + 評価 (Act + Assert) --- */
+    /* ----------------------------------- */
     ASSERT_EQ(WdgM_GetLocalStatus(WDGM_ENTITY_WARNING, &status), E_OK);
     EXPECT_EQ(status, WDGM_LOCAL_STATUS_FAILED);
 
@@ -139,12 +194,19 @@ TEST_F(Bsw_WdgM_GetLocalStatus_Test, GetLocalStatus_OK_StaysFailedDuringSuppress
 
 TEST_F(Bsw_WdgM_GetLocalStatus_Test, GetLocalStatus_OK_ReturnsOkAfterAliveRecoveryResetsExpiredCounter)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     /* 猶予カウンタ消費中でも、Alive Supervision が実際に回復すれば即座に
      * OK へ戻り、猶予カウンタもリセットされる（Global 側と同じ単純な
      * 二値復帰。実仕様の 1 段階ずつの減算は簡略化のため採用していない）。 */
     WdgM_MainFunction();
     WdgM_MainFunction();
     WdgM_LocalStatusType expiredStatus = WDGM_LOCAL_STATUS_OK;
+
+    /* ----------------------------------- */
+    /* ---- 実行 + 評価 (Act + Assert) --- */
+    /* ----------------------------------- */
     ASSERT_EQ(WdgM_GetLocalStatus(WDGM_ENTITY_WARNING, &expiredStatus), E_OK);
     ASSERT_EQ(expiredStatus, WDGM_LOCAL_STATUS_EXPIRED);
 
@@ -171,8 +233,19 @@ TEST_F(Bsw_WdgM_GetLocalStatus_Test, GetLocalStatus_OK_ReturnsOkAfterAliveRecove
 
 TEST_F(Bsw_WdgM_GetLocalStatus_Test, GetLocalStatus_NG_NullPointerReturnsErrorAndReportsDet)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = WdgM_GetLocalStatus(WDGM_ENTITY_ENGINE, NULL);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, WDGM_E_INV_POINTER);
     EXPECT_EQ(FakeDetHw_ReportCount, 1U);
@@ -180,12 +253,22 @@ TEST_F(Bsw_WdgM_GetLocalStatus_Test, GetLocalStatus_NG_NullPointerReturnsErrorAn
 
 TEST_F(Bsw_WdgM_GetLocalStatus_Test, GetLocalStatus_NG_UninitializedReturnsDeactivatedAndReportsDet)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     WdgM_DeInit();
     FakeDetHw_Reset();
 
     WdgM_LocalStatusType status = WDGM_LOCAL_STATUS_OK;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = WdgM_GetLocalStatus(WDGM_ENTITY_ENGINE, &status);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(status, WDGM_LOCAL_STATUS_DEACTIVATED);
     EXPECT_EQ(FakeDetHw_LastErrorId, WDGM_E_NO_INIT);
@@ -193,9 +276,19 @@ TEST_F(Bsw_WdgM_GetLocalStatus_Test, GetLocalStatus_NG_UninitializedReturnsDeact
 
 TEST_F(Bsw_WdgM_GetLocalStatus_Test, GetLocalStatus_NG_InvalidSeidReturnsDeactivatedAndReportsDet)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     WdgM_LocalStatusType status = WDGM_LOCAL_STATUS_OK;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = WdgM_GetLocalStatus(WdgM_Config.EntityCount, &status);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(status, WDGM_LOCAL_STATUS_DEACTIVATED);
     EXPECT_EQ(FakeDetHw_LastErrorId, WDGM_E_PARAM_SEID);

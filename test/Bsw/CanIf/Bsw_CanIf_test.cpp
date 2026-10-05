@@ -86,6 +86,9 @@ const CanIf_ConfigType kControllerModeCanIfConfig = {
  * Test Fixture
  * ====================================================================== */
 
+/* CanIf のコントローラモード系 API（SetControllerMode / GetControllerMode / GetControllerErrorState）の単体テスト用フィクスチャ。
+ * SetUp(): 模擬 Can_Hw と wrap をリセットし、Can_Init() と、このグループ専用の CanIf 設定（kControllerModeCanIfConfig）で CanIf_Init() を呼ぶ（Init 中の DET ログは抑制し、Init 自体の記録は消して後続の検証から除く）。
+ * TearDown(): CanIf_DeInit() で未初期化へ戻す。 */
 class Bsw_CanIf_ControllerMode_Test : public ::testing::Test
 {
 protected:
@@ -124,8 +127,19 @@ protected:
 
 TEST_F(Bsw_CanIf_ControllerMode_Test, SetControllerMode_OK_StartedFromStoppedUsesCanTStart)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = CanIf_SetControllerMode(0U, CAN_CS_STARTED);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_OK);
     EXPECT_EQ(Can_Test_GetControllerState(), CAN_CS_STARTED);
     Can_ControllerStateType mode;
@@ -135,16 +149,38 @@ TEST_F(Bsw_CanIf_ControllerMode_Test, SetControllerMode_OK_StartedFromStoppedUse
 
 TEST_F(Bsw_CanIf_ControllerMode_Test, SetControllerMode_NG_InvalidControllerIdReturnsErrorAndReportsDet)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = CanIf_SetControllerMode(CANIF_CONTROLLER_MAX, CAN_CS_STARTED);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, CANIF_E_PARAM_CONTROLLERID);
 }
 
 TEST_F(Bsw_CanIf_ControllerMode_Test, SetControllerMode_NG_InvalidControllerModeReturnsErrorAndReportsDet)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = CanIf_SetControllerMode(0U, CAN_CS_UNINIT);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, CANIF_E_PARAM_CTRLMODE);
     /* 拒否された要求は Can 側にも CanIf の追跡状態にも影響しないこと。 */
@@ -156,26 +192,58 @@ TEST_F(Bsw_CanIf_ControllerMode_Test, SetControllerMode_NG_InvalidControllerMode
 
 TEST_F(Bsw_CanIf_ControllerMode_Test, GetControllerMode_OK_ReflectsStoppedRightAfterInit)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     Can_ControllerStateType mode;
 
-    ASSERT_EQ(CanIf_GetControllerMode(0U, &mode), E_OK);
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Std_ReturnType ret = CanIf_GetControllerMode(0U, &mode);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    ASSERT_EQ(ret, E_OK);
     EXPECT_EQ(mode, CAN_CS_STOPPED);
     EXPECT_EQ(FakeDetHw_ReportCount, 0U);
 }
 
 TEST_F(Bsw_CanIf_ControllerMode_Test, GetControllerMode_NG_InvalidControllerIdReturnsErrorAndReportsDet)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     Can_ControllerStateType mode;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = CanIf_GetControllerMode(CANIF_CONTROLLER_MAX, &mode);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, CANIF_E_PARAM_CONTROLLERID);
 }
 
 TEST_F(Bsw_CanIf_ControllerMode_Test, GetControllerMode_NG_NullPointerReturnsErrorAndReportsDet)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = CanIf_GetControllerMode(0U, NULL);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, CANIF_E_PARAM_POINTER);
 }
@@ -186,6 +254,14 @@ TEST_F(Bsw_CanIf_ControllerMode_Test, GetControllerMode_NG_NullPointerReturnsErr
 
 TEST_F(Bsw_CanIf_ControllerMode_Test, SetControllerMode_OK_StoppedFromStartedUsesCanTStop)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------------------- */
+    /* ---- 実行 + 評価 (Act + Assert) --- */
+    /* ----------------------------------- */
     ASSERT_EQ(CanIf_SetControllerMode(0U, CAN_CS_STARTED), E_OK);
     ASSERT_EQ(Can_Test_GetControllerState(), CAN_CS_STARTED);
 
@@ -200,6 +276,14 @@ TEST_F(Bsw_CanIf_ControllerMode_Test, SetControllerMode_OK_StoppedFromStartedUse
 
 TEST_F(Bsw_CanIf_ControllerMode_Test, SetControllerMode_OK_StoppedFromSleepUsesCanTWakeup)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------------------- */
+    /* ---- 実行 + 評価 (Act + Assert) --- */
+    /* ----------------------------------- */
     ASSERT_EQ(CanIf_SetControllerMode(0U, CAN_CS_SLEEP), E_OK);
     ASSERT_EQ(Can_Test_GetControllerState(), CAN_CS_SLEEP);
 
@@ -222,11 +306,21 @@ TEST_F(Bsw_CanIf_ControllerMode_Test, SetControllerMode_OK_StoppedFromSleepUsesC
 
 TEST_F(Bsw_CanIf_ControllerMode_Test, GetControllerErrorState_OK_ReflectsBusOffFromHwChain)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     FakeCanHw_ErrorState = 2U;  /* CAN_ERRORSTATE_BUSOFF */
 
     Can_ErrorStateType state;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = CanIf_GetControllerErrorState(0U, &state);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_OK);
     EXPECT_EQ(state, CAN_ERRORSTATE_BUSOFF);
     EXPECT_EQ(FakeDetHw_ReportCount, 0U);
@@ -234,17 +328,38 @@ TEST_F(Bsw_CanIf_ControllerMode_Test, GetControllerErrorState_OK_ReflectsBusOffF
 
 TEST_F(Bsw_CanIf_ControllerMode_Test, GetControllerErrorState_NG_InvalidControllerIdReturnsErrorAndReportsDet)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     Can_ErrorStateType state;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = CanIf_GetControllerErrorState(CANIF_CONTROLLER_MAX, &state);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, CANIF_E_PARAM_CONTROLLERID);
 }
 
 TEST_F(Bsw_CanIf_ControllerMode_Test, GetControllerErrorState_NG_NullPointerReturnsErrorAndReportsDet)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = CanIf_GetControllerErrorState(0U, NULL);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, CANIF_E_PARAM_POINTER);
 }
@@ -310,6 +425,9 @@ const CanIf_ConfigType kNotifStatusCanIfConfig = {
  * Test Fixture
  * ====================================================================== */
 
+/* CanIf の通知状態系 API（ReadTxNotifStatus / ReadRxNotifStatus / GetTxConfirmationState）の単体テスト用フィクスチャ。
+ * SetUp(): 模擬 Can_Hw と wrap をリセットし、Can_Init() と、このグループ専用の CanIf 設定（kNotifStatusCanIfConfig）で CanIf_Init() を呼び、コントローラを STARTED にする。CanIf_RxIndication() が CanSM_RxIndication() を無条件に呼ぶため、CanSM_Init(NULL) も呼んでおく（Init 中の DET ログは抑制し、Init 自体の記録は消して後続の検証から除く）。
+ * TearDown(): CanSM_DeInit() と CanIf_DeInit() で未初期化へ戻す。 */
 class Bsw_CanIf_NotifStatus_Test : public ::testing::Test
 {
 protected:
@@ -353,28 +471,60 @@ protected:
 #if 0 // 本番コードからの呼び出し元が無いため無効化（ファイル冒頭コメント参照）
 TEST_F(Bsw_CanIf_NotifStatus_Test, ReadTxNotifStatus_OK_ReturnsNoNotificationInitially)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     CanIf_NotifStatusType status = CanIf_ReadTxNotifStatus(0U);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(status, CANIF_NO_NOTIFICATION);
     EXPECT_EQ(FakeDetHw_ReportCount, 0U);
 }
 
 TEST_F(Bsw_CanIf_NotifStatus_Test, ReadTxNotifStatus_OK_ReflectsTxConfirmationThenClearsOnRead)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     CanIf_TxConfirmation(0U);
 
-    EXPECT_EQ(CanIf_ReadTxNotifStatus(0U), CANIF_TX_RX_NOTIFICATION);
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    CanIf_NotifStatusType ret1 = CanIf_ReadTxNotifStatus(0U);
     /* [SWS_CANIF_00393]: 読み出しと同時にリセットされること。 */
-    EXPECT_EQ(CanIf_ReadTxNotifStatus(0U), CANIF_NO_NOTIFICATION);
+    CanIf_NotifStatusType ret2 = CanIf_ReadTxNotifStatus(0U);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret1, CANIF_TX_RX_NOTIFICATION);
+    EXPECT_EQ(ret2, CANIF_NO_NOTIFICATION);
 }
 #endif
 
 TEST_F(Bsw_CanIf_NotifStatus_Test, ReadTxNotifStatus_NG_UninitializedReturnsNoNotificationWithoutDet)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     CanIf_DeInit();
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     CanIf_NotifStatusType status = CanIf_ReadTxNotifStatus(0U);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(status, CANIF_NO_NOTIFICATION);
     /* CanIf_Cfg.h 冒頭コメントの通り、未初期化チェックは DET 報告なしの
      * 早期 return（CanIf の他 API と同じ方針）。 */
@@ -383,8 +533,19 @@ TEST_F(Bsw_CanIf_NotifStatus_Test, ReadTxNotifStatus_NG_UninitializedReturnsNoNo
 
 TEST_F(Bsw_CanIf_NotifStatus_Test, ReadTxNotifStatus_NG_InvalidIdReturnsNoNotificationAndReportsDet)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     CanIf_NotifStatusType status = CanIf_ReadTxNotifStatus(kNotifStatusCanIfConfig.TxPduCount);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(status, CANIF_NO_NOTIFICATION);
     EXPECT_EQ(FakeDetHw_LastErrorId, CANIF_E_INVALID_TXPDUID);
 }
@@ -396,40 +557,83 @@ TEST_F(Bsw_CanIf_NotifStatus_Test, ReadTxNotifStatus_NG_InvalidIdReturnsNoNotifi
 #if 0 // 本番コードからの呼び出し元が無いため無効化（ファイル冒頭コメント参照）
 TEST_F(Bsw_CanIf_NotifStatus_Test, ReadRxNotifStatus_OK_ReturnsNoNotificationInitially)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     CanIf_NotifStatusType status = CanIf_ReadRxNotifStatus(0U);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(status, CANIF_NO_NOTIFICATION);
     EXPECT_EQ(FakeDetHw_ReportCount, 0U);
 }
 
 TEST_F(Bsw_CanIf_NotifStatus_Test, ReadRxNotifStatus_OK_ReflectsRxIndicationThenClearsOnRead)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     Can_HwType mailbox = { /* CanId */ 0x998U, /* Hoh */ 0U, /* ControllerId */ 0U };
     uint8      data[1] = { 0x42U };
     PduInfoType pduInfo = { data, 1U };
 
     CanIf_RxIndication(&mailbox, &pduInfo);
 
-    EXPECT_EQ(CanIf_ReadRxNotifStatus(0U), CANIF_TX_RX_NOTIFICATION);
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    CanIf_NotifStatusType ret1 = CanIf_ReadRxNotifStatus(0U);
     /* [SWS_CANIF_00394]: 読み出しと同時にリセットされること。 */
-    EXPECT_EQ(CanIf_ReadRxNotifStatus(0U), CANIF_NO_NOTIFICATION);
+    CanIf_NotifStatusType ret2 = CanIf_ReadRxNotifStatus(0U);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret1, CANIF_TX_RX_NOTIFICATION);
+    EXPECT_EQ(ret2, CANIF_NO_NOTIFICATION);
 }
 #endif
 
 TEST_F(Bsw_CanIf_NotifStatus_Test, ReadRxNotifStatus_NG_UninitializedReturnsNoNotificationWithoutDet)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     CanIf_DeInit();
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     CanIf_NotifStatusType status = CanIf_ReadRxNotifStatus(0U);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(status, CANIF_NO_NOTIFICATION);
     EXPECT_EQ(FakeDetHw_ReportCount, 0U);
 }
 
 TEST_F(Bsw_CanIf_NotifStatus_Test, ReadRxNotifStatus_NG_InvalidIdReturnsNoNotificationAndReportsDet)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     CanIf_NotifStatusType status = CanIf_ReadRxNotifStatus(kNotifStatusCanIfConfig.RxPduCount);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(status, CANIF_NO_NOTIFICATION);
     EXPECT_EQ(FakeDetHw_LastErrorId, CANIF_E_INVALID_RXPDUID);
 }
@@ -441,11 +645,22 @@ TEST_F(Bsw_CanIf_NotifStatus_Test, ReadRxNotifStatus_NG_InvalidIdReturnsNoNotifi
 #if 0 // 本番コードからの呼び出し元が無いため無効化（ファイル冒頭コメント参照）
 TEST_F(Bsw_CanIf_NotifStatus_Test, GetTxConfirmationState_OK_ReturnsNoNotificationAfterInit)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     /* CanIf_Init() のゼロクリアを確認する基礎ケース（SetUp() の
      * CanIf_SetControllerMode(STARTED) によるリセットの検証は
      * ResetsOnControllerRestart が別途担う）。 */
     CanIf_NotifStatusType status = CanIf_GetTxConfirmationState(0U);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(status, CANIF_NO_NOTIFICATION);
     EXPECT_EQ(FakeDetHw_ReportCount, 0U);
 }
@@ -454,17 +669,36 @@ TEST_F(Bsw_CanIf_NotifStatus_Test, GetTxConfirmationState_OK_ReturnsNoNotificati
 #if 0 // 本番コードからの呼び出し元が無いため無効化（ファイル冒頭コメント参照）
 TEST_F(Bsw_CanIf_NotifStatus_Test, GetTxConfirmationState_OK_ReflectsTxConfirmationAndDoesNotClearOnRead)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     CanIf_TxConfirmation(0U);
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     /* [SWS_CANIF_00734] は Read*NotifStatus() と異なり読み出し時のクリアを
      * 規定しないため、複数回読んでも状態は変わらないこと。 */
-    EXPECT_EQ(CanIf_GetTxConfirmationState(0U), CANIF_TX_RX_NOTIFICATION);
-    EXPECT_EQ(CanIf_GetTxConfirmationState(0U), CANIF_TX_RX_NOTIFICATION);
+    CanIf_NotifStatusType ret1 = CanIf_GetTxConfirmationState(0U);
+    CanIf_NotifStatusType ret2 = CanIf_GetTxConfirmationState(0U);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret1, CANIF_TX_RX_NOTIFICATION);
+    EXPECT_EQ(ret2, CANIF_TX_RX_NOTIFICATION);
 }
 
 TEST_F(Bsw_CanIf_NotifStatus_Test, GetTxConfirmationState_OK_ResetsOnControllerRestart)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     CanIf_TxConfirmation(0U);
+
+    /* ----------------------------------- */
+    /* ---- 実行 + 評価 (Act + Assert) --- */
+    /* ----------------------------------- */
     ASSERT_EQ(CanIf_GetTxConfirmationState(0U), CANIF_TX_RX_NOTIFICATION);
 
     /* 「直近のコントローラ起動以降」を表すため、再起動（CAN_CS_STARTED への
@@ -477,24 +711,47 @@ TEST_F(Bsw_CanIf_NotifStatus_Test, GetTxConfirmationState_OK_ResetsOnControllerR
 
 TEST_F(Bsw_CanIf_NotifStatus_Test, GetTxConfirmationState_NG_UninitializedReturnsNoNotificationWithoutDet)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     CanIf_DeInit();
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     CanIf_NotifStatusType status = CanIf_GetTxConfirmationState(0U);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(status, CANIF_NO_NOTIFICATION);
     EXPECT_EQ(FakeDetHw_ReportCount, 0U);
 }
 
 TEST_F(Bsw_CanIf_NotifStatus_Test, GetTxConfirmationState_NG_InvalidControllerIdReturnsNoNotificationAndReportsDet)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     CanIf_NotifStatusType status = CanIf_GetTxConfirmationState(CANIF_CONTROLLER_MAX);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(status, CANIF_NO_NOTIFICATION);
     EXPECT_EQ(FakeDetHw_LastErrorId, CANIF_E_PARAM_CONTROLLERID);
 }
 
 TEST_F(Bsw_CanIf_NotifStatus_Test, GetTxConfirmationState_NG_NotUpdatedWhileControllerStopped)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     /* [SWS_CANIF_00740]: STARTED でなければバッファしない。Can_TxConfQueue
      * の非同期ドレインにより、送信要求時点では STARTED でも通知到達時には
      * 停止済みというケースの回帰防止（/code-review で発見）。 */
@@ -502,7 +759,15 @@ TEST_F(Bsw_CanIf_NotifStatus_Test, GetTxConfirmationState_NG_NotUpdatedWhileCont
 
     CanIf_TxConfirmation(0U);
 
-    EXPECT_EQ(CanIf_GetTxConfirmationState(0U), CANIF_NO_NOTIFICATION);
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    CanIf_NotifStatusType ret = CanIf_GetTxConfirmationState(0U);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, CANIF_NO_NOTIFICATION);
 }
 
 // ============================================================================
@@ -552,6 +817,9 @@ const CanIf_ConfigType kTestCanIfConfig = {
  * Test Fixture
  * ====================================================================== */
 
+/* CanIf（上記 2 グループ以外の API）の単体テスト用フィクスチャ。
+ * SetUp(): CanIf_RxIndication() が CanSM_RxIndication() を無条件に呼ぶため CanSM_Init(NULL) を先に呼び、続けて CanIf_Init(&kTestCanIfConfig) を呼ぶ（Init 中の DET ログは抑制し、Init 自体の記録は消して後続の検証から除く）。
+ * TearDown(): CanIf_DeInit() と CanSM_DeInit() で未初期化へ戻す。 */
 class Bsw_CanIf_Test : public ::testing::Test
 {
 protected:
@@ -580,30 +848,57 @@ protected:
 
 TEST_F(Bsw_CanIf_Test, CanIf_Init_NG_NullConfigPtr)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     CanIf_DeInit();
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     CanIf_Init(NULL);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeDetHw_LastErrorId, CANIF_E_PARAM_POINTER);
 }
 
 TEST_F(Bsw_CanIf_Test, CanIf_Init_NG_RxPduCountExceedsMax)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     CanIf_DeInit();
     const CanIf_ConfigType badConfig = { NULL, 0U, NULL, static_cast<uint8>(CANIF_RX_PDU_MAX + 1U) };
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     CanIf_Init(&badConfig);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeDetHw_LastErrorId, CANIF_E_INIT_FAILED);
 }
 
 TEST_F(Bsw_CanIf_Test, CanIf_Init_NG_TxPduCountExceedsMax)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     CanIf_DeInit();
     const CanIf_ConfigType badConfig = { NULL, static_cast<uint8>(CANIF_TX_PDU_MAX + 1U), NULL, 0U };
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     CanIf_Init(&badConfig);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeDetHw_LastErrorId, CANIF_E_INIT_FAILED);
 }
 
@@ -613,19 +908,39 @@ TEST_F(Bsw_CanIf_Test, CanIf_Init_NG_TxPduCountExceedsMax)
 
 TEST_F(Bsw_CanIf_Test, CanIf_Transmit_NG_InvalidTxPduId)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     uint8 sdu[8] = { 0 };
     PduInfoType info = { sdu, 1U };
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = CanIf_Transmit(1U, &info);  // TxPduCount=1 のため範囲外
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, CANIF_E_INVALID_TXPDUID);
 }
 
 TEST_F(Bsw_CanIf_Test, CanIf_Transmit_NG_NullPduInfoPtr)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = CanIf_Transmit(0U, NULL);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, CANIF_E_PARAM_POINTER);
 }
@@ -636,31 +951,60 @@ TEST_F(Bsw_CanIf_Test, CanIf_Transmit_NG_NullPduInfoPtr)
 
 TEST_F(Bsw_CanIf_Test, CanIf_ReadRxPduData_NG_InvalidRxSduId)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     uint8 buf[8];
     PduInfoType info = { buf, 0U };
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = CanIf_ReadRxPduData(1U, &info);  // RxPduCount=1 のため範囲外
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, CANIF_E_INVALID_RXPDUID);
 }
 
 TEST_F(Bsw_CanIf_Test, CanIf_ReadRxPduData_NG_NullInfoPtr)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = CanIf_ReadRxPduData(0U, NULL);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, CANIF_E_PARAM_POINTER);
 }
 
 TEST_F(Bsw_CanIf_Test, CanIf_ReadRxPduData_NG_NotOptedIn)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     // kTestRxPdu.ReadRxPduDataEnabled == 0（既定）のため、範囲内 ID でも拒否される。
     uint8 buf[8];
     PduInfoType info = { buf, 0U };
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = CanIf_ReadRxPduData(0U, &info);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, CANIF_E_INVALID_RXPDUID);
 }
@@ -671,18 +1015,40 @@ TEST_F(Bsw_CanIf_Test, CanIf_ReadRxPduData_NG_NotOptedIn)
 
 TEST_F(Bsw_CanIf_Test, CanIf_SetPduMode_NG_InvalidControllerId)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = CanIf_SetPduMode(CANIF_CONTROLLER_MAX, CANIF_ONLINE);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, CANIF_E_PARAM_CONTROLLERID);
 }
 
 TEST_F(Bsw_CanIf_Test, CanIf_SetPduMode_NG_InvalidPduMode)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     // 0x02 (CANIF_TX_OFFLINE_ACTIVE) は CanIf_PduModeType の定義値に無い
     // （未実装・欠番、CanIf_Types.h 冒頭コメント参照）。
     Std_ReturnType ret = CanIf_SetPduMode(0U, static_cast<CanIf_PduModeType>(0x02));
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, CANIF_E_PARAM_PDU_MODE);
 }
@@ -693,18 +1059,38 @@ TEST_F(Bsw_CanIf_Test, CanIf_SetPduMode_NG_InvalidPduMode)
 
 TEST_F(Bsw_CanIf_Test, CanIf_GetPduMode_NG_InvalidControllerId)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     CanIf_PduModeType mode;
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = CanIf_GetPduMode(CANIF_CONTROLLER_MAX, &mode);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, CANIF_E_PARAM_CONTROLLERID);
 }
 
 TEST_F(Bsw_CanIf_Test, CanIf_GetPduMode_NG_NullPointer)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = CanIf_GetPduMode(0U, NULL);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, CANIF_E_PARAM_POINTER);
 }
@@ -715,8 +1101,19 @@ TEST_F(Bsw_CanIf_Test, CanIf_GetPduMode_NG_NullPointer)
 
 TEST_F(Bsw_CanIf_Test, CanIf_GetVersionInfo_NG_NullPointer)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     CanIf_GetVersionInfo(NULL);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeDetHw_LastErrorId, CANIF_E_PARAM_POINTER);
 }
 
@@ -726,8 +1123,19 @@ TEST_F(Bsw_CanIf_Test, CanIf_GetVersionInfo_NG_NullPointer)
 
 TEST_F(Bsw_CanIf_Test, CanIf_TxConfirmation_NG_InvalidTxPduId)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     CanIf_TxConfirmation(1U);  // TxPduCount=1 のため範囲外
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeDetHw_LastErrorId, CANIF_E_PARAM_LPDU);
 }
 
@@ -737,37 +1145,64 @@ TEST_F(Bsw_CanIf_Test, CanIf_TxConfirmation_NG_InvalidTxPduId)
 
 TEST_F(Bsw_CanIf_Test, CanIf_RxIndication_NG_NullMailbox)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     uint8 sdu[8] = { 0 };
     PduInfoType info = { sdu, 1U };
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     CanIf_RxIndication(NULL, &info);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeDetHw_LastErrorId, CANIF_E_PARAM_POINTER);
+}
+
+TEST_F(Bsw_CanIf_Test, CanIf_RxIndication_NG_NoHohMatch)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // Hoh(=99) がどの RX PDU の Hrh とも一致しない（SWS_CANIF_00416）。
+    uint8 sdu[8] = { 0 };
+    PduInfoType info = { sdu, 1U };
+    Can_HwType mailbox = { 0x200U, 99U, 0U };
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    CanIf_RxIndication(&mailbox, &info);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(FakeDetHw_LastErrorId, CANIF_E_PARAM_HOH);
 }
 
 TEST_F(Bsw_CanIf_Test, CanIf_RxIndication_NG_CanIdMismatch)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     // Hoh は kTestRxPdu.Hrh(=0) と一致するが、CanId が異なる
     // （SWS_CANIF_00417、Hoh一致だが CanId不一致のケース）。
     uint8 sdu[8] = { 0 };
     PduInfoType info = { sdu, 1U };
     Can_HwType mailbox = { 0x999U, 0U, 0U };
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     CanIf_RxIndication(&mailbox, &info);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeDetHw_LastErrorId, CANIF_E_PARAM_CANID);
-}
-
-TEST_F(Bsw_CanIf_Test, CanIf_RxIndication_NG_NoHohMatch)
-{
-    // Hoh(=99) がどの RX PDU の Hrh とも一致しない（SWS_CANIF_00416）。
-    uint8 sdu[8] = { 0 };
-    PduInfoType info = { sdu, 1U };
-    Can_HwType mailbox = { 0x200U, 99U, 0U };
-
-    CanIf_RxIndication(&mailbox, &info);
-
-    EXPECT_EQ(FakeDetHw_LastErrorId, CANIF_E_PARAM_HOH);
 }
 
 // ------------------------------------------------------------
@@ -776,8 +1211,19 @@ TEST_F(Bsw_CanIf_Test, CanIf_RxIndication_NG_NoHohMatch)
 
 TEST_F(Bsw_CanIf_Test, CanIf_ControllerBusOff_NG_InvalidControllerId)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     CanIf_ControllerBusOff(1U);  // CANIF_CONTROLLER_MAX=1 のため範囲外
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeDetHw_LastErrorId, CANIF_E_PARAM_CONTROLLERID);
 }
 

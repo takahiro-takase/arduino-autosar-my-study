@@ -41,6 +41,8 @@
  * Global Variables
  * ====================================================================== */
 
+/* WdgM_PerformReset() の単体テスト用フィクスチャ。
+ * SetUp(): 時刻・模擬 Wdg_Hw・DET・Dem の wrap を初期化し、Dem_Init(NULL)・Wdg_Init()・WdgM_Init() を EcuM_Init() と同じ順序で呼ぶ（Init 自体の DET 記録は消す）。 */
 class Bsw_WdgM_PerformReset_Test : public ::testing::Test
 {
 protected:
@@ -63,28 +65,47 @@ protected:
 
 TEST_F(Bsw_WdgM_PerformReset_Test, PerformReset_OK_StopsHwWatchdogRefreshImmediately)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     /* 通常時は refresh される。 */
     WdgM_TriggerHwWatchdog();
     EXPECT_EQ(FakeWdgHw_RefreshCount, 1U);
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     WdgM_PerformReset();
 
     /* 呼び出し以降、何回呼んでも refresh されない。 */
     WdgM_TriggerHwWatchdog();
     WdgM_TriggerHwWatchdog();
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeWdgHw_RefreshCount, 1U);
 }
 
 TEST_F(Bsw_WdgM_PerformReset_Test, PerformReset_OK_RequestsImmediateHwResetViaTriggerConditionZero)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     /* [SWS_WdgM_00232]: 呼び出された時点で同期的に trigger condition を 0 にする。
      * Wdg は [SWS_Wdg_00140] に従い ECU を強制リセットする（Wdg_Hw_ForceReset）。
      * 以前はフラグを立てるだけで、リセットは WdgM_TriggerHwWatchdog() の以後の
      * リフレッシュ停止から HW ウォッチドッグの期限切れまで待っていた。 */
     EXPECT_EQ(FakeWdgHw_ForceResetCount, 0U);
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     WdgM_PerformReset();
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeWdgHw_ForceResetCount, 1U);
     EXPECT_EQ(FakeWdgHw_RefreshCount, 0U);
 
@@ -97,20 +118,38 @@ TEST_F(Bsw_WdgM_PerformReset_Test, PerformReset_OK_RequestsImmediateHwResetViaTr
 
 TEST_F(Bsw_WdgM_PerformReset_Test, PerformReset_OK_OverridesSupervisionSuppression)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     /* POST_RUN 相当（WdgM_SupervisionSuppressed 中）は本来 refresh を継続する。 */
     WdgM_DisableHwWatchdog();
     WdgM_TriggerHwWatchdog();
     EXPECT_EQ(FakeWdgHw_RefreshCount, 1U);
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     /* それでも WdgM_PerformReset() は最優先で refresh を止める
      * （[SWS_WdgM_00233]: 呼び出し後は二度とトリガ条件を更新しない）。 */
     WdgM_PerformReset();
     WdgM_TriggerHwWatchdog();
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeWdgHw_RefreshCount, 1U);
 }
 
 TEST_F(Bsw_WdgM_PerformReset_Test, PerformReset_OK_NotUndoneByMainFunctionRecovery)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     WdgM_PerformReset();
 
     /* WdgM_MainFunction() が何度動いても（＝WdgM_GlobalStopped 側の自然回復
@@ -120,16 +159,29 @@ TEST_F(Bsw_WdgM_PerformReset_Test, PerformReset_OK_NotUndoneByMainFunctionRecove
     WdgM_MainFunction();
 
     WdgM_TriggerHwWatchdog();
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeWdgHw_RefreshCount, 0U);
 }
 
 TEST_F(Bsw_WdgM_PerformReset_Test, PerformReset_NG_UninitializedReportsDetWithoutEffect)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     WdgM_DeInit();
     FakeDetHw_Reset();
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     WdgM_PerformReset();
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeDetHw_LastErrorId, WDGM_E_NO_INIT);
     EXPECT_EQ(FakeDetHw_ReportCount, 1U);
 

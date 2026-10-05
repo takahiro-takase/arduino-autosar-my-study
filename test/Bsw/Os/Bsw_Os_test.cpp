@@ -52,6 +52,8 @@ constexpr uint8 TEST_OS_GPT_CHANNEL = GPT_CHANNEL_1;
  * Test Fixture
  * ====================================================================== */
 
+/* Os（協調スケジューラ）の単体テスト用フィクスチャ。
+ * SetUp(): 模擬 Gpt_Hw・DET・時刻を初期化し、Os を未初期化の状態へ戻して、2 チャネルの Gpt 設定と Os の設定を用意する。 */
 class OsTest : public ::testing::Test
 {
 protected:
@@ -117,17 +119,35 @@ protected:
 
 TEST_F(OsTest, GetCounterValue_OK_BeforeOsInitReturnsMillis)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     FakeMillis_Value = 1234UL;
     TickType value = 0U;
 
-    EXPECT_EQ(E_OK, GetCounterValue(SYSTEM_COUNTER, &value));
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    StatusType ret = GetCounterValue(SYSTEM_COUNTER, &value);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(E_OK, ret);
     EXPECT_EQ(1234U, value);
 }
 
 TEST_F(OsTest, GetCounterValue_OK_ContinuesFromMillisAtOsInit)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     FakeMillis_Value = 5000UL;
     TickType before = 0U;
+
+    /* ----------------------------------- */
+    /* ---- 実行 + 評価 (Act + Assert) --- */
+    /* ----------------------------------- */
     ASSERT_EQ(E_OK, GetCounterValue(SYSTEM_COUNTER, &before));
 
     StartOs();
@@ -144,12 +164,19 @@ TEST_F(OsTest, GetCounterValue_OK_ContinuesFromMillisAtOsInit)
 
 TEST_F(OsTest, GetCounterValue_OK_ContinuousAcrossMillisFallback)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     FakeMillis_Value = 8000UL;
     StartOs();
 
     TickGpt(100U);
     FakeMillis_Value += 100UL;
     TickType beforeFallback = 0U;
+
+    /* ----------------------------------- */
+    /* ---- 実行 + 評価 (Act + Assert) --- */
+    /* ----------------------------------- */
     ASSERT_EQ(E_OK, GetCounterValue(SYSTEM_COUNTER, &beforeFallback));
     EXPECT_EQ(8100U, beforeFallback);
 
@@ -170,15 +197,39 @@ TEST_F(OsTest, GetCounterValue_OK_ContinuousAcrossMillisFallback)
 
 TEST_F(OsTest, GetCounterValue_NG_InvalidCounterIdReturnsEOsId)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     TickType value = 777U;
 
-    EXPECT_EQ(E_OS_ID, GetCounterValue(SYSTEM_COUNTER + 1U, &value));
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    StatusType ret = GetCounterValue(SYSTEM_COUNTER + 1U, &value);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(E_OS_ID, ret);
     EXPECT_EQ(777U, value);
 }
 
 TEST_F(OsTest, GetCounterValue_NG_NullValueReturnsEOsValue)
 {
-    EXPECT_EQ(E_OS_VALUE, GetCounterValue(SYSTEM_COUNTER, nullptr));
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    StatusType ret = GetCounterValue(SYSTEM_COUNTER, nullptr);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(E_OS_VALUE, ret);
 }
 
 /* ---------------------------------------------------------------------
@@ -187,12 +238,19 @@ TEST_F(OsTest, GetCounterValue_NG_NullValueReturnsEOsValue)
 
 TEST_F(OsTest, GetElapsedValue_OK_ReturnsDifferenceAndUpdatesValue)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     FakeMillis_Value = 1000UL;
     TickType prev = 0U;
     ASSERT_EQ(E_OK, GetCounterValue(SYSTEM_COUNTER, &prev));
 
     FakeMillis_Value = 1450UL;
     TickType elapsed = 0U;
+
+    /* ----------------------------------- */
+    /* ---- 実行 + 評価 (Act + Assert) --- */
+    /* ----------------------------------- */
     EXPECT_EQ(E_OK, GetElapsedValue(SYSTEM_COUNTER, &prev, &elapsed));
     EXPECT_EQ(450U, elapsed);
     EXPECT_EQ(1450U, prev);
@@ -205,38 +263,83 @@ TEST_F(OsTest, GetElapsedValue_OK_ReturnsDifferenceAndUpdatesValue)
 
 TEST_F(OsTest, GetElapsedValue_OK_CorrectAcrossWrapAround)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     FakeMillis_Value = 0xFFFFFFF0UL;
     TickType prev = 0U;
     ASSERT_EQ(E_OK, GetCounterValue(SYSTEM_COUNTER, &prev));
 
     FakeMillis_Value = 0x00000010UL;  /* 32bit をラップした後 */
     TickType elapsed = 0U;
-    EXPECT_EQ(E_OK, GetElapsedValue(SYSTEM_COUNTER, &prev, &elapsed));
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    StatusType ret = GetElapsedValue(SYSTEM_COUNTER, &prev, &elapsed);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(E_OK, ret);
     EXPECT_EQ(0x20U, elapsed);
 }
 
 TEST_F(OsTest, GetElapsedValue_NG_InvalidCounterIdReturnsEOsId)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     TickType prev = 10U;
     TickType elapsed = 99U;
 
-    EXPECT_EQ(E_OS_ID, GetElapsedValue(SYSTEM_COUNTER + 1U, &prev, &elapsed));
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    StatusType ret = GetElapsedValue(SYSTEM_COUNTER + 1U, &prev, &elapsed);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(E_OS_ID, ret);
     EXPECT_EQ(10U, prev);
     EXPECT_EQ(99U, elapsed);
 }
 
 TEST_F(OsTest, GetElapsedValue_NG_NullValueReturnsEOsValue)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     TickType elapsed = 0U;
 
-    EXPECT_EQ(E_OS_VALUE, GetElapsedValue(SYSTEM_COUNTER, nullptr, &elapsed));
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    StatusType ret = GetElapsedValue(SYSTEM_COUNTER, nullptr, &elapsed);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(E_OS_VALUE, ret);
 }
 
 TEST_F(OsTest, GetElapsedValue_NG_NullElapsedValueReturnsEOsValue)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     TickType prev = 0U;
 
-    EXPECT_EQ(E_OS_VALUE, GetElapsedValue(SYSTEM_COUNTER, &prev, nullptr));
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    StatusType ret = GetElapsedValue(SYSTEM_COUNTER, &prev, nullptr);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(E_OS_VALUE, ret);
 }
 
 }  // namespace

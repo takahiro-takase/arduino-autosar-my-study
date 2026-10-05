@@ -37,6 +37,8 @@
  * Global Variables
  * ====================================================================== */
 
+/* WdgM_SetMode() / WdgM_GetMode() の単体テスト用フィクスチャ。
+ * SetUp(): 時刻・模擬 Wdg_Hw・DET・Dem の wrap を初期化し、Dem_Init(NULL)・Wdg_Init()・WdgM_Init() を EcuM_Init() と同じ順序で呼ぶ（Init 自体の DET 記録は消す）。 */
 class Bsw_WdgM_SetGetMode_Test : public ::testing::Test
 {
 protected:
@@ -59,16 +61,38 @@ protected:
 
 TEST_F(Bsw_WdgM_SetGetMode_Test, SetMode_OK_DefaultModeReturnsOk)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = WdgM_SetMode(WDGM_MODE_DEFAULT);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_OK);
     EXPECT_EQ(FakeDetHw_ReportCount, 0U);
 }
 
 TEST_F(Bsw_WdgM_SetGetMode_Test, SetMode_NG_OutOfRangeModeReturnsErrorAndReportsDet)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = WdgM_SetMode((WdgM_ModeType)(WDGM_MODE_DEFAULT + 1U));
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, WDGM_E_PARAM_MODE);
     EXPECT_EQ(FakeDetHw_ReportCount, 1U);
@@ -76,37 +100,79 @@ TEST_F(Bsw_WdgM_SetGetMode_Test, SetMode_NG_OutOfRangeModeReturnsErrorAndReports
 
 TEST_F(Bsw_WdgM_SetGetMode_Test, SetMode_NG_UninitializedReturnsErrorAndReportsDet)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     WdgM_DeInit();
     FakeDetHw_Reset();
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = WdgM_SetMode(WDGM_MODE_DEFAULT);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, WDGM_E_NO_INIT);
 }
 
 TEST_F(Bsw_WdgM_SetGetMode_Test, GetMode_OK_ReturnsDefaultModeRightAfterInit)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     WdgM_ModeType mode = (WdgM_ModeType)0xFFU;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = WdgM_GetMode(&mode);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_OK);
     EXPECT_EQ(mode, WDGM_MODE_DEFAULT);
 }
 
 TEST_F(Bsw_WdgM_SetGetMode_Test, GetMode_OK_ReflectsPreviousSetMode)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     ASSERT_EQ(WdgM_SetMode(WDGM_MODE_DEFAULT), E_OK);
 
     WdgM_ModeType mode = (WdgM_ModeType)0xFFU;
-    ASSERT_EQ(WdgM_GetMode(&mode), E_OK);
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Std_ReturnType ret = WdgM_GetMode(&mode);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    ASSERT_EQ(ret, E_OK);
     EXPECT_EQ(mode, WDGM_MODE_DEFAULT);
 }
 
 TEST_F(Bsw_WdgM_SetGetMode_Test, GetMode_NG_NullPointerReturnsErrorAndReportsDet)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = WdgM_GetMode(NULL);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, WDGM_E_INV_POINTER);
     EXPECT_EQ(FakeDetHw_ReportCount, 1U);
@@ -114,12 +180,22 @@ TEST_F(Bsw_WdgM_SetGetMode_Test, GetMode_NG_NullPointerReturnsErrorAndReportsDet
 
 TEST_F(Bsw_WdgM_SetGetMode_Test, GetMode_NG_UninitializedReturnsDefaultAndReportsDet)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     WdgM_DeInit();
     FakeDetHw_Reset();
 
     WdgM_ModeType mode = (WdgM_ModeType)0xFFU;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = WdgM_GetMode(&mode);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(mode, WDGM_MODE_DEFAULT);
     EXPECT_EQ(FakeDetHw_LastErrorId, WDGM_E_NO_INIT);

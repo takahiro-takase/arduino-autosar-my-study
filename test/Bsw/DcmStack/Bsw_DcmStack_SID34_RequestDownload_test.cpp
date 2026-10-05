@@ -262,6 +262,11 @@ TEST_F(Bsw_DcmStack_SID34_RequestDownload_Test,
        OK_ValidSizeProducesMaxBlockLengthResponse)
 {
     /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
     /* ---- 実行 (Act) ------- */
     /* ----------------------- */
     // addr=0x10, size=0x40（64バイト、DCM_TRANSFER_MAX_SIZE 以内）
@@ -285,8 +290,19 @@ TEST_F(Bsw_DcmStack_SID34_RequestDownload_Test,
 TEST_F(Bsw_DcmStack_SID34_RequestDownload_Test,
        NG_RequestOutOfRange_ZeroSize)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     SendRequestDownload(0x10U, 0x00U);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     ASSERT_EQ(FakeCanHw_SendCount, 1U);
     EXPECT_EQ(FakeCanHw_LastSendData[0], 0x03U);
     EXPECT_EQ(FakeCanHw_LastSendData[1], DCM_SID_NEGATIVE_RESP);

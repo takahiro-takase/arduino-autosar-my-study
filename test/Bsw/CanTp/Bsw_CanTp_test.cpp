@@ -49,6 +49,8 @@ namespace
  * Test Fixture
  * ====================================================================== */
 
+/* CanTp の単体テスト用フィクスチャ。
+ * SetUp(): 時刻を初期化し、CanTp_Init(NULL) を呼ぶ（Init 中の DET ログは抑制し、Init 自体の記録は消して後続の検証から除く）。 */
 class Bsw_CanTp_Test : public ::testing::Test
 {
 protected:
@@ -76,8 +78,19 @@ protected:
 
 TEST_F(Bsw_CanTp_Test, CanTp_GetVersionInfo_NG_NullPointer)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     CanTp_GetVersionInfo(NULL);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeDetHw_LastErrorId, CANTP_E_PARAM_POINTER);
 }
 
@@ -87,31 +100,60 @@ TEST_F(Bsw_CanTp_Test, CanTp_GetVersionInfo_NG_NullPointer)
 
 TEST_F(Bsw_CanTp_Test, CanTp_Transmit_NG_Uninit)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     CanTp_Test_ResetInitState();
     uint8 sdu[4] = { 0 };
     PduInfoType info = { sdu, 4U };
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = CanTp_Transmit(CANTP_TX_SDU_ID, &info);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, CANTP_E_UNINIT);
 }
 
 TEST_F(Bsw_CanTp_Test, CanTp_Transmit_NG_InvalidTxSduId)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     uint8 sdu[4] = { 0 };
     PduInfoType info = { sdu, 4U };
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = CanTp_Transmit(CANTP_TX_SDU_ID + 1U, &info);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, CANTP_E_INVALID_TX_ID);
 }
 
 TEST_F(Bsw_CanTp_Test, CanTp_Transmit_NG_NullPduInfoPtr)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = CanTp_Transmit(CANTP_TX_SDU_ID, NULL);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, CANTP_E_PARAM_POINTER);
 }
@@ -122,10 +164,19 @@ TEST_F(Bsw_CanTp_Test, CanTp_Transmit_NG_NullPduInfoPtr)
 
 TEST_F(Bsw_CanTp_Test, CanTp_MainFunction_NG_Uninit)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     CanTp_Test_ResetInitState();
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     CanTp_MainFunction();
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeDetHw_LastErrorId, CANTP_E_UNINIT);
 }
 
@@ -135,29 +186,58 @@ TEST_F(Bsw_CanTp_Test, CanTp_MainFunction_NG_Uninit)
 
 TEST_F(Bsw_CanTp_Test, CanTp_RxIndication_NG_Uninit)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     CanTp_Test_ResetInitState();
     uint8 sdu[8] = { 0 };
     PduInfoType info = { sdu, 8U };
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     CanTp_RxIndication(CANTP_RX_SDU_ID, &info);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeDetHw_LastErrorId, CANTP_E_UNINIT);
 }
 
 TEST_F(Bsw_CanTp_Test, CanTp_RxIndication_NG_InvalidRxPduId)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     uint8 sdu[8] = { 0 };
     PduInfoType info = { sdu, 8U };
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     CanTp_RxIndication(CANTP_RX_SDU_ID + 1U, &info);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeDetHw_LastErrorId, CANTP_E_INVALID_RX_ID);
 }
 
 TEST_F(Bsw_CanTp_Test, CanTp_RxIndication_NG_NullPduInfoPtr)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     CanTp_RxIndication(CANTP_RX_SDU_ID, NULL);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeDetHw_LastErrorId, CANTP_E_PARAM_POINTER);
 }
 
@@ -167,10 +247,19 @@ TEST_F(Bsw_CanTp_Test, CanTp_RxIndication_NG_NullPduInfoPtr)
 
 TEST_F(Bsw_CanTp_Test, CanTp_TxConfirmation_NG_Uninit)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     CanTp_Test_ResetInitState();
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     CanTp_TxConfirmation(CANTP_TX_SDU_ID, E_OK);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeDetHw_LastErrorId, CANTP_E_UNINIT);
 }
 

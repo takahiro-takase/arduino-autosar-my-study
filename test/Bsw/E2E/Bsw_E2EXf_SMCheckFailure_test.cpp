@@ -66,6 +66,9 @@ const E2E_P05ConfigType kRefEngineInfoCfg = {
  * Test Fixture
  * ====================================================================== */
 
+/* E2EXf が E2E の状態機械（E2E_SMCheck）の失敗を扱う経路の単体テスト用フィクスチャ。
+ * SetUp(): Dem と E2E の wrap を初期化し、Dem_Init(NULL) と E2EXf_PBCfg_Init() を呼ぶ。BuildFrame() は、Profile05 で保護したフレームを作る補助関数。
+ * TearDown(): E2EXf_DeInit() で未初期化へ戻す。 */
 class Bsw_E2EXf_SMCheckFailure_Test : public ::testing::Test
 {
 protected:

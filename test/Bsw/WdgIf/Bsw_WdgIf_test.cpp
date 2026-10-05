@@ -51,6 +51,8 @@ const WdgIf_DeviceType kInvalidDevice = WDGIF_DEVICE_0 + 1U;
  * Test Fixture
  * ====================================================================== */
 
+/* WdgIf の単体テスト用フィクスチャ。
+ * SetUp(): DET の記録を初期化する。 */
 class Bsw_WdgIf_Test : public ::testing::Test
 {
 protected:
@@ -70,8 +72,19 @@ protected:
 
 TEST_F(Bsw_WdgIf_Test, WdgIf_SetMode_NG_InvalidDevice)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = WdgIf_SetMode(kInvalidDevice, WDGIF_FAST_MODE);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, WDGIF_E_PARAM_DEVICE);
     EXPECT_EQ(FakeDetHw_LastApiId, WDGIF_API_ID_SET_MODE);
@@ -83,8 +96,19 @@ TEST_F(Bsw_WdgIf_Test, WdgIf_SetMode_NG_InvalidDevice)
 
 TEST_F(Bsw_WdgIf_Test, WdgIf_SetTriggerCondition_NG_InvalidDevice)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     WdgIf_SetTriggerCondition(kInvalidDevice, 100U);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeDetHw_LastErrorId, WDGIF_E_PARAM_DEVICE);
     EXPECT_EQ(FakeDetHw_LastApiId, WDGIF_API_ID_SET_TRIGGER_CONDITION);
 }
@@ -95,8 +119,19 @@ TEST_F(Bsw_WdgIf_Test, WdgIf_SetTriggerCondition_NG_InvalidDevice)
 
 TEST_F(Bsw_WdgIf_Test, WdgIf_GetVersionInfo_NG_NullPointer)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     WdgIf_GetVersionInfo(NULL);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeDetHw_LastErrorId, WDGIF_E_PARAM_POINTER);
     EXPECT_EQ(FakeDetHw_LastApiId, WDGIF_API_ID_GET_VERSION_INFO);
 }

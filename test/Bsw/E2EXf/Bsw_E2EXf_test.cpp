@@ -55,6 +55,9 @@ namespace
  * Test Fixture
  * ====================================================================== */
 
+/* E2EXf（E2E Transformer）の単体テスト用フィクスチャ。
+ * SetUp(): E2EXf_Init(NULL) を呼ぶ（Init 中の DET ログは抑制し、Init 自体の記録は消して後続の検証から除く）。
+ * TearDown(): E2EXf_DeInit() で未初期化へ戻す。 */
 class Bsw_E2EXf_Test : public ::testing::Test
 {
 protected:
@@ -83,32 +86,59 @@ protected:
 
 TEST_F(Bsw_E2EXf_Test, E2EXf_E2EHealthStatus_NG_NullBufferLengthPtr)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     uint8 buf[5];
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     uint8 ret = E2EXf_E2EHealthStatus(buf, NULL, NULL, 0U);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_SAFETY_HARD_RUNTIMEERROR);
     EXPECT_EQ(FakeDetHw_LastErrorId, E2EXF_E_PARAM_POINTER);
 }
 
 TEST_F(Bsw_E2EXf_Test, E2EXf_E2EHealthStatus_NG_Uninit)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     E2EXf_DeInit();
     uint8  buf[5];
     uint32 bufLen = sizeof(buf);
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     uint8 ret = E2EXf_E2EHealthStatus(buf, &bufLen, NULL, 0U);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_SAFETY_HARD_RUNTIMEERROR);
     EXPECT_EQ(FakeDetHw_LastErrorId, E2EXF_E_UNINIT);
 }
 
 TEST_F(Bsw_E2EXf_Test, E2EXf_E2EHealthStatus_NG_NullBufferPtr)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     uint32 bufLen = 5U;
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     uint8 ret = E2EXf_E2EHealthStatus(NULL, &bufLen, NULL, 0U);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_SAFETY_HARD_RUNTIMEERROR);
     EXPECT_EQ(FakeDetHw_LastErrorId, E2EXF_E_PARAM_POINTER);
 }
@@ -119,24 +149,42 @@ TEST_F(Bsw_E2EXf_Test, E2EXf_E2EHealthStatus_NG_NullBufferPtr)
 
 TEST_F(Bsw_E2EXf_Test, E2EXf_Inv_EngineInfo_NG_NullCheckStatusPtr)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     uint8  buf[7];
     uint32 bufLen = sizeof(buf);
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     uint8 ret = E2EXf_Inv_EngineInfo(buf, &bufLen, NULL, 0U, NULL);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_SAFETY_HARD_RUNTIMEERROR);
     EXPECT_EQ(FakeDetHw_LastErrorId, E2EXF_E_PARAM_POINTER);
 }
 
 TEST_F(Bsw_E2EXf_Test, E2EXf_Inv_EngineInfo_NG_Uninit)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     E2EXf_DeInit();
     uint8  buf[7];
     uint32 bufLen = sizeof(buf);
     E2E_P05StatusType checkStatus;
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     uint8 ret = E2EXf_Inv_EngineInfo(buf, &bufLen, NULL, 0U, &checkStatus);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_SAFETY_HARD_RUNTIMEERROR);
     EXPECT_EQ(checkStatus, E2E_P05STATUS_ERROR);
     EXPECT_EQ(FakeDetHw_LastErrorId, E2EXF_E_UNINIT);
@@ -144,11 +192,20 @@ TEST_F(Bsw_E2EXf_Test, E2EXf_Inv_EngineInfo_NG_Uninit)
 
 TEST_F(Bsw_E2EXf_Test, E2EXf_Inv_EngineInfo_NG_NullBufferPtr)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     uint32 bufLen = 7U;
     E2E_P05StatusType checkStatus;
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     uint8 ret = E2EXf_Inv_EngineInfo(NULL, &bufLen, NULL, 0U, &checkStatus);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_SAFETY_HARD_RUNTIMEERROR);
     EXPECT_EQ(checkStatus, E2E_P05STATUS_ERROR);
     EXPECT_EQ(FakeDetHw_LastErrorId, E2EXF_E_PARAM_POINTER);
@@ -160,24 +217,42 @@ TEST_F(Bsw_E2EXf_Test, E2EXf_Inv_EngineInfo_NG_NullBufferPtr)
 
 TEST_F(Bsw_E2EXf_Test, E2EXf_Inv_AbsInfo_NG_NullCheckStatusPtr)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     uint8  buf[6];
     uint32 bufLen = sizeof(buf);
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     uint8 ret = E2EXf_Inv_AbsInfo(buf, &bufLen, NULL, 0U, NULL);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_SAFETY_HARD_RUNTIMEERROR);
     EXPECT_EQ(FakeDetHw_LastErrorId, E2EXF_E_PARAM_POINTER);
 }
 
 TEST_F(Bsw_E2EXf_Test, E2EXf_Inv_AbsInfo_NG_Uninit)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     E2EXf_DeInit();
     uint8  buf[6];
     uint32 bufLen = sizeof(buf);
     E2E_P05StatusType checkStatus;
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     uint8 ret = E2EXf_Inv_AbsInfo(buf, &bufLen, NULL, 0U, &checkStatus);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_SAFETY_HARD_RUNTIMEERROR);
     EXPECT_EQ(checkStatus, E2E_P05STATUS_ERROR);
     EXPECT_EQ(FakeDetHw_LastErrorId, E2EXF_E_UNINIT);
@@ -185,11 +260,20 @@ TEST_F(Bsw_E2EXf_Test, E2EXf_Inv_AbsInfo_NG_Uninit)
 
 TEST_F(Bsw_E2EXf_Test, E2EXf_Inv_AbsInfo_NG_NullBufferPtr)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     uint32 bufLen = 6U;
     E2E_P05StatusType checkStatus;
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     uint8 ret = E2EXf_Inv_AbsInfo(NULL, &bufLen, NULL, 0U, &checkStatus);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_SAFETY_HARD_RUNTIMEERROR);
     EXPECT_EQ(checkStatus, E2E_P05STATUS_ERROR);
     EXPECT_EQ(FakeDetHw_LastErrorId, E2EXF_E_PARAM_POINTER);
@@ -201,11 +285,22 @@ TEST_F(Bsw_E2EXf_Test, E2EXf_Inv_AbsInfo_NG_NullBufferPtr)
 
 TEST_F(Bsw_E2EXf_Test, E2EXf_DeInit_NG_Uninit)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     E2EXf_DeInit();  // 1回目: SetUp() の Init を正常に解除する
     FakeDetHw_Reset();
 
     E2EXf_DeInit();  // 2回目: 既に未初期化のため NG
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeDetHw_LastErrorId, E2EXF_E_UNINIT);
 }
 
@@ -215,8 +310,19 @@ TEST_F(Bsw_E2EXf_Test, E2EXf_DeInit_NG_Uninit)
 
 TEST_F(Bsw_E2EXf_Test, E2EXf_GetVersionInfo_NG_NullPointer)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     E2EXf_GetVersionInfo(NULL);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeDetHw_LastErrorId, E2EXF_E_PARAM_POINTER);
 }
 

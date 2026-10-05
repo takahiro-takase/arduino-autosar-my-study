@@ -44,6 +44,9 @@ namespace
  * Test Fixture
  * ====================================================================== */
 
+/* Dem のフィルタ API（Dem_SetDTCFilter / Dem_GetNumberOfFilteredDTC / Dem_GetNextFilteredDTC 系）の単体テスト用フィクスチャ。
+ * SetUp(): Dem_Init(NULL) を呼ぶ。SetFilter() はフィルタを設定する補助関数、DrainDtcs() は一致する DTC を最後まで取り出す補助関数。
+ * TearDown(): Dem を未初期化の状態へ戻す。 */
 class Bsw_Dem_DtcFilter_Test : public ::testing::Test
 {
 protected:
@@ -99,18 +102,38 @@ protected:
 
 TEST_F(Bsw_Dem_DtcFilter_Test, Dem_GetNextFilteredDTC_NG_NoFilterSetReturnsNotOk)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     uint32 dtc = 0U;
     uint8  status = 0U;
     uint16 count = 0U;
     sint8  fdc = 0;
 
     EXPECT_EQ(Dem_GetNumberOfFilteredDTC(0U, &count), E_NOT_OK);
-    EXPECT_EQ(Dem_GetNextFilteredDTC(0U, &dtc, &status), E_NOT_OK);
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Std_ReturnType ret = Dem_GetNextFilteredDTC(0U, &dtc, &status);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(Dem_GetNextFilteredDTCAndFDC(0U, &dtc, &fdc), E_NOT_OK);
 }
 
 TEST_F(Bsw_Dem_DtcFilter_Test, Dem_SetDTCFilter_OK_CallingAgainRestartsFromTheFirstDtc)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------------------- */
+    /* ---- 実行 + 評価 (Act + Assert) --- */
+    /* ----------------------------------- */
     ASSERT_EQ(SetFilter(0x00U), E_OK);
     uint32 dtc = 0U;
     uint8  status = 0U;

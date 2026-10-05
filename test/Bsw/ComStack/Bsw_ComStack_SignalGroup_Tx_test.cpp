@@ -465,6 +465,11 @@ TEST_F(Bsw_ComStack_SignalGroup_Tx_SwitchIpduTxMode_Test, NG_Step01_ComSwitchIpd
 
 TEST_F(Bsw_ComStack_SignalGroup_Tx_SwitchIpduTxMode_Test, NG_Step01_ComSwitchIpduTxMode_UnknownPduId)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
     /* ----------------------------------- */
     /* ---- 実行 (Act) + 評価 (Assert) --- */
     /* ----------------------------------- */
@@ -656,10 +661,20 @@ TEST_F(Bsw_ComStack_SignalGroup_Tx_SendSignalGroupArray_Test, OK_ReturnsServiceN
 
 TEST_F(Bsw_ComStack_SignalGroup_Tx_SendSignalGroupArray_Test, NG_Step01_ComSendSignalGroupArray_NullDataPtr)
 {
-    /* ----------------------------------- */
-    /* ---- 実行 (Act) + 評価 (Assert) --- */
-    /* ----------------------------------- */
-    EXPECT_EQ(Com_SendSignalGroupArray(1U, NULL), E_NOT_OK);
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    uint8 ret = Com_SendSignalGroupArray(1U, NULL);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(Com_Test_GetTxPending(1U), 0U);  // 何も変化しない
 }
 
@@ -672,10 +687,15 @@ TEST_F(Bsw_ComStack_SignalGroup_Tx_SendSignalGroupArray_Test, NG_Step01_ComSendS
     // kTestTxIPdu（IPduId=0）は IsSignalGroup=0
     uint8_t raw[2] = { 0x12U, 0x34U };
 
-    /* ----------------------------------- */
-    /* ---- 実行 (Act) + 評価 (Assert) --- */
-    /* ----------------------------------- */
-    EXPECT_EQ(Com_SendSignalGroupArray(0U, raw), E_NOT_OK);
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    uint8 ret = Com_SendSignalGroupArray(0U, raw);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(Com_Test_GetTxPending(0U), 0U);
 }
 
@@ -955,12 +975,17 @@ TEST_F(Bsw_ComStack_SignalGroup_Tx_TriggerIPDUSend_Test, NG_Step01_ComTriggerIPD
     // 同じ経路であることも合わせて確認する）。
     Com_IpduGroupStop(kTestStoppableGroupId);
 
-    /* ----------------------------------- */
-    /* ---- 実行 (Act) + 評価 (Assert) --- */
-    /* ----------------------------------- */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     // [SWS_Com_00861] stopped I-PDU は E_NOT_OK。
     // トリガー自体も記録されない（後で started になっても自動実行されない）。
-    EXPECT_EQ(Com_TriggerIPDUSend(3U), E_NOT_OK);
+    Std_ReturnType ret = Com_TriggerIPDUSend(3U);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(Com_Test_GetTxTriggerPending(3U), 0U);
 }
 

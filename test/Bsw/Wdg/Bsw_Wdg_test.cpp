@@ -56,6 +56,9 @@ namespace
  * Test Fixture
  * ====================================================================== */
 
+/* Wdg の単体テスト用フィクスチャ。
+ * SetUp(): 模擬 Wdg_Hw をリセットし、Wdg_Init(&Wdg_Config) を呼ぶ（Init 中の DET ログは抑制し、Init 自体の記録は消して後続の検証から除く）。
+ * TearDown(): 未初期化の状態へ戻す。 */
 class Bsw_Wdg_Test : public ::testing::Test
 {
 protected:
@@ -85,10 +88,19 @@ protected:
 
 TEST_F(Bsw_Wdg_Test, Wdg_Init_NG_NullConfigPtr)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     Wdg_Test_ResetInitState();
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Wdg_Init(NULL);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeDetHw_LastErrorId, WDG_E_PARAM_POINTER);
 }
 
@@ -98,20 +110,40 @@ TEST_F(Bsw_Wdg_Test, Wdg_Init_NG_NullConfigPtr)
 
 TEST_F(Bsw_Wdg_Test, Wdg_SetMode_NG_DriverState)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     Wdg_Test_ResetInitState();
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = Wdg_SetMode(WDGIF_FAST_MODE);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, WDG_E_DRIVER_STATE);
 }
 
 TEST_F(Bsw_Wdg_Test, Wdg_SetMode_NG_ParamMode)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     // WDGIF_SLOW_MODE は本プロジェクトが対応しない値（default 分岐、
     // Wdg.c 参照）。
     Std_ReturnType ret = Wdg_SetMode(static_cast<WdgIf_ModeType>(0xFFU));
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, WDG_E_PARAM_MODE);
 }
@@ -122,20 +154,38 @@ TEST_F(Bsw_Wdg_Test, Wdg_SetMode_NG_ParamMode)
 
 TEST_F(Bsw_Wdg_Test, Wdg_SetTriggerCondition_NG_DriverState)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     Wdg_Test_ResetInitState();
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Wdg_SetTriggerCondition(100U);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeDetHw_LastErrorId, WDG_E_DRIVER_STATE);
 }
 
 TEST_F(Bsw_Wdg_Test, Wdg_SetTriggerCondition_NG_ParamTimeout)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     // Wdg_Config.DefaultTimeoutMs を超える timeout。
     uint16 tooLarge = static_cast<uint16>(Wdg_Config.DefaultTimeoutMs + 1U);
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Wdg_SetTriggerCondition(tooLarge);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeDetHw_LastErrorId, WDG_E_PARAM_TIMEOUT);
 }
 
@@ -145,8 +195,19 @@ TEST_F(Bsw_Wdg_Test, Wdg_SetTriggerCondition_NG_ParamTimeout)
 
 TEST_F(Bsw_Wdg_Test, Wdg_GetVersionInfo_NG_NullPointer)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Wdg_GetVersionInfo(NULL);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeDetHw_LastErrorId, WDG_E_PARAM_POINTER);
 }
 

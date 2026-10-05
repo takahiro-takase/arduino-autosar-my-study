@@ -54,6 +54,9 @@ namespace
  * Test Fixture
  * ====================================================================== */
 
+/* ComM_CommunicationAllowed() の単体テスト用フィクスチャ。
+ * SetUp(): ComM_Init(NULL) を呼ぶ（Init 中の DET ログは抑制し、Init 自体の記録は消して後続の検証から除く）。
+ * TearDown(): ComM_DeInit() で未初期化へ戻す。 */
 class Bsw_ComM_CommunicationAllowed_Test : public ::testing::Test
 {
 protected:
@@ -78,19 +81,39 @@ protected:
 
 TEST_F(Bsw_ComM_CommunicationAllowed_Test, ComM_CommunicationAllowed_NG_UninitializedReportsDet)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     ComM_DeInit();
     FakeDetHw_Reset();
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     ComM_CommunicationAllowed(COMM_CHANNEL_0, TRUE);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeDetHw_LastErrorId, COMM_E_UNINIT);
     EXPECT_EQ(FakeDetHw_ReportCount, 1U);
 }
 
 TEST_F(Bsw_ComM_CommunicationAllowed_Test, ComM_CommunicationAllowed_NG_InvalidChannelReportsDet)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     ComM_CommunicationAllowed(COMM_CHANNEL_COUNT, TRUE);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeDetHw_LastErrorId, COMM_E_WRONG_PARAMETERS);
     EXPECT_EQ(FakeDetHw_ReportCount, 1U);
 }
@@ -113,6 +136,9 @@ TEST_F(Bsw_ComM_CommunicationAllowed_Test, ComM_CommunicationAllowed_NG_InvalidC
  * Test Fixture
  * ====================================================================== */
 
+/* ComM_GetRequestedComMode() の単体テスト用フィクスチャ。
+ * SetUp(): ComM_Init(NULL) を呼ぶ（Init 中の DET ログは抑制し、Init 自体の記録は消して後続の検証から除く）。範囲外のユーザーを表す kInvalidUser も用意する。
+ * TearDown(): ComM_DeInit() で未初期化へ戻す。 */
 class Bsw_ComM_GetRequestedComMode_Test : public ::testing::Test
 {
 protected:
@@ -135,10 +161,19 @@ protected:
 
 TEST_F(Bsw_ComM_GetRequestedComMode_Test, ComM_GetRequestedComMode_OK_ReturnsNoComRightAfterInit)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     ComM_ModeType mode = COMM_FULL_COMMUNICATION;
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = ComM_GetRequestedComMode(COMM_USER_0, &mode);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_OK);
     EXPECT_EQ(mode, COMM_NO_COMMUNICATION);
     EXPECT_EQ(FakeDetHw_ReportCount, 0U);
@@ -146,22 +181,41 @@ TEST_F(Bsw_ComM_GetRequestedComMode_Test, ComM_GetRequestedComMode_OK_ReturnsNoC
 
 TEST_F(Bsw_ComM_GetRequestedComMode_Test, ComM_GetRequestedComMode_NG_UninitializedReturnsErrorAndReportsDet)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     ComM_DeInit();
     FakeDetHw_Reset();
 
     ComM_ModeType mode = COMM_FULL_COMMUNICATION;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = ComM_GetRequestedComMode(COMM_USER_0, &mode);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, COMM_E_UNINIT);
 }
 
 TEST_F(Bsw_ComM_GetRequestedComMode_Test, ComM_GetRequestedComMode_NG_InvalidUserReturnsErrorAndReportsDet)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     ComM_ModeType mode = COMM_FULL_COMMUNICATION;
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = ComM_GetRequestedComMode(kInvalidUser, &mode);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, COMM_E_WRONG_PARAMETERS);
     EXPECT_EQ(FakeDetHw_ReportCount, 1U);
@@ -169,8 +223,19 @@ TEST_F(Bsw_ComM_GetRequestedComMode_Test, ComM_GetRequestedComMode_NG_InvalidUse
 
 TEST_F(Bsw_ComM_GetRequestedComMode_Test, ComM_GetRequestedComMode_NG_NullPointerReturnsErrorAndReportsDet)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = ComM_GetRequestedComMode(COMM_USER_0, NULL);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, COMM_E_PARAM_POINTER);
 }
@@ -216,6 +281,9 @@ TEST_F(Bsw_ComM_GetRequestedComMode_Test, ComM_GetRequestedComMode_NG_NullPointe
  * Test Fixture
  * ====================================================================== */
 
+/* ComM（上記 2 グループ以外の API）の単体テスト用フィクスチャ。
+ * SetUp(): ComM_Init(NULL) を呼ぶ（Init 中の DET ログは抑制し、Init 自体の記録は消して後続の検証から除く）。
+ * TearDown(): ComM_DeInit() で未初期化へ戻す。 */
 class Bsw_ComM_Test : public ::testing::Test
 {
 protected:
@@ -240,11 +308,22 @@ protected:
 
 TEST_F(Bsw_ComM_Test, ComM_DeInit_NG_Uninit)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     ComM_DeInit();  // 1回目: SetUp() の Init を正常に解除する
     FakeDetHw_Reset();
 
     ComM_DeInit();  // 2回目: 既に未初期化のため NG
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeDetHw_LastErrorId, COMM_E_UNINIT);
 }
 
@@ -254,8 +333,19 @@ TEST_F(Bsw_ComM_Test, ComM_DeInit_NG_Uninit)
 
 TEST_F(Bsw_ComM_Test, ComM_GetStatus_NG_NullPointer)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = ComM_GetStatus(NULL);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, COMM_E_PARAM_POINTER);
 }
@@ -266,18 +356,38 @@ TEST_F(Bsw_ComM_Test, ComM_GetStatus_NG_NullPointer)
 
 TEST_F(Bsw_ComM_Test, ComM_RequestComMode_NG_Uninit)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     ComM_DeInit();
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = ComM_RequestComMode(0U, COMM_FULL_COMMUNICATION);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, COMM_E_UNINIT);
 }
 
 TEST_F(Bsw_ComM_Test, ComM_RequestComMode_NG_WrongParameters)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = ComM_RequestComMode(COMM_USER_COUNT, COMM_FULL_COMMUNICATION);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, COMM_E_WRONG_PARAMETERS);
 }
@@ -288,29 +398,58 @@ TEST_F(Bsw_ComM_Test, ComM_RequestComMode_NG_WrongParameters)
 
 TEST_F(Bsw_ComM_Test, ComM_GetCurrentComMode_NG_Uninit)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     ComM_DeInit();
     ComM_ModeType mode;
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = ComM_GetCurrentComMode(0U, &mode);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, COMM_E_UNINIT);
 }
 
 TEST_F(Bsw_ComM_Test, ComM_GetCurrentComMode_NG_WrongParameters)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     ComM_ModeType mode;
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = ComM_GetCurrentComMode(COMM_USER_COUNT, &mode);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, COMM_E_WRONG_PARAMETERS);
 }
 
 TEST_F(Bsw_ComM_Test, ComM_GetCurrentComMode_NG_NullPointer)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = ComM_GetCurrentComMode(0U, NULL);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, COMM_E_PARAM_POINTER);
 }
@@ -321,8 +460,19 @@ TEST_F(Bsw_ComM_Test, ComM_GetCurrentComMode_NG_NullPointer)
 
 TEST_F(Bsw_ComM_Test, ComM_GetVersionInfo_NG_NullPointer)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     ComM_GetVersionInfo(NULL);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeDetHw_LastErrorId, COMM_E_PARAM_POINTER);
 }
 
@@ -332,17 +482,37 @@ TEST_F(Bsw_ComM_Test, ComM_GetVersionInfo_NG_NullPointer)
 
 TEST_F(Bsw_ComM_Test, ComM_Nm_NetworkStartIndication_NG_Uninit)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     ComM_DeInit();
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     ComM_Nm_NetworkStartIndication(0U);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeDetHw_LastErrorId, COMM_E_UNINIT);
 }
 
 TEST_F(Bsw_ComM_Test, ComM_Nm_NetworkStartIndication_NG_WrongParameters)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     ComM_Nm_NetworkStartIndication(COMM_CHANNEL_COUNT);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeDetHw_LastErrorId, COMM_E_WRONG_PARAMETERS);
 }
 
@@ -352,17 +522,37 @@ TEST_F(Bsw_ComM_Test, ComM_Nm_NetworkStartIndication_NG_WrongParameters)
 
 TEST_F(Bsw_ComM_Test, ComM_Nm_NetworkMode_NG_Uninit)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     ComM_DeInit();
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     ComM_Nm_NetworkMode(0U);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeDetHw_LastErrorId, COMM_E_UNINIT);
 }
 
 TEST_F(Bsw_ComM_Test, ComM_Nm_NetworkMode_NG_WrongParameters)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     ComM_Nm_NetworkMode(COMM_CHANNEL_COUNT);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeDetHw_LastErrorId, COMM_E_WRONG_PARAMETERS);
 }
 
@@ -372,17 +562,37 @@ TEST_F(Bsw_ComM_Test, ComM_Nm_NetworkMode_NG_WrongParameters)
 
 TEST_F(Bsw_ComM_Test, ComM_Nm_PrepareBusSleepMode_NG_Uninit)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     ComM_DeInit();
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     ComM_Nm_PrepareBusSleepMode(0U);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeDetHw_LastErrorId, COMM_E_UNINIT);
 }
 
 TEST_F(Bsw_ComM_Test, ComM_Nm_PrepareBusSleepMode_NG_WrongParameters)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     ComM_Nm_PrepareBusSleepMode(COMM_CHANNEL_COUNT);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeDetHw_LastErrorId, COMM_E_WRONG_PARAMETERS);
 }
 
@@ -392,17 +602,37 @@ TEST_F(Bsw_ComM_Test, ComM_Nm_PrepareBusSleepMode_NG_WrongParameters)
 
 TEST_F(Bsw_ComM_Test, ComM_Nm_BusSleepMode_NG_Uninit)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     ComM_DeInit();
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     ComM_Nm_BusSleepMode(0U);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeDetHw_LastErrorId, COMM_E_UNINIT);
 }
 
 TEST_F(Bsw_ComM_Test, ComM_Nm_BusSleepMode_NG_WrongParameters)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     ComM_Nm_BusSleepMode(COMM_CHANNEL_COUNT);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeDetHw_LastErrorId, COMM_E_WRONG_PARAMETERS);
 }
 
@@ -412,17 +642,37 @@ TEST_F(Bsw_ComM_Test, ComM_Nm_BusSleepMode_NG_WrongParameters)
 
 TEST_F(Bsw_ComM_Test, ComM_DCM_ActiveDiagnostic_NG_Uninit)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     ComM_DeInit();
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     ComM_DCM_ActiveDiagnostic(0U);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeDetHw_LastErrorId, COMM_E_UNINIT);
 }
 
 TEST_F(Bsw_ComM_Test, ComM_DCM_ActiveDiagnostic_NG_WrongParameters)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     ComM_DCM_ActiveDiagnostic(COMM_CHANNEL_COUNT);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeDetHw_LastErrorId, COMM_E_WRONG_PARAMETERS);
 }
 
@@ -432,17 +682,37 @@ TEST_F(Bsw_ComM_Test, ComM_DCM_ActiveDiagnostic_NG_WrongParameters)
 
 TEST_F(Bsw_ComM_Test, ComM_DCM_InactiveDiagnostic_NG_Uninit)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     ComM_DeInit();
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     ComM_DCM_InactiveDiagnostic(0U);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeDetHw_LastErrorId, COMM_E_UNINIT);
 }
 
 TEST_F(Bsw_ComM_Test, ComM_DCM_InactiveDiagnostic_NG_WrongParameters)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     ComM_DCM_InactiveDiagnostic(COMM_CHANNEL_COUNT);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeDetHw_LastErrorId, COMM_E_WRONG_PARAMETERS);
 }
 
@@ -452,17 +722,37 @@ TEST_F(Bsw_ComM_Test, ComM_DCM_InactiveDiagnostic_NG_WrongParameters)
 
 TEST_F(Bsw_ComM_Test, ComM_BusSM_ModeIndication_NG_Uninit)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     ComM_DeInit();
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     ComM_BusSM_ModeIndication(0U, COMM_FULL_COMMUNICATION);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeDetHw_LastErrorId, COMM_E_UNINIT);
 }
 
 TEST_F(Bsw_ComM_Test, ComM_BusSM_ModeIndication_NG_WrongParameters)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     ComM_BusSM_ModeIndication(COMM_CHANNEL_COUNT, COMM_FULL_COMMUNICATION);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeDetHw_LastErrorId, COMM_E_WRONG_PARAMETERS);
 }
 
@@ -472,10 +762,19 @@ TEST_F(Bsw_ComM_Test, ComM_BusSM_ModeIndication_NG_WrongParameters)
 
 TEST_F(Bsw_ComM_Test, ComM_MainFunction_NG_Uninit)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     ComM_DeInit();
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     ComM_MainFunction();
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeDetHw_LastErrorId, COMM_E_UNINIT);
 }
 

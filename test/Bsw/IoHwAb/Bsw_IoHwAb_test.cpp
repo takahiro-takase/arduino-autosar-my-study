@@ -46,6 +46,8 @@ namespace
  * Test Fixture
  * ====================================================================== */
 
+/* IoHwAb の単体テスト用フィクスチャ。
+ * SetUp(): DET の記録を初期化する。 */
 class Bsw_IoHwAb_Test : public ::testing::Test
 {
 protected:
@@ -65,8 +67,19 @@ protected:
 
 TEST_F(Bsw_IoHwAb_Test, IoHwAb_Button_GetLevel_NG_NullPointer)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = IoHwAb_Button_GetLevel(NULL);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, 0x01U);  // IoHwAb 独自の IOHWAB_E_PARAM_POINTER（非公開定数、IoHwAb.c 参照）
 }
@@ -77,8 +90,19 @@ TEST_F(Bsw_IoHwAb_Test, IoHwAb_Button_GetLevel_NG_NullPointer)
 
 TEST_F(Bsw_IoHwAb_Test, IoHwAb_Adc_GetValue_mV_NG_NullPointer)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = IoHwAb_Adc_GetValue_mV(NULL);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, 0x01U);  // IoHwAb 独自の IOHWAB_E_PARAM_POINTER（非公開定数、IoHwAb.c 参照）
 }

@@ -44,6 +44,8 @@ namespace
  * Test Fixture
  * ====================================================================== */
 
+/* Adc の単体テスト用フィクスチャ。
+ * SetUp(): DET の記録を初期化する。Adc_Init() は各テストが必要に応じて呼ぶ。 */
 class Bsw_Adc_Test : public ::testing::Test
 {
 protected:
@@ -63,8 +65,19 @@ protected:
 
 TEST_F(Bsw_Adc_Test, Adc_ReadChannel_NG_NullPointer)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = Adc_ReadChannel(0U, NULL);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, ADC_E_PARAM_POINTER);
 }
@@ -75,8 +88,19 @@ TEST_F(Bsw_Adc_Test, Adc_ReadChannel_NG_NullPointer)
 
 TEST_F(Bsw_Adc_Test, Adc_GetVersionInfo_NG_NullPointer)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Adc_GetVersionInfo(NULL);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeDetHw_LastErrorId, ADC_E_PARAM_POINTER);
 }
 

@@ -419,6 +419,7 @@ TEST_F(Bsw_ComStack_Signal_Tx_SendToConfirm_Test, OK)
     // step01: Com_SendSignal()
     uint16_t value = 0x1234U;
     Com_SendSignal(0U, &value);
+    ASSERT_EQ(Return_Com_SendSignal, E_OK);  // Com_SendSignal() が E_OK を返した
     ASSERT_EQ(Com_Test_GetTxPending(0U), 1U);
 
     // step02: Com → PduR → CanIf → Can_Write → HW 送信
@@ -538,6 +539,7 @@ TEST_F(Bsw_ComStack_Signal_Tx_SendToConfirm_Test, NG_Step02_CanWrite_Busy)
     // step01: Com_SendSignal()
     uint16_t value = 0x1234U;
     Com_SendSignal(0U, &value);
+    ASSERT_EQ(Return_Com_SendSignal, E_OK);  // Com_SendSignal() が E_OK を返した
     ASSERT_EQ(Com_Test_GetTxPending(0U), 1U);
 
     // step02: Com → PduR → CanIf → Can_Write → HW 送信
@@ -933,6 +935,11 @@ TEST_F(Bsw_ComStack_Signal_Tx_TxTOut_Test, OK_RepeatsDoNotRestartOrExtendDeadlin
 TEST_F(Bsw_ComStack_Signal_Tx_InvalidateSignal_Test, OK)
 {
     /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
     /* ---- 実行 (Act) ------- */
     /* ----------------------- */
     uint8 ret = Com_InvalidateSignal(0U);
@@ -982,10 +989,20 @@ TEST_F(Bsw_ComStack_Signal_Tx_InvalidateSignal_Test, NG_Step01_ComInvalidateSign
 
 TEST_F(Bsw_ComStack_Signal_Tx_InvalidateSignal_Test, NG_Step01_ComInvalidateSignal_UnknownSignalId)
 {
-    /* ----------------------------------- */
-    /* ---- 実行 + 評価 (Act + Assert) --- */
-    /* ----------------------------------- */
-    EXPECT_EQ(Com_InvalidateSignal(255U), E_NOT_OK);
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    uint8 ret = Com_InvalidateSignal(255U);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_NOT_OK);
 }
 
 
@@ -999,11 +1016,16 @@ TEST_F(Bsw_ComStack_Signal_Tx_InvalidateSignal_Test, NG_Step01_ComInvalidateSign
     // 数値空間を共有するため、Direction チェックが無いと Com_SendSignal()
     // 側で偶然一致する TX I-PDU を静かに書き換えかねない（/code-review 指摘）。
 
-    /* ----------------------------------- */
-    /* ---- 実行 + 評価 (Act + Assert) --- */
-    /* ----------------------------------- */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     // Direction チェックのみで拒否される
-    EXPECT_EQ(Com_InvalidateSignal(8U), E_NOT_OK);
+    uint8 ret = Com_InvalidateSignal(8U);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_NOT_OK);
 }
 
 
@@ -1099,10 +1121,20 @@ TEST_F(Bsw_ComStack_Signal_Tx_TriggerIPDUSend_Test, OK_DoesNotConsumeNumberOfRep
 
 TEST_F(Bsw_ComStack_Signal_Tx_TriggerIPDUSend_Test, NG_Step01_ComTriggerIPDUSend_UnknownPduId)
 {
-    /* ----------------------------------- */
-    /* ---- 実行 + 評価 (Act + Assert) --- */
-    /* ----------------------------------- */
-    EXPECT_EQ(Com_TriggerIPDUSend(99U), E_NOT_OK);
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Std_ReturnType ret = Com_TriggerIPDUSend(99U);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_NOT_OK);
 }
 
 
@@ -1271,6 +1303,10 @@ TEST_F(Bsw_ComStack_Signal_Tx_TriggerIPDUSendPeriodic_Test, OK)
     // トリガー直後、MDT(50ms)未経過ではまだ消費されない
     ASSERT_EQ(Com_TriggerIPDUSend(0U), E_OK);
     Com_MainFunctionTx();
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(Com_Test_GetTxTriggerPending(0U), 1U);
 
     /* ----------------------- */

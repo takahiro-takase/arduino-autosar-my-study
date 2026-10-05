@@ -239,6 +239,11 @@ TEST_F(Bsw_DcmStack_SID28_CommunicationControl_Test,
        OK_EnableRxTxNormalMapsToDcmEnableRxTxNorm)
 {
     /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
     /* ---- 実行 (Act) ------- */
     /* ----------------------- */
     SendCommunicationControl(0x00U /* enableRxAndTx */, 0x01U /* normal */);
@@ -259,8 +264,19 @@ TEST_F(Bsw_DcmStack_SID28_CommunicationControl_Test,
 TEST_F(Bsw_DcmStack_SID28_CommunicationControl_Test,
        OK_DisableRxTxNmMapsToDcmDisableRxTxNm)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     SendCommunicationControl(0x03U /* disableRxAndTx */, 0x02U /* NM */);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     ASSERT_EQ(FakeCanHw_SendCount, 1U);
     EXPECT_EQ(FakeCanHw_LastSendData[0], 0x02U);
     EXPECT_EQ(FakeCanHw_LastSendData[1], 0x68U);
@@ -272,8 +288,19 @@ TEST_F(Bsw_DcmStack_SID28_CommunicationControl_Test,
 TEST_F(Bsw_DcmStack_SID28_CommunicationControl_Test,
        OK_EnableRxDisableTxNormAndNmMapsToDcmEnableRxDisableTxNormNm)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     SendCommunicationControl(0x01U /* enableRxAndDisableTx */, 0x03U /* normal + NM */);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     ASSERT_EQ(FakeCanHw_SendCount, 1U);
     EXPECT_EQ(FakeCanHw_LastSendData[0], 0x02U);
     EXPECT_EQ(FakeCanHw_LastSendData[1], 0x68U);
@@ -285,8 +312,19 @@ TEST_F(Bsw_DcmStack_SID28_CommunicationControl_Test,
 TEST_F(Bsw_DcmStack_SID28_CommunicationControl_Test,
        OK_DisableRxEnableTxNormMapsToDcmDisableRxEnableTxNorm)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     SendCommunicationControl(0x02U /* disableRxAndEnableTx */, 0x01U /* normal */);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     ASSERT_EQ(FakeCanHw_SendCount, 1U);
     EXPECT_EQ(LastRequestedMode_BswM_Dcm_CommunicationMode_CurrentState, DCM_DISABLE_RX_ENABLE_TX_NORM);
 }
@@ -298,8 +336,19 @@ TEST_F(Bsw_DcmStack_SID28_CommunicationControl_Test,
 TEST_F(Bsw_DcmStack_SID28_CommunicationControl_Test,
        NG_SubFuncNotSupported_UnsupportedControlType_WithoutCallingBswM)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     SendCommunicationControl(0x04U /* enableRxAndDisableTxWithEnhancedAddressInformation、非対応 */, 0x01U);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     ASSERT_EQ(FakeCanHw_SendCount, 1U);
     EXPECT_EQ(FakeCanHw_LastSendData[0], 0x03U);
     EXPECT_EQ(FakeCanHw_LastSendData[1], 0x7FU);
@@ -310,8 +359,19 @@ TEST_F(Bsw_DcmStack_SID28_CommunicationControl_Test,
 TEST_F(Bsw_DcmStack_SID28_CommunicationControl_Test,
        NG_RequestOutOfRange_InvalidCommunicationType_WithoutCallingBswM)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     SendCommunicationControl(0x00U, 0x00U /* 0 は未定義 */);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     ASSERT_EQ(FakeCanHw_SendCount, 1U);
     EXPECT_EQ(FakeCanHw_LastSendData[0], 0x03U);
     EXPECT_EQ(FakeCanHw_LastSendData[1], 0x7FU);
@@ -352,6 +412,9 @@ TEST_F(Bsw_DcmStack_SID28_CommunicationControl_Test,
 TEST_F(Bsw_DcmStack_SID28_CommunicationControl_Test,
        NG_SubFuncNotSupported_UnsupportedControlTypeWithWrongLength)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     /* [SWS_Dcm_00273]/[SWS_Dcm_00696]: サブ機能サポート確認は最小メッセージ長
      * 確認より先に行う処理順序（2026-09 是正）。controlType(uds[1])が
      * 不正かつ communicationType(uds[2]) が欠けている(udsLen=2<3)場合でも、
@@ -364,8 +427,14 @@ TEST_F(Bsw_DcmStack_SID28_CommunicationControl_Test,
     FakeCanHw_RxData[2] = 0xFFU;
     FakeCanHw_RxPendingCount = 1U;
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Can_MainFunction_Read();
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     ASSERT_EQ(FakeCanHw_SendCount, 1U);
     EXPECT_EQ(FakeCanHw_LastSendData[0], 0x03U);
     EXPECT_EQ(FakeCanHw_LastSendData[1], 0x7FU);

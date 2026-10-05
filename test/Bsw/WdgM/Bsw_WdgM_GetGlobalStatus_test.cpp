@@ -38,6 +38,8 @@
  * Global Variables
  * ====================================================================== */
 
+/* WdgM_GetGlobalStatus() の単体テスト用フィクスチャ。
+ * SetUp(): 時刻・模擬 Wdg_Hw・DET・Dem の wrap を初期化し、Dem_Init(NULL)・Wdg_Init()・WdgM_Init() を EcuM_Init() と同じ順序で呼ぶ（Init 自体の DET 記録は消す）。DriveAllEntitiesToStopped() は、全エンティティを STOPPED まで進める補助関数。 */
 class Bsw_WdgM_GetGlobalStatus_Test : public ::testing::Test
 {
 protected:
@@ -105,9 +107,19 @@ protected:
 
 TEST_F(Bsw_WdgM_GetGlobalStatus_Test, GetGlobalStatus_OK_ReturnsOkRightAfterInit)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     WdgM_GlobalStatusType status = WDGM_GLOBAL_STATUS_STOPPED;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = WdgM_GetGlobalStatus(&status);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_OK);
     EXPECT_EQ(status, WDGM_GLOBAL_STATUS_OK);
 }
@@ -115,6 +127,9 @@ TEST_F(Bsw_WdgM_GetGlobalStatus_Test, GetGlobalStatus_OK_ReturnsOkRightAfterInit
 TEST_F(Bsw_WdgM_GetGlobalStatus_Test,
        GetGlobalStatus_OK_ReturnsOkDuringSuppressionEvenWhileEntitiesAreFailing)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     /* POST_RUN 突入相当。Rte_Engine/Rte_Warning が意図的に停止するのを模して
      * 一切 CheckpointReached を呼ばないまま WdgM_MainFunction() を回す。 */
     WdgM_DisableHwWatchdog();
@@ -128,8 +143,15 @@ TEST_F(Bsw_WdgM_GetGlobalStatus_Test,
      * WdgM_TriggerHwWatchdog() が無条件に refresh を続けるのと同じ理由で、
      * WdgM_GetGlobalStatus() も OK を返すべき（本物の異常ではないため）。 */
     WdgM_GlobalStatusType status = WDGM_GLOBAL_STATUS_STOPPED;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = WdgM_GetGlobalStatus(&status);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_OK);
     EXPECT_EQ(status, WDGM_GLOBAL_STATUS_OK);
 }
@@ -137,6 +159,9 @@ TEST_F(Bsw_WdgM_GetGlobalStatus_Test,
 TEST_F(Bsw_WdgM_GetGlobalStatus_Test,
        GetGlobalStatus_OK_ReturnsFailedAfterLogicalViolationBeforeNextMainFunctionCycle)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     /* ENGINE の許可遷移は INITIAL->START/START->END/END->START のみ。
      * INITIAL から直接 END へ遷移させ、Logical Supervision 違反を即座に起こす。 */
     Std_ReturnType cpRet = WdgM_CheckpointReached(WDGM_ENTITY_ENGINE, WDGM_CP_ENGINE_END);
@@ -148,8 +173,15 @@ TEST_F(Bsw_WdgM_GetGlobalStatus_Test,
      * 観測できるはず（2026-09 是正後も本テストの期待値自体は変わらない。
      * WdgM_GlobalExpired は WdgM_MainFunction() 内でのみラッチされるため）。 */
     WdgM_GlobalStatusType status = WDGM_GLOBAL_STATUS_OK;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = WdgM_GetGlobalStatus(&status);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_OK);
     EXPECT_EQ(status, WDGM_GLOBAL_STATUS_FAILED);
 }
@@ -157,6 +189,9 @@ TEST_F(Bsw_WdgM_GetGlobalStatus_Test,
 TEST_F(Bsw_WdgM_GetGlobalStatus_Test,
        GetGlobalStatus_OK_BecomesExpiredOnFirstMainFunctionCycleAfterLogicalViolation)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     /* [SWS_WdgM_00215]/[00077] の回帰テスト(2026-09 追加): Logical/Deadline
      * 違反は Alive Supervision と異なり猶予なしで即座に Local Status が
      * EXPIRED になるため([SWS_WdgM_00202])、Global は Alive のような
@@ -171,18 +206,44 @@ TEST_F(Bsw_WdgM_GetGlobalStatus_Test,
     WdgM_MainFunction();
 
     WdgM_GlobalStatusType status;
-    ASSERT_EQ(WdgM_GetGlobalStatus(&status), E_OK);
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Std_ReturnType ret = WdgM_GetGlobalStatus(&status);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    ASSERT_EQ(ret, E_OK);
     EXPECT_EQ(status, WDGM_GLOBAL_STATUS_EXPIRED);
 }
 
 TEST_F(Bsw_WdgM_GetGlobalStatus_Test, GetGlobalStatus_OK_ExpiresThenStopsAfterToleranceExhausted)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     DriveAllEntitiesToStopped();
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // ヘルパー DriveAllEntitiesToStopped() の中の ASSERT/EXPECT で確認する
+    // （EXPIRED を経て STOPPED へ遷移し、許容回数を使い切るまでの状態）。
 }
 
 TEST_F(Bsw_WdgM_GetGlobalStatus_Test,
        GetGlobalStatus_OK_RecoversToOkAfterStoppedOnceAliveSupervisionIsSatisfied)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     DriveAllEntitiesToStopped();
 
     /* 両エンティティの Alive Supervision を満たす（Logical/Deadline は違反させない
@@ -220,7 +281,16 @@ TEST_F(Bsw_WdgM_GetGlobalStatus_Test,
     EXPECT_EQ(warningStatus, WDGM_LOCAL_STATUS_OK);
 
     WdgM_GlobalStatusType status;
-    ASSERT_EQ(WdgM_GetGlobalStatus(&status), E_OK);
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Std_ReturnType ret = WdgM_GetGlobalStatus(&status);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    ASSERT_EQ(ret, E_OK);
     EXPECT_EQ(status, WDGM_GLOBAL_STATUS_OK);
 
     /* [SWS_WdgM_00129]/[00375] の回帰テスト(2026-09 追加): STOPPED から
@@ -233,8 +303,19 @@ TEST_F(Bsw_WdgM_GetGlobalStatus_Test,
 
 TEST_F(Bsw_WdgM_GetGlobalStatus_Test, GetGlobalStatus_NG_NullPointerReturnsErrorAndReportsDet)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = WdgM_GetGlobalStatus(NULL);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, WDGM_E_INV_POINTER);
     EXPECT_EQ(FakeDetHw_ReportCount, 1U);
@@ -242,12 +323,22 @@ TEST_F(Bsw_WdgM_GetGlobalStatus_Test, GetGlobalStatus_NG_NullPointerReturnsError
 
 TEST_F(Bsw_WdgM_GetGlobalStatus_Test, GetGlobalStatus_NG_UninitializedReturnsDeactivatedAndReportsDet)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     WdgM_DeInit();
     FakeDetHw_Reset();
 
     WdgM_GlobalStatusType status = WDGM_GLOBAL_STATUS_OK;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = WdgM_GetGlobalStatus(&status);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(status, WDGM_GLOBAL_STATUS_DEACTIVATED);
     EXPECT_EQ(FakeDetHw_LastErrorId, WDGM_E_NO_INIT);

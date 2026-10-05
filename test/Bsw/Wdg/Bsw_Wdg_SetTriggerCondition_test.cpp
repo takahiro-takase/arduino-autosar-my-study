@@ -46,6 +46,9 @@ namespace
  * Test Fixture
  * ====================================================================== */
 
+/* Wdg_SetTriggerCondition() の単体テスト用フィクスチャ。
+ * SetUp(): 模擬 Wdg_Hw をリセットし、Wdg を未初期化の状態へ戻したうえで Wdg_Init(&Wdg_Config) を呼ぶ（Init 自体の DET 記録は消す）。
+ * TearDown(): 未初期化の状態へ戻す。 */
 class Bsw_Wdg_SetTriggerCondition_Test : public ::testing::Test
 {
 protected:
@@ -71,8 +74,19 @@ protected:
 
 TEST_F(Bsw_Wdg_SetTriggerCondition_Test, Wdg_SetTriggerCondition_OK_NonZeroTimeoutRefreshesOnly)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Wdg_SetTriggerCondition(Wdg_Config.DefaultTimeoutMs);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeWdgHw_RefreshCount, 1U);
     EXPECT_EQ(FakeWdgHw_ForceResetCount, 0U);
     EXPECT_EQ(FakeDetHw_ReportCount, 0U);
@@ -80,30 +94,60 @@ TEST_F(Bsw_Wdg_SetTriggerCondition_Test, Wdg_SetTriggerCondition_OK_NonZeroTimeo
 
 TEST_F(Bsw_Wdg_SetTriggerCondition_Test, Wdg_SetTriggerCondition_OK_ZeroTimeoutStopsTriggerAndForcesReset)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     FakeDetHw_LogSuppressed = 1U;  // 強制リセット要求の ERROR ログを抑制
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Wdg_SetTriggerCondition(0U);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeWdgHw_ForceResetCount, 1U);
     EXPECT_EQ(FakeWdgHw_RefreshCount, 0U);  // 0 を渡してリフレッシュしてはならない
 }
 
 TEST_F(Bsw_Wdg_SetTriggerCondition_Test, Wdg_SetTriggerCondition_OK_CallsAfterZeroAreIgnored)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     FakeDetHw_LogSuppressed = 1U;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Wdg_SetTriggerCondition(0U);
 
     Wdg_SetTriggerCondition(Wdg_Config.DefaultTimeoutMs);
     Wdg_SetTriggerCondition(0U);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeWdgHw_ForceResetCount, 1U);  // 2 回目の 0 でもリセット要求を重ねない
     EXPECT_EQ(FakeWdgHw_RefreshCount, 0U);     // 0 を受けた後はリフレッシュしない
 }
 
 TEST_F(Bsw_Wdg_SetTriggerCondition_Test, Wdg_SetTriggerCondition_OK_ReInitClearsStoppedState)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     FakeDetHw_LogSuppressed = 1U;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Wdg_SetTriggerCondition(0U);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     ASSERT_EQ(FakeWdgHw_ForceResetCount, 1U);
 
     Wdg_Init(&Wdg_Config);  // 初期化し直すと timeout=0 によるトリガ停止も解除される

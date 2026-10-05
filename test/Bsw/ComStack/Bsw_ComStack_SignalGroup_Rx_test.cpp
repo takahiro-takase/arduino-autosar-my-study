@@ -847,6 +847,11 @@ TEST_F(Bsw_ComStack_SignalGroup_RxIpduGroup_IpduGroupStartStop_Test, OK_NonGroup
 // ------------------------------------------------------------
 TEST_F(Bsw_ComStack_SignalGroup_RxIpduGroup_ReceptionDM_Test, OK_TogglesFlagForMatchingGroupIPdusOnly)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
     /* ----------------------------------- */
     /* ---- 評価 (Assert) ---------------- */
     /* ----------------------------------- */

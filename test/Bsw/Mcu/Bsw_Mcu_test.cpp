@@ -55,6 +55,8 @@ namespace
  * Test Fixture
  * ====================================================================== */
 
+/* Mcu の単体テスト用フィクスチャ。
+ * SetUp(): 模擬 Mcu_Hw と Det の wrap を初期化し、Mcu を未初期化の状態へ戻す。Mcu_Init() は各テストが呼ぶ。 */
 class McuTest : public ::testing::Test
 {
 protected:
@@ -76,37 +78,81 @@ protected:
 
 TEST_F(McuTest, Mcu_GetResetReason_OK_ReturnsWatchdogReset)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     FakeMcuHw_ResetReason.Watchdog = 1U;
     Mcu_Init(&Mcu_Config);
 
-    EXPECT_EQ(Mcu_GetResetReason(), MCU_WATCHDOG_RESET);
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Mcu_ResetType ret = Mcu_GetResetReason();
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, MCU_WATCHDOG_RESET);
     EXPECT_EQ(CallCount_Det_ReportError, 0U);
 }
 
 TEST_F(McuTest, Mcu_GetResetReason_OK_ReturnsPowerOnReset)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     FakeMcuHw_ResetReason.PowerOn = 1U;
     Mcu_Init(&Mcu_Config);
 
-    EXPECT_EQ(Mcu_GetResetReason(), MCU_POWER_ON_RESET);
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Mcu_ResetType ret = Mcu_GetResetReason();
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, MCU_POWER_ON_RESET);
     EXPECT_EQ(CallCount_Det_ReportError, 0U);
 }
 
 TEST_F(McuTest, Mcu_GetResetReason_OK_ReturnsUndefinedWhenNoRecognizedFlag)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     // BrownOut/External が単独で立っている場合、Mcu_ResetType には対応する
     // 値が無いため MCU_RESET_UNDEFINED になる（Mcu.h 冒頭コメント参照）。
     FakeMcuHw_ResetReason.BrownOut = 1U;
     Mcu_Init(&Mcu_Config);
 
-    EXPECT_EQ(Mcu_GetResetReason(), MCU_RESET_UNDEFINED);
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Mcu_ResetType ret = Mcu_GetResetReason();
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, MCU_RESET_UNDEFINED);
     EXPECT_EQ(CallCount_Det_ReportError, 0U);  // 初期化済みのためエラー報告なし
 }
 
 TEST_F(McuTest, Mcu_GetResetReason_NG_ReportsUninitBeforeInit)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Mcu_ResetType reason = Mcu_GetResetReason();
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(reason, MCU_RESET_UNDEFINED);
     EXPECT_EQ(CallCount_Det_ReportError, 1U);
     EXPECT_EQ(LastModuleId_Det_ReportError, MCU_MODULE_ID);
@@ -120,19 +166,41 @@ TEST_F(McuTest, Mcu_GetResetReason_NG_ReportsUninitBeforeInit)
 
 TEST_F(McuTest, Mcu_GetResetRawValue_OK_ReturnsBitPackedFlags)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     FakeMcuHw_ResetReason.Watchdog = 1U;
     FakeMcuHw_ResetReason.PowerOn  = 1U;
     Mcu_Init(&Mcu_Config);
 
-    EXPECT_EQ(Mcu_GetResetRawValue(),
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Mcu_RawResetType ret = Mcu_GetResetRawValue();
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret,
               static_cast<Mcu_RawResetType>(MCU_RAW_RESET_WATCHDOG_BIT | MCU_RAW_RESET_POWERON_BIT));
     EXPECT_EQ(CallCount_Det_ReportError, 0U);
 }
 
 TEST_F(McuTest, Mcu_GetResetRawValue_NG_ReportsUninitBeforeInit)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Mcu_RawResetType raw = Mcu_GetResetRawValue();
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(raw, 0xFFU);  // [SWS_Mcu_00135] 実装依存の非ゼロ値
     EXPECT_EQ(CallCount_Det_ReportError, 1U);
     EXPECT_EQ(LastModuleId_Det_ReportError, MCU_MODULE_ID);
@@ -146,8 +214,19 @@ TEST_F(McuTest, Mcu_GetResetRawValue_NG_ReportsUninitBeforeInit)
 
 TEST_F(McuTest, Mcu_PerformReset_NG_ReportsUninitAndDoesNotCallHw)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Mcu_PerformReset();
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeMcuHw_PerformResetCount, 0U);
     EXPECT_EQ(CallCount_Det_ReportError, 1U);
     EXPECT_EQ(LastModuleId_Det_ReportError, MCU_MODULE_ID);
@@ -161,18 +240,38 @@ TEST_F(McuTest, Mcu_PerformReset_NG_ReportsUninitAndDoesNotCallHw)
 
 TEST_F(McuTest, Mcu_GetVersionInfo_OK_FillsExpectedModuleId)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     Std_VersionInfoType info;
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Mcu_GetVersionInfo(&info);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(info.moduleID, MCU_MODULE_ID);
     EXPECT_EQ(CallCount_Det_ReportError, 0U);
 }
 
 TEST_F(McuTest, Mcu_GetVersionInfo_NG_ReportsParamPointerForNull)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Mcu_GetVersionInfo(NULL);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(CallCount_Det_ReportError, 1U);
     EXPECT_EQ(LastModuleId_Det_ReportError, MCU_MODULE_ID);
     EXPECT_EQ(LastApiId_Det_ReportError, MCU_API_ID_GET_VERSION_INFO);
@@ -185,10 +284,19 @@ TEST_F(McuTest, Mcu_GetVersionInfo_NG_ReportsParamPointerForNull)
 
 TEST_F(McuTest, Mcu_Init_OK_MarksInitializedAndCachesResetReason)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     FakeMcuHw_ResetReason.Watchdog = 1U;
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Mcu_Init(&Mcu_Config);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeMcuHw_ReadAndClearResetReasonCount, 1U);
     EXPECT_EQ(Mcu_GetResetReason(), MCU_WATCHDOG_RESET);
     EXPECT_EQ(CallCount_Det_ReportError, 0U);
@@ -196,6 +304,14 @@ TEST_F(McuTest, Mcu_Init_OK_MarksInitializedAndCachesResetReason)
 
 TEST_F(McuTest, Mcu_Init_NG_NullConfigLeavesModuleUninitialized)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     // ConfigPtr が NULL の場合、リセット原因キャッシュの更新は行うが
     // 初期化済みとはみなさない（Mcu.c 冒頭コメント参照。現状唯一の
     // 呼び出し元 main.cpp は必ず &Mcu_Config を渡すため到達しないが、
@@ -205,6 +321,9 @@ TEST_F(McuTest, Mcu_Init_NG_NullConfigLeavesModuleUninitialized)
 
     Mcu_ResetType reason = Mcu_GetResetReason();
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(reason, MCU_RESET_UNDEFINED);
     EXPECT_EQ(CallCount_Det_ReportError, 1U);
     EXPECT_EQ(LastApiId_Det_ReportError, MCU_API_ID_GET_RESET_REASON);

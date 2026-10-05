@@ -46,6 +46,9 @@ namespace
  * Test Fixture
  * ====================================================================== */
 
+/* BswM の単体テスト用フィクスチャ。
+ * SetUp(): wrap の状態を戻し、BswM_Init(&BswM_Config) を呼ぶ（Init 中の DET ログは抑制し、Init 自体の記録は消して後続の検証から除く）。
+ * TearDown(): BswM_Deinit() で未初期化へ戻す。 */
 class Bsw_BswM_Test : public ::testing::Test
 {
 protected:
@@ -75,10 +78,19 @@ protected:
 
 TEST_F(Bsw_BswM_Test, BswM_Init_NG_NullConfigPtr)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     BswM_Deinit();
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     BswM_Init(NULL);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeDetHw_LastErrorId, BSWM_E_PARAM_CONFIG);
 }
 
@@ -88,11 +100,22 @@ TEST_F(Bsw_BswM_Test, BswM_Init_NG_NullConfigPtr)
 
 TEST_F(Bsw_BswM_Test, BswM_Deinit_NG_NoInit)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     BswM_Deinit();  // 1回目: SetUp() の Init を正常に解除する
     FakeDetHw_Reset();
 
     BswM_Deinit();  // 2回目: 既に未初期化のため NG
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeDetHw_LastErrorId, BSWM_E_NO_INIT);
 }
 
@@ -102,8 +125,19 @@ TEST_F(Bsw_BswM_Test, BswM_Deinit_NG_NoInit)
 
 TEST_F(Bsw_BswM_Test, BswM_GetVersionInfo_NG_NullPointer)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     BswM_GetVersionInfo(NULL);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeDetHw_LastErrorId, BSWM_E_PARAM_POINTER);
 }
 
@@ -113,17 +147,37 @@ TEST_F(Bsw_BswM_Test, BswM_GetVersionInfo_NG_NullPointer)
 
 TEST_F(Bsw_BswM_Test, BswM_EcuM_CurrentState_NG_NoInit)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     BswM_Deinit();
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     BswM_EcuM_CurrentState(ECUM_STATE_RUN);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeDetHw_LastErrorId, BSWM_E_NO_INIT);
 }
 
 TEST_F(Bsw_BswM_Test, BswM_EcuM_CurrentState_NG_ReqModeOutOfRange)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     BswM_EcuM_CurrentState(static_cast<EcuM_StateType>(0xFFU));
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeDetHw_LastErrorId, BSWM_E_REQ_MODE_OUT_OF_RANGE);
 }
 
@@ -133,17 +187,37 @@ TEST_F(Bsw_BswM_Test, BswM_EcuM_CurrentState_NG_ReqModeOutOfRange)
 
 TEST_F(Bsw_BswM_Test, BswM_ComM_CurrentMode_NG_NoInit)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     BswM_Deinit();
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     BswM_ComM_CurrentMode(0U, COMM_FULL_COMMUNICATION);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeDetHw_LastErrorId, BSWM_E_NO_INIT);
 }
 
 TEST_F(Bsw_BswM_Test, BswM_ComM_CurrentMode_NG_ReqModeOutOfRange)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     BswM_ComM_CurrentMode(0U, static_cast<ComM_ModeType>(COMM_FULL_COMMUNICATION + 1U));
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeDetHw_LastErrorId, BSWM_E_REQ_MODE_OUT_OF_RANGE);
 }
 
@@ -153,18 +227,38 @@ TEST_F(Bsw_BswM_Test, BswM_ComM_CurrentMode_NG_ReqModeOutOfRange)
 
 TEST_F(Bsw_BswM_Test, BswM_Dcm_CommunicationMode_CurrentState_NG_NoInit)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
     BswM_Deinit();
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     BswM_Dcm_CommunicationMode_CurrentState(0U, DCM_DISABLE_RX_TX_NORM_NM);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeDetHw_LastErrorId, BSWM_E_NO_INIT);
 }
 
 TEST_F(Bsw_BswM_Test, BswM_Dcm_CommunicationMode_CurrentState_NG_ReqModeOutOfRange)
 {
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     BswM_Dcm_CommunicationMode_CurrentState(
         0U, static_cast<Dcm_CommunicationModeType>(DCM_DISABLE_RX_TX_NORM_NM + 1U));
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(FakeDetHw_LastErrorId, BSWM_E_REQ_MODE_OUT_OF_RANGE);
 }
 
