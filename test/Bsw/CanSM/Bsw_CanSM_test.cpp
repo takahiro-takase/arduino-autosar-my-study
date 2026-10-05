@@ -203,36 +203,6 @@ protected:
  * ====================================================================== */
 
 // ------------------------------------------------------------
-// 異常系: CanIf_SetControllerMode(STARTED) が失敗する回、コントローラは
-// BUS_OFF のまま据え置かれ、次周期の再試行に委ねられる（CanSM.c 726〜736
-// 行目、これまで未到達だった防御分岐）。
-// ------------------------------------------------------------
-TEST_F(Bsw_CanSM_BusOffRecovery_Test, MainFunction_NG_RecoveryAttemptFails_StaysInBusOffForNextRetry)
-{
-    /* ----------------------- */
-    /* ---- 準備 (Arrange) --- */
-    /* ----------------------- */
-    ArrangeBusOffPastL1Interval();
-    FailFromCallCount_CanIf_SetControllerMode = 1U;
-
-    /* ----------------------- */
-    /* ---- 実行 (Act) ------- */
-    /* ----------------------- */
-    CanSM_MainFunction();
-
-    /* ----------------------- */
-    /* ---- 評価 (Assert) ---- */
-    /* ----------------------- */
-    // 回復を試みたが失敗 → BUS_OFF のまま
-    EXPECT_EQ(CallCount_CanIf_SetControllerMode, 1U);
-    EXPECT_EQ(Can_Test_GetControllerState(), CAN_CS_STOPPED);
-    ComM_ModeType mode = COMM_FULL_COMMUNICATION;
-    ASSERT_EQ(ComM_GetCurrentComMode(COMM_USER_0, &mode), E_OK);
-    EXPECT_EQ(mode, static_cast<ComM_ModeType>(COMM_SILENT_COMMUNICATION));
-    EXPECT_EQ(CallCount_Dem_SetEventStatus, 0U);  // まだ PASSED は報告しない
-}
-
-// ------------------------------------------------------------
 // 2026-09 是正の本題: 失敗した試行の直後（L1 周期を空けずに）呼んでも
 // 再試行しない（バックオフ周期を正しく守る）。
 // ------------------------------------------------------------
@@ -299,6 +269,36 @@ TEST_F(Bsw_CanSM_BusOffRecovery_Test, MainFunction_OK_RecoversOnNextAttemptAfter
     EXPECT_EQ(mode, static_cast<ComM_ModeType>(COMM_FULL_COMMUNICATION));
     EXPECT_EQ(CallCount_Dem_SetEventStatus, 1U);
     EXPECT_EQ(LastEventStatus_Dem_SetEventStatus, DEM_EVENT_STATUS_PASSED);
+}
+
+// ------------------------------------------------------------
+// 異常系: CanIf_SetControllerMode(STARTED) が失敗する回、コントローラは
+// BUS_OFF のまま据え置かれ、次周期の再試行に委ねられる（CanSM.c 726〜736
+// 行目、これまで未到達だった防御分岐）。
+// ------------------------------------------------------------
+TEST_F(Bsw_CanSM_BusOffRecovery_Test, MainFunction_NG_RecoveryAttemptFails_StaysInBusOffForNextRetry)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    ArrangeBusOffPastL1Interval();
+    FailFromCallCount_CanIf_SetControllerMode = 1U;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    CanSM_MainFunction();
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // 回復を試みたが失敗 → BUS_OFF のまま
+    EXPECT_EQ(CallCount_CanIf_SetControllerMode, 1U);
+    EXPECT_EQ(Can_Test_GetControllerState(), CAN_CS_STOPPED);
+    ComM_ModeType mode = COMM_FULL_COMMUNICATION;
+    ASSERT_EQ(ComM_GetCurrentComMode(COMM_USER_0, &mode), E_OK);
+    EXPECT_EQ(mode, static_cast<ComM_ModeType>(COMM_SILENT_COMMUNICATION));
+    EXPECT_EQ(CallCount_Dem_SetEventStatus, 0U);  // まだ PASSED は報告しない
 }
 
 // ============================================================================

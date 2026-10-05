@@ -143,6 +143,24 @@ TEST_F(DioTest, ReadChannelGroup_OK_MasksAndShiftsToLsb)
     EXPECT_EQ(FakeDetHw_ReportCount, 0U);
 }
 
+TEST_F(DioTest, ReadChannelGroup_NG_NullPointerReturnsZeroAndReportsDet)
+{
+    Dio_PortLevelType level = Dio_ReadChannelGroup(NULL);
+
+    EXPECT_EQ(level, 0U);
+    EXPECT_EQ(FakeDetHw_LastErrorId, DIO_E_PARAM_POINTER);
+}
+
+TEST_F(DioTest, ReadChannelGroup_NG_InvalidPortReturnsZeroAndReportsDet)
+{
+    Dio_ChannelGroupType group = { (Dio_PortType)0xFFU, 0x01U, 0U };
+
+    Dio_PortLevelType level = Dio_ReadChannelGroup(&group);
+
+    EXPECT_EQ(level, 0U);
+    EXPECT_EQ(FakeDetHw_LastErrorId, DIO_E_PARAM_INVALID_GROUP);
+}
+
 TEST_F(DioTest, WriteChannelGroup_OK_LeavesChannelsOutsideMaskUnchanged)
 {
     Dio_WriteChannel(DIO_CHANNEL_LED_WARNING, DIO_HIGH);  /* グループ外、変化しないはず */
@@ -155,14 +173,6 @@ TEST_F(DioTest, WriteChannelGroup_OK_LeavesChannelsOutsideMaskUnchanged)
     EXPECT_EQ(FakeDetHw_ReportCount, 0U);
 }
 
-TEST_F(DioTest, ReadChannelGroup_NG_NullPointerReturnsZeroAndReportsDet)
-{
-    Dio_PortLevelType level = Dio_ReadChannelGroup(NULL);
-
-    EXPECT_EQ(level, 0U);
-    EXPECT_EQ(FakeDetHw_LastErrorId, DIO_E_PARAM_POINTER);
-}
-
 TEST_F(DioTest, WriteChannelGroup_NG_NullPointerHasNoEffectAndReportsDet)
 {
     uint32 writeCountBefore = FakeDioHw_WriteCount;
@@ -171,16 +181,6 @@ TEST_F(DioTest, WriteChannelGroup_NG_NullPointerHasNoEffectAndReportsDet)
 
     EXPECT_EQ(FakeDioHw_WriteCount, writeCountBefore);
     EXPECT_EQ(FakeDetHw_LastErrorId, DIO_E_PARAM_POINTER);
-}
-
-TEST_F(DioTest, ReadChannelGroup_NG_InvalidPortReturnsZeroAndReportsDet)
-{
-    Dio_ChannelGroupType group = { (Dio_PortType)0xFFU, 0x01U, 0U };
-
-    Dio_PortLevelType level = Dio_ReadChannelGroup(&group);
-
-    EXPECT_EQ(level, 0U);
-    EXPECT_EQ(FakeDetHw_LastErrorId, DIO_E_PARAM_INVALID_GROUP);
 }
 
 TEST_F(DioTest, WriteChannelGroup_NG_OffsetBeyondPortWidthHasNoEffectAndReportsDet)

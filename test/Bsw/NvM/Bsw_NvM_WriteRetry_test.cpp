@@ -121,6 +121,22 @@ protected:
  * Test Functions
  * ====================================================================== */
 
+TEST_F(Bsw_NvM_WriteRetry_Test, NvM_MainFunction_OK_WriteRecoversWithinRetryLimitWithoutDemReport)
+{
+    MakeFeeBusy();
+    ASSERT_EQ(NvM_WriteBlock(NVM_BLOCK_ID_DEM_STATUS, newData), E_OK);
+
+    // 上限以内の拒否（2 回）の後で Fee が空けば、書き込みは成功する。
+    NvM_MainFunction();
+    NvM_MainFunction();
+    ASSERT_EQ(ResultOf(NVM_BLOCK_ID_DEM_STATUS), NVM_REQ_PENDING);
+    ReleaseFee();
+    RunUntilIdle();
+
+    EXPECT_EQ(ResultOf(NVM_BLOCK_ID_DEM_STATUS), NVM_REQ_OK);
+    EXPECT_EQ(CallCount_Dem_SetEventStatus, 0U);  // 上限内で成功すれば失敗も回復も報告しない
+}
+
 TEST_F(Bsw_NvM_WriteRetry_Test, NvM_MainFunction_NG_WriteRejectedBeyondRetryLimitFailsBlockAndReportsToDem)
 {
     MakeFeeBusy();
@@ -177,22 +193,6 @@ TEST_F(Bsw_NvM_WriteRetry_Test, NvM_MainFunction_NG_BlockAfterFailedBlockIsStill
     // 失敗からの回復として、成功した書き込みで PASSED が報告される（[SWS_NvM_00873]）。
     EXPECT_EQ(LastEventId_Dem_SetEventStatus, DEM_EVENT_NVM_REQ_FAILED);
     EXPECT_EQ(LastEventStatus_Dem_SetEventStatus, DEM_EVENT_STATUS_PASSED);
-}
-
-TEST_F(Bsw_NvM_WriteRetry_Test, NvM_MainFunction_OK_WriteRecoversWithinRetryLimitWithoutDemReport)
-{
-    MakeFeeBusy();
-    ASSERT_EQ(NvM_WriteBlock(NVM_BLOCK_ID_DEM_STATUS, newData), E_OK);
-
-    // 上限以内の拒否（2 回）の後で Fee が空けば、書き込みは成功する。
-    NvM_MainFunction();
-    NvM_MainFunction();
-    ASSERT_EQ(ResultOf(NVM_BLOCK_ID_DEM_STATUS), NVM_REQ_PENDING);
-    ReleaseFee();
-    RunUntilIdle();
-
-    EXPECT_EQ(ResultOf(NVM_BLOCK_ID_DEM_STATUS), NVM_REQ_OK);
-    EXPECT_EQ(CallCount_Dem_SetEventStatus, 0U);  // 上限内で成功すれば失敗も回復も報告しない
 }
 
 }  // namespace

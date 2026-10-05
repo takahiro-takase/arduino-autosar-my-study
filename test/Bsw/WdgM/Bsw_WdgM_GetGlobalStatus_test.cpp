@@ -103,28 +103,6 @@ protected:
  * Test Functions
  * ====================================================================== */
 
-TEST_F(Bsw_WdgM_GetGlobalStatus_Test, GetGlobalStatus_NG_NullPointerReturnsErrorAndReportsDet)
-{
-    Std_ReturnType ret = WdgM_GetGlobalStatus(NULL);
-
-    EXPECT_EQ(ret, E_NOT_OK);
-    EXPECT_EQ(FakeDetHw_LastErrorId, WDGM_E_INV_POINTER);
-    EXPECT_EQ(FakeDetHw_ReportCount, 1U);
-}
-
-TEST_F(Bsw_WdgM_GetGlobalStatus_Test, GetGlobalStatus_NG_UninitializedReturnsDeactivatedAndReportsDet)
-{
-    WdgM_DeInit();
-    FakeDetHw_Reset();
-
-    WdgM_GlobalStatusType status = WDGM_GLOBAL_STATUS_OK;
-    Std_ReturnType ret = WdgM_GetGlobalStatus(&status);
-
-    EXPECT_EQ(ret, E_NOT_OK);
-    EXPECT_EQ(status, WDGM_GLOBAL_STATUS_DEACTIVATED);
-    EXPECT_EQ(FakeDetHw_LastErrorId, WDGM_E_NO_INIT);
-}
-
 TEST_F(Bsw_WdgM_GetGlobalStatus_Test, GetGlobalStatus_OK_ReturnsOkRightAfterInit)
 {
     WdgM_GlobalStatusType status = WDGM_GLOBAL_STATUS_STOPPED;
@@ -251,4 +229,26 @@ TEST_F(Bsw_WdgM_GetGlobalStatus_Test,
     EXPECT_EQ(CallCount_Dem_SetEventStatus, 2U);
     EXPECT_EQ(LastEventId_Dem_SetEventStatus, DEM_EVENT_WDGM_SUPERVISION);
     EXPECT_EQ(LastEventStatus_Dem_SetEventStatus, DEM_EVENT_STATUS_PASSED);
+}
+
+TEST_F(Bsw_WdgM_GetGlobalStatus_Test, GetGlobalStatus_NG_NullPointerReturnsErrorAndReportsDet)
+{
+    Std_ReturnType ret = WdgM_GetGlobalStatus(NULL);
+
+    EXPECT_EQ(ret, E_NOT_OK);
+    EXPECT_EQ(FakeDetHw_LastErrorId, WDGM_E_INV_POINTER);
+    EXPECT_EQ(FakeDetHw_ReportCount, 1U);
+}
+
+TEST_F(Bsw_WdgM_GetGlobalStatus_Test, GetGlobalStatus_NG_UninitializedReturnsDeactivatedAndReportsDet)
+{
+    WdgM_DeInit();
+    FakeDetHw_Reset();
+
+    WdgM_GlobalStatusType status = WDGM_GLOBAL_STATUS_OK;
+    Std_ReturnType ret = WdgM_GetGlobalStatus(&status);
+
+    EXPECT_EQ(ret, E_NOT_OK);
+    EXPECT_EQ(status, WDGM_GLOBAL_STATUS_DEACTIVATED);
+    EXPECT_EQ(FakeDetHw_LastErrorId, WDGM_E_NO_INIT);
 }

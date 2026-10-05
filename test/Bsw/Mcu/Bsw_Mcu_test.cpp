@@ -74,17 +74,6 @@ protected:
  * Test Functions
  * ====================================================================== */
 
-TEST_F(McuTest, Mcu_GetResetReason_NG_ReportsUninitBeforeInit)
-{
-    Mcu_ResetType reason = Mcu_GetResetReason();
-
-    EXPECT_EQ(reason, MCU_RESET_UNDEFINED);
-    EXPECT_EQ(CallCount_Det_ReportError, 1U);
-    EXPECT_EQ(LastModuleId_Det_ReportError, MCU_MODULE_ID);
-    EXPECT_EQ(LastApiId_Det_ReportError, MCU_API_ID_GET_RESET_REASON);
-    EXPECT_EQ(LastErrorId_Det_ReportError, MCU_E_UNINIT);
-}
-
 TEST_F(McuTest, Mcu_GetResetReason_OK_ReturnsWatchdogReset)
 {
     FakeMcuHw_ResetReason.Watchdog = 1U;
@@ -114,20 +103,20 @@ TEST_F(McuTest, Mcu_GetResetReason_OK_ReturnsUndefinedWhenNoRecognizedFlag)
     EXPECT_EQ(CallCount_Det_ReportError, 0U);  // 初期化済みのためエラー報告なし
 }
 
+TEST_F(McuTest, Mcu_GetResetReason_NG_ReportsUninitBeforeInit)
+{
+    Mcu_ResetType reason = Mcu_GetResetReason();
+
+    EXPECT_EQ(reason, MCU_RESET_UNDEFINED);
+    EXPECT_EQ(CallCount_Det_ReportError, 1U);
+    EXPECT_EQ(LastModuleId_Det_ReportError, MCU_MODULE_ID);
+    EXPECT_EQ(LastApiId_Det_ReportError, MCU_API_ID_GET_RESET_REASON);
+    EXPECT_EQ(LastErrorId_Det_ReportError, MCU_E_UNINIT);
+}
+
 // ------------------------------------------------------------
 // Mcu_GetResetRawValue()
 // ------------------------------------------------------------
-
-TEST_F(McuTest, Mcu_GetResetRawValue_NG_ReportsUninitBeforeInit)
-{
-    Mcu_RawResetType raw = Mcu_GetResetRawValue();
-
-    EXPECT_EQ(raw, 0xFFU);  // [SWS_Mcu_00135] 実装依存の非ゼロ値
-    EXPECT_EQ(CallCount_Det_ReportError, 1U);
-    EXPECT_EQ(LastModuleId_Det_ReportError, MCU_MODULE_ID);
-    EXPECT_EQ(LastApiId_Det_ReportError, MCU_API_ID_GET_RESET_RAW_VALUE);
-    EXPECT_EQ(LastErrorId_Det_ReportError, MCU_E_UNINIT);
-}
 
 TEST_F(McuTest, Mcu_GetResetRawValue_OK_ReturnsBitPackedFlags)
 {
@@ -140,9 +129,30 @@ TEST_F(McuTest, Mcu_GetResetRawValue_OK_ReturnsBitPackedFlags)
     EXPECT_EQ(CallCount_Det_ReportError, 0U);
 }
 
+TEST_F(McuTest, Mcu_GetResetRawValue_NG_ReportsUninitBeforeInit)
+{
+    Mcu_RawResetType raw = Mcu_GetResetRawValue();
+
+    EXPECT_EQ(raw, 0xFFU);  // [SWS_Mcu_00135] 実装依存の非ゼロ値
+    EXPECT_EQ(CallCount_Det_ReportError, 1U);
+    EXPECT_EQ(LastModuleId_Det_ReportError, MCU_MODULE_ID);
+    EXPECT_EQ(LastApiId_Det_ReportError, MCU_API_ID_GET_RESET_RAW_VALUE);
+    EXPECT_EQ(LastErrorId_Det_ReportError, MCU_E_UNINIT);
+}
+
 // ------------------------------------------------------------
 // Mcu_PerformReset()
 // ------------------------------------------------------------
+
+TEST_F(McuTest, Mcu_PerformReset_OK_CallsHwPerformReset)
+{
+    Mcu_Init(&Mcu_Config);
+
+    Mcu_PerformReset();
+
+    EXPECT_EQ(FakeMcuHw_PerformResetCount, 1U);
+    EXPECT_EQ(CallCount_Det_ReportError, 0U);
+}
 
 TEST_F(McuTest, Mcu_PerformReset_NG_ReportsUninitAndDoesNotCallHw)
 {
@@ -155,29 +165,9 @@ TEST_F(McuTest, Mcu_PerformReset_NG_ReportsUninitAndDoesNotCallHw)
     EXPECT_EQ(LastErrorId_Det_ReportError, MCU_E_UNINIT);
 }
 
-TEST_F(McuTest, Mcu_PerformReset_OK_CallsHwPerformReset)
-{
-    Mcu_Init(&Mcu_Config);
-
-    Mcu_PerformReset();
-
-    EXPECT_EQ(FakeMcuHw_PerformResetCount, 1U);
-    EXPECT_EQ(CallCount_Det_ReportError, 0U);
-}
-
 // ------------------------------------------------------------
 // Mcu_GetVersionInfo()
 // ------------------------------------------------------------
-
-TEST_F(McuTest, Mcu_GetVersionInfo_NG_ReportsParamPointerForNull)
-{
-    Mcu_GetVersionInfo(NULL);
-
-    EXPECT_EQ(CallCount_Det_ReportError, 1U);
-    EXPECT_EQ(LastModuleId_Det_ReportError, MCU_MODULE_ID);
-    EXPECT_EQ(LastApiId_Det_ReportError, MCU_API_ID_GET_VERSION_INFO);
-    EXPECT_EQ(LastErrorId_Det_ReportError, MCU_E_PARAM_POINTER);
-}
 
 TEST_F(McuTest, Mcu_GetVersionInfo_OK_FillsExpectedModuleId)
 {
@@ -189,9 +179,30 @@ TEST_F(McuTest, Mcu_GetVersionInfo_OK_FillsExpectedModuleId)
     EXPECT_EQ(CallCount_Det_ReportError, 0U);
 }
 
+TEST_F(McuTest, Mcu_GetVersionInfo_NG_ReportsParamPointerForNull)
+{
+    Mcu_GetVersionInfo(NULL);
+
+    EXPECT_EQ(CallCount_Det_ReportError, 1U);
+    EXPECT_EQ(LastModuleId_Det_ReportError, MCU_MODULE_ID);
+    EXPECT_EQ(LastApiId_Det_ReportError, MCU_API_ID_GET_VERSION_INFO);
+    EXPECT_EQ(LastErrorId_Det_ReportError, MCU_E_PARAM_POINTER);
+}
+
 // ------------------------------------------------------------
 // Mcu_Init()
 // ------------------------------------------------------------
+
+TEST_F(McuTest, Mcu_Init_OK_MarksInitializedAndCachesResetReason)
+{
+    FakeMcuHw_ResetReason.Watchdog = 1U;
+
+    Mcu_Init(&Mcu_Config);
+
+    EXPECT_EQ(FakeMcuHw_ReadAndClearResetReasonCount, 1U);
+    EXPECT_EQ(Mcu_GetResetReason(), MCU_WATCHDOG_RESET);
+    EXPECT_EQ(CallCount_Det_ReportError, 0U);
+}
 
 TEST_F(McuTest, Mcu_Init_NG_NullConfigLeavesModuleUninitialized)
 {
@@ -208,17 +219,6 @@ TEST_F(McuTest, Mcu_Init_NG_NullConfigLeavesModuleUninitialized)
     EXPECT_EQ(CallCount_Det_ReportError, 1U);
     EXPECT_EQ(LastApiId_Det_ReportError, MCU_API_ID_GET_RESET_REASON);
     EXPECT_EQ(LastErrorId_Det_ReportError, MCU_E_UNINIT);
-}
-
-TEST_F(McuTest, Mcu_Init_OK_MarksInitializedAndCachesResetReason)
-{
-    FakeMcuHw_ResetReason.Watchdog = 1U;
-
-    Mcu_Init(&Mcu_Config);
-
-    EXPECT_EQ(FakeMcuHw_ReadAndClearResetReasonCount, 1U);
-    EXPECT_EQ(Mcu_GetResetReason(), MCU_WATCHDOG_RESET);
-    EXPECT_EQ(CallCount_Det_ReportError, 0U);
 }
 
 }  // namespace
