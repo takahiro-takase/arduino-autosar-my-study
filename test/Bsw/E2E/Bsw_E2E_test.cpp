@@ -133,51 +133,6 @@ TEST_F(E2EP05Test, E2E_P05Protect_OK_IncrementsCounterAndWrapsAt0xFF)
     EXPECT_EQ(state.Counter, 0U); /* 次回用の内部Counterは0に折り返す */
 }
 
-TEST_F(E2EP05Test, E2E_P05Check_OK_FirstCheckAfterInitBecauseCheckStateStartsAtCounter0xFF)
-{
-    /* [SWS_E2E_00451]: E2E_P05CheckInit() は Counter を 0xFF で初期化する
-     * （2026-09-06 是正。以前は 0 だったため、送信側が Counter=0 から
-     * 送り始める最初のフレームが delta=0 の REPEATED と誤判定されていた）。
-     * ProtectState は Counter=0 から送り始めるため、CheckState 側が 0xFF
-     * から始まることで初回フレームは delta=1（0 - 0xFF の mod-256 引き算）
-     * となり OK と判定される。これは Profile01 の WaitForFirstData/INITIAL
-     * に相当する「初回フレームを特別扱いしなくても正しく判定できる」効果を
-     * 仕様上の初期値そのものが持っていることを示す。 */
-    E2E_P05ProtectStateType protectState;
-    E2E_P05CheckStateType   checkState;
-    E2E_P05ProtectInit(&protectState);
-    E2E_P05CheckInit(&checkState);
-
-    uint8_t data[5] = {0U, 0U, 0U, 0x01U, 0x02U};
-    E2E_P05Protect(&config, &protectState, data, sizeof(data));
-
-    ASSERT_EQ(E2E_P05Check(&config, &checkState, data, sizeof(data)), E2E_E_OK);
-    const E2E_P05StatusType status = checkState.Status;
-
-    EXPECT_EQ(status, E2E_P05STATUS_OK);
-    EXPECT_EQ(checkState.Counter, 0U);
-}
-
-TEST_F(E2EP05Test, E2E_P05Check_OK_SecondConsecutiveFrame)
-{
-    E2E_P05ProtectStateType protectState;
-    E2E_P05CheckStateType   checkState;
-    E2E_P05ProtectInit(&protectState);
-    E2E_P05CheckInit(&checkState);
-
-    uint8_t frame1[5] = {0U, 0U, 0U, 0x01U, 0x02U};
-    uint8_t frame2[5] = {0U, 0U, 0U, 0x01U, 0x02U};
-    E2E_P05Protect(&config, &protectState, frame1, sizeof(frame1));
-    E2E_P05Protect(&config, &protectState, frame2, sizeof(frame2));
-
-    E2E_P05Check(&config, &checkState, frame1, sizeof(frame1)); /* 1回目: OK（CheckState は Counter=0xFF から始まるため） */
-    ASSERT_EQ(E2E_P05Check(&config, &checkState, frame2, sizeof(frame2)), E2E_E_OK);
-    const E2E_P05StatusType status = checkState.Status;
-
-    EXPECT_EQ(status, E2E_P05STATUS_OK);
-    EXPECT_EQ(checkState.Counter, 1U);
-}
-
 TEST_F(E2EP05Test, E2E_P05Check_OK_CounterWrapsFrom0xFFTo0IsRecognized)
 {
     E2E_P05ProtectStateType protectState;

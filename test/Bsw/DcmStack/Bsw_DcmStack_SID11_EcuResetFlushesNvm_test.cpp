@@ -47,6 +47,7 @@ extern "C" {
 #include "Wrap_CanIf.h"
 #include "Wrap_PduR.h"
 #include "Wrap_CanTp.h"
+#include "Wrap_Dem.h"
 }
 
 /* ======================================================================
@@ -199,6 +200,7 @@ TEST_F(Bsw_DcmStack_SID11_EcuResetFlushesNvm_Test,
     // limit=1 のイベントを FAILED にして DTC を確定させる
     // （Dem が STATUS と EXTENDED の書き込みを NvM に積む）。まだ NvM_MainFunction() は
     // 一度も回していないので、書き込みは PENDING のまま。
+    WrapDem_Reset();
     ASSERT_EQ(Dem_SetEventStatus(DEM_EVENT_BUTTON_STUCK, DEM_EVENT_STATUS_FAILED), E_OK);
     ASSERT_EQ(ResultOf(NVM_BLOCK_ID_DEM_STATUS), NVM_REQ_PENDING);
     ASSERT_EQ(ResultOf(NVM_BLOCK_ID_DEM_EXTENDED), NVM_REQ_PENDING);
@@ -227,6 +229,9 @@ TEST_F(Bsw_DcmStack_SID11_EcuResetFlushesNvm_Test,
     EXPECT_EQ(FakeMcuHw_PerformResetCount, 1U);
     EXPECT_EQ(ResultOf(NVM_BLOCK_ID_DEM_STATUS), NVM_REQ_OK);
     EXPECT_EQ(ResultOf(NVM_BLOCK_ID_DEM_EXTENDED), NVM_REQ_OK);
+    // NvM_WriteAll() が Dem へ失敗を報告していないこと
+    // （Dem_SetEventStatus() の呼び出しは、上で自分が呼んだ 1 回だけ）。
+    EXPECT_EQ(CallCount_Dem_SetEventStatus, 1U);
 }
 
 }  // namespace

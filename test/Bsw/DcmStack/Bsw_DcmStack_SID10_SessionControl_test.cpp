@@ -285,6 +285,42 @@ TEST_F(Bsw_DcmStack_SID10_SessionControl_Test,
 }
 
 // ------------------------------------------------------------
+// OK: bit7 を立てた [0x10, 0x83] は正応答を送信せず、セッションだけが遷移する
+// （suppressPosRspMsgIndicationBit、[SWS_Dcm_00200]/[SWS_Dcm_00201]）。
+// ------------------------------------------------------------
+TEST_F(Bsw_DcmStack_SID10_SessionControl_Test,
+       OK_SuppressPosRspBitSuppressesPositiveResponse)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // [0x10, 0x83] を 0x7E0 の受信バッファへセットする（SF: 02 10 83）。
+    FakeCanHw_RxId  = 0x7E0U;
+    FakeCanHw_RxDlc = 8U;
+    FakeCanHw_RxData[0] = 2U;
+    FakeCanHw_RxData[1] = DCM_SID_SESSION_CTRL;
+    FakeCanHw_RxData[2] = (uint8)(0x80U | DCM_SESSION_EXTENDED);
+    for (uint8 i = 3U; i < 8U; i++)
+        FakeCanHw_RxData[i] = 0U;
+    FakeCanHw_RxPendingCount = 1U;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Can_MainFunction_Read();
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // 正応答は送信されないが、セッション自体は extendedSession へ遷移していること。
+    EXPECT_EQ(FakeCanHw_SendCount, 0U);
+    Dcm_SesCtrlType session = 0U;
+    ASSERT_EQ(Dcm_GetSesCtrlType(&session), E_OK);
+    EXPECT_EQ(session, DCM_SESSION_EXTENDED);
+}
+
+
+// ------------------------------------------------------------
 // NG: 有効な subFunc に余分な1バイト（[0x10, 0x01, 0x00]、2バイト厳密一致の
 // ため上限超過）は incorrectMessageLength (NRC 0x13) になる（固定長サービス
 // の上限長チェック欠落の是正、2026-09 の回帰確認）。

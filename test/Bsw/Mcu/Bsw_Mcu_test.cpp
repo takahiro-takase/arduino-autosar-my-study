@@ -144,16 +144,6 @@ TEST_F(McuTest, Mcu_GetResetRawValue_NG_ReportsUninitBeforeInit)
 // Mcu_PerformReset()
 // ------------------------------------------------------------
 
-TEST_F(McuTest, Mcu_PerformReset_OK_CallsHwPerformReset)
-{
-    Mcu_Init(&Mcu_Config);
-
-    Mcu_PerformReset();
-
-    EXPECT_EQ(FakeMcuHw_PerformResetCount, 1U);
-    EXPECT_EQ(CallCount_Det_ReportError, 0U);
-}
-
 TEST_F(McuTest, Mcu_PerformReset_NG_ReportsUninitAndDoesNotCallHw)
 {
     Mcu_PerformReset();

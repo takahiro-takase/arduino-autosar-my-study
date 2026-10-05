@@ -273,6 +273,39 @@ TEST_F(Bsw_DcmStack_SID3E_TesterPresent_Test,
 }
 
 // ------------------------------------------------------------
+// OK: bit7 を立てた [0x3E, 0x80] は正応答を送信しない
+// （suppressPosRspMsgIndicationBit、[SWS_Dcm_00200]/[SWS_Dcm_00201]）。
+// ------------------------------------------------------------
+TEST_F(Bsw_DcmStack_SID3E_TesterPresent_Test,
+       OK_SuppressPosRspBitSuppressesPositiveResponse)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // [0x3E, 0x80] を 0x7E0 の受信バッファへセットする（SF: 02 3E 80）。
+    FakeCanHw_RxId  = 0x7E0U;
+    FakeCanHw_RxDlc = 8U;
+    FakeCanHw_RxData[0] = 2U;
+    FakeCanHw_RxData[1] = DCM_SID_TESTER_PRESENT;
+    FakeCanHw_RxData[2] = 0x80U;
+    for (uint8 i = 3U; i < 8U; i++)
+        FakeCanHw_RxData[i] = 0U;
+    FakeCanHw_RxPendingCount = 1U;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Can_MainFunction_Read();
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // 正応答が一切 Can_Hw へ送信されないこと。
+    EXPECT_EQ(FakeCanHw_SendCount, 0U);
+}
+
+
+// ------------------------------------------------------------
 // NG: zeroSubFunction に余分な1バイト（[0x3E, 0x00, 0x00]、2バイト厳密一致
 // のため上限超過）は incorrectMessageLength (NRC 0x13) になる。
 // ------------------------------------------------------------

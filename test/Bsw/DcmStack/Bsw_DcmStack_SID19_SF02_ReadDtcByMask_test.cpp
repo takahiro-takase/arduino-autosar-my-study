@@ -270,7 +270,7 @@ TEST_F(Bsw_DcmStack_SID19_SF02_ReadDtcByMask_Test,
        OK_TwoMatchingDtcsProduceMultiFrameResponse)
 {
     /* ------------------------- */
-    /* ---- 準備 (Act 1) ------- */
+    /* ---- 準備 (Arrange 1) --- */
     /* ------------------------- */
     // DEM_EVENT_ENGINE_OVERHEAT（limit=2）と
     // DEM_EVENT_CAN_BUSOFF（limit=1）を testFailed 確定させる。一致件数

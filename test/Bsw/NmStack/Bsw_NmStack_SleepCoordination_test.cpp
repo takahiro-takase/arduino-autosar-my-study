@@ -318,6 +318,7 @@ TEST_F(Bsw_NmStack_SleepCoordination_VoluntarySleep_Test, OK_DefersPhysicalSleep
     /* ----------------------- */
     // ここで初めて物理スリープと ComM/EcuM の更新が起きる
     EXPECT_EQ(Can_Test_GetControllerState(), CAN_CS_SLEEP);
+    EXPECT_EQ(Return_Can_SetControllerMode, CAN_OK);  // 最後の遷移（SLEEP）が受理された
     EXPECT_EQ(FakeEcuM_ReleaseRUNCount, 1U);
     ASSERT_EQ(ComM_GetCurrentComMode(COMM_USER_0, &mode), E_OK);
     EXPECT_EQ(mode, static_cast<ComM_ModeType>(COMM_NO_COMMUNICATION));
@@ -863,6 +864,7 @@ TEST_F(Bsw_NmStack_SleepCoordination_BusOff_Test, OK_DuringSilentComRestoresSile
     // を一切呼ばない設計のため、ここで STOPPED になったことは Bus-Off が
     // 正しく処理された証拠になる（ガードで無視されていれば STARTED のまま）。
     EXPECT_EQ(Can_Test_GetControllerState(), CAN_CS_STOPPED);
+    EXPECT_EQ(Return_Can_SetControllerMode, CAN_OK);  // 最後の遷移（STOP）が受理された
     ComM_ModeType mode = COMM_FULL_COMMUNICATION;
     ASSERT_EQ(ComM_GetCurrentComMode(COMM_USER_0, &mode), E_OK);
     EXPECT_EQ(mode, static_cast<ComM_ModeType>(COMM_SILENT_COMMUNICATION));

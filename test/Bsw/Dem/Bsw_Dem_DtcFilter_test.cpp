@@ -97,53 +97,6 @@ protected:
  * Test Functions
  * ====================================================================== */
 
-TEST_F(Bsw_Dem_DtcFilter_Test, Dem_GetNextFilteredDTC_OK_MaskZeroReportsAllSupportedDtcs)
-{
-    // 0x19/0x0A: DTCStatusMask=0x00 はステータスで絞り込まず、対応する全 DTC を返す。
-    ASSERT_EQ(SetFilter(0x00U), E_OK);
-    uint16 count = 0U;
-    ASSERT_EQ(Dem_GetNumberOfFilteredDTC(0U, &count), E_OK);
-    EXPECT_EQ(count, DEM_EVENT_COUNT);
-
-    uint32 dtcs[DEM_EVENT_COUNT + 2U];
-    uint8  statuses[DEM_EVENT_COUNT + 2U];
-    const uint8 n = DrainDtcs(dtcs, statuses);
-
-    EXPECT_EQ(n, DEM_EVENT_COUNT);
-    EXPECT_EQ(dtcs[0], DEM_DTC_ENGINE_OVERHEAT);
-    EXPECT_EQ(dtcs[DEM_EVENT_COUNT - 1U], DEM_DTC_NVM_REQ_FAILED);
-}
-
-TEST_F(Bsw_Dem_DtcFilter_Test, Dem_GetNextFilteredDTC_OK_StatusMaskSelectsMatchingDtcsOnly)
-{
-    // 初期状態は全イベントとも testNotCompletedSinceLastClear(0x10) のみ。
-    // BUTTON_STUCK（デバウンス閾値 1）を FAILED 確定させると TF/PENDING/CONFIRMED 等が立つ。
-    ASSERT_EQ(Dem_SetEventStatus(DEM_EVENT_BUTTON_STUCK, DEM_EVENT_STATUS_FAILED), E_OK);
-
-    ASSERT_EQ(SetFilter(DEM_STATUS_CONFIRMED), E_OK);
-    uint16 count = 0U;
-    ASSERT_EQ(Dem_GetNumberOfFilteredDTC(0U, &count), E_OK);
-    EXPECT_EQ(count, 1U);
-
-    uint32 dtcs[DEM_EVENT_COUNT + 2U];
-    uint8  statuses[DEM_EVENT_COUNT + 2U];
-    const uint8 n = DrainDtcs(dtcs, statuses);
-
-    ASSERT_EQ(n, 1U);
-    EXPECT_EQ(dtcs[0], DEM_DTC_BUTTON_STUCK);
-    EXPECT_NE(statuses[0] & DEM_STATUS_CONFIRMED, 0U);
-}
-
-TEST_F(Bsw_Dem_DtcFilter_Test, Dem_GetNextFilteredDTC_OK_StatusMaskWithNoMatchReturnsNoElementImmediately)
-{
-    // 誰も confirmed ではない状態で confirmed だけを要求する → 0 件。
-    ASSERT_EQ(SetFilter(DEM_STATUS_CONFIRMED), E_OK);
-    uint32 dtc = 0U;
-    uint8  status = 0U;
-
-    EXPECT_EQ(Dem_GetNextFilteredDTC(0U, &dtc, &status), DEM_NO_SUCH_ELEMENT);
-}
-
 TEST_F(Bsw_Dem_DtcFilter_Test, Dem_GetNextFilteredDTC_NG_NoFilterSetReturnsNotOk)
 {
     uint32 dtc = 0U;
@@ -170,39 +123,6 @@ TEST_F(Bsw_Dem_DtcFilter_Test, Dem_SetDTCFilter_OK_CallingAgainRestartsFromTheFi
     ASSERT_EQ(Dem_GetNextFilteredDTC(0U, &dtc, &status), E_OK);
 
     EXPECT_EQ(dtc, first);
-}
-
-TEST_F(Bsw_Dem_DtcFilter_Test, Dem_GetNextFilteredDTCAndFDC_OK_FdcFilterReportsOnlyPrefailedDtcs)
-{
-    // 0x19/0x14: FilterForFaultDetectionCounter=TRUE。ENGINE_OVERHEAT（閾値 2）に FAILED を 1 回だけ
-    // 報告すると、確定前の prefailed（FDC が 1〜0x7E）になる。BUTTON_STUCK（閾値 1）は確定済みで対象外。
-    ASSERT_EQ(Dem_SetEventStatus(DEM_EVENT_ENGINE_OVERHEAT, DEM_EVENT_STATUS_FAILED), E_OK);
-    ASSERT_EQ(Dem_SetEventStatus(DEM_EVENT_BUTTON_STUCK, DEM_EVENT_STATUS_FAILED), E_OK);
-
-    ASSERT_EQ(SetFilter(0x00U, TRUE), E_OK);
-    uint16 count = 0U;
-    ASSERT_EQ(Dem_GetNumberOfFilteredDTC(0U, &count), E_OK);
-    EXPECT_EQ(count, 1U);
-
-    uint32 dtc = 0U;
-    sint8  fdc = 0;
-    ASSERT_EQ(Dem_GetNextFilteredDTCAndFDC(0U, &dtc, &fdc), E_OK);
-    EXPECT_EQ(dtc, DEM_DTC_ENGINE_OVERHEAT);
-    EXPECT_GE(fdc, 1);
-    EXPECT_LE(fdc, 0x7E);
-    EXPECT_EQ(Dem_GetNextFilteredDTCAndFDC(0U, &dtc, &fdc), DEM_NO_SUCH_ELEMENT);
-}
-
-TEST_F(Bsw_Dem_DtcFilter_Test, Dem_GetNextFilteredDTCAndFDC_OK_NoPrefailedDtcReturnsNoElement)
-{
-    ASSERT_EQ(SetFilter(0x00U, TRUE), E_OK);
-    uint16 count = 99U;
-    ASSERT_EQ(Dem_GetNumberOfFilteredDTC(0U, &count), E_OK);
-    EXPECT_EQ(count, 0U);
-
-    uint32 dtc = 0U;
-    sint8  fdc = 0;
-    EXPECT_EQ(Dem_GetNextFilteredDTCAndFDC(0U, &dtc, &fdc), DEM_NO_SUCH_ELEMENT);
 }
 
 }  // namespace

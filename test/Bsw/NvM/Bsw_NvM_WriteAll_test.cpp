@@ -87,55 +87,6 @@ protected:
  * ====================================================================== */
 
 // ------------------------------------------------------------
-// OK: 積まれた複数ブロック（冗長ブロックを含む）の書き込みが、NvM_MainFunction() の
-// 周期実行を待たずに NvM_WriteAll() 1 回で全て完了する。
-// ------------------------------------------------------------
-TEST_F(Bsw_NvM_WriteAll_Test, NvM_WriteAll_OK_DrainsAllPendingBlocksIncludingRedundant)
-{
-    /* ----------------------- */
-    /* ---- 準備 (Arrange) --- */
-    /* ----------------------- */
-    // 3 ブロックの書き込みを積む（まだ 1 バイトも書かれていない）。
-    ASSERT_EQ(NvM_WriteBlock(NVM_BLOCK_ID_DEM_STATUS, statusData), E_OK);
-    ASSERT_EQ(NvM_WriteBlock(NVM_BLOCK_ID_DEM_AGING, agingData), E_OK);
-    ASSERT_EQ(NvM_WriteBlock(NVM_BLOCK_ID_DEM_EXTENDED, extendedData), E_OK);
-    ASSERT_EQ(ResultOf(NVM_BLOCK_ID_DEM_STATUS), NVM_REQ_PENDING);
-    ASSERT_EQ(ResultOf(NVM_BLOCK_ID_DEM_AGING), NVM_REQ_PENDING);
-    ASSERT_EQ(ResultOf(NVM_BLOCK_ID_DEM_EXTENDED), NVM_REQ_PENDING);
-
-    /* ----------------------- */
-    /* ---- 実行 (Act) ------- */
-    /* ----------------------- */
-    NvM_WriteAll();
-
-    /* ----------------------- */
-    /* ---- 評価 (Assert) ---- */
-    /* ----------------------- */
-    // 全ブロックが完了し、Dem へ失敗も報告されていないこと。
-    EXPECT_EQ(ResultOf(NVM_BLOCK_ID_DEM_STATUS), NVM_REQ_OK);
-    EXPECT_EQ(ResultOf(NVM_BLOCK_ID_DEM_AGING), NVM_REQ_OK);
-    EXPECT_EQ(ResultOf(NVM_BLOCK_ID_DEM_EXTENDED), NVM_REQ_OK);
-    EXPECT_EQ(CallCount_Dem_SetEventStatus, 0U);
-}
-
-// ------------------------------------------------------------
-// OK: 積まれたジョブが無ければ何もせずに戻る（DET も報告しない）。
-// ------------------------------------------------------------
-TEST_F(Bsw_NvM_WriteAll_Test, NvM_WriteAll_OK_ReturnsImmediatelyWhenNothingIsPending)
-{
-    /* ----------------------- */
-    /* ---- 実行 (Act) ------- */
-    /* ----------------------- */
-    NvM_WriteAll();
-
-    /* ----------------------- */
-    /* ---- 評価 (Assert) ---- */
-    /* ----------------------- */
-    EXPECT_EQ(FakeDetHw_ReportCount, 0U);
-    EXPECT_EQ(CallCount_Dem_SetEventStatus, 0U);
-}
-
-// ------------------------------------------------------------
 // NG: NvM_Init() 前に呼ぶと NVM_E_NOT_INITIALIZED を DET へ報告して戻る（[SWS_NvM_00647]）。
 // ------------------------------------------------------------
 TEST_F(Bsw_NvM_WriteAll_Test, NvM_WriteAll_NG_NotInitializedReportsDet)

@@ -133,6 +133,7 @@ protected:
         canConfig.crystalFreq     = CAN_CRYSTAL_16MHZ;
 
         Can_Init(&canConfig);
+        ASSERT_EQ(Can_Test_GetControllerState(), CAN_CS_STOPPED);  // Can_Init() 直後は STOPPED（Listen-Only）
         CanIf_Init(&kTestCanIfConfig);
         CanSM_Init(NULL);
         ComM_Init(NULL);
@@ -219,6 +220,7 @@ TEST_F(Bsw_NmStack_Wakeup_WakeupValidation_Test, OK)
     // SLEEP → STOPPED (Listen-Only) のみ。FULL_COM へはまだ確定しない
     // （ComM/EcuM へはまだ通知しない）
     EXPECT_EQ(Can_Test_GetControllerState(), CAN_CS_STOPPED);
+    EXPECT_EQ(Return_Can_SetControllerMode, CAN_OK);  // 最後の遷移（WAKEUP）が受理された
     EXPECT_EQ(FakeCanHw_LastMode, CAN_HW_MODE_LISTEN_ONLY);
     EXPECT_EQ(CurrentComMode(), static_cast<ComM_ModeType>(COMM_NO_COMMUNICATION));
     EXPECT_EQ(FakeEcuM_RequestRUNCount, 0U);
@@ -234,6 +236,7 @@ TEST_F(Bsw_NmStack_Wakeup_WakeupValidation_Test, OK)
     /* ---- 評価 (Assert) ---- */
     /* ----------------------- */
     EXPECT_EQ(Can_Test_GetControllerState(), CAN_CS_STARTED);
+    EXPECT_EQ(Return_Can_SetControllerMode, CAN_OK);  // 最後の遷移（START）が受理された
     EXPECT_EQ(FakeCanHw_LastMode, CAN_HW_MODE_NORMAL);
     EXPECT_EQ(CurrentComMode(), static_cast<ComM_ModeType>(COMM_FULL_COMMUNICATION));
     EXPECT_EQ(FakeEcuM_RequestRUNCount, 1U);

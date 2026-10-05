@@ -254,7 +254,7 @@ TEST_F(Bsw_DcmStack_SID31_RoutineControl_Test,
     EnterExtendedSession();
 
     /* ------------------------- */
-    /* ---- 準備 (Act 1) ------- */
+    /* ---- 準備 (Arrange 1) --- */
     /* ------------------------- */
     // 先に start を送っておく（stop の前提）。
     FakeCanHw_RxId  = 0x7E0U;
