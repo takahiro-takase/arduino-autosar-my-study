@@ -185,7 +185,7 @@ TEST_F(Bsw_DcmStack_SID19_SF06_ReadDtcExtendedData_Test,
        OK_MultiFrameResponseReassemblesToExpectedPayload)
 {
     /* ------------------------- */
-    /* ---- 準備 (Act 1) ------- */
+    /* ---- 準備 (Arrange 1) --- */
     /* ------------------------- */
     // DEM_EVENT_ENGINE_OVERHEAT（limit=2、DTC=0x000101）を
     // FAILED 確定させてから、[0x19, 0x06, 0x00,0x01,0x01, recordNumber=0x01]
@@ -289,7 +289,7 @@ TEST_F(Bsw_DcmStack_SID19_SF06_ReadDtcExtendedData_Test,
        OK_RecordNumber0xFFAliasReturnsSameMultiFrameResponse)
 {
     /* ------------------------- */
-    /* ---- 準備 (Act 1) ------- */
+    /* ---- 準備 (Arrange 1) --- */
     /* ------------------------- */
     // DEM_EVENT_ENGINE_OVERHEAT を FAILED 確定させてから、
     // recordNumber=0xFF ([0x19, 0x06, 0x00,0x01,0x01, 0xFF]) を 0x7E0 の

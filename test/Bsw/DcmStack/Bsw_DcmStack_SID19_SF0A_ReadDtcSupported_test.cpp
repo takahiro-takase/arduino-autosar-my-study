@@ -214,7 +214,7 @@ TEST_F(Bsw_DcmStack_SID19_SF0A_ReadDtcSupported_Test,
        OK_MultiFrameResponseReassemblesToExpectedPayload)
 {
     /* ------------------------- */
-    /* ---- 準備 (Act 1) ------- */
+    /* ---- 準備 (Arrange 1) --- */
     /* ------------------------- */
     // [0x19, 0x0A] を 0x7E0 の受信バッファへセットする
     // （SF: 02 19 0A）。

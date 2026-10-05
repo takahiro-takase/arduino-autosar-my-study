@@ -39,6 +39,7 @@ extern "C" {
 #include "Wrap_CanIf.h"
 #include "Wrap_PduR.h"
 #include "Wrap_CanTp.h"
+#include "Wrap_Dem.h"
 }
 
 /* ======================================================================
@@ -220,6 +221,8 @@ TEST_F(Bsw_DcmStack_SID11_EcuReset_Test,
     for (uint8 i = 3U; i < 8U; i++)
         FakeCanHw_RxData[i] = 0U;
     FakeCanHw_RxPendingCount = 1U;
+    // 積まれた NvM ジョブは無い状態で、NvM_WriteAll() が何もせずに戻ることも併せて確認する。
+    WrapDem_Reset();
 
     /* ------------------------- */
     /* ---- 実行 (Act) --------- */
@@ -247,6 +250,8 @@ TEST_F(Bsw_DcmStack_SID11_EcuReset_Test,
      * プロセスを終了させずに戻ってくるため、ここまで到達できる
      * （Fake_Mcu_Hw.h 参照）。 */
     EXPECT_EQ(FakeMcuHw_PerformResetCount, 1U);
+    // 積まれた NvM ジョブが無いので、Dem への報告も発生していないこと。
+    EXPECT_EQ(CallCount_Dem_SetEventStatus, 0U);
 }
 
 // ------------------------------------------------------------
@@ -283,6 +288,39 @@ TEST_F(Bsw_DcmStack_SID11_EcuReset_Test,
     EXPECT_EQ(FakeCanHw_LastSendData[1], 0x51U);
     EXPECT_EQ(FakeCanHw_LastSendData[2], DCM_RESET_SOFT);
 }
+
+// ------------------------------------------------------------
+// OK: bit7 を立てた [0x11, 0x81] は hardReset として受理され、正応答は送信されない
+// （suppressPosRspMsgIndicationBit、[SWS_Dcm_00200]/[SWS_Dcm_00201]）。
+// ------------------------------------------------------------
+TEST_F(Bsw_DcmStack_SID11_EcuReset_Test,
+       OK_SuppressPosRspBitSuppressesPositiveResponse)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // [0x11, 0x81] を 0x7E0 の受信バッファへセットする（SF: 02 11 81）。
+    FakeCanHw_RxId  = 0x7E0U;
+    FakeCanHw_RxDlc = 8U;
+    FakeCanHw_RxData[0] = 2U;
+    FakeCanHw_RxData[1] = DCM_SID_ECU_RESET;
+    FakeCanHw_RxData[2] = (uint8)(0x80U | DCM_RESET_HARD);
+    for (uint8 i = 3U; i < 8U; i++)
+        FakeCanHw_RxData[i] = 0U;
+    FakeCanHw_RxPendingCount = 1U;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Can_MainFunction_Read();
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // 否定応答（NRC 0x12 subFunctionNotSupported）にならず、正応答も送信されないこと。
+    EXPECT_EQ(FakeCanHw_SendCount, 0U);
+}
+
 
 // ------------------------------------------------------------
 // NG: 有効な subFunc に余分な1バイト（[0x11, 0x01, 0x00]、2バイト厳密一致の

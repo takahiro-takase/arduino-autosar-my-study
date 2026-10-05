@@ -264,6 +264,47 @@ TEST_F(Bsw_DcmStack_SID19_SF14_ReadDtcFaultDetectionCounter_Test,
 }
 
 // ------------------------------------------------------------
+// OK: 確定済み（FDC=0x7F）のイベントは応答に含めず、確定前の prefailed のイベントだけを
+// 報告する（FDC が 1〜0x7E の範囲だけが対象）。
+// ------------------------------------------------------------
+TEST_F(Bsw_DcmStack_SID19_SF14_ReadDtcFaultDetectionCounter_Test,
+       OK_ConfirmedEventIsExcludedFromResponse)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // DEM_EVENT_BUTTON_STUCK（limit=1）を FAILED 確定させ、DEM_EVENT_ENGINE_OVERHEAT（limit=2）は
+    // 1 回だけ FAILED 報告して prefailed のままにする。
+    (void)Dem_SetEventStatus(DEM_EVENT_BUTTON_STUCK, DEM_EVENT_STATUS_FAILED);
+    (void)Dem_SetEventStatus(DEM_EVENT_ENGINE_OVERHEAT, DEM_EVENT_STATUS_FAILED);
+    FakeCanHw_RxId  = 0x7E0U;
+    FakeCanHw_RxDlc = 8U;
+    FakeCanHw_RxData[0] = 2U;
+    FakeCanHw_RxData[1] = DCM_SID_READ_DTC_INFO;
+    FakeCanHw_RxData[2] = DCM_DTC_SUBFUNC_REPORT_FDC;
+    FakeCanHw_RxPendingCount = 1U;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Can_MainFunction_Read();
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // 応答は prefailed の ENGINE_OVERHEAT 1 件だけ（Single Frame、ペイロード長=6）。
+    ASSERT_EQ(FakeCanHw_SendCount, 1U);
+    EXPECT_EQ(FakeCanHw_LastSendData[0], 0x06U);  // SF PCI（UDSペイロード長=6）
+    EXPECT_EQ(FakeCanHw_LastSendData[1], 0x59U);
+    EXPECT_EQ(FakeCanHw_LastSendData[2], DCM_DTC_SUBFUNC_REPORT_FDC);
+    EXPECT_EQ(FakeCanHw_LastSendData[3], 0x00U);  // DTC_H
+    EXPECT_EQ(FakeCanHw_LastSendData[4], 0x01U);  // DTC_M
+    EXPECT_EQ(FakeCanHw_LastSendData[5], 0x01U);  // DTC_L（ENGINE_OVERHEAT）
+    EXPECT_EQ(FakeCanHw_LastSendData[6], 63U);    // FaultDetectionCounter
+}
+
+
+// ------------------------------------------------------------
 // NG: 余分な1バイト（[0x19, 0x14, 0x00]、3バイト。udsLen!=2 のため）は
 // incorrectMessageLength (NRC 0x13) になり、それも同じ経路で Can_Hw まで
 // 届くことを確認する（OK と同じファイルに同居させる方針、

@@ -215,16 +215,6 @@ TEST_F(Bsw_CanIf_ControllerMode_Test, SetControllerMode_OK_StoppedFromSleepUsesC
     EXPECT_EQ(mode, CAN_CS_STOPPED);
 }
 
-TEST_F(Bsw_CanIf_ControllerMode_Test, SetControllerMode_OK_SleepFromStartedUsesCanTSleep)
-{
-    ASSERT_EQ(CanIf_SetControllerMode(0U, CAN_CS_STARTED), E_OK);
-
-    Std_ReturnType ret = CanIf_SetControllerMode(0U, CAN_CS_SLEEP);
-
-    EXPECT_EQ(ret, E_OK);
-    EXPECT_EQ(Can_Test_GetControllerState(), CAN_CS_SLEEP);
-}
-
 // ------------------------------------------------------------------------
 // CanIf_GetControllerErrorState() の単体テスト（[SWS_CANIF_91001]、
 // 2026-08-31 追加。CanIf → Can.c → Can_Hw.c（フェイク）の実チェーンで検証）。

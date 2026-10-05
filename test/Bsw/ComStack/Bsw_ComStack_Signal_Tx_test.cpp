@@ -434,6 +434,7 @@ TEST_F(Bsw_ComStack_Signal_Tx_SendToConfirm_Test, OK)
     /* ---- 評価 (Assert) ---- */
     /* ----------------------- */
     EXPECT_EQ(Com_Test_GetTxPending(0U), 0U);  // 送信要求が消費された
+    EXPECT_EQ(Return_Can_Write, CAN_OK);       // Can_Write() が CAN_OK を返した
     EXPECT_EQ(FakeCanHw_SendCount, 1U);
     EXPECT_EQ(FakeCanHw_LastSendId, 0x100U);   // CanIf_TxPduConfigType.CanId
     EXPECT_EQ(FakeCanHw_LastSendDlc, 2U);
@@ -550,6 +551,7 @@ TEST_F(Bsw_ComStack_Signal_Tx_SendToConfirm_Test, NG_Step02_CanWrite_Busy)
     /* ----------------------- */
     /* ---- 評価 (Assert) ---- */
     /* ----------------------- */
+    EXPECT_EQ(Return_Can_Write, CAN_BUSY);     // Can_Write() が CAN_BUSY を返した
     EXPECT_EQ(FakeCanHw_SendCount, 0U);
     EXPECT_EQ(CallCount_CanIf_TxConfirmation, 0U);
     EXPECT_EQ(CallCount_Com_TxConfirmation, 0U);

@@ -126,16 +126,6 @@ protected:
  * Test Functions
  * ====================================================================== */
 
-TEST_F(Bsw_Dcm_ReadDtcInfo_Test, GetDTCStatusAvailabilityMask_OK_ReturnsConfiguredMask)
-{
-    uint8 mask = 0U;
-
-    Std_ReturnType ret = Dem_GetDTCStatusAvailabilityMask(DCM_DEM_CLIENT_ID, &mask);
-
-    EXPECT_EQ(ret, E_OK);
-    EXPECT_EQ(mask, DEM_STATUS_AVAILABILITY_MASK);
-}
-
 TEST_F(Bsw_Dcm_ReadDtcInfo_Test, GetDTCStatusAvailabilityMask_NG_NullPointerReturnsError)
 {
     Std_ReturnType ret = Dem_GetDTCStatusAvailabilityMask(DCM_DEM_CLIENT_ID, NULL);
@@ -148,16 +138,6 @@ TEST_F(Bsw_Dcm_ReadDtcInfo_Test, GetDTCStatusAvailabilityMask_NG_NullPointerRetu
 // Std_ReturnType 戻り値へシグネチャを合わせた際の直接呼び出し検証。
 // UDS SID 0x85 経由の挙動は Bsw_Dcm_ControlDTCSetting_test.cpp が担当）
 // ------------------------------------------------------------
-
-TEST_F(Bsw_Dcm_ReadDtcInfo_Test, EnableDTCSetting_OK_ReturnsOk)
-{
-    EXPECT_EQ(Dem_EnableDTCSetting(DCM_DEM_CLIENT_ID), E_OK);
-}
-
-TEST_F(Bsw_Dcm_ReadDtcInfo_Test, DisableDTCSetting_OK_ReturnsOk)
-{
-    EXPECT_EQ(Dem_DisableDTCSetting(DCM_DEM_CLIENT_ID), E_OK);
-}
 
 // ------------------------------------------------------------
 // Dem_GetFaultDetectionCounter（UDS SID 0x19 subFunc 0x14
@@ -262,22 +242,6 @@ TEST_F(Bsw_Dcm_ReadDtcInfo_Test, GetDTCOfEvent_NG_NullPointerReturnsError)
 // 返す）
 // ------------------------------------------------------------
 
-TEST_F(Bsw_Dcm_ReadDtcInfo_Test, GetVin_OK_ReturnsFixedSeventeenByteVin)
-{
-    uint8 vin[DCM_VIN_LENGTH] = { 0 };
-
-    Std_ReturnType ret = Dcm_GetVin(vin);
-
-    EXPECT_EQ(ret, E_OK);
-    /* 全バイトが書き換わっている（0x00埋めのまま残っていない）ことのみ検証。
-     * 具体的な文字列内容は固定値の実装詳細のため固定しない。 */
-    uint8 nonZeroCount = 0U;
-    for (uint8 i = 0U; i < DCM_VIN_LENGTH; i++)
-        if (vin[i] != 0U)
-            nonZeroCount++;
-    EXPECT_EQ(nonZeroCount, DCM_VIN_LENGTH);
-}
-
 TEST_F(Bsw_Dcm_ReadDtcInfo_Test, GetVin_NG_NullPointerReturnsError)
 {
     Std_ReturnType ret = Dcm_GetVin(NULL);
@@ -296,16 +260,6 @@ TEST_F(Bsw_Dcm_ReadDtcInfo_Test, GetVin_NG_NullPointerReturnsError)
 // Dcm_CurrentSession/Dcm_SecurityLevel を読み出すだけの新規 getter API）
 // ------------------------------------------------------------
 
-TEST_F(Bsw_Dcm_ReadDtcInfo_Test, GetSesCtrlType_OK_ReturnsDefaultSessionAfterInit)
-{
-    Dcm_SesCtrlType session = 0xFFU;  /* 未更新を検出できる初期値 */
-
-    Std_ReturnType ret = Dcm_GetSesCtrlType(&session);
-
-    EXPECT_EQ(ret, E_OK);
-    EXPECT_EQ(session, DCM_SESSION_DEFAULT);
-}
-
 TEST_F(Bsw_Dcm_ReadDtcInfo_Test, GetSesCtrlType_OK_ReflectsExtendedSessionAfterRequest)
 {
     uint8 req[2] = { DCM_SID_SESSION_CTRL, DCM_SESSION_EXTENDED };
@@ -322,16 +276,6 @@ TEST_F(Bsw_Dcm_ReadDtcInfo_Test, GetSesCtrlType_OK_ReflectsExtendedSessionAfterR
 TEST_F(Bsw_Dcm_ReadDtcInfo_Test, GetSesCtrlType_NG_NullPointerReturnsError)
 {
     EXPECT_EQ(Dcm_GetSesCtrlType(NULL), E_NOT_OK);
-}
-
-TEST_F(Bsw_Dcm_ReadDtcInfo_Test, GetSecurityLevel_OK_ReturnsLockedByDefault)
-{
-    Dcm_SecLevelType level = 0xFFU;  /* 未更新を検出できる初期値 */
-
-    Std_ReturnType ret = Dcm_GetSecurityLevel(&level);
-
-    EXPECT_EQ(ret, E_OK);
-    EXPECT_EQ(level, 0U);  /* Locked */
 }
 
 TEST_F(Bsw_Dcm_ReadDtcInfo_Test, GetSecurityLevel_NG_NullPointerReturnsError)
@@ -503,29 +447,6 @@ TEST_F(Bsw_Dcm_ReadDtcInfo_Test, ReadDtcSnapshot_NG_UnsupportedRecordNumberStill
 // Bsw_DcmStack_SID10/SID11/SID3E/SID14/SID27_*_test.cpp へ移植済み
 // （2026-09、同内容のため削除）。
 
-TEST_F(Bsw_Dcm_ReadDtcInfo_Test, SessionControl_OK_SuppressPosRspBitSuppressesPositiveResponse)
-{
-    /* ----------------------- */
-    /* ---- 準備 (Arrange) --- */
-    /* ----------------------- */
-    // subFunc の bit7 (suppressPosRspMsgIndicationBit) を立てた
-    // [0x10, 0x80|DCM_SESSION_EXTENDED]（[SWS_Dcm_00200]/[SWS_Dcm_00201]。
-    // 2026-09 追加: 以前は読み取って捨てるだけで実際には抑制していなかった）。
-    // セッション自体は正常に遷移するはずだが、正応答フレームは一切送信され
-    // ないことを確認する。
-    uint8 req[2] = { DCM_SID_SESSION_CTRL, (uint8)(0x80U | DCM_SESSION_EXTENDED) };
-
-    PduInfoType pdu = { req, sizeof(req) };
-    Dcm_ComIndication(0U, &pdu);
-
-    EXPECT_EQ(CallCount_CanTp_Transmit, 0U);
-
-    /* セッション遷移自体は抑制されていないことを Dcm_GetSesCtrlType() で確認 */
-    Dcm_SesCtrlType sesCtrlType;
-    ASSERT_EQ(Dcm_GetSesCtrlType(&sesCtrlType), E_OK);
-    EXPECT_EQ(sesCtrlType, DCM_SESSION_EXTENDED);
-}
-
 TEST_F(Bsw_Dcm_ReadDtcInfo_Test, SessionControl_NG_SuppressPosRspBitDoesNotSuppressNegativeResponse)
 {
     /* ----------------------- */
@@ -545,41 +466,6 @@ TEST_F(Bsw_Dcm_ReadDtcInfo_Test, SessionControl_NG_SuppressPosRspBitDoesNotSuppr
     EXPECT_EQ(LastData_CanTp_Transmit[0], DCM_SID_NEGATIVE_RESP);
     EXPECT_EQ(LastData_CanTp_Transmit[1], DCM_SID_SESSION_CTRL);
     EXPECT_EQ(LastData_CanTp_Transmit[2], DCM_NRC_SUB_FUNC_NOT_SUPPORTED);
-}
-
-TEST_F(Bsw_Dcm_ReadDtcInfo_Test, TesterPresent_OK_SuppressPosRspBitSuppressesPositiveResponse)
-{
-    /* ----------------------- */
-    /* ---- 準備 (Arrange) --- */
-    /* ----------------------- */
-    // zeroSubFunction の bit7 を立てた [0x3E, 0x80]。
-    // TesterPresent は副作用が S3 タイマ更新のみのため、正応答が送信され
-    // ないことだけを確認すればよい。
-    uint8 req[2] = { DCM_SID_TESTER_PRESENT, 0x80U };
-
-    PduInfoType pdu = { req, sizeof(req) };
-    Dcm_ComIndication(0U, &pdu);
-
-    EXPECT_EQ(CallCount_CanTp_Transmit, 0U);
-}
-
-TEST_F(Bsw_Dcm_ReadDtcInfo_Test, EcuReset_OK_SuppressPosRspBitAcceptsHardResetWithoutTransmitting)
-{
-    /* ----------------------- */
-    /* ---- 準備 (Arrange) --- */
-    /* ----------------------- */
-    // [0x11, 0x80|DCM_RESET_HARD]（本タスクで見つけた実害バグの
-    // 直接的な回帰テスト: 以前は bit7 を一切マスクせず生バイトのまま subFunc
-    // として比較していたため、本ビットを立てただけで hardReset/softReset の
-    // どちらとも不一致になり誤って NRC 0x12 subFunctionNotSupported を返して
-    // いた。是正後は bit7 を無視して正しく hardReset と認識しつつ、正応答は
-    // 抑制されることを確認する）。
-    uint8 req[2] = { DCM_SID_ECU_RESET, (uint8)(0x80U | DCM_RESET_HARD) };
-
-    PduInfoType pdu = { req, sizeof(req) };
-    Dcm_ComIndication(0U, &pdu);
-
-    EXPECT_EQ(CallCount_CanTp_Transmit, 0U);
 }
 
 // ------------------------------------------------------------

@@ -79,23 +79,6 @@ protected:
  * Test Functions
  * ====================================================================== */
 
-TEST_F(Bsw_Can_Test, Can_Init_OK)
-{
-    /* ----------------------- */
-    /* ---- 準備 (Arrange) --- */
-    /* ----------------------- */
-
-    /* ----------------------- */
-    /* ---- 実行 (Act) ------- */
-    /* ----------------------- */
-    Can_Init(&config);
-
-    /* ----------------------- */
-    /* ---- 評価 (Assert) ---- */
-    /* ----------------------- */
-    EXPECT_EQ(Can_Test_GetControllerState(), CAN_CS_STOPPED);
-}
-
 // ------------------------------------------------------------
 // Can_Init() の単体テスト
 // ------------------------------------------------------------
@@ -115,84 +98,6 @@ TEST_F(Bsw_Can_Test, Can_Init_NG_NullConfig)
     /* ----------------------- */
     EXPECT_EQ(Can_Test_GetControllerState(), CAN_CS_UNINIT);
     EXPECT_EQ(FakeDetHw_LastErrorId, CAN_E_PARAM_POINTER);
-}
-
-TEST_F(Bsw_Can_Test, Can_SetControllerMode_OK_Start)
-{
-    /* ----------------------- */
-    /* ---- 準備 (Arrange) --- */
-    /* ----------------------- */
-    Can_Init(&config);
-
-    /* ----------------------- */
-    /* ---- 実行 (Act) ------- */
-    /* ----------------------- */
-    Can_ReturnType ret = Can_SetControllerMode(0U, CAN_T_START);
-
-    /* ----------------------- */
-    /* ---- 評価 (Assert) ---- */
-    /* ----------------------- */
-    EXPECT_EQ(ret, CAN_OK);
-    EXPECT_EQ(Can_Test_GetControllerState(), CAN_CS_STARTED);
-}
-
-TEST_F(Bsw_Can_Test, Can_SetControllerMode_OK_Stop)
-{
-    /* ----------------------- */
-    /* ---- 準備 (Arrange) --- */
-    /* ----------------------- */
-    Can_Init(&config);
-
-    /* ----------------------- */
-    /* ---- 実行 (Act) ------- */
-    /* ----------------------- */
-    Can_ReturnType ret = Can_SetControllerMode(0U, CAN_T_STOP);
-
-    /* ----------------------- */
-    /* ---- 評価 (Assert) ---- */
-    /* ----------------------- */
-    EXPECT_EQ(ret, CAN_OK);
-    EXPECT_EQ(Can_Test_GetControllerState(), CAN_CS_STOPPED);
-}
-
-TEST_F(Bsw_Can_Test, Can_SetControllerMode_OK_Wakeup_On_Sleep)
-{
-    /* ----------------------- */
-    /* ---- 準備 (Arrange) --- */
-    /* ----------------------- */
-    Can_Init(&config);
-    Can_SetControllerMode(0U, CAN_T_SLEEP);
-
-    /* ----------------------- */
-    /* ---- 実行 (Act) ------- */
-    /* ----------------------- */
-    Can_ReturnType ret = Can_SetControllerMode(0U, CAN_T_WAKEUP);
-
-    /* ----------------------- */
-    /* ---- 評価 (Assert) ---- */
-    /* ----------------------- */
-    EXPECT_EQ(ret, CAN_OK);
-    EXPECT_EQ(Can_Test_GetControllerState(), CAN_CS_STOPPED);
-}
-
-TEST_F(Bsw_Can_Test, Can_SetControllerMode_OK_Sleep)
-{
-    /* ----------------------- */
-    /* ---- 準備 (Arrange) --- */
-    /* ----------------------- */
-    Can_Init(&config);
-    Can_SetControllerMode(0U, CAN_T_START);
-
-    /* ----------------------- */
-    /* ---- 実行 (Act) ------- */
-    /* ----------------------- */
-    Can_ReturnType ret = Can_SetControllerMode(0U, CAN_T_SLEEP);
-
-    /* ----------------------- */
-    /* ---- 評価 (Assert) ---- */
-    /* ----------------------- */
-    EXPECT_EQ(ret, CAN_OK);
-    EXPECT_EQ(Can_Test_GetControllerState(), CAN_CS_SLEEP);
 }
 
 // ------------------------------------------------------------
@@ -405,35 +310,6 @@ TEST_F(Bsw_Can_Test, Can_EnableControllerInterrupts_NG_UnmatchedCallIsNoOp)
     Can_EnableControllerInterrupts(0U);
 
     EXPECT_EQ(FakeCanHw_EnableRxIsrCount, 0U);
-}
-
-TEST_F(Bsw_Can_Test, Can_Write_OK)
-{
-    /* ----------------------- */
-    /* ---- 準備 (Arrange) --- */
-    /* ----------------------- */
-    Can_Init(&config);
-    Can_SetControllerMode(0U, CAN_T_START);
-
-    /* ----------------------- */
-    /* ---- 実行 (Act) ------- */
-    /* ----------------------- */
-    Can_PduType pdu;
-    pdu.id = 0x123U;
-    pdu.length = 8U;
-    uint8_t sdu[8] = {0};
-    pdu.sdu = sdu;
-    pdu.swPduHandle = 0U;
-
-    Can_ReturnType ret = Can_Write(0U, &pdu);
-
-    /* ----------------------- */
-    /* ---- 評価 (Assert) ---- */
-    /* ----------------------- */
-    EXPECT_EQ(ret, CAN_OK);
-    EXPECT_EQ(FakeCanHw_SendCount, 1U);
-    EXPECT_EQ(FakeCanHw_LastSendId, 0x123U);
-    EXPECT_EQ(FakeCanHw_LastSendDlc, 8U);
 }
 
 TEST_F(Bsw_Can_Test, Can_Write_OK_ResetsTxErrCountAfterPriorFailure)

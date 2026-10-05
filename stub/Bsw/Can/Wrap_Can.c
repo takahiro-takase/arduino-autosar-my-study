@@ -51,6 +51,9 @@ Can_ReturnType ForcedReturn_Can_SetControllerMode       = CAN_NOT_OK;
 Std_ReturnType ForcedReturn_Can_GetControllerErrorState = E_NOT_OK;
 Can_ReturnType ForcedReturn_Can_Write                   = CAN_NOT_OK;
 
+Can_ReturnType Return_Can_Write                         = CAN_NOT_OK;
+Can_ReturnType Return_Can_SetControllerMode             = CAN_NOT_OK;
+
 /* ----------------------------------------------------------------------
  * WrapCan_Reset — 11関数すべての状態を一括で初期化する（Wrap_Can.h 参照）。
  * ---------------------------------------------------------------------- */
@@ -76,6 +79,9 @@ void WrapCan_Reset(void)
     ForcedReturn_Can_SetControllerMode       = CAN_NOT_OK;
     ForcedReturn_Can_GetControllerErrorState = E_NOT_OK;
     ForcedReturn_Can_Write                   = CAN_NOT_OK;
+
+    Return_Can_Write                         = CAN_NOT_OK;
+    Return_Can_SetControllerMode             = CAN_NOT_OK;
 }
 
 /* ======================================================================
@@ -141,10 +147,13 @@ Can_ReturnType __wrap_Can_SetControllerMode(uint8 Controller, Can_StateTransitio
 
     if (CallCount_Can_SetControllerMode >= FailFromCallCount_Can_SetControllerMode)
     {
-        return ForcedReturn_Can_SetControllerMode;
+        Return_Can_SetControllerMode = ForcedReturn_Can_SetControllerMode;
     }
-
-    return __real_Can_SetControllerMode(Controller, Transition);
+    else
+    {
+        Return_Can_SetControllerMode = __real_Can_SetControllerMode(Controller, Transition);
+    }
+    return Return_Can_SetControllerMode;
 }
 
 /* ----------------------------------------------------------------------
@@ -194,10 +203,13 @@ Can_ReturnType __wrap_Can_Write(Can_HwHandleType Hth, const Can_PduType* PduInfo
 
     if (CallCount_Can_Write >= FailFromCallCount_Can_Write)
     {
-        return ForcedReturn_Can_Write;
+        Return_Can_Write = ForcedReturn_Can_Write;
     }
-
-    return __real_Can_Write(Hth, PduInfo);
+    else
+    {
+        Return_Can_Write = __real_Can_Write(Hth, PduInfo);
+    }
+    return Return_Can_Write;
 }
 
 /* ======================================================================
