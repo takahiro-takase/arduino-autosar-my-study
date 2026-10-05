@@ -163,6 +163,9 @@ const CanIf_ConfigType kTestCanIfConfigWithNmTx = {
  * Test Fixture
  * ====================================================================== */
 
+/* ComM / CanSM / CanNm / Nm / Can のスリープ協調（ボランタリスリープ、Bus-Off、通信許可など）のコールチェーンのテストで共通のフィクスチャ（シナリオごとの派生クラスの基底）。
+ * SetUp(): 模擬 Can_Hw・EcuM と wrap をリセットし、Dem_Init(NULL)・Can_Init()・CanIf_Init(&kTestCanIfConfig)・CanSM_Init(NULL)・ComM_Init(NULL)（通信を許可）・CanNm_Init(NULL)・Nm_Init(NULL) の順に初期化する（Init 中の DET ログは抑制する）。ArrangeFullCom() は、FULL_COM を要求して CanNm を Normal Operation State まで進める補助関数。
+ * TearDown(): CanNm・ComM・CanSM・CanIf を未初期化へ戻す。 */
 class Bsw_NmStack_SleepCoordination_Base : public ::testing::Test
 {
 protected:
@@ -276,10 +279,15 @@ protected:
 };
 
 // シナリオごとのフィクスチャ（共通の準備は Bsw_NmStack_SleepCoordination_Base）
+/* ボランタリスリープ（NO_COM の要求）で、物理スリープを Nm の Bus-Sleep Mode 到達まで遅らせる協調。 */
 class Bsw_NmStack_SleepCoordination_VoluntarySleep_Test : public Bsw_NmStack_SleepCoordination_Base {};
+/* スリープに向かう途中での、FULL_COM の再要求や受信による復帰。 */
 class Bsw_NmStack_SleepCoordination_ReRequestFullCom_Test : public Bsw_NmStack_SleepCoordination_Base {};
+/* Dcm の ActiveDiagnostic / InactiveDiagnostic による、FULL_COM の維持と解除。 */
 class Bsw_NmStack_SleepCoordination_DcmDiagnostic_Test : public Bsw_NmStack_SleepCoordination_Base {};
+/* スリープ協調の途中で起きる Bus-Off と、その回復。 */
 class Bsw_NmStack_SleepCoordination_BusOff_Test : public Bsw_NmStack_SleepCoordination_Base {};
+/* ComM_CommunicationAllowed による、FULL_COM 要求の保留と実行。 */
 class Bsw_NmStack_SleepCoordination_CommunicationAllowed_Test : public Bsw_NmStack_SleepCoordination_Base {};
 
 /* ======================================================================

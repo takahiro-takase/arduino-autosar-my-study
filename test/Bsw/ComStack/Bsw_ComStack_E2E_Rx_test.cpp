@@ -140,6 +140,9 @@ const E2E_P05ConfigType kRefEngineInfoCfg = {
  * Test Fixture
  * ====================================================================== */
 
+/* E2E Profile05 の受信チェック（Com_RxIndication → E2E Transformer → E2E_P05Check）のコールチェーンのテスト用フィクスチャ。
+ * SetUp(): Com_Init(&kTestComConfig) と E2EXf_PBCfg_Init() を呼び、E2E の受信結果を受けるコールバックの記録（呼び出し回数、直近のチェック結果）を初期化する（Init 中の DET ログは抑制する）。BuildFrame() は、Profile05 で保護した 7 バイトのフレームを作る補助関数。
+ * TearDown(): E2EXf_DeInit() と Com_DeInit() で未初期化へ戻す。 */
 class Bsw_ComStack_E2E_Rx_Check_Test : public ::testing::Test
 {
 protected:

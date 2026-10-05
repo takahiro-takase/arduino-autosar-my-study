@@ -126,6 +126,9 @@ const PduR_PBConfigType kTestPduRConfig = {
  * Test Fixture
  * ====================================================================== */
 
+/* SID 0x11 ECUReset が、リセット前に NvM の積まれた書き込みを完了させること（NvM_WriteAll()）のコールチェーンのテスト用フィクスチャ。
+ * SetUp(): 模擬 Can_Hw・模擬 Mcu_Hw と wrap をリセットし、Can_Init() → CanIf_Init(&kTestCanIfConfig)（STARTED・ONLINE）→ PduR_Init() → CanSM_Init(NULL) → CanTp_Init(NULL) → MemIf_Init() → NvM_Init(NULL) → Dem_Init(NULL) → Mcu_Init() → Dcm_Init(NULL) の順に初期化し、最後に NvM_WriteAll() で初期化時の書き込みを済ませて、各テストを「積まれた書き込みが無い」状態から始める。ResultOf() は、ブロックの要求結果を取得する補助関数。
+ * TearDown(): NvM を未初期化の状態へ戻し、CanSM_DeInit() と CanIf_DeInit() で戻す。 */
 class Bsw_DcmStack_SID11_EcuResetFlushesNvm_Test : public ::testing::Test
 {
 protected:
