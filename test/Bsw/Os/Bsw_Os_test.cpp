@@ -145,20 +145,28 @@ TEST_F(OsTest, GetCounterValue_OK_ContinuesFromMillisAtOsInit)
     FakeMillis_Value = 5000UL;
     TickType before = 0U;
 
-    /* ----------------------------------- */
-    /* ---- 実行 + 評価 (Act + Assert) --- */
-    /* ----------------------------------- */
-    ASSERT_EQ(E_OK, GetCounterValue(SYSTEM_COUNTER, &before));
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Std_ReturnType retBefore = GetCounterValue(SYSTEM_COUNTER, &before);
 
     StartOs();
 
     TickType afterInit = 0U;
-    ASSERT_EQ(E_OK, GetCounterValue(SYSTEM_COUNTER, &afterInit));
-    EXPECT_EQ(before, afterInit);
+    Std_ReturnType retAfterInit = GetCounterValue(SYSTEM_COUNTER, &afterInit);
 
     TickGpt(300U);
     TickType later = 0U;
-    ASSERT_EQ(E_OK, GetCounterValue(SYSTEM_COUNTER, &later));
+    Std_ReturnType retLater = GetCounterValue(SYSTEM_COUNTER, &later);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    ASSERT_EQ(E_OK, retBefore);
+    ASSERT_EQ(E_OK, retAfterInit);
+    EXPECT_EQ(before, afterInit);
+
+    ASSERT_EQ(E_OK, retLater);
     EXPECT_EQ(5300U, later);
 }
 
@@ -174,11 +182,10 @@ TEST_F(OsTest, GetCounterValue_OK_ContinuousAcrossMillisFallback)
     FakeMillis_Value += 100UL;
     TickType beforeFallback = 0U;
 
-    /* ----------------------------------- */
-    /* ---- 実行 + 評価 (Act + Assert) --- */
-    /* ----------------------------------- */
-    ASSERT_EQ(E_OK, GetCounterValue(SYSTEM_COUNTER, &beforeFallback));
-    EXPECT_EQ(8100U, beforeFallback);
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Std_ReturnType retBefore = GetCounterValue(SYSTEM_COUNTER, &beforeFallback);
 
     /* Gpt tick が止まったまま millis() だけが進む（OS_TICK_CROSSCHECK_PERIOD_MS 超）。
      * Os_SchedulerStep() のクロスチェックが millis() へフォールバックする。 */
@@ -186,12 +193,22 @@ TEST_F(OsTest, GetCounterValue_OK_ContinuousAcrossMillisFallback)
     Os_SchedulerStep();
 
     TickType afterFallback = 0U;
-    ASSERT_EQ(E_OK, GetCounterValue(SYSTEM_COUNTER, &afterFallback));
-    EXPECT_EQ(beforeFallback, afterFallback);
+    Std_ReturnType retAfter = GetCounterValue(SYSTEM_COUNTER, &afterFallback);
 
     FakeMillis_Value += 250UL;
     TickType later = 0U;
-    ASSERT_EQ(E_OK, GetCounterValue(SYSTEM_COUNTER, &later));
+    Std_ReturnType retLater = GetCounterValue(SYSTEM_COUNTER, &later);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    ASSERT_EQ(E_OK, retBefore);
+    EXPECT_EQ(8100U, beforeFallback);
+
+    ASSERT_EQ(E_OK, retAfter);
+    EXPECT_EQ(beforeFallback, afterFallback);
+
+    ASSERT_EQ(E_OK, retLater);
     EXPECT_EQ(afterFallback + 250U, later);
 }
 
@@ -248,17 +265,28 @@ TEST_F(OsTest, GetElapsedValue_OK_ReturnsDifferenceAndUpdatesValue)
     FakeMillis_Value = 1450UL;
     TickType elapsed = 0U;
 
-    /* ----------------------------------- */
-    /* ---- 実行 + 評価 (Act + Assert) --- */
-    /* ----------------------------------- */
-    EXPECT_EQ(E_OK, GetElapsedValue(SYSTEM_COUNTER, &prev, &elapsed));
-    EXPECT_EQ(450U, elapsed);
-    EXPECT_EQ(1450U, prev);
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Std_ReturnType retFirst = GetElapsedValue(SYSTEM_COUNTER, &prev, &elapsed);
+    TickType elapsedFirst = elapsed;
+    TickType prevFirst    = prev;
 
     FakeMillis_Value = 1500UL;
-    EXPECT_EQ(E_OK, GetElapsedValue(SYSTEM_COUNTER, &prev, &elapsed));
-    EXPECT_EQ(50U, elapsed);
-    EXPECT_EQ(1500U, prev);
+    Std_ReturnType retSecond = GetElapsedValue(SYSTEM_COUNTER, &prev, &elapsed);
+    TickType elapsedSecond = elapsed;
+    TickType prevSecond    = prev;
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(E_OK, retFirst);
+    EXPECT_EQ(450U, elapsedFirst);
+    EXPECT_EQ(1450U, prevFirst);
+
+    EXPECT_EQ(E_OK, retSecond);
+    EXPECT_EQ(50U, elapsedSecond);
+    EXPECT_EQ(1500U, prevSecond);
 }
 
 TEST_F(OsTest, GetElapsedValue_OK_CorrectAcrossWrapAround)

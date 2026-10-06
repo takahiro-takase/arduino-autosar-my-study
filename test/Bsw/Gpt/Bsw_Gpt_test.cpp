@@ -158,14 +158,21 @@ TEST_F(GptTest, Gpt_ApiCalls_NG_BeforeInitReportUninit)
     /* ----------------------- */
     // なし（Gpt_Init() を呼ばない未初期化の状態）
 
-    /* ----------------------------------- */
-    /* ---- 実行 + 評価 (Act + Assert) --- */
-    /* ----------------------------------- */
-    EXPECT_EQ(Gpt_GetTimeElapsed(GPT_CHANNEL_0), 0U);
-    EXPECT_EQ(FakeDetHw_LastErrorId, GPT_E_UNINIT);
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Gpt_ValueType elapsed = Gpt_GetTimeElapsed(GPT_CHANNEL_0);
+    uint8 errAfterGet = FakeDetHw_LastErrorId;
 
     Gpt_StartTimer(GPT_CHANNEL_0, 1000U);
-    EXPECT_EQ(FakeDetHw_LastErrorId, GPT_E_UNINIT);
+    uint8 errAfterStart = FakeDetHw_LastErrorId;
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(elapsed, 0U);
+    EXPECT_EQ(errAfterGet, GPT_E_UNINIT);
+    EXPECT_EQ(errAfterStart, GPT_E_UNINIT);
 }
 
 TEST_F(GptTest, Gpt_StartTimer_OK_SucceedsAndDelegatesToHw)

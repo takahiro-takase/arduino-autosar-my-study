@@ -428,8 +428,8 @@ TEST_F(Bsw_ComStack_Signal_Tx_SendToConfirm_Test, OK)
 
     // step01: Com_SendSignal()
     uint16_t value = 0x1234U;
-    Com_SendSignal(0U, &value);
-    ASSERT_EQ(Return_Com_SendSignal, E_OK);  // Com_SendSignal() が E_OK を返した
+    uint8 retSend = Com_SendSignal(0U, &value);
+    ASSERT_EQ(retSend, E_OK);  // Com_SendSignal() が E_OK を返した
     ASSERT_EQ(Com_Test_GetTxPending(0U), 1U);
 
     // step02: Com → PduR → CanIf → Can_Write → HW 送信
@@ -548,8 +548,8 @@ TEST_F(Bsw_ComStack_Signal_Tx_SendToConfirm_Test, NG_Step02_CanWrite_Busy)
 
     // step01: Com_SendSignal()
     uint16_t value = 0x1234U;
-    Com_SendSignal(0U, &value);
-    ASSERT_EQ(Return_Com_SendSignal, E_OK);  // Com_SendSignal() が E_OK を返した
+    uint8 retSend = Com_SendSignal(0U, &value);
+    ASSERT_EQ(retSend, E_OK);  // Com_SendSignal() が E_OK を返した
     ASSERT_EQ(Com_Test_GetTxPending(0U), 1U);
 
     // step02: Com → PduR → CanIf → Can_Write → HW 送信
@@ -576,8 +576,12 @@ TEST_F(Bsw_ComStack_Signal_Tx_SendToConfirm_Test, NG_Step02_CanWrite_Busy)
  *   保留中の送信確認を CanIf → PduR → Com へ戻す
  * ---------------------------------------------------------------------- */
 
-/* 未実装（CanIf_TxConfirmation() は上位層へ常に E_OK で通知するため、
- * 通しの流れで到達できる NG が現状ない） */
+/* NG ケースなし。CanIf_TxConfirmation() は上位層へ常に E_OK で通知するため、
+ * 通しの流れでは確認が失敗として届かない。また、この通しの流れが使う
+ * I-PDU（IPduId=0）は I-PDU Group に属さず停止できないため、
+ * [SWS_Com_00800]（停止中の I-PDU への確認は無視）も通しでは再現できない。
+ * 後者は Bsw_ComStack_SignalGroup_Tx_test.cpp の
+ * NG_Step01_ComTxConfirmation_IpduGroupStopped で検証している。 */
 
 
 // ------------------------------------------------------------
@@ -591,30 +595,48 @@ TEST_F(Bsw_ComStack_Signal_Tx_Repetition_Test, OK_FiresConfiguredNumberOfRepeats
     uint16_t value = 0x1234U;
     Com_SendSignal(0U, &value);
 
-    /* ----------------------------------- */
-    /* ---- 実行 + 評価 (Act + Assert) --- */
-    /* ----------------------------------- */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     // 初回送信
     Com_MainFunctionTx();
-    EXPECT_EQ(FakeCanHw_SendCount, 1U);
-    EXPECT_EQ(Com_Test_GetTxRepeatsRemaining(0U), 2U);  // 初回はまだ減らない
+    uint32 sendCount0 = FakeCanHw_SendCount;
+    uint8  remaining0 = Com_Test_GetTxRepeatsRemaining(0U);
 
     /* 1 回目の再送（RepetitionPeriodMs=50 経過後） */
     FakeMillis_Value += 50U;
     Com_MainFunctionTx();
-    EXPECT_EQ(FakeCanHw_SendCount, 2U);
-    EXPECT_EQ(Com_Test_GetTxRepeatsRemaining(0U), 1U);
+    uint32 sendCount1 = FakeCanHw_SendCount;
+    uint8  remaining1 = Com_Test_GetTxRepeatsRemaining(0U);
 
     /* 2 回目の再送（NumberOfRepetitions=2 を使い切る） */
     FakeMillis_Value += 50U;
     Com_MainFunctionTx();
-    EXPECT_EQ(FakeCanHw_SendCount, 3U);
-    EXPECT_EQ(Com_Test_GetTxRepeatsRemaining(0U), 0U);
+    uint32 sendCount2 = FakeCanHw_SendCount;
+    uint8  remaining2 = Com_Test_GetTxRepeatsRemaining(0U);
 
     /* 再送を使い切った後は、さらに周期が経過しても送信されない */
     FakeMillis_Value += 50U;
     Com_MainFunctionTx();
-    EXPECT_EQ(FakeCanHw_SendCount, 3U);
+    uint32 sendCount3 = FakeCanHw_SendCount;
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // 初回送信
+    EXPECT_EQ(sendCount0, 1U);
+    EXPECT_EQ(remaining0, 2U);  // 初回はまだ減らない
+
+    // 1 回目の再送
+    EXPECT_EQ(sendCount1, 2U);
+    EXPECT_EQ(remaining1, 1U);
+
+    // 2 回目の再送
+    EXPECT_EQ(sendCount2, 3U);
+    EXPECT_EQ(remaining2, 0U);
+
+    // 再送を使い切った後は送信されない
+    EXPECT_EQ(sendCount3, 3U);
 }
 
 
@@ -659,23 +681,34 @@ TEST_F(Bsw_ComStack_Signal_Tx_Repetition_Test, OK_InitialSendDoesNotConsumeRepea
     uint16_t value = 0x1234U;
     Com_SendSignal(0U, &value);
 
-    /* ----------------------------------- */
-    /* ---- 実行 + 評価 (Act + Assert) --- */
-    /* ----------------------------------- */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     // 初回送信では残り回数が減らない
     // （elapsed が RepetitionPeriodMs を超えていても、changeDue 由来の
     // 送信は再送としてカウントしない）。計3回まで正常に続くことは
     // OK_FiresConfiguredNumberOfRepeatsThenStops が
     // 既に検証しているため、ここでは初回分の回帰確認に絞る。
     Com_MainFunctionTx();
-    EXPECT_EQ(FakeCanHw_SendCount, 1U);
-    EXPECT_EQ(Com_Test_GetTxRepeatsRemaining(0U), 2U);
+    uint32 sendCount0 = FakeCanHw_SendCount;
+    uint8  remaining0 = Com_Test_GetTxRepeatsRemaining(0U);
 
     /* 以降も正常に再送が続くことだけ 1 回分だけ確認する */
     FakeMillis_Value += 50U;
     Com_MainFunctionTx();
-    EXPECT_EQ(FakeCanHw_SendCount, 2U);
-    EXPECT_EQ(Com_Test_GetTxRepeatsRemaining(0U), 1U);
+    uint32 sendCount1 = FakeCanHw_SendCount;
+    uint8  remaining1 = Com_Test_GetTxRepeatsRemaining(0U);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // 初回送信では残り回数が減らない
+    EXPECT_EQ(sendCount0, 1U);
+    EXPECT_EQ(remaining0, 2U);
+
+    // 以降も正常に再送が続く
+    EXPECT_EQ(sendCount1, 2U);
+    EXPECT_EQ(remaining1, 1U);
 }
 
 
@@ -821,20 +854,31 @@ TEST_F(Bsw_ComStack_Signal_Tx_TxTOut_Test, OK_FiresAfterFirstTimeoutWhenArmedAnd
     Com_MainFunctionTx();  // t=0: 実送信、Com_TxConfPendingSinceMs[0]=0 でアーム
     ASSERT_EQ(Com_Test_GetTxConfPending(0U), 1U);
 
-    /* ----------------------------------- */
-    /* ---- 実行 + 評価 (Act + Assert) --- */
-    /* ----------------------------------- */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     // TxFirstTimeoutMs(1000) 未満ではまだ発火しない
     FakeMillis_Value += 999U;
     Com_MainFunctionTx();
-    EXPECT_EQ(Com_Test_GetTxTimedOut(0U), 0U);
-    EXPECT_EQ(s_txTOutCount, 0U);
+    uint8 timedOutBefore = Com_Test_GetTxTimedOut(0U);
+    uint8 cbkCountBefore = s_txTOutCount;
 
     /* TxFirstTimeoutMs(1000) 超過で発火する */
     FakeMillis_Value += 2U;
     Com_MainFunctionTx();
-    EXPECT_EQ(Com_Test_GetTxTimedOut(0U), 1U);
-    EXPECT_EQ(s_txTOutCount, 1U);
+    uint8 timedOutAfter = Com_Test_GetTxTimedOut(0U);
+    uint8 cbkCountAfter = s_txTOutCount;
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // TxFirstTimeoutMs(1000) 未満ではまだ発火しない
+    EXPECT_EQ(timedOutBefore, 0U);
+    EXPECT_EQ(cbkCountBefore, 0U);
+
+    // TxFirstTimeoutMs(1000) 超過で発火する
+    EXPECT_EQ(timedOutAfter, 1U);
+    EXPECT_EQ(cbkCountAfter, 1U);
 }
 
 
