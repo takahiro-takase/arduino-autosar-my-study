@@ -158,31 +158,46 @@ TEST_F(Bsw_NvM_WriteRetry_Test, NvM_MainFunction_NG_WriteRejectedBeyondRetryLimi
     MakeFeeBusy();
     ASSERT_EQ(NvM_WriteBlock(NVM_BLOCK_ID_DEM_STATUS, newData), E_OK);
 
-    /* ----------------------------------- */
-    /* ---- 実行 + 評価 (Act + Assert) --- */
-    /* ----------------------------------- */
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     // 1 回目の拒否〜上限回数までは、まだリトライ中（要求結果は PENDING のまま、Dem へも報告しない）。
+    NvM_RequestResultType resultDuringRetry[NVM_MAX_NUM_OF_WRITE_RETRIES];
     for (uint8 i = 0U; i < NVM_MAX_NUM_OF_WRITE_RETRIES; i++)
     {
         NvM_MainFunction();
-        EXPECT_EQ(ResultOf(NVM_BLOCK_ID_DEM_STATUS), NVM_REQ_PENDING) << "retry " << (unsigned)(i + 1U);
+        resultDuringRetry[i] = ResultOf(NVM_BLOCK_ID_DEM_STATUS);
     }
-    EXPECT_EQ(CallCount_Dem_SetEventStatus, 0U);
+    uint32 demCallsDuringRetry = CallCount_Dem_SetEventStatus;
 
     // 上限を超える拒否: ブロックを諦め、NVM_E_REQ_FAILED（FAILED）を Dem へ報告する。
     NvM_MainFunction();
+    uint32               demCallsAfterGiveUp = CallCount_Dem_SetEventStatus;
+    Dem_EventIdType      reportedEventId     = LastEventId_Dem_SetEventStatus;
+    Dem_EventStatusType  reportedStatus      = LastEventStatus_Dem_SetEventStatus;
 
-    EXPECT_EQ(CallCount_Dem_SetEventStatus, 1U);
-    EXPECT_EQ(LastEventId_Dem_SetEventStatus, DEM_EVENT_NVM_REQ_FAILED);
-    EXPECT_EQ(LastEventStatus_Dem_SetEventStatus, DEM_EVENT_STATUS_FAILED);
-
-    // 実 Dem は FAILED 確定で自身のステータスブロック（ここで失敗させたブロックと同じ）を
+    // ※ Dem は FAILED 確定で自身のステータスブロック（ここで失敗させたブロックと同じ）を
     // 書き直そうとするため、その再書き込みも同様に諦めるまで回してから最終結果を確認する。
     for (uint8 i = 0U; i < 20U; i++)
     {
         NvM_MainFunction();
     }
-    EXPECT_EQ(ResultOf(NVM_BLOCK_ID_DEM_STATUS), NVM_REQ_NOT_OK);
+    NvM_RequestResultType finalResult = ResultOf(NVM_BLOCK_ID_DEM_STATUS);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    for (uint8 i = 0U; i < NVM_MAX_NUM_OF_WRITE_RETRIES; i++)
+    {
+        EXPECT_EQ(resultDuringRetry[i], NVM_REQ_PENDING) << "retry " << (unsigned)(i + 1U);
+    }
+    EXPECT_EQ(demCallsDuringRetry, 0U);
+
+    EXPECT_EQ(demCallsAfterGiveUp, 1U);
+    EXPECT_EQ(reportedEventId, DEM_EVENT_NVM_REQ_FAILED);
+    EXPECT_EQ(reportedStatus, DEM_EVENT_STATUS_FAILED);
+
+    EXPECT_EQ(finalResult, NVM_REQ_NOT_OK);
 }
 
 TEST_F(Bsw_NvM_WriteRetry_Test, NvM_MainFunction_NG_BlockAfterFailedBlockIsStillProcessed)

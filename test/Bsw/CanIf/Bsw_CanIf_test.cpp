@@ -257,20 +257,24 @@ TEST_F(Bsw_CanIf_ControllerMode_Test, SetControllerMode_OK_StoppedFromStartedUse
     /* ----------------------- */
     /* ---- 準備 (Arrange) --- */
     /* ----------------------- */
-    // なし（SetUp() で初期化済み）
-
-    /* ----------------------------------- */
-    /* ---- 実行 + 評価 (Act + Assert) --- */
-    /* ----------------------------------- */
     ASSERT_EQ(CanIf_SetControllerMode(0U, CAN_CS_STARTED), E_OK);
     ASSERT_EQ(Can_Test_GetControllerState(), CAN_CS_STARTED);
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = CanIf_SetControllerMode(0U, CAN_CS_STOPPED);
 
-    EXPECT_EQ(ret, E_OK);
-    EXPECT_EQ(Can_Test_GetControllerState(), CAN_CS_STOPPED);
+    Can_ControllerStateType canState = Can_Test_GetControllerState();
     Can_ControllerStateType mode;
-    ASSERT_EQ(CanIf_GetControllerMode(0U, &mode), E_OK);
+    Std_ReturnType retGet = CanIf_GetControllerMode(0U, &mode);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_OK);
+    EXPECT_EQ(canState, CAN_CS_STOPPED);
+    ASSERT_EQ(retGet, E_OK);
     EXPECT_EQ(mode, CAN_CS_STOPPED);
 }
 
@@ -279,23 +283,27 @@ TEST_F(Bsw_CanIf_ControllerMode_Test, SetControllerMode_OK_StoppedFromSleepUsesC
     /* ----------------------- */
     /* ---- 準備 (Arrange) --- */
     /* ----------------------- */
-    // なし（SetUp() で初期化済み）
-
-    /* ----------------------------------- */
-    /* ---- 実行 + 評価 (Act + Assert) --- */
-    /* ----------------------------------- */
     ASSERT_EQ(CanIf_SetControllerMode(0U, CAN_CS_SLEEP), E_OK);
     ASSERT_EQ(Can_Test_GetControllerState(), CAN_CS_SLEEP);
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = CanIf_SetControllerMode(0U, CAN_CS_STOPPED);
 
+    Can_ControllerStateType canState = Can_Test_GetControllerState();
+    Can_ControllerStateType mode;
+    Std_ReturnType retGet = CanIf_GetControllerMode(0U, &mode);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_OK);
     /* CAN_T_STOP は CAN_CS_SLEEP からの遷移を拒否する（Can.c 参照）ため、
      * ここで実際に CAN_CS_STOPPED へ遷移していれば CAN_T_WAKEUP が
      * 選ばれたことの間接的な証明になる。 */
-    EXPECT_EQ(Can_Test_GetControllerState(), CAN_CS_STOPPED);
-    Can_ControllerStateType mode;
-    ASSERT_EQ(CanIf_GetControllerMode(0U, &mode), E_OK);
+    EXPECT_EQ(canState, CAN_CS_STOPPED);
+    ASSERT_EQ(retGet, E_OK);
     EXPECT_EQ(mode, CAN_CS_STOPPED);
 }
 
@@ -695,17 +703,22 @@ TEST_F(Bsw_CanIf_NotifStatus_Test, GetTxConfirmationState_OK_ResetsOnControllerR
     /* ---- 準備 (Arrange) --- */
     /* ----------------------- */
     CanIf_TxConfirmation(0U);
-
-    /* ----------------------------------- */
-    /* ---- 実行 + 評価 (Act + Assert) --- */
-    /* ----------------------------------- */
     ASSERT_EQ(CanIf_GetTxConfirmationState(0U), CANIF_TX_RX_NOTIFICATION);
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     /* 「直近のコントローラ起動以降」を表すため、再起動（CAN_CS_STARTED への
      * 再遷移）でリセットされること（Table 8.25）。 */
-    ASSERT_EQ(CanIf_SetControllerMode(0U, CAN_CS_STARTED), E_OK);
+    Std_ReturnType retStart = CanIf_SetControllerMode(0U, CAN_CS_STARTED);
 
-    EXPECT_EQ(CanIf_GetTxConfirmationState(0U), CANIF_NO_NOTIFICATION);
+    CanIf_NotifStatusType stateAfterRestart = CanIf_GetTxConfirmationState(0U);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    ASSERT_EQ(retStart, E_OK);
+    EXPECT_EQ(stateAfterRestart, CANIF_NO_NOTIFICATION);
 }
 #endif
 

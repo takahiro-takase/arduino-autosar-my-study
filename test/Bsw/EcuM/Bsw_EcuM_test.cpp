@@ -89,13 +89,13 @@ protected:
     static const EcuM_UserType kInvalidUser = ECUM_USER_COUNT;
 };
 
-// ------------------------------------------------------------
-// EcuM_RequestRUN()
-// ------------------------------------------------------------
-
 /* ======================================================================
  * Test Functions
  * ====================================================================== */
+
+// ------------------------------------------------------------
+// EcuM_RequestRUN()
+// ------------------------------------------------------------
 
 TEST_F(Bsw_EcuM_Test, EcuM_RequestRUN_NG_InvalidUser)
 {
@@ -121,16 +121,17 @@ TEST_F(Bsw_EcuM_Test, EcuM_RequestRUN_NG_MultipleRequest)
     /* ----------------------- */
     /* ---- 準備 (Arrange) --- */
     /* ----------------------- */
-    // なし（SetUp() で初期化済み）
-
-    /* ----------------------------------- */
-    /* ---- 実行 + 評価 (Act + Assert) --- */
-    /* ----------------------------------- */
     ASSERT_EQ(EcuM_RequestRUN(0U), E_OK);
     FakeDetHw_Reset();
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = EcuM_RequestRUN(0U);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     ExpectDet(ECUM_API_ID_REQUEST_RUN, ECUM_E_MULTIPLE_RUN_REQUESTS);
 }
@@ -205,16 +206,17 @@ TEST_F(Bsw_EcuM_Test, EcuM_RequestPOST_RUN_NG_MultipleRequest)
     /* ----------------------- */
     /* ---- 準備 (Arrange) --- */
     /* ----------------------- */
-    // なし（SetUp() で初期化済み）
-
-    /* ----------------------------------- */
-    /* ---- 実行 + 評価 (Act + Assert) --- */
-    /* ----------------------------------- */
     ASSERT_EQ(EcuM_RequestPOST_RUN(0U), E_OK);
     FakeDetHw_Reset();
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     Std_ReturnType ret = EcuM_RequestPOST_RUN(0U);
 
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     ExpectDet(ECUM_API_ID_REQUEST_POST_RUN, ECUM_E_MULTIPLE_RUN_REQUESTS);
 }

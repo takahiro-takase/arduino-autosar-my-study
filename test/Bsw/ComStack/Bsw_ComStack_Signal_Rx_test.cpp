@@ -1117,7 +1117,7 @@ TEST_F(Bsw_ComStack_Signal_Rx_Timeout_Test, OK_RejectedFrameStillTransitionsToSt
 }
 
 
-TEST_F(Bsw_ComStack_Signal_Rx_Timeout_Test, NG_Step01_ComRxIpduCallout_RejectedFrameStillResetsDeadlineTimer)
+TEST_F(Bsw_ComStack_Signal_Rx_Timeout_Test, OK_RejectedFrameStillResetsDeadlineTimer)
 {
     /* ----------------------- */
     /* ---- 準備 (Arrange) --- */

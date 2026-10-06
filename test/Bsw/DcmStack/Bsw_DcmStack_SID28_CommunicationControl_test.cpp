@@ -230,13 +230,13 @@ protected:
     Can_ConfigType canConfig;
 };
 
-// ------------------------------------------------------------
-// Dcm_CommunicationModeType への変換（controlType + (communicationType-1)*4）
-// ------------------------------------------------------------
-
 /* ======================================================================
  * Test Functions
  * ====================================================================== */
+
+// ------------------------------------------------------------
+// Dcm_CommunicationModeType への変換（controlType + (communicationType-1)*4）
+// ------------------------------------------------------------
 
 TEST_F(Bsw_DcmStack_SID28_CommunicationControl_Test,
        OK_EnableRxTxNormalMapsToDcmEnableRxTxNorm)

@@ -173,23 +173,35 @@ TEST_F(Bsw_WdgM_GetLocalStatus_Test, GetLocalStatus_OK_StaysFailedDuringSuppress
 
     WdgM_LocalStatusType status = WDGM_LOCAL_STATUS_OK;
 
-    /* ----------------------------------- */
-    /* ---- 実行 + 評価 (Act + Assert) --- */
-    /* ----------------------------------- */
-    ASSERT_EQ(WdgM_GetLocalStatus(WDGM_ENTITY_WARNING, &status), E_OK);
-    EXPECT_EQ(status, WDGM_LOCAL_STATUS_FAILED);
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Std_ReturnType retSuppressed = WdgM_GetLocalStatus(WDGM_ENTITY_WARNING, &status);
+    WdgM_LocalStatusType statusSuppressed = status;
 
     /* 抑制解除後は、凍結されていた分の蓄積がいきなり反映されるのではなく、
      * 解除後にあらためて WDGM_EXPIRED_SUPERVISION_CYCLE_TOL 判定サイクル分の
      * 継続 FAILED を要して EXPIRED へ遷移することを確認する。 */
     WdgM_EnableHwWatchdog();
     WdgM_MainFunction();
-    ASSERT_EQ(WdgM_GetLocalStatus(WDGM_ENTITY_WARNING, &status), E_OK);
-    EXPECT_EQ(status, WDGM_LOCAL_STATUS_FAILED);
+    Std_ReturnType retCycle1 = WdgM_GetLocalStatus(WDGM_ENTITY_WARNING, &status);
+    WdgM_LocalStatusType statusCycle1 = status;
 
     WdgM_MainFunction();
-    ASSERT_EQ(WdgM_GetLocalStatus(WDGM_ENTITY_WARNING, &status), E_OK);
-    EXPECT_EQ(status, WDGM_LOCAL_STATUS_EXPIRED);
+    Std_ReturnType retCycle2 = WdgM_GetLocalStatus(WDGM_ENTITY_WARNING, &status);
+    WdgM_LocalStatusType statusCycle2 = status;
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    ASSERT_EQ(retSuppressed, E_OK);
+    EXPECT_EQ(statusSuppressed, WDGM_LOCAL_STATUS_FAILED);
+
+    ASSERT_EQ(retCycle1, E_OK);
+    EXPECT_EQ(statusCycle1, WDGM_LOCAL_STATUS_FAILED);
+
+    ASSERT_EQ(retCycle2, E_OK);
+    EXPECT_EQ(statusCycle2, WDGM_LOCAL_STATUS_EXPIRED);
 }
 
 TEST_F(Bsw_WdgM_GetLocalStatus_Test, GetLocalStatus_OK_ReturnsOkAfterAliveRecoveryResetsExpiredCounter)
@@ -203,13 +215,12 @@ TEST_F(Bsw_WdgM_GetLocalStatus_Test, GetLocalStatus_OK_ReturnsOkAfterAliveRecove
     WdgM_MainFunction();
     WdgM_MainFunction();
     WdgM_LocalStatusType expiredStatus = WDGM_LOCAL_STATUS_OK;
-
-    /* ----------------------------------- */
-    /* ---- 実行 + 評価 (Act + Assert) --- */
-    /* ----------------------------------- */
     ASSERT_EQ(WdgM_GetLocalStatus(WDGM_ENTITY_WARNING, &expiredStatus), E_OK);
     ASSERT_EQ(expiredStatus, WDGM_LOCAL_STATUS_EXPIRED);
 
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     /* Logical/Deadline を違反させないよう、許可された遷移のみを使い、
      * Deadline 許容範囲内になるよう millis() を進める
      * (Bsw_WdgM_GetGlobalStatus_test.cpp の同種テストと同じ手順)。 */
@@ -227,7 +238,12 @@ TEST_F(Bsw_WdgM_GetLocalStatus_Test, GetLocalStatus_OK_ReturnsOkAfterAliveRecove
     WdgM_MainFunction();
 
     WdgM_LocalStatusType status = WDGM_LOCAL_STATUS_FAILED;
-    ASSERT_EQ(WdgM_GetLocalStatus(WDGM_ENTITY_WARNING, &status), E_OK);
+    Std_ReturnType ret = WdgM_GetLocalStatus(WDGM_ENTITY_WARNING, &status);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    ASSERT_EQ(ret, E_OK);
     EXPECT_EQ(status, WDGM_LOCAL_STATUS_OK);
 }
 

@@ -1745,7 +1745,7 @@ of the signals into account"、無効なシグナル/シグナルグループ受
    でした（コード自体は `[SWS_Com_00738]` を引用しつつ、実際には
    Signal Group の破棄には適用されていなかった、という食い違いが
    存在していました）。回帰テスト
-   `Bsw_ComStack_SignalGroup_Rx_GroupRxTOut_Test.NG_Step01_ComRxIndication_ShortFrameDiscardStillResetsDeadlineTimer`
+   `Bsw_ComStack_SignalGroup_Rx_GroupRxTOut_Test.OK_ShortFrameDiscardStillResetsDeadlineTimer`
    で検証済みです。
 2. `RxIpduCalloutCbk` に拒否された受信であっても、`Com_RxUsingFirstTimeout`
    は steady 状態へ遷移するようになりました。「初回受信」の定義が

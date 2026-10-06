@@ -131,21 +131,33 @@ TEST_F(Bsw_Dem_DtcFilter_Test, Dem_SetDTCFilter_OK_CallingAgainRestartsFromTheFi
     /* ----------------------- */
     // なし（SetUp() で初期化済み）
 
-    /* ----------------------------------- */
-    /* ---- 実行 + 評価 (Act + Assert) --- */
-    /* ----------------------------------- */
-    ASSERT_EQ(SetFilter(0x00U), E_OK);
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
     uint32 dtc = 0U;
     uint8  status = 0U;
-    ASSERT_EQ(Dem_GetNextFilteredDTC(0U, &dtc, &status), E_OK);
-    const uint32 first = dtc;
-    ASSERT_EQ(Dem_GetNextFilteredDTC(0U, &dtc, &status), E_OK);
-    ASSERT_NE(dtc, first);
+    Std_ReturnType retSet1  = SetFilter(0x00U);
+    Std_ReturnType retNext1 = Dem_GetNextFilteredDTC(0U, &dtc, &status);
+    const uint32   first    = dtc;
+    Std_ReturnType retNext2 = Dem_GetNextFilteredDTC(0U, &dtc, &status);
+    const uint32   second   = dtc;
 
-    ASSERT_EQ(SetFilter(0x00U), E_OK);  // 設定し直すと走査位置が先頭へ戻る
-    ASSERT_EQ(Dem_GetNextFilteredDTC(0U, &dtc, &status), E_OK);
+    Std_ReturnType retSet2  = SetFilter(0x00U);  // 設定し直すと走査位置が先頭へ戻る
+    Std_ReturnType retNext3 = Dem_GetNextFilteredDTC(0U, &dtc, &status);
+    const uint32   third    = dtc;
 
-    EXPECT_EQ(dtc, first);
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    ASSERT_EQ(retSet1, E_OK);
+    ASSERT_EQ(retNext1, E_OK);
+    ASSERT_EQ(retNext2, E_OK);
+    ASSERT_NE(second, first);
+
+    ASSERT_EQ(retSet2, E_OK);
+    ASSERT_EQ(retNext3, E_OK);
+
+    EXPECT_EQ(third, first);
 }
 
 }  // namespace

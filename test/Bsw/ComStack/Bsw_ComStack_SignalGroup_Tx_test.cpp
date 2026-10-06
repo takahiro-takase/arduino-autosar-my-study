@@ -164,7 +164,7 @@ const Com_IPduConfigType kTestErrGroupIPdu = {
     /* IpduGroupId */      kTestStoppableGroupId,
     /* RxIndicationCbk */  NULL,
     /* TxTransformCbk */   NULL,
-    /* TxAckCbk */         NULL,
+    /* TxAckCbk */         TestGroupTxAckCbk,  // SWS_Com_00800（停止中は確認を無視）検証用
     /* TxErrCbk */         TestGroupTxErrCbk,
     /* RxAckCbk */         NULL,
     /* NumberOfRepetitions */ 0U,
@@ -814,6 +814,35 @@ TEST_F(Bsw_ComStack_SignalGroup_Tx_TxConfirmation_Test, NG_Step01_ComTxConfirmat
     /* ---- 評価 (Assert) ---- */
     /* ----------------------- */
     // 無関係な Signal Group（IPduId=1）の TxAckCbk は呼ばれない
+    EXPECT_EQ(s_groupTxAckCount, 0U);
+}
+
+
+// ------------------------------------------------------------
+// SWS_Com_00800: 停止中の I-PDU に対する送信確認は無視する
+// ------------------------------------------------------------
+TEST_F(Bsw_ComStack_SignalGroup_Tx_TxConfirmation_Test, NG_Step01_ComTxConfirmation_IpduGroupStopped)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // 停止可能グループ（IPduId=3 が所属）を起動し、起動中は確認が
+    // 通知されることを確かめてから、停止する。
+    Com_IpduGroupStart(kTestStoppableGroupId, FALSE);
+    Com_TxConfirmation(3U, E_OK);
+    ASSERT_EQ(s_groupTxAckCount, 1U);
+    s_groupTxAckCount = 0U;
+    Com_IpduGroupStop(kTestStoppableGroupId);
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Com_TxConfirmation(3U, E_OK);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // 停止中の I-PDU への確認は無視され、TxAckCbk は呼ばれない。
     EXPECT_EQ(s_groupTxAckCount, 0U);
 }
 

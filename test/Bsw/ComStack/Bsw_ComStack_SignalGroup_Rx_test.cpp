@@ -357,7 +357,7 @@ TEST_F(Bsw_ComStack_SignalGroup_Rx_GroupRxTOut_Test, OK_FiresAfterThresholdElaps
 }
 
 
-TEST_F(Bsw_ComStack_SignalGroup_Rx_GroupRxTOut_Test, NG_Step01_ComRxIndication_ShortFrameDiscardStillResetsDeadlineTimer)
+TEST_F(Bsw_ComStack_SignalGroup_Rx_GroupRxTOut_Test, OK_ShortFrameDiscardStillResetsDeadlineTimer)
 {
     /* ----------------------- */
     /* ---- 準備 (Arrange) --- */
