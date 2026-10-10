@@ -167,8 +167,12 @@ HAL ─── MCU 依存の最下層（Can_Hw / Dio_Hw ほか、src/Hal/ に集�
 │   ├── test_main.cpp       # GoogleTest の main()（全テストで共通）
 │   └── Bsw/<Module>/       # モジュール別のテストファイル（複数モジュールにまたがるものは <X>Stack/ など）
 ├── stub/                   # テスト用の差し替え（src/ と同じ構成。Fake_*=HW 差し替え、Wrap_*=--wrap による呼び出し記録）
+├── config/
+│   ├── data/               # 設定データ（信号表 can_signals.json と、CanIf / Com / PduR / E2EXf / SecOC / Csm・Crypto・KeyM / BswM の設定 json）
+│   └── schema/             # 設定 json のスキーマ
 ├── tools/
-│   ├── can_tool/           # UDS ボタン送信 / CAPL 風スクリプト / 信号エディタ（Python）
+│   ├── can_tool/           # UDS ボタン送信 / CAPL 風スクリプト / 信号エディタ・設定 JSON エディタ（Python）
+│   ├── configurator/       # 信号表と設定 json から、*_PBCfg.c / *_Cfg.h の生成領域を作る（gen_cfg.py、sync_cfg.py）
 │   ├── misra/              # MISRA C:2012 静的解析（run_misra.py、逸脱リスト misra_suppressions.txt）
 │   ├── api_coverage/       # AUTOSAR API の実装数の集計（api_coverage.py、仕様書の API 一覧 autosar_api_list.json）
 │   └── coverage/           # テストのカバレッジレポート生成（generate_coverage_report.sh）
@@ -178,7 +182,6 @@ HAL ─── MCU 依存の最下層（Can_Hw / Dio_Hw ほか、src/Hal/ に集�
 │   ├── images/             # README 用の図
 │   └── archive/            # 分割前の README（全文）
 ├── dbc/                    # CAN の DBC ファイル
-├── data/                   # can_signal_editor の信号定義
 ├── platformio.ini          # 実機ビルド（env: uno_r4）
 ├── CMakeLists.txt          # ホスト上のテスト・静的解析（プリセットは CMakePresets.json）
 └── CMakePresets.json

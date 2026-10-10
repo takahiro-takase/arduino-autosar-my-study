@@ -1,0 +1,171 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Com configuration",
+  "description": "Com_PBCfg.c / Com_Cfg.h の生成元。フレームに由来する値（DLC、ビット位置・ビット長、周期、タイムアウト、update-bit の位置）は、frame / field が指す信号表（config/data/can_signals.json）から引く。この json には Com としての振る舞い（ID の割り当て、送信モード、フィルタ、コールバック名など）を書く。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["module", "rxIpduCountDoc", "txIpduCountDoc", "signalCountDoc", "gwMappingCountDoc", "constants", "rxIpdus", "txIpdus", "signals", "gateway"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "module": { "const": "Com" },
+    "rxIpduCountDoc": { "$ref": "#/$defs/commentLines" },
+    "txIpduCountDoc": { "$ref": "#/$defs/commentLines" },
+    "signalCountDoc": { "$ref": "#/$defs/commentLines" },
+    "gwMappingCountDoc": { "$ref": "#/$defs/commentLines" },
+    "ipduGroups": {
+      "type": "array",
+      "description": "I-PDU グループ（ComIPduGroup）。値は並び順（添字）。BswM のルールが起動・停止する",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["macro", "doc"],
+        "properties": { "macro": { "$ref": "#/$defs/cName" }, "doc": { "$ref": "#/$defs/commentLines" } }
+      }
+    },
+    "excludedFrames": {
+      "type": "array",
+      "description": "信号表にあるが、Com の対象にしないフレーム（CanNm が直接扱うものなど）",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["frame", "reason"],
+        "properties": { "frame": { "$ref": "#/$defs/text" }, "reason": { "$ref": "#/$defs/text" } }
+      }
+    },
+    "constants": { "type": "array", "items": { "$ref": "#/$defs/constant" } },
+    "rxIpdus": { "type": "array", "maxItems": 255, "items": { "$ref": "#/$defs/ipdu" } },
+    "txIpdus": { "type": "array", "maxItems": 255, "items": { "$ref": "#/$defs/ipdu" } },
+    "signals": { "type": "array", "maxItems": 255, "items": { "$ref": "#/$defs/signal" } },
+    "gateway": { "type": "array", "items": { "$ref": "#/$defs/gateway" } }
+  },
+  "$defs": {
+    "commentLines": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string", "not": { "pattern": "\\*/" } }
+    },
+    "text": { "type": "string", "minLength": 1, "not": { "pattern": "\\*/" } },
+    "shortName": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_]*$" },
+    "cName": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$" },
+    "uint": { "type": "integer", "minimum": 0, "maximum": 4294967295 },
+    "uint16": { "type": "integer", "minimum": 0, "maximum": 65535 },
+    "uint8": { "type": "integer", "minimum": 0, "maximum": 255 },
+    "intOrMacro": { "oneOf": [{ "$ref": "#/$defs/uint" }, { "$ref": "#/$defs/cName" }] },
+    "comments": {
+      "type": "object",
+      "description": "フィールドごとの注釈（キーは json のフィールド名）。無ければ既定の注釈、またはなし",
+      "additionalProperties": { "$ref": "#/$defs/commentLines" }
+    },
+    "constant": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["macro", "doc"],
+      "properties": {
+        "macro": { "$ref": "#/$defs/cName" },
+        "value": { "$ref": "#/$defs/uint" },
+        "fromFrame": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["frame", "key"],
+          "description": "信号表のフレームの値を、このマクロの値にする",
+          "properties": {
+            "frame": { "$ref": "#/$defs/text" },
+            "key": { "enum": ["txPeriodMs", "rxTimeoutMs"] }
+          }
+        },
+        "doc": { "$ref": "#/$defs/commentLines" }
+      }
+    },
+    "ipdu": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "frame", "title"],
+      "properties": {
+        "name": { "$ref": "#/$defs/shortName", "description": "ComIPdu の ShortName" },
+        "frame": { "$ref": "#/$defs/text", "description": "信号表のフレーム名" },
+        "title": { "$ref": "#/$defs/text" },
+        "note": { "$ref": "#/$defs/commentLines" },
+        "dlc": { "type": "integer", "minimum": 0, "maximum": 8, "description": "信号表の DLC と異なる場合だけ指定する（例: SecOC 保護で、Com が見るのは認証対象のペイロードだけ）" },
+        "unusedFields": { "type": "array", "items": { "$ref": "#/$defs/text" }, "description": "信号表のフィールドのうち、意図して Com の信号にしないもの" },
+        "pduRId": { "$ref": "#/$defs/uint16", "description": "PduR の設定から引けない場合だけ指定する（例: SecOC が Com_RxIndication を呼ぶ ID）。指定しない場合は PduR の設定から引く" },
+        "firstTimeoutMs": { "$ref": "#/$defs/intOrMacro" },
+        "timeoutMs": { "$ref": "#/$defs/intOrMacro" },
+        "isSignalGroup": { "enum": [0, 1] },
+        "txModeMode": { "enum": ["COM_TX_MODE_DIRECT", "COM_TX_MODE_PERIODIC", "COM_TX_MODE_MIXED"] },
+        "txPeriodMs": { "$ref": "#/$defs/intOrMacro" },
+        "txModeModeTrue": { "enum": ["COM_TX_MODE_DIRECT", "COM_TX_MODE_PERIODIC", "COM_TX_MODE_MIXED"] },
+        "txPeriodMsTrue": { "$ref": "#/$defs/intOrMacro" },
+        "minDelayMs": { "$ref": "#/$defs/intOrMacro" },
+        "updateBitPosition": { "$ref": "#/$defs/uint8", "description": "指定しない場合、信号表の (update-bit) フィールドの位置（無ければ 255 = なし）" },
+        "ipduGroupId": { "$ref": "#/$defs/cName" },
+        "rxIndicationCbk": { "$ref": "#/$defs/cName" },
+        "txTransformCbk": { "$ref": "#/$defs/cName" },
+        "txAckCbk": { "$ref": "#/$defs/cName" },
+        "txErrCbk": { "$ref": "#/$defs/cName" },
+        "rxAckCbk": { "$ref": "#/$defs/cName" },
+        "numberOfRepetitions": { "$ref": "#/$defs/uint8" },
+        "repetitionPeriodMs": { "$ref": "#/$defs/intOrMacro" },
+        "txFirstTimeoutMs": { "$ref": "#/$defs/intOrMacro" },
+        "txTimeoutMs": { "$ref": "#/$defs/intOrMacro" },
+        "txTOutCbk": { "$ref": "#/$defs/cName" },
+        "rxTOutCbk": { "$ref": "#/$defs/cName" },
+        "rxIpduCalloutCbk": { "$ref": "#/$defs/cName" },
+        "txIpduCalloutCbk": { "$ref": "#/$defs/cName" },
+        "comments": { "$ref": "#/$defs/comments" }
+      }
+    },
+    "signal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "title", "macro", "direction", "ipdu", "field", "idDoc"],
+      "properties": {
+        "name": { "$ref": "#/$defs/shortName", "description": "ComSignal の ShortName" },
+        "title": { "$ref": "#/$defs/text" },
+        "headNote": { "$ref": "#/$defs/commentLines" },
+        "note": { "$ref": "#/$defs/commentLines" },
+        "idDoc": { "$ref": "#/$defs/commentLines", "description": "Com_Cfg.h のシグナル ID マクロの説明" },
+        "macro": { "$ref": "#/$defs/cName", "description": "Com_Cfg.h のシグナル ID マクロ名。値は signals の並び順（添字）" },
+        "direction": { "enum": ["RX", "TX"] },
+        "ipdu": { "$ref": "#/$defs/shortName", "description": "所属する I-PDU の name" },
+        "field": { "$ref": "#/$defs/text", "description": "信号表のフィールド名（ビット位置・ビット長をここから引く）" },
+        "bitPosition": { "$ref": "#/$defs/uint8", "description": "信号表と異なる場合だけ指定する" },
+        "bitSize": { "$ref": "#/$defs/uint8", "description": "信号表と異なる場合だけ指定する" },
+        "initValue": { "$ref": "#/$defs/uint" },
+        "filterAlgorithm": { "$ref": "#/$defs/cName" },
+        "mask": { "$ref": "#/$defs/uint" },
+        "filterX": { "$ref": "#/$defs/uint" },
+        "filterMin": { "$ref": "#/$defs/uint" },
+        "filterMax": { "$ref": "#/$defs/uint" },
+        "filterRejectCbk": { "$ref": "#/$defs/cName" },
+        "tmsContributor": { "enum": [0, 1] },
+        "updateBitContributor": { "enum": [0, 1] },
+        "transferProperty": { "$ref": "#/$defs/cName" },
+        "rxDataTimeoutAction": { "$ref": "#/$defs/cName" },
+        "timeoutSubstitutionValue": { "$ref": "#/$defs/uint" },
+        "dataInvalidAction": { "$ref": "#/$defs/cName" },
+        "invalidValue": { "$ref": "#/$defs/uint" },
+        "invalidNotificationCbk": { "$ref": "#/$defs/cName" },
+        "firstTimeoutMs": { "$ref": "#/$defs/intOrMacro" },
+        "timeoutMs": { "$ref": "#/$defs/intOrMacro" },
+        "rxTOutCbk": { "$ref": "#/$defs/cName" },
+        "txAckCbk": { "$ref": "#/$defs/cName" },
+        "txErrCbk": { "$ref": "#/$defs/cName" },
+        "rxAckCbk": { "$ref": "#/$defs/cName" },
+        "txTOutCbk": { "$ref": "#/$defs/cName" },
+        "invalidValueConfigured": { "enum": [0, 1] },
+        "comments": { "$ref": "#/$defs/comments" }
+      }
+    },
+    "gateway": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "src", "dest"],
+      "properties": {
+        "name": { "$ref": "#/$defs/shortName" },
+        "note": { "$ref": "#/$defs/commentLines" },
+        "src": { "$ref": "#/$defs/shortName", "description": "転送元の signals の name（RX）" },
+        "dest": { "$ref": "#/$defs/shortName", "description": "転送先の signals の name（TX）" }
+      }
+    }
+  }
+}

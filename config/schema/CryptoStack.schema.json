@@ -1,0 +1,258 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Crypto stack (Csm / Crypto / KeyM) configuration",
+  "description": "Crypto_PBCfg.c / Csm_PBCfg.c / KeyM_PBCfg.c と、それぞれの *_Cfg.h の ID マクロの生成元。鍵（keys）を中心に、ジョブ（jobs）が使う鍵と、KeyM の鍵名を結び付ける。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "module",
+    "keys",
+    "keysTrailingNote",
+    "keyCountDoc",
+    "keyTablePostNote",
+    "keyMTrailingNote",
+    "keyMCountDoc",
+    "keyMTablePostNote",
+    "jobs",
+    "jobsTrailingNote",
+    "jobCountDoc"
+  ],
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "module": {
+      "const": "CryptoStack"
+    },
+    "keys": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/key"
+      }
+    },
+    "keysTrailingNote": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "not": {
+          "pattern": "\\*/"
+        }
+      }
+    },
+    "keyCountDoc": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "not": {
+          "pattern": "\\*/"
+        }
+      }
+    },
+    "keyTablePostNote": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "not": {
+          "pattern": "\\*/"
+        }
+      }
+    },
+    "keyMTrailingNote": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "not": {
+          "pattern": "\\*/"
+        }
+      }
+    },
+    "keyMCountDoc": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "not": {
+          "pattern": "\\*/"
+        }
+      }
+    },
+    "keyMTablePostNote": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "not": {
+          "pattern": "\\*/"
+        }
+      }
+    },
+    "jobs": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/job"
+      }
+    },
+    "jobsTrailingNote": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "not": {
+          "pattern": "\\*/"
+        }
+      }
+    },
+    "jobCountDoc": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "not": {
+          "pattern": "\\*/"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "key": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "macro",
+        "doc",
+        "hex",
+        "note"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[A-Za-z][A-Za-z0-9_]*$"
+        },
+        "macro": {
+          "type": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+          "description": "Crypto_Cfg.h の鍵 ID マクロ。値は keys の並び順（添字）"
+        },
+        "doc": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "not": {
+              "pattern": "\\*/"
+            }
+          }
+        },
+        "hex": {
+          "type": "string",
+          "pattern": "^[0-9A-Fa-f]{32}$",
+          "description": "AES-128 の鍵（16 byte = 16 進 32 桁）。学習用の固定鍵"
+        },
+        "note": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "not": {
+              "pattern": "\\*/"
+            }
+          }
+        },
+        "keyM": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "macro",
+            "name",
+            "doc"
+          ],
+          "description": "KeyM の鍵名（KeyM_Update() の keyName）に対応づける場合",
+          "properties": {
+            "macro": {
+              "type": "string",
+              "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+            },
+            "name": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1,
+              "description": "1 バイトの ASCII 文字"
+            },
+            "doc": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "not": {
+                  "pattern": "\\*/"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "job": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "macro",
+        "service",
+        "key",
+        "doc"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[A-Za-z][A-Za-z0-9_]*$"
+        },
+        "macro": {
+          "type": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+          "description": "Csm_Cfg.h のジョブ ID マクロ。値は jobs の並び順（添字）"
+        },
+        "service": {
+          "enum": [
+            "MACGENERATE",
+            "MACVERIFY"
+          ]
+        },
+        "key": {
+          "type": "string",
+          "pattern": "^[A-Za-z][A-Za-z0-9_]*$",
+          "description": "使う鍵の name（keys）"
+        },
+        "doc": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "not": {
+              "pattern": "\\*/"
+            }
+          }
+        }
+      }
+    }
+  }
+}

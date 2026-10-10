@@ -40,9 +40,11 @@ extern "C" {
  * Global Variables
  * ====================================================================== */
 
+/* @@GEN-BEGIN e2exf-externs  生成元: config/data/E2EXf.json  （自動生成: 手編集禁止） */
 extern const E2EXf_RxConfigTypeP05 E2EXf_EngineInfoRxCfg;
 extern const E2EXf_RxConfigTypeP05 E2EXf_AbsInfoRxCfg;
 extern const E2EXf_TxConfigTypeP05 E2EXf_E2EHealthStatusTxCfgP05;
+/* @@GEN-END e2exf-externs */
 
 /* ======================================================================
  * Functions

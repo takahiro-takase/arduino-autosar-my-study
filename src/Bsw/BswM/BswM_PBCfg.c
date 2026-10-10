@@ -114,10 +114,11 @@
 /* cppcheck-suppress misra-c2012-9.3 */
 static const BswM_RuleType BswM_Rules[BSWM_RULE_COUNT] =
 {
+/* @@GEN-BEGIN bswm-rules  生成元: config/data/BswM.json  （自動生成: 手編集禁止） */
     /* Rule 0: EcuM → RUN: 全タスクを有効化 */
     {
         .Operator       = BSWM_OP_AND,
-        .Condition       = {{ BSWM_MODE_SRC_ECUM, (uint8)ECUM_STATE_RUN }},
+        .Condition      = {{ BSWM_MODE_SRC_ECUM, (uint8)ECUM_STATE_RUN }},
         .ConditionCount = 1U,
         .Action         = BSWM_ACTION_ACTIVATE,
         .TaskMask       = BSWM_TASK_MASK_ALL
@@ -125,7 +126,7 @@ static const BswM_RuleType BswM_Rules[BSWM_RULE_COUNT] =
     /* Rule 1: EcuM → POST_RUN: アプリ Runnable のみ無効化 (BSW は継続) */
     {
         .Operator       = BSWM_OP_AND,
-        .Condition       = {{ BSWM_MODE_SRC_ECUM, (uint8)ECUM_STATE_POST_RUN }},
+        .Condition      = {{ BSWM_MODE_SRC_ECUM, (uint8)ECUM_STATE_POST_RUN }},
         .ConditionCount = 1U,
         .Action         = BSWM_ACTION_DEACTIVATE,
         .TaskMask       = BSWM_TASK_MASK_APP
@@ -135,7 +136,7 @@ static const BswM_RuleType BswM_Rules[BSWM_RULE_COUNT] =
      * MemIf_MainFunction・CanNm_MainFunction 以外を無効化 */
     {
         .Operator       = BSWM_OP_AND,
-        .Condition       = {{ BSWM_MODE_SRC_ECUM, (uint8)ECUM_STATE_SHUTDOWN }},
+        .Condition      = {{ BSWM_MODE_SRC_ECUM, (uint8)ECUM_STATE_SHUTDOWN }},
         .ConditionCount = 1U,
         .Action         = BSWM_ACTION_DEACTIVATE,
         .TaskMask       = BSWM_TASK_MASK_SHUTDOWN
@@ -146,8 +147,8 @@ static const BswM_RuleType BswM_Rules[BSWM_RULE_COUNT] =
      * 自体が既に初期値でゼロクリア済みのため、initialize=false でも実害はない） */
     {
         .Operator       = BSWM_OP_AND,
-        .Condition       = {{ BSWM_MODE_SRC_ECUM, (uint8)ECUM_STATE_RUN },
-                             { BSWM_MODE_SRC_COMM, (uint8)COMM_FULL_COMMUNICATION }},
+        .Condition      = {{ BSWM_MODE_SRC_ECUM, (uint8)ECUM_STATE_RUN },
+                           { BSWM_MODE_SRC_COMM, (uint8)COMM_FULL_COMMUNICATION }},
         .ConditionCount = 2U,
         .Action         = BSWM_ACTION_PDU_GROUP_START,
         .IpduGroupId    = COM_IPDU_GROUP_TELEMETRY,
@@ -156,7 +157,7 @@ static const BswM_RuleType BswM_Rules[BSWM_RULE_COUNT] =
     /* Rule 4: EcuM → POST_RUN: I-PDU Group「テレメトリ」を停止 */
     {
         .Operator       = BSWM_OP_AND,
-        .Condition       = {{ BSWM_MODE_SRC_ECUM, (uint8)ECUM_STATE_POST_RUN }},
+        .Condition      = {{ BSWM_MODE_SRC_ECUM, (uint8)ECUM_STATE_POST_RUN }},
         .ConditionCount = 1U,
         .Action         = BSWM_ACTION_PDU_GROUP_STOP,
         .IpduGroupId    = COM_IPDU_GROUP_TELEMETRY
@@ -168,8 +169,8 @@ static const BswM_RuleType BswM_Rules[BSWM_RULE_COUNT] =
      * 即座にテレメトリ送信を止める） */
     {
         .Operator       = BSWM_OP_OR,
-        .Condition       = {{ BSWM_MODE_SRC_COMM, (uint8)COMM_SILENT_COMMUNICATION },
-                             { BSWM_MODE_SRC_COMM, (uint8)COMM_NO_COMMUNICATION }},
+        .Condition      = {{ BSWM_MODE_SRC_COMM, (uint8)COMM_SILENT_COMMUNICATION },
+                           { BSWM_MODE_SRC_COMM, (uint8)COMM_NO_COMMUNICATION }},
         .ConditionCount = 2U,
         .Action         = BSWM_ACTION_PDU_GROUP_STOP,
         .IpduGroupId    = COM_IPDU_GROUP_TELEMETRY
@@ -177,23 +178,23 @@ static const BswM_RuleType BswM_Rules[BSWM_RULE_COUNT] =
     /* Rule 6/7: I-PDU Group「センサーRX」(EngineInfo/AbsInfo) の起動/停止
      * （2026-08 追加）。狙い・Rule 3/4/5（テレメトリ、TX）との条件の違い
      * （SILENT_COMMUNICATION/POST_RUN を対象外にした理由）は、本ファイル
-     * 冒頭の「Rule 6/7 の狙い」コメント参照。 */
+     * 冒頭の「Rule 6/7 の狙い」コメント参照。
+     * Rule 6: EcuM==RUN AND ComM==FULL_COMMUNICATION: I-PDU Group「センサーRX」を起動 */
     {
-        /* Rule 6: EcuM==RUN AND ComM==FULL_COMMUNICATION: I-PDU Group「センサーRX」を起動 */
         .Operator       = BSWM_OP_AND,
-        .Condition       = {{ BSWM_MODE_SRC_ECUM, (uint8)ECUM_STATE_RUN },
-                             { BSWM_MODE_SRC_COMM, (uint8)COMM_FULL_COMMUNICATION }},
+        .Condition      = {{ BSWM_MODE_SRC_ECUM, (uint8)ECUM_STATE_RUN },
+                           { BSWM_MODE_SRC_COMM, (uint8)COMM_FULL_COMMUNICATION }},
         .ConditionCount = 2U,
         .Action         = BSWM_ACTION_PDU_GROUP_START,
         .IpduGroupId    = COM_IPDU_GROUP_SENSOR_RX,
         .Initialize     = FALSE
     },
+    /* Rule 7: ComM==NO_COMMUNICATION（真の物理スリープのみ。
+     * SILENT_COMMUNICATION は対象外——上のコメント参照）:
+     * I-PDU Group「センサーRX」を停止 */
     {
-        /* Rule 7: ComM==NO_COMMUNICATION（真の物理スリープのみ。
-         * SILENT_COMMUNICATION は対象外——上のコメント参照）:
-         * I-PDU Group「センサーRX」を停止 */
         .Operator       = BSWM_OP_AND,
-        .Condition       = {{ BSWM_MODE_SRC_COMM, (uint8)COMM_NO_COMMUNICATION }},
+        .Condition      = {{ BSWM_MODE_SRC_COMM, (uint8)COMM_NO_COMMUNICATION }},
         .ConditionCount = 1U,
         .Action         = BSWM_ACTION_PDU_GROUP_STOP,
         .IpduGroupId    = COM_IPDU_GROUP_SENSOR_RX
@@ -205,76 +206,77 @@ static const BswM_RuleType BswM_Rules[BSWM_RULE_COUNT] =
      * false へ、新値のルールが true へ遷移し、常にちょうど1本だけ発火する）。 */
     {
         .Operator       = BSWM_OP_AND,
-        .Condition       = {{ BSWM_MODE_SRC_DCM_COMM, DCM_ENABLE_RX_TX_NORM }},
+        .Condition      = {{ BSWM_MODE_SRC_DCM_COMM, DCM_ENABLE_RX_TX_NORM }},
         .ConditionCount = 1U,
         .Action         = BSWM_ACTION_DCM_COMM_APPLY
     },
     {
         .Operator       = BSWM_OP_AND,
-        .Condition       = {{ BSWM_MODE_SRC_DCM_COMM, DCM_ENABLE_RX_DISABLE_TX_NORM }},
+        .Condition      = {{ BSWM_MODE_SRC_DCM_COMM, DCM_ENABLE_RX_DISABLE_TX_NORM }},
         .ConditionCount = 1U,
         .Action         = BSWM_ACTION_DCM_COMM_APPLY
     },
     {
         .Operator       = BSWM_OP_AND,
-        .Condition       = {{ BSWM_MODE_SRC_DCM_COMM, DCM_DISABLE_RX_ENABLE_TX_NORM }},
+        .Condition      = {{ BSWM_MODE_SRC_DCM_COMM, DCM_DISABLE_RX_ENABLE_TX_NORM }},
         .ConditionCount = 1U,
         .Action         = BSWM_ACTION_DCM_COMM_APPLY
     },
     {
         .Operator       = BSWM_OP_AND,
-        .Condition       = {{ BSWM_MODE_SRC_DCM_COMM, DCM_DISABLE_RX_TX_NORM }},
+        .Condition      = {{ BSWM_MODE_SRC_DCM_COMM, DCM_DISABLE_RX_TX_NORM }},
         .ConditionCount = 1U,
         .Action         = BSWM_ACTION_DCM_COMM_APPLY
     },
     {
         .Operator       = BSWM_OP_AND,
-        .Condition       = {{ BSWM_MODE_SRC_DCM_COMM, DCM_ENABLE_RX_TX_NM }},
+        .Condition      = {{ BSWM_MODE_SRC_DCM_COMM, DCM_ENABLE_RX_TX_NM }},
         .ConditionCount = 1U,
         .Action         = BSWM_ACTION_DCM_COMM_APPLY
     },
     {
         .Operator       = BSWM_OP_AND,
-        .Condition       = {{ BSWM_MODE_SRC_DCM_COMM, DCM_ENABLE_RX_DISABLE_TX_NM }},
+        .Condition      = {{ BSWM_MODE_SRC_DCM_COMM, DCM_ENABLE_RX_DISABLE_TX_NM }},
         .ConditionCount = 1U,
         .Action         = BSWM_ACTION_DCM_COMM_APPLY
     },
     {
         .Operator       = BSWM_OP_AND,
-        .Condition       = {{ BSWM_MODE_SRC_DCM_COMM, DCM_DISABLE_RX_ENABLE_TX_NM }},
+        .Condition      = {{ BSWM_MODE_SRC_DCM_COMM, DCM_DISABLE_RX_ENABLE_TX_NM }},
         .ConditionCount = 1U,
         .Action         = BSWM_ACTION_DCM_COMM_APPLY
     },
     {
         .Operator       = BSWM_OP_AND,
-        .Condition       = {{ BSWM_MODE_SRC_DCM_COMM, DCM_DISABLE_RX_TX_NM }},
+        .Condition      = {{ BSWM_MODE_SRC_DCM_COMM, DCM_DISABLE_RX_TX_NM }},
         .ConditionCount = 1U,
         .Action         = BSWM_ACTION_DCM_COMM_APPLY
     },
     {
         .Operator       = BSWM_OP_AND,
-        .Condition       = {{ BSWM_MODE_SRC_DCM_COMM, DCM_ENABLE_RX_TX_NORM_NM }},
+        .Condition      = {{ BSWM_MODE_SRC_DCM_COMM, DCM_ENABLE_RX_TX_NORM_NM }},
         .ConditionCount = 1U,
         .Action         = BSWM_ACTION_DCM_COMM_APPLY
     },
     {
         .Operator       = BSWM_OP_AND,
-        .Condition       = {{ BSWM_MODE_SRC_DCM_COMM, DCM_ENABLE_RX_DISABLE_TX_NORM_NM }},
+        .Condition      = {{ BSWM_MODE_SRC_DCM_COMM, DCM_ENABLE_RX_DISABLE_TX_NORM_NM }},
         .ConditionCount = 1U,
         .Action         = BSWM_ACTION_DCM_COMM_APPLY
     },
     {
         .Operator       = BSWM_OP_AND,
-        .Condition       = {{ BSWM_MODE_SRC_DCM_COMM, DCM_DISABLE_RX_ENABLE_TX_NORM_NM }},
+        .Condition      = {{ BSWM_MODE_SRC_DCM_COMM, DCM_DISABLE_RX_ENABLE_TX_NORM_NM }},
         .ConditionCount = 1U,
         .Action         = BSWM_ACTION_DCM_COMM_APPLY
     },
     {
         .Operator       = BSWM_OP_AND,
-        .Condition       = {{ BSWM_MODE_SRC_DCM_COMM, DCM_DISABLE_RX_TX_NORM_NM }},
+        .Condition      = {{ BSWM_MODE_SRC_DCM_COMM, DCM_DISABLE_RX_TX_NORM_NM }},
         .ConditionCount = 1U,
         .Action         = BSWM_ACTION_DCM_COMM_APPLY
     }
+    /* @@GEN-END bswm-rules */
 };
 
 /* -----------------------------------------------------------------------

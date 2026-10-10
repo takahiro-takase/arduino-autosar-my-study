@@ -1,0 +1,191 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "E2EXf configuration",
+  "description": "E2EXf_PBCfg.c / E2EXf_PBCfg.h の生成元。DataLength、Offset、DataID（既定）は frame が指す信号表から引く。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "module",
+    "smConfig",
+    "instances"
+  ],
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "module": {
+      "const": "E2EXf"
+    },
+    "smConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "doc",
+        "windowSize",
+        "minOkStateInit",
+        "maxErrorStateInit",
+        "minOkStateValid",
+        "maxErrorStateValid",
+        "minOkStateInvalid",
+        "maxErrorStateInvalid"
+      ],
+      "properties": {
+        "doc": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "not": {
+              "pattern": "\\*/"
+            }
+          }
+        },
+        "windowSize": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 255
+        },
+        "minOkStateInit": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 255
+        },
+        "maxErrorStateInit": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 255
+        },
+        "minOkStateValid": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 255
+        },
+        "maxErrorStateValid": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 255
+        },
+        "minOkStateInvalid": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 255
+        },
+        "maxErrorStateInvalid": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 255
+        }
+      }
+    },
+    "instances": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/instance"
+      }
+    }
+  },
+  "$defs": {
+    "instance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "stem",
+        "frame",
+        "direction",
+        "profile",
+        "lengthNote"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[A-Za-z][A-Za-z0-9_]*$",
+          "description": "DaVinci の E2EXf インスタンス名"
+        },
+        "stem": {
+          "type": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+          "description": "C の変数名に使う語幹（E2EXf_<stem>CfgP05 など）"
+        },
+        "frame": {
+          "type": "string",
+          "minLength": 1,
+          "not": {
+            "pattern": "\\*/"
+          },
+          "description": "信号表のフレーム名"
+        },
+        "direction": {
+          "enum": [
+            "RX",
+            "TX"
+          ]
+        },
+        "profile": {
+          "enum": [
+            "P05"
+          ]
+        },
+        "note": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "not": {
+              "pattern": "\\*/"
+            }
+          }
+        },
+        "lengthNote": {
+          "type": "string",
+          "minLength": 1,
+          "not": {
+            "pattern": "\\*/"
+          },
+          "description": "DataLength の説明（PDU のレイアウト）"
+        },
+        "dataId": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 65535,
+          "description": "既定は CAN ID"
+        },
+        "maxDeltaCounter": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 255
+        },
+        "demEvent": {
+          "type": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+          "description": "RX のみ。Dem イベントのマクロ"
+        },
+        "waitNote": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "not": {
+              "pattern": "\\*/"
+            }
+          }
+        },
+        "smNote": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "not": {
+              "pattern": "\\*/"
+            }
+          }
+        }
+      }
+    }
+  }
+}

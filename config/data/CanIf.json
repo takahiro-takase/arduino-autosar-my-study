@@ -1,0 +1,214 @@
+{
+  "$schema": "../schema/CanIf.schema.json",
+  "module": "CanIf",
+  "txPduCountDoc": [
+    "TX PDU テーブルのエントリ数（送信 CAN フレーム種別数）",
+    "TxPduId=0: EngineState    (CAN 0x200, COM)",
+    "TxPduId=1: UDS 診断応答   (CAN 0x7E8, DCM)",
+    "TxPduId=2: NM フレーム    (CAN 0x400, CanNm。PduR/Com を経由せず直接呼び出す)",
+    "TxPduId=3: WarningStatus  (CAN 0x210, COM Signal Group)",
+    "TxPduId=4: E2EHealthStatus (CAN 0x220, COM PERIODIC)",
+    "TxPduId=5: ImmobilizerStatus (CAN 0x230, COM DIRECT。Signal Gateway 転送先)"
+  ],
+  "rxPduCountDoc": [
+    "RX PDU テーブルのエントリ数（受信 CAN フレーム種別数）",
+    "DaVinci: /ActiveEcuC/CanIf/CanIfInitCfg/CanIfRxPduCfg ノード数",
+    "RxPduId=0: EngineInfo     (CAN 0x100, COM)   エンジン ECU",
+    "RxPduId=1: UDS 診断要求   (CAN 0x7E0, DCM)   診断ツール",
+    "RxPduId=2: AbsInfo        (CAN 0x110, COM)   ABS ECU",
+    "RxPduId=3: ImmobilizerCmd (CAN 0x120, SecOC) KeyFobEcu 想定",
+    "RxPduId=4: NM フレーム    (CAN 0x400, CanNm。PduR/Com を経由せず直接呼び出す)"
+  ],
+  "txPdus": [
+    {
+      "name": "MeterStatus_Tx",
+      "frame": "MeterStatus",
+      "title": "MeterStatus フレーム",
+      "upperLayerTxPduId": 0,
+      "hth": 0,
+      "txConfirm": "PDUR",
+      "notes": {
+        "dlc": [
+          "E2E 保護なし。byte[0]=EngineState、",
+          "byte[1] bit0=update-bit、byte[2]=警告灯3bit、",
+          "byte[3-4]=EngineSpeedミラー、byte[5]=CoolantTempミラー"
+        ]
+      }
+    },
+    {
+      "name": "DiagResp_Tx",
+      "canId": "0x7E8",
+      "dlc": 8,
+      "title": "UDS 診断応答フレーム",
+      "upperLayerTxPduId": 1,
+      "hth": 0,
+      "txConfirm": "PDUR",
+      "notes": {
+        "txConfirm": [
+          "PduR_PBCfg.c の TX パス(SrcPduId=1)は",
+          "ConfFct=CanTp_TxConfirmation を設定済みだが、",
+          "以前は本フィールドが NULL のため到達不能な配線に",
+          "なっていた（CanTp_TxConfirmation 自体は意図的な",
+          "no-op のため実害はなかったが、設定の一貫性として",
+          "修正。2026-08 のスペック監査で発見）"
+        ]
+      }
+    },
+    {
+      "name": "CanNm_Tx",
+      "frame": "Nm",
+      "title": "NM フレーム",
+      "note": [
+        "CanNm.c は PduR/Com を経由せず CanIf_Transmit(CANNM_CANIF_TX_PDU_ID, ...) を",
+        "直接呼び出す（実車の CanNm と同じく Com スタックとは独立して動作する）。"
+      ],
+      "upperLayerTxPduId": 2,
+      "hth": 0,
+      "txConfirm": "CANNM",
+      "notes": {
+        "upperLayerTxPduId": [
+          "CanNm_Cfg.h の CANNM_CANIF_TX_PDU_ID と一致させること"
+        ],
+        "dlc": [
+          "Control Bit Vector 1B + Source Node ID 1B"
+        ],
+        "txConfirm": [
+          "[SWS_CanNm_00099] NM-Timeout Timer 再起動に使用"
+        ]
+      }
+    },
+    {
+      "name": "WarningStatus_Tx",
+      "frame": "WarningStatus",
+      "title": "WarningStatus フレーム (COM Signal Group)",
+      "upperLayerTxPduId": 2,
+      "hth": 0,
+      "txConfirm": "PDUR",
+      "notes": {
+        "upperLayerTxPduId": [
+          "TxConfirmation で上位層(PduR)へ返す ID のため、CanIf 自身の TxPduId(=3) ではなく",
+          "PduR_PBCfg.c の PduR_TxPaths[] における WarningStatus パスの SrcPduId(=2) と",
+          "一致させる。（MeterStatus/UDS応答は SrcPduId と CanIf TxPduId が",
+          "たまたま同値のため、この区別が表面化していなかった）"
+        ],
+        "dlc": [
+          "RunLamp/FaultLamp/AbsLamp 各1bit"
+        ]
+      }
+    },
+    {
+      "name": "E2EHealthStatus_Tx",
+      "frame": "E2EHealthStatus",
+      "title": "E2EHealthStatus フレーム (COM PERIODIC、E2E Profile05 保護のみ)",
+      "upperLayerTxPduId": 3,
+      "hth": 0,
+      "txConfirm": "PDUR",
+      "notes": {
+        "upperLayerTxPduId": [
+          "PduR_PBCfg.c の E2EHealthStatus パスの SrcPduId(=3) と一致させる"
+        ],
+        "dlc": [
+          "E2E Profile05 保護: CRC16 2B + Counter 1B + CrcErrCount 1B + SeqErrCount 1B の",
+          "5byte。以前は E2E P01(4byte)+SecOC の Freshness1B+MAC3B で DLC=8 だったが、",
+          "SecOC は撤去し Com 自身が知る DLC とそのまま一致させている"
+        ]
+      }
+    },
+    {
+      "name": "ImmobilizerStatus_Tx",
+      "frame": "ImmobilizerStatus",
+      "title": "ImmobilizerStatus フレーム (COM DIRECT、Signal Gateway 転送先)",
+      "upperLayerTxPduId": 4,
+      "hth": 0,
+      "txConfirm": "PDUR",
+      "notes": {
+        "upperLayerTxPduId": [
+          "PduR_PBCfg.c の ImmobilizerStatus パスの SrcPduId(=4) と一致させる"
+        ],
+        "dlc": [
+          "ImmobilizerStatus のみ"
+        ]
+      }
+    }
+  ],
+  "rxPdus": [
+    {
+      "name": "EngineInfo_Rx",
+      "frame": "EngineInfo",
+      "title": "EngineInfo フレーム (エンジン ECU → メータ ECU)",
+      "upperLayerRxPduId": 0,
+      "hrh": 0,
+      "rxIndication": "PDUR",
+      "notes": {
+        "dlc": [
+          "E2E P05 保護: CRC16(2B)+Counter1B+シグナル4B"
+        ]
+      }
+    },
+    {
+      "name": "DiagReq_Rx",
+      "canId": "0x7E0",
+      "dlc": 8,
+      "title": "UDS 診断要求フレーム (診断ツール → メータ ECU)",
+      "upperLayerRxPduId": 1,
+      "hrh": 0,
+      "rxIndication": "PDUR",
+      "notes": {
+        "dlc": [
+          "ISO 15765-2 診断フレームは常に8バイト"
+        ]
+      }
+    },
+    {
+      "name": "AbsInfo_Rx",
+      "frame": "AbsInfo",
+      "title": "AbsInfo フレーム (ABS ECU → メータ ECU)",
+      "upperLayerRxPduId": 2,
+      "hrh": 0,
+      "rxIndication": "PDUR",
+      "notes": {
+        "dlc": [
+          "E2E P05 保護: CRC16(2B)+Counter1B+シグナル3B"
+        ]
+      }
+    },
+    {
+      "name": "ImmobilizerCmd_Rx",
+      "frame": "SecureCommand (ImmobilizerCmd)",
+      "title": "ImmobilizerCmd フレーム (KeyFobEcu 想定 → メータ ECU)",
+      "note": [
+        "SecOC Profile 1 (24Bit-CMAC-8Bit-FV) で保護される Secured I-PDU。",
+        "詳細は src/Bsw/SecOC/SecOC_PBCfg.c 参照。"
+      ],
+      "upperLayerRxPduId": 3,
+      "hrh": 0,
+      "rxIndication": "PDUR",
+      "notes": {
+        "dlc": [
+          "Authentic 2B + Freshness 1B + 切り詰めMAC 3B"
+        ]
+      }
+    },
+    {
+      "name": "CanNm_Rx",
+      "frame": "Nm",
+      "title": "NM フレーム (仮想他 ECU → メータ ECU)",
+      "note": [
+        "CanNm.c は PduR/Com を経由せず CanIf から直接呼ばれる（実車の CanNm と",
+        "同様、TxPduId=2 の NM フレーム送信と対になる受信経路）。"
+      ],
+      "upperLayerRxPduId": 4,
+      "hrh": 0,
+      "rxIndication": "CANNM",
+      "notes": {
+        "upperLayerRxPduId": [
+          "CanNm_Cfg.h の CANNM_CANIF_RX_PDU_ID と一致させること。",
+          "単一チャネルのため CanNm 側では実質未使用"
+        ],
+        "dlc": [
+          "Control Bit Vector 1B + Source Node ID 1B"
+        ]
+      }
+    }
+  ]
+}

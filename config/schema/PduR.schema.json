@@ -1,0 +1,95 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "PduR configuration",
+  "description": "PduR_PBCfg.c / PduR_Cfg.h の生成元。項目名は PduR_Types.h の構造体フィールドと DaVinci の ECUC パラメータ（PduRRoutingPath 等）に対応する。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["module", "rxPathCountDoc", "txPathCountDoc", "rxPaths", "txPaths"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "module": { "const": "PduR" },
+    "rxPathCountDoc": { "$ref": "#/$defs/commentLines", "description": "PDUR_RX_PATH_COUNT の Doxygen コメント本文" },
+    "txPathCountDoc": { "$ref": "#/$defs/commentLines", "description": "PDUR_TX_PATH_COUNT の Doxygen コメント本文" },
+    "rxPaths": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 255,
+      "items": { "$ref": "#/$defs/rxPath" }
+    },
+    "txPaths": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 255,
+      "items": { "$ref": "#/$defs/txPath" }
+    }
+  },
+  "$defs": {
+    "commentLines": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string", "not": { "pattern": "\\*/" } }
+    },
+    "pduId": { "type": "integer", "minimum": 0, "maximum": 65535 },
+    "shortName": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_]*$" },
+    "text": { "type": "string", "minLength": 1, "not": { "pattern": "\\*/" } },
+    "rxPath": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "tableSummary", "summary", "srcPduId", "destCountNote", "dests"],
+      "properties": {
+        "name": { "$ref": "#/$defs/shortName", "description": "PduRRoutingPath の ShortName" },
+        "frame": { "$ref": "#/$defs/text", "description": "信号表（can_signals.json）のフレーム名。見出し中の {canId} の置換と、CanIf との整合性検査に使う" },
+        "tableSummary": { "$ref": "#/$defs/text", "description": "配信先テーブルの見出しコメント" },
+        "summary": { "$ref": "#/$defs/text", "description": "RX ルーティングパステーブル内の見出しコメント" },
+        "srcPduId": { "$ref": "#/$defs/pduId", "description": "PduRSrcPduHandleId（CanIf の RxPduId）" },
+        "destCountNote": { "$ref": "#/$defs/text", "description": "PduR_Cfg.h の配信先数マクロのコメント" },
+        "dests": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 255,
+          "items": { "$ref": "#/$defs/rxDest" }
+        }
+      }
+    },
+    "rxDest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["module"],
+      "oneOf": [{ "required": ["destPduId"] }, { "required": ["ipdu"] }, { "required": ["secocPdu"] }],
+      "properties": {
+        "module": { "enum": ["COM", "CANTP", "SECOC"], "description": "PduRDestModule" },
+        "destPduId": { "$ref": "#/$defs/pduId", "description": "PduRDestPduHandleId（上位層の PDU インデックス）。COM 宛ては ipdu で指定する" },
+        "ipdu": { "$ref": "#/$defs/shortName", "description": "COM 宛ての場合の、Com の RX I-PDU の name。destPduId は Com の設定の並び順から引く" },
+        "secocPdu": { "$ref": "#/$defs/shortName", "description": "SecOC 宛ての場合の、SecOC の RX PDU の name。destPduId は SecOC の設定の並び順から引く" },
+        "destPduIdNote": { "$ref": "#/$defs/text" }
+      }
+    },
+    "txPath": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "summary", "srcPduId", "canIfTxPduId", "confModule"],
+      "oneOf": [{ "required": ["confDestPduId"] }, { "required": ["confIpdu"] }],
+      "properties": {
+        "name": { "$ref": "#/$defs/shortName" },
+        "frame": { "$ref": "#/$defs/text" },
+        "summary": { "$ref": "#/$defs/text" },
+        "note": { "$ref": "#/$defs/commentLines" },
+        "srcPduId": { "$ref": "#/$defs/pduId" },
+        "canIfTxPduId": { "$ref": "#/$defs/pduId" },
+        "confDestPduId": { "$ref": "#/$defs/pduId", "description": "送信完了の通知先の PDU ID。COM 宛ては confIpdu で指定する" },
+        "confIpdu": { "$ref": "#/$defs/shortName", "description": "confModule が COM の場合の、Com の TX I-PDU の name。confDestPduId は Com の設定の並び順から引く" },
+        "confModule": { "enum": ["COM", "CANTP"], "description": "送信確認の通知先モジュール（PduRTxConfirmation）" },
+        "transmitOverride": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["fct", "id"],
+          "description": "TX 経路上に SecOC 等の中間モジュールを挟む場合のみ（本プロジェクト独自拡張）",
+          "properties": {
+            "fct": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_]*$" },
+            "id": { "$ref": "#/$defs/pduId" }
+          }
+        }
+      }
+    }
+  }
+}

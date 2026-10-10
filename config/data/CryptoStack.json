@@ -1,0 +1,55 @@
+{
+  "$schema": "../schema/CryptoStack.schema.json",
+  "module": "CryptoStack",
+  "keys": [
+    {
+      "name": "ImmobilizerCmd",
+      "macro": "CRYPTO_KEY_IMMOBILIZER_CMD",
+      "doc": ["RX Secured I-PDU「ImmobilizerCmd」検証用の鍵（KeyFobEcu と共有）"],
+      "hex": "4B6579466F6253656372657421212121",
+      "note": [
+        "CRYPTO_KEY_IMMOBILIZER_CMD: ASCII で \"KeyFobSecret!!!!\" と読める値にして",
+        "あり、デバッグ時にログ上のバイト列から鍵だと一目でわかるようにしている",
+        "（学習用の意図的な選択。実車の鍵は当然このような可読値にしない）。"
+      ],
+      "keyM": {
+        "macro": "KEYM_CRYPTO_KEY_NAME_IMMOBILIZER_CMD",
+        "name": "1",
+        "doc": ["RX Secured I-PDU「ImmobilizerCmd」の鍵名"]
+      }
+    }
+  ],
+  "keysTrailingNote": [
+    "CRYPTO_KEY_E2E_HEALTH_STATUS は E2EHealthStatus の SecOC 撤去に伴い削除済み",
+    "（E2E Profile05 単体保護へ切り替えたため、この鍵を使う PDU が無くなった）。"
+  ],
+  "keyCountDoc": ["鍵テーブルの総数"],
+  "keyTablePostNote": [
+    "CRYPTO_KEY_E2E_HEALTH_STATUS (\"TelemetryKey!!!!\") は E2EHealthStatus の",
+    "SecOC 撤去に伴い削除済み（E2E Profile05 単体保護へ切り替えたため）。"
+  ],
+  "keyMTrailingNote": [
+    "KEYM_CRYPTO_KEY_NAME_E2E_HEALTH_STATUS ('2') は E2EHealthStatus の SecOC",
+    "撤去に伴い削除済み（E2E Profile05 単体保護へ切り替えたため）。"
+  ],
+  "keyMCountDoc": ["鍵名テーブルの総数"],
+  "keyMTablePostNote": [
+    "KEYM_CRYPTO_KEY_NAME_E2E_HEALTH_STATUS は E2EHealthStatus の SecOC 撤去に",
+    "伴い削除済み（対応する CRYPTO_KEY_E2E_HEALTH_STATUS が無くなったため）。"
+  ],
+  "jobs": [
+    {
+      "name": "ImmobilizerCmdVerify",
+      "macro": "CSM_JOB_ID_IMMOBILIZER_CMD_VERIFY",
+      "service": "MACVERIFY",
+      "key": "ImmobilizerCmd",
+      "doc": ["RX Secured I-PDU「ImmobilizerCmd」の MAC 検証ジョブ"]
+    }
+  ],
+  "jobsTrailingNote": [
+    "CSM_JOB_ID_E2E_HEALTH_STATUS_GENERATE は E2EHealthStatus の SecOC 撤去に",
+    "伴い削除済み（E2E Profile05 単体保護へ切り替えたため、TX 方向で SecOC/Csm",
+    "の MAC 生成ジョブを使う PDU が現在無い）。"
+  ],
+  "jobCountDoc": ["ジョブテーブルの総数"]
+}

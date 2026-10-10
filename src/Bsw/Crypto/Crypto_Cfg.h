@@ -78,12 +78,14 @@
  * 鍵テーブル（実車は KeyM 等による鍵のプロビジョニング・保護が必須だが、
  * 本実装は学習のためコンパイル時の固定鍵テーブルに簡略化する）
  * ----------------------------------------------------------------------- */
+/* @@GEN-BEGIN crypto-key-ids  生成元: config/data/CryptoStack.json  （自動生成: 手編集禁止） */
 /** RX Secured I-PDU「ImmobilizerCmd」検証用の鍵（KeyFobEcu と共有） */
-#define CRYPTO_KEY_IMMOBILIZER_CMD    0U
+#define CRYPTO_KEY_IMMOBILIZER_CMD  0U
 
 /* CRYPTO_KEY_E2E_HEALTH_STATUS は E2EHealthStatus の SecOC 撤去に伴い削除済み
  * （E2E Profile05 単体保護へ切り替えたため、この鍵を使う PDU が無くなった）。 */
 /** 鍵テーブルの総数 */
 #define CRYPTO_KEY_COUNT  1U
+/* @@GEN-END crypto-key-ids */
 
 #endif /* CRYPTO_CFG_H */

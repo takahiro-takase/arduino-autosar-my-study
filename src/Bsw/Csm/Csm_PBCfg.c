@@ -24,6 +24,7 @@
  * Global Variables
  * ====================================================================== */
 
+/* @@GEN-BEGIN csm-job-table  生成元: config/data/CryptoStack.json  （自動生成: 手編集禁止） */
 const Csm_JobConfigType Csm_JobConfigData[CSM_JOB_COUNT] = {
     {
         .JobId       = CSM_JOB_ID_IMMOBILIZER_CMD_VERIFY,
@@ -31,3 +32,4 @@ const Csm_JobConfigType Csm_JobConfigData[CSM_JOB_COUNT] = {
         .CryptoKeyId = CRYPTO_KEY_IMMOBILIZER_CMD
     }
 };
+/* @@GEN-END csm-job-table */

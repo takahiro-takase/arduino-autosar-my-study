@@ -7,7 +7,7 @@ can_signal_editor_app.py（CAN信号定義エディタ）と uds_tester_app.py�
 埋め込む前提の同一パッケージ内モジュールとして同居する（単体起動は廃止済み）。
 
 使い方:
-    python src/app.py [--data ../../data/can_signals.json] [--config ../config.json]
+    python src/app.py [--data ../../config/data/can_signals.json] [--config ../config.json]
 """
 from __future__ import annotations
 
@@ -16,6 +16,8 @@ import tkinter as tk
 from tkinter import ttk
 
 import can_signal_editor_app
+import config_editor_app
+import configurator_panel
 import uds_tester_app
 
 
@@ -44,11 +46,19 @@ def main() -> None:
     )
     notebook.add(editor_frame)
 
+    # 設定 JSON エディタ（config/data/*.json をスキーマに従って編集する）。
+    # コンフィグレータの実行に使う信号表は、信号定義エディタと同じ args.data。
+    config_frame = config_editor_app.ConfigEditorFrame(
+        notebook, configurator_panel.CONFIG_DIR, lambda: args.data,
+        on_title_change=lambda text: notebook.tab(config_frame, text=text),
+    )
+    notebook.add(config_frame)
+
     tester_frame = uds_tester_app.UdsTesterFrame(notebook, args.config)
     notebook.add(tester_frame, text="UDS Tester")
     notebook.select(tester_frame)  # 起動直後に表示するタブ（UDS Tester を優先）
 
-    tabs = (editor_frame, tester_frame)
+    tabs = (editor_frame, config_frame, tester_frame)
 
     def _on_close() -> None:
         # 各タブは confirm_close() を実装していれば閉じてよいかを判断できる

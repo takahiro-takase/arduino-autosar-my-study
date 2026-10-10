@@ -78,6 +78,7 @@
  * 本プロジェクトは KeyM 仕様書 9 章のシーケンス図例（"1"/"2"/"3" のような
  * 1 バイト ASCII 数字の鍵名）に合わせ、単純な1バイト鍵名にする。
  * ----------------------------------------------------------------------- */
+/* @@GEN-BEGIN keym-key-names  生成元: config/data/CryptoStack.json  （自動生成: 手編集禁止） */
 /** RX Secured I-PDU「ImmobilizerCmd」の鍵名 */
 #define KEYM_CRYPTO_KEY_NAME_IMMOBILIZER_CMD    '1'
 
@@ -85,5 +86,6 @@
  * 撤去に伴い削除済み（E2E Profile05 単体保護へ切り替えたため）。 */
 /** 鍵名テーブルの総数 */
 #define KEYM_CRYPTO_KEY_COUNT  1U
+/* @@GEN-END keym-key-names */
 
 #endif /* KEYM_CFG_H */

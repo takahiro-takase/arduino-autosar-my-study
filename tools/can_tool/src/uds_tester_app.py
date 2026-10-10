@@ -39,11 +39,11 @@ def parse_payload(items) -> bytes:
 # tools/uds_tester/src の絶対パス。__file__ は tools/uds_tester/src/app.py。
 _THIS_DIR = os.path.dirname(os.path.abspath(__file__))
 
-# data/can_signals.json（CANフレームのビットレイアウト定義。tools/can_signal_editor/
+# config/data/can_signals.json（CANフレームのビットレイアウト定義。tools/can_signal_editor/
 # 参照）へのパス。3階層上がリポジトリルート
 # （tools/can_signal_editor/src/app.py の DEFAULT_DATA_PATH と同じ規約）。
 DEFAULT_SIGNAL_DEFS_PATH = os.path.normpath(
-    os.path.join(_THIS_DIR, "..", "..", "..", "data", "can_signals.json")
+    os.path.join(_THIS_DIR, "..", "..", "..", "config", "data", "can_signals.json")
 )
 
 # config.json（このツール自身の設定）へのパス。以前は cwd 相対の "config.json" が
@@ -85,7 +85,7 @@ class _Tooltip:
 
 class UdsTesterFrame(ttk.Frame):
     def _load_signal_defs(self, path: str) -> "dict[int, dict]":
-        """data/can_signals.json を読み込み、{CAN ID(int): フレーム定義} の辞書を返す。
+        """config/data/can_signals.json を読み込み、{CAN ID(int): フレーム定義} の辞書を返す。
         RXモニタのデコードはこの辞書を情報源にする（tools/can_signal_editor/ で
         編集した内容がそのまま反映される）。ファイル自体が無い・JSONとして壊れて
         いる場合は空辞書にフォールバックする（全フレーム分のデコードが無効化
@@ -702,7 +702,7 @@ class UdsTesterFrame(ttk.Frame):
                 self._entry_vars.setdefault(i, {})["data"] = data_var
 
                 # 周期(ms) 入力欄 (col 1)。優先順位: config.json の interval_ms
-                # （明示指定）→ data/can_signals.json の txPeriodMs（この can_id を
+                # （明示指定）→ config/data/can_signals.json の txPeriodMs（この can_id を
                 # 持つ RX/TX-RX 方向のフレーム定義があれば、そこに記録された送信
                 # 周期。can_frame ボタンは基本的に外部ECUからの受信を模擬する用途
                 # のため、対応するRXフレームの txPeriodMs がそのまま「相手ECUが
@@ -1884,7 +1884,7 @@ class UdsTesterFrame(ttk.Frame):
     # ------------------------------------------------------------------
     # 受信モニター (rx_monitor)
     #
-    # デコードは data/can_signals.json（tools/can_signal_editor/ で編集する、
+    # デコードは config/data/can_signals.json（tools/can_signal_editor/ で編集する、
     # CANフレームのビットレイアウト定義）を情報源にする。以前はフレームごとに
     # 手書きのビット演算デコード関数を持っていたが、フレーム追加のたびに
     # ここへも手を入れる必要があった。can_signals.json に定義さえあれば

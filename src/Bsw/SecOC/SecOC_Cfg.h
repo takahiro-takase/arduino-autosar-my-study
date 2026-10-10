@@ -85,6 +85,7 @@
 #define SECOC_SW_MINOR_VERSION   0U
 #define SECOC_SW_PATCH_VERSION   0U
 
+/* @@GEN-BEGIN secoc-counts  生成元: config/data/SecOC.json  （自動生成: 手編集禁止） */
 /** RX Secured I-PDU テーブルのエントリ数
  *  [0]=ImmobilizerCmd (CAN 0x120, KeyFobEcu からの想定) */
 #define SECOC_RX_PDU_COUNT  1U
@@ -93,5 +94,6 @@
  *  無い（以前は E2EHealthStatus (CAN 0x220) を保護していたが、E2E Profile05
  *  単体保護へ切り替えて撤去した）。RX 方向 (ImmobilizerCmd) は引き続き使用中。 */
 #define SECOC_TX_PDU_COUNT  0U
+/* @@GEN-END secoc-counts */
 
 #endif /* SECOC_CFG_H */
