@@ -71,6 +71,7 @@
 /* -----------------------------------------------------------------------
  * プリコンパイル設定定数
  * ----------------------------------------------------------------------- */
+/* @@GEN-BEGIN pdur-counts  生成元: config/data/PduR.json  （自動生成: 手編集禁止） */
 /** RX ルーティングパス数
  *  DaVinci: /ActiveEcuC/PduR/PduRConfig/PduRRoutingTable 内の
  *           RECEIVE 方向 PduRRoutingPath ノード数
@@ -105,5 +106,6 @@
  *  SrcPduId は COM が PduR_ComTransmit() へ、CanTp が PduR_CanTpTransmit() へ
  *  渡す共通の名前空間のため、各パスで重複しない値を割り当てること。 */
 #define PDUR_TX_PATH_COUNT   5U
+/* @@GEN-END pdur-counts */
 
 #endif /* PDUR_CFG_H */

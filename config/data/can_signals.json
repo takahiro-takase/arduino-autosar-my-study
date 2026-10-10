@@ -265,7 +265,7 @@
       "canId": "0x100",
       "dlc": 7,
       "txPeriodMs": 1000,
-      "rxTimeoutMs": 3000,
+      "rxTimeoutMs": 5000,
       "note": "エンジンECU送信。AUTOSAR E2E Profile05保護。rxTimeoutMs=COM_TIMEOUT_ENGINE_INFO_MSの実測値（txPeriodMsの導出根拠は先頭$note参照）",
       "fields": [
         {
@@ -330,7 +330,7 @@
       "canId": "0x110",
       "dlc": 6,
       "txPeriodMs": 1000,
-      "rxTimeoutMs": 3000,
+      "rxTimeoutMs": 5000,
       "note": "ABS ECU送信。AUTOSAR E2E Profile05保護。RX Signal Group。rxTimeoutMs=COM_TIMEOUT_ABS_INFO_MSの実測値（txPeriodMsの導出根拠は先頭$note参照）",
       "fields": [
         {

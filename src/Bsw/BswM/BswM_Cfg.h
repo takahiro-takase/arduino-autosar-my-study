@@ -201,9 +201,11 @@
 /* -----------------------------------------------------------------------
  * ルール数
  * ----------------------------------------------------------------------- */
+/* @@GEN-BEGIN bswm-rule-count  生成元: config/data/BswM.json  （自動生成: 手編集禁止） */
 /* 既存 8 ルール + Dcm_CommunicationModeType（[SWS_Dcm_00981]）の全 12 通り
  * それぞれに対応する BSWM_ACTION_DCM_COMM_APPLY ルールを 1 行ずつ追加。 */
 #define BSWM_RULE_COUNT  20U
+/* @@GEN-END bswm-rule-count */
 
 /** モードソース数（BswM_ModeSrcType の列挙値数。複合条件ルール評価用の
  *  モードキャッシュ配列 BswM_ModeSrcCache[] のサイズに使う）。 */

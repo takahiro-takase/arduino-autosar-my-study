@@ -1,0 +1,142 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "BswM configuration",
+  "description": "BswM_PBCfg.c のルールテーブルと BswM_Cfg.h のルール数の生成元。I-PDU グループは Com の ipduGroups の macro で参照する。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "module",
+    "ruleCountDoc",
+    "rules"
+  ],
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "module": {
+      "const": "BswM"
+    },
+    "ruleCountDoc": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "not": {
+          "pattern": "\\*/"
+        }
+      }
+    },
+    "rules": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/rule"
+      }
+    }
+  },
+  "$defs": {
+    "rule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "operator",
+        "action"
+      ],
+      "properties": {
+        "comment": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "not": {
+              "pattern": "\\*/"
+            }
+          }
+        },
+        "operator": {
+          "enum": [
+            "AND",
+            "OR"
+          ]
+        },
+        "conditions": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 4,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "source",
+              "value"
+            ],
+            "properties": {
+              "source": {
+                "enum": [
+                  "ECUM",
+                  "COMM",
+                  "DCM_COMM"
+                ]
+              },
+              "value": {
+                "type": "string",
+                "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+              }
+            }
+          }
+        },
+        "perValue": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "source",
+            "values"
+          ],
+          "description": "値ごとに単一条件のルールを 1 本ずつ展開する",
+          "properties": {
+            "source": {
+              "enum": [
+                "ECUM",
+                "COMM",
+                "DCM_COMM"
+              ]
+            },
+            "values": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string",
+                "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+              }
+            }
+          }
+        },
+        "action": {
+          "enum": [
+            "ACTIVATE",
+            "DEACTIVATE",
+            "PDU_GROUP_START",
+            "PDU_GROUP_STOP",
+            "DCM_COMM_APPLY"
+          ]
+        },
+        "taskMask": {
+          "type": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+          "description": "ACTIVATE / DEACTIVATE の対象タスク（BswM_Cfg.h の BSWM_TASK_MASK_*）"
+        },
+        "ipduGroup": {
+          "type": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+          "description": "PDU_GROUP_START / STOP の対象。Com の ipduGroups の macro"
+        },
+        "initialize": {
+          "type": "boolean",
+          "description": "PDU_GROUP_START の initialize 引数"
+        }
+      }
+    }
+  }
+}

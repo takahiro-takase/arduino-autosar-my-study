@@ -66,6 +66,7 @@
  * （CRYPTO_KEY_*）を使うかは Csm_PBCfg.c の Csm_JobConfigData で決める
  * （SecOC は jobId しか知らず、鍵そのものへは一切アクセスしない）。
  * ----------------------------------------------------------------------- */
+/* @@GEN-BEGIN csm-job-ids  生成元: config/data/CryptoStack.json  （自動生成: 手編集禁止） */
 /** RX Secured I-PDU「ImmobilizerCmd」の MAC 検証ジョブ */
 #define CSM_JOB_ID_IMMOBILIZER_CMD_VERIFY     0U
 
@@ -74,5 +75,6 @@
  * の MAC 生成ジョブを使う PDU が現在無い）。 */
 /** ジョブテーブルの総数 */
 #define CSM_JOB_COUNT  1U
+/* @@GEN-END csm-job-ids */
 
 #endif /* CSM_CFG_H */

@@ -99,6 +99,7 @@
 /* -----------------------------------------------------------------------
  * プリコンパイル設定定数
  * ----------------------------------------------------------------------- */
+/* @@GEN-BEGIN canif-counts  生成元: config/data/CanIf.json  （自動生成: 手編集禁止） */
 /** TX PDU テーブルのエントリ数（送信 CAN フレーム種別数）
  *  TxPduId=0: EngineState    (CAN 0x200, COM)
  *  TxPduId=1: UDS 診断応答   (CAN 0x7E8, DCM)
@@ -116,6 +117,7 @@
  *  RxPduId=3: ImmobilizerCmd (CAN 0x120, SecOC) KeyFobEcu 想定
  *  RxPduId=4: NM フレーム    (CAN 0x400, CanNm。PduR/Com を経由せず直接呼び出す) */
 #define CANIF_RX_PDU_COUNT  5U
+/* @@GEN-END canif-counts */
 
 /** CanIf_ReadRxPduData()（2026-08 追加）の内部バッファ配列サイズ。
  *  Com_Cfg.h の COM_RX_IPDU_MAX と同じ規約（CANIF_RX_PDU_COUNT に連動）。

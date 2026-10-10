@@ -1,0 +1,146 @@
+{
+  "$schema": "../schema/PduR.schema.json",
+  "module": "PduR",
+  "rxPathCountDoc": [
+    "RX ルーティングパス数",
+    "DaVinci: /ActiveEcuC/PduR/PduRConfig/PduRRoutingTable 内の",
+    "         RECEIVE 方向 PduRRoutingPath ノード数",
+    "パス 0: CAN 0x100 → COM   (EngineInfo,  エンジン ECU)",
+    "パス 1: CAN 0x7E0 → CanTp (UDS 診断要求, 診断ツール)",
+    "パス 2: CAN 0x110 → COM   (AbsInfo,     ABS ECU)",
+    "パス 3: CAN 0x120 → SecOC (ImmobilizerCmd, KeyFobEcu 想定。検証成功後",
+    "         SecOC 自身が Com_RxIndication() を直接呼ぶため、COM への",
+    "         配信先はここには現れない）"
+  ],
+  "txPathCountDoc": [
+    "TX ルーティングパス数",
+    "パス 0: COM   → CanIf TxPduId=0 (CAN 0x200, EngineState)",
+    "パス 1: CanTp → CanIf TxPduId=1 (CAN 0x7E8, UDS 診断応答)",
+    "パス 2: COM   → CanIf TxPduId=3 (CAN 0x210, WarningStatus Signal Group)",
+    "パス 3: COM   → CanIf TxPduId=4 (CAN 0x220, E2EHealthStatus PERIODIC。",
+    "        E2E Profile05 保護のみ。以前は SecOC を経由していたが撤去済み)",
+    "パス 4: COM   → CanIf TxPduId=5 (CAN 0x230, ImmobilizerStatus。",
+    "        Signal Gateway の転送先。DIRECT)",
+    "SrcPduId は COM が PduR_ComTransmit() へ、CanTp が PduR_CanTpTransmit() へ",
+    "渡す共通の名前空間のため、各パスで重複しない値を割り当てること。"
+  ],
+  "rxPaths": [
+    {
+      "name": "EngineInfo_Rx",
+      "frame": "EngineInfo",
+      "tableSummary": "CAN {canId} → COM (EngineInfo)",
+      "summary": "CanIf RxPduId=0 (CAN {canId}) → COM/EngineInfo",
+      "srcPduId": 0,
+      "destCountNote": "COM のみ",
+      "dests": [
+        {
+          "module": "COM",
+          "ipdu": "EngineInfo_Rx"
+        }
+      ]
+    },
+    {
+      "name": "DiagReq_Rx",
+      "tableSummary": "CAN 0x7E0 → CanTp (UDS 診断)",
+      "summary": "CanIf RxPduId=1 (CAN 0x7E0) → CanTp/DCM",
+      "srcPduId": 1,
+      "destCountNote": "CanTp のみ",
+      "dests": [
+        {
+          "module": "CANTP",
+          "destPduId": 0
+        }
+      ]
+    },
+    {
+      "name": "AbsInfo_Rx",
+      "frame": "AbsInfo",
+      "tableSummary": "CAN {canId} → COM (AbsInfo)",
+      "summary": "CanIf RxPduId=2 (CAN {canId}) → COM/AbsInfo",
+      "srcPduId": 2,
+      "destCountNote": "COM のみ: AbsInfo は ABS ECU からの受信専用",
+      "dests": [
+        {
+          "module": "COM",
+          "ipdu": "AbsInfo_Rx"
+        }
+      ]
+    },
+    {
+      "name": "ImmobilizerCmd_Rx",
+      "frame": "SecureCommand (ImmobilizerCmd)",
+      "tableSummary": "CAN {canId} → SecOC (ImmobilizerCmd)",
+      "summary": "CanIf RxPduId=3 (CAN {canId}) → SecOC/ImmobilizerCmd",
+      "srcPduId": 3,
+      "destCountNote": "SecOC のみ",
+      "dests": [
+        {
+          "module": "SECOC",
+          "secocPdu": "ImmobilizerCmd_Rx"
+        }
+      ]
+    }
+  ],
+  "txPaths": [
+    {
+      "name": "MeterStatus_Tx",
+      "frame": "MeterStatus",
+      "summary": "COM (SrcPduId=0) → CanIf TxPduId=0 (CAN {canId})",
+      "srcPduId": 0,
+      "canIfTxPduId": 0,
+      "confModule": "COM",
+      "confIpdu": "MeterStatus_Tx"
+    },
+    {
+      "name": "DiagResp_Tx",
+      "summary": "CanTp (SrcPduId=1) → CanIf TxPduId=1 (CAN 0x7E8)",
+      "srcPduId": 1,
+      "canIfTxPduId": 1,
+      "confDestPduId": 0,
+      "confModule": "CANTP"
+    },
+    {
+      "name": "WarningStatus_Tx",
+      "frame": "WarningStatus",
+      "summary": "COM (SrcPduId=2) → CanIf TxPduId=3 (CAN {canId}, WarningStatus)",
+      "note": [
+        "SrcPduId=1 は CanTp が既に使用しているため、COM の 2 番目の TX I-PDU",
+        "(WarningStatus) には SrcPduId=2 を割り当てる。"
+      ],
+      "srcPduId": 2,
+      "canIfTxPduId": 3,
+      "confModule": "COM",
+      "confIpdu": "WarningStatus_Tx"
+    },
+    {
+      "name": "E2EHealthStatus_Tx",
+      "frame": "E2EHealthStatus",
+      "summary": "COM (SrcPduId=3) → CanIf TxPduId=4 (CAN {canId}, E2EHealthStatus)",
+      "note": [
+        "COM の 3 番目の TX I-PDU には SrcPduId=3 を割り当てる。",
+        "以前は SecOC（TransmitOverrideFct=SecOC_IfTransmit）を経由する",
+        "二重保護構成だったが、E2E Profile05 単体保護へ切り替えたため撤去し、",
+        "パス4（ImmobilizerStatus）と同じ COM→CanIf 直結パターンにした",
+        "（TransmitOverrideFct 未設定）。"
+      ],
+      "srcPduId": 3,
+      "canIfTxPduId": 4,
+      "confModule": "COM",
+      "confIpdu": "E2EHealthStatus_Tx"
+    },
+    {
+      "name": "ImmobilizerStatus_Tx",
+      "frame": "ImmobilizerStatus",
+      "summary": "COM (SrcPduId=4) → CanIf TxPduId=5 (CAN {canId}, ImmobilizerStatus)",
+      "note": [
+        "Signal Gateway（Com_GatewayRoute()）の転送先。Com からは通常の",
+        "COM_TX_MODE_DIRECT I-PDU の 1 つとして見え、PduR 側にも SecOC の",
+        "ような中間モジュールは挟まらない（TransmitOverrideFct 未設定）。"
+      ],
+      "srcPduId": 4,
+      "canIfTxPduId": 5,
+      "confModule": "COM",
+      "confIpdu": "ImmobilizerStatus_Tx"
+    }
+  ]
+}

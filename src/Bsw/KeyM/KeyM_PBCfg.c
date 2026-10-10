@@ -23,6 +23,7 @@
  * Global Variables
  * ====================================================================== */
 
+/* @@GEN-BEGIN keym-key-table  生成元: config/data/CryptoStack.json  （自動生成: 手編集禁止） */
 const KeyM_CryptoKeyConfigType KeyM_CryptoKeyConfigData[KEYM_CRYPTO_KEY_COUNT] = {
     {
         .KeyName         = KEYM_CRYPTO_KEY_NAME_IMMOBILIZER_CMD,
@@ -31,3 +32,4 @@ const KeyM_CryptoKeyConfigType KeyM_CryptoKeyConfigData[KEYM_CRYPTO_KEY_COUNT] =
     /* KEYM_CRYPTO_KEY_NAME_E2E_HEALTH_STATUS は E2EHealthStatus の SecOC 撤去に
      * 伴い削除済み（対応する CRYPTO_KEY_E2E_HEALTH_STATUS が無くなったため）。 */
 };
+/* @@GEN-END keym-key-table */

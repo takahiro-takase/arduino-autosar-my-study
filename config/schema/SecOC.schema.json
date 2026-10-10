@@ -1,0 +1,120 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "SecOC configuration",
+  "description": "SecOC_PBCfg.c / SecOC_Cfg.h の生成元。Secured I-PDU のレイアウト（Freshness / MAC の位置・長さ、DLC）は frame が指す信号表から引く。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "module",
+    "rxPduCountDoc",
+    "txPduCountDoc",
+    "rxPdus"
+  ],
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "module": {
+      "const": "SecOC"
+    },
+    "rxPduCountDoc": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "not": {
+          "pattern": "\\*/"
+        }
+      }
+    },
+    "txPduCountDoc": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "not": {
+          "pattern": "\\*/"
+        }
+      }
+    },
+    "rxPdus": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/rxPdu"
+      }
+    }
+  },
+  "$defs": {
+    "rxPdu": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "frame",
+        "title",
+        "comIpdu",
+        "csmJobId"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[A-Za-z][A-Za-z0-9_]*$"
+        },
+        "frame": {
+          "type": "string",
+          "minLength": 1,
+          "not": {
+            "pattern": "\\*/"
+          }
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "not": {
+            "pattern": "\\*/"
+          }
+        },
+        "comIpdu": {
+          "type": "string",
+          "pattern": "^[A-Za-z][A-Za-z0-9_]*$",
+          "description": "検証成功後に Authentic Payload を渡す、Com の RX I-PDU の name"
+        },
+        "dataId": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 65535,
+          "description": "既定は CAN ID"
+        },
+        "csmJobId": {
+          "type": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+        },
+        "verificationStatusCallout": {
+          "type": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+        },
+        "verificationStatusPropagationMode": {
+          "type": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+        },
+        "comments": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "not": {
+                "pattern": "\\*/"
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

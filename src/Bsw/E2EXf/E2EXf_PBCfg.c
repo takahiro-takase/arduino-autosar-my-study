@@ -36,6 +36,7 @@
  * Definitions
  * ====================================================================== */
 
+/* @@GEN-BEGIN e2exf-sm-define  生成元: config/data/E2EXf.json  （自動生成: 手編集禁止） */
 /* -----------------------------------------------------------------------
  * E2E ステートマシン設定（[SWS_E2EXf_00028]、E2E_SMConfigType）
  * 全 RX インスタンス共通。仕様書はしきい値の具体的な数値を規定しない
@@ -55,11 +56,13 @@
  *   - Invalid系(2/1): VALID復帰もVALID維持と同じ基準で対称に統一した。
  * ----------------------------------------------------------------------- */
 #define E2EXF_SM_WINDOW_SIZE 3U
+/* @@GEN-END e2exf-sm-define */
 
 /* ======================================================================
  * Global Variables
  * ====================================================================== */
 
+/* @@GEN-BEGIN e2exf-instances  生成元: config/data/E2EXf.json  （自動生成: 手編集禁止） */
 /* cppcheck-suppress misra-c2012-8.9 */
 static const E2E_SMConfigType E2EXf_SMConfigDefault = {
     E2EXF_SM_WINDOW_SIZE, /* WindowSize */
@@ -111,6 +114,7 @@ const E2EXf_RxConfigTypeP05 E2EXf_EngineInfoRxCfg = {
 /* -----------------------------------------------------------------------
  * AbsInfo (RX IPduId=1, CAN 0x110)
  * DaVinci: /ActiveEcuC/E2EXf/AbsInfo_Rx_E2EXf
+ *
  * 以前は E2E Profile01(CRC8+4bitカウンタ、DLC=5) だったが、EngineInfo と
  * 同じ理由で E2E Profile05(CRC16+8bitカウンタ、DLC=6) へ切り替えた。
  * ----------------------------------------------------------------------- */
@@ -142,6 +146,7 @@ const E2EXf_RxConfigTypeP05 E2EXf_AbsInfoRxCfg = {
 /* -----------------------------------------------------------------------
  * E2EHealthStatus (TX IPduId=2, CAN 0x220)
  * DaVinci: /ActiveEcuC/E2EXf/E2EHealthStatus_Tx_E2EXf
+ *
  * E2EMon（CDD 相当）が発行するネットワーク健全性テレメトリ自体も、
  * 監視ツールが誤ったカウンタ値を信用してしまわないよう E2E 保護を付与する。
  * 以前は E2E Profile01(+SecOC 二重保護、DLC=8) だったが、CRC 検出能力を
@@ -161,6 +166,7 @@ const E2EXf_TxConfigTypeP05 E2EXf_E2EHealthStatusTxCfgP05 = {
     .E2EConfig    = &E2EXf_E2EHealthStatusCfgP05,
     .ProtectState = &E2EXf_E2EHealthStatusStateP05
 };
+/* @@GEN-END e2exf-instances */
 
 /* ======================================================================
  * Functions
@@ -168,6 +174,7 @@ const E2EXf_TxConfigTypeP05 E2EXf_E2EHealthStatusTxCfgP05 = {
 
 void E2EXf_PBCfg_Init(void)
 {
+/* @@GEN-BEGIN e2exf-init  生成元: config/data/E2EXf.json  （自動生成: 手編集禁止） */
     (void)E2E_P05CheckInit(&E2EXf_EngineInfoStateP05);
     (void)E2E_P05CheckInit(&E2EXf_AbsInfoStateP05);
     E2EXf_EngineInfoWaitForFirstDataP05 = 1U;
@@ -178,6 +185,7 @@ void E2EXf_PBCfg_Init(void)
     (void)E2E_SMCheckInit(&E2EXf_EngineInfoSMState, &E2EXf_SMConfigDefault);
     (void)E2E_SMCheckInit(&E2EXf_AbsInfoSMState, &E2EXf_SMConfigDefault);
     (void)E2E_P05ProtectInit(&E2EXf_E2EHealthStatusStateP05);
+    /* @@GEN-END e2exf-init */
 
     /* 各 State の初期化が完了した最後に、E2EXf モジュール自身の初期化状態
      * (SWS_E2EXf_00130) を TRUE にする。E2EXf_Inv_EngineInfo()等の各

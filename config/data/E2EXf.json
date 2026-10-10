@@ -1,0 +1,87 @@
+{
+  "$schema": "../schema/E2EXf.schema.json",
+  "module": "E2EXf",
+  "smConfig": {
+    "doc": [
+      "E2E ステートマシン設定（[SWS_E2EXf_00028]、E2E_SMConfigType）",
+      "全 RX インスタンス共通。仕様書はしきい値の具体的な数値を規定しない",
+      "（アプリケーション/インテグレータが選ぶ設定パラメータ、ECUC_E2E_*）ため、",
+      "以下は本プロジェクト独自の判断:",
+      "  - WindowSize=3: Arduino UNO R4 の限られた RAM を踏まえ、判定に必要な",
+      "    最小限の履歴数（インスタンスあたり ProfileStatusWindow 3 byte +",
+      "    E2E_SMCheckStateType 本体のみ）に絞った。`E2EXF_SM_WINDOW_SIZE` と",
+      "    しても定義し、各インスタンスの `ProfileStatusWindow` 配列サイズを",
+      "    ここへ連動させる（値のハードコード重複を避ける）。",
+      "  - Init系(2/1): 起動直後、直近3回中2回以上OKで初期同期完了とみなす",
+      "    （1回はエラー相性が悪くても許容）。",
+      "  - Valid系(2/1): 直近3回中1回のCRC/カウンタ異常（例: ノイズによる単発",
+      "    ビット化け）までは通信健全とみなし DTC を確定させない。これが本設定",
+      "    追加の主目的（以前は E2E_SMCheck() 自体を呼んでおらず、単発異常が",
+      "    即座に FAILED に直結していた、2026-09 是正）。2回連続なら INVALID。",
+      "  - Invalid系(2/1): VALID復帰もVALID維持と同じ基準で対称に統一した。"
+    ],
+    "windowSize": 3,
+    "minOkStateInit": 2,
+    "maxErrorStateInit": 1,
+    "minOkStateValid": 2,
+    "maxErrorStateValid": 1,
+    "minOkStateInvalid": 2,
+    "maxErrorStateInvalid": 1
+  },
+  "instances": [
+    {
+      "name": "EngineInfo_Rx_E2EXf",
+      "stem": "EngineInfo",
+      "frame": "EngineInfo",
+      "direction": "RX",
+      "profile": "P05",
+      "note": [
+        "EngineSpeed（回転数）は実車ではメータ表示だけでなく変速制御・トラクション",
+        "コントロール・オーバーレブ保護等、複数の機能が参照しうる値のため、",
+        "一般的なエンジン ECU の周期送信フレームを模して E2E 保護を付与する。",
+        "以前は E2E Profile01(CRC8+4bitカウンタ、DLC=6) だったが、CRC 検出能力を",
+        "高めるため E2E Profile05(CRC16+8bitカウンタ、DLC=7) へ切り替えた",
+        "（EngineHealthStatus の TX 側と同じ理由）。"
+      ],
+      "lengthNote": "PDU 全体バイト数 (CRC16 2B + Counter 1B + シグナル 4B)",
+      "maxDeltaCounter": 1,
+      "demEvent": "DEM_EVENT_E2E_ENGINEINFO",
+      "waitNote": [
+        "Profile05にはINITIAL相当が無いため、E2EXf層で初回受信の特別扱いを行う",
+        "ためのフラグ(E2EXf_RxConfigTypeP05.WaitForFirstData 宣言コメント参照)。"
+      ],
+      "smNote": ["E2E ステートマシン状態（E2EXf_SMConfigDefault 参照）。"]
+    },
+    {
+      "name": "AbsInfo_Rx_E2EXf",
+      "stem": "AbsInfo",
+      "frame": "AbsInfo",
+      "direction": "RX",
+      "profile": "P05",
+      "note": [
+        "以前は E2E Profile01(CRC8+4bitカウンタ、DLC=5) だったが、EngineInfo と",
+        "同じ理由で E2E Profile05(CRC16+8bitカウンタ、DLC=6) へ切り替えた。"
+      ],
+      "lengthNote": "PDU 全体バイト数 (CRC16 2B + Counter 1B + シグナル 3B)",
+      "maxDeltaCounter": 1,
+      "demEvent": "DEM_EVENT_E2E_ABSINFO",
+      "waitNote": ["EngineInfo と同じ理由(E2EXf_EngineInfoWaitForFirstDataP05 参照)。"],
+      "smNote": ["EngineInfo と同じ理由(E2EXf_EngineInfoSMState 参照)。"]
+    },
+    {
+      "name": "E2EHealthStatus_Tx_E2EXf",
+      "stem": "E2EHealthStatus",
+      "frame": "E2EHealthStatus",
+      "direction": "TX",
+      "profile": "P05",
+      "note": [
+        "E2EMon（CDD 相当）が発行するネットワーク健全性テレメトリ自体も、",
+        "監視ツールが誤ったカウンタ値を信用してしまわないよう E2E 保護を付与する。",
+        "以前は E2E Profile01(+SecOC 二重保護、DLC=8) だったが、CRC 検出能力を",
+        "高めるため E2E Profile05(CRC16、DLC=5) 単体に切り替えた。SecOC は撤去",
+        "した(PduR_PBCfg.c のパス3、SecOC_PBCfg.c 参照)。"
+      ],
+      "lengthNote": "PDU 全体バイト数 (CRC16 2B + Counter 1B + シグナル 2B)"
+    }
+  ]
+}

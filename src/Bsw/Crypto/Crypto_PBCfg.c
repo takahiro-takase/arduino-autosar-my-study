@@ -28,6 +28,7 @@
  * Global Variables
  * ====================================================================== */
 
+/* @@GEN-BEGIN crypto-key-table  生成元: config/data/CryptoStack.json  （自動生成: 手編集禁止） */
 const uint8 Crypto_KeyTable[CRYPTO_KEY_COUNT][CRYPTO_AES128_KEY_SIZE] = {
     /* CRYPTO_KEY_IMMOBILIZER_CMD: ASCII で "KeyFobSecret!!!!" と読める値にして
      * あり、デバッグ時にログ上のバイト列から鍵だと一目でわかるようにしている
@@ -39,3 +40,4 @@ const uint8 Crypto_KeyTable[CRYPTO_KEY_COUNT][CRYPTO_AES128_KEY_SIZE] = {
     /* CRYPTO_KEY_E2E_HEALTH_STATUS ("TelemetryKey!!!!") は E2EHealthStatus の
      * SecOC 撤去に伴い削除済み（E2E Profile05 単体保護へ切り替えたため）。 */
 };
+/* @@GEN-END crypto-key-table */

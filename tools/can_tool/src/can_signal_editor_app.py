@@ -1,7 +1,7 @@
 """
 CAN 信号定義エディタ (GUI)
 
-data/can_signals.json（docs/can_frame_spec.md の表を一元管理するための
+config/data/can_signals.json（docs/can_frame_spec.md の表を一元管理するための
 データソース）を Excel 風の表形式で表示・編集する。フレーム一覧とフィールド
 一覧を2段のグリッドで表示し、セルのダブルクリックでインライン編集する。
 
@@ -15,6 +15,8 @@ import os
 import tkinter as tk
 from tkinter import messagebox, ttk
 from typing import Callable
+
+import configurator_panel
 
 # type ごとに保持しうる専用キー。field_detail_text()/_edit_field_detail()/
 # _on_field_cell_commit() の型変更クリーンアップが、この1箇所を共通の情報源とする。
@@ -31,7 +33,7 @@ DIRECTIONS = ["TX", "RX", "TX/RX"]  # Nm 等、自ノード送信・他ノード
 
 DEFAULT_DATA_PATH = os.path.normpath(
     # __file__ は tools/can_signal_editor/src/app.py なので、3階層上がリポジトリルート
-    os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "data", "can_signals.json")
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "config", "data", "can_signals.json")
 )
 
 # (キー, 見出し, 列幅) のリストを唯一の情報源とし、キー一覧・見出し・幅の
@@ -51,7 +53,7 @@ FRAME_COLUMNS = tuple(key for key, _, _ in FRAME_COLUMNS_DEF)
 #   "optional_int" : 任意の非負整数（txPeriodMs/rxTimeoutMs）。空欄にした場合は
 #                    0 や null ではなくキー自体を削除する（欠落 = このフレームには
 #                    周期/タイムアウトの概念が無い、という意図的な未設定。
-#                    data/can_signals.json の $note 参照）。
+#                    config/data/can_signals.json の $note 参照）。
 # 以前は dlc 用の素の if 文と、txPeriodMs/rxTimeoutMs 用の frozenset 判定という
 # 独立した2つの仕組みがあった。数値系の列が増えるたびにどちらに追加すべきか
 # 迷い、書き忘れると無検証のプレーン文字列として扱われてしまう（silent
@@ -348,6 +350,9 @@ class CanSignalEditorFrame(ttk.Frame):
         self.data = self._load()
         self.dirty = False
         self.current_frame_id: str | None = None
+        # 同じウィンドウの設定 JSON エディタ（app.py が設定する）。コンフィグレータの実行前に、
+        # こちらの未保存の変更も確認するため（ツールは保存済みのファイルを読むので、片方だけでは古い内容で動いてしまう）。
+        self.peer = None
 
         self._build_ui()
         self._refresh_frame_tree()
@@ -480,6 +485,11 @@ class CanSignalEditorFrame(ttk.Frame):
         self.problems_var = tk.StringVar(value="")
         ttk.Label(problems_pane, textvariable=self.problems_var, foreground="#B00").pack(anchor="w")
 
+        # --- コンフィグレータ（信号表から設定 json・Cfg ソースを連動させる） ---
+        self.configurator = configurator_panel.ConfiguratorPanel(
+            self, lambda: self.data_path, self._ensure_saved_before_run)
+        self.configurator.pack(fill=tk.BOTH)
+
     # ------------------------------------------------------------------
     # フレーム一覧
     # ------------------------------------------------------------------
@@ -496,7 +506,7 @@ class CanSignalEditorFrame(ttk.Frame):
         if kind == "optional_int" and value.strip() == "":
             # 空欄 = このフレームには周期/タイムアウトの概念が無い、を意味する。
             # 0 を書き込むのではなくキー自体を削除する（欠落 = 意図的な未設定、
-            # という data/can_signals.json の既存の表現に合わせる）。
+            # という config/data/can_signals.json の既存の表現に合わせる）。
             fr.pop(col_name, None)
             self._mark_dirty()
             self.frame_tree.set(row_id, col_name, "")
@@ -664,6 +674,21 @@ class CanSignalEditorFrame(ttk.Frame):
                 self._sync_field_row(idx)
         else:
             messagebox.showinfo("案内", f"type='{t}' は詳細編集の対象外です（note のみで説明する構造的フィールド）")
+
+    # ------------------------------------------------------------------
+    # コンフィグレータ
+    # ------------------------------------------------------------------
+    def ensure_saved(self) -> bool:
+        """信号表の未保存の変更を、保存するか確認する。実行を取りやめるなら False。"""
+        if self.dirty:
+            if not messagebox.askyesno("確認", "信号表に未保存の変更があります。保存してから実行しますか？"):
+                return False
+            self._save()
+        return True
+
+    def _ensure_saved_before_run(self) -> bool:
+        """コンフィグレータの実行前に、信号表と（あれば）設定 JSON エディタの未保存の変更を確認する。"""
+        return self.ensure_saved() and (self.peer is None or self.peer.ensure_saved())
 
     # ------------------------------------------------------------------
     # 検証・その他

@@ -1,0 +1,130 @@
+{
+  "$schema": "../schema/BswM.schema.json",
+  "module": "BswM",
+  "ruleCountDoc": [
+    "既存 8 ルール + Dcm_CommunicationModeType（[SWS_Dcm_00981]）の全 12 通り",
+    "それぞれに対応する BSWM_ACTION_DCM_COMM_APPLY ルールを 1 行ずつ追加。"
+  ],
+  "rules": [
+    {
+      "comment": ["Rule 0: EcuM → RUN: 全タスクを有効化"],
+      "operator": "AND",
+      "conditions": [{ "source": "ECUM", "value": "ECUM_STATE_RUN" }],
+      "action": "ACTIVATE",
+      "taskMask": "BSWM_TASK_MASK_ALL"
+    },
+    {
+      "comment": ["Rule 1: EcuM → POST_RUN: アプリ Runnable のみ無効化 (BSW は継続)"],
+      "operator": "AND",
+      "conditions": [{ "source": "ECUM", "value": "ECUM_STATE_POST_RUN" }],
+      "action": "DEACTIVATE",
+      "taskMask": "BSWM_TASK_MASK_APP"
+    },
+    {
+      "comment": [
+        "Rule 2: EcuM → SHUTDOWN: WdgM_TriggerHwWatchdog・Can_MainFunction_Read・",
+        "Can_MainFunction_Wakeup・CanSM_MainFunction・NvM_MainFunction・",
+        "MemIf_MainFunction・CanNm_MainFunction 以外を無効化"
+      ],
+      "operator": "AND",
+      "conditions": [{ "source": "ECUM", "value": "ECUM_STATE_SHUTDOWN" }],
+      "action": "DEACTIVATE",
+      "taskMask": "BSWM_TASK_MASK_SHUTDOWN"
+    },
+    {
+      "comment": [
+        "Rule 3: EcuM==RUN AND ComM==FULL_COMMUNICATION: I-PDU Group「テレメトリ」を起動",
+        "（initialize=false: POST_RUN/SILENT_COM 等で停止する前の直近の値・",
+        "カウンタをそのまま引き継いで再開する。起動直後の初回だけは Com_Init()",
+        "自体が既に初期値でゼロクリア済みのため、initialize=false でも実害はない）"
+      ],
+      "operator": "AND",
+      "conditions": [
+        { "source": "ECUM", "value": "ECUM_STATE_RUN" },
+        { "source": "COMM", "value": "COMM_FULL_COMMUNICATION" }
+      ],
+      "action": "PDU_GROUP_START",
+      "ipduGroup": "COM_IPDU_GROUP_TELEMETRY",
+      "initialize": false
+    },
+    {
+      "comment": ["Rule 4: EcuM → POST_RUN: I-PDU Group「テレメトリ」を停止"],
+      "operator": "AND",
+      "conditions": [{ "source": "ECUM", "value": "ECUM_STATE_POST_RUN" }],
+      "action": "PDU_GROUP_STOP",
+      "ipduGroup": "COM_IPDU_GROUP_TELEMETRY"
+    },
+    {
+      "comment": [
+        "Rule 5: ComM==SILENT_COMMUNICATION OR ComM==NO_COMMUNICATION:",
+        "I-PDU Group「テレメトリ」を停止（Rule3 の AND 条件と対になる OR 条件。",
+        "EcuM が RUN のままでも CAN チャネルが FULL_COMMUNICATION から離脱したら",
+        "（Bus-Off 中の SILENT_COM、ボランタリスリープの NO_COM いずれでも）",
+        "即座にテレメトリ送信を止める）"
+      ],
+      "operator": "OR",
+      "conditions": [
+        { "source": "COMM", "value": "COMM_SILENT_COMMUNICATION" },
+        { "source": "COMM", "value": "COMM_NO_COMMUNICATION" }
+      ],
+      "action": "PDU_GROUP_STOP",
+      "ipduGroup": "COM_IPDU_GROUP_TELEMETRY"
+    },
+    {
+      "comment": [
+        "Rule 6/7: I-PDU Group「センサーRX」(EngineInfo/AbsInfo) の起動/停止",
+        "（2026-08 追加）。狙い・Rule 3/4/5（テレメトリ、TX）との条件の違い",
+        "（SILENT_COMMUNICATION/POST_RUN を対象外にした理由）は、本ファイル",
+        "冒頭の「Rule 6/7 の狙い」コメント参照。",
+        "Rule 6: EcuM==RUN AND ComM==FULL_COMMUNICATION: I-PDU Group「センサーRX」を起動"
+      ],
+      "operator": "AND",
+      "conditions": [
+        { "source": "ECUM", "value": "ECUM_STATE_RUN" },
+        { "source": "COMM", "value": "COMM_FULL_COMMUNICATION" }
+      ],
+      "action": "PDU_GROUP_START",
+      "ipduGroup": "COM_IPDU_GROUP_SENSOR_RX",
+      "initialize": false
+    },
+    {
+      "comment": [
+        "Rule 7: ComM==NO_COMMUNICATION（真の物理スリープのみ。",
+        "SILENT_COMMUNICATION は対象外——上のコメント参照）:",
+        "I-PDU Group「センサーRX」を停止"
+      ],
+      "operator": "AND",
+      "conditions": [{ "source": "COMM", "value": "COMM_NO_COMMUNICATION" }],
+      "action": "PDU_GROUP_STOP",
+      "ipduGroup": "COM_IPDU_GROUP_SENSOR_RX"
+    },
+    {
+      "comment": [
+        "Rule 8-19: Dcm_CommunicationModeType（[SWS_Dcm_00981]）の全 12 通り",
+        "それぞれに対して BSWM_ACTION_DCM_COMM_APPLY を発火させる",
+        "（BswM_Dcm_CommunicationMode_CurrentState()/BswM_ApplyDcmCommMode()",
+        "参照。12 条件は互いに排他的なため、値が変化するたびに旧値のルールが",
+        "false へ、新値のルールが true へ遷移し、常にちょうど1本だけ発火する）。"
+      ],
+      "operator": "AND",
+      "action": "DCM_COMM_APPLY",
+      "perValue": {
+        "source": "DCM_COMM",
+        "values": [
+          "DCM_ENABLE_RX_TX_NORM",
+          "DCM_ENABLE_RX_DISABLE_TX_NORM",
+          "DCM_DISABLE_RX_ENABLE_TX_NORM",
+          "DCM_DISABLE_RX_TX_NORM",
+          "DCM_ENABLE_RX_TX_NM",
+          "DCM_ENABLE_RX_DISABLE_TX_NM",
+          "DCM_DISABLE_RX_ENABLE_TX_NM",
+          "DCM_DISABLE_RX_TX_NM",
+          "DCM_ENABLE_RX_TX_NORM_NM",
+          "DCM_ENABLE_RX_DISABLE_TX_NORM_NM",
+          "DCM_DISABLE_RX_ENABLE_TX_NORM_NM",
+          "DCM_DISABLE_RX_TX_NORM_NM"
+        ]
+      }
+    }
+  ]
+}

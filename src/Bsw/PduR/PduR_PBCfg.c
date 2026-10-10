@@ -75,6 +75,7 @@
  * Global Variables
  * ====================================================================== */
 
+/* @@GEN-BEGIN pdur-routing  生成元: config/data/PduR.json  （自動生成: 手編集禁止） */
 /* -----------------------------------------------------------------------
  * RX 配信先テーブル（パスごと）
  * DaVinci: /ActiveEcuC/PduR/PduRConfig/PduRRoutingTable/[PduRRoutingPath]/
@@ -116,9 +117,9 @@ static const PduR_RxDestType PduR_RxDests_Path2[PDUR_RX_DEST_COUNT_PATH2] = {
  * DaVinci: /ActiveEcuC/PduR/PduRConfig/PduRRoutingTable/ImmobilizerCmd_Rx */
 static const PduR_RxDestType PduR_RxDests_Path3[PDUR_RX_DEST_COUNT_PATH3] = {
     {
-        .Module    = PDUR_MODULE_SECOC,   /* DaVinci: PduRDestPdu/PduRDestModule = SECOC */
-        .DestPduId = 0U,                  /* DaVinci: PduRDestPdu/PduRDestPduHandleId
-                                           *          → SecOC RX (SecOCRxPduId=0: ImmobilizerCmd) */
+        .Module    = PDUR_MODULE_SECOC, /* DaVinci: PduRDestPdu/PduRDestModule = SECOC */
+        .DestPduId = 0U,                /* DaVinci: PduRDestPdu/PduRDestPduHandleId
+                                         *          → SecOC RX (SecOCRxPduId=0: ImmobilizerCmd) */
         .RxIndFct  = SecOC_RxIndication /* DaVinci: 自動解決（PduRDestModule=SECOC） */
     }
 };
@@ -138,7 +139,9 @@ static const PduR_RxRoutingPathType PduR_RxPaths[PDUR_RX_PATH_COUNT] = {
         .DestCount = PDUR_RX_DEST_COUNT_PATH0
     },
     {
-        /* パス 1: CanIf RxPduId=1 (CAN 0x7E0) → CanTp/DCM */
+        /* パス 1: CanIf RxPduId=1 (CAN 0x7E0) → CanTp/DCM
+         * DaVinci: PduRSrcPdu/PduRSrcPduHandleId = 1
+         *          (CanIf_PBCfg の RxPduId=1 と一致) */
         .SrcPduId  = 1U,
         .Dests     = PduR_RxDests_Path1,
         .DestCount = PDUR_RX_DEST_COUNT_PATH1
@@ -170,27 +173,28 @@ static const PduR_TxRoutingPathType PduR_TxPaths[PDUR_TX_PATH_COUNT] = {
     {
         /* パス 0: COM (SrcPduId=0) → CanIf TxPduId=0 (CAN 0x200)
          * DaVinci: PduRRoutingPath/MeterStatus_Tx */
-        .SrcPduId      = 0U,              /* DaVinci: PduRSrcPdu/PduRSrcPduHandleId */
-        .CanIfTxPduId  = 0U,              /* DaVinci: PduRDestPdu/PduRDestPduHandleId */
+        .SrcPduId      = 0U,                /* DaVinci: PduRSrcPdu/PduRSrcPduHandleId */
+        .CanIfTxPduId  = 0U,                /* DaVinci: PduRDestPdu/PduRDestPduHandleId */
         .ConfDestPduId = 0U,
         .ConfFct       = Com_TxConfirmation /* DaVinci: PduRTxConfirmation */
     },
     {
-        /* パス 1: CanTp (SrcPduId=1) → CanIf TxPduId=1 (CAN 0x7E8) */
-        .SrcPduId      = 1U,
-        .CanIfTxPduId  = 1U,
+        /* パス 1: CanTp (SrcPduId=1) → CanIf TxPduId=1 (CAN 0x7E8)
+         * DaVinci: PduRRoutingPath/DiagResp_Tx */
+        .SrcPduId      = 1U,                  /* DaVinci: PduRSrcPdu/PduRSrcPduHandleId */
+        .CanIfTxPduId  = 1U,                  /* DaVinci: PduRDestPdu/PduRDestPduHandleId */
         .ConfDestPduId = 0U,
-        .ConfFct       = CanTp_TxConfirmation
+        .ConfFct       = CanTp_TxConfirmation /* DaVinci: PduRTxConfirmation */
     },
     {
         /* パス 2: COM (SrcPduId=2) → CanIf TxPduId=3 (CAN 0x210, WarningStatus)
          * DaVinci: PduRRoutingPath/WarningStatus_Tx
          * SrcPduId=1 は CanTp が既に使用しているため、COM の 2 番目の TX I-PDU
          * (WarningStatus) には SrcPduId=2 を割り当てる。 */
-        .SrcPduId      = 2U,
-        .CanIfTxPduId  = 3U,
+        .SrcPduId      = 2U,                /* DaVinci: PduRSrcPdu/PduRSrcPduHandleId */
+        .CanIfTxPduId  = 3U,                /* DaVinci: PduRDestPdu/PduRDestPduHandleId */
         .ConfDestPduId = 1U,
-        .ConfFct       = Com_TxConfirmation
+        .ConfFct       = Com_TxConfirmation /* DaVinci: PduRTxConfirmation */
     },
     {
         /* パス 3: COM (SrcPduId=3) → CanIf TxPduId=4 (CAN 0x220, E2EHealthStatus)
@@ -200,10 +204,10 @@ static const PduR_TxRoutingPathType PduR_TxPaths[PDUR_TX_PATH_COUNT] = {
          * 二重保護構成だったが、E2E Profile05 単体保護へ切り替えたため撤去し、
          * パス4（ImmobilizerStatus）と同じ COM→CanIf 直結パターンにした
          * （TransmitOverrideFct 未設定）。 */
-        .SrcPduId      = 3U,
-        .CanIfTxPduId  = 4U,
+        .SrcPduId      = 3U,                /* DaVinci: PduRSrcPdu/PduRSrcPduHandleId */
+        .CanIfTxPduId  = 4U,                /* DaVinci: PduRDestPdu/PduRDestPduHandleId */
         .ConfDestPduId = 2U,
-        .ConfFct       = Com_TxConfirmation
+        .ConfFct       = Com_TxConfirmation /* DaVinci: PduRTxConfirmation */
     },
     {
         /* パス 4: COM (SrcPduId=4) → CanIf TxPduId=5 (CAN 0x230, ImmobilizerStatus)
@@ -211,10 +215,10 @@ static const PduR_TxRoutingPathType PduR_TxPaths[PDUR_TX_PATH_COUNT] = {
          * Signal Gateway（Com_GatewayRoute()）の転送先。Com からは通常の
          * COM_TX_MODE_DIRECT I-PDU の 1 つとして見え、PduR 側にも SecOC の
          * ような中間モジュールは挟まらない（TransmitOverrideFct 未設定）。 */
-        .SrcPduId      = 4U,
-        .CanIfTxPduId  = 5U,
+        .SrcPduId      = 4U,                /* DaVinci: PduRSrcPdu/PduRSrcPduHandleId */
+        .CanIfTxPduId  = 5U,                /* DaVinci: PduRDestPdu/PduRDestPduHandleId */
         .ConfDestPduId = 3U,
-        .ConfFct       = Com_TxConfirmation
+        .ConfFct       = Com_TxConfirmation /* DaVinci: PduRTxConfirmation */
     }
 };
 
@@ -228,3 +232,4 @@ const PduR_PBConfigType PduR_Config = {
     .TxPaths     = PduR_TxPaths,
     .TxPathCount = PDUR_TX_PATH_COUNT
 };
+/* @@GEN-END pdur-routing */
