@@ -79,10 +79,12 @@ def splice(text, region_id, body):
             begin = i
         m = END_RE.match(line)
         if m and m.group("id") == region_id:
+            if end is not None:
+                raise ValueError("領域 %s の END が複数ある" % region_id)
             end = i
     if begin is None or end is None or end < begin:
         raise ValueError("領域 %s の BEGIN/END が見つからない（または順序が逆）" % region_id)
-    new = lines[: begin + 1] + body.split("\n") + lines[end:]
+    new = lines[: begin + 1] + (body.split("\n") if body else []) + lines[end:]
     return nl.join(new)
 
 
@@ -187,7 +189,13 @@ def main():
     unknown = [m for m in args.modules if m not in MODULES]
     if unknown:
         ap.error("未対応のモジュール: " + ", ".join(unknown))
-    sys.exit(run(args.modules, args.check, args.signals, args.config_dir, pathlib.Path(args.repo_root)))
+    try:
+        status = run(args.modules, args.check, args.signals, args.config_dir, pathlib.Path(args.repo_root))
+    except (OSError, ValueError, KeyError) as e:
+        # 信号表や設定 json の読み込み失敗など。終了コード 1（差分あり）と区別する
+        print("エラー: %s: %s" % (type(e).__name__, e))
+        status = 2
+    sys.exit(status)
 
 
 if __name__ == "__main__":

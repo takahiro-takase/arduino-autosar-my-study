@@ -141,6 +141,13 @@ def parse_scalar(text: str, kind: str, schema: dict) -> Any:
             return int(text, 0)
         except ValueError:
             return text
+    if kind in ("enum", "const"):
+        # 選択肢は文字列で表示しているため、スキーマの値（整数など）へ戻す
+        members = schema["enum"] if kind == "enum" else [schema["const"]]
+        for m in members:
+            if display_value(m) == text:
+                return m
+        raise ValueError("選択肢にない値です: %s" % text)
     return text
 
 
@@ -297,6 +304,9 @@ class ConfigEditorFrame(ttk.Frame):
         self.schema: dict = {}
         self.validator: jsonschema.Draft202012Validator | None = None
         self.dirty = False
+        # 同じウィンドウの信号定義エディタ（app.py が設定する）。コンフィグレータの実行前に、
+        # こちらの未保存の変更も確認するため（ツールは保存済みのファイルを読む）。
+        self.peer = None
         self._nodes: dict[str, tuple[tuple, dict]] = {}  # 行 ID → (path, schema)
         self._build_ui()
         names = self.file_names()
@@ -390,12 +400,17 @@ class ConfigEditorFrame(ttk.Frame):
             return
         self.open_file(name)
 
-    def _ensure_saved_before_run(self) -> bool:
+    def ensure_saved(self) -> bool:
+        """設定 JSON の未保存の変更を、保存するか確認する。実行を取りやめるなら False。"""
         if self.dirty:
             if not messagebox.askyesno("確認", "設定 JSON に未保存の変更があります。保存してから実行しますか？"):
                 return False
             self.save()
         return True
+
+    def _ensure_saved_before_run(self) -> bool:
+        """コンフィグレータの実行前に、設定 JSON と（あれば）信号定義エディタの未保存の変更を確認する。"""
+        return self.ensure_saved() and (self.peer is None or self.peer.ensure_saved())
 
     # ------------------------------------------------------------------
     # UI
@@ -688,4 +703,7 @@ class ConfigEditorFrame(ttk.Frame):
         for iid, (path, _s) in self._nodes.items():
             if path in bad:
                 self.tree.item(iid, tags=("bad",))
-        self.status_var.set(("スキーマ違反 %d 件" % len(errs)) if errs else self.status_var.get())
+        if errs:
+            self.status_var.set("スキーマ違反 %d 件" % len(errs))
+        elif self.status_var.get().startswith("スキーマ違反"):
+            self.status_var.set("")

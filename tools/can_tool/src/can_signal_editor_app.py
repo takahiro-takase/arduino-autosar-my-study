@@ -350,6 +350,9 @@ class CanSignalEditorFrame(ttk.Frame):
         self.data = self._load()
         self.dirty = False
         self.current_frame_id: str | None = None
+        # 同じウィンドウの設定 JSON エディタ（app.py が設定する）。コンフィグレータの実行前に、
+        # こちらの未保存の変更も確認するため（ツールは保存済みのファイルを読むので、片方だけでは古い内容で動いてしまう）。
+        self.peer = None
 
         self._build_ui()
         self._refresh_frame_tree()
@@ -675,13 +678,17 @@ class CanSignalEditorFrame(ttk.Frame):
     # ------------------------------------------------------------------
     # コンフィグレータ
     # ------------------------------------------------------------------
-    def _ensure_saved_before_run(self) -> bool:
-        """コンフィグレータの実行前に、信号表の未保存の変更を保存するか確認する（ツールは保存済みのファイルを読む）。"""
+    def ensure_saved(self) -> bool:
+        """信号表の未保存の変更を、保存するか確認する。実行を取りやめるなら False。"""
         if self.dirty:
             if not messagebox.askyesno("確認", "信号表に未保存の変更があります。保存してから実行しますか？"):
                 return False
             self._save()
         return True
+
+    def _ensure_saved_before_run(self) -> bool:
+        """コンフィグレータの実行前に、信号表と（あれば）設定 JSON エディタの未保存の変更を確認する。"""
+        return self.ensure_saved() and (self.peer is None or self.peer.ensure_saved())
 
     # ------------------------------------------------------------------
     # 検証・その他

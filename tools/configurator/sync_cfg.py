@@ -199,4 +199,9 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except (OSError, ValueError, KeyError) as e:
+        # 信号表や設定 json の読み込み失敗など。終了コード 1（警告あり）と区別する
+        print("エラー: %s: %s" % (type(e).__name__, e))
+        sys.exit(2)

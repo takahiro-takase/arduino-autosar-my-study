@@ -5,6 +5,29 @@
 """
 
 
+from modules.secoc import layout as secoc_layout
+
+
+def _canid(text):
+    """'0x1a0' と '0x01A0' を同じ値として比べるため、整数へ直す。"""
+    return int(text, 16)
+
+
+def _com_dlc(ctx, ipdu, frame):
+    """Com の I-PDU の実際の長さ。dlc の指定が無く、SecOC が検証後のペイロードを渡す I-PDU は、認証対象の長さ。"""
+    if "dlc" in ipdu:
+        return ipdu["dlc"]
+    sec = ctx.configs.get("SecOC")
+    if sec:
+        pdu = next((s for s in sec["rxPdus"] if s["comIpdu"] == ipdu["name"]), None)
+        if pdu is not None:
+            try:
+                return secoc_layout(pdu, ctx)["authenticPduLength"]
+            except ValueError:
+                pass  # レイアウトの不備は SecOC 側の検査で報告する
+    return frame["dlc"]
+
+
 def _direction_ok(frame_dir, want):
     return frame_dir == want or frame_dir == "TX/RX"
 
@@ -33,9 +56,9 @@ def check_all(ctx):
             for p in canif[key]:
                 if "frame" in p and p["frame"] not in frames:
                     continue
-                cid = frames[p["frame"]]["canId"] if "frame" in p else p["canId"]
+                cid = _canid(frames[p["frame"]]["canId"] if "frame" in p else p["canId"])
                 if cid in seen:
-                    errors.append("CanIf %s: CAN ID %s が %s と重複している" % (p["name"], cid, seen[cid]))
+                    errors.append("CanIf %s: CAN ID 0x%X が %s と重複している" % (p["name"], cid, seen[cid]))
                 seen[cid] = p["name"]
 
         # 信号表のフレームが、CanIf に漏れなく設定されているか
@@ -158,7 +181,7 @@ def _check_com(ctx, com, errors, warnings):
         size = s.get("bitSize", fld["bitSize"])
         if "bitPosition" in s or "bitSize" in s:
             warnings.append("Com %s: 信号表と異なるビット位置・長さを個別に指定している" % s["name"])
-        dlc = p.get("dlc", f["dlc"])
+        dlc = _com_dlc(ctx, p, f)
         if pos + size > dlc * 8:
             errors.append("Com %s: ビット範囲 [%d, %d) が I-PDU '%s' の DLC(%d byte) を超える" % (s["name"], pos, pos + size, p["name"], dlc))
         for (a, b2, other) in ranges.setdefault((s["direction"], s["ipdu"]), []):

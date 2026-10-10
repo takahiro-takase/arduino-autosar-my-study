@@ -53,6 +53,9 @@ def main() -> None:
         on_title_change=lambda text: notebook.tab(config_frame, text=text),
     )
     notebook.add(config_frame)
+    # コンフィグレータは保存済みのファイルを読むため、どちらのタブから実行しても、両方の未保存の変更を確認する
+    editor_frame.peer = config_frame
+    config_frame.peer = editor_frame
 
     tester_frame = uds_tester_app.UdsTesterFrame(notebook, args.config)
     notebook.add(tester_frame, text="UDS Tester")
