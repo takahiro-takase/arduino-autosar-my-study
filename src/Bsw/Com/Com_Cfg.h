@@ -177,12 +177,13 @@
  *  健全性テレメトリ。詳細は src/Bsw/E2EMon/E2EMon.c 参照)、
  *  [3]=ImmobilizerStatus 0x230 (DIRECT: 変化時のみ送信。Signal Gateway が
  *  ImmobilizerCmd（RX、SecOC 検証済み）から SWC を介さず直接転送する。
- *  詳細は Com_PBCfg.c の Com_GwMappingData 参照) */
-#define COM_TX_IPDU_COUNT   4U
+ *  詳細は Com_PBCfg.c の Com_GwMappingData 参照)、
+ *  [4]=TestMsg 0x300 (PERIODIC 1000ms。信号追加の練習用のテスト専用フレーム) */
+#define COM_TX_IPDU_COUNT   5U
 
 /** シグナルテーブルのエントリ数（RX + TX の合計）
  *  DaVinci: /ActiveEcuC/Com/ComConfig/ 内 ComSignal ノード数の合計 */
-#define COM_SIGNAL_COUNT    19U
+#define COM_SIGNAL_COUNT    20U
 
 /** Signal Gateway ルーティングテーブルのエントリ数
  *  DaVinci: /ActiveEcuC/Com/ComConfig/[ComGwMapping] ノード数
@@ -201,6 +202,10 @@
 /** E2EHealthStatus (0x220) の PERIODIC 送信周期 [ms]
  *  DaVinci: /ActiveEcuC/Com/ComConfig/[ComIPdu]/ComTxModeTimePeriodFactor */
 #define COM_TX_PERIOD_E2EHEALTH_MS  6000U
+
+/** TestMsg (0x300、テスト専用) の PERIODIC 送信周期 [ms]
+ *  値が変化しなくても、この周期で送信し続ける（信号追加の練習・動作確認用）。 */
+#define COM_TX_PERIOD_TESTMSG_MS  1000U
 
 /** MeterStatus (0x200) の MIXED 送信モードにおける周期フロア間隔 [ms]
  *  DaVinci: /ActiveEcuC/Com/ComConfig/[ComIPdu]/ComTxModeFalse/ComTxModeTimePeriodFactor
@@ -340,6 +345,9 @@
 /** TX: 冷却水温ミラー (8 bit, CAN ID 0x200, byte[5]、EngineInfoの
  *  検証済みCoolantTempと同一値・同一単位) */
 #define COM_SIGNAL_METER_COOLANT_TEMP  18U
+
+/** TX: TestCounter (8 bit, CAN ID 0x300, bit 0) */
+#define COM_SIGNAL_TEST_MSG_TEST_COUNTER  19U
 /* @@GEN-END com-signal-ids */
 
 #endif /* COM_CFG_H */

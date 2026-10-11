@@ -67,6 +67,34 @@ C ソースの生成領域は手で編集しません（次の生成で上書き
 - 人が決める値（Com の送信モード、タイムアウト、I-PDU グループ、コールバックなど）は、既定値を入れた上で「要確認」として表示します。
   追加後に `Com.json` を直してから、`gen_cfg.py` を実行します。
 
+## 信号を追加する練習（TestMsg）
+
+信号表に信号を足して、ECU から CAN に出てくるところまでを試すための、テスト専用のメッセージ `TestMsg`（CAN 0x300、ECU 送信、1 秒周期）を用意しています。
+E2E・SecOC は付けていない素のフレームで、`TestCounter`（1 バイト）が 1 秒ごとに +1 されます（255 の次は 0）。
+カウンタは `src/Asw/App_TestMsg.c` が書き込みます。
+
+can_tool の左側で `Tester` を開くと、受信モニタに `TestMsg (0x300, テスト用)` の行があります（`tools/can_tool/config.json` で登録済み）。
+CAN のバイト列と、信号表の定義に従ってデコードした信号名つきの値（`TestCounter=…`）が表示されます。
+まず何も変更せずに ECU を起動して、値が 1 秒ごとに増えることを確認してください。
+
+### 1 バイト追加してみる
+
+`TestMsg` に 2 つ目の信号 `TestCounter2`（1 バイト）を足す手順です。
+
+1. can_tool の `Signals` を開き、`TestMsg`（0x300）を選びます。
+2. DLC を `1` から `2` に変え、フィールド `TestCounter2`（ビット位置 8、ビット幅 8、種類 number、範囲 0〜255）を追加して保存します。
+3. 下部の「検査」を押します。信号表にあって Com に無い信号の指摘が出ます（ここまでは想定どおりです）。
+4. 「同期の確認 (dry-run)」で追加内容を確認し、「同期」を押します（`Com.json` に `COM_SIGNAL_TEST_MSG_TEST_COUNTER2` の信号が追加されます）。
+5. 「生成」を押し、続けてもう一度「検査」を押して、指摘が無いことを確認します。
+6. `pio run -e uno_r4 -t upload` で書き込み、can_tool の受信モニタを見ます。`TestMsg` が 2 バイトになり、`TestCounter2` が表示されます。
+
+`TestCounter2` に値を入れる処理はまだ無いため、値は 0 のままです。値を変えたいときは、次のとおり ECU 側のコードを足します。
+
+- `src/Rte/Rte.h` / `Rte.c` に、`Rte_Write_TestMsg_TestCounter()` と同じ形で `Rte_Write_TestMsg_TestCounter2()` を足します（`Com_SendSignal(COM_SIGNAL_TEST_MSG_TEST_COUNTER2, &value)` を呼ぶだけです）。
+- `src/Asw/App_TestMsg.c` の `App_TestMsg_Run()` から、その関数を呼びます。
+
+元に戻すときは、信号表の変更を取り消し（`git checkout` または手で戻す）、「同期」「生成」を押し直します。
+
 ## 仕組み
 
 C ソースが「テンプレート」を兼ねます。生成する範囲を、目印のコメントで挟んであります。

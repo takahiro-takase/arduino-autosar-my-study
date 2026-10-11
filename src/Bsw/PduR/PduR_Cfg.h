@@ -105,7 +105,7 @@
  *          Signal Gateway の転送先。DIRECT)
  *  SrcPduId は COM が PduR_ComTransmit() へ、CanTp が PduR_CanTpTransmit() へ
  *  渡す共通の名前空間のため、各パスで重複しない値を割り当てること。 */
-#define PDUR_TX_PATH_COUNT   5U
+#define PDUR_TX_PATH_COUNT   6U
 /* @@GEN-END pdur-counts */
 
 #endif /* PDUR_CFG_H */

@@ -170,6 +170,17 @@ static const CanIf_TxPduConfigType CanIf_TxPduConfigData[CANIF_TX_PDU_COUNT] = {
                                                        *          ImmobilizerStatus のみ */
         .Hth               = 0U,                      /* DaVinci: CanIfTxPduHthIdRef */
         .TxConfirmFct      = PduR_CanIfTxConfirmation /* DaVinci: CanIfTxPduUserTxConfirmationName */
+    },
+    {
+        /* ---------------------------------------------------------------
+         * TxPduId=6: TestMsg フレーム
+         * DaVinci: /ActiveEcuC/CanIf/CanIfInitCfg/CanIfTxPduCfg/TestMsg_Tx
+         * --------------------------------------------------------------- */
+        .UpperLayerTxPduId = 5U,                      /* DaVinci: CanIfTxPduId */
+        .CanId             = 0x300U,                  /* DaVinci: CanIfTxPduCanId */
+        .Dlc               = 1U,                      /* DaVinci: CanIfTxPduDlc */
+        .Hth               = 0U,                      /* DaVinci: CanIfTxPduHthIdRef */
+        .TxConfirmFct      = PduR_CanIfTxConfirmation /* DaVinci: CanIfTxPduUserTxConfirmationName */
     }
 };
 

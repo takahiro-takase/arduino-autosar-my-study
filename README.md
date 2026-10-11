@@ -395,6 +395,9 @@ python tools/configurator/gen_cfg.py     # スキーマ・整合性を検査し�
 - 設定 JSON は、`tools/can_tool` の左側のナビゲーション（`Com`、`PduR`、`CanIf` など）で、スキーマ（`config/schema/`）に従って GUI から編集できます。
   信号定義エディタと設定 JSON エディタの下部のボタンから、検査・同期・生成も実行できます。
 
+- 試すためのテスト専用メッセージ `TestMsg`（CAN 0x300、ECU 送信）があります。1 バイトの信号を足して CAN Tool の受信モニタで確認する手順は、
+  [信号を追加する練習](tools/configurator/README.md#信号を追加する練習testmsg) にあります。
+
 仕組みや設計の判断、整合性検査の内容は [tools/configurator/README.md](tools/configurator/README.md) を参照してください。
 
 <a id="stack-details"></a>

@@ -141,6 +141,15 @@
       "canIfTxPduId": 5,
       "confModule": "COM",
       "confIpdu": "ImmobilizerStatus_Tx"
+    },
+    {
+      "name": "TestMsg_Tx",
+      "frame": "TestMsg",
+      "summary": "COM (SrcPduId=5) → CanIf TxPduId=6 (CAN {canId}, TestMsg)",
+      "srcPduId": 5,
+      "canIfTxPduId": 6,
+      "confIpdu": "TestMsg_Tx",
+      "confModule": "COM"
     }
   ]
 }

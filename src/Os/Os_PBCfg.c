@@ -45,6 +45,7 @@
  *                                                             「宣言されたが一度もスケジューラに登録
  *                                                             されない」ギャップを避けるため配線のみ
  *                                                             行う）
+ *            Task 22: App_TestMsg_Run             1000 ms  — テスト用メッセージ TestMsg のカウンタ更新（信号追加の練習用）
  *
  *          CAN 受信が真のハードウェア割り込み (Can_Isr(), INT ピン立ち下がりで
  *          attachInterrupt 起動) になったことに伴い、旧 Task 0 (Can_Isr の
@@ -148,6 +149,7 @@
 #include "MemIf.h"
 #include "ComM.h"
 #include "App_GptDemo.h"
+#include "App_TestMsg.h"
 
 /* ======================================================================
  * Global Variables
@@ -181,7 +183,8 @@ static const Os_TaskType Os_TaskTable[OS_TASK_COUNT] =
     /* Task 18 */ { MemIf_MainFunction,             10U  },  /* 10 ms   : 保留中 EEPROM ジョブ処理 (Fee 物理バイト書き込み) */
     /* Task 19 */ { App_GptDemo_Run,              2000U  },  /* 2000 ms : Gpt 実 HW タイマ通知カウンタのログ出力 (動作確認用) */
     /* Task 20 */ { ComM_MainFunction,             100U  },  /* 100 ms  : 現状 NOP（SWS_ComM_00888、ComM.c 参照） */
-    /* Task 21 */ { SecOC_MainFunctionRx,          100U  }   /* 100 ms  : 現状 NOP（RX 検証は同期実行済み、SecOC.c 参照） */
+    /* Task 21 */ { SecOC_MainFunctionRx,          100U  },  /* 100 ms  : 現状 NOP（RX 検証は同期実行済み、SecOC.c 参照） */
+    /* Task 22 */ { App_TestMsg_Run,              1000U  }   /* 1000 ms : テスト用メッセージ TestMsg のカウンタ更新（信号追加の練習用） */
 };
 
 /* -----------------------------------------------------------------------
