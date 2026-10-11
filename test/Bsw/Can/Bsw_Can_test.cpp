@@ -643,6 +643,41 @@ TEST_F(Bsw_Can_Test, Can_MainFunction_Write_OK)
     EXPECT_EQ(LastPduId_CanIf_TxConfirmation, 42U);
 }
 
+TEST_F(Bsw_Can_Test, Can_MainFunction_Write_OK_BurstOfDiagResponsesAllConfirmed)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    Can_Init(&config);
+    Can_SetControllerMode(0U, CAN_T_START);
+
+    /* 周期フレーム（TX PDU 数）に加えて、診断応答（同じ PDU）が 8 件続いた状態を想定する。
+     * 実機では、診断要求 5 件の連続処理中に確認が 7 件たまり、旧サイズ（TX PDU 数）では取りこぼした。 */
+    const uint8_t burst = (uint8_t)(CANIF_TX_PDU_COUNT + 8U);
+    uint8_t sdu[8] = {0};
+    Can_PduType pdu;
+    pdu.id = 0x7E8U;
+    pdu.length = 8U;
+    pdu.sdu = sdu;
+
+    for (uint8_t i = 0U; i < burst; i++)
+    {
+        pdu.swPduHandle = (PduIdType)(i % 2U);
+        Can_Write(0U, &pdu);
+    }
+    ASSERT_EQ(CallCount_CanIf_TxConfirmation, 0U);  // Can_Write 単体ではまだ通知されない
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Can_MainFunction_Write();
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(CallCount_CanIf_TxConfirmation, (uint32_t)burst);  // 1 件も取りこぼさない
+}
+
 //------------------------------------------------------------
 // Can_MainFunction_Write() の単体テスト
 //------------------------------------------------------------
