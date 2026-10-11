@@ -1,4 +1,5 @@
 python-can[gs_usb]>=4.3.0
+python-can-candle>=1.2
 pycryptodome>=3.20.0
 pyserial>=3.5
 jsonschema>=4.18

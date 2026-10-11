@@ -50,6 +50,15 @@ src/
 アダプタの場合は `interface=gs_usb`, `channel=0`。SLCAN 系の COM ポートアダプタ
 の場合は `interface=slcan`, `channel=COM3` のように変更してください。
 
+CAN FD に対応したアダプタ（DSD TECH SH-C31A など。出荷時の candleLight ファームウェアのままで FD を扱えます）は
+`interface=candle`, `channel=0` で接続します（`pip install -r requirements.txt` で入る `python-can-candle` を使います。
+Windows では追加のドライバ操作は要りませんでした）。`interface` 欄は、`gs_usb` / `candle` / `slcan` から選べます。
+`candle` は、`gs_usb` と同じ USB の ID（`1D50:606F`）のアダプタを扱うため、同時にはどちらか一方でのみ接続してください。
+現在のツールが送受信するのはクラシック CAN（8 バイトまで）で、FD フレームの送受信は未対応です。
+
+> **ECU はアイドルが続くと眠ります**（NM のバススリープ）。応答が無いときは、もう一度送信してください
+> （最初の 1 フレームで起きます）。
+
 > **Cangaroo と同時に同じアダプタへ接続することはできません。** 干渉する場合は
 > どちらか一方を切断してください。
 

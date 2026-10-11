@@ -204,6 +204,11 @@ def create_bus(interface: str, channel, bitrate: int) -> can.BusABC:
     """python-can の Bus を生成する。アダプタ種別ごとに channel の型が異なる
     （gs_usb は整数 index、slcan はシリアルポート文字列等）ため、呼び出し側
     (config.json) でそのまま渡せる値をそのまま使う。"""
+    if interface == "candle":
+        # python-can-candle（candleLight / gs_usb 互換の USB-CAN。FD 対応のアダプタも扱える）。
+        # ignore_config=True は、python-can の設定ファイル・環境変数の値で引数が文字列に
+        # 変換されるのを防ぐ（candle の引数は型を持つため）。送受信の仕方は gs_usb と同じ。
+        return can.Bus(interface=interface, channel=channel, bitrate=bitrate, ignore_config=True)
     bus = can.Bus(interface=interface, channel=channel, bitrate=bitrate)
     if interface == "gs_usb":
         _patch_gs_usb_shutdown(bus)
