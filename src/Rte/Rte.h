@@ -84,8 +84,12 @@ Std_ReturnType Rte_Write_MeterStatus_FaultLamp(uint8 level);
 Std_ReturnType Rte_Write_MeterStatus_AbsLamp(uint8 level);
 Std_ReturnType Rte_Write_MeterStatus_CoolantTemp(CoolantTemp_t temp);
 
-/* TestMsg シグナル書き込みポート (CAN 0x300、信号追加の練習用・テスト専用) */
+/* @@GEN-BEGIN rte-signal-api  生成元: config/data/Rte.json  （自動生成: 手編集禁止） */
+/* 信号表から生成した信号アクセス（手書きの Rte 関数が無い信号のみ）。
+ * 名前は Rte_Write/Rte_Read_<フレーム名>_<信号名>。合わない名前は Rte.json の names で上書きする */
+/* TestMsg (CAN 0x300) 送信 */
 Std_ReturnType Rte_Write_TestMsg_TestCounter(uint8 value);
+/* @@GEN-END rte-signal-api */
 
 /* ----------------------------------------------------------------------
  * Rte_Invalidate_<p>_<o>  (RTE 5.6.7, SWS_Rte_01206)

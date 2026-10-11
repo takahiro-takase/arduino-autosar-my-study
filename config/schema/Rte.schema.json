@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Rte configuration",
+  "description": "Rte.h / Rte.c の信号アクセス関数（Rte_Write_<ポート>_<要素> / Rte_Read_<ポート>_<要素>）の生成の設定。ポート名はフレーム名、要素名は信号名から自動で作る。合わない名前の上書きと、生成しない信号の指定だけを書く。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "module",
+    "names",
+    "exclude"
+  ],
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "module": {
+      "const": "Rte"
+    },
+    "names": {
+      "type": "array",
+      "description": "名前の上書き。macro は Com の信号 ID マクロ。port / element は、書いたほうだけ上書きする（省略した側は自動）。",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "macro"
+        ],
+        "properties": {
+          "macro": {
+            "type": "string",
+            "pattern": "^COM_SIGNAL_[A-Z0-9_]+$",
+            "description": "Com の信号 ID マクロ（例: COM_SIGNAL_TEST_MSG_TEST_COUNTER）"
+          },
+          "port": {
+            "type": "string",
+            "pattern": "^[A-Za-z][A-Za-z0-9_]*$",
+            "description": "ポート名（Rte_Write_<ポート>_<要素> の <ポート>）"
+          },
+          "element": {
+            "type": "string",
+            "pattern": "^[A-Za-z][A-Za-z0-9_]*$",
+            "description": "データ要素名（Rte_Write_<ポート>_<要素> の <要素>）"
+          }
+        }
+      }
+    },
+    "exclude": {
+      "type": "array",
+      "description": "関数を生成しない信号（Com の信号 ID マクロ）。",
+      "items": {
+        "type": "string",
+        "pattern": "^COM_SIGNAL_[A-Z0-9_]+$"
+      }
+    }
+  }
+}

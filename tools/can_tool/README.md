@@ -118,7 +118,7 @@ GUI のボタン送信に加え、複数手順を一連の操作としてスク�
 
 ## 設定 JSON エディタ（tools/can_tool）
 
-左側のナビゲーションの `Com`、`PduR` などの項目では、`config/data/*.json`（CanIf、Com、PduR、E2EXf、SecOC、CryptoStack、BswM の設定データ）を、
+左側のナビゲーションの `Com`、`PduR` などの項目では、`config/data/*.json`（CanIf、Com、PduR、E2EXf、SecOC、CryptoStack、Rte、BswM の設定データ）を、
 対応する JSON スキーマ（`config/schema/*.schema.json`）に従って編集できます。画面はスキーマから作るため、
 設定 json の種類が増えても、このツールの変更は要りません。
 
