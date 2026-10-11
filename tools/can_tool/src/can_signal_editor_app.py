@@ -342,7 +342,8 @@ class CanSignalEditorFrame(ttk.Frame):
     このクラスは on_title_change コールバックと confirm_close() のみを提供する。"""
 
     def __init__(self, master: tk.Misc, data_path: str,
-                 on_title_change: Callable[[str], None] | None = None):
+                 on_title_change: Callable[[str], None] | None = None,
+                 ensure_all_saved: Callable[[], bool] | None = None):
         super().__init__(master)
         self.data_path = data_path
         self._on_title_change = on_title_change or (lambda _title: None)
@@ -350,9 +351,9 @@ class CanSignalEditorFrame(ttk.Frame):
         self.data = self._load()
         self.dirty = False
         self.current_frame_id: str | None = None
-        # 同じウィンドウの設定 JSON エディタ（app.py が設定する）。コンフィグレータの実行前に、
-        # こちらの未保存の変更も確認するため（ツールは保存済みのファイルを読むので、片方だけでは古い内容で動いてしまう）。
-        self.peer = None
+        # コンフィグレータの実行前に呼ぶ「未保存の変更を確認する」関数。設定 JSON エディタの分も含める場合に渡す
+        # （ツールは保存済みのファイルを読むので、片方だけでは古い内容で動いてしまう）。
+        self._ensure_all_saved = ensure_all_saved
 
         self._build_ui()
         self._refresh_frame_tree()
@@ -687,8 +688,8 @@ class CanSignalEditorFrame(ttk.Frame):
         return True
 
     def _ensure_saved_before_run(self) -> bool:
-        """コンフィグレータの実行前に、信号表と（あれば）設定 JSON エディタの未保存の変更を確認する。"""
-        return self.ensure_saved() and (self.peer is None or self.peer.ensure_saved())
+        """コンフィグレータの実行前に、未保存の変更を確認する（共通の関数が渡されていれば、そちらを使う）。"""
+        return (self._ensure_all_saved or self.ensure_saved)()
 
     # ------------------------------------------------------------------
     # 検証・その他

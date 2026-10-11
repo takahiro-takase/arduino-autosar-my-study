@@ -56,7 +56,7 @@ python tools/configurator/sync_cfg.py --dry-run   # 追加内容を表示する�
 C ソースの生成領域は手で編集しません（次の生成で上書きされます）。
 
 信号表の編集画面（can_tool の信号定義エディタ）にも、「検査」「同期の確認」「同期」「生成」のボタンがあります（[can_tool の README](../can_tool/README.md) 参照）。
-設定 json は、can_tool の「設定 JSON」タブから、スキーマに従って GUI で編集できます（同じく [can_tool の README](../can_tool/README.md) 参照）。
+設定 json は、can_tool の左側のナビゲーションの `Com`、`PduR` などの項目から、スキーマに従って GUI で編集できます（同じく [can_tool の README](../can_tool/README.md) 参照）。
 
 ### 同期ツールの動き
 - 追加するのは、信号表にあって設定に無いフレームの「ひな形」です。CanIf の PDU、Com の I-PDU とシグナル
