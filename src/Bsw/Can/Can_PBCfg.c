@@ -51,6 +51,12 @@ const Can_ConfigType Can_Config = {
     .csPin       = CAN_CS_PIN,
     .intPin      = CAN_INT_PIN,
     .baudrate    = CAN_BAUDRATE_500KBPS,
-    .crystalFreq = CAN_CRYSTAL_8MHZ
+    .crystalFreq = CAN_CRYSTAL_8MHZ,
+    /* CAN FD の設定（AUTOSAR の CanControllerFdBaudrateConfig 相当）。MCP2515 は CAN FD に対応しないため無効。
+     * MCP2518FD へ載せ替えるときは controller を変更し、enabled を true にする。
+     * dataBitrate は通常のビットレートの整数倍（データ部のビットレート）。 */
+    .fdEnabled       = 0U,
+    .fdBaudrate      = 2000000UL,
+    .txBitRateSwitch = 1U
 };
 /* @@GEN-END can-config */

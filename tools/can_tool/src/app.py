@@ -43,7 +43,7 @@ NAV_BLOCKS = (
         NavRow("Com.json", "Com", "Com — 信号・I-PDU・送信モード・コールバック"),
         NavRow("PduR.json", "PduR", "PduR — PDU のルーティング"),
         NavRow("CanIf.json", "CanIf", "CanIf — PDU と CAN ID の対応"),
-        NavRow("Can.json", "Can", "Can — コントローラ設定（ピン・ボーレート・水晶・受信フィルタ）"),
+        NavRow("Can.json", "Can", "Can — コントローラ設定（種類・ピン・ボーレート・水晶・CAN FD・受信フィルタ）"),
     ),
     (
         NavRow("E2EXf.json", "E2EXf", "E2EXf — E2E 保護（Profile05）"),

@@ -125,6 +125,8 @@
 #define CAN_CRYSTAL_16MHZ  ((Can_CrystalFreqType)16U)  /**< 16 MHz 水晶 */
 /* cppcheck-suppress misra-c2012-2.5 */
 #define CAN_CRYSTAL_20MHZ  ((Can_CrystalFreqType)20U)  /**< 20 MHz 水晶 */
+/* cppcheck-suppress misra-c2012-2.5 */
+#define CAN_CRYSTAL_40MHZ  ((Can_CrystalFreqType)40U)  /**< 40 MHz 水晶（MCP2518FD 用） */
 
 /* ======================================================================
  * Type Definitions
@@ -163,6 +165,12 @@ typedef struct
     uint8               intPin;      /**< 割り込みピン番号 */
     uint32              baudrate;    /**< ボーレート（mcp_can_dfs.h の CAN_*KBPS 値） */
     Can_CrystalFreqType crystalFreq; /**< 水晶発振器周波数 (MHz) */
+    uint8               fdEnabled;   /**< 1 = CAN FD を有効にする（CAN FD 対応のコントローラのみ。
+                                      *   現行の MCP2515 ドライバは参照しない） */
+    uint32              fdBaudrate;  /**< データ部のビットレート [bit/s]
+                                      *   （AUTOSAR の CanControllerFdBaudRate 相当。通常のビットレートの整数倍） */
+    uint8               txBitRateSwitch; /**< 1 = 送信時にデータ部でビットレートを切り替える
+                                      *   （AUTOSAR の CanControllerTxBitRateSwitch 相当） */
 } Can_ConfigType;
 
 #endif /* CAN_CFG_H */
