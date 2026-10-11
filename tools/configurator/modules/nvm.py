@@ -7,15 +7,12 @@ ROM デフォルト値（なし／1 バイトの定数／同じ式の繰り返�
   - EEPROM の先頭アドレス（前のブロックの末尾＋CRC 1 バイトから連鎖。冗長ブロックはミラー面の分も確保する）
   - RAM ミラーバッファ、ROM デフォルト値、ブロック記述子テーブル
   - 最大ブロック長（NVM_MAX_BLOCK_LENGTH）、EEPROM レイアウトのコメント
-Dem のイベント数に長さを合わせるブロック（`demEventCount`）は、Dem_Cfg.h の DEM_EVENT_COUNT と一致するか検査する。
+Dem のイベント数に長さを合わせるブロック（`demEventCount`）は、Dem.json のイベント数と一致するか検査し、
+ROM デフォルト値の各要素に、対応するイベント名の注釈（`event N: <name>`）を付ける。
 """
-
-import pathlib
-import re
 
 from .common import block_comment, doc_comment
 
-REPO_ROOT = pathlib.Path(__file__).resolve().parents[3]
 RULE = "-" * 71
 
 
@@ -32,6 +29,8 @@ def validate(cfg):
                 errors.append("blocks %s: default.elementComments の index が length 以上" % b["name"])
             if len(set(idx)) != len(idx):
                 errors.append("blocks %s: default.elementComments の index が重複している" % b["name"])
+        if b.get("demEventCount") and d.get("elementComments"):
+            errors.append("blocks %s: demEventCount のブロックでは、要素の注釈（event N: <名前>）を自動で付けるため、default.elementComments は指定しない" % b["name"])
         if d["kind"] != "none" and "value" not in d:
             errors.append("blocks %s: default.kind=%s には value が必要" % (b["name"], d["kind"]))
         if d["kind"] == "scalar" and b["length"] != 1:
@@ -64,17 +63,16 @@ def layout(cfg):
     return result, addr - cfg.get("baseAddress", 0)
 
 
+def dem_events(ctx):
+    return [e["name"] for e in ctx.configs["Dem"]["events"]]
+
+
 def check_dem(cfg, ctx):
-    """Dem のイベント数に合わせるブロックの長さを、Dem_Cfg.h の DEM_EVENT_COUNT と突き合わせる。"""
-    root = pathlib.Path(getattr(ctx, "repo_root", None) or REPO_ROOT)
-    text = (root / "src" / "Bsw" / "Dem" / "Dem_Cfg.h").read_bytes().decode("utf-8", errors="replace")
-    m = re.search(r"#define\s+DEM_EVENT_COUNT\s+(\d+)U", text)
-    if m is None:
-        raise ValueError("Dem_Cfg.h に DEM_EVENT_COUNT が見つからない")
-    count = int(m.group(1))
+    """Dem のイベント数に合わせるブロックの長さを、Dem.json のイベント数と突き合わせる。"""
+    count = len(dem_events(ctx))
     for b in cfg["blocks"]:
         if b.get("demEventCount") and b["length"] != count:
-            raise ValueError("blocks %s: length=%d が Dem の DEM_EVENT_COUNT=%d と一致しない" % (b["name"], b["length"], count))
+            raise ValueError("blocks %s: length=%d が Dem のイベント数 %d（Dem.json）と一致しない" % (b["name"], b["length"], count))
 
 
 def ruled(lines):
@@ -192,6 +190,8 @@ def render_pbcfg(cfg, ctx):
             out.append("static const uint8 %s[NVM_BLOCK_%s_LENGTH] =" % (default_ident(b), b["name"]))
             out.append("{")
             comments = {str(c["index"]): c["text"] for c in d.get("elementComments", [])}
+            if b.get("demEventCount"):
+                comments = {str(i): "event %d: %s" % (i, n) for i, n in enumerate(dem_events(ctx))}
             for i in range(b["length"]):
                 comma = "," if i < b["length"] - 1 else " "
                 line = "    %s%s" % (d["value"], comma)

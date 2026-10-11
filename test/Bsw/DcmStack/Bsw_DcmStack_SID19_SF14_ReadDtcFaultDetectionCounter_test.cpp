@@ -232,9 +232,9 @@ TEST_F(Bsw_DcmStack_SID19_SF14_ReadDtcFaultDetectionCounter_Test,
     /* ----------------------- */
     /* ---- 準備 (Arrange) --- */
     /* ----------------------- */
-    // DEM_EVENT_ENGINE_OVERHEAT（limit=2）を1回だけ FAILED
+    // DemConf_DemEventParameter_ENGINE_OVERHEAT（limit=2）を1回だけ FAILED
     // 報告する（生カウンタ1は確定閾値2未満のため prefailed）。
-    (void)Dem_SetEventStatus(DEM_EVENT_ENGINE_OVERHEAT, DEM_EVENT_STATUS_FAILED);
+    (void)Dem_SetEventStatus(DemConf_DemEventParameter_ENGINE_OVERHEAT, DEM_EVENT_STATUS_FAILED);
 
     FakeCanHw_RxId  = 0x7E0U;
     FakeCanHw_RxDlc = 8U;
@@ -276,10 +276,10 @@ TEST_F(Bsw_DcmStack_SID19_SF14_ReadDtcFaultDetectionCounter_Test,
     /* ----------------------- */
     /* ---- 準備 (Arrange) --- */
     /* ----------------------- */
-    // DEM_EVENT_BUTTON_STUCK（limit=1）を FAILED 確定させ、DEM_EVENT_ENGINE_OVERHEAT（limit=2）は
+    // DemConf_DemEventParameter_BUTTON_STUCK（limit=1）を FAILED 確定させ、DemConf_DemEventParameter_ENGINE_OVERHEAT（limit=2）は
     // 1 回だけ FAILED 報告して prefailed のままにする。
-    (void)Dem_SetEventStatus(DEM_EVENT_BUTTON_STUCK, DEM_EVENT_STATUS_FAILED);
-    (void)Dem_SetEventStatus(DEM_EVENT_ENGINE_OVERHEAT, DEM_EVENT_STATUS_FAILED);
+    (void)Dem_SetEventStatus(DemConf_DemEventParameter_BUTTON_STUCK, DEM_EVENT_STATUS_FAILED);
+    (void)Dem_SetEventStatus(DemConf_DemEventParameter_ENGINE_OVERHEAT, DEM_EVENT_STATUS_FAILED);
     FakeCanHw_RxId  = 0x7E0U;
     FakeCanHw_RxDlc = 8U;
     FakeCanHw_RxData[0] = 2U;

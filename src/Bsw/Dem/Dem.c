@@ -92,6 +92,7 @@
  * ====================================================================== */
 
 #include "Dem.h"
+#include "Dem_PBCfg.h"
 #include "Det.h"
 #include "NvM.h"
 
@@ -116,63 +117,8 @@
 /** 各イベントの DTC ステータスバイト (NvM RAM ミラーから復元した作業コピー) */
 static uint8 Dem_StatusTable[DEM_EVENT_COUNT];
 
-/** イベント ID → DTC コード (24-bit) 変換テーブル */
-static const uint32 Dem_DtcTable[DEM_EVENT_COUNT] = {
-    DEM_DTC_ENGINE_OVERHEAT,         /* event 0 */
-    DEM_DTC_ENGINE_STALL,            /* event 1 */
-    DEM_DTC_ENGINE_SPEED_NO_FLAG,    /* event 2 */
-    DEM_DTC_STARTING_TIMEOUT,        /* event 3 */
-    DEM_DTC_COMM_TIMEOUT,            /* event 4 */
-    DEM_DTC_BUTTON_STUCK,            /* event 5 */
-    DEM_DTC_ADC_VOLT_LOW,            /* event 6 */
-    DEM_DTC_CAN_BUSOFF,              /* event 7 */
-    DEM_DTC_E2E_ABSINFO,             /* event 8 */
-    DEM_DTC_E2E_ENGINEINFO,          /* event 9 */
-    DEM_DTC_WDGM_SUPERVISION,        /* event 10 */
-    DEM_DTC_WDG_DISABLE_REJECTED,    /* event 11 */
-    DEM_DTC_NVM_INTEGRITY_FAILED,    /* event 12 */
-    DEM_DTC_NVM_LOSS_OF_REDUNDANCY,  /* event 13 */
-    DEM_DTC_NVM_REQ_FAILED           /* event 14 */
-};
-
-/** イベント ID → デバウンス確定閾値 変換テーブル (Dem_Cfg.h の DEM_DEBOUNCE_LIMIT_*) */
-static const sint8 Dem_DebounceLimitTable[DEM_EVENT_COUNT] = {
-    DEM_DEBOUNCE_LIMIT_ENGINE_OVERHEAT,       /* event 0 */
-    DEM_DEBOUNCE_LIMIT_ENGINE_STALL,          /* event 1 */
-    DEM_DEBOUNCE_LIMIT_ENGINE_SPEED_NO_FLAG,  /* event 2 */
-    DEM_DEBOUNCE_LIMIT_STARTING_TIMEOUT,      /* event 3 */
-    DEM_DEBOUNCE_LIMIT_COMM_TIMEOUT,          /* event 4 */
-    DEM_DEBOUNCE_LIMIT_BUTTON_STUCK,          /* event 5 */
-    DEM_DEBOUNCE_LIMIT_ADC_VOLT_LOW,          /* event 6 */
-    DEM_DEBOUNCE_LIMIT_CAN_BUSOFF,            /* event 7 */
-    DEM_DEBOUNCE_LIMIT_E2E_ABSINFO,           /* event 8 */
-    DEM_DEBOUNCE_LIMIT_E2E_ENGINEINFO,        /* event 9 */
-    DEM_DEBOUNCE_LIMIT_WDGM_SUPERVISION,      /* event 10 */
-    DEM_DEBOUNCE_LIMIT_WDG_DISABLE_REJECTED,  /* event 11 */
-    DEM_DEBOUNCE_LIMIT_NVM_INTEGRITY_FAILED,  /* event 12 */
-    DEM_DEBOUNCE_LIMIT_NVM_LOSS_OF_REDUNDANCY, /* event 13 */
-    DEM_DEBOUNCE_LIMIT_NVM_REQ_FAILED          /* event 14 */
-};
-
-/** イベント ID → 経年回復(Aging)閾値 変換テーブル (Dem_Cfg.h の DEM_AGING_THRESHOLD_*) */
-/* cppcheck-suppress misra-c2012-8.9 */
-static const uint8 Dem_AgingThresholdTable[DEM_EVENT_COUNT] = {
-    DEM_AGING_THRESHOLD_ENGINE_OVERHEAT,       /* event 0 */
-    DEM_AGING_THRESHOLD_ENGINE_STALL,          /* event 1 */
-    DEM_AGING_THRESHOLD_ENGINE_SPEED_NO_FLAG,  /* event 2 */
-    DEM_AGING_THRESHOLD_STARTING_TIMEOUT,      /* event 3 */
-    DEM_AGING_THRESHOLD_COMM_TIMEOUT,          /* event 4 */
-    DEM_AGING_THRESHOLD_BUTTON_STUCK,          /* event 5 */
-    DEM_AGING_THRESHOLD_ADC_VOLT_LOW,          /* event 6 */
-    DEM_AGING_THRESHOLD_CAN_BUSOFF,            /* event 7 */
-    DEM_AGING_THRESHOLD_E2E_ABSINFO,           /* event 8 */
-    DEM_AGING_THRESHOLD_E2E_ENGINEINFO,        /* event 9 */
-    DEM_AGING_THRESHOLD_WDGM_SUPERVISION,      /* event 10 */
-    DEM_AGING_THRESHOLD_WDG_DISABLE_REJECTED,  /* event 11 */
-    DEM_AGING_THRESHOLD_NVM_INTEGRITY_FAILED,  /* event 12 */
-    DEM_AGING_THRESHOLD_NVM_LOSS_OF_REDUNDANCY, /* event 13 */
-    DEM_AGING_THRESHOLD_NVM_REQ_FAILED          /* event 14 */
-};
+/* イベント ID → DTC / デバウンス閾値 / Aging 閾値 の各テーブル (Dem_DtcTable[] 等) は
+ * Dem_PBCfg.c（config/data/Dem.json から生成）で定義する。 */
 
 /** イベントごとの FreezeFrame (故障時スナップショット)。RAM のみ保持 */
 static Dem_FreezeFrameType Dem_FreezeFrameTable[DEM_EVENT_COUNT];
@@ -456,7 +402,7 @@ Std_ReturnType Dem_ClearDTC(uint8 ClientId, uint32 DTC, Dem_DTCFormatType DTCFor
  *          Dcm 側は既に解決済みの EventId で直接本関数を呼ぶ既存の簡略化を
  *          そのまま踏襲する（本関数の改名以前から変わらない設計）。
  *
- * \param[in]   EventId        イベント ID (DEM_EVENT_* 定数)。
+ * \param[in]   EventId        イベント ID (DemConf_DemEventParameter_* 定数)。
  * \param[out]  UDSStatusByte  取得したステータスバイト（statusAvailabilityMask
  *                             でマスク済み）の格納先。NULL 禁止。
  *                             戻り値が E_NOT_OK の場合は不定。
@@ -512,13 +458,13 @@ Std_ReturnType Dem_GetEventUdsStatus(Dem_EventIdType EventId, Dem_UdsStatusByteT
 /**
  * \brief   イベント ID から DTC コードを取得する（[SWS_Dem_00198]/[SWS_Dem_00269]）。
  *
- * \details 本プロジェクトの `Dem_DtcTable[]`（Dem_Cfg.h）は UDS 3-byte 形式の
+ * \details 本プロジェクトの `Dem_DtcTable[]`（Dem_PBCfg.c）は UDS 3-byte 形式の
  *          DTC 値のみを構成しており、OBD/J1939 形式は一切保持しないため、
  *          `DTCFormat` に `DEM_DTC_FORMAT_UDS` 以外を渡された場合は
  *          `DEM_E_NO_DTC_AVAILABLE`（要求フォーマットの DTC が構成されていない）
  *          を返す。
  *
- * \param[in]   EventId     イベント ID (DEM_EVENT_* 定数)。
+ * \param[in]   EventId     イベント ID (DemConf_DemEventParameter_* 定数)。
  * \param[in]   DTCFormat   取得する DTC 値のフォーマット。本プロジェクトは
  *                          `DEM_DTC_FORMAT_UDS` のみ対応。
  * \param[out]  DTCOfEvent  24-bit DTC コードの格納先。NULL 禁止。
@@ -717,7 +663,7 @@ Std_ReturnType Dem_GetFaultDetectionCounter(Dem_EventIdType EventId, sint8* Faul
  *          の生の単発判定を報告し、Dem が報告回数を数えて閾値到達で確定する」という
  *          学習用簡略方式を採用しているための制約。
  *
- * \param[in]  EventId      イベント ID (DEM_EVENT_* 定数)。
+ * \param[in]  EventId      イベント ID (DemConf_DemEventParameter_* 定数)。
  * \param[in]  EventStatus  DEM_EVENT_STATUS_FAILED または DEM_EVENT_STATUS_PASSED。
  *                          PREPASSED / PREFAILED は受け付けない。
  *
@@ -1685,7 +1631,7 @@ Std_ReturnType Dem_EnableDTCSetting(uint8 ClientId)
  * \brief   指定イベントの DTC ステータス・デバウンスカウンタ・経年回復カウンタ・
  *          ExtendedData・FreezeFrame を初期状態に戻す（NvM 書き込みは呼び出し元が行う）。
  *
- * \param[in]  EventId  イベント ID (DEM_EVENT_* 定数)。範囲チェックは呼び出し元の責務。
+ * \param[in]  EventId  イベント ID (DemConf_DemEventParameter_* 定数)。範囲チェックは呼び出し元の責務。
  */
 static void Dem_ClearOne(Dem_EventIdType EventId)
 {

@@ -1,0 +1,106 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Dem configuration",
+  "description": "Dem_Cfg.h のイベント ID・DTC コード・デバウンスと経年回復の閾値と、Dem.c のそれらを引く 3 つの表の生成元。イベントの並び順がそのままイベント ID。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "module",
+    "events"
+  ],
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "module": {
+      "const": "Dem"
+    },
+    "events": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 255,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "dtc",
+          "debounceLimit",
+          "agingThreshold",
+          "idDoc",
+          "dtcDoc",
+          "debounceDoc",
+          "agingDoc"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "pattern": "^[A-Z][A-Z0-9_]*$",
+            "description": "イベント名。DemConf_DemEventParameter_<name>（イベント ID のシンボリック名）、DEM_DTC_<name>、DEM_DEBOUNCE_LIMIT_<name>、DEM_AGING_THRESHOLD_<name> のマクロ名になる"
+          },
+          "dtc": {
+            "type": "string",
+            "pattern": "^0x[0-9A-Fa-f]{1,6}$",
+            "description": "DTC コード（24 bit、16 進。ISO 14229-1。製造者定義領域を使う）。全イベントで重複しない"
+          },
+          "debounceLimit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 127,
+            "description": "デバウンス（カウンタ式）の確定閾値。FAILED 報告で +1、PASSED 報告で -1 し、±この値に達した瞬間にステータスを確定する"
+          },
+          "agingThreshold": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 255,
+            "description": "経年回復（Aging）の閾値。確定した DTC が再故障せずにこの回数の操作サイクルを経過すると、確定を自動的に解除する"
+          },
+          "idDoc": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "not": {
+                "pattern": "\\*/"
+              }
+            },
+            "description": "イベント ID のコメント",
+            "minItems": 1
+          },
+          "dtcDoc": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "not": {
+                "pattern": "\\*/"
+              }
+            },
+            "description": "DTC コードのコメント",
+            "minItems": 1
+          },
+          "debounceDoc": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "not": {
+                "pattern": "\\*/"
+              }
+            },
+            "description": "デバウンス閾値のコメント",
+            "minItems": 1
+          },
+          "agingDoc": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "not": {
+                "pattern": "\\*/"
+              }
+            },
+            "description": "Aging 閾値のコメント",
+            "minItems": 1
+          }
+        }
+      }
+    }
+  }
+}

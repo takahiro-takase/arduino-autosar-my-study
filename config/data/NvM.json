@@ -41,36 +41,6 @@
           "(DEM_STATUS_NOT_COMPLETED_SINCE_CLEAR | DEM_STATUS_NOT_COMPLETED_THIS_CYCLE)。",
           "MAGIC は無事だが STATUS だけ破損した場合でも、Dem が想定する",
           "「正常な初期状態」と一致させるため。"
-        ],
-        "elementComments": [
-          {
-            "index": 8,
-            "text": "event 8: E2E_ABSINFO"
-          },
-          {
-            "index": 9,
-            "text": "event 9: E2E_ENGINEINFO"
-          },
-          {
-            "index": 10,
-            "text": "event 10: WDGM_SUPERVISION"
-          },
-          {
-            "index": 11,
-            "text": "event 11: WDG_DISABLE_REJECTED"
-          },
-          {
-            "index": 12,
-            "text": "event 12: NVM_INTEGRITY_FAILED"
-          },
-          {
-            "index": 13,
-            "text": "event 13: NVM_LOSS_OF_REDUNDANCY"
-          },
-          {
-            "index": 14,
-            "text": "event 14: NVM_REQ_FAILED"
-          }
         ]
       }
     },

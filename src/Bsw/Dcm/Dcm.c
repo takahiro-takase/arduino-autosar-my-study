@@ -162,6 +162,7 @@
 
 #include "Dcm.h"
 #include "Dcm_Cfg.h"
+#include "Dcm_PBCfg.h"
 #include "Dem.h"
 #include "CanTp.h"
 #include "Rte.h"
@@ -310,6 +311,14 @@ static uint8 Dcm_TestPattern[DCM_DID_TEST_PATTERN_LENGTH];
  *  コメント参照）。 */
 static uint8 Dcm_Vin[DCM_VIN_LENGTH];
 
+/** 手書きの読み出し関数が書き込む長さを、生成した応答バッファ長が超えないことの静的アサート（Dcm.json の length と関数の食い違い防止） */
+/* cppcheck-suppress misra-c2012-2.3 */
+typedef char Dcm_ReadBuf_Must_Fit_Vin[(DCM_DID_READ_MAX_LENGTH >= DCM_VIN_LENGTH) ? 1 : -1];
+/* cppcheck-suppress misra-c2012-2.3 */
+typedef char Dcm_ReadBuf_Must_Fit_TestPattern[(DCM_DID_READ_MAX_LENGTH >= DCM_DID_TEST_PATTERN_LENGTH) ? 1 : -1];
+/* cppcheck-suppress misra-c2012-2.3 */
+typedef char Dcm_ReadBuf_Must_Fit_TxBuf[(DCM_TX_BUF_SIZE >= (DCM_DID_READ_MAX_LENGTH + 3U)) ? 1 : -1];
+
 /** CanTp_Transmit に渡す PDU 情報構造体 */
 static PduInfoType Dcm_TxPdu;
 
@@ -347,7 +356,6 @@ static void Dcm_HandleCommunicationControl(const uint8* uds, uint8 udsLen);
 static void Dcm_CommControlReset(void);
 static void Dcm_HandleControlDTCSetting(const uint8* uds, uint8 udsLen);
 static void Dcm_DTCSettingReset(void);
-static Std_ReturnType Dcm_LampIdOfDid(uint16 did, Rte_LampIdType* lamp);
 static void Dcm_UpdateComMRequest(uint8 session);
 static void Dcm_HandleSecurityAccess(const uint8* uds, uint8 udsLen);
 static void Dcm_HandleSecurityRequestSeed(uint8 subFunc, uint8 udsLen);
@@ -355,7 +363,7 @@ static void Dcm_HandleSecuritySendKey(uint8 subFunc, const uint8* uds, uint8 uds
 static uint16 Dcm_ComputeSecurityKey(uint16 seed);
 static void Dcm_SecurityLock(void);
 static void Dcm_HandleTesterPresent(const uint8* uds, uint8 udsLen);
-static Std_ReturnType Dcm_ReadDid(uint16 did, uint8* buf, uint8* dataLen);
+static const Dcm_DidConfigType* Dcm_FindDid(uint16 did);
 static void Dcm_HandleRoutineControl(const uint8* uds, uint8 udsLen);
 static void Dcm_HandleRoutineStart(uint16 rid);
 static void Dcm_HandleRoutineStop(uint16 rid);
@@ -1743,71 +1751,109 @@ static void Dcm_HandleReadDtcInfo(const uint8* uds, uint8 udsLen)
 }
 
 /* -----------------------------------------------------------------------
- * 0x22 ReadDataByIdentifier — DID ディスパッチ
+ * DID の表の探索とデータ関数（表は Dcm_PBCfg.c の Dcm_DidTable[]）
  * ----------------------------------------------------------------------- */
 
 /**
- * \brief   DID に対応するデータを読み出す。
+ * \brief   DID の表から、DID に対応する行を探す。
  *
- * \param[in]   did      データ識別子 (DCM_DID_*)。
- * \param[out]  buf      読み出したデータの格納先。
- * \param[out]  dataLen  読み出したデータのバイト数。
+ * \param[in]  did  データ識別子 (DCM_DID_*)。
  *
- * \retval  E_OK      正常取得。
- * \retval  E_NOT_OK  DID 不明またはデータ取得失敗。
+ * \return  対応する行へのポインタ。DID が表に無ければ NULL。
  */
-static Std_ReturnType Dcm_ReadDid(uint16 did, uint8* buf, uint8* dataLen)
+static const Dcm_DidConfigType* Dcm_FindDid(uint16 did)
 {
-    switch (did)
+    const Dcm_DidConfigType* found = NULL;
+    uint8 i;
+
+    for (i = 0U; (i < DCM_DID_COUNT) && (found == NULL); i++)
     {
-    case DCM_DID_ENGINE_SPEED:
-    {
-        EngineSpeed_t speed = 0U;
-        (void)Rte_Read_SpeedSensor_EngineSpeed(&speed);
-        buf[0]   = (uint8)(speed >> 8U);   /* MSB first (big-endian) */
-        buf[1]   = (uint8)(speed & 0xFFU);
-        *dataLen = 2U;
-        return E_OK;
-    }
-    case DCM_DID_COOLANT_TEMP:
-    {
-        CoolantTemp_t temp = 0U;
-        (void)Rte_Read_TempSensor_CoolantTemp(&temp);
-        buf[0]   = temp;
-        *dataLen = 1U;
-        return E_OK;
-    }
-    case DCM_DID_ENGINE_STATE:
-    {
-        EngineState_t state = ENGINE_STATE_OFF;
-        (void)Rte_Read_EngineStatus_EngineState(&state);
-        buf[0]   = (uint8)state;
-        *dataLen = 1U;
-        return E_OK;
-    }
-    case DCM_DID_TEST_PATTERN:
-    {
-        uint8 i;
-        for (i = 0U; i < DCM_DID_TEST_PATTERN_LENGTH; i++)
+        if (Dcm_DidTable[i].Did == did)
         {
-            buf[i] = Dcm_TestPattern[i];
+            found = &Dcm_DidTable[i];
         }
-        *dataLen = DCM_DID_TEST_PATTERN_LENGTH;
-        return E_OK;
     }
-    case DCM_DID_VIN:
+    return found;
+}
+
+/**
+ * \brief   DCM_DID_ENGINE_SPEED (0x0101) の読み出し関数。
+ *
+ * \param[out]  Data  EngineSpeed (uint16, MSB first) の格納先。2 バイト。
+ *
+ * \retval  E_OK  常に正常。
+ */
+Std_ReturnType Dcm_ReadDidEngineSpeed(uint8* Data)
+{
+    EngineSpeed_t speed = 0U;
+    (void)Rte_Read_SpeedSensor_EngineSpeed(&speed);
+    Data[0] = (uint8)(speed >> 8U);   /* MSB first (big-endian) */
+    Data[1] = (uint8)(speed & 0xFFU);
+    return E_OK;
+}
+
+/**
+ * \brief   DCM_DID_COOLANT_TEMP (0x0102) の読み出し関数。
+ *
+ * \param[out]  Data  CoolantTemp (uint8) の格納先。1 バイト。
+ *
+ * \retval  E_OK  常に正常。
+ */
+Std_ReturnType Dcm_ReadDidCoolantTemp(uint8* Data)
+{
+    CoolantTemp_t temp = 0U;
+    (void)Rte_Read_TempSensor_CoolantTemp(&temp);
+    Data[0] = temp;
+    return E_OK;
+}
+
+/**
+ * \brief   DCM_DID_ENGINE_STATE (0x0103) の読み出し関数。
+ *
+ * \param[out]  Data  EngineState (uint8) の格納先。1 バイト。
+ *
+ * \retval  E_OK  常に正常。
+ */
+Std_ReturnType Dcm_ReadDidEngineState(uint8* Data)
+{
+    EngineState_t state = ENGINE_STATE_OFF;
+    (void)Rte_Read_EngineStatus_EngineState(&state);
+    Data[0] = (uint8)state;
+    return E_OK;
+}
+
+/**
+ * \brief   DCM_DID_TEST_PATTERN (0x0104) の読み出し関数。
+ *
+ * \param[out]  Data  保持している TestPattern の格納先。DCM_DID_TEST_PATTERN_LENGTH バイト。
+ *
+ * \retval  E_OK  常に正常。
+ */
+Std_ReturnType Dcm_ReadDidTestPattern(uint8* Data)
+{
+    uint8 i;
+    for (i = 0U; i < DCM_DID_TEST_PATTERN_LENGTH; i++)
     {
-        uint8 i;
-        for (i = 0U; i < DCM_VIN_LENGTH; i++)
-        {
-            buf[i] = Dcm_Vin[i];
-        }
-        *dataLen = DCM_VIN_LENGTH;
-        return E_OK;
+        Data[i] = Dcm_TestPattern[i];
     }
-    default:
-        return E_NOT_OK;
+    return E_OK;
+}
+
+/**
+ * \brief   DCM_DID_VIN (0xF190) の読み出し関数。
+ *
+ * \param[out]  Data  起動時にキャッシュした VIN の格納先。DCM_VIN_LENGTH バイト。
+ *
+ * \retval  E_OK  常に正常。
+ */
+Std_ReturnType Dcm_ReadDidVin(uint8* Data)
+{
+    uint8 i;
+    for (i = 0U; i < DCM_VIN_LENGTH; i++)
+    {
+        Data[i] = Dcm_Vin[i];
     }
+    return E_OK;
 }
 
 /**
@@ -1816,7 +1862,7 @@ static Std_ReturnType Dcm_ReadDid(uint16 did, uint8* buf, uint8* dataLen)
  * \details 要求フレームから DID を抽出し、対応するデータを読み出して
  *          正応答 [0x62, DID_H, DID_L, data...] を返す。
  *
- *          本実装は `Dcm_ReadDid()` が単一 DID しか扱えない設計のため、
+ *          本実装は 1 要求で 1 つの DID しか扱えない設計のため、
  *          実質的に `DcmDspMaxDidToRead=1` に相当する。要求に2つ目以降の
  *          DID が付いている場合(udsLen>3)は NRC 0x13 で拒否する
  *          （[SWS_Dcm_01335]。2026-09 是正: 以前は下限のみ判定していたため、
@@ -1836,17 +1882,18 @@ static void Dcm_HandleReadDataById(const uint8* uds, uint8 udsLen)
 
     uint16 did = ((uint16)uds[1] << 8U) | (uint16)uds[2];
 
-    /* Dcm_ReadDid() が扱う DID の中で最大の長さ（DCM_VIN_LENGTH=17）に
-     * 合わせる。DCM_DID_TEST_PATTERN_LENGTH(8) だけを見て確保すると VIN
-     * (0xF190) 読み出し時にスタックバッファオーバーフローする。 */
-    uint8 dataBuf[DCM_VIN_LENGTH];
-    uint8 dataLen = 0U;
+    /* 読み出し対応の DID の中で最大の長さに合わせる（Dcm_Cfg.h の DCM_DID_READ_MAX_LENGTH。
+     * Dcm.json から生成）。短い長さで確保すると長い DID の読み出しでスタックバッファを溢れる。 */
+    uint8 dataBuf[DCM_DID_READ_MAX_LENGTH];
 
-    if (Dcm_ReadDid(did, dataBuf, &dataLen) != E_OK)
+    const Dcm_DidConfigType* row = Dcm_FindDid(did);
+    if ((row == NULL) || (row->ReadFct == NULL) || (row->ReadFct(dataBuf) != E_OK))
     {
         Dcm_SendNegativeResponse(DCM_SID_READ_DATA, DCM_NRC_REQUEST_OUT_OF_RANGE);
         return;
     }
+
+    uint8 dataLen = row->Length;
 
     DET_LOGI(TAG, "22 did=0x%04X len=%u", (unsigned)did, (unsigned)dataLen);
 
@@ -1908,11 +1955,52 @@ static Std_ReturnType Dcm_UpdateCryptoKey(uint8 keyName, const uint8* keyData)
 }
 
 /**
+ * \brief   DCM_DID_TEST_PATTERN (0x0104) の書き込み関数。
+ *
+ * \param[in]  Data  新しい TestPattern。DCM_DID_TEST_PATTERN_LENGTH バイト（長さは呼び出し元で検証済み）。
+ *
+ * \retval  E_OK  常に正常。
+ */
+Std_ReturnType Dcm_WriteDidTestPattern(const uint8* Data)
+{
+    uint8 i;
+    for (i = 0U; i < DCM_DID_TEST_PATTERN_LENGTH; i++)
+    {
+        Dcm_TestPattern[i] = Data[i];
+    }
+    return E_OK;
+}
+
+/**
+ * \brief   DCM_DID_CRYPTO_KEY_UPDATE (0x0108) の書き込み関数。
+ *
+ * \param[in]  Data  [keyName(1), keyData(16)]。DCM_DID_CRYPTO_KEY_UPDATE_LENGTH バイト（長さは呼び出し元で検証済み）。
+ *
+ * \retval  E_OK      鍵を更新し有効化した。
+ * \retval  E_NOT_OK  KeyM の更新が失敗した（鍵名不一致等）。
+ */
+Std_ReturnType Dcm_WriteDidCryptoKeyUpdate(const uint8* Data)
+{
+    Std_ReturnType ret = Dcm_UpdateCryptoKey(Data[0], &Data[1]);
+
+    if (ret != E_OK)
+    {
+        DET_LOGW(TAG, "2E did=0x%04X keyName=0x%02X: KeyM update failed",
+                 (unsigned)DCM_DID_CRYPTO_KEY_UPDATE, (unsigned)Data[0]);
+    }
+    else
+    {
+        DET_LOGI(TAG, "2E did=0x%04X keyName=0x%02X: key updated",
+                 (unsigned)DCM_DID_CRYPTO_KEY_UPDATE, (unsigned)Data[0]);
+    }
+    return ret;
+}
+
+/**
  * \brief   UDS 0x2E WriteDataByIdentifier を処理する。
  *
- * \details DCM_DID_TEST_PATTERN (0x0104, 固定長 DCM_DID_TEST_PATTERN_LENGTH
- *          バイト) と DCM_DID_CRYPTO_KEY_UPDATE (0x0108, 固定長
- *          DCM_DID_CRYPTO_KEY_UPDATE_LENGTH バイト) のみ書き込みに対応する。
+ * \details DID の表 (Dcm_DidTable[]) で WriteFct を持つ DID に対応する
+ *          （現在は DCM_DID_TEST_PATTERN と DCM_DID_CRYPTO_KEY_UPDATE）。
  *          いずれも要求ペイロードが CanTp の SF 上限 (7 バイト) を超えるため、
  *          CanTp_RxIndication() の FF+CF 受信パスを実機で検証する目的も兼ねる
  *          学習用 DID（実際の車両データ・鍵配布プロトコルではない）。
@@ -1923,6 +2011,9 @@ static Std_ReturnType Dcm_UpdateCryptoKey(uint8 keyName, const uint8* keyData)
  *          TestPattern   要求: [0x2E, DID_H, DID_L, data0..data7]
  *          CryptoKeyUpdate 要求: [0x2E, DID_H, DID_L, keyName, key0..key15]
  *          応答（共通）: [0x6E, DID_H, DID_L]
+ *
+ *          NRC の判定順: 0x33（セキュリティ）→ 0x13（3 バイト未満）→ 0x31（DID が表に無い、または
+ *          WriteFct が無い）→ 0x13（DID ごとの固定長と不一致）→ 0x31（書き込み関数が失敗）。
  *
  * \param[in]  uds     UDS ペイロード先頭ポインタ (uds[0]=SID 0x2E)。
  * \param[in]  udsLen  UDS ペイロード長。
@@ -1943,47 +2034,26 @@ static void Dcm_HandleWriteDataById(const uint8* uds, uint8 udsLen)
 
     uint16 did = ((uint16)uds[1] << 8U) | (uint16)uds[2];
 
-    if (did == DCM_DID_TEST_PATTERN)
-    {
-        if (udsLen != (uint8)(3U + DCM_DID_TEST_PATTERN_LENGTH))
-        {
-            Dcm_SendNegativeResponse(DCM_SID_WRITE_DATA, DCM_NRC_INCORRECT_MESSAGE_LENGTH);
-            return;
-        }
-
-        uint8 i;
-        for (i = 0U; i < DCM_DID_TEST_PATTERN_LENGTH; i++)
-        {
-            Dcm_TestPattern[i] = uds[3U + i];
-        }
-
-        DET_LOGI(TAG, "2E did=0x%04X len=%u (multi-frame request)",
-                 (unsigned)did, (unsigned)DCM_DID_TEST_PATTERN_LENGTH);
-    }
-    else if (did == DCM_DID_CRYPTO_KEY_UPDATE)
-    {
-        if (udsLen != (uint8)(3U + DCM_DID_CRYPTO_KEY_UPDATE_LENGTH))
-        {
-            Dcm_SendNegativeResponse(DCM_SID_WRITE_DATA, DCM_NRC_INCORRECT_MESSAGE_LENGTH);
-            return;
-        }
-
-        uint8 keyName = uds[3];
-        if (Dcm_UpdateCryptoKey(keyName, &uds[4]) != E_OK)
-        {
-            DET_LOGW(TAG, "2E did=0x%04X keyName=0x%02X: KeyM update failed",
-                     (unsigned)did, (unsigned)keyName);
-            Dcm_SendNegativeResponse(DCM_SID_WRITE_DATA, DCM_NRC_REQUEST_OUT_OF_RANGE);
-            return;
-        }
-
-        DET_LOGI(TAG, "2E did=0x%04X keyName=0x%02X: key updated", (unsigned)did, (unsigned)keyName);
-    }
-    else
+    const Dcm_DidConfigType* row = Dcm_FindDid(did);
+    if ((row == NULL) || (row->WriteFct == NULL))
     {
         Dcm_SendNegativeResponse(DCM_SID_WRITE_DATA, DCM_NRC_REQUEST_OUT_OF_RANGE);
         return;
     }
+
+    if (udsLen != (uint8)(3U + row->Length))
+    {
+        Dcm_SendNegativeResponse(DCM_SID_WRITE_DATA, DCM_NRC_INCORRECT_MESSAGE_LENGTH);
+        return;
+    }
+
+    if (row->WriteFct(&uds[3]) != E_OK)
+    {
+        Dcm_SendNegativeResponse(DCM_SID_WRITE_DATA, DCM_NRC_REQUEST_OUT_OF_RANGE);
+        return;
+    }
+
+    DET_LOGI(TAG, "2E did=0x%04X len=%u", (unsigned)did, (unsigned)row->Length);
 
     /* 正応答: [0x6E, DID_H, DID_L] */
     Dcm_TxBuf[0] = 0x6EU;               /* SID + 0x40 */
@@ -1999,29 +2069,10 @@ static void Dcm_HandleWriteDataById(const uint8* uds, uint8 udsLen)
  * ----------------------------------------------------------------------- */
 
 /**
- * \brief   DID から対応する Rte ランプ ID を求める。
- *
- * \param[in]   did   データ識別子。
- * \param[out]  lamp  対応する Rte_LampIdType の格納先。
- *
- * \retval  E_OK      対応するランプが見つかった。
- * \retval  E_NOT_OK  DID が RunLamp/FaultLamp/AbsLamp のいずれでもない。
- */
-static Std_ReturnType Dcm_LampIdOfDid(uint16 did, Rte_LampIdType* lamp)
-{
-    switch (did)
-    {
-    case DCM_DID_RUN_LAMP:   *lamp = RTE_LAMP_RUN;   return E_OK;
-    case DCM_DID_FAULT_LAMP: *lamp = RTE_LAMP_FAULT; return E_OK;
-    case DCM_DID_ABS_LAMP:   *lamp = RTE_LAMP_ABS;   return E_OK;
-    default:                 return E_NOT_OK;
-    }
-}
-
-/**
  * \brief   UDS 0x2F InputOutputControlByIdentifier を処理する。
  *
- * \details 対応 DID: RunLamp(0x0105) / FaultLamp(0x0106) / AbsLamp(0x0107)
+ * \details 対応 DID: DID の表 (Dcm_DidTable[]) で IoControlLamp を持つもの
+ *          RunLamp(0x0105) / FaultLamp(0x0106) / AbsLamp(0x0107)
  *          （WarningStatus, CAN 0x210 の Signal Group メンバーと同じ3灯）。
  *
  *          controlOptionRecord (ISO 14229-1 Table 209):
@@ -2060,12 +2111,13 @@ static void Dcm_HandleIoControl(const uint8* uds, uint8 udsLen)
     uint16 did           = ((uint16)uds[1] << 8U) | (uint16)uds[2];
     uint8  controlOption = uds[3];
 
-    Rte_LampIdType lamp;
-    if (Dcm_LampIdOfDid(did, &lamp) != E_OK)
+    const Dcm_DidConfigType* row = Dcm_FindDid(did);
+    if ((row == NULL) || (row->IoControlLamp >= (uint8)RTE_LAMP_COUNT))
     {
         Dcm_SendNegativeResponse(DCM_SID_IO_CONTROL, DCM_NRC_REQUEST_OUT_OF_RANGE);
         return;
     }
+    Rte_LampIdType lamp = (Rte_LampIdType)row->IoControlLamp;
 
     uint8 resultLevel = 0U;
 
@@ -3107,52 +3159,9 @@ static void Dcm_HandleTesterPresent(const uint8* uds, uint8 udsLen)
 }
 
 /* -----------------------------------------------------------------------
- * SID × セッション許可テーブル (AUTOSAR DcmDspSessionRow に相当)
+ * SID × セッション許可の判定（表は Dcm_PBCfg.c の Dcm_SidSessionTable[]。
+ * AUTOSAR DcmDspSessionRow に相当し、config/data/Dcm.json から生成する）
  * ----------------------------------------------------------------------- */
-
-/** SID ごとに許可されるセッションを表す 1 行。 */
-typedef struct
-{
-    uint8 Sid;
-    uint8 AllowedSessionMask;  /**< DCM_SESSION_MASK_* の組み合わせ */
-} Dcm_SidSessionRowType;
-
-/** テーブルに掲載のない SID はセッション制約なし（全セッションで許可）とみなす。
- *  DTC 履歴の消去 (0x14)・セキュリティ認証 (0x27)・データ書き込み (0x2E) のみ、
- *  誤操作・悪用の影響が大きいため extendedSession 限定とする学習用の最小構成。
- *  0x2F (IOControl) も診断専用の一時的な出力制御であり通常操作ではないため
- *  extendedSession 限定とするが、車両制御や NVM 書き換えを伴わないため
- *  SecurityAccess までは要求しない（0x14/0x2E との保護レベルの違いを
- *  意図的に設けている）。0x31 (RoutineControl) も同様の理由
- *  （EngineHealthCheck はセンサ値を読むだけで NVM 書き換え・車両制御を
- *  伴わない）で extendedSession 限定・SecurityAccess 不要とする。
- *  0x28 (CommunicationControl) も同様に extendedSession 限定・SecurityAccess
- *  不要とする（通信そのものを止める操作的な影響はあるが、車両制御や NVM
- *  書き換えは伴わないため 0x2F/0x31 と同じ保護レベル）。
- *  0x34/0x36/0x37 (RequestDownload/TransferData/RequestTransferExit) は
- *  0x14/0x2E と同じ「誤操作・悪用の影響が大きい」保護レベルのため
- *  extendedSession 限定とする（SecurityAccess は 0x34 のみで判定する。
- *  Dcm.c 冒頭のコメント参照）。
- *  0x85 (ControlDTCSetting) も 0x28/0x2F/0x31 と同じ保護レベル
- *  （DTC 記録という診断上重要な機能への操作的な影響はあるが、車両制御や
- *  NVM 書き換えは伴わないため SecurityAccess までは要求しない）で
- *  extendedSession 限定とする。
- *  実際の AUTOSAR では DcmDspSessionRow がサービス・サブ機能単位で
- *  この表をコンフィギュレーションツールから生成する。 */
-/* cppcheck-suppress misra-c2012-8.9 */
-static const Dcm_SidSessionRowType Dcm_SidSessionTable[] =
-{
-    { DCM_SID_CLEAR_DTC,             DCM_SESSION_MASK_EXTENDED },
-    { DCM_SID_SECURITY_ACCESS,       DCM_SESSION_MASK_EXTENDED },
-    { DCM_SID_WRITE_DATA,            DCM_SESSION_MASK_EXTENDED },
-    { DCM_SID_IO_CONTROL,            DCM_SESSION_MASK_EXTENDED },
-    { DCM_SID_COMM_CONTROL,          DCM_SESSION_MASK_EXTENDED },
-    { DCM_SID_ROUTINE_CONTROL,       DCM_SESSION_MASK_EXTENDED },
-    { DCM_SID_REQUEST_DOWNLOAD,      DCM_SESSION_MASK_EXTENDED },
-    { DCM_SID_TRANSFER_DATA,         DCM_SESSION_MASK_EXTENDED },
-    { DCM_SID_REQUEST_TRANSFER_EXIT, DCM_SESSION_MASK_EXTENDED },
-    { DCM_SID_CONTROL_DTC_SETTING,   DCM_SESSION_MASK_EXTENDED },
-};
 
 /**
  * \brief   SID が現在のセッションで許可されているかを判定する。
@@ -3172,10 +3181,9 @@ static uint8 Dcm_IsServiceAllowedInSession(uint8 sid, uint8 session)
     const uint8 sessionMask = (session == DCM_SESSION_EXTENDED)
                                ? DCM_SESSION_MASK_EXTENDED
                                : DCM_SESSION_MASK_DEFAULT;
-    const uint8 rowCount = (uint8)(sizeof(Dcm_SidSessionTable) / sizeof(Dcm_SidSessionTable[0]));
     uint8 i;
 
-    for (i = 0U; i < rowCount; i++)
+    for (i = 0U; i < DCM_SID_SESSION_COUNT; i++)
     {
         if (Dcm_SidSessionTable[i].Sid == sid)
         {

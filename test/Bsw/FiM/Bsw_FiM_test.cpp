@@ -123,7 +123,7 @@ TEST_F(Bsw_FiM_Test, MainFunction_OK_InhibitsFidWhenDtcConfirmedAfterInit)
     /* ----------------------- */
     // 初期化後に Bus-Off が確定 (DEM_DEBOUNCE_LIMIT_CAN_BUSOFF=1
     // のため1回で確定)
-    (void)Dem_SetEventStatus(DEM_EVENT_CAN_BUSOFF, DEM_EVENT_STATUS_FAILED);
+    (void)Dem_SetEventStatus(DemConf_DemEventParameter_CAN_BUSOFF, DEM_EVENT_STATUS_FAILED);
     FiM_MainFunction();
 
     /* ----------------------- */
@@ -169,7 +169,7 @@ TEST_F(Bsw_FiM_Test, Init_NG_InhibitsAlreadyConfirmedDtcWithoutWaitingForMainFun
     // 実機の起動順序 (EcuM.c: Dem_Init() → FiM_Init()) を
     // 模し、FiM_Init() を呼ぶ「前」に Bus-Off が既に確定している状態を作る
     // (前回起動までに NvM から復元された確定済み DTC に相当)。
-    (void)Dem_SetEventStatus(DEM_EVENT_CAN_BUSOFF, DEM_EVENT_STATUS_FAILED);
+    (void)Dem_SetEventStatus(DemConf_DemEventParameter_CAN_BUSOFF, DEM_EVENT_STATUS_FAILED);
 
     /* ----------------------- */
     /* ---- 実行 (Act) ------- */

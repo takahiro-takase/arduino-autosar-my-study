@@ -37,7 +37,7 @@
  *            4. 再度 Bus-Off が発生した場合は試行回数をカウント
  *            5. 試行回数が CANSM_BUSOFF_L1_TO_L2_COUNT を超えたら、一時的な
  *               バス障害ではなく持続的な Bus-Off と判断し、Dem へ FAILED 報告
- *               (DEM_EVENT_CAN_BUSOFF)。Dem 側は DEM_DEBOUNCE_LIMIT_CAN_BUSOFF=1
+ *               (DemConf_DemEventParameter_CAN_BUSOFF)。Dem 側は DEM_DEBOUNCE_LIMIT_CAN_BUSOFF=1
  *               のため即座に確定する。以降はリトライ周期を長い
  *               CANSM_BUSOFF_RECOVERY_L2_MS へ切り替えるだけで、回復試行その
  *               ものは無期限に継続する（AUTOSAR 仕様には「回復を諦めて二度と
@@ -297,7 +297,7 @@ Std_ReturnType CanSM_RequestComMode(NetworkHandleType network, ComM_ModeType mod
             CanSM_BusOffRetries = 0U;
             DET_LOGI(TAG, "->FULL_COM");
             /* 通信確立を報告。デバウンス確定すれば CAN_BUSOFF の TF をクリアする */
-            (void)Dem_SetEventStatus(DEM_EVENT_CAN_BUSOFF, DEM_EVENT_STATUS_PASSED);
+            (void)Dem_SetEventStatus(DemConf_DemEventParameter_CAN_BUSOFF, DEM_EVENT_STATUS_PASSED);
             ComM_BusSM_ModeIndication(network, COMM_FULL_COMMUNICATION);
             break;
 
@@ -699,7 +699,7 @@ void CanSM_ControllerModeIndication(uint8 ControllerId, Can_ControllerStateType 
  *
  * \details Bus-Off 状態のとき、L1/L2 のいずれかの周期（下記）が経過すると
  *          コントローラの再起動を試みる。再起動時は
- *          Dem_SetEventStatus(DEM_EVENT_CAN_BUSOFF, PASSED) を報告する
+ *          Dem_SetEventStatus(DemConf_DemEventParameter_CAN_BUSOFF, PASSED) を報告する
  *          （CanSM_RequestComMode を経由しない自動復帰のため、ここで明示的に報告する）。
  *          再起動後に再度 Bus-Off が発生すると CanSM_ControllerBusOff() が
  *          呼ばれ、試行回数がインクリメントされる（リトライ回数は次回の
@@ -713,7 +713,7 @@ void CanSM_ControllerModeIndication(uint8 ControllerId, Can_ControllerStateType 
  *            試行回数 <= CANSM_BUSOFF_L1_TO_L2_COUNT の間は
  *            CANSM_BUSOFF_RECOVERY_L1_MS（短い周期）でリトライする。
  *            この回数を超えたら、一時的なバス障害ではなく持続的な Bus-Off と
- *            判断し、Dem_SetEventStatus(DEM_EVENT_CAN_BUSOFF, FAILED) を
+ *            判断し、Dem_SetEventStatus(DemConf_DemEventParameter_CAN_BUSOFF, FAILED) を
  *            1 回だけ報告した上で（Dem 側は DEM_DEBOUNCE_LIMIT_CAN_BUSOFF=1
  *            のため即座に確定する）、以降は CANSM_BUSOFF_RECOVERY_L2_MS
  *            （長い周期）でリトライを継続する。AUTOSAR 仕様には「回復を諦めて
@@ -791,7 +791,7 @@ void CanSM_MainFunction(void)
          * 残る）。回復試行そのものは止めない（下へ続く）。 */
         DET_LOGE(TAG, "BusOff: L1(%u) exceeded, degrade to L2 (%lums)",
                  (unsigned)CANSM_BUSOFF_L1_TO_L2_COUNT, (unsigned long)CANSM_BUSOFF_RECOVERY_L2_MS);
-        (void)Dem_SetEventStatus(DEM_EVENT_CAN_BUSOFF, DEM_EVENT_STATUS_FAILED);
+        (void)Dem_SetEventStatus(DemConf_DemEventParameter_CAN_BUSOFF, DEM_EVENT_STATUS_FAILED);
     }
 
     DET_LOGI(TAG, "BusOff: restart attempt %u (%s, next in %lums)",
@@ -812,7 +812,7 @@ void CanSM_MainFunction(void)
     /* 回復成功を報告。デバウンス確定すれば CAN_BUSOFF の TF をクリアする
      * （CDTC/PDTC は上の FAILED 確定で既に立っていれば保持される。Dem.c の
      * PASSED デバウンス確定コメント参照）。 */
-    (void)Dem_SetEventStatus(DEM_EVENT_CAN_BUSOFF, DEM_EVENT_STATUS_PASSED);
+    (void)Dem_SetEventStatus(DemConf_DemEventParameter_CAN_BUSOFF, DEM_EVENT_STATUS_PASSED);
 
     /* 2026-08 変更: Bus-Off は CANSM_STATE_FULL_COM だけでなく
      * CANSM_STATE_SILENT_COM からも起こりうるようになったため
@@ -927,7 +927,7 @@ void CanSM_RxIndication(uint8 ControllerId)
     CanSM_SetPduModeOnlineBestEffort("RxIndication");
     CanSM_State         = CANSM_STATE_FULL_COM;
     CanSM_BusOffRetries = 0U;
-    (void)Dem_SetEventStatus(DEM_EVENT_CAN_BUSOFF, DEM_EVENT_STATUS_PASSED);
+    (void)Dem_SetEventStatus(DemConf_DemEventParameter_CAN_BUSOFF, DEM_EVENT_STATUS_PASSED);
     ComM_BusSM_ModeIndication(0U, COMM_FULL_COMMUNICATION);
 }
 

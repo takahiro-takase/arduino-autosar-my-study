@@ -204,7 +204,7 @@ TEST_F(Bsw_DcmStack_SID11_EcuResetFlushesNvm_Test,
     // （Dem が STATUS と EXTENDED の書き込みを NvM に積む）。まだ NvM_MainFunction() は
     // 一度も回していないので、書き込みは PENDING のまま。
     WrapDem_Reset();
-    ASSERT_EQ(Dem_SetEventStatus(DEM_EVENT_BUTTON_STUCK, DEM_EVENT_STATUS_FAILED), E_OK);
+    ASSERT_EQ(Dem_SetEventStatus(DemConf_DemEventParameter_BUTTON_STUCK, DEM_EVENT_STATUS_FAILED), E_OK);
     ASSERT_EQ(ResultOf(NVM_BLOCK_ID_DEM_STATUS), NVM_REQ_PENDING);
     ASSERT_EQ(ResultOf(NVM_BLOCK_ID_DEM_EXTENDED), NVM_REQ_PENDING);
 

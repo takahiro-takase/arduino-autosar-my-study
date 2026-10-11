@@ -2,7 +2,7 @@
 
 信号表（CAN ビットアサイン表）と、モジュールごとの設定 json から、各モジュールの設定ソース
 （`*_PBCfg.c`、`*_Cfg.h`）の該当部分を生成する Python ツールです。
-現在の対象は **CanIf**、**Com**、**PduR**、**E2EXf**（E2E Transformer）、**SecOC**、**Csm / Crypto / KeyM**（暗号処理の連鎖）、**Rte**（ASW 向けの信号アクセス関数）、**NvM**（不揮発ブロックの構成）、**WdgM**（ウォッチドッグの監視対象）、**FiM**（機能の抑止）、**Can**（コントローラ設定）、**BswM**（モード遷移のルール）の 8 モジュールです。Com スタックの他のモジュールへ広げていく計画です。
+現在の対象は **CanIf**、**Com**、**PduR**、**E2EXf**（E2E Transformer）、**SecOC**、**Csm / Crypto / KeyM**（暗号処理の連鎖）、**Rte**（ASW 向けの信号アクセス関数）、**Dem**（診断イベント）、**Dcm**（DID の表）、**NvM**（不揮発ブロックの構成）、**WdgM**（ウォッチドッグの監視対象）、**FiM**（機能の抑止）、**Can**（コントローラ設定）、**BswM**（モード遷移のルール）の 16 モジュールです。Com スタックの他のモジュールへ広げていく計画です。
 
 最終的な構想は `arxml ⇔ json ⇔ Cfg.c` です。このうち json → Cfg.c の部分と、
 信号表の変更に設定を連動させる部分を、この範囲で試しています。
@@ -13,7 +13,7 @@
 config/data/can_signals.json（ビットアサイン表の正本。can_tool の GUI で編集）
         │  sync_cfg.py: 追加されたフレームの設定のひな形を、各モジュールの設定 json へ追加
         ▼
-config/data/CanIf.json, Com.json, PduR.json, E2EXf.json, SecOC.json, CryptoStack.json, Rte.json, NvM.json, WdgM.json, FiM.json, Can.json, BswM.json
+config/data/CanIf.json, Com.json, PduR.json, E2EXf.json, SecOC.json, CryptoStack.json, Rte.json, Dem.json, Dcm.json, NvM.json, WdgM.json, FiM.json, Can.json, BswM.json
         │  gen_cfg.py: スキーマ・整合性を検査して、Cfg ソースの生成領域を更新（json → C の一方向）
         ▼
 src/Bsw/CanIf/CanIf_PBCfg.c, CanIf_Cfg.h / src/Bsw/Com/Com_PBCfg.c, Com_Cfg.h / src/Bsw/PduR/PduR_PBCfg.c, PduR_Cfg.h
@@ -21,6 +21,8 @@ src/Bsw/CanIf/CanIf_PBCfg.c, CanIf_Cfg.h / src/Bsw/Com/Com_PBCfg.c, Com_Cfg.h / 
 / src/Bsw/Csm, Crypto, KeyM の *_PBCfg.c, *_Cfg.h（鍵・ジョブ・鍵名のテーブルと ID マクロ）
 / src/Bsw/BswM/BswM_PBCfg.c, BswM_Cfg.h（ルールテーブルとルール数）
 / src/Rte/Rte.h, Rte.c（信号アクセス関数 Rte_Write_* / Rte_Read_*）
+/ src/Bsw/Dem/Dem_Cfg.h, Dem_PBCfg.c（イベント ID・DTC・閾値のマクロと表）
+/ src/Bsw/Dcm/Dcm_Cfg.h, Dcm_PBCfg.h, Dcm_PBCfg.c（DID のマクロ・データ関数の宣言・DID の表）
 / src/Bsw/NvM/NvM_Cfg.h, NvM_PBCfg.c（ブロック ID・アドレス・バッファ・ROM デフォルト値・記述子テーブル）
 / src/Bsw/WdgM/WdgM_Cfg.h, WdgM_PBCfg.c（エンティティ・チェックポイント・遷移表・Deadline 表）
 / src/Bsw/FiM/FiM_Cfg.h, FiM_PBCfg.c（機能 ID と対応テーブル） / src/Bsw/Can/Can_Cfg.h, Can_PBCfg.c（ピン番号と Can_Config）
@@ -139,6 +141,46 @@ C ソースが「テンプレート」を兼ねます。生成する範囲を、
 3 の判定は文字の検索なので、コメントに信号 ID マクロを書いただけでも「使われている」と見なされます。
 生成した関数名が、手書きの宣言・定義と同じになる場合や、生成した関数どうしで同じになる場合は、生成エラーになります（`names` で上書きしてください）。
 
+<a id="dem-generation"></a>
+## Dem のイベント定義の生成
+
+診断イベント（DTC）の定義を `config/data/Dem.json` の `events[]` に書いて、`Dem_Cfg.h` と `Dem_PBCfg.c` を生成します（`modules/dem.py`）。
+NvM、WdgM と同じく、信号表とは関係なく Dem.json だけが入力です。
+
+| Dem.json の項目 | 生成されるもの |
+|-----------------|----------------|
+| `events[]` の並び順 / `name` | イベント ID（シンボリック名 `DemConf_DemEventParameter_<name>`）、イベント数（`DEM_EVENT_COUNT`）、各表の添字 |
+| `dtc` | DTC コード（`DEM_DTC_<name>`）と、イベント ID から DTC を引く表（`Dem_DtcTable`、`Dem_PBCfg.c`） |
+| `debounceLimit` | デバウンスの確定閾値（`DEM_DEBOUNCE_LIMIT_<name>`）と表（`Dem_DebounceLimitTable`） |
+| `agingThreshold` | 経年回復の閾値（`DEM_AGING_THRESHOLD_<name>`）と表（`Dem_AgingThresholdTable`） |
+
+- イベントを足すには、`Dem.json` の `events` に 1 件足して `gen_cfg.py` を実行します。ID・DTC・閾値のマクロと 3 つの表が、揃って増えます。
+- 3 つの表は `Dem_PBCfg.c`（新設）の目印の間に生成します。宣言は `Dem_PBCfg.h`（手書き）にあり、`Dem.c` はそれを参照するだけです。設定データは `Dem.c` から完全になくなりました。
+- 検査: `name` の形、DTC コードの重複と範囲（グループコード 0xFFFFFF は使えない）。
+- **他のモジュールとの連動**:
+  - NvM: `demEventCount: true` のブロック（Dem のステータス・Aging・故障確定回数）の長さが、Dem.json のイベント数と一致することを検査します。
+    ROM デフォルト値の各要素には、対応するイベント名の注釈（`event N: <name>`）を自動で付けます。
+  - FiM・E2EXf: 監視する（報告する）イベントは、`Dem.json` のイベント名（`events[].name`）で指定します。名前が無ければ生成エラーです。生成物では `DemConf_DemEventParameter_<name>` になります。
+  - イベントを足したら、NvM のブロック長（`NvM.json` の `length`）も同じ数に直します（食い違うと生成エラー）。
+- 表を `Dem_PBCfg.c` に分離した後は、3 つの表の値（DTC・閾値）が分離前と同じであることをホスト側のテストと実機で確認します（表の位置が変わるため、コンパイル結果は完全には一致しません）。
+
+<a id="dcm-generation"></a>
+## Dcm の DID の表・セッション許可の表の生成
+
+UDS の DID（0x22 読み出し・0x2E 書き込み・0x2F 入出力制御）の定義を `config/data/Dcm.json` の `dids[]` に書いて、`Dcm_Cfg.h`・`Dcm_PBCfg.h`・`Dcm_PBCfg.c` を生成します（`modules/dcm.py`）。
+
+| Dcm.json の項目 | 生成されるもの |
+|---|---|
+| `dids[]` の並び順 / `name` / `did` | DID のマクロ（`DCM_DID_<name>`）と、表（`Dcm_DidTable`、`Dcm_PBCfg.c`）の行。個数は `DCM_DID_COUNT` |
+| `length` / `lengthMacro` | 表のデータ長。`lengthMacro` があれば長さのマクロも生成（テストが使う `DCM_VIN_LENGTH` など） |
+| `readFct` / `writeFct` | 0x22 / 0x2E のデータ関数。宣言は `Dcm_PBCfg.h` に生成し、中身は `Dcm.c` に手書きする |
+| `ioControlLamp` | 0x2F で制御するランプ（`Rte_LampIdType`） |
+
+- `Dcm.c` の 0x22 / 0x2E / 0x2F は、表を `Dcm_FindDid()` で引いて処理する汎用の形になり、DID ごとの `switch` はなくなりました。DID を足すには、`Dcm.json` に 1 件書き、データ関数を手書きして `gen_cfg.py` を実行します。
+- NRC の判定順は従来のままです。0x2E は 0x33（セキュリティ）→ 0x13（3 バイト未満）→ 0x31（表に無い、または書き込み関数が無い）→ 0x13（固定長と不一致）→ 0x31（書き込み失敗）。
+- 0x22 の応答用バッファの大きさは、読み出し対応の DID の最大データ長（`DCM_DID_READ_MAX_LENGTH`）から生成します。
+- SID ごとの許可セッションは `sidSessions[]`（`sid` は `Dcm_Cfg.h` の `DCM_SID_<sid>` の名前、`sessions` は `DEFAULT` / `EXTENDED`）に書きます。表（`Dcm_SidSessionTable`、`Dcm_PBCfg.c`）と行数（`DCM_SID_SESSION_COUNT`）を生成し、表に無い SID は全セッションで許可です。`Dcm.c` は表を引いて判定するだけです。SID の名前が `Dcm_Cfg.h` に無ければ生成エラーです。表の説明文は `sidSessionDoc` に書きます。
+
 <a id="nvm-generation"></a>
 ## NvM のブロック構成の生成
 
@@ -154,7 +196,7 @@ NvM が管理する不揮発ブロックの構成を `config/data/NvM.json` に�
 | （全ブロックの最大） | `NVM_MAX_BLOCK_LENGTH`、EEPROM レイアウトのコメント |
 
 - ブロックを足すには、`NvM.json` の `blocks` に 1 件足して `gen_cfg.py` を実行します。ID、アドレス、バッファ、テーブルの行が揃って増えます。
-- `demEventCount: true` のブロックは、長さが `Dem_Cfg.h` の `DEM_EVENT_COUNT` と一致するかを検査します（食い違うと生成エラー）。
+- `demEventCount: true` のブロックは、長さが `Dem.json` のイベント数と一致するかを検査します（食い違うと生成エラー）。
 - ROM デフォルト値の `value` は C の式をそのまま書きます（`Dem_Cfg.h` のマクロを使う場合は、`NvM_PBCfg.c` がそれをインクルードしていることを検査します）。
 - 生成の前後で、`NvM_PBCfg.c`・`NvM.c`・`Dem.c` をコンパイルした結果（セクションの内容とリロケーション）が一致することを確認しています。
 - 生成するのはサイズ・アドレス・テーブルまでです。ブロックを実際に読み書きする処理（Dem など）は、手で書きます。
@@ -198,7 +240,7 @@ NvM、WdgM と同じく、信号表とは関係なく、それぞれの JSON だ
 | `functions[]` の並び順 | 機能 ID（`FIM_FID_<name>`）、機能数（`FIM_FUNCTION_COUNT`）、対応テーブルの添字 |
 | `event`、`statusMask` | 対応テーブル（`FiM_Functions[]`）。監視する Dem イベントと、抑止するステータスのビット |
 
-- `event` と `statusMask` は `Dem_Cfg.h` に実在するマクロでなければならず、イベント ID が `DEM_EVENT_COUNT` 未満であることも検査します。
+- `event` は `Dem.json` のイベント名（例: `CAN_BUSOFF`）、`statusMask` は `Dem_Cfg.h` に実在するマクロでなければなりません（検査します）。
 
 **Can**（`config/data/Can.json`、`modules/can.py`）
 
@@ -255,7 +297,7 @@ CanIf・PduR・Com が持つ PDU / 信号の ID は、AUTOSAR のシンボリッ
 | `gen_cfg.py` | 目印コメントの差し込み、スキーマ検証、生成の実行 |
 | `sync_cfg.py` | 信号表に追加されたフレームの設定を、設定 json へ追加 |
 | `checks.py` | 信号表と各モジュール設定の整合性検査 |
-| `modules/canif.py`, `com.py`, `pdur.py`, `e2exf.py`, `secoc.py`, `cryptostack.py`, `rte.py`, `nvm.py`, `wdgm.py`, `fim.py`, `can.py`, `bswm.py` | モジュールごとの生成関数（`SPEC` に生成先と領域 ID を持つ） |
+| `modules/canif.py`, `com.py`, `pdur.py`, `e2exf.py`, `secoc.py`, `cryptostack.py`, `rte.py`, `dem.py`, `nvm.py`, `wdgm.py`, `fim.py`, `can.py`, `bswm.py` | モジュールごとの生成関数（`SPEC` に生成先と領域 ID を持つ） |
 | `modules/common.py` | コメント・構造体フィールドの整形 |
 | `../../config/schema/*.schema.json` | 設定 json のスキーマ（型・範囲・列挙） |
 | `../../config/data/*.json` | モジュールごとの設定データ（リポジトリ直下の `config/`。コードと分けて置く） |
@@ -406,5 +448,5 @@ E2E と SecOC の設定は、Com から分けて別の設定 json（`E2EXf.json`
 - 他のモジュール。信号表との関係は薄いため、必要になったら足す。NvM、WdgM、FiM、Can は対応済み。CanSM と ComM は、表になる設定が無いため対象外。
 - Rte の信号アクセス関数の生成は、信号グループの I-PDU・ゲートウェイの信号・手書きの関数がある信号を対象外にしている。信号グループ（`Rte_SendSignalGroup_*`）や、E2E 変換つきの Read は手書きのまま。
 - CanSM と ComM は、表になる設定が無いため対象外（BswM は対応済み）。
-- 診断（DCM / UDS）の設定の対象化。入力となる表（DID 一覧など）の整理が先に必要。
+- 診断の設定のうち、Dem のイベント定義は対応済み。Dcm（UDS）は、DID が表ではなく `switch` 文のコードになっているため、DID を表にして `Dcm.c` を表を引く作りに変える改造が先に必要。
 - ARXML の入出力。json の項目名を ECUC のパラメータ名に寄せてあるので、変換層を足す形にできる。

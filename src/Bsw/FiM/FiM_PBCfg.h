@@ -39,7 +39,7 @@
 typedef struct
 {
     uint8 FunctionId;         /**< 機能 ID (FIM_FID_*)                              */
-    uint8 EventId;            /**< 監視する Dem イベント ID (DEM_EVENT_*)            */
+    uint8 EventId;            /**< 監視する Dem イベント ID (DemConf_DemEventParameter_*)            */
     uint8 InhibitStatusMask;  /**< Dem ステータスビット (DEM_STATUS_*)。
                                 *   いずれか 1 ビットでも立っていれば当該機能を抑止する */
 } FiM_FunctionCfgType;

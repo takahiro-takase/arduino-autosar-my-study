@@ -1,0 +1,202 @@
+{
+  "$schema": "../schema/Dcm.schema.json",
+  "module": "Dcm",
+  "dids": [
+    {
+      "name": "ENGINE_SPEED",
+      "did": "0x0101",
+      "length": 2,
+      "readFct": "Dcm_ReadDidEngineSpeed",
+      "doc": [
+        "EngineSpeed: uint16, rpm"
+      ]
+    },
+    {
+      "name": "COOLANT_TEMP",
+      "did": "0x0102",
+      "length": 1,
+      "readFct": "Dcm_ReadDidCoolantTemp",
+      "doc": [
+        "CoolantTemp: uint8,  ℃"
+      ]
+    },
+    {
+      "name": "ENGINE_STATE",
+      "did": "0x0103",
+      "length": 1,
+      "readFct": "Dcm_ReadDidEngineState",
+      "doc": [
+        "EngineState: uint8,  enum"
+      ]
+    },
+    {
+      "name": "TEST_PATTERN",
+      "did": "0x0104",
+      "length": 8,
+      "lengthMacro": "DCM_DID_TEST_PATTERN_LENGTH",
+      "readFct": "Dcm_ReadDidTestPattern",
+      "writeFct": "Dcm_WriteDidTestPattern",
+      "doc": [
+        "TestPattern: uint8[DCM_DID_TEST_PATTERN_LENGTH], 読み書き可能 (0x22 / 0x2E)。",
+        "実際の車両データではなく、CanTp の複数フレーム要求受信 (FF+CF) を",
+        "実機で検証するために用意した学習用 DID。0x2E の要求ペイロードが",
+        "SID(1)+DID(2)+data(8)=11 バイトとなり SF の 7 バイト制限を超える。"
+      ],
+      "lengthDoc": [
+        "TestPattern のデータ長 [byte]"
+      ]
+    },
+    {
+      "name": "RUN_LAMP",
+      "did": "0x0105",
+      "length": 1,
+      "ioControlLamp": "RTE_LAMP_RUN",
+      "doc": [
+        "RunLamp: uint8 (0/1)。0x2F InputOutputControlByIdentifier 専用の DID",
+        "（0x22 ReadDataByIdentifier / 0x2E WriteDataByIdentifier では未対応）。",
+        "WarningStatus (CAN 0x210) の Signal Group メンバーと同じ3灯を、",
+        "診断側から強制点灯/消灯できるようにする。"
+      ]
+    },
+    {
+      "name": "FAULT_LAMP",
+      "did": "0x0106",
+      "length": 1,
+      "ioControlLamp": "RTE_LAMP_FAULT",
+      "doc": [
+        "FaultLamp: uint8 (0/1)。0x2F 専用（RunLamp と同じ）"
+      ]
+    },
+    {
+      "name": "ABS_LAMP",
+      "did": "0x0107",
+      "length": 1,
+      "ioControlLamp": "RTE_LAMP_ABS",
+      "doc": [
+        "AbsLamp: uint8 (0/1)。0x2F 専用（RunLamp と同じ）"
+      ]
+    },
+    {
+      "name": "CRYPTO_KEY_UPDATE",
+      "did": "0x0108",
+      "length": 17,
+      "lengthMacro": "DCM_DID_CRYPTO_KEY_UPDATE_LENGTH",
+      "writeFct": "Dcm_WriteDidCryptoKeyUpdate",
+      "doc": [
+        "CryptoKeyUpdate: [keyName(1byte), keyData(16byte)]、書き込み専用 (0x2E のみ)。",
+        "KeyM の鍵更新セッション（Csm/CryIf/Crypto レイヤ分離の続き）を",
+        "模擬的な「鍵マスター」として駆動する学習用 DID。実際の鍵配布プロトコルでは",
+        "ないため、複数 ECU 間の鍵配布や NVM 永続化は行わない（Crypto_Init() が",
+        "Crypto_PBCfg.c の初期値から RAM へロードし直すだけで、再起動すれば元に戻る）。",
+        "要求ペイロードは SID(1)+DID(2)+keyName(1)+keyData(16)=20 バイトとなり",
+        "DCM_DID_TEST_PATTERN と同じく CanTp の複数フレーム受信を経由する。"
+      ],
+      "lengthDoc": [
+        "keyName(1) + keyData(16, CRYPTO_AES128_KEY_SIZE と同値)"
+      ]
+    },
+    {
+      "name": "VIN",
+      "did": "0xF190",
+      "length": 17,
+      "lengthMacro": "DCM_VIN_LENGTH",
+      "readFct": "Dcm_ReadDidVin",
+      "doc": [
+        "VIN (Vehicle Identification Number): uint8[DCM_VIN_LENGTH]、読み取り専用",
+        "(0x22 のみ)。ISO 14229-1 Annex F の標準化領域 (0xF180-0xF19F) に属する",
+        "固定 DID のため、製造者定義領域 (0x0100-0xFEFF) とは別枠。実仕様は",
+        "`Dcm_GetVin()`（Dcm.h 参照）が起動時に一度だけ取得した値を",
+        "キャッシュして返す。"
+      ],
+      "lengthDoc": [
+        "VIN のデータ長 [byte]"
+      ]
+    }
+  ],
+  "sidSessionDoc": [
+    "テーブルに掲載のない SID はセッション制約なし（全セッションで許可）とみなす。",
+    "DTC 履歴の消去 (0x14)・セキュリティ認証 (0x27)・データ書き込み (0x2E) のみ、",
+    "誤操作・悪用の影響が大きいため extendedSession 限定とする学習用の最小構成。",
+    "0x2F (IOControl) も診断専用の一時的な出力制御であり通常操作ではないため",
+    "extendedSession 限定とするが、車両制御や NVM 書き換えを伴わないため",
+    "SecurityAccess までは要求しない（0x14/0x2E との保護レベルの違いを",
+    "意図的に設けている）。0x31 (RoutineControl) も同様の理由",
+    "（EngineHealthCheck はセンサ値を読むだけで NVM 書き換え・車両制御を",
+    "伴わない）で extendedSession 限定・SecurityAccess 不要とする。",
+    "0x28 (CommunicationControl) も同様に extendedSession 限定・SecurityAccess",
+    "不要とする（通信そのものを止める操作的な影響はあるが、車両制御や NVM",
+    "書き換えは伴わないため 0x2F/0x31 と同じ保護レベル）。",
+    "0x34/0x36/0x37 (RequestDownload/TransferData/RequestTransferExit) は",
+    "0x14/0x2E と同じ「誤操作・悪用の影響が大きい」保護レベルのため",
+    "extendedSession 限定とする（SecurityAccess は 0x34 のみで判定する。",
+    "Dcm.c 冒頭のコメント参照）。",
+    "0x85 (ControlDTCSetting) も 0x28/0x2F/0x31 と同じ保護レベル",
+    "（DTC 記録という診断上重要な機能への操作的な影響はあるが、車両制御や",
+    "NVM 書き換えは伴わないため SecurityAccess までは要求しない）で",
+    "extendedSession 限定とする。",
+    "実際の AUTOSAR では DcmDspSessionRow がサービス・サブ機能単位で",
+    "この表をコンフィギュレーションツールから生成する。"
+  ],
+  "sidSessions": [
+    {
+      "sid": "CLEAR_DTC",
+      "sessions": [
+        "EXTENDED"
+      ]
+    },
+    {
+      "sid": "SECURITY_ACCESS",
+      "sessions": [
+        "EXTENDED"
+      ]
+    },
+    {
+      "sid": "WRITE_DATA",
+      "sessions": [
+        "EXTENDED"
+      ]
+    },
+    {
+      "sid": "IO_CONTROL",
+      "sessions": [
+        "EXTENDED"
+      ]
+    },
+    {
+      "sid": "COMM_CONTROL",
+      "sessions": [
+        "EXTENDED"
+      ]
+    },
+    {
+      "sid": "ROUTINE_CONTROL",
+      "sessions": [
+        "EXTENDED"
+      ]
+    },
+    {
+      "sid": "REQUEST_DOWNLOAD",
+      "sessions": [
+        "EXTENDED"
+      ]
+    },
+    {
+      "sid": "TRANSFER_DATA",
+      "sessions": [
+        "EXTENDED"
+      ]
+    },
+    {
+      "sid": "REQUEST_TRANSFER_EXIT",
+      "sessions": [
+        "EXTENDED"
+      ]
+    },
+    {
+      "sid": "CONTROL_DTC_SETTING",
+      "sessions": [
+        "EXTENDED"
+      ]
+    }
+  ]
+}

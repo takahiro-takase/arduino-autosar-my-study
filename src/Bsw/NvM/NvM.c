@@ -616,7 +616,7 @@ static void NvM_MarkPending(NvM_BlockIdType id)
  *          NVM_MAX_NUM_OF_WRITE_RETRIES 以内なら現在の面のジョブを先頭
  *          （データ本体フェーズ）からやり直す。上限を超えたら、そのブロックの
  *          要求結果を NVM_REQ_NOT_OK にして処理を打ち切り、NVM_E_REQ_FAILED
- *          （DEM_EVENT_NVM_REQ_FAILED）を Dem へ報告する（[SWS_NvM_00865]）。
+ *          （DemConf_DemEventParameter_NVM_REQ_FAILED）を Dem へ報告する（[SWS_NvM_00865]）。
  *          以前はリトライ上限が無く、失敗が続くと同じジョブを永久に再試行し
  *          （要求結果も PENDING のまま）、後続のブロックも処理されなかった。
  *
@@ -647,7 +647,7 @@ static void NvM_HandleWriteFailure(const char* reason)
 
     /* 状態を整理し終えてから報告する（Dem が NvM_WriteBlock() を呼んでも
      * 整合した状態で受け付けられるように）。 */
-    (void)Dem_SetEventStatus(DEM_EVENT_NVM_REQ_FAILED, DEM_EVENT_STATUS_FAILED);
+    (void)Dem_SetEventStatus(DemConf_DemEventParameter_NVM_REQ_FAILED, DEM_EVENT_STATUS_FAILED);
 }
 
 /* -----------------------------------------------------------------------
@@ -785,11 +785,11 @@ void NvM_ReportBootDiagnosticsToDem(void)
 
     if ((anyIntegrityFailed) != 0U)
     {
-        (void)Dem_SetEventStatus(DEM_EVENT_NVM_INTEGRITY_FAILED, DEM_EVENT_STATUS_FAILED);
+        (void)Dem_SetEventStatus(DemConf_DemEventParameter_NVM_INTEGRITY_FAILED, DEM_EVENT_STATUS_FAILED);
     }
     else if ((anyIntegrityPassed) != 0U)
     {
-        (void)Dem_SetEventStatus(DEM_EVENT_NVM_INTEGRITY_FAILED, DEM_EVENT_STATUS_PASSED);
+        (void)Dem_SetEventStatus(DemConf_DemEventParameter_NVM_INTEGRITY_FAILED, DEM_EVENT_STATUS_PASSED);
     }
     else
     {
@@ -798,11 +798,11 @@ void NvM_ReportBootDiagnosticsToDem(void)
 
     if ((anyRedundancyFailed) != 0U)
     {
-        (void)Dem_SetEventStatus(DEM_EVENT_NVM_LOSS_OF_REDUNDANCY, DEM_EVENT_STATUS_FAILED);
+        (void)Dem_SetEventStatus(DemConf_DemEventParameter_NVM_LOSS_OF_REDUNDANCY, DEM_EVENT_STATUS_FAILED);
     }
     else if ((anyRedundancyPassed) != 0U)
     {
-        (void)Dem_SetEventStatus(DEM_EVENT_NVM_LOSS_OF_REDUNDANCY, DEM_EVENT_STATUS_PASSED);
+        (void)Dem_SetEventStatus(DemConf_DemEventParameter_NVM_LOSS_OF_REDUNDANCY, DEM_EVENT_STATUS_PASSED);
     }
     else
     {
@@ -1361,7 +1361,7 @@ void NvM_MainFunction(void)
     if (NvM_WriteFailureReported != 0U)
     {
         NvM_WriteFailureReported = 0U;
-        (void)Dem_SetEventStatus(DEM_EVENT_NVM_REQ_FAILED, DEM_EVENT_STATUS_PASSED);
+        (void)Dem_SetEventStatus(DemConf_DemEventParameter_NVM_REQ_FAILED, DEM_EVENT_STATUS_PASSED);
     }
 }
 

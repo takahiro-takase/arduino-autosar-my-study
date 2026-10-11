@@ -98,7 +98,7 @@ Std_ReturnType Wdg_SetMode(WdgIf_ModeType Mode)
          * 対になる PASSED（[SWS_Wdg_00183]）は、本プロジェクトの Wdg が
          * 無効化に成功する経路を持たないため報告しない。 */
         Wdg_Hw_Disable();
-        (void)Dem_SetEventStatus(DEM_EVENT_WDG_DISABLE_REJECTED, DEM_EVENT_STATUS_FAILED);
+        (void)Dem_SetEventStatus(DemConf_DemEventParameter_WDG_DISABLE_REJECTED, DEM_EVENT_STATUS_FAILED);
         DET_LOGW(TAG, "SetMode(OFF) rejected - HW cannot be disabled once armed");
         return E_NOT_OK;
 

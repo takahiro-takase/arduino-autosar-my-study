@@ -42,8 +42,8 @@
           },
           "event": {
             "type": "string",
-            "pattern": "^DEM_EVENT_[A-Z0-9_]+$",
-            "description": "監視する Dem イベント（Dem_Cfg.h の DEM_EVENT_*）"
+            "pattern": "^[A-Z][A-Z0-9_]*$",
+            "description": "監視する Dem イベントの名前（Dem.json の events[].name。生成物では DemConf_DemEventParameter_<name>）"
           },
           "statusMask": {
             "type": "string",

@@ -49,7 +49,7 @@
  *              （詳細は Dcm.c 冒頭のコメント参照）
  *            0x3E TesterPresent (S3 タイマ維持)
  *
- *          SID × セッション許可は Dcm.c の Dcm_SidSessionTable[]
+ *          SID × セッション許可は Dcm_PBCfg.c の Dcm_SidSessionTable[]
  *          (AUTOSAR DcmDspSessionRow に相当) で一元管理する。テーブルに掲載のない
  *          SID はセッション制約なし（全セッションで許可）とみなす。
  *
@@ -150,10 +150,13 @@
 
 /* -----------------------------------------------------------------------
  * SID × セッション許可マスク (AUTOSAR DcmDspSessionRow に相当)
- * Dcm_SidSessionTable[] (Dcm.c) の AllowedSessionMask 列で使用する。
+ * Dcm_SidSessionTable[] (Dcm_PBCfg.c) の AllowedSessionMask 列で使用する。
  * ----------------------------------------------------------------------- */
 #define DCM_SESSION_MASK_DEFAULT   0x01U  /**< bit0: defaultSession で許可            */
 #define DCM_SESSION_MASK_EXTENDED  0x02U  /**< bit1: extendedDiagnosticSession で許可 */
+/* @@GEN-BEGIN dcm-sid-session-count  生成元: config/data/Dcm.json  （自動生成: 手編集禁止） */
+#define DCM_SID_SESSION_COUNT  10U  /**< Dcm_SidSessionTable[] のエントリ数 */
+/* @@GEN-END dcm-sid-session-count */
 
 /* -----------------------------------------------------------------------
  * UDS サービス識別子 (ISO 14229-1 Table 3)
@@ -275,43 +278,38 @@
  * データ識別子 (DID) 定義
  * ISO 14229-1 の製造者定義領域 (0x0100-0xFEFF) を使用。
  * ----------------------------------------------------------------------- */
-#define DCM_DID_ENGINE_SPEED   0x0101U  /**< EngineSpeed: uint16, rpm */
-#define DCM_DID_COOLANT_TEMP   0x0102U  /**< CoolantTemp: uint8,  ℃  */
-#define DCM_DID_ENGINE_STATE   0x0103U  /**< EngineState: uint8,  enum */
-
-/** TestPattern: uint8[DCM_DID_TEST_PATTERN_LENGTH], 読み書き可能 (0x22 / 0x2E)。
- *  実際の車両データではなく、CanTp の複数フレーム要求受信 (FF+CF) を
- *  実機で検証するために用意した学習用 DID。0x2E の要求ペイロードが
- *  SID(1)+DID(2)+data(8)=11 バイトとなり SF の 7 バイト制限を超える。 */
-#define DCM_DID_TEST_PATTERN          0x0104U
-#define DCM_DID_TEST_PATTERN_LENGTH   8U
-
-/** RunLamp/FaultLamp/AbsLamp: uint8 (0/1)。0x2F InputOutputControlByIdentifier
- *  専用の DID（0x22 ReadDataByIdentifier / 0x2E WriteDataByIdentifier では
- *  未対応、Dcm_ReadDid() には含まれない）。WarningStatus (CAN 0x210) の
- *  Signal Group メンバーと同じ3灯を、診断側から強制点灯/消灯できるようにする。 */
-#define DCM_DID_RUN_LAMP     0x0105U
-#define DCM_DID_FAULT_LAMP   0x0106U
-#define DCM_DID_ABS_LAMP     0x0107U
-
-/** CryptoKeyUpdate: [keyName(1byte), keyData(16byte)]、書き込み専用 (0x2E のみ)。
- *  KeyM の鍵更新セッション（Csm/CryIf/Crypto レイヤ分離の続き）を
- *  模擬的な「鍵マスター」として駆動する学習用 DID。実際の鍵配布プロトコルでは
- *  ないため、複数 ECU 間の鍵配布や NVM 永続化は行わない（Crypto_Init() が
- *  Crypto_PBCfg.c の初期値から RAM へロードし直すだけで、再起動すれば元に戻る）。
- *  要求ペイロードは SID(1)+DID(2)+keyName(1)+keyData(16)=20 バイトとなり
- *  DCM_DID_TEST_PATTERN と同じく CanTp の複数フレーム受信を経由する。 */
-#define DCM_DID_CRYPTO_KEY_UPDATE          0x0108U
-/** keyName(1) + keyData(16, CRYPTO_AES128_KEY_SIZE と同値) */
-#define DCM_DID_CRYPTO_KEY_UPDATE_LENGTH   17U
-
-/** VIN (Vehicle Identification Number): uint8[DCM_VIN_LENGTH]、読み取り専用
- *  (0x22 のみ)。ISO 14229-1 Annex F の標準化領域 (0xF180-0xF19F) に属する
- *  固定 DID のため、本ファイル冒頭コメントの製造者定義領域 (0x0100-0xFEFF)
- *  とは別枠。実仕様は `Dcm_GetVin()`（Dcm.h 参照）が起動時に一度だけ取得
- *  した値をここへキャッシュして返す。 */
-#define DCM_DID_VIN     0xF190U
-#define DCM_VIN_LENGTH  17U
+/* @@GEN-BEGIN dcm-dids  生成元: config/data/Dcm.json  （自動生成: 手編集禁止） */
+#define DCM_DID_ENGINE_SPEED              0x0101U  /**< EngineSpeed: uint16, rpm */
+#define DCM_DID_COOLANT_TEMP              0x0102U  /**< CoolantTemp: uint8,  ℃ */
+#define DCM_DID_ENGINE_STATE              0x0103U  /**< EngineState: uint8,  enum */
+#define DCM_DID_TEST_PATTERN              0x0104U  /**< TestPattern: uint8[DCM_DID_TEST_PATTERN_LENGTH], 読み書き可能 (0x22 / 0x2E)。
+                                                    *   実際の車両データではなく、CanTp の複数フレーム要求受信 (FF+CF) を
+                                                    *   実機で検証するために用意した学習用 DID。0x2E の要求ペイロードが
+                                                    *   SID(1)+DID(2)+data(8)=11 バイトとなり SF の 7 バイト制限を超える。 */
+#define DCM_DID_TEST_PATTERN_LENGTH       8U       /**< TestPattern のデータ長 [byte] */
+#define DCM_DID_RUN_LAMP                  0x0105U  /**< RunLamp: uint8 (0/1)。0x2F InputOutputControlByIdentifier 専用の DID
+                                                    *   （0x22 ReadDataByIdentifier / 0x2E WriteDataByIdentifier では未対応）。
+                                                    *   WarningStatus (CAN 0x210) の Signal Group メンバーと同じ3灯を、
+                                                    *   診断側から強制点灯/消灯できるようにする。 */
+#define DCM_DID_FAULT_LAMP                0x0106U  /**< FaultLamp: uint8 (0/1)。0x2F 専用（RunLamp と同じ） */
+#define DCM_DID_ABS_LAMP                  0x0107U  /**< AbsLamp: uint8 (0/1)。0x2F 専用（RunLamp と同じ） */
+#define DCM_DID_CRYPTO_KEY_UPDATE         0x0108U  /**< CryptoKeyUpdate: [keyName(1byte), keyData(16byte)]、書き込み専用 (0x2E のみ)。
+                                                    *   KeyM の鍵更新セッション（Csm/CryIf/Crypto レイヤ分離の続き）を
+                                                    *   模擬的な「鍵マスター」として駆動する学習用 DID。実際の鍵配布プロトコルでは
+                                                    *   ないため、複数 ECU 間の鍵配布や NVM 永続化は行わない（Crypto_Init() が
+                                                    *   Crypto_PBCfg.c の初期値から RAM へロードし直すだけで、再起動すれば元に戻る）。
+                                                    *   要求ペイロードは SID(1)+DID(2)+keyName(1)+keyData(16)=20 バイトとなり
+                                                    *   DCM_DID_TEST_PATTERN と同じく CanTp の複数フレーム受信を経由する。 */
+#define DCM_DID_CRYPTO_KEY_UPDATE_LENGTH  17U      /**< keyName(1) + keyData(16, CRYPTO_AES128_KEY_SIZE と同値) */
+#define DCM_DID_VIN                       0xF190U  /**< VIN (Vehicle Identification Number): uint8[DCM_VIN_LENGTH]、読み取り専用
+                                                    *   (0x22 のみ)。ISO 14229-1 Annex F の標準化領域 (0xF180-0xF19F) に属する
+                                                    *   固定 DID のため、製造者定義領域 (0x0100-0xFEFF) とは別枠。実仕様は
+                                                    *   `Dcm_GetVin()`（Dcm.h 参照）が起動時に一度だけ取得した値を
+                                                    *   キャッシュして返す。 */
+#define DCM_VIN_LENGTH                    17U      /**< VIN のデータ長 [byte] */
+#define DCM_DID_COUNT                     9U       /**< Dcm_DidTable[] のエントリ数 */
+#define DCM_DID_READ_MAX_LENGTH           17U      /**< 0x22 で読み出せる DID の最大データ長（応答用バッファの大きさ） */
+/* @@GEN-END dcm-dids */
 
 /* -----------------------------------------------------------------------
  * InputOutputControlByIdentifier (SID 0x2F) controlOptionRecord

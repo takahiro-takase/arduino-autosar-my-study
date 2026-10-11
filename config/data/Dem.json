@@ -1,0 +1,298 @@
+{
+  "$schema": "../schema/Dem.schema.json",
+  "module": "Dem",
+  "events": [
+    {
+      "name": "ENGINE_OVERHEAT",
+      "dtc": "0x000101",
+      "debounceLimit": 2,
+      "agingThreshold": 5,
+      "idDoc": [
+        "冷却水温過熱"
+      ],
+      "dtcDoc": [
+        "冷却水温過熱"
+      ],
+      "debounceDoc": [
+        "瞬時しきい値判定のため複数回要求"
+      ],
+      "agingDoc": [
+        "重大故障。誤って早期回復しないよう慎重に"
+      ]
+    },
+    {
+      "name": "ENGINE_STALL",
+      "dtc": "0x000102",
+      "debounceLimit": 2,
+      "agingThreshold": 5,
+      "idDoc": [
+        "エンジン失速"
+      ],
+      "dtcDoc": [
+        "エンジン失速"
+      ],
+      "debounceDoc": [
+        "瞬時しきい値判定のため複数回要求"
+      ],
+      "agingDoc": [
+        "重大故障。誤って早期回復しないよう慎重に"
+      ]
+    },
+    {
+      "name": "ENGINE_SPEED_NO_FLAG",
+      "dtc": "0x000103",
+      "debounceLimit": 2,
+      "agingThreshold": 3,
+      "idDoc": [
+        "フラグなし回転検出"
+      ],
+      "dtcDoc": [
+        "フラグなし回転"
+      ],
+      "debounceDoc": [
+        "瞬時しきい値判定のため複数回要求"
+      ],
+      "agingDoc": [
+        "標準"
+      ]
+    },
+    {
+      "name": "STARTING_TIMEOUT",
+      "dtc": "0x000104",
+      "debounceLimit": 2,
+      "agingThreshold": 2,
+      "idDoc": [
+        "起動タイムアウト"
+      ],
+      "dtcDoc": [
+        "起動タイムアウト"
+      ],
+      "debounceDoc": [
+        "瞬時しきい値判定のため複数回要求"
+      ],
+      "agingDoc": [
+        "起動時の一過性要因の可能性が高い"
+      ]
+    },
+    {
+      "name": "COMM_TIMEOUT",
+      "dtc": "0x000105",
+      "debounceLimit": 2,
+      "agingThreshold": 3,
+      "idDoc": [
+        "EngineInfo 受信タイムアウト"
+      ],
+      "dtcDoc": [
+        "EngineInfo 受信タイムアウト"
+      ],
+      "debounceDoc": [
+        "毎サイクル報告のため数百ms〜数秒で確定"
+      ],
+      "agingDoc": [
+        "標準"
+      ]
+    },
+    {
+      "name": "BUTTON_STUCK",
+      "dtc": "0x000106",
+      "debounceLimit": 1,
+      "agingThreshold": 3,
+      "idDoc": [
+        "警告確認ボタン固着（5 秒以上押下）"
+      ],
+      "dtcDoc": [
+        "警告確認ボタン固着"
+      ],
+      "debounceDoc": [
+        "IoHwAb が 5 秒固着判定済み。二重チェック不要"
+      ],
+      "agingDoc": [
+        "標準"
+      ]
+    },
+    {
+      "name": "ADC_VOLT_LOW",
+      "dtc": "0x000107",
+      "debounceLimit": 2,
+      "agingThreshold": 3,
+      "idDoc": [
+        "ADC センサ電圧低下（< 1000 mV）"
+      ],
+      "dtcDoc": [
+        "ADC センサ電圧低下"
+      ],
+      "debounceDoc": [
+        "毎サイクル報告のため数十 ms で確定"
+      ],
+      "agingDoc": [
+        "標準"
+      ]
+    },
+    {
+      "name": "CAN_BUSOFF",
+      "dtc": "0x000108",
+      "debounceLimit": 1,
+      "agingThreshold": 5,
+      "idDoc": [
+        "CAN Bus-Off 持続（L1→L2 降格）"
+      ],
+      "dtcDoc": [
+        "CAN Bus-Off 持続（L1→L2 降格）"
+      ],
+      "debounceDoc": [
+        "CanSM が L1 リトライ済み。二重チェック不要"
+      ],
+      "agingDoc": [
+        "通信路の重大故障。誤って早期回復しないよう慎重に"
+      ]
+    },
+    {
+      "name": "E2E_ABSINFO",
+      "dtc": "0x000109",
+      "debounceLimit": 1,
+      "agingThreshold": 3,
+      "idDoc": [
+        "AbsInfo E2E 保護違反 (CRC/カウンタ異常)"
+      ],
+      "dtcDoc": [
+        "AbsInfo E2E 保護違反"
+      ],
+      "debounceDoc": [
+        "E2EXf が E2E_SMCheck() で単発異常を",
+        "吸収済み(2026-09)。二重チェック不要"
+      ],
+      "agingDoc": [
+        "標準"
+      ]
+    },
+    {
+      "name": "E2E_ENGINEINFO",
+      "dtc": "0x00010A",
+      "debounceLimit": 1,
+      "agingThreshold": 3,
+      "idDoc": [
+        "EngineInfo E2E 保護違反 (CRC/カウンタ異常)"
+      ],
+      "dtcDoc": [
+        "EngineInfo E2E 保護違反"
+      ],
+      "debounceDoc": [
+        "同上(E2EXf_AbsInfoRxCfg 参照)"
+      ],
+      "agingDoc": [
+        "標準"
+      ]
+    },
+    {
+      "name": "WDGM_SUPERVISION",
+      "dtc": "0x00010B",
+      "debounceLimit": 1,
+      "agingThreshold": 5,
+      "idDoc": [
+        "WdgM Global Supervision Status が",
+        "WDGM_GLOBAL_STATUS_STOPPED に到達",
+        "([SWS_WdgM_00129]/[00375]、2026-09 追加)"
+      ],
+      "dtcDoc": [
+        "WdgM Global Supervision Status STOPPED"
+      ],
+      "debounceDoc": [
+        "WdgM 自身が OK→FAILED→EXPIRED→",
+        "猶予サイクル消費という多段階の",
+        "持続性チェックを経てから STOPPED を",
+        "報告するため、二重チェック不要"
+      ],
+      "agingDoc": [
+        "重大故障（実HWリセット直前）。誤って早期回復しないよう慎重に"
+      ]
+    },
+    {
+      "name": "WDG_DISABLE_REJECTED",
+      "dtc": "0x00010C",
+      "debounceLimit": 1,
+      "agingThreshold": 5,
+      "idDoc": [
+        "Wdg_SetMode(WDGIF_OFF_MODE) が",
+        "無効化不可（HW制約）により拒否された",
+        "([SWS_Wdg_00026]/[00182]、2026-09 追加)"
+      ],
+      "dtcDoc": [
+        "Wdg_SetMode(OFF) 無効化拒否"
+      ],
+      "debounceDoc": [
+        "HW制約による決定論的な拒否",
+        "（毎回必ず拒否される）ため",
+        "二重チェック不要"
+      ],
+      "agingDoc": [
+        "安全上重要な無効化拒否。誤って早期回復しないよう慎重に"
+      ]
+    },
+    {
+      "name": "NVM_INTEGRITY_FAILED",
+      "dtc": "0x00010D",
+      "debounceLimit": 1,
+      "agingThreshold": 5,
+      "idDoc": [
+        "NvM_Init() 時の読み込みで",
+        "CRC 不整合を検出",
+        "([SWS_NvM_00591]/[00864]、",
+        "2026-09 追加)"
+      ],
+      "dtcDoc": [
+        "NvM 読み込みCRC不整合"
+      ],
+      "debounceDoc": [
+        "CRC比較は決定論的。",
+        "不一致は即確定"
+      ],
+      "agingDoc": [
+        "EEPROM データ破損。誤って早期回復しないよう慎重に"
+      ]
+    },
+    {
+      "name": "NVM_LOSS_OF_REDUNDANCY",
+      "dtc": "0x00010E",
+      "debounceLimit": 1,
+      "agingThreshold": 5,
+      "idDoc": [
+        "冗長ブロックの片面が破損し",
+        "自己修復した",
+        "([SWS_NvM_00595]/[00868]、",
+        "2026-09 追加)"
+      ],
+      "dtcDoc": [
+        "NvM 冗長ブロック片面破損"
+      ],
+      "debounceDoc": [
+        "CRC比較は決定論的。",
+        "不一致は即確定"
+      ],
+      "agingDoc": [
+        "EEPROM データ破損。誤って早期回復しないよう慎重に"
+      ]
+    },
+    {
+      "name": "NVM_REQ_FAILED",
+      "dtc": "0x00010F",
+      "debounceLimit": 1,
+      "agingThreshold": 5,
+      "idDoc": [
+        "NvM_WriteBlock() が書き込み",
+        "リトライ上限を超えて失敗",
+        "([SWS_NvM_00659]/[00865]、",
+        "2026-10 追加)"
+      ],
+      "dtcDoc": [
+        "NvM 書き込みがリトライ上限超過で失敗"
+      ],
+      "debounceDoc": [
+        "NvM 内でリトライを使い切った後に",
+        "報告されるため二重チェック不要"
+      ],
+      "agingDoc": [
+        "EEPROM 書き込み不良。誤って早期回復しないよう慎重に"
+      ]
+    }
+  ]
+}

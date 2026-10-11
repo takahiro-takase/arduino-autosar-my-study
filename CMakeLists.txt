@@ -93,7 +93,7 @@
 # 1関数だけ観測する）で `-Wl,--wrap=Dem_SetEventStatus`
 # （stub/Bsw/Dem/Wrap_Dem.h 参照）を導入し、常に `__real_Dem_SetEventStatus()`
 # へパススルーしつつ呼び出し回数・引数を記録する。対象イベント
-# （DEM_EVENT_CAN_BUSOFF/DEM_EVENT_WDGM_SUPERVISION）はいずれもデバウンス閾値が
+# （DemConf_DemEventParameter_CAN_BUSOFF/DemConf_DemEventParameter_WDGM_SUPERVISION）はいずれもデバウンス閾値が
 # 1（Dem_Cfg.h の DEM_DEBOUNCE_LIMIT_*）のため、既存テストの「1回呼べば確定/
 # 回復する」という前提はそのまま成立する。Dem の内部状態自体はテストケースを
 # 跨いで永続する static のため、各テストの SetUp() で `Dem_Init(NULL)` を追加
@@ -306,7 +306,9 @@ set(NATIVE_CHAIN_SRC_SOURCES
     src/Bsw/Csm/Csm.c
     src/Bsw/Csm/Csm_PBCfg.c
     src/Bsw/Dcm/Dcm.c
+    src/Bsw/Dcm/Dcm_PBCfg.c
     src/Bsw/Dem/Dem.c
+    src/Bsw/Dem/Dem_PBCfg.c
     src/Bsw/Det/Det.c
     src/Bsw/EcuM/EcuM.c
     src/Bsw/Dio/Dio.c

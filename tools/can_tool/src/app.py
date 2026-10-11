@@ -55,6 +55,8 @@ NAV_BLOCKS = (
         NavRow("CryptoStack.json", "KeyM", "KeyM — 鍵名の管理。Csm・Crypto と同じ設定ファイル", (("keys", 0, "keyM"), ("keys",))),
     ),
     (
+        NavRow("Dcm.json", "Dcm", "Dcm — 診断サービス（DID の表: 読み出し・書き込み・入出力制御）"),
+        NavRow("Dem.json", "Dem", "Dem — 診断イベント（DTC コード・デバウンス・経年回復の閾値）"),
         NavRow("FiM.json", "FiM", "FiM — 機能の抑止（機能 ID と Dem イベントの対応）"),
         NavRow("WdgM.json", "WdgM", "WdgM — 監視対象のタスク（Alive・順序・時間の監視）"),
         NavRow("NvM.json", "NvM", "NvM — 不揮発ブロックの構成（サイズ・EEPROM アドレス・ROM デフォルト値）"),

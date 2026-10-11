@@ -46,7 +46,7 @@ SW-Component。OFF 継続を検知して ComM へ通信不要（NO_COM）を要�
 
 `App_EngineManager_Run`（3000ms 周期、Os Task 2）は、遷移を判定する前に
 `EngineInfo` の受信タイムアウト（`RTE_E_COM_STOPPED`）を先に判定します。STARTING / RUNNING 中に
-タイムアウトしていれば FAULT へ遷移して `DEM_EVENT_COMM_TIMEOUT` を報告し、その周期は状態ハンドラ
+タイムアウトしていれば FAULT へ遷移して `DemConf_DemEventParameter_COMM_TIMEOUT` を報告し、その周期は状態ハンドラ
 （上の表の遷移）を実行しません。OFF / FAULT 中は通信が無いのが正常（ボランタリスリープ等）なため、
 タイムアウトしていても FAILED を報告せず遷移もしません。E2E ハードエラー
 （`RTE_E_HARD_TRANSFORMER_ERROR`）は観測ログを出すだけで、遷移にも Dem にも影響させません
@@ -56,17 +56,17 @@ SW-Component。OFF 継続を検知して ComM へ通信不要（NO_COM）を要�
 
 | イベント（DTC） | FAILED になる条件 | PASSED になる条件 |
 |---------------|-------------------|-------------------|
-| `DEM_EVENT_ENGINE_OVERHEAT`（0x000101） | RUNNING で CoolantTemp ≥ 100 ℃ | RUNNING で正常、またはストール側で FAILED のとき |
-| `DEM_EVENT_ENGINE_STALL`（0x000102） | RUNNING で EngineSpeed < 100 rpm | RUNNING で正常、または過熱側で FAILED のとき |
-| `DEM_EVENT_ENGINE_SPEED_NO_FLAG`（0x000103） | OFF で EngineOnFlag=0 かつ EngineSpeed > 0 | OFF で回転なし、または OFF→STARTING |
-| `DEM_EVENT_STARTING_TIMEOUT`（0x000104） | STARTING が 5 秒続いても RUNNING にならない | STARTING→RUNNING |
-| `DEM_EVENT_COMM_TIMEOUT`（0x000105） | STARTING / RUNNING 中の EngineInfo 受信タイムアウト | 正常受信の周期ごと |
+| `DemConf_DemEventParameter_ENGINE_OVERHEAT`（0x000101） | RUNNING で CoolantTemp ≥ 100 ℃ | RUNNING で正常、またはストール側で FAILED のとき |
+| `DemConf_DemEventParameter_ENGINE_STALL`（0x000102） | RUNNING で EngineSpeed < 100 rpm | RUNNING で正常、または過熱側で FAILED のとき |
+| `DemConf_DemEventParameter_ENGINE_SPEED_NO_FLAG`（0x000103） | OFF で EngineOnFlag=0 かつ EngineSpeed > 0 | OFF で回転なし、または OFF→STARTING |
+| `DemConf_DemEventParameter_STARTING_TIMEOUT`（0x000104） | STARTING が 5 秒続いても RUNNING にならない | STARTING→RUNNING |
+| `DemConf_DemEventParameter_COMM_TIMEOUT`（0x000105） | STARTING / RUNNING 中の EngineInfo 受信タイムアウト | 正常受信の周期ごと |
 
 また毎周期 `Dem_SetFreezeFrameContext()` で現在の回転数・水温・状態を Dem へ渡し、FAILED 遷移時の
 フリーズフレームとして記録されます。FAULT から OFF への復帰（`EngineOnFlag=0`、または警告確認ボタン）
 では FAILED を取り消しません。過熱・ストール・起動タイムアウトの PASSED は RUNNING に入らないと
 報告されないため、OFF に戻ってもこれらの TF ビットは次に RUNNING になるまで残ります。ボタンの受理は
-`FIM_FID_BUTTON_ACK` が許可されているときだけで、ボタン固着（`DEM_EVENT_BUTTON_STUCK`）の確定中は
+`FIM_FID_BUTTON_ACK` が許可されているときだけで、ボタン固着（`DemConf_DemEventParameter_BUTTON_STUCK`）の確定中は
 `FAULT->OFF btn=1 inhibited (FiM)` として無視します。ボタン判定は通信状態に依らず毎周期行います。
 
 ## ボランタリスリープ判断

@@ -13,8 +13,8 @@ FID↔イベント対応表・判定フロー・フェールセーフ既定値�
 
 | FID | 機能 | 抑止条件 | 抑止時の挙動 |
 |---|---|---|---|
-| `FIM_FID_RUNNING_LED` | RUNNING LED (D6) の点灯 | `DEM_EVENT_CAN_BUSOFF` が CONFIRMED | D6 を強制消灯（EngineState は CAN 受信由来のため、Bus-Off 確定中は信頼できない） |
-| `FIM_FID_BUTTON_ACK` | 警告確認ボタンによる FAULT 解除 | `DEM_EVENT_BUTTON_STUCK` が CONFIRMED | ボタン押下を無視（固着確定中の押下は物理的固着による偽信号の可能性がある） |
+| `FIM_FID_RUNNING_LED` | RUNNING LED (D6) の点灯 | `DemConf_DemEventParameter_CAN_BUSOFF` が CONFIRMED | D6 を強制消灯（EngineState は CAN 受信由来のため、Bus-Off 確定中は信頼できない） |
+| `FIM_FID_BUTTON_ACK` | 警告確認ボタンによる FAULT 解除 | `DemConf_DemEventParameter_BUTTON_STUCK` が CONFIRMED | ボタン押下を無視（固着確定中の押下は物理的固着による偽信号の可能性がある） |
 
 対応表は `FiM_PBCfg.c` の `FiM_Functions[]` で定義する（AUTOSAR の `FiMFunction` コンテナに相当）。
 新しい FID を追加する場合は、ここに 1 行追加するだけで済む。

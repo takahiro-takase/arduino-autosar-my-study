@@ -58,7 +58,7 @@ misra-c2012-7.3
 #   インライン抑制（`/* cppcheck-suppress misra-c2012-8.9 */`）で個別に逸脱とする。
 #   逸脱とするのは次のいずれかに限る（2026-09 方針確定）:
 #     (a) ECUC の設定コンテナに相当する設定テーブル・設定用ステート
-#         （Dio_PortConfig、Port_PinConfig、Dem_AgingThresholdTable、
+#         （Dio_PortConfig、Port_PinConfig、
 #         Dcm_SidSessionTable、E2EXf_PBCfg.c の各テーブル/ステート）。
 #         AUTOSAR では設定データはファイルスコープの const テーブルとして
 #         生成される。E2EXf_PBCfg.c のステート変数はファイルスコープの設定

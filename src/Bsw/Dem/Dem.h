@@ -54,7 +54,7 @@
 /* -----------------------------------------------------------------------
  * 型定義
  * ----------------------------------------------------------------------- */
-/** イベント ID 型 (DEM_EVENT_* 定数を渡す) */
+/** イベント ID 型 (DemConf_DemEventParameter_* 定数を渡す) */
 typedef uint8 Dem_EventIdType;
 
 /** UDS DTC ステータスバイト型（[SWS_Dem_00928]、AUTOSAR では Bitfield/uint8
@@ -63,7 +63,7 @@ typedef uint8 Dem_UdsStatusByteType;
 
 /**
  * \brief   DTC 値のフォーマットを選択する型（[SWS_Dem_00933]）。
- * \details 本プロジェクトの `Dem_DtcTable[]`（Dem_Cfg.h）は UDS 3-byte 形式の
+ * \details 本プロジェクトの `Dem_DtcTable[]`（Dem_PBCfg.c）は UDS 3-byte 形式の
  *          DTC 値のみを保持し、OBD/J1939 形式は一切構成していないため、
  *          `Dem_GetDTCOfEvent()` は `DEM_DTC_FORMAT_UDS` 以外を
  *          `DEM_E_NO_DTC_AVAILABLE` で拒否する（実仕様の Return value 表が
@@ -209,7 +209,7 @@ void Dem_Init(const Dem_ConfigType* ConfigPtr);
  *          達した瞬間にのみ DTC ステータス (TF/PDTC/CDTC/TFSLC) を確定して
  *          EEPROM へ書き込む（学習用の counter-based debouncing）。
  *
- * \param[in]  EventId      イベント ID (DEM_EVENT_* 定数)。
+ * \param[in]  EventId      イベント ID (DemConf_DemEventParameter_* 定数)。
  * \param[in]  EventStatus  DEM_EVENT_STATUS_FAILED または DEM_EVENT_STATUS_PASSED。
  *                          PREPASSED / PREFAILED は受け付けない。
  *
@@ -272,7 +272,7 @@ Std_ReturnType Dem_GetDTCStatusAvailabilityMask(uint8 ClientId, Dem_UdsStatusByt
  *          Dcm 側は既に解決済みの EventId で直接本関数を呼ぶ既存の簡略化を
  *          そのまま踏襲する（本関数の改名以前から変わらない設計）。
  *
- * \param[in]   EventId        イベント ID (DEM_EVENT_* 定数)。
+ * \param[in]   EventId        イベント ID (DemConf_DemEventParameter_* 定数)。
  * \param[out]  UDSStatusByte  取得したステータスバイト（statusAvailabilityMask
  *                             でマスク済み）の格納先。NULL 禁止。
  *                             戻り値が E_NOT_OK の場合は不定。
@@ -290,13 +290,13 @@ Std_ReturnType Dem_GetEventUdsStatus(Dem_EventIdType EventId, Dem_UdsStatusByteT
 /**
  * \brief   イベント ID から DTC コードを取得する（[SWS_Dem_00198]/[SWS_Dem_00269]）。
  *
- * \details 本プロジェクトの `Dem_DtcTable[]`（Dem_Cfg.h）は UDS 3-byte 形式の
+ * \details 本プロジェクトの `Dem_DtcTable[]`（Dem_PBCfg.c）は UDS 3-byte 形式の
  *          DTC 値のみを構成しており、OBD/J1939 形式は一切保持しないため、
  *          `DTCFormat` に `DEM_DTC_FORMAT_UDS` 以外を渡された場合は
  *          `DEM_E_NO_DTC_AVAILABLE`（要求フォーマットの DTC が構成されていない）
  *          を返す。
  *
- * \param[in]   EventId     イベント ID (DEM_EVENT_* 定数)。
+ * \param[in]   EventId     イベント ID (DemConf_DemEventParameter_* 定数)。
  * \param[in]   DTCFormat   取得する DTC 値のフォーマット。本プロジェクトは
  *                          `DEM_DTC_FORMAT_UDS` のみ対応。
  * \param[out]  DTCOfEvent  24-bit DTC コードの格納先。NULL 禁止。
@@ -495,7 +495,7 @@ void Dem_SetFreezeFrameContext(uint16 EngineSpeed, uint8 CoolantTemp, uint8 Engi
  * \details DCM SID 0x19 subFunc 0x04 (reportDTCSnapshotRecordByDTCNumber) から
  *          呼び出す。一度も FAILED 報告されていないイベントには記録がない。
  *
- * \param[in]   EventId  イベント ID (DEM_EVENT_* 定数)。
+ * \param[in]   EventId  イベント ID (DemConf_DemEventParameter_* 定数)。
  * \param[out]  Frame    取得した FreezeFrame の格納先。NULL 禁止。
  *
  * \retval  E_OK      記録あり。
@@ -536,7 +536,7 @@ Std_ReturnType Dem_GetEventIdOfDTC(uint32 DTC, Dem_EventIdType* EventId);
  *          E_OK・カウンタ 0 を返しており、唯一の呼び出し元 Dcm 側が
  *          誤って正応答を返してしまっていた）。
  *
- * \param[in]   EventId   イベント ID (DEM_EVENT_* 定数)。
+ * \param[in]   EventId   イベント ID (DemConf_DemEventParameter_* 定数)。
  * \param[out]  Counter   故障確定回数の格納先。NULL 禁止。
  *
  * \retval  E_OK      正常取得（1 回以上確定 FAILED 済み）。
@@ -589,7 +589,7 @@ Dem_DTCTranslationFormatType Dem_GetTranslationType(uint8 ClientId);
  *          範囲へ線形写像して返す（[SWS_Dem_00415]、`Dem_MapDebounceCounterToFdc()`
  *          参照）。
  *
- * \param[in]   EventId               イベント ID (DEM_EVENT_* 定数)。
+ * \param[in]   EventId               イベント ID (DemConf_DemEventParameter_* 定数)。
  * \param[out]  FaultDetectionCounter 写像後の Fault Detection Counter の格納先。NULL 禁止。
  *
  * \retval  E_OK      正常取得。
