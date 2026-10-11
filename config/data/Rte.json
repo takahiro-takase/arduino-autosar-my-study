@@ -1,0 +1,6 @@
+{
+  "$schema": "../schema/Rte.schema.json",
+  "module": "Rte",
+  "names": [],
+  "exclude": []
+}

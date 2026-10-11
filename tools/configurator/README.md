@@ -2,7 +2,7 @@
 
 信号表（CAN ビットアサイン表）と、モジュールごとの設定 json から、各モジュールの設定ソース
 （`*_PBCfg.c`、`*_Cfg.h`）の該当部分を生成する Python ツールです。
-現在の対象は **CanIf**、**Com**、**PduR**、**E2EXf**（E2E Transformer）、**SecOC**、**Csm / Crypto / KeyM**（暗号処理の連鎖）、**BswM**（モード遷移のルール）の 8 モジュールです。Com スタックの他のモジュールへ広げていく計画です。
+現在の対象は **CanIf**、**Com**、**PduR**、**E2EXf**（E2E Transformer）、**SecOC**、**Csm / Crypto / KeyM**（暗号処理の連鎖）、**Rte**（ASW 向けの信号アクセス関数）、**BswM**（モード遷移のルール）の 8 モジュールです。Com スタックの他のモジュールへ広げていく計画です。
 
 最終的な構想は `arxml ⇔ json ⇔ Cfg.c` です。このうち json → Cfg.c の部分と、
 信号表の変更に設定を連動させる部分を、この範囲で試しています。
@@ -13,13 +13,14 @@
 config/data/can_signals.json（ビットアサイン表の正本。can_tool の GUI で編集）
         │  sync_cfg.py: 追加されたフレームの設定のひな形を、各モジュールの設定 json へ追加
         ▼
-config/data/CanIf.json, Com.json, PduR.json, E2EXf.json, SecOC.json, CryptoStack.json, BswM.json
+config/data/CanIf.json, Com.json, PduR.json, E2EXf.json, SecOC.json, CryptoStack.json, Rte.json, BswM.json
         │  gen_cfg.py: スキーマ・整合性を検査して、Cfg ソースの生成領域を更新（json → C の一方向）
         ▼
 src/Bsw/CanIf/CanIf_PBCfg.c, CanIf_Cfg.h / src/Bsw/Com/Com_PBCfg.c, Com_Cfg.h / src/Bsw/PduR/PduR_PBCfg.c, PduR_Cfg.h
 / src/Bsw/E2EXf/E2EXf_PBCfg.c, E2EXf_PBCfg.h / src/Bsw/SecOC/SecOC_PBCfg.c, SecOC_Cfg.h
 / src/Bsw/Csm, Crypto, KeyM の *_PBCfg.c, *_Cfg.h（鍵・ジョブ・鍵名のテーブルと ID マクロ）
 / src/Bsw/BswM/BswM_PBCfg.c, BswM_Cfg.h（ルールテーブルとルール数）
+/ src/Rte/Rte.h, Rte.c（信号アクセス関数 Rte_Write_* / Rte_Read_*）
 ```
 
 - **信号表の値は設定 json にコピーしません。** CAN ID、DLC、信号のビット位置・ビット長、update-bit の位置、
@@ -88,10 +89,8 @@ CAN のバイト列と、信号表の定義に従ってデコードした信号�
 5. 「生成」を押し、続けてもう一度「検査」を押して、指摘が無いことを確認します。
 6. `pio run -e uno_r4 -t upload` で書き込み、can_tool の受信モニタを見ます。`TestMsg` が 2 バイトになり、`TestCounter2` が表示されます。
 
-`TestCounter2` に値を入れる処理はまだ無いため、値は 0 のままです。値を変えたいときは、次のとおり ECU 側のコードを足します。
-
-- `src/Rte/Rte.h` / `Rte.c` に、`Rte_Write_TestMsg_TestCounter()` と同じ形で `Rte_Write_TestMsg_TestCounter2()` を足します（`Com_SendSignal(COM_SIGNAL_TEST_MSG_TEST_COUNTER2, &value)` を呼ぶだけです）。
-- `src/Asw/App_TestMsg.c` の `App_TestMsg_Run()` から、その関数を呼びます。
+`TestCounter2` に値を入れる処理はまだ無いため、値は 0 のままです。ASW から書く関数 `Rte_Write_TestMsg_TestCounter2()` は、手順 5 の「生成」で `src/Rte/Rte.h` / `Rte.c` に自動で作られています（[Rte の関数の生成](#rte-generation) 参照）。
+値を変えたいときは、`src/Asw/App_TestMsg.c` の `App_TestMsg_Run()` から、その関数を呼びます。
 
 元に戻すときは、信号表の変更を取り消し（`git checkout` または手で戻す）、「同期」「生成」を押し直します。
 
@@ -109,6 +108,34 @@ C ソースが「テンプレート」を兼ねます。生成する範囲を、
 - 領域の ID と生成関数の対応は、`modules/` の各モジュール（`SPEC`）と、`gen_cfg.py` の `MODULES` に書いてあります。
 - 一方向（json → C）です。C → json の逆変換は行いません。json が正本です。
 
+<a id="rte-generation"></a>
+## Rte の関数の生成
+
+信号を足したとき、ASW が使う読み書きの関数も自動で作ります（`config/data/Rte.json`、`modules/rte.py`）。
+
+| 信号の向き | 生成する関数 | 中身 |
+|------------|--------------|------|
+| TX | `Std_ReturnType Rte_Write_<ポート>_<要素>(<型> value)` | `Com_SendSignal(COM_SIGNAL_xxx, &value)` |
+| RX | `Std_ReturnType Rte_Read_<ポート>_<要素>(<型>* data)` | `Com_ReceiveSignal(COM_SIGNAL_xxx, data)` |
+
+- 仕様（SWS_RTE）では、`<ポート>` はポートの名前、`<要素>` はデータ要素の名前で、どちらも SW-C の設計者が決める名前です。
+  ECU 間の送信では、データ要素ごとに Com の信号 1 つへ書き込む（[SWS_Rte_06023]）ことになっています。
+- 名前は、フレーム名を `<ポート>`、信号名を `<要素>` として自動で作ります（空白や括弧で区切って、各語の先頭を大文字にして連結。
+  例: `TestMsg` の `TestCounter` → `Rte_Write_TestMsg_TestCounter`）。合わない名前は、`Rte.json` の `names` で
+  Com の信号 ID マクロを指して上書きします（`port` と `element` のどちらか片方だけでもよい）。
+- 型は信号のビット長から決めます（8 bit 以下は `uint8`、16 bit 以下は `uint16`、32 bit 以下は `uint32`）。
+- 生成先は `Rte.h` と `Rte.c` の `@@GEN-BEGIN rte-signal-api` から `@@GEN-END rte-signal-api` の間です。
+
+生成するのは、次のどれにも当てはまらない信号だけです。手書きの関数を置き換えたり、二重に作ったりしないためです。
+
+1. 信号グループの I-PDU の信号（確定のコミットが要るため、手書きの `Rte_SendSignalGroup_*` で扱う）
+2. ゲートウェイの入出力の信号（SWC を介さず、Com の中で転送する）
+3. Com 以外の `src/` のコードから、すでに使われている信号（手書きの Rte 関数、E2EMon など）。信号 ID マクロの文字が、生成領域の外のコードにあるかで判定する
+4. `Rte.json` の `exclude` に書いた信号
+
+3 の判定は文字の検索なので、コメントに信号 ID マクロを書いただけでも「使われている」と見なされます。
+生成した関数名が、手書きの宣言・定義と同じになる場合や、生成した関数どうしで同じになる場合は、生成エラーになります（`names` で上書きしてください）。
+
 ## ファイル構成
 
 | パス | 内容 |
@@ -116,7 +143,7 @@ C ソースが「テンプレート」を兼ねます。生成する範囲を、
 | `gen_cfg.py` | 目印コメントの差し込み、スキーマ検証、生成の実行 |
 | `sync_cfg.py` | 信号表に追加されたフレームの設定を、設定 json へ追加 |
 | `checks.py` | 信号表と各モジュール設定の整合性検査 |
-| `modules/canif.py`, `com.py`, `pdur.py`, `e2exf.py`, `secoc.py`, `cryptostack.py`, `bswm.py` | モジュールごとの生成関数（`SPEC` に生成先と領域 ID を持つ） |
+| `modules/canif.py`, `com.py`, `pdur.py`, `e2exf.py`, `secoc.py`, `cryptostack.py`, `rte.py`, `bswm.py` | モジュールごとの生成関数（`SPEC` に生成先と領域 ID を持つ） |
 | `modules/common.py` | コメント・構造体フィールドの整形 |
 | `../../config/schema/*.schema.json` | 設定 json のスキーマ（型・範囲・列挙） |
 | `../../config/data/*.json` | モジュールごとの設定データ（リポジトリ直下の `config/`。コードと分けて置く） |
@@ -265,7 +292,7 @@ E2E と SecOC の設定は、Com から分けて別の設定 json（`E2EXf.json`
 - Com の設定 json の整理。既定値を導入して、通常と違う値だけを書く形にする。ID マクロの説明など、json の中の長い説明文の置き場所も見直す。
 - E2E の他のプロファイル（P01、P02 など）への対応。SecOC の TX Secured I-PDU への対応。
 - 他のモジュール（Can、FiM、WdgM、NvM など）。信号表との関係は薄いため、必要になったら足す。
-- Com のシグナルを使う側（Rte など）の連動。信号を追加したとき、Rte 側の読み書き関数は手で足す必要がある。
+- Rte の信号アクセス関数の生成は、信号グループの I-PDU・ゲートウェイの信号・手書きの関数がある信号を対象外にしている。信号グループ（`Rte_SendSignalGroup_*`）や、E2E 変換つきの Read は手書きのまま。
 - 他のモジュール（CanSM、ComM、BswM など）への展開。
 - 診断（DCM / UDS）の設定の対象化。入力となる表（DID 一覧など）の整理が先に必要。
 - PDU ID のシンボリック名（`#define` による名前付け）の生成。現状の ID は直値。名前を付ける場合は、値の正本がポストビルドの表（`*_PBCfg.c`）にあるため、

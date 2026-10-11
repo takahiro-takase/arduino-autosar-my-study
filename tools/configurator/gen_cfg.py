@@ -28,7 +28,7 @@ import sys
 import jsonschema
 
 import checks
-from modules import bswm, canif, com, cryptostack, e2exf, pdur, secoc
+from modules import bswm, canif, com, cryptostack, e2exf, pdur, rte, secoc
 
 TOOL_DIR = pathlib.Path(__file__).resolve().parent
 REPO_ROOT = TOOL_DIR.parents[1]
@@ -46,6 +46,7 @@ MODULES = {
     "CryptoStack": cryptostack.SPEC,
     "E2EXf": e2exf.SPEC,
     "PduR": pdur.SPEC,
+    "Rte": rte.SPEC,
     "SecOC": secoc.SPEC,
 }
 
@@ -147,6 +148,7 @@ def render_module(ctx, name, repo_root, check):
 
 def run(names, check, signals, config_dir, repo_root):
     ctx = Context(signals, config_dir)
+    ctx.repo_root = repo_root
     bad = False
     # 整合性検査は、対象に関わらず全モジュールの設定を読んで行う
     for name in sorted(MODULES):

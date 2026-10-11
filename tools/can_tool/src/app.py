@@ -39,6 +39,7 @@ class NavRow(NamedTuple):
 # 設定 json の並べ方。上位のレイヤから下位へ、全体の流れが分かる順にし、ブロックの間に区切り線を入れる。
 NAV_BLOCKS = (
     (
+        NavRow("Rte.json", "Rte", "Rte — ASW 向けの信号アクセス関数（名前の上書きと、生成しない信号）"),
         NavRow("Com.json", "Com", "Com — 信号・I-PDU・送信モード・コールバック"),
         NavRow("PduR.json", "PduR", "PduR — PDU のルーティング"),
         NavRow("CanIf.json", "CanIf", "CanIf — PDU と CAN ID の対応"),
