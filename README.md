@@ -56,7 +56,7 @@ CAN 通信と UDS 診断（ISO 15765-2 / ISO 14229-1）を、PC 上のテスト�
 > 経由で送信した EngineInfo/AbsInfo（本物の周辺 ECU が送信しているように
 > E2E Profile05 で保護したフレーム）を Arduino が受信し、RPM・RUN/ABS 警告灯へ
 > 反映している様子です
-> （[デモ用スクリプト](tools/can_tool/capl_scripts/demo_realistic_engine.capl)）。
+> （[送信スクリプト](test_scripts/regression_normal_operation.capl)）。
 
 CAN 経由で受信するエンジン ECU（0x100）・ABS ECU（0x110）からの情報を警告灯制御へ
 反映する、以下の入出力を持つメータ ECU です。
@@ -169,6 +169,7 @@ HAL ─── MCU 依存の最下層（Can_Hw / Dio_Hw ほか、src/Hal/ に集�
 │   ├── test_main.cpp       # GoogleTest の main()（全テストで共通）
 │   └── Bsw/<Module>/       # モジュール別のテストファイル（複数モジュールにまたがるものは <X>Stack/ など）
 ├── stub/                   # テスト用の差し替え（src/ と同じ構成。Fake_*=HW 差し替え、Wrap_*=--wrap による呼び出し記録）
+├── test_scripts/           # 実機の結合テストスクリプト（CAPL 風 .capl / .py。tools/can_tool から実行）
 ├── config/
 │   ├── data/               # 設定データ（信号表 can_signals.json と、CanIf / Com / PduR / E2EXf / SecOC / Csm・Crypto・KeyM / BswM の設定 json）
 │   └── schema/             # 設定 json のスキーマ
@@ -359,7 +360,8 @@ bash tools/coverage/generate_coverage_report.sh
 
 PC から CAN 経由で診断要求や EngineInfo/AbsInfo を送り、実機の挙動をシリアルログで確認します。
 ボタン送信や CAPL 風スクリプトによる手順化は [tools/can_tool/README.md](tools/can_tool/README.md) を
-参照してください。実機のシリアルログの例は、分割前の README
+参照してください。実機の結合テストに使うスクリプトは [test_scripts/](test_scripts/README.md) にあります。
+実機のシリアルログの例は、分割前の README
 （[旧 README](docs/archive/README_2026-10-03.md#serial-log-example)）に残しています。
 
 

@@ -86,7 +86,7 @@ CAN 送受信の観測からの推測値だったため撤去した旧「トラ�
 1回送信するショートカットです。セッション制約・SecurityAccess のどちらも
 不要なため単独で完結し、送信すると実機のリセットボタン押下と同等に ECU が
 即座にリセットされます（`Mcu_PerformReset()` 経由、[シリアルモニタ出力例](../../docs/archive/README_2026-10-03.md#serial-log-example)
-参照。`tools/can_tool/capl_scripts/001_ecu_reset.capl` と同じ内容を
+参照。`test_scripts/001_ecu_reset.capl` と同じ内容を
 ボタン1つで実行できるようにしたもの）。
 
 ボタンの追加・変更はコードを触らず `config.json` の `buttons` 配列に項目を
@@ -346,6 +346,6 @@ on message 0x200
 評価する前に本体を必ず1回実行すること、`break` で途中脱出できること、
 TesterPresent を成功する/上限回数に達するまで送信するリトライ処理での
 実用例）を参照してください。
-`tools/can_tool/capl_scripts/100_verify_nvm_writeall_on_reset.capl` は実機の確認用スクリプトです
+`test_scripts/100_verify_nvm_writeall_on_reset.capl` は実機の確認用スクリプトです（[`test_scripts/`](../../test_scripts/README.md) 参照）
 （0x14 全クリアの直後に 0x11 ECUReset を送り、リセット後にクリアした DTC が復活しないことを確認する。
 ECUReset 直前の `NvM_WriteAll()` の動作確認。[`NvM_Notes.md`](../../docs/modules/NvM_Notes.md) 参照）。

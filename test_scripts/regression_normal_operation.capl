@@ -1,0 +1,434 @@
+// 通常動作のデグレ確認スクリプト（実機の ECU が、通常の走行相当の入力で期待どおりに反応するか）。
+//
+// 実エンジン ECU / ABS ECU のように、E2E Profile05 (CRC16+8bitカウンタ) で保護した EngineInfo (0x100) と
+// AbsInfo (0x110) を 200ms 周期で送り、ECU が出力するフレームを受信して PASS/FAIL を判定する。
+// 約 20 秒で終わる（最後に結果が出る。その後は「停止」ボタンで終了する）。
+//
+// 前提:
+//   - ECU を起動 (リセット) した直後で、FAULT 状態 (警告灯 D7 の点滅中) ではないこと。
+//     FAULT からは EngineInfo の起動フラグが 0 になるまで戻らないため、迷うときは先に ECU をリセットする。
+//   - can_tool に CAN 接続済み。
+//
+// 手順:
+//   [0] extendedSession + SecurityAccess → 0x14 全クリア (DTC を消す) → defaultSession
+//   [1] 立ち上げ: 回転数を 300rpm から 3000rpm へ、水温を 20°C から 80°C へ上げる (約 5.6 秒)
+//   [2] 3000rpm / 80°C で保持 (8 秒)。この間 E2E エラーカウンタを監視する
+//   [3] ABS 作動 (3 秒) → 解除 (3 秒)
+//
+// 判定 (ECU の出力):
+//   [A] MeterStatus (0x200): EngineState=RUNNING(2)、EngineSpeed=3000、CoolantTemp=80 (送った値のミラー)
+//   [B] WarningStatus (0x210): RunLamp=1 (点灯)、FaultLamp=0。ABS 作動中は AbsLamp=1、解除後は AbsLamp=0
+//   [C] E2EHealthStatus (0x220): 保持の途中から最後まで、CRC エラー・シーケンスエラーの累積数が増えない
+//   [D] TestMsg (0x300): 1 秒周期で届き、値が戻ったり大きく飛んだりしない (1 回の増分は 1 か 2)
+//       増分が 2 になるのは正常: ECU 内の 1 秒タスクがカウンタを書く周期と、Com が送る周期が別々のタイマーの
+//       ため、約 20〜30 秒に 1 回、書き込みが 2 回続けて送信の間に入り、値が 1 つ飛ぶ (実機のシリアルログで確認済み)
+//
+// 送る値は (src/Asw/App_EngineManager.c の状態遷移閾値: ENGINE_SPEED_RUNNING_THRESHOLD=500,
+// ENGINE_SPEED_STALL_THRESHOLD=100, COOLANT_OVERHEAT_THRESHOLD=100°C) と整合させ、意図せず FAULT に
+// ならないようにしている。EngineManager の周期は 3 秒のため、判定の前に 2 周期以上の保持を入れている。
+//
+// E2E のフレーム組み立てと CRC は、test_E2E.capl の SendMessage_EngineInfo()/CalcE2EProfile05CRC() と
+// 同じ (src/Bsw/E2EXf/E2EXf_PBCfg.c の EngineInfo/AbsInfo 設定)。
+
+variables
+{
+    message 0x100 engineInfoMsg;
+    message 0x110 absInfoMsg;
+    byte e2eCnt;
+    byte e2eCntAbs;
+
+    // 送信側の状態
+    word rpm;
+    byte coolant;
+    word vehicleSpeed;
+    byte brakeActive;
+    byte absActive;
+    int  tickNo;       // 200ms ごとに +1。判定のタイミングはこの値で決める
+
+    // 受信した ECU の出力 (最後に受信した値)
+    int got200;
+    int engineState;
+    int meterSpeed;
+    int meterTemp;
+    int got210;
+    int lampRun;
+    int lampFault;
+    int lampAbs;
+    int got220;
+    int crcErr;
+    int seqErr;
+    int baseSet;       // 1=E2E カウンタの基準値を取った
+    int baseCrcErr;
+    int baseSeqErr;
+    int framesAfterBase;   // 基準値を取った後に受信した 0x220 の数
+    int tmVal;
+    int tmLast;
+    int tmHave;
+    int tmCount;
+    int tmBreaks;
+    int tmStep;
+
+    // 判定の集計
+    int passCount;
+    int failCount;
+}
+
+// 期待値との比較を 1 件ずつ出力して集計する。got=0 は「ECU の出力を受信できなかった」ことを表す。
+void Judge(int got, int expected, int actual)
+{
+    if (got == 0)
+    {
+        failCount++;
+        write("    FAIL 未受信 (期待=%d)", expected);
+    }
+    else if (actual == expected)
+    {
+        passCount++;
+        write("    PASS 期待=%d 実測=%d", expected, actual);
+    }
+    else
+    {
+        failCount++;
+        write("    FAIL 期待=%d 実測=%d", expected, actual);
+    }
+}
+
+// actual が min 以上かどうかを出力して集計する。
+void JudgeMin(int actual, int min)
+{
+    if (actual >= min)
+    {
+        passCount++;
+        write("    PASS 期待=%d 以上 実測=%d", min, actual);
+    }
+    else
+    {
+        failCount++;
+        write("    FAIL 期待=%d 以上 実測=%d", min, actual);
+    }
+}
+
+on start
+{
+    write("=== 通常動作のデグレ確認を開始します (約 20 秒) ===");
+
+    write("[0] DTC を消去します (extendedSession + SecurityAccess → 0x14 全クリア)");
+    send(0x10, 0x03);
+    wait_response();
+    assert_positive();
+    security_unlock();
+    assert_positive();
+    send(0x14, 0xFF, 0xFF, 0xFF);
+    wait_response();
+    assert_positive();
+    send(0x10, 0x01);
+    wait_response();
+    assert_positive();
+
+    e2eCnt       = 0x00;
+    e2eCntAbs    = 0x00;
+    rpm          = 300;    // クランキング開始（起動フラグ=1 と合わせて STARTING へ遷移）
+    coolant      = 20;     // 冷間始動
+    vehicleSpeed = 6000;   // 60.00 km/h で巡航中
+    brakeActive  = 0;
+    absActive    = 0;
+    tickNo       = 0;
+
+    write("[1] 立ち上げ: 300rpm/20°C から 3000rpm/80°C へ");
+    setTimer(Tick, 200);
+}
+
+// ECU の出力を受信して、最後の値を覚えておく (判定は on timer Tick で行う)。
+// MeterStatus: byte[0]=EngineState、byte[3-4]=EngineSpeed (ビッグエンディアン)、byte[5]=CoolantTemp
+on message 0x200
+{
+    if (msgDlc() >= 6)
+    {
+        got200      = 1;
+        engineState = msgData(0);
+        meterSpeed  = (msgData(3) << 8) | msgData(4);
+        meterTemp   = msgData(5);
+    }
+}
+
+// WarningStatus: byte[0] の bit7=RunLamp、bit6=FaultLamp、bit5=AbsLamp (MSB 起点。1=点灯)
+on message 0x210
+{
+    if (msgDlc() >= 1)
+    {
+        got210    = 1;
+        lampRun   = (msgData(0) >> 7) & 1;
+        lampFault = (msgData(0) >> 6) & 1;
+        lampAbs   = (msgData(0) >> 5) & 1;
+    }
+}
+
+// E2EHealthStatus: byte[3]=E2E CRC エラー累積数、byte[4]=E2E シーケンスエラー累積数
+on message 0x220
+{
+    if (msgDlc() >= 5)
+    {
+        got220 = 1;
+        crcErr = msgData(3);
+        seqErr = msgData(4);
+        if (baseSet)
+        {
+            framesAfterBase++;
+        }
+    }
+}
+
+// TestMsg: byte[0]=カウンタ (1 秒ごとに +1、255 の次は 0)。増分が 1 か 2 なら正常 (冒頭のコメント参照)
+on message 0x300
+{
+    if (msgDlc() >= 1)
+    {
+        tmVal = msgData(0);
+        if (tmHave)
+        {
+            tmStep = (tmVal - tmLast) & 0xFF;
+            if (tmStep < 1 || tmStep > 2)
+            {
+                tmBreaks++;
+                write("    TestMsg の値が想定外: %d -> %d", tmLast, tmVal);
+            }
+        }
+        tmLast = tmVal;
+        tmHave = 1;
+        tmCount++;
+    }
+}
+
+on timer Tick
+{
+    // ---- 送る値を決める ----
+    if (tickNo < 28)
+    {
+        // 立ち上げ: 900rpm までは +60、以降は +120 で 3000rpm まで
+        // (500 を跨いだ時点で App_EngineManager が STARTING->RUNNING へ遷移する)
+        if (rpm < 900)
+        {
+            rpm = rpm + 60;
+        }
+        else
+        {
+            rpm = rpm + 120;
+            if (rpm > 3000)
+            {
+                rpm = 3000;
+            }
+        }
+        if (coolant < 80)
+        {
+            coolant = coolant + 3;
+            if (coolant > 80)
+            {
+                coolant = 80;
+            }
+        }
+    }
+
+    // ABS: tick 68〜82 はブレーキング + ABS 作動 (急減速)、それ以外は巡航/解除
+    if (tickNo >= 68 && tickNo < 83)
+    {
+        brakeActive = 1;
+        absActive   = 1;
+        if (vehicleSpeed >= 150)
+        {
+            vehicleSpeed = vehicleSpeed - 150;
+        }
+        else
+        {
+            vehicleSpeed = 0;
+        }
+    }
+    else
+    {
+        brakeActive = 0;
+        absActive   = 0;
+    }
+
+    SendMessage_EngineInfo(rpm, coolant, 1, 0);
+    SendMessage_AbsInfo(vehicleSpeed, brakeActive, absActive, 0);
+
+    // ---- 判定のタイミング (1 tick = 200ms) ----
+    if (tickNo == 28)
+    {
+        write("[2] 3000rpm / 80°C で保持します (8 秒)");
+    }
+
+    if (tickNo == 40)
+    {
+        // E2E エラー累積数の基準値。立ち上げ中の取りこぼしを数えないよう、保持の途中で取る
+        if (got220)
+        {
+            baseCrcErr = crcErr;
+            baseSeqErr = seqErr;
+            baseSet    = 1;
+            write("    E2E エラー累積数の基準値: CRC=%d SEQ=%d", baseCrcErr, baseSeqErr);
+        }
+    }
+
+    if (tickNo == 68)
+    {
+        write("[A] MeterStatus (0x200): EngineState (RUNNING=2)");
+        Judge(got200, 2, engineState);
+        write("[A] MeterStatus (0x200): EngineSpeed (送った 3000rpm のミラー)");
+        Judge(got200, 3000, meterSpeed);
+        write("[A] MeterStatus (0x200): CoolantTemp (送った 80°C のミラー)");
+        Judge(got200, 80, meterTemp);
+        write("[B] WarningStatus (0x210): RunLamp (点灯=1)");
+        Judge(got210, 1, lampRun);
+        write("[B] WarningStatus (0x210): FaultLamp (消灯=0)");
+        Judge(got210, 0, lampFault);
+        write("[B] WarningStatus (0x210): AbsLamp (ABS 作動前。消灯=0)");
+        Judge(got210, 0, lampAbs);
+        write("[3] ABS 作動 (3 秒)");
+    }
+
+    if (tickNo == 83)
+    {
+        write("[B] WarningStatus (0x210): AbsLamp (ABS 作動中。点灯=1)");
+        Judge(got210, 1, lampAbs);
+        write("[3] ABS 解除 (3 秒)");
+    }
+
+    if (tickNo == 98)
+    {
+        write("[B] WarningStatus (0x210): AbsLamp (ABS 解除後。消灯=0)");
+        Judge(got210, 0, lampAbs);
+        write("[C] E2EHealthStatus (0x220): CRC エラー累積数の増加 (0)");
+        Judge(baseSet, 0, crcErr - baseCrcErr);
+        write("[C] E2EHealthStatus (0x220): シーケンスエラー累積数の増加 (0)");
+        Judge(baseSet, 0, seqErr - baseSeqErr);
+        write("[C] E2EHealthStatus (0x220): 基準値の後に受信した数");
+        JudgeMin(framesAfterBase, 1);
+        write("[D] TestMsg (0x300): 受信数 (1 秒周期)");
+        JudgeMin(tmCount, 15);
+        write("[D] TestMsg (0x300): 値の戻り・大きな飛び (増分が 1 か 2 以外)");
+        Judge(tmHave, 0, tmBreaks);
+
+        if (failCount == 0)
+        {
+            write("結果: PASS (%d 件すべて合格)", passCount);
+        }
+        else
+        {
+            write("結果: FAIL (%d 件中 %d 件が不合格)", passCount + failCount, failCount);
+        }
+        write("終了しました。「停止」ボタンでスクリプトを止めてください");
+    }
+    else
+    {
+        tickNo = tickNo + 1;
+        setTimer(Tick, 200);  // CAPL の msTimer と同じく単発なので、繰り返すには再度アームする
+    }
+}
+
+// -----------------------------------------------------------------------------
+// EngineInfo (CAN 0x100, E2E Profile05)
+// byte[0-1]=CRC16(リトルエンディアン) / byte[2]=Counter(フル値) /
+// byte[3-4]=EngineSpeed(ビッグエンディアン16bit) / byte[5]=CoolantTemp /
+// byte[6] bit7=EngineOnFlag。test_E2E.capl の SendMessage_EngineInfo() と同じ
+// レイアウト・CRC 計算 (src/Bsw/E2EXf/E2EXf_PBCfg.c 参照)。
+// -----------------------------------------------------------------------------
+void SendMessage_EngineInfo(word speed, byte coolantTemp, byte onFlag, byte errorFlag)
+{
+    byte data[5];
+    word crc16;
+
+    data[0] = e2eCnt;
+    data[1] = (speed >> 8) & 0xFF;
+    data[2] = speed & 0xFF;
+    data[3] = coolantTemp;
+    data[4] = (onFlag & 0x01) << 7;
+
+    engineInfoMsg.dlc = 7;
+    engineInfoMsg.byte(2) = data[0];
+    engineInfoMsg.byte(3) = data[1];
+    engineInfoMsg.byte(4) = data[2];
+    engineInfoMsg.byte(5) = data[3];
+    engineInfoMsg.byte(6) = data[4];
+
+    crc16 = CalcE2EProfile05CRC(0x0100, 5, data);
+    engineInfoMsg.byte(0) = crc16 & 0xFF;
+    engineInfoMsg.byte(1) = (crc16 >> 8) & 0xFF;
+
+    output(engineInfoMsg);
+
+    e2eCnt = e2eCnt + 1;
+}
+
+// -----------------------------------------------------------------------------
+// AbsInfo (CAN 0x110, E2E Profile05)
+// byte[0-1]=CRC16(リトルエンディアン) / byte[2]=Counter(フル値) /
+// byte[3-4]=VehicleSpeed(ビッグエンディアン16bit、0.01km/h) /
+// byte[5] bit7=BrakeActive・bit6=AbsActive (src/Bsw/Com/Com_PBCfg.c の
+// BitPosition=40/41、src/Bsw/E2EXf/E2EXf_PBCfg.c の AbsInfo 設定 DataID=0x0110
+// DataLength=6 参照)。SendMessage_EngineInfo() と同じ CRC 計算方式。
+// -----------------------------------------------------------------------------
+void SendMessage_AbsInfo(word speed, byte brake, byte absFlag, byte errorFlag)
+{
+    byte data[4];
+    word crc16;
+
+    data[0] = e2eCntAbs;
+    data[1] = (speed >> 8) & 0xFF;
+    data[2] = speed & 0xFF;
+    data[3] = ((brake & 0x01) << 7) | ((absFlag & 0x01) << 6);
+
+    absInfoMsg.dlc = 6;
+    absInfoMsg.byte(2) = data[0];
+    absInfoMsg.byte(3) = data[1];
+    absInfoMsg.byte(4) = data[2];
+    absInfoMsg.byte(5) = data[3];
+
+    crc16 = CalcE2EProfile05CRC(0x0110, 4, data);
+    absInfoMsg.byte(0) = crc16 & 0xFF;
+    absInfoMsg.byte(1) = (crc16 >> 8) & 0xFF;
+
+    output(absInfoMsg);
+
+    e2eCntAbs = e2eCntAbs + 1;
+}
+
+// CRC16 (poly=0x1021、MSB first、非反転)。test_E2E.capl の
+// UpdateCrc16()/CalcE2EProfile05CRC() と同一実装。
+word UpdateCrc16(word crc, byte b)
+{
+    word poly = 0x1021;
+    int i;
+
+    crc ^= (b << 8);
+    for (i = 0; i < 8; i++)
+    {
+        if (crc & 0x8000)
+        {
+            crc = (crc << 1) ^ poly;
+        }
+        else
+        {
+            crc <<= 1;
+        }
+    }
+    return crc;
+}
+
+word CalcE2EProfile05CRC(word dataId, byte len, byte data[])
+{
+    // 開始値 0xFFFF (SWS_E2E_00406)。data[](Counter含む) を先に投入し、
+    // DataID を下位バイト→上位バイトの順で最後に投入する
+    // (SWS_E2E_00399/00406、src/Bsw/E2E/E2E_P05.c の E2E_CalcCrc16Body() と同じ)。
+    word crc = 0xFFFF;
+    byte index;
+
+    for (index = 0; index < len; index++)
+    {
+        crc = UpdateCrc16(crc, data[index]);
+    }
+
+    crc = UpdateCrc16(crc, dataId & 0xFF);
+    crc = UpdateCrc16(crc, (dataId >> 8) & 0xFF);
+
+    return crc;
+}
