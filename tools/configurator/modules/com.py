@@ -7,6 +7,7 @@
 Com の設定 json に書く値: ID の割り当て、送信モード、フィルタ、タイムアウト時の動作、コールバック名など。
 """
 
+from . import symbols
 from .common import block_comment, doc_comment, ruled_comment, struct_fields
 from .secoc import layout as secoc_layout
 
@@ -136,13 +137,13 @@ def derive_pdur_id(p, direction, idx, ctx):
     if direction == "TX":
         for path in pdur["txPaths"]:
             if path.get("confIpdu") == p["name"]:
-                return path["srcPduId"]
+                return symbols.PDUR_SRC + path["name"]
     else:
         for path in pdur["rxPaths"]:
             if any(d.get("ipdu") == p["name"] for d in path["dests"]):
-                return idx
+                return symbols.COM_IPDU + p["name"]
         if secoc_pdu_of(p, ctx) is not None:
-            return idx  # SecOC が検証後に Com_RxIndication() へ渡す ID（= Com の RX I-PDU の ID）
+            return symbols.COM_IPDU + p["name"]  # SecOC が検証後に Com_RxIndication() へ渡す ID（= Com の RX I-PDU の ID）
     raise ValueError("Com %s: pduRId が未指定で、PduR の設定にも SecOC の設定にもこの I-PDU を指す経路がない" % p["name"])
 
 
@@ -157,7 +158,7 @@ def secoc_pdu_of(p, ctx):
 def ipdu_values(p, ctx, idx, direction):
     """I-PDU の (json キー → 値) を、信号表と PduR の設定から引く値を補って返す。"""
     fr = frame_of(p, ctx)
-    vals = {"ipduId": idx}
+    vals = {"ipduId": symbols.COM_IPDU + p["name"]}
     vals["pduRId"] = p["pduRId"] if "pduRId" in p else derive_pdur_id(p, direction, idx, ctx)
     sec = secoc_pdu_of(p, ctx) if direction == "RX" else None
     if "dlc" in p:
@@ -186,7 +187,7 @@ def signal_values(s, cfg, ctx):
     vals = {
         "signalId": s["macro"],
         "direction": "COM_SIGNAL_DIRECTION_" + s["direction"],
-        "ipduId": pos,
+        "ipduId": symbols.COM_IPDU + ipdus[pos]["name"],
         "bitPosition": s["bitPosition"] if "bitPosition" in s else f["bitPosition"],
         "bitSize": s["bitSize"] if "bitSize" in s else f["bitSize"],
         "endian": "COM_BIG_ENDIAN" if ctx.byte_order.startswith("big-endian") else "COM_LITTLE_ENDIAN",
@@ -372,8 +373,22 @@ def render_cfg_ipdu_groups(cfg, ctx):
     return chr(10).join(out)
 
 
+def render_cfg_symbols(cfg, ctx):
+    """Com が提供するハンドル ID のシンボリック名（[TPS_ECUC_02108]）。値は各テーブルの添字。"""
+    symbols.check_unique([p["name"] for p in cfg["rxIpdus"] + cfg["txIpdus"]], "Com ipdus")
+    symbols.check_unique([s["name"] for s in cfg["signals"]], "Com signals")
+    out = ["/* シンボリック名: ComConf_<コンテナ定義>_<name>（値は各テーブルの添字）。PduR などの下位層が参照する。 */"]
+    out += symbols.define_lines([
+        [(symbols.COM_IPDU + p["name"], i, False) for i, p in enumerate(cfg["rxIpdus"])],
+        [(symbols.COM_IPDU + p["name"], i, False) for i, p in enumerate(cfg["txIpdus"])],
+        # 生成するコードは信号の ID に COM_SIGNAL_* を使うため、こちらは未使用
+        [(symbols.COM_SIGNAL + s["name"], i, True) for i, s in enumerate(cfg["signals"])],
+    ])
+    return chr(10).join(out)
+
+
 def check_includes(cfg, text):
-    return []
+    return symbols.include_warnings(text)
 
 
 SPEC = {
@@ -385,5 +400,6 @@ SPEC = {
         ("src/Bsw/Com/Com_Cfg.h", "com-ipdu-groups", render_cfg_ipdu_groups, None),
         ("src/Bsw/Com/Com_Cfg.h", "com-counts", render_cfg_counts, None),
         ("src/Bsw/Com/Com_Cfg.h", "com-signal-ids", render_cfg_signal_ids, None),
+        ("src/Bsw/Com/Com_Cfg.h", "com-symbols", render_cfg_symbols, None),
     ],
 }

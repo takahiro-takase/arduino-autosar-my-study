@@ -108,4 +108,19 @@
 #define PDUR_TX_PATH_COUNT   6U
 /* @@GEN-END pdur-counts */
 
+/* @@GEN-BEGIN pdur-symbols  生成元: config/data/PduR.json  （自動生成: 手編集禁止） */
+/* シンボリック名: PduRConf_PduRSrcPdu_<name>（値は経路の srcPduId）。CanIf などの下位層が参照する。 */
+#define PduRConf_PduRSrcPdu_EngineInfo_Rx         0U
+#define PduRConf_PduRSrcPdu_DiagReq_Rx            1U
+#define PduRConf_PduRSrcPdu_AbsInfo_Rx            2U
+#define PduRConf_PduRSrcPdu_ImmobilizerCmd_Rx     3U
+
+#define PduRConf_PduRSrcPdu_MeterStatus_Tx        0U
+#define PduRConf_PduRSrcPdu_DiagResp_Tx           1U
+#define PduRConf_PduRSrcPdu_WarningStatus_Tx      2U
+#define PduRConf_PduRSrcPdu_E2EHealthStatus_Tx    3U
+#define PduRConf_PduRSrcPdu_ImmobilizerStatus_Tx  4U
+#define PduRConf_PduRSrcPdu_TestMsg_Tx            5U
+/* @@GEN-END pdur-symbols */
+
 #endif /* PDUR_CFG_H */

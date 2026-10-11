@@ -1,5 +1,6 @@
 """PduR（PduR_PBCfg.c / PduR_Cfg.h）の生成。"""
 
+from . import symbols
 from .common import block_comment, doc_comment, struct_fields
 
 RX_FCT = {"COM": "Com_RxIndication", "CANTP": "CanTp_RxIndication", "SECOC": "SecOC_RxIndication"}
@@ -46,12 +47,32 @@ def secoc_index(ctx, name, where):
     raise ValueError("%s: SecOC の RX PDU '%s' が存在しない" % (where, name))
 
 
+def com_ipdu_symbol(ctx, direction, name, where):
+    """Com の I-PDU のシンボリック名。I-PDU が存在することも確認する。"""
+    com_index(ctx, direction, name, where)
+    return symbols.COM_IPDU + name
+
+
+def dest_pdu_value(d, path, ctx):
+    """配信先の ID の C 表記。Com の I-PDU ならシンボリック名、それ以外は数値。"""
+    if "ipdu" in d:
+        return com_ipdu_symbol(ctx, "RX", d["ipdu"], "PduR " + path["name"])
+    return "%dU" % dest_pdu_id(d, path, ctx)
+
+
 def dest_pdu_id(d, path, ctx):
     if "ipdu" in d:
         return com_index(ctx, "RX", d["ipdu"], "PduR " + path["name"])
     if "secocPdu" in d:
         return secoc_index(ctx, d["secocPdu"], "PduR " + path["name"])
     return d["destPduId"]
+
+
+def conf_dest_value(p, ctx):
+    """送信確認の宛先の ID の C 表記。Com の I-PDU ならシンボリック名、それ以外は数値。"""
+    if "confIpdu" in p:
+        return com_ipdu_symbol(ctx, "TX", p["confIpdu"], "PduR " + p["name"])
+    return "%dU" % conf_dest_pdu_id(p, ctx)
 
 
 def conf_dest_pdu_id(p, ctx):
@@ -98,7 +119,7 @@ def rx_dest_tables(cfg, ctx):
             out += struct_fields(
                 [
                     ("Module", "PDUR_MODULE_" + mod, ["DaVinci: PduRDestPdu/PduRDestModule = " + mod]),
-                    ("DestPduId", "%dU" % dest_id, id_note),
+                    ("DestPduId", dest_pdu_value(d, p, ctx), id_note),
                     ("RxIndFct", RX_FCT[mod], ["DaVinci: 自動解決（PduRDestModule=%s）" % mod]),
                 ],
                 8,
@@ -131,7 +152,7 @@ def rx_paths(cfg, ctx):
         )
         out += struct_fields(
             [
-                ("SrcPduId", "%dU" % p["srcPduId"], None),
+                ("SrcPduId", symbols.PDUR_SRC + p["name"], None),
                 ("Dests", "PduR_RxDests_Path%d" % i, None),
                 ("DestCount", "PDUR_RX_DEST_COUNT_PATH%d" % i, None),
             ],
@@ -160,9 +181,10 @@ def tx_paths(cfg, ctx):
             8,
         )
         fields = [
-            ("SrcPduId", "%dU" % p["srcPduId"], ["DaVinci: PduRSrcPdu/PduRSrcPduHandleId"]),
-            ("CanIfTxPduId", "%dU" % p["canIfTxPduId"], ["DaVinci: PduRDestPdu/PduRDestPduHandleId"]),
-            ("ConfDestPduId", "%dU" % conf_dest_pdu_id(p, ctx), None),
+            ("SrcPduId", symbols.PDUR_SRC + p["name"], ["DaVinci: PduRSrcPdu/PduRSrcPduHandleId"]),
+            ("CanIfTxPduId", symbols.canif_tx(ctx, p["canIfTxPduId"], "PduR " + p["name"]),
+             ["DaVinci: PduRDestPdu/PduRDestPduHandleId"]),
+            ("ConfDestPduId", conf_dest_value(p, ctx), None),
             ("ConfFct", TX_FCT[p["confModule"]], ["DaVinci: PduRTxConfirmation"]),
         ]
         ov = p.get("transmitOverride")
@@ -209,15 +231,27 @@ def render_cfg_h(cfg, ctx):
     return "\n".join(out)
 
 
+def render_symbols(cfg, ctx):
+    """PduR が提供するハンドル ID のシンボリック名（[TPS_ECUC_02108]）。値は経路の srcPduId。"""
+    symbols.check_unique([p["name"] for p in cfg["rxPaths"] + cfg["txPaths"]], "PduR paths")
+    out = ["/* シンボリック名: PduRConf_PduRSrcPdu_<name>（値は経路の srcPduId）。CanIf などの下位層が参照する。 */"]
+    out += symbols.define_lines([
+        [(symbols.PDUR_SRC + p["name"], p["srcPduId"], False) for p in cfg["rxPaths"]],
+        [(symbols.PDUR_SRC + p["name"], p["srcPduId"], False) for p in cfg["txPaths"]],
+    ])
+    return chr(10).join(out)
+
+
 def check_includes(cfg, text):
     """使うモジュールのヘッダが C ソースにインクルードされているかを確認する。"""
     used = {d["module"] for p in cfg["rxPaths"] for d in p["dests"]}
     used |= {p["confModule"] for p in cfg["txPaths"]}
-    return [
+    msgs = [
         "%s がインクルードされていない（モジュール %s を使用）" % (MODULE_HEADER[m], m)
         for m in sorted(used)
         if '#include "%s"' % MODULE_HEADER[m] not in text
     ]
+    return msgs + symbols.include_warnings(text)
 
 
 SPEC = {
@@ -227,5 +261,6 @@ SPEC = {
     "targets": [
         ("src/Bsw/PduR/PduR_PBCfg.c", "pdur-routing", render_pbcfg, check_includes),
         ("src/Bsw/PduR/PduR_Cfg.h", "pdur-counts", render_cfg_h, None),
+        ("src/Bsw/PduR/PduR_Cfg.h", "pdur-symbols", render_symbols, None),
     ],
 }

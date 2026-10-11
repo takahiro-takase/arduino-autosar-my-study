@@ -226,6 +226,28 @@ NvM、WdgM と同じく、信号表とは関係なく、それぞれの JSON だ
 
 どちらも、生成の前後で `FiM_PBCfg.c`・`FiM.c`・`Can_PBCfg.c`・`Can.c` をコンパイルした結果（セクションの内容とリロケーション）が一致することを確認しています。
 
+<a id="symbolic-names"></a>
+## ハンドル ID のシンボリック名
+
+CanIf・PduR・Com が持つ PDU / 信号の ID は、AUTOSAR のシンボリック名の規則（ECU Configuration の [TPS_ECUC_02108]、BSW General の [SWS_BSW_00200]）でも生成します。
+名前は `<モジュールの略称>Conf_<コンテナ定義の名前>_<設定 JSON の name>`、定義先は値を提供するモジュールの `*_Cfg.h` の生成領域です（`modules/symbols.py` が共通の部品）。
+
+| モジュール | 名前 | 値 | 生成領域 |
+|------------|------|----|----------|
+| CanIf | `CanIfConf_CanIfTxPduCfg_<name>`、`CanIfConf_CanIfRxPduCfg_<name>` | TX / RX PDU の添字 | `CanIf_Cfg.h` の `canif-symbols` |
+| PduR | `PduRConf_PduRSrcPdu_<name>` | 経路の `srcPduId` | `PduR_Cfg.h` の `pdur-symbols` |
+| Com | `ComConf_ComIPdu_<name>`、`ComConf_ComSignal_<name>` | I-PDU / 信号の添字 | `Com_Cfg.h` の `com-symbols` |
+
+- 生成したコードでは、他のモジュールの ID を指す数値をこの名前に置き換えています。PduR の経路の `SrcPduId`・送信先の CanIf の PDU・配信先と送信確認先の Com の I-PDU、
+  CanIf が上位層へ返す ID（PduR の経路に対応するもの）、Com の I-PDU の `IPduId` / `PduRId` と信号の `IPduId` です。NM のように PduR を経由しない ID と、CanTp・SecOC が相手の ID は数値のままです。
+- 既存の信号 ID マクロ `COM_SIGNAL_*` は残しています（手書きのコードが使うため）。手書きのコードを仕様の名前へ全面的に置き換えるのは、今後の課題です。
+- `name` は、C の識別子として使える形（英数字と `_`、先頭は英字）で、同じモジュールの中で重複しないこと（生成時に検査）。PduR の経路は RX と TX で名前空間が共通なので、`_Rx` / `_Tx` のように方向を名前に含めてください（同じ名前で値が違う定義は不正な設定です、[TPS_ECUC_06074]）。
+- CanIf の `upperLayerTxPduId` などが PduR の経路と一致しない場合は、生成の前の整合性検査でエラーになります。使うヘッダのインクルードが足りないときは、生成時に警告が出ます。
+- 生成するコードが使わない名前には、MISRA C:2012 Rule 2.5（未使用マクロ）の抑止コメントを付けています（CanIf は、PduR の設定に出力が左右されないよう全部に付けます）。
+- 注意: 仕様の名前は長く、先頭 31 文字が同じ名前が出ます（例: `PduRConf_PduRSrcPdu_ImmobilizerCmd_Rx` と `..._ImmobilizerStatus_Tx`）。MISRA C:2012 Rule 5.4 を厳密に適用すると逸脱ですが、
+  このプロジェクトの MISRA チェック（cppcheck のアドオン）は指摘せず、コンパイラは 63 文字まで区別するため、動作には影響しません。
+- 検証: 置き換えの前後で、`CanIf_PBCfg.c`・`PduR_PBCfg.c`・`Com_PBCfg.c` と、各モジュール本体のコンパイル結果が完全に一致することを確認しています。
+
 ## ファイル構成
 
 | パス | 内容 |
@@ -385,6 +407,6 @@ E2E と SecOC の設定は、Com から分けて別の設定 json（`E2EXf.json`
 - Rte の信号アクセス関数の生成は、信号グループの I-PDU・ゲートウェイの信号・手書きの関数がある信号を対象外にしている。信号グループ（`Rte_SendSignalGroup_*`）や、E2E 変換つきの Read は手書きのまま。
 - CanSM と ComM は、表になる設定が無いため対象外（BswM は対応済み）。
 - 診断（DCM / UDS）の設定の対象化。入力となる表（DID 一覧など）の整理が先に必要。
-- PDU ID のシンボリック名（`#define` による名前付け）の生成。現状の ID は直値。名前を付ける場合は、値の正本がポストビルドの表（`*_PBCfg.c`）にあるため、
-  名前の定義も `*_PBCfg.h` に置いて値と同じ設定の単位にそろえるのを第一候補とする。ただし置き場所を定める仕様の記述は、手元の SWS には見つかっていない（未確認）。
+- 手書きのコードが使う ID マクロ（`COM_SIGNAL_*` など）を、仕様のシンボリック名（`ComConf_ComSignal_*` など）へ全面的に置き換える。
+  `src/` に約 50 か所、テストに約 20 か所の参照がある。CAN FD で Com / PduR を変更する前後など、同じコードに手を入れるときがまとめて直す機会になる。
 - ARXML の入出力。json の項目名を ECUC のパラメータ名に寄せてあるので、変換層を足す形にできる。
