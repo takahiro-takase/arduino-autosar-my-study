@@ -13,7 +13,9 @@
     "baudrate",
     "crystalMhz",
     "filter",
-    "filterNote"
+    "filterNote",
+    "controller",
+    "fd"
   ],
   "properties": {
     "$schema": {
@@ -21,6 +23,13 @@
     },
     "module": {
       "const": "Can"
+    },
+    "controller": {
+      "enum": [
+        "MCP2515",
+        "MCP2518FD"
+      ],
+      "description": "CAN コントローラの種類。MCP2515 は CAN 2.0 まで、MCP2518FD は CAN FD に対応する。水晶の周波数と FD の指定は、この種類に合っている必要がある"
     },
     "csPin": {
       "type": "integer",
@@ -59,9 +68,10 @@
       "enum": [
         8,
         16,
-        20
+        20,
+        40
       ],
-      "description": "水晶発振器の周波数 [MHz]（CAN_CRYSTAL_<値>MHZ）"
+      "description": "水晶発振器の周波数 [MHz]（CAN_CRYSTAL_<値>MHZ）。MCP2515: 8 / 16 / 20、MCP2518FD: 20 / 40"
     },
     "filter": {
       "type": "object",
@@ -91,6 +101,44 @@
         "type": "string",
         "not": {
           "pattern": "\\*/"
+        }
+      }
+    },
+    "fd": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "enabled",
+        "dataBitrate",
+        "txBitRateSwitch",
+        "note"
+      ],
+      "description": "CAN FD の設定（AUTOSAR の CanControllerFdBaudrateConfig / CanControllerTxBitRateSwitch 相当）",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "CAN FD を有効にする（controller が FD 対応のときだけ true にできる）"
+        },
+        "dataBitrate": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 8000000,
+          "description": "データ部のビットレート [bit/s]。通常のビットレートの整数倍。使うトランシーバの上限を超えない値にする"
+        },
+        "txBitRateSwitch": {
+          "type": "boolean",
+          "description": "送信時にデータ部でビットレートを切り替える（BRS）"
+        },
+        "note": {
+          "type": "array",
+          "minItems": 1,
+          "description": "FD 設定のコメント",
+          "items": {
+            "type": "string",
+            "not": {
+              "pattern": "\\*/"
+            }
+          }
         }
       }
     }

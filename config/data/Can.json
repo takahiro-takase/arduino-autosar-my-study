@@ -1,6 +1,7 @@
 {
   "$schema": "../schema/Can.schema.json",
   "module": "Can",
+  "controller": "MCP2515",
   "csPin": 10,
   "csPinDoc": "MCP2515 チップセレクト (CS) ピン番号",
   "intPin": 2,
@@ -15,5 +16,15 @@
     "mask=0x000: 全 CAN ID を受け入れ、CanIf ソフトウェアフィルタに委ねる。",
     "0x100 (COM データ) と 0x7E0 (UDS 診断) を同時に受信するために必要。",
     "本来は RX バッファごとに mask/filter を設定するが、学習用実装のため省略。"
-  ]
+  ],
+  "fd": {
+    "enabled": false,
+    "dataBitrate": 2000000,
+    "txBitRateSwitch": true,
+    "note": [
+      "CAN FD の設定（AUTOSAR の CanControllerFdBaudrateConfig 相当）。MCP2515 は CAN FD に対応しないため無効。",
+      "MCP2518FD へ載せ替えるときは controller を変更し、enabled を true にする。",
+      "dataBitrate は通常のビットレートの整数倍（データ部のビットレート）。"
+    ]
+  }
 }

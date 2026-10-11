@@ -205,10 +205,23 @@ NvM、WdgM と同じく、信号表とは関係なく、それぞれの JSON だ
 |-----------------|----------------|
 | `csPin`、`intPin` | `Can_Cfg.h` の `CAN_CS_PIN`、`CAN_INT_PIN` |
 | `baudrate`、`crystalMhz`、`filter` | `Can_PBCfg.c` の `Can_Config`（フィルタ、ピン、ボーレート、水晶） |
+| `controller`、`fd` | `Can_Config` の `fdEnabled`、`fdBaudrate`、`txBitRateSwitch`（CAN FD の設定。AUTOSAR の `CanControllerFdBaudrateConfig` / `CanControllerTxBitRateSwitch` 相当） |
 
 - ボーレートと水晶の指定は、`Can_Cfg.h` の `CAN_BAUDRATE_<値>` / `CAN_CRYSTAL_<値>MHZ` に実在する名前でなければなりません。
+- `controller`（`MCP2515` または `MCP2518FD`）に応じて、次を検査します。
+
+  | controller | CAN FD | 使える水晶 [MHz] |
+  |------------|--------|------------------|
+  | `MCP2515` | 非対応（`fd.enabled` を true にするとエラー） | 8、16、20 |
+  | `MCP2518FD` | 対応 | 20、40 |
+
+- `fd.enabled` が true のときは、`fd.dataBitrate`（データ部のビットレート）が、通常のビットレート（`baudrate`）の整数倍でなければなりません。
+  MCP2518FD 用の ACAN2517FD ライブラリは、データ部のビットレートを通常のビットレートの倍率で指定するためです。
+  トランシーバ（ATA6560 など）の上限を超えない値にしてください。上限はデータシートで確認してください。
+- 現行の `Can_Hw`（MCP2515）は `fdEnabled` などの値を参照しません。MCP2518FD の `Can_Hw` を作るときに使う想定の準備です。
 - `Can_Cfg.h` の他の定数（エラーコード、ApiId、ボーレートの数値表など）は手書きのままです。
-- 将来、コントローラを入れ替えるとき（例: CAN FD 対応のコントローラ）の設定項目は、`Can.json` を拡張して足せます。
+- MCP2518FD に載せ替えるときは、`Can.json` の `controller` を `MCP2518FD`、`crystalMhz` を実際の水晶（20 または 40）に変え、
+  `fd.enabled` を true にして `gen_cfg.py` を実行します（ピン番号も新しい配線に合わせて直します）。
 
 どちらも、生成の前後で `FiM_PBCfg.c`・`FiM.c`・`Can_PBCfg.c`・`Can.c` をコンパイルした結果（セクションの内容とリロケーション）が一致することを確認しています。
 
