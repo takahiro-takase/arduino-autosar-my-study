@@ -18,7 +18,7 @@ from tkinter import ttk
 # コンフィグレータ（tools/configurator/）。信号表の変更に合わせて、各モジュールの設定 json の追加と、
 # Cfg ソースの生成を行う。
 CONFIGURATOR_DIR = os.path.normpath(
-    os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "configurator")
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "configurator")
 )
 # 設定データ（config/data/*.json）とそのスキーマ（config/schema/*.schema.json）は、リポジトリ直下の config/ にある
 REPO_ROOT = os.path.normpath(os.path.join(CONFIGURATOR_DIR, "..", ".."))
