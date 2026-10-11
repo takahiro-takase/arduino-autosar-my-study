@@ -16,7 +16,7 @@ import tkinter as tk
 from tkinter import messagebox, ttk
 from typing import Callable
 
-import configurator_panel
+from editors import configurator_panel
 
 # type ごとに保持しうる専用キー。field_detail_text()/_edit_field_detail()/
 # _on_field_cell_commit() の型変更クリーンアップが、この1箇所を共通の情報源とする。
@@ -33,7 +33,7 @@ DIRECTIONS = ["TX", "RX", "TX/RX"]  # Nm 等、自ノード送信・他ノード
 
 DEFAULT_DATA_PATH = os.path.normpath(
     # __file__ は tools/can_signal_editor/src/app.py なので、3階層上がリポジトリルート
-    os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "config", "data", "can_signals.json")
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "..", "config", "data", "can_signals.json")
 )
 
 # (キー, 見出し, 列幅) のリストを唯一の情報源とし、キー一覧・見出し・幅の

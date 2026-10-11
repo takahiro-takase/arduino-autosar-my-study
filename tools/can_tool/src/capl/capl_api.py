@@ -31,7 +31,7 @@ import threading
 import time
 from typing import Callable, Optional
 
-import uds_link
+from uds import uds_link
 
 
 class ScriptAbort(Exception):

@@ -27,9 +27,8 @@ import serial.tools.list_ports
 from Crypto.Cipher import AES
 from Crypto.Hash import CMAC
 
-import capl_api
-import capl_dsl
-import uds_link
+from capl import capl_api, capl_dsl
+from uds import uds_link
 
 
 def parse_payload(items) -> bytes:
@@ -43,14 +42,14 @@ _THIS_DIR = os.path.dirname(os.path.abspath(__file__))
 # 参照）へのパス。3階層上がリポジトリルート
 # （tools/can_signal_editor/src/app.py の DEFAULT_DATA_PATH と同じ規約）。
 DEFAULT_SIGNAL_DEFS_PATH = os.path.normpath(
-    os.path.join(_THIS_DIR, "..", "..", "..", "config", "data", "can_signals.json")
+    os.path.join(_THIS_DIR, "..", "..", "..", "..", "config", "data", "can_signals.json")
 )
 
 # config.json（このツール自身の設定）へのパス。以前は cwd 相対の "config.json" が
 # 既定値で、run.bat の cd /d "%~dp0" に解決を頼っていた。tools/can_tool/（統合
 # ランチャー）は tools/uds_tester/ へ cd しないため、DEFAULT_SIGNAL_DEFS_PATH と
 # 同じ __file__ 基準の絶対パス規約に揃える（単体起動時の挙動は変わらない）。
-DEFAULT_CONFIG_PATH = os.path.normpath(os.path.join(_THIS_DIR, "..", "config.json"))
+DEFAULT_CONFIG_PATH = os.path.normpath(os.path.join(_THIS_DIR, "..", "..", "config.json"))
 
 
 class _Tooltip:
@@ -163,7 +162,7 @@ class UdsTesterFrame(ttk.Frame):
         log_dir_cfg = self.cfg.get("serial", {}).get("log_dir", "logs")
         self.serial_log_dir = (
             os.path.normpath(log_dir_cfg) if os.path.isabs(log_dir_cfg)
-            else os.path.normpath(os.path.join(_THIS_DIR, "..", log_dir_cfg))
+            else os.path.normpath(os.path.join(_THIS_DIR, "..", "..", log_dir_cfg))
         )
         # CanSM/EcuM の最新状態表示用 StringVar（ログ行から正規表現で抽出、
         # _parse_serial_state 参照）。tk.StringVar は Tk ルート作成後にしか

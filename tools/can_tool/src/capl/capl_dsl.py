@@ -143,7 +143,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Optional, Union
 
-import capl_api
+from capl import capl_api
 
 ArgValue = Union[int, float, str]
 

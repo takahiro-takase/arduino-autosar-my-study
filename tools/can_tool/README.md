@@ -35,6 +35,16 @@ Windows で `pip install` 済みなら `tools/can_tool/run.bat` をダブルク�
 実行するだけの薄いランチャーです）。ウィンドウの左側に縦に並んだ一覧（ナビゲーション）があり、
 `Tester`（UDS Tester）、`Signals`（信号定義エディタ）、設定 JSON の各モジュール（`Com`、`PduR`、`CanIf` など）を選んで切り替えます。
 
+ソース（`src/`）は機能ごとのフォルダに分かれています。
+
+```
+src/
+├── app.py                     起動点（左側のナビゲーションと各ページの組み立て）
+├── uds/                       UDS 診断（uds_link.py: ISO-TP の送受信、uds_tester_app.py: ボタン送信 GUI）
+├── capl/                      CAPL 風スクリプト（capl_api.py: Python API、capl_dsl.py: 独自 DSL）
+└── editors/                   信号定義エディタ、設定 JSON エディタ、コンフィグレータの実行パネル
+```
+
 接続先は「CAN 接続」パネルの `interface` / `channel` / `bitrate` で指定します
 （既定値は `config.json` の `can` セクション）。CANable / candleLight 互換
 アダプタの場合は `interface=gs_usb`, `channel=0`。SLCAN 系の COM ポートアダプタ
@@ -162,13 +172,13 @@ BswM       モード管理
 近い書き味で一連の手順をスクリプトとして書ける機能を用意しています。GUI の
 「スクリプト実行...」ボタンからファイルを選択するとバックグラウンドスレッドで
 実行されます（Connect 済みの `bus` をそのまま使用）。「停止」ボタンで途中中断
-できます。拡張子で以下の2種類を自動判別します（どちらも `tools/can_tool/src/capl_api.py`
+できます。拡張子で以下の2種類を自動判別します（どちらも `tools/can_tool/src/capl/capl_api.py`
 の `CaplContext` を実行時のランタイムとして共通で使うため、送受信の挙動は揃っています）。
 
 **`.py`（Python 構文、`capl_api.py`）**
 
 ファイルの内容をそのまま `exec()` する方式。Python 構文ですが、
-`tools/can_tool/src/capl_api.py` が公開する以下の関数だけを使えば CAPL に近い
+`tools/can_tool/src/capl/capl_api.py` が公開する以下の関数だけを使えば CAPL に近い
 書き味で書けます。
 
 | 関数 | 説明 |
@@ -186,7 +196,7 @@ BswM       モード管理
 Python の全機能（if/while/変数等）が使えるため、複雑な分岐が必要な場合はこちらが
 向いています。
 
-**`.capl`（CAPL 風の独自 DSL、`tools/can_tool/src/capl_dsl.py`）**
+**`.capl`（CAPL 風の独自 DSL、`tools/can_tool/src/capl/capl_dsl.py`）**
 
 `on start`/`on timer`/`on message` という実際の CAPL に近いイベント構文に加えて、
 `variables { }` での変数宣言 (`byte`/`int`/`float`/`word` 配列、`byte`/`word` スカラーの

@@ -20,10 +20,8 @@ import tkinter as tk
 from tkinter import messagebox, ttk
 from typing import NamedTuple
 
-import can_signal_editor_app
-import config_editor_app
-import configurator_panel
-import uds_tester_app
+from editors import can_signal_editor_app, config_editor_app, configurator_panel
+from uds import uds_tester_app
 
 NAV_WIDTH = 190  # 左側のナビゲーションの幅 [px]
 SEPARATOR = "─" * 12

@@ -24,7 +24,7 @@ from typing import Any, Callable
 
 import jsonschema
 
-import configurator_panel
+from editors import configurator_panel
 
 SCALAR_KINDS = ("string", "integer", "number", "boolean", "enum", "const", "union")
 KIND_LABEL = {
