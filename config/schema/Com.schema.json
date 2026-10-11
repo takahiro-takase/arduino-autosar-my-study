@@ -117,14 +117,13 @@
     "signal": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["name", "title", "macro", "direction", "ipdu", "field", "idDoc"],
+      "required": ["name", "title", "direction", "ipdu", "field", "idDoc"],
       "properties": {
-        "name": { "$ref": "#/$defs/shortName", "description": "ComSignal の ShortName" },
+        "name": { "$ref": "#/$defs/shortName", "description": "ComSignal の ShortName。シグナル ID のシンボリック名 ComConf_ComSignal_<name> になる（値は signals の並び順）" },
         "title": { "$ref": "#/$defs/text" },
         "headNote": { "$ref": "#/$defs/commentLines" },
         "note": { "$ref": "#/$defs/commentLines" },
-        "idDoc": { "$ref": "#/$defs/commentLines", "description": "Com_Cfg.h のシグナル ID マクロの説明" },
-        "macro": { "$ref": "#/$defs/cName", "description": "Com_Cfg.h のシグナル ID マクロ名。値は signals の並び順（添字）" },
+        "idDoc": { "$ref": "#/$defs/commentLines", "description": "Com_Cfg.h のシグナル ID（ComConf_ComSignal_<name>）の説明" },
         "direction": { "enum": ["RX", "TX"] },
         "ipdu": { "$ref": "#/$defs/shortName", "description": "所属する I-PDU の name" },
         "field": { "$ref": "#/$defs/text", "description": "信号表のフィールド名（ビット位置・ビット長をここから引く）" },

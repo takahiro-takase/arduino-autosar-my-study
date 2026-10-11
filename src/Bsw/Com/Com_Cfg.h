@@ -10,7 +10,7 @@
  *          シグナル ID は RTE と COM の間の「インタフェース契約」であり、
  *          このファイルを唯一の定義箇所とする。
  *          Rte.c は RTE_SIGNAL_* を独自定義せず、このファイルをインクルード
- *          して COM_SIGNAL_* を参照することで ID の重複定義を防ぐ。
+ *          して ComConf_ComSignal_*（シンボリック名）を参照することで ID の重複定義を防ぐ。
  *
  *          DaVinci 対応:
  *            本ファイルは /ActiveEcuC/Com/ComConfig の
@@ -279,77 +279,6 @@
 #define COM_TX_REPETITION_PERIOD_IMMOBILIZERSTATUS_MS  100U
 /* @@GEN-END com-counts */
 
-/* -----------------------------------------------------------------------
- * シグナル ID 定数
- * DaVinci: /ActiveEcuC/Com/ComConfig/[ComSignal]/ComHandleId に相当
- * Com_ReceiveSignal() / Com_SendSignal() の第 1 引数として使用する。
- * RTE は RTE_SIGNAL_* を独自定義せず、これらの定数を参照すること。
- * ----------------------------------------------------------------------- */
-/* @@GEN-BEGIN com-signal-ids  生成元: config/data/Com.json  （自動生成: 手編集禁止） */
-/** RX: エンジン回転数シグナル (16 bit, CAN ID 0x100, byte[0-1]) */
-#define COM_SIGNAL_ENGINE_SPEED  0U
-
-/** RX: 冷却水温シグナル (8 bit, CAN ID 0x100, byte[2]) */
-#define COM_SIGNAL_COOLANT_TEMP  1U
-
-/** RX: エンジン起動フラグシグナル (1 bit, CAN ID 0x100, byte[3] bit7) */
-#define COM_SIGNAL_ENGINE_ON_FLAG  2U
-
-/** TX: エンジン状態シグナル (8 bit, CAN ID 0x200, byte[0]) */
-#define COM_SIGNAL_ENGINE_STATE  3U
-
-/** RX: 車速シグナル (16 bit, CAN ID 0x110, byte[0-1], 0.01 km/h) */
-#define COM_SIGNAL_VEHICLE_SPEED  4U
-
-/** RX: ブレーキ作動フラグ (1 bit, CAN ID 0x110, byte[2] bit7, 0=解除/1=作動) */
-#define COM_SIGNAL_BRAKE_ACTIVE  5U
-
-/** RX: ABS 作動フラグ (1 bit, CAN ID 0x110, byte[2] bit6, 0=非作動/1=作動) */
-#define COM_SIGNAL_ABS_ACTIVE  6U
-
-/** TX: RUNNING LED 状態 (1 bit, CAN ID 0x210, byte[0] bit7) */
-#define COM_SIGNAL_RUN_LAMP  7U
-
-/** TX: FAULT LED 状態 (1 bit, CAN ID 0x210, byte[0] bit6) */
-#define COM_SIGNAL_FAULT_LAMP  8U
-
-/** TX: ABS LED 状態 (1 bit, CAN ID 0x210, byte[0] bit5) */
-#define COM_SIGNAL_ABS_LAMP  9U
-
-/** TX: E2E CRC 不一致累積数 (8 bit, CAN ID 0x220, byte[0]、0-255 で飽和) */
-#define COM_SIGNAL_E2E_CRC_ERR_COUNT  10U
-
-/** TX: E2E シーケンス異常累積数 (8 bit, CAN ID 0x220, byte[1]、0-255 で飽和) */
-#define COM_SIGNAL_E2E_SEQ_ERR_COUNT  11U
-
-/** RX: イモビライザー解除コマンド (8 bit, CAN ID 0x120, byte[0]、
- *  0x00=LOCK/0x01=UNLOCK。SecOC 検証成功後のみ更新される） */
-#define COM_SIGNAL_IMMOBILIZER_CMD  12U
-
-/** TX: イモビライザー状態ブロードキャスト (8 bit, CAN ID 0x230, byte[0]) */
-#define COM_SIGNAL_IMMOBILIZER_STATUS  13U
-
-/** TX: エンジン回転数ミラー (16 bit, CAN ID 0x200, byte[3-4]、EngineInfoの
- *  検証済みEngineSpeedと同一値・同一単位) */
-#define COM_SIGNAL_METER_ENGINE_SPEED  14U
-
-/** TX: RUNNING LED 状態ミラー (1 bit, CAN ID 0x200, byte[2] bit0) */
-#define COM_SIGNAL_METER_RUN_LAMP  15U
-
-/** TX: FAULT LED 状態ミラー (1 bit, CAN ID 0x200, byte[2] bit1) */
-#define COM_SIGNAL_METER_FAULT_LAMP  16U
-
-/** TX: ABS LED 状態ミラー (1 bit, CAN ID 0x200, byte[2] bit2) */
-#define COM_SIGNAL_METER_ABS_LAMP  17U
-
-/** TX: 冷却水温ミラー (8 bit, CAN ID 0x200, byte[5]、EngineInfoの
- *  検証済みCoolantTempと同一値・同一単位) */
-#define COM_SIGNAL_METER_COOLANT_TEMP  18U
-
-/** TX: TestCounter (8 bit, CAN ID 0x300, bit 0) */
-#define COM_SIGNAL_TEST_MSG_TEST_COUNTER  19U
-/* @@GEN-END com-signal-ids */
-
 /* @@GEN-BEGIN com-symbols  生成元: config/data/Com.json  （自動生成: 手編集禁止） */
 /* シンボリック名: ComConf_<コンテナ定義>_<name>（値は各テーブルの添字）。PduR などの下位層が参照する。 */
 #define ComConf_ComIPdu_EngineInfo_Rx                        0U
@@ -362,45 +291,67 @@
 #define ComConf_ComIPdu_ImmobilizerStatus_Tx                 3U
 #define ComConf_ComIPdu_TestMsg_Tx                           4U
 
-/* cppcheck-suppress misra-c2012-2.5 */
+/** RX: エンジン回転数シグナル (16 bit, CAN ID 0x100, byte[0-1]) */
 #define ComConf_ComSignal_EngineSpeed_Rx                     0U
-/* cppcheck-suppress misra-c2012-2.5 */
+
+/** RX: 冷却水温シグナル (8 bit, CAN ID 0x100, byte[2]) */
 #define ComConf_ComSignal_CoolantTemp_Rx                     1U
-/* cppcheck-suppress misra-c2012-2.5 */
+
+/** RX: エンジン起動フラグシグナル (1 bit, CAN ID 0x100, byte[3] bit7) */
 #define ComConf_ComSignal_EngineOnFlag_Rx                    2U
-/* cppcheck-suppress misra-c2012-2.5 */
+
+/** TX: エンジン状態シグナル (8 bit, CAN ID 0x200, byte[0]) */
 #define ComConf_ComSignal_EngineState_Tx                     3U
-/* cppcheck-suppress misra-c2012-2.5 */
+
+/** RX: 車速シグナル (16 bit, CAN ID 0x110, byte[0-1], 0.01 km/h) */
 #define ComConf_ComSignal_VehicleSpeed_Rx                    4U
-/* cppcheck-suppress misra-c2012-2.5 */
+
+/** RX: ブレーキ作動フラグ (1 bit, CAN ID 0x110, byte[2] bit7, 0=解除/1=作動) */
 #define ComConf_ComSignal_BrakeActive_Rx                     5U
-/* cppcheck-suppress misra-c2012-2.5 */
+
+/** RX: ABS 作動フラグ (1 bit, CAN ID 0x110, byte[2] bit6, 0=非作動/1=作動) */
 #define ComConf_ComSignal_AbsActive_Rx                       6U
-/* cppcheck-suppress misra-c2012-2.5 */
+
+/** TX: RUNNING LED 状態 (1 bit, CAN ID 0x210, byte[0] bit7) */
 #define ComConf_ComSignal_RunLamp_Tx                         7U
-/* cppcheck-suppress misra-c2012-2.5 */
+
+/** TX: FAULT LED 状態 (1 bit, CAN ID 0x210, byte[0] bit6) */
 #define ComConf_ComSignal_FaultLamp_Tx                       8U
-/* cppcheck-suppress misra-c2012-2.5 */
+
+/** TX: ABS LED 状態 (1 bit, CAN ID 0x210, byte[0] bit5) */
 #define ComConf_ComSignal_AbsLamp_Tx                         9U
-/* cppcheck-suppress misra-c2012-2.5 */
+
+/** TX: E2E CRC 不一致累積数 (8 bit, CAN ID 0x220, byte[0]、0-255 で飽和) */
 #define ComConf_ComSignal_E2ECrcErrCount_Tx                 10U
-/* cppcheck-suppress misra-c2012-2.5 */
+
+/** TX: E2E シーケンス異常累積数 (8 bit, CAN ID 0x220, byte[1]、0-255 で飽和) */
 #define ComConf_ComSignal_E2ESeqErrCount_Tx                 11U
-/* cppcheck-suppress misra-c2012-2.5 */
+
+/** RX: イモビライザー解除コマンド (8 bit, CAN ID 0x120, byte[0]、
+ *  0x00=LOCK/0x01=UNLOCK。SecOC 検証成功後のみ更新される） */
 #define ComConf_ComSignal_ImmobilizerCmd_Rx                 12U
-/* cppcheck-suppress misra-c2012-2.5 */
+
+/** TX: イモビライザー状態ブロードキャスト (8 bit, CAN ID 0x230, byte[0]) */
 #define ComConf_ComSignal_ImmobilizerStatus_Tx              13U
-/* cppcheck-suppress misra-c2012-2.5 */
+
+/** TX: エンジン回転数ミラー (16 bit, CAN ID 0x200, byte[3-4]、EngineInfoの
+ *  検証済みEngineSpeedと同一値・同一単位) */
 #define ComConf_ComSignal_MeterStatus_EngineSpeedMirror_Tx  14U
-/* cppcheck-suppress misra-c2012-2.5 */
+
+/** TX: RUNNING LED 状態ミラー (1 bit, CAN ID 0x200, byte[2] bit0) */
 #define ComConf_ComSignal_MeterStatus_RunLampMirror_Tx      15U
-/* cppcheck-suppress misra-c2012-2.5 */
+
+/** TX: FAULT LED 状態ミラー (1 bit, CAN ID 0x200, byte[2] bit1) */
 #define ComConf_ComSignal_MeterStatus_FaultLampMirror_Tx    16U
-/* cppcheck-suppress misra-c2012-2.5 */
+
+/** TX: ABS LED 状態ミラー (1 bit, CAN ID 0x200, byte[2] bit2) */
 #define ComConf_ComSignal_MeterStatus_AbsLampMirror_Tx      17U
-/* cppcheck-suppress misra-c2012-2.5 */
+
+/** TX: 冷却水温ミラー (8 bit, CAN ID 0x200, byte[5]、EngineInfoの
+ *  検証済みCoolantTempと同一値・同一単位) */
 #define ComConf_ComSignal_MeterStatus_CoolantTempMirror_Tx  18U
-/* cppcheck-suppress misra-c2012-2.5 */
+
+/** TX: TestCounter (8 bit, CAN ID 0x300, bit 0) */
 #define ComConf_ComSignal_TestMsg_TestCounter_Tx            19U
 /* @@GEN-END com-symbols */
 

@@ -688,7 +688,6 @@
         "（byte[0-1]=E2E CRC16, byte[2]=E2E Counter を先頭に配置する",
         "E2E Profile05 のヘッダレイアウトのため、シグナルは byte[3] から）"
       ],
-      "macro": "COM_SIGNAL_ENGINE_SPEED",
       "direction": "RX",
       "filterAlgorithm": "COM_FILTER_NEW_IS_WITHIN",
       "filterMax": 8000,
@@ -749,7 +748,6 @@
         "参照。割り込み禁止区間からの直接呼び出しで WDT リセットを起こした",
         "実機障害の教訓）。"
       ],
-      "macro": "COM_SIGNAL_COOLANT_TEMP",
       "direction": "RX",
       "dataInvalidAction": "COM_DATA_INVALID_ACTION_NOTIFY",
       "invalidValue": 255,
@@ -793,7 +791,6 @@
         "Com_CbkRxTOut 相当）: 上の FirstTimeoutMs/TimeoutMs（シグナル",
         "単位、EngineInfo と同値）を新規に超過した瞬間に1回だけ呼ばれる。"
       ],
-      "macro": "COM_SIGNAL_ENGINE_ON_FLAG",
       "direction": "RX",
       "firstTimeoutMs": "COM_TIMEOUT_ENGINE_INFO_MS",
       "timeoutMs": "COM_TIMEOUT_ENGINE_INFO_MS",
@@ -829,7 +826,6 @@
         "に届かなかった場合に呼ばれる。実機で発動する経路は無い",
         "（docs/modules/Com_Notes.md 参照）。"
       ],
-      "macro": "COM_SIGNAL_ENGINE_STATE",
       "direction": "TX",
       "filterAlgorithm": "COM_FILTER_MASKED_NEW_DIFFERS_MASKED_OLD",
       "mask": 255,
@@ -902,7 +898,6 @@
         "（Com_IPduConfigType 側、グループの deadline）が使われる",
         "（Com_Types.h の Com_SignalConfigType 宣言コメント参照）。"
       ],
-      "macro": "COM_SIGNAL_VEHICLE_SPEED",
       "direction": "RX",
       "rxDataTimeoutAction": "COM_RX_TIMEOUT_ACTION_SUBSTITUTE",
       "timeoutSubstitutionValue": 65535,
@@ -929,7 +924,6 @@
       "note": [
         "RX Signal Group（AbsInfo_Rx）メンバー。VehicleSpeed と同様。"
       ],
-      "macro": "COM_SIGNAL_BRAKE_ACTIVE",
       "direction": "RX",
       "ipdu": "AbsInfo_Rx",
       "field": "BrakeActive",
@@ -946,7 +940,6 @@
       "note": [
         "RX Signal Group（AbsInfo_Rx）メンバー。VehicleSpeed と同様。"
       ],
-      "macro": "COM_SIGNAL_ABS_ACTIVE",
       "direction": "RX",
       "ipdu": "AbsInfo_Rx",
       "field": "AbsActive",
@@ -961,7 +954,6 @@
         "ComTransferProperty=TRIGGERED_ON_CHANGE: 自身の点灯/消灯だけで",
         "WarningStatus の送信を引き起こす（他の灯の変化を待たない）。"
       ],
-      "macro": "COM_SIGNAL_RUN_LAMP",
       "direction": "TX",
       "transferProperty": "COM_TRANSFER_PROPERTY_TRIGGERED_ON_CHANGE",
       "comments": {
@@ -984,7 +976,6 @@
         "ComTransferProperty=TRIGGERED_ON_CHANGE: TMS 判定（FilterAlgorithm）",
         "とは独立に、自身の点灯/消灯だけで送信も引き起こす。"
       ],
-      "macro": "COM_SIGNAL_FAULT_LAMP",
       "direction": "TX",
       "filterAlgorithm": "COM_FILTER_MASKED_NEW_DIFFERS_X",
       "mask": 1,
@@ -1011,7 +1002,6 @@
         "TMS 寄与シグナル: FaultLamp と同様（値=1 で WarningStatus の TMS を true に）。",
         "ComTransferProperty=TRIGGERED_ON_CHANGE: FaultLamp と同様。"
       ],
-      "macro": "COM_SIGNAL_ABS_LAMP",
       "direction": "TX",
       "filterAlgorithm": "COM_FILTER_MASKED_NEW_DIFFERS_X",
       "mask": 1,
@@ -1038,7 +1028,6 @@
         "（byte[0-1]=E2E CRC16, byte[2]=E2E Counter を先頭に配置する",
         "E2E Profile05 標準レイアウトのため、シグナルは byte[3] から）"
       ],
-      "macro": "COM_SIGNAL_E2E_CRC_ERR_COUNT",
       "direction": "TX",
       "ipdu": "E2EHealthStatus_Tx",
       "field": "E2ECrcErrCount",
@@ -1049,7 +1038,6 @@
     {
       "name": "E2ESeqErrCount_Tx",
       "title": "E2ESeqErrCount  TX 8bit  CAN 0x220 byte[4]",
-      "macro": "COM_SIGNAL_E2E_SEQ_ERR_COUNT",
       "direction": "TX",
       "ipdu": "E2EHealthStatus_Tx",
       "field": "E2ESeqErrCount",
@@ -1065,7 +1053,6 @@
         "Com_RxIndication() 経由で更新される（IPduId=2、SecureCommand_Rx 参照）。",
         "0x00=LOCK, 0x01=UNLOCK。"
       ],
-      "macro": "COM_SIGNAL_IMMOBILIZER_CMD",
       "direction": "RX",
       "ipdu": "SecureCommand_Rx",
       "field": "ImmobilizerCmd",
@@ -1082,7 +1069,6 @@
         "このシグナルへ一切書き込まない（Com_SendSignal() を呼ぶのは",
         "Com_GatewayRoute() のみ）。"
       ],
-      "macro": "COM_SIGNAL_IMMOBILIZER_STATUS",
       "direction": "TX",
       "filterAlgorithm": "COM_FILTER_MASKED_NEW_DIFFERS_MASKED_OLD",
       "mask": 255,
@@ -1109,7 +1095,6 @@
         "App_EngineManager が EngineInfo(RX) の検証済み EngineSpeed を",
         "そのままミラー送信する（uds_tester の仮想メータ表示タブ向け）。"
       ],
-      "macro": "COM_SIGNAL_METER_ENGINE_SPEED",
       "direction": "TX",
       "filterAlgorithm": "COM_FILTER_MASKED_NEW_DIFFERS_MASKED_OLD",
       "mask": 65535,
@@ -1148,7 +1133,6 @@
         "WarningStatus の Signal 7(RunLamp) と同じ値を App_WarningIndicator",
         "がミラー送信する（uds_tester の仮想メータ表示タブ向け）。"
       ],
-      "macro": "COM_SIGNAL_METER_RUN_LAMP",
       "direction": "TX",
       "filterAlgorithm": "COM_FILTER_MASKED_NEW_DIFFERS_MASKED_OLD",
       "mask": 1,
@@ -1182,7 +1166,6 @@
       "note": [
         "WarningStatus の Signal 8(FaultLamp) と同じ値のミラー。"
       ],
-      "macro": "COM_SIGNAL_METER_FAULT_LAMP",
       "direction": "TX",
       "filterAlgorithm": "COM_FILTER_MASKED_NEW_DIFFERS_MASKED_OLD",
       "mask": 1,
@@ -1218,7 +1201,6 @@
       "note": [
         "WarningStatus の Signal 9(AbsLamp) と同じ値のミラー。"
       ],
-      "macro": "COM_SIGNAL_METER_ABS_LAMP",
       "direction": "TX",
       "filterAlgorithm": "COM_FILTER_MASKED_NEW_DIFFERS_MASKED_OLD",
       "mask": 1,
@@ -1260,7 +1242,6 @@
         "双方で使うことで、メータ側も「センサ値が信頼できない」ことを",
         "上位（uds_tester 等）へそのまま伝播できる）。"
       ],
-      "macro": "COM_SIGNAL_METER_COOLANT_TEMP",
       "direction": "TX",
       "filterAlgorithm": "COM_FILTER_MASKED_NEW_DIFFERS_MASKED_OLD",
       "mask": 255,
@@ -1301,7 +1282,6 @@
     {
       "name": "TestMsg_TestCounter_Tx",
       "title": "TestCounter  TX 8bit  CAN 0x300 bit0",
-      "macro": "COM_SIGNAL_TEST_MSG_TEST_COUNTER",
       "direction": "TX",
       "ipdu": "TestMsg_Tx",
       "field": "TestCounter",

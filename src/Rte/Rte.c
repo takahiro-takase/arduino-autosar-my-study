@@ -53,7 +53,7 @@
  * Global Variables
  * ====================================================================== */
 
-/* シグナル ID は Com_Cfg.h の COM_SIGNAL_* を使用（重複定義を排除） */
+/* シグナル ID は Com_Cfg.h の ComConf_ComSignal_*（シンボリック名）を使用（重複定義を排除） */
 
 /* EngineState の内部ミラー変数。
  * Rte_Write_EngineStatus_EngineState() が書き込み、
@@ -310,7 +310,7 @@ Std_ReturnType Rte_Write_EngineStatus_EngineState(EngineState_t state)
     Rte_EngineStateMirror = state;
     SchM_Exit_Rte_MIRROR_EXCLUSIVE_AREA();
     uint8 val = (uint8)state;
-    return Com_SendSignal(COM_SIGNAL_ENGINE_STATE, &val);
+    return Com_SendSignal(ComConf_ComSignal_EngineState_Tx, &val);
 }
 
 /**
@@ -339,7 +339,7 @@ Std_ReturnType Rte_Write_EngineStatus_EngineState(EngineState_t state)
  */
 Std_ReturnType Rte_Write_WarningStatus_RunLamp(uint8 level)
 {
-    return Com_SendSignal(COM_SIGNAL_RUN_LAMP, &level);
+    return Com_SendSignal(ComConf_ComSignal_RunLamp_Tx, &level);
 }
 
 /**
@@ -362,7 +362,7 @@ Std_ReturnType Rte_Write_WarningStatus_RunLamp(uint8 level)
  */
 Std_ReturnType Rte_Write_WarningStatus_FaultLamp(uint8 level)
 {
-    return Com_SendSignal(COM_SIGNAL_FAULT_LAMP, &level);
+    return Com_SendSignal(ComConf_ComSignal_FaultLamp_Tx, &level);
 }
 
 /**
@@ -385,7 +385,7 @@ Std_ReturnType Rte_Write_WarningStatus_FaultLamp(uint8 level)
  */
 Std_ReturnType Rte_Write_WarningStatus_AbsLamp(uint8 level)
 {
-    return Com_SendSignal(COM_SIGNAL_ABS_LAMP, &level);
+    return Com_SendSignal(ComConf_ComSignal_AbsLamp_Tx, &level);
 }
 
 /**
@@ -415,7 +415,7 @@ Std_ReturnType Rte_Write_WarningStatus_AbsLamp(uint8 level)
  */
 Std_ReturnType Rte_Write_MeterStatus_EngineSpeed(EngineSpeed_t speed)
 {
-    return Com_SendSignal(COM_SIGNAL_METER_ENGINE_SPEED, &speed);
+    return Com_SendSignal(ComConf_ComSignal_MeterStatus_EngineSpeedMirror_Tx, &speed);
 }
 
 /**
@@ -440,7 +440,7 @@ Std_ReturnType Rte_Write_MeterStatus_EngineSpeed(EngineSpeed_t speed)
  */
 Std_ReturnType Rte_Write_MeterStatus_RunLamp(uint8 level)
 {
-    return Com_SendSignal(COM_SIGNAL_METER_RUN_LAMP, &level);
+    return Com_SendSignal(ComConf_ComSignal_MeterStatus_RunLampMirror_Tx, &level);
 }
 
 /**
@@ -464,7 +464,7 @@ Std_ReturnType Rte_Write_MeterStatus_RunLamp(uint8 level)
  */
 Std_ReturnType Rte_Write_MeterStatus_FaultLamp(uint8 level)
 {
-    return Com_SendSignal(COM_SIGNAL_METER_FAULT_LAMP, &level);
+    return Com_SendSignal(ComConf_ComSignal_MeterStatus_FaultLampMirror_Tx, &level);
 }
 
 /**
@@ -488,7 +488,7 @@ Std_ReturnType Rte_Write_MeterStatus_FaultLamp(uint8 level)
  */
 Std_ReturnType Rte_Write_MeterStatus_AbsLamp(uint8 level)
 {
-    return Com_SendSignal(COM_SIGNAL_METER_ABS_LAMP, &level);
+    return Com_SendSignal(ComConf_ComSignal_MeterStatus_AbsLampMirror_Tx, &level);
 }
 
 /**
@@ -514,7 +514,7 @@ Std_ReturnType Rte_Write_MeterStatus_AbsLamp(uint8 level)
  */
 Std_ReturnType Rte_Write_MeterStatus_CoolantTemp(CoolantTemp_t temp)
 {
-    return Com_SendSignal(COM_SIGNAL_METER_COOLANT_TEMP, &temp);
+    return Com_SendSignal(ComConf_ComSignal_MeterStatus_CoolantTempMirror_Tx, &temp);
 }
 
 /* @@GEN-BEGIN rte-signal-api  生成元: config/data/Rte.json  （自動生成: 手編集禁止） */
@@ -522,7 +522,7 @@ Std_ReturnType Rte_Write_MeterStatus_CoolantTemp(CoolantTemp_t temp)
  * \brief   TestMsg 提供ポートへ TestCounter シグナルを書き込む。
  *
  * \details 信号表（TestMsg, CAN 0x300）から生成した送信ポート。
- *          Com_SendSignal(COM_SIGNAL_TEST_MSG_TEST_COUNTER) へ委譲するだけ。
+ *          Com_SendSignal(ComConf_ComSignal_TestMsg_TestCounter_Tx) へ委譲するだけ。
  *
  * \param[in]  value  TestCounter の値（8 bit）。
  *
@@ -537,7 +537,7 @@ Std_ReturnType Rte_Write_MeterStatus_CoolantTemp(CoolantTemp_t temp)
  */
 Std_ReturnType Rte_Write_TestMsg_TestCounter(uint8 value)
 {
-    return Com_SendSignal(COM_SIGNAL_TEST_MSG_TEST_COUNTER, &value);
+    return Com_SendSignal(ComConf_ComSignal_TestMsg_TestCounter_Tx, &value);
 }
 /* @@GEN-END rte-signal-api */
 
@@ -553,7 +553,7 @@ Std_ReturnType Rte_Write_TestMsg_TestCounter(uint8 value)
  *          （Com_InvalidateSignal() へ委譲、2026-08 追加）。
  *          Rte_COMCbkInv_CoolantTemp() から呼ばれる（同関数の
  *          Doxygen コメント参照）。他の Rte_Write_<Port>_<Signal>() と同じく、
- *          呼び出し元が生の COM_SIGNAL_* 定数を直接扱わずに済むようにする。
+ *          呼び出し元が生の ComConf_ComSignal_* を直接扱わずに済むようにする。
  *
  * \retval  E_OK      COM の実 TX バッファへ無効値を正常に反映した。
  * \retval  E_NOT_OK  COM 未初期化、シグナル ID が見つからない、または
@@ -569,7 +569,7 @@ Std_ReturnType Rte_Write_TestMsg_TestCounter(uint8 value)
  */
 uint8 Rte_Invalidate_MeterStatus_CoolantTemp(void)
 {
-    return Com_InvalidateSignal(COM_SIGNAL_METER_COOLANT_TEMP);
+    return Com_InvalidateSignal(ComConf_ComSignal_MeterStatus_CoolantTempMirror_Tx);
 }
 
 /* -----------------------------------------------------------------------
@@ -1266,7 +1266,7 @@ void Rte_COMCbkTAck_EngineState(void)
  * \details Com_PBCfg.c の CoolantTemp シグナル設定（DataInvalidAction=
  *          COM_DATA_INVALID_ACTION_NOTIFY）から InvalidNotificationCbk として
  *          登録される（実 AUTOSAR の ComInvalidNotification、ECUC_Com_00315
- *          相当）。Com_ReceiveSignal(COM_SIGNAL_COOLANT_TEMP, ...) が受信値と
+ *          相当）。Com_ReceiveSignal(ComConf_ComSignal_CoolantTemp_Rx, ...) が受信値と
  *          InvalidValue の一致を検知した「次回」の Com_MainFunctionRx() から
  *          呼ばれる（SWS_Com_00680/00717。同期呼び出しにしていない理由は
  *          Com.c の Com_RxInvalidNotifyPending 宣言コメント参照 — この関数が
@@ -1715,9 +1715,9 @@ void Rte_COMRxInd_EngineInfo(void)
     }
 
     SchM_Enter_Rte_MIRROR_EXCLUSIVE_AREA();
-    (void)Com_ReceiveSignal(COM_SIGNAL_ENGINE_SPEED,   &Rte_EngineInfoMirror.speed);
-    (void)Com_ReceiveSignal(COM_SIGNAL_COOLANT_TEMP,   &Rte_EngineInfoMirror.temp);
-    (void)Com_ReceiveSignal(COM_SIGNAL_ENGINE_ON_FLAG, &Rte_EngineInfoMirror.onFlag);
+    (void)Com_ReceiveSignal(ComConf_ComSignal_EngineSpeed_Rx,   &Rte_EngineInfoMirror.speed);
+    (void)Com_ReceiveSignal(ComConf_ComSignal_CoolantTemp_Rx,   &Rte_EngineInfoMirror.temp);
+    (void)Com_ReceiveSignal(ComConf_ComSignal_EngineOnFlag_Rx, &Rte_EngineInfoMirror.onFlag);
     SchM_Exit_Rte_MIRROR_EXCLUSIVE_AREA();
 }
 
@@ -1765,9 +1765,9 @@ void Rte_COMRxInd_AbsInfo(void)
 
     SchM_Enter_Rte_MIRROR_EXCLUSIVE_AREA();
     (void)Com_ReceiveSignalGroup(1U);
-    (void)Com_ReceiveSignal(COM_SIGNAL_VEHICLE_SPEED, &Rte_AbsInfoMirror.speed);
-    (void)Com_ReceiveSignal(COM_SIGNAL_BRAKE_ACTIVE,  &Rte_AbsInfoMirror.brake);
-    (void)Com_ReceiveSignal(COM_SIGNAL_ABS_ACTIVE,    &Rte_AbsInfoMirror.abs);
+    (void)Com_ReceiveSignal(ComConf_ComSignal_VehicleSpeed_Rx, &Rte_AbsInfoMirror.speed);
+    (void)Com_ReceiveSignal(ComConf_ComSignal_BrakeActive_Rx,  &Rte_AbsInfoMirror.brake);
+    (void)Com_ReceiveSignal(ComConf_ComSignal_AbsActive_Rx,    &Rte_AbsInfoMirror.abs);
     SchM_Exit_Rte_MIRROR_EXCLUSIVE_AREA();
 }
 
@@ -1800,7 +1800,7 @@ void Rte_COMRxInd_AbsInfo(void)
 void Rte_COMRxInd_SecureCommand(void)
 {
     uint8 cmd = 0U;
-    if (Com_ReceiveSignal(COM_SIGNAL_IMMOBILIZER_CMD, &cmd) != E_OK)
+    if (Com_ReceiveSignal(ComConf_ComSignal_ImmobilizerCmd_Rx, &cmd) != E_OK)
     {
         return;
     }
@@ -1862,7 +1862,7 @@ void Rte_COMTransform_E2EHealthStatus(uint8* Data, uint8 Length)
  * \details Com_PBCfg.c の EngineSpeed シグナル設定（FilterAlgorithm=
  *          COM_FILTER_NEW_IS_WITHIN）から FilterRejectCbk として登録される
  *          （実 AUTOSAR の ComNotification 相当）。Com_ReceiveSignal(
- *          COM_SIGNAL_ENGINE_SPEED, ...) が範囲外の値を検知した「次回」の
+ *          ComConf_ComSignal_EngineSpeed_Rx, ...) が範囲外の値を検知した「次回」の
  *          Com_MainFunctionRx() から呼ばれる（SWS_Com_00273。Rte_COMCbkInv_
  *          CoolantTemp と同じ理由で同期呼び出しにしていない。Com.c の
  *          Com_RxFilterRejectPending 宣言コメント参照）。この関数自体は

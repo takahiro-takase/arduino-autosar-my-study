@@ -489,7 +489,7 @@ static const Com_IPduConfigType Com_TxIPduConfigData[COM_TX_IPDU_COUNT] = {
  * シグナルテーブル（RX + TX 共通）
  * DaVinci: /ActiveEcuC/Com/ComConfig/[ComSignal]
  * Com_ReceiveSignal() / Com_SendSignal() がビットパック・アンパックに使用する。
- * シグナル ID は Com_Cfg.h の COM_SIGNAL_* 定数と対応している。
+ * シグナル ID は Com_Cfg.h の ComConf_ComSignal_*（シンボリック名）と対応している。
  *
  * ComBitPosition の数え方（BigEndian/OPAQUE）:
  *   byte[0] の MSB = ビット位置 0、byte[0] の LSB = ビット位置 7
@@ -503,29 +503,29 @@ static const Com_SignalConfigType Com_SignalConfigData[COM_SIGNAL_COUNT] = {
          * E2E Profile05 のヘッダレイアウトのため、シグナルは byte[3] から）
          * DaVinci: /ActiveEcuC/Com/ComConfig/EngineSpeed_Rx
          * --------------------------------------------------------------- */
-        .SignalId        = COM_SIGNAL_ENGINE_SPEED,         /* DaVinci: ComHandleId */
-        .Direction       = COM_SIGNAL_DIRECTION_RX,         /* 本プロジェクト独自拡張。Com_SignalDirectionType 参照 */
-        .IPduId          = ComConf_ComIPdu_EngineInfo_Rx,   /* DaVinci: ComIPduRef → EngineInfo_Rx */
-        .BitPosition     = 24U,                             /* DaVinci: ComBitPosition */
-        .BitSize         = 16U,                             /* DaVinci: ComBitSize */
-        .Endian          = COM_BIG_ENDIAN,                  /* DaVinci: ComSignalEndianness = OPAQUE */
-        .FilterAlgorithm = COM_FILTER_NEW_IS_WITHIN,        /* DaVinci: ComFilterAlgorithm（RX 受信フィルタ）
-                                                             *          物理的にあり得ない回転数（センサノイズ・
-                                                             *          ビット化けの疑い）をプラウジビリティチェックで
-                                                             *          破棄する。EngineSpeed は非 Signal Group かつ
-                                                             *          RxIndicationCbk 内で毎フレーム実際に読まれるため
-                                                             *          （VehicleSpeed の RxDataTimeoutAction と異なり）
-                                                             *          このフィルタは実際に効く */
-        .FilterMin       = 0U,                              /* DaVinci: ComFilterMin（下限、rpm） */
-        .FilterMax       = 8000U,                           /* DaVinci: ComFilterMax（上限、rpm。本プロジェクト想定
-                                                             *          エンジンのレッドライン相当） */
-        .FilterRejectCbk = Rte_COMFilterReject_EngineSpeed, /* DaVinci: ComNotification 相当
-                                                             *          （フィルタで破棄された旨をログするだけの最小デモ） */
-        .FirstTimeoutMs  = COM_TIMEOUT_ENGINE_INFO_MS,      /* DaVinci: ComFirstTimeout（シグナル単位）
-                                                             *          非 Signal Group のためシグナル単位の監視が有効。
-                                                             *          所属 I-PDU（EngineInfo）の値と同じにして、
-                                                             *          このシグナル単独としては挙動を変えない */
-        .TimeoutMs       = COM_TIMEOUT_ENGINE_INFO_MS       /* DaVinci: ComTimeout（シグナル単位） */
+        .SignalId        = ComConf_ComSignal_EngineSpeed_Rx, /* DaVinci: ComHandleId */
+        .Direction       = COM_SIGNAL_DIRECTION_RX,          /* 本プロジェクト独自拡張。Com_SignalDirectionType 参照 */
+        .IPduId          = ComConf_ComIPdu_EngineInfo_Rx,    /* DaVinci: ComIPduRef → EngineInfo_Rx */
+        .BitPosition     = 24U,                              /* DaVinci: ComBitPosition */
+        .BitSize         = 16U,                              /* DaVinci: ComBitSize */
+        .Endian          = COM_BIG_ENDIAN,                   /* DaVinci: ComSignalEndianness = OPAQUE */
+        .FilterAlgorithm = COM_FILTER_NEW_IS_WITHIN,         /* DaVinci: ComFilterAlgorithm（RX 受信フィルタ）
+                                                              *          物理的にあり得ない回転数（センサノイズ・
+                                                              *          ビット化けの疑い）をプラウジビリティチェックで
+                                                              *          破棄する。EngineSpeed は非 Signal Group かつ
+                                                              *          RxIndicationCbk 内で毎フレーム実際に読まれるため
+                                                              *          （VehicleSpeed の RxDataTimeoutAction と異なり）
+                                                              *          このフィルタは実際に効く */
+        .FilterMin       = 0U,                               /* DaVinci: ComFilterMin（下限、rpm） */
+        .FilterMax       = 8000U,                            /* DaVinci: ComFilterMax（上限、rpm。本プロジェクト想定
+                                                              *          エンジンのレッドライン相当） */
+        .FilterRejectCbk = Rte_COMFilterReject_EngineSpeed,  /* DaVinci: ComNotification 相当
+                                                              *          （フィルタで破棄された旨をログするだけの最小デモ） */
+        .FirstTimeoutMs  = COM_TIMEOUT_ENGINE_INFO_MS,       /* DaVinci: ComFirstTimeout（シグナル単位）
+                                                              *          非 Signal Group のためシグナル単位の監視が有効。
+                                                              *          所属 I-PDU（EngineInfo）の値と同じにして、
+                                                              *          このシグナル単独としては挙動を変えない */
+        .TimeoutMs       = COM_TIMEOUT_ENGINE_INFO_MS        /* DaVinci: ComTimeout（シグナル単位） */
     },
     {
         /* ---------------------------------------------------------------
@@ -544,18 +544,18 @@ static const Com_SignalConfigType Com_SignalConfigData[COM_SIGNAL_COUNT] = {
          * 参照。割り込み禁止区間からの直接呼び出しで WDT リセットを起こした
          * 実機障害の教訓）。
          * --------------------------------------------------------------- */
-        .SignalId               = COM_SIGNAL_COOLANT_TEMP,        /* DaVinci: ComHandleId */
-        .Direction              = COM_SIGNAL_DIRECTION_RX,        /* 本プロジェクト独自拡張。Com_SignalDirectionType 参照 */
-        .IPduId                 = ComConf_ComIPdu_EngineInfo_Rx,  /* DaVinci: ComIPduRef → EngineInfo_Rx */
-        .BitPosition            = 40U,                            /* DaVinci: ComBitPosition */
-        .BitSize                = 8U,                             /* DaVinci: ComBitSize */
-        .Endian                 = COM_BIG_ENDIAN,                 /* DaVinci: ComSignalEndianness = OPAQUE */
-        .DataInvalidAction      = COM_DATA_INVALID_ACTION_NOTIFY, /* DaVinci: ComDataInvalidAction */
-        .InvalidValue           = 0xFFU,                          /* DaVinci: ComSignalDataInvalidValue */
-        .InvalidNotificationCbk = Rte_COMCbkInv_CoolantTemp,      /* DaVinci: ComInvalidNotification */
-        .FirstTimeoutMs         = COM_TIMEOUT_ENGINE_INFO_MS,     /* DaVinci: ComFirstTimeout（シグナル単位）
-                                                                   *          EngineSpeed と同じ理由・同じ値 */
-        .TimeoutMs              = COM_TIMEOUT_ENGINE_INFO_MS      /* DaVinci: ComTimeout（シグナル単位） */
+        .SignalId               = ComConf_ComSignal_CoolantTemp_Rx, /* DaVinci: ComHandleId */
+        .Direction              = COM_SIGNAL_DIRECTION_RX,          /* 本プロジェクト独自拡張。Com_SignalDirectionType 参照 */
+        .IPduId                 = ComConf_ComIPdu_EngineInfo_Rx,    /* DaVinci: ComIPduRef → EngineInfo_Rx */
+        .BitPosition            = 40U,                              /* DaVinci: ComBitPosition */
+        .BitSize                = 8U,                               /* DaVinci: ComBitSize */
+        .Endian                 = COM_BIG_ENDIAN,                   /* DaVinci: ComSignalEndianness = OPAQUE */
+        .DataInvalidAction      = COM_DATA_INVALID_ACTION_NOTIFY,   /* DaVinci: ComDataInvalidAction */
+        .InvalidValue           = 0xFFU,                            /* DaVinci: ComSignalDataInvalidValue */
+        .InvalidNotificationCbk = Rte_COMCbkInv_CoolantTemp,        /* DaVinci: ComInvalidNotification */
+        .FirstTimeoutMs         = COM_TIMEOUT_ENGINE_INFO_MS,       /* DaVinci: ComFirstTimeout（シグナル単位）
+                                                                     *          EngineSpeed と同じ理由・同じ値 */
+        .TimeoutMs              = COM_TIMEOUT_ENGINE_INFO_MS        /* DaVinci: ComTimeout（シグナル単位） */
     },
     {
         /* ---------------------------------------------------------------
@@ -570,15 +570,15 @@ static const Com_SignalConfigType Com_SignalConfigData[COM_SIGNAL_COUNT] = {
          * Com_CbkRxTOut 相当）: 上の FirstTimeoutMs/TimeoutMs（シグナル
          * 単位、EngineInfo と同値）を新規に超過した瞬間に1回だけ呼ばれる。
          * --------------------------------------------------------------- */
-        .SignalId       = COM_SIGNAL_ENGINE_ON_FLAG,     /* DaVinci: ComHandleId */
-        .Direction      = COM_SIGNAL_DIRECTION_RX,       /* 本プロジェクト独自拡張。Com_SignalDirectionType 参照 */
-        .IPduId         = ComConf_ComIPdu_EngineInfo_Rx, /* DaVinci: ComIPduRef → EngineInfo_Rx */
-        .BitPosition    = 48U,                           /* DaVinci: ComBitPosition */
-        .BitSize        = 1U,                            /* DaVinci: ComBitSize */
-        .Endian         = COM_BIG_ENDIAN,                /* DaVinci: ComSignalEndianness = OPAQUE */
-        .FirstTimeoutMs = COM_TIMEOUT_ENGINE_INFO_MS,    /* DaVinci: ComFirstTimeout（シグナル単位）
-                                                          *          EngineSpeed と同じ理由・同じ値 */
-        .TimeoutMs      = COM_TIMEOUT_ENGINE_INFO_MS,    /* DaVinci: ComTimeout（シグナル単位） */
+        .SignalId       = ComConf_ComSignal_EngineOnFlag_Rx, /* DaVinci: ComHandleId */
+        .Direction      = COM_SIGNAL_DIRECTION_RX,           /* 本プロジェクト独自拡張。Com_SignalDirectionType 参照 */
+        .IPduId         = ComConf_ComIPdu_EngineInfo_Rx,     /* DaVinci: ComIPduRef → EngineInfo_Rx */
+        .BitPosition    = 48U,                               /* DaVinci: ComBitPosition */
+        .BitSize        = 1U,                                /* DaVinci: ComBitSize */
+        .Endian         = COM_BIG_ENDIAN,                    /* DaVinci: ComSignalEndianness = OPAQUE */
+        .FirstTimeoutMs = COM_TIMEOUT_ENGINE_INFO_MS,        /* DaVinci: ComFirstTimeout（シグナル単位）
+                                                              *          EngineSpeed と同じ理由・同じ値 */
+        .TimeoutMs      = COM_TIMEOUT_ENGINE_INFO_MS,        /* DaVinci: ComTimeout（シグナル単位） */
         .RxTOutCbk      = Rte_COMCbkRxTOut_EngineOnFlag,
         .RxAckCbk       = Rte_COMCbk_EngineOnFlag
     },
@@ -595,7 +595,7 @@ static const Com_SignalConfigType Com_SignalConfigData[COM_SIGNAL_COUNT] = {
          * に届かなかった場合に呼ばれる。実機で発動する経路は無い
          * （docs/modules/Com_Notes.md 参照）。
          * --------------------------------------------------------------- */
-        .SignalId             = COM_SIGNAL_ENGINE_STATE,                  /* DaVinci: ComHandleId */
+        .SignalId             = ComConf_ComSignal_EngineState_Tx,         /* DaVinci: ComHandleId */
         .Direction            = COM_SIGNAL_DIRECTION_TX,                  /* 本プロジェクト独自拡張。Com_SignalDirectionType 参照 */
         .IPduId               = ComConf_ComIPdu_MeterStatus_Tx,           /* DaVinci: ComIPduRef → MeterStatus_Tx */
         .BitPosition          = 0U,                                       /* DaVinci: ComBitPosition */
@@ -648,14 +648,14 @@ static const Com_SignalConfigType Com_SignalConfigData[COM_SIGNAL_COUNT] = {
          * （Com_IPduConfigType 側、グループの deadline）が使われる
          * （Com_Types.h の Com_SignalConfigType 宣言コメント参照）。
          * --------------------------------------------------------------- */
-        .SignalId                 = COM_SIGNAL_VEHICLE_SPEED,         /* DaVinci: ComHandleId */
-        .Direction                = COM_SIGNAL_DIRECTION_RX,          /* 本プロジェクト独自拡張。Com_SignalDirectionType 参照 */
-        .IPduId                   = ComConf_ComIPdu_AbsInfo_Rx,       /* DaVinci: ComIPduRef → AbsInfo_Rx */
-        .BitPosition              = 24U,                              /* DaVinci: ComBitPosition */
-        .BitSize                  = 16U,                              /* DaVinci: ComBitSize */
-        .Endian                   = COM_BIG_ENDIAN,                   /* DaVinci: ComSignalEndianness = OPAQUE */
-        .RxDataTimeoutAction      = COM_RX_TIMEOUT_ACTION_SUBSTITUTE, /* DaVinci: ComRxDataTimeoutAction */
-        .TimeoutSubstitutionValue = 0xFFFFU                           /* DaVinci: ComTimeoutSubstitutionValue */
+        .SignalId                 = ComConf_ComSignal_VehicleSpeed_Rx, /* DaVinci: ComHandleId */
+        .Direction                = COM_SIGNAL_DIRECTION_RX,           /* 本プロジェクト独自拡張。Com_SignalDirectionType 参照 */
+        .IPduId                   = ComConf_ComIPdu_AbsInfo_Rx,        /* DaVinci: ComIPduRef → AbsInfo_Rx */
+        .BitPosition              = 24U,                               /* DaVinci: ComBitPosition */
+        .BitSize                  = 16U,                               /* DaVinci: ComBitSize */
+        .Endian                   = COM_BIG_ENDIAN,                    /* DaVinci: ComSignalEndianness = OPAQUE */
+        .RxDataTimeoutAction      = COM_RX_TIMEOUT_ACTION_SUBSTITUTE,  /* DaVinci: ComRxDataTimeoutAction */
+        .TimeoutSubstitutionValue = 0xFFFFU                            /* DaVinci: ComTimeoutSubstitutionValue */
     },
     {
         /* ---------------------------------------------------------------
@@ -664,12 +664,12 @@ static const Com_SignalConfigType Com_SignalConfigData[COM_SIGNAL_COUNT] = {
          * DaVinci: /ActiveEcuC/Com/ComConfig/BrakeActive_Rx
          * RX Signal Group（AbsInfo_Rx）メンバー。VehicleSpeed と同様。
          * --------------------------------------------------------------- */
-        .SignalId    = COM_SIGNAL_BRAKE_ACTIVE,    /* DaVinci: ComHandleId */
-        .Direction   = COM_SIGNAL_DIRECTION_RX,    /* 本プロジェクト独自拡張。Com_SignalDirectionType 参照 */
-        .IPduId      = ComConf_ComIPdu_AbsInfo_Rx, /* DaVinci: ComIPduRef → AbsInfo_Rx */
-        .BitPosition = 40U,                        /* DaVinci: ComBitPosition */
-        .BitSize     = 1U,                         /* DaVinci: ComBitSize */
-        .Endian      = COM_BIG_ENDIAN              /* DaVinci: ComSignalEndianness = OPAQUE */
+        .SignalId    = ComConf_ComSignal_BrakeActive_Rx, /* DaVinci: ComHandleId */
+        .Direction   = COM_SIGNAL_DIRECTION_RX,          /* 本プロジェクト独自拡張。Com_SignalDirectionType 参照 */
+        .IPduId      = ComConf_ComIPdu_AbsInfo_Rx,       /* DaVinci: ComIPduRef → AbsInfo_Rx */
+        .BitPosition = 40U,                              /* DaVinci: ComBitPosition */
+        .BitSize     = 1U,                               /* DaVinci: ComBitSize */
+        .Endian      = COM_BIG_ENDIAN                    /* DaVinci: ComSignalEndianness = OPAQUE */
     },
     {
         /* ---------------------------------------------------------------
@@ -678,12 +678,12 @@ static const Com_SignalConfigType Com_SignalConfigData[COM_SIGNAL_COUNT] = {
          * DaVinci: /ActiveEcuC/Com/ComConfig/AbsActive_Rx
          * RX Signal Group（AbsInfo_Rx）メンバー。VehicleSpeed と同様。
          * --------------------------------------------------------------- */
-        .SignalId    = COM_SIGNAL_ABS_ACTIVE,      /* DaVinci: ComHandleId */
-        .Direction   = COM_SIGNAL_DIRECTION_RX,    /* 本プロジェクト独自拡張。Com_SignalDirectionType 参照 */
-        .IPduId      = ComConf_ComIPdu_AbsInfo_Rx, /* DaVinci: ComIPduRef → AbsInfo_Rx */
-        .BitPosition = 41U,                        /* DaVinci: ComBitPosition */
-        .BitSize     = 1U,                         /* DaVinci: ComBitSize */
-        .Endian      = COM_BIG_ENDIAN              /* DaVinci: ComSignalEndianness = OPAQUE */
+        .SignalId    = ComConf_ComSignal_AbsActive_Rx, /* DaVinci: ComHandleId */
+        .Direction   = COM_SIGNAL_DIRECTION_RX,        /* 本プロジェクト独自拡張。Com_SignalDirectionType 参照 */
+        .IPduId      = ComConf_ComIPdu_AbsInfo_Rx,     /* DaVinci: ComIPduRef → AbsInfo_Rx */
+        .BitPosition = 41U,                            /* DaVinci: ComBitPosition */
+        .BitSize     = 1U,                             /* DaVinci: ComBitSize */
+        .Endian      = COM_BIG_ENDIAN                  /* DaVinci: ComSignalEndianness = OPAQUE */
     },
     {
         /* ---------------------------------------------------------------
@@ -692,7 +692,7 @@ static const Com_SignalConfigType Com_SignalConfigData[COM_SIGNAL_COUNT] = {
          * ComTransferProperty=TRIGGERED_ON_CHANGE: 自身の点灯/消灯だけで
          * WarningStatus の送信を引き起こす（他の灯の変化を待たない）。
          * --------------------------------------------------------------- */
-        .SignalId         = COM_SIGNAL_RUN_LAMP,                      /* DaVinci: ComHandleId */
+        .SignalId         = ComConf_ComSignal_RunLamp_Tx,             /* DaVinci: ComHandleId */
         .Direction        = COM_SIGNAL_DIRECTION_TX,                  /* 本プロジェクト独自拡張。Com_SignalDirectionType 参照 */
         .IPduId           = ComConf_ComIPdu_WarningStatus_Tx,         /* DaVinci: ComIPduRef → WarningStatus_Tx */
         .BitPosition      = 0U,                                       /* DaVinci: ComBitPosition */
@@ -709,7 +709,7 @@ static const Com_SignalConfigType Com_SignalConfigData[COM_SIGNAL_COUNT] = {
          * ComTransferProperty=TRIGGERED_ON_CHANGE: TMS 判定（FilterAlgorithm）
          * とは独立に、自身の点灯/消灯だけで送信も引き起こす。
          * --------------------------------------------------------------- */
-        .SignalId         = COM_SIGNAL_FAULT_LAMP,                    /* DaVinci: ComHandleId */
+        .SignalId         = ComConf_ComSignal_FaultLamp_Tx,           /* DaVinci: ComHandleId */
         .Direction        = COM_SIGNAL_DIRECTION_TX,                  /* 本プロジェクト独自拡張。Com_SignalDirectionType 参照 */
         .IPduId           = ComConf_ComIPdu_WarningStatus_Tx,         /* DaVinci: ComIPduRef → WarningStatus_Tx */
         .BitPosition      = 1U,                                       /* DaVinci: ComBitPosition */
@@ -727,7 +727,7 @@ static const Com_SignalConfigType Com_SignalConfigData[COM_SIGNAL_COUNT] = {
          * TMS 寄与シグナル: FaultLamp と同様（値=1 で WarningStatus の TMS を true に）。
          * ComTransferProperty=TRIGGERED_ON_CHANGE: FaultLamp と同様。
          * --------------------------------------------------------------- */
-        .SignalId         = COM_SIGNAL_ABS_LAMP,                      /* DaVinci: ComHandleId */
+        .SignalId         = ComConf_ComSignal_AbsLamp_Tx,             /* DaVinci: ComHandleId */
         .Direction        = COM_SIGNAL_DIRECTION_TX,                  /* 本プロジェクト独自拡張。Com_SignalDirectionType 参照 */
         .IPduId           = ComConf_ComIPdu_WarningStatus_Tx,         /* DaVinci: ComIPduRef → WarningStatus_Tx */
         .BitPosition      = 2U,                                       /* DaVinci: ComBitPosition */
@@ -745,24 +745,24 @@ static const Com_SignalConfigType Com_SignalConfigData[COM_SIGNAL_COUNT] = {
          * E2E Profile05 標準レイアウトのため、シグナルは byte[3] から）
          * DaVinci: /ActiveEcuC/Com/ComConfig/E2ECrcErrCount_Tx
          * --------------------------------------------------------------- */
-        .SignalId    = COM_SIGNAL_E2E_CRC_ERR_COUNT,       /* DaVinci: ComHandleId */
-        .Direction   = COM_SIGNAL_DIRECTION_TX,            /* 本プロジェクト独自拡張。Com_SignalDirectionType 参照 */
-        .IPduId      = ComConf_ComIPdu_E2EHealthStatus_Tx, /* DaVinci: ComIPduRef → E2EHealthStatus_Tx */
-        .BitPosition = 24U,                                /* DaVinci: ComBitPosition */
-        .BitSize     = 8U,                                 /* DaVinci: ComBitSize */
-        .Endian      = COM_BIG_ENDIAN                      /* DaVinci: ComSignalEndianness = OPAQUE */
+        .SignalId    = ComConf_ComSignal_E2ECrcErrCount_Tx, /* DaVinci: ComHandleId */
+        .Direction   = COM_SIGNAL_DIRECTION_TX,             /* 本プロジェクト独自拡張。Com_SignalDirectionType 参照 */
+        .IPduId      = ComConf_ComIPdu_E2EHealthStatus_Tx,  /* DaVinci: ComIPduRef → E2EHealthStatus_Tx */
+        .BitPosition = 24U,                                 /* DaVinci: ComBitPosition */
+        .BitSize     = 8U,                                  /* DaVinci: ComBitSize */
+        .Endian      = COM_BIG_ENDIAN                       /* DaVinci: ComSignalEndianness = OPAQUE */
     },
     {
         /* ---------------------------------------------------------------
          * Signal 11: E2ESeqErrCount  TX 8bit  CAN 0x220 byte[4]
          * DaVinci: /ActiveEcuC/Com/ComConfig/E2ESeqErrCount_Tx
          * --------------------------------------------------------------- */
-        .SignalId    = COM_SIGNAL_E2E_SEQ_ERR_COUNT,       /* DaVinci: ComHandleId */
-        .Direction   = COM_SIGNAL_DIRECTION_TX,            /* 本プロジェクト独自拡張。Com_SignalDirectionType 参照 */
-        .IPduId      = ComConf_ComIPdu_E2EHealthStatus_Tx, /* DaVinci: ComIPduRef → E2EHealthStatus_Tx */
-        .BitPosition = 32U,                                /* DaVinci: ComBitPosition */
-        .BitSize     = 8U,                                 /* DaVinci: ComBitSize */
-        .Endian      = COM_BIG_ENDIAN                      /* DaVinci: ComSignalEndianness = OPAQUE */
+        .SignalId    = ComConf_ComSignal_E2ESeqErrCount_Tx, /* DaVinci: ComHandleId */
+        .Direction   = COM_SIGNAL_DIRECTION_TX,             /* 本プロジェクト独自拡張。Com_SignalDirectionType 参照 */
+        .IPduId      = ComConf_ComIPdu_E2EHealthStatus_Tx,  /* DaVinci: ComIPduRef → E2EHealthStatus_Tx */
+        .BitPosition = 32U,                                 /* DaVinci: ComBitPosition */
+        .BitSize     = 8U,                                  /* DaVinci: ComBitSize */
+        .Endian      = COM_BIG_ENDIAN                       /* DaVinci: ComSignalEndianness = OPAQUE */
     },
     {
         /* ---------------------------------------------------------------
@@ -772,12 +772,12 @@ static const Com_SignalConfigType Com_SignalConfigData[COM_SIGNAL_COUNT] = {
          * Com_RxIndication() 経由で更新される（IPduId=2、SecureCommand_Rx 参照）。
          * 0x00=LOCK, 0x01=UNLOCK。
          * --------------------------------------------------------------- */
-        .SignalId    = COM_SIGNAL_IMMOBILIZER_CMD,       /* DaVinci: ComHandleId */
-        .Direction   = COM_SIGNAL_DIRECTION_RX,          /* 本プロジェクト独自拡張。Com_SignalDirectionType 参照 */
-        .IPduId      = ComConf_ComIPdu_SecureCommand_Rx, /* DaVinci: ComIPduRef → SecureCommand_Rx */
-        .BitPosition = 0U,                               /* DaVinci: ComBitPosition */
-        .BitSize     = 8U,                               /* DaVinci: ComBitSize */
-        .Endian      = COM_BIG_ENDIAN                    /* DaVinci: ComSignalEndianness = OPAQUE */
+        .SignalId    = ComConf_ComSignal_ImmobilizerCmd_Rx, /* DaVinci: ComHandleId */
+        .Direction   = COM_SIGNAL_DIRECTION_RX,             /* 本プロジェクト独自拡張。Com_SignalDirectionType 参照 */
+        .IPduId      = ComConf_ComIPdu_SecureCommand_Rx,    /* DaVinci: ComIPduRef → SecureCommand_Rx */
+        .BitPosition = 0U,                                  /* DaVinci: ComBitPosition */
+        .BitSize     = 8U,                                  /* DaVinci: ComBitSize */
+        .Endian      = COM_BIG_ENDIAN                       /* DaVinci: ComSignalEndianness = OPAQUE */
     },
     {
         /* ---------------------------------------------------------------
@@ -787,7 +787,7 @@ static const Com_SignalConfigType Com_SignalConfigData[COM_SIGNAL_COUNT] = {
          * このシグナルへ一切書き込まない（Com_SendSignal() を呼ぶのは
          * Com_GatewayRoute() のみ）。
          * --------------------------------------------------------------- */
-        .SignalId        = COM_SIGNAL_IMMOBILIZER_STATUS,            /* DaVinci: ComHandleId */
+        .SignalId        = ComConf_ComSignal_ImmobilizerStatus_Tx,   /* DaVinci: ComHandleId */
         .Direction       = COM_SIGNAL_DIRECTION_TX,                  /* 本プロジェクト独自拡張。Com_SignalDirectionType 参照 */
         .IPduId          = ComConf_ComIPdu_ImmobilizerStatus_Tx,     /* DaVinci: ComIPduRef → ImmobilizerStatus_Tx */
         .BitPosition     = 0U,                                       /* DaVinci: ComBitPosition */
@@ -805,19 +805,19 @@ static const Com_SignalConfigType Com_SignalConfigData[COM_SIGNAL_COUNT] = {
          * App_EngineManager が EngineInfo(RX) の検証済み EngineSpeed を
          * そのままミラー送信する（uds_tester の仮想メータ表示タブ向け）。
          * --------------------------------------------------------------- */
-        .SignalId             = COM_SIGNAL_METER_ENGINE_SPEED,            /* DaVinci: ComHandleId */
-        .Direction            = COM_SIGNAL_DIRECTION_TX,                  /* 本プロジェクト独自拡張 */
-        .IPduId               = ComConf_ComIPdu_MeterStatus_Tx,           /* DaVinci: ComIPduRef → MeterStatus_Tx */
-        .BitPosition          = 24U,                                      /* DaVinci: ComBitPosition (byte[3]) */
-        .BitSize              = 16U,                                      /* DaVinci: ComBitSize */
-        .Endian               = COM_BIG_ENDIAN,                           /* DaVinci: ComSignalEndianness = OPAQUE */
-        .FilterAlgorithm      = COM_FILTER_MASKED_NEW_DIFFERS_MASKED_OLD, /* DaVinci: ComFilterAlgorithm
-                                                                           *          値が変化したときだけ送信要求とみなす */
-        .Mask                 = 0xFFFFU,                                  /* DaVinci: ComFilterNewValue/ComFilterMask 相当（16bit全体） */
-        .UpdateBitContributor = 0U                                        /* MeterStatus の update-bit は EngineState
-                                                                           * 専用（Signal 3 参照）。このミラーは
-                                                                           * 頻繁に変化するため寄与させない
-                                                                           * （2026-08 コードレビューで対応） */
+        .SignalId             = ComConf_ComSignal_MeterStatus_EngineSpeedMirror_Tx, /* DaVinci: ComHandleId */
+        .Direction            = COM_SIGNAL_DIRECTION_TX,                            /* 本プロジェクト独自拡張 */
+        .IPduId               = ComConf_ComIPdu_MeterStatus_Tx,                     /* DaVinci: ComIPduRef → MeterStatus_Tx */
+        .BitPosition          = 24U,                                                /* DaVinci: ComBitPosition (byte[3]) */
+        .BitSize              = 16U,                                                /* DaVinci: ComBitSize */
+        .Endian               = COM_BIG_ENDIAN,                                     /* DaVinci: ComSignalEndianness = OPAQUE */
+        .FilterAlgorithm      = COM_FILTER_MASKED_NEW_DIFFERS_MASKED_OLD,           /* DaVinci: ComFilterAlgorithm
+                                                                                     *          値が変化したときだけ送信要求とみなす */
+        .Mask                 = 0xFFFFU,                                            /* DaVinci: ComFilterNewValue/ComFilterMask 相当（16bit全体） */
+        .UpdateBitContributor = 0U                                                  /* MeterStatus の update-bit は EngineState
+                                                                                     * 専用（Signal 3 参照）。このミラーは
+                                                                                     * 頻繁に変化するため寄与させない
+                                                                                     * （2026-08 コードレビューで対応） */
     },
     {
         /* ---------------------------------------------------------------
@@ -826,16 +826,16 @@ static const Com_SignalConfigType Com_SignalConfigData[COM_SIGNAL_COUNT] = {
          * WarningStatus の Signal 7(RunLamp) と同じ値を App_WarningIndicator
          * がミラー送信する（uds_tester の仮想メータ表示タブ向け）。
          * --------------------------------------------------------------- */
-        .SignalId             = COM_SIGNAL_METER_RUN_LAMP,                /* DaVinci: ComHandleId */
-        .Direction            = COM_SIGNAL_DIRECTION_TX,                  /* 本プロジェクト独自拡張 */
-        .IPduId               = ComConf_ComIPdu_MeterStatus_Tx,           /* DaVinci: ComIPduRef → MeterStatus_Tx */
-        .BitPosition          = 16U,                                      /* DaVinci: ComBitPosition (byte[2] bit0) */
-        .BitSize              = 1U,                                       /* DaVinci: ComBitSize */
-        .Endian               = COM_BIG_ENDIAN,                           /* DaVinci: ComSignalEndianness = OPAQUE */
-        .FilterAlgorithm      = COM_FILTER_MASKED_NEW_DIFFERS_MASKED_OLD, /* DaVinci: ComFilterAlgorithm */
-        .Mask                 = 1U,                                       /* DaVinci: ComFilterNewValue/ComFilterMask 相当 */
-        .UpdateBitContributor = 0U                                        /* MeterStatus の update-bit は EngineState 専用
-                                                                           * （2026-08 コードレビューで対応） */
+        .SignalId             = ComConf_ComSignal_MeterStatus_RunLampMirror_Tx, /* DaVinci: ComHandleId */
+        .Direction            = COM_SIGNAL_DIRECTION_TX,                        /* 本プロジェクト独自拡張 */
+        .IPduId               = ComConf_ComIPdu_MeterStatus_Tx,                 /* DaVinci: ComIPduRef → MeterStatus_Tx */
+        .BitPosition          = 16U,                                            /* DaVinci: ComBitPosition (byte[2] bit0) */
+        .BitSize              = 1U,                                             /* DaVinci: ComBitSize */
+        .Endian               = COM_BIG_ENDIAN,                                 /* DaVinci: ComSignalEndianness = OPAQUE */
+        .FilterAlgorithm      = COM_FILTER_MASKED_NEW_DIFFERS_MASKED_OLD,       /* DaVinci: ComFilterAlgorithm */
+        .Mask                 = 1U,                                             /* DaVinci: ComFilterNewValue/ComFilterMask 相当 */
+        .UpdateBitContributor = 0U                                              /* MeterStatus の update-bit は EngineState 専用
+                                                                                 * （2026-08 コードレビューで対応） */
     },
     {
         /* ---------------------------------------------------------------
@@ -843,18 +843,18 @@ static const Com_SignalConfigType Com_SignalConfigData[COM_SIGNAL_COUNT] = {
          * DaVinci: /ActiveEcuC/Com/ComConfig/MeterStatus_FaultLampMirror_Tx
          * WarningStatus の Signal 8(FaultLamp) と同じ値のミラー。
          * --------------------------------------------------------------- */
-        .SignalId             = COM_SIGNAL_METER_FAULT_LAMP,              /* DaVinci: ComHandleId */
-        .Direction            = COM_SIGNAL_DIRECTION_TX,                  /* 本プロジェクト独自拡張 */
-        .IPduId               = ComConf_ComIPdu_MeterStatus_Tx,           /* DaVinci: ComIPduRef → MeterStatus_Tx */
-        .BitPosition          = 17U,                                      /* DaVinci: ComBitPosition (byte[2] bit1) */
-        .BitSize              = 1U,                                       /* DaVinci: ComBitSize */
-        .Endian               = COM_BIG_ENDIAN,                           /* DaVinci: ComSignalEndianness = OPAQUE */
-        .FilterAlgorithm      = COM_FILTER_MASKED_NEW_DIFFERS_MASKED_OLD, /* DaVinci: ComFilterAlgorithm */
-        .Mask                 = 1U,                                       /* DaVinci: ComFilterNewValue/ComFilterMask 相当 */
-        .UpdateBitContributor = 0U                                        /* MeterStatus の update-bit は EngineState 専用。
-                                                                           * FaultLamp は FAULT 中 500ms ごとに変化
-                                                                           * するため、寄与させないことが特に重要
-                                                                           * （2026-08 コードレビューで対応） */
+        .SignalId             = ComConf_ComSignal_MeterStatus_FaultLampMirror_Tx, /* DaVinci: ComHandleId */
+        .Direction            = COM_SIGNAL_DIRECTION_TX,                          /* 本プロジェクト独自拡張 */
+        .IPduId               = ComConf_ComIPdu_MeterStatus_Tx,                   /* DaVinci: ComIPduRef → MeterStatus_Tx */
+        .BitPosition          = 17U,                                              /* DaVinci: ComBitPosition (byte[2] bit1) */
+        .BitSize              = 1U,                                               /* DaVinci: ComBitSize */
+        .Endian               = COM_BIG_ENDIAN,                                   /* DaVinci: ComSignalEndianness = OPAQUE */
+        .FilterAlgorithm      = COM_FILTER_MASKED_NEW_DIFFERS_MASKED_OLD,         /* DaVinci: ComFilterAlgorithm */
+        .Mask                 = 1U,                                               /* DaVinci: ComFilterNewValue/ComFilterMask 相当 */
+        .UpdateBitContributor = 0U                                                /* MeterStatus の update-bit は EngineState 専用。
+                                                                                   * FaultLamp は FAULT 中 500ms ごとに変化
+                                                                                   * するため、寄与させないことが特に重要
+                                                                                   * （2026-08 コードレビューで対応） */
     },
     {
         /* ---------------------------------------------------------------
@@ -862,16 +862,16 @@ static const Com_SignalConfigType Com_SignalConfigData[COM_SIGNAL_COUNT] = {
          * DaVinci: /ActiveEcuC/Com/ComConfig/MeterStatus_AbsLampMirror_Tx
          * WarningStatus の Signal 9(AbsLamp) と同じ値のミラー。
          * --------------------------------------------------------------- */
-        .SignalId             = COM_SIGNAL_METER_ABS_LAMP,                /* DaVinci: ComHandleId */
-        .Direction            = COM_SIGNAL_DIRECTION_TX,                  /* 本プロジェクト独自拡張 */
-        .IPduId               = ComConf_ComIPdu_MeterStatus_Tx,           /* DaVinci: ComIPduRef → MeterStatus_Tx */
-        .BitPosition          = 18U,                                      /* DaVinci: ComBitPosition (byte[2] bit2) */
-        .BitSize              = 1U,                                       /* DaVinci: ComBitSize */
-        .Endian               = COM_BIG_ENDIAN,                           /* DaVinci: ComSignalEndianness = OPAQUE */
-        .FilterAlgorithm      = COM_FILTER_MASKED_NEW_DIFFERS_MASKED_OLD, /* DaVinci: ComFilterAlgorithm */
-        .Mask                 = 1U,                                       /* DaVinci: ComFilterNewValue/ComFilterMask 相当 */
-        .UpdateBitContributor = 0U                                        /* MeterStatus の update-bit は EngineState 専用
-                                                                           * （2026-08 コードレビューで対応） */
+        .SignalId             = ComConf_ComSignal_MeterStatus_AbsLampMirror_Tx, /* DaVinci: ComHandleId */
+        .Direction            = COM_SIGNAL_DIRECTION_TX,                        /* 本プロジェクト独自拡張 */
+        .IPduId               = ComConf_ComIPdu_MeterStatus_Tx,                 /* DaVinci: ComIPduRef → MeterStatus_Tx */
+        .BitPosition          = 18U,                                            /* DaVinci: ComBitPosition (byte[2] bit2) */
+        .BitSize              = 1U,                                             /* DaVinci: ComBitSize */
+        .Endian               = COM_BIG_ENDIAN,                                 /* DaVinci: ComSignalEndianness = OPAQUE */
+        .FilterAlgorithm      = COM_FILTER_MASKED_NEW_DIFFERS_MASKED_OLD,       /* DaVinci: ComFilterAlgorithm */
+        .Mask                 = 1U,                                             /* DaVinci: ComFilterNewValue/ComFilterMask 相当 */
+        .UpdateBitContributor = 0U                                              /* MeterStatus の update-bit は EngineState 専用
+                                                                                 * （2026-08 コードレビューで対応） */
     },
     {
         /* ---------------------------------------------------------------
@@ -887,21 +887,21 @@ static const Com_SignalConfigType Com_SignalConfigData[COM_SIGNAL_COUNT] = {
          * 双方で使うことで、メータ側も「センサ値が信頼できない」ことを
          * 上位（uds_tester 等）へそのまま伝播できる）。
          * --------------------------------------------------------------- */
-        .SignalId               = COM_SIGNAL_METER_COOLANT_TEMP,            /* DaVinci: ComHandleId */
-        .Direction              = COM_SIGNAL_DIRECTION_TX,                  /* 本プロジェクト独自拡張 */
-        .IPduId                 = ComConf_ComIPdu_MeterStatus_Tx,           /* DaVinci: ComIPduRef → MeterStatus_Tx */
-        .BitPosition            = 40U,                                      /* DaVinci: ComBitPosition (byte[5]) */
-        .BitSize                = 8U,                                       /* DaVinci: ComBitSize */
-        .Endian                 = COM_BIG_ENDIAN,                           /* DaVinci: ComSignalEndianness = OPAQUE */
-        .FilterAlgorithm        = COM_FILTER_MASKED_NEW_DIFFERS_MASKED_OLD, /* DaVinci: ComFilterAlgorithm
-                                                                             *          値が変化したときだけ送信要求とみなす */
-        .Mask                   = 0xFFU,                                    /* DaVinci: ComFilterNewValue/ComFilterMask 相当 */
-        .UpdateBitContributor   = 0U,                                       /* MeterStatus の update-bit は EngineState 専用
-                                                                             * （EngineSpeed/警告灯ミラーと同じ理由。
-                                                                             * 2026-08 コードレビューで対応した
-                                                                             * パターンを新規シグナルにも適用） */
-        .InvalidValue           = 0xFFU,                                    /* DaVinci: ComSignalDataInvalidValue。RX 側の
-                                                                             *          CoolantTemp（Signal 1）と同じマーカー値 */
+        .SignalId               = ComConf_ComSignal_MeterStatus_CoolantTempMirror_Tx, /* DaVinci: ComHandleId */
+        .Direction              = COM_SIGNAL_DIRECTION_TX,                            /* 本プロジェクト独自拡張 */
+        .IPduId                 = ComConf_ComIPdu_MeterStatus_Tx,                     /* DaVinci: ComIPduRef → MeterStatus_Tx */
+        .BitPosition            = 40U,                                                /* DaVinci: ComBitPosition (byte[5]) */
+        .BitSize                = 8U,                                                 /* DaVinci: ComBitSize */
+        .Endian                 = COM_BIG_ENDIAN,                                     /* DaVinci: ComSignalEndianness = OPAQUE */
+        .FilterAlgorithm        = COM_FILTER_MASKED_NEW_DIFFERS_MASKED_OLD,           /* DaVinci: ComFilterAlgorithm
+                                                                                       *          値が変化したときだけ送信要求とみなす */
+        .Mask                   = 0xFFU,                                              /* DaVinci: ComFilterNewValue/ComFilterMask 相当 */
+        .UpdateBitContributor   = 0U,                                                 /* MeterStatus の update-bit は EngineState 専用
+                                                                                       * （EngineSpeed/警告灯ミラーと同じ理由。
+                                                                                       * 2026-08 コードレビューで対応した
+                                                                                       * パターンを新規シグナルにも適用） */
+        .InvalidValue           = 0xFFU,                                              /* DaVinci: ComSignalDataInvalidValue。RX 側の
+                                                                                       *          CoolantTemp（Signal 1）と同じマーカー値 */
         .InvalidValueConfigured = 1U
     },
     {
@@ -909,12 +909,12 @@ static const Com_SignalConfigType Com_SignalConfigData[COM_SIGNAL_COUNT] = {
          * Signal 19: TestCounter  TX 8bit  CAN 0x300 bit0
          * DaVinci: /ActiveEcuC/Com/ComConfig/TestMsg_TestCounter_Tx
          * --------------------------------------------------------------- */
-        .SignalId        = COM_SIGNAL_TEST_MSG_TEST_COUNTER, /* DaVinci: ComHandleId */
-        .Direction       = COM_SIGNAL_DIRECTION_TX,          /* 本プロジェクト独自拡張。Com_SignalDirectionType 参照 */
-        .IPduId          = ComConf_ComIPdu_TestMsg_Tx,       /* DaVinci: ComIPduRef → TestMsg_Tx */
-        .BitPosition     = 0U,                               /* DaVinci: ComBitPosition */
-        .BitSize         = 8U,                               /* DaVinci: ComBitSize */
-        .Endian          = COM_BIG_ENDIAN,                   /* DaVinci: ComSignalEndianness = OPAQUE */
+        .SignalId        = ComConf_ComSignal_TestMsg_TestCounter_Tx, /* DaVinci: ComHandleId */
+        .Direction       = COM_SIGNAL_DIRECTION_TX,                  /* 本プロジェクト独自拡張。Com_SignalDirectionType 参照 */
+        .IPduId          = ComConf_ComIPdu_TestMsg_Tx,               /* DaVinci: ComIPduRef → TestMsg_Tx */
+        .BitPosition     = 0U,                                       /* DaVinci: ComBitPosition */
+        .BitSize         = 8U,                                       /* DaVinci: ComBitSize */
+        .Endian          = COM_BIG_ENDIAN,                           /* DaVinci: ComSignalEndianness = OPAQUE */
         .FilterAlgorithm = COM_FILTER_MASKED_NEW_DIFFERS_MASKED_OLD,
         .Mask            = 0xFFU
     }
@@ -930,8 +930,8 @@ static const Com_GwMappingType Com_GwMappingData[COM_GW_MAPPING_COUNT] = {
     {
         /* ImmobilizerCmd(RX、SecOC 検証済み) → ImmobilizerStatus(TX)
          * DaVinci: /ActiveEcuC/Com/ComConfig/ImmobilizerCmd_to_ImmobilizerStatus_Gw */
-        .SrcSignalId  = COM_SIGNAL_IMMOBILIZER_CMD,
-        .DestSignalId = COM_SIGNAL_IMMOBILIZER_STATUS
+        .SrcSignalId  = ComConf_ComSignal_ImmobilizerCmd_Rx,
+        .DestSignalId = ComConf_ComSignal_ImmobilizerStatus_Tx
     }
 };
 

@@ -81,7 +81,7 @@ void E2EMon_Init(void);
  *          シーケンス異常累積カウンタをそれぞれ +1 する（0xFF で飽和）。
  *          その他の状態（OK/INITIAL/SYNC/OKSOMELOST/ERROR）はどちらの
  *          カウンタも変化させない。カウンタ値は毎回 Com_SendSignal() で
- *          COM_SIGNAL_E2E_CRC_ERR_COUNT/COM_SIGNAL_E2E_SEQ_ERR_COUNT へ
+ *          ComConf_ComSignal_E2ECrcErrCount_Tx/ComConf_ComSignal_E2ESeqErrCount_Tx へ
  *          反映する（実際に CAN へ送信するタイミングは Com 自身の
  *          PERIODIC モードが独立に判断する）。
  *

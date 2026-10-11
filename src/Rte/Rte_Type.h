@@ -36,7 +36,7 @@
 // アプリケーション Signal の型エイリアス
 //
 // AUTOSAR では ARXML から自動生成される。
-// SW-C は COM_SIGNAL_* の ID や uint16/uint8 の生の型を知らず、
+// SW-C は ComConf_ComSignal_* の ID や uint16/uint8 の生の型を知らず、
 // これらのアプリ型だけを使う。
 // -------------------------------------------------------
 typedef uint16 EngineSpeed_t;    /* rpm (0-15000) */
