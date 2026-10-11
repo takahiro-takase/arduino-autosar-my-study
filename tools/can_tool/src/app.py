@@ -54,6 +54,10 @@ NAV_BLOCKS = (
         NavRow("CryptoStack.json", "Crypto", "Crypto — 暗号ドライバ（鍵）。Csm・KeyM と同じ設定ファイル", (("keys",),)),
         NavRow("CryptoStack.json", "KeyM", "KeyM — 鍵名の管理。Csm・Crypto と同じ設定ファイル", (("keys", 0, "keyM"), ("keys",))),
     ),
+    (
+        NavRow("WdgM.json", "WdgM", "WdgM — 監視対象のタスク（Alive・順序・時間の監視）"),
+        NavRow("NvM.json", "NvM", "NvM — 不揮発ブロックの構成（サイズ・EEPROM アドレス・ROM デフォルト値）"),
+    ),
     (NavRow("BswM.json", "BswM", "BswM — モード遷移のルール・I-PDU グループの起動/停止"),),
 )
 
