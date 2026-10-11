@@ -2,7 +2,7 @@
 
 信号表（CAN ビットアサイン表）と、モジュールごとの設定 json から、各モジュールの設定ソース
 （`*_PBCfg.c`、`*_Cfg.h`）の該当部分を生成する Python ツールです。
-現在の対象は **CanIf**、**Com**、**PduR**、**E2EXf**（E2E Transformer）、**SecOC**、**Csm / Crypto / KeyM**（暗号処理の連鎖）、**Rte**（ASW 向けの信号アクセス関数）、**NvM**（不揮発ブロックの構成）、**WdgM**（ウォッチドッグの監視対象）、**BswM**（モード遷移のルール）の 8 モジュールです。Com スタックの他のモジュールへ広げていく計画です。
+現在の対象は **CanIf**、**Com**、**PduR**、**E2EXf**（E2E Transformer）、**SecOC**、**Csm / Crypto / KeyM**（暗号処理の連鎖）、**Rte**（ASW 向けの信号アクセス関数）、**NvM**（不揮発ブロックの構成）、**WdgM**（ウォッチドッグの監視対象）、**FiM**（機能の抑止）、**Can**（コントローラ設定）、**BswM**（モード遷移のルール）の 8 モジュールです。Com スタックの他のモジュールへ広げていく計画です。
 
 最終的な構想は `arxml ⇔ json ⇔ Cfg.c` です。このうち json → Cfg.c の部分と、
 信号表の変更に設定を連動させる部分を、この範囲で試しています。
@@ -13,7 +13,7 @@
 config/data/can_signals.json（ビットアサイン表の正本。can_tool の GUI で編集）
         │  sync_cfg.py: 追加されたフレームの設定のひな形を、各モジュールの設定 json へ追加
         ▼
-config/data/CanIf.json, Com.json, PduR.json, E2EXf.json, SecOC.json, CryptoStack.json, Rte.json, NvM.json, WdgM.json, BswM.json
+config/data/CanIf.json, Com.json, PduR.json, E2EXf.json, SecOC.json, CryptoStack.json, Rte.json, NvM.json, WdgM.json, FiM.json, Can.json, BswM.json
         │  gen_cfg.py: スキーマ・整合性を検査して、Cfg ソースの生成領域を更新（json → C の一方向）
         ▼
 src/Bsw/CanIf/CanIf_PBCfg.c, CanIf_Cfg.h / src/Bsw/Com/Com_PBCfg.c, Com_Cfg.h / src/Bsw/PduR/PduR_PBCfg.c, PduR_Cfg.h
@@ -23,6 +23,7 @@ src/Bsw/CanIf/CanIf_PBCfg.c, CanIf_Cfg.h / src/Bsw/Com/Com_PBCfg.c, Com_Cfg.h / 
 / src/Rte/Rte.h, Rte.c（信号アクセス関数 Rte_Write_* / Rte_Read_*）
 / src/Bsw/NvM/NvM_Cfg.h, NvM_PBCfg.c（ブロック ID・アドレス・バッファ・ROM デフォルト値・記述子テーブル）
 / src/Bsw/WdgM/WdgM_Cfg.h, WdgM_PBCfg.c（エンティティ・チェックポイント・遷移表・Deadline 表）
+/ src/Bsw/FiM/FiM_Cfg.h, FiM_PBCfg.c（機能 ID と対応テーブル） / src/Bsw/Can/Can_Cfg.h, Can_PBCfg.c（ピン番号と Can_Config）
 ```
 
 - **信号表の値は設定 json にコピーしません。** CAN ID、DLC、信号のビット位置・ビット長、update-bit の位置、
@@ -184,6 +185,33 @@ NvM と同じく、信号表とは関係なく WdgM.json だけが入力です�
 - `WdgM_Cfg.h` の他の定数（EXPIRED の許容サイクル数、HW ウォッチドッグの周期とタイムアウトなど）と、チェックポイントを実際に報告する処理（`WdgM_CheckpointReached()` の呼び出し）は、手書きのままです。
 - 生成の前後で、`WdgM_PBCfg.c`・`WdgM.c`・`Wdg_PBCfg.c` をコンパイルした結果（セクションの内容とリロケーション）が一致することを確認しています。
 
+<a id="fim-can-generation"></a>
+## FiM と Can の設定の生成
+
+NvM、WdgM と同じく、信号表とは関係なく、それぞれの JSON だけが入力です。
+
+**FiM**（`config/data/FiM.json`、`modules/fim.py`）
+
+| FiM.json の項目 | 生成されるもの |
+|-----------------|----------------|
+| `functions[]` の並び順 | 機能 ID（`FIM_FID_<name>`）、機能数（`FIM_FUNCTION_COUNT`）、対応テーブルの添字 |
+| `event`、`statusMask` | 対応テーブル（`FiM_Functions[]`）。監視する Dem イベントと、抑止するステータスのビット |
+
+- `event` と `statusMask` は `Dem_Cfg.h` に実在するマクロでなければならず、イベント ID が `DEM_EVENT_COUNT` 未満であることも検査します。
+
+**Can**（`config/data/Can.json`、`modules/can.py`）
+
+| Can.json の項目 | 生成されるもの |
+|-----------------|----------------|
+| `csPin`、`intPin` | `Can_Cfg.h` の `CAN_CS_PIN`、`CAN_INT_PIN` |
+| `baudrate`、`crystalMhz`、`filter` | `Can_PBCfg.c` の `Can_Config`（フィルタ、ピン、ボーレート、水晶） |
+
+- ボーレートと水晶の指定は、`Can_Cfg.h` の `CAN_BAUDRATE_<値>` / `CAN_CRYSTAL_<値>MHZ` に実在する名前でなければなりません。
+- `Can_Cfg.h` の他の定数（エラーコード、ApiId、ボーレートの数値表など）は手書きのままです。
+- 将来、コントローラを入れ替えるとき（例: CAN FD 対応のコントローラ）の設定項目は、`Can.json` を拡張して足せます。
+
+どちらも、生成の前後で `FiM_PBCfg.c`・`FiM.c`・`Can_PBCfg.c`・`Can.c` をコンパイルした結果（セクションの内容とリロケーション）が一致することを確認しています。
+
 ## ファイル構成
 
 | パス | 内容 |
@@ -191,7 +219,7 @@ NvM と同じく、信号表とは関係なく WdgM.json だけが入力です�
 | `gen_cfg.py` | 目印コメントの差し込み、スキーマ検証、生成の実行 |
 | `sync_cfg.py` | 信号表に追加されたフレームの設定を、設定 json へ追加 |
 | `checks.py` | 信号表と各モジュール設定の整合性検査 |
-| `modules/canif.py`, `com.py`, `pdur.py`, `e2exf.py`, `secoc.py`, `cryptostack.py`, `rte.py`, `nvm.py`, `wdgm.py`, `bswm.py` | モジュールごとの生成関数（`SPEC` に生成先と領域 ID を持つ） |
+| `modules/canif.py`, `com.py`, `pdur.py`, `e2exf.py`, `secoc.py`, `cryptostack.py`, `rte.py`, `nvm.py`, `wdgm.py`, `fim.py`, `can.py`, `bswm.py` | モジュールごとの生成関数（`SPEC` に生成先と領域 ID を持つ） |
 | `modules/common.py` | コメント・構造体フィールドの整形 |
 | `../../config/schema/*.schema.json` | 設定 json のスキーマ（型・範囲・列挙） |
 | `../../config/data/*.json` | モジュールごとの設定データ（リポジトリ直下の `config/`。コードと分けて置く） |
@@ -339,7 +367,7 @@ E2E と SecOC の設定は、Com から分けて別の設定 json（`E2EXf.json`
 
 - Com の設定 json の整理。既定値を導入して、通常と違う値だけを書く形にする。ID マクロの説明など、json の中の長い説明文の置き場所も見直す。
 - E2E の他のプロファイル（P01、P02 など）への対応。SecOC の TX Secured I-PDU への対応。
-- 他のモジュール（Can、FiM など）。信号表との関係は薄いため、必要になったら足す。NvM と WdgM は対応済み。
+- 他のモジュール。信号表との関係は薄いため、必要になったら足す。NvM、WdgM、FiM、Can は対応済み。CanSM と ComM は、表になる設定が無いため対象外。
 - Rte の信号アクセス関数の生成は、信号グループの I-PDU・ゲートウェイの信号・手書きの関数がある信号を対象外にしている。信号グループ（`Rte_SendSignalGroup_*`）や、E2E 変換つきの Read は手書きのまま。
 - 他のモジュール（CanSM、ComM、BswM など）への展開。
 - 診断（DCM / UDS）の設定の対象化。入力となる表（DID 一覧など）の整理が先に必要。

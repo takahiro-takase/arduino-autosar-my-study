@@ -28,7 +28,7 @@ import sys
 import jsonschema
 
 import checks
-from modules import bswm, canif, com, cryptostack, e2exf, nvm, pdur, rte, secoc, wdgm
+from modules import bswm, can, canif, com, cryptostack, e2exf, fim, nvm, pdur, rte, secoc, wdgm
 
 TOOL_DIR = pathlib.Path(__file__).resolve().parent
 REPO_ROOT = TOOL_DIR.parents[1]
@@ -41,10 +41,12 @@ END_RE = re.compile(r"^[ \t]*/\* @@GEN-END (?P<id>[\w\-]+)[ \t]*\*/[ \t]*$")
 
 MODULES = {
     "BswM": bswm.SPEC,
+    "Can": can.SPEC,
     "CanIf": canif.SPEC,
     "Com": com.SPEC,
     "CryptoStack": cryptostack.SPEC,
     "E2EXf": e2exf.SPEC,
+    "FiM": fim.SPEC,
     "NvM": nvm.SPEC,
     "PduR": pdur.SPEC,
     "Rte": rte.SPEC,

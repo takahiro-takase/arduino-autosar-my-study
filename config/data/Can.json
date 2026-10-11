@@ -1,0 +1,19 @@
+{
+  "$schema": "../schema/Can.schema.json",
+  "module": "Can",
+  "csPin": 10,
+  "csPinDoc": "MCP2515 チップセレクト (CS) ピン番号",
+  "intPin": 2,
+  "intPinDoc": "MCP2515 割り込み (INT) ピン番号",
+  "baudrate": "500KBPS",
+  "crystalMhz": 8,
+  "filter": {
+    "id": "0x000",
+    "mask": "0x000"
+  },
+  "filterNote": [
+    "mask=0x000: 全 CAN ID を受け入れ、CanIf ソフトウェアフィルタに委ねる。",
+    "0x100 (COM データ) と 0x7E0 (UDS 診断) を同時に受信するために必要。",
+    "本来は RX バッファごとに mask/filter を設定するが、学習用実装のため省略。"
+  ]
+}

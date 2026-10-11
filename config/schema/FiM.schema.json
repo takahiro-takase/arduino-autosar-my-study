@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "FiM configuration",
+  "description": "FiM_Cfg.h の機能 ID と、FiM_PBCfg.c の FID × Dem イベント対応テーブルの生成元。機能の並び順がそのまま FID。Dem のイベント・ステータスのマクロは Dem_Cfg.h に実在する名前で書く。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "module",
+    "functions"
+  ],
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "module": {
+      "const": "FiM"
+    },
+    "functions": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 255,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "title",
+          "event",
+          "statusMask",
+          "note"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "pattern": "^[A-Z][A-Z0-9_]*$",
+            "description": "機能名（FIM_FID_<name> のマクロ名になる）"
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "description": "機能の説明（FID マクロのコメントとテーブルの見出し）"
+          },
+          "event": {
+            "type": "string",
+            "pattern": "^DEM_EVENT_[A-Z0-9_]+$",
+            "description": "監視する Dem イベント（Dem_Cfg.h の DEM_EVENT_*）"
+          },
+          "statusMask": {
+            "type": "string",
+            "pattern": "^DEM_STATUS_[A-Z0-9_]+$",
+            "description": "抑止するステータスのビット（Dem_Cfg.h の DEM_STATUS_*）。いずれか 1 ビットでも立っていれば抑止する"
+          },
+          "note": {
+            "type": "array",
+            "description": "テーブルの、この機能の見出しコメント",
+            "items": {
+              "type": "string",
+              "not": {
+                "pattern": "\\*/"
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

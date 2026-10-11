@@ -118,7 +118,7 @@ GUI のボタン送信に加え、複数手順を一連の操作としてスク�
 
 ## 設定 JSON エディタ（tools/can_tool）
 
-左側のナビゲーションの `Com`、`PduR` などの項目では、`config/data/*.json`（CanIf、Com、PduR、E2EXf、SecOC、CryptoStack、Rte、NvM、WdgM、BswM の設定データ）を、
+左側のナビゲーションの `Com`、`PduR` などの項目では、`config/data/*.json`（CanIf、Com、PduR、E2EXf、SecOC、CryptoStack、Rte、NvM、WdgM、FiM、Can、BswM の設定データ）を、
 対応する JSON スキーマ（`config/schema/*.schema.json`）に従って編集できます。画面はスキーマから作るため、
 設定 json の種類が増えても、このツールの変更は要りません。
 
@@ -128,10 +128,11 @@ GUI のボタン送信に加え、複数手順を一連の操作としてスク�
 Tester
 Signals
 ───────
+Rte        ASW 向けの信号アクセス関数（名前の上書き・除外）
 Com        通信スタック（上 → 下）
 PduR
 CanIf
-Can        （json なし。手書きのため、選べない薄い字）
+Can        コントローラ設定（ピン・ボーレート・水晶・受信フィルタ）
 ───────
 E2EXf      保護・暗号
 SecOC
@@ -139,6 +140,10 @@ SecOC
 Csm        Csm・Crypto・KeyM は、同じ設定ファイル（CryptoStack.json）の別の箇所を開く
 Crypto
 KeyM
+───────
+FiM        機能の抑止
+WdgM       ウォッチドッグの監視対象
+NvM        不揮発ブロックの構成
 ───────
 BswM       モード管理
 ```

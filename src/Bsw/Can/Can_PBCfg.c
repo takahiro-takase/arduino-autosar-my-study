@@ -38,9 +38,11 @@
  *
  * \details Can_Init() の引数として渡す設定データ。
  *          フィルタ・ピン番号・ボーレート・水晶周波数を保持する。
- *          ピン番号とフィルタ値は Can_Cfg.h のプリコンパイル定数を使用し、
- *          ボーレートは mcp_can_dfs.h の CAN_500KBPS を参照する。
+ *          値は config/data/Can.json から生成する（下の生成領域）。
+ *          ピン番号は Can_Cfg.h の CAN_CS_PIN / CAN_INT_PIN、ボーレートと水晶は
+ *          Can_Cfg.h の CAN_BAUDRATE_* / CAN_CRYSTAL_*MHZ を参照する。
  */
+/* @@GEN-BEGIN can-config  生成元: config/data/Can.json  （自動生成: 手編集禁止） */
 const Can_ConfigType Can_Config = {
     /* mask=0x000: 全 CAN ID を受け入れ、CanIf ソフトウェアフィルタに委ねる。
      * 0x100 (COM データ) と 0x7E0 (UDS 診断) を同時に受信するために必要。
@@ -51,3 +53,4 @@ const Can_ConfigType Can_Config = {
     .baudrate    = CAN_BAUDRATE_500KBPS,
     .crystalFreq = CAN_CRYSTAL_8MHZ
 };
+/* @@GEN-END can-config */
