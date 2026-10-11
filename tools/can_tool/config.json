@@ -26,6 +26,9 @@
         { "label": "ImmobilizerStatus\n(0x230, Signal Gateway)", "type": "rx_monitor",
           "can_id": "0x230" },
 
+        { "label": "TestMsg\n(0x300, テスト用)", "type": "rx_monitor",
+          "can_id": "0x300" },
+
         { "type": "group_header", "label": "周辺ECU" },
 
         { "label": "NM 仮想他ECU\n(0x400, node=0x02)", "type": "can_frame", "can_id": "0x400",

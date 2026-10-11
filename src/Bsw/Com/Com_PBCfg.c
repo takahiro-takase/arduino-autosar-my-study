@@ -113,6 +113,10 @@
  *              ComTxModeNumberOfRepetitions=2, ComTxModeRepetitionPeriod=100ms
  *              （[SWS_Com_00305]）: 施錠/解錠状態の変化を単発フレーム紛失で
  *              見逃さないよう、初回送信+100ms間隔で2回再送（計3回）する。
+ *            TX I-PDU 4 (IPduId=4): CAN ID 0x300, DLC=1  TestMsg
+ *              (メータ ECU、TxModeMode=COM_TX_MODE_PERIODIC、1000ms 周期、保護なし)
+ *              Signal 19: TestCounter  8 bit  BitPos=0  BigEndian
+ *              信号追加の練習用のテスト専用フレーム（App_TestMsg が 1 秒ごとに +1）。
  *
  *          E2E（Profile01/05）の設定・ステート実体（DataID/Counter・CRC オフセット等）は
  *          E2E Transformer 方式への移行に伴い src/Bsw/E2EXf/E2EXf_PBCfg.c へ
@@ -464,6 +468,19 @@ static const Com_IPduConfigType Com_TxIPduConfigData[COM_TX_IPDU_COUNT] = {
                                                                                *          初回送信 + 再送2回 = 計3回（[SWS_Com_00305]） */
         .RepetitionPeriodMs  = COM_TX_REPETITION_PERIOD_IMMOBILIZERSTATUS_MS, /* DaVinci: ComTxModeRepetitionPeriod */
         .TxIpduCalloutCbk    = Rte_COMTxIpduCallout_ImmobilizerStatus
+    },
+    {
+        /* ---------------------------------------------------------------
+         * TX IPduId=4: TestMsg フレーム (メータ ECU 送信、テスト専用、E2E/SecOC なし)
+         * DaVinci: /ActiveEcuC/Com/ComConfig/TestMsg_Tx
+         * --------------------------------------------------------------- */
+        .IPduId            = 4U,
+        .DLC               = 1U,
+        .PduRId            = 5U,
+        .TxModeMode        = COM_TX_MODE_PERIODIC,
+        .TxPeriodMs        = COM_TX_PERIOD_TESTMSG_MS,
+        .UpdateBitPosition = 0xFFU,
+        .IpduGroupId       = COM_IPDU_GROUP_NONE
     }
 };
 
@@ -885,6 +902,20 @@ static const Com_SignalConfigType Com_SignalConfigData[COM_SIGNAL_COUNT] = {
         .InvalidValue           = 0xFFU,                                    /* DaVinci: ComSignalDataInvalidValue。RX 側の
                                                                              *          CoolantTemp（Signal 1）と同じマーカー値 */
         .InvalidValueConfigured = 1U
+    },
+    {
+        /* ---------------------------------------------------------------
+         * Signal 19: TestCounter  TX 8bit  CAN 0x300 bit0
+         * DaVinci: /ActiveEcuC/Com/ComConfig/TestMsg_TestCounter_Tx
+         * --------------------------------------------------------------- */
+        .SignalId        = COM_SIGNAL_TEST_MSG_TEST_COUNTER, /* DaVinci: ComHandleId */
+        .Direction       = COM_SIGNAL_DIRECTION_TX,          /* 本プロジェクト独自拡張。Com_SignalDirectionType 参照 */
+        .IPduId          = 4U,                               /* DaVinci: ComIPduRef → TestMsg_Tx */
+        .BitPosition     = 0U,                               /* DaVinci: ComBitPosition */
+        .BitSize         = 8U,                               /* DaVinci: ComBitSize */
+        .Endian          = COM_BIG_ENDIAN,                   /* DaVinci: ComSignalEndianness = OPAQUE */
+        .FilterAlgorithm = COM_FILTER_MASKED_NEW_DIFFERS_MASKED_OLD,
+        .Mask            = 0xFFU
     }
 };
 

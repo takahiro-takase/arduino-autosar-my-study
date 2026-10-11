@@ -23,7 +23,7 @@
  * ====================================================================== */
 
 /** 管理タスク総数 (Os_PBCfg.c の Os_TaskTable 要素数と一致させること) */
-#define OS_TASK_COUNT  22U
+#define OS_TASK_COUNT  23U
 
 /** OsCounter の ID。本プロジェクトのカウンタは 1 つ（SYSTEM_COUNTER）で、
  *  1 tick = 1 ms、起動時の millis() と同じ座標系（Os.c 参照）。 */

@@ -162,13 +162,14 @@ static uint8 Can_InterruptDisableNestCount = 0U;
  * Can_Write() は送信成功時に swPduHandle をこのキューへ積むだけで即座に
  * 返り、実際の CanIf_TxConfirmation() 呼び出しは Can_MainFunction_Write()
  * まで遅延させる（ファイル冒頭のコメント参照）。
- * サイズは CanIf の TX PDU 数 (CANIF_TX_PDU_COUNT=4) に合わせる。
+ * サイズは CanIf の TX PDU 数 (CANIF_TX_PDU_COUNT) に連動させる。TX PDU を追加
+ * しても、1 パスで積まれる保留件数がキューを超えないようにするため。
  * Os_SchedulerStep() は 1 回のスケジューラパスにつき各タスクを高々 1 回しか
  * 呼ばないため、Can_MainFunction_Write() が次に呼ばれるまでに積まれる
  * 保留件数はこの数を超えない想定。万一超えた場合は最も古い保留を
  * 上書きせず破棄し、DET へエラーを報告する（沈黙した取りこぼしを避ける）。
  * ----------------------------------------------------------------------- */
-#define CAN_TX_CONF_QUEUE_SIZE  4U
+#define CAN_TX_CONF_QUEUE_SIZE  CANIF_TX_PDU_COUNT
 
 static PduIdType Can_TxConfQueue[CAN_TX_CONF_QUEUE_SIZE];
 static uint8     Can_TxConfHead = 0U;  /**< 次に取り出すエントリの index */

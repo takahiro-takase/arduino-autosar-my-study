@@ -106,8 +106,9 @@
  *  TxPduId=2: NM フレーム    (CAN 0x400, CanNm。PduR/Com を経由せず直接呼び出す)
  *  TxPduId=3: WarningStatus  (CAN 0x210, COM Signal Group)
  *  TxPduId=4: E2EHealthStatus (CAN 0x220, COM PERIODIC)
- *  TxPduId=5: ImmobilizerStatus (CAN 0x230, COM DIRECT。Signal Gateway 転送先) */
-#define CANIF_TX_PDU_COUNT  6U
+ *  TxPduId=5: ImmobilizerStatus (CAN 0x230, COM DIRECT。Signal Gateway 転送先)
+ *  TxPduId=6: TestMsg (CAN 0x300, COM PERIODIC。信号追加の練習用のテスト専用フレーム) */
+#define CANIF_TX_PDU_COUNT  7U
 
 /** RX PDU テーブルのエントリ数（受信 CAN フレーム種別数）
  *  DaVinci: /ActiveEcuC/CanIf/CanIfInitCfg/CanIfRxPduCfg ノード数

@@ -517,6 +517,28 @@ Std_ReturnType Rte_Write_MeterStatus_CoolantTemp(CoolantTemp_t temp)
     return Com_SendSignal(COM_SIGNAL_METER_COOLANT_TEMP, &temp);
 }
 
+/**
+ * \brief   TestMsg 提供ポートへ TestCounter シグナルを書き込む。
+ *
+ * \details 信号追加の練習用・テスト専用のシグナル（CAN 0x300）。
+ *          App_TestMsg_Run() が 1 秒ごとにカウンタ値を書き込む。
+ *
+ * \param[in]  value  カウンタ値（0〜255）。
+ *
+ * \retval  E_OK      COM の実 TX バッファへ正常にパックした。
+ * \retval  E_NOT_OK  COM 未初期化またはシグナル ID が見つからない。
+ *
+ * \pre        Com_Init() が正常に完了していること。
+ *
+ * \note       AUTOSAR 標準外の API（本プロジェクト独自拡張、テスト専用）。
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType Rte_Write_TestMsg_TestCounter(uint8 value)
+{
+    return Com_SendSignal(COM_SIGNAL_TEST_MSG_TEST_COUNTER, &value);
+}
+
 /* -----------------------------------------------------------------------
  * Rte_Invalidate_<p>_<o>  (RTE 5.6.7, SWS_Rte_01206)
  *   送信側 S/R の無効値マーキング（Com_InvalidateSignal へ委譲）。

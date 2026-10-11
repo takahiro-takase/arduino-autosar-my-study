@@ -501,6 +501,27 @@
           "note": "SecureCommand.ImmobilizerCmdのゲートウェイ転送値（Com_GwMappingData参照）"
         }
       ]
+    },
+    {
+      "name": "TestMsg",
+      "direction": "TX",
+      "canId": "0x300",
+      "dlc": 1,
+      "txPeriodMs": 1000,
+      "note": "動作確認・信号追加手順の練習用（テスト専用）。メータECU送信、E2E/SecOCなし、1秒周期。TestCounterは起動後のカウントアップ値",
+      "fields": [
+        {
+          "name": "TestCounter",
+          "bitPosition": 0,
+          "bitSize": 8,
+          "type": "number",
+          "range": {
+            "min": 0,
+            "max": 255
+          },
+          "note": "テスト用カウンタ（1秒ごとに+1、255の次は0）"
+        }
+      ]
     }
   ]
 }

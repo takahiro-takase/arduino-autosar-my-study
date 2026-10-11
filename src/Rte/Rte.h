@@ -84,6 +84,9 @@ Std_ReturnType Rte_Write_MeterStatus_FaultLamp(uint8 level);
 Std_ReturnType Rte_Write_MeterStatus_AbsLamp(uint8 level);
 Std_ReturnType Rte_Write_MeterStatus_CoolantTemp(CoolantTemp_t temp);
 
+/* TestMsg シグナル書き込みポート (CAN 0x300、信号追加の練習用・テスト専用) */
+Std_ReturnType Rte_Write_TestMsg_TestCounter(uint8 value);
+
 /* ----------------------------------------------------------------------
  * Rte_Invalidate_<p>_<o>  (RTE 5.6.7, SWS_Rte_01206)
  * ---------------------------------------------------------------------- */

@@ -219,6 +219,14 @@ static const PduR_TxRoutingPathType PduR_TxPaths[PDUR_TX_PATH_COUNT] = {
         .CanIfTxPduId  = 5U,                /* DaVinci: PduRDestPdu/PduRDestPduHandleId */
         .ConfDestPduId = 3U,
         .ConfFct       = Com_TxConfirmation /* DaVinci: PduRTxConfirmation */
+    },
+    {
+        /* パス 5: COM (SrcPduId=5) → CanIf TxPduId=6 (CAN 0x300, TestMsg)
+         * DaVinci: PduRRoutingPath/TestMsg_Tx */
+        .SrcPduId      = 5U,                /* DaVinci: PduRSrcPdu/PduRSrcPduHandleId */
+        .CanIfTxPduId  = 6U,                /* DaVinci: PduRDestPdu/PduRDestPduHandleId */
+        .ConfDestPduId = 4U,
+        .ConfFct       = Com_TxConfirmation /* DaVinci: PduRTxConfirmation */
     }
 };
 
