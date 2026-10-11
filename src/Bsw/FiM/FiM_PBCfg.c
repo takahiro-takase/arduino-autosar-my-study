@@ -5,9 +5,8 @@
  *          AUTOSAR 環境ではコンフィギュレーションツールが自動生成するファイル
  *          に相当する。
  *
- *          機能一覧:
- *            FID 0 (RUNNING_LED): DEM_EVENT_CAN_BUSOFF が CONFIRMED の間抑止
- *            FID 1 (BUTTON_ACK) : DEM_EVENT_BUTTON_STUCK が CONFIRMED の間抑止
+ *          機能の一覧（FID と、監視する Dem イベント・抑止するステータス）は
+ *          config/data/FiM.json から生成する（下の生成領域）。
  *
  * \copyright  Copyright (c) 2025 T_T
  * \license    MIT License - 詳細は LICENSE ファイルを参照。
@@ -27,19 +26,23 @@
  * Global Variables
  * ====================================================================== */
 
+/* @@GEN-BEGIN fim-table  生成元: config/data/FiM.json  （自動生成: 手編集禁止） */
 /* -----------------------------------------------------------------------
  * FID × Dem イベント対応テーブル
  * ----------------------------------------------------------------------- */
 static const FiM_FunctionCfgType FiM_Functions[FIM_FUNCTION_COUNT] =
 {
-    /* FID 0: RUNNING LED — CAN Bus-Off 確定中は EngineState (CAN 受信由来) が
-     * 信頼できないため、点灯機能そのものを抑止する。 */
-    { FIM_FID_RUNNING_LED, DEM_EVENT_CAN_BUSOFF,   DEM_STATUS_CONFIRMED },
+    /* FID 0: RUNNING LED (D6) 点灯機能
+     * CAN Bus-Off 確定中は EngineState (CAN 受信由来) が信頼できないため、
+     * 点灯機能そのものを抑止する。 */
+    { FIM_FID_RUNNING_LED, DEM_EVENT_CAN_BUSOFF, DEM_STATUS_CONFIRMED },
 
-    /* FID 1: 警告確認ボタンによる FAULT 解除 — ボタン固着確定中の押下は
-     * 物理的固着による偽信号の可能性があるため、確認操作を抑止する。 */
-    { FIM_FID_BUTTON_ACK,  DEM_EVENT_BUTTON_STUCK, DEM_STATUS_CONFIRMED }
+    /* FID 1: 警告確認ボタンによる FAULT 解除
+     * ボタン固着確定中の押下は物理的固着による偽信号の可能性があるため、
+     * 確認操作を抑止する。 */
+    { FIM_FID_BUTTON_ACK, DEM_EVENT_BUTTON_STUCK, DEM_STATUS_CONFIRMED }
 };
+/* @@GEN-END fim-table */
 
 /* -----------------------------------------------------------------------
  * ポストビルドコンフィグインスタンス (EcuM が FiM_Init に渡す)

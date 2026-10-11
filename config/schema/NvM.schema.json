@@ -1,0 +1,155 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "NvM configuration",
+  "description": "NvM_Cfg.h のブロック ID・サイズ・EEPROM アドレスと、NvM_PBCfg.c の RAM バッファ・ROM デフォルト値・ブロック記述子テーブルの生成元。ブロックの並び順がそのままブロック ID。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "module",
+    "blocks"
+  ],
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "module": {
+      "const": "NvM"
+    },
+    "baseAddress": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 65535,
+      "description": "最初のブロックの EEPROM 先頭アドレス（既定 0）"
+    },
+    "blocks": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 255,
+      "items": {
+        "$ref": "#/$defs/block"
+      }
+    }
+  },
+  "$defs": {
+    "lines": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "not": {
+          "pattern": "\\*/"
+        }
+      }
+    },
+    "block": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "title",
+        "length",
+        "lengthDoc",
+        "addrDoc",
+        "default"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[A-Z][A-Z0-9_]*$",
+          "description": "ブロック名。NVM_BLOCK_ID_<name> 等のマクロ名と、RAM / ROM の変数名（NvM_Ram_<Name>）になる"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "description": "ブロックの説明（ID マクロのコメントと EEPROM レイアウトに使う）"
+        },
+        "length": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65534,
+          "description": "データ長 [byte]（CRC 1 バイトは別に付く）"
+        },
+        "demEventCount": {
+          "type": "boolean",
+          "description": "true: 長さが Dem の DEM_EVENT_COUNT と一致することを検査する"
+        },
+        "redundant": {
+          "type": "boolean",
+          "description": "true: 冗長ブロック（ミラー面も確保する）"
+        },
+        "useCrcCompMechanism": {
+          "type": "boolean",
+          "description": "CRC 比較による書き込みスキップ（省略時: 非冗長なら true、冗長なら false）"
+        },
+        "lengthDoc": {
+          "type": "string",
+          "minLength": 1,
+          "description": "長さのマクロのコメント"
+        },
+        "addrDoc": {
+          "type": "string",
+          "minLength": 1,
+          "description": "先頭アドレスのマクロのコメント"
+        },
+        "mirrorAddrDoc": {
+          "type": "string",
+          "description": "ミラー面のアドレスのマクロのコメント（冗長ブロックのみ）"
+        },
+        "note": {
+          "$ref": "#/$defs/lines",
+          "description": "ブロック記述子テーブルの、このブロックの見出しコメント"
+        },
+        "default": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind"
+          ],
+          "properties": {
+            "kind": {
+              "enum": [
+                "none",
+                "scalar",
+                "repeat"
+              ],
+              "description": "none: ROM デフォルト値なし（NULL）、scalar: 1 バイトの定数、repeat: 同じ式を length 個並べる"
+            },
+            "value": {
+              "type": "string",
+              "minLength": 1,
+              "description": "C の式（kind が scalar / repeat のとき）"
+            },
+            "doc": {
+              "$ref": "#/$defs/lines",
+              "description": "ROM デフォルト値のコメント"
+            },
+            "elementComments": {
+              "type": "array",
+              "description": "repeat の要素ごとの注釈",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "index",
+                  "text"
+                ],
+                "properties": {
+                  "index": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "text": {
+                    "type": "string",
+                    "minLength": 1,
+                    "not": {
+                      "pattern": "\\*/"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

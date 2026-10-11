@@ -1,0 +1,26 @@
+{
+  "$schema": "../schema/FiM.schema.json",
+  "module": "FiM",
+  "functions": [
+    {
+      "name": "RUNNING_LED",
+      "title": "RUNNING LED (D6) 点灯機能",
+      "event": "DEM_EVENT_CAN_BUSOFF",
+      "statusMask": "DEM_STATUS_CONFIRMED",
+      "note": [
+        "CAN Bus-Off 確定中は EngineState (CAN 受信由来) が信頼できないため、",
+        "点灯機能そのものを抑止する。"
+      ]
+    },
+    {
+      "name": "BUTTON_ACK",
+      "title": "警告確認ボタンによる FAULT 解除",
+      "event": "DEM_EVENT_BUTTON_STUCK",
+      "statusMask": "DEM_STATUS_CONFIRMED",
+      "note": [
+        "ボタン固着確定中の押下は物理的固着による偽信号の可能性があるため、",
+        "確認操作を抑止する。"
+      ]
+    }
+  ]
+}

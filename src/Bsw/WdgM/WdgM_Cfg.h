@@ -112,6 +112,7 @@
  *  （学習用簡略化、詳細は docs/modules/WdgM_Notes.md 参照）。 */
 #define WDGM_MODE_DEFAULT     0U
 
+/* @@GEN-BEGIN wdgm-entities  生成元: config/data/WdgM.json  （自動生成: 手編集禁止） */
 /** 監視対象エンティティ総数 */
 #define WDGM_SUPERVISED_ENTITY_COUNT     2U
 
@@ -130,11 +131,12 @@
 
 /** ENGINE: サイクル内に期待する CheckpointReached 呼び出し最小回数
  *  (期待値 約2回に対し最小1回)。 */
-#define WDGM_ENGINE_EXPECTED_ALIVE_INDICATIONS   1U
+#define WDGM_ENGINE_EXPECTED_ALIVE_INDICATIONS  1U
 
 /** WARNING: サイクル内に期待する CheckpointReached 呼び出し最小回数
  *  (期待値 約12回に対し最小6回、ENGINE と同じ「期待値の半分」の比率)。 */
 #define WDGM_WARNING_EXPECTED_ALIVE_INDICATIONS  6U
+/* @@GEN-END wdgm-entities */
 
 /**
  * グローバルレベルの EXPIRED 許容判定サイクル数
@@ -206,6 +208,7 @@
  */
 #define WDGM_HW_WATCHDOG_TIMEOUT_MS  4000UL
 
+/* @@GEN-BEGIN wdgm-checkpoints  生成元: config/data/WdgM.json  （自動生成: 手編集禁止） */
 /* -----------------------------------------------------------------------
  * 論理監視 (Logical Supervision) チェックポイント ID
  * Entity 0 (App_EngineManager_Run) のプログラムフロー上の 2 点を表す。
@@ -213,7 +216,7 @@
 /** Run() 開始直後（RTE 読み取り前）に到達するチェックポイント */
 #define WDGM_CP_ENGINE_START  0U
 /** Run() 終了直前（CAN 送信後）に到達するチェックポイント */
-#define WDGM_CP_ENGINE_END    1U
+#define WDGM_CP_ENGINE_END  1U
 
 /* -----------------------------------------------------------------------
  * 論理監視 (Logical Supervision) チェックポイント ID
@@ -226,7 +229,7 @@
 /** Run() 開始直後（RTE 読み取り前）に到達するチェックポイント */
 #define WDGM_CP_WARNING_START  2U
 /** Run() 終了直前（CAN 送信後）に到達するチェックポイント */
-#define WDGM_CP_WARNING_END    3U
+#define WDGM_CP_WARNING_END  3U
 
 /** 「まだ一度もチェックポイントが来ていない」ことを示す遷移元の特別値。
  *  起動直後のみ有効な遷移元として許可テーブルに登場する。 */
@@ -241,7 +244,6 @@
  *  特に意味を持たないため 0（実質チェックなし）とする。 */
 #define WDGM_ENGINE_DEADLINE_START_TO_END_MIN_MS   0UL
 #define WDGM_ENGINE_DEADLINE_START_TO_END_MAX_MS   500UL
-
 /** END→START（次サイクルの Run() 呼び出しまでの間隔）の許容範囲。
  *  タスク周期 3000ms (Os_PBCfg.c Task 2) を中心に余裕を持たせる
  *  (協調スケジューラのため、他タスクの実行による多少のジッタを許容する)。
@@ -262,7 +264,6 @@
  *  LED 出力のみの単純な処理のため ENGINE より短い上限とする。 */
 #define WDGM_WARNING_DEADLINE_START_TO_END_MIN_MS   0UL
 #define WDGM_WARNING_DEADLINE_START_TO_END_MAX_MS   200UL
-
 /** END→START（次サイクルの Run() 呼び出しまでの間隔）の許容範囲。
  *  タスク周期 500ms (Os_PBCfg.c Task 3) を中心に余裕を持たせる。
  *  当初は ±200ms（700ms 上限）だったが、実機で Dem の新規 DTC 確定時
@@ -275,5 +276,6 @@
  *  実測値に十分な余裕（約2倍）を持たせて上限を引き上げた。 */
 #define WDGM_WARNING_DEADLINE_END_TO_START_MIN_MS   300UL
 #define WDGM_WARNING_DEADLINE_END_TO_START_MAX_MS   1500UL
+/* @@GEN-END wdgm-checkpoints */
 
 #endif /* WDGM_CFG_H */

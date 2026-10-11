@@ -1,0 +1,200 @@
+{
+  "$schema": "../schema/WdgM.schema.json",
+  "module": "WdgM",
+  "supervisionCycleMs": 6000,
+  "supervisionCycleDoc": [
+    "Alive Supervision サイクル時間 (ms)。全エンティティ共通で、",
+    "WdgM_MainFunction の呼び出し周期と一致させること (Os_PBCfg.c Task 7)。",
+    "ENGINE のタスク周期 3000ms の 2 倍に設定し、サイクル内に 2 回の Runnable",
+    "実行を許容する（WARNING は 500ms 周期のため、同じ 6000ms サイクル内に",
+    "約 12 回の実行が期待される）。"
+  ],
+  "entities": [
+    {
+      "name": "ENGINE",
+      "runnable": "App_EngineManager_Run",
+      "taskPeriodMs": 3000,
+      "idDoc": "App_EngineManager_Run (3000ms 周期)",
+      "expectedAliveIndications": 1,
+      "aliveDoc": [
+        "ENGINE: サイクル内に期待する CheckpointReached 呼び出し最小回数",
+        "(期待値 約2回に対し最小1回)。"
+      ],
+      "checkpointsDoc": [
+        "Entity 0 (App_EngineManager_Run) のプログラムフロー上の 2 点を表す。"
+      ],
+      "checkpoints": [
+        {
+          "name": "START",
+          "id": 0,
+          "doc": [
+            "Run() 開始直後（RTE 読み取り前）に到達するチェックポイント"
+          ]
+        },
+        {
+          "name": "END",
+          "id": 1,
+          "doc": [
+            "Run() 終了直前（CAN 送信後）に到達するチェックポイント"
+          ]
+        }
+      ],
+      "transitionsDoc": [
+        "Entity 0 (App_EngineManager_Run) のプログラムフロー:",
+        "  (起動直後) → START → END → START → END → ...",
+        "上記以外の遷移（START の連続呼び出し、END で始まる等）は順序違反として検出する。"
+      ],
+      "transitions": [
+        {
+          "from": "INITIAL",
+          "to": "START",
+          "comment": "起動後、最初に許可されるのは START のみ"
+        },
+        {
+          "from": "START",
+          "to": "END",
+          "comment": "START の次に許可されるのは END"
+        },
+        {
+          "from": "END",
+          "to": "START",
+          "comment": "END の次に許可されるのは次サイクルの START"
+        }
+      ],
+      "deadlinesDoc": [
+        "Entity 0 (App_EngineManager_Run) の 2 つのチェックポイント間隔を監視する:",
+        "  START→END : Run() 1 回分の処理時間（無限ループ・ブロッキング処理の検出）",
+        "  END→START : 次サイクルの Run() 呼び出しまでの間隔（タスク周期 3000ms の遵守確認）"
+      ],
+      "deadlines": [
+        {
+          "from": "START",
+          "to": "END",
+          "minMs": 0,
+          "maxMs": 500,
+          "doc": [
+            "START→END（Run() 1 回分の処理時間）の許容範囲。",
+            "通常は数 ms で完了するはずの処理に上限を設け、無限ループや",
+            "ブロッキング処理による異常な遅延を検出する。下限は本処理にとって",
+            "特に意味を持たないため 0（実質チェックなし）とする。"
+          ]
+        },
+        {
+          "from": "END",
+          "to": "START",
+          "minMs": 2500,
+          "maxMs": 4500,
+          "doc": [
+            "END→START（次サイクルの Run() 呼び出しまでの間隔）の許容範囲。",
+            "タスク周期 3000ms (Os_PBCfg.c Task 2) を中心に余裕を持たせる",
+            "(協調スケジューラのため、他タスクの実行による多少のジッタを許容する)。",
+            "上限は当初 3500ms（±500ms）だったが、Dem が新規 DTC 確定時に",
+            "NvM_WriteBlock() 経由で EEPROM へ同期書き込みするブロッキング処理",
+            "（Renesas RA の NvM_Hw_WriteBlock() はバイト単位の EEPROM.update() ループで、",
+            "フラッシュ消去/書き込みを伴う）が数百ms 単位の協調スケジューラ停止を",
+            "引き起こすことが実機で判明した（WARNING エンティティの Deadline 違反、",
+            "elapsed=741ms として検出）ため、同じ要因で ENGINE 側も将来違反し得ると",
+            "判断し、上限に余裕を持たせた。"
+          ]
+        }
+      ],
+      "note": [
+        "3000ms 周期タスクを 6000ms サイクルで監視。1 回以上の報告を期待する。",
+        "論理監視は WdgM_EngineTransitions の遷移グラフのみを許可する。",
+        "時間監視は WdgM_EngineDeadlines の 2 区間（START→END, END→START）を監視する。"
+      ]
+    },
+    {
+      "name": "WARNING",
+      "runnable": "App_WarningIndicator_Run",
+      "taskPeriodMs": 500,
+      "idDoc": "App_WarningIndicator_Run (500ms 周期)",
+      "expectedAliveIndications": 6,
+      "aliveDoc": [
+        "WARNING: サイクル内に期待する CheckpointReached 呼び出し最小回数",
+        "(期待値 約12回に対し最小6回、ENGINE と同じ「期待値の半分」の比率)。"
+      ],
+      "checkpointsDoc": [
+        "Entity 1 (App_WarningIndicator_Run) のプログラムフロー上の 2 点を表す。",
+        "チェックポイント ID はエンティティごとに独立した名前空間で解釈される",
+        "(WdgM_LastCheckpoint[] がエンティティ単位の配列のため、ENGINE の",
+        "0/1 と数値が重複しても混同しない) が、設定ファイルを読む際の視認性を",
+        "優先し、あえて重複しない値を割り当てている。"
+      ],
+      "checkpoints": [
+        {
+          "name": "START",
+          "id": 2,
+          "doc": [
+            "Run() 開始直後（RTE 読み取り前）に到達するチェックポイント"
+          ]
+        },
+        {
+          "name": "END",
+          "id": 3,
+          "doc": [
+            "Run() 終了直前（CAN 送信後）に到達するチェックポイント"
+          ]
+        }
+      ],
+      "transitionsDoc": [
+        "Entity 1 (App_WarningIndicator_Run) のプログラムフロー:",
+        "  (起動直後) → START → END → START → END → ...",
+        "Entity 0 と同じ「START/END の交互反復」パターンだが、周期は 500ms と",
+        "ENGINE (3000ms) より短い。"
+      ],
+      "transitions": [
+        {
+          "from": "INITIAL",
+          "to": "START"
+        },
+        {
+          "from": "START",
+          "to": "END"
+        },
+        {
+          "from": "END",
+          "to": "START"
+        }
+      ],
+      "deadlinesDoc": [
+        "Entity 1 (App_WarningIndicator_Run) の 2 つのチェックポイント間隔を監視する（Entity 0 と同じ構成）。"
+      ],
+      "deadlines": [
+        {
+          "from": "START",
+          "to": "END",
+          "minMs": 0,
+          "maxMs": 200,
+          "doc": [
+            "START→END（Run() 1 回分の処理時間）の許容範囲。",
+            "LED 出力のみの単純な処理のため ENGINE より短い上限とする。"
+          ]
+        },
+        {
+          "from": "END",
+          "to": "START",
+          "minMs": 300,
+          "maxMs": 1500,
+          "doc": [
+            "END→START（次サイクルの Run() 呼び出しまでの間隔）の許容範囲。",
+            "タスク周期 500ms (Os_PBCfg.c Task 3) を中心に余裕を持たせる。",
+            "当初は ±200ms（700ms 上限）だったが、実機で Dem の新規 DTC 確定時",
+            "（NvM_WriteBlock() 経由の EEPROM 同期書き込み、Renesas RA では",
+            "NvM_Hw_WriteBlock() がバイト単位の EEPROM.update() ループでフラッシュ",
+            "消去/書き込みを伴う）による協調スケジューラの一時停止で",
+            "elapsed=741ms の Deadline 違反 → HW ウォッチドッグ未リフレッシュ →",
+            "実機リセットが発生することが判明した。この遅延はタスク自身の異常",
+            "ではなく、他 BSW モジュールのブロッキング処理由来であるため、",
+            "実測値に十分な余裕（約2倍）を持たせて上限を引き上げた。"
+          ]
+        }
+      ],
+      "note": [
+        "500ms 周期タスクを、Entity 0 と同じ 6000ms サイクルで監視。6 回以上の",
+        "報告を期待する（期待値 約12回の半分）。論理監視は WdgM_WarningTransitions、",
+        "時間監視は WdgM_WarningDeadlines をそれぞれ独立に適用する。"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,251 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "WdgM configuration",
+  "description": "WdgM_Cfg.h のエンティティ数・チェックポイント ID・Deadline の許容時間と、WdgM_PBCfg.c の許可遷移テーブル・Deadline テーブル・エンティティテーブルの生成元。エンティティの並び順がそのままエンティティ ID。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "module",
+    "supervisionCycleMs",
+    "supervisionCycleDoc",
+    "entities"
+  ],
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "module": {
+      "const": "WdgM"
+    },
+    "supervisionCycleMs": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Alive Supervision の判定サイクル [ms]（WDGM_SUPERVISION_CYCLE_MS）"
+    },
+    "supervisionCycleDoc": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "not": {
+          "pattern": "\\*/"
+        }
+      },
+      "description": "WDGM_SUPERVISION_CYCLE_MS のコメント"
+    },
+    "entities": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 255,
+      "items": {
+        "$ref": "#/$defs/entity"
+      }
+    }
+  },
+  "$defs": {
+    "entity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "runnable",
+        "taskPeriodMs",
+        "idDoc",
+        "expectedAliveIndications",
+        "aliveDoc",
+        "checkpointsDoc",
+        "checkpoints",
+        "transitionsDoc",
+        "transitions",
+        "deadlinesDoc",
+        "deadlines",
+        "note"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[A-Z][A-Z0-9_]*$",
+          "description": "エンティティ名（WDGM_ENTITY_<name>、WDGM_CP_<name>_* 等のマクロ名と、WdgM_<Name>Transitions 等の配列名になる）"
+        },
+        "runnable": {
+          "type": "string",
+          "minLength": 1,
+          "description": "監視する Runnable の関数名（コメント用）"
+        },
+        "taskPeriodMs": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Runnable を呼ぶタスクの周期 [ms]（Os_PBCfg.c）。Alive の期待回数と Deadline の許容範囲の整合性検査に使う"
+        },
+        "idDoc": {
+          "type": "string",
+          "minLength": 1,
+          "description": "エンティティ ID マクロのコメント"
+        },
+        "expectedAliveIndications": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "判定サイクルの間に期待する CheckpointReached 呼び出しの最小回数"
+        },
+        "aliveDoc": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "not": {
+              "pattern": "\\*/"
+            }
+          },
+          "description": "期待回数マクロのコメント"
+        },
+        "checkpointsDoc": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "not": {
+              "pattern": "\\*/"
+            }
+          },
+          "description": "チェックポイント ID の見出しコメント"
+        },
+        "checkpoints": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "name",
+              "id",
+              "doc"
+            ],
+            "properties": {
+              "name": {
+                "type": "string",
+                "pattern": "^[A-Z][A-Z0-9_]*$",
+                "description": "チェックポイント名（WDGM_CP_<エンティティ名>_<name>）"
+              },
+              "id": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 254,
+                "description": "チェックポイント ID（全エンティティで重複しない。0xFF は INITIAL 用に予約）"
+              },
+              "doc": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "not": {
+                    "pattern": "\\*/"
+                  }
+                },
+                "description": "チェックポイント ID マクロのコメント"
+              }
+            }
+          }
+        },
+        "transitionsDoc": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "not": {
+              "pattern": "\\*/"
+            }
+          },
+          "description": "許可遷移テーブルのコメント"
+        },
+        "transitions": {
+          "type": "array",
+          "description": "Logical 監視で許可する遷移。from に INITIAL（起動直後）が使える",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "from",
+              "to"
+            ],
+            "properties": {
+              "from": {
+                "type": "string",
+                "minLength": 1,
+                "description": "遷移元のチェックポイント名、または INITIAL"
+              },
+              "to": {
+                "type": "string",
+                "minLength": 1,
+                "description": "遷移先のチェックポイント名"
+              },
+              "comment": {
+                "type": "string",
+                "not": {
+                  "pattern": "\\*/"
+                },
+                "description": "行末の注釈"
+              }
+            }
+          }
+        },
+        "deadlinesDoc": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "not": {
+              "pattern": "\\*/"
+            }
+          },
+          "description": "Deadline テーブルのコメント"
+        },
+        "deadlines": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "from",
+              "to",
+              "minMs",
+              "maxMs",
+              "doc"
+            ],
+            "properties": {
+              "from": {
+                "type": "string",
+                "minLength": 1
+              },
+              "to": {
+                "type": "string",
+                "minLength": 1
+              },
+              "minMs": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "maxMs": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "doc": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "not": {
+                    "pattern": "\\*/"
+                  }
+                },
+                "description": "許容時間マクロのコメント"
+              }
+            }
+          }
+        },
+        "note": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "not": {
+              "pattern": "\\*/"
+            }
+          },
+          "description": "エンティティテーブルの、このエンティティの見出しコメント"
+        }
+      }
+    }
+  }
+}

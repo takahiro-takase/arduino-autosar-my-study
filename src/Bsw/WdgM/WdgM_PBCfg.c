@@ -43,29 +43,26 @@
  * Global Variables
  * ====================================================================== */
 
+/* @@GEN-BEGIN wdgm-tables  生成元: config/data/WdgM.json  （自動生成: 手編集禁止） */
 /* -----------------------------------------------------------------------
  * 論理監視 (Logical Supervision) 許可遷移テーブル — Entity 0 用
  * ----------------------------------------------------------------------- */
-/**
- * Entity 0 (App_EngineManager_Run) のプログラムフロー:
- *   (起動直後) → START → END → START → END → ...
- * 上記以外の遷移（START の連続呼び出し、END で始まる等）は順序違反として検出する。
- */
+/** Entity 0 (App_EngineManager_Run) のプログラムフロー:
+ *    (起動直後) → START → END → START → END → ...
+ *  上記以外の遷移（START の連続呼び出し、END で始まる等）は順序違反として検出する。 */
 static const WdgM_TransitionCfgType WdgM_EngineTransitions[] =
 {
-    { WDGM_CP_INITIAL,      WDGM_CP_ENGINE_START },  /* 起動後、最初に許可されるのは START のみ */
-    { WDGM_CP_ENGINE_START, WDGM_CP_ENGINE_END   },  /* START の次に許可されるのは END          */
-    { WDGM_CP_ENGINE_END,   WDGM_CP_ENGINE_START }   /* END の次に許可されるのは次サイクルの START */
+    { WDGM_CP_INITIAL, WDGM_CP_ENGINE_START },      /* 起動後、最初に許可されるのは START のみ */
+    { WDGM_CP_ENGINE_START, WDGM_CP_ENGINE_END },   /* START の次に許可されるのは END */
+    { WDGM_CP_ENGINE_END, WDGM_CP_ENGINE_START }    /* END の次に許可されるのは次サイクルの START */
 };
 
 /* -----------------------------------------------------------------------
  * 時間監視 (Deadline Supervision) 許容テーブル — Entity 0 用
  * ----------------------------------------------------------------------- */
-/**
- * Entity 0 (App_EngineManager_Run) の 2 つのチェックポイント間隔を監視する:
- *   START→END : Run() 1 回分の処理時間（無限ループ・ブロッキング処理の検出）
- *   END→START : 次サイクルの Run() 呼び出しまでの間隔（タスク周期 3000ms の遵守確認）
- */
+/** Entity 0 (App_EngineManager_Run) の 2 つのチェックポイント間隔を監視する:
+ *    START→END : Run() 1 回分の処理時間（無限ループ・ブロッキング処理の検出）
+ *    END→START : 次サイクルの Run() 呼び出しまでの間隔（タスク周期 3000ms の遵守確認） */
 static const WdgM_DeadlineCfgType WdgM_EngineDeadlines[] =
 {
     { WDGM_CP_ENGINE_START, WDGM_CP_ENGINE_END,
@@ -77,22 +74,21 @@ static const WdgM_DeadlineCfgType WdgM_EngineDeadlines[] =
 /* -----------------------------------------------------------------------
  * 論理監視 (Logical Supervision) 許可遷移テーブル — Entity 1 用
  * ----------------------------------------------------------------------- */
-/**
- * Entity 1 (App_WarningIndicator_Run) のプログラムフロー:
- *   (起動直後) → START → END → START → END → ...
- * Entity 0 と同じ「START/END の交互反復」パターンだが、周期は 500ms と
- * ENGINE (3000ms) より短い。
- */
+/** Entity 1 (App_WarningIndicator_Run) のプログラムフロー:
+ *    (起動直後) → START → END → START → END → ...
+ *  Entity 0 と同じ「START/END の交互反復」パターンだが、周期は 500ms と
+ *  ENGINE (3000ms) より短い。 */
 static const WdgM_TransitionCfgType WdgM_WarningTransitions[] =
 {
-    { WDGM_CP_INITIAL,       WDGM_CP_WARNING_START },
-    { WDGM_CP_WARNING_START, WDGM_CP_WARNING_END   },
-    { WDGM_CP_WARNING_END,   WDGM_CP_WARNING_START }
+    { WDGM_CP_INITIAL, WDGM_CP_WARNING_START },
+    { WDGM_CP_WARNING_START, WDGM_CP_WARNING_END },
+    { WDGM_CP_WARNING_END, WDGM_CP_WARNING_START }
 };
 
 /* -----------------------------------------------------------------------
  * 時間監視 (Deadline Supervision) 許容テーブル — Entity 1 用
  * ----------------------------------------------------------------------- */
+/** Entity 1 (App_WarningIndicator_Run) の 2 つのチェックポイント間隔を監視する（Entity 0 と同じ構成）。 */
 static const WdgM_DeadlineCfgType WdgM_WarningDeadlines[] =
 {
     { WDGM_CP_WARNING_START, WDGM_CP_WARNING_END,
@@ -133,6 +129,7 @@ static const WdgM_EntityCfgType WdgM_Entities[WDGM_SUPERVISED_ENTITY_COUNT] =
         (uint8)(sizeof(WdgM_WarningDeadlines) / sizeof(WdgM_WarningDeadlines[0]))
     }
 };
+/* @@GEN-END wdgm-tables */
 
 /* -----------------------------------------------------------------------
  * ポストビルドコンフィグインスタンス (EcuM が WdgM_Init に渡す)

@@ -43,7 +43,7 @@ NAV_BLOCKS = (
         NavRow("Com.json", "Com", "Com — 信号・I-PDU・送信モード・コールバック"),
         NavRow("PduR.json", "PduR", "PduR — PDU のルーティング"),
         NavRow("CanIf.json", "CanIf", "CanIf — PDU と CAN ID の対応"),
-        NavRow(None, "Can", "Can — コントローラ設定（json なし。手書き）"),
+        NavRow("Can.json", "Can", "Can — コントローラ設定（ピン・ボーレート・水晶・受信フィルタ）"),
     ),
     (
         NavRow("E2EXf.json", "E2EXf", "E2EXf — E2E 保護（Profile05）"),
@@ -53,6 +53,11 @@ NAV_BLOCKS = (
         NavRow("CryptoStack.json", "Csm", "Csm — 暗号サービス（ジョブ）。Crypto・KeyM と同じ設定ファイル", (("jobs",),)),
         NavRow("CryptoStack.json", "Crypto", "Crypto — 暗号ドライバ（鍵）。Csm・KeyM と同じ設定ファイル", (("keys",),)),
         NavRow("CryptoStack.json", "KeyM", "KeyM — 鍵名の管理。Csm・Crypto と同じ設定ファイル", (("keys", 0, "keyM"), ("keys",))),
+    ),
+    (
+        NavRow("FiM.json", "FiM", "FiM — 機能の抑止（機能 ID と Dem イベントの対応）"),
+        NavRow("WdgM.json", "WdgM", "WdgM — 監視対象のタスク（Alive・順序・時間の監視）"),
+        NavRow("NvM.json", "NvM", "NvM — 不揮発ブロックの構成（サイズ・EEPROM アドレス・ROM デフォルト値）"),
     ),
     (NavRow("BswM.json", "BswM", "BswM — モード遷移のルール・I-PDU グループの起動/停止"),),
 )

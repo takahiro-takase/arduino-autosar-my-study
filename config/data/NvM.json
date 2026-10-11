@@ -1,0 +1,121 @@
+{
+  "$schema": "../schema/NvM.schema.json",
+  "module": "NvM",
+  "baseAddress": 0,
+  "blocks": [
+    {
+      "name": "DEM_MAGIC",
+      "title": "DEM 有効マーカー",
+      "length": 1,
+      "lengthDoc": "マジックバイト: 1 byte",
+      "addrDoc": "マジックバイトのアドレス (CRC は +MAGIC_LENGTH)",
+      "note": [
+        "UseCrcCompMechanism=1: 内容が変化しない起動が大半のため、CRC一致時は",
+        "物理書き込みをスキップしEEPROM書き込み耐久を節約する",
+        "（[SWS_NvM_00852]、2026-09 追加。NvM.h の UseCrcCompMechanism 宣言",
+        "コメント参照。STATUS/AGING も同じ理由）。"
+      ],
+      "default": {
+        "kind": "scalar",
+        "value": "0x00U",
+        "doc": [
+          "マジックバイトのデフォルトは DEM_NVM_MAGIC_BYTE と異なる値（無効）にする。",
+          "MAGIC ブロックが破損から復元された場合でも、Dem_Init() 側の既存ロジックが",
+          "そのまま「初回起動扱い」として STATUS/AGING を含め一貫した初期化を行う。"
+        ]
+      }
+    },
+    {
+      "name": "DEM_STATUS",
+      "title": "DEM イベントステータス",
+      "length": 15,
+      "demEventCount": true,
+      "lengthDoc": "DEM_EVENT_COUNT = 15 イベント分",
+      "addrDoc": "ステータステーブルの先頭アドレス",
+      "note": [],
+      "default": {
+        "kind": "repeat",
+        "value": "DEM_STATUS_NOT_COMPLETED_SINCE_CLEAR | DEM_STATUS_NOT_COMPLETED_THIS_CYCLE",
+        "doc": [
+          "DEM_STATUS のデフォルトは Dem_Init() の初回起動時と同じ値",
+          "(DEM_STATUS_NOT_COMPLETED_SINCE_CLEAR | DEM_STATUS_NOT_COMPLETED_THIS_CYCLE)。",
+          "MAGIC は無事だが STATUS だけ破損した場合でも、Dem が想定する",
+          "「正常な初期状態」と一致させるため。"
+        ],
+        "elementComments": [
+          {
+            "index": 8,
+            "text": "event 8: E2E_ABSINFO"
+          },
+          {
+            "index": 9,
+            "text": "event 9: E2E_ENGINEINFO"
+          },
+          {
+            "index": 10,
+            "text": "event 10: WDGM_SUPERVISION"
+          },
+          {
+            "index": 11,
+            "text": "event 11: WDG_DISABLE_REJECTED"
+          },
+          {
+            "index": 12,
+            "text": "event 12: NVM_INTEGRITY_FAILED"
+          },
+          {
+            "index": 13,
+            "text": "event 13: NVM_LOSS_OF_REDUNDANCY"
+          },
+          {
+            "index": 14,
+            "text": "event 14: NVM_REQ_FAILED"
+          }
+        ]
+      }
+    },
+    {
+      "name": "DEM_AGING",
+      "title": "DEM 経年回復(Aging)カウンタ",
+      "length": 15,
+      "demEventCount": true,
+      "lengthDoc": "DEM_EVENT_COUNT = 15 イベント分",
+      "addrDoc": "Aging カウンタの先頭アドレス",
+      "note": [],
+      "default": {
+        "kind": "none",
+        "doc": [
+          "DEM_AGING / DEM_EXTENDED はデフォルトを定義しない (NULL)。経年回復カウンタ・",
+          "故障確定回数 (ExtendedData) の初回起動値はいずれも全イベント 0 であり、",
+          "NvM_Init() が CRC 不一致検出時に NULL の場合行う全 0 フィルと一致するため、",
+          "専用の ROM テーブルを用意する必要がない（2026-09 追記: ただしこれは",
+          "NvM_Init() 内部の起動時復旧処理に限った話で、実行中に明示的に呼ぶ",
+          "`NvM_RestoreBlockDefaults()` は ROM デフォルト値が未設定のブロックに対し",
+          "E_NOT_OK を返すだけで全 0 フィルは行わない、[SWS_NvM_00883]。この2ブロックに",
+          "対して `NvM_RestoreBlockDefaults()` を呼んでもリセットは起きない）。"
+        ]
+      }
+    },
+    {
+      "name": "DEM_EXTENDED",
+      "title": "DEM 故障確定回数 ExtendedData",
+      "length": 15,
+      "demEventCount": true,
+      "redundant": true,
+      "lengthDoc": "DEM_EVENT_COUNT = 15 イベント分",
+      "addrDoc": "故障確定回数の先頭アドレス・プライマリ面",
+      "mirrorAddrDoc": "故障確定回数のミラー面。冗長ブロック専用",
+      "note": [
+        "冗長ブロック（2 面化）。",
+        "UDS SID 0x19/06 で読み出せる車両生涯の故障確定回数を保持するため、",
+        "1 バイトの書き込み不良で丸ごと失われる（全 0 へ復元される）ことを",
+        "避ける。",
+        "UseCrcCompMechanism は使わない（Redundant=1 のとき NvM_WriteBlock() の",
+        "スキップ条件が Redundant==0U で対象外にする）。"
+      ],
+      "default": {
+        "kind": "none"
+      }
+    }
+  ]
+}

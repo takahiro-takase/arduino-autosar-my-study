@@ -391,7 +391,7 @@ python tools/configurator/sync_cfg.py    # 信号表に追加したフレーム�
 python tools/configurator/gen_cfg.py     # スキーマ・整合性を検査して、生成領域を更新（--check で差分の確認のみ）
 ```
 
-- 対象は CanIf / Com / PduR / E2EXf / SecOC / Csm・Crypto・KeyM / Rte（信号アクセス関数）/ BswM です。生成領域は、C ソースの
+- 対象は CanIf / Com / PduR / E2EXf / SecOC / Csm・Crypto・KeyM / Rte（信号アクセス関数）/ NvM（ブロック構成）/ WdgM（監視対象）/ FiM（機能の抑止）/ Can（コントローラ設定）/ BswM です。生成領域は、C ソースの
   `@@GEN-BEGIN` から `@@GEN-END` までの間だけで、手で編集しません。
 - CAN ID、DLC、ビット位置などの値の正本は信号表です。設定 JSON はフレーム名で参照するだけで、値をコピーしません。
 - 設定 JSON は、`tools/can_tool` の左側のナビゲーション（`Com`、`PduR`、`CanIf` など）で、スキーマ（`config/schema/`）に従って GUI から編集できます。

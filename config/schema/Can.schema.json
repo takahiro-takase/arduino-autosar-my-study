@@ -1,0 +1,98 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Can configuration",
+  "description": "Can_Cfg.h のピン番号と、Can_PBCfg.c の Can_Config（フィルタ・ピン・ボーレート・水晶）の生成元。ボーレートと水晶の指定は、Can_Cfg.h の CAN_BAUDRATE_* / CAN_CRYSTAL_*MHZ に実在する名前で書く。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "module",
+    "csPin",
+    "csPinDoc",
+    "intPin",
+    "intPinDoc",
+    "baudrate",
+    "crystalMhz",
+    "filter",
+    "filterNote"
+  ],
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "module": {
+      "const": "Can"
+    },
+    "csPin": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 255,
+      "description": "SPI チップセレクト (CS) のピン番号（CAN_CS_PIN）"
+    },
+    "csPinDoc": {
+      "type": "string",
+      "minLength": 1,
+      "not": {
+        "pattern": "\\*/"
+      },
+      "description": "CAN_CS_PIN のコメント"
+    },
+    "intPin": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 255,
+      "description": "割り込み (INT) のピン番号（CAN_INT_PIN）"
+    },
+    "intPinDoc": {
+      "type": "string",
+      "minLength": 1,
+      "not": {
+        "pattern": "\\*/"
+      },
+      "description": "CAN_INT_PIN のコメント"
+    },
+    "baudrate": {
+      "type": "string",
+      "pattern": "^[0-9K]+BPS$",
+      "description": "ボーレート。CAN_BAUDRATE_<値> の <値>（例: 500KBPS）"
+    },
+    "crystalMhz": {
+      "enum": [
+        8,
+        16,
+        20
+      ],
+      "description": "水晶発振器の周波数 [MHz]（CAN_CRYSTAL_<値>MHZ）"
+    },
+    "filter": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "mask"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^0x[0-9A-Fa-f]{1,8}$",
+          "description": "受け付ける CAN ID（16 進）"
+        },
+        "mask": {
+          "type": "string",
+          "pattern": "^0x[0-9A-Fa-f]{1,8}$",
+          "description": "フィルタマスク（16 進。1 のビットは一致必須）"
+        }
+      }
+    },
+    "filterNote": {
+      "type": "array",
+      "minItems": 1,
+      "description": "フィルタ設定のコメント",
+      "items": {
+        "type": "string",
+        "not": {
+          "pattern": "\\*/"
+        }
+      }
+    }
+  }
+}

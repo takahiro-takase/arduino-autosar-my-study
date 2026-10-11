@@ -9,7 +9,7 @@ variables
     int dids[3] = {0xF190, 0xF187, 0xF18C};  // 読み出す DID のリスト
     int i;
     int okCount;
-    message 0x300 statusMsg;                 // 自作の状態通知フレームを組み立てて送る
+    message 0x500 statusMsg;                 // 自作の状態通知フレームを組み立てて送る
 }
 
 // int 配列の要素 (DID) を1つ ReadDataByIdentifier で読み出す。1なら成功。
@@ -42,7 +42,7 @@ on start
     }
     write("読み出し成功 %d/3 件", okCount);
 
-    // message 変数を組み立てて、自作の状態通知フレーム (0x300) を送信する
+    // message 変数を組み立てて、自作の状態通知フレーム (0x500。ECU が使っていない ID。0x300 は ECU の TestMsg が使う) を送信する
     // (output() は send_can() と同様、応答待ちをしない「投げっぱなし」送信)
     statusMsg.byte(0) = 0x01;   // 例: ステータスコード
     statusMsg.byte(1) = okCount;

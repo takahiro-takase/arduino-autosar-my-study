@@ -76,11 +76,13 @@
 /* cppcheck-suppress misra-c2012-2.5 */
 #define CAN_CONTROLLER_COUNT   1U
 
+/* @@GEN-BEGIN can-pins  生成元: config/data/Can.json  （自動生成: 手編集禁止） */
 /** MCP2515 チップセレクト (CS) ピン番号 */
 #define CAN_CS_PIN             10U
 
 /** MCP2515 割り込み (INT) ピン番号 */
 #define CAN_INT_PIN            2U
+/* @@GEN-END can-pins */
 
 /* -----------------------------------------------------------------------
  * ボーレート定数 (mcp_can_dfs.h の enum 値と一致)
