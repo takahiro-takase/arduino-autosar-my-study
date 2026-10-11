@@ -22,13 +22,13 @@ def validate(cfg):
     dtcs = [int(e["dtc"], 16) for e in cfg["events"]]
     if len(set(dtcs)) != len(dtcs):
         errors.append("events: dtc が重複している")
+    if len(cfg["events"]) > 255:
+        errors.append("events: イベント数は 255 件まで（Dem_EventIdType が uint8 のため）")
     for e in cfg["events"]:
         if not IDENT_RE.match(e["name"]):
             errors.append("events %s: name は大文字の英数字と _ だけ（先頭は英字）" % e["name"])
-        if not 1 <= int(e["dtc"], 16) <= 0xFFFFFF:
-            errors.append("events %s: dtc は 24 bit の範囲（0x000001〜0xFFFFFF）" % e["name"])
-        if e["dtc"].upper() == "0XFFFFFF":
-            errors.append("events %s: dtc 0xFFFFFF は「全 DTC」を表すグループコード（DEM_GROUP_ALL_DTCS）と同じため使えない" % e["name"])
+        if not 1 <= int(e["dtc"], 16) <= 0xFFFFFE:  # 0xFFFFFF は「全 DTC」のグループコード（DEM_GROUP_ALL_DTCS）と同じため使えない
+            errors.append("events %s: dtc は 0x000001〜0xFFFFFE の範囲（0xFFFFFF は全 DTC を表すグループコード）" % e["name"])
     return errors
 
 

@@ -1,0 +1,142 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Dcm configuration",
+  "description": "Dcm_Cfg.h の DID の定義と、Dcm_PBCfg.c / Dcm_PBCfg.h の DID 表・データ関数の宣言の生成元。DID の並び順がそのまま表の順序。読み出し・書き込みの関数は Dcm.c に手書きする（名前だけをここに書く）。 sidSessions は SID ごとの許可セッション（表に無い SID は全セッションで許可）。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "module",
+    "dids",
+    "sidSessionDoc",
+    "sidSessions"
+  ],
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "module": {
+      "const": "Dcm"
+    },
+    "dids": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 255,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "did",
+          "length",
+          "doc"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "pattern": "^[A-Z][A-Z0-9_]*$",
+            "description": "DID 名。DCM_DID_<name> のマクロ名になる"
+          },
+          "did": {
+            "type": "string",
+            "pattern": "^0x[0-9A-Fa-f]{4}$",
+            "description": "データ識別子（16 bit、16 進 4 桁）。全 DID で重複しない"
+          },
+          "length": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 255,
+            "description": "データ長 [byte]（読み出しの応答と、書き込みの要求のデータ部の長さ）"
+          },
+          "lengthMacro": {
+            "type": "string",
+            "pattern": "^[A-Z][A-Z0-9_]*$",
+            "description": "データ長のマクロ名（テストや手書きのコードが長さを使う場合だけ指定する。省略すると表に数値で書く）"
+          },
+          "lengthDoc": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "string",
+              "not": {
+                "pattern": "\\*/"
+              }
+            },
+            "description": "データ長マクロのコメント（lengthMacro を指定したとき）"
+          },
+          "readFct": {
+            "type": "string",
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+            "description": "0x22 ReadDataByIdentifier のデータ読み出し関数（Dcm.c に手書き）。省略すると 0x22 非対応"
+          },
+          "writeFct": {
+            "type": "string",
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+            "description": "0x2E WriteDataByIdentifier のデータ書き込み関数（Dcm.c に手書き）。省略すると 0x2E 非対応"
+          },
+          "ioControlLamp": {
+            "enum": [
+              "RTE_LAMP_RUN",
+              "RTE_LAMP_FAULT",
+              "RTE_LAMP_ABS"
+            ],
+            "description": "0x2F InputOutputControlByIdentifier で制御するランプ（Rte.h の Rte_LampIdType）。省略すると 0x2F 非対応"
+          },
+          "doc": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "string",
+              "not": {
+                "pattern": "\\*/"
+              }
+            },
+            "description": "DID のマクロのコメント"
+          }
+        }
+      }
+    },
+    "sidSessionDoc": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "not": {
+          "pattern": "\\*/"
+        }
+      },
+      "description": "sidSessions の表のコメント（Dcm_PBCfg.c の表の直前に出す）"
+    },
+    "sidSessions": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "sid",
+          "sessions"
+        ],
+        "properties": {
+          "sid": {
+            "type": "string",
+            "pattern": "^[A-Z][A-Z0-9_]*$",
+            "description": "Dcm_Cfg.h の DCM_SID_<sid> に対応する名前"
+          },
+          "sessions": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {
+              "enum": [
+                "DEFAULT",
+                "EXTENDED"
+              ]
+            },
+            "description": "許可するセッション（DCM_SESSION_MASK_<値> の論理和になる）"
+          }
+        }
+      },
+      "maxItems": 255
+    }
+  }
+}
