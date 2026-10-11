@@ -120,6 +120,35 @@
 #define CANIF_RX_PDU_COUNT  5U
 /* @@GEN-END canif-counts */
 
+/* @@GEN-BEGIN canif-symbols  生成元: config/data/CanIf.json  （自動生成: 手編集禁止） */
+/* シンボリック名: CanIfConf_<コンテナ定義>_<name>（値は各テーブルの添字）。PduR などの上位層が参照する。 */
+/* cppcheck-suppress misra-c2012-2.5 */
+#define CanIfConf_CanIfTxPduCfg_MeterStatus_Tx        0U
+/* cppcheck-suppress misra-c2012-2.5 */
+#define CanIfConf_CanIfTxPduCfg_DiagResp_Tx           1U
+/* cppcheck-suppress misra-c2012-2.5 */
+#define CanIfConf_CanIfTxPduCfg_CanNm_Tx              2U
+/* cppcheck-suppress misra-c2012-2.5 */
+#define CanIfConf_CanIfTxPduCfg_WarningStatus_Tx      3U
+/* cppcheck-suppress misra-c2012-2.5 */
+#define CanIfConf_CanIfTxPduCfg_E2EHealthStatus_Tx    4U
+/* cppcheck-suppress misra-c2012-2.5 */
+#define CanIfConf_CanIfTxPduCfg_ImmobilizerStatus_Tx  5U
+/* cppcheck-suppress misra-c2012-2.5 */
+#define CanIfConf_CanIfTxPduCfg_TestMsg_Tx            6U
+
+/* cppcheck-suppress misra-c2012-2.5 */
+#define CanIfConf_CanIfRxPduCfg_EngineInfo_Rx         0U
+/* cppcheck-suppress misra-c2012-2.5 */
+#define CanIfConf_CanIfRxPduCfg_DiagReq_Rx            1U
+/* cppcheck-suppress misra-c2012-2.5 */
+#define CanIfConf_CanIfRxPduCfg_AbsInfo_Rx            2U
+/* cppcheck-suppress misra-c2012-2.5 */
+#define CanIfConf_CanIfRxPduCfg_ImmobilizerCmd_Rx     3U
+/* cppcheck-suppress misra-c2012-2.5 */
+#define CanIfConf_CanIfRxPduCfg_CanNm_Rx              4U
+/* @@GEN-END canif-symbols */
+
 /** CanIf_ReadRxPduData()（2026-08 追加）の内部バッファ配列サイズ。
  *  Com_Cfg.h の COM_RX_IPDU_MAX と同じ規約（CANIF_RX_PDU_COUNT に連動）。
  *  この配列は native_chain バイナリ全体で共有される固定サイズのため、

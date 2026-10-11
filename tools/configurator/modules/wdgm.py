@@ -1,6 +1,6 @@
 """WdgM（WdgM_Cfg.h / WdgM_PBCfg.c）の生成。
 
-WdgM.json に書く値: 判定サイクル、監視対象エンティティ（タスク周期、Alive の期待回数、チェックポイント、
+WdgM.json に書く値: 判定サイクル、監視対象エンティティ（監視する Os のタスク、Alive の期待回数、チェックポイント、
 Logical 監視の許可遷移、Deadline 監視の許容時間）と、各項目の説明。
 生成する値:
   - エンティティ数・ID、判定サイクル、Alive の期待回数のマクロ（WdgM_Cfg.h）
@@ -9,12 +9,18 @@ Logical 監視の許可遷移、Deadline 監視の許容時間）と、各項目
 検査する内容（validate）:
   - チェックポイント ID が全エンティティで重複せず、WDGM_CP_INITIAL（0xFF）と衝突しない
   - 遷移・Deadline が、そのエンティティのチェックポイントを指している
-  - Deadline の min <= max、タスク周期が「終了→開始」の許容範囲に入っている
+  - Deadline の min <= max
+  - 監視するタスク（osTask）の周期を Os_PBCfg.c の Os_TaskTable から読み、「終了→開始」の許容範囲に入っている
   - Alive の期待回数が、判定サイクルの間に実際に呼ばれる回数（サイクル ÷ タスク周期）を超えない
 WdgM_Cfg.h の他の定数（EXPIRED の許容サイクル数、HW ウォッチドッグの周期とタイムアウト）は手書きのまま。
 """
 
+import pathlib
+import re
+
 from .common import doc_comment
+
+REPO_ROOT = pathlib.Path(__file__).resolve().parents[3]
 
 INITIAL = "INITIAL"
 INITIAL_ID = 0xFF
@@ -57,17 +63,6 @@ def validate(cfg):
             if (d["from"], d["to"]) in pairs:
                 errors.append("entities %s: deadlines %s→%s が重複している" % (e["name"], d["from"], d["to"]))
             pairs.add((d["from"], d["to"]))
-        # 周期の整合性
-        period = e["taskPeriodMs"]
-        per_cycle = cycle // period
-        if e["expectedAliveIndications"] > per_cycle:
-            errors.append("entities %s: expectedAliveIndications=%d が、判定サイクルの間に呼ばれる回数 %d（%dms ÷ %dms）を超えている"
-                          % (e["name"], e["expectedAliveIndications"], per_cycle, cycle, period))
-        back = [d for d in e["deadlines"] if d["to"] == e["checkpoints"][0]["name"] and d["from"] == e["checkpoints"][-1]["name"]]
-        for d in back:
-            if not (d["minMs"] <= period <= d["maxMs"]):
-                errors.append("entities %s: タスク周期 %dms が deadlines %s→%s の許容範囲 %d〜%dms に入っていない"
-                              % (e["name"], period, d["from"], d["to"], d["minMs"], d["maxMs"]))
     return errors
 
 
@@ -84,7 +79,40 @@ def deadline_macro(e, d, which):
     return "WDGM_%s_DEADLINE_%s_TO_%s_%s_MS" % (e["name"], d["from"], d["to"], which)
 
 
+def os_periods(ctx):
+    """Os_PBCfg.c の Os_TaskTable から {タスクの関数名: 周期 [ms]} を読む。"""
+    root = pathlib.Path(getattr(ctx, "repo_root", None) or REPO_ROOT)
+    text = (root / "src" / "Os" / "Os_PBCfg.c").read_bytes().decode("utf-8", errors="replace")
+    i = text.index("Os_TaskTable[")
+    body = text[i:text.index("};", i)]
+    return {m.group(1): int(m.group(2)) for m in re.finditer(r"\{\s*(\w+)\s*,\s*(\d+)U\s*\}", body)}
+
+
+def check_periods(cfg, ctx):
+    """監視するタスク（osTask）の周期を Os_PBCfg.c から引き、Alive の期待回数と Deadline の許容範囲と矛盾しないか検査する。"""
+    periods = os_periods(ctx)
+    cycle = cfg["supervisionCycleMs"]
+    errors = []
+    for e in cfg["entities"]:
+        period = periods.get(e["osTask"])
+        if period is None:
+            errors.append("entities %s: osTask '%s' が Os_PBCfg.c の Os_TaskTable に無い" % (e["name"], e["osTask"]))
+            continue
+        per_cycle = cycle // period
+        if e["expectedAliveIndications"] > per_cycle:
+            errors.append("entities %s: expectedAliveIndications=%d が、判定サイクルの間に呼ばれる回数 %d（%dms ÷ %s の周期 %dms）を超えている"
+                          % (e["name"], e["expectedAliveIndications"], per_cycle, cycle, e["osTask"], period))
+        first, last = e["checkpoints"][0]["name"], e["checkpoints"][-1]["name"]
+        for d in e["deadlines"]:
+            if d["to"] == first and d["from"] == last and not (d["minMs"] <= period <= d["maxMs"]):
+                errors.append("entities %s: %s の周期 %dms が deadlines %s→%s の許容範囲 %d〜%dms に入っていない"
+                              % (e["name"], e["osTask"], period, d["from"], d["to"], d["minMs"], d["maxMs"]))
+    if errors:
+        raise ValueError("; ".join(errors))
+
+
 def render_cfg_entities(cfg, ctx):
+    check_periods(cfg, ctx)
     out = doc_comment(["監視対象エンティティ総数"])
     out.append("#define WDGM_SUPERVISED_ENTITY_COUNT     %dU" % len(cfg["entities"]))
     for i, e in enumerate(cfg["entities"]):
@@ -102,6 +130,7 @@ def render_cfg_entities(cfg, ctx):
 
 
 def render_cfg_checkpoints(cfg, ctx):
+    check_periods(cfg, ctx)
     out = []
     for i, e in enumerate(cfg["entities"]):
         out += ruled(["論理監視 (Logical Supervision) チェックポイント ID"] + e["checkpointsDoc"])
@@ -128,6 +157,7 @@ def table_ident(e, kind):
 
 
 def render_pbcfg(cfg, ctx):
+    check_periods(cfg, ctx)
     out = []
     for i, e in enumerate(cfg["entities"]):
         if e["transitions"]:

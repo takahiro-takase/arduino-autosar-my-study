@@ -350,4 +350,58 @@
 #define COM_SIGNAL_TEST_MSG_TEST_COUNTER  19U
 /* @@GEN-END com-signal-ids */
 
+/* @@GEN-BEGIN com-symbols  生成元: config/data/Com.json  （自動生成: 手編集禁止） */
+/* シンボリック名: ComConf_<コンテナ定義>_<name>（値は各テーブルの添字）。PduR などの下位層が参照する。 */
+#define ComConf_ComIPdu_EngineInfo_Rx                        0U
+#define ComConf_ComIPdu_AbsInfo_Rx                           1U
+#define ComConf_ComIPdu_SecureCommand_Rx                     2U
+
+#define ComConf_ComIPdu_MeterStatus_Tx                       0U
+#define ComConf_ComIPdu_WarningStatus_Tx                     1U
+#define ComConf_ComIPdu_E2EHealthStatus_Tx                   2U
+#define ComConf_ComIPdu_ImmobilizerStatus_Tx                 3U
+#define ComConf_ComIPdu_TestMsg_Tx                           4U
+
+/* cppcheck-suppress misra-c2012-2.5 */
+#define ComConf_ComSignal_EngineSpeed_Rx                     0U
+/* cppcheck-suppress misra-c2012-2.5 */
+#define ComConf_ComSignal_CoolantTemp_Rx                     1U
+/* cppcheck-suppress misra-c2012-2.5 */
+#define ComConf_ComSignal_EngineOnFlag_Rx                    2U
+/* cppcheck-suppress misra-c2012-2.5 */
+#define ComConf_ComSignal_EngineState_Tx                     3U
+/* cppcheck-suppress misra-c2012-2.5 */
+#define ComConf_ComSignal_VehicleSpeed_Rx                    4U
+/* cppcheck-suppress misra-c2012-2.5 */
+#define ComConf_ComSignal_BrakeActive_Rx                     5U
+/* cppcheck-suppress misra-c2012-2.5 */
+#define ComConf_ComSignal_AbsActive_Rx                       6U
+/* cppcheck-suppress misra-c2012-2.5 */
+#define ComConf_ComSignal_RunLamp_Tx                         7U
+/* cppcheck-suppress misra-c2012-2.5 */
+#define ComConf_ComSignal_FaultLamp_Tx                       8U
+/* cppcheck-suppress misra-c2012-2.5 */
+#define ComConf_ComSignal_AbsLamp_Tx                         9U
+/* cppcheck-suppress misra-c2012-2.5 */
+#define ComConf_ComSignal_E2ECrcErrCount_Tx                 10U
+/* cppcheck-suppress misra-c2012-2.5 */
+#define ComConf_ComSignal_E2ESeqErrCount_Tx                 11U
+/* cppcheck-suppress misra-c2012-2.5 */
+#define ComConf_ComSignal_ImmobilizerCmd_Rx                 12U
+/* cppcheck-suppress misra-c2012-2.5 */
+#define ComConf_ComSignal_ImmobilizerStatus_Tx              13U
+/* cppcheck-suppress misra-c2012-2.5 */
+#define ComConf_ComSignal_MeterStatus_EngineSpeedMirror_Tx  14U
+/* cppcheck-suppress misra-c2012-2.5 */
+#define ComConf_ComSignal_MeterStatus_RunLampMirror_Tx      15U
+/* cppcheck-suppress misra-c2012-2.5 */
+#define ComConf_ComSignal_MeterStatus_FaultLampMirror_Tx    16U
+/* cppcheck-suppress misra-c2012-2.5 */
+#define ComConf_ComSignal_MeterStatus_AbsLampMirror_Tx      17U
+/* cppcheck-suppress misra-c2012-2.5 */
+#define ComConf_ComSignal_MeterStatus_CoolantTempMirror_Tx  18U
+/* cppcheck-suppress misra-c2012-2.5 */
+#define ComConf_ComSignal_TestMsg_TestCounter_Tx            19U
+/* @@GEN-END com-symbols */
+
 #endif /* COM_CFG_H */

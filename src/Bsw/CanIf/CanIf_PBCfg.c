@@ -67,6 +67,7 @@
 #include "CanIf_PBCfg.h"
 #include "CanIf_Cfg.h"
 #include "PduR_CanIf.h"
+#include "PduR_Cfg.h"
 #include "CanNm.h"
 
 /* ======================================================================
@@ -85,31 +86,31 @@ static const CanIf_TxPduConfigType CanIf_TxPduConfigData[CANIF_TX_PDU_COUNT] = {
          * TxPduId=0: MeterStatus フレーム
          * DaVinci: /ActiveEcuC/CanIf/CanIfInitCfg/CanIfTxPduCfg/MeterStatus_Tx
          * --------------------------------------------------------------- */
-        .UpperLayerTxPduId = 0U,                      /* DaVinci: CanIfTxPduId */
-        .CanId             = 0x200U,                  /* DaVinci: CanIfTxPduCanId */
-        .Dlc               = 6U,                      /* DaVinci: CanIfTxPduDlc
-                                                       *          E2E 保護なし。byte[0]=EngineState、
-                                                       *          byte[1] bit0=update-bit、byte[2]=警告灯3bit、
-                                                       *          byte[3-4]=EngineSpeedミラー、byte[5]=CoolantTempミラー */
-        .Hth               = 0U,                      /* DaVinci: CanIfTxPduHthIdRef */
-        .TxConfirmFct      = PduR_CanIfTxConfirmation /* DaVinci: CanIfTxPduUserTxConfirmationName */
+        .UpperLayerTxPduId = PduRConf_PduRSrcPdu_MeterStatus_Tx, /* DaVinci: CanIfTxPduId */
+        .CanId             = 0x200U,                             /* DaVinci: CanIfTxPduCanId */
+        .Dlc               = 6U,                                 /* DaVinci: CanIfTxPduDlc
+                                                                  *          E2E 保護なし。byte[0]=EngineState、
+                                                                  *          byte[1] bit0=update-bit、byte[2]=警告灯3bit、
+                                                                  *          byte[3-4]=EngineSpeedミラー、byte[5]=CoolantTempミラー */
+        .Hth               = 0U,                                 /* DaVinci: CanIfTxPduHthIdRef */
+        .TxConfirmFct      = PduR_CanIfTxConfirmation            /* DaVinci: CanIfTxPduUserTxConfirmationName */
     },
     {
         /* ---------------------------------------------------------------
          * TxPduId=1: UDS 診断応答フレーム
          * DaVinci: /ActiveEcuC/CanIf/CanIfInitCfg/CanIfTxPduCfg/DiagResp_Tx
          * --------------------------------------------------------------- */
-        .UpperLayerTxPduId = 1U,                      /* DaVinci: CanIfTxPduId */
-        .CanId             = 0x7E8U,                  /* DaVinci: CanIfTxPduCanId */
-        .Dlc               = 8U,                      /* DaVinci: CanIfTxPduDlc */
-        .Hth               = 0U,                      /* DaVinci: CanIfTxPduHthIdRef */
-        .TxConfirmFct      = PduR_CanIfTxConfirmation /* DaVinci: CanIfTxPduUserTxConfirmationName
-                                                       *          PduR_PBCfg.c の TX パス(SrcPduId=1)は
-                                                       *          ConfFct=CanTp_TxConfirmation を設定済みだが、
-                                                       *          以前は本フィールドが NULL のため到達不能な配線に
-                                                       *          なっていた（CanTp_TxConfirmation 自体は意図的な
-                                                       *          no-op のため実害はなかったが、設定の一貫性として
-                                                       *          修正。2026-08 のスペック監査で発見） */
+        .UpperLayerTxPduId = PduRConf_PduRSrcPdu_DiagResp_Tx, /* DaVinci: CanIfTxPduId */
+        .CanId             = 0x7E8U,                          /* DaVinci: CanIfTxPduCanId */
+        .Dlc               = 8U,                              /* DaVinci: CanIfTxPduDlc */
+        .Hth               = 0U,                              /* DaVinci: CanIfTxPduHthIdRef */
+        .TxConfirmFct      = PduR_CanIfTxConfirmation         /* DaVinci: CanIfTxPduUserTxConfirmationName
+                                                               *          PduR_PBCfg.c の TX パス(SrcPduId=1)は
+                                                               *          ConfFct=CanTp_TxConfirmation を設定済みだが、
+                                                               *          以前は本フィールドが NULL のため到達不能な配線に
+                                                               *          なっていた（CanTp_TxConfirmation 自体は意図的な
+                                                               *          no-op のため実害はなかったが、設定の一貫性として
+                                                               *          修正。2026-08 のスペック監査で発見） */
     },
     {
         /* ---------------------------------------------------------------
@@ -132,55 +133,55 @@ static const CanIf_TxPduConfigType CanIf_TxPduConfigData[CANIF_TX_PDU_COUNT] = {
          * TxPduId=3: WarningStatus フレーム (COM Signal Group)
          * DaVinci: /ActiveEcuC/CanIf/CanIfInitCfg/CanIfTxPduCfg/WarningStatus_Tx
          * --------------------------------------------------------------- */
-        .UpperLayerTxPduId = 2U,                      /* DaVinci: CanIfTxPduId
-                                                       *          TxConfirmation で上位層(PduR)へ返す ID のため、CanIf 自身の TxPduId(=3) ではなく
-                                                       *          PduR_PBCfg.c の PduR_TxPaths[] における WarningStatus パスの SrcPduId(=2) と
-                                                       *          一致させる。（MeterStatus/UDS応答は SrcPduId と CanIf TxPduId が
-                                                       *          たまたま同値のため、この区別が表面化していなかった） */
-        .CanId             = 0x210U,                  /* DaVinci: CanIfTxPduCanId */
-        .Dlc               = 1U,                      /* DaVinci: CanIfTxPduDlc
-                                                       *          RunLamp/FaultLamp/AbsLamp 各1bit */
-        .Hth               = 0U,                      /* DaVinci: CanIfTxPduHthIdRef */
-        .TxConfirmFct      = PduR_CanIfTxConfirmation /* DaVinci: CanIfTxPduUserTxConfirmationName */
+        .UpperLayerTxPduId = PduRConf_PduRSrcPdu_WarningStatus_Tx, /* DaVinci: CanIfTxPduId
+                                                                    *          TxConfirmation で上位層(PduR)へ返す ID のため、CanIf 自身の TxPduId(=3) ではなく
+                                                                    *          PduR_PBCfg.c の PduR_TxPaths[] における WarningStatus パスの SrcPduId(=2) と
+                                                                    *          一致させる。（MeterStatus/UDS応答は SrcPduId と CanIf TxPduId が
+                                                                    *          たまたま同値のため、この区別が表面化していなかった） */
+        .CanId             = 0x210U,                               /* DaVinci: CanIfTxPduCanId */
+        .Dlc               = 1U,                                   /* DaVinci: CanIfTxPduDlc
+                                                                    *          RunLamp/FaultLamp/AbsLamp 各1bit */
+        .Hth               = 0U,                                   /* DaVinci: CanIfTxPduHthIdRef */
+        .TxConfirmFct      = PduR_CanIfTxConfirmation              /* DaVinci: CanIfTxPduUserTxConfirmationName */
     },
     {
         /* ---------------------------------------------------------------
          * TxPduId=4: E2EHealthStatus フレーム (COM PERIODIC、E2E Profile05 保護のみ)
          * DaVinci: /ActiveEcuC/CanIf/CanIfInitCfg/CanIfTxPduCfg/E2EHealthStatus_Tx
          * --------------------------------------------------------------- */
-        .UpperLayerTxPduId = 3U,                      /* DaVinci: CanIfTxPduId
-                                                       *          PduR_PBCfg.c の E2EHealthStatus パスの SrcPduId(=3) と一致させる */
-        .CanId             = 0x220U,                  /* DaVinci: CanIfTxPduCanId */
-        .Dlc               = 5U,                      /* DaVinci: CanIfTxPduDlc
-                                                       *          E2E Profile05 保護: CRC16 2B + Counter 1B + CrcErrCount 1B + SeqErrCount 1B の
-                                                       *          5byte。以前は E2E P01(4byte)+SecOC の Freshness1B+MAC3B で DLC=8 だったが、
-                                                       *          SecOC は撤去し Com 自身が知る DLC とそのまま一致させている */
-        .Hth               = 0U,                      /* DaVinci: CanIfTxPduHthIdRef */
-        .TxConfirmFct      = PduR_CanIfTxConfirmation /* DaVinci: CanIfTxPduUserTxConfirmationName */
+        .UpperLayerTxPduId = PduRConf_PduRSrcPdu_E2EHealthStatus_Tx, /* DaVinci: CanIfTxPduId
+                                                                      *          PduR_PBCfg.c の E2EHealthStatus パスの SrcPduId(=3) と一致させる */
+        .CanId             = 0x220U,                                 /* DaVinci: CanIfTxPduCanId */
+        .Dlc               = 5U,                                     /* DaVinci: CanIfTxPduDlc
+                                                                      *          E2E Profile05 保護: CRC16 2B + Counter 1B + CrcErrCount 1B + SeqErrCount 1B の
+                                                                      *          5byte。以前は E2E P01(4byte)+SecOC の Freshness1B+MAC3B で DLC=8 だったが、
+                                                                      *          SecOC は撤去し Com 自身が知る DLC とそのまま一致させている */
+        .Hth               = 0U,                                     /* DaVinci: CanIfTxPduHthIdRef */
+        .TxConfirmFct      = PduR_CanIfTxConfirmation                /* DaVinci: CanIfTxPduUserTxConfirmationName */
     },
     {
         /* ---------------------------------------------------------------
          * TxPduId=5: ImmobilizerStatus フレーム (COM DIRECT、Signal Gateway 転送先)
          * DaVinci: /ActiveEcuC/CanIf/CanIfInitCfg/CanIfTxPduCfg/ImmobilizerStatus_Tx
          * --------------------------------------------------------------- */
-        .UpperLayerTxPduId = 4U,                      /* DaVinci: CanIfTxPduId
-                                                       *          PduR_PBCfg.c の ImmobilizerStatus パスの SrcPduId(=4) と一致させる */
-        .CanId             = 0x230U,                  /* DaVinci: CanIfTxPduCanId */
-        .Dlc               = 1U,                      /* DaVinci: CanIfTxPduDlc
-                                                       *          ImmobilizerStatus のみ */
-        .Hth               = 0U,                      /* DaVinci: CanIfTxPduHthIdRef */
-        .TxConfirmFct      = PduR_CanIfTxConfirmation /* DaVinci: CanIfTxPduUserTxConfirmationName */
+        .UpperLayerTxPduId = PduRConf_PduRSrcPdu_ImmobilizerStatus_Tx, /* DaVinci: CanIfTxPduId
+                                                                        *          PduR_PBCfg.c の ImmobilizerStatus パスの SrcPduId(=4) と一致させる */
+        .CanId             = 0x230U,                                   /* DaVinci: CanIfTxPduCanId */
+        .Dlc               = 1U,                                       /* DaVinci: CanIfTxPduDlc
+                                                                        *          ImmobilizerStatus のみ */
+        .Hth               = 0U,                                       /* DaVinci: CanIfTxPduHthIdRef */
+        .TxConfirmFct      = PduR_CanIfTxConfirmation                  /* DaVinci: CanIfTxPduUserTxConfirmationName */
     },
     {
         /* ---------------------------------------------------------------
          * TxPduId=6: TestMsg フレーム
          * DaVinci: /ActiveEcuC/CanIf/CanIfInitCfg/CanIfTxPduCfg/TestMsg_Tx
          * --------------------------------------------------------------- */
-        .UpperLayerTxPduId = 5U,                      /* DaVinci: CanIfTxPduId */
-        .CanId             = 0x300U,                  /* DaVinci: CanIfTxPduCanId */
-        .Dlc               = 1U,                      /* DaVinci: CanIfTxPduDlc */
-        .Hth               = 0U,                      /* DaVinci: CanIfTxPduHthIdRef */
-        .TxConfirmFct      = PduR_CanIfTxConfirmation /* DaVinci: CanIfTxPduUserTxConfirmationName */
+        .UpperLayerTxPduId = PduRConf_PduRSrcPdu_TestMsg_Tx, /* DaVinci: CanIfTxPduId */
+        .CanId             = 0x300U,                         /* DaVinci: CanIfTxPduCanId */
+        .Dlc               = 1U,                             /* DaVinci: CanIfTxPduDlc */
+        .Hth               = 0U,                             /* DaVinci: CanIfTxPduHthIdRef */
+        .TxConfirmFct      = PduR_CanIfTxConfirmation        /* DaVinci: CanIfTxPduUserTxConfirmationName */
     }
 };
 
@@ -195,39 +196,39 @@ static const CanIf_RxPduConfigType CanIf_RxPduConfigData[CANIF_RX_PDU_COUNT] = {
          * RxPduId=0: EngineInfo フレーム (エンジン ECU → メータ ECU)
          * DaVinci: /ActiveEcuC/CanIf/CanIfInitCfg/CanIfRxPduCfg/EngineInfo_Rx
          * --------------------------------------------------------------- */
-        .CanId             = 0x100U,                /* DaVinci: CanIfRxPduCanId */
-        .Hrh               = 0U,                    /* DaVinci: CanIfRxPduHrhIdRef */
-        .UpperLayerRxPduId = 0U,                    /* DaVinci: CanIfRxPduUpperLayerPduId
-                                                     *          → PduR RX パス 0 へのリンク */
-        .Dlc               = 7U,                    /* DaVinci: CanIfRxPduDataLength
-                                                     *          E2E P05 保護: CRC16(2B)+Counter1B+シグナル4B */
-        .RxIndicationFct   = PduR_CanIfRxIndication /* DaVinci: CanIfRxPduUserRxIndicationName */
+        .CanId             = 0x100U,                            /* DaVinci: CanIfRxPduCanId */
+        .Hrh               = 0U,                                /* DaVinci: CanIfRxPduHrhIdRef */
+        .UpperLayerRxPduId = PduRConf_PduRSrcPdu_EngineInfo_Rx, /* DaVinci: CanIfRxPduUpperLayerPduId
+                                                                 *          → PduR RX パス 0 へのリンク */
+        .Dlc               = 7U,                                /* DaVinci: CanIfRxPduDataLength
+                                                                 *          E2E P05 保護: CRC16(2B)+Counter1B+シグナル4B */
+        .RxIndicationFct   = PduR_CanIfRxIndication             /* DaVinci: CanIfRxPduUserRxIndicationName */
     },
     {
         /* ---------------------------------------------------------------
          * RxPduId=1: UDS 診断要求フレーム (診断ツール → メータ ECU)
          * DaVinci: /ActiveEcuC/CanIf/CanIfInitCfg/CanIfRxPduCfg/DiagReq_Rx
          * --------------------------------------------------------------- */
-        .CanId             = 0x7E0U,                /* DaVinci: CanIfRxPduCanId */
-        .Hrh               = 0U,                    /* DaVinci: CanIfRxPduHrhIdRef */
-        .UpperLayerRxPduId = 1U,                    /* DaVinci: CanIfRxPduUpperLayerPduId
-                                                     *          → PduR RX パス 1 へのリンク */
-        .Dlc               = 8U,                    /* DaVinci: CanIfRxPduDataLength
-                                                     *          ISO 15765-2 診断フレームは常に8バイト */
-        .RxIndicationFct   = PduR_CanIfRxIndication /* DaVinci: CanIfRxPduUserRxIndicationName */
+        .CanId             = 0x7E0U,                         /* DaVinci: CanIfRxPduCanId */
+        .Hrh               = 0U,                             /* DaVinci: CanIfRxPduHrhIdRef */
+        .UpperLayerRxPduId = PduRConf_PduRSrcPdu_DiagReq_Rx, /* DaVinci: CanIfRxPduUpperLayerPduId
+                                                              *          → PduR RX パス 1 へのリンク */
+        .Dlc               = 8U,                             /* DaVinci: CanIfRxPduDataLength
+                                                              *          ISO 15765-2 診断フレームは常に8バイト */
+        .RxIndicationFct   = PduR_CanIfRxIndication          /* DaVinci: CanIfRxPduUserRxIndicationName */
     },
     {
         /* ---------------------------------------------------------------
          * RxPduId=2: AbsInfo フレーム (ABS ECU → メータ ECU)
          * DaVinci: /ActiveEcuC/CanIf/CanIfInitCfg/CanIfRxPduCfg/AbsInfo_Rx
          * --------------------------------------------------------------- */
-        .CanId             = 0x110U,                /* DaVinci: CanIfRxPduCanId */
-        .Hrh               = 0U,                    /* DaVinci: CanIfRxPduHrhIdRef */
-        .UpperLayerRxPduId = 2U,                    /* DaVinci: CanIfRxPduUpperLayerPduId
-                                                     *          → PduR RX パス 2 へのリンク */
-        .Dlc               = 6U,                    /* DaVinci: CanIfRxPduDataLength
-                                                     *          E2E P05 保護: CRC16(2B)+Counter1B+シグナル3B */
-        .RxIndicationFct   = PduR_CanIfRxIndication /* DaVinci: CanIfRxPduUserRxIndicationName */
+        .CanId             = 0x110U,                         /* DaVinci: CanIfRxPduCanId */
+        .Hrh               = 0U,                             /* DaVinci: CanIfRxPduHrhIdRef */
+        .UpperLayerRxPduId = PduRConf_PduRSrcPdu_AbsInfo_Rx, /* DaVinci: CanIfRxPduUpperLayerPduId
+                                                              *          → PduR RX パス 2 へのリンク */
+        .Dlc               = 6U,                             /* DaVinci: CanIfRxPduDataLength
+                                                              *          E2E P05 保護: CRC16(2B)+Counter1B+シグナル3B */
+        .RxIndicationFct   = PduR_CanIfRxIndication          /* DaVinci: CanIfRxPduUserRxIndicationName */
     },
     {
         /* ---------------------------------------------------------------
@@ -236,13 +237,13 @@ static const CanIf_RxPduConfigType CanIf_RxPduConfigData[CANIF_RX_PDU_COUNT] = {
          * SecOC Profile 1 (24Bit-CMAC-8Bit-FV) で保護される Secured I-PDU。
          * 詳細は src/Bsw/SecOC/SecOC_PBCfg.c 参照。
          * --------------------------------------------------------------- */
-        .CanId             = 0x120U,                /* DaVinci: CanIfRxPduCanId */
-        .Hrh               = 0U,                    /* DaVinci: CanIfRxPduHrhIdRef */
-        .UpperLayerRxPduId = 3U,                    /* DaVinci: CanIfRxPduUpperLayerPduId
-                                                     *          → PduR RX パス 3 へのリンク */
-        .Dlc               = 6U,                    /* DaVinci: CanIfRxPduDataLength
-                                                     *          Authentic 2B + Freshness 1B + 切り詰めMAC 3B */
-        .RxIndicationFct   = PduR_CanIfRxIndication /* DaVinci: CanIfRxPduUserRxIndicationName */
+        .CanId             = 0x120U,                                /* DaVinci: CanIfRxPduCanId */
+        .Hrh               = 0U,                                    /* DaVinci: CanIfRxPduHrhIdRef */
+        .UpperLayerRxPduId = PduRConf_PduRSrcPdu_ImmobilizerCmd_Rx, /* DaVinci: CanIfRxPduUpperLayerPduId
+                                                                     *          → PduR RX パス 3 へのリンク */
+        .Dlc               = 6U,                                    /* DaVinci: CanIfRxPduDataLength
+                                                                     *          Authentic 2B + Freshness 1B + 切り詰めMAC 3B */
+        .RxIndicationFct   = PduR_CanIfRxIndication                 /* DaVinci: CanIfRxPduUserRxIndicationName */
     },
     {
         /* ---------------------------------------------------------------

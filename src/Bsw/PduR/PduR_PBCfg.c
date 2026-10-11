@@ -67,6 +67,8 @@
 
 #include "PduR_PBCfg.h"
 #include "PduR_Cfg.h"
+#include "CanIf_Cfg.h"
+#include "Com_Cfg.h"
 #include "Com.h"
 #include "CanTp.h"
 #include "SecOC.h"
@@ -85,10 +87,10 @@
  * DaVinci: /ActiveEcuC/PduR/PduRConfig/PduRRoutingTable/EngineInfo_Rx */
 static const PduR_RxDestType PduR_RxDests_Path0[PDUR_RX_DEST_COUNT_PATH0] = {
     {
-        .Module    = PDUR_MODULE_COM, /* DaVinci: PduRDestPdu/PduRDestModule = COM */
-        .DestPduId = 0U,              /* DaVinci: PduRDestPdu/PduRDestPduHandleId
-                                       *          → COM RX IPduId=0 (EngineInfo_Rx) */
-        .RxIndFct  = Com_RxIndication /* DaVinci: 自動解決（PduRDestModule=COM） */
+        .Module    = PDUR_MODULE_COM,               /* DaVinci: PduRDestPdu/PduRDestModule = COM */
+        .DestPduId = ComConf_ComIPdu_EngineInfo_Rx, /* DaVinci: PduRDestPdu/PduRDestPduHandleId
+                                                     *          → COM RX IPduId=0 (EngineInfo_Rx) */
+        .RxIndFct  = Com_RxIndication               /* DaVinci: 自動解決（PduRDestModule=COM） */
     }
 };
 
@@ -106,10 +108,10 @@ static const PduR_RxDestType PduR_RxDests_Path1[PDUR_RX_DEST_COUNT_PATH1] = {
  * DaVinci: /ActiveEcuC/PduR/PduRConfig/PduRRoutingTable/AbsInfo_Rx */
 static const PduR_RxDestType PduR_RxDests_Path2[PDUR_RX_DEST_COUNT_PATH2] = {
     {
-        .Module    = PDUR_MODULE_COM, /* DaVinci: PduRDestPdu/PduRDestModule = COM */
-        .DestPduId = 1U,              /* DaVinci: PduRDestPdu/PduRDestPduHandleId
-                                       *          → COM RX IPduId=1 (AbsInfo_Rx) */
-        .RxIndFct  = Com_RxIndication /* DaVinci: 自動解決（PduRDestModule=COM） */
+        .Module    = PDUR_MODULE_COM,            /* DaVinci: PduRDestPdu/PduRDestModule = COM */
+        .DestPduId = ComConf_ComIPdu_AbsInfo_Rx, /* DaVinci: PduRDestPdu/PduRDestPduHandleId
+                                                  *          → COM RX IPduId=1 (AbsInfo_Rx) */
+        .RxIndFct  = Com_RxIndication            /* DaVinci: 自動解決（PduRDestModule=COM） */
     }
 };
 
@@ -134,7 +136,7 @@ static const PduR_RxRoutingPathType PduR_RxPaths[PDUR_RX_PATH_COUNT] = {
         /* パス 0: CanIf RxPduId=0 (CAN 0x100) → COM/EngineInfo
          * DaVinci: PduRSrcPdu/PduRSrcPduHandleId = 0
          *          (CanIf_PBCfg の RxPduId=0 と一致) */
-        .SrcPduId  = 0U,
+        .SrcPduId  = PduRConf_PduRSrcPdu_EngineInfo_Rx,
         .Dests     = PduR_RxDests_Path0,
         .DestCount = PDUR_RX_DEST_COUNT_PATH0
     },
@@ -142,7 +144,7 @@ static const PduR_RxRoutingPathType PduR_RxPaths[PDUR_RX_PATH_COUNT] = {
         /* パス 1: CanIf RxPduId=1 (CAN 0x7E0) → CanTp/DCM
          * DaVinci: PduRSrcPdu/PduRSrcPduHandleId = 1
          *          (CanIf_PBCfg の RxPduId=1 と一致) */
-        .SrcPduId  = 1U,
+        .SrcPduId  = PduRConf_PduRSrcPdu_DiagReq_Rx,
         .Dests     = PduR_RxDests_Path1,
         .DestCount = PDUR_RX_DEST_COUNT_PATH1
     },
@@ -150,7 +152,7 @@ static const PduR_RxRoutingPathType PduR_RxPaths[PDUR_RX_PATH_COUNT] = {
         /* パス 2: CanIf RxPduId=2 (CAN 0x110) → COM/AbsInfo
          * DaVinci: PduRSrcPdu/PduRSrcPduHandleId = 2
          *          (CanIf_PBCfg の RxPduId=2 と一致) */
-        .SrcPduId  = 2U,
+        .SrcPduId  = PduRConf_PduRSrcPdu_AbsInfo_Rx,
         .Dests     = PduR_RxDests_Path2,
         .DestCount = PDUR_RX_DEST_COUNT_PATH2
     },
@@ -158,7 +160,7 @@ static const PduR_RxRoutingPathType PduR_RxPaths[PDUR_RX_PATH_COUNT] = {
         /* パス 3: CanIf RxPduId=3 (CAN 0x120) → SecOC/ImmobilizerCmd
          * DaVinci: PduRSrcPdu/PduRSrcPduHandleId = 3
          *          (CanIf_PBCfg の RxPduId=3 と一致) */
-        .SrcPduId  = 3U,
+        .SrcPduId  = PduRConf_PduRSrcPdu_ImmobilizerCmd_Rx,
         .Dests     = PduR_RxDests_Path3,
         .DestCount = PDUR_RX_DEST_COUNT_PATH3
     }
@@ -173,28 +175,28 @@ static const PduR_TxRoutingPathType PduR_TxPaths[PDUR_TX_PATH_COUNT] = {
     {
         /* パス 0: COM (SrcPduId=0) → CanIf TxPduId=0 (CAN 0x200)
          * DaVinci: PduRRoutingPath/MeterStatus_Tx */
-        .SrcPduId      = 0U,                /* DaVinci: PduRSrcPdu/PduRSrcPduHandleId */
-        .CanIfTxPduId  = 0U,                /* DaVinci: PduRDestPdu/PduRDestPduHandleId */
-        .ConfDestPduId = 0U,
-        .ConfFct       = Com_TxConfirmation /* DaVinci: PduRTxConfirmation */
+        .SrcPduId      = PduRConf_PduRSrcPdu_MeterStatus_Tx,     /* DaVinci: PduRSrcPdu/PduRSrcPduHandleId */
+        .CanIfTxPduId  = CanIfConf_CanIfTxPduCfg_MeterStatus_Tx, /* DaVinci: PduRDestPdu/PduRDestPduHandleId */
+        .ConfDestPduId = ComConf_ComIPdu_MeterStatus_Tx,
+        .ConfFct       = Com_TxConfirmation                      /* DaVinci: PduRTxConfirmation */
     },
     {
         /* パス 1: CanTp (SrcPduId=1) → CanIf TxPduId=1 (CAN 0x7E8)
          * DaVinci: PduRRoutingPath/DiagResp_Tx */
-        .SrcPduId      = 1U,                  /* DaVinci: PduRSrcPdu/PduRSrcPduHandleId */
-        .CanIfTxPduId  = 1U,                  /* DaVinci: PduRDestPdu/PduRDestPduHandleId */
+        .SrcPduId      = PduRConf_PduRSrcPdu_DiagResp_Tx,     /* DaVinci: PduRSrcPdu/PduRSrcPduHandleId */
+        .CanIfTxPduId  = CanIfConf_CanIfTxPduCfg_DiagResp_Tx, /* DaVinci: PduRDestPdu/PduRDestPduHandleId */
         .ConfDestPduId = 0U,
-        .ConfFct       = CanTp_TxConfirmation /* DaVinci: PduRTxConfirmation */
+        .ConfFct       = CanTp_TxConfirmation                 /* DaVinci: PduRTxConfirmation */
     },
     {
         /* パス 2: COM (SrcPduId=2) → CanIf TxPduId=3 (CAN 0x210, WarningStatus)
          * DaVinci: PduRRoutingPath/WarningStatus_Tx
          * SrcPduId=1 は CanTp が既に使用しているため、COM の 2 番目の TX I-PDU
          * (WarningStatus) には SrcPduId=2 を割り当てる。 */
-        .SrcPduId      = 2U,                /* DaVinci: PduRSrcPdu/PduRSrcPduHandleId */
-        .CanIfTxPduId  = 3U,                /* DaVinci: PduRDestPdu/PduRDestPduHandleId */
-        .ConfDestPduId = 1U,
-        .ConfFct       = Com_TxConfirmation /* DaVinci: PduRTxConfirmation */
+        .SrcPduId      = PduRConf_PduRSrcPdu_WarningStatus_Tx,     /* DaVinci: PduRSrcPdu/PduRSrcPduHandleId */
+        .CanIfTxPduId  = CanIfConf_CanIfTxPduCfg_WarningStatus_Tx, /* DaVinci: PduRDestPdu/PduRDestPduHandleId */
+        .ConfDestPduId = ComConf_ComIPdu_WarningStatus_Tx,
+        .ConfFct       = Com_TxConfirmation                        /* DaVinci: PduRTxConfirmation */
     },
     {
         /* パス 3: COM (SrcPduId=3) → CanIf TxPduId=4 (CAN 0x220, E2EHealthStatus)
@@ -204,10 +206,10 @@ static const PduR_TxRoutingPathType PduR_TxPaths[PDUR_TX_PATH_COUNT] = {
          * 二重保護構成だったが、E2E Profile05 単体保護へ切り替えたため撤去し、
          * パス4（ImmobilizerStatus）と同じ COM→CanIf 直結パターンにした
          * （TransmitOverrideFct 未設定）。 */
-        .SrcPduId      = 3U,                /* DaVinci: PduRSrcPdu/PduRSrcPduHandleId */
-        .CanIfTxPduId  = 4U,                /* DaVinci: PduRDestPdu/PduRDestPduHandleId */
-        .ConfDestPduId = 2U,
-        .ConfFct       = Com_TxConfirmation /* DaVinci: PduRTxConfirmation */
+        .SrcPduId      = PduRConf_PduRSrcPdu_E2EHealthStatus_Tx,     /* DaVinci: PduRSrcPdu/PduRSrcPduHandleId */
+        .CanIfTxPduId  = CanIfConf_CanIfTxPduCfg_E2EHealthStatus_Tx, /* DaVinci: PduRDestPdu/PduRDestPduHandleId */
+        .ConfDestPduId = ComConf_ComIPdu_E2EHealthStatus_Tx,
+        .ConfFct       = Com_TxConfirmation                          /* DaVinci: PduRTxConfirmation */
     },
     {
         /* パス 4: COM (SrcPduId=4) → CanIf TxPduId=5 (CAN 0x230, ImmobilizerStatus)
@@ -215,18 +217,18 @@ static const PduR_TxRoutingPathType PduR_TxPaths[PDUR_TX_PATH_COUNT] = {
          * Signal Gateway（Com_GatewayRoute()）の転送先。Com からは通常の
          * COM_TX_MODE_DIRECT I-PDU の 1 つとして見え、PduR 側にも SecOC の
          * ような中間モジュールは挟まらない（TransmitOverrideFct 未設定）。 */
-        .SrcPduId      = 4U,                /* DaVinci: PduRSrcPdu/PduRSrcPduHandleId */
-        .CanIfTxPduId  = 5U,                /* DaVinci: PduRDestPdu/PduRDestPduHandleId */
-        .ConfDestPduId = 3U,
-        .ConfFct       = Com_TxConfirmation /* DaVinci: PduRTxConfirmation */
+        .SrcPduId      = PduRConf_PduRSrcPdu_ImmobilizerStatus_Tx,     /* DaVinci: PduRSrcPdu/PduRSrcPduHandleId */
+        .CanIfTxPduId  = CanIfConf_CanIfTxPduCfg_ImmobilizerStatus_Tx, /* DaVinci: PduRDestPdu/PduRDestPduHandleId */
+        .ConfDestPduId = ComConf_ComIPdu_ImmobilizerStatus_Tx,
+        .ConfFct       = Com_TxConfirmation                            /* DaVinci: PduRTxConfirmation */
     },
     {
         /* パス 5: COM (SrcPduId=5) → CanIf TxPduId=6 (CAN 0x300, TestMsg)
          * DaVinci: PduRRoutingPath/TestMsg_Tx */
-        .SrcPduId      = 5U,                /* DaVinci: PduRSrcPdu/PduRSrcPduHandleId */
-        .CanIfTxPduId  = 6U,                /* DaVinci: PduRDestPdu/PduRDestPduHandleId */
-        .ConfDestPduId = 4U,
-        .ConfFct       = Com_TxConfirmation /* DaVinci: PduRTxConfirmation */
+        .SrcPduId      = PduRConf_PduRSrcPdu_TestMsg_Tx,     /* DaVinci: PduRSrcPdu/PduRSrcPduHandleId */
+        .CanIfTxPduId  = CanIfConf_CanIfTxPduCfg_TestMsg_Tx, /* DaVinci: PduRDestPdu/PduRDestPduHandleId */
+        .ConfDestPduId = ComConf_ComIPdu_TestMsg_Tx,
+        .ConfFct       = Com_TxConfirmation                  /* DaVinci: PduRTxConfirmation */
     }
 };
 

@@ -4,6 +4,7 @@ CAN ID と DLC は、`frame` が指すフレームの定義（config/data/can_si
 信号表に無いフレーム（UDS 診断など）だけ、`canId` と `dlc` を直接書く。
 """
 
+from . import symbols
 from .common import doc_comment, hex_literal, note_lines, ruled_comment, struct_fields
 
 TX_CONFIRM_FCT = {"PDUR": "PduR_CanIfTxConfirmation", "CANNM": "CanNm_TxConfirmation"}
@@ -37,6 +38,19 @@ def resolve(pdu, ctx):
     return pdu["canId"], pdu["dlc"]
 
 
+def upper_tx_value(p, index, ctx):
+    """上位層へ返す送信確認の ID。PduR 宛てなら PduR の送信元 PDU のシンボリック名、それ以外（NM など）は数値。"""
+    if p["txConfirm"] == "PDUR":
+        return symbols.pdur_src_for_canif_tx(ctx, p, index)
+    return "%dU" % p["upperLayerTxPduId"]
+
+
+def upper_rx_value(p, ctx):
+    if p["rxIndication"] == "PDUR":
+        return symbols.pdur_src_for_canif_rx(ctx, p)
+    return "%dU" % p["upperLayerRxPduId"]
+
+
 def tx_table(cfg, ctx):
     out = [
         "/* -----------------------------------------------------------------------",
@@ -56,7 +70,7 @@ def tx_table(cfg, ctx):
         )
         out += struct_fields(
             [
-                ("UpperLayerTxPduId", "%dU" % p["upperLayerTxPduId"],
+                ("UpperLayerTxPduId", upper_tx_value(p, i, ctx),
                  note_lines("DaVinci: CanIfTxPduId", nt.get("upperLayerTxPduId"))),
                 ("CanId", hex_literal(can_id), note_lines("DaVinci: CanIfTxPduCanId")),
                 ("Dlc", "%dU" % dlc, note_lines("DaVinci: CanIfTxPduDlc", nt.get("dlc"))),
@@ -96,7 +110,7 @@ def rx_table(cfg, ctx):
             [
                 ("CanId", hex_literal(can_id), note_lines("DaVinci: CanIfRxPduCanId")),
                 ("Hrh", "%dU" % p["hrh"], note_lines("DaVinci: CanIfRxPduHrhIdRef")),
-                ("UpperLayerRxPduId", "%dU" % p["upperLayerRxPduId"],
+                ("UpperLayerRxPduId", upper_rx_value(p, ctx),
                  note_lines("DaVinci: CanIfRxPduUpperLayerPduId", up_extra)),
                 ("Dlc", "%dU" % dlc, note_lines("DaVinci: CanIfRxPduDataLength", nt.get("dlc"))),
                 ("RxIndicationFct", RX_IND_FCT[p["rxIndication"]],
@@ -137,13 +151,28 @@ def render_cfg_h(cfg, ctx):
     return "\n".join(out)
 
 
+def render_symbols(cfg, ctx):
+    """CanIf が提供するハンドル ID のシンボリック名（[TPS_ECUC_02108]）。値はテーブルの添字。"""
+    symbols.check_unique([p["name"] for p in cfg["txPdus"]], "CanIf txPdus")
+    symbols.check_unique([p["name"] for p in cfg["rxPdus"]], "CanIf rxPdus")
+    out = ["/* シンボリック名: CanIfConf_<コンテナ定義>_<name>（値は各テーブルの添字）。PduR などの上位層が参照する。 */"]
+    # 使うかどうかは PduR の設定しだいだが、CanIf の出力が PduR の設定に左右されないよう、全部に
+    # MISRA 2.5（未使用マクロ）の抑止コメントを付ける（使われている名前に付けても指摘は出ない）
+    out += symbols.define_lines([
+        [(symbols.CANIF_TX + p["name"], i, True) for i, p in enumerate(cfg["txPdus"])],
+        [(symbols.CANIF_RX + p["name"], i, True) for i, p in enumerate(cfg["rxPdus"])],
+    ])
+    return "\n".join(out)
+
+
 def check_includes(cfg, text):
     used = {p["txConfirm"] for p in cfg["txPdus"]} | {p["rxIndication"] for p in cfg["rxPdus"]}
-    return [
+    msgs = [
         "%s がインクルードされていない（%s を使用）" % (MODULE_HEADER[m], m)
         for m in sorted(used)
         if '#include "%s"' % MODULE_HEADER[m] not in text
     ]
+    return msgs + symbols.include_warnings(text)
 
 
 SPEC = {
@@ -153,5 +182,6 @@ SPEC = {
     "targets": [
         ("src/Bsw/CanIf/CanIf_PBCfg.c", "canif-pdus", render_pbcfg, check_includes),
         ("src/Bsw/CanIf/CanIf_Cfg.h", "canif-counts", render_cfg_h, None),
+        ("src/Bsw/CanIf/CanIf_Cfg.h", "canif-symbols", render_symbols, None),
     ],
 }

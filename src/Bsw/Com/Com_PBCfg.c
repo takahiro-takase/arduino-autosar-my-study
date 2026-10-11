@@ -189,6 +189,7 @@
 
 #include "Com_PBCfg.h"
 #include "Com_Cfg.h"
+#include "PduR_Cfg.h"
 
 /* Rte が提供するコールバック関数のプロトタイプ（[SWS_Rte_03795]/[SWS_Rte_03796]、
  * Com から見ては [SWS_Com_00220] のユーザコールバックヘッダに相当）。Rte.h とは
@@ -214,21 +215,21 @@ static const Com_IPduConfigType Com_RxIPduConfigData[COM_RX_IPDU_COUNT] = {
          * から変更。Bus-Sleep 中の誤ったRXタイムアウト検知を防ぐため）。
          * 詳細は Com_Cfg.h の COM_IPDU_GROUP_SENSOR_RX コメント参照。
          * --------------------------------------------------------------- */
-        .IPduId            = 0U,                         /* DaVinci: ComIPduHandleId  - I-PDU 識別番号 */
-        .DLC               = 7U,                         /* DaVinci: ComIPduLength    - I-PDU バイト長
-                                                          *          byte[0-1]=E2E CRC16(LE), byte[2]=E2E Counter, byte[3-6]=シグナル */
-        .PduRId            = 0U,                         /* DaVinci: ComIPduPduRef    - PduR が Com_RxIndication へ渡す DestPduId
-                                                          *          (PduR_PBCfg.c PduR_RxDests_Path0[0].DestPduId と一致させること) */
-        .FirstTimeoutMs    = COM_TIMEOUT_ENGINE_INFO_MS, /* DaVinci: ComFirstTimeout
-                                                          *          Com_Init 直後・初回受信までの猶予（現状は定常値と同じにして
-                                                          *          既存挙動を変えない。将来的に個別調整可能） */
-        .TimeoutMs         = COM_TIMEOUT_ENGINE_INFO_MS, /* DaVinci: ComRxDeadlineMonitoringPeriod（ComTimeout 相当）
-                                                          *          初回受信後、以降のエンジン ECU からの受信が途絶えたと
-                                                          *          判断するまでの時間 */
-        .UpdateBitPosition = 0xFFU,                      /* update-bit なし（Signal Group 専用機能のため未使用） */
-        .IpduGroupId       = COM_IPDU_GROUP_SENSOR_RX,   /* BswM が FULL_COM 到達で Start・NO_COMMUNICATION で Stop を呼ぶ */
-        .RxIndicationCbk   = Rte_COMRxInd_EngineInfo     /* DaVinci: /ActiveEcuC/E2EXf/EngineInfo_Rx_E2EXf
-                                                          *          （E2E Transformer 呼び出しは Rte 層が担う） */
+        .IPduId            = ComConf_ComIPdu_EngineInfo_Rx, /* DaVinci: ComIPduHandleId  - I-PDU 識別番号 */
+        .DLC               = 7U,                            /* DaVinci: ComIPduLength    - I-PDU バイト長
+                                                             *          byte[0-1]=E2E CRC16(LE), byte[2]=E2E Counter, byte[3-6]=シグナル */
+        .PduRId            = ComConf_ComIPdu_EngineInfo_Rx, /* DaVinci: ComIPduPduRef    - PduR が Com_RxIndication へ渡す DestPduId
+                                                             *          (PduR_PBCfg.c PduR_RxDests_Path0[0].DestPduId と一致させること) */
+        .FirstTimeoutMs    = COM_TIMEOUT_ENGINE_INFO_MS,    /* DaVinci: ComFirstTimeout
+                                                             *          Com_Init 直後・初回受信までの猶予（現状は定常値と同じにして
+                                                             *          既存挙動を変えない。将来的に個別調整可能） */
+        .TimeoutMs         = COM_TIMEOUT_ENGINE_INFO_MS,    /* DaVinci: ComRxDeadlineMonitoringPeriod（ComTimeout 相当）
+                                                             *          初回受信後、以降のエンジン ECU からの受信が途絶えたと
+                                                             *          判断するまでの時間 */
+        .UpdateBitPosition = 0xFFU,                         /* update-bit なし（Signal Group 専用機能のため未使用） */
+        .IpduGroupId       = COM_IPDU_GROUP_SENSOR_RX,      /* BswM が FULL_COM 到達で Start・NO_COMMUNICATION で Stop を呼ぶ */
+        .RxIndicationCbk   = Rte_COMRxInd_EngineInfo        /* DaVinci: /ActiveEcuC/E2EXf/EngineInfo_Rx_E2EXf
+                                                             *          （E2E Transformer 呼び出しは Rte 層が担う） */
     },
     {
         /* ---------------------------------------------------------------
@@ -246,28 +247,28 @@ static const Com_IPduConfigType Com_RxIPduConfigData[COM_RX_IPDU_COUNT] = {
          * 監視で十分カバーされる）。詳細は docs/modules/Com_Notes.md の
          * 「Update Bit」節を参照。
          * --------------------------------------------------------------- */
-        .IPduId            = 1U,                       /* DaVinci: ComIPduHandleId  - I-PDU 識別番号 */
-        .DLC               = 6U,                       /* DaVinci: ComIPduLength    - I-PDU バイト長
-                                                        *          byte[0-1]=E2E CRC16(LE), byte[2]=E2E Counter, byte[3-5]=シグナル */
-        .PduRId            = 1U,                       /* DaVinci: ComIPduPduRef    - PduR が Com_RxIndication へ渡す DestPduId
-                                                        *          (PduR_PBCfg.c PduR_RxDests_Path2[0].DestPduId と一致させること) */
-        .FirstTimeoutMs    = COM_TIMEOUT_ABS_INFO_MS,  /* DaVinci: ComFirstTimeout
-                                                        *          Com_Init 直後・初回受信までの猶予（現状は定常値と同じ） */
-        .TimeoutMs         = COM_TIMEOUT_ABS_INFO_MS,  /* DaVinci: ComRxDeadlineMonitoringPeriod（ComTimeout 相当）
-                                                        *          初回受信後、ABS ECU からの受信が途絶えたと判断するまでの時間 */
-        .IsSignalGroup     = 1U,                       /* RX Signal Group（Com_ReceiveSignalGroup で確定コピー） */
-        .UpdateBitPosition = 0xFFU,                    /* update-bit なし（本 I-PDU には適用しない。上記コメント参照） */
-        .IpduGroupId       = COM_IPDU_GROUP_SENSOR_RX, /* EngineInfo と同じ理由でグループへ移行（Com_Cfg.h 参照） */
-        .RxIndicationCbk   = Rte_COMRxInd_AbsInfo,     /* DaVinci: /ActiveEcuC/E2EXf/AbsInfo_Rx_E2EXf
-                                                        *          （E2E Transformer 呼び出しは Rte 層が担う） */
-        .RxAckCbk          = Rte_COMCbk_AbsInfo,       /* SWS_Com_00555 (Com_CbkRxAck)、
-                                                        * Signal Group 単位（WarningStatus の
-                                                        * TxAckCbk と対称。RxIndicationCbk より前に
-                                                        * 呼ばれる） */
-        .RxTOutCbk         = Rte_COMCbkRxTOut_AbsInfo  /* SWS_Com_00536/00556 (Com_CbkRxTOut)、
-                                                        * Signal Group 単位。上の FirstTimeoutMs/
-                                                        * TimeoutMs を新規に超過した瞬間に1回だけ
-                                                        * 呼ばれる（EngineOnFlag のシグナル単位版と対称）。 */
+        .IPduId            = ComConf_ComIPdu_AbsInfo_Rx, /* DaVinci: ComIPduHandleId  - I-PDU 識別番号 */
+        .DLC               = 6U,                         /* DaVinci: ComIPduLength    - I-PDU バイト長
+                                                          *          byte[0-1]=E2E CRC16(LE), byte[2]=E2E Counter, byte[3-5]=シグナル */
+        .PduRId            = ComConf_ComIPdu_AbsInfo_Rx, /* DaVinci: ComIPduPduRef    - PduR が Com_RxIndication へ渡す DestPduId
+                                                          *          (PduR_PBCfg.c PduR_RxDests_Path2[0].DestPduId と一致させること) */
+        .FirstTimeoutMs    = COM_TIMEOUT_ABS_INFO_MS,    /* DaVinci: ComFirstTimeout
+                                                          *          Com_Init 直後・初回受信までの猶予（現状は定常値と同じ） */
+        .TimeoutMs         = COM_TIMEOUT_ABS_INFO_MS,    /* DaVinci: ComRxDeadlineMonitoringPeriod（ComTimeout 相当）
+                                                          *          初回受信後、ABS ECU からの受信が途絶えたと判断するまでの時間 */
+        .IsSignalGroup     = 1U,                         /* RX Signal Group（Com_ReceiveSignalGroup で確定コピー） */
+        .UpdateBitPosition = 0xFFU,                      /* update-bit なし（本 I-PDU には適用しない。上記コメント参照） */
+        .IpduGroupId       = COM_IPDU_GROUP_SENSOR_RX,   /* EngineInfo と同じ理由でグループへ移行（Com_Cfg.h 参照） */
+        .RxIndicationCbk   = Rte_COMRxInd_AbsInfo,       /* DaVinci: /ActiveEcuC/E2EXf/AbsInfo_Rx_E2EXf
+                                                          *          （E2E Transformer 呼び出しは Rte 層が担う） */
+        .RxAckCbk          = Rte_COMCbk_AbsInfo,         /* SWS_Com_00555 (Com_CbkRxAck)、
+                                                          * Signal Group 単位（WarningStatus の
+                                                          * TxAckCbk と対称。RxIndicationCbk より前に
+                                                          * 呼ばれる） */
+        .RxTOutCbk         = Rte_COMCbkRxTOut_AbsInfo    /* SWS_Com_00536/00556 (Com_CbkRxTOut)、
+                                                          * Signal Group 単位。上の FirstTimeoutMs/
+                                                          * TimeoutMs を新規に超過した瞬間に1回だけ
+                                                          * 呼ばれる（EngineOnFlag のシグナル単位版と対称）。 */
     },
     {
         /* ---------------------------------------------------------------
@@ -291,17 +292,17 @@ static const Com_IPduConfigType Com_RxIPduConfigData[COM_RX_IPDU_COUNT] = {
          * 業務レベルの妥当性（Reserved 予約領域が本当に 0 か）までは検証
          * しないため、Com 側でこの層を担う。
          * --------------------------------------------------------------- */
-        .IPduId            = 2U,                         /* DaVinci: ComIPduHandleId  - I-PDU 識別番号 */
-        .DLC               = 2U,                         /* DaVinci: ComIPduLength    - Authentic Payload のみ
-                                                          *          （byte[0]=ImmobilizerCmd, byte[1]=Reserved） */
-        .PduRId            = 2U,                         /* DaVinci: ComIPduPduRef    - SecOC が
-                                                          *          Com_RxIndication() へ渡す ID
-                                                          *          (SecOC_PBCfg.c の ComRxPduId と一致させること) */
-        .TimeoutMs         = 0U,                         /* 監視無効（上記コメント参照） */
-        .UpdateBitPosition = 0xFFU,                      /* update-bit なし（Signal Group 専用機能のため未使用） */
-        .IpduGroupId       = COM_IPDU_GROUP_NONE,        /* I-PDU Group に属さない（常に有効） */
-        .RxIndicationCbk   = Rte_COMRxInd_SecureCommand, /* ログ出力のみの最小デモ
-                                                          * （Rte_COMCbkInv_CoolantTemp と同じパターン） */
+        .IPduId            = ComConf_ComIPdu_SecureCommand_Rx, /* DaVinci: ComIPduHandleId  - I-PDU 識別番号 */
+        .DLC               = 2U,                               /* DaVinci: ComIPduLength    - Authentic Payload のみ
+                                                                *          （byte[0]=ImmobilizerCmd, byte[1]=Reserved） */
+        .PduRId            = ComConf_ComIPdu_SecureCommand_Rx, /* DaVinci: ComIPduPduRef    - SecOC が
+                                                                *          Com_RxIndication() へ渡す ID
+                                                                *          (SecOC_PBCfg.c の ComRxPduId と一致させること) */
+        .TimeoutMs         = 0U,                               /* 監視無効（上記コメント参照） */
+        .UpdateBitPosition = 0xFFU,                            /* update-bit なし（Signal Group 専用機能のため未使用） */
+        .IpduGroupId       = COM_IPDU_GROUP_NONE,              /* I-PDU Group に属さない（常に有効） */
+        .RxIndicationCbk   = Rte_COMRxInd_SecureCommand,       /* ログ出力のみの最小デモ
+                                                                * （Rte_COMCbkInv_CoolantTemp と同じパターン） */
         .RxIpduCalloutCbk  = Rte_COMRxIpduCallout_SecureCommand
     }
 };
@@ -329,13 +330,13 @@ static const Com_IPduConfigType Com_TxIPduConfigData[COM_TX_IPDU_COUNT] = {
          * 再送」を区別できる（WarningStatus のグループ単位 update-bit との
          * 対比用に、シグナル単位の実装例として追加した）。
          * --------------------------------------------------------------- */
-        .IPduId            = 0U,                                 /* DaVinci: ComIPduHandleId  - I-PDU 識別番号 */
+        .IPduId            = ComConf_ComIPdu_MeterStatus_Tx,     /* DaVinci: ComIPduHandleId  - I-PDU 識別番号 */
         .DLC               = 6U,                                 /* DaVinci: ComIPduLength    - I-PDU バイト長
                                                                   *          byte[0]=EngineState、byte[1] bit0=update-bit（残り7bitは予約）、
                                                                   *          byte[2] bit0-2=警告灯3bit（残り5bitは予約）、
                                                                   *          byte[3-4]=EngineSpeedミラー（16bit）、
                                                                   *          byte[5]=CoolantTempミラー（8bit） */
-        .PduRId            = 0U,                                 /* DaVinci: ComIPduPduRef    - PduR TX パス 0 へのリンク */
+        .PduRId            = PduRConf_PduRSrcPdu_MeterStatus_Tx, /* DaVinci: ComIPduPduRef    - PduR TX パス 0 へのリンク */
         .TimeoutMs         = 0U,                                 /* TX I-PDU のため監視無効 */
         .IsSignalGroup     = 0U,                                 /* 直接送信（既存の挙動のまま） */
         .TxModeMode        = COM_TX_MODE_MIXED,                  /* DaVinci: ComTxModeMode = MIXED
@@ -380,26 +381,26 @@ static const Com_IPduConfigType Com_TxIPduConfigData[COM_TX_IPDU_COUNT] = {
          * 監視を Signal Group 単位で配線する。詳細は
          * docs/modules/Com_Notes.md「TX 送信デッドライン監視」参照。
          * --------------------------------------------------------------- */
-        .IPduId            = 1U,                                /* DaVinci: ComIPduHandleId  - I-PDU 識別番号 */
-        .DLC               = 1U,                                /* DaVinci: ComIPduLength    - I-PDU バイト長
-                                                                 *          （bit0-2=RunLamp/FaultLamp/AbsLamp、bit3=update-bit、残り4bitは予約） */
-        .PduRId            = 2U,                                /* DaVinci: ComIPduPduRef    - PduR TX パス 2 へのリンク
-                                                                 *          (PduR_ComTransmit/PduR_CanTpTransmit の SrcPduId は COM/CanTp で共通の名前空間のため、
-                                                                 *          CanTp が使用する 1U と衝突しないよう 2U を割り当てる) */
-        .TimeoutMs         = 0U,                                /* TX I-PDU のため監視無効 */
-        .IsSignalGroup     = 1U,                                /* Signal Group（Com_SendSignalGroup で確定コミット） */
-        .TxModeMode        = COM_TX_MODE_DIRECT,                /* DaVinci: ComTxModeMode = ComTxModeFalse
-                                                                 *          (TMS false: 通常時) */
-        .TxModeModeTrue    = COM_TX_MODE_MIXED,                 /* DaVinci: ComTxModeTrue
-                                                                 *          (TMS true: FAULT/ABS 点灯中) */
+        .IPduId            = ComConf_ComIPdu_WarningStatus_Tx,     /* DaVinci: ComIPduHandleId  - I-PDU 識別番号 */
+        .DLC               = 1U,                                   /* DaVinci: ComIPduLength    - I-PDU バイト長
+                                                                    *          （bit0-2=RunLamp/FaultLamp/AbsLamp、bit3=update-bit、残り4bitは予約） */
+        .PduRId            = PduRConf_PduRSrcPdu_WarningStatus_Tx, /* DaVinci: ComIPduPduRef    - PduR TX パス 2 へのリンク
+                                                                    *          (PduR_ComTransmit/PduR_CanTpTransmit の SrcPduId は COM/CanTp で共通の名前空間のため、
+                                                                    *          CanTp が使用する 1U と衝突しないよう 2U を割り当てる) */
+        .TimeoutMs         = 0U,                                   /* TX I-PDU のため監視無効 */
+        .IsSignalGroup     = 1U,                                   /* Signal Group（Com_SendSignalGroup で確定コミット） */
+        .TxModeMode        = COM_TX_MODE_DIRECT,                   /* DaVinci: ComTxModeMode = ComTxModeFalse
+                                                                    *          (TMS false: 通常時) */
+        .TxModeModeTrue    = COM_TX_MODE_MIXED,                    /* DaVinci: ComTxModeTrue
+                                                                    *          (TMS true: FAULT/ABS 点灯中) */
         .TxPeriodMsTrue    = COM_TX_PERIOD_WARNINGSTATUS_TRUE_FLOOR_MS,
-        .MinDelayMs        = COM_TX_MIN_DELAY_WARNINGSTATUS_MS, /* DaVinci: ComMinimumDelayTime */
-        .UpdateBitPosition = 3U,                                /* Signal Group 全体の update-bit（byte[0] bit3、ネットワークビット3） */
-        .IpduGroupId       = COM_IPDU_GROUP_NONE,               /* I-PDU Group に属さない（常に有効） */
-        .TxAckCbk          = Rte_COMCbkTAck_WarningStatus,      /* DaVinci: ComNotification (ComSignalGroup) */
-        .TxFirstTimeoutMs  = COM_TX_TIMEOUT_WARNINGSTATUS_MS,   /* DaVinci: ComTransmissionDeadlineMonitoring/ComFirstTimeout */
-        .TxTimeoutMs       = COM_TX_TIMEOUT_WARNINGSTATUS_MS,   /* DaVinci: ComTransmissionDeadlineMonitoring/ComTimeout */
-        .TxTOutCbk         = Rte_COMCbkTxTOut_WarningStatus     /* DaVinci: ComTransmissionDeadlineMonitoring (ComSignalGroup) */
+        .MinDelayMs        = COM_TX_MIN_DELAY_WARNINGSTATUS_MS,    /* DaVinci: ComMinimumDelayTime */
+        .UpdateBitPosition = 3U,                                   /* Signal Group 全体の update-bit（byte[0] bit3、ネットワークビット3） */
+        .IpduGroupId       = COM_IPDU_GROUP_NONE,                  /* I-PDU Group に属さない（常に有効） */
+        .TxAckCbk          = Rte_COMCbkTAck_WarningStatus,         /* DaVinci: ComNotification (ComSignalGroup) */
+        .TxFirstTimeoutMs  = COM_TX_TIMEOUT_WARNINGSTATUS_MS,      /* DaVinci: ComTransmissionDeadlineMonitoring/ComFirstTimeout */
+        .TxTimeoutMs       = COM_TX_TIMEOUT_WARNINGSTATUS_MS,      /* DaVinci: ComTransmissionDeadlineMonitoring/ComTimeout */
+        .TxTOutCbk         = Rte_COMCbkTxTOut_WarningStatus        /* DaVinci: ComTransmissionDeadlineMonitoring (ComSignalGroup) */
     },
     {
         /* ---------------------------------------------------------------
@@ -415,23 +416,23 @@ static const Com_IPduConfigType Com_TxIPduConfigData[COM_TX_IPDU_COUNT] = {
          * 以前は E2E P01+SecOC の二重保護だったが、SecOC は撤去し E2E Profile05
          * 単体（CRC16、DLC=5）に切り替えた（PduR_PBCfg.c パス3参照）。
          * --------------------------------------------------------------- */
-        .IPduId            = 2U,                              /* DaVinci: ComIPduHandleId  - I-PDU 識別番号 */
-        .DLC               = 5U,                              /* DaVinci: ComIPduLength    - byte[0-1]=E2E CRC16, byte[2]=E2E Counter,
-                                                               *          byte[3]=CrcErrCount, byte[4]=SeqErrCount */
-        .PduRId            = 3U,                              /* DaVinci: ComIPduPduRef    - PduR TX パス 3 へのリンク */
-        .TimeoutMs         = 0U,                              /* TX I-PDU のため監視無効 */
-        .IsSignalGroup     = 0U,                              /* 直接送信 */
-        .TxModeMode        = COM_TX_MODE_PERIODIC,            /* DaVinci: ComTxModeMode = PERIODIC */
-        .TxPeriodMs        = COM_TX_PERIOD_E2EHEALTH_MS,      /* DaVinci: ComTxModeTimePeriodFactor */
-        .UpdateBitPosition = 0xFFU,                           /* update-bit なし（Signal Group 専用機能のため未使用） */
-        .IpduGroupId       = COM_IPDU_GROUP_TELEMETRY,        /* I-PDU Group「テレメトリ」に所属。既定で
-                                                               * 停止状態（[SWS_Com_00444]）で初期化され、EcuM が
-                                                               * RUN へ遷移した際に BswM の Rule が
-                                                               * Com_IpduGroupStart() を呼ぶまで送信されない
-                                                               * （詳細は Com_Cfg.h の COM_IPDU_GROUP_TELEMETRY、
-                                                               * src/Bsw/BswM/BswM_PBCfg.c 参照） */
-        .TxTransformCbk    = Rte_COMTransform_E2EHealthStatus /* DaVinci: /ActiveEcuC/E2EXf/E2EHealthStatus_Tx_E2EXf
-                                                               *          （E2E Transformer 呼び出しは Rte 層が担う） */
+        .IPduId            = ComConf_ComIPdu_E2EHealthStatus_Tx,     /* DaVinci: ComIPduHandleId  - I-PDU 識別番号 */
+        .DLC               = 5U,                                     /* DaVinci: ComIPduLength    - byte[0-1]=E2E CRC16, byte[2]=E2E Counter,
+                                                                      *          byte[3]=CrcErrCount, byte[4]=SeqErrCount */
+        .PduRId            = PduRConf_PduRSrcPdu_E2EHealthStatus_Tx, /* DaVinci: ComIPduPduRef    - PduR TX パス 3 へのリンク */
+        .TimeoutMs         = 0U,                                     /* TX I-PDU のため監視無効 */
+        .IsSignalGroup     = 0U,                                     /* 直接送信 */
+        .TxModeMode        = COM_TX_MODE_PERIODIC,                   /* DaVinci: ComTxModeMode = PERIODIC */
+        .TxPeriodMs        = COM_TX_PERIOD_E2EHEALTH_MS,             /* DaVinci: ComTxModeTimePeriodFactor */
+        .UpdateBitPosition = 0xFFU,                                  /* update-bit なし（Signal Group 専用機能のため未使用） */
+        .IpduGroupId       = COM_IPDU_GROUP_TELEMETRY,               /* I-PDU Group「テレメトリ」に所属。既定で
+                                                                      * 停止状態（[SWS_Com_00444]）で初期化され、EcuM が
+                                                                      * RUN へ遷移した際に BswM の Rule が
+                                                                      * Com_IpduGroupStart() を呼ぶまで送信されない
+                                                                      * （詳細は Com_Cfg.h の COM_IPDU_GROUP_TELEMETRY、
+                                                                      * src/Bsw/BswM/BswM_PBCfg.c 参照） */
+        .TxTransformCbk    = Rte_COMTransform_E2EHealthStatus        /* DaVinci: /ActiveEcuC/E2EXf/E2EHealthStatus_Tx_E2EXf
+                                                                      *          （E2E Transformer 呼び出しは Rte 層が担う） */
     },
     {
         /* ---------------------------------------------------------------
@@ -453,9 +454,9 @@ static const Com_IPduConfigType Com_TxIPduConfigData[COM_TX_IPDU_COUNT] = {
          * ゲートウェイが他 ECU へ意味不明な値をブロードキャストしないよう、
          * 送信直前のこの層で最終防衛する（多層防御の一例）。
          * --------------------------------------------------------------- */
-        .IPduId              = 3U,                                            /* DaVinci: ComIPduHandleId  - I-PDU 識別番号 */
+        .IPduId              = ComConf_ComIPdu_ImmobilizerStatus_Tx,          /* DaVinci: ComIPduHandleId  - I-PDU 識別番号 */
         .DLC                 = 1U,                                            /* DaVinci: ComIPduLength    - byte[0]=ImmobilizerStatus のみ */
-        .PduRId              = 4U,                                            /* DaVinci: ComIPduPduRef    - PduR TX パス 4 へのリンク */
+        .PduRId              = PduRConf_PduRSrcPdu_ImmobilizerStatus_Tx,      /* DaVinci: ComIPduPduRef    - PduR TX パス 4 へのリンク */
         .TimeoutMs           = 0U,                                            /* TX I-PDU のため監視無効 */
         .IsSignalGroup       = 0U,                                            /* 直接送信 */
         .TxModeMode          = COM_TX_MODE_DIRECT,                            /* DaVinci: ComTxModeMode = DIRECT
@@ -474,9 +475,9 @@ static const Com_IPduConfigType Com_TxIPduConfigData[COM_TX_IPDU_COUNT] = {
          * TX IPduId=4: TestMsg フレーム (メータ ECU 送信、テスト専用、E2E/SecOC なし)
          * DaVinci: /ActiveEcuC/Com/ComConfig/TestMsg_Tx
          * --------------------------------------------------------------- */
-        .IPduId            = 4U,
+        .IPduId            = ComConf_ComIPdu_TestMsg_Tx,
         .DLC               = 1U,
-        .PduRId            = 5U,
+        .PduRId            = PduRConf_PduRSrcPdu_TestMsg_Tx,
         .TxModeMode        = COM_TX_MODE_PERIODIC,
         .TxPeriodMs        = COM_TX_PERIOD_TESTMSG_MS,
         .UpdateBitPosition = 0xFFU,
@@ -504,7 +505,7 @@ static const Com_SignalConfigType Com_SignalConfigData[COM_SIGNAL_COUNT] = {
          * --------------------------------------------------------------- */
         .SignalId        = COM_SIGNAL_ENGINE_SPEED,         /* DaVinci: ComHandleId */
         .Direction       = COM_SIGNAL_DIRECTION_RX,         /* 本プロジェクト独自拡張。Com_SignalDirectionType 参照 */
-        .IPduId          = 0U,                              /* DaVinci: ComIPduRef → EngineInfo_Rx */
+        .IPduId          = ComConf_ComIPdu_EngineInfo_Rx,   /* DaVinci: ComIPduRef → EngineInfo_Rx */
         .BitPosition     = 24U,                             /* DaVinci: ComBitPosition */
         .BitSize         = 16U,                             /* DaVinci: ComBitSize */
         .Endian          = COM_BIG_ENDIAN,                  /* DaVinci: ComSignalEndianness = OPAQUE */
@@ -545,7 +546,7 @@ static const Com_SignalConfigType Com_SignalConfigData[COM_SIGNAL_COUNT] = {
          * --------------------------------------------------------------- */
         .SignalId               = COM_SIGNAL_COOLANT_TEMP,        /* DaVinci: ComHandleId */
         .Direction              = COM_SIGNAL_DIRECTION_RX,        /* 本プロジェクト独自拡張。Com_SignalDirectionType 参照 */
-        .IPduId                 = 0U,                             /* DaVinci: ComIPduRef → EngineInfo_Rx */
+        .IPduId                 = ComConf_ComIPdu_EngineInfo_Rx,  /* DaVinci: ComIPduRef → EngineInfo_Rx */
         .BitPosition            = 40U,                            /* DaVinci: ComBitPosition */
         .BitSize                = 8U,                             /* DaVinci: ComBitSize */
         .Endian                 = COM_BIG_ENDIAN,                 /* DaVinci: ComSignalEndianness = OPAQUE */
@@ -569,15 +570,15 @@ static const Com_SignalConfigType Com_SignalConfigData[COM_SIGNAL_COUNT] = {
          * Com_CbkRxTOut 相当）: 上の FirstTimeoutMs/TimeoutMs（シグナル
          * 単位、EngineInfo と同値）を新規に超過した瞬間に1回だけ呼ばれる。
          * --------------------------------------------------------------- */
-        .SignalId       = COM_SIGNAL_ENGINE_ON_FLAG,  /* DaVinci: ComHandleId */
-        .Direction      = COM_SIGNAL_DIRECTION_RX,    /* 本プロジェクト独自拡張。Com_SignalDirectionType 参照 */
-        .IPduId         = 0U,                         /* DaVinci: ComIPduRef → EngineInfo_Rx */
-        .BitPosition    = 48U,                        /* DaVinci: ComBitPosition */
-        .BitSize        = 1U,                         /* DaVinci: ComBitSize */
-        .Endian         = COM_BIG_ENDIAN,             /* DaVinci: ComSignalEndianness = OPAQUE */
-        .FirstTimeoutMs = COM_TIMEOUT_ENGINE_INFO_MS, /* DaVinci: ComFirstTimeout（シグナル単位）
-                                                       *          EngineSpeed と同じ理由・同じ値 */
-        .TimeoutMs      = COM_TIMEOUT_ENGINE_INFO_MS, /* DaVinci: ComTimeout（シグナル単位） */
+        .SignalId       = COM_SIGNAL_ENGINE_ON_FLAG,     /* DaVinci: ComHandleId */
+        .Direction      = COM_SIGNAL_DIRECTION_RX,       /* 本プロジェクト独自拡張。Com_SignalDirectionType 参照 */
+        .IPduId         = ComConf_ComIPdu_EngineInfo_Rx, /* DaVinci: ComIPduRef → EngineInfo_Rx */
+        .BitPosition    = 48U,                           /* DaVinci: ComBitPosition */
+        .BitSize        = 1U,                            /* DaVinci: ComBitSize */
+        .Endian         = COM_BIG_ENDIAN,                /* DaVinci: ComSignalEndianness = OPAQUE */
+        .FirstTimeoutMs = COM_TIMEOUT_ENGINE_INFO_MS,    /* DaVinci: ComFirstTimeout（シグナル単位）
+                                                          *          EngineSpeed と同じ理由・同じ値 */
+        .TimeoutMs      = COM_TIMEOUT_ENGINE_INFO_MS,    /* DaVinci: ComTimeout（シグナル単位） */
         .RxTOutCbk      = Rte_COMCbkRxTOut_EngineOnFlag,
         .RxAckCbk       = Rte_COMCbk_EngineOnFlag
     },
@@ -596,7 +597,7 @@ static const Com_SignalConfigType Com_SignalConfigData[COM_SIGNAL_COUNT] = {
          * --------------------------------------------------------------- */
         .SignalId             = COM_SIGNAL_ENGINE_STATE,                  /* DaVinci: ComHandleId */
         .Direction            = COM_SIGNAL_DIRECTION_TX,                  /* 本プロジェクト独自拡張。Com_SignalDirectionType 参照 */
-        .IPduId               = 0U,                                       /* DaVinci: ComIPduRef → MeterStatus_Tx */
+        .IPduId               = ComConf_ComIPdu_MeterStatus_Tx,           /* DaVinci: ComIPduRef → MeterStatus_Tx */
         .BitPosition          = 0U,                                       /* DaVinci: ComBitPosition */
         .BitSize              = 8U,                                       /* DaVinci: ComBitSize */
         .Endian               = COM_BIG_ENDIAN,                           /* DaVinci: ComSignalEndianness = OPAQUE */
@@ -649,7 +650,7 @@ static const Com_SignalConfigType Com_SignalConfigData[COM_SIGNAL_COUNT] = {
          * --------------------------------------------------------------- */
         .SignalId                 = COM_SIGNAL_VEHICLE_SPEED,         /* DaVinci: ComHandleId */
         .Direction                = COM_SIGNAL_DIRECTION_RX,          /* 本プロジェクト独自拡張。Com_SignalDirectionType 参照 */
-        .IPduId                   = 1U,                               /* DaVinci: ComIPduRef → AbsInfo_Rx */
+        .IPduId                   = ComConf_ComIPdu_AbsInfo_Rx,       /* DaVinci: ComIPduRef → AbsInfo_Rx */
         .BitPosition              = 24U,                              /* DaVinci: ComBitPosition */
         .BitSize                  = 16U,                              /* DaVinci: ComBitSize */
         .Endian                   = COM_BIG_ENDIAN,                   /* DaVinci: ComSignalEndianness = OPAQUE */
@@ -663,12 +664,12 @@ static const Com_SignalConfigType Com_SignalConfigData[COM_SIGNAL_COUNT] = {
          * DaVinci: /ActiveEcuC/Com/ComConfig/BrakeActive_Rx
          * RX Signal Group（AbsInfo_Rx）メンバー。VehicleSpeed と同様。
          * --------------------------------------------------------------- */
-        .SignalId    = COM_SIGNAL_BRAKE_ACTIVE, /* DaVinci: ComHandleId */
-        .Direction   = COM_SIGNAL_DIRECTION_RX, /* 本プロジェクト独自拡張。Com_SignalDirectionType 参照 */
-        .IPduId      = 1U,                      /* DaVinci: ComIPduRef → AbsInfo_Rx */
-        .BitPosition = 40U,                     /* DaVinci: ComBitPosition */
-        .BitSize     = 1U,                      /* DaVinci: ComBitSize */
-        .Endian      = COM_BIG_ENDIAN           /* DaVinci: ComSignalEndianness = OPAQUE */
+        .SignalId    = COM_SIGNAL_BRAKE_ACTIVE,    /* DaVinci: ComHandleId */
+        .Direction   = COM_SIGNAL_DIRECTION_RX,    /* 本プロジェクト独自拡張。Com_SignalDirectionType 参照 */
+        .IPduId      = ComConf_ComIPdu_AbsInfo_Rx, /* DaVinci: ComIPduRef → AbsInfo_Rx */
+        .BitPosition = 40U,                        /* DaVinci: ComBitPosition */
+        .BitSize     = 1U,                         /* DaVinci: ComBitSize */
+        .Endian      = COM_BIG_ENDIAN              /* DaVinci: ComSignalEndianness = OPAQUE */
     },
     {
         /* ---------------------------------------------------------------
@@ -677,12 +678,12 @@ static const Com_SignalConfigType Com_SignalConfigData[COM_SIGNAL_COUNT] = {
          * DaVinci: /ActiveEcuC/Com/ComConfig/AbsActive_Rx
          * RX Signal Group（AbsInfo_Rx）メンバー。VehicleSpeed と同様。
          * --------------------------------------------------------------- */
-        .SignalId    = COM_SIGNAL_ABS_ACTIVE,   /* DaVinci: ComHandleId */
-        .Direction   = COM_SIGNAL_DIRECTION_RX, /* 本プロジェクト独自拡張。Com_SignalDirectionType 参照 */
-        .IPduId      = 1U,                      /* DaVinci: ComIPduRef → AbsInfo_Rx */
-        .BitPosition = 41U,                     /* DaVinci: ComBitPosition */
-        .BitSize     = 1U,                      /* DaVinci: ComBitSize */
-        .Endian      = COM_BIG_ENDIAN           /* DaVinci: ComSignalEndianness = OPAQUE */
+        .SignalId    = COM_SIGNAL_ABS_ACTIVE,      /* DaVinci: ComHandleId */
+        .Direction   = COM_SIGNAL_DIRECTION_RX,    /* 本プロジェクト独自拡張。Com_SignalDirectionType 参照 */
+        .IPduId      = ComConf_ComIPdu_AbsInfo_Rx, /* DaVinci: ComIPduRef → AbsInfo_Rx */
+        .BitPosition = 41U,                        /* DaVinci: ComBitPosition */
+        .BitSize     = 1U,                         /* DaVinci: ComBitSize */
+        .Endian      = COM_BIG_ENDIAN              /* DaVinci: ComSignalEndianness = OPAQUE */
     },
     {
         /* ---------------------------------------------------------------
@@ -693,7 +694,7 @@ static const Com_SignalConfigType Com_SignalConfigData[COM_SIGNAL_COUNT] = {
          * --------------------------------------------------------------- */
         .SignalId         = COM_SIGNAL_RUN_LAMP,                      /* DaVinci: ComHandleId */
         .Direction        = COM_SIGNAL_DIRECTION_TX,                  /* 本プロジェクト独自拡張。Com_SignalDirectionType 参照 */
-        .IPduId           = 1U,                                       /* DaVinci: ComIPduRef → WarningStatus_Tx */
+        .IPduId           = ComConf_ComIPdu_WarningStatus_Tx,         /* DaVinci: ComIPduRef → WarningStatus_Tx */
         .BitPosition      = 0U,                                       /* DaVinci: ComBitPosition */
         .BitSize          = 1U,                                       /* DaVinci: ComBitSize */
         .Endian           = COM_BIG_ENDIAN,                           /* DaVinci: ComSignalEndianness = OPAQUE */
@@ -710,7 +711,7 @@ static const Com_SignalConfigType Com_SignalConfigData[COM_SIGNAL_COUNT] = {
          * --------------------------------------------------------------- */
         .SignalId         = COM_SIGNAL_FAULT_LAMP,                    /* DaVinci: ComHandleId */
         .Direction        = COM_SIGNAL_DIRECTION_TX,                  /* 本プロジェクト独自拡張。Com_SignalDirectionType 参照 */
-        .IPduId           = 1U,                                       /* DaVinci: ComIPduRef → WarningStatus_Tx */
+        .IPduId           = ComConf_ComIPdu_WarningStatus_Tx,         /* DaVinci: ComIPduRef → WarningStatus_Tx */
         .BitPosition      = 1U,                                       /* DaVinci: ComBitPosition */
         .BitSize          = 1U,                                       /* DaVinci: ComBitSize */
         .Endian           = COM_BIG_ENDIAN,                           /* DaVinci: ComSignalEndianness = OPAQUE */
@@ -728,7 +729,7 @@ static const Com_SignalConfigType Com_SignalConfigData[COM_SIGNAL_COUNT] = {
          * --------------------------------------------------------------- */
         .SignalId         = COM_SIGNAL_ABS_LAMP,                      /* DaVinci: ComHandleId */
         .Direction        = COM_SIGNAL_DIRECTION_TX,                  /* 本プロジェクト独自拡張。Com_SignalDirectionType 参照 */
-        .IPduId           = 1U,                                       /* DaVinci: ComIPduRef → WarningStatus_Tx */
+        .IPduId           = ComConf_ComIPdu_WarningStatus_Tx,         /* DaVinci: ComIPduRef → WarningStatus_Tx */
         .BitPosition      = 2U,                                       /* DaVinci: ComBitPosition */
         .BitSize          = 1U,                                       /* DaVinci: ComBitSize */
         .Endian           = COM_BIG_ENDIAN,                           /* DaVinci: ComSignalEndianness = OPAQUE */
@@ -744,24 +745,24 @@ static const Com_SignalConfigType Com_SignalConfigData[COM_SIGNAL_COUNT] = {
          * E2E Profile05 標準レイアウトのため、シグナルは byte[3] から）
          * DaVinci: /ActiveEcuC/Com/ComConfig/E2ECrcErrCount_Tx
          * --------------------------------------------------------------- */
-        .SignalId    = COM_SIGNAL_E2E_CRC_ERR_COUNT, /* DaVinci: ComHandleId */
-        .Direction   = COM_SIGNAL_DIRECTION_TX,      /* 本プロジェクト独自拡張。Com_SignalDirectionType 参照 */
-        .IPduId      = 2U,                           /* DaVinci: ComIPduRef → E2EHealthStatus_Tx */
-        .BitPosition = 24U,                          /* DaVinci: ComBitPosition */
-        .BitSize     = 8U,                           /* DaVinci: ComBitSize */
-        .Endian      = COM_BIG_ENDIAN                /* DaVinci: ComSignalEndianness = OPAQUE */
+        .SignalId    = COM_SIGNAL_E2E_CRC_ERR_COUNT,       /* DaVinci: ComHandleId */
+        .Direction   = COM_SIGNAL_DIRECTION_TX,            /* 本プロジェクト独自拡張。Com_SignalDirectionType 参照 */
+        .IPduId      = ComConf_ComIPdu_E2EHealthStatus_Tx, /* DaVinci: ComIPduRef → E2EHealthStatus_Tx */
+        .BitPosition = 24U,                                /* DaVinci: ComBitPosition */
+        .BitSize     = 8U,                                 /* DaVinci: ComBitSize */
+        .Endian      = COM_BIG_ENDIAN                      /* DaVinci: ComSignalEndianness = OPAQUE */
     },
     {
         /* ---------------------------------------------------------------
          * Signal 11: E2ESeqErrCount  TX 8bit  CAN 0x220 byte[4]
          * DaVinci: /ActiveEcuC/Com/ComConfig/E2ESeqErrCount_Tx
          * --------------------------------------------------------------- */
-        .SignalId    = COM_SIGNAL_E2E_SEQ_ERR_COUNT, /* DaVinci: ComHandleId */
-        .Direction   = COM_SIGNAL_DIRECTION_TX,      /* 本プロジェクト独自拡張。Com_SignalDirectionType 参照 */
-        .IPduId      = 2U,                           /* DaVinci: ComIPduRef → E2EHealthStatus_Tx */
-        .BitPosition = 32U,                          /* DaVinci: ComBitPosition */
-        .BitSize     = 8U,                           /* DaVinci: ComBitSize */
-        .Endian      = COM_BIG_ENDIAN                /* DaVinci: ComSignalEndianness = OPAQUE */
+        .SignalId    = COM_SIGNAL_E2E_SEQ_ERR_COUNT,       /* DaVinci: ComHandleId */
+        .Direction   = COM_SIGNAL_DIRECTION_TX,            /* 本プロジェクト独自拡張。Com_SignalDirectionType 参照 */
+        .IPduId      = ComConf_ComIPdu_E2EHealthStatus_Tx, /* DaVinci: ComIPduRef → E2EHealthStatus_Tx */
+        .BitPosition = 32U,                                /* DaVinci: ComBitPosition */
+        .BitSize     = 8U,                                 /* DaVinci: ComBitSize */
+        .Endian      = COM_BIG_ENDIAN                      /* DaVinci: ComSignalEndianness = OPAQUE */
     },
     {
         /* ---------------------------------------------------------------
@@ -771,12 +772,12 @@ static const Com_SignalConfigType Com_SignalConfigData[COM_SIGNAL_COUNT] = {
          * Com_RxIndication() 経由で更新される（IPduId=2、SecureCommand_Rx 参照）。
          * 0x00=LOCK, 0x01=UNLOCK。
          * --------------------------------------------------------------- */
-        .SignalId    = COM_SIGNAL_IMMOBILIZER_CMD, /* DaVinci: ComHandleId */
-        .Direction   = COM_SIGNAL_DIRECTION_RX,    /* 本プロジェクト独自拡張。Com_SignalDirectionType 参照 */
-        .IPduId      = 2U,                         /* DaVinci: ComIPduRef → SecureCommand_Rx */
-        .BitPosition = 0U,                         /* DaVinci: ComBitPosition */
-        .BitSize     = 8U,                         /* DaVinci: ComBitSize */
-        .Endian      = COM_BIG_ENDIAN              /* DaVinci: ComSignalEndianness = OPAQUE */
+        .SignalId    = COM_SIGNAL_IMMOBILIZER_CMD,       /* DaVinci: ComHandleId */
+        .Direction   = COM_SIGNAL_DIRECTION_RX,          /* 本プロジェクト独自拡張。Com_SignalDirectionType 参照 */
+        .IPduId      = ComConf_ComIPdu_SecureCommand_Rx, /* DaVinci: ComIPduRef → SecureCommand_Rx */
+        .BitPosition = 0U,                               /* DaVinci: ComBitPosition */
+        .BitSize     = 8U,                               /* DaVinci: ComBitSize */
+        .Endian      = COM_BIG_ENDIAN                    /* DaVinci: ComSignalEndianness = OPAQUE */
     },
     {
         /* ---------------------------------------------------------------
@@ -788,7 +789,7 @@ static const Com_SignalConfigType Com_SignalConfigData[COM_SIGNAL_COUNT] = {
          * --------------------------------------------------------------- */
         .SignalId        = COM_SIGNAL_IMMOBILIZER_STATUS,            /* DaVinci: ComHandleId */
         .Direction       = COM_SIGNAL_DIRECTION_TX,                  /* 本プロジェクト独自拡張。Com_SignalDirectionType 参照 */
-        .IPduId          = 3U,                                       /* DaVinci: ComIPduRef → ImmobilizerStatus_Tx */
+        .IPduId          = ComConf_ComIPdu_ImmobilizerStatus_Tx,     /* DaVinci: ComIPduRef → ImmobilizerStatus_Tx */
         .BitPosition     = 0U,                                       /* DaVinci: ComBitPosition */
         .BitSize         = 8U,                                       /* DaVinci: ComBitSize */
         .Endian          = COM_BIG_ENDIAN,                           /* DaVinci: ComSignalEndianness = OPAQUE */
@@ -806,7 +807,7 @@ static const Com_SignalConfigType Com_SignalConfigData[COM_SIGNAL_COUNT] = {
          * --------------------------------------------------------------- */
         .SignalId             = COM_SIGNAL_METER_ENGINE_SPEED,            /* DaVinci: ComHandleId */
         .Direction            = COM_SIGNAL_DIRECTION_TX,                  /* 本プロジェクト独自拡張 */
-        .IPduId               = 0U,                                       /* DaVinci: ComIPduRef → MeterStatus_Tx */
+        .IPduId               = ComConf_ComIPdu_MeterStatus_Tx,           /* DaVinci: ComIPduRef → MeterStatus_Tx */
         .BitPosition          = 24U,                                      /* DaVinci: ComBitPosition (byte[3]) */
         .BitSize              = 16U,                                      /* DaVinci: ComBitSize */
         .Endian               = COM_BIG_ENDIAN,                           /* DaVinci: ComSignalEndianness = OPAQUE */
@@ -827,7 +828,7 @@ static const Com_SignalConfigType Com_SignalConfigData[COM_SIGNAL_COUNT] = {
          * --------------------------------------------------------------- */
         .SignalId             = COM_SIGNAL_METER_RUN_LAMP,                /* DaVinci: ComHandleId */
         .Direction            = COM_SIGNAL_DIRECTION_TX,                  /* 本プロジェクト独自拡張 */
-        .IPduId               = 0U,                                       /* DaVinci: ComIPduRef → MeterStatus_Tx */
+        .IPduId               = ComConf_ComIPdu_MeterStatus_Tx,           /* DaVinci: ComIPduRef → MeterStatus_Tx */
         .BitPosition          = 16U,                                      /* DaVinci: ComBitPosition (byte[2] bit0) */
         .BitSize              = 1U,                                       /* DaVinci: ComBitSize */
         .Endian               = COM_BIG_ENDIAN,                           /* DaVinci: ComSignalEndianness = OPAQUE */
@@ -844,7 +845,7 @@ static const Com_SignalConfigType Com_SignalConfigData[COM_SIGNAL_COUNT] = {
          * --------------------------------------------------------------- */
         .SignalId             = COM_SIGNAL_METER_FAULT_LAMP,              /* DaVinci: ComHandleId */
         .Direction            = COM_SIGNAL_DIRECTION_TX,                  /* 本プロジェクト独自拡張 */
-        .IPduId               = 0U,                                       /* DaVinci: ComIPduRef → MeterStatus_Tx */
+        .IPduId               = ComConf_ComIPdu_MeterStatus_Tx,           /* DaVinci: ComIPduRef → MeterStatus_Tx */
         .BitPosition          = 17U,                                      /* DaVinci: ComBitPosition (byte[2] bit1) */
         .BitSize              = 1U,                                       /* DaVinci: ComBitSize */
         .Endian               = COM_BIG_ENDIAN,                           /* DaVinci: ComSignalEndianness = OPAQUE */
@@ -863,7 +864,7 @@ static const Com_SignalConfigType Com_SignalConfigData[COM_SIGNAL_COUNT] = {
          * --------------------------------------------------------------- */
         .SignalId             = COM_SIGNAL_METER_ABS_LAMP,                /* DaVinci: ComHandleId */
         .Direction            = COM_SIGNAL_DIRECTION_TX,                  /* 本プロジェクト独自拡張 */
-        .IPduId               = 0U,                                       /* DaVinci: ComIPduRef → MeterStatus_Tx */
+        .IPduId               = ComConf_ComIPdu_MeterStatus_Tx,           /* DaVinci: ComIPduRef → MeterStatus_Tx */
         .BitPosition          = 18U,                                      /* DaVinci: ComBitPosition (byte[2] bit2) */
         .BitSize              = 1U,                                       /* DaVinci: ComBitSize */
         .Endian               = COM_BIG_ENDIAN,                           /* DaVinci: ComSignalEndianness = OPAQUE */
@@ -888,7 +889,7 @@ static const Com_SignalConfigType Com_SignalConfigData[COM_SIGNAL_COUNT] = {
          * --------------------------------------------------------------- */
         .SignalId               = COM_SIGNAL_METER_COOLANT_TEMP,            /* DaVinci: ComHandleId */
         .Direction              = COM_SIGNAL_DIRECTION_TX,                  /* 本プロジェクト独自拡張 */
-        .IPduId                 = 0U,                                       /* DaVinci: ComIPduRef → MeterStatus_Tx */
+        .IPduId                 = ComConf_ComIPdu_MeterStatus_Tx,           /* DaVinci: ComIPduRef → MeterStatus_Tx */
         .BitPosition            = 40U,                                      /* DaVinci: ComBitPosition (byte[5]) */
         .BitSize                = 8U,                                       /* DaVinci: ComBitSize */
         .Endian                 = COM_BIG_ENDIAN,                           /* DaVinci: ComSignalEndianness = OPAQUE */
@@ -910,7 +911,7 @@ static const Com_SignalConfigType Com_SignalConfigData[COM_SIGNAL_COUNT] = {
          * --------------------------------------------------------------- */
         .SignalId        = COM_SIGNAL_TEST_MSG_TEST_COUNTER, /* DaVinci: ComHandleId */
         .Direction       = COM_SIGNAL_DIRECTION_TX,          /* 本プロジェクト独自拡張。Com_SignalDirectionType 参照 */
-        .IPduId          = 4U,                               /* DaVinci: ComIPduRef → TestMsg_Tx */
+        .IPduId          = ComConf_ComIPdu_TestMsg_Tx,       /* DaVinci: ComIPduRef → TestMsg_Tx */
         .BitPosition     = 0U,                               /* DaVinci: ComBitPosition */
         .BitSize         = 8U,                               /* DaVinci: ComBitSize */
         .Endian          = COM_BIG_ENDIAN,                   /* DaVinci: ComSignalEndianness = OPAQUE */
