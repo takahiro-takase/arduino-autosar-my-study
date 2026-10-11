@@ -392,7 +392,7 @@ python tools/configurator/gen_cfg.py     # スキーマ・整合性を検査し�
 - 対象は CanIf / Com / PduR / E2EXf / SecOC / Csm・Crypto・KeyM / BswM です。生成領域は、C ソースの
   `@@GEN-BEGIN` から `@@GEN-END` までの間だけで、手で編集しません。
 - CAN ID、DLC、ビット位置などの値の正本は信号表です。設定 JSON はフレーム名で参照するだけで、値をコピーしません。
-- 設定 JSON は、`tools/can_tool` の「設定 JSON」タブで、スキーマ（`config/schema/`）に従って GUI から編集できます。
+- 設定 JSON は、`tools/can_tool` の左側のナビゲーション（`Com`、`PduR`、`CanIf` など）で、スキーマ（`config/schema/`）に従って GUI から編集できます。
   信号定義エディタと設定 JSON エディタの下部のボタンから、検査・同期・生成も実行できます。
 
 仕組みや設計の判断、整合性検査の内容は [tools/configurator/README.md](tools/configurator/README.md) を参照してください。

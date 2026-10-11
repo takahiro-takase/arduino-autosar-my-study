@@ -592,12 +592,17 @@ TEST_F(Bsw_ComStack_Signal_Tx_Repetition_Test, OK_FiresConfiguredNumberOfRepeats
     /* ----------------------- */
     /* ---- 準備 (Arrange) --- */
     /* ----------------------- */
-    uint16_t value = 0x1234U;
-    Com_SendSignal(0U, &value);
+    // なし（SetUp() で初期化済み）
 
     /* ----------------------- */
     /* ---- 実行 (Act) ------- */
     /* ----------------------- */
+
+    // step01: Com_SendSignal()
+    uint16_t value = 0x1234U;
+    Com_SendSignal(0U, &value);
+
+    // step02: Com → PduR → CanIf → Can_Write → HW 送信
     // 初回送信
     Com_MainFunctionTx();
     uint32 sendCount0 = FakeCanHw_SendCount;

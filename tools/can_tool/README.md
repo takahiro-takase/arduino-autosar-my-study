@@ -8,8 +8,8 @@
 セッション制御・SecurityAccess・複数フレーム応答の FC 送信など、手動操作する
 項目が増えて Cangaroo での都度のフレーム手入力が煩雑になってきたため、
 よく使う UDS コマンドをボタン 1 つで送信できる Python/Tkinter 製の補助ツールを
-`tools/can_tool/` に用意しています（同じウィンドウの別タブに CAN 信号定義
-エディタ（`config/data/can_signals.json` を編集する GUI）も同居しています）。
+`tools/can_tool/` に用意しています（同じウィンドウに CAN 信号定義
+エディタ（`config/data/can_signals.json` を編集する GUI）と、設定 JSON エディタも同居しています）。
 
 | 機能 | 説明 |
 |------|------|
@@ -32,8 +32,8 @@ python src/app.py
 
 Windows で `pip install` 済みなら `tools/can_tool/run.bat` をダブルクリックしても
 起動できます（内部で自分自身のディレクトリへ `cd` してから `python src\app.py` を
-実行するだけの薄いランチャーです）。UDS Tester は「UDS Tester」タブに、CAN 信号
-定義エディタはもう一方のタブに表示されます。
+実行するだけの薄いランチャーです）。ウィンドウの左側に縦に並んだ一覧（ナビゲーション）があり、
+`Tester`（UDS Tester）、`Signals`（信号定義エディタ）、設定 JSON の各モジュール（`Com`、`PduR`、`CanIf` など）を選んで切り替えます。
 
 接続先は「CAN 接続」パネルの `interface` / `channel` / `bitrate` で指定します
 （既定値は `config.json` の `can` セクション）。CANable / candleLight 互換
@@ -108,9 +108,34 @@ GUI のボタン送信に加え、複数手順を一連の操作としてスク�
 
 ## 設定 JSON エディタ（tools/can_tool）
 
-「設定 JSON」タブでは、`config/data/*.json`（CanIf、Com、PduR、E2EXf、SecOC、CryptoStack、BswM の設定データ）を、
+左側のナビゲーションの `Com`、`PduR` などの項目では、`config/data/*.json`（CanIf、Com、PduR、E2EXf、SecOC、CryptoStack、BswM の設定データ）を、
 対応する JSON スキーマ（`config/schema/*.schema.json`）に従って編集できます。画面はスキーマから作るため、
 設定 json の種類が増えても、このツールの変更は要りません。
+
+左側の一覧は、短い英語の名前で、全体の流れの順に並びます。区切り線が、ブロックの境目です。
+
+```
+Tester
+Signals
+───────
+Com        通信スタック（上 → 下）
+PduR
+CanIf
+Can        （json なし。手書きのため、選べない薄い字）
+───────
+E2EXf      保護・暗号
+SecOC
+───────
+Csm        Csm・Crypto・KeyM は、同じ設定ファイル（CryptoStack.json）の別の箇所を開く
+Crypto
+KeyM
+───────
+BswM       モード管理
+```
+
+- 各項目の日本語の説明（`PduR — PDU のルーティング` など）は、右側のページの上部に出ます。
+- `Csm`・`Crypto`・`KeyM` は、同じ `CryptoStack.json` を開き、それぞれジョブ・鍵・鍵名の項目を選んだ状態にします。
+- 未保存の変更がある項目には `*` が付きます。別のファイルへ切り替えるときは、破棄してよいかを確認します。
 
 | 操作 | 内容 |
 |------|------|

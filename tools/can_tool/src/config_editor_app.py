@@ -34,7 +34,6 @@ KIND_LABEL = {
 # 配列の要素の見出しに使う項目（先頭から探す）
 LABEL_KEYS = ("name", "macro", "title", "frame", "summary")
 
-
 # ----------------------------------------------------------------------
 # スキーマの扱い
 # ----------------------------------------------------------------------
@@ -293,10 +292,16 @@ class ConfigEditorFrame(ttk.Frame):
     """設定 JSON エディタ。ウィンドウを閉じる判断は呼び出し元の責務で、confirm_close() だけを提供する。"""
 
     def __init__(self, master: tk.Misc, config_dir: str, get_signals_path: Callable[[], str],
-                 on_title_change: Callable[[str], None] | None = None):
+                 on_title_change: Callable[[str], None] | None = None,
+                 ensure_all_saved: Callable[[], bool] | None = None):
+        """ファイルは、呼び出し元（app.py の左側ナビゲーション）が show() で選ぶ。
+        ensure_all_saved: コンフィグレータの実行前に呼ぶ「未保存の変更を確認する」関数。
+        信号表など、他のエディタの分も含める場合に渡す（既定は、この設定 JSON の分だけ）。"""
         super().__init__(master)
         self.config_dir = config_dir
+        self.names = self.file_names()  # 編集できる設定 json の名前（起動時に 1 回だけ調べる）
         self._get_signals_path = get_signals_path
+        self._ensure_all_saved = ensure_all_saved
         self._on_title_change = on_title_change or (lambda _t: None)
         self.path: str | None = None
         self.data: Any = {}
@@ -304,18 +309,10 @@ class ConfigEditorFrame(ttk.Frame):
         self.schema: dict = {}
         self.validator: jsonschema.Draft202012Validator | None = None
         self.dirty = False
-        # 同じウィンドウの信号定義エディタ（app.py が設定する）。コンフィグレータの実行前に、
-        # こちらの未保存の変更も確認するため（ツールは保存済みのファイルを読む）。
-        self.peer = None
+        self.file_var = tk.StringVar(value="")     # 開いているファイル名
+        self.caption_var = tk.StringVar(value="")  # 開いている設定の日本語の説明
         self._nodes: dict[str, tuple[tuple, dict]] = {}  # 行 ID → (path, schema)
         self._build_ui()
-        names = self.file_names()
-        if names:
-            self.file_var.set(names[0])
-            self.open_file(names[0], notify=False)
-        # on_title_change が呼び出し元の変数（Notebook のタブを指す Frame 自身）を参照する場合に備え、
-        # コンストラクタの完了後（イベントループの開始後）に通知する（信号定義エディタと同じ方式）。
-        self.after_idle(self._update_title)
 
     # ------------------------------------------------------------------
     # ファイル
@@ -334,9 +331,12 @@ class ConfigEditorFrame(ttk.Frame):
                 names.append(os.path.basename(p))
         return names
 
-    def open_file(self, name: str, *, notify: bool = True) -> bool:
-        """name の設定 json とスキーマを読み込む。notify=False は、コンストラクタからの呼び出し用
-        （on_title_change が呼び出し元の変数を参照する場合に、代入前に呼ばないため）。"""
+    @property
+    def current_file(self) -> str | None:
+        return os.path.basename(self.path) if self.path else None
+
+    def open_file(self, name: str) -> bool:
+        """name の設定 json とスキーマを読み込む。"""
         path = os.path.join(self.config_dir, name)
         with open(path, "r", encoding="utf-8") as f:
             data = json.load(f)
@@ -349,8 +349,8 @@ class ConfigEditorFrame(ttk.Frame):
         self.validator = jsonschema.Draft202012Validator(schema)
         self.dirty = False
         self.refresh()
-        if notify:
-            self._update_title()
+        self._select_root()  # 別のファイルを開いたとき、前のファイルでの選択を引き継がない
+        self._update_title()
         self.status_var.set("開きました: %s" % path)
         return True
 
@@ -391,14 +391,45 @@ class ConfigEditorFrame(ttk.Frame):
         self.dirty = True
         self._update_title()
 
-    def _on_file_selected(self, _event: Any = None) -> None:
-        name = self.file_var.get()
+    def show(self, name: str, caption: str, focus=None) -> bool:
+        """name を表示する（別のファイルなら切り替える）。右側のページの説明を出し、focus の候補の項目を選ぶ。
+        未保存の変更の破棄を取りやめたら False（何も変えない）。"""
+        if not self.switch_file(name):
+            return False
+        self.caption_var.set(caption)
+        self.focus_path(focus)
+        return True
+
+    def focus_path(self, candidates) -> None:
+        """候補の順に、最初に実在する項目を選んで見える位置へ出す（親の項目を展開する）。
+        候補があるのに、どれも無ければ、前の選択を残さず、先頭（ファイル全体）を選ぶ。"""
+        for path in candidates or ():
+            for iid, (p, _s) in self._nodes.items():
+                if p == path:
+                    parent = self.tree.parent(iid)
+                    while parent:
+                        self.tree.item(parent, open=True)
+                        parent = self.tree.parent(parent)
+                    self.tree.selection_set(iid)
+                    self.tree.see(iid)
+                    return
+        if candidates:
+            self._select_root()
+
+    def _select_root(self) -> None:
+        roots = self.tree.get_children("")
+        if roots:
+            self.tree.selection_set(roots[0])
+            self.tree.see(roots[0])
+
+    def switch_file(self, name: str) -> bool:
+        """別の設定 json へ切り替える。未保存の変更があれば確認し、取りやめたら False を返す。"""
         if self.path and os.path.basename(self.path) == name:
-            return
+            return True
         if self.dirty and not messagebox.askyesno("確認", "未保存の変更を破棄して、別のファイルを開きますか？"):
-            self.file_var.set(os.path.basename(self.path) if self.path else "")
-            return
+            return False
         self.open_file(name)
+        return True
 
     def ensure_saved(self) -> bool:
         """設定 JSON の未保存の変更を、保存するか確認する。実行を取りやめるなら False。"""
@@ -409,8 +440,8 @@ class ConfigEditorFrame(ttk.Frame):
         return True
 
     def _ensure_saved_before_run(self) -> bool:
-        """コンフィグレータの実行前に、設定 JSON と（あれば）信号定義エディタの未保存の変更を確認する。"""
-        return self.ensure_saved() and (self.peer is None or self.peer.ensure_saved())
+        """コンフィグレータの実行前に、未保存の変更を確認する（共通の関数が渡されていれば、そちらを使う）。"""
+        return (self._ensure_all_saved or self.ensure_saved)()
 
     # ------------------------------------------------------------------
     # UI
@@ -418,11 +449,9 @@ class ConfigEditorFrame(ttk.Frame):
     def _build_ui(self) -> None:
         bar = ttk.Frame(self, padding=4)
         bar.pack(fill=tk.X)
-        ttk.Label(bar, text="設定ファイル:").pack(side=tk.LEFT)
-        self.file_var = tk.StringVar()
-        box = ttk.Combobox(bar, textvariable=self.file_var, values=self.file_names(), state="readonly", width=24)
-        box.pack(side=tk.LEFT, padx=4)
-        box.bind("<<ComboboxSelected>>", self._on_file_selected)
+        # ファイルは左側のナビゲーションで選ぶので、開いているファイル名と、その日本語の説明だけを表示する
+        ttk.Label(bar, textvariable=self.file_var, font=("TkDefaultFont", 10, "bold")).pack(side=tk.LEFT, padx=(4, 8))
+        ttk.Label(bar, textvariable=self.caption_var).pack(side=tk.LEFT, padx=(0, 12))
         ttk.Button(bar, text="保存", command=self.save).pack(side=tk.LEFT, padx=(8, 0))
         ttk.Button(bar, text="再読み込み", command=self.reload).pack(side=tk.LEFT, padx=4)
         self.status_var = tk.StringVar(value="")
