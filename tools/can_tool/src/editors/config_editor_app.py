@@ -125,6 +125,16 @@ class SchemaNav:
         return "x" if int(s.get("minLength", 0)) > 0 else ""
 
 
+# 説明文の項目（コメント・メモ・Doxygen の本文）。設定 json は、値より説明文のほうが多いことがあるため、
+# 既定ではツリーに出さない（「説明文を表示」のチェックで出せる）。値の検証や保存の内容には影響しない。
+DOC_KEYS = {"comments", "comment", "note", "notes", "headNote", "doc"}
+DOC_SUFFIXES = ("Doc", "Note", "Comments")
+
+
+def is_doc_key(key: Any) -> bool:
+    return isinstance(key, str) and (key in DOC_KEYS or key.endswith(DOC_SUFFIXES))
+
+
 def parse_scalar(text: str, kind: str, schema: dict) -> Any:
     """入力文字列を、スキーマの種類に応じた値へ変換する。変換できなければ ValueError。"""
     if kind == "integer":
@@ -454,6 +464,8 @@ class ConfigEditorFrame(ttk.Frame):
         ttk.Label(bar, textvariable=self.caption_var).pack(side=tk.LEFT, padx=(0, 12))
         ttk.Button(bar, text="保存", command=self.save).pack(side=tk.LEFT, padx=(8, 0))
         ttk.Button(bar, text="再読み込み", command=self.reload).pack(side=tk.LEFT, padx=4)
+        self.show_docs_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(bar, text="説明文を表示", variable=self.show_docs_var, command=self.refresh).pack(side=tk.LEFT, padx=(8, 0))
         self.status_var = tk.StringVar(value="")
         ttk.Label(bar, textvariable=self.status_var, foreground="#666").pack(side=tk.LEFT, padx=12)
 
@@ -560,8 +572,9 @@ class ConfigEditorFrame(ttk.Frame):
         kind = self.nav.kind(s)
         if kind == "object" and isinstance(v, dict):
             req = set(self.nav.required(s))
+            show_docs = self.show_docs_var.get()
             for k in v:
-                if k == "$schema":
+                if k == "$schema" or (not show_docs and is_doc_key(k)):
                     continue
                 self._insert(parent, str(k), path + (k,), self.nav.prop_schema(s, k), k in req, expanded)
         elif kind == "array" and isinstance(v, list):

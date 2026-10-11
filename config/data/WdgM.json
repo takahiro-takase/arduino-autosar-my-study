@@ -13,7 +13,7 @@
     {
       "name": "ENGINE",
       "runnable": "App_EngineManager_Run",
-      "taskPeriodMs": 3000,
+      "osTask": "Rte_ScheduleRunnables",
       "idDoc": "App_EngineManager_Run (3000ms 周期)",
       "expectedAliveIndications": 1,
       "aliveDoc": [
@@ -107,7 +107,7 @@
     {
       "name": "WARNING",
       "runnable": "App_WarningIndicator_Run",
-      "taskPeriodMs": 500,
+      "osTask": "Rte_ScheduleWarningIndicator",
       "idDoc": "App_WarningIndicator_Run (500ms 周期)",
       "expectedAliveIndications": 6,
       "aliveDoc": [

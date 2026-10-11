@@ -48,7 +48,7 @@
       "required": [
         "name",
         "runnable",
-        "taskPeriodMs",
+        "osTask",
         "idDoc",
         "expectedAliveIndications",
         "aliveDoc",
@@ -71,10 +71,10 @@
           "minLength": 1,
           "description": "監視する Runnable の関数名（コメント用）"
         },
-        "taskPeriodMs": {
-          "type": "integer",
-          "minimum": 1,
-          "description": "Runnable を呼ぶタスクの周期 [ms]（Os_PBCfg.c）。Alive の期待回数と Deadline の許容範囲の整合性検査に使う"
+        "osTask": {
+          "type": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+          "description": "この Runnable を呼ぶ Os のタスクの関数名（Os_PBCfg.c の Os_TaskTable にある名前）。周期はそこから読み、Alive の期待回数と Deadline の許容範囲の整合性検査に使う"
         },
         "idDoc": {
           "type": "string",

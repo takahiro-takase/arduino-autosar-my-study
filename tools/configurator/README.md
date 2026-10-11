@@ -169,6 +169,7 @@ NvM と同じく、信号表とは関係なく WdgM.json だけが入力です�
 |------------------|----------------|
 | `entities[]` の並び順 | エンティティ ID（`WDGM_ENTITY_<name>`）、エンティティ数、エンティティテーブルの添字 |
 | `supervisionCycleMs` | 判定サイクル（`WDGM_SUPERVISION_CYCLE_MS`） |
+| `osTask` | 生成物には出ない。監視する Runnable を呼ぶ Os のタスクの関数名で、周期を `Os_PBCfg.c` から読んで整合性の検査に使う |
 | `expectedAliveIndications` | Alive の期待回数（`WDGM_<name>_EXPECTED_ALIVE_INDICATIONS`） |
 | `checkpoints[]` | チェックポイント ID（`WDGM_CP_<name>_<cp>`） |
 | `transitions[]` | Logical 監視の許可遷移テーブル（`WdgM_<Name>Transitions`）。`from` に `INITIAL`（起動直後）が使える |
@@ -179,9 +180,9 @@ NvM と同じく、信号表とは関係なく WdgM.json だけが入力です�
   - チェックポイント ID が全エンティティで重複しない（`WDGM_CP_INITIAL` の 0xFF とも衝突しない）。
   - 遷移と Deadline が、そのエンティティのチェックポイントを指している。
   - Deadline の `minMs` が `maxMs` 以下である。
-  - `taskPeriodMs` が、開始から終了までを戻る区間（最後のチェックポイントから最初のチェックポイントへの Deadline）の許容範囲に入っている。
+  - `osTask`（監視する Os のタスクの関数名）の周期が、開始から終了までを戻る区間（最後のチェックポイントから最初のチェックポイントへの Deadline）の許容範囲に入っている。
   - `expectedAliveIndications` が、判定サイクルの間に呼ばれる回数（サイクル ÷ タスク周期）を超えない。
-- `taskPeriodMs` は `Os_PBCfg.c` のタスク周期と手で合わせます（Os の設定との自動の突き合わせは未対応）。
+- タスクの周期は `WdgM.json` に書かず、`osTask` で指したタスクの周期を `Os_PBCfg.c` の `Os_TaskTable` から読みます（Os の設定を変えると、食い違いが生成エラーになります）。
 - `WdgM_Cfg.h` の他の定数（EXPIRED の許容サイクル数、HW ウォッチドッグの周期とタイムアウトなど）と、チェックポイントを実際に報告する処理（`WdgM_CheckpointReached()` の呼び出し）は、手書きのままです。
 - 生成の前後で、`WdgM_PBCfg.c`・`WdgM.c`・`Wdg_PBCfg.c` をコンパイルした結果（セクションの内容とリロケーション）が一致することを確認しています。
 
@@ -382,7 +383,7 @@ E2E と SecOC の設定は、Com から分けて別の設定 json（`E2EXf.json`
 - E2E の他のプロファイル（P01、P02 など）への対応。SecOC の TX Secured I-PDU への対応。
 - 他のモジュール。信号表との関係は薄いため、必要になったら足す。NvM、WdgM、FiM、Can は対応済み。CanSM と ComM は、表になる設定が無いため対象外。
 - Rte の信号アクセス関数の生成は、信号グループの I-PDU・ゲートウェイの信号・手書きの関数がある信号を対象外にしている。信号グループ（`Rte_SendSignalGroup_*`）や、E2E 変換つきの Read は手書きのまま。
-- 他のモジュール（CanSM、ComM、BswM など）への展開。
+- CanSM と ComM は、表になる設定が無いため対象外（BswM は対応済み）。
 - 診断（DCM / UDS）の設定の対象化。入力となる表（DID 一覧など）の整理が先に必要。
 - PDU ID のシンボリック名（`#define` による名前付け）の生成。現状の ID は直値。名前を付ける場合は、値の正本がポストビルドの表（`*_PBCfg.c`）にあるため、
   名前の定義も `*_PBCfg.h` に置いて値と同じ設定の単位にそろえるのを第一候補とする。ただし置き場所を定める仕様の記述は、手元の SWS には見つかっていない（未確認）。
