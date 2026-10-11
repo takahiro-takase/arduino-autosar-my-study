@@ -14,7 +14,7 @@
  *
  *          リクエストは [0x19, 0x04, DTC_H, DTC_M, DTC_L, recordNumber]
  *          （6バイト、Single Frame に収まる）。DTC は
- *          DEM_EVENT_ENGINE_OVERHEAT（DTC=0x000101）を
+ *          DemConf_DemEventParameter_ENGINE_OVERHEAT（DTC=0x000101）を
  *          Dem_SetEventStatus() で FAILED 確定させ FreezeFrame を記録させた
  *          ものを使う（Bsw_Dcm_ReadDtcInfo_test.cpp と同じ手段、新規 Wrap
  *          関数は不要）。
@@ -191,12 +191,12 @@ TEST_F(Bsw_DcmStack_SID19_SF04_ReadDtcSnapshot_Test,
     /* ------------------------- */
     /* ---- 準備 (Arrange 1) --- */
     /* ------------------------- */
-    // DEM_EVENT_ENGINE_OVERHEAT（limit=2、DTC=0x000101）を
+    // DemConf_DemEventParameter_ENGINE_OVERHEAT（limit=2、DTC=0x000101）を
     // FAILED 確定させ FreezeFrame を記録させてから、
     // [0x19, 0x04, 0x00,0x01,0x01, recordNumber=0x01] を 0x7E0 の受信
     // バッファへセットする（SF: 06 19 04 00 01 01 01）。
-    (void)Dem_SetEventStatus(DEM_EVENT_ENGINE_OVERHEAT, DEM_EVENT_STATUS_FAILED);
-    (void)Dem_SetEventStatus(DEM_EVENT_ENGINE_OVERHEAT, DEM_EVENT_STATUS_FAILED);
+    (void)Dem_SetEventStatus(DemConf_DemEventParameter_ENGINE_OVERHEAT, DEM_EVENT_STATUS_FAILED);
+    (void)Dem_SetEventStatus(DemConf_DemEventParameter_ENGINE_OVERHEAT, DEM_EVENT_STATUS_FAILED);
 
     FakeCanHw_RxId  = 0x7E0U;
     FakeCanHw_RxDlc = 8U;
@@ -302,11 +302,11 @@ TEST_F(Bsw_DcmStack_SID19_SF04_ReadDtcSnapshot_Test,
     /* ------------------------- */
     /* ---- 準備 (Arrange 1) --- */
     /* ------------------------- */
-    // DEM_EVENT_ENGINE_OVERHEAT を FAILED 確定させ FreezeFrame
+    // DemConf_DemEventParameter_ENGINE_OVERHEAT を FAILED 確定させ FreezeFrame
     // を記録させてから、recordNumber=0xFF ([0x19, 0x04, 0x00,0x01,0x01, 0xFF])
     // を 0x7E0 の受信バッファへセットする（SF: 06 19 04 00 01 01 FF）。
-    (void)Dem_SetEventStatus(DEM_EVENT_ENGINE_OVERHEAT, DEM_EVENT_STATUS_FAILED);
-    (void)Dem_SetEventStatus(DEM_EVENT_ENGINE_OVERHEAT, DEM_EVENT_STATUS_FAILED);
+    (void)Dem_SetEventStatus(DemConf_DemEventParameter_ENGINE_OVERHEAT, DEM_EVENT_STATUS_FAILED);
+    (void)Dem_SetEventStatus(DemConf_DemEventParameter_ENGINE_OVERHEAT, DEM_EVENT_STATUS_FAILED);
 
     FakeCanHw_RxId  = 0x7E0U;
     FakeCanHw_RxDlc = 8U;

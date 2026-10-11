@@ -10,6 +10,7 @@ import pathlib
 import re
 
 from .common import block_comment
+from .dem import EVENT_SYMBOL
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[3]
 RULE = "-" * 71
@@ -20,12 +21,11 @@ def validate(cfg):
     names = [f["name"] for f in cfg["functions"]]
     if len(set(names)) != len(names):
         errors.append("functions: name が重複している")
-    pairs = [(f["event"], f["statusMask"]) for f in cfg["functions"]]
     return errors
 
 
 def dem_macros(ctx):
-    """Dem_Cfg.h の #define を {名前: 数値 or None} で返す。"""
+    """Dem_Cfg.h の #define を {名前: 数値} で返す（ステータスのビットの存在確認用）。"""
     root = pathlib.Path(getattr(ctx, "repo_root", None) or REPO_ROOT)
     text = (root / "src" / "Bsw" / "Dem" / "Dem_Cfg.h").read_bytes().decode("utf-8", errors="replace")
     result = {}
@@ -35,14 +35,14 @@ def dem_macros(ctx):
 
 
 def check_dem(cfg, ctx):
+    """監視するイベントが Dem.json に実在し、ステータスのビットが Dem_Cfg.h に実在することを確認する。"""
+    events = {e["name"] for e in ctx.configs["Dem"]["events"]}
     macros = dem_macros(ctx)
-    count = macros.get("DEM_EVENT_COUNT")
     for f in cfg["functions"]:
-        for key in ("event", "statusMask"):
-            if f[key] not in macros:
-                raise ValueError("functions %s: %s '%s' が Dem_Cfg.h に無い" % (f["name"], key, f[key]))
-        if count is not None and macros[f["event"]] >= count:
-            raise ValueError("functions %s: event '%s'(%d) が DEM_EVENT_COUNT=%d 以上" % (f["name"], f["event"], macros[f["event"]], count))
+        if f["event"] not in events:
+            raise ValueError("functions %s: event '%s' が Dem.json のイベント名に無い" % (f["name"], f["event"]))
+        if f["statusMask"] not in macros:
+            raise ValueError("functions %s: statusMask '%s' が Dem_Cfg.h に無い" % (f["name"], f["statusMask"]))
 
 
 def ruled(lines):
@@ -73,7 +73,7 @@ def render_pbcfg(cfg, ctx):
     for i, f in enumerate(fns):
         out += block_comment(["FID %d: %s" % (i, f["title"])] + f["note"], indent=4)
         comma = "," if i < len(fns) - 1 else ""
-        out.append("    { FIM_FID_%s, %s, %s }%s" % (f["name"], f["event"], f["statusMask"], comma))
+        out.append("    { FIM_FID_%s, %s, %s }%s" % (f["name"], EVENT_SYMBOL + f["event"], f["statusMask"], comma))
         if i < len(fns) - 1:
             out.append("")
     out.append("};")

@@ -35,8 +35,8 @@
  * SWS 上 Extended Production Error（開発エラーとは別区分）。2026-09 是正:
  * 以前は「本プロジェクトは他モジュール同様 Production Error の仕組み自体を
  * 持たないため未実装」としていたが、これは事実誤りと判明した（WdgM が
- * DEM_EVENT_WDGM_SUPERVISION で既に Dem_SetEventStatus() 経由の仕組みを
- * 導入済み）。WDG_E_DISABLE_REJECTED は DEM_EVENT_WDG_DISABLE_REJECTED
+ * DemConf_DemEventParameter_WDGM_SUPERVISION で既に Dem_SetEventStatus() 経由の仕組みを
+ * 導入済み）。WDG_E_DISABLE_REJECTED は DemConf_DemEventParameter_WDG_DISABLE_REJECTED
  * として実装した（Wdg.c の Wdg_SetMode() 参照）。WDG_E_MODE_FAILED
  * （[SWS_Wdg_00173]/[00181]、Wdg_Init 失敗時用）は本実装の Wdg_Init() に
  * 対応する失敗分岐が無いため引き続き未実装（対象の呼び出し元自体が無く

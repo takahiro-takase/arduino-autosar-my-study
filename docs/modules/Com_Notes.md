@@ -1372,7 +1372,7 @@ COM モジュールが各 RX I-PDU の受信間隔を監視し、設定タイム
       → Com_ReceiveSignal()
           Com_RxTimedOut[0] == 1 → return E_NOT_OK
     E_NOT_OK を検知
-      → DEM_EVENT_COMM_TIMEOUT FAILED 報告
+      → DemConf_DemEventParameter_COMM_TIMEOUT FAILED 報告
       → ENGINE_STATE_FAULT 遷移
       → LED 点滅（App_WarningIndicator がそのまま動く）
 ```

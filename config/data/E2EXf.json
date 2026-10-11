@@ -45,12 +45,14 @@
       ],
       "lengthNote": "PDU 全体バイト数 (CRC16 2B + Counter 1B + シグナル 4B)",
       "maxDeltaCounter": 1,
-      "demEvent": "DEM_EVENT_E2E_ENGINEINFO",
+      "demEvent": "E2E_ENGINEINFO",
       "waitNote": [
         "Profile05にはINITIAL相当が無いため、E2EXf層で初回受信の特別扱いを行う",
         "ためのフラグ(E2EXf_RxConfigTypeP05.WaitForFirstData 宣言コメント参照)。"
       ],
-      "smNote": ["E2E ステートマシン状態（E2EXf_SMConfigDefault 参照）。"]
+      "smNote": [
+        "E2E ステートマシン状態（E2EXf_SMConfigDefault 参照）。"
+      ]
     },
     {
       "name": "AbsInfo_Rx_E2EXf",
@@ -64,9 +66,13 @@
       ],
       "lengthNote": "PDU 全体バイト数 (CRC16 2B + Counter 1B + シグナル 3B)",
       "maxDeltaCounter": 1,
-      "demEvent": "DEM_EVENT_E2E_ABSINFO",
-      "waitNote": ["EngineInfo と同じ理由(E2EXf_EngineInfoWaitForFirstDataP05 参照)。"],
-      "smNote": ["EngineInfo と同じ理由(E2EXf_EngineInfoSMState 参照)。"]
+      "demEvent": "E2E_ABSINFO",
+      "waitNote": [
+        "EngineInfo と同じ理由(E2EXf_EngineInfoWaitForFirstDataP05 参照)。"
+      ],
+      "smNote": [
+        "EngineInfo と同じ理由(E2EXf_EngineInfoSMState 参照)。"
+      ]
     },
     {
       "name": "E2EHealthStatus_Tx_E2EXf",

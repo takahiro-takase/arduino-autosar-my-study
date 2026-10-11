@@ -160,8 +160,8 @@
         },
         "demEvent": {
           "type": "string",
-          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
-          "description": "RX のみ。Dem イベントのマクロ"
+          "pattern": "^[A-Z][A-Z0-9_]*$",
+          "description": "RX のみ。E2E 違反を報告する Dem イベントの名前（Dem.json の events[].name。生成物では DemConf_DemEventParameter_<name>）"
         },
         "waitNote": {
           "type": "array",

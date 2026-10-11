@@ -260,13 +260,13 @@ TEST_F(Bsw_DcmStack_SID19_SF01_ReadDtcCount_Test,
     /* ----------------------- */
     /* ---- 準備 (Arrange) --- */
     /* ----------------------- */
-    // DEM_EVENT_ENGINE_OVERHEAT を FAILED（testFailed ビット
+    // DemConf_DemEventParameter_ENGINE_OVERHEAT を FAILED（testFailed ビット
     // が立つ）にしてから、[0x19, 0x01, statusMask=testFailedのみ] を 0x7E0 の
     // 受信バッファへセットする（SF: 03 19 01 01）。DEM_DEBOUNCE_LIMIT_ENGINE_OVERHEAT
     // =2（Dem_Cfg.h参照）のため、確定させるには2回呼ぶ必要がある
     // （Bsw_Dcm_ReadDtcInfo_test.cpp の同パターン参照）。
-    (void)Dem_SetEventStatus(DEM_EVENT_ENGINE_OVERHEAT, DEM_EVENT_STATUS_FAILED);
-    (void)Dem_SetEventStatus(DEM_EVENT_ENGINE_OVERHEAT, DEM_EVENT_STATUS_FAILED);
+    (void)Dem_SetEventStatus(DemConf_DemEventParameter_ENGINE_OVERHEAT, DEM_EVENT_STATUS_FAILED);
+    (void)Dem_SetEventStatus(DemConf_DemEventParameter_ENGINE_OVERHEAT, DEM_EVENT_STATUS_FAILED);
 
     FakeCanHw_RxId  = 0x7E0U;
     FakeCanHw_RxDlc = 8U;

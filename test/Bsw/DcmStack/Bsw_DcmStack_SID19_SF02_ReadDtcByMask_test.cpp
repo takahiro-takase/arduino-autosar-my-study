@@ -12,8 +12,8 @@
  *          ことで Single Frame（0件・1件）と マルチフレーム（2件）の両方を
  *          同じサブファンクションで作れる。
  *
- *          DTC 一致件数の作り方: DEM_EVENT_ENGINE_OVERHEAT
- *          （DEM_DEBOUNCE_LIMIT=2）と DEM_EVENT_CAN_BUSOFF
+ *          DTC 一致件数の作り方: DemConf_DemEventParameter_ENGINE_OVERHEAT
+ *          （DEM_DEBOUNCE_LIMIT=2）と DemConf_DemEventParameter_CAN_BUSOFF
  *          （DEM_DEBOUNCE_LIMIT=1）を Dem_SetEventStatus() で FAILED 確定
  *          させ、statusMask=DEM_STATUS_TEST_FAILED でフィルタする
  *          （Bsw_Dcm_ReadDtcInfo_test.cpp と同じ手段、新規 Wrap 関数は不要）。
@@ -235,11 +235,11 @@ TEST_F(Bsw_DcmStack_SID19_SF02_ReadDtcByMask_Test,
     /* ----------------------- */
     /* ---- 準備 (Arrange) --- */
     /* ----------------------- */
-    // DEM_EVENT_ENGINE_OVERHEAT（limit=2）を testFailed
+    // DemConf_DemEventParameter_ENGINE_OVERHEAT（limit=2）を testFailed
     // 確定させてから、[0x19, 0x02, mask=testFailedのみ] を送る。一致件数
     // 1件なら応答は 3+4=7 バイトで Single Frame の境界に収まる。
-    (void)Dem_SetEventStatus(DEM_EVENT_ENGINE_OVERHEAT, DEM_EVENT_STATUS_FAILED);
-    (void)Dem_SetEventStatus(DEM_EVENT_ENGINE_OVERHEAT, DEM_EVENT_STATUS_FAILED);
+    (void)Dem_SetEventStatus(DemConf_DemEventParameter_ENGINE_OVERHEAT, DEM_EVENT_STATUS_FAILED);
+    (void)Dem_SetEventStatus(DemConf_DemEventParameter_ENGINE_OVERHEAT, DEM_EVENT_STATUS_FAILED);
 
     FakeCanHw_RxId  = 0x7E0U;
     FakeCanHw_RxDlc = 8U;
@@ -275,13 +275,13 @@ TEST_F(Bsw_DcmStack_SID19_SF02_ReadDtcByMask_Test,
     /* ------------------------- */
     /* ---- 準備 (Arrange 1) --- */
     /* ------------------------- */
-    // DEM_EVENT_ENGINE_OVERHEAT（limit=2）と
-    // DEM_EVENT_CAN_BUSOFF（limit=1）を testFailed 確定させる。一致件数
+    // DemConf_DemEventParameter_ENGINE_OVERHEAT（limit=2）と
+    // DemConf_DemEventParameter_CAN_BUSOFF（limit=1）を testFailed 確定させる。一致件数
     // 2件なら応答は 3+4*2=11 バイトで Single Frame を超えマルチフレームに
     // なる。
-    (void)Dem_SetEventStatus(DEM_EVENT_ENGINE_OVERHEAT, DEM_EVENT_STATUS_FAILED);
-    (void)Dem_SetEventStatus(DEM_EVENT_ENGINE_OVERHEAT, DEM_EVENT_STATUS_FAILED);
-    (void)Dem_SetEventStatus(DEM_EVENT_CAN_BUSOFF, DEM_EVENT_STATUS_FAILED);
+    (void)Dem_SetEventStatus(DemConf_DemEventParameter_ENGINE_OVERHEAT, DEM_EVENT_STATUS_FAILED);
+    (void)Dem_SetEventStatus(DemConf_DemEventParameter_ENGINE_OVERHEAT, DEM_EVENT_STATUS_FAILED);
+    (void)Dem_SetEventStatus(DemConf_DemEventParameter_CAN_BUSOFF, DEM_EVENT_STATUS_FAILED);
 
     FakeCanHw_RxId  = 0x7E0U;
     FakeCanHw_RxDlc = 8U;

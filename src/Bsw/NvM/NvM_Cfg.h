@@ -155,7 +155,7 @@
  *  （[SWS_NvM_00216]、ECUC の NvMMaxNumOfWriteRetries 相当。範囲 0..7）。
  *  MemIf が書き込みを拒否した、またはジョブが失敗するたびにカウンタを +1 し、
  *  この値を超えたらブロックの要求結果を NVM_REQ_NOT_OK にして
- *  NVM_E_REQ_FAILED（DEM_EVENT_NVM_REQ_FAILED）を Dem へ報告する
+ *  NVM_E_REQ_FAILED（DemConf_DemEventParameter_NVM_REQ_FAILED）を Dem へ報告する
  *  （[SWS_NvM_00213]/[00659]）。全ブロック共通（ブロックごとの設定は持たない）。 */
 #define NVM_MAX_NUM_OF_WRITE_RETRIES  3U
 

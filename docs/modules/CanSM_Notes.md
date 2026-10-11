@@ -78,11 +78,11 @@ stateDiagram-v2
 
 | 遷移 | CanSM が行うこと |
 |------|------------------|
-| `RequestComMode(FULL_COM)` | `CanIf_SetControllerMode(STARTED)`（失敗したら状態を変えず `E_NOT_OK`）→ `CanIf_SetPduMode(ONLINE)`（ベストエフォート）→ Bus-Off リトライ回数を 0 に戻し `DEM_EVENT_CAN_BUSOFF` を PASSED → `ComM_BusSM_ModeIndication(FULL_COM)` |
+| `RequestComMode(FULL_COM)` | `CanIf_SetControllerMode(STARTED)`（失敗したら状態を変えず `E_NOT_OK`）→ `CanIf_SetPduMode(ONLINE)`（ベストエフォート）→ Bus-Off リトライ回数を 0 に戻し `DemConf_DemEventParameter_CAN_BUSOFF` を PASSED → `ComM_BusSM_ModeIndication(FULL_COM)` |
 | `RequestComMode(SILENT_COM)` | FULL_COM からのときだけ `CanIf_SetPduMode(TX_OFFLINE)`（コントローラは `CAN_CS_STARTED` のまま、PDU の送信だけを止める）→ `ComM_BusSM_ModeIndication(SILENT_COM)` |
 | `RequestComMode(NO_COM)` | `CanIf_SetControllerMode(SLEEP)` → `ComM_BusSM_ModeIndication(NO_COM)` |
 | `ControllerModeIndication()`（ウェイクアップ） | NO_COM のときだけ受け付ける。`CanIf_SetControllerMode(STOPPED)`（Listen-Only）にして `WAKEUP_VALIDATING` へ。それ以外の状態では無視（ログのみ） |
-| `RxIndication()`（検証中の有効フレーム） | `CanIf_SetControllerMode(STARTED)` → PDU を ONLINE → `DEM_EVENT_CAN_BUSOFF` を PASSED → `ComM_BusSM_ModeIndication(FULL_COM)` |
+| `RxIndication()`（検証中の有効フレーム） | `CanIf_SetControllerMode(STARTED)` → PDU を ONLINE → `DemConf_DemEventParameter_CAN_BUSOFF` を PASSED → `ComM_BusSM_ModeIndication(FULL_COM)` |
 | `MainFunction()`（検証タイムアウト） | `CanIf_SetControllerMode(SLEEP)` で再スリープ（ウェイクアップ割り込みを再武装）し NO_COM へ戻る |
 
 `CanSM_MainFunction()` は Os Task 4（10ms 周期）です。設定値（`CanSM_Cfg.h`）:
@@ -91,7 +91,7 @@ stateDiagram-v2
 |------|--------|------|
 | `CANSM_BUSOFF_RECOVERY_L1_MS` | 200 ms | Bus-Off 回復リトライの間隔（L1） |
 | `CANSM_BUSOFF_RECOVERY_L2_MS` | 5000 ms | L2 の間隔（L1 を使い切った後） |
-| `CANSM_BUSOFF_L1_TO_L2_COUNT` | 3 回 | L1 のリトライ回数。超えた時点で `DEM_EVENT_CAN_BUSOFF` を FAILED にして L2 へ |
+| `CANSM_BUSOFF_L1_TO_L2_COUNT` | 3 回 | L1 のリトライ回数。超えた時点で `DemConf_DemEventParameter_CAN_BUSOFF` を FAILED にして L2 へ |
 | `CANSM_WAKEUP_VALIDATION_MS` | 2000 ms | ウェイクアップ検証の待ち時間。この間に有効な RX が無ければ再スリープ |
 
 ## 開発の経緯（実機で見つかった不具合・設計変更）

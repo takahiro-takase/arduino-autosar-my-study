@@ -307,6 +307,7 @@ set(NATIVE_CHAIN_SRC_SOURCES
     src/Bsw/Csm/Csm_PBCfg.c
     src/Bsw/Dcm/Dcm.c
     src/Bsw/Dem/Dem.c
+    src/Bsw/Dem/Dem_PBCfg.c
     src/Bsw/Det/Det.c
     src/Bsw/EcuM/EcuM.c
     src/Bsw/Dio/Dio.c

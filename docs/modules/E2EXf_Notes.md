@@ -197,7 +197,7 @@ Rte_Read_SpeedSensor_EngineSpeed() 等（Rte.c）:
 > エラーを起こしたフレームを最後に通信が本当に途絶えた場合（配線断は
 > E2E 異常と通信途絶を同時に招きやすい）、ラッチされた
 > `RTE_E_HARD_TRANSFORMER_ERROR` が `Com_IsRxTimedOut()` の変化後も
-> 永久に優先され続け、`DEM_EVENT_COMM_TIMEOUT` の FAULT 遷移が二度と
+> 永久に優先され続け、`DemConf_DemEventParameter_COMM_TIMEOUT` の FAULT 遷移が二度と
 > 起きなくなってしまいます（コードレビューで発見・修正済み）。そのため
 > 常に「現在も継続する物理層の状態」である `Com_IsRxTimedOut()` を先に
 > 判定します。
@@ -207,8 +207,8 @@ Rte_Read_SpeedSensor_EngineSpeed() 等（Rte.c）:
 これは実 AUTOSAR でも許される正当な使い方です（データ変換ポートであっても、
 呼び出し側がステータスを見ずにベストエフォートの値だけを使う設計は珍しくありません）。
 一方 `App_EngineManager_Run()` は `RTE_E_COM_STOPPED` のみを見て
-`DEM_EVENT_COMM_TIMEOUT` の FAULT 遷移を判定し（E2E エラーは既に
-`DEM_EVENT_E2E_ENGINEINFO`/`_ABSINFO` として別途 Dem に報告されるため、ここで
+`DemConf_DemEventParameter_COMM_TIMEOUT` の FAULT 遷移を判定し（E2E エラーは既に
+`DemConf_DemEventParameter_E2E_ENGINEINFO`/`_ABSINFO` として別途 Dem に報告されるため、ここで
 二重に COMM_TIMEOUT として扱わない）、`RTE_E_HARD_TRANSFORMER_ERROR` は状態遷移に
 影響させず観測用の WARN ログのみ出力します。SWC が受け取った詳細ステータスを
 実際にどう使うか（ログに留めるか、独自のフェールオペレーショナル判断に使うか）は
@@ -284,7 +284,7 @@ Profile05 には Profile01 の SyncCounter 再ロック機構が無いため、�
 
 uds_tester ツールの EngineInfo/AbsInfo データ入力欄で byte[0-1]（CRC16 バイト）を誤った値に
 書き換えてから送信ボタンを押すと、Rte 層の E2E Transformer フックが CRC エラーを検出して
-それぞれ DEM_EVENT_E2E_ENGINEINFO / DEM_EVENT_E2E_ABSINFO が報告されます。
+それぞれ DemConf_DemEventParameter_E2E_ENGINEINFO / DemConf_DemEventParameter_E2E_ABSINFO が報告されます。
 
 **動作確認方法（WRONGSEQUENCE → OK 復帰）:**
 

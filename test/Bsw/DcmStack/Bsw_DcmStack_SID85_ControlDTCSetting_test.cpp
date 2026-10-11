@@ -224,19 +224,19 @@ protected:
         Can_MainFunction_Read();
     }
 
-    /* DEM_EVENT_CAN_BUSOFF (DEM_DEBOUNCE_LIMIT_CAN_BUSOFF=1、1回の報告で
+    /* DemConf_DemEventParameter_CAN_BUSOFF (DEM_DEBOUNCE_LIMIT_CAN_BUSOFF=1、1回の報告で
      * 即確定) を FAILED 報告する。DTC 記録が有効なら testFailed/confirmedDTC
      * ビットが立つはず。UDS 読み出しサービスを経由せず Dem を直接呼ぶ
      * （旧ファイルと同じ手法。ファイル冒頭コメント参照）。 */
     static void ReportBusOffFailed()
     {
-        (void)Dem_SetEventStatus(DEM_EVENT_CAN_BUSOFF, DEM_EVENT_STATUS_FAILED);
+        (void)Dem_SetEventStatus(DemConf_DemEventParameter_CAN_BUSOFF, DEM_EVENT_STATUS_FAILED);
     }
 
     static uint8 BusOffStatus()
     {
         Dem_UdsStatusByteType status = 0U;
-        (void)Dem_GetEventUdsStatus(DEM_EVENT_CAN_BUSOFF, &status);
+        (void)Dem_GetEventUdsStatus(DemConf_DemEventParameter_CAN_BUSOFF, &status);
         return status;
     }
 

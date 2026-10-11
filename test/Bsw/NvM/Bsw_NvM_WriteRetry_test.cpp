@@ -4,7 +4,7 @@
  * \details [SWS_NvM_00213]/[SWS_NvM_00659]: 書き込みジョブで MemIf が書き込みを拒否した、
  *          またはジョブが失敗するたびにリトライカウンタを +1 し、NVM_MAX_NUM_OF_WRITE_RETRIES
  *          を超えたらブロックの要求結果を NVM_REQ_NOT_OK にして NVM_E_REQ_FAILED
- *          （DEM_EVENT_NVM_REQ_FAILED）を Dem へ報告する。以前はリトライ上限が無く、
+ *          （DemConf_DemEventParameter_NVM_REQ_FAILED）を Dem へ報告する。以前はリトライ上限が無く、
  *          拒否が続くと同じジョブを永久に再試行し、要求結果も PENDING のまま
  *          後続のブロックも処理されなかった。
  *
@@ -194,7 +194,7 @@ TEST_F(Bsw_NvM_WriteRetry_Test, NvM_MainFunction_NG_WriteRejectedBeyondRetryLimi
     EXPECT_EQ(demCallsDuringRetry, 0U);
 
     EXPECT_EQ(demCallsAfterGiveUp, 1U);
-    EXPECT_EQ(reportedEventId, DEM_EVENT_NVM_REQ_FAILED);
+    EXPECT_EQ(reportedEventId, DemConf_DemEventParameter_NVM_REQ_FAILED);
     EXPECT_EQ(reportedStatus, DEM_EVENT_STATUS_FAILED);
 
     EXPECT_EQ(finalResult, NVM_REQ_NOT_OK);
@@ -236,7 +236,7 @@ TEST_F(Bsw_NvM_WriteRetry_Test, NvM_MainFunction_NG_BlockAfterFailedBlockIsStill
 
     EXPECT_EQ(ResultOf(NVM_BLOCK_ID_DEM_AGING), NVM_REQ_OK);
     // 失敗からの回復として、成功した書き込みで PASSED が報告される（[SWS_NvM_00873]）。
-    EXPECT_EQ(LastEventId_Dem_SetEventStatus, DEM_EVENT_NVM_REQ_FAILED);
+    EXPECT_EQ(LastEventId_Dem_SetEventStatus, DemConf_DemEventParameter_NVM_REQ_FAILED);
     EXPECT_EQ(LastEventStatus_Dem_SetEventStatus, DEM_EVENT_STATUS_PASSED);
 }
 

@@ -442,7 +442,7 @@ Alive 不足が続いたときの流れです（`WDGM_EXPIRED_SUPERVISION_CYCLE_
 [18000ms] WARN  WdgM: Global status EXPIRED, tolerance 1/2 cycles   ← リフレッシュは継続
 [24000ms] WARN  WdgM: Global status EXPIRED, tolerance 2/2 cycles
 [30000ms] ERROR WdgM: Global supervision STOPPED (tolerance exhausted) [HW WDT reset pending]
-                      （Dem に DEM_EVENT_WDGM_SUPERVISION が FAILED で報告される）
+                      （Dem に DemConf_DemEventParameter_WDGM_SUPERVISION が FAILED で報告される）
 [31000ms] ERROR WdgM: HW watchdog NOT refreshed - reset imminent   ← 以降リフレッシュしない
 （最後に成功したリフレッシュ(30000ms 前後)から HW ウォッチドッグのタイムアウト 4000ms 後に
  MCU がリセットされ、setup() から再起動する → およそ 34 秒後）

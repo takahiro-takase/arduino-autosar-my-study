@@ -90,13 +90,13 @@ protected:
 
         /* グローバル猶予カウンタが尽きて初めて WdgM_GlobalStopped が立ち
          * STOPPED に遷移する。この瞬間に [SWS_WdgM_00129] 対応として
-         * DEM_EVENT_WDGM_SUPERVISION が FAILED 報告される（2026-09 追加）。 */
+         * DemConf_DemEventParameter_WDGM_SUPERVISION が FAILED 報告される（2026-09 追加）。 */
         WdgM_MainFunction();
         WdgM_GlobalStatusType status;
         ASSERT_EQ(WdgM_GetGlobalStatus(&status), E_OK);
         EXPECT_EQ(status, WDGM_GLOBAL_STATUS_STOPPED);
         EXPECT_EQ(CallCount_Dem_SetEventStatus, 1U);
-        EXPECT_EQ(LastEventId_Dem_SetEventStatus, DEM_EVENT_WDGM_SUPERVISION);
+        EXPECT_EQ(LastEventId_Dem_SetEventStatus, DemConf_DemEventParameter_WDGM_SUPERVISION);
         EXPECT_EQ(LastEventStatus_Dem_SetEventStatus, DEM_EVENT_STATUS_FAILED);
     }
 };
@@ -297,7 +297,7 @@ TEST_F(Bsw_WdgM_GetGlobalStatus_Test,
      * 回復した際、対になる PASSED を報告する
      * (DriveAllEntitiesToStopped() 内で既に FAILED 1 回分をカウント済み)。 */
     EXPECT_EQ(CallCount_Dem_SetEventStatus, 2U);
-    EXPECT_EQ(LastEventId_Dem_SetEventStatus, DEM_EVENT_WDGM_SUPERVISION);
+    EXPECT_EQ(LastEventId_Dem_SetEventStatus, DemConf_DemEventParameter_WDGM_SUPERVISION);
     EXPECT_EQ(LastEventStatus_Dem_SetEventStatus, DEM_EVENT_STATUS_PASSED);
 }
 

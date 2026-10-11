@@ -186,7 +186,7 @@ MemIf が書き込みを拒否した（`MemIf_Write()` が `E_NOT_OK`）か、�
 （`MEMIF_JOB_FAILED` / `MEMIF_JOB_CANCELED` など）するたびに、書き込みリトライカウンタを
 +1 します。`NVM_MAX_NUM_OF_WRITE_RETRIES`（`NvM_Cfg.h`、既定 3）以内なら現在の面の
 ジョブをデータ本体フェーズの先頭からやり直し、上限を超えたらそのブロックを諦めて
-要求結果を `NVM_REQ_NOT_OK` にし、`NVM_E_REQ_FAILED`（`DEM_EVENT_NVM_REQ_FAILED`）を
+要求結果を `NVM_REQ_NOT_OK` にし、`NVM_E_REQ_FAILED`（`DemConf_DemEventParameter_NVM_REQ_FAILED`）を
 Dem へ FAILED 報告します（[SWS_NvM_00865]）。以前はこの上限が無く、失敗が続くと同じ
 ジョブを永久に再試行し（要求結果も PENDING のまま）、後続のブロックも処理
 されませんでした。Dem への PASSED 報告（[SWS_NvM_00873]）は、FAILED を報告済みの間に

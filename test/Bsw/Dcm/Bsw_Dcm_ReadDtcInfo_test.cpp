@@ -158,7 +158,7 @@ TEST_F(Bsw_Dcm_ReadDtcInfo_Test, GetDTCStatusAvailabilityMask_NG_NullPointerRetu
 // Dem_GetFaultDetectionCounter（UDS SID 0x19 subFunc 0x14
 // reportDTCFaultDetectionCounter 用に新設。[SWS_Dem_00415]により内部の
 // Dem_DebounceCounter[]（-limit〜+limit）を-128〜127へ線形写像して返す。
-// DEM_EVENT_ENGINE_OVERHEAT の limit は 2 (DEM_DEBOUNCE_LIMIT_ENGINE_OVERHEAT)。
+// DemConf_DemEventParameter_ENGINE_OVERHEAT の limit は 2 (DEM_DEBOUNCE_LIMIT_ENGINE_OVERHEAT)。
 // ------------------------------------------------------------
 
 TEST_F(Bsw_Dcm_ReadDtcInfo_Test, GetFaultDetectionCounter_OK_ReturnsZeroForFreshEvent)
@@ -171,7 +171,7 @@ TEST_F(Bsw_Dcm_ReadDtcInfo_Test, GetFaultDetectionCounter_OK_ReturnsZeroForFresh
     /* ----------------------- */
     /* ---- 実行 (Act) ------- */
     /* ----------------------- */
-    Std_ReturnType ret = Dem_GetFaultDetectionCounter(DEM_EVENT_ENGINE_OVERHEAT, &fdc);
+    Std_ReturnType ret = Dem_GetFaultDetectionCounter(DemConf_DemEventParameter_ENGINE_OVERHEAT, &fdc);
 
     /* ----------------------- */
     /* ---- 評価 (Assert) ---- */
@@ -185,14 +185,14 @@ TEST_F(Bsw_Dcm_ReadDtcInfo_Test, GetFaultDetectionCounter_OK_ReflectsDebounceCou
     /* ----------------------- */
     /* ---- 準備 (Arrange) --- */
     /* ----------------------- */
-    (void)Dem_SetEventStatus(DEM_EVENT_ENGINE_OVERHEAT, DEM_EVENT_STATUS_FAILED);
+    (void)Dem_SetEventStatus(DemConf_DemEventParameter_ENGINE_OVERHEAT, DEM_EVENT_STATUS_FAILED);
 
     sint8 fdc = 0;
 
     /* ----------------------- */
     /* ---- 実行 (Act) ------- */
     /* ----------------------- */
-    Std_ReturnType ret = Dem_GetFaultDetectionCounter(DEM_EVENT_ENGINE_OVERHEAT, &fdc);
+    Std_ReturnType ret = Dem_GetFaultDetectionCounter(DemConf_DemEventParameter_ENGINE_OVERHEAT, &fdc);
 
     /* ----------------------- */
     /* ---- 評価 (Assert) ---- */
@@ -231,7 +231,7 @@ TEST_F(Bsw_Dcm_ReadDtcInfo_Test, GetFaultDetectionCounter_NG_NullPointerReturnsE
     /* ----------------------- */
     /* ---- 実行 (Act) ------- */
     /* ----------------------- */
-    Std_ReturnType ret = Dem_GetFaultDetectionCounter(DEM_EVENT_ENGINE_OVERHEAT, NULL);
+    Std_ReturnType ret = Dem_GetFaultDetectionCounter(DemConf_DemEventParameter_ENGINE_OVERHEAT, NULL);
 
     /* ----------------------- */
     /* ---- 評価 (Assert) ---- */
@@ -255,7 +255,7 @@ TEST_F(Bsw_Dcm_ReadDtcInfo_Test, GetDTCOfEvent_OK_ReturnsUdsDtcWhenFormatIsUds)
     /* ----------------------- */
     /* ---- 実行 (Act) ------- */
     /* ----------------------- */
-    Std_ReturnType ret = Dem_GetDTCOfEvent(DEM_EVENT_ENGINE_OVERHEAT, DEM_DTC_FORMAT_UDS, &dtc);
+    Std_ReturnType ret = Dem_GetDTCOfEvent(DemConf_DemEventParameter_ENGINE_OVERHEAT, DEM_DTC_FORMAT_UDS, &dtc);
 
     /* ----------------------- */
     /* ---- 評価 (Assert) ---- */
@@ -292,7 +292,7 @@ TEST_F(Bsw_Dcm_ReadDtcInfo_Test, GetDTCOfEvent_NG_NullPointerReturnsError)
     /* ----------------------- */
     /* ---- 実行 (Act) ------- */
     /* ----------------------- */
-    Std_ReturnType ret = Dem_GetDTCOfEvent(DEM_EVENT_ENGINE_OVERHEAT, DEM_DTC_FORMAT_UDS, NULL);
+    Std_ReturnType ret = Dem_GetDTCOfEvent(DemConf_DemEventParameter_ENGINE_OVERHEAT, DEM_DTC_FORMAT_UDS, NULL);
 
     /* ----------------------- */
     /* ---- 評価 (Assert) ---- */
@@ -310,7 +310,7 @@ TEST_F(Bsw_Dcm_ReadDtcInfo_Test, GetDTCOfEvent_NG_ObdFormatReturnsNoDtcAvailable
     /* ----------------------- */
     /* ---- 実行 (Act) ------- */
     /* ----------------------- */
-    Std_ReturnType ret = Dem_GetDTCOfEvent(DEM_EVENT_ENGINE_OVERHEAT, DEM_DTC_FORMAT_OBD, &dtc);
+    Std_ReturnType ret = Dem_GetDTCOfEvent(DemConf_DemEventParameter_ENGINE_OVERHEAT, DEM_DTC_FORMAT_OBD, &dtc);
 
     /* ----------------------- */
     /* ---- 評価 (Assert) ---- */
@@ -328,7 +328,7 @@ TEST_F(Bsw_Dcm_ReadDtcInfo_Test, GetDTCOfEvent_NG_J1939FormatReturnsNoDtcAvailab
     /* ----------------------- */
     /* ---- 実行 (Act) ------- */
     /* ----------------------- */
-    Std_ReturnType ret = Dem_GetDTCOfEvent(DEM_EVENT_ENGINE_OVERHEAT, DEM_DTC_FORMAT_J1939, &dtc);
+    Std_ReturnType ret = Dem_GetDTCOfEvent(DemConf_DemEventParameter_ENGINE_OVERHEAT, DEM_DTC_FORMAT_J1939, &dtc);
 
     /* ----------------------- */
     /* ---- 評価 (Assert) ---- */
@@ -638,7 +638,7 @@ TEST_F(Bsw_Dcm_ReadDtcInfo_Test, ReadDtcSnapshot_NG_UnsupportedRecordNumberStill
     /* ----------------------- */
     // 0x01/0xFF以外のrecordNumber(0x02)は依然として拒否される
     // ことを確認する(0xFF追加が「何でも受理」への後退でないことの回帰)。
-    (void)Dem_SetEventStatus(DEM_EVENT_ENGINE_OVERHEAT, DEM_EVENT_STATUS_FAILED);
+    (void)Dem_SetEventStatus(DemConf_DemEventParameter_ENGINE_OVERHEAT, DEM_EVENT_STATUS_FAILED);
 
     uint8 req[6] = { DCM_SID_READ_DTC_INFO, DCM_DTC_SUBFUNC_REPORT_SNAPSHOT,
                       0x00U, 0x01U, 0x01U, 0x02U };

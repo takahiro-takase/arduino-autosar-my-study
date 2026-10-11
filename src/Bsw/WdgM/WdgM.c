@@ -927,7 +927,7 @@ Std_ReturnType WdgM_GetGlobalStatus(WdgM_GlobalStatusType* Status)
  *          通常経路と[SWS_WdgM_00117]のtol=0防御分岐でほぼ同じ処理が重複
  *          していた」と指摘され抽出）。
  *
- *          あわせて [SWS_WdgM_00129] 準拠として DEM_EVENT_WDGM_SUPERVISION を
+ *          あわせて [SWS_WdgM_00129] 準拠として DemConf_DemEventParameter_WDGM_SUPERVISION を
  *          FAILED 報告する（本プロジェクトは `WdgMDemStoppedSupervisionReport`
  *          設定パラメータ自体を持たないため常に TRUE 相当として無条件に
  *          報告する。仕様上の既定値は FALSE（[ECUC_WdgM_00338]）だが、本
@@ -950,7 +950,7 @@ static void WdgM_EnterGlobalStopped(const char* reason, uint8 firstNotOkFound, u
         WdgM_FirstExpiredSEIDInv = (WdgM_SupervisedEntityIdType)(~(WdgM_SupervisedEntityIdType)firstNotOkSeid);
     }
 
-    (void)Dem_SetEventStatus(DEM_EVENT_WDGM_SUPERVISION, DEM_EVENT_STATUS_FAILED);
+    (void)Dem_SetEventStatus(DemConf_DemEventParameter_WDGM_SUPERVISION, DEM_EVENT_STATUS_FAILED);
 
     DET_LOGE(TAG, "Global supervision STOPPED (%s) [HW WDT reset pending]", reason);
 }
@@ -1186,7 +1186,7 @@ void WdgM_MainFunction(void)
     }
     else if ((WdgM_ExpiredCycleCount > 0U) || WdgM_GlobalStopped || WdgM_GlobalExpired)
     {
-        /* [SWS_WdgM_00129]/[00375]: DEM_EVENT_WDGM_SUPERVISION の Fail 条件は
+        /* [SWS_WdgM_00129]/[00375]: DemConf_DemEventParameter_WDGM_SUPERVISION の Fail 条件は
          * 「WDGM_GLOBAL_STATUS_STOPPED に到達した」ことであり、EXPIRED から
          * FAILED を一度も報告しないまま回復した場合は対になる PASSED も
          * 報告しない（WdgM_EnterGlobalStopped() で FAILED 済みの場合のみ
@@ -1203,7 +1203,7 @@ void WdgM_MainFunction(void)
          * 裏取りで指摘・追記）。 */
         if ((WdgM_GlobalStopped) != 0U)
         {
-            (void)Dem_SetEventStatus(DEM_EVENT_WDGM_SUPERVISION, DEM_EVENT_STATUS_PASSED);
+            (void)Dem_SetEventStatus(DemConf_DemEventParameter_WDGM_SUPERVISION, DEM_EVENT_STATUS_PASSED);
         }
 
         WdgM_GlobalExpired     = 0U;

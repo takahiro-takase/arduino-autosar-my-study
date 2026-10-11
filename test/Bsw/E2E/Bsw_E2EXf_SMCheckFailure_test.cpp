@@ -147,7 +147,7 @@ TEST_F(Bsw_E2EXf_SMCheckFailure_Test, Inv_EngineInfo_OK_ValidFrameReportsPassedV
     EXPECT_EQ(checkStatus, E2E_P05STATUS_OK);
     EXPECT_EQ(CallCount_E2E_SMCheck, 3U);
     EXPECT_EQ(CallCount_Dem_SetEventStatus, 1U);
-    EXPECT_EQ(LastEventId_Dem_SetEventStatus, DEM_EVENT_E2E_ENGINEINFO);
+    EXPECT_EQ(LastEventId_Dem_SetEventStatus, DemConf_DemEventParameter_E2E_ENGINEINFO);
     EXPECT_EQ(LastEventStatus_Dem_SetEventStatus, DEM_EVENT_STATUS_PASSED);
 }
 

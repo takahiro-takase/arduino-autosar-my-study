@@ -7,6 +7,7 @@
 E2EXf の設定 json に書く値: インスタンスの識別（stem）、MaxDeltaCounter、Dem イベント、ステートマシンのしきい値など。
 """
 
+from .dem import event_symbol
 from .common import block_comment
 
 DAVINCI_E2EXF = "/ActiveEcuC/E2EXf/"
@@ -111,7 +112,7 @@ def instance_block(p, ctx):
             "const E2EXf_RxConfigTypeP05 E2EXf_%sRxCfg = {" % s,
             "    .E2EConfig        = &E2EXf_%sCfgP05," % s,
             "    .CheckState       = &E2EXf_%sStateP05," % s,
-            "    .DemEventId       = %s," % p["demEvent"],
+            "    .DemEventId       = %s," % event_symbol(ctx, p["demEvent"], "E2EXf " + p["name"]),
             "    .WaitForFirstData = &E2EXf_%sWaitForFirstDataP05," % s,
             "    .SMConfig         = &E2EXf_SMConfigDefault,",
             "    .SMState          = &E2EXf_%sSMState" % s,
