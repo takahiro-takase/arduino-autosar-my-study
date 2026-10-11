@@ -30,8 +30,8 @@ E2EMon_NotifyCheckResultP05()（E2EMon.c）:
     YES → E2EMon_CrcErrorCount++（0xFF で飽和）
   status == WRONGSEQUENCE または REPEATED ?
     YES → E2EMon_SequenceErrorCount++（0xFF で飽和）
-  Com_SendSignal(COM_SIGNAL_E2E_CRC_ERR_COUNT, &E2EMon_CrcErrorCount)
-  Com_SendSignal(COM_SIGNAL_E2E_SEQ_ERR_COUNT, &E2EMon_SequenceErrorCount)
+  Com_SendSignal(ComConf_ComSignal_E2ECrcErrCount_Tx, &E2EMon_CrcErrorCount)
+  Com_SendSignal(ComConf_ComSignal_E2ESeqErrCount_Tx, &E2EMon_SequenceErrorCount)
     ← 値をセットするだけで、送信タイミングには一切関与しない
 ```
 

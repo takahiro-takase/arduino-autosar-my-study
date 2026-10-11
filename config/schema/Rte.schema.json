@@ -18,18 +18,18 @@
     },
     "names": {
       "type": "array",
-      "description": "名前の上書き。macro は Com の信号 ID マクロ。port / element は、書いたほうだけ上書きする（省略した側は自動）。",
+      "description": "名前の上書き。signal は Com の信号の name（Com.json の signals[].name）。port / element は、書いたほうだけ上書きする（省略した側は自動）。",
       "items": {
         "type": "object",
         "additionalProperties": false,
         "required": [
-          "macro"
+          "signal"
         ],
         "properties": {
-          "macro": {
+          "signal": {
             "type": "string",
-            "pattern": "^COM_SIGNAL_[A-Z0-9_]+$",
-            "description": "Com の信号 ID マクロ（例: COM_SIGNAL_TEST_MSG_TEST_COUNTER）"
+            "pattern": "^[A-Za-z][A-Za-z0-9_]*$",
+            "description": "Com の信号の name（例: TestMsg_TestCounter_Tx）"
           },
           "port": {
             "type": "string",
@@ -46,10 +46,10 @@
     },
     "exclude": {
       "type": "array",
-      "description": "関数を生成しない信号（Com の信号 ID マクロ）。",
+      "description": "関数を生成しない信号（Com の信号の name）。",
       "items": {
         "type": "string",
-        "pattern": "^COM_SIGNAL_[A-Z0-9_]+$"
+        "pattern": "^[A-Za-z][A-Za-z0-9_]*$"
       }
     }
   }

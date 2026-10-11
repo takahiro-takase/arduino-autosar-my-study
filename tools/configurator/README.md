@@ -88,7 +88,7 @@ CAN のバイト列と、信号表の定義に従ってデコードした信号�
 1. can_tool の `Signals` を開き、`TestMsg`（0x300）を選びます。
 2. DLC を `1` から `2` に変え、フィールド `TestCounter2`（ビット位置 8、ビット幅 8、種類 number、範囲 0〜255）を追加して保存します。
 3. 下部の「検査」を押します。信号表にあって Com に無い信号の指摘が出ます（ここまでは想定どおりです）。
-4. 「同期の確認 (dry-run)」で追加内容を確認し、「同期」を押します（`Com.json` に `COM_SIGNAL_TEST_MSG_TEST_COUNTER2` の信号が追加されます）。
+4. 「同期の確認 (dry-run)」で追加内容を確認し、「同期」を押します（`Com.json` に `TestMsg_TestCounter2_Tx` の信号が追加されます）。
 5. 「生成」を押し、続けてもう一度「検査」を押して、指摘が無いことを確認します。
 6. `pio run -e uno_r4 -t upload` で書き込み、can_tool の受信モニタを見ます。`TestMsg` が 2 バイトになり、`TestCounter2` が表示されます。
 
@@ -118,14 +118,14 @@ C ソースが「テンプレート」を兼ねます。生成する範囲を、
 
 | 信号の向き | 生成する関数 | 中身 |
 |------------|--------------|------|
-| TX | `Std_ReturnType Rte_Write_<ポート>_<要素>(<型> value)` | `Com_SendSignal(COM_SIGNAL_xxx, &value)` |
-| RX | `Std_ReturnType Rte_Read_<ポート>_<要素>(<型>* data)` | `Com_ReceiveSignal(COM_SIGNAL_xxx, data)` |
+| TX | `Std_ReturnType Rte_Write_<ポート>_<要素>(<型> value)` | `Com_SendSignal(ComConf_ComSignal_xxx, &value)` |
+| RX | `Std_ReturnType Rte_Read_<ポート>_<要素>(<型>* data)` | `Com_ReceiveSignal(ComConf_ComSignal_xxx, data)` |
 
 - 仕様（SWS_RTE）では、`<ポート>` はポートの名前、`<要素>` はデータ要素の名前で、どちらも SW-C の設計者が決める名前です。
   ECU 間の送信では、データ要素ごとに Com の信号 1 つへ書き込む（[SWS_Rte_06023]）ことになっています。
 - 名前は、フレーム名を `<ポート>`、信号名を `<要素>` として自動で作ります（空白や括弧で区切って、各語の先頭を大文字にして連結。
   例: `TestMsg` の `TestCounter` → `Rte_Write_TestMsg_TestCounter`）。合わない名前は、`Rte.json` の `names` で
-  Com の信号 ID マクロを指して上書きします（`port` と `element` のどちらか片方だけでもよい）。
+  Com の信号の `name` を `signal` で指して上書きします（`port` と `element` のどちらか片方だけでもよい）。
 - 型は信号のビット長から決めます（8 bit 以下は `uint8`、16 bit 以下は `uint16`、32 bit 以下は `uint32`）。
 - 生成先は `Rte.h` と `Rte.c` の `@@GEN-BEGIN rte-signal-api` から `@@GEN-END rte-signal-api` の間です。
 
@@ -240,7 +240,7 @@ CanIf・PduR・Com が持つ PDU / 信号の ID は、AUTOSAR のシンボリッ
 
 - 生成したコードでは、他のモジュールの ID を指す数値をこの名前に置き換えています。PduR の経路の `SrcPduId`・送信先の CanIf の PDU・配信先と送信確認先の Com の I-PDU、
   CanIf が上位層へ返す ID（PduR の経路に対応するもの）、Com の I-PDU の `IPduId` / `PduRId` と信号の `IPduId` です。NM のように PduR を経由しない ID と、CanTp・SecOC が相手の ID は数値のままです。
-- 既存の信号 ID マクロ `COM_SIGNAL_*` は残しています（手書きのコードが使うため）。手書きのコードを仕様の名前へ全面的に置き換えるのは、今後の課題です。
+- 信号 ID は `ComConf_ComSignal_<name>` に統一しました。以前の `COM_SIGNAL_*` マクロは廃止し、手書きのコード（`Rte.c`・`E2EMon.c`）も置き換え済みです（`Com.json` の信号の `macro` 項目もなくなりました）。
 - `name` は、C の識別子として使える形（英数字と `_`、先頭は英字）で、同じモジュールの中で重複しないこと（生成時に検査）。PduR の経路は RX と TX で名前空間が共通なので、`_Rx` / `_Tx` のように方向を名前に含めてください（同じ名前で値が違う定義は不正な設定です、[TPS_ECUC_06074]）。
 - CanIf の `upperLayerTxPduId` などが PduR の経路と一致しない場合は、生成の前の整合性検査でエラーになります。使うヘッダのインクルードが足りないときは、生成時に警告が出ます。
 - 生成するコードが使わない名前には、MISRA C:2012 Rule 2.5（未使用マクロ）の抑止コメントを付けています（CanIf は、PduR の設定に出力が左右されないよう全部に付けます）。
@@ -308,7 +308,7 @@ CanIf・PduR・Com が持つ PDU / 信号の ID は、AUTOSAR のシンボリッ
 | Com `rxIpdus[]` / `txIpdus[]` の並び順 | `IPduId` | `ComIPduHandleId` |
 | Com `rxIpdus[].frame` → DLC（または `dlc`） | `DLC` | `ComIPduLength` |
 | Com `*Ipdus[].txModeMode` ほか | `TxModeMode` ほか | `ComTxModeMode` ほか |
-| Com `signals[]` の並び順 / `macro` | `SignalId` | `ComHandleId` |
+| Com `signals[]` の並び順 / `name` | `SignalId`（`ComConf_ComSignal_<name>`） | `ComHandleId` |
 | Com `signals[].ipdu` | `IPduId` | `ComIPduRef` |
 | Com `signals[].field` → ビット位置・ビット長 | `BitPosition` / `BitSize` | `ComBitPosition` / `ComBitSize` |
 | E2EXf `instances[]`（`frame` → DataLength / Offset / DataID） | `E2E_P05ConfigType` | `E2EXf` の E2EProfile 設定（`E2EXf_*_E2EXf`） |
@@ -407,6 +407,4 @@ E2E と SecOC の設定は、Com から分けて別の設定 json（`E2EXf.json`
 - Rte の信号アクセス関数の生成は、信号グループの I-PDU・ゲートウェイの信号・手書きの関数がある信号を対象外にしている。信号グループ（`Rte_SendSignalGroup_*`）や、E2E 変換つきの Read は手書きのまま。
 - CanSM と ComM は、表になる設定が無いため対象外（BswM は対応済み）。
 - 診断（DCM / UDS）の設定の対象化。入力となる表（DID 一覧など）の整理が先に必要。
-- 手書きのコードが使う ID マクロ（`COM_SIGNAL_*` など）を、仕様のシンボリック名（`ComConf_ComSignal_*` など）へ全面的に置き換える。
-  `src/` に約 50 か所、テストに約 20 か所の参照がある。CAN FD で Com / PduR を変更する前後など、同じコードに手を入れるときがまとめて直す機会になる。
 - ARXML の入出力。json の項目名を ECUC のパラメータ名に寄せてあるので、変換層を足す形にできる。

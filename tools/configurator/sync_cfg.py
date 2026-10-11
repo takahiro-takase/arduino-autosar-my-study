@@ -109,7 +109,6 @@ def sync(signals, canif, pdur, com):
                     s = {
                         "name": "%s_%s" % (base, direction.title()),
                         "title": "%s  %s %dbit  CAN %s bit%d" % (fld["name"], direction, fld["bitSize"], can_id, fld["bitPosition"]),
-                        "macro": "COM_SIGNAL_%s_%s" % (snake_upper(sn), snake_upper(fld["name"])),
                         "direction": direction,
                         "ipdu": comname,
                         "field": fld["name"],
@@ -119,7 +118,7 @@ def sync(signals, canif, pdur, com):
                         s["filterAlgorithm"] = "COM_FILTER_MASKED_NEW_DIFFERS_MASKED_OLD"
                         s["mask"] = (1 << fld["bitSize"]) - 1
                     com["signals"].append(s)
-                    made.append("Com シグナル %s" % s["macro"])
+                    made.append("Com シグナル %s" % s["name"])
 
             # --- PduR（Com の I-PDU があり、CanIf が PduR 宛ての場合） ---
             if comname and cp.get("txConfirm", cp.get("rxIndication")) == "PDUR":

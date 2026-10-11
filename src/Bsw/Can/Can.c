@@ -162,14 +162,20 @@ static uint8 Can_InterruptDisableNestCount = 0U;
  * Can_Write() は送信成功時に swPduHandle をこのキューへ積むだけで即座に
  * 返り、実際の CanIf_TxConfirmation() 呼び出しは Can_MainFunction_Write()
  * まで遅延させる（ファイル冒頭のコメント参照）。
- * サイズは CanIf の TX PDU 数 (CANIF_TX_PDU_COUNT) に連動させる。TX PDU を追加
- * しても、1 パスで積まれる保留件数がキューを超えないようにするため。
- * Os_SchedulerStep() は 1 回のスケジューラパスにつき各タスクを高々 1 回しか
- * 呼ばないため、Can_MainFunction_Write() が次に呼ばれるまでに積まれる
- * 保留件数はこの数を超えない想定。万一超えた場合は最も古い保留を
- * 上書きせず破棄し、DET へエラーを報告する（沈黙した取りこぼしを避ける）。
+ * サイズは「CanIf の TX PDU 数 (CANIF_TX_PDU_COUNT) + 診断応答の連続分
+ * (CAN_TX_CONF_QUEUE_DIAG_BURST)」とする。
+ * - 周期フレーム: Os_SchedulerStep() は 1 回のスケジューラパスにつき各タスクを
+ *   高々 1 回しか呼ばないため、TX PDU ごとに最大 1 件は積まれる想定。TX PDU を
+ *   追加しても足りるよう、PDU 数に連動させる。
+ * - 診断応答: 1 回のパスの中で Can_MainFunction_Read() が受信済みの要求を続けて
+ *   処理するため、同じ PDU (UDS 応答) の確認が連続して積まれる。ログ出力で
+ *   パスが長引いたとき（実機ログで、診断要求 5 件の連続処理中に 7 件がたまり、
+ *   取りこぼしが出た）に備えて、その分の余裕を加える。
+ * 万一超えた場合は最も古い保留を上書きせず破棄し、DET へエラーを報告する
+ * （沈黙した取りこぼしを避ける）。
  * ----------------------------------------------------------------------- */
-#define CAN_TX_CONF_QUEUE_SIZE  CANIF_TX_PDU_COUNT
+#define CAN_TX_CONF_QUEUE_DIAG_BURST  8U
+#define CAN_TX_CONF_QUEUE_SIZE        (CANIF_TX_PDU_COUNT + CAN_TX_CONF_QUEUE_DIAG_BURST)
 
 static PduIdType Can_TxConfQueue[CAN_TX_CONF_QUEUE_SIZE];
 static uint8     Can_TxConfHead = 0U;  /**< 次に取り出すエントリの index */

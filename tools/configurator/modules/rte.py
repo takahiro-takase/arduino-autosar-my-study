@@ -16,6 +16,7 @@
 import pathlib
 import re
 
+from . import symbols
 from .com import frame_field, frame_of
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[3]
@@ -28,9 +29,9 @@ IDENT_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_]*$")
 
 def validate(cfg):
     errors = []
-    macros = [n["macro"] for n in cfg["names"]]
-    if len(set(macros)) != len(macros):
-        errors.append("names: macro が重複している")
+    signals = [n["signal"] for n in cfg["names"]]
+    if len(set(signals)) != len(signals):
+        errors.append("names: signal が重複している")
     return errors
 
 
@@ -87,31 +88,36 @@ def targets(cfg, ctx):
     com = ctx.configs["Com"]
     ipdus = {p["name"]: p for p in com["rxIpdus"] + com["txIpdus"]}
     gateway = {g[k] for g in com["gateway"] for k in ("src", "dest")}
-    overrides = {n["macro"]: n for n in cfg["names"]}
-    used = scan_sources(ctx)
+    overrides = {n["signal"]: n for n in cfg["names"]}
+    known = {s["name"] for s in com["signals"]}
+    unknown = [n for n in list(overrides) + list(cfg["exclude"]) if n not in known]
+    if unknown:
+        raise ValueError("Rte.json: Com.json の signals に無い信号名が指定されている: %s" % ", ".join(unknown))
+    # 手書きのコードがすでに使っている信号のシンボリック名（ソース全体を 1 回だけ走査して集める）
+    used = set(re.findall(symbols.COM_SIGNAL + r"\w+", scan_sources(ctx)))
     result, seen = [], {}
     for s in com["signals"]:
-        macro = s["macro"]
+        symbol = symbols.COM_SIGNAL + s["name"]  # Com_SendSignal() / Com_ReceiveSignal() に渡す ID のシンボリック名
         ipdu = ipdus[s["ipdu"]]
-        if ipdu.get("isSignalGroup") or s["ipdu"] in gateway or macro in cfg["exclude"] or macro in used:
+        if ipdu.get("isSignalGroup") or s["ipdu"] in gateway or s["name"] in cfg["exclude"] or symbol in used:
             continue
         frame = frame_of(ipdu, ctx)
         field = frame_field(frame, s["field"])
         ctype = ctype_of(field["bitSize"])
         if ctype is None:
-            raise ValueError("%s: ビット長 %d は 32 bit を超えるため、Rte の関数を生成できない" % (macro, field["bitSize"]))
-        ov = overrides.get(macro, {})
+            raise ValueError("%s: ビット長 %d は 32 bit を超えるため、Rte の関数を生成できない" % (symbol, field["bitSize"]))
+        ov = overrides.get(s["name"], {})
         port = ov.get("port") or ident(frame["name"])
         element = ov.get("element") or ident(s["field"])
         for label, value in (("ポート名", port), ("データ要素名", element)):
             if not IDENT_RE.match(value):
-                raise ValueError("%s: %s '%s' が C の識別子にならない（Rte.json の names で上書きしてください）" % (macro, label, value))
+                raise ValueError("%s: %s '%s' が C の識別子にならない（Rte.json の names で上書きしてください）" % (symbol, label, value))
         kind = "Write" if s["direction"] == "TX" else "Read"
         name = "Rte_%s_%s_%s" % (kind, port, element)
         if name in seen:
-            raise ValueError("%s: 関数名 %s が %s と重複している（Rte.json の names で上書きしてください）" % (macro, name, seen[name]))
-        seen[name] = macro
-        result.append({"name": name, "kind": kind, "macro": macro, "ctype": ctype, "bits": field["bitSize"],
+            raise ValueError("%s: 関数名 %s が %s と重複している（Rte.json の names で上書きしてください）" % (symbol, name, seen[name]))
+        seen[name] = symbol
+        result.append({"name": name, "kind": kind, "symbol": symbol, "ctype": ctype, "bits": field["bitSize"],
                        "port": port, "element": element, "frame": frame["name"], "canId": frame["canId"],
                        "field": s["field"]})
     # 同じ名前の宣言・定義が手書きのコードにあれば重複（呼び出しだけなら問題ない）
@@ -147,19 +153,19 @@ def render_source(cfg, ctx):
         if t["kind"] == "Write":
             brief = "%s 提供ポートへ %s シグナルを書き込む。" % (t["port"], t["element"])
             detail = ["信号表（%s, CAN %s）から生成した送信ポート。" % (t["frame"], t["canId"]),
-                      "Com_SendSignal(%s) へ委譲するだけ。" % t["macro"]]
+                      "Com_SendSignal(%s) へ委譲するだけ。" % t["symbol"]]
             param = " * \\param[in]  value  %s の値（%d bit）。" % (t["element"], t["bits"])
             retval = [" * \\retval  E_OK      COM の実 TX バッファへ正常にパックした。",
                       " * \\retval  E_NOT_OK  COM 未初期化またはシグナル ID が見つからない。"]
-            body = "    return Com_SendSignal(%s, &value);" % t["macro"]
+            body = "    return Com_SendSignal(%s, &value);" % t["symbol"]
         else:
             brief = "%s 要求ポートから %s シグナルを読み出す。" % (t["port"], t["element"])
             detail = ["信号表（%s, CAN %s）から生成した受信ポート。" % (t["frame"], t["canId"]),
-                      "Com_ReceiveSignal(%s) へ委譲するだけ。" % t["macro"]]
+                      "Com_ReceiveSignal(%s) へ委譲するだけ。" % t["symbol"]]
             param = " * \\param[out] data  %s の値の格納先（%d bit）。" % (t["element"], t["bits"])
             retval = [" * \\retval  E_OK      COM の RX バッファから正常に読み出した。",
                       " * \\retval  E_NOT_OK  COM 未初期化、シグナル ID が見つからない、または data が NULL。"]
-            body = "    return Com_ReceiveSignal(%s, data);" % t["macro"]
+            body = "    return Com_ReceiveSignal(%s, data);" % t["symbol"]
         doc = ["/**", " * \\brief   " + brief, " *", " * \\details " + detail[0]]
         doc += [" *          " + ln for ln in detail[1:]]
         doc += [" *", param, " *"] + retval

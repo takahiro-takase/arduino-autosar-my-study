@@ -11,6 +11,8 @@
 
 import re
 
+from .common import doc_comment
+
 IDENT_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_]*$")
 
 CANIF_TX = "CanIfConf_CanIfTxPduCfg_"
@@ -71,20 +73,26 @@ def check_unique(names, label):
 
 
 def define_lines(groups):
-    """#define の行を作る。groups は [[(名前, 値, 抑止コメントを付けるか), ...], ...]（グループの間に空行を入れる）。
-    名前の幅と数値の桁数を全体でそろえ、値の列が縦にそろうようにする。"""
+    """#define の行を作る。groups は [[(名前, 値, 抑止コメントを付けるか[, 説明の行のリスト]), ...], ...]
+    （グループの間に空行を入れる）。名前の幅と数値の桁数を全体でそろえ、値の列が縦にそろうようにする。
+    説明の行（Doxygen コメントにする）がある定義は、前に空行を入れて区切る。"""
     entries = [e for g in groups for e in g]
     if not entries:
         return []
-    name_w = max(len(n) for n, _, _ in entries)
-    val_w = max(len(str(v)) for _, v, _ in entries)
+    name_w = max(len(e[0]) for e in entries)
+    val_w = max(len(str(e[1])) for e in entries)
     out = []
     for g in groups:
         if not g:
             continue
         if out:
             out.append("")
-        for name, value, unused in g:
+        for k, (name, value, unused, *rest) in enumerate(g):
+            doc = rest[0] if rest else None
+            if doc:
+                if k:
+                    out.append("")
+                out += doc_comment(doc)
             if unused:
                 out.append(MISRA_UNUSED_MACRO)
             out.append("#define %s  %sU" % (name.ljust(name_w), str(value).rjust(val_w)))

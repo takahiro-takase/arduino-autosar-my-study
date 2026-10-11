@@ -76,9 +76,6 @@ def validate(cfg):
         names = [p["name"] for p in cfg[key]]
         if len(set(names)) != len(names):
             errors.append("%s: name が重複している" % key)
-    macros = [s["macro"] for s in cfg["signals"]]
-    if len(set(macros)) != len(macros):
-        errors.append("signals: macro が重複している")
     cm = [c["macro"] for c in cfg["constants"]]
     if len(set(cm)) != len(cm):
         errors.append("constants: macro が重複している")
@@ -185,7 +182,7 @@ def signal_values(s, cfg, ctx):
     fr = frame_of(ipdus[pos], ctx)
     f = frame_field(fr, s["field"])
     vals = {
-        "signalId": s["macro"],
+        "signalId": symbols.COM_SIGNAL + s["name"],
         "direction": "COM_SIGNAL_DIRECTION_" + s["direction"],
         "ipduId": symbols.COM_IPDU + ipdus[pos]["name"],
         "bitPosition": s["bitPosition"] if "bitPosition" in s else f["bitPosition"],
@@ -253,7 +250,7 @@ def signal_table(cfg, ctx):
         " * シグナルテーブル（RX + TX 共通）",
         " * DaVinci: /ActiveEcuC/Com/ComConfig/[ComSignal]",
         " * Com_ReceiveSignal() / Com_SendSignal() がビットパック・アンパックに使用する。",
-        " * シグナル ID は Com_Cfg.h の COM_SIGNAL_* 定数と対応している。",
+        " * シグナル ID は Com_Cfg.h の ComConf_ComSignal_*（シンボリック名）と対応している。",
         " *",
         " * ComBitPosition の数え方（BigEndian/OPAQUE）:",
         " *   byte[0] の MSB = ビット位置 0、byte[0] の LSB = ビット位置 7",
@@ -279,7 +276,7 @@ def signal_table(cfg, ctx):
 
 
 def gateway_table(cfg, ctx):
-    by_name = {s["name"]: s["macro"] for s in cfg["signals"]}
+    by_name = {s["name"]: symbols.COM_SIGNAL + s["name"] for s in cfg["signals"]}
     out = [
         "/* -----------------------------------------------------------------------",
         " * Signal Gateway ルーティングテーブル",
@@ -353,16 +350,6 @@ def render_cfg_counts(cfg, ctx):
     return "\n".join(out)
 
 
-def render_cfg_signal_ids(cfg, ctx):
-    out = []
-    for i, s in enumerate(cfg["signals"]):
-        if i:
-            out.append("")
-        out += doc_comment(s["idDoc"])
-        out.append("#define %s  %dU" % (s["macro"], i))
-    return "\n".join(out)
-
-
 def render_cfg_ipdu_groups(cfg, ctx):
     out = []
     for i, g in enumerate(cfg.get("ipduGroups", [])):
@@ -374,15 +361,15 @@ def render_cfg_ipdu_groups(cfg, ctx):
 
 
 def render_cfg_symbols(cfg, ctx):
-    """Com が提供するハンドル ID のシンボリック名（[TPS_ECUC_02108]）。値は各テーブルの添字。"""
+    """Com が提供するハンドル ID のシンボリック名（[TPS_ECUC_02108]）。値は各テーブルの添字。
+    信号の名前は Com_ReceiveSignal() / Com_SendSignal() の第 1 引数（ComHandleId）として使う。"""
     symbols.check_unique([p["name"] for p in cfg["rxIpdus"] + cfg["txIpdus"]], "Com ipdus")
     symbols.check_unique([s["name"] for s in cfg["signals"]], "Com signals")
     out = ["/* シンボリック名: ComConf_<コンテナ定義>_<name>（値は各テーブルの添字）。PduR などの下位層が参照する。 */"]
     out += symbols.define_lines([
         [(symbols.COM_IPDU + p["name"], i, False) for i, p in enumerate(cfg["rxIpdus"])],
         [(symbols.COM_IPDU + p["name"], i, False) for i, p in enumerate(cfg["txIpdus"])],
-        # 生成するコードは信号の ID に COM_SIGNAL_* を使うため、こちらは未使用
-        [(symbols.COM_SIGNAL + s["name"], i, True) for i, s in enumerate(cfg["signals"])],
+        [(symbols.COM_SIGNAL + s["name"], i, False, s["idDoc"]) for i, s in enumerate(cfg["signals"])],
     ])
     return chr(10).join(out)
 
@@ -399,7 +386,6 @@ SPEC = {
         ("src/Bsw/Com/Com_PBCfg.c", "com-config", render_pbcfg, check_includes),
         ("src/Bsw/Com/Com_Cfg.h", "com-ipdu-groups", render_cfg_ipdu_groups, None),
         ("src/Bsw/Com/Com_Cfg.h", "com-counts", render_cfg_counts, None),
-        ("src/Bsw/Com/Com_Cfg.h", "com-signal-ids", render_cfg_signal_ids, None),
         ("src/Bsw/Com/Com_Cfg.h", "com-symbols", render_cfg_symbols, None),
     ],
 }

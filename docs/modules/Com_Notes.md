@@ -1216,7 +1216,7 @@ I-PDU 処理（TMS 評価等）は行わない」と明記されています。`
 `EngineInfo.CoolantTemp`（RX）が 0xFF（無効値マーカー）で届いたことは
 既に `Rte_COMCbkInv_CoolantTemp()` が検知していました（前節）が、
 従来はログ出力のみで、メータ表示側の `MeterStatus.CoolantTemp`
-（TX、`COM_SIGNAL_METER_COOLANT_TEMP`）は「直近の有効値をミラーし続ける」
+（TX、`ComConf_ComSignal_MeterStatus_CoolantTempMirror_Tx`）は「直近の有効値をミラーし続ける」
 だけで、無効という事実そのものは下流（`uds_tester` 等）に伝わりません
 でした。`Com_InvalidateSignal` 追加を機に、同じコールバックから
 `MeterStatus.CoolantTemp` 自体も無効化するようにしました。
@@ -1230,7 +1230,7 @@ Rte_COMCbkInv_CoolantTemp()  ← EngineInfo.CoolantTemp=0xFF 検知時
   DET_LOGW(...)                                    ← 既存のログ出力
   Rte_Invalidate_MeterStatus_CoolantTemp()  ← 新規追加。他の
     Rte_Write_<Port>_<Signal>() と同じポートラッパー規約に揃え、
-    内部で Com_InvalidateSignal(COM_SIGNAL_METER_COOLANT_TEMP) へ委譲
+    内部で Com_InvalidateSignal(ComConf_ComSignal_MeterStatus_CoolantTempMirror_Tx) へ委譲
 ```
 
 ただしこれは「無効を検知した瞬間」の単発パルスであり、継続的な無効状態
@@ -1954,7 +1954,7 @@ KeyFobEcu → SecOC（MAC・フレッシュネス検証） → Com_RxIndication(
   → Rte_COMRxInd_SecureCommand()（ログのみ、既存のデモ用グルー）
   → Com_GatewayRoute()（新規）
       RX バッファから ImmobilizerCmd の生値をアンパック
-      → Com_SendSignal(COM_SIGNAL_IMMOBILIZER_STATUS, &value)
+      → Com_SendSignal(ComConf_ComSignal_ImmobilizerStatus_Tx, &value)
           （SWC が直接呼ぶ場合と全く同じ経路。COM_FILTER_MASKED_NEW_DIFFERS_MASKED_OLD
             により値が変化したときだけ次回 Com_MainFunctionTx() で送信）
   → CAN 0x230 (ImmobilizerStatus) 送信
