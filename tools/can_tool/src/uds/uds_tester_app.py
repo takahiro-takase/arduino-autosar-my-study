@@ -117,6 +117,7 @@ class UdsTesterFrame(ttk.Frame):
             self.cfg = json.load(f)
 
         self.bus: can.BusABC | None = None
+        self._bus_interface = ""  # 接続中のインターフェース名（切断時の後始末の分岐に使う）
         self.bus_lock = threading.Lock()
         self.log_queue: "queue.Queue[str]" = queue.Queue()
         self.state_queue: "queue.Queue[tuple]" = queue.Queue()
@@ -193,7 +194,10 @@ class UdsTesterFrame(ttk.Frame):
 
         ttk.Label(conn, text="interface").grid(row=0, column=0, padx=4, pady=4)
         self.interface_var = tk.StringVar(value=self.cfg["can"]["interface"])
-        ttk.Entry(conn, textvariable=self.interface_var, width=12).grid(row=0, column=1)
+        # gs_usb: candleLight 系（FD 非対応）、candle: python-can-candle（FD 対応のアダプタ向け）、slcan: COM ポート
+        # 一覧にない値も直接入力できる（python-can のインターフェース名をそのまま渡す）。
+        ttk.Combobox(conn, textvariable=self.interface_var, values=("gs_usb", "candle", "slcan"),
+                     width=10).grid(row=0, column=1)
 
         ttk.Label(conn, text="channel").grid(row=0, column=2, padx=4)
         self.channel_var = tk.StringVar(value=str(self.cfg["can"]["channel"]))
@@ -1018,6 +1022,7 @@ class UdsTesterFrame(ttk.Frame):
             messagebox.showerror("接続失敗", str(exc))
             return
         self.bus = bus
+        self._bus_interface = self.interface_var.get()
         self.status_var.set("● Connected")
         self.status_label.configure(foreground="green")
         self.connect_btn.configure(text="Disconnect")
@@ -1062,7 +1067,16 @@ class UdsTesterFrame(ttk.Frame):
             if self._rx_monitor_thread.is_alive():
                 self.log_queue.put("[RXモニタ] 停止待ちタイムアウト (バックグラウンドで終了処理中)")
         self._rx_monitor_thread = None
+        old_bus = self.bus
         self.bus = None
+        # gs_usb 以外（candle など）は、shutdown() を直接呼んでデバイスを確実に解放する
+        # （上記の access violation の問題は gs_usb バックエンド固有のため）。
+        if old_bus is not None and getattr(self, "_bus_interface", "gs_usb") != "gs_usb":
+            try:
+                old_bus.shutdown()
+            except Exception:  # noqa: BLE001 - 後始末中の失敗は無視してよい
+                pass
+        old_bus = None
         # 参照を破棄しただけでは GC 実行タイミングが不定で、古い GsUsbBus が
         # USB デバイスを掴んだままの状態が続くことがある（すぐ Connect
         # し直すと「Entity not found」で失敗する原因になりうる）。shutdown()
