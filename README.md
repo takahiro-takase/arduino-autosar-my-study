@@ -56,7 +56,7 @@ CAN 通信と UDS 診断（ISO 15765-2 / ISO 14229-1）を、PC 上のテスト�
 > 経由で送信した EngineInfo/AbsInfo（本物の周辺 ECU が送信しているように
 > E2E Profile05 で保護したフレーム）を Arduino が受信し、RPM・RUN/ABS 警告灯へ
 > 反映している様子です
-> （[送信スクリプト](test_scripts/regression_normal_operation.capl)）。
+> （[送信スクリプト](test_scripts/000_regression_normal_operation.capl)）。
 
 CAN 経由で受信するエンジン ECU（0x100）・ABS ECU（0x110）からの情報を警告灯制御へ
 反映する、以下の入出力を持つメータ ECU です。
