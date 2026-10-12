@@ -83,8 +83,8 @@
 #define COM_API_ID_RECEIVE_SIGNAL_GROUP         0x0EU
 #define COM_API_ID_RECEIVE_SIGNAL_GROUP_ARRAY   0x24U
 /* [SWS_Com_00557]/[SWS_Com_00645] Com_InvalidateSignalGroup の実 Service ID。
- * 旧 COM_API_ID_IS_RX_TIMED_OUT（本プロジェクト独自 API）がここ（0x1B）を
- * 占有していたため、下記の通り 0xF0 へ退避させて空けている。 */
+ * 旧 COM_API_ID_IS_RX_TIMED_OUT（本プロジェクト独自 API、廃止済み）がここ（0x1B）を
+ * 占有していたため、0xF0 へ退避させて空けていた。 */
 #define COM_API_ID_INVALIDATE_SIGNAL_GROUP      0x1BU
 /* [SWS_Com_00398]/[SWS_Com_00399] Com_MainFunctionRx/Tx の実 Service ID。
  * 単体の Com_MainFunction（旧 COM_API_ID_MAIN_FUNCTION=0x20、実仕様に
@@ -104,10 +104,6 @@
 /* cppcheck-suppress misra-c2012-2.5 */
 #define COM_API_ID_GET_STATUS                   0x07U
 #define COM_API_ID_GET_VERSION_INFO             0x09U
-/* 本プロジェクト独自 API（実 AUTOSAR に対応関数なし）。Dcm_Cfg.h の同種
- * エントリに倣い、非標準値 0xF0 を踏襲する（旧値 0x1B は上記の通り
- * Com_InvalidateSignalGroup の実 ID と衝突していたため退避）。 */
-#define COM_API_ID_IS_RX_TIMED_OUT               0xF0U
 
 /* -----------------------------------------------------------------------
  * Com_GetVersionInfo() が返す固定値

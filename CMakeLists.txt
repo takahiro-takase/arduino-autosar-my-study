@@ -505,7 +505,6 @@ set(NATIVE_CHAIN_WRAP_SYMBOLS
     Com_TxConfirmation
     Com_MainFunctionRx
     Com_MainFunctionTx
-    Com_IsRxTimedOut
     Com_SetCommunicationEnabled
     # ComM.h の AUTOSAR IF 全16関数（Wrap_ComM.h/.c 参照）。
     ComM_Init

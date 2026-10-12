@@ -3926,43 +3926,6 @@ static void Com_RequestTxOnChange(const Com_IPduConfigType* ipdu)
     Com_TxRepeatsRemaining[ipdu->IPduId] = Com_TxRepeatApplicable(mode) ? ipdu->NumberOfRepetitions : 0U;
 }
 
-/* ----------------------------------------------------------------------
- * Com_IsRxTimedOut
- * ---------------------------------------------------------------------- */
-
-/**
- * \brief   RX I-PDU が現在タイムアウト中かどうかを返す。
- *
- * \details Com_RxTimedOut[IPduId] をそのまま返す軽量アクセサ。
- *          Rte 層が Com_ReceiveSignal() を介さずに、E_NOT_OK 判定の
- *          ゲートとして直接参照する用途を想定している
- *          （E2E Transformer 方式では Rte がミラーから値を読むため、
- *          Com_ReceiveSignal() のタイムアウトチェックを経由しない）。
- *
- * \param[in]  IPduId  確認する RX I-PDU の ID。
- *
- * \retval  1  タイムアウト中（IPduId が範囲外の場合も安全側でこちらを返す）。
- * \retval  0  タイムアウトしていない（正常受信中）。
- *
- * \pre        Com_Init() が正常に完了していること。
- *
- * \note    本プロジェクト独自 API（実 AUTOSAR に対応関数なし）のため、
- *          ServiceID は本プロジェクト独自 API 共通の非標準値 0xF0 を踏襲する
- *          （Com_Cfg.h 参照）。
- * \ServiceID      {0xF0}
- * \Reentrancy     {Reentrant}
- * \Synchronicity  {Synchronous}
- */
-uint8 Com_IsRxTimedOut(Com_IPduIdType IPduId)
-{
-    if (IPduId >= COM_RX_IPDU_MAX)
-    {
-        (void)Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_IS_RX_TIMED_OUT, COM_E_PARAM);
-        return 1U;
-    }
-    return Com_RxTimedOut[IPduId];
-}
-
 typedef void (*Com_VoidCbkType)(void);
 
 /* ----------------------------------------------------------------------
@@ -4183,6 +4146,15 @@ uint8 Com_Test_GetSigTimedOut(Com_SignalIdType SignalId)
         return 0U;
     }
     return Com_SigTimedOut[s];
+}
+
+uint8 Com_Test_GetRxTimedOut(Com_IPduIdType ipduId)
+{
+    if (ipduId >= COM_RX_IPDU_MAX)
+    {
+        return 0U;
+    }
+    return Com_RxTimedOut[ipduId];
 }
 
 void Com_Test_SetTxConfPending(Com_IPduIdType ipduId, uint8 value)

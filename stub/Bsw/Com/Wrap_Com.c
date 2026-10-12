@@ -53,7 +53,6 @@ uint32 CallCount_Com_RxIndication            = 0U;
 uint32 CallCount_Com_TxConfirmation          = 0U;
 uint32 CallCount_Com_MainFunctionRx          = 0U;
 uint32 CallCount_Com_MainFunctionTx          = 0U;
-uint32 CallCount_Com_IsRxTimedOut            = 0U;
 uint32 CallCount_Com_SetCommunicationEnabled = 0U;
 
 uint32 FailFromCallCount_Com_TriggerIPDUSend = Wrap_Com_FAIL_FROM_CALL_COUNT_DISABLED;
@@ -61,7 +60,7 @@ uint32 FailFromCallCount_Com_TriggerIPDUSend = Wrap_Com_FAIL_FROM_CALL_COUNT_DIS
 Std_ReturnType ForcedReturn_Com_TriggerIPDUSend = E_NOT_OK;
 
 /* ----------------------------------------------------------------------
- * WrapCom_Reset — 24関数すべての状態を一括で初期化する（Wrap_Com.h 参照）。
+ * WrapCom_Reset — 23関数すべての状態を一括で初期化する（Wrap_Com.h 参照）。
  * ---------------------------------------------------------------------- */
 
 void WrapCom_Reset(void)
@@ -88,7 +87,6 @@ void WrapCom_Reset(void)
     CallCount_Com_TxConfirmation          = 0U;
     CallCount_Com_MainFunctionRx          = 0U;
     CallCount_Com_MainFunctionTx          = 0U;
-    CallCount_Com_IsRxTimedOut            = 0U;
     CallCount_Com_SetCommunicationEnabled = 0U;
 
     FailFromCallCount_Com_TriggerIPDUSend = Wrap_Com_FAIL_FROM_CALL_COUNT_DISABLED;
@@ -479,20 +477,6 @@ void __wrap_Com_MainFunctionTx(void)
  * ---------------------------------------------------------------------- */
 
 /* 未実装 */
-
-/* ----------------------------------------------------------------------
- * Com_IsRxTimedOut
- * ---------------------------------------------------------------------- */
-
-extern
-uint8 __real_Com_IsRxTimedOut(Com_IPduIdType IPduId);
-uint8 __wrap_Com_IsRxTimedOut(Com_IPduIdType IPduId)
-{
-    CallCount_Com_IsRxTimedOut++;
-    Log_Write(LOG_T, TAG, "Com_IsRxTimedOut", "called %u times", CallCount_Com_IsRxTimedOut);
-
-    return __real_Com_IsRxTimedOut(IPduId);
-}
 
 /* ----------------------------------------------------------------------
  * Com_SetCommunicationEnabled

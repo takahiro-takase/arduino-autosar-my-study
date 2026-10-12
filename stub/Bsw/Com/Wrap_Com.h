@@ -7,7 +7,7 @@
  *          冒頭コメント参照（「wrap 対象の関数が定義されている元の src ファイル
  *          1 つにつき 1 ファイル」）。既定動作は `__real_...` へのパススルー。
  *
- *          Com.c の公開 IF 全24関数を wrap 対象とする（2026-09-20 導入時は
+ *          Com.c の公開 IF 全23関数を wrap 対象とする（2026-09-20 導入時は
  *          11関数のみだったが、その後の Com.c 拡張に追随して随時追加している。
  *          `Com_Test_*` はテスト専用の拡張関数であり AUTOSAR 標準外のため
  *          対象外）。
@@ -27,7 +27,7 @@
  *          単純化できる（2026-09-20、ユーザー提案により `!= 0` ガードを撤去）。
  *
  *          `Com_TriggerIPDUSend` 以外の戻り値を持つ関数（SendSignal系/
- *          ReceiveSignal系/InvalidateSignal系/IsRxTimedOut等）は故障注入を
+ *          ReceiveSignal系/InvalidateSignal系等）は故障注入を
  *          実装せず、呼び出し回数のみを記録する。
  *
  *          変数名は `<種類>_<Module>_<関数名>`（種類=CallCount/
@@ -78,7 +78,7 @@ extern "C" {
  * ====================================================================== */
 
 /* ----------------------------------------------------------------------
- * 呼び出し回数（AUTOSAR IF 全24関数共通）
+ * 呼び出し回数（AUTOSAR IF 全23関数共通）
  * ---------------------------------------------------------------------- */
 extern uint32 CallCount_Com_Init;
 extern uint32 CallCount_Com_DeInit;
@@ -102,7 +102,6 @@ extern uint32 CallCount_Com_RxIndication;
 extern uint32 CallCount_Com_TxConfirmation;
 extern uint32 CallCount_Com_MainFunctionRx;
 extern uint32 CallCount_Com_MainFunctionTx;
-extern uint32 CallCount_Com_IsRxTimedOut;
 extern uint32 CallCount_Com_SetCommunicationEnabled;
 
 /* ----------------------------------------------------------------------

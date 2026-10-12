@@ -1097,7 +1097,7 @@ TEST_F(Bsw_ComStack_Signal_Rx_Timeout_Test, OK_RejectedFrameStillTransitionsToSt
      * タイムアウトしない */
     FakeMillis_Value = 750UL;
     Com_MainFunctionRx();
-    ASSERT_EQ(Com_IsRxTimedOut(2U), 0U);
+    ASSERT_EQ(Com_Test_GetRxTimedOut(2U), 0U);
 
     /* ----------------------- */
     /* ---- 実行 (Act) ------- */
@@ -1113,7 +1113,7 @@ TEST_F(Bsw_ComStack_Signal_Rx_Timeout_Test, OK_RejectedFrameStillTransitionsToSt
     // もし拒否によって First(1000ms) のまま据え置かれていたら、
     // 550ms < 1000ms でタイムアウトしないはずなので、この違いで
     // 状態遷移の有無を判別できる。
-    EXPECT_EQ(Com_IsRxTimedOut(2U), 1U);
+    EXPECT_EQ(Com_Test_GetRxTimedOut(2U), 1U);
 }
 
 
@@ -1143,7 +1143,7 @@ TEST_F(Bsw_ComStack_Signal_Rx_Timeout_Test, OK_RejectedFrameStillResetsDeadlineT
     // 実 AUTOSAR ならタイムアウトしない状況
     // （バスは正常、ペイロードが拒否されただけ）で、実際にタイムアウト
     // しないことを確認する。
-    EXPECT_EQ(Com_IsRxTimedOut(2U), 0U);
+    EXPECT_EQ(Com_Test_GetRxTimedOut(2U), 0U);
 }
 
 

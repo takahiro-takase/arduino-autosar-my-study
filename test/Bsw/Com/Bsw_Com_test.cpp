@@ -1244,28 +1244,4 @@ TEST_F(Bsw_Com_Test, Com_MainFunctionTx_NG_Uninit)
     EXPECT_EQ(FakeDetHw_LastErrorId, COM_E_UNINIT);
 }
 
-// ------------------------------------------------------------
-// Com_IsRxTimedOut()（本プロジェクト独自 API。Uninit チェックは無く、
-// 範囲チェックのみ Com.c 参照）
-// ------------------------------------------------------------
-
-TEST_F(Bsw_Com_Test, Com_IsRxTimedOut_NG_IPduIdOutOfRange)
-{
-    /* ----------------------- */
-    /* ---- 準備 (Arrange) --- */
-    /* ----------------------- */
-    // なし（SetUp() で初期化済み）
-
-    /* ----------------------- */
-    /* ---- 実行 (Act) ------- */
-    /* ----------------------- */
-    uint8 ret = Com_IsRxTimedOut(kOutOfRangeIPduId);
-
-    /* ----------------------- */
-    /* ---- 評価 (Assert) ---- */
-    /* ----------------------- */
-    EXPECT_EQ(ret, 1U);  // フェールセーフでタイムアウト扱い（Com.c 参照）
-    EXPECT_EQ(FakeDetHw_LastErrorId, COM_E_PARAM);
-}
-
 }  // namespace

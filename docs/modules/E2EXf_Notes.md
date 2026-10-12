@@ -142,7 +142,7 @@ E2E エラー（REPEATED/WRONGSEQUENCE/ERROR）時はミラーを更新しない
 （Com が E2E を関知しないため）フレーム到達だけでリセットされ続けます。したがって
 E2E 違反が続く間の古い値保持は「E2E フェイルセーフ」（Rte ミラー非更新）が担い、
 物理的にフレームそのものが途絶えた場合は別軸の「Com 受信デッドライン監視」
-（`Com_IsRxTimedOut()` → `E_NOT_OK`）がフェイルセーフを担う、という 2 段構えです。
+（`Rte_COMCbkRxTOut_*()` が立てる RxTimedOut → `RTE_E_COM_STOPPED`）がフェイルセーフを担う、という 2 段構えです。
 
 > なぜフレーム受信の都度チェックするのか: E2E Counter によるシーケンス追跡は、
 > 物理フレームが届くたびに 1 回検証しないと delta 計算の基準がずれる。ASW の Runnable が
@@ -155,7 +155,7 @@ E2E 違反が続く間の古い値保持は「E2E フェイルセーフ」（Rte
 上記の通り、E2E 違反時は Rte ミラーを更新しないことで「直前の正常値を使い続ける」
 というフェイルセーフを実現していますが、これだけでは **SWC（ASW）自身は E2E 違反が
 起きたことを一切知る手段がありません**。`Rte_Read_SpeedSensor_EngineSpeed()` 等の
-戻り値は、以前は `Com_IsRxTimedOut()` によるタイムアウト判定のみを反映する
+戻り値は、以前は Com の受信デッドライン超過の通知によるタイムアウト判定のみを反映する
 `Std_ReturnType`（E_OK/E_NOT_OK の二値）でした。
 
 実際の AUTOSAR では、データ変換（Transformer チェーン）を持つポートの
@@ -184,22 +184,22 @@ Rte_Read_SpeedSensor_EngineSpeed() 等（Rte.c）:
        「E2E フェイルセーフ = 前回の正常値を使い続ける」という既存の設計方針
        （本ファイル冒頭）を優先し、あえてこの点だけ逸脱している
   戻り値の合成（[SWS_Rte_08594] の優先順位をそのまま適用しない。下記注記参照）:
-    Com_IsRxTimedOut(0) ? → RTE_E_COM_STOPPED
+    RxTimedOut      ? → RTE_E_COM_STOPPED
     それ以外              → Rte_EngineInfoStatus（OK / SOFT / HARD のいずれか）
 ```
 
 > **なぜ `[SWS_Rte_08594]` の優先順位（HARD > COM_STOPPED）をそのまま
 > 適用しないか**: `Rte_EngineInfoStatus` は「最後にフレームを受信した瞬間」の
-> E2E チェック結果を保持するラッチであり、`Com_IsRxTimedOut()` は Com が
+> E2E チェック結果を保持するラッチであり、RxTimedOut（`Rte_COMCbkRxTOut_*()` で立つ）は Com が
 > 周期的に評価する「今まさに生きているか」という独立した軸です。実 AUTOSAR
 > の優先順位規定は「同一呼び出しで複数要因が同時に新規発生した」場面を
 > 想定していますが、本実装のようにラッチを先に見てしまうと、E2E ハード
 > エラーを起こしたフレームを最後に通信が本当に途絶えた場合（配線断は
 > E2E 異常と通信途絶を同時に招きやすい）、ラッチされた
-> `RTE_E_HARD_TRANSFORMER_ERROR` が `Com_IsRxTimedOut()` の変化後も
+> `RTE_E_HARD_TRANSFORMER_ERROR` が RxTimedOut の変化後も
 > 永久に優先され続け、`DemConf_DemEventParameter_COMM_TIMEOUT` の FAULT 遷移が二度と
 > 起きなくなってしまいます（コードレビューで発見・修正済み）。そのため
-> 常に「現在も継続する物理層の状態」である `Com_IsRxTimedOut()` を先に
+> 常に「現在も継続する物理層の状態」である RxTimedOut を先に
 > 判定します。
 
 **呼び出し元（SWC）はこの情報を無視してもよい**: 例えば `App_WarningIndicator_Run()`

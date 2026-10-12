@@ -163,27 +163,6 @@ uint8 Com_ReceiveSignalGroup(Com_SignalGroupIdType SignalGroupId);
  */
 uint8 Com_ReceiveSignalGroupArray(Com_SignalGroupIdType SignalGroupId, uint8* DataPtr);
 
-/**
- * \brief   RX I-PDU が現在タイムアウト中かどうかを返す軽量アクセサ。
- *
- * \details Rte 層が Com_ReceiveSignal() を介さずに E_NOT_OK 判定のゲートとして
- *          直接参照する用途を想定している（E2E Transformer 方式で Rte が
- *          ミラーから値を読む際に使用）。
- *
- * \param[in]  IPduId  確認する RX I-PDU の ID。
- *
- * \retval  1  タイムアウト中（IPduId が範囲外の場合も安全側でこちらを返す）。
- * \retval  0  タイムアウトしていない。
- *
- * \note    本プロジェクト独自 API（実 AUTOSAR に対応関数なし）のため、
- *          ServiceID は本プロジェクト独自 API 共通の非標準値 0xF0 を踏襲する
- *          （Com_Cfg.h 参照）。
- * \ServiceID      {0xF0}
- * \Reentrancy     {Reentrant}
- * \Synchronicity  {Synchronous}
- */
-uint8 Com_IsRxTimedOut(Com_IPduIdType IPduId);
-
 /* SWS_Com_00197 */
 uint8 Com_SendSignal(Com_SignalIdType SignalId, const void* SignalDataPtr);
 /* SWS_Com_00200: Signal Group メンバーをシャドウバッファへまとめて確定コミットする。
@@ -509,6 +488,11 @@ const uint8* Com_Test_GetTxBuffer(Com_IPduIdType ipduId);
  *  立っている（[「Rx 処理」の「デッドライン監視」](../../../docs/can_stack.md#rx-processing-timeout)
  *  参照）。範囲外の `SignalId` は 0 を返す。 */
 uint8 Com_Test_GetSigTimedOut(Com_SignalIdType SignalId);
+
+/** [テスト専用] RX I-PDU の Com_RxTimedOut（I-PDU 単位のデッドライン監視の
+ *  タイムアウト中フラグ）を取得する。受信（`Com_RxIndication()`）でクリアされる。
+ *  範囲外の `ipduId` は 0 を返す。 */
+uint8 Com_Test_GetRxTimedOut(Com_IPduIdType ipduId);
 
 /** [テスト専用] TX I-PDU の「送信済み・未確認」フラグ（Com_TxConfPending
  *  [ipduId]）を直接セットする。Com_IpduGroupStop() の TxErrCbk（グループ単位
