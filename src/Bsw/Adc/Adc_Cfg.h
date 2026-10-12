@@ -30,23 +30,30 @@
  * （Release 4.3.1、docs/ 配下）の「List of Basic Software Modules」表で
  * ADC Driver (Adc) に割り当てられた固定値 123 を使う。
  *
- * Adc_Init は [SWS_Adc_00365] のシグネチャ（ConfigPtr 引数）に準拠させて
- * いるが、本実装の Adc_ReadChannel() は実際の SWS_Adc（Adc_ReadGroup 等の
- * グループ・バッファベース API 群）には存在しない、本プロジェクト独自の
- * 単一チャネル即時読み取り関数のため、個々の SWS 関数の ApiId とは対応
- * しない。NULL ポインタチェックのエラーコードのみ、Adc_SetupResultBuffer
- * 等の「バッファポインタ NULL」に対応する値 (0x14) を流用する。
+ * 本実装は、AUTOSAR の ADC のグループ・バッファ方式の API
+ * （Adc_SetupResultBuffer / Adc_StartGroupConversion / Adc_ReadGroup /
+ * Adc_GetGroupStatus）で、1 グループ・1 チャネルのソフトウェアトリガの
+ * ワンショット変換だけを扱う（以前は、実仕様に存在しない独自 API の
+ * Adc_ReadChannel() で即時に読み取っていた。2026-10 に置き換え）。
  * ----------------------------------------------------------------------- */
 /** AUTOSAR ADC Driver の ModuleId（AUTOSAR_TR_BSWModuleList 参照、固定値 123） */
 #define ADC_MODULE_ID  123U
 
-/** 開発エラーコード（SWS_Adc Table 3 より） */
+/** エラーコード（SWS_Adc Table 3 より）。UNINIT/PARAM_GROUP/PARAM_POINTER は開発エラー、BUSY/IDLE/BUFFER_UNINIT は実行時エラー。 */
+#define ADC_E_UNINIT         0x0AU
+#define ADC_E_BUSY           0x0BU
+#define ADC_E_IDLE           0x0CU
 #define ADC_E_PARAM_POINTER  0x14U
+#define ADC_E_PARAM_GROUP    0x15U
+#define ADC_E_BUFFER_UNINIT  0x19U
 
 /** ApiId（既存の Doxygen \ServiceID タグと一致させる） */
 /* cppcheck-suppress misra-c2012-2.5 */
 #define ADC_API_ID_INIT  0x00U          /**< [SWS_Adc_00365] Adc_Init と同じ ServiceID */
-#define ADC_API_ID_READ_CHANNEL  0xD0U
+#define ADC_API_ID_SETUP_RESULT_BUFFER  0x0CU
+#define ADC_API_ID_START_GROUP_CONVERSION  0x02U
+#define ADC_API_ID_READ_GROUP  0x04U
+#define ADC_API_ID_GET_GROUP_STATUS  0x09U
 #define ADC_API_ID_GET_VERSION_INFO  0x0AU
 
 /** バージョン情報（SWS_Adc、Com/E2EXf/PduR 等の既存モジュールと同じ命名規則） */
@@ -60,6 +67,13 @@
  * 可変抵抗（ポテンショメータ）等を接続して電圧値を読み取る。
  */
 #define ADC_CHANNEL_SENSOR    0U    /**< A0: アナログセンサ入力チャネル     */
+
+/**
+ * ADC チャネルグループ（AdcGroup）。1 グループ = 1 チャネル、ソフトウェアトリガ、
+ * ワンショット変換、単一アクセス。
+ */
+#define ADC_GROUP_SENSOR   0U   /**< センサ入力グループ（ADC_CHANNEL_SENSOR を変換）*/
+#define ADC_GROUP_COUNT    1U   /**< グループ数 */
 
 /**
  * Arduino UNO の ADC 分解能は 10-bit（0〜1023）。

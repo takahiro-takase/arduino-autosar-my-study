@@ -495,7 +495,7 @@ SW-C (App_EngineManager / App_WarningIndicator)
   │ Rte_Call_LedRunning_SetLevel / Rte_Call_Button_GetLevel / Rte_Call_Adc_GetValue_mV 等
   ↓
 IoHwAb（論理 API：LED / ボタン / ADC）
-  │ Dio_WriteChannel / Dio_ReadChannel          │ Adc_ReadChannel
+  │ Dio_WriteChannel / Dio_ReadChannel          │ Adc_StartGroupConversion / Adc_ReadGroup
   ↓                                              ↓
 Dio（値の読み書き）                             Adc（生値読み取り）
   │ Dio_Hw_WriteChannel / Dio_Hw_ReadChannel      │ Adc_Hw_ReadChannel

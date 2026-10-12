@@ -40,6 +40,21 @@
  */
 typedef struct Adc_ConfigType_Tag Adc_ConfigType;
 
+/** [SWS_Adc_00356] ADC チャネルグループの ID（Adc_Cfg.h の ADC_GROUP_*）。 */
+typedef uint8 Adc_GroupType;
+
+/** [SWS_Adc_00359] 変換結果の型（10-bit の ADC 生値を 16 ビットで保持する）。 */
+typedef uint16 Adc_ValueGroupType;
+
+/** [SWS_Adc_00360] グループの変換の状態。 */
+typedef enum
+{
+    ADC_IDLE = 0,            /**< 変換を始めていない、または結果を読み出し済み */
+    ADC_BUSY,                /**< 変換中 */
+    ADC_COMPLETED,           /**< 一部の変換が完了（本プロジェクトは使わない） */
+    ADC_STREAM_COMPLETED     /**< 変換が完了し、結果を読み出せる */
+} Adc_StatusType;
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -55,10 +70,13 @@ extern "C" {
 /**
  * \brief   ADC ドライバを初期化する。
  *
- * \details 本実装はハードウェア初期化状態を持たない（Adc_Hw_ReadChannel は
- *          Arduino analogRead() を都度呼ぶだけで、事前初期化を必要としない）
- *          ため、実処理は行わない。シグネチャを [SWS_Adc_00365] に合わせる
- *          ことが目的。
+ * \details ハードウェアの初期化は不要（Adc_Hw_ReadChannel は Arduino analogRead() を
+ *          都度呼ぶだけ）だが、ドライバの初期化済みフラグを立て、全グループを ADC_IDLE・
+ *          結果バッファ未登録の状態にする。これ以外の API（Adc_SetupResultBuffer /
+ *          Adc_StartGroupConversion / Adc_ReadGroup / Adc_GetGroupStatus）は、本関数の
+ *          呼び出し前は ADC_E_UNINIT を報告する。本関数は再度呼ぶと、結果バッファの
+ *          登録も消える（二重初期化の ADC_E_ALREADY_INITIALIZED は検出しない）。
+ *          シグネチャは [SWS_Adc_00365] に合わせている。
  *
  * \param[in]  ConfigPtr  常に NULL を渡すこと（本プロジェクトは post-build 設定を
  *                        持たないため）。
@@ -71,29 +89,101 @@ extern "C" {
 void Adc_Init(const Adc_ConfigType* ConfigPtr);
 
 /**
- * \brief   指定チャネルのアナログ生値を読み取る。
+ * \brief   グループの結果バッファを登録する（変換を始める前に必要）。
  *
- * \details Adc_Hw_ReadChannel() へ委譲し、10-bit の ADC 生値を返す。
- *          IoHwAb_MainFunction() から 10ms 周期で呼び出される。
+ * \details [SWS_Adc_00420]/[SWS_Adc_00421]: 登録後でなければ、そのグループの変換は始められない
+ *          （Adc_StartGroupConversion() が ADC_E_BUFFER_UNINIT を報告する）。
+ *          グループが ADC_IDLE でないときは、実行時エラー ADC_E_BUSY を報告して何もしない
+ *          （[SWS_Adc_00433]）。
  *
- * \param[in]  channel  アナログ入力チャネル番号（ADC_CHANNEL_* 定数）。
- * \param[out] raw      ADC 生値（0〜1023）の格納先。NULL 禁止。
+ * \note    本プロジェクトは 1 グループ・1 チャネル・ストリーミングなしのため、変換結果は Adc.c 内部の
+ *          領域に保持し、Adc_ReadGroup() が呼び出し元の DataBufferPtr へコピーして返す。
+ *          ここで登録したポインタは、登録済みかどうかの確認だけに使う（引数が const のため、
+ *          仕様どおりドライバから書き込まない）。
  *
- * \retval  E_OK      正常読み取り。
- * \retval  E_NOT_OK  raw が NULL。
+ * \param[in]  Group          対象の ADC チャネルグループ（ADC_GROUP_*）。
+ * \param[in]  DataBufferPtr  結果バッファの先頭アドレス。NULL 禁止（[SWS_Adc_00457]）。
  *
- * \ServiceID      {0xD0}
+ * \retval  E_OK      登録した。
+ * \retval  E_NOT_OK  未初期化・グループが範囲外・ポインタが NULL・グループが ADC_IDLE でない。
+ *
+ * \AUTOSARReq     {SWS_Adc_00419, SWS_Adc_00420, SWS_Adc_00421, SWS_Adc_00423, SWS_Adc_00433, SWS_Adc_00457}
+ * \ServiceID      {0x0c}
  * \Reentrancy     {Reentrant}
  * \Synchronicity  {Synchronous}
  */
-Std_ReturnType Adc_ReadChannel(uint8 channel, uint16* raw);
+Std_ReturnType Adc_SetupResultBuffer(Adc_GroupType Group, const Adc_ValueGroupType* DataBufferPtr);
+
+/**
+ * \brief   グループの変換を開始する。
+ *
+ * \details [SWS_Adc_00061]: 要求されたグループの全チャネルの変換を開始する。本プロジェクトのグループは、
+ *          ソフトウェアトリガ・ワンショット・単一アクセスで、Adc_Hw_ReadChannel()（Arduino の
+ *          analogRead()）の呼び出しが同期的に完了するため、戻ったときには状態が
+ *          ADC_STREAM_COMPLETED になっている。
+ *          エラー時は、何もせず戻る（結果は返さない）。
+ *          ・未初期化: ADC_E_UNINIT（[SWS_Adc_00295]）
+ *          ・グループが範囲外: ADC_E_PARAM_GROUP（[SWS_Adc_00125]）
+ *          ・結果バッファが未登録: ADC_E_BUFFER_UNINIT（[SWS_Adc_00424]）
+ *          ・グループが ADC_IDLE でない: 実行時エラー ADC_E_BUSY（[SWS_Adc_00346]）
+ *
+ * \param[in]  Group  変換を開始するグループ（ADC_GROUP_*）。
+ *
+ * \AUTOSARReq     {SWS_Adc_00367, SWS_Adc_00061, SWS_Adc_00125, SWS_Adc_00295, SWS_Adc_00346, SWS_Adc_00424}
+ * \ServiceID      {0x02}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Asynchronous}
+ */
+void Adc_StartGroupConversion(Adc_GroupType Group);
+
+/**
+ * \brief   グループの直近の変換結果を読み出す。
+ *
+ * \details [SWS_Adc_00075]: 直近に完了した変換の結果を、DataBufferPtr へ書き込む。
+ *          グループが ADC_STREAM_COMPLETED のとき、読み出しで ADC_IDLE へ戻る
+ *          （ソフトウェアトリガのワンショットで、変換が自動的に止まるグループ、[SWS_Adc_00330]）。
+ *          グループが ADC_IDLE（変換を始めていない、または読み出し済み）のときは、
+ *          実行時エラー ADC_E_IDLE（[SWS_Adc_00388]）を報告して E_NOT_OK を返す。
+ *          未初期化は ADC_E_UNINIT、グループが範囲外は ADC_E_PARAM_GROUP（[SWS_Adc_00152]）、
+ *          ポインタが NULL は ADC_E_PARAM_POINTER を報告する。
+ *
+ * \param[in]  Group          読み出すグループ（ADC_GROUP_*）。
+ * \param[out] DataBufferPtr  変換結果（ADC 生値 0〜1023）の格納先。NULL 禁止。
+ *
+ * \retval  E_OK      結果を書き込んだ。
+ * \retval  E_NOT_OK  結果がない、またはエラー。
+ *
+ * \AUTOSARReq     {SWS_Adc_00369, SWS_Adc_00075, SWS_Adc_00152, SWS_Adc_00296, SWS_Adc_00330, SWS_Adc_00388}
+ * \ServiceID      {0x04}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType Adc_ReadGroup(Adc_GroupType Group, Adc_ValueGroupType* DataBufferPtr);
+
+/**
+ * \brief   グループの変換の状態を返す。
+ *
+ * \details [SWS_Adc_00220]/[SWS_Adc_00221]: 変換を始める前、または結果を読み出した後は ADC_IDLE、
+ *          変換が完了して結果を読み出す前は ADC_STREAM_COMPLETED を返す。
+ *          未初期化（ADC_E_UNINIT）またはグループが範囲外（ADC_E_PARAM_GROUP）のときは、
+ *          エラーを報告して ADC_IDLE を返す。
+ *
+ * \param[in]  Group  状態を知りたいグループ（ADC_GROUP_*）。
+ *
+ * \return  グループの変換の状態（Adc_StatusType）。
+ *
+ * \AUTOSARReq     {SWS_Adc_00374, SWS_Adc_00220, SWS_Adc_00221}
+ * \ServiceID      {0x09}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Adc_StatusType Adc_GetGroupStatus(Adc_GroupType Group);
 
 /**
  * \brief   ADC ドライバのバージョン情報を取得する。
  *
- * \details 本プロジェクトの Adc_Init はハードウェア初期化状態を持たない
- *          単一チャネル即時読み取り実装（Adc_Cfg.h 冒頭コメント参照）のため、
- *          初期化状態チェックは行わず、NULL ポインタチェックのみ行う。
+ * \details 初期化状態チェックは行わず（Adc_Init() の前でも呼べる）、NULL ポインタ
+ *          チェックのみ行う。
  *
  * \param[out]  versioninfo  バージョン情報の格納先。NULL 禁止。
  *

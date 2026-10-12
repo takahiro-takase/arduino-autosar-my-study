@@ -110,6 +110,8 @@ static uint16 s_adcMv           = 0U;  /* ADC 変換済み電圧値 [mV] */
  */
 void IoHwAb_Init(const IoHwAb_ConfigType* ConfigPtr)
 {
+    static Adc_ValueGroupType adcResultBuffer = 0U;  /* ADC グループの結果バッファ（Adc_SetupResultBuffer() へ登録） */
+
     (void)ConfigPtr; /* 本プロジェクトは post-build 設定を持たない（IoHwAb.h 参照） */
     Dio_WriteChannel(DIO_CHANNEL_LED_RUNNING, DIO_LOW);  /* 消灯状態で起動 */
     Dio_WriteChannel(DIO_CHANNEL_LED_FAULT,   DIO_LOW);  /* 消灯状態で起動 */
@@ -118,6 +120,10 @@ void IoHwAb_Init(const IoHwAb_ConfigType* ConfigPtr)
     s_debounceCounter = 0U;
     s_stuckCounter    = 0U;
     s_adcMv           = 0U;
+    if (Adc_SetupResultBuffer(ADC_GROUP_SENSOR, &adcResultBuffer) != E_OK)  /* Adc_Init() の後であること（EcuM_Init() の呼び出し順） */
+    {
+        DET_LOGE(TAG, "Init E: Adc_SetupResultBuffer failed (ADC conversion unavailable)");
+    }
     DET_LOGI(TAG, "Init");
 }
 
@@ -253,17 +259,22 @@ void IoHwAb_MainFunction(void)
 
     /* ADC サンプリング: 生値を mV へ変換し、電圧低下を DEM 報告 */
     {
-        uint16 raw = 0U;
-        (void)Adc_ReadChannel(ADC_CHANNEL_SENSOR, &raw);
-        s_adcMv = (uint16)((uint32)raw * ADC_REF_VOLTAGE_MV / ADC_RESOLUTION_MAX);
-        if (s_adcMv < IOHWAB_ADC_LOW_VOLT_THRESHOLD_MV)
+        Adc_ValueGroupType raw = 0U;
+        Adc_StartGroupConversion(ADC_GROUP_SENSOR);
+        if (Adc_ReadGroup(ADC_GROUP_SENSOR, &raw) == E_OK)
         {
-            (void)Dem_SetEventStatus(DemConf_DemEventParameter_ADC_VOLT_LOW, DEM_EVENT_STATUS_FAILED);
+            s_adcMv = (uint16)((uint32)raw * ADC_REF_VOLTAGE_MV / ADC_RESOLUTION_MAX);
+            if (s_adcMv < IOHWAB_ADC_LOW_VOLT_THRESHOLD_MV)
+            {
+                (void)Dem_SetEventStatus(DemConf_DemEventParameter_ADC_VOLT_LOW, DEM_EVENT_STATUS_FAILED);
+            }
+            else
+            {
+                (void)Dem_SetEventStatus(DemConf_DemEventParameter_ADC_VOLT_LOW, DEM_EVENT_STATUS_PASSED);
+            }
         }
-        else
-        {
-            (void)Dem_SetEventStatus(DemConf_DemEventParameter_ADC_VOLT_LOW, DEM_EVENT_STATUS_PASSED);
-        }
+        /* else: 変換できなかった（結果なし）。0 V の測定値と誤認して電圧低下を報告しないよう、
+         * 前回値のまま、Dem へは報告しない（原因は Adc 側が DET へ報告済み）。 */
     }
 }
 
@@ -304,7 +315,7 @@ Std_ReturnType IoHwAb_Button_GetLevel(uint8* level)
  * \brief   ADC センサ電圧値を取得する。
  *
  * \details IoHwAb_MainFunction が計算した最新の s_adcMv を返す。
- *          Adc_ReadChannel は呼び出さず、静的変数を参照するだけ。
+ *          Adc_ReadGroup は呼び出さず、静的変数を参照するだけ。
  *
  * \param[out] mv  変換済み電圧値 [mV]。
  *
