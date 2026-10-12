@@ -5,47 +5,8 @@
  *          AUTOSAR 環境ではコンフィギュレーションツールが自動生成するファイル
  *          に相当する。
  *
- *          タスク一覧:
- *            Task 0: Can_MainFunction_Read         1 ms  — RX 割り込みペンディングのドレイン
- *            Task 1: CanTp_MainFunction            1 ms  — タイムアウト監視・CF 送信
- *            Task 2: Rte_ScheduleRunnables      3000 ms  — エンジン Runnable 起動
- *            Task 3: Rte_ScheduleWarningIndicator 500 ms — 警告灯 Runnable 起動
- *            Task 4: CanSM_MainFunction            10 ms  — Bus-Off 回復タイマ監視
- *            Task 5: Com_MainFunctionRx           100 ms  — RX 受信デッドライン監視
- *            Task 6: Com_MainFunctionTx           100 ms  — TX送信スケジューリング・送信確認監視
- *                                                             （2026-08、単体の Com_MainFunction は
- *                                                              実仕様に存在しないため Rx/Tx へ分割。
- *                                                              Task 5 の直後へ挿入したのは、Task 17
- *                                                              SecOC_MainFunctionTx が同一パス内で
- *                                                              Com のディスパッチ結果を同じティックで
- *                                                              拾えるようにするため——末尾に追加すると
- *                                                              1 ティック分の遅延が生じてしまう。
- *                                                              Task 7 以降は全て 1 つずつ後ろへ
- *                                                              ずれている）
- *            Task 7: IoHwAb_MainFunction           10 ms  — ボタンデバウンスサンプリング
- *            Task 8: WdgM_MainFunction           6000 ms  — Alive/Logical/Deadline 判定
- *            Task 9: Dcm_MainFunction            1000 ms  — S3 セッションタイムアウト監視
- *            Task 10: FiM_MainFunction             100 ms  — 機能抑止状態の再評価
- *            Task 11: WdgM_TriggerHwWatchdog      1000 ms  — HW ウォッチドッグ trigger（リフレッシュ）
- *            Task 12: CanNm_MainFunction             1000 ms  — NM フレーム送信（ComM FULL_COM 中のみ）
- *            Task 13: NvM_MainFunction             10 ms  — 保留中 EEPROM 書き込みジョブを1バイトずつ処理
- *            Task 14: Can_MainFunction_Write        1 ms  — 保留中 TX 確認 (CanIf_TxConfirmation) をドレイン
- *            Task 15: Can_MainFunction_BusOff       1 ms  — Bus-Off (EFLG.TXBO) ポーリング
- *            Task 16: Can_MainFunction_Wakeup       1 ms  — SLEEP 中のウェイクアップペンディングのドレイン
- *            Task 17: SecOC_MainFunctionTx           100 ms  — TX Secured I-PDU の Freshness/MAC 計算・送信
- *            Task 18: MemIf_MainFunction            10 ms  — 保留中 EEPROM 書き込みジョブを1バイトずつ処理 (Fee)
- *            Task 19: App_GptDemo_Run             2000 ms  — Gpt 実 HW タイマ通知カウンタのログ出力（動作確認用）
- *            Task 20: ComM_MainFunction            100 ms  — 現状 NOP（ComMNmVariant=FULL では
- *                                                             [SWS_ComM_00888] によりヒステリシス
- *                                                             タイマ不要。ComM.c 参照）
- *            Task 21: SecOC_MainFunctionRx          100 ms  — 現状 NOP（SecOC_RxIndication() が
- *                                                             受信の都度 Csm_MacVerify() を同期実行
- *                                                             するため保留中の RX ジョブが存在しない。
- *                                                             SecOC.c 参照。ComM_MainFunction と同じく、
- *                                                             「宣言されたが一度もスケジューラに登録
- *                                                             されない」ギャップを避けるため配線のみ
- *                                                             行う）
- *            Task 22: App_TestMsg_Run             1000 ms  — テスト用メッセージ TestMsg のカウンタ更新（信号追加の練習用）
+ *          タスク一覧（関数・周期・説明）は、下のタスク表を参照する。タスク表は config/data/Os.json から
+ *          生成する（並び順がそのままタスク ID と実行順序）。
  *
  *          CAN 受信が真のハードウェア割り込み (Can_Isr(), INT ピン立ち下がりで
  *          attachInterrupt 起動) になったことに伴い、旧 Task 0 (Can_Isr の
@@ -160,32 +121,41 @@
  * インデックスがそのままタスク ID に対応する。
  * 実行順序はインデックス昇順 (優先度なし)。
  * ----------------------------------------------------------------------- */
+/* @@GEN-BEGIN os-tasks  生成元: config/data/Os.json  （自動生成: 手編集禁止） */
 static const Os_TaskType Os_TaskTable[OS_TASK_COUNT] =
 {
-    /* Task 0 */ { Can_MainFunction_Read,        1U    },  /* 1 ms    : RX 割り込みペンディングのドレイン */
-    /* Task 1 */ { CanTp_MainFunction,           1U    },  /* 1 ms    : CanTp タイムアウト監視    */
-    /* Task 2 */ { Rte_ScheduleRunnables,        3000U },  /* 3000 ms : エンジン Runnable         */
-    /* Task 3 */ { Rte_ScheduleWarningIndicator, 500U  },  /* 500 ms  : 警告灯 Runnable           */
-    /* Task 4 */ { CanSM_MainFunction,           10U   },  /* 10 ms   : BusOff 回復タイマ監視     */
-    /* Task 5 */ { Com_MainFunctionRx,           100U  },  /* 100 ms  : COM 受信デッドライン監視  */
-    /* Task 6 */ { Com_MainFunctionTx,           100U  },  /* 100 ms  : TX送信スケジューリング・送信確認監視 */
-    /* Task 7 */ { IoHwAb_MainFunction,          10U   },  /* 10 ms   : ボタンデバウンスサンプリング */
-    /* Task 8 */ { WdgM_MainFunction,            6000U },  /* 6000 ms : Alive/Logical/Deadline 判定 */
-    /* Task 9 */ { Dcm_MainFunction,             1000U },  /* 1000 ms : S3 セッションタイムアウト監視 */
-    /* Task 10 */ { FiM_MainFunction,             100U  },  /* 100 ms  : 機能抑止状態の再評価      */
-    /* Task 11 */ { WdgM_TriggerHwWatchdog,      1000U },  /* 1000 ms : HW ウォッチドッグ trigger */
-    /* Task 12 */ { CanNm_MainFunction,             1000U },  /* 1000 ms : NM フレーム送信           */
-    /* Task 13 */ { NvM_MainFunction,              10U  },  /* 10 ms   : 保留中 EEPROM ジョブ処理  */
-    /* Task 14 */ { Can_MainFunction_Write,          1U  },  /* 1 ms    : 保留中 TX 確認をドレイン  */
-    /* Task 15 */ { Can_MainFunction_BusOff,         1U  },  /* 1 ms    : Bus-Off ポーリング        */
-    /* Task 16 */ { Can_MainFunction_Wakeup,         1U  },  /* 1 ms    : ウェイクアップペンディングのドレイン */
-    /* Task 17 */ { SecOC_MainFunctionTx,            100U  },  /* 100 ms  : TX Secured I-PDU の Freshness/MAC 計算・送信 */
-    /* Task 18 */ { MemIf_MainFunction,             10U  },  /* 10 ms   : 保留中 EEPROM ジョブ処理 (Fee 物理バイト書き込み) */
-    /* Task 19 */ { App_GptDemo_Run,              2000U  },  /* 2000 ms : Gpt 実 HW タイマ通知カウンタのログ出力 (動作確認用) */
-    /* Task 20 */ { ComM_MainFunction,             100U  },  /* 100 ms  : 現状 NOP（SWS_ComM_00888、ComM.c 参照） */
-    /* Task 21 */ { SecOC_MainFunctionRx,          100U  },  /* 100 ms  : 現状 NOP（RX 検証は同期実行済み、SecOC.c 参照） */
-    /* Task 22 */ { App_TestMsg_Run,              1000U  }   /* 1000 ms : テスト用メッセージ TestMsg のカウンタ更新（信号追加の練習用） */
+    /* Task 0  */ { Can_MainFunction_Read,           1U },  /* 1 ms : RX 割り込みペンディングのドレイン */
+    /* Task 1  */ { CanTp_MainFunction,              1U },  /* 1 ms : CanTp タイムアウト監視 */
+    /* Task 2  */ { Rte_ScheduleRunnables,        3000U },  /* 3000 ms : エンジン Runnable */
+    /* Task 3  */ { Rte_ScheduleWarningIndicator,  500U },  /* 500 ms : 警告灯 Runnable */
+    /* Task 4  */ { CanSM_MainFunction,             10U },  /* 10 ms : BusOff 回復タイマ監視 */
+    /* Task 5  */ { Com_MainFunctionRx,            100U },  /* 100 ms : COM 受信デッドライン監視 */
+    /* 2026-08、単体の Com_MainFunction は実仕様に存在しないため Rx/Tx へ分割した。
+     * Com_MainFunctionRx の直後へ挿入したのは、SecOC_MainFunctionTx が同一パス内で Com のディスパッチ結果を
+     * 同じティックで拾えるようにするため（末尾に追加すると 1 ティック分の遅延が生じる）。 */
+    /* Task 6  */ { Com_MainFunctionTx,            100U },  /* 100 ms : TX送信スケジューリング・送信確認監視 */
+    /* Task 7  */ { IoHwAb_MainFunction,            10U },  /* 10 ms : ボタンデバウンスサンプリング */
+    /* Task 8  */ { WdgM_MainFunction,            6000U },  /* 6000 ms : Alive/Logical/Deadline 判定 */
+    /* Task 9  */ { Dcm_MainFunction,             1000U },  /* 1000 ms : S3 セッションタイムアウト監視 */
+    /* Task 10 */ { FiM_MainFunction,              100U },  /* 100 ms : 機能抑止状態の再評価 */
+    /* Task 11 */ { WdgM_TriggerHwWatchdog,       1000U },  /* 1000 ms : HW ウォッチドッグ trigger */
+    /* Task 12 */ { CanNm_MainFunction,           1000U },  /* 1000 ms : NM フレーム送信 */
+    /* Task 13 */ { NvM_MainFunction,               10U },  /* 10 ms : 保留中 EEPROM ジョブ処理 */
+    /* Task 14 */ { Can_MainFunction_Write,          1U },  /* 1 ms : 保留中 TX 確認をドレイン */
+    /* Task 15 */ { Can_MainFunction_BusOff,         1U },  /* 1 ms : Bus-Off ポーリング */
+    /* Task 16 */ { Can_MainFunction_Wakeup,         1U },  /* 1 ms : ウェイクアップペンディングのドレイン */
+    /* Task 17 */ { SecOC_MainFunctionTx,          100U },  /* 100 ms : TX Secured I-PDU の Freshness/MAC 計算・送信 */
+    /* Task 18 */ { MemIf_MainFunction,             10U },  /* 10 ms : 保留中 EEPROM ジョブ処理 (Fee 物理バイト書き込み) */
+    /* Task 19 */ { App_GptDemo_Run,              2000U },  /* 2000 ms : Gpt 実 HW タイマ通知カウンタのログ出力 (動作確認用) */
+    /* 現状 NOP（ComMNmVariant=FULL では [SWS_ComM_00888] によりヒステリシスタイマ不要。ComM.c 参照）。 */
+    /* Task 20 */ { ComM_MainFunction,             100U },  /* 100 ms : 現状 NOP（SWS_ComM_00888、ComM.c 参照） */
+    /* 現状 NOP（SecOC_RxIndication() が受信の都度 Csm_MacVerify() を同期実行するため、保留中の RX ジョブが
+     * 存在しない。SecOC.c 参照）。ComM_MainFunction と同じく、「宣言されたが一度もスケジューラに登録されない」
+     * ギャップを避けるため配線のみ行う。 */
+    /* Task 21 */ { SecOC_MainFunctionRx,          100U },  /* 100 ms : 現状 NOP（RX 検証は同期実行済み、SecOC.c 参照） */
+    /* Task 22 */ { App_TestMsg_Run,              1000U }   /* 1000 ms : テスト用メッセージ TestMsg のカウンタ更新（信号追加の練習用） */
 };
+/* @@GEN-END os-tasks */
 
 /* -----------------------------------------------------------------------
  * ポストビルドコンフィグインスタンス (EcuM が Os_Init に渡す)

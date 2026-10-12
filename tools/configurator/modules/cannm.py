@@ -2,7 +2,7 @@
 
 CanNm.json に書く値: NM の周期・フレーム長・ノード識別子・各タイマ [ms]、NM フレームの CanIf の PDU、各項目の説明。
 NM フレームの CanIf の PDU は CanIf.json の名前で指し、生成物ではシンボリック名（CanIfConf_*_<name>）にする。
-検査: 周期が Os_PBCfg.c の CanNm_MainFunction の周期と一致すること、CanIf の PDU の名前と上位層の種類。
+検査: 周期が Os.json の CanNm_MainFunction の周期と一致すること、CanIf の PDU の名前と上位層の種類。
 """
 
 from . import symbols
@@ -39,9 +39,9 @@ def canif_pdu(cfg, ctx, key, table, prefix, upper):
 def check_cycle(cfg, ctx):
     period = os_periods(ctx).get(MAIN_FUNCTION)
     if period is None:
-        return ["Os_PBCfg.c の Os_TaskTable に %s が無い" % MAIN_FUNCTION]
+        return ["Os.json の tasks に %s が無い" % MAIN_FUNCTION]
     if period != cfg["cycleMs"]["value"]:
-        return ["cycleMs=%d が Os_PBCfg.c の %s の周期 %d ms と一致しない" % (cfg["cycleMs"]["value"], MAIN_FUNCTION, period)]
+        return ["cycleMs=%d が Os.json の %s の周期 %d ms と一致しない" % (cfg["cycleMs"]["value"], MAIN_FUNCTION, period)]
     return []
 
 

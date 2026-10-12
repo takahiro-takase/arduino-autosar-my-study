@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Os configuration",
+  "description": "Os_PBCfg.c のタスク表と Os_Cfg.h のタスク数・タスク ID（シンボリック名 OsConf_OsTask_<function>）の生成元。tasks の並び順がそのままタスク ID で、実行順序（インデックス昇順）になる。周期は WdgM・CanNm・CanSM の生成時の検査が、この json から引く。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "module",
+    "taskCountDoc",
+    "tasks"
+  ],
+  "$defs": {
+    "line": {
+      "type": "string",
+      "not": {
+        "pattern": "\\*/"
+      }
+    }
+  },
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "module": {
+      "const": "Os"
+    },
+    "taskCountDoc": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/line"
+      },
+      "description": "OS_TASK_COUNT のコメントの行"
+    },
+    "tasks": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 32,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "function",
+          "periodMs",
+          "header",
+          "summary"
+        ],
+        "properties": {
+          "function": {
+            "type": "string",
+            "pattern": "^[A-Za-z][A-Za-z0-9_]*$",
+            "description": "タスクとして呼ぶ関数の名前（void func(void)）。シンボリック名の元にもなる"
+          },
+          "periodMs": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 4294967295,
+            "description": "呼び出し周期 [ms]"
+          },
+          "header": {
+            "type": "string",
+            "pattern": "^[A-Za-z][A-Za-z0-9_]*\\.h$",
+            "description": "関数を宣言しているヘッダ（Os_PBCfg.c がインクルードしていること。生成時に検査する）"
+          },
+          "summary": {
+            "$ref": "#/$defs/line",
+            "description": "テーブルの行末に出す、1 行の説明"
+          },
+          "note": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "$ref": "#/$defs/line"
+            },
+            "description": "行の直前に出す、補足のコメントの行（任意）"
+          }
+        }
+      }
+    }
+  }
+}

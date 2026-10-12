@@ -48,6 +48,7 @@ NAV_BLOCKS = (
         NavRow("CanNm.json", "CanNm", "CanNm — ネットワーク管理（NM フレーム・タイマ）"),
     ),
     (
+        NavRow("Os.json", "Os", "Os — タスク表（関数・周期・実行順序）"),
         NavRow("CanSM.json", "CanSM", "CanSM — バス状態管理（Bus-Off 回復時間・ウェイクアップ検証時間）"),
         NavRow("ComM.json", "ComM", "ComM — 通信管理（チャネル数・ユーザ数）"),
         NavRow("Nm.json", "Nm", "Nm — ネットワーク管理インタフェース（チャネルのハンドル）"),
