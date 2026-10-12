@@ -52,6 +52,7 @@ uint32 CallCount_Dem_GetOccurrenceCounterOfEvent      = 0U;
 
 Dem_EventIdType     LastEventId_Dem_SetEventStatus     = 0xFFU;
 Dem_EventStatusType LastEventStatus_Dem_SetEventStatus = 0xFFU;
+Dem_EventStatusType LastStatusOfEvent_Dem_SetEventStatus[DEM_EVENT_COUNT];
 
 uint32 FailFromCallCount_Dem_GetEventUdsStatus             = WRAP_DEM_FAIL_FROM_CALL_COUNT_DISABLED;
 uint32 FailFromCallCount_Dem_GetDTCOfEvent                 = WRAP_DEM_FAIL_FROM_CALL_COUNT_DISABLED;
@@ -111,6 +112,10 @@ void WrapDem_Reset(void)
     
     LastEventId_Dem_SetEventStatus     = 0xFFU;
     LastEventStatus_Dem_SetEventStatus = 0xFFU;
+    for (uint8 e = 0U; e < DEM_EVENT_COUNT; e++)
+    {
+        LastStatusOfEvent_Dem_SetEventStatus[e] = 0xFFU;
+    }
 
     FailFromCallCount_Dem_GetEventUdsStatus            = WRAP_DEM_FAIL_FROM_CALL_COUNT_DISABLED;
     FailFromCallCount_Dem_GetDTCOfEvent                = WRAP_DEM_FAIL_FROM_CALL_COUNT_DISABLED;
@@ -409,6 +414,10 @@ Std_ReturnType __wrap_Dem_SetEventStatus(Dem_EventIdType EventId, Dem_EventStatu
     CallCount_Dem_SetEventStatus++;
     LastEventId_Dem_SetEventStatus     = EventId;
     LastEventStatus_Dem_SetEventStatus = EventStatus;
+    if (EventId < DEM_EVENT_COUNT)
+    {
+        LastStatusOfEvent_Dem_SetEventStatus[EventId] = EventStatus;
+    }
     Log_Write(LOG_T, TAG, "Dem_SetEventStatus", "called %u times", CallCount_Dem_SetEventStatus);
 
     /* 他の関数と異なり故障注入のトグルを持たない（Wrap_Dem.h 冒頭コメント参照）。 */
