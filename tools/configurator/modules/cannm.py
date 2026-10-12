@@ -7,9 +7,23 @@ NM フレームの CanIf の PDU は CanIf.json の名前で指し、生成物�
 
 from . import symbols
 from .common import os_periods
-from .defs import define, join, section
+from .defs import render_layout
 
 MAIN_FUNCTION = "CanNm_MainFunction"
+
+# 並び順どおりに出力する（形式は defs.render_layout を参照）。値を計算で作る項目は render() の overrides で上書きする。
+LAYOUT = (
+    ("section", "frameSection"),
+    ("define", "cycleMs", "CANNM_CYCLE_MS", "%dUL"),
+    ("define", "dlc", "CANNM_DLC", "%dU"),
+    ("define", "sourceNodeId", "CANNM_SOURCE_NODE_ID", "%s"),
+    ("define", "canifTxPdu", "CANNM_CANIF_TX_PDU_ID", "%s"),
+    ("define", "canifRxPdu", "CANNM_CANIF_RX_PDU_ID", "%s"),
+    ("section", "timerSection"),
+    ("define", "timeoutMs", "CANNM_TIMEOUT_MS", "%dUL"),
+    ("define", "repeatMessageMs", "CANNM_REPEAT_MESSAGE_MS", "%dUL"),
+    ("define", "waitBusSleepMs", "CANNM_WAIT_BUS_SLEEP_MS", "%dUL"),
+)
 
 
 def canif_pdu(cfg, ctx, key, table, prefix, upper):
@@ -45,21 +59,11 @@ def render(cfg, ctx):
     errors = check_cycle(cfg, ctx)
     if errors:
         raise ValueError("CanNm.json: " + " / ".join(errors))
-    tx = canif_pdu(cfg, ctx, "canifTxPdu", "txPdus", symbols.CANIF_TX, "txConfirm")
-    rx = canif_pdu(cfg, ctx, "canifRxPdu", "rxPdus", symbols.CANIF_RX, "rxIndication")
-    g = lambda key, name, value: define(name, value, cfg[key]["doc"], cfg[key].get("unused", False))
-    return join([
-        section(cfg["frameSection"]),
-        g("cycleMs", "CANNM_CYCLE_MS", "%dUL" % cfg["cycleMs"]["value"]),
-        g("dlc", "CANNM_DLC", "%dU" % cfg["dlc"]["value"]),
-        g("sourceNodeId", "CANNM_SOURCE_NODE_ID", "0x%02XU" % int(cfg["sourceNodeId"]["value"], 16)),
-        g("canifTxPdu", "CANNM_CANIF_TX_PDU_ID", tx),
-        g("canifRxPdu", "CANNM_CANIF_RX_PDU_ID", rx),
-        section(cfg["timerSection"]),
-        g("timeoutMs", "CANNM_TIMEOUT_MS", "%dUL" % cfg["timeoutMs"]["value"]),
-        g("repeatMessageMs", "CANNM_REPEAT_MESSAGE_MS", "%dUL" % cfg["repeatMessageMs"]["value"]),
-        g("waitBusSleepMs", "CANNM_WAIT_BUS_SLEEP_MS", "%dUL" % cfg["waitBusSleepMs"]["value"]),
-    ])
+    return render_layout(cfg, LAYOUT, {
+        "sourceNodeId": "0x%02XU" % int(cfg["sourceNodeId"]["value"], 16),
+        "canifTxPdu": canif_pdu(cfg, ctx, "canifTxPdu", "txPdus", symbols.CANIF_TX, "txConfirm"),
+        "canifRxPdu": canif_pdu(cfg, ctx, "canifRxPdu", "rxPdus", symbols.CANIF_RX, "rxIndication"),
+    })
 
 
 SPEC = {

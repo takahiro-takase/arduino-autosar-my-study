@@ -96,10 +96,12 @@
 #define NM_SW_MINOR_VERSION   0U
 #define NM_SW_PATCH_VERSION   0U
 
+/* @@GEN-BEGIN nm-params  生成元: config/data/Nm.json  （自動生成: 手編集禁止） */
 /** 本プロジェクトが持つ唯一の NM チャネルのハンドル値。呼び出し元はこの値を
  *  渡すこと。これ以外の値は NM_E_INVALID_CHANNEL として拒否される
  *  （CanNm 側の CANNM_MAIN_NETWORK_HANDLE と同じ値 0 だが、Nm/CanNm は
  *  別モジュールのため別定数として持つ）。 */
 #define NM_MAIN_NETWORK_HANDLE  0U
+/* @@GEN-END nm-params */
 
 #endif /* NM_CFG_H */

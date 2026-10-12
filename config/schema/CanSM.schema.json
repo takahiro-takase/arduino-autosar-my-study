@@ -1,0 +1,131 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CanSM configuration",
+  "description": "CanSM_Cfg.h のチャネル数・Bus-Off 回復時間・ウェイクアップ検証時間の定義の生成元。時間は CanSM_MainFunction() の周期（Os_PBCfg.c）の倍数にする（生成時に検査する）。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "module",
+    "channelCount",
+    "busOffRecoveryL1Ms",
+    "busOffRecoveryL2Ms",
+    "busOffL1ToL2Count",
+    "wakeupValidationMs"
+  ],
+  "$defs": {
+    "doc": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "not": {
+          "pattern": "\\*/"
+        }
+      },
+      "description": "定義の直前に出す Doxygen コメントの行"
+    }
+  },
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "module": {
+      "const": "CanSM"
+    },
+    "channelCount": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "value",
+        "doc"
+      ],
+      "properties": {
+        "value": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 255,
+          "description": "管理ネットワーク（チャネル）数"
+        },
+        "doc": {
+          "$ref": "#/$defs/doc"
+        }
+      }
+    },
+    "busOffRecoveryL1Ms": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "value",
+        "doc"
+      ],
+      "properties": {
+        "value": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4294967295,
+          "description": "Bus-Off 回復待機時間 L1 [ms]"
+        },
+        "doc": {
+          "$ref": "#/$defs/doc"
+        }
+      }
+    },
+    "busOffRecoveryL2Ms": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "value",
+        "doc"
+      ],
+      "properties": {
+        "value": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4294967295,
+          "description": "Bus-Off 回復待機時間 L2 [ms]（L1 より長い）"
+        },
+        "doc": {
+          "$ref": "#/$defs/doc"
+        }
+      }
+    },
+    "busOffL1ToL2Count": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "value",
+        "doc"
+      ],
+      "properties": {
+        "value": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 255,
+          "description": "L1 から L2 へ切り替えるまでの回復試行回数"
+        },
+        "doc": {
+          "$ref": "#/$defs/doc"
+        }
+      }
+    },
+    "wakeupValidationMs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "value",
+        "doc"
+      ],
+      "properties": {
+        "value": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4294967295,
+          "description": "ウェイクアップ検証タイムアウト [ms]"
+        },
+        "doc": {
+          "$ref": "#/$defs/doc"
+        }
+      }
+    }
+  }
+}
