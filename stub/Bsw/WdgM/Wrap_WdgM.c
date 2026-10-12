@@ -35,8 +35,6 @@ uint32 CallCount_WdgM_DeInit                 = 0U;
 uint32 CallCount_WdgM_GetVersionInfo         = 0U;
 uint32 CallCount_WdgM_SetMode                = 0U;
 uint32 CallCount_WdgM_GetMode                = 0U;
-uint32 CallCount_WdgM_EnableHwWatchdog       = 0U;
-uint32 CallCount_WdgM_DisableHwWatchdog      = 0U;
 uint32 CallCount_WdgM_ResumeSupervision      = 0U;
 uint32 CallCount_WdgM_CheckpointReached      = 0U;
 uint32 CallCount_WdgM_GetLocalStatus         = 0U;
@@ -71,8 +69,6 @@ void WrapWdgM_Reset(void)
     CallCount_WdgM_GetVersionInfo      = 0U;
     CallCount_WdgM_SetMode             = 0U;
     CallCount_WdgM_GetMode             = 0U;
-    CallCount_WdgM_EnableHwWatchdog    = 0U;
-    CallCount_WdgM_DisableHwWatchdog   = 0U;
     CallCount_WdgM_ResumeSupervision   = 0U;
     CallCount_WdgM_CheckpointReached   = 0U;
     CallCount_WdgM_GetLocalStatus      = 0U;
@@ -179,34 +175,6 @@ Std_ReturnType __wrap_WdgM_GetMode(WdgM_ModeType* Mode)
     }
 
     return __real_WdgM_GetMode(Mode);
-}
-
-/* ----------------------------------------------------------------------
- * WdgM_EnableHwWatchdog
- * ---------------------------------------------------------------------- */
-
-extern
-void __real_WdgM_EnableHwWatchdog(void);
-void __wrap_WdgM_EnableHwWatchdog(void)
-{
-    CallCount_WdgM_EnableHwWatchdog++;
-    Log_Write(LOG_T, TAG, "WdgM_EnableHwWatchdog", "called %u times", CallCount_WdgM_EnableHwWatchdog);
-
-    __real_WdgM_EnableHwWatchdog();
-}
-
-/* ----------------------------------------------------------------------
- * WdgM_DisableHwWatchdog
- * ---------------------------------------------------------------------- */
-
-extern
-void __real_WdgM_DisableHwWatchdog(void);
-void __wrap_WdgM_DisableHwWatchdog(void)
-{
-    CallCount_WdgM_DisableHwWatchdog++;
-    Log_Write(LOG_T, TAG, "WdgM_DisableHwWatchdog", "called %u times", CallCount_WdgM_DisableHwWatchdog);
-
-    __real_WdgM_DisableHwWatchdog();
 }
 
 /* ----------------------------------------------------------------------

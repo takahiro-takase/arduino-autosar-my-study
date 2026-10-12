@@ -70,7 +70,7 @@
  * （Release 4.3.1、docs/ 配下）の「List of Basic Software Modules」表で
  * Watchdog Manager (WdgM) に割り当てられた固定値 13 を使う。
  *
- * WdgM_EnableHwWatchdog/WdgM_DisableHwWatchdog/WdgM_ResumeSupervision は
+ * WdgM_SetMode(WDGM_MODE_DEFAULT)/WdgM_SetMode(WDGM_MODE_POST_RUN)/WdgM_ResumeSupervision は
  * AUTOSAR 標準の SWS_WdgM には存在しない本プロジェクト独自の拡張関数
  * （実際の HW ウォッチドッグ有効/無効は WdgIf 経由で内部的に行われる）
  * のため、DET 対象外とする。
@@ -105,12 +105,15 @@
 #define WDGM_SW_MINOR_VERSION   0U
 #define WDGM_SW_PATCH_VERSION   0U
 
-/** WdgM モードの設定数。本プロジェクトは単一の静的コンフィグのみ保持し、
- *  複数モード間の切替（監視対象・許容値セットの入れ替え）には対応しない
- *  ため、常にこの 1 モードのみを受理する（[SWS_WdgM_00358] WdgM_ModeType の
- *  Range 0〜<Number of Modes>-1 は本プロジェクトでは 0 のみ）
- *  （学習用簡略化、詳細は docs/modules/WdgM_Notes.md 参照）。 */
-#define WDGM_MODE_DEFAULT     0U
+/** WdgM のモード（[SWS_WdgM_00358] WdgM_ModeType。Range 0〜<Number of Modes>-1）。
+ *  本プロジェクトは単一の静的コンフィグ（監視対象・許容値は共通）のみ保持し、モードごとに違うのは、
+ *  WdgIf へ要求するウォッチドッグのモードと、監視の判定を抑制するかだけである
+ *  （監視対象・許容値セット自体の入れ替えは行わない学習用簡略化。詳細は docs/modules/WdgM_Notes.md 参照）。 */
+#define WDGM_MODE_DEFAULT     0U  /**< 通常（RUN）: 監視の判定を有効にし、WdgIf へ WDGIF_FAST_MODE を要求する */
+#define WDGM_MODE_POST_RUN    1U  /**< POST_RUN: 監視対象タスクが意図的に止まるため、監視の判定を抑制し（FAILED でも
+                                   *   リフレッシュを続ける）、WdgIf へ WDGIF_OFF_MODE を要求する。本プロジェクトの
+                                   *   HW は一度有効化すると無効化できず、この要求は拒否されるが、無視してよい */
+#define WDGM_MODE_COUNT       2U  /**< モードの数 */
 
 /* @@GEN-BEGIN wdgm-entities  生成元: config/data/WdgM.json  （自動生成: 手編集禁止） */
 /** 監視対象エンティティ総数 */
@@ -187,7 +190,7 @@
 /**
  * HW ウォッチドッグのタイムアウト。
  * Wdg_PBCfg.c がこの値を直接引用して Wdg_Config.DefaultTimeoutMs を
- * 組み立て、WdgM_EnableHwWatchdog() → WdgIf_SetMode(WDGIF_FAST_MODE) →
+ * 組み立て、WdgM_SetMode(WDGM_MODE_DEFAULT) → WdgIf_SetMode(WDGIF_FAST_MODE) →
  * Wdg_SetMode() → Wdg_Hw_Enable(timeoutMs) の経路で実 HW へ渡る（以前は
  * WdgM_Hw.cpp が WDT.begin(4000) と直接ハードコードし、この定数と手動で
  * 一致させる必要があった。詳細は Wdg_PBCfg.c 冒頭のコメント参照）。

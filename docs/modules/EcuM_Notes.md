@@ -149,9 +149,9 @@ Bus-Off 回復中に SILENT_COM を何度挟んでも、EcuM への再通知は�
 | 遷移 | EcuM が行うこと |
 |------|----------------|
 | STARTUP → RUN（`EcuM_Init()` 末尾） | `BswM_EcuM_CurrentState(RUN)`（Rule 0: 全タスク有効化） |
-| RUN → POST_RUN（最後の RUN ユーザが解放） | POST_RUN の起算時刻を記録 → `WdgM_DisableHwWatchdog()`（アプリタスクが止まり Alive が必ず不足するため、SHUTDOWN を待たずここで HW ウォッチドッグを無効化扱いにする）→ `BswM_EcuM_CurrentState(POST_RUN)`（Rule 1: アプリタスク無効化） |
+| RUN → POST_RUN（最後の RUN ユーザが解放） | POST_RUN の起算時刻を記録 → `WdgM_SetMode(WDGM_MODE_POST_RUN)`（アプリタスクが止まり Alive が必ず不足するため、SHUTDOWN を待たずここで HW ウォッチドッグを無効化扱いにする）→ `BswM_EcuM_CurrentState(POST_RUN)`（Rule 1: アプリタスク無効化） |
 | POST_RUN → SHUTDOWN | `BswM_EcuM_CurrentState(SHUTDOWN)`（Rule 2: 動かし続けるタスク以外を無効化） |
-| POST_RUN / SHUTDOWN → RUN（`EcuM_RequestRUN`） | `WdgM_ResumeSupervision()`（チェックポイント基準のリセット。止まっていた時間を Deadline 違反と誤認しないため）→ `WdgM_EnableHwWatchdog()` → `BswM_EcuM_CurrentState(RUN)`。POST_RUN 要求も全てクリアする（残すと次回の SHUTDOWN が永久に保留されるため） |
+| POST_RUN / SHUTDOWN → RUN（`EcuM_RequestRUN`） | `WdgM_ResumeSupervision()`（チェックポイント基準のリセット。止まっていた時間を Deadline 違反と誤認しないため）→ `WdgM_SetMode(WDGM_MODE_DEFAULT)` → `BswM_EcuM_CurrentState(RUN)`。POST_RUN 要求も全てクリアする（残すと次回の SHUTDOWN が永久に保留されるため） |
 
 ## POST_RUN 要求（`EcuM_RequestPOST_RUN` / `EcuM_ReleasePOST_RUN`）
 

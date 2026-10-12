@@ -196,6 +196,7 @@ static unsigned long   EcuM_PostRunTimerMs = 0UL;
  * ====================================================================== */
 
 static unsigned long EcuM_GetNowMs(void);
+static void EcuM_SetWdgMMode(WdgM_ModeType mode);
 
 /* ======================================================================
  * Functions
@@ -416,13 +417,13 @@ Std_ReturnType EcuM_RequestRUN(EcuM_UserType user)
         DET_LOGI(TAG, "->RUN user=%u", (unsigned)user);
         /* Rte_Engine / Rte_Warning タスク（WdgM の監視対象、Entity 0/1）が
          * 再開するため、POST_RUN 移行時に無効化した HW ウォッチドッグを
-         * 再度有効化する。その前に WdgM_ResumeSupervision() でチェックポイント
-         * 基準をリセットしておく必要がある。POST_RUN 中の停止時間がそのまま
+         * 再度有効化する（WDGM_MODE_DEFAULT）。その前に WdgM_ResumeSupervision() で
+         * チェックポイント基準をリセットしておく必要がある。POST_RUN 中の停止時間がそのまま
          * 残っていると、再開後最初のチェックポイントで Deadline Supervision が
          * 「停止時間」を実際の処理時間と誤認し、誤って FAILED と判定してしまう
          * （全エンティティ分まとめてリセットされる、WdgM.c 参照）。 */
         WdgM_ResumeSupervision();
-        WdgM_EnableHwWatchdog();
+        EcuM_SetWdgMMode(WDGM_MODE_DEFAULT);
         BswM_EcuM_CurrentState(ECUM_STATE_RUN);  /* Rule 0: 全タスク再有効化 */
         /* この POST_RUN サイクルは RUN 復帰により終了したため、残っている
          * POST_RUN 要求は今後の SHUTDOWN 判定にとって無意味になる。クリア
@@ -441,7 +442,7 @@ Std_ReturnType EcuM_RequestRUN(EcuM_UserType user)
         EcuM_State = ECUM_STATE_RUN;
         DET_LOGI(TAG, "SHUTDOWN ->RUN (wakeup) user=%u", (unsigned)user);
         WdgM_ResumeSupervision();
-        WdgM_EnableHwWatchdog();
+        EcuM_SetWdgMMode(WDGM_MODE_DEFAULT);
         BswM_EcuM_CurrentState(ECUM_STATE_RUN);  /* Rule 0: 全タスク再有効化 */
         EcuM_PostRunUsers = 0U;  /* 前回 POST_RUN サイクルの残留要求をクリア（上記と同じ理由） */
     }
@@ -492,7 +493,7 @@ Std_ReturnType EcuM_ReleaseRUN(EcuM_UserType user)
          * HW ウォッチドッグのタイムアウト（WDGM_HW_WATCHDOG_TIMEOUT_MS=4000ms）
          * より先に意図しないリセットが発生し得る。POST_RUN への移行そのものを
          * 安全な無効化ポイントとする。 */
-        WdgM_DisableHwWatchdog();
+        EcuM_SetWdgMMode(WDGM_MODE_POST_RUN);
         BswM_EcuM_CurrentState(ECUM_STATE_POST_RUN);  /* Rule 1: アプリタスク無効化 */
     }
     return E_OK;
@@ -936,6 +937,24 @@ void EcuM_GetVersionInfo(Std_VersionInfoType* versioninfo)
 /* ----------------------------------------------------------------------
  * EcuM_GetNowMs
  * ---------------------------------------------------------------------- */
+
+/**
+ * \brief   WdgM のモードを切り替える（RUN: WDGM_MODE_DEFAULT、POST_RUN: WDGM_MODE_POST_RUN）。
+ *
+ * \details WdgM_SetMode() が E_NOT_OK を返した場合（WdgM 未初期化、モードが範囲外）は、エラーをログに出す。
+ *          戻り値を黙って捨てると、POST_RUN から RUN への復帰に失敗した時に、監視の抑制が残ったまま
+ *          （FAILED でもリフレッシュを続ける）になり、気づけないため。EcuM はモードの切り替えが失敗しても、
+ *          遷移は続ける（通信・シャットダウンの動作を止めない）。
+ *
+ * \param[in]  mode  設定するモード（WDGM_MODE_DEFAULT / WDGM_MODE_POST_RUN）。
+ */
+static void EcuM_SetWdgMMode(WdgM_ModeType mode)
+{
+    if (WdgM_SetMode(mode) != E_OK)
+    {
+        DET_LOGE(TAG, "WdgM_SetMode(%u) failed", (unsigned)mode);
+    }
+}
 
 /**
  * \brief   現在時刻 [ms] を返す（Os カウンタ SYSTEM_COUNTER の tick 値）。

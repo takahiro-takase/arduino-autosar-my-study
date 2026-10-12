@@ -656,8 +656,6 @@ set(NATIVE_CHAIN_WRAP_SYMBOLS
     WdgM_GetVersionInfo
     WdgM_SetMode
     WdgM_GetMode
-    WdgM_EnableHwWatchdog
-    WdgM_DisableHwWatchdog
     WdgM_ResumeSupervision
     WdgM_CheckpointReached
     WdgM_GetLocalStatus
