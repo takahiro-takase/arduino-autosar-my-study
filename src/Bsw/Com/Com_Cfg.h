@@ -209,7 +209,7 @@
 
 /** MeterStatus (0x200) の MIXED 送信モードにおける周期フロア間隔 [ms]
  *  DaVinci: /ActiveEcuC/Com/ComConfig/[ComIPdu]/ComTxModeFalse/ComTxModeTimePeriodFactor
- *  
+ *
  *  ComFilterAlgorithm によって「変化なし」と判定され続けても、最終送信から
  *  この間隔が経過したら Com_MainFunctionTx() が強制的に再送する（実車の MIXED
  *  送信モードが持つ「周期フロア」。起動直後や瞬断から復帰した受信側が、
@@ -222,7 +222,7 @@
  *  SWS_Com_00878/00879/00880/00304/00554）の閾値 [ms]
  *  DaVinci: /ActiveEcuC/Com/ComConfig/[ComIPdu]/ComTransmissionDeadlineMonitoring/
  *  ComFirstTimeout・ComTimeout
- *  
+ *
  *  PduR_ComTransmit() へ渡してから Com_TxConfirmation() が届くまでの許容時間。
  *  実送信間隔（COM_TX_PERIOD_METERSTATUS_FLOOR_MS=9000ms）より十分短く、
  *  現実的な確認応答遅延より十分長い値とし、First/Timeout 共通で使う
@@ -235,7 +235,7 @@
  *  評価された（FaultLamp/AbsLamp のいずれかが点灯中の）ときに使う
  *  MIXED 送信モードの周期フロア間隔 [ms]
  *  DaVinci: /ActiveEcuC/Com/ComConfig/[ComIPdu]/ComTxModeTrue/ComTxModeTimePeriodFactor
- *  
+ *
  *  TMS が false（全ランプ消灯）の間は DIRECT（周期フロアなし、変化時のみ送信）
  *  だが、FAULT/ABS のいずれかが点灯している間は他 ECU・監視ツールが途中から
  *  参加した場合でも状態を把握できるよう、この間隔で強制的に再送する
@@ -245,7 +245,7 @@
 
 /** WarningStatus (0x210) の MDT（ComMinimumDelayTime、変化時送信の最小送信間隔）[ms]
  *  DaVinci: /ActiveEcuC/Com/ComConfig/[ComIPdu]/ComMinimumDelayTime
- *  
+ *
  *  直近の実送信からこの時間未満しか経過していなければ、値が変化しても実送信を
  *  保留する（破棄はしない。満了次第送信する）。バス輻輳防止のための保護的な
  *  既定値であり、本プロジェクトの ASW（App_WarningIndicator_Run、500ms 周期）
@@ -257,7 +257,7 @@
 /** WarningStatus (0x210) の TX 送信デッドライン監視（Com_CbkTxTOut、
  *  SWS_Com_00878 等）用の First/Timeout 共通値 [ms]
  *  DaVinci: /ActiveEcuC/Com/ComConfig/[ComIPdu]/ComTransmissionDeadlineMonitoring
- *  
+ *
  *  MeterStatus の COM_TX_TIMEOUT_METERSTATUS_MS と同じ流儀（First/Timeout
  *  共通で使う）。WarningStatus は DIRECT モード（TMS=false）中は周期送信を
  *  持たないが、TMS=true 中の MIXED 周期フロア
@@ -269,7 +269,7 @@
 /** ImmobilizerStatus (0x230) の ComTxModeNumberOfRepetitions 再送間隔
  *  （ComTxModeRepetitionPeriod）[ms]
  *  DaVinci: /ActiveEcuC/Com/ComConfig/[ComIPdu]/ComTxModeRepetitionPeriod
- *  
+ *
  *  DIRECT モードの変化時送信をトリガーした後、Com_TxConfirmation() による
  *  確認が N+1 回（ComTxModeNumberOfRepetitions+1）届くまでこの間隔で再送する
  *  （[SWS_Com_00305]）。イモビライザー状態のような安全上重要な通知を、

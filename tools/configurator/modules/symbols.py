@@ -8,6 +8,7 @@
   PduR : PduRConf_PduRSrcPdu_<name>                                         （値: srcPduId）
   Com  : ComConf_ComIPdu_<name>、ComConf_ComSignal_<name>                   （値: 各テーブルの添字）
   SecOC: SecOCConf_SecOCRxSecuredPdu_<name>                                 （値: SecOCRxPduId = テーブルの添字）
+  Os   : OsConf_OsTask_<function>                                           （値: タスク ID = タスク表の添字）
 """
 
 import re
@@ -66,7 +67,7 @@ def pdur_src_for_canif_rx(ctx, pdu):
 
 
 # シンボリック名の接頭辞 → 定義しているヘッダ。C ソースにこの接頭辞の名前があれば、そのヘッダのインクルードが要る。
-SYMBOL_HEADERS = {"CanIfConf_": "CanIf_Cfg.h", "PduRConf_": "PduR_Cfg.h", "ComConf_": "Com_Cfg.h", "SecOCConf_": "SecOC_Cfg.h"}
+SYMBOL_HEADERS = {"CanIfConf_": "CanIf_Cfg.h", "PduRConf_": "PduR_Cfg.h", "ComConf_": "Com_Cfg.h", "SecOCConf_": "SecOC_Cfg.h", "OsConf_": "Os_Cfg.h"}
 
 
 def include_warnings(text):

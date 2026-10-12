@@ -8,7 +8,7 @@ def block_comment(lines, indent=0, star="/*", cont=" * "):
         return [pad + star + " " + lines[0] + " */"]
     out = [pad + star + " " + lines[0]]
     for ln in lines[1:-1]:
-        out.append(pad + cont + ln)
+        out.append((pad + cont + ln).rstrip())  # 空行は行末の空白を残さない
     out.append(pad + cont + lines[-1] + " */")
     return out
 

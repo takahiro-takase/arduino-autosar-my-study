@@ -1,12 +1,21 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "BswM configuration",
-  "description": "BswM_PBCfg.c のルールテーブルと BswM_Cfg.h のルール数の生成元。I-PDU グループは Com の ipduGroups の macro で参照する。",
+  "description": "BswM_PBCfg.c のルールテーブルと BswM_Cfg.h のルール数の生成元。I-PDU グループは Com の ipduGroups の macro で参照する。 osTasks とマスクの定義から、BswM_Cfg.h のタスク ID（BSWM_OS_TASK_*）とビットマスク（BSWM_TASK_MASK_*）も生成する。",
   "type": "object",
   "additionalProperties": false,
   "required": [
     "module",
     "ruleCountDoc",
+    "osTasks",
+    "osTaskIdSection",
+    "excludedOsTasks",
+    "osTaskExcludedNote",
+    "maskSection",
+    "maskAll",
+    "maskApp",
+    "maskBsw",
+    "maskShutdown",
     "rules"
   ],
   "properties": {
@@ -33,6 +42,180 @@
       "items": {
         "$ref": "#/$defs/rule"
       }
+    },
+    "osTaskIdSection": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "not": {
+          "pattern": "\\*/"
+        }
+      },
+      "description": "BSWM_OS_TASK_* の見出しコメントの行"
+    },
+    "osTasks": {
+      "type": "array",
+      "minItems": 1,
+      "description": "BswM が有効化・無効化を制御する Os のタスク。BSWM_OS_TASK_<symbol> を Os のタスク ID（Os.json のタスクの名前から引く）として生成する。BSWM_TASK_MASK_ALL はここに挙げたタスクすべて",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "task",
+          "symbol"
+        ],
+        "properties": {
+          "task": {
+            "type": "string",
+            "description": "Os.json の tasks の function"
+          },
+          "symbol": {
+            "type": "string",
+            "pattern": "^[A-Z][A-Z0-9_]*$",
+            "description": "BSWM_OS_TASK_ の後に付ける名前"
+          },
+          "note": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "string",
+              "not": {
+                "pattern": "\\*/"
+              }
+            },
+            "description": "定義の直前に出す補足のコメントの行（任意）"
+          }
+        }
+      }
+    },
+    "osTaskExcludedNote": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "not": {
+          "pattern": "\\*/"
+        }
+      },
+      "description": "osTasks に挙げないタスクについての注記の行"
+    },
+    "maskSection": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "not": {
+          "pattern": "\\*/"
+        }
+      },
+      "description": "タスクビットマスクの見出しコメントの行"
+    },
+    "maskAll": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "doc"
+      ],
+      "properties": {
+        "doc": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "not": {
+              "pattern": "\\*/"
+            }
+          }
+        }
+      }
+    },
+    "maskApp": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "tasks",
+        "doc"
+      ],
+      "properties": {
+        "tasks": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Z][A-Z0-9_]*$"
+          },
+          "uniqueItems": true,
+          "description": "アプリ Runnable として POST_RUN で停止するタスク（osTasks の symbol）"
+        },
+        "doc": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "not": {
+              "pattern": "\\*/"
+            }
+          }
+        }
+      }
+    },
+    "maskBsw": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "doc"
+      ],
+      "properties": {
+        "doc": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "not": {
+              "pattern": "\\*/"
+            }
+          }
+        }
+      }
+    },
+    "maskShutdown": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "keepTasks",
+        "doc"
+      ],
+      "properties": {
+        "keepTasks": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Z][A-Z0-9_]*$"
+          },
+          "uniqueItems": true,
+          "description": "SHUTDOWN 後も動かし続けるタスク（osTasks の symbol）。これ以外の osTasks が SHUTDOWN で止まる"
+        },
+        "doc": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "not": {
+              "pattern": "\\*/"
+            }
+          }
+        }
+      }
+    },
+    "excludedOsTasks": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "uniqueItems": true,
+      "description": "BswM が制御しない Os のタスク（Os.json の tasks の function）。Os のタスクは osTasks か、ここのどちらかに必ず挙げる"
     }
   },
   "$defs": {
