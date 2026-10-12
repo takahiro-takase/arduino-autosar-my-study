@@ -57,14 +57,15 @@ App_EngineManager_Run が読み取る:
 <a id="adc-monitoring"></a>
 ## ADC センサ電圧監視
 
-`IoHwAb_MainFunction` が 10ms 周期で `Adc_ReadChannel` を呼び出し、10-bit 生値を mV へ変換して
+`IoHwAb_MainFunction` が 10ms 周期で `Adc_StartGroupConversion` / `Adc_ReadGroup` を呼び出し、10-bit 生値を mV へ変換して
 電圧低下を Dem へ報告します。`Dio_ReadChannel` と同様に、ADC アクセスも `IoHwAb_MainFunction` に
 集約し、`IoHwAb_Adc_GetValue_mV` は変換済みの静的変数を返すだけにしています
 （チャネル設定は [`Adc_Notes.md`](./Adc_Notes.md) の `Adc_Cfg.h` 参照）。
 
 ```
 10ms ごとに (IoHwAb_MainFunction):
-  raw = Adc_ReadChannel(ADC_CHANNEL_SENSOR)        ← 0〜1023
+  Adc_StartGroupConversion(ADC_GROUP_SENSOR)
+  raw = Adc_ReadGroup(ADC_GROUP_SENSOR)            ← 0〜1023（結果バッファは IoHwAb_Init で Adc_SetupResultBuffer へ登録）
   mv  = (uint32)raw * ADC_REF_VOLTAGE_MV / ADC_RESOLUTION_MAX
 
   mv < 1000 (IOHWAB_ADC_LOW_VOLT_THRESHOLD_MV)?
@@ -74,7 +75,7 @@ App_EngineManager_Run が読み取る:
 App_EngineManager_Run が読み取る:
   Rte_Call_Adc_GetValue_mV(&mv)
     → IoHwAb_Adc_GetValue_mV()
-        → s_adcMv を返す（Adc_ReadChannel は呼ばない）
+        → s_adcMv を返す（Adc_ReadGroup は呼ばない）
 ```
 
 `(uint32)raw * ADC_REF_VOLTAGE_MV` は最大 1023 × 5000 = 5,115,000 となり uint16 を超えるため、
