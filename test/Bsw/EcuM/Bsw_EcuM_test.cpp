@@ -288,6 +288,28 @@ TEST_F(Bsw_EcuM_Test, EcuM_CheckWakeup_NG_InvalidSource)
 }
 
 // ------------------------------------------------------------
+// EcuM_ValidateWakeupEvent()
+// ------------------------------------------------------------
+
+TEST_F(Bsw_EcuM_Test, EcuM_ValidateWakeupEvent_NG_UnknownSource)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    EcuM_ValidateWakeupEvent(0U);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    ExpectDet(ECUM_API_ID_VALIDATE_WAKEUP_EVENT, ECUM_E_UNKNOWN_WAKEUP_SOURCE);
+}
+
+// ------------------------------------------------------------
 // EcuM_GetVersionInfo()
 // ------------------------------------------------------------
 

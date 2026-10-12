@@ -24,10 +24,16 @@
  *          ここから 2 通りの分岐がある（それぞれ独立したテストとして検証する）：
  *
  *            2a. 検証成功: Can_MainFunction_Read() が受信フレームをドレイン
- *                → CanIf_RxIndication() → CanSM_RxIndication()
- *                  → CanIf_SetControllerMode(CAN_CS_STARTED)
- *                    → Can_SetControllerMode(CAN_T_START) → CanSM_State: FULL_COM
- *                      → ComM_BusSM_ModeIndication(FULL_COM)
+ *                → CanIf_RxIndication()（起床後の最初の受信として記憶するだけ）
+ *                EcuM_MainFunction() が保留中の起床要因を検証（本テストでは
+ *                EcuM をフェイクにしているため、その代わりにテストが
+ *                CanIf_CheckValidation(ECUM_WKSOURCE_CAN) を直接呼ぶ）
+ *                → EcuM_ValidateWakeupEvent()（実体）
+ *                  → ComM_EcuM_WakeUpIndication()（実体）
+ *                    → CanSM_RequestComMode(FULL_COM)
+ *                      → CanIf_SetControllerMode(CAN_CS_STARTED)
+ *                        → Can_SetControllerMode(CAN_T_START) → CanSM_State: FULL_COM
+ *                          → ComM_BusSM_ModeIndication(FULL_COM)
  *
  *            2b. 検証失敗（タイムアウト）: CanSM_MainFunction() が
  *                CANSM_WAKEUP_VALIDATION_MS 超過を検出
@@ -51,7 +57,7 @@
  *          途中経路であり終端ではないため）。
  *          Dem（Bus-Off 通信路の PASSED/FAILED 報告先）も同様にフェイクに
  *          差し替える（Bsw_Dem_fake.h 参照）。PduR はこのチェーンに登場
- *          しないため（CanSM_RxIndication() は CanIf_RxIndication() の PDU
+ *          しないため（起床後の最初の受信の記憶は CanIf_RxIndication() の PDU
  *          振り分けより前に無条件で呼ばれる、CanIf.c 参照）、CanIf の RxPdu
  *          設定は 0 件のまま使う。
  *
@@ -235,6 +241,10 @@ TEST_F(Bsw_NmStack_Wakeup_WakeupValidation_Test, OK)
 
     // step02: 受信フレームで検証成功 → FULL_COM へ確定
     Can_MainFunction_Read();
+    // 受信しただけでは確定しない（EcuM の検証の問い合わせ待ち）
+    ASSERT_EQ(CurrentComMode(), static_cast<ComM_ModeType>(COMM_NO_COMMUNICATION));
+    // EcuM_MainFunction() による検証の問い合わせの代わり
+    EXPECT_EQ(CanIf_CheckValidation(ECUM_WKSOURCE_CAN), E_OK);
 
     /* ----------------------- */
     /* ---- 評価 (Assert) ---- */

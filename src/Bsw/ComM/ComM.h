@@ -297,6 +297,35 @@ void ComM_DCM_ActiveDiagnostic(NetworkHandleType Channel);
 void ComM_DCM_InactiveDiagnostic(NetworkHandleType Channel);
 
 /**
+ * \brief   EcuM から、対象チャネルでバスからの起床が検証されたことを通知する
+ *          （[SWS_ComM_00275]）。
+ *
+ * \details EcuM_ValidateWakeupEvent() が、検証された起床要因に対応するチャネルについて
+ *          呼ぶ（[SWS_EcuM_02645]）。チャネルが NO_COM（ボランタリスリープ中の
+ *          起床）のとき、FULL_COM を CanSM へ要求する（[SWS_ComM_00893]/[SWS_ComM_00694]
+ *          の趣旨: 起床後すぐに通信を開始する）。CanSM がコントローラを起動して
+ *          FULL_COM へ確定し、`ComM_BusSM_ModeIndication(FULL_COM)` を返すと、
+ *          通常の起動時と同じ流れ（EcuM の RUN 要求、Dcm への通知など）になる。
+ *          チャネルが既に NO_COM でないときは何もしない。
+ *
+ *          以前は CanIf_RxIndication() が独自 API の CanSM_RxIndication() を呼び、
+ *          CanSM が検証成功を自分で判断して同じ確定を行っていた（2026-10 に置き換え）。
+ *
+ *          CommunicationAllowed ゲート（`ComM_RequestFullComOrPend()`）は通さず、
+ *          直接 CanSM を呼ぶ。バス側の事象（ComM_Nm_NetworkMode() /
+ *          ComM_Nm_NetworkStartIndication()）と同じ扱いで、起床を取りこぼさない
+ *          ため。
+ *
+ * \param[in]  Channel  起床が検証されたチャネル。
+ *
+ * \AUTOSARReq     {SWS_ComM_00275, SWS_ComM_00893}
+ * \ServiceID      {0x2a}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void ComM_EcuM_WakeUpIndication(NetworkHandleType Channel);
+
+/**
  * \brief   CanSM からの通信モード変化通知コールバック（下位層 → 上位層）。
  *
  * \details CanSM が実際の CAN バス状態を変化させた際に呼び出す。

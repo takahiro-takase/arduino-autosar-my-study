@@ -29,7 +29,7 @@
  *          `millis()`（`stub/Hal/Fake_Millis.c`）のみで足りる。IPduId=0
  *          （RxDataTimeoutAction=SUBSTITUTE）と、[SWS_Com_00872] 段階順の
  *          回帰用の IPduId=2（RxIpduCalloutCbk が必ず拒否）のみを使う。
- *          `CanIf_RxIndication()` は無条件に `CanSM_RxIndication()` を呼ぶため、
+ *          以前は `CanIf_RxIndication()` が `CanSM_RxIndication()` を無条件に呼んでおり（2026-10 に廃止、現在は呼ばない。共有 static の状態を揃えるため CanSM_Init は残している）、
  *          物理チェーン部分では `[env:native_chain]` が実体リンクする CanSM の
  *          `CanSM_Init()`/`CanSM_DeInit()` を呼ぶ（呼ばないと DET_E_UNINIT が
  *          報告される）。
@@ -361,7 +361,7 @@ protected:
         s_calloutAccept = 1U;
         s_calloutInvokeCount = 0U;
         s_calloutLastByte1 = 0U;
-        // CanIf_RxIndication() は無条件に CanSM_RxIndication() を呼ぶため
+        // 以前は CanIf_RxIndication() が CanSM_RxIndication() を無条件に呼んでおり（2026-10 に廃止、現在は呼ばない。共有 static の状態を揃えるため CanSM_Init は残している）
         // （CanIf.c 参照）、CanSM 未初期化のままだと毎回 DET_E_UNINIT が
         // 報告されてしまう。本テストは CanSM_State を FULL_COM/NO_COM のまま
         // （WAKEUP_VALIDATING にしない）保つため、CanSM 自体は何もしない

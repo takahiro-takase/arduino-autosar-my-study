@@ -36,7 +36,6 @@ uint32 CallCount_CanSM_RequestComMode             = 0U;
 uint32 CallCount_CanSM_GetCurrentComMode          = 0U;
 uint32 CallCount_CanSM_ControllerBusOff           = 0U;
 uint32 CallCount_CanSM_ControllerModeIndication   = 0U;
-uint32 CallCount_CanSM_RxIndication               = 0U;
 uint32 CallCount_CanSM_MainFunction               = 0U;
 uint32 CallCount_CanSM_GetVersionInfo             = 0U;
 
@@ -47,7 +46,7 @@ Std_ReturnType ForcedReturn_CanSM_RequestComMode    = E_NOT_OK;
 Std_ReturnType ForcedReturn_CanSM_GetCurrentComMode = E_NOT_OK;
 
 /* ----------------------------------------------------------------------
- * WrapCanSM_Reset — 9関数すべての状態を一括で初期化する（Wrap_CanSM.h 参照）。
+ * WrapCanSM_Reset — 8関数すべての状態を一括で初期化する（Wrap_CanSM.h 参照）。
  * ---------------------------------------------------------------------- */
 
 void WrapCanSM_Reset(void)
@@ -58,7 +57,6 @@ void WrapCanSM_Reset(void)
     CallCount_CanSM_GetCurrentComMode        = 0U;
     CallCount_CanSM_ControllerBusOff         = 0U;
     CallCount_CanSM_ControllerModeIndication = 0U;
-    CallCount_CanSM_RxIndication             = 0U;
     CallCount_CanSM_MainFunction             = 0U;
     CallCount_CanSM_GetVersionInfo           = 0U;
 
@@ -273,16 +271,3 @@ void __wrap_CanSM_MainFunction(void)
  * Internal Functions
  * ====================================================================== */
 
-/* ----------------------------------------------------------------------
- * CanSM_RxIndication
- * ---------------------------------------------------------------------- */
-
-extern
-void __real_CanSM_RxIndication(uint8 ControllerId);
-void __wrap_CanSM_RxIndication(uint8 ControllerId)
-{
-    CallCount_CanSM_RxIndication++;
-    Log_Write(LOG_T, TAG, "CanSM_RxIndication", "called %u times", CallCount_CanSM_RxIndication);
-
-    __real_CanSM_RxIndication(ControllerId);
-}

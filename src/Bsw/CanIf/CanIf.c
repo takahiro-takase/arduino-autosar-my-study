@@ -67,6 +67,11 @@ static CanIf_NotifStatusType CanIf_RxNotifStatus[CANIF_RX_PDU_MAX];
  * 参照）。 */
 static CanIf_PduModeType CanIf_ControllerPduMode[CANIF_CONTROLLER_MAX];
 
+/* CanIf_CheckValidation()（[SWS_CANIF_00178]/[SWS_CANIF_00286]）用の、
+ * 起床後の最初の受信の記憶。CanIf_RxIndication() が立て、CanIf_CheckValidation() が
+ * EcuM へ通知して下ろす。CanIf_SetControllerMode(CAN_CS_SLEEP) でも下ろす（[SWS_CANIF_00756]）。 */
+static uint8 CanIf_WakeupRxEventStored[CANIF_CONTROLLER_MAX];
+
 /* CanIf_SetControllerMode()/CanIf_GetControllerMode()（[SWS_CANIF_00003]/
  * [SWS_CANIF_00229]、2026-08 追加）が追跡するコントローラ状態。
  * 実 AUTOSAR は CanIf_ControllerModeIndication()（Can からの非同期通知）で
@@ -180,6 +185,7 @@ void CanIf_Init(const CanIf_ConfigType* ConfigPtr)
         CanIf_ControllerMode[i] = CAN_CS_STOPPED;
 
         CanIf_TxConfirmationState[i] = CANIF_NO_NOTIFICATION;
+        CanIf_WakeupRxEventStored[i] = 0U;
     }
 
     DET_LOGI(TAG, "Init ok TX=%u RX=%u",
@@ -290,6 +296,12 @@ Std_ReturnType CanIf_SetControllerMode(uint8 ControllerId, Can_ControllerStateTy
     if ((ControllerMode == CAN_CS_STARTED) || (ControllerMode == CAN_CS_STOPPED))
     {
         CanIf_TxConfirmationState[ControllerId] = CANIF_NO_NOTIFICATION;
+    }
+
+    /* [SWS_CANIF_00756]: スリープへ入るとき、前回の起床で記憶した受信を消す。 */
+    if (ControllerMode == CAN_CS_SLEEP)
+    {
+        CanIf_WakeupRxEventStored[ControllerId] = 0U;
     }
 
     return E_OK;
@@ -852,7 +864,68 @@ void CanIf_GetVersionInfo(Std_VersionInfoType* versioninfo)
  * CanIf_CheckValidation
  * ---------------------------------------------------------------------- */
 
-/* 未実装 */
+/**
+ * \brief   起床要因の検証要求（CAN の起床の検証）を受け付け、有効な受信が
+ *          あれば EcuM へ「検証済み」を通知する（[SWS_CANIF_00178]）。
+ *
+ * \details ウェイクアップ検証（[SWS_CANIF_00286]/[SWS_CANIF_00179]）の CanIf 側の
+ *          窓口。CanIf_RxIndication() は、受信した最初のフレームを「起床後の
+ *          最初の受信」として記憶する。EcuM が起床要因の検証を要求
+ *          （EcuM_MainFunction() が保留中の起床要因について本関数を呼ぶ）したとき、
+ *          記憶があれば `EcuM_ValidateWakeupEvent(WakeupSource)` を呼ぶ
+ *          （仕様の <User_ValidateWakeupEvent>。記憶が無ければ呼ばない）。
+ *          記憶は、通知後に消す。また、コントローラが `CAN_CS_SLEEP` に
+ *          なったとき、前回の起床で記憶した受信を消す（[SWS_CANIF_00756]）。
+ *
+ *          以前は CanIf_RxIndication() が、実仕様に存在しない独自 API の
+ *          `CanSM_RxIndication()` を毎回呼び、CanSM が受信を検証成功の合図として
+ *          自分で FULL_COM へ確定していた（2026-10 に置き換え。確定は
+ *          EcuM_ValidateWakeupEvent() → ComM_EcuM_WakeUpIndication() →
+ *          CanSM_RequestComMode(FULL_COM) の経路で行う）。
+ *
+ * \note    本プロジェクトの検証は、コントローラが Listen-Only
+ *          （`CAN_CS_STOPPED`）の間に行う。実仕様は `CAN_CS_STARTED` のコントローラの
+ *          受信を前提とする（[SWS_CANIF_00286]）が、MCP2515 の Listen-Only で
+ *          バス上の有効フレームを確認するため、コントローラの状態では絞らない。
+ *          また、`CanIfPublicWakeupCheckValidByNM` 相当の「NM フレームだけを
+ *          有効とする」絞り込みは行わない（受信した任意のフレームを有効とする）。
+ *
+ * \param[in]  WakeupSource  検証する起床要因（`ECUM_WKSOURCE_CAN` のビット）。
+ *                          ビットが立っていなければ `CANIF_E_PARAM_WAKEUPSOURCE`
+ *                          （[SWS_CANIF_00404]）を DET へ報告する。
+ *
+ * \retval  E_OK      検証要求を受け付けた（検証済みの通知をしたかどうかとは無関係）。
+ * \retval  E_NOT_OK  WakeupSource が不正、または CanIf が未初期化。
+ *
+ * \AUTOSARReq     {SWS_CANIF_00178, SWS_CANIF_00179, SWS_CANIF_00286, SWS_CANIF_00404, SWS_CANIF_00756}
+ * \ServiceID      {0x12}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType CanIf_CheckValidation(EcuM_WakeupSourceType WakeupSource)
+{
+    if (CanIf_ConfigPtr == NULL)
+    {
+        return E_NOT_OK;  /* 未初期化時は DET 報告なし（本ファイルの他 API と同じ） */
+    }
+
+    if ((WakeupSource & ECUM_WKSOURCE_CAN) == 0U)
+    {
+        DET_LOGE(TAG, "CheckValidation: unknown source=0x%08lX", (unsigned long)WakeupSource);
+        (void)Det_ReportError(CANIF_MODULE_ID, 0U, CANIF_API_ID_CHECK_VALIDATION, CANIF_E_PARAM_WAKEUPSOURCE);
+        return E_NOT_OK;
+    }
+
+    /* 本プロジェクトの CAN コントローラは 1 つだけ（CANIF_CONTROLLER_MAX=1）。 */
+    if (CanIf_WakeupRxEventStored[0] != 0U)
+    {
+        CanIf_WakeupRxEventStored[0] = 0U;
+        DET_LOGI(TAG, "CheckValidation: wakeup RX confirmed -> EcuM_ValidateWakeupEvent");
+        EcuM_ValidateWakeupEvent(WakeupSource);
+    }
+
+    return E_OK;
+}
 
 /* ----------------------------------------------------------------------
  * CanIf_GetTxConfirmationState
@@ -1026,11 +1099,10 @@ void CanIf_TxConfirmation(PduIdType CanTxPduId)
  *          （データ長チェック、違反時はランタイムエラー
  *          CANIF_E_INVALID_DATA_LENGTH を報告する、[SWS_CANIF_00168]）。
  *
- *          上位 PDU への振り分け結果に関わらず、CanSM_RxIndication() を
- *          呼び出して「有効なフレームを受信した」ことを CanSM へ通知する
- *          (AUTOSAR SWS_CanSM の CanSMRxIndicationUsed に相当)。通常運用中は
- *          無害だが、ウェイクアップ検証中はこれが検証成功の唯一の合図になる
- *          （詳細は CanSM_RxIndication() を参照）。
+ *          上位 PDU への振り分け結果に関わらず、最初に受信したフレームを
+ *          「起床後の最初の受信」として記憶する（[SWS_CANIF_00286]）。ウェイクアップ
+ *          検証中は、これが検証成功の合図になる（EcuM が CanIf_CheckValidation() で
+ *          確認する。詳細は CanIf_CheckValidation() を参照）。
  *
  *          `ReadRxPduDataEnabled=1` の RX PDU では、上位層コールバックの
  *          呼び出しに加えて内部バッファも更新し、`CanIf_ReadRxPduData()`
@@ -1064,7 +1136,10 @@ void CanIf_RxIndication(const Can_HwType* Mailbox, const PduInfoType* PduInfoPtr
         return;
     }
 
-    CanSM_RxIndication(Mailbox->ControllerId);
+    if (Mailbox->ControllerId < CANIF_CONTROLLER_MAX)
+    {
+        CanIf_WakeupRxEventStored[Mailbox->ControllerId] = 1U;
+    }
 
     /* SWS_CANIF_00416/00417: Hoh 自体が未設定なのか（HOH エラー）、Hoh は
      * 設定済みだが CanId が想定と異なるのか（CanId エラー）を区別して

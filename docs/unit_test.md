@@ -65,7 +65,7 @@ DET_LOG_VERBOSE=1 ./build/native_chain/native_chain_tests.exe  # TRACE ログ出
 箇所）でテストを2つのセグメントに分け、それぞれを個別に実行可能な
 `TEST_F` ケースとしている（`--gtest_filter=Bsw_ComStack_Signal_Tx_*` 等で
 絞り込み可）。フェイクは最下層の `Can_Hw` のみ（`stub/Hal/
-Fake_Can_Hw.c`）で、CanIf.c が呼ぶ `CanSM_RxIndication()`/
+Fake_Can_Hw.c`）で、CanIf.c が呼ぶ `CanSM_ControllerBusOff()`/
 `CanSM_ControllerModeIndication()` 等は CanSM.c 自身を実体でリンクして
 処理させている（同じ `native_chain_tests` で CanSM 自身のコールチェーン
 （「[CAN コントローラのスリープ制御](can_stack.md#can-controller-sleep)」節）も検証するため、2026-09 に

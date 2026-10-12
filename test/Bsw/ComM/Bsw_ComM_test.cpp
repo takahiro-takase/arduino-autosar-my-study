@@ -677,6 +677,46 @@ TEST_F(Bsw_ComM_Test, ComM_DCM_ActiveDiagnostic_NG_WrongParameters)
 }
 
 // ------------------------------------------------------------
+// ComM_EcuM_WakeUpIndication()
+// ------------------------------------------------------------
+
+TEST_F(Bsw_ComM_Test, ComM_EcuM_WakeUpIndication_NG_Uninit)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    ComM_DeInit();
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    ComM_EcuM_WakeUpIndication(0U);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(FakeDetHw_LastErrorId, COMM_E_UNINIT);
+}
+
+TEST_F(Bsw_ComM_Test, ComM_EcuM_WakeUpIndication_NG_WrongParameters)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    ComM_EcuM_WakeUpIndication(COMM_CHANNEL_COUNT);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(FakeDetHw_LastErrorId, COMM_E_WRONG_PARAMETERS);
+}
+
+// ------------------------------------------------------------
 // ComM_DCM_InactiveDiagnostic()
 // ------------------------------------------------------------
 

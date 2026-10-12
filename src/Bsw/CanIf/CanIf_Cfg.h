@@ -47,6 +47,7 @@
 #define CANIF_E_PARAM_CANID         10U  /* [SWS_CANIF_00417]: Hoh 一致だが Mailbox->CanId が不一致 */
 #define CANIF_E_PARAM_HOH           12U  /* [SWS_CANIF_00416]: Mailbox->Hoh に一致する設定なし */
 #define CANIF_E_PARAM_CONTROLLERID  15U  /* [SWS_CANIF_00429 等]: ControllerId が範囲外 */
+#define CANIF_E_PARAM_WAKEUPSOURCE  16U  /* [SWS_CANIF_00404]: CanIf_CheckValidation() の WakeupSource が不正 */
 #define CANIF_E_PARAM_POINTER       20U  /* [SWS_CANIF_00320/00419 等]: NULL ポインタチェック */
 #define CANIF_E_PARAM_LPDU          13U  /* [SWS_CANIF_00410]: CanTxPduId が範囲外 */
 #define CANIF_E_INVALID_TXPDUID     50U  /* [SWS_CANIF_00319]: TxPduId が範囲外 */
@@ -89,6 +90,7 @@
 #define CANIF_API_ID_READ_TX_NOTIF_STATUS 0x07U
 #define CANIF_API_ID_READ_RX_NOTIF_STATUS 0x08U
 #define CANIF_API_ID_GET_TX_CONFIRMATION_STATE 0x19U
+#define CANIF_API_ID_CHECK_VALIDATION    0x12U
 
 /** バージョン情報（SWS_CANInterface、Com/E2EXf/PduR 等の既存モジュールと同じ命名規則） */
 #define CANIF_VENDOR_ID          0U

@@ -105,13 +105,14 @@ ModuleId は README の「[モジュール一覧](../../README.md#module-list)�
   本実装の設計上そもそも検出対象が存在せず、追加していません
   （ServiceID タグの誤りのみ修正）。
 
-**非標準の独自拡張関数（DET 対象外）**: `CanSM_RxIndication` /
-`WdgM_SetMode(WDGM_MODE_DEFAULT)` /
+**非標準の独自拡張関数（DET 対象外）**: `WdgM_SetMode(WDGM_MODE_DEFAULT)` /
 `WdgM_SetMode(WDGM_MODE_POST_RUN)` / `WdgM_ResumeSupervision` /
 `Adc_ReadChannel` はいずれも実際の AUTOSAR SWS には存在しない、本プロジェクト
 独自の簡略化・拡張関数のため、DET のエラーコード・ApiId は個々の実 SWS 関数
-とは対応付けていません（ServiceID は既存の非標準値をそのまま踏襲。ただし
-`CanSM_RxIndication` は2026-09-05に0x07→0x15へ変更、CanSM_Cfg.hのコメント参照）。
+とは対応付けていません（ServiceID は既存の非標準値をそのまま踏襲。）。
+`CanSM_RxIndication` は2026-10に廃止した（検証成功の合図は、実仕様の
+`CanIf_CheckValidation` → `EcuM_ValidateWakeupEvent` → `ComM_EcuM_WakeUpIndication`
+の経路へ置き換えた）。
 `CanSM_ControllerWakeup`は2026-09-05に実仕様の`CanSM_ControllerModeIndication`
 （[SWS_CanSM_00396]、ControllerMode引数を追加）へ改名・是正したため、この
 一覧からは除外した。同じく`CanIf_ControllerWakeup`（実仕様に存在しない独自

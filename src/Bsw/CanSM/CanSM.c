@@ -77,7 +77,7 @@
  *            CANSM_STATE_BUS_OFF は実 HW をスリープさせないため、これが
  *            本モジュールで唯一 HW を実際にスリープさせる経路である。
  *            なお CANSM_STATE_BUS_OFF は CAN_CS_STOPPED（受信は継続）扱いの
- *            ため、Bus-Off 回復待ち中でも CanSM_RxIndication()/
+ *            ため、Bus-Off 回復待ち中でも CanIf_RxIndication()/
  *            CanNm_RxIndication() は普通に発火しうる（Can_MainFunction_Read()
  *            が RX ドレインをスキップするのは CanState==CAN_CS_SLEEP の
  *            ときのみ）。CANSM_STATE_SILENT_COM は 2026-08 の変更後は
@@ -110,8 +110,11 @@
  *                   ComM/EcuM へはまだ何も通知しない（この時点ではノイズの
  *                   可能性を否定できないため）。
  *              2a. 検証タイマ (CANSM_WAKEUP_VALIDATION_MS) 内に何らかの
- *                  CAN フレームを正常受信 → CanIf_RxIndication() 経由で
- *                  CanSM_RxIndication() が呼ばれ、検証成功と判断して
+ *                  CAN フレームを正常受信 → CanIf_RxIndication() が記憶し、
+ *                  EcuM_MainFunction() が CanIf_CheckValidation() で確認して
+ *                  EcuM_ValidateWakeupEvent() → ComM_EcuM_WakeUpIndication()
+ *                  → CanSM_RequestComMode(FULL_COM) が呼ばれる（検証成功。
+ *                  2026-10 に、独自 API の CanSM_RxIndication() から置き換え）。
  *                  CAN_T_START → CANSM_STATE_FULL_COM へ確定し、
  *                  ComM_BusSM_ModeIndication(FULL_COM) で EcuM を RUN へ復帰させる。
  *              2b. 検証タイマが切れても何も受信できなければ、CanSM_MainFunction()
@@ -582,8 +585,8 @@ void CanSM_ControllerBusOff(uint8 ControllerId)
  *          この時点ではまだ FULL_COM へ確定しない。MCP2515 の WAKIF はノイズでも
  *          誤って立ちうるため、CAN_T_WAKEUP（SLEEP→STOPPED、Listen-Only）のみを
  *          実行して CANSM_STATE_WAKEUP_VALIDATING へ遷移し、検証タイマを開始する。
- *          実際に FULL_COM へ確定するのは CanSM_RxIndication() が有効な受信を
- *          確認したとき（検証成功）、または CanSM_MainFunction() が検証タイムアウトを
+ *          実際に FULL_COM へ確定するのは、有効な受信の確認後に ComM が
+ *          CanSM_RequestComMode(FULL_COM) を呼んだとき（検証成功）、または CanSM_MainFunction() が検証タイムアウトを
  *          検出して再スリープするとき（検証失敗）のいずれかである。
  *
  * \param[in]  ControllerId   モードが変化したコントローラ ID。
@@ -594,7 +597,7 @@ void CanSM_ControllerBusOff(uint8 ControllerId)
  * \note    実仕様の \Reentrancy は「Reentrant (only for different CAN
  *          controllers)」だが、本実装は `CanSM_State`/`CanSM_ValidationTimerMs`
  *          等の共有 static 変数を排他制御なしに読み書きするため、
- *          兄弟関数（`CanSM_ControllerBusOff`/`CanSM_RxIndication`/
+ *          兄弟関数（`CanSM_ControllerBusOff`/
  *          `CanSM_RequestComMode` 等、いずれも `Non Reentrant`）と同様に
  *          `Non Reentrant` のまま扱う（本プロジェクトは単一コントローラ構成
  *          で ControllerId!=0 を DET 拒否するため、実仕様が言う「異なる
@@ -721,8 +724,8 @@ void CanSM_ControllerModeIndication(uint8 ControllerId, Can_ControllerStateType 
  *            回復試行そのものは無期限に続ける。
  *
  *          ウェイクアップ検証中 (CANSM_STATE_WAKEUP_VALIDATING) は、
- *          CANSM_WAKEUP_VALIDATION_MS 以内に CanSM_RxIndication() による
- *          検証成功がなければタイムアウトと判断し、ノイズによる誤ウェイクアップ
+ *          CANSM_WAKEUP_VALIDATION_MS 以内に有効な受信による
+ *          検証成功（CanSM_RequestComMode(FULL_COM)）がなければタイムアウトと判断し、ノイズによる誤ウェイクアップ
  *          とみなして Can_T_SLEEP で再びスリープへ戻す。
  *
  * \ServiceID      {0x05}
@@ -864,74 +867,6 @@ static unsigned long CanSM_GetNowMs(void)
 }
 
 /* ----------------------------------------------------------------------
- * CanSM_RxIndication
- * ---------------------------------------------------------------------- */
-
-/**
- * \brief   受信通知コールバック（CanIf から全受信フレームについて呼び出される）。
- *
- * \details AUTOSAR SWS_CanSM の CanSMRxIndicationUsed 設定に相当し、CanIf が
- *          フレームを受信するたびに（上位 PDU への振り分け結果に関わらず）
- *          通知される。通常運用中（CANSM_STATE_FULL_COM 等）は何もしない。
- *
- *          CANSM_STATE_WAKEUP_VALIDATING 中にのみ意味を持つ: 有効な CAN
- *          フレームを実際に受信できたことは、直前のウェイクアップがノイズ
- *          ではなく本物のバス活動だったことの確証となる。これを検証成功と
- *          判断し、CAN_T_START で FULL_COM へ確定して EcuM を RUN へ復帰させる。
- *
- * \param[in]  ControllerId  受信したコントローラ ID。
- *
- * \note    実仕様には存在しない本プロジェクト独自の拡張関数のため、対応する
- *          \AUTOSARReq は無い（CanSM_Cfg.h の CANSM_API_ID_RX_INDICATION
- *          コメント参照）。ServiceID は以前 0x07 だったが、
- *          `CanSM_ControllerModeIndication`（旧 CanSM_ControllerWakeup）の
- *          正しい ServiceID が実は 0x07 だったと判明したため、2026-09-05 に
- *          0x15 へ変更した（自己割当値、実仕様との衝突を避けるため）。
- * \ServiceID      {0x15}
- * \Reentrancy     {Non Reentrant}
- * \Synchronicity  {Synchronous}
- */
-void CanSM_RxIndication(uint8 ControllerId)
-{
-    (void)ControllerId;
-
-    if (!CanSM_Initialized)
-    {
-        (void)Det_ReportError(CANSM_MODULE_ID, 0U, CANSM_API_ID_RX_INDICATION, CANSM_E_UNINIT);
-        return;
-    }
-
-    if (CanSM_State != CANSM_STATE_WAKEUP_VALIDATING)
-    {
-        return;
-    }
-
-    DET_LOGI(TAG, "Wakeup validated (RX confirmed) -> FULL_COM");
-    if (CanIf_SetControllerMode(0U, CAN_CS_STARTED) != E_OK)   /* CAN_CS_STOPPED -> CAN_CS_STARTED */
-    {
-        /* 到達しないはずの経路（CANSM_STATE_WAKEUP_VALIDATING に入っている
-         * 時点で CanState==CAN_CS_STOPPED のはず）。失敗した場合に
-         * CanSM_State を FULL_COM へ進めてしまうと、CanSM/ComM/EcuM は
-         * 「成功した」と誤認したまま MCP2515 は Listen-Only のままで送信
-         * できず、実害が静かに進行する（レビュー指摘の症状そのもの）。
-         * WAKEUP_VALIDATING に留まり、タイムアウトで再スリープする
-         * 既存のフェイルセーフ（CanSM_MainFunction）に委ねる。 */
-        DET_LOGE(TAG, "RxIndication E: CanIf_SetControllerMode(STARTED) failed, staying in WAKEUP_VALIDATING");
-        return;
-    }
-    /* WAKEUP_VALIDATING に入る直前の状態が SILENT_COM だった場合（眠る前に
-     * TX を抑制していた）、CanIf の PDU モードは CANIF_TX_OFFLINE のまま
-     * 変化していない。ここで明示的に CANIF_ONLINE へ戻さないと、起床後
-     * FULL_COM に確定したのに TX だけ永久に塞がったままという静かなバグに
-     * なる（2026-08 のレビュー方針同様、失敗しても DET のみで続行）。 */
-    CanSM_SetPduModeOnlineBestEffort("RxIndication");
-    CanSM_State         = CANSM_STATE_FULL_COM;
-    CanSM_BusOffRetries = 0U;
-    (void)Dem_SetEventStatus(DemConf_DemEventParameter_CAN_BUSOFF, DEM_EVENT_STATUS_PASSED);
-    ComM_BusSM_ModeIndication(0U, COMM_FULL_COMMUNICATION);
-}
-
-/* ----------------------------------------------------------------------
  * CanSM_SetPduModeOnlineBestEffort
  * ---------------------------------------------------------------------- */
 
@@ -947,7 +882,7 @@ void CanSM_RxIndication(uint8 ControllerId)
  *          誤認したまま実際には動いているコントローラを放置することになり、
  *          かえって実害が大きい。DET のみ記録して呼び出し元は続行する
  *          （2026-08 のレビュー方針を踏襲。CanSM_RequestComMode()/
- *          CanSM_RxIndication()/CanSM_MainFunction() の 3 箇所から呼ぶ）。
+ *          CanSM_MainFunction() の 2 箇所から呼ぶ）。
  *
  * \param[in]  callerTag  DET ログに残す呼び出し元の名前（例: "RequestComMode"）。
  */

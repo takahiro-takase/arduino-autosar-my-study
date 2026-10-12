@@ -43,6 +43,7 @@
 
 /** 開発エラーコード（値は実装時割り当て。実際に使用する分のみ定義） */
 #define ECUM_E_INVALID_PAR              0x02U  /* 不正なパラメータ（user が範囲外 等） */
+#define ECUM_E_UNKNOWN_WAKEUP_SOURCE    0x04U  /* [SWS_EcuM_02868]: 未知の起床要因（値は実装時割り当て） */
 #define ECUM_E_NULL_POINTER             0x03U  /* [Table 7]: NULL ポインタチェック（値は実装時割り当て） */
 #define ECUM_E_MULTIPLE_RUN_REQUESTS    0x20U  /* [SWS_EcuM_04125]: 同一ユーザの多重 RUN 要求 */
 #define ECUM_E_MISMATCHED_RUN_RELEASE   0x21U  /* [SWS_EcuM_04127]: 対応する要求のない解放 */
@@ -56,6 +57,7 @@
 #define ECUM_API_ID_REQUEST_POST_RUN 0x0AU
 #define ECUM_API_ID_RELEASE_POST_RUN 0x0BU
 #define ECUM_API_ID_CHECK_WAKEUP     0x42U
+#define ECUM_API_ID_VALIDATE_WAKEUP_EVENT 0x14U
 #define ECUM_API_ID_GET_VERSION_INFO 0x00U
 
 /** バージョン情報（SWS_EcuM_GetVersionInfo、Com/E2EXf/PduR 等の既存モジュールと同じ命名規則） */
