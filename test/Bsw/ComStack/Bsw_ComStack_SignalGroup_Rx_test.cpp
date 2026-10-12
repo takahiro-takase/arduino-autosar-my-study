@@ -352,7 +352,7 @@ TEST_F(Bsw_ComStack_SignalGroup_Rx_GroupRxTOut_Test, OK_FiresAfterThresholdElaps
     // 一度も受信させていないため Com_Init() 起点で同時に満了し、
     // s_sigRxTOutCount 側も独立に発火しうる——これは IPduId=0/1 が別々の
     // I-PDU である以上正しい挙動であり、本テストの主張ではない）
-    EXPECT_EQ(Com_IsRxTimedOut(2U), 1U);
+    EXPECT_EQ(Com_Test_GetRxTimedOut(2U), 1U);
     EXPECT_EQ(s_groupRxTOutCount, 1U);
 }
 
@@ -381,7 +381,7 @@ TEST_F(Bsw_ComStack_SignalGroup_Rx_GroupRxTOut_Test, OK_ShortFrameDiscardStillRe
     // [SWS_Com_00738]（無効なシグナルグループ受信時も
     // タイマは再始動される）どおり、拒否された t=300ms を起点にまだ
     // 300ms しか経過しておらず、タイムアウトしない。
-    EXPECT_EQ(Com_IsRxTimedOut(2U), 0U);
+    EXPECT_EQ(Com_Test_GetRxTimedOut(2U), 0U);
     EXPECT_EQ(s_groupRxTOutCount, 0U);
 }
 
@@ -402,7 +402,7 @@ TEST_F(Bsw_ComStack_SignalGroup_Rx_GroupRxTOut_Test, NG_Step01_ComMainFunctionRx
     /* ----------------------- */
     /* ---- 評価 (Assert) ---- */
     /* ----------------------- */
-    EXPECT_EQ(Com_IsRxTimedOut(2U), 0U);
+    EXPECT_EQ(Com_Test_GetRxTimedOut(2U), 0U);
     EXPECT_EQ(s_groupRxTOutCount, 0U);
 }
 

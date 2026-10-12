@@ -16,7 +16,7 @@
  *          Syntax）という、E2E 保護対象のデータエレメント（`<transformerId>`）
  *          ごとに個別の関数を自動生成するが、本プロジェクトには RTE
  *          ジェネレータが無いため、`Rte.c` が
- *          Com_ReceiveSignalGroupArray()/Com_IsRxTimedOut() 経由で明示的に
+ *          Com_ReceiveSignalGroupArray() 経由で明示的に
  *          このモジュールの API を呼び出す、静的に書き下した相当品として
  *          実装している（2026-09 是正: 以前は Config 構造体を引数に取る
  *          汎用関数 1 個で全インスタンスを賄っていたが、`<transformerId>`

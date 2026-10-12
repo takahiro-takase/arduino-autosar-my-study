@@ -68,8 +68,9 @@ static EngineState_t Rte_EngineStateMirror = ENGINE_STATE_OFF;
  * （Com_Types.h の RxIndicationCbk 説明参照）。かわりに、フレーム受信の
  * 都度呼ばれる Rte_COMCbk_*() が E2EXf_Inv_EngineInfo()/E2EXf_Inv_AbsInfo()
  * （とも E2E Profile05 使用）で検証し、合格した場合のみここのミラーを
- * 更新する。Rte_Read_*() はタイムアウト判定 (Com_IsRxTimedOut()) だけを
- * Com に問い合わせ、値自体はこのミラーから返す。
+ * 更新する。Rte_Read_*() はタイムアウト判定を、Com の RxTOut 通知
+ * （Rte_COMCbkRxTOut_*()）で立てる Rte_EngineInfoRxTimedOut/Rte_AbsInfoRxTimedOut から
+ * 得て、値自体はこのミラーから返す。
  *
  * E2E チェックが失敗しても Com のタイムアウトタイマ自体はフレーム到達で
  * リセットされる（Com は妥当性を関知しないため）。よってこのミラーの
@@ -103,28 +104,29 @@ static EngineState_t Rte_EngineStateMirror = ENGINE_STATE_OFF;
  * OKSOMELOST 等の詳細を Rte 層のこの分類のためだけに残している
  * （E2EXf_Inv_EngineInfo() の \note 参照。将来グローバル変数経由での
  * 公開へ置き換える予定）。
- * Rte_Read_*() はこれを Com_IsRxTimedOut() と合成し、SWC が「タイムアウト
+ * Rte_Read_*() はこれを Rte_EngineInfoRxTimedOut/Rte_AbsInfoRxTimedOut と合成し、SWC が「タイムアウト
  * なのか」「E2E で弾かれたのか（データは信頼できないので前回値のまま）」
  * 「E2E 上は使用可だが一部フレーム消失があったのか」を区別できるようにする
  * （実 AUTOSAR の Rte_IStatusType が担う役割の簡略版）。SWC がこの区別を
  * 必要としない場合は、従来通り戻り値を無視してデータだけ読んでもよい
  * （*data は RTE_E_OK 以外でも常に「読める最善の値」を返す。詳細は各
  * Rte_Read_* のコメント参照）。起動直後の初期値は RTE_E_OK とし、
- * まだ一度もフレームを受信していない段階（Com_IsRxTimedOut() もまだ
+ * まだ一度もフレームを受信していない段階（RxTimedOut もまだ
  * false）での挙動を変更前と同じにしている。
  *
- * 合成の優先順位（重要）: Rte_Read_*() は必ず Com_IsRxTimedOut() を先に
+ * 合成の優先順位（重要）: Rte_Read_*() は必ず RxTimedOut を先に
  * 判定し、タイムアウトでなければ Rte_EngineInfoStatus/Rte_AbsInfoStatus を
  * そのまま返す。Rte_EngineInfoStatus 等は「最後にフレームを受信した瞬間」
- * にしか更新されないラッチであり、Com_IsRxTimedOut() は Com_MainFunctionRx()
- * が周期的に評価する「今まさに生きているか」の独立した軸である。もし
+ * にしか更新されないラッチであり、RxTimedOut は Com_MainFunctionRx()
+ * が周期的に評価した結果を通知（Rte_COMCbkRxTOut_*()）で受ける「今まさに生きているか」
+ * の独立した軸である。もし
  * ラッチを先に見てしまうと、E2E ハードエラーを起こしたフレームを最後に
  * 通信が本当に途絶えた場合（配線断は E2E 異常と通信途絶を同時に招きやすい）、
  * ラッチされた RTE_E_HARD_TRANSFORMER_ERROR が永久に優先され、
- * Com_IsRxTimedOut() が真に切り替わっても RTE_E_COM_STOPPED が一切
+ * RxTimedOut が真に切り替わっても RTE_E_COM_STOPPED が一切
  * 浮上しなくなる（＝COMM_TIMEOUT の FAULT 遷移が永久にマスクされる）。
  * 実 AUTOSAR の Rte_Read 用優先順位規定（[SWS_Rte_08592]）では COM_STOPPED
- * が HARD_TRANSFORMER_ERROR より優先度が高く、本実装が Com_IsRxTimedOut()
+ * が HARD_TRANSFORMER_ERROR より優先度が高く、本実装が RxTimedOut
  * を先に見る挙動はこの規定と整合している（詳細な優先順位リストと
  * 2026-09 是正の経緯は Rte_Type.h の Rte_IStatusType コメント参照）。
  * ----------------------------------------------------------------------- */
@@ -136,6 +138,9 @@ typedef struct
 } Rte_EngineInfoMirrorType;
 static Rte_EngineInfoMirrorType Rte_EngineInfoMirror;
 static Rte_IStatusType Rte_EngineInfoStatus = RTE_E_OK;
+/** 1 = EngineInfo の受信デッドライン超過中。Rte_COMCbkRxTOut_EngineOnFlag() が立て、
+ *  フレーム受信（Rte_COMRxInd_EngineInfo()）が下ろす。 */
+static uint8 Rte_EngineInfoRxTimedOut = 0U;
 
 typedef struct
 {
@@ -145,6 +150,9 @@ typedef struct
 } Rte_AbsInfoMirrorType;
 static Rte_AbsInfoMirrorType Rte_AbsInfoMirror;
 static Rte_IStatusType Rte_AbsInfoStatus = RTE_E_OK;
+/** 1 = AbsInfo の受信デッドライン超過中。Rte_COMCbkRxTOut_AbsInfo() が立て、
+ *  フレーム受信（Rte_COMRxInd_AbsInfo()）が下ろす。 */
+static uint8 Rte_AbsInfoRxTimedOut = 0U;
 
 /**
  * \brief   E2E_P01StatusType（8状態）を Rte_IStatusType（3値+OK）へ写像する。
@@ -610,7 +618,7 @@ Rte_IStatusType Rte_Read_SpeedSensor_EngineSpeed(EngineSpeed_t* data)
     *data = Rte_EngineInfoMirror.speed;
     SchM_Exit_Rte_MIRROR_EXCLUSIVE_AREA();
 
-    if ((Com_IsRxTimedOut(0U)) != 0U)
+    if (Rte_EngineInfoRxTimedOut != 0U)
     {
         return RTE_E_COM_STOPPED;
     }
@@ -642,7 +650,7 @@ Rte_IStatusType Rte_Read_TempSensor_CoolantTemp(CoolantTemp_t* data)
     *data = Rte_EngineInfoMirror.temp;
     SchM_Exit_Rte_MIRROR_EXCLUSIVE_AREA();
 
-    if ((Com_IsRxTimedOut(0U)) != 0U)
+    if (Rte_EngineInfoRxTimedOut != 0U)
     {
         return RTE_E_COM_STOPPED;
     }
@@ -675,7 +683,7 @@ Rte_IStatusType Rte_Read_EngineStatus_EngineOnFlag(EngineOnFlag_t* data)
     *data = Rte_EngineInfoMirror.onFlag;
     SchM_Exit_Rte_MIRROR_EXCLUSIVE_AREA();
 
-    if ((Com_IsRxTimedOut(0U)) != 0U)
+    if (Rte_EngineInfoRxTimedOut != 0U)
     {
         return RTE_E_COM_STOPPED;
     }
@@ -760,7 +768,7 @@ Rte_IStatusType Rte_Read_VehicleSensor_VehicleSpeed(VehicleSpeed_t* data)
     *data = Rte_AbsInfoMirror.speed;
     SchM_Exit_Rte_MIRROR_EXCLUSIVE_AREA();
 
-    if ((Com_IsRxTimedOut(1U)) != 0U)
+    if (Rte_AbsInfoRxTimedOut != 0U)
     {
         return RTE_E_COM_STOPPED;
     }
@@ -791,7 +799,7 @@ Rte_IStatusType Rte_Read_BrakeSensor_BrakeActive(BrakeActive_t* data)
     *data = Rte_AbsInfoMirror.brake;
     SchM_Exit_Rte_MIRROR_EXCLUSIVE_AREA();
 
-    if ((Com_IsRxTimedOut(1U)) != 0U)
+    if (Rte_AbsInfoRxTimedOut != 0U)
     {
         return RTE_E_COM_STOPPED;
     }
@@ -822,7 +830,7 @@ Rte_IStatusType Rte_Read_AbsSensor_AbsActive(AbsActive_t* data)
     *data = Rte_AbsInfoMirror.abs;
     SchM_Exit_Rte_MIRROR_EXCLUSIVE_AREA();
 
-    if ((Com_IsRxTimedOut(1U)) != 0U)
+    if (Rte_AbsInfoRxTimedOut != 0U)
     {
         return RTE_E_COM_STOPPED;
     }
@@ -1099,11 +1107,13 @@ Std_ReturnType Rte_Start(void)
     Rte_EngineInfoMirror.temp   = 0U;
     Rte_EngineInfoMirror.onFlag = 0U;
     Rte_EngineInfoStatus        = RTE_E_OK;
+    Rte_EngineInfoRxTimedOut    = 0U;
 
     Rte_AbsInfoMirror.speed = 0U;
     Rte_AbsInfoMirror.brake = 0U;
     Rte_AbsInfoMirror.abs   = 0U;
     Rte_AbsInfoStatus       = RTE_E_OK;
+    Rte_AbsInfoRxTimedOut   = 0U;
 
     SchM_Exit_Rte_MIRROR_EXCLUSIVE_AREA();
 
@@ -1326,6 +1336,7 @@ void Rte_COMCbkInv_CoolantTemp(void)
  */
 void Rte_COMCbkRxTOut_EngineOnFlag(void)
 {
+    Rte_EngineInfoRxTimedOut = 1U;   /* Rte_Read_*() が RTE_E_COM_STOPPED を返す。次のフレーム受信まで継続 */
     DET_LOGW(TAG, "EngineInfo RX deadline timeout (EngineOnFlag)");
 }
 
@@ -1449,6 +1460,7 @@ void Rte_COMCbkTAck_WarningStatus(void)
  */
 void Rte_COMCbkRxTOut_AbsInfo(void)
 {
+    Rte_AbsInfoRxTimedOut = 1U;   /* Rte_Read_*() が RTE_E_COM_STOPPED を返す。次のフレーム受信まで継続 */
     DET_LOGW(TAG, "AbsInfo RX deadline timeout (group)");
 }
 
@@ -1695,6 +1707,9 @@ void Rte_SecOCVerificationStatus_ImmobilizerCmd(SecOC_VerificationStatusType sta
 void Rte_COMRxInd_EngineInfo(void)
 {
     uint8 buf[7];
+
+    Rte_EngineInfoRxTimedOut = 0U;   /* フレームが届いた＝デッドライン超過の解消 */
+
     if (Com_ReceiveSignalGroupArray(0U, buf) != E_OK)
     {
         return;
@@ -1746,6 +1761,9 @@ void Rte_COMRxInd_EngineInfo(void)
 void Rte_COMRxInd_AbsInfo(void)
 {
     uint8 buf[6];
+
+    Rte_AbsInfoRxTimedOut = 0U;   /* フレームが届いた＝デッドライン超過の解消 */
+
     if (Com_ReceiveSignalGroupArray(1U, buf) != E_OK)
     {
         return;

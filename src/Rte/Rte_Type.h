@@ -75,11 +75,11 @@ typedef enum
  * 優先度が高く、乖離ではなかった）。E2E チェックはフレーム受信時に
  * 非同期に行い結果をラッチする設計のため、RTE_E_HARD_TRANSFORMER_ERROR
  * は「過去の一時点（最後の受信）のラッチ」であり、RTE_E_COM_STOPPED
- * （Com_IsRxTimedOut()）は「現在も継続する物理層の状態」である。ラッチを
+ * （Com の RxTOut 通知で立てる RxTimedOut）は「現在も継続する物理層の状態」である。ラッチを
  * 無条件に優先すると、E2E エラーを起こしたフレームを最後に通信が本当に
  * 途絶えた場合、ラッチされた HARD_TRANSFORMER_ERROR が COM_STOPPED を
  * 永久にマスクしてしまう（コードレビューで発見・修正済み）。そのため
- * Rte_Read_*() は必ず Com_IsRxTimedOut()（生きている情報）を先に判定する
+ * Rte_Read_*() は必ず RxTimedOut（生きている情報）を先に判定する
  * （詳細は Rte.c の「E2E Transformer 方式の RX ミラー」コメント参照）。
  *
  * 値そのものは本プロジェクトの簡略実装であり、AUTOSAR 公式のビット幅・
