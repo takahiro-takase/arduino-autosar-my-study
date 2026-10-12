@@ -12,6 +12,8 @@
     "sourceNodeId",
     "canifTxPdu",
     "canifRxPdu",
+    "nmTxPduId",
+    "nmRxPduId",
     "timerSection",
     "timeoutMs",
     "repeatMessageMs",
@@ -39,6 +41,27 @@
         }
       },
       "description": "見出しコメントの行"
+    },
+    "pduId": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "value",
+        "doc"
+      ],
+      "properties": {
+        "value": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 65535
+        },
+        "doc": {
+          "$ref": "#/$defs/doc"
+        },
+        "unused": {
+          "type": "boolean"
+        }
+      }
     },
     "ms": {
       "type": "object",
@@ -144,6 +167,14 @@
     "canifRxPdu": {
       "$ref": "#/$defs/pdu",
       "description": "NM フレームの CanIf の RX PDU（rxIndication が CANNM のもの）"
+    },
+    "nmTxPduId": {
+      "$ref": "#/$defs/pduId",
+      "description": "CanNm 側の TX PDU の ID（CanIf が TxConfirmation で CanNm へ返す ID）"
+    },
+    "nmRxPduId": {
+      "$ref": "#/$defs/pduId",
+      "description": "CanNm 側の RX PDU の ID（CanIf が RxIndication で CanNm へ渡す ID）"
     },
     "timerSection": {
       "$ref": "#/$defs/section"

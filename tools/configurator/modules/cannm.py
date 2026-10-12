@@ -19,11 +19,19 @@ LAYOUT = (
     ("define", "sourceNodeId", "CANNM_SOURCE_NODE_ID", "%s"),
     ("define", "canifTxPdu", "CANNM_CANIF_TX_PDU_ID", "%s"),
     ("define", "canifRxPdu", "CANNM_CANIF_RX_PDU_ID", "%s"),
+    ("define", "nmTxPduId", "<CanNmConf_CanNmTxPdu_*>", "%dU"),  # マクロ名は layout() が CanIf の PDU 名から作る
+    ("define", "nmRxPduId", "<CanNmConf_CanNmRxPdu_*>", "%dU"),
     ("section", "timerSection"),
     ("define", "timeoutMs", "CANNM_TIMEOUT_MS", "%dUL"),
     ("define", "repeatMessageMs", "CANNM_REPEAT_MESSAGE_MS", "%dUL"),
     ("define", "waitBusSleepMs", "CANNM_WAIT_BUS_SLEEP_MS", "%dUL"),
 )
+
+
+def layout(cfg):
+    """LAYOUT の、名前が CanIf の PDU 名に依存する定義（CanNm 側の PDU の ID）にマクロ名を入れる。"""
+    names = {"nmTxPduId": symbols.CANNM_TX + cfg["canifTxPdu"]["pdu"], "nmRxPduId": symbols.CANNM_RX + cfg["canifRxPdu"]["pdu"]}
+    return tuple((it[0], it[1], names.get(it[1], it[2]), it[3]) if it[0] == "define" else it for it in LAYOUT)
 
 
 def canif_pdu(cfg, ctx, key, table, prefix, upper):
@@ -59,7 +67,8 @@ def render(cfg, ctx):
     errors = check_cycle(cfg, ctx)
     if errors:
         raise ValueError("CanNm.json: " + " / ".join(errors))
-    return render_layout(cfg, LAYOUT, {
+    # CanNm 側の PDU の ID は、シンボリック名（CanNmConf_*_<CanIf の PDU 名>）で定義する
+    return render_layout(cfg, layout(cfg), {
         "sourceNodeId": "0x%02XU" % int(cfg["sourceNodeId"]["value"], 16),
         "canifTxPdu": canif_pdu(cfg, ctx, "canifTxPdu", "txPdus", symbols.CANIF_TX, "txConfirm"),
         "canifRxPdu": canif_pdu(cfg, ctx, "canifRxPdu", "rxPdus", symbols.CANIF_RX, "rxIndication"),
@@ -71,6 +80,6 @@ SPEC = {
     "schema": "config/schema/CanNm.schema.json",
     "validate": validate,
     "targets": [
-        ("src/Bsw/CanNm/CanNm_Cfg.h", "cannm-params", render, lambda cfg, text: symbols.include_warnings(text)),
+        ("src/Bsw/CanNm/CanNm_Cfg.h", "cannm-params", render, lambda cfg, text: symbols.include_warnings(text, "CanNm_Cfg.h")),
     ],
 }
