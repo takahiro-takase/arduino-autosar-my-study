@@ -166,7 +166,7 @@ TEST_F(Bsw_WdgM_GetLocalStatus_Test, GetLocalStatus_OK_StaysFailedDuringSuppress
      * べき（/code-review で指摘、修正済み）。猶予サイクル数を大幅に超えて
      * 抑制状態が続いても FAILED のまま EXPIRED へエスカレーションしないことを
      * 確認する。 */
-    WdgM_DisableHwWatchdog();
+    (void)WdgM_SetMode(WDGM_MODE_POST_RUN);
 
     for (uint8 i = 0U; i < WDGM_EXPIRED_SUPERVISION_CYCLE_TOL + 3U; i++)
         WdgM_MainFunction();
@@ -182,7 +182,7 @@ TEST_F(Bsw_WdgM_GetLocalStatus_Test, GetLocalStatus_OK_StaysFailedDuringSuppress
     /* 抑制解除後は、凍結されていた分の蓄積がいきなり反映されるのではなく、
      * 解除後にあらためて WDGM_EXPIRED_SUPERVISION_CYCLE_TOL 判定サイクル分の
      * 継続 FAILED を要して EXPIRED へ遷移することを確認する。 */
-    WdgM_EnableHwWatchdog();
+    (void)WdgM_SetMode(WDGM_MODE_DEFAULT);
     WdgM_MainFunction();
     Std_ReturnType retCycle1 = WdgM_GetLocalStatus(WDGM_ENTITY_WARNING, &status);
     WdgM_LocalStatusType statusCycle1 = status;

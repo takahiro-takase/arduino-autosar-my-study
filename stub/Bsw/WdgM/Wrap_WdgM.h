@@ -7,8 +7,8 @@
  *          参照（「wrap 対象の関数が定義されている元の src ファイル 1 つにつき
  *          1 ファイル」）。既定動作は `__real_...` へのパススルー。
  *
- *          `WdgM.h` が宣言する公開API全15関数（AUTOSAR IF 11関数 +
- *          本プロジェクト独自拡張4関数: EnableHwWatchdog/DisableHwWatchdog/
+ *          `WdgM.h` が宣言する公開API全13関数（AUTOSAR IF 11関数 +
+ *          本プロジェクト独自拡張2関数:
  *          ResumeSupervision/TriggerHwWatchdog）を wrap 対象とする
  *          （`WdgM_Test_SetFirstExpiredSEIDRaw` はテスト専用の拡張関数であり
  *          `WDGM_UNIT_TEST` ビルドでのみ存在するため対象外）。
@@ -21,8 +21,7 @@
  *          `CallCount_WdgM_Xxx` が N 以上になった回から（その回を含め、
  *          以降ずっと）`ForcedReturn_WdgM_Xxx` を返すようになる。
  *
- *          戻り値を持たない9関数（Init/DeInit/EnableHwWatchdog/
- *          DisableHwWatchdog/ResumeSupervision/MainFunction/
+ *          戻り値を持たない関数（Init/DeInit/ResumeSupervision/MainFunction/
  *          TriggerHwWatchdog/PerformReset/GetVersionInfo）は故障注入する
  *          戻り値が無いため、呼び出し回数のみ記録する。
  *
@@ -60,15 +59,13 @@ extern "C" {
  * ====================================================================== */
 
 /* ----------------------------------------------------------------------
- * 呼び出し回数（公開API全15関数共通）
+ * 呼び出し回数（公開API全13関数共通）
  * ---------------------------------------------------------------------- */
 extern uint32 CallCount_WdgM_Init;
 extern uint32 CallCount_WdgM_DeInit;
 extern uint32 CallCount_WdgM_GetVersionInfo;
 extern uint32 CallCount_WdgM_SetMode;
 extern uint32 CallCount_WdgM_GetMode;
-extern uint32 CallCount_WdgM_EnableHwWatchdog;
-extern uint32 CallCount_WdgM_DisableHwWatchdog;
 extern uint32 CallCount_WdgM_ResumeSupervision;
 extern uint32 CallCount_WdgM_CheckpointReached;
 extern uint32 CallCount_WdgM_GetLocalStatus;

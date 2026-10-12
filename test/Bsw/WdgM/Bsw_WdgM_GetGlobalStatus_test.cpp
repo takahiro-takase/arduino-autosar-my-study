@@ -132,7 +132,7 @@ TEST_F(Bsw_WdgM_GetGlobalStatus_Test,
     /* ----------------------- */
     /* POST_RUN 突入相当。Rte_Engine/Rte_Warning が意図的に停止するのを模して
      * 一切 CheckpointReached を呼ばないまま WdgM_MainFunction() を回す。 */
-    WdgM_DisableHwWatchdog();
+    (void)WdgM_SetMode(WDGM_MODE_POST_RUN);
 
     WdgM_MainFunction();
     WdgM_MainFunction();

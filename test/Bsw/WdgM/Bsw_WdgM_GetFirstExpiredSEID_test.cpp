@@ -210,7 +210,7 @@ TEST_F(Bsw_WdgM_GetFirstExpiredSEID_Test,
 
     /* 実 HW リセットに至る前に（本テストは実 HW を持たないため無条件に）
      * ENGINE も Alive Supervision を満たすようにし、両エンティティが OK に
-     * 戻る（＝実機なら WdgM_DisableHwWatchdog() 等でリセットを免れて回復した
+     * 戻る（＝実機なら WdgM_SetMode(WDGM_MODE_POST_RUN) 等でリセットを免れて回復した
      * ケースに相当）。 */
     WdgM_CheckpointReached(WDGM_ENTITY_ENGINE, WDGM_CP_ENGINE_START);
     /* WARNING の直前チェックポイントは上のループの最後の END（[300,1500]ms

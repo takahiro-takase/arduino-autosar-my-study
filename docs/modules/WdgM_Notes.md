@@ -173,7 +173,7 @@ EcuM_Init() 内、WdgM_Init() より前:
                             ウォッチドッグのタイムアウトに巻き込まれないため）
 
 WdgM_Init()（起動シーケンス末尾、Os_Init の直前）:
-  WdgM_EnableHwWatchdog()
+  WdgM_SetMode(WDGM_MODE_DEFAULT)
     → WdgIf_SetMode(WDGIF_DEVICE_0, WDGIF_FAST_MODE)
       → Wdg_SetMode(WDGIF_FAST_MODE)
         → Wdg_Hw_Enable(timeoutMs)   ← HW ウォッチドッグを 4000ms タイムアウトで有効化
@@ -195,13 +195,13 @@ WdgM_TriggerHwWatchdog()（1000ms 周期、リフレッシュのみ）:
   → setup() から再起動（DET ログも最初から出力される）
 ```
 
-**Wdg_SetMode(WDGIF_OFF_MODE) は常に失敗する**: `WdgM_DisableHwWatchdog()`
+**Wdg_SetMode(WDGIF_OFF_MODE) は常に失敗する**: `WdgM_SetMode(WDGM_MODE_POST_RUN)`
 （POST_RUN 遷移時に呼ばれる）は内部で `WdgIf_SetMode(WDGIF_DEVICE_0,
 WDGIF_OFF_MODE)` を呼ぶが、Renesas RA4M1 の IWDT は一度有効化すると
 無効化する手段がないため、`Wdg_SetMode()` は常に `E_NOT_OK` を返す
 （実 AUTOSAR の拡張プロダクションエラー `WDG_E_DISABLE_REJECTED` に相当する
 状況。本プロジェクトはプロダクションエラーの仕組み自体を持たないため
-`DET_LOGW` のみで通知する）。`WdgM_DisableHwWatchdog()` はこの戻り値を
+`DET_LOGW` のみで通知する）。`WdgM_SetMode(WDGM_MODE_POST_RUN)` はこの戻り値を
 無視し、`WdgM_SupervisionSuppressed` フラグを立てることで目的を達成する
 （HW が物理的に無効化されたかどうかには依存しない設計。詳細は WdgM.c の
 「HW ウォッチドッグ連携」コメント参照）。
@@ -323,7 +323,7 @@ Renesas RA は WDT が `WDT.begin()` を呼ぶまで動作しないため、
 
 ## 意図的な POST_RUN 移行での無効化／RUN 復帰での再有効化
 
-EcuM が RUN から POST_RUN へ遷移する際、`WdgM_DisableHwWatchdog()` を呼んで
+EcuM が RUN から POST_RUN へ遷移する際、`WdgM_SetMode(WDGM_MODE_POST_RUN)` を呼んで
 HW ウォッチドッグを無効化します。POST_RUN では BswM Rule 1 によって Rte_Engine /
 Rte_Warning タスク（WdgM の監視対象、Entity 0/1 双方）が意図的に停止するため、
 両エンティティとも Alive Supervision は必ず FAILED になります。
@@ -338,7 +338,7 @@ HW ウォッチドッグのタイムアウト（4000ms）は SHUTDOWN への遷�
 POST_RUN への移行そのものを無効化のタイミングにすることで、この競合を避けています。
 
 ボランタリスリープからのウェイクアップ等で POST_RUN/SHUTDOWN から RUN へ復帰した
-場合は、`WdgM_EnableHwWatchdog()` で再度有効化し、Alive Supervision による監視を
+場合は、`WdgM_SetMode(WDGM_MODE_DEFAULT)` で再度有効化し、Alive Supervision による監視を
 再開します（Bus-Off 回復は L1/L2 バックオフで無期限に継続し RUN を解放しないため、
 この経路で POST_RUN に入ることはありません）。
 
@@ -541,11 +541,14 @@ delay(1000);  /* 動作確認用: 500ms の許容上限を超えさせる */
   リセットまでの約 4 秒の間に書き込みます（スケジューラ自体が止まった場合は書けません）。後者は
   `NvM_WriteAll()` で書き切ってからリセットします。
 
-- **`WdgM_SetMode()` は複数モード切替に対応していません**（本プロジェクトは
-  `WdgM_ConfigType`/`WdgM_EntityCfgType` が単一の静的コンフィグのみを保持する
-  構造で、`WDGM_MODE_DEFAULT` (0) 以外の `Mode` を渡すと常にエラー拒否する
-  だけの簡略実装です。実際にモード間で監視対象・許容値セットを入れ替える
-  ロジック自体を持ちません）。2026-09-19〜20のBSW仕様乖離サーベイで
+- **`WdgM_SetMode()` は、モードごとの監視対象・許容値セットの入れ替えには対応していません**
+  （本プロジェクトは `WdgM_ConfigType`/`WdgM_EntityCfgType` が単一の静的コンフィグのみを保持する
+  構造です。有効なモードは `WDGM_MODE_DEFAULT`（通常）と `WDGM_MODE_POST_RUN`（POST_RUN）の 2 つで、
+  モードごとに違うのは、WdgIf へ要求するウォッチドッグのモード（FAST / OFF）と、監視の判定を
+  抑制するか（`WdgM_SupervisionSuppressed`）だけです。範囲外の `Mode` はエラー拒否します。
+  EcuM が、POST_RUN へ遷移する時に `WDGM_MODE_POST_RUN`、RUN へ復帰する時に `WDGM_MODE_DEFAULT` を
+  設定します。2026-10 に、独自 API の `WdgM_EnableHwWatchdog()`/`WdgM_DisableHwWatchdog()` を廃止し、
+  この仕様の API へ置き換えました）。2026-09-19〜20のBSW仕様乖離サーベイで
   `WdgM_E_SET_MODE`（実は Dem の拡張プロダクションエラー、
   [SWS_WdgM_00376]/[SWS_WdgM_00142]）が未実装というバックログ候補を調査した
   結果、この簡略化に起因すると確定したため、正式にここへ登録する（以前は
@@ -553,20 +556,17 @@ delay(1000);  /* 動作確認用: 500ms の許容上限を超えさせる */
   散在しており、この Notes.md には記載が無かったため「未実装ギャップ」として
   何度か再発見されるリスクがあった）。
   - 未実装の要求: [SWS_WdgM_00186]（`WdgIf_SetMode()` によるモードごとの
-    監視パラメータ一式の適用。`WdgM_SetMode()` からは `WdgIf_SetMode()` を
-    呼んでいない。なお `WdgM_EnableHwWatchdog()`/`WdgM_DisableHwWatchdog()` は
-    HW ウォッチドッグの有効化・無効化のために `WdgIf_SetMode()` を呼ぶが、
-    モードごとの監視パラメータの適用とは別物）、[SWS_WdgM_00139]/[SWS_WdgM_00142]（`WdgIf_SetMode()`
+    監視パラメータ一式の適用。`WdgM_SetMode()` は、`WdgIf_SetMode()` で
+    HW ウォッチドッグのモードを切り替えるが、モードごとの監視パラメータの適用はしない）、[SWS_WdgM_00139]/[SWS_WdgM_00142]（`WdgIf_SetMode()`
     失敗時の Global Status STOPPED 遷移・Dem `WDGM_E_SET_MODE` 報告。
-    呼び出し自体が無いためこの失敗パス自体が発生しえない）、
+    POST_RUN の OFF 要求は HW の制約で常に失敗するが、結果を無視する）、
     [SWS_WdgM_00145]/[SWS_WdgM_00316]（Global Status が OK/FAILED 以外の
     ときに何もせず return するガード）、[SWS_WdgM_00182]/[SWS_WdgM_00315]
     （新モードで非activateなSEを`WDGM_LOCAL_STATUS_DEACTIVATED`にする等の
     SE単位のactivate/deactivate処理）、[SWS_WdgM_00031]（`WdgMOffModeEnabled`
     がFALSEのときのOFF_MODE拒否、DET `WDGM_E_DISABLE_NOT_ALLOWED`）。
-  - **本プロジェクトの本番コード（EcuM/BswM含む）から`WdgM_SetMode()`は
-    一度も呼ばれていません**（呼び出し元はユニットテストのみ）。そのため
-    実機ログでの観測・検証は原理的に不可能です。
+  - `WdgM_SetMode()` は、EcuM が RUN と POST_RUN の遷移で呼びます（実機ログの
+    `WdgM: WdgM_ApplyMode: SetMode ok mode=` で観測できます）。
   - フル対応するには、モードごとの監視パラメータ一式（`WdgMSupervisionCycle`/
     `WdgMExpiredSupervisionCycleTol`/Alive・Deadline・Logical各設定/
     WdgIfトリガ設定）を保持する新規コンフィグ構造への全面刷新、
@@ -737,7 +737,7 @@ POST_RUN 中は Rte_Engine / Rte_Warning タスクが意図的に停止するた
 はリセットしていなかった。そのため POST_RUN 中に付いた FAILED ラッチが
 SHUTDOWN を越えて RUN 復帰後まで残ってしまう。
 
-RUN 復帰直後は `WdgM_EnableHwWatchdog()` により `WdgM_SupervisionSuppressed`
+RUN 復帰直後は `WdgM_SetMode(WDGM_MODE_DEFAULT)` により `WdgM_SupervisionSuppressed`
 が解除されるため、アプリタスクは実際には正常に再開しているにもかかわらず、
 古い FAILED ラッチのせいで `WdgM_TriggerHwWatchdog()` がリフレッシュを拒否し
 続ける。次に `WdgM_MainFunction()` が判定し直してラッチが自然に解消される

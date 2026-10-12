@@ -122,7 +122,7 @@ TEST_F(Bsw_WdgM_PerformReset_Test, PerformReset_OK_OverridesSupervisionSuppressi
     /* ---- 準備 (Arrange) --- */
     /* ----------------------- */
     /* POST_RUN 相当（WdgM_SupervisionSuppressed 中）は本来 refresh を継続する。 */
-    WdgM_DisableHwWatchdog();
+    (void)WdgM_SetMode(WDGM_MODE_POST_RUN);
     WdgM_TriggerHwWatchdog();
     EXPECT_EQ(FakeWdgHw_RefreshCount, 1U);
 

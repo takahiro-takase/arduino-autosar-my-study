@@ -2,9 +2,9 @@
  * \file    Bsw_WdgM_SetGetMode_test.cpp
  * \brief   WdgM_SetMode()/WdgM_GetMode() の単体テスト
  * \details AUTOSAR SWS_WdgM_00154/SWS_WdgM_00168 準拠のシグネチャで新設。
- *          本プロジェクトは単一の静的コンフィグのみ保持するため、
- *          WDGM_MODE_DEFAULT (0) のみを有効なモードとして受理する簡略実装
- *          であることを検証する。
+ *          本プロジェクトは単一の静的コンフィグのみ保持し、有効なモードは
+ *          WDGM_MODE_DEFAULT（通常）と WDGM_MODE_POST_RUN（POST_RUN、監視の判定を抑制）
+ *          の 2 つだけであることを検証する（範囲外は E_NOT_OK）。
  *          本番の WdgM_Config (WdgM_PBCfg.c) をそのまま使う。
  */
 
@@ -88,7 +88,7 @@ TEST_F(Bsw_WdgM_SetGetMode_Test, SetMode_NG_OutOfRangeModeReturnsErrorAndReports
     /* ----------------------- */
     /* ---- 実行 (Act) ------- */
     /* ----------------------- */
-    Std_ReturnType ret = WdgM_SetMode((WdgM_ModeType)(WDGM_MODE_DEFAULT + 1U));
+    Std_ReturnType ret = WdgM_SetMode((WdgM_ModeType)WDGM_MODE_COUNT);
 
     /* ----------------------- */
     /* ---- 評価 (Assert) ---- */
@@ -156,6 +156,27 @@ TEST_F(Bsw_WdgM_SetGetMode_Test, GetMode_OK_ReflectsPreviousSetMode)
     /* ----------------------- */
     ASSERT_EQ(ret, E_OK);
     EXPECT_EQ(mode, WDGM_MODE_DEFAULT);
+}
+
+TEST_F(Bsw_WdgM_SetGetMode_Test, SetMode_OK_PostRunModeIsAcceptedAndReflectedByGetMode)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    WdgM_ModeType mode = (WdgM_ModeType)0xFFU;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Std_ReturnType setRet = WdgM_SetMode(WDGM_MODE_POST_RUN);
+    Std_ReturnType getRet = WdgM_GetMode(&mode);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(setRet, E_OK);   // WdgIf_SetMode(OFF) が拒否されても、E_OK（HW を実際に無効化できなくてよい）
+    ASSERT_EQ(getRet, E_OK);
+    EXPECT_EQ(mode, WDGM_MODE_POST_RUN);
 }
 
 TEST_F(Bsw_WdgM_SetGetMode_Test, GetMode_NG_NullPointerReturnsErrorAndReportsDet)

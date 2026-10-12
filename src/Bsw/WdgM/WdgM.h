@@ -93,8 +93,7 @@ typedef uint16 WdgM_CheckpointIdType;
 /**
  * \brief   WdgM に設定されたモードを区別する型。
  * \details AUTOSAR WdgM_ModeType に相当する ([SWS_WdgM_00358])。範囲は
- *          0〜<設定モード数>-1 だが、本プロジェクトは単一の静的コンフィグ
- *          のみ保持するため実質的に WDGM_MODE_DEFAULT (0) のみが有効な値。
+ *          0〜WDGM_MODE_COUNT-1（WDGM_MODE_DEFAULT・WDGM_MODE_POST_RUN）。
  *
  * \AUTOSARReq     {SWS_WdgM_00358}
  */
@@ -172,8 +171,8 @@ extern "C" {
  * \brief   WdgM モジュールを初期化する。
  *
  * \details 全エンティティの Alive カウンタとステータスを初期化し、
- *          WdgM_EnableHwWatchdog() で実ハードウェアウォッチドッグを
- *          有効化する。EcuM_Init() の末尾、他の全 BSW モジュール初期化が
+ *          WdgM_SetMode(WDGM_MODE_DEFAULT) 相当（WdgIf へ WDGIF_FAST_MODE を要求）で
+ *          実ハードウェアウォッチドッグを有効化する。EcuM_Init() の末尾、他の全 BSW モジュール初期化が
  *          完了した後（Os_Init より前）に呼び出すこと。
  *
  * \param[in]  ConfigPtr  ポストビルドコンフィグへのポインタ。NULL 禁止。
@@ -190,8 +189,7 @@ void WdgM_Init(const WdgM_ConfigType* ConfigPtr);
  *
  * \details 設定ポインタを NULL に戻す。未初期化状態で呼ばれた場合は
  *          WDGM_E_NO_INIT を報告し何もしない。実 HW ウォッチドッグの有効/
- *          無効化は行わない（WdgM_EnableHwWatchdog/DisableHwWatchdog は
- *          本プロジェクト独自の別 API であり、本関数の責務ではない）。
+ *          無効化は行わない（モードの切替は WdgM_SetMode() の責務であり、本関数の責務ではない）。
  *
  * \AUTOSARReq     {SWS_WdgM_00261, SWS_WdgM_00288}
  * \ServiceID      {0x01}
@@ -203,28 +201,27 @@ void WdgM_DeInit(void);
 /**
  * \brief   WdgM の現在のモードを設定する。
  *
- * \details 実仕様は複数の監視設定セット（モード）間の切替 API だが、
- *          本プロジェクトは単一の静的コンフィグのみ保持するため、
- *          `WDGM_MODE_DEFAULT` (0) 以外はエラーとして拒否するだけの
- *          簡略実装とする（監視対象・許容値セット自体の実際の入れ替えは
- *          行わない）（学習用簡略化）。この簡略化の結果、モード切替の実体で
- *          ある `WdgIf_SetMode()` 呼び出し自体を行っておらず、それに伴う
- *          [SWS_WdgM_00186]（監視パラメータ一式のモードごとの入れ替え）・
- *          [SWS_WdgM_00139]/[SWS_WdgM_00142]（`WdgIf_SetMode()` 失敗時の
- *          Global Status STOPPED 遷移・Dem `WDGM_E_SET_MODE` 拡張
- *          プロダクションエラー報告）・[SWS_WdgM_00145]/[SWS_WdgM_00316]
- *          （Global Status ガード）・[SWS_WdgM_00182]/[SWS_WdgM_00315]
- *          （SE 単位の activate/deactivate）・[SWS_WdgM_00031]（OFF_MODE
- *          禁止時の `WDGM_E_DISABLE_NOT_ALLOWED`）も未実装（詳細・調査
- *          経緯は docs/modules/WdgM_Notes.md 参照）。`WdgM_SetMode()`
- *          自体、本プロジェクトの本番コード（EcuM/BswM 含む）からは
- *          一度も呼ばれておらず、複数モード対応には呼び出し元の設計も
- *          別途必要になる。
+ * \details 次の 2 つのモードを切り替える（[SWS_WdgM_00154]）。
+ *            - WDGM_MODE_DEFAULT: 通常（RUN）。監視の判定を有効にし、WdgIf へ WDGIF_FAST_MODE を要求する
+ *              （WdgM_Init() も、これと同じ状態で始まる）。
+ *            - WDGM_MODE_POST_RUN: POST_RUN。Rte_Engine などの監視対象タスクが意図的に止まり、Alive Supervision が
+ *              必ず FAILED になるため、監視の判定を抑制し（FAILED でも HW ウォッチドッグのリフレッシュを続ける）、
+ *              WdgIf へ WDGIF_OFF_MODE を要求する。本プロジェクトの HW（Renesas RA の WDT）は一度有効化すると
+ *              無効化できず、この要求は拒否される（Dem に WDG_DISABLE_REJECTED が記録される）が、
+ *              ここでの目的は「WdgM が FAILED 判定の結果を無視する」ことなので、戻り値は無視する。
+ *          EcuM が、RUN から POST_RUN へ遷移する時に WDGM_MODE_POST_RUN、RUN へ復帰する時に WDGM_MODE_DEFAULT を設定する
+ *          （復帰時は WdgM_ResumeSupervision() も併せて呼ぶこと）。
  *
- * \param[in]  Mode  設定するモード。`WDGM_MODE_DEFAULT` のみ有効。
- * \retval  E_OK      モードを正常に設定した。
- * \retval  E_NOT_OK  WdgM 未初期化、または Mode が範囲外
- *                    (`WDGM_MODE_DEFAULT` 以外)。
+ *          監視対象・許容値セット自体は、モードによらず共通（単一の静的コンフィグ。学習用簡略化）。
+ *          そのため、モードごとの監視の入れ替え（[SWS_WdgM_00186]）、WdgIf_SetMode() 失敗時の Global Status の STOPPED への
+ *          遷移・Dem WDGM_E_SET_MODE の報告（[SWS_WdgM_00139]/[SWS_WdgM_00142]）、Global Status のガード
+ *          （[SWS_WdgM_00145]/[SWS_WdgM_00316]）、SE 単位の activate/deactivate（[SWS_WdgM_00182]/[SWS_WdgM_00315]）、
+ *          OFF_MODE 禁止時の WDGM_E_DISABLE_NOT_ALLOWED（[SWS_WdgM_00031]）は未実装
+ *          （詳細・調査経緯は docs/modules/WdgM_Notes.md 参照）。
+ *
+ * \param[in]  Mode  設定するモード（WDGM_MODE_DEFAULT / WDGM_MODE_POST_RUN）。
+ * \retval  E_OK      モードを設定した。
+ * \retval  E_NOT_OK  WdgM 未初期化、または Mode が範囲外（WDGM_MODE_COUNT 以上）。
  *
  * \AUTOSARReq     {SWS_WdgM_00154, SWS_WdgM_00020, SWS_WdgM_00021}
  * \ServiceID      {0x03}
@@ -249,44 +246,10 @@ Std_ReturnType WdgM_SetMode(WdgM_ModeType Mode);
 Std_ReturnType WdgM_GetMode(WdgM_ModeType* Mode);
 
 /**
- * \brief   実ハードウェアウォッチドッグを WDGM_HW_WATCHDOG_TIMEOUT_MS で有効化する。
- *
- * \details WdgM_Init() がこの関数を呼ぶ。また、EcuM が POST_RUN から RUN へ
- *          復帰する際にも、監視対象タスクが再開するのに合わせて再度呼び出す
- *          （その際は WdgM_ResumeSupervision() も併せて呼ぶこと）。
- *
- * \note       AUTOSAR 標準の SWS_WdgM には存在しない本プロジェクト独自の
- *             拡張関数のため、対応する \AUTOSARReq は無い
- *             (WdgM_Cfg.h 冒頭のコメント参照)。
- * \ServiceID      {0x07}
- * \Reentrancy     {Non Reentrant}
- * \Synchronicity  {Synchronous}
- */
-void WdgM_EnableHwWatchdog(void);
-
-/**
- * \brief   実ハードウェアウォッチドッグを無効化する。
- *
- * \details EcuM が POST_RUN へ遷移する際に呼び出す。POST_RUN では
- *          Rte_Engine タスク（WdgM の監視対象）が意図的に停止するため、
- *          Alive Supervision は必ず FAILED になる。無効化しないと、
- *          意図した停止にもかかわらず HW ウォッチドッグのタイムアウト後に
- *          MCU がリセットされてしまう。
- *
- * \note       AUTOSAR 標準の SWS_WdgM には存在しない本プロジェクト独自の
- *             拡張関数のため、対応する \AUTOSARReq は無い
- *             (WdgM_Cfg.h 冒頭のコメント参照)。
- * \ServiceID      {0x06}
- * \Reentrancy     {Non Reentrant}
- * \Synchronicity  {Synchronous}
- */
-void WdgM_DisableHwWatchdog(void);
-
-/**
  * \brief   全エンティティのチェックポイント追跡基準をリセットする。
  *
  * \details EcuM が POST_RUN から RUN へ復帰し、監視対象タスクの実行を
- *          再開する直前に呼び出すこと（WdgM_EnableHwWatchdog() と対になる）。
+ *          再開する直前に呼び出すこと（WdgM_SetMode(WDGM_MODE_DEFAULT) と対になる）。
  *          POST_RUN 中は監視対象タスクが意図的に停止しているため、
  *          WdgM_CheckpointReached() が呼ばれず、内部の「直前チェックポイント」
  *          基準（チェックポイント ID・発生時刻）は停止前の古い値のまま残る。
@@ -423,7 +386,7 @@ void WdgM_MainFunction(void);
  * \brief   HW ウォッチドッグの trigger（リフレッシュ）処理。
  *
  * \details Os スケジューラから WDGM_HW_TRIGGER_CYCLE_MS ごとに呼ばれる。
- *          WdgM_GlobalStopped が立っていない（または WdgM_DisableHwWatchdog()
+ *          WdgM_GlobalStopped が立っていない（または WdgM_SetMode(WDGM_MODE_POST_RUN)
  *          による抑制中）場合のみ WdgIf_SetTriggerCondition() を呼ぶ。
  *          WdgM_GlobalStopped は WdgM_MainFunction() がグローバル猶予サイクル
  *          (WDGM_EXPIRED_SUPERVISION_CYCLE_TOL) を使い切って初めて立てる

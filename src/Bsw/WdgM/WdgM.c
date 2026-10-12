@@ -145,12 +145,12 @@
  *            短く、判定サイクルに直接リフレッシュを同期できないため
  *            （詳細は WdgM_Cfg.h の WDGM_HW_WATCHDOG_TIMEOUT_MS コメントを参照）。
  *            EcuM が POST_RUN へ遷移する際（Rte_Engine タスクが意図的に停止し
- *            Alive Supervision が必ず FAILED になる）は WdgM_DisableHwWatchdog() を
+ *            Alive Supervision が必ず FAILED になる）は WdgM_SetMode(WDGM_MODE_POST_RUN) を
  *            呼ぶ。WdgM_SupervisionSuppressed フラグも併せて立て、HW を実際に
  *            無効化できない MCU (例: Renesas RA の WDT は一度有効化すると
  *            ソフトウェアから無効化できない) でも、FAILED 判定に関わらず
  *            refresh を継続することで意図しないリセットを防ぐ。RUN へ復帰する
- *            際は WdgM_EnableHwWatchdog() でフラグを下ろし、通常の
+ *            際は WdgM_SetMode(WDGM_MODE_DEFAULT) でフラグを下ろし、通常の
  *            FAILED 時リセット動作に戻す。
  *
  * \copyright  Copyright (c) 2025 T_T
@@ -191,7 +191,7 @@
 
 static const WdgM_ConfigType* WdgM_Cfg = NULL;
 
-/** 1 = WdgM_DisableHwWatchdog() 以降 (POST_RUN 中等)。Alive Supervision の
+/** 1 = WdgM_SetMode(WDGM_MODE_POST_RUN) 以降 (POST_RUN 中等)。Alive Supervision の
  *  FAILED 判定に関わらず HW ウォッチドッグを refresh し続ける。
  *  HW を実際に無効化できる MCU では実質的に無意味だが、HW ウォッチドッグを
  *  一度有効化すると無効化できない MCU (例: Renesas RA) でも、POST_RUN の
@@ -325,6 +325,7 @@ static WdgM_SupervisedEntityIdType WdgM_FirstExpiredSEIDInv __attribute__((secti
  * ====================================================================== */
 
 static unsigned long WdgM_GetNowMs(void);
+static void WdgM_ApplyMode(WdgM_ModeType Mode);
 
 /* ======================================================================
  * Functions
@@ -342,7 +343,7 @@ static unsigned long WdgM_GetNowMs(void);
  * \brief   WdgM モジュールを初期化する。
  *
  * \details 全エンティティの Alive カウンタを 0、ステータスを OK にリセットし、
- *          WdgM_EnableHwWatchdog() で実ハードウェアウォッチドッグを
+ *          WdgM_SetMode(WDGM_MODE_DEFAULT) で実ハードウェアウォッチドッグを
  *          有効化する。他の全 BSW モジュール初期化が完了した後、Os_Init() の
  *          直前に呼び出すこと（初期化中の正常な処理時間では誤って時間切れに
  *          ならないように、初期化の最後に有効化する）。
@@ -377,9 +378,8 @@ void WdgM_Init(const WdgM_ConfigType* ConfigPtr)
     WdgM_ExpiredCycleCount     = 0U;
     WdgM_GlobalStopped         = 0U;
     WdgM_ResetRequested        = 0U;
-    WdgM_CurrentMode           = WDGM_MODE_DEFAULT;
 
-    WdgM_EnableHwWatchdog();
+    WdgM_ApplyMode(WDGM_MODE_DEFAULT);   /* 実 HW ウォッチドッグを有効化（WdgIf へ FAST を要求） */
 
     DET_LOGI(TAG, "Init ok entities=%u", (unsigned)ConfigPtr->EntityCount);
 }
@@ -439,15 +439,46 @@ Std_ReturnType WdgM_SetMode(WdgM_ModeType Mode)
         return E_NOT_OK;
     }
 
-    if (Mode != WDGM_MODE_DEFAULT)
+    if (Mode >= WDGM_MODE_COUNT)
     {
         (void)Det_ReportError(WDGM_MODULE_ID, 0U, WDGM_API_ID_SET_MODE, WDGM_E_PARAM_MODE);
         return E_NOT_OK;
     }
 
-    WdgM_CurrentMode = Mode;
-    DET_LOGI(TAG, "SetMode ok mode=%u", (unsigned)Mode);
+    WdgM_ApplyMode(Mode);
     return E_OK;
+}
+
+/**
+ * @brief   モードを適用する（WdgM_Init() と WdgM_SetMode() の共通処理）。
+ *
+ * @details WdgIf へ、モードのウォッチドッグのモードを要求し、監視の判定の抑制を切り替え、現在のモードを更新する。
+ *          WdgIf_SetMode() の戻り値は無視する。本プロジェクトの HW は一度有効化すると WDGIF_OFF_MODE へ戻せず、
+ *          POST_RUN の要求は常に E_NOT_OK になる（Wdg.c の Wdg_SetMode() コメント参照）が、
+ *          ここで行いたいのは「WdgM が FAILED 判定の結果を無視する」ことで、HW が実際に無効化されたかには
+ *          依存しないため。
+ *
+ * @param[in]  Mode  適用するモード（WDGM_MODE_COUNT 未満であること。呼び出し元で確認済み）。
+ */
+static void WdgM_ApplyMode(WdgM_ModeType Mode)
+{
+    /* モードごとの設定（WdgIf へ要求するウォッチドッグのモードと、監視の判定を抑制するか）。
+     * 添字は WdgM_ModeType（WDGM_MODE_DEFAULT / WDGM_MODE_POST_RUN）。 */
+    static const struct
+    {
+        WdgIf_ModeType WatchdogMode;          /* WdgIf_SetMode() に渡すモード */
+        uint8          SupervisionSuppressed; /* 1 = 監視の判定を抑制する（WdgM_SupervisionSuppressed に反映） */
+    } WdgM_ModeTable[WDGM_MODE_COUNT] =
+    {
+        /* WDGM_MODE_DEFAULT  */ { WDGIF_FAST_MODE, 0U },  /* WDGM_HW_WATCHDOG_TIMEOUT_MS (4000ms) に対応 */
+        /* WDGM_MODE_POST_RUN */ { WDGIF_OFF_MODE,  1U }
+    };
+
+    (void)WdgIf_SetMode(WDGIF_DEVICE_0, WdgM_ModeTable[Mode].WatchdogMode);
+    WdgM_SupervisionSuppressed = WdgM_ModeTable[Mode].SupervisionSuppressed;
+    WdgM_CurrentMode           = Mode;
+    DET_LOGI(TAG, "SetMode ok mode=%u (HW watchdog %s)", (unsigned)Mode,
+             (Mode == WDGM_MODE_DEFAULT) ? "enabled (4000ms)" : "off requested");
 }
 
 /* ----------------------------------------------------------------------
@@ -482,50 +513,6 @@ Std_ReturnType WdgM_GetMode(WdgM_ModeType* Mode)
 }
 
 /* ----------------------------------------------------------------------
- * WdgM_EnableHwWatchdog
- * ---------------------------------------------------------------------- */
-
-/**
- * \brief   実 HW ウォッチドッグを WDGM_HW_WATCHDOG_TIMEOUT_MS (4000ms) で有効化する。
- *
- * \note       AUTOSAR 標準の SWS_WdgM には存在しない本プロジェクト独自の
- *             拡張関数のため、対応する \AUTOSARReq は無い。
- * \ServiceID      {0x07}
- * \Reentrancy     {Non Reentrant}
- * \Synchronicity  {Synchronous}
- */
-void WdgM_EnableHwWatchdog(void)
-{
-    (void)WdgIf_SetMode(WDGIF_DEVICE_0, WDGIF_FAST_MODE);  /* WDGM_HW_WATCHDOG_TIMEOUT_MS (4000ms) に対応 */
-    WdgM_SupervisionSuppressed = 0U;
-    DET_LOGI(TAG, "HW watchdog enabled (4000ms)");
-}
-
-/* ----------------------------------------------------------------------
- * WdgM_DisableHwWatchdog
- * ---------------------------------------------------------------------- */
-
-/**
- * \brief   実 HW ウォッチドッグを無効化する。
- *
- * \note       AUTOSAR 標準の SWS_WdgM には存在しない本プロジェクト独自の
- *             拡張関数のため、対応する \AUTOSARReq は無い。
- * \ServiceID      {0x06}
- * \Reentrancy     {Non Reentrant}
- * \Synchronicity  {Synchronous}
- */
-void WdgM_DisableHwWatchdog(void)
-{
-    /* WdgIf_SetMode(OFF) は本プロジェクトの HW 制約により常に E_NOT_OK を
-     * 返す（Wdg.c の Wdg_SetMode() コメント参照）が、ここで行いたいのは
-     * 「WdgM が FAILED 判定の結果を無視する」ことであり、HW が物理的に
-     * 無効化されたかどうかには依存しないため、戻り値は無視してよい。 */
-    (void)WdgIf_SetMode(WDGIF_DEVICE_0, WDGIF_OFF_MODE);
-    WdgM_SupervisionSuppressed = 1U;
-    DET_LOGI(TAG, "HW watchdog disabled");
-}
-
-/* ----------------------------------------------------------------------
  * WdgM_ResumeSupervision
  * ---------------------------------------------------------------------- */
 
@@ -542,7 +529,7 @@ void WdgM_DisableHwWatchdog(void)
  *          不足し、WdgM_MainFunction() が SE を FAILED とラッチすることがある
  *          （POST_RUN 中は WdgM_SupervisionSuppressed により実害はない）。
  *          この FAILED ラッチをリセットせずに RUN へ復帰すると、
- *          WdgM_EnableHwWatchdog() が抑制フラグを解除した直後、実際には
+ *          WdgM_SetMode(WDGM_MODE_DEFAULT) が抑制フラグを解除した直後、実際には
  *          アプリが正常に再開しているにもかかわらず「POST_RUN 中の古い
  *          FAILED ラッチ」のせいで WdgM_TriggerHwWatchdog() がリフレッシュを
  *          拒否し続け、次の WdgM_MainFunction 判定サイクル（最大 6000ms 後）が
@@ -1196,7 +1183,7 @@ void WdgM_MainFunction(void)
          * [SWS_WdgM_00221]「STOPPED はいずれ HW リセットに至る最終状態」は、
          * そもそも STOPPED から（リセットを経ずに）回復するケース自体を
          * 想定していない。本プロジェクトは STOPPED を実際の HW リセットに
-         * 至る前に（WdgM_DisableHwWatchdog() 等による WdgM_SupervisionSuppressed
+         * 至る前に（WdgM_SetMode(WDGM_MODE_POST_RUN) 等による WdgM_SupervisionSuppressed
          * 経由で）解消できる独自拡張を既に持っており（このブロック自体の
          * 目的）、この PASSED 報告はその独自拡張シナリオに対する、仕様の
          * 想定範囲を超えた本プロジェクト独自の対応付けである（自己仕様引用
@@ -1211,7 +1198,7 @@ void WdgM_MainFunction(void)
         WdgM_GlobalStopped     = 0U;
 
         /* STOPPED/EXPIRED（実 HW リセットが迫っていた状態）が実際のリセットへ
-         * 至る前に解消したケース（例: WdgM_DisableHwWatchdog() による
+         * 至る前に解消したケース（例: WdgM_SetMode(WDGM_MODE_POST_RUN) による
          * WdgM_SupervisionSuppressed が refresh を再開させた後、RUN 復帰で
          * エンティティが真に回復した場合）。記録済みの WdgM_FirstExpiredSEID
          * は今回のリセット原因ではなくなったため、後で本当に無関係な原因

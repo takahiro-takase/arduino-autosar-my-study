@@ -106,8 +106,8 @@ ModuleId は README の「[モジュール一覧](../../README.md#module-list)�
   （ServiceID タグの誤りのみ修正）。
 
 **非標準の独自拡張関数（DET 対象外）**: `CanSM_RxIndication` /
-`WdgM_EnableHwWatchdog` /
-`WdgM_DisableHwWatchdog` / `WdgM_ResumeSupervision` /
+`WdgM_SetMode(WDGM_MODE_DEFAULT)` /
+`WdgM_SetMode(WDGM_MODE_POST_RUN)` / `WdgM_ResumeSupervision` /
 `Adc_ReadChannel` はいずれも実際の AUTOSAR SWS には存在しない、本プロジェクト
 独自の簡略化・拡張関数のため、DET のエラーコード・ApiId は個々の実 SWS 関数
 とは対応付けていません（ServiceID は既存の非標準値をそのまま踏襲。ただし
