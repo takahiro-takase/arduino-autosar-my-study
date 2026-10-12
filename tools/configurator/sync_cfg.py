@@ -73,11 +73,11 @@ def sync(signals, canif, pdur, com):
             cp = canif_pdu(ckey, name)
             if cp is None:
                 if direction == "TX":
-                    up = max([p["srcPduId"] for p in pdur["txPaths"]] + [p["upperLayerTxPduId"] for p in canif[ckey]] + [-1]) + 1
+                    up = max([p["srcPduId"] for p in pdur["txPaths"]] + [p.get("upperLayerTxPduId", -1) for p in canif[ckey]] + [-1]) + 1
                     cp = {"name": sn + suffix, "frame": name, "title": "%s フレーム" % name,
                           "upperLayerTxPduId": up, "hth": 0, "txConfirm": "PDUR"}
                 else:
-                    up = max([p["srcPduId"] for p in pdur["rxPaths"]] + [p["upperLayerRxPduId"] for p in canif[ckey]] + [-1]) + 1
+                    up = max([p["srcPduId"] for p in pdur["rxPaths"]] + [p.get("upperLayerRxPduId", -1) for p in canif[ckey]] + [-1]) + 1
                     cp = {"name": sn + suffix, "frame": name, "title": "%s フレーム" % name,
                           "upperLayerRxPduId": up, "hrh": 0, "rxIndication": "PDUR"}
                 canif[ckey].append(cp)

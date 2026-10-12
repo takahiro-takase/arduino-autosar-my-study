@@ -63,12 +63,11 @@
         "CanNm.c は PduR/Com を経由せず CanIf_Transmit(CANNM_CANIF_TX_PDU_ID, ...) を",
         "直接呼び出す（実車の CanNm と同じく Com スタックとは独立して動作する）。"
       ],
-      "upperLayerTxPduId": 2,
       "hth": 0,
       "txConfirm": "CANNM",
       "notes": {
         "upperLayerTxPduId": [
-          "CanNm_Cfg.h の CANNM_CANIF_TX_PDU_ID と一致させること"
+          "CanNm 側の TX PDU の ID（CanNm.json の nmTxPduId、CanNm_Cfg.h の CanNmConf_CanNmTxPdu_<name>）"
         ],
         "dlc": [
           "Control Bit Vector 1B + Source Node ID 1B"
@@ -206,13 +205,11 @@
         "CanNm.c は PduR/Com を経由せず CanIf から直接呼ばれる（実車の CanNm と",
         "同様、TxPduId=2 の NM フレーム送信と対になる受信経路）。"
       ],
-      "upperLayerRxPduId": 4,
       "hrh": 0,
       "rxIndication": "CANNM",
       "notes": {
         "upperLayerRxPduId": [
-          "CanNm_Cfg.h の CANNM_CANIF_RX_PDU_ID と一致させること。",
-          "単一チャネルのため CanNm 側では実質未使用"
+          "CanNm 側の RX PDU の ID（CanNm.json の nmRxPduId、CanNm_Cfg.h の CanNmConf_CanNmRxPdu_<name>）"
         ],
         "dlc": [
           "Control Bit Vector 1B + Source Node ID 1B"

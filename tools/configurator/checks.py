@@ -88,6 +88,7 @@ def check_all(ctx):
             linked.add(idx)
             if t["txConfirm"] != "PDUR":
                 errors.append("PduR %s: CanIf TX PDU '%s' の送信完了通知が PduR ではない" % (p["name"], t["name"]))
+                continue  # PduR 宛てでない PDU は upperLayerTxPduId を持たないため、以降の検査はしない
             if t["upperLayerTxPduId"] != p["srcPduId"]:
                 errors.append(
                     "PduR %s: srcPduId=%d と、CanIf '%s' の upperLayerTxPduId=%d が一致しない"

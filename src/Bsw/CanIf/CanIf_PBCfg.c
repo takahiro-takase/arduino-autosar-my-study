@@ -69,6 +69,7 @@
 #include "PduR_CanIf.h"
 #include "PduR_Cfg.h"
 #include "CanNm.h"
+#include "CanNm_Cfg.h"
 
 /* ======================================================================
  * Global Variables
@@ -119,14 +120,14 @@ static const CanIf_TxPduConfigType CanIf_TxPduConfigData[CANIF_TX_PDU_COUNT] = {
          * CanNm.c は PduR/Com を経由せず CanIf_Transmit(CANNM_CANIF_TX_PDU_ID, ...) を
          * 直接呼び出す（実車の CanNm と同じく Com スタックとは独立して動作する）。
          * --------------------------------------------------------------- */
-        .UpperLayerTxPduId = 2U,                  /* DaVinci: CanIfTxPduId
-                                                   *          CanNm_Cfg.h の CANNM_CANIF_TX_PDU_ID と一致させること */
-        .CanId             = 0x400U,              /* DaVinci: CanIfTxPduCanId */
-        .Dlc               = 2U,                  /* DaVinci: CanIfTxPduDlc
-                                                   *          Control Bit Vector 1B + Source Node ID 1B */
-        .Hth               = 0U,                  /* DaVinci: CanIfTxPduHthIdRef */
-        .TxConfirmFct      = CanNm_TxConfirmation /* DaVinci: CanIfTxPduUserTxConfirmationName
-                                                   *          [SWS_CanNm_00099] NM-Timeout Timer 再起動に使用 */
+        .UpperLayerTxPduId = CanNmConf_CanNmTxPdu_CanNm_Tx, /* DaVinci: CanIfTxPduId
+                                                             *          CanNm 側の TX PDU の ID（CanNm.json の nmTxPduId、CanNm_Cfg.h の CanNmConf_CanNmTxPdu_<name>） */
+        .CanId             = 0x400U,                        /* DaVinci: CanIfTxPduCanId */
+        .Dlc               = 2U,                            /* DaVinci: CanIfTxPduDlc
+                                                             *          Control Bit Vector 1B + Source Node ID 1B */
+        .Hth               = 0U,                            /* DaVinci: CanIfTxPduHthIdRef */
+        .TxConfirmFct      = CanNm_TxConfirmation           /* DaVinci: CanIfTxPduUserTxConfirmationName
+                                                             *          [SWS_CanNm_00099] NM-Timeout Timer 再起動に使用 */
     },
     {
         /* ---------------------------------------------------------------
@@ -252,14 +253,13 @@ static const CanIf_RxPduConfigType CanIf_RxPduConfigData[CANIF_RX_PDU_COUNT] = {
          * CanNm.c は PduR/Com を経由せず CanIf から直接呼ばれる（実車の CanNm と
          * 同様、TxPduId=2 の NM フレーム送信と対になる受信経路）。
          * --------------------------------------------------------------- */
-        .CanId             = 0x400U,            /* DaVinci: CanIfRxPduCanId */
-        .Hrh               = 0U,                /* DaVinci: CanIfRxPduHrhIdRef */
-        .UpperLayerRxPduId = 4U,                /* DaVinci: CanIfRxPduUpperLayerPduId
-                                                 *          CanNm_Cfg.h の CANNM_CANIF_RX_PDU_ID と一致させること。
-                                                 *          単一チャネルのため CanNm 側では実質未使用 */
-        .Dlc               = 2U,                /* DaVinci: CanIfRxPduDataLength
-                                                 *          Control Bit Vector 1B + Source Node ID 1B */
-        .RxIndicationFct   = CanNm_RxIndication /* DaVinci: CanIfRxPduUserRxIndicationName */
+        .CanId             = 0x400U,                        /* DaVinci: CanIfRxPduCanId */
+        .Hrh               = 0U,                            /* DaVinci: CanIfRxPduHrhIdRef */
+        .UpperLayerRxPduId = CanNmConf_CanNmRxPdu_CanNm_Rx, /* DaVinci: CanIfRxPduUpperLayerPduId
+                                                             *          CanNm 側の RX PDU の ID（CanNm.json の nmRxPduId、CanNm_Cfg.h の CanNmConf_CanNmRxPdu_<name>） */
+        .Dlc               = 2U,                            /* DaVinci: CanIfRxPduDataLength
+                                                             *          Control Bit Vector 1B + Source Node ID 1B */
+        .RxIndicationFct   = CanNm_RxIndication             /* DaVinci: CanIfRxPduUserRxIndicationName */
     }
 };
 

@@ -20,6 +20,13 @@ def validate(cfg):
         names = [p["name"] for p in cfg[key]]
         if len(set(names)) != len(names):
             errors.append("%s: name が重複している" % key)
+    for p in cfg["txPdus"]:
+        # 上位層へ返す ID は、PduR 宛てのときだけ数値で指定する（NM 宛ては CanNm.json の名前から引く）
+        if (p["txConfirm"] == "PDUR") != ("upperLayerTxPduId" in p):
+            errors.append("%s: upperLayerTxPduId は txConfirm が PDUR のときだけ指定する" % p["name"])
+    for p in cfg["rxPdus"]:
+        if (p["rxIndication"] == "PDUR") != ("upperLayerRxPduId" in p):
+            errors.append("%s: upperLayerRxPduId は rxIndication が PDUR のときだけ指定する" % p["name"])
     for p in cfg["txPdus"] + cfg["rxPdus"]:
         if ("frame" in p) == ("canId" in p):
             errors.append("%s: frame と canId のどちらか一方だけを指定する" % p["name"])
@@ -39,16 +46,16 @@ def resolve(pdu, ctx):
 
 
 def upper_tx_value(p, index, ctx):
-    """上位層へ返す送信確認の ID。PduR 宛てなら PduR の送信元 PDU のシンボリック名、それ以外（NM など）は数値。"""
+    """上位層へ返す送信確認の ID。PduR 宛てなら PduR の送信元 PDU、NM 宛てなら CanNm の TX PDU のシンボリック名。"""
     if p["txConfirm"] == "PDUR":
         return symbols.pdur_src_for_canif_tx(ctx, p, index)
-    return "%dU" % p["upperLayerTxPduId"]
+    return symbols.cannm_tx_for_canif(ctx, p)
 
 
 def upper_rx_value(p, ctx):
     if p["rxIndication"] == "PDUR":
         return symbols.pdur_src_for_canif_rx(ctx, p)
-    return "%dU" % p["upperLayerRxPduId"]
+    return symbols.cannm_rx_for_canif(ctx, p)
 
 
 def tx_table(cfg, ctx):

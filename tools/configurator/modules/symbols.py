@@ -8,6 +8,7 @@
   PduR : PduRConf_PduRSrcPdu_<name>                                         （値: srcPduId）
   Com  : ComConf_ComIPdu_<name>、ComConf_ComSignal_<name>                   （値: 各テーブルの添字）
   SecOC: SecOCConf_SecOCRxSecuredPdu_<name>                                 （値: SecOCRxPduId = テーブルの添字）
+  CanNm: CanNmConf_CanNmTxPdu_<name>、CanNmConf_CanNmRxPdu_<name>           （値: CanNm.json の nmTxPduId、nmRxPduId）
   Os   : OsConf_OsTask_<function>                                           （値: タスク ID = タスク表の添字）
 """
 
@@ -23,6 +24,8 @@ PDUR_SRC = "PduRConf_PduRSrcPdu_"
 COM_IPDU = "ComConf_ComIPdu_"
 COM_SIGNAL = "ComConf_ComSignal_"
 SECOC_RX = "SecOCConf_SecOCRxSecuredPdu_"
+CANNM_TX = "CanNmConf_CanNmTxPdu_"
+CANNM_RX = "CanNmConf_CanNmRxPdu_"
 
 # 使われないマクロに付ける MISRA C:2012 Rule 2.5（未使用マクロ）の抑止コメント（Can_Cfg.h などと同じ書き方）
 MISRA_UNUSED_MACRO = "/* cppcheck-suppress misra-c2012-2.5 */"
@@ -66,16 +69,33 @@ def pdur_src_for_canif_rx(ctx, pdu):
     raise ValueError("CanIf %s: upperLayerRxPduId=%d に対応する PduR の RX 経路がない" % (pdu["name"], pdu["upperLayerRxPduId"]))
 
 
+def cannm_tx_for_canif(ctx, pdu):
+    """CanIf の TX PDU（NM 宛て）が上位層（CanNm）へ返す ID に対応する、CanNm の TX PDU のシンボル。"""
+    cfg = ctx.configs["CanNm"]
+    if cfg["canifTxPdu"]["pdu"] != pdu["name"]:
+        raise ValueError("CanIf %s: CanNm.json の canifTxPdu が指す PDU ではない（%s）" % (pdu["name"], cfg["canifTxPdu"]["pdu"]))
+    return CANNM_TX + pdu["name"]
+
+
+def cannm_rx_for_canif(ctx, pdu):
+    """CanIf の RX PDU（NM 宛て）が上位層（CanNm）へ渡す ID に対応する、CanNm の RX PDU のシンボル。"""
+    cfg = ctx.configs["CanNm"]
+    if cfg["canifRxPdu"]["pdu"] != pdu["name"]:
+        raise ValueError("CanIf %s: CanNm.json の canifRxPdu が指す PDU ではない（%s）" % (pdu["name"], cfg["canifRxPdu"]["pdu"]))
+    return CANNM_RX + pdu["name"]
+
+
 # シンボリック名の接頭辞 → 定義しているヘッダ。C ソースにこの接頭辞の名前があれば、そのヘッダのインクルードが要る。
-SYMBOL_HEADERS = {"CanIfConf_": "CanIf_Cfg.h", "PduRConf_": "PduR_Cfg.h", "ComConf_": "Com_Cfg.h", "SecOCConf_": "SecOC_Cfg.h", "OsConf_": "Os_Cfg.h"}
+SYMBOL_HEADERS = {"CanIfConf_": "CanIf_Cfg.h", "PduRConf_": "PduR_Cfg.h", "ComConf_": "Com_Cfg.h", "SecOCConf_": "SecOC_Cfg.h", "OsConf_": "Os_Cfg.h", "CanNmConf_": "CanNm_Cfg.h"}
 
 
-def include_warnings(text):
-    """生成した C ソース（text）が使っているシンボリック名のヘッダが、インクルードされているかを確認する。"""
+def include_warnings(text, own_header=None):
+    """生成した C ソース（text）が使っているシンボリック名のヘッダが、インクルードされているかを確認する。
+    own_header は、そのソース自身が定義しているシンボルのヘッダ（自分自身はインクルード不要）。"""
     return [
         "%s がインクルードされていない（%s のシンボリック名を使用）" % (header, prefix[:-5])
         for prefix, header in SYMBOL_HEADERS.items()
-        if prefix in text and '#include "%s"' % header not in text
+        if prefix in text and header != own_header and '#include "%s"' % header not in text
     ]
 
 

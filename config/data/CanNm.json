@@ -56,6 +56,26 @@
     ],
     "unused": true
   },
+  "nmTxPduId": {
+    "value": 0,
+    "doc": [
+      "CanNm 側の TX PDU の ID（シンボリック名 CanNmConf_CanNmTxPdu_<canifTxPdu.pdu>）。",
+      "CanIf が送信完了を CanNm_TxConfirmation() へ通知するときに渡す（CanIf_PBCfg.c の",
+      "UpperLayerTxPduId）。CanNm 自身の PDU の番号であり、CanIf の TxPduId（CANNM_CANIF_TX_PDU_ID）とは",
+      "別の番号空間。単一チャネルのため CanNm 側では実質未使用。"
+    ],
+    "unused": true
+  },
+  "nmRxPduId": {
+    "value": 0,
+    "doc": [
+      "CanNm 側の RX PDU の ID（シンボリック名 CanNmConf_CanNmRxPdu_<canifRxPdu.pdu>）。",
+      "CanIf が受信を CanNm_RxIndication() へ通知するときに渡す（CanIf_PBCfg.c の",
+      "UpperLayerRxPduId）。CanIf の RxPduId（CANNM_CANIF_RX_PDU_ID）とは別の番号空間。",
+      "単一チャネルのため CanNm 側では実質未使用。"
+    ],
+    "unused": true
+  },
   "timerSection": [
     "CanNm 状態機械タイマ値 [ms]",
     "([SWS_CanNm_00102]/[SWS_CanNm_00109]/[SWS_CanNm_00115] 準拠。",

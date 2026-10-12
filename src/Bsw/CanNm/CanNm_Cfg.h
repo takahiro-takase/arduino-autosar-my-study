@@ -156,6 +156,20 @@
 /* cppcheck-suppress misra-c2012-2.5 */
 #define CANNM_CANIF_RX_PDU_ID  CanIfConf_CanIfRxPduCfg_CanNm_Rx
 
+/** CanNm 側の TX PDU の ID（シンボリック名 CanNmConf_CanNmTxPdu_<canifTxPdu.pdu>）。
+ *  CanIf が送信完了を CanNm_TxConfirmation() へ通知するときに渡す（CanIf_PBCfg.c の
+ *  UpperLayerTxPduId）。CanNm 自身の PDU の番号であり、CanIf の TxPduId（CANNM_CANIF_TX_PDU_ID）とは
+ *  別の番号空間。単一チャネルのため CanNm 側では実質未使用。 */
+/* cppcheck-suppress misra-c2012-2.5 */
+#define CanNmConf_CanNmTxPdu_CanNm_Tx  0U
+
+/** CanNm 側の RX PDU の ID（シンボリック名 CanNmConf_CanNmRxPdu_<canifRxPdu.pdu>）。
+ *  CanIf が受信を CanNm_RxIndication() へ通知するときに渡す（CanIf_PBCfg.c の
+ *  UpperLayerRxPduId）。CanIf の RxPduId（CANNM_CANIF_RX_PDU_ID）とは別の番号空間。
+ *  単一チャネルのため CanNm 側では実質未使用。 */
+/* cppcheck-suppress misra-c2012-2.5 */
+#define CanNmConf_CanNmRxPdu_CanNm_Rx  0U
+
 /* -----------------------------------------------------------------------
  * CanNm 状態機械タイマ値 [ms]
  * ([SWS_CanNm_00102]/[SWS_CanNm_00109]/[SWS_CanNm_00115] 準拠。
