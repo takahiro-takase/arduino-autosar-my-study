@@ -184,14 +184,18 @@ static uint8 NvM_WriteStartIsMirror[NVM_BLOCK_COUNT];
  *  Dem_SetEventStatus() を呼んでも、直後に実行される Dem_Init() が
  *  Dem_StatusTable[]/Dem_DebounceCounter[] を丸ごと初期化し直すため
  *  効果が消えてしまう（EcuM.c の呼び出し順序参照）。そのためここへ
- *  結果を保留し、EcuM_Init() が Dem_Init() の直後に
- *  NvM_ReportBootDiagnosticsToDem() を呼んで遅延報告する（2026-09 追加）。 */
+ *  結果を保留し、Dem が初期化済みになった後の最初の NvM_MainFunction() が
+ *  NvM_ReportInitDiagnosticsToDem() で遅延報告する（2026-09 追加）。 */
 typedef enum
 {
     NVM_DEM_REPORT_NONE = 0U,  /**< 対象外（非冗長ブロックの LOSS_OF_REDUNDANCY 等） */
     NVM_DEM_REPORT_FAILED,
     NVM_DEM_REPORT_PASSED
 } NvM_DemReportType;
+
+/** 1 = 起動時の読み込み結果（NvM_IntegrityFailedReport[]/NvM_LossOfRedundancyReport[]）を、
+ *  まだ Dem へ報告していない。NvM_Init() が立て、最初の NvM_MainFunction() が報告して下ろす。 */
+static uint8 NvM_InitReportPending = 0U;
 
 static NvM_DemReportType NvM_IntegrityFailedReport[NVM_BLOCK_COUNT];
 static NvM_DemReportType NvM_LossOfRedundancyReport[NVM_BLOCK_COUNT];
@@ -650,68 +654,8 @@ static void NvM_HandleWriteFailure(const char* reason)
     (void)Dem_SetEventStatus(DemConf_DemEventParameter_NVM_REQ_FAILED, DEM_EVENT_STATUS_FAILED);
 }
 
-/* -----------------------------------------------------------------------
- * 公開 API
- * ----------------------------------------------------------------------- */
-
 /* ----------------------------------------------------------------------
- * NvM_Init
- * ---------------------------------------------------------------------- */
-
-/**
- * \brief   全ブロックの EEPROM 内容を RAM ミラーへ一括ロードする。
- *
- * \details MemIf_Read() で EEPROM アドレス → RAM へバイト列をコピーする。
- *          読み込み直後に各ブロックの CRC を検証し、不一致ならデフォルト値
- *          (NvM_ApplyDefaultSync()) で復元する。
- *
- *          ConfigPtr は無視し、`NvM_PBCfg.c` の静的テーブル`NvM_Config`を
- *          直接参照する（[SWS_NvM_00881]「ConfigPtr は常に NULL_PTR である
- *          べき（post-build 設定は API 引数経由ではなく NvM 内部の生成
- *          テーブルから取得する）」。2026-09 是正: 以前は呼び出し元
- *          （EcuM_Init()）が渡すポインタの中身に実際に依存しており、他の
- *          8 モジュール（CanSM/CanTp/ComM/Dcm/Dem/Fee/Port/IoHwAb、
- *          docs/autosar_review_checkpoints.md 参照）に既に適用済みの
- *          「opaque ConfigType + 常に NULL を渡す」パターンから外れて
- *          いた）。
- *
- * \pre        MemIf_Init() が完了していること（EcuM_Init() が NvM_Init() より
- *             前に呼ぶ。EcuM.c 参照）。
- *
- * \AUTOSARReq     {SWS_NvM_00881}
- * \ServiceID      {0x00}
- * \Reentrancy     {Non Reentrant}
- * \Synchronicity  {Synchronous}
- */
-void NvM_Init(const NvM_ConfigType* ConfigPtr)
-{
-    (void)ConfigPtr; /* [SWS_NvM_00881]、本関数の \details 参照 */
-
-    NvM_Cfg = &NvM_Config;
-
-    for (uint8 i = 0U; (i < NvM_Config.NumBlocks) && (i < NVM_BLOCK_COUNT); i++)
-    {
-        NvM_BlockPending[i]   = 0U;
-        NvM_BlockResult[i]    = NVM_REQ_OK;
-        NvM_BlockProtected[i] = 0U;
-
-        NvM_LoadAndVerifyBlock(i, &NvM_Config.Blocks[i]);
-    }
-
-    NvM_ActiveBlockId      = NVM_BLOCK_COUNT;
-    NvM_ActivePhase         = NVM_PHASE_NONE;
-    NvM_ActiveCopyIsMirror  = 0U;
-    NvM_ActiveWriteRetries  = 0U;
-    NvM_WriteFailureReported = 0U;
-    NvM_QueueHead = 0U;
-    NvM_QueueTail = 0U;
-    NvM_QueueLen  = 0U;
-
-    DET_LOGI(TAG, "Init ok blocks=%u", (unsigned)NvM_Config.NumBlocks);
-}
-
-/* ----------------------------------------------------------------------
- * NvM_ReportBootDiagnosticsToDem
+ * NvM_ReportInitDiagnosticsToDem
  * ---------------------------------------------------------------------- */
 
 /**
@@ -723,11 +667,14 @@ void NvM_Init(const NvM_ConfigType* ConfigPtr)
  *          `NvM_IntegrityFailedReport[]`/`NvM_LossOfRedundancyReport[]` を
  *          読み、対応する Dem イベントを FAILED/PASSED 報告する。
  *
- *          EcuM_Init() が `Dem_Init()` の直後に呼ぶこと。NvM_Init() 自体は
- *          Dem_Init() より前に実行されるため、NvM_LoadAndVerifyBlock() から
- *          直接 Dem_SetEventStatus() を呼んでも、直後の Dem_Init() が
- *          Dem 側の状態テーブルを丸ごと初期化し直すため効果が消えてしまう
- *          （`NvM_IntegrityFailedReport[]` 宣言部のコメント参照）。
+ *          NvM_Init() 自体は Dem_Init() より前に実行されるため、NvM_LoadAndVerifyBlock()
+ *          から直接 Dem_SetEventStatus() を呼んでも、直後の Dem_Init() が Dem 側の
+ *          状態テーブルを丸ごと初期化し直すため効果が消えてしまう
+ *          （`NvM_IntegrityFailedReport[]` 宣言部のコメント参照）。そのため結果を保留し、
+ *          Dem が初期化済みになった後の、最初の NvM_MainFunction() が、この関数で
+ *          1 回だけ報告する（`NvM_InitReportPending`。以前は、独自 API の
+ *          NvM_ReportBootDiagnosticsToDem() を EcuM_Init() が Dem_Init() の直後に呼んでいた。
+ *          2026-10 に、EcuM との独自の取り決めをなくし、NvM の仕様の API だけで完結する形にした）。
  *
  *          Dem イベントはブロック単位ではなくモジュール単位で1つしか無い
  *          ため、複数ブロックの結果は「いずれか1つでも FAILED なら FAILED、
@@ -738,12 +685,8 @@ void NvM_Init(const NvM_ConfigType* ConfigPtr)
  *          MAGIC ブロックが CRC 不整合で FAILED でも、最後に処理される
  *          EXTENDED ブロックが正常なら PASSED で上書きされ、実際の
  *          EEPROM 破損が握りつぶされていた）。
- *
- * \note    実仕様には存在しない本プロジェクト独自の拡張関数のため、対応する
- *          \AUTOSARReq は無い（対応する実際の要求は上記 [SWS_NvM_00591]/
- *          [00595] 自体に付与済み）。
  */
-void NvM_ReportBootDiagnosticsToDem(void)
+static void NvM_ReportInitDiagnosticsToDem(void)
 {
     uint8 anyIntegrityFailed  = 0U;
     uint8 anyIntegrityPassed  = 0U;
@@ -808,6 +751,68 @@ void NvM_ReportBootDiagnosticsToDem(void)
     {
         /* どのブロックも報告なし（MISRA 15.7 準拠のための防御的な明示）。 */
     }
+}
+
+/* -----------------------------------------------------------------------
+ * 公開 API
+ * ----------------------------------------------------------------------- */
+
+/* ----------------------------------------------------------------------
+ * NvM_Init
+ * ---------------------------------------------------------------------- */
+
+/**
+ * \brief   全ブロックの EEPROM 内容を RAM ミラーへ一括ロードする。
+ *
+ * \details MemIf_Read() で EEPROM アドレス → RAM へバイト列をコピーする。
+ *          読み込み直後に各ブロックの CRC を検証し、不一致ならデフォルト値
+ *          (NvM_ApplyDefaultSync()) で復元する。
+ *
+ *          ConfigPtr は無視し、`NvM_PBCfg.c` の静的テーブル`NvM_Config`を
+ *          直接参照する（[SWS_NvM_00881]「ConfigPtr は常に NULL_PTR である
+ *          べき（post-build 設定は API 引数経由ではなく NvM 内部の生成
+ *          テーブルから取得する）」。2026-09 是正: 以前は呼び出し元
+ *          （EcuM_Init()）が渡すポインタの中身に実際に依存しており、他の
+ *          8 モジュール（CanSM/CanTp/ComM/Dcm/Dem/Fee/Port/IoHwAb、
+ *          docs/autosar_review_checkpoints.md 参照）に既に適用済みの
+ *          「opaque ConfigType + 常に NULL を渡す」パターンから外れて
+ *          いた）。
+ *
+ * \pre        MemIf_Init() が完了していること（EcuM_Init() が NvM_Init() より
+ *             前に呼ぶ。EcuM.c 参照）。
+ *
+ * \AUTOSARReq     {SWS_NvM_00881}
+ * \ServiceID      {0x00}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void NvM_Init(const NvM_ConfigType* ConfigPtr)
+{
+    (void)ConfigPtr; /* [SWS_NvM_00881]、本関数の \details 参照 */
+
+    NvM_Cfg = &NvM_Config;
+
+    for (uint8 i = 0U; (i < NvM_Config.NumBlocks) && (i < NVM_BLOCK_COUNT); i++)
+    {
+        NvM_BlockPending[i]   = 0U;
+        NvM_BlockResult[i]    = NVM_REQ_OK;
+        NvM_BlockProtected[i] = 0U;
+
+        NvM_LoadAndVerifyBlock(i, &NvM_Config.Blocks[i]);
+    }
+
+    NvM_ActiveBlockId      = NVM_BLOCK_COUNT;
+    NvM_ActivePhase         = NVM_PHASE_NONE;
+    NvM_ActiveCopyIsMirror  = 0U;
+    NvM_ActiveWriteRetries  = 0U;
+    NvM_WriteFailureReported = 0U;
+    NvM_QueueHead = 0U;
+    NvM_QueueTail = 0U;
+    NvM_QueueLen  = 0U;
+
+    NvM_InitReportPending = 1U;   /* 起動時の読み込み結果の Dem への報告を、最初の NvM_MainFunction() へ回す */
+
+    DET_LOGI(TAG, "Init ok blocks=%u", (unsigned)NvM_Config.NumBlocks);
 }
 
 /* ----------------------------------------------------------------------
@@ -1224,6 +1229,13 @@ void NvM_MainFunction(void)
         return;
     }
 
+    if (NvM_InitReportPending != 0U)
+    {
+        /* Dem が初期化済みになった後の、最初の呼び出し。NvM_Init() で検出した結果を報告する。 */
+        NvM_InitReportPending = 0U;
+        NvM_ReportInitDiagnosticsToDem();
+    }
+
     if (NvM_ActiveBlockId >= NVM_BLOCK_COUNT)
     {
         /* 処理中のブロックが無い: FIFO キューの先頭 (最も古く投入された
@@ -1564,5 +1576,11 @@ void NvM_GetVersionInfo(Std_VersionInfoType* versioninfo)
 void NvM_Test_ResetInitState(void)
 {
     NvM_Cfg = NULL;
+    NvM_InitReportPending = 0U;
+    for (uint8 i = 0U; i < NVM_BLOCK_COUNT; i++)
+    {
+        NvM_IntegrityFailedReport[i] = NVM_DEM_REPORT_NONE;
+        NvM_LossOfRedundancyReport[i] = NVM_DEM_REPORT_NONE;
+    }
 }
 #endif

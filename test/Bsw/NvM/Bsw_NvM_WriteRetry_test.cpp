@@ -64,6 +64,12 @@ protected:
         FakeDetHw_LogSuppressed = 1U;
         MemIf_Init();
         NvM_Init(NULL);
+        // 起動時の読み込み結果の Dem への報告（最初の NvM_MainFunction()）と、NvM_Init() が積んだジョブを、先に済ませておく
+        for (uint16 i = 0U; i < 200U; i++)
+        {
+            NvM_MainFunction();
+            MemIf_MainFunction();
+        }
         WrapDem_Reset();
         FakeDetHw_Reset();
         std::memset(newData, 0x5A, sizeof(newData));  // 既存内容（全 0 ほか）と異なる値（書き込みスキップ回避）
