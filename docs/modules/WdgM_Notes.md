@@ -34,8 +34,8 @@ WdgM_MainFunction (6000ms 周期) が評価:
           （この不足が WDGM_EXPIRED_SUPERVISION_CYCLE_TOL 周期連続すると EXPIRED。後述）
 
 評価後: AliveCount = 0 にリセットして次サイクル開始
-  （HW ウォッチドッグへのリフレッシュはここでは行わない。別タスクの
-   WdgM_TriggerHwWatchdog が 1000ms 周期で判定結果を見て行う。後述）
+  （この判定は WdgM_MainFunction（1000ms 周期）が 6 回に 1 回だけ行う。
+   HW ウォッチドッグへのリフレッシュは、WdgM_MainFunction が毎回、判定の後に行う。後述）
 ```
 
 ## Logical Supervision の仕組み
@@ -94,7 +94,7 @@ START→END は通常 RTE 読み取り・状態遷移・CAN 送信トリガの�
 これまで WdgM は `App_EngineManager_Run()`（Entity 0）1 つしか監視しておらず、
 「エンティティごとの独立したローカル判定 → 全エンティティを見たグローバル判定」
 という WdgM 本来の構成が実機で一度も動いていませんでした。`WdgM.c` のコアロジック
-（`WdgM_MainFunction` / `WdgM_TriggerHwWatchdog` / `WdgM_CheckpointReached`）は
+（`WdgM_MainFunction` / `WdgM_CheckpointReached`）は
 最初から `WdgM_Cfg->EntityCount` を見て汎用的にループする作りだったため、
 `App_WarningIndicator_Run()`（500ms 周期の警告灯タスク）を Entity 1 として
 追加登録するだけで、この構成を確認できます。
@@ -125,7 +125,7 @@ WdgM_MainFunction()（6000ms 判定サイクル）:
           ExpiredCycleCount を進め、WDGM_EXPIRED_SUPERVISION_CYCLE_TOL を使い切った周期で
           GlobalStopped = true（FAILED のみなら猶予を消費しない。状態機械は後述）
 
-WdgM_TriggerHwWatchdog()（1000ms 周期）:
+WdgM_MainFunction() の毎回の呼び出しの最後（1000ms 周期、リフレッシュ）:
   !GlobalStopped || SupervisionSuppressed ?
     YES → WdgIf_SetTriggerCondition()   ← OK/FAILED/EXPIRED のいずれでもリフレッシュ継続
     NO  → 何もしない                     ← GlobalStopped（STOPPED）到達時のみリフレッシュを止める
@@ -184,7 +184,7 @@ WdgM_MainFunction()（6000ms 周期、判定のみ）:
   WDGM_EXPIRED_SUPERVISION_CYCLE_TOL（既定 2）周期を使い切って初めて
   WdgM_GlobalStopped を立てる（詳細は次項）。ここでは HW ウォッチドッグに触れない。
 
-WdgM_TriggerHwWatchdog()（1000ms 周期、リフレッシュのみ）:
+WdgM_MainFunction() の毎回の呼び出しの最後（1000ms 周期、リフレッシュ）:
   WdgM_GlobalStopped が立っていない ?
     YES → WdgIf_SetTriggerCondition(WDGIF_DEVICE_0, WDGM_HW_WATCHDOG_TIMEOUT_MS)
             → Wdg_SetTriggerCondition() → Wdg_Hw_Refresh()
@@ -216,9 +216,11 @@ WDGIF_OFF_MODE)` を呼ぶが、Renesas RA4M1 の IWDT は一度有効化する�
 
 これは実車の AUTOSAR WdgM が、Wdg への trigger 周期と `WdgMSupervisionCycle`
 （判定周期）を別々に設定できる設計になっているのと同じ理由です。そこで本実装も
-リフレッシュ専用の軽量タスク `WdgM_TriggerHwWatchdog`（1000ms 周期、判定結果を
-参照するだけ）を新設し、判定は従来通り 6000ms 周期のまま、リフレッシュだけを
-HW タイムアウト（4000ms）に対して十分短い周期で行うようにしました。
+`WdgM_MainFunction` を 1000ms 周期で呼び、毎回リフレッシュし、判定だけを 6 回に 1 回
+（`WDGM_SUPERVISION_REFERENCE_CYCLE`、AUTOSAR の `WdgMSupervisionReferenceCycle` 相当）に
+間引く構成にしました。判定は従来通り 6000ms ごとのまま、リフレッシュだけを HW タイムアウト
+（4000ms）に対して十分短い周期で行います（以前は、リフレッシュ専用の独自 API
+`WdgM_TriggerHwWatchdog` を別タスク（1000ms 周期）として持っていたが、2026-10 に統合した）。
 副次効果として、リフレッシュを止めるかどうかの確認は 6000ms ごとから 1000ms ごとになりました。
 ただし後述のとおり、リフレッシュを止める条件は「グローバル状態が STOPPED」になったときだけで、
 違反を検出してから STOPPED になるまでには EXPIRED 許容サイクルの分の判定サイクルがかかります。
@@ -264,7 +266,7 @@ WdgM_MainFunction()（6000ms 周期）:
           （EXPIRED なエンティティが無い = FAILED だけなら、何も消費せず維持）
     NO  → 全回復（WdgM_ExpiredCycleCount = 0, WdgM_GlobalExpired = 0, WdgM_GlobalStopped = 0）
 
-WdgM_TriggerHwWatchdog()（1000ms 周期）:
+WdgM_MainFunction() の毎回の呼び出しの最後（1000ms 周期）:
   WdgM_GlobalStopped ?
     YES → リフレッシュしない（HW タイムアウト後に実際にリセット）
     NO  → リフレッシュする（FAILED/EXPIRED 判定中でも、猶予の範囲内なら継続）
@@ -414,7 +416,7 @@ MainFunction の次サイクルを待たずにリセットに至るため、ス�
 **正常時（6000ms ごと）:**
 ```
 [19ms]    INFO  WdgM: HW watchdog enabled (4000ms)   ← WdgM_Init 内（起動時）
-[1019ms]  DEBUG WdgM: HW watchdog refreshed          ← WdgM_TriggerHwWatchdog（1000ms 周期）
+[1019ms]  DEBUG WdgM: HW watchdog refreshed          ← WdgM_MainFunction（1000ms 周期）
 [2019ms]  DEBUG WdgM: HW watchdog refreshed
 [3019ms]  DEBUG WdgM: HW watchdog refreshed
 [4019ms]  DEBUG WdgM: HW watchdog refreshed
@@ -519,7 +521,8 @@ delay(1000);  /* 動作確認用: 500ms の許容上限を超えさせる */
 | `WDGM_WARNING_DEADLINE_START_TO_END_MIN_MS` / `_MAX_MS` | 0 / 200 ms | WARNING の START→END 許容経過時間 |
 | `WDGM_WARNING_DEADLINE_END_TO_START_MIN_MS` / `_MAX_MS` | 300 / 1500 ms | WARNING の END→START 許容経過時間 |
 | `WDGM_EXPIRED_SUPERVISION_CYCLE_TOL` | 2 | EXPIRED の許容判定サイクル数。Alive 不足が連続してこの回数に達すると Local EXPIRED、Global EXPIRED になってからこの回数を使い切ると `WdgM_GlobalStopped` |
-| `WDGM_HW_TRIGGER_CYCLE_MS` | 1000 ms | HW ウォッチドッグへの実際のリフレッシュ周期（WdgM_TriggerHwWatchdog 周期と一致）。判定サイクル（`WDGM_SUPERVISION_CYCLE_MS`）とは意図的に分離 |
+| `WDGM_MAIN_FUNCTION_CYCLE_MS` | 1000 ms | `WdgM_MainFunction` の呼び出し周期（= HW ウォッチドッグへのリフレッシュ周期）。判定サイクル（`WDGM_SUPERVISION_CYCLE_MS`）とは意図的に分離 |
+| `WDGM_SUPERVISION_REFERENCE_CYCLE` | 6 | 判定を行う `WdgM_MainFunction` の呼び出し回数（`WDGM_SUPERVISION_CYCLE_MS / WDGM_MAIN_FUNCTION_CYCLE_MS`） |
 | `WDGM_HW_WATCHDOG_TIMEOUT_MS` | 4000 ms | 実 HW ウォッチドッグのタイムアウト。`Wdg_PBCfg.c` がこの値を直接引用して `Wdg_Config.DefaultTimeoutMs` を組み立て、`Wdg_Hw_Enable(timeoutMs)`（`Wdg_Hw.cpp`、`WDT.begin(timeoutMs)`）まで渡る。`WDGM_HW_TRIGGER_CYCLE_MS` より十分長く設定すること（RA4M1 の IWDT 最大タイムアウト ≒5592ms 未満という制約もある） |
 
 許可遷移グラフは `WdgM_PBCfg.c` の `WdgM_EngineTransitions[]`、Deadline 許容範囲テーブルは
@@ -637,7 +640,7 @@ SHUTDOWN が 6000ms 以上続いた後に RUN へ復帰すると、`Os_Scheduler
 
 ### グローバル EXPIRED 許容サイクルの追加
 
-当初、`WdgM_TriggerHwWatchdog()` は「1 つでもエンティティが FAILED ならその場で
+当初、`WdgM_MainFunction()` のリフレッシュ処理 は「1 つでもエンティティが FAILED ならその場で
 リフレッシュを止める」設計だった。しかし `docs/autosar/4.3.1/AUTOSAR_SWS_WatchdogManager.pdf`
 を確認すると、`[SWS_WdgM_00119]`〜`[SWS_WdgM_00121]` は Global Supervision
 Status が `WDGM_GLOBAL_STATUS_OK`・`FAILED`・`EXPIRED` のいずれであっても
@@ -730,7 +733,7 @@ UDS CommunicationControl（SID 0x28）の実機検証中、S3 タイムアウト
 POST_RUN 中は Rte_Engine / Rte_Warning タスクが意図的に停止するため、
 `WdgM_MainFunction()` の判定サイクルで両エンティティの Alive Supervision が
 必ず FAILED とラッチされる（POST_RUN 中はこれ自体は無害。
-`WdgM_SupervisionSuppressed` により `WdgM_TriggerHwWatchdog()` がリフレッシュ
+`WdgM_SupervisionSuppressed` により `WdgM_MainFunction()` のリフレッシュ処理 がリフレッシュ
 拒否を無視するため）。しかし `WdgM_ResumeSupervision()` はチェックポイント
 基準（`WdgM_LastCheckpoint[]` / `WdgM_LastCheckpointTimeMs[]`、上記 Deadline
 誤検出対策で導入）のみリセットし、`WdgM_AliveCount[]` / `WdgM_AliveStatus[]`
@@ -739,7 +742,7 @@ SHUTDOWN を越えて RUN 復帰後まで残ってしまう。
 
 RUN 復帰直後は `WdgM_SetMode(WDGM_MODE_DEFAULT)` により `WdgM_SupervisionSuppressed`
 が解除されるため、アプリタスクは実際には正常に再開しているにもかかわらず、
-古い FAILED ラッチのせいで `WdgM_TriggerHwWatchdog()` がリフレッシュを拒否し
+古い FAILED ラッチのせいで `WdgM_MainFunction()` のリフレッシュ処理 がリフレッシュを拒否し
 続ける。次に `WdgM_MainFunction()` が判定し直してラッチが自然に解消される
 のは最大 6000ms 後だが、HW ウォッチドッグのタイムアウトは 4000ms しかない
 ため、判定が間に合わず実際に MCU がリセットされてしまった。
@@ -768,7 +771,7 @@ POST_RUN のシナリオで、再度実際に HW ウォッチドッグリセッ�
 タイミングが来てしまうことがある。この場合、Rte_Engine（3000ms 周期）等の
 エンティティが `WdgM_ResumeSupervision()` 以降まだ一度もチェックポイントへ
 到達できていないうちに判定が行われ、`alive=0 (exp>=1)` として誤って
-FAILED と判定 → `WdgM_TriggerHwWatchdog()` がリフレッシュを拒否し続け、
+FAILED と判定 → `WdgM_MainFunction()` のリフレッシュ処理 がリフレッシュを拒否し続け、
 実際に MCU がリセットされてしまった。
 
 上記の修正（`WdgM_AliveCount[]`/`WdgM_AliveStatus[]` のリセット）だけでは、

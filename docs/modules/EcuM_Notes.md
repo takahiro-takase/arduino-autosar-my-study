@@ -19,7 +19,7 @@ STARTUP ──────────────────→ RUN ── 全
                                                   ECUM_POST_RUN_TIMEOUT_MS (5秒) 経過
                                                                ↓
                                                            SHUTDOWN
-                            (WdgM_TriggerHwWatchdog / Can_MainFunction_Read /
+                            (WdgM_MainFunction / Can_MainFunction_Read /
                              Can_MainFunction_Wakeup / CanSM_MainFunction /
                              NvM_MainFunction / MemIf_MainFunction /
                              CanNm_MainFunction 以外は停止)
@@ -33,7 +33,7 @@ STARTUP ──────────────────→ RUN ── 全
 | STARTUP | 停止 | `EcuM_Init()` 末尾で RUN へ自動遷移 |
 | RUN | **実行** | 全 RUN ユーザが `EcuM_ReleaseRUN` → POST_RUN |
 | POST_RUN | **実行**（後処理継続） | POST_RUN 要求ユーザが無く、かつタイムアウト → SHUTDOWN / `EcuM_RequestRUN` → RUN |
-| SHUTDOWN | **実行**（`WdgM_TriggerHwWatchdog` / `Can_MainFunction_Read` / `Can_MainFunction_Wakeup` / `CanSM_MainFunction` / `NvM_MainFunction` / `MemIf_MainFunction` / `CanNm_MainFunction` のみ有効） | Arduino では電源断不可のためアイドル待機するが、`EcuM_RequestRUN` が来れば RUN へ復帰できる（CAN バスのウェイクアップ経由）。`Os_SchedulerStep()` 自体は呼ばれ続けるが、BswM Rule 2 がこの 7 タスク以外を無効化するため実質アイドル（マスク対象外の `App_GptDemo_Run`/`ComM_MainFunction`/`SecOC_MainFunctionRx` を除く。詳細は [`BswM_Notes.md`](./BswM_Notes.md)）。HW ウォッチドッグ維持のため `WdgM_TriggerHwWatchdog`、CAN ウェイクアップ検出・検証中フレーム処理のため `Can_MainFunction_Read`/`Can_MainFunction_Wakeup`、ウェイクアップ検証タイムアウト監視のため `CanSM_MainFunction`、保留中の DTC 永続化のため `NvM_MainFunction`/`MemIf_MainFunction`（NvM がジョブを開始するだけの `NvM_MainFunction` だけを動かしても、物理バイト書き込みを進める `MemIf_MainFunction` を止めてしまうとジョブが永久に完了しない）、CanNm 状態機械（Bus-Sleep Mode への到達判定・他ノードの NM フレーム受信によるスリープ延期の継続処理）のため `CanNm_MainFunction` だけは動き続ける（CAN 受信自体は真のハードウェア割り込み `Can_Isr()` のため、この無効化に関わらず常に起動する） |
+| SHUTDOWN | **実行**（`WdgM_MainFunction` / `Can_MainFunction_Read` / `Can_MainFunction_Wakeup` / `CanSM_MainFunction` / `NvM_MainFunction` / `MemIf_MainFunction` / `CanNm_MainFunction` のみ有効） | Arduino では電源断不可のためアイドル待機するが、`EcuM_RequestRUN` が来れば RUN へ復帰できる（CAN バスのウェイクアップ経由）。`Os_SchedulerStep()` 自体は呼ばれ続けるが、BswM Rule 2 がこの 7 タスク以外を無効化するため実質アイドル（マスク対象外の `App_GptDemo_Run`/`ComM_MainFunction`/`SecOC_MainFunctionRx` を除く。詳細は [`BswM_Notes.md`](./BswM_Notes.md)）。HW ウォッチドッグ維持のため `WdgM_MainFunction`、CAN ウェイクアップ検出・検証中フレーム処理のため `Can_MainFunction_Read`/`Can_MainFunction_Wakeup`、ウェイクアップ検証タイムアウト監視のため `CanSM_MainFunction`、保留中の DTC 永続化のため `NvM_MainFunction`/`MemIf_MainFunction`（NvM がジョブを開始するだけの `NvM_MainFunction` だけを動かしても、物理バイト書き込みを進める `MemIf_MainFunction` を止めてしまうとジョブが永久に完了しない）、CanNm 状態機械（Bus-Sleep Mode への到達判定・他ノードの NM フレーム受信によるスリープ延期の継続処理）のため `CanNm_MainFunction` だけは動き続ける（CAN 受信自体は真のハードウェア割り込み `Can_Isr()` のため、この無効化に関わらず常に起動する） |
 
 SHUTDOWN は CAN バスのウェイクアップにより常に RUN へ復帰できます。実機リセットが
 必要な終端状態は存在しません。Bus-Off 回復は後述の通り L1/L2 バックオフで無期限に
@@ -65,7 +65,7 @@ AUTOSAR OS の OsCounter が HW タイマ割り込みで駆動される構成に
 **millis() をフォールバック用に残した理由:** [`Can_Notes.md`](./Can_Notes.md#rx-割り込み化の実機検証で得られた教訓)
 に記録のとおり、本プロジェクトは実機で割り込みが期待どおり発火しなかった
 事象を CAN RX 割り込み化の際に一度経験しています。Os の時間源はスケジューラ
-そのものであり、`WdgM_TriggerHwWatchdog` を含む全タスクの発火判定に使われる
+そのものであり、`WdgM_MainFunction` を含む全タスクの発火判定に使われる
 ため、ここが完全に停止すると実 HW ウォッチドッグ（`WDGM_HW_WATCHDOG_TIMEOUT_MS`=
 4000ms）でリセットされてしまいます。CAN フレーム 1 個の欠落よりも影響が
 大きいため、単に「検知してログを残す」だけでは不十分です（ログを残しても
@@ -216,7 +216,7 @@ Bus-Off 回復中に SILENT_COM を何度挟んでも、EcuM への再通知は�
 [CAN RX 割り込み化の実機検証で得られた教訓](./Can_Notes.md#rx-割り込み化の実機検証で得られた教訓)
 のとおり、割り込みが実機で期待どおり発火しない事象を一度経験している。
 今回 Gpt が駆動するのは Os スケジューラそのものであり、これが完全に止まると
-`WdgM_TriggerHwWatchdog` を含む全タスクが二度と発火しなくなり、実 HW
+`WdgM_MainFunction` を含む全タスクが二度と発火しなくなり、実 HW
 ウォッチドッグ（`WDGM_HW_WATCHDOG_TIMEOUT_MS`=4000ms）でリセットされる。
 CAN フレーム 1 個の欠落よりも影響が大きいため、Gpt とは別系統の HW タイマで
 駆動している `millis()` との差分を `Os_CrossCheckTickSource()` で

@@ -15,6 +15,7 @@
 
 #include <gtest/gtest.h>
 #include "WdgM.h"
+#include "WdgM_TestUtil.h"
 #include "Wdg.h"
 #include "Wdg_PBCfg.h"
 #include "Fake_Wdg_Hw.h"
@@ -74,7 +75,7 @@ protected:
     {
         for (uint8 cycle = 0U; cycle < WDGM_EXPIRED_SUPERVISION_CYCLE_TOL - 1U; cycle++)
         {
-            WdgM_MainFunction();
+            WdgM_RunSupervisionCycle();
             WdgM_GlobalStatusType status;
             ASSERT_EQ(WdgM_GetGlobalStatus(&status), E_OK);
             EXPECT_EQ(status, WDGM_GLOBAL_STATUS_FAILED) << "pre-expired cycle " << (unsigned)cycle;
@@ -82,7 +83,7 @@ protected:
 
         for (uint8 cycle = 0U; cycle < WDGM_EXPIRED_SUPERVISION_CYCLE_TOL + 1U; cycle++)
         {
-            WdgM_MainFunction();
+            WdgM_RunSupervisionCycle();
             WdgM_GlobalStatusType status;
             ASSERT_EQ(WdgM_GetGlobalStatus(&status), E_OK);
             EXPECT_EQ(status, WDGM_GLOBAL_STATUS_EXPIRED) << "expired cycle " << (unsigned)cycle;
@@ -91,7 +92,7 @@ protected:
         /* グローバル猶予カウンタが尽きて初めて WdgM_GlobalStopped が立ち
          * STOPPED に遷移する。この瞬間に [SWS_WdgM_00129] 対応として
          * DemConf_DemEventParameter_WDGM_SUPERVISION が FAILED 報告される（2026-09 追加）。 */
-        WdgM_MainFunction();
+        WdgM_RunSupervisionCycle();
         WdgM_GlobalStatusType status;
         ASSERT_EQ(WdgM_GetGlobalStatus(&status), E_OK);
         EXPECT_EQ(status, WDGM_GLOBAL_STATUS_STOPPED);
@@ -134,13 +135,13 @@ TEST_F(Bsw_WdgM_GetGlobalStatus_Test,
      * 一切 CheckpointReached を呼ばないまま WdgM_MainFunction() を回す。 */
     (void)WdgM_SetMode(WDGM_MODE_POST_RUN);
 
-    WdgM_MainFunction();
-    WdgM_MainFunction();
-    WdgM_MainFunction();
+    WdgM_RunSupervisionCycle();
+    WdgM_RunSupervisionCycle();
+    WdgM_RunSupervisionCycle();
 
     /* 抑制中はグローバル猶予カウンタが凍結されるため anyNotOk はまだ立って
      * いるはずだが（Alive Supervision は実際に FAILED になる）、
-     * WdgM_TriggerHwWatchdog() が無条件に refresh を続けるのと同じ理由で、
+     * WdgM_MainFunction() が無条件に refresh を続けるのと同じ理由で、
      * WdgM_GetGlobalStatus() も OK を返すべき（本物の異常ではないため）。 */
     WdgM_GlobalStatusType status = WDGM_GLOBAL_STATUS_STOPPED;
 
@@ -203,7 +204,7 @@ TEST_F(Bsw_WdgM_GetGlobalStatus_Test,
     Std_ReturnType cpRet = WdgM_CheckpointReached(WDGM_ENTITY_ENGINE, WDGM_CP_ENGINE_END);
     ASSERT_EQ(cpRet, E_OK);
 
-    WdgM_MainFunction();
+    WdgM_RunSupervisionCycle();
 
     WdgM_GlobalStatusType status;
 
@@ -272,7 +273,7 @@ TEST_F(Bsw_WdgM_GetGlobalStatus_Test,
      * が回復し、Logical/Deadline も違反させていないため、全エンティティが
      * OK に戻る。これによりグローバル猶予カウンタと STOPPED フラグの両方が
      * クリアされ、OK に回復する。 */
-    WdgM_MainFunction();
+    WdgM_RunSupervisionCycle();
     WdgM_LocalStatusType engineStatus;
     WdgM_LocalStatusType warningStatus;
     ASSERT_EQ(WdgM_GetLocalStatus(WDGM_ENTITY_ENGINE, &engineStatus), E_OK);

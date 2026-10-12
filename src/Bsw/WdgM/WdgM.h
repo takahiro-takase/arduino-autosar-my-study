@@ -7,7 +7,8 @@
  *            1. EcuM_Init 内で WdgM_Init(&WdgM_Config) を呼ぶ。
  *            2. 監視対象の Runnable 内のプログラムフロー上の各地点で
  *               WdgM_CheckpointReached(WDGM_ENTITY_*, WDGM_CP_*) を呼ぶ。
- *            3. Os スケジューラが WdgM_MainFunction() を定期実行する。
+ *            3. Os スケジューラが WdgM_MainFunction() を定期実行する（WDGM_MAIN_FUNCTION_CYCLE_MS、
+ *               1000ms）。基準周期（WDGM_SUPERVISION_REFERENCE_CYCLE 回）ごとに判定する。
  *               CheckpointReached がエンティティごとの期待回数
  *               (WdgM_Cfg.h の WDGM_*_EXPECTED_ALIVE_INDICATIONS) 以上来ていれば OK、
  *               満たさなければ FAILED とみなしログで通知する (Alive Supervision)。
@@ -24,11 +25,10 @@
  *            保持するのと同じ考え方）、WdgM_GetLocalStatus() はいずれか一つでも
  *            FAILED ならローカルステータスとして FAILED を返す。
  *            実 HW ウォッチドッグ（WdgIf → Wdg → Wdg_Hw 層経由。Wdg_Hw の実体は
- *            Renesas RA の WDT ライブラリ）と連携している。判定は WdgM_MainFunction が
- *            WDGM_SUPERVISION_CYCLE_MS ごとに行うが、HW ウォッチドッグへの実際の
- *            リフレッシュは WdgM_TriggerHwWatchdog が WDGM_HW_TRIGGER_CYCLE_MS
- *            ごとに、直近の判定結果を見て行う（周期を分離している理由は
- *            WdgM_Cfg.h の WDGM_HW_WATCHDOG_TIMEOUT_MS コメントを参照）。
+ *            Renesas RA の WDT ライブラリ）と連携している。WdgM_MainFunction は
+ *            WDGM_MAIN_FUNCTION_CYCLE_MS ごとに HW ウォッチドッグへリフレッシュし、
+ *            判定は WDGM_SUPERVISION_CYCLE_MS（基準周期）ごとに行う（周期を
+ *            分けている理由は WdgM_Cfg.h の WDGM_HW_WATCHDOG_TIMEOUT_MS コメントを参照）。
  *            いずれかが FAILED の間はリフレッシュが止まり、
  *            WDGM_HW_WATCHDOG_TIMEOUT_MS 後に実際に MCU がリセットされる
  *            （シミュレーションではなく実機で本当に発生する）。
@@ -358,59 +358,40 @@ Std_ReturnType WdgM_GetLocalStatus(WdgM_SupervisedEntityIdType SEID, WdgM_LocalS
 Std_ReturnType WdgM_GetGlobalStatus(WdgM_GlobalStatusType* Status);
 
 /**
- * \brief   WdgM 周期処理。Alive Supervision を評価する。
+ * \brief   WdgM 周期処理。HW ウォッチドッグをリフレッシュし、基準周期ごとに
+ *          Alive Supervision 等を評価する。
  *
- * \details Os スケジューラから WDGM_SUPERVISION_CYCLE_MS ごとに呼ばれる。
- *          各エンティティの Alive カウンタを検査し、期待回数を満たさない場合は
- *          ローカルステータスを FAILED に更新して WARN ログを出力する。
- *          検査後、カウンタは次のサイクルのためにリセットする。
- *          HW ウォッチドッグへの実際のリフレッシュはここでは行わない
- *          （WdgM_TriggerHwWatchdog が別周期で判定結果を見て行う）。
+ * \details Os スケジューラから WDGM_MAIN_FUNCTION_CYCLE_MS（1000ms）ごとに呼ばれる。
+ *          実 AUTOSAR の WdgM_MainFunction と同じく、毎回の呼び出しで
+ *          WdgIf_SetTriggerCondition() による HW ウォッチドッグのリフレッシュ
+ *          （WdgM_RefreshHwWatchdog()）まで行う。Alive/Logical/Deadline の判定
+ *          （WdgM_EvaluateSupervisionCycle()）は、WdgMSupervisionReferenceCycle
+ *          相当の WDGM_SUPERVISION_REFERENCE_CYCLE（= WDGM_SUPERVISION_CYCLE_MS /
+ *          WDGM_MAIN_FUNCTION_CYCLE_MS = 6）回の呼び出しごとに 1 回だけ行う。
+ *          判定をリフレッシュより先に行うため、判定で WdgM_GlobalStopped が
+ *          立てば、同じ呼び出しの中でリフレッシュが止まる。
  *
- * \note       グローバル猶予サイクル判定 (OK→FAILED→EXPIRED→STOPPED、
- *             [SWS_WdgM_00119]〜[SWS_WdgM_00122]) 自体もここで行う。実
- *             AUTOSAR の WdgM_MainFunction はこれに加えて HW ウォッチドッグへの
- *             実際のリフレッシュ指示までを 1 関数で担うが、本プロジェクトは
- *             Renesas RA4M1 の IWDT タイムアウト制約 (詳細は WdgM_Cfg.h の
- *             WDGM_HW_WATCHDOG_TIMEOUT_MS 参照) によりリフレッシュ部分を
- *             WdgM_TriggerHwWatchdog() へ分離している。
+ *          以前は、判定（6000ms 周期、WdgM_MainFunction）と、リフレッシュ
+ *          （1000ms 周期、独自 API の WdgM_TriggerHwWatchdog）を別タスクに
+ *          分けていた（Renesas RA4M1 の IWDT 最大タイムアウト 約 5592ms が
+ *          判定サイクルより短いため）。2026-10 に、呼び出し周期を 1000ms に
+ *          揃え、判定だけを基準周期ごとに間引く標準の構成へ統合した
+ *          （周期の分離という本来の目的は保たれる）。
+ *
+ *          WdgM_Init() が完了していなければ、何もしない（HW ウォッチドッグは
+ *          WdgM_Init() で有効化されるため、リフレッシュ対象がない）。
+ *
  * \AUTOSARReq     {SWS_WdgM_00159, SWS_WdgM_00119, SWS_WdgM_00120,
- *                  SWS_WdgM_00121, SWS_WdgM_00122}
+ *                  SWS_WdgM_00121, SWS_WdgM_00122, SWS_WdgM_00076,
+ *                  SWS_WdgM_00077, SWS_WdgM_00078, SWS_WdgM_00117,
+ *                  SWS_WdgM_00215, SWS_WdgM_00216, SWS_WdgM_00217,
+ *                  SWS_WdgM_00218, SWS_WdgM_00219, SWS_WdgM_00220,
+ *                  SWS_WdgM_00221, SWS_WdgM_00214, SWS_WdgM_00129}
  * \ServiceID      {0x08}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
  */
 void WdgM_MainFunction(void);
-
-/**
- * \brief   HW ウォッチドッグの trigger（リフレッシュ）処理。
- *
- * \details Os スケジューラから WDGM_HW_TRIGGER_CYCLE_MS ごとに呼ばれる。
- *          WdgM_GlobalStopped が立っていない（または WdgM_SetMode(WDGM_MODE_POST_RUN)
- *          による抑制中）場合のみ WdgIf_SetTriggerCondition() を呼ぶ。
- *          WdgM_GlobalStopped は WdgM_MainFunction() がグローバル猶予サイクル
- *          (WDGM_EXPIRED_SUPERVISION_CYCLE_TOL) を使い切って初めて立てる
- *          （1 つのエンティティが FAILED になった瞬間に即座に呼ばなくなる
- *          わけではない）ため、それが続いた場合に最終的に
- *          WDGM_HW_WATCHDOG_TIMEOUT_MS 後に実際に MCU がリセットされる。
- *
- *          WdgM_MainFunction（判定, 6000ms）と周期を分離しているのは、
- *          Renesas RA4M1 の IWDT 最大タイムアウト（約 5592ms）が判定サイクルより
- *          短く、判定サイクルに直接リフレッシュを同期できないため。
- *          詳細は WdgM_Cfg.h の WDGM_HW_WATCHDOG_TIMEOUT_MS コメントを参照。
- *
- * \note       実 AUTOSAR の WdgM_MainFunction が内包するリフレッシュ指示
- *             部分を本プロジェクトが分離した独自 API のため、専用の
- *             Service ID は SWS_WdgM に存在しない（\ServiceID の値は
- *             プロジェクト内でのみ一意な自己割当）。継続/停止の判断根拠
- *             ([SWS_WdgM_00119]〜[SWS_WdgM_00122]) は WdgM_MainFunction() と
- *             共通。
- * \AUTOSARReq     {SWS_WdgM_00119, SWS_WdgM_00120, SWS_WdgM_00121, SWS_WdgM_00122}
- * \ServiceID      {0x09}
- * \Reentrancy     {Non Reentrant}
- * \Synchronicity  {Synchronous}
- */
-void WdgM_TriggerHwWatchdog(void);
 
 /**
  * \brief   HW ウォッチドッグの trigger を永続的に止め、リセットさせる。
@@ -419,7 +400,7 @@ void WdgM_TriggerHwWatchdog(void);
  *          する（[SWS_WdgM_00232]、WdgIf_SetTriggerCondition(0)）。Wdg は
  *          [SWS_Wdg_00140] に従い、トリガを止めて ECU を（ほぼ）即座にリセット
  *          する（本プロジェクトではソフトウェアリセット）。あわせて
- *          WdgM_ResetRequested フラグを立て、以降 WdgM_TriggerHwWatchdog() は
+ *          WdgM_ResetRequested フラグを立て、以降 WdgM_MainFunction() は
  *          Global Supervision Status に関わらずリフレッシュを二度と行わなく
  *          なる（次回 WdgM_Init() が呼ばれるまで。[SWS_WdgM_00233]）。
  *          本プロジェクトの HW ウォッチドッグ（Renesas RA の IWDT）は一度

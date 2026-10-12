@@ -161,7 +161,7 @@
 
 /** NvM_WriteAll() が書き込みの完了を待つ時間の上限 [ms]（Os のカウンタで計測）。
  *  HW ウォッチドッグ（WDGM_HW_WATCHDOG_TIMEOUT_MS=4000ms）の最後のリフレッシュが
- *  最大 WDGM_HW_TRIGGER_CYCLE_MS（1000ms）前であることを見込み、それより十分短くする。 */
+ *  最大 WDGM_MAIN_FUNCTION_CYCLE_MS（1000ms）前であることを見込み、それより十分短くする。 */
 #define NVM_WRITEALL_TIMEOUT_MS  2000UL
 
 /** NvM_WriteAll() のループ回数の上限（時刻が進まない環境でも必ず終わらせるための安全弁）。 */

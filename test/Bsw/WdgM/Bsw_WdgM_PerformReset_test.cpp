@@ -3,7 +3,7 @@
  * \brief   WdgM_PerformReset() の単体テスト
  * \details AUTOSAR SWS_WdgM_00232/00233/00264/00270 が規定する、呼び出し以降
  *          HW ウォッチドッグの trigger を二度と行わなくなる（＝リセットが
- *          確実に迫る）挙動を、WdgM_TriggerHwWatchdog() の呼び出し記録
+ *          確実に迫る）挙動を、WdgM_MainFunction() の呼び出し記録
  *          （Fake_Wdg_Hw.h の FakeWdgHw_RefreshCount。2026-09、WdgIf/Wdg
  *          自身の Det 検証のため実体リンクへ切り替え、旧 Fake_WdgIf.h の
  *          FakeWdgIf_SetTriggerConditionCount から一段深いレイヤへ移した）
@@ -18,6 +18,7 @@
 
 #include <gtest/gtest.h>
 #include "WdgM.h"
+#include "WdgM_TestUtil.h"
 #include "Wdg.h"
 #include "Wdg_PBCfg.h"
 #include "Fake_Wdg_Hw.h"
@@ -69,7 +70,7 @@ TEST_F(Bsw_WdgM_PerformReset_Test, PerformReset_OK_StopsHwWatchdogRefreshImmedia
     /* ---- 準備 (Arrange) --- */
     /* ----------------------- */
     /* 通常時は refresh される。 */
-    WdgM_TriggerHwWatchdog();
+    WdgM_MainFunction();
     EXPECT_EQ(FakeWdgHw_RefreshCount, 1U);
 
     /* ----------------------- */
@@ -78,8 +79,8 @@ TEST_F(Bsw_WdgM_PerformReset_Test, PerformReset_OK_StopsHwWatchdogRefreshImmedia
     WdgM_PerformReset();
 
     /* 呼び出し以降、何回呼んでも refresh されない。 */
-    WdgM_TriggerHwWatchdog();
-    WdgM_TriggerHwWatchdog();
+    WdgM_MainFunction();
+    WdgM_MainFunction();
 
     /* ----------------------- */
     /* ---- 評価 (Assert) ---- */
@@ -94,7 +95,7 @@ TEST_F(Bsw_WdgM_PerformReset_Test, PerformReset_OK_RequestsImmediateHwResetViaTr
     /* ----------------------- */
     /* [SWS_WdgM_00232]: 呼び出された時点で同期的に trigger condition を 0 にする。
      * Wdg は [SWS_Wdg_00140] に従い ECU を強制リセットする（Wdg_Hw_ForceReset）。
-     * 以前はフラグを立てるだけで、リセットは WdgM_TriggerHwWatchdog() の以後の
+     * 以前はフラグを立てるだけで、リセットは WdgM_MainFunction() の以後の
      * リフレッシュ停止から HW ウォッチドッグの期限切れまで待っていた。 */
     EXPECT_EQ(FakeWdgHw_ForceResetCount, 0U);
 
@@ -111,7 +112,7 @@ TEST_F(Bsw_WdgM_PerformReset_Test, PerformReset_OK_RequestsImmediateHwResetViaTr
 
     /* 再度の呼び出し・以後のリフレッシュ要求でリセット要求を重ねない。 */
     WdgM_PerformReset();
-    WdgM_TriggerHwWatchdog();
+    WdgM_MainFunction();
     EXPECT_EQ(FakeWdgHw_ForceResetCount, 1U);
     EXPECT_EQ(FakeWdgHw_RefreshCount, 0U);
 }
@@ -123,7 +124,7 @@ TEST_F(Bsw_WdgM_PerformReset_Test, PerformReset_OK_OverridesSupervisionSuppressi
     /* ----------------------- */
     /* POST_RUN 相当（WdgM_SupervisionSuppressed 中）は本来 refresh を継続する。 */
     (void)WdgM_SetMode(WDGM_MODE_POST_RUN);
-    WdgM_TriggerHwWatchdog();
+    WdgM_MainFunction();
     EXPECT_EQ(FakeWdgHw_RefreshCount, 1U);
 
     /* ----------------------- */
@@ -132,7 +133,7 @@ TEST_F(Bsw_WdgM_PerformReset_Test, PerformReset_OK_OverridesSupervisionSuppressi
     /* それでも WdgM_PerformReset() は最優先で refresh を止める
      * （[SWS_WdgM_00233]: 呼び出し後は二度とトリガ条件を更新しない）。 */
     WdgM_PerformReset();
-    WdgM_TriggerHwWatchdog();
+    WdgM_MainFunction();
 
     /* ----------------------- */
     /* ---- 評価 (Assert) ---- */
@@ -155,10 +156,10 @@ TEST_F(Bsw_WdgM_PerformReset_Test, PerformReset_OK_NotUndoneByMainFunctionRecove
     /* WdgM_MainFunction() が何度動いても（＝WdgM_GlobalStopped 側の自然回復
      * 条件を再評価しても）、WdgM_ResetRequested は独立したフラグのため
      * 巻き戻らない。判定結果自体（OK/FAILED）はここでは関知しない。 */
-    WdgM_MainFunction();
-    WdgM_MainFunction();
+    WdgM_RunSupervisionCycle();
+    WdgM_RunSupervisionCycle();
 
-    WdgM_TriggerHwWatchdog();
+    WdgM_MainFunction();
 
     /* ----------------------- */
     /* ---- 評価 (Assert) ---- */
@@ -185,6 +186,6 @@ TEST_F(Bsw_WdgM_PerformReset_Test, PerformReset_NG_UninitializedReportsDetWithou
     EXPECT_EQ(FakeDetHw_LastErrorId, WDGM_E_NO_INIT);
     EXPECT_EQ(FakeDetHw_ReportCount, 1U);
 
-    /* 未初期化時は無効果（[SWS_WdgM_00270]）。WdgM_TriggerHwWatchdog() 自体は
+    /* 未初期化時は無効果（[SWS_WdgM_00270]）。WdgM_MainFunction() 自体は
      * Cfg==NULL のガードで別途早期 return するため、ここでは呼ばない。 */
 }

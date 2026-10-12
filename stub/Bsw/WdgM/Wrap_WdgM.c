@@ -40,7 +40,6 @@ uint32 CallCount_WdgM_CheckpointReached      = 0U;
 uint32 CallCount_WdgM_GetLocalStatus         = 0U;
 uint32 CallCount_WdgM_GetGlobalStatus        = 0U;
 uint32 CallCount_WdgM_MainFunction           = 0U;
-uint32 CallCount_WdgM_TriggerHwWatchdog      = 0U;
 uint32 CallCount_WdgM_PerformReset           = 0U;
 uint32 CallCount_WdgM_GetFirstExpiredSEID    = 0U;
 
@@ -59,7 +58,7 @@ Std_ReturnType ForcedReturn_WdgM_GetGlobalStatus     = E_NOT_OK;
 Std_ReturnType ForcedReturn_WdgM_GetFirstExpiredSEID = E_NOT_OK;
 
 /* ----------------------------------------------------------------------
- * WrapWdgM_Reset — 15関数すべての状態を一括で初期化する（Wrap_WdgM.h 参照）。
+ * WrapWdgM_Reset — 14関数すべての状態を一括で初期化する（Wrap_WdgM.h 参照）。
  * ---------------------------------------------------------------------- */
 
 void WrapWdgM_Reset(void)
@@ -74,7 +73,6 @@ void WrapWdgM_Reset(void)
     CallCount_WdgM_GetLocalStatus      = 0U;
     CallCount_WdgM_GetGlobalStatus     = 0U;
     CallCount_WdgM_MainFunction        = 0U;
-    CallCount_WdgM_TriggerHwWatchdog   = 0U;
     CallCount_WdgM_PerformReset        = 0U;
     CallCount_WdgM_GetFirstExpiredSEID = 0U;
 
@@ -260,20 +258,6 @@ void __wrap_WdgM_MainFunction(void)
     Log_Write(LOG_T, TAG, "WdgM_MainFunction", "called %u times", CallCount_WdgM_MainFunction);
 
     __real_WdgM_MainFunction();
-}
-
-/* ----------------------------------------------------------------------
- * WdgM_TriggerHwWatchdog
- * ---------------------------------------------------------------------- */
-
-extern
-void __real_WdgM_TriggerHwWatchdog(void);
-void __wrap_WdgM_TriggerHwWatchdog(void)
-{
-    CallCount_WdgM_TriggerHwWatchdog++;
-    Log_Write(LOG_T, TAG, "WdgM_TriggerHwWatchdog", "called %u times", CallCount_WdgM_TriggerHwWatchdog);
-
-    __real_WdgM_TriggerHwWatchdog();
 }
 
 /* ----------------------------------------------------------------------

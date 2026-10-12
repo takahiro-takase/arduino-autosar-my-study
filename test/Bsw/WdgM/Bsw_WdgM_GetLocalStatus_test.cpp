@@ -15,6 +15,7 @@
 
 #include <gtest/gtest.h>
 #include "WdgM.h"
+#include "WdgM_TestUtil.h"
 #include "Wdg.h"
 #include "Wdg_PBCfg.h"
 #include "Fake_Wdg_Hw.h"
@@ -86,7 +87,7 @@ TEST_F(Bsw_WdgM_GetLocalStatus_Test, GetLocalStatus_OK_ReturnsFailedAfterAliveSh
     /* ----------------------- */
     /* CheckpointReached を一切呼ばずに WdgM_MainFunction() を実行すると、
      * 両エンティティとも Alive Supervision が期待回数を満たせず FAILED になる。 */
-    WdgM_MainFunction();
+    WdgM_RunSupervisionCycle();
 
     WdgM_LocalStatusType status = WDGM_LOCAL_STATUS_OK;
 
@@ -139,8 +140,8 @@ TEST_F(Bsw_WdgM_GetLocalStatus_Test, GetLocalStatus_OK_ReturnsExpiredAfterSustai
      * 1 回目の判定サイクルは FAILED のまま
      * (GetLocalStatus_OK_ReturnsFailedAfterAliveShortfall で検証済み)、
      * 2 回連続で Alive 不足が続くと EXPIRED へ遷移する。 */
-    WdgM_MainFunction();
-    WdgM_MainFunction();
+    WdgM_RunSupervisionCycle();
+    WdgM_RunSupervisionCycle();
 
     WdgM_LocalStatusType status = WDGM_LOCAL_STATUS_OK;
 
@@ -169,7 +170,7 @@ TEST_F(Bsw_WdgM_GetLocalStatus_Test, GetLocalStatus_OK_StaysFailedDuringSuppress
     (void)WdgM_SetMode(WDGM_MODE_POST_RUN);
 
     for (uint8 i = 0U; i < WDGM_EXPIRED_SUPERVISION_CYCLE_TOL + 3U; i++)
-        WdgM_MainFunction();
+        WdgM_RunSupervisionCycle();
 
     WdgM_LocalStatusType status = WDGM_LOCAL_STATUS_OK;
 
@@ -183,11 +184,11 @@ TEST_F(Bsw_WdgM_GetLocalStatus_Test, GetLocalStatus_OK_StaysFailedDuringSuppress
      * 解除後にあらためて WDGM_EXPIRED_SUPERVISION_CYCLE_TOL 判定サイクル分の
      * 継続 FAILED を要して EXPIRED へ遷移することを確認する。 */
     (void)WdgM_SetMode(WDGM_MODE_DEFAULT);
-    WdgM_MainFunction();
+    WdgM_RunSupervisionCycle();
     Std_ReturnType retCycle1 = WdgM_GetLocalStatus(WDGM_ENTITY_WARNING, &status);
     WdgM_LocalStatusType statusCycle1 = status;
 
-    WdgM_MainFunction();
+    WdgM_RunSupervisionCycle();
     Std_ReturnType retCycle2 = WdgM_GetLocalStatus(WDGM_ENTITY_WARNING, &status);
     WdgM_LocalStatusType statusCycle2 = status;
 
@@ -212,8 +213,8 @@ TEST_F(Bsw_WdgM_GetLocalStatus_Test, GetLocalStatus_OK_ReturnsOkAfterAliveRecove
     /* 猶予カウンタ消費中でも、Alive Supervision が実際に回復すれば即座に
      * OK へ戻り、猶予カウンタもリセットされる（Global 側と同じ単純な
      * 二値復帰。実仕様の 1 段階ずつの減算は簡略化のため採用していない）。 */
-    WdgM_MainFunction();
-    WdgM_MainFunction();
+    WdgM_RunSupervisionCycle();
+    WdgM_RunSupervisionCycle();
     WdgM_LocalStatusType expiredStatus = WDGM_LOCAL_STATUS_OK;
     ASSERT_EQ(WdgM_GetLocalStatus(WDGM_ENTITY_WARNING, &expiredStatus), E_OK);
     ASSERT_EQ(expiredStatus, WDGM_LOCAL_STATUS_EXPIRED);
@@ -235,7 +236,7 @@ TEST_F(Bsw_WdgM_GetLocalStatus_Test, GetLocalStatus_OK_ReturnsOkAfterAliveRecove
     WdgM_CheckpointReached(WDGM_ENTITY_WARNING, WDGM_CP_WARNING_START);
     FakeMillis_Value += 50UL;
     WdgM_CheckpointReached(WDGM_ENTITY_WARNING, WDGM_CP_WARNING_END);    /* Alive=6 (期待値 6 を満たす) */
-    WdgM_MainFunction();
+    WdgM_RunSupervisionCycle();
 
     WdgM_LocalStatusType status = WDGM_LOCAL_STATUS_FAILED;
     Std_ReturnType ret = WdgM_GetLocalStatus(WDGM_ENTITY_WARNING, &status);

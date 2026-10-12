@@ -14,7 +14,7 @@
  *            docs/modules/Can_Notes.md「RX 割り込み化の実機検証で得られた教訓」の
  *            とおり、本プロジェクトでは実機で割り込みが期待どおり発火しない
  *            事象を一度経験している。Os の時間源が完全に止まると
- *            WdgM_TriggerHwWatchdog を含む全タスクが二度と発火しなくなり、
+ *            WdgM_MainFunction を含む全タスクが二度と発火しなくなり、
  *            実 HW ウォッチドッグ（WDGM_HW_WATCHDOG_TIMEOUT_MS=4000ms、
  *            WdgM_Cfg.h 参照）でリセットされてしまう。CAN フレーム 1 個の
  *            欠落より遥かに影響が大きいため、単なる「検知してログを残す」

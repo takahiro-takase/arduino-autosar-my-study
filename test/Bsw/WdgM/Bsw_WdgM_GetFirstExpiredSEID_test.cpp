@@ -16,6 +16,7 @@
 
 #include <gtest/gtest.h>
 #include "WdgM.h"
+#include "WdgM_TestUtil.h"
 #include "Wdg.h"
 #include "Wdg_PBCfg.h"
 #include "Fake_Wdg_Hw.h"
@@ -94,7 +95,7 @@ protected:
             FakeMillis_Value += 50UL;
             WdgM_CheckpointReached(WDGM_ENTITY_WARNING, WDGM_CP_WARNING_END);
 
-            WdgM_MainFunction();
+            WdgM_RunSupervisionCycle();
         }
 
         WdgM_GlobalStatusType globalStatus;
@@ -228,7 +229,7 @@ TEST_F(Bsw_WdgM_GetFirstExpiredSEID_Test,
     WdgM_CheckpointReached(WDGM_ENTITY_WARNING, WDGM_CP_WARNING_START);
     FakeMillis_Value += 50UL;
     WdgM_CheckpointReached(WDGM_ENTITY_WARNING, WDGM_CP_WARNING_END);
-    WdgM_MainFunction();
+    WdgM_RunSupervisionCycle();
 
     WdgM_GlobalStatusType globalStatus;
     ASSERT_EQ(WdgM_GetGlobalStatus(&globalStatus), E_OK);

@@ -9,7 +9,7 @@
  *            BSWM_TASK_MASK_APP      — アプリ Runnable のみ (POST_RUN 時に停止)
  *            BSWM_TASK_MASK_BSW      — BSW タスクのみ (後処理用に継続動作)
  *            BSWM_TASK_MASK_SHUTDOWN — SHUTDOWN 時に停止するタスク
- *                                      (WdgM_TriggerHwWatchdog・
+ *                                      (WdgM_MainFunction・
  *                                       Can_MainFunction_Read・
  *                                       Can_MainFunction_Wakeup・
  *                                       CanSM_MainFunction・NvM_MainFunction・
@@ -90,13 +90,11 @@
 #define BSWM_OS_TASK_COM_MAIN_TX  OsConf_OsTask_Com_MainFunctionTx  /**< Com_MainFunctionTx (100 ms) */
 /* cppcheck-suppress misra-c2012-2.5 */
 #define BSWM_OS_TASK_IOHWAB_MAIN  OsConf_OsTask_IoHwAb_MainFunction  /**< IoHwAb_MainFunction (10 ms) */
-/* cppcheck-suppress misra-c2012-2.5 */
-#define BSWM_OS_TASK_WDGM_MAIN  OsConf_OsTask_WdgM_MainFunction  /**< WdgM_MainFunction (6000 ms) */
+#define BSWM_OS_TASK_WDGM_MAIN  OsConf_OsTask_WdgM_MainFunction  /**< WdgM_MainFunction (1000 ms) */
 /* cppcheck-suppress misra-c2012-2.5 */
 #define BSWM_OS_TASK_DCM_MAIN  OsConf_OsTask_Dcm_MainFunction  /**< Dcm_MainFunction (1000 ms) */
 /* cppcheck-suppress misra-c2012-2.5 */
 #define BSWM_OS_TASK_FIM_MAIN  OsConf_OsTask_FiM_MainFunction  /**< FiM_MainFunction (100 ms) */
-#define BSWM_OS_TASK_WDGM_TRIGGER  OsConf_OsTask_WdgM_TriggerHwWatchdog  /**< WdgM_TriggerHwWatchdog (1000 ms) */
 #define BSWM_OS_TASK_CANNM_MAIN  OsConf_OsTask_CanNm_MainFunction  /**< CanNm_MainFunction (1000 ms) */
 #define BSWM_OS_TASK_NVM_MAIN  OsConf_OsTask_NvM_MainFunction  /**< NvM_MainFunction (10 ms) */
 /* cppcheck-suppress misra-c2012-2.5 */
@@ -117,7 +115,7 @@
  * 制御不能になっていたバグを修正した経緯がある）。
  * ----------------------------------------------------------------------- */
 /** 全タスク（osTasks に挙げたタスクすべて）。挙げていない Os のタスクは意図的に除外している——上記の注記参照。 */
-#define BSWM_TASK_MASK_ALL  0x7FFFFUL
+#define BSWM_TASK_MASK_ALL  0x3FFFFUL
 
 /** アプリ Runnable タスク: RTE_ENGINE + RTE_WARNING
  *   POST_RUN 時に停止し、アプリロジックを凍結する */
@@ -129,13 +127,13 @@
 #define BSWM_TASK_MASK_BSW  ((uint32)(BSWM_TASK_MASK_ALL & (uint32)(~BSWM_TASK_MASK_APP)))
 
 /** SHUTDOWN 時に停止するタスク = ALL & ~(keepTasks に挙げたタスク)。keepTasks は次のとおり。
- *  WDGM_TRIGGER・CAN_READ・CAN_WAKEUP・CANSM_MAIN・NVM_MAIN・MEMIF_MAIN・CANNM_MAIN。
+ *  WDGM_MAIN・CAN_READ・CAN_WAKEUP・CANSM_MAIN・NVM_MAIN・MEMIF_MAIN・CANNM_MAIN。
  *
- *  WdgM_TriggerHwWatchdog だけは SHUTDOWN 後も動かし続ける必要がある。
+ *  WdgM_MainFunction は SHUTDOWN 後も動かし続ける必要がある。
  *  Renesas RA の IWDT は一度有効化すると無効化する手段がなく
  *  (Wdg_Hw.cpp 参照)、誰もリフレッシュしなければ SHUTDOWN 後も
  *  HW タイムアウトで MCU がリセットされてしまう
- *  (WdgM_SupervisionSuppressed が立っているため、WdgM_TriggerHwWatchdog さえ動いていれば
+ *  (WdgM_SupervisionSuppressed が立っているため、WdgM_MainFunction さえ動いていれば
  *  無条件にリフレッシュを継続し、実害なく HW を満たし続けられる)。
  *
  *  Can_MainFunction_Read・Can_MainFunction_Wakeup も同様に SHUTDOWN 中
@@ -187,7 +185,7 @@
  *  誰も立てなくなるため送信要求は発生しないが、無効化しておくのが本来の
  *  設計意図であり、BSWM_TASK_MASK_ALL に BSWM_OS_TASK_SECOC_MAIN のビットを
  *  含めることでこの無効化対象に含める）。 */
-#define BSWM_TASK_MASK_SHUTDOWN  ((uint32)(BSWM_TASK_MASK_ALL & (uint32)(~((1UL << BSWM_OS_TASK_WDGM_TRIGGER) | \
+#define BSWM_TASK_MASK_SHUTDOWN  ((uint32)(BSWM_TASK_MASK_ALL & (uint32)(~((1UL << BSWM_OS_TASK_WDGM_MAIN) | \
                                                         (1UL << BSWM_OS_TASK_CAN_READ) | \
                                                         (1UL << BSWM_OS_TASK_CAN_WAKEUP) | \
                                                         (1UL << BSWM_OS_TASK_CANSM_MAIN) | \

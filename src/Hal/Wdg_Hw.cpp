@@ -22,7 +22,7 @@
  *          最大タイムアウトは約 5592ms (WDT.getMaxTimeout() 相当) しかなく、
  *          旧 WDGM_SUPERVISION_CYCLE_MS (6000ms) 直結のリフレッシュ設計とは
  *          両立できない。このため WdgM 側でリフレッシュ (trigger) 周期を
- *          判定周期から分離した (WdgM_TriggerHwWatchdog、1000ms 周期)。
+ *          判定周期から分離した (WdgM_MainFunction は 1000ms 周期で毎回リフレッシュし、判定は 6 回に 1 回)。
  *          本ファイルは「一定タイムアウトで Enable/Disable/Refresh する」
  *          という MCU 非依存の役割のみを持ち、周期分離は関与しない。
  *
