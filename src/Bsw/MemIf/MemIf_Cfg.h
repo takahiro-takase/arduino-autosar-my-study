@@ -63,7 +63,6 @@
 #define MEMIF_API_ID_GET_STATUS        0x05U
 #define MEMIF_API_ID_GET_JOB_RESULT    0x06U
 #define MEMIF_API_ID_GET_VERSION_INFO  0x08U
-#define MEMIF_API_ID_WRITE_IMMEDIATE   0x0BU  /**< AUTOSAR 非標準（Fee.h 参照） */
 
 /** バージョン情報（Com/E2EXf/PduR 等の既存モジュールと同じ命名規則） */
 #define MEMIF_VENDOR_ID          0U

@@ -312,8 +312,10 @@ EEPROM.write(0x22U, EEPROM.read(0x22U) ^ 0xFFU);  // DEM_EXTENDED プライマ�
   Renesas RA (Fee) の 2 プラットフォームに対応しており、プラットフォーム
   分岐を MemIf.c 1 箇所に閉じ込める設計だったため（現在は AVR/Ea 対応を
   削除し Renesas RA 専用だが、この構造はそのまま残している）
-- `Fee_WriteImmediate()`（実仕様の `FeeImmediateData` ブロック属性相当）も
-  同様に本プロジェクト独自の API
+- 以前あった独自 API の `Fee_WriteImmediate()` / `MemIf_WriteImmediate()`（同期の即時書き込み）は
+  2026-10 に廃止した。`NvM_Init()` の CRC 不一致時の復元（EEPROM への書き戻し）は、
+  `MemIf_Write()`（非同期ジョブの発行）の後、Os スケジューラ開始前に `MemIf_MainFunction()` を
+  回して完了まで待つ（`NvM.c` の `NvM_WriteJobSync()`。`NvM_WriteAll()` と同じ考え方）
 
 ## 開発の経緯（実機で見つかった不具合・設計変更）
 

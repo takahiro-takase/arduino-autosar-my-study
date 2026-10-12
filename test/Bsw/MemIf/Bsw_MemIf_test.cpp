@@ -2,7 +2,7 @@
  * \file    Bsw_MemIf_test.cpp
  * \brief   MemIf.c（src/Bsw/MemIf/MemIf.c）の単体テスト（NG系）
  * \details MemIf.c は `MemIf_CheckDevice()`（1箇所の `Det_ReportError()`
- *          呼び出し）を Read/Write/WriteImmediate/Cancel/GetStatus/
+ *          呼び出し）を Read/Write/Cancel/GetStatus/
  *          GetJobResult の6エントリポイントから呼ぶ薄い層のため、ソース上の
  *          `Det_ReportError()` 呼び出し箇所は2箇所（本関数＋GetVersionInfo）
  *          のみだが、6エントリポイントそれぞれで報告される ApiId が正しい値に
@@ -135,30 +135,6 @@ TEST_F(Bsw_MemIf_Test, MemIf_Write_NG_InvalidDevice)
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, MEMIF_E_PARAM_DEVICE);
     EXPECT_EQ(FakeDetHw_LastApiId, MEMIF_API_ID_WRITE);
-}
-
-// ------------------------------------------------------------
-// MemIf_WriteImmediate()
-// ------------------------------------------------------------
-
-TEST_F(Bsw_MemIf_Test, MemIf_WriteImmediate_NG_InvalidDevice)
-{
-    /* ----------------------- */
-    /* ---- 準備 (Arrange) --- */
-    /* ----------------------- */
-    const uint8 data[1] = { 0U };
-
-    /* ----------------------- */
-    /* ---- 実行 (Act) ------- */
-    /* ----------------------- */
-    Std_ReturnType ret = MemIf_WriteImmediate(kInvalidDevice, 0U, data, 1U);
-
-    /* ----------------------- */
-    /* ---- 評価 (Assert) ---- */
-    /* ----------------------- */
-    EXPECT_EQ(ret, E_NOT_OK);
-    EXPECT_EQ(FakeDetHw_LastErrorId, MEMIF_E_PARAM_DEVICE);
-    EXPECT_EQ(FakeDetHw_LastApiId, MEMIF_API_ID_WRITE_IMMEDIATE);
 }
 
 // ------------------------------------------------------------

@@ -18,8 +18,9 @@
  *            NvM_Init() は読み込み直後に CRC を再計算して検証し、
  *            不一致ならビット化けや書き込み中の電源断による破損とみなして
  *            ROM デフォルト値（未設定なら全 0）で復元し EEPROM へ書き戻す
- *            (起動時、Os スケジューラ開始前のため MemIf_WriteImmediate() に
- *            よる同期処理のまま)。
+ *            (起動時、Os スケジューラ開始前のため、MemIf_Write() で発行した
+ *            書き込みジョブを MemIf_MainFunction() を回して完了まで待つ同期処理のまま、
+ *            NvM_WriteJobSync() 参照)。
  *            実際の AUTOSAR Crc モジュールへの委譲は行わず、本ファイル内に
  *            最小実装を持つ（学習用簡略化。Crc モジュール自体は本プロジェクトの
  *            対応範囲外）。
@@ -278,6 +279,63 @@ static uint16 NvM_CrcAddressForBase(uint16 base, uint16 length)
 }
 
 /* ----------------------------------------------------------------------
+ * NvM_WriteJobSync
+ * ---------------------------------------------------------------------- */
+
+/**
+ * \brief   EEPROM への書き込みジョブ 1 本を発行し、完了するまで同期的に待つ。
+ *
+ * \details MemIf_Write()（非同期ジョブの発行）の後、MemIf_MainFunction() を自分で回して
+ *          ジョブを進める。Fee は 1 回の MemIf_MainFunction() 呼び出しにつき 1 バイト書くため、
+ *          length 回で完了する（余裕を 1 回見込む）。NvM_WriteAll()（Os スケジューラ停止中に
+ *          NvM_MainFunction()/MemIf_MainFunction() を回して待つ）と同じ考え方で、
+ *          NvM_Init() の CRC 不一致時の復元など、Os スケジューラ開始前に EEPROM を
+ *          書き戻したい文脈でだけ使う。
+ *
+ *          以前は、実仕様に存在しない独自 API の MemIf_WriteImmediate()/
+ *          Fee_WriteImmediate()（Fee_Hw_WriteBlock() の一括書き込み）を使っていた
+ *          （2026-10 に置き換え。書く内容・EEPROM.update() による差分書き込みは同じ）。
+ *
+ *          MemIf_Write() が拒否した場合（Fee がジョブ処理中など）は、書かずに戻る。
+ *          待ちが上限に達してもジョブが完了しなかった場合は、MemIf_Cancel() で中断してから戻る
+ *          （呼び出し元のスタックを指す data を Fee のジョブが保持したまま戻らないため）。
+ *          書き込みが拒否・未完了・失敗に終わると、ログを出す。復元の成否は呼び出し元へは返さない
+ *          （以前の MemIf_WriteImmediate() の呼び出しも戻り値を使っていなかった。EEPROM は
+ *          CRC 不一致のまま残り、次回の起動で再び復元を試みる）。
+ *
+ * \param[in]  address  書き込み開始アドレス。
+ * \param[in]  data     書き込み元データ。
+ * \param[in]  length   書き込むバイト数（1 以上）。
+ */
+static void NvM_WriteJobSync(uint16 address, const uint8* data, uint16 length)
+{
+    if (MemIf_Write(MEMIF_DEVICE_0, address, data, length) != E_OK)
+    {
+        DET_LOGE(TAG, "SyncWrite E: MemIf_Write rejected addr=%u len=%u", (unsigned)address, (unsigned)length);
+        return;
+    }
+
+    for (uint16 i = 0U; (i <= length) && (MemIf_GetStatus(MEMIF_DEVICE_0) != MEMIF_IDLE); i++)
+    {
+        MemIf_MainFunction();
+    }
+
+    if (MemIf_GetStatus(MEMIF_DEVICE_0) != MEMIF_IDLE)
+    {
+        DET_LOGE(TAG, "SyncWrite E: job did not complete addr=%u len=%u, cancelled", (unsigned)address, (unsigned)length);
+        MemIf_Cancel(MEMIF_DEVICE_0);
+    }
+    else if (MemIf_GetJobResult(MEMIF_DEVICE_0) != MEMIF_JOB_OK)
+    {
+        DET_LOGE(TAG, "SyncWrite E: job failed addr=%u len=%u", (unsigned)address, (unsigned)length);
+    }
+    else
+    {
+        /* 完了（MEMIF_JOB_OK） */
+    }
+}
+
+/* ----------------------------------------------------------------------
  * NvM_WriteCopySync
  * ---------------------------------------------------------------------- */
 
@@ -288,15 +346,15 @@ static uint16 NvM_CrcAddressForBase(uint16 base, uint16 length)
  * \details 冗長ブロックのプライマリ／ミラーいずれか片方だけを書く共通処理。
  *          呼び出し元が起動時（NvM_Init 経由）やデフォルト復元時など、
  *          同期的にブロッキングしてよい文脈でのみ使うこと
- *          (MemIf_WriteImmediate() 経由、Fee.h の Fee_WriteImmediate() 参照)。
+ *          (NvM_WriteJobSync() 経由)。
  */
 static void NvM_WriteCopySync(uint16 base, const void* data, uint16 length)
 {
     /* cppcheck-suppress misra-c2012-11.5 */
-    (void)MemIf_WriteImmediate(MEMIF_DEVICE_0, base, (const uint8*)data, length);
+    NvM_WriteJobSync(base, (const uint8*)data, length);
     /* cppcheck-suppress misra-c2012-11.5 */
     uint8 crc = NvM_CalcCrc8((const uint8*)data, length);
-    (void)MemIf_WriteImmediate(MEMIF_DEVICE_0, NvM_CrcAddressForBase(base, length), &crc, 1U);
+    NvM_WriteJobSync(NvM_CrcAddressForBase(base, length), &crc, 1U);
 }
 
 /* ----------------------------------------------------------------------

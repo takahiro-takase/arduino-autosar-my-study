@@ -54,20 +54,6 @@ extern "C" {
 void Fee_Hw_ReadBlock(void* DstRam, uint16 EepromAddr, uint16 Length);
 
 /**
- * \brief   RAM の内容を不揮発メモリの指定アドレスへ書き込む（ブロッキング）。
- *
- * \details 既存値と異なるバイトのみ物理書き込みする（EEPROM.update() が
- *          既に持つ性質）。Fee_WriteImmediate() （Os スケジューラ開始前の
- *          同期書き込み）専用。実行中の非同期ジョブ（Fee_MainFunction()）は
- *          Fee_Hw_WriteByte() を 1 バイトずつ使う。
- *
- * \param[in]  SrcRam      書き込み元 RAM バッファ。
- * \param[in]  EepromAddr  不揮発メモリ上の開始アドレス。
- * \param[in]  Length      書き込むバイト数。
- */
-void Fee_Hw_WriteBlock(const void* SrcRam, uint16 EepromAddr, uint16 Length);
-
-/**
  * \brief   不揮発メモリの指定アドレスへ 1 バイト書き込む。
  *
  * \param[in]  EepromAddr  不揮発メモリ上のアドレス。

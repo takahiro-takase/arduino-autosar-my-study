@@ -138,25 +138,6 @@ Std_ReturnType MemIf_Read(MemIf_DeviceType Device, uint16 Address, uint8* DataBu
 Std_ReturnType MemIf_Write(MemIf_DeviceType Device, uint16 Address, const uint8* DataBufferPtr, uint16 Length);
 
 /**
- * \brief   対応する下位ドライバへ同期（即時）書き込みをディスパッチする。
- *          詳細は Fee_WriteImmediate() 参照（AUTOSAR 非標準 API。
- *          MemIf_Cfg.h 参照）。
- *
- * \param[in]  Device         MEMIF_DEVICE_0 のみ有効。
- * \param[in]  Address        書き込み開始アドレス。
- * \param[in]  DataBufferPtr  書き込み元データ。NULL 禁止。
- * \param[in]  Length         書き込むバイト数。0 禁止。
- *
- * \retval  E_OK      正常完了。
- * \retval  E_NOT_OK  Device が不正、または下位ドライバが失敗。
- *
- * \ServiceID      {0x0B}
- * \Reentrancy     {Reentrant}
- * \Synchronicity  {Synchronous}
- */
-Std_ReturnType MemIf_WriteImmediate(MemIf_DeviceType Device, uint16 Address, const uint8* DataBufferPtr, uint16 Length);
-
-/**
  * \brief   対応する下位ドライバの処理中ジョブを中断する。詳細は
  *          Fee_Cancel() 参照。
  *

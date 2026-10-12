@@ -207,41 +207,6 @@ Std_ReturnType Fee_Write(uint16 Address, const uint8* DataBufferPtr, uint16 Leng
 }
 
 /* ----------------------------------------------------------------------
- * Fee_WriteImmediate
- * ---------------------------------------------------------------------- */
-
-Std_ReturnType Fee_WriteImmediate(uint16 Address, const uint8* DataBufferPtr, uint16 Length)
-{
-    if (!Fee_Initialized)
-    {
-        (void)Det_ReportError(FEE_MODULE_ID, 0U, FEE_API_ID_WRITE_IMMEDIATE, FEE_E_UNINIT);
-        return E_NOT_OK;
-    }
-    if (DataBufferPtr == NULL)
-    {
-        (void)Det_ReportError(FEE_MODULE_ID, 0U, FEE_API_ID_WRITE_IMMEDIATE, FEE_E_PARAM_POINTER);
-        return E_NOT_OK;
-    }
-    if (Length == 0U)
-    {
-        (void)Det_ReportError(FEE_MODULE_ID, 0U, FEE_API_ID_WRITE_IMMEDIATE, FEE_E_INVALID_BLOCK_LEN);
-        return E_NOT_OK;
-    }
-    if ((Fee_Job.Active) != 0U)
-    {
-        /* Fee_Write() の非同期ジョブと物理アドレス空間が重なりうるため、
-         * Fee_Write() と同じ排他を取る（Fee.h の Fee_WriteImmediate() 説明
-         * 参照）。呼び出し元は「Os スケジューラ開始前のみ」という運用規約に
-         * 加え、この戻り値でも保護される。 */
-        (void)Det_ReportError(FEE_MODULE_ID, 0U, FEE_API_ID_WRITE_IMMEDIATE, FEE_E_BUSY);
-        return E_NOT_OK;
-    }
-
-    Fee_Hw_WriteBlock(DataBufferPtr, Address, Length);
-    return E_OK;
-}
-
-/* ----------------------------------------------------------------------
  * Fee_Cancel
  * ---------------------------------------------------------------------- */
 
