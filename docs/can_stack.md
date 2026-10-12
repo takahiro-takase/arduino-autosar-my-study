@@ -375,13 +375,19 @@ Can_Isr（INT ピン立ち下がりの真のハードウェア割り込み。SHU
 【2nd phase-a: 検証成功（検証タイマ内に有効な CAN フレームを受信）】
 Can_MainFunction_Read（Listen-Only になったため通常の RX ドレインが有効。
                         SHUTDOWN 中もこのタスクだけは動き続ける）
-  └→ CanIf_RxIndication()                     ← 受信フレームを検出
-       └→ CanSM_RxIndication(0)                ← 全受信フレームで無条件に呼ばれる
-            └→ CanSM: WAKEUP_VALIDATING → FULL_COM（Can_SetControllerMode(CAN_T_START)）
-                 └→ ComM_BusSM_ModeIndication(FULL_COM)
-                      └→ EcuM_RequestRUN(ECUM_USER_COMM)
-                           └→ EcuM: SHUTDOWN → RUN（全タスク再有効化）
+  └→ CanIf_RxIndication()                     ← 受信フレームを検出し、起床後の最初の受信として記憶
        └→ （同じフレームがそのまま PduR/Com/Dcm 等へも配信される）
+
+EcuM_MainFunction()（SHUTDOWN 中も動作）:
+  検証待ちの起床要因（EcuM_CheckWakeup() が保留）がある ?
+    YES → CanIf_CheckValidation(ECUM_WKSOURCE_CAN)    ← 記憶した受信があれば:
+            └→ EcuM_ValidateWakeupEvent(ECUM_WKSOURCE_CAN)
+                 └→ ComM_EcuM_WakeUpIndication(0)    ← チャネルが NO_COM のとき
+                      └→ CanSM_RequestComMode(FULL_COM)
+                           └→ CanSM: WAKEUP_VALIDATING → FULL_COM（Can_SetControllerMode(CAN_T_START)）
+                                └→ ComM_BusSM_ModeIndication(FULL_COM)
+                                     └→ EcuM_RequestRUN(ECUM_USER_COMM)
+                                          └→ EcuM: SHUTDOWN → RUN（全タスク再有効化）
 
 【2nd phase-b: 検証失敗（検証タイマ超過、ノイズによる誤ウェイクアップ）】
 CanSM_MainFunction（10ms タスク、SHUTDOWN 中も動き続ける）
@@ -478,11 +484,14 @@ Can_MainFunction_Read()（1ms 周期、SHUTDOWN 中も動作）:
   CAN_CS_SLEEP 中でない かつ Can_RxIrqPending ?
     YES → フラグをクリアし、受信バッファが空になるまでドレイン
           （Listen-Only になった直後からは、この関数が受信フレームを処理する）
-       → 受信フレームがあれば CanIf_RxIndication() → CanSM_RxIndication(0)
-            CANSM_STATE_WAKEUP_VALIDATING 中 ?
-              YES → 検証成功: Can_SetControllerMode(CAN_T_START) → CANSM_STATE_FULL_COM
-                     → ComM_BusSM_ModeIndication(FULL_COM) → EcuM_RequestRUN
-              NO  → 通常運用中は何もしない
+       → 受信フレームがあれば CanIf_RxIndication()（起床後の最初の受信として記憶）
+
+EcuM_MainFunction()（SHUTDOWN 中も動作）:
+  検証待ちの起床要因がある ?
+    YES → CanIf_CheckValidation() → （記憶した受信があれば）EcuM_ValidateWakeupEvent()
+            → ComM_EcuM_WakeUpIndication(0) → CanSM_RequestComMode(FULL_COM)
+            → 検証成功: Can_SetControllerMode(CAN_T_START) → CANSM_STATE_FULL_COM
+               → ComM_BusSM_ModeIndication(FULL_COM) → EcuM_RequestRUN
 
 CanSM_MainFunction()（10ms 周期、SHUTDOWN 中も動作）:
   CANSM_STATE_WAKEUP_VALIDATING 中 ?
@@ -491,15 +500,19 @@ CanSM_MainFunction()（10ms 周期、SHUTDOWN 中も動作）:
                    → CANSM_STATE_NO_COM（ComM/EcuM は一切関与しない）
 ```
 
-`CanSM_RxIndication()` は AUTOSAR SWS_CanSM の `CanSMRxIndicationUsed` 設定に相当し、
-CanIf が受信したフレーム**すべて**について（特定の PDU に一致するかどうかに
-関わらず）呼び出されます。「何らかの構造的に正しい CAN フレームを実際に
-受信できた」こと自体が、直前のウェイクアップが本物のバス活動だった証拠になる
-という考え方です。
+検証成功の合図は、AUTOSAR の仕様（[SWS_CANIF_00286]/[SWS_CANIF_00179]）どおりの
+経路で伝わります。CanIf は、受信したフレーム**すべて**について（特定の PDU に
+一致するかどうかに関わらず）最初の受信を記憶します。「何らかの構造的に正しい
+CAN フレームを実際に受信できた」こと自体が、直前のウェイクアップが本物の
+バス活動だった証拠になるという考え方です。EcuM が検証待ちの起床要因について
+`CanIf_CheckValidation()` を呼ぶと、記憶があれば CanIf が
+`EcuM_ValidateWakeupEvent()` を呼び、EcuM が `ComM_EcuM_WakeUpIndication()`
+で ComM へ伝え、ComM が `CanSM_RequestComMode(FULL_COM)` で FULL_COM を要求します
+（以前は、実仕様に存在しない独自 API の `CanSM_RxIndication()` を CanIf が
+毎回呼び、CanSM が自分で確定していました。2026-10 に置き換え）。
 
-検証成功の判定に使われたフレーム自体も失われません。`CanSM_RxIndication()` の
-直後に続く `CanIf_RxIndication()` の通常の PDU 振り分け処理でそのまま
-PduR/Com/Dcm 等へ配信されます。
+検証成功の判定に使われたフレーム自体も失われません。`CanIf_RxIndication()` の
+通常の PDU 振り分け処理でそのまま PduR/Com/Dcm 等へ配信されます。
 
 想定されるログ例（スリープ突入 → ウェイクアップ検証成功・ノイズによる誤ウェイクアップ）は
 「[シリアルモニタ出力例](archive/README_2026-10-03.md#serial-log-example)」の

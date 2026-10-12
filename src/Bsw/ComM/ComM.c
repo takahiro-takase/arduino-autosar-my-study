@@ -72,8 +72,8 @@
  *
  *            2026-09 追加: ComM_Nm_NetworkStartIndication()（[SWS_ComM_00383]）。
  *            この待機期間中の物理ウェイクアップ（CanSM_ControllerModeIndication() →
- *            ウェイクアップ検証 → CanSM_RxIndication() →
- *            ComM_BusSM_ModeIndication(FULL_COM)）とは別に、CanNm 自身がまだ
+ *            ウェイクアップ検証 → ComM_EcuM_WakeUpIndication() →
+ *            CanSM_RequestComMode(FULL_COM) → ComM_BusSM_ModeIndication(FULL_COM)）とは別に、CanNm 自身がまだ
  *            Bus-Sleep Mode のまま NM フレームを受信した場合（レース条件、
  *            [SWS_CanNm_00127]）は CanNm_RxIndication() の CANNM_STATE_BUS_SLEEP
  *            ケースから本関数が呼ばれ、チャネルを FULL_COM へ、CanNm 自身も
@@ -841,7 +841,59 @@ void ComM_DCM_InactiveDiagnostic(NetworkHandleType Channel)
  * ComM_EcuM_WakeUpIndication
  * ---------------------------------------------------------------------- */
 
-/* 未実装 */
+/**
+ * \brief   EcuM から、対象チャネルでバスからの起床が検証されたことを通知する
+ *          （[SWS_ComM_00275]）。
+ *
+ * \details EcuM_ValidateWakeupEvent() が、検証された起床要因に対応するチャネルについて
+ *          呼ぶ（[SWS_EcuM_02645]）。チャネルが NO_COM（ボランタリスリープ中の
+ *          起床）のとき、FULL_COM を CanSM へ要求する（[SWS_ComM_00893]/[SWS_ComM_00694]
+ *          の趣旨: 起床後すぐに通信を開始する）。CanSM がコントローラを起動して
+ *          FULL_COM へ確定し、`ComM_BusSM_ModeIndication(FULL_COM)` を返すと、
+ *          通常の起動時と同じ流れ（EcuM の RUN 要求、Dcm への通知など）になる。
+ *          チャネルが既に NO_COM でないときは何もしない。
+ *
+ *          以前は CanIf_RxIndication() が独自 API の CanSM_RxIndication() を呼び、
+ *          CanSM が検証成功を自分で判断して同じ確定を行っていた（2026-10 に置き換え）。
+ *
+ *          CommunicationAllowed ゲート（`ComM_RequestFullComOrPend()`）は通さず、
+ *          直接 CanSM を呼ぶ。バス側の事象（ComM_Nm_NetworkMode() /
+ *          ComM_Nm_NetworkStartIndication()）と同じ扱いで、起床を取りこぼさない
+ *          ため。
+ *
+ * \param[in]  Channel  起床が検証されたチャネル。
+ *
+ * \AUTOSARReq     {SWS_ComM_00275, SWS_ComM_00893}
+ * \ServiceID      {0x2a}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void ComM_EcuM_WakeUpIndication(NetworkHandleType Channel)
+{
+    if (!ComM_Initialized)
+    {
+        (void)Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_ECUM_WAKEUP_INDICATION, COMM_E_UNINIT);
+        return;
+    }
+
+    if (Channel >= COMM_CHANNEL_COUNT)
+    {
+        (void)Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_ECUM_WAKEUP_INDICATION, COMM_E_WRONG_PARAMETERS);
+        return;
+    }
+
+    DET_LOGI(TAG, "ch%u EcuM WakeUpIndication (mode=%u)", (unsigned)Channel, (unsigned)ComM_ChannelMode[Channel]);
+
+    if (ComM_ChannelMode[Channel] == COMM_NO_COMMUNICATION)
+    {
+        /* 失敗しても再試行はしない（EcuM/CanIf は検証済みの通知を消費済み）。CanSM は
+         * WAKEUP_VALIDATING のまま検証タイマの満了で再スリープするため、ログだけ残す。 */
+        if (CanSM_RequestComMode(Channel, COMM_FULL_COMMUNICATION) != E_OK)
+        {
+            DET_LOGE(TAG, "ch%u EcuM WakeUpIndication E: CanSM_RequestComMode(FULL_COM) failed", (unsigned)Channel);
+        }
+    }
+}
 
 /* ----------------------------------------------------------------------
  * ComM_EcuM_PNCWakeUpIndication

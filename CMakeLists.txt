@@ -22,7 +22,7 @@
 # 横断でコールチェーンを実体（Com.c/PduR.c/CanIf.c/Can.c/CanSM.c）のまま
 # リンクして検証したいテストを test/ に置く（Bsw_ComStack_Tx_test.cpp 参照）。
 #
-# CanIf.c が CanSM_RxIndication()/ControllerBusOff() を、Can.c が
+# CanIf.c が CanSM_ControllerBusOff() を、Can.c が
 # EcuM_CheckWakeup() 経由で CanSM_ControllerModeIndication() をハードコードで
 # 呼ぶため（2026-09-05、旧 CanIf_ControllerWakeup() 経由から変更。
 # Fake_Bsw_EcuM.h 参照）、CanSM.c は実体・フェイクのいずれかをこのバイナリ
@@ -472,7 +472,6 @@ set(NATIVE_CHAIN_WRAP_SYMBOLS
     CanSM_GetCurrentComMode
     CanSM_ControllerBusOff
     CanSM_ControllerModeIndication
-    CanSM_RxIndication
     CanSM_MainFunction
     CanSM_GetVersionInfo
     # CanTp.c の AUTOSAR IF 全数（Wrap_CanTp.h/.c 参照）。
@@ -506,7 +505,7 @@ set(NATIVE_CHAIN_WRAP_SYMBOLS
     Com_MainFunctionRx
     Com_MainFunctionTx
     Com_SetCommunicationEnabled
-    # ComM.h の AUTOSAR IF 全16関数（Wrap_ComM.h/.c 参照）。
+    # ComM.h の AUTOSAR IF 全17関数（Wrap_ComM.h/.c 参照）。
     ComM_Init
     ComM_DeInit
     ComM_GetStatus
@@ -520,6 +519,7 @@ set(NATIVE_CHAIN_WRAP_SYMBOLS
     ComM_Nm_BusSleepMode
     ComM_DCM_ActiveDiagnostic
     ComM_DCM_InactiveDiagnostic
+    ComM_EcuM_WakeUpIndication
     ComM_CommunicationAllowed
     ComM_BusSM_ModeIndication
     ComM_MainFunction

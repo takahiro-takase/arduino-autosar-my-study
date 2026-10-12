@@ -67,6 +67,7 @@ extern uint32 CallCount_ComM_Nm_PrepareBusSleepMode;
 extern uint32 CallCount_ComM_Nm_BusSleepMode;
 extern uint32 CallCount_ComM_DCM_ActiveDiagnostic;
 extern uint32 CallCount_ComM_DCM_InactiveDiagnostic;
+extern uint32 CallCount_ComM_EcuM_WakeUpIndication;
 extern uint32 CallCount_ComM_CommunicationAllowed;
 extern uint32 CallCount_ComM_BusSM_ModeIndication;
 extern uint32 CallCount_ComM_MainFunction;

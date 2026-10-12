@@ -56,14 +56,15 @@ stateDiagram-v2
     BUS_OFF --> FULL_COM: MainFunction()\nL1/L2 回復成功（Bus-Off 発生時 FULL_COM）
     BUS_OFF --> SILENT_COM: MainFunction()\nL1/L2 回復成功（Bus-Off 発生時 SILENT_COM）
 
-    WAKEUP_VALIDATING --> FULL_COM: RxIndication()\n(有効フレーム受信、検証成功)
+    WAKEUP_VALIDATING --> FULL_COM: RequestComMode(FULL_COM)\n(有効フレームの受信確認後、ComM_EcuM_WakeUpIndication 経由)
     WAKEUP_VALIDATING --> NO_COM: MainFunction()\n(検証タイムアウト、再スリープ)
 ```
 
 > **図にない遷移（`WAKEUP_VALIDATING` からの `RequestComMode()`）**: `CanSM_RequestComMode()`
 > 冒頭のガードは `BUS_OFF` しかチェックしておらず、`WAKEUP_VALIDATING` 中に呼ばれても
-> 素通りする。`RequestComMode(FULL_COM)` は `CanSM_RxIndication()` による検証を経ずに
-> 直接 `FULL_COM` へ、`RequestComMode(NO_COM)` は `Can_SetControllerMode(CAN_T_SLEEP)`
+> 素通りする。`RequestComMode(FULL_COM)` は直接 `FULL_COM` へ（有効フレームの受信確認後に
+> `ComM_EcuM_WakeUpIndication()` が呼ぶ場合は、これが正規の経路。受信確認を経ない呼び出しでも
+> 同じ遷移になる）、`RequestComMode(NO_COM)` は `Can_SetControllerMode(CAN_T_SLEEP)`
 > を呼ばないまま状態だけ `NO_COM` にしてしまい、コントローラが Listen-Only
 > （`CAN_CS_STOPPED`）のまま起きた状態で残る（`NO_COM` の「物理的にスリープ済み」
 > という不変条件と矛盾する）。ただし `ComM_RequestComMode()` の呼び出し元
@@ -82,7 +83,7 @@ stateDiagram-v2
 | `RequestComMode(SILENT_COM)` | FULL_COM からのときだけ `CanIf_SetPduMode(TX_OFFLINE)`（コントローラは `CAN_CS_STARTED` のまま、PDU の送信だけを止める）→ `ComM_BusSM_ModeIndication(SILENT_COM)` |
 | `RequestComMode(NO_COM)` | `CanIf_SetControllerMode(SLEEP)` → `ComM_BusSM_ModeIndication(NO_COM)` |
 | `ControllerModeIndication()`（ウェイクアップ） | NO_COM のときだけ受け付ける。`CanIf_SetControllerMode(STOPPED)`（Listen-Only）にして `WAKEUP_VALIDATING` へ。それ以外の状態では無視（ログのみ） |
-| `RxIndication()`（検証中の有効フレーム） | `CanIf_SetControllerMode(STARTED)` → PDU を ONLINE → `DemConf_DemEventParameter_CAN_BUSOFF` を PASSED → `ComM_BusSM_ModeIndication(FULL_COM)` |
+| `RequestComMode(FULL_COM)`（検証中に有効フレームを確認した後、`ComM_EcuM_WakeUpIndication()` から） | `CanIf_SetControllerMode(STARTED)` → PDU を ONLINE → `DemConf_DemEventParameter_CAN_BUSOFF` を PASSED → `ComM_BusSM_ModeIndication(FULL_COM)` |
 | `MainFunction()`（検証タイムアウト） | `CanIf_SetControllerMode(SLEEP)` で再スリープ（ウェイクアップ割り込みを再武装）し NO_COM へ戻る |
 
 `CanSM_MainFunction()` は Os Task 4（10ms 周期）です。設定値（`CanSM_Cfg.h`）:

@@ -165,7 +165,7 @@ protected:
          * と同じ理由）。 */
         CanIf_SetPduMode(0U, CANIF_ONLINE);
         PduR_Init(&kTestPduRConfig);
-        /* CanIf_RxIndication() は無条件に CanSM_RxIndication() を呼ぶため、
+        /* 以前は CanIf_RxIndication() が CanSM_RxIndication() を無条件に呼んでおり（2026-10 に廃止、現在は呼ばない。共有 static の状態を揃えるため CanSM_Init は残している）、
          * CanSM 未初期化のままだと DET_E_UNINIT が毎回報告される
          * （Bsw_ComStack_Signal_Rx_test.cpp と同じ理由。CanSM 自体の状態機械は
          * 本テストの対象外）。 */

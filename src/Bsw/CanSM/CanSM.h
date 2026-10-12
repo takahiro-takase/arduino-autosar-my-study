@@ -135,29 +135,6 @@ Std_ReturnType CanSM_RequestComMode(NetworkHandleType network, ComM_ModeType mod
 Std_ReturnType CanSM_GetCurrentComMode(NetworkHandleType network, ComM_ModeType* mode);
 
 /**
- * \brief   受信通知コールバック（CanIf から全受信フレームについて呼び出される）。
- *
- * \details AUTOSAR SWS_CanSM の CanSMRxIndicationUsed 設定に相当。
- *          ウェイクアップ検証中 (CANSM_STATE_WAKEUP_VALIDATING) にのみ意味を持ち、
- *          有効な CAN フレームの受信をもって直前のウェイクアップがノイズでは
- *          ないと判断し、FULL_COM へ確定させる。それ以外の状態では何もしない。
- *
- * \note    実仕様には存在しない本プロジェクト独自の拡張関数のため、対応する
- *          \AUTOSARReq は無い。ServiceID は以前 0x07 だったが、
- *          `CanSM_ControllerModeIndication`（旧 CanSM_ControllerWakeup）の
- *          正しい ServiceID が実は 0x07 だったと判明したため、2026-09-05 に
- *          0x15 へ変更した（自己割当値、実仕様との衝突を避けるため。
- *          CanSM_Cfg.h の CANSM_API_ID_RX_INDICATION コメント参照）。
- *
- * \param[in]  ControllerId  受信したコントローラ ID。
- *
- * \ServiceID      {0x15}
- * \Reentrancy     {Non Reentrant}
- * \Synchronicity  {Synchronous}
- */
-void CanSM_RxIndication(uint8 ControllerId);
-
-/**
  * \brief   CanSM 周期処理（Bus-Off 回復タイマ・ウェイクアップ検証タイマ管理）。
  *
  * \details OS タスク (10 ms 周期、SHUTDOWN 中も動作) から呼び出される。
@@ -230,8 +207,9 @@ void CanSM_ControllerBusOff(uint8 ControllerId);
  *          この時点ではまだ FULL_COM へ確定しない（ウェイクアップ検証、
  *          AUTOSAR EcuM Wakeup Validation Protocol 相当）。CAN_T_WAKEUP のみ
  *          実行して Listen-Only へ遷移し、検証タイマを開始する。実際に
- *          FULL_COM へ確定するかどうかは CanSM_RxIndication() /
- *          CanSM_MainFunction() が決める。
+ *          FULL_COM へ確定するかどうかは、有効な受信の確認後に ComM が呼ぶ
+ *          CanSM_RequestComMode(FULL_COM) /
+ *          CanSM_MainFunction()（タイムアウト）が決める。
  *
  * \param[in]  ControllerId   モードが変化したコントローラ ID。
  * \param[in]  ControllerMode 通知されたコントローラモード。本プロジェクトの
@@ -246,7 +224,7 @@ void CanSM_ControllerBusOff(uint8 ControllerId);
  * \note    実仕様の \Reentrancy は「Reentrant (only for different CAN
  *          controllers)」だが、本実装は `CanSM_State`/`CanSM_ValidationTimerMs`
  *          等の共有 static 変数を排他制御なしに読み書きするため、
- *          兄弟関数（`CanSM_ControllerBusOff`/`CanSM_RxIndication`/
+ *          兄弟関数（`CanSM_ControllerBusOff`/
  *          `CanSM_RequestComMode` 等、いずれも `Non Reentrant`）と同様に
  *          `Non Reentrant` のまま扱う（本プロジェクトは単一コントローラ構成
  *          で ControllerId!=0 を DET 拒否するため、実仕様が言う「異なる

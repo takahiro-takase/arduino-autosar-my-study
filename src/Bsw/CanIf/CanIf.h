@@ -17,6 +17,7 @@
 
 #include "CanIf_Types.h"
 #include "CanIf_Cfg.h"
+#include "EcuM.h"
 
 /* ======================================================================
  * Definitions
@@ -103,6 +104,46 @@ CanIf_NotifStatusType CanIf_ReadTxNotifStatus(PduIdType CanIfTxSduId);
  * \Synchronicity  {Synchronous}
  */
 CanIf_NotifStatusType CanIf_ReadRxNotifStatus(PduIdType CanIfRxSduId);
+
+/**
+ * \brief   起床要因の検証要求（CAN の起床の検証）を受け付け、有効な受信が
+ *          あれば EcuM へ「検証済み」を通知する（[SWS_CANIF_00178]）。
+ *
+ * \details ウェイクアップ検証（[SWS_CANIF_00286]/[SWS_CANIF_00179]）の CanIf 側の
+ *          窓口。CanIf_RxIndication() は、受信した最初のフレームを「起床後の
+ *          最初の受信」として記憶する。EcuM が起床要因の検証を要求
+ *          （EcuM_MainFunction() が保留中の起床要因について本関数を呼ぶ）したとき、
+ *          記憶があれば `EcuM_ValidateWakeupEvent(WakeupSource)` を呼ぶ
+ *          （仕様の <User_ValidateWakeupEvent>。記憶が無ければ呼ばない）。
+ *          記憶は、通知後に消す。また、コントローラが `CAN_CS_SLEEP` に
+ *          なったとき、前回の起床で記憶した受信を消す（[SWS_CANIF_00756]）。
+ *
+ *          以前は CanIf_RxIndication() が、実仕様に存在しない独自 API の
+ *          `CanSM_RxIndication()` を毎回呼び、CanSM が受信を検証成功の合図として
+ *          自分で FULL_COM へ確定していた（2026-10 に置き換え。確定は
+ *          EcuM_ValidateWakeupEvent() → ComM_EcuM_WakeUpIndication() →
+ *          CanSM_RequestComMode(FULL_COM) の経路で行う）。
+ *
+ * \note    本プロジェクトの検証は、コントローラが Listen-Only
+ *          （`CAN_CS_STOPPED`）の間に行う。実仕様は `CAN_CS_STARTED` のコントローラの
+ *          受信を前提とする（[SWS_CANIF_00286]）が、MCP2515 の Listen-Only で
+ *          バス上の有効フレームを確認するため、コントローラの状態では絞らない。
+ *          また、`CanIfPublicWakeupCheckValidByNM` 相当の「NM フレームだけを
+ *          有効とする」絞り込みは行わない（受信した任意のフレームを有効とする）。
+ *
+ * \param[in]  WakeupSource  検証する起床要因（`ECUM_WKSOURCE_CAN` のビット）。
+ *                          ビットが立っていなければ `CANIF_E_PARAM_WAKEUPSOURCE`
+ *                          （[SWS_CANIF_00404]）を DET へ報告する。
+ *
+ * \retval  E_OK      検証要求を受け付けた（検証済みの通知をしたかどうかとは無関係）。
+ * \retval  E_NOT_OK  WakeupSource が不正、または CanIf が未初期化。
+ *
+ * \AUTOSARReq     {SWS_CANIF_00178, SWS_CANIF_00179, SWS_CANIF_00286, SWS_CANIF_00404, SWS_CANIF_00756}
+ * \ServiceID      {0x12}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType CanIf_CheckValidation(EcuM_WakeupSourceType WakeupSource);
 
 /**
  * \brief   指定コントローラで、直近の起動以降に一度でも TX 確認があったかを返す

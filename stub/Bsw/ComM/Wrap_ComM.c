@@ -38,6 +38,7 @@ uint32 CallCount_ComM_Nm_PrepareBusSleepMode    = 0U;
 uint32 CallCount_ComM_Nm_BusSleepMode           = 0U;
 uint32 CallCount_ComM_DCM_ActiveDiagnostic      = 0U;
 uint32 CallCount_ComM_DCM_InactiveDiagnostic    = 0U;
+uint32 CallCount_ComM_EcuM_WakeUpIndication     = 0U;
 uint32 CallCount_ComM_CommunicationAllowed      = 0U;
 uint32 CallCount_ComM_BusSM_ModeIndication      = 0U;
 uint32 CallCount_ComM_MainFunction              = 0U;
@@ -63,6 +64,7 @@ void WrapComM_Reset(void)
     CallCount_ComM_Nm_BusSleepMode           = 0U;
     CallCount_ComM_DCM_ActiveDiagnostic      = 0U;
     CallCount_ComM_DCM_InactiveDiagnostic    = 0U;
+    CallCount_ComM_EcuM_WakeUpIndication     = 0U;
     CallCount_ComM_CommunicationAllowed      = 0U;
     CallCount_ComM_BusSM_ModeIndication      = 0U;
     CallCount_ComM_MainFunction              = 0U;
@@ -333,8 +335,15 @@ void __wrap_ComM_DCM_InactiveDiagnostic(NetworkHandleType Channel)
 /* ----------------------------------------------------------------------
  * ComM_EcuM_WakeUpIndication
  * ---------------------------------------------------------------------- */
+extern
+void __real_ComM_EcuM_WakeUpIndication(NetworkHandleType Channel);
+void __wrap_ComM_EcuM_WakeUpIndication(NetworkHandleType Channel)
+{
+    CallCount_ComM_EcuM_WakeUpIndication++;
+    Log_Write(LOG_T, TAG, "ComM_EcuM_WakeUpIndication", "called %u times", CallCount_ComM_EcuM_WakeUpIndication);
 
-/* 未実装 */
+    __real_ComM_EcuM_WakeUpIndication(Channel);
+}
 
 /* ----------------------------------------------------------------------
  * ComM_EcuM_PNCWakeUpIndication

@@ -30,8 +30,9 @@ DLC の値は `CanIf_PBCfg.c` の設定どおりです（RX の DLC は受信長
 - **TX（`CanIf_Transmit()`）**: TxPduId の範囲・ポインタ・長さ（設定 DLC を超える長さは拒否）を確認し、
   **PDU モードが `CANIF_ONLINE` のときだけ** `Can_Write()` まで進めます（それ以外は `E_NOT_OK`）。
   `Can_Write()` が `CAN_OK` なら `E_OK`（`CAN_BUSY` は警告ログ付きで `E_NOT_OK`）。
-- **RX（`CanIf_RxIndication()`）**: まず**どの CAN ID であっても** `CanSM_RxIndication()` を呼びます
-  （ウェイクアップ検証中に「何かフレームを受信できた」ことを CanSM が知るため）。その後、
+- **RX（`CanIf_RxIndication()`）**: まず**どの CAN ID であっても**、最初の受信を「起床後の最初の受信」として記憶します
+  （ウェイクアップ検証用。EcuM が `CanIf_CheckValidation()` で確認し、記憶があれば
+  `EcuM_ValidateWakeupEvent()` で検証済みを伝えます。スリープへ入ると記憶は消えます）。その後、
   HRH と CAN ID が一致する RX PDU を探し、設定 DLC 未満なら（`CANIF_E_INVALID_DATA_LENGTH` を
   ランタイムエラーとして報告して）棄却、足りていれば上位層の `RxIndicationFct`（PduR）へ渡します。
   一致する PDU が無いときは、HRH が一致していれば `CANIF_E_PARAM_CANID`、一致していなければ

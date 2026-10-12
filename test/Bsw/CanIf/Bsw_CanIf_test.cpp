@@ -40,6 +40,7 @@ extern "C" {
 #include "Fake_Det_Hw.h"
 #include "Wrap_CanIf.h"
 #include "Wrap_Can.h"
+#include "Wrap_ComM.h"
 }
 
 /* ======================================================================
@@ -393,7 +394,7 @@ TEST_F(Bsw_CanIf_ControllerMode_Test, GetControllerErrorState_NG_NullPointerRetu
  *          されず、CanIf_SetControllerMode(STARTED) への遷移でのみリセット
  *          される点がテストの主眼。
  *
- *          CanIf_RxIndication() は無条件に CanSM_RxIndication() を呼ぶため
+ *          以前は CanIf_RxIndication() が CanSM_RxIndication() を無条件に呼んでおり（2026-10 に廃止、現在は呼ばない。共有 static の状態を揃えるため CanSM_Init は残している）
  *          （CanIf.c 参照）、feedback_native_chain_shared_static_hang の
  *          教訓通り CanSM_Init(NULL)（Bsw_ComStack_Signal_Rx_test.cpp と同じ安全な
  *          no-op パターン）で既知の状態に初期化してから検証する。
@@ -434,7 +435,7 @@ const CanIf_ConfigType kNotifStatusCanIfConfig = {
  * ====================================================================== */
 
 /* CanIf の通知状態系 API（ReadTxNotifStatus / ReadRxNotifStatus / GetTxConfirmationState）の単体テスト用フィクスチャ。
- * SetUp(): 模擬 Can_Hw と wrap をリセットし、Can_Init() と、このグループ専用の CanIf 設定（kNotifStatusCanIfConfig）で CanIf_Init() を呼び、コントローラを STARTED にする。CanIf_RxIndication() が CanSM_RxIndication() を無条件に呼ぶため、CanSM_Init(NULL) も呼んでおく（Init 中の DET ログは抑制し、Init 自体の記録は消して後続の検証から除く）。
+ * SetUp(): 模擬 Can_Hw と wrap をリセットし、Can_Init() と、このグループ専用の CanIf 設定（kNotifStatusCanIfConfig）で CanIf_Init() を呼び、コントローラを STARTED にする。以前は CanIf_RxIndication() が CanSM_RxIndication() を無条件に呼んでおり（2026-10 に廃止。共有 static の状態を揃えるため CanSM_Init は残している）、CanSM_Init(NULL) も呼んでおく（Init 中の DET ログは抑制し、Init 自体の記録は消して後続の検証から除く）。
  * TearDown(): CanSM_DeInit() と CanIf_DeInit() で未初期化へ戻す。 */
 class Bsw_CanIf_NotifStatus_Test : public ::testing::Test
 {
@@ -796,7 +797,7 @@ TEST_F(Bsw_CanIf_NotifStatus_Test, GetTxConfirmationState_NG_NotUpdatedWhileCont
  *          各ケースで、報告される ErrorId が仕様どおり正しい値になっている
  *          ことを `Fake_Det_Hw.h`（`FakeDetHw_LastErrorId`）で検証する。
  *
- *          `CanIf_RxIndication()` は無条件に `CanSM_RxIndication()` を呼ぶため
+ *          以前は `CanIf_RxIndication()` が `CanSM_RxIndication()` を無条件に呼んでおり（2026-10 に廃止、現在は呼ばない。共有 static の状態を揃えるため CanSM_Init は残している）
  *          （CanSM 未初期化だと `CANSM_E_UNINIT` が割り込む）、
  *          `Bsw_ComStack_Signal_Rx_test.cpp` 等と同じ理由で CanSM も
  *          Init/DeInit する。実 Can 層（`Can_Init()`）は本セクションのどの NG
@@ -831,7 +832,7 @@ const CanIf_ConfigType kTestCanIfConfig = {
  * ====================================================================== */
 
 /* CanIf（上記 2 グループ以外の API）の単体テスト用フィクスチャ。
- * SetUp(): CanIf_RxIndication() が CanSM_RxIndication() を無条件に呼ぶため CanSM_Init(NULL) を先に呼び、続けて CanIf_Init(&kTestCanIfConfig) を呼ぶ（Init 中の DET ログは抑制し、Init 自体の記録は消して後続の検証から除く）。
+ * SetUp(): 以前は CanIf_RxIndication() が CanSM_RxIndication() を無条件に呼んでおり（2026-10 に廃止。共有 static の状態を揃えるため CanSM_Init は残している） CanSM_Init(NULL) を先に呼び、続けて CanIf_Init(&kTestCanIfConfig) を呼ぶ（Init 中の DET ログは抑制し、Init 自体の記録は消して後続の検証から除く）。
  * TearDown(): CanIf_DeInit() と CanSM_DeInit() で未初期化へ戻す。 */
 class Bsw_CanIf_Test : public ::testing::Test
 {
@@ -1216,6 +1217,67 @@ TEST_F(Bsw_CanIf_Test, CanIf_RxIndication_NG_CanIdMismatch)
     /* ---- 評価 (Assert) ---- */
     /* ----------------------- */
     EXPECT_EQ(FakeDetHw_LastErrorId, CANIF_E_PARAM_CANID);
+}
+
+// ------------------------------------------------------------
+// CanIf_CheckValidation()
+// ------------------------------------------------------------
+
+TEST_F(Bsw_CanIf_Test, CanIf_CheckValidation_NG_InvalidWakeupSource)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Std_ReturnType ret = CanIf_CheckValidation(0U);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_NOT_OK);
+    EXPECT_EQ(FakeDetHw_LastErrorId, CANIF_E_PARAM_WAKEUPSOURCE);
+}
+
+TEST_F(Bsw_CanIf_Test, CanIf_CheckValidation_NG_Uninit)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    CanIf_DeInit();
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Std_ReturnType ret = CanIf_CheckValidation(ECUM_WKSOURCE_CAN);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_NOT_OK);
+}
+
+TEST_F(Bsw_CanIf_Test, CanIf_CheckValidation_NG_NoRxStored_DoesNotNotifyEcuM)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    WrapComM_Reset();
+    // 起床後の最初の受信はまだ記憶されていない
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Std_ReturnType ret = CanIf_CheckValidation(ECUM_WKSOURCE_CAN);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_OK);
+    EXPECT_EQ(CallCount_ComM_EcuM_WakeUpIndication, 0U);   // EcuM_ValidateWakeupEvent() を呼んでいない
 }
 
 // ------------------------------------------------------------

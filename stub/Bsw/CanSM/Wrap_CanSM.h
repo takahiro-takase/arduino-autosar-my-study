@@ -7,7 +7,7 @@
  *          （「wrap 対象の関数が定義されている元の src ファイル 1 つにつき
  *          1 ファイル」）。既定動作は `__real_...` へのパススルー。
  *
- *          `CanSM.h` が宣言する AUTOSAR IF 全9関数を wrap 対象とする。
+ *          `CanSM.h` が宣言する AUTOSAR IF 全8関数を wrap 対象とする。
  *
  *          戻り値を持つ2関数（RequestComMode/GetCurrentComMode）には
  *          「指定した呼び出し回数以降は常に失敗を返す」という回数閾値方式の
@@ -16,9 +16,8 @@
  *          `CallCount_CanSM_Xxx` が N 以上になった回から（その回を含め、
  *          以降ずっと）`ForcedReturn_CanSM_Xxx` を返すようになる。
  *
- *          戻り値を持たない7関数（Init/DeInit/ControllerBusOff/
- *          ControllerModeIndication/RxIndication/MainFunction/
- *          GetVersionInfo）は故障注入する戻り値が無いため、呼び出し回数のみを
+ *          戻り値を持たない6関数（Init/DeInit/ControllerBusOff/
+ *          ControllerModeIndication/MainFunction/GetVersionInfo）は故障注入する戻り値が無いため、呼び出し回数のみを
  *          記録する。
  *
  *          変数名・故障注入方式・Reset方針は
@@ -55,7 +54,7 @@ extern "C" {
  * ====================================================================== */
 
 /* ----------------------------------------------------------------------
- * 呼び出し回数（AUTOSAR IF 全9関数共通）
+ * 呼び出し回数（AUTOSAR IF 全8関数共通）
  * ---------------------------------------------------------------------- */
 extern uint32 CallCount_CanSM_Init;
 extern uint32 CallCount_CanSM_DeInit;
@@ -63,7 +62,6 @@ extern uint32 CallCount_CanSM_RequestComMode;
 extern uint32 CallCount_CanSM_GetCurrentComMode;
 extern uint32 CallCount_CanSM_ControllerBusOff;
 extern uint32 CallCount_CanSM_ControllerModeIndication;
-extern uint32 CallCount_CanSM_RxIndication;
 extern uint32 CallCount_CanSM_MainFunction;
 extern uint32 CallCount_CanSM_GetVersionInfo;
 
