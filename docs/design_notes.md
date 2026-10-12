@@ -142,7 +142,7 @@ TX 側と同じ検証を RX の各層境界（CanIf → PduR → Com）にも追
 | NvM ブロックの冗長化（Redundant Block）追加・変更 | `NvM_PBCfg.c` の該当ブロックの `Redundant`/`NvMNvBlockBaseNumberMirror`、ミラーアドレスは `NvM_Cfg.h` |
 | Dem デバウンス閾値の変更（イベントごと） | `Dem_Cfg.h` の `DEM_DEBOUNCE_LIMIT_*` |
 | Dem 経年回復（Aging）の閾値変更（イベントごと） | `Dem_Cfg.h` の `DEM_AGING_THRESHOLD_*` |
-| **タスク周期・タスク追加/削除** | **`Os_PBCfg.c`** |
+| **タスク周期・タスク追加/削除** | **`config/data/Os.json`**（`Os_PBCfg.c` は生成物） |
 | EcuM POST_RUN タイムアウト・RUN ユーザ追加 | `EcuM_Cfg.h` |
 | BswM ルール追加・タスクマスク変更 | `BswM_PBCfg.c` / `BswM_Cfg.h` |
 | WdgM 監視サイクル・期待回数の変更 | `WdgM_Cfg.h` |

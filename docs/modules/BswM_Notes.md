@@ -218,4 +218,4 @@ CAN コントローラの実スリープ処理・ボランタリスリープ〜�
 |---------|------------|
 | POST_RUN で停止するタスクの追加・変更 | `BswM_Cfg.h` の `BSWM_TASK_MASK_APP` |
 | ルール追加（例: ComM モードに反応する） | `BswM_PBCfg.c` にルールを追記し `BSWM_RULE_COUNT` を更新 |
-| タスク追加 | `BswM_Cfg.h` に ID 定数を追加し `Os_PBCfg.c` にも追記 |
+| タスク追加 | `config/data/Os.json` に追加し（`Os_PBCfg.c` は生成物）、`BswM_Cfg.h` に ID 定数を追加（Os.json での位置と一致するかは `gen_cfg.py` が検査する） |

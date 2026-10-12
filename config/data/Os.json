@@ -1,0 +1,160 @@
+{
+  "$schema": "../schema/Os.schema.json",
+  "module": "Os",
+  "taskCountDoc": [
+    "管理タスク総数（Os.json の tasks の数。Os_PBCfg.c の Os_TaskTable の要素数と一致する）"
+  ],
+  "tasks": [
+    {
+      "function": "Can_MainFunction_Read",
+      "periodMs": 1,
+      "header": "Can.h",
+      "summary": "RX 割り込みペンディングのドレイン"
+    },
+    {
+      "function": "CanTp_MainFunction",
+      "periodMs": 1,
+      "header": "CanTp.h",
+      "summary": "CanTp タイムアウト監視"
+    },
+    {
+      "function": "Rte_ScheduleRunnables",
+      "periodMs": 3000,
+      "header": "Rte.h",
+      "summary": "エンジン Runnable"
+    },
+    {
+      "function": "Rte_ScheduleWarningIndicator",
+      "periodMs": 500,
+      "header": "Rte.h",
+      "summary": "警告灯 Runnable"
+    },
+    {
+      "function": "CanSM_MainFunction",
+      "periodMs": 10,
+      "header": "CanSM.h",
+      "summary": "BusOff 回復タイマ監視"
+    },
+    {
+      "function": "Com_MainFunctionRx",
+      "periodMs": 100,
+      "header": "Com.h",
+      "summary": "COM 受信デッドライン監視"
+    },
+    {
+      "function": "Com_MainFunctionTx",
+      "periodMs": 100,
+      "header": "Com.h",
+      "summary": "TX送信スケジューリング・送信確認監視",
+      "note": [
+        "2026-08、単体の Com_MainFunction は実仕様に存在しないため Rx/Tx へ分割した。",
+        "Com_MainFunctionRx の直後へ挿入したのは、SecOC_MainFunctionTx が同一パス内で Com のディスパッチ結果を",
+        "同じティックで拾えるようにするため（末尾に追加すると 1 ティック分の遅延が生じる）。"
+      ]
+    },
+    {
+      "function": "IoHwAb_MainFunction",
+      "periodMs": 10,
+      "header": "IoHwAb.h",
+      "summary": "ボタンデバウンスサンプリング"
+    },
+    {
+      "function": "WdgM_MainFunction",
+      "periodMs": 6000,
+      "header": "WdgM.h",
+      "summary": "Alive/Logical/Deadline 判定"
+    },
+    {
+      "function": "Dcm_MainFunction",
+      "periodMs": 1000,
+      "header": "Dcm.h",
+      "summary": "S3 セッションタイムアウト監視"
+    },
+    {
+      "function": "FiM_MainFunction",
+      "periodMs": 100,
+      "header": "FiM.h",
+      "summary": "機能抑止状態の再評価"
+    },
+    {
+      "function": "WdgM_TriggerHwWatchdog",
+      "periodMs": 1000,
+      "header": "WdgM.h",
+      "summary": "HW ウォッチドッグ trigger"
+    },
+    {
+      "function": "CanNm_MainFunction",
+      "periodMs": 1000,
+      "header": "CanNm.h",
+      "summary": "NM フレーム送信"
+    },
+    {
+      "function": "NvM_MainFunction",
+      "periodMs": 10,
+      "header": "NvM.h",
+      "summary": "保留中 EEPROM ジョブ処理"
+    },
+    {
+      "function": "Can_MainFunction_Write",
+      "periodMs": 1,
+      "header": "Can.h",
+      "summary": "保留中 TX 確認をドレイン"
+    },
+    {
+      "function": "Can_MainFunction_BusOff",
+      "periodMs": 1,
+      "header": "Can.h",
+      "summary": "Bus-Off ポーリング"
+    },
+    {
+      "function": "Can_MainFunction_Wakeup",
+      "periodMs": 1,
+      "header": "Can.h",
+      "summary": "ウェイクアップペンディングのドレイン"
+    },
+    {
+      "function": "SecOC_MainFunctionTx",
+      "periodMs": 100,
+      "header": "SecOC.h",
+      "summary": "TX Secured I-PDU の Freshness/MAC 計算・送信"
+    },
+    {
+      "function": "MemIf_MainFunction",
+      "periodMs": 10,
+      "header": "MemIf.h",
+      "summary": "保留中 EEPROM ジョブ処理 (Fee 物理バイト書き込み)"
+    },
+    {
+      "function": "App_GptDemo_Run",
+      "periodMs": 2000,
+      "header": "App_GptDemo.h",
+      "summary": "Gpt 実 HW タイマ通知カウンタのログ出力 (動作確認用)"
+    },
+    {
+      "function": "ComM_MainFunction",
+      "periodMs": 100,
+      "header": "ComM.h",
+      "summary": "現状 NOP（SWS_ComM_00888、ComM.c 参照）",
+      "note": [
+        "現状 NOP（ComMNmVariant=FULL では [SWS_ComM_00888] によりヒステリシスタイマ不要。ComM.c 参照）。"
+      ]
+    },
+    {
+      "function": "SecOC_MainFunctionRx",
+      "periodMs": 100,
+      "header": "SecOC.h",
+      "summary": "現状 NOP（RX 検証は同期実行済み、SecOC.c 参照）",
+      "note": [
+        "現状 NOP（SecOC_RxIndication() が受信の都度 Csm_MacVerify() を同期実行するため、保留中の RX ジョブが",
+        "存在しない。SecOC.c 参照）。ComM_MainFunction と同じく、「宣言されたが一度もスケジューラに登録されない」",
+        "ギャップを避けるため配線のみ行う。"
+      ]
+    },
+    {
+      "function": "App_TestMsg_Run",
+      "periodMs": 1000,
+      "header": "App_TestMsg.h",
+      "summary": "テスト用メッセージ TestMsg のカウンタ更新（信号追加の練習用）"
+    }
+  ]
+}

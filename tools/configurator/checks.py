@@ -4,6 +4,8 @@
 エラーは errors、直せば足りる注意は warnings に入れて返す。
 """
 
+import pathlib
+import re
 
 from modules.secoc import layout as secoc_layout
 
@@ -125,6 +127,7 @@ def check_all(ctx):
     _check_cryptostack(ctx, errors, warnings)
     _check_bswm(ctx, errors, warnings)
     _check_channels(ctx, errors)
+    _check_bswm_task_ids(ctx, errors)
 
     return errors, warnings
 
@@ -136,6 +139,29 @@ def _check_channels(ctx, errors):
         errors.append("CanSM の channelCount=%d が ComM の channelCount=%d と一致しない" % (cansm["channelCount"]["value"], comm["channelCount"]["value"]))
     if nm and comm and nm["mainNetworkHandle"]["value"] != comm["channel0"]["value"]:
         errors.append("Nm の mainNetworkHandle=%d が ComM の channel0=%d と一致しない" % (nm["mainNetworkHandle"]["value"], comm["channel0"]["value"]))
+
+
+def _check_bswm_task_ids(ctx, errors):
+    """BswM_Cfg.h の BSWM_OS_TASK_*（タスク ID の手書きの数値）が、Os.json のタスク表の位置と食い違っていないか。
+    各定義の行末コメント（/**< 関数名 (周期) */）の先頭の語を、タスクの関数名として照合する。"""
+    os_cfg = ctx.configs.get("Os")
+    if not os_cfg:
+        return
+    path = pathlib.Path(ctx.repo_root) / "src" / "Bsw" / "BswM" / "BswM_Cfg.h"
+    if not path.exists():
+        return
+    index = {t["function"]: i for i, t in enumerate(os_cfg["tasks"])}
+    text = path.read_bytes().decode("utf-8", errors="replace")
+    for m in re.finditer(r"^#define (BSWM_OS_TASK_\w+)(.*)$", text, re.M):
+        name, rest = m.group(1), re.match(r"\s+(\d+)U\s*/\*\*<\s*(\w+)", m.group(2))
+        if rest is None:
+            errors.append("BswM_Cfg.h %s: 「#define 名前 数値U /**< 関数名 (周期) */」の形でないため、Os.json と照合できない" % name)
+            continue
+        value, func = int(rest.group(1)), rest.group(2)
+        if func not in index:
+            errors.append("BswM_Cfg.h %s: コメントの関数 '%s' が Os.json のタスクに無い" % (name, func))
+        elif index[func] != value:
+            errors.append("BswM_Cfg.h %s=%d が、Os.json での %s のタスク ID %d と一致しない" % (name, value, func, index[func]))
 
 
 def _is_com_field(f):

@@ -1,9 +1,4 @@
-"""各モジュールの生成関数が共有する、コメントと構造体フィールドの整形、Os_PBCfg.c の周期の読み込み。"""
-
-import pathlib
-import re
-
-REPO_ROOT = pathlib.Path(__file__).resolve().parents[3]
+"""各モジュールの生成関数が共有する、コメントと構造体フィールドの整形、Os.json の周期の読み込み。"""
 
 
 def block_comment(lines, indent=0, star="/*", cont=" * "):
@@ -64,9 +59,7 @@ def hex_literal(text):
 
 
 def os_periods(ctx):
-    """Os_PBCfg.c の Os_TaskTable から {タスクの関数名: 周期 [ms]} を読む。"""
-    root = pathlib.Path(getattr(ctx, "repo_root", None) or REPO_ROOT)
-    text = (root / "src" / "Os" / "Os_PBCfg.c").read_bytes().decode("utf-8", errors="replace")
-    i = text.index("Os_TaskTable[")
-    body = text[i:text.index("};", i)]
-    return {m.group(1): int(m.group(2)) for m in re.finditer(r"\{\s*(\w+)\s*,\s*(\d+)U\s*\}", body)}
+    """Os.json のタスク表から {タスクの関数名: 周期 [ms]} を返す。"""
+    if "Os" not in ctx.configs:
+        raise ValueError("Os.json が読み込まれていない（タスクの周期を引けない）")
+    return {t["function"]: t["periodMs"] for t in ctx.configs["Os"]["tasks"]}

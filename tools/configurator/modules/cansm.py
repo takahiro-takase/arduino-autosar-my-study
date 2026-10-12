@@ -2,7 +2,7 @@
 
 CanSM.json に書く値: チャネル数、Bus-Off 回復待機時間 L1/L2 [ms]、L1 から L2 へ切り替える試行回数、ウェイクアップ検証時間 [ms]、
 各項目の説明。
-検査: L2 は L1 より長いこと。時間は CanSM_MainFunction() の周期（Os_PBCfg.c）の倍数であること
+検査: L2 は L1 より長いこと。時間は CanSM_MainFunction() の周期（Os.json）の倍数であること
 （周期の途中の値は、次の周期まで丸められて意図より長くなるため）。チャネル数は 1 のみ対応（CanSM.c が 1 チャネル固定のため）。ComM.json との一致は checks.py で検査する。
 """
 
@@ -32,7 +32,7 @@ def validate(cfg):
 def render(cfg, ctx):
     period = os_periods(ctx).get(MAIN_FUNCTION)
     if period is None:
-        raise ValueError("CanSM.json: Os_PBCfg.c の Os_TaskTable に %s が無い" % MAIN_FUNCTION)
+        raise ValueError("CanSM.json: Os.json の tasks に %s が無い" % MAIN_FUNCTION)
     for key in ("busOffRecoveryL1Ms", "busOffRecoveryL2Ms", "wakeupValidationMs"):
         if cfg[key]["value"] % period:
             raise ValueError("CanSM.json: %s=%d は %s の周期 %d ms の倍数ではない" % (key, cfg[key]["value"], MAIN_FUNCTION, period))

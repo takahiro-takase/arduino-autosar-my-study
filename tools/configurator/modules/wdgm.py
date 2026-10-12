@@ -10,7 +10,7 @@ Logical 監視の許可遷移、Deadline 監視の許容時間）と、各項目
   - チェックポイント ID が全エンティティで重複せず、WDGM_CP_INITIAL（0xFF）と衝突しない
   - 遷移・Deadline が、そのエンティティのチェックポイントを指している
   - Deadline の min <= max
-  - 監視するタスク（osTask）の周期を Os_PBCfg.c の Os_TaskTable から読み、「終了→開始」の許容範囲に入っている
+  - 監視するタスク（osTask）の周期を Os.json のタスク表から引き、「終了→開始」の許容範囲に入っている
   - Alive の期待回数が、判定サイクルの間に実際に呼ばれる回数（サイクル ÷ タスク周期）を超えない
 WdgM_Cfg.h の他の定数（EXPIRED の許容サイクル数、HW ウォッチドッグの周期とタイムアウト）は手書きのまま。
 """
@@ -76,14 +76,14 @@ def deadline_macro(e, d, which):
 
 
 def check_periods(cfg, ctx):
-    """監視するタスク（osTask）の周期を Os_PBCfg.c から引き、Alive の期待回数と Deadline の許容範囲と矛盾しないか検査する。"""
+    """監視するタスク（osTask）の周期を Os.json から引き、Alive の期待回数と Deadline の許容範囲と矛盾しないか検査する。"""
     periods = os_periods(ctx)
     cycle = cfg["supervisionCycleMs"]
     errors = []
     for e in cfg["entities"]:
         period = periods.get(e["osTask"])
         if period is None:
-            errors.append("entities %s: osTask '%s' が Os_PBCfg.c の Os_TaskTable に無い" % (e["name"], e["osTask"]))
+            errors.append("entities %s: osTask '%s' が Os.json の tasks に無い" % (e["name"], e["osTask"]))
             continue
         per_cycle = cycle // period
         if e["expectedAliveIndications"] > per_cycle:

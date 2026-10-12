@@ -22,8 +22,58 @@
  * Definitions
  * ====================================================================== */
 
-/** 管理タスク総数 (Os_PBCfg.c の Os_TaskTable 要素数と一致させること) */
+/* @@GEN-BEGIN os-tasks  生成元: config/data/Os.json  （自動生成: 手編集禁止） */
+/** 管理タスク総数（Os.json の tasks の数。Os_PBCfg.c の Os_TaskTable の要素数と一致する） */
 #define OS_TASK_COUNT  23U
+
+/* シンボリック名: OsConf_OsTask_<function>（値はタスク表の添字 = タスク ID） */
+/* cppcheck-suppress misra-c2012-2.5 */
+#define OsConf_OsTask_Can_MainFunction_Read          0U
+/* cppcheck-suppress misra-c2012-2.5 */
+#define OsConf_OsTask_CanTp_MainFunction             1U
+/* cppcheck-suppress misra-c2012-2.5 */
+#define OsConf_OsTask_Rte_ScheduleRunnables          2U
+/* cppcheck-suppress misra-c2012-2.5 */
+#define OsConf_OsTask_Rte_ScheduleWarningIndicator   3U
+/* cppcheck-suppress misra-c2012-2.5 */
+#define OsConf_OsTask_CanSM_MainFunction             4U
+/* cppcheck-suppress misra-c2012-2.5 */
+#define OsConf_OsTask_Com_MainFunctionRx             5U
+/* cppcheck-suppress misra-c2012-2.5 */
+#define OsConf_OsTask_Com_MainFunctionTx             6U
+/* cppcheck-suppress misra-c2012-2.5 */
+#define OsConf_OsTask_IoHwAb_MainFunction            7U
+/* cppcheck-suppress misra-c2012-2.5 */
+#define OsConf_OsTask_WdgM_MainFunction              8U
+/* cppcheck-suppress misra-c2012-2.5 */
+#define OsConf_OsTask_Dcm_MainFunction               9U
+/* cppcheck-suppress misra-c2012-2.5 */
+#define OsConf_OsTask_FiM_MainFunction              10U
+/* cppcheck-suppress misra-c2012-2.5 */
+#define OsConf_OsTask_WdgM_TriggerHwWatchdog        11U
+/* cppcheck-suppress misra-c2012-2.5 */
+#define OsConf_OsTask_CanNm_MainFunction            12U
+/* cppcheck-suppress misra-c2012-2.5 */
+#define OsConf_OsTask_NvM_MainFunction              13U
+/* cppcheck-suppress misra-c2012-2.5 */
+#define OsConf_OsTask_Can_MainFunction_Write        14U
+/* cppcheck-suppress misra-c2012-2.5 */
+#define OsConf_OsTask_Can_MainFunction_BusOff       15U
+/* cppcheck-suppress misra-c2012-2.5 */
+#define OsConf_OsTask_Can_MainFunction_Wakeup       16U
+/* cppcheck-suppress misra-c2012-2.5 */
+#define OsConf_OsTask_SecOC_MainFunctionTx          17U
+/* cppcheck-suppress misra-c2012-2.5 */
+#define OsConf_OsTask_MemIf_MainFunction            18U
+/* cppcheck-suppress misra-c2012-2.5 */
+#define OsConf_OsTask_App_GptDemo_Run               19U
+/* cppcheck-suppress misra-c2012-2.5 */
+#define OsConf_OsTask_ComM_MainFunction             20U
+/* cppcheck-suppress misra-c2012-2.5 */
+#define OsConf_OsTask_SecOC_MainFunctionRx          21U
+/* cppcheck-suppress misra-c2012-2.5 */
+#define OsConf_OsTask_App_TestMsg_Run               22U
+/* @@GEN-END os-tasks */
 
 /** OsCounter の ID。本プロジェクトのカウンタは 1 つ（SYSTEM_COUNTER）で、
  *  1 tick = 1 ms、起動時の millis() と同じ座標系（Os.c 参照）。 */
