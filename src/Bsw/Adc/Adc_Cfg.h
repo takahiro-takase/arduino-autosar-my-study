@@ -50,6 +50,7 @@
 /** ApiId（既存の Doxygen \ServiceID タグと一致させる） */
 /* cppcheck-suppress misra-c2012-2.5 */
 #define ADC_API_ID_INIT  0x00U          /**< [SWS_Adc_00365] Adc_Init と同じ ServiceID */
+#define ADC_API_ID_DEINIT  0x01U
 #define ADC_API_ID_SETUP_RESULT_BUFFER  0x0CU
 #define ADC_API_ID_START_GROUP_CONVERSION  0x02U
 #define ADC_API_ID_READ_GROUP  0x04U

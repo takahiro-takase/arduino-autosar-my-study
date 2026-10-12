@@ -148,7 +148,43 @@ Std_ReturnType Adc_SetupResultBuffer(Adc_GroupType Group, const Adc_ValueGroupTy
  * Adc_DeInit
  * ---------------------------------------------------------------------- */
 
-/* 未実装 */
+/**
+ * \brief   ADC ドライバを未初期化の状態に戻す。
+ *
+ * \details [SWS_Adc_00366]。どれかのグループが ADC_IDLE でない（変換中、または変換が完了して結果を
+ *          読み出す前）ときは、実行時エラー ADC_E_BUSY（[SWS_Adc_00112]）を報告して、何もしない。
+ *          全グループが ADC_IDLE のときは、結果バッファの登録を消し、初期化済みフラグを下ろす。
+ *          以降、Adc_Init() を呼ぶまで、他の API は ADC_E_UNINIT を報告する。
+ *
+ * \AUTOSARReq     {SWS_Adc_00366, SWS_Adc_00112}
+ * \ServiceID      {0x01}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void Adc_DeInit(void)
+{
+    if (Adc_Initialized == 0U)
+    {
+        (void)Det_ReportError(ADC_MODULE_ID, 0U, ADC_API_ID_DEINIT, ADC_E_UNINIT);
+        return;
+    }
+
+    for (uint8 g = 0U; g < ADC_GROUP_COUNT; g++)
+    {
+        if (Adc_GroupStatus[g] != ADC_IDLE)
+        {
+            (void)Det_ReportRuntimeError(ADC_MODULE_ID, 0U, ADC_API_ID_DEINIT, ADC_E_BUSY);
+            return;
+        }
+    }
+
+    for (uint8 g = 0U; g < ADC_GROUP_COUNT; g++)
+    {
+        Adc_ResultBuffer[g] = NULL;
+    }
+    Adc_Initialized = 0U;
+    DET_LOGI(TAG, "DeInit ok");
+}
 
 /* ----------------------------------------------------------------------
  * Adc_StartGroupConversion

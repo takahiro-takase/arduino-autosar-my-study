@@ -115,6 +115,21 @@ void Adc_Init(const Adc_ConfigType* ConfigPtr);
 Std_ReturnType Adc_SetupResultBuffer(Adc_GroupType Group, const Adc_ValueGroupType* DataBufferPtr);
 
 /**
+ * \brief   ADC ドライバを未初期化の状態に戻す。
+ *
+ * \details [SWS_Adc_00366]。どれかのグループが ADC_IDLE でない（変換中、または変換が完了して結果を
+ *          読み出す前）ときは、実行時エラー ADC_E_BUSY（[SWS_Adc_00112]）を報告して、何もしない。
+ *          全グループが ADC_IDLE のときは、結果バッファの登録を消し、初期化済みフラグを下ろす。
+ *          以降、Adc_Init() を呼ぶまで、他の API は ADC_E_UNINIT を報告する。
+ *
+ * \AUTOSARReq     {SWS_Adc_00366, SWS_Adc_00112}
+ * \ServiceID      {0x01}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void Adc_DeInit(void);
+
+/**
  * \brief   グループの変換を開始する。
  *
  * \details [SWS_Adc_00061]: 要求されたグループの全チャネルの変換を開始する。本プロジェクトのグループは、
