@@ -57,31 +57,24 @@
 #define DIO_SW_MINOR_VERSION   0U
 #define DIO_SW_PATCH_VERSION   0U
 
-/**
- * Arduino UNO RUNNING LED (D6)。
- * エンジン正常稼働中（ENGINE_STATE_RUNNING）に点灯する。
- */
+/* @@GEN-BEGIN dio-channels  生成元: config/data/Dio.json  （自動生成: 手編集禁止） */
+/** Arduino UNO RUNNING LED (D6)。
+ *  エンジン正常稼働中（ENGINE_STATE_RUNNING）に点灯する。 */
 #define DIO_CHANNEL_LED_RUNNING  6U
 
-/**
- * Arduino UNO FAULT LED (D7)。
- * 異常状態（ENGINE_STATE_FAULT）に点滅する。
- */
-#define DIO_CHANNEL_LED_FAULT    7U
+/** Arduino UNO FAULT LED (D7)。
+ *  異常状態（ENGINE_STATE_FAULT）に点滅する。 */
+#define DIO_CHANNEL_LED_FAULT  7U
 
-/**
- * Arduino UNO LED (D8)。
- * 警告灯インジケータとして使用する。
- */
+/** Arduino UNO LED (D8)。
+ *  警告灯インジケータとして使用する。 */
 #define DIO_CHANNEL_LED_WARNING  8U
 
-/**
- * Arduino UNO プッシュボタン (D9)。
- * 警告確認ボタン。FAULT 状態でボタン押下 → FAULT→OFF 遷移。
- * Port は INPUT_PULLUP で設定するため、押下時は DIO_LOW となる。
- * IoHwAb_Button_GetLevel() で論理反転し、押下=1 に変換する。
- */
-#define DIO_CHANNEL_BUTTON       9U
+/** Arduino UNO プッシュボタン (D9)。
+ *  警告確認ボタン。FAULT 状態でボタン押下 → FAULT→OFF 遷移。
+ *  Port は INPUT_PULLUP で設定するため、押下時は DIO_LOW となる。
+ *  IoHwAb_Button_GetLevel() で論理反転し、押下=1 に変換する。 */
+#define DIO_CHANNEL_BUTTON  9U
 
 /* -----------------------------------------------------------------------
  * Dio_PortType / Dio_ChannelGroupType 設定
@@ -97,25 +90,27 @@
  * （入力チャネルを含めると WritePort 等が INPUT_PULLUP 設定を書き換えて
  * しまう）。
  * ----------------------------------------------------------------------- */
+
 /** LED出力3ch(D6=RUNNING/D7=FAULT/D8=WARNING)をまとめた仮想ポート。
- *  bit0=D6, bit1=D7, bit2=D8（実体は Dio.c の Dio_PortLedGroupChannels[]）。 */
+ *   bit0=D6, bit1=D7, bit2=D8（実体は Dio.c の Dio_PortLedGroupChannels[]）。 */
 #define DIO_PORT_LED_GROUP  0U
 
 /** Dio_PortType の総数。Dio.c の Dio_PortConfig[] の要素数と一致させること
- *  （ポートを追加する際は両方を同時に更新する。Port.c の PORT_PIN_COUNT と
- *  同じ安全策）。 */
+ *   （ポートを追加する際は両方を同時に更新する。Port.c の PORT_PIN_COUNT と
+ *   同じ安全策）。 */
 #define DIO_PORT_COUNT  1U
 
 /** ChannelGroup 例: DIO_PORT_LED_GROUP の下位2bit(D6+D7)をまとめたグループ。
- *  Dio.c が事前定義済みインスタンス `Dio_ChannelGroupRunFault`（Dio.h で
- *  extern 宣言）として公開しているので、通常はそちらを使えばよい。
- *  自前で組み立てる場合は `Dio_ChannelGroupType g = {
- *  DIO_CHANNELGROUP_RUN_FAULT_PORT, DIO_CHANNELGROUP_RUN_FAULT_MASK,
- *  DIO_CHANNELGROUP_RUN_FAULT_OFFSET };` のようにする（Dio_ChannelGroupType
- *  は Dio.h で定義されており、本ファイルより後にインクルードされるため
- *  実体を本ファイルには置けない）。 */
+ *   Dio.c が事前定義済みインスタンス `Dio_ChannelGroupRunFault`（Dio.h で
+ *   extern 宣言）として公開しているので、通常はそちらを使えばよい。
+ *   自前で組み立てる場合は `Dio_ChannelGroupType g = {
+ *   DIO_CHANNELGROUP_RUN_FAULT_PORT, DIO_CHANNELGROUP_RUN_FAULT_MASK,
+ *   DIO_CHANNELGROUP_RUN_FAULT_OFFSET };` のようにする（Dio_ChannelGroupType
+ *   は Dio.h で定義されており、本ファイルより後にインクルードされるため
+ *   実体を本ファイルには置けない）。 */
 #define DIO_CHANNELGROUP_RUN_FAULT_PORT    DIO_PORT_LED_GROUP
 #define DIO_CHANNELGROUP_RUN_FAULT_MASK    0x03U
 #define DIO_CHANNELGROUP_RUN_FAULT_OFFSET  0U
+/* @@GEN-END dio-channels */
 
 #endif /* DIO_CFG_H */

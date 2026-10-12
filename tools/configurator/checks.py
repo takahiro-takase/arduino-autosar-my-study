@@ -125,6 +125,7 @@ def check_all(ctx):
     _check_cryptostack(ctx, errors, warnings)
     _check_bswm(ctx, errors, warnings)
     _check_channels(ctx, errors)
+    _check_port_dio(ctx, errors)
     _check_bswm_tasks(ctx, errors)
 
     return errors, warnings
@@ -137,6 +138,20 @@ def _check_channels(ctx, errors):
         errors.append("CanSM の channelCount=%d が ComM の channelCount=%d と一致しない" % (cansm["channelCount"]["value"], comm["channelCount"]["value"]))
     if nm and comm and nm["mainNetworkHandle"]["value"] != comm["channel0"]["value"]:
         errors.append("Nm の mainNetworkHandle=%d が ComM の channel0=%d と一致しない" % (nm["mainNetworkHandle"]["value"], comm["channel0"]["value"]))
+
+
+def _check_port_dio(ctx, errors):
+    """Dio のチャネルが、Port が管理するピンに含まれているか（Port で入出力方向を設定していないピンを Dio で読み書きしないため）。"""
+    port, dio = ctx.configs.get("Port"), ctx.configs.get("Dio")
+    if not port or not dio:
+        return
+    from modules import dio as dio_mod
+    from modules import port as port_mod
+
+    pins = set(port_mod.pins(port).values())
+    for macro, number in dio_mod.channels(dio).items():
+        if number not in pins:
+            errors.append("Dio の %s=%d が、Port.json が管理するピン（PORT_PIN_*）に無い" % (macro, number))
 
 
 def _check_bswm_tasks(ctx, errors):

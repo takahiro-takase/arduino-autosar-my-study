@@ -69,7 +69,14 @@ NAV_BLOCKS = (
         NavRow("WdgM.json", "WdgM", "WdgM — 監視対象のタスク（Alive・順序・時間の監視）"),
         NavRow("NvM.json", "NvM", "NvM — 不揮発ブロックの構成（サイズ・EEPROM アドレス・ROM デフォルト値）"),
     ),
-    (NavRow("BswM.json", "BswM", "BswM — モード遷移のルール・I-PDU グループの起動/停止"),),
+    (NavRow("BswM.json", "BswM", "BswM — モード遷移のルール・I-PDU グループの起動/停止"),
+     NavRow("EcuM.json", "EcuM", "EcuM — RUN 要求ユーザ・POST_RUN タイムアウト・ウェイクアップ要因"),),
+    (
+        NavRow("Port.json", "Port", "Port — 管理ピン（LED・ボタンのピン番号）"),
+        NavRow("Dio.json", "Dio", "Dio — チャネル（ピン番号）・ポート・チャネルグループ"),
+        NavRow("Adc.json", "Adc", "Adc — アナログ入力のチャネル・グループ・分解能・基準電圧"),
+        NavRow("Gpt.json", "Gpt", "Gpt — 汎用タイマのチャネル（周期・モード・通知関数）"),
+    ),
 )
 
 

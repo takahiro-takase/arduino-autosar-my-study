@@ -1,0 +1,55 @@
+{
+  "$schema": "../schema/EcuM.schema.json",
+  "module": "EcuM",
+  "items": [
+    {
+      "doc": [
+        "RUN 要求ユーザ総数"
+      ],
+      "defines": [
+        {
+          "macro": "ECUM_USER_COUNT",
+          "value": "1U"
+        }
+      ]
+    },
+    {
+      "doc": [
+        "RUN 要求ユーザ ID: ComM チャネル 0"
+      ],
+      "defines": [
+        {
+          "macro": "ECUM_USER_COMM",
+          "value": "0U"
+        }
+      ]
+    },
+    {
+      "doc": [
+        "POST_RUN フェーズタイムアウト (ms)",
+        " この時間内に誰も RUN を要求しなければ SHUTDOWN へ遷移する。"
+      ],
+      "defines": [
+        {
+          "macro": "ECUM_POST_RUN_TIMEOUT_MS",
+          "value": "5000UL"
+        }
+      ]
+    },
+    {
+      "doc": [
+        "[SWS_EcuM_04040] `EcuM_WakeupSourceType` のビット0〜4は仕様で予約済み",
+        " （ECUM_WKSOURCE_POWER/RESET/INTERNAL_RESET/INTERNAL_WDG/EXTERNAL_WDG）。",
+        " 本プロジェクトが実際に持つウェイクアップ要因は CAN バス起床のみのため、",
+        " 予約範囲の次のビット5を独自に割り当てる（他モジュールと衝突しない",
+        " プロジェクト内自己割当）。"
+      ],
+      "defines": [
+        {
+          "macro": "ECUM_WKSOURCE_CAN",
+          "value": "0x00000020UL"
+        }
+      ]
+    }
+  ]
+}

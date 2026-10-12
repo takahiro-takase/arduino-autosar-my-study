@@ -28,7 +28,7 @@ import sys
 import jsonschema
 
 import checks
-from modules import bswm, can, canif, cannm, cansm, cantp, com, comm, cryptostack, dcm, dem, e2exf, fim, nm, nvm, ostask, pdur, rte, secoc, wdgm
+from modules import adc, bswm, can, canif, cannm, cansm, cantp, com, comm, cryptostack, dcm, dem, dio, e2exf, ecum, fim, gpt, nm, nvm, ostask, pdur, port, rte, secoc, wdgm
 
 TOOL_DIR = pathlib.Path(__file__).resolve().parent
 REPO_ROOT = TOOL_DIR.parents[1]
@@ -40,6 +40,7 @@ BEGIN_RE = re.compile(r"^[ \t]*/\* @@GEN-BEGIN (?P<id>[\w\-]+)\b.*\*/[ \t]*$")
 END_RE = re.compile(r"^[ \t]*/\* @@GEN-END (?P<id>[\w\-]+)[ \t]*\*/[ \t]*$")
 
 MODULES = {
+    "Adc": adc.SPEC,
     "BswM": bswm.SPEC,
     "Can": can.SPEC,
     "CanIf": canif.SPEC,
@@ -51,12 +52,16 @@ MODULES = {
     "ComM": comm.SPEC,
     "Dcm": dcm.SPEC,
     "Dem": dem.SPEC,
+    "Dio": dio.SPEC,
     "E2EXf": e2exf.SPEC,
+    "EcuM": ecum.SPEC,
     "FiM": fim.SPEC,
+    "Gpt": gpt.SPEC,
     "Nm": nm.SPEC,
     "NvM": nvm.SPEC,
     "Os": ostask.SPEC,
     "PduR": pdur.SPEC,
+    "Port": port.SPEC,
     "Rte": rte.SPEC,
     "SecOC": secoc.SPEC,
     "WdgM": wdgm.SPEC,

@@ -45,6 +45,7 @@
  * Global Variables
  * ====================================================================== */
 
+/* @@GEN-BEGIN gpt-table  生成元: config/data/Gpt.json  （自動生成: 手編集禁止） */
 /* -----------------------------------------------------------------------
  * チャネルテーブル
  * インデックスがそのままチャネル番号 (Gpt_ChannelType) に対応する。
@@ -68,6 +69,7 @@ static const Gpt_ChannelConfigType Gpt_ChannelTable[GPT_CHANNEL_COUNT] =
         NULL                    /* Notification     : Os は Gpt_GetTimeElapsed() をポーリングするだけ */
     }
 };
+/* @@GEN-END gpt-table */
 
 /* -----------------------------------------------------------------------
  * ポストビルドコンフィグインスタンス (EcuM が Gpt_Init に渡す)

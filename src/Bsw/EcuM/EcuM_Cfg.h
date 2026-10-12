@@ -66,21 +66,23 @@
 #define ECUM_SW_MINOR_VERSION   0U
 #define ECUM_SW_PATCH_VERSION   0U
 
+/* @@GEN-BEGIN ecum-params  生成元: config/data/EcuM.json  （自動生成: 手編集禁止） */
 /** RUN 要求ユーザ総数 */
-#define ECUM_USER_COUNT              1U
+#define ECUM_USER_COUNT  1U
 
 /** RUN 要求ユーザ ID: ComM チャネル 0 */
-#define ECUM_USER_COMM               0U
+#define ECUM_USER_COMM  0U
 
 /** POST_RUN フェーズタイムアウト (ms)
- *  この時間内に誰も RUN を要求しなければ SHUTDOWN へ遷移する。 */
-#define ECUM_POST_RUN_TIMEOUT_MS     5000UL
+ *   この時間内に誰も RUN を要求しなければ SHUTDOWN へ遷移する。 */
+#define ECUM_POST_RUN_TIMEOUT_MS  5000UL
 
 /** [SWS_EcuM_04040] `EcuM_WakeupSourceType` のビット0〜4は仕様で予約済み
- *  （ECUM_WKSOURCE_POWER/RESET/INTERNAL_RESET/INTERNAL_WDG/EXTERNAL_WDG）。
- *  本プロジェクトが実際に持つウェイクアップ要因は CAN バス起床のみのため、
- *  予約範囲の次のビット5を独自に割り当てる（他モジュールと衝突しない
- *  プロジェクト内自己割当）。 */
-#define ECUM_WKSOURCE_CAN            0x00000020UL
+ *   （ECUM_WKSOURCE_POWER/RESET/INTERNAL_RESET/INTERNAL_WDG/EXTERNAL_WDG）。
+ *   本プロジェクトが実際に持つウェイクアップ要因は CAN バス起床のみのため、
+ *   予約範囲の次のビット5を独自に割り当てる（他モジュールと衝突しない
+ *   プロジェクト内自己割当）。 */
+#define ECUM_WKSOURCE_CAN  0x00000020UL
+/* @@GEN-END ecum-params */
 
 #endif /* ECUM_CFG_H */

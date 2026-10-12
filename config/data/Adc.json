@@ -1,0 +1,58 @@
+{
+  "$schema": "../schema/Adc.schema.json",
+  "module": "Adc",
+  "items": [
+    {
+      "doc": [
+        "Arduino UNO アナログ入力 A0。",
+        "可変抵抗（ポテンショメータ）等を接続して電圧値を読み取る。"
+      ],
+      "defines": [
+        {
+          "macro": "ADC_CHANNEL_SENSOR",
+          "value": "0U"
+        }
+      ]
+    },
+    {
+      "doc": [
+        "ADC チャネルグループ（AdcGroup）。1 グループ = 1 チャネル、ソフトウェアトリガ、",
+        "ワンショット変換、単一アクセス。ADC_GROUP_SENSOR はセンサ入力グループ（ADC_CHANNEL_SENSOR を変換）、",
+        "ADC_GROUP_COUNT はグループ数。"
+      ],
+      "defines": [
+        {
+          "macro": "ADC_GROUP_SENSOR",
+          "value": "0U"
+        },
+        {
+          "macro": "ADC_GROUP_COUNT",
+          "value": "1U"
+        }
+      ]
+    },
+    {
+      "doc": [
+        "Arduino UNO の ADC 分解能は 10-bit（0〜1023）。10-bit ADC 最大生値。"
+      ],
+      "defines": [
+        {
+          "macro": "ADC_RESOLUTION_MAX",
+          "value": "1023U"
+        }
+      ]
+    },
+    {
+      "doc": [
+        "Arduino UNO の ADC 基準電圧は 5V（5000mV）。基準電圧 [mV]。",
+        "analogRead(0) = 1023 のとき 5000mV となる。"
+      ],
+      "defines": [
+        {
+          "macro": "ADC_REF_VOLTAGE_MV",
+          "value": "5000U"
+        }
+      ]
+    }
+  ]
+}

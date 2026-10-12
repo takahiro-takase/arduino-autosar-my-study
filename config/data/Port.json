@@ -1,0 +1,64 @@
+{
+  "$schema": "../schema/Port.schema.json",
+  "module": "Port",
+  "items": [
+    {
+      "doc": [
+        "管理ピン総数"
+      ],
+      "defines": [
+        {
+          "macro": "PORT_PIN_COUNT",
+          "value": "4U"
+        }
+      ]
+    },
+    {
+      "doc": [
+        "RUNNING LED (D6) — 出力ピン（エンジン正常稼働中に点灯）"
+      ],
+      "defines": [
+        {
+          "macro": "PORT_PIN_LED_RUNNING",
+          "value": "6U"
+        }
+      ]
+    },
+    {
+      "doc": [
+        "FAULT LED (D7) — 出力ピン（異常状態に点滅）"
+      ],
+      "defines": [
+        {
+          "macro": "PORT_PIN_LED_FAULT",
+          "value": "7U"
+        }
+      ]
+    },
+    {
+      "doc": [
+        "ABS / 警告灯 LED (D8) — 出力ピン（ABS 作動中に点灯）"
+      ],
+      "defines": [
+        {
+          "macro": "PORT_PIN_LED_WARNING",
+          "value": "8U"
+        }
+      ]
+    },
+    {
+      "doc": [
+        "警告確認ボタン (D9) — 入力ピン (INPUT_PULLUP)",
+        " FAULT 状態でボタン押下 → FAULT→OFF 遷移。",
+        " ボタン押下時は GND と接続され DIO_LOW が読まれる。",
+        " IoHwAb_Button_GetLevel() で論理反転して 押下=1 に変換する。"
+      ],
+      "defines": [
+        {
+          "macro": "PORT_PIN_BUTTON",
+          "value": "9U"
+        }
+      ]
+    }
+  ]
+}

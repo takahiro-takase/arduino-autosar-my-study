@@ -1,0 +1,158 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Gpt configuration",
+  "description": "Gpt_PBCfg.h のチャネル数・チャネル ID の #define（items[]、形式は tools/configurator/modules/defines.py 参照）と、Gpt_PBCfg.c のチャネルテーブル（channels[]）の生成元。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "module",
+    "items",
+    "channels"
+  ],
+  "$defs": {
+    "lines": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "not": {
+          "pattern": "\\*/"
+        }
+      }
+    },
+    "define": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "macro",
+        "value"
+      ],
+      "properties": {
+        "macro": {
+          "type": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+        },
+        "value": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    }
+  },
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "module": {
+      "const": "Gpt"
+    },
+    "items": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "section"
+            ],
+            "properties": {
+              "section": {
+                "$ref": "#/$defs/lines"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "defines"
+            ],
+            "properties": {
+              "doc": {
+                "$ref": "#/$defs/lines",
+                "description": "定義の直前に出す Doxygen コメントの行"
+              },
+              "unused": {
+                "type": "boolean",
+                "description": "真なら MISRA C:2012 Rule 2.5（未使用マクロ）の抑止コメントを付ける"
+              },
+              "defines": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "$ref": "#/$defs/define"
+                }
+              }
+            }
+          }
+        ]
+      }
+    },
+    "channels": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "heading",
+          "id",
+          "mode",
+          "tickFrequencyHz",
+          "tickValueMax",
+          "notification"
+        ],
+        "properties": {
+          "heading": {
+            "type": "string",
+            "description": "行の直前に出すコメント"
+          },
+          "id": {
+            "type": "string",
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+            "description": "items で定義した GPT_CHANNEL_* のマクロ名"
+          },
+          "mode": {
+            "enum": [
+              "CONTINUOUS",
+              "ONESHOT"
+            ]
+          },
+          "tickFrequencyHz": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "tickValueMax": {
+            "type": "string",
+            "minLength": 1,
+            "description": "C のリテラル（例: 0xFFFFFFFFU）"
+          },
+          "notification": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "通知関数名。無ければ null"
+          },
+          "notes": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "tickFrequencyHz": {
+                "type": "string"
+              },
+              "tickValueMax": {
+                "type": "string"
+              },
+              "notification": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

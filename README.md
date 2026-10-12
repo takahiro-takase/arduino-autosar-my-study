@@ -171,7 +171,7 @@ HAL ─── MCU 依存の最下層（Can_Hw / Dio_Hw ほか、src/Hal/ に集�
 ├── stub/                   # テスト用の差し替え（src/ と同じ構成。Fake_*=HW 差し替え、Wrap_*=--wrap による呼び出し記録）
 ├── test_scripts/           # 実機の結合テストスクリプト（CAPL 風 .capl / .py。tools/can_tool から実行）
 ├── config/
-│   ├── data/               # 設定データ（信号表 can_signals.json と、各モジュールの設定 json。CanIf / Com / PduR / CanNm / CanSM / CanTp / ComM / Nm / Dcm / Dem / NvM / WdgM / FiM / Can / E2EXf / SecOC / Csm・Crypto・KeyM / BswM / Os / Rte）
+│   ├── data/               # 設定データ（信号表 can_signals.json と、各モジュールの設定 json。CanIf / Com / PduR / CanNm / CanSM / CanTp / ComM / Nm / Dcm / Dem / NvM / WdgM / FiM / Can / E2EXf / SecOC / Csm・Crypto・KeyM / BswM / Os / Rte / Port / Dio / Adc / EcuM / Gpt）
 │   └── schema/             # 設定 json のスキーマ
 ├── tools/
 │   ├── can_tool/           # UDS ボタン送信 / CAPL 風スクリプト / 信号エディタ・設定 JSON エディタ（Python）
@@ -391,7 +391,7 @@ python tools/configurator/sync_cfg.py    # 信号表に追加したフレーム�
 python tools/configurator/gen_cfg.py     # スキーマ・整合性を検査して、生成領域を更新（--check で差分の確認のみ）
 ```
 
-- 対象は CanIf / Com / PduR / E2EXf / SecOC / Csm・Crypto・KeyM / Rte（信号アクセス関数）/ Dem（診断イベント）/ NvM（ブロック構成）/ WdgM（監視対象）/ FiM（機能の抑止）/ Can（コントローラ設定）/ BswM / Os（タスク表。BswM のタスク ID もここから生成）/ CanNm（NM フレーム・タイマ、CanNm 側の PDU の ID）/ CanSM / CanTp / ComM / Nm（各モジュールの定数・ID）/ Dcm（DID 定義）です。生成領域は、C ソースの
+- 対象は CanIf / Com / PduR / E2EXf / SecOC / Csm・Crypto・KeyM / Rte（信号アクセス関数）/ Dem（診断イベント）/ NvM（ブロック構成）/ WdgM（監視対象）/ FiM（機能の抑止）/ Can（コントローラ設定）/ BswM / Port・Dio・Adc・EcuM（設計値の定義）/ Gpt（チャネルテーブル）/ Os（タスク表。BswM のタスク ID もここから生成）/ CanNm（NM フレーム・タイマ、CanNm 側の PDU の ID）/ CanSM / CanTp / ComM / Nm（各モジュールの定数・ID）/ Dcm（DID 定義）です。生成領域は、C ソースの
   `@@GEN-BEGIN` から `@@GEN-END` までの間だけで、手で編集しません。
 - CAN ID、DLC、ビット位置などの値の正本は信号表です。設定 JSON はフレーム名で参照するだけで、値をコピーしません。
 - 設定 JSON は、`tools/can_tool` の左側のナビゲーション（`Com`、`PduR`、`CanIf` など）で、スキーマ（`config/schema/`）に従って GUI から編集できます。
