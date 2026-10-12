@@ -51,6 +51,7 @@
 #include "SecOC_PBCfg.h"
 #include "SecOC_Cfg.h"
 #include "Csm_Cfg.h"
+#include "Com_Cfg.h"
 
 /* Rte.c 側の実体のプロトタイプ（Rte.h ではなくコールバック専用の
  * Rte_Cbk.h を使うため、循環インクルードにはならない）。 */
@@ -66,18 +67,18 @@ static const SecOC_RxPduConfigType SecOC_RxPduConfigData[SECOC_RX_PDU_COUNT] = {
         /* ---------------------------------------------------------------
          * RX Secured I-PDU 0: ImmobilizerCmd
          * --------------------------------------------------------------- */
-        .SecOCRxPduId                      = 0U,      /* PduR_PBCfg.c の該当 RxDest.DestPduId と一致 */
-        .DataId                            = 0x0120U, /* SecOCDataId。CAN ID と同値にして
-                                                       * 対応関係を分かりやすくする（E2E の
-                                                       * DataID 割り当てと同じ方針） */
-        .AuthenticPduLength                = 2U,      /* byte[0]=ImmobilizerCmd, byte[1]=Reserved */
+        .SecOCRxPduId                      = SecOCConf_SecOCRxSecuredPdu_ImmobilizerCmd_Rx, /* PduR_PBCfg.c の該当 RxDest.DestPduId と同じシンボル */
+        .DataId                            = 0x0120U,                                       /* SecOCDataId。CAN ID と同値にして
+                                                                                             * 対応関係を分かりやすくする（E2E の
+                                                                                             * DataID 割り当てと同じ方針） */
+        .AuthenticPduLength                = 2U,                                            /* byte[0]=ImmobilizerCmd, byte[1]=Reserved */
         .FreshnessOffset                   = 2U,
-        .FreshnessLength                   = 1U,      /* 8bit、切り詰めなし（SecOC_Types.h 参照） */
+        .FreshnessLength                   = 1U,                                            /* 8bit、切り詰めなし（SecOC_Types.h 参照） */
         .MacOffset                         = 3U,
-        .MacTxLength                       = 3U,      /* 24bit（SecOC Profile 1） */
-        .SecuredPduLength                  = 6U,      /* 2 + 1 + 3 */
+        .MacTxLength                       = 3U,                                            /* 24bit（SecOC Profile 1） */
+        .SecuredPduLength                  = 6U,                                            /* 2 + 1 + 3 */
         .CsmJobId                          = CSM_JOB_ID_IMMOBILIZER_CMD_VERIFY,
-        .ComRxPduId                        = 2U,      /* Com RX IPduId=2 (SecureCommand_Rx) */
+        .ComRxPduId                        = ComConf_ComIPdu_SecureCommand_Rx,
         .VerificationStatusCallout         = Rte_SecOCVerificationStatus_ImmobilizerCmd,
         .VerificationStatusPropagationMode = SECOC_VERIFICATION_STATUS_PROPAGATION_BOTH
     }

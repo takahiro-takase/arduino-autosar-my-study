@@ -20,7 +20,7 @@
       "verificationStatusCallout": "Rte_SecOCVerificationStatus_ImmobilizerCmd",
       "verificationStatusPropagationMode": "SECOC_VERIFICATION_STATUS_PROPAGATION_BOTH",
       "comments": {
-        "secOCRxPduId": ["PduR_PBCfg.c の該当 RxDest.DestPduId と一致"],
+        "secOCRxPduId": ["PduR_PBCfg.c の該当 RxDest.DestPduId と同じシンボル"],
         "dataId": [
           "SecOCDataId。CAN ID と同値にして",
           "対応関係を分かりやすくする（E2E の",
@@ -29,8 +29,7 @@
         "authenticPduLength": ["byte[0]=ImmobilizerCmd, byte[1]=Reserved"],
         "freshnessLength": ["8bit、切り詰めなし（SecOC_Types.h 参照）"],
         "macTxLength": ["24bit（SecOC Profile 1）"],
-        "securedPduLength": ["2 + 1 + 3"],
-        "comRxPduId": ["Com RX IPduId=2 (SecureCommand_Rx)"]
+        "securedPduLength": ["2 + 1 + 3"]
       }
     }
   ]

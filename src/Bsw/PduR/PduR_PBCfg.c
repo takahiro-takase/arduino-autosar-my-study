@@ -72,6 +72,7 @@
 #include "Com.h"
 #include "CanTp.h"
 #include "SecOC.h"
+#include "SecOC_Cfg.h"
 
 /* ======================================================================
  * Global Variables
@@ -99,7 +100,7 @@ static const PduR_RxDestType PduR_RxDests_Path0[PDUR_RX_DEST_COUNT_PATH0] = {
 static const PduR_RxDestType PduR_RxDests_Path1[PDUR_RX_DEST_COUNT_PATH1] = {
     {
         .Module    = PDUR_MODULE_CANTP, /* DaVinci: PduRDestPdu/PduRDestModule = CANTP */
-        .DestPduId = 0U,                /* DaVinci: PduRDestPdu/PduRDestPduHandleId */
+        .DestPduId = CANTP_RX_SDU_ID,   /* DaVinci: PduRDestPdu/PduRDestPduHandleId */
         .RxIndFct  = CanTp_RxIndication /* DaVinci: 自動解決（PduRDestModule=CANTP） */
     }
 };
@@ -119,10 +120,10 @@ static const PduR_RxDestType PduR_RxDests_Path2[PDUR_RX_DEST_COUNT_PATH2] = {
  * DaVinci: /ActiveEcuC/PduR/PduRConfig/PduRRoutingTable/ImmobilizerCmd_Rx */
 static const PduR_RxDestType PduR_RxDests_Path3[PDUR_RX_DEST_COUNT_PATH3] = {
     {
-        .Module    = PDUR_MODULE_SECOC, /* DaVinci: PduRDestPdu/PduRDestModule = SECOC */
-        .DestPduId = 0U,                /* DaVinci: PduRDestPdu/PduRDestPduHandleId
-                                         *          → SecOC RX (SecOCRxPduId=0: ImmobilizerCmd) */
-        .RxIndFct  = SecOC_RxIndication /* DaVinci: 自動解決（PduRDestModule=SECOC） */
+        .Module    = PDUR_MODULE_SECOC,                             /* DaVinci: PduRDestPdu/PduRDestModule = SECOC */
+        .DestPduId = SecOCConf_SecOCRxSecuredPdu_ImmobilizerCmd_Rx, /* DaVinci: PduRDestPdu/PduRDestPduHandleId
+                                                                     *          → SecOC RX (SecOCRxPduId=0: ImmobilizerCmd) */
+        .RxIndFct  = SecOC_RxIndication                             /* DaVinci: 自動解決（PduRDestModule=SECOC） */
     }
 };
 
@@ -185,7 +186,7 @@ static const PduR_TxRoutingPathType PduR_TxPaths[PDUR_TX_PATH_COUNT] = {
          * DaVinci: PduRRoutingPath/DiagResp_Tx */
         .SrcPduId      = PduRConf_PduRSrcPdu_DiagResp_Tx,     /* DaVinci: PduRSrcPdu/PduRSrcPduHandleId */
         .CanIfTxPduId  = CanIfConf_CanIfTxPduCfg_DiagResp_Tx, /* DaVinci: PduRDestPdu/PduRDestPduHandleId */
-        .ConfDestPduId = 0U,
+        .ConfDestPduId = CANTP_TX_SDU_ID,
         .ConfFct       = CanTp_TxConfirmation                 /* DaVinci: PduRTxConfirmation */
     },
     {

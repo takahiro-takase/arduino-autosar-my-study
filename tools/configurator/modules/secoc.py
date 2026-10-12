@@ -9,6 +9,7 @@ SecOC の設定 json に書く値: Csm のジョブ、通知関数、Com の I-P
 TX の Secured I-PDU は未対応（現状 TX 方向で SecOC を使う PDU は無い）。
 """
 
+from . import symbols
 from .common import doc_comment, ruled_comment, struct_fields
 
 FIELDS = [
@@ -52,11 +53,12 @@ def layout(p, ctx):
     }
 
 
-def com_index(ctx, name, where):
-    for i, ip in enumerate(ctx.configs["Com"]["rxIpdus"]):
-        if ip["name"] == name:
-            return i
-    raise ValueError("%s: Com の RX I-PDU '%s' が存在しない" % (where, name))
+def render_symbols(cfg, ctx):
+    """SecOC が提供する Secured I-PDU の ID のシンボリック名（[TPS_ECUC_02108]）。値は SecOCRxPduId（テーブルの添字）。"""
+    symbols.check_unique([p["name"] for p in cfg["rxPdus"]], "SecOC rxPdus")
+    out = ["/* シンボリック名: SecOCConf_SecOCRxSecuredPdu_<name>（値は SecOC_RxPduConfigData の添字）。PduR が参照する。 */"]
+    out += symbols.define_lines([[(symbols.SECOC_RX + p["name"], i, False) for i, p in enumerate(cfg["rxPdus"])]])
+    return "\n".join(out)
 
 
 def render_pbcfg(cfg, ctx):
@@ -67,7 +69,7 @@ def render_pbcfg(cfg, ctx):
     for i, p in enumerate(items):
         lay = layout(p, ctx)
         vals = {
-            "secOCRxPduId": "%dU" % i,
+            "secOCRxPduId": symbols.SECOC_RX + p["name"],
             "dataId": "0x%04XU" % lay["dataId"],
             "authenticPduLength": "%dU" % lay["authenticPduLength"],
             "freshnessOffset": "%dU" % lay["freshnessOffset"],
@@ -76,7 +78,7 @@ def render_pbcfg(cfg, ctx):
             "macTxLength": "%dU" % lay["macTxLength"],
             "securedPduLength": "%dU" % lay["securedPduLength"],
             "csmJobId": p["csmJobId"],
-            "comRxPduId": "%dU" % com_index(ctx, p["comIpdu"], "SecOC " + p["name"]),
+            "comRxPduId": symbols.com_ipdu_symbol(ctx, "RX", p["comIpdu"], "SecOC " + p["name"]),
         }
         if "verificationStatusCallout" in p:
             vals["verificationStatusCallout"] = p["verificationStatusCallout"]
@@ -120,7 +122,8 @@ SPEC = {
     "schema": "config/schema/SecOC.schema.json",
     "validate": validate,
     "targets": [
-        ("src/Bsw/SecOC/SecOC_PBCfg.c", "secoc-config", render_pbcfg, None),
+        ("src/Bsw/SecOC/SecOC_PBCfg.c", "secoc-config", render_pbcfg, lambda cfg, text: symbols.include_warnings(text)),
         ("src/Bsw/SecOC/SecOC_Cfg.h", "secoc-counts", render_cfg_counts, None),
+        ("src/Bsw/SecOC/SecOC_Cfg.h", "secoc-symbols", render_symbols, None),
     ],
 }
