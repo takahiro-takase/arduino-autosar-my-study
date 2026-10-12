@@ -15,12 +15,8 @@ Logical 監視の許可遷移、Deadline 監視の許容時間）と、各項目
 WdgM_Cfg.h の他の定数（EXPIRED の許容サイクル数、HW ウォッチドッグの周期とタイムアウト）は手書きのまま。
 """
 
-import pathlib
-import re
+from .common import doc_comment, os_periods
 
-from .common import doc_comment
-
-REPO_ROOT = pathlib.Path(__file__).resolve().parents[3]
 
 INITIAL = "INITIAL"
 INITIAL_ID = 0xFF
@@ -77,15 +73,6 @@ def ruled(lines):
 
 def deadline_macro(e, d, which):
     return "WDGM_%s_DEADLINE_%s_TO_%s_%s_MS" % (e["name"], d["from"], d["to"], which)
-
-
-def os_periods(ctx):
-    """Os_PBCfg.c の Os_TaskTable から {タスクの関数名: 周期 [ms]} を読む。"""
-    root = pathlib.Path(getattr(ctx, "repo_root", None) or REPO_ROOT)
-    text = (root / "src" / "Os" / "Os_PBCfg.c").read_bytes().decode("utf-8", errors="replace")
-    i = text.index("Os_TaskTable[")
-    body = text[i:text.index("};", i)]
-    return {m.group(1): int(m.group(2)) for m in re.finditer(r"\{\s*(\w+)\s*,\s*(\d+)U\s*\}", body)}
 
 
 def check_periods(cfg, ctx):

@@ -1,4 +1,9 @@
-"""各モジュールの生成関数が共有する、コメントと構造体フィールドの整形。"""
+"""各モジュールの生成関数が共有する、コメントと構造体フィールドの整形、Os_PBCfg.c の周期の読み込み。"""
+
+import pathlib
+import re
+
+REPO_ROOT = pathlib.Path(__file__).resolve().parents[3]
 
 
 def block_comment(lines, indent=0, star="/*", cont=" * "):
@@ -56,3 +61,12 @@ def struct_fields(fields, indent):
 def hex_literal(text):
     """'0x200' → '0x200U'。"""
     return text + "U"
+
+
+def os_periods(ctx):
+    """Os_PBCfg.c の Os_TaskTable から {タスクの関数名: 周期 [ms]} を読む。"""
+    root = pathlib.Path(getattr(ctx, "repo_root", None) or REPO_ROOT)
+    text = (root / "src" / "Os" / "Os_PBCfg.c").read_bytes().decode("utf-8", errors="replace")
+    i = text.index("Os_TaskTable[")
+    body = text[i:text.index("};", i)]
+    return {m.group(1): int(m.group(2)) for m in re.finditer(r"\{\s*(\w+)\s*,\s*(\d+)U\s*\}", body)}

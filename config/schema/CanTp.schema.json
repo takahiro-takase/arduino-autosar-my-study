@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CanTp configuration",
+  "description": "CanTp_Cfg.h のバッファ・フロー制御・タイムアウト・ID の定義の生成元。診断応答の PduR の経路は、PduR.json の txPaths の名前で指す（生成物ではシンボリック名 PduRConf_PduRSrcPdu_<name> になる）。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["module", "bufferSection", "rxBufferSize", "txBufferSize", "flowControlSection", "blockSize", "stMin", "timeoutSection", "nCrTimeoutMs", "nBsTimeoutMs", "nAsTimeoutMs", "idSection", "pdurTxSrcPdu", "txSduId", "rxSduId"],
+  "$defs": {
+    "doc": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string", "not": { "pattern": "\\*/" } },
+      "description": "定義の直前に出す Doxygen コメントの行"
+    },
+    "section": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string", "not": { "pattern": "\\*/" } },
+      "description": "見出しコメントの行"
+    },
+    "byte": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["value", "doc"],
+      "properties": {
+        "value": { "type": "integer", "minimum": 0, "maximum": 255 },
+        "doc": { "$ref": "#/$defs/doc" }
+      }
+    },
+    "ms": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["value", "doc"],
+      "properties": {
+        "value": { "type": "integer", "minimum": 1, "maximum": 4294967295, "description": "時間 [ms]" },
+        "doc": { "$ref": "#/$defs/doc" }
+      }
+    }
+  },
+  "properties": {
+    "$schema": { "type": "string" },
+    "module": { "const": "CanTp" },
+    "bufferSection": { "$ref": "#/$defs/section" },
+    "rxBufferSize": { "$ref": "#/$defs/byte", "description": "RX N-SDU バッファのバイト数（FF/CF の組み立て用）" },
+    "txBufferSize": { "$ref": "#/$defs/byte", "description": "TX N-SDU バッファのバイト数（FF/CF の分割用）。Dcm の応答バッファ以上であること（Dcm.c の静的アサートが検査する）" },
+    "flowControlSection": { "$ref": "#/$defs/section" },
+    "blockSize": { "$ref": "#/$defs/byte", "description": "ブロックサイズ (BS)" },
+    "stMin": { "$ref": "#/$defs/byte", "description": "最小分離時間 (STmin)" },
+    "timeoutSection": { "$ref": "#/$defs/section" },
+    "nCrTimeoutMs": { "$ref": "#/$defs/ms" },
+    "nBsTimeoutMs": { "$ref": "#/$defs/ms" },
+    "nAsTimeoutMs": { "$ref": "#/$defs/ms" },
+    "idSection": { "$ref": "#/$defs/section" },
+    "pdurTxSrcPdu": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["pdu", "doc"],
+      "properties": {
+        "pdu": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_]*$", "description": "PduR.json の txPaths の name（confModule が CANTP のもの）" },
+        "doc": { "$ref": "#/$defs/doc" }
+      }
+    },
+    "txSduId": { "$ref": "#/$defs/byte", "description": "Dcm が CanTp_Transmit() に渡す TX N-SDU ID" },
+    "rxSduId": { "$ref": "#/$defs/byte", "description": "CanTp_RxIndication() が受け取る RX N-SDU ID" }
+  }
+}

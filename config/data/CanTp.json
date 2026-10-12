@@ -1,0 +1,97 @@
+{
+  "$schema": "../schema/CanTp.schema.json",
+  "module": "CanTp",
+  "bufferSection": [
+    "バッファサイズ"
+  ],
+  "rxBufferSize": {
+    "value": 32,
+    "doc": [
+      "RX N-SDU バッファサイズ (FF/CF 組立用): 32 バイト",
+      "対応可能な最大 UDS 要求ペイロード。現状の最大要求は WriteDataByIdentifier",
+      "CryptoKeyUpdate (0x2E, DID 0x0108) の 20 バイト（4ヘッダ+16文字キー）。"
+    ]
+  },
+  "txBufferSize": {
+    "value": 76,
+    "doc": [
+      "TX N-SDU バッファサイズ (FF/CF 分割用): 76 バイト",
+      "Dcm.c の DCM_TX_BUF_SIZE（3 + DEM_EVENT_COUNT*4、subFunc 0x0A の",
+      "DTC一覧応答の最大長）以上でなければならない。この制約は Dcm.c 側",
+      "（DCM_TX_BUF_SIZE 定義の直後）の静的アサートでビルド時に強制している。",
+      "",
+      "DEM_EVENT_COUNT 増加にこの値が追従せず実機の UDS 0x19 応答が無応答に",
+      "なるバグが過去2回発生（直近: 2026-09-20、10→14 増加時。経緯は git 履歴",
+      "参照）。76 = FF(6) + CF×10(7×10) という ISO-TP フレーム境界に一致する値で、",
+      "DEM_EVENT_COUNT が今後 18 まで増えてもこの値を再確認せずに済む余裕を",
+      "持たせている。余裕を使い切ってなお増やす場合は上記の静的アサートが",
+      "ビルドを止めて教える。"
+    ]
+  },
+  "flowControlSection": [
+    "フロー制御パラメータ (AUTOSAR CanTp N_USData.req の N_Ar, N_Bs, N_Cr)"
+  ],
+  "blockSize": {
+    "value": 0,
+    "doc": [
+      "ブロックサイズ (BS): 0 = ブロック間 FC なし (すべての CF を連続送信)"
+    ]
+  },
+  "stMin": {
+    "value": 0,
+    "doc": [
+      "最小分離時間 (STmin): 0 = CF 間の最小待ち時間なし"
+    ]
+  },
+  "timeoutSection": [
+    "タイムアウト値 (ms)",
+    "ISO 15765-2 Table 8: N_Ar / N_Br / N_Cr / N_Bs / N_Cs"
+  ],
+  "nCrTimeoutMs": {
+    "value": 1000,
+    "doc": [
+      "N_Cr タイムアウト: 次の CF を受信するまでの最大待機時間 (ms)",
+      "ISO 15765-2 Table 8 の標準値である 1000ms を採用する。"
+    ]
+  },
+  "nBsTimeoutMs": {
+    "value": 5000,
+    "doc": [
+      "N_Bs タイムアウト: FF 送信後に FC を受信するまでの最大待機時間 (ms)",
+      "ISO 15765-2 Table 8 の標準値は 1000ms だが、手動テスト (Cangaroo で FC を",
+      "手動送信) に対応するため、本実装ではあえて長い 5000ms に設定している。"
+    ]
+  },
+  "nAsTimeoutMs": {
+    "value": 1000,
+    "doc": [
+      "N_As タイムアウト: CF の物理送信が同期的に失敗し続けた場合に、そのまま",
+      "無期限リトライさせずセッションを中断するまでの最大許容時間 (ms)。",
+      "本実装は非同期の TxConfirmation 経路が常に E_OK 固定（Can.c/CanIf.c 参照）",
+      "で真の N_As（送信確認待ち）を表現できないため、代わりに",
+      "Can_Write() の同期的な送信失敗が一定時間継続した場合の保護として用いる。"
+    ]
+  },
+  "idSection": [
+    "PDU / N-SDU ID"
+  ],
+  "pdurTxSrcPdu": {
+    "pdu": "DiagResp_Tx",
+    "doc": [
+      "CanTp が診断応答フレームを送信する際に使用する PduR TX SrcPduId",
+      "（PduR.json の txPaths の name から求めたシンボリック名。CAN 0x7E8 の経路）。"
+    ]
+  },
+  "txSduId": {
+    "value": 0,
+    "doc": [
+      "Dcm が CanTp_Transmit() に渡す TX N-SDU ID (診断応答チャネル)"
+    ]
+  },
+  "rxSduId": {
+    "value": 0,
+    "doc": [
+      "CanTp_RxIndication() が受け取る RX N-SDU ID (診断要求チャネル)"
+    ]
+  }
+}

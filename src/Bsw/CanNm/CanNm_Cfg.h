@@ -37,6 +37,8 @@
  * Includes
  * ====================================================================== */
 
+#include "CanIf_Cfg.h"
+
 /* ======================================================================
  * Definitions
  * ====================================================================== */
@@ -100,8 +102,23 @@
 #define CANNM_SW_PATCH_VERSION   0U
 
 /* -----------------------------------------------------------------------
+ * NM チャネルの固定値
+ * ----------------------------------------------------------------------- */
+/** 本プロジェクトが持つ唯一の NM チャネルのハンドル値。呼び出し元はこの値を
+ *  渡すこと。これ以外の値は CANNM_E_INVALID_CHANNEL として拒否される
+ *  （[SWS_CanNm_00192]、CanNm_NetworkRequest() 等参照）。 */
+#define CANNM_MAIN_NETWORK_HANDLE  0U
+
+/** Control Bit Vector のビット位置（[SWS_CanNm_00045] 実測。本プロジェクトは
+ *  Bit0（Repeat Message Request）のみ扱う。Bit3(Coordinator Sleep)/Bit4(Active
+ *  Wakeup)/Bit6(Partial Network) は対応除外の機能に対応するビットのため未使用。 */
+#define CANNM_CBV_BIT_REPEAT_MESSAGE_REQUEST  0x01U
+
+/* @@GEN-BEGIN cannm-params  生成元: config/data/CanNm.json  （自動生成: 手編集禁止） */
+/* -----------------------------------------------------------------------
  * NM フレーム送受信パラメータ
  * ----------------------------------------------------------------------- */
+
 /** CanNm_MainFunction() の呼び出し周期 [ms]（Os_PBCfg.c のタスク周期と一致させること）。
  *  MeterStatus (3000ms) より短い周期で、バス上の生存確認を高頻度に行うという
  *  NM 本来の性質を反映する。
@@ -126,41 +143,28 @@
 /** 本 ECU（メータ ECU）の NM ノード識別子 */
 #define CANNM_SOURCE_NODE_ID  0x01U
 
-/** 本プロジェクトが持つ唯一の NM チャネルのハンドル値。呼び出し元はこの値を
- *  渡すこと。これ以外の値は CANNM_E_INVALID_CHANNEL として拒否される
- *  （[SWS_CanNm_00192]、CanNm_NetworkRequest() 等参照）。 */
-#define CANNM_MAIN_NETWORK_HANDLE  0U
+/** CanIf に登録した本 NM フレームの TxPduId（CanIf.json の txPdus の中の位置から求めた
+ *  シンボリック名。CanIf_PBCfg.c の CanIf_TxPduConfigData 配列インデックスと一致する）。
+ *  CanNm は PduR/Com を経由せず CanIf_Transmit() を直接呼ぶため、
+ *  実車の CanNm と同様に Com スタックとは独立して動作する。 */
+#define CANNM_CANIF_TX_PDU_ID  CanIfConf_CanIfTxPduCfg_CanNm_Tx
 
-/** Control Bit Vector のビット位置（[SWS_CanNm_00045] 実測。本プロジェクトは
- *  Bit0（Repeat Message Request）のみ扱う。Bit3(Coordinator Sleep)/Bit4(Active
- *  Wakeup)/Bit6(Partial Network) は対応除外の機能に対応するビットのため未使用。 */
-#define CANNM_CBV_BIT_REPEAT_MESSAGE_REQUEST  0x01U
-
-/**
- * CanIf に登録した本 NM フレームの TxPduId。
- * CanIf_PBCfg.c の CanIf_TxPduConfigData 配列インデックスと一致させること
- * （CanNm は PduR/Com を経由せず CanIf_Transmit() を直接呼ぶため、
- * 実車の CanNm と同様に Com スタックとは独立して動作する）。
- */
-#define CANNM_CANIF_TX_PDU_ID  2U
-
-/**
- * CanIf に登録した本 NM フレームの RxPduId（CanIf_RxPduConfigData 配列
- * インデックスと一致させること）。CanIf は HOH/CanId でエントリを検索して
- * CanNm_RxIndication() を直接呼ぶため、この値自体は CanNm 側では単一チャネル
- * ゆえ実質未使用（受信ログ表示にのみ使う）。
- */
+/** CanIf に登録した本 NM フレームの RxPduId（CanIf.json の rxPdus の中の位置から求めた
+ *  シンボリック名）。CanIf は HOH/CanId でエントリを検索して
+ *  CanNm_RxIndication() を直接呼ぶため、この値自体は CanNm 側では単一チャネル
+ *  ゆえ実質未使用（受信ログ表示にのみ使う）。 */
 /* cppcheck-suppress misra-c2012-2.5 */
-#define CANNM_CANIF_RX_PDU_ID  4U
+#define CANNM_CANIF_RX_PDU_ID  CanIfConf_CanIfRxPduCfg_CanNm_Rx
 
 /* -----------------------------------------------------------------------
  * CanNm 状態機械タイマ値 [ms]
  * ([SWS_CanNm_00102]/[SWS_CanNm_00109]/[SWS_CanNm_00115] 準拠。
- *  実車では全ノードで同一値に設定することが要求される
- *  [Note after SWS_CanNm_00126] が、本プロジェクトは自ノードのみ実装のため
- *  値の選定は任意。CANNM_CYCLE_MS の周期で少なくとも1回は正常送信/受信できる
- *  余裕を持たせつつ、実機での検証待ち時間が長くなりすぎない値とした。)
+ * 実車では全ノードで同一値に設定することが要求される
+ * [Note after SWS_CanNm_00126] が、本プロジェクトは自ノードのみ実装のため
+ * 値の選定は任意。CANNM_CYCLE_MS の周期で少なくとも1回は正常送信/受信できる
+ * 余裕を持たせつつ、実機での検証待ち時間が長くなりすぎない値とした。)
  * ----------------------------------------------------------------------- */
+
 /** NM-Timeout Timer。この時間内に NM PDU の送信確認または受信がなければ、
  *  Repeat Message/Normal Operation State では再送信、Ready Sleep State では
  *  Prepare Bus-Sleep Mode へ遷移する。 */
@@ -171,5 +175,6 @@
 
 /** Prepare Bus-Sleep Mode の滞在時間（CanNmWaitBusSleepTime 相当）。 */
 #define CANNM_WAIT_BUS_SLEEP_MS  1500UL
+/* @@GEN-END cannm-params */
 
 #endif /* CANNM_CFG_H */

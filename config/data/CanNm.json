@@ -1,0 +1,87 @@
+{
+  "$schema": "../schema/CanNm.schema.json",
+  "module": "CanNm",
+  "frameSection": [
+    "NM フレーム送受信パラメータ"
+  ],
+  "cycleMs": {
+    "value": 1000,
+    "doc": [
+      "CanNm_MainFunction() の呼び出し周期 [ms]（Os_PBCfg.c のタスク周期と一致させること）。",
+      "MeterStatus (3000ms) より短い周期で、バス上の生存確認を高頻度に行うという",
+      "NM 本来の性質を反映する。",
+      "",
+      "実 CanNm の Message Cycle Timer（`CanNmMsgCycleTime`、[SWS_CanNm_00032]/",
+      "[SWS_CanNm_00040]。Repeat Message/Normal Operation State での周期送信を",
+      "NM-Timeout Timer とは独立に駆動する専用タイマ）を兼ねる簡略化。本来は",
+      "CANNM_TIMEOUT_MS よりも十分短い専用のタイマにすべきだが、本プロジェクトは",
+      "CanNm_MainFunction() 自体の呼び出し周期をそのまま Message Cycle Time として",
+      "流用する（CanNm.c 参照）。"
+    ],
+    "unused": true
+  },
+  "dlc": {
+    "value": 2,
+    "doc": [
+      "NM PDU のバイト長。byte[0]=Control Bit Vector, byte[1]=Source Node Identifier",
+      "（[SWS_CanNm_00074]/[SWS_CanNm_00075] で言うCanNmPduNidPosition/",
+      "CanNmPduCbvPositionが実際に配置可能な2値。ただし仕様のデフォルトは",
+      "逆順（NidPosition=Byte0/CbvPosition=Byte1）であり、本プロジェクトは",
+      "それとは異なる配置を選択している。User Data は本プロジェクトでは",
+      "対応除外のため0バイト）。"
+    ]
+  },
+  "sourceNodeId": {
+    "value": "0x01",
+    "doc": [
+      "本 ECU（メータ ECU）の NM ノード識別子"
+    ]
+  },
+  "canifTxPdu": {
+    "pdu": "CanNm_Tx",
+    "doc": [
+      "CanIf に登録した本 NM フレームの TxPduId（CanIf.json の txPdus の中の位置から求めた",
+      "シンボリック名。CanIf_PBCfg.c の CanIf_TxPduConfigData 配列インデックスと一致する）。",
+      "CanNm は PduR/Com を経由せず CanIf_Transmit() を直接呼ぶため、",
+      "実車の CanNm と同様に Com スタックとは独立して動作する。"
+    ]
+  },
+  "canifRxPdu": {
+    "pdu": "CanNm_Rx",
+    "doc": [
+      "CanIf に登録した本 NM フレームの RxPduId（CanIf.json の rxPdus の中の位置から求めた",
+      "シンボリック名）。CanIf は HOH/CanId でエントリを検索して",
+      "CanNm_RxIndication() を直接呼ぶため、この値自体は CanNm 側では単一チャネル",
+      "ゆえ実質未使用（受信ログ表示にのみ使う）。"
+    ],
+    "unused": true
+  },
+  "timerSection": [
+    "CanNm 状態機械タイマ値 [ms]",
+    "([SWS_CanNm_00102]/[SWS_CanNm_00109]/[SWS_CanNm_00115] 準拠。",
+    "実車では全ノードで同一値に設定することが要求される",
+    "[Note after SWS_CanNm_00126] が、本プロジェクトは自ノードのみ実装のため",
+    "値の選定は任意。CANNM_CYCLE_MS の周期で少なくとも1回は正常送信/受信できる",
+    "余裕を持たせつつ、実機での検証待ち時間が長くなりすぎない値とした。)"
+  ],
+  "timeoutMs": {
+    "value": 3000,
+    "doc": [
+      "NM-Timeout Timer。この時間内に NM PDU の送信確認または受信がなければ、",
+      "Repeat Message/Normal Operation State では再送信、Ready Sleep State では",
+      "Prepare Bus-Sleep Mode へ遷移する。"
+    ]
+  },
+  "repeatMessageMs": {
+    "value": 1500,
+    "doc": [
+      "Repeat Message State の滞在時間（CanNmRepeatMessageTime 相当）。"
+    ]
+  },
+  "waitBusSleepMs": {
+    "value": 1500,
+    "doc": [
+      "Prepare Bus-Sleep Mode の滞在時間（CanNmWaitBusSleepTime 相当）。"
+    ]
+  }
+}

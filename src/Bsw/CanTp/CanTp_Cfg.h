@@ -25,6 +25,7 @@
  * ====================================================================== */
 
 #include "Platform_Types.h"
+#include "PduR_Cfg.h"
 
 /* ======================================================================
  * Definitions
@@ -69,13 +70,15 @@
 #define CANTP_SW_MINOR_VERSION   0U
 #define CANTP_SW_PATCH_VERSION   0U
 
+/* @@GEN-BEGIN cantp-params  生成元: config/data/CanTp.json  （自動生成: 手編集禁止） */
 /* -----------------------------------------------------------------------
  * バッファサイズ
  * ----------------------------------------------------------------------- */
+
 /** RX N-SDU バッファサイズ (FF/CF 組立用): 32 バイト
  *  対応可能な最大 UDS 要求ペイロード。現状の最大要求は WriteDataByIdentifier
  *  CryptoKeyUpdate (0x2E, DID 0x0108) の 20 バイト（4ヘッダ+16文字キー）。 */
-#define CANTP_RX_BUFFER_SIZE      32U
+#define CANTP_RX_BUFFER_SIZE  32U
 
 /** TX N-SDU バッファサイズ (FF/CF 分割用): 76 バイト
  *  Dcm.c の DCM_TX_BUF_SIZE（3 + DEM_EVENT_COUNT*4、subFunc 0x0A の
@@ -88,48 +91,52 @@
  *  DEM_EVENT_COUNT が今後 18 まで増えてもこの値を再確認せずに済む余裕を
  *  持たせている。余裕を使い切ってなお増やす場合は上記の静的アサートが
  *  ビルドを止めて教える。 */
-#define CANTP_TX_BUFFER_SIZE      76U
+#define CANTP_TX_BUFFER_SIZE  76U
 
 /* -----------------------------------------------------------------------
  * フロー制御パラメータ (AUTOSAR CanTp N_USData.req の N_Ar, N_Bs, N_Cr)
  * ----------------------------------------------------------------------- */
+
 /** ブロックサイズ (BS): 0 = ブロック間 FC なし (すべての CF を連続送信) */
-#define CANTP_BLOCK_SIZE          0U
+#define CANTP_BLOCK_SIZE  0U
 
 /** 最小分離時間 (STmin): 0 = CF 間の最小待ち時間なし */
-#define CANTP_ST_MIN              0U
+#define CANTP_ST_MIN  0U
 
 /* -----------------------------------------------------------------------
  * タイムアウト値 (ms)
  * ISO 15765-2 Table 8: N_Ar / N_Br / N_Cr / N_Bs / N_Cs
  * ----------------------------------------------------------------------- */
+
 /** N_Cr タイムアウト: 次の CF を受信するまでの最大待機時間 (ms)
  *  ISO 15765-2 Table 8 の標準値である 1000ms を採用する。 */
-#define CANTP_N_CR_TIMEOUT_MS     1000UL
+#define CANTP_N_CR_TIMEOUT_MS  1000UL
 
 /** N_Bs タイムアウト: FF 送信後に FC を受信するまでの最大待機時間 (ms)
  *  ISO 15765-2 Table 8 の標準値は 1000ms だが、手動テスト (Cangaroo で FC を
  *  手動送信) に対応するため、本実装ではあえて長い 5000ms に設定している。 */
-#define CANTP_N_BS_TIMEOUT_MS     5000UL
+#define CANTP_N_BS_TIMEOUT_MS  5000UL
 
 /** N_As タイムアウト: CF の物理送信が同期的に失敗し続けた場合に、そのまま
  *  無期限リトライさせずセッションを中断するまでの最大許容時間 (ms)。
  *  本実装は非同期の TxConfirmation 経路が常に E_OK 固定（Can.c/CanIf.c 参照）
  *  で真の N_As（送信確認待ち）を表現できないため、代わりに
  *  Can_Write() の同期的な送信失敗が一定時間継続した場合の保護として用いる。 */
-#define CANTP_N_AS_TIMEOUT_MS     1000UL
+#define CANTP_N_AS_TIMEOUT_MS  1000UL
 
 /* -----------------------------------------------------------------------
  * PDU / N-SDU ID
  * ----------------------------------------------------------------------- */
-/** CanTp が診断応答フレームを送信する際に使用する PduR TX SrcPduId。
- *  PduR_PBCfg.c TX パス 1 (CAN 0x7E8) に対応する。 */
-#define CANTP_PDUR_TX_SDU_ID      1U
+
+/** CanTp が診断応答フレームを送信する際に使用する PduR TX SrcPduId
+ *  （PduR.json の txPaths の name から求めたシンボリック名。CAN 0x7E8 の経路）。 */
+#define CANTP_PDUR_TX_SDU_ID  PduRConf_PduRSrcPdu_DiagResp_Tx
 
 /** Dcm が CanTp_Transmit() に渡す TX N-SDU ID (診断応答チャネル) */
-#define CANTP_TX_SDU_ID           0U
+#define CANTP_TX_SDU_ID  0U
 
 /** CanTp_RxIndication() が受け取る RX N-SDU ID (診断要求チャネル) */
-#define CANTP_RX_SDU_ID           0U
+#define CANTP_RX_SDU_ID  0U
+/* @@GEN-END cantp-params */
 
 #endif /* CANTP_CFG_H */
