@@ -20,6 +20,21 @@ def define(name, value, doc, unused=False):
     return out
 
 
+def render_layout(cfg, layout, overrides=None):
+    """layout に沿って見出しと定義を並べる。layout の要素は ("section", キー) か ("define", キー, マクロ名, 書式)。
+    書式は "%dU" のように値（cfg[キー]["value"]）へ適用する文字列。overrides[キー] があれば書式を使わずその文字列を値にする。"""
+    overrides = overrides or {}
+    blocks = []
+    for item in layout:
+        if item[0] == "section":
+            blocks.append(section(cfg[item[1]]))
+        else:
+            _, key, macro, fmt = item
+            value = overrides[key] if key in overrides else fmt % cfg[key]["value"]
+            blocks.append(define(macro, value, cfg[key]["doc"], cfg[key].get("unused", False)))
+    return join(blocks)
+
+
 def join(blocks):
     """ブロックの間を空行 1 つで区切る。"""
     out = []

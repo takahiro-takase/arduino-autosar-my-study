@@ -1,0 +1,13 @@
+{
+  "$schema": "../schema/Nm.schema.json",
+  "module": "Nm",
+  "mainNetworkHandle": {
+    "value": 0,
+    "doc": [
+      "本プロジェクトが持つ唯一の NM チャネルのハンドル値。呼び出し元はこの値を",
+      "渡すこと。これ以外の値は NM_E_INVALID_CHANNEL として拒否される",
+      "（CanNm 側の CANNM_MAIN_NETWORK_HANDLE と同じ値 0 だが、Nm/CanNm は",
+      "別モジュールのため別定数として持つ）。"
+    ]
+  }
+}

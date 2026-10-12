@@ -1,0 +1,31 @@
+{
+  "$schema": "../schema/ComM.schema.json",
+  "module": "ComM",
+  "channelCount": {
+    "value": 1,
+    "doc": [
+      "管理チャネル数"
+    ]
+  },
+  "userCount": {
+    "value": 1,
+    "doc": [
+      "管理ユーザ数",
+      "（2026-08 のシグネチャ準拠サーベイで Dcm 用の仮想ユーザースロット",
+      "COMM_USER_1 を廃止し ComM_DCM_ActiveDiagnostic/InactiveDiagnostic",
+      "（ComM.c 参照）へ置き換えたため、実ユーザは COMM_USER_0 のみになった）"
+    ]
+  },
+  "channel0": {
+    "value": 0,
+    "doc": [
+      "チャネル 0 ID"
+    ]
+  },
+  "user0": {
+    "value": 0,
+    "doc": [
+      "ユーザ 0 ID（EcuM が RUN 中は常時 FULL_COM を要求する。実質「エンジン運用アプリ」の代表）"
+    ]
+  }
+}

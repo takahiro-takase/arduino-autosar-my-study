@@ -48,6 +48,11 @@ NAV_BLOCKS = (
         NavRow("CanNm.json", "CanNm", "CanNm — ネットワーク管理（NM フレーム・タイマ）"),
     ),
     (
+        NavRow("CanSM.json", "CanSM", "CanSM — バス状態管理（Bus-Off 回復時間・ウェイクアップ検証時間）"),
+        NavRow("ComM.json", "ComM", "ComM — 通信管理（チャネル数・ユーザ数）"),
+        NavRow("Nm.json", "Nm", "Nm — ネットワーク管理インタフェース（チャネルのハンドル）"),
+    ),
+    (
         NavRow("E2EXf.json", "E2EXf", "E2EXf — E2E 保護（Profile05）"),
         NavRow("SecOC.json", "SecOC", "SecOC — 認証（Secured I-PDU）"),
     ),

@@ -28,7 +28,7 @@ import sys
 import jsonschema
 
 import checks
-from modules import bswm, can, canif, cannm, cantp, com, cryptostack, dcm, dem, e2exf, fim, nvm, pdur, rte, secoc, wdgm
+from modules import bswm, can, canif, cannm, cansm, cantp, com, comm, cryptostack, dcm, dem, e2exf, fim, nm, nvm, pdur, rte, secoc, wdgm
 
 TOOL_DIR = pathlib.Path(__file__).resolve().parent
 REPO_ROOT = TOOL_DIR.parents[1]
@@ -46,11 +46,14 @@ MODULES = {
     "Com": com.SPEC,
     "CryptoStack": cryptostack.SPEC,
     "CanNm": cannm.SPEC,
+    "CanSM": cansm.SPEC,
     "CanTp": cantp.SPEC,
+    "ComM": comm.SPEC,
     "Dcm": dcm.SPEC,
     "Dem": dem.SPEC,
     "E2EXf": e2exf.SPEC,
     "FiM": fim.SPEC,
+    "Nm": nm.SPEC,
     "NvM": nvm.SPEC,
     "PduR": pdur.SPEC,
     "Rte": rte.SPEC,

@@ -124,8 +124,18 @@ def check_all(ctx):
     _check_secoc(ctx, errors)
     _check_cryptostack(ctx, errors, warnings)
     _check_bswm(ctx, errors, warnings)
+    _check_channels(ctx, errors)
 
     return errors, warnings
+
+
+def _check_channels(ctx, errors):
+    """CanSM・ComM・Nm が持つチャネルの設定（チャネル数・ハンドル）が、互いに食い違っていないか。"""
+    cansm, comm, nm = (ctx.configs.get(n) for n in ("CanSM", "ComM", "Nm"))
+    if cansm and comm and cansm["channelCount"]["value"] != comm["channelCount"]["value"]:
+        errors.append("CanSM の channelCount=%d が ComM の channelCount=%d と一致しない" % (cansm["channelCount"]["value"], comm["channelCount"]["value"]))
+    if nm and comm and nm["mainNetworkHandle"]["value"] != comm["channel0"]["value"]:
+        errors.append("Nm の mainNetworkHandle=%d が ComM の channel0=%d と一致しない" % (nm["mainNetworkHandle"]["value"], comm["channel0"]["value"]))
 
 
 def _is_com_field(f):

@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Nm configuration",
+  "description": "Nm_Cfg.h の NM チャネルのハンドルの生成元。ComM.json のチャネル 0 の ID と一致すること（生成時に検査する）。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "module",
+    "mainNetworkHandle"
+  ],
+  "$defs": {
+    "doc": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "not": {
+          "pattern": "\\*/"
+        }
+      },
+      "description": "定義の直前に出す Doxygen コメントの行"
+    }
+  },
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "module": {
+      "const": "Nm"
+    },
+    "mainNetworkHandle": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "value",
+        "doc"
+      ],
+      "properties": {
+        "value": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 254,
+          "description": "NM チャネルのハンドル値"
+        },
+        "doc": {
+          "$ref": "#/$defs/doc"
+        }
+      }
+    }
+  }
+}

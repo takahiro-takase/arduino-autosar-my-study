@@ -66,6 +66,7 @@
 #define COMM_SW_MINOR_VERSION   0U
 #define COMM_SW_PATCH_VERSION   0U
 
+/* @@GEN-BEGIN comm-params  生成元: config/data/ComM.json  （自動生成: 手編集禁止） */
 /** 管理チャネル数 */
 #define COMM_CHANNEL_COUNT  1U
 
@@ -73,12 +74,13 @@
  *  （2026-08 のシグネチャ準拠サーベイで Dcm 用の仮想ユーザースロット
  *  COMM_USER_1 を廃止し ComM_DCM_ActiveDiagnostic/InactiveDiagnostic
  *  （ComM.c 参照）へ置き換えたため、実ユーザは COMM_USER_0 のみになった） */
-#define COMM_USER_COUNT     1U
+#define COMM_USER_COUNT  1U
 
 /** チャネル 0 ID */
-#define COMM_CHANNEL_0      0U
+#define COMM_CHANNEL_0  0U
 
 /** ユーザ 0 ID（EcuM が RUN 中は常時 FULL_COM を要求する。実質「エンジン運用アプリ」の代表） */
-#define COMM_USER_0         0U
+#define COMM_USER_0  0U
+/* @@GEN-END comm-params */
 
 #endif /* COMM_CFG_H */

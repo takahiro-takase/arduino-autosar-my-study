@@ -6,9 +6,9 @@ CanTp.json に書く値: RX/TX バッファの大きさ、ブロックサイズ�
 """
 
 from . import symbols
-from .defs import define, join, section
+from .defs import render_layout
 
-# 並び順どおりに出力する。("section", キー) は見出し、("define", キー, マクロ名, 書式) は定義。書式が None のものは PduR のシンボル。
+# 並び順どおりに出力する。("section", キー) は見出し、("define", キー, マクロ名, 書式) は定義。pdurTxSrcPdu は値を PduR のシンボルで上書きする。
 LAYOUT = (
     ("section", "bufferSection"),
     ("define", "rxBufferSize", "CANTP_RX_BUFFER_SIZE", "%dU"),
@@ -21,7 +21,7 @@ LAYOUT = (
     ("define", "nBsTimeoutMs", "CANTP_N_BS_TIMEOUT_MS", "%dUL"),
     ("define", "nAsTimeoutMs", "CANTP_N_AS_TIMEOUT_MS", "%dUL"),
     ("section", "idSection"),
-    ("define", "pdurTxSrcPdu", "CANTP_PDUR_TX_SDU_ID", None),
+    ("define", "pdurTxSrcPdu", "CANTP_PDUR_TX_SDU_ID", "%s"),
     ("define", "txSduId", "CANTP_TX_SDU_ID", "%dU"),
     ("define", "rxSduId", "CANTP_RX_SDU_ID", "%dU"),
 )
@@ -38,15 +38,7 @@ def pdur_symbol(cfg, ctx):
 
 
 def render(cfg, ctx):
-    pdur = pdur_symbol(cfg, ctx)
-    blocks = []
-    for item in LAYOUT:
-        if item[0] == "section":
-            blocks.append(section(cfg[item[1]]))
-        else:
-            _, key, macro, fmt = item
-            blocks.append(define(macro, pdur if fmt is None else fmt % cfg[key]["value"], cfg[key]["doc"]))
-    return join(blocks)
+    return render_layout(cfg, LAYOUT, {"pdurTxSrcPdu": pdur_symbol(cfg, ctx)})
 
 
 SPEC = {
