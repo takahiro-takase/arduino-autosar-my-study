@@ -8,11 +8,12 @@
  *          GitHub Issue #122（subFunc 0x0A reportSupportedDTC の追加要望）
  *          への対応をきっかけに新設した。
  *
- *          `Dcm_ComIndication()` に生の UDS バイト列を直接渡し、
+ *          `WrapDcm_InjectRequest()`（`Dcm_StartOfReception()` から `Dcm_TpRxIndication()` までの受信の流れ）で、
+ *          生の UDS バイト列を Dcm へ直接渡し、
  *          `CanTp_Transmit()`（`Wrap_CanTp.h` で応答ペイロードをキャプチャ）
  *          へ渡された応答を検証する、という「入口と出口だけを見る」
- *          ブラックボックステスト。`Dcm_ComIndication()` 自体は
- *          「CanTp が組み立てた生 UDS ペイロードを受け取る」入口のため、
+ *          ブラックボックステスト。Dcm の受信の入口（TP の受信コールバック）は
+ *          「CanTp が渡した生 UDS ペイロードを受け取る」ため、
  *          RX 側の CanTp/PduR/CanIf/Can は経由しない。TX 側は CanTp.c が
  *          実体でリンクされる（2026-09-22、Fake_CanTp.c から切り替え）が、
  *          その先の PduR/CanIf/Can は本 env では未初期化のため、物理送信は
@@ -34,6 +35,7 @@ extern "C" {
 #include "Dcm_Cfg.h"
 #include "Dem.h"
 #include "Wrap_CanTp.h"
+#include "Wrap_Dcm.h"
 #include "Fake_Millis.h"
 #include "Fake_Det_Hw.h"
 #include "Wrap_ComM.h"
@@ -58,7 +60,7 @@ namespace
  * Test Fixture
  * ====================================================================== */
 
-/* Dcm の UDS サービス処理（0x19 ReadDTCInformation など）を、CAN を通さずに Dcm_ComIndication() へ直接要求を渡して確認する単体テスト用フィクスチャ。
+/* Dcm の UDS サービス処理（0x19 ReadDTCInformation など）を、CAN を通さずに WrapDcm_InjectRequest() で要求を直接渡して確認する単体テスト用フィクスチャ。
  * SetUp(): 時刻と CanTp の wrap を初期化し、通信管理（ComM / CanSM / CanNm）は対象外として抑制したうえで、CanTp_Init(NULL)・Dem_Init(NULL)・Dcm_Init(NULL) を呼ぶ。
  * SendReadDtcInfo() は、要求のバイト列を渡す補助関数。
  * TearDown(): ComM の wrap を戻して、他のテストファイルへ影響を残さない。 */
@@ -69,6 +71,7 @@ protected:
     {
         FakeMillis_Reset();
         WrapCanTp_Reset();
+        CaptureEnabled_CanTp_Transmit = 1U;  // 応答を LastData_CanTp_Transmit へ複製する
         Suppressed_ComM_DcmDiagnostic = 1U;  // 本テストは通信管理(ComM/CanSM/CanNm)が対象外
         FakeDetHw_LogSuppressed = 1U;  // Init() のログはノイズになるため抑制
 
@@ -85,11 +88,11 @@ protected:
         WrapComM_Reset();  // 他のテストファイルへ影響を残さない
     }
 
-    /** [0x19, subFunc, ...] を組み立てて Dcm_ComIndication() へ直接渡す。 */
+    /** [0x19, subFunc, ...] を組み立てて Dcm へ直接渡す（WrapDcm_InjectRequest()）。 */
     void SendReadDtcInfo(const uint8* payload, uint8 len)
     {
         PduInfoType pdu = { const_cast<uint8*>(payload), len };
-        Dcm_ComIndication(0U, &pdu);
+        (void)WrapDcm_InjectRequest(pdu.SduDataPtr, (uint8)pdu.SduLength);
     }
 
     /** extendedSessionへ遷移し、requestSeed→sendKeyで実際にSecurityAccess
@@ -100,11 +103,11 @@ protected:
     {
         uint8 sessionReq[2] = { DCM_SID_SESSION_CTRL, DCM_SESSION_EXTENDED };
         PduInfoType sessionPdu = { sessionReq, sizeof(sessionReq) };
-        Dcm_ComIndication(0U, &sessionPdu);
+        (void)WrapDcm_InjectRequest(sessionPdu.SduDataPtr, (uint8)sessionPdu.SduLength);
 
         uint8 seedReq[2] = { DCM_SID_SECURITY_ACCESS, DCM_SEC_SUBFUNC_REQUEST_SEED };
         PduInfoType seedPdu = { seedReq, sizeof(seedReq) };
-        Dcm_ComIndication(0U, &seedPdu);
+        (void)WrapDcm_InjectRequest(seedPdu.SduDataPtr, (uint8)seedPdu.SduLength);
         ASSERT_EQ(LastData_CanTp_Transmit[0], 0x67U);
         uint16 seed = (uint16)(((uint16)LastData_CanTp_Transmit[2] << 8U) | (uint16)LastData_CanTp_Transmit[3]);
         uint16 key  = (uint16)(seed ^ DCM_SECURITY_KEY_MASK);
@@ -112,7 +115,7 @@ protected:
         uint8 keyReq[4] = { DCM_SID_SECURITY_ACCESS, DCM_SEC_SUBFUNC_SEND_KEY,
                              (uint8)(key >> 8U), (uint8)(key & 0xFFU) };
         PduInfoType keyPdu = { keyReq, sizeof(keyReq) };
-        Dcm_ComIndication(0U, &keyPdu);
+        (void)WrapDcm_InjectRequest(keyPdu.SduDataPtr, (uint8)keyPdu.SduLength);
         ASSERT_EQ(LastData_CanTp_Transmit[0], 0x67U) << "security unlock must succeed as a test precondition";
 
         WrapCanTp_Reset();
@@ -682,7 +685,7 @@ TEST_F(Bsw_Dcm_ReadDtcInfo_Test, SessionControl_NG_SuppressPosRspBitDoesNotSuppr
     /* ----------------------- */
     /* ---- 実行 (Act) ------- */
     /* ----------------------- */
-    Dcm_ComIndication(0U, &pdu);
+    (void)WrapDcm_InjectRequest(pdu.SduDataPtr, (uint8)pdu.SduLength);
 
     /* ----------------------- */
     /* ---- 評価 (Assert) ---- */
@@ -721,7 +724,7 @@ TEST_F(Bsw_Dcm_ReadDtcInfo_Test, SessionControl_OK_ReselectingSameSessionRelocks
     // ([0x10, 0x03]、現在アクティブなセッションへの再遷移)。
     uint8 sessionReq[2] = { DCM_SID_SESSION_CTRL, DCM_SESSION_EXTENDED };
     PduInfoType sessionPdu = { sessionReq, sizeof(sessionReq) };
-    Dcm_ComIndication(0U, &sessionPdu);
+    (void)WrapDcm_InjectRequest(sessionPdu.SduDataPtr, (uint8)sessionPdu.SduLength);
 
     /* ----------------------- */
     /* ---- 評価 (Assert) ---- */

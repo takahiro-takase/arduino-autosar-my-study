@@ -19,16 +19,16 @@ MCP2515 → Can → CanIf（CanId=0x7E0 → RxPduId=1）
                 PduR（パス 1: CanTp 専用ルート）
                   ↓
                 CanTp_RxIndication()
-                  SF → UDS ペイロードを即時渡し
-                  FF → FC 送信、CF 待ち
-                  CF → バッファ組立、完成後に渡し
+                  SF → Dcm_StartOfReception → Dcm_CopyRxData → Dcm_TpRxIndication
+                  FF → Dcm_StartOfReception、FC 送信、CF 待ち
+                  CF → Dcm_CopyRxData（Dcm の受信バッファへ直接）、完成後に Dcm_TpRxIndication
                   FC → TX 側の CF 送信を再開
                   ↓
-                Dcm_ComIndication() → UDS サービス処理
+                Dcm_TpRxIndication(E_OK) → UDS サービス処理
                   ↓
-                CanTp_Transmit()
-                  ≤7B → SF 送信
-                  ≥8B → FF 送信 → FC 待ち → CF 送信
+                CanTp_Transmit()（応答の長さだけを渡す）
+                  ≤7B → Dcm_CopyTxData → SF 送信 → Dcm_TpTxConfirmation
+                  ≥8B → Dcm_CopyTxData → FF 送信 → FC 待ち → CF ごとに Dcm_CopyTxData → 送信 → Dcm_TpTxConfirmation
                   ↓
                 PduR_CanTpTransmit(SrcPduId=1) → CanIf → Can
   │  CAN 0x7E8  [UDS 応答 / FC]
@@ -107,8 +107,8 @@ statusMask の代表値: `0x08`=confirmedDTC のみ / `0xFF`=全件。
 しませんでした（Com/Can とは異なる扱い）。今回、この状況を変えて
 ホスト上のユニットテスト環境（当時は `[env:native_dcm]`。現在は `[env:native_chain]` に統合済みで、
 テストは `test/Bsw/Dcm/` と `test/Bsw/DcmStack/`）を新設し、
-`Dcm_ComIndication()` に生の UDS バイト列を渡して `CanTp_Transmit()`
-（フェイクでキャプチャ）の応答を検証する形で 0x19 の主要 subFunc を
+`WrapDcm_InjectRequest()`（`Dcm_StartOfReception()` から `Dcm_TpRxIndication()` までの受信の流れ）で、
+生の UDS バイト列を渡して `CanTp_Transmit()`（wrap でキャプチャ）の応答を検証する形で 0x19 の主要 subFunc を
 カバーしました。実機での動作確認はこれとは別に行います。
 
 **uds_tester での動作確認**: `config.json` に「対応DTC全件取得 (0x19/0A)」
@@ -129,7 +129,7 @@ subFunc 0x0A の応答が一切送信されない不具合が見つかりまし�
 検出できませんでした。詳細と修正内容は
 [`CanTp_Notes.md`](./CanTp_Notes.md) の該当節を参照してください。
 
-`CANTP_TX_BUFFER_SIZE` を修正後（当時48バイト。ISO-TPのフレーム境界に
+`CANTP_TX_BUFFER_SIZE`（現在は廃止）を修正後（当時48バイト。ISO-TPのフレーム境界に
 一致し、`DEM_EVENT_COUNT` の今後の増加にも余裕を持たせた値。その後
 `DEM_EVENT_COUNT` の更なる増加により同種バグが再発し76バイトへ再拡張、
 再発防止の静的アサートも追加済み。詳細は
@@ -539,7 +539,7 @@ S3 の時間は、仕様（[SWS_Dcm_00143]）では 5 秒固定ですが、Teste
 増えすぎるため、本プロジェクトは `DCM_S3_TIMEOUT_MS`（`Dcm_Cfg.h`）を 60 秒にしています。
 
 ```
-Dcm_ComIndication（要求受信時、SID を問わず毎回）:
+Dcm_ProcessRequest（要求受信時、SID を問わず毎回。Dcm_TpRxIndication から呼ばれる）:
   Dcm_LastActivityMs = Dcm_GetNowMs()   ← S3 タイマをリセット（Os のカウンタ値）
 
 Dcm_MainFunction（1000ms 周期、Os Task 9）:
@@ -588,6 +588,24 @@ SecurityAccess の Level1（subFunc 0x01/0x02）でアンロックしないと N
 量産 ECU は OEM 固有の非公開アルゴリズムや暗号学的アルゴリズムを使用するため、
 本実装のロジックを実運用に転用しないでください。
 
+## CanTp との受け渡し（TP のコールバック、2026-10）
+
+Dcm は、CanTp との間で、仕様の TP の関数（`Dcm_Cbk.h` で宣言）を実装しています。
+
+| 関数 | 役割 |
+|------|------|
+| `Dcm_StartOfReception` | SF/FF の受信を受け入れるかを判定する。送信が進行中なら `BUFREQ_E_NOT_OK`（[SWS_Dcm_00557]）、要求が `DCM_RX_BUF_SIZE`（32 バイト）を超えるなら `BUFREQ_E_OVFL`。`TpSduLength` が 0 なら、受信バッファの大きさを返すだけ |
+| `Dcm_CopyRxData` | 受信したデータを、Dcm の受信バッファ（`Dcm_RxBuf`）の続きへコピーする。通知された長さを超えるデータは拒否する |
+| `Dcm_TpRxIndication` | 受信の終了。`E_OK` で、通知された長さのデータが揃っていれば、要求を処理する（`Dcm_ProcessRequest()`）。それ以外は、受信したデータを捨てる |
+| `Dcm_CopyTxData` | 応答（`Dcm_TxBuf`）の次の部分を、CanTp のフレームバッファへコピーする。`retry->TpDataState` が `TP_DATARETRY` なら、`TxTpDataCnt` バイト戻してからコピーする。要求した長さが残りより大きければ、何もコピーせず `BUFREQ_E_BUSY` |
+| `Dcm_TpTxConfirmation` | 送信の終了。「送信が進行中」の状態を解除する（以降、新しい要求を受け付け、S3 タイマも進む） |
+
+- 応答の送信（`Dcm_Transmit()`）は、`CanTp_Transmit()` に応答の長さだけを渡します。「送信が進行中」の印は、`CanTp_Transmit()` の中で `Dcm_TpTxConfirmation()` が呼ばれる場合（SF）に備えて、呼ぶ前に立てます。受け付けられなければ、すぐ解除します。
+- 要求の受信バッファ `DCM_RX_BUF_SIZE` は `Dcm_Cfg.h` に手書きしています（現在の最大の要求は 0x2E の鍵更新の 20 バイト）。
+- 仕様では PduR を経由します（`PduR_CanTpStartOfReception` など）が、本プロジェクトは PduR に TP の経路を持たないので、CanTp が Dcm を直接呼びます。
+- 応答の送信の確認（`Dcm_TpTxConfirmation`）が届くまで ComM の `InactiveDiagnostic` を待つのが仕様の趣旨ですが、既存の動作を変えないため、通知は、従来どおり応答の送信を始めた時点で行っています。
+- 未実装: `Dcm_TxConfirmation`（TP でない I-PDU の送信確認）。
+
 ## SID × セッション許可テーブル
 
 `SecurityAccess は extendedSession 限定`という制約は、当初
@@ -595,7 +613,7 @@ SecurityAccess の Level1（subFunc 0x01/0x02）でアンロックしないと N
 他のサービス（ClearDTC 等）にも同種のセッション制約が増えていくと、
 「どの SID がどのセッションで使えるか」が各ハンドラに分散して見通しにくくなります。
 そこで AUTOSAR の `DcmDspSessionRow` コンフィグに相当する一覧テーブルへ一般化し、
-`Dcm_ComIndication()` が SID ディスパッチの**前**に全 SID 共通で判定するようにしました。
+`Dcm_ProcessRequest()` が SID ディスパッチの**前**に全 SID 共通で判定するようにしました。
 
 ```c
 /* Dcm_PBCfg.c（config/data/Dcm.json から生成） */
@@ -643,7 +661,7 @@ Dcm と ComM は、双方向に通知し合います。
 
 - `ComM_BusSM_ModeIndication()` が、チャネルのモードを記録した直後に Dcm へ通知します。
 - NO_COM / SILENT_COM の間は、要求は処理しますが、応答は `CanTp_Transmit()` を呼ばずに破棄します（[SWS_Dcm_00148]/[SWS_Dcm_00153]）。FULL_COM の通知で送信が再開します。`Dcm_Init()` 直後は送信を許可しています（ComM からの通知があるまで）。
-- 診断要求は `Dcm_ComIndication()` の先頭で `ComM_DCM_ActiveDiagnostic()` を呼びます。SILENT_COM 中に届いた要求は、これでチャネルが FULL_COM へ戻り（協調スリープの取り消し）、応答が出ます。`Dcm_SetActiveDiagnostic(FALSE)` にすると、この「起こす」動作が止まり、SILENT_COM 中の応答は破棄されます。
+- 診断要求は `Dcm_ProcessRequest()` の先頭で `ComM_DCM_ActiveDiagnostic()` を呼びます。SILENT_COM 中に届いた要求は、これでチャネルが FULL_COM へ戻り（協調スリープの取り消し）、応答が出ます。`Dcm_SetActiveDiagnostic(FALSE)` にすると、この「起こす」動作が止まり、SILENT_COM 中の応答は破棄されます。
 - Dcm が扱うチャネルは 1 つ（`COMM_CHANNEL_0`）です。それ以外の通知は何もせずに戻ります（[SWS_Dcm_01324]〜[SWS_Dcm_01326]）。
 - ResponseOnEvent と周期送信（ReadDataByPeriodicIdentifier）は未対応のため、止めるのは通常の応答だけです。
 - 注意: `Dcm_SetActiveDiagnostic(FALSE)` の状態で SILENT_COM 中に要求が届くと、チャネルを起こさないため応答だけが破棄されます。要求の処理（セッションの変更や DTC の消去など）は済んでいるので、テスタは応答を受け取れないまま ECU の状態が変わりうります。既定の設定（TRUE）では、要求がチャネルを起こしてから応答するので起きません。

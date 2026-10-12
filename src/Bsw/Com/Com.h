@@ -176,7 +176,7 @@ uint8 Com_ReceiveSignalGroupArray(Com_SignalGroupIdType SignalGroupId, uint8* Da
  * \retval  0  タイムアウトしていない。
  *
  * \note    本プロジェクト独自 API（実 AUTOSAR に対応関数なし）のため、
- *          ServiceID は Dcm_ComIndication 等と同じ非標準値 0xF0 を踏襲する
+ *          ServiceID は本プロジェクト独自 API 共通の非標準値 0xF0 を踏襲する
  *          （Com_Cfg.h 参照）。
  * \ServiceID      {0xF0}
  * \Reentrancy     {Reentrant}

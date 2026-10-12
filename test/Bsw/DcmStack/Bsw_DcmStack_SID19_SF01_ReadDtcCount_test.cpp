@@ -4,7 +4,7 @@
  *          フェイク）を起点・終点とするフルコールチェーンテスト（GoogleTest /
  *          CMake native_chain_tests）。
  *
- * \details 他の `Bsw_Dcm_*_test.cpp` は `Dcm_ComIndication()` に生の UDS
+ * \details 他の `Bsw_Dcm_*_test.cpp` は `WrapDcm_InjectRequest()` で生の UDS
  *          バイト列を直接渡し `Wrap_CanTp.h` で応答をキャプチャする
  *          「入口と出口だけを見る」ブラックボックステストだが、本ファイルは
  *          その外側 — CAN物理フレームの受信（`Can_Hw`）から

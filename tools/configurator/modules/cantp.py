@@ -1,7 +1,7 @@
 """CanTp（CanTp_Cfg.h）のバッファ・フロー制御・タイムアウト・ID の定義の生成。
 
-CanTp.json に書く値: RX/TX バッファの大きさ、ブロックサイズと STmin、各タイムアウト [ms]、N-SDU の ID、
-診断応答の PduR の経路、各項目の説明。PduR の経路は PduR.json の txPaths の名前で指し、
+CanTp.json に書く値: ブロックサイズと STmin、各タイムアウト [ms]、N-SDU の ID、Dcm の I-PDU の ID、
+診断応答の PduR の経路、各項目の説明（CanTp は組み立て・分割のバッファを持たず、Dcm の受信・送信バッファを使う）。PduR の経路は PduR.json の txPaths の名前で指し、
 生成物ではシンボリック名（PduRConf_PduRSrcPdu_<name>）にする。
 """
 
@@ -10,9 +10,6 @@ from .defs import render_layout
 
 # 並び順どおりに出力する。("section", キー) は見出し、("define", キー, マクロ名, 書式) は定義。pdurTxSrcPdu は値を PduR のシンボルで上書きする。
 LAYOUT = (
-    ("section", "bufferSection"),
-    ("define", "rxBufferSize", "CANTP_RX_BUFFER_SIZE", "%dU"),
-    ("define", "txBufferSize", "CANTP_TX_BUFFER_SIZE", "%dU"),
     ("section", "flowControlSection"),
     ("define", "blockSize", "CANTP_BLOCK_SIZE", "%dU"),
     ("define", "stMin", "CANTP_ST_MIN", "%dU"),
@@ -24,6 +21,8 @@ LAYOUT = (
     ("define", "pdurTxSrcPdu", "CANTP_PDUR_TX_SDU_ID", "%s"),
     ("define", "txSduId", "CANTP_TX_SDU_ID", "%dU"),
     ("define", "rxSduId", "CANTP_RX_SDU_ID", "%dU"),
+    ("define", "dcmRxPduId", "CANTP_DCM_RX_PDU_ID", "%dU"),
+    ("define", "dcmTxPduId", "CANTP_DCM_TX_PDU_ID", "%dU"),
 )
 
 

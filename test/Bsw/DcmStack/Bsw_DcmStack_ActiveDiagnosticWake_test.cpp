@@ -13,13 +13,13 @@
  *          診断要求が届くと、要求は処理されるが応答が CanIf で拒否されて
  *          無言で失われていた（実機で 0x19/02 が一度だけ無応答になった事象）。
  *
- *          1. Dcm_ComIndication_OK_DefaultSessionRequestDuringSilentComWakesChannelAndResponds:
+ *          1. OK_DefaultSessionRequestDuringSilentComWakesChannelAndResponds:
  *             SILENT_COM 中の TesterPresent 要求で協調スリープが取り消されて
  *             FULL_COM へ復帰し、応答が Can_Hw まで到達すること。
- *          2. Dcm_ComIndication_OK_DefaultSessionRequestNotifiesActiveThenInactive:
+ *          2. OK_DefaultSessionRequestNotifiesActiveThenInactive:
  *             通常（FULL_COM）の要求では ActiveDiagnostic/InactiveDiagnostic が
  *             1 回ずつ呼ばれ、チャネルモードを乱さないこと。
- *          3. Dcm_ComIndication_OK_ExtendedSessionKeepsDiagnosticActive:
+ *          3. OK_ExtendedSessionKeepsDiagnosticActive:
  *             拡張セッションへ入った後は InactiveDiagnostic が呼ばれず、
  *             アクティブ状態が維持されること。
  */

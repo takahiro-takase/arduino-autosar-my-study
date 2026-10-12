@@ -5,7 +5,7 @@
  * \details SILENT_COM の通知で応答は破棄され（診断要求でチャネルを起こさない設定 Dcm_SetActiveDiagnostic(FALSE) の下で）、
  *          FULL_COM の通知で再開する。Dcm_ComM_*ModeEntered() を直接呼ぶテスト
  *          （Bsw_DcmStack_ComMModeEntered_Silent_test.cpp）と違い、ComM_BusSM_ModeIndication() 経由の配線を確認する。
- *          要求は Dcm_ComIndication() へ直接渡す（応答要求のたびに ComM/CanSM が下位層の状態を変えるため、
+ *          要求は WrapDcm_InjectRequest() で Dcm へ直接渡す（応答要求のたびに ComM/CanSM が下位層の状態を変えるため、
  *          CAN の受信は経由しない）。応答の送信可否は、CanTp_Transmit() が呼ばれたかで見る。
  */
 
@@ -35,6 +35,7 @@ extern "C" {
 #include "Wrap_PduR.h"
 #include "Wrap_CanTp.h"
 #include "Wrap_ComM.h"
+#include "Wrap_Dcm.h"
 }
 
 /* ======================================================================
@@ -187,13 +188,12 @@ TEST_F(Bsw_DcmStack_ComMModeEntered_Wiring_Test,
     // （起こすと FULL_COM に戻って応答が出る。Bsw_DcmStack_ActiveDiagnosticWake_test.cpp 参照）。
     ASSERT_EQ(Dcm_SetActiveDiagnostic(FALSE), E_OK);
     uint8 sdu[2] = { DCM_SID_TESTER_PRESENT, 0x00U };
-    PduInfoType pdu = { sdu, 2U };
     ComM_BusSM_ModeIndication(COMM_CHANNEL_0, COMM_SILENT_COMMUNICATION);
 
     /* ------------------------- */
     /* ---- 実行 (Act 1) ------- */
     /* ------------------------- */
-    Dcm_ComIndication(0U, &pdu);
+    (void)WrapDcm_InjectRequest(sdu, (uint8)sizeof(sdu));
 
     /* ------------------------- */
     /* ---- 評価 (Assert 1) ---- */
@@ -208,7 +208,7 @@ TEST_F(Bsw_DcmStack_ComMModeEntered_Wiring_Test,
     /* ------------------------- */
     /* ---- 実行 (Act 2) ------- */
     /* ------------------------- */
-    Dcm_ComIndication(0U, &pdu);
+    (void)WrapDcm_InjectRequest(sdu, (uint8)sizeof(sdu));
 
     /* ------------------------- */
     /* ---- 評価 (Assert 2) ---- */

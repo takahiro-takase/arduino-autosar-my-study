@@ -11,20 +11,20 @@
  *
  *            1. S3 セッションタイマー（[SWS_Dcm_00141]「CanTp 送信中は
  *               タイマが進まない」）
- *            2. `Dcm_ComIndication()` 自体の新規リクエスト無視
- *               （[SWS_Dcm_00557]、CanTp TX がビジーな間は新規要求を
- *               ディスパッチしない）
+ *            2. `Dcm_StartOfReception()` による新規リクエストの拒否
+ *               （[SWS_Dcm_00557]、応答の TP 送信が進行中の間は新規要求を
+ *               受け付けない）
  *
  *          旧 Bsw_Dcm_ControlDTCSetting_test.cpp の `S3Timer_OK_*` と
  *          旧 Bsw_Dcm_ReadDtcInfo_test.cpp の `ComIndication_NG/OK_*` は、
- *          いずれも `Wrap_CanTp.h`（`FailFromCallCount_CanTp_IsTxBusy`）で
+ *          いずれも `Wrap_CanTp.h` の故障注入（当時の `CanTp_IsTxBusy()` の強制）で
  *          CanTp のビジー状態を人工的に強制注入していたが、本ファイルでは
  *          SID 0x19/0x0A reportSupportedDTC（応答 3+DEM_EVENT_COUNT*4 バイト、マルチフレーム
  *          必須。Bsw_DcmStack_SID19_SF0A_ReadDtcSupported_test.cpp と
  *          同じ理由で選定）を実際に送信させ、First Frame 送信後・
  *          Consecutive Frame 送信完了前という「CanTp が本当にビジーな状態」
  *          を物理チェーン経由で作り出す。これにより、Dcm 側のビジー判定
- *          ロジックが実体の `CanTp_IsTxBusy()`（`-Wl,--wrap` 経由で既定
+ *          ロジックが実体の `CanTp_Test_IsTxBusy()`（`-Wl,--wrap` 経由で既定
  *          パススルー）から正しく通知を受け取れているかまで検証する
  *          （人工的なフォールトインジェクションでは、CanTp 自体の状態機械を
  *          経由しないため、配線そのものの正しさまでは検証できない）。
@@ -240,7 +240,7 @@ protected:
 
         ASSERT_EQ(FakeCanHw_SendCount, 1U);
         ASSERT_EQ(FakeCanHw_LastSendData[0], 0x10U);  // First Frame（応答は SF に収まらない長さ）
-        ASSERT_EQ(CanTp_IsTxBusy(), (boolean)1U);      // 本当にビジーであることの前提確認
+        ASSERT_EQ(CanTp_Test_IsTxBusy(), (boolean)1U);      // 本当にビジーであることの前提確認
     }
 
     /* Flow Control（CTS, BS=0, STmin=0）を注入し、残りの Consecutive
@@ -262,7 +262,7 @@ protected:
         for (uint8 cf = 0U; cf < kCfCount; cf++)
             CanTp_MainFunction();
 
-        ASSERT_EQ(CanTp_IsTxBusy(), (boolean)0U);  // 本当に IDLE へ戻ったことの確認
+        ASSERT_EQ(CanTp_Test_IsTxBusy(), (boolean)0U);  // 本当に IDLE へ戻ったことの確認
     }
 
     Can_ConfigType canConfig;
@@ -298,7 +298,7 @@ TEST_F(Bsw_DcmStack_CanTpBusy_Test,
     /* ---- 評価 (Assert) ---- */
     /* ----------------------- */
     // defaultSession へ落ちていないこと（実体の
-    // CanTp_IsTxBusy() から正しく通知を受け取れている傍証）。
+    // CanTp_Test_IsTxBusy() から正しく通知を受け取れている傍証）。
     Dcm_SesCtrlType session = 0U;
     ASSERT_EQ(Dcm_GetSesCtrlType(&session), E_OK);
     EXPECT_EQ(session, DCM_SESSION_EXTENDED);
@@ -342,7 +342,7 @@ TEST_F(Bsw_DcmStack_CanTpBusy_Test,
 }
 
 // ============================================================
-// Dcm_ComIndication() 自体の新規リクエスト無視（[SWS_Dcm_00557]）
+// Dcm_StartOfReception() による新規リクエストの拒否（[SWS_Dcm_00557]）
 // ============================================================
 
 TEST_F(Bsw_DcmStack_CanTpBusy_Test,

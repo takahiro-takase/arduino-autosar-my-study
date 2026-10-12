@@ -1,33 +1,6 @@
 {
   "$schema": "../schema/CanTp.schema.json",
   "module": "CanTp",
-  "bufferSection": [
-    "バッファサイズ"
-  ],
-  "rxBufferSize": {
-    "value": 32,
-    "doc": [
-      "RX N-SDU バッファサイズ (FF/CF 組立用): 32 バイト",
-      "対応可能な最大 UDS 要求ペイロード。現状の最大要求は WriteDataByIdentifier",
-      "CryptoKeyUpdate (0x2E, DID 0x0108) の 20 バイト（4ヘッダ+16文字キー）。"
-    ]
-  },
-  "txBufferSize": {
-    "value": 76,
-    "doc": [
-      "TX N-SDU バッファサイズ (FF/CF 分割用): 76 バイト",
-      "Dcm.c の DCM_TX_BUF_SIZE（3 + DEM_EVENT_COUNT*4、subFunc 0x0A の",
-      "DTC一覧応答の最大長）以上でなければならない。この制約は Dcm.c 側",
-      "（DCM_TX_BUF_SIZE 定義の直後）の静的アサートでビルド時に強制している。",
-      "",
-      "DEM_EVENT_COUNT 増加にこの値が追従せず実機の UDS 0x19 応答が無応答に",
-      "なるバグが過去2回発生（直近: 2026-09-20、10→14 増加時。経緯は git 履歴",
-      "参照）。76 = FF(6) + CF×10(7×10) という ISO-TP フレーム境界に一致する値で、",
-      "DEM_EVENT_COUNT が今後 18 まで増えてもこの値を再確認せずに済む余裕を",
-      "持たせている。余裕を使い切ってなお増やす場合は上記の静的アサートが",
-      "ビルドを止めて教える。"
-    ]
-  },
   "flowControlSection": [
     "フロー制御パラメータ (AUTOSAR CanTp N_USData.req の N_Ar, N_Bs, N_Cr)"
   ],
@@ -92,6 +65,18 @@
     "value": 0,
     "doc": [
       "CanTp_RxIndication() が受け取る RX N-SDU ID (診断要求チャネル)"
+    ]
+  },
+  "dcmRxPduId": {
+    "value": 0,
+    "doc": [
+      "Dcm_StartOfReception() / Dcm_CopyRxData() / Dcm_TpRxIndication() に渡す、Dcm の RX I-PDU の ID。"
+    ]
+  },
+  "dcmTxPduId": {
+    "value": 0,
+    "doc": [
+      "Dcm_CopyTxData() / Dcm_TpTxConfirmation() に渡す、Dcm の TX I-PDU の ID。"
     ]
   }
 }

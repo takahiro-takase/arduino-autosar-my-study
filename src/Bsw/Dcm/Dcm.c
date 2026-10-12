@@ -2,7 +2,7 @@
  * \file    Dcm.c
  * \brief   DCM モジュール実装 (AUTOSAR SWS_DCM 準拠, UDS ISO 14229-1)
  * \details `Dcm.h` が宣言する標準API全8関数（`Dcm_Init`/`Dcm_MainFunction`等）
- *          と、`Dcm_Cbk.h` が宣言する受信コールバック `Dcm_ComIndication`
+ *          と、`Dcm_Cbk.h` が宣言するTP の受信・送信コールバック（`Dcm_StartOfReception` など）
  *          （SIDディスパッチ本体）を、本ファイル1つにまとめて実装する
  *          （2026-09、旧ファイル名 `Dcm_Cbk.c` から改名。`Dcm_MainFunction`等の
  *          標準API群が「コールバック専用のはず」の名前のファイルに入っている
@@ -45,7 +45,7 @@
  *          CanTp の複数フレーム要求受信 (FF+CF) を実機検証する唯一の SID。
  *
  *          S3 タイマ:
- *            defaultSession 以外の間、Dcm_ComIndication() が呼ばれるたびに
+ *            defaultSession 以外の間、Dcm_ProcessRequest() が呼ばれるたびに
  *            最終活動時刻を更新する (TesterPresent に限らず全サービスが対象)。
  *            Dcm_MainFunction() が周期的に経過時間を確認し、
  *            DCM_S3_TIMEOUT_MS 以上要求が来なければ defaultSession へ復帰する。
@@ -123,7 +123,7 @@
  *            個別に再チェックしなくても未認証での到達経路が存在しない。
  *
  *          SID × セッション許可 (Dcm_SidSessionTable[], AUTOSAR DcmDspSessionRow 相当):
- *            Dcm_ComIndication() が SID ディスパッチの前に全 SID 共通で判定する。
+ *            Dcm_ProcessRequest() が SID ディスパッチの前に全 SID 共通で判定する。
  *            テーブルに掲載のない SID はセッション制約なし。現在は
  *            0x14・0x27・0x2E・0x2F・0x31・0x34・0x36・0x37・0x85
  *            のみ extendedSession 限定とし、defaultSession では NRC 0x7F
@@ -213,7 +213,7 @@ static uint8 Dcm_CurrentSession;
  *  [SWS_Dcm_00202] 相当: サブ機能を持つ各 SID のハンドラが uds[1] から bit7
  *  を読み取ってこの変数へ格納し、正応答送信直前の Dcm_TransmitPositiveResponse()
  *  がこれを見て抑制する（否定応答は対象外。Dcm_SendNegativeResponse() は
- *  この変数を見ずに常に送信する）。Dcm_ComIndication() が新規リクエストの
+ *  この変数を見ずに常に送信する）。Dcm_ProcessRequest() が新規リクエストの
  *  たびに 0 へリセットするため、リクエストを跨いで持ち越されることはない
  *  （[SWS_Dcm_00204]: サブ機能を持たない SID では誰もこの変数を立てないため
  *  常に 0 のまま=抑制なし）。 */
@@ -306,10 +306,25 @@ static uint8 Dcm_TransferChecksum;
 /** UDS 応答バッファ (PCI バイトなし; CanTp がトランスポート層を付加する) */
 static uint8 Dcm_TxBuf[DCM_TX_BUF_SIZE];
 
-/** CANTP_TX_BUFFER_SIZE 追従し忘れの再発防止（経緯は CanTp_Cfg.h 参照）。
- *  AVR/native 両ビルドで有効な C89 互換の静的アサート（負配列サイズは違法）。 */
-/* cppcheck-suppress misra-c2012-2.3 */
-typedef char Dcm_TxBuf_Must_Fit_In_CanTp_TxBuffer[(CANTP_TX_BUFFER_SIZE >= DCM_TX_BUF_SIZE) ? 1 : -1];
+/** 応答の送信位置（Dcm_CopyTxData() が次にコピーするバイトの位置）。CanTp は、応答の送信バッファを持たず、
+ *  フレームごとに Dcm_CopyTxData() で、この Dcm_TxBuf から取り出す。 */
+static PduLengthType Dcm_TxPos;
+
+/** 1 = 診断応答の TP 送信が進行中（CanTp_Transmit() の受け付けから、Dcm_TpTxConfirmation() まで）。
+ *  進行中は新しい要求を受け付けない（[SWS_Dcm_00557]）。S3 タイマも止める（[SWS_Dcm_00141]）。 */
+static uint8 Dcm_TxInProgress;
+
+/** UDS 要求の受信バッファ。CanTp は、Dcm_CopyRxData() でここへ直接コピーする。 */
+static uint8 Dcm_RxBuf[DCM_RX_BUF_SIZE];
+
+/** Dcm_StartOfReception() で通知された、受信する N-SDU 全体の長さ */
+static PduLengthType Dcm_RxTotal;
+
+/** Dcm_RxBuf へコピー済みのバイト数 */
+static PduLengthType Dcm_RxLen;
+
+/** 1 = TP 受信の途中（Dcm_StartOfReception() の受け入れから、Dcm_TpRxIndication() まで） */
+static uint8 Dcm_RxActive;
 
 /** DID 0x0104 (TestPattern) の格納領域。CanTp の複数フレーム要求受信を
  *  検証するための学習用データ（実際の車両データではない）。 */
@@ -319,6 +334,11 @@ static uint8 Dcm_TestPattern[DCM_DID_TEST_PATTERN_LENGTH];
  *  起動時に一度だけ Dcm_GetVin() を呼んで埋める（Dcm_GetVin() の Doxygen
  *  コメント参照）。 */
 static uint8 Dcm_Vin[DCM_VIN_LENGTH];
+
+/** TransferData の要求（SID 1 + blockSequenceCounter 1 + データ）が、受信バッファ（DCM_RX_BUF_SIZE）に収まることの静的アサート。
+ *  maxNumberOfBlockLength（DCM_TRANSFER_MAX_BLOCK_LENGTH）は、その総バイト数の上限としてテスタへ通知する。 */
+/* cppcheck-suppress misra-c2012-2.3 */
+typedef char Dcm_TransferBlock_Must_Fit_RxBuf[(DCM_TRANSFER_MAX_BLOCK_LENGTH <= DCM_RX_BUF_SIZE) ? 1 : -1];
 
 /** 手書きの読み出し関数が書き込む長さを、生成した応答バッファ長が超えないことの静的アサート（Dcm.json の length と関数の食い違い防止） */
 /* cppcheck-suppress misra-c2012-2.3 */
@@ -367,6 +387,7 @@ static void Dcm_HandleControlDTCSetting(const uint8* uds, uint8 udsLen);
 static void Dcm_DTCSettingReset(void);
 static void Dcm_UpdateComMRequest(uint8 session);
 static void Dcm_NotifyActiveDiagnostic(void);
+static void Dcm_ProcessRequest(const uint8* uds, uint8 udsLen);
 static void Dcm_SetTxEnabled(uint8 networkId, uint8 enabled);
 static void Dcm_HandleSecurityAccess(const uint8* uds, uint8 udsLen);
 static void Dcm_HandleSecurityRequestSeed(uint8 subFunc, uint8 udsLen);
@@ -422,6 +443,12 @@ void Dcm_Init(const Dcm_ConfigType* ConfigPtr)
     Dcm_TransferState = DCM_TRANSFER_STATE_IDLE;
 
     Dcm_DTCSettingDisabled = 0U;
+
+    Dcm_TxInProgress = 0U;
+    Dcm_TxPos        = 0U;
+    Dcm_RxActive     = 0U;
+    Dcm_RxLen        = 0U;
+    Dcm_RxTotal      = 0U;
 
     Dcm_ActiveDiagnostic = 1U;  /* [SWS_Dcm_01069] */
     Dcm_TxEnabled        = 1U;  /* ComM からの通知（Dcm_ComM_*ModeEntered）があるまで送信を許可する */
@@ -697,31 +724,295 @@ Std_ReturnType Dcm_SetActiveDiagnostic(boolean active)
  * Dcm_StartOfReception
  * ----------------------------------------------------------------------- */
 
-/* 未実装 */
+/**
+ * \brief   TP 受信の開始を Dcm へ伝える（SF の受信、または FF の受信）。
+ *
+ * \details [SWS_Dcm_00094]。受け入れの判定は次のとおり。
+ *            - 未初期化: DET を報告し、BUFREQ_E_NOT_OK。
+ *            - TpSduLength が 0: 受信バッファの大きさを bufferSizePtr で返すだけ（BUFREQ_OK）。
+ *            - 診断応答の TP 送信が進行中: BUFREQ_E_NOT_OK（[SWS_Dcm_00557]。TesterPresent だけ S3
+ *              タイマを更新する、という例外つきの仕様だが、本実装は要求の SID を、この時点では知らないので、
+ *              要求が届いたこと自体をテスタの生存の証跡として、S3 タイマを更新する）。
+ *            - TpSduLength が DCM_RX_BUF_SIZE を超える: BUFREQ_E_OVFL。
+ *          受け入れたら、受信中の印を立て、受信済みのバイト数を 0 に戻す。進行中の受信があっても、
+ *          新しい受信を優先する（CanTp が、FF/SF による中断の時に、古い受信を Dcm_TpRxIndication(E_NOT_OK)
+ *          で閉じるため、通常は残っていない）。info は使わない（本プロジェクトは MetaData を持たず、
+ *          データは Dcm_CopyRxData() で受け取る）。
+ *
+ * \param[in]   id             I-PDU の識別子（単一チャネルのため未使用）。
+ * \param[in]   info           FF/SF のペイロードと MetaData。未使用。
+ * \param[in]   TpSduLength    受信する N-SDU 全体の長さ。
+ * \param[out]  bufferSizePtr  Dcm の受信バッファの空き。NULL 禁止。
+ *
+ * \retval  BUFREQ_OK        受信を受け入れた。
+ * \retval  BUFREQ_E_NOT_OK  受信を拒否した（未初期化、NULL ポインタ、診断応答の送信が進行中）。
+ * \retval  BUFREQ_E_OVFL    TpSduLength が受信バッファより大きい。
+ *
+ * \AUTOSARReq     {SWS_Dcm_00094}
+ * \ServiceID      {0x46}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+BufReq_ReturnType Dcm_StartOfReception(PduIdType id, const PduInfoType* info, PduLengthType TpSduLength, PduLengthType* bufferSizePtr)
+{
+    (void)id;
+    (void)info;
+
+    if (!Dcm_Initialized)
+    {
+        (void)Det_ReportError(DCM_MODULE_ID, 0U, DCM_API_ID_START_OF_RECEPTION, DCM_E_UNINIT);
+        return BUFREQ_E_NOT_OK;
+    }
+
+    if (bufferSizePtr == NULL)
+    {
+        (void)Det_ReportError(DCM_MODULE_ID, 0U, DCM_API_ID_START_OF_RECEPTION, DCM_E_PARAM_POINTER);
+        return BUFREQ_E_NOT_OK;
+    }
+
+    if (TpSduLength == 0U)
+    {
+        *bufferSizePtr = (PduLengthType)DCM_RX_BUF_SIZE;   /* 問い合わせだけ */
+        return BUFREQ_OK;
+    }
+
+    if (Dcm_TxInProgress != 0U)
+    {
+        Dcm_LastActivityMs = Dcm_GetNowMs();
+        DET_LOGW(TAG, "reception rejected (response TX in progress)");
+        return BUFREQ_E_NOT_OK;
+    }
+
+    if (TpSduLength > (PduLengthType)DCM_RX_BUF_SIZE)
+    {
+        DET_LOGW(TAG, "reception rejected (len=%u > %u)", (unsigned)TpSduLength, (unsigned)DCM_RX_BUF_SIZE);
+        return BUFREQ_E_OVFL;
+    }
+
+    Dcm_RxTotal    = TpSduLength;
+    Dcm_RxLen      = 0U;
+    Dcm_RxActive   = 1U;
+    *bufferSizePtr = (PduLengthType)DCM_RX_BUF_SIZE;
+    return BUFREQ_OK;
+}
 
 /* -----------------------------------------------------------------------
  * Dcm_CopyRxData
  * ----------------------------------------------------------------------- */
 
-/* 未実装 */
+/**
+ * \brief   受信した N-SDU の一部（N-PDU のデータ）を、Dcm の受信バッファへコピーする。
+ *
+ * \details [SWS_Dcm_00556]。呼ぶたびに、N-SDU の次の部分を Dcm_RxBuf の続きへ追加する。
+ *          SduLength が 0 なら、空きを問い合わせるだけで、SduDataPtr は NULL でもよい。
+ *          受信中でない場合、または Dcm_StartOfReception() で通知された長さを超えるデータは、
+ *          BUFREQ_E_NOT_OK で拒否する。
+ *
+ * \param[in]   id             受信した I-PDU の識別子（未使用）。
+ * \param[in]   info           コピー元（SduDataPtr）とバイト数（SduLength）。
+ * \param[out]  bufferSizePtr  コピー後の、Dcm の受信バッファの空き。NULL 禁止。
+ *
+ * \retval  BUFREQ_OK        コピーした。
+ * \retval  BUFREQ_E_NOT_OK  コピーしなかった。
+ *
+ * \AUTOSARReq     {SWS_Dcm_00556}
+ * \ServiceID      {0x44}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+BufReq_ReturnType Dcm_CopyRxData(PduIdType id, const PduInfoType* info, PduLengthType* bufferSizePtr)
+{
+    (void)id;
+
+    if (!Dcm_Initialized)
+    {
+        (void)Det_ReportError(DCM_MODULE_ID, 0U, DCM_API_ID_COPY_RX_DATA, DCM_E_UNINIT);
+        return BUFREQ_E_NOT_OK;
+    }
+
+    if ((info == NULL) || (bufferSizePtr == NULL) || ((info->SduLength > 0U) && (info->SduDataPtr == NULL)))
+    {
+        (void)Det_ReportError(DCM_MODULE_ID, 0U, DCM_API_ID_COPY_RX_DATA, DCM_E_PARAM_POINTER);
+        return BUFREQ_E_NOT_OK;
+    }
+
+    if (Dcm_RxActive == 0U)
+    {
+        return BUFREQ_E_NOT_OK;
+    }
+
+    if ((PduLengthType)(Dcm_RxLen + info->SduLength) > Dcm_RxTotal)
+    {
+        DET_LOGW(TAG, "rx data exceeds announced length");
+        return BUFREQ_E_NOT_OK;
+    }
+
+    PduLengthType i;
+    for (i = 0U; i < info->SduLength; i++)
+    {
+        Dcm_RxBuf[Dcm_RxLen + i] = info->SduDataPtr[i];
+    }
+    Dcm_RxLen = (PduLengthType)(Dcm_RxLen + info->SduLength);
+
+    *bufferSizePtr = (PduLengthType)((PduLengthType)DCM_RX_BUF_SIZE - Dcm_RxLen);
+    return BUFREQ_OK;
+}
 
 /* -----------------------------------------------------------------------
  * Dcm_TpRxIndication
  * ----------------------------------------------------------------------- */
 
-/* 未実装 */
+/**
+ * \brief   TP 受信の終了を Dcm へ伝える。
+ *
+ * \details [SWS_Dcm_00093]。result が E_OK で、通知された長さのデータが揃っていれば、受信した
+ *          UDS 要求を処理する（Dcm_ProcessRequest()）。それ以外（E_NOT_OK、データ不足）は、
+ *          受信したデータを捨てる。
+ *
+ * \param[in]  id      受信した I-PDU の識別子（未使用）。
+ * \param[in]  result  受信の結果。
+ *
+ * \AUTOSARReq     {SWS_Dcm_00093}
+ * \ServiceID      {0x45}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void Dcm_TpRxIndication(PduIdType id, Std_ReturnType result)
+{
+    (void)id;
+
+    if (!Dcm_Initialized)
+    {
+        (void)Det_ReportError(DCM_MODULE_ID, 0U, DCM_API_ID_TP_RX_INDICATION, DCM_E_UNINIT);
+        return;
+    }
+
+    if (Dcm_RxActive == 0U)
+    {
+        return;
+    }
+    Dcm_RxActive = 0U;
+
+    if ((result != E_OK) || (Dcm_RxLen != Dcm_RxTotal) || (Dcm_RxLen == 0U))
+    {
+        DET_LOGW(TAG, "reception discarded (result=%u len=%u/%u)",
+                 (unsigned)result, (unsigned)Dcm_RxLen, (unsigned)Dcm_RxTotal);
+        return;
+    }
+
+    Dcm_ProcessRequest(Dcm_RxBuf, (uint8)Dcm_RxLen);
+}
 
 /* -----------------------------------------------------------------------
  * Dcm_CopyTxData
  * ----------------------------------------------------------------------- */
 
-/* 未実装 */
+/**
+ * \brief   送信する N-SDU の一部（N-PDU のデータ）を、CanTp の送信バッファへコピーする。
+ *
+ * \details [SWS_Dcm_00092]。CanTp が SF・FF・各 CF を組み立てる時に呼ぶ。呼ぶたびに、応答
+ *          （Dcm_TxBuf）の次の部分を info->SduDataPtr へコピーし、送信位置を進める。
+ *          retry->TpDataState が TP_DATARETRY のときは、先に送信位置を TxTpDataCnt バイト戻して
+ *          から、その位置からコピーする。SduLength が 0 のときは、コピーせずに残りのバイト数
+ *          だけを返す。送信が進行中でない場合は、BUFREQ_E_NOT_OK。要求した長さ
+ *          （SduLength）が残りより大きい場合は、何もコピーせず BUFREQ_E_BUSY を返す。
+ *
+ * \param[in]   id                 送信する I-PDU の識別子（未使用）。
+ * \param[in]   info               コピー先（SduDataPtr）とバイト数（SduLength）。
+ * \param[in]   retry              送信済みデータの確認・再送の指示。NULL なら、コピーしたデータはすぐ捨ててよい。
+ * \param[out]  availableDataPtr   コピー後の、応答の残りのバイト数。NULL 禁止。
+ *
+ * \retval  BUFREQ_OK        要求どおりにコピーした。
+ * \retval  BUFREQ_E_BUSY    要求した長さのデータが無い。何もコピーしていない。
+ * \retval  BUFREQ_E_NOT_OK  コピーしなかった。
+ *
+ * \AUTOSARReq     {SWS_Dcm_00092}
+ * \ServiceID      {0x43}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+BufReq_ReturnType Dcm_CopyTxData(PduIdType id, const PduInfoType* info, const RetryInfoType* retry, PduLengthType* availableDataPtr)
+{
+    (void)id;
+
+    if (!Dcm_Initialized)
+    {
+        (void)Det_ReportError(DCM_MODULE_ID, 0U, DCM_API_ID_COPY_TX_DATA, DCM_E_UNINIT);
+        return BUFREQ_E_NOT_OK;
+    }
+
+    if ((info == NULL) || (availableDataPtr == NULL) || ((info->SduLength > 0U) && (info->SduDataPtr == NULL)))
+    {
+        (void)Det_ReportError(DCM_MODULE_ID, 0U, DCM_API_ID_COPY_TX_DATA, DCM_E_PARAM_POINTER);
+        return BUFREQ_E_NOT_OK;
+    }
+
+    if (Dcm_TxInProgress == 0U)
+    {
+        return BUFREQ_E_NOT_OK;
+    }
+
+    if ((retry != NULL) && (retry->TpDataState == TP_DATARETRY))
+    {
+        if (retry->TxTpDataCnt > Dcm_TxPos)
+        {
+            return BUFREQ_E_NOT_OK;   /* 先頭より前へは戻れない */
+        }
+        Dcm_TxPos = (PduLengthType)(Dcm_TxPos - retry->TxTpDataCnt);
+    }
+
+    PduLengthType remaining = (PduLengthType)(Dcm_TxPdu.SduLength - Dcm_TxPos);
+    if (info->SduLength > remaining)
+    {
+        return BUFREQ_E_BUSY;
+    }
+
+    PduLengthType i;
+    for (i = 0U; i < info->SduLength; i++)
+    {
+        info->SduDataPtr[i] = Dcm_TxBuf[Dcm_TxPos + i];
+    }
+    Dcm_TxPos = (PduLengthType)(Dcm_TxPos + info->SduLength);
+
+    *availableDataPtr = (PduLengthType)(Dcm_TxPdu.SduLength - Dcm_TxPos);
+    return BUFREQ_OK;
+}
 
 /* -----------------------------------------------------------------------
  * Dcm_TpTxConfirmation
  * ----------------------------------------------------------------------- */
 
-/* 未実装 */
+/**
+ * \brief   TP 送信の終了を Dcm へ伝える。
+ *
+ * \details [SWS_Dcm_00351]。応答の最後のフレームを送った時（E_OK）、または送信を中断した時
+ *          （E_NOT_OK）に、CanTp が呼ぶ。Dcm は、送信が進行中である状態を解除する（以降、新しい要求を
+ *          受け付け、S3 タイマも進む）。
+ *
+ * \param[in]  id      送信した I-PDU の識別子（未使用）。
+ * \param[in]  result  送信の結果。
+ *
+ * \AUTOSARReq     {SWS_Dcm_00351}
+ * \ServiceID      {0x48}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void Dcm_TpTxConfirmation(PduIdType id, Std_ReturnType result)
+{
+    (void)id;
+
+    if (!Dcm_Initialized)
+    {
+        (void)Det_ReportError(DCM_MODULE_ID, 0U, DCM_API_ID_TP_TX_CONFIRMATION, DCM_E_UNINIT);
+        return;
+    }
+
+    if (result != E_OK)
+    {
+        DET_LOGW(TAG, "response TX aborted");
+    }
+    Dcm_TxInProgress = 0U;
+}
 
 /* -----------------------------------------------------------------------
  * Dcm_TxConfirmation
@@ -912,17 +1203,14 @@ void Dcm_MainFunction(void)
         return;
     }
 
-    if (CanTp_IsTxBusy())
+    if (Dcm_TxInProgress != 0U)
     {
         /* [SWS_Dcm_00141]: S3Server タイマは最終応答の送信完了
-         * (Dcm_TpTxConfirmation) まで停止しているべきだが、本プロジェクトは
-         * Dcm_TpTxConfirmation相当のコールバック自体を持たない
-         * ([SWS_Dcm_00557]対応時の`Dcm_ComIndication()`と同じ制約)。CanTp
-         * TX がビジー（前回応答、特にマルチフレームの送信未完了）の間は
-         * 毎周期タイマを更新し続けることで、タイマが進まない代用とする
-         * （2026-09 追加。以前はこのチェックが無く、応答送信が長時間かかった
-         * 場合（gs_usb の TX スタック不具合等）に、送信継続中でも S3
-         * タイムアウトが誤発火しうる状態だった）。 */
+         * (Dcm_TpTxConfirmation) まで停止しているべき。応答の TP 送信が進行中
+         * （特にマルチフレームの送信未完了）の間は、毎周期タイマを更新し続けることで、
+         * タイマが進まない代わりとする（2026-09 追加。以前はこのチェックが無く、
+         * 応答送信が長時間かかった場合（gs_usb の TX スタック不具合等）に、送信継続中でも
+         * S3 タイムアウトが誤発火しうる状態だった）。 */
         Dcm_LastActivityMs = Dcm_GetNowMs();
         return;
     }
@@ -1018,7 +1306,7 @@ static void Dcm_SetTxEnabled(uint8 networkId, uint8 enabled)
 /**
  * \brief   Dcm_TxBuf の内容を CanTp 経由で CAN 0x7E8 に送信する。
  *
- * \details CanTp がペイロード長に応じて SF/FF+CF を選択する。
+ * \details CanTp がペイロード長に応じて SF/FF+CF を選択し、データは Dcm_CopyTxData() で取りに来る。
  *          呼び出し前に Dcm_TxPdu.SduLength を設定すること。
  *          ComM のチャネルが FULL_COM でない間（Dcm_ComM_NoComModeEntered()/
  *          Dcm_ComM_SilentComModeEntered() の後、Dcm_ComM_FullComModeEntered() まで）は、
@@ -1033,7 +1321,18 @@ static void Dcm_Transmit(void)
         DET_LOGW(TAG, "response dropped (ComM channel is not in FULL_COM)");
         return;
     }
-    (void)CanTp_Transmit(CANTP_TX_SDU_ID, &Dcm_TxPdu);
+    /* CanTp_Transmit() は、応答の長さだけを受け取る。データは、CanTp が Dcm_CopyTxData() で取りに来る
+     * （SF は CanTp_Transmit() の中で、MF は FF と各 CF の組み立ての時に）。進行中の印は、
+     * CanTp_Transmit() の中で Dcm_TpTxConfirmation() が呼ばれる場合（SF）に備えて、呼ぶ前に立てる。 */
+    PduInfoType info;
+    info.SduDataPtr = NULL;
+    info.SduLength  = Dcm_TxPdu.SduLength;
+    Dcm_TxPos        = 0U;
+    Dcm_TxInProgress = 1U;
+    if (CanTp_Transmit(CANTP_TX_SDU_ID, &info) != E_OK)
+    {
+        Dcm_TxInProgress = 0U;   /* 受け付けられなかった（確認通知も来ない） */
+    }
 }
 
 /**
@@ -1283,7 +1582,7 @@ static void Dcm_HandleEcuReset(const uint8* uds, uint8 udsLen)
  *          2関数呼び分けを Dem_ClearDTC() 1関数へ統合。Dem.h 参照）。
  *          該当する DTC が無ければ NRC 0x31。いずれの場合も正応答 [0x54] を返す。
  *          DTC 履歴の消去は誤操作・悪用の影響が大きいため二重に保護する:
- *            ・extendedSession 限定（Dcm_ComIndication の Dcm_SidSessionTable[] が判定、
+ *            ・extendedSession 限定（Dcm_ProcessRequest の Dcm_SidSessionTable[] が判定、
  *              defaultSession では本関数に到達する前に NRC 0x7F で拒否される）
  *            ・SecurityAccess Level1 アンロック必須（本関数内で判定、未アンロックは NRC 0x33）
  *
@@ -2757,7 +3056,7 @@ static void Dcm_HandleSecuritySendKey(uint8 subFunc, const uint8* uds, uint8 uds
 /**
  * \brief   UDS 0x27 SecurityAccess のサブ機能をディスパッチする。
  *
- * \details extendedSession 限定であることは Dcm_ComIndication の
+ * \details extendedSession 限定であることは Dcm_ProcessRequest の
  *          Dcm_SidSessionTable[] チェックで一元的に保証済みのため、
  *          本関数ではセッション判定を行わない。
  *
@@ -2924,7 +3223,7 @@ static void Dcm_HandleRoutineRequestResults(uint16 rid)
 /**
  * \brief   UDS 0x31 RoutineControl のサブ機能をディスパッチする。
  *
- * \details extendedSession 限定であることは Dcm_ComIndication の
+ * \details extendedSession 限定であることは Dcm_ProcessRequest の
  *          Dcm_SidSessionTable[] チェックで一元的に保証済みのため、
  *          本関数ではセッション判定を行わない。対応 RID は
  *          DCM_RID_ENGINE_HEALTH_CHECK (0x0203) のみ。
@@ -3244,7 +3543,7 @@ static void Dcm_HandleRequestTransferExit(const uint8* uds, uint8 udsLen)
 /**
  * \brief   UDS 0x3E TesterPresent を処理する。
  *
- * \details S3 タイマをリセットする (Dcm_ComIndication で全 SID 共通リセット済みのため
+ * \details S3 タイマをリセットする (Dcm_ProcessRequest で全 SID 共通リセット済みのため
  *          本関数では追加処理不要)。subFunction は ISO 14229-1 の
  *          zeroSubFunction (0x00、bit7 は suppressPosRspMsgIndicationBit) のみ
  *          有効で、それ以外は NRC 0x12 (subFunctionNotSupported) を返す
@@ -3331,73 +3630,21 @@ static uint8 Dcm_IsServiceAllowedInSession(uint8 sid, uint8 session)
 }
 
 /* -----------------------------------------------------------------------
- * Dcm_ComIndication — CanTp から呼び出されるエントリポイント
+ * 要求の処理（Dcm_TpRxIndication から呼ぶ）
  * ----------------------------------------------------------------------- */
 
 /**
- * \brief   CanTp から配信された UDS ペイロードを処理する。
+ * \brief   受信した UDS 要求を処理する。
  *
- * \details CanTp が ISO 15765-2 トランスポート層を処理済みであるため、
- *          PduInfoPtr には PCI バイトを含まない生 UDS ペイロードが格納されている。
- *          先頭バイト (uds[0]) が UDS サービス ID (SID) となる。
+ * \details 受信バッファ（Dcm_RxBuf）の中の、PCI を含まない生の UDS ペイロード（先頭バイトが SID）
+ *          を処理し、SID ディスパッチまで行う。
  *
- *          前回の応答送信（特にマルチフレーム）が `CanTp_MainFunction()` に
- *          より継続中の場合、新規要求は一切ディスパッチせず無視する
- *          （[SWS_Dcm_00557]、2026-09 追加。詳細は本関数内のコメント参照）。
- *
- * \param[in]  RxPduId     受信 PDU ID（未使用; CanTp からの単一チャネル固定）。
- * \param[in]  PduInfoPtr  組立済み UDS ペイロードへのポインタ。NULL 禁止。
- *
- * \AUTOSARReq     {SWS_Dcm_00557}
- * \ServiceID      {0xF0}
- * \Reentrancy     {Reentrant}
- * \Synchronicity  {Synchronous}
+ * \param[in]  uds     UDS ペイロード先頭ポインタ（uds[0] が SID）。
+ * \param[in]  udsLen  UDS ペイロード長（1 以上）。
  */
-void Dcm_ComIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
+static void Dcm_ProcessRequest(const uint8* uds, uint8 udsLen)
 {
-    (void)RxPduId;
-
-    if (!Dcm_Initialized)
-    {
-        (void)Det_ReportError(DCM_MODULE_ID, 0U, DCM_API_ID_COM_INDICATION, DCM_E_UNINIT);
-        return;
-    }
-
-    if ((PduInfoPtr == NULL) || (PduInfoPtr->SduDataPtr == NULL))
-    {
-        (void)Det_ReportError(DCM_MODULE_ID, 0U, DCM_API_ID_COM_INDICATION, DCM_E_PARAM_POINTER);
-        return;
-    }
-
-    if (PduInfoPtr->SduLength == 0U)
-    {
-        return;  /* 空フレームは DET 対象外（NULL ポインタではないため） */
-    }
-
-    /* CanTp が PCI を除去済み: 先頭バイトは UDS SID */
-    const uint8* uds    = PduInfoPtr->SduDataPtr;
-    uint8        udsLen = (uint8)PduInfoPtr->SduLength;
-    uint8        sid    = uds[0];
-
-    if (CanTp_IsTxBusy())
-    {
-        /* [SWS_Dcm_00557]: 同一コネクション上で処理中の診断要求がある間、
-         * 新規要求は Dcm_StartOfReception() で BUFREQ_E_NOT_OK として拒否
-         * すべき（TesterPresentのみS3タイマ更新目的でBUFREQ_OKを返すが
-         * 以降処理はしない、という例外つき）。本実装はCanTpが受信の
-         * 組立を独立して完結させ Dcm_StartOfReception() 相当の段階受理
-         * API 自体を持たないため、Dcm が関与できる最も早い地点である
-         * 本関数冒頭でこれに相当するチェックを行う。「処理中」の判定は
-         * CanTp TX チャネルのビジー状態（前回応答、特にマルチフレームの
-         * 送信未完了）で代用する（2026-09 追加。以前はこのチェックが無く、
-         * 要求は最後まで処理されるが応答だけが CanTp_Transmit() の
-         * ビジー判定で黙って消えていた）。S3 タイマは
-         * [SWS_Dcm_00557]のTesterPresent特例と同じ理由で更新する
-         * （要求が届いたこと自体がテスター生存の証跡）。 */
-        Dcm_LastActivityMs = Dcm_GetNowMs();
-        DET_LOGW(TAG, "req SID=0x%02X ignored (CanTp TX busy)", (unsigned)sid);
-        return;
-    }
+    uint8 sid = uds[0];
 
     /* [SWS_Dcm_00202]: suppressPosRspMsgIndicationBit の状態はリクエストごとに
      * 独立して評価する（前回リクエストの抑制状態を持ち越さない）。サブ機能を
@@ -3431,9 +3678,9 @@ void Dcm_ComIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
     /* [SWS_Dcm_01374]/[SWS_Dcm_01377]: 要求の処理が終わり、かつデフォルトセッション
      * なら診断インアクティブを通知する（拡張セッション中はアクティブのまま。S3
      * タイムアウトやデフォルト復帰時は Dcm_UpdateComMRequest() が通知する）。
-     * 厳密な「処理完了」は応答の送信確認（Dcm_TpTxConfirmation、未実装）だが、
-     * 本実装では応答の送信開始時点で代用する。多フレーム応答の残りの CF は
-     * CanNm の NM-Timeout（既定 3000ms）が働くため完走できる。 */
+     * 厳密な「処理完了」は応答の送信確認（Dcm_TpTxConfirmation）だが、既存の動作
+     * （応答の送信開始時点での通知）を変えないため、通知はここで行う。多フレーム応答の
+     * 残りの CF は CanNm の NM-Timeout（既定 3000ms）が働くため完走できる。 */
     if (Dcm_CurrentSession == DCM_SESSION_DEFAULT)
     {
         ComM_DCM_InactiveDiagnostic(COMM_CHANNEL_0);

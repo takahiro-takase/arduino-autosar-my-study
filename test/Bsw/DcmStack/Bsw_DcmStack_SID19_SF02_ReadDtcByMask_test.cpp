@@ -145,6 +145,7 @@ protected:
         WrapCanIf_Reset();
         WrapPduR_Reset();
         WrapCanTp_Reset();
+        CaptureEnabled_CanTp_Transmit = 1U;  // 応答を LastData_CanTp_Transmit へ複製する
         FakeDetHw_LogSuppressed = 1U;  // Init() のログはノイズになるため抑制
 
         canConfig.filter.filterId = 0x0000U;
@@ -357,7 +358,7 @@ TEST_F(Bsw_DcmStack_SID19_SF02_ReadDtcByMask_Test,
     // 内容を結合すると Dcm が生成した元の11バイト UDS ペイロードと完全
     // 一致すること。
     ASSERT_EQ(pos, 11U);
-    EXPECT_EQ(CanTp_IsTxBusy(), (boolean)0U);
+    EXPECT_EQ(CanTp_Test_IsTxBusy(), (boolean)0U);
     for (uint8 i = 0U; i < 11U; i++)
     {
         EXPECT_EQ(reassembled[i], LastData_CanTp_Transmit[i]) << "byte " << (unsigned)i;

@@ -165,6 +165,7 @@ protected:
         WrapCanIf_Reset();
         WrapPduR_Reset();
         WrapCanTp_Reset();
+        CaptureEnabled_CanTp_Transmit = 1U;  // 応答を LastData_CanTp_Transmit へ複製する
         FakeDetHw_LogSuppressed = 1U;  // Init() のログはノイズになるため抑制
 
         canConfig.filter.filterId = 0x0000U;
@@ -312,7 +313,7 @@ TEST_F(Bsw_DcmStack_SID19_SF0A_ReadDtcSupported_Test,
     // IDLE（ビジーでない）へ戻っていること。
     ASSERT_EQ(pos, kResponseLen);
     EXPECT_EQ(FakeCanHw_SendCount, static_cast<uint32>(1U + kCfCount));  // FF 1 + CF
-    EXPECT_EQ(CanTp_IsTxBusy(), (boolean)0U);
+    EXPECT_EQ(CanTp_Test_IsTxBusy(), (boolean)0U);
 
     /* ------------------------- */
     /* ---- 評価 (Assert 3) ---- */
