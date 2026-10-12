@@ -57,15 +57,6 @@ extern "C" void Fee_Hw_ReadBlock(void* DstRam, uint16 EepromAddr, uint16 Length)
     }
 }
 
-extern "C" void Fee_Hw_WriteBlock(const void* SrcRam, uint16 EepromAddr, uint16 Length)
-{
-    const uint8* src = (const uint8*)SrcRam;
-    for (uint16 i = 0U; i < Length; i++)
-    {
-        EEPROM.update((int)(EepromAddr + i), src[i]);
-    }
-}
-
 extern "C" void Fee_Hw_WriteByte(uint16 EepromAddr, uint8 Value)
 {
     EEPROM.update((int)EepromAddr, Value);

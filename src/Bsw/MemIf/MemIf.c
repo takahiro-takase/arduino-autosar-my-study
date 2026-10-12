@@ -140,19 +140,6 @@ Std_ReturnType MemIf_Write(MemIf_DeviceType Device, uint16 Address, const uint8*
 }
 
 /* ----------------------------------------------------------------------
- * MemIf_WriteImmediate
- * ---------------------------------------------------------------------- */
-
-Std_ReturnType MemIf_WriteImmediate(MemIf_DeviceType Device, uint16 Address, const uint8* DataBufferPtr, uint16 Length)
-{
-    if (!MemIf_CheckDevice(Device, MEMIF_API_ID_WRITE_IMMEDIATE))
-    {
-        return E_NOT_OK;
-    }
-    return Fee_WriteImmediate(Address, DataBufferPtr, Length);
-}
-
-/* ----------------------------------------------------------------------
  * MemIf_Cancel
  * ---------------------------------------------------------------------- */
 

@@ -40,11 +40,6 @@ void Fee_Hw_ReadBlock(void* DstRam, uint16 EepromAddr, uint16 Length)
     memcpy(DstRam, &FakeFeeHw_Buffer[EepromAddr], Length);
 }
 
-void Fee_Hw_WriteBlock(const void* SrcRam, uint16 EepromAddr, uint16 Length)
-{
-    memcpy(&FakeFeeHw_Buffer[EepromAddr], SrcRam, Length);
-}
-
 void Fee_Hw_WriteByte(uint16 EepromAddr, uint8 Value)
 {
     FakeFeeHw_Buffer[EepromAddr] = Value;

@@ -52,10 +52,7 @@
                                           *   [SWS_Fee_00184]。2026-09 追加） */
 
 /** ApiId（各関数の Doxygen \ServiceID タグと一致させること。実装している API は
- *  [SWS_Fee_00084]〜[SWS_Fee_00191] の Service ID[hex] と一致させた。
- *  Fee_WriteImmediate は AUTOSAR 非標準（実 AUTOSAR では FeeImmediateData
- *  ブロック属性として Fee_Write に統合される。Fee.h 冒頭のコメント参照）の
- *  ため、実仕様が 0x00〜0x09 を使い切った直後の未使用値 0x0A を割り当てる。 */
+ *  [SWS_Fee_00084]〜[SWS_Fee_00191] の Service ID[hex] と一致させた。 */
 /* cppcheck-suppress misra-c2012-2.5 */
 #define FEE_API_ID_INIT              0x00U
 #define FEE_API_ID_SET_MODE           0x01U
@@ -68,7 +65,6 @@
 #define FEE_API_ID_GET_VERSION_INFO   0x08U
 /* cppcheck-suppress misra-c2012-2.5 */
 #define FEE_API_ID_MAIN_FUNCTION      0x12U
-#define FEE_API_ID_WRITE_IMMEDIATE    0x0AU  /**< AUTOSAR 非標準（Fee.h 参照） */
 
 /** バージョン情報（Com/E2EXf/PduR 等の既存モジュールと同じ命名規則） */
 #define FEE_VENDOR_ID          0U

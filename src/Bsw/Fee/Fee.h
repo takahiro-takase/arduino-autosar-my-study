@@ -20,10 +20,9 @@
  *            - Fee_Read() は同期 API。EcuM_Init() が Os スケジューラ開始前
  *              (Fee_MainFunction() を誰も呼べない期間) に NvM_Init() 経由で
  *              使うことしか想定していないため、ブロッキングしても無害。
- *            - Fee_WriteImmediate() も同期 API（AUTOSAR の
- *              FeeImmediateData ブロック属性に相当する「即時書き込み」）。
- *              NvM の CRC 不一致時の自動デフォルト復元など、Fee_Read() と
- *              同じく Os スケジューラ開始前の文脈でのみ使う。
+ *            - 書き込みは Fee_Write()（非同期ジョブ）のみ。NvM_Init() の CRC 不一致時の
+ *              復元も、Os スケジューラ開始前に MemIf_MainFunction() を回して完了を待つ
+ *              （NvM.c の NvM_WriteJobSync() 参照）。
  *            - 本実装は「論理ブロック番号 → 物理アドレス」を変換する
  *              FeeBlockConfiguration テーブルを持たない（学習用簡略化。
  *              呼び出し元が NvM 1 個のみで、かつ NvM_PBCfg.c が既に
@@ -184,28 +183,6 @@ Std_ReturnType Fee_Read(uint16 Address, uint8* DataBufferPtr, uint16 Length);
  * \Synchronicity  {Asynchronous}
  */
 Std_ReturnType Fee_Write(uint16 Address, const uint8* DataBufferPtr, uint16 Length);
-
-/**
- * \brief   指定アドレスへ Length バイトを同期的に（即時）書き込む。
- *
- * \details AUTOSAR の FeeImmediateData ブロック属性に相当。Os スケジューラ
- *          開始前の利用のみを想定した同期 API。ブロッキングする。
- *          実 AUTOSAR には独立した関数としては存在しない（FeeImmediateData=
- *          TRUE のブロックに対する Fee_Write() が内部的に同期実行される
- *          という仕様のため）本プロジェクト独自の API（Fee_Cfg.h 参照）。
- *
- * \param[in]  Address        書き込み開始アドレス。
- * \param[in]  DataBufferPtr  書き込み元データ。NULL 禁止。
- * \param[in]  Length         書き込むバイト数。0 禁止。
- *
- * \retval  E_OK      正常完了。
- * \retval  E_NOT_OK  未初期化、NULL、または Length=0。
- *
- * \ServiceID      {0x0A}
- * \Reentrancy     {Reentrant}
- * \Synchronicity  {Synchronous}
- */
-Std_ReturnType Fee_WriteImmediate(uint16 Address, const uint8* DataBufferPtr, uint16 Length);
 
 /**
  * \brief   処理中の非同期ジョブを中断する。
