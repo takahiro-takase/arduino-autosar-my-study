@@ -265,6 +265,157 @@ TEST_F(Bsw_Adc_Test, Adc_GetGroupStatus_NG_InvalidGroup)
 }
 
 // ------------------------------------------------------------
+// 未初期化（Adc_DeInit() の後）
+// ------------------------------------------------------------
+
+TEST_F(Bsw_Adc_Test, Adc_SetupResultBuffer_NG_Uninit)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    Adc_Init(NULL);
+    Adc_ValueGroupType buf = 0U;
+    ASSERT_EQ(Adc_SetupResultBuffer(ADC_GROUP_SENSOR, &buf), E_OK);
+    Adc_DeInit();
+    FakeDetHw_Reset();
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Std_ReturnType ret = Adc_SetupResultBuffer(ADC_GROUP_SENSOR, &buf);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_NOT_OK);
+    EXPECT_EQ(FakeDetHw_LastErrorId, ADC_E_UNINIT);
+    EXPECT_EQ(FakeDetHw_LastApiId, ADC_API_ID_SETUP_RESULT_BUFFER);
+}
+
+TEST_F(Bsw_Adc_Test, Adc_StartGroupConversion_NG_Uninit)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    Adc_Init(NULL);
+    Adc_ValueGroupType buf = 0U;
+    ASSERT_EQ(Adc_SetupResultBuffer(ADC_GROUP_SENSOR, &buf), E_OK);
+    Adc_DeInit();
+    FakeDetHw_Reset();
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Adc_StartGroupConversion(ADC_GROUP_SENSOR);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(FakeDetHw_LastErrorId, ADC_E_UNINIT);
+    EXPECT_EQ(FakeDetHw_LastApiId, ADC_API_ID_START_GROUP_CONVERSION);
+}
+
+TEST_F(Bsw_Adc_Test, Adc_ReadGroup_NG_Uninit)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    Adc_Init(NULL);
+    Adc_ValueGroupType buf = 0U;
+    ASSERT_EQ(Adc_SetupResultBuffer(ADC_GROUP_SENSOR, &buf), E_OK);
+    Adc_DeInit();
+    FakeDetHw_Reset();
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Adc_ValueGroupType raw = 0U;
+    Std_ReturnType ret = Adc_ReadGroup(ADC_GROUP_SENSOR, &raw);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_NOT_OK);
+    EXPECT_EQ(FakeDetHw_LastErrorId, ADC_E_UNINIT);
+    EXPECT_EQ(FakeDetHw_LastApiId, ADC_API_ID_READ_GROUP);
+}
+
+TEST_F(Bsw_Adc_Test, Adc_GetGroupStatus_NG_Uninit)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    Adc_Init(NULL);
+    Adc_ValueGroupType buf = 0U;
+    ASSERT_EQ(Adc_SetupResultBuffer(ADC_GROUP_SENSOR, &buf), E_OK);
+    Adc_DeInit();
+    FakeDetHw_Reset();
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Adc_StatusType st = Adc_GetGroupStatus(ADC_GROUP_SENSOR);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(st, ADC_IDLE);
+    EXPECT_EQ(FakeDetHw_LastErrorId, ADC_E_UNINIT);
+    EXPECT_EQ(FakeDetHw_LastApiId, ADC_API_ID_GET_GROUP_STATUS);
+}
+
+// ------------------------------------------------------------
+// Adc_DeInit()
+// ------------------------------------------------------------
+
+TEST_F(Bsw_Adc_Test, Adc_DeInit_NG_Uninit)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    Adc_Init(NULL);
+    Adc_ValueGroupType buf = 0U;
+    ASSERT_EQ(Adc_SetupResultBuffer(ADC_GROUP_SENSOR, &buf), E_OK);
+    Adc_DeInit();
+    FakeDetHw_Reset();
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Adc_DeInit();
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(FakeDetHw_LastErrorId, ADC_E_UNINIT);
+    EXPECT_EQ(FakeDetHw_LastApiId, ADC_API_ID_DEINIT);
+}
+
+TEST_F(Bsw_Adc_Test, Adc_DeInit_NG_BusyWhileResultNotRead)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    Adc_Init(NULL);
+    Adc_ValueGroupType buf = 0U;
+    ASSERT_EQ(Adc_SetupResultBuffer(ADC_GROUP_SENSOR, &buf), E_OK);
+    Adc_StartGroupConversion(ADC_GROUP_SENSOR);   // ADC_STREAM_COMPLETED（結果を読み出していない）
+    FakeDetHw_Reset();
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Adc_DeInit();
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(FakeDetHw_LastErrorId, ADC_E_BUSY);
+    EXPECT_EQ(FakeDetHw_LastApiId, ADC_API_ID_DEINIT);
+    EXPECT_EQ(Adc_GetGroupStatus(ADC_GROUP_SENSOR), ADC_STREAM_COMPLETED);   // 何もしない（初期化済みのまま）
+}
+
+// ------------------------------------------------------------
 // Adc_GetVersionInfo()
 // ------------------------------------------------------------
 

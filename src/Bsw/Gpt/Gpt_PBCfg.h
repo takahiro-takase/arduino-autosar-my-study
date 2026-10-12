@@ -25,6 +25,7 @@
  * Definitions
  * ====================================================================== */
 
+/* @@GEN-BEGIN gpt-channels  生成元: config/data/Gpt.json  （自動生成: 手編集禁止） */
 /** 管理チャネル総数 (Gpt_PBCfg.c の Gpt_ChannelTable 要素数と一致させること) */
 #define GPT_CHANNEL_COUNT  2U
 
@@ -32,9 +33,10 @@
 #define GPT_CHANNEL_0  0U
 
 /** Channel 1: Os が自身のスケジューラ用ティックカウンタとして専有する
- *  (src/Os/Os.c 参照)。Notification は使わず、Os は Gpt_GetTimeElapsed() を
- *  ポーリングするだけなので、他モジュールはこのチャネルに触れないこと。 */
+ *   (src/Os/Os.c 参照)。Notification は使わず、Os は Gpt_GetTimeElapsed() を
+ *   ポーリングするだけなので、他モジュールはこのチャネルに触れないこと。 */
 #define GPT_CHANNEL_1  1U
+/* @@GEN-END gpt-channels */
 
 /* ======================================================================
  * Type Definitions

@@ -51,22 +51,24 @@
 #define PORT_SW_MINOR_VERSION   0U
 #define PORT_SW_PATCH_VERSION   0U
 
+/* @@GEN-BEGIN port-pins  生成元: config/data/Port.json  （自動生成: 手編集禁止） */
 /** 管理ピン総数 */
-#define PORT_PIN_COUNT          4U
+#define PORT_PIN_COUNT  4U
 
 /** RUNNING LED (D6) — 出力ピン（エンジン正常稼働中に点灯） */
-#define PORT_PIN_LED_RUNNING    6U
+#define PORT_PIN_LED_RUNNING  6U
 
 /** FAULT LED (D7) — 出力ピン（異常状態に点滅） */
-#define PORT_PIN_LED_FAULT      7U
+#define PORT_PIN_LED_FAULT  7U
 
 /** ABS / 警告灯 LED (D8) — 出力ピン（ABS 作動中に点灯） */
-#define PORT_PIN_LED_WARNING    8U
+#define PORT_PIN_LED_WARNING  8U
 
 /** 警告確認ボタン (D9) — 入力ピン (INPUT_PULLUP)
- *  FAULT 状態でボタン押下 → FAULT→OFF 遷移。
- *  ボタン押下時は GND と接続され DIO_LOW が読まれる。
- *  IoHwAb_Button_GetLevel() で論理反転して 押下=1 に変換する。 */
-#define PORT_PIN_BUTTON         9U
+ *   FAULT 状態でボタン押下 → FAULT→OFF 遷移。
+ *   ボタン押下時は GND と接続され DIO_LOW が読まれる。
+ *   IoHwAb_Button_GetLevel() で論理反転して 押下=1 に変換する。 */
+#define PORT_PIN_BUTTON  9U
+/* @@GEN-END port-pins */
 
 #endif /* PORT_CFG_H */

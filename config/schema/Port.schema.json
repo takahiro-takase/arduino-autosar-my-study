@@ -1,0 +1,79 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Port configuration",
+  "description": "Port_Cfg.h の設計値の #define の生成元（items[] に、ファイルに出す順で書く。形式は tools/configurator/modules/defines.py 参照）。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "module",
+    "items"
+  ],
+  "$defs": {
+    "lines": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "not": {
+          "pattern": "\\*/"
+        }
+      }
+    },
+    "define": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "macro",
+        "value"
+      ],
+      "properties": {
+        "macro": {
+          "type": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+        },
+        "value": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    }
+  },
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "module": {
+      "const": "Port"
+    },
+    "items": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "見出し（section）か、説明（doc）と #define の並び（defines）のどちらか一方を書く",
+        "properties": {
+          "section": {
+            "$ref": "#/$defs/lines",
+            "description": "見出しコメントの行（罫線で囲んで出す）"
+          },
+          "doc": {
+            "$ref": "#/$defs/lines",
+            "description": "定義の直前に出す Doxygen コメントの行"
+          },
+          "unused": {
+            "type": "boolean",
+            "description": "真なら MISRA C:2012 Rule 2.5（未使用マクロ）の抑止コメントを付ける"
+          },
+          "defines": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "$ref": "#/$defs/define"
+            }
+          }
+        }
+      }
+    }
+  }
+}

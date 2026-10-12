@@ -114,6 +114,11 @@ extern uint32 CallCount_Dem_GetOccurrenceCounterOfEvent;
 extern Dem_EventIdType     LastEventId_Dem_SetEventStatus;
 extern Dem_EventStatusType LastEventStatus_Dem_SetEventStatus;
 
+/** `Dem_SetEventStatus` で、イベント ID ごとに直近で報告されたステータス（未報告は 0xFF）。
+ *  複数のイベントを続けて報告する処理（NvM_MainFunction() の起動時診断の報告など）で、
+ *  イベントごとの結果を確認するために使う。添字はイベント ID（DEM_EVENT_COUNT 未満）。 */
+extern Dem_EventStatusType LastStatusOfEvent_Dem_SetEventStatus[DEM_EVENT_COUNT];
+
 /* ----------------------------------------------------------------------
  * 回数閾値故障注入（戻り値を持つ15関数のみ。Dem_SetEventStatus と
  * Dem_GetTranslationType は対象外、上記コメント参照）

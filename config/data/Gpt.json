@@ -1,0 +1,68 @@
+{
+  "$schema": "../schema/Gpt.schema.json",
+  "module": "Gpt",
+  "items": [
+    {
+      "doc": [
+        "管理チャネル総数 (Gpt_PBCfg.c の Gpt_ChannelTable 要素数と一致させること)"
+      ],
+      "defines": [
+        {
+          "macro": "GPT_CHANNEL_COUNT",
+          "value": "2U"
+        }
+      ]
+    },
+    {
+      "doc": [
+        "チャネル ID（Gpt_PBCfg.c の Gpt_ChannelTable 配列インデックスと一致させること）"
+      ],
+      "defines": [
+        {
+          "macro": "GPT_CHANNEL_0",
+          "value": "0U"
+        }
+      ]
+    },
+    {
+      "doc": [
+        "Channel 1: Os が自身のスケジューラ用ティックカウンタとして専有する",
+        " (src/Os/Os.c 参照)。Notification は使わず、Os は Gpt_GetTimeElapsed() を",
+        " ポーリングするだけなので、他モジュールはこのチャネルに触れないこと。"
+      ],
+      "defines": [
+        {
+          "macro": "GPT_CHANNEL_1",
+          "value": "1U"
+        }
+      ]
+    }
+  ],
+  "channels": [
+    {
+      "heading": "Channel 0",
+      "id": "GPT_CHANNEL_0",
+      "mode": "CONTINUOUS",
+      "tickFrequencyHz": 1000,
+      "tickValueMax": "0xFFFFFFFFU",
+      "notification": "App_GptDemo_OnTick",
+      "notes": {
+        "tickFrequencyHz": "1ms 分解能",
+        "tickValueMax": "32-bit フルレンジ"
+      }
+    },
+    {
+      "heading": "Channel 1: Os 専用のスケジューラティック（Notification 不要）",
+      "id": "GPT_CHANNEL_1",
+      "mode": "CONTINUOUS",
+      "tickFrequencyHz": 1000,
+      "tickValueMax": "0xFFFFFFFFU",
+      "notification": null,
+      "notes": {
+        "tickFrequencyHz": "1ms 分解能",
+        "tickValueMax": "32-bit フルレンジ (millis() 同様に自然ラップ)",
+        "notification": "Os は Gpt_GetTimeElapsed() をポーリングするだけ"
+      }
+    }
+  ]
+}

@@ -171,7 +171,7 @@ HAL ─── MCU 依存の最下層（Can_Hw / Dio_Hw ほか、src/Hal/ に集�
 ├── stub/                   # テスト用の差し替え（src/ と同じ構成。Fake_*=HW 差し替え、Wrap_*=--wrap による呼び出し記録）
 ├── test_scripts/           # 実機の結合テストスクリプト（CAPL 風 .capl / .py。tools/can_tool から実行）
 ├── config/
-│   ├── data/               # 設定データ（信号表 can_signals.json と、CanIf / Com / PduR / E2EXf / SecOC / Csm・Crypto・KeyM / BswM の設定 json）
+│   ├── data/               # 設定データ（信号表 can_signals.json と、各モジュールの設定 json。CanIf / Com / PduR / CanNm / CanSM / CanTp / ComM / Nm / Dcm / Dem / NvM / WdgM / FiM / Can / E2EXf / SecOC / Csm・Crypto・KeyM / BswM / Os / Rte / Port / Dio / Adc / EcuM / Gpt）
 │   └── schema/             # 設定 json のスキーマ
 ├── tools/
 │   ├── can_tool/           # UDS ボタン送信 / CAPL 風スクリプト / 信号エディタ・設定 JSON エディタ（Python）
@@ -201,15 +201,15 @@ HAL ─── MCU 依存の最下層（Can_Hw / Dio_Hw ほか、src/Hal/ に集�
 |  | App_<br>WarningIndicator | — | — | 警告灯制御 SWC (LED 3灯)<br>（[詳細](docs/modules/App_WarningIndicator_Notes.md)） |
 | RTE | Rte | — | — | SWC 間シグナル仲介 (RTE ミラー)・COM コールバック (`Rte_Cbk.h`)<br>（[詳細](docs/modules/Rte_Notes.md)） |
 | OS | Os | — | SWS_Os<br>API 数は対象外<br>(協調スケジューラ。OSEK の API は未実装で、カウンタ API のみ実装) | タイムトリガスケジューラ・カウンタ API (`GetCounterValue` / `GetElapsedValue`、BSW の時刻取得窓口)<br>（[詳細](docs/modules/Os_Notes.md)） |
-| BSW | Adc | 123 | SWS_Adc<br>API実装: 2 / 18<br>(一部意図的に簡略化) | アナログ入力ドライバ<br>（[詳細](docs/modules/Adc_Notes.md)） |
+| BSW | Adc | 123 | SWS_Adc<br>API実装: 6 / 18<br>(一部意図的に簡略化) | アナログ入力ドライバ<br>（[詳細](docs/modules/Adc_Notes.md)） |
 |  | BswM | 42 | SWS_BswM<br>API実装: 6 / 32<br>(一部意図的に簡略化) | BSW モード管理・状態遷移の一元制御<br>（[詳細](docs/modules/BswM_Notes.md)） |
 |  | Can | 80 | SWS_Can<br>API実装: 10 / 16 | CAN コントローラドライバ (MCP2515)<br>（[詳細](docs/modules/Can_Notes.md)） |
-|  | CanIf | 60 | SWS_CanIf<br>API実装: 16 / 35 | CAN コントローラ抽象化層<br>（[詳細](docs/modules/CanIf_Notes.md)） |
+|  | CanIf | 60 | SWS_CanIf<br>API実装: 17 / 35 | CAN コントローラ抽象化層<br>（[詳細](docs/modules/CanIf_Notes.md)） |
 |  | CanNm | 31 | SWS_CanNM<br>API実装: 14 / 24 | ネットワークマネジメント (CAN NM)<br>（[詳細](docs/modules/CanNm_Notes.md)） |
 |  | CanSM | 140 | SWS_CanSM<br>API実装: 8 / 19 | CAN ネットワーク状態管理 (Bus-Off 回復・CanNm 連携)<br>（[詳細](docs/modules/CanSM_Notes.md)） |
 |  | CanTp | 35 | SWS_CanTp<br>API実装: 4 / 9<br>(一部意図的に簡略化) | ISO 15765-2 トランスポートプロトコル<br>（[詳細](docs/modules/CanTp_Notes.md)） |
 |  | Com | 50 | SWS_Com<br>API実装: 22 / 32 | シグナルベース通信管理<br>（[詳細](docs/modules/Com_Notes.md)） |
-|  | ComM | 12 | SWS_ComM<br>API実装: 16 / 28 | 通信マネージャ (チャネル状態集約)<br>（[詳細](docs/modules/ComM_Notes.md)） |
+|  | ComM | 12 | SWS_ComM<br>API実装: 17 / 28 | 通信マネージャ (チャネル状態集約)<br>（[詳細](docs/modules/ComM_Notes.md)） |
 |  | CryIf | 112 | SWS_CryptoInterface<br>API実装: 6 / 17<br>パススルー<br>(下位が1個のため) | 暗号ドライバへのルーティング層<br>（[詳細](docs/modules/CryIf_Notes.md)） |
 |  | Crypto | 114 | SWS_CryptoDriver<br>API実装: 6 / 18<br>(一部意図的に簡略化) | 暗号処理ドライバ (AES-128-CMAC)<br>（[詳細](docs/modules/Crypto_Notes.md)） |
 |  | Csm | 110 | SWS_CryptoServiceManager<br>API実装: 7 / 74<br>(一部意図的に簡略化) | 暗号サービスマネージャ<br>（[詳細](docs/modules/Csm_Notes.md)） |
@@ -220,7 +220,7 @@ HAL ─── MCU 依存の最下層（Can_Hw / Dio_Hw ほか、src/Hal/ に集�
 |  | E2E | — | SWS_E2E<br>API実装: 13 / 43<br>(一部意図的に簡略化) | エンドツーエンド保護ライブラリ (Profile01/05)<br>（[詳細](docs/modules/E2E_Notes.md)） |
 |  | E2EXf | 176 | SWS_E2ELibrary 12.4<br>(E2E Transformer)<br>API 数は対象外<br>(一部意図的に簡略化) | E2E トランスフォーマ (Rte⇔E2E ライブラリ統合)<br>（[詳細](docs/modules/E2EXf_Notes.md)） |
 |  | E2EMon | — | — (独自 CDD 相当) | ネットワーク健全性モニタ (独自 CDD)<br>（[詳細](docs/modules/E2EMon_Notes.md)） |
-|  | EcuM | 10 | SWS_EcuStateManager<br>API実装: 8 / 53 | ECU ステートマネージャ (起動・シャットダウン制御)<br>（[詳細](docs/modules/EcuM_Notes.md)） |
+|  | EcuM | 10 | SWS_EcuStateManager<br>API実装: 9 / 53 | ECU ステートマネージャ (起動・シャットダウン制御)<br>（[詳細](docs/modules/EcuM_Notes.md)） |
 |  | Fee | 21 | SWS_Fee<br>API実装: 9 / 13<br>(一部意図的に簡略化) | フラッシュエミュレーション EEPROM ドライバ<br>（[詳細](docs/modules/Fee_Notes.md)） |
 |  | FiM | 11 | SWS_FiM<br>API実装: 4 / 6<br>(一部意図的に簡略化) | 機能抑止マネージャ<br>（[詳細](docs/modules/FiM_Notes.md)） |
 |  | Gpt | 100 | SWS_Gpt<br>API実装: 9 / 14<br>(一部意図的に簡略化) | 汎用タイマドライバ<br>（[詳細](docs/modules/Gpt_Notes.md)） |
@@ -321,7 +321,7 @@ python tools/api_coverage/api_coverage.py --update-readme # README の表の数�
 
 実 HW を使わず、BSW モジュールのロジックを PC 上で GoogleTest により検証します。
 単一モジュールのテストも、複数モジュールにまたがる関数コールチェーンのテストも、
-`native_chain_tests` という 1 つのテストバイナリにまとめています（2026-10 時点で 868 件）。
+`native_chain_tests` という 1 つのテストバイナリにまとめています（2026-10 時点で 908 件）。
 
 ビルドは PlatformIO ではなく CMake + clang++（llvm-mingw）です。事前に環境変数
 `LLVM_MINGW_BIN` へ llvm-mingw の `bin` ディレクトリを設定してください。
@@ -391,7 +391,7 @@ python tools/configurator/sync_cfg.py    # 信号表に追加したフレーム�
 python tools/configurator/gen_cfg.py     # スキーマ・整合性を検査して、生成領域を更新（--check で差分の確認のみ）
 ```
 
-- 対象は CanIf / Com / PduR / E2EXf / SecOC / Csm・Crypto・KeyM / Rte（信号アクセス関数）/ Dem（診断イベント）/ NvM（ブロック構成）/ WdgM（監視対象）/ FiM（機能の抑止）/ Can（コントローラ設定）/ BswM です。生成領域は、C ソースの
+- 対象は CanIf / Com / PduR / E2EXf / SecOC / Csm・Crypto・KeyM / Rte（信号アクセス関数）/ Dem（診断イベント）/ NvM（ブロック構成）/ WdgM（監視対象）/ FiM（機能の抑止）/ Can（コントローラ設定）/ BswM / Port・Dio・Adc・EcuM（設計値の定義）/ Gpt（チャネルテーブル）/ Os（タスク表。BswM のタスク ID もここから生成）/ CanNm（NM フレーム・タイマ、CanNm 側の PDU の ID）/ CanSM / CanTp / ComM / Nm（各モジュールの定数・ID）/ Dcm（DID 定義）です。生成領域は、C ソースの
   `@@GEN-BEGIN` から `@@GEN-END` までの間だけで、手で編集しません。
 - CAN ID、DLC、ビット位置などの値の正本は信号表です。設定 JSON はフレーム名で参照するだけで、値をコピーしません。
 - 設定 JSON は、`tools/can_tool` の左側のナビゲーション（`Com`、`PduR`、`CanIf` など）で、スキーマ（`config/schema/`）に従って GUI から編集できます。
@@ -469,7 +469,8 @@ EcuM が状態遷移を決定し、BswM がその状態に応じたタスクの�
 > 実装でも、`BswM.c` は `BswM_ComM_CurrentMode()` という受動的なコールバックのみで
 > ComM/CanSM を呼ばず、`WdgM.c` は ComM/CanSM と一切無関係、`EcuM.c` からの呼び出しも
 > 起動時（`ComM_Init()` / `ComM_CommunicationAllowed()` / `ComM_RequestComMode()`）と、
-> ウェイクアップ通知（`CanSM_ControllerModeIndication()`）に限られます。実際のコールグラフの密度は
+> ウェイクアップの通知・検証（`CanSM_ControllerModeIndication()` / `CanIf_CheckValidation()` /
+> `EcuM_ValidateWakeupEvent()` から `ComM_EcuM_WakeUpIndication()`）に限られます。実際のコールグラフの密度は
 > CanIf/Can 側にあるため、ComM/CanSM/CanNm は
 > 「[CAN 通信状態管理](docs/can_stack.md#can-comm-management)」として CAN 通信スタック側にまとめ、
 > EcuM/BswM が関わる箇所はそちらのコールチェーン図中に個別に注釈しています。

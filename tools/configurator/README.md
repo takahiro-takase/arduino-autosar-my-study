@@ -2,7 +2,7 @@
 
 信号表（CAN ビットアサイン表）と、モジュールごとの設定 json から、各モジュールの設定ソース
 （`*_PBCfg.c`、`*_Cfg.h`）の該当部分を生成する Python ツールです。
-現在の対象は **CanIf**、**Com**、**PduR**、**E2EXf**（E2E Transformer）、**SecOC**、**Csm / Crypto / KeyM**（暗号処理の連鎖）、**Rte**（ASW 向けの信号アクセス関数）、**Dem**（診断イベント）、**Dcm**（DID の表）、**CanTp**（診断のトランスポート層）、**CanNm**（ネットワーク管理）、**CanSM**（バス状態管理）、**ComM**（通信管理）、**Nm**（ネットワーク管理インタフェース）、**Os**（タスク表）、**NvM**（不揮発ブロックの構成）、**WdgM**（ウォッチドッグの監視対象）、**FiM**（機能の抑止）、**Can**（コントローラ設定）、**BswM**（モード遷移のルール）の 22 モジュールです。Com スタックの他のモジュールへ広げていく計画です。
+現在の対象は **CanIf**、**Com**、**PduR**、**E2EXf**（E2E Transformer）、**SecOC**、**Csm / Crypto / KeyM**（暗号処理の連鎖）、**Rte**（ASW 向けの信号アクセス関数）、**Dem**（診断イベント）、**Dcm**（DID の表）、**CanTp**（診断のトランスポート層）、**CanNm**（ネットワーク管理）、**CanSM**（バス状態管理）、**ComM**（通信管理）、**Nm**（ネットワーク管理インタフェース）、**Os**（タスク表）、**NvM**（不揮発ブロックの構成）、**WdgM**（ウォッチドッグの監視対象）、**FiM**（機能の抑止）、**Can**（コントローラ設定）、**BswM**（モード遷移のルール）、**Port**（管理ピン）、**Dio**（チャネル・ポート）、**Adc**（アナログ入力のチャネル・グループ）、**EcuM**（RUN 要求ユーザ・タイムアウト・ウェイクアップ要因）、**Gpt**（汎用タイマのチャネル）の 27 モジュールです。Com スタックの他のモジュールへ広げていく計画です。
 
 最終的な構想は `arxml ⇔ json ⇔ Cfg.c` です。このうち json → Cfg.c の部分と、
 信号表の変更に設定を連動させる部分を、この範囲で試しています。
@@ -13,7 +13,7 @@
 config/data/can_signals.json（ビットアサイン表の正本。can_tool の GUI で編集）
         │  sync_cfg.py: 追加されたフレームの設定のひな形を、各モジュールの設定 json へ追加
         ▼
-config/data/CanIf.json, Com.json, PduR.json, E2EXf.json, SecOC.json, CryptoStack.json, Rte.json, Dem.json, Dcm.json, CanTp.json, CanNm.json, CanSM.json, ComM.json, Nm.json, Os.json, NvM.json, WdgM.json, FiM.json, Can.json, BswM.json
+config/data/CanIf.json, Com.json, PduR.json, E2EXf.json, SecOC.json, CryptoStack.json, Rte.json, Dem.json, Dcm.json, CanTp.json, CanNm.json, CanSM.json, ComM.json, Nm.json, Os.json, NvM.json, WdgM.json, FiM.json, Can.json, BswM.json, Port.json, Dio.json, Adc.json, EcuM.json, Gpt.json
         │  gen_cfg.py: スキーマ・整合性を検査して、Cfg ソースの生成領域を更新（json → C の一方向）
         ▼
 src/Bsw/CanIf/CanIf_PBCfg.c, CanIf_Cfg.h / src/Bsw/Com/Com_PBCfg.c, Com_Cfg.h / src/Bsw/PduR/PduR_PBCfg.c, PduR_Cfg.h
@@ -30,6 +30,7 @@ src/Bsw/CanIf/CanIf_PBCfg.c, CanIf_Cfg.h / src/Bsw/Com/Com_PBCfg.c, Com_Cfg.h / 
 / src/Bsw/NvM/NvM_Cfg.h, NvM_PBCfg.c（ブロック ID・アドレス・バッファ・ROM デフォルト値・記述子テーブル）
 / src/Bsw/WdgM/WdgM_Cfg.h, WdgM_PBCfg.c（エンティティ・チェックポイント・遷移表・Deadline 表）
 / src/Bsw/FiM/FiM_Cfg.h, FiM_PBCfg.c（機能 ID と対応テーブル） / src/Bsw/Can/Can_Cfg.h, Can_PBCfg.c（ピン番号と Can_Config）
+/ src/Bsw/Port/Port_Cfg.h, Dio/Dio_Cfg.h, Adc/Adc_Cfg.h, EcuM/EcuM_Cfg.h（設計値の #define）/ src/Bsw/Gpt/Gpt_PBCfg.h, Gpt_PBCfg.c（チャネル ID とチャネルテーブル）
 ```
 
 - **信号表の値は設定 json にコピーしません。** CAN ID、DLC、信号のビット位置・ビット長、update-bit の位置、
