@@ -31,15 +31,6 @@ def validate(cfg):
     return errors
 
 
-def com_index(ctx, direction, name, where):
-    """Com の設定における I-PDU の添字（ID）。"""
-    key = "rxIpdus" if direction == "RX" else "txIpdus"
-    for i, p in enumerate(ctx.configs["Com"][key]):
-        if p["name"] == name:
-            return i
-    raise ValueError("%s: Com の %s I-PDU '%s' が存在しない" % (where, direction, name))
-
-
 def secoc_index(ctx, name, where):
     for i, p in enumerate(ctx.configs["SecOC"]["rxPdus"]):
         if p["name"] == name:
@@ -47,22 +38,29 @@ def secoc_index(ctx, name, where):
     raise ValueError("%s: SecOC の RX PDU '%s' が存在しない" % (where, name))
 
 
-def com_ipdu_symbol(ctx, direction, name, where):
-    """Com の I-PDU のシンボリック名。I-PDU が存在することも確認する。"""
-    com_index(ctx, direction, name, where)
-    return symbols.COM_IPDU + name
+def cantp_sdu(ctx, key, macro, value, where):
+    """CanTp 宛ての ID は CanTp_Cfg.h のマクロで書く。json の数値が CanTp.json の値と食い違えばエラーにする。"""
+    expected = ctx.configs["CanTp"][key]["value"]
+    if value != expected:
+        raise ValueError("%s: CanTp 宛ての ID %d が CanTp.json の %s=%d と一致しない" % (where, value, key, expected))
+    return macro
 
 
 def dest_pdu_value(d, path, ctx):
-    """配信先の ID の C 表記。Com の I-PDU ならシンボリック名、それ以外は数値。"""
+    """配信先の ID の C 表記。Com の I-PDU・SecOC の Secured I-PDU ならシンボリック名、それ以外は数値。"""
     if "ipdu" in d:
-        return com_ipdu_symbol(ctx, "RX", d["ipdu"], "PduR " + path["name"])
+        return symbols.com_ipdu_symbol(ctx, "RX", d["ipdu"], "PduR " + path["name"])
+    if "secocPdu" in d:
+        secoc_index(ctx, d["secocPdu"], "PduR " + path["name"])  # 存在の確認
+        return symbols.SECOC_RX + d["secocPdu"]
+    if d["module"] == "CANTP":
+        return cantp_sdu(ctx, "rxSduId", "CANTP_RX_SDU_ID", d["destPduId"], "PduR " + path["name"])
     return "%dU" % dest_pdu_id(d, path, ctx)
 
 
 def dest_pdu_id(d, path, ctx):
     if "ipdu" in d:
-        return com_index(ctx, "RX", d["ipdu"], "PduR " + path["name"])
+        return symbols.com_ipdu_index(ctx, "RX", d["ipdu"], "PduR " + path["name"])
     if "secocPdu" in d:
         return secoc_index(ctx, d["secocPdu"], "PduR " + path["name"])
     return d["destPduId"]
@@ -71,13 +69,15 @@ def dest_pdu_id(d, path, ctx):
 def conf_dest_value(p, ctx):
     """送信確認の宛先の ID の C 表記。Com の I-PDU ならシンボリック名、それ以外は数値。"""
     if "confIpdu" in p:
-        return com_ipdu_symbol(ctx, "TX", p["confIpdu"], "PduR " + p["name"])
+        return symbols.com_ipdu_symbol(ctx, "TX", p["confIpdu"], "PduR " + p["name"])
+    if p["confModule"] == "CANTP":
+        return cantp_sdu(ctx, "txSduId", "CANTP_TX_SDU_ID", p["confDestPduId"], "PduR " + p["name"])
     return "%dU" % conf_dest_pdu_id(p, ctx)
 
 
 def conf_dest_pdu_id(p, ctx):
     if "confIpdu" in p:
-        return com_index(ctx, "TX", p["confIpdu"], "PduR " + p["name"])
+        return symbols.com_ipdu_index(ctx, "TX", p["confIpdu"], "PduR " + p["name"])
     return p["confDestPduId"]
 
 

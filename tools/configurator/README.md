@@ -286,7 +286,7 @@ NvM、WdgM と同じく、信号表とは関係なく、それぞれの JSON だ
 <a id="symbolic-names"></a>
 ## ハンドル ID のシンボリック名
 
-CanIf・PduR・Com が持つ PDU / 信号の ID は、AUTOSAR のシンボリック名の規則（ECU Configuration の [TPS_ECUC_02108]、BSW General の [SWS_BSW_00200]）でも生成します。
+CanIf・PduR・Com・SecOC が持つ PDU / 信号の ID は、AUTOSAR のシンボリック名の規則（ECU Configuration の [TPS_ECUC_02108]、BSW General の [SWS_BSW_00200]）でも生成します。
 名前は `<モジュールの略称>Conf_<コンテナ定義の名前>_<設定 JSON の name>`、定義先は値を提供するモジュールの `*_Cfg.h` の生成領域です（`modules/symbols.py` が共通の部品）。
 
 | モジュール | 名前 | 値 | 生成領域 |
@@ -294,9 +294,10 @@ CanIf・PduR・Com が持つ PDU / 信号の ID は、AUTOSAR のシンボリッ
 | CanIf | `CanIfConf_CanIfTxPduCfg_<name>`、`CanIfConf_CanIfRxPduCfg_<name>` | TX / RX PDU の添字 | `CanIf_Cfg.h` の `canif-symbols` |
 | PduR | `PduRConf_PduRSrcPdu_<name>` | 経路の `srcPduId` | `PduR_Cfg.h` の `pdur-symbols` |
 | Com | `ComConf_ComIPdu_<name>`、`ComConf_ComSignal_<name>` | I-PDU / 信号の添字 | `Com_Cfg.h` の `com-symbols` |
+| SecOC | `SecOCConf_SecOCRxSecuredPdu_<name>` | `SecOCRxPduId`（Secured I-PDU の添字） | `SecOC_Cfg.h` の `secoc-symbols` |
 
 - 生成したコードでは、他のモジュールの ID を指す数値をこの名前に置き換えています。PduR の経路の `SrcPduId`・送信先の CanIf の PDU・配信先と送信確認先の Com の I-PDU、
-  CanIf が上位層へ返す ID（PduR の経路に対応するもの）、Com の I-PDU の `IPduId` / `PduRId` と信号の `IPduId` です。NM のように PduR を経由しない ID と、CanTp・SecOC が相手の ID は数値のままです。
+  CanIf が上位層へ返す ID（PduR の経路に対応するもの）、Com の I-PDU の `IPduId` / `PduRId` と信号の `IPduId`、SecOC の `SecOCRxPduId` と `ComRxPduId`（Com の RX I-PDU）です。CanTp が相手の ID（PduR の `DestPduId` / `ConfDestPduId`）は、`CanTp_Cfg.h` のマクロ（`CANTP_RX_SDU_ID` / `CANTP_TX_SDU_ID`）で書き、`PduR.json` の数値が `CanTp.json` と食い違えば生成エラーです。CanIf の `UpperLayerTxPduId` / `UpperLayerRxPduId` のうち CanNm 宛てのものは、CanNm が持つ ID なので数値のままです。
 - 信号 ID は `ComConf_ComSignal_<name>` に統一しました。以前の `COM_SIGNAL_*` マクロは廃止し、手書きのコード（`Rte.c`・`E2EMon.c`）も置き換え済みです（`Com.json` の信号の `macro` 項目もなくなりました）。
 - `name` は、C の識別子として使える形（英数字と `_`、先頭は英字）で、同じモジュールの中で重複しないこと（生成時に検査）。PduR の経路は RX と TX で名前空間が共通なので、`_Rx` / `_Tx` のように方向を名前に含めてください（同じ名前で値が違う定義は不正な設定です、[TPS_ECUC_06074]）。
 - CanIf の `upperLayerTxPduId` などが PduR の経路と一致しない場合は、生成の前の整合性検査でエラーになります。使うヘッダのインクルードが足りないときは、生成時に警告が出ます。
@@ -312,8 +313,8 @@ CanIf・PduR・Com が持つ PDU / 信号の ID は、AUTOSAR のシンボリッ
 | `gen_cfg.py` | 目印コメントの差し込み、スキーマ検証、生成の実行 |
 | `sync_cfg.py` | 信号表に追加されたフレームの設定を、設定 json へ追加 |
 | `checks.py` | 信号表と各モジュール設定の整合性検査 |
-| `modules/canif.py`, `com.py`, `pdur.py`, `e2exf.py`, `secoc.py`, `cryptostack.py`, `rte.py`, `dem.py`, `nvm.py`, `wdgm.py`, `fim.py`, `can.py`, `bswm.py` | モジュールごとの生成関数（`SPEC` に生成先と領域 ID を持つ） |
-| `modules/common.py` | コメント・構造体フィールドの整形 |
+| `modules/canif.py`, `com.py`, `pdur.py`, `cantp.py`, `cannm.py`, `dcm.py`, `e2exf.py`, `secoc.py`, `cryptostack.py`, `rte.py`, `dem.py`, `nvm.py`, `wdgm.py`, `fim.py`, `can.py`, `bswm.py` | モジュールごとの生成関数（`SPEC` に生成先と領域 ID を持つ） |
+| `modules/common.py`, `defs.py` | コメント・構造体フィールドの整形、設定値の `#define`（説明コメント付き）の整形、`Os_PBCfg.c` の周期の読み込み |
 | `../../config/schema/*.schema.json` | 設定 json のスキーマ（型・範囲・列挙） |
 | `../../config/data/*.json` | モジュールごとの設定データ（リポジトリ直下の `config/`。コードと分けて置く） |
 

@@ -96,4 +96,9 @@
 #define SECOC_TX_PDU_COUNT  0U
 /* @@GEN-END secoc-counts */
 
+/* @@GEN-BEGIN secoc-symbols  生成元: config/data/SecOC.json  （自動生成: 手編集禁止） */
+/* シンボリック名: SecOCConf_SecOCRxSecuredPdu_<name>（値は SecOC_RxPduConfigData の添字）。PduR が参照する。 */
+#define SecOCConf_SecOCRxSecuredPdu_ImmobilizerCmd_Rx  0U
+/* @@GEN-END secoc-symbols */
+
 #endif /* SECOC_CFG_H */

@@ -7,6 +7,7 @@
   CanIf: CanIfConf_CanIfTxPduCfg_<name>、CanIfConf_CanIfRxPduCfg_<name>   （値: テーブルの添字）
   PduR : PduRConf_PduRSrcPdu_<name>                                         （値: srcPduId）
   Com  : ComConf_ComIPdu_<name>、ComConf_ComSignal_<name>                   （値: 各テーブルの添字）
+  SecOC: SecOCConf_SecOCRxSecuredPdu_<name>                                 （値: SecOCRxPduId = テーブルの添字）
 """
 
 import re
@@ -20,6 +21,7 @@ CANIF_RX = "CanIfConf_CanIfRxPduCfg_"
 PDUR_SRC = "PduRConf_PduRSrcPdu_"
 COM_IPDU = "ComConf_ComIPdu_"
 COM_SIGNAL = "ComConf_ComSignal_"
+SECOC_RX = "SecOCConf_SecOCRxSecuredPdu_"
 
 # 使われないマクロに付ける MISRA C:2012 Rule 2.5（未使用マクロ）の抑止コメント（Can_Cfg.h などと同じ書き方）
 MISRA_UNUSED_MACRO = "/* cppcheck-suppress misra-c2012-2.5 */"
@@ -30,6 +32,21 @@ def canif_tx(ctx, index, where):
     if not 0 <= index < len(pdus):
         raise ValueError("%s: CanIf の TX PDU の添字 %d が範囲外" % (where, index))
     return CANIF_TX + pdus[index]["name"]
+
+
+def com_ipdu_index(ctx, direction, name, where):
+    """Com の設定における I-PDU の添字（ID）。direction は "RX" か "TX"。"""
+    key = "rxIpdus" if direction == "RX" else "txIpdus"
+    for i, p in enumerate(ctx.configs["Com"][key]):
+        if p["name"] == name:
+            return i
+    raise ValueError("%s: Com の %s I-PDU '%s' が存在しない" % (where, direction, name))
+
+
+def com_ipdu_symbol(ctx, direction, name, where):
+    """Com の I-PDU のシンボリック名。I-PDU が存在することも確認する。"""
+    com_ipdu_index(ctx, direction, name, where)
+    return COM_IPDU + name
 
 
 def pdur_src_for_canif_tx(ctx, pdu, index):
@@ -49,7 +66,7 @@ def pdur_src_for_canif_rx(ctx, pdu):
 
 
 # シンボリック名の接頭辞 → 定義しているヘッダ。C ソースにこの接頭辞の名前があれば、そのヘッダのインクルードが要る。
-SYMBOL_HEADERS = {"CanIfConf_": "CanIf_Cfg.h", "PduRConf_": "PduR_Cfg.h", "ComConf_": "Com_Cfg.h"}
+SYMBOL_HEADERS = {"CanIfConf_": "CanIf_Cfg.h", "PduRConf_": "PduR_Cfg.h", "ComConf_": "Com_Cfg.h", "SecOCConf_": "SecOC_Cfg.h"}
 
 
 def include_warnings(text):
