@@ -68,7 +68,7 @@ FULL_COM のまま維持されます。
 
 | タイミング | 呼び出し |
 |-----------|---------------|
-| 診断要求を受理するたび（`Dcm_ComIndication()`。CanTp 送信ビジーで無視する並行要求を除く。[SWS_Dcm_01376]） | `ComM_DCM_ActiveDiagnostic(0)` |
+| 診断要求を受理するたび（`Dcm_ProcessRequest()`。CanTp 送信中で拒否する並行要求を除く。[SWS_Dcm_01376]） | `ComM_DCM_ActiveDiagnostic(0)` |
 | デフォルトセッションの要求の処理が終わったとき（応答の送信開始時点で代用。[SWS_Dcm_01374]/[SWS_Dcm_01377]） | `ComM_DCM_InactiveDiagnostic(0)` |
 | extendedSession に入ったとき（SID 0x10/0x03） | `ComM_DCM_ActiveDiagnostic(0)`（拡張セッションの間はアクティブを維持し、要求の処理後に Inactive は呼ばない） |
 | defaultSession へ戻ったとき（明示要求・S3タイムアウト・ECUReset のいずれも） | `ComM_DCM_InactiveDiagnostic(0)` |

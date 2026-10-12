@@ -10,6 +10,8 @@
 
 #include "Wrap_Dcm.h"
 #include "Det.h"
+#include "Dcm_Cfg.h"
+#include "Dcm_Cbk.h"
 
 /* ======================================================================
  * Definitions
@@ -33,7 +35,11 @@ uint32 CallCount_Dcm_GetSecurityLevel      = 0U;
 uint32 CallCount_Dcm_GetActiveProtocol     = 0U;
 uint32 CallCount_Dcm_ResetToDefaultSession = 0U;
 uint32 CallCount_Dcm_GetVersionInfo        = 0U;
-uint32 CallCount_Dcm_ComIndication         = 0U;
+uint32 CallCount_Dcm_StartOfReception     = 0U;
+uint32 CallCount_Dcm_CopyRxData            = 0U;
+uint32 CallCount_Dcm_TpRxIndication        = 0U;
+uint32 CallCount_Dcm_CopyTxData            = 0U;
+uint32 CallCount_Dcm_TpTxConfirmation      = 0U;
 
 uint32 FailFromCallCount_Dcm_GetVin                = WRAP_DCM_FAIL_FROM_CALL_COUNT_DISABLED;
 uint32 FailFromCallCount_Dcm_GetSesCtrlType         = WRAP_DCM_FAIL_FROM_CALL_COUNT_DISABLED;
@@ -47,10 +53,12 @@ Std_ReturnType ForcedReturn_Dcm_GetSecurityLevel      = E_NOT_OK;
 Std_ReturnType ForcedReturn_Dcm_GetActiveProtocol     = E_NOT_OK;
 Std_ReturnType ForcedReturn_Dcm_ResetToDefaultSession = E_NOT_OK;
 
-PduIdType LastRxPduId_Dcm_ComIndication = 0U;
+PduLengthType  LastTpSduLength_Dcm_StartOfReception = 0U;
+Std_ReturnType LastResult_Dcm_TpRxIndication        = E_OK;
+Std_ReturnType LastResult_Dcm_TpTxConfirmation      = E_OK;
 
 /* ----------------------------------------------------------------------
- * WrapDcm_Reset — 9関数すべての状態を一括で初期化する（Wrap_Dcm.h 参照）。
+ * WrapDcm_Reset — 全関数の状態を一括で初期化する（Wrap_Dcm.h 参照）。
  * ---------------------------------------------------------------------- */
 
 void WrapDcm_Reset(void)
@@ -63,7 +71,11 @@ void WrapDcm_Reset(void)
     CallCount_Dcm_GetActiveProtocol     = 0U;
     CallCount_Dcm_ResetToDefaultSession = 0U;
     CallCount_Dcm_GetVersionInfo        = 0U;
-    CallCount_Dcm_ComIndication         = 0U;
+    CallCount_Dcm_StartOfReception      = 0U;
+    CallCount_Dcm_CopyRxData            = 0U;
+    CallCount_Dcm_TpRxIndication        = 0U;
+    CallCount_Dcm_CopyTxData            = 0U;
+    CallCount_Dcm_TpTxConfirmation      = 0U;
 
     FailFromCallCount_Dcm_GetVin               = WRAP_DCM_FAIL_FROM_CALL_COUNT_DISABLED;
     FailFromCallCount_Dcm_GetSesCtrlType        = WRAP_DCM_FAIL_FROM_CALL_COUNT_DISABLED;
@@ -77,7 +89,46 @@ void WrapDcm_Reset(void)
     ForcedReturn_Dcm_GetActiveProtocol     = E_NOT_OK;
     ForcedReturn_Dcm_ResetToDefaultSession = E_NOT_OK;
 
-    LastRxPduId_Dcm_ComIndication = 0U;
+    LastTpSduLength_Dcm_StartOfReception = 0U;
+    LastResult_Dcm_TpRxIndication        = E_OK;
+    LastResult_Dcm_TpTxConfirmation      = E_OK;
+}
+
+/* ----------------------------------------------------------------------
+ * WrapDcm_InjectRequest — CanTp を介さずに UDS 要求を渡す（Wrap_Dcm.h 参照）。
+ * ---------------------------------------------------------------------- */
+
+Std_ReturnType WrapDcm_InjectRequest(const uint8* data, uint8 len)
+{
+    static uint8 work[DCM_RX_BUF_SIZE];
+    PduInfoType   info;
+    PduLengthType bufSize = 0U;
+    uint8         i;
+
+    if (len > DCM_RX_BUF_SIZE)
+    {
+        return E_NOT_OK;
+    }
+    for (i = 0U; i < len; i++)
+    {
+        work[i] = data[i];
+    }
+
+    if (Dcm_StartOfReception(0U, NULL, (PduLengthType)len, &bufSize) != BUFREQ_OK)
+    {
+        return E_NOT_OK;
+    }
+
+    info.SduDataPtr = work;
+    info.SduLength  = (PduLengthType)len;
+    if (Dcm_CopyRxData(0U, &info, &bufSize) != BUFREQ_OK)
+    {
+        Dcm_TpRxIndication(0U, E_NOT_OK);
+        return E_NOT_OK;
+    }
+
+    Dcm_TpRxIndication(0U, E_OK);
+    return E_OK;
 }
 
 /* ======================================================================
@@ -233,35 +284,79 @@ Std_ReturnType __wrap_Dcm_ResetToDefaultSession(void)
  * Callback notifications
  * ====================================================================== */
 
-/* -----------------------------------------------------------------------
+/* ----------------------------------------------------------------------
  * Dcm_StartOfReception
- * ----------------------------------------------------------------------- */
+ * ---------------------------------------------------------------------- */
 
-/* 未実装 */
+extern
+BufReq_ReturnType __real_Dcm_StartOfReception(PduIdType id, const PduInfoType* info, PduLengthType TpSduLength, PduLengthType* bufferSizePtr);
+BufReq_ReturnType __wrap_Dcm_StartOfReception(PduIdType id, const PduInfoType* info, PduLengthType TpSduLength, PduLengthType* bufferSizePtr)
+{
+    CallCount_Dcm_StartOfReception++;
+    LastTpSduLength_Dcm_StartOfReception = TpSduLength;
+    Log_Write(LOG_T, TAG, "Dcm_StartOfReception", "called %u times", CallCount_Dcm_StartOfReception);
 
-/* -----------------------------------------------------------------------
+    return __real_Dcm_StartOfReception(id, info, TpSduLength, bufferSizePtr);
+}
+
+/* ----------------------------------------------------------------------
  * Dcm_CopyRxData
- * ----------------------------------------------------------------------- */
+ * ---------------------------------------------------------------------- */
 
-/* 未実装 */
+extern
+BufReq_ReturnType __real_Dcm_CopyRxData(PduIdType id, const PduInfoType* info, PduLengthType* bufferSizePtr);
+BufReq_ReturnType __wrap_Dcm_CopyRxData(PduIdType id, const PduInfoType* info, PduLengthType* bufferSizePtr)
+{
+    CallCount_Dcm_CopyRxData++;
+    Log_Write(LOG_T, TAG, "Dcm_CopyRxData", "called %u times", CallCount_Dcm_CopyRxData);
 
-/* -----------------------------------------------------------------------
+    return __real_Dcm_CopyRxData(id, info, bufferSizePtr);
+}
+
+/* ----------------------------------------------------------------------
  * Dcm_TpRxIndication
- * ----------------------------------------------------------------------- */
+ * ---------------------------------------------------------------------- */
 
-/* 未実装 */
+extern
+void __real_Dcm_TpRxIndication(PduIdType id, Std_ReturnType result);
+void __wrap_Dcm_TpRxIndication(PduIdType id, Std_ReturnType result)
+{
+    CallCount_Dcm_TpRxIndication++;
+    LastResult_Dcm_TpRxIndication = result;
+    Log_Write(LOG_T, TAG, "Dcm_TpRxIndication", "called %u times", CallCount_Dcm_TpRxIndication);
 
-/* -----------------------------------------------------------------------
+    __real_Dcm_TpRxIndication(id, result);
+}
+
+/* ----------------------------------------------------------------------
  * Dcm_CopyTxData
- * ----------------------------------------------------------------------- */
+ * ---------------------------------------------------------------------- */
 
-/* 未実装 */
+extern
+BufReq_ReturnType __real_Dcm_CopyTxData(PduIdType id, const PduInfoType* info, const RetryInfoType* retry, PduLengthType* availableDataPtr);
+BufReq_ReturnType __wrap_Dcm_CopyTxData(PduIdType id, const PduInfoType* info, const RetryInfoType* retry, PduLengthType* availableDataPtr)
+{
+    CallCount_Dcm_CopyTxData++;
+    Log_Write(LOG_T, TAG, "Dcm_CopyTxData", "called %u times", CallCount_Dcm_CopyTxData);
 
-/* -----------------------------------------------------------------------
+    return __real_Dcm_CopyTxData(id, info, retry, availableDataPtr);
+}
+
+/* ----------------------------------------------------------------------
  * Dcm_TpTxConfirmation
- * ----------------------------------------------------------------------- */
+ * ---------------------------------------------------------------------- */
 
-/* 未実装 */
+extern
+void __real_Dcm_TpTxConfirmation(PduIdType id, Std_ReturnType result);
+void __wrap_Dcm_TpTxConfirmation(PduIdType id, Std_ReturnType result)
+{
+    CallCount_Dcm_TpTxConfirmation++;
+    LastResult_Dcm_TpTxConfirmation = result;
+    Log_Write(LOG_T, TAG, "Dcm_TpTxConfirmation", "called %u times", CallCount_Dcm_TpTxConfirmation);
+
+    __real_Dcm_TpTxConfirmation(id, result);
+}
+
 
 /* -----------------------------------------------------------------------
  * Dcm_TxConfirmation
@@ -355,23 +450,4 @@ void __wrap_Dcm_MainFunction(void)
     Log_Write(LOG_T, TAG, "Dcm_MainFunction", "called %u times", CallCount_Dcm_MainFunction);
 
     __real_Dcm_MainFunction();
-}
-
-/* ======================================================================
- * Internal Functions
- * ====================================================================== */
-
-/* ----------------------------------------------------------------------
- * Dcm_ComIndication
- * ---------------------------------------------------------------------- */
-
-extern
-void __real_Dcm_ComIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr);
-void __wrap_Dcm_ComIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
-{
-    CallCount_Dcm_ComIndication++;
-    LastRxPduId_Dcm_ComIndication = RxPduId;
-    Log_Write(LOG_T, TAG, "Dcm_ComIndication", "called %u times", CallCount_Dcm_ComIndication);
-
-    __real_Dcm_ComIndication(RxPduId, PduInfoPtr);
 }

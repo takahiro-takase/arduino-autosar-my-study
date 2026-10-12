@@ -10,10 +10,10 @@
  *          標準テンプレートに従う。
  *
  *          AUTOSAR 仕様（SWS_Dcm）が定義する `Dcm.h` の公開 IF 関数8個に加え、
- *          本プロジェクト独自の受信コールバック `Dcm_ComIndication()`
+ *          TP の受信・送信コールバック（`Dcm_StartOfReception()` など 5 関数）
  *          （`Dcm_Cbk.h` 参照）も対象に含める（いずれも実体は `Dcm.c`
  *          1ファイルに定義されている）。DcmStack コールチェーンテストで、
- *          CanTp から Dcm への境界（`Dcm_ComIndication()`）を検証する用途を
+ *          CanTp と Dcm の境界（TP コールバック）を検証する用途を
  *          想定する。
  *
  *          戻り値を持つ5関数（GetVin/GetSesCtrlType/GetSecurityLevel/
@@ -66,7 +66,7 @@ extern "C" {
  * ====================================================================== */
 
 /* ----------------------------------------------------------------------
- * 呼び出し回数（AUTOSAR IF + Dcm_ComIndication 全9関数共通）
+ * 呼び出し回数（AUTOSAR IF + TP コールバック 5 関数 全13関数共通）
  * ---------------------------------------------------------------------- */
 extern uint32 CallCount_Dcm_Init;
 extern uint32 CallCount_Dcm_MainFunction;
@@ -76,7 +76,11 @@ extern uint32 CallCount_Dcm_GetSecurityLevel;
 extern uint32 CallCount_Dcm_GetActiveProtocol;
 extern uint32 CallCount_Dcm_ResetToDefaultSession;
 extern uint32 CallCount_Dcm_GetVersionInfo;
-extern uint32 CallCount_Dcm_ComIndication;
+extern uint32 CallCount_Dcm_StartOfReception;
+extern uint32 CallCount_Dcm_CopyRxData;
+extern uint32 CallCount_Dcm_TpRxIndication;
+extern uint32 CallCount_Dcm_CopyTxData;
+extern uint32 CallCount_Dcm_TpTxConfirmation;
 
 /* ----------------------------------------------------------------------
  * 回数閾値故障注入（戻り値を持つ5関数のみ）
@@ -101,10 +105,27 @@ extern Std_ReturnType ForcedReturn_Dcm_GetActiveProtocol;      /**< 既定 E_NOT
 extern Std_ReturnType ForcedReturn_Dcm_ResetToDefaultSession;  /**< 既定 E_NOT_OK */
 
 /* ----------------------------------------------------------------------
- * 直近の呼び出し内容のキャプチャ（Dcm_ComIndication のみ）
+ * 直近の呼び出し内容のキャプチャ（TP コールバックのみ）
  * ---------------------------------------------------------------------- */
-/** 直近の `Dcm_ComIndication()` 呼び出しで渡された `RxPduId`。 */
-extern PduIdType LastRxPduId_Dcm_ComIndication;
+/** 直近の `Dcm_StartOfReception()` 呼び出しで渡された `TpSduLength`。 */
+extern PduLengthType LastTpSduLength_Dcm_StartOfReception;
+
+/** 直近の `Dcm_TpRxIndication()` 呼び出しで渡された `result`。 */
+extern Std_ReturnType LastResult_Dcm_TpRxIndication;
+
+/** 直近の `Dcm_TpTxConfirmation()` 呼び出しで渡された `result`。 */
+extern Std_ReturnType LastResult_Dcm_TpTxConfirmation;
+
+/* ----------------------------------------------------------------------
+ * 要求の注入（CanTp を介さずに、Dcm へ UDS 要求を渡す）
+ * ---------------------------------------------------------------------- */
+/** CanTp の代わりに、UDS 要求（PCI を含まない生のペイロード）を Dcm へ渡す。
+ *  `Dcm_StartOfReception()` → `Dcm_CopyRxData()` → `Dcm_TpRxIndication(E_OK)` を、CanTp が SF を
+ *  受信した時と同じ順で呼ぶ（各 wrap の呼び出し回数にも数えられる）。
+ *  \retval E_OK     受け入れられ、コピーでき、`Dcm_TpRxIndication()` まで呼んだ。
+ *  \retval E_NOT_OK `Dcm_StartOfReception()` が拒否した、またはコピーに失敗した
+ *                   （後者では `Dcm_TpRxIndication(E_NOT_OK)` を呼ぶ）。 */
+extern Std_ReturnType WrapDcm_InjectRequest(const uint8* data, uint8 len);
 
 /* ======================================================================
  * Functions

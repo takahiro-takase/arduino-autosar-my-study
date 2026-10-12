@@ -8,11 +8,13 @@
  *
  *          RX フロー:
  *            PduR_CanIfRxIndication → CanTp_RxIndication
- *            CanTp: SF/FF+CF を組み立て → Dcm_ComIndication (UDS ペイロードのみ)
+ *            CanTp: SF/FF → Dcm_StartOfReception、各フレームのデータ → Dcm_CopyRxData、
+ *                   完了 → Dcm_TpRxIndication（組み立ては、Dcm の受信バッファの上で行う）
  *
  *          TX フロー:
- *            Dcm → CanTp_Transmit (UDS ペイロードのみ)
- *            CanTp: SF/FF+CF に分割 → PduR_CanTpTransmit → CanIf → CAN 0x7E8
+ *            Dcm → CanTp_Transmit (応答の長さだけ)
+ *            CanTp: SF/FF/各 CF のデータ → Dcm_CopyTxData、フレームを送信 → PduR_CanTpTransmit → CanIf → CAN 0x7E8、
+ *                   完了 → Dcm_TpTxConfirmation
  *
  * \copyright  Copyright (c) 2025 T_T
  * \license    MIT License - 詳細は LICENSE ファイルを参照。
@@ -78,15 +80,16 @@ extern "C" {
 void CanTp_Init(const CanTp_ConfigType* CfgPtr);
 
 /**
- * \brief   DCM からの UDS ペイロードを CAN トランスポートフレームに分割して送信する。
+ * \brief   DCM の UDS 応答を CAN トランスポートフレームに分割して送信する。
  *
  * \details PduInfoPtr の SduLength <= 7 なら Single Frame として送信
  *          (SWS_CanTp_00231)。8 バイト以上なら First Frame + Consecutive Frame
  *          に分割し (SWS_CanTp_00232)、Flow Control 受信後に CF を順次送信する。
  *
  * \param[in]  TxSduId     TX N-SDU ID (CANTP_TX_SDU_ID)。本実装は 1 チャネル固定。
- * \param[in]  PduInfoPtr  送信する UDS ペイロード (PCI バイトを含まない生データ)。
- *                         SduLength が CANTP_TX_BUFFER_SIZE を超えてはならない。
+ * \param[in]  PduInfoPtr  送信する UDS 応答の長さ（SduLength）。データ（SduDataPtr）は使わず、
+ *                         フレームを組み立てる時に Dcm_CopyTxData() で取り出す。
+ *                         SduLength は 4095 を超えてはならない（FF の長さ欄は 12 bit）。
  *
  * \retval  E_OK      送信要求を受け付けた (SF) または FF を送信した (MF)。
  * \retval  E_NOT_OK  NULL ポインタ、長さ超過、TX チャネルがビジー、
@@ -98,27 +101,6 @@ void CanTp_Init(const CanTp_ConfigType* CfgPtr);
  * \Synchronicity  {Synchronous}
  */
 Std_ReturnType CanTp_Transmit(PduIdType TxSduId, const PduInfoType* PduInfoPtr);
-
-/**
- * \brief   TX チャネルが送信中(ビジー)かどうかを返す。
- *
- * \details AUTOSAR 実仕様の CanTp には存在しない、本プロジェクト独自の
- *          拡張問い合わせ API。上位層(Dcm)が新規要求を受理する前に、前回の
- *          応答送信（特にマルチフレーム）がまだ完了していないかを判定する
- *          目的で新設した（[SWS_Dcm_00557]対応、Dcm_ComIndication() 参照。
- *          2026-09 追加）。`CanTp_Transmit()` 自身も同じ状態を見て
- *          ビジー時に E_NOT_OK を返すが、それは「送信を試みてから失敗を知る」
- *          方式のため、要求の副作用（診断サービスの実処理）が既に確定して
- *          しまった後では手遅れになる。本 API は副作用が発生する前に
- *          事前確認するために用いる。
- *
- * \return  TRUE: 送信中（新規送信は受け付けられない）。FALSE: アイドル。
- *
- * \ServiceID      {0x4A}
- * \Reentrancy     {Reentrant}
- * \Synchronicity  {Synchronous}
- */
-boolean CanTp_IsTxBusy(void);
 
 /**
  * \brief   タイムアウト監視と CF 送信を周期的に処理する。
@@ -157,7 +139,7 @@ void CanTp_GetVersionInfo(Std_VersionInfoType* versioninfo);
  * \brief   PduR から配信された受信 CAN フレームを処理する。
  *
  * \details フレームタイプ (SF/FF/CF/FC) を判定し、
- *          SF または組立完了した多重フレームを Dcm_ComIndication へ渡す
+ *          SF/FF/CF のデータを、Dcm の TP の API（Dcm_StartOfReception / Dcm_CopyRxData / Dcm_TpRxIndication）で渡す
  *          (SWS_CanTp_00214)。
  *          FC フレームは TX 側の FC 待ちを解除する。
  *
@@ -208,6 +190,18 @@ void CanTp_TxConfirmation(PduIdType TxPduId, Std_ReturnType result);
  *          標準外の関数。`Mcu_Test_ResetInitState()` と同じ設計方針）。
  */
 void CanTp_Test_ResetInitState(void);
+
+/**
+ * \brief   [テスト専用] TX チャネルが、送信の途中（FC 待ち、または CF の送信中）か。
+ *
+ * \details 以前は公開 API（CanTp_IsTxBusy）だったが、Dcm が TP の送信確認（Dcm_TpTxConfirmation）で
+ *          自分の送信状態を持つようになり、不要になった。マルチフレーム送信の途中・完了を、
+ *          テストが確認するためだけに残している。
+ *
+ * \retval  TRUE   送信の途中。
+ * \retval  FALSE  IDLE。
+ */
+boolean CanTp_Test_IsTxBusy(void);
 #endif
 
 #ifdef __cplusplus

@@ -9,25 +9,35 @@
  *            CF (Consecutive Frame) PCI 上位ニブル = 0x2
  *            FC (Flow Control)      PCI 上位ニブル = 0x3
  *
+ *          上位層（Dcm）との受け渡しは TP の API で行う。CanTp は組み立て・分割用の
+ *          バッファを持たず、フレームごとに上位層とやり取りする（仕様では PduR を経由する
+ *          が、本プロジェクトは PduR の TP の経路を持たないので、Dcm を直接呼ぶ）。
+ *            受信: Dcm_StartOfReception()（SF/FF の受信時）→ Dcm_CopyRxData()（各フレームの
+ *                  データ）→ Dcm_TpRxIndication()（完了・中断）
+ *            送信: CanTp_Transmit()（長さだけを受け取る）→ Dcm_CopyTxData()（SF/FF/各 CF の
+ *                  データ）→ Dcm_TpTxConfirmation()（完了・中断）
+ *
  *          RX 状態マシン:
- *            IDLE → SF 受信 → Dcm_ComIndication → IDLE
- *            IDLE → FF 受信 → FC 送信 → WAIT_CF
- *            WAIT_CF → CF 受信 → 完成なら Dcm_ComIndication → IDLE
+ *            IDLE → SF 受信 → StartOfReception/CopyRxData/TpRxIndication(E_OK) → IDLE
+ *            IDLE → FF 受信 → StartOfReception → FC 送信 → CopyRxData（FF のデータ）→ WAIT_CF
+ *            WAIT_CF → CF 受信 → CopyRxData → 完成なら TpRxIndication(E_OK) → IDLE
  *                             → 未完成なら WAIT_CF (N_Cr リセット)
- *            WAIT_CF → N_Cr タイムアウト → IDLE (中断)
- *            WAIT_CF → 別の SF/FF 受信 → 進行中の受信を中断し、新規受信として
- *                                     処理する (SWS_CanTp_00124)
+ *            WAIT_CF → N_Cr タイムアウト → TpRxIndication(E_NOT_OK) → IDLE (中断)
+ *            WAIT_CF → 別の SF/FF 受信 → 進行中の受信を TpRxIndication(E_NOT_OK) で中断し、
+ *                                     新規受信として処理する (SWS_CanTp_00124)
  *
  *          TX 状態マシン:
- *            IDLE → CanTp_Transmit (<=7B) → SF 送信（失敗なら E_NOT_OK を返し IDLE のまま）
- *            IDLE → CanTp_Transmit (>7B) → FF 送信 → WAIT_FC（送信失敗なら E_NOT_OK を返し中断）
+ *            IDLE → CanTp_Transmit (<=7B) → CopyTxData → SF 送信 → TpTxConfirmation(E_OK)
+ *                                          （失敗なら E_NOT_OK を返し IDLE のまま。確認通知は出さない）
+ *            IDLE → CanTp_Transmit (>7B) → CopyTxData → FF 送信 → WAIT_FC（送信失敗なら E_NOT_OK を返し中断）
  *            WAIT_FC → FC(CTS) 受信 → SEND_CF
- *            WAIT_FC → N_Bs タイムアウト → IDLE (中断)
- *            SEND_CF → CF 送信 (CanTp_MainFunction) → 完成なら IDLE
+ *            WAIT_FC → N_Bs タイムアウト → TpTxConfirmation(E_NOT_OK) → IDLE (中断)
+ *            SEND_CF → CopyTxData → CF 送信 (CanTp_MainFunction) → 完成なら TpTxConfirmation(E_OK) → IDLE
  *                    → BS 消費なら WAIT_FC
- *            SEND_CF → CF 送信が同期的に失敗し続け N_As タイムアウト → IDLE (中断)
+ *            SEND_CF → CF 送信が同期的に失敗し続け N_As タイムアウト → TpTxConfirmation(E_NOT_OK) → IDLE (中断)
+ *                      （送信に失敗した CF は、CopyTxData をやり直さず、同じフレームを再送する）
  *
- *          TxConfirmation について: 本実装は Can.c/CanIf.c の非同期 TX 確認経路が
+ *          CanTp_TxConfirmation（CanIf からの送信確認）について: 本実装は Can.c/CanIf.c の非同期 TX 確認経路が
  *          常に E_OK 固定（真の送信失敗を表現できない）であるため、
  *          CanTp_TxConfirmation() 自体は no-op のままとし、代わりに
  *          CanTp_SendFrame() の同期的な戻り値（PduR/CanIf/Can_Write が
@@ -71,6 +81,7 @@
 #define CANTP_SF_MAX_DATA 7U     /**< SF: 最大 UDS ペイロード長    */
 #define CANTP_FF_DATA     6U     /**< FF: 先頭データバイト数       */
 #define CANTP_CF_DATA     7U     /**< CF: データバイト数           */
+#define CANTP_MAX_MSG_LEN 4095U  /**< FF の長さ欄（12 bit）で表せる N-SDU の最大長 */
 
 /* ======================================================================
  * Type Definitions
@@ -96,21 +107,22 @@ typedef enum
  * モジュール内部状態
  * ----------------------------------------------------------------------- */
 
-/** RX チャネル状態 (FF/CF 組立バッファ含む) */
+/** RX チャネル状態（データは持たず、フレームごとに Dcm_CopyRxData() で渡す） */
 static struct {
-    uint8             buf[CANTP_RX_BUFFER_SIZE];
     uint16            msgLen;    /**< FF で通知された総メッセージ長 */
-    uint16            pos;       /**< buf への書き込み済みバイト数  */
+    uint16            pos;       /**< Dcm へコピー済みのバイト数    */
     uint8             sn;        /**< 次に受信すべき CF シーケンス番号 */
     CanTp_RxStateType state;
     unsigned long     timer;     /**< N_Cr タイムアウト基点 (ms)   */
 } CanTp_Rx;
 
-/** TX チャネル状態 (FF/CF 分割バッファ含む) */
+/** TX チャネル状態（データは持たず、フレームごとに Dcm_CopyTxData() で取り出す） */
 static struct {
-    uint8             buf[CANTP_TX_BUFFER_SIZE];
     uint16            msgLen;    /**< 送信する総メッセージ長        */
-    uint16            pos;       /**< buf からの読み出し済みバイト数 */
+    uint16            pos;       /**< 送信済み（フレームに詰めた）バイト数 */
+    uint8             frameLen;  /**< 組み立て済みで未送信の CF のデータバイト数 */
+    uint8             frameReady;/**< 1 = CanTp_TxFrameBuf に未送信の CF が組み立て済み
+                                  *   （送信に失敗した CF を、CopyTxData をやり直さず再送する） */
     uint8             sn;        /**< 次の CF シーケンス番号 (1-15, 0...) */
     uint8             bs;        /**< FC で受信したブロックサイズ   */
     uint8             bsCnt;     /**< 現ブロック内残り送信数        */
@@ -131,7 +143,8 @@ static struct {
  *  このフラグを使う。 */
 static uint8 CanTp_Initialized = 0U;
 
-/** TX フレーム送信用バッファ (SF/FF/CF/FC 共用) */
+/** TX フレーム送信用バッファ (SF/FF/CF 共用)。FC は、CF の組み立て済みフレーム（再送待ち）を壊さないよう、
+ *  CanTp_SendFlowControl() の中の別のバッファを使う */
 static uint8 CanTp_TxFrameBuf[8];
 
 /* ======================================================================
@@ -143,7 +156,12 @@ static unsigned long CanTp_GetNowMs(void);
 /* -----------------------------------------------------------------------
  * 内部関数プロトタイプ
  * ----------------------------------------------------------------------- */
-static Std_ReturnType CanTp_SendFrame(void);
+static Std_ReturnType CanTp_SendFrame(uint8* frame);
+static boolean CanTp_TxBusy(void);
+static boolean CanTp_TxStallTimedOut(void);
+static void CanTp_RxAbort(void);
+static BufReq_ReturnType CanTp_CopyToUpper(const uint8* src, uint8 len);
+static void CanTp_TxFinish(Std_ReturnType result);
 static void CanTp_SendFlowControl(uint8 fs, uint8 bs, uint8 stMin);
 static void CanTp_SendNextCF(void);
 static uint8 CanTp_DecodeStMin(uint8 raw);
@@ -170,7 +188,13 @@ void CanTp_Init(const CanTp_ConfigType* CfgPtr)
 {
     (void)CfgPtr; /* 本プロジェクトは post-build 設定を持たない（CanTp.h 参照） */
     CanTp_Rx.state  = CANTP_RX_IDLE;
-    CanTp_Tx.state  = CANTP_TX_IDLE;
+    CanTp_Rx.msgLen = 0U;
+    CanTp_Rx.pos    = 0U;
+    CanTp_Tx.state       = CANTP_TX_IDLE;
+    CanTp_Tx.msgLen      = 0U;
+    CanTp_Tx.pos         = 0U;
+    CanTp_Tx.frameReady  = 0U;
+    CanTp_Tx.asFailTimer = 0UL;
     CanTp_Initialized = 1U;
     DET_LOGI(TAG, "Init ok");
 }
@@ -205,15 +229,19 @@ void CanTp_GetVersionInfo(Std_VersionInfoType* versioninfo)
  * ----------------------------------------------------------------------- */
 
 /**
- * \brief   DCM からの UDS ペイロードを CAN フレームに分割して送信する。
+ * \brief   DCM の UDS 応答を CAN フレームに分割して送信する。
  *
- * \details ペイロード長 <= 7 なら SF 送信、>= 8 なら FF 送信 + WAIT_FC へ遷移。
+ * \details PduInfoPtr->SduLength だけを使う（SduDataPtr は NULL でもよい）。データは、フレームを
+ *          組み立てる時に Dcm_CopyTxData() で Dcm から取り出す。長さ <= 7 なら、取り出して SF を
+ *          送信し、送信できたら Dcm_TpTxConfirmation(E_OK) を呼ぶ。>= 8 なら FF の分を取り出して
+ *          FF 送信し、WAIT_FC へ遷移する（残りは各 CF の組み立ての時に取り出す）。
  *
- * \param[in]  TxSduId     TX N-SDU ID (単一チャネルのため未使用)。
- * \param[in]  PduInfoPtr  UDS ペイロード (PCI バイトを含まない)。
+ * \param[in]  TxSduId     TX N-SDU ID (CANTP_TX_SDU_ID)。
+ * \param[in]  PduInfoPtr  送信する UDS 応答の長さ（SduLength）。NULL 禁止。
  *
  * \retval  E_OK      送信受け付け済み。
- * \retval  E_NOT_OK  NULL ポインタ、長さ超過、またはチャネルビジー。
+ * \retval  E_NOT_OK  NULL ポインタ、長さ 0 または超過、チャネルビジー、データの取り出し・フレームの送信の失敗。
+ *                     （この場合、Dcm_TpTxConfirmation() は呼ばない）
  *
  * \AUTOSARReq     {SWS_CanTp_00212}
  * \ServiceID      {0x49}
@@ -235,7 +263,8 @@ Std_ReturnType CanTp_Transmit(PduIdType TxSduId, const PduInfoType* PduInfoPtr)
         return E_NOT_OK;
     }
 
-    if ((PduInfoPtr == NULL) || (PduInfoPtr->SduDataPtr == NULL))
+    /* データ（SduDataPtr）は使わない。送る長さだけを受け取り、データは Dcm_CopyTxData() で取り出す。 */
+    if (PduInfoPtr == NULL)
     {
         DET_LOGE(TAG, "TX E: NULL PduInfoPtr");
         (void)Det_ReportError(CANTP_MODULE_ID, 0U, CANTP_API_ID_TRANSMIT, CANTP_E_PARAM_POINTER);
@@ -244,7 +273,7 @@ Std_ReturnType CanTp_Transmit(PduIdType TxSduId, const PduInfoType* PduInfoPtr)
 
     uint16 msgLen = (uint16)PduInfoPtr->SduLength;
 
-    if ((msgLen == 0U) || (msgLen > (uint16)CANTP_TX_BUFFER_SIZE))
+    if ((msgLen == 0U) || (msgLen > (uint16)CANTP_MAX_MSG_LEN))
     {
         DET_LOGE(TAG, "TX E: invalid len");
         return E_NOT_OK;
@@ -253,34 +282,40 @@ Std_ReturnType CanTp_Transmit(PduIdType TxSduId, const PduInfoType* PduInfoPtr)
     /* [SWS_CanTp_00123]: TX チャネルがビジー（マルチフレーム送信が
      * CANTP_TX_WAIT_FC/CANTP_TX_SEND_CF で進行中）なら、フレーム種別
      * （SF/FF）に関わらず新規送信要求を拒否する。CanTp_TxFrameBuf は
-     * SF/FF/CF/FC 全てが共有する単一の送信バッファであり、ここで SF だけ
+     * SF/FF/CF が共有する単一の送信バッファであり、ここで SF だけ
      * チェックを素通りさせると、進行中の CF ストリームの最中に無関係な SF
      * フレームがそのままバスへ出てしまい、受信側の再組み立てを破壊する
      * （2026-08 のスペック監査で発見・修正。以前は FF 分岐にのみこの
      * チェックがあった）。 */
-    if (CanTp_IsTxBusy())
+    if (CanTp_TxBusy())
     {
         DET_LOGE(TAG, "TX E: busy");
         return E_NOT_OK;
     }
 
+    PduLengthType avail = 0U;
+
     if (msgLen <= (uint16)CANTP_SF_MAX_DATA)
     {
         /* ---- Single Frame ---- */
+        PduInfoType src;
+        src.SduDataPtr = &CanTp_TxFrameBuf[1];
+        src.SduLength  = (PduLengthType)msgLen;
+        if (Dcm_CopyTxData(CANTP_DCM_TX_PDU_ID, &src, NULL, &avail) != BUFREQ_OK)
+        {
+            DET_LOGE(TAG, "TX SF: CopyTxData failed");
+            return E_NOT_OK;
+        }
         CanTp_TxFrameBuf[0] = (uint8)msgLen;   /* SF PCI: 0x0N */
         uint8 i;
-        for (i = 0U; i < (uint8)msgLen; i++)
-        {
-            CanTp_TxFrameBuf[1U + i] = PduInfoPtr->SduDataPtr[i];
-        }
-        for (; i < CANTP_SF_MAX_DATA; i++)
+        for (i = (uint8)msgLen; i < CANTP_SF_MAX_DATA; i++)
         {
             CanTp_TxFrameBuf[1U + i] = 0x00U;
         }
 
         DET_LOGI(TAG, "TX SF len=%u", (unsigned)msgLen);
 
-        if (CanTp_SendFrame() != E_OK)
+        if (CanTp_SendFrame(CanTp_TxFrameBuf) != E_OK)
         {
             /* FF 分岐と同様に送信失敗を呼び出し元(Dcm)へ伝える
              * (SWS_CanTp_00212 の定義どおり、要求が受理されなかった場合は
@@ -288,32 +323,32 @@ Std_ReturnType CanTp_Transmit(PduIdType TxSduId, const PduInfoType* PduInfoPtr)
             DET_LOGE(TAG, "TX SF FAIL");
             return E_NOT_OK;
         }
+        Dcm_TpTxConfirmation(CANTP_DCM_TX_PDU_ID, E_OK);   /* SF は、送ったら終わり */
         return E_OK;
     }
 
     /* ---- Multi Frame: First Frame ---- */
-    /* メッセージ全体を TX バッファへコピー */
-    uint16 i;
-    for (i = 0U; i < msgLen; i++)
+    PduInfoType src;
+    src.SduDataPtr = &CanTp_TxFrameBuf[2];
+    src.SduLength  = (PduLengthType)CANTP_FF_DATA;
+    if (Dcm_CopyTxData(CANTP_DCM_TX_PDU_ID, &src, NULL, &avail) != BUFREQ_OK)
     {
-        CanTp_Tx.buf[i] = PduInfoPtr->SduDataPtr[i];
+        DET_LOGE(TAG, "TX FF: CopyTxData failed");
+        return E_NOT_OK;
     }
-    CanTp_Tx.msgLen = msgLen;
-    CanTp_Tx.pos    = (uint16)CANTP_FF_DATA;   /* FF で送信済みバイト数 */
-    CanTp_Tx.sn     = 1U;
 
-    /* FF PCI: [0x1H, 0xLL] + 先頭 6 バイト */
+    CanTp_Tx.msgLen     = msgLen;
+    CanTp_Tx.pos        = (uint16)CANTP_FF_DATA;   /* FF で送信済みバイト数 */
+    CanTp_Tx.sn         = 1U;
+    CanTp_Tx.frameReady = 0U;
+
+    /* FF PCI: [0x1H, 0xLL] + 先頭 6 バイト（データは CopyTxData で書き込み済み） */
     CanTp_TxFrameBuf[0] = (uint8)(0x10U | (uint8)((msgLen >> 8U) & 0x0FU));
     CanTp_TxFrameBuf[1] = (uint8)(msgLen & 0xFFU);
-    uint8 k;
-    for (k = 0U; k < CANTP_FF_DATA; k++)
-    {
-        CanTp_TxFrameBuf[2U + k] = CanTp_Tx.buf[k];
-    }
 
     DET_LOGI(TAG, "TX FF len=%u", (unsigned)msgLen);
 
-    if (CanTp_SendFrame() != E_OK)
+    if (CanTp_SendFrame(CanTp_TxFrameBuf) != E_OK)
     {
         DET_LOGE(TAG, "TX FF FAIL abort");
         CanTp_Tx.state = CANTP_TX_IDLE;
@@ -380,7 +415,7 @@ void CanTp_MainFunction(void)
         if ((now - CanTp_Tx.bsTimer) >= CANTP_N_BS_TIMEOUT_MS)
         {
             DET_LOGE(TAG, "TX N_Bs timeout abort");
-            CanTp_Tx.state = CANTP_TX_IDLE;
+            CanTp_TxFinish(E_NOT_OK);
         }
     }
 
@@ -400,7 +435,7 @@ void CanTp_MainFunction(void)
         if ((now - CanTp_Rx.timer) >= CANTP_N_CR_TIMEOUT_MS)
         {
             DET_LOGE(TAG, "RX N_Cr timeout abort");
-            CanTp_Rx.state = CANTP_RX_IDLE;
+            CanTp_RxAbort();
         }
     }
 }
@@ -417,7 +452,8 @@ void CanTp_MainFunction(void)
  * \brief   PduR から配信された受信 CAN フレームを処理する。
  *
  * \details フレームタイプを判定して SF/FF/CF/FC それぞれを処理する。
- *          SF または完全に組み立てた UDS メッセージは Dcm_ComIndication へ渡す。
+ *          SF/FF/CF のデータは、Dcm_StartOfReception()/Dcm_CopyRxData()/Dcm_TpRxIndication() で
+ *          Dcm へ渡す（組み立ては Dcm の受信バッファの上で行う）。
  *
  * \param[in]  RxPduId     受信 PDU ID (単一チャネルのため未使用)。
  * \param[in]  PduInfoPtr  受信した 8 バイト CAN フレーム。NULL 禁止。
@@ -471,21 +507,19 @@ void CanTp_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
             break;
         }
 
-        uint8 i;
-        for (i = 0U; i < udsLen; i++)
-        {
-            CanTp_Rx.buf[i] = data[1U + i];
-        }
-
-        CanTp_Rx.state = CANTP_RX_IDLE;   /* 受信中の MF があれば中断 */
-
-        static PduInfoType sfUds;
-        sfUds.SduDataPtr = CanTp_Rx.buf;
-        sfUds.SduLength  = (PduLengthType)udsLen;
+        CanTp_RxAbort();   /* 受信中の MF があれば中断（受信中でなければ何もしない） */
 
         DET_LOGI(TAG, "RX SF len=%u", (unsigned)udsLen);
 
-        Dcm_ComIndication(0U, &sfUds);
+        PduLengthType bufSize = 0U;
+        if (Dcm_StartOfReception(CANTP_DCM_RX_PDU_ID, NULL, (PduLengthType)udsLen, &bufSize) != BUFREQ_OK)
+        {
+            DET_LOGW(TAG, "RX SF rejected by upper layer");
+            break;   /* 受け入れられなかった（Dcm_TpRxIndication() は呼ばない） */
+        }
+
+        Std_ReturnType result = (CanTp_CopyToUpper(&data[1], (uint8)udsLen) == BUFREQ_OK) ? E_OK : E_NOT_OK;
+        Dcm_TpRxIndication(CANTP_DCM_RX_PDU_ID, result);
         break;
     }
 
@@ -505,6 +539,7 @@ void CanTp_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
         if (CanTp_Rx.state == CANTP_RX_WAIT_CF)
         {
             DET_LOGW(TAG, "RX FF aborts in-progress reception, starting new");
+            CanTp_RxAbort();   /* 古い受信を、上位層へ中断として通知する */
         }
 
         uint16 msgLen = (uint16)((((uint16)pci & 0x0FU) << 8U)
@@ -515,11 +550,20 @@ void CanTp_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
             break;
         }
 
-        if (msgLen > (uint16)CANTP_RX_BUFFER_SIZE)
+        PduLengthType bufSize = 0U;
+        BufReq_ReturnType started = Dcm_StartOfReception(CANTP_DCM_RX_PDU_ID, NULL, (PduLengthType)msgLen, &bufSize);
+
+        if (started == BUFREQ_E_OVFL)
         {
             DET_LOGE(TAG, "RX FF overflow FC_OVFLW");
             CanTp_SendFlowControl(CANTP_FC_OVFLW, 0U, 0U);
             break;
+        }
+
+        if (started != BUFREQ_OK)
+        {
+            DET_LOGW(TAG, "RX FF rejected by upper layer");
+            break;   /* 受け入れられなかった（Dcm_TpRxIndication() は呼ばない） */
         }
 
         CanTp_Rx.msgLen = msgLen;
@@ -527,17 +571,15 @@ void CanTp_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
         CanTp_Rx.state  = CANTP_RX_WAIT_CF;
         CanTp_Rx.timer  = CanTp_GetNowMs();
 
-        /* FF の先頭 6 バイトをコピー */
-        uint16 copyLen = (msgLen < (uint16)CANTP_FF_DATA)
-                         ? msgLen : (uint16)CANTP_FF_DATA;
-        uint8 i;
-        for (i = 0U; i < (uint8)copyLen; i++)
-        {
-            CanTp_Rx.buf[i] = data[2U + i];
-        }
-        CanTp_Rx.pos = copyLen;
-
         DET_LOGI(TAG, "RX FF len=%u", (unsigned)msgLen);
+
+        /* FF の先頭 6 バイトを、上位層へ渡す（msgLen > 7 は上で確認済み） */
+        if (CanTp_CopyToUpper(&data[2], (uint8)CANTP_FF_DATA) != BUFREQ_OK)
+        {
+            CanTp_RxAbort();
+            break;
+        }
+        CanTp_Rx.pos = (uint16)CANTP_FF_DATA;
 
         CanTp_SendFlowControl(CANTP_FC_CTS, CANTP_BLOCK_SIZE, CANTP_ST_MIN);
         break;
@@ -558,7 +600,7 @@ void CanTp_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
         if (PduInfoPtr->SduLength < 8U)
         {
             DET_LOGE(TAG, "RX CF too short len=%u", (unsigned)PduInfoPtr->SduLength);
-            CanTp_Rx.state = CANTP_RX_IDLE;
+            CanTp_RxAbort();
             break;
         }
 
@@ -568,17 +610,17 @@ void CanTp_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
         {
             DET_LOGE(TAG, "RX CF SN err exp=%u got=%u",
                      (unsigned)(CanTp_Rx.sn & 0x0FU), (unsigned)sn);
-            CanTp_Rx.state = CANTP_RX_IDLE;
+            CanTp_RxAbort();
             break;
         }
 
         uint16 remaining = CanTp_Rx.msgLen - CanTp_Rx.pos;
         uint8  copyLen   = (remaining > (uint16)CANTP_CF_DATA)
                            ? CANTP_CF_DATA : (uint8)remaining;
-        uint8 i;
-        for (i = 0U; i < copyLen; i++)
+        if (CanTp_CopyToUpper(&data[1], copyLen) != BUFREQ_OK)
         {
-            CanTp_Rx.buf[CanTp_Rx.pos + i] = data[1U + i];
+            CanTp_RxAbort();
+            break;
         }
 
         CanTp_Rx.pos += (uint16)copyLen;
@@ -591,13 +633,9 @@ void CanTp_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
         {
             CanTp_Rx.state = CANTP_RX_IDLE;
 
-            static PduInfoType mfUds;
-            mfUds.SduDataPtr = CanTp_Rx.buf;
-            mfUds.SduLength  = (PduLengthType)CanTp_Rx.msgLen;
-
             DET_LOGI(TAG, "RX MF done len=%u", (unsigned)CanTp_Rx.msgLen);
 
-            Dcm_ComIndication(0U, &mfUds);
+            Dcm_TpRxIndication(CANTP_DCM_RX_PDU_ID, E_OK);
         }
         break;
     }
@@ -639,7 +677,7 @@ void CanTp_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
         else   /* OVFLW */
         {
             DET_LOGE(TAG, "TX FC OVFLW abort");
-            CanTp_Tx.state = CANTP_TX_IDLE;
+            CanTp_TxFinish(E_NOT_OK);
         }
         break;
     }
@@ -711,15 +749,75 @@ static unsigned long CanTp_GetNowMs(void)
  * 内部ヘルパー: フレーム送信
  * ----------------------------------------------------------------------- */
 
-/** CanTp_TxFrameBuf の内容 (8 バイト) を PduR 経由で CAN 0x7E8 に送信する。
+/** frame（8 バイト）を PduR 経由で CAN 0x7E8 に送信する。
+ *  \param[in] frame  送信する 8 バイトのフレーム（CanTp_TxFrameBuf か fcFrame）。
  *  \retval E_OK     送信受け付け成功。
  *  \retval E_NOT_OK PduR / CanIf / Can_Write が失敗（TX バッファビジー等）。 */
-static Std_ReturnType CanTp_SendFrame(void)
+static Std_ReturnType CanTp_SendFrame(uint8* frame)
 {
     static PduInfoType pdu;
-    pdu.SduDataPtr = CanTp_TxFrameBuf;
+    pdu.SduDataPtr = frame;
     pdu.SduLength  = 8U;
     return PduR_CanTpTransmit(CANTP_PDUR_TX_SDU_ID, &pdu);
+}
+
+/** TX チャネルが、送信の途中（FC 待ち、または CF の送信中）か。 */
+static boolean CanTp_TxBusy(void)
+{
+    return (boolean)(CanTp_Tx.state != CANTP_TX_IDLE);
+}
+
+/** 送信が進まない状態（CF の送信失敗、または Dcm の送信データ待ち）が、CANTP_N_AS_TIMEOUT_MS を
+ *  超えて続いたか。呼ぶたびに、進まない状態の継続を測る（最初に呼んだ時刻を基点に記録する）。
+ *  進んだ時は、呼び出し側が asFailTimer を 0 へ戻す。
+ *  @retval TRUE   タイムアウト。
+ *  @retval FALSE  まだ。 */
+static boolean CanTp_TxStallTimedOut(void)
+{
+    unsigned long now = CanTp_GetNowMs();
+
+    if (CanTp_Tx.asFailTimer == 0UL)
+    {
+        CanTp_Tx.asFailTimer = now;   /* 継続の開始時刻を記録 */
+    }
+    return (boolean)((now - CanTp_Tx.asFailTimer) >= CANTP_N_AS_TIMEOUT_MS);
+}
+
+/** 受信中の N-SDU を中断する。上位層（Dcm）へ Dcm_TpRxIndication(E_NOT_OK) を通知し、RX を IDLE へ戻す。 */
+static void CanTp_RxAbort(void)
+{
+    if (CanTp_Rx.state == CANTP_RX_WAIT_CF)
+    {
+        CanTp_Rx.state = CANTP_RX_IDLE;
+        Dcm_TpRxIndication(CANTP_DCM_RX_PDU_ID, E_NOT_OK);
+    }
+}
+
+/** 送信を終える（正常終了、または中断）。TX を IDLE へ戻し、上位層（Dcm）へ Dcm_TpTxConfirmation() を通知する。 */
+static void CanTp_TxFinish(Std_ReturnType result)
+{
+    CanTp_Tx.state       = CANTP_TX_IDLE;
+    CanTp_Tx.frameReady  = 0U;
+    CanTp_Tx.asFailTimer = 0UL;
+    Dcm_TpTxConfirmation(CANTP_DCM_TX_PDU_ID, result);
+}
+
+/** 受信したフレームのデータ（len バイト、最大 CANTP_CF_DATA）を、上位層の受信バッファへコピーする。
+ *  CopyRxData() は書き込み可能なポインタを取るので、受信フレームを一度、内部の作業領域へ写してから渡す。 */
+static BufReq_ReturnType CanTp_CopyToUpper(const uint8* src, uint8 len)
+{
+    static uint8 work[CANTP_CF_DATA];
+    PduInfoType  info;
+    PduLengthType remaining = 0U;
+    uint8 k;
+
+    for (k = 0U; k < len; k++)
+    {
+        work[k] = src[k];
+    }
+    info.SduDataPtr = work;
+    info.SduLength  = (PduLengthType)len;
+    return Dcm_CopyRxData(CANTP_DCM_RX_PDU_ID, &info, &remaining);
 }
 
 /**
@@ -760,18 +858,20 @@ static uint8 CanTp_DecodeStMin(uint8 raw)
  */
 static void CanTp_SendFlowControl(uint8 fs, uint8 bs, uint8 stMin)
 {
-    CanTp_TxFrameBuf[0] = (uint8)(0x30U | (fs & 0x0FU));
-    CanTp_TxFrameBuf[1] = bs;
-    CanTp_TxFrameBuf[2] = stMin;
-    CanTp_TxFrameBuf[3] = 0x00U;
-    CanTp_TxFrameBuf[4] = 0x00U;
-    CanTp_TxFrameBuf[5] = 0x00U;
-    CanTp_TxFrameBuf[6] = 0x00U;
-    CanTp_TxFrameBuf[7] = 0x00U;
+    static uint8 fcFrame[8];
+
+    fcFrame[0] = (uint8)(0x30U | (fs & 0x0FU));
+    fcFrame[1] = bs;
+    fcFrame[2] = stMin;
+    fcFrame[3] = 0x00U;
+    fcFrame[4] = 0x00U;
+    fcFrame[5] = 0x00U;
+    fcFrame[6] = 0x00U;
+    fcFrame[7] = 0x00U;
 
     DET_LOGI(TAG, "TX FC fs=%u bs=%u", (unsigned)fs, (unsigned)bs);
 
-    (void)CanTp_SendFrame();   /* FC 送信失敗は N_Cr タイムアウトで上位が再試行 */
+    (void)CanTp_SendFrame(fcFrame);   /* FC 送信失敗は N_Cr タイムアウトで上位が再試行 */
 }
 
 /**
@@ -789,53 +889,75 @@ static void CanTp_SendFlowControl(uint8 fs, uint8 bs, uint8 stMin)
  */
 static void CanTp_SendNextCF(void)
 {
-    uint16 remaining = CanTp_Tx.msgLen - CanTp_Tx.pos;
-    uint8  copyLen   = (remaining > (uint16)CANTP_CF_DATA)
-                       ? CANTP_CF_DATA : (uint8)remaining;
+    if (CanTp_Tx.frameReady == 0U)
+    {
+        /* 新しい CF を組み立てる: データは、上位層（Dcm）から取り出す。 */
+        uint16 remaining = CanTp_Tx.msgLen - CanTp_Tx.pos;
+        uint8  copyLen   = (remaining > (uint16)CANTP_CF_DATA)
+                           ? CANTP_CF_DATA : (uint8)remaining;
 
-    CanTp_TxFrameBuf[0] = (uint8)(0x20U | (CanTp_Tx.sn & 0x0FU));
-    uint8 i;
-    for (i = 0U; i < copyLen; i++)
-    {
-        CanTp_TxFrameBuf[1U + i] = CanTp_Tx.buf[CanTp_Tx.pos + i];
-    }
-    for (; i < CANTP_CF_DATA; i++)
-    {
-        CanTp_TxFrameBuf[1U + i] = 0x00U;
+        PduInfoType   src;
+        PduLengthType avail = 0U;
+        src.SduDataPtr = &CanTp_TxFrameBuf[1];
+        src.SduLength  = (PduLengthType)copyLen;
+
+        BufReq_ReturnType got = Dcm_CopyTxData(CANTP_DCM_TX_PDU_ID, &src, NULL, &avail);
+
+        if (got == BUFREQ_E_BUSY)
+        {
+            /* データがまだ無い。次の CanTp_MainFunction 呼び出しで再試行する（[SWS_CanTp_00184]）。
+             * ただし、送信データが用意されないまま続く場合に備え、N_Cs 相当のタイムアウトで中断する
+             * （送信失敗の継続を測る N_As 用のタイマと、同じ時間・同じタイマを使う）。 */
+            if (CanTp_TxStallTimedOut())
+            {
+                DET_LOGE(TAG, "TX CF: no data from upper layer (N_Cs) abort sn=%u", (unsigned)CanTp_Tx.sn);
+                CanTp_TxFinish(E_NOT_OK);
+            }
+            return;
+        }
+
+        if (got != BUFREQ_OK)
+        {
+            DET_LOGE(TAG, "TX CF: CopyTxData failed abort sn=%u", (unsigned)CanTp_Tx.sn);
+            CanTp_TxFinish(E_NOT_OK);
+            return;
+        }
+
+        CanTp_TxFrameBuf[0] = (uint8)(0x20U | (CanTp_Tx.sn & 0x0FU));
+        uint8 i;
+        for (i = copyLen; i < CANTP_CF_DATA; i++)
+        {
+            CanTp_TxFrameBuf[1U + i] = 0x00U;
+        }
+        CanTp_Tx.frameLen   = copyLen;
+        CanTp_Tx.frameReady = 1U;
     }
 
     DET_LOGI(TAG, "TX CF sn=%u pos=%u", (unsigned)CanTp_Tx.sn, (unsigned)CanTp_Tx.pos);
 
-    if (CanTp_SendFrame() != E_OK)
+    if (CanTp_SendFrame(CanTp_TxFrameBuf) != E_OK)
     {
-        unsigned long now = CanTp_GetNowMs();
-
-        if (CanTp_Tx.asFailTimer == 0UL)
-        {
-            CanTp_Tx.asFailTimer = now;   /* 失敗継続の開始時刻を記録 */
-        }
-
-        if ((now - CanTp_Tx.asFailTimer) >= CANTP_N_AS_TIMEOUT_MS)
+        if (CanTp_TxStallTimedOut())
         {
             DET_LOGE(TAG, "TX N_As timeout abort sn=%u", (unsigned)CanTp_Tx.sn);
-            CanTp_Tx.state       = CANTP_TX_IDLE;
-            CanTp_Tx.asFailTimer = 0UL;
+            CanTp_TxFinish(E_NOT_OK);
             return;
         }
 
-        /* 送信失敗: pos/sn を進めず次の CanTp_MainFunction 呼び出しでリトライ */
+        /* 送信失敗: pos/sn を進めず、組み立て済みの同じ CF を、次の CanTp_MainFunction 呼び出しで再送する */
         DET_LOGE(TAG, "TX CF FAIL sn=%u retry", (unsigned)CanTp_Tx.sn);
         return;
     }
 
     CanTp_Tx.asFailTimer = 0UL;   /* 送信成功: 失敗継続の記録をクリア */
-    CanTp_Tx.pos += (uint16)copyLen;
+    CanTp_Tx.frameReady  = 0U;
+    CanTp_Tx.pos += (uint16)CanTp_Tx.frameLen;
     CanTp_Tx.sn   = (uint8)((CanTp_Tx.sn + 1U) & 0x0FU);
 
     if (CanTp_Tx.pos >= CanTp_Tx.msgLen)
     {
         DET_LOGI(TAG, "TX done");
-        CanTp_Tx.state = CANTP_TX_IDLE;
+        CanTp_TxFinish(E_OK);
         return;
     }
 
@@ -852,11 +974,6 @@ static void CanTp_SendNextCF(void)
     }
 }
 
-boolean CanTp_IsTxBusy(void)
-{
-    return (boolean)(CanTp_Tx.state != CANTP_TX_IDLE);
-}
-
 /* ======================================================================
  * Test Functions
  * ====================================================================== */
@@ -865,5 +982,10 @@ boolean CanTp_IsTxBusy(void)
 void CanTp_Test_ResetInitState(void)
 {
     CanTp_Initialized = 0U;
+}
+
+boolean CanTp_Test_IsTxBusy(void)
+{
+    return CanTp_TxBusy();
 }
 #endif

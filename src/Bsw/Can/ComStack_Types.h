@@ -49,4 +49,29 @@ typedef struct
     PduLengthType SduLength;  // ペイロード長（バイト）
 } PduInfoType;
 
+// TP（トランスポートプロトコル）のバッファ要求の結果。
+// CanTp ⇔ 上位層（Dcm）の Xxx_StartOfReception()/Xxx_CopyRxData()/Xxx_CopyTxData() の戻り値に使う。
+typedef enum
+{
+    BUFREQ_OK       = 0U,  // 要求を満たした
+    BUFREQ_E_NOT_OK = 1U,  // 要求を拒否した（受信は中断する）
+    BUFREQ_E_BUSY   = 2U,  // 今は満たせないが、後で再試行してよい
+    BUFREQ_E_OVFL   = 3U   // 必要な長さのバッファを用意できない（受信は中断する）
+} BufReq_ReturnType;
+
+// TP の送信データの状態。Xxx_CopyTxData() の retry 引数で、送信済みデータの確認や再送を指示する。
+typedef enum
+{
+    TP_DATACONF    = 0U,  // これまでにコピーしたデータは確認済みで、バッファから消してよい
+    TP_DATARETRY   = 1U,  // コピー済みのデータを、TxTpDataCnt バイト前から再度コピーする
+    TP_CONFPENDING = 2U   // 確認待ち。コピー済みのデータは、エラー回復のためバッファに残す
+} TpDataStateType;
+
+// Xxx_CopyTxData() の retry 引数
+typedef struct
+{
+    TpDataStateType TpDataState;  // 送信済みデータの状態
+    PduLengthType   TxTpDataCnt;  // TP_DATARETRY のとき、現在のコピー位置から戻るバイト数
+} RetryInfoType;
+
 #endif

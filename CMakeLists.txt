@@ -478,7 +478,6 @@ set(NATIVE_CHAIN_WRAP_SYMBOLS
     # CanTp.c の AUTOSAR IF 全数（Wrap_CanTp.h/.c 参照）。
     CanTp_Init
     CanTp_Transmit
-    CanTp_IsTxBusy
     CanTp_RxIndication
     CanTp_TxConfirmation
     CanTp_MainFunction
@@ -525,7 +524,7 @@ set(NATIVE_CHAIN_WRAP_SYMBOLS
     ComM_CommunicationAllowed
     ComM_BusSM_ModeIndication
     ComM_MainFunction
-    # Dcm.h の AUTOSAR IF 全8関数 + Dcm_ComIndication（Wrap_Dcm.h/.c 参照）。
+    # Dcm.h の AUTOSAR IF 全8関数 + TP の受信・送信コールバック 5 関数（Wrap_Dcm.h/.c 参照）。
     Dcm_Init
     Dcm_MainFunction
     Dcm_GetVin
@@ -534,7 +533,11 @@ set(NATIVE_CHAIN_WRAP_SYMBOLS
     Dcm_GetActiveProtocol
     Dcm_ResetToDefaultSession
     Dcm_GetVersionInfo
-    Dcm_ComIndication
+    Dcm_StartOfReception
+    Dcm_CopyRxData
+    Dcm_TpRxIndication
+    Dcm_CopyTxData
+    Dcm_TpTxConfirmation
     # Dem.h の公開API全18関数（Wrap_Dem.h/.c 参照）。
     Dem_Init
     Dem_SetEventStatus

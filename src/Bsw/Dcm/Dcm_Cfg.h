@@ -85,13 +85,11 @@
  * （Release 4.3.1、docs/ 配下）の「List of Basic Software Modules」表で
  * Diagnostic Communication Manager (Dcm) に割り当てられた固定値 53 を使う。
  *
- * 本実装は実際の SWS_Dcm が定義する Dcm_TpRxIndication/StartOfReception/
- * CopyRxData のようなストリーミング型 PduR-Dcm インタフェースではなく、
- * CanTp が組み立て済みの UDS ペイロードを一括で渡す簡略設計
- * （Dcm_ComIndication、AUTOSAR 標準に対応する単一関数が存在しない
- * 本プロジェクト独自の拡張。ServiceID は既存の 0xF0 を踏襲）のため、
- * 各 UDS サービスハンドラ（Dcm_HandleXxx 内部関数）は Dcm_ComIndication で
- * 検証済みのデータのみを受け取り、個別の NULL/範囲チェックは対象外とする。
+ * CanTp との受け渡しは、SWS_Dcm が定義する TP の API（Dcm_StartOfReception/
+ * Dcm_CopyRxData/Dcm_TpRxIndication、Dcm_CopyTxData/Dcm_TpTxConfirmation）で
+ * 行い、DET のチェックもこれらの入口で行う。要求の処理（Dcm_ProcessRequest）は
+ * 検証済みの受信バッファのデータだけを受け取るため、各 UDS サービスハンドラ
+ * （Dcm_HandleXxx 内部関数）は、個別の NULL/範囲チェックは対象外とする。
  * また UDS 要求自体の長さ不正・不正な値は Det ではなく NRC（否定応答）で
  * 表現するのが AUTOSAR の設計であり、本実装もその方針に従う。
  * ----------------------------------------------------------------------- */
@@ -104,8 +102,7 @@
 #define DCM_E_PARAM_POINTER 0x07U
 
 /** ApiId（Dcm_Init/Dcm_MainFunction は SWS 8.x 章の「Service ID[hex]」記載を
- *  実測して確認済み。Dcm_ComIndication は AUTOSAR 標準の単一関数に対応しない
- *  本プロジェクト独自のエントリポイントのため、既存の非標準値 0xF0 を踏襲する） */
+ *  実測して確認済み。TP の 5 関数も、SWS 8.4 章の値）。 */
 /* cppcheck-suppress misra-c2012-2.5 */
 #define DCM_API_ID_INIT           0x01U
 #define DCM_API_ID_GET_VIN        0x07U
@@ -113,7 +110,11 @@
 #define DCM_API_ID_GET_SECURITY_LEVEL 0x0DU
 #define DCM_API_ID_RESET_TO_DEFAULT_SESSION 0x2AU
 #define DCM_API_ID_MAIN_FUNCTION  0x25U
-#define DCM_API_ID_COM_INDICATION 0xF0U
+#define DCM_API_ID_START_OF_RECEPTION 0x46U
+#define DCM_API_ID_COPY_RX_DATA   0x44U
+#define DCM_API_ID_TP_RX_INDICATION 0x45U
+#define DCM_API_ID_COPY_TX_DATA   0x43U
+#define DCM_API_ID_TP_TX_CONFIRMATION 0x48U
 #define DCM_API_ID_GET_VERSION_INFO 0x24U
 #define DCM_API_ID_GET_ACTIVE_PROTOCOL 0x0FU
 
@@ -274,6 +275,13 @@
  *  1 バイト目のネガティブレスポンス SID マーカーとは別物（意味も使用箇所も異なる）。 */
 #define DCM_NRC_SERVICE_NOT_SUPPORTED_IN_SESSION  0x7FU
 
+/** UDS 要求の受信バッファの大きさ [byte]。CanTp は組み立てを持たず、Dcm_StartOfReception()/
+ *  Dcm_CopyRxData() で、この Dcm の受信バッファへ直接コピーする。これを超える長さの要求は
+ *  BUFREQ_E_OVFL で拒否し、CanTp は Flow Control (Overflow) を返す。
+ *  現状の最大の要求は WriteDataByIdentifier CryptoKeyUpdate (0x2E, DID 0x0108) の 20 バイト
+ *  （SID 1 + DID 2 + keyName 1 + 鍵 16）。 */
+#define DCM_RX_BUF_SIZE  32U
+
 /* -----------------------------------------------------------------------
  * データ識別子 (DID) 定義
  * ISO 14229-1 の製造者定義領域 (0x0100-0xFEFF) を使用。
@@ -388,8 +396,9 @@
 
 /** RequestDownload の応答 maxNumberOfBlockLength [bytes]。以降の
  *  TransferData 要求（SID+blockSequenceCounter+data を含む総バイト数）が
- *  これを超えないようテスタ側が調整する。CanTp の再組立バッファ
- *  (CANTP_RX_BUFFER_SIZE、既定 32 バイト) を下回る値にすること。 */
+ *  これを超えないようテスタ側が調整する。Dcm の受信バッファ
+ *  (DCM_RX_BUF_SIZE、既定 32 バイト) に TransferData の要求が収まる値にすること
+ *  （超える要求は BUFREQ_E_OVFL で拒否される。Dcm.c の静的アサートが検査する）。 */
 #define DCM_TRANSFER_MAX_BLOCK_LENGTH  16U
 
 /** RequestDownload で宣言できる memorySize の上限 [bytes]。実データは

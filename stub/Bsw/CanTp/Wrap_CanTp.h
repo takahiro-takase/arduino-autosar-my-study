@@ -10,22 +10,20 @@
  *          標準テンプレートに従う。
  *
  *          AUTOSAR 仕様（SWS_CanTp）が定義する CanTp.c の公開 IF 関数を
- *          全数 wrap 対象とする（`CanTp.h` 参照。`CanTp_IsTxBusy()` は
- *          AUTOSAR 標準外の本プロジェクト独自拡張 API だが、上位層の
- *          事前確認パスを検証するために対象に含める）。
+ *          全数 wrap 対象とする（`CanTp.h` 参照）。
  *
- *          戻り値を持つ2関数（Transmit/IsTxBusy）には「指定した呼び出し
+ *          戻り値を持つ関数（Transmit）には「指定した呼び出し
  *          回数以降は常に強制値を返す」という回数閾値方式の故障注入を実装
  *          する。`FailFromCallCount_CanTp_Xxx`
  *          （既定 `WRAP_CANTP_FAIL_FROM_CALL_COUNT_DISABLED`）に N を設定
  *          すると、`CallCount_CanTp_Xxx` が N 以上になった回から（その回を
  *          含め、以降ずっと）`ForcedReturn_CanTp_Xxx` を返すようになる。
  *
- *          戻り値を持たない5関数（Init/RxIndication/TxConfirmation/
+ *          戻り値を持たない関数（Init/RxIndication/TxConfirmation/
  *          MainFunction/GetVersionInfo）は故障注入する戻り値が無いため、
  *          呼び出し回数のみを記録する。
  *
- *          7関数すべて本ファイル1つが対象のため、他 wrap ファイルのような
+ *          全関数が本ファイル1つの対象のため、他 wrap ファイルのような
  *          関数ごとの個別 `Reset()` ではなく、全状態を一括で初期状態へ戻す
  *          `WrapCanTp_Reset()` を1つだけ持つ。各テストケースは SetUp() で
  *          `WrapCanTp_Reset()` を1回呼び、`FailFromCallCount_CanTp_Xxx` を
@@ -72,41 +70,56 @@ extern "C" {
  * ====================================================================== */
 
 /* ----------------------------------------------------------------------
- * 呼び出し回数（AUTOSAR IF 全7関数共通）
+ * 呼び出し回数（AUTOSAR IF 全6関数共通）
  * ---------------------------------------------------------------------- */
 extern uint32 CallCount_CanTp_Init;
 extern uint32 CallCount_CanTp_Transmit;
-extern uint32 CallCount_CanTp_IsTxBusy;
 extern uint32 CallCount_CanTp_RxIndication;
 extern uint32 CallCount_CanTp_TxConfirmation;
 extern uint32 CallCount_CanTp_MainFunction;
 extern uint32 CallCount_CanTp_GetVersionInfo;
 
 /* ----------------------------------------------------------------------
- * 回数閾値故障注入（戻り値を持つ2関数のみ）
+ * 回数閾値故障注入（戻り値を持つ関数のみ）
  * ---------------------------------------------------------------------- */
 /** `WRAP_CANTP_FAIL_FROM_CALL_COUNT_DISABLED`（既定）: 常に対応する
  *  `__real_CanTp_Xxx()` へパススルー。それ以外の値を設定すると、対応する
  *  `CallCount_CanTp_Xxx` がこの値に達した回から（以降ずっと）
  *  対応する `ForcedReturn_CanTp_Xxx` を返す。 */
 extern uint32 FailFromCallCount_CanTp_Transmit;
-extern uint32 FailFromCallCount_CanTp_IsTxBusy;
 
 /* ----------------------------------------------------------------------
- * 閾値到達後の強制戻り値（戻り値を持つ2関数のみ）
+ * 閾値到達後の強制戻り値（戻り値を持つ関数のみ）
  * ---------------------------------------------------------------------- */
 extern Std_ReturnType ForcedReturn_CanTp_Transmit; /**< 既定 E_NOT_OK */
-extern boolean        ForcedReturn_CanTp_IsTxBusy; /**< 既定 TRUE（送信中扱い） */
 
 /* ----------------------------------------------------------------------
  * 直近の呼び出し内容のキャプチャ（CanTp_Transmit のみ）
  * ---------------------------------------------------------------------- */
-/** 直近の `CanTp_Transmit()` 呼び出しで渡された `PduInfoPtr->SduDataPtr` の
- *  複製（先頭 `LastLength_CanTp_Transmit` バイトが有効）。 */
-extern uint8 LastData_CanTp_Transmit[CANTP_TX_BUFFER_SIZE];
+/** `LastData_CanTp_Transmit` の大きさ（これを超える応答は、先頭だけを複製する）。 */
+#define WRAP_CANTP_CAPTURE_SIZE 128U
+
+/** 1 にすると、`CanTp_Transmit()` が呼ばれた時に、上位層（Dcm）の応答を `Dcm_CopyTxData()` で
+ *  読み出して `LastData_CanTp_Transmit` へ複製する（読み出した分は、`TP_DATARETRY` で巻き戻すので、
+ *  本物の CanTp が後から読む分には影響しない）。既定 0。Dcm が応答を準備していない場面
+ *  （CanTp 単体の異常系のテストなど）で、余計な呼び出しをしないための選択式。 */
+extern uint8 CaptureEnabled_CanTp_Transmit;
+
+/** 直近の `CanTp_Transmit()` 呼び出しで、Dcm から読み出した応答の複製
+ *  （`CaptureEnabled_CanTp_Transmit` が 1 の時のみ。先頭 `LastLength_CanTp_Transmit`
+ *  バイト（上限 `WRAP_CANTP_CAPTURE_SIZE`）が有効）。 */
+extern uint8 LastData_CanTp_Transmit[WRAP_CANTP_CAPTURE_SIZE];
 
 /** 直近の `CanTp_Transmit()` 呼び出しで渡された `PduInfoPtr->SduLength`。 */
 extern PduLengthType LastLength_CanTp_Transmit;
+
+/* ----------------------------------------------------------------------
+ * 閾値到達後に強制値 E_OK を返す場合の振る舞い
+ * ---------------------------------------------------------------------- */
+/** 0（既定）: `ForcedReturn_CanTp_Transmit` が `E_OK` のとき、本物の CanTp の代わりに、
+ *  送信が完了したものとして `Dcm_TpTxConfirmation(E_OK)` を呼ぶ（Dcm の送信進行中の状態が
+ *  残らないようにする）。1: 呼ばない（Dcm を、送信が進行中のまま止める）。 */
+extern uint8 SuppressConfirmation_CanTp_Transmit;
 
 /* ======================================================================
  * Functions

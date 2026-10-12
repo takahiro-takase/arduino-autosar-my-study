@@ -7,6 +7,28 @@
 CanTp モジュールが ISO 15765-2 のフレーム処理を担い、
 DCM は PCI バイトを意識せず生 UDS ペイロードのみを扱います。
 
+## 上位層（Dcm）との受け渡し（TP の API）
+
+CanTp は、組み立て・分割用のバッファを持ちません。フレームごとに、Dcm と TP の API でやり取りします
+（2026-10 に、独自の `Dcm_ComIndication()` から、仕様の関数へ置き換えました）。
+仕様では PduR を経由しますが（`PduR_CanTpStartOfReception` など）、本プロジェクトは PduR に TP の経路を持たないので、
+CanTp が Dcm を直接呼びます。
+
+| 方向 | 順序 | 内容 |
+|------|------|------|
+| 受信 | `Dcm_StartOfReception(id, NULL, 長さ, &空き)` | SF/FF の受信時。Dcm が受け入れるかを返す（`BUFREQ_OK` / `BUFREQ_E_NOT_OK` / `BUFREQ_E_OVFL`）。`BUFREQ_E_OVFL` なら CanTp は FC(OVFLW) を返す |
+| | `Dcm_CopyRxData(id, {データ, 長さ}, &空き)` | SF のデータ、FF の先頭 6 バイト、各 CF のデータを、Dcm の受信バッファ（`DCM_RX_BUF_SIZE`＝32）へ直接コピーする |
+| | `Dcm_TpRxIndication(id, E_OK / E_NOT_OK)` | 受信の完了（E_OK）、または中断（N_Cr タイムアウト、シーケンス番号の誤り、別の SF/FF による中断。E_NOT_OK） |
+| 送信 | `CanTp_Transmit(id, {長さ})` | Dcm は応答の長さだけを渡す（`SduDataPtr` は使わない） |
+| | `Dcm_CopyTxData(id, {コピー先, 長さ}, 再送指示, &残り)` | SF（`CanTp_Transmit()` の中）、FF の先頭 6 バイト、各 CF の組み立ての時に、Dcm の応答バッファから取り出す |
+| | `Dcm_TpTxConfirmation(id, E_OK / E_NOT_OK)` | 送信の完了（最後のフレームを送った時。E_OK）、または中断（N_Bs・N_As タイムアウト、FC(OVFLW)、CopyTxData の失敗。E_NOT_OK） |
+
+- CF の送信に失敗したときは、組み立て済みの同じフレームを次の周期で再送します（`Dcm_CopyTxData()` を呼び直さない）。
+- `CanTp_Transmit()` が `E_NOT_OK` を返した（受け付けなかった）ときは、`Dcm_TpTxConfirmation()` は呼びません。
+- FC の送信には、CF の組み立て済みフレームを壊さないよう、別のバッファ（`fcFrame`）を使います。
+- 送信できる N-SDU の最大長は、FF の長さ欄（12 bit）で決まる 4095 バイトです。実際の上限は、Dcm の応答バッファ（`DCM_TX_BUF_SIZE`）です。
+  受信できる最大長は、Dcm の受信バッファ（`DCM_RX_BUF_SIZE`）です。以前の `CANTP_RX_BUFFER_SIZE`・`CANTP_TX_BUFFER_SIZE` は廃止しました（下記の歴史的な記述の定数名は、当時のものです）。
+
 ## ISO 15765-2 フレーム構造
 
 | フレーム種別 | PCI (byte[0]) | 内容 |
@@ -19,12 +41,12 @@ DCM は PCI バイトを意識せず生 UDS ペイロードのみを扱います
 ## RX 状態マシン（Arduino 受信側）
 
 ```
-IDLE ──── SF 受信 ──────────────────→ Dcm_ComIndication → IDLE
-     ──── FF 受信 → FC(CTS) 送信 ──→ WAIT_CF
-WAIT_CF ─ CF 受信(未完) ────────────→ WAIT_CF
-        ─ CF 受信(完成) ────────────→ Dcm_ComIndication → IDLE
-        ─ N_Cr タイムアウト(1000ms) ─→ IDLE (中断)
-        ─ 別の SF/FF 受信 ──────────→ 進行中の受信を中断し、新規受信として処理（後述）
+IDLE ──── SF 受信 ──────────────────→ StartOfReception → CopyRxData → TpRxIndication(E_OK) → IDLE
+     ──── FF 受信 → StartOfReception → FC(CTS) 送信 ──→ WAIT_CF
+WAIT_CF ─ CF 受信(未完) ────────────→ CopyRxData → WAIT_CF
+        ─ CF 受信(完成) ────────────→ CopyRxData → TpRxIndication(E_OK) → IDLE
+        ─ N_Cr タイムアウト(1000ms) ─→ TpRxIndication(E_NOT_OK) → IDLE (中断)
+        ─ 別の SF/FF 受信 ──────────→ 進行中の受信を TpRxIndication(E_NOT_OK) で中断し、新規受信として処理（後述）
 ```
 
 ## WAIT_CF 中に別の SF/FF を受信した場合（SWS_CanTp_00124）
@@ -70,20 +92,21 @@ TX 確認経路（`Can.c`/`CanIf.c`）が常に成功固定で真の送信失敗
 
 ## バッファ上限（FC OVFLW）とビジー判定
 
-**受信側（FF の総長が大きすぎる場合）**: FF が示す総長が `CANTP_RX_BUFFER_SIZE`（32 バイト）を
-超えるときは、再組立を始めず `FC(OVFLW)` を返して拒否します（ログ: `RX FF overflow FC_OVFLW`）。
+**受信側（FF の総長が大きすぎる場合）**: FF が示す総長が Dcm の受信バッファ（`DCM_RX_BUF_SIZE`、32 バイト）を
+超えるときは、`Dcm_StartOfReception()` が `BUFREQ_E_OVFL` を返し、CanTp は受信を始めず `FC(OVFLW)` を返して拒否します
+（ログ: `RX FF overflow FC_OVFLW`。`Bsw_DcmStack_RxOverflow_test.cpp` 参照）。
 **送信側**: 自 ECU が FF を送った後に相手から `FC(OVFLW)` を受け取った場合は、送信を中断して
 IDLE に戻ります（ログ: `TX FC OVFLW abort`）。FC(WAIT) を受け取ったときは N_Bs タイマを
-リセットして待ちます。送信できる応答の最大長は `CANTP_TX_BUFFER_SIZE`（76 バイト）で、
-超える `CanTp_Transmit()` は `invalid len` で拒否します（Dcm 側の `DCM_TX_BUF_SIZE` との関係は
-後述の「TX バッファサイズと上位層(Dcm)のペイロード長の不整合」参照）。
+リセットして待ちます。`CanTp_Transmit()` は、長さが 0 または 4095 を超えるときは `invalid len` で拒否します
+（応答の長さの実際の上限は、Dcm の `DCM_TX_BUF_SIZE` です。後述の「TX バッファサイズと上位層(Dcm)のペイロード長の不整合」は、
+以前、CanTp に応答のコピー用バッファ `CANTP_TX_BUFFER_SIZE` があった頃の経緯です）。
 
-**送信中かどうかの問い合わせ（`CanTp_IsTxBusy()`）**: 複数フレームの応答を送信中
-（FF 送信後の WAIT_FC から最後の CF まで）は `TRUE` を返します。Dcm はこれを使って、
-応答送信中は S3 タイマを毎周期更新し続けて進めず（[SWS_Dcm_00141] の代用）、送信中に届いた
-新しい要求は処理せず無視します（ログ: `req SID=0x.. ignored (CanTp TX busy)`。要求が届いたこと
-自体はテスターの生存の証拠として S3 タイマを更新します。[SWS_Dcm_00557]。
-`Bsw_DcmStack_CanTpBusy_test.cpp` 参照）。
+**送信中の扱い**: Dcm は、`CanTp_Transmit()` を受け付けてもらってから `Dcm_TpTxConfirmation()` が来るまで、
+自分で「送信が進行中」の状態を持ちます（以前は、CanTp の `CanTp_IsTxBusy()` を呼んで確認していましたが、廃止しました。
+テスト用に `CanTp_Test_IsTxBusy()` だけ残しています）。進行中は、応答送信中は S3 タイマを毎周期更新し続けて進めず
+（[SWS_Dcm_00141]）、送信中に届いた新しい要求は `Dcm_StartOfReception()` が `BUFREQ_E_NOT_OK` で拒否します
+（ログ: `reception rejected (response TX in progress)`。要求が届いたこと自体はテスターの生存の証拠として
+S3 タイマを更新します。[SWS_Dcm_00557]。`Bsw_DcmStack_CanTpBusy_test.cpp` 参照）。
 
 ## フロー制御パラメータ（BS / STmin）
 
@@ -119,6 +142,8 @@ CF1 と CF2 の間に追加 FC を送る必要はありません。
 FC が 1 回届いた時点で「最後の CF まで送ってよい」という許可が出ているためです。
 
 ## TX バッファサイズと上位層(Dcm)のペイロード長の不整合（実機ログで発覚、2026-08）
+
+> 2026-10 に、CanTp は応答のコピー用バッファを持たなくなり（`Dcm_CopyTxData()` で Dcm から取り出す）、`CANTP_TX_BUFFER_SIZE`・`CANTP_RX_BUFFER_SIZE` は廃止しました。以下は、当時の経緯です。
 
 `CanTp_Transmit()` は `PduInfoPtr->SduLength > CANTP_TX_BUFFER_SIZE` を
 「invalid len」として即座に拒否する（`CanTp.c` 参照）。この定数は

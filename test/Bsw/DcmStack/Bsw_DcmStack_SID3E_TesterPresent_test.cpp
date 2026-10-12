@@ -217,7 +217,7 @@ TEST_F(Bsw_DcmStack_SID3E_TesterPresent_Test,
 // ------------------------------------------------------------
 // OK: TesterPresent の本来の目的（S3 タイマ維持）の確認。extendedSession
 // 中に S3 タイムアウト直前で TesterPresent を送ると、それ自体が
-// Dcm_ComIndication() 経由で S3 タイマをリセットするため、その後さらに
+// 要求の処理（Dcm_ProcessRequest()）で S3 タイマをリセットするため、その後さらに
 // DCM_S3_TIMEOUT_MS 近く経過しても defaultSession へは戻らない。
 // ------------------------------------------------------------
 TEST_F(Bsw_DcmStack_SID3E_TesterPresent_Test,
