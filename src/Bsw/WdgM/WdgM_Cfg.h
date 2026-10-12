@@ -36,13 +36,13 @@
  *                       の順序のみを許可する。
  *              周期が ENGINE (3000ms) と異なる 2 つ目のエンティティを登録することで、
  *              WdgM のローカル判定（エンティティごとに独立）→グローバル判定
- *              （WdgM_TriggerHwWatchdog が全エンティティの結果を集約）という、
+ *              （WdgM_MainFunction のリフレッシュ処理が全エンティティの結果を集約）という、
  *              単一エンティティ構成では確認できない挙動を実機で検証できる。
  *
  *          HW ウォッチドッグの二重周期設計:
  *            判定（Alive/Logical/Deadline Supervision）は WDGM_SUPERVISION_CYCLE_MS
  *            ごと、HW ウォッチドッグへの実際のリフレッシュ（trigger）は
- *            WDGM_HW_TRIGGER_CYCLE_MS ごとと、意図的に周期を分離している。
+ *            WDGM_MAIN_FUNCTION_CYCLE_MS ごとと、意図的に周期を分離している。
  *            詳細は WDGM_HW_WATCHDOG_TIMEOUT_MS のコメントを参照。
  *
  * \copyright  Copyright (c) 2025 T_T
@@ -126,7 +126,7 @@
 #define WDGM_ENTITY_WARNING              1U
 
 /** Alive Supervision サイクル時間 (ms)。全エンティティ共通で、
- *  WdgM_MainFunction の呼び出し周期と一致させること (Os_PBCfg.c Task 7)。
+ *  WdgM_MainFunction の呼び出し周期（WDGM_MAIN_FUNCTION_CYCLE_MS）の整数倍にすること。
  *  ENGINE のタスク周期 3000ms の 2 倍に設定し、サイクル内に 2 回の Runnable
  *  実行を許容する（WARNING は 500ms 周期のため、同じ 6000ms サイクル内に
  *  約 12 回の実行が期待される）。 */
@@ -179,13 +179,22 @@
 #define WDGM_EXPIRED_SUPERVISION_CYCLE_TOL   2U
 
 /**
- * HW ウォッチドッグの trigger（リフレッシュ）周期。
- * WdgM_TriggerHwWatchdog の呼び出し周期と一致させること (Os_PBCfg.c 新設タスク)。
+ * WdgM_MainFunction の呼び出し周期（= HW ウォッチドッグのリフレッシュ周期）。
+ * Os.json の WdgM_MainFunction の periodMs と一致させること。
  * WDGM_SUPERVISION_CYCLE_MS（Alive/Logical/Deadline の判定サイクル）とは
  * 意図的に分離している。理由は WDGM_HW_WATCHDOG_TIMEOUT_MS のコメントを参照。
  */
-/* cppcheck-suppress misra-c2012-2.5 */
-#define WDGM_HW_TRIGGER_CYCLE_MS     1000UL
+#define WDGM_MAIN_FUNCTION_CYCLE_MS  1000UL
+
+/**
+ * Alive/Logical/Deadline の判定を行う、WdgM_MainFunction の呼び出し回数
+ * （AUTOSAR WdgMSupervisionReferenceCycle 相当）。
+ */
+#define WDGM_SUPERVISION_REFERENCE_CYCLE  ((uint8)(WDGM_SUPERVISION_CYCLE_MS / WDGM_MAIN_FUNCTION_CYCLE_MS))
+
+#if ((WDGM_SUPERVISION_CYCLE_MS % WDGM_MAIN_FUNCTION_CYCLE_MS) != 0UL) || (WDGM_SUPERVISION_CYCLE_MS < WDGM_MAIN_FUNCTION_CYCLE_MS) || ((WDGM_SUPERVISION_CYCLE_MS / WDGM_MAIN_FUNCTION_CYCLE_MS) > 255UL)
+#error "WDGM_SUPERVISION_CYCLE_MS は WDGM_MAIN_FUNCTION_CYCLE_MS の整数倍（1〜255 倍）にすること"
+#endif
 
 /**
  * HW ウォッチドッグのタイムアウト。
@@ -195,7 +204,7 @@
  * WdgM_Hw.cpp が WDT.begin(4000) と直接ハードコードし、この定数と手動で
  * 一致させる必要があった。詳細は Wdg_PBCfg.c 冒頭のコメント参照）。
  *
- * WDGM_HW_TRIGGER_CYCLE_MS (1000ms) より十分長く設定し、trigger 呼び出しの
+ * WDGM_MAIN_FUNCTION_CYCLE_MS (1000ms) より十分長く設定し、trigger 呼び出しの
  * ジッタで誤ってタイムアウトしないマージンを持たせること。
  *
  * 以前は「WDGM_SUPERVISION_CYCLE_MS (6000ms) より長く」という制約だったが、
@@ -203,11 +212,11 @@
  * 判定サイクルにそのままリフレッシュを同期させると仕様上不可能だった
  * （AVR の WDTO_8S=8000ms では問題にならなかった）。
  * このため HW ウォッチドッグの trigger（リフレッシュ）を Alive/Logical/Deadline
- * の判定サイクルから切り離し、判定は WDGM_SUPERVISION_CYCLE_MS（6000ms）ごと、
- * リフレッシュは WDGM_HW_TRIGGER_CYCLE_MS（1000ms）ごとの、判定結果を参照する
- * だけの軽量処理（WdgM_TriggerHwWatchdog）に分離した。
- * 実車の AUTOSAR WdgM も、Wdg への trigger 周期と WdgMSupervisionCycle を
- * 独立して設定できる点で同じ考え方を採る。
+ * の判定サイクルから切り離し、WdgM_MainFunction を WDGM_MAIN_FUNCTION_CYCLE_MS
+ * （1000ms）ごとに呼んで毎回リフレッシュし、判定は WDGM_SUPERVISION_REFERENCE_CYCLE
+ * 回に 1 回（WDGM_SUPERVISION_CYCLE_MS = 6000ms ごと）に間引く。
+ * 実車の AUTOSAR WdgM も、WdgMSupervisionCycle（呼び出し周期）と
+ * WdgMSupervisionReferenceCycle（判定の間引き）で同じ構成を採る。
  */
 #define WDGM_HW_WATCHDOG_TIMEOUT_MS  4000UL
 

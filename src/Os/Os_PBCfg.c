@@ -23,14 +23,14 @@
  *            App_WarningIndicator_Run は LED 点滅半周期 (500 ms ON/OFF) のため 500 ms とする。
  *            CanSM_MainFunction は Bus-Off 回復タイマの精度を確保するため 10 ms とする。
  *            IoHwAb_MainFunction はデバウンス閾値 40ms (4 サンプル × 10ms) を実現するため 10 ms とする。
- *            WdgM_TriggerHwWatchdog は WdgM_MainFunction (判定, 6000ms) とは別に、
- *            HW ウォッチドッグのタイムアウト (4000ms) より十分短い周期で
- *            リフレッシュするため 1000 ms とする。Renesas RA4M1 の IWDT 最大
- *            タイムアウト（約 5592ms）が判定サイクル (6000ms) より短く、
- *            判定サイクルに直接同期できないための分離（詳細は WdgM_Cfg.h の
+ *            WdgM_MainFunction は HW ウォッチドッグのタイムアウト (4000ms) より十分短い
+ *            周期で毎回リフレッシュするため 1000 ms とする。判定は 6 回に 1 回
+ *            (6000ms ごと) だけ行う。Renesas RA4M1 の IWDT 最大タイムアウト
+ *            （約 5592ms）が判定サイクル (6000ms) より短く、判定サイクルに直接
+ *            同期できないための構成（詳細は WdgM_Cfg.h の
  *            WDGM_HW_WATCHDOG_TIMEOUT_MS コメントを参照）。
  *            CanNm_MainFunction は MeterStatus (3000ms) より高頻度な 1000 ms とし、
- *            WdgM_TriggerHwWatchdog と同じ「中頻度の BSW ハウスキーピング」
+ *            WdgM_MainFunction と同じ「中頻度の BSW ハウスキーピング」
  *            周期に揃えている（詳細は CanNm_Cfg.h を参照）。
  *            NvM_MainFunction は CanSM_MainFunction / IoHwAb_MainFunction と同じ
  *            10 ms とする（ブロック・CRC・冗長化のオーケストレーションのみで
@@ -135,25 +135,24 @@ static const Os_TaskType Os_TaskTable[OS_TASK_COUNT] =
      * 同じティックで拾えるようにするため（末尾に追加すると 1 ティック分の遅延が生じる）。 */
     /* Task 6  */ { Com_MainFunctionTx,            100U },  /* 100 ms : TX送信スケジューリング・送信確認監視 */
     /* Task 7  */ { IoHwAb_MainFunction,            10U },  /* 10 ms : ボタンデバウンスサンプリング */
-    /* Task 8  */ { WdgM_MainFunction,            6000U },  /* 6000 ms : Alive/Logical/Deadline 判定 */
+    /* Task 8  */ { WdgM_MainFunction,            1000U },  /* 1000 ms : HW ウォッチドッグのリフレッシュ + Alive/Logical/Deadline 判定（6 回に 1 回） */
     /* Task 9  */ { Dcm_MainFunction,             1000U },  /* 1000 ms : S3 セッションタイムアウト監視 */
     /* Task 10 */ { FiM_MainFunction,              100U },  /* 100 ms : 機能抑止状態の再評価 */
-    /* Task 11 */ { WdgM_TriggerHwWatchdog,       1000U },  /* 1000 ms : HW ウォッチドッグ trigger */
-    /* Task 12 */ { CanNm_MainFunction,           1000U },  /* 1000 ms : NM フレーム送信 */
-    /* Task 13 */ { NvM_MainFunction,               10U },  /* 10 ms : 保留中 EEPROM ジョブ処理 */
-    /* Task 14 */ { Can_MainFunction_Write,          1U },  /* 1 ms : 保留中 TX 確認をドレイン */
-    /* Task 15 */ { Can_MainFunction_BusOff,         1U },  /* 1 ms : Bus-Off ポーリング */
-    /* Task 16 */ { Can_MainFunction_Wakeup,         1U },  /* 1 ms : ウェイクアップペンディングのドレイン */
-    /* Task 17 */ { SecOC_MainFunctionTx,          100U },  /* 100 ms : TX Secured I-PDU の Freshness/MAC 計算・送信 */
-    /* Task 18 */ { MemIf_MainFunction,             10U },  /* 10 ms : 保留中 EEPROM ジョブ処理 (Fee 物理バイト書き込み) */
-    /* Task 19 */ { App_GptDemo_Run,              2000U },  /* 2000 ms : Gpt 実 HW タイマ通知カウンタのログ出力 (動作確認用) */
+    /* Task 11 */ { CanNm_MainFunction,           1000U },  /* 1000 ms : NM フレーム送信 */
+    /* Task 12 */ { NvM_MainFunction,               10U },  /* 10 ms : 保留中 EEPROM ジョブ処理 */
+    /* Task 13 */ { Can_MainFunction_Write,          1U },  /* 1 ms : 保留中 TX 確認をドレイン */
+    /* Task 14 */ { Can_MainFunction_BusOff,         1U },  /* 1 ms : Bus-Off ポーリング */
+    /* Task 15 */ { Can_MainFunction_Wakeup,         1U },  /* 1 ms : ウェイクアップペンディングのドレイン */
+    /* Task 16 */ { SecOC_MainFunctionTx,          100U },  /* 100 ms : TX Secured I-PDU の Freshness/MAC 計算・送信 */
+    /* Task 17 */ { MemIf_MainFunction,             10U },  /* 10 ms : 保留中 EEPROM ジョブ処理 (Fee 物理バイト書き込み) */
+    /* Task 18 */ { App_GptDemo_Run,              2000U },  /* 2000 ms : Gpt 実 HW タイマ通知カウンタのログ出力 (動作確認用) */
     /* 現状 NOP（ComMNmVariant=FULL では [SWS_ComM_00888] によりヒステリシスタイマ不要。ComM.c 参照）。 */
-    /* Task 20 */ { ComM_MainFunction,             100U },  /* 100 ms : 現状 NOP（SWS_ComM_00888、ComM.c 参照） */
+    /* Task 19 */ { ComM_MainFunction,             100U },  /* 100 ms : 現状 NOP（SWS_ComM_00888、ComM.c 参照） */
     /* 現状 NOP（SecOC_RxIndication() が受信の都度 Csm_MacVerify() を同期実行するため、保留中の RX ジョブが
      * 存在しない。SecOC.c 参照）。ComM_MainFunction と同じく、「宣言されたが一度もスケジューラに登録されない」
      * ギャップを避けるため配線のみ行う。 */
-    /* Task 21 */ { SecOC_MainFunctionRx,          100U },  /* 100 ms : 現状 NOP（RX 検証は同期実行済み、SecOC.c 参照） */
-    /* Task 22 */ { App_TestMsg_Run,              1000U }   /* 1000 ms : テスト用メッセージ TestMsg のカウンタ更新（信号追加の練習用） */
+    /* Task 20 */ { SecOC_MainFunctionRx,          100U },  /* 100 ms : 現状 NOP（RX 検証は同期実行済み、SecOC.c 参照） */
+    /* Task 21 */ { App_TestMsg_Run,              1000U }   /* 1000 ms : テスト用メッセージ TestMsg のカウンタ更新（信号追加の練習用） */
 };
 /* @@GEN-END os-tasks */
 

@@ -63,10 +63,6 @@
       "symbol": "FIM_MAIN"
     },
     {
-      "task": "WdgM_TriggerHwWatchdog",
-      "symbol": "WDGM_TRIGGER"
-    },
-    {
       "task": "CanNm_MainFunction",
       "symbol": "CANNM_MAIN"
     },
@@ -134,7 +130,7 @@
   },
   "maskShutdown": {
     "keepTasks": [
-      "WDGM_TRIGGER",
+      "WDGM_MAIN",
       "CAN_READ",
       "CAN_WAKEUP",
       "CANSM_MAIN",
@@ -144,13 +140,13 @@
     ],
     "doc": [
       "SHUTDOWN 時に停止するタスク = ALL & ~(keepTasks に挙げたタスク)。keepTasks は次のとおり。",
-      "WDGM_TRIGGER・CAN_READ・CAN_WAKEUP・CANSM_MAIN・NVM_MAIN・MEMIF_MAIN・CANNM_MAIN。",
+      "WDGM_MAIN・CAN_READ・CAN_WAKEUP・CANSM_MAIN・NVM_MAIN・MEMIF_MAIN・CANNM_MAIN。",
       "",
-      "WdgM_TriggerHwWatchdog だけは SHUTDOWN 後も動かし続ける必要がある。",
+      "WdgM_MainFunction は SHUTDOWN 後も動かし続ける必要がある。",
       "Renesas RA の IWDT は一度有効化すると無効化する手段がなく",
       "(Wdg_Hw.cpp 参照)、誰もリフレッシュしなければ SHUTDOWN 後も",
       "HW タイムアウトで MCU がリセットされてしまう",
-      "(WdgM_SupervisionSuppressed が立っているため、WdgM_TriggerHwWatchdog さえ動いていれば",
+      "(WdgM_SupervisionSuppressed が立っているため、WdgM_MainFunction さえ動いていれば",
       "無条件にリフレッシュを継続し、実害なく HW を満たし続けられる)。",
       "",
       "Can_MainFunction_Read・Can_MainFunction_Wakeup も同様に SHUTDOWN 中",
@@ -235,7 +231,7 @@
     },
     {
       "comment": [
-        "Rule 2: EcuM → SHUTDOWN: WdgM_TriggerHwWatchdog・Can_MainFunction_Read・",
+        "Rule 2: EcuM → SHUTDOWN: WdgM_MainFunction・Can_MainFunction_Read・",
         "Can_MainFunction_Wakeup・CanSM_MainFunction・NvM_MainFunction・",
         "MemIf_MainFunction・CanNm_MainFunction 以外を無効化"
       ],

@@ -18,7 +18,7 @@ EcuM が「今どのフェーズか」を決めるのに対し、BswM は「そ�
 |----|------------------|-----------|------|
 | 0 | EcuM==RUN | ACTIVATE | 全タスク（`BSWM_TASK_MASK_ALL`） |
 | 1 | EcuM==POST_RUN | DEACTIVATE | アプリタスクのみ（`BSWM_TASK_MASK_APP`） |
-| 2 | EcuM==SHUTDOWN | DEACTIVATE | `BSWM_TASK_MASK_SHUTDOWN`（WdgM_TriggerHwWatchdog・Can_MainFunction_Read・Can_MainFunction_Wakeup・CanSM_MainFunction・NvM_MainFunction・MemIf_MainFunction・CanNm_MainFunction を除く） |
+| 2 | EcuM==SHUTDOWN | DEACTIVATE | `BSWM_TASK_MASK_SHUTDOWN`（WdgM_MainFunction・Can_MainFunction_Read・Can_MainFunction_Wakeup・CanSM_MainFunction・NvM_MainFunction・MemIf_MainFunction・CanNm_MainFunction を除く） |
 | 3 | **EcuM==RUN `AND` ComM==FULL_COMMUNICATION** | PDU_GROUP_START | I-PDU Group「テレメトリ」(E2EHealthStatus) |
 | 4 | EcuM==POST_RUN | PDU_GROUP_STOP | I-PDU Group「テレメトリ」 |
 | 5 | **ComM==SILENT_COMMUNICATION `OR` ComM==NO_COMMUNICATION** | PDU_GROUP_STOP | I-PDU Group「テレメトリ」 |
@@ -66,7 +66,7 @@ true が続く間の重複実行や true→false への遷移では実行しま�
 
 ## タスク ID とマスク（`BswM_Cfg.h`）
 
-タスク数が 16 を超えるため、`TaskMask` は uint32（bits 0〜18）です。
+タスク数が 16 を超えるため、`TaskMask` は uint32（bits 0〜17）です。
 
 | タスク ID | 定数 | 対応関数 | 周期 |
 |---------|------|---------|------|
@@ -78,46 +78,46 @@ true が続く間の重複実行や true→false への遷移では実行しま�
 | 5 | `BSWM_OS_TASK_COM_MAIN` | `Com_MainFunctionRx` | 100 ms |
 | 6 | `BSWM_OS_TASK_COM_MAIN_TX` | `Com_MainFunctionTx` | 100 ms |
 | 7 | `BSWM_OS_TASK_IOHWAB_MAIN` | `IoHwAb_MainFunction` | 10 ms |
-| 8 | `BSWM_OS_TASK_WDGM_MAIN` | `WdgM_MainFunction` | 6000 ms |
+| 8 | `BSWM_OS_TASK_WDGM_MAIN` | `WdgM_MainFunction` | 1000 ms（毎回 HW ウォッチドッグをリフレッシュ、判定は 6 回に 1 回） |
 | 9 | `BSWM_OS_TASK_DCM_MAIN` | `Dcm_MainFunction` | 1000 ms |
 | 10 | `BSWM_OS_TASK_FIM_MAIN` | `FiM_MainFunction` | 100 ms |
-| 11 | `BSWM_OS_TASK_WDGM_TRIGGER` | `WdgM_TriggerHwWatchdog` | 1000 ms |
-| 12 | `BSWM_OS_TASK_CANNM_MAIN` | `CanNm_MainFunction` | 1000 ms |
-| 13 | `BSWM_OS_TASK_NVM_MAIN` | `NvM_MainFunction` | 10 ms |
-| 14 | `BSWM_OS_TASK_CAN_TX_CONF` | `Can_MainFunction_Write` | 1 ms |
-| 15 | `BSWM_OS_TASK_CAN_BUSOFF` | `Can_MainFunction_BusOff` | 1 ms |
-| 16 | `BSWM_OS_TASK_CAN_WAKEUP` | `Can_MainFunction_Wakeup` | 1 ms |
-| 17 | `BSWM_OS_TASK_SECOC_MAIN` | `SecOC_MainFunctionTx` | 100 ms |
-| 18 | `BSWM_OS_TASK_MEMIF_MAIN` | `MemIf_MainFunction` | 10 ms |
-| 19 | (マスク対象外) | `App_GptDemo_Run` | 2000 ms |
-| 20 | (マスク対象外) | `ComM_MainFunction` | 100 ms |
-| 21 | (マスク対象外) | `SecOC_MainFunctionRx` | 100 ms |
+| 11 | `BSWM_OS_TASK_CANNM_MAIN` | `CanNm_MainFunction` | 1000 ms |
+| 12 | `BSWM_OS_TASK_NVM_MAIN` | `NvM_MainFunction` | 10 ms |
+| 13 | `BSWM_OS_TASK_CAN_TX_CONF` | `Can_MainFunction_Write` | 1 ms |
+| 14 | `BSWM_OS_TASK_CAN_BUSOFF` | `Can_MainFunction_BusOff` | 1 ms |
+| 15 | `BSWM_OS_TASK_CAN_WAKEUP` | `Can_MainFunction_Wakeup` | 1 ms |
+| 16 | `BSWM_OS_TASK_SECOC_MAIN` | `SecOC_MainFunctionTx` | 100 ms |
+| 17 | `BSWM_OS_TASK_MEMIF_MAIN` | `MemIf_MainFunction` | 10 ms |
+| 18 | (マスク対象外) | `App_GptDemo_Run` | 2000 ms |
+| 19 | (マスク対象外) | `ComM_MainFunction` | 100 ms |
+| 20 | (マスク対象外) | `SecOC_MainFunctionRx` | 100 ms |
+| 21 | (マスク対象外) | `App_TestMsg_Run` | 1000 ms |
 
 Task 6（`Com_MainFunctionTx`）は 2026-08、単体だった `Com_MainFunction` を
 実仕様準拠の `Com_MainFunctionRx`/`Com_MainFunctionTx` へ分割した際に追加しました。
 タスクは `Os_SchedulerStep()` 内でインデックス昇順に実行されるため、Task 6 の Com の送信結果は、
-同じパス内で後ろのタスク（Task 17 の `SecOC_MainFunctionTx` 等）が拾えます。
+同じパス内で後ろのタスク（Task 16 の `SecOC_MainFunctionTx` 等）が拾えます。
 
 `BSWM_TASK_MASK_APP = 0x00C`（bit2=Rte_Engine, bit3=Rte_Warning）がアプリタスクマスクです。
-POST_RUN ではこの 2 タスクだけを停止し、BSW タスク（Can_MainFunction_Read/BusOff/Wakeup・CanTp・CanSM・Com・IoHwAb・WdgM・Dcm・FiM・WdgM_TriggerHwWatchdog・CanNm・NvM・MemIf・SecOC・Can_MainFunction_Write）は継続させます。
+POST_RUN ではこの 2 タスクだけを停止し、BSW タスク（Can_MainFunction_Read/BusOff/Wakeup・CanTp・CanSM・Com・IoHwAb・WdgM・Dcm・FiM・WdgM_MainFunction・CanNm・NvM・MemIf・SecOC・Can_MainFunction_Write）は継続させます。
 Dcm を継続させることで、POST_RUN 中も S3 タイマ監視（セッションの自動失効）が動作し続けます。
 CanNm は POST_RUN 中も動き続けますが、POST_RUN へ遷移する経路（エンジン OFF 継続による
 ボランタリスリープ突入。Bus-Off は L1/L2 バックオフで無期限に回復を試みるため
 POST_RUN 遷移の原因にはならない）では ComM は既に NO_COM になっているため、
 実際には送信を行いません。
 
-`BSWM_TASK_MASK_SHUTDOWN = 0x2C7EE`（`BSWM_TASK_MASK_ALL` から bit11=WdgM_TriggerHwWatchdog・
-bit0=Can_MainFunction_Read・bit16=Can_MainFunction_Wakeup・bit4=CanSM_MainFunction・
-bit13=NvM_MainFunction・bit18=MemIf_MainFunction・bit12=CanNm_MainFunction を除いたもの）が
-SHUTDOWN 時の無効化対象マスクです。SecOC_MainFunctionTx（bit17）はこの除外リストに
+`BSWM_TASK_MASK_SHUTDOWN = 0x166EE`（`BSWM_TASK_MASK_ALL` から bit8=WdgM_MainFunction・
+bit0=Can_MainFunction_Read・bit15=Can_MainFunction_Wakeup・bit4=CanSM_MainFunction・
+bit12=NvM_MainFunction・bit17=MemIf_MainFunction・bit11=CanNm_MainFunction を除いたもの）が
+SHUTDOWN 時の無効化対象マスクです。SecOC_MainFunctionTx（bit16）はこの除外リストに
 含まれないため（POST_RUN 中に Com_MainFunctionTx が止まり SecOC の送信要求自体が
 発生しなくなるのと同じ理由で、無効化しておくのが本来の設計意図）、
-Can_MainFunction_Write（bit14）・Can_MainFunction_BusOff（bit15）と同様に
+Can_MainFunction_Write（bit13）・Can_MainFunction_BusOff（bit14）と同様に
 SHUTDOWN 中は停止します。BusOff ポーリングは `CanState==CAN_CS_STARTED` が条件のため
 SHUTDOWN 中（SLEEP か Listen-Only）はどのみち無意味であり、TX 確認も SHUTDOWN 中は
 新規送信が発生しないため停止して問題ありません（詳細は [`Can_Notes.md`](./Can_Notes.md) の
 「TX 確認の非同期化」参照）。
-WdgM_TriggerHwWatchdog は、Renesas RA の IWDT が一度有効化すると無効化する手段がないため、
+WdgM_MainFunction は、Renesas RA の IWDT が一度有効化すると無効化する手段がないため、
 SHUTDOWN 後も動かし続けて `WdgM_SupervisionSuppressed` により無条件にリフレッシュを継続する
 必要があります（詳細は [`WdgM_Notes.md`](./WdgM_Notes.md) の「HW ウォッチドッグ連携」を参照）。
 Can_MainFunction_Read・Can_MainFunction_Wakeup は、CAN バスのボランタリスリープからの
@@ -138,8 +138,8 @@ MemIf_Write() でジョブを「開始」するだけで、実際の物理バイ
 この 7 タスクの存在により、SHUTDOWN は HW ウォッチドッグを維持しつつ CAN バス活動
 （ボランタリスリープからのウェイクアップ）で常に RUN へ復帰できる状態になっています。
 
-なお、`BSWM_TASK_MASK_ALL`（bit0〜18）に含まれない 3 タスク（bit19=App_GptDemo_Run、
-bit20=ComM_MainFunction、bit21=SecOC_MainFunctionRx）は、BswM のルールで止められないため、
+なお、`BSWM_TASK_MASK_ALL`（bit0〜17）に含まれない 4 タスク（bit18=App_GptDemo_Run、
+bit19=ComM_MainFunction、bit20=SecOC_MainFunctionRx、bit21=App_TestMsg_Run）は、BswM のルールで止められないため、
 RUN・POST_RUN・SHUTDOWN のいずれでも動き続けます（ComM と SecOC_Rx の周期関数は現状 NOP）。
 
 ## POST_RUN でアプリタスクのみ停止する理由
@@ -154,7 +154,7 @@ POST_RUN 中も動き続けるタスク:
   IoHwAb_Main        → ボタンのデバウンス状態を正常終了
   WdgM_Main          → Alive Supervision のソフト評価は継続するが判定結果は無視される
                         （WdgM_SupervisionSuppressed が立っているため）
-  WdgM_TriggerHwWatchdog → HW ウォッチドッグのリフレッシュは継続（判定結果を無視して
+  WdgM_MainFunction → HW ウォッチドッグのリフレッシュは継続（判定結果を無視して
                         無条件にリフレッシュするため、実際のリセットは発生しない）
   Dcm_Main           → S3 タイマ監視を継続（拡張セッションも正しく失効する）
   CanNm_MainFunction    → タスク自体は動き続けるが、ComM が既に NO_COM のため送信しない
@@ -194,7 +194,7 @@ POST_RUN 中に停止するタスク:
 POST_RUN 5秒後
   EcuM: POST_RUN → SHUTDOWN
     └→ BswM_EcuM_CurrentState(SHUTDOWN)
-          └→ Rule 2 発火: Os_SetTaskActive(WdgM_TriggerHwWatchdog / Can_MainFunction_Read /
+          └→ Rule 2 発火: Os_SetTaskActive(WdgM_MainFunction / Can_MainFunction_Read /
                                           Can_MainFunction_Wakeup / CanSM_MainFunction /
                                           NvM_MainFunction / MemIf_MainFunction /
                                           CanNm_MainFunction 以外, OFF)

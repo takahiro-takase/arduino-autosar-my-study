@@ -47,7 +47,7 @@
  *          L1/L2 バックオフで無期限に継続するため、Bus-Off が原因で
  *          この SHUTDOWN 状態に至ることはない）。
  *          Os_SchedulerStep() 自体は SHUTDOWN 中も呼ばれ続けるが、
- *          BswM Rule 2 が WdgM_TriggerHwWatchdog / Can_MainFunction_Read /
+ *          BswM Rule 2 が WdgM_MainFunction / Can_MainFunction_Read /
  *          Can_MainFunction_Wakeup 以外の全タスクを無効化するため実質的に
  *          アイドル状態になる（HW ウォッチドッグ維持と CAN ウェイクアップ
  *          検出・検証中フレーム処理のためだけに、この 3 タスクだけは
@@ -60,7 +60,7 @@ typedef enum
     ECUM_STATE_STARTUP  = 0x00U, /**< 初期化フェーズ (EcuM_Init 実行中)        */
     ECUM_STATE_RUN      = 0x10U, /**< 通常動作フェーズ (RUN ユーザが存在する)  */
     ECUM_STATE_POST_RUN = 0x20U, /**< 終了移行フェーズ (全 RUN ユーザ解放後)   */
-    ECUM_STATE_SHUTDOWN = 0x30U  /**< シャットダウン完了 (WdgM_TriggerHwWatchdog /
+    ECUM_STATE_SHUTDOWN = 0x30U  /**< シャットダウン完了 (WdgM_MainFunction /
                                   *   Can_MainFunction_Read / Can_MainFunction_Wakeup
                                   *   以外は停止。CAN ウェイクアップで RUN へ復帰可能) */
 } EcuM_StateType;

@@ -647,7 +647,7 @@ set(NATIVE_CHAIN_WRAP_SYMBOLS
     Port_RefreshPortDirection
     Port_GetVersionInfo
     Port_SetPinMode
-    # WdgM.h の公開API全15関数（AUTOSAR IF 11関数 + 本プロジェクト独自拡張4関数、
+    # WdgM.h の公開API全14関数（AUTOSAR IF 11関数 + 本プロジェクト独自拡張3関数、
     # WdgM_Test_SetFirstExpiredSEIDRawはテスト専用のため対象外、
     # Wrap_WdgM.h/.c 参照）。
     WdgM_Init
@@ -660,7 +660,6 @@ set(NATIVE_CHAIN_WRAP_SYMBOLS
     WdgM_GetLocalStatus
     WdgM_GetGlobalStatus
     WdgM_MainFunction
-    WdgM_TriggerHwWatchdog
     WdgM_PerformReset
     WdgM_GetFirstExpiredSEID
     # Os.h の公開API全5関数（Wrap_Os.h/.c 参照）。

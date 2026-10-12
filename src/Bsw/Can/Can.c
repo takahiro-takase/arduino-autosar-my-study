@@ -802,7 +802,7 @@ void Can_MainFunction_BusOff(void)
  *          検証シーケンス、CanSM.c 参照）へ委譲する（EcuM.h 参照）。
  *
  *          BswM は SHUTDOWN 中も本タスクだけは無効化しない
- *          （WdgM_TriggerHwWatchdog・Can_MainFunction_Read・CanSM_MainFunction・
+ *          （WdgM_MainFunction・Can_MainFunction_Read・CanSM_MainFunction・
  *          NvM_MainFunction と並ぶ「SHUTDOWN 中も動き続ける必要がある」タスク。
  *          詳細は BswM_Cfg.h の BSWM_TASK_MASK_SHUTDOWN を参照）。実機の割り込みが
  *          CPU のスリープからの復帰トリガそのものであるのと同じ理由で、この

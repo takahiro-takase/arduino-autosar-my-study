@@ -97,11 +97,11 @@
  *            Wdg_Hw 層が MCU 固有 API をラップする）を呼び、直接は呼ばない
  *            （NvM → MemIf → Fee と同じ 3 層構成。詳細は WdgIf.c/Wdg.c
  *            冒頭のコメント参照）。
- *            判定 (Alive/Logical/Deadline Supervision) は WdgM_MainFunction が
- *            WDGM_SUPERVISION_CYCLE_MS (6000ms) ごとに行うが、HW ウォッチドッグへの
- *            実際のリフレッシュは WdgM_TriggerHwWatchdog が
- *            WDGM_HW_TRIGGER_CYCLE_MS (1000ms) ごとに、WdgM_GlobalStopped を
- *            見て行う（WARN ログのみだった従来の学習用簡略化を解消し、本物の
+ *            WdgM_MainFunction は WDGM_MAIN_FUNCTION_CYCLE_MS (1000ms) ごとに呼ばれ、
+ *            毎回 HW ウォッチドッグへリフレッシュする（WdgM_GlobalStopped を見て行う）。
+ *            判定 (Alive/Logical/Deadline Supervision) は WDGM_SUPERVISION_CYCLE_MS
+ *            (6000ms、基準周期 WDGM_SUPERVISION_REFERENCE_CYCLE 回) ごとに行う。
+ *            （WARN ログのみだった従来の学習用簡略化は解消済みで、本物の
  *            フェールセーフ動作にした）。
  *
  *            グローバルレベルの EXPIRED 許容サイクル
@@ -247,6 +247,10 @@ static unsigned long WdgM_LastCheckpointTimeMs[WDGM_SUPERVISED_ENTITY_COUNT];
  *  実機で確認された（詳細は WdgM_MainFunction() 冒頭のコメント参照）。 */
 static uint8 WdgM_SkipNextAliveJudgment = 0U;
 
+/** WdgM_MainFunction() の呼び出し回数（基準周期 WDGM_SUPERVISION_REFERENCE_CYCLE に
+ *  達するたびに 0 へ戻り、そのとき判定サイクルを 1 回評価する）。WdgM_Init() で 0 にする。 */
+static uint8 WdgM_ReferenceCycleCount = 0U;
+
 /** WdgM_SetMode()/WdgM_GetMode() が扱う現在のモード。本プロジェクトは
  *  単一の静的コンフィグのみ保持するため、常に WDGM_MODE_DEFAULT に留まる
  *  （学習用簡略化、WdgM.h の WdgM_SetMode() Doxygen コメント参照）。 */
@@ -293,17 +297,17 @@ static uint8 WdgM_ExpiredCycleCount = 0U;
 
 /** 1 = グローバル許容サイクルを使い切り、AUTOSAR の
  *  WDGM_GLOBAL_STATUS_STOPPED 相当に到達した。この時点で初めて
- *  WdgM_TriggerHwWatchdog() がリフレッシュを拒否する
+ *  WdgM_RefreshHwWatchdog() がリフレッシュを拒否する
  *  (SWS_WdgM_00119-00122: OK/FAILED/EXPIRED はいずれもリフレッシュを
  *  継続し、STOPPED でのみ止める)。 */
 static uint8 WdgM_GlobalStopped = 0U;
 
 /** 1 = WdgM_PerformReset() が呼ばれた。WdgM_GlobalStopped とは独立して
- *  持つ理由: WdgM_MainFunction() 末尾の自然回復判定（全エンティティが
+ *  持つ理由: WdgM_EvaluateSupervisionCycle() 末尾の自然回復判定（全エンティティが
  *  OK に戻れば WdgM_GlobalStopped を 0 に戻す）は、WdgM_PerformReset()
  *  による意図的なリセット要求には適用してはならない
  *  （[SWS_WdgM_00233]: 「以降トリガ条件を二度と更新しない」。回復判定で
- *  巻き戻ると仕様の意図に反する）。WdgM_TriggerHwWatchdog() 側で
+ *  巻き戻ると仕様の意図に反する）。WdgM_RefreshHwWatchdog() 側で
  *  WdgM_GlobalStopped より優先してチェックする。WdgM_Init() でのみ 0 に戻る。 */
 static uint8 WdgM_ResetRequested = 0U;
 
@@ -326,6 +330,8 @@ static WdgM_SupervisedEntityIdType WdgM_FirstExpiredSEIDInv __attribute__((secti
 
 static unsigned long WdgM_GetNowMs(void);
 static void WdgM_ApplyMode(WdgM_ModeType Mode);
+static void WdgM_RefreshHwWatchdog(void);
+static void WdgM_EvaluateSupervisionCycle(void);
 
 /* ======================================================================
  * Functions
@@ -374,6 +380,7 @@ void WdgM_Init(const WdgM_ConfigType* ConfigPtr)
         WdgM_LastCheckpointTimeMs[i] = WdgM_GetNowMs();
     }
     WdgM_SkipNextAliveJudgment = 0U;
+    WdgM_ReferenceCycleCount   = 0U;
     WdgM_GlobalExpired         = 0U;
     WdgM_ExpiredCycleCount     = 0U;
     WdgM_GlobalStopped         = 0U;
@@ -531,7 +538,7 @@ Std_ReturnType WdgM_GetMode(WdgM_ModeType* Mode)
  *          この FAILED ラッチをリセットせずに RUN へ復帰すると、
  *          WdgM_SetMode(WDGM_MODE_DEFAULT) が抑制フラグを解除した直後、実際には
  *          アプリが正常に再開しているにもかかわらず「POST_RUN 中の古い
- *          FAILED ラッチ」のせいで WdgM_TriggerHwWatchdog() がリフレッシュを
+ *          FAILED ラッチ」のせいで WdgM_RefreshHwWatchdog() がリフレッシュを
  *          拒否し続け、次の WdgM_MainFunction 判定サイクル（最大 6000ms 後）が
  *          来る前に HW ウォッチドッグタイムアウト（4000ms）に達して実際に
  *          MCU がリセットされてしまう（実機で確認された不具合）。
@@ -838,7 +845,7 @@ static uint8 WdgM_AnyEntityExpired(void)
  *          WdgM_SupervisionSuppressed 中（POST_RUN 中、Rte_Engine/
  *          Rte_Warning が意図的に停止することによる Alive Supervision の
  *          想定内の FAILED）は、WdgM_MainFunction() がグローバル猶予サイクルを
- *          進めず、WdgM_TriggerHwWatchdog() も無条件に refresh を続けるのと
+ *          進めず、WdgM_RefreshHwWatchdog() も無条件に refresh を続けるのと
  *          同じ考え方で、無条件に OK を返す（GlobalStopped が既に立っている
  *          場合でも、抑制中である以上リフレッシュは継続しているため OK を
  *          優先する）。
@@ -947,42 +954,29 @@ static void WdgM_EnterGlobalStopped(const char* reason, uint8 firstNotOkFound, u
  * ---------------------------------------------------------------------- */
 
 /**
- * \brief   WdgM 周期処理。Alive Supervision を評価する。
+ * \brief   WdgM 周期処理。HW ウォッチドッグをリフレッシュし、基準周期ごとに
+ *          Alive Supervision 等を評価する。
  *
- * \details 各エンティティの Alive カウンタを検査し、WdgM_AliveStatus に反映する
- *          (WdgM_LogicalStatus / WdgM_DeadlineStatus はここでは変更しない。
- *          いずれも WdgM_Init までラッチされる)。
- *          検査後カウンタをリセットして次サイクルを開始する。
- *          HW ウォッチドッグへの実際のリフレッシュはここでは行わない
- *          (WdgM_TriggerHwWatchdog が別周期で判定結果を見て行う)。
+ * \details Os スケジューラから WDGM_MAIN_FUNCTION_CYCLE_MS（1000ms）ごとに呼ばれる。
+ *          実 AUTOSAR の WdgM_MainFunction と同じく、毎回の呼び出しで
+ *          WdgIf_SetTriggerCondition() による HW ウォッチドッグのリフレッシュ
+ *          （WdgM_RefreshHwWatchdog()）まで行う。Alive/Logical/Deadline の判定
+ *          （WdgM_EvaluateSupervisionCycle()）は、WdgMSupervisionReferenceCycle
+ *          相当の WDGM_SUPERVISION_REFERENCE_CYCLE（= WDGM_SUPERVISION_CYCLE_MS /
+ *          WDGM_MAIN_FUNCTION_CYCLE_MS = 6）回の呼び出しごとに 1 回だけ行う。
+ *          判定をリフレッシュより先に行うため、判定で WdgM_GlobalStopped が
+ *          立てば、同じ呼び出しの中でリフレッシュが止まる。
  *
- *          エンティティ判定の後、グローバルレベルの EXPIRED 許容サイクル
- *          (WdgM_ExpiredCycleCount) も更新する。1 つでも FAILED なエンティティ
- *          がある判定サイクルが WDGM_EXPIRED_SUPERVISION_CYCLE_TOL 回を超えて
- *          連続して初めて WdgM_GlobalStopped を立て、
- *          WdgM_TriggerHwWatchdog() がリフレッシュを拒否するようになる
- *          （詳細は WdgM_Cfg.h の WDGM_EXPIRED_SUPERVISION_CYCLE_TOL コメントを
- *          参照。AUTOSAR SWS_WdgM_00119-00122 準拠: OK/FAILED/EXPIRED は
- *          いずれもリフレッシュを継続し、STOPPED でのみ止める）。
+ *          以前は、判定（6000ms 周期、WdgM_MainFunction）と、リフレッシュ
+ *          （1000ms 周期、独自 API の WdgM_TriggerHwWatchdog）を別タスクに
+ *          分けていた（Renesas RA4M1 の IWDT 最大タイムアウト 約 5592ms が
+ *          判定サイクルより短いため）。2026-10 に、呼び出し周期を 1000ms に
+ *          揃え、判定だけを基準周期ごとに間引く標準の構成へ統合した
+ *          （周期の分離という本来の目的は保たれる）。
  *
- *          WdgM_ResumeSupervision() 直後 1 回だけ判定をスキップする理由:
- *          本関数（Task 7）は POST_RUN 中も継続動作するタスクのため、
- *          Os 側の呼び出しタイミング（Os_LastRunMs[7]）は
- *          WdgM_ResumeSupervision() が AliveCount をリセットするタイミングとは
- *          無関係である。POST_RUN が WDGM_SUPERVISION_CYCLE_MS (6000ms) より
- *          大幅に短い場合、AliveCount リセット直後にたまたま本関数の呼び出し
- *          タイミングが来てしまうことがあり、その場合エンティティが
- *          一度もチェックインできていないうちに「alive=0」で FAILED と
- *          誤判定し、HW ウォッチドッグのリフレッシュ拒否 → 実リセットに
- *          至ることが実機で確認された。AliveCount を触らずに 1 回スキップ
- *          するだけで、蓄積は継続したまま次回（Os 自身の周期により確実に
- *          一定時間後となる）の判定へ持ち越されるため、実害はない。
+ *          WdgM_Init() が完了していなければ、何もしない（HW ウォッチドッグは
+ *          WdgM_Init() で有効化されるため、リフレッシュ対象がない）。
  *
- * \note       実 AUTOSAR の WdgM_MainFunction はこれに加えて HW ウォッチドッグへの
- *             実際のリフレッシュ指示までを 1 関数で担うが、本プロジェクトは
- *             Renesas RA4M1 の IWDT タイムアウト制約（詳細は WdgM_Cfg.h の
- *             WDGM_HW_WATCHDOG_TIMEOUT_MS 参照）によりリフレッシュ部分を
- *             WdgM_TriggerHwWatchdog() へ分離している。
  * \AUTOSARReq     {SWS_WdgM_00159, SWS_WdgM_00119, SWS_WdgM_00120,
  *                  SWS_WdgM_00121, SWS_WdgM_00122, SWS_WdgM_00076,
  *                  SWS_WdgM_00077, SWS_WdgM_00078, SWS_WdgM_00117,
@@ -1000,6 +994,194 @@ void WdgM_MainFunction(void)
         return;
     }
 
+    WdgM_ReferenceCycleCount++;
+    if (WdgM_ReferenceCycleCount >= WDGM_SUPERVISION_REFERENCE_CYCLE)
+    {
+        WdgM_ReferenceCycleCount = 0U;
+        WdgM_EvaluateSupervisionCycle();
+    }
+
+    WdgM_RefreshHwWatchdog();
+}
+
+/* ----------------------------------------------------------------------
+ * WdgM_PerformReset
+ * ---------------------------------------------------------------------- */
+
+/**
+ * \brief   HW ウォッチドッグの trigger を永続的に止め、リセットさせる。
+ *
+ * \details [SWS_WdgM_00232]: 呼び出された時点で、同期的に Watchdog Driver の
+ *          trigger condition を 0 にする（WdgIf_SetTriggerCondition(0)）。
+ *          Wdg 側が [SWS_Wdg_00140] に従い、トリガを止めて ECU を（ほぼ）即座に
+ *          リセットする（本プロジェクトではソフトウェアリセット）。以前は
+ *          WdgM_ResetRequested を立てるだけで、リセットはその後の
+ *          WdgM_RefreshHwWatchdog() によるリフレッシュ停止から HW ウォッチドッグの
+ *          期限切れ（最大 WDGM_HW_WATCHDOG_TIMEOUT_MS）まで待っていた。
+ *
+ *          あわせて WdgM_ResetRequested も立てる。実際にリセットされず戻って
+ *          きた場合（Wdg が未初期化など）でも WdgM_RefreshHwWatchdog() が
+ *          リフレッシュを二度と行わなくするためで、WdgM_GlobalStopped とは
+ *          独立した専用フラグにしているのは、WdgM_EvaluateSupervisionCycle() 末尾の自然回復判定（全エンティティ
+ *          OK で WdgM_GlobalStopped を 0 に戻す）が本 API の効果を巻き戻して
+ *          しまわないようにするため（[SWS_WdgM_00233]: 呼び出し後は二度と
+ *          トリガ条件を更新しない）。
+ *
+ * \AUTOSARReq     {SWS_WdgM_00264, SWS_WdgM_00232, SWS_WdgM_00233, SWS_WdgM_00270}
+ * \ServiceID      {0x0f}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void WdgM_PerformReset(void)
+{
+    if (WdgM_Cfg == NULL)
+    {
+        (void)Det_ReportError(WDGM_MODULE_ID, 0U, WDGM_API_ID_PERFORM_RESET, WDGM_E_NO_INIT);
+        return;
+    }
+
+    WdgM_ResetRequested = 1U;
+    DET_LOGE(TAG, "PerformReset called - trigger condition set to 0, HW watchdog refresh stopped permanently");
+    WdgIf_SetTriggerCondition(WDGIF_DEVICE_0, 0U);
+}
+
+/* ----------------------------------------------------------------------
+ * WdgM_GetFirstExpiredSEID
+ * ---------------------------------------------------------------------- */
+
+/**
+ * \brief   直近の HW ウォッチドッグリセットの原因となった Supervised Entity の
+ *          ID を取得する。
+ *
+ * \details [SWS_WdgM_00349]: WdgM_FirstExpiredSEID/Inv（.noinit 領域、宣言
+ *          コメント参照）の一致を確認し、一致すれば有効な値として *SEID へ
+ *          書き込み E_OK を返す。不一致（初回起動・POR 等で不定値のまま）
+ *          なら *SEID に 0 を書き込み E_NOT_OK を返す。
+ *
+ * \note    [SWS_WdgM_00348] 準拠、WdgM_Init() 前でも呼び出せるため
+ *          WDGM_E_NO_INIT チェックは行わない。
+ *
+ * \AUTOSARReq     {SWS_WdgM_00346, SWS_WdgM_00347, SWS_WdgM_00348, SWS_WdgM_00349}
+ * \ServiceID      {0x10}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType WdgM_GetFirstExpiredSEID(WdgM_SupervisedEntityIdType* SEID)
+{
+    if (SEID == NULL)
+    {
+        (void)Det_ReportError(WDGM_MODULE_ID, 0U, WDGM_API_ID_GET_FIRST_EXPIRED_SEID, WDGM_E_INV_POINTER);
+        return E_NOT_OK;
+    }
+
+    if ((WdgM_SupervisedEntityIdType)(~WdgM_FirstExpiredSEID) != WdgM_FirstExpiredSEIDInv)
+    {
+        *SEID = 0U;
+        return E_NOT_OK;
+    }
+
+    *SEID = WdgM_FirstExpiredSEID;
+    return E_OK;
+}
+
+
+/* ======================================================================
+ * Internal Functions
+ * ====================================================================== */
+
+/* ----------------------------------------------------------------------
+ * WdgM_GetNowMs
+ * ---------------------------------------------------------------------- */
+
+/**
+ * \brief   現在時刻 [ms] を返す（Os カウンタ SYSTEM_COUNTER の tick 値）。
+ * \details millis() を直接呼ばず Os の GetCounterValue() を介する。値は Os_Init() の
+ *          前後や millis() フォールバックの前後でも飛ばない（Os.h 参照）ため、
+ *          本モジュールが保持する「前回時刻」との差分計算にそのまま使える。
+ */
+static unsigned long WdgM_GetNowMs(void)
+{
+    TickType now = 0U;
+    (void)GetCounterValue(SYSTEM_COUNTER, &now);
+    return (unsigned long)now;
+}
+
+/* ----------------------------------------------------------------------
+ * WdgM_RefreshHwWatchdog
+ * ---------------------------------------------------------------------- */
+
+/**
+ * \brief   HW ウォッチドッグのリフレッシュ（trigger）処理。WdgM_MainFunction() が
+ *          毎回の呼び出しの最後に行う。
+ *
+ * \details WdgM_ResetRequested（WdgM_PerformReset() 呼び出し済み）が
+ *          最優先で、これが立っていれば他の状態に関わらずリフレッシュを
+ *          拒否する（[SWS_WdgM_00233]: 呼び出し後は二度とトリガ条件を
+ *          更新しない）。それ以外は WdgM_GlobalStopped が立っていない限り
+ *          （または WdgM_SupervisionSuppressed による抑制中は無条件に）
+ *          WdgIf_SetTriggerCondition() を呼ぶ（実体は Wdg_SetTriggerCondition()
+ *          → Wdg_Hw_Refresh()）。
+ *
+ *          AUTOSAR SWS_WdgM_00119-00122 準拠: Global Supervision Status が
+ *          OK・FAILED・EXPIRED のいずれであってもリフレッシュは継続する。
+ *          リフレッシュを止めるのは WDGM_GLOBAL_STATUS_STOPPED
+ *          （本実装では WdgM_GlobalStopped、WdgM_EvaluateSupervisionCycle() が
+ *          WDGM_EXPIRED_SUPERVISION_CYCLE_TOL 回の連続 FAILED 判定サイクルを
+ *          経て初めて立てる）に到達したときだけである。1 つのエンティティが
+ *          FAILED になった瞬間に即座にリフレッシュを止める設計ではない。
+ *
+ *          以前は、独自 API の WdgM_TriggerHwWatchdog()（1000ms 周期の別タスク）
+ *          だった（2026-10 に WdgM_MainFunction() へ統合）。
+ */
+static void WdgM_RefreshHwWatchdog(void)
+{
+    if (!WdgM_ResetRequested && (!WdgM_GlobalStopped || WdgM_SupervisionSuppressed))
+    {
+        WdgIf_SetTriggerCondition(WDGIF_DEVICE_0, (uint16)WDGM_HW_WATCHDOG_TIMEOUT_MS);
+        DET_LOGD(TAG, "HW watchdog refreshed");
+    }
+    else
+    {
+        DET_LOGE(TAG, "HW watchdog NOT refreshed - reset imminent");
+    }
+}
+
+/* ----------------------------------------------------------------------
+ * WdgM_EvaluateSupervisionCycle
+ * ---------------------------------------------------------------------- */
+
+/**
+ * \brief   Alive Supervision 等の判定サイクルを 1 回評価する（WdgM_MainFunction() から、
+ *          基準周期ごとに呼ばれる）。
+ *
+ * \details 各エンティティの Alive カウンタを検査し、WdgM_AliveStatus に反映する
+ *          (WdgM_LogicalStatus / WdgM_DeadlineStatus はここでは変更しない。
+ *          いずれも WdgM_Init までラッチされる)。
+ *          検査後カウンタをリセットして次サイクルを開始する。
+ *
+ *          エンティティ判定の後、グローバルレベルの EXPIRED 許容サイクル
+ *          (WdgM_ExpiredCycleCount) も更新する。1 つでも FAILED なエンティティ
+ *          がある判定サイクルが WDGM_EXPIRED_SUPERVISION_CYCLE_TOL 回を超えて
+ *          連続して初めて WdgM_GlobalStopped を立て、
+ *          WdgM_RefreshHwWatchdog() がリフレッシュを拒否するようになる
+ *          （詳細は WdgM_Cfg.h の WDGM_EXPIRED_SUPERVISION_CYCLE_TOL コメントを
+ *          参照。AUTOSAR SWS_WdgM_00119-00122 準拠: OK/FAILED/EXPIRED は
+ *          いずれもリフレッシュを継続し、STOPPED でのみ止める）。
+ *
+ *          WdgM_ResumeSupervision() 直後 1 回だけ判定をスキップする理由:
+ *          WdgM_MainFunction() は POST_RUN 中も継続動作するタスクのため、
+ *          その呼び出しタイミングは WdgM_ResumeSupervision() が AliveCount を
+ *          リセットするタイミングとは無関係である。POST_RUN が
+ *          WDGM_SUPERVISION_CYCLE_MS (6000ms) より大幅に短い場合、AliveCount
+ *          リセット直後にたまたま判定のタイミングが来てしまうことがあり、
+ *          その場合エンティティが一度もチェックインできていないうちに
+ *          「alive=0」で FAILED と誤判定し、HW ウォッチドッグのリフレッシュ拒否
+ *          → 実リセットに至ることが実機で確認された。AliveCount を触らずに
+ *          1 回スキップするだけで、蓄積は継続したまま次回の判定へ持ち越される
+ *          ため、実害はない。
+ */
+static void WdgM_EvaluateSupervisionCycle(void)
+{
     if ((WdgM_SkipNextAliveJudgment) != 0U)
     {
         WdgM_SkipNextAliveJudgment = 0U;
@@ -1112,7 +1294,7 @@ void WdgM_MainFunction(void)
      * WdgM_ExpiredCycleCount で STOPPED までの猶予を消費する。
      *
      * WdgM_SupervisionSuppressed 中（POST_RUN 中の意図的な Alive 不足）は
-     * 状態遷移そのものを凍結する（詳細は WdgM_TriggerHwWatchdog() 側の
+     * 状態遷移そのものを凍結する（詳細は WdgM_RefreshHwWatchdog() 側の
      * 抑制と対になる判断、既存方針を維持）。
      * ------------------------------------------------------------------ */
     const uint8 anyNotOk = WdgM_AnyEntityNotOk();
@@ -1216,159 +1398,6 @@ void WdgM_MainFunction(void)
         /* 全エンティティ OK かつ回復処理も不要な通常ケース（MISRA 15.7 準拠の
          * ための防御的な明示）。 */
     }
-}
-
-/* ----------------------------------------------------------------------
- * WdgM_TriggerHwWatchdog
- * ---------------------------------------------------------------------- */
-
-/**
- * \brief   HW ウォッチドッグの trigger（リフレッシュ）処理。
- *
- * \details WdgM_ResetRequested（WdgM_PerformReset() 呼び出し済み）が
- *          最優先で、これが立っていれば他の状態に関わらずリフレッシュを
- *          拒否する（[SWS_WdgM_00233]: 呼び出し後は二度とトリガ条件を
- *          更新しない）。それ以外は WdgM_GlobalStopped が立っていない限り
- *          （または WdgM_SupervisionSuppressed による抑制中は無条件に）
- *          WdgIf_SetTriggerCondition() を呼ぶ（実体は Wdg_SetTriggerCondition()
- *          → Wdg_Hw_Refresh()）。
- *
- *          AUTOSAR SWS_WdgM_00119-00122 準拠: Global Supervision Status が
- *          OK・FAILED・EXPIRED のいずれであってもリフレッシュは継続する。
- *          リフレッシュを止めるのは WDGM_GLOBAL_STATUS_STOPPED
- *          （本実装では WdgM_GlobalStopped、WdgM_MainFunction() が
- *          WDGM_EXPIRED_SUPERVISION_CYCLE_TOL 回の連続 FAILED 判定サイクルを
- *          経て初めて立てる）に到達したときだけである。1 つのエンティティが
- *          FAILED になった瞬間に即座にリフレッシュを止める設計ではない
- *          （旧実装はこの猶予機構を持たず、単発の異常でも即座に停止していた）。
- *
- *          WdgM_MainFunction の判定サイクル (6000ms) より高頻度
- *          (WDGM_HW_TRIGGER_CYCLE_MS = 1000ms) で呼ばれることを想定しており、
- *          WdgM_GlobalStopped が変化してから最短 1 サイクル以内にリフレッシュ
- *          停止へ反映される。
- *
- * \note       実 AUTOSAR の WdgM_MainFunction が内包するリフレッシュ指示
- *             部分を本プロジェクトが分離した独自 API のため、専用の
- *             Service ID は SWS_WdgM に存在しない（\ServiceID の値は
- *             プロジェクト内でのみ一意な自己割当）。
- * \AUTOSARReq     {SWS_WdgM_00119, SWS_WdgM_00120, SWS_WdgM_00121, SWS_WdgM_00122}
- * \ServiceID      {0x09}
- * \Reentrancy     {Non Reentrant}
- * \Synchronicity  {Synchronous}
- */
-void WdgM_TriggerHwWatchdog(void)
-{
-    if (!WdgM_ResetRequested && (!WdgM_GlobalStopped || WdgM_SupervisionSuppressed))
-    {
-        WdgIf_SetTriggerCondition(WDGIF_DEVICE_0, (uint16)WDGM_HW_WATCHDOG_TIMEOUT_MS);
-        DET_LOGD(TAG, "HW watchdog refreshed");
-    }
-    else
-    {
-        DET_LOGE(TAG, "HW watchdog NOT refreshed - reset imminent");
-    }
-}
-
-/* ----------------------------------------------------------------------
- * WdgM_PerformReset
- * ---------------------------------------------------------------------- */
-
-/**
- * \brief   HW ウォッチドッグの trigger を永続的に止め、リセットさせる。
- *
- * \details [SWS_WdgM_00232]: 呼び出された時点で、同期的に Watchdog Driver の
- *          trigger condition を 0 にする（WdgIf_SetTriggerCondition(0)）。
- *          Wdg 側が [SWS_Wdg_00140] に従い、トリガを止めて ECU を（ほぼ）即座に
- *          リセットする（本プロジェクトではソフトウェアリセット）。以前は
- *          WdgM_ResetRequested を立てるだけで、リセットはその後の
- *          WdgM_TriggerHwWatchdog() によるリフレッシュ停止から HW ウォッチドッグの
- *          期限切れ（最大 WDGM_HW_WATCHDOG_TIMEOUT_MS）まで待っていた。
- *
- *          あわせて WdgM_ResetRequested も立てる。実際にリセットされず戻って
- *          きた場合（Wdg が未初期化など）でも WdgM_TriggerHwWatchdog() が
- *          リフレッシュを二度と行わなくするためで、WdgM_GlobalStopped とは
- *          独立した専用フラグにしているのは、WdgM_MainFunction() 末尾の自然回復判定（全エンティティ
- *          OK で WdgM_GlobalStopped を 0 に戻す）が本 API の効果を巻き戻して
- *          しまわないようにするため（[SWS_WdgM_00233]: 呼び出し後は二度と
- *          トリガ条件を更新しない）。
- *
- * \AUTOSARReq     {SWS_WdgM_00264, SWS_WdgM_00232, SWS_WdgM_00233, SWS_WdgM_00270}
- * \ServiceID      {0x0f}
- * \Reentrancy     {Non Reentrant}
- * \Synchronicity  {Synchronous}
- */
-void WdgM_PerformReset(void)
-{
-    if (WdgM_Cfg == NULL)
-    {
-        (void)Det_ReportError(WDGM_MODULE_ID, 0U, WDGM_API_ID_PERFORM_RESET, WDGM_E_NO_INIT);
-        return;
-    }
-
-    WdgM_ResetRequested = 1U;
-    DET_LOGE(TAG, "PerformReset called - trigger condition set to 0, HW watchdog refresh stopped permanently");
-    WdgIf_SetTriggerCondition(WDGIF_DEVICE_0, 0U);
-}
-
-/* ----------------------------------------------------------------------
- * WdgM_GetFirstExpiredSEID
- * ---------------------------------------------------------------------- */
-
-/**
- * \brief   直近の HW ウォッチドッグリセットの原因となった Supervised Entity の
- *          ID を取得する。
- *
- * \details [SWS_WdgM_00349]: WdgM_FirstExpiredSEID/Inv（.noinit 領域、宣言
- *          コメント参照）の一致を確認し、一致すれば有効な値として *SEID へ
- *          書き込み E_OK を返す。不一致（初回起動・POR 等で不定値のまま）
- *          なら *SEID に 0 を書き込み E_NOT_OK を返す。
- *
- * \note    [SWS_WdgM_00348] 準拠、WdgM_Init() 前でも呼び出せるため
- *          WDGM_E_NO_INIT チェックは行わない。
- *
- * \AUTOSARReq     {SWS_WdgM_00346, SWS_WdgM_00347, SWS_WdgM_00348, SWS_WdgM_00349}
- * \ServiceID      {0x10}
- * \Reentrancy     {Reentrant}
- * \Synchronicity  {Synchronous}
- */
-Std_ReturnType WdgM_GetFirstExpiredSEID(WdgM_SupervisedEntityIdType* SEID)
-{
-    if (SEID == NULL)
-    {
-        (void)Det_ReportError(WDGM_MODULE_ID, 0U, WDGM_API_ID_GET_FIRST_EXPIRED_SEID, WDGM_E_INV_POINTER);
-        return E_NOT_OK;
-    }
-
-    if ((WdgM_SupervisedEntityIdType)(~WdgM_FirstExpiredSEID) != WdgM_FirstExpiredSEIDInv)
-    {
-        *SEID = 0U;
-        return E_NOT_OK;
-    }
-
-    *SEID = WdgM_FirstExpiredSEID;
-    return E_OK;
-}
-
-
-/* ======================================================================
- * Internal Functions
- * ====================================================================== */
-
-/* ----------------------------------------------------------------------
- * WdgM_GetNowMs
- * ---------------------------------------------------------------------- */
-
-/**
- * \brief   現在時刻 [ms] を返す（Os カウンタ SYSTEM_COUNTER の tick 値）。
- * \details millis() を直接呼ばず Os の GetCounterValue() を介する。値は Os_Init() の
- *          前後や millis() フォールバックの前後でも飛ばない（Os.h 参照）ため、
- *          本モジュールが保持する「前回時刻」との差分計算にそのまま使える。
- */
-static unsigned long WdgM_GetNowMs(void)
-{
-    TickType now = 0U;
-    (void)GetCounterValue(SYSTEM_COUNTER, &now);
-    return (unsigned long)now;
 }
 
 #ifdef WDGM_UNIT_TEST

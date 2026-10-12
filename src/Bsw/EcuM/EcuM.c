@@ -363,13 +363,13 @@ void EcuM_MainFunction(void)
             {
                 EcuM_State = ECUM_STATE_SHUTDOWN;
                 DET_LOGI(TAG, "->SHUTDOWN");
-                BswM_EcuM_CurrentState(ECUM_STATE_SHUTDOWN);  /* Rule 2: WdgM_TriggerHwWatchdog 以外を無効化 */
+                BswM_EcuM_CurrentState(ECUM_STATE_SHUTDOWN);  /* Rule 2: WdgM_MainFunction 以外を無効化 */
             }
             break;
 
         case ECUM_STATE_SHUTDOWN:
             /* Arduino では電源断不可のためアイドルで待機するが、Os_SchedulerStep()
-             * 自体は呼び続ける。BswM Rule 2 が WdgM_TriggerHwWatchdog 以外の全タスクを
+             * 自体は呼び続ける。BswM Rule 2 が WdgM_MainFunction 以外の全タスクを
              * 無効化済みのため、実質的に動くのはこの 1 タスクだけ。
              * ここで Os_SchedulerStep() を止めてしまうと、タスクの有効/無効に関係なく
              * 誰も呼ばれなくなり、無効化する手段のない Renesas RA の IWDT が

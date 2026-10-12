@@ -7,7 +7,7 @@
  *          ルール一覧:
  *            Rule 0: EcuM → RUN      → 全タスクを有効化
  *            Rule 1: EcuM → POST_RUN → アプリ Runnable のみ無効化 (BSW は継続)
- *            Rule 2: EcuM → SHUTDOWN → WdgM_TriggerHwWatchdog・Can_MainFunction_Read・
+ *            Rule 2: EcuM → SHUTDOWN → WdgM_MainFunction・Can_MainFunction_Read・
  *                                      Can_MainFunction_Wakeup・CanSM_MainFunction・
  *                                      NvM_MainFunction・MemIf_MainFunction・
  *                                      CanNm_MainFunction 以外を無効化
@@ -79,7 +79,7 @@
  *            - COM デッドライン監視を最後まで実行する (Com_MainFunctionRx/Tx)
  *            - ボタン入力をデバウンス完了まで処理する (IoHwAb_MainFunction)
  *
- *          SHUTDOWN で WdgM_TriggerHwWatchdog だけ止めない理由:
+ *          SHUTDOWN で WdgM_MainFunction だけ止めない理由:
  *            Renesas RA の IWDT は一度有効化すると無効化する手段がなく、
  *            SHUTDOWN 後に誰もリフレッシュしなければ HW タイムアウトで
  *            MCU がリセットされてしまう。WdgM_SupervisionSuppressed が
@@ -131,7 +131,7 @@ static const BswM_RuleType BswM_Rules[BSWM_RULE_COUNT] =
         .Action         = BSWM_ACTION_DEACTIVATE,
         .TaskMask       = BSWM_TASK_MASK_APP
     },
-    /* Rule 2: EcuM → SHUTDOWN: WdgM_TriggerHwWatchdog・Can_MainFunction_Read・
+    /* Rule 2: EcuM → SHUTDOWN: WdgM_MainFunction・Can_MainFunction_Read・
      * Can_MainFunction_Wakeup・CanSM_MainFunction・NvM_MainFunction・
      * MemIf_MainFunction・CanNm_MainFunction 以外を無効化 */
     {

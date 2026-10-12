@@ -60,9 +60,9 @@
     },
     {
       "function": "WdgM_MainFunction",
-      "periodMs": 6000,
+      "periodMs": 1000,
       "header": "WdgM.h",
-      "summary": "Alive/Logical/Deadline 判定"
+      "summary": "HW ウォッチドッグのリフレッシュ + Alive/Logical/Deadline 判定（6 回に 1 回）"
     },
     {
       "function": "Dcm_MainFunction",
@@ -75,12 +75,6 @@
       "periodMs": 100,
       "header": "FiM.h",
       "summary": "機能抑止状態の再評価"
-    },
-    {
-      "function": "WdgM_TriggerHwWatchdog",
-      "periodMs": 1000,
-      "header": "WdgM.h",
-      "summary": "HW ウォッチドッグ trigger"
     },
     {
       "function": "CanNm_MainFunction",

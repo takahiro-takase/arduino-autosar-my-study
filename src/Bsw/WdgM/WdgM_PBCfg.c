@@ -20,7 +20,7 @@
  *                        (WdgM_GetLocalStatus() はどれか一方でも FAILED なら FAILED)
  *
  *          Entity 0 と Entity 1 は周期の異なる独立したタスクを別々に監視し、
- *          WdgM_TriggerHwWatchdog() がその両方の WdgM_GetLocalStatus() を
+ *          WdgM_MainFunction() のリフレッシュ処理がその両方の WdgM_GetLocalStatus() を
  *          集約する（1 つでも FAILED なら HW ウォッチドッグの refresh を止める）。
  *          「エンティティごとのローカル判定 → 全エンティティを見たグローバル判定」
  *          という WdgM 本来の構成を、単一エンティティでは確認できなかった形で

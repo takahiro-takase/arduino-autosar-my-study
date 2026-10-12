@@ -4,7 +4,7 @@
   "supervisionCycleMs": 6000,
   "supervisionCycleDoc": [
     "Alive Supervision サイクル時間 (ms)。全エンティティ共通で、",
-    "WdgM_MainFunction の呼び出し周期と一致させること (Os_PBCfg.c Task 7)。",
+    "WdgM_MainFunction の呼び出し周期（WDGM_MAIN_FUNCTION_CYCLE_MS）の整数倍にすること。",
     "ENGINE のタスク周期 3000ms の 2 倍に設定し、サイクル内に 2 回の Runnable",
     "実行を許容する（WARNING は 500ms 周期のため、同じ 6000ms サイクル内に",
     "約 12 回の実行が期待される）。"

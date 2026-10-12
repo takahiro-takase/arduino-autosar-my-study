@@ -148,7 +148,7 @@ void Wdg_SetTriggerCondition(uint16 timeout)
     /* 本プロジェクトの HW は API 経由でのタイムアウト窓の動的変更に対応
      * しないため、timeout が 0 以外なら、その値によらずリフレッシュのみ行う
      * （Wdg.h 冒頭のコメント参照）。現在のモードの確認も行わない
-     * （WdgM_TriggerHwWatchdog() は WdgM_SupervisionSuppressed 中も含め常に
+     * （WdgM_MainFunction() のリフレッシュは WdgM_SupervisionSuppressed 中も含め常に
      * リフレッシュを要求し続ける設計のため、Wdg 側で再度モードを判定する
      * 必要はない）。 */
     Wdg_Hw_Refresh();
