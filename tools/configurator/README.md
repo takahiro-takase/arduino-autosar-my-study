@@ -214,7 +214,7 @@ UDS の DID（0x22 読み出し・0x2E 書き込み・0x2F 入出力制御）の
 `tasks` の並び順がそのままタスク ID と実行順序（インデックス昇順）です。
 
 - **周期は Os.json が正本です。** `WdgM`（`osTask`）・`CanNm`（`cycleMs`）・`CanSM`（回復時間は周期の倍数）は、これまで `Os_PBCfg.c` を読み取っていましたが、今は Os.json から周期を引きます。
-- **BswM のタスク ID の検査**: `BswM_Cfg.h` の手書きの `BSWM_OS_TASK_*`（タスク ID の数値）が、Os.json でのタスクの位置と一致するかを、毎回の整合性検査で確認します（定義の行末コメントの関数名で照合し、その形でない定義はエラーにします）。タスクを入れ替えたり挿入したりすると、ここでエラーになります。検査するのはタスク ID だけで、`BSWM_TASK_MASK_*`（ビットマスク）は手書きのままなので、タスクを挿入した時は、マスクも手で直してください。
+- **BswM のタスク ID とマスクも Os.json から生成します**: `BswM.json` の `osTasks`（BswM が制御するタスクと、`BSWM_OS_TASK_` の後に付ける名前）から、`BswM_Cfg.h` の `BSWM_OS_TASK_*`（値は `OsConf_OsTask_<function>`、つまり Os.json でのタスクの位置）と、`BSWM_TASK_MASK_ALL`（`osTasks` のすべて）・`BSWM_TASK_MASK_APP`（`maskApp.tasks`）・`BSWM_TASK_MASK_BSW`・`BSWM_TASK_MASK_SHUTDOWN`（`osTasks` から `maskShutdown.keepTasks` を除いたもの）を生成します。タスクを挿入・入れ替えても、ID とマスクは自動で追従します。`osTasks` のタスクが Os.json に無い、マスクの対象が `osTasks` に無い、といった食い違いは、毎回の整合性検査でエラーになります。BswM が制御しないタスクは `excludedOsTasks` に挙げます（`App_GptDemo_Run` など）。Os.json のタスクは `osTasks` か `excludedOsTasks` のどちらかに必ず挙げる必要があり、新しいタスクを足して挙げ忘れると、整合性検査でエラーになります（黙って制御対象外になることはありません）。タスク ID は 31 以下（ビットマスクは 32 ビット）です。
 - 関数のヘッダは `header` で指定し、`Os_PBCfg.c` がインクルードしていなければ警告します。補足（`note`）はその行の直前にコメントで出ます。
 - 生成の前後で、`src/` の 70 ファイルをコンパイルした結果が完全に一致することを確認しています。
 

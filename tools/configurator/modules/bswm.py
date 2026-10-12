@@ -5,7 +5,10 @@
 I-PDU グループは Com の `ipduGroups` の macro 名で参照する。
 """
 
-from .common import block_comment, doc_comment
+from . import symbols
+from .common import block_comment, doc_comment, os_periods
+from .defs import section
+from .ostask import TASK_SYMBOL
 
 ACTIONS = {
     "ACTIVATE": "BSWM_ACTION_ACTIVATE",
@@ -91,6 +94,44 @@ def render_rules(cfg, ctx):
     return "\n".join(out)
 
 
+BACKSLASH = chr(92)
+
+
+def continued(head, items, sep, tail, indent):
+    """C のマクロ定義を、項目ごとに行を継続（行末のバックスラッシュ）して並べる。"""
+    out = [head + items[0] + (sep + BACKSLASH if len(items) > 1 else tail)]
+    for k, item in enumerate(items[1:], 1):
+        out.append(" " * indent + item + (tail if k == len(items) - 1 else sep + BACKSLASH))
+    return out
+
+
+def render_task_ids(cfg, ctx):
+    """BswM が制御する Os のタスクの ID（BSWM_OS_TASK_*）とビットマスク（BSWM_TASK_MASK_*）。値は Os.json から引く。"""
+    index = {t["function"]: i for i, t in enumerate(ctx.configs["Os"]["tasks"])}
+    periods = os_periods(ctx)
+    used = set(cfg["maskApp"]["tasks"]) | set(cfg["maskShutdown"]["keepTasks"])
+    out = section(cfg["osTaskIdSection"])
+    for t in cfg["osTasks"]:
+        if "note" in t:
+            out += block_comment(t["note"])
+        if t["symbol"] not in used:
+            out.append(symbols.MISRA_UNUSED_MACRO)
+        out.append("#define BSWM_OS_TASK_%s  %s  /**< %s (%d ms) */" % (t["symbol"], TASK_SYMBOL + t["task"], t["task"], periods[t["task"]]))
+    out += block_comment(cfg["osTaskExcludedNote"])
+    out += section(cfg["maskSection"])
+    mask_all = sum(1 << index[t["task"]] for t in cfg["osTasks"])
+    out += doc_comment(cfg["maskAll"]["doc"]) + ["#define BSWM_TASK_MASK_ALL  0x%XUL" % mask_all, ""]
+    app = ["((uint32)1U << BSWM_OS_TASK_%s)" % s for s in cfg["maskApp"]["tasks"]]
+    out += doc_comment(cfg["maskApp"]["doc"])
+    out += continued("#define BSWM_TASK_MASK_APP  (", app, " | ", ")", 29)
+    out += [""] + doc_comment(cfg["maskBsw"]["doc"])
+    out += [symbols.MISRA_UNUSED_MACRO, "#define BSWM_TASK_MASK_BSW  ((uint32)(BSWM_TASK_MASK_ALL & (uint32)(~BSWM_TASK_MASK_APP)))", ""]
+    keep = ["(1UL << BSWM_OS_TASK_%s)" % s for s in cfg["maskShutdown"]["keepTasks"]]
+    out += doc_comment(cfg["maskShutdown"]["doc"])
+    out += continued("#define BSWM_TASK_MASK_SHUTDOWN  ((uint32)(BSWM_TASK_MASK_ALL & (uint32)(~(", keep, " | ", "))))", 56)
+    return "\n".join(out)
+
+
 def render_count(cfg, ctx):
     out = block_comment(cfg["ruleCountDoc"])
     out.append("#define BSWM_RULE_COUNT  %dU" % len(expand(cfg)))
@@ -104,5 +145,6 @@ SPEC = {
     "targets": [
         ("src/Bsw/BswM/BswM_PBCfg.c", "bswm-rules", render_rules, None),
         ("src/Bsw/BswM/BswM_Cfg.h", "bswm-rule-count", render_count, None),
+        ("src/Bsw/BswM/BswM_Cfg.h", "bswm-task-ids", render_task_ids, lambda cfg, text: symbols.include_warnings(text)),
     ],
 }
