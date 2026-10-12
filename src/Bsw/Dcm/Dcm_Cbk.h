@@ -59,6 +59,51 @@ void Dcm_ComIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr);
  * Callback Functions and Notifications
  * ====================================================================== */
 
+/**
+ * \brief   ComM のチャネルが COMM_NO_COMMUNICATION へ遷移したことを Dcm へ伝える。
+ *
+ * \details 応答の送信を禁止する。Dcm が扱わない ComM チャネルの通知は何もせず戻る。
+ *          ComM_BusSM_ModeIndication() が、チャネルのモードが通知されるたびに呼ぶ。
+ *
+ * \param[in]  NetworkId  モードが変わった ComM チャネルの識別子。
+ *
+ * \AUTOSARReq     {SWS_Dcm_00356}
+ * \ServiceID      {0x21}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void Dcm_ComM_NoComModeEntered(uint8 NetworkId);
+
+/**
+ * \brief   ComM のチャネルが COMM_SILENT_COMMUNICATION へ遷移したことを Dcm へ伝える。
+ *
+ * \details 応答の送信を禁止する。Dcm が扱わない ComM チャネルの通知は何もせず戻る。
+ *          ComM_BusSM_ModeIndication() が、チャネルのモードが通知されるたびに呼ぶ。
+ *
+ * \param[in]  NetworkId  モードが変わった ComM チャネルの識別子。
+ *
+ * \AUTOSARReq     {SWS_Dcm_00358}
+ * \ServiceID      {0x22}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void Dcm_ComM_SilentComModeEntered(uint8 NetworkId);
+
+/**
+ * \brief   ComM のチャネルが COMM_FULL_COMMUNICATION へ遷移したことを Dcm へ伝える。
+ *
+ * \details 応答の送信を許可する。Dcm が扱わない ComM チャネルの通知は何もせず戻る。
+ *          ComM_BusSM_ModeIndication() が、チャネルのモードが通知されるたびに呼ぶ。
+ *
+ * \param[in]  NetworkId  モードが変わった ComM チャネルの識別子。
+ *
+ * \AUTOSARReq     {SWS_Dcm_00360}
+ * \ServiceID      {0x23}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void Dcm_ComM_FullComModeEntered(uint8 NetworkId);
+
 /* ======================================================================
  * Test Functions
  * ====================================================================== */

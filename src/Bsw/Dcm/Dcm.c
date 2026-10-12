@@ -196,6 +196,15 @@
 /** [SWS_Dcm 7.1.1] 用の初期化済みフラグ。 */
 static uint8 Dcm_Initialized;
 
+/** ActiveDiagnostic の状態（[SWS_Dcm_01069]〜[SWS_Dcm_01071]）。1 = 診断要求のたびに
+ *  ComM_DCM_ActiveDiagnostic() を呼ぶ（Dcm_Init() 直後の既定値）、
+ *  0 = 呼ばない（Dcm_SetActiveDiagnostic(FALSE) で設定）。 */
+static uint8 Dcm_ActiveDiagnostic = 1U;
+
+/** 応答の送信が許可されているか。ComM のチャネルモードに追従する（Dcm_ComM_*ModeEntered()）。
+ *  1 = 許可（FULL_COM、Dcm_Init() 直後の既定値）、0 = 禁止（NO_COM / SILENT_COM）。 */
+static uint8 Dcm_TxEnabled = 1U;
+
 /** 現在の診断セッション (DCM_SESSION_DEFAULT / DCM_SESSION_EXTENDED) */
 static uint8 Dcm_CurrentSession;
 
@@ -357,6 +366,8 @@ static void Dcm_CommControlReset(void);
 static void Dcm_HandleControlDTCSetting(const uint8* uds, uint8 udsLen);
 static void Dcm_DTCSettingReset(void);
 static void Dcm_UpdateComMRequest(uint8 session);
+static void Dcm_NotifyActiveDiagnostic(void);
+static void Dcm_SetTxEnabled(uint8 networkId, uint8 enabled);
 static void Dcm_HandleSecurityAccess(const uint8* uds, uint8 udsLen);
 static void Dcm_HandleSecurityRequestSeed(uint8 subFunc, uint8 udsLen);
 static void Dcm_HandleSecuritySendKey(uint8 subFunc, const uint8* uds, uint8 udsLen);
@@ -411,6 +422,9 @@ void Dcm_Init(const Dcm_ConfigType* ConfigPtr)
     Dcm_TransferState = DCM_TRANSFER_STATE_IDLE;
 
     Dcm_DTCSettingDisabled = 0U;
+
+    Dcm_ActiveDiagnostic = 1U;  /* [SWS_Dcm_01069] */
+    Dcm_TxEnabled        = 1U;  /* ComM からの通知（Dcm_ComM_*ModeEntered）があるまで送信を許可する */
 
     (void)Dcm_GetVin(Dcm_Vin);  /* [SWS_Dcm_01174]: 起動時に一度だけ取得しキャッシュする */
 
@@ -651,7 +665,29 @@ Std_ReturnType Dcm_ResetToDefaultSession(void)
  * Dcm_SetActiveDiagnostic
  * ----------------------------------------------------------------------- */
 
-/* 未実装 */
+/**
+ * \brief   ComM_DCM_ActiveDiagnostic() の呼び出しを許可・禁止する。
+ *
+ * \details [SWS_Dcm_01068]〜[SWS_Dcm_01071]。FALSE にすると、以降 Dcm は
+ *          診断要求を受けても ComM_DCM_ActiveDiagnostic() を呼ばない
+ *          （診断要求で ECU のスリープを妨げたくないとき、アプリケーションが使う）。
+ *          TRUE にすると呼ぶようになる。Dcm_Init() 直後は TRUE。
+ *          ComM_DCM_InactiveDiagnostic() の呼び出しは、この設定の影響を受けない。
+ *
+ * \param[in]  active  TRUE: ComM_DCM_ActiveDiagnostic() を呼ぶ。FALSE: 呼ばない。
+ *
+ * \retval  E_OK  常に E_OK。
+ *
+ * \AUTOSARReq     {SWS_Dcm_01068}
+ * \ServiceID      {0x56}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType Dcm_SetActiveDiagnostic(boolean active)
+{
+    Dcm_ActiveDiagnostic = (active != FALSE) ? 1U : 0U;
+    return E_OK;
+}
 
 /* ======================================================================
  * Callback notifications
@@ -697,19 +733,76 @@ Std_ReturnType Dcm_ResetToDefaultSession(void)
  * Dcm_ComM_NoComModeEntered
  * ----------------------------------------------------------------------- */
 
-/* 未実装 */
+/**
+ * \brief   ComM のチャネルが COMM_NO_COMMUNICATION へ遷移したことを Dcm へ伝える。
+ *
+ * \details 応答の送信を禁止する（[SWS_Dcm_00148]/[SWS_Dcm_00152]。CanTp_Transmit() を呼ばず、応答は破棄する）。
+ *          Dcm が扱わない ComM チャネルの通知は何もせず戻る（[SWS_Dcm_01324]〜[SWS_Dcm_01326]）。
+ *          ComM_BusSM_ModeIndication() が、チャネルのモードが通知されるたびに呼ぶ。
+ *          本プロジェクトの ResponseOnEvent と周期送信（ReadDataByPeriodicIdentifier）は
+ *          未対応のため、止めるのは通常の応答だけである。
+ *
+ * \param[in]  NetworkId  モードが変わった ComM チャネルの識別子。
+ *
+ * \AUTOSARReq     {SWS_Dcm_00356}
+ * \ServiceID      {0x21}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void Dcm_ComM_NoComModeEntered(uint8 NetworkId)
+{
+    Dcm_SetTxEnabled(NetworkId, 0U);
+}
 
 /* -----------------------------------------------------------------------
  * Dcm_ComM_SilentComModeEntered
  * ----------------------------------------------------------------------- */
 
-/* 未実装 */
+/**
+ * \brief   ComM のチャネルが COMM_SILENT_COMMUNICATION へ遷移したことを Dcm へ伝える。
+ *
+ * \details 応答の送信を禁止する（[SWS_Dcm_00153]/[SWS_Dcm_00156]。CanTp_Transmit() を呼ばず、応答は破棄する）。
+ *          Dcm が扱わない ComM チャネルの通知は何もせず戻る（[SWS_Dcm_01324]〜[SWS_Dcm_01326]）。
+ *          ComM_BusSM_ModeIndication() が、チャネルのモードが通知されるたびに呼ぶ。
+ *          本プロジェクトの ResponseOnEvent と周期送信（ReadDataByPeriodicIdentifier）は
+ *          未対応のため、止めるのは通常の応答だけである。
+ *
+ * \param[in]  NetworkId  モードが変わった ComM チャネルの識別子。
+ *
+ * \AUTOSARReq     {SWS_Dcm_00358}
+ * \ServiceID      {0x22}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void Dcm_ComM_SilentComModeEntered(uint8 NetworkId)
+{
+    Dcm_SetTxEnabled(NetworkId, 0U);
+}
 
 /* -----------------------------------------------------------------------
  * Dcm_ComM_FullComModeEntered
  * ----------------------------------------------------------------------- */
 
-/* 未実装 */
+/**
+ * \brief   ComM のチャネルが COMM_FULL_COMMUNICATION へ遷移したことを Dcm へ伝える。
+ *
+ * \details 応答の送信を許可する（[SWS_Dcm_00157]/[SWS_Dcm_00161]）。
+ *          Dcm が扱わない ComM チャネルの通知は何もせず戻る（[SWS_Dcm_01324]〜[SWS_Dcm_01326]）。
+ *          ComM_BusSM_ModeIndication() が、チャネルのモードが通知されるたびに呼ぶ。
+ *          本プロジェクトの ResponseOnEvent と周期送信（ReadDataByPeriodicIdentifier）は
+ *          未対応のため、止めるのは通常の応答だけである。
+ *
+ * \param[in]  NetworkId  モードが変わった ComM チャネルの識別子。
+ *
+ * \AUTOSARReq     {SWS_Dcm_00360}
+ * \ServiceID      {0x23}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void Dcm_ComM_FullComModeEntered(uint8 NetworkId)
+{
+    Dcm_SetTxEnabled(NetworkId, 1U);
+}
 
 /* ======================================================================
  * Callout Definitions
@@ -877,11 +970,44 @@ static void Dcm_UpdateComMRequest(uint8 session)
 {
     if (session == DCM_SESSION_EXTENDED)
     {
-        ComM_DCM_ActiveDiagnostic(0U);
+        Dcm_NotifyActiveDiagnostic();
     }
     else
     {
-        ComM_DCM_InactiveDiagnostic(0U);
+        ComM_DCM_InactiveDiagnostic(COMM_CHANNEL_0);
+    }
+}
+
+/**
+ * \brief   ComM へ診断アクティブを通知する（Dcm_SetActiveDiagnostic() で許可されている間だけ）。
+ *
+ * \details [SWS_Dcm_01070]: Dcm_SetActiveDiagnostic(FALSE) の間は
+ *          ComM_DCM_ActiveDiagnostic() を呼ばない。インアクティブの通知
+ *          （ComM_DCM_InactiveDiagnostic()）はこの設定の影響を受けない。
+ */
+static void Dcm_NotifyActiveDiagnostic(void)
+{
+    if (Dcm_ActiveDiagnostic != 0U)
+    {
+        ComM_DCM_ActiveDiagnostic(COMM_CHANNEL_0);
+    }
+}
+
+/**
+ * \brief   応答の送信可否を、ComM のチャネルのモード変化に合わせて切り替える。
+ *
+ * \details Dcm_ComM_NoComModeEntered()/Dcm_ComM_SilentComModeEntered()/
+ *          Dcm_ComM_FullComModeEntered() の共通処理。Dcm が扱わない ComM チャネルの
+ *          通知は何もしない（[SWS_Dcm_01324]〜[SWS_Dcm_01326]）。
+ *
+ * \param[in]  networkId  モードが変わった ComM チャネルの識別子。
+ * \param[in]  enabled    1: 送信を許可する（FULL_COM）。0: 送信を禁止する（NO_COM / SILENT_COM）。
+ */
+static void Dcm_SetTxEnabled(uint8 networkId, uint8 enabled)
+{
+    if (networkId == COMM_CHANNEL_0)
+    {
+        Dcm_TxEnabled = enabled;
     }
 }
 
@@ -894,9 +1020,19 @@ static void Dcm_UpdateComMRequest(uint8 session)
  *
  * \details CanTp がペイロード長に応じて SF/FF+CF を選択する。
  *          呼び出し前に Dcm_TxPdu.SduLength を設定すること。
+ *          ComM のチャネルが FULL_COM でない間（Dcm_ComM_NoComModeEntered()/
+ *          Dcm_ComM_SilentComModeEntered() の後、Dcm_ComM_FullComModeEntered() まで）は、
+ *          送信せずに破棄する。
  */
 static void Dcm_Transmit(void)
 {
+    if (Dcm_TxEnabled == 0U)
+    {
+        /* [SWS_Dcm_00148]/[SWS_Dcm_00153]: NO_COM / SILENT_COM の間は応答を送信しない
+         * （CanTp_Transmit() を呼ばない）。要求の処理自体は済んでおり、応答だけが破棄される。 */
+        DET_LOGW(TAG, "response dropped (ComM channel is not in FULL_COM)");
+        return;
+    }
     (void)CanTp_Transmit(CANTP_TX_SDU_ID, &Dcm_TxPdu);
 }
 
@@ -3279,7 +3415,7 @@ void Dcm_ComIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
      * 要求の応答は CanIf が TX_OFFLINE で拒否して無言で失われるが、ここで通知すれば
      * ComM が協調スリープを取り消して FULL_COM へ復帰させ、応答が送信できる。
      * CanTp 送信ビジーで無視する並行要求には呼ばない（[SWS_Dcm_01050]）。 */
-    ComM_DCM_ActiveDiagnostic(0U);
+    Dcm_NotifyActiveDiagnostic();
 
     /* SID × セッション許可チェック (Dcm_SidSessionTable[]) を全 SID 共通で先に行う。
      * 各ハンドラ個別の特例チェックに分散させず、ここで一元的に拒否する。 */
@@ -3300,7 +3436,7 @@ void Dcm_ComIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
      * CanNm の NM-Timeout（既定 3000ms）が働くため完走できる。 */
     if (Dcm_CurrentSession == DCM_SESSION_DEFAULT)
     {
-        ComM_DCM_InactiveDiagnostic(0U);
+        ComM_DCM_InactiveDiagnostic(COMM_CHANNEL_0);
     }
 }
 

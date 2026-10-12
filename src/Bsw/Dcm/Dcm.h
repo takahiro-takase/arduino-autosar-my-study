@@ -206,6 +206,26 @@ Std_ReturnType Dcm_GetActiveProtocol(Dcm_ProtocolType* ActiveProtocolType, uint1
 Std_ReturnType Dcm_ResetToDefaultSession(void);
 
 /**
+ * \brief   ComM_DCM_ActiveDiagnostic() の呼び出しを許可・禁止する。
+ *
+ * \details [SWS_Dcm_01068]〜[SWS_Dcm_01071]。FALSE にすると、以降 Dcm は
+ *          診断要求を受けても ComM_DCM_ActiveDiagnostic() を呼ばない
+ *          （診断要求で ECU のスリープを妨げたくないとき、アプリケーションが使う）。
+ *          TRUE にすると呼ぶようになる。Dcm_Init() 直後は TRUE。
+ *          ComM_DCM_InactiveDiagnostic() の呼び出しは、この設定の影響を受けない。
+ *
+ * \param[in]  active  TRUE: ComM_DCM_ActiveDiagnostic() を呼ぶ。FALSE: 呼ばない。
+ *
+ * \retval  E_OK  常に E_OK。
+ *
+ * \AUTOSARReq     {SWS_Dcm_01068}
+ * \ServiceID      {0x56}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType Dcm_SetActiveDiagnostic(boolean active);
+
+/**
  * \brief   DCM モジュールのバージョン情報を取得する。
  *
  * \details Dcm_Init と並び、未初期化時でも DCM_E_UNINIT を報告しない
