@@ -598,8 +598,8 @@ SecurityAccess の Level1（subFunc 0x01/0x02）でアンロックしないと N
 `Dcm_ComIndication()` が SID ディスパッチの**前**に全 SID 共通で判定するようにしました。
 
 ```c
-/* Dcm.c */
-static const Dcm_SidSessionRowType Dcm_SidSessionTable[] =
+/* Dcm_PBCfg.c（config/data/Dcm.json から生成） */
+const Dcm_SidSessionRowType Dcm_SidSessionTable[DCM_SID_SESSION_COUNT] =
 {
     { DCM_SID_CLEAR_DTC,             DCM_SESSION_MASK_EXTENDED },
     { DCM_SID_SECURITY_ACCESS,       DCM_SESSION_MASK_EXTENDED },
@@ -630,3 +630,20 @@ SecurityAccess チェックは行わないため、extendedSession でありさ�
 
 新しいサービスにセッション制約を追加する場合は、ハンドラ内に判定を書き足すのではなく
 `Dcm_SidSessionTable[]` に行を追加するだけで済みます。
+
+## ComM との連携（ActiveDiagnostic と通信モードの通知）
+
+Dcm と ComM は、双方向に通知し合います。
+
+| 向き | API | 内容 |
+|------|-----|------|
+| Dcm → ComM | `ComM_DCM_ActiveDiagnostic()` / `ComM_DCM_InactiveDiagnostic()` | 診断要求の処理中・拡張セッション中は ECU をスリープさせない |
+| アプリ → Dcm | `Dcm_SetActiveDiagnostic(boolean)` | FALSE にすると、診断要求で `ComM_DCM_ActiveDiagnostic()` を呼ばなくなる（[SWS_Dcm_01070]）。既定は TRUE |
+| ComM → Dcm | `Dcm_ComM_NoComModeEntered()` / `Dcm_ComM_SilentComModeEntered()` / `Dcm_ComM_FullComModeEntered()` | チャネルのモード変化。NO_COM / SILENT_COM の間は応答を送信しない |
+
+- `ComM_BusSM_ModeIndication()` が、チャネルのモードを記録した直後に Dcm へ通知します。
+- NO_COM / SILENT_COM の間は、要求は処理しますが、応答は `CanTp_Transmit()` を呼ばずに破棄します（[SWS_Dcm_00148]/[SWS_Dcm_00153]）。FULL_COM の通知で送信が再開します。`Dcm_Init()` 直後は送信を許可しています（ComM からの通知があるまで）。
+- 診断要求は `Dcm_ComIndication()` の先頭で `ComM_DCM_ActiveDiagnostic()` を呼びます。SILENT_COM 中に届いた要求は、これでチャネルが FULL_COM へ戻り（協調スリープの取り消し）、応答が出ます。`Dcm_SetActiveDiagnostic(FALSE)` にすると、この「起こす」動作が止まり、SILENT_COM 中の応答は破棄されます。
+- Dcm が扱うチャネルは 1 つ（`COMM_CHANNEL_0`）です。それ以外の通知は何もせずに戻ります（[SWS_Dcm_01324]〜[SWS_Dcm_01326]）。
+- ResponseOnEvent と周期送信（ReadDataByPeriodicIdentifier）は未対応のため、止めるのは通常の応答だけです。
+- 注意: `Dcm_SetActiveDiagnostic(FALSE)` の状態で SILENT_COM 中に要求が届くと、チャネルを起こさないため応答だけが破棄されます。要求の処理（セッションの変更や DTC の消去など）は済んでいるので、テスタは応答を受け取れないまま ECU の状態が変わりうります。既定の設定（TRUE）では、要求がチャネルを起こしてから応答するので起きません。

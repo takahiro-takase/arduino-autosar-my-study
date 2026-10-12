@@ -133,6 +133,7 @@
 #include "EcuM.h"
 #include "BswM.h"
 #include "Nm.h"
+#include "Dcm_Cbk.h"
 #include "Det.h"
 
 /* ======================================================================
@@ -968,6 +969,27 @@ void ComM_BusSM_ModeIndication(NetworkHandleType Network, ComM_ModeType Mode)
     const ComM_ModeType prevMode = ComM_ChannelMode[Network];
     ComM_ChannelMode[Network] = Mode;
     DET_LOGI(TAG, "ch%u ->mode=%u", (unsigned)Network, (unsigned)Mode);
+
+    /* Dcm へチャネルのモードを通知する（[SWS_Dcm_00148]/[SWS_Dcm_00153]/[SWS_Dcm_00157]:
+     * NO_COM / SILENT_COM の間 Dcm は応答を送信せず、FULL_COM で再開する）。
+     * 以降の分岐に早期 return があるため、モードを記録した直後に通知する。 */
+    if (Mode == COMM_FULL_COMMUNICATION)
+    {
+        Dcm_ComM_FullComModeEntered(Network);
+    }
+    else if (Mode == COMM_SILENT_COMMUNICATION)
+    {
+        Dcm_ComM_SilentComModeEntered(Network);
+    }
+    else if (Mode == COMM_NO_COMMUNICATION)
+    {
+        Dcm_ComM_NoComModeEntered(Network);
+    }
+    else
+    {
+        /* 上記 3 値以外は渡されない（MISRA 15.7 準拠のための防御的な明示）。
+         * 未知の値で Dcm の応答を止めないよう、Dcm へは通知しない。 */
+    }
 
     if ((Mode == COMM_FULL_COMMUNICATION) || (Mode == COMM_NO_COMMUNICATION))
     {

@@ -1,0 +1,224 @@
+// NM の協調スリープ中に診断要求を送って、ECU が起きて応答するかの確認スクリプト。
+//
+// 背景: CanNm の協調スリープ（Prepare Bus-Sleep Mode）の間、チャネルは SILENT_COM になり、CanIf が TX を止める。
+// この間に届いた診断要求は、Dcm が ComM_DCM_ActiveDiagnostic() でチャネルを FULL_COM へ戻すことで、応答が出る
+// （Bsw_DcmStack_ActiveDiagnosticWake_test.cpp、[SWS_Dcm_01376]）。さらに、SILENT_COM / NO_COM の間は Dcm が応答を
+// 送らない（Dcm_ComM_*ModeEntered()、[SWS_Dcm_00148]/[SWS_Dcm_00153]）ため、「起こしてから応答する」順序が正しく動くかを見る。
+//
+// 手順:
+//   [0] ECU を起こす: TesterPresent (0x7E0: 02 3E 00) を 1 秒ごとに送り、応答 (0x7E8: 02 7E 00) が来るまで繰り返す
+//   [1] 何も送らずに待つ: ECU が通信の要求を手放し、NM が協調スリープへ進む。ECU の送信 (0x200/0x210/0x220/0x300/0x400)
+//       が 1.3 秒以上途絶えたら、SILENT_COM（Prepare Bus-Sleep Mode）に入ったとみなす
+//   [2] その時点で TesterPresent を 1 回送り、3 秒以内に応答が来るかを見る
+//   [3] 応答が来なければ、ECU が既に完全なスリープ（Bus-Sleep Mode）に入っていたとみなす。この場合、最初のフレームは
+//       ECU を起こすだけで応答されない。2 秒おきに最大 5 回まで再送し、起きた後に応答することを確認する
+//
+// 判定:
+//   [1] ECU が起きている状態から、NM のスリープへ進む（ECU の送信が途絶える）こと
+//   [2] 送信が途絶えた直後の要求に、応答すること（理想: [2] で応答 = SILENT_COM 中に起こして応答できた）
+//   [3] 応答があった後、ECU の周期送信が再開すること
+// [2] で最初の要求に応答があれば「協調スリープ中でも起こして応答できた」、再送で応答があれば「完全なスリープに入っていた
+// ため、最初のフレームは起床だけに使われた」（どちらも ECU の動作としては正しい。どちらだったかは INFO で表示する）。
+//
+// 前提:
+//   - can_tool に CAN 接続済み。ECU の電源が入っていること（スリープしていてもよい）
+//   - 実行中は、他のフレーム（EngineInfo 等）を送らないこと。送ると ECU が通信を手放さず、スリープしない
+//   - 約 20〜40 秒で終わる（最後に結果が出る。その後は「停止」ボタンで終了する）
+
+variables
+{
+    int tickNo;          // 100ms ごとに +1
+    int phase;           // 0=起こす 1=スリープ待ち 2=最初の要求の応答待ち 3=再送 4=再開の確認 5=終了
+    int lastEcuTick;     // ECU の送信を最後に受信した tick
+    int respCount;       // 受信した TesterPresent の正応答の数
+    int respBase;
+    int sentTick;
+    int attempts;        // [3] での再送回数
+    int firstAnswered;   // 1=最初の要求に応答があった
+    int slept;           // 1=ECU の送信が途絶えた（スリープへ進んだ）
+    int resumeBase;
+    int passCount;
+    int failCount;
+}
+
+void SendTesterPresent()
+{
+    send_can(0x7E0, 0x02, 0x3E, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00);
+    sentTick = tickNo;
+}
+
+void Pass(int ok, int line)
+{
+    if (ok)
+    {
+        passCount++;
+        write("PASS [", line, "]");
+    }
+    else
+    {
+        failCount++;
+        write("FAIL [", line, "]");
+    }
+}
+
+void Finish()
+{
+    phase = 5;
+    write("=== 結果: PASS ", passCount, " / FAIL ", failCount, " ===");
+}
+
+on start
+{
+    write("=== NM スリープ中の診断要求 ===");
+    write("[0] ECU を起こします（TesterPresent を 1 秒ごとに送信）");
+    tickNo = 0;
+    phase = 0;
+    lastEcuTick = 0;
+    SendTesterPresent();
+    setTimer(tick, 100);
+}
+
+on message 0x7E8
+{
+    if (msgData(1) == 0x7E)
+    {
+        respCount++;
+    }
+}
+
+on message 0x200
+{
+    lastEcuTick = tickNo;
+}
+
+on message 0x210
+{
+    lastEcuTick = tickNo;
+}
+
+on message 0x220
+{
+    lastEcuTick = tickNo;
+}
+
+on message 0x300
+{
+    lastEcuTick = tickNo;
+}
+
+on message 0x400
+{
+    lastEcuTick = tickNo;
+}
+
+on timer tick
+{
+    tickNo++;
+
+    if (phase == 0)
+    {
+        // [0] 応答が来たら、ECU が起きた
+        if (respCount > 0)
+        {
+            write("    ECU が起きました。何も送らずに、ECU の送信が途絶えるのを待ちます（スリープ待ち）");
+            lastEcuTick = tickNo;
+            phase = 1;
+        }
+        else if (tickNo % 10 == 0)
+        {
+            if (tickNo >= 150)
+            {
+                write("    ECU が応答しません（15 秒）。電源・接続を確認してください");
+                Pass(0, 0);
+                Finish();
+            }
+            SendTesterPresent();
+        }
+    }
+    else if (phase == 1)
+    {
+        // [1] ECU の送信が 1.3 秒以上途絶えたら SILENT_COM（Prepare Bus-Sleep Mode）とみなす
+        if (tickNo - lastEcuTick >= 13)
+        {
+            slept = 1;
+            write("[1] ECU の送信が途絶えました（t=", tickNo / 10, " 秒）。スリープへ進んでいます");
+            Pass(1, 1);
+            write("[2] TesterPresent を送ります");
+            respBase = respCount;
+            SendTesterPresent();
+            phase = 2;
+        }
+        else if (tickNo >= 600)
+        {
+            write("    60 秒待っても、ECU の送信が途絶えません（スリープしていません）");
+            Pass(0, 1);
+            Finish();
+        }
+    }
+    else if (phase == 2)
+    {
+        // [2] 最初の要求への応答を 3 秒待つ
+        if (respCount > respBase)
+        {
+            firstAnswered = 1;
+            write("INFO  最初の要求に応答がありました（", (tickNo - sentTick) * 100, " ms）= 協調スリープ中に起こして応答できた");
+            Pass(1, 2);
+            resumeBase = tickNo;
+            lastEcuTick = 0;
+            phase = 4;
+        }
+        else if (tickNo - sentTick >= 30)
+        {
+            write("INFO  最初の要求に応答がありません = 完全なスリープ（Bus-Sleep Mode）に入っていた。最初のフレームは起床だけに使われたはずです");
+            write("[3] 2 秒おきに再送します");
+            attempts = 0;
+            respBase = respCount;
+            SendTesterPresent();
+            phase = 3;
+        }
+    }
+    else if (phase == 3)
+    {
+        // [3] 再送の応答
+        if (respCount > respBase)
+        {
+            write("INFO  再送への応答がありました（", attempts + 1, " 回目）= 起床後は応答できた");
+            Pass(1, 2);
+            resumeBase = tickNo;
+            lastEcuTick = 0;
+            phase = 4;
+        }
+        else if (tickNo - sentTick >= 20)
+        {
+            attempts++;
+            if (attempts >= 5)
+            {
+                write("    再送しても応答がありません（5 回）");
+                Pass(0, 2);
+                Finish();
+            }
+            SendTesterPresent();
+        }
+    }
+    else if (phase == 4)
+    {
+        // [C] 応答の後、ECU の周期送信が 3 秒以内に再開すること
+        if (lastEcuTick > 0)
+        {
+            write("[3] ECU の周期送信が再開しました");
+            Pass(1, 3);
+            Finish();
+        }
+        else if (tickNo - resumeBase >= 30)
+        {
+            write("    ECU の周期送信が再開しません（3 秒）");
+            Pass(0, 3);
+            Finish();
+        }
+    }
+
+    if (phase != 5)
+    {
+        setTimer(tick, 100);
+    }
+}
