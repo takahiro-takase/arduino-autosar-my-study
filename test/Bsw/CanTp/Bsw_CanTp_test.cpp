@@ -28,6 +28,7 @@ extern "C" {
 #include "CanTp.h"
 #include "Fake_Det_Hw.h"
 #include "Fake_Millis.h"
+#include "Wrap_CanTp.h"
 }
 
 /* ======================================================================
@@ -50,13 +51,14 @@ namespace
  * ====================================================================== */
 
 /* CanTp の単体テスト用フィクスチャ。
- * SetUp(): 時刻を初期化し、CanTp_Init(NULL) を呼ぶ（Init 中の DET ログは抑制し、Init 自体の記録は消して後続の検証から除く）。 */
+ * SetUp(): 時刻と CanTp の wrap（呼び出し回数・故障注入。他のテストが設定したまま残っていても影響を受けないよう）を初期化し、CanTp_Init(NULL) を呼ぶ（Init 中の DET ログは抑制し、Init 自体の記録は消して後続の検証から除く）。 */
 class Bsw_CanTp_Test : public ::testing::Test
 {
 protected:
     void SetUp() override
     {
         FakeMillis_Reset();
+        WrapCanTp_Reset();
         FakeDetHw_LogSuppressed = 1U;  // Init() のログはノイズになるため抑制
         CanTp_Init(NULL);              // CfgPtr は常に NULL（CanTp.h 参照）
         FakeDetHw_Reset();              // Init 自体の記録を後続の検証対象から除く
