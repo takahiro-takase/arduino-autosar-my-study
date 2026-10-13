@@ -526,4 +526,197 @@ TEST_F(GptTest, Gpt_GetVersionInfo_NG_RejectsNullPointer)
     EXPECT_EQ(FakeDetHw_LastErrorId, GPT_E_PARAM_POINTER);
 }
 
+TEST_F(GptTest, Gpt_Init_NG_RejectsChannelCountAboveMax)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    config.ChannelCount = GPT_CHANNEL_COUNT + 1U;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Gpt_Init(&config);
+    const uint8 errAfterInit = FakeDetHw_LastErrorId;
+    const uint8 apiAfterInit = FakeDetHw_LastApiId;
+
+    /* 初期化に失敗しているので、続く API は未初期化として扱われる。 */
+    Gpt_StartTimer(GPT_CHANNEL_0, 1000U);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(errAfterInit, GPT_E_INIT_FAILED);
+    EXPECT_EQ(apiAfterInit, GPT_API_ID_INIT);
+    EXPECT_EQ(FakeDetHw_LastErrorId, GPT_E_UNINIT);
+}
+
+TEST_F(GptTest, Gpt_OnTick_NG_IgnoresInvalidChannel)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    Gpt_Init(&config);
+    Gpt_StartTimer(GPT_CHANNEL_0, 1000U);
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Gpt_OnTick((Gpt_ChannelType)1U);
+    Gpt_OnTick((Gpt_ChannelType)0xFFU);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(Gpt_GetTimeElapsed(GPT_CHANNEL_0), 0U);   // 有効チャネルの状態は変わらない
+    EXPECT_EQ(g_notifyCount, 0U);
+    EXPECT_EQ(FakeDetHw_ReportCount, 0U);   // ISR 経路では DET を報告しない
+}
+
+TEST_F(GptTest, Gpt_GetTimeElapsed_NG_RejectsInvalidChannel)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    Gpt_Init(&config);
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    const Gpt_ValueType elapsed = Gpt_GetTimeElapsed((Gpt_ChannelType)1U);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(elapsed, 0U);
+    EXPECT_EQ(FakeDetHw_LastErrorId, GPT_E_PARAM_CHANNEL);
+    EXPECT_EQ(FakeDetHw_LastApiId, GPT_API_ID_GET_TIME_ELAPSED);
+}
+
+TEST_F(GptTest, Gpt_GetTimeRemaining_NG_BeforeInitReportsUninit)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（Gpt_Init() を呼ばない未初期化の状態）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    const Gpt_ValueType remaining = Gpt_GetTimeRemaining(GPT_CHANNEL_0);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(remaining, 0U);
+    EXPECT_EQ(FakeDetHw_LastErrorId, GPT_E_UNINIT);
+    EXPECT_EQ(FakeDetHw_LastApiId, GPT_API_ID_GET_TIME_REMAINING);
+}
+
+TEST_F(GptTest, Gpt_GetTimeRemaining_NG_RejectsInvalidChannel)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    Gpt_Init(&config);
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    const Gpt_ValueType remaining = Gpt_GetTimeRemaining((Gpt_ChannelType)1U);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(remaining, 0U);
+    EXPECT_EQ(FakeDetHw_LastErrorId, GPT_E_PARAM_CHANNEL);
+    EXPECT_EQ(FakeDetHw_LastApiId, GPT_API_ID_GET_TIME_REMAINING);
+}
+
+TEST_F(GptTest, Gpt_StopTimer_NG_RejectsInvalidChannel)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    Gpt_Init(&config);
+    Gpt_StartTimer(GPT_CHANNEL_0, 1000U);
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Gpt_StopTimer((Gpt_ChannelType)1U);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(FakeDetHw_LastErrorId, GPT_E_PARAM_CHANNEL);
+    EXPECT_EQ(FakeDetHw_LastApiId, GPT_API_ID_STOP_TIMER);
+    EXPECT_EQ(FakeGptHw_StopCount, 0U);   // 有効チャネルは止まらない
+}
+
+TEST_F(GptTest, Gpt_EnableNotification_NG_BeforeInitReportsUninit)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（Gpt_Init() を呼ばない未初期化の状態）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Gpt_EnableNotification(GPT_CHANNEL_0);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(FakeDetHw_LastErrorId, GPT_E_UNINIT);
+    EXPECT_EQ(FakeDetHw_LastApiId, GPT_API_ID_ENABLE_NOTIFICATION);
+}
+
+TEST_F(GptTest, Gpt_DisableNotification_NG_BeforeInitReportsUninit)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（Gpt_Init() を呼ばない未初期化の状態）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Gpt_DisableNotification(GPT_CHANNEL_0);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(FakeDetHw_LastErrorId, GPT_E_UNINIT);
+    EXPECT_EQ(FakeDetHw_LastApiId, GPT_API_ID_DISABLE_NOTIFICATION);
+}
+
+TEST_F(GptTest, Gpt_DisableNotification_NG_RejectsInvalidChannelAndNoNotification)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    Gpt_Init(&config);
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Gpt_DisableNotification((Gpt_ChannelType)1U);
+    const uint8 errInvalid = FakeDetHw_LastErrorId;
+
+    FakeDetHw_Reset();
+    channels[0].Notification = NULL;
+    Gpt_DeInit();
+    Gpt_Init(&config);
+    Gpt_DisableNotification(GPT_CHANNEL_0);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(errInvalid, GPT_E_PARAM_CHANNEL);
+    EXPECT_EQ(FakeDetHw_LastErrorId, GPT_E_PARAM_CHANNEL);
+    EXPECT_EQ(FakeDetHw_LastApiId, GPT_API_ID_DISABLE_NOTIFICATION);
+}
+
 }  // namespace
