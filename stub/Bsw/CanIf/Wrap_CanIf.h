@@ -37,7 +37,7 @@
  * \par CanIf_SetControllerMode
  * `CanSM_MainFunction()` の Bus-Off 回復リトライ（`CanIf_SetControllerMode
  * (CAN_CS_STARTED)` 失敗時の分岐、CanSM.c 参照）を検証するために導入
- * （2026-09、`test/test_chain/Bsw_CanSM_BusOffRecovery_test.cpp` 参照。
+ * （2026-09、`test/test_chain/CanSM_BusOffRecovery_test.cpp` 参照。
  * 元は試作環境 `[env:native_chain_wrap]` の `Wrap_CanIf_SetControllerMode.h`
  * として新設し、本ファイルへ統合した）。CanIf.c/Can.c 自体はフェイクに
  * 置き換えず実体のまま、CanSM.c から見た戻り値だけをピンポイントで
@@ -48,11 +48,11 @@
  * 上位層通知として呼ぶ（旧 `test/test_native/Bsw_CanIf_fake.h` が単純な
  * 呼び出し記録フェイクとして丸ごと差し替えていた境界）。native_chain は
  * 既に CanIf.c を実体でリンクしており（Tx/Rx チェーン検証用）、
- * Bsw_Can_test.cpp（Can.c 単体検証）は CanIf の実際のPDUルーティングまでは
+ * Can_test.cpp（Can.c 単体検証）は CanIf の実際のPDUルーティングまでは
  * 対象外で、呼び出し回数・引数だけを検証したいため、CanIf_SetControllerMode
  * と同じ考え方で境界だけをピンポイントで観測する。既定は
  * `__real_...` へのパススルー（CanIf/CanSM 側に未初期化ガードがあり、
- * Bsw_Can_test.cpp は CanIf_Init()/CanSM_Init() を呼ばないため、実体へ渡っても
+ * Can_test.cpp は CanIf_Init()/CanSM_Init() を呼ばないため、実体へ渡っても
  * 静かに no-op になるだけで既存挙動に影響しない）。故障注入は誰も必要と
  * していないため、この3関数には呼び出し回数・引数キャプチャのみを持つ。
  */

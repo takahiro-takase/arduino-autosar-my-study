@@ -1,0 +1,191 @@
+/**
+ * \file    WdgM_PerformReset_test.cpp
+ * \brief   WdgM_PerformReset() の単体テスト
+ * \details AUTOSAR SWS_WdgM_00232/00233/00264/00270 が規定する、呼び出し以降
+ *          HW ウォッチドッグの trigger を二度と行わなくなる（＝リセットが
+ *          確実に迫る）挙動を、WdgM_MainFunction() の呼び出し記録
+ *          （Fake_Wdg_Hw.h の FakeWdgHw_RefreshCount。2026-09、WdgIf/Wdg
+ *          自身の Det 検証のため実体リンクへ切り替え、旧 Fake_WdgIf.h の
+ *          FakeWdgIf_SetTriggerConditionCount から一段深いレイヤへ移した）
+ *          で検証する。本番の WdgM_Config
+ *          （WdgM_PBCfg.c、Entity 0=ENGINE/Entity 1=WARNING の2エンティティ
+ *          構成）をそのまま使う。
+ */
+
+/* ======================================================================
+ * Includes
+ * ====================================================================== */
+
+#include <gtest/gtest.h>
+#include "WdgM.h"
+#include "WdgM_TestUtil.h"
+#include "Wdg.h"
+#include "Wdg_PBCfg.h"
+#include "Fake_Wdg_Hw.h"
+#include "Wrap_Dem.h"
+#include "Fake_Det_Hw.h"
+#include "Fake_Millis.h"
+
+/* ======================================================================
+ * Test Fixture
+ * ====================================================================== */
+
+/* ======================================================================
+ * Definitions
+ * ====================================================================== */
+
+/* ======================================================================
+ * Type Definitions
+ * ====================================================================== */
+
+/* ======================================================================
+ * Global Variables
+ * ====================================================================== */
+
+/* WdgM_PerformReset() の単体テスト用フィクスチャ。
+ * SetUp(): 時刻・模擬 Wdg_Hw・DET・Dem の wrap を初期化し、Dem_Init(NULL)・Wdg_Init()・WdgM_Init() を EcuM_Init() と同じ順序で呼ぶ（Init 自体の DET 記録は消す）。 */
+class WdgM_PerformReset_Test : public ::testing::Test
+{
+protected:
+    void SetUp() override
+    {
+        FakeMillis_Reset();
+        FakeDetHw_Reset();
+        FakeWdgHw_Reset();
+        WrapDem_Reset();
+        Dem_Init(NULL);  // Demの内部状態を毎テスト決定的にリセットする（Fake_NvM.cにより常に「初回起動」）
+        Wdg_Init(&Wdg_Config);  // WdgIf/Wdg を実体リンクへ切り替えた際に追加（EcuM_Init() と同じ順序）
+        WdgM_Init(&WdgM_Config);
+        FakeDetHw_Reset();  /* Init 自体が出す DET ログ・記録を後続の検証対象から除く */
+    }
+};
+
+/* ======================================================================
+ * Test Functions
+ * ====================================================================== */
+
+TEST_F(WdgM_PerformReset_Test, PerformReset_OK_StopsHwWatchdogRefreshImmediately)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    /* 通常時は refresh される。 */
+    WdgM_MainFunction();
+    EXPECT_EQ(FakeWdgHw_RefreshCount, 1U);
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    WdgM_PerformReset();
+
+    /* 呼び出し以降、何回呼んでも refresh されない。 */
+    WdgM_MainFunction();
+    WdgM_MainFunction();
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(FakeWdgHw_RefreshCount, 1U);
+}
+
+TEST_F(WdgM_PerformReset_Test, PerformReset_OK_RequestsImmediateHwResetViaTriggerConditionZero)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    /* [SWS_WdgM_00232]: 呼び出された時点で同期的に trigger condition を 0 にする。
+     * Wdg は [SWS_Wdg_00140] に従い ECU を強制リセットする（Wdg_Hw_ForceReset）。
+     * 以前はフラグを立てるだけで、リセットは WdgM_MainFunction() の以後の
+     * リフレッシュ停止から HW ウォッチドッグの期限切れまで待っていた。 */
+    EXPECT_EQ(FakeWdgHw_ForceResetCount, 0U);
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    WdgM_PerformReset();
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(FakeWdgHw_ForceResetCount, 1U);
+    EXPECT_EQ(FakeWdgHw_RefreshCount, 0U);
+
+    /* 再度の呼び出し・以後のリフレッシュ要求でリセット要求を重ねない。 */
+    WdgM_PerformReset();
+    WdgM_MainFunction();
+    EXPECT_EQ(FakeWdgHw_ForceResetCount, 1U);
+    EXPECT_EQ(FakeWdgHw_RefreshCount, 0U);
+}
+
+TEST_F(WdgM_PerformReset_Test, PerformReset_OK_OverridesSupervisionSuppression)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    /* POST_RUN 相当（WdgM_SupervisionSuppressed 中）は本来 refresh を継続する。 */
+    (void)WdgM_SetMode(WDGM_MODE_POST_RUN);
+    WdgM_MainFunction();
+    EXPECT_EQ(FakeWdgHw_RefreshCount, 1U);
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    /* それでも WdgM_PerformReset() は最優先で refresh を止める
+     * （[SWS_WdgM_00233]: 呼び出し後は二度とトリガ条件を更新しない）。 */
+    WdgM_PerformReset();
+    WdgM_MainFunction();
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(FakeWdgHw_RefreshCount, 1U);
+}
+
+TEST_F(WdgM_PerformReset_Test, PerformReset_OK_NotUndoneByMainFunctionRecovery)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    WdgM_PerformReset();
+
+    /* WdgM_MainFunction() が何度動いても（＝WdgM_GlobalStopped 側の自然回復
+     * 条件を再評価しても）、WdgM_ResetRequested は独立したフラグのため
+     * 巻き戻らない。判定結果自体（OK/FAILED）はここでは関知しない。 */
+    WdgM_RunSupervisionCycle();
+    WdgM_RunSupervisionCycle();
+
+    WdgM_MainFunction();
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(FakeWdgHw_RefreshCount, 0U);
+}
+
+TEST_F(WdgM_PerformReset_Test, PerformReset_NG_UninitializedReportsDetWithoutEffect)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    WdgM_DeInit();
+    FakeDetHw_Reset();
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    WdgM_PerformReset();
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(FakeDetHw_LastErrorId, WDGM_E_NO_INIT);
+    EXPECT_EQ(FakeDetHw_ReportCount, 1U);
+
+    /* 未初期化時は無効果（[SWS_WdgM_00270]）。WdgM_MainFunction() 自体は
+     * Cfg==NULL のガードで別途早期 return するため、ここでは呼ばない。 */
+}

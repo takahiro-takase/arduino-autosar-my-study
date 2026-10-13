@@ -8,7 +8,7 @@
  *          （Com_Types.h の RxIndicationCbk / TxTransformCbk 汎用フック経由で
  *          呼ばれるだけ）、実際の CRC/Counter 検証・付与は本モジュールが
  *          E2E_P05.c（現在の実配線先。E2E_P01.c は実 PDU を持たない参考実装
- *          として `test/Bsw/E2E/Bsw_E2E_test.cpp` の `E2EP01Test` からのみ
+ *          として `test/Bsw/E2E/E2E_test.cpp` の `E2EP01Test` からのみ
  *          検証される）へ委譲する形で行う。
  *
  *          実 AUTOSAR の Transformer は RTE 生成コードが `E2EXf_<transformerId>`/

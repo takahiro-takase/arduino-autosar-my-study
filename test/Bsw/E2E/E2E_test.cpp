@@ -1,0 +1,1106 @@
+/**
+ * \file    E2E_test.cpp
+ * \brief   E2E_P05.c（src/Bsw/E2E/E2E_P05.c）の単体テスト（GoogleTest / PlatformIO native環境）
+ * \details E2E_P05.c は実 HW 依存の無い自己完結したロジックのため、フェイク
+ *          実装は不要で公開 API (E2E_P05Protect/E2E_P05Check とその Init) を
+ *          直接呼んで検証する。E2E_CalcCrc16() 等の内部ヘルパーは static の
+ *          ため、CRC の正しさは「本テストファイル内に SWS_E2E_00406 の
+ *          擬似コードを独立に書き起こした参照実装」との突き合わせで検証する
+ *          (E2E_P05.c 側の実装をコピーするのではなく、仕様書の記述から
+ *          改めて書き起こすことで、実装のコピペミスを検出できるようにする)。
+ *
+ *          E2E_P05Check() はこのプロジェクト内に実行時の呼び出し元が無い
+ *          (EngineHealthStatus は TX のみ) ため、正しさを検証できるのは
+ *          このホストテストだけである。
+ *
+ *          E2E_P01.c のテストを追加する場合も、モジュール概念上は E2E
+ *          ディレクトリで1つのため本ファイルに TEST_F(E2EP01Test, ...) を
+ *          追加する形でまとめる（別ファイルに分けない）。
+ *
+ *          GoogleTest の main() は test_main.cpp に集約しているため、
+ *          本ファイルでは定義しない。
+ */
+
+/* ======================================================================
+ * Includes
+ * ====================================================================== */
+
+#include <gtest/gtest.h>
+
+extern "C" {
+#include "E2E.h"
+#include "E2E_P01.h"
+#include "E2E_P05.h"
+#include "Wrap_E2E.h"
+}
+
+/* ======================================================================
+ * Definitions
+ * ====================================================================== */
+
+/* ======================================================================
+ * Type Definitions
+ * ====================================================================== */
+
+/* ======================================================================
+ * Global Variables
+ * ====================================================================== */
+
+namespace
+{
+
+/**
+ * \brief  SWS_E2E_00406 の擬似コードを本テストファイル内で独立に書き起こした
+ *         参照 CRC16 計算 (多項式 0x1021、開始値 0xFFFF、MSB first、非反転)。
+ *         E2E_P05.c の実装が仕様書通りかを突き合わせるためのものなので、
+ *         E2E_P05.c のコードをコピーせずゼロから書く。
+ */
+uint16_t ReferenceCrc16(const uint8_t *data, uint8_t len, uint16_t crc)
+{
+    for (uint8_t i = 0; i < len; i++)
+    {
+        crc = static_cast<uint16_t>(crc ^ (static_cast<uint16_t>(data[i]) << 8));
+        for (uint8_t bit = 0; bit < 8; bit++)
+        {
+            if (crc & 0x8000U)
+                crc = static_cast<uint16_t>((crc << 1) ^ 0x1021U);
+            else
+                crc = static_cast<uint16_t>(crc << 1);
+        }
+    }
+    return crc;
+}
+
+/** 5byte PDU (CRC16 2B + Counter 1B + ユーザーデータ 2B) に対する参照CRCを計算する。 */
+uint16_t ReferenceCrcForFrame(const uint8_t *data, uint8_t dataLength, uint8_t offset, uint16_t dataId)
+{
+    uint16_t crc = 0xFFFFU;
+    crc = ReferenceCrc16(&data[offset + 2U], static_cast<uint8_t>(dataLength - offset - 2U), crc);
+    const uint8_t idLow  = static_cast<uint8_t>(dataId & 0xFFU);
+    const uint8_t idHigh = static_cast<uint8_t>((dataId >> 8U) & 0xFFU);
+    crc = ReferenceCrc16(&idLow,  1U, crc);
+    crc = ReferenceCrc16(&idHigh, 1U, crc);
+    return crc;
+}
+
+/* ======================================================================
+ * Test Fixture
+ * ====================================================================== */
+
+/* E2E Profile05（E2E_P05Protect / E2E_P05Check など）の単体テスト用フィクスチャ。
+ * SetUp(): Profile05 の設定（DataID=0x0220、データ長 5 バイト、最大カウンタ差 1）を用意する。 */
+class E2EP05Test : public ::testing::Test
+{
+protected:
+    E2E_P05ConfigType config;
+
+    void SetUp() override
+    {
+        config.DataID          = 0x0220U;
+        config.DataLength       = 5U; /* CRC16(2B) + Counter(1B) + userdata(2B) */
+        config.MaxDeltaCounter  = 1U;
+        config.Offset           = 0U;
+    }
+};
+
+/* ======================================================================
+ * Test Functions
+ * ====================================================================== */
+
+TEST_F(E2EP05Test, E2E_P05Protect_OK_ComputesCrcMatchingReferenceImplementation)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    E2E_P05ProtectStateType state;
+    E2E_P05ProtectInit(&state);
+
+    uint8_t data[5] = {0U, 0U, 0U, 0x12U, 0x34U}; /* byte[3-4] = ユーザーデータ */
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    E2E_P05Protect(&config, &state, data, sizeof(data));
+
+    const uint16_t receivedCrc  = static_cast<uint16_t>(data[0]) | static_cast<uint16_t>(data[1] << 8);
+    const uint16_t expectedCrc  = ReferenceCrcForFrame(data, config.DataLength, config.Offset, config.DataID);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(receivedCrc, expectedCrc);
+    EXPECT_EQ(data[2], 0U); /* 1回目の Counter は 0 */
+}
+
+TEST_F(E2EP05Test, E2E_P05Protect_OK_IncrementsCounterAndWrapsAt0xFF)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    E2E_P05ProtectStateType state;
+    E2E_P05ProtectInit(&state);
+    state.Counter = 0xFFU; /* 折り返し直前まで進めておく */
+
+    uint8_t data[5] = {0U, 0U, 0U, 0U, 0U};
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    E2E_P05Protect(&config, &state, data, sizeof(data));
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(data[2], 0xFFU);   /* 送信されたCounterは折り返し前の0xFF */
+    EXPECT_EQ(state.Counter, 0U); /* 次回用の内部Counterは0に折り返す */
+}
+
+TEST_F(E2EP05Test, E2E_P05Check_OK_CounterWrapsFrom0xFFTo0IsRecognized)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    E2E_P05ProtectStateType protectState;
+    E2E_P05CheckStateType   checkState;
+    protectState.Counter = 0xFFU;
+    checkState.Counter   = 0xFEU; /* 直前に受け付けた値が0xFEだったと仮定 */
+    checkState.Status    = E2E_P05STATUS_OK;
+
+    uint8_t frame1[5] = {0U, 0U, 0U, 0U, 0U}; /* Counter=0xFF (delta=1 from 0xFE) */
+    uint8_t frame2[5] = {0U, 0U, 0U, 0U, 0U}; /* Counter=0x00 (delta=1 from 0xFF、折り返し) */
+    E2E_P05Protect(&config, &protectState, frame1, sizeof(frame1));
+    E2E_P05Protect(&config, &protectState, frame2, sizeof(frame2));
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Std_ReturnType retCheck1 = E2E_P05Check(&config, &checkState, frame1, sizeof(frame1));
+    E2E_P05CheckStateType stateAfter1 = checkState;
+    Std_ReturnType retCheck2 = E2E_P05Check(&config, &checkState, frame2, sizeof(frame2));
+    E2E_P05CheckStateType stateAfter2 = checkState;
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    ASSERT_EQ(retCheck1, E2E_E_OK);
+    EXPECT_EQ(stateAfter1.Status, E2E_P05STATUS_OK);
+    ASSERT_EQ(retCheck2, E2E_E_OK);
+    EXPECT_EQ(stateAfter2.Status, E2E_P05STATUS_OK);
+    EXPECT_EQ(stateAfter2.Counter, 0U);
+}
+
+/**
+ * \brief  Data==NULL かつ Length!=0 も同じ「wrong input」扱い
+ *         （Data==NULL && Length==0 のみが NONEWDATA、それ以外の
+ *         Data==NULL は wrong input）。
+ */
+TEST_F(E2EP05Test, E2E_P05Check_NG_NullDataWithNonZeroLengthReturnsInputErrWrong)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    E2E_P05CheckStateType checkState;
+    E2E_P05CheckInit(&checkState);
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Std_ReturnType ret = E2E_P05Check(&config, &checkState, nullptr, 5U);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E2E_E_INPUTERR_WRONG);
+}
+
+/**
+ * \brief  [SWS_E2E_00411/00412]: Length が Config->DataLength と不一致な
+ *         「wrong input」は E2E_E_INPUTERR_WRONG を返さなければならない
+ *         （2026-09-06 是正。以前は誤って E2E_E_OK を返していた）。
+ */
+TEST_F(E2EP05Test, E2E_P05Check_NG_LengthMismatchReturnsInputErrWrong)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    E2E_P05CheckStateType checkState;
+    E2E_P05CheckInit(&checkState);
+
+    uint8_t data[6] = {0U, 0U, 0U, 0U, 0U, 0U}; /* config.DataLength=5 と不一致 */
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Std_ReturnType ret = E2E_P05Check(&config, &checkState, data, sizeof(data));
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E2E_E_INPUTERR_WRONG);
+}
+
+TEST_F(E2EP05Test, E2E_P05Check_NG_CrcMismatchReturnsErrorAndDoesNotUpdateState)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    E2E_P05ProtectStateType protectState;
+    E2E_P05CheckStateType   checkState;
+    E2E_P05ProtectInit(&protectState);
+    E2E_P05CheckInit(&checkState);
+    checkState.Counter = 5U; /* 直前の正常な状態を模擬 */
+
+    uint8_t data[5] = {0U, 0U, 6U, 0U, 0U}; /* Counter=6 だがCRCは未計算(0,0)のまま=不一致 */
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Std_ReturnType ret = E2E_P05Check(&config, &checkState, data, sizeof(data));
+    const E2E_P05StatusType status = checkState.Status;
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    ASSERT_EQ(ret, E2E_E_OK);
+
+    EXPECT_EQ(status, E2E_P05STATUS_ERROR);
+    EXPECT_EQ(checkState.Counter, 5U); /* CRC不一致時は状態を更新しない */
+}
+
+TEST_F(E2EP05Test, E2E_P05Check_NG_CounterJumpBeyondMaxDeltaIsWrongSequence)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    E2E_P05ProtectStateType protectState;
+    E2E_P05CheckStateType   checkState;
+    E2E_P05ProtectInit(&protectState);
+    E2E_P05CheckInit(&checkState);
+
+    uint8_t frame1[5] = {0U, 0U, 0U, 0U, 0U};
+    uint8_t frame2[5] = {0U, 0U, 0U, 0U, 0U};
+    uint8_t frame3[5] = {0U, 0U, 0U, 0U, 0U};
+    E2E_P05Protect(&config, &protectState, frame1, sizeof(frame1)); /* Counter=0 */
+    E2E_P05Protect(&config, &protectState, frame2, sizeof(frame2)); /* Counter=1 */
+    E2E_P05Protect(&config, &protectState, frame3, sizeof(frame3)); /* Counter=2 */
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    E2E_P05Check(&config, &checkState, frame1, sizeof(frame1)); /* OK、checkState.Counter=0 */
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    /* frame2 を飛ばして frame3 (Counter=2) を Check する → delta=2 > MaxDeltaCounter(1) */
+    ASSERT_EQ(E2E_P05Check(&config, &checkState, frame3, sizeof(frame3)), E2E_E_OK);
+    const E2E_P05StatusType status = checkState.Status;
+
+    EXPECT_EQ(status, E2E_P05STATUS_WRONGSEQUENCE);
+    EXPECT_EQ(checkState.Counter, 2U); /* WRONGSEQUENCEでも状態は受信値へ更新される (CRC正常なため) */
+}
+
+TEST_F(E2EP05Test, MapStatusToSM_OK_MapsEachStatusPerSpecTable)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    /* [SWS_E2E_00453] */
+    E2E_PCheckStatusType retOk            = E2E_P05MapStatusToSM(E2E_E_OK, E2E_P05STATUS_OK);
+    E2E_PCheckStatusType retOkSomeLost    = E2E_P05MapStatusToSM(E2E_E_OK, E2E_P05STATUS_OKSOMELOST);
+    E2E_PCheckStatusType retError         = E2E_P05MapStatusToSM(E2E_E_OK, E2E_P05STATUS_ERROR);
+    E2E_PCheckStatusType retRepeated      = E2E_P05MapStatusToSM(E2E_E_OK, E2E_P05STATUS_REPEATED);
+    E2E_PCheckStatusType retNoNewData     = E2E_P05MapStatusToSM(E2E_E_OK, E2E_P05STATUS_NONEWDATA);
+    E2E_PCheckStatusType retWrongSequence = E2E_P05MapStatusToSM(E2E_E_OK, E2E_P05STATUS_WRONGSEQUENCE);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(retOk, E2E_P_OK);
+    EXPECT_EQ(retOkSomeLost, E2E_P_OK);
+    EXPECT_EQ(retError, E2E_P_ERROR);
+    EXPECT_EQ(retRepeated, E2E_P_REPEATED);
+    EXPECT_EQ(retNoNewData, E2E_P_NONEWDATA);
+    EXPECT_EQ(retWrongSequence, E2E_P_WRONGSEQUENCE);
+}
+
+TEST_F(E2EP05Test, MapStatusToSM_NG_NonOkCheckReturnAlwaysMapsToErrorRegardlessOfStatus)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    /* [SWS_E2E_00454] */
+    E2E_PCheckStatusType ret = E2E_P05MapStatusToSM(E2E_E_INPUTERR_NULL, E2E_P05STATUS_OK);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E2E_P_ERROR);
+}
+
+/**
+ * \brief  SWS_E2E_00083 の CRC8 SAE-J1850 (多項式 0x1D、開始値・最終XORとも
+ *         0x00、MSB first) を本テストファイル内で独立に書き起こした参照実装。
+ *         E2E_P01.c の実装をコピーせずゼロから書く（ReferenceCrc16 と同じ方針）。
+ */
+uint8_t ReferenceCrc8(const uint8_t *data, uint8_t len, uint8_t crc)
+{
+    for (uint8_t i = 0; i < len; i++)
+    {
+        crc = static_cast<uint8_t>(crc ^ data[i]);
+        for (uint8_t bit = 0; bit < 8; bit++)
+        {
+            if (crc & 0x80U)
+                crc = static_cast<uint8_t>((crc << 1) ^ 0x1DU);
+            else
+                crc = static_cast<uint8_t>(crc << 1);
+        }
+    }
+    return crc;
+}
+
+/** CRC 計算範囲: DataID(下位→上位) → Data[0..CRCOffset-1] → Data[CRCOffset+1..DataLength-1]
+ *  (CRC バイト自身を除く、SWS_E2E_00082 Figure 7-6 準拠)。 */
+uint8_t ReferenceCrc8ForFrame(const uint8_t *data, uint8_t dataLength, uint8_t crcOffset, uint16_t dataId)
+{
+    uint8_t crc = 0x00U;
+    const uint8_t idLow  = static_cast<uint8_t>(dataId & 0xFFU);
+    const uint8_t idHigh = static_cast<uint8_t>((dataId >> 8U) & 0xFFU);
+    crc = ReferenceCrc8(&idLow,  1U, crc);
+    crc = ReferenceCrc8(&idHigh, 1U, crc);
+    if (crcOffset > 0U)
+        crc = ReferenceCrc8(data, crcOffset, crc);
+    if (static_cast<uint8_t>(crcOffset + 1U) < dataLength)
+        crc = ReferenceCrc8(&data[crcOffset + 1U], static_cast<uint8_t>(dataLength - crcOffset - 1U), crc);
+    return crc;
+}
+
+/* ======================================================================
+ * Test Fixture
+ * ====================================================================== */
+
+/* E2E Profile01（E2E_P01Protect / E2E_P01Check など）の単体テスト用フィクスチャ。
+ * SetUp(): Profile01 の設定（DataID=0x0110、データ長 5 バイト、最大カウンタ差 1、CRC・カウンタのオフセット、同期カウンタ初期値 2）を用意する。 */
+class E2EP01Test : public ::testing::Test
+{
+protected:
+    E2E_P01ConfigType config;
+
+    void SetUp() override
+    {
+        /* AbsInfo (CAN 0x110, DLC=5) 相当: byte[0]=CRC8, byte[1]=Counter, byte[2-4]=データ */
+        config.DataID          = 0x0110U;
+        config.DataLength       = 5U;
+        config.MaxDeltaCounter  = 1U;
+        config.CounterOffset    = 1U;
+        config.CRCOffset        = 0U;
+        config.SyncCounterInit  = 2U;
+    }
+};
+
+TEST_F(E2EP01Test, E2E_P01Protect_OK_ComputesCrcMatchingReferenceImplementationAndStartsAtCounterZero)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    E2E_P01ProtectStateType state;
+    ASSERT_EQ(E2E_P01ProtectInit(&state), E2E_E_OK);
+
+    uint8_t data[5] = {0U, 0U, 0x12U, 0x34U, 0x56U};
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Std_ReturnType ret = E2E_P01Protect(&config, &state, data);
+
+    const uint8_t expectedCrc = ReferenceCrc8ForFrame(data, config.DataLength, config.CRCOffset, config.DataID);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    ASSERT_EQ(ret, E2E_E_OK);
+    EXPECT_EQ(data[0], expectedCrc);
+    EXPECT_EQ(data[1], 0U); /* 1回目の Counter は 0 */
+}
+
+TEST_F(E2EP01Test, E2E_P01Protect_OK_IncrementsCounterAndWrapsAt14SkippingReservedValue15)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    E2E_P01ProtectStateType state;
+    ASSERT_EQ(E2E_P01ProtectInit(&state), E2E_E_OK);
+    state.Counter = 14U; /* 折り返し直前 (4bit、15は予約値のためスキップ) */
+
+    uint8_t data[5] = {0U, 0U, 0U, 0U, 0U};
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Std_ReturnType ret = E2E_P01Protect(&config, &state, data);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    ASSERT_EQ(ret, E2E_E_OK);
+
+    EXPECT_EQ(data[1], 14U);      /* 送信された Counter は折り返し前の 14 */
+    EXPECT_EQ(state.Counter, 0U); /* 次回用の内部 Counter は 15 を飛ばして 0 */
+}
+
+TEST_F(E2EP01Test, E2E_P01Check_OK_FirstCheckAfterInitReturnsInitial)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    E2E_P01ProtectStateType protectState;
+    E2E_P01CheckStateType   checkState;
+    ASSERT_EQ(E2E_P01ProtectInit(&protectState), E2E_E_OK);
+    ASSERT_EQ(E2E_P01CheckInit(&checkState), E2E_E_OK);
+
+    uint8_t data[5] = {0U, 0U, 0x01U, 0x02U, 0x03U};
+    ASSERT_EQ(E2E_P01Protect(&config, &protectState, data), E2E_E_OK);
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Std_ReturnType ret = E2E_P01Check(&config, &checkState, data);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    ASSERT_EQ(ret, E2E_E_OK);
+    EXPECT_EQ(checkState.Status, E2E_P01STATUS_INITIAL);
+    EXPECT_EQ(checkState.LastValidCounter, 0U);
+}
+
+TEST_F(E2EP01Test, E2E_P01Check_OK_SecondConsecutiveFrame)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    E2E_P01ProtectStateType protectState;
+    E2E_P01CheckStateType   checkState;
+    ASSERT_EQ(E2E_P01ProtectInit(&protectState), E2E_E_OK);
+    ASSERT_EQ(E2E_P01CheckInit(&checkState), E2E_E_OK);
+
+    uint8_t frame1[5] = {0U, 0U, 0U, 0U, 0U};
+    uint8_t frame2[5] = {0U, 0U, 0U, 0U, 0U};
+    ASSERT_EQ(E2E_P01Protect(&config, &protectState, frame1), E2E_E_OK);
+    ASSERT_EQ(E2E_P01Protect(&config, &protectState, frame2), E2E_E_OK);
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Std_ReturnType ret1 = E2E_P01Check(&config, &checkState, frame1);
+    Std_ReturnType ret2 = E2E_P01Check(&config, &checkState, frame2);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    ASSERT_EQ(ret1, E2E_E_OK); /* INITIAL */
+    ASSERT_EQ(ret2, E2E_E_OK);
+
+    EXPECT_EQ(checkState.Status, E2E_P01STATUS_OK);
+    EXPECT_EQ(checkState.LastValidCounter, 1U);
+}
+
+TEST_F(E2EP01Test, E2E_P01Check_NG_NullPointerReturnsInputErrNullWithoutTouchingState)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    E2E_P01CheckStateType   checkState;
+    E2E_P01ProtectStateType protectState;
+    ASSERT_EQ(E2E_P01CheckInit(&checkState), E2E_E_OK);
+    ASSERT_EQ(E2E_P01ProtectInit(&protectState), E2E_E_OK);
+    uint8_t data[5] = {0U, 0U, 0U, 0U, 0U};
+    const E2E_P01CheckStateType   checkStateBefore   = checkState;
+    const E2E_P01ProtectStateType protectStateBefore = protectState;
+
+    EXPECT_EQ(E2E_P01CheckInit(nullptr), E2E_E_INPUTERR_NULL);
+    EXPECT_EQ(E2E_P01ProtectInit(nullptr), E2E_E_INPUTERR_NULL);
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Std_ReturnType ret1 = E2E_P01Check(nullptr, &checkState, data);
+    Std_ReturnType ret2 = E2E_P01Check(&config, nullptr, data);
+    Std_ReturnType ret3 = E2E_P01Check(&config, &checkState, nullptr);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret1, E2E_E_INPUTERR_NULL);
+    EXPECT_EQ(ret2, E2E_E_INPUTERR_NULL);
+    EXPECT_EQ(ret3, E2E_E_INPUTERR_NULL);
+    EXPECT_EQ(E2E_P01Protect(nullptr, &protectState, data), E2E_E_INPUTERR_NULL);
+    EXPECT_EQ(E2E_P01Protect(&config, nullptr, data), E2E_E_INPUTERR_NULL);
+    EXPECT_EQ(E2E_P01Protect(&config, &protectState, nullptr), E2E_E_INPUTERR_NULL);
+
+    /* NULL 引数エラー時は State を一切書き換えないこと（テスト名の裏付け） */
+    EXPECT_EQ(checkState.LastValidCounter, checkStateBefore.LastValidCounter);
+    EXPECT_EQ(checkState.Status, checkStateBefore.Status);
+    EXPECT_EQ(checkState.WaitForFirstData, checkStateBefore.WaitForFirstData);
+    EXPECT_EQ(checkState.SyncCounter, checkStateBefore.SyncCounter);
+    EXPECT_EQ(protectState.Counter, protectStateBefore.Counter);
+}
+
+TEST_F(E2EP01Test, E2E_P01Check_NG_CrcMismatchReturnsWrongCrcAndDoesNotUpdateCounter)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    E2E_P01CheckStateType checkState;
+    ASSERT_EQ(E2E_P01CheckInit(&checkState), E2E_E_OK);
+    checkState.WaitForFirstData = 0U;
+    checkState.LastValidCounter = 3U;
+
+    uint8_t data[5] = {0U, 4U, 0U, 0U, 0U}; /* Counter=4 だが CRC は未計算(0)のまま=不一致 */
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Std_ReturnType ret = E2E_P01Check(&config, &checkState, data);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    ASSERT_EQ(ret, E2E_E_OK);
+
+    EXPECT_EQ(checkState.Status, E2E_P01STATUS_WRONGCRC);
+    EXPECT_EQ(checkState.LastValidCounter, 3U); /* CRC不一致時は状態を更新しない */
+}
+
+TEST_F(E2EP01Test, E2E_P01Check_NG_CounterJumpBeyondMaxDeltaTriggersWrongSequenceThenSyncUntilRelocked)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    E2E_P01ProtectStateType protectState;
+    E2E_P01CheckStateType   checkState;
+    ASSERT_EQ(E2E_P01ProtectInit(&protectState), E2E_E_OK);
+    ASSERT_EQ(E2E_P01CheckInit(&checkState), E2E_E_OK);
+
+    uint8_t frame0[5] = {0U, 0U, 0U, 0U, 0U};
+    ASSERT_EQ(E2E_P01Protect(&config, &protectState, frame0), E2E_E_OK); /* Counter=0 */
+
+    protectState.Counter = 3U; /* frame0(基準0)からdelta=3 > MaxDeltaCounter(1) */
+    uint8_t frameJump[5] = {0U, 0U, 0U, 0U, 0U};
+    ASSERT_EQ(E2E_P01Protect(&config, &protectState, frameJump), E2E_E_OK);
+
+    /* 再ロック用のフレーム (SyncCounterInit=2回分) と、再ロック完了後のフレーム */
+    enum { SYNC_FRAMES_MAX = 4 };
+    ASSERT_LE(config.SyncCounterInit, SYNC_FRAMES_MAX);
+    uint8_t frameSync[SYNC_FRAMES_MAX][5] = {};
+    for (uint8_t i = 0U; i < config.SyncCounterInit; i++)
+    {
+        ASSERT_EQ(E2E_P01Protect(&config, &protectState, frameSync[i]), E2E_E_OK);
+    }
+    uint8_t frameRelocked[5] = {0U, 0U, 0U, 0U, 0U};
+    ASSERT_EQ(E2E_P01Protect(&config, &protectState, frameRelocked), E2E_E_OK);
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Std_ReturnType retInitial = E2E_P01Check(&config, &checkState, frame0);  /* INITIAL、基準値=0 */
+
+    Std_ReturnType retJump = E2E_P01Check(&config, &checkState, frameJump);
+    E2E_P01CheckStateType stateJump = checkState;
+
+    /* 再ロック中 (SyncCounterInit=2回分) は CRC/Counter が正常でも SYNC を返す */
+    Std_ReturnType        retSync[SYNC_FRAMES_MAX];
+    E2E_P01CheckStateType stateSync[SYNC_FRAMES_MAX];
+    for (uint8_t i = 0U; i < config.SyncCounterInit; i++)
+    {
+        retSync[i]   = E2E_P01Check(&config, &checkState, frameSync[i]);
+        stateSync[i] = checkState;
+    }
+
+    /* 再ロック完了後は通常の OK に戻る */
+    Std_ReturnType retRelocked = E2E_P01Check(&config, &checkState, frameRelocked);
+    E2E_P01CheckStateType stateRelocked = checkState;
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    ASSERT_EQ(retInitial, E2E_E_OK);
+
+    ASSERT_EQ(retJump, E2E_E_OK);
+    EXPECT_EQ(stateJump.Status, E2E_P01STATUS_WRONGSEQUENCE);
+    EXPECT_EQ(stateJump.LastValidCounter, 3U);
+    EXPECT_EQ(stateJump.SyncCounter, config.SyncCounterInit);
+
+    for (uint8_t i = 0U; i < config.SyncCounterInit; i++)
+    {
+        ASSERT_EQ(retSync[i], E2E_E_OK);
+        EXPECT_EQ(stateSync[i].Status, E2E_P01STATUS_SYNC);
+    }
+
+    ASSERT_EQ(retRelocked, E2E_E_OK);
+    EXPECT_EQ(stateRelocked.Status, E2E_P01STATUS_OK);
+}
+
+TEST_F(E2EP01Test, MapStatusToSM_OK_R42BehaviorGroupsSyncWithOkAndInitialWithWrongSequence)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    /* [SWS_E2E_00383]: profileBehavior=1 (TRUE) */
+    E2E_PCheckStatusType retOk            = E2E_P01MapStatusToSM(E2E_E_OK, E2E_P01STATUS_OK, 1U);
+    E2E_PCheckStatusType retOkSomeLost    = E2E_P01MapStatusToSM(E2E_E_OK, E2E_P01STATUS_OKSOMELOST, 1U);
+    E2E_PCheckStatusType retSync          = E2E_P01MapStatusToSM(E2E_E_OK, E2E_P01STATUS_SYNC, 1U);
+    E2E_PCheckStatusType retWrongCrc      = E2E_P01MapStatusToSM(E2E_E_OK, E2E_P01STATUS_WRONGCRC, 1U);
+    E2E_PCheckStatusType retRepeated      = E2E_P01MapStatusToSM(E2E_E_OK, E2E_P01STATUS_REPEATED, 1U);
+    E2E_PCheckStatusType retNoNewData     = E2E_P01MapStatusToSM(E2E_E_OK, E2E_P01STATUS_NONEWDATA, 1U);
+    E2E_PCheckStatusType retWrongSequence = E2E_P01MapStatusToSM(E2E_E_OK, E2E_P01STATUS_WRONGSEQUENCE, 1U);
+    E2E_PCheckStatusType retInitial       = E2E_P01MapStatusToSM(E2E_E_OK, E2E_P01STATUS_INITIAL, 1U);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(retOk, E2E_P_OK);
+    EXPECT_EQ(retOkSomeLost, E2E_P_OK);
+    EXPECT_EQ(retSync, E2E_P_OK);
+    EXPECT_EQ(retWrongCrc, E2E_P_ERROR);
+    EXPECT_EQ(retRepeated, E2E_P_REPEATED);
+    EXPECT_EQ(retNoNewData, E2E_P_NONEWDATA);
+    EXPECT_EQ(retWrongSequence, E2E_P_WRONGSEQUENCE);
+    EXPECT_EQ(retInitial, E2E_P_WRONGSEQUENCE);
+}
+
+TEST_F(E2EP01Test, MapStatusToSM_OK_PreR42BehaviorGroupsInitialWithOkAndSyncWithWrongSequence)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    /* [SWS_E2E_00476]: profileBehavior=0 (FALSE)。TRUEだとちょうど
+     * INITIAL/SYNCの帰属が入れ替わる点のみ異なる。 */
+    E2E_PCheckStatusType retOk            = E2E_P01MapStatusToSM(E2E_E_OK, E2E_P01STATUS_OK, 0U);
+    E2E_PCheckStatusType retOkSomeLost    = E2E_P01MapStatusToSM(E2E_E_OK, E2E_P01STATUS_OKSOMELOST, 0U);
+    E2E_PCheckStatusType retInitial       = E2E_P01MapStatusToSM(E2E_E_OK, E2E_P01STATUS_INITIAL, 0U);
+    E2E_PCheckStatusType retWrongCrc      = E2E_P01MapStatusToSM(E2E_E_OK, E2E_P01STATUS_WRONGCRC, 0U);
+    E2E_PCheckStatusType retRepeated      = E2E_P01MapStatusToSM(E2E_E_OK, E2E_P01STATUS_REPEATED, 0U);
+    E2E_PCheckStatusType retNoNewData     = E2E_P01MapStatusToSM(E2E_E_OK, E2E_P01STATUS_NONEWDATA, 0U);
+    E2E_PCheckStatusType retWrongSequence = E2E_P01MapStatusToSM(E2E_E_OK, E2E_P01STATUS_WRONGSEQUENCE, 0U);
+    E2E_PCheckStatusType retSync          = E2E_P01MapStatusToSM(E2E_E_OK, E2E_P01STATUS_SYNC, 0U);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(retOk, E2E_P_OK);
+    EXPECT_EQ(retOkSomeLost, E2E_P_OK);
+    EXPECT_EQ(retInitial, E2E_P_OK);
+    EXPECT_EQ(retWrongCrc, E2E_P_ERROR);
+    EXPECT_EQ(retRepeated, E2E_P_REPEATED);
+    EXPECT_EQ(retNoNewData, E2E_P_NONEWDATA);
+    EXPECT_EQ(retWrongSequence, E2E_P_WRONGSEQUENCE);
+    EXPECT_EQ(retSync, E2E_P_WRONGSEQUENCE);
+}
+
+TEST_F(E2EP01Test, MapStatusToSM_NG_NonOkCheckReturnAlwaysMapsToErrorRegardlessOfStatusOrBehavior)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    /* [SWS_E2E_00384] */
+    E2E_PCheckStatusType ret1 = E2E_P01MapStatusToSM(E2E_E_INPUTERR_NULL, E2E_P01STATUS_OK, 1U);
+    E2E_PCheckStatusType ret2 = E2E_P01MapStatusToSM(E2E_E_INPUTERR_NULL, E2E_P01STATUS_OK, 0U);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret1, E2E_P_ERROR);
+    EXPECT_EQ(ret2, E2E_P_ERROR);
+}
+
+/* ======================================================================
+ * Test Fixture
+ * ====================================================================== */
+
+/* E2E 共通部分（プロファイルに依存しない API。GetVersionInfo など）の単体テスト用フィクスチャ。SetUp / TearDown は持たない。 */
+class E2ETest : public ::testing::Test
+{
+};
+
+TEST_F(E2ETest, E2E_GetVersionInfo_OK_FillsExpectedModuleId)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    Std_VersionInfoType info;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    E2E_GetVersionInfo(&info);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(info.moduleID, E2E_MODULE_ID);
+}
+
+TEST_F(E2ETest, E2E_GetVersionInfo_NG_SilentlyIgnoresNullPointer)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    /* [SWS_E2E_00216]: ライブラリは DET/DEM を呼んではならないため、NULL
+     * でもクラッシュせず何もせず戻ることだけを確認する（報告先が無い）。
+     * EXPECT_NO_FATAL_FAILURE は使わない（GoogleTest 1.17.0+MinGW の
+     * ThreadLocalRegistryImpl 絡みでハングする既知の組み合わせのため。
+     * 単純に直接呼び、クラッシュしなければ後続の行に到達する事実だけで
+     * 十分検証になる）。 */
+    E2E_GetVersionInfo(nullptr);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // 異常終了せずに戻ること（EXPECT/ASSERT は無い）
+}
+
+/* ======================================================================
+ * Test Fixture
+ * ====================================================================== */
+
+/**
+ * \brief  E2E_SMCheck()/E2E_SMCheckInit() の単体テスト（[SWS_E2E_00340]/
+ *         [SWS_E2E_00353]）。
+ * \details 状態遷移の閾値は WindowSize=3、Init系=3件全OK/0件Errorで昇格、
+ *          Valid系=1件OK/1件Errorまで許容、Invalid系=3件全OK/0件Errorで
+ *          復帰、という小さく手計算しやすい値にしている。
+ */
+class E2ESMTest : public ::testing::Test
+{
+protected:
+    uint8_t          window[3];
+    E2E_SMConfigType config;
+    E2E_SMCheckStateType state;
+
+    void SetUp() override
+    {
+        /* E2E_SMCheck() は -Wl,--wrap=E2E_SMCheck 経由でリンクされるため、
+         * 他ファイル（E2EXf_SMCheckFailure_test.cpp 等）が
+         * FailFromCallCount_E2E_SMCheck を設定したまま（自身の次のテストの
+         * SetUp() でのみリセットする設計）だと、native_chain_tests 全体の
+         * 実行順序によっては本フィクスチャへ漏れ伝わる（2026-09、
+         * --gtest_shuffle でのみ顕在化する形で発見。他モジュールのテストと
+         * 同じ「他ファイルの故障注入が漏れ伝わらないよう防御的にリセット」
+         * 方針をここにも適用する）。 */
+        WrapE2E_Reset();
+
+        config.WindowSize           = 3U;
+        config.MinOkStateInit       = 3U;
+        config.MaxErrorStateInit    = 0U;
+        config.MinOkStateValid      = 1U;
+        config.MaxErrorStateValid   = 1U;
+        config.MinOkStateInvalid    = 3U;
+        config.MaxErrorStateInvalid = 0U;
+
+        state.ProfileStatusWindow = window;
+    }
+};
+
+TEST_F(E2ESMTest, CheckInit_OK_SetsNodataStateAndClearsWindow)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Std_ReturnType ret = E2E_SMCheckInit(&state, &config);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    ASSERT_EQ(ret, E2E_E_OK);
+
+    EXPECT_EQ(state.SMState, E2E_SM_NODATA);
+    EXPECT_EQ(state.WindowTopIndex, 0U);
+    EXPECT_EQ(state.OkCount, 0U);
+    EXPECT_EQ(state.ErrorCount, 0U);
+    for (uint8_t i = 0U; i < config.WindowSize; i++)
+        EXPECT_EQ(window[i], static_cast<uint8_t>(E2E_P_NOTAVAILABLE));
+}
+
+TEST_F(E2ESMTest, CheckInit_NG_NullPointerReturnsInputErrNull)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Std_ReturnType ret1 = E2E_SMCheckInit(nullptr, &config);
+    Std_ReturnType ret2 = E2E_SMCheckInit(&state, nullptr);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret1, E2E_E_INPUTERR_NULL);
+    EXPECT_EQ(ret2, E2E_E_INPUTERR_NULL);
+}
+
+TEST_F(E2ESMTest, Check_OK_NodataStaysUntilFirstGoodStatus)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    ASSERT_EQ(E2E_SMCheckInit(&state, &config), E2E_E_OK);
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Std_ReturnType retError = E2E_SMCheck(E2E_P_ERROR, &config, &state);
+    E2E_SMCheckStateType stateAfterError = state;
+
+    Std_ReturnType retNoNewData = E2E_SMCheck(E2E_P_NONEWDATA, &config, &state);
+    E2E_SMCheckStateType stateAfterNoNewData = state;
+
+    Std_ReturnType retOk = E2E_SMCheck(E2E_P_OK, &config, &state);
+    E2E_SMCheckStateType stateAfterOk = state;
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    ASSERT_EQ(retError, E2E_E_OK);
+    EXPECT_EQ(stateAfterError.SMState, E2E_SM_NODATA);
+
+    ASSERT_EQ(retNoNewData, E2E_E_OK);
+    EXPECT_EQ(stateAfterNoNewData.SMState, E2E_SM_NODATA);
+
+    /* NODATA からの遷移では E2E_SMAddStatus() を呼ばない（PDFベクタ座標解析で
+     * 確認済み、E2E_SMCheck() の Doxygen 参照）ため、ここまで OkCount/
+     * ErrorCount は 0 のままのはず。 */
+    EXPECT_EQ(stateAfterNoNewData.OkCount, 0U);
+    EXPECT_EQ(stateAfterNoNewData.ErrorCount, 0U);
+
+    ASSERT_EQ(retOk, E2E_E_OK);
+    EXPECT_EQ(stateAfterOk.SMState, E2E_SM_INIT);
+    EXPECT_EQ(stateAfterOk.OkCount, 0U);    /* この遷移自体もウィンドウには追加しない */
+    EXPECT_EQ(stateAfterOk.ErrorCount, 0U);
+}
+
+TEST_F(E2ESMTest, Check_OK_InitPromotesToValidOnceWindowFullOfOk)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    ASSERT_EQ(E2E_SMCheckInit(&state, &config), E2E_E_OK);
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Std_ReturnType retNodataToInit = E2E_SMCheck(E2E_P_OK, &config, &state); /* NODATA -> INIT */
+    E2E_SMCheckStateType stateNodataToInit = state;
+
+    /* WindowSize(3) 回分 OK を積むまでは INIT に留まる */
+    Std_ReturnType retOk1 = E2E_SMCheck(E2E_P_OK, &config, &state);
+    E2E_SMCheckStateType stateOk1 = state;
+    Std_ReturnType retOk2 = E2E_SMCheck(E2E_P_OK, &config, &state);
+    E2E_SMCheckStateType stateOk2 = state;
+
+    /* 3回目でウィンドウが全て OK になり VALID へ昇格 */
+    Std_ReturnType retOk3 = E2E_SMCheck(E2E_P_OK, &config, &state);
+    E2E_SMCheckStateType stateOk3 = state;
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    ASSERT_EQ(retNodataToInit, E2E_E_OK);
+    ASSERT_EQ(stateNodataToInit.SMState, E2E_SM_INIT);
+
+    ASSERT_EQ(retOk1, E2E_E_OK);
+    EXPECT_EQ(stateOk1.SMState, E2E_SM_INIT);
+    ASSERT_EQ(retOk2, E2E_E_OK);
+    EXPECT_EQ(stateOk2.SMState, E2E_SM_INIT);
+
+    ASSERT_EQ(retOk3, E2E_E_OK);
+    EXPECT_EQ(stateOk3.SMState, E2E_SM_VALID);
+    EXPECT_EQ(stateOk3.OkCount, 3U);
+    EXPECT_EQ(stateOk3.ErrorCount, 0U);
+}
+
+TEST_F(E2ESMTest, Check_OK_InitDemotesDirectlyToInvalidWhenErrorExceedsMax)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    ASSERT_EQ(E2E_SMCheckInit(&state, &config), E2E_E_OK);
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Std_ReturnType ret1 = E2E_SMCheck(E2E_P_OK, &config, &state);
+
+    /* MaxErrorStateInit=0 のため、INIT 中に ERROR が1回でも発生すると
+     * (OK が十分溜まる前でも) 即座に INVALID へ落ちる。 */
+    Std_ReturnType ret2 = E2E_SMCheck(E2E_P_ERROR, &config, &state);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    ASSERT_EQ(ret1, E2E_E_OK); /* NODATA -> INIT */
+    ASSERT_EQ(ret2, E2E_E_OK);
+    EXPECT_EQ(state.SMState, E2E_SM_INVALID);
+}
+
+TEST_F(E2ESMTest, Check_OK_ValidStaysValidWithinErrorLimitThenDemotesWhenExceeded)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    ASSERT_EQ(E2E_SMCheckInit(&state, &config), E2E_E_OK);
+    ASSERT_EQ(E2E_SMCheck(E2E_P_OK, &config, &state), E2E_E_OK); /* NODATA -> INIT（AddStatus は呼ばれない） */
+    ASSERT_EQ(E2E_SMCheck(E2E_P_OK, &config, &state), E2E_E_OK); /* window=[OK,NA,NA] */
+    ASSERT_EQ(E2E_SMCheck(E2E_P_OK, &config, &state), E2E_E_OK); /* window=[OK,OK,NA] */
+    ASSERT_EQ(E2E_SMCheck(E2E_P_OK, &config, &state), E2E_E_OK); /* window=[OK,OK,OK] -> VALID */
+    ASSERT_EQ(state.SMState, E2E_SM_VALID);
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    /* MaxErrorStateValid=1 のため、1件だけの ERROR は許容され VALID を維持する
+     * (window=[ERROR,OK,OK] は OkCount=2>=MinOkStateValid(1)、ErrorCount=1<=1)。 */
+    Std_ReturnType retError1 = E2E_SMCheck(E2E_P_ERROR, &config, &state);
+    E2E_SMCheckStateType stateError1 = state;
+
+    /* 2件目の ERROR で許容量(1)を超え INVALID へ落ちる
+     * (window=[ERROR,ERROR,OK] は ErrorCount=2>1)。 */
+    Std_ReturnType retError2 = E2E_SMCheck(E2E_P_ERROR, &config, &state);
+    E2E_SMCheckStateType stateError2 = state;
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    ASSERT_EQ(retError1, E2E_E_OK);
+    EXPECT_EQ(stateError1.SMState, E2E_SM_VALID);
+
+    ASSERT_EQ(retError2, E2E_E_OK);
+    EXPECT_EQ(stateError2.SMState, E2E_SM_INVALID);
+}
+
+TEST_F(E2ESMTest, Check_OK_InvalidRecoversToValidOnceWindowFullOfOk)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    /* INIT を経由せず、INVALID から直接検証する（E2E_SMAddStatus() は
+     * 呼び出し毎にウィンドウ全体を再走査して OkCount/ErrorCount を再計算する
+     * ため、事前の Ok/ErrorCount の値そのものは結果に影響しない）。 */
+    window[0] = static_cast<uint8_t>(E2E_P_ERROR);
+    window[1] = static_cast<uint8_t>(E2E_P_ERROR);
+    window[2] = static_cast<uint8_t>(E2E_P_ERROR);
+    state.WindowTopIndex = 0U;
+    state.SMState        = E2E_SM_INVALID;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    /* MinOkStateInvalid=3/MaxErrorStateInvalid=0 のため、ウィンドウ全体が
+     * OK で埋まるまで INVALID に留まる。 */
+    Std_ReturnType retOk1 = E2E_SMCheck(E2E_P_OK, &config, &state);
+    E2E_SMCheckStateType stateOk1 = state;
+    Std_ReturnType retOk2 = E2E_SMCheck(E2E_P_OK, &config, &state);
+    E2E_SMCheckStateType stateOk2 = state;
+
+    /* 3回目でウィンドウが全て OK になり VALID へ復帰 */
+    Std_ReturnType retOk3 = E2E_SMCheck(E2E_P_OK, &config, &state);
+    E2E_SMCheckStateType stateOk3 = state;
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    ASSERT_EQ(retOk1, E2E_E_OK);
+    EXPECT_EQ(stateOk1.SMState, E2E_SM_INVALID);
+    ASSERT_EQ(retOk2, E2E_E_OK);
+    EXPECT_EQ(stateOk2.SMState, E2E_SM_INVALID);
+
+    ASSERT_EQ(retOk3, E2E_E_OK);
+    EXPECT_EQ(stateOk3.SMState, E2E_SM_VALID);
+    EXPECT_EQ(stateOk3.OkCount, 3U);
+    EXPECT_EQ(stateOk3.ErrorCount, 0U);
+}
+
+TEST_F(E2ESMTest, Check_NG_NullPointerReturnsInputErrNull)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    ASSERT_EQ(E2E_SMCheckInit(&state, &config), E2E_E_OK);
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Std_ReturnType ret1 = E2E_SMCheck(E2E_P_OK, nullptr, &state);
+    Std_ReturnType ret2 = E2E_SMCheck(E2E_P_OK, &config, nullptr);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret1, E2E_E_INPUTERR_NULL);
+    EXPECT_EQ(ret2, E2E_E_INPUTERR_NULL);
+}
+
+TEST_F(E2ESMTest, Check_NG_DeinitStateReturnsWrongStateWithoutChangingState)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    /* E2E_SMCheckInit() を一度も呼んでいない場合を模擬するため、State を
+     * 明示的に E2E_SM_DEINIT にする。注意: [SWS_E2E_00343] の値定義は
+     * E2E_SM_VALID=0x00・E2E_SM_DEINIT=0x01 のため、ゼロ初期化しただけでは
+     * DEINIT にはならず（誤って VALID 扱いになってしまう）、呼び出し元は
+     * 必ず E2E_SMCheckInit() を明示的に呼ぶ必要がある（本テストはその
+     * 「明示的な初期化が必須」という前提を裏付けるためのもの）。 */
+    state.SMState = E2E_SM_DEINIT;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Std_ReturnType ret = E2E_SMCheck(E2E_P_OK, &config, &state);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E2E_E_WRONGSTATE);
+    EXPECT_EQ(state.SMState, E2E_SM_DEINIT); /* 状態遷移しないこと */
+}
+
+}  // namespace

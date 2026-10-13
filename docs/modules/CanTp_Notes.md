@@ -94,7 +94,7 @@ TX 確認経路（`Can.c`/`CanIf.c`）が常に成功固定で真の送信失敗
 
 **受信側（FF の総長が大きすぎる場合）**: FF が示す総長が Dcm の受信バッファ（`DCM_RX_BUF_SIZE`、32 バイト）を
 超えるときは、`Dcm_StartOfReception()` が `BUFREQ_E_OVFL` を返し、CanTp は受信を始めず `FC(OVFLW)` を返して拒否します
-（ログ: `RX FF overflow FC_OVFLW`。`Bsw_DcmStack_RxOverflow_test.cpp` 参照）。
+（ログ: `RX FF overflow FC_OVFLW`。`DcmStack_RxOverflow_test.cpp` 参照）。
 **送信側**: 自 ECU が FF を送った後に相手から `FC(OVFLW)` を受け取った場合は、送信を中断して
 IDLE に戻ります（ログ: `TX FC OVFLW abort`）。FC(WAIT) を受け取ったときは N_Bs タイマを
 リセットして待ちます。`CanTp_Transmit()` は、長さが 0 または 4095 を超えるときは `invalid len` で拒否します
@@ -106,7 +106,7 @@ IDLE に戻ります（ログ: `TX FC OVFLW abort`）。FC(WAIT) を受け取っ
 テスト用に `CanTp_Test_IsTxBusy()` だけ残しています）。進行中は、応答送信中は S3 タイマを毎周期更新し続けて進めず
 （[SWS_Dcm_00141]）、送信中に届いた新しい要求は `Dcm_StartOfReception()` が `BUFREQ_E_NOT_OK` で拒否します
 （ログ: `reception rejected (response TX in progress)`。要求が届いたこと自体はテスターの生存の証拠として
-S3 タイマを更新します。[SWS_Dcm_00557]。`Bsw_DcmStack_CanTpBusy_test.cpp` 参照）。
+S3 タイマを更新します。[SWS_Dcm_00557]。`DcmStack_CanTpBusy_test.cpp` 参照）。
 
 ## フロー制御パラメータ（BS / STmin）
 

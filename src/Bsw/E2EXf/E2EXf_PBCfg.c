@@ -10,7 +10,7 @@
  *          公開 API の引数には登場しない（2026-09 是正、E2EXf.h 冒頭コメント
  *          参照）。E2E Profile 01（`E2E_P01.c`）は実 PDU を持たない参考実装
  *          のため、対応する Config struct・インスタンスはここに存在しない
- *          （`test/Bsw/E2E/Bsw_E2E_test.cpp` の `E2EP01Test` が
+ *          （`test/Bsw/E2E/E2E_test.cpp` の `E2EP01Test` が
  *          `E2E_P01.c` 単体を直接検証する）。
  *          以前は Com_PBCfg.c が Com_IPduConfigType の E2EConfig/
  *          E2ECheckState/E2EProtectState/E2EDemEventId フィールドとして

@@ -2,7 +2,7 @@
 //
 // 背景: CanNm の協調スリープ（Prepare Bus-Sleep Mode）の間、チャネルは SILENT_COM になり、CanIf が TX を止める。
 // この間に届いた診断要求は、Dcm が ComM_DCM_ActiveDiagnostic() でチャネルを FULL_COM へ戻すことで、応答が出る
-// （Bsw_DcmStack_ActiveDiagnosticWake_test.cpp、[SWS_Dcm_01376]）。さらに、SILENT_COM / NO_COM の間は Dcm が応答を
+// （DcmStack_ActiveDiagnosticWake_test.cpp、[SWS_Dcm_01376]）。さらに、SILENT_COM / NO_COM の間は Dcm が応答を
 // 送らない（Dcm_ComM_*ModeEntered()、[SWS_Dcm_00148]/[SWS_Dcm_00153]）ため、「起こしてから応答する」順序が正しく動くかを見る。
 //
 // 手順:

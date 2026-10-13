@@ -20,16 +20,16 @@
 # コールチェーンテスト全般の方針。README の「Tx処理」「Rx処理」「CAN コント
 # ローラのスリープ制御」（実スリープ・ウェイクアップ検証）のようにモジュール
 # 横断でコールチェーンを実体（Com.c/PduR.c/CanIf.c/Can.c/CanSM.c）のまま
-# リンクして検証したいテストを test/ に置く（Bsw_ComStack_Tx_test.cpp 参照）。
+# リンクして検証したいテストを test/ に置く（ComStack_Tx_test.cpp 参照）。
 #
 # CanIf.c が CanSM_ControllerBusOff() を、Can.c が
 # EcuM_CheckWakeup() 経由で CanSM_ControllerModeIndication() をハードコードで
 # 呼ぶため（2026-09-05、旧 CanIf_ControllerWakeup() 経由から変更。
 # Fake_Bsw_EcuM.h 参照）、CanSM.c は実体・フェイクのいずれかをこのバイナリ
-# 全体で選ぶ必要がある。Tx/Rx チェーン（Bsw_ComStack_Tx_test.cpp/
-# Bsw_ComStack_Signal_Rx_test.cpp）は CanSM の状態遷移に関与しないが、CanSM 自身の
-# コールチェーン（Bsw_NmStack_Wakeup_test.cpp）や CanNm↔CanSM↔ComM 協調スリープ
-# （Bsw_NmStack_SleepCoordination_test.cpp）を同じバイナリで検証するため、CanSM.c は
+# 全体で選ぶ必要がある。Tx/Rx チェーン（ComStack_Tx_test.cpp/
+# ComStack_Signal_Rx_test.cpp）は CanSM の状態遷移に関与しないが、CanSM 自身の
+# コールチェーン（NmStack_Wakeup_test.cpp）や CanNm↔CanSM↔ComM 協調スリープ
+# （NmStack_SleepCoordination_test.cpp）を同じバイナリで検証するため、CanSM.c は
 # 実体をリンクしている。
 #
 # ComM.c/CanNm.c も実体でリンクする（2026-08、当初は CanNm/CanSM/ComM 協調スリープの
@@ -47,14 +47,14 @@
 # を呼ばないため、これらのモジュールの実体は未初期化のまま（呼ばれない）で無害。
 #
 # E2E チェーン（README「Tx 処理」「Rx 処理」それぞれの「E2E」節、
-# Bsw_ComStack_E2E_Tx_test.cpp/Bsw_ComStack_E2E_Rx_test.cpp）は E2EXf.c/
+# ComStack_E2E_Tx_test.cpp/ComStack_E2E_Rx_test.cpp）は E2EXf.c/
 # E2EXf_PBCfg.c/E2E_P05.c（実配線先）を実体でリンクする（E2E_P01.c は実 PDU
 # を持たない参考実装のため、E2EXf.h/.c 側の対応するインスタンス専用関数は
-# 廃止済み。E2E_P01.c 自体の検証は Bsw_E2E_test.cpp の E2EP01Test が独立して
+# 廃止済み。E2E_P01.c 自体の検証は E2E_test.cpp の E2EP01Test が独立して
 # 担う）。本番の TxTransformCbk/RxIndicationCbk
 # （Rte_COMTransform_E2EHealthStatus()/Rte_COMCbk_EngineInfo() 等）は Rte.c
 # 内にあるが、Rte.c 自体は IoHwAb/FiM/App_EngineManager/App_WarningIndicator
-# まで巨大な依存グラフを引き込むため（Bsw_ComStack_Tx_test.cpp 冒頭コメント
+# まで巨大な依存グラフを引き込むため（ComStack_Tx_test.cpp 冒頭コメント
 # と同じ理由）リンクしない。各テストファイル内に、本番の
 # Rte_COMTransform_E2EHealthStatus()/Rte_COMCbk_EngineInfo() と同じ1行の委譲
 # 呼び出しをテスト専用の TxTransformCbk/RxIndicationCbk として定義し、
@@ -63,13 +63,13 @@
 # （README の「E2E」節の図に含めていない別軸のため）。
 #
 # デッドライン監視チェーン（README「Rx 処理」の「デッドライン監視」節、
-# Bsw_ComStack_Signal_Rx_test.cpp）は PduR/CanIf/Can/CanSM を経由せず Com.c
+# ComStack_Signal_Rx_test.cpp）は PduR/CanIf/Can/CanSM を経由せず Com.c
 # 単体で完結するため、フェイクは millis()（Fake_Millis.c）のみで足りる。
 #
 # GNU ld の `-Wl,--wrap=<symbol>` によるフォールトインジェクション（2026-09
 # 新設、以前は [env:native_chain_wrap] という別 env で試作していたが、2ラウンド
 # の実績（CanSM Bus-Off回復・E2EXf SMCheck失敗分岐、いずれも
-# test/Bsw_CanSM_BusOffRecovery_test.cpp/Bsw_E2EXf_SMCheckFailure_test.cpp 参照）を
+# test/CanSM_BusOffRecovery_test.cpp/E2EXf_SMCheckFailure_test.cpp 参照）を
 # 経て本バイナリへ統合した）。実体を丸ごとフェイクへ差し替えず、境界の1関数
 # だけをピンポイントで失敗させたい場合に使う（stub/Bsw/CanIf/Wrap_CanIf.h・
 # stub/Bsw/E2E/Wrap_E2E.h 冒頭コメント参照）。「stub は fake ファイルではなく
@@ -141,13 +141,13 @@
 # test_native/test_dcm/test_wdgm/test_fim を test_chain へ統合するという長期
 # ゴールの最終回）。Gpt/Dio/Port は他モジュールと無縁の末端モジュールのため、
 # それぞれの HAL 層フェイク（stub/Hal/Fake_Gpt_Hw.c 等）ごとそのまま
-# 持ち込むだけで済んだ。Can.c 単体検証（Bsw_Can_test.cpp）だけは、Can.c が
+# 持ち込むだけで済んだ。Can.c 単体検証（Can_test.cpp）だけは、Can.c が
 # 上位層通知として呼ぶ `CanIf_RxIndication()`/`CanIf_TxConfirmation()`/
 # `CanIf_ControllerBusOff()` の3関数を、native_chain が既に CanIf.c を実体で
 # リンクしているため `--wrap` 化する必要があった（stub/Bsw/CanIf/
 # Wrap_CanIf.c/h へ追記）。3関数とも（a）CanIf/CanSM側に未初期化ガードがあり、
-# Bsw_Can_test.cppはCanIf_Init()/CanSM_Init()を呼ばないため実体へパススルー
-# しても静かにno-opになるだけ、（b）Bsw_Can_test.cpp自体にDET報告回数の完全
+# Can_test.cppはCanIf_Init()/CanSM_Init()を呼ばないため実体へパススルー
+# しても静かにno-opになるだけ、（b）Can_test.cpp自体にDET報告回数の完全
 # 一致アサーションが1件も無い、の2点を確認した上で、単純な既定パススルー
 # のみで実装した。
 #
@@ -158,7 +158,7 @@
 # 配下に整理されていたため、単純な呼び出し記録フェイク（Fake_Bsw_BswM.c 等）
 # も同じ考え方で stub/ 配下（src/ のディレクトリ構成をそのまま反映:
 # 例 src/Bsw/CanTp/ → stub/Bsw/CanTp/、src/Rte/ → stub/Rte/）へ移設
-# した。結果として `test/` 直下はテストファイル（`Bsw_{シナリオ名}_test.cpp`）と
+# した。結果として `test/` 直下はテストファイル（`{シナリオ名}_test.cpp`）と
 # `test_main.cpp`/`win_quick_exit_stub.cpp` のみになった。
 #
 # 2026-09-23、`test/` 配下をさらにモジュール別サブフォルダ（`test/Can/`・
@@ -383,7 +383,7 @@ set(NATIVE_CHAIN_STUB_SOURCES
     stub/Hal/Fake_Adc_Hw.c
 )
 
-# test/ 配下のテストファイル（Bsw_{Module|Stack}_{シナリオ}_test.cpp）を自動収集する。
+# test/ 配下のテストファイル（{Module|Stack}_{シナリオ}_test.cpp）を自動収集する。
 # 2026-09、test/ 直下にモジュール別サブフォルダ（test/Bsw/Can/・test/Bsw/DcmStack/
 # 等、stub/ と同じ「src/ ミラーリング」の発想）を新設し整理したため、
 # test/ 直下限定だった旧 GLOB から GLOB_RECURSE へ変更した。stub/ 配下は

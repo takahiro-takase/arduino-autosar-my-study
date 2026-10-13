@@ -212,7 +212,7 @@ EXTENDED 32B〔冗長で 2 面〕を書くので、最短でも約 0.6 秒かか
 `delay(50)` の前に呼ぶので、テスターを待たせません。WdgM のリセットや HW ウォッチドッグのリセット
 （故障時の経路）、電源断では書き切れません。
 
-テスト: `Bsw_NvM_WriteAll_test.cpp`（単体）、`Bsw_DcmStack_SID11_EcuResetFlushesNvm_test.cpp`
+テスト: `NvM_WriteAll_test.cpp`（単体）、`DcmStack_SID11_EcuResetFlushesNvm_test.cpp`
 （ECUReset のフルチェーン）。
 
 ## 書き込みスキップ・書き込み保護・NvM_ReadBlock
