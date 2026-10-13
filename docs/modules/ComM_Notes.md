@@ -76,7 +76,7 @@ FULL_COM のまま維持されます。
 デフォルトセッションの要求でも Active を通知するのは、CanNm の協調スリープ中（Prepare Bus-Sleep Mode、
 チャネルは SILENT_COM で CanIf が TX を拒否）に届いた要求の応答が失われるのを防ぐためです。通知を受けた
 ComM は協調スリープを取り消し、CanNm を Repeat Message State へ戻してチャネルを FULL_COM に復帰させるので、
-応答を送信できます（`Bsw_DcmStack_ActiveDiagnosticWake_test.cpp` で検証）。応答が終わるとデフォルトセッション
+応答を送信できます（`DcmStack_ActiveDiagnosticWake_test.cpp` で検証）。応答が終わるとデフォルトセッション
 では Inactive を通知し、エンジン OFF が続いていれば `App_EngineManager` の次の周期で再びスリープに入ります。
 `Dcm_TpTxConfirmation`（未実装）による厳密な「処理完了」の検出は行っておらず、多フレーム応答の残りの CF は
 CanNm の NM-Timeout（既定 3000ms）の間に送信されます。

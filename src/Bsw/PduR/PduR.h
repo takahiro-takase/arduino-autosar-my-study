@@ -63,7 +63,7 @@ void           PduR_GetVersionInfo(Std_VersionInfoType* versioninfo);
  * \details PduR には Mcu 同様 DeInit() に相当する API が無く、`PduR_ConfigPtr`
  *          は native_chain_tests バイナリ全体で共有される static のため、
  *          一度 `PduR_Init()` を呼ぶと他のテストファイルの実行順に関わらず
- *          「未初期化状態」を再現できなくなる（`Bsw_PduR_SecOCTxConfirmation_test.cpp`
+ *          「未初期化状態」を再現できなくなる（`PduR_SecOCTxConfirmation_test.cpp`
  *          冒頭コメント参照。同ファイルはこの制約のため PDUR_E_UNINIT の
  *          検証自体を諦めていた）。native 環境のホストテストからのみ使用する。
  *          `PDUR_UNIT_TEST` は CMakeLists.txt の native_chain ターゲットでのみ

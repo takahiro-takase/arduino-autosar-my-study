@@ -228,7 +228,7 @@ void Mcu_GetVersionInfo(Std_VersionInfoType* versioninfo);
  *
  * \details 実 AUTOSAR SWS_Mcu には Mcu_DeInit() に相当する API が無く（本実装も
  *          意図的に追加していない、ファイル冒頭コメント参照）、他のテスト
- *          ファイル（例: Bsw_DcmStack_SID11_EcuReset_test.cpp）がそれぞれの
+ *          ファイル（例: DcmStack_SID11_EcuReset_test.cpp）がそれぞれの
  *          SetUp() で Mcu_Init() を呼ぶため、native_chain_tests のリンク順・
  *          実行順に関わらず「未初期化状態からの呼び出し」を確実に再現するには
  *          本関数が必要（`Mcu_Init()` は一度呼ぶと二度と未初期化へ戻せない）。

@@ -1,0 +1,351 @@
+/**
+ * \file    DcmStack_SID3E_TesterPresent_test.cpp
+ * \brief   UDS SID 0x3E TesterPresent の、物理層（Can_Hw フェイク）を
+ *          起点・終点とするフルコールチェーンテスト（GoogleTest /
+ *          CMake native_chain_tests）。
+ *
+ * \details DcmStack_SID19_SF01_ReadDtcCount_test.cpp 系列で確立した
+ *          チェーンの型を適用する。リクエスト・応答とも Single Frame に
+ *          収まるため、CanTp のマルチフレーム分割は関与しない。
+ *
+ *          旧 Dcm_ReadDtcInfo_test.cpp の
+ *          `TesterPresent_NG_ExtraByteReturnsIncorrectMessageLength`
+ *          （固定長サービスの上限長チェック、2026-09 是正の回帰確認）を
+ *          ここへ移植する。
+ */
+
+/* ======================================================================
+ * Includes
+ * ====================================================================== */
+
+#include <gtest/gtest.h>
+
+extern "C" {
+#include "Can.h"
+#include "Can_Hw.h"
+#include "CanIf.h"
+#include "CanSM.h"
+#include "PduR.h"
+#include "CanTp.h"
+#include "CanTp_Cfg.h"
+#include "Dcm.h"
+#include "Dcm_Cfg.h"
+#include "Dem.h"
+#include "Fake_Can_Hw.h"
+#include "Fake_Det_Hw.h"
+#include "Fake_Millis.h"
+#include "Wrap_Can.h"
+#include "Wrap_CanIf.h"
+#include "Wrap_PduR.h"
+#include "Wrap_CanTp.h"
+}
+
+/* ======================================================================
+ * Definitions
+ * ====================================================================== */
+
+/* ======================================================================
+ * Type Definitions
+ * ====================================================================== */
+
+/* ======================================================================
+ * Global Variables
+ * ====================================================================== */
+
+namespace
+{
+
+// -----------------------------------------------------------------------
+// テスト専用の最小 CanIf/PduR 設定（DcmStack_SID19_SF01_ReadDtcCount_test.cpp
+// と同一。ファイル冒頭コメント参照）。
+// -----------------------------------------------------------------------
+
+const CanIf_RxPduConfigType kTestCanIfRxPdu = {
+    /* CanId */                0x7E0U,
+    /* Hrh */                  0U,  /* Can_MainFunction_Read() が構築する Mailbox は常に Hoh=0 */
+    /* UpperLayerRxPduId */    0U,
+    /* Dlc */                  8U,
+    /* RxIndicationFct */      PduR_CanIfRxIndication,
+    /* ReadRxPduDataEnabled */ 0U
+};
+
+const CanIf_TxPduConfigType kTestCanIfTxPdu = {
+    /* UpperLayerTxPduId */ 0U,
+    /* CanId */             0x7E8U,
+    /* Dlc */               8U,
+    /* Hth */               0U,
+    /* TxConfirmFct */      PduR_CanIfTxConfirmation
+};
+
+const CanIf_ConfigType kTestCanIfConfig = {
+    /* TxPduConfig */ &kTestCanIfTxPdu,
+    /* TxPduCount */  1U,
+    /* RxPduConfig */ &kTestCanIfRxPdu,
+    /* RxPduCount */  1U
+};
+
+const PduR_RxDestType kTestPduRRxDest = {
+    /* Module */    PDUR_MODULE_CANTP,
+    /* DestPduId */ CANTP_RX_SDU_ID,
+    /* RxIndFct */  CanTp_RxIndication
+};
+
+const PduR_RxRoutingPathType kTestPduRRxPath = {
+    /* SrcPduId */  0U,  /* = kTestCanIfRxPdu.UpperLayerRxPduId */
+    /* Dests */     &kTestPduRRxDest,
+    /* DestCount */ 1U
+};
+
+const PduR_TxRoutingPathType kTestPduRTxPath = {
+    /* SrcPduId */             CANTP_PDUR_TX_SDU_ID,
+    /* CanIfTxPduId */         0U,  /* = kTestCanIfTxPdu の登録順インデックス */
+    /* ConfDestPduId */        0U,
+    /* ConfFct */              CanTp_TxConfirmation,
+    /* TransmitOverrideFct */  NULL,
+    /* TransmitOverrideId */   0U
+};
+
+const PduR_PBConfigType kTestPduRConfig = {
+    /* RxPaths */     &kTestPduRRxPath,
+    /* RxPathCount */ 1U,
+    /* TxPaths */     &kTestPduRTxPath,
+    /* TxPathCount */ 1U
+};
+
+/* ======================================================================
+ * Test Fixture
+ * ====================================================================== */
+
+/* SID 0x3E TesterPresent のコールチェーンのテスト用フィクスチャ。CAN の受信（0x7E0）から応答の送信（0x7E8）までを実際に通して確認する。
+ * SetUp(): 模擬 Can_Hw と wrap をリセットし、Can_Init() → CanIf_Init(&kTestCanIfConfig)（コントローラを STARTED、PDU を ONLINE にする）→ PduR_Init() → CanSM_Init(NULL)（CanIf_RxIndication() が呼ぶため）→ CanTp_Init(NULL) → Dem_Init(NULL) → Dcm_Init(NULL) の順に初期化する。
+ * TearDown(): CanSM_DeInit() と CanIf_DeInit() で未初期化へ戻す。 */
+class DcmStack_SID3E_TesterPresent_Test : public ::testing::Test
+{
+protected:
+    void SetUp() override
+    {
+        FakeMillis_Reset();
+        FakeCanHw_Reset();
+        WrapCan_Reset();
+        WrapCanIf_Reset();
+        WrapPduR_Reset();
+        WrapCanTp_Reset();
+        FakeDetHw_LogSuppressed = 1U;  // Init() のログはノイズになるため抑制
+
+        canConfig.filter.filterId = 0x0000U;
+        canConfig.filter.mask     = 0x0000U;  // 全ID受理（Can_PBCfg.c の本番設定と同じ）
+        canConfig.csPin           = 10U;
+        canConfig.intPin          = 2U;
+        canConfig.baudrate        = 500000U;
+        canConfig.crystalFreq     = CAN_CRYSTAL_16MHZ;
+
+        Can_Init(&canConfig);
+        CanIf_Init(&kTestCanIfConfig);
+        /* CanIf_Init() 直後は CanIf_ControllerMode[] が CAN_CS_STOPPED に
+         * 巻き戻るため、CanIf_SetControllerMode() 経由で明示的に起動する
+         * （ComStack_Signal_Rx_test.cpp と同じ理由）。 */
+        CanIf_SetControllerMode(0U, CAN_CS_STARTED);
+        /* 本テストは CanSM 経由で FULL_COM を確立しないため、CanIf_Init()
+         * 直後の既定値 CANIF_OFFLINE のままだと応答側の CanIf_Transmit() が
+         * 常に E_NOT_OK になってしまう（ComStack_Signal_Tx_test.cpp
+         * と同じ理由）。 */
+        CanIf_SetPduMode(0U, CANIF_ONLINE);
+        PduR_Init(&kTestPduRConfig);
+        /* 以前は CanIf_RxIndication() が CanSM_RxIndication() を無条件に呼んでおり（2026-10 に廃止、現在は呼ばない。共有 static の状態を揃えるため CanSM_Init は残している）、
+         * CanSM 未初期化のままだと DET_E_UNINIT が毎回報告される
+         * （ComStack_Signal_Rx_test.cpp と同じ理由。CanSM 自体の状態機械は
+         * 本テストの対象外）。 */
+        CanSM_Init(NULL);
+        CanTp_Init(NULL);
+        Dem_Init(NULL);
+        Dcm_Init(NULL);
+
+        FakeDetHw_LogSuppressed = 0U;  // ここから各 TEST_F の実行(Act)区間
+    }
+
+    void TearDown() override
+    {
+        FakeDetHw_LogSuppressed = 1U;  // DeInit() のログを抑制
+        CanSM_DeInit();
+        CanIf_DeInit();
+    }
+
+    Can_ConfigType canConfig;
+};
+
+/* ======================================================================
+ * Test Functions
+ * ====================================================================== */
+
+// ------------------------------------------------------------
+// OK: [0x3E, 0x00] zeroSubFunction は正応答 [0x7E, 0x00] を返す。
+// ------------------------------------------------------------
+TEST_F(DcmStack_SID3E_TesterPresent_Test,
+       OK_ZeroSubFunctionProducesPositiveResponse)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // [0x3E, 0x00] を 0x7E0 の受信バッファへセットする
+    // （SF: 02 3E 00）。
+    FakeCanHw_RxId  = 0x7E0U;
+    FakeCanHw_RxDlc = 8U;
+    FakeCanHw_RxData[0] = 2U;
+    FakeCanHw_RxData[1] = DCM_SID_TESTER_PRESENT;
+    FakeCanHw_RxData[2] = 0x00U;
+    for (uint8 i = 3U; i < 8U; i++)
+        FakeCanHw_RxData[i] = 0U;
+    FakeCanHw_RxPendingCount = 1U;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Can_MainFunction_Read();
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // 正応答 [0x7E, 0x00] が Can_Hw まで到達すること。
+    ASSERT_EQ(FakeCanHw_SendCount, 1U);
+    EXPECT_EQ(FakeCanHw_LastSendId, 0x7E8U);
+    EXPECT_EQ(FakeCanHw_LastSendDlc, 8U);
+    EXPECT_EQ(FakeCanHw_LastSendData[0], 0x02U);  // SF PCI（UDSペイロード長=2）
+    EXPECT_EQ(FakeCanHw_LastSendData[1], 0x7EU);
+    EXPECT_EQ(FakeCanHw_LastSendData[2], 0x00U);
+}
+
+// ------------------------------------------------------------
+// OK: TesterPresent の本来の目的（S3 タイマ維持）の確認。extendedSession
+// 中に S3 タイムアウト直前で TesterPresent を送ると、それ自体が
+// 要求の処理（Dcm_ProcessRequest()）で S3 タイマをリセットするため、その後さらに
+// DCM_S3_TIMEOUT_MS 近く経過しても defaultSession へは戻らない。
+// ------------------------------------------------------------
+TEST_F(DcmStack_SID3E_TesterPresent_Test,
+       OK_ResetsS3TimerPreventingSessionTimeout)
+{
+    /* ------------------------- */
+    /* ---- 準備 (Arrange 1) --- */
+    /* ------------------------- */
+    // extendedSession へ遷移させておく。
+    FakeCanHw_RxId  = 0x7E0U;
+    FakeCanHw_RxDlc = 8U;
+    FakeCanHw_RxData[0] = 2U;
+    FakeCanHw_RxData[1] = DCM_SID_SESSION_CTRL;
+    FakeCanHw_RxData[2] = DCM_SESSION_EXTENDED;
+    for (uint8 i = 3U; i < 8U; i++)
+        FakeCanHw_RxData[i] = 0U;
+    FakeCanHw_RxPendingCount = 1U;
+    Can_MainFunction_Read();
+    ASSERT_EQ(FakeCanHw_LastSendData[1], 0x50U);  // 前提確認
+    FakeCanHw_Reset();
+
+    /* ------------------------- */
+    /* ---- 準備 (Arrange 2) --- */
+    /* ------------------------- */
+    // S3 タイムアウト(60000ms)の直前まで経過させてから
+    // TesterPresent を送る。
+    FakeMillis_Value += (DCM_S3_TIMEOUT_MS - 100UL);
+    FakeCanHw_RxId  = 0x7E0U;
+    FakeCanHw_RxDlc = 8U;
+    FakeCanHw_RxData[0] = 2U;
+    FakeCanHw_RxData[1] = DCM_SID_TESTER_PRESENT;
+    FakeCanHw_RxData[2] = 0x00U;
+    for (uint8 i = 3U; i < 8U; i++)
+        FakeCanHw_RxData[i] = 0U;
+    FakeCanHw_RxPendingCount = 1U;
+    Can_MainFunction_Read();
+    ASSERT_EQ(FakeCanHw_LastSendData[1], 0x7EU);  // 前提確認
+
+    /* ------------------------- */
+    /* ---- 実行 (Act) --------- */
+    /* ------------------------- */
+    // TesterPresent 送信時点からさらに 59900ms 経過させて
+    // Dcm_MainFunction() を呼ぶ（TesterPresent が S3 タイマをリセットして
+    // いなければ、Init 起点で合計 119800ms 経過し確実にタイムアウトする）。
+    FakeMillis_Value += (DCM_S3_TIMEOUT_MS - 100UL);
+    Dcm_MainFunction();
+
+    /* ------------------------- */
+    /* ---- 評価 (Assert) ------ */
+    /* ------------------------- */
+    // TesterPresent がタイマをリセットしているため、まだ
+    // extendedSession のまま（S3 タイムアウトしていない）こと。
+    Dcm_SesCtrlType session = 0U;
+    ASSERT_EQ(Dcm_GetSesCtrlType(&session), E_OK);
+    EXPECT_EQ(session, DCM_SESSION_EXTENDED);
+}
+
+// ------------------------------------------------------------
+// OK: bit7 を立てた [0x3E, 0x80] は正応答を送信しない
+// （suppressPosRspMsgIndicationBit、[SWS_Dcm_00200]/[SWS_Dcm_00201]）。
+// ------------------------------------------------------------
+TEST_F(DcmStack_SID3E_TesterPresent_Test,
+       OK_SuppressPosRspBitSuppressesPositiveResponse)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // [0x3E, 0x80] を 0x7E0 の受信バッファへセットする（SF: 02 3E 80）。
+    FakeCanHw_RxId  = 0x7E0U;
+    FakeCanHw_RxDlc = 8U;
+    FakeCanHw_RxData[0] = 2U;
+    FakeCanHw_RxData[1] = DCM_SID_TESTER_PRESENT;
+    FakeCanHw_RxData[2] = 0x80U;
+    for (uint8 i = 3U; i < 8U; i++)
+        FakeCanHw_RxData[i] = 0U;
+    FakeCanHw_RxPendingCount = 1U;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Can_MainFunction_Read();
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // 正応答が一切 Can_Hw へ送信されないこと。
+    EXPECT_EQ(FakeCanHw_SendCount, 0U);
+}
+
+
+// ------------------------------------------------------------
+// NG: zeroSubFunction に余分な1バイト（[0x3E, 0x00, 0x00]、2バイト厳密一致
+// のため上限超過）は incorrectMessageLength (NRC 0x13) になる。
+// ------------------------------------------------------------
+TEST_F(DcmStack_SID3E_TesterPresent_Test,
+       NG_IncorrectMessageLength_ExtraByte)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // [0x3E, 0x00, 0x00] を 0x7E0 の受信バッファへセットする
+    // （SF: 03 3E 00 00）。
+    FakeCanHw_RxId  = 0x7E0U;
+    FakeCanHw_RxDlc = 8U;
+    FakeCanHw_RxData[0] = 3U;
+    FakeCanHw_RxData[1] = DCM_SID_TESTER_PRESENT;
+    FakeCanHw_RxData[2] = 0x00U;
+    FakeCanHw_RxData[3] = 0x00U;
+    for (uint8 i = 4U; i < 8U; i++)
+        FakeCanHw_RxData[i] = 0U;
+    FakeCanHw_RxPendingCount = 1U;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Can_MainFunction_Read();
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // 否定応答 [0x7F, 0x3E, 0x13] が Can_Hw まで到達すること。
+    ASSERT_EQ(FakeCanHw_SendCount, 1U);
+    EXPECT_EQ(FakeCanHw_LastSendId, 0x7E8U);
+    EXPECT_EQ(FakeCanHw_LastSendDlc, 8U);
+    EXPECT_EQ(FakeCanHw_LastSendData[0], 0x03U);  // SF PCI（UDSペイロード長=3）
+    EXPECT_EQ(FakeCanHw_LastSendData[1], DCM_SID_NEGATIVE_RESP);
+    EXPECT_EQ(FakeCanHw_LastSendData[2], DCM_SID_TESTER_PRESENT);
+    EXPECT_EQ(FakeCanHw_LastSendData[3], DCM_NRC_INCORRECT_MESSAGE_LENGTH);
+}
+
+}  // namespace

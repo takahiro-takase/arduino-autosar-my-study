@@ -274,7 +274,7 @@ I-PDU に対して自動評価（`Com_SendSignal`/`Com_SendSignalGroup` 経由�
 （`WarningStatus` の TMS は現状 `FaultLamp`/`AbsLamp` の自動評価のみで
 運用されており、手動切り替えが必要な具体的なユースケースが本プロジェクトの
 アプリケーション側に無いため）。ユニットテストでのみ検証しています
-（`test/Bsw/ComStack/Bsw_ComStack_Signal_Tx_test.cpp` / `Bsw_ComStack_SignalGroup_Tx_test.cpp` の `SwitchIpduTxMode_*`、
+（`test/Bsw/ComStack/ComStack_Signal_Tx_test.cpp` / `ComStack_SignalGroup_Tx_test.cpp` の `SwitchIpduTxMode_*`、
 `kTestTmsGroupIPdu` を流用）。
 
 ## MDT（ComMinimumDelayTime、変化時送信の最小送信間隔）
@@ -414,7 +414,7 @@ Com_MainFunctionTx() の dispatch 時点で行う理由**: [SWS_Com_00305] の�
    （経過時間が常に 0）ケースしか検証していなかったため検出できませんでした。
    **対応**: デクリメント条件を `repeatDue && !changeDue`（純粋に再送だけが
    理由で dispatch した場合に限る）へ変更。回帰テスト
-   `Bsw_ComStack_Signal_Tx_Repetition_Test.OK_InitialSendDoesNotConsumeRepeatBudgetEvenWhenElapsedAlreadyExceedsPeriod`
+   `ComStack_Signal_Tx_Repetition_Test.OK_InitialSendDoesNotConsumeRepeatBudgetEvenWhenElapsedAlreadyExceedsPeriod`
    を追加。
 2. **CommunicationControl 無効中に残り回数を空費する**: `Com_TxLastSentMs`
    の更新は `Com_TxEnabled==0` でも行われる（既存の SWS_Com_00777 対応と
@@ -427,7 +427,7 @@ Com_MainFunctionTx() の dispatch 時点で行う理由**: [SWS_Com_00305] の�
    しまっては本末転倒です。**対応**: デクリメントを `Com_TxEnabled==0` の
    早期 `continue` より後（＝実際に `Com_DoTransmit()` を呼ぶ直前）へ移動。
    回帰テスト
-   `Bsw_ComStack_Signal_Tx_Repetition_Test.OK_DoesNotConsumeBudgetWhileCommunicationControlDisabled`
+   `ComStack_Signal_Tx_Repetition_Test.OK_DoesNotConsumeBudgetWhileCommunicationControlDisabled`
    を追加。
 
 上記2件はどちらも `Com_TxRepeatsRemaining[]` を「いつ減らすか」の条件だけの
@@ -593,7 +593,7 @@ signal group 単位で別名を持てます。`Com_IpduGroupStop()`（送信済�
 Group へ所属させる設定変更が必要ですが、それ自体が「常時有効なダッシュボード
 表示」という意図と反するため見送っています）。`ComRxDataTimeoutAction` の
 REPLACE 等と同じく、動機は実利より仕様忠実性であり、修正の正しさは
-`test/Bsw/ComStack/Bsw_ComStack_SignalGroup_Tx_test.cpp` のユニットテスト（Signal Group 用の
+`test/Bsw/ComStack/ComStack_SignalGroup_Tx_test.cpp` のユニットテスト（Signal Group 用の
 I-PDU Group を持つテスト専用設定で `Com_IpduGroupStop()` を直接呼ぶ）でのみ
 検証しています。
 
@@ -1004,12 +1004,12 @@ RX 側で新しい問題を作った」のと同種の落とし穴）。その�
 
 **この機能は実際に発動するか**: 実機での動作確認は未実施です（上記の
 理由により、本番の呼び出し元が存在しないため）。回帰テストとして
-`test/Bsw/ComStack/Bsw_ComStack_SignalGroup_Tx_test.cpp` の
-`Bsw_ComStack_SignalGroup_Tx_SendSignalGroupArray_Test.OK_WritesBufferTriggersSendAndSetsUpdateBit`/
-`Bsw_ComStack_SignalGroup_Tx_SendSignalGroupArray_Test.OK_AlwaysTriggersEvenWithoutChange`/
-`Bsw_ComStack_SignalGroup_Tx_SendSignalGroupArray_Test.NG_Step01_ComSendSignalGroupArray_NullDataPtr`/
-`Bsw_ComStack_SignalGroup_Tx_SendSignalGroupArray_Test.NG_Step01_ComSendSignalGroupArray_NonSignalGroupIPdu`/
-`Bsw_ComStack_SignalGroup_Tx_SendSignalGroupArray_Test.OK_SyncsShadowBufferPreventingStaleOverwrite`
+`test/Bsw/ComStack/ComStack_SignalGroup_Tx_test.cpp` の
+`ComStack_SignalGroup_Tx_SendSignalGroupArray_Test.OK_WritesBufferTriggersSendAndSetsUpdateBit`/
+`ComStack_SignalGroup_Tx_SendSignalGroupArray_Test.OK_AlwaysTriggersEvenWithoutChange`/
+`ComStack_SignalGroup_Tx_SendSignalGroupArray_Test.NG_Step01_ComSendSignalGroupArray_NullDataPtr`/
+`ComStack_SignalGroup_Tx_SendSignalGroupArray_Test.NG_Step01_ComSendSignalGroupArray_NonSignalGroupIPdu`/
+`ComStack_SignalGroup_Tx_SendSignalGroupArray_Test.OK_SyncsShadowBufferPreventingStaleOverwrite`
 （上記の状態同期の是正確認）を追加し、既存の TMS 用 Signal Group
 （`kTestTmsGroupIPdu`、IPduId=1）を流用して検証しています。
 
@@ -1257,13 +1257,13 @@ Rte_COMCbkInv_CoolantTemp()  ← EngineInfo.CoolantTemp=0xFF 検知時
 （Signal Group 版）は本番設定では未使用（本プロジェクトの唯一の TX Signal
 Group である `WarningStatus` に `ComSignalDataInvalidValue` を設定した
 シグナルが無いため）で、ユニットテストのみで検証しています。回帰テストは
-`test/Bsw/ComStack/Bsw_ComStack_Signal_Tx_test.cpp` / `Bsw_ComStack_SignalGroup_Tx_test.cpp` の
-`Bsw_ComStack_Signal_Tx_InvalidateSignal_Test.OK`/
-`Bsw_ComStack_Signal_Tx_InvalidateSignal_Test.NG_Step01_ComInvalidateSignal_UnconfiguredInvalidValue`/
-`Bsw_ComStack_Signal_Tx_InvalidateSignal_Test.NG_Step01_ComInvalidateSignal_UnknownSignalId`/
-`Bsw_ComStack_Signal_Tx_InvalidateSignal_Test.NG_Step01_ComInvalidateSignal_RxSignal`/
-`Bsw_ComStack_SignalGroup_Tx_InvalidateSignalGroup_Test.OK`/
-`Bsw_ComStack_SignalGroup_Tx_InvalidateSignalGroup_Test.NG_Step01_ComInvalidateSignalGroup_AnyMemberUnconfigured`
+`test/Bsw/ComStack/ComStack_Signal_Tx_test.cpp` / `ComStack_SignalGroup_Tx_test.cpp` の
+`ComStack_Signal_Tx_InvalidateSignal_Test.OK`/
+`ComStack_Signal_Tx_InvalidateSignal_Test.NG_Step01_ComInvalidateSignal_UnconfiguredInvalidValue`/
+`ComStack_Signal_Tx_InvalidateSignal_Test.NG_Step01_ComInvalidateSignal_UnknownSignalId`/
+`ComStack_Signal_Tx_InvalidateSignal_Test.NG_Step01_ComInvalidateSignal_RxSignal`/
+`ComStack_SignalGroup_Tx_InvalidateSignalGroup_Test.OK`/
+`ComStack_SignalGroup_Tx_InvalidateSignalGroup_Test.NG_Step01_ComInvalidateSignalGroup_AnyMemberUnconfigured`
 参照。
 
 ## RX ComFilterAlgorithm（受信フィルタ、プラウジビリティチェック）
@@ -1532,8 +1532,8 @@ ON/OFF する専用 API）でしたが、実装を進める過程で以下の理
 低いと判断）。`Com_IpduGroupStart`/`Stop` の RX 側コード自体は既存の共通実装
 （元々 TX 専用グループでのみ実運用されていた）を流用しており、
 `Com.c` 側の変更は一切ありません。回帰テストとして
-`test/Bsw/ComStack/Bsw_ComStack_SignalGroup_Rx_test.cpp` の
-`Bsw_ComStack_SignalGroup_RxIpduGroup_IpduGroupStartStop_Test` フィクスチャ（`NG_Step01_ComMainFunctionRx_StoppedGroupedIPdu`/
+`test/Bsw/ComStack/ComStack_SignalGroup_Rx_test.cpp` の
+`ComStack_SignalGroup_RxIpduGroup_IpduGroupStartStop_Test` フィクスチャ（`NG_Step01_ComMainFunctionRx_StoppedGroupedIPdu`/
 `OK_GroupedIPduBeginsMonitoringAfterExplicitStart`/
 `OK_StoppingAgainSuppressesTimeoutEvenAfterElapsed`）
 を新設し、「停止中は経過時間に関わらずタイムアウトしない」
@@ -1745,7 +1745,7 @@ of the signals into account"、無効なシグナル/シグナルグループ受
    でした（コード自体は `[SWS_Com_00738]` を引用しつつ、実際には
    Signal Group の破棄には適用されていなかった、という食い違いが
    存在していました）。回帰テスト
-   `Bsw_ComStack_SignalGroup_Rx_GroupRxTOut_Test.OK_ShortFrameDiscardStillResetsDeadlineTimer`
+   `ComStack_SignalGroup_Rx_GroupRxTOut_Test.OK_ShortFrameDiscardStillResetsDeadlineTimer`
    で検証済みです。
 2. `RxIpduCalloutCbk` に拒否された受信であっても、`Com_RxUsingFirstTimeout`
    は steady 状態へ遷移するようになりました。「初回受信」の定義が
@@ -1754,7 +1754,7 @@ of the signals into account"、無効なシグナル/シグナルグループ受
    `TimeoutMs`（定常状態）に異なる値を設定した I-PDU で、拒否され
    続ける callout を持たせると、2回目以降は `TimeoutMs` 側のしきい値が
    使われます。回帰テスト
-   `Bsw_ComStack_Signal_Rx_Timeout_Test.OK_RejectedFrameStillTransitionsToSteadyTimeout`
+   `ComStack_Signal_Rx_Timeout_Test.OK_RejectedFrameStillTransitionsToSteadyTimeout`
    で検証済みです。
 
 ```
@@ -1875,8 +1875,8 @@ SecOC 鍵付き `ImmobilizerCmd=UNLOCK(0x01)` を送ると、ログで
 拒否側は実機での確認は未実施です（`ImmobilizerCmd` の送信元となる別 ECU が
 無く、正規の SecOC 鍵で `0x00`/`0x01` 以外の値を意図的に送る手段が
 `uds_tester` 側に無いため）。回帰テスト
-（`test/Bsw/ComStack/Bsw_ComStack_Signal_Tx_test.cpp` の
-`Bsw_ComStack_Signal_Tx_TxIpduCallout_Test.NG_Step02_ComTxIpduCallout_Rejected`）でのみ
+（`test/Bsw/ComStack/ComStack_Signal_Tx_test.cpp` の
+`ComStack_Signal_Tx_TxIpduCallout_Test.NG_Step02_ComTxIpduCallout_Rejected`）でのみ
 検証済みです。
 
 **既知の制約: 拒否が続くと最終的に静かになる（/code-review で指摘）**:

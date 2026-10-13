@@ -1,0 +1,347 @@
+/**
+ * \file    NmStack_Wakeup_test.cpp
+ * \brief   docs/can_stack.md「ウェイクアップ検出とウェイクアップ検証」コールチェーンの
+ *          単体テスト（GoogleTest / PlatformIO `[env:native_chain]`）。
+ *
+ * \details 本テストは docs/can_stack.md の以下のコールチェーンをそのまま実行して確認する：
+ *
+ *              Can_MainFunction_Wakeup()（SLEEP 中、INT ピンのウェイクアップ
+ *                                          要因を検出。本テストでは
+ *                                          Can_Hw_IsWakeupPending() のフォール
+ *                                          バックポーリング経路を使う）
+ *                → EcuM_CheckWakeup(ECUM_WKSOURCE_CAN)（[SWS_Can_00271]、
+ *                                          2026-09-05 是正前は実仕様に存在
+ *                                          しない独自 API CanIf_ControllerWakeup()
+ *                                          経由だった。フェイク実装は
+ *                                          Fake_Bsw_EcuM.h 参照）
+ *                  → CanSM_ControllerModeIndication()
+ *                    → CanIf_SetControllerMode(CAN_CS_STOPPED)
+ *                      → Can_SetControllerMode(CAN_T_WAKEUP)   ← SLEEP→STOPPED
+ *                                                                  (Listen-Only)
+ *                      CanSM_State: NO_COM → WAKEUP_VALIDATING
+ *                      （ComM/EcuM へはまだ通知しない）
+ *
+ *          ここから 2 通りの分岐がある（それぞれ独立したテストとして検証する）：
+ *
+ *            2a. 検証成功: Can_MainFunction_Read() が受信フレームをドレイン
+ *                → CanIf_RxIndication()（起床後の最初の受信として記憶するだけ）
+ *                EcuM_MainFunction() が保留中の起床要因を検証（本テストでは
+ *                EcuM をフェイクにしているため、その代わりにテストが
+ *                CanIf_CheckValidation(ECUM_WKSOURCE_CAN) を直接呼ぶ）
+ *                → EcuM_ValidateWakeupEvent()（実体）
+ *                  → ComM_EcuM_WakeUpIndication()（実体）
+ *                    → CanSM_RequestComMode(FULL_COM)
+ *                      → CanIf_SetControllerMode(CAN_CS_STARTED)
+ *                        → Can_SetControllerMode(CAN_T_START) → CanSM_State: FULL_COM
+ *                          → ComM_BusSM_ModeIndication(FULL_COM)
+ *
+ *            2b. 検証失敗（タイムアウト）: CanSM_MainFunction() が
+ *                CANSM_WAKEUP_VALIDATION_MS 超過を検出
+ *                → CanIf_SetControllerMode(CAN_CS_SLEEP)
+ *                  → Can_SetControllerMode(CAN_T_SLEEP) → CanSM_State: NO_COM
+ *                  （ComM/EcuM への通知なし）
+ *
+ *          ComM（CanSM が呼び返す通知の宛先）は 2026-08 の協調スリープ移管
+ *          （NmStack_SleepCoordination_test.cpp 参照）で本 env に実体として
+ *          統合された。本テストは ComM_RequestComMode() を経由せず CanSM の
+ *          API を直接叩くため、ComM の内部状態（ComM_Init() 直後の既定値
+ *          NO_COM）がそのまま「ボランタリスリープ済み」の前提と一致する。
+ *          ComM が呼ぶ EcuM_RequestRUN() は境界としてフェイクに差し替える
+ *          （Fake_Bsw_EcuM.h 参照）。BswM_ComM_CurrentMode() は実体でリンク
+ *          される（2026-09-22、Fake_Bsw_BswM.c から切り替え）が、
+ *          `BswM_Init()` を呼ばないため実際のルール評価は走らず、
+ *          `Wrap_BswM.h` の呼び出し回数・引数キャプチャのみを検証に使う。
+ *          Can_MainFunction_Wakeup() が呼ぶ EcuM_CheckWakeup() のみ、
+ *          フェイクから実 CanSM_ControllerModeIndication() へ委譲する
+ *          （Fake_Bsw_EcuM.h 冒頭コメント参照。この関数だけはチェーンの
+ *          途中経路であり終端ではないため）。
+ *          Dem（Bus-Off 通信路の PASSED/FAILED 報告先）も同様にフェイクに
+ *          差し替える（Bsw_Dem_fake.h 参照）。PduR はこのチェーンに登場
+ *          しないため（起床後の最初の受信の記憶は CanIf_RxIndication() の PDU
+ *          振り分けより前に無条件で呼ばれる、CanIf.c 参照）、CanIf の RxPdu
+ *          設定は 0 件のまま使う。
+ *
+ *          ComStack_Signal_Tx_test.cpp/ComStack_Signal_Rx_test.cpp（docs/can_stack.md「Tx/Rx処理」の
+ *          コールチェーン）と同じ `[env:native_chain]` 上で CanSM.c の実体を
+ *          共有する（詳細は ComStack_Signal_Tx_test.cpp 冒頭コメント参照）。
+ */
+
+/* ======================================================================
+ * Includes
+ * ====================================================================== */
+
+#include <gtest/gtest.h>
+
+extern "C" {
+#include "CanSM.h"
+#include "CanIf.h"
+#include "Can.h"
+#include "Can_Hw.h"
+#include "ComM.h"
+#include "CanNm.h"
+#include "Nm.h"
+#include "Fake_Can_Hw.h"
+#include "Fake_Millis.h"
+#include "Fake_Bsw_EcuM.h"
+#include "Wrap_BswM.h"
+#include "Wrap_Dem.h"
+#include "Fake_Det_Hw.h"
+#include "Wrap_CanIf.h"
+#include "Wrap_Can.h"
+}
+
+/* ======================================================================
+ * Definitions
+ * ====================================================================== */
+
+/* ======================================================================
+ * Type Definitions
+ * ====================================================================== */
+
+/* ======================================================================
+ * Global Variables
+ * ====================================================================== */
+
+namespace
+{
+
+const CanIf_ConfigType kTestCanIfConfig = {
+    /* TxPduConfig */ NULL,
+    /* TxPduCount */  0U,
+    /* RxPduConfig */ NULL,
+    /* RxPduCount */  0U
+};
+
+/* ======================================================================
+ * Test Fixture
+ * ====================================================================== */
+
+/* ウェイクアップ検出と検証（Can_MainFunction_Wakeup → EcuM_CheckWakeup → CanSM → … → FULL_COM）のコールチェーンのテストで共通のフィクスチャ（シナリオごとの派生クラスの基底）。
+ * SetUp(): 模擬 Can_Hw・EcuM と wrap をリセットし、Dem_Init(NULL)・Can_Init()（直後は STOPPED）・CanIf_Init(&kTestCanIfConfig)・CanSM_Init(NULL)・ComM_Init(NULL)・CanNm_Init(NULL)・Nm_Init(NULL) の順に初期化したうえで、コントローラを SLEEP にする（スリープ済みの状態から始める）。CurrentComMode() は ComM が把握しているチャネルモードを返す補助関数、ArrangeValidating() は検証開始（WAKEUP_VALIDATING）の状態を用意する補助関数。
+ * TearDown(): CanNm・ComM・CanSM・CanIf を未初期化へ戻す。 */
+class Bsw_NmStack_Wakeup_Base : public ::testing::Test
+{
+protected:
+    void SetUp() override
+    {
+        FakeCanHw_Reset();
+        WrapCanIf_Reset();  // 他ファイルの故障注入が漏れ伝わらないよう防御的にリセット
+        WrapCan_Reset();  // 同上（Can.c 側）
+        FakeEcuM_Reset();
+        WrapBswM_Reset();
+        WrapDem_Reset();
+        FakeMillis_Reset();
+        FakeDetHw_LogSuppressed = 1U;  // Init() のログはノイズになるため抑制
+        Dem_Init(NULL);  // Demの内部状態を毎テスト決定的にリセットする（Fake_NvM.cにより常に「初回起動」）
+
+        canConfig.filter.filterId = 0x0220U;
+        canConfig.filter.mask     = 0x1FFFU;
+        canConfig.csPin           = 10U;
+        canConfig.intPin          = 2U;
+        canConfig.baudrate        = 500000U;
+        canConfig.crystalFreq     = CAN_CRYSTAL_16MHZ;
+
+        Can_Init(&canConfig);
+        ASSERT_EQ(Can_Test_GetControllerState(), CAN_CS_STOPPED);  // Can_Init() 直後は STOPPED（Listen-Only）
+        CanIf_Init(&kTestCanIfConfig);
+        CanSM_Init(NULL);
+        ComM_Init(NULL);
+        CanNm_Init(NULL);
+        Nm_Init(NULL);
+
+        // ボランタリスリープ済みの状態を Arrange する（docs/can_stack.md のとおり、
+        // ウェイクアップ検証は CANSM_STATE_NO_COM からの起床のみを受け付ける）。
+        // ComM_Init() 直後の既定値は NO_COM のため、ComM 側は別途要求しなくても
+        // この前提と一致する。
+        ASSERT_EQ(CanIf_SetControllerMode(0U, CAN_CS_SLEEP), E_OK);
+        ASSERT_EQ(Can_Test_GetControllerState(), CAN_CS_SLEEP);
+        FakeCanHw_SetModeCount = 0U;
+
+        FakeDetHw_LogSuppressed = 0U;  // ここから各 TEST_F の実行(Act)区間
+    }
+
+    void TearDown() override
+    {
+        FakeDetHw_LogSuppressed = 1U;  // DeInit() のログを抑制
+        CanNm_DeInit();
+        ComM_DeInit();
+        CanSM_DeInit();
+        CanIf_DeInit();
+    }
+
+    /* 現在 ComM が把握しているチャネルモードを返すヘルパー
+     * （FakeComM_BusSM_ModeIndicationCount 相当の「まだ通知されていないか」判定に使う）。 */
+    static ComM_ModeType CurrentComMode()
+    {
+        ComM_ModeType mode = 0xFFU;
+        EXPECT_EQ(ComM_GetCurrentComMode(COMM_USER_0, &mode), E_OK);
+        return mode;
+    }
+
+    /* 検証開始状態（CANSM_STATE_WAKEUP_VALIDATING）を Arrange するヘルパー。 */
+    void ArrangeValidating()
+    {
+        FakeCanHw_IsWakeupPendingReturn = CAN_HW_OK;
+        Can_MainFunction_Wakeup();
+        ASSERT_EQ(Can_Test_GetControllerState(), CAN_CS_STOPPED);
+        ASSERT_EQ(CurrentComMode(), static_cast<ComM_ModeType>(COMM_NO_COMMUNICATION));
+        ASSERT_EQ(FakeEcuM_RequestRUNCount, 0U);
+        FakeCanHw_SetModeCount = 0U;
+        FakeEcuM_Reset();
+        WrapBswM_Reset();
+        WrapDem_Reset();
+    }
+
+    Can_ConfigType canConfig;
+};
+
+// シナリオごとのフィクスチャ（共通の準備は Bsw_NmStack_Wakeup_Base）
+/* ウェイクアップの検出から検証（FULL_COM への確定、または黙って再スリープ）まで。 */
+class NmStack_Wakeup_WakeupValidation_Test : public Bsw_NmStack_Wakeup_Base {};
+
+/* ======================================================================
+ * Test Functions
+ * ====================================================================== */
+
+/* ----------------------------------------------------------------------
+ * ウェイクアップ検出 → 検証
+ *   Can_MainFunction_Wakeup() / Can_MainFunction_Read() の 2 つの実行
+ *   （別タスク）を通しで確認する
+ * ---------------------------------------------------------------------- */
+TEST_F(NmStack_Wakeup_WakeupValidation_Test, OK)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // SetUp() で SLEEP 済み
+    FakeCanHw_IsWakeupPendingReturn = CAN_HW_OK;
+    FakeCanHw_RxPendingCount = 1U;
+    FakeCanHw_RxId  = 0x100U;
+    FakeCanHw_RxDlc = 2U;
+    FakeCanHw_RxData[0] = 0x12U;
+    FakeCanHw_RxData[1] = 0x34U;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    // step01: ウェイクアップ検出 → 検証開始
+    Can_MainFunction_Wakeup();
+
+    // SLEEP → STOPPED (Listen-Only) のみ。FULL_COM へはまだ確定しない
+    // （ComM/EcuM へはまだ通知しない）
+    EXPECT_EQ(Can_Test_GetControllerState(), CAN_CS_STOPPED);
+    EXPECT_EQ(Return_Can_SetControllerMode, CAN_OK);  // 最後の遷移（WAKEUP）が受理された
+    EXPECT_EQ(FakeCanHw_LastMode, CAN_HW_MODE_LISTEN_ONLY);
+    EXPECT_EQ(CurrentComMode(), static_cast<ComM_ModeType>(COMM_NO_COMMUNICATION));
+    EXPECT_EQ(FakeEcuM_RequestRUNCount, 0U);
+    // EcuM_CheckWakeup(ECUM_WKSOURCE_CAN) が入口として実際に呼ばれたことを確認
+    // （旧 CanIf_ControllerWakeup() の役割、2026-09-05 是正）
+    EXPECT_EQ(FakeEcuM_CheckWakeupCount, 1U);
+    EXPECT_EQ(FakeEcuM_LastWakeupSource, static_cast<EcuM_WakeupSourceType>(ECUM_WKSOURCE_CAN));
+
+    // step02: 受信フレームで検証成功 → FULL_COM へ確定
+    Can_MainFunction_Read();
+    // 受信しただけでは確定しない（EcuM の検証の問い合わせ待ち）
+    ASSERT_EQ(CurrentComMode(), static_cast<ComM_ModeType>(COMM_NO_COMMUNICATION));
+    // EcuM_MainFunction() による検証の問い合わせの代わり
+    EXPECT_EQ(CanIf_CheckValidation(ECUM_WKSOURCE_CAN), E_OK);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(Can_Test_GetControllerState(), CAN_CS_STARTED);
+    EXPECT_EQ(Return_Can_SetControllerMode, CAN_OK);  // 最後の遷移（START）が受理された
+    EXPECT_EQ(FakeCanHw_LastMode, CAN_HW_MODE_NORMAL);
+    EXPECT_EQ(CurrentComMode(), static_cast<ComM_ModeType>(COMM_FULL_COMMUNICATION));
+    EXPECT_EQ(FakeEcuM_RequestRUNCount, 1U);
+    EXPECT_EQ(CallCount_BswM_ComM_CurrentMode, 1U);
+    EXPECT_EQ(LastMode_BswM_ComM_CurrentMode, static_cast<ComM_ModeType>(COMM_FULL_COMMUNICATION));
+    // Bus-Off の TF クリア相当（PASSED）を Dem へ報告する
+    EXPECT_EQ(CallCount_Dem_SetEventStatus, 1U);
+    EXPECT_EQ(LastEventStatus_Dem_SetEventStatus, DEM_EVENT_STATUS_PASSED);
+}
+
+
+TEST_F(NmStack_Wakeup_WakeupValidation_Test, NG_Step01_CanMainFunctionWakeup_NoWakeupPending)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // ウェイクアップ要因なし（既定 CAN_HW_FAIL のまま）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    // step01: ウェイクアップ検出
+    Can_MainFunction_Wakeup();
+
+    // step02: 受信フレームによる検証
+    // skip（step01 で検証が始まらないため実行しない）
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(Can_Test_GetControllerState(), CAN_CS_SLEEP);
+    EXPECT_EQ(FakeCanHw_SetModeCount, 0U);
+}
+
+
+TEST_F(NmStack_Wakeup_WakeupValidation_Test, NG_Step02_CanSMMainFunction_ValidationTimeout)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // step01 の終端状態（WAKEUP_VALIDATING）から、
+    // 検証タイマ（CANSM_WAKEUP_VALIDATION_MS=2000ms）を超過させる
+    ArrangeValidating();
+    FakeMillis_Value = 2001UL;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    // step01: ウェイクアップ検出
+    // （準備の ArrangeValidating() で実施済み）
+
+    // step02: 検証タイマ超過の判定
+    CanSM_MainFunction();
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // ノイズによる誤ウェイクアップとみなし、静かに再スリープする
+    EXPECT_EQ(Can_Test_GetControllerState(), CAN_CS_SLEEP);
+    EXPECT_EQ(FakeCanHw_LastMode, CAN_HW_MODE_SLEEP);
+    EXPECT_EQ(CurrentComMode(), static_cast<ComM_ModeType>(COMM_NO_COMMUNICATION));
+    EXPECT_EQ(FakeEcuM_RequestRUNCount, 0U);
+}
+
+
+TEST_F(NmStack_Wakeup_WakeupValidation_Test, NG_Step02_CanSMMainFunction_NotYetTimedOut)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // step01 の終端状態（WAKEUP_VALIDATING）から、タイマ超過前の時刻にする
+    ArrangeValidating();
+    FakeMillis_Value = 1999UL;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    // step01: ウェイクアップ検出
+    // （準備の ArrangeValidating() で実施済み）
+
+    // step02: 検証タイマ超過の判定
+    CanSM_MainFunction();
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // まだ検証継続中（Listen-Only のまま）
+    EXPECT_EQ(Can_Test_GetControllerState(), CAN_CS_STOPPED);
+    EXPECT_EQ(FakeCanHw_SetModeCount, 0U);
+    EXPECT_EQ(CurrentComMode(), static_cast<ComM_ModeType>(COMM_NO_COMMUNICATION));
+    EXPECT_EQ(FakeEcuM_RequestRUNCount, 0U);
+}
+
+}  // namespace

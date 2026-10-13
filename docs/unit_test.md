@@ -57,13 +57,13 @@ DET_LOG_VERBOSE=1 ./build/native_chain/native_chain_tests.exe  # TRACE ログ出
 → `Com_MainFunctionTx()` → `PduR_ComTransmit()` → `CanIf_Transmit()` →
 `Can_Write()`）を複数モジュールにわたって実体（Com.c/PduR.c/CanIf.c/Can.c）で
 リンクし、そのまま検証するテストを `test/Bsw/ComStack/` に用意しています
-（通常のシグナルは `Bsw_ComStack_Signal_Tx_test.cpp`、Signal Group や I-PDU Group の停止まわりは
-`Bsw_ComStack_SignalGroup_Tx_test.cpp`。`Com.c`/`PduR.c`/`CanIf.c` それぞれ単体のテストではなく、
+（通常のシグナルは `ComStack_Signal_Tx_test.cpp`、Signal Group や I-PDU Group の停止まわりは
+`ComStack_SignalGroup_Tx_test.cpp`。`Com.c`/`PduR.c`/`CanIf.c` それぞれ単体のテストではなく、
 [CAN 通信スタック詳細](can_stack.md) のコールチェーン図そのものを実行して理解・確認するのが主目的）。
 コールチェーン図に明示されている非同期の切れ目
 （`Com_TxPending` というキュー経由で次回 `Com_MainFunctionTx()` まで待機する
 箇所）でテストを2つのセグメントに分け、それぞれを個別に実行可能な
-`TEST_F` ケースとしている（`--gtest_filter=Bsw_ComStack_Signal_Tx_*` 等で
+`TEST_F` ケースとしている（`--gtest_filter=ComStack_Signal_Tx_*` 等で
 絞り込み可）。フェイクは最下層の `Can_Hw` のみ（`stub/Hal/
 Fake_Can_Hw.c`）で、CanIf.c が呼ぶ `CanSM_ControllerBusOff()`/
 `CanSM_ControllerModeIndication()` 等は CanSM.c 自身を実体でリンクして
@@ -74,12 +74,12 @@ Fake_Can_Hw.c`）で、CanIf.c が呼ぶ `CanSM_ControllerBusOff()`/
 
 [「Tx 処理」の「E2E」](can_stack.md#tx-processing-e2e)（`Com_MainFunctionTx()` →
 TxTransformCbk → `E2EXf_E2EHealthStatus()` → `E2E_P05Protect()`）は
-`Bsw_ComStack_E2E_Tx_test.cpp` で別途検証している。本番の TxTransformCbk
+`ComStack_E2E_Tx_test.cpp` で別途検証している。本番の TxTransformCbk
 （`Rte_COMTransform_E2EHealthStatus()`）は `Rte.c` にあるが、`Rte.c` 自体は
 IoHwAb/FiM/App_EngineManager/App_WarningIndicator まで巨大な依存グラフを
 引き込むためリンクせず、本番と同じ1行の委譲呼び出しをテスト専用の
 TxTransformCbk として定義し、そこから先（E2EXf.c/E2EXf_PBCfg.c/E2E_P05.c）は
-実体をそのまま検証する（詳細は `Bsw_ComStack_E2E_Tx_test.cpp` 冒頭のコメント参照）。
+実体をそのまま検証する（詳細は `ComStack_E2E_Tx_test.cpp` 冒頭のコメント参照）。
 
 <a id="unit-test-rx"></a>
 ### Rx 処理（Can → CanIf → PduR → Com の順）
@@ -87,8 +87,8 @@ TxTransformCbk として定義し、そこから先（E2EXf.c/E2EXf_PBCfg.c/E2E_
 同じ `test/Bsw/ComStack/` に、[「Rx 処理」コールチェーン](can_stack.md#rx-processing)
 （`Can_MainFunction_Read()` → `CanIf_RxIndication()` →
 `PduR_CanIfRxIndication()`（`PduR_ComRxIndication()` の `#define` エイリアス）→
-`Com_RxIndication()`）を検証する `Bsw_ComStack_Signal_Rx_test.cpp`（通常のシグナル）と
-`Bsw_ComStack_SignalGroup_Rx_test.cpp`（Signal Group・I-PDU Group）もある。Tx処理と異なり
+`Com_RxIndication()`）を検証する `ComStack_Signal_Rx_test.cpp`（通常のシグナル）と
+`ComStack_SignalGroup_Rx_test.cpp`（Signal Group・I-PDU Group）もある。Tx処理と異なり
 1セグメントにまとめている理由がある: 図中の非同期境界を担う `Can_Isr()` は
 `Can.c` 内の `static` 関数でテストから直接呼べず、かつ `Can_MainFunction_Read()`
 自身も `Can_RxIrqPending` フラグの有無に関わらず無条件にポーリングする設計
@@ -96,21 +96,21 @@ TxTransformCbk として定義し、そこから先（E2EXf.c/E2EXf_PBCfg.c/E2E_
 二重防御、`Can.c` 冒頭のコメント参照）のため、フラグは `Com_TxPending` の
 ような「後続処理の前提条件」ではない。したがって `Can_MainFunction_Read()` を
 起点とする1つのコールチェーンとして検証している（詳細は
-`Bsw_ComStack_Signal_Rx_test.cpp` 冒頭のコメント参照）。
+`ComStack_Signal_Rx_test.cpp` 冒頭のコメント参照）。
 
 [「Rx 処理」の「E2E」](can_stack.md#rx-processing-e2e)（`Com_RxIndication()` →
 RxIndicationCbk → `E2EXf_Inv_EngineInfo()`/`E2EXf_Inv_AbsInfo()` → `E2E_P05Check()`）は
-`Bsw_ComStack_E2E_Rx_test.cpp` で別途検証している。`Com_RxIndication()` を直接
+`ComStack_E2E_Rx_test.cpp` で別途検証している。`Com_RxIndication()` を直接
 呼ぶところから始め（コールチェーン図もこの粒度で揃えている）、Tx 側と同じ理由で
 `Rte.c` はリンクせず、本番の RxIndicationCbk（`Rte_COMRxInd_EngineInfo()`）と
 同じ処理をテスト専用の RxIndicationCbk として定義している。CRC 破損時に
 `E2E_P05STATUS_ERROR` になることも含めて検証する（詳細は
-`Bsw_ComStack_E2E_Rx_test.cpp` 冒頭のコメント参照）。
+`ComStack_E2E_Rx_test.cpp` 冒頭のコメント参照）。
 
 [「Rx 処理」の「デッドライン監視」](can_stack.md#rx-processing-timeout)（`Com_MainFunctionRx()`
 がしきい値超過を検知 → `Com_SigTimedOut` フラグ経由 → `Com_ReceiveSignal()` が
-`ComRxDataTimeoutAction` を適用）は `Bsw_ComStack_Signal_Rx_test.cpp`（`Timeout` フィクスチャ）と
-`Bsw_ComStack_SignalGroup_Rx_test.cpp` で別途検証している。この非同期境界は Tx 処理の `Com_TxPending` と構造が同じだが、
+`ComRxDataTimeoutAction` を適用）は `ComStack_Signal_Rx_test.cpp`（`Timeout` フィクスチャ）と
+`ComStack_SignalGroup_Rx_test.cpp` で別途検証している。この非同期境界は Tx 処理の `Com_TxPending` と構造が同じだが、
 「立てる側／読む側」が逆（周期タスクが立てて on-demand 呼び出しが読む）ため、
 PduR/CanIf/Can/CanSM を一切経由せず Com.c 単体で完結する。フェイクは
 `millis()`（`stub/Hal/Fake_Millis.c`）のみで、`Com_RxIndication()`を
@@ -118,7 +118,7 @@ PduR/CanIf/Can/CanSM を一切経由せず Com.c 単体で完結する。フェ�
 しきい値超過まで進めてから検証する。Tx チェーンと同じくフラグの前後で
 2セグメントに分け、フラグの状態自体はテスト専用アクセサ
 `Com_Test_GetSigTimedOut()`（`COM_UNIT_TEST` 定義時のみ）で直接観測する
-（詳細は `Bsw_ComStack_Signal_Rx_test.cpp` 冒頭のコメント参照）。
+（詳細は `ComStack_Signal_Rx_test.cpp` 冒頭のコメント参照）。
 
 <a id="unit-test-single"></a>
 ## 単一モジュールのテスト
@@ -126,17 +126,17 @@ PduR/CanIf/Can/CanSM を一切経由せず Com.c 単体で完結する。フェ�
 `Gpt`/`Dio`/`Port`/`Det`/`E2E`/`E2E_P05`/`E2E_P01` のように他モジュールと
 コールチェーンを共有しない末端モジュールは、HAL 層（`*_Hw` ファイル）だけを
 フェイクに差し替えて単体で検証している（テストファイルは `test/Bsw/Gpt/` の
-`Bsw_Gpt_test.cpp` 等、フェイクは `stub/Hal/Fake_Gpt_Hw.c` 等、
+`Gpt_test.cpp` 等、フェイクは `stub/Hal/Fake_Gpt_Hw.c` 等、
 2026-09 に専用 env `[env:native]` から本テストバイナリ（`native_chain_tests`）へ
 統合済み）。ファイル名は、テストは `test/Bsw/{Module}/` に
-`Bsw_{Module}_{Scenario}_test.cpp`（複数モジュールを跨ぐ統合テストは
-`Bsw_{Stack}Stack_{Scenario}_test.cpp`、上記「コールチェーンのテスト」参照）で、
+`{Module}_{Scenario}_test.cpp`（複数モジュールを跨ぐ統合テストは
+`{Stack}Stack_{Scenario}_test.cpp`、上記「コールチェーンのテスト」参照）で、
 `{Scenario}` は**1つの正常系（OK）シナリオ単位**を基本とする（2026-09-20、
-`Bsw_ComStack_TxChain_test.cpp` が1ファイルに多数のシナリオを詰め込んで
+`ComStack_TxChain_test.cpp` が1ファイルに多数のシナリオを詰め込んで
 肥大化していたのを分割した経緯を踏まえ、新規テストファイルもこの粒度を守る。
 そのシナリオの派生 NG ケースは同じファイルに同居させる。`DcmStack` は SID 単位）。
 例外が `ComStack` で、同年9月にメッセージの種類（Signal / SignalGroup / E2E）×
-方向（Tx / Rx）の `Bsw_ComStack_{MsgType}_{Tx|Rx}_test.cpp` 6 ファイルへ再編している
+方向（Tx / Rx）の `ComStack_{MsgType}_{Tx|Rx}_test.cpp` 6 ファイルへ再編している
 （COM_TX_IPDU_MAX の制約で、分割するたびに共有設定を複製する必要があったため）。
 フェイク/`--wrap` は `stub/` 配下に `src/` のディレクトリ構成を
 ミラーリングして `Fake_{Module}.c`/`Wrap_{Module}.c`（HAL 層はフォルダ名
@@ -144,7 +144,7 @@ PduR/CanIf/Can/CanSM を一切経由せず Com.c 単体で完結する。フェ�
 （本来 ISR から呼ばれる関数）はテストから直接呼ぶことで、実割り込みなしに
 状態機械を駆動している。
 
-`Bsw_Can_test.cpp`（`src/Bsw/Can/Can.c` 単体）は少し特殊で、`native_chain_tests`
+`Can_test.cpp`（`src/Bsw/Can/Can.c` 単体）は少し特殊で、`native_chain_tests`
 は他のコールチェーンテストのために `CanIf.c`/`CanSM.c` を実体でリンクして
 いるため、Can.c が上位層通知として呼ぶ3関数（`CanIf_RxIndication()`/
 `CanIf_TxConfirmation()`/`CanIf_ControllerBusOff()`）だけを`--wrap`で
@@ -155,7 +155,7 @@ CanIf/CanSM 側の未初期化ガードにより、本テストが
 静かに no-op になる。
 
 新しい Bsw モジュールのテストを追加する場合は `test/Bsw/{Module}/` に
-`Bsw_{Module}_{Scenario}_test.cpp`（および必要なら `stub/` 配下の
+`{Module}_{Scenario}_test.cpp`（および必要なら `stub/` 配下の
 対応する `src/` パスに `Fake_{Module}.c`）を追加し、`CMakeLists.txt` の
 `NATIVE_CHAIN_SRC_SOURCES`/`NATIVE_CHAIN_INCLUDE_DIRS` にその実ソースを
 積み増す（GoogleTest の `main()` は `test_main.cpp` に集約しているため、
@@ -199,4 +199,4 @@ CanIf/CanSM 側の未初期化ガードにより、本テストが
   構造上到達できない分岐は、テストを作らずその理由をコメントに残している。
 - **時刻**: モジュールは `millis()` を直接呼ばず Os のカウンタ API（`GetCounterValue()`）経由で時刻を
   取る。Os 未初期化時は `millis()` を返すため、テストは `FakeMillis_Value`（`stub/Hal/Fake_Millis.c`）を
-  進めるだけで時間を操作できる。Os 自身のテストは `test/Bsw/Os/Bsw_Os_test.cpp`。
+  進めるだけで時間を操作できる。Os 自身のテストは `test/Bsw/Os/Os_test.cpp`。

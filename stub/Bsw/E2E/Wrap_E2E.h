@@ -15,7 +15,7 @@
  * `E2E_E_OK` 以外の場合に通る「到達しないはず」の防御分岐
  * （`E2EXf_PBCfg_Init()` が全インスタンスに対し `E2E_SMCheckInit()` を
  * 呼んでから使うため、`E2E_E_WRONGSTATE` は起きないはず）を検証するために
- * 導入（2026-09、`test/Bsw_E2EXf_SMCheckFailure_test.cpp` 参照。
+ * 導入（2026-09、`test/E2EXf_SMCheckFailure_test.cpp` 参照。
  * 元は試作環境 `[env:native_chain_wrap]` の `Wrap_E2E_SMCheck.h` として
  * 新設し、本ファイルへ統合した）。E2EXf.c/E2E.c の実体は保ったまま、
  * 境界の1関数だけをピンポイントで失敗させる。既定動作は `__real_...` への
