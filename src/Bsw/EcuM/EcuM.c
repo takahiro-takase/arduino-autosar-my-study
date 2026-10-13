@@ -1034,4 +1034,19 @@ void EcuM_Test_ResetInitState(void)
     EcuM_PostRunTimerMs = 0UL;
     EcuM_PendingWakeupSources = 0U;
 }
+
+/**
+ * \brief   EcuM の状態を指定の値へ直接設定する（単体テスト専用）。
+ *
+ * \details 実 EcuM_Init() は BSW 全モジュールを初期化して ECUM_STATE_RUN へ
+ *          入るため、EcuM 単体のテストでは RUN/POST_RUN/SHUTDOWN の状態から
+ *          始める手段が無い。状態以外（RUN/POST_RUN 要求ビット・タイマ）は
+ *          変えない（標準外の関数。EcuM_Test_ResetInitState() と同じ設計方針）。
+ *
+ * \param[in]  state  設定する EcuM の状態。
+ */
+void EcuM_Test_SetState(EcuM_StateType state)
+{
+    EcuM_State = state;
+}
 #endif
