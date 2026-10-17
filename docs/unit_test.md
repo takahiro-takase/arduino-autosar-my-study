@@ -47,6 +47,36 @@ DET_LOG_VERBOSE=1 ./build/native_chain/native_chain_tests.exe  # TRACE ログ出
 > UCRT ランタイム版の MinGW-w64 を使っている場合は本来不要で、
 > `__imp_quick_exit`/`__imp__Exit` の多重定義エラーが出たら削除すること。
 
+<a id="test-roles"></a>
+## テストの役割分担（単体テストとコールチェーン）
+
+2026-10-16、「モジュールの単体テストにも正常系（OK）を作る」方針とした。それまでは、OK の動作を
+コールチェーンのテスト（`ComStack` など）が間接的に確かめ、モジュール単位のテストは NG
+（DET 報告や戻り値の異常系）だけの場合が多かった。
+
+| 種類 | 置き場所 | 検証すること |
+|------|----------|--------------|
+| 単体テスト | `test/Bsw/{Module}/{Module}_{Function}_test.cpp`（関数単位） | そのモジュールの**分岐を OK・NG の両側から網羅**する。判定の各条件が結果に効くこと（MC/DC）を目安にする。依存先は、実体のままにするか `--wrap` で記録・差し替えして、検証対象に集中する |
+| コールチェーンのテスト | `test/CallChain/{Stack}Stack/` | **層をまたぐ結線と呼び出しの順序**を確かめる。各モジュールの内部分岐の網羅は目的にしない |
+
+- 単体テストの OK は、そのモジュールの分岐を網羅するためのテストとする。チェーンのテストと同じ正常系を二重に持つ場合は、
+  チェーン側を結線の確認に絞る（仕様変更のときに直す箇所を増やさないため）。
+- 単体テストが落ちたときは、そのモジュールの不具合。チェーンのテストだけが落ちたときは、層間の結線か呼び出し順の不具合、と
+  切り分けられる。
+- 完全な単体（依存先をすべて偽物にする）にはしない。隣接モジュールは実体のままにし、必要なときだけ
+  `--wrap` で観測・故障注入する現行の方式を続ける（スタブの保守を増やさないため）。
+- 作り方の例: `KeyM`・`SecOC`・`EcuM`・`Os`・`Gpt` の OK 系テスト（2026-10 追加）。
+  MC/DC の見方と演習は [mcdc_learning.md](mcdc_learning.md) を参照。
+
+### 現状と優先順位（2026-10-16 時点）
+
+OK 系が少ないモジュールから、MC/DC の未成立の条件が多いものを優先して足していく。
+
+- OK が 0 件: Com、Csm、Crypto、CryIf、CanTp、E2EXf、Fee、MemIf、WdgIf
+- OK が 1〜2 件: Dem、ComM、CanSM、PduR、Adc
+
+足すたびに、`tools/coverage/generate_coverage_report.sh` で MC/DC の変化を確認する。
+
 <a id="unit-test-chain"></a>
 ## コールチェーンのテスト（`native_chain_tests`）
 
@@ -56,7 +86,7 @@ DET_LOG_VERBOSE=1 ./build/native_chain/native_chain_tests.exe  # TRACE ログ出
 [「Tx 処理」コールチェーン](can_stack.md#tx-processing)（`Com_SendSignal()` → …
 → `Com_MainFunctionTx()` → `PduR_ComTransmit()` → `CanIf_Transmit()` →
 `Can_Write()`）を複数モジュールにわたって実体（Com.c/PduR.c/CanIf.c/Can.c）で
-リンクし、そのまま検証するテストを `test/Bsw/ComStack/` に用意しています
+リンクし、そのまま検証するテストを `test/CallChain/ComStack/` に用意しています
 （通常のシグナルは `ComStack_Signal_Tx_test.cpp`、Signal Group や I-PDU Group の停止まわりは
 `ComStack_SignalGroup_Tx_test.cpp`。`Com.c`/`PduR.c`/`CanIf.c` それぞれ単体のテストではなく、
 [CAN 通信スタック詳細](can_stack.md) のコールチェーン図そのものを実行して理解・確認するのが主目的）。
@@ -84,7 +114,7 @@ TxTransformCbk として定義し、そこから先（E2EXf.c/E2EXf_PBCfg.c/E2E_
 <a id="unit-test-rx"></a>
 ### Rx 処理（Can → CanIf → PduR → Com の順）
 
-同じ `test/Bsw/ComStack/` に、[「Rx 処理」コールチェーン](can_stack.md#rx-processing)
+同じ `test/CallChain/ComStack/` に、[「Rx 処理」コールチェーン](can_stack.md#rx-processing)
 （`Can_MainFunction_Read()` → `CanIf_RxIndication()` →
 `PduR_CanIfRxIndication()`（`PduR_ComRxIndication()` の `#define` エイリアス）→
 `Com_RxIndication()`）を検証する `ComStack_Signal_Rx_test.cpp`（通常のシグナル）と
@@ -128,14 +158,20 @@ PduR/CanIf/Can/CanSM を一切経由せず Com.c 単体で完結する。フェ�
 フェイクに差し替えて単体で検証している（テストファイルは `test/Bsw/Gpt/` の
 `Gpt_test.cpp` 等、フェイクは `stub/Hal/Fake_Gpt_Hw.c` 等、
 2026-09 に専用 env `[env:native]` から本テストバイナリ（`native_chain_tests`）へ
-統合済み）。ファイル名は、テストは `test/Bsw/{Module}/` に
-`{Module}_{Scenario}_test.cpp`（複数モジュールを跨ぐ統合テストは
-`{Stack}Stack_{Scenario}_test.cpp`、上記「コールチェーンのテスト」参照）で、
-`{Scenario}` は**1つの正常系（OK）シナリオ単位**を基本とする（2026-09-20、
+統合済み）。
+
+ファイル名は、**単体テストは関数単位**で、`test/Bsw/{Module}/{Module}_{Function}_test.cpp`
+（例: `CanNm_RxIndication_test.cpp`）とする（2026-10-16 に確定。1 つの関数の OK と NG
+を同じファイルに置き、フィクスチャ名は `{Module}_{Function}_Test`。テストが 1〜2 件しかない
+関数は、近い機能の関数とまとめてよい）。複数モジュールを跨ぐコールチェーンのテストは
+`{Stack}Stack_{Scenario}_test.cpp`（上記「コールチェーンのテスト」参照）で、
+`{Scenario}` は**1つの正常系（OK）シナリオ単位**とする（2026-09-20、
 `ComStack_TxChain_test.cpp` が1ファイルに多数のシナリオを詰め込んで
-肥大化していたのを分割した経緯を踏まえ、新規テストファイルもこの粒度を守る。
-そのシナリオの派生 NG ケースは同じファイルに同居させる。`DcmStack` は SID 単位）。
-例外が `ComStack` で、同年9月にメッセージの種類（Signal / SignalGroup / E2E）×
+肥大化していたのを分割した経緯による。そのシナリオの派生 NG ケースは
+同じファイルに同居させる。`DcmStack` は SID 単位）。
+既存のモジュール単体テストのうち、関数単位になっていないファイルは、MC/DC を埋めるために
+触るときに順次分割する（`CanNm` は 2026-10-16 に分割済み）。
+チェーンの例外が `ComStack` で、同年9月にメッセージの種類（Signal / SignalGroup / E2E）×
 方向（Tx / Rx）の `ComStack_{MsgType}_{Tx|Rx}_test.cpp` 6 ファイルへ再編している
 （COM_TX_IPDU_MAX の制約で、分割するたびに共有設定を複製する必要があったため）。
 フェイク/`--wrap` は `stub/` 配下に `src/` のディレクトリ構成を
@@ -155,7 +191,7 @@ CanIf/CanSM 側の未初期化ガードにより、本テストが
 静かに no-op になる。
 
 新しい Bsw モジュールのテストを追加する場合は `test/Bsw/{Module}/` に
-`{Module}_{Scenario}_test.cpp`（および必要なら `stub/` 配下の
+`{Module}_{Function}_test.cpp`（関数単位。および必要なら `stub/` 配下の
 対応する `src/` パスに `Fake_{Module}.c`）を追加し、`CMakeLists.txt` の
 `NATIVE_CHAIN_SRC_SOURCES`/`NATIVE_CHAIN_INCLUDE_DIRS` にその実ソースを
 積み増す（GoogleTest の `main()` は `test_main.cpp` に集約しているため、
@@ -168,7 +204,7 @@ CanIf/CanSM 側の未初期化ガードにより、本テストが
 |------|--------------|----------|
 | コールチェーン（`ComStack` / `NmStack`） | 共通の準備は `..._Base`、シナリオごとに `..._{シナリオ}_Test`（基底を継承した空クラス） | `OK`（その中の OK が 1 件のとき）/ `OK_{要因}` / `NG_Step{NN}_{失敗する API}_{要因}` |
 | UDS の要求応答（`DcmStack`） | 1 つの SID につき 1 ファイル・1 フィクスチャ | `OK_{内容}` / `NG_{NRC名}_{要因}`（応答が返らない場合は `NG_NoResponse_...`） |
-| 単一モジュール | モジュールごとに 1 つ | `{API名}_{OK\|NG}_{要因}` |
+| 単一モジュール | 関数ごとに 1 つ（`{Module}_{Function}_Test`） | `{API名}_{OK\|NG}_{要因}` |
 
 - **step の意味**: 通しのシナリオで、別タスク（OS の周期）として実行される単位を `step01`、`step02` … と
   数えます。NG は、失敗が起きる step と、その step で実際に失敗する API 名を名前に入れます。到達できる

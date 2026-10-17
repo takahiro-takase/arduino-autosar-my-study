@@ -5,7 +5,7 @@
  *          1ファイルにまとめる。各ケースで、報告される ErrorId が仕様どおり
  *          正しい値になっていることを `Fake_Det_Hw.h`（`FakeDetHw_LastErrorId`）
  *          で検証する。UDS サービスディスパッチ自体の検証（NRC 応答等）は
- *          `Dcm_ReadDtcInfo_test.cpp`/`test/Bsw/DcmStack/` の責務であり、
+ *          `Dcm_ReadDtcInfo_test.cpp`/`test/CallChain/DcmStack/` の責務であり、
  *          本ファイルは対象外。
  *
  *          Dcm には `Dcm_DeInit()` に相当する API が無く、`Dcm_Initialized` は

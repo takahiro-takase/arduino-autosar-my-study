@@ -335,11 +335,16 @@ cmake --build --preset native-chain
 build/native_chain/native_chain_tests.exe
 ```
 
-- **配置: テストは `test/Bsw/<Module>/`、差し替え（HAL の Fake、`--wrap` による呼び出し記録）は
+- **配置: モジュールの単体テストは `test/Bsw/<Module>/`、コールチェーンのテストは
+  `test/CallChain/<Stack>Stack/`、差し替え（HAL の Fake、`--wrap` による呼び出し記録）は
   `src/` と同じ構成で `stub/` に置く
-- **粒度**: ファイル名は `<Module>_<Scenario>_test.cpp`。1 つの正常系（OK）シナリオにつき
-  1 ファイルとし、そのシナリオから派生する異常系（NG）は同じファイルに置く
+- **粒度**: モジュールの単体テストは**関数単位**で、ファイル名は `<Module>_<Function>_test.cpp`
+  （1 つの関数の OK と NG を同じファイルに置く）。コールチェーンのテストは `<Stack>Stack_<Scenario>_test.cpp` で、
+  1 つの正常系（OK）シナリオにつき 1 ファイルとし、そのシナリオから派生する異常系（NG）は同じファイルに置く
   （例外: ComStack は COM の共有設定の制約から、メッセージの種類 × 送受信方向の 6 ファイル）
+- **単体テストの方針**: モジュールの単体テストは、正常系（OK）と異常系（NG）の両側から分岐を網羅する
+  （MC/DC を目安）。結線の確認はコールチェーンのテストが担う（詳細は `docs/unit_test.md` の「テストの役割分担」、
+  MC/DC の学習は `docs/mcdc_learning.md`）
 - **コールチェーンのテスト**: Tx/Rx 処理（通常・E2E・デッドライン監視）、診断（UDS）、ネットワーク
   管理（スリープ協調）などを、実モジュールをリンクして関数呼び出しの連なりごと検証する
 - **カバレッジ**: `native-chain-coverage` プリセットで MC/DC を含むカバレッジを計測できる

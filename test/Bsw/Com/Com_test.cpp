@@ -1,7 +1,7 @@
 /**
  * \file    Com_test.cpp
  * \brief   Com.c（src/Bsw/Com/Com.c）の単体テスト（NG系）
- * \details Com は `test/Bsw/ComStack/` の複数モジュール結合テストでのみ
+ * \details Com は `test/CallChain/ComStack/` の複数モジュール結合テストでのみ
  *          間接的に検証されており、モジュール単品での標準テストファイルが
  *          存在しなかった（`Det_ReportError()` の報告内容もどこからも検証
  *          されていない）。本ファイルは Com.c の全 `Det_ReportError()`

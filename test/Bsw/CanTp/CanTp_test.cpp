@@ -1,7 +1,7 @@
 /**
  * \file    CanTp_test.cpp
  * \brief   CanTp.c（src/Bsw/CanTp/CanTp.c）の単体テスト（NG系）
- * \details CanTp は `test/Bsw/DcmStack/`/`test/Bsw/ComStack/` 等の複数モジュール
+ * \details CanTp は `test/CallChain/DcmStack/`/`test/CallChain/ComStack/` 等の複数モジュール
  *          結合テストでのみ間接的に検証されており、モジュール単品での標準
  *          テストファイルが存在しなかった。本ファイルは CanTp.c の全
  *          `Det_ReportError()` 呼び出し箇所（NG ケースのみ）を1ファイルに

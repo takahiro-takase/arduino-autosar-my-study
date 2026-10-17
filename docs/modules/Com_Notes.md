@@ -274,7 +274,7 @@ I-PDU に対して自動評価（`Com_SendSignal`/`Com_SendSignalGroup` 経由�
 （`WarningStatus` の TMS は現状 `FaultLamp`/`AbsLamp` の自動評価のみで
 運用されており、手動切り替えが必要な具体的なユースケースが本プロジェクトの
 アプリケーション側に無いため）。ユニットテストでのみ検証しています
-（`test/Bsw/ComStack/ComStack_Signal_Tx_test.cpp` / `ComStack_SignalGroup_Tx_test.cpp` の `SwitchIpduTxMode_*`、
+（`test/CallChain/ComStack/ComStack_Signal_Tx_test.cpp` / `ComStack_SignalGroup_Tx_test.cpp` の `SwitchIpduTxMode_*`、
 `kTestTmsGroupIPdu` を流用）。
 
 ## MDT（ComMinimumDelayTime、変化時送信の最小送信間隔）
@@ -593,7 +593,7 @@ signal group 単位で別名を持てます。`Com_IpduGroupStop()`（送信済�
 Group へ所属させる設定変更が必要ですが、それ自体が「常時有効なダッシュボード
 表示」という意図と反するため見送っています）。`ComRxDataTimeoutAction` の
 REPLACE 等と同じく、動機は実利より仕様忠実性であり、修正の正しさは
-`test/Bsw/ComStack/ComStack_SignalGroup_Tx_test.cpp` のユニットテスト（Signal Group 用の
+`test/CallChain/ComStack/ComStack_SignalGroup_Tx_test.cpp` のユニットテスト（Signal Group 用の
 I-PDU Group を持つテスト専用設定で `Com_IpduGroupStop()` を直接呼ぶ）でのみ
 検証しています。
 
@@ -1004,7 +1004,7 @@ RX 側で新しい問題を作った」のと同種の落とし穴）。その�
 
 **この機能は実際に発動するか**: 実機での動作確認は未実施です（上記の
 理由により、本番の呼び出し元が存在しないため）。回帰テストとして
-`test/Bsw/ComStack/ComStack_SignalGroup_Tx_test.cpp` の
+`test/CallChain/ComStack/ComStack_SignalGroup_Tx_test.cpp` の
 `ComStack_SignalGroup_Tx_SendSignalGroupArray_Test.OK_WritesBufferTriggersSendAndSetsUpdateBit`/
 `ComStack_SignalGroup_Tx_SendSignalGroupArray_Test.OK_AlwaysTriggersEvenWithoutChange`/
 `ComStack_SignalGroup_Tx_SendSignalGroupArray_Test.NG_Step01_ComSendSignalGroupArray_NullDataPtr`/
@@ -1257,7 +1257,7 @@ Rte_COMCbkInv_CoolantTemp()  ← EngineInfo.CoolantTemp=0xFF 検知時
 （Signal Group 版）は本番設定では未使用（本プロジェクトの唯一の TX Signal
 Group である `WarningStatus` に `ComSignalDataInvalidValue` を設定した
 シグナルが無いため）で、ユニットテストのみで検証しています。回帰テストは
-`test/Bsw/ComStack/ComStack_Signal_Tx_test.cpp` / `ComStack_SignalGroup_Tx_test.cpp` の
+`test/CallChain/ComStack/ComStack_Signal_Tx_test.cpp` / `ComStack_SignalGroup_Tx_test.cpp` の
 `ComStack_Signal_Tx_InvalidateSignal_Test.OK`/
 `ComStack_Signal_Tx_InvalidateSignal_Test.NG_Step01_ComInvalidateSignal_UnconfiguredInvalidValue`/
 `ComStack_Signal_Tx_InvalidateSignal_Test.NG_Step01_ComInvalidateSignal_UnknownSignalId`/
@@ -1532,7 +1532,7 @@ ON/OFF する専用 API）でしたが、実装を進める過程で以下の理
 低いと判断）。`Com_IpduGroupStart`/`Stop` の RX 側コード自体は既存の共通実装
 （元々 TX 専用グループでのみ実運用されていた）を流用しており、
 `Com.c` 側の変更は一切ありません。回帰テストとして
-`test/Bsw/ComStack/ComStack_SignalGroup_Rx_test.cpp` の
+`test/CallChain/ComStack/ComStack_SignalGroup_Rx_test.cpp` の
 `ComStack_SignalGroup_RxIpduGroup_IpduGroupStartStop_Test` フィクスチャ（`NG_Step01_ComMainFunctionRx_StoppedGroupedIPdu`/
 `OK_GroupedIPduBeginsMonitoringAfterExplicitStart`/
 `OK_StoppingAgainSuppressesTimeoutEvenAfterElapsed`）
@@ -1875,7 +1875,7 @@ SecOC 鍵付き `ImmobilizerCmd=UNLOCK(0x01)` を送ると、ログで
 拒否側は実機での確認は未実施です（`ImmobilizerCmd` の送信元となる別 ECU が
 無く、正規の SecOC 鍵で `0x00`/`0x01` 以外の値を意図的に送る手段が
 `uds_tester` 側に無いため）。回帰テスト
-（`test/Bsw/ComStack/ComStack_Signal_Tx_test.cpp` の
+（`test/CallChain/ComStack/ComStack_Signal_Tx_test.cpp` の
 `ComStack_Signal_Tx_TxIpduCallout_Test.NG_Step02_ComTxIpduCallout_Rejected`）でのみ
 検証済みです。
 

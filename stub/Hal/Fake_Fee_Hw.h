@@ -13,7 +13,7 @@
  *
  *          `native_chain` は元々 `stub/Bsw/NvM/Fake_NvM.c`
  *          （`NvM_ReadBlock()` が常に `E_NOT_OK` を返すだけの単純なフェイク）
- *          により、`Dem_Init()` を呼ぶ全テストファイル（`test/Bsw/DcmStack/`
+ *          により、`Dem_Init()` を呼ぶ全テストファイル（`test/CallChain/DcmStack/`
  *          等、約36ファイル）が「毎回必ず初回起動」という前提に暗黙に乗って
  *          いた。2026-09、NvM/Fee/MemIf 自身の `Det_ReportError()` を検証する
  *          ため実体の `NvM.c`/`MemIf.c`/`Fee.c` を実体リンクへ切り替えた際、
