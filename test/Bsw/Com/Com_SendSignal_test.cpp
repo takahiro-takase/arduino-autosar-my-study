@@ -21,6 +21,8 @@
 extern "C" {
 #include "Com.h"
 #include "Fake_Det_Hw.h"
+#include "Fake_Millis.h"
+#include "Wrap_PduR.h"
 }
 
 /* ======================================================================
@@ -178,6 +180,41 @@ const Com_SignalConfigType kUnregisteredRxSignal = {
     COM_DATA_INVALID_ACTION_NONE, 0U, NULL, 0U, 0U, NULL, NULL, NULL, NULL, NULL, 0U
 };
 
+// 送信シグナル 1 つ（SignalId 81）を持つ TX I-PDU（IPduId 0、DLC 2）を、各テストが組み立てる。
+// 設定テーブルは Com が参照し続けるため、テスト本体のローカル変数ではなく静的な領域に置く。
+Com_IPduConfigType    gSendIPdu;
+Com_SignalConfigType  gSendSignal;
+Com_ConfigType        gSendConfig;
+
+const Com_SignalIdType kSendSignalId = 81U;
+
+void PrepareSendConfig()
+{
+    gSendIPdu = kTestTxIPdu;
+    gSendIPdu.DLC = 2U;
+    gSendSignal = kTestTxSignal;
+    gSendSignal.SignalId         = kSendSignalId;
+    gSendSignal.TransferProperty = COM_TRANSFER_PROPERTY_TRIGGERED_ON_CHANGE;
+}
+
+void InitWithSendConfig()
+{
+    gSendConfig.RxIPdus        = NULL;
+    gSendConfig.RxIPduCount    = 0U;
+    gSendConfig.TxIPdus        = &gSendIPdu;
+    gSendConfig.TxIPduCount    = 1U;
+    gSendConfig.Signals        = &gSendSignal;
+    gSendConfig.SignalCount    = 1U;
+    gSendConfig.GwMappings     = NULL;
+    gSendConfig.GwMappingCount = 0U;
+
+    FakeDetHw_LogSuppressed = 1U;
+    Com_DeInit();
+    Com_Init(&gSendConfig);
+    FakeDetHw_Reset();
+    FakeDetHw_LogSuppressed = 0U;
+}
+
 const Com_SignalConfigType kTestSignals[] = {
     kTestTxSignal, kTestRxSignal, kCorruptTxSignal,
     kUnregisteredTxSignal, kCorruptRxSignal, kUnregisteredRxSignal
@@ -202,6 +239,8 @@ class Com_SendSignal_Test : public ::testing::Test
 protected:
     void SetUp() override
     {
+        FakeMillis_Reset();
+        WrapPduR_Reset();
         FakeDetHw_LogSuppressed = 1U;  // Init() のログはノイズになるため抑制
         Com_Init(&kTestConfig);
         FakeDetHw_Reset();             // Init 自体の記録を後続の検証対象から除く
@@ -211,6 +250,7 @@ protected:
     void TearDown() override
     {
         FakeDetHw_LogSuppressed = 1U;
+        WrapPduR_Reset();   // 故障注入を残さない
         Com_DeInit();
     }
 };
@@ -313,6 +353,58 @@ TEST_F(Com_SendSignal_Test, Com_SendSignal_NG_SignalNotFound)
     /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, COM_E_PARAM);
+}
+
+TEST_F(Com_SendSignal_Test, Com_SendSignal_OK_RepeatedValueRejectedByFilterDoesNotRequestTransmit)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    PrepareSendConfig();
+    gSendSignal.FilterAlgorithm = COM_FILTER_MASKED_NEW_DIFFERS_MASKED_OLD;   // 前回の値と違うときだけ通す
+    InitWithSendConfig();
+    FailFromCallCount_PduR_ComTransmit = 0U;   // PduR への送信は成功する
+    ForcedReturn_PduR_ComTransmit      = E_OK;
+    const uint8 value = 0x55U;
+    ASSERT_EQ(Com_SendSignal(kSendSignalId, &value), E_OK);
+    ASSERT_EQ(Com_Test_GetTxPending(0U), 1U);   // 1 回目は、値が変わったので予約する
+    Com_MainFunctionTx();                        // 送って、予約を消す
+    ASSERT_EQ(Com_Test_GetTxPending(0U), 0U);
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    const uint8 ret = Com_SendSignal(kSendSignalId, &value);   // 同じ値をもう一度送る
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_OK);
+    EXPECT_EQ(Com_Test_GetTxPending(0U), 0U);   // フィルタが棄却するので、送信を予約しない
+}
+
+TEST_F(Com_SendSignal_Test, Com_SendSignal_OK_SignalNotContributingToUpdateBitLeavesUpdateBitClear)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    PrepareSendConfig();
+    gSendIPdu.UpdateBitPosition      = 15U;   // I-PDU は update-bit を持つ
+    gSendSignal.UpdateBitContributor = 0U;    // しかし、このシグナルは update-bit を立てる対象ではない
+    InitWithSendConfig();
+    const uint8 value = 0x55U;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    const uint8 ret = Com_SendSignal(kSendSignalId, &value);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_OK);
+    EXPECT_EQ(Com_Test_GetTxBuffer(0U)[0], 0x55U);
+    EXPECT_EQ(Com_Test_GetTxBuffer(0U)[1] & 0x01U, 0U);   // update-bit は立たない
 }
 
 }  // namespace

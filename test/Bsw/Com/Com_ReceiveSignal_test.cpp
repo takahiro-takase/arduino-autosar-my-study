@@ -681,4 +681,33 @@ TEST_F(Com_ReceiveSignal_Test, Com_ReceiveSignal_OK_LittleEndianSignalIsUnpacked
     EXPECT_EQ(value, 0x80U);   // 本実装のビット番号は byte 内で最上位ビットが 0 番。リトルエンディアンは 0 番を値の最下位ビットにするため、ビットが反転して見える
 }
 
+TEST_F(Com_ReceiveSignal_Test, Com_ReceiveSignal_OK_ValueBelowFilterRangeReturnsLastValidValue)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    PrepareRxConfig();
+    gRxSignal.FilterAlgorithm = COM_FILTER_NEW_IS_WITHIN;
+    gRxSignal.FilterMin       = 10U;
+    gRxSignal.FilterMax       = 20U;
+    InitWithRxConfig();
+    ReceiveByte(15U);
+    uint8 first = 0U;
+    ASSERT_EQ(Com_ReceiveSignal(kRxSignalId, &first), E_OK);
+    ASSERT_EQ(first, 15U);
+    ReceiveByte(5U);   // 範囲の下限を下回る値
+    uint8 value = 0U;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    const uint8 ret = Com_ReceiveSignal(kRxSignalId, &value);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_OK);
+    EXPECT_EQ(value, 15U);   // 範囲の外の値は上位へ渡さず、最後の有効値を返す
+}
+
 }  // namespace

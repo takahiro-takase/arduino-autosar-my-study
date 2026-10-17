@@ -84,6 +84,11 @@ DET_LOG_VERBOSE=1 ./build/native_chain/native_chain_tests.exe  # TRACE ログ出
   - Csm の MAC 生成: 設定にある Csm のジョブは MAC 検証 1 つだけで、MAC 生成のジョブが無い。
   - E2EXf の `E2E_P05Check()` 失敗経路・`E2E_SMCheck()` 失敗経路: 設定が固定のため、失敗を返す入力を作れない。
   - `Can_Init()` の失敗時の無限ループ。
+  - MC/DC で条件の組み合わせが不足したまま残るもの（2026-10-18 時点）: Dem の `Dem_SetEventStatus()` の「確定済みの再確定」
+    （デバウンスカウンタが飽和して変わらないとき、途中で戻るため）、Gpt の通知関数が NULL のチャネル
+    （`Gpt_EnableNotification()` が通知を有効にしない）、WdgM の `WdgM_GetLocalStatus()` が失敗する経路、
+    E2EXf の WaitForFirstData が NULL の設定、EcuM の利用者が 1 人だけの構成、Dcm の「受信長 0 かつ総長 0」、
+    SecOC の送信側。いずれも、設定または実装の都合で、その条件の片側を作れない。
   - 実装上到達できない分岐（Dem の飽和カウンタ、WdgM の失敗しない API、NvM の設定依存ループ、
     実体の Dcm を使う CanTp の FF 先頭データの受け取り失敗、Dem が失敗を返さないために Dcm の
     0x19 の `Dem_SetDTCFilter` 失敗経路へ入れないこと、Dcm の応答バッファが全イベント分ちょうどのため

@@ -172,6 +172,39 @@ const Com_SignalConfigType kUnregisteredRxSignal = {
     COM_DATA_INVALID_ACTION_NONE, 0U, NULL, 0U, 0U, NULL, NULL, NULL, NULL, NULL, 0U
 };
 
+// TX Signal Group（IPduId 0、DLC 1）、そのメンバー（SignalId 92、無効値 0xFF）、同じ IPduId を持つ RX シグナル（SignalId 93）で Com を初期化し直す。
+// 設定テーブルは Com が参照し続けるため、テスト本体のローカル変数ではなく静的な領域に置く。
+Com_IPduConfigType    gInvIPdu;
+Com_SignalConfigType  gInvSignals[2];
+Com_ConfigType        gInvConfig;
+
+void InitWithInvalidateGroup(uint8 invalidValueConfigured)
+{
+    gInvIPdu = kTestTxIPdu;
+    gInvIPdu.IsSignalGroup = 1U;
+    gInvSignals[0] = kTestRxSignal;   // RX シグナル（同じ IPduId だが、方向が違う）
+    gInvSignals[0].SignalId = 93U;
+    gInvSignals[1] = kTestTxSignal;
+    gInvSignals[1].SignalId               = 92U;
+    gInvSignals[1].InvalidValue           = 0xFFU;
+    gInvSignals[1].InvalidValueConfigured = invalidValueConfigured;
+
+    gInvConfig.RxIPdus        = &kTestRxIPdu;
+    gInvConfig.RxIPduCount    = 1U;
+    gInvConfig.TxIPdus        = &gInvIPdu;
+    gInvConfig.TxIPduCount    = 1U;
+    gInvConfig.Signals        = gInvSignals;
+    gInvConfig.SignalCount    = 2U;
+    gInvConfig.GwMappings     = NULL;
+    gInvConfig.GwMappingCount = 0U;
+
+    FakeDetHw_LogSuppressed = 1U;
+    Com_DeInit();
+    Com_Init(&gInvConfig);
+    FakeDetHw_Reset();
+    FakeDetHw_LogSuppressed = 0U;
+}
+
 const Com_SignalConfigType kTestSignals[] = {
     kTestTxSignal, kTestRxSignal, kCorruptTxSignal,
     kUnregisteredTxSignal, kCorruptRxSignal, kUnregisteredRxSignal
@@ -288,6 +321,45 @@ TEST_F(Com_InvalidateSignalGroup_Test, Com_InvalidateSignalGroup_NG_Unregistered
     /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, COM_E_PARAM);
+}
+
+TEST_F(Com_InvalidateSignalGroup_Test, Com_InvalidateSignalGroup_NG_MemberWithoutInvalidValueIsNotAvailable)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    InitWithInvalidateGroup(0U);   // メンバーに、無効値を設定していない
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    const uint8 ret = Com_InvalidateSignalGroup(0U);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, COM_SERVICE_NOT_AVAILABLE);
+}
+
+TEST_F(Com_InvalidateSignalGroup_Test, Com_InvalidateSignalGroup_OK_WritesInvalidValueOfEveryTransmitMember)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    InitWithInvalidateGroup(1U);
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    const uint8 ret = Com_InvalidateSignalGroup(0U);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_OK);
+    const uint8* tx = Com_Test_GetTxBuffer(0U);
+    ASSERT_NE(tx, nullptr);
+    EXPECT_EQ(tx[0], 0xFFU);   // 送信メンバーに、無効値が書かれる
 }
 
 }  // namespace

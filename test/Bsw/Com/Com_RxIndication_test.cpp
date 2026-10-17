@@ -176,7 +176,7 @@ const Com_SignalConfigType kUnregisteredRxSignal = {
 // 設定テーブルは Com が参照し続けるため、テスト本体のローカル変数ではなく静的な領域に置く。
 Com_IPduConfigType    gGwRxIPdus[2];
 Com_IPduConfigType    gGwTxIPdu;
-Com_SignalConfigType  gGwSignals[3];
+Com_SignalConfigType  gGwSignals[4];
 Com_GwMappingType     gGwMappings[1];
 Com_ConfigType        gGwConfig;
 
@@ -195,14 +195,17 @@ void InitWithGateway(Com_SignalIdType srcSignalId)
     gGwRxIPdus[1].PduRId = 1U;
     gGwTxIPdu = kTestTxIPdu;
 
-    gGwSignals[0] = kTestRxSignal;
-    gGwSignals[0].SignalId = kGwRxSignalOnPdu0;
-    gGwSignals[0].IPduId   = 0U;
+    // 先頭に、中継元と同じ SignalId を持つ TX シグナルを置く（SignalId は方向ごとに別の値空間のため、方向も見て探さなければならない）。
+    gGwSignals[0] = kTestTxSignal;
+    gGwSignals[0].SignalId = srcSignalId;
     gGwSignals[1] = kTestRxSignal;
-    gGwSignals[1].SignalId = kGwRxSignalOnPdu1;
-    gGwSignals[1].IPduId   = 1U;
-    gGwSignals[2] = kTestTxSignal;
-    gGwSignals[2].SignalId = kGwTxSignal;
+    gGwSignals[1].SignalId = kGwRxSignalOnPdu0;
+    gGwSignals[1].IPduId   = 0U;
+    gGwSignals[2] = kTestRxSignal;
+    gGwSignals[2].SignalId = kGwRxSignalOnPdu1;
+    gGwSignals[2].IPduId   = 1U;
+    gGwSignals[3] = kTestTxSignal;
+    gGwSignals[3].SignalId = kGwTxSignal;
 
     gGwMappings[0].SrcSignalId  = srcSignalId;
     gGwMappings[0].DestSignalId = kGwTxSignal;
@@ -212,7 +215,7 @@ void InitWithGateway(Com_SignalIdType srcSignalId)
     gGwConfig.TxIPdus        = &gGwTxIPdu;
     gGwConfig.TxIPduCount    = 1U;
     gGwConfig.Signals        = gGwSignals;
-    gGwConfig.SignalCount    = 3U;
+    gGwConfig.SignalCount    = 4U;
     gGwConfig.GwMappings     = gGwMappings;
     gGwConfig.GwMappingCount = 1U;
 

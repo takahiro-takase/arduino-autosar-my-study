@@ -172,6 +172,38 @@ const Com_SignalConfigType kUnregisteredRxSignal = {
     COM_DATA_INVALID_ACTION_NONE, 0U, NULL, 0U, 0U, NULL, NULL, NULL, NULL, NULL, 0U
 };
 
+// TX Signal Group（IPduId 0、DLC 2）、そのメンバー（SignalId 90）、同じ IPduId を持つ RX シグナル（SignalId 91）で Com を初期化し直す。
+// 設定テーブルは Com が参照し続けるため、テスト本体のローカル変数ではなく静的な領域に置く。
+Com_IPduConfigType    gArrIPdu;
+Com_SignalConfigType  gArrSignals[2];
+Com_ConfigType        gArrConfig;
+
+void InitWithGroupAndRxSignal()
+{
+    gArrIPdu = kTestTxIPdu;
+    gArrIPdu.DLC           = 2U;
+    gArrIPdu.IsSignalGroup = 1U;
+    gArrSignals[0] = kTestRxSignal;   // RX シグナル（同じ IPduId だが、方向が違う）
+    gArrSignals[0].SignalId = 91U;
+    gArrSignals[1] = kTestTxSignal;
+    gArrSignals[1].SignalId = 90U;
+
+    gArrConfig.RxIPdus        = &kTestRxIPdu;
+    gArrConfig.RxIPduCount    = 1U;
+    gArrConfig.TxIPdus        = &gArrIPdu;
+    gArrConfig.TxIPduCount    = 1U;
+    gArrConfig.Signals        = gArrSignals;
+    gArrConfig.SignalCount    = 2U;
+    gArrConfig.GwMappings     = NULL;
+    gArrConfig.GwMappingCount = 0U;
+
+    FakeDetHw_LogSuppressed = 1U;
+    Com_DeInit();
+    Com_Init(&gArrConfig);
+    FakeDetHw_Reset();
+    FakeDetHw_LogSuppressed = 0U;
+}
+
 const Com_SignalConfigType kTestSignals[] = {
     kTestTxSignal, kTestRxSignal, kCorruptTxSignal,
     kUnregisteredTxSignal, kCorruptRxSignal, kUnregisteredRxSignal
@@ -308,6 +340,29 @@ TEST_F(Com_SendSignalGroupArray_Test, Com_SendSignalGroupArray_NG_UnregisteredId
     /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, COM_E_PARAM);
+}
+
+TEST_F(Com_SendSignalGroupArray_Test, Com_SendSignalGroupArray_OK_WritesWholeGroupToTransmitBuffer)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    InitWithGroupAndRxSignal();
+    const uint8 data[2] = { 0x11U, 0x22U };
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    const uint8 ret = Com_SendSignalGroupArray(0U, data);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_OK);
+    const uint8* tx = Com_Test_GetTxBuffer(0U);
+    ASSERT_NE(tx, nullptr);
+    EXPECT_EQ(tx[0], 0x11U);
+    EXPECT_EQ(tx[1], 0x22U);
 }
 
 }  // namespace

@@ -427,4 +427,28 @@ TEST_F(Com_SendSignalGroup_Test, Com_SendSignalGroup_OK_PeriodicIPduSetsUpdateBi
     EXPECT_NE(Com_Test_GetTxBuffer(0U)[1] & 0x01U, 0U);  // update-bit は、トリガーされたので立てる
 }
 
+TEST_F(Com_SendSignalGroup_Test, Com_SendSignalGroup_OK_GroupWithoutUpdateBitStillRequestsTransmitOnChange)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    PrepareTxGroupConfig(COM_TRANSFER_PROPERTY_TRIGGERED_ON_CHANGE);
+    gTxGroupIPdu.UpdateBitPosition = 0xFFU;   // update-bit を使わない
+    InitWithTxGroupConfig();
+    const uint8 value = 0x55U;
+    ASSERT_EQ(Com_SendSignal(kTxGroupSignalId, &value), E_OK);
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    const uint8 ret = Com_SendSignalGroup(0U);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_OK);
+    EXPECT_EQ(Com_Test_GetTxPending(0U), 1U);
+    EXPECT_EQ(Com_Test_GetTxBuffer(0U)[0], 0x55U);
+}
+
 }  // namespace
