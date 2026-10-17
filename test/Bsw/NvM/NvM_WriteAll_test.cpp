@@ -27,6 +27,7 @@ extern "C" {
 #include "MemIf.h"
 #include "Fake_Det_Hw.h"
 #include "Wrap_Dem.h"
+#include "Wrap_MemIf.h"
 }
 
 /* ======================================================================
@@ -60,6 +61,7 @@ protected:
         MemIf_Init();
         NvM_Init(NULL);
         WrapDem_Reset();
+        WrapMemIf_Reset();   // 起動時の処理で数えた回数を除き、故障注入も他のテストから漏れないようにする
         FakeDetHw_Reset();
         std::memset(statusData, 0x5A, sizeof(statusData));    // 既存内容と異なる値（書き込みスキップ回避）
         std::memset(agingData, 0x5A, sizeof(agingData));
@@ -70,6 +72,7 @@ protected:
     void TearDown() override
     {
         FakeDetHw_LogSuppressed = 1U;
+        WrapMemIf_Reset();   // 故障注入を残さない
         NvM_Test_ResetInitState();
     }
 
@@ -111,6 +114,27 @@ TEST_F(NvM_WriteAll_Test, NvM_WriteAll_NG_NotInitializedReportsDet)
     EXPECT_EQ(FakeDetHw_ReportCount, 1U);
     EXPECT_EQ(FakeDetHw_LastApiId, NVM_API_ID_WRITE_ALL);
     EXPECT_EQ(FakeDetHw_LastErrorId, NVM_E_NOT_INITIALIZED);
+}
+
+TEST_F(NvM_WriteAll_Test, NvM_WriteAll_NG_ReturnsAtIterationLimitWhenJobNeverCompletes)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    FailFromCallCount_MemIf_GetJobResult = 1U;   // 書き込みジョブが、いつまでも終わらない
+    ForcedReturn_MemIf_GetJobResult      = MEMIF_JOB_PENDING;
+    ASSERT_EQ(NvM_WriteBlock(NVM_BLOCK_ID_DEM_STATUS, statusData), E_OK);
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    NvM_WriteAll();   // 終わらないジョブを待ち続けず、上限で戻る
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(CallCount_MemIf_MainFunction, (uint32)NVM_WRITEALL_MAX_ITERATIONS);   // 回数の上限で打ち切る
+    EXPECT_EQ(ResultOf(NVM_BLOCK_ID_DEM_STATUS), NVM_REQ_PENDING);                   // ジョブは終わっていない
 }
 
 }  // namespace

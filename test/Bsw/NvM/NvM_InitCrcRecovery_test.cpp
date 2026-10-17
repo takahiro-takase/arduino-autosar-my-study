@@ -20,6 +20,7 @@ extern "C" {
 #include "MemIf.h"
 #include "Fake_Det_Hw.h"
 #include "Wrap_Dem.h"
+#include "Wrap_MemIf.h"
 }
 
 /* ======================================================================
@@ -50,6 +51,7 @@ protected:
     void SetUp() override
     {
         FakeDetHw_LogSuppressed = 1U;
+        WrapMemIf_Reset();   // 他のテストファイルの故障注入が漏れ伝わらないようリセット
         WrapDem_Reset();
         FakeDetHw_Reset();
         MemIf_Init();
@@ -58,6 +60,7 @@ protected:
     void TearDown() override
     {
         FakeDetHw_LogSuppressed = 1U;
+        WrapMemIf_Reset();   // 故障注入を残さない
         NvM_Test_ResetInitState();
     }
 };
@@ -65,6 +68,76 @@ protected:
 /* ======================================================================
  * Test Functions
  * ====================================================================== */
+
+TEST_F(NvM_InitCrcRecovery_Test, NvM_Init_NG_RecoveryWriteRejectedLeavesEepromBlank)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    FailFromCallCount_MemIf_Write = 1U;   // MemIf が、書き込みを受け付けない
+    NvM_Init(NULL);   // 空の EEPROM: 復元して書き戻そうとするが、書き込みを拒否される
+    ASSERT_GT(CallCount_MemIf_Write, 0U);   // 書き戻しを試みた
+    WrapMemIf_Reset();   // 以降は正常に書ける
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    NvM_Init(NULL);   // もう一度読み直す
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    uint8 notOkCount = 0U;
+    for (uint8 id = 0U; id < NVM_BLOCK_COUNT; id++)
+    {
+        NvM_RequestResultType result = NVM_REQ_OK;
+        ASSERT_EQ(NvM_GetErrorStatus(id, &result), E_OK);
+        if (result != NVM_REQ_OK)
+        {
+            notOkCount++;
+        }
+    }
+    EXPECT_GT(notOkCount, 0U);   // 書き戻せていないので、EEPROM は空のまま（CRC 不一致が続く）
+}
+
+TEST_F(NvM_InitCrcRecovery_Test, NvM_Init_NG_RecoveryWriteThatNeverCompletesIsCancelled)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    FailFromCallCount_MemIf_GetStatus = 1U;       // MemIf が、いつまでも BUSY を返す（ジョブが終わらない）
+    ForcedReturn_MemIf_GetStatus      = MEMIF_BUSY;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    NvM_Init(NULL);   // 空の EEPROM: 復元して書き戻そうとする
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_GT(CallCount_MemIf_Cancel, 0U);   // 待ちきれなかったジョブを、中断する
+}
+
+TEST_F(NvM_InitCrcRecovery_Test, NvM_Init_NG_RecoveryWriteJobFailureDoesNotHang)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    FailFromCallCount_MemIf_GetJobResult = 1U;   // MemIf が、ジョブの失敗を返す
+    ForcedReturn_MemIf_GetJobResult      = MEMIF_JOB_FAILED;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    NvM_Init(NULL);   // 空の EEPROM: 復元して書き戻そうとする
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_GT(CallCount_MemIf_GetJobResult, 0U);   // ジョブの結果を確認し、失敗でも先へ進む
+    EXPECT_EQ(MemIf_GetStatus(MEMIF_DEVICE_0), MEMIF_IDLE);
+}
 
 TEST_F(NvM_InitCrcRecovery_Test, NvM_Init_OK_RecoveredBlocksPassCrcOnNextInit)
 {

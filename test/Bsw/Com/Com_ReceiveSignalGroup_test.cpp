@@ -172,6 +172,53 @@ const Com_SignalConfigType kUnregisteredRxSignal = {
     COM_DATA_INVALID_ACTION_NONE, 0U, NULL, 0U, 0U, NULL, NULL, NULL, NULL, NULL, 0U
 };
 
+// update-bit（byte 1 の最下位ビット）を持つ RX Signal Group（IPduId 0、DLC 2、PduRId 0）と、そのメンバー（SignalId 70）で Com を初期化し直す。
+// 設定テーブルは Com が参照し続けるため、テスト本体のローカル変数ではなく静的な領域に置く。
+Com_IPduConfigType    gRxGroupIPdu;
+Com_SignalConfigType  gRxGroupSignal;
+Com_ConfigType        gRxGroupConfig;
+
+const Com_SignalIdType kRxGroupSignalId = 70U;
+const uint8            kRxGroupInitValue = 0x42U;
+
+// 呼ぶ前に、各テストが gRxGroupIPdu のうち変えたい項目だけを書き換える。
+void PrepareRxGroupConfig()
+{
+    gRxGroupIPdu = kTestRxIPdu;
+    gRxGroupIPdu.DLC               = 2U;
+    gRxGroupIPdu.IsSignalGroup     = 1U;
+    gRxGroupIPdu.UpdateBitPosition = 15U;
+    gRxGroupSignal = kTestRxSignal;
+    gRxGroupSignal.SignalId  = kRxGroupSignalId;
+    gRxGroupSignal.InitValue = kRxGroupInitValue;
+}
+
+void InitWithRxGroupConfig()
+{
+    gRxGroupConfig.RxIPdus        = &gRxGroupIPdu;
+    gRxGroupConfig.RxIPduCount    = 1U;
+    gRxGroupConfig.TxIPdus        = NULL;
+    gRxGroupConfig.TxIPduCount    = 0U;
+    gRxGroupConfig.Signals        = &gRxGroupSignal;
+    gRxGroupConfig.SignalCount    = 1U;
+    gRxGroupConfig.GwMappings     = NULL;
+    gRxGroupConfig.GwMappingCount = 0U;
+
+    FakeDetHw_LogSuppressed = 1U;
+    Com_DeInit();
+    Com_Init(&gRxGroupConfig);
+    FakeDetHw_Reset();
+    FakeDetHw_LogSuppressed = 0U;
+}
+
+// 2 バイトのフレーム（update-bit は byte 1 の最下位ビット）を、受信したことにする。
+void ReceiveGroupFrame(uint8 byte0, uint8 byte1)
+{
+    uint8 frame[2] = { byte0, byte1 };
+    PduInfoType info = { frame, 2U };
+    Com_RxIndication(0U, &info);
+}
+
 const Com_SignalConfigType kTestSignals[] = {
     kTestTxSignal, kTestRxSignal, kCorruptTxSignal,
     kUnregisteredTxSignal, kCorruptRxSignal, kUnregisteredRxSignal
@@ -289,6 +336,76 @@ TEST_F(Com_ReceiveSignalGroup_Test, Com_ReceiveSignalGroup_NG_UnregisteredId)
     /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, COM_E_PARAM);
+}
+
+TEST_F(Com_ReceiveSignalGroup_Test, Com_ReceiveSignalGroup_NG_StoppedIPduReportsServiceNotAvailable)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    PrepareRxGroupConfig();
+    gRxGroupIPdu.UpdateBitPosition = 0xFFU;   // update-bit は使わない
+    gRxGroupIPdu.IpduGroupId       = 3U;      // まだ開始していない I-PDU Group
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    InitWithRxGroupConfig();
+    const uint8 ret = Com_ReceiveSignalGroup(0U);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, COM_SERVICE_NOT_AVAILABLE);
+}
+
+TEST_F(Com_ReceiveSignalGroup_Test, Com_ReceiveSignalGroup_OK_UpdateBitSetCopiesFrameToShadowBuffer)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    PrepareRxGroupConfig();
+    InitWithRxGroupConfig();
+    ReceiveGroupFrame(0x77U, 0x01U);   // update-bit が立っている
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    const uint8 ret = Com_ReceiveSignalGroup(0U);
+    uint8 value = 0U;
+    const uint8 retSignal = Com_ReceiveSignal(kRxGroupSignalId, &value);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_OK);
+    EXPECT_EQ(retSignal, E_OK);
+    EXPECT_EQ(value, 0x77U);   // 受信した値を、シャドウバッファ経由で読める
+}
+
+TEST_F(Com_ReceiveSignalGroup_Test, Com_ReceiveSignalGroup_OK_UpdateBitClearKeepsPreviousShadowBuffer)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    PrepareRxGroupConfig();
+    InitWithRxGroupConfig();
+    ReceiveGroupFrame(0x77U, 0x01U);
+    ASSERT_EQ(Com_ReceiveSignalGroup(0U), E_OK);   // 1 つ目のフレームを取り込む
+    ReceiveGroupFrame(0x88U, 0x00U);               // update-bit が立っていない（送信側がこのグループを更新していない）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    const uint8 ret = Com_ReceiveSignalGroup(0U);
+    uint8 value = 0U;
+    (void)Com_ReceiveSignal(kRxGroupSignalId, &value);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_OK);
+    EXPECT_EQ(value, 0x77U);   // 取り込まず、前回のシャドウバッファのまま
 }
 
 }  // namespace

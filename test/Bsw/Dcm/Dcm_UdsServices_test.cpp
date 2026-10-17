@@ -16,6 +16,11 @@ extern "C" {
 #include "Dcm.h"
 #include "Dcm_Cfg.h"
 #include "Dem.h"
+#include "Crypto.h"
+#include "CryIf.h"
+#include "Csm.h"
+#include "KeyM.h"
+#include "KeyM_Cfg.h"
 #include "CanTp.h"
 #include "Wrap_CanTp.h"
 #include "Wrap_Dcm.h"
@@ -74,12 +79,36 @@ protected:
         FakeDetHw_LogSuppressed = 1U;
         WrapComM_Reset();  // 他のテストファイルへ影響を残さない
         FakeRte_Reset();
+        KeyM_Deinit();     // 鍵更新のテストが初期化した暗号系を、未初期化へ戻す（未初期化のときは何もしない）
+        Crypto_Test_ResetInitState();
+        CryIf_Test_ResetInitState();
+        Csm_Test_ResetInitState();
     }
 
     /** 生の UDS 要求を Dcm へ直接渡す（WrapDcm_InjectRequest()）。 */
     static void Send(const uint8* payload, uint8 len)
     {
         (void)WrapDcm_InjectRequest(payload, len);
+    }
+
+    /** 鍵更新（0x2E 0x0108）が使う暗号系（Crypto・CryIf・Csm・KeyM）を初期化する。 */
+    static void InitCryptoStack()
+    {
+        Crypto_Test_ResetInitState();
+        CryIf_Test_ResetInitState();
+        Csm_Test_ResetInitState();
+        Crypto_Init();
+        CryIf_Init();
+        Csm_Init();
+        KeyM_Init(NULL);
+    }
+
+    /** 鍵更新（0x2E 0x0108）の要求 [SID, DID(2), keyName, keyData(16)] を作って送る。 */
+    static void SendKeyUpdate(uint8 keyName)
+    {
+        uint8 req[3U + DCM_DID_CRYPTO_KEY_UPDATE_LENGTH] = { DCM_SID_WRITE_DATA, (uint8)(DCM_DID_CRYPTO_KEY_UPDATE >> 8U), (uint8)(DCM_DID_CRYPTO_KEY_UPDATE & 0xFFU), keyName };
+        for (uint8 i = 0U; i < 16U; i++) { req[4U + i] = (uint8)(0xA0U + i); }
+        Send(req, sizeof(req));
     }
 
     /** SecurityAccess の requestSeed を送り、返ってきたシードを返す（正応答でなければ ASSERT 失敗）。 */
@@ -1019,6 +1048,43 @@ TEST_F(Dcm_UdsServices_Test, Dcm_ReadDtcInfo_NG_DemFailureIsReportedAsConditions
     ExpectNegative(DCM_SID_READ_DTC_INFO, DCM_NRC_CONDITIONS_NOT_CORRECT);   // 0x19 0x0A
 }
 
+TEST_F(Dcm_UdsServices_Test, Dcm_WriteDataById_NG_CryptoKeyUpdateWithoutKeyMIsRejected)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    UnlockSecurityAccessLevel1();   // 暗号系（KeyM）は初期化しない
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    SendKeyUpdate(KEYM_CRYPTO_KEY_NAME_IMMOBILIZER_CMD);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    ExpectNegative(DCM_SID_WRITE_DATA, DCM_NRC_REQUEST_OUT_OF_RANGE);   // KeyM_Start() が失敗する
+}
+
+TEST_F(Dcm_UdsServices_Test, Dcm_WriteDataById_NG_CryptoKeyUpdateOfUnknownKeyIsRejected)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    UnlockSecurityAccessLevel1();
+    InitCryptoStack();
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    SendKeyUpdate(0x7EU);   // KeyM に登録されていない鍵の名前
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    ExpectNegative(DCM_SID_WRITE_DATA, DCM_NRC_REQUEST_OUT_OF_RANGE);   // KeyM_Update() が失敗する（開始した更新は終了して後始末する）
+}
+
 TEST_F(Dcm_UdsServices_Test, Dcm_IoControl_OK_ShortTermAdjustmentToOffIsAccepted)
 {
     /* ----------------------- */
@@ -1302,6 +1368,28 @@ TEST_F(Dcm_UdsServices_Test, Dcm_SessionControl_OK_ReturningToDefaultToleratesDt
     /* ---- 評価 (Assert) ---- */
     /* ----------------------- */
     EXPECT_EQ(LastData_CanTp_Transmit[0], 0x50U);   // セッション切り替え自体は成功する
+}
+
+TEST_F(Dcm_UdsServices_Test, Dcm_WriteDataById_OK_CryptoKeyUpdateIsAccepted)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    UnlockSecurityAccessLevel1();
+    InitCryptoStack();
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    SendKeyUpdate(KEYM_CRYPTO_KEY_NAME_IMMOBILIZER_CMD);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(LastLength_CanTp_Transmit, 3U);
+    EXPECT_EQ(LastData_CanTp_Transmit[0], 0x6EU);   // 正応答 [0x6E, DID(2)]
+    EXPECT_EQ(LastData_CanTp_Transmit[1], (uint8)(DCM_DID_CRYPTO_KEY_UPDATE >> 8U));
+    EXPECT_EQ(LastData_CanTp_Transmit[2], (uint8)(DCM_DID_CRYPTO_KEY_UPDATE & 0xFFU));
 }
 
 }  // namespace

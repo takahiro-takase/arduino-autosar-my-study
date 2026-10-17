@@ -172,6 +172,44 @@ const Com_SignalConfigType kUnregisteredRxSignal = {
     COM_DATA_INVALID_ACTION_NONE, 0U, NULL, 0U, 0U, NULL, NULL, NULL, NULL, NULL, 0U
 };
 
+// update-bit（byte 1 の最下位ビット）を持つ TX Signal Group（IPduId 0、DLC 2）と、そのメンバー（SignalId 60）で Com を初期化し直す。
+// 設定テーブルは Com が参照し続けるため、テスト本体のローカル変数ではなく静的な領域に置く。
+Com_IPduConfigType    gTxGroupIPdu;
+Com_SignalConfigType  gTxGroupSignal;
+Com_ConfigType        gTxGroupConfig;
+
+const Com_SignalIdType kTxGroupSignalId = 60U;
+
+// 呼ぶ前に、各テストが gTxGroupIPdu / gTxGroupSignal のうち変えたい項目だけを書き換える。
+void PrepareTxGroupConfig(Com_TransferPropertyType property)
+{
+    gTxGroupIPdu = kTestTxIPdu;
+    gTxGroupIPdu.DLC               = 2U;
+    gTxGroupIPdu.IsSignalGroup     = 1U;
+    gTxGroupIPdu.UpdateBitPosition = 15U;
+    gTxGroupSignal = kTestTxSignal;
+    gTxGroupSignal.SignalId         = kTxGroupSignalId;
+    gTxGroupSignal.TransferProperty = property;
+}
+
+void InitWithTxGroupConfig()
+{
+    gTxGroupConfig.RxIPdus        = NULL;
+    gTxGroupConfig.RxIPduCount    = 0U;
+    gTxGroupConfig.TxIPdus        = &gTxGroupIPdu;
+    gTxGroupConfig.TxIPduCount    = 1U;
+    gTxGroupConfig.Signals        = &gTxGroupSignal;
+    gTxGroupConfig.SignalCount    = 1U;
+    gTxGroupConfig.GwMappings     = NULL;
+    gTxGroupConfig.GwMappingCount = 0U;
+
+    FakeDetHw_LogSuppressed = 1U;
+    Com_DeInit();
+    Com_Init(&gTxGroupConfig);
+    FakeDetHw_Reset();
+    FakeDetHw_LogSuppressed = 0U;
+}
+
 const Com_SignalConfigType kTestSignals[] = {
     kTestTxSignal, kTestRxSignal, kCorruptTxSignal,
     kUnregisteredTxSignal, kCorruptRxSignal, kUnregisteredRxSignal
@@ -289,6 +327,104 @@ TEST_F(Com_SendSignalGroup_Test, Com_SendSignalGroup_NG_UnregisteredId)
     /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, COM_E_PARAM);
+}
+
+TEST_F(Com_SendSignalGroup_Test, Com_SendSignalGroup_OK_ChangedTriggeredMemberRequestsTransmitAndSetsUpdateBit)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    PrepareTxGroupConfig(COM_TRANSFER_PROPERTY_TRIGGERED_ON_CHANGE);
+    InitWithTxGroupConfig();
+    const uint8 value = 0x55U;   // 前回の値（InitValue 0）から変わる
+    ASSERT_EQ(Com_SendSignal(kTxGroupSignalId, &value), E_OK);
+    ASSERT_EQ(Com_Test_GetTxPending(0U), 0U);   // シャドウバッファへ書いただけでは、送信を予約しない
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    const uint8 ret = Com_SendSignalGroup(0U);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_OK);
+    EXPECT_EQ(Com_Test_GetTxPending(0U), 1U);                  // グループ全体の送信を予約する
+    EXPECT_EQ(Com_Test_GetTxBuffer(0U)[0], 0x55U);
+    EXPECT_NE(Com_Test_GetTxBuffer(0U)[1] & 0x01U, 0U);        // update-bit が立つ
+}
+
+TEST_F(Com_SendSignalGroup_Test, Com_SendSignalGroup_OK_UnchangedTriggeredMemberDoesNotRequestTransmit)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    PrepareTxGroupConfig(COM_TRANSFER_PROPERTY_TRIGGERED_ON_CHANGE);
+    InitWithTxGroupConfig();
+    const uint8 value = 0U;   // InitValue（0）と同じ値
+    ASSERT_EQ(Com_SendSignal(kTxGroupSignalId, &value), E_OK);
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    const uint8 ret = Com_SendSignalGroup(0U);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_OK);
+    EXPECT_EQ(Com_Test_GetTxPending(0U), 0U);                  // 値が変わっていないので、送信を予約しない
+    EXPECT_EQ(Com_Test_GetTxBuffer(0U)[1] & 0x01U, 0U);        // update-bit も立てない
+}
+
+TEST_F(Com_SendSignalGroup_Test, Com_SendSignalGroup_OK_PendingMemberNeverRequestsTransmit)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    PrepareTxGroupConfig(COM_TRANSFER_PROPERTY_PENDING);
+    InitWithTxGroupConfig();
+    const uint8 value = 0x55U;   // 値は変わるが、PENDING は送信のきっかけにならない
+    ASSERT_EQ(Com_SendSignal(kTxGroupSignalId, &value), E_OK);
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    const uint8 ret = Com_SendSignalGroup(0U);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_OK);
+    EXPECT_EQ(Com_Test_GetTxPending(0U), 0U);
+    EXPECT_EQ(Com_Test_GetTxBuffer(0U)[0], 0x55U);   // 値は、他の送信に便乗して運ばれるよう、バッファへ反映する
+}
+
+TEST_F(Com_SendSignalGroup_Test, Com_SendSignalGroup_OK_PeriodicIPduSetsUpdateBitWithoutOnChangeRequest)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    PrepareTxGroupConfig(COM_TRANSFER_PROPERTY_TRIGGERED_ON_CHANGE);
+    gTxGroupIPdu.TxModeMode     = COM_TX_MODE_PERIODIC;
+    gTxGroupIPdu.TxModeModeTrue = COM_TX_MODE_PERIODIC;
+    gTxGroupIPdu.TxPeriodMs     = 100U;
+    gTxGroupIPdu.TxPeriodMsTrue = 100U;
+    InitWithTxGroupConfig();
+    const uint8 value = 0x55U;
+    ASSERT_EQ(Com_SendSignal(kTxGroupSignalId, &value), E_OK);
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    const uint8 ret = Com_SendSignalGroup(0U);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_OK);
+    EXPECT_EQ(Com_Test_GetTxPending(0U), 0U);            // 周期送信の I-PDU は、値の変化では送らない（周期が運ぶ）
+    EXPECT_NE(Com_Test_GetTxBuffer(0U)[1] & 0x01U, 0U);  // update-bit は、トリガーされたので立てる
 }
 
 }  // namespace

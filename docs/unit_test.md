@@ -68,14 +68,21 @@ DET_LOG_VERBOSE=1 ./build/native_chain/native_chain_tests.exe  # TRACE ログ出
 - 作り方の例: `KeyM`・`SecOC`・`EcuM`・`Os`・`Gpt` の OK 系テスト（2026-10 追加）。
   MC/DC の見方と演習は [mcdc_learning.md](mcdc_learning.md) を参照。
 
-### 現状と優先順位（2026-10-16 時点）
+### 現状と優先順位（2026-10-18 時点）
 
-OK 系が少ないモジュールから、MC/DC の未成立の条件が多いものを優先して足していく。
+`src/Bsw` と `src/Os` の行カバレッジは約 93%（2026-10-18 の測定）。未実行の行が多いモジュールから、
+エラー分岐・タイムアウト・状態遷移の順に足していく。足すたびに、
+`tools/coverage/generate_coverage_report.sh` で行カバレッジと MC/DC の変化を確認する。
 
-- OK が 0 件: Com、Csm、Crypto、CryIf、CanTp、E2EXf、Fee、MemIf、WdgIf
-- OK が 1〜2 件: Dem、ComM、CanSM、PduR、Adc
-
-足すたびに、`tools/coverage/generate_coverage_report.sh` で MC/DC の変化を確認する。
+- **まだ残っているもの**: Com の `Com_Test_*` の範囲外ガード。NvM の一部（設定で到達できない分岐）。
+- **到達できないため単体テストにしないもの**:
+  - SecOC の送信側: 送信に使う PDU 数がビルド時に 0（`SECOC_TX_PDU_COUNT`）で、`SecOC_Init()` が
+    それを超える設定を拒否する。
+  - `EcuM_Init()`: 全モジュールを起動順に初期化する本番の起動シーケンス。順序の確認はコールチェーンで行う。
+  - 実装上到達できない分岐（Dem の飽和カウンタ、WdgM の失敗しない API、NvM の設定依存ループ、
+    実体の Dcm を使う CanTp の FF 先頭データの受け取り失敗、Dem が失敗を返さないために Dcm の
+    0x19 の `Dem_SetDTCFilter` 失敗経路へ入れないこと、Dcm の応答バッファが全イベント分ちょうどのため
+    溢れないことなど）。
 
 <a id="unit-test-chain"></a>
 ## コールチェーンのテスト（`native_chain_tests`）
@@ -237,6 +244,29 @@ CanIf/CanSM 側の未初期化ガードにより、本テストが
   直接設定する（単体テストのみ。遷移そのものの検証はコールチェーンのテストで行う。状態以外の
   値は変えないので、必要なら別途そろえる）。`static` を外して内部の変数に直接触る方式は、
   全モジュールを 1 つのバイナリへリンクするため名前が衝突しうるので採用しない。
+- **上位層を実体で使うテスト（CanTp）**: CanTp のテストは、上位層の Dcm を実体のまま
+  `Dem_Init()`・`Dcm_Init()` で初期化し、CanTp が渡すデータを Dcm が実際に受け取る・取り出す形にしている。
+  CAN フレームの送信（`PduR_CanTpTransmit`）は `stub/Bsw/PduR/Wrap_PduR.c` の
+  `FailFromCallCount_PduR_CanTpTransmit` / `ForcedReturn_PduR_CanTpTransmit` で成功・失敗を決める
+  （実体の PduR は設定が無いと失敗するため、成功させるには `FailFromCallCount_…= 0` と `ForcedReturn_…= E_OK` を指定する）。
+  CanTp の内部状態を観測・設定するフックは `CANTP_UNIT_TEST` ガード付きで、
+  `CanTp_Test_IsTxBusy()`（送信中か）、`CanTp_Test_SetTxWaitFc()`（FC 待ちにする）、
+  `CanTp_Test_GetTxStMin()`（FC から取り込んだ STmin）を持つ。TearDown では Dcm を未初期化へ戻し、
+  他のテストファイルへ影響を残さない。
+- **Rte の読み出し値**: Dcm の RoutineControl や DID の読み出しのように、Rte 経由のセンサ値で結果が
+  変わる処理は、`stub/Rte/Fake_Rte.h` の `FakeRte_EngineSpeed` / `FakeRte_CoolantTemp`（既定 0）で値を
+  指定する。使うテストは SetUp/TearDown で `FakeRte_Reset()` を呼ぶ。
+- **Com の状態取得とキャプチャ**: Com の送信バッファ・予約状態などは `Com_Test_*` で読む
+  （`COM_UNIT_TEST` 定義時のみ）。`stub/Bsw/Com/Wrap_Com.c` は、呼び出し側（Dcm・BswM など）が
+  `Com_SetCommunicationEnabled()` へ渡した値を `LastRxEnabled_…` / `LastTxEnabled_…` に記録する。
+- **設定を差し替えるテスト**: Com の I-PDU Group・Signal Group・Signal Gateway・update-bit のように、
+  本番の設定に含まれない構成が必要なときは、各テストで `Com_IPduConfigType` /
+  `Com_SignalConfigType` / `Com_ConfigType` を静的な領域に組み立て、`Com_DeInit()` →
+  `Com_Init()` で初期化し直す（設定テーブルは Com が参照し続けるため、ローカル変数にしない）。
+- **MemIf への故障注入（NvM）**: NvM は MemIf 経由で Fee を使うため、実体の Fee では起こせない異常
+  （書き込みの拒否、ジョブの失敗、ジョブが終わらない）は、`stub/Bsw/MemIf/Wrap_MemIf.h` の
+  `FailFromCallCount_MemIf_Xxx` / `ForcedReturn_MemIf_Xxx`（Read/Write/GetStatus/GetJobResult）で再現する。
+  使うテストは SetUp と TearDown で `WrapMemIf_Reset()` を呼び、故障注入を他のテストへ残さない。
 - **模擬 EEPROM の自動リセット**: Fee/NvM を実体リンクしているため、`test/test_main.cpp` の
   `FeeHwAutoResetListener`（GoogleTest の `TestEventListener`）が、すべてのテストの開始前に模擬
   EEPROM（`stub/Hal/Fake_Fee_Hw.c`）を消去済み状態に戻す。これにより、各テストは常に「初回起動」から始まる。

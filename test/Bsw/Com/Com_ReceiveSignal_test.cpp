@@ -362,6 +362,32 @@ TEST_F(Com_ReceiveSignal_Test, Com_ReceiveSignal_NG_SignalNotFound)
     EXPECT_EQ(FakeDetHw_LastErrorId, COM_E_PARAM);
 }
 
+TEST_F(Com_ReceiveSignal_Test, Com_ReceiveSignal_NG_TimedOutSignalWithoutActionFails)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    PrepareRxConfig();
+    gRxIPdu.TimeoutMs   = (uint16)kTimeoutMs;
+    gRxSignal.TimeoutMs = (uint16)kTimeoutMs;
+    gRxSignal.RxDataTimeoutAction = COM_RX_TIMEOUT_ACTION_NONE;
+    InitWithRxConfig();
+    ReceiveByte(0x11U);
+    FakeMillis_Value += kTimeoutMs;   // 受信デッドラインが切れる
+    Com_MainFunctionRx();
+    uint8 value = 0xFFU;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    const uint8 ret = Com_ReceiveSignal(kRxSignalId, &value);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_NOT_OK);   // 代わりの値が設定されていないので、失敗として返す
+}
+
 TEST_F(Com_ReceiveSignal_Test, Com_ReceiveSignal_OK_TimedOutSignalIsReplacedByInitValue)
 {
     /* ----------------------- */
@@ -607,6 +633,52 @@ TEST_F(Com_ReceiveSignal_Test, Com_ReceiveSignal_OK_ReenablingReceptionRestartsD
     /* ----------------------- */
     EXPECT_EQ(ret, E_OK);
     EXPECT_EQ(value, 0x11U);   // 止めていた時間は数えず、タイムアウトにはしない（InitValue には置き換わらない）
+}
+
+TEST_F(Com_ReceiveSignal_Test, Com_ReceiveSignal_OK_FrameIsIgnoredWhileIPduGroupIsStopped)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    PrepareRxConfig();
+    gRxIPdu.IpduGroupId = 3U;   // まだ開始していない I-PDU Group
+    InitWithRxConfig();
+    ReceiveByte(0x22U);
+    uint8 value = 0U;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    const uint8 ret = Com_ReceiveSignal(kRxSignalId, &value);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, COM_SERVICE_NOT_AVAILABLE);
+    EXPECT_EQ(value, kInitValue);   // 停止中のフレームは取り込まない
+}
+
+TEST_F(Com_ReceiveSignal_Test, Com_ReceiveSignal_OK_LittleEndianSignalIsUnpackedBitReversedWithinByte)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    PrepareRxConfig();
+    gRxSignal.Endian = COM_LITTLE_ENDIAN;
+    InitWithRxConfig();
+    ReceiveByte(0x01U);
+    uint8 value = 0U;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    const uint8 ret = Com_ReceiveSignal(kRxSignalId, &value);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_OK);
+    EXPECT_EQ(value, 0x80U);   // 本実装のビット番号は byte 内で最上位ビットが 0 番。リトルエンディアンは 0 番を値の最下位ビットにするため、ビットが反転して見える
 }
 
 }  // namespace
