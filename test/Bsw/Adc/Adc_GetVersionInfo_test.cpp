@@ -35,6 +35,10 @@ extern "C" {
 namespace
 {
 
+/* ======================================================================
+ * Test Fixture
+ * ====================================================================== */
+
 /* Adc_GetVersionInfo() の単体テスト用フィクスチャ。
  * SetUp(): DET の記録を初期化する。 */
 class Adc_GetVersionInfo_Test : public ::testing::Test
@@ -46,9 +50,38 @@ protected:
     }
 };
 
+/* Adc の単体テスト用フィクスチャ。
+ * SetUp(): DET の記録を初期化する。Adc_Init() は各テストが必要に応じて呼ぶ。 */
+class Adc_GetVersionInfo_Base_Test : public ::testing::Test
+{
+protected:
+    void SetUp() override
+    {
+        FakeDetHw_Reset();
+    }
+};
+
 /* ======================================================================
  * Test Functions
  * ====================================================================== */
+
+TEST_F(Adc_GetVersionInfo_Base_Test, Adc_GetVersionInfo_NG_NullPointer)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Adc_GetVersionInfo(NULL);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(FakeDetHw_LastErrorId, ADC_E_PARAM_POINTER);
+}
 
 TEST_F(Adc_GetVersionInfo_Test, Adc_GetVersionInfo_OK_ReturnsConfiguredVersion)
 {

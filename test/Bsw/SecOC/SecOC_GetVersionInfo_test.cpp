@@ -43,6 +43,7 @@ namespace
 
 /* テスト用の VerificationStatusCallout が記録する値。 */
 uint32                       g_calloutCount;
+
 SecOC_VerificationStatusType g_calloutLast;
 
 void TestCallout(SecOC_VerificationStatusType status)
@@ -52,7 +53,6 @@ void TestCallout(SecOC_VerificationStatusType status)
 }
 
 constexpr PduIdType TEST_RX_PDU_ID = SecOCConf_SecOCRxSecuredPdu_ImmobilizerCmd_Rx;
-
 
 /* ======================================================================
  * Test Fixture
@@ -128,9 +128,58 @@ protected:
     }
 };
 
+/* SecOC の単体テスト用フィクスチャ。
+ * SetUp(): SecOC_Init(&SecOC_Config) を呼ぶ（Init 中の DET ログは抑制し、Init 自体の記録は消して後続の検証から除く）。MakeValidSecuredPdu() は、有効な Secured I-PDU を作る補助関数。
+ * TearDown(): SecOC_DeInit() を呼び、Csm と CryIf を未初期化の状態へ戻す。 */
+class SecOC_GetVersionInfo_Base_Test : public ::testing::Test
+{
+protected:
+    void SetUp() override
+    {
+        FakeDetHw_LogSuppressed = 1U;  // Init() のログはノイズになるため抑制
+        SecOC_Init(&SecOC_Config);
+        FakeDetHw_Reset();             // Init 自体の記録を後続の検証対象から除く
+        FakeDetHw_LogSuppressed = 0U;  // ここから各 TEST_F の実行(Act)区間
+    }
+
+    void TearDown() override
+    {
+        FakeDetHw_LogSuppressed = 1U;
+        SecOC_DeInit();
+        Csm_Test_ResetInitState();
+        CryIf_Test_ResetInitState();
+    }
+
+    PduInfoType MakeValidSecuredPdu(uint8* buf)
+    {
+        for (uint8 i = 0U; i < 6U; i++)
+            buf[i] = 0U;
+        PduInfoType info = { buf, 6U };  // SecOC_Config の RxPdu[0].SecuredPduLength=6
+        return info;
+    }
+};
+
 /* ======================================================================
  * Test Functions
  * ====================================================================== */
+
+TEST_F(SecOC_GetVersionInfo_Base_Test, SecOC_GetVersionInfo_NG_NullPointer)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    SecOC_GetVersionInfo(NULL);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(FakeDetHw_LastErrorId, SECOC_E_PARAM_POINTER);
+}
 
 TEST_F(SecOC_GetVersionInfo_Test, SecOC_GetVersionInfo_OK_ReturnsConfiguredVersion)
 {

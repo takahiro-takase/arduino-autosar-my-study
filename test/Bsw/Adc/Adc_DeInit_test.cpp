@@ -37,6 +37,10 @@ extern "C" {
 namespace
 {
 
+/* ======================================================================
+ * Test Fixture
+ * ====================================================================== */
+
 /* Adc_DeInit() の単体テスト用フィクスチャ。
  * SetUp(): DET の記録を初期化する。 */
 class Adc_DeInit_Test : public ::testing::Test
@@ -48,9 +52,67 @@ protected:
     }
 };
 
+/* Adc の単体テスト用フィクスチャ。
+ * SetUp(): DET の記録を初期化する。Adc_Init() は各テストが必要に応じて呼ぶ。 */
+class Adc_DeInit_Base_Test : public ::testing::Test
+{
+protected:
+    void SetUp() override
+    {
+        FakeDetHw_Reset();
+    }
+};
+
 /* ======================================================================
  * Test Functions
  * ====================================================================== */
+
+TEST_F(Adc_DeInit_Base_Test, Adc_DeInit_NG_Uninit)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    Adc_Init(NULL);
+    Adc_ValueGroupType buf = 0U;
+    ASSERT_EQ(Adc_SetupResultBuffer(ADC_GROUP_SENSOR, &buf), E_OK);
+    Adc_DeInit();
+    FakeDetHw_Reset();
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Adc_DeInit();
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(FakeDetHw_LastErrorId, ADC_E_UNINIT);
+    EXPECT_EQ(FakeDetHw_LastApiId, ADC_API_ID_DEINIT);
+}
+
+TEST_F(Adc_DeInit_Base_Test, Adc_DeInit_NG_BusyWhileResultNotRead)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    Adc_Init(NULL);
+    Adc_ValueGroupType buf = 0U;
+    ASSERT_EQ(Adc_SetupResultBuffer(ADC_GROUP_SENSOR, &buf), E_OK);
+    Adc_StartGroupConversion(ADC_GROUP_SENSOR);   // ADC_STREAM_COMPLETED（結果を読み出していない）
+    FakeDetHw_Reset();
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Adc_DeInit();
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(FakeDetHw_LastErrorId, ADC_E_BUSY);
+    EXPECT_EQ(FakeDetHw_LastApiId, ADC_API_ID_DEINIT);
+    EXPECT_EQ(Adc_GetGroupStatus(ADC_GROUP_SENSOR), ADC_STREAM_COMPLETED);   // 何もしない（初期化済みのまま）
+}
 
 TEST_F(Adc_DeInit_Test, Adc_DeInit_OK_ClearsInitializationAndBufferRegistration)
 {

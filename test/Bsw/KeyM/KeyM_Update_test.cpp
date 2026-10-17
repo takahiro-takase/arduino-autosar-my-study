@@ -42,8 +42,8 @@ const uint8 g_newKey[CRYPTO_AES128_KEY_SIZE] = {
     0xA0U, 0xA1U, 0xA2U, 0xA3U, 0xA4U, 0xA5U, 0xA6U, 0xA7U,
     0xA8U, 0xA9U, 0xAAU, 0xABU, 0xACU, 0xADU, 0xAEU, 0xAFU
 };
-const uint8 g_keyName = static_cast<uint8>(KEYM_CRYPTO_KEY_NAME_IMMOBILIZER_CMD);
 
+const uint8 g_keyName = static_cast<uint8>(KEYM_CRYPTO_KEY_NAME_IMMOBILIZER_CMD);
 
 /* ======================================================================
  * Test Fixture
@@ -86,30 +86,50 @@ protected:
     }
 };
 
+/* KeyM の単体テスト用フィクスチャ。
+ * SetUp(): KeyM_Init(NULL) を呼ぶ（Init 中の DET ログは抑制し、Init 自体の記録は消して後続の検証から除く）。
+ * TearDown(): KeyM_Deinit() で未初期化へ戻す。 */
+class KeyM_Update_Base_Test : public ::testing::Test
+{
+protected:
+    void SetUp() override
+    {
+        FakeDetHw_LogSuppressed = 1U;  // Init() のログはノイズになるため抑制
+        KeyM_Init(NULL);
+        FakeDetHw_Reset();             // Init 自体の記録を後続の検証対象から除く
+        FakeDetHw_LogSuppressed = 0U;  // ここから各 TEST_F の実行(Act)区間
+    }
+
+    void TearDown() override
+    {
+        FakeDetHw_LogSuppressed = 1U;
+        KeyM_Deinit();
+    }
+};
+
 /* ======================================================================
  * Test Functions
  * ====================================================================== */
 
-TEST_F(KeyM_Update_Test, KeyM_Update_OK_WritesNewKeyViaCsm)
+TEST_F(KeyM_Update_Base_Test, KeyM_Update_NG_Uninit)
 {
     /* ----------------------- */
     /* ---- 準備 (Arrange) --- */
     /* ----------------------- */
-    KeyM_Start(KEYM_START_WORKSHOPMODE, NULL, 0U, NULL, NULL);
-    uint8 key[CRYPTO_AES128_KEY_SIZE] = { 0U };
+    KeyM_Deinit();
+    uint8 keyName = 0x01U;
+    uint8 reqData = 0x00U;
 
     /* ----------------------- */
     /* ---- 実行 (Act) ------- */
     /* ----------------------- */
-    const Std_ReturnType ret = KeyM_Update(&g_keyName, 1U, g_newKey, CRYPTO_AES128_KEY_SIZE, NULL, 0U);
-    const Std_ReturnType retRead = ReadKey(key);
+    Std_ReturnType ret = KeyM_Update(&keyName, 1U, &reqData, 1U, NULL, 0U);
 
     /* ----------------------- */
     /* ---- 評価 (Assert) ---- */
     /* ----------------------- */
-    EXPECT_EQ(ret, E_OK);
-    ASSERT_EQ(retRead, E_OK);
-    EXPECT_EQ(memcmp(key, g_newKey, CRYPTO_AES128_KEY_SIZE), 0);
+    EXPECT_EQ(ret, E_NOT_OK);
+    EXPECT_EQ(FakeDetHw_LastErrorId, KEYM_E_UNINIT);
 }
 
 TEST_F(KeyM_Update_Test, KeyM_Update_NG_WithoutSessionIsRejected)
@@ -181,6 +201,66 @@ TEST_F(KeyM_Update_Test, KeyM_Update_NG_WrongKeyLengthIsRejectedByCsm)
     /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(memcmp(before, after, CRYPTO_AES128_KEY_SIZE), 0);
+}
+
+TEST_F(KeyM_Update_Base_Test, KeyM_Update_NG_NullKeyNamePtr)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    uint8 reqData = 0x00U;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Std_ReturnType ret = KeyM_Update(NULL, 1U, &reqData, 1U, NULL, 0U);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_NOT_OK);
+    EXPECT_EQ(FakeDetHw_LastErrorId, KEYM_E_PARAM_POINTER);
+}
+
+TEST_F(KeyM_Update_Base_Test, KeyM_Update_NG_NullRequestDataPtr)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    uint8 keyName = 0x01U;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Std_ReturnType ret = KeyM_Update(&keyName, 1U, NULL, 1U, NULL, 0U);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_NOT_OK);
+    EXPECT_EQ(FakeDetHw_LastErrorId, KEYM_E_PARAM_POINTER);
+}
+
+TEST_F(KeyM_Update_Test, KeyM_Update_OK_WritesNewKeyViaCsm)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    KeyM_Start(KEYM_START_WORKSHOPMODE, NULL, 0U, NULL, NULL);
+    uint8 key[CRYPTO_AES128_KEY_SIZE] = { 0U };
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    const Std_ReturnType ret = KeyM_Update(&g_keyName, 1U, g_newKey, CRYPTO_AES128_KEY_SIZE, NULL, 0U);
+    const Std_ReturnType retRead = ReadKey(key);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_OK);
+    ASSERT_EQ(retRead, E_OK);
+    EXPECT_EQ(memcmp(key, g_newKey, CRYPTO_AES128_KEY_SIZE), 0);
 }
 
 }  // namespace

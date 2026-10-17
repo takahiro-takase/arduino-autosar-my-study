@@ -9,7 +9,7 @@
  *          以前の独自関数 Dem_GetAllDTCs / Dem_GetSupportedDTCs /
  *          Dem_GetPrefailedDTCs と同じ結果になることが置き換えの条件。
  *
- *          Det の NG ケースは Dem_test.cpp にある。GoogleTest の main() は
+ *          Det の NG ケースは test/Bsw/Dem/ にある。GoogleTest の main() は
  *          test_main.cpp に集約しているため、本ファイルでは定義しない。
  */
 

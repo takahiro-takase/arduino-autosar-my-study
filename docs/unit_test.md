@@ -156,7 +156,7 @@ PduR/CanIf/Can/CanSM を一切経由せず Com.c 単体で完結する。フェ�
 `Gpt`/`Dio`/`Port`/`Det`/`E2E`/`E2E_P05`/`E2E_P01` のように他モジュールと
 コールチェーンを共有しない末端モジュールは、HAL 層（`*_Hw` ファイル）だけを
 フェイクに差し替えて単体で検証している（テストファイルは `test/Bsw/Gpt/` の
-`Gpt_test.cpp` 等、フェイクは `stub/Hal/Fake_Gpt_Hw.c` 等、
+`Gpt_StartTimer_test.cpp` 等、フェイクは `stub/Hal/Fake_Gpt_Hw.c` 等、
 2026-09 に専用 env `[env:native]` から本テストバイナリ（`native_chain_tests`）へ
 統合済み）。
 
@@ -169,8 +169,9 @@ PduR/CanIf/Can/CanSM を一切経由せず Com.c 単体で完結する。フェ�
 `ComStack_TxChain_test.cpp` が1ファイルに多数のシナリオを詰め込んで
 肥大化していたのを分割した経緯による。そのシナリオの派生 NG ケースは
 同じファイルに同居させる。`DcmStack` は SID 単位）。
-既存のモジュール単体テストのうち、関数単位になっていないファイルは、MC/DC を埋めるために
-触るときに順次分割する（`CanNm` は 2026-10-16 に分割済み）。
+既存のモジュール単体テスト（`{Module}_test.cpp`）は、2026-10-18 に全モジュールを関数単位のファイルへ
+分割済み（`CanNm` は 2026-10-16）。なお `Dcm_ReadDtcInfo_test.cpp` や `WdgM_*_test.cpp` など、もともと
+機能単位だったファイルは、そのまま残している。
 チェーンの例外が `ComStack` で、同年9月にメッセージの種類（Signal / SignalGroup / E2E）×
 方向（Tx / Rx）の `ComStack_{MsgType}_{Tx|Rx}_test.cpp` 6 ファイルへ再編している
 （COM_TX_IPDU_MAX の制約で、分割するたびに共有設定を複製する必要があったため）。
@@ -180,7 +181,7 @@ PduR/CanIf/Can/CanSM を一切経由せず Com.c 単体で完結する。フェ�
 （本来 ISR から呼ばれる関数）はテストから直接呼ぶことで、実割り込みなしに
 状態機械を駆動している。
 
-`Can_test.cpp`（`src/Bsw/Can/Can.c` 単体）は少し特殊で、`native_chain_tests`
+`test/Bsw/Can/`（`src/Bsw/Can/Can.c` 単体のテスト）は少し特殊で、`native_chain_tests`
 は他のコールチェーンテストのために `CanIf.c`/`CanSM.c` を実体でリンクして
 いるため、Can.c が上位層通知として呼ぶ3関数（`CanIf_RxIndication()`/
 `CanIf_TxConfirmation()`/`CanIf_ControllerBusOff()`）だけを`--wrap`で
@@ -212,8 +213,8 @@ CanIf/CanSM 側の未初期化ガードにより、本テストが
 - **並び順**: コールチェーンのテストでは、同じフィクスチャの中で、OK を先に、NG を step 順に並べます。
   モジュールの単体テスト（関数単位のファイル）では、**対象の関数の処理の順**に並べます（未初期化 → 引数・
   チャネルの確認 → 状態による分岐 → 正常系の順で、NG が先、OK が後ろ。2026-10-16 に決定）。判定を
-  上から順に MC/DC で調べるときに、テストの順とコードの順が一致するためです。既存のファイルは、触るときに
-  順次この順へ直します。
+  上から順に MC/DC で調べるときに、テストの順とコードの順が一致するためです。既存のファイルも、2026-10-18 の
+  分割のときに、この順（未初期化の NG → その他の NG → OK）へ並べ替えた。
 - **OK と NG の区分**: NG は、その API 呼び出し自体がエラーを返す、または Det などで異常を報告するケースです。
   異常な入力（拒否されたフレーム、破棄された短いフレームなど）を受けても、API が正常な結果を返し、
   動作が仕様どおりになるケースは OK とします（例: `OK_RejectedFrameStillResetsDeadlineTimer`）。
@@ -244,4 +245,4 @@ CanIf/CanSM 側の未初期化ガードにより、本テストが
   構造上到達できない分岐は、テストを作らずその理由をコメントに残している。
 - **時刻**: モジュールは `millis()` を直接呼ばず Os のカウンタ API（`GetCounterValue()`）経由で時刻を
   取る。Os 未初期化時は `millis()` を返すため、テストは `FakeMillis_Value`（`stub/Hal/Fake_Millis.c`）を
-  進めるだけで時間を操作できる。Os 自身のテストは `test/Bsw/Os/Os_test.cpp`。
+  進めるだけで時間を操作できる。Os 自身のテストは `test/Bsw/Os/`。

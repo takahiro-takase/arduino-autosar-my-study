@@ -41,8 +41,8 @@ const uint8 g_newKey[CRYPTO_AES128_KEY_SIZE] = {
     0xA0U, 0xA1U, 0xA2U, 0xA3U, 0xA4U, 0xA5U, 0xA6U, 0xA7U,
     0xA8U, 0xA9U, 0xAAU, 0xABU, 0xACU, 0xADU, 0xAEU, 0xAFU
 };
-const uint8 g_keyName = static_cast<uint8>(KEYM_CRYPTO_KEY_NAME_IMMOBILIZER_CMD);
 
+const uint8 g_keyName = static_cast<uint8>(KEYM_CRYPTO_KEY_NAME_IMMOBILIZER_CMD);
 
 /* ======================================================================
  * Test Fixture
@@ -85,9 +85,51 @@ protected:
     }
 };
 
+/* KeyM の単体テスト用フィクスチャ。
+ * SetUp(): KeyM_Init(NULL) を呼ぶ（Init 中の DET ログは抑制し、Init 自体の記録は消して後続の検証から除く）。
+ * TearDown(): KeyM_Deinit() で未初期化へ戻す。 */
+class KeyM_Deinit_Base_Test : public ::testing::Test
+{
+protected:
+    void SetUp() override
+    {
+        FakeDetHw_LogSuppressed = 1U;  // Init() のログはノイズになるため抑制
+        KeyM_Init(NULL);
+        FakeDetHw_Reset();             // Init 自体の記録を後続の検証対象から除く
+        FakeDetHw_LogSuppressed = 0U;  // ここから各 TEST_F の実行(Act)区間
+    }
+
+    void TearDown() override
+    {
+        FakeDetHw_LogSuppressed = 1U;
+        KeyM_Deinit();
+    }
+};
+
 /* ======================================================================
  * Test Functions
  * ====================================================================== */
+
+TEST_F(KeyM_Deinit_Base_Test, KeyM_Deinit_NG_Uninit)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    KeyM_Deinit();  // 1回目: SetUp() の Init を正常に解除する
+    FakeDetHw_Reset();
+
+    KeyM_Deinit();  // 2回目: 既に未初期化のため NG
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(FakeDetHw_LastErrorId, KEYM_E_UNINIT);
+}
 
 TEST_F(KeyM_Deinit_Test, KeyM_Deinit_OK_ErasesKeyMaterialAndClosesSession)
 {
