@@ -206,4 +206,46 @@ TEST_F(Csm_MacVerify_Test, Csm_MacVerify_NG_ServiceNotStarted)
     EXPECT_EQ(FakeDetHw_LastErrorId, CSM_E_SERVICE_NOT_STARTED);
 }
 
+TEST_F(Csm_MacVerify_Test, Csm_MacVerify_NG_NullMacPtr)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    const uint8 data[1] = { 0x01U };
+    Crypto_VerifyResultType verifyResult;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Std_ReturnType ret = Csm_MacVerify(CSM_JOB_ID_IMMOBILIZER_CMD_VERIFY, CRYPTO_OPERATIONMODE_SINGLECALL,
+                                        data, 1U, NULL, CRYPTO_CMAC_SIZE * 8U, &verifyResult);   // dataPtr は有効、macPtr だけ NULL
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_NOT_OK);
+    EXPECT_EQ(FakeDetHw_LastErrorId, CSM_E_PARAM_POINTER);
+}
+
+TEST_F(Csm_MacVerify_Test, Csm_MacVerify_NG_NullVerifyPtr)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    const uint8 data[1] = { 0x01U };
+    const uint8 mac[CRYPTO_CMAC_SIZE] = { 0U };
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Std_ReturnType ret = Csm_MacVerify(CSM_JOB_ID_IMMOBILIZER_CMD_VERIFY, CRYPTO_OPERATIONMODE_SINGLECALL,
+                                        data, 1U, mac, CRYPTO_CMAC_SIZE * 8U, NULL);   // verifyPtr だけ NULL
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_NOT_OK);
+    EXPECT_EQ(FakeDetHw_LastErrorId, CSM_E_PARAM_POINTER);
+}
+
 }  // namespace

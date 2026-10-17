@@ -183,4 +183,67 @@ TEST_F(Crypto_ProcessJob_Test, Crypto_ProcessJob_NG_NullVerifyResultPtr)
     EXPECT_EQ(FakeDetHw_LastErrorId, CRYPTO_E_PARAM_POINTER);
 }
 
+TEST_F(Crypto_ProcessJob_Test, Crypto_ProcessJob_NG_NullInputPtr)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    uint8 mac[CRYPTO_CMAC_SIZE];
+    Crypto_JobType job = MakeMacGenerateJob(mac);
+    job.inputPtr = NULL;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Std_ReturnType ret = Crypto_ProcessJob(CRYPTO_OBJECT_ID, &job);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_NOT_OK);
+    EXPECT_EQ(FakeDetHw_LastErrorId, CRYPTO_E_PARAM_POINTER);
+}
+
+TEST_F(Crypto_ProcessJob_Test, Crypto_ProcessJob_NG_NullMacPtr)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    uint8 mac[CRYPTO_CMAC_SIZE];
+    Crypto_JobType job = MakeMacGenerateJob(mac);
+    job.macPtr = NULL;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Std_ReturnType ret = Crypto_ProcessJob(CRYPTO_OBJECT_ID, &job);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_NOT_OK);
+    EXPECT_EQ(FakeDetHw_LastErrorId, CRYPTO_E_PARAM_POINTER);
+}
+
+TEST_F(Crypto_ProcessJob_Test, Crypto_ProcessJob_NG_MacLengthAboveCmacSize)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    uint8 mac[CRYPTO_CMAC_SIZE];
+    Crypto_JobType job = MakeMacGenerateJob(mac);
+    job.macLength = CRYPTO_CMAC_SIZE + 1U;   // cryptoKeyId は有効、macLength だけが範囲外
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Std_ReturnType ret = Crypto_ProcessJob(CRYPTO_OBJECT_ID, &job);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_NOT_OK);
+    EXPECT_EQ(FakeDetHw_LastErrorId, CRYPTO_E_PARAM_HANDLE);
+}
+
 }  // namespace

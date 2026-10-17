@@ -161,4 +161,29 @@ TEST_F(SecOC_RxPropagationFailureOnly_Test, SecOC_RxIndication_OK_FailureOnlyMod
     EXPECT_EQ(CallCount_Com_RxIndication, 1U);
 }
 
+TEST_F(SecOC_RxPropagationFailureOnly_Test, SecOC_RxIndication_OK_NoneModeNeverNotifies)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    rxCfg.VerificationStatusPropagationMode = SECOC_VERIFICATION_STATUS_PROPAGATION_NONE;
+    uint8 goodBuf[6];
+    PduInfoType good = BuildFrame(1U, goodBuf);
+    uint8 badBuf[6];
+    PduInfoType bad = BuildFrame(2U, badBuf);
+    badBuf[0] ^= 0x01U;   // MAC と合わなくなる
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    SecOC_RxIndication(TEST_RX_PDU_ID, &good);   // 検証成功
+    SecOC_RxIndication(TEST_RX_PDU_ID, &bad);    // 検証失敗
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(g_calloutCount, 0U);              // 成功でも失敗でも通知しない
+    EXPECT_EQ(CallCount_Com_RxIndication, 1U);  // 検証自体は行い、成功したフレームは Com へ渡す
+}
+
 }  // namespace

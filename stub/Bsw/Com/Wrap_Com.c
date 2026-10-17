@@ -59,6 +59,9 @@ uint32 FailFromCallCount_Com_TriggerIPDUSend = Wrap_Com_FAIL_FROM_CALL_COUNT_DIS
 
 Std_ReturnType ForcedReturn_Com_TriggerIPDUSend = E_NOT_OK;
 
+uint8 LastRxEnabled_Com_SetCommunicationEnabled = 0U;
+uint8 LastTxEnabled_Com_SetCommunicationEnabled = 0U;
+
 /* ----------------------------------------------------------------------
  * WrapCom_Reset — 23関数すべての状態を一括で初期化する（Wrap_Com.h 参照）。
  * ---------------------------------------------------------------------- */
@@ -92,6 +95,9 @@ void WrapCom_Reset(void)
     FailFromCallCount_Com_TriggerIPDUSend = Wrap_Com_FAIL_FROM_CALL_COUNT_DISABLED;
 
     ForcedReturn_Com_TriggerIPDUSend = E_NOT_OK;
+
+    LastRxEnabled_Com_SetCommunicationEnabled = 0U;
+    LastTxEnabled_Com_SetCommunicationEnabled = 0U;
 }
 
 /* ======================================================================
@@ -487,6 +493,8 @@ void __real_Com_SetCommunicationEnabled(uint8 RxEnabled, uint8 TxEnabled);
 void __wrap_Com_SetCommunicationEnabled(uint8 RxEnabled, uint8 TxEnabled)
 {
     CallCount_Com_SetCommunicationEnabled++;
+    LastRxEnabled_Com_SetCommunicationEnabled = RxEnabled;
+    LastTxEnabled_Com_SetCommunicationEnabled = TxEnabled;
     Log_Write(LOG_T, TAG, "Com_SetCommunicationEnabled", "called %u times", CallCount_Com_SetCommunicationEnabled);
 
     __real_Com_SetCommunicationEnabled(RxEnabled, TxEnabled);

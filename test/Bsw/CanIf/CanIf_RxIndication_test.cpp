@@ -156,4 +156,41 @@ TEST_F(CanIf_RxIndication_Test, CanIf_RxIndication_NG_CanIdMismatch)
     EXPECT_EQ(FakeDetHw_LastErrorId, CANIF_E_PARAM_CANID);
 }
 
+TEST_F(CanIf_RxIndication_Test, CanIf_RxIndication_NG_NullPduInfoPtr)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    Can_HwType mailbox = { 0x200U, 0U, 0U };   // Mailbox は有効、PduInfoPtr だけ NULL
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    CanIf_RxIndication(&mailbox, NULL);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(FakeDetHw_LastErrorId, CANIF_E_PARAM_POINTER);
+}
+
+TEST_F(CanIf_RxIndication_Test, CanIf_RxIndication_NG_NullSduDataPtr)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    PduInfoType info = { NULL, 1U };           // PduInfoPtr は有効、SduDataPtr だけ NULL
+    Can_HwType mailbox = { 0x200U, 0U, 0U };
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    CanIf_RxIndication(&mailbox, &info);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(FakeDetHw_LastErrorId, CANIF_E_PARAM_POINTER);
+}
+
 }  // namespace

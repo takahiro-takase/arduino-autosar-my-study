@@ -231,4 +231,22 @@ TEST_F(Com_TxConfirmation_Test, Com_TxConfirmation_NG_Uninit)
     EXPECT_EQ(FakeDetHw_LastErrorId, COM_E_UNINIT);
 }
 
+TEST_F(Com_TxConfirmation_Test, Com_TxConfirmation_OK_IdBeyondTableIsIgnoredWithoutError)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）。範囲外の ID は、停止中かどうかの配列参照より前に除外される。
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Com_TxConfirmation(200U, E_OK);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(FakeDetHw_LastErrorId, 0xFFU);   // 配列範囲外を読まず、DET も報告しない
+}
+
 }  // namespace

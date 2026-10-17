@@ -306,4 +306,58 @@ TEST_F(E2E_Check_Test, Check_OK_InvalidRecoversToValidOnceWindowFullOfOk)
     EXPECT_EQ(stateOk3.ErrorCount, 0U);
 }
 
+TEST_F(E2E_Check_Test, Check_OK_ValidDemotesWhenOkCountFallsBelowMinimumEvenWithoutErrors)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    /* エラーは 1 件も無いが、OK も 1 件も無い（新規データなし）状態の VALID。
+     * ErrorCount(0)<=MaxErrorStateValid(1) は満たすが、OkCount(0)<MinOkStateValid(1) のため INVALID へ落ちる。 */
+    window[0] = static_cast<uint8_t>(E2E_P_NONEWDATA);
+    window[1] = static_cast<uint8_t>(E2E_P_NONEWDATA);
+    window[2] = static_cast<uint8_t>(E2E_P_NONEWDATA);
+    state.WindowTopIndex = 0U;
+    state.SMState        = E2E_SM_VALID;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Std_ReturnType ret = E2E_SMCheck(E2E_P_NONEWDATA, &config, &state);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    ASSERT_EQ(ret, E2E_E_OK);
+    EXPECT_EQ(state.SMState, E2E_SM_INVALID);
+    EXPECT_EQ(state.ErrorCount, 0U);   // エラーが理由ではない
+    EXPECT_EQ(state.OkCount, 0U);
+}
+
+TEST_F(E2E_Check_Test, Check_OK_InvalidStaysInvalidWhenOkCountBelowMinimumEvenWithoutErrors)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    /* エラーは 1 件も無いが、OK も足りない（1 件だけ）状態の INVALID。
+     * ErrorCount(0)<=MaxErrorStateInvalid(0) は満たすが、OkCount(1)<MinOkStateInvalid(3) のため INVALID のまま。 */
+    window[0] = static_cast<uint8_t>(E2E_P_NONEWDATA);
+    window[1] = static_cast<uint8_t>(E2E_P_NONEWDATA);
+    window[2] = static_cast<uint8_t>(E2E_P_NONEWDATA);
+    state.WindowTopIndex = 0U;
+    state.SMState        = E2E_SM_INVALID;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Std_ReturnType ret = E2E_SMCheck(E2E_P_OK, &config, &state);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    ASSERT_EQ(ret, E2E_E_OK);
+    EXPECT_EQ(state.SMState, E2E_SM_INVALID);
+    EXPECT_EQ(state.ErrorCount, 0U);   // エラーが理由ではない
+    EXPECT_EQ(state.OkCount, 1U);
+}
+
 }  // namespace

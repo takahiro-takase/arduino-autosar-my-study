@@ -118,6 +118,15 @@ extern uint32 FailFromCallCount_Com_TriggerIPDUSend;
  * ---------------------------------------------------------------------- */
 extern Std_ReturnType ForcedReturn_Com_TriggerIPDUSend;
 
+/* ----------------------------------------------------------------------
+ * 直近の呼び出し内容のキャプチャ
+ * ---------------------------------------------------------------------- */
+/** 直近の `Com_SetCommunicationEnabled()` 呼び出しで渡された `RxEnabled`（未呼び出しは 0）。 */
+extern uint8 LastRxEnabled_Com_SetCommunicationEnabled;
+
+/** 直近の `Com_SetCommunicationEnabled()` 呼び出しで渡された `TxEnabled`（未呼び出しは 0）。 */
+extern uint8 LastTxEnabled_Com_SetCommunicationEnabled;
+
 /* ======================================================================
  * Functions
  * ====================================================================== */

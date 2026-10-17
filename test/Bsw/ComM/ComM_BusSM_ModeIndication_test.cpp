@@ -130,4 +130,27 @@ TEST_F(ComM_BusSM_ModeIndication_Test, ComM_BusSM_ModeIndication_NG_WrongParamet
     EXPECT_EQ(FakeDetHw_LastErrorId, COMM_E_WRONG_PARAMETERS);
 }
 
+TEST_F(ComM_BusSM_ModeIndication_Test, ComM_BusSM_ModeIndication_OK_SameModeAsCurrentChangesNothing)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    ComM_ModeType before = COMM_FULL_COMMUNICATION;
+    ASSERT_EQ(ComM_GetCurrentComMode(COMM_USER_0, &before), E_OK);   // 初期化直後は NO_COM
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    ComM_BusSM_ModeIndication(0U, before);   // 現在と同じモードの再通知（SILENT_COM 以外）
+    ComM_ModeType after = COMM_FULL_COMMUNICATION;
+    const Std_ReturnType ret = ComM_GetCurrentComMode(COMM_USER_0, &after);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(before, COMM_NO_COMMUNICATION);
+    ASSERT_EQ(ret, E_OK);
+    EXPECT_EQ(after, COMM_NO_COMMUNICATION);   // 何も変わらない
+}
+
 }  // namespace

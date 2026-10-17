@@ -156,4 +156,23 @@ TEST_F(Gpt_EnableNotification_Test, Gpt_EnableNotification_OK_FiresOnlyWhileEnab
     EXPECT_EQ(g_notifyCount, 1U);  /* 無効化後は増えない */
 }
 
+TEST_F(Gpt_EnableNotification_Test, Gpt_EnableNotification_NG_RejectsInvalidChannel)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    Gpt_Init(&config);
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Gpt_EnableNotification((Gpt_ChannelType)1U);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(FakeDetHw_LastErrorId, GPT_E_PARAM_CHANNEL);
+    EXPECT_EQ(FakeDetHw_LastApiId, GPT_API_ID_ENABLE_NOTIFICATION);
+}
+
 }  // namespace

@@ -251,4 +251,24 @@ TEST_F(Com_RxIndication_Test, Com_RxIndication_NG_NullPduInfoPtr)
     EXPECT_EQ(FakeDetHw_LastErrorId, COM_E_PARAM_POINTER);
 }
 
+TEST_F(Com_RxIndication_Test, Com_RxIndication_NG_NullSduDataPtr)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    PduInfoType info;
+    info.SduDataPtr = NULL;
+    info.SduLength = 1U;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Com_RxIndication(0U, &info);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(FakeDetHw_LastErrorId, COM_E_PARAM_POINTER);
+}
+
 }  // namespace

@@ -153,4 +153,30 @@ TEST_F(Can_MainFunction_Wakeup_Test, Can_MainFunction_Wakeup_OK)
     EXPECT_EQ(FakeEcuM_LastWakeupSource, static_cast<EcuM_WakeupSourceType>(ECUM_WKSOURCE_CAN));
 }
 
+TEST_F(Can_MainFunction_Wakeup_Test, Can_MainFunction_Wakeup_OK_IsrFlagWithoutHwIndication)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    Can_Init(&config);
+    Can_SetControllerMode(0U, CAN_T_SLEEP);
+    // FakeCanHw_IsWakeupPendingReturn は既定 CAN_HW_FAIL のまま（HW の確認では検出されない）
+    ASSERT_NE(FakeCanHw_AttachedIsr, nullptr);
+    FakeCanHw_AttachedIsr();   // SLEEP 中の INT ピンの割り込み（ウェイクアップのフラグだけが立つ）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Can_MainFunction_Wakeup();
+    const uint32 countAfterFirst = FakeEcuM_CheckWakeupCount;
+    Can_MainFunction_Wakeup();   // フラグは読み出したときに消えている
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(countAfterFirst, 1U);                  // HW の確認なしに、フラグだけで EcuM へ通知する
+    EXPECT_EQ(FakeEcuM_CheckWakeupCount, 1U);        // 2 回目は通知しない
+    EXPECT_EQ(FakeEcuM_LastWakeupSource, static_cast<EcuM_WakeupSourceType>(ECUM_WKSOURCE_CAN));
+}
+
 }  // namespace

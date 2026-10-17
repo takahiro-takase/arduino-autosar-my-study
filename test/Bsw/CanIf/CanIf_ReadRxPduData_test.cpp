@@ -154,4 +154,23 @@ TEST_F(CanIf_ReadRxPduData_Test, CanIf_ReadRxPduData_NG_NotOptedIn)
     EXPECT_EQ(FakeDetHw_LastErrorId, CANIF_E_INVALID_RXPDUID);
 }
 
+TEST_F(CanIf_ReadRxPduData_Test, CanIf_ReadRxPduData_NG_NullSduDataPtr)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    PduInfoType info = { NULL, 0U };   // CanIfRxInfoPtr は有効、SduDataPtr だけ NULL
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Std_ReturnType ret = CanIf_ReadRxPduData(0U, &info);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_NOT_OK);
+    EXPECT_EQ(FakeDetHw_LastErrorId, CANIF_E_PARAM_POINTER);
+}
+
 }  // namespace

@@ -142,4 +142,23 @@ TEST_F(SecOC_IfTransmit_Test, SecOC_IfTransmit_NG_InvalidPduSduId)
     EXPECT_EQ(FakeDetHw_LastErrorId, SECOC_E_INVALID_PDU_SDU_ID);
 }
 
+TEST_F(SecOC_IfTransmit_Test, SecOC_IfTransmit_NG_NullSduDataPtr)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    PduInfoType info = { NULL, 6U };
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Std_ReturnType ret = SecOC_IfTransmit(0U, &info);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_NOT_OK);
+    EXPECT_EQ(FakeDetHw_LastErrorId, SECOC_E_PARAM_POINTER);
+}
+
 }  // namespace

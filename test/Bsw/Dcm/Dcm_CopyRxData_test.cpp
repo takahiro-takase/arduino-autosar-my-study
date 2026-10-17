@@ -146,4 +146,67 @@ TEST_F(Dcm_CopyRxData_Test, Dcm_CopyRxData_NG_ExceedsAnnouncedLength)
     EXPECT_EQ(ret, BUFREQ_E_NOT_OK);
 }
 
+TEST_F(Dcm_CopyRxData_Test, Dcm_CopyRxData_NG_NullBufferSizePtr)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    uint8 buf[1] = { 0U };
+    PduInfoType info = { buf, 1U };
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    BufReq_ReturnType ret = Dcm_CopyRxData(0U, &info, NULL);   // info は有効、bufferSizePtr だけ NULL
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, BUFREQ_E_NOT_OK);
+    EXPECT_EQ(FakeDetHw_LastErrorId, DCM_E_PARAM_POINTER);
+}
+
+TEST_F(Dcm_CopyRxData_Test, Dcm_CopyRxData_NG_NullSduDataPtrWithLength)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    PduInfoType info = { NULL, 1U };   // コピーするバイト数があるのに、SduDataPtr が NULL
+    PduLengthType bufferSize = 0U;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    BufReq_ReturnType ret = Dcm_CopyRxData(0U, &info, &bufferSize);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, BUFREQ_E_NOT_OK);
+    EXPECT_EQ(FakeDetHw_LastErrorId, DCM_E_PARAM_POINTER);
+}
+
+TEST_F(Dcm_CopyRxData_Test, Dcm_CopyRxData_OK_ZeroLengthWithNullDataQueriesFreeSpace)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    PduLengthType bufferSize = 0U;
+    ASSERT_EQ(Dcm_StartOfReception(0U, NULL, 2U, &bufferSize), BUFREQ_OK);
+    PduInfoType info = { NULL, 0U };   // コピーするバイト数が 0 なら、SduDataPtr は NULL でもよい（空きの問い合わせ）
+    bufferSize = 0U;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    BufReq_ReturnType ret = Dcm_CopyRxData(0U, &info, &bufferSize);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, BUFREQ_OK);
+    EXPECT_NE(bufferSize, 0U);   // 受信バッファの空きを返す
+    EXPECT_NE(FakeDetHw_LastErrorId, DCM_E_PARAM_POINTER);
+}
+
 }  // namespace

@@ -188,4 +188,45 @@ TEST_F(Gpt_OnTick_Test, Gpt_OnTick_OK_OneshotModeStopsHwAndFreezesAtTarget)
     EXPECT_EQ(FakeGptHw_StopCount, 1U);
 }
 
+TEST_F(Gpt_OnTick_Test, Gpt_OnTick_NG_BeforeInitIsIgnored)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（Gpt_Init() を呼ばない未初期化の状態）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Gpt_OnTick(GPT_CHANNEL_0);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(g_notifyCount, 0U);
+    EXPECT_EQ(FakeDetHw_ReportCount, 0U);   // ISR 経路では DET を報告しない
+}
+
+TEST_F(Gpt_OnTick_Test, Gpt_OnTick_OK_EnabledChannelWithoutNotificationFunctionIsSafe)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    Gpt_Init(&config);
+    Gpt_StartTimer(GPT_CHANNEL_0, 1000U);
+    Gpt_EnableNotification(GPT_CHANNEL_0);   // 通知関数があるうちに有効化する
+    channels[0].Notification = NULL;         // その後で、設定から通知関数が無くなった状態にする
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Gpt_OnTick(GPT_CHANNEL_0);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(g_notifyCount, 0U);   // NULL の通知関数は呼ばない
+    EXPECT_EQ(Gpt_GetTimeElapsed(GPT_CHANNEL_0), 1U);   // タイマー自体は進む
+}
+
 }  // namespace

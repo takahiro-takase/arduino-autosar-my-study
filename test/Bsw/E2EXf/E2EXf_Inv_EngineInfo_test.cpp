@@ -136,4 +136,24 @@ TEST_F(E2EXf_Inv_EngineInfo_Test, E2EXf_Inv_EngineInfo_NG_NullBufferPtr)
     EXPECT_EQ(FakeDetHw_LastErrorId, E2EXF_E_PARAM_POINTER);
 }
 
+TEST_F(E2EXf_Inv_EngineInfo_Test, E2EXf_Inv_EngineInfo_NG_NullBufferLengthPtr)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    uint8 buf[7] = { 0U };
+    E2E_P05StatusType checkStatus;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    uint8 ret = E2EXf_Inv_EngineInfo(buf, NULL, NULL, 0U, &checkStatus);   // CheckStatus は有効、bufferLength だけ NULL
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_SAFETY_HARD_RUNTIMEERROR);
+    EXPECT_EQ(FakeDetHw_LastErrorId, E2EXF_E_PARAM_POINTER);
+}
+
 }  // namespace

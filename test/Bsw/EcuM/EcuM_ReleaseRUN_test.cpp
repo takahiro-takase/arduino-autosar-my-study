@@ -117,4 +117,24 @@ TEST_F(EcuM_ReleaseRUN_Test, EcuM_ReleaseRUN_NG_MismatchedRelease)
     ExpectDet(ECUM_API_ID_RELEASE_RUN, ECUM_E_MISMATCHED_RUN_RELEASE);
 }
 
+TEST_F(EcuM_ReleaseRUN_Test, EcuM_ReleaseRUN_OK_BeforeRunStateDoesNotEnterPostRun)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    ASSERT_EQ(EcuM_RequestRUN(ECUM_USER_COMM), E_OK);   // 起動中（STARTUP）の状態で要求・解放する
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    const Std_ReturnType ret = EcuM_ReleaseRUN(ECUM_USER_COMM);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_OK);
+    EXPECT_EQ(EcuM_GetState(), ECUM_STATE_STARTUP);   // RUN ではないので、全員が解放しても POST_RUN へは進まない
+    EXPECT_EQ(FakeDetHw_ReportCount, 0U);
+}
+
 }  // namespace
