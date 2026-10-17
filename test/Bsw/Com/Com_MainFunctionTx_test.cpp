@@ -15,6 +15,8 @@
 extern "C" {
 #include "Com.h"
 #include "Fake_Det_Hw.h"
+#include "Fake_Millis.h"
+#include "Wrap_PduR.h"
 }
 
 /* ======================================================================
@@ -172,6 +174,49 @@ const Com_SignalConfigType kUnregisteredRxSignal = {
     COM_DATA_INVALID_ACTION_NONE, 0U, NULL, 0U, 0U, NULL, NULL, NULL, NULL, NULL, 0U
 };
 
+// 送信確認のタイムアウト通知（シグナル単位）が呼ばれた回数。
+uint32 gTimeoutCount;
+void OnTxTimeout() { gTimeoutCount++; }
+
+// 送信シグナル 1 つ（SignalId 80）を持つ TX I-PDU（IPduId 0、DLC 1）を、各テストが組み立てる。
+// 設定テーブルは Com が参照し続けるため、テスト本体のローカル変数ではなく静的な領域に置く。
+Com_IPduConfigType    gTxIPdu;
+Com_SignalConfigType  gTxSignal;
+Com_ConfigType        gTxConfig;
+
+const Com_SignalIdType kTxSignalId = 80U;
+
+// mode と period（ms）を持つ TX I-PDU の設定を用意する。呼ぶ前後に、各テストが変えたい項目だけを書き換える。
+void PrepareTxConfig(Com_TxModeModeType mode, uint16 periodMs)
+{
+    gTxIPdu = kTestTxIPdu;
+    gTxIPdu.TxModeMode     = mode;
+    gTxIPdu.TxModeModeTrue = mode;
+    gTxIPdu.TxPeriodMs     = periodMs;
+    gTxIPdu.TxPeriodMsTrue = periodMs;
+    gTxSignal = kTestTxSignal;
+    gTxSignal.SignalId         = kTxSignalId;
+    gTxSignal.TransferProperty = COM_TRANSFER_PROPERTY_TRIGGERED_ON_CHANGE;
+}
+
+void InitWithTxConfig()
+{
+    gTxConfig.RxIPdus        = NULL;
+    gTxConfig.RxIPduCount    = 0U;
+    gTxConfig.TxIPdus        = &gTxIPdu;
+    gTxConfig.TxIPduCount    = 1U;
+    gTxConfig.Signals        = &gTxSignal;
+    gTxConfig.SignalCount    = 1U;
+    gTxConfig.GwMappings     = NULL;
+    gTxConfig.GwMappingCount = 0U;
+
+    FakeDetHw_LogSuppressed = 1U;
+    Com_DeInit();
+    Com_Init(&gTxConfig);
+    FakeDetHw_Reset();
+    FakeDetHw_LogSuppressed = 0U;
+}
+
 const Com_SignalConfigType kTestSignals[] = {
     kTestTxSignal, kTestRxSignal, kCorruptTxSignal,
     kUnregisteredTxSignal, kCorruptRxSignal, kUnregisteredRxSignal
@@ -196,6 +241,10 @@ class Com_MainFunctionTx_Test : public ::testing::Test
 protected:
     void SetUp() override
     {
+        FakeMillis_Reset();
+        WrapPduR_Reset();
+        FailFromCallCount_PduR_ComTransmit = 0U;   // PduR への送信は、常に成功する（呼ばれた回数を数える）
+        ForcedReturn_PduR_ComTransmit      = E_OK;
         FakeDetHw_LogSuppressed = 1U;  // Init() のログはノイズになるため抑制
         Com_Init(&kTestConfig);
         FakeDetHw_Reset();             // Init 自体の記録を後続の検証対象から除く
@@ -205,6 +254,7 @@ protected:
     void TearDown() override
     {
         FakeDetHw_LogSuppressed = 1U;
+        WrapPduR_Reset();   // 故障注入を残さない
         Com_DeInit();
     }
 };
@@ -229,6 +279,136 @@ TEST_F(Com_MainFunctionTx_Test, Com_MainFunctionTx_NG_Uninit)
     /* ---- 評価 (Assert) ---- */
     /* ----------------------- */
     EXPECT_EQ(FakeDetHw_LastErrorId, COM_E_UNINIT);
+}
+
+TEST_F(Com_MainFunctionTx_Test, Com_MainFunctionTx_OK_PeriodicIPduIsSentOnlyWhenPeriodElapses)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    PrepareTxConfig(COM_TX_MODE_PERIODIC, 100U);
+    InitWithTxConfig();
+    const uint32 callsBefore = CallCount_PduR_ComTransmit;
+    FakeMillis_Value += 99UL;
+    Com_MainFunctionTx();   // 周期の手前
+    const uint32 callsBeforePeriod = CallCount_PduR_ComTransmit;
+    FakeMillis_Value += 1UL;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Com_MainFunctionTx();   // 周期が経過する
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(callsBeforePeriod, callsBefore);                 // 周期の手前では送らない
+    EXPECT_EQ(CallCount_PduR_ComTransmit, callsBefore + 1U);   // 周期が経過したら送る
+}
+
+TEST_F(Com_MainFunctionTx_Test, Com_MainFunctionTx_OK_MixedIPduIsSentByPeriodWithoutAnyChange)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    PrepareTxConfig(COM_TX_MODE_MIXED, 100U);
+    InitWithTxConfig();
+    const uint32 callsBefore = CallCount_PduR_ComTransmit;
+    FakeMillis_Value += 99UL;
+    Com_MainFunctionTx();   // 周期の手前（値も変わっていない）
+    const uint32 callsBeforePeriod = CallCount_PduR_ComTransmit;
+    FakeMillis_Value += 1UL;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Com_MainFunctionTx();   // 周期が経過する
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(callsBeforePeriod, callsBefore);
+    EXPECT_EQ(CallCount_PduR_ComTransmit, callsBefore + 1U);   // 変化が無くても、周期の分は送る
+}
+
+TEST_F(Com_MainFunctionTx_Test, Com_MainFunctionTx_OK_DirectIPduWithoutChangeIsNotSentByPeriod)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    PrepareTxConfig(COM_TX_MODE_DIRECT, 100U);
+    InitWithTxConfig();
+    const uint32 callsBefore = CallCount_PduR_ComTransmit;
+    FakeMillis_Value += 1000UL;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Com_MainFunctionTx();
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(CallCount_PduR_ComTransmit, callsBefore);   // DIRECT は周期では送らない（変化・トリガーだけ）
+}
+
+TEST_F(Com_MainFunctionTx_Test, Com_MainFunctionTx_OK_ChangeIsHeldBackUntilMinimumDelayElapses)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    PrepareTxConfig(COM_TX_MODE_DIRECT, 0U);
+    gTxIPdu.MinDelayMs = 50U;   // 最小送信間隔 50 ms
+    InitWithTxConfig();
+    const uint8 value = 0x55U;
+    ASSERT_EQ(Com_SendSignal(kTxSignalId, &value), E_OK);   // 値が変わり、送信が予約される
+    const uint32 callsBefore = CallCount_PduR_ComTransmit;
+    FakeMillis_Value += 49UL;
+    Com_MainFunctionTx();   // 最小送信間隔の手前
+    const uint32 callsBeforeDelay = CallCount_PduR_ComTransmit;
+    FakeMillis_Value += 1UL;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Com_MainFunctionTx();   // 最小送信間隔が経過する
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(callsBeforeDelay, callsBefore);                  // 間隔が空くまで、予約した送信は待つ
+    EXPECT_EQ(CallCount_PduR_ComTransmit, callsBefore + 1U);
+}
+
+TEST_F(Com_MainFunctionTx_Test, Com_MainFunctionTx_OK_ConfirmationTimeoutIsNotifiedOnlyOnce)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    PrepareTxConfig(COM_TX_MODE_DIRECT, 0U);
+    gTxIPdu.TxTimeoutMs      = 100U;
+    gTxIPdu.TxFirstTimeoutMs = 100U;   // 最初の送信から監視する
+    gTxSignal.TxTOutCbk   = OnTxTimeout;
+    InitWithTxConfig();
+    gTimeoutCount = 0U;
+    const uint8 value = 0x55U;
+    ASSERT_EQ(Com_SendSignal(kTxSignalId, &value), E_OK);
+    Com_MainFunctionTx();   // 送信する（確認はまだ来ない）
+    FakeMillis_Value += 100UL;   // 確認のデッドラインが切れる
+    Com_MainFunctionTx();
+    const uint32 afterFirst = gTimeoutCount;
+    FakeMillis_Value += 100UL;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Com_MainFunctionTx();   // 通知済みの I-PDU は、続けて通知しない
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(afterFirst, 1U);
+    EXPECT_EQ(gTimeoutCount, 1U);
 }
 
 }  // namespace

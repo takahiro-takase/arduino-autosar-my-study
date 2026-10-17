@@ -227,6 +227,54 @@ void InitWithGroupMembers(uint8 signalGroup)
     FakeDetHw_LogSuppressed = 0U;
 }
 
+// 上の設定に、所属していない別の I-PDU（RX/TX とも IPduId 1、グループ無し）とそのシグナルを足した設定。
+Com_IPduConfigType    gOtherRxIPdus[2];
+Com_IPduConfigType    gOtherTxIPdus[2];
+Com_SignalConfigType  gOtherSignals[4];
+Com_ConfigType        gOtherConfig;
+
+const Com_SignalIdType kOtherRxSignalId = 12U;
+const Com_SignalIdType kOtherTxSignalId = 13U;
+
+void InitWithOtherIPdus()
+{
+    InitWithGroupMembers(0U);   // gGroupRxIPdu / gGroupTxIPdu / gGroupSignals[2] を組み立てる
+
+    gOtherRxIPdus[0] = gGroupRxIPdu;
+    gOtherRxIPdus[1] = kTestRxIPdu;
+    gOtherRxIPdus[1].IPduId = 1U;
+    gOtherRxIPdus[1].PduRId = 1U;
+    gOtherTxIPdus[0] = gGroupTxIPdu;
+    gOtherTxIPdus[1] = kTestTxIPdu;
+    gOtherTxIPdus[1].IPduId = 1U;
+
+    gOtherSignals[0] = gGroupSignals[0];
+    gOtherSignals[1] = gGroupSignals[1];
+    gOtherSignals[2] = kTestRxSignal;
+    gOtherSignals[2].SignalId  = kOtherRxSignalId;
+    gOtherSignals[2].IPduId    = 1U;
+    gOtherSignals[2].InitValue = kRxInitValue;
+    gOtherSignals[3] = kTestTxSignal;
+    gOtherSignals[3].SignalId  = kOtherTxSignalId;
+    gOtherSignals[3].IPduId    = 1U;
+    gOtherSignals[3].InitValue = kTxInitValue;
+
+    gOtherConfig.RxIPdus        = gOtherRxIPdus;
+    gOtherConfig.RxIPduCount    = 2U;
+    gOtherConfig.TxIPdus        = gOtherTxIPdus;
+    gOtherConfig.TxIPduCount    = 2U;
+    gOtherConfig.Signals        = gOtherSignals;
+    gOtherConfig.SignalCount    = 4U;
+    gOtherConfig.GwMappings     = NULL;
+    gOtherConfig.GwMappingCount = 0U;
+
+    FakeDetHw_LogSuppressed = 1U;
+    Com_DeInit();
+    Com_Init(&gOtherConfig);
+    FakeDetHw_Reset();
+    FakeDetHw_LogSuppressed = 0U;
+}
+
 const Com_SignalConfigType kTestSignals[] = {
     kTestTxSignal, kTestRxSignal, kCorruptTxSignal,
     kUnregisteredTxSignal, kCorruptRxSignal, kUnregisteredRxSignal
@@ -387,6 +435,36 @@ TEST_F(Com_IpduGroupStart_Test, Com_IpduGroupStart_OK_RestartClearsUpdateBit)
     /* ----------------------- */
     EXPECT_EQ(Com_Test_GetTxBuffer(0U)[1] & 0x01U, 0U);   // update-bit だけがクリアされる
     EXPECT_EQ(Com_Test_GetTxBuffer(0U)[0], 0x55U);        // 値は残る
+}
+
+TEST_F(Com_IpduGroupStart_Test, Com_IpduGroupStart_OK_InitializeDoesNotTouchSignalsOfOtherIPdus)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    InitWithOtherIPdus();
+    Com_IpduGroupStart(kGroup, FALSE);
+    uint8 frame[1] = { 0x77U };
+    PduInfoType info = { frame, 1U };
+    Com_RxIndication(1U, &info);   // グループに属さない RX I-PDU（PduRId 1）が、値を受け取る
+    const uint8 txValue = 0x55U;
+    ASSERT_EQ(Com_SendSignal(kOtherTxSignalId, &txValue), E_OK);   // グループに属さない TX I-PDU へ、値を書く
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Com_IpduGroupStart(kGroup, TRUE);   // 別のグループの I-PDU だけが初期化される
+    uint8 received = 0U;
+    const uint8 retRx = Com_ReceiveSignal(kOtherRxSignalId, &received);
+    const uint8* tx = Com_Test_GetTxBuffer(1U);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(retRx, E_OK);
+    EXPECT_EQ(received, 0x77U);   // 受信した値は、そのまま
+    ASSERT_NE(tx, nullptr);
+    EXPECT_EQ(tx[0], 0x55U);      // 送信バッファも、そのまま
 }
 
 }  // namespace
