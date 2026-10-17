@@ -15,6 +15,7 @@
 extern "C" {
 #include "Com.h"
 #include "Fake_Det_Hw.h"
+#include "Wrap_PduR.h"
 }
 
 /* ======================================================================
@@ -172,6 +173,37 @@ const Com_SignalConfigType kUnregisteredRxSignal = {
     COM_DATA_INVALID_ACTION_NONE, 0U, NULL, 0U, 0U, NULL, NULL, NULL, NULL, NULL, 0U
 };
 
+// update-bit（byte 1 の最下位ビット）を持つ TX I-PDU（DLC 2）と、それを立てるシグナル（SignalId 50）で Com を初期化し直す。
+// 設定テーブルは Com が参照し続けるため、テスト本体のローカル変数ではなく静的な領域に置く。
+Com_IPduConfigType    gUbIPdu;
+Com_SignalConfigType  gUbSignal;
+Com_ConfigType        gUbConfig;
+
+void InitWithUpdateBit()
+{
+    gUbIPdu = kTestTxIPdu;
+    gUbIPdu.DLC               = 2U;
+    gUbIPdu.UpdateBitPosition = 15U;
+    gUbSignal = kTestTxSignal;
+    gUbSignal.SignalId             = 50U;
+    gUbSignal.UpdateBitContributor = 1U;
+
+    gUbConfig.RxIPdus        = NULL;
+    gUbConfig.RxIPduCount    = 0U;
+    gUbConfig.TxIPdus        = &gUbIPdu;
+    gUbConfig.TxIPduCount    = 1U;
+    gUbConfig.Signals        = &gUbSignal;
+    gUbConfig.SignalCount    = 1U;
+    gUbConfig.GwMappings     = NULL;
+    gUbConfig.GwMappingCount = 0U;
+
+    FakeDetHw_LogSuppressed = 1U;
+    Com_DeInit();
+    Com_Init(&gUbConfig);
+    FakeDetHw_Reset();
+    FakeDetHw_LogSuppressed = 0U;
+}
+
 const Com_SignalConfigType kTestSignals[] = {
     kTestTxSignal, kTestRxSignal, kCorruptTxSignal,
     kUnregisteredTxSignal, kCorruptRxSignal, kUnregisteredRxSignal
@@ -268,6 +300,33 @@ TEST_F(Com_TriggerIPDUSend_Test, Com_TriggerIPDUSend_NG_NotRegisteredTxIPdu)
     /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, COM_E_PARAM);
+}
+
+TEST_F(Com_TriggerIPDUSend_Test, Com_TriggerIPDUSend_OK_UpdateBitIsClearedAfterSuccessfulTransmit)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    InitWithUpdateBit();
+    WrapPduR_Reset();
+    FailFromCallCount_PduR_ComTransmit = 0U;   // PduR への送信は成功する
+    ForcedReturn_PduR_ComTransmit      = E_OK;
+    const uint8 value = 0x55U;
+    ASSERT_EQ(Com_SendSignal(50U, &value), E_OK);   // update-bit が立つ
+    ASSERT_NE(Com_Test_GetTxBuffer(0U)[1] & 0x01U, 0U);
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    const Std_ReturnType ret = Com_TriggerIPDUSend(0U);   // 送信を予約する
+    Com_MainFunctionTx();                                  // 送信周期の処理で、実際に送る
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_OK);
+    EXPECT_EQ(CallCount_PduR_ComTransmit, 1U);
+    EXPECT_EQ(Com_Test_GetTxBuffer(0U)[1] & 0x01U, 0U);   // 送信できたら、update-bit を下ろす
 }
 
 }  // namespace

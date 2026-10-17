@@ -172,6 +172,46 @@ const Com_SignalConfigType kUnregisteredRxSignal = {
     COM_DATA_INVALID_ACTION_NONE, 0U, NULL, 0U, 0U, NULL, NULL, NULL, NULL, NULL, 0U
 };
 
+// 送信確認の通知関数が呼ばれた回数。
+uint32 gSignalAckCount;
+uint32 gGroupAckCount;
+void OnSignalAck() { gSignalAckCount++; }
+void OnGroupAck()  { gGroupAckCount++; }
+
+// 送信シグナル 1 つ（SignalId 40）を持つ TX I-PDU（IPduId 0）で、Com を初期化し直す。
+// 設定テーブルは Com が参照し続けるため、テスト本体のローカル変数ではなく静的な領域に置く。
+Com_IPduConfigType    gAckIPdu;
+Com_SignalConfigType  gAckSignal;
+Com_ConfigType        gAckConfig;
+
+void InitWithAckCallbacks(uint8 signalGroup, Com_IpduGroupIdType ipduGroupId)
+{
+    gAckIPdu = kTestTxIPdu;
+    gAckIPdu.IsSignalGroup = signalGroup;
+    gAckIPdu.IpduGroupId   = ipduGroupId;
+    gAckIPdu.TxAckCbk      = OnGroupAck;
+    gAckSignal = kTestTxSignal;
+    gAckSignal.SignalId = 40U;
+    gAckSignal.TxAckCbk = OnSignalAck;
+
+    gAckConfig.RxIPdus        = NULL;
+    gAckConfig.RxIPduCount    = 0U;
+    gAckConfig.TxIPdus        = &gAckIPdu;
+    gAckConfig.TxIPduCount    = 1U;
+    gAckConfig.Signals        = &gAckSignal;
+    gAckConfig.SignalCount    = 1U;
+    gAckConfig.GwMappings     = NULL;
+    gAckConfig.GwMappingCount = 0U;
+
+    FakeDetHw_LogSuppressed = 1U;
+    Com_DeInit();
+    Com_Init(&gAckConfig);
+    FakeDetHw_Reset();
+    FakeDetHw_LogSuppressed = 0U;
+    gSignalAckCount = 0U;
+    gGroupAckCount  = 0U;
+}
+
 const Com_SignalConfigType kTestSignals[] = {
     kTestTxSignal, kTestRxSignal, kCorruptTxSignal,
     kUnregisteredTxSignal, kCorruptRxSignal, kUnregisteredRxSignal
@@ -231,6 +271,42 @@ TEST_F(Com_TxConfirmation_Test, Com_TxConfirmation_NG_Uninit)
     EXPECT_EQ(FakeDetHw_LastErrorId, COM_E_UNINIT);
 }
 
+TEST_F(Com_TxConfirmation_Test, Com_TxConfirmation_NG_StoppedIPduConfirmationIsIgnored)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    InitWithAckCallbacks(0U, 3U);   // I-PDU Group 3 に所属し、まだ開始していない
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Com_TxConfirmation(0U, E_OK);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(gSignalAckCount, 0U);   // 停止中の I-PDU への確認は、通知しない
+}
+
+TEST_F(Com_TxConfirmation_Test, Com_TxConfirmation_NG_FailedConfirmationDoesNotCallAckCallback)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    InitWithAckCallbacks(0U, COM_IPDU_GROUP_NONE);
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Com_TxConfirmation(0U, E_NOT_OK);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(gSignalAckCount, 0U);   // 送信に失敗した確認では、成功の通知を呼ばない
+}
+
 TEST_F(Com_TxConfirmation_Test, Com_TxConfirmation_OK_IdBeyondTableIsIgnoredWithoutError)
 {
     /* ----------------------- */
@@ -247,6 +323,44 @@ TEST_F(Com_TxConfirmation_Test, Com_TxConfirmation_OK_IdBeyondTableIsIgnoredWith
     /* ---- 評価 (Assert) ---- */
     /* ----------------------- */
     EXPECT_EQ(FakeDetHw_LastErrorId, 0xFFU);   // 配列範囲外を読まず、DET も報告しない
+}
+
+TEST_F(Com_TxConfirmation_Test, Com_TxConfirmation_OK_SignalAckCallbackIsCalled)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    InitWithAckCallbacks(0U, COM_IPDU_GROUP_NONE);
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Com_TxConfirmation(0U, E_OK);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(gSignalAckCount, 1U);
+    EXPECT_EQ(gGroupAckCount, 0U);   // Signal Group ではないので、グループ単位の通知は呼ばない
+}
+
+TEST_F(Com_TxConfirmation_Test, Com_TxConfirmation_OK_SignalGroupAckCallbackIsCalled)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    InitWithAckCallbacks(1U, COM_IPDU_GROUP_NONE);
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Com_TxConfirmation(0U, E_OK);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(gGroupAckCount, 1U);
+    EXPECT_EQ(gSignalAckCount, 0U);   // Signal Group では、グループ単位の通知だけを呼ぶ
 }
 
 }  // namespace

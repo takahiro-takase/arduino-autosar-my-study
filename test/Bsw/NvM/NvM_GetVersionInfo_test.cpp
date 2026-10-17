@@ -16,6 +16,7 @@ extern "C" {
 #include "NvM.h"
 #include "MemIf.h"
 #include "Fake_Det_Hw.h"
+#include "NvM_Cfg.h"
 }
 
 /* ======================================================================
@@ -81,6 +82,28 @@ TEST_F(NvM_GetVersionInfo_Test, NvM_GetVersionInfo_NG_NullPointer)
     /* ---- 評価 (Assert) ---- */
     /* ----------------------- */
     EXPECT_EQ(FakeDetHw_LastErrorId, NVM_E_PARAM_POINTER);
+}
+
+TEST_F(NvM_GetVersionInfo_Test, NvM_GetVersionInfo_OK_ReturnsModuleVersion)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    Std_VersionInfoType info = { 0xFFFFU, 0xFFFFU, 0xFFU, 0xFFU, 0xFFU };
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    NvM_GetVersionInfo(&info);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(info.vendorID, NVM_VENDOR_ID);
+    EXPECT_EQ(info.moduleID, NVM_MODULE_ID);
+    EXPECT_EQ(info.sw_major_version, NVM_SW_MAJOR_VERSION);
+    EXPECT_EQ(info.sw_minor_version, NVM_SW_MINOR_VERSION);
+    EXPECT_EQ(info.sw_patch_version, NVM_SW_PATCH_VERSION);
 }
 
 }  // namespace
