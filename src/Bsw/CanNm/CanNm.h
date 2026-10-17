@@ -370,6 +370,21 @@ void CanNm_TxConfirmation(PduIdType TxPduId, Std_ReturnType result);
  * Test Functions
  * ====================================================================== */
 
+#ifdef CANNM_UNIT_TEST
+/**
+ * \brief   CanNm の状態を指定の値へ直接設定する（単体テスト専用）。
+ *
+ * \details 状態遷移の API（CanNm_NetworkRequest()・CanNm_MainFunction() など）を
+ *          経由せずに、指定の状態から判定の分岐を調べるために使う（遷移そのものの
+ *          検証はコールチェーンのテストの役割）。状態以外（タイマー・各種フラグ・
+ *          上位層への通知）は変えない。テスト側で、判定に必要な他の値を別途そろえること
+ *          （標準外の関数。EcuM_Test_SetState() と同じ設計方針）。
+ *
+ * \param[in]  state  設定する CanNm の状態。
+ */
+void CanNm_Test_SetState(CanNm_StateType state);
+#endif
+
 #ifdef __cplusplus
 }
 #endif

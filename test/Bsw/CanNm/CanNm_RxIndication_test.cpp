@@ -133,4 +133,100 @@ TEST_F(CanNm_RxIndication_Test, CanNm_RxIndication_NG_NullPduInfoPtr)
     EXPECT_EQ(FakeDetHw_LastErrorId, CANNM_E_PARAM_POINTER);
 }
 
+TEST_F(CanNm_RxIndication_Test, CanNm_RxIndication_OK_RepeatMessageBitInNormalOperationReAnnounces)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    CanNm_Test_SetState(CANNM_STATE_NORMAL_OPERATION);
+    uint8 pdu[2] = { CANNM_CBV_BIT_REPEAT_MESSAGE_REQUEST, 0x2AU };  // 他ノードの Repeat Message Request Bit（[SWS_CanNm_00119]）
+    PduInfoType info = { pdu, 2U };
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    CanNm_RxIndication(0U, &info);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    CanNm_StateType state;
+    CanNm_ModeType  mode;
+    ASSERT_EQ(CanNm_GetState(CANNM_MAIN_NETWORK_HANDLE, &state, &mode), E_OK);
+    EXPECT_EQ(state, CANNM_STATE_REPEAT_MESSAGE);  // 自ノードも Repeat Message State へ入り直す
+    EXPECT_GT(FakeDetHw_ReportCount, 0U);  // 入り直しで Nm_NetworkMode() が呼ばれ、未初期化の ComM が DET を報告する
+}
+
+TEST_F(CanNm_RxIndication_Test, CanNm_RxIndication_OK_RepeatMessageBitInReadySleepReAnnounces)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    CanNm_Test_SetState(CANNM_STATE_READY_SLEEP);
+    uint8 pdu[2] = { CANNM_CBV_BIT_REPEAT_MESSAGE_REQUEST, 0x2AU };  // 他ノードの Repeat Message Request Bit（[SWS_CanNm_00111]）
+    PduInfoType info = { pdu, 2U };
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    CanNm_RxIndication(0U, &info);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    CanNm_StateType state;
+    CanNm_ModeType  mode;
+    ASSERT_EQ(CanNm_GetState(CANNM_MAIN_NETWORK_HANDLE, &state, &mode), E_OK);
+    EXPECT_EQ(state, CANNM_STATE_REPEAT_MESSAGE);
+    EXPECT_GT(FakeDetHw_ReportCount, 0U);
+}
+
+TEST_F(CanNm_RxIndication_Test, CanNm_RxIndication_OK_RepeatMessageBitInRepeatMessageDoesNotReAnnounce)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    CanNm_Test_SetState(CANNM_STATE_REPEAT_MESSAGE);
+    uint8 pdu[2] = { CANNM_CBV_BIT_REPEAT_MESSAGE_REQUEST, 0x2AU };
+    PduInfoType info = { pdu, 2U };
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    CanNm_RxIndication(0U, &info);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    CanNm_StateType state;
+    CanNm_ModeType  mode;
+    ASSERT_EQ(CanNm_GetState(CANNM_MAIN_NETWORK_HANDLE, &state, &mode), E_OK);
+    EXPECT_EQ(state, CANNM_STATE_REPEAT_MESSAGE);
+    EXPECT_EQ(FakeDetHw_ReportCount, 0U);  // すでに Repeat Message State のため入り直さない（Nm_NetworkMode() を呼ばない）
+}
+
+TEST_F(CanNm_RxIndication_Test, CanNm_RxIndication_OK_WithoutRepeatMessageBitDoesNotReAnnounce)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    CanNm_Test_SetState(CANNM_STATE_NORMAL_OPERATION);
+    uint8 pdu[2] = { 0x00U, 0x2AU };  // Repeat Message Request Bit なし
+    PduInfoType info = { pdu, 2U };
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    CanNm_RxIndication(0U, &info);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    CanNm_StateType state;
+    CanNm_ModeType  mode;
+    ASSERT_EQ(CanNm_GetState(CANNM_MAIN_NETWORK_HANDLE, &state, &mode), E_OK);
+    EXPECT_EQ(state, CANNM_STATE_NORMAL_OPERATION);  // 状態は変わらない
+    EXPECT_EQ(FakeDetHw_ReportCount, 0U);
+}
+
 }  // namespace

@@ -195,6 +195,7 @@ FetchContent_MakeAvailable(googletest)
 
 add_compile_definitions(
     CAN_UNIT_TEST
+    CANNM_UNIT_TEST
     CANTP_UNIT_TEST
     COM_UNIT_TEST
     CRYIF_UNIT_TEST
