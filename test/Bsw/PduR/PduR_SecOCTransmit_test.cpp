@@ -15,6 +15,7 @@
 extern "C" {
 #include "PduR.h"
 #include "Fake_Det_Hw.h"
+#include "Wrap_CanIf.h"
 }
 
 /* ======================================================================
@@ -69,12 +70,18 @@ protected:
     void SetUp() override
     {
         FakeDetHw_LogSuppressed = 1U;  // Init() のログはノイズになるため抑制
+        WrapCanIf_Reset();             // 他のテストファイルの故障注入が漏れ伝わらないようリセット
         PduR_Init(&kTestConfig);
         FakeDetHw_Reset();             // Init 自体の記録を後続の検証対象から除く
         FakeDetHw_LogSuppressed = 0U;  // ここから各 TEST_F の実行(Act)区間
     }
 
-    // PduR に DeInit() は無いため TearDown は書かない。未初期化状態が必要な
+    void TearDown() override
+    {
+        WrapCanIf_Reset();   // 故障注入を残さない
+    }
+
+    // PduR に DeInit() は無いため、未初期化状態が必要な
     // テストは各自 PduR_Test_ResetInitState() を明示的に呼ぶ（ファイル冒頭
     // コメント参照）。
 };
@@ -141,6 +148,28 @@ TEST_F(PduR_SecOCTransmit_Test, PduR_SecOCTransmit_NG_NoMatchingRoute)
     /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, PDUR_E_PDU_ID_INVALID);
+}
+
+TEST_F(PduR_SecOCTransmit_Test, PduR_SecOCTransmit_OK_ForwardsToCanIfWithRoutedTxPduId)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    FailFromCallCount_CanIf_Transmit = 0U;   // CanIf への送信は成功する
+    ForcedReturn_CanIf_Transmit      = E_OK;
+    uint8 sdu[8] = { 0 };
+    PduInfoType info = { sdu, 6U };
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    const Std_ReturnType ret = PduR_SecOCTransmit(10U, &info);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_OK);
+    EXPECT_EQ(CallCount_CanIf_Transmit, 1U);   // 経路に対応する CanIf の送信へ直接渡す
 }
 
 }  // namespace

@@ -76,6 +76,7 @@ protected:
     void SetUp() override
     {
         FakeDetHw_LogSuppressed = 1U;  // Init() のログはノイズになるため抑制
+        WrapCanIf_Reset();             // 他のテストファイルの故障注入が漏れ伝わらないようリセット
         CanSM_Init(NULL);
         FakeDetHw_Reset();              // Init 自体の記録を後続の検証対象から除く
         FakeDetHw_LogSuppressed = 0U;  // ここから各 TEST_F の実行(Act)区間
@@ -84,6 +85,7 @@ protected:
     void TearDown() override
     {
         FakeDetHw_LogSuppressed = 1U;
+        WrapCanIf_Reset();   // 故障注入を残さない
         CanSM_DeInit();
     }
 };
@@ -126,6 +128,58 @@ TEST_F(CanSM_ControllerModeIndication_Test, CanSM_ControllerModeIndication_NG_In
     /* ---- 評価 (Assert) ---- */
     /* ----------------------- */
     EXPECT_EQ(FakeDetHw_LastErrorId, CANSM_E_PARAM_CONTROLLER);
+}
+
+TEST_F(CanSM_ControllerModeIndication_Test, CanSM_ControllerModeIndication_NG_WakeupIgnoredOutsideNoCom)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    FailFromCallCount_CanIf_SetControllerMode = 0U;   // コントローラの状態変更は、常に成功する
+    ForcedReturn_CanIf_SetControllerMode      = E_OK;
+    FailFromCallCount_CanIf_SetPduMode = 0U;   // PDU モードの変更は、常に成功する
+    ForcedReturn_CanIf_SetPduMode      = E_OK;
+    ASSERT_EQ(CanSM_RequestComMode(0U, COMM_FULL_COMMUNICATION), E_OK);   // NO_COM ではなく FULL_COM にする
+    const uint32 setModeBefore = CallCount_CanIf_SetControllerMode;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    CanSM_ControllerModeIndication(0U, CAN_CS_STARTED);
+    ComM_ModeType mode = COMM_NO_COMMUNICATION;
+    const Std_ReturnType retMode = CanSM_GetCurrentComMode(0U, &mode);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    ASSERT_EQ(retMode, E_OK);
+    EXPECT_EQ(mode, COMM_FULL_COMMUNICATION);                          // 状態は変わらない
+    EXPECT_EQ(CallCount_CanIf_SetControllerMode, setModeBefore);       // コントローラへも何も要求しない
+}
+
+TEST_F(CanSM_ControllerModeIndication_Test, CanSM_ControllerModeIndication_NG_WakeupStaysInNoComWhenControllerCannotStop)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    FailFromCallCount_CanIf_SetControllerMode = 0U;   // コントローラの状態変更は、常に失敗する
+    ForcedReturn_CanIf_SetControllerMode      = E_NOT_OK;
+    const uint32 setModeBefore = CallCount_CanIf_SetControllerMode;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    CanSM_ControllerModeIndication(0U, CAN_CS_STARTED);   // NO_COM のまま、ウェイクアップを検出する
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(CallCount_CanIf_SetControllerMode, setModeBefore + 1U);   // リスン専用への移行（停止）を要求したが失敗した
+    // 検証中の状態へは移らない（次の MainFunction で、検証のタイムアウトが働かない）
+    FakeMillis_Value += CANSM_WAKEUP_VALIDATION_MS + 1UL;
+    const uint32 afterIndication = CallCount_CanIf_SetControllerMode;
+    CanSM_MainFunction();
+    EXPECT_EQ(CallCount_CanIf_SetControllerMode, afterIndication);
 }
 
 }  // namespace

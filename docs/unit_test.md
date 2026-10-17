@@ -70,15 +70,20 @@ DET_LOG_VERBOSE=1 ./build/native_chain/native_chain_tests.exe  # TRACE ログ出
 
 ### 現状と優先順位（2026-10-18 時点）
 
-`src/Bsw` と `src/Os` の行カバレッジは約 93%（2026-10-18 の測定）。未実行の行が多いモジュールから、
+`src/Bsw` と `src/Os` の行カバレッジは約 96%（2026-10-18 の測定）。未実行の行が多いモジュールから、
 エラー分岐・タイムアウト・状態遷移の順に足していく。足すたびに、
 `tools/coverage/generate_coverage_report.sh` で行カバレッジと MC/DC の変化を確認する。
 
 - **まだ残っているもの**: Com の `Com_Test_*` の範囲外ガード。NvM の一部（設定で到達できない分岐）。
+  CanIf の `CanIf_ReadTxNotifStatus()`/`CanIf_ReadRxNotifStatus()` の OK 系は、本番コードからの呼び出し元が
+  無いため、意図的に無効化している（各テストファイル冒頭コメント参照）。
 - **到達できないため単体テストにしないもの**:
   - SecOC の送信側: 送信に使う PDU 数がビルド時に 0（`SECOC_TX_PDU_COUNT`）で、`SecOC_Init()` が
     それを超える設定を拒否する。
   - `EcuM_Init()`: 全モジュールを起動順に初期化する本番の起動シーケンス。順序の確認はコールチェーンで行う。
+  - Csm の MAC 生成: 設定にある Csm のジョブは MAC 検証 1 つだけで、MAC 生成のジョブが無い。
+  - E2EXf の `E2E_P05Check()` 失敗経路・`E2E_SMCheck()` 失敗経路: 設定が固定のため、失敗を返す入力を作れない。
+  - `Can_Init()` の失敗時の無限ループ。
   - 実装上到達できない分岐（Dem の飽和カウンタ、WdgM の失敗しない API、NvM の設定依存ループ、
     実体の Dcm を使う CanTp の FF 先頭データの受け取り失敗、Dem が失敗を返さないために Dcm の
     0x19 の `Dem_SetDTCFilter` 失敗経路へ入れないこと、Dcm の応答バッファが全イベント分ちょうどのため

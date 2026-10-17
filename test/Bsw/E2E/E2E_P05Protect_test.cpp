@@ -93,54 +93,6 @@ protected:
  * Test Functions
  * ====================================================================== */
 
-TEST_F(E2E_P05Protect_Test, E2E_P05Protect_OK_ComputesCrcMatchingReferenceImplementation)
-{
-    /* ----------------------- */
-    /* ---- 準備 (Arrange) --- */
-    /* ----------------------- */
-    E2E_P05ProtectStateType state;
-    E2E_P05ProtectInit(&state);
-
-    uint8_t data[5] = {0U, 0U, 0U, 0x12U, 0x34U}; /* byte[3-4] = ユーザーデータ */
-
-    /* ----------------------- */
-    /* ---- 実行 (Act) ------- */
-    /* ----------------------- */
-    E2E_P05Protect(&config, &state, data, sizeof(data));
-
-    const uint16_t receivedCrc  = static_cast<uint16_t>(data[0]) | static_cast<uint16_t>(data[1] << 8);
-    const uint16_t expectedCrc  = ReferenceCrcForFrame(data, config.DataLength, config.Offset, config.DataID);
-
-    /* ----------------------- */
-    /* ---- 評価 (Assert) ---- */
-    /* ----------------------- */
-    EXPECT_EQ(receivedCrc, expectedCrc);
-    EXPECT_EQ(data[2], 0U); /* 1回目の Counter は 0 */
-}
-
-TEST_F(E2E_P05Protect_Test, E2E_P05Protect_OK_IncrementsCounterAndWrapsAt0xFF)
-{
-    /* ----------------------- */
-    /* ---- 準備 (Arrange) --- */
-    /* ----------------------- */
-    E2E_P05ProtectStateType state;
-    E2E_P05ProtectInit(&state);
-    state.Counter = 0xFFU; /* 折り返し直前まで進めておく */
-
-    uint8_t data[5] = {0U, 0U, 0U, 0U, 0U};
-
-    /* ----------------------- */
-    /* ---- 実行 (Act) ------- */
-    /* ----------------------- */
-    E2E_P05Protect(&config, &state, data, sizeof(data));
-
-    /* ----------------------- */
-    /* ---- 評価 (Assert) ---- */
-    /* ----------------------- */
-    EXPECT_EQ(data[2], 0xFFU);   /* 送信されたCounterは折り返し前の0xFF */
-    EXPECT_EQ(state.Counter, 0U); /* 次回用の内部Counterは0に折り返す */
-}
-
 TEST_F(E2E_P05Protect_Test, E2E_P05Protect_NG_NullConfigReturnsInputErrNull)
 {
     /* ----------------------- */
@@ -218,6 +170,72 @@ TEST_F(E2E_P05Protect_Test, E2E_P05Protect_NG_LengthShorterThanDataLengthReturns
     /* ----------------------- */
     EXPECT_EQ(ret, E2E_E_INPUTERR_WRONG);
     EXPECT_EQ(state.Counter, 0U);   // 状態は進めない
+}
+
+TEST_F(E2E_P05Protect_Test, E2E_P05ProtectInit_NG_NullStateReturnsInputErrNull)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    const Std_ReturnType ret = E2E_P05ProtectInit(nullptr);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E2E_E_INPUTERR_NULL);
+}
+
+TEST_F(E2E_P05Protect_Test, E2E_P05Protect_OK_ComputesCrcMatchingReferenceImplementation)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    E2E_P05ProtectStateType state;
+    E2E_P05ProtectInit(&state);
+
+    uint8_t data[5] = {0U, 0U, 0U, 0x12U, 0x34U}; /* byte[3-4] = ユーザーデータ */
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    E2E_P05Protect(&config, &state, data, sizeof(data));
+
+    const uint16_t receivedCrc  = static_cast<uint16_t>(data[0]) | static_cast<uint16_t>(data[1] << 8);
+    const uint16_t expectedCrc  = ReferenceCrcForFrame(data, config.DataLength, config.Offset, config.DataID);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(receivedCrc, expectedCrc);
+    EXPECT_EQ(data[2], 0U); /* 1回目の Counter は 0 */
+}
+
+TEST_F(E2E_P05Protect_Test, E2E_P05Protect_OK_IncrementsCounterAndWrapsAt0xFF)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    E2E_P05ProtectStateType state;
+    E2E_P05ProtectInit(&state);
+    state.Counter = 0xFFU; /* 折り返し直前まで進めておく */
+
+    uint8_t data[5] = {0U, 0U, 0U, 0U, 0U};
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    E2E_P05Protect(&config, &state, data, sizeof(data));
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(data[2], 0xFFU);   /* 送信されたCounterは折り返し前の0xFF */
+    EXPECT_EQ(state.Counter, 0U); /* 次回用の内部Counterは0に折り返す */
 }
 
 }  // namespace

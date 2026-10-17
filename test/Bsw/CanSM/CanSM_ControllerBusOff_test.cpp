@@ -76,6 +76,7 @@ protected:
     void SetUp() override
     {
         FakeDetHw_LogSuppressed = 1U;  // Init() のログはノイズになるため抑制
+        WrapCanIf_Reset();             // 他のテストファイルの故障注入が漏れ伝わらないようリセット
         CanSM_Init(NULL);
         FakeDetHw_Reset();              // Init 自体の記録を後続の検証対象から除く
         FakeDetHw_LogSuppressed = 0U;  // ここから各 TEST_F の実行(Act)区間
@@ -84,6 +85,7 @@ protected:
     void TearDown() override
     {
         FakeDetHw_LogSuppressed = 1U;
+        WrapCanIf_Reset();   // 故障注入を残さない
         CanSM_DeInit();
     }
 };
@@ -149,6 +151,33 @@ TEST_F(CanSM_ControllerBusOff_Test, CanSM_ControllerBusOff_OK_IgnoredOutsideFull
     EXPECT_EQ(mode, COMM_NO_COMMUNICATION);                            // 状態は変わらない（回復シーケンスを始めない）
     EXPECT_EQ(CallCount_CanIf_SetControllerMode, setModeBefore);       // コントローラの停止も要求しない
     EXPECT_EQ(FakeDetHw_ReportCount, 0U);
+}
+
+TEST_F(CanSM_ControllerBusOff_Test, CanSM_ControllerBusOff_OK_ProceedsToBusOffEvenWhenControllerStopFails)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    FailFromCallCount_CanIf_SetControllerMode = 0U;   // コントローラの状態変更は、常に成功する
+    ForcedReturn_CanIf_SetControllerMode      = E_OK;
+    FailFromCallCount_CanIf_SetPduMode = 0U;   // PDU モードの変更は、常に成功する
+    ForcedReturn_CanIf_SetPduMode      = E_OK;
+    ASSERT_EQ(CanSM_RequestComMode(0U, COMM_FULL_COMMUNICATION), E_OK);
+    FailFromCallCount_CanIf_SetControllerMode = 0U;   // コントローラの状態変更は、常に失敗する
+    ForcedReturn_CanIf_SetControllerMode      = E_NOT_OK;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    CanSM_ControllerBusOff(0U);
+    ComM_ModeType mode = COMM_NO_COMMUNICATION;
+    const Std_ReturnType retMode = CanSM_GetCurrentComMode(0U, &mode);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    ASSERT_EQ(retMode, E_OK);
+    EXPECT_NE(mode, COMM_FULL_COMMUNICATION);   // 停止の要求が失敗しても、BUS_OFF の状態（上位へは SILENT）へ移る
 }
 
 }  // namespace

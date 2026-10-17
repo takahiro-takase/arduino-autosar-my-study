@@ -131,6 +131,26 @@ TEST_F(CanIf_GetControllerErrorState_Test, GetControllerErrorState_NG_NullPointe
 // CanIf_GetControllerErrorState() の単体テスト（[SWS_CANIF_91001]、
 // 2026-08-31 追加。CanIf → Can.c → Can_Hw.c（フェイク）の実チェーンで検証）。
 // ------------------------------------------------------------------------
+
+TEST_F(CanIf_GetControllerErrorState_Test, GetControllerErrorState_NG_UninitializedReturnsError)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    CanIf_DeInit();   // 未初期化にする
+    Can_ErrorStateType state = CAN_ERRORSTATE_ACTIVE;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    const Std_ReturnType ret = CanIf_GetControllerErrorState(0U, &state);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_NOT_OK);
+}
+
 TEST_F(CanIf_GetControllerErrorState_Test, GetControllerErrorState_OK_ReflectsBusOffFromHwChain)
 {
     /* ----------------------- */

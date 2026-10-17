@@ -127,6 +127,25 @@ TEST_F(CanIf_GetControllerMode_Test, GetControllerMode_NG_NullPointerReturnsErro
     EXPECT_EQ(FakeDetHw_LastErrorId, CANIF_E_PARAM_POINTER);
 }
 
+TEST_F(CanIf_GetControllerMode_Test, GetControllerMode_NG_UninitializedReturnsError)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    CanIf_DeInit();   // 未初期化にする
+    Can_ControllerStateType mode = CAN_CS_STARTED;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    const Std_ReturnType ret = CanIf_GetControllerMode(0U, &mode);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_NOT_OK);
+}
+
 TEST_F(CanIf_GetControllerMode_Test, GetControllerMode_OK_ReflectsStoppedRightAfterInit)
 {
     /* ----------------------- */

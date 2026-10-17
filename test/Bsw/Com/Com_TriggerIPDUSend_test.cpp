@@ -237,6 +237,7 @@ protected:
     void TearDown() override
     {
         FakeDetHw_LogSuppressed = 1U;
+        WrapPduR_Reset();   // 故障注入（PduR への送信を強制的に成功させる指定）を、他のテストへ残さない
         Com_DeInit();
     }
 };

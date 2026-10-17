@@ -114,4 +114,25 @@ TEST_F(FiM_SetFunctionAvailable_Test, FiM_SetFunctionAvailable_NG_FidOutOfRange)
     EXPECT_EQ(FakeDetHw_LastErrorId, FIM_E_FID_OUT_OF_RANGE);
 }
 
+TEST_F(FiM_SetFunctionAvailable_Test, FiM_SetFunctionAvailable_OK_ReAvailableRestoresPermission)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    FiM_Init(&FiM_Config);
+    ASSERT_EQ(FiM_SetFunctionAvailable(FIM_FID_RUNNING_LED, FALSE), E_OK);
+    ASSERT_EQ(GetPermission(FIM_FID_RUNNING_LED), FALSE);
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    const Std_ReturnType ret = FiM_SetFunctionAvailable(FIM_FID_RUNNING_LED, TRUE);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_OK);
+    EXPECT_EQ(GetPermission(FIM_FID_RUNNING_LED), TRUE);   // 利用可に戻すと、再び許可される
+}
+
 }  // namespace

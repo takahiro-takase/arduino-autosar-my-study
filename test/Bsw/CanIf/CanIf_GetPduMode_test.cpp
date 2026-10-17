@@ -132,4 +132,23 @@ TEST_F(CanIf_GetPduMode_Test, CanIf_GetPduMode_NG_NullPointer)
     EXPECT_EQ(FakeDetHw_LastErrorId, CANIF_E_PARAM_POINTER);
 }
 
+TEST_F(CanIf_GetPduMode_Test, CanIf_GetPduMode_NG_UninitializedReturnsError)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    CanIf_DeInit();   // 未初期化にする
+    CanIf_PduModeType mode = CANIF_ONLINE;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    const Std_ReturnType ret = CanIf_GetPduMode(0U, &mode);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_NOT_OK);
+}
+
 }  // namespace

@@ -98,4 +98,26 @@ TEST_F(CryIf_GetVersionInfo_Test, CryIf_GetVersionInfo_NG_NullPointer)
     EXPECT_EQ(FakeDetHw_LastErrorId, CRYIF_E_PARAM_POINTER);
 }
 
+TEST_F(CryIf_GetVersionInfo_Test, CryIf_GetVersionInfo_OK_ReturnsModuleVersion)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    Std_VersionInfoType info = { 0xFFFFU, 0xFFFFU, 0xFFU, 0xFFU, 0xFFU };
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    CryIf_GetVersionInfo(&info);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(info.vendorID, CRYIF_VENDOR_ID);
+    EXPECT_EQ(info.moduleID, CRYIF_MODULE_ID);
+    EXPECT_EQ(info.sw_major_version, CRYIF_SW_MAJOR_VERSION);
+    EXPECT_EQ(info.sw_minor_version, CRYIF_SW_MINOR_VERSION);
+    EXPECT_EQ(info.sw_patch_version, CRYIF_SW_PATCH_VERSION);
+}
+
 }  // namespace

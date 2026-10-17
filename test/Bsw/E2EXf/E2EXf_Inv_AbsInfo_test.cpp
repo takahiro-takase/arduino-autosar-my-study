@@ -26,6 +26,8 @@
 extern "C" {
 #include "E2EXf.h"
 #include "Fake_Det_Hw.h"
+#include "Wrap_E2E.h"
+#include "Wrap_E2E_P05.h"
 #include "E2E_P05.h"
 #include "E2EXf_PBCfg.h"
 #include "Dem.h"
@@ -78,6 +80,8 @@ protected:
     void SetUp() override
     {
         FakeDetHw_LogSuppressed = 1U;  // Init() のログはノイズになるため抑制
+        WrapE2E_Reset();               // 他のテストファイルの故障注入（E2E_SMCheck など）が漏れ伝わらないようリセット
+        WrapE2EP05_Reset();
         E2EXf_Init(NULL);
         FakeDetHw_Reset();             // Init 自体の記録を後続の検証対象から除く
         FakeDetHw_LogSuppressed = 0U;  // ここから各 TEST_F の実行(Act)区間
@@ -241,6 +245,41 @@ TEST_F(E2EXf_Inv_AbsInfo_Test, E2EXf_Inv_AbsInfo_OK_FirstValidFrameIsAcceptedThe
     EXPECT_EQ(status1, E2E_P05STATUS_OK);   // 初回の正しいフレームは OK（待ちを解除する）
     EXPECT_EQ(status2, E2E_P05STATUS_OK);   // 2 回目以降は通常のカウンタ判定（差 1 は OK）
     EXPECT_EQ(bufLen, 6U);
+}
+
+TEST_F(E2EXf_Inv_AbsInfo_Test, E2EXf_Inv_AbsInfo_OK_RepeatedCrcErrorsReportDemFailed)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    WrapDem_Reset();
+    Dem_Init(NULL);
+    E2EXf_PBCfg_Init();
+    E2E_P05ProtectStateType refState;
+    E2E_P05ProtectInit(&refState);
+    uint32 bufLen = 0U;
+    E2E_P05StatusType status = E2E_P05STATUS_OK;
+    bool failedReported = false;
+    uint8 first[6] = { 0U };
+    BuildAbsFrame(first, &refState);
+    (void)E2EXf_Inv_AbsInfo(first, &bufLen, NULL, 0U, &status);   // 最初の正しいフレーム（状態機械が NODATA から出る）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    for (uint8 i = 0U; (i < 60U) && !failedReported; i++)
+    {
+        uint8 bad[6] = { 0U };
+        BuildAbsFrame(bad, &refState);
+        bad[3] ^= 0x01U;   // CRC と合わなくなるフレームを、繰り返し受信する
+        (void)E2EXf_Inv_AbsInfo(bad, &bufLen, NULL, 0U, &status);
+        failedReported = (CallCount_Dem_SetEventStatus > 0U) && (LastEventStatus_Dem_SetEventStatus == DEM_EVENT_STATUS_FAILED);
+    }
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_TRUE(failedReported);   // 状態機械が INVALID になり、Dem へ FAILED を報告する
 }
 
 }  // namespace

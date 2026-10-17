@@ -113,4 +113,43 @@ TEST_F(ComM_GetStatus_Test, ComM_GetStatus_NG_NullPointer)
     EXPECT_EQ(FakeDetHw_LastErrorId, COMM_E_PARAM_POINTER);
 }
 
+TEST_F(ComM_GetStatus_Test, ComM_GetStatus_OK_ReportsInitAfterInit)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    ComM_InitStatusType status = COMM_UNINIT;   // SetUp() で初期化済み
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    const Std_ReturnType ret = ComM_GetStatus(&status);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_OK);
+    EXPECT_EQ(status, COMM_INIT);
+}
+
+TEST_F(ComM_GetStatus_Test, ComM_GetStatus_OK_ReportsUninitAfterDeInit)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    ComM_DeInit();
+    ComM_InitStatusType status = COMM_INIT;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    const Std_ReturnType ret = ComM_GetStatus(&status);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_OK);
+    EXPECT_EQ(status, COMM_UNINIT);
+}
+
 }  // namespace

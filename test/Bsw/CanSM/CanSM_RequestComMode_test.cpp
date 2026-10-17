@@ -76,6 +76,7 @@ protected:
     void SetUp() override
     {
         FakeDetHw_LogSuppressed = 1U;  // Init() のログはノイズになるため抑制
+        WrapCanIf_Reset();             // 他のテストファイルの故障注入が漏れ伝わらないようリセット
         CanSM_Init(NULL);
         FakeDetHw_Reset();              // Init 自体の記録を後続の検証対象から除く
         FakeDetHw_LogSuppressed = 0U;  // ここから各 TEST_F の実行(Act)区間
@@ -84,6 +85,7 @@ protected:
     void TearDown() override
     {
         FakeDetHw_LogSuppressed = 1U;
+        WrapCanIf_Reset();   // 故障注入を残さない
         CanSM_DeInit();
     }
 };
@@ -128,6 +130,131 @@ TEST_F(CanSM_RequestComMode_Test, CanSM_RequestComMode_NG_InvalidNetworkHandle)
     /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, CANSM_E_INVALID_NETWORK_HANDLE);
+}
+
+TEST_F(CanSM_RequestComMode_Test, CanSM_RequestComMode_NG_UnknownModeIsRejected)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    const Std_ReturnType ret = CanSM_RequestComMode(0U, static_cast<ComM_ModeType>(0xFFU));
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_NOT_OK);
+}
+
+TEST_F(CanSM_RequestComMode_Test, CanSM_RequestComMode_NG_FullComFailsWhenControllerCannotStart)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    FailFromCallCount_CanIf_SetControllerMode = 0U;   // コントローラの状態変更は、常に失敗する
+    ForcedReturn_CanIf_SetControllerMode      = E_NOT_OK;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    const Std_ReturnType ret = CanSM_RequestComMode(0U, COMM_FULL_COMMUNICATION);
+    ComM_ModeType mode = COMM_FULL_COMMUNICATION;
+    const Std_ReturnType retMode = CanSM_GetCurrentComMode(0U, &mode);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_NOT_OK);
+    ASSERT_EQ(retMode, E_OK);
+    EXPECT_EQ(mode, COMM_NO_COMMUNICATION);   // 状態は変わらない
+}
+
+TEST_F(CanSM_RequestComMode_Test, CanSM_RequestComMode_NG_SilentComFailsWhenTxCannotBeSuppressed)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    FailFromCallCount_CanIf_SetControllerMode = 0U;   // コントローラの状態変更は、常に成功する
+    ForcedReturn_CanIf_SetControllerMode      = E_OK;
+    FailFromCallCount_CanIf_SetPduMode = 0U;   // PDU モードの変更は、常に成功する
+    ForcedReturn_CanIf_SetPduMode      = E_OK;
+    ASSERT_EQ(CanSM_RequestComMode(0U, COMM_FULL_COMMUNICATION), E_OK);   // FULL_COM にする
+    FailFromCallCount_CanIf_SetPduMode = 0U;   // PDU モードの変更は、常に失敗する
+    ForcedReturn_CanIf_SetPduMode      = E_NOT_OK;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    const Std_ReturnType ret = CanSM_RequestComMode(0U, COMM_SILENT_COMMUNICATION);
+    ComM_ModeType mode = COMM_NO_COMMUNICATION;
+    const Std_ReturnType retMode = CanSM_GetCurrentComMode(0U, &mode);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_NOT_OK);
+    ASSERT_EQ(retMode, E_OK);
+    EXPECT_EQ(mode, COMM_FULL_COMMUNICATION);   // 送信を止められないので、FULL_COM のまま
+}
+
+TEST_F(CanSM_RequestComMode_Test, CanSM_RequestComMode_OK_FullComProceedsEvenWhenPduModeCannotBeSetOnline)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    FailFromCallCount_CanIf_SetControllerMode = 0U;   // コントローラの状態変更は、常に成功する
+    ForcedReturn_CanIf_SetControllerMode      = E_OK;
+    FailFromCallCount_CanIf_SetPduMode = 0U;   // PDU モードの変更は、常に失敗する
+    ForcedReturn_CanIf_SetPduMode      = E_NOT_OK;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    const Std_ReturnType ret = CanSM_RequestComMode(0U, COMM_FULL_COMMUNICATION);
+    ComM_ModeType mode = COMM_NO_COMMUNICATION;
+    const Std_ReturnType retMode = CanSM_GetCurrentComMode(0U, &mode);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_OK);   // PDU モードの設定失敗は、ベストエフォートとして先へ進む
+    ASSERT_EQ(retMode, E_OK);
+    EXPECT_EQ(mode, COMM_FULL_COMMUNICATION);
+}
+
+TEST_F(CanSM_RequestComMode_Test, CanSM_RequestComMode_OK_FullThenSilentThenNoComAreReflectedInCurrentMode)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    FailFromCallCount_CanIf_SetControllerMode = 0U;   // コントローラの状態変更は、常に成功する
+    ForcedReturn_CanIf_SetControllerMode      = E_OK;
+    FailFromCallCount_CanIf_SetPduMode = 0U;   // PDU モードの変更は、常に成功する
+    ForcedReturn_CanIf_SetPduMode      = E_OK;
+    ComM_ModeType full = COMM_NO_COMMUNICATION;
+    ComM_ModeType silent = COMM_NO_COMMUNICATION;
+    ComM_ModeType none = COMM_FULL_COMMUNICATION;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    ASSERT_EQ(CanSM_RequestComMode(0U, COMM_FULL_COMMUNICATION), E_OK);
+    ASSERT_EQ(CanSM_GetCurrentComMode(0U, &full), E_OK);
+    ASSERT_EQ(CanSM_RequestComMode(0U, COMM_SILENT_COMMUNICATION), E_OK);
+    ASSERT_EQ(CanSM_GetCurrentComMode(0U, &silent), E_OK);
+    ASSERT_EQ(CanSM_RequestComMode(0U, COMM_NO_COMMUNICATION), E_OK);
+    ASSERT_EQ(CanSM_GetCurrentComMode(0U, &none), E_OK);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(full, COMM_FULL_COMMUNICATION);
+    EXPECT_EQ(silent, COMM_SILENT_COMMUNICATION);
+    EXPECT_EQ(none, COMM_NO_COMMUNICATION);
 }
 
 }  // namespace

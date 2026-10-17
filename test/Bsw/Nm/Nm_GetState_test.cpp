@@ -134,6 +134,25 @@ TEST_F(Nm_GetState_Base_Test, Nm_GetState_NG_InvalidChannel)
     EXPECT_EQ(FakeDetHw_LastErrorId, NM_E_INVALID_CHANNEL);
 }
 
+TEST_F(Nm_GetState_Base_Test, Nm_GetState_NG_CanNmFailureIsReturned)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    Nm_StateType state = NM_STATE_NORMAL_OPERATION;
+    Nm_ModeType  mode  = NM_MODE_NETWORK;   // CanNm は初期化していない
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    const Std_ReturnType ret = Nm_GetState(NM_MAIN_NETWORK_HANDLE, &state, &mode);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_NOT_OK);
+}
+
 TEST_F(Nm_GetState_Test, Nm_GetState_OK_MapsBusSleepStateAndMode)
 {
     /* ----------------------- */
@@ -158,6 +177,61 @@ TEST_F(Nm_GetState_Test, Nm_GetState_OK_MapsBusSleepStateAndMode)
     EXPECT_EQ(retNoState, E_OK);   // NULL の側は書かない
     EXPECT_EQ(retNoMode, E_OK);
     EXPECT_EQ(FakeDetHw_ReportCount, 0U);
+}
+
+TEST_F(Nm_GetState_Test, Nm_GetState_OK_MapsEachCanNmStateToNmStateAndMode)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    struct Row { CanNm_StateType canNm; Nm_StateType nmState; Nm_ModeType nmMode; };
+    const Row rows[] = {
+        { CANNM_STATE_BUS_SLEEP,         NM_STATE_BUS_SLEEP,         NM_MODE_BUS_SLEEP },
+        { CANNM_STATE_PREPARE_BUS_SLEEP, NM_STATE_PREPARE_BUS_SLEEP, NM_MODE_PREPARE_BUS_SLEEP },
+        { CANNM_STATE_REPEAT_MESSAGE,    NM_STATE_REPEAT_MESSAGE,    NM_MODE_NETWORK },
+        { CANNM_STATE_NORMAL_OPERATION,  NM_STATE_NORMAL_OPERATION,  NM_MODE_NETWORK },
+        { CANNM_STATE_READY_SLEEP,       NM_STATE_READY_SLEEP,       NM_MODE_NETWORK },
+    };
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    for (const Row& row : rows)
+    {
+        SCOPED_TRACE(static_cast<int>(row.canNm));
+        CanNm_Test_SetState(row.canNm);
+        Nm_StateType state = NM_STATE_BUS_SLEEP;
+        Nm_ModeType  mode  = NM_MODE_BUS_SLEEP;
+        ASSERT_EQ(Nm_GetState(NM_MAIN_NETWORK_HANDLE, &state, &mode), E_OK);
+        EXPECT_EQ(state, row.nmState);
+        EXPECT_EQ(mode, row.nmMode);
+    }
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // 各行で、期待どおりに変換されることを確認済み
+}
+
+TEST_F(Nm_GetState_Test, Nm_GetState_OK_UnknownCanNmStateFallsBackToBusSleep)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    CanNm_Test_SetState(static_cast<CanNm_StateType>(0x7F));   // 定義にない値（破損を想定）
+    Nm_StateType state = NM_STATE_NORMAL_OPERATION;
+    Nm_ModeType  mode  = NM_MODE_NETWORK;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    const Std_ReturnType ret = Nm_GetState(NM_MAIN_NETWORK_HANDLE, &state, &mode);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_OK);
+    EXPECT_EQ(state, NM_STATE_BUS_SLEEP);   // 安全側（BUS_SLEEP）へ倒す
 }
 
 }  // namespace

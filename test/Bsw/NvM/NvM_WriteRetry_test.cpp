@@ -74,7 +74,11 @@ protected:
         WrapDem_Reset();
         WrapMemIf_Reset();   // 起動時の処理で数えた回数を除き、故障注入も他のテストから漏れないようにする
         FakeDetHw_Reset();
-        std::memset(newData, 0x5A, sizeof(newData));  // 既存内容（全 0 ほか）と異なる値（書き込みスキップ回避）
+        // 既存内容（RAM ミラーに残った直前のテストの値を含む）と必ず異なる値にする（同じ値だと書き込みがスキップされ、
+        // 書き込みが走らないまま完了してしまい、テストの結果が実行順序に依存する）。
+        static uint8 pattern = 0x5AU;
+        pattern = (uint8)(pattern + 1U);
+        std::memset(newData, pattern, sizeof(newData));
     }
 
     void TearDown() override

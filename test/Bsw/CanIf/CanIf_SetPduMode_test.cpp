@@ -134,6 +134,24 @@ TEST_F(CanIf_SetPduMode_Test, CanIf_SetPduMode_NG_InvalidPduMode)
     EXPECT_EQ(FakeDetHw_LastErrorId, CANIF_E_PARAM_PDU_MODE);
 }
 
+TEST_F(CanIf_SetPduMode_Test, CanIf_SetPduMode_NG_UninitializedReturnsError)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    CanIf_DeInit();   // 未初期化にする
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    const Std_ReturnType ret = CanIf_SetPduMode(0U, CANIF_ONLINE);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_NOT_OK);
+}
+
 TEST_F(CanIf_SetPduMode_Test, CanIf_SetPduMode_OK_AcceptsOfflineMode)
 {
     /* ----------------------- */

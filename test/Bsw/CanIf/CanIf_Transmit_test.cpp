@@ -152,4 +152,47 @@ TEST_F(CanIf_Transmit_Test, CanIf_Transmit_NG_NullSduDataPtr)
     EXPECT_EQ(FakeDetHw_LastErrorId, CANIF_E_PARAM_POINTER);
 }
 
+TEST_F(CanIf_Transmit_Test, CanIf_Transmit_NG_SduLengthAboveDlc)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    uint8 sdu[9] = { 0 };
+    PduInfoType info = { sdu, 9U };   // 設定の Dlc（8）を超える
+    const uint32 writeBefore = CallCount_Can_Write;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    const Std_ReturnType ret = CanIf_Transmit(0U, &info);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_NOT_OK);
+    EXPECT_EQ(CallCount_Can_Write, writeBefore);   // Can ドライバへ渡さない
+}
+
+TEST_F(CanIf_Transmit_Test, CanIf_Transmit_NG_PduModeNotOnline)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    ASSERT_EQ(CanIf_SetPduMode(0U, CANIF_TX_OFFLINE), E_OK);   // 送信を止める
+    uint8 sdu[8] = { 0 };
+    PduInfoType info = { sdu, 8U };
+    const uint32 writeBefore = CallCount_Can_Write;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    const Std_ReturnType ret = CanIf_Transmit(0U, &info);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_NOT_OK);
+    EXPECT_EQ(CallCount_Can_Write, writeBefore);   // Can ドライバへ渡さない
+}
+
 }  // namespace

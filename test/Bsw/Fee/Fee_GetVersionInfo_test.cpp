@@ -87,4 +87,26 @@ TEST_F(Fee_GetVersionInfo_Test, Fee_GetVersionInfo_NG_NullPointer)
     EXPECT_EQ(FakeDetHw_LastErrorId, FEE_E_PARAM_POINTER);
 }
 
+TEST_F(Fee_GetVersionInfo_Test, Fee_GetVersionInfo_OK_ReturnsModuleVersion)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    Std_VersionInfoType info = { 0xFFFFU, 0xFFFFU, 0xFFU, 0xFFU, 0xFFU };
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Fee_GetVersionInfo(&info);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(info.vendorID, FEE_VENDOR_ID);
+    EXPECT_EQ(info.moduleID, FEE_MODULE_ID);
+    EXPECT_EQ(info.sw_major_version, FEE_SW_MAJOR_VERSION);
+    EXPECT_EQ(info.sw_minor_version, FEE_SW_MINOR_VERSION);
+    EXPECT_EQ(info.sw_patch_version, FEE_SW_PATCH_VERSION);
+}
+
 }  // namespace

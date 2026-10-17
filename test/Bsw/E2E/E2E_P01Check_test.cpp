@@ -254,4 +254,92 @@ TEST_F(E2E_P01Check_Test, E2E_P01Check_OK_SecondConsecutiveFrame)
     EXPECT_EQ(checkState.LastValidCounter, 1U);
 }
 
+TEST_F(E2E_P01Check_Test, E2E_P01Check_OK_SameCounterReceivedAgainIsRepeated)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    E2E_P01ProtectStateType protectState;
+    E2E_P01CheckStateType   checkState;
+    ASSERT_EQ(E2E_P01ProtectInit(&protectState), E2E_E_OK);
+    ASSERT_EQ(E2E_P01CheckInit(&checkState), E2E_E_OK);
+    uint8_t frame[5] = {0U, 0U, 0U, 0U, 0U};
+    ASSERT_EQ(E2E_P01Protect(&config, &protectState, frame), E2E_E_OK);
+    ASSERT_EQ(E2E_P01Check(&config, &checkState, frame), E2E_E_OK);   // 初回
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    const Std_ReturnType ret = E2E_P01Check(&config, &checkState, frame);   // 同じフレーム（同じカウンタ）をもう一度
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E2E_E_OK);
+    EXPECT_EQ(checkState.Status, E2E_P01STATUS_REPEATED);
+}
+
+TEST_F(E2E_P01Check_Test, E2E_P01Check_OK_SkippedFrameWithinMaxDeltaIsOkSomeLost)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    config.MaxDeltaCounter = 2U;   // 1 フレームの消失までは許容する
+    config.SyncCounterInit = 0U;   // 再ロックの待ちは使わない
+    E2E_P01ProtectStateType protectState;
+    E2E_P01CheckStateType   checkState;
+    ASSERT_EQ(E2E_P01ProtectInit(&protectState), E2E_E_OK);
+    ASSERT_EQ(E2E_P01CheckInit(&checkState), E2E_E_OK);
+    uint8_t f1[5] = {0U, 0U, 0U, 0U, 0U};
+    uint8_t f2[5] = {0U, 0U, 0U, 0U, 0U};
+    uint8_t f3[5] = {0U, 0U, 0U, 0U, 0U};
+    uint8_t f4[5] = {0U, 0U, 0U, 0U, 0U};
+    ASSERT_EQ(E2E_P01Protect(&config, &protectState, f1), E2E_E_OK);
+    ASSERT_EQ(E2E_P01Protect(&config, &protectState, f2), E2E_E_OK);
+    ASSERT_EQ(E2E_P01Protect(&config, &protectState, f3), E2E_E_OK);   // f3 は受信側へ届かない
+    ASSERT_EQ(E2E_P01Protect(&config, &protectState, f4), E2E_E_OK);
+    ASSERT_EQ(E2E_P01Check(&config, &checkState, f1), E2E_E_OK);
+    ASSERT_EQ(E2E_P01Check(&config, &checkState, f2), E2E_E_OK);
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    const Std_ReturnType ret = E2E_P01Check(&config, &checkState, f4);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E2E_E_OK);
+    EXPECT_EQ(checkState.Status, E2E_P01STATUS_OKSOMELOST);   // 正常だが、一部が消失している
+}
+
+TEST_F(E2E_P01Check_Test, E2E_P01Check_OK_CrcPlacedAfterCounterIsVerifiedOverWholeFrame)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    config.CRCOffset     = 4U;   // CRC を、フレームの末尾（データの後）へ置く
+    config.CounterOffset = 1U;
+    E2E_P01ProtectStateType protectState;
+    E2E_P01CheckStateType   checkState;
+    ASSERT_EQ(E2E_P01ProtectInit(&protectState), E2E_E_OK);
+    ASSERT_EQ(E2E_P01CheckInit(&checkState), E2E_E_OK);
+    uint8_t f1[5] = {0U, 0U, 0xA5U, 0x5AU, 0U};
+    uint8_t f2[5] = {0U, 0U, 0xA5U, 0x5AU, 0U};
+    ASSERT_EQ(E2E_P01Protect(&config, &protectState, f1), E2E_E_OK);
+    ASSERT_EQ(E2E_P01Protect(&config, &protectState, f2), E2E_E_OK);
+    ASSERT_EQ(E2E_P01Check(&config, &checkState, f1), E2E_E_OK);
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    const Std_ReturnType ret = E2E_P01Check(&config, &checkState, f2);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E2E_E_OK);
+    EXPECT_EQ(checkState.Status, E2E_P01STATUS_OK);   // CRC の前後のバイトを含めて、正しく検証できる
+}
+
 }  // namespace
