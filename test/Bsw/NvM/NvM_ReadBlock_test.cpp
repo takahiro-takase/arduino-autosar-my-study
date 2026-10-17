@@ -24,6 +24,7 @@ extern "C" {
 #include "NvM.h"
 #include "MemIf.h"
 #include "Fake_Det_Hw.h"
+#include "NvM_Cfg.h"
 }
 
 /* ======================================================================
@@ -110,6 +111,25 @@ TEST_F(NvM_ReadBlock_Test, NvM_ReadBlock_NG_InvalidBlockId)
     /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, NVM_E_PARAM_BLOCK_ID);
+}
+
+TEST_F(NvM_ReadBlock_Test, NvM_ReadBlock_OK_NullDestinationUsesPermanentRamBlock)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）。DEM_STATUS は恒久 RAM ブロックを持つ。
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Std_ReturnType ret = NvM_ReadBlock(NVM_BLOCK_ID_DEM_STATUS, NULL);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_OK);
+    EXPECT_EQ(FakeDetHw_LastErrorId, 0xFFU);   // DET も報告しない
 }
 
 }  // namespace

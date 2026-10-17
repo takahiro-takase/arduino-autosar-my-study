@@ -123,4 +123,24 @@ TEST_F(Dem_GetFaultDetectionCounter_Test, Dem_GetFaultDetectionCounter_NG_NullPo
     EXPECT_EQ(FakeDetHw_LastErrorId, DEM_E_PARAM_POINTER);
 }
 
+TEST_F(Dem_GetFaultDetectionCounter_Test, Dem_GetFaultDetectionCounter_OK_NegativeDebounceCounterMapsToNegativeFdc)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    ASSERT_EQ(Dem_SetEventStatus(0U, DEM_EVENT_STATUS_PASSED), E_OK);   // デバウンスカウンタが -1（上限 2 の半分）になる
+    sint8 fdc = 0;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Std_ReturnType ret = Dem_GetFaultDetectionCounter(0U, &fdc);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    ASSERT_EQ(ret, E_OK);
+    EXPECT_EQ(fdc, -64);   // 負側は -128 を上限（-limit）に写像する: -1 * 128 / 2
+}
+
 }  // namespace

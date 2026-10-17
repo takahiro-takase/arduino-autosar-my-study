@@ -17,6 +17,12 @@ extern "C" {
 #include "Fake_Det_Hw.h"
 #include "Fake_Millis.h"
 #include "Wrap_CanTp.h"
+#include "Wrap_PduR.h"
+#include "Wrap_ComM.h"
+#include "Wrap_Dcm.h"
+#include "Dcm.h"
+#include "Dcm_Cfg.h"
+#include "Dem.h"
 #include "Wrap_Dcm.h"
 #include "Wrap_CanIf.h"
 }
@@ -41,7 +47,8 @@ namespace
  * ====================================================================== */
 
 /* CanTp の単体テスト用フィクスチャ。
- * SetUp(): 時刻と、CanTp・Dcm・CanIf の wrap（呼び出し回数・故障注入。他のテストが設定したまま残っていても影響を受けないよう）を初期化し、CanTp_Init(NULL) を呼ぶ（Init 中の DET ログは抑制し、Init 自体の記録は消して後続の検証から除く）。 */
+ * SetUp(): 時刻と、CanTp・Dcm・CanIf の wrap（呼び出し回数・故障注入。他のテストが設定したまま残っていても影響を受けないよう）を初期化し、PduR への送信は成功する既定にして、CanTp_Init(NULL)・Dem_Init(NULL)・Dcm_Init(NULL) を呼ぶ（Init 中の DET ログは抑制し、Init 自体の記録は消して後続の検証から除く）。
+ * TearDown(): ComM・PduR の wrap を戻し、Dcm を未初期化へ戻す（他のテストファイルへ影響を残さない）。 */
 class CanTp_RxIndication_Test : public ::testing::Test
 {
 protected:
@@ -52,7 +59,13 @@ protected:
         WrapDcm_Reset();
         WrapCanIf_Reset();
         FakeDetHw_LogSuppressed = 1U;  // Init() のログはノイズになるため抑制
+        WrapPduR_Reset();
+        FailFromCallCount_PduR_CanTpTransmit = 0U;   // 既定: CAN フレームの送信（PduR 経由）は成功する
+        ForcedReturn_PduR_CanTpTransmit      = E_OK;
+        Suppressed_ComM_DcmDiagnostic        = 1U;   // 本テストは通信管理(ComM/CanSM/CanNm)が対象外
         CanTp_Init(NULL);              // CfgPtr は常に NULL（CanTp.h 参照）
+        Dem_Init(NULL);
+        Dcm_Init(NULL);                // 上位層（Dcm）は実体。CanTp から渡るデータを、実際に受け取る・取り出す
         FakeDetHw_Reset();              // Init 自体の記録を後続の検証対象から除く
         FakeDetHw_LogSuppressed = 0U;  // ここから各 TEST_F の実行(Act)区間
     }
@@ -68,9 +81,40 @@ protected:
         return CanTp_Test_GetTxStMin();
     }
 
-    // CanTp に DeInit() は無いため TearDown は書かない。未初期化状態が必要な
-    // テストは各自 CanTp_Test_ResetInitState() を明示的に呼ぶ（ファイル冒頭
-    // コメント参照）。
+    void TearDown() override
+    {
+        FakeDetHw_LogSuppressed = 1U;
+        WrapComM_Reset();           // 他のテストファイルへ影響を残さない
+        WrapPduR_Reset();
+        Dcm_Test_ResetInitState();
+    }
+
+    // FF（総長 10: 先頭 6 バイト＋ CF 1 本）を受け取ったことにする。中身は TesterPresent 風の 0x3E で、残りは 0。
+    static void ReceiveFirstFrame()
+    {
+        uint8 frame[8] = { 0x10U, 0x0AU, 0x3EU, 0U, 0U, 0U, 0U, 0U };
+        PduInfoType info = { frame, 8U };
+        CanTp_RxIndication(CANTP_RX_SDU_ID, &info);
+    }
+
+    // CF（シーケンス番号 sn、データ部は 0）を、長さ len で受け取ったことにする。
+    static void ReceiveConsecutiveFrame(uint8 sn, uint8 len)
+    {
+        uint8 frame[8] = { (uint8)(0x20U | sn), 0U, 0U, 0U, 0U, 0U, 0U, 0U };
+        PduInfoType info = { frame, len };
+        CanTp_RxIndication(CANTP_RX_SDU_ID, &info);
+    }
+
+    // FC（フロー状態 fs、STmin 5）を受け取ったことにする。
+    static void ReceiveFlowControl(uint8 fs)
+    {
+        uint8 frame[8] = { (uint8)(0x30U | fs), 0U, 5U, 0U, 0U, 0U, 0U, 0U };
+        PduInfoType info = { frame, 8U };
+        CanTp_RxIndication(CANTP_RX_SDU_ID, &info);
+    }
+
+    // CanTp に DeInit() は無いため、未初期化状態が必要なテストは各自
+    // CanTp_Test_ResetInitState() を明示的に呼ぶ（ファイル冒頭コメント参照）。
 };
 
 /* ======================================================================
@@ -249,6 +293,232 @@ TEST_F(CanTp_RxIndication_Test, CanTp_RxIndication_NG_FfFrameShorterThanEightByt
     EXPECT_EQ(CallCount_Dcm_StartOfReception, 0U);   // 判定で弾かれ、上位層（Dcm）へ受信の開始を通知しない
 }
 
+TEST_F(CanTp_RxIndication_Test, CanTp_RxIndication_NG_FfWhileReceivingAbortsPreviousReception)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    ReceiveFirstFrame();   // 1 つ目の受信（CF 待ち）
+    ASSERT_EQ(CallCount_Dcm_StartOfReception, 1U);
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    ReceiveFirstFrame();   // CF を待っている途中で、新しい FF が届く
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(CallCount_Dcm_TpRxIndication, 1U);
+    EXPECT_EQ(LastResult_Dcm_TpRxIndication, E_NOT_OK);   // 古い受信は、中断として上位層へ通知する
+    EXPECT_EQ(CallCount_Dcm_StartOfReception, 2U);        // 新しい受信は始める
+}
+
+TEST_F(CanTp_RxIndication_Test, CanTp_RxIndication_NG_CfWithoutReceptionIsIgnored)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // 受信中ではない（FF を受け取っていない）。
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    ReceiveConsecutiveFrame(1U, 8U);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(CallCount_Dcm_CopyRxData, 0U);
+    EXPECT_EQ(CallCount_Dcm_TpRxIndication, 0U);
+}
+
+TEST_F(CanTp_RxIndication_Test, CanTp_RxIndication_NG_CfShorterThanEightBytesAbortsReception)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    ReceiveFirstFrame();
+    ASSERT_EQ(CallCount_Dcm_CopyRxData, 1U);
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    ReceiveConsecutiveFrame(1U, 7U);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(CallCount_Dcm_CopyRxData, 1U);   // データを渡さない
+    EXPECT_EQ(CallCount_Dcm_TpRxIndication, 1U);
+    EXPECT_EQ(LastResult_Dcm_TpRxIndication, E_NOT_OK);
+}
+
+TEST_F(CanTp_RxIndication_Test, CanTp_RxIndication_NG_CfWithWrongSequenceNumberAbortsReception)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    ReceiveFirstFrame();
+    ASSERT_EQ(CallCount_Dcm_CopyRxData, 1U);
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    ReceiveConsecutiveFrame(2U, 8U);   // 次に受け取るべき番号は 1
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(CallCount_Dcm_CopyRxData, 1U);   // データを渡さない
+    EXPECT_EQ(CallCount_Dcm_TpRxIndication, 1U);
+    EXPECT_EQ(LastResult_Dcm_TpRxIndication, E_NOT_OK);
+}
+
+TEST_F(CanTp_RxIndication_Test, CanTp_RxIndication_NG_CfRejectedByUpperLayerAbortsReception)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    ReceiveFirstFrame();
+    Dcm_Init(NULL);   // Dcm が受信中ではなくなる（Dcm_CopyRxData() が失敗する）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    ReceiveConsecutiveFrame(1U, 8U);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(CallCount_Dcm_CopyRxData, 2U);
+    EXPECT_EQ(CallCount_Dcm_TpRxIndication, 1U);
+    EXPECT_EQ(LastResult_Dcm_TpRxIndication, E_NOT_OK);
+}
+
+TEST_F(CanTp_RxIndication_Test, CanTp_RxIndication_NG_FcWithoutWaitingIsIgnored)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // TX は FC を待っていない（初期状態）。
+    const uint8 before = CanTp_Test_GetTxStMin();   // 直前のテストの値が残っていてもよいよう、変化の有無で見る
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    ReceiveFlowControl(0U);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(CanTp_Test_GetTxStMin(), before);   // STmin（5）を取り込まない
+    EXPECT_FALSE(CanTp_Test_IsTxBusy());
+}
+
+TEST_F(CanTp_RxIndication_Test, CanTp_RxIndication_NG_FcShorterThanEightBytesIsIgnored)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    CanTp_Test_SetTxWaitFc();
+    const uint8 before = CanTp_Test_GetTxStMin();   // 直前のテストの値が残っていてもよいよう、変化の有無で見る
+    uint8 frame[8] = { 0x30U, 0U, 5U, 0U, 0U, 0U, 0U, 0U };
+    PduInfoType info = { frame, 3U };
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    CanTp_RxIndication(CANTP_RX_SDU_ID, &info);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(CanTp_Test_GetTxStMin(), before);   // STmin（5）を取り込まない
+}
+
+TEST_F(CanTp_RxIndication_Test, CanTp_RxIndication_NG_FcOverflowAbortsTransmission)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    CanTp_Test_SetTxWaitFc();
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    ReceiveFlowControl(2U);   // OVFLW
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(CallCount_Dcm_TpTxConfirmation, 1U);
+    EXPECT_EQ(LastResult_Dcm_TpTxConfirmation, E_NOT_OK);
+    EXPECT_FALSE(CanTp_Test_IsTxBusy());
+}
+
+TEST_F(CanTp_RxIndication_Test, CanTp_RxIndication_NG_UnknownFrameTypeIsIgnored)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    uint8 frame[8] = { 0x40U, 0U, 0U, 0U, 0U, 0U, 0U, 0U };   // 上位 4 ビットが SF/FF/CF/FC のどれでもない
+    PduInfoType info = { frame, 8U };
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    CanTp_RxIndication(CANTP_RX_SDU_ID, &info);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(CallCount_Dcm_StartOfReception, 0U);
+    EXPECT_EQ(CallCount_Dcm_CopyRxData, 0U);
+    EXPECT_EQ(CallCount_Dcm_TpRxIndication, 0U);
+}
+
+TEST_F(CanTp_RxIndication_Test, CanTp_RxIndication_NG_EmptyFrameIsIgnored)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    uint8 frame[8] = { 0x02U, 0x10U, 0x01U, 0U, 0U, 0U, 0U, 0U };   // 長さが 0 なら、中身は見ない
+    PduInfoType info = { frame, 0U };
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    CanTp_RxIndication(CANTP_RX_SDU_ID, &info);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(CallCount_Dcm_StartOfReception, 0U);
+    EXPECT_EQ(FakeDetHw_LastErrorId, 0xFFU);   // DET も報告しない
+}
+
+TEST_F(CanTp_RxIndication_Test, CanTp_RxIndication_NG_FfRejectedByUpperLayerStartsNoReception)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    Dcm_Test_ResetInitState();   // Dcm が受信を受け付けない（Dcm_StartOfReception() が失敗する）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    ReceiveFirstFrame();
+    ReceiveConsecutiveFrame(1U, 8U);   // 受信は始まっていないので、CF は無視される
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(CallCount_Dcm_StartOfReception, 1U);
+    EXPECT_EQ(CallCount_Dcm_CopyRxData, 0U);        // FF のデータも渡さない
+    EXPECT_EQ(CallCount_Dcm_TpRxIndication, 0U);    // 受け付けられなかった受信は、完了も中断も通知しない
+}
+
 TEST_F(CanTp_RxIndication_Test, CanTp_RxIndication_OK_SfValidFrameStartsReception)
 {
     /* ----------------------- */
@@ -344,6 +614,26 @@ TEST_F(CanTp_RxIndication_Test, CanTp_RxIndication_OK_FcStMinReservedValueIsClam
     /* ----------------------- */
     EXPECT_EQ(stMinBelowMicrosecondRange, 127U);   // 0xF0（規格の予約値）
     EXPECT_EQ(stMinAboveMicrosecondRange, 127U);   // 0xFA（規格の予約値）
+}
+
+TEST_F(CanTp_RxIndication_Test, CanTp_RxIndication_OK_MultiFrameReceptionDeliversWholeMessage)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    ReceiveFirstFrame();
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    ReceiveConsecutiveFrame(1U, 8U);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(CallCount_Dcm_CopyRxData, 2U);              // FF の 6 バイトと、CF の残り 4 バイト
+    EXPECT_EQ(CallCount_Dcm_TpRxIndication, 1U);
+    EXPECT_EQ(LastResult_Dcm_TpRxIndication, E_OK);
 }
 
 }  // namespace

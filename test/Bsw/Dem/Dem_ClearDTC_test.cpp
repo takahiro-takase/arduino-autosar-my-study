@@ -103,4 +103,40 @@ TEST_F(Dem_ClearDTC_Test, Dem_ClearDTC_NG_WrongConfiguration)
     EXPECT_EQ(FakeDetHw_LastErrorId, DEM_E_WRONG_CONFIGURATION);
 }
 
+TEST_F(Dem_ClearDTC_Test, Dem_ClearDTC_NG_UnsupportedDtcFormat)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Std_ReturnType ret = Dem_ClearDTC(0U, DEM_GROUP_ALL_DTCS, DEM_DTC_FORMAT_OBD, DEM_DTC_ORIGIN_PRIMARY_MEMORY);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, DEM_E_NO_DTC_AVAILABLE);   // UDS 形式以外は、該当する DTC が無いものとして返す
+}
+
+TEST_F(Dem_ClearDTC_Test, Dem_ClearDTC_NG_UnknownDtc)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Std_ReturnType ret = Dem_ClearDTC(0U, 0x123456UL, DEM_DTC_FORMAT_UDS, DEM_DTC_ORIGIN_PRIMARY_MEMORY);   // どのイベントにも割り当てられていない DTC
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_NOT_OK);
+}
+
 }  // namespace

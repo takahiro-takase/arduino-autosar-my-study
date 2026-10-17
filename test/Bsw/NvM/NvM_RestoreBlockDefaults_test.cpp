@@ -24,6 +24,7 @@ extern "C" {
 #include "NvM.h"
 #include "MemIf.h"
 #include "Fake_Det_Hw.h"
+#include "NvM_Cfg.h"
 }
 
 /* ======================================================================
@@ -130,6 +131,54 @@ TEST_F(NvM_RestoreBlockDefaults_Test, NvM_RestoreBlockDefaults_NG_BlockWithoutDe
     /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, NVM_E_BLOCK_WITHOUT_DEFAULTS);
+}
+
+TEST_F(NvM_RestoreBlockDefaults_Test, NvM_RestoreBlockDefaults_NG_WriteProtectedBlock)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    ASSERT_EQ(NvM_SetBlockProtection(NVM_BLOCK_ID_DEM_STATUS, TRUE), E_OK);
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Std_ReturnType ret = NvM_RestoreBlockDefaults(NVM_BLOCK_ID_DEM_STATUS, NULL);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_NOT_OK);
+    NvM_RequestResultType result = NVM_REQ_OK;
+    ASSERT_EQ(NvM_GetErrorStatus(NVM_BLOCK_ID_DEM_STATUS, &result), E_OK);
+    EXPECT_NE(result, NVM_REQ_PENDING);   // 書き込みを積まない
+}
+
+TEST_F(NvM_RestoreBlockDefaults_Test, NvM_RestoreBlockDefaults_OK_CopiesRomDefaultsAndQueuesWrite)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    uint8 pattern[15];
+    for (uint8 i = 0U; i < 15U; i++) { pattern[i] = 0xA5U; }
+    ASSERT_EQ(NvM_WriteBlock(NVM_BLOCK_ID_DEM_STATUS, pattern), E_OK);   // RAM ミラーを、既定値と異なる内容にする
+    uint8 dest[15];
+    for (uint8 i = 0U; i < 15U; i++) { dest[i] = 0xEEU; }
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Std_ReturnType ret = NvM_RestoreBlockDefaults(NVM_BLOCK_ID_DEM_STATUS, dest);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_OK);
+    uint8 ram[15] = { 0U };
+    ASSERT_EQ(NvM_ReadBlock(NVM_BLOCK_ID_DEM_STATUS, ram), E_OK);
+    EXPECT_NE(ram[0], 0xA5U);        // RAM ミラーが ROM の既定値へ戻る
+    EXPECT_EQ(dest[0], ram[0]);      // 呼び出し元の領域へも、同じ内容を渡す
+    EXPECT_EQ(dest[14], ram[14]);
 }
 
 }  // namespace

@@ -83,4 +83,28 @@ TEST_F(Dem_SetFreezeFrameContext_Test, Dem_SetFreezeFrameContext_NG_Uninit)
     EXPECT_EQ(FakeDetHw_LastErrorId, DEM_E_UNINIT);
 }
 
+TEST_F(Dem_SetFreezeFrameContext_Test, Dem_SetFreezeFrameContext_OK_ContextIsCapturedWhenEventFails)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    Dem_SetFreezeFrameContext(1500U, 90U, 2U);
+    ASSERT_EQ(Dem_SetEventStatus(0U, DEM_EVENT_STATUS_FAILED), E_OK);
+    ASSERT_EQ(Dem_SetEventStatus(0U, DEM_EVENT_STATUS_FAILED), E_OK);   // デバウンス上限 2 で FAILED が確定する
+    Dem_FreezeFrameType frame = { 0U, 0U, 0U };
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Std_ReturnType ret = Dem_GetFreezeFrameOfEvent(0U, &frame);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    ASSERT_EQ(ret, E_OK);
+    EXPECT_EQ(frame.EngineSpeed, 1500U);
+    EXPECT_EQ(frame.CoolantTemp, 90U);
+    EXPECT_EQ(frame.EngineState, 2U);
+}
+
 }  // namespace

@@ -15,6 +15,7 @@
 extern "C" {
 #include "Com.h"
 #include "Fake_Det_Hw.h"
+#include "Fake_Millis.h"
 }
 
 /* ======================================================================
@@ -172,6 +173,58 @@ const Com_SignalConfigType kUnregisteredRxSignal = {
     COM_DATA_INVALID_ACTION_NONE, 0U, NULL, 0U, 0U, NULL, NULL, NULL, NULL, NULL, 0U
 };
 
+// 受信シグナル 1 つ（SignalId 20、8 ビット）と、それを持つ RX I-PDU（DLC 1 バイト）を、各テストが組み立てる。
+// 設定テーブルは Com が参照し続けるため、テスト本体のローカル変数ではなく静的な領域に置く。
+Com_IPduConfigType    gRxIPdu;
+Com_SignalConfigType  gRxSignal;
+Com_ConfigType        gRxConfig;
+
+const Com_SignalIdType kRxSignalId    = 20U;
+const uint8            kInitValue     = 0x42U;
+const unsigned long    kTimeoutMs     = 100UL;
+
+// gRxSignal / gRxIPdu を既定（kTestRxSignal / kTestRxIPdu。InitValue は kInitValue）にして、Com を初期化し直す。
+// 呼ぶ前に、各テストが gRxSignal / gRxIPdu のうち変えたい項目だけを書き換えられるよう、準備と初期化を分けてある。
+void PrepareRxConfig()
+{
+    gRxIPdu    = kTestRxIPdu;
+    gRxSignal  = kTestRxSignal;
+    gRxSignal.SignalId  = kRxSignalId;
+    gRxSignal.InitValue = kInitValue;
+}
+
+void InitWithRxConfig()
+{
+    gRxConfig.RxIPdus     = &gRxIPdu;
+    gRxConfig.RxIPduCount = 1U;
+    gRxConfig.TxIPdus     = NULL;
+    gRxConfig.TxIPduCount = 0U;
+    gRxConfig.Signals     = &gRxSignal;
+    gRxConfig.SignalCount = 1U;
+    gRxConfig.GwMappings     = NULL;
+    gRxConfig.GwMappingCount = 0U;
+
+    FakeDetHw_LogSuppressed = 1U;
+    Com_DeInit();
+    Com_Init(&gRxConfig);
+    FakeDetHw_Reset();
+    FakeDetHw_LogSuppressed = 0U;
+}
+
+// 通知関数が呼ばれた回数。
+uint32 gInvalidNotifyCount;
+uint32 gFilterRejectCount;
+void OnInvalidNotify() { gInvalidNotifyCount++; }
+void OnFilterReject()  { gFilterRejectCount++; }
+
+// 1 バイトのデータを、受信したことにする。
+void ReceiveByte(uint8 value)
+{
+    uint8 frame[1] = { value };
+    PduInfoType info = { frame, 1U };
+    Com_RxIndication(0U, &info);
+}
+
 const Com_SignalConfigType kTestSignals[] = {
     kTestTxSignal, kTestRxSignal, kCorruptTxSignal,
     kUnregisteredTxSignal, kCorruptRxSignal, kUnregisteredRxSignal
@@ -307,6 +360,253 @@ TEST_F(Com_ReceiveSignal_Test, Com_ReceiveSignal_NG_SignalNotFound)
     /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, COM_E_PARAM);
+}
+
+TEST_F(Com_ReceiveSignal_Test, Com_ReceiveSignal_OK_TimedOutSignalIsReplacedByInitValue)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    PrepareRxConfig();
+    gRxIPdu.TimeoutMs  = (uint16)kTimeoutMs;
+    gRxSignal.TimeoutMs = (uint16)kTimeoutMs;
+    gRxSignal.RxDataTimeoutAction = COM_RX_TIMEOUT_ACTION_REPLACE;
+    InitWithRxConfig();
+    ReceiveByte(0x11U);
+    FakeMillis_Value += kTimeoutMs;   // 受信デッドラインが切れる
+    Com_MainFunctionRx();
+    uint8 value = 0xFFU;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    const uint8 ret = Com_ReceiveSignal(kRxSignalId, &value);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_OK);
+    EXPECT_EQ(value, kInitValue);   // タイムアウトした値の代わりに、InitValue を返す
+}
+
+TEST_F(Com_ReceiveSignal_Test, Com_ReceiveSignal_OK_InvalidValueWithNotifyReturnsLastValidValue)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    PrepareRxConfig();
+    gRxSignal.InvalidValue      = 0xFFU;
+    gRxSignal.DataInvalidAction = COM_DATA_INVALID_ACTION_NOTIFY;
+    InitWithRxConfig();
+    ReceiveByte(0x11U);
+    uint8 first = 0U;
+    ASSERT_EQ(Com_ReceiveSignal(kRxSignalId, &first), E_OK);
+    ASSERT_EQ(first, 0x11U);   // 有効な値を、最後の有効値として覚える
+    ReceiveByte(0xFFU);        // 無効値を受信する
+    uint8 value = 0U;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    const uint8 ret = Com_ReceiveSignal(kRxSignalId, &value);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_OK);
+    EXPECT_EQ(value, 0x11U);   // 無効値は上位へ渡さず、最後の有効値を返す
+}
+
+TEST_F(Com_ReceiveSignal_Test, Com_ReceiveSignal_OK_InvalidValueWithReplaceReturnsInitValue)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    PrepareRxConfig();
+    gRxSignal.InvalidValue      = 0xFFU;
+    gRxSignal.DataInvalidAction = COM_DATA_INVALID_ACTION_REPLACE;
+    InitWithRxConfig();
+    ReceiveByte(0xFFU);   // 無効値を受信する
+    uint8 value = 0U;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    const uint8 ret = Com_ReceiveSignal(kRxSignalId, &value);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_OK);
+    EXPECT_EQ(value, kInitValue);   // 無効値の代わりに、InitValue を返す
+}
+
+TEST_F(Com_ReceiveSignal_Test, Com_ReceiveSignal_OK_ValueOutsideFilterRangeReturnsLastValidValue)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    PrepareRxConfig();
+    gRxSignal.FilterAlgorithm = COM_FILTER_NEW_IS_WITHIN;
+    gRxSignal.FilterMin       = 10U;
+    gRxSignal.FilterMax       = 20U;
+    InitWithRxConfig();
+    ReceiveByte(15U);
+    uint8 first = 0U;
+    ASSERT_EQ(Com_ReceiveSignal(kRxSignalId, &first), E_OK);
+    ASSERT_EQ(first, 15U);   // 範囲内の値は、最後の有効値になる
+    ReceiveByte(30U);        // 範囲の外の値を受信する
+    uint8 value = 0U;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    const uint8 ret = Com_ReceiveSignal(kRxSignalId, &value);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_OK);
+    EXPECT_EQ(value, 15U);   // 範囲の外の値は上位へ渡さず、最後の有効値を返す
+}
+
+TEST_F(Com_ReceiveSignal_Test, Com_ReceiveSignal_OK_FrameIsIgnoredWhileReceptionIsSuppressed)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    PrepareRxConfig();
+    InitWithRxConfig();
+    ReceiveByte(0x11U);
+    Com_SetCommunicationEnabled(FALSE, TRUE);   // 受信だけを止める（診断の CommunicationControl 相当）
+    ReceiveByte(0x22U);
+    uint8 value = 0U;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    const uint8 ret = Com_ReceiveSignal(kRxSignalId, &value);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_OK);
+    EXPECT_EQ(value, 0x11U);   // 止めている間のフレームは取り込まない
+}
+
+TEST_F(Com_ReceiveSignal_Test, Com_ReceiveSignal_OK_FrameForUnknownPduIdIsIgnored)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    PrepareRxConfig();
+    InitWithRxConfig();
+    uint8 frame[1] = { 0x22U };
+    PduInfoType info = { frame, 1U };
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Com_RxIndication(7U, &info);   // どの RX I-PDU にも割り当てられていない PduId
+    uint8 value = 0U;
+    const uint8 ret = Com_ReceiveSignal(kRxSignalId, &value);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_OK);
+    EXPECT_EQ(value, kInitValue);   // 取り込まれていない（初期化時の InitValue のまま）
+    EXPECT_EQ(FakeDetHw_LastErrorId, 0xFFU);   // DET も報告しない
+}
+
+TEST_F(Com_ReceiveSignal_Test, Com_ReceiveSignal_OK_InvalidValueNotificationIsCalledFromMainFunctionRx)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    PrepareRxConfig();
+    gRxSignal.InvalidValue           = 0xFFU;
+    gRxSignal.DataInvalidAction      = COM_DATA_INVALID_ACTION_NOTIFY;
+    gRxSignal.InvalidNotificationCbk = OnInvalidNotify;
+    InitWithRxConfig();
+    gInvalidNotifyCount = 0U;
+    ReceiveByte(0xFFU);
+    uint8 value = 0U;
+    (void)Com_ReceiveSignal(kRxSignalId, &value);   // 無効値を読んだ（通知が予約される）
+    ASSERT_EQ(gInvalidNotifyCount, 0U);             // 読んだ時点では呼ばない
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Com_MainFunctionRx();
+    const uint32 afterFirst = gInvalidNotifyCount;
+    Com_MainFunctionRx();
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(afterFirst, 1U);
+    EXPECT_EQ(gInvalidNotifyCount, 1U);   // 1 回の予約に対して 1 回だけ呼ぶ
+}
+
+TEST_F(Com_ReceiveSignal_Test, Com_ReceiveSignal_OK_FilterRejectNotificationIsCalledFromMainFunctionRx)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    PrepareRxConfig();
+    gRxSignal.FilterAlgorithm = COM_FILTER_NEW_IS_WITHIN;
+    gRxSignal.FilterMin       = 10U;
+    gRxSignal.FilterMax       = 20U;
+    gRxSignal.FilterRejectCbk = OnFilterReject;
+    InitWithRxConfig();
+    gFilterRejectCount = 0U;
+    ReceiveByte(30U);   // 範囲の外
+    uint8 value = 0U;
+    (void)Com_ReceiveSignal(kRxSignalId, &value);   // 読んだ（通知が予約される）
+    ASSERT_EQ(gFilterRejectCount, 0U);
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Com_MainFunctionRx();
+    const uint32 afterFirst = gFilterRejectCount;
+    Com_MainFunctionRx();
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(afterFirst, 1U);
+    EXPECT_EQ(gFilterRejectCount, 1U);
+}
+
+TEST_F(Com_ReceiveSignal_Test, Com_ReceiveSignal_OK_ReenablingReceptionRestartsDeadlineMonitoring)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    PrepareRxConfig();
+    gRxIPdu.TimeoutMs   = (uint16)kTimeoutMs;
+    gRxSignal.TimeoutMs = (uint16)kTimeoutMs;
+    gRxSignal.RxDataTimeoutAction = COM_RX_TIMEOUT_ACTION_REPLACE;
+    InitWithRxConfig();
+    ReceiveByte(0x11U);
+    Com_SetCommunicationEnabled(FALSE, TRUE);   // 受信を止める
+    FakeMillis_Value += 2U * kTimeoutMs;        // 止めている間に、デッドライン分の時間が過ぎる
+    Com_SetCommunicationEnabled(TRUE, TRUE);    // 受信を再開する
+    uint8 value = 0U;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Com_MainFunctionRx();   // 再開の直後
+    const uint8 ret = Com_ReceiveSignal(kRxSignalId, &value);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_OK);
+    EXPECT_EQ(value, 0x11U);   // 止めていた時間は数えず、タイムアウトにはしない（InitValue には置き換わらない）
 }
 
 }  // namespace

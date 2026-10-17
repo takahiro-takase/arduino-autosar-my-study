@@ -16,6 +16,7 @@ extern "C" {
 #include "NvM.h"
 #include "MemIf.h"
 #include "Fake_Det_Hw.h"
+#include "NvM_Cfg.h"
 }
 
 /* ======================================================================
@@ -122,6 +123,31 @@ TEST_F(NvM_SetBlockProtection_Test, NvM_SetBlockProtection_NG_BlockPending)
     /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, NVM_E_BLOCK_PENDING);
+}
+
+TEST_F(NvM_SetBlockProtection_Test, NvM_SetBlockProtection_OK_ProtectionBlocksWritesUntilReleased)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    uint8 pattern[15];
+    for (uint8 i = 0U; i < 15U; i++) { pattern[i] = 0xA5U; }
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Std_ReturnType retSet = NvM_SetBlockProtection(NVM_BLOCK_ID_DEM_STATUS, TRUE);
+    Std_ReturnType retWriteProtected = NvM_WriteBlock(NVM_BLOCK_ID_DEM_STATUS, pattern);
+    Std_ReturnType retRelease = NvM_SetBlockProtection(NVM_BLOCK_ID_DEM_STATUS, FALSE);
+    Std_ReturnType retWriteReleased = NvM_WriteBlock(NVM_BLOCK_ID_DEM_STATUS, pattern);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(retSet, E_OK);
+    EXPECT_EQ(retWriteProtected, E_NOT_OK);   // 保護中は書き込めない
+    EXPECT_EQ(retRelease, E_OK);
+    EXPECT_EQ(retWriteReleased, E_OK);        // 解除すれば書き込める
 }
 
 }  // namespace
