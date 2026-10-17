@@ -26,6 +26,10 @@
 extern "C" {
 #include "E2EXf.h"
 #include "Fake_Det_Hw.h"
+#include "E2E_P05.h"
+#include "E2EXf_PBCfg.h"
+#include "Dem.h"
+#include "Wrap_Dem.h"
 }
 
 /* ======================================================================
@@ -42,6 +46,24 @@ extern "C" {
 
 namespace
 {
+
+// 検証対象フレームの組み立て用のローカル E2E 設定（本番の E2EXf_AbsInfoCfgP05 と同じ
+// DataID/DataLength/MaxDeltaCounter/Offset）。
+const E2E_P05ConfigType kRefAbsInfoCfg = {
+    0x0110U,  /* DataID */
+    6U,       /* DataLength */
+    1U,       /* MaxDeltaCounter */
+    0U        /* Offset */
+};
+
+// kRefAbsInfoCfg に基づき、独立した Protect 状態でフレームを組み立てる。
+void BuildAbsFrame(uint8 (&buf)[6], E2E_P05ProtectStateType* state)
+{
+    buf[3] = 0x01U;
+    buf[4] = 0x02U;
+    buf[5] = 0x03U;
+    E2E_P05Protect(&kRefAbsInfoCfg, state, buf, 6U);
+}
 
 /* ======================================================================
  * Test Fixture
@@ -134,6 +156,91 @@ TEST_F(E2EXf_Inv_AbsInfo_Test, E2EXf_Inv_AbsInfo_NG_NullBufferPtr)
     EXPECT_EQ(ret, E_SAFETY_HARD_RUNTIMEERROR);
     EXPECT_EQ(checkStatus, E2E_P05STATUS_ERROR);
     EXPECT_EQ(FakeDetHw_LastErrorId, E2EXF_E_PARAM_POINTER);
+}
+
+TEST_F(E2EXf_Inv_AbsInfo_Test, E2EXf_Inv_AbsInfo_NG_NullBufferLengthPtr)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    uint8 buf[6] = { 0U };
+    E2E_P05StatusType checkStatus;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    uint8 ret = E2EXf_Inv_AbsInfo(buf, NULL, NULL, 0U, &checkStatus);   // CheckStatus は有効、bufferLength だけ NULL
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_SAFETY_HARD_RUNTIMEERROR);
+    EXPECT_EQ(FakeDetHw_LastErrorId, E2EXF_E_PARAM_POINTER);
+}
+
+TEST_F(E2EXf_Inv_AbsInfo_Test, E2EXf_Inv_AbsInfo_NG_FirstFrameWithBadCrcStaysErrorAndKeepsWaitingForFirstData)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    WrapDem_Reset();
+    Dem_Init(NULL);
+    E2EXf_PBCfg_Init();   // 初回受信の特別扱い（WaitForFirstData）と状態機械を初期状態へ戻す
+    E2E_P05ProtectStateType refState;
+    E2E_P05ProtectInit(&refState);
+    uint8 bad[6] = { 0U };
+    BuildAbsFrame(bad, &refState);
+    bad[3] ^= 0x01U;   // CRC と合わなくなる
+    uint8 good[6] = { 0U };
+    BuildAbsFrame(good, &refState);
+    uint32 bufLen = 0U;
+    E2E_P05StatusType status = E2E_P05STATUS_OK;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    (void)E2EXf_Inv_AbsInfo(bad, &bufLen, NULL, 0U, &status);
+    const E2E_P05StatusType statusOfBadFrame = status;
+    (void)E2EXf_Inv_AbsInfo(good, &bufLen, NULL, 0U, &status);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(statusOfBadFrame, E2E_P05STATUS_ERROR);   // 初回でも CRC エラーは OK に格上げしない
+    EXPECT_EQ(status, E2E_P05STATUS_OK);                // 次の正しいフレームが、初回として受理される（待ちが残っている）
+    EXPECT_EQ(bufLen, 6U);
+}
+
+TEST_F(E2EXf_Inv_AbsInfo_Test, E2EXf_Inv_AbsInfo_OK_FirstValidFrameIsAcceptedThenNormalCounterCheck)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    WrapDem_Reset();
+    Dem_Init(NULL);
+    E2EXf_PBCfg_Init();   // 初回受信の特別扱い（WaitForFirstData）と状態機械を初期状態へ戻す
+    E2E_P05ProtectStateType refState;
+    E2E_P05ProtectInit(&refState);
+    uint8 frame1[6] = { 0U };
+    uint8 frame2[6] = { 0U };
+    BuildAbsFrame(frame1, &refState);
+    BuildAbsFrame(frame2, &refState);   // カウンタは frame1 の次の値
+    uint32 bufLen = 0U;
+    E2E_P05StatusType status1 = E2E_P05STATUS_ERROR;
+    E2E_P05StatusType status2 = E2E_P05STATUS_ERROR;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    (void)E2EXf_Inv_AbsInfo(frame1, &bufLen, NULL, 0U, &status1);
+    (void)E2EXf_Inv_AbsInfo(frame2, &bufLen, NULL, 0U, &status2);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(status1, E2E_P05STATUS_OK);   // 初回の正しいフレームは OK（待ちを解除する）
+    EXPECT_EQ(status2, E2E_P05STATUS_OK);   // 2 回目以降は通常のカウンタ判定（差 1 は OK）
+    EXPECT_EQ(bufLen, 6U);
 }
 
 }  // namespace

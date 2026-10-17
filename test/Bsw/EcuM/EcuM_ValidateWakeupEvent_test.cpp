@@ -93,4 +93,22 @@ TEST_F(EcuM_ValidateWakeupEvent_Test, EcuM_ValidateWakeupEvent_NG_UnknownSource)
     ExpectDet(ECUM_API_ID_VALIDATE_WAKEUP_EVENT, ECUM_E_UNKNOWN_WAKEUP_SOURCE);
 }
 
+TEST_F(EcuM_ValidateWakeupEvent_Test, EcuM_ValidateWakeupEvent_NG_UnknownSourceMixedWithCan)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    EcuM_ValidateWakeupEvent(ECUM_WKSOURCE_CAN | 0x00000001UL);   // CAN の要因に、未知の要因が混ざっている
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    ExpectDet(ECUM_API_ID_VALIDATE_WAKEUP_EVENT, ECUM_E_UNKNOWN_WAKEUP_SOURCE);
+}
+
 }  // namespace

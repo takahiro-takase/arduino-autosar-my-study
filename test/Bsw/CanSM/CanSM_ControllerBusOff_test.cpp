@@ -128,4 +128,27 @@ TEST_F(CanSM_ControllerBusOff_Test, CanSM_ControllerBusOff_NG_InvalidController)
     EXPECT_EQ(FakeDetHw_LastErrorId, CANSM_E_PARAM_CONTROLLER);
 }
 
+TEST_F(CanSM_ControllerBusOff_Test, CanSM_ControllerBusOff_OK_IgnoredOutsideFullAndSilentCom)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    const uint32 setModeBefore = CallCount_CanIf_SetControllerMode;   // 初期化直後は NO_COM
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    CanSM_ControllerBusOff(0U);
+    ComM_ModeType mode = COMM_FULL_COMMUNICATION;
+    const Std_ReturnType retMode = CanSM_GetCurrentComMode(0U, &mode);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(retMode, E_OK);
+    EXPECT_EQ(mode, COMM_NO_COMMUNICATION);                            // 状態は変わらない（回復シーケンスを始めない）
+    EXPECT_EQ(CallCount_CanIf_SetControllerMode, setModeBefore);       // コントローラの停止も要求しない
+    EXPECT_EQ(FakeDetHw_ReportCount, 0U);
+}
+
 }  // namespace

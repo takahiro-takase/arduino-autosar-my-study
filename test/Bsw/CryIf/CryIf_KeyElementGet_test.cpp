@@ -142,4 +142,23 @@ TEST_F(CryIf_KeyElementGet_Test, CryIf_KeyElementGet_NG_InvalidCryIfKeyId)
     EXPECT_EQ(FakeDetHw_LastErrorId, CRYIF_E_PARAM_HANDLE);
 }
 
+TEST_F(CryIf_KeyElementGet_Test, CryIf_KeyElementGet_NG_NullResultLengthPtr)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    uint8 buf[16] = { 0U };
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Std_ReturnType ret = CryIf_KeyElementGet(0U, 1U, buf, NULL);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_NOT_OK);
+    EXPECT_EQ(FakeDetHw_LastErrorId, CRYIF_E_PARAM_POINTER);
+}
+
 }  // namespace

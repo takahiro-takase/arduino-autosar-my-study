@@ -17,6 +17,7 @@ extern "C" {
 #include "Dcm_Cbk.h"
 #include "Dcm_Cfg.h"
 #include "Fake_Det_Hw.h"
+#include "Wrap_CanTp.h"
 }
 
 /* ======================================================================
@@ -79,6 +80,52 @@ TEST_F(Dcm_TpRxIndication_Test, Dcm_TpRxIndication_NG_Uninit)
     /* ---- 評価 (Assert) ---- */
     /* ----------------------- */
     EXPECT_EQ(FakeDetHw_LastErrorId, DCM_E_UNINIT);
+}
+
+TEST_F(Dcm_TpRxIndication_Test, Dcm_TpRxIndication_NG_FailedReceptionIsDiscarded)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    WrapCanTp_Reset();
+    PduLengthType bufferSize = 0U;
+    ASSERT_EQ(Dcm_StartOfReception(0U, NULL, 2U, &bufferSize), BUFREQ_OK);
+    uint8 data[2] = { 0x3EU, 0x00U };   // 有効な要求（TesterPresent）が揃っている
+    PduInfoType info = { data, 2U };
+    ASSERT_EQ(Dcm_CopyRxData(0U, &info, &bufferSize), BUFREQ_OK);
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Dcm_TpRxIndication(0U, E_NOT_OK);   // 受信に失敗した
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(CallCount_CanTp_Transmit, 0U);   // 要求を処理しない（応答を送らない）
+}
+
+TEST_F(Dcm_TpRxIndication_Test, Dcm_TpRxIndication_NG_IncompleteReceptionIsDiscarded)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    WrapCanTp_Reset();
+    PduLengthType bufferSize = 0U;
+    ASSERT_EQ(Dcm_StartOfReception(0U, NULL, 2U, &bufferSize), BUFREQ_OK);
+    uint8 data[1] = { 0x3EU };
+    PduInfoType info = { data, 1U };   // 2 バイトの予定のうち、1 バイトしか届いていない
+    ASSERT_EQ(Dcm_CopyRxData(0U, &info, &bufferSize), BUFREQ_OK);
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Dcm_TpRxIndication(0U, E_OK);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(CallCount_CanTp_Transmit, 0U);   // データ不足なので処理しない（処理すれば長さ不正の応答を送る）
 }
 
 }  // namespace

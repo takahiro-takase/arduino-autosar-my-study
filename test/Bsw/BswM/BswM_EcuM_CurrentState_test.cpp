@@ -100,4 +100,22 @@ TEST_F(BswM_EcuM_CurrentState_Test, BswM_EcuM_CurrentState_NG_ReqModeOutOfRange)
     EXPECT_EQ(FakeDetHw_LastErrorId, BSWM_E_REQ_MODE_OUT_OF_RANGE);
 }
 
+TEST_F(BswM_EcuM_CurrentState_Test, BswM_EcuM_CurrentState_OK_StartupIsAcceptedAsValidState)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で BswM_Init() 済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    BswM_EcuM_CurrentState(ECUM_STATE_STARTUP);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(FakeDetHw_ReportCount, 0U);   // 範囲外の状態としては扱わない（DET を報告しない）
+}
+
 }  // namespace

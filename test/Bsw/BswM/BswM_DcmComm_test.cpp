@@ -161,4 +161,64 @@ TEST_F(BswM_DcmComm_Test, BswM_Dcm_CommunicationMode_CurrentState_OK_NormalAndNm
     EXPECT_EQ(CallCount_Nm_DisableCommunication, 1U);
 }
 
+TEST_F(BswM_DcmComm_Test, BswM_Dcm_CommunicationMode_CurrentState_OK_EnableRxDisableTxEnablesOnlyRx)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で BswM_Init() 済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    BswM_Dcm_CommunicationMode_CurrentState(NM_MAIN_NETWORK_HANDLE, DCM_ENABLE_RX_DISABLE_TX_NORM);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(CallCount_Com_SetCommunicationEnabled, 1U);
+    EXPECT_EQ(LastRxEnabled_Com_SetCommunicationEnabled, 1U);   // Rx は有効
+    EXPECT_EQ(LastTxEnabled_Com_SetCommunicationEnabled, 0U);   // Tx は無効
+}
+
+TEST_F(BswM_DcmComm_Test, BswM_Dcm_CommunicationMode_CurrentState_OK_DisableRxEnableTxEnablesOnlyTx)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で BswM_Init() 済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    BswM_Dcm_CommunicationMode_CurrentState(NM_MAIN_NETWORK_HANDLE, DCM_DISABLE_RX_ENABLE_TX_NORM);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(CallCount_Com_SetCommunicationEnabled, 1U);
+    EXPECT_EQ(LastRxEnabled_Com_SetCommunicationEnabled, 0U);   // Rx は無効
+    EXPECT_EQ(LastTxEnabled_Com_SetCommunicationEnabled, 1U);   // Tx は有効
+}
+
+TEST_F(BswM_DcmComm_Test, BswM_Dcm_CommunicationMode_CurrentState_OK_NmEnableTxOnlyEnablesNm)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で BswM_Init() 済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    BswM_Dcm_CommunicationMode_CurrentState(NM_MAIN_NETWORK_HANDLE, DCM_DISABLE_RX_ENABLE_TX_NM);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(CallCount_Nm_EnableCommunication, 1U);    // 送信が有効なモード → Nm_EnableCommunication()
+    EXPECT_EQ(CallCount_Nm_DisableCommunication, 0U);
+    EXPECT_EQ(CallCount_Com_SetCommunicationEnabled, 0U);   // NM だけが対象
+}
+
 }  // namespace

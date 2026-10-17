@@ -180,4 +180,43 @@ TEST_F(Crypto_KeyElementGet_Test, Crypto_KeyElementGet_NG_BufferTooLarge)
     EXPECT_EQ(FakeDetHw_LastErrorId, CRYPTO_E_PARAM_VALUE);
 }
 
+TEST_F(Crypto_KeyElementGet_Test, Crypto_KeyElementGet_NG_InvalidKeyElementId)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    uint8  buf[CRYPTO_AES128_KEY_SIZE];
+    uint32 len = sizeof(buf);
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Std_ReturnType ret = Crypto_KeyElementGet(0U, CRYPTO_KEY_ELEMENT_ID_CIPHER_KEY + 1U, buf, &len);   // 鍵 ID は有効、鍵要素 ID だけが不正
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_NOT_OK);
+    EXPECT_EQ(FakeDetHw_LastErrorId, CRYPTO_E_PARAM_HANDLE);
+}
+
+TEST_F(Crypto_KeyElementGet_Test, Crypto_KeyElementGet_NG_NullResultLengthPtr)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    uint8 buf[CRYPTO_AES128_KEY_SIZE];
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Std_ReturnType ret = Crypto_KeyElementGet(0U, CRYPTO_KEY_ELEMENT_ID_CIPHER_KEY, buf, NULL);   // resultPtr は有効、resultLengthPtr だけ NULL
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_NOT_OK);
+    EXPECT_EQ(FakeDetHw_LastErrorId, CRYPTO_E_PARAM_POINTER);
+}
+
 }  // namespace

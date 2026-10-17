@@ -126,4 +126,43 @@ TEST_F(Dcm_CopyTxData_Test, Dcm_CopyTxData_NG_NotTransmitting)
     EXPECT_EQ(ret, BUFREQ_E_NOT_OK);
 }
 
+TEST_F(Dcm_CopyTxData_Test, Dcm_CopyTxData_NG_NullSduDataPtrWithLength)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    PduInfoType info = { NULL, 1U };   // コピーするバイト数があるのに、SduDataPtr が NULL
+    PduLengthType available = 0U;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    BufReq_ReturnType ret = Dcm_CopyTxData(0U, &info, NULL, &available);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, BUFREQ_E_NOT_OK);
+    EXPECT_EQ(FakeDetHw_LastErrorId, DCM_E_PARAM_POINTER);
+}
+
+TEST_F(Dcm_CopyTxData_Test, Dcm_CopyTxData_NG_NullInfoPtr)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    PduLengthType available = 0U;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    BufReq_ReturnType ret = Dcm_CopyTxData(0U, NULL, NULL, &available);   // availableDataPtr は有効、info だけ NULL
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, BUFREQ_E_NOT_OK);
+    EXPECT_EQ(FakeDetHw_LastErrorId, DCM_E_PARAM_POINTER);
+}
+
 }  // namespace

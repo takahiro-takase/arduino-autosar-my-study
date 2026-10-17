@@ -163,4 +163,46 @@ TEST_F(Csm_MacGenerate_Test, Csm_MacGenerate_NG_NoMatchingJob)
     EXPECT_EQ(FakeDetHw_LastErrorId, CSM_E_PARAM_HANDLE);
 }
 
+TEST_F(Csm_MacGenerate_Test, Csm_MacGenerate_NG_NullMacPtr)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    const uint8 data[1] = { 0x01U };
+    uint32 macLen = CRYPTO_CMAC_SIZE;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Std_ReturnType ret = Csm_MacGenerate(CSM_JOB_ID_IMMOBILIZER_CMD_VERIFY, CRYPTO_OPERATIONMODE_SINGLECALL,
+                                          data, 1U, NULL, &macLen);   // dataPtr は有効、macPtr だけ NULL
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_NOT_OK);
+    EXPECT_EQ(FakeDetHw_LastErrorId, CSM_E_PARAM_POINTER);
+}
+
+TEST_F(Csm_MacGenerate_Test, Csm_MacGenerate_NG_NullMacLengthPtr)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    const uint8 data[1] = { 0x01U };
+    uint8 mac[CRYPTO_CMAC_SIZE];
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Std_ReturnType ret = Csm_MacGenerate(CSM_JOB_ID_IMMOBILIZER_CMD_VERIFY, CRYPTO_OPERATIONMODE_SINGLECALL,
+                                          data, 1U, mac, NULL);   // macLengthPtr だけ NULL
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_NOT_OK);
+    EXPECT_EQ(FakeDetHw_LastErrorId, CSM_E_PARAM_POINTER);
+}
+
 }  // namespace

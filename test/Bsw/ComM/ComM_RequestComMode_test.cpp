@@ -15,6 +15,8 @@
 extern "C" {
 #include "ComM.h"
 #include "Fake_Det_Hw.h"
+#include "CanSM.h"
+#include "CanSM_Cfg.h"
 }
 
 /* ======================================================================
@@ -130,6 +132,67 @@ TEST_F(ComM_RequestComMode_Test, ComM_RequestComMode_NG_WrongParameters)
     /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, COMM_E_WRONG_PARAMETERS);
+}
+
+TEST_F(ComM_RequestComMode_Test, ComM_RequestComMode_NG_WrongComMode)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Std_ReturnType ret = ComM_RequestComMode(COMM_USER_0, static_cast<ComM_ModeType>(COMM_FULL_COMMUNICATION + 1U));   // User は有効、ComMode だけが範囲外
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_NOT_OK);
+    EXPECT_EQ(FakeDetHw_LastErrorId, COMM_E_WRONG_PARAMETERS);
+}
+
+TEST_F(ComM_RequestComMode_Test, ComM_RequestComMode_OK_SilentRequestWhileFullIsForwardedToCanSm)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    CanSM_DeInit();   // CanSM は未初期化にしておく（他のテストの状態を巻き込まない。転送先で拒否されるだけにする）
+    ComM_BusSM_ModeIndication(0U, COMM_FULL_COMMUNICATION);   // チャネルを FULL_COM にする
+    FakeDetHw_Reset();
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    const Std_ReturnType ret = ComM_RequestComMode(COMM_USER_0, COMM_SILENT_COMMUNICATION);   // FULL_COM のチャネルへ、SILENT_COM を要求する
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_NOT_OK);                               // CanSM（未初期化）へそのまま転送され、拒否される
+    EXPECT_EQ(FakeDetHw_LastModuleId, CANSM_MODULE_ID);     // NO_COM への解放要求（Nm_NetworkRelease）ではなく、CanSM へ転送する
+}
+
+TEST_F(ComM_RequestComMode_Test, ComM_RequestComMode_OK_FullRequestWhileSilentIsForwardedToCanSm)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    CanSM_DeInit();
+    ComM_BusSM_ModeIndication(0U, COMM_SILENT_COMMUNICATION);   // チャネルを SILENT_COM にする（例: Bus-Off）
+    FakeDetHw_Reset();
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    const Std_ReturnType ret = ComM_RequestComMode(COMM_USER_0, COMM_FULL_COMMUNICATION);   // SILENT_COM のチャネルへ、FULL_COM を要求する
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_NOT_OK);                               // NO_COM からの遷移ではないので、許可待ち（CommunicationAllowed）を経ずに CanSM へ転送される
+    EXPECT_EQ(FakeDetHw_LastModuleId, CANSM_MODULE_ID);
 }
 
 }  // namespace

@@ -140,4 +140,22 @@ TEST_F(PduR_ComRxIndication_Test, PduR_ComRxIndication_NG_NoMatchingRoute)
     EXPECT_EQ(FakeDetHw_LastErrorId, PDUR_E_PDU_ID_INVALID);
 }
 
+TEST_F(PduR_ComRxIndication_Test, PduR_ComRxIndication_NG_NullSduDataPtr)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    PduInfoType info = { NULL, 0U };
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    PduR_ComRxIndication(40U, &info);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(FakeDetHw_LastErrorId, PDUR_E_PARAM_POINTER);
+}
+
 }  // namespace

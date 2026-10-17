@@ -121,4 +121,31 @@ TEST_F(PduR_Init_Test, PduR_Init_NG_RxPathHasNoDests)
     EXPECT_EQ(FakeDetHw_LastErrorId, PDUR_E_INIT_FAILED);
 }
 
+TEST_F(PduR_Init_Test, PduR_Init_NG_RxPathDestCountZero)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    PduR_Test_ResetInitState();
+    const PduR_RxRoutingPathType badRxPath = { 40U, &kTestRxDest, 0U };   // Dests は有効だが、数が 0
+    const PduR_PBConfigType badConfig = { &badRxPath, 1U, NULL, 0U };
+    uint8 data[1] = { 0U };
+    PduInfoType info = { data, 1U };
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    PduR_Init(&badConfig);
+    const uint8 errAfterInit = FakeDetHw_LastErrorId;
+
+    /* 設定が受け入れられていれば初期化済みになるはず。拒否されているので、未初期化のままである。 */
+    PduR_ComRxIndication(40U, &info);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(errAfterInit, PDUR_E_INIT_FAILED);
+    EXPECT_EQ(FakeDetHw_LastErrorId, PDUR_E_UNINIT);
+}
+
 }  // namespace

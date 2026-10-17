@@ -157,4 +157,23 @@ TEST_F(Crypto_KeyElementSet_Test, Crypto_KeyElementSet_NG_KeySizeMismatch)
     EXPECT_EQ(FakeDetHw_LastErrorId, CRYPTO_E_PARAM_VALUE);
 }
 
+TEST_F(Crypto_KeyElementSet_Test, Crypto_KeyElementSet_NG_InvalidKeyElementId)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    uint8 key[CRYPTO_AES128_KEY_SIZE] = { 0 };
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Std_ReturnType ret = Crypto_KeyElementSet(0U, CRYPTO_KEY_ELEMENT_ID_CIPHER_KEY + 1U, key, sizeof(key));   // 鍵 ID は有効、鍵要素 ID だけが不正
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_NOT_OK);
+    EXPECT_EQ(FakeDetHw_LastErrorId, CRYPTO_E_PARAM_HANDLE);
+}
+
 }  // namespace

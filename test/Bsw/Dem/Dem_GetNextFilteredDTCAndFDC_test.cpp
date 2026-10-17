@@ -105,4 +105,23 @@ TEST_F(Dem_GetNextFilteredDTCAndFDC_Test, Dem_GetNextFilteredDTCAndFDC_NG_NullPo
     EXPECT_EQ(FakeDetHw_LastErrorId, DEM_E_PARAM_POINTER);
 }
 
+TEST_F(Dem_GetNextFilteredDTCAndFDC_Test, Dem_GetNextFilteredDTCAndFDC_NG_NullFaultDetectionCounterPtr)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    uint32 dtc = 0U;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Std_ReturnType ret = Dem_GetNextFilteredDTCAndFDC(0U, &dtc, NULL);   // DTC は有効、DTCFaultDetectionCounter だけ NULL
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_NOT_OK);
+    EXPECT_EQ(FakeDetHw_LastErrorId, DEM_E_PARAM_POINTER);
+}
+
 }  // namespace

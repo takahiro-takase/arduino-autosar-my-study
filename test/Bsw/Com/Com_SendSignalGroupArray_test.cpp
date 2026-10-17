@@ -290,4 +290,24 @@ TEST_F(Com_SendSignalGroupArray_Test, Com_SendSignalGroupArray_NG_NotFoundOrNotG
     EXPECT_EQ(FakeDetHw_LastErrorId, COM_E_PARAM);
 }
 
+TEST_F(Com_SendSignalGroupArray_Test, Com_SendSignalGroupArray_NG_UnregisteredId)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // IPduId=1 は配列範囲内だが、I-PDU 設定テーブルに登録されていない。
+    uint8 data[8] = { 0 };
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    uint8 ret = Com_SendSignalGroupArray(kUnregisteredIPduId, data);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_NOT_OK);
+    EXPECT_EQ(FakeDetHw_LastErrorId, COM_E_PARAM);
+}
+
 }  // namespace

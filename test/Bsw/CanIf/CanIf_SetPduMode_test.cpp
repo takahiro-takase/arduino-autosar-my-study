@@ -134,4 +134,27 @@ TEST_F(CanIf_SetPduMode_Test, CanIf_SetPduMode_NG_InvalidPduMode)
     EXPECT_EQ(FakeDetHw_LastErrorId, CANIF_E_PARAM_PDU_MODE);
 }
 
+TEST_F(CanIf_SetPduMode_Test, CanIf_SetPduMode_OK_AcceptsOfflineMode)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Std_ReturnType ret = CanIf_SetPduMode(0U, CANIF_OFFLINE);
+    CanIf_PduModeType mode = CANIF_ONLINE;
+    const Std_ReturnType retGet = CanIf_GetPduMode(0U, &mode);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_OK);                   // OFFLINE も有効なモードとして受け付ける
+    ASSERT_EQ(retGet, E_OK);
+    EXPECT_EQ(mode, CANIF_OFFLINE);
+    EXPECT_EQ(FakeDetHw_ReportCount, 0U);
+}
+
 }  // namespace

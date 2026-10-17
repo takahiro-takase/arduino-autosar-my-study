@@ -113,4 +113,25 @@ TEST_F(EcuM_ReleasePOST_RUN_Test, EcuM_ReleasePOST_RUN_NG_MismatchedRelease)
     ExpectDet(ECUM_API_ID_RELEASE_POST_RUN, ECUM_E_MISMATCHED_RUN_RELEASE);
 }
 
+TEST_F(EcuM_ReleasePOST_RUN_Test, EcuM_ReleasePOST_RUN_OK_OutsidePostRunKeepsState)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    EcuM_Test_SetState(ECUM_STATE_RUN);
+    ASSERT_EQ(EcuM_RequestPOST_RUN(ECUM_USER_COMM), E_OK);
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    const Std_ReturnType ret = EcuM_ReleasePOST_RUN(ECUM_USER_COMM);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_OK);
+    EXPECT_EQ(EcuM_GetState(), ECUM_STATE_RUN);   // POST_RUN ではないので、状態は変わらない
+    EXPECT_EQ(FakeDetHw_ReportCount, 0U);
+}
+
 }  // namespace

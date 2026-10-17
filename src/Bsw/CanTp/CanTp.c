@@ -988,4 +988,30 @@ boolean CanTp_Test_IsTxBusy(void)
 {
     return CanTp_TxBusy();
 }
+
+/**
+ * \brief   [テスト専用] TX チャネルを、Flow Control（FC）の待ち状態にする。
+ *
+ * \details マルチフレーム送信を実際に始めるには、上位層（Dcm）の送信データと CAN の送信が必要になる。
+ *          受信した FC フレームの解釈（STmin の換算など）だけを調べるテストが、それを用意せずに
+ *          FC 待ちの状態から始められるようにする。状態以外（送信済みバイト数、タイマーなど）は変えない
+ *          （標準外の関数。CanNm_Test_SetState() と同じ設計方針）。
+ */
+void CanTp_Test_SetTxWaitFc(void)
+{
+    CanTp_Tx.state = CANTP_TX_WAIT_FC;
+}
+
+/**
+ * \brief   [テスト専用] 直近の FC フレームで受信し、換算した STmin（ms）を返す。
+ *
+ * \details CTS の FC フレームを受信すると、CanTp が、FC の STmin の生の値を ms に換算して保持する。
+ *          その換算結果を、テストが確認するためだけに公開している（標準外の関数）。
+ *
+ * \return  換算後の STmin（ms）。
+ */
+uint8 CanTp_Test_GetTxStMin(void)
+{
+    return CanTp_Tx.stMin;
+}
 #endif

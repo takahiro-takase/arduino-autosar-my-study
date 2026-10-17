@@ -215,4 +215,62 @@ TEST_F(E2E_P05Check_Test, E2E_P05Check_OK_CounterWrapsFrom0xFFTo0IsRecognized)
     EXPECT_EQ(stateAfter2.Counter, 0U);
 }
 
+TEST_F(E2E_P05Check_Test, E2E_P05Check_NG_NullConfigReturnsInputErrNull)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    E2E_P05CheckStateType checkState;
+    E2E_P05CheckInit(&checkState);
+    uint8_t data[5] = { 0U };
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Std_ReturnType ret = E2E_P05Check(nullptr, &checkState, data, sizeof(data));
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E2E_E_INPUTERR_NULL);
+}
+
+TEST_F(E2E_P05Check_Test, E2E_P05Check_NG_NullStateReturnsInputErrNull)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    uint8_t data[5] = { 0U };
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Std_ReturnType ret = E2E_P05Check(&config, nullptr, data, sizeof(data));
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E2E_E_INPUTERR_NULL);
+}
+
+TEST_F(E2E_P05Check_Test, E2E_P05Check_OK_NullDataWithZeroLengthIsNoNewData)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    E2E_P05CheckStateType checkState;
+    E2E_P05CheckInit(&checkState);
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Std_ReturnType ret = E2E_P05Check(&config, &checkState, nullptr, 0U);   // 新しいデータが無い
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E2E_E_OK);
+    EXPECT_EQ(checkState.Status, E2E_P05STATUS_NONEWDATA);
+}
+
 }  // namespace

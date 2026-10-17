@@ -175,4 +175,23 @@ TEST_F(Csm_KeyElementGet_Test, Csm_KeyElementGet_NG_SmallBuffer)
     EXPECT_EQ(FakeDetHw_LastErrorId, CSM_E_SMALL_BUFFER);
 }
 
+TEST_F(Csm_KeyElementGet_Test, Csm_KeyElementGet_NG_NullKeyLengthPtr)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    uint8 buf[16] = { 0U };
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Std_ReturnType ret = Csm_KeyElementGet(0U, 1U, buf, NULL);   // keyPtr は有効、keyLengthPtr だけ NULL
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_NOT_OK);
+    EXPECT_EQ(FakeDetHw_LastErrorId, CSM_E_PARAM_POINTER);
+}
+
 }  // namespace

@@ -741,4 +741,71 @@ TEST_F(Dcm_ReadDtcInfo_Test, SessionControl_OK_ReselectingSameSessionRelocksSecu
 // DcmStack_CanTpBusy_test.cpp（実際のマルチフレーム送信中の
 // 真のビジー状態を使う版）へ移植済み（2026-09、旧S3Timer系と統合）。
 
+TEST_F(Dcm_ReadDtcInfo_Test, ReadDtcSnapshot_NG_UnknownDtcReturnsRequestOutOfRange)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    uint8 req[6] = { DCM_SID_READ_DTC_INFO, DCM_DTC_SUBFUNC_REPORT_SNAPSHOT,
+                      0x12U, 0x34U, 0x56U, DCM_RECORD_NUMBER_ALL };   // 設定に無い DTC
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    SendReadDtcInfo(req, sizeof(req));
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    ASSERT_EQ(CallCount_CanTp_Transmit, 1U);
+    ASSERT_EQ(LastLength_CanTp_Transmit, 3U);
+    EXPECT_EQ(LastData_CanTp_Transmit[0], DCM_SID_NEGATIVE_RESP);
+    EXPECT_EQ(LastData_CanTp_Transmit[2], DCM_NRC_REQUEST_OUT_OF_RANGE);
+}
+
+TEST_F(Dcm_ReadDtcInfo_Test, ReadDtcExtendedData_NG_UnknownDtcReturnsRequestOutOfRange)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    uint8 req[6] = { DCM_SID_READ_DTC_INFO, DCM_DTC_SUBFUNC_REPORT_EXTDATA,
+                      0x12U, 0x34U, 0x56U, DCM_RECORD_NUMBER_ALL };   // 設定に無い DTC
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    SendReadDtcInfo(req, sizeof(req));
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    ASSERT_EQ(CallCount_CanTp_Transmit, 1U);
+    ASSERT_EQ(LastLength_CanTp_Transmit, 3U);
+    EXPECT_EQ(LastData_CanTp_Transmit[0], DCM_SID_NEGATIVE_RESP);
+    EXPECT_EQ(LastData_CanTp_Transmit[2], DCM_NRC_REQUEST_OUT_OF_RANGE);
+}
+
+TEST_F(Dcm_ReadDtcInfo_Test, ReadDtcExtendedData_NG_UnsupportedRecordNumberReturnsRequestOutOfRange)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    (void)Dem_SetEventStatus(DemConf_DemEventParameter_ENGINE_OVERHEAT, DEM_EVENT_STATUS_FAILED);
+    uint8 req[6] = { DCM_SID_READ_DTC_INFO, DCM_DTC_SUBFUNC_REPORT_EXTDATA,
+                      0x00U, 0x01U, 0x01U, 0x02U };   // 0x01/0xFF 以外のレコード番号（DTC は設定にある）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    SendReadDtcInfo(req, sizeof(req));
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    ASSERT_EQ(CallCount_CanTp_Transmit, 1U);
+    ASSERT_EQ(LastLength_CanTp_Transmit, 3U);
+    EXPECT_EQ(LastData_CanTp_Transmit[0], DCM_SID_NEGATIVE_RESP);
+    EXPECT_EQ(LastData_CanTp_Transmit[2], DCM_NRC_REQUEST_OUT_OF_RANGE);
+}
+
 }  // namespace

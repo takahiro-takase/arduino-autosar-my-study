@@ -141,4 +141,83 @@ TEST_F(E2E_P05Protect_Test, E2E_P05Protect_OK_IncrementsCounterAndWrapsAt0xFF)
     EXPECT_EQ(state.Counter, 0U); /* 次回用の内部Counterは0に折り返す */
 }
 
+TEST_F(E2E_P05Protect_Test, E2E_P05Protect_NG_NullConfigReturnsInputErrNull)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    E2E_P05ProtectStateType state;
+    E2E_P05ProtectInit(&state);
+    uint8_t data[5] = { 0U };
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Std_ReturnType ret = E2E_P05Protect(nullptr, &state, data, sizeof(data));
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E2E_E_INPUTERR_NULL);
+}
+
+TEST_F(E2E_P05Protect_Test, E2E_P05Protect_NG_NullStateReturnsInputErrNull)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    uint8_t data[5] = { 0U };
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Std_ReturnType ret = E2E_P05Protect(&config, nullptr, data, sizeof(data));
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E2E_E_INPUTERR_NULL);
+}
+
+TEST_F(E2E_P05Protect_Test, E2E_P05Protect_NG_NullDataReturnsInputErrNull)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    E2E_P05ProtectStateType state;
+    E2E_P05ProtectInit(&state);
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Std_ReturnType ret = E2E_P05Protect(&config, &state, nullptr, 5U);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E2E_E_INPUTERR_NULL);
+    EXPECT_EQ(state.Counter, 0U);   // 状態は進めない
+}
+
+TEST_F(E2E_P05Protect_Test, E2E_P05Protect_NG_LengthShorterThanDataLengthReturnsInputErrWrong)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    E2E_P05ProtectStateType state;
+    E2E_P05ProtectInit(&state);
+    uint8_t data[5] = { 0U };
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Std_ReturnType ret = E2E_P05Protect(&config, &state, data, config.DataLength - 1U);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E2E_E_INPUTERR_WRONG);
+    EXPECT_EQ(state.Counter, 0U);   // 状態は進めない
+}
+
 }  // namespace
