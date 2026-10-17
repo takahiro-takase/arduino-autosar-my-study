@@ -370,4 +370,24 @@ TEST_F(CanNm_MainFunctionUninit_Test, CanNm_MainFunction_NG_Uninit)
     EXPECT_EQ(FakeDetHw_LastErrorId, CANNM_E_UNINIT);
 }
 
+TEST_F(CanNm_MainFunction_Test, MainFunction_NG_TimeoutFiresInRepeatMessageWhenEnabled)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // 送信有効のまま Repeat Message State でタイムアウトを超える
+    CanNm_Test_SetState(CANNM_STATE_REPEAT_MESSAGE);
+    FakeMillis_Value += CANNM_TIMEOUT_MS + 1UL;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    CanNm_MainFunction();
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_TRUE(NetworkTimeoutReported());
+}
+
 }  // namespace

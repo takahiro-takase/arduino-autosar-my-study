@@ -114,4 +114,114 @@ TEST_F(CanNm_RepeatMessageRequest_Test, CanNm_RepeatMessageRequest_NG_Uninit)
     EXPECT_EQ(FakeDetHw_LastErrorId, CANNM_E_UNINIT);
 }
 
+TEST_F(CanNm_RepeatMessageRequest_Test, RepeatMessageRequest_OK_FromNormalOperationEntersRepeatMessage)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    CanNm_Test_SetState(CANNM_STATE_NORMAL_OPERATION);  // [SWS_CanNm_00120]
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Std_ReturnType ret = CanNm_RepeatMessageRequest(CANNM_MAIN_NETWORK_HANDLE);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    CanNm_StateType state;
+    CanNm_ModeType  mode;
+    ASSERT_EQ(CanNm_GetState(CANNM_MAIN_NETWORK_HANDLE, &state, &mode), E_OK);
+    EXPECT_EQ(ret, E_OK);
+    EXPECT_EQ(state, CANNM_STATE_REPEAT_MESSAGE);
+}
+
+TEST_F(CanNm_RepeatMessageRequest_Test, RepeatMessageRequest_OK_FromReadySleepEntersRepeatMessage)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    CanNm_Test_SetState(CANNM_STATE_READY_SLEEP);  // [SWS_CanNm_00112]
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Std_ReturnType ret = CanNm_RepeatMessageRequest(CANNM_MAIN_NETWORK_HANDLE);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    CanNm_StateType state;
+    CanNm_ModeType  mode;
+    ASSERT_EQ(CanNm_GetState(CANNM_MAIN_NETWORK_HANDLE, &state, &mode), E_OK);
+    EXPECT_EQ(ret, E_OK);
+    EXPECT_EQ(state, CANNM_STATE_REPEAT_MESSAGE);
+}
+
+TEST_F(CanNm_RepeatMessageRequest_Test, RepeatMessageRequest_NG_RejectedInRepeatMessageState)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    CanNm_Test_SetState(CANNM_STATE_REPEAT_MESSAGE);  // [SWS_CanNm_00137]
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Std_ReturnType ret = CanNm_RepeatMessageRequest(CANNM_MAIN_NETWORK_HANDLE);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    CanNm_StateType state;
+    CanNm_ModeType  mode;
+    ASSERT_EQ(CanNm_GetState(CANNM_MAIN_NETWORK_HANDLE, &state, &mode), E_OK);
+    EXPECT_EQ(ret, E_NOT_OK);
+    EXPECT_EQ(state, CANNM_STATE_REPEAT_MESSAGE);  // 状態は変わらない
+}
+
+TEST_F(CanNm_RepeatMessageRequest_Test, RepeatMessageRequest_NG_RejectedInPrepareBusSleepState)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    CanNm_Test_SetState(CANNM_STATE_PREPARE_BUS_SLEEP);  // [SWS_CanNm_00137]
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Std_ReturnType ret = CanNm_RepeatMessageRequest(CANNM_MAIN_NETWORK_HANDLE);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    CanNm_StateType state;
+    CanNm_ModeType  mode;
+    ASSERT_EQ(CanNm_GetState(CANNM_MAIN_NETWORK_HANDLE, &state, &mode), E_OK);
+    EXPECT_EQ(ret, E_NOT_OK);
+    EXPECT_EQ(state, CANNM_STATE_PREPARE_BUS_SLEEP);  // 状態は変わらない
+}
+
+TEST_F(CanNm_RepeatMessageRequest_Test, RepeatMessageRequest_NG_RejectedInBusSleepState)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    CanNm_Test_SetState(CANNM_STATE_BUS_SLEEP);  // [SWS_CanNm_00137]（CanNm_Init() 直後と同じ状態）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Std_ReturnType ret = CanNm_RepeatMessageRequest(CANNM_MAIN_NETWORK_HANDLE);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    CanNm_StateType state;
+    CanNm_ModeType  mode;
+    ASSERT_EQ(CanNm_GetState(CANNM_MAIN_NETWORK_HANDLE, &state, &mode), E_OK);
+    EXPECT_EQ(ret, E_NOT_OK);
+    EXPECT_EQ(state, CANNM_STATE_BUS_SLEEP);  // 状態は変わらない
+}
+
 }  // namespace
