@@ -89,6 +89,7 @@ protected:
     void TearDown() override
     {
         FakeDetHw_LogSuppressed = 1U;  // DeInit() のログを抑制
+        WrapE2E_Reset();               // 故障注入を残さない
         E2EXf_DeInit();
     }
 

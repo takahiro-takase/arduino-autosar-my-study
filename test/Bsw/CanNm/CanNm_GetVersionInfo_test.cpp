@@ -94,4 +94,26 @@ TEST_F(CanNm_GetVersionInfo_Test, CanNm_GetVersionInfo_NG_NullPointer)
     EXPECT_EQ(FakeDetHw_LastErrorId, CANNM_E_PARAM_POINTER);
 }
 
+TEST_F(CanNm_GetVersionInfo_Test, CanNm_GetVersionInfo_OK_ReturnsModuleVersion)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    Std_VersionInfoType info = { 0xFFFFU, 0xFFFFU, 0xFFU, 0xFFU, 0xFFU };
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    CanNm_GetVersionInfo(&info);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(info.vendorID, CANNM_VENDOR_ID);
+    EXPECT_EQ(info.moduleID, CANNM_MODULE_ID);
+    EXPECT_EQ(info.sw_major_version, CANNM_SW_MAJOR_VERSION);
+    EXPECT_EQ(info.sw_minor_version, CANNM_SW_MINOR_VERSION);
+    EXPECT_EQ(info.sw_patch_version, CANNM_SW_PATCH_VERSION);
+}
+
 }  // namespace

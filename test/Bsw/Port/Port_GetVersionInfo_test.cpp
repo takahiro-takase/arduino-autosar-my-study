@@ -71,4 +71,26 @@ TEST_F(Port_GetVersionInfo_Test, GetVersionInfo_NG_NullPointer)
     EXPECT_EQ(FakeDetHw_LastErrorId, PORT_E_PARAM_POINTER);
 }
 
+TEST_F(Port_GetVersionInfo_Test, Port_GetVersionInfo_OK_ReturnsModuleVersion)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    Std_VersionInfoType info = { 0xFFFFU, 0xFFFFU, 0xFFU, 0xFFU, 0xFFU };
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Port_GetVersionInfo(&info);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(info.vendorID, PORT_VENDOR_ID);
+    EXPECT_EQ(info.moduleID, PORT_MODULE_ID);
+    EXPECT_EQ(info.sw_major_version, PORT_SW_MAJOR_VERSION);
+    EXPECT_EQ(info.sw_minor_version, PORT_SW_MINOR_VERSION);
+    EXPECT_EQ(info.sw_patch_version, PORT_SW_PATCH_VERSION);
+}
+
 }  // namespace

@@ -206,6 +206,7 @@ TEST_F(CanSM_MainFunction_Base_Test, CanSM_MainFunction_NG_Uninit)
 // BUS_OFF のまま据え置かれ、次周期の再試行に委ねられる（CanSM.c 726〜736
 // 行目、これまで未到達だった防御分岐）。
 // ------------------------------------------------------------
+
 TEST_F(CanSM_MainFunction_Test, MainFunction_NG_RecoveryAttemptFails_StaysInBusOffForNextRetry)
 {
     /* ----------------------- */
@@ -264,6 +265,7 @@ TEST_F(CanSM_MainFunction_Test, MainFunction_OK_DoesNotRetryImmediatelyAfterFail
 // 正常系: L1 周期を空けて次の試行で CanIf_SetControllerMode(STARTED) が
 // 成功すれば FULL_COM へ正しく回復する（上のテストと地続きの回復シーケンス）。
 // ------------------------------------------------------------
+
 TEST_F(CanSM_MainFunction_Test, MainFunction_OK_RecoversOnNextAttemptAfterPriorFailure)
 {
     /* ----------------------- */
@@ -294,6 +296,57 @@ TEST_F(CanSM_MainFunction_Test, MainFunction_OK_RecoversOnNextAttemptAfterPriorF
     EXPECT_EQ(mode, static_cast<ComM_ModeType>(COMM_FULL_COMMUNICATION));
     EXPECT_EQ(CallCount_Dem_SetEventStatus, 1U);
     EXPECT_EQ(LastEventStatus_Dem_SetEventStatus, DEM_EVENT_STATUS_PASSED);
+}
+
+TEST_F(CanSM_MainFunction_Test, MainFunction_OK_DoesNothingWhileNotInBusOff)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    const uint32 setModeBefore = CallCount_CanIf_SetControllerMode;   // 通常運転中（BUS_OFF ではない）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    FakeMillis_Value += static_cast<unsigned long>(CANSM_BUSOFF_RECOVERY_L2_MS) + 1UL;
+    CanSM_MainFunction();
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(CallCount_CanIf_SetControllerMode, setModeBefore);   // 回復の処理は始めない
+}
+
+TEST_F(CanSM_MainFunction_Test, MainFunction_OK_DegradesToL2AndReportsDemAfterRepeatedFailedRecoveries)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    ArrangeBusOffPastL1Interval();
+    FailFromCallCount_CanIf_SetControllerMode = 1U;   // 回復の試行が、いつも失敗する
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    CanSM_MainFunction();   // 1 回目（L1）
+    FakeMillis_Value += static_cast<unsigned long>(CANSM_BUSOFF_RECOVERY_L1_MS) + 1UL;
+    CanSM_MainFunction();   // 2 回目（L1）
+    FakeMillis_Value += static_cast<unsigned long>(CANSM_BUSOFF_RECOVERY_L1_MS) + 1UL;
+    CanSM_MainFunction();   // 3 回目（L1）
+    const uint32 demBeforeL2 = CallCount_Dem_SetEventStatus;
+    FakeMillis_Value += static_cast<unsigned long>(CANSM_BUSOFF_RECOVERY_L1_MS) + 1UL;
+    CanSM_MainFunction();   // L1 の間隔では、まだ 4 回目の試行をしない（L2 の間隔が必要）
+    const uint32 demAtL1Interval = CallCount_Dem_SetEventStatus;
+    FakeMillis_Value += static_cast<unsigned long>(CANSM_BUSOFF_RECOVERY_L2_MS) + 1UL;
+    CanSM_MainFunction();   // 4 回目（L2 の間隔が経過）
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(demBeforeL2, 0U);
+    EXPECT_EQ(demAtL1Interval, 0U);
+    EXPECT_EQ(CallCount_Dem_SetEventStatus, 1U);   // L1 を使い切って L2 へ格下げした回に、1 回だけ報告する
+    EXPECT_EQ(LastEventStatus_Dem_SetEventStatus, DEM_EVENT_STATUS_FAILED);
 }
 
 }  // namespace

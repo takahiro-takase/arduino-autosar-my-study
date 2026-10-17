@@ -69,6 +69,14 @@ protected:
         return status;
     }
 
+    /* WARNING の Local Status を読む。 */
+    static WdgM_LocalStatusType WarningStatusOf()
+    {
+        WdgM_LocalStatusType status = WDGM_LOCAL_STATUS_OK;
+        (void)WdgM_GetLocalStatus(WDGM_ENTITY_WARNING, &status);
+        return status;
+    }
+
     /* ENGINE の START→END を、Deadline の上限（500ms）を超える間隔で報告して、Deadline 違反（EXPIRED）にする。 */
     static void ViolateEngineDeadline()
     {
@@ -138,6 +146,25 @@ protected:
 /* ======================================================================
  * Test Functions
  * ====================================================================== */
+
+TEST_F(WdgM_MainFunction_Test, MainFunction_NG_UninitializedDoesNothing)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    WdgM_DeInit();   // 未初期化にする
+    FakeWdgHw_RefreshCount = 0U;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    WdgM_MainFunction();
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(FakeWdgHw_RefreshCount, 0U);   // ウォッチドッグへ触れない
+}
 
 TEST_F(WdgM_MainFunction_Test, MainFunction_OK_SuppressedHealthyCycleKeepsGlobalOk)
 {
@@ -253,6 +280,28 @@ TEST_F(WdgM_MainFunction_Test, MainFunction_OK_GlobalRecoversFromExpiredWhenAllE
     /* ----------------------- */
     EXPECT_EQ(global, WDGM_GLOBAL_STATUS_OK);   // 全エンティティが OK に戻ったので、EXPIRED から回復する
     EXPECT_NE(retSeid, E_OK);                    // 解消済みなので、原因のエンティティの記録は無効になる
+}
+
+TEST_F(WdgM_MainFunction_Test, MainFunction_OK_FirstJudgmentAfterResumeIsSkipped)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    WdgM_ResumeSupervision();   // 基準を取り直す（再開直後の判定は 1 回見送る）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    WdgM_RunSupervisionCycle();   // どのエンティティも報告していないが、見送られる
+    const WdgM_LocalStatusType afterFirst = WarningStatusOf();
+    WdgM_RunSupervisionCycle();   // 2 回目は判定する（報告が無いので Alive 不足）
+    const WdgM_LocalStatusType afterSecond = WarningStatusOf();
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(afterFirst, WDGM_LOCAL_STATUS_OK);
+    EXPECT_NE(afterSecond, WDGM_LOCAL_STATUS_OK);
 }
 
 }  // namespace

@@ -82,6 +82,25 @@ protected:
  * Test Functions
  * ====================================================================== */
 
+TEST_F(FiM_MainFunction_Test, MainFunction_NG_UninitializedDoesNothing)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    FiM_Test_ResetInitState();   // 未初期化にする
+    FakeDetHw_Reset();
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    FiM_MainFunction();
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(FakeDetHw_ReportCount, 0U);   // 何もしない（DET も報告しない）
+}
+
 TEST_F(FiM_MainFunction_Test, MainFunction_OK_InhibitsFidWhenDtcConfirmedAfterInit)
 {
     /* ----------------------- */
@@ -104,6 +123,28 @@ TEST_F(FiM_MainFunction_Test, MainFunction_OK_InhibitsFidWhenDtcConfirmedAfterIn
     // RUNNING_LED のみ抑止され、無関係の BUTTON_ACK は影響なし
     EXPECT_EQ(GetPermission(FIM_FID_RUNNING_LED), FALSE);
     EXPECT_EQ(GetPermission(FIM_FID_BUTTON_ACK), TRUE);
+}
+
+TEST_F(FiM_MainFunction_Test, MainFunction_OK_PermitsFidAgainWhenDtcIsCleared)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    FiM_Init(&FiM_Config);
+    (void)Dem_SetEventStatus(DemConf_DemEventParameter_CAN_BUSOFF, DEM_EVENT_STATUS_FAILED);
+    FiM_MainFunction();
+    ASSERT_EQ(GetPermission(FIM_FID_RUNNING_LED), FALSE);   // いったん抑止される
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    ASSERT_EQ(Dem_ClearDTC(0U, DEM_GROUP_ALL_DTCS, DEM_DTC_FORMAT_UDS, DEM_DTC_ORIGIN_PRIMARY_MEMORY), E_OK);   // DTC を消去する
+    FiM_MainFunction();
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(GetPermission(FIM_FID_RUNNING_LED), TRUE);   // 確定していないので、再び許可される
 }
 
 }  // namespace

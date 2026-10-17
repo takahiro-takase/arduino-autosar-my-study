@@ -99,6 +99,7 @@ TEST_F(E2E_P05Check_Test, E2E_P05Check_NG_NullDataWithNonZeroLengthReturnsInputE
  *         「wrong input」は E2E_E_INPUTERR_WRONG を返さなければならない
  *         （2026-09-06 是正。以前は誤って E2E_E_OK を返していた）。
  */
+
 TEST_F(E2E_P05Check_Test, E2E_P05Check_NG_LengthMismatchReturnsInputErrWrong)
 {
     /* ----------------------- */
@@ -181,40 +182,6 @@ TEST_F(E2E_P05Check_Test, E2E_P05Check_NG_CounterJumpBeyondMaxDeltaIsWrongSequen
     EXPECT_EQ(checkState.Counter, 2U); /* WRONGSEQUENCEでも状態は受信値へ更新される (CRC正常なため) */
 }
 
-TEST_F(E2E_P05Check_Test, E2E_P05Check_OK_CounterWrapsFrom0xFFTo0IsRecognized)
-{
-    /* ----------------------- */
-    /* ---- 準備 (Arrange) --- */
-    /* ----------------------- */
-    E2E_P05ProtectStateType protectState;
-    E2E_P05CheckStateType   checkState;
-    protectState.Counter = 0xFFU;
-    checkState.Counter   = 0xFEU; /* 直前に受け付けた値が0xFEだったと仮定 */
-    checkState.Status    = E2E_P05STATUS_OK;
-
-    uint8_t frame1[5] = {0U, 0U, 0U, 0U, 0U}; /* Counter=0xFF (delta=1 from 0xFE) */
-    uint8_t frame2[5] = {0U, 0U, 0U, 0U, 0U}; /* Counter=0x00 (delta=1 from 0xFF、折り返し) */
-    E2E_P05Protect(&config, &protectState, frame1, sizeof(frame1));
-    E2E_P05Protect(&config, &protectState, frame2, sizeof(frame2));
-
-    /* ----------------------- */
-    /* ---- 実行 (Act) ------- */
-    /* ----------------------- */
-    Std_ReturnType retCheck1 = E2E_P05Check(&config, &checkState, frame1, sizeof(frame1));
-    E2E_P05CheckStateType stateAfter1 = checkState;
-    Std_ReturnType retCheck2 = E2E_P05Check(&config, &checkState, frame2, sizeof(frame2));
-    E2E_P05CheckStateType stateAfter2 = checkState;
-
-    /* ----------------------- */
-    /* ---- 評価 (Assert) ---- */
-    /* ----------------------- */
-    ASSERT_EQ(retCheck1, E2E_E_OK);
-    EXPECT_EQ(stateAfter1.Status, E2E_P05STATUS_OK);
-    ASSERT_EQ(retCheck2, E2E_E_OK);
-    EXPECT_EQ(stateAfter2.Status, E2E_P05STATUS_OK);
-    EXPECT_EQ(stateAfter2.Counter, 0U);
-}
-
 TEST_F(E2E_P05Check_Test, E2E_P05Check_NG_NullConfigReturnsInputErrNull)
 {
     /* ----------------------- */
@@ -253,6 +220,58 @@ TEST_F(E2E_P05Check_Test, E2E_P05Check_NG_NullStateReturnsInputErrNull)
     EXPECT_EQ(ret, E2E_E_INPUTERR_NULL);
 }
 
+TEST_F(E2E_P05Check_Test, E2E_P05CheckInit_NG_NullStateReturnsInputErrNull)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    const Std_ReturnType ret = E2E_P05CheckInit(nullptr);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E2E_E_INPUTERR_NULL);
+}
+
+TEST_F(E2E_P05Check_Test, E2E_P05Check_OK_CounterWrapsFrom0xFFTo0IsRecognized)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    E2E_P05ProtectStateType protectState;
+    E2E_P05CheckStateType   checkState;
+    protectState.Counter = 0xFFU;
+    checkState.Counter   = 0xFEU; /* 直前に受け付けた値が0xFEだったと仮定 */
+    checkState.Status    = E2E_P05STATUS_OK;
+
+    uint8_t frame1[5] = {0U, 0U, 0U, 0U, 0U}; /* Counter=0xFF (delta=1 from 0xFE) */
+    uint8_t frame2[5] = {0U, 0U, 0U, 0U, 0U}; /* Counter=0x00 (delta=1 from 0xFF、折り返し) */
+    E2E_P05Protect(&config, &protectState, frame1, sizeof(frame1));
+    E2E_P05Protect(&config, &protectState, frame2, sizeof(frame2));
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Std_ReturnType retCheck1 = E2E_P05Check(&config, &checkState, frame1, sizeof(frame1));
+    E2E_P05CheckStateType stateAfter1 = checkState;
+    Std_ReturnType retCheck2 = E2E_P05Check(&config, &checkState, frame2, sizeof(frame2));
+    E2E_P05CheckStateType stateAfter2 = checkState;
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    ASSERT_EQ(retCheck1, E2E_E_OK);
+    EXPECT_EQ(stateAfter1.Status, E2E_P05STATUS_OK);
+    ASSERT_EQ(retCheck2, E2E_E_OK);
+    EXPECT_EQ(stateAfter2.Status, E2E_P05STATUS_OK);
+    EXPECT_EQ(stateAfter2.Counter, 0U);
+}
+
 TEST_F(E2E_P05Check_Test, E2E_P05Check_OK_NullDataWithZeroLengthIsNoNewData)
 {
     /* ----------------------- */
@@ -271,6 +290,61 @@ TEST_F(E2E_P05Check_Test, E2E_P05Check_OK_NullDataWithZeroLengthIsNoNewData)
     /* ----------------------- */
     EXPECT_EQ(ret, E2E_E_OK);
     EXPECT_EQ(checkState.Status, E2E_P05STATUS_NONEWDATA);
+}
+
+TEST_F(E2E_P05Check_Test, E2E_P05Check_OK_SameCounterReceivedAgainIsRepeated)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    E2E_P05ProtectStateType protectState;
+    E2E_P05CheckStateType   checkState;
+    ASSERT_EQ(E2E_P05ProtectInit(&protectState), E2E_E_OK);
+    ASSERT_EQ(E2E_P05CheckInit(&checkState), E2E_E_OK);
+    uint8_t frame[5] = {0U, 0U, 0U, 0U, 0U};
+    ASSERT_EQ(E2E_P05Protect(&config, &protectState, frame, sizeof(frame)), E2E_E_OK);
+    ASSERT_EQ(E2E_P05Check(&config, &checkState, frame, sizeof(frame)), E2E_E_OK);
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    const Std_ReturnType ret = E2E_P05Check(&config, &checkState, frame, sizeof(frame));   // 同じフレームをもう一度
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E2E_E_OK);
+    EXPECT_EQ(checkState.Status, E2E_P05STATUS_REPEATED);
+}
+
+TEST_F(E2E_P05Check_Test, E2E_P05Check_OK_SkippedFrameWithinMaxDeltaIsOkSomeLost)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    config.MaxDeltaCounter = 2U;   // 1 フレームの消失までは許容する
+    E2E_P05ProtectStateType protectState;
+    E2E_P05CheckStateType   checkState;
+    ASSERT_EQ(E2E_P05ProtectInit(&protectState), E2E_E_OK);
+    ASSERT_EQ(E2E_P05CheckInit(&checkState), E2E_E_OK);
+    uint8_t f1[5] = {0U, 0U, 0U, 0U, 0U};
+    uint8_t f2[5] = {0U, 0U, 0U, 0U, 0U};
+    uint8_t f3[5] = {0U, 0U, 0U, 0U, 0U};
+    ASSERT_EQ(E2E_P05Protect(&config, &protectState, f1, sizeof(f1)), E2E_E_OK);
+    ASSERT_EQ(E2E_P05Protect(&config, &protectState, f2, sizeof(f2)), E2E_E_OK);   // f2 は受信側へ届かない
+    ASSERT_EQ(E2E_P05Protect(&config, &protectState, f3, sizeof(f3)), E2E_E_OK);
+    ASSERT_EQ(E2E_P05Check(&config, &checkState, f1, sizeof(f1)), E2E_E_OK);
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    const Std_ReturnType ret = E2E_P05Check(&config, &checkState, f3, sizeof(f3));
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E2E_E_OK);
+    EXPECT_EQ(checkState.Status, E2E_P05STATUS_OKSOMELOST);
 }
 
 }  // namespace

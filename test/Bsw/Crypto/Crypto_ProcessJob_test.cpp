@@ -246,4 +246,75 @@ TEST_F(Crypto_ProcessJob_Test, Crypto_ProcessJob_NG_MacLengthAboveCmacSize)
     EXPECT_EQ(FakeDetHw_LastErrorId, CRYPTO_E_PARAM_HANDLE);
 }
 
+TEST_F(Crypto_ProcessJob_Test, Crypto_ProcessJob_NG_KeyNotValidAfterKeyElementSet)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    uint8 newKey[CRYPTO_AES128_KEY_SIZE] = { 0U };
+    ASSERT_EQ(Crypto_KeyElementSet(0U, CRYPTO_KEY_ELEMENT_ID_CIPHER_KEY, newKey, sizeof(newKey)), E_OK);   // 鍵を書き換えると、有効化されるまで使えない
+    uint8 mac[CRYPTO_CMAC_SIZE] = { 0 };
+    Crypto_JobType job = MakeMacGenerateJob(mac);
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    const Std_ReturnType ret = Crypto_ProcessJob(CRYPTO_OBJECT_ID, &job);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, CRYPTO_E_KEY_NOT_VALID);
+}
+
+TEST_F(Crypto_ProcessJob_Test, Crypto_ProcessJob_NG_UnsupportedServiceIsRejected)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    uint8 mac[CRYPTO_CMAC_SIZE] = { 0 };
+    Crypto_JobType job = MakeMacGenerateJob(mac);
+    job.service = static_cast<Crypto_ServiceInfoType>(0x7F);   // 対応していない用途
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    const Std_ReturnType ret = Crypto_ProcessJob(CRYPTO_OBJECT_ID, &job);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_NOT_OK);
+}
+
+TEST_F(Crypto_ProcessJob_Test, Crypto_ProcessJob_OK_MacGenerateCopiesRequestedLengthOfCmac)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    uint8 full[CRYPTO_CMAC_SIZE] = { 0 };
+    uint8 head[3] = { 0 };
+    Crypto_JobType jobFull = MakeMacGenerateJob(full);
+    Crypto_JobType jobHead = MakeMacGenerateJob(head);
+    jobHead.macLength = 3U;   // 先頭 3 バイトだけ求める
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    const Std_ReturnType retFull = Crypto_ProcessJob(CRYPTO_OBJECT_ID, &jobFull);
+    const Std_ReturnType retHead = Crypto_ProcessJob(CRYPTO_OBJECT_ID, &jobHead);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(retFull, E_OK);
+    EXPECT_EQ(retHead, E_OK);
+    EXPECT_EQ(head[0], full[0]);   // 全長の MAC の先頭と一致する
+    EXPECT_EQ(head[1], full[1]);
+    EXPECT_EQ(head[2], full[2]);
+    uint8 any = 0U;
+    for (uint8 b = 0U; b < CRYPTO_CMAC_SIZE; b++) { any |= full[b]; }
+    EXPECT_NE(any, 0U);            // 0 のままではない（実際に計算している）
+}
+
 }  // namespace

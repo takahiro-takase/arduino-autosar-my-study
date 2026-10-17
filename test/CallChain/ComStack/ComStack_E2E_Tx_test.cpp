@@ -58,8 +58,10 @@ extern "C" {
 #include "E2E_P05.h"
 #include "Fake_Can_Hw.h"
 #include "Fake_Det_Hw.h"
+#include "Fake_Millis.h"
 #include "Wrap_CanIf.h"
 #include "Wrap_Can.h"
+#include "Wrap_PduR.h"
 }
 
 /* ======================================================================
@@ -205,9 +207,11 @@ class ComStack_E2E_Tx_Protect_Test : public ::testing::Test
 protected:
     void SetUp() override
     {
+        FakeMillis_Reset();  // 時刻を前のテストから引き継がない（Com の送信間隔・受信デッドラインの判定が、時刻に依存するため）
         FakeCanHw_Reset();
         WrapCanIf_Reset();  // 他ファイルの故障注入が漏れ伝わらないよう防御的にリセット
         WrapCan_Reset();  // 同上（Can.c 側）
+        WrapPduR_Reset();  // 同上（PduR.c 側）
         FakeDetHw_LogSuppressed = 1U;  // Init() のログはノイズになるため抑制
 
         canConfig.filter.filterId = 0x0220U;

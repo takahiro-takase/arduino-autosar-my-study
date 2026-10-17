@@ -149,4 +149,22 @@ TEST_F(Nm_RepeatMessageRequest_Test, Nm_RepeatMessageRequest_OK_ReturnsCanNmResu
     EXPECT_EQ(ret, E_NOT_OK);
 }
 
+TEST_F(Nm_RepeatMessageRequest_Test, Nm_RepeatMessageRequest_OK_RequestedInReadySleepIsAccepted)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    CanNm_Test_SetState(CANNM_STATE_READY_SLEEP);
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    const Std_ReturnType ret = Nm_RepeatMessageRequest(NM_MAIN_NETWORK_HANDLE);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_OK);
+}
+
 }  // namespace

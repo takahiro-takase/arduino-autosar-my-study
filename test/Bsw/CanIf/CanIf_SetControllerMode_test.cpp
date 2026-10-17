@@ -79,6 +79,7 @@ protected:
     void TearDown() override
     {
         FakeDetHw_LogSuppressed = 1U;
+        WrapCan_Reset();   // 故障注入を残さない
         CanIf_DeInit();
     }
 
@@ -132,6 +133,47 @@ TEST_F(CanIf_SetControllerMode_Test, SetControllerMode_NG_InvalidControllerModeR
     EXPECT_EQ(mode, CAN_CS_STOPPED);
 }
 
+TEST_F(CanIf_SetControllerMode_Test, SetControllerMode_NG_UninitializedReturnsError)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    CanIf_DeInit();   // 未初期化にする
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    const Std_ReturnType ret = CanIf_SetControllerMode(0U, CAN_CS_STARTED);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_NOT_OK);
+}
+
+TEST_F(CanIf_SetControllerMode_Test, SetControllerMode_NG_CanDriverRejectsTransition)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    FailFromCallCount_Can_SetControllerMode = 0U;   // Can ドライバが、状態遷移を受け付けない
+    ForcedReturn_Can_SetControllerMode      = CAN_NOT_OK;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    const Std_ReturnType ret = CanIf_SetControllerMode(0U, CAN_CS_STARTED);
+    Can_ControllerStateType mode = CAN_CS_STARTED;
+    const Std_ReturnType retMode = CanIf_GetControllerMode(0U, &mode);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_NOT_OK);
+    ASSERT_EQ(retMode, E_OK);
+    EXPECT_EQ(mode, CAN_CS_STOPPED);   // 追跡している状態は変えない
+}
+
 TEST_F(CanIf_SetControllerMode_Test, SetControllerMode_OK_StartedFromStoppedUsesCanTStart)
 {
     /* ----------------------- */
@@ -157,6 +199,7 @@ TEST_F(CanIf_SetControllerMode_Test, SetControllerMode_OK_StartedFromStoppedUses
 /* CAN_CS_STOPPED の要求は、CanIf が追跡する遷移元状態によって Can_T_STOP
  * （STARTED から）と CAN_T_WAKEUP（SLEEP から）を使い分ける、本モジュールの
  * 中核ロジック。両方の遷移元を独立して検証する。 */
+
 TEST_F(CanIf_SetControllerMode_Test, SetControllerMode_OK_StoppedFromStartedUsesCanTStop)
 {
     /* ----------------------- */

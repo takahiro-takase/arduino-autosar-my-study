@@ -101,4 +101,26 @@ TEST_F(PduR_GetVersionInfo_Test, PduR_GetVersionInfo_NG_NullPointer)
     EXPECT_EQ(FakeDetHw_LastErrorId, PDUR_E_PARAM_POINTER);
 }
 
+TEST_F(PduR_GetVersionInfo_Test, PduR_GetVersionInfo_OK_ReturnsModuleVersion)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    Std_VersionInfoType info = { 0xFFFFU, 0xFFFFU, 0xFFU, 0xFFU, 0xFFU };
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    PduR_GetVersionInfo(&info);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(info.vendorID, PDUR_VENDOR_ID);
+    EXPECT_EQ(info.moduleID, PDUR_MODULE_ID);
+    EXPECT_EQ(info.sw_major_version, PDUR_SW_MAJOR_VERSION);
+    EXPECT_EQ(info.sw_minor_version, PDUR_SW_MINOR_VERSION);
+    EXPECT_EQ(info.sw_patch_version, PDUR_SW_PATCH_VERSION);
+}
+
 }  // namespace

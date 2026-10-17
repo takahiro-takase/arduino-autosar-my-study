@@ -169,6 +169,45 @@ TEST_F(WdgM_CheckpointReached_Test, CheckpointReached_NG_DeadlineBelowMinExpires
     EXPECT_EQ(WarningStatus(), WDGM_LOCAL_STATUS_EXPIRED);   // Logical は許可された遷移のため、Deadline が原因
 }
 
+TEST_F(WdgM_CheckpointReached_Test, CheckpointReached_NG_UninitializedReportsDet)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    WdgM_DeInit();   // 未初期化にする
+    FakeDetHw_Reset();
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    const Std_ReturnType ret = WdgM_CheckpointReached(WDGM_ENTITY_WARNING, WDGM_CP_WARNING_START);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_NOT_OK);
+    EXPECT_EQ(FakeDetHw_LastErrorId, WDGM_E_NO_INIT);
+}
+
+TEST_F(WdgM_CheckpointReached_Test, CheckpointReached_NG_InvalidSupervisedEntityIdReportsDet)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    FakeDetHw_Reset();
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    const Std_ReturnType ret = WdgM_CheckpointReached(0xFFU, WDGM_CP_WARNING_START);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_NOT_OK);
+    EXPECT_EQ(FakeDetHw_LastErrorId, WDGM_E_PARAM_SEID);
+}
+
 TEST_F(WdgM_CheckpointReached_Test, CheckpointReached_OK_DeadlineWithinRangeKeepsStatusOk)
 {
     /* ----------------------- */

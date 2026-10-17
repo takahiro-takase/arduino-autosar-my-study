@@ -52,6 +52,32 @@ const PduR_RxRoutingPathType kTestRxPath = {
     /* DestCount */ 1U
 };
 
+// TransmitOverrideFct に指定するテスト用の関数（呼ばれた回数と、渡された値を記録して、成功を返す）。
+uint32     gOverrideCalls;
+PduIdType  gOverrideId;
+const PduInfoType* gOverridePdu;
+Std_ReturnType OverrideTransmit(PduIdType id, const PduInfoType* pdu)
+{
+    gOverrideCalls++;
+    gOverrideId  = id;
+    gOverridePdu = pdu;
+    return E_OK;
+}
+
+const PduR_TxRoutingPathType kOverrideTxPath = {
+    /* SrcPduId */             10U,
+    /* CanIfTxPduId */         0U,
+    /* ConfDestPduId */        20U,
+    /* ConfFct */              NULL,
+    /* TransmitOverrideFct */  OverrideTransmit,
+    /* TransmitOverrideId */   7U
+};
+
+const PduR_PBConfigType kOverrideConfig = {
+    &kTestRxPath, 1U,
+    &kOverrideTxPath, 1U
+};
+
 const PduR_PBConfigType kTestConfig = {
     &kTestRxPath, 1U,
     &kTestTxPath, 1U
@@ -141,6 +167,32 @@ TEST_F(PduR_ComTransmit_Test, PduR_ComTransmit_NG_NoMatchingRoute)
     /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, PDUR_E_PDU_ID_INVALID);
+}
+
+TEST_F(PduR_ComTransmit_Test, PduR_ComTransmit_OK_RoutesThroughTransmitOverrideWhenConfigured)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    PduR_Init(&kOverrideConfig);   // 送信経路に TransmitOverrideFct を持つ設定へ入れ替える
+    gOverrideCalls = 0U;
+    gOverrideId    = 0xFFU;
+    gOverridePdu   = nullptr;
+    uint8 sdu[8] = { 0 };
+    PduInfoType info = { sdu, 1U };
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    const Std_ReturnType ret = PduR_ComTransmit(10U, &info);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_OK);
+    EXPECT_EQ(gOverrideCalls, 1U);       // CanIf へ直接ではなく、中間モジュールの関数へ渡す
+    EXPECT_EQ(gOverrideId, 7U);          // TransmitOverrideId を渡す
+    EXPECT_EQ(gOverridePdu, &info);
 }
 
 }  // namespace

@@ -196,6 +196,62 @@ protected:
 // 2026-09 是正の本題: 送信無効化中は NM-Timeout Timer の満了判定自体を
 // 止めるため、いくら時間が経っても CANNM_E_NETWORK_TIMEOUT は報告されない。
 // ------------------------------------------------------------
+TEST_F(CanNm_MainFunction_Test, MainFunction_NG_TimeoutFiresNormallyWhenEnabled)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    FakeMillis_Value += CANNM_TIMEOUT_MS + 1UL;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    CanNm_MainFunction();
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_TRUE(NetworkTimeoutReported());
+}
+
+TEST_F(CanNm_MainFunctionUninit_Test, CanNm_MainFunction_NG_Uninit)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    CanNm_DeInit();
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    CanNm_MainFunction();
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(FakeDetHw_LastErrorId, CANNM_E_UNINIT);
+}
+
+TEST_F(CanNm_MainFunction_Test, MainFunction_NG_TimeoutFiresInRepeatMessageWhenEnabled)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // 送信有効のまま Repeat Message State でタイムアウトを超える
+    CanNm_Test_SetState(CANNM_STATE_REPEAT_MESSAGE);
+    FakeMillis_Value += CANNM_TIMEOUT_MS + 1UL;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    CanNm_MainFunction();
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_TRUE(NetworkTimeoutReported());
+}
+
 TEST_F(CanNm_MainFunction_Test, MainFunction_OK_TimeoutDoesNotFireWhileDisabled)
 {
     /* ----------------------- */
@@ -228,6 +284,7 @@ TEST_F(CanNm_MainFunction_Test, MainFunction_OK_TimeoutDoesNotFireWhileDisabled)
 // 再有効化時にタイマーが再起動されること(スタックした古い基準時刻のまま
 // 残っていれば、再有効化直後の1周期で即座に見かけ上の満了が起きるはず)。
 // ------------------------------------------------------------
+
 TEST_F(CanNm_MainFunction_Test, MainFunction_OK_TimeoutRestartsOnReEnable)
 {
     /* ----------------------- */
@@ -267,6 +324,7 @@ TEST_F(CanNm_MainFunction_Test, MainFunction_OK_TimeoutRestartsOnReEnable)
 // NORMAL_OPERATION でしか検証していなかったため、REPEAT_MESSAGE/
 // READY_SLEEP でも同様にゲートが効くことを直接確認する。
 // ------------------------------------------------------------
+
 TEST_F(CanNm_MainFunction_Test, MainFunction_OK_TimeoutDoesNotFireWhileDisabledInRepeatMessage)
 {
     /* ----------------------- */
@@ -334,50 +392,60 @@ TEST_F(CanNm_MainFunction_Test, MainFunction_OK_DoesNotEnterPrepareBusSleepWhile
 // 制御群: 送信有効のまま(既定)放置すれば、通常どおり NM-Timeout Timer は
 // 満了して CANNM_E_NETWORK_TIMEOUT が報告される(是正前から変わらない挙動)。
 // ------------------------------------------------------------
-TEST_F(CanNm_MainFunction_Test, MainFunction_NG_TimeoutFiresNormallyWhenEnabled)
+
+TEST_F(CanNm_MainFunction_Test, MainFunction_OK_BusSleepStateDoesNothing)
 {
     /* ----------------------- */
     /* ---- 準備 (Arrange) --- */
     /* ----------------------- */
-    FakeMillis_Value += CANNM_TIMEOUT_MS + 1UL;
+    CanNm_Test_SetState(CANNM_STATE_BUS_SLEEP);
 
     /* ----------------------- */
     /* ---- 実行 (Act) ------- */
     /* ----------------------- */
+    FakeMillis_Value += CANNM_TIMEOUT_MS + CANNM_REPEAT_MESSAGE_MS;
     CanNm_MainFunction();
+    CanNm_StateType state = CANNM_STATE_NORMAL_OPERATION;
+    CanNm_ModeType  mode  = CANNM_MODE_NETWORK;
+    const Std_ReturnType ret = CanNm_GetState(CANNM_MAIN_NETWORK_HANDLE, &state, &mode);
 
     /* ----------------------- */
     /* ---- 評価 (Assert) ---- */
     /* ----------------------- */
-    EXPECT_TRUE(NetworkTimeoutReported());
+    ASSERT_EQ(ret, E_OK);
+    EXPECT_EQ(state, CANNM_STATE_BUS_SLEEP);   // 時間が経っても、状態は変わらない
 }
 
-TEST_F(CanNm_MainFunctionUninit_Test, CanNm_MainFunction_NG_Uninit)
+TEST_F(CanNm_MainFunction_Test, MainFunction_OK_RepeatMessageEndsInReadySleepWhenNetworkIsNotRequested)
 {
     /* ----------------------- */
     /* ---- 準備 (Arrange) --- */
     /* ----------------------- */
-    CanNm_DeInit();
-
-    /* ----------------------- */
-    /* ---- 実行 (Act) ------- */
-    /* ----------------------- */
-    CanNm_MainFunction();
-
-    /* ----------------------- */
-    /* ---- 評価 (Assert) ---- */
-    /* ----------------------- */
-    EXPECT_EQ(FakeDetHw_LastErrorId, CANNM_E_UNINIT);
-}
-
-TEST_F(CanNm_MainFunction_Test, MainFunction_NG_TimeoutFiresInRepeatMessageWhenEnabled)
-{
-    /* ----------------------- */
-    /* ---- 準備 (Arrange) --- */
-    /* ----------------------- */
-    // 送信有効のまま Repeat Message State でタイムアウトを超える
+    ASSERT_EQ(CanNm_NetworkRelease(CANNM_MAIN_NETWORK_HANDLE), E_OK);   // 通信の要求を取り下げる
     CanNm_Test_SetState(CANNM_STATE_REPEAT_MESSAGE);
-    FakeMillis_Value += CANNM_TIMEOUT_MS + 1UL;
+    FakeMillis_Value += CANNM_REPEAT_MESSAGE_MS;   // 繰り返し送信の期間が経過する
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    CanNm_MainFunction();
+    CanNm_StateType state = CANNM_STATE_NORMAL_OPERATION;
+    CanNm_ModeType  mode  = CANNM_MODE_NETWORK;
+    const Std_ReturnType ret = CanNm_GetState(CANNM_MAIN_NETWORK_HANDLE, &state, &mode);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    ASSERT_EQ(ret, E_OK);
+    EXPECT_EQ(state, CANNM_STATE_READY_SLEEP);   // 要求が無いので、通常運転ではなく READY_SLEEP へ
+}
+
+TEST_F(CanNm_MainFunction_Test, MainFunction_OK_UnknownStateIsIgnored)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    CanNm_Test_SetState(static_cast<CanNm_StateType>(0x7F));   // 定義にない値（破損を想定）
 
     /* ----------------------- */
     /* ---- 実行 (Act) ------- */
@@ -387,7 +455,7 @@ TEST_F(CanNm_MainFunction_Test, MainFunction_NG_TimeoutFiresInRepeatMessageWhenE
     /* ----------------------- */
     /* ---- 評価 (Assert) ---- */
     /* ----------------------- */
-    EXPECT_TRUE(NetworkTimeoutReported());
+    EXPECT_EQ(FakeDetHw_ReportCount, 0U);   // 何もしない（DET も報告しない）
 }
 
 }  // namespace

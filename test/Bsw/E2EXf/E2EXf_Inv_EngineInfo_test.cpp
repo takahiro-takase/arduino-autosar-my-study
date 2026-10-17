@@ -26,6 +26,8 @@
 extern "C" {
 #include "E2EXf.h"
 #include "Fake_Det_Hw.h"
+#include "Wrap_E2E.h"
+#include "Wrap_E2E_P05.h"
 }
 
 /* ======================================================================
@@ -56,6 +58,8 @@ protected:
     void SetUp() override
     {
         FakeDetHw_LogSuppressed = 1U;  // Init() のログはノイズになるため抑制
+        WrapE2E_Reset();               // 他のテストファイルの故障注入（E2E_SMCheck など）が漏れ伝わらないようリセット
+        WrapE2EP05_Reset();
         E2EXf_Init(NULL);
         FakeDetHw_Reset();             // Init 自体の記録を後続の検証対象から除く
         FakeDetHw_LogSuppressed = 0U;  // ここから各 TEST_F の実行(Act)区間
