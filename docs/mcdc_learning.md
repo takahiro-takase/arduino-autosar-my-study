@@ -170,7 +170,7 @@ C2-Pair: covered: (1,2)
 
 **考えること**: C1 が真（不正なチャネル）で結果が真になるベクタ `T, -` を作るには、どんなテストが要りますか。
 
-**ヒント**: 既存の [Gpt_test.cpp](../test/Bsw/Gpt/Gpt_test.cpp) には、不正チャネルで `Gpt_DisableNotification` を呼ぶテストはありますが、`Gpt_EnableNotification` を呼ぶテストはありません。`Gpt_StartTimer_NG_RejectsInvalidChannel` を参考に、1 件追加します。
+**ヒント**: [test/Bsw/Gpt/](../test/Bsw/Gpt/) の [Gpt_DisableNotification_test.cpp](../test/Bsw/Gpt/Gpt_DisableNotification_test.cpp) には、不正チャネルで `Gpt_DisableNotification` を呼ぶテストはありますが、[Gpt_EnableNotification_test.cpp](../test/Bsw/Gpt/Gpt_EnableNotification_test.cpp) には、不正チャネルで `Gpt_EnableNotification` を呼ぶテストがありません。[Gpt_StartTimer_test.cpp](../test/Bsw/Gpt/Gpt_StartTimer_test.cpp) の `Gpt_StartTimer_NG_RejectsInvalidChannel` を参考に、`Gpt_EnableNotification_test.cpp` へ 1 件追加します。
 
 **答え合わせ**: `Gpt_Init(&config)` の後に `Gpt_EnableNotification((Gpt_ChannelType)1U)` を呼び、`GPT_E_PARAM_CHANNEL` が報告されることを確認します。追加後に再計測すると、このファイルの 417 行目が 100% になります。
 

@@ -51,7 +51,6 @@ namespace
 
 constexpr uint8 TEST_OS_GPT_CHANNEL = GPT_CHANNEL_1;
 
-
 /* ======================================================================
  * Test Fixture
  * ====================================================================== */
@@ -140,9 +139,62 @@ protected:
     }
 };
 
+/* EcuM の単体テスト用フィクスチャ。
+ * SetUp(): 模擬 EcuM をパススルーにして（実体の EcuM を呼ぶ）EcuM を未初期化へ戻し、DET の記録を初期化する。ExpectDet() は、DET 報告が 1 件で、API ID とエラー ID が一致することを確認する補助関数。
+ * TearDown(): 模擬 EcuM の状態も含めて元に戻す。 */
+class EcuM_CheckWakeup_Base_Test : public ::testing::Test
+{
+protected:
+    void SetUp() override
+    {
+        FakeEcuM_Reset();
+        FakeEcuM_PassThrough = 1U;
+        EcuM_Test_ResetInitState();
+        FakeDetHw_Reset();
+        FakeDetHw_LogSuppressed = 0U;
+    }
+
+    void TearDown() override
+    {
+        FakeDetHw_LogSuppressed = 1U;
+        EcuM_Test_ResetInitState();
+        FakeEcuM_Reset();  // PassThrough も FALSE へ戻る
+    }
+
+    static void ExpectDet(uint8 apiId, uint8 errorId)
+    {
+        EXPECT_EQ(FakeDetHw_ReportCount, 1U);
+        EXPECT_EQ(FakeDetHw_LastModuleId, ECUM_MODULE_ID);
+        EXPECT_EQ(FakeDetHw_LastApiId, apiId);
+        EXPECT_EQ(FakeDetHw_LastErrorId, errorId);
+    }
+
+    static const EcuM_UserType kInvalidUser = ECUM_USER_COUNT;
+};
+
 /* ======================================================================
  * Test Functions
  * ====================================================================== */
+
+TEST_F(EcuM_CheckWakeup_Base_Test, EcuM_CheckWakeup_NG_InvalidSource)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // なし（SetUp() で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    EcuM_CheckWakeup(0U);
+
+    ExpectDet(ECUM_API_ID_CHECK_WAKEUP, ECUM_E_INVALID_PAR);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // 異常終了せずに戻ること（EXPECT/ASSERT は無い）
+}
 
 TEST_F(EcuM_CheckWakeup_Test, EcuM_CheckWakeup_OK_CanSourceDelegatesToCanSm)
 {

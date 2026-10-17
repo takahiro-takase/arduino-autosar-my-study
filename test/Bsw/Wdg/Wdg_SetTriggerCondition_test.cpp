@@ -10,7 +10,7 @@
  *          実 HW への依存は `stub/Hal/Fake_Wdg_Hw.c` で満たし、リフレッシュ回数と
  *          強制リセット回数で観測する。
  *
- *          Det の NG ケースは Wdg_test.cpp にある。GoogleTest の main() は
+ *          Det の NG ケースは test/Bsw/Wdg/ にある。GoogleTest の main() は
  *          test_main.cpp に集約しているため、本ファイルでは定義しない。
  */
 
@@ -68,9 +68,68 @@ protected:
     }
 };
 
+/* Wdg の単体テスト用フィクスチャ。
+ * SetUp(): 模擬 Wdg_Hw をリセットし、Wdg_Init(&Wdg_Config) を呼ぶ（Init 中の DET ログは抑制し、Init 自体の記録は消して後続の検証から除く）。
+ * TearDown(): 未初期化の状態へ戻す。 */
+class Wdg_SetTriggerCondition_Base_Test : public ::testing::Test
+{
+protected:
+    void SetUp() override
+    {
+        FakeWdgHw_Reset();
+        FakeDetHw_LogSuppressed = 1U;  // Init() のログはノイズになるため抑制
+        Wdg_Init(&Wdg_Config);
+        FakeDetHw_Reset();             // Init 自体の記録を後続の検証対象から除く
+        FakeDetHw_LogSuppressed = 0U;  // ここから各 TEST_F の実行(Act)区間
+    }
+
+    void TearDown() override
+    {
+        FakeDetHw_LogSuppressed = 1U;
+        Wdg_Test_ResetInitState();
+    }
+};
+
 /* ======================================================================
  * Test Functions
  * ====================================================================== */
+
+TEST_F(Wdg_SetTriggerCondition_Base_Test, Wdg_SetTriggerCondition_NG_DriverState)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    Wdg_Test_ResetInitState();
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Wdg_SetTriggerCondition(100U);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(FakeDetHw_LastErrorId, WDG_E_DRIVER_STATE);
+}
+
+TEST_F(Wdg_SetTriggerCondition_Base_Test, Wdg_SetTriggerCondition_NG_ParamTimeout)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // Wdg_Config.DefaultTimeoutMs を超える timeout。
+    uint16 tooLarge = static_cast<uint16>(Wdg_Config.DefaultTimeoutMs + 1U);
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Wdg_SetTriggerCondition(tooLarge);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(FakeDetHw_LastErrorId, WDG_E_PARAM_TIMEOUT);
+}
 
 TEST_F(Wdg_SetTriggerCondition_Test, Wdg_SetTriggerCondition_OK_NonZeroTimeoutRefreshesOnly)
 {

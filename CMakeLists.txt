@@ -50,7 +50,7 @@
 # ComStack_E2E_Tx_test.cpp/ComStack_E2E_Rx_test.cpp）は E2EXf.c/
 # E2EXf_PBCfg.c/E2E_P05.c（実配線先）を実体でリンクする（E2E_P01.c は実 PDU
 # を持たない参考実装のため、E2EXf.h/.c 側の対応するインスタンス専用関数は
-# 廃止済み。E2E_P01.c 自体の検証は E2E_test.cpp の E2EP01Test が独立して
+# 廃止済み。E2E_P01.c 自体の検証は test/Bsw/E2E/ の E2EP01Test が独立して
 # 担う）。本番の TxTransformCbk/RxIndicationCbk
 # （Rte_COMTransform_E2EHealthStatus()/Rte_COMCbk_EngineInfo() 等）は Rte.c
 # 内にあるが、Rte.c 自体は IoHwAb/FiM/App_EngineManager/App_WarningIndicator
@@ -141,13 +141,13 @@
 # test_native/test_dcm/test_wdgm/test_fim を test_chain へ統合するという長期
 # ゴールの最終回）。Gpt/Dio/Port は他モジュールと無縁の末端モジュールのため、
 # それぞれの HAL 層フェイク（stub/Hal/Fake_Gpt_Hw.c 等）ごとそのまま
-# 持ち込むだけで済んだ。Can.c 単体検証（Can_test.cpp）だけは、Can.c が
+# 持ち込むだけで済んだ。Can.c 単体検証（test/Bsw/Can/）だけは、Can.c が
 # 上位層通知として呼ぶ `CanIf_RxIndication()`/`CanIf_TxConfirmation()`/
 # `CanIf_ControllerBusOff()` の3関数を、native_chain が既に CanIf.c を実体で
 # リンクしているため `--wrap` 化する必要があった（stub/Bsw/CanIf/
 # Wrap_CanIf.c/h へ追記）。3関数とも（a）CanIf/CanSM側に未初期化ガードがあり、
-# Can_test.cppはCanIf_Init()/CanSM_Init()を呼ばないため実体へパススルー
-# しても静かにno-opになるだけ、（b）Can_test.cpp自体にDET報告回数の完全
+# test/Bsw/Can/はCanIf_Init()/CanSM_Init()を呼ばないため実体へパススルー
+# しても静かにno-opになるだけ、（b）test/Bsw/Can/自体にDET報告回数の完全
 # 一致アサーションが1件も無い、の2点を確認した上で、単純な既定パススルー
 # のみで実装した。
 #

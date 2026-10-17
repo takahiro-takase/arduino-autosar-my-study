@@ -48,11 +48,11 @@
  * 上位層通知として呼ぶ（旧 `test/test_native/Bsw_CanIf_fake.h` が単純な
  * 呼び出し記録フェイクとして丸ごと差し替えていた境界）。native_chain は
  * 既に CanIf.c を実体でリンクしており（Tx/Rx チェーン検証用）、
- * Can_test.cpp（Can.c 単体検証）は CanIf の実際のPDUルーティングまでは
+ * test/Bsw/Can/（Can.c 単体検証）は CanIf の実際のPDUルーティングまでは
  * 対象外で、呼び出し回数・引数だけを検証したいため、CanIf_SetControllerMode
  * と同じ考え方で境界だけをピンポイントで観測する。既定は
  * `__real_...` へのパススルー（CanIf/CanSM 側に未初期化ガードがあり、
- * Can_test.cpp は CanIf_Init()/CanSM_Init() を呼ばないため、実体へ渡っても
+ * test/Bsw/Can/ は CanIf_Init()/CanSM_Init() を呼ばないため、実体へ渡っても
  * 静かに no-op になるだけで既存挙動に影響しない）。故障注入は誰も必要と
  * していないため、この3関数には呼び出し回数・引数キャプチャのみを持つ。
  */
