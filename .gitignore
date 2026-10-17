@@ -15,6 +15,9 @@ docs/*.pdf
 docs/autosar/4.3.1/*.*
 docs/autosar/4.4.0/*.*
 
+# 個人学習用の資料（著作権物を含むためコミットしない）
+docs/local_reference/
+
 # Python
 __pycache__/
 *.pyc

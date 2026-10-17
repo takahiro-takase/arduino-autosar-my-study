@@ -384,7 +384,7 @@ set(NATIVE_CHAIN_STUB_SOURCES
 )
 
 # test/ 配下のテストファイル（{Module|Stack}_{シナリオ}_test.cpp）を自動収集する。
-# 2026-09、test/ 直下にモジュール別サブフォルダ（test/Bsw/Can/・test/Bsw/DcmStack/
+# 2026-09、test/ 直下にモジュール別サブフォルダ（test/Bsw/Can/・test/CallChain/DcmStack/
 # 等、stub/ と同じ「src/ ミラーリング」の発想）を新設し整理したため、
 # test/ 直下限定だった旧 GLOB から GLOB_RECURSE へ変更した。stub/ 配下は
 # 全て .c（wrap/fake スタブ）で .cpp が無いため、再帰化しても誤って拾われる

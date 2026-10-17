@@ -29,7 +29,7 @@ namespace
  * \details `Fake_Fee_Hw.c`（NvM/MemIf/Fee の実体リンクに伴い導入。
  *          `Fake_Fee_Hw.h` 冒頭コメント参照）は旧 `Fake_NvM.c` と異なり
  *          RAM バッファに内容を実際に保持するため、何もしなければ
- *          `Dem_Init()` を呼ぶ既存の全テストファイル（`test/Bsw/DcmStack/`
+ *          `Dem_Init()` を呼ぶ既存の全テストファイル（`test/CallChain/DcmStack/`
  *          等、約36ファイル）が暗黙に前提とする「毎回必ず初回起動」という
  *          挙動が2回目以降のテストで崩れてしまう。個々のテストファイルの
  *          `SetUp()` を変更する代わりに、ここで全テスト共通に自動リセット

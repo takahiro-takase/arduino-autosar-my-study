@@ -106,7 +106,7 @@ statusMask の代表値: `0x08`=confirmedDTC のみ / `0xFF`=全件。
 `uds_tester` の手動検証のみで確認しており、ユニットテストが存在
 しませんでした（Com/Can とは異なる扱い）。今回、この状況を変えて
 ホスト上のユニットテスト環境（当時は `[env:native_dcm]`。現在は `[env:native_chain]` に統合済みで、
-テストは `test/Bsw/Dcm/` と `test/Bsw/DcmStack/`）を新設し、
+テストは `test/Bsw/Dcm/` と `test/CallChain/DcmStack/`）を新設し、
 `WrapDcm_InjectRequest()`（`Dcm_StartOfReception()` から `Dcm_TpRxIndication()` までの受信の流れ）で、
 生の UDS バイト列を渡して `CanTp_Transmit()`（wrap でキャプチャ）の応答を検証する形で 0x19 の主要 subFunc を
 カバーしました。実機での動作確認はこれとは別に行います。
