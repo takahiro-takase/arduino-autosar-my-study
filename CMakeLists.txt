@@ -278,6 +278,7 @@ set(NATIVE_CHAIN_INCLUDE_DIRS
     stub/Bsw/KeyM
     stub/Bsw/Nm
     stub/Bsw/NvM
+    stub/Bsw/MemIf
     stub/Bsw/PduR
     stub/Bsw/Port
     stub/Bsw/WdgIf
@@ -365,6 +366,7 @@ set(NATIVE_CHAIN_STUB_SOURCES
     stub/Bsw/EcuM/Fake_EcuM_Deps.c
     stub/Bsw/FiM/Wrap_FiM.c
     stub/Bsw/Gpt/Wrap_Gpt.c
+    stub/Bsw/MemIf/Wrap_MemIf.c
     stub/Bsw/Nm/Wrap_Nm.c
     stub/Bsw/PduR/Wrap_PduR.c
     stub/Bsw/Port/Wrap_Port.c
@@ -633,6 +635,16 @@ set(NATIVE_CHAIN_WRAP_SYMBOLS
     Nm_NetworkMode
     Nm_BusSleepMode
     Nm_PrepareBusSleepMode
+    # MemIf.h の公開API全9関数（Wrap_MemIf.h/.c 参照）。
+    MemIf_Init
+    MemIf_GetVersionInfo
+    MemIf_SetMode
+    MemIf_Read
+    MemIf_Write
+    MemIf_Cancel
+    MemIf_GetStatus
+    MemIf_GetJobResult
+    MemIf_MainFunction
     # PduR.c の AUTOSAR IF 全数（Wrap_PduR.h/.c 参照）。
     PduR_Init
     PduR_GetVersionInfo

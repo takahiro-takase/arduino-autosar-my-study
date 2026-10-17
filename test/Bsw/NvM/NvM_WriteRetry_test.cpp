@@ -32,6 +32,7 @@ extern "C" {
 #include "Dem_Cfg.h"
 #include "Fake_Det_Hw.h"
 #include "Wrap_Dem.h"
+#include "Wrap_MemIf.h"
 }
 
 /* ======================================================================
@@ -71,6 +72,7 @@ protected:
             MemIf_MainFunction();
         }
         WrapDem_Reset();
+        WrapMemIf_Reset();   // 起動時の処理で数えた回数を除き、故障注入も他のテストから漏れないようにする
         FakeDetHw_Reset();
         std::memset(newData, 0x5A, sizeof(newData));  // 既存内容（全 0 ほか）と異なる値（書き込みスキップ回避）
     }
@@ -78,6 +80,7 @@ protected:
     void TearDown() override
     {
         FakeDetHw_LogSuppressed = 1U;
+        WrapMemIf_Reset();   // 故障注入を残さない
         NvM_Test_ResetInitState();
     }
 
@@ -129,32 +132,6 @@ protected:
 /* ======================================================================
  * Test Functions
  * ====================================================================== */
-
-TEST_F(NvM_WriteRetry_Test, NvM_MainFunction_OK_WriteRecoversWithinRetryLimitWithoutDemReport)
-{
-    /* ----------------------- */
-    /* ---- 準備 (Arrange) --- */
-    /* ----------------------- */
-    MakeFeeBusy();
-    ASSERT_EQ(NvM_WriteBlock(NVM_BLOCK_ID_DEM_STATUS, newData), E_OK);
-
-    /* ----------------------- */
-    /* ---- 実行 (Act) ------- */
-    /* ----------------------- */
-    // 上限以内の拒否（2 回）の後で Fee が空けば、書き込みは成功する。
-    NvM_MainFunction();
-    NvM_MainFunction();
-
-    /* ----------------------- */
-    /* ---- 評価 (Assert) ---- */
-    /* ----------------------- */
-    ASSERT_EQ(ResultOf(NVM_BLOCK_ID_DEM_STATUS), NVM_REQ_PENDING);
-    ReleaseFee();
-    RunUntilIdle();
-
-    EXPECT_EQ(ResultOf(NVM_BLOCK_ID_DEM_STATUS), NVM_REQ_OK);
-    EXPECT_EQ(CallCount_Dem_SetEventStatus, 0U);  // 上限内で成功すれば失敗も回復も報告しない
-}
 
 TEST_F(NvM_WriteRetry_Test, NvM_MainFunction_NG_WriteRejectedBeyondRetryLimitFailsBlockAndReportsToDem)
 {
@@ -244,6 +221,75 @@ TEST_F(NvM_WriteRetry_Test, NvM_MainFunction_NG_BlockAfterFailedBlockIsStillProc
     // 失敗からの回復として、成功した書き込みで PASSED が報告される（[SWS_NvM_00873]）。
     EXPECT_EQ(LastEventId_Dem_SetEventStatus, DemConf_DemEventParameter_NVM_REQ_FAILED);
     EXPECT_EQ(LastEventStatus_Dem_SetEventStatus, DEM_EVENT_STATUS_PASSED);
+}
+
+TEST_F(NvM_WriteRetry_Test, NvM_MainFunction_NG_CrcWriteRejectedBeyondRetryLimitFailsBlock)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    FailFromCallCount_MemIf_Write = 2U;   // データ本体（1 回目）は受け付けるが、CRC の書き込み（2 回目）以降は拒否する
+    ForcedReturn_MemIf_Write      = E_NOT_OK;
+    ASSERT_EQ(NvM_WriteBlock(NVM_BLOCK_ID_DEM_STATUS, newData), E_OK);
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    RunUntilIdle();
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ResultOf(NVM_BLOCK_ID_DEM_STATUS), NVM_REQ_NOT_OK);   // リトライの上限まで繰り返し、諦める
+    EXPECT_GT(CallCount_MemIf_Write, 2U);                           // データ本体を書き直している
+}
+
+TEST_F(NvM_WriteRetry_Test, NvM_MainFunction_NG_JobFailureBeyondRetryLimitFailsBlock)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    FailFromCallCount_MemIf_GetJobResult = 1U;   // 書き込みジョブの結果が、いつも失敗
+    ForcedReturn_MemIf_GetJobResult      = MEMIF_JOB_FAILED;
+    ASSERT_EQ(NvM_WriteBlock(NVM_BLOCK_ID_DEM_STATUS, newData), E_OK);
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    RunUntilIdle();
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ResultOf(NVM_BLOCK_ID_DEM_STATUS), NVM_REQ_NOT_OK);
+    EXPECT_GE(CallCount_Dem_SetEventStatus, 1U);                      // 要求の失敗を Dem へ報告する（Dem の状態ブロックの書き直しで、複数回になりうる）
+    EXPECT_EQ(LastEventId_Dem_SetEventStatus, DemConf_DemEventParameter_NVM_REQ_FAILED);
+}
+
+TEST_F(NvM_WriteRetry_Test, NvM_MainFunction_OK_WriteRecoversWithinRetryLimitWithoutDemReport)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    MakeFeeBusy();
+    ASSERT_EQ(NvM_WriteBlock(NVM_BLOCK_ID_DEM_STATUS, newData), E_OK);
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    // 上限以内の拒否（2 回）の後で Fee が空けば、書き込みは成功する。
+    NvM_MainFunction();
+    NvM_MainFunction();
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    ASSERT_EQ(ResultOf(NVM_BLOCK_ID_DEM_STATUS), NVM_REQ_PENDING);
+    ReleaseFee();
+    RunUntilIdle();
+
+    EXPECT_EQ(ResultOf(NVM_BLOCK_ID_DEM_STATUS), NVM_REQ_OK);
+    EXPECT_EQ(CallCount_Dem_SetEventStatus, 0U);  // 上限内で成功すれば失敗も回復も報告しない
 }
 
 }  // namespace

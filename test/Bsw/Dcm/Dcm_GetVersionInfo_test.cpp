@@ -81,4 +81,26 @@ TEST_F(Dcm_GetVersionInfo_Test, Dcm_GetVersionInfo_NG_NullPointer)
     EXPECT_EQ(FakeDetHw_LastErrorId, DCM_E_PARAM_POINTER);
 }
 
+TEST_F(Dcm_GetVersionInfo_Test, Dcm_GetVersionInfo_OK_ReturnsModuleVersion)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    Std_VersionInfoType info = { 0xFFFFU, 0xFFFFU, 0xFFU, 0xFFU, 0xFFU };
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Dcm_GetVersionInfo(&info);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(info.vendorID, DCM_VENDOR_ID);
+    EXPECT_EQ(info.moduleID, DCM_MODULE_ID);
+    EXPECT_EQ(info.sw_major_version, DCM_SW_MAJOR_VERSION);
+    EXPECT_EQ(info.sw_minor_version, DCM_SW_MINOR_VERSION);
+    EXPECT_EQ(info.sw_patch_version, DCM_SW_PATCH_VERSION);
+}
+
 }  // namespace
