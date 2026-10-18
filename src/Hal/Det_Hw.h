@@ -51,7 +51,7 @@ extern "C" {
  */
 void Det_Hw_PrintLogLine(LogLevel lvl, const char* tag, const char* func, const char* msg);
 
-/** \brief  "[<ms>ms] DET M=.. I=.. API=0x.. ERR=0x.." 形式で 1 行出力する。 */
+/** \brief  "[<ms>ms] [<ノード名>] ERROR Det: M=.. I=.. API=0x.. ERR=0x.." 形式で 1 行出力する。 */
 void Det_Hw_PrintDetError(uint16 ModuleId, uint8 InstanceId, uint8 ApiId, uint8 ErrorId);
 
 /* ======================================================================

@@ -32,6 +32,12 @@
 #endif
 /* @@GEN-END det-log-level */
 
+/** シリアルログの各行に付けるノード名（`[<ms>ms] [<ノード名>] LEVEL TAG: ...`）。
+ *  複数の ECU のログを1つに集約する CAN ツール等が、どの ECU の行かを判別するために使う。 */
+#ifndef DET_LOG_NODE_NAME
+#  define DET_LOG_NODE_NAME  "Arduino"
+#endif
+
 /* -----------------------------------------------------------------------
  * DET（Default Error Tracer）自身の Det_GetVersionInfo 関連定数
  *

@@ -150,7 +150,7 @@ void Det_Init(const Det_ConfigType* ConfigPtr);
  *
  *          本実装は実 AUTOSAR の「コールアウトフック登録・実行停止」等の
  *          高度な機能を持たない学習用の簡略実装で、単に
- *          `[<ms>ms] DET M=<ModuleId> I=<InstanceId> API=0x<ApiId> ERR=0x<ErrorId>`
+ *          `[<ms>ms] [<ノード名>] ERROR Det: M=<ModuleId> I=<InstanceId> API=0x<ApiId> ERR=0x<ErrorId>`
  *          という 1 行を出力するのみ。DET_LOG_LEVEL によるレベル抑制の対象外
  *          （開発エラーは常に最重要度のため）。
  *
