@@ -9,9 +9,9 @@
  *            （`DET_LOG_LEVEL`）に依存せず、CAN の受信だけで ECU 時刻が分かる。
  *
  *          対応範囲（簡略版）:
- *            - 時間マスターのみ（SYNC/FUP の送信）。時間スレーブ（受信側）、
- *              OFS/OFNS（オフセット時間ベース）、CRC 付きメッセージ
- *              （0x20/0x28）、CAN FD の拡張フォーマットは対象外。
+ *            - 時間マスターのみ（SYNC/FUP の送信）。CRC 付きメッセージ（0x20/0x28）に
+ *              対応（CANTSYN_TX_CRC_SECURED で切り替え）。時間スレーブ（受信側）、
+ *              OFS/OFNS（オフセット時間ベース）、CAN FD の拡張フォーマットは対象外。
  *            - 時刻源は StbM ではなく ECU の稼働時間（Os カウンタ [ms]）。
  *              時間領域は 0 の1つ。時間ベースの状態（同期/ゲートウェイ）は持たない。
  *            将来 StbM を実装する場合は、`CanTSyn_GetNowMs()`（CanTSyn.c）を
@@ -32,6 +32,7 @@
  * Includes
  * ====================================================================== */
 
+#include "Std_Types.h"
 #include "CanIf_Cfg.h"
 
 /* ======================================================================
@@ -96,8 +97,35 @@
 /** 時刻同期メッセージの DLC（クラシック CAN では 8、[SWS_CanTSyn_00010]）。 */
 #define CANTSYN_DLC  8U
 
-/* SYNC/FUP の Type 値（CRC なし、[SWS_CanTSyn_00031]） */
-#define CANTSYN_TYPE_SYNC  0x10U
-#define CANTSYN_TYPE_FUP   0x18U
+/** 時刻同期メッセージの CAN ID（信号表 TimeSync の canId と一致させること。configurator の
+ *  検査で確認する）。CRC の DataID の元にも使う。 */
+#define CANTSYN_CAN_ID  0x240U
+
+/* SYNC/FUP の Type 値（[SWS_CanTSyn_00031]）。CRC なしは 0x10/0x18、CRC 付きは 0x20/0x28 */
+#define CANTSYN_TYPE_SYNC      0x10U
+#define CANTSYN_TYPE_FUP       0x18U
+#define CANTSYN_TYPE_SYNC_CRC  0x20U
+#define CANTSYN_TYPE_FUP_CRC   0x28U
+
+/** 送信する SYNC/FUP を CRC 付きにするか（1=CRC 付き 0x20/0x28、0=CRC なし 0x10/0x18。
+ *  CanTSynGlobalTimeTxCrcSecured 相当、[SWS_CanTSyn_00031]）。 */
+#define CANTSYN_TX_CRC_SECURED  1U
+
+/** 送信する SYNC/FUP の Type（CANTSYN_TX_CRC_SECURED に従う）。 */
+#define CANTSYN_TX_TYPE_SYNC  ((CANTSYN_TX_CRC_SECURED != 0U) ? CANTSYN_TYPE_SYNC_CRC : CANTSYN_TYPE_SYNC)
+#define CANTSYN_TX_TYPE_FUP   ((CANTSYN_TX_CRC_SECURED != 0U) ? CANTSYN_TYPE_FUP_CRC : CANTSYN_TYPE_FUP)
+
+/* -----------------------------------------------------------------------
+ * CRC の DataID（[SWS_CanTSyn_00054]: DataID = DataIDList[SC]、メッセージ種別ごとの表）
+ *
+ * DataID は 8bit。CAN ID を元に、SC（0〜15）ごとに別の値、SYNC と FUP で別の値にする
+ * （E2E で DataID を CAN ID と一致させている慣習に倣い、表を CAN ID から導く）:
+ *   SYNC の DataID = (CAN ID + SC) の下位 8bit            （CAN ID 0x240 なら 0x40〜0x4F）
+ *   FUP  の DataID = (CAN ID + 0x10 + SC) の下位 8bit     （CAN ID 0x240 なら 0x50〜0x5F）
+ * SC ごとに値が違うため、別の SC のフレームを取り違えると CRC が合わなくなり、
+ * SYNC と FUP を取り違えても CRC が合わない。受信側（CAN ツール）も同じ式で検証する。
+ * ----------------------------------------------------------------------- */
+#define CANTSYN_DATA_ID_SYNC(sc)  ((uint8)((CANTSYN_CAN_ID + (uint32)(sc)) & 0xFFU))
+#define CANTSYN_DATA_ID_FUP(sc)   ((uint8)((CANTSYN_CAN_ID + 0x10UL + (uint32)(sc)) & 0xFFU))
 
 #endif /* CANTSYN_CFG_H */

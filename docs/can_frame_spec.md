@@ -53,7 +53,8 @@
 |  |  |  |  | 0–7 | 8 bit | Control Bit Vector | bit0=Repeat Message Request のみ使用 |
 |  |  |  |  | 8–15 | 8 bit | Source Node Identifier | 本 ECU は 0x01 |
 | Tx | TimeSync (CanTSyn) | 0x240 | 8 | ↓ | ↓ | ↓ | ↓ |
-|  |  |  |  | 0–7 | 8 bit | Type | 0x10=SYNC / 0x18=FUP（同じ CAN ID を Type で区別） |
+|  |  |  |  | 0–7 | 8 bit | Type | 0x20=SYNC / 0x28=FUP（CRC 付き。CRC なしにすると 0x10/0x18。同じ CAN ID を Type で区別） |
+|  |  |  |  | 8–15 | 8 bit | CRC | CRC-8H2F（Byte2〜Byte7 + DataID）。DataID は CAN ID と SC から導く |
 |  |  |  |  | 16–19 | 4 bit | SC（シーケンスカウンタ） | SYNC ごとに +1（0〜15 循環）。FUP は対の SYNC と同じ値 |
 |  |  |  |  | 20–23 | 4 bit | 時間領域 | 0 固定 |
 |  |  |  |  | 32–63 | 32 bit | 時刻（ビッグエンディアン） | SYNC=秒、FUP=ナノ秒（Byte3 の Bit1-0 は OVS） |
@@ -151,7 +152,7 @@ ImmobilizerCmd だけが Com へ届き、Signal Gateway がそのまま Immobili
 受信は `CanNm_RxIndication()` へ直接渡します（[`CanNm_Notes.md`](modules/CanNm_Notes.md) 参照）。
 
 **時刻同期フレーム（CAN ID 0x240 / DLC=8）**: CanTSyn が Com を経由せず `CanIf_Transmit()` で直接送信します。
-SYNC（Type=0x10、秒）と FUP（Type=0x18、ナノ秒）の2フレームで1組、1000ms 周期です。ECU の稼働時間を配信し、
+SYNC（Type=0x20、秒）と FUP（Type=0x28、ナノ秒）の2フレームで1組（CRC 付き。CRC なしは 0x10/0x18）、1000ms 周期です。ECU の稼働時間を配信し、
 CAN ツールが ECU のシリアルログの時刻と PC の時刻を揃えるのに使います（[`CanTSyn_Notes.md`](modules/CanTSyn_Notes.md) 参照）。
 
 **診断フレーム（CAN ID 0x7E0 要求 / 0x7E8 応答）**: ISO 15765-2 の PCI を含む UDS フレームです

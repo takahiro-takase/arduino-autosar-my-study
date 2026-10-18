@@ -127,7 +127,7 @@ TEST_F(TimeSyncStack_SyncFup_Test, OK_SyncReachesHwThenConfirmationSendsFupInSam
     CanTSyn_MainFunction();   // SYNC を送る（Can_Write() は確認を保留キューへ積む）
     ASSERT_EQ(FakeCanHw_SendCount, 1U);
     ASSERT_EQ(FakeCanHw_LastSendId, 0x240U);
-    ASSERT_EQ(FakeCanHw_LastSendData[0], CANTSYN_TYPE_SYNC);
+    ASSERT_EQ(FakeCanHw_LastSendData[0], CANTSYN_TX_TYPE_SYNC);
     FakeMillis_Value += 5UL;   // SYNC の送信完了まで 5ms かかった
 
     /* ----------------------- */
@@ -141,7 +141,7 @@ TEST_F(TimeSyncStack_SyncFup_Test, OK_SyncReachesHwThenConfirmationSendsFupInSam
     EXPECT_EQ(FakeCanHw_SendCount, 2U);                          // FUP が HW へ届いた
     EXPECT_EQ(FakeCanHw_LastSendId, 0x240U);
     EXPECT_EQ(FakeCanHw_LastSendDlc, CANTSYN_DLC);
-    EXPECT_EQ(FakeCanHw_LastSendData[0], CANTSYN_TYPE_FUP);
+    EXPECT_EQ(FakeCanHw_LastSendData[0], CANTSYN_TX_TYPE_FUP);
     EXPECT_EQ(FakeCanHw_LastSendData[2], 0x00U);                 // SYNC と同じ SC
     // T4 = (12345ms の ns 部分 = 345ms) + 5ms = 350ms = 350000000ns = 0x14DC9380（ビッグエンディアン）
     EXPECT_EQ(FakeCanHw_LastSendData[4], 0x14U);
@@ -174,7 +174,7 @@ TEST_F(TimeSyncStack_SyncFup_Test, OK_NextPeriodSendsSyncWithNextSequenceCounter
     /* ---- 評価 (Assert) ---- */
     /* ----------------------- */
     EXPECT_EQ(FakeCanHw_SendCount, 3U);
-    EXPECT_EQ(FakeCanHw_LastSendData[0], CANTSYN_TYPE_SYNC);
+    EXPECT_EQ(FakeCanHw_LastSendData[0], CANTSYN_TX_TYPE_SYNC);
     EXPECT_EQ(FakeCanHw_LastSendData[2], 0x01U);   // SC が進む
 }
 

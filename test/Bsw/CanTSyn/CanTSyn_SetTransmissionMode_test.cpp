@@ -172,7 +172,7 @@ TEST_F(CanTSyn_SetTransmissionMode_Test, CanTSyn_SetTransmissionMode_OK_TxOnResu
     /* ---- 評価 (Assert) ---- */
     /* ----------------------- */
     EXPECT_EQ(CallCount_CanIf_Transmit, 1U);
-    EXPECT_EQ(LastData_CanIf_Transmit[0], CANTSYN_TYPE_SYNC);
+    EXPECT_EQ(LastData_CanIf_Transmit[0], CANTSYN_TX_TYPE_SYNC);
 }
 
 }  // namespace

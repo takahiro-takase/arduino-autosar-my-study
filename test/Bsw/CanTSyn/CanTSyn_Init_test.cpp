@@ -86,9 +86,16 @@ TEST_F(CanTSyn_Init_Test, CanTSyn_Init_OK_FirstMainFunctionSendsSync)
     EXPECT_EQ(CallCount_CanIf_Transmit, 1U);   // 初回の呼び出しで SYNC を送る
     EXPECT_EQ(LastPduId_CanIf_Transmit, CANTSYN_CANIF_TX_PDU_ID);
     EXPECT_EQ(LastLength_CanIf_Transmit, CANTSYN_DLC);
-    EXPECT_EQ(LastData_CanIf_Transmit[0], CANTSYN_TYPE_SYNC);
+    EXPECT_EQ(LastData_CanIf_Transmit[0], CANTSYN_TX_TYPE_SYNC);
     EXPECT_EQ(LastData_CanIf_Transmit[2], 0x00U);   // 時間領域 0、SC=0（[SWS_CanTSyn_00007]）
     EXPECT_EQ(LastData_CanIf_Transmit[7], 12U);     // 12345ms の秒部分 = 12（ビッグエンディアン）
+#if (CANTSYN_TX_CRC_SECURED != 0U)
+    EXPECT_EQ(LastData_CanIf_Transmit[0], 0x20U);   // CRC 付きの SYNC
+    // CRC-8H2F（Byte2〜Byte7 = 00 00 00 00 00 0C と、SYNC の DataID(SC=0) = 0x40）= 0xDC
+    EXPECT_EQ(LastData_CanIf_Transmit[1], 0xDCU);
+#else
+    EXPECT_EQ(LastData_CanIf_Transmit[0], 0x10U);   // CRC なしの SYNC
+#endif
 }
 
 TEST_F(CanTSyn_Init_Test, CanTSyn_Init_OK_ReinitializeResetsSequenceCounter)
@@ -116,7 +123,7 @@ TEST_F(CanTSyn_Init_Test, CanTSyn_Init_OK_ReinitializeResetsSequenceCounter)
     /* ----------------------- */
     /* ---- 評価 (Assert) ---- */
     /* ----------------------- */
-    EXPECT_EQ(LastData_CanIf_Transmit[0], CANTSYN_TYPE_SYNC);
+    EXPECT_EQ(LastData_CanIf_Transmit[0], CANTSYN_TX_TYPE_SYNC);
     EXPECT_EQ(LastData_CanIf_Transmit[2], 0x00U);  // SC が 0 へ戻る
 }
 

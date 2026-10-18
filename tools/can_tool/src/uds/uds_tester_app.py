@@ -17,7 +17,6 @@ import math
 import os
 import queue
 import re
-import statistics
 import threading
 import time
 import tkinter as tk
@@ -1284,8 +1283,13 @@ class UdsTesterFrame(ttk.Frame):
     _SYNC_LINE_RE = re.compile(r"^\[(\d+)ms\]")
     # ECU が配信する時刻同期（AUTOSAR CanTSyn、SWS_CanTSyn 7.3.1）の CAN ID と Type。
     _TSYN_CAN_ID = 0x240
-    _TSYN_TYPE_SYNC = 0x10
-    _TSYN_TYPE_FUP = 0x18
+    # Type: CRC なし 0x10(SYNC)/0x18(FUP)、CRC 付き 0x20(SYNC)/0x28(FUP)（[SWS_CanTSyn_00031]）
+    _TSYN_SYNC_TYPES = (0x10, 0x20)
+    _TSYN_FUP_TYPES = (0x18, 0x28)
+    _TSYN_CRC_TYPES = (0x20, 0x28)
+    # SYNC と FUP を1組とみなす最大の間隔 [s]（ECU は SYNC の送信完了直後に FUP を送る。
+    # 送信完了待ちの上限 100ms に、受信の遅れの余裕を足した値）。
+    _TSYN_PAIR_WINDOW_S = 0.5
 
     @staticmethod
     def _fmt_log_time(t: float) -> str:
@@ -1309,6 +1313,8 @@ class UdsTesterFrame(ttk.Frame):
                 dirn, can_id, data = text
                 if can_id == self._TSYN_CAN_ID and dirn == "Rx":
                     self._on_time_sync_frame(t, data, lines)   # 「ログ」OFFでも同期には使う
+                if dirn == "Tx":
+                    self._stamp_tx_rows(can_id, t)
                 if can_id in self._can_log_off:
                     continue  # 「ログ」OFFのID: 行は出さない
                 text = f"{dirn} 0x{can_id:03X} [{len(data)}] {data.hex(' ').upper()}"
@@ -1336,7 +1342,7 @@ class UdsTesterFrame(ttk.Frame):
                         self._on_ecu_restart(t, lines)
                     self._sync_last_ms = ecu_ms
             lines.append((t, tag, text))
-        offset = statistics.median(self._sync_offsets) if self._sync_offsets else None
+        offset = self._sync_offset()
         out = [self._format_log_line(t, tag, text, offset) for t, tag, text in lines]
         if not out:
             return
@@ -1401,6 +1407,14 @@ class UdsTesterFrame(ttk.Frame):
         w.see("end")
         w.configure(state="disabled")
 
+    def _sync_offset(self):
+        """ECU 時刻 → PC 時刻のオフセット（PC時刻 - ECU時刻）。標本が無ければ None。
+        標本は「PC が SYNC を受け取った時刻 - ECU が SYNC を送った時刻」で、USB アダプタの
+        キューに溜まっていた古いフレームや通信の遅れが乗ると、本当の値より必ず大きくなる
+        （遅れは負にならない）。そのため中央値ではなく、直近 16 標本（deque の上限）の最小値を使う。接続直後にアダプタから
+        まとめて出てくる古いフレームの影響も受けない。"""
+        return min(self._sync_offsets) if self._sync_offsets else None
+
     def _on_ecu_restart(self, t: float, lines: list):
         """ECU の再起動を検出したときの処理。旧オフセットを捨てて、同期の通知を出し直せるようにする。
         シリアル行と FUP のどちらの基準時刻も、新しい起動に合わせて 0 へ戻す。"""
@@ -1410,11 +1424,30 @@ class UdsTesterFrame(ttk.Frame):
         self._tsyn_last_ms = 0.0
         lines.append((t, "SYNC", "ECU再起動を検出（オフセット推定をリセット）"))
 
+    @staticmethod
+    def _crc8h2f(data: bytes) -> int:
+        """CRC-8H2F（多項式 0x2F、初期値 0xFF、最終 XOR 0xFF、反転なし。AUTOSAR の Crc_CalculateCRC8H2F と同じ。
+        検査値: b"123456789" → 0xDF）。"""
+        crc = 0xFF
+        for b in data:
+            crc ^= b
+            for _ in range(8):
+                crc = ((crc << 1) ^ 0x2F) & 0xFF if crc & 0x80 else (crc << 1) & 0xFF
+        return crc ^ 0xFF
+
+    def _tsyn_crc_ok(self, data: bytes) -> bool:
+        """CRC 付きの SYNC/FUP の CRC（Byte1）を検証する。CRC は Byte2〜Byte7 に DataID を続けて計算する
+        （[SWS_CanTSyn_00055]）。DataID は ECU（CanTSyn_Cfg.h）と同じ式: SYNC は CAN ID + SC、
+        FUP は CAN ID + 0x10 + SC の下位 8bit。"""
+        sc = data[2] & 0x0F
+        base = self._TSYN_CAN_ID + (0x10 if data[0] in self._TSYN_FUP_TYPES else 0)
+        return self._crc8h2f(data[2:8] + bytes([(base + sc) & 0xFF])) == data[1]
+
     def _on_time_sync_frame(self, t: float, data: bytes, lines: list):
         """ECU の時刻同期メッセージ（CanTSyn、CAN ID 0x240）を処理し、オフセット
         （PC時刻 - ECU時刻）の標本を取る。
-          SYNC（Byte0=0x10）: Byte4-7 = T0 の秒（ビッグエンディアン）。受信した PC 時刻を控える。
-          FUP （Byte0=0x18）: SC が直前の SYNC と同じなら、Byte3 の Bit1-0（OVS、秒の繰り上がり）と
+          SYNC（Byte0=0x10、CRC 付きは 0x20）: Byte4-7 = T0 の秒（ビッグエンディアン）。受信した PC 時刻を控える。
+          FUP （Byte0=0x18、CRC 付きは 0x28）: SC が直前の SYNC と同じなら、Byte3 の Bit1-0（OVS、秒の繰り上がり）と
                               Byte4-7（ナノ秒）から、ECU が SYNC を実際に送信した時刻
                               = (秒 + OVS) + ナノ秒 を得る。この時刻に SYNC を受信したとみなす。
         ECU 時刻が前回より小さければ ECU の再起動とみなして標本を捨てる。
@@ -1422,15 +1455,20 @@ class UdsTesterFrame(ttk.Frame):
         if len(data) < 8:
             return
         msg_type, sc = data[0], data[2] & 0x0F
+        if msg_type in self._TSYN_CRC_TYPES and not self._tsyn_crc_ok(data):
+            self._log("時刻同期メッセージの CRC が一致しません（このフレームは同期に使いません）", "WARN")
+            # 保留中の SYNC も捨てる。残すと、SC が一巡した後の FUP と古い SYNC を取り違える。
+            self._sync_pending_sync = None
+            return
         value = int.from_bytes(data[4:8], "big")
-        if msg_type == self._TSYN_TYPE_SYNC:
+        if msg_type in self._TSYN_SYNC_TYPES:
             self._sync_pending_sync = (sc, t, value)
             return
-        if msg_type != self._TSYN_TYPE_FUP or self._sync_pending_sync is None:
+        if msg_type not in self._TSYN_FUP_TYPES or self._sync_pending_sync is None:
             return
         (sync_sc, sync_t, sync_sec), self._sync_pending_sync = self._sync_pending_sync, None
-        if sync_sc != sc:
-            return  # 別の組の SYNC/FUP（途中の取りこぼし）
+        if sync_sc != sc or t - sync_t > self._TSYN_PAIR_WINDOW_S:
+            return  # 別の組の SYNC/FUP（途中の取りこぼし）。FUP は SYNC の直後に届くので、離れていれば対にしない
         ecu_s = sync_sec + (data[3] & 0x03) + value / 1e9
         ecu_ms = ecu_s * 1000.0
         # 再起動の判定は FUP どうしで行う。シリアル行の ECU 時刻（_sync_last_ms）は、SYNC を
@@ -1441,7 +1479,7 @@ class UdsTesterFrame(ttk.Frame):
         self._sync_offsets.append(sync_t - ecu_s)
         if not self._sync_announced:
             self._sync_announced = True
-            base = statistics.median(self._sync_offsets)
+            base = self._sync_offset()
             lines.append((t, "SYNC",
                           f"時刻同期: 以後の時刻は Arduino の時間軸 (ECU 0ms = {self._fmt_log_time(base)})"))
 
@@ -1603,16 +1641,38 @@ class UdsTesterFrame(ttk.Frame):
         else:
             self._handle_periodic_can_toggle(btn_cfg, idx, label, entry_data)
 
-    @staticmethod
-    def _now_ts() -> str:
-        """TX/RXタイムスタンプ表示用の PC ローカル時刻文字列（HH:MM:SS）。"""
-        return time.strftime("%H:%M:%S")
+    def _row_time_text(self, t: float) -> str:
+        """メッセージ欄の TX/RX タイムスタンプ表示。ECU との時刻同期が済んでいれば ECU の時間軸の
+        `<ms>ms`（統合ログの `[<ms>ms]` と同じ時間軸）、未同期なら PC ローカル時刻の HH:MM:SS。
+        メインスレッドからのみ呼ぶ（同期のオフセットを読むため）。"""
+        if self._sync_offsets:
+            return f"{int((t - self._sync_offset()) * 1000)}ms"
+        return time.strftime("%H:%M:%S", time.localtime(t))
 
     def _mark_tx(self, idx: int) -> None:
-        self.state_queue.put(("tx_ts", (idx, self._now_ts())))
+        self.state_queue.put(("tx_ts", (idx, time.time())))
 
     def _mark_rx(self, idx: int) -> None:
-        self.state_queue.put(("rx_ts", (idx, self._now_ts())))
+        self.state_queue.put(("rx_ts", (idx, time.time())))
+
+    def _stamp_tx_rows(self, can_id: int, t: float) -> None:
+        """CAN ID で受信した送信フレームを、同じ CAN ID の送信行（CAN ID 欄の値で照合）の
+        TX タイムスタンプへ反映する。ボタン以外（スクリプト等）が送ったフレームも
+        統合ログと同じ経路（_write_unified_log）で拾うため、スクリプトの送信も表示に連動する。
+        UDS の行は要求の内容（コマンド）を CAN ID だけでは特定できないため対象外。"""
+        text = None
+        for idx, ev in self._entry_vars.items():
+            var = ev.get("can_id")
+            if var is None or idx not in self._tx_ts_vars:
+                continue
+            try:
+                row_id = self._parse_can_id(var.get())
+            except ValueError:
+                continue
+            if row_id == can_id:
+                if text is None:
+                    text = self._row_time_text(t)
+                self._tx_ts_vars[idx].set(text)
 
     def _on_combined_click(self, btn_cfg, idx: int):
         """送信/定期ボタン統合（2026-09）: 周期(ms)欄を持たない（=定期送信非対応の
@@ -1757,8 +1817,9 @@ class UdsTesterFrame(ttk.Frame):
                     # 送信直前に正しい値へ上書きされてしまうバグがあった）。
                     e2e_cfg = btn_cfg.get("e2e")
                     secoc_cfg = btn_cfg.get("secoc")
+                    # TX 時刻は、送信フレームを拾う _stamp_tx_rows が CAN ID から行へ反映する
+                    # （スクリプトの送信も同じ経路。ここで二重に更新しない）。
                     uds_link.send_can_frame(self.bus, can_id, data)
-                    self._mark_tx(idx)
                     self._log(
                         f"[{label}] TX ID=0x{can_id:03X} " + " ".join(f"{b:02X}" for b in data)
                     )
@@ -2079,8 +2140,7 @@ class UdsTesterFrame(ttk.Frame):
                             secoc_freshness = (secoc_freshness + 1) & 0xFF
                         else:
                             send_data = data
-                        uds_link.send_can_frame(self.bus, can_id, send_data)
-                        self._mark_tx(idx)
+                        uds_link.send_can_frame(self.bus, can_id, send_data)   # TX 時刻は _stamp_tx_rows が反映する
                         time.sleep(self._PERIODIC_POST_SEND_HOLD_S)
                     except Exception:  # noqa: BLE001 - 周期送信中の一時エラーは無視して継続する
                         pass
@@ -2509,13 +2569,13 @@ class UdsTesterFrame(ttk.Frame):
                 if btn_idx in self._periodic_btn_vars:
                     self._periodic_btn_vars[btn_idx].set(text)
             elif kind == "tx_ts":
-                ts_idx, ts_text = value
+                ts_idx, ts_time = value
                 if ts_idx in self._tx_ts_vars:
-                    self._tx_ts_vars[ts_idx].set(ts_text)
+                    self._tx_ts_vars[ts_idx].set(self._row_time_text(ts_time))
             elif kind == "rx_ts":
-                ts_idx, ts_text = value
+                ts_idx, ts_time = value
                 if ts_idx in self._rx_ts_vars:
-                    self._rx_ts_vars[ts_idx].set(ts_text)
+                    self._rx_ts_vars[ts_idx].set(self._row_time_text(ts_time))
             elif kind == "serial_state":
                 tag, state = value
                 if tag in self._serial_state_vars:
