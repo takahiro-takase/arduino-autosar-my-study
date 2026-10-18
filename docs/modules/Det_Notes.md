@@ -48,8 +48,9 @@ if (config == NULL)
 ```
 
 `Det_ReportError()` 自体は `Det.h`/`Det.c` に新規実装し、`DET_LOGE` とは
-独立したチャネルとして `[<ms>ms] DET M=<ModuleId> I=<InstanceId> API=0x<ApiId>
-ERR=0x<ErrorId>` という 1 行を出力します（本実装は実 AUTOSAR のコールアウト
+独立したチャネルとして `[<ms>ms] [<ノード名>] ERROR Det: M=<ModuleId> I=<InstanceId> API=0x<ApiId>
+ERR=0x<ErrorId>` という 1 行を出力します（ノード名は `Det_Cfg.h` の `DET_LOG_NODE_NAME`、
+通常のログ行 `[<ms>ms] [<ノード名>] LEVEL TAG: func: message` と同じ構造）（本実装は実 AUTOSAR のコールアウト
 フック登録・実行停止等の高度な機能は持たない学習用の簡略実装）。
 
 エラーコードは該当 SWS PDF の章から検証した値をそのまま `<Module>_Cfg.h` に

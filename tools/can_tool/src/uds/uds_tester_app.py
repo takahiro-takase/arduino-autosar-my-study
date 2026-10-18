@@ -10,12 +10,14 @@ can_tool（app.py）の「UDS Tester」タブとして埋め込まれる。単�
 """
 from __future__ import annotations
 
+import collections
 import gc
 import json
 import math
 import os
 import queue
 import re
+import statistics
 import threading
 import time
 import tkinter as tk
@@ -146,14 +148,13 @@ class UdsTesterFrame(ttk.Frame):
         self.serial_port: "serial.Serial | None" = None
         self._serial_stop = threading.Event()
         self._serial_thread: threading.Thread | None = None
-        self.serial_log_queue: "queue.Queue[str]" = queue.Queue()
-        self._serial_log_visible = tk.BooleanVar(value=False)
-        # Serialログのファイル保存（表示中の全行を、書式そのままファイルへ追記する）。
-        # 「Serialログ」チェックボックス（表示/非表示）とは独立で、常時有効
+        # 統合ログ（Serial・CAN・ツールの全行）のファイル保存。画面表示と同じ行を、
+        # 書式そのままファイルへ追記する。「ログ」チェックボックス（表示/非表示）とは
+        # 独立で、常時有効
         # （オプトインのトグルは持たない。実機ログを見返す・チャットで確認して
         # もらう用途がほぼ全てで、保存したくない接続の方が稀なため）。ファイルへの
         # 書き込みはメインスレッド（_poll_queues）でのみ行うため、ワーカースレッド
-        # との排他は不要（serial_log_queue 経由で受け渡すのと同じ設計）。
+        # との排他は不要（file_log_queue 経由で受け渡すのと同じ設計）。
         #
         # 保存先は毎回尋ねず、Connect のたびに self.serial_log_dir 配下へ
         # タイムスタンプ付きファイル名を自動生成する（接続1回につき1ファイル、
@@ -165,6 +166,23 @@ class UdsTesterFrame(ttk.Frame):
             os.path.normpath(log_dir_cfg) if os.path.isabs(log_dir_cfg)
             else os.path.normpath(os.path.join(_THIS_DIR, "..", "..", log_dir_cfg))
         )
+        # 統合ログ（シリアル+CAN+ツールログを同じファイルへ時系列で記録）の受け渡し。
+        # 各スレッドは (PC時刻[s], タグ, 本文) を積むだけで、ファイルへ書くのは
+        # メインスレッド（_poll_queues → _write_unified_log）のみ。CANフレームは
+        # _wrap_bus_logging が bus.send/recv を包んで積む（UDS送受信・周期送信・
+        # RXモニタのどの経路で触ったフレームも1箇所で拾えるため）。
+        self.file_log_queue: "queue.Queue[tuple[float, str, str]]" = queue.Queue()
+        self._can_log_vars: "dict[int, tk.BooleanVar]" = {}
+        # ワーカースレッドから読むため、tk変数のミラーとして素の属性を持つ
+        # （_apply_can_log_filter が更新）。
+        self._can_log_off: "frozenset[int]" = frozenset()
+        # ECU時刻(ms) <-> PC時刻の同期推定（_resolve_sync_samples 参照）。
+        self._sync_frames: "dict[tuple[int, str], collections.deque]" = collections.defaultdict(
+            lambda: collections.deque(maxlen=16))
+        self._sync_offsets: "collections.deque[float]" = collections.deque(maxlen=32)
+        self._sync_last_ms = 0
+        self._sync_announced = False
+        self._sync_pending: "list[tuple[float, int, str, int]]" = []
         # CanSM/EcuM の最新状態表示用 StringVar（ログ行から正規表現で抽出、
         # _parse_serial_state 参照）。tk.StringVar は Tk ルート作成後にしか
         # 生成できないためインスタンス属性だが、キー・表示順・ラベルは
@@ -214,15 +232,6 @@ class UdsTesterFrame(ttk.Frame):
         self.status_label = ttk.Label(conn, textvariable=self.status_var, foreground="red")
         self.status_label.grid(row=0, column=7, padx=8)
 
-        # 「CANログ」表示切替は接続状態や応答からの推測値ではなくGUI自体の表示設定
-        # のため、トラッキング状態ではなく接続パネル側に置く。
-        ttk.Checkbutton(
-            conn,
-            text="CANログ",
-            variable=self._log_visible,
-            command=lambda: self._toggle_panel(self.log_frame, self._log_visible),
-        ).grid(row=0, column=8, padx=8)
-
         # CAPL風スクリプトの実行/停止（CAN 送信操作）も、コマンド一覧のボタンや
         # トラッキング状態とは性質が異なる常設の操作のため、CAN 接続パネル側に
         # 置く（ログと同じ理由）。
@@ -238,7 +247,8 @@ class UdsTesterFrame(ttk.Frame):
         # だが、シリアルログ読み取り自体は特定デバイスに依存しない汎用機能のため
         # 「Arduino」ではなく「Serial」と呼ぶ） ----
         conn_serial = ttk.LabelFrame(self, text="Serial 接続")
-        conn_serial.pack(fill="x", padx=8, pady=4)
+        # 接続の順序は Serial（ログ・時刻同期の土台）→ CAN。
+        conn_serial.pack(fill="x", padx=8, pady=4, before=conn)
 
         ttk.Label(conn_serial, text="port").grid(row=0, column=0, padx=4, pady=4)
         self.serial_port_var = tk.StringVar(value="")
@@ -264,13 +274,14 @@ class UdsTesterFrame(ttk.Frame):
             conn_serial, textvariable=self.serial_status_var, foreground="red")
         self.serial_status_label.grid(row=0, column=7, padx=8)
 
-        # 「CANログ」と同じ理由（GUI 表示設定であって接続状態からの推測値ではない）
-        # で Serial 接続パネル側に置く。
+        # 統合ログ（Serial・CAN・ツール）の表示切替。ログは Serial 接続から作られ
+        # 時刻同期もシリアルが基準のため、Serial 接続パネル側に置く（GUI 表示設定で
+        # あって接続状態からの推測値ではない）。
         ttk.Checkbutton(
             conn_serial,
-            text="Serialログ",
-            variable=self._serial_log_visible,
-            command=lambda: self._toggle_panel(self.serial_log_frame, self._serial_log_visible),
+            text="ログ",
+            variable=self._log_visible,
+            command=lambda: self._toggle_panel(self.log_frame, self._log_visible),
         ).grid(row=0, column=8, padx=8)
 
         # ---- ECU 状態（シリアルログから抽出。接続パネルとは別枠にする理由:
@@ -370,7 +381,7 @@ class UdsTesterFrame(ttk.Frame):
         body.pack(fill="both", expand=True, padx=8, pady=4)
 
         # ---- コマンドリスト (スクロール可能・1列) ----
-        cmd_outer = ttk.LabelFrame(body, text="コマンド")
+        cmd_outer = ttk.LabelFrame(body, text="メッセージ")
         cmd_outer.pack(side="left", fill="both", expand=True, padx=(0, 8))
 
         canvas = tk.Canvas(cmd_outer, width=500, highlightthickness=0)
@@ -407,29 +418,45 @@ class UdsTesterFrame(ttk.Frame):
         # ときは単発送信、0以外のときは定期送信の開始/停止トグルとして働く。
         # ボタン表示は待機中「▶」/定期送信中「■」、ツールチップで挙動を説明する。
         # 統合で空いた列にはTX/RXタイムスタンプ（PCローカル時刻）を表示する。
-        ttk.Label(inner, text="コマンド", font=("", 9, "bold")).grid(
+        ttk.Label(inner, text="ログ", font=("", 9, "bold")).grid(
             row=0, column=0, padx=(4, 2), pady=(4, 1), sticky="w")
+        ttk.Label(inner, text="メッセージ", font=("", 9, "bold")).grid(
+            row=0, column=1, padx=(4, 2), pady=(4, 1), sticky="w")
         ttk.Label(inner, text="周期(ms)", font=("", 9, "bold")).grid(
-            row=0, column=1, padx=(4, 4), pady=(4, 1), sticky="w")
+            row=0, column=2, padx=(4, 4), pady=(4, 1), sticky="w")
         ttk.Label(inner, text="送信/定期", font=("", 9, "bold")).grid(
-            row=0, column=2, padx=(2, 4), pady=(4, 1), sticky="w")
-        ttk.Label(inner, text="時刻", font=("", 9, "bold")).grid(
             row=0, column=3, padx=(2, 4), pady=(4, 1), sticky="w")
-        ttk.Label(inner, text="CAN ID", font=("", 9, "bold")).grid(
+        ttk.Label(inner, text="時刻", font=("", 9, "bold")).grid(
             row=0, column=4, padx=(2, 4), pady=(4, 1), sticky="w")
+        ttk.Label(inner, text="CAN ID", font=("", 9, "bold")).grid(
+            row=0, column=5, padx=(2, 4), pady=(4, 1), sticky="w")
         hdr_cell = ttk.Frame(inner)
-        hdr_cell.grid(row=0, column=5, padx=(0, 4), pady=(4, 1), sticky="w")
+        hdr_cell.grid(row=0, column=6, padx=(0, 4), pady=(4, 1), sticky="w")
         ttk.Label(hdr_cell, text="データ (hex)", font=("", 9, "bold"),
                   width=30, anchor="w").pack(side="left")
         ttk.Label(hdr_cell, text="説明", font=("", 9, "bold"),
                   width=40, anchor="w").pack(side="left", padx=(4, 0))
         ttk.Separator(inner, orient="horizontal").grid(
-            row=1, column=0, columnspan=6, sticky="ew", padx=4, pady=(0, 2))
+            row=1, column=0, columnspan=7, sticky="ew", padx=4, pady=(0, 2))
 
         def _hex_str(items) -> str:
             return " ".join(
                 f"{int(x, 16) if isinstance(x, str) else int(x):02X}" for x in items
             )
+
+        def _add_log_check(row: int, can_ids, rowspan: int = 1):
+            """行頭の「ログ」チェックボックス。チェックしたIDのフレームだけを統合ログへ
+            記録する（_apply_can_log_filter）。同じIDの行同士、UDSの要求/応答
+            （0x7E0/0x7E8）は1つの変数を共有して連動する。"""
+            var = next((self._can_log_vars[c] for c in can_ids if c in self._can_log_vars), None)
+            if var is None:
+                var = tk.BooleanVar(value=True)
+                var.trace_add("write", lambda *_: self._apply_can_log_filter())
+            for c in can_ids:
+                self._can_log_vars[c] = var
+            cb = ttk.Checkbutton(inner, variable=var)
+            cb.grid(row=row, column=0, rowspan=rowspan, padx=(6, 2), pady=2)
+            cb.bind("<MouseWheel>", _scroll)
 
         current_row = 2
         for i, btn_cfg in enumerate(self.cfg["buttons"]):
@@ -437,11 +464,18 @@ class UdsTesterFrame(ttk.Frame):
             t = btn_cfg.get("type")
 
             if t == "group_header":
-                sep = ttk.Label(inner, text=f"── {btn_cfg['label']} {'─' * 40}",
-                                font=("", 9, "bold"), foreground="#555555", anchor="w")
-                sep.grid(row=row, column=0, columnspan=6,
+                # 見出し + 残りの幅いっぱいに伸びる区切り線（固定文字数の罫線だと、
+                # 表の幅に対して短くなるため）。
+                sep = ttk.Frame(inner)
+                sep.grid(row=row, column=0, columnspan=7,
                          padx=(4, 4), pady=(6, 2), sticky="ew")
-                sep.bind("<MouseWheel>", _scroll)
+                sep_lbl = ttk.Label(sep, text=btn_cfg["label"],
+                                    font=("", 9, "bold"), foreground="#555555")
+                sep_lbl.pack(side="left", padx=(0, 6))
+                sep_line = ttk.Separator(sep, orient="horizontal")
+                sep_line.pack(side="left", fill="x", expand=True)
+                for w in (sep, sep_lbl, sep_line):
+                    w.bind("<MouseWheel>", _scroll)
                 current_row += 1
                 continue
 
@@ -450,22 +484,23 @@ class UdsTesterFrame(ttk.Frame):
                 can_id_int = int(raw_id, 0) if isinstance(raw_id, str) else int(raw_id)
                 cmd_lbl = ttk.Label(inner, text=btn_cfg["label"], width=20,
                                     anchor="w", justify="left")
-                cmd_lbl.grid(row=row, column=0, padx=(4, 2), pady=2, sticky="nsew")
+                cmd_lbl.grid(row=row, column=1, padx=(4, 2), pady=2, sticky="nsew")
                 cmd_lbl.bind("<MouseWheel>", _scroll)
+                _add_log_check(row, [can_id_int])
                 rx_ts_var = tk.StringVar(value="")
                 rx_ts_lbl = ttk.Label(inner, textvariable=rx_ts_var,
                                       font=("Consolas", 8), foreground="#777777")
-                rx_ts_lbl.grid(row=row, column=3, padx=(4, 4), pady=2, sticky="w")
+                rx_ts_lbl.grid(row=row, column=4, padx=(4, 4), pady=2, sticky="w")
                 rx_ts_lbl.bind("<MouseWheel>", _scroll)
                 self._rx_ts_vars[i] = rx_ts_var
                 id_lbl = ttk.Label(inner, text=f"0x{can_id_int:03X}",
                                    font=("Consolas", 9), foreground="#2a7a2a")
-                id_lbl.grid(row=row, column=4, padx=(2, 6), pady=2, sticky="w")
+                id_lbl.grid(row=row, column=5, padx=(2, 6), pady=2, sticky="w")
                 id_lbl.bind("<MouseWheel>", _scroll)
                 rx_var = tk.StringVar(value="")
                 name_var = tk.StringVar(value="")
                 cell = ttk.Frame(inner)
-                cell.grid(row=row, column=5,
+                cell.grid(row=row, column=6,
                           padx=(0, 4), pady=2, sticky="ew")
                 cell.bind("<MouseWheel>", _scroll)
                 rx_lbl = ttk.Label(cell, textvariable=rx_var,
@@ -491,9 +526,11 @@ class UdsTesterFrame(ttk.Frame):
 
             # ---- 説明ラベル (col 0) ----
             rs = 2 if is_uds else 1
+            if is_uds:
+                _add_log_check(row, [uds_link.REQUEST_ID, uds_link.RESPONSE_ID], rowspan=2)
             cmd_lbl = ttk.Label(inner, text=btn_cfg["label"], width=20,
                                 anchor="w", justify="left")
-            cmd_lbl.grid(row=row, column=0, rowspan=rs,
+            cmd_lbl.grid(row=row, column=1, rowspan=rs,
                          padx=(4, 2), pady=2, sticky="nsew")
             cmd_lbl.bind("<MouseWheel>", _scroll)
 
@@ -501,20 +538,20 @@ class UdsTesterFrame(ttk.Frame):
                 # TX 行 (上段): CAN ID=0x7E0 + 送信データ(編集可)
                 tx_id = ttk.Label(inner, text="0x7E0", font=("Consolas", 9),
                                   foreground="#555555")
-                tx_id.grid(row=row, column=4, padx=(2, 6), pady=(3, 1), sticky="w")
+                tx_id.grid(row=row, column=5, padx=(2, 6), pady=(3, 1), sticky="w")
                 tx_id.bind("<MouseWheel>", _scroll)
 
                 if t == "security_access_auto":
                     tx_data = ttk.Label(inner, text="(seed→key 自動計算)",
                                         font=("Consolas", 9))
-                    tx_data.grid(row=row, column=5, padx=(0, 4), pady=(3, 1), sticky="w")
+                    tx_data.grid(row=row, column=6, padx=(0, 4), pady=(3, 1), sticky="w")
                     tx_data.bind("<MouseWheel>", _scroll)
                 else:
                     default_hex = _hex_str(btn_cfg.get("payload", []))
                     data_var = tk.StringVar(value=default_hex)
                     presets = btn_cfg.get("presets", [])
                     cell = ttk.Frame(inner)
-                    cell.grid(row=row, column=5, padx=(0, 4), pady=(3, 1), sticky="w")
+                    cell.grid(row=row, column=6, padx=(0, 4), pady=(3, 1), sticky="w")
                     cell.bind("<MouseWheel>", _scroll)
                     # 送信データ入力欄: Entry+読み取り専用Comboboxだったものを、
                     # 直接編集も▼からのプリセット選択も両方できる1つの
@@ -566,14 +603,14 @@ class UdsTesterFrame(ttk.Frame):
                 # RX 行 (下段): CAN ID=0x7E8 + 受信データ(自動更新)
                 rx_id = ttk.Label(inner, text="0x7E8", font=("Consolas", 9),
                                   foreground="#3a7ebf")
-                rx_id.grid(row=row + 1, column=4, padx=(2, 6), pady=(1, 3), sticky="w")
+                rx_id.grid(row=row + 1, column=5, padx=(2, 6), pady=(1, 3), sticky="w")
                 rx_id.bind("<MouseWheel>", _scroll)
 
                 resp_var = tk.StringVar(value="")
                 resp_lbl = ttk.Label(inner, textvariable=resp_var,
                                      font=("Consolas", 9), foreground="#3a7ebf",
                                      anchor="w")
-                resp_lbl.grid(row=row + 1, column=5, padx=(0, 4), pady=(1, 3), sticky="ew")
+                resp_lbl.grid(row=row + 1, column=6, padx=(0, 4), pady=(1, 3), sticky="ew")
                 resp_lbl.bind("<MouseWheel>", _scroll)
                 self._response_vars[i] = resp_var
 
@@ -587,7 +624,7 @@ class UdsTesterFrame(ttk.Frame):
                     inner, textvariable=combined_var, width=5,
                     command=lambda c=btn_cfg, idx=i: self._on_combined_click(c, idx),
                 )
-                combined_btn.grid(row=row, column=2, rowspan=2,
+                combined_btn.grid(row=row, column=3, rowspan=2,
                                   padx=(4, 4), pady=2, sticky="nsew")
                 combined_btn.bind("<MouseWheel>", _scroll)
                 self._periodic_btn_vars[i] = combined_var
@@ -599,14 +636,14 @@ class UdsTesterFrame(ttk.Frame):
                 tx_ts_var = tk.StringVar(value="")
                 tx_ts_lbl = ttk.Label(inner, textvariable=tx_ts_var,
                                       font=("Consolas", 8), foreground="#777777")
-                tx_ts_lbl.grid(row=row, column=3, padx=(4, 4), pady=(3, 1), sticky="w")
+                tx_ts_lbl.grid(row=row, column=4, padx=(4, 4), pady=(3, 1), sticky="w")
                 tx_ts_lbl.bind("<MouseWheel>", _scroll)
                 self._tx_ts_vars[i] = tx_ts_var
 
                 rx_ts_var = tk.StringVar(value="")
                 rx_ts_lbl = ttk.Label(inner, textvariable=rx_ts_var,
                                       font=("Consolas", 8), foreground="#777777")
-                rx_ts_lbl.grid(row=row + 1, column=3, padx=(4, 4), pady=(1, 3), sticky="w")
+                rx_ts_lbl.grid(row=row + 1, column=4, padx=(4, 4), pady=(1, 3), sticky="w")
                 rx_ts_lbl.bind("<MouseWheel>", _scroll)
                 self._rx_ts_vars[i] = rx_ts_var
 
@@ -623,7 +660,7 @@ class UdsTesterFrame(ttk.Frame):
                     interval_var = tk.StringVar(value=str(btn_cfg.get("interval_ms", 0)))
                     interval_entry = ttk.Entry(inner, textvariable=interval_var, width=6,
                                                font=("Consolas", 9))
-                    interval_entry.grid(row=row, column=1, rowspan=2,
+                    interval_entry.grid(row=row, column=2, rowspan=2,
                                         padx=(2, 4), pady=2, sticky="ns")
                     interval_entry.bind("<MouseWheel>", _scroll)
                     self._entry_vars.setdefault(i, {})["interval_ms"] = interval_var
@@ -633,10 +670,11 @@ class UdsTesterFrame(ttk.Frame):
                 # can_frame: 1行のみ
                 raw_id = btn_cfg.get("can_id", "0x000")
                 can_id_val = int(raw_id, 0) if isinstance(raw_id, str) else int(raw_id)
+                _add_log_check(row, [can_id_val])
                 can_id_var = tk.StringVar(value=f"0x{can_id_val:03X}")
                 id_widget = ttk.Entry(inner, textvariable=can_id_var, width=9,
                                       font=("Consolas", 9))
-                id_widget.grid(row=row, column=4, padx=(2, 6), pady=2, sticky="w")
+                id_widget.grid(row=row, column=5, padx=(2, 6), pady=2, sticky="w")
                 id_widget.bind("<MouseWheel>", _scroll)
                 self._entry_vars.setdefault(i, {})["can_id"] = can_id_var
 
@@ -657,7 +695,7 @@ class UdsTesterFrame(ttk.Frame):
                 data_var = tk.StringVar(value=default_hex)
                 presets = btn_cfg.get("presets", [])
                 cell = ttk.Frame(inner)
-                cell.grid(row=row, column=5, padx=(0, 4), pady=2, sticky="w")
+                cell.grid(row=row, column=6, padx=(0, 4), pady=2, sticky="w")
                 cell.bind("<MouseWheel>", _scroll)
                 # 送信データ入力欄: Entry+読み取り専用Comboboxだったものを、
                 # 直接編集も▼からのプリセット選択も両方できる1つの
@@ -724,7 +762,7 @@ class UdsTesterFrame(ttk.Frame):
                 interval_var = tk.StringVar(value=str(_default_interval))
                 interval_entry = ttk.Entry(inner, textvariable=interval_var, width=6,
                                            font=("Consolas", 9))
-                interval_entry.grid(row=row, column=1, padx=(2, 4), pady=2)
+                interval_entry.grid(row=row, column=2, padx=(2, 4), pady=2)
                 interval_entry.bind("<MouseWheel>", _scroll)
                 self._entry_vars.setdefault(i, {})["interval_ms"] = interval_var
 
@@ -736,7 +774,7 @@ class UdsTesterFrame(ttk.Frame):
                     inner, textvariable=combined_var, width=5,
                     command=lambda c=btn_cfg, idx=i: self._on_combined_click(c, idx),
                 )
-                combined_btn.grid(row=row, column=2, padx=(4, 2), pady=2)
+                combined_btn.grid(row=row, column=3, padx=(4, 2), pady=2)
                 combined_btn.bind("<MouseWheel>", _scroll)
                 self._periodic_btn_vars[i] = combined_var
                 _Tooltip(combined_btn, "▶: 周期(ms)=0なら送信、0以外なら定期送信を開始\n■: クリックで定期送信を停止")
@@ -745,36 +783,26 @@ class UdsTesterFrame(ttk.Frame):
                 tx_ts_var = tk.StringVar(value="")
                 tx_ts_lbl = ttk.Label(inner, textvariable=tx_ts_var,
                                       font=("Consolas", 8), foreground="#777777")
-                tx_ts_lbl.grid(row=row, column=3, padx=(4, 4), pady=2, sticky="w")
+                tx_ts_lbl.grid(row=row, column=4, padx=(4, 4), pady=2, sticky="w")
                 tx_ts_lbl.bind("<MouseWheel>", _scroll)
                 self._tx_ts_vars[i] = tx_ts_var
 
                 current_row += 1
         # ---- ログ ----
-        self.log_frame = ttk.LabelFrame(body, text="ログ")
+        self.log_frame = ttk.LabelFrame(body, text="ログ（CAN・Serial・ツール）")
         # initially hidden; shown by _toggle_panel when checkbox is checked
 
         self.log_text = scrolledtext.ScrolledText(
             self.log_frame, font=("Consolas", 10), state="disabled", wrap="word"
         )
         self.log_text.pack(fill="both", expand=True)
-
-        # ---- Serial ログ（Serial.println 出力。上記「CANログ」＝ツール自身の
-        # CAN 送受信ログとは別物のため、別パネルとして分ける） ----
-        self.serial_log_frame = ttk.LabelFrame(body, text="Serialログ")
-        # initially hidden; shown by _toggle_panel when checkbox is checked
-        # CanSM/EcuM の状態表示は専用の「ECU 状態」パネルに常設したため、ここには
-        # 置かない（_serial_state_vars の Label は state_frame 側を参照）。
-
-        self.serial_log_text = scrolledtext.ScrolledText(
-            self.serial_log_frame, font=("Consolas", 9), state="disabled", wrap="word"
-        )
-        self.serial_log_text.pack(fill="both", expand=True, padx=4, pady=4)
+        for tag, color in self._LOG_COLORS.items():
+            self.log_text.tag_configure(tag, foreground=color)
 
     @staticmethod
     def _toggle_panel(frame, visible_var):
         """チェックボックス連動で LabelFrame の表示/非表示を切り替える共通処理
-        （「ログ」「Serialログ」パネルで同一の4行を2回書いていたのを統合）。"""
+        （現在は「ログ」パネルのみ）。"""
         if visible_var.get():
             frame.pack(side="left", fill="both", expand=True)
         else:
@@ -1021,6 +1049,7 @@ class UdsTesterFrame(ttk.Frame):
         except Exception as exc:  # noqa: BLE001 - 接続失敗内容をそのままユーザーに見せる
             messagebox.showerror("接続失敗", str(exc))
             return
+        self._wrap_bus_logging(bus)
         self.bus = bus
         self._bus_interface = self.interface_var.get()
         self.status_var.set("● Connected")
@@ -1125,8 +1154,9 @@ class UdsTesterFrame(ttk.Frame):
         # 開始しておく（キューの中身は _poll_queues が後でまとめて捌くので、
         # ここで先に self.serial_log_file を用意しておけばそのタイミングで
         # 一緒に書き込まれる）。
+        self._reset_time_sync()
         self._open_serial_log_file()
-        self.serial_log_queue.put(f"接続しました ({port} @ {baud}bps)")
+        self._serial_note(f"接続しました ({port} @ {baud}bps)")
         self._serial_stop.clear()
         self._serial_thread = threading.Thread(
             target=self._serial_reader_worker, args=(ser, self._serial_stop), daemon=True)
@@ -1138,7 +1168,7 @@ class UdsTesterFrame(ttk.Frame):
             self._serial_thread.join(timeout=1.0)
         self._serial_thread = None
         self._serial_mark_disconnected()
-        self.serial_log_queue.put("切断しました")
+        self._serial_note("切断しました")
         if self.serial_log_file is not None:
             # 「切断しました」もファイルへ残したいので、_poll_queues が上記の
             # キュー内容を実際に書き込み終わった後（次の poll サイクル以降）に
@@ -1177,7 +1207,7 @@ class UdsTesterFrame(ttk.Frame):
         except OSError as exc:
             messagebox.showerror("保存失敗", f"ログフォルダを作成できません: {exc}")
             return
-        filename = f"serial_log_{time.strftime('%Y%m%d_%H%M%S')}.txt"
+        filename = f"can_tool_log_{time.strftime('%Y%m%d_%H%M%S')}.txt"
         path = os.path.join(self.serial_log_dir, filename)
         try:
             self.serial_log_file = open(path, "a", encoding="utf-8")
@@ -1185,7 +1215,7 @@ class UdsTesterFrame(ttk.Frame):
             messagebox.showerror("保存失敗", str(exc))
             return
         self.serial_log_file_path = path
-        self.serial_log_queue.put(f"[Serialログ] ファイル保存を開始しました: {path}")
+        self._serial_note(f"[Serialログ] ファイル保存を開始しました: {path}")
 
     def _close_serial_log_file(self):
         """開いている Serialログ保存先ファイルを閉じる（best-effort。
@@ -1198,10 +1228,192 @@ class UdsTesterFrame(ttk.Frame):
                 pass
             self.serial_log_file = None
             self.serial_log_file_path = None
-            self.serial_log_queue.put(f"[Serialログ] ファイル保存を終了しました: {path}")
+            self._serial_note(f"[Serialログ] ファイル保存を終了しました: {path}")
+
+    def _serial_note(self, text: str):
+        """ツール側の通知（接続/切断/エラー等）を統合ログへ SYS として残す
+        （ECU由来の行は _serial_reader_worker が SER として積む）。"""
+        self.file_log_queue.put((time.time(), "SYS", text))
+
+    def _apply_can_log_filter(self):
+        """各IDの「ログ」チェックを、ワーカーが読む素の属性（tk変数はワーカー
+        スレッドから触れない）へ反映する。チェックを外したIDだけを記録しない
+        （メッセージ欄にないIDは常に記録する）。"""
+        self._can_log_off = frozenset(c for c, v in self._can_log_vars.items() if not v.get())
+
+    def _wrap_bus_logging(self, bus: "can.BusABC"):
+        """bus.send/recv を包み、通過した全フレームを統合ログ用キューへ積む。
+        send/recv の呼び出し元（UDS・周期送信・RXモニタ・CAPL）に依らず1箇所で
+        拾える。"""
+        orig_send = bus.send
+        orig_recv = bus.recv
+
+        def log_frame(direction: str, msg: "can.Message"):
+            # 整形はメインスレッド（_write_unified_log）に任せ、ここでは素のまま積む。
+            # 「ログ」OFFのIDも時刻同期の標本に使うため、ここでは絞らない。
+            self.file_log_queue.put((
+                time.time(), "CAN", (direction, msg.arbitration_id, bytes(msg.data))))
+
+        def send(msg, *args, **kwargs):
+            result = orig_send(msg, *args, **kwargs)
+            log_frame("Tx", msg)
+            return result
+
+        def recv(*args, **kwargs):
+            msg = orig_recv(*args, **kwargs)
+            if msg is not None:
+                log_frame("Rx", msg)
+            return msg
+
+        bus.send = send
+        bus.recv = recv
+
+    def _reset_time_sync(self):
+        """ECUとの時刻同期の状態を初期化する（Serial 接続し直し時。別のECU起動
+        （ms の時間軸）へ古いオフセットを持ち越さないため）。"""
+        self._sync_frames.clear()
+        self._sync_offsets.clear()
+        self._sync_pending = []
+        self._sync_last_ms = 0
+        self._sync_announced = False
+
+    _SYNC_LINE_RE = re.compile(r"^\[(\d+)ms\]")
+    _SYNC_CAN_RE = re.compile(r"\b(TX|RX)\b.*?\bcan=0x([0-9A-Fa-f]+)")
+
+    @staticmethod
+    def _fmt_log_time(t: float) -> str:
+        return time.strftime("%H:%M:%S", time.localtime(t)) + f".{int(t % 1 * 1000):03d}"
+
+    def _write_unified_log(self):
+        """file_log_queue の内容を統合ログファイルへ書く（メインスレッド専用）。
+        ECUの `[<ms>ms]` 付きSerial行は、CanIfのTX/RXログ（`can=0xID`）とPC側で
+        観測したCANフレームを突き合わせて推定したオフセットでPC時刻へ換算する
+        （_resolve_sync_samples）。未同期の間は受信時刻のままで、タグを SER? にする。
+        行は到着順に書くため、時刻順に見たいときは行頭の時刻でソートする。"""
+        items = []
+        while True:
+            try:
+                items.append(self.file_log_queue.get_nowait())
+            except queue.Empty:
+                break
+        lines = []
+        for t, tag, text in items:
+            if tag == "CAN":
+                dirn, can_id, data = text
+                self._sync_frames[(can_id, dirn)].append(t)
+                if can_id in self._can_log_off:
+                    continue  # 「ログ」OFFのID: 同期の標本にだけ使い、行は出さない
+                text = f"{dirn} 0x{can_id:03X} [{len(data)}] {data.hex(' ').upper()}"
+            elif tag == "SER":
+                m = self._SYNC_LINE_RE.match(text)
+                if m:
+                    ecu_ms = int(m.group(1))
+                    if ecu_ms < self._sync_last_ms:  # ECU再起動（ms値の巻き戻り）: 旧オフセット破棄
+                        self._sync_offsets.clear()
+                        self._sync_announced = False
+                        lines.append((t, "SYNC", "ECU再起動を検出（オフセット推定をリセット）"))
+                    self._sync_last_ms = ecu_ms
+                    c = self._SYNC_CAN_RE.search(text)
+                    if c:
+                        self._sync_pending.append((t, ecu_ms, c.group(1), int(c.group(2), 16)))
+            lines.append((t, tag, text))
+        self._resolve_sync_samples(lines)
+        offset = statistics.median(self._sync_offsets) if self._sync_offsets else None
+        out = [self._format_log_line(t, tag, text, offset) for t, tag, text in lines]
+        if not out:
+            return
+        self._append_log_view(out)
+        if self.serial_log_file is None:
+            return
+        try:
+            self.serial_log_file.write("\n".join(line for line, _key in out) + "\n")
+            self.serial_log_file.flush()
+        except OSError as exc:
+            self._serial_note(
+                f"[Serialログ] ファイル書き込みエラーのため保存を停止しました: {exc}")
+            self._close_serial_log_file()
+
+    _LOG_VIEW_MAX_LINES = 5000
+    _LOG_COLORS = {"SER": "#000000", "CAN": "#1f5fbf", "TOOL": "#2a7a2a", "CAPL": "#2a7a2a",
+                   "SYNC": "#777777", "WARN": "#b06000", "ERROR": "#cc0000"}
+    # ツール側ログのうち ERROR / WARN として扱う文言（Arduino行は自身のLEVELを使う）。
+    _ERROR_WORDS = ("エラー", "失敗", "未接続", "中断", "異常")
+    _WARN_WORDS = ("タイムアウト",)
+
+    def _format_log_line(self, t: float, tag: str, text: str, offset: "float | None"):
+        """統合ログ1行を `[時刻] [ノード] LEVEL TAG: 本文` へ整形し、(行, 色キー) を返す。
+        ノードは行の出力主体（Arduino=ECUのシリアル行、Tester=このツール）。
+        時刻は、ECUとの時刻同期が済んでいれば ECU の時間軸の `[<ms>ms]`
+        （Arduino行は元の値そのまま、Tester行はオフセットで換算）、同期前は
+        PC時刻 `[HH:MM:SS.mmm]`。"""
+        if tag == "SER":
+            m = self._SYNC_LINE_RE.match(text)
+            rest = text[m.end():].lstrip() if m else text
+            time_s = f"[{m.group(1)}ms]" if (m and offset is not None) else f"[{self._fmt_log_time(t)}]"
+            # ECU が `[<ノード名>]` を付けていればそのまま使い、旧ファームの行にだけ補う。
+            if not rest.startswith("["):
+                rest = f"[Arduino] {rest}"
+            words = rest.split(" ", 2)
+            level = words[1] if len(words) > 1 else ""
+            key = level if level in ("WARN", "ERROR") else "SER"
+            return f"{time_s} {rest}", key
+        time_s = (f"[{self._fmt_log_time(t)}]" if offset is None
+                  else f"[{int((t - offset) * 1000)}ms]")
+        if tag == "CAN":
+            level, name = "INFO", "CAN"
+        elif tag == "SYNC":
+            level, name = "INFO", "SYNC"
+        else:
+            name = "CAPL" if text.startswith("[script:") else "TOOL"
+            level = ("ERROR" if any(w in text for w in self._ERROR_WORDS)
+                     else "WARN" if any(w in text for w in self._WARN_WORDS) else "INFO")
+        key = level if level != "INFO" else name
+        return f"{time_s} {'[Tester]'.ljust(9)} {level:<5} {name}: {text}", key
+
+    def _append_log_view(self, out: list):
+        """統合ログの行（(行, 色キー) のリスト）を画面（「ログ」パネル）へ追記する。
+        ファイルと同じ内容を色付きで表示し、古い行は _LOG_VIEW_MAX_LINES を超えた
+        分だけ捨てる（画面表示のみ。ファイルには全行残る）。1回の poll 分を
+        まとめて挿入する。"""
+        w = self.log_text
+        w.configure(state="normal")
+        for line, key in out:
+            w.insert("end", line + "\n", key)
+        extra = int(w.index("end-1c").split(".")[0]) - 1 - self._LOG_VIEW_MAX_LINES
+        if extra > 0:
+            w.delete("1.0", f"{extra + 1}.0")
+        w.see("end")
+        w.configure(state="disabled")
+
+    def _resolve_sync_samples(self, lines: list):
+        """保留中のECU側TX/RXログ行を、対応するCANフレーム時刻と突き合わせて
+        オフセット(PC時刻 - ECU時刻)の標本にする。ECUのTXはツールから見るとRx、
+        ECUのRXはツールから見るとTxに対応する。シリアル行とCANフレームのどちらが
+        先にPCへ届くかは一定でない（実機ログではRxフレームの記録がECUのTXログより
+        数十ms後になることが多い）ため、行の受信時刻の前後 0.15 秒以内で最も近い
+        フレームを使う。まだ対応フレームが届いていない行は 1 秒間だけ保留して
+        次回以降の呼び出しで再試行する。"""
+        now = time.time()
+        pending, self._sync_pending = self._sync_pending, []
+        for item in pending:
+            ser_t, ecu_ms, ecu_dir, can_id = item
+            frames = self._sync_frames.get((can_id, "Rx" if ecu_dir == "TX" else "Tx"))
+            cands = [f for f in frames if abs(f - ser_t) < 0.15] if frames else []
+            # 窓内に同IDのフレームが複数ある（周期が短いID）と隣のサイクルと
+            # 取り違えるため、候補が1つに定まるときだけ標本にする。
+            if len(cands) == 1:
+                frames.remove(cands[0])
+                self._sync_offsets.append(cands[0] - ecu_ms / 1000.0)
+            elif not cands and now - ser_t < 1.0:
+                self._sync_pending.append(item)
+        if self._sync_offsets and not self._sync_announced:
+            self._sync_announced = True
+            base = statistics.median(self._sync_offsets)
+            lines.insert(0, (time.time(), "SYNC",
+                             f"時刻同期: 以後の時刻は Arduino の時間軸 (ECU 0ms = {self._fmt_log_time(base)})"))
 
     def _serial_reader_worker(self, ser: "serial.Serial", stop_ev: threading.Event):
-        """シリアルログを行単位で読み、生ログは serial_log_queue へ、
+        """シリアルログを行単位で読み、生ログは file_log_queue（統合ログ）へ、
         CanSM/EcuM の状態変化は state_queue へ流す。timeout=0.2s で定期的に
         stop_ev を確認することで、切断時に確実に終了する
         （_rx_monitor_worker と同じ設計、bus_lock 相当の排他は不要
@@ -1219,7 +1431,7 @@ class UdsTesterFrame(ttk.Frame):
             try:
                 chunk = ser.read(max(1, ser.in_waiting))
             except Exception as exc:  # noqa: BLE001 - 実エラーはログに出してワーカーを止める
-                self.serial_log_queue.put(f"[Serialログ] 受信エラーのため監視を停止しました: {exc}")
+                self._serial_note(f"[Serialログ] 受信エラーのため監視を停止しました: {exc}")
                 self.state_queue.put(("serial_error", None))
                 return
             if not chunk:
@@ -1233,14 +1445,15 @@ class UdsTesterFrame(ttk.Frame):
                 line = raw_line.decode("utf-8", errors="replace").rstrip("\r")
                 if not line:
                     continue
-                self.serial_log_queue.put(line)
+                self.file_log_queue.put((time.time(), "SER", line))
                 parsed = self._parse_serial_state(line)
                 if parsed is not None:
                     self.state_queue.put(("serial_state", parsed))
 
     # ログ行 "[<ms>ms] LEVEL TAG: func: message" から TAG と残りを取り出す
     # （Det_Hw.cpp の出力フォーマット。docs/archive/README_2026-10-03.md「シリアルモニタ出力例」参照）。
-    _SERIAL_LOG_RE = re.compile(r"^\[\d+ms\]\s+\S+\s+(\w+):\s+(.*)$")
+    # `[<ms>ms] [<ノード名>] LEVEL TAG: ...`（ノード名は旧ファームでは無い）
+    _SERIAL_LOG_RE = re.compile(r"^\[\d+ms\]\s+(?:\[[^\]]*\]\s+)?\S+\s+(\w+):\s+(.*)$")
 
     # CanSM/EcuM の状態遷移ログに現れる部分文字列 → 表示する状態名。
     # 上から順に最初に一致したものを採用するため、より具体的な文字列
@@ -2207,39 +2420,9 @@ class UdsTesterFrame(ttk.Frame):
                 text = self.log_queue.get_nowait()
             except queue.Empty:
                 break
-            self.log_text.configure(state="normal")
-            self.log_text.insert("end", f"[{time.strftime('%H:%M:%S')}] {text}\n")
-            self.log_text.see("end")
-            self.log_text.configure(state="disabled")
+            self.file_log_queue.put((time.time(), "TOOL", text))
 
-        serial_lines = []
-        while True:
-            try:
-                serial_lines.append(self.serial_log_queue.get_nowait())
-            except queue.Empty:
-                break
-        if serial_lines:
-            # Arduino 側が既に [<ms>ms] 形式のタイムスタンプを付けているため、
-            # 上記「ログ」（ツール自身の送受信ログ）と違い PC 側の時刻は付けない。
-            # まとめて1回で insert することで、Arduino起動時の大量ログ等
-            # バーストで届いた場合に Tk ウィジェット操作を行単位で繰り返さない。
-            self.serial_log_text.configure(state="normal")
-            self.serial_log_text.insert("end", "\n".join(serial_lines) + "\n")
-            self.serial_log_text.see("end")
-            self.serial_log_text.configure(state="disabled")
-
-            if self.serial_log_file is not None:
-                # 画面表示と全く同じ行をそのままファイルへ追記する。1行ごとに
-                # flush することで、アプリが正常終了しなかった場合（強制終了等）
-                # でもそこまでの内容は失われない（この学習用ツールでは
-                # 明示的なクローズ処理より単純さを優先する）。
-                try:
-                    self.serial_log_file.write("\n".join(serial_lines) + "\n")
-                    self.serial_log_file.flush()
-                except OSError as exc:
-                    self.serial_log_queue.put(
-                        f"[Serialログ] ファイル書き込みエラーのため保存を停止しました: {exc}")
-                    self._close_serial_log_file()
+        self._write_unified_log()
 
         while True:
             try:

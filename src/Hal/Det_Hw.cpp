@@ -55,11 +55,19 @@ static void Det_Hw_PrintLevel(LogLevel lvl)
     }
 }
 
-void Det_Hw_PrintLogLine(LogLevel lvl, const char* tag, const char* func, const char* msg)
+/* 各行の共通プレフィックス "[<ms>ms] [<ノード名>] " を出力する。 */
+static void Det_Hw_PrintPrefix(void)
 {
     Serial.print('[');
     Serial.print(millis());
-    Serial.print(F("ms] "));
+    Serial.print(F("ms] ["));
+    Serial.print(F(DET_LOG_NODE_NAME));
+    Serial.print(F("] "));
+}
+
+void Det_Hw_PrintLogLine(LogLevel lvl, const char* tag, const char* func, const char* msg)
+{
+    Det_Hw_PrintPrefix();
     Det_Hw_PrintLevel(lvl);
     Serial.print(' ');
     Serial.print(tag);
@@ -71,9 +79,8 @@ void Det_Hw_PrintLogLine(LogLevel lvl, const char* tag, const char* func, const 
 
 void Det_Hw_PrintDetError(uint16 ModuleId, uint8 InstanceId, uint8 ApiId, uint8 ErrorId)
 {
-    Serial.print('[');
-    Serial.print(millis());
-    Serial.print(F("ms] DET M="));
+    Det_Hw_PrintPrefix();
+    Serial.print(F("ERROR Det: M="));
     Serial.print(ModuleId);
     Serial.print(F(" I="));
     Serial.print(InstanceId);
