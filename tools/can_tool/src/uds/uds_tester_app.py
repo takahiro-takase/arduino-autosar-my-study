@@ -99,7 +99,7 @@ class UdsTesterFrame(ttk.Frame):
             with open(path, "r", encoding="utf-8") as f:
                 data = json.load(f)
         except (OSError, ValueError) as exc:
-            self.log_queue.put(f"[起動] {path} の読み込みに失敗しました（RXモニタのデコードは無効化されます）: {exc}")
+            self._log_error(f"[起動] {path} の読み込みに失敗しました（RXモニタのデコードは無効化されます）: {exc}")
             return {}
 
         result: "dict[int, dict]" = {}
@@ -107,7 +107,7 @@ class UdsTesterFrame(ttk.Frame):
             try:
                 result[int(fr["canId"], 0)] = fr
             except Exception as exc:  # noqa: BLE001 - フレーム1件分の壊れ方は事前に列挙しきれない
-                self.log_queue.put(
+                self._log_warn(
                     f"[起動] {path} のフレーム定義 {fr.get('name', '?')!r} を読み飛ばしました: {exc}"
                 )
         return result
@@ -121,7 +121,6 @@ class UdsTesterFrame(ttk.Frame):
         self.bus: can.BusABC | None = None
         self._bus_interface = ""  # 接続中のインターフェース名（切断時の後始末の分岐に使う）
         self.bus_lock = threading.Lock()
-        self.log_queue: "queue.Queue[str]" = queue.Queue()
         self.state_queue: "queue.Queue[tuple]" = queue.Queue()
         self.signal_defs = self._load_signal_defs(DEFAULT_SIGNAL_DEFS_PATH)
         self._periodic_stops: "dict[int, threading.Event]" = {}
@@ -171,7 +170,9 @@ class UdsTesterFrame(ttk.Frame):
         # メインスレッド（_poll_queues → _write_unified_log）のみ。CANフレームは
         # _wrap_bus_logging が bus.send/recv を包んで積む（UDS送受信・周期送信・
         # RXモニタのどの経路で触ったフレームも1箇所で拾えるため）。
-        self.file_log_queue: "queue.Queue[tuple[float, str, str]]" = queue.Queue()
+        self.file_log_queue: "queue.Queue[tuple[float, str, object]]" = queue.Queue()
+        # スクリプトが変更した「ログ」チェックの元の値（ID → 元の値）。スクリプト終了時に戻す。
+        self._script_log_saved: "dict[int, bool]" = {}
         self._can_log_vars: "dict[int, tk.BooleanVar]" = {}
         # ワーカースレッドから読むため、tk変数のミラーとして素の属性を持つ
         # （_apply_can_log_filter が更新）。
@@ -240,8 +241,11 @@ class UdsTesterFrame(ttk.Frame):
         ttk.Button(conn, text="停止", command=self._stop_script).grid(
             row=0, column=10, padx=(2, 8))
         self.script_status_var = tk.StringVar(value="")
-        ttk.Label(conn, textvariable=self.script_status_var).grid(
-            row=0, column=11, padx=(0, 8), sticky="w")
+        # スクリプトの状態表示（実行中 / 終了結果）。ログは流れてしまうため、終了後も
+        # 次の実行まで結果（完了・停止・中断・エラー）と終了時刻を残し、色で区別する。
+        self.script_status_label = ttk.Label(
+            conn, textvariable=self.script_status_var, font=("", 9, "bold"))
+        self.script_status_label.grid(row=0, column=11, padx=(0, 8), sticky="w")
 
         # ---- Serial 接続（CAN 接続 self.bus とは別の独立した接続。実体は Arduino
         # だが、シリアルログ読み取り自体は特定デバイスに依存しない汎用機能のため
@@ -1072,7 +1076,7 @@ class UdsTesterFrame(ttk.Frame):
             # 生成され、同一デバイスへの二重オープンが起こり得る。
             self._script_thread.join(timeout=3.0)
             if self._script_thread.is_alive():
-                self.log_queue.put("[script] 停止待ちタイムアウト (バックグラウンドで終了処理中)")
+                self._log_warn("[script] 停止待ちタイムアウト (バックグラウンドで終了処理中)")
         for pidx, stop_ev in self._periodic_stops.items():
             stop_ev.set()
             if pidx in self._periodic_btn_vars:
@@ -1094,7 +1098,7 @@ class UdsTesterFrame(ttk.Frame):
         if self._rx_monitor_thread is not None and self._rx_monitor_thread.is_alive():
             self._rx_monitor_thread.join(timeout=1.0)
             if self._rx_monitor_thread.is_alive():
-                self.log_queue.put("[RXモニタ] 停止待ちタイムアウト (バックグラウンドで終了処理中)")
+                self._log_warn("[RXモニタ] 停止待ちタイムアウト (バックグラウンドで終了処理中)")
         self._rx_monitor_thread = None
         old_bus = self.bus
         self.bus = None
@@ -1230,10 +1234,10 @@ class UdsTesterFrame(ttk.Frame):
             self.serial_log_file_path = None
             self._serial_note(f"[Serialログ] ファイル保存を終了しました: {path}")
 
-    def _serial_note(self, text: str):
+    def _serial_note(self, text: str, level: str = "INFO"):
         """ツール側の通知（接続/切断/エラー等）を統合ログへ SYS として残す
         （ECU由来の行は _serial_reader_worker が SER として積む）。"""
-        self.file_log_queue.put((time.time(), "SYS", text))
+        self._log(text, level, "SYS")
 
     def _apply_can_log_filter(self):
         """各IDの「ログ」チェックを、ワーカーが読む素の属性（tk変数はワーカー
@@ -1304,6 +1308,22 @@ class UdsTesterFrame(ttk.Frame):
                 if can_id in self._can_log_off:
                     continue  # 「ログ」OFFのID: 同期の標本にだけ使い、行は出さない
                 text = f"{dirn} 0x{can_id:03X} [{len(data)}] {data.hex(' ').upper()}"
+            elif tag == "LOGRESTORE":
+                # スクリプト終了: 変更した「ログ」設定を元に戻す。LOGFILTER と同じキューで
+                # 順に処理するため、終了直前の setMessageLog() より必ず後に実行される。
+                for log_id, orig in self._script_log_saved.items():
+                    self._can_log_vars[log_id].set(orig)
+                self._script_log_saved.clear()
+                continue
+            elif tag == "LOGFILTER":
+                # スクリプトからの記録ID切り替え（tk変数はメインスレッドでしか触れない）。
+                # フレームと同じキューで順に処理するので、前後のフレームとの順序が保たれる。
+                log_id, log_on = text
+                var = self._can_log_vars.get(log_id)
+                if var is not None:
+                    self._script_log_saved.setdefault(log_id, var.get())
+                    var.set(bool(log_on))
+                continue
             elif tag == "SER":
                 m = self._SYNC_LINE_RE.match(text)
                 if m:
@@ -1330,15 +1350,12 @@ class UdsTesterFrame(ttk.Frame):
             self.serial_log_file.flush()
         except OSError as exc:
             self._serial_note(
-                f"[Serialログ] ファイル書き込みエラーのため保存を停止しました: {exc}")
+                f"[Serialログ] ファイル書き込みエラーのため保存を停止しました: {exc}", "ERROR")
             self._close_serial_log_file()
 
     _LOG_VIEW_MAX_LINES = 5000
     _LOG_COLORS = {"SER": "#000000", "CAN": "#1f5fbf", "TOOL": "#2a7a2a", "CAPL": "#2a7a2a",
                    "SYNC": "#777777", "WARN": "#b06000", "ERROR": "#cc0000"}
-    # ツール側ログのうち ERROR / WARN として扱う文言（Arduino行は自身のLEVELを使う）。
-    _ERROR_WORDS = ("エラー", "失敗", "未接続", "中断", "異常")
-    _WARN_WORDS = ("タイムアウト",)
 
     def _format_log_line(self, t: float, tag: str, text: str, offset: "float | None"):
         """統合ログ1行を `[時刻] [ノード] LEVEL TAG: 本文` へ整形し、(行, 色キー) を返す。
@@ -1364,9 +1381,9 @@ class UdsTesterFrame(ttk.Frame):
         elif tag == "SYNC":
             level, name = "INFO", "SYNC"
         else:
+            # ツール側ログは (レベル, 本文)。レベルは出力の原因で決まる
+            level, text = text
             name = "CAPL" if text.startswith("[script:") else "TOOL"
-            level = ("ERROR" if any(w in text for w in self._ERROR_WORDS)
-                     else "WARN" if any(w in text for w in self._WARN_WORDS) else "INFO")
         key = level if level != "INFO" else name
         return f"{time_s} {'[Tester]'.ljust(9)} {level:<5} {name}: {text}", key
 
@@ -1431,7 +1448,7 @@ class UdsTesterFrame(ttk.Frame):
             try:
                 chunk = ser.read(max(1, ser.in_waiting))
             except Exception as exc:  # noqa: BLE001 - 実エラーはログに出してワーカーを止める
-                self._serial_note(f"[Serialログ] 受信エラーのため監視を停止しました: {exc}")
+                self._serial_note(f"[Serialログ] 受信エラーのため監視を停止しました: {exc}", "ERROR")
                 self.state_queue.put(("serial_error", None))
                 return
             if not chunk:
@@ -1614,7 +1631,7 @@ class UdsTesterFrame(ttk.Frame):
                 try:
                     return self._parse_hex_bytes(entry_data["data"])
                 except ValueError:
-                    self.log_queue.put(
+                    self._log_error(
                         f"[{label}] データ形式エラー (スペース区切り hex 例: 02 10 01)"
                     )
                     return None
@@ -1625,7 +1642,7 @@ class UdsTesterFrame(ttk.Frame):
                 try:
                     return self._parse_can_id(entry_data["can_id"])
                 except ValueError:
-                    self.log_queue.put(
+                    self._log_error(
                         f"[{label}] CAN ID 形式エラー (例: 0x100 または 256)"
                     )
                     return None
@@ -1641,14 +1658,14 @@ class UdsTesterFrame(ttk.Frame):
                     # まとめて記録する。
                     self._mark_tx(idx)
                     self._mark_rx(idx)
-                    self.log_queue.put(f"[{label}] {result}")
+                    self._log(f"[{label}] {result}")
                     self.state_queue.put(("resp", (idx, result)))
                 elif btn_cfg["type"] == "security_seed":
                     payload = get_payload("payload")
                     if payload is None:
                         return
                     self.state_queue.put(("resp", (idx, "")))
-                    self.log_queue.put(
+                    self._log(
                         f"[{label}] TX " + " ".join(f"{b:02X}" for b in payload)
                     )
                     uds_link.send_raw(self.bus, payload)
@@ -1660,7 +1677,7 @@ class UdsTesterFrame(ttk.Frame):
                             and resp.raw[0] == 0x67):
                         seed = (resp.raw[2] << 8) | resp.raw[3]
                         if seed == 0:
-                            self.log_queue.put(f"[{label}] RX {self._rx_display(resp)}  既にアンロック済み (allZeroSeed)")
+                            self._log(f"[{label}] RX {self._rx_display(resp)}  既にアンロック済み (allZeroSeed)")
                         else:
                             key = seed ^ uds_link.SECURITY_KEY_MASK
                             key_hex = (f"04 27 02 {(key >> 8) & 0xFF:02X}"
@@ -1672,19 +1689,19 @@ class UdsTesterFrame(ttk.Frame):
                             )
                             if key_idx is not None:
                                 self.state_queue.put(("key_fill", (key_idx, key_hex)))
-                            self.log_queue.put(
+                            self._log(
                                 f"[{label}] RX {self._rx_display(resp)}"
                                 f"  seed=0x{seed:04X} key=0x{key:04X}"
                                 + (" → Step2 に入力済み" if key_idx is not None else "")
                             )
                     else:
-                        self.log_queue.put(f"[{label}] RX " + self._decode_response(payload, resp))
+                        self._log(f"[{label}] RX " + self._decode_response(payload, resp))
                 elif btn_cfg["type"] in ("raw", "security_key"):
                     payload = get_payload("payload")
                     if payload is None:
                         return
                     self.state_queue.put(("resp", (idx, "")))
-                    self.log_queue.put(
+                    self._log(
                         f"[{label}] TX " + " ".join(f"{b:02X}" for b in payload)
                     )
                     uds_link.send_raw(self.bus, payload)
@@ -1692,14 +1709,14 @@ class UdsTesterFrame(ttk.Frame):
                     resp = uds_link.receive_uds_response(self.bus)
                     self._mark_rx(idx)
                     decoded = self._decode_response(payload, resp)
-                    self.log_queue.put(f"[{label}] RX " + decoded)
+                    self._log(f"[{label}] RX " + decoded)
                     self.state_queue.put(("resp", (idx, self._rx_display(resp))))
                 elif btn_cfg["type"] == "multiframe":
                     uds_payload = get_payload("payload")
                     if uds_payload is None:
                         return
                     self.state_queue.put(("resp", (idx, "")))
-                    self.log_queue.put(
+                    self._log(
                         f"[{label}] TX (FF+CF, {len(uds_payload)}B) "
                         + " ".join(f"{b:02X}" for b in uds_payload)
                     )
@@ -1709,7 +1726,7 @@ class UdsTesterFrame(ttk.Frame):
                     self._mark_rx(idx)
                     sent = bytes([0]) + uds_payload  # _decode_response は sent[1]=SID を見る
                     decoded = self._decode_response(sent, resp)
-                    self.log_queue.put(f"[{label}] RX " + decoded)
+                    self._log(f"[{label}] RX " + decoded)
                     self.state_queue.put(("resp", (idx, self._rx_display(resp))))
                 elif btn_cfg["type"] == "can_frame":
                     can_id = get_can_id()
@@ -1726,7 +1743,7 @@ class UdsTesterFrame(ttk.Frame):
                     secoc_cfg = btn_cfg.get("secoc")
                     uds_link.send_can_frame(self.bus, can_id, data)
                     self._mark_tx(idx)
-                    self.log_queue.put(
+                    self._log(
                         f"[{label}] TX ID=0x{can_id:03X} " + " ".join(f"{b:02X}" for b in data)
                     )
                     # E2E 付きの場合、次回送信に備えて Counter を進め、CRC を再計算した
@@ -1751,14 +1768,14 @@ class UdsTesterFrame(ttk.Frame):
                             ("entry_update", (idx, " ".join(f"{b:02X}" for b in next_frame)))
                         )
                 else:
-                    self.log_queue.put(f"[{label}] 未知のボタン種別: {btn_cfg['type']}")
+                    self._log_error(f"[{label}] 未知のボタン種別: {btn_cfg['type']}")
             except uds_link.UdsTimeoutError as exc:
-                self.log_queue.put(f"[{label}] {exc}")
+                self._log_error(f"[{label}] {exc}")
                 if btn_cfg.get("type") in ("raw", "multiframe", "security_access_auto",
                                             "security_seed", "security_key"):
                     self.state_queue.put(("resp", (idx, "タイムアウト")))
             except Exception as exc:  # noqa: BLE001 - 想定外のエラーもログに出して継続する
-                self.log_queue.put(f"[{label}] エラー: {exc}")
+                self._log_error(f"[{label}] エラー: {exc}")
 
     @staticmethod
     def _rx_display(resp) -> str:
@@ -1918,7 +1935,7 @@ class UdsTesterFrame(ttk.Frame):
             if interval_ms <= 0:
                 raise ValueError
         except ValueError:
-            self.log_queue.put(f"[{label}] 周期(ms)の形式エラー: {raw!r}（正の整数を入力してください）")
+            self._log_error(f"[{label}] 周期(ms)の形式エラー: {raw!r}（正の整数を入力してください）")
             return None
         return interval_ms
 
@@ -1947,7 +1964,7 @@ class UdsTesterFrame(ttk.Frame):
         stop_ev = self._periodic_stops.get(idx)
         if stop_ev is not None and not stop_ev.is_set():
             stop_ev.set()
-            self.log_queue.put(f"[{label}] 周期送信 停止")
+            self._log(f"[{label}] 周期送信 停止")
             self.state_queue.put(("periodic_btn", (idx, "▶")))
             return
         built = build_worker()
@@ -1957,7 +1974,7 @@ class UdsTesterFrame(ttk.Frame):
         new_stop = threading.Event()
         self._periodic_stops[idx] = new_stop
         self.state_queue.put(("periodic_btn", (idx, "■")))
-        self.log_queue.put(start_log_text)
+        self._log(start_log_text)
         threading.Thread(
             target=worker_target,
             args=(*worker_args, new_stop),
@@ -1970,7 +1987,7 @@ class UdsTesterFrame(ttk.Frame):
     def _handle_periodic_can_toggle(self, btn_cfg, idx: int, label: str, entry_data: dict):
         def build_worker():
             if self.bus is None:
-                self.log_queue.put(f"[{label}] 未接続")
+                self._log_error(f"[{label}] 未接続")
                 return None
             try:
                 if "can_id" in entry_data:
@@ -1983,7 +2000,7 @@ class UdsTesterFrame(ttk.Frame):
                 else:
                     data = parse_payload(btn_cfg["data"])
             except ValueError as exc:
-                self.log_queue.put(f"[{label}] 入力エラー: {exc}")
+                self._log_error(f"[{label}] 入力エラー: {exc}")
                 return None
             e2e_cfg_p = btn_cfg.get("e2e")
             secoc_cfg_p = btn_cfg.get("secoc")
@@ -2067,7 +2084,7 @@ class UdsTesterFrame(ttk.Frame):
         周期送信専用（multiframe/security_* には使わない）。"""
         def build_worker():
             if self.bus is None:
-                self.log_queue.put(f"[{label}] 未接続")
+                self._log_error(f"[{label}] 未接続")
                 return None
             try:
                 if "data" in entry_data:
@@ -2075,7 +2092,7 @@ class UdsTesterFrame(ttk.Frame):
                 else:
                     payload = parse_payload(btn_cfg.get("payload", []))
             except ValueError as exc:
-                self.log_queue.put(f"[{label}] 入力エラー: {exc}")
+                self._log_error(f"[{label}] 入力エラー: {exc}")
                 return None
             interval_ms = self._parse_interval_ms(entry_data, btn_cfg, label, default=2000)
             if interval_ms is None:
@@ -2317,7 +2334,7 @@ class UdsTesterFrame(ttk.Frame):
                 # send()/wait_response() 等と同様にエラーを可視化し、このワーカー自体を
                 # 停止する（GUI の Connected 表示自体は変えないが、以後 RX モニタ表示も
                 # on message へのフレーム供給も止まる）。
-                self.log_queue.put(f"[RXモニタ] 受信エラーのため監視を停止しました: {error}")
+                self._log_error(f"[RXモニタ] 受信エラーのため監視を停止しました: {error}")
                 return
             if msg is None:
                 # フレーム未受信時は次の取得まで待機し、他スレッドがロックを取れる窓を設ける
@@ -2372,7 +2389,8 @@ class UdsTesterFrame(ttk.Frame):
                 break
 
         self.script_stop_event.clear()
-        self.script_status_var.set(f"実行中: {os.path.basename(path)}")
+        self.script_status_var.set(f"▶ 実行中: {os.path.basename(path)}")
+        self.script_status_label.configure(foreground=self._LOG_COLORS["CAN"])
         self._script_thread = threading.Thread(
             target=self._script_worker, args=(source, path), daemon=True
         )
@@ -2381,47 +2399,68 @@ class UdsTesterFrame(ttk.Frame):
     def _stop_script(self):
         self.script_stop_event.set()
 
+    # スクリプトの終了結果 → (表示, _LOG_COLORS のキー)。「停止」ボタンによる終了は灰色。
+    _SCRIPT_OUTCOMES = {
+        "done": ("完了", "TOOL"),
+        "stopped": ("停止", "SYNC"),
+        "aborted": ("中断", "ERROR"),
+        "syntax": ("構文エラー", "ERROR"),
+        "error": ("エラー", "ERROR"),
+    }
+
     def _script_worker(self, source: str, path: str):
         label = os.path.basename(path)
-        self.log_queue.put(f"[script:{label}] 開始")
+        self._log(f"[script:{label}] 開始")
         # 拡張子で Python (.py, exec() ベース) / CAPL 風 DSL (.capl, 自作パーサ+インタプリタ)
         # を自動判別する。両者は run_script()/run_dsl_script() の引数の並びを揃えてあり、
         # どちらも内部で capl_api.CaplContext をランタイムとして使うため、GUI 側はこの分岐
         # だけで済む。
         is_dsl = path.lower().endswith(".capl")
         run = capl_dsl.run_dsl_script if is_dsl else capl_api.run_script
+        outcome = "done"  # 終了結果のキー（_SCRIPT_OUTCOMES）。例外の種類で上書きする
         try:
             run(
                 source, path, lambda: self.bus, self.bus_lock,
-                lambda text: self.log_queue.put(f"[script:{label}] {text}"),
+                lambda text: self._log(f"[script:{label}] {text}"),
                 self.script_stop_event, self._message_dispatch_queue,
+                # フレームと同じキューに積み、前後のフレームとの順序を保つ
+                # （_write_unified_log が順に処理する）。
+                lambda can_id, on: self.file_log_queue.put((time.time(), "LOGFILTER", (can_id, on))),
             )
-            self.log_queue.put(f"[script:{label}] 完了")
+            self._log(f"[script:{label}] 完了")
+        except capl_api.ScriptFinished:
+            self._log(f"[script:{label}] 完了 (stop() により終了)")
         except capl_api.ScriptStopped:
-            self.log_queue.put(f"[script:{label}] 停止されました")
+            self._log(f"[script:{label}] 停止されました")
+            outcome = "stopped"
         except capl_api.ScriptAbort as exc:
-            self.log_queue.put(f"[script:{label}] 中断: {exc}")
+            self._log_error(f"[script:{label}] 中断: {exc}")
+            outcome = "aborted"
         except capl_dsl.DslSyntaxError as exc:
-            self.log_queue.put(f"[script:{label}] 構文エラー: {exc}")
+            self._log_error(f"[script:{label}] 構文エラー: {exc}")
+            outcome = "syntax"
         except Exception as exc:  # noqa: BLE001 - スクリプト内の想定外エラーもログに出して継続する
-            self.log_queue.put(f"[script:{label}] エラー: {exc}")
+            self._log_error(f"[script:{label}] エラー: {exc}")
+            outcome = "error"
         finally:
-            self.state_queue.put(("script_done", None))
+            self.file_log_queue.put((time.time(), "LOGRESTORE", None))
+            self.state_queue.put(("script_done", (label, outcome)))
 
     # ------------------------------------------------------------------
     # ログ・状態表示の更新 (メインスレッドからのみ tkinter 変数を更新する)
     # ------------------------------------------------------------------
-    def _log(self, text: str):
-        self.log_queue.put(text)
+    def _log(self, text: str, level: str = "INFO", tag: str = "TOOL"):
+        """ツールのログ（統合ログへ直接積む。時刻は出力した時点）。レベルは出力の原因で
+        決める（文言からは推定しない）。tag は TOOL（通常）/ SYS（接続・切断などの通知）。"""
+        self.file_log_queue.put((time.time(), tag, (level, text)))
+
+    def _log_error(self, text: str):
+        self._log(text, "ERROR")
+
+    def _log_warn(self, text: str):
+        self._log(text, "WARN")
 
     def _poll_queues(self):
-        while True:
-            try:
-                text = self.log_queue.get_nowait()
-            except queue.Empty:
-                break
-            self.file_log_queue.put((time.time(), "TOOL", text))
-
         self._write_unified_log()
 
         while True:
@@ -2444,7 +2483,11 @@ class UdsTesterFrame(ttk.Frame):
                 if "data" in ev:
                     ev["data"].set(upd_text)
             elif kind == "script_done":
-                self.script_status_var.set("")
+                script_label, outcome = value
+                text, color_key = self._SCRIPT_OUTCOMES[outcome]
+                self.script_status_var.set(
+                    f"■ {text}: {script_label} ({time.strftime('%H:%M:%S')})")
+                self.script_status_label.configure(foreground=self._LOG_COLORS[color_key])
             elif kind == "periodic_btn":
                 btn_idx, text = value
                 if btn_idx in self._periodic_btn_vars:

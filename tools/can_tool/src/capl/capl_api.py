@@ -38,6 +38,10 @@ class ScriptAbort(Exception):
     """assert_positive/assert_negative 失敗や応答タイムアウトでスクリプトを中断する。"""
 
 
+class ScriptFinished(Exception):
+    """スクリプト自身が stop() で正常終了を要求した（実 CAPL の stop() 相当）。"""
+
+
 class ScriptStopped(Exception):
     """GUI の「停止」ボタンで外部から停止要求された。"""
 
@@ -51,8 +55,10 @@ class CaplContext:
 
     def __init__(self, get_bus: Callable[[], Optional[object]], bus_lock: threading.Lock,
                  log_func: Callable[[str], None], stop_event: threading.Event,
-                 message_queue: Optional["queue.Queue"] = None):
+                 message_queue: Optional["queue.Queue"] = None,
+                 set_message_log: Optional[Callable[[int, bool], None]] = None):
         self._get_bus = get_bus
+        self._set_message_log = set_message_log
         self._bus_lock = bus_lock
         self._log = log_func
         self._stop_event = stop_event
@@ -89,6 +95,19 @@ class CaplContext:
     # ---- ログ ----
     def log(self, *args) -> None:
         self._log(" ".join(str(a) for a in args))
+
+    def stop(self) -> None:
+        """スクリプトを正常終了する（実 CAPL の stop()＝測定終了に相当）。on message /
+        on timer を持つスクリプトは、これを呼ばない限り「停止」ボタンまで動き続ける。"""
+        raise ScriptFinished("スクリプトが stop() で終了しました")
+
+    def set_message_log(self, can_id: int, on) -> None:
+        """統合ログへ記録する CAN ID を切り替える（GUI のメッセージ欄「ログ」
+        チェックボックスと同じ設定を操作する。実 CAPL にこの命令は無く、本ツール
+        独自の拡張）。メッセージ欄に無い ID は常に記録されるため何も起きない。"""
+        self._check_stop()
+        if self._set_message_log is not None:
+            self._set_message_log(int(can_id), bool(on))
 
     # ---- 送信 ----
     def send(self, payload, request_id: int = uds_link.REQUEST_ID) -> None:
@@ -247,7 +266,8 @@ class CaplContext:
 def run_script(source: str, script_path: str, get_bus: Callable[[], Optional[object]],
                bus_lock: threading.Lock, log_func: Callable[[str], None],
                stop_event: threading.Event,
-               message_queue: Optional["queue.Queue"] = None) -> None:
+               message_queue: Optional["queue.Queue"] = None,
+               set_message_log: Optional[Callable[[int, bool], None]] = None) -> None:
     """スクリプトファイルの内容 (source) を exec() する。
 
     get_bus は現在接続中の python-can Bus (未接続なら None) を返す呼び出し可能
@@ -263,7 +283,7 @@ def run_script(source: str, script_path: str, get_bus: Callable[[], Optional[obj
     （`on_timer` はデコレータ登録時に `ctx` 自体を束縛したいことが多いため、
     こちらは `ctx.on_timer(...)` の形のみ提供する）。
     """
-    ctx = CaplContext(get_bus, bus_lock, log_func, stop_event, message_queue)
+    ctx = CaplContext(get_bus, bus_lock, log_func, stop_event, message_queue, set_message_log)
     script_globals = {
         "__name__": "__capl_script__",
         "__file__": script_path,
@@ -276,6 +296,8 @@ def run_script(source: str, script_path: str, get_bus: Callable[[], Optional[obj
         "security_unlock": ctx.security_unlock,
         "wait": ctx.wait,
         "log": ctx.log,
+        "set_message_log": ctx.set_message_log,
+        "stop": ctx.stop,
         "NRC_NAMES": uds_link.NRC_NAMES,
         "DID_NAMES": uds_link.DID_NAMES,
         "DTC_NAMES": uds_link.DTC_NAMES,

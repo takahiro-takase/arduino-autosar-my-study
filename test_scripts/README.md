@@ -18,6 +18,8 @@
 | `001_ecu_reset.capl` | UDS 0x11 ECUReset を送り、ECU が実際にリセットされることを確認する |
 | `100_verify_nvm_writeall_on_reset.capl` | 0x14 全クリアの直後に 0x11 を送り、リセット後にクリアした DTC が復活しないこと（ECUReset 直前の `NvM_WriteAll()`）を確認する |
 | `000_regression_normal_operation.capl` | 通常動作のデグレ確認（約 20 秒）。DTC を消去したあと、E2E Profile05 で保護した EngineInfo / AbsInfo を周期送信し、ECU の出力（MeterStatus の EngineState・EngineSpeed・CoolantTemp、WarningStatus の各ランプ、E2EHealthStatus のエラーカウンタ、TestMsg の連続性）を判定して PASS / FAIL を出す。ECU をリセットした直後に実行する |
+| `101_verify_e2e_profile05.capl` | E2E Profile05 の実機検証（約 40 秒）。ECU が周期送信する 0x220（E2EHealthStatus）の CRC16 と Counter を検証し、正常な EngineInfo ではエラーカウンタが増えないこと、CRC16 を誤らせると crcErr が +1、Counter を飛ばすと seqErr が +1 になることを確認する。テスト対象以外のメッセージは `setMessageLog()` で実行中だけ統合ログへの記録を止める |
+| `102_verify_dcm_did.capl` | Dcm の DID 表（`Dcm.json` から生成）経由の UDS 0x22 / 0x2E / 0x2F の実機検証。読み出し/書き込み/ランプ制御の正常系（TestPattern の書き込み→読み戻し、マルチフレーム応答を含む）と、NRC 0x31（DID なし・機能なし）/0x13（長さ違い）/0x33（セキュリティ未解除）/0x7F（defaultSession）を確認する。最後にランプを `returnControlToECU` で戻す |
 | `200_diag_request_during_nm_sleep.capl` | NM の協調スリープ（SILENT_COM）に入った ECU へ TesterPresent を送り、起こして応答すること（[SWS_Dcm_01376]）と、起床後に ECU の周期送信が再開することを確認する（約 20〜40 秒）。実行中は他のフレームを送らない |
 | `201_wakeup_validation_after_bus_sleep.capl` | 完全なスリープ（Bus-Sleep Mode）に入った ECU へ、受信設定に無い ID のダミーフレームを 1 回送り、起床要因の検証（`CanIf_CheckValidation()` → `EcuM_ValidateWakeupEvent()` → `ComM_EcuM_WakeUpIndication()` → `CanSM_RequestComMode(FULL_COM)`）を経て、ECU の周期送信が再開し診断要求に応答することを確認する（約 30〜60 秒）。途中経路は ECU のシリアルログで確認する。実行中は他のフレームを送らない |
 | `dcm_cantp_tx_busy_check.py` | CanTp の送信中に届いた新規要求を Dcm が無視すること（[SWS_Dcm_00557]）を確認する |

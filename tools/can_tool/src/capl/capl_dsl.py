@@ -1428,6 +1428,7 @@ class Interpreter:
     # (例: `x = cancelTimer(未アームのタイマー);`)。
     _VOID_BUILTINS = frozenset({
         "send", "send_can", "wait", "log", "write", "setTimer", "cancelTimer", "output",
+        "setMessageLog", "stop",
     })
 
     # 配列/message 変数を裸で (添字/フィールドアクセス無しで) 直接の引数として渡せる
@@ -1472,6 +1473,12 @@ class Interpreter:
             "log": (0, lambda args: ctx.log(self._format_write_args(args))),
             "write": (0, lambda args: ctx.log(self._format_write_args(args))),  # CAPL の write() 相当のエイリアス
             "setTimer": (2, lambda args: self._set_timer(str(args[0]), float(args[1]))),
+            # スクリプトの正常終了（実 CAPL の stop()）。on message/on timer を持つ
+            # スクリプトは、これを呼ばない限り「停止」ボタンまで動き続ける。
+            "stop": (0, lambda args: ctx.stop()),
+            # 統合ログへ記録する CAN ID の切り替え（本ツール独自。実 CAPL には無い）。
+            "setMessageLog": (2, lambda args: ctx.set_message_log(
+                self._to_int(args[0]), self._to_int(args[1]))),
             "cancelTimer": (1, lambda args: self._armed_timers.pop(str(args[0]), None)),
             "msgData": (1, lambda args: self._msg_data(self._to_int(args[0]))),
             "msgId": (0, lambda args: self._msg_id()),
@@ -2652,7 +2659,7 @@ class Interpreter:
 
 
 def run_dsl_script(source: str, script_path: str, get_bus, bus_lock,
-                    log_func, stop_event, message_queue=None) -> None:
+                    log_func, stop_event, message_queue=None, set_message_log=None) -> None:
     """`.capl` スクリプトを実行する。capl_api.run_script() の DSL 版で、app.py からは
     ファイル拡張子で自動的にどちらを呼ぶか切り替えられる (同じ引数の並びにしてある)。
 
@@ -2661,5 +2668,6 @@ def run_dsl_script(source: str, script_path: str, get_bus, bus_lock,
     消費する側に回ることで、_rx_monitor_worker と bus.recv() を奪い合わないようにする
     (capl_api.py モジュール冒頭の docstring 参照)。"""
     script = parse(source)  # DslSyntaxError は呼び出し側 (_script_worker) の except で表示される
-    ctx = capl_api.CaplContext(get_bus, bus_lock, log_func, stop_event, message_queue)
+    ctx = capl_api.CaplContext(get_bus, bus_lock, log_func, stop_event, message_queue,
+                               set_message_log)
     Interpreter(script, ctx, stop_event).run()
