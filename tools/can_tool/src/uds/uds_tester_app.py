@@ -1309,6 +1309,8 @@ class UdsTesterFrame(ttk.Frame):
                 dirn, can_id, data = text
                 if can_id == self._TSYN_CAN_ID and dirn == "Rx":
                     self._on_time_sync_frame(t, data, lines)   # 「ログ」OFFでも同期には使う
+                if dirn == "Tx":
+                    self._stamp_tx_rows(can_id, t)
                 if can_id in self._can_log_off:
                     continue  # 「ログ」OFFのID: 行は出さない
                 text = f"{dirn} 0x{can_id:03X} [{len(data)}] {data.hex(' ').upper()}"
@@ -1603,16 +1605,38 @@ class UdsTesterFrame(ttk.Frame):
         else:
             self._handle_periodic_can_toggle(btn_cfg, idx, label, entry_data)
 
-    @staticmethod
-    def _now_ts() -> str:
-        """TX/RXタイムスタンプ表示用の PC ローカル時刻文字列（HH:MM:SS）。"""
-        return time.strftime("%H:%M:%S")
+    def _row_time_text(self, t: float) -> str:
+        """メッセージ欄の TX/RX タイムスタンプ表示。ECU との時刻同期が済んでいれば ECU の時間軸の
+        `<ms>ms`（統合ログの `[<ms>ms]` と同じ時間軸）、未同期なら PC ローカル時刻の HH:MM:SS。
+        メインスレッドからのみ呼ぶ（同期のオフセットを読むため）。"""
+        if self._sync_offsets:
+            return f"{int((t - statistics.median(self._sync_offsets)) * 1000)}ms"
+        return time.strftime("%H:%M:%S", time.localtime(t))
 
     def _mark_tx(self, idx: int) -> None:
-        self.state_queue.put(("tx_ts", (idx, self._now_ts())))
+        self.state_queue.put(("tx_ts", (idx, time.time())))
 
     def _mark_rx(self, idx: int) -> None:
-        self.state_queue.put(("rx_ts", (idx, self._now_ts())))
+        self.state_queue.put(("rx_ts", (idx, time.time())))
+
+    def _stamp_tx_rows(self, can_id: int, t: float) -> None:
+        """CAN ID で受信した送信フレームを、同じ CAN ID の送信行（CAN ID 欄の値で照合）の
+        TX タイムスタンプへ反映する。ボタン以外（スクリプト等）が送ったフレームも
+        統合ログと同じ経路（_write_unified_log）で拾うため、スクリプトの送信も表示に連動する。
+        UDS の行は要求の内容（コマンド）を CAN ID だけでは特定できないため対象外。"""
+        text = None
+        for idx, ev in self._entry_vars.items():
+            var = ev.get("can_id")
+            if var is None or idx not in self._tx_ts_vars:
+                continue
+            try:
+                row_id = self._parse_can_id(var.get())
+            except ValueError:
+                continue
+            if row_id == can_id:
+                if text is None:
+                    text = self._row_time_text(t)
+                self._tx_ts_vars[idx].set(text)
 
     def _on_combined_click(self, btn_cfg, idx: int):
         """送信/定期ボタン統合（2026-09）: 周期(ms)欄を持たない（=定期送信非対応の
@@ -1757,8 +1781,9 @@ class UdsTesterFrame(ttk.Frame):
                     # 送信直前に正しい値へ上書きされてしまうバグがあった）。
                     e2e_cfg = btn_cfg.get("e2e")
                     secoc_cfg = btn_cfg.get("secoc")
+                    # TX 時刻は、送信フレームを拾う _stamp_tx_rows が CAN ID から行へ反映する
+                    # （スクリプトの送信も同じ経路。ここで二重に更新しない）。
                     uds_link.send_can_frame(self.bus, can_id, data)
-                    self._mark_tx(idx)
                     self._log(
                         f"[{label}] TX ID=0x{can_id:03X} " + " ".join(f"{b:02X}" for b in data)
                     )
@@ -2079,8 +2104,7 @@ class UdsTesterFrame(ttk.Frame):
                             secoc_freshness = (secoc_freshness + 1) & 0xFF
                         else:
                             send_data = data
-                        uds_link.send_can_frame(self.bus, can_id, send_data)
-                        self._mark_tx(idx)
+                        uds_link.send_can_frame(self.bus, can_id, send_data)   # TX 時刻は _stamp_tx_rows が反映する
                         time.sleep(self._PERIODIC_POST_SEND_HOLD_S)
                     except Exception:  # noqa: BLE001 - 周期送信中の一時エラーは無視して継続する
                         pass
@@ -2509,13 +2533,13 @@ class UdsTesterFrame(ttk.Frame):
                 if btn_idx in self._periodic_btn_vars:
                     self._periodic_btn_vars[btn_idx].set(text)
             elif kind == "tx_ts":
-                ts_idx, ts_text = value
+                ts_idx, ts_time = value
                 if ts_idx in self._tx_ts_vars:
-                    self._tx_ts_vars[ts_idx].set(ts_text)
+                    self._tx_ts_vars[ts_idx].set(self._row_time_text(ts_time))
             elif kind == "rx_ts":
-                ts_idx, ts_text = value
+                ts_idx, ts_time = value
                 if ts_idx in self._rx_ts_vars:
-                    self._rx_ts_vars[ts_idx].set(ts_text)
+                    self._rx_ts_vars[ts_idx].set(self._row_time_text(ts_time))
             elif kind == "serial_state":
                 tag, state = value
                 if tag in self._serial_state_vars:
