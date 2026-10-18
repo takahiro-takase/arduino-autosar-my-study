@@ -327,6 +327,8 @@ on message 0x200
 | `wait(seconds)` | 指定秒数待機（Python 版と異なり、この待機中も `setTimer` タイマーの発火・`on message` ディスパッチは止まらず動き続ける） |
 | `log(fmt, ...)` / `write(fmt, ...)` | 同じ動作（`write` は CAPL の `write()` に合わせたエイリアス）。第1引数が `%` を含む文字列で、かつ他に引数がある場合は CAPL の `write()` と同様 printf 風の書式文字列（`%d`/`%f`/`%s`/`%x`/`%X`/`%%` 等、Python の `%` 演算子と同じ書式）として扱う。それ以外（引数1つだけ、または `%` を含まない）は従来通りスペース区切りで連結するので、`write("50% 完了")` のような `%` を含む単なるテキストはそのまま出力される |
 | `setTimer(name, ms)` / `cancelTimer(name)` | タイマーのアーム/解除。`name` は識別子そのもの（実際の CAPL の `msTimer` 変数と違い、`variables{}` での事前宣言は不要） |
+| `stop()` | スクリプトを正常終了する（実 CAPL の `stop()`＝測定終了に相当）。`on message`/`on timer` を持つスクリプトは、`on start` が終わっても「停止」ボタンまで動き続けるため、自分で終わらせたいときに呼ぶ。Python 版も `stop()` |
+| `setMessageLog(id, on)` | 統合ログへ記録する CAN ID の切り替え（メッセージ欄の「ログ」チェックボックスと同じ設定を操作する）。`on` は `1`=記録 / `0`=記録しない。**実 CAPL にこの命令は無い、本ツール独自の拡張**（実 CAPL のログ制御は `startLogging()`/`stopLogging()` 等でログブロック単位、メッセージ単位の絞り込みはログブロックの設定側）。メッセージ欄に無い ID は常に記録されるため何も起きない。Python 版は `set_message_log(id, on)` |
 | `msgData(n)` / `msgId()` / `msgDlc()` | `on message` ハンドラ内で、直近に受信したフレームの byte[n]/CAN ID/データ長を取得（`on message` ハンドラ外でも呼べ、その場合は `0` を返す） |
 | `this.byte(n)` / `this.id` / `this.dlc` | 上記と同じ内容を返す、実際の CAPL の `on message` ハンドラでの書き方に近いプロパティ風の構文。**`on message` ハンドラ内でのみ使用可**（ハンドラ外で使うと実行前検証でエラーになる。実際の CAPL でも `this` は message ハンドラの外では使えない） |
 

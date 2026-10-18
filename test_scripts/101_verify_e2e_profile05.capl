@@ -1,0 +1,297 @@
+// 実機検証: E2E Profile05 の動作確認（EngineInfo 0x100 受信検証 / E2EHealthStatus 0x220 送信保護）。
+//
+// 確認すること:
+//   A. ECU が 0x220 (E2EHealthStatus, E2E Profile05) を周期送信し、CRC16 が正しく、
+//      Counter が1ずつ進む（送信側 E2E_P05Protect の確認）。
+//   B. 正しい EngineInfo (0x100) を送ると、0x220 の crcErr(byte3)/seqErr(byte4) が増えない。
+//   C. CRC16 を誤らせた EngineInfo を1回送ると crcErr が +1、seqErr は増えない
+//      （受信側 E2E_P05Check の ERROR 判定と E2EMon の集計）。
+//   D. Counter を飛ばした EngineInfo を1回送ると seqErr が +1、crcErr は増えない
+//      （WRONGSEQUENCE 判定、MaxDeltaCounter=1）。
+//
+// 0x220 は 6 秒周期のため、全体で約 40 秒かかる。
+// 実行中は正常な EngineInfo を 200ms 周期で送り続ける。EngineInfo が途絶えると
+// ECU が協調スリープ（Bus-Sleep、受信 I-PDU グループ停止）に入り、起床時に
+// 先頭のフレームが取りこぼされて Counter が飛び、検証と無関係な seqErr が出るため。
+// 各フェーズは、直前の 0x220 の crcErr/seqErr を基準にし、操作の後に届く
+// 最初の 0x220 と比べる（操作の直前に送信済みで、まだ反映前の 0x220 だった場合は、次の 0x220 を見直す）。
+//
+// テスト対象以外のメッセージは、実行中だけ統合ログへの記録を OFF にする
+// （setMessageLog は本ツール独自の命令。メッセージ欄の「ログ」チェックと同じ）。
+// スクリプトが終了（正常終了・停止・中断のいずれも）すると、ツールが元に戻す。
+//
+// CRC16 (UpdateCrc16/CalcE2EProfile05CRC) と EngineInfo の組み立て (SendEngineInfo) は
+// 000_regression_normal_operation.capl / tools/can_tool/capl_scripts/test_E2E.capl と
+// 同一実装（CAPL 風 DSL にはファイルの取り込みが無いため、各スクリプトに持つ）。
+
+variables
+{
+    message 0x100 engineInfoMsg;
+    byte e2eCnt_0x100;
+
+    // 直近に受信した正しい 0x220 の内容
+    byte rxCnt;
+    byte rxCrcErr;
+    byte rxSeqErr;
+    int  rxFrames;     // CRC が正しかった 0x220 の受信数
+    int  rxCrcNg;      // CRC 不一致だった 0x220 の受信数
+    int  rxCntNg;      // Counter が +1 以外だった回数
+
+    byte baseCrcErr;
+    byte baseSeqErr;
+    int  passCount;
+    int  failCount;
+    int  rxIndex;
+    int  got;
+    byte rxData[32];
+}
+
+on message 0x220
+{
+    // on message ブロック内ではローカル変数を宣言できないため、配列は variables{} 側に置く
+    for (rxIndex = 0; rxIndex < this.dlc; rxIndex++)
+    {
+        rxData[rxIndex] = this.byte(rxIndex);
+    }
+    ProcessHealth(this.dlc, rxData);
+}
+
+void ProcessHealth(byte dlc, byte data[])
+{
+    byte e2eData[32];
+    byte e2eLen;
+    byte i;
+    word crc;
+    word receivedCrc;
+    byte delta;
+
+    // byte[0-1]=CRC16(LE) / byte[2]=Counter / byte[3]=CrcErrCount / byte[4]=SeqErrCount。
+    // CRC の計算対象は byte[2] 以降。
+    e2eLen = 0;
+    for (i = 2; i < dlc; i++)
+    {
+        e2eData[e2eLen] = data[i];
+        e2eLen = e2eLen + 1;
+    }
+    crc = CalcE2EProfile05CRC(0x0220, e2eLen, e2eData);
+    receivedCrc = data[0] | (data[1] << 8);
+
+    if (receivedCrc == crc)
+    {
+        if (rxFrames > 0)
+        {
+            delta = data[2] - rxCnt;
+            if (delta != 1)
+            {
+                rxCntNg = rxCntNg + 1;
+            }
+        }
+        rxCnt = data[2];
+        rxCrcErr = data[3];
+        rxSeqErr = data[4];
+        rxFrames = rxFrames + 1;
+    }
+    else
+    {
+        rxCrcNg = rxCrcNg + 1;
+    }
+}
+
+// 新しい 0x220 が1つ届くまで待つ（最大 8 秒）。届いたら 1、届かなければ 0。
+int WaitNewHealth()
+{
+    int start;
+    int waited;
+    start = rxFrames;
+    waited = 0;
+    while ((rxFrames == start) && (waited < 8000))
+    {
+        wait(0.1);
+        waited = waited + 100;
+    }
+    if (rxFrames == start)
+    {
+        return 0;
+    }
+    return 1;
+}
+
+// 新しい 0x220 を待ち、まだ基準から変化していなければ（操作の直前に ECU が送信済みで、
+// 反映前の 0x220 だった場合）次の 0x220 を1回だけ見直す。届いたら 1、届かなければ 0。
+int WaitReflected()
+{
+    int ok;
+    ok = WaitNewHealth();
+    if ((rxCrcErr == baseCrcErr) && (rxSeqErr == baseSeqErr))
+    {
+        ok = WaitNewHealth();
+    }
+    return ok;
+}
+
+void Check(int ok)
+{
+    if (ok)
+    {
+        write("  -> PASS");
+        passCount = passCount + 1;
+    }
+    else
+    {
+        write("  -> FAIL (crcErr=%d seqErr=%d / 基準 crcErr=%d seqErr=%d)", rxCrcErr, rxSeqErr, baseCrcErr, baseSeqErr);
+        failCount = failCount + 1;
+    }
+}
+
+// 直前に受信した 0x220 の値を基準にする。
+void Baseline()
+{
+    baseCrcErr = rxCrcErr;
+    baseSeqErr = rxSeqErr;
+    write("  基準: crcErr=%d seqErr=%d", baseCrcErr, baseSeqErr);
+}
+
+// EngineInfo を 200ms 周期で送り続ける（ECU を起こしたまま Counter を連続させる）。
+on timer keepAlive
+{
+    SendEngineInfo(0);
+    setTimer(keepAlive, 200);
+}
+
+on start
+{
+    e2eCnt_0x100 = 0;
+
+    write("=== E2E Profile05 の実機検証 ===");
+
+    // テスト対象 (0x100, 0x220) 以外の記録を止める
+    setMessageLog(0x200, 0);
+    setMessageLog(0x210, 0);
+    setMessageLog(0x230, 0);
+    setMessageLog(0x300, 0);
+    setMessageLog(0x400, 0);
+
+    // ECU を起こし、以後 Counter を連続させるため、最初から EngineInfo を送り続ける
+    SendEngineInfo(0);
+    setTimer(keepAlive, 200);
+
+    write("A. 0x220 (E2EHealthStatus) を 3 フレーム受信し CRC16 と Counter を検証");
+    WaitNewHealth();
+    WaitNewHealth();
+    WaitNewHealth();
+    write("  受信=%d フレーム, CRC不一致=%d, Counter不連続=%d", rxFrames, rxCrcNg, rxCntNg);
+    Check((rxFrames >= 3) && (rxCrcNg == 0) && (rxCntNg == 0));
+
+    write("B. 正常な EngineInfo を送り続けてもエラーカウンタは増えない");
+    Baseline();
+    got = WaitNewHealth();
+    Check(got && (rxCrcErr == baseCrcErr) && (rxSeqErr == baseSeqErr));
+
+    write("C. CRC16 を誤らせた EngineInfo を1回送ると crcErr が +1 (seqErr は不変)");
+    Baseline();
+    SendEngineInfo(1);
+    got = WaitReflected();
+    Check(got && (rxCrcErr == baseCrcErr + 1) && (rxSeqErr == baseSeqErr));
+
+    write("D. Counter を飛ばした EngineInfo を1回送ると seqErr が +1 (crcErr は不変)");
+    Baseline();
+    SendEngineInfo(2);
+    got = WaitReflected();
+    Check(got && (rxSeqErr == baseSeqErr + 1) && (rxCrcErr == baseCrcErr));
+
+    cancelTimer(keepAlive);
+
+    write("=== 集計: PASS=%d FAIL=%d ===", passCount, failCount);
+
+    // on message / on timer を持つため、stop() を呼ばないと「停止」ボタンまで動き続ける
+    stop();
+}
+
+// -----------------------------------------------------------------------------
+// EngineInfo (0x100) 送信。errorFlag: 0=正常 / 1=CRC異常 / 2=Counter飛び(+3)
+// CRC異常のフレームは Counter を進めない（ECU は CRC 不一致のフレームの Counter を
+// 記録しないため、進めると次の正常フレームが Counter 飛びと判定されて seqErr も増える）。
+// レイアウト: byte[0-1]=CRC16(LE) / byte[2]=Counter / byte[3-6]=シグナル、DLC=7
+// -----------------------------------------------------------------------------
+void SendEngineInfo(byte errorFlag)
+{
+    byte data[5];
+    word crc16;
+
+    if (errorFlag == 2)
+    {
+        // Profile05 の Counter はフルレンジ(0-255)で、byte型のラップがそのまま仕様どおり。
+        e2eCnt_0x100 = e2eCnt_0x100 + 3;
+    }
+
+    // CRC 計算対象は Counter 以降 (Counter + シグナル4バイト)
+    data[0] = e2eCnt_0x100;
+    data[1] = 0;
+    data[2] = 0;
+    data[3] = 0;
+    data[4] = 0x80;  // onFlag=1
+
+    engineInfoMsg.dlc = 7;
+    engineInfoMsg.byte(2) = data[0];
+    engineInfoMsg.byte(3) = data[1];
+    engineInfoMsg.byte(4) = data[2];
+    engineInfoMsg.byte(5) = data[3];
+    engineInfoMsg.byte(6) = data[4];
+
+    crc16 = CalcE2EProfile05CRC(0x0100, 5, data);
+    engineInfoMsg.byte(0) = crc16 & 0xFF;
+    engineInfoMsg.byte(1) = (crc16 >> 8) & 0xFF;
+
+    if (errorFlag == 1)
+    {
+        engineInfoMsg.byte(0) = 0;
+        engineInfoMsg.byte(1) = 0;
+    }
+
+    output(engineInfoMsg);
+
+    if (errorFlag != 1)
+    {
+        e2eCnt_0x100 = e2eCnt_0x100 + 1;
+    }
+}
+
+// -----------------------------------------------------------------------------
+// E2E Profile05 CRC16 (poly=0x1021, MSB first, 開始値 0xFFFF)
+// データ(Counter 以降)を先に投入し、DataID を下位→上位の順で最後に投入する。
+// -----------------------------------------------------------------------------
+word UpdateCrc16(word crc, byte b)
+{
+    word poly = 0x1021;
+    int i;
+
+    crc ^= (b << 8);
+    for (i = 0; i < 8; i++)
+    {
+        if (crc & 0x8000)
+        {
+            crc = (crc << 1) ^ poly;
+        }
+        else
+        {
+            crc <<= 1;
+        }
+    }
+    return crc;
+}
+
+word CalcE2EProfile05CRC(word dataId, byte len, byte data[])
+{
+    word crc = 0xFFFF;
+    byte index;
+
+    for (index = 0; index < len; index++)
+    {
+        crc = UpdateCrc16(crc, data[index]);
+    }
+
+    crc = UpdateCrc16(crc, dataId & 0xFF);
+    crc = UpdateCrc16(crc, (dataId >> 8) & 0xFF);
+
+    return crc;
+}
