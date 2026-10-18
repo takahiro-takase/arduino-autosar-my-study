@@ -265,6 +265,18 @@ TEST_F(NvM_WriteRetry_Test, NvM_MainFunction_NG_JobFailureBeyondRetryLimitFailsB
     /* ----------------------- */
     /* ---- 評価 (Assert) ---- */
     /* ----------------------- */
+    // ジョブの結果が失敗のままなので、データ本体の書き込みを繰り返すだけで、CRC（データの直後の 1 バイト）の書き込みへは進まない。
+    // （失敗の判定を外すと、失敗した結果を成功として扱い、CRC の書き込みへ進む。ブロックが NOT_OK になる結果は同じでも、書き込みの内容が変わる。）
+    const uint16 crcAddress = (uint16)(NVM_BLOCK_DEM_STATUS_EEPROM_ADDR + NVM_BLOCK_DEM_STATUS_LENGTH);
+    bool wroteData = false;
+    bool wroteCrc  = false;
+    for (uint32 i = 0U; (i < CallCount_MemIf_Write) && (i < WRAP_MEMIF_WRITE_CAPTURE_SIZE); i++)
+    {
+        wroteData = wroteData || (Address_MemIf_Write[i] == NVM_BLOCK_DEM_STATUS_EEPROM_ADDR);
+        wroteCrc  = wroteCrc  || (Address_MemIf_Write[i] == crcAddress);
+    }
+    EXPECT_TRUE(wroteData);    // データ本体は書こうとした
+    EXPECT_FALSE(wroteCrc);    // CRC は書かない
     EXPECT_EQ(ResultOf(NVM_BLOCK_ID_DEM_STATUS), NVM_REQ_NOT_OK);
     EXPECT_GE(CallCount_Dem_SetEventStatus, 1U);                      // 要求の失敗を Dem へ報告する（Dem の状態ブロックの書き直しで、複数回になりうる）
     EXPECT_EQ(LastEventId_Dem_SetEventStatus, DemConf_DemEventParameter_NVM_REQ_FAILED);

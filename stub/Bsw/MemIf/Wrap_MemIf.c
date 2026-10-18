@@ -36,6 +36,9 @@ uint32 FailFromCallCount_MemIf_Write        = WRAP_MEMIF_FAIL_FROM_CALL_COUNT_DI
 uint32 FailFromCallCount_MemIf_GetStatus    = WRAP_MEMIF_FAIL_FROM_CALL_COUNT_DISABLED;
 uint32 FailFromCallCount_MemIf_GetJobResult = WRAP_MEMIF_FAIL_FROM_CALL_COUNT_DISABLED;
 
+uint16 Address_MemIf_Write[WRAP_MEMIF_WRITE_CAPTURE_SIZE];
+uint16 Length_MemIf_Write[WRAP_MEMIF_WRITE_CAPTURE_SIZE];
+
 Std_ReturnType      ForcedReturn_MemIf_Read         = E_NOT_OK;
 Std_ReturnType      ForcedReturn_MemIf_Write        = E_NOT_OK;
 MemIf_StatusType    ForcedReturn_MemIf_GetStatus    = MEMIF_BUSY;
@@ -66,6 +69,12 @@ void WrapMemIf_Reset(void)
     ForcedReturn_MemIf_Write        = E_NOT_OK;
     ForcedReturn_MemIf_GetStatus    = MEMIF_BUSY;
     ForcedReturn_MemIf_GetJobResult = MEMIF_JOB_FAILED;
+
+    for (uint32 i = 0U; i < WRAP_MEMIF_WRITE_CAPTURE_SIZE; i++)
+    {
+        Address_MemIf_Write[i] = 0U;
+        Length_MemIf_Write[i]  = 0U;
+    }
 }
 
 /* ----------------------------------------------------------------------
@@ -131,6 +140,11 @@ extern
 Std_ReturnType __real_MemIf_Write(MemIf_DeviceType Device, uint16 Address, const uint8* DataBufferPtr, uint16 Length);
 Std_ReturnType __wrap_MemIf_Write(MemIf_DeviceType Device, uint16 Address, const uint8* DataBufferPtr, uint16 Length)
 {
+    if (CallCount_MemIf_Write < WRAP_MEMIF_WRITE_CAPTURE_SIZE)
+    {
+        Address_MemIf_Write[CallCount_MemIf_Write] = Address;
+        Length_MemIf_Write[CallCount_MemIf_Write]  = Length;
+    }
     CallCount_MemIf_Write++;
     Log_Write(LOG_T, TAG, "MemIf_Write", "called %u times", CallCount_MemIf_Write);
 
