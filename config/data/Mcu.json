@@ -1,0 +1,11 @@
+{
+  "$schema": "../schema/Mcu.schema.json",
+  "module": "Mcu",
+  "placeholder": {
+    "value": 0,
+    "doc": [
+      "実フィールドを持たないプレースホルダ。クロック初期化は Arduino フレームワークが担い、",
+      "RAM セクション初期化・複数電源モードもモデル化しない（Mcu.h 冒頭のコメント参照）。"
+    ]
+  }
+}

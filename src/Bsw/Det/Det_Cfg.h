@@ -26,9 +26,11 @@
  * Definitions
  * ====================================================================== */
 
+/* @@GEN-BEGIN det-log-level  生成元: config/data/Det.json  （自動生成: 手編集禁止） */
 #ifndef DET_LOG_LEVEL
 #  define DET_LOG_LEVEL  LOG_I  /**< 既定値: ERROR/WARN/INFO を出力、TRACE/DEBUG を抑制 */
 #endif
+/* @@GEN-END det-log-level */
 
 /* -----------------------------------------------------------------------
  * DET（Default Error Tracer）自身の Det_GetVersionInfo 関連定数

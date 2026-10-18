@@ -2,7 +2,7 @@
 
 信号表（CAN ビットアサイン表）と、モジュールごとの設定 json から、各モジュールの設定ソース
 （`*_PBCfg.c`、`*_Cfg.h`）の該当部分を生成する Python ツールです。
-現在の対象は **CanIf**、**Com**、**PduR**、**E2EXf**（E2E Transformer）、**SecOC**、**Csm / Crypto / KeyM**（暗号処理の連鎖）、**Rte**（ASW 向けの信号アクセス関数）、**Dem**（診断イベント）、**Dcm**（DID の表）、**CanTp**（診断のトランスポート層）、**CanNm**（ネットワーク管理）、**CanSM**（バス状態管理）、**ComM**（通信管理）、**Nm**（ネットワーク管理インタフェース）、**Os**（タスク表）、**NvM**（不揮発ブロックの構成）、**WdgM**（ウォッチドッグの監視対象）、**FiM**（機能の抑止）、**Can**（コントローラ設定）、**BswM**（モード遷移のルール）、**Port**（管理ピン）、**Dio**（チャネル・ポート）、**Adc**（アナログ入力のチャネル・グループ）、**EcuM**（RUN 要求ユーザ・タイムアウト・ウェイクアップ要因）、**Gpt**（汎用タイマのチャネル）の 27 モジュールです。Com スタックの他のモジュールへ広げていく計画です。
+現在の対象は **CanIf**、**Com**、**PduR**、**E2EXf**（E2E Transformer）、**SecOC**、**Csm / Crypto / KeyM**（暗号処理の連鎖）、**Rte**（ASW 向けの信号アクセス関数）、**Dem**（診断イベント）、**Dcm**（DID の表）、**CanTp**（診断のトランスポート層）、**CanNm**（ネットワーク管理）、**CanSM**（バス状態管理）、**ComM**（通信管理）、**Nm**（ネットワーク管理インタフェース）、**Os**（タスク表）、**NvM**（不揮発ブロックの構成）、**WdgM**（ウォッチドッグの監視対象）、**FiM**（機能の抑止）、**Can**（コントローラ設定）、**BswM**（モード遷移のルール）、**Port**（管理ピン）、**Dio**（チャネル・ポート）、**Adc**（アナログ入力のチャネル・グループ）、**EcuM**（RUN 要求ユーザ・タイムアウト・ウェイクアップ要因）、**Gpt**（汎用タイマのチャネル）、**Wdg**（ウォッチドッグドライバの HW タイムアウト）、**Mcu**（MCU ドライバ。実フィールドの無いプレースホルダ）、**CryIf**（Crypto チャネル ID）、**Det**（既定のログレベル）、**IoHwAb**（ボタンのデバウンス・固着判定と ADC 電圧低下の閾値）の 32 モジュールです。Com スタックの他のモジュールへ広げていく計画です。
 
 最終的な構想は `arxml ⇔ json ⇔ Cfg.c` です。このうち json → Cfg.c の部分と、
 信号表の変更に設定を連動させる部分を、この範囲で試しています。
@@ -13,7 +13,7 @@
 config/data/can_signals.json（ビットアサイン表の正本。can_tool の GUI で編集）
         │  sync_cfg.py: 追加されたフレームの設定のひな形を、各モジュールの設定 json へ追加
         ▼
-config/data/CanIf.json, Com.json, PduR.json, E2EXf.json, SecOC.json, CryptoStack.json, Rte.json, Dem.json, Dcm.json, CanTp.json, CanNm.json, CanSM.json, ComM.json, Nm.json, Os.json, NvM.json, WdgM.json, FiM.json, Can.json, BswM.json, Port.json, Dio.json, Adc.json, EcuM.json, Gpt.json
+config/data/CanIf.json, Com.json, PduR.json, E2EXf.json, SecOC.json, CryptoStack.json, Rte.json, Dem.json, Dcm.json, CanTp.json, CanNm.json, CanSM.json, ComM.json, Nm.json, Os.json, NvM.json, WdgM.json, FiM.json, Can.json, BswM.json, Port.json, Dio.json, Adc.json, EcuM.json, Gpt.json, Wdg.json, Mcu.json, CryIf.json, Det.json, IoHwAb.json
         │  gen_cfg.py: スキーマ・整合性を検査して、Cfg ソースの生成領域を更新（json → C の一方向）
         ▼
 src/Bsw/CanIf/CanIf_PBCfg.c, CanIf_Cfg.h / src/Bsw/Com/Com_PBCfg.c, Com_Cfg.h / src/Bsw/PduR/PduR_PBCfg.c, PduR_Cfg.h
@@ -31,6 +31,7 @@ src/Bsw/CanIf/CanIf_PBCfg.c, CanIf_Cfg.h / src/Bsw/Com/Com_PBCfg.c, Com_Cfg.h / 
 / src/Bsw/WdgM/WdgM_Cfg.h, WdgM_PBCfg.c（エンティティ・チェックポイント・遷移表・Deadline 表）
 / src/Bsw/FiM/FiM_Cfg.h, FiM_PBCfg.c（機能 ID と対応テーブル） / src/Bsw/Can/Can_Cfg.h, Can_PBCfg.c（ピン番号と Can_Config）
 / src/Bsw/Port/Port_Cfg.h, Dio/Dio_Cfg.h, Adc/Adc_Cfg.h, EcuM/EcuM_Cfg.h（設計値の #define）/ src/Bsw/Gpt/Gpt_PBCfg.h, Gpt_PBCfg.c（チャネル ID とチャネルテーブル）
+/ src/Bsw/Wdg/Wdg_PBCfg.c（Wdg_Config）/ src/Bsw/Mcu/Mcu_PBCfg.c（Mcu_Config）/ src/Bsw/CryIf/CryIf_Cfg.h（チャネル ID）/ src/Bsw/Det/Det_Cfg.h（ログレベルの既定値）/ src/Bsw/IoHwAb/IoHwAb_Cfg.h（ボタンのサンプル数・ADC 閾値）
 ```
 
 - **信号表の値は設定 json にコピーしません。** CAN ID、DLC、信号のビット位置・ビット長、update-bit の位置、
@@ -489,3 +490,8 @@ E2E と SecOC の設定は、Com から分けて別の設定 json（`E2EXf.json`
 - CanSM と ComM は、表になる設定が無いため対象外（BswM は対応済み）。
 - 診断の設定のうち、Dem のイベント定義は対応済み。Dcm（UDS）は、DID が表ではなく `switch` 文のコードになっているため、DID を表にして `Dcm.c` を表を引く作りに変える改造が先に必要。
 - ARXML の入出力。json の項目名を ECUC のパラメータ名に寄せてあるので、変換層を足す形にできる。
+
+- **Wdg の HW タイムアウトは WdgM_Cfg.h の値を指します**: `Wdg.json` の `defaultTimeout.macro` に、WdgM_Cfg.h の `WDGM_HW_WATCHDOG_TIMEOUT_MS` のようなマクロ名を書くと、`Wdg_PBCfg.c` の `Wdg_Config`（`DefaultTimeoutMs`）を生成します。値の実体は WdgM_Cfg.h の 1 か所だけで、Wdg.c は WdgM_Cfg.h を知りません（下位層が上位層の設定ヘッダに依存しない）。マクロが WdgM_Cfg.h に実在しない、または値が 1〜65535（uint16）に収まらないときは、整合性検査でエラーになります。
+- **Mcu は今のところ中身がありません**: 本プロジェクトの Mcu は、クロック初期化を Arduino フレームワークに任せ、RAM セクション初期化も複数の電源モードもモデル化しないため、`Mcu_ConfigType` は実フィールドの無いプレースホルダ（`Dummy`）です。`Mcu.json` は、AUTOSAR の McuModuleConfiguration コンテナの置き場所として用意したもので、クロック設定やリセット要因の扱いを足すときに、ここへ項目を足していきます。
+- **設計値のマクロだけのモジュール**: CryIf の `CRYIF_CHANNEL_ID`（`CryIf.json`、形式は `defines.py` 参照）と、Det の既定のログレベル `DET_LOG_LEVEL`（`Det.json`。ビルド設定の `-DDET_LOG_LEVEL=...` で上書きできるよう、`#ifndef` の中の既定値を生成します。値は `LOG_T` / `LOG_E` / `LOG_W` / `LOG_I` / `LOG_D` のどれか）を生成します。E2E・Fee・MemIf・WdgIf・Gpt の `*_Cfg.h` は、ModuleId・エラーコード・ApiId・バージョンなど AUTOSAR の仕様で決まる固定値と型定義だけで、プロジェクトの設計値を含まないため、対象にしていません（Gpt のチャネルは `Gpt_PBCfg.h` / `Gpt_PBCfg.c` から生成済み）。
+- **IoHwAb のサンプル数は、時間とタスク周期から求めます**: `IoHwAb.json` の `button.debounceMs`（ボタンの生レベルが連続して変わり続けたら確定値を変える時間）と `button.stuckMs`（押下確定から固着と判定するまでの時間）を、`osTask`（`IoHwAb_MainFunction` を呼ぶタスク。Os.json の `function`）の周期で割って、`IoHwAb_Cfg.h` の `IOHWAB_BUTTON_DEBOUNCE_COUNT` と `IOHWAB_BUTTON_STUCK_COUNT` を生成します。タスクの周期を変えても、時間が保たれるようにサンプル数が追従します。時間が周期の整数倍でない、サンプル数がカウンタの型に収まらない（デバウンス 1〜255、固着 1〜65535）、電圧低下の閾値が Adc.json の基準電圧 `ADC_REF_VOLTAGE_MV` を超える、といった食い違いは、整合性検査でエラーになります。ADC 電圧低下の閾値 `adc.lowVoltageThresholdMv` は、`IOHWAB_ADC_LOW_VOLT_THRESHOLD_MV` になります。

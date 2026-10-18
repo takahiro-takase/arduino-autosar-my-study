@@ -1,0 +1,12 @@
+{
+  "$schema": "../schema/IoHwAb.schema.json",
+  "module": "IoHwAb",
+  "osTask": "IoHwAb_MainFunction",
+  "button": {
+    "debounceMs": 40,
+    "stuckMs": 5000
+  },
+  "adc": {
+    "lowVoltageThresholdMv": 1000
+  }
+}

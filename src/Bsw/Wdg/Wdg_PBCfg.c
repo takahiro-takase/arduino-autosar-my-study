@@ -35,7 +35,12 @@
  * Global Variables
  * ====================================================================== */
 
+/* @@GEN-BEGIN wdg-config  生成元: config/data/Wdg.json  （自動生成: 手編集禁止） */
+/* HW ウォッチドッグのタイムアウトは WdgM_Cfg.h の WDGM_HW_WATCHDOG_TIMEOUT_MS を使う。
+ * 値の実体を 1 か所（WdgM_Cfg.h）だけに保ち、手動で一致させる必要をなくしている。
+ * Wdg.c 自身は WdgM_Cfg.h を知らない（下位層が上位層の設定ヘッダへ依存しない）。 */
 const Wdg_ConfigType Wdg_Config =
 {
     (uint16)WDGM_HW_WATCHDOG_TIMEOUT_MS  /* DefaultTimeoutMs */
 };
+/* @@GEN-END wdg-config */

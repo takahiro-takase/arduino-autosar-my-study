@@ -20,6 +20,7 @@
  * ====================================================================== */
 
 #include "IoHwAb.h"
+#include "IoHwAb_Cfg.h"
 #include "Dio.h"
 #include "Dio_Cfg.h"
 #include "Adc.h"
@@ -57,14 +58,8 @@
 #define IOHWAB_API_ID_BUTTON_GET_LEVEL  0xC2U
 #define IOHWAB_API_ID_ADC_GET_VALUE_MV  0xC6U
 
-/** ボタン確定に必要な連続一致サンプル数 (4 × 10ms = 40ms) */
-#define IOHWAB_BUTTON_DEBOUNCE_COUNT  4U
-
-/** ボタン固着と判定するまでの確定押下継続サンプル数 (500 × 10ms = 5000ms) */
-#define IOHWAB_BUTTON_STUCK_COUNT     500U
-
-/** ADC 電圧低下と判定する閾値 [mV] */
-#define IOHWAB_ADC_LOW_VOLT_THRESHOLD_MV  1000U
+/* ボタンのデバウンス・固着判定のサンプル数と、ADC 電圧低下の閾値（IOHWAB_BUTTON_DEBOUNCE_COUNT 等）は
+ * IoHwAb_Cfg.h（config/data/IoHwAb.json から生成）で定義する。 */
 
 /* ======================================================================
  * Type Definitions

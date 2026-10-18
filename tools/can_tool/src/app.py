@@ -76,6 +76,11 @@ NAV_BLOCKS = (
         NavRow("Dio.json", "Dio", "Dio — チャネル（ピン番号）・ポート・チャネルグループ"),
         NavRow("Adc.json", "Adc", "Adc — アナログ入力のチャネル・グループ・分解能・基準電圧"),
         NavRow("Gpt.json", "Gpt", "Gpt — 汎用タイマのチャネル（周期・モード・通知関数）"),
+        NavRow("Wdg.json", "Wdg", "Wdg — ウォッチドッグドライバ（HW ウォッチドッグのタイムアウト）"),
+        NavRow("Mcu.json", "Mcu", "Mcu — MCU ドライバ（現在は実フィールドの無いプレースホルダ）"),
+        NavRow("CryIf.json", "CryIf", "CryIf — 暗号インタフェース（Crypto チャネル ID）"),
+        NavRow("Det.json", "Det", "Det — 開発エラー・ログ（既定のログレベル）"),
+        NavRow("IoHwAb.json", "IoHwAb", "IoHwAb — ボタンのデバウンス・固着判定の時間、ADC 電圧低下の閾値"),
     ),
 )
 

@@ -127,6 +127,8 @@ def check_all(ctx):
     _check_channels(ctx, errors)
     _check_port_dio(ctx, errors)
     _check_bswm_tasks(ctx, errors)
+    _check_wdg_timeout(ctx, errors)
+    _check_iohwab(ctx, errors)
 
     return errors, warnings
 
@@ -449,3 +451,35 @@ def _check_bswm(ctx, errors, warnings):
             )
         if g not in stops:
             warnings.append("I-PDU グループ '%s' を停止する BswM のルールがない" % g)
+
+
+def _check_wdg_timeout(ctx, errors):
+    """Wdg.json の defaultTimeout.macro が WdgM_Cfg.h に実在し、値が uint16 に収まる正の整数か。"""
+    import pathlib
+    import re
+
+    from modules.wdg import MACRO_FILE
+
+    wdg = ctx.configs.get("Wdg")
+    if not wdg:
+        return
+    macro = wdg["defaultTimeout"]["macro"]
+    root = pathlib.Path(getattr(ctx, "repo_root", None) or pathlib.Path(__file__).resolve().parents[2])
+    text = (root / MACRO_FILE).read_bytes().decode("utf-8", errors="replace")
+    m = re.search(r"^[ \t]*#define[ \t]+%s[ \t]+(0[xX][0-9A-Fa-f]+|\d+)[uUlL]*\b" % re.escape(macro), text, re.MULTILINE)
+    if not m:
+        errors.append("Wdg の defaultTimeout.macro '%s' が、%s に数値のマクロとして実在しない" % (macro, MACRO_FILE))
+        return
+    value = int(m.group(1), 0)
+    if not 1 <= value <= 0xFFFF:
+        errors.append("Wdg の defaultTimeout.macro '%s'=%d が 1〜65535（uint16）に収まらない" % (macro, value))
+
+
+def _check_iohwab(ctx, errors):
+    """IoHwAb.json: osTask が Os.json に実在し、時間がその周期の整数倍で、サンプル数と閾値が範囲に収まるか。"""
+    iohwab = ctx.configs.get("IoHwAb")
+    if not iohwab or "Os" not in ctx.configs:
+        return
+    from modules import iohwab as iohwab_mod
+
+    errors.extend("IoHwAb: " + e for e in iohwab_mod.check_ranges(iohwab, ctx))
