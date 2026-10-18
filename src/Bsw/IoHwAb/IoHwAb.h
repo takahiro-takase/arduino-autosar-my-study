@@ -71,6 +71,19 @@ extern "C" {
 void IoHwAb_Init(const IoHwAb_ConfigType* ConfigPtr);
 
 /**
+ * \brief   IoHwAb モジュールのバージョン情報を取得する。
+ *
+ * \param[out]  versioninfo  バージョン情報の格納先。NULL を渡すと
+ *                           IOHWAB_E_PARAM_POINTER を DET へ報告し、何も書かない。
+ *
+ * \AUTOSARReq     {SWS_IoHwAb_00120}
+ * \ServiceID      {0x10}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void IoHwAb_GetVersionInfo(Std_VersionInfoType* versioninfo);
+
+/**
  * \brief   警告灯 LED の出力レベルを設定する。
  *
  * \details MCAL Dio_WriteChannel() へ委譲し、LED を点灯または消灯する。

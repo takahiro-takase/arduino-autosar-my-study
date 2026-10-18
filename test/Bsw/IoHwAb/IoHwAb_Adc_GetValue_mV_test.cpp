@@ -73,7 +73,7 @@ TEST_F(IoHwAb_Adc_GetValue_mV_Test, IoHwAb_Adc_GetValue_mV_NG_NullPointer)
     /* ---- 評価 (Assert) ---- */
     /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
-    EXPECT_EQ(FakeDetHw_LastErrorId, 0x01U);  // IoHwAb 独自の IOHWAB_E_PARAM_POINTER（非公開定数、IoHwAb.c 参照）
+    EXPECT_EQ(FakeDetHw_LastErrorId, 0x01U);  // IoHwAb 独自の IOHWAB_E_PARAM_POINTER（IoHwAb_Cfg.h 参照）
 }
 
 }  // namespace
