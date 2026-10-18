@@ -28,7 +28,7 @@ import sys
 import jsonschema
 
 import checks
-from modules import adc, bswm, can, canif, cannm, cansm, cantp, com, comm, cryptostack, dcm, dem, dio, e2exf, ecum, fim, gpt, nm, nvm, ostask, pdur, port, rte, secoc, wdgm
+from modules import adc, bswm, can, canif, cannm, cansm, cantp, com, comm, cryif, cryptostack, dcm, dem, det, dio, e2exf, ecum, fim, gpt, iohwab, mcu, nm, nvm, ostask, pdur, port, rte, secoc, wdg, wdgm
 
 TOOL_DIR = pathlib.Path(__file__).resolve().parent
 REPO_ROOT = TOOL_DIR.parents[1]
@@ -45,6 +45,7 @@ MODULES = {
     "Can": can.SPEC,
     "CanIf": canif.SPEC,
     "Com": com.SPEC,
+    "CryIf": cryif.SPEC,
     "CryptoStack": cryptostack.SPEC,
     "CanNm": cannm.SPEC,
     "CanSM": cansm.SPEC,
@@ -52,11 +53,14 @@ MODULES = {
     "ComM": comm.SPEC,
     "Dcm": dcm.SPEC,
     "Dem": dem.SPEC,
+    "Det": det.SPEC,
     "Dio": dio.SPEC,
     "E2EXf": e2exf.SPEC,
     "EcuM": ecum.SPEC,
     "FiM": fim.SPEC,
     "Gpt": gpt.SPEC,
+    "IoHwAb": iohwab.SPEC,
+    "Mcu": mcu.SPEC,
     "Nm": nm.SPEC,
     "NvM": nvm.SPEC,
     "Os": ostask.SPEC,
@@ -64,6 +68,7 @@ MODULES = {
     "Port": port.SPEC,
     "Rte": rte.SPEC,
     "SecOC": secoc.SPEC,
+    "Wdg": wdg.SPEC,
     "WdgM": wdgm.SPEC,
 }
 

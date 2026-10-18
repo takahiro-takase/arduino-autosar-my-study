@@ -63,9 +63,11 @@
 #define CRYIF_SW_MINOR_VERSION   0U
 #define CRYIF_SW_PATCH_VERSION   0U
 
+/* @@GEN-BEGIN cryif-channel  生成元: config/data/CryIf.json  （自動生成: 手編集禁止） */
 /** 本プロジェクトの CryIf は単一の Crypto チャネル（= 単一 Crypto Driver
  *  Object へのルーティング）のみを持つ（CanIf が単一 CAN コントローラに
  *  固定しているのと同じ簡略化）。 */
 #define CRYIF_CHANNEL_ID  0U
+/* @@GEN-END cryif-channel */
 
 #endif /* CRYIF_CFG_H */

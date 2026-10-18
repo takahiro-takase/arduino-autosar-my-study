@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Mcu configuration",
+  "description": "Mcu_PBCfg.c の Mcu_Config の生成元。本プロジェクトの Mcu は実フィールドを持たないプレースホルダ。将来クロック設定などを足すときに項目を足す。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "module",
+    "placeholder"
+  ],
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "module": {
+      "const": "Mcu"
+    },
+    "placeholder": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "value"
+      ],
+      "properties": {
+        "value": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 255,
+          "description": "プレースホルダ（Dummy）の値。意味は無い"
+        },
+        "doc": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "not": {
+              "pattern": "\\*/"
+            }
+          },
+          "description": "説明（Mcu_Config の直前のコメントとして出す）"
+        }
+      }
+    }
+  }
+}

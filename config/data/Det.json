@@ -1,0 +1,8 @@
+{
+  "$schema": "../schema/Det.schema.json",
+  "module": "Det",
+  "logLevel": {
+    "value": "LOG_I",
+    "doc": "既定値: ERROR/WARN/INFO を出力、TRACE/DEBUG を抑制"
+  }
+}

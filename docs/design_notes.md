@@ -150,7 +150,8 @@ TX 側と同じ検証を RX の各層境界（CanIf → PduR → Com）にも追
 | WdgM 論理監視（許可されるチェックポイント順序）の変更 | `WdgM_PBCfg.c` の `WdgM_EngineTransitions[]` / チェックポイント ID は `WdgM_Cfg.h` |
 | WdgM 時間監視（チェックポイント間の許容経過時間）の変更 | `WdgM_PBCfg.c` の `WdgM_EngineDeadlines[]` / 閾値は `WdgM_Cfg.h` の `WDGM_ENGINE_DEADLINE_*` / `WDGM_WARNING_DEADLINE_*` |
 | LED / ボタンのピン番号変更 | `Dio_Cfg.h`（`DIO_CHANNEL_LED_RUNNING` / `_LED_FAULT` / `_LED_WARNING` / `_BUTTON`） |
-| ADC チャネル・分解能・基準電圧・電圧低下閾値 | `Adc_Cfg.h` / `IoHwAb.c`（`IOHWAB_ADC_LOW_VOLT_THRESHOLD_MV`） |
+| ADC チャネル・分解能・基準電圧・電圧低下閾値 | `Adc_Cfg.h` / `IoHwAb_Cfg.h`（`IOHWAB_ADC_LOW_VOLT_THRESHOLD_MV`、`config/data/IoHwAb.json` から生成） |
+| ボタンのデバウンス時間・固着判定の時間 | `IoHwAb_Cfg.h`（`IOHWAB_BUTTON_DEBOUNCE_COUNT` / `IOHWAB_BUTTON_STUCK_COUNT`、`config/data/IoHwAb.json` の `button` から、`IoHwAb_MainFunction` のタスク周期で割って生成） |
 | Dcm S3 タイマのタイムアウト時間変更 | `Dcm_Cfg.h` の `DCM_S3_TIMEOUT_MS` |
 | Dcm SecurityAccess の鍵・試行回数・ロックアウト時間変更 | `Dcm_Cfg.h` の `DCM_SECURITY_KEY_MASK` / `DCM_SECURITY_MAX_ATTEMPTS` / `DCM_SECURITY_DELAY_MS` |
 | SecurityAccess で保護するサービスの追加 | `Dcm.c` の各ハンドラ先頭で `Dcm_SecurityLevel == 0U` をチェック（`Dcm_HandleClearDtc` 参照） |

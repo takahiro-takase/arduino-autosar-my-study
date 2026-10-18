@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "IoHwAb configuration",
+  "description": "IoHwAb_Cfg.h のボタンのデバウンス・固着判定のサンプル数と、ADC 電圧低下の閾値の生成元。サンプル数は、時間 [ms] を osTask の周期（Os.json）で割って求める。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "module",
+    "osTask",
+    "button",
+    "adc"
+  ],
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "module": {
+      "const": "IoHwAb"
+    },
+    "osTask": {
+      "type": "string",
+      "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+      "description": "IoHwAb_MainFunction を呼ぶタスクの関数名（Os.json の tasks の function）。サンプルの周期を引くのに使う"
+    },
+    "button": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "debounceMs",
+        "stuckMs"
+      ],
+      "properties": {
+        "debounceMs": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "ボタンの生レベルが連続して変わり続けたら、確定値を変える時間 [ms]（osTask の周期の整数倍）"
+        },
+        "stuckMs": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "押下が確定してから、固着と判定するまでの時間 [ms]（osTask の周期の整数倍）"
+        }
+      }
+    },
+    "adc": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "lowVoltageThresholdMv"
+      ],
+      "properties": {
+        "lowVoltageThresholdMv": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535,
+          "description": "ADC の電圧がこの値 [mV] を下回ったら、電圧低下とみなす閾値（Adc.json の基準電圧以下）"
+        }
+      }
+    }
+  }
+}

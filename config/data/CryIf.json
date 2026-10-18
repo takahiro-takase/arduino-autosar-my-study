@@ -1,0 +1,19 @@
+{
+  "$schema": "../schema/CryIf.schema.json",
+  "module": "CryIf",
+  "items": [
+    {
+      "doc": [
+        "本プロジェクトの CryIf は単一の Crypto チャネル（= 単一 Crypto Driver",
+        "Object へのルーティング）のみを持つ（CanIf が単一 CAN コントローラに",
+        "固定しているのと同じ簡略化）。"
+      ],
+      "defines": [
+        {
+          "macro": "CRYIF_CHANNEL_ID",
+          "value": "0U"
+        }
+      ]
+    }
+  ]
+}

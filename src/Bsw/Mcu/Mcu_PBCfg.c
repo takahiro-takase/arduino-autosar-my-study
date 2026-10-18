@@ -22,7 +22,11 @@
  * Global Variables
  * ====================================================================== */
 
+/* @@GEN-BEGIN mcu-config  生成元: config/data/Mcu.json  （自動生成: 手編集禁止） */
+/* 実フィールドを持たないプレースホルダ。クロック初期化は Arduino フレームワークが担い、
+ * RAM セクション初期化・複数電源モードもモデル化しない（Mcu.h 冒頭のコメント参照）。 */
 const Mcu_ConfigType Mcu_Config =
 {
     0U  /* Dummy */
 };
+/* @@GEN-END mcu-config */
