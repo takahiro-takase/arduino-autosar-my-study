@@ -98,6 +98,8 @@ static void CanTSyn_SendSync(unsigned long nowMs);
 static void CanTSyn_SendFup(unsigned long nowMs);
 static void CanTSyn_WriteBe32(uint8* dst, uint32 value);
 static Std_ReturnType CanTSyn_TransmitPdu(uint8* pdu);
+static uint8 CanTSyn_Crc8H2FUpdate(uint8 crc, uint8 data);
+static void CanTSyn_SetCrc(uint8* pdu, uint8 dataId);
 
 /* ======================================================================
  * Functions
@@ -392,11 +394,12 @@ static void CanTSyn_SendSync(unsigned long nowMs)
     CanTSyn_Sc         = (uint8)((CanTSyn_Sc + 1U) & CANTSYN_SC_MASK);
     CanTSyn_LastSyncMs = nowMs;
 
-    pdu[0] = CANTSYN_TYPE_SYNC;
-    /* pdu[1] = User Byte 1（既定値 0） */
+    pdu[0] = CANTSYN_TX_TYPE_SYNC;
+    /* pdu[1] = CRC なしなら User Byte 1（既定値 0）、CRC 付きなら CRC（下の CanTSyn_SetCrc） */
     pdu[2] = (uint8)((CANTSYN_TIME_DOMAIN_ID << 4U) | CanTSyn_Sc);
     /* pdu[3] = User Byte 0（既定値 0） */
     CanTSyn_WriteBe32(&pdu[4], secPart);
+    CanTSyn_SetCrc(pdu, CANTSYN_DATA_ID_SYNC(CanTSyn_Sc));
 
     if (CanTSyn_TransmitPdu(pdu) == E_OK)
     {
@@ -406,7 +409,8 @@ static void CanTSyn_SendSync(unsigned long nowMs)
     }
     else
     {
-        DET_LOGW(TAG, "SYNC transmit rejected sc=%u", (unsigned)CanTSyn_Sc);
+        /* SILENT_COM（Bus-Off 中・バススリープの準備中）は CanIf が TX を拒否するのが正常のため、WARN にしない */
+        DET_LOGD(TAG, "SYNC transmit rejected sc=%u", (unsigned)CanTSyn_Sc);
     }
 }
 
@@ -440,11 +444,12 @@ static void CanTSyn_SendFup(unsigned long nowMs)
         ovs = CANTSYN_OVS_MAX;
     }
 
-    pdu[0] = CANTSYN_TYPE_FUP;
-    /* pdu[1] = User Byte 2（既定値 0） */
+    pdu[0] = CANTSYN_TX_TYPE_FUP;
+    /* pdu[1] = CRC なしなら User Byte 2（既定値 0）、CRC 付きなら CRC（下の CanTSyn_SetCrc） */
     pdu[2] = (uint8)((CANTSYN_TIME_DOMAIN_ID << 4U) | CanTSyn_Sc);
     pdu[3] = (uint8)(ovs & 0x03U);   /* SGW=0（SyncToGTM）、OVS=Bit1-0 */
     CanTSyn_WriteBe32(&pdu[4], nsPart);
+    CanTSyn_SetCrc(pdu, CANTSYN_DATA_ID_FUP(CanTSyn_Sc));
 
     if (CanTSyn_TransmitPdu(pdu) == E_OK)
     {
@@ -455,9 +460,65 @@ static void CanTSyn_SendFup(unsigned long nowMs)
     }
     else
     {
-        DET_LOGW(TAG, "FUP transmit rejected sc=%u", (unsigned)CanTSyn_Sc);
+        DET_LOGD(TAG, "FUP transmit rejected sc=%u", (unsigned)CanTSyn_Sc);
         CanTSyn_State = CANTSYN_STATE_IDLE;
     }
+}
+
+/* ----------------------------------------------------------------------
+ * CanTSyn_Crc8H2F
+ * ---------------------------------------------------------------------- */
+
+/**
+ * \brief   CRC-8H2F（多項式 0x2F、反転なし）へ 1 バイト分を投入する。
+ *
+ * \details 呼び出し側が、初期値 0xFF から始め、全バイトを投入し終えたあとに最終 XOR 0xFF を
+ *          掛ける（CanTSyn_SetCrc 参照）。この手順は AUTOSAR の Crc_CalculateCRC8H2F() と
+ *          同じ結果になる（[SWS_CanTSyn_00050]。検査値: "123456789" → 0xDF）。本プロジェクトには
+ *          Crc モジュールが無いため、本モジュール内に持つ。
+ *
+ * \param[in]  crc   投入前の CRC（途中の値）。
+ * \param[in]  data  投入する 1 バイト。
+ * \return     投入後の CRC（途中の値）。
+ */
+static uint8 CanTSyn_Crc8H2FUpdate(uint8 crc, uint8 data)
+{
+    crc ^= data;
+    for (uint8 bit = 0U; bit < 8U; bit++)
+    {
+        crc = ((crc & 0x80U) != 0U) ? (uint8)((uint8)(crc << 1U) ^ 0x2FU) : (uint8)(crc << 1U);
+    }
+
+    return crc;
+}
+
+/* ----------------------------------------------------------------------
+ * CanTSyn_SetCrc
+ * ---------------------------------------------------------------------- */
+
+/**
+ * \brief   CRC 付きの設定なら、SYNC/FUP の Byte1 へ CRC を書く（なしなら何もしない）。
+ *
+ * \details CRC は Byte2〜Byte7 に続けて DataID を最後に計算する（[SWS_CanTSyn_00055]）。
+ *
+ * \param[in,out] pdu     組み立て済みの SYNC/FUP（Byte1 以外が完成していること）。
+ * \param[in]     dataId  この SC・メッセージ種別の DataID（CANTSYN_DATA_ID_SYNC/FUP）。
+ */
+static void CanTSyn_SetCrc(uint8* pdu, uint8 dataId)
+{
+#if (CANTSYN_TX_CRC_SECURED != 0U)
+    uint8 crc = 0xFFU;   /* 初期値 */
+
+    for (uint8 i = 2U; i < CANTSYN_DLC; i++)   /* Byte2〜Byte7 */
+    {
+        crc = CanTSyn_Crc8H2FUpdate(crc, pdu[i]);
+    }
+    crc = CanTSyn_Crc8H2FUpdate(crc, dataId);  /* DataID を最後に */
+    pdu[1] = (uint8)(crc ^ 0xFFU);             /* 最終 XOR */
+#else
+    (void)pdu;
+    (void)dataId;
+#endif
 }
 
 /* ----------------------------------------------------------------------

@@ -13,10 +13,13 @@
  *            3. FUP 送信: T4 の ns 部分を載せる（ns が 1 秒を超えた分は OVS）。
  *               送信遅延（キュー待ち等）を含めた「SYNC を送った時刻」が配信される。
  *
- *          フォーマット（CRC なし、DLC=8、時刻はビッグエンディアン）:
- *            SYNC: Byte0=0x10 / Byte2=時間領域(上位4bit)+SC(下位4bit) / Byte4-7=秒
- *            FUP : Byte0=0x18 / Byte2=時間領域+SC（SYNC と同じ値）
- *                  / Byte3=SGW+OVS / Byte4-7=ナノ秒
+ *          フォーマット（DLC=8、時刻はビッグエンディアン）:
+ *            SYNC: Byte0=Type（CRC なし 0x10 / CRC 付き 0x20）
+ *                  / Byte1=CRC（CRC 付きのとき。なしなら User Byte 1）
+ *                  / Byte2=時間領域(上位4bit)+SC(下位4bit) / Byte4-7=秒
+ *            FUP : Byte0=Type（CRC なし 0x18 / CRC 付き 0x28）/ Byte1=CRC
+ *                  / Byte2=時間領域+SC（SYNC と同じ値）/ Byte3=SGW+OVS / Byte4-7=ナノ秒
+ *            CRC は CRC-8H2F で、Byte2〜Byte7 と DataID（CanTSyn_Cfg.h 参照）に対して計算する。
  *
  *          対応範囲は CanTSyn_Cfg.h を参照（時間マスターのみ。StbM は未実装で、
  *          時刻源は Os カウンタ）。

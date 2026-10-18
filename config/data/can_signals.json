@@ -529,7 +529,7 @@
       "canId": "0x240",
       "dlc": 8,
       "txPeriodMs": 1000,
-      "note": "AUTOSAR CanTSyn（Time Synchronization over CAN）の SYNC/FUP。本ECUが時間マスターとして、ECU の稼働時間を CAN ツール等へ配信する。SYNC（Type=0x10、秒）と FUP（Type=0x18、ナノ秒＝SYNC を実際に送った時刻）の2フレームで1組、同じ CAN ID を Byte0 の Type で区別する。Com を経由せず CanTSyn が CanIf_Transmit() を直接呼ぶ。時刻はビッグエンディアン。src/Bsw/CanTSyn/ 参照",
+      "note": "AUTOSAR CanTSyn（Time Synchronization over CAN）の SYNC/FUP。本ECUが時間マスターとして、ECU の稼働時間を CAN ツール等へ配信する。SYNC（Type=0x20、秒）と FUP（Type=0x28、ナノ秒＝SYNC を実際に送った時刻）。CRC なしの設定では 0x10/0x18の2フレームで1組、同じ CAN ID を Byte0 の Type で区別する。Com を経由せず CanTSyn が CanIf_Transmit() を直接呼ぶ。時刻はビッグエンディアン。src/Bsw/CanTSyn/ 参照",
       "fields": [
         {
           "name": "Type",
@@ -539,14 +539,33 @@
           "enum": [
             {
               "value": 16,
-              "label": "SYNC（秒）"
+              "label": "SYNC（秒、CRC なし）"
             },
             {
               "value": 24,
-              "label": "FUP（ナノ秒）"
+              "label": "FUP（ナノ秒、CRC なし）"
+            },
+            {
+              "value": 32,
+              "label": "SYNC（秒、CRC 付き）"
+            },
+            {
+              "value": 40,
+              "label": "FUP（ナノ秒、CRC 付き）"
             }
           ],
-          "note": "メッセージ種別（CRC なし。CRC 付きは 0x20/0x28 だが本ECUは送らない）"
+          "note": "メッセージ種別。本ECUは既定で CRC 付き（0x20/0x28）を送る（CanTSyn_Cfg.h の CANTSYN_TX_CRC_SECURED）"
+        },
+        {
+          "name": "CRC",
+          "bitPosition": 8,
+          "bitSize": 8,
+          "type": "number",
+          "range": {
+            "min": 0,
+            "max": 255
+          },
+          "note": "CRC-8H2F（多項式 0x2F、初期値 0xFF、最終 XOR 0xFF）。Byte2〜Byte7 に DataID を続けて計算。DataID は SYNC=(CAN ID+SC)&0xFF、FUP=(CAN ID+0x10+SC)&0xFF。CRC なしの設定では User Byte"
         },
         {
           "name": "TimeDomain",

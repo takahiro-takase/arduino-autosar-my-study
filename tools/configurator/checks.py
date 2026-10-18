@@ -455,7 +455,7 @@ def _check_bswm(ctx, errors, warnings):
 
 
 def _check_cantsyn(ctx, errors):
-    """CanTSyn_Cfg.h（手書き）の設計値が、信号表（TimeSync の txPeriodMs・dlc）と
+    """CanTSyn_Cfg.h（手書き）の設計値が、信号表（TimeSync の canId・txPeriodMs・dlc）と
     Os.json（CanTSyn_MainFunction の周期）と一致しているか。"""
     import pathlib
     import re
@@ -467,13 +467,14 @@ def _check_cantsyn(ctx, errors):
     text = (root / "src/Bsw/CanTSyn/CanTSyn_Cfg.h").read_bytes().decode("utf-8", errors="replace")
 
     def define(name):
-        m = re.search(r"^[ \t]*#define[ \t]+%s[ \t]+(\d+)[uUlL]*\b" % name, text, re.MULTILINE)
-        return int(m.group(1)) if m else None
+        m = re.search(r"^[ \t]*#define[ \t]+%s[ \t]+(0[xX][0-9A-Fa-f]+|\d+)[uUlL]*\b" % name, text, re.MULTILINE)
+        return int(m.group(1), 0) if m else None
 
     tasks = {t["function"]: t["periodMs"] for t in ctx.configs["Os"]["tasks"]}
     expected = [
         ("CANTSYN_TX_PERIOD_MS", frame.get("txPeriodMs"), "信号表 TimeSync の txPeriodMs"),
         ("CANTSYN_DLC", frame.get("dlc"), "信号表 TimeSync の dlc"),
+        ("CANTSYN_CAN_ID", int(frame["canId"], 0), "信号表 TimeSync の canId"),
         ("CANTSYN_MAIN_FUNCTION_PERIOD_MS", tasks.get("CanTSyn_MainFunction"), "Os.json の CanTSyn_MainFunction の periodMs"),
     ]
     for name, want, source in expected:

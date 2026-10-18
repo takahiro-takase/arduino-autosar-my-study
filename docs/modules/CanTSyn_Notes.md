@@ -39,19 +39,22 @@ SYNC と FUP は同じ CAN ID（0x240）・同じ PDU を使い、Byte0 の Type
 （[SWS_CanTSyn_00008]）。PduR/Com を経由せず、`CanTSyn` が `CanIf_Transmit()` を直接
 呼びます（`CanNm` と同じ構造）。
 
-## フレームフォーマット（CRC なし、DLC=8、時刻はビッグエンディアン）
+## フレームフォーマット（DLC=8、時刻はビッグエンディアン）
+
+CRC の有無は `CanTSyn_Cfg.h` の `CANTSYN_TX_CRC_SECURED`（1=CRC 付きが既定、0=CRC なし）で切り替えます。Type は、
+CRC なしが SYNC=0x10 / FUP=0x18、CRC 付きが SYNC=0x20 / FUP=0x28 です（[SWS_CanTSyn_00031]）。
 
 ```
-SYNC（[SWS_CanTSyn_00015]）
-  Byte0   : Type = 0x10
-  Byte1   : User Byte 1（既定 0）
+SYNC（[SWS_CanTSyn_00015]/[SWS_CanTSyn_00017]）
+  Byte0   : Type = 0x10（CRC 付きは 0x20）
+  Byte1   : User Byte 1（既定 0）。CRC 付きでは CRC
   Byte2   : 時間領域 D（上位4bit、本 ECU は 0）+ シーケンスカウンタ SC（下位4bit）
   Byte3   : User Byte 0（既定 0）
   Byte4-7 : SyncTimeSec = T0 の秒（32bit）
 
-FUP（[SWS_CanTSyn_00016]）
-  Byte0   : Type = 0x18
-  Byte1   : User Byte 2（既定 0）
+FUP（[SWS_CanTSyn_00016]/[SWS_CanTSyn_00018]）
+  Byte0   : Type = 0x18（CRC 付きは 0x28）
+  Byte1   : User Byte 2（既定 0）。CRC 付きでは CRC
   Byte2   : 時間領域 D + SC（対の SYNC と同じ値、[SWS_CanTSyn_00049]）
   Byte3   : SGW（Bit2、0 = SyncToGTM）+ OVS（Bit1-0、ns が 1 秒を超えた秒数）
   Byte4-7 : SyncTimeNSec = T4 の ns 部分（32bit）
@@ -60,10 +63,23 @@ FUP（[SWS_CanTSyn_00016]）
 SC は SYNC を送信要求するたびに +1 し、0〜15 で循環します（[SWS_CanTSyn_00048]。
 送信が拒否された要求でも進めます）。
 
+### CRC（CRC 付きのとき）
+
+- CRC-8H2F（多項式 0x2F、初期値 0xFF、最終 XOR 0xFF、反転なし。AUTOSAR の `Crc_CalculateCRC8H2F()` と同じ。
+  検査値 `"123456789"` → 0xDF）を、**Byte2〜Byte7 に DataID を続けて**計算し、Byte1 に入れます
+  （[SWS_CanTSyn_00055]）。CRC を使うモジュールが無いため、`CanTSyn.c` 内に関数を持ちます。
+- DataID は 8bit で、仕様では SC をインデックスにした表（`DataIDList[SC]`、[SWS_CanTSyn_00054]）で与えます。
+  本プロジェクトは、E2E が DataID を CAN ID と一致させている慣習に倣い、表を **CAN ID から導きます**:
+  SYNC の DataID = (CAN ID + SC) の下位 8bit、FUP の DataID = (CAN ID + 0x10 + SC) の下位 8bit
+  （CAN ID 0x240 なら、SYNC は 0x40〜0x4F、FUP は 0x50〜0x5F）。SC ごと・SYNC/FUP ごとに値が違うため、
+  別の SC や SYNC/FUP を取り違えたフレームは CRC が合いません。CAN ID は 11bit で 8bit に収まらないため、
+  E2E のように CAN ID そのものは使えず、下位 8bit に SC を足す形にしています（表は持ちませんが、
+  ECUC 上は「16 要素の表」と等価です）。受信側（CAN ツール）も同じ式で検証します。
+
 ## 受信側（CAN ツール）の使い方
 
 SYNC（秒）の受信時刻と、FUP の `(秒 + OVS) + ナノ秒` から求めた「ECU が SYNC を実際に送った
-時刻」を対応づけて、PC 時刻と ECU 時刻のオフセットを求めます（直近16標本の中央値）。
+時刻」を対応づけて（CRC 付きの場合は CRC を検証し、一致しないフレームは同期に使わず WARN を出します）、PC 時刻と ECU 時刻のオフセットを求めます（直近16標本の最小値。遅れて届いたフレームの標本は必ず大きくなるため）。
 ECU の再起動は、ECU 時刻が前回より小さくなることで検出します。ツールの詳細は
 [tools/can_tool/README.md](../../tools/can_tool/README.md) を参照してください。
 
@@ -73,7 +89,8 @@ ECU の再起動は、ECU 時刻が前回より小さくなることで検出し
 | --- | --- |
 | 時間マスター（SYNC/FUP の送信） | 実装済み |
 | 時間スレーブ（`CanTSyn_RxIndication`、受信した時刻を StbM へ反映） | 未実装 |
-| OFS/OFNS（オフセット時間ベース）、CRC 付きメッセージ（0x20/0x28）、CAN FD の拡張フォーマット | 未実装 |
+| CRC 付きメッセージ（0x20/0x28）の送信 | 実装済み（`CANTSYN_TX_CRC_SECURED`、既定 1） |
+| OFS/OFNS（オフセット時間ベース）、CAN FD の拡張フォーマット | 未実装 |
 | 時刻源 | StbM ではなく ECU の稼働時間（`CanTSyn_GetNowMs()`、Os カウンタ） |
 | 時間領域 | 0 の1つ。時間ベースの状態（同期/ゲートウェイ）は持たない |
 | ナノ秒の分解能 | ms（`1ms = 1,000,000ns` 単位） |

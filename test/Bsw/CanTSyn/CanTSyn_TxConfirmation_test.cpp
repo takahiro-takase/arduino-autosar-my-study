@@ -1,7 +1,7 @@
 /**
  * \file    CanTSyn_TxConfirmation_test.cpp
  * \brief   CanTSyn_TxConfirmation() の単体テスト
- * \details SYNC の送信完了で FUP（Type=0x18、SC は SYNC と同じ、SYNC を渡してからの経過時間を含む T4 のナノ秒部分）を送信する（[SWS_CanTSyn_00045]）。
+ * \details SYNC の送信完了で FUP（Type は CANTSYN_TX_TYPE_FUP、CRC 付きなら Byte1 に CRC、SC は SYNC と同じ、SYNC を渡してからの経過時間を含む T4 のナノ秒部分）を送信する（[SWS_CanTSyn_00045]）。
  *          T4 が 1 秒以上になれば超えた秒数を OVS（Byte3 の Bit1-0）へ入れる。PDU ID が不正なら CANTSYN_E_INVALID_PDUID を報告して何もしない。
  *          SYNC の送信失敗通知・FUP の送信拒否・待機中の通知では FUP を送らず待機へ戻る。FUP の送信完了で SYNC/FUP の1組が完了する。
  */
@@ -189,13 +189,17 @@ TEST_F(CanTSyn_TxConfirmation_Test, CanTSyn_TxConfirmation_OK_FupCarriesOverflow
     /* ----------------------- */
     /* ---- 評価 (Assert) ---- */
     /* ----------------------- */
-    EXPECT_EQ(LastData_CanIf_Transmit[0], CANTSYN_TYPE_FUP);
+    EXPECT_EQ(LastData_CanIf_Transmit[0], CANTSYN_TX_TYPE_FUP);
     EXPECT_EQ(LastData_CanIf_Transmit[3], 0x01U);   // T4 = 950ms + 99ms = 1049ms → OVS=1
     // 残りのナノ秒 = 49000000ns = 0x02EBAE40（ビッグエンディアン）
     EXPECT_EQ(LastData_CanIf_Transmit[4], 0x02U);
     EXPECT_EQ(LastData_CanIf_Transmit[5], 0xEBU);
     EXPECT_EQ(LastData_CanIf_Transmit[6], 0xAEU);
     EXPECT_EQ(LastData_CanIf_Transmit[7], 0x40U);
+#if (CANTSYN_TX_CRC_SECURED != 0U)
+    // CRC-8H2F（Byte2〜Byte7 = 00 01 02 EB AE 40 と、FUP の DataID(SC=0) = (0x240+0x10)&0xFF = 0x50）= 0xF0
+    EXPECT_EQ(LastData_CanIf_Transmit[1], 0xF0U);
+#endif
 }
 
 TEST_F(CanTSyn_TxConfirmation_Test, CanTSyn_TxConfirmation_OK_FupCarriesNanosecondsAndSameSc)
@@ -217,7 +221,7 @@ TEST_F(CanTSyn_TxConfirmation_Test, CanTSyn_TxConfirmation_OK_FupCarriesNanoseco
     EXPECT_EQ(CallCount_CanIf_Transmit, 2U);
     EXPECT_EQ(LastPduId_CanIf_Transmit, CANTSYN_CANIF_TX_PDU_ID);
     EXPECT_EQ(LastLength_CanIf_Transmit, CANTSYN_DLC);
-    EXPECT_EQ(LastData_CanIf_Transmit[0], CANTSYN_TYPE_FUP);
+    EXPECT_EQ(LastData_CanIf_Transmit[0], CANTSYN_TX_TYPE_FUP);
     EXPECT_EQ(LastData_CanIf_Transmit[2], 0x00U);   // SYNC と同じ時間領域・SC
     EXPECT_EQ(LastData_CanIf_Transmit[3], 0x00U);   // SGW=0、OVS=0
     // T4 = 950ms + 20ms = 970ms = 970000000ns = 0x39D10680（ビッグエンディアン）
@@ -225,6 +229,10 @@ TEST_F(CanTSyn_TxConfirmation_Test, CanTSyn_TxConfirmation_OK_FupCarriesNanoseco
     EXPECT_EQ(LastData_CanIf_Transmit[5], 0xD1U);
     EXPECT_EQ(LastData_CanIf_Transmit[6], 0x06U);
     EXPECT_EQ(LastData_CanIf_Transmit[7], 0x80U);
+#if (CANTSYN_TX_CRC_SECURED != 0U)
+    // CRC-8H2F（Byte2〜Byte7 = 00 00 39 D1 06 80 と、FUP の DataID(SC=0) = 0x50）= 0xE6
+    EXPECT_EQ(LastData_CanIf_Transmit[1], 0xE6U);
+#endif
 }
 
 TEST_F(CanTSyn_TxConfirmation_Test, CanTSyn_TxConfirmation_OK_FupConfirmationCompletesSequence)
@@ -247,7 +255,7 @@ TEST_F(CanTSyn_TxConfirmation_Test, CanTSyn_TxConfirmation_OK_FupConfirmationCom
     /* ---- 評価 (Assert) ---- */
     /* ----------------------- */
     EXPECT_EQ(CallCount_CanIf_Transmit, 3U);
-    EXPECT_EQ(LastData_CanIf_Transmit[0], CANTSYN_TYPE_SYNC);
+    EXPECT_EQ(LastData_CanIf_Transmit[0], CANTSYN_TX_TYPE_SYNC);
     EXPECT_EQ(LastData_CanIf_Transmit[2], 0x01U);   // 次の SYNC は SC=1
 }
 
