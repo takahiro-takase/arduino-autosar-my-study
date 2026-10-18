@@ -34,31 +34,8 @@
 
 #define TAG "IoHwAb"
 
-/* -----------------------------------------------------------------------
- * DET（Default Error Tracer）関連定数
- *
- * AUTOSAR_SWS_IOHardwareAbstraction.pdf 7.6.1 Development Errors 章:
- * IoHwAb の開発エラー分類は AUTOSAR 標準では規定されず、「報告したいエラーの
- * 定義自体を実装者に一任する」("Up to the implementer to define error he
- * wants to report") とされている（この記述自体に SWS 番号は付与されて
- * いない）。ModuleId のみ AUTOSAR_TR_BSWModuleList（Release 4.3.1、
- * docs/ 配下）の「List of Basic Software Modules」表で IO Hardware
- * Abstraction (IoHwAb) に割り当てられた固定値 254 を使う。エラーコード自体は
- * 本プロジェクト独自に、Dio/Adc 経由の呼び出しで NULL 出力ポインタが渡された
- * 場合のみを対象として定義する。
- * ----------------------------------------------------------------------- */
-
-/** AUTOSAR IO Hardware Abstraction の ModuleId（AUTOSAR_TR_BSWModuleList 参照、固定値 254） */
-#define IOHWAB_MODULE_ID  254U
-
-/** 開発エラーコード（実装者定義。SWS の例示値 0x01 をそのまま踏襲） */
-#define IOHWAB_E_PARAM_POINTER  0x01U
-
-/** ApiId（既存の Doxygen \ServiceID タグと一致させる） */
-#define IOHWAB_API_ID_BUTTON_GET_LEVEL  0xC2U
-#define IOHWAB_API_ID_ADC_GET_VALUE_MV  0xC6U
-
-/* ボタンのデバウンス・固着判定のサンプル数と、ADC 電圧低下の閾値（IOHWAB_BUTTON_DEBOUNCE_COUNT 等）は
+/* ModuleId・エラーコード・ApiId・バージョン情報（IOHWAB_MODULE_ID 等）は IoHwAb_Cfg.h で定義する。 */
+/* ボタンのデバウンス・固着判定のサンプル数と、ADC 電圧低下の閾値（IOHWAB_BUTTON_DEBOUNCE_COUNT 等）も
  * IoHwAb_Cfg.h（config/data/IoHwAb.json から生成）で定義する。 */
 
 /* ======================================================================
@@ -120,6 +97,36 @@ void IoHwAb_Init(const IoHwAb_ConfigType* ConfigPtr)
         DET_LOGE(TAG, "Init E: Adc_SetupResultBuffer failed (ADC conversion unavailable)");
     }
     DET_LOGI(TAG, "Init");
+}
+
+/* ----------------------------------------------------------------------
+ * IoHwAb_GetVersionInfo
+ * ---------------------------------------------------------------------- */
+
+/**
+ * \brief   IoHwAb モジュールのバージョン情報を取得する。
+ *
+ * \param[out]  versioninfo  バージョン情報の格納先。NULL を渡すと
+ *                           IOHWAB_E_PARAM_POINTER を DET へ報告し、何も書かない。
+ *
+ * \AUTOSARReq     {SWS_IoHwAb_00120}
+ * \ServiceID      {0x10}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void IoHwAb_GetVersionInfo(Std_VersionInfoType* versioninfo)
+{
+    if (versioninfo == NULL)
+    {
+        (void)Det_ReportError(IOHWAB_MODULE_ID, 0U, IOHWAB_API_ID_GET_VERSION_INFO, IOHWAB_E_PARAM_POINTER);
+        return;
+    }
+
+    versioninfo->vendorID         = IOHWAB_VENDOR_ID;
+    versioninfo->moduleID         = IOHWAB_MODULE_ID;
+    versioninfo->sw_major_version = IOHWAB_SW_MAJOR_VERSION;
+    versioninfo->sw_minor_version = IOHWAB_SW_MINOR_VERSION;
+    versioninfo->sw_patch_version = IOHWAB_SW_PATCH_VERSION;
 }
 
 /* ----------------------------------------------------------------------

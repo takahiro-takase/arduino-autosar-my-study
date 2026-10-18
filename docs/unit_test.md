@@ -277,6 +277,8 @@ CanIf/CanSM 側の未初期化ガードにより、本テストが
   （書き込みの拒否、ジョブの失敗、ジョブが終わらない）は、`stub/Bsw/MemIf/Wrap_MemIf.h` の
   `FailFromCallCount_MemIf_Xxx` / `ForcedReturn_MemIf_Xxx`（Read/Write/GetStatus/GetJobResult）で再現する。
   使うテストは SetUp と TearDown で `WrapMemIf_Reset()` を呼び、故障注入を他のテストへ残さない。
+  `MemIf_Write()` の呼び出しごとの引数（アドレスと長さ）は `Address_MemIf_Write[]` / `Length_MemIf_Write[]` に記録され、
+  NvM がデータ本体と CRC のどちらを書こうとしたかを、書き込み先のアドレスで確かめられる（ジョブの失敗を成功と取り違えると CRC まで書いてしまう、といった違いを区別するため）。
 - **模擬 EEPROM の自動リセット**: Fee/NvM を実体リンクしているため、`test/test_main.cpp` の
   `FeeHwAutoResetListener`（GoogleTest の `TestEventListener`）が、すべてのテストの開始前に模擬
   EEPROM（`stub/Hal/Fake_Fee_Hw.c`）を消去済み状態に戻す。これにより、各テストは常に「初回起動」から始まる。

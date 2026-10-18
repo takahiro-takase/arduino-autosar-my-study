@@ -39,6 +39,9 @@
 /** `FailFromCallCount_MemIf_Xxx` の「無効（常にパススルー）」を表す番兵値。 */
 #define WRAP_MEMIF_FAIL_FROM_CALL_COUNT_DISABLED 0xFFFFFFFFU
 
+/** `MemIf_Write()` の呼び出しごとに記録する引数の、最大件数（それ以降の呼び出しは記録しない）。 */
+#define WRAP_MEMIF_WRITE_CAPTURE_SIZE 64U
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -63,6 +66,11 @@ extern uint32 FailFromCallCount_MemIf_Read;
 extern uint32 FailFromCallCount_MemIf_Write;
 extern uint32 FailFromCallCount_MemIf_GetStatus;
 extern uint32 FailFromCallCount_MemIf_GetJobResult;
+
+/* `MemIf_Write()` の呼び出しごとの引数（添字は 0 から数えた呼び出し順。CallCount_MemIf_Write 件まで有効）。
+ * 強制失敗にした呼び出しも記録する。NvM がデータ本体と CRC（1 バイト）の、どちらを書こうとしたかを調べるのに使う。 */
+extern uint16 Address_MemIf_Write[WRAP_MEMIF_WRITE_CAPTURE_SIZE];
+extern uint16 Length_MemIf_Write[WRAP_MEMIF_WRITE_CAPTURE_SIZE];
 
 /* 閾値到達後の強制戻り値（戻り値を持つ4関数のみ） */
 extern Std_ReturnType      ForcedReturn_MemIf_Read;         /**< 既定 E_NOT_OK */
