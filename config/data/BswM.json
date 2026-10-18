@@ -89,6 +89,10 @@
     {
       "task": "MemIf_MainFunction",
       "symbol": "MEMIF_MAIN"
+    },
+    {
+      "task": "CanTSyn_MainFunction",
+      "symbol": "CANTSYN_MAIN"
     }
   ],
   "excludedOsTasks": [

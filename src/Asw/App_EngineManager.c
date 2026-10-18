@@ -321,7 +321,7 @@ void App_EngineManager_Run(void)
     {
         uint16 adcMv = 0U;
         (void)Rte_Call_Adc_GetValue_mV(&adcMv);
-        DET_LOGD(TAG, "ADC=%umV", (unsigned)adcMv);
+        DET_LOGV(TAG, "ADC=%umV", (unsigned)adcMv);
     }
 
     /* Runnable 実行完了を WdgM へ報告 (Alive + Logical Supervision チェックポイント) */
@@ -477,7 +477,7 @@ static void State_Running(EngineSpeed_t speed, CoolantTemp_t temp, EngineOnFlag_
     (void)Dem_SetEventStatus(DemConf_DemEventParameter_ENGINE_OVERHEAT, DEM_EVENT_STATUS_PASSED);
     (void)Dem_SetEventStatus(DemConf_DemEventParameter_ENGINE_STALL,    DEM_EVENT_STATUS_PASSED);
 
-    DET_LOGD(TAG, "RUNNING spd=%u tmp=%u", (unsigned)speed, (unsigned)temp);
+    DET_LOGV(TAG, "RUNNING spd=%u tmp=%u", (unsigned)speed, (unsigned)temp);
 }
 
 /**
@@ -510,7 +510,7 @@ static void State_Fault(EngineSpeed_t speed, CoolantTemp_t temp, EngineOnFlag_t 
     }
     else
     {
-        DET_LOGD(TAG, "FAULT wait flag=0 or btn");
+        DET_LOGV(TAG, "FAULT wait flag=0 or btn");
     }
 }
 

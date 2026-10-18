@@ -24,7 +24,7 @@
 
 /* @@GEN-BEGIN os-tasks  生成元: config/data/Os.json  （自動生成: 手編集禁止） */
 /** 管理タスク総数（Os.json の tasks の数。Os_PBCfg.c の Os_TaskTable の要素数と一致する） */
-#define OS_TASK_COUNT  22U
+#define OS_TASK_COUNT  23U
 
 /* シンボリック名: OsConf_OsTask_<function>（値はタスク表の添字 = タスク ID） */
 /* cppcheck-suppress misra-c2012-2.5 */
@@ -71,6 +71,8 @@
 #define OsConf_OsTask_SecOC_MainFunctionRx          20U
 /* cppcheck-suppress misra-c2012-2.5 */
 #define OsConf_OsTask_App_TestMsg_Run               21U
+/* cppcheck-suppress misra-c2012-2.5 */
+#define OsConf_OsTask_CanTSyn_MainFunction          22U
 /* @@GEN-END os-tasks */
 
 /** OsCounter の ID。本プロジェクトのカウンタは 1 つ（SYSTEM_COUNTER）で、

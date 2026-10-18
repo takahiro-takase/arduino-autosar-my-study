@@ -109,8 +109,9 @@
  *  TxPduId=3: WarningStatus  (CAN 0x210, COM Signal Group)
  *  TxPduId=4: E2EHealthStatus (CAN 0x220, COM PERIODIC)
  *  TxPduId=5: ImmobilizerStatus (CAN 0x230, COM DIRECT。Signal Gateway 転送先)
- *  TxPduId=6: TestMsg (CAN 0x300, COM PERIODIC。信号追加の練習用のテスト専用フレーム) */
-#define CANIF_TX_PDU_COUNT  7U
+ *  TxPduId=6: TestMsg (CAN 0x300, COM PERIODIC。信号追加の練習用のテスト専用フレーム)
+ *  TxPduId=7: TimeSync (CAN 0x240, CanTSyn。PduR/Com を経由せず直接呼び出す) */
+#define CANIF_TX_PDU_COUNT  8U
 
 /** RX PDU テーブルのエントリ数（受信 CAN フレーム種別数）
  *  DaVinci: /ActiveEcuC/CanIf/CanIfInitCfg/CanIfRxPduCfg ノード数
@@ -138,6 +139,8 @@
 #define CanIfConf_CanIfTxPduCfg_ImmobilizerStatus_Tx  5U
 /* cppcheck-suppress misra-c2012-2.5 */
 #define CanIfConf_CanIfTxPduCfg_TestMsg_Tx            6U
+/* cppcheck-suppress misra-c2012-2.5 */
+#define CanIfConf_CanIfTxPduCfg_CanTSyn_Tx            7U
 
 /* cppcheck-suppress misra-c2012-2.5 */
 #define CanIfConf_CanIfRxPduCfg_EngineInfo_Rx         0U

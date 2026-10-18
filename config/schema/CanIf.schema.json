@@ -36,7 +36,7 @@
         "note": { "$ref": "#/$defs/commentLines" },
         "upperLayerTxPduId": { "$ref": "#/$defs/pduId", "description": "TxConfirmation で上位層へ返す PDU ID。txConfirm が PDUR のときだけ書く（CANNM のときは CanNm.json の nmTxPduId から引く）" },
         "hth": { "type": "integer", "minimum": 0, "maximum": 255 },
-        "txConfirm": { "enum": ["PDUR", "CANNM"], "description": "送信完了通知の宛先" },
+        "txConfirm": { "enum": ["PDUR", "CANNM", "CANTSYN"], "description": "送信完了通知の宛先（CANTSYN は時刻同期 CanTSyn。上位層へ返す ID は CanTSyn_Cfg.h の CANTSYN_TX_PDU_ID）" },
         "notes": {
           "type": "object",
           "additionalProperties": false,

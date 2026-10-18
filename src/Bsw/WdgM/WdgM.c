@@ -1138,7 +1138,7 @@ static void WdgM_RefreshHwWatchdog(void)
     if (!WdgM_ResetRequested && (!WdgM_GlobalStopped || WdgM_SupervisionSuppressed))
     {
         WdgIf_SetTriggerCondition(WDGIF_DEVICE_0, (uint16)WDGM_HW_WATCHDOG_TIMEOUT_MS);
-        DET_LOGD(TAG, "HW watchdog refreshed");
+        DET_LOGV(TAG, "HW watchdog refreshed");
     }
     else
     {
@@ -1214,7 +1214,7 @@ static void WdgM_EvaluateSupervisionCycle(void)
             }
             else
             {
-                DET_LOGD(TAG, "SE%u alive OK alive=%u", (unsigned)i, (unsigned)WdgM_AliveCount[i]);
+                DET_LOGV(TAG, "SE%u alive OK alive=%u", (unsigned)i, (unsigned)WdgM_AliveCount[i]);
             }
         }
         else

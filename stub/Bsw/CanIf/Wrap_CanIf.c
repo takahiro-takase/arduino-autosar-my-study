@@ -57,6 +57,9 @@ Std_ReturnType ForcedReturn_CanIf_SetControllerMode        = E_NOT_OK;
 Std_ReturnType ForcedReturn_CanIf_GetControllerMode        = E_NOT_OK;
 Std_ReturnType ForcedReturn_CanIf_GetControllerErrorState  = E_NOT_OK;
 Std_ReturnType ForcedReturn_CanIf_Transmit                 = E_NOT_OK;
+PduIdType      LastPduId_CanIf_Transmit                    = 0U;
+PduLengthType  LastLength_CanIf_Transmit                   = 0U;
+uint8          LastData_CanIf_Transmit[8]                  = { 0U };
 Std_ReturnType ForcedReturn_CanIf_ReadRxPduData            = E_NOT_OK;
 CanIf_NotifStatusType ForcedReturn_CanIf_ReadTxNotifStatus = CANIF_NO_NOTIFICATION;
 CanIf_NotifStatusType ForcedReturn_CanIf_ReadRxNotifStatus = CANIF_NO_NOTIFICATION;
@@ -112,6 +115,11 @@ void WrapCanIf_Reset(void)
     ForcedReturn_CanIf_SetPduMode              = E_NOT_OK;
     ForcedReturn_CanIf_GetPduMode              = E_NOT_OK;
     ForcedReturn_CanIf_GetTxConfirmationState  = CANIF_NO_NOTIFICATION;
+
+    LastPduId_CanIf_Transmit               = 0U;
+    LastLength_CanIf_Transmit              = 0U;
+    for (uint8 i = 0U; i < 8U; i++)
+        LastData_CanIf_Transmit[i] = 0U;
 
     LastMailbox_CanIf_RxIndication.CanId        = 0U;
     LastMailbox_CanIf_RxIndication.Hoh          = 0U;
@@ -219,6 +227,18 @@ Std_ReturnType __wrap_CanIf_Transmit(PduIdType TxPduId, const PduInfoType* PduIn
 {
     CallCount_CanIf_Transmit++;
     Log_Write(LOG_T, TAG, "CanIf_Transmit", "called %u times", CallCount_CanIf_Transmit);
+
+    /* 直近の呼び出しの引数を残す（送信フレームの中身をテストで検証するため）。 */
+    LastPduId_CanIf_Transmit = TxPduId;
+    if (PduInfoPtr != NULL)
+    {
+        LastLength_CanIf_Transmit = PduInfoPtr->SduLength;
+        if (PduInfoPtr->SduDataPtr != NULL)   // CanIf の NULL チェックの試験で NULL が渡されうる
+        {
+            for (uint8 i = 0U; (i < 8U) && (i < PduInfoPtr->SduLength); i++)
+                LastData_CanIf_Transmit[i] = PduInfoPtr->SduDataPtr[i];
+        }
+    }
 
     if (CallCount_CanIf_Transmit >= FailFromCallCount_CanIf_Transmit)
     {

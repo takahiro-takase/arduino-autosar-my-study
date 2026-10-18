@@ -105,6 +105,7 @@
 #include "Dcm.h"
 #include "FiM.h"
 #include "CanNm.h"
+#include "CanTSyn.h"
 #include "NvM.h"
 #include "SecOC.h"
 #include "MemIf.h"
@@ -152,7 +153,8 @@ static const Os_TaskType Os_TaskTable[OS_TASK_COUNT] =
      * 存在しない。SecOC.c 参照）。ComM_MainFunction と同じく、「宣言されたが一度もスケジューラに登録されない」
      * ギャップを避けるため配線のみ行う。 */
     /* Task 20 */ { SecOC_MainFunctionRx,          100U },  /* 100 ms : 現状 NOP（RX 検証は同期実行済み、SecOC.c 参照） */
-    /* Task 21 */ { App_TestMsg_Run,              1000U }   /* 1000 ms : テスト用メッセージ TestMsg のカウンタ更新（信号追加の練習用） */
+    /* Task 21 */ { App_TestMsg_Run,              1000U },  /* 1000 ms : テスト用メッセージ TestMsg のカウンタ更新（信号追加の練習用） */
+    /* Task 22 */ { CanTSyn_MainFunction,          100U }   /* 100 ms : 時刻同期メッセージ（SYNC/FUP）の周期送信と送信完了待ちの監視 */
 };
 /* @@GEN-END os-tasks */
 

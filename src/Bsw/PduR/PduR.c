@@ -206,12 +206,12 @@ Std_ReturnType PduR_ComTransmit(PduIdType SrcPduId, const PduInfoType* PduInfoPt
 
     if (path->TransmitOverrideFct != NULL)
     {
-        DET_LOGI(TAG, "TX src=%u -> override id=%u",
+        DET_LOGD(TAG, "TX src=%u -> override id=%u",
                  (unsigned)SrcPduId, (unsigned)path->TransmitOverrideId);
         return path->TransmitOverrideFct(path->TransmitOverrideId, PduInfoPtr);
     }
 
-    DET_LOGI(TAG, "TX src=%u canif=%u",
+    DET_LOGD(TAG, "TX src=%u canif=%u",
              (unsigned)SrcPduId, (unsigned)path->CanIfTxPduId);
 
     return CanIf_Transmit(path->CanIfTxPduId, PduInfoPtr);
@@ -310,7 +310,7 @@ Std_ReturnType PduR_SecOCTransmit(PduIdType SrcPduId, const PduInfoType* PduInfo
         return E_NOT_OK;
     }
 
-    DET_LOGI(TAG, "TX(SecOC) src=%u canif=%u",
+    DET_LOGD(TAG, "TX(SecOC) src=%u canif=%u",
              (unsigned)SrcPduId, (unsigned)path->CanIfTxPduId);
 
     return CanIf_Transmit(path->CanIfTxPduId, PduInfoPtr);
@@ -402,7 +402,7 @@ void PduR_ComRxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
         {
             const PduR_RxDestType* dest = &path->Dests[d];
 
-            DET_LOGI(TAG, "RxInd src=%u mod=%u dst=%u",
+            DET_LOGD(TAG, "RxInd src=%u mod=%u dst=%u",
                      (unsigned)RxPduId, (unsigned)dest->Module,
                      (unsigned)dest->DestPduId);
 
@@ -465,7 +465,7 @@ void PduR_CanIfTxConfirmation(PduIdType TxPduId, Std_ReturnType result)
         return;
     }
 
-    DET_LOGI(TAG, "TxConf src=%u dst=%u",
+    DET_LOGD(TAG, "TxConf src=%u dst=%u",
              (unsigned)TxPduId, (unsigned)path->ConfDestPduId);
 
     if (path->ConfFct != NULL)

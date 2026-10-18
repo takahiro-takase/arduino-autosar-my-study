@@ -522,6 +522,55 @@
           "note": "テスト用カウンタ（1秒ごとに+1、255の次は0）"
         }
       ]
+    },
+    {
+      "name": "TimeSync",
+      "direction": "TX",
+      "canId": "0x240",
+      "dlc": 8,
+      "txPeriodMs": 1000,
+      "note": "AUTOSAR CanTSyn（Time Synchronization over CAN）の SYNC/FUP。本ECUが時間マスターとして、ECU の稼働時間を CAN ツール等へ配信する。SYNC（Type=0x10、秒）と FUP（Type=0x18、ナノ秒＝SYNC を実際に送った時刻）の2フレームで1組、同じ CAN ID を Byte0 の Type で区別する。Com を経由せず CanTSyn が CanIf_Transmit() を直接呼ぶ。時刻はビッグエンディアン。src/Bsw/CanTSyn/ 参照",
+      "fields": [
+        {
+          "name": "Type",
+          "bitPosition": 0,
+          "bitSize": 8,
+          "type": "enum",
+          "enum": [
+            {
+              "value": 16,
+              "label": "SYNC（秒）"
+            },
+            {
+              "value": 24,
+              "label": "FUP（ナノ秒）"
+            }
+          ],
+          "note": "メッセージ種別（CRC なし。CRC 付きは 0x20/0x28 だが本ECUは送らない）"
+        },
+        {
+          "name": "TimeDomain",
+          "bitPosition": 20,
+          "bitSize": 4,
+          "type": "number",
+          "range": {
+            "min": 0,
+            "max": 15
+          },
+          "note": "時間領域（Byte2 上位4bit）。本ECUは 0 固定"
+        },
+        {
+          "name": "SequenceCounter",
+          "bitPosition": 16,
+          "bitSize": 4,
+          "type": "number",
+          "range": {
+            "min": 0,
+            "max": 15
+          },
+          "note": "SYNC ごとに +1（0〜15 で循環）。FUP は対の SYNC と同じ値"
+        }
+      ]
     }
   ]
 }

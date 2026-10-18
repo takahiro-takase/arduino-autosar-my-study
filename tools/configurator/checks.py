@@ -128,6 +128,7 @@ def check_all(ctx):
     _check_port_dio(ctx, errors)
     _check_bswm_tasks(ctx, errors)
     _check_wdg_timeout(ctx, errors)
+    _check_cantsyn(ctx, errors)
     _check_iohwab(ctx, errors)
 
     return errors, warnings
@@ -451,6 +452,34 @@ def _check_bswm(ctx, errors, warnings):
             )
         if g not in stops:
             warnings.append("I-PDU グループ '%s' を停止する BswM のルールがない" % g)
+
+
+def _check_cantsyn(ctx, errors):
+    """CanTSyn_Cfg.h（手書き）の設計値が、信号表（TimeSync の txPeriodMs・dlc）と
+    Os.json（CanTSyn_MainFunction の周期）と一致しているか。"""
+    import pathlib
+    import re
+
+    frame = ctx.frames.get("TimeSync")
+    if frame is None or "Os" not in ctx.configs:
+        return
+    root = pathlib.Path(getattr(ctx, "repo_root", None) or pathlib.Path(__file__).resolve().parents[2])
+    text = (root / "src/Bsw/CanTSyn/CanTSyn_Cfg.h").read_bytes().decode("utf-8", errors="replace")
+
+    def define(name):
+        m = re.search(r"^[ \t]*#define[ \t]+%s[ \t]+(\d+)[uUlL]*\b" % name, text, re.MULTILINE)
+        return int(m.group(1)) if m else None
+
+    tasks = {t["function"]: t["periodMs"] for t in ctx.configs["Os"]["tasks"]}
+    expected = [
+        ("CANTSYN_TX_PERIOD_MS", frame.get("txPeriodMs"), "信号表 TimeSync の txPeriodMs"),
+        ("CANTSYN_DLC", frame.get("dlc"), "信号表 TimeSync の dlc"),
+        ("CANTSYN_MAIN_FUNCTION_PERIOD_MS", tasks.get("CanTSyn_MainFunction"), "Os.json の CanTSyn_MainFunction の periodMs"),
+    ]
+    for name, want, source in expected:
+        got = define(name)
+        if got is None or want is None or got != want:
+            errors.append("CanTSyn_Cfg.h の %s=%s が、%s（%s）と一致しない" % (name, got, source, want))
 
 
 def _check_wdg_timeout(ctx, errors):

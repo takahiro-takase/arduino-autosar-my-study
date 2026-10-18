@@ -806,7 +806,7 @@ Std_ReturnType Dem_SetEventStatus(Dem_EventIdType EventId,
     else
     {
         /* PRE-FAILED / PRE-PASSED: まだ確定していないため DTC ステータスは変更しない */
-        DET_LOGD(TAG, "ev=%u debounce=%d (%s)",
+        DET_LOGV(TAG, "ev=%u debounce=%d (%s)",
                  (unsigned)EventId, (int)counter,
                  (counter > 0) ? "PREFAILED" : (counter < 0) ? "PREPASSED" : "neutral");
         return E_OK;

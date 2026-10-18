@@ -84,6 +84,8 @@ DET_LOG_VERBOSE=1 ./build/native_chain/native_chain_tests.exe  # TRACE ログ出
   - Csm の MAC 生成: 設定にある Csm のジョブは MAC 検証 1 つだけで、MAC 生成のジョブが無い。
   - E2EXf の `E2E_P05Check()` 失敗経路・`E2E_SMCheck()` 失敗経路: 設定が固定のため、失敗を返す入力を作れない。
   - `Can_Init()` の失敗時の無限ループ。
+  - CanTSyn の未初期化での呼び出し（`CANTSYN_E_UNINIT`）: CanTSyn には DeInit が無く（SWS_CanTSyn に無い）、
+    他のテストが先に初期化済みにするため、未初期化の状態を作れない。
   - MC/DC で条件の組み合わせが不足したまま残るもの（2026-10-18 時点）: Dem の `Dem_SetEventStatus()` の「確定済みの再確定」
     （デバウンスカウンタが飽和して変わらないとき、途中で戻るため）、Gpt の通知関数が NULL のチャネル
     （`Gpt_EnableNotification()` が通知を有効にしない）、WdgM の `WdgM_GetLocalStatus()` が失敗する経路、

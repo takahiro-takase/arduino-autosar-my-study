@@ -95,7 +95,7 @@ Can_Hw_ReturnType Can_Hw_Send(uint32_t id, uint8_t dlc, const uint8_t* data)
 
     char hexbuf[25];
     Log_HexStr(hexbuf, sizeof(hexbuf), data, dlc);
-    DET_LOGI(TAG, "TX OK id=0x%lX dlc=%u [%s]", (unsigned long)id, (unsigned)dlc, hexbuf);
+    DET_LOGD(TAG, "TX OK id=0x%lX dlc=%u [%s]", (unsigned long)id, (unsigned)dlc, hexbuf);
 
     return CAN_HW_OK;
 }
@@ -136,7 +136,7 @@ Can_Hw_ReturnType Can_Hw_Read(uint32_t* id, uint8_t* dlc, uint8_t* data)
 
     char hexbuf[25];
     Log_HexStr(hexbuf, sizeof(hexbuf), buf, len);
-    DET_LOGI(TAG, "RX OK id=0x%lX dlc=%u [%s]", (unsigned long)*id, (unsigned)len, hexbuf);
+    DET_LOGD(TAG, "RX OK id=0x%lX dlc=%u [%s]", (unsigned long)*id, (unsigned)len, hexbuf);
 
     return CAN_HW_OK;
 }
@@ -193,7 +193,7 @@ Can_Hw_ReturnType Can_Hw_IsBusOff(void)
     if (eflg != prevEflg)
     {
         prevEflg = eflg;
-        DET_LOGD(TAG, "EFLG=0x%02X TXBO=%u TXEP=%u TXWAR=%u EWARN=%u",
+        DET_LOGV(TAG, "EFLG=0x%02X TXBO=%u TXEP=%u TXWAR=%u EWARN=%u",
                  (unsigned)eflg,
                  (unsigned)((eflg >> 5) & 1U),  /* bit5: Bus-Off */
                  (unsigned)((eflg >> 4) & 1U),  /* bit4: TX Error-Passive */

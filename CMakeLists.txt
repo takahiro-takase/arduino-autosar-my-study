@@ -225,6 +225,7 @@ set(NATIVE_CHAIN_INCLUDE_DIRS
     src/Bsw/Com
     src/Bsw/PduR
     src/Bsw/CanNm
+    src/Bsw/CanTSyn
     src/Bsw/Nm
     src/Bsw/EcuM
     src/Bsw/BswM
@@ -296,6 +297,7 @@ set(NATIVE_CHAIN_SRC_SOURCES
     src/Bsw/Can/Can.c
     src/Bsw/CanIf/CanIf.c
     src/Bsw/CanNm/CanNm.c
+    src/Bsw/CanTSyn/CanTSyn.c
     src/Bsw/CanSM/CanSM.c
     src/Bsw/CanTp/CanTp.c
     src/Bsw/Com/Com.c

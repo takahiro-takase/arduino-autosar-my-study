@@ -177,13 +177,13 @@ class UdsTesterFrame(ttk.Frame):
         # ワーカースレッドから読むため、tk変数のミラーとして素の属性を持つ
         # （_apply_can_log_filter が更新）。
         self._can_log_off: "frozenset[int]" = frozenset()
-        # ECU時刻(ms) <-> PC時刻の同期推定（_resolve_sync_samples 参照）。
-        self._sync_frames: "dict[tuple[int, str], collections.deque]" = collections.defaultdict(
-            lambda: collections.deque(maxlen=16))
-        self._sync_offsets: "collections.deque[float]" = collections.deque(maxlen=32)
-        self._sync_last_ms = 0
+        # ECU時刻 <-> PC時刻の同期（ECU が CAN で配信する CanTSyn の SYNC/FUP から求める。
+        # _on_time_sync_frame 参照）。
+        self._sync_offsets: "collections.deque[float]" = collections.deque(maxlen=16)
+        self._sync_last_ms = 0       # 直近のシリアル行の ECU 時刻 [ms]（再起動の検出用）
+        self._tsyn_last_ms = 0.0     # 直近の FUP が示した ECU 時刻 [ms]（同上。シリアル行とは別に持つ）
         self._sync_announced = False
-        self._sync_pending: "list[tuple[float, int, str, int]]" = []
+        self._sync_pending_sync: "tuple[int, float, int] | None" = None  # (SC, PC受信時刻, 秒)
         # CanSM/EcuM の最新状態表示用 StringVar（ログ行から正規表現で抽出、
         # _parse_serial_state 参照）。tk.StringVar は Tk ルート作成後にしか
         # 生成できないためインスタンス属性だが、キー・表示順・ラベルは
@@ -1275,14 +1275,17 @@ class UdsTesterFrame(ttk.Frame):
     def _reset_time_sync(self):
         """ECUとの時刻同期の状態を初期化する（Serial 接続し直し時。別のECU起動
         （ms の時間軸）へ古いオフセットを持ち越さないため）。"""
-        self._sync_frames.clear()
         self._sync_offsets.clear()
-        self._sync_pending = []
+        self._sync_pending_sync = None
         self._sync_last_ms = 0
+        self._tsyn_last_ms = 0.0
         self._sync_announced = False
 
     _SYNC_LINE_RE = re.compile(r"^\[(\d+)ms\]")
-    _SYNC_CAN_RE = re.compile(r"\b(TX|RX)\b.*?\bcan=0x([0-9A-Fa-f]+)")
+    # ECU が配信する時刻同期（AUTOSAR CanTSyn、SWS_CanTSyn 7.3.1）の CAN ID と Type。
+    _TSYN_CAN_ID = 0x240
+    _TSYN_TYPE_SYNC = 0x10
+    _TSYN_TYPE_FUP = 0x18
 
     @staticmethod
     def _fmt_log_time(t: float) -> str:
@@ -1290,10 +1293,10 @@ class UdsTesterFrame(ttk.Frame):
 
     def _write_unified_log(self):
         """file_log_queue の内容を統合ログファイルへ書く（メインスレッド専用）。
-        ECUの `[<ms>ms]` 付きSerial行は、CanIfのTX/RXログ（`can=0xID`）とPC側で
-        観測したCANフレームを突き合わせて推定したオフセットでPC時刻へ換算する
-        （_resolve_sync_samples）。未同期の間は受信時刻のままで、タグを SER? にする。
-        行は到着順に書くため、時刻順に見たいときは行頭の時刻でソートする。"""
+        ECU が CAN で配信する時刻同期メッセージ（CanTSyn の SYNC/FUP）から ECU 時刻と
+        PC 時刻のオフセットを求め（_on_time_sync_frame）、同期後は行頭の時刻を
+        ECU の時間軸の `[<ms>ms]` にする（_format_log_line）。
+        行は到着順に書くため、同期後は行頭の ms でソートすれば時刻順に見られる。"""
         items = []
         while True:
             try:
@@ -1304,9 +1307,10 @@ class UdsTesterFrame(ttk.Frame):
         for t, tag, text in items:
             if tag == "CAN":
                 dirn, can_id, data = text
-                self._sync_frames[(can_id, dirn)].append(t)
+                if can_id == self._TSYN_CAN_ID and dirn == "Rx":
+                    self._on_time_sync_frame(t, data, lines)   # 「ログ」OFFでも同期には使う
                 if can_id in self._can_log_off:
-                    continue  # 「ログ」OFFのID: 同期の標本にだけ使い、行は出さない
+                    continue  # 「ログ」OFFのID: 行は出さない
                 text = f"{dirn} 0x{can_id:03X} [{len(data)}] {data.hex(' ').upper()}"
             elif tag == "LOGRESTORE":
                 # スクリプト終了: 変更した「ログ」設定を元に戻す。LOGFILTER と同じキューで
@@ -1328,16 +1332,10 @@ class UdsTesterFrame(ttk.Frame):
                 m = self._SYNC_LINE_RE.match(text)
                 if m:
                     ecu_ms = int(m.group(1))
-                    if ecu_ms < self._sync_last_ms:  # ECU再起動（ms値の巻き戻り）: 旧オフセット破棄
-                        self._sync_offsets.clear()
-                        self._sync_announced = False
-                        lines.append((t, "SYNC", "ECU再起動を検出（オフセット推定をリセット）"))
+                    if ecu_ms < self._sync_last_ms:  # ECU再起動（ms値の巻き戻り）
+                        self._on_ecu_restart(t, lines)
                     self._sync_last_ms = ecu_ms
-                    c = self._SYNC_CAN_RE.search(text)
-                    if c:
-                        self._sync_pending.append((t, ecu_ms, c.group(1), int(c.group(2), 16)))
             lines.append((t, tag, text))
-        self._resolve_sync_samples(lines)
         offset = statistics.median(self._sync_offsets) if self._sync_offsets else None
         out = [self._format_log_line(t, tag, text, offset) for t, tag, text in lines]
         if not out:
@@ -1355,7 +1353,8 @@ class UdsTesterFrame(ttk.Frame):
 
     _LOG_VIEW_MAX_LINES = 5000
     _LOG_COLORS = {"SER": "#000000", "CAN": "#1f5fbf", "TOOL": "#2a7a2a", "CAPL": "#2a7a2a",
-                   "SYNC": "#777777", "WARN": "#b06000", "ERROR": "#cc0000"}
+                   "SYNC": "#777777", "WARN": "#b06000", "ERROR": "#cc0000",
+                   "DEBUG": "#5a5a5a", "VERB": "#9a9a9a"}
 
     def _format_log_line(self, t: float, tag: str, text: str, offset: "float | None"):
         """統合ログ1行を `[時刻] [ノード] LEVEL TAG: 本文` へ整形し、(行, 色キー) を返す。
@@ -1372,7 +1371,7 @@ class UdsTesterFrame(ttk.Frame):
                 rest = f"[Arduino] {rest}"
             words = rest.split(" ", 2)
             level = words[1] if len(words) > 1 else ""
-            key = level if level in ("WARN", "ERROR") else "SER"
+            key = level if level in ("WARN", "ERROR", "DEBUG", "VERB") else "SER"
             return f"{time_s} {rest}", key
         time_s = (f"[{self._fmt_log_time(t)}]" if offset is None
                   else f"[{int((t - offset) * 1000)}ms]")
@@ -1402,32 +1401,49 @@ class UdsTesterFrame(ttk.Frame):
         w.see("end")
         w.configure(state="disabled")
 
-    def _resolve_sync_samples(self, lines: list):
-        """保留中のECU側TX/RXログ行を、対応するCANフレーム時刻と突き合わせて
-        オフセット(PC時刻 - ECU時刻)の標本にする。ECUのTXはツールから見るとRx、
-        ECUのRXはツールから見るとTxに対応する。シリアル行とCANフレームのどちらが
-        先にPCへ届くかは一定でない（実機ログではRxフレームの記録がECUのTXログより
-        数十ms後になることが多い）ため、行の受信時刻の前後 0.15 秒以内で最も近い
-        フレームを使う。まだ対応フレームが届いていない行は 1 秒間だけ保留して
-        次回以降の呼び出しで再試行する。"""
-        now = time.time()
-        pending, self._sync_pending = self._sync_pending, []
-        for item in pending:
-            ser_t, ecu_ms, ecu_dir, can_id = item
-            frames = self._sync_frames.get((can_id, "Rx" if ecu_dir == "TX" else "Tx"))
-            cands = [f for f in frames if abs(f - ser_t) < 0.15] if frames else []
-            # 窓内に同IDのフレームが複数ある（周期が短いID）と隣のサイクルと
-            # 取り違えるため、候補が1つに定まるときだけ標本にする。
-            if len(cands) == 1:
-                frames.remove(cands[0])
-                self._sync_offsets.append(cands[0] - ecu_ms / 1000.0)
-            elif not cands and now - ser_t < 1.0:
-                self._sync_pending.append(item)
-        if self._sync_offsets and not self._sync_announced:
+    def _on_ecu_restart(self, t: float, lines: list):
+        """ECU の再起動を検出したときの処理。旧オフセットを捨てて、同期の通知を出し直せるようにする。
+        シリアル行と FUP のどちらの基準時刻も、新しい起動に合わせて 0 へ戻す。"""
+        self._sync_offsets.clear()
+        self._sync_announced = False
+        self._sync_last_ms = 0
+        self._tsyn_last_ms = 0.0
+        lines.append((t, "SYNC", "ECU再起動を検出（オフセット推定をリセット）"))
+
+    def _on_time_sync_frame(self, t: float, data: bytes, lines: list):
+        """ECU の時刻同期メッセージ（CanTSyn、CAN ID 0x240）を処理し、オフセット
+        （PC時刻 - ECU時刻）の標本を取る。
+          SYNC（Byte0=0x10）: Byte4-7 = T0 の秒（ビッグエンディアン）。受信した PC 時刻を控える。
+          FUP （Byte0=0x18）: SC が直前の SYNC と同じなら、Byte3 の Bit1-0（OVS、秒の繰り上がり）と
+                              Byte4-7（ナノ秒）から、ECU が SYNC を実際に送信した時刻
+                              = (秒 + OVS) + ナノ秒 を得る。この時刻に SYNC を受信したとみなす。
+        ECU 時刻が前回より小さければ ECU の再起動とみなして標本を捨てる。
+        同期が取れた最初の1回だけ、`SYNC` 行を `lines` の先頭へ入れる。"""
+        if len(data) < 8:
+            return
+        msg_type, sc = data[0], data[2] & 0x0F
+        value = int.from_bytes(data[4:8], "big")
+        if msg_type == self._TSYN_TYPE_SYNC:
+            self._sync_pending_sync = (sc, t, value)
+            return
+        if msg_type != self._TSYN_TYPE_FUP or self._sync_pending_sync is None:
+            return
+        (sync_sc, sync_t, sync_sec), self._sync_pending_sync = self._sync_pending_sync, None
+        if sync_sc != sc:
+            return  # 別の組の SYNC/FUP（途中の取りこぼし）
+        ecu_s = sync_sec + (data[3] & 0x03) + value / 1e9
+        ecu_ms = ecu_s * 1000.0
+        # 再起動の判定は FUP どうしで行う。シリアル行の ECU 時刻（_sync_last_ms）は、SYNC を
+        # 送った直後の別のログ行の方が新しいことがあり、比べると誤検出するため。
+        if ecu_ms < self._tsyn_last_ms:  # ECU再起動（時刻の巻き戻り）
+            self._on_ecu_restart(t, lines)
+        self._tsyn_last_ms = ecu_ms
+        self._sync_offsets.append(sync_t - ecu_s)
+        if not self._sync_announced:
             self._sync_announced = True
             base = statistics.median(self._sync_offsets)
-            lines.insert(0, (time.time(), "SYNC",
-                             f"時刻同期: 以後の時刻は Arduino の時間軸 (ECU 0ms = {self._fmt_log_time(base)})"))
+            lines.append((t, "SYNC",
+                          f"時刻同期: 以後の時刻は Arduino の時間軸 (ECU 0ms = {self._fmt_log_time(base)})"))
 
     def _serial_reader_worker(self, ser: "serial.Serial", stop_ev: threading.Event):
         """シリアルログを行単位で読み、生ログは file_log_queue（統合ログ）へ、
