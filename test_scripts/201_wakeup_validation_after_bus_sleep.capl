@@ -34,7 +34,7 @@
 // 前提:
 //   - can_tool に CAN 接続済み。ECU の電源が入っていること（スリープしていてもよい）
 //   - 実行中は、他のフレーム（EngineInfo 等）を送らないこと。送ると ECU が通信を手放さず、スリープしない
-//   - 約 30〜60 秒で終わる（最後に結果が出る。その後は「停止」ボタンで終了する）
+//   - 約 30〜60 秒で終わる（最後に結果が出て、stop() でスクリプト自身が終了する）
 
 variables
 {
@@ -78,6 +78,7 @@ void Finish()
 {
     phase = 5;
     write("=== 結果: PASS ", passCount, " / FAIL ", failCount, " ===");
+    stop();  // on timer / on message を持つため、stop() を呼ばないと「停止」ボタンまで動き続ける
 }
 
 on start

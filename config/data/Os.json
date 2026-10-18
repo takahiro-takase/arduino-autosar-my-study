@@ -149,6 +149,12 @@
       "periodMs": 1000,
       "header": "App_TestMsg.h",
       "summary": "テスト用メッセージ TestMsg のカウンタ更新（信号追加の練習用）"
+    },
+    {
+      "function": "CanTSyn_MainFunction",
+      "periodMs": 100,
+      "header": "CanTSyn.h",
+      "summary": "時刻同期メッセージ（SYNC/FUP）の周期送信と送信完了待ちの監視"
     }
   ]
 }

@@ -2494,7 +2494,7 @@ void Com_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
 
         char hexbuf[25];
         Log_HexStr(hexbuf, sizeof(hexbuf), Com_RxBuffer[ipdu->IPduId], ipdu->DLC);
-        DET_LOGI(TAG, "RX iPdu=%u [%s]", (unsigned)ipdu->IPduId, hexbuf);
+        DET_LOGD(TAG, "RX iPdu=%u [%s]", (unsigned)ipdu->IPduId, hexbuf);
 
         /* フレーム受信の都度呼ばれる汎用フック（E2E Transformer 等）。
          * バッファ更新後・return 前に呼ぶことで、上位層が最新データを
@@ -2586,7 +2586,7 @@ void Com_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
  */
 void Com_TxConfirmation(PduIdType TxPduId, Std_ReturnType result)
 {
-    DET_LOGI(TAG, "TxConf id=%u", (unsigned)TxPduId);
+    DET_LOGD(TAG, "TxConf id=%u", (unsigned)TxPduId);
 
     if (Com_ConfigPtr == NULL)
     {
@@ -3447,7 +3447,7 @@ static void Com_GatewayRoute(Com_IPduIdType rxIPduId)
         const uint32 value = Com_UnpackSignal(
             Com_RxBuffer[rxIPduId], srcSig->BitPosition, srcSig->BitSize, srcSig->Endian);
 
-        DET_LOGI(TAG, "Gateway src=%u -> dst=%u value=%lu",
+        DET_LOGD(TAG, "Gateway src=%u -> dst=%u value=%lu",
                  (unsigned)gw->SrcSignalId, (unsigned)gw->DestSignalId, (unsigned long)value);
 
         /* SWC が Com_SendSignal() を直接呼ぶのと全く同じ経路（7.2.5 節）。
@@ -3626,7 +3626,7 @@ static Std_ReturnType Com_DoTransmit(const Com_IPduConfigType* ipdu, unsigned lo
 
     char hexbuf[25];
     Log_HexStr(hexbuf, sizeof(hexbuf), Com_TxBuffer[ipdu->IPduId], ipdu->DLC);
-    DET_LOGI(TAG, "TX iPdu=%u [%s]", (unsigned)ipdu->IPduId, hexbuf);
+    DET_LOGD(TAG, "TX iPdu=%u [%s]", (unsigned)ipdu->IPduId, hexbuf);
 
     PduInfoType pduInfo = {
         .SduDataPtr = Com_TxBuffer[ipdu->IPduId],

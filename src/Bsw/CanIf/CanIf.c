@@ -470,7 +470,7 @@ Std_ReturnType CanIf_Transmit(PduIdType TxPduId, const PduInfoType* PduInfoPtr)
         .sdu         = PduInfoPtr->SduDataPtr
     };
 
-    DET_LOGI(TAG, "TX id=%u can=0x%lX", (unsigned)TxPduId, (unsigned long)txCfg->CanId);
+    DET_LOGD(TAG, "TX id=%u can=0x%lX", (unsigned)TxPduId, (unsigned long)txCfg->CanId);
 
     Can_ReturnType ret = Can_Write(txCfg->Hth, &canPdu);
 
@@ -1057,7 +1057,7 @@ void CanIf_TxConfirmation(PduIdType CanTxPduId)
 
     const CanIf_TxPduConfigType* txCfg = &CanIf_ConfigPtr->TxPduConfig[CanTxPduId];
 
-    DET_LOGI(TAG, "TxConf id=%u", (unsigned)CanTxPduId);
+    DET_LOGD(TAG, "TxConf id=%u", (unsigned)CanTxPduId);
 
     /* [SWS_CANIF_00202]: CanIf_ReadTxNotifStatus() 用の通知状態
      * （CanIf_ReadTxNotifStatus() の Doxygen 参照）。 */
@@ -1183,7 +1183,7 @@ void CanIf_RxIndication(const Can_HwType* Mailbox, const PduInfoType* PduInfoPtr
             return;
         }
 
-        DET_LOGI(TAG, "RX can=0x%lX pdu=%u",
+        DET_LOGD(TAG, "RX can=0x%lX pdu=%u",
                  (unsigned long)Mailbox->CanId,
                  (unsigned)rxCfg->UpperLayerRxPduId);
 

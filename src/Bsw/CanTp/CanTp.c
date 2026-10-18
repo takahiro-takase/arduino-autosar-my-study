@@ -313,7 +313,7 @@ Std_ReturnType CanTp_Transmit(PduIdType TxSduId, const PduInfoType* PduInfoPtr)
             CanTp_TxFrameBuf[1U + i] = 0x00U;
         }
 
-        DET_LOGI(TAG, "TX SF len=%u", (unsigned)msgLen);
+        DET_LOGD(TAG, "TX SF len=%u", (unsigned)msgLen);
 
         if (CanTp_SendFrame(CanTp_TxFrameBuf) != E_OK)
         {
@@ -346,7 +346,7 @@ Std_ReturnType CanTp_Transmit(PduIdType TxSduId, const PduInfoType* PduInfoPtr)
     CanTp_TxFrameBuf[0] = (uint8)(0x10U | (uint8)((msgLen >> 8U) & 0x0FU));
     CanTp_TxFrameBuf[1] = (uint8)(msgLen & 0xFFU);
 
-    DET_LOGI(TAG, "TX FF len=%u", (unsigned)msgLen);
+    DET_LOGD(TAG, "TX FF len=%u", (unsigned)msgLen);
 
     if (CanTp_SendFrame(CanTp_TxFrameBuf) != E_OK)
     {
@@ -509,7 +509,7 @@ void CanTp_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
 
         CanTp_RxAbort();   /* 受信中の MF があれば中断（受信中でなければ何もしない） */
 
-        DET_LOGI(TAG, "RX SF len=%u", (unsigned)udsLen);
+        DET_LOGD(TAG, "RX SF len=%u", (unsigned)udsLen);
 
         PduLengthType bufSize = 0U;
         if (Dcm_StartOfReception(CANTP_DCM_RX_PDU_ID, NULL, (PduLengthType)udsLen, &bufSize) != BUFREQ_OK)
@@ -571,7 +571,7 @@ void CanTp_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
         CanTp_Rx.state  = CANTP_RX_WAIT_CF;
         CanTp_Rx.timer  = CanTp_GetNowMs();
 
-        DET_LOGI(TAG, "RX FF len=%u", (unsigned)msgLen);
+        DET_LOGD(TAG, "RX FF len=%u", (unsigned)msgLen);
 
         /* FF の先頭 6 バイトを、上位層へ渡す（msgLen > 7 は上で確認済み） */
         if (CanTp_CopyToUpper(&data[2], (uint8)CANTP_FF_DATA) != BUFREQ_OK)
@@ -627,13 +627,13 @@ void CanTp_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
         CanTp_Rx.sn   = (uint8)((CanTp_Rx.sn + 1U) & 0x0FU);
         CanTp_Rx.timer = CanTp_GetNowMs();
 
-        DET_LOGI(TAG, "RX CF sn=%u pos=%u", (unsigned)sn, (unsigned)CanTp_Rx.pos);
+        DET_LOGD(TAG, "RX CF sn=%u pos=%u", (unsigned)sn, (unsigned)CanTp_Rx.pos);
 
         if (CanTp_Rx.pos >= CanTp_Rx.msgLen)
         {
             CanTp_Rx.state = CANTP_RX_IDLE;
 
-            DET_LOGI(TAG, "RX MF done len=%u", (unsigned)CanTp_Rx.msgLen);
+            DET_LOGD(TAG, "RX MF done len=%u", (unsigned)CanTp_Rx.msgLen);
 
             Dcm_TpRxIndication(CANTP_DCM_RX_PDU_ID, E_OK);
         }
@@ -660,7 +660,7 @@ void CanTp_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
 
         uint8 fs = pci & 0x0FU;
 
-        DET_LOGI(TAG, "RX FC fs=%u", (unsigned)fs);
+        DET_LOGD(TAG, "RX FC fs=%u", (unsigned)fs);
 
         if (fs == CANTP_FC_CTS)
         {
@@ -869,7 +869,7 @@ static void CanTp_SendFlowControl(uint8 fs, uint8 bs, uint8 stMin)
     fcFrame[6] = 0x00U;
     fcFrame[7] = 0x00U;
 
-    DET_LOGI(TAG, "TX FC fs=%u bs=%u", (unsigned)fs, (unsigned)bs);
+    DET_LOGD(TAG, "TX FC fs=%u bs=%u", (unsigned)fs, (unsigned)bs);
 
     (void)CanTp_SendFrame(fcFrame);   /* FC 送信失敗は N_Cr タイムアウトで上位が再試行 */
 }
@@ -933,7 +933,7 @@ static void CanTp_SendNextCF(void)
         CanTp_Tx.frameReady = 1U;
     }
 
-    DET_LOGI(TAG, "TX CF sn=%u pos=%u", (unsigned)CanTp_Tx.sn, (unsigned)CanTp_Tx.pos);
+    DET_LOGD(TAG, "TX CF sn=%u pos=%u", (unsigned)CanTp_Tx.sn, (unsigned)CanTp_Tx.pos);
 
     if (CanTp_SendFrame(CanTp_TxFrameBuf) != E_OK)
     {
@@ -956,7 +956,7 @@ static void CanTp_SendNextCF(void)
 
     if (CanTp_Tx.pos >= CanTp_Tx.msgLen)
     {
-        DET_LOGI(TAG, "TX done");
+        DET_LOGD(TAG, "TX done");
         CanTp_TxFinish(E_OK);
         return;
     }
@@ -967,7 +967,7 @@ static void CanTp_SendNextCF(void)
         CanTp_Tx.bsCnt--;
         if (CanTp_Tx.bsCnt == 0U)
         {
-            DET_LOGI(TAG, "TX block done wait FC");
+            DET_LOGD(TAG, "TX block done wait FC");
             CanTp_Tx.state   = CANTP_TX_WAIT_FC;
             CanTp_Tx.bsTimer = CanTp_GetNowMs();
         }

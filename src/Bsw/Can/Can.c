@@ -619,7 +619,7 @@ Can_ReturnType Can_Write(Can_HwHandleType Hth, const Can_PduType* PduInfo)
 
     char hexbuf[25];
     Log_HexStr(hexbuf, sizeof(hexbuf), PduInfo->sdu, PduInfo->length);
-    DET_LOGI(TAG, "TX id=0x%lX [%s]", (unsigned long)PduInfo->id, hexbuf);
+    DET_LOGD(TAG, "TX id=0x%lX [%s]", (unsigned long)PduInfo->id, hexbuf);
 
     if (Can_TxConfLen >= CAN_TX_CONF_QUEUE_SIZE)
     {

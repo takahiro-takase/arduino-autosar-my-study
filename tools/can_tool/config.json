@@ -29,6 +29,9 @@
         { "label": "TestMsg\n(0x300, テスト用)", "type": "rx_monitor",
           "can_id": "0x300" },
 
+        { "label": "TimeSync\n(0x240, CanTSyn)", "type": "rx_monitor",
+          "can_id": "0x240" },
+
         { "type": "group_header", "label": "周辺ECU" },
 
         { "label": "NM 仮想他ECU\n(0x400, node=0x02)", "type": "can_frame", "can_id": "0x400",

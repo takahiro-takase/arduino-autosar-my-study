@@ -8,6 +8,11 @@
  *            [<ms>ms] INFO  <TAG>: message
  *            [<ms>ms] TRACE <TAG>: message
  *            [<ms>ms] DEBUG <TAG>: message
+ *            [<ms>ms] VERB  <TAG>: message
+ *
+ *          DEBUG はメッセージ単位の送受信（ComStack の TX/RX 等）と判断の過程、
+ *          VERBOSE は毎サイクル繰り返し出る詳細（周期的な生存確認など）。
+ *          重要度は ERROR < WARN < INFO < DEBUG < VERBOSE の順に低くなる。
  *
  *          TRACE は関数コールチェーンの確認専用（関数先頭に機械的に置く、
  *          AUTOSAR 仕様書記載 I/F 関数・内部関数を問わない）。INFO と DEBUG の
@@ -58,6 +63,7 @@
 #define DET_LOGW(tag, fmt, ...)  Log_Write(LOG_W, tag, __func__, fmt, ##__VA_ARGS__)
 #define DET_LOGI(tag, fmt, ...)  Log_Write(LOG_I, tag, __func__, fmt, ##__VA_ARGS__)
 #define DET_LOGD(tag, fmt, ...)  Log_Write(LOG_D, tag, __func__, fmt, ##__VA_ARGS__)
+#define DET_LOGV(tag, fmt, ...)  Log_Write(LOG_V, tag, __func__, fmt, ##__VA_ARGS__)
 
 /* ======================================================================
  * Type Definitions
@@ -72,7 +78,8 @@ typedef enum
     LOG_E,      /**< Error   — エラー (abort / NRC / NULL ptr) */
     LOG_W,      /**< Warning — 警告  (BUSY / no route)         */
     LOG_I,      /**< Info    — 通常情報 (Init / 状態遷移)      */
-    LOG_D       /**< Debug   — 詳細  (フレームデータ等)        */
+    LOG_D,      /**< Debug   — 詳細  (メッセージ単位の送受信・判断の過程) */
+    LOG_V       /**< Verbose — 最詳細 (毎サイクル繰り返し出る詳細) */
 } LogLevel;
 
 /**

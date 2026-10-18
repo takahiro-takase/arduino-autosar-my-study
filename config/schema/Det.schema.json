@@ -29,9 +29,10 @@
             "LOG_E",
             "LOG_W",
             "LOG_I",
-            "LOG_D"
+            "LOG_D",
+            "LOG_V"
           ],
-          "description": "既定のログレベル（Det.h の LogLevel）。LOG_T=TRACE、LOG_E=ERROR、LOG_W=WARN、LOG_I=INFO、LOG_D=DEBUG"
+          "description": "既定のログレベル（Det.h の LogLevel）。LOG_T=TRACE、LOG_E=ERROR、LOG_W=WARN、LOG_I=INFO、LOG_D=DEBUG、LOG_V=VERBOSE"
         },
         "doc": {
           "type": "string",

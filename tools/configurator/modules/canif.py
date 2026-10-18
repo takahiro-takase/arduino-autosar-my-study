@@ -7,9 +7,10 @@ CAN ID と DLC は、`frame` が指すフレームの定義（config/data/can_si
 from . import symbols
 from .common import doc_comment, hex_literal, note_lines, ruled_comment, struct_fields
 
-TX_CONFIRM_FCT = {"PDUR": "PduR_CanIfTxConfirmation", "CANNM": "CanNm_TxConfirmation"}
+TX_CONFIRM_FCT = {"PDUR": "PduR_CanIfTxConfirmation", "CANNM": "CanNm_TxConfirmation",
+                  "CANTSYN": "CanTSyn_TxConfirmation"}
 RX_IND_FCT = {"PDUR": "PduR_CanIfRxIndication", "CANNM": "CanNm_RxIndication"}
-MODULE_HEADER = {"PDUR": "PduR_CanIf.h", "CANNM": "CanNm.h"}
+MODULE_HEADER = {"PDUR": "PduR_CanIf.h", "CANNM": "CanNm.h", "CANTSYN": "CanTSyn.h"}
 DAVINCI_TX = "/ActiveEcuC/CanIf/CanIfInitCfg/CanIfTxPduCfg/"
 DAVINCI_RX = "/ActiveEcuC/CanIf/CanIfInitCfg/CanIfRxPduCfg/"
 
@@ -46,9 +47,12 @@ def resolve(pdu, ctx):
 
 
 def upper_tx_value(p, index, ctx):
-    """上位層へ返す送信確認の ID。PduR 宛てなら PduR の送信元 PDU、NM 宛てなら CanNm の TX PDU のシンボリック名。"""
+    """上位層へ返す送信確認の ID。PduR 宛てなら PduR の送信元 PDU、NM 宛てなら CanNm の TX PDU のシンボリック名、
+    時刻同期宛ては CanTSyn_Cfg.h の CANTSYN_TX_PDU_ID。"""
     if p["txConfirm"] == "PDUR":
         return symbols.pdur_src_for_canif_tx(ctx, p, index)
+    if p["txConfirm"] == "CANTSYN":
+        return "CANTSYN_TX_PDU_ID"
     return symbols.cannm_tx_for_canif(ctx, p)
 
 

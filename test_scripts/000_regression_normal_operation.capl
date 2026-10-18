@@ -2,7 +2,7 @@
 //
 // 実エンジン ECU / ABS ECU のように、E2E Profile05 (CRC16+8bitカウンタ) で保護した EngineInfo (0x100) と
 // AbsInfo (0x110) を 200ms 周期で送り、ECU が出力するフレームを受信して PASS/FAIL を判定する。
-// 約 20 秒で終わる（最後に結果が出る。その後は「停止」ボタンで終了する）。
+// 約 20 秒で終わる（最後に結果が出て、stop() でスクリプト自身が終了する）。
 //
 // 前提:
 //   - ECU を起動 (リセット) した直後で、FAULT 状態 (警告灯 D7 の点滅中) ではないこと。
@@ -316,7 +316,7 @@ on timer Tick
         {
             write("結果: FAIL (%d 件中 %d 件が不合格)", passCount + failCount, failCount);
         }
-        write("終了しました。「停止」ボタンでスクリプトを止めてください");
+        stop();  // on timer / on message を持つため、stop() を呼ばないと「停止」ボタンまで動き続ける
     }
     else
     {

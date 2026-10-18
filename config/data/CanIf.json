@@ -9,7 +9,8 @@
     "TxPduId=3: WarningStatus  (CAN 0x210, COM Signal Group)",
     "TxPduId=4: E2EHealthStatus (CAN 0x220, COM PERIODIC)",
     "TxPduId=5: ImmobilizerStatus (CAN 0x230, COM DIRECT。Signal Gateway 転送先)",
-    "TxPduId=6: TestMsg (CAN 0x300, COM PERIODIC。信号追加の練習用のテスト専用フレーム)"
+    "TxPduId=6: TestMsg (CAN 0x300, COM PERIODIC。信号追加の練習用のテスト専用フレーム)",
+    "TxPduId=7: TimeSync (CAN 0x240, CanTSyn。PduR/Com を経由せず直接呼び出す)"
   ],
   "rxPduCountDoc": [
     "RX PDU テーブルのエントリ数（受信 CAN フレーム種別数）",
@@ -137,6 +138,28 @@
       "upperLayerTxPduId": 5,
       "hth": 0,
       "txConfirm": "PDUR"
+    },
+    {
+      "name": "CanTSyn_Tx",
+      "frame": "TimeSync",
+      "title": "時刻同期フレーム（SYNC/FUP）",
+      "note": [
+        "CanTSyn.c は PduR/Com を経由せず CanIf_Transmit(CANTSYN_CANIF_TX_PDU_ID, ...) を",
+        "直接呼び出す。SYNC と FUP は同じ PDU（同じ CAN ID）で、Byte0 の Type で区別する。"
+      ],
+      "hth": 0,
+      "txConfirm": "CANTSYN",
+      "notes": {
+        "upperLayerTxPduId": [
+          "CanTSyn 側の TX PDU の ID（CanTSyn_Cfg.h の CANTSYN_TX_PDU_ID）"
+        ],
+        "dlc": [
+          "SYNC/FUP とも 8（クラシック CAN、[SWS_CanTSyn_00010]）"
+        ],
+        "txConfirm": [
+          "SYNC の送信完了で FUP を送信する（[SWS_CanTSyn_00045]）"
+        ]
+      }
     }
   ],
   "rxPdus": [

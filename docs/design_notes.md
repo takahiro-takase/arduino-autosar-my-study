@@ -79,10 +79,11 @@ C ファイルから C++ 関数を呼ぶすべてのヘッダに `extern "C"` �
 ## ログレベルの抑制 (Det_Cfg.h)
 
 `Det_Cfg.h` の `DET_LOG_LEVEL`（既定値 `LOG_I`）以下の重要度のログのみ出力されます
-（`LogLevel` は数値が小さいほど重要度が高い: `LOG_T`=0（テスト専用トレース）< `LOG_E` < `LOG_W` < `LOG_I` < `LOG_D`）。
-既定では ERROR/WARN/INFO のみ出力し、DEBUG（例: IoHwAb の ADC 電圧低下デバウンス過程など、
-毎サイクル出力されうる詳細ログ）を抑制します。全レベル出力したい場合は
-`platformio.ini` の `build_flags` に `-D DET_LOG_LEVEL=LOG_D` を追加してください。
+（`LogLevel` は数値が小さいほど重要度が高い: `LOG_T`=0（テスト専用トレース）< `LOG_E` < `LOG_W` < `LOG_I` < `LOG_D` < `LOG_V`）。
+既定では ERROR/WARN/INFO のみ出力し、DEBUG（メッセージ単位の送受信: ComStack の TX/RX
+など、判断の過程）と VERBOSE（毎サイクル繰り返し出る詳細: WdgM の生存確認、ADC の電圧など）
+を抑制します。ComStack の送受信は CAN ツールの CAN ログで確認できます。全レベル出力したい場合は
+`platformio.ini` の `build_flags` に `-D DET_LOG_LEVEL=LOG_V`（DEBUG まででよければ `LOG_D`）を追加してください。
 
 <a id="fixed-buffer-size"></a>
 ## 固定長バッファのサイズは設定定数から計算する

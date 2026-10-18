@@ -70,6 +70,7 @@
 #include "PduR_Cfg.h"
 #include "CanNm.h"
 #include "CanNm_Cfg.h"
+#include "CanTSyn.h"
 
 /* ======================================================================
  * Global Variables
@@ -183,6 +184,22 @@ static const CanIf_TxPduConfigType CanIf_TxPduConfigData[CANIF_TX_PDU_COUNT] = {
         .Dlc               = 1U,                             /* DaVinci: CanIfTxPduDlc */
         .Hth               = 0U,                             /* DaVinci: CanIfTxPduHthIdRef */
         .TxConfirmFct      = PduR_CanIfTxConfirmation        /* DaVinci: CanIfTxPduUserTxConfirmationName */
+    },
+    {
+        /* ---------------------------------------------------------------
+         * TxPduId=7: 時刻同期フレーム（SYNC/FUP）
+         * DaVinci: /ActiveEcuC/CanIf/CanIfInitCfg/CanIfTxPduCfg/CanTSyn_Tx
+         * CanTSyn.c は PduR/Com を経由せず CanIf_Transmit(CANTSYN_CANIF_TX_PDU_ID, ...) を
+         * 直接呼び出す。SYNC と FUP は同じ PDU（同じ CAN ID）で、Byte0 の Type で区別する。
+         * --------------------------------------------------------------- */
+        .UpperLayerTxPduId = CANTSYN_TX_PDU_ID,     /* DaVinci: CanIfTxPduId
+                                                     *          CanTSyn 側の TX PDU の ID（CanTSyn_Cfg.h の CANTSYN_TX_PDU_ID） */
+        .CanId             = 0x240U,                /* DaVinci: CanIfTxPduCanId */
+        .Dlc               = 8U,                    /* DaVinci: CanIfTxPduDlc
+                                                     *          SYNC/FUP とも 8（クラシック CAN、[SWS_CanTSyn_00010]） */
+        .Hth               = 0U,                    /* DaVinci: CanIfTxPduHthIdRef */
+        .TxConfirmFct      = CanTSyn_TxConfirmation /* DaVinci: CanIfTxPduUserTxConfirmationName
+                                                     *          SYNC の送信完了で FUP を送信する（[SWS_CanTSyn_00045]） */
     }
 };
 

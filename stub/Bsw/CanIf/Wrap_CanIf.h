@@ -128,6 +128,9 @@ extern Std_ReturnType ForcedReturn_CanIf_SetPduMode;
 extern Std_ReturnType ForcedReturn_CanIf_GetPduMode;
 extern CanIf_NotifStatusType ForcedReturn_CanIf_GetTxConfirmationState;
 
+extern PduIdType     LastPduId_CanIf_Transmit;
+extern PduLengthType LastLength_CanIf_Transmit;
+extern uint8         LastData_CanIf_Transmit[8];
 extern uint8         LastData_CanIf_RxIndication[8];
 extern Can_HwType    LastMailbox_CanIf_RxIndication;
 extern PduLengthType LastLength_CanIf_RxIndication;

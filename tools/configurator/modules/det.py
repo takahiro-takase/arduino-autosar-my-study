@@ -1,13 +1,13 @@
 """Det（Det_Cfg.h）のログレベルの既定値の生成。
 
 Det.json に書く値:
-  logLevel.value : 既定のログレベル。LOG_T / LOG_E / LOG_W / LOG_I / LOG_D のどれか（Det.h の LogLevel）。
+  logLevel.value : 既定のログレベル。LOG_T / LOG_E / LOG_W / LOG_I / LOG_D / LOG_V のどれか（Det.h の LogLevel）。
                    ビルド設定（-DDET_LOG_LEVEL=...）で上書きできるよう、生成するのは `#ifndef DET_LOG_LEVEL` の中の既定値。
   logLevel.doc   : 既定値の説明（行末のコメントとして出す）
 Det_Cfg.h の他の定数（ModuleId、エラーコード、ApiId、バージョン）は AUTOSAR の仕様で決まる固定値のため、手書きのまま。
 """
 
-LEVELS = ("LOG_T", "LOG_E", "LOG_W", "LOG_I", "LOG_D")
+LEVELS = ("LOG_T", "LOG_E", "LOG_W", "LOG_I", "LOG_D", "LOG_V")
 
 
 def validate(cfg):
