@@ -19,7 +19,8 @@
     "RxPduId=1: UDS 診断要求   (CAN 0x7E0, DCM)   診断ツール",
     "RxPduId=2: AbsInfo        (CAN 0x110, COM)   ABS ECU",
     "RxPduId=3: ImmobilizerCmd (CAN 0x120, SecOC) KeyFobEcu 想定",
-    "RxPduId=4: NM フレーム    (CAN 0x400, CanNm。PduR/Com を経由せず直接呼び出す)"
+    "RxPduId=4: NM フレーム    (CAN 0x400, CanNm。PduR/Com を経由せず直接呼び出す)",
+    "RxPduId=5: TimeSyncIn (CAN 0x241, CanTSyn。PduR/Com を経由せず直接呼び出す)"
   ],
   "txPdus": [
     {
@@ -238,6 +239,17 @@
           "Control Bit Vector 1B + Source Node ID 1B"
         ]
       }
+    },
+    {
+      "name": "CanTSyn_Rx",
+      "frame": "TimeSyncIn",
+      "title": "時刻同期フレーム（SYNC/FUP、受信）",
+      "note": [
+        "CanIf は PduR/Com を経由せず CanTSyn_RxIndication() を直接呼び出す。",
+        "SYNC と FUP は同じ PDU（同じ CAN ID）で、Byte0 の Type で区別する。"
+      ],
+      "hrh": 0,
+      "rxIndication": "CANTSYN"
     }
   ]
 }

@@ -61,7 +61,7 @@
         "note": { "$ref": "#/$defs/commentLines" },
         "upperLayerRxPduId": { "$ref": "#/$defs/pduId", "description": "上位層へ渡す受信 PDU ID。rxIndication が PDUR のときだけ書く（CANNM のときは CanNm.json の nmRxPduId から引く）" },
         "hrh": { "type": "integer", "minimum": 0, "maximum": 255 },
-        "rxIndication": { "enum": ["PDUR", "CANNM"], "description": "受信通知の宛先" },
+        "rxIndication": { "enum": ["PDUR", "CANNM", "CANTSYN"], "description": "受信通知の宛先（CANTSYN は時刻同期 CanTSyn。上位層へ渡す ID は CanTSyn_Cfg.h の CANTSYN_RX_PDU_ID）" },
         "notes": {
           "type": "object",
           "additionalProperties": false,

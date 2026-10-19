@@ -93,6 +93,10 @@
     {
       "task": "CanTSyn_MainFunction",
       "symbol": "CANTSYN_MAIN"
+    },
+    {
+      "task": "StbM_MainFunction",
+      "symbol": "STBM_MAIN"
     }
   ],
   "excludedOsTasks": [

@@ -17,6 +17,7 @@
 extern "C" {
 #include "CanTSyn.h"
 #include "CanTSyn_Cfg.h"
+#include "StbM.h"
 #include "Fake_Millis.h"
 #include "Fake_Det_Hw.h"
 #include "Wrap_CanIf.h"
@@ -56,6 +57,7 @@ protected:
         FailFromCallCount_CanIf_Transmit = 1U;   // 1 回目から強制戻り値（成功）
         ForcedReturn_CanIf_Transmit      = E_OK;
         FakeMillis_Value                 = 12345UL;
+        StbM_Init(NULL);
     }
 
     void TearDown() override

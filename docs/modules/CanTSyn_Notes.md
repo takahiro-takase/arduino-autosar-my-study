@@ -1,4 +1,4 @@
-# CanTSyn（CAN 時刻同期、時間マスターのみ）
+# CanTSyn（CAN 時刻同期、時間マスター・時間スレーブ）
 
 > [README](../../README.md) の「[モジュール一覧](../../README.md#module-list)」節から分離。
 
@@ -88,19 +88,41 @@ ECU の再起動は、ECU 時刻が前回より小さくなることで検出し
 | 項目 | 状況 |
 | --- | --- |
 | 時間マスター（SYNC/FUP の送信） | 実装済み |
-| 時間スレーブ（`CanTSyn_RxIndication`、受信した時刻を StbM へ反映） | 未実装 |
+| 時間スレーブ（`CanTSyn_RxIndication`、受信した時刻を StbM の時間ベース 1 へ反映） | 実装済み（時間領域 1、CAN ID 0x241） |
 | CRC 付きメッセージ（0x20/0x28）の送信 | 実装済み（`CANTSYN_TX_CRC_SECURED`、既定 1） |
 | OFS/OFNS（オフセット時間ベース）、CAN FD の拡張フォーマット | 未実装 |
-| 時刻源 | StbM ではなく ECU の稼働時間（`CanTSyn_GetNowMs()`、Os カウンタ） |
-| 時間領域 | 0 の1つ。時間ベースの状態（同期/ゲートウェイ）は持たない |
+| 時刻源 | StbM（[StbM_Notes.md](./StbM_Notes.md)）。送信は時間ベース 0（本 ECU が時間マスター）、受信は時間ベース 1。`CanTSyn_GetNowMs()`（Os カウンタ）は、送信周期と待ち時間の計時だけに使う |
+| 時間領域 | 送信が 0、受信が 1 |
 | ナノ秒の分解能 | ms（`1ms = 1,000,000ns` 単位） |
 
 API は SWS_CanTSyn に合わせています（`CanTSyn_Init`/`GetVersionInfo`/`SetTransmissionMode`/
-`MainFunction`/`TxConfirmation`、開発エラー `CANTSYN_E_*`）。StbM を実装する場合は、
-`CanTSyn_GetNowMs()` を `StbM_GetCurrentTime()` / `StbM_GetCurrentTimeRaw()` /
-`StbM_GetCurrentTimeDiff()` に置き換え、`CanTSyn_Cfg.h` の設定値（時間領域 ID・送信周期・
-送信完了待ちの時間）を ECUC のパラメータ（`CanTSynGlobalTimeDomainId` など）へ対応づければ、
-メッセージフォーマットと送信シーケンスはそのまま使えます。
+`MainFunction`/`TxConfirmation`/`RxIndication`、開発エラー `CANTSYN_E_*`）。設定値（時間領域 ID・
+送信周期・送信完了待ちの時間・受信の CRC 検証・FUP の待ち時間・SC の増分の上限）は、ECUC の
+パラメータ（`CanTSynGlobalTimeDomainId`・`CanTSynGlobalTimeTxPeriod`・
+`CanTSynMasterConfirmationTimeout`・`CanTSynRxCrcValidated`・`CanTSynGlobalTimeFollowUpTimeout`・
+`CanTSynGlobalTimeSequenceCounterJumpWidth`）に対応します。
+
+## 時間スレーブ（受信）
+
+他ノードの時間マスターが時間領域 1・CAN ID 0x241 で送る SYNC/FUP を受け、StbM の時間ベース 1 へ
+反映します。アルゴリズムは [SWS_CanTSyn_00073]:
+
+```
+SYNC 受信:  T0 = SYNC の秒、T2raw = StbM_GetCurrentTimeRaw()（受信時の仮想ローカル時間）を控える
+FUP 受信:   T4 = OVS の秒 + FUP のナノ秒、T3diff = StbM_GetCurrentTimeDiff(T2raw)（SYNC を受けてからの経過時間）
+            全域時間 = T0 + T4 + T3diff   → StbM_BusSetGlobalTime(時間ベース 1, 全域時間, 伝搬遅延 0)
+```
+
+検証（ひとつでも外れたら、その SYNC/FUP は使わない）:
+
+| 検証 | 内容 |
+| --- | --- |
+| 時間領域 | `CANTSYN_RX_TIME_DOMAIN_ID`（1）と一致 |
+| DLC | 8 以上 |
+| Type と CRC | `CANTSYN_RX_CRC_VALIDATED`=1 なら Type 0x20/0x28 で CRC が正しいもの、0 なら 0x10/0x18 |
+| SC の増分（SYNC） | 直前に受けた SYNC との差が 1〜`CANTSYN_RX_SC_JUMP_WIDTH`。外れた SYNC は無視するが、SC は記録する（1 回取りこぼしても、次の SYNC から復帰できる） |
+| SC の一致（FUP） | 対の SYNC と同じ。違えば、保留中の SYNC も捨てる |
+| FUP の待ち時間 | SYNC から `CANTSYN_RX_FOLLOW_UP_TIMEOUT_MS`（200ms）未満 |
 
 ## 配線
 
@@ -109,7 +131,8 @@ API は SWS_CanTSyn に合わせています（`CanTSyn_Init`/`GetVersionInfo`/`
 | 信号表（`config/data/can_signals.json`） | フレーム `TimeSync`（0x240、DLC=8）。Com は経由しない（`Com.json` の `excludedFrames`） |
 | `config/data/CanIf.json` | TX PDU `CanTSyn_Tx`（`txConfirm: "CANTSYN"`）。送信完了は `CanTSyn_TxConfirmation()` へ通知 |
 | `config/data/Os.json` / `BswM.json` | タスク `CanTSyn_MainFunction`（100ms）。`CanNm` と同じく POST_RUN（バススリープの準備中）でも動き続け、SHUTDOWN（バススリープ）で BswM が止める。Com の I-PDU グループや ComM の通信許可は経由しない（`CanNm` と同じ。SILENT_COM 中の送信抑制は CanIf の PduMode で効く） |
-| `EcuM_Init()` | `CanTSyn_Init(NULL)`（`ComM_RequestComMode()` の前） |
+| `config/data/CanIf.json`（受信） | RX PDU `CanTSyn_Rx`（`rxIndication: "CANTSYN"`、信号表 `TimeSyncIn` = 0x241）。受信は `CanTSyn_RxIndication()` へ通知 |
+| `EcuM_Init()` | `StbM_Init(NULL)` → `CanTSyn_Init(NULL)`（`ComM_RequestComMode()` の前） |
 
 ## 単体テスト
 

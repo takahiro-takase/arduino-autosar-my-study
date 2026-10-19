@@ -155,6 +155,12 @@
       "periodMs": 100,
       "header": "CanTSyn.h",
       "summary": "時刻同期メッセージ（SYNC/FUP）の周期送信と送信完了待ちの監視"
+    },
+    {
+      "function": "StbM_MainFunction",
+      "periodMs": 100,
+      "header": "StbM.h",
+      "summary": "同期時間ベースの同期喪失タイムアウトの監視"
     }
   ]
 }

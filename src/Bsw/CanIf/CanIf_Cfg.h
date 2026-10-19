@@ -119,8 +119,9 @@
  *  RxPduId=1: UDS 診断要求   (CAN 0x7E0, DCM)   診断ツール
  *  RxPduId=2: AbsInfo        (CAN 0x110, COM)   ABS ECU
  *  RxPduId=3: ImmobilizerCmd (CAN 0x120, SecOC) KeyFobEcu 想定
- *  RxPduId=4: NM フレーム    (CAN 0x400, CanNm。PduR/Com を経由せず直接呼び出す) */
-#define CANIF_RX_PDU_COUNT  5U
+ *  RxPduId=4: NM フレーム    (CAN 0x400, CanNm。PduR/Com を経由せず直接呼び出す)
+ *  RxPduId=5: TimeSyncIn (CAN 0x241, CanTSyn。PduR/Com を経由せず直接呼び出す) */
+#define CANIF_RX_PDU_COUNT  6U
 /* @@GEN-END canif-counts */
 
 /* @@GEN-BEGIN canif-symbols  生成元: config/data/CanIf.json  （自動生成: 手編集禁止） */
@@ -152,6 +153,8 @@
 #define CanIfConf_CanIfRxPduCfg_ImmobilizerCmd_Rx     3U
 /* cppcheck-suppress misra-c2012-2.5 */
 #define CanIfConf_CanIfRxPduCfg_CanNm_Rx              4U
+/* cppcheck-suppress misra-c2012-2.5 */
+#define CanIfConf_CanIfRxPduCfg_CanTSyn_Rx            5U
 /* @@GEN-END canif-symbols */
 
 /** CanIf_ReadRxPduData()（2026-08 追加）の内部バッファ配列サイズ。

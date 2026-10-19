@@ -1,0 +1,163 @@
+// 実機検証: CanTSyn の時間スレーブ（受信）と StbM の時間ベース 1 の動作確認。
+//
+// 背景: ECU は CAN ID 0x241・時間領域 1 の SYNC/FUP（CRC 付き、Type 0x20 / 0x28）を受けて、StbM の時間ベース 1
+// （時間スレーブ）の全域時間を更新する（docs/modules/CanTSyn_Notes.md / StbM_Notes.md）。このスクリプトは外部の
+// 時間マスターの役をして 0x241 に SYNC/FUP を送り、ECU が受け付ける/捨てるべきフレームを区別することを確認する。
+//
+// このスクリプトは ECU の内部状態を CAN で読めないため、判定は ECU のシリアルログ（統合ログの SER 行）で行う。
+// 見るログ（どちらも既定のログレベル INFO / WARN で出る）:
+//   StbM : base=1 synchronized          時間ベース 1 が同期した（初回、またはタイムアウト後の復帰）
+//   StbM : base=1 sync loss timeout     時間ベース 1 が 5 秒更新されず、同期喪失（TIMEOUT）になった
+//
+// 手順と、ECU のログの期待値（スクリプトも各手順で「期待」を write する）:
+//   [1] FUP の CRC が不正                       -> synchronized は出ない
+//   [2] FUP の SC が SYNC と違う                 -> 出ない
+//   [3] FUP が SYNC から 400ms 遅れる（待ち時間 200ms 超過） -> 出ない
+//   [4] 時間領域が違う（2）の SYNC/FUP           -> 出ない
+//   [5] 正しい SYNC/FUP                         -> synchronized が 1 回出る
+//   [6] 正しい SYNC/FUP をあと 3 組（1 秒おき）    -> 出ない（同期済みのため）
+//   [7] 何も送らずに 7 秒待つ                    -> sync loss timeout が 1 回出る
+//   [8] 正しい SYNC/FUP                         -> synchronized が再び 1 回出る
+//
+// 前提:
+//   - can_tool に CAN 接続済み。ECU を起動（リセット）した直後に実行する（[1] の前に時間ベース 1 が
+//     すでに同期済みだと、[1]〜[4] で「出ない」を確認できない）
+//   - ECU のログに ECU 側の行（SER）が出るよう、シリアルも接続しておく
+//   - ECU が眠らないように、TesterPresent（0x7E0）を 1 秒ごとに送り続ける
+//   - 約 30 秒で終わる
+
+variables
+{
+    int sc;            // 次に送る SYNC の SC（0〜15 で循環）
+}
+
+// CRC-8H2F の 1 バイト分（多項式 0x2F、反転なし）
+int UpdateCrc8(int crc, int b)
+{
+    int i;
+    int c;
+
+    c = (crc ^ b) & 0xFF;
+    for (i = 0; i < 8; i++)
+    {
+        if (c & 0x80)
+        {
+            c = ((c << 1) ^ 0x2F) & 0xFF;
+        }
+        else
+        {
+            c = (c << 1) & 0xFF;
+        }
+    }
+    return c;
+}
+
+// SYNC/FUP の CRC。Byte2〜Byte7 に DataID を続けて計算し、最後に 0xFF と XOR する。
+// DataID は SYNC=(0x241 + SC) の下位 8bit、FUP=(0x241 + 0x10 + SC) の下位 8bit。
+int FrameCrc(int b2, int b3, int b4, int b5, int b6, int b7, int dataId)
+{
+    int crc;
+
+    crc = 0xFF;
+    crc = UpdateCrc8(crc, b2);
+    crc = UpdateCrc8(crc, b3);
+    crc = UpdateCrc8(crc, b4);
+    crc = UpdateCrc8(crc, b5);
+    crc = UpdateCrc8(crc, b6);
+    crc = UpdateCrc8(crc, b7);
+    crc = UpdateCrc8(crc, dataId);
+    return crc ^ 0xFF;
+}
+
+// SYNC（秒 = 1000000 = 0x000F4240）。domain は時間領域、frameSc はフレームに載せる SC。
+void SendSync(int domain, int frameSc)
+{
+    int b2;
+    int crc;
+
+    b2 = (domain << 4) | frameSc;
+    crc = FrameCrc(b2, 0x00, 0x00, 0x0F, 0x42, 0x40, (0x241 + frameSc) & 0xFF);
+    send_can(0x241, 0x20, crc, b2, 0x00, 0x00, 0x0F, 0x42, 0x40);
+}
+
+// FUP（ナノ秒 = 500000000 = 0x1DCD6500、OVS=0、SGW=0）。badCrc=1 なら CRC を 1 ビット壊す。
+void SendFup(int domain, int frameSc, int badCrc)
+{
+    int b2;
+    int crc;
+
+    b2 = (domain << 4) | frameSc;
+    crc = FrameCrc(b2, 0x00, 0x1D, 0xCD, 0x65, 0x00, (0x241 + 0x10 + frameSc) & 0xFF);
+    if (badCrc)
+    {
+        crc = crc ^ 0x01;
+    }
+    send_can(0x241, 0x28, crc, b2, 0x00, 0x1D, 0xCD, 0x65, 0x00);
+}
+
+// 時間領域 1 の SYNC/FUP の 1 組。FUP は delayMs ミリ秒後に送る。SC は SYNC ごとに +1。
+void SendPair(int delayMs, int fupScOffset, int badCrc)
+{
+    SendSync(1, sc);
+    wait(delayMs / 1000.0);
+    SendFup(1, (sc + fupScOffset) & 0x0F, badCrc);
+    sc = (sc + 1) & 0x0F;
+}
+
+on timer keepAlive
+{
+    send_can(0x7E0, 0x02, 0x3E, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00);
+    setTimer(keepAlive, 1000);
+}
+
+on start
+{
+    sc = 1;
+
+    write("=== CanTSyn 時間スレーブの実機検証（判定は ECU のシリアルログで行う）===");
+
+    // ECU を起こし、以後眠らせない
+    send_can(0x7E0, 0x02, 0x3E, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00);
+    setTimer(keepAlive, 1000);
+    wait(2);
+
+    write("[1] FUP の CRC が不正 -> 期待: 'base=1 synchronized' は出ない");
+    SendPair(20, 0, 1);
+    wait(1);
+
+    write("[2] FUP の SC が SYNC と違う -> 期待: 出ない");
+    SendPair(20, 1, 0);
+    wait(1);
+
+    write("[3] FUP が 400ms 遅れる -> 期待: 出ない");
+    SendPair(400, 0, 0);
+    wait(1);
+
+    write("[4] 時間領域 2 の SYNC/FUP -> 期待: 出ない");
+    SendSync(2, sc);
+    wait(0.02);
+    SendFup(2, sc, 0);
+    wait(1);
+
+    write("[5] 正しい SYNC/FUP -> 期待: 'base=1 synchronized' が 1 回出る");
+    SendPair(20, 0, 0);
+    wait(1);
+
+    write("[6] 正しい SYNC/FUP をあと 3 組 -> 期待: 出ない（同期済み）");
+    SendPair(20, 0, 0);
+    wait(1);
+    SendPair(20, 0, 0);
+    wait(1);
+    SendPair(20, 0, 0);
+
+    write("[7] 7 秒待つ -> 期待: 'base=1 sync loss timeout' が 1 回出る");
+    wait(7);
+
+    write("[8] 正しい SYNC/FUP -> 期待: 'base=1 synchronized' が再び 1 回出る");
+    SendPair(20, 0, 0);
+    wait(1);
+
+    cancelTimer(keepAlive);
+    write("=== 送信完了。ECU のログの StbM 行が、上の期待どおりか確認してください ===");
+    stop();
+}

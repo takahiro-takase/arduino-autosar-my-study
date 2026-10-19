@@ -67,7 +67,8 @@
  *                                ComM_RequestComMode(FULL_COM) より必ず前に置くこと
  *                                （上記と同じ理由。Nm_NetworkRequest() が NM_E_UNINIT
  *                                で失敗すると Nm 層より下の CanNm まで要求が届かない）
- *               CanTSyn_Init      — 時刻同期（時間マスター）初期化。CanIf_Init() の後で
+ *               StbM_Init         — 同期時間ベースの初期化。CanTSyn_Init() より前に置くこと。
+ *               CanTSyn_Init      — 時刻同期（時間マスター・時間スレーブ）初期化。CanIf_Init() の後で
  *                                あればよい（CanIf の TX PDU を使うだけで、他モジュールの
  *                                状態に依存しない）。ComM_RequestComMode() より前に置くのは
  *                                最初の SYNC を CAN の開通後に送るためではなく、全 Init を
@@ -156,6 +157,7 @@
 #include "ComM.h"
 #include "CanNm.h"
 #include "CanTSyn.h"
+#include "StbM.h"
 #include "Nm.h"
 #include "Rte.h"
 #include "IoHwAb.h"
@@ -299,7 +301,8 @@ void EcuM_Init(void)
                                * 必ず前に置くこと（上記と同じ理由。Nm_NetworkRequest()
                                * が NM_E_UNINIT で失敗すると Nm 層より下の CanNm
                                * まで要求が届かない）。 */
-    CanTSyn_Init(NULL);           /* 時刻同期（時間マスター）。CanIf_Init() 後ならよい */
+    StbM_Init(NULL);              /* 同期時間ベース。CanTSyn_Init() より前（CanTSyn が時刻を読む） */
+    CanTSyn_Init(NULL);           /* 時刻同期（時間マスター・時間スレーブ）。CanIf_Init() 後ならよい */
     (void)ComM_RequestComMode(COMM_USER_0, COMM_FULL_COMMUNICATION);/* 全層初期化後に開通 */
     (void)Rte_Start();                /* RTE 自身の初期化（[SWS_Rte_02569]）。SW-C の
                                   * Init Runnable 起動より必ず前に置くこと
