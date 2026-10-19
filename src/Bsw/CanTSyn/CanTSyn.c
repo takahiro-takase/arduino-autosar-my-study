@@ -27,9 +27,12 @@
  * Includes
  * ====================================================================== */
 
+#include <stdint.h>
+
 #include "CanTSyn.h"
 #include "CanTSyn_Cfg.h"
 #include "CanIf.h"
+#include "StbM.h"
 #include "Det.h"
 #include "Os.h"
 
@@ -51,12 +54,22 @@
 /** SC（シーケンスカウンタ）の値域（4bit、[SWS_CanTSyn_00048]）。 */
 #define CANTSYN_SC_MASK  0x0FU
 
+/** SYNC 送信時に T0 と T0raw を同じ瞬間に読めるまでの最大試行回数（tick をまたいだ場合に読み直す）。 */
+#define CANTSYN_T0_READ_TRIES  3U
+
 /** OVS（秒のオーバーフロー、FUP Byte3 の Bit1-0）の最大値。 */
 #define CANTSYN_OVS_MAX  3UL
 
 /* ======================================================================
  * Type Definitions
  * ====================================================================== */
+
+/** 受信（時間スレーブ）シーケンスの内部状態。 */
+typedef enum
+{
+    CANTSYN_RX_STATE_IDLE = 0,   /**< SYNC を待っている */
+    CANTSYN_RX_STATE_WAIT_FUP    /**< SYNC を受けた。対の FUP を待っている */
+} CanTSyn_RxStateType;
 
 /** 送信シーケンスの内部状態。 */
 typedef enum
@@ -89,6 +102,25 @@ static unsigned long CanTSyn_WaitStartMs;
  *  SYNC を送信要求するたびに +1 する（SendSync）。FUP は同じ値を使う。 */
 static uint8 CanTSyn_Sc;
 
+/** 現在の SYNC に載せた T0 の ns 部分 [ns]（StbM の全域時間から取る。FUP の T4 計算用）。 */
+static uint32 CanTSyn_T0Ns;
+
+/** SYNC を CanIf へ渡した時点の仮想ローカル時間（StbM_GetCurrentTimeRaw()、T0raw）。 */
+static StbM_TimeStampRawType CanTSyn_T0Raw;
+
+/** 受信（時間スレーブ）の状態。 */
+static CanTSyn_RxStateType CanTSyn_RxState;
+
+/** 受け付けた直近の SYNC の SC（SC の増分の検証用）。CanTSyn_RxHaveSc が 0 の間は無効。 */
+static uint8 CanTSyn_RxLastSc;
+static uint8 CanTSyn_RxHaveSc;
+
+/** 待っている FUP の対になる SYNC の SC、秒（T0）、受信時の仮想ローカル時間（T2raw）、受信時刻 [ms]。 */
+static uint8                 CanTSyn_RxSyncSc;
+static uint32                CanTSyn_RxSyncSec;
+static StbM_TimeStampRawType CanTSyn_RxT2Raw;
+static unsigned long         CanTSyn_RxWaitStartMs;
+
 /* ======================================================================
  * Function Prototypes
  * ====================================================================== */
@@ -99,7 +131,12 @@ static void CanTSyn_SendFup(unsigned long nowMs);
 static void CanTSyn_WriteBe32(uint8* dst, uint32 value);
 static Std_ReturnType CanTSyn_TransmitPdu(uint8* pdu);
 static uint8 CanTSyn_Crc8H2FUpdate(uint8 crc, uint8 data);
+static uint8 CanTSyn_CalcFrameCrc(const uint8* frame, uint8 dataId);
 static void CanTSyn_SetCrc(uint8* pdu, uint8 dataId);
+static uint32 CanTSyn_ReadBe32(const uint8* src);
+static boolean CanTSyn_RxCrcOk(const uint8* data, uint8 dataId);
+static void CanTSyn_RxHandleSync(const uint8* data, unsigned long nowMs);
+static void CanTSyn_RxHandleFup(const uint8* data, unsigned long nowMs);
 
 /* ======================================================================
  * Functions
@@ -133,6 +170,15 @@ void CanTSyn_Init(const CanTSyn_ConfigType* ConfigPtr)
     /* 初回の呼び出しで SYNC を送るため、前回送信時刻を1周期前にしておく
      * （unsigned の引き算の折り返しで、経過時間は CANTSYN_TX_PERIOD_MS になる） */
     CanTSyn_LastSyncMs    = CanTSyn_GetNowMs() - CANTSYN_TX_PERIOD_MS;
+    CanTSyn_T0Ns          = 0U;
+    CanTSyn_T0Raw         = 0U;
+    CanTSyn_RxState       = CANTSYN_RX_STATE_IDLE;
+    CanTSyn_RxHaveSc      = 0U;
+    CanTSyn_RxLastSc      = 0U;
+    CanTSyn_RxSyncSc      = 0U;
+    CanTSyn_RxSyncSec     = 0U;
+    CanTSyn_RxT2Raw       = 0U;
+    CanTSyn_RxWaitStartMs = 0UL;
     CanTSyn_Initialized   = 1U;
 
     DET_LOGI(TAG, "Init ok period=%lums", (unsigned long)CANTSYN_TX_PERIOD_MS);
@@ -260,6 +306,14 @@ void CanTSyn_MainFunction(void)
     {
         /* 送信完了通知を待っている間は何もしない */
     }
+
+    if ((CanTSyn_RxState == CANTSYN_RX_STATE_WAIT_FUP)
+        && ((nowMs - CanTSyn_RxWaitStartMs) >= CANTSYN_RX_FOLLOW_UP_TIMEOUT_MS))
+    {
+        /* [SWS_CanTSyn_00063]: SYNC のあと FUP が待ち時間内に来なかった。その SYNC を捨てる。 */
+        DET_LOGD(TAG, "RX FUP timeout sc=%u", (unsigned)CanTSyn_RxSyncSc);
+        CanTSyn_RxState = CANTSYN_RX_STATE_IDLE;
+    }
 }
 
 /* ======================================================================
@@ -333,9 +387,246 @@ void CanTSyn_TxConfirmation(PduIdType TxPduId, Std_ReturnType result)
     }
 }
 
+/* ----------------------------------------------------------------------
+ * CanTSyn_RxIndication
+ * ---------------------------------------------------------------------- */
+
+/**
+ * \brief   時刻同期メッセージ（SYNC/FUP）の受信を通知する（CanIf から呼ばれる、時間スレーブ側）。
+ *
+ * \details SYNC を受けると、StbM の時間ベース 1 の仮想ローカル時間 T2raw を控えて FUP を待つ。
+ *          対応する FUP（SC が同じ）を待ち時間内に受けると、
+ *          全域時間 = T0（SYNC の秒）+ T4（FUP の OVS とナノ秒）+ T3diff（T2raw からの経過時間）を
+ *          求め、StbM_BusSetGlobalTime() で時間ベース 1 へ反映する（[SWS_CanTSyn_00073]）。
+ *          次のものは無視する: 時間領域が違うフレーム、Type が CANTSYN_RX_CRC_VALIDATED の設定と
+ *          合わないもの、CRC が合わないもの、SC の増分が 0 または CANTSYN_RX_SC_JUMP_WIDTH を
+ *          超える SYNC、SC が対の SYNC と違う FUP、待ち時間（CANTSYN_RX_FOLLOW_UP_TIMEOUT_MS）を
+ *          超えて届いた FUP、SYNC を受けていない FUP。
+ *
+ * \param[in]  RxPduId     受信した PDU の ID（CANTSYN_RX_PDU_ID 以外は
+ *                         CANTSYN_E_INVALID_PDUID を DET へ報告し何もしない）。
+ * \param[in]  PduInfoPtr  受信データ。NULL またはデータポインタが NULL なら
+ *                         CANTSYN_E_NULL_POINTER を DET へ報告する。DLC が足りないものは無視する。
+ *
+ * \AUTOSARReq     {SWS_CanTSyn_00096}
+ * \ServiceID      {0x42}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void CanTSyn_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
+{
+    if (CanTSyn_Initialized == 0U)
+    {
+        (void)Det_ReportError(CANTSYN_MODULE_ID, 0U, CANTSYN_API_ID_RX_INDICATION, CANTSYN_E_UNINIT);
+        return;
+    }
+
+    if (RxPduId != CANTSYN_RX_PDU_ID)
+    {
+        (void)Det_ReportError(CANTSYN_MODULE_ID, 0U, CANTSYN_API_ID_RX_INDICATION, CANTSYN_E_INVALID_PDUID);
+        return;
+    }
+
+    if ((PduInfoPtr == NULL) || (PduInfoPtr->SduDataPtr == NULL))
+    {
+        (void)Det_ReportError(CANTSYN_MODULE_ID, 0U, CANTSYN_API_ID_RX_INDICATION, CANTSYN_E_NULL_POINTER);
+        return;
+    }
+
+    const uint8* data = PduInfoPtr->SduDataPtr;
+
+    if ((PduInfoPtr->SduLength < CANTSYN_DLC)
+        || ((uint8)(data[2] >> 4U) != CANTSYN_RX_TIME_DOMAIN_ID))
+    {
+        return;   /* DLC が足りない、または別の時間領域のフレーム */
+    }
+
+    if (data[0] == CANTSYN_RX_TYPE_SYNC)
+    {
+        CanTSyn_RxHandleSync(data, CanTSyn_GetNowMs());
+    }
+    else if (data[0] == CANTSYN_RX_TYPE_FUP)
+    {
+        CanTSyn_RxHandleFup(data, CanTSyn_GetNowMs());
+    }
+    else
+    {
+        /* CANTSYN_RX_CRC_VALIDATED の設定と合わない Type は受け付けない（[SWS_CanTSyn_00057]/00058） */
+    }
+}
+
 /* ======================================================================
  * Internal Functions
  * ====================================================================== */
+
+/* ----------------------------------------------------------------------
+ * CanTSyn_RxHandleSync
+ * ---------------------------------------------------------------------- */
+
+/**
+ * \brief   受信した SYNC を検証し、FUP を待つ状態へ移る。
+ *
+ * \details 設定で CRC を検証する場合は CRC（Byte2〜Byte7 + DataID）が合うことを確認する。
+ *          SC の増分（直前に受け付けた SYNC との差）が 1〜CANTSYN_RX_SC_JUMP_WIDTH でなければ
+ *          無視する（[SWS_CanTSyn_00078]）。直前の SC は、無視した SYNC でも更新する
+ *          （1 回取りこぼしても、次の SYNC から復帰できるようにするため）。
+ *          受け付けたら、秒（T0）と、StbM の時間ベース 1 の仮想ローカル時間 T2raw を控える。
+ *
+ * \param[in]  data   受信した SYNC（CANTSYN_DLC バイト）。
+ * \param[in]  nowMs  現在時刻 [ms]（FUP の待ち時間の起点）。
+ */
+static void CanTSyn_RxHandleSync(const uint8* data, unsigned long nowMs)
+{
+    uint8 sc = (uint8)(data[2] & CANTSYN_SC_MASK);
+
+    if ((CANTSYN_RX_CRC_VALIDATED != 0U) && (!CanTSyn_RxCrcOk(data, CANTSYN_RX_DATA_ID_SYNC(sc))))
+    {
+        return;
+    }
+
+    uint8 jump = (uint8)((sc - CanTSyn_RxLastSc) & CANTSYN_SC_MASK);
+    boolean jumpOk = (CanTSyn_RxHaveSc == 0U) || ((jump >= 1U) && (jump <= CANTSYN_RX_SC_JUMP_WIDTH));
+
+    CanTSyn_RxLastSc = sc;
+    CanTSyn_RxHaveSc = 1U;
+
+    if ((!jumpOk) || (StbM_GetCurrentTimeRaw(STBM_TIME_BASE_SLAVE, &CanTSyn_RxT2Raw) != E_OK))
+    {
+        CanTSyn_RxState = CANTSYN_RX_STATE_IDLE;
+        return;
+    }
+
+    CanTSyn_RxSyncSc      = sc;
+    CanTSyn_RxSyncSec     = CanTSyn_ReadBe32(&data[4]);
+    CanTSyn_RxWaitStartMs = nowMs;
+    CanTSyn_RxState       = CANTSYN_RX_STATE_WAIT_FUP;
+}
+
+/* ----------------------------------------------------------------------
+ * CanTSyn_RxHandleFup
+ * ---------------------------------------------------------------------- */
+
+/**
+ * \brief   受信した FUP を検証し、全域時間を求めて StbM の時間ベース 1 へ反映する。
+ *
+ * \details SYNC を受けていない、CRC が合わない（設定で検証する場合）、SC が対の SYNC と
+ *          違う、待ち時間を超えた、のいずれかなら捨てる（SC が違うときは、保留中の SYNC も捨てる、
+ *          [SWS_CanTSyn_00076]）。受け付けたら、
+ *            全域時間 = T0（SYNC の秒）+ T4（OVS の秒 + FUP のナノ秒）+ T3diff（T2raw からの経過時間）
+ *          を StbM_BusSetGlobalTime() で時間ベース 1 へ反映する（[SWS_CanTSyn_00073]/00075/00064）。
+ *          FUP の SGW は SYNC_TO_GATEWAY ビットに反映する（[SWS_CanTSyn_00133]）。
+ *
+ * \param[in]  data   受信した FUP（CANTSYN_DLC バイト）。
+ * \param[in]  nowMs  現在時刻 [ms]（FUP の待ち時間の判定用）。
+ */
+static void CanTSyn_RxHandleFup(const uint8* data, unsigned long nowMs)
+{
+    uint8 sc = (uint8)(data[2] & CANTSYN_SC_MASK);
+
+    if (CanTSyn_RxState != CANTSYN_RX_STATE_WAIT_FUP)
+    {
+        return;   /* 対の SYNC を受けていない FUP */
+    }
+
+    CanTSyn_RxState = CANTSYN_RX_STATE_IDLE;   /* この SYNC は、この FUP で使い切る（捨てる場合も含む） */
+
+    if ((CANTSYN_RX_CRC_VALIDATED != 0U) && (!CanTSyn_RxCrcOk(data, CANTSYN_RX_DATA_ID_FUP(sc))))
+    {
+        return;
+    }
+
+    if ((sc != CanTSyn_RxSyncSc)
+        || ((nowMs - CanTSyn_RxWaitStartMs) >= CANTSYN_RX_FOLLOW_UP_TIMEOUT_MS))
+    {
+        return;
+    }
+
+    StbM_TimeStampRawType t3Diff = 0U;
+    if (StbM_GetCurrentTimeDiff(STBM_TIME_BASE_SLAVE, CanTSyn_RxT2Raw, &t3Diff) != E_OK)
+    {
+        return;
+    }
+
+    uint64_t totalNs = ((uint64_t)CanTSyn_RxSyncSec * (uint64_t)CANTSYN_NS_PER_SEC)
+                     + ((uint64_t)(data[3] & 0x03U) * (uint64_t)CANTSYN_NS_PER_SEC)   /* OVS */
+                     + (uint64_t)CanTSyn_ReadBe32(&data[4])                          /* T4 のナノ秒 */
+                     + (uint64_t)t3Diff;
+    uint64_t seconds = totalNs / (uint64_t)CANTSYN_NS_PER_SEC;
+
+    StbM_TimeStampType   ts;
+    StbM_MeasurementType measure;
+
+    ts.timeBaseStatus = (uint8)(((data[3] & 0x04U) != 0U) ? STBM_TIMEBASE_STATUS_SYNC_TO_GATEWAY : 0U);
+    ts.nanoseconds    = (uint32)(totalNs % (uint64_t)CANTSYN_NS_PER_SEC);
+    ts.seconds        = (uint32)(seconds & 0xFFFFFFFFULL);
+    ts.secondsHi      = (uint16)((seconds >> 32U) & 0xFFFFULL);
+    measure.pathDelay = 0U;   /* [SWS_CanTSyn_00115] */
+
+    if (StbM_BusSetGlobalTime(STBM_TIME_BASE_SLAVE, &ts, NULL, &measure) == E_OK)
+    {
+        DET_LOGD(TAG, "RX time updated sc=%u sec=%lu", (unsigned)sc, (unsigned long)ts.seconds);
+    }
+}
+
+/* ----------------------------------------------------------------------
+ * CanTSyn_ReadBe32
+ * ---------------------------------------------------------------------- */
+
+/**
+ * \brief   4 バイトのビッグエンディアンの値を読む（[SWS_CanTSyn_00008]）。
+ *
+ * \param[in]  src  読み出し元（4 バイト以上）。
+ * \return     値。
+ */
+static uint32 CanTSyn_ReadBe32(const uint8* src)
+{
+    return ((uint32)src[0] << 24U) | ((uint32)src[1] << 16U) | ((uint32)src[2] << 8U) | (uint32)src[3];
+}
+
+/* ----------------------------------------------------------------------
+ * CanTSyn_RxCrcOk
+ * ---------------------------------------------------------------------- */
+
+/**
+ * \brief   受信した SYNC/FUP の CRC（Byte1）が正しいか確認する。
+ *
+ * \details CRC は Byte2〜Byte7 に DataID を続けて計算する（送信側の CanTSyn_SetCrc と同じ、
+ *          [SWS_CanTSyn_00055]）。
+ *
+ * \param[in]  data    受信したフレーム（CANTSYN_DLC バイト）。
+ * \param[in]  dataId  この SC・メッセージ種別の DataID（CANTSYN_RX_DATA_ID_SYNC/FUP）。
+ * \return     TRUE=CRC が一致した。FALSE=一致しない。
+ */
+static boolean CanTSyn_RxCrcOk(const uint8* data, uint8 dataId)
+{
+    return (CanTSyn_CalcFrameCrc(data, dataId) == data[1]) ? TRUE : FALSE;
+}
+
+/* ----------------------------------------------------------------------
+ * CanTSyn_CalcFrameCrc
+ * ---------------------------------------------------------------------- */
+
+/**
+ * \brief   SYNC/FUP の CRC（Byte1 に載せる値）を計算する。送信（SetCrc）と受信（RxCrcOk）で共通。
+ *
+ * \details Byte2〜Byte7 に続けて DataID を投入し、最後に 0xFF と XOR する（[SWS_CanTSyn_00055]）。
+ *
+ * \param[in]  frame   SYNC/FUP（CANTSYN_DLC バイト。Byte1 は読まない）。
+ * \param[in]  dataId  この SC・メッセージ種別の DataID。
+ * \return     CRC。
+ */
+static uint8 CanTSyn_CalcFrameCrc(const uint8* frame, uint8 dataId)
+{
+    uint8 crc = 0xFFU;   /* 初期値 */
+
+    for (uint8 i = 2U; i < CANTSYN_DLC; i++)   /* Byte2〜Byte7 */
+    {
+        crc = CanTSyn_Crc8H2FUpdate(crc, frame[i]);
+    }
+    crc = CanTSyn_Crc8H2FUpdate(crc, dataId);  /* DataID を最後に */
+
+    return (uint8)(crc ^ 0xFFU);               /* 最終 XOR */
+}
 
 /* ----------------------------------------------------------------------
  * CanTSyn_GetNowMs
@@ -343,8 +634,8 @@ void CanTSyn_TxConfirmation(PduIdType TxPduId, Std_ReturnType result)
 
 /**
  * \brief   現在時刻 [ms] を返す（Os カウンタ SYSTEM_COUNTER の tick 値）。
- * \details StbM を実装した場合は StbM_GetCurrentTime() への置き換え箇所
- *          （CanTSyn_Cfg.h 参照）。millis() を直接呼ばず Os の GetCounterValue() を
+ * \details 送信周期・各種タイムアウトの判定に使う ms（StbM の全域時間とは別）。
+ *          millis() を直接呼ばず Os の GetCounterValue() を
  *          介する理由は CanNm.c の同名関数と同じ。
  */
 static unsigned long CanTSyn_GetNowMs(void)
@@ -379,20 +670,49 @@ static void CanTSyn_WriteBe32(uint8* dst, uint32 value)
 /**
  * \brief   SYNC メッセージを組み立てて CanIf_Transmit() へ渡す。
  *
- * \details T0 = 現在時刻。秒部分を SyncTimeSec へ書く（ns 部分は FUP の T4 計算で
- *          CanTSyn_LastSyncMs から求める）。SC は送信要求のたびに1進める（[SWS_CanTSyn_00048]。送信に
- *          失敗した場合も進める）。渡せた場合は送信完了通知待ちへ移り、渡せな
- *          かった場合は待機のまま、次の周期でやり直す。
+ * \details T0 = StbM の時間ベース 0 の現在の全域時間（[SWS_CanTSyn_00045]）。秒部分を SyncTimeSec へ書き、
+ *          ns 部分と、そのときの仮想ローカル時間 T0raw を FUP の T4 計算用に保持する。時間ベースが
+ *          全域時間に同期済みでなければ送らない（[SWS_CanTSyn_00028]）。SC は送信要求のたびに
+ *          1進める（[SWS_CanTSyn_00048]。送信に失敗した場合も進める）。渡せた場合は送信完了通知待ちへ
+ *          移り、渡せなかった場合は待機のまま、次の周期でやり直す。
  *
  * \param[in]  nowMs  現在時刻 [ms]（T0）。
  */
 static void CanTSyn_SendSync(unsigned long nowMs)
 {
-    uint8  pdu[CANTSYN_DLC] = { 0U };
-    uint32 secPart = (uint32)(nowMs / CANTSYN_MS_PER_SEC);
+    uint8              pdu[CANTSYN_DLC] = { 0U };
+    StbM_TimeStampType t0;
+    StbM_UserDataType  userData;
 
-    CanTSyn_Sc         = (uint8)((CanTSyn_Sc + 1U) & CANTSYN_SC_MASK);
     CanTSyn_LastSyncMs = nowMs;
+
+    /* [SWS_CanTSyn_00028]: 時間ベースが全域時間に同期済み（GLOBAL_TIME_BASE）のときだけ送る */
+    /* T0 と T0raw は同じ瞬間でなければ T4 がずれる。tick をまたいだ読み取り（前後の Raw が違う）は読み直す */
+    StbM_TimeStampRawType rawBefore = 0U;
+    StbM_TimeStampRawType rawAfter  = 0U;
+    uint8                 tries     = 0U;
+    do
+    {
+        if ((StbM_GetCurrentTimeRaw(STBM_TIME_BASE_MASTER, &rawBefore) != E_OK)
+            || (StbM_GetCurrentTime(STBM_TIME_BASE_MASTER, &t0, &userData) != E_OK)
+            || (StbM_GetCurrentTimeRaw(STBM_TIME_BASE_MASTER, &rawAfter) != E_OK))
+        {
+            return;
+        }
+        tries++;
+    } while ((rawBefore != rawAfter) && (tries < CANTSYN_T0_READ_TRIES));
+
+    CanTSyn_T0Raw = rawBefore;
+
+    if ((t0.timeBaseStatus & STBM_TIMEBASE_STATUS_GLOBAL_TIME_BASE) == 0U)
+    {
+        return;
+    }
+
+    uint32 secPart = t0.seconds;   /* 秒の下位 32bit を載せる（[SWS_CanTSyn_00015]） */
+
+    CanTSyn_Sc = (uint8)((CanTSyn_Sc + 1U) & CANTSYN_SC_MASK);
+    CanTSyn_T0Ns = t0.nanoseconds;
 
     pdu[0] = CANTSYN_TX_TYPE_SYNC;
     /* pdu[1] = CRC なしなら User Byte 1（既定値 0）、CRC 付きなら CRC（下の CanTSyn_SetCrc） */
@@ -421,7 +741,7 @@ static void CanTSyn_SendSync(unsigned long nowMs)
 /**
  * \brief   FUP メッセージを組み立てて CanIf_Transmit() へ渡す。
  *
- * \details T4 = (T0 の ns 部分) + (SYNC を CanIf へ渡してからの経過時間)
+ * \details T4 = (T0 の ns 部分) + (SYNC を CanIf へ渡してからの経過時間。StbM_GetCurrentTimeDiff() で測る)
  *          （[SWS_CanTSyn_00045]）。T4 が 1 秒以上なら、超えた秒数を OVS
  *          （最大 3）へ、残りを SyncTimeNSec へ書く（[SWS_CanTSyn_00047]）。
  *          SC は SYNC と同じ値にする（[SWS_CanTSyn_00049]）。渡せなかった場合は
@@ -431,13 +751,19 @@ static void CanTSyn_SendSync(unsigned long nowMs)
  */
 static void CanTSyn_SendFup(unsigned long nowMs)
 {
-    uint8   pdu[CANTSYN_DLC] = { 0U };
-    uint32  elapsedMs = (uint32)(nowMs - CanTSyn_WaitStartMs);
-    /* T0 の ns 部分。SYNC の送信要求時刻 T0 は CanTSyn_LastSyncMs に残っている。 */
-    uint32  t0Ns      = (uint32)((CanTSyn_LastSyncMs % CANTSYN_MS_PER_SEC) * CANTSYN_NS_PER_MS);
-    uint32  t4Ns      = t0Ns + (elapsedMs * (uint32)CANTSYN_NS_PER_MS);
-    uint32  ovs       = t4Ns / (uint32)CANTSYN_NS_PER_SEC;
-    uint32  nsPart    = t4Ns % (uint32)CANTSYN_NS_PER_SEC;
+    uint8                 pdu[CANTSYN_DLC] = { 0U };
+    StbM_TimeStampRawType t0Diff = 0U;
+
+    /* [SWS_CanTSyn_00045]: T4 = T0 の ns 部分 + (SYNC を渡してからの経過時間)。経過時間は StbM が測る。 */
+    if (StbM_GetCurrentTimeDiff(STBM_TIME_BASE_MASTER, CanTSyn_T0Raw, &t0Diff) != E_OK)
+    {
+        CanTSyn_State = CANTSYN_STATE_IDLE;
+        return;
+    }
+
+    uint32  t4Ns   = CanTSyn_T0Ns + t0Diff;
+    uint32  ovs    = t4Ns / (uint32)CANTSYN_NS_PER_SEC;
+    uint32  nsPart = t4Ns % (uint32)CANTSYN_NS_PER_SEC;
 
     if (ovs > CANTSYN_OVS_MAX)
     {
@@ -507,14 +833,7 @@ static uint8 CanTSyn_Crc8H2FUpdate(uint8 crc, uint8 data)
 static void CanTSyn_SetCrc(uint8* pdu, uint8 dataId)
 {
 #if (CANTSYN_TX_CRC_SECURED != 0U)
-    uint8 crc = 0xFFU;   /* 初期値 */
-
-    for (uint8 i = 2U; i < CANTSYN_DLC; i++)   /* Byte2〜Byte7 */
-    {
-        crc = CanTSyn_Crc8H2FUpdate(crc, pdu[i]);
-    }
-    crc = CanTSyn_Crc8H2FUpdate(crc, dataId);  /* DataID を最後に */
-    pdu[1] = (uint8)(crc ^ 0xFFU);             /* 最終 XOR */
+    pdu[1] = CanTSyn_CalcFrameCrc(pdu, dataId);
 #else
     (void)pdu;
     (void)dataId;

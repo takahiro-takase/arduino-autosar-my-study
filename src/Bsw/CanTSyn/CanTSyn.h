@@ -21,14 +21,15 @@
  *                  / Byte2=時間領域+SC（SYNC と同じ値）/ Byte3=SGW+OVS / Byte4-7=ナノ秒
  *            CRC は CRC-8H2F で、Byte2〜Byte7 と DataID（CanTSyn_Cfg.h 参照）に対して計算する。
  *
- *          対応範囲は CanTSyn_Cfg.h を参照（時間マスターのみ。StbM は未実装で、
- *          時刻源は Os カウンタ）。
+ *          時間マスター（SYNC/FUP の送信）と時間スレーブ（受信して StbM へ反映）の両方に対応する。
+ *          時刻は StbM 経由。対応範囲は CanTSyn_Cfg.h を参照。
  *
  *          使い方:
  *            1. EcuM_Init 内で CanTSyn_Init() を呼ぶ（CanIf_Init() の後）。
  *            2. Os スケジューラが CANTSYN_MAIN_FUNCTION_PERIOD_MS ごとに
  *               CanTSyn_MainFunction() を呼ぶ（SYNC の周期送信と、送信完了待ちの監視）。
- *            3. CanIf が送信完了のたびに CanTSyn_TxConfirmation() を呼ぶ。
+ *            3. CanIf が送信完了のたびに CanTSyn_TxConfirmation() を、時刻同期メッセージ
+ *               の受信のたびに CanTSyn_RxIndication() を呼ぶ。
  *
  * \copyright  Copyright (c) 2025 T_T
  * \license    MIT License - 詳細は LICENSE ファイルを参照。
@@ -168,6 +169,30 @@ void CanTSyn_MainFunction(void);
  * \Synchronicity  {Synchronous}
  */
 void CanTSyn_TxConfirmation(PduIdType TxPduId, Std_ReturnType result);
+
+/**
+ * \brief   時刻同期メッセージ（SYNC/FUP）の受信を通知する（CanIf から呼ばれる、時間スレーブ側）。
+ *
+ * \details SYNC を受けると、StbM の時間ベース 1 の仮想ローカル時間 T2raw を控えて FUP を待つ。
+ *          対応する FUP（SC が同じ）を待ち時間内に受けると、
+ *          全域時間 = T0（SYNC の秒）+ T4（FUP の OVS とナノ秒）+ T3diff（T2raw からの経過時間）を
+ *          求め、StbM_BusSetGlobalTime() で時間ベース 1 へ反映する（[SWS_CanTSyn_00073]）。
+ *          次のものは無視する: 時間領域が違うフレーム、Type が CANTSYN_RX_CRC_VALIDATED の設定と
+ *          合わないもの、CRC が合わないもの、SC の増分が 0 または CANTSYN_RX_SC_JUMP_WIDTH を
+ *          超える SYNC、SC が対の SYNC と違う FUP、待ち時間（CANTSYN_RX_FOLLOW_UP_TIMEOUT_MS）を
+ *          超えて届いた FUP、SYNC を受けていない FUP。
+ *
+ * \param[in]  RxPduId     受信した PDU の ID（CANTSYN_RX_PDU_ID 以外は
+ *                         CANTSYN_E_INVALID_PDUID を DET へ報告し何もしない）。
+ * \param[in]  PduInfoPtr  受信データ。NULL またはデータポインタが NULL なら
+ *                         CANTSYN_E_NULL_POINTER を DET へ報告する。DLC が足りないものは無視する。
+ *
+ * \AUTOSARReq     {SWS_CanTSyn_00096}
+ * \ServiceID      {0x42}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void CanTSyn_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr);
 
 #ifdef __cplusplus
 }

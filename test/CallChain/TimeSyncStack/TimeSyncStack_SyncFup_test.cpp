@@ -23,6 +23,7 @@ extern "C" {
 #include "CanIf.h"
 #include "CanTSyn.h"
 #include "CanTSyn_Cfg.h"
+#include "StbM.h"
 #include "Fake_Can_Hw.h"
 #include "Fake_Millis.h"
 #include "Fake_Det_Hw.h"
@@ -99,6 +100,7 @@ protected:
         CanIf_Init(&kTimeSyncCanIfConfig);
         ASSERT_EQ(CanIf_SetControllerMode(0U, CAN_CS_STARTED), E_OK);
         ASSERT_EQ(CanIf_SetPduMode(0U, CANIF_ONLINE), E_OK);
+        StbM_Init(NULL);
         CanTSyn_Init(NULL);
 
         FakeCanHw_Reset();   // ここまでの HW 呼び出しを検証対象から除く

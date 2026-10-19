@@ -590,6 +590,73 @@
           "note": "SYNC ごとに +1（0〜15 で循環）。FUP は対の SYNC と同じ値"
         }
       ]
+    },
+    {
+      "name": "TimeSyncIn",
+      "direction": "RX",
+      "canId": "0x241",
+      "dlc": 8,
+      "note": "AUTOSAR CanTSyn の SYNC/FUP の受信側（本ECUが時間スレーブ）。他ノードの時間マスターが時間領域 1 で送り、本ECUは StbM の時間ベース 1 へ反映する。フォーマットは TimeSync（0x240）と同じ（Type 0x20=SYNC / 0x28=FUP、CRC-8H2F、DataID は CAN ID と SC から導く）。Com を経由せず CanIf が CanTSyn_RxIndication() を直接呼ぶ。src/Bsw/CanTSyn/ 参照",
+      "fields": [
+        {
+          "name": "Type",
+          "bitPosition": 0,
+          "bitSize": 8,
+          "type": "enum",
+          "enum": [
+            {
+              "value": 16,
+              "label": "SYNC（秒、CRC なし）"
+            },
+            {
+              "value": 24,
+              "label": "FUP（ナノ秒、CRC なし）"
+            },
+            {
+              "value": 32,
+              "label": "SYNC（秒、CRC 付き）"
+            },
+            {
+              "value": 40,
+              "label": "FUP（ナノ秒、CRC 付き）"
+            }
+          ],
+          "note": "メッセージ種別。本ECUは既定で CRC 付き（0x20/0x28）だけを受け付ける（CanTSyn_Cfg.h の CANTSYN_RX_CRC_VALIDATED）"
+        },
+        {
+          "name": "CRC",
+          "bitPosition": 8,
+          "bitSize": 8,
+          "type": "number",
+          "range": {
+            "min": 0,
+            "max": 255
+          },
+          "note": "CRC-8H2F。Byte2〜Byte7 に DataID を続けて計算。DataID は SYNC=(CAN ID+SC)&0xFF、FUP=(CAN ID+0x10+SC)&0xFF"
+        },
+        {
+          "name": "SequenceCounter",
+          "bitPosition": 16,
+          "bitSize": 4,
+          "type": "number",
+          "range": {
+            "min": 0,
+            "max": 15
+          },
+          "note": "SYNC ごとに +1（0〜15 で循環）。FUP は対の SYNC と同じ値"
+        },
+        {
+          "name": "TimeDomain",
+          "bitPosition": 20,
+          "bitSize": 4,
+          "type": "number",
+          "range": {
+            "min": 0,
+            "max": 15
+          },
+          "note": "時間領域。本ECUは 1 だけを受け付ける"
+        }
+      ]
     }
   ]
 }

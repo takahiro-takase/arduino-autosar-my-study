@@ -1310,6 +1310,10 @@
     {
       "frame": "TimeSync",
       "reason": "CanTSyn が CanIf と直接やりとりするため Com を経由しない"
+    },
+    {
+      "frame": "TimeSyncIn",
+      "reason": "CanTSyn が CanIf と直接やりとりするため Com を経由しない"
     }
   ]
 }

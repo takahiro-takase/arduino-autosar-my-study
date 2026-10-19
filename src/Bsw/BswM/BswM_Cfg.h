@@ -107,6 +107,8 @@
 #define BSWM_OS_TASK_MEMIF_MAIN  OsConf_OsTask_MemIf_MainFunction  /**< MemIf_MainFunction (10 ms) */
 /* cppcheck-suppress misra-c2012-2.5 */
 #define BSWM_OS_TASK_CANTSYN_MAIN  OsConf_OsTask_CanTSyn_MainFunction  /**< CanTSyn_MainFunction (100 ms) */
+/* cppcheck-suppress misra-c2012-2.5 */
+#define BSWM_OS_TASK_STBM_MAIN  OsConf_OsTask_StbM_MainFunction  /**< StbM_MainFunction (100 ms) */
 /* 次の Os のタスクは意図的に BswM の制御対象外（excludedOsTasks）のため、BswM 用のタスク ID 定数を持たない。
  * Os.json のタスク表に載るタスクは、osTasks か excludedOsTasks のどちらかに必ず挙げる（挙げ忘れは生成時にエラーになる）。 */
 /* -----------------------------------------------------------------------
@@ -117,7 +119,7 @@
  * 制御不能になっていたバグを修正した経緯がある）。
  * ----------------------------------------------------------------------- */
 /** 全タスク（osTasks に挙げたタスクすべて）。挙げていない Os のタスクは意図的に除外している——上記の注記参照。 */
-#define BSWM_TASK_MASK_ALL  0x43FFFFUL
+#define BSWM_TASK_MASK_ALL  0xC3FFFFUL
 
 /** アプリ Runnable タスク: RTE_ENGINE + RTE_WARNING
  *   POST_RUN 時に停止し、アプリロジックを凍結する */

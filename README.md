@@ -208,7 +208,7 @@ HAL ─── MCU 依存の最下層（Can_Hw / Dio_Hw ほか、src/Hal/ に集�
 |  | CanNm | 31 | SWS_CanNM<br>API実装: 14 / 24 | ネットワークマネジメント (CAN NM)<br>（[詳細](docs/modules/CanNm_Notes.md)） |
 |  | CanSM | 140 | SWS_CanSM<br>API実装: 8 / 19 | CAN ネットワーク状態管理 (Bus-Off 回復・CanNm 連携)<br>（[詳細](docs/modules/CanSM_Notes.md)） |
 |  | CanTp | 35 | SWS_CanTp<br>API実装: 4 / 9<br>(一部意図的に簡略化) | ISO 15765-2 トランスポートプロトコル<br>（[詳細](docs/modules/CanTp_Notes.md)） |
-|  | CanTSyn | 161 | SWS_CanTSyn<br>API実装: 5 / 6<br>(時間マスターのみ) | CAN 時刻同期 (SYNC/FUP で ECU の稼働時間を配信)<br>（[詳細](docs/modules/CanTSyn_Notes.md)） |
+|  | CanTSyn | 161 | SWS_CanTSyn<br>API実装: 6 / 6<br>(OFS/OFNS・CAN FD は対象外) | CAN 時刻同期 (SYNC/FUP の送信・受信)<br>（[詳細](docs/modules/CanTSyn_Notes.md)） |
 |  | Com | 50 | SWS_Com<br>API実装: 22 / 32 | シグナルベース通信管理<br>（[詳細](docs/modules/Com_Notes.md)） |
 |  | ComM | 12 | SWS_ComM<br>API実装: 17 / 28 | 通信マネージャ (チャネル状態集約)<br>（[詳細](docs/modules/ComM_Notes.md)） |
 |  | CryIf | 112 | SWS_CryptoInterface<br>API実装: 6 / 17<br>パススルー<br>(下位が1個のため) | 暗号ドライバへのルーティング層<br>（[詳細](docs/modules/CryIf_Notes.md)） |
@@ -235,6 +235,7 @@ HAL ─── MCU 依存の最下層（Can_Hw / Dio_Hw ほか、src/Hal/ に集�
 |  | Port | — | SWS_Port<br>API実装: 5 / 5<br>(一部意図的に簡略化) | ピン設定管理<br>（[詳細](docs/modules/Port_Notes.md)） |
 |  | SchM | — | SWS_SchM<br>API 数は対象外<br>(一部意図的に簡略化) | 排他制御 (スケジューラマネージャ)<br>（[詳細](docs/modules/SchM_Notes.md)） |
 |  | SecOC | 150 | SWS_SecureOnboard<br>Communication<br>API実装: 7 / 27<br>(一部意図的に簡略化) | メッセージ認証 (改ざん・なりすまし対策)<br>（[詳細](docs/modules/SecOC_Notes.md)） |
+|  | StbM | 160 | SWS_SynchronizedTime<br>BaseManager<br>API実装: 9 / 30<br>(最小版) | 同期時間ベースマネージャ (全域時間の保持・提供)<br>（[詳細](docs/modules/StbM_Notes.md)） |
 |  | Wdg | 102 | SWS_Wdg<br>API実装: 4 / 4<br>(一部意図的に簡略化) | ウォッチドッグドライバ<br>（[詳細](docs/modules/Wdg_Notes.md)） |
 |  | WdgIf | 43 | SWS_WdgIf<br>API実装: 3 / 3<br>パススルー<br>(下位が1個のため) | ウォッチドッグ抽象化層<br>（[詳細](docs/modules/WdgIf_Notes.md)） |
 |  | WdgM | 13 | SWS_WdgM<br>API実装: 11 / 11 | ウォッチドッグマネージャ (生存監視)<br>（[詳細](docs/modules/WdgM_Notes.md)） |

@@ -9,14 +9,15 @@
  *            （`DET_LOG_LEVEL`）に依存せず、CAN の受信だけで ECU 時刻が分かる。
  *
  *          対応範囲（簡略版）:
- *            - 時間マスターのみ（SYNC/FUP の送信）。CRC 付きメッセージ（0x20/0x28）に
- *              対応（CANTSYN_TX_CRC_SECURED で切り替え）。時間スレーブ（受信側）、
- *              OFS/OFNS（オフセット時間ベース）、CAN FD の拡張フォーマットは対象外。
- *            - 時刻源は StbM ではなく ECU の稼働時間（Os カウンタ [ms]）。
- *              時間領域は 0 の1つ。時間ベースの状態（同期/ゲートウェイ）は持たない。
- *            将来 StbM を実装する場合は、`CanTSyn_GetNowMs()`（CanTSyn.c）を
- *            StbM_GetCurrentTime() に置き換え、本ファイルの設定値を ECUC の
- *            パラメータ（CanTSynGlobalTimeDomainId 等）へ対応づける。
+ *            - 時間マスター（SYNC/FUP の送信）と時間スレーブ（受信）の両方。CRC 付き
+ *              メッセージ（0x20/0x28）に対応（送信は CANTSYN_TX_CRC_SECURED、受信は
+ *              CANTSYN_RX_CRC_VALIDATED）。OFS/OFNS（オフセット時間ベース）、CAN FD の
+ *              拡張フォーマットは対象外。
+ *            - 時刻は StbM（同期時間ベースマネージャ）経由。送信は StbM の時間ベース 0
+ *              （本 ECU が時間マスター）、受信は時間ベース 1（受信した時刻を
+ *              StbM_BusSetGlobalTime() で反映）。時間領域は送信が 0、受信が 1。
+ *              本ファイルの設定値は、ECUC のパラメータ（CanTSynGlobalTimeDomainId 等）に
+ *              対応づけられる。
  *
  * \copyright  Copyright (c) 2025 T_T
  * \license    MIT License - 詳細は LICENSE ファイルを参照。
@@ -61,6 +62,7 @@
 #define CANTSYN_API_ID_GET_VERSION_INFO      0x02U
 #define CANTSYN_API_ID_SET_TRANSMISSION_MODE 0x03U
 #define CANTSYN_API_ID_TX_CONFIRMATION       0x40U
+#define CANTSYN_API_ID_RX_INDICATION         0x42U
 #define CANTSYN_API_ID_MAIN_FUNCTION         0x06U
 
 /** バージョン情報（Com/E2EXf/PduR 等の既存モジュールと同じ命名規則） */
@@ -127,5 +129,41 @@
  * ----------------------------------------------------------------------- */
 #define CANTSYN_DATA_ID_SYNC(sc)  ((uint8)((CANTSYN_CAN_ID + (uint32)(sc)) & 0xFFU))
 #define CANTSYN_DATA_ID_FUP(sc)   ((uint8)((CANTSYN_CAN_ID + 0x10UL + (uint32)(sc)) & 0xFFU))
+
+/* -----------------------------------------------------------------------
+ * 時間スレーブ（他ノードの時間マスターが送る SYNC/FUP の受信）
+ * ----------------------------------------------------------------------- */
+
+/** 受信する時刻同期メッセージの CAN ID（信号表 TimeSyncIn の canId と一致させること。
+ *  configurator の検査で確認する）。CRC の DataID の元にも使う。 */
+#define CANTSYN_RX_CAN_ID  0x241U
+
+/** CanIf が RxIndication で CanTSyn へ渡す RX PDU の ID（CanIf.json の CanTSyn_Rx の
+ *  CanTSyn 側の ID。単一なので 0）。 */
+#define CANTSYN_RX_PDU_ID  0U
+
+/** 受信する時間領域 ID（0〜15。送信側の CANTSYN_TIME_DOMAIN_ID とは別の領域）。 */
+#define CANTSYN_RX_TIME_DOMAIN_ID  1U
+
+/** 受信の CRC 検証（CanTSynRxCrcValidated 相当、[SWS_CanTSyn_00057]〜[SWS_CanTSyn_00062]）。
+ *  1=CRC_VALIDATED（Type 0x20/0x28 で CRC が正しいものだけ受け付ける）、
+ *  0=CRC_NOT_VALIDATED（Type 0x10/0x18 だけ受け付ける）。 */
+#define CANTSYN_RX_CRC_VALIDATED  1U
+
+/** SYNC を受けてから FUP を待つ上限 [ms]（CanTSynGlobalTimeFollowUpTimeout 相当、
+ *  [SWS_CanTSyn_00063]）。超えると、その SYNC を捨てて次の SYNC を待つ。 */
+#define CANTSYN_RX_FOLLOW_UP_TIMEOUT_MS  200UL
+
+/** 連続する SYNC の SC の増分の上限（CanTSynGlobalTimeSequenceCounterJumpWidth 相当、
+ *  [SWS_CanTSyn_00078]。0 は不可）。増分が 0 または上限超なら、その SYNC は無視する。 */
+#define CANTSYN_RX_SC_JUMP_WIDTH  1U
+
+/** 受け付ける SYNC/FUP の Type（CANTSYN_RX_CRC_VALIDATED に従う）。 */
+#define CANTSYN_RX_TYPE_SYNC  ((CANTSYN_RX_CRC_VALIDATED != 0U) ? CANTSYN_TYPE_SYNC_CRC : CANTSYN_TYPE_SYNC)
+#define CANTSYN_RX_TYPE_FUP   ((CANTSYN_RX_CRC_VALIDATED != 0U) ? CANTSYN_TYPE_FUP_CRC : CANTSYN_TYPE_FUP)
+
+/** 受信側の DataID（送信側と同じ式を、受信の CAN ID で計算する）。 */
+#define CANTSYN_RX_DATA_ID_SYNC(sc)  ((uint8)((CANTSYN_RX_CAN_ID + (uint32)(sc)) & 0xFFU))
+#define CANTSYN_RX_DATA_ID_FUP(sc)   ((uint8)((CANTSYN_RX_CAN_ID + 0x10UL + (uint32)(sc)) & 0xFFU))
 
 #endif /* CANTSYN_CFG_H */

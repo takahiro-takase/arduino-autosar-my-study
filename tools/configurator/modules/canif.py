@@ -9,7 +9,8 @@ from .common import doc_comment, hex_literal, note_lines, ruled_comment, struct_
 
 TX_CONFIRM_FCT = {"PDUR": "PduR_CanIfTxConfirmation", "CANNM": "CanNm_TxConfirmation",
                   "CANTSYN": "CanTSyn_TxConfirmation"}
-RX_IND_FCT = {"PDUR": "PduR_CanIfRxIndication", "CANNM": "CanNm_RxIndication"}
+RX_IND_FCT = {"PDUR": "PduR_CanIfRxIndication", "CANNM": "CanNm_RxIndication",
+              "CANTSYN": "CanTSyn_RxIndication"}
 MODULE_HEADER = {"PDUR": "PduR_CanIf.h", "CANNM": "CanNm.h", "CANTSYN": "CanTSyn.h"}
 DAVINCI_TX = "/ActiveEcuC/CanIf/CanIfInitCfg/CanIfTxPduCfg/"
 DAVINCI_RX = "/ActiveEcuC/CanIf/CanIfInitCfg/CanIfRxPduCfg/"
@@ -59,6 +60,8 @@ def upper_tx_value(p, index, ctx):
 def upper_rx_value(p, ctx):
     if p["rxIndication"] == "PDUR":
         return symbols.pdur_src_for_canif_rx(ctx, p)
+    if p["rxIndication"] == "CANTSYN":
+        return "CANTSYN_RX_PDU_ID"
     return symbols.cannm_rx_for_canif(ctx, p)
 
 

@@ -277,6 +277,19 @@ static const CanIf_RxPduConfigType CanIf_RxPduConfigData[CANIF_RX_PDU_COUNT] = {
         .Dlc               = 2U,                            /* DaVinci: CanIfRxPduDataLength
                                                              *          Control Bit Vector 1B + Source Node ID 1B */
         .RxIndicationFct   = CanNm_RxIndication             /* DaVinci: CanIfRxPduUserRxIndicationName */
+    },
+    {
+        /* ---------------------------------------------------------------
+         * RxPduId=5: 時刻同期フレーム（SYNC/FUP、受信）
+         * DaVinci: /ActiveEcuC/CanIf/CanIfInitCfg/CanIfRxPduCfg/CanTSyn_Rx
+         * CanIf は PduR/Com を経由せず CanTSyn_RxIndication() を直接呼び出す。
+         * SYNC と FUP は同じ PDU（同じ CAN ID）で、Byte0 の Type で区別する。
+         * --------------------------------------------------------------- */
+        .CanId             = 0x241U,              /* DaVinci: CanIfRxPduCanId */
+        .Hrh               = 0U,                  /* DaVinci: CanIfRxPduHrhIdRef */
+        .UpperLayerRxPduId = CANTSYN_RX_PDU_ID,   /* DaVinci: CanIfRxPduUpperLayerPduId */
+        .Dlc               = 8U,                  /* DaVinci: CanIfRxPduDataLength */
+        .RxIndicationFct   = CanTSyn_RxIndication /* DaVinci: CanIfRxPduUserRxIndicationName */
     }
 };
 
