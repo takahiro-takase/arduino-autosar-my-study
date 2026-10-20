@@ -83,6 +83,11 @@
 #define STBM_SYNC_LOSS_TIMEOUT_MS_MASTER  0UL
 #define STBM_SYNC_LOSS_TIMEOUT_MS_SLAVE   5000UL
 
+/** 時間ベースごとの、起動時から同期済み（GLOBAL_TIME_BASE）にするか（1=同期済み、0=未同期）。
+ *  時間マスターは自分で時刻を決めるため、全域時間 = 仮想ローカル時間で起動時から同期済み。 */
+#define STBM_INITIALLY_SYNCED_MASTER  1U
+#define STBM_INITIALLY_SYNCED_SLAVE   0U
+
 /** StbM_MainFunction() の呼び出し周期 [ms]（StbMMainFunctionPeriod 相当、
  *  Os.json のタスク周期と一致させること）。 */
 #define STBM_MAIN_FUNCTION_PERIOD_MS  100UL
