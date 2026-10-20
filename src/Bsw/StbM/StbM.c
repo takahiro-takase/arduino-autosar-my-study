@@ -66,10 +66,16 @@ static uint32 StbM_TickWraps = 0U;
 
 static StbM_TimeBaseType StbM_TimeBase[STBM_TIME_BASE_COUNT];
 
-/** 時間ベースごとの同期喪失のタイムアウト [ms]（0 なら監視しない）。添字は時間ベースの ID。 */
-static const unsigned long StbM_SyncLossTimeoutMs[STBM_TIME_BASE_COUNT] = {
-    STBM_SYNC_LOSS_TIMEOUT_MS_MASTER,
-    STBM_SYNC_LOSS_TIMEOUT_MS_SLAVE
+/** 時間ベースごとの設定（StbMSynchronizedTimeBase 相当）。添字は時間ベースの ID。 */
+typedef struct
+{
+    uint8         initiallySynced;   /**< 1=起動時から同期済み（GLOBAL_TIME_BASE） */
+    unsigned long syncLossTimeoutMs; /**< 同期喪失のタイムアウト [ms]（0 なら監視しない） */
+} StbM_TimeBaseConfigType;
+
+static const StbM_TimeBaseConfigType StbM_TimeBaseConfig[STBM_TIME_BASE_COUNT] = {
+    [STBM_TIME_BASE_MASTER] = { STBM_INITIALLY_SYNCED_MASTER, STBM_SYNC_LOSS_TIMEOUT_MS_MASTER },
+    [STBM_TIME_BASE_SLAVE]  = { STBM_INITIALLY_SYNCED_SLAVE,  STBM_SYNC_LOSS_TIMEOUT_MS_SLAVE  }
 };
 
 /* ======================================================================
@@ -113,12 +119,10 @@ void StbM_Init(const StbM_ConfigType* ConfigPtr)
     for (uint16 id = 0U; id < STBM_TIME_BASE_COUNT; id++)
     {
         StbM_TimeBase[id].offsetNs     = 0;
-        StbM_TimeBase[id].status       = 0U;
+        StbM_TimeBase[id].status       = (StbM_TimeBaseConfig[id].initiallySynced != 0U)
+                                         ? STBM_TIMEBASE_STATUS_GLOBAL_TIME_BASE : 0U;
         StbM_TimeBase[id].lastUpdateMs = StbM_GetNowMs();
     }
-
-    /* 時間マスター: 全域時間 = 仮想ローカル時間（オフセット 0）で、起動時から同期済みとする */
-    StbM_TimeBase[STBM_TIME_BASE_MASTER].status = STBM_TIMEBASE_STATUS_GLOBAL_TIME_BASE;
 
     StbM_Initialized = 1U;   /* [SWS_StbM_00121] */
 
@@ -451,10 +455,10 @@ void StbM_MainFunction(void)
     {
         StbM_TimeBaseType* base = &StbM_TimeBase[id];
 
-        if ((StbM_SyncLossTimeoutMs[id] != 0UL)
+        if ((StbM_TimeBaseConfig[id].syncLossTimeoutMs != 0UL)
             && ((base->status & STBM_TIMEBASE_STATUS_GLOBAL_TIME_BASE) != 0U)
             && ((base->status & STBM_TIMEBASE_STATUS_TIMEOUT) == 0U)
-            && ((nowMs - base->lastUpdateMs) >= StbM_SyncLossTimeoutMs[id]))
+            && ((nowMs - base->lastUpdateMs) >= StbM_TimeBaseConfig[id].syncLossTimeoutMs))
         {
             base->status |= STBM_TIMEBASE_STATUS_TIMEOUT;
             DET_LOGW(TAG, "base=%u sync loss timeout", (unsigned)id);

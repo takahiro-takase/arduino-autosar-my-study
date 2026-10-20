@@ -7,11 +7,15 @@ CAN ID と DLC は、`frame` が指すフレームの定義（config/data/can_si
 from . import symbols
 from .common import doc_comment, hex_literal, note_lines, ruled_comment, struct_fields
 
-TX_CONFIRM_FCT = {"PDUR": "PduR_CanIfTxConfirmation", "CANNM": "CanNm_TxConfirmation",
-                  "CANTSYN": "CanTSyn_TxConfirmation"}
-RX_IND_FCT = {"PDUR": "PduR_CanIfRxIndication", "CANNM": "CanNm_RxIndication",
-              "CANTSYN": "CanTSyn_RxIndication"}
-MODULE_HEADER = {"PDUR": "PduR_CanIf.h", "CANNM": "CanNm.h", "CANTSYN": "CanTSyn.h"}
+# 上位層ごとの、送信確認・受信通知の関数名と、それを宣言するヘッダ
+UPPER_LAYERS = {
+    "PDUR":    {"txConfirm": "PduR_CanIfTxConfirmation", "rxIndication": "PduR_CanIfRxIndication",
+                "header": "PduR_CanIf.h"},
+    "CANNM":   {"txConfirm": "CanNm_TxConfirmation", "rxIndication": "CanNm_RxIndication",
+                "header": "CanNm.h"},
+    "CANTSYN": {"txConfirm": "CanTSyn_TxConfirmation", "rxIndication": "CanTSyn_RxIndication",
+                "header": "CanTSyn.h"},
+}
 DAVINCI_TX = "/ActiveEcuC/CanIf/CanIfInitCfg/CanIfTxPduCfg/"
 DAVINCI_RX = "/ActiveEcuC/CanIf/CanIfInitCfg/CanIfRxPduCfg/"
 
@@ -89,7 +93,7 @@ def tx_table(cfg, ctx):
                 ("CanId", hex_literal(can_id), note_lines("DaVinci: CanIfTxPduCanId")),
                 ("Dlc", "%dU" % dlc, note_lines("DaVinci: CanIfTxPduDlc", nt.get("dlc"))),
                 ("Hth", "%dU" % p["hth"], note_lines("DaVinci: CanIfTxPduHthIdRef")),
-                ("TxConfirmFct", TX_CONFIRM_FCT[p["txConfirm"]],
+                ("TxConfirmFct", UPPER_LAYERS[p["txConfirm"]]["txConfirm"],
                  note_lines("DaVinci: CanIfTxPduUserTxConfirmationName", nt.get("txConfirm"))),
             ],
             8,
@@ -127,7 +131,7 @@ def rx_table(cfg, ctx):
                 ("UpperLayerRxPduId", upper_rx_value(p, ctx),
                  note_lines("DaVinci: CanIfRxPduUpperLayerPduId", up_extra)),
                 ("Dlc", "%dU" % dlc, note_lines("DaVinci: CanIfRxPduDataLength", nt.get("dlc"))),
-                ("RxIndicationFct", RX_IND_FCT[p["rxIndication"]],
+                ("RxIndicationFct", UPPER_LAYERS[p["rxIndication"]]["rxIndication"],
                  note_lines("DaVinci: CanIfRxPduUserRxIndicationName")),
             ],
             8,
@@ -182,9 +186,9 @@ def render_symbols(cfg, ctx):
 def check_includes(cfg, text):
     used = {p["txConfirm"] for p in cfg["txPdus"]} | {p["rxIndication"] for p in cfg["rxPdus"]}
     msgs = [
-        "%s がインクルードされていない（%s を使用）" % (MODULE_HEADER[m], m)
+        "%s がインクルードされていない（%s を使用）" % (UPPER_LAYERS[m]["header"], m)
         for m in sorted(used)
-        if '#include "%s"' % MODULE_HEADER[m] not in text
+        if '#include "%s"' % UPPER_LAYERS[m]["header"] not in text
     ]
     return msgs + symbols.include_warnings(text)
 

@@ -466,34 +466,33 @@ def _check_cantsyn(ctx, errors):
     if frame is None or "Os" not in ctx.configs:
         return
     root = pathlib.Path(getattr(ctx, "repo_root", None) or pathlib.Path(__file__).resolve().parents[2])
-    text = (root / "src/Bsw/CanTSyn/CanTSyn_Cfg.h").read_bytes().decode("utf-8", errors="replace")
-    stbm_text = (root / "src/Bsw/StbM/StbM_Cfg.h").read_bytes().decode("utf-8", errors="replace")
+    headers = {}
+    for rel in ("src/Bsw/CanTSyn/CanTSyn_Cfg.h", "src/Bsw/StbM/StbM_Cfg.h"):
+        headers[rel.rsplit("/", 1)[1]] = (root / rel).read_bytes().decode("utf-8", errors="replace")
 
-    def define(name, source=text):
-        m = re.search(r"^[ \t]*#define[ \t]+%s[ \t]+(0[xX][0-9A-Fa-f]+|\d+)[uUlL]*\b" % name, source, re.MULTILINE)
+    def define(header, name):
+        m = re.search(r"^[ \t]*#define[ \t]+%s[ \t]+(0[xX][0-9A-Fa-f]+|\d+)[uUlL]*\b" % name,
+                      headers[header], re.MULTILINE)
         return int(m.group(1), 0) if m else None
 
     tasks = {t["function"]: t["periodMs"] for t in ctx.configs["Os"]["tasks"]}
+    # (ヘッダ, マクロ名, 期待値, 期待値の出どころ)
     expected = [
-        ("CANTSYN_TX_PERIOD_MS", frame.get("txPeriodMs"), "信号表 TimeSync の txPeriodMs"),
-        ("CANTSYN_DLC", frame.get("dlc"), "信号表 TimeSync の dlc"),
-        ("CANTSYN_CAN_ID", int(frame["canId"], 0), "信号表 TimeSync の canId"),
-        ("CANTSYN_MAIN_FUNCTION_PERIOD_MS", tasks.get("CanTSyn_MainFunction"), "Os.json の CanTSyn_MainFunction の periodMs"),
+        ("CanTSyn_Cfg.h", "CANTSYN_TX_PERIOD_MS", frame.get("txPeriodMs"), "信号表 TimeSync の txPeriodMs"),
+        ("CanTSyn_Cfg.h", "CANTSYN_DLC", frame.get("dlc"), "信号表 TimeSync の dlc"),
+        ("CanTSyn_Cfg.h", "CANTSYN_CAN_ID", int(frame["canId"], 0), "信号表 TimeSync の canId"),
+        ("CanTSyn_Cfg.h", "CANTSYN_MAIN_FUNCTION_PERIOD_MS", tasks.get("CanTSyn_MainFunction"),
+         "Os.json の CanTSyn_MainFunction の periodMs"),
+        ("StbM_Cfg.h", "STBM_MAIN_FUNCTION_PERIOD_MS", tasks.get("StbM_MainFunction"),
+         "Os.json の StbM_MainFunction の periodMs"),
     ]
     if rx_frame is not None:
-        expected.append(("CANTSYN_RX_CAN_ID", int(rx_frame["canId"], 0), "信号表 TimeSyncIn の canId"))
-        expected.append(("CANTSYN_DLC", rx_frame.get("dlc"), "信号表 TimeSyncIn の dlc"))
-    for name, want, source in expected:
-        got = define(name)
+        expected.append(("CanTSyn_Cfg.h", "CANTSYN_RX_CAN_ID", int(rx_frame["canId"], 0), "信号表 TimeSyncIn の canId"))
+        expected.append(("CanTSyn_Cfg.h", "CANTSYN_DLC", rx_frame.get("dlc"), "信号表 TimeSyncIn の dlc"))
+    for header, name, want, source in expected:
+        got = define(header, name)
         if got is None or want is None or got != want:
-            errors.append("CanTSyn_Cfg.h の %s=%s が、%s（%s）と一致しない" % (name, got, source, want))
-
-    stbm_name = "STBM_MAIN_FUNCTION_PERIOD_MS"
-    stbm_want = tasks.get("StbM_MainFunction")
-    stbm_got = define(stbm_name, stbm_text)
-    if stbm_got is None or stbm_want is None or stbm_got != stbm_want:
-        errors.append("StbM_Cfg.h の %s=%s が、Os.json の StbM_MainFunction の periodMs（%s）と一致しない"
-                      % (stbm_name, stbm_got, stbm_want))
+            errors.append("%s の %s=%s が、%s（%s）と一致しない" % (header, name, got, source, want))
 
 
 def _check_wdg_timeout(ctx, errors):
