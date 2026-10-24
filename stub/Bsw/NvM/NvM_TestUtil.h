@@ -21,6 +21,19 @@
 extern "C" {
 #endif
 
+/** 空の EEPROM から NvM を初期化する（Dcm_Init() が SecurityAccess の失敗回数を NvM から復元するため、Dcm を使うテストの SetUp() で呼ぶ）。 */
+static inline void NvMTest_ColdBoot(void)
+{
+    MemIf_Init();
+    NvM_Init(NULL);
+}
+
+/** NvM を未初期化へ戻す（NvM を初期化したテストの TearDown() で呼び、次のテストへ状態を残さない）。 */
+static inline void NvMTest_Shutdown(void)
+{
+    NvM_Test_ResetInitState();
+}
+
 /** 全ブロックが有効な EEPROM を用意する（空の EEPROM への NvM_Init() が復元して書き戻す）。 */
 static inline void NvMTest_PrepareValidEeprom(void)
 {

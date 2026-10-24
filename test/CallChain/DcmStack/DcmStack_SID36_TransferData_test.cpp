@@ -36,6 +36,9 @@ extern "C" {
 #include "Dcm.h"
 #include "Dcm_Cfg.h"
 #include "Dem.h"
+#include "NvM_TestUtil.h"
+#include "NvM.h"
+#include "MemIf.h"
 #include "Fake_Can_Hw.h"
 #include "Fake_Det_Hw.h"
 #include "Fake_Millis.h"
@@ -162,6 +165,7 @@ protected:
          * 本テストの対象外）。 */
         CanSM_Init(NULL);
         CanTp_Init(NULL);
+        NvMTest_ColdBoot();   // 空の EEPROM から NvM を初期化する（Dcm_Init() が失敗回数を NvM から復元するため）
         Dem_Init(NULL);
         Dcm_Init(NULL);
         StartDownload(0x40U);  // 0x36 は DOWNLOADING 状態が前提（64バイト転送予定）
@@ -171,6 +175,7 @@ protected:
 
     void TearDown() override
     {
+        NvMTest_Shutdown();   // 次のテストへ NvM の初期化状態を残さない
         FakeDetHw_LogSuppressed = 1U;  // DeInit() のログを抑制
         CanSM_DeInit();
         CanIf_DeInit();

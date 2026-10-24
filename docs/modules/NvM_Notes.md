@@ -68,6 +68,7 @@ CRC 不一致を検出すると、ブロックごとに設定された **ROM デ
 | DEM_STATUS | 全イベント `DEM_STATUS_NOT_COMPLETED_SINCE_CLEAR \| DEM_STATUS_NOT_COMPLETED_THIS_CYCLE` | Dem_Init() の初回起動時と同じ値。MAGIC は無事だが STATUS だけ破損したケースでも Dem が想定する初期状態と一致させる |
 | DEM_AGING | 未設定（NULL） | 経年回復カウンタの初回起動値はそもそも全イベント 0 であり、`NvM_Init()` 内部の全 0 フォールバックと一致するため専用テーブル不要。ただし `NvM_RestoreBlockDefaults(NVM_BLOCK_ID_DEM_AGING, ...)` を明示的に呼んでも E_NOT_OK が返るだけでリセットはされない点に注意 |
 | DEM_EXTENDED | 未設定（NULL） | 故障確定回数 (ExtendedData) の初回起動値も同様に全イベント 0。DEM_AGING と同じ注意点が当てはまる |
+| DCM_SECURITY | `0x00` | SecurityAccess の連続失敗回数。初回起動や復元からは、失敗回数 0（ロックアウトなし）から始める。ただし消去済みの EEPROM の 1 バイト 0xFF は CRC8 でも正しい組になるため、Dcm_Init() が 0xFF だけを「書かれていない」として 0 に直す（それ以外の上限より大きい値はロックアウトする） |
 
 DEM_STATUS のデフォルト値定義に `Dem_Cfg.h` の定数を使っているのは
 `NvM_PBCfg.c` だけです。NvM 本体 (`NvM.c`) は Dem の存在を一切知りません

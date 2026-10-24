@@ -86,6 +86,31 @@
       "default": {
         "kind": "none"
       }
+    },
+    {
+      "name": "DCM_SECURITY",
+      "title": "Dcm SecurityAccess の連続失敗回数",
+      "length": 1,
+      "lengthDoc": "AttemptCounter: 1 byte",
+      "addrDoc": "SecurityAccess の連続失敗回数のアドレス (CRC は +DCM_SECURITY_LENGTH)",
+      "note": [
+        "SecurityAccess (UDS 0x27) の sendKey の連続失敗回数（AttemptCounter）。",
+        "再起動でブルートフォース対策（ロックアウト）を回避されないよう、Dcm が失敗のたびに",
+        "書き、Dcm_Init() が復元する（[SWS_Dcm_01154]/[SWS_Dcm_01155]）。",
+        "UseCrcCompMechanism=1: 回数が変わらない書き込みは物理書き込みをスキップし、",
+        "EEPROM の書き込み耐久を節約する（[SWS_NvM_00852]）。"
+      ],
+      "default": {
+        "kind": "scalar",
+        "value": "0x00U",
+        "doc": [
+          "初回起動、または CRC 不一致からの復元では、失敗回数 0（ロックアウトなし）から始める。",
+          "実仕様は、回数を読めなかった場合に DcmDspSecurityNumAttDelay（ロックアウトする値）とする",
+          "（[SWS_Dcm_01156]）が、NvM_Init() は復元したブロックを読み出し成功として扱うため、",
+          "Dcm からは「読めなかった」と区別できない（Dcm_Init() は NvM_ReadBlock() が E_NOT_OK のときだけ、",
+          "ロックアウトする値にする）。"
+        ]
+      }
     }
   ]
 }

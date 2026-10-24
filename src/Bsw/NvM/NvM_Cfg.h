@@ -95,7 +95,7 @@
 
 /* @@GEN-BEGIN nvm-blocks  生成元: config/data/NvM.json  （自動生成: 手編集禁止） */
 /* -----------------------------------------------------------------------
- * EEPROM レイアウト（先頭 66 バイト）
+ * EEPROM レイアウト（先頭 68 バイト）
  * 各ブロックはデータ本体直後に CRC8 (SAE J1850) を 1 バイト付加する
  * (NvM.c の NvM_CalcCrc8() / NvM_CrcAddressForBase() 参照)。
  *   Addr 0x0000: NVM_BLOCK_ID_DEM_MAGIC    データ (1 byte) — DEM 有効マーカー
@@ -108,6 +108,8 @@
  *   Addr 0x0031: NVM_BLOCK_ID_DEM_EXTENDED CRC   (1 byte) — プライマリ面
  *   Addr 0x0032: NVM_BLOCK_ID_DEM_EXTENDED データ (15 bytes) — DEM 故障確定回数 ExtendedData（ミラー面）
  *   Addr 0x0041: NVM_BLOCK_ID_DEM_EXTENDED CRC   (1 byte) — ミラー面
+ *   Addr 0x0042: NVM_BLOCK_ID_DCM_SECURITY データ (1 byte) — Dcm SecurityAccess の連続失敗回数
+ *   Addr 0x0043: NVM_BLOCK_ID_DCM_SECURITY CRC   (1 byte)
  * ----------------------------------------------------------------------- */
 
 /* -----------------------------------------------------------------------
@@ -118,7 +120,8 @@
 #define NVM_BLOCK_ID_DEM_STATUS    1U  /**< DEM イベントステータス (15 bytes) */
 #define NVM_BLOCK_ID_DEM_AGING     2U  /**< DEM 経年回復(Aging)カウンタ (15 bytes) */
 #define NVM_BLOCK_ID_DEM_EXTENDED  3U  /**< DEM 故障確定回数 ExtendedData (15 bytes) */
-#define NVM_BLOCK_COUNT            4U  /**< 管理ブロック総数 */
+#define NVM_BLOCK_ID_DCM_SECURITY  4U  /**< Dcm SecurityAccess の連続失敗回数 (1 byte) */
+#define NVM_BLOCK_COUNT            5U  /**< 管理ブロック総数 */
 
 /* -----------------------------------------------------------------------
  * ブロックサイズ (bytes)
@@ -127,6 +130,7 @@
 #define NVM_BLOCK_DEM_STATUS_LENGTH    15U  /**< DEM_EVENT_COUNT = 15 イベント分 */
 #define NVM_BLOCK_DEM_AGING_LENGTH     15U  /**< DEM_EVENT_COUNT = 15 イベント分 */
 #define NVM_BLOCK_DEM_EXTENDED_LENGTH  15U  /**< DEM_EVENT_COUNT = 15 イベント分 */
+#define NVM_BLOCK_DCM_SECURITY_LENGTH  1U  /**< AttemptCounter: 1 byte */
 
 /* -----------------------------------------------------------------------
  * EEPROM 先頭アドレス (各ブロックの物理格納先)
@@ -144,6 +148,8 @@
     (NVM_BLOCK_DEM_AGING_EEPROM_ADDR + NVM_BLOCK_DEM_AGING_LENGTH + 1U)  /**< 故障確定回数の先頭アドレス・プライマリ面 */
 #define NVM_BLOCK_DEM_EXTENDED_MIRROR_EEPROM_ADDR \
     (NVM_BLOCK_DEM_EXTENDED_EEPROM_ADDR + NVM_BLOCK_DEM_EXTENDED_LENGTH + 1U)  /**< 故障確定回数のミラー面。冗長ブロック専用 */
+#define NVM_BLOCK_DCM_SECURITY_EEPROM_ADDR \
+    (NVM_BLOCK_DEM_EXTENDED_MIRROR_EEPROM_ADDR + NVM_BLOCK_DEM_EXTENDED_LENGTH + 1U)  /**< SecurityAccess の連続失敗回数のアドレス (CRC は +DCM_SECURITY_LENGTH) */
 
 /** 設定済みブロックの中で最大の NvMNvBlockLength（生成値）。
  *  冗長ブロックの読み込み検証（NvM.c の NvM_LoadAndVerifyBlock()）がミラー面の内容を

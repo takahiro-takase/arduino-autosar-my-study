@@ -43,6 +43,7 @@ static uint8 NvM_Ram_DemMagic[NVM_BLOCK_DEM_MAGIC_LENGTH];
 static uint8 NvM_Ram_DemStatus[NVM_BLOCK_DEM_STATUS_LENGTH];
 static uint8 NvM_Ram_DemAging[NVM_BLOCK_DEM_AGING_LENGTH];
 static uint8 NvM_Ram_DemExtended[NVM_BLOCK_DEM_EXTENDED_LENGTH];
+static uint8 NvM_Ram_DcmSecurity[NVM_BLOCK_DCM_SECURITY_LENGTH];
 
 /* -----------------------------------------------------------------------
  * ROM デフォルト値 (CRC 不一致時に NvM_Init()/NvM_RestoreBlockDefaults() が
@@ -84,6 +85,12 @@ static const uint8 NvM_Default_DemStatus[NVM_BLOCK_DEM_STATUS_LENGTH] =
  * `NvM_RestoreBlockDefaults()` は ROM デフォルト値が未設定のブロックに対し
  * E_NOT_OK を返すだけで全 0 フィルは行わない、[SWS_NvM_00883]。この2ブロックに
  * 対して `NvM_RestoreBlockDefaults()` を呼んでもリセットは起きない）。 */
+/** 初回起動、または CRC 不一致からの復元では、失敗回数 0（ロックアウトなし）から始める。
+ *  実仕様は、回数を読めなかった場合に DcmDspSecurityNumAttDelay（ロックアウトする値）とする
+ *  （[SWS_Dcm_01156]）が、NvM_Init() は復元したブロックを読み出し成功として扱うため、
+ *  Dcm からは「読めなかった」と区別できない（Dcm_Init() は NvM_ReadBlock() が E_NOT_OK のときだけ、
+ *  ロックアウトする値にする）。 */
+static const uint8 NvM_Default_DcmSecurity = 0x00U;
 
 /* -----------------------------------------------------------------------
  * ブロック記述子テーブル
@@ -140,6 +147,21 @@ static const NvM_BlockDescriptorType NvM_BlockTable[NVM_BLOCK_COUNT] =
         1U,                                         /* Redundant: 冗長ブロック */
         NVM_BLOCK_DEM_EXTENDED_MIRROR_EEPROM_ADDR,  /* NvMNvBlockBaseNumberMirror */
         0U                                          /* UseCrcCompMechanism: 使わない */
+    },
+    /* NVM_BLOCK_ID_DCM_SECURITY
+     * SecurityAccess (UDS 0x27) の sendKey の連続失敗回数（AttemptCounter）。
+     * 再起動でブルートフォース対策（ロックアウト）を回避されないよう、Dcm が失敗のたびに
+     * 書き、Dcm_Init() が復元する（[SWS_Dcm_01154]/[SWS_Dcm_01155]）。
+     * UseCrcCompMechanism=1: 回数が変わらない書き込みは物理書き込みをスキップし、
+     * EEPROM の書き込み耐久を節約する（[SWS_NvM_00852]）。 */
+    {
+        NVM_BLOCK_DCM_SECURITY_EEPROM_ADDR,  /* NvMNvBlockBaseNumber */
+        NVM_BLOCK_DCM_SECURITY_LENGTH,       /* NvMNvBlockLength */
+        NvM_Ram_DcmSecurity,                 /* RamBlockDataAddress */
+        &NvM_Default_DcmSecurity,            /* RomBlockDataAddress */
+        0U,                                  /* Redundant: 非冗長 */
+        0U,                                  /* NvMNvBlockBaseNumberMirror: 非冗長のため未使用 */
+        1U                                   /* UseCrcCompMechanism */
     }
 };
 /* @@GEN-END nvm-pbcfg */
