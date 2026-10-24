@@ -173,7 +173,13 @@ typedef enum
  * ----------------------------------------------------------------------- */
 static CanSM_InternalStateType CanSM_State;
 static unsigned long           CanSM_BusOffTimerMs;   /* Bus-Off 検出時刻 (直近のリトライ基準点) */
-static uint8                   CanSM_BusOffRetries;   /* 回復試行回数 (L1→L2 切替判定にも使う) */
+static uint8                   CanSM_BusOffRetries;   /* 回復試行回数 (L1→L2 切替判定にも使う。回復が確定すると 0 へ戻す) */
+
+/** 回復の再起動をしたが、確定条件 G_BUS_OFF_PASSIVE をまだ満たしていない（[SWS_CanSM_00496]〜[00498]）。
+ *  満たすと Dem へ PASSED を報告し、CanSM_BusOffRetries を 0 へ戻す。満たす前に再度 Bus-Off が起きたら、
+ *  確定しないまま次の回復試行へ進む（回数は戻らない）。 */
+static uint8                   CanSM_BorPassivePending;
+static unsigned long           CanSM_BorRestartMs;    /* 直近の回復の再起動の時刻（確定条件を時間で判定するときの起点） */
 static unsigned long           CanSM_ValidationTimerMs; /* ウェイクアップ検証開始時刻 */
 
 /** Bus-Off 検出直前の CanSM_State（CANSM_STATE_FULL_COM または
@@ -196,6 +202,8 @@ static unsigned long CanSM_GetNowMs(void);
 
 static void CanSM_SetPduModeOnlineBestEffort(const char* callerTag);
 
+static boolean CanSM_BorPassiveGuardMet(void);
+
 /* ======================================================================
  * Functions
  * ====================================================================== */
@@ -217,6 +225,8 @@ void CanSM_Init(const CanSM_ConfigType* ConfigPtr)
     CanSM_State              = CANSM_STATE_NO_COM;
     CanSM_BusOffTimerMs      = 0UL;
     CanSM_BusOffRetries      = 0U;
+    CanSM_BorPassivePending  = 0U;
+    CanSM_BorRestartMs       = 0UL;
     CanSM_ValidationTimerMs  = 0UL;
     CanSM_PreBusOffState     = CANSM_STATE_NO_COM;
     CanSM_Initialized        = 1U;
@@ -296,8 +306,9 @@ Std_ReturnType CanSM_RequestComMode(NetworkHandleType network, ComM_ModeType mod
              * CANIF_OFFLINE、または以前 SILENT_COM だった名残のいずれでも、
              * FULL_COM では常に TX 有効であるべきため）。 */
             CanSM_SetPduModeOnlineBestEffort("RequestComMode");
-            CanSM_State         = CANSM_STATE_FULL_COM;
-            CanSM_BusOffRetries = 0U;
+            CanSM_State             = CANSM_STATE_FULL_COM;
+            CanSM_BusOffRetries     = 0U;
+            CanSM_BorPassivePending = 0U;   /* 新しく FULL_COM へ入り直すので、前の回復の確定待ちは破棄する */
             DET_LOGI(TAG, "->FULL_COM");
             /* 通信確立を報告。デバウンス確定すれば CAN_BUSOFF の TF をクリアする */
             (void)Dem_SetEventStatus(DemConf_DemEventParameter_CAN_BUSOFF, DEM_EVENT_STATUS_PASSED);
@@ -346,7 +357,8 @@ Std_ReturnType CanSM_RequestComMode(NetworkHandleType network, ComM_ModeType mod
              * （CAN_CS_STARTED/STOPPED いずれから呼ばれても正当なため）、
              * 戻り値は常に E_OK。明示的に無視する。 */
             (void)CanIf_SetControllerMode(0U, CAN_CS_SLEEP);
-            CanSM_State = CANSM_STATE_NO_COM;
+            CanSM_State             = CANSM_STATE_NO_COM;
+            CanSM_BorPassivePending = 0U;   /* 眠るので、前の回復の確定待ちは破棄する */
             DET_LOGI(TAG, "->NO_COM (physical sleep)");
             ComM_BusSM_ModeIndication(network, COMM_NO_COMMUNICATION);
             break;
@@ -535,6 +547,10 @@ void CanSM_ControllerBusOff(uint8 ControllerId)
      * 再設定しなくて済む（下記コメント・CanSM_MainFunction() 参照）。 */
     CanSM_PreBusOffState = CanSM_State;
 
+    /* 確定条件を満たす前に再度 Bus-Off が起きた。回復は確定しないので、確定待ちを破棄する
+     * （回復試行回数は戻さない。[SWS_CanSM_00514]/[00515]） */
+    CanSM_BorPassivePending = 0U;
+
     if (CanIf_SetControllerMode(0U, CAN_CS_STOPPED) != E_OK)
     {
         /* 到達しないはずの経路（CanIf_ControllerBusOff は Can 側が
@@ -701,12 +717,13 @@ void CanSM_ControllerModeIndication(uint8 ControllerId, Can_ControllerStateType 
  * \brief   CanSM 周期処理（Bus-Off 回復タイマ管理）。
  *
  * \details Bus-Off 状態のとき、L1/L2 のいずれかの周期（下記）が経過すると
- *          コントローラの再起動を試みる。再起動時は
- *          Dem_SetEventStatus(DemConf_DemEventParameter_CAN_BUSOFF, PASSED) を報告する
- *          （CanSM_RequestComMode を経由しない自動復帰のため、ここで明示的に報告する）。
- *          再起動後に再度 Bus-Off が発生すると CanSM_ControllerBusOff() が
- *          呼ばれ、試行回数がインクリメントされる（リトライ回数は次回の
- *          CanSM_RequestComMode(FULL_COM) までリセットされない）。
+ *          コントローラの再起動を試みる。再起動できた時点では、まだ回復は確定しない。
+ *          確定条件（G_BUS_OFF_PASSIVE、CanSM_BorPassiveGuardMet() 参照）を満たしたとき
+ *          （[SWS_CanSM_00496]〜[00498]）、はじめて
+ *          Dem_SetEventStatus(DemConf_DemEventParameter_CAN_BUSOFF, PASSED) を報告し、
+ *          回復試行回数を 0 へ戻す。確定する前に再度 Bus-Off が発生すると
+ *          CanSM_ControllerBusOff() が呼ばれ、回数を持ち越したまま次の回復試行へ進む
+ *          （単発の Bus-Off が起動後に累積して、突然 L2 になることはない）。
  *          各リトライ試行そのものの時刻を基準点として毎回更新するため、
  *          `CanIf_SetControllerMode(CAN_CS_STARTED)` が失敗して BUS_OFF に
  *          据え置かれた場合でも、次の試行は L1/L2 周期を空けてから行われる
@@ -740,6 +757,19 @@ void CanSM_MainFunction(void)
         return;
     }
 
+    /* [SWS_CanSM_00496]/[00497]: 回復の再起動後、確定条件（G_BUS_OFF_PASSIVE）を満たしたら、回復が確定したとして
+     * Dem へ PASSED を報告し（[SWS_CanSM_00498]）、回復試行回数を 0 へ戻す（[SWS_CanSM_00514]/[00515] の回数は
+     * 「G_BUS_OFF_PASSIVE を通らずに繰り返した回数」）。 */
+    if ((CanSM_BorPassivePending != 0U)
+        && ((CanSM_State == CANSM_STATE_FULL_COM) || (CanSM_State == CANSM_STATE_SILENT_COM))
+        && CanSM_BorPassiveGuardMet())
+    {
+        CanSM_BorPassivePending = 0U;
+        CanSM_BusOffRetries     = 0U;
+        DET_LOGI(TAG, "BusOff recovery confirmed (G_BUS_OFF_PASSIVE), retries reset");
+        (void)Dem_SetEventStatus(DemConf_DemEventParameter_CAN_BUSOFF, DEM_EVENT_STATUS_PASSED);
+    }
+
     if (CanSM_State == CANSM_STATE_WAKEUP_VALIDATING)
     {
         if ((CanSM_GetNowMs() - CanSM_ValidationTimerMs) >= CANSM_WAKEUP_VALIDATION_MS)
@@ -749,7 +779,8 @@ void CanSM_MainFunction(void)
             /* CAN_T_SLEEP は失敗しない（CanSM_RequestComMode() の
              * COMM_NO_COMMUNICATION 分岐のコメント参照）。戻り値は明示的に無視する。 */
             (void)CanIf_SetControllerMode(0U, CAN_CS_SLEEP);  /* CAN_CS_STOPPED -> CAN_CS_SLEEP、ウェイクアップ割り込み再武装 */
-            CanSM_State = CANSM_STATE_NO_COM;
+            CanSM_State             = CANSM_STATE_NO_COM;
+            CanSM_BorPassivePending = 0U;
         }
         return;
     }
@@ -784,7 +815,12 @@ void CanSM_MainFunction(void)
      * CanIf_SetControllerMode() 呼び出しのみのため、試行失敗は実質即座の
      * 再Bus-Off相当とみなせ、両者は事実上一致する。自己spec-citation検証で
      * 確認済みの意図的な近似）。 */
-    CanSM_BusOffRetries++;
+    /* 確定しないまま繰り返すと回数は増え続けるので、uint8 の上限で止める（折り返して 0 に戻ると、
+     * 持続的な Bus-Off なのに L1 の間隔へ戻り、DTC の FAILED を重ねて報告してしまう）。 */
+    if (CanSM_BusOffRetries < 0xFFU)
+    {
+        CanSM_BusOffRetries++;
+    }
     CanSM_BusOffTimerMs = CanSM_GetNowMs();
 
     if (CanSM_BusOffRetries == (CANSM_BUSOFF_L1_TO_L2_COUNT + 1U))
@@ -812,10 +848,11 @@ void CanSM_MainFunction(void)
         DET_LOGE(TAG, "MainFunction E: CanIf_SetControllerMode(STARTED) failed during BusOff recovery, retry next cycle");
         return;
     }
-    /* 回復成功を報告。デバウンス確定すれば CAN_BUSOFF の TF をクリアする
-     * （CDTC/PDTC は上の FAILED 確定で既に立っていれば保持される。Dem.c の
-     * PASSED デバウンス確定コメント参照）。 */
-    (void)Dem_SetEventStatus(DemConf_DemEventParameter_CAN_BUSOFF, DEM_EVENT_STATUS_PASSED);
+    /* コントローラは再起動できたが、回復の確定はまだ（[SWS_CanSM_00496]〜[00498]）。確定条件（G_BUS_OFF_PASSIVE）を
+     * 満たすまで、Dem へ PASSED は報告せず、回復試行回数も戻さない（上の判定ブロック参照）。確定する前に再度
+     * Bus-Off が起きれば、回数を持ち越して次の回復試行へ進む。 */
+    CanSM_BorPassivePending = 1U;
+    CanSM_BorRestartMs      = CanSM_GetNowMs();
 
     /* 2026-08 変更: Bus-Off は CANSM_STATE_FULL_COM だけでなく
      * CANSM_STATE_SILENT_COM からも起こりうるようになったため
@@ -837,6 +874,9 @@ void CanSM_MainFunction(void)
     {
         CanSM_SetPduModeOnlineBestEffort("MainFunction");
         CanSM_State = CANSM_STATE_FULL_COM;
+        /* CAN ツールの「ECU 状態」パネルが、このログから CanSM の状態を FULL_COM へ戻す
+         * （SILENT_COM へ戻る分岐のログと対）。 */
+        DET_LOGI(TAG, "BusOff recovered -> FULL_COM");
         /* 回復成功 → ComM に FULL_COM を通知 → EcuM_RequestRUN → RUN へ戻る
          * （ただし上記の CanNm 解放ペンディング中だった場合は、ComM 側が代わりに
          * CanSM_RequestComMode(NO_COM) を呼び返して仕切り直す）。 */
@@ -864,6 +904,33 @@ static unsigned long CanSM_GetNowMs(void)
     TickType now = 0U;
     (void)GetCounterValue(SYSTEM_COUNTER, &now);
     return (unsigned long)now;
+}
+
+/* ----------------------------------------------------------------------
+ * CanSM_BorPassiveGuardMet
+ * ---------------------------------------------------------------------- */
+
+/**
+ * \brief   Bus-Off 回復の確定条件 G_BUS_OFF_PASSIVE を満たしたかを返す。
+ *
+ * \details CANSM_BOR_TX_CONFIRMATION_POLLING が有効で、FULL_COM に戻っているなら、再起動後に
+ *          CanIf_GetTxConfirmationState() が CANIF_TX_RX_NOTIFICATION（再起動後に TX 確認が 1 回でもあった）を
+ *          返したときに満たす（[SWS_CanSM_00497]）。それ以外は、再起動から CANSM_BOR_TIME_TX_ENSURED_MS 以上
+ *          経過したときに満たす（[SWS_CanSM_00496]）。無効のときはもちろん、SILENT_COM に戻った場合も時間で判定する
+ *          （SILENT_COM は CanIf 層で TX を抑制しており、TX 確認が得られないため）。TX 確認の状態は、コントローラを
+ *          起動し直すたびに CanIf がリセットする（[SWS_CANIF_00734]）ので、回復の再起動より前の確認は数えない。
+ *
+ * \return  TRUE=確定条件を満たした。FALSE=まだ満たしていない。
+ */
+static boolean CanSM_BorPassiveGuardMet(void)
+{
+#if (CANSM_BOR_TX_CONFIRMATION_POLLING != 0U)
+    if (CanSM_State == CANSM_STATE_FULL_COM)
+    {
+        return (CanIf_GetTxConfirmationState(0U) == CANIF_TX_RX_NOTIFICATION) ? TRUE : FALSE;
+    }
+#endif
+    return ((CanSM_GetNowMs() - CanSM_BorRestartMs) >= CANSM_BOR_TIME_TX_ENSURED_MS) ? TRUE : FALSE;
 }
 
 /* ----------------------------------------------------------------------

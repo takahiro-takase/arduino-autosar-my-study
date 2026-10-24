@@ -13,6 +13,8 @@ Bus-Off 検出直後（回復試行の前）に `ComM_BusSM_ModeIndication(SILEN
 試行回数が `CANSM_BUSOFF_L1_TO_L2_COUNT` を超えるまでは短い周期（L1）でリトライし、
 超えたら Dem へ DTC を報告（limit=1 のため即座に確定）した上で長い周期（L2）へ
 切り替えて無期限にリトライを継続する（回復を諦めて停止する状態は存在しない）。
+再起動に成功しても、その時点では回復は確定しない。確定条件（G_BUS_OFF_PASSIVE、SWS_CanSM_00496〜00498）を
+満たしたとき、はじめて Dem へ PASSED を報告し、試行回数を 0 に戻す（下の「Bus-Off 回復の確定」参照）。
 再起動試行に成功したら、Bus-Off 発生直前の状態（FULL_COM か SILENT_COM か）へ
 復帰させる（`CanSM_PreBusOffState`、SILENT_COM だった場合は誤って FULL_COM へ
 戻さない）。ComM の NO_COM 要求によるボランタリスリープでは即座にはスリープせず、
@@ -93,7 +95,28 @@ stateDiagram-v2
 | `CANSM_BUSOFF_RECOVERY_L1_MS` | 200 ms | Bus-Off 回復リトライの間隔（L1） |
 | `CANSM_BUSOFF_RECOVERY_L2_MS` | 5000 ms | L2 の間隔（L1 を使い切った後） |
 | `CANSM_BUSOFF_L1_TO_L2_COUNT` | 3 回 | L1 のリトライ回数。超えた時点で `DemConf_DemEventParameter_CAN_BUSOFF` を FAILED にして L2 へ |
+| `CANSM_BOR_TX_CONFIRMATION_POLLING` | 1 | 回復の確定に TX 確認のポーリングを使う（1）か、時間で判定する（0）か |
+| `CANSM_BOR_TIME_TX_ENSURED_MS` | 1000 ms | 回復の確定までの待ち時間。ポーリングを使わない（上が 0 の）とき、および SILENT_COM に戻った場合に使う |
 | `CANSM_WAKEUP_VALIDATION_MS` | 2000 ms | ウェイクアップ検証の待ち時間。この間に有効な RX が無ければ再スリープ |
+
+### Bus-Off 回復の確定（G_BUS_OFF_PASSIVE、2026-10 追加）
+
+再起動（`CanIf_SetControllerMode(STARTED)`）に成功した時点では、回復は確定しません（以前は、再起動できた
+直後に Dem へ PASSED を報告していました）。次の条件を満たしたとき、回復が確定します。
+
+| 設定 | 確定条件 |
+| --- | --- |
+| `CANSM_BOR_TX_CONFIRMATION_POLLING` = 1（既定、[SWS_CanSM_00497]） | 再起動後に `CanIf_GetTxConfirmationState()` が `CANIF_TX_RX_NOTIFICATION`（TX 確認が 1 回でもあった）を返す |
+| 0（[SWS_CanSM_00496]）、または SILENT_COM に戻った場合 | 再起動から `CANSM_BOR_TIME_TX_ENSURED_MS` 以上経過した（SILENT_COM は CanIf 層で TX を抑制しており、TX 確認が得られないため） |
+
+確定したとき（[SWS_CanSM_00498]）、Dem へ `DEM_EVENT_STATUS_PASSED` を報告し、回復試行回数を 0 に戻します。
+確定する前に再度 Bus-Off が起きると、確定しないまま次の回復試行へ進み、回数は持ち越されます
+（[SWS_CanSM_00514]/[00515] の回数は「G_BUS_OFF_PASSIVE を通らずに繰り返した回数」）。
+そのため、単発の Bus-Off が、起動後に累積して、突然 L2（長い間隔）や DTC の FAILED になることはなくなりました。
+逆に、TX 確認が一度も得られない状況（他のノードが ACK を返さないなど）では、確定せず、回数は増え続け、
+L1 を使い切ると L2 と DTC の FAILED になります。TX 確認の状態は、コントローラを起動し直すたびに CanIf が
+リセットする（[SWS_CANIF_00734]）ので、回復の再起動より前の確認は数えません。
+`RequestComMode(FULL_COM)`（新しく FULL_COM に入り直す）は、確定待ちを破棄して、回数を 0 に戻します。
 
 ## 開発の経緯（実機で見つかった不具合・設計変更）
 

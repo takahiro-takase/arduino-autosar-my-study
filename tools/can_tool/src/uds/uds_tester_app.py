@@ -1533,6 +1533,8 @@ class UdsTesterFrame(ttk.Frame):
     # DET_LOGI/DET_LOGW 呼び出し文字列と対応（docs/modules/CanSM_Notes.md
     # 「状態遷移」の Mermaid 図と同じ6状態）。
     _CANSM_STATE_RULES = (
+        ("BusOff recovered -> FULL_COM", "FULL_COM"),
+        ("BusOff recovered -> SILENT_COM", "SILENT_COM"),
         ("awaiting Nm Bus-Sleep Mode", "NO_COM_PENDING_SLEEP"),
         ("->FULL_COM", "FULL_COM"),
         ("->SILENT_COM", "SILENT_COM"),
@@ -1574,18 +1576,25 @@ class UdsTesterFrame(ttk.Frame):
     )
     _TAG_STATE_RULES = {tag: rules for tag, _label, rules in _STATE_DEFS}
     # 値の表示幅（文字数）。実行中に値が変わっても左右の他要素の位置が動かない
-    # よう固定する。全状態を通じて最長の値は "NO_COM_PENDING_SLEEP"（20文字）。
-    _STATE_VALUE_WIDTH = 20
+    # よう固定する。全状態を通じて最長の値は "BUS_OFF retry=255 (L2)"（22文字。回数は uint8）。
+    _STATE_VALUE_WIDTH = 22
+
+    # CanSM.c の ControllerBusOff が出す "BusOff detected! retry=<回数> (<L1|L2>) ..." から、
+    # BUS_OFF 表示に続けて回復試行の回数と L1/L2 を付ける（回数は G_BUS_OFF_PASSIVE を
+    # 通らずに繰り返した回数。255 で止まる）。最長 22 文字（_STATE_VALUE_WIDTH 内）。
+    _BUSOFF_DETECTED_RE = re.compile(r"BusOff detected! retry=(\d+) \((L[12])\)")
 
     @classmethod
     def _parse_serial_state(cls, line: str):
         """ログ1行から EcuM/ComM/CanSM の状態遷移を抽出する。
         該当なしなら None、該当すれば (tag, state) を返す。
         完全な状態機械の再現ではなく、DET_LOGI/DET_LOGW に実際に出てくる
-        文字列だけを頼りにしたベストエフォートの表示用。Bus-Off 回復成功時
-        （CanSM_MainFunction() の復帰分岐、CanSM.c 参照）のように、その場では
-        専用の状態変化ログを出さない遷移もあり、その場合は次に別の遷移ログが
-        出るまで表示が古いままになる。"""
+        文字列だけを頼りにしたベストエフォートの表示用。Bus-Off からの復帰は、
+        CanSM_MainFunction() の復帰分岐が "BusOff recovered -> FULL_COM" /
+        "BusOff recovered -> SILENT_COM" を出すので、それで BUS_OFF 表示を戻す
+        （以前は FULL_COM へ戻る分岐にログが無く、ComM の表示だけが FULL_COM になって
+        CanSM が BUS_OFF のまま残った、2026-10）。専用の状態変化ログを出さない遷移が
+        あれば、次に別の遷移ログが出るまで表示が古いままになる。"""
         m = cls._SERIAL_LOG_RE.match(line)
         if not m:
             return None
@@ -1595,6 +1604,10 @@ class UdsTesterFrame(ttk.Frame):
             return None
         for substr, state in rules:
             if substr in rest:
+                if state == "BUS_OFF":
+                    d = cls._BUSOFF_DETECTED_RE.search(rest)
+                    if d:
+                        state = f"BUS_OFF retry={d.group(1)} ({d.group(2)})"
                 return (tag, state)
         return None
 
