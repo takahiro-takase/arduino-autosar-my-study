@@ -87,6 +87,18 @@
  *  経た後の確定情報のため、Dem では重ねてデバウンスしない）。 */
 #define CANSM_BUSOFF_L1_TO_L2_COUNT  3U
 
+/** Bus-Off 回復の確定条件（G_BUS_OFF_PASSIVE）に TX 確認のポーリングを使うか（CanSMBorTxConfirmationPolling 相当、
+ *  1=使う、0=使わない）。1 なら、再起動後に CanIf_GetTxConfirmationState() が CANIF_TX_RX_NOTIFICATION
+ *  （再起動後に TX 確認が 1 回でもあった）を返した時点で回復が確定する（SWS_CanSM_00497）。
+ *  0 なら（SILENT_COM に戻った場合も）、再起動から CANSM_BOR_TIME_TX_ENSURED_MS が経過した時点で確定する（SWS_CanSM_00496）。
+ *  確定すると、Dem へ PASSED を報告し、回復試行回数を 0 に戻す（SWS_CanSM_00498）。 */
+#define CANSM_BOR_TX_CONFIRMATION_POLLING  1U
+
+/** Bus-Off 回復の確定までの待ち時間 [ms]（CanSMBorTimeTxEnsured 相当）。
+ *  CANSM_BOR_TX_CONFIRMATION_POLLING が 0 のとき（SWS_CanSM_00496）と、SILENT_COM に戻った場合（TX を抑制
+ *  していて TX 確認が得られないため）に使う。この時間の間に再度 Bus-Off が起きなければ、回復が確定したとみなす。 */
+#define CANSM_BOR_TIME_TX_ENSURED_MS  1000UL
+
 /** ウェイクアップ検証タイムアウト [ms]（AUTOSAR EcuM Wakeup Validation
  *  Protocol 相当）。ボランタリスリープ中に MCP2515 の WAKIF が立ってから、
  *  この時間内に有効な CAN フレームを 1 つも受信できなければ、電気的ノイズ等

@@ -10,6 +10,8 @@
     "busOffRecoveryL1Ms",
     "busOffRecoveryL2Ms",
     "busOffL1ToL2Count",
+    "borTxConfirmationPolling",
+    "borTimeTxEnsuredMs",
     "wakeupValidationMs"
   ],
   "$defs": {
@@ -102,6 +104,44 @@
           "minimum": 1,
           "maximum": 255,
           "description": "L1 から L2 へ切り替えるまでの回復試行回数"
+        },
+        "doc": {
+          "$ref": "#/$defs/doc"
+        }
+      }
+    },
+    "borTxConfirmationPolling": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "value",
+        "doc"
+      ],
+      "properties": {
+        "value": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Bus-Off 回復の確定に TX 確認のポーリングを使うか（1=使う、0=使わない）"
+        },
+        "doc": {
+          "$ref": "#/$defs/doc"
+        }
+      }
+    },
+    "borTimeTxEnsuredMs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "value",
+        "doc"
+      ],
+      "properties": {
+        "value": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4294967295,
+          "description": "Bus-Off 回復の確定までの待ち時間 [ms]（ポーリングを使わないとき、または SILENT_COM に戻ったときに使う）"
         },
         "doc": {
           "$ref": "#/$defs/doc"

@@ -232,6 +232,65 @@ TEST_F(CanSM_MainFunction_Test, MainFunction_NG_RecoveryAttemptFails_StaysInBusO
     EXPECT_EQ(CallCount_Dem_SetEventStatus, 0U);  // まだ PASSED は報告しない
 }
 
+// 以下の確定条件のテストは、TX 確認のポーリング（CANSM_BOR_TX_CONFIRMATION_POLLING=1、既定）を前提にする
+static_assert(CANSM_BOR_TX_CONFIRMATION_POLLING == 1U, "このテストは CANSM_BOR_TX_CONFIRMATION_POLLING=1 が前提");
+
+// ------------------------------------------------------------
+// 異常系: 再起動できても、再起動後に TX 確認が無ければ、回復は確定しない
+// （Dem へ PASSED を報告せず、回復試行回数も戻さない。[SWS_CanSM_00497]/[00498]）。
+// ------------------------------------------------------------
+
+TEST_F(CanSM_MainFunction_Test, MainFunction_NG_RecoveryNotConfirmedWithoutTxConfirmation)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    ArrangeBusOffPastL1Interval();
+    CanSM_MainFunction();   // 再起動できる（FULL_COM へ戻る）。TX 確認はまだ 1 つも無い
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    for (int i = 0; i < 5; i++)
+    {
+        FakeMillis_Value += 1000UL;
+        CanSM_MainFunction();
+    }
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(CallCount_Dem_SetEventStatus, 0U);   // 確定しないので、PASSED を報告しない
+}
+
+// ------------------------------------------------------------
+// 異常系: 再起動の後に NO_COM（物理スリープ）へ入ると、回復の確定待ちは破棄される。
+// 眠った後に TX 確認があっても、前の回復を確定して Dem へ PASSED を報告しない。
+// ------------------------------------------------------------
+
+TEST_F(CanSM_MainFunction_Test, MainFunction_NG_NoComDiscardsPendingRecoveryConfirmation)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    ArrangeBusOffPastL1Interval();
+    CanSM_MainFunction();   // 再起動できる（確定待ちになる）
+    ASSERT_EQ(CanSM_RequestComMode(0U, COMM_NO_COMMUNICATION), E_OK);
+    WrapDem_Reset();
+    FailFromCallCount_CanIf_GetTxConfirmationState = 1U;
+    ForcedReturn_CanIf_GetTxConfirmationState      = CANIF_TX_RX_NOTIFICATION;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    CanSM_MainFunction();
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(CallCount_Dem_SetEventStatus, 0U);
+}
+
 TEST_F(CanSM_MainFunction_Test, MainFunction_OK_DoesNotRetryImmediatelyAfterFailedAttempt)
 {
     /* ----------------------- */
@@ -289,13 +348,12 @@ TEST_F(CanSM_MainFunction_Test, MainFunction_OK_RecoversOnNextAttemptAfterPriorF
     /* ----------------------- */
     /* ---- 評価 (Assert) ---- */
     /* ----------------------- */
-    // FULL_COM へ回復し、Dem へ PASSED を報告する
+    // FULL_COM へ回復する。ただし回復の確定（G_BUS_OFF_PASSIVE）はまだなので、Dem へ PASSED は報告しない
     EXPECT_EQ(Can_Test_GetControllerState(), CAN_CS_STARTED);
     ComM_ModeType mode = COMM_NO_COMMUNICATION;
     ASSERT_EQ(ComM_GetCurrentComMode(COMM_USER_0, &mode), E_OK);
     EXPECT_EQ(mode, static_cast<ComM_ModeType>(COMM_FULL_COMMUNICATION));
-    EXPECT_EQ(CallCount_Dem_SetEventStatus, 1U);
-    EXPECT_EQ(LastEventStatus_Dem_SetEventStatus, DEM_EVENT_STATUS_PASSED);
+    EXPECT_EQ(CallCount_Dem_SetEventStatus, 0U);
 }
 
 TEST_F(CanSM_MainFunction_Test, MainFunction_OK_DoesNothingWhileNotInBusOff)
@@ -347,6 +405,148 @@ TEST_F(CanSM_MainFunction_Test, MainFunction_OK_DegradesToL2AndReportsDemAfterRe
     EXPECT_EQ(demAtL1Interval, 0U);
     EXPECT_EQ(CallCount_Dem_SetEventStatus, 1U);   // L1 を使い切って L2 へ格下げした回に、1 回だけ報告する
     EXPECT_EQ(LastEventStatus_Dem_SetEventStatus, DEM_EVENT_STATUS_FAILED);
+}
+
+// ------------------------------------------------------------
+// 正常系: 回復の再起動を、確定しないまま繰り返すと、回復試行回数が累積して L2 の間隔になる
+// （[SWS_CanSM_00514]/[00515]。単発の Bus-Off が、確定のたびに戻らずに累積することはない）。
+// ------------------------------------------------------------
+
+TEST_F(CanSM_MainFunction_Test, MainFunction_OK_RetriesAccumulateWhenBusOffRepeatsBeforeConfirmation)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // Bus-Off → 再起動を、TX 確認の無いまま L1 の回数（CANSM_BUSOFF_L1_TO_L2_COUNT）だけ繰り返す
+    for (unsigned i = 0U; i < CANSM_BUSOFF_L1_TO_L2_COUNT; i++)
+    {
+        CanSM_ControllerBusOff(0U);
+        FakeMillis_Value += static_cast<unsigned long>(CANSM_BUSOFF_RECOVERY_L1_MS) + 1UL;
+        CanSM_MainFunction();
+        ASSERT_EQ(Can_Test_GetControllerState(), CAN_CS_STARTED);
+    }
+    CanSM_ControllerBusOff(0U);
+    const uint32 setModeAfterBusOff = CallCount_CanIf_SetControllerMode;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    FakeMillis_Value += static_cast<unsigned long>(CANSM_BUSOFF_RECOVERY_L1_MS) + 1UL;   // L1 の間隔だけ待つ
+    CanSM_MainFunction();
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(CallCount_CanIf_SetControllerMode, setModeAfterBusOff);   // L2 の間隔が要るので、まだ再起動しない
+    EXPECT_EQ(Can_Test_GetControllerState(), CAN_CS_STOPPED);
+}
+
+// ------------------------------------------------------------
+// 正常系: 確定しないまま 255 回を超えて繰り返しても、回復試行回数は折り返さない。
+// 折り返すと L1 の間隔へ戻り、DTC の FAILED を重ねて報告してしまうため、L2 の間隔のまま、FAILED は 1 回だけ。
+// ------------------------------------------------------------
+
+TEST_F(CanSM_MainFunction_Test, MainFunction_OK_RetriesDoNotWrapAroundWhenNeverConfirmed)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    for (unsigned i = 0U; i < 300U; i++)
+    {
+        CanSM_ControllerBusOff(0U);
+        FakeMillis_Value += static_cast<unsigned long>(CANSM_BUSOFF_RECOVERY_L2_MS) + 1UL;
+        CanSM_MainFunction();
+    }
+    CanSM_ControllerBusOff(0U);
+    const uint32 setModeAfterBusOff = CallCount_CanIf_SetControllerMode;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    FakeMillis_Value += static_cast<unsigned long>(CANSM_BUSOFF_RECOVERY_L1_MS) + 1UL;   // L1 の間隔だけ待つ
+    CanSM_MainFunction();
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(CallCount_CanIf_SetControllerMode, setModeAfterBusOff);   // L2 のまま。まだ再起動しない
+    EXPECT_EQ(CallCount_Dem_SetEventStatus, 1U);                         // FAILED は L1 → L2 の 1 回だけ
+    EXPECT_EQ(LastEventStatus_Dem_SetEventStatus, DEM_EVENT_STATUS_FAILED);
+}
+
+// ------------------------------------------------------------
+// 正常系: 再起動後に TX 確認があれば、回復が確定する。Dem へ PASSED を報告し、回復試行回数が 0 へ戻る
+// （次の Bus-Off は、また L1 の間隔で再起動する。[SWS_CanSM_00497]/[00498]）。
+// ------------------------------------------------------------
+
+TEST_F(CanSM_MainFunction_Test, MainFunction_OK_TxConfirmationConfirmsRecoveryAndResetsRetries)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    for (unsigned i = 0U; i < CANSM_BUSOFF_L1_TO_L2_COUNT; i++)
+    {
+        CanSM_ControllerBusOff(0U);
+        FakeMillis_Value += static_cast<unsigned long>(CANSM_BUSOFF_RECOVERY_L1_MS) + 1UL;
+        CanSM_MainFunction();
+        ASSERT_EQ(Can_Test_GetControllerState(), CAN_CS_STARTED);
+    }
+    WrapDem_Reset();
+    // 再起動後に TX 確認があったことにする（CanIf_GetTxConfirmationState() が CANIF_TX_RX_NOTIFICATION を返す）
+    FailFromCallCount_CanIf_GetTxConfirmationState = 1U;
+    ForcedReturn_CanIf_GetTxConfirmationState      = CANIF_TX_RX_NOTIFICATION;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    CanSM_MainFunction();
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(CallCount_Dem_SetEventStatus, 1U);
+    EXPECT_EQ(LastEventStatus_Dem_SetEventStatus, DEM_EVENT_STATUS_PASSED);
+
+    // 回数が戻っているので、次の Bus-Off は L1 の間隔で再起動する
+    FailFromCallCount_CanIf_GetTxConfirmationState = WRAP_CANIF_FAIL_FROM_CALL_COUNT_DISABLED;
+    CanSM_ControllerBusOff(0U);
+    FakeMillis_Value += static_cast<unsigned long>(CANSM_BUSOFF_RECOVERY_L1_MS) + 1UL;
+    CanSM_MainFunction();
+    EXPECT_EQ(Can_Test_GetControllerState(), CAN_CS_STARTED);
+}
+
+// ------------------------------------------------------------
+// 正常系: SILENT_COM（TX を抑制している）に戻った場合は、TX 確認が得られないので、時間
+// （CANSM_BOR_TIME_TX_ENSURED_MS）で回復を確定する。確定すると Dem へ PASSED を報告し、回数が 0 に戻る。
+// ------------------------------------------------------------
+
+TEST_F(CanSM_MainFunction_Test, MainFunction_OK_SilentComRecoveryIsConfirmedByTime)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    ASSERT_EQ(CanSM_RequestComMode(0U, COMM_SILENT_COMMUNICATION), E_OK);
+    CanSM_ControllerBusOff(0U);
+    FakeMillis_Value += static_cast<unsigned long>(CANSM_BUSOFF_RECOVERY_L1_MS) + 1UL;
+    CanSM_MainFunction();   // 再起動して SILENT_COM に戻る
+    ASSERT_EQ(Can_Test_GetControllerState(), CAN_CS_STARTED);
+    WrapDem_Reset();
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    FakeMillis_Value += static_cast<unsigned long>(CANSM_BOR_TIME_TX_ENSURED_MS) - 10UL;
+    CanSM_MainFunction();   // まだ確定しない
+    const uint32 demBefore = CallCount_Dem_SetEventStatus;
+    FakeMillis_Value += 20UL;
+    CanSM_MainFunction();   // 時間が経ったので確定する
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(demBefore, 0U);
+    EXPECT_EQ(CallCount_Dem_SetEventStatus, 1U);
+    EXPECT_EQ(LastEventStatus_Dem_SetEventStatus, DEM_EVENT_STATUS_PASSED);
 }
 
 }  // namespace
