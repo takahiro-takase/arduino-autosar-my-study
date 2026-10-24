@@ -116,7 +116,7 @@
  *            TX I-PDU 4 (IPduId=4): CAN ID 0x300, DLC=1  TestMsg
  *              (メータ ECU、TxModeMode=COM_TX_MODE_PERIODIC、1000ms 周期、保護なし)
  *              Signal 19: TestCounter  8 bit  BitPos=0  BigEndian
- *              信号追加の練習用のテスト専用フレーム（App_TestMsg が 1 秒ごとに +1）。
+ *              信号追加の練習用のテスト専用フレーム（App_Test が 1 秒ごとに +1）。
  *
  *          E2E（Profile01/05）の設定・ステート実体（DataID/Counter・CRC オフセット等）は
  *          E2E Transformer 方式への移行に伴い src/Bsw/E2EXf/E2EXf_PBCfg.c へ

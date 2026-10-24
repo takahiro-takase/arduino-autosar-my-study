@@ -58,6 +58,7 @@
 #define CANTSYN_E_INV_CTRL_IDX   0x06U  /* [SWS_CanTSyn_00089]: 不正な CAN チャネル番号 */
 
 /** ApiId（各関数の Doxygen \ServiceID タグと一致させること。SWS_CanTSyn 8.1.3 の Service ID） */
+/* cppcheck-suppress misra-c2012-2.5 */
 #define CANTSYN_API_ID_INIT                  0x01U
 #define CANTSYN_API_ID_GET_VERSION_INFO      0x02U
 #define CANTSYN_API_ID_SET_TRANSMISSION_MODE 0x03U
@@ -87,6 +88,7 @@
 
 /** CanTSyn_MainFunction() の呼び出し周期 [ms]（CanTSynMainFunctionPeriod 相当、
  *  Os.json のタスク周期と一致させること）。 */
+/* cppcheck-suppress misra-c2012-2.5 */
 #define CANTSYN_MAIN_FUNCTION_PERIOD_MS  100UL
 
 /** 時刻同期メッセージの CanIf の TX PDU ID（CanIf.json の CanTSyn_Tx。SYNC と FUP は

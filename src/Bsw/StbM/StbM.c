@@ -85,7 +85,7 @@ static const StbM_TimeBaseConfigType StbM_TimeBaseConfig[STBM_TIME_BASE_COUNT] =
 static uint64_t StbM_GetNowMs(void);
 static uint64_t StbM_LocalNs(void);
 static uint64_t StbM_GlobalNs(const StbM_TimeBaseType* base);
-static void StbM_SetGlobalNs(StbM_TimeBaseType* base, uint64_t globalNs);
+static void StbM_SetGlobalNs(uint16 timeBaseId, uint64_t globalNs);
 static uint64_t StbM_TimeStampToNs(const StbM_TimeStampType* ts);
 static boolean  StbM_TimeStampInRange(const StbM_TimeStampType* ts, uint8 apiId);
 static boolean StbM_CheckTimeBase(StbM_SynchronizedTimeBaseType timeBaseId, uint8 apiId);
@@ -322,7 +322,7 @@ Std_ReturnType StbM_SetGlobalTime(StbM_SynchronizedTimeBaseType timeBaseId,
         return E_NOT_OK;
     }
 
-    StbM_SetGlobalNs(&StbM_TimeBase[timeBaseId], StbM_TimeStampToNs(timeStamp));
+    StbM_SetGlobalNs(timeBaseId, StbM_TimeStampToNs(timeStamp));
     return E_OK;
 }
 
@@ -373,7 +373,7 @@ Std_ReturnType StbM_BusSetGlobalTime(StbM_SynchronizedTimeBaseType timeBaseId,
         return E_NOT_OK;
     }
 
-    StbM_SetGlobalNs(base, StbM_TimeStampToNs(timeStampPtr) + (uint64_t)measureDataPtr->pathDelay);
+    StbM_SetGlobalNs(timeBaseId, StbM_TimeStampToNs(timeStampPtr) + (uint64_t)measureDataPtr->pathDelay);
 
     if ((timeStampPtr->timeBaseStatus & STBM_TIMEBASE_STATUS_SYNC_TO_GATEWAY) != 0U)
     {
@@ -532,11 +532,12 @@ static uint64_t StbM_GlobalNs(const StbM_TimeBaseType* base)
  * \details 同期済み（GLOBAL_TIME_BASE）にし、TIMEOUT を下ろして、最終更新時刻を現在にする。
  *          同期済みでなかった（初回、またはタイムアウト後）の更新は INFO ログに出す（受信側の実機確認用）。
  *
- * \param[in,out] base      時間ベース。
- * \param[in]     globalNs  いまの全域時間 [ns]。
+ * \param[in]  timeBaseId  時間ベースの ID（範囲は呼び出し元で確認済み）。
+ * \param[in]  globalNs    いまの全域時間 [ns]。
  */
-static void StbM_SetGlobalNs(StbM_TimeBaseType* base, uint64_t globalNs)
+static void StbM_SetGlobalNs(uint16 timeBaseId, uint64_t globalNs)
 {
+    StbM_TimeBaseType* base = &StbM_TimeBase[timeBaseId];   /* [MISRA 18.4] ポインタの引き算をやめ、ID を渡す */
     boolean wasSynced = ((base->status & STBM_TIMEBASE_STATUS_GLOBAL_TIME_BASE) != 0U)
                         && ((base->status & STBM_TIMEBASE_STATUS_TIMEOUT) == 0U);
 
@@ -547,7 +548,7 @@ static void StbM_SetGlobalNs(StbM_TimeBaseType* base, uint64_t globalNs)
 
     if (!wasSynced)
     {
-        DET_LOGI(TAG, "base=%u synchronized", (unsigned)(base - StbM_TimeBase));
+        DET_LOGI(TAG, "base=%u synchronized", (unsigned)timeBaseId);
     }
 }
 

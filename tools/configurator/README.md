@@ -83,7 +83,7 @@ C ソースの生成領域は手で編集しません（次の生成で上書き
 
 信号表に信号を足して、ECU から CAN に出てくるところまでを試すための、テスト専用のメッセージ `TestMsg`（CAN 0x300、ECU 送信、1 秒周期）を用意しています。
 E2E・SecOC は付けていない素のフレームで、`TestCounter`（1 バイト）が 1 秒ごとに +1 されます（255 の次は 0）。
-カウンタは `src/Asw/App_TestMsg.c` が書き込みます。
+カウンタは `src/Asw/App_Test.c` が書き込みます。
 
 can_tool の左側で `Tester` を開くと、受信モニタに `TestMsg (0x300, テスト用)` の行があります（`tools/can_tool/config.json` で登録済み）。
 CAN のバイト列と、信号表の定義に従ってデコードした信号名つきの値（`TestCounter=…`）が表示されます。
@@ -101,7 +101,7 @@ CAN のバイト列と、信号表の定義に従ってデコードした信号�
 6. `pio run -e uno_r4 -t upload` で書き込み、can_tool の受信モニタを見ます。`TestMsg` が 2 バイトになり、`TestCounter2` が表示されます。
 
 `TestCounter2` に値を入れる処理はまだ無いため、値は 0 のままです。ASW から書く関数 `Rte_Write_TestMsg_TestCounter2()` は、手順 5 の「生成」で `src/Rte/Rte.h` / `Rte.c` に自動で作られています（[Rte の関数の生成](#rte-generation) 参照）。
-値を変えたいときは、`src/Asw/App_TestMsg.c` の `App_TestMsg_Run()` から、その関数を呼びます。
+値を変えたいときは、`src/Asw/App_Test.c` の `App_Test_Run()` から、その関数を呼びます。
 
 元に戻すときは、信号表の変更を取り消し（`git checkout` または手で戻す）、「同期」「生成」を押し直します。
 
