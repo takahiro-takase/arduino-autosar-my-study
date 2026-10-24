@@ -308,6 +308,7 @@ cmake --build --preset native-chain --target misra_check
   該当行の直前に `/* cppcheck-suppress <ルール> */` を置いて記録する。いずれも理由を併記し、判断基準
   （AUTOSAR 仕様で規定されている、ツールの過剰指摘、など）は `misra_suppressions.txt` に書いている
 - **注意**: MISRA の規則文は著作権のためツールに含まれず、ルール番号のみが表示される
+- **練習用**: 指摘の修正を練習するダミーアプリ（`src/Asw/App_Test.c` の末尾の練習用ブロック）は、勉強するときだけ有効にする。手順は [docs/misra/README.md](docs/misra/README.md)
 
 AUTOSAR API の実装数（上記「[モジュール一覧](#module-list)」の「API 実装数」列）も、ソースを解析して
 数えます。数字は手で書かず、スクリプトで集計・検証します。

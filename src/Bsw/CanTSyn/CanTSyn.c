@@ -42,14 +42,8 @@
 
 #define TAG "CanTSyn"
 
-/** 1 ms あたりの ns 数。 */
-#define CANTSYN_NS_PER_MS  1000000UL
-
 /** 1 s あたりの ns 数。 */
 #define CANTSYN_NS_PER_SEC  1000000000UL
-
-/** 1 s あたりの ms 数。 */
-#define CANTSYN_MS_PER_SEC  1000UL
 
 /** SC（シーケンスカウンタ）の値域（4bit、[SWS_CanTSyn_00048]）。 */
 #define CANTSYN_SC_MASK  0x0FU
@@ -128,6 +122,7 @@ static unsigned long         CanTSyn_RxWaitStartMs;
 static unsigned long CanTSyn_GetNowMs(void);
 static void CanTSyn_SendSync(unsigned long nowMs);
 static void CanTSyn_SendFup(unsigned long nowMs);
+static void CanTSyn_ClearPdu(uint8* pdu);
 static void CanTSyn_WriteBe32(uint8* dst, uint32 value);
 static Std_ReturnType CanTSyn_TransmitPdu(uint8* pdu);
 static uint8 CanTSyn_Crc8H2FUpdate(uint8 crc, uint8 data);
@@ -646,6 +641,26 @@ static unsigned long CanTSyn_GetNowMs(void)
 }
 
 /* ----------------------------------------------------------------------
+ * CanTSyn_ClearPdu
+ * ---------------------------------------------------------------------- */
+
+/**
+ * \brief   SYNC/FUP 用のバッファ（CANTSYN_DLC バイト）を 0 で埋める。
+ *
+ * \details User Byte など、値を決めていないバイトを既定値 0 にしておくために、組み立ての前に呼ぶ。
+ *          配列の一部だけを初期化子で書く方法は、MISRA C:2012 Rule 9.3 に反するため、ループで埋める。
+ *
+ * \param[out] pdu  埋めるバッファ（CANTSYN_DLC バイト）。
+ */
+static void CanTSyn_ClearPdu(uint8* pdu)
+{
+    for (uint8 i = 0U; i < CANTSYN_DLC; i++)
+    {
+        pdu[i] = 0U;
+    }
+}
+
+/* ----------------------------------------------------------------------
  * CanTSyn_WriteBe32
  * ---------------------------------------------------------------------- */
 
@@ -680,10 +695,11 @@ static void CanTSyn_WriteBe32(uint8* dst, uint32 value)
  */
 static void CanTSyn_SendSync(unsigned long nowMs)
 {
-    uint8              pdu[CANTSYN_DLC] = { 0U };
+    uint8              pdu[CANTSYN_DLC];
     StbM_TimeStampType t0;
     StbM_UserDataType  userData;
 
+    CanTSyn_ClearPdu(pdu);
     CanTSyn_LastSyncMs = nowMs;
 
     /* [SWS_CanTSyn_00028]: 時間ベースが全域時間に同期済み（GLOBAL_TIME_BASE）のときだけ送る */
@@ -751,8 +767,10 @@ static void CanTSyn_SendSync(unsigned long nowMs)
  */
 static void CanTSyn_SendFup(unsigned long nowMs)
 {
-    uint8                 pdu[CANTSYN_DLC] = { 0U };
+    uint8                 pdu[CANTSYN_DLC];
     StbM_TimeStampRawType t0Diff = 0U;
+
+    CanTSyn_ClearPdu(pdu);
 
     /* [SWS_CanTSyn_00045]: T4 = T0 の ns 部分 + (SYNC を渡してからの経過時間)。経過時間は StbM が測る。 */
     if (StbM_GetCurrentTimeDiff(STBM_TIME_BASE_MASTER, CanTSyn_T0Raw, &t0Diff) != E_OK)
@@ -809,13 +827,13 @@ static void CanTSyn_SendFup(unsigned long nowMs)
  */
 static uint8 CanTSyn_Crc8H2FUpdate(uint8 crc, uint8 data)
 {
-    crc ^= data;
+    uint8 result = (uint8)(crc ^ data);   /* [MISRA 17.8] 引数 crc は書き換えず、ローカル変数で計算する */
     for (uint8 bit = 0U; bit < 8U; bit++)
     {
-        crc = ((crc & 0x80U) != 0U) ? (uint8)((uint8)(crc << 1U) ^ 0x2FU) : (uint8)(crc << 1U);
+        result = ((result & 0x80U) != 0U) ? (uint8)((uint8)(result << 1U) ^ 0x2FU) : (uint8)(result << 1U);
     }
 
-    return crc;
+    return result;
 }
 
 /* ----------------------------------------------------------------------

@@ -48,6 +48,7 @@
 #define STBM_E_PARAM_POINTER    0x10U  /* [SWS_StbM_00041]: NULL ポインタ */
 
 /** ApiId（各関数の Doxygen \ServiceID タグと一致させること。SWS_StbM 8.1.3 の Service ID） */
+/* cppcheck-suppress misra-c2012-2.5 */
 #define STBM_API_ID_INIT                  0x00U
 #define STBM_API_ID_MAIN_FUNCTION         0x04U
 #define STBM_API_ID_GET_VERSION_INFO      0x05U
@@ -90,6 +91,7 @@
 
 /** StbM_MainFunction() の呼び出し周期 [ms]（StbMMainFunctionPeriod 相当、
  *  Os.json のタスク周期と一致させること）。 */
+/* cppcheck-suppress misra-c2012-2.5 */
 #define STBM_MAIN_FUNCTION_PERIOD_MS  100UL
 
 #endif /* STBM_CFG_H */

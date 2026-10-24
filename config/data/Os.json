@@ -145,9 +145,9 @@
       ]
     },
     {
-      "function": "App_TestMsg_Run",
+      "function": "App_Test_Run",
       "periodMs": 1000,
-      "header": "App_TestMsg.h",
+      "header": "App_Test.h",
       "summary": "テスト用メッセージ TestMsg のカウンタ更新（信号追加の練習用）"
     },
     {

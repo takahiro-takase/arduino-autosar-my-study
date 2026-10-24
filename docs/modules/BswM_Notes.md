@@ -91,7 +91,7 @@ true が続く間の重複実行や true→false への遷移では実行しま�
 | 18 | (マスク対象外) | `App_GptDemo_Run` | 2000 ms |
 | 19 | (マスク対象外) | `ComM_MainFunction` | 100 ms |
 | 20 | (マスク対象外) | `SecOC_MainFunctionRx` | 100 ms |
-| 21 | (マスク対象外) | `App_TestMsg_Run` | 1000 ms |
+| 21 | (マスク対象外) | `App_Test_Run` | 1000 ms |
 
 Task 6（`Com_MainFunctionTx`）は 2026-08、単体だった `Com_MainFunction` を
 実仕様準拠の `Com_MainFunctionRx`/`Com_MainFunctionTx` へ分割した際に追加しました。
@@ -139,7 +139,7 @@ MemIf_Write() でジョブを「開始」するだけで、実際の物理バイ
 （ボランタリスリープからのウェイクアップ）で常に RUN へ復帰できる状態になっています。
 
 なお、`BSWM_TASK_MASK_ALL`（bit0〜17）に含まれない 4 タスク（bit18=App_GptDemo_Run、
-bit19=ComM_MainFunction、bit20=SecOC_MainFunctionRx、bit21=App_TestMsg_Run）は、BswM のルールで止められないため、
+bit19=ComM_MainFunction、bit20=SecOC_MainFunctionRx、bit21=App_Test_Run）は、BswM のルールで止められないため、
 RUN・POST_RUN・SHUTDOWN のいずれでも動き続けます（ComM と SecOC_Rx の周期関数は現状 NOP）。
 
 ## POST_RUN でアプリタスクのみ停止する理由

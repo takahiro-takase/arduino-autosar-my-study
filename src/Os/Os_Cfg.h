@@ -70,7 +70,7 @@
 /* cppcheck-suppress misra-c2012-2.5 */
 #define OsConf_OsTask_SecOC_MainFunctionRx          20U
 /* cppcheck-suppress misra-c2012-2.5 */
-#define OsConf_OsTask_App_TestMsg_Run               21U
+#define OsConf_OsTask_App_Test_Run                  21U
 /* cppcheck-suppress misra-c2012-2.5 */
 #define OsConf_OsTask_CanTSyn_MainFunction          22U
 /* cppcheck-suppress misra-c2012-2.5 */
