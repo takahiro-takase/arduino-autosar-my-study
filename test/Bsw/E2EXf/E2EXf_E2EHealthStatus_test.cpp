@@ -73,7 +73,7 @@ TEST_F(E2EXf_E2EHealthStatus_Test, E2EXf_E2EHealthStatus_NG_Uninit)
     /* ----------------------- */
     /* ---- 実行 (Act) ------- */
     /* ----------------------- */
-    uint8 ret = E2EXf_E2EHealthStatus(buf, &bufLen, NULL, 0U);
+    uint8 ret = E2EXf_E2EHealthStatus(buf, &bufLen, NULL, 5U);
 
     /* ----------------------- */
     /* ---- 評価 (Assert) ---- */
@@ -92,7 +92,7 @@ TEST_F(E2EXf_E2EHealthStatus_Test, E2EXf_E2EHealthStatus_NG_NullBufferLengthPtr)
     /* ----------------------- */
     /* ---- 実行 (Act) ------- */
     /* ----------------------- */
-    uint8 ret = E2EXf_E2EHealthStatus(buf, NULL, NULL, 0U);
+    uint8 ret = E2EXf_E2EHealthStatus(buf, NULL, NULL, 5U);
 
     /* ----------------------- */
     /* ---- 評価 (Assert) ---- */
@@ -111,13 +111,53 @@ TEST_F(E2EXf_E2EHealthStatus_Test, E2EXf_E2EHealthStatus_NG_NullBufferPtr)
     /* ----------------------- */
     /* ---- 実行 (Act) ------- */
     /* ----------------------- */
-    uint8 ret = E2EXf_E2EHealthStatus(NULL, &bufLen, NULL, 0U);
+    uint8 ret = E2EXf_E2EHealthStatus(NULL, &bufLen, NULL, 5U);
 
     /* ----------------------- */
     /* ---- 評価 (Assert) ---- */
     /* ----------------------- */
     EXPECT_EQ(ret, E_SAFETY_HARD_RUNTIMEERROR);
     EXPECT_EQ(FakeDetHw_LastErrorId, E2EXF_E_PARAM_POINTER);
+}
+
+TEST_F(E2EXf_E2EHealthStatus_Test, E2EXf_E2EHealthStatus_NG_ShortInputLength)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    uint8  buf[5] = { 0U };
+    uint32 bufLen = sizeof(buf);
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    uint8 ret = E2EXf_E2EHealthStatus(buf, &bufLen, NULL, 4U);   // PDU の長さ（DataLength = 5）に足りない
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_SAFETY_HARD_RUNTIMEERROR);
+    EXPECT_EQ(FakeDetHw_LastErrorId, E2EXF_E_PARAM);
+}
+
+TEST_F(E2EXf_E2EHealthStatus_Test, E2EXf_E2EHealthStatus_NG_InputLengthAboveUint16)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    uint8  buf[5] = { 0U };
+    uint32 bufLen = sizeof(buf);
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    uint8 ret = E2EXf_E2EHealthStatus(buf, &bufLen, NULL, 0x10000U + 5U);   // 切り詰めると 5 に見える長さ
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_SAFETY_HARD_RUNTIMEERROR);
+    EXPECT_EQ(FakeDetHw_LastErrorId, E2EXF_E_PARAM);
 }
 
 }  // namespace

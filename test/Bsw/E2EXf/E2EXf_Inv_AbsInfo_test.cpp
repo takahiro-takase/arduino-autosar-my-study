@@ -111,7 +111,7 @@ TEST_F(E2EXf_Inv_AbsInfo_Test, E2EXf_Inv_AbsInfo_NG_Uninit)
     /* ----------------------- */
     /* ---- 実行 (Act) ------- */
     /* ----------------------- */
-    uint8 ret = E2EXf_Inv_AbsInfo(buf, &bufLen, NULL, 0U, &checkStatus);
+    uint8 ret = E2EXf_Inv_AbsInfo(buf, &bufLen, NULL, 6U, &checkStatus);
 
     /* ----------------------- */
     /* ---- 評価 (Assert) ---- */
@@ -132,7 +132,7 @@ TEST_F(E2EXf_Inv_AbsInfo_Test, E2EXf_Inv_AbsInfo_NG_NullCheckStatusPtr)
     /* ----------------------- */
     /* ---- 実行 (Act) ------- */
     /* ----------------------- */
-    uint8 ret = E2EXf_Inv_AbsInfo(buf, &bufLen, NULL, 0U, NULL);
+    uint8 ret = E2EXf_Inv_AbsInfo(buf, &bufLen, NULL, 6U, NULL);
 
     /* ----------------------- */
     /* ---- 評価 (Assert) ---- */
@@ -152,7 +152,7 @@ TEST_F(E2EXf_Inv_AbsInfo_Test, E2EXf_Inv_AbsInfo_NG_NullBufferPtr)
     /* ----------------------- */
     /* ---- 実行 (Act) ------- */
     /* ----------------------- */
-    uint8 ret = E2EXf_Inv_AbsInfo(NULL, &bufLen, NULL, 0U, &checkStatus);
+    uint8 ret = E2EXf_Inv_AbsInfo(NULL, &bufLen, NULL, 6U, &checkStatus);
 
     /* ----------------------- */
     /* ---- 評価 (Assert) ---- */
@@ -173,7 +173,7 @@ TEST_F(E2EXf_Inv_AbsInfo_Test, E2EXf_Inv_AbsInfo_NG_NullBufferLengthPtr)
     /* ----------------------- */
     /* ---- 実行 (Act) ------- */
     /* ----------------------- */
-    uint8 ret = E2EXf_Inv_AbsInfo(buf, NULL, NULL, 0U, &checkStatus);   // CheckStatus は有効、bufferLength だけ NULL
+    uint8 ret = E2EXf_Inv_AbsInfo(buf, NULL, NULL, 6U, &checkStatus);   // CheckStatus は有効、bufferLength だけ NULL
 
     /* ----------------------- */
     /* ---- 評価 (Assert) ---- */
@@ -203,9 +203,9 @@ TEST_F(E2EXf_Inv_AbsInfo_Test, E2EXf_Inv_AbsInfo_NG_FirstFrameWithBadCrcStaysErr
     /* ----------------------- */
     /* ---- 実行 (Act) ------- */
     /* ----------------------- */
-    (void)E2EXf_Inv_AbsInfo(bad, &bufLen, NULL, 0U, &status);
+    (void)E2EXf_Inv_AbsInfo(bad, &bufLen, NULL, 6U, &status);
     const E2E_P05StatusType statusOfBadFrame = status;
-    (void)E2EXf_Inv_AbsInfo(good, &bufLen, NULL, 0U, &status);
+    (void)E2EXf_Inv_AbsInfo(good, &bufLen, NULL, 6U, &status);
 
     /* ----------------------- */
     /* ---- 評価 (Assert) ---- */
@@ -236,8 +236,8 @@ TEST_F(E2EXf_Inv_AbsInfo_Test, E2EXf_Inv_AbsInfo_OK_FirstValidFrameIsAcceptedThe
     /* ----------------------- */
     /* ---- 実行 (Act) ------- */
     /* ----------------------- */
-    (void)E2EXf_Inv_AbsInfo(frame1, &bufLen, NULL, 0U, &status1);
-    (void)E2EXf_Inv_AbsInfo(frame2, &bufLen, NULL, 0U, &status2);
+    (void)E2EXf_Inv_AbsInfo(frame1, &bufLen, NULL, 6U, &status1);
+    (void)E2EXf_Inv_AbsInfo(frame2, &bufLen, NULL, 6U, &status2);
 
     /* ----------------------- */
     /* ---- 評価 (Assert) ---- */
@@ -262,7 +262,7 @@ TEST_F(E2EXf_Inv_AbsInfo_Test, E2EXf_Inv_AbsInfo_OK_RepeatedCrcErrorsReportDemFa
     bool failedReported = false;
     uint8 first[6] = { 0U };
     BuildAbsFrame(first, &refState);
-    (void)E2EXf_Inv_AbsInfo(first, &bufLen, NULL, 0U, &status);   // 最初の正しいフレーム（状態機械が NODATA から出る）
+    (void)E2EXf_Inv_AbsInfo(first, &bufLen, NULL, 6U, &status);   // 最初の正しいフレーム（状態機械が NODATA から出る）
 
     /* ----------------------- */
     /* ---- 実行 (Act) ------- */
@@ -272,7 +272,7 @@ TEST_F(E2EXf_Inv_AbsInfo_Test, E2EXf_Inv_AbsInfo_OK_RepeatedCrcErrorsReportDemFa
         uint8 bad[6] = { 0U };
         BuildAbsFrame(bad, &refState);
         bad[3] ^= 0x01U;   // CRC と合わなくなるフレームを、繰り返し受信する
-        (void)E2EXf_Inv_AbsInfo(bad, &bufLen, NULL, 0U, &status);
+        (void)E2EXf_Inv_AbsInfo(bad, &bufLen, NULL, 6U, &status);
         failedReported = (CallCount_Dem_SetEventStatus > 0U) && (LastEventStatus_Dem_SetEventStatus == DEM_EVENT_STATUS_FAILED);
     }
 
@@ -280,6 +280,106 @@ TEST_F(E2EXf_Inv_AbsInfo_Test, E2EXf_Inv_AbsInfo_OK_RepeatedCrcErrorsReportDemFa
     /* ---- 評価 (Assert) ---- */
     /* ----------------------- */
     EXPECT_TRUE(failedReported);   // 状態機械が INVALID になり、Dem へ FAILED を報告する
+}
+
+TEST_F(E2EXf_Inv_AbsInfo_Test, E2EXf_Inv_AbsInfo_NG_WrongInputLength)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    uint8  buf[6] = { 0U };
+    uint32 bufLen = sizeof(buf);
+    E2E_P05StatusType checkStatus = E2E_P05STATUS_OK;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    uint8 ret = E2EXf_Inv_AbsInfo(buf, &bufLen, NULL, 5U, &checkStatus);   // PDU の長さ（DataLength = 6）と合わない
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_SAFETY_HARD_RUNTIMEERROR);
+    EXPECT_EQ(checkStatus, E2E_P05STATUS_ERROR);
+    EXPECT_EQ(FakeDetHw_LastErrorId, E2EXF_E_PARAM);
+}
+
+TEST_F(E2EXf_Inv_AbsInfo_Test, E2EXf_Inv_AbsInfo_NG_InputLengthAboveUint16)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    uint8  buf[6] = { 0U };
+    uint32 bufLen = sizeof(buf);
+    E2E_P05StatusType checkStatus = E2E_P05STATUS_OK;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    uint8 ret = E2EXf_Inv_AbsInfo(buf, &bufLen, NULL, 0x10000U + 6U, &checkStatus);   // 切り詰めると 6 に見える長さ
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_SAFETY_HARD_RUNTIMEERROR);
+    EXPECT_EQ(checkStatus, E2E_P05STATUS_ERROR);
+    EXPECT_EQ(FakeDetHw_LastErrorId, E2EXF_E_PARAM);
+}
+
+TEST_F(E2EXf_Inv_AbsInfo_Test, E2EXf_Inv_AbsInfo_OK_NoNewDataIsReportedAsNoNewData)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    E2EXf_PBCfg_Init();   // 状態機械と初回受信の待ちを初期状態へ戻す
+    uint32 bufLen = 99U;
+    E2E_P05StatusType checkStatus = E2E_P05STATUS_OK;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    uint8 ret = E2EXf_Inv_AbsInfo(NULL, &bufLen, NULL, 0U, &checkStatus);   // buffer が NULL で長さ 0: 新しいデータが無い（[SWS_E2EXf_00105]）
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_NE(ret, E_SAFETY_HARD_RUNTIMEERROR);
+    EXPECT_EQ(ret & 0x0FU, (uint8)E2E_P_NONEWDATA);   // 戻り値の下位ニブルが NONEWDATA（[SWS_E2EXf_00027]）
+    EXPECT_EQ(checkStatus, E2E_P05STATUS_NONEWDATA);
+    EXPECT_EQ(bufLen, 0U);                            // [SWS_E2EXf_00114]
+}
+
+TEST_F(E2EXf_Inv_AbsInfo_Test, E2EXf_Inv_AbsInfo_OK_NoNewDataKeepsWaitingForFirstData)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    WrapDem_Reset();
+    Dem_Init(NULL);
+    E2EXf_PBCfg_Init();   // 初回受信の特別扱い（WaitForFirstData）と状態機械を初期状態へ戻す
+    E2E_P05ProtectStateType refState;
+    E2E_P05ProtectInit(&refState);
+    uint8 skipped[6] = { 0U };
+    for (uint8 i = 0U; i < 5U; i++)
+    {
+        BuildAbsFrame(skipped, &refState);   // 先頭のカウンタを進めておく（待ちが無いと、初回でも WRONGSEQUENCE になる値）
+    }
+    uint8 frame[6] = { 0U };
+    BuildAbsFrame(frame, &refState);
+    uint32 bufLen = 0U;
+    E2E_P05StatusType status = E2E_P05STATUS_ERROR;
+    (void)E2EXf_Inv_AbsInfo(NULL, &bufLen, NULL, 0U, &status);   // 新しいデータが無い呼び出し（初回受信の待ちを消費しない）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    (void)E2EXf_Inv_AbsInfo(frame, &bufLen, NULL, 6U, &status);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(status, E2E_P05STATUS_OK);   // 最初の正しいフレームが、初回として受理される（待ちが残っている）
+    EXPECT_EQ(bufLen, 6U);
 }
 
 }  // namespace

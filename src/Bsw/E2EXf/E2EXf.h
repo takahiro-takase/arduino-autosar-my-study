@@ -244,9 +244,9 @@ void E2EXf_DeInit(void);
  *          EngineInfo）ごとに個別生成される関数であり、Config を引数で
  *          受け取る設計にはならない（[SWS_E2EXf_00020]/[00025]）。本関数は
  *          `E2EXf_PBCfg.c` の `E2EXf_EngineInfoRxCfg` を直接参照する
- *          インスタンス専用実装へ変更した（AbsInfo 用の
- *          `E2EXf_Inv_AbsInfo()` とは実装を共有せず、それぞれ独立に完結
- *          させている。実 RTE 生成コードの構造に倣う）。
+ *          インスタンス専用関数へ変更した（AbsInfo 用の `E2EXf_Inv_AbsInfo()` とは、
+ *          使う設定だけが違い、処理は同じなので、内部の共通関数 `E2EXf_InvP05()` へ
+ *          委ねる。仕様も、変換関数が内部の共通関数を呼ぶことを認めている）。
  *
  *          E2E_P05Check() を呼び、結果を `E2E_P05MapStatusToSM()` で汎用
  *          ステータスへ変換する。OK/OKSOMELOST は E2E_P_OK（今回のフレーム
@@ -283,12 +283,22 @@ void E2EXf_DeInit(void);
  *          は、ニブルパックせず `E_SAFETY_SOFT_RUNTIMEERROR`（0x77）を
  *          そのまま返す。
  *
- * \note    `bufferLength`/`inputBuffer`/`inputBufferLength` は仕様の
- *          Syntax（8.3.2節）に合わせてシグネチャへ含めているが、本
- *          プロジェクトは in-place 変換（かつ全 PDU 固定長）のみを実装し
- *          out-of-place 変換は行わないため、`inputBuffer`/
- *          `inputBufferLength` は未使用（常に無視する）。`bufferLength`
- *          には呼び出し完了時の実使用長（= 固定の DataLength）を書き込む。
+ * \note    本プロジェクトは in-place 変換（かつ全 PDU 固定長）のみを実装し、out-of-place 変換は
+ *          行わないため、`inputBuffer` は未使用（常に無視する）。`inputBufferLength`
+ *          は、`buffer` の長さ [byte]。E2E ヘッダ（Counter・CRC16）の領域を PDU の中に最初から
+ *          持つ（ヘッダを取り除いて詰め直さない）ので、PDU 全体の長さ（= DataLength）を渡す
+ *          （[SWS_E2EXf_00104]: E2E_P05Check() へ、この長さを渡す）。次の規則に従う。
+ *            - `buffer` が NULL で `inputBufferLength` が 0: 「新しいデータが無い」有効な組み合わせ
+ *              （[SWS_E2EXf_00105]）。`*CheckStatus` は NONEWDATA、戻り値の下位ニブルは NONEWDATA。
+ *              `*bufferLength` は 0（[SWS_E2EXf_00114]）。初回受信の特別扱い（WaitForFirstData）は消費しない。
+ *            - `buffer` が NULL で `inputBufferLength` が 0 以外、または `inputBufferLength` が
+ *              DataLength と違う: E_SAFETY_HARD_RUNTIMEERROR。
+ *          `*bufferLength` には、データがあるとき、実使用長（= 固定の DataLength。仕様は
+ *          `inputBufferLength - ヘッダ長` だが、ヘッダを取り除かない簡略化のため、ヘッダ込みの長さ）を書き込む。
+ *          本プロジェクトの Rte は、フレームを受信したときにだけ本関数を呼び、「新しいデータが無い」呼び出し
+ *          （NULL・0）は行わない（Com のタイムアウトは、`Rte_COMCbkRxTOut_*()` の別経路で扱う）。
+ *          NULL・0 の呼び出しを足すと、フレームの途絶が E2E の状態機械にも INVALID として現れ、
+ *          既存のタイムアウトの DTC に加えて、E2E の DTC も確定する。
  *
  * \note    `CheckStatus` は仕様の Syntax には無い本プロジェクト独自の
  *          追加出力引数（2026-09、Rte.c が必要とする詳細な生ステータス
@@ -297,10 +307,12 @@ void E2EXf_DeInit(void);
  *          置き換える予定 — 詳細はコミットログ参照）。
  *
  * \param[in,out] buffer             検証対象の I-PDU バイト列（in-place、
- *                                   固定長）。NULL 禁止。
+ *                                   固定長）。NULL は、`inputBufferLength` が 0 のときだけ
+ *                                   「新しいデータが無い」を表す。
  * \param[out]    bufferLength       実使用長を受け取る。NULL 禁止。
  * \param[in]     inputBuffer        未使用（out-of-place 変換非対応）。
- * \param[in]     inputBufferLength  未使用（同上）。
+ * \param[in]     inputBufferLength  `buffer` の長さ（PDU 全体 = DataLength）。0 かつ `buffer` が NULL なら
+ *                                   「新しいデータが無い」（上記 \note 参照）。
  * \param[out]    CheckStatus        E2E_P05Check() の生の 6 状態を受け取る
  *                                   （仕様外の追加出力引数、上記 \note 参照）。
  *                                   NULL 禁止。
@@ -310,9 +322,10 @@ void E2EXf_DeInit(void);
  *                                      使ってよい。
  * \retval  0x02/0x03/0x05/0x20〜0x45   [SWS_E2EXf_00027] のニブルパック値
  *                                      （SMState/チェック結果の組み合わせ）。
- * \retval  E_SAFETY_HARD_RUNTIMEERROR  buffer/bufferLength/CheckStatus が
- *                                      NULL、または E2EXf_Init() 未呼び出し
- *                                      （[SWS_E2EXf_00152]/[00153]）。
+ * \retval  E_SAFETY_HARD_RUNTIMEERROR  bufferLength/CheckStatus が NULL、
+ *                                      buffer が NULL で長さが 0 以外、長さが
+ *                                      DataLength と違う、または E2EXf_Init()
+ *                                      未呼び出し（[SWS_E2EXf_00105]/[00152]/[00153]）。
  * \retval  E_SAFETY_SOFT_RUNTIMEERROR  E2E_SMCheck() が失敗した（到達しない
  *                                      はずの防御的な経路。[SWS_E2EXf_00027]）。
  *
@@ -332,10 +345,12 @@ uint8 E2EXf_Inv_EngineInfo(uint8* buffer, uint32* bufferLength, const uint8* inp
  *          （`E2EXf_EngineInfoRxCfg` の代わりに `E2EXf_AbsInfoRxCfg` を
  *          参照する以外は同一実装）。
  *
- * \param[in,out] buffer             検証対象の I-PDU バイト列。NULL 禁止。
+ * \param[in,out] buffer             検証対象の I-PDU バイト列。NULL は、`inputBufferLength` が 0 のときだけ
+ *                                   「新しいデータが無い」を表す。
  * \param[out]    bufferLength       実使用長を受け取る。NULL 禁止。
  * \param[in]     inputBuffer        未使用（out-of-place 変換非対応）。
- * \param[in]     inputBufferLength  未使用（同上）。
+ * \param[in]     inputBufferLength  `buffer` の長さ（PDU 全体 = DataLength）。0 かつ `buffer` が NULL なら
+ *                                   「新しいデータが無い」（`E2EXf_Inv_EngineInfo()` の \note 参照）。
  * \param[out]    CheckStatus        E2E_P05Check() の生の 6 状態を受け取る
  *                                   （仕様外の追加出力引数）。NULL 禁止。
  *
@@ -367,18 +382,21 @@ uint8 E2EXf_Inv_AbsInfo(uint8* buffer, uint32* bufferLength, const uint8* inputB
  *          単純な3値）。本実装では E_SAFETY_SOFT_RUNTIMEERROR を返す経路は
  *          無い（判定不能な状態自体が Protect 側には存在しないため）。
  *
- * \note    `bufferLength`/`inputBuffer`/`inputBufferLength` の扱いは
- *          `E2EXf_Inv_EngineInfo()` の同名 \note 参照。
+ * \note    `inputBuffer`/`inputBufferLength` の扱いは `E2EXf_Inv_EngineInfo()` の同名 \note 参照。
+ *          `inputBufferLength` は、E2E ヘッダの領域を含む PDU 全体の長さ（= DataLength）で、足りないと
+ *          E2E_P05Protect() が E2E_E_INPUTERR_WRONG を返し、E_SAFETY_HARD_RUNTIMEERROR とする。
+ *          簡略化: 仕様は「buffer が NULL で長さ 0」を「新しいデータが無い」有効な組み合わせとするが、
+ *          送信側にはその使い道が無いので、buffer が NULL なら、長さによらずエラーとする。
  *
  * \param[in,out] buffer             変換対象の I-PDU バイト列（in-place、
  *                                   固定長、上書きされる）。NULL 禁止。
  * \param[out]    bufferLength       実使用長を受け取る。NULL 禁止。
  * \param[in]     inputBuffer        未使用（out-of-place 変換非対応）。
- * \param[in]     inputBufferLength  未使用（同上）。
+ * \param[in]     inputBufferLength  `buffer` の長さ（PDU 全体 = DataLength）。
  *
  * \retval  E_OK                       変換を実行した。
- * \retval  E_SAFETY_HARD_RUNTIMEERROR 未初期化、または buffer/bufferLength
- *                                     が NULL 等のパラメータ異常
+ * \retval  E_SAFETY_HARD_RUNTIMEERROR 未初期化、buffer/bufferLength が NULL、
+ *                                     または長さが DataLength に足りない
  *                                     （[SWS_E2EXf_00150]/[00151]）。
  *
  * \AUTOSARReq     {SWS_E2EXf_00020, SWS_E2EXf_00032, SWS_E2EXf_00150,

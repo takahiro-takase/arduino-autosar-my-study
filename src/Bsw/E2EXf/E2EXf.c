@@ -49,6 +49,8 @@ static uint8 E2EXf_Initialized = 0U;
 static Std_ReturnType E2EXf_ReportSMVerdict(Dem_EventIdType DemEventId, E2E_PCheckStatusType ProfileStatus,
                                              const E2E_SMConfigType* SMConfig, E2E_SMCheckStateType* SMState);
 static uint8 E2EXf_PackReturn(E2E_SMStateType SMState, E2E_PCheckStatusType CheckStatus);
+static uint8 E2EXf_InvP05(const E2EXf_RxConfigTypeP05* Cfg, const char* Name, const uint8* buffer, uint32* bufferLength,
+                           uint32 inputBufferLength, E2E_P05StatusType* CheckStatus);
 
 /* ======================================================================
  * Functions
@@ -64,8 +66,7 @@ static uint8 E2EXf_PackReturn(E2E_SMStateType SMState, E2E_PCheckStatusType Chec
 
 uint8 E2EXf_E2EHealthStatus(uint8* buffer, uint32* bufferLength, const uint8* inputBuffer, uint32 inputBufferLength)
 {
-    (void)inputBuffer;
-    (void)inputBufferLength;
+    (void)inputBuffer;   /* out-of-place 変換は使用しない（E2EXf.h の \note 参照） */
 
     if (bufferLength == NULL)
     {
@@ -81,15 +82,30 @@ uint8 E2EXf_E2EHealthStatus(uint8* buffer, uint32* bufferLength, const uint8* in
         return E_SAFETY_HARD_RUNTIMEERROR;
     }
 
+    /* [SWS_E2EXf_00102]: buffer が NULL（かつ長さが 0 でも）送信するデータが無いので、変換できない（簡略化:
+     * 仕様は「NULL かつ長さ 0」を「新しいデータが無い」有効な組み合わせとするが、送信側にはその使い道が無い）。 */
     if (buffer == NULL)
     {
-        /* [SWS_E2EXf_00150] */
         (void)Det_ReportError(E2EXF_MODULE_ID, 0U, E2EXF_API_ID_TRANSFORM, E2EXF_E_PARAM_POINTER);
         return E_SAFETY_HARD_RUNTIMEERROR;
     }
 
-    (void)E2E_P05Protect(E2EXf_E2EHealthStatusTxCfgP05.E2EConfig, E2EXf_E2EHealthStatusTxCfgP05.ProtectState, buffer,
-                          E2EXf_E2EHealthStatusTxCfgP05.E2EConfig->DataLength);
+    /* [SWS_E2EXf_00111]/[SWS_E2EXf_00162 相当]: 長さが、E2E の保護する PDU 長（DataLength）と合うこと。
+     * 本プロジェクトの in-place 変換は、E2E ヘッダ（Counter・CRC16）の領域を、PDU の中に最初から持つので、
+     * inputBufferLength は PDU 全体の長さ（= DataLength）。E2E_P05Protect() が長さを検査して、足りなければ
+     * E2E_E_INPUTERR_WRONG を返す。 */
+    Std_ReturnType protectRet = E2E_E_INPUTERR_WRONG;   /* uint16 に収まらない長さは、切り詰めず、長さ異常のままにする */
+    if (inputBufferLength <= 0xFFFFU)
+    {
+        protectRet = E2E_P05Protect(E2EXf_E2EHealthStatusTxCfgP05.E2EConfig, E2EXf_E2EHealthStatusTxCfgP05.ProtectState,
+                                     buffer, (uint16)inputBufferLength);
+    }
+    if (protectRet != E2E_E_OK)
+    {
+        (void)Det_ReportError(E2EXF_MODULE_ID, 0U, E2EXF_API_ID_TRANSFORM, E2EXF_E_PARAM);
+        return E_SAFETY_HARD_RUNTIMEERROR;
+    }
+
     *bufferLength = E2EXf_E2EHealthStatusTxCfgP05.E2EConfig->DataLength;
     return E_OK;
 }
@@ -107,94 +123,8 @@ uint8 E2EXf_Inv_EngineInfo(uint8* buffer, uint32* bufferLength, const uint8* inp
                             E2E_P05StatusType* CheckStatus)
 {
     (void)inputBuffer;        /* out-of-place 変換は使用しない（E2EXf.h 冒頭 \note 参照） */
-    (void)inputBufferLength;
 
-    if ((CheckStatus == NULL) || (bufferLength == NULL))
-    {
-        /* [SWS_E2EXf_00152] */
-        (void)Det_ReportError(E2EXF_MODULE_ID, 0U, E2EXF_API_ID_INVERSE_TRANSFORM, E2EXF_E_PARAM_POINTER);
-        return E_SAFETY_HARD_RUNTIMEERROR;
-    }
-
-    if (!E2EXf_Initialized)
-    {
-        /* [SWS_E2EXf_00153] */
-        (void)Det_ReportError(E2EXF_MODULE_ID, 0U, E2EXF_API_ID_INVERSE_TRANSFORM, E2EXF_E_UNINIT);
-        *CheckStatus = E2E_P05STATUS_ERROR;
-        return E_SAFETY_HARD_RUNTIMEERROR;
-    }
-
-    if (buffer == NULL)
-    {
-        /* [SWS_E2EXf_00152] */
-        (void)Det_ReportError(E2EXF_MODULE_ID, 0U, E2EXF_API_ID_INVERSE_TRANSFORM, E2EXF_E_PARAM_POINTER);
-        *CheckStatus = E2E_P05STATUS_ERROR;
-        return E_SAFETY_HARD_RUNTIMEERROR;
-    }
-
-    if (E2E_P05Check(E2EXf_EngineInfoRxCfg.E2EConfig, E2EXf_EngineInfoRxCfg.CheckState, buffer,
-                      E2EXf_EngineInfoRxCfg.E2EConfig->DataLength) != E2E_E_OK)
-    {
-        /* buffer/CheckState/E2EConfig はここまでで NULL でないことを確認
-         * 済みのため、通常は到達しない（E2E_E_INPUTERR_NULL の防御）。
-         * [SWS_E2EXf_00152] */
-        (void)Det_ReportError(E2EXF_MODULE_ID, 0U, E2EXF_API_ID_INVERSE_TRANSFORM, E2EXF_E_PARAM_POINTER);
-        *CheckStatus = E2E_P05STATUS_ERROR;
-        return E_SAFETY_HARD_RUNTIMEERROR;
-    }
-    E2E_P05StatusType status = E2EXf_EngineInfoRxCfg.CheckState->Status;
-
-    /* Profile05にはProfile01のWaitForFirstData/INITIAL相当の初回受信の特別扱いが
-     * 無い(E2E_P05.c は仕様に忠実な実装として意図的にこれを持たない)。しかし
-     * 実運用では起動直後、送信元ECUが既に稼働中でCounterが0以外から始まっている
-     * ことが十分あり得るため、そのまま繋ぐと最初のフレーム(CRCは正しい)が
-     * REPEATED/WRONGSEQUENCEと誤判定され、DEM_DEBOUNCE_LIMIT=1の設定と相まって
-     * 即座に誤ったDTCが確定してしまう。CRCさえ正しければ「通信路そのものは
-     * 正常」と判断し、最初の1回に限りOKへ格上げする(E2E_P05Check()側は既に
-     * 内部でCounterを受信値へ同期済みのため、2回目以降は通常のdelta判定に
-     * 自然に戻る)。 */
-    if ((E2EXf_EngineInfoRxCfg.WaitForFirstData != NULL) && (*E2EXf_EngineInfoRxCfg.WaitForFirstData != 0U)
-        && (status != E2E_P05STATUS_ERROR))
-    {
-        status = E2E_P05STATUS_OK;
-        *E2EXf_EngineInfoRxCfg.WaitForFirstData = 0U;
-    }
-
-    *CheckStatus  = status;
-    *bufferLength = E2EXf_EngineInfoRxCfg.E2EConfig->DataLength;
-
-    /* 「今回のフレームが使えるか」の判定（acceptable、戻り値下位ニブル）は
-     * Dem への報告方針とは別物（下記参照）。 */
-    const E2E_PCheckStatusType profileStatus = E2E_P05MapStatusToSM(E2E_E_OK, status);
-    const uint8 acceptable = (profileStatus == E2E_P_OK) ? 1U : 0U;
-
-    if (!acceptable)
-    {
-        DET_LOGW(TAG, "Inv_EngineInfo NG DemEvent=%u st=%u",
-                 (unsigned)E2EXf_EngineInfoRxCfg.DemEventId, (unsigned)status);
-    }
-
-    /* [SWS_E2EXf_00028]/[00029]: 通信路全体の直近 WindowSize 回分の健全性を
-     * E2E_SMCheck() のステートマシンで判定し、その結果が VALID/INVALID に
-     * 確定したときのみ Dem へ報告する（共通処理は E2EXf_ReportSMVerdict()
-     * 参照）。 */
-    const Std_ReturnType smVerdict = E2EXf_ReportSMVerdict(E2EXf_EngineInfoRxCfg.DemEventId, profileStatus,
-                                                            E2EXf_EngineInfoRxCfg.SMConfig,
-                                                            E2EXf_EngineInfoRxCfg.SMState);
-    if (smVerdict != E2E_E_OK)
-    {
-        /* [SWS_E2EXf_00027]: E2E_SMCheck() 自体が失敗した場合はニブルパック
-         * せずそのまま返す（E2EXf.h の関数コメント参照）。CheckStatus は
-         * 既に上で確定済み（生データの合否判定自体は行えている）ため
-         * 書き換えない。 */
-        return smVerdict;
-    }
-
-    /* [SWS_E2EXf_00027] 準拠のニブルパック（上位=SMState、下位=profileStatus）。
-     * ret==0x00 は「SMState=VALID かつ今回のフレームも合格」を意味し、
-     * [SWS_E2E_00345] の "do NOT use data" 規定（NODATA/INIT/INVALID中は
-     * データを使わない）を、呼び出し元が単一の等値比較だけで満たせる。 */
-    return E2EXf_PackReturn(E2EXf_EngineInfoRxCfg.SMState->SMState, profileStatus);
+    return E2EXf_InvP05(&E2EXf_EngineInfoRxCfg, "EngineInfo", buffer, bufferLength, inputBufferLength, CheckStatus);
 }
 
 /* ----------------------------------------------------------------------
@@ -206,64 +136,8 @@ uint8 E2EXf_Inv_AbsInfo(uint8* buffer, uint32* bufferLength, const uint8* inputB
                          E2E_P05StatusType* CheckStatus)
 {
     (void)inputBuffer;
-    (void)inputBufferLength;
 
-    if ((CheckStatus == NULL) || (bufferLength == NULL))
-    {
-        (void)Det_ReportError(E2EXF_MODULE_ID, 0U, E2EXF_API_ID_INVERSE_TRANSFORM, E2EXF_E_PARAM_POINTER);
-        return E_SAFETY_HARD_RUNTIMEERROR;
-    }
-
-    if (!E2EXf_Initialized)
-    {
-        (void)Det_ReportError(E2EXF_MODULE_ID, 0U, E2EXF_API_ID_INVERSE_TRANSFORM, E2EXF_E_UNINIT);
-        *CheckStatus = E2E_P05STATUS_ERROR;
-        return E_SAFETY_HARD_RUNTIMEERROR;
-    }
-
-    if (buffer == NULL)
-    {
-        (void)Det_ReportError(E2EXF_MODULE_ID, 0U, E2EXF_API_ID_INVERSE_TRANSFORM, E2EXF_E_PARAM_POINTER);
-        *CheckStatus = E2E_P05STATUS_ERROR;
-        return E_SAFETY_HARD_RUNTIMEERROR;
-    }
-
-    if (E2E_P05Check(E2EXf_AbsInfoRxCfg.E2EConfig, E2EXf_AbsInfoRxCfg.CheckState, buffer,
-                      E2EXf_AbsInfoRxCfg.E2EConfig->DataLength) != E2E_E_OK)
-    {
-        (void)Det_ReportError(E2EXF_MODULE_ID, 0U, E2EXF_API_ID_INVERSE_TRANSFORM, E2EXF_E_PARAM_POINTER);
-        *CheckStatus = E2E_P05STATUS_ERROR;
-        return E_SAFETY_HARD_RUNTIMEERROR;
-    }
-    E2E_P05StatusType status = E2EXf_AbsInfoRxCfg.CheckState->Status;
-
-    if ((E2EXf_AbsInfoRxCfg.WaitForFirstData != NULL) && (*E2EXf_AbsInfoRxCfg.WaitForFirstData != 0U)
-        && (status != E2E_P05STATUS_ERROR))
-    {
-        status = E2E_P05STATUS_OK;
-        *E2EXf_AbsInfoRxCfg.WaitForFirstData = 0U;
-    }
-
-    *CheckStatus  = status;
-    *bufferLength = E2EXf_AbsInfoRxCfg.E2EConfig->DataLength;
-
-    const E2E_PCheckStatusType profileStatus = E2E_P05MapStatusToSM(E2E_E_OK, status);
-    const uint8 acceptable = (profileStatus == E2E_P_OK) ? 1U : 0U;
-
-    if (!acceptable)
-    {
-        DET_LOGW(TAG, "Inv_AbsInfo NG DemEvent=%u st=%u", (unsigned)E2EXf_AbsInfoRxCfg.DemEventId, (unsigned)status);
-    }
-
-    const Std_ReturnType smVerdict = E2EXf_ReportSMVerdict(E2EXf_AbsInfoRxCfg.DemEventId, profileStatus,
-                                                            E2EXf_AbsInfoRxCfg.SMConfig,
-                                                            E2EXf_AbsInfoRxCfg.SMState);
-    if (smVerdict != E2E_E_OK)
-    {
-        return smVerdict;
-    }
-
-    return E2EXf_PackReturn(E2EXf_AbsInfoRxCfg.SMState->SMState, profileStatus);
+    return E2EXf_InvP05(&E2EXf_AbsInfoRxCfg, "AbsInfo", buffer, bufferLength, inputBufferLength, CheckStatus);
 }
 
 /* ----------------------------------------------------------------------
@@ -330,6 +204,140 @@ void E2EXf_GetVersionInfo(Std_VersionInfoType* versioninfo)
 /* ======================================================================
  * Internal Functions
  * ====================================================================== */
+
+/* ----------------------------------------------------------------------
+ * E2EXf_InvP05
+ * ---------------------------------------------------------------------- */
+
+/**
+ * \brief   Profile05 の E2E Inverse Transform（`E2EXf_Inv_<transformerId>`）の共通処理。
+ *
+ * \details `E2EXf_Inv_EngineInfo()`/`E2EXf_Inv_AbsInfo()` は、使う設定（`E2EXf_RxConfigTypeP05`）だけが違い、
+ *          処理は完全に同じなので、この関数へ委ねる（仕様も、変換関数が内部の共通関数を呼んでよいとする）。
+ *
+ *          入力の規則（[SWS_E2EXf_00105]/[SWS_E2EXf_00104]）:
+ *            - buffer が NULL で、inputBufferLength が 0 以外 → E_SAFETY_HARD_RUNTIMEERROR（ポインタ異常）。
+ *            - buffer が NULL で、inputBufferLength が 0 → 「新しいデータが無い」を表す有効な組み合わせ。
+ *              E2E_P05Check() へ NULL・0 を渡して、E2E_P05STATUS_NONEWDATA を得る（初回受信の特別扱い
+ *              （WaitForFirstData）は消費しない）。ステートマシンへは E2E_P_NONEWDATA として渡り、
+ *              *bufferLength は 0（[SWS_E2EXf_00114]）。
+ *            - それ以外は、inputBufferLength を E2E_P05Check() へ渡す（[SWS_E2EXf_00104]）。長さが設定の DataLength と
+ *              合わなければ、E2E_P05Check() が E2E_E_INPUTERR_WRONG を返し、E_SAFETY_HARD_RUNTIMEERROR とする。
+ *
+ *          処理の続き（WaitForFirstData、E2E_SMCheck()、Dem への報告、戻り値のニブルパック）は、
+ *          `E2EXf_Inv_EngineInfo()` の説明（E2EXf.h）のとおり。
+ *
+ * \param[in]  Cfg               使う受信側の設定（インスタンスごと）。NULL 禁止。
+ * \param[in]  Name              ログに出すインスタンス名。NULL 禁止。
+ * \param[in]  buffer            検証する I-PDU のバイト列（in-place。この関数は書き換えない）。NULL は「新しいデータが無い」（長さ 0 のとき）。
+ * \param[out] bufferLength      実使用長を受け取る。NULL 禁止。
+ * \param[in]  inputBufferLength buffer の長さ [byte]。E2E ヘッダ込みの PDU 全体の長さ（= DataLength）。
+ * \param[out] CheckStatus       E2E_P05Check() の生の 6 状態を受け取る。NULL 禁止。
+ *
+ * \retval  0x00 (E_OK)                 SMState=VALID かつ今回のフレームも合格。
+ * \retval  0x02/0x03/0x05/0x20〜0x45   [SWS_E2EXf_00027] のニブルパック値。
+ * \retval  E_SAFETY_HARD_RUNTIMEERROR  引数の異常、または E2EXf_Init() 未呼び出し。
+ * \retval  E_SAFETY_SOFT_RUNTIMEERROR  E2E_SMCheck() が失敗した（到達しないはずの防御的な経路）。
+ */
+static uint8 E2EXf_InvP05(const E2EXf_RxConfigTypeP05* Cfg, const char* Name, const uint8* buffer, uint32* bufferLength,
+                           uint32 inputBufferLength, E2E_P05StatusType* CheckStatus)
+{
+    if ((CheckStatus == NULL) || (bufferLength == NULL))
+    {
+        /* [SWS_E2EXf_00152] */
+        (void)Det_ReportError(E2EXF_MODULE_ID, 0U, E2EXF_API_ID_INVERSE_TRANSFORM, E2EXF_E_PARAM_POINTER);
+        return E_SAFETY_HARD_RUNTIMEERROR;
+    }
+
+    if (!E2EXf_Initialized)
+    {
+        /* [SWS_E2EXf_00153] */
+        (void)Det_ReportError(E2EXF_MODULE_ID, 0U, E2EXF_API_ID_INVERSE_TRANSFORM, E2EXF_E_UNINIT);
+        *CheckStatus = E2E_P05STATUS_ERROR;
+        return E_SAFETY_HARD_RUNTIMEERROR;
+    }
+
+    if ((buffer == NULL) && (inputBufferLength != 0U))
+    {
+        /* [SWS_E2EXf_00105] */
+        (void)Det_ReportError(E2EXF_MODULE_ID, 0U, E2EXF_API_ID_INVERSE_TRANSFORM, E2EXF_E_PARAM_POINTER);
+        *CheckStatus = E2E_P05STATUS_ERROR;
+        return E_SAFETY_HARD_RUNTIMEERROR;
+    }
+
+    const uint8 noNewData = (buffer == NULL) ? 1U : 0U;   /* ここまでで、buffer が NULL なら inputBufferLength は 0 */
+
+    if (inputBufferLength > 0xFFFFU)
+    {
+        /* E2E_P05Check() の長さ引数は uint16。範囲外は、切り詰めて別の長さに見えないよう、先に弾く */
+        (void)Det_ReportError(E2EXF_MODULE_ID, 0U, E2EXF_API_ID_INVERSE_TRANSFORM, E2EXF_E_PARAM);
+        *CheckStatus = E2E_P05STATUS_ERROR;
+        return E_SAFETY_HARD_RUNTIMEERROR;
+    }
+
+    /* [SWS_E2EXf_00104]: 設定の DataLength ではなく、受け取った長さ inputBufferLength を渡す */
+    const Std_ReturnType checkRet = E2E_P05Check(Cfg->E2EConfig, Cfg->CheckState, buffer, (uint16)inputBufferLength);
+    if (checkRet != E2E_E_OK)
+    {
+        /* E2E_E_INPUTERR_NULL（設定・状態が NULL、通常は到達しない）か E2E_E_INPUTERR_WRONG（長さが DataLength と違う）。
+         * [SWS_E2EXf_00152] */
+        (void)Det_ReportError(E2EXF_MODULE_ID, 0U, E2EXF_API_ID_INVERSE_TRANSFORM,
+                              (checkRet == E2E_E_INPUTERR_WRONG) ? E2EXF_E_PARAM : E2EXF_E_PARAM_POINTER);
+        *CheckStatus = E2E_P05STATUS_ERROR;
+        return E_SAFETY_HARD_RUNTIMEERROR;
+    }
+    E2E_P05StatusType status = Cfg->CheckState->Status;
+
+    /* Profile05にはProfile01のWaitForFirstData/INITIAL相当の初回受信の特別扱いが
+     * 無い(E2E_P05.c は仕様に忠実な実装として意図的にこれを持たない)。しかし
+     * 実運用では起動直後、送信元ECUが既に稼働中でCounterが0以外から始まっている
+     * ことが十分あり得るため、そのまま繋ぐと最初のフレーム(CRCは正しい)が
+     * REPEATED/WRONGSEQUENCEと誤判定され、DEM_DEBOUNCE_LIMIT=1の設定と相まって
+     * 即座に誤ったDTCが確定してしまう。CRCさえ正しければ「通信路そのものは
+     * 正常」と判断し、最初の1回に限りOKへ格上げする(E2E_P05Check()側は既に
+     * 内部でCounterを受信値へ同期済みのため、2回目以降は通常のdelta判定に
+     * 自然に戻る)。「新しいデータが無い」呼び出しは、実際にフレームを受け取った
+     * わけではないので、この特別扱いを消費しない。 */
+    if ((noNewData == 0U) && (Cfg->WaitForFirstData != NULL) && (*Cfg->WaitForFirstData != 0U)
+        && (status != E2E_P05STATUS_ERROR))
+    {
+        status = E2E_P05STATUS_OK;
+        *Cfg->WaitForFirstData = 0U;
+    }
+
+    *CheckStatus  = status;
+    *bufferLength = (noNewData != 0U) ? 0U : Cfg->E2EConfig->DataLength;   /* [SWS_E2EXf_00114]（簡略化は E2EXf.h の \note 参照） */
+
+    /* 「今回のフレームが使えるか」の判定（acceptable、戻り値下位ニブル）は
+     * Dem への報告方針とは別物（下記参照）。 */
+    const E2E_PCheckStatusType profileStatus = E2E_P05MapStatusToSM(E2E_E_OK, status);
+    const uint8 acceptable = (profileStatus == E2E_P_OK) ? 1U : 0U;
+
+    if (!acceptable)
+    {
+        DET_LOGW(TAG, "Inv_%s NG DemEvent=%u st=%u", Name, (unsigned)Cfg->DemEventId, (unsigned)status);
+    }
+
+    /* [SWS_E2EXf_00028]/[00029]: 通信路全体の直近 WindowSize 回分の健全性を
+     * E2E_SMCheck() のステートマシンで判定し、その結果が VALID/INVALID に
+     * 確定したときのみ Dem へ報告する（共通処理は E2EXf_ReportSMVerdict()
+     * 参照）。 */
+    const Std_ReturnType smVerdict = E2EXf_ReportSMVerdict(Cfg->DemEventId, profileStatus, Cfg->SMConfig, Cfg->SMState);
+    if (smVerdict != E2E_E_OK)
+    {
+        /* [SWS_E2EXf_00027]: E2E_SMCheck() 自体が失敗した場合はニブルパック
+         * せずそのまま返す（E2EXf.h の関数コメント参照）。CheckStatus は
+         * 既に上で確定済み（生データの合否判定自体は行えている）ため
+         * 書き換えない。 */
+        return smVerdict;
+    }
+
+    /* [SWS_E2EXf_00027] 準拠のニブルパック（上位=SMState、下位=profileStatus）。
+     * ret==0x00 は「SMState=VALID かつ今回のフレームも合格」を意味し、
+     * [SWS_E2E_00345] の "do NOT use data" 規定（NODATA/INIT/INVALID中は
+     * データを使わない）を、呼び出し元が単一の等値比較だけで満たせる。 */
+    return E2EXf_PackReturn(Cfg->SMState->SMState, profileStatus);
+}
 
 /* ----------------------------------------------------------------------
  * E2EXf_ReportSMVerdict

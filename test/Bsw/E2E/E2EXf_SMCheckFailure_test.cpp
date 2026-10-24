@@ -136,10 +136,10 @@ TEST_F(E2EXf_SMCheckFailure_Test, Inv_EngineInfo_OK_ValidFrameReportsPassedViaDe
     /* ----------------------- */
     E2E_P05StatusType checkStatus = E2E_P05STATUS_ERROR;
     uint32 bufferLength;
-    (void)E2EXf_Inv_EngineInfo(buf1, &bufferLength, NULL, 0U, &checkStatus);
-    (void)E2EXf_Inv_EngineInfo(buf2, &bufferLength, NULL, 0U, &checkStatus);
+    (void)E2EXf_Inv_EngineInfo(buf1, &bufferLength, NULL, 7U, &checkStatus);
+    (void)E2EXf_Inv_EngineInfo(buf2, &bufferLength, NULL, 7U, &checkStatus);
     const uint8 ret =
-        E2EXf_Inv_EngineInfo(buf3, &bufferLength, NULL, 0U, &checkStatus);
+        E2EXf_Inv_EngineInfo(buf3, &bufferLength, NULL, 7U, &checkStatus);
 
     /* ----------------------- */
     /* ---- 評価 (Assert) ---- */
@@ -181,16 +181,16 @@ TEST_F(E2EXf_SMCheckFailure_Test, Inv_EngineInfo_OK_ResumesReportingAfterSMCheck
     FailFromCallCount_E2E_SMCheck = 1U;
     E2E_P05StatusType checkStatus = E2E_P05STATUS_ERROR;
     uint32 bufferLength;
-    (void)E2EXf_Inv_EngineInfo(buf1, &bufferLength, NULL, 0U, &checkStatus);
+    (void)E2EXf_Inv_EngineInfo(buf1, &bufferLength, NULL, 7U, &checkStatus);
     ASSERT_EQ(CallCount_Dem_SetEventStatus, 0U);
     FailFromCallCount_E2E_SMCheck = WRAP_E2E_FAIL_FROM_CALL_COUNT_DISABLED;  // 以降はパススルー（実体成功）
 
     /* ----------------------- */
     /* ---- 実行 (Act) ------- */
     /* ----------------------- */
-    (void)E2EXf_Inv_EngineInfo(buf2, &bufferLength, NULL, 0U, &checkStatus);
-    (void)E2EXf_Inv_EngineInfo(buf3, &bufferLength, NULL, 0U, &checkStatus);
-    (void)E2EXf_Inv_EngineInfo(buf4, &bufferLength, NULL, 0U, &checkStatus);
+    (void)E2EXf_Inv_EngineInfo(buf2, &bufferLength, NULL, 7U, &checkStatus);
+    (void)E2EXf_Inv_EngineInfo(buf3, &bufferLength, NULL, 7U, &checkStatus);
+    (void)E2EXf_Inv_EngineInfo(buf4, &bufferLength, NULL, 7U, &checkStatus);
 
     /* ----------------------- */
     /* ---- 評価 (Assert) ---- */
@@ -230,7 +230,7 @@ TEST_F(E2EXf_SMCheckFailure_Test, Inv_EngineInfo_NG_SMCheckFailureReturnsSafetyS
     E2E_P05StatusType checkStatus = E2E_P05STATUS_ERROR;
     uint32 bufferLength;
     const uint8 ret =
-        E2EXf_Inv_EngineInfo(buf, &bufferLength, NULL, 0U, &checkStatus);
+        E2EXf_Inv_EngineInfo(buf, &bufferLength, NULL, 7U, &checkStatus);
 
     /* ----------------------- */
     /* ---- 評価 (Assert) ---- */

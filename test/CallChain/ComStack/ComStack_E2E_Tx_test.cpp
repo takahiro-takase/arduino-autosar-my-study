@@ -23,7 +23,7 @@
  *          App_WarningIndicator まで巨大な依存グラフを引き込むため
  *          （ComStack_Signal_Tx_test.cpp 冒頭コメントと同じ理由）リンクしない。
  *          本ファイル内に、本番と同じ1行の委譲呼び出し
- *          （`E2EXf_E2EHealthStatus(Data, &bufferLength, NULL, 0U)`）
+ *          （`E2EXf_E2EHealthStatus(Data, &bufferLength, NULL, 5U)`）
  *          をテスト専用の TxTransformCbk として定義し、そこから先
  *          （E2EXf.c/E2EXf_PBCfg.c/E2E_P05.c）は実体をそのまま検証する。
  *          E2EXf_PBCfg.c の本番設定（`E2EXf_E2EHealthStatusTxCfgP05`,
@@ -85,9 +85,8 @@ namespace
 // -----------------------------------------------------------------------
 void TestTxTransform_E2EHealthStatus(uint8* Data, uint8 Length)
 {
-    (void)Length;  /* E2EXf_E2EHealthStatus() は固定長PDU用にDataLengthを内部で保持するため未使用 */
     uint32 bufferLength;
-    (void)E2EXf_E2EHealthStatus(Data, &bufferLength, NULL, 0U);
+    (void)E2EXf_E2EHealthStatus(Data, &bufferLength, NULL, (uint32)Length);
 }
 
 // -----------------------------------------------------------------------

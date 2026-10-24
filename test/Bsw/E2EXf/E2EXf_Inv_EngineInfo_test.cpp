@@ -28,6 +28,7 @@ extern "C" {
 #include "Fake_Det_Hw.h"
 #include "Wrap_E2E.h"
 #include "Wrap_E2E_P05.h"
+#include "E2EXf_PBCfg.h"
 }
 
 /* ======================================================================
@@ -89,7 +90,7 @@ TEST_F(E2EXf_Inv_EngineInfo_Test, E2EXf_Inv_EngineInfo_NG_Uninit)
     /* ----------------------- */
     /* ---- 実行 (Act) ------- */
     /* ----------------------- */
-    uint8 ret = E2EXf_Inv_EngineInfo(buf, &bufLen, NULL, 0U, &checkStatus);
+    uint8 ret = E2EXf_Inv_EngineInfo(buf, &bufLen, NULL, 7U, &checkStatus);
 
     /* ----------------------- */
     /* ---- 評価 (Assert) ---- */
@@ -110,7 +111,7 @@ TEST_F(E2EXf_Inv_EngineInfo_Test, E2EXf_Inv_EngineInfo_NG_NullCheckStatusPtr)
     /* ----------------------- */
     /* ---- 実行 (Act) ------- */
     /* ----------------------- */
-    uint8 ret = E2EXf_Inv_EngineInfo(buf, &bufLen, NULL, 0U, NULL);
+    uint8 ret = E2EXf_Inv_EngineInfo(buf, &bufLen, NULL, 7U, NULL);
 
     /* ----------------------- */
     /* ---- 評価 (Assert) ---- */
@@ -130,7 +131,7 @@ TEST_F(E2EXf_Inv_EngineInfo_Test, E2EXf_Inv_EngineInfo_NG_NullBufferPtr)
     /* ----------------------- */
     /* ---- 実行 (Act) ------- */
     /* ----------------------- */
-    uint8 ret = E2EXf_Inv_EngineInfo(NULL, &bufLen, NULL, 0U, &checkStatus);
+    uint8 ret = E2EXf_Inv_EngineInfo(NULL, &bufLen, NULL, 7U, &checkStatus);
 
     /* ----------------------- */
     /* ---- 評価 (Assert) ---- */
@@ -151,13 +152,80 @@ TEST_F(E2EXf_Inv_EngineInfo_Test, E2EXf_Inv_EngineInfo_NG_NullBufferLengthPtr)
     /* ----------------------- */
     /* ---- 実行 (Act) ------- */
     /* ----------------------- */
-    uint8 ret = E2EXf_Inv_EngineInfo(buf, NULL, NULL, 0U, &checkStatus);   // CheckStatus は有効、bufferLength だけ NULL
+    uint8 ret = E2EXf_Inv_EngineInfo(buf, NULL, NULL, 7U, &checkStatus);   // CheckStatus は有効、bufferLength だけ NULL
 
     /* ----------------------- */
     /* ---- 評価 (Assert) ---- */
     /* ----------------------- */
     EXPECT_EQ(ret, E_SAFETY_HARD_RUNTIMEERROR);
     EXPECT_EQ(FakeDetHw_LastErrorId, E2EXF_E_PARAM_POINTER);
+}
+
+TEST_F(E2EXf_Inv_EngineInfo_Test, E2EXf_Inv_EngineInfo_NG_WrongInputLength)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    uint8  buf[7] = { 0U };
+    uint32 bufLen = sizeof(buf);
+    E2E_P05StatusType checkStatus = E2E_P05STATUS_OK;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    uint8 ret = E2EXf_Inv_EngineInfo(buf, &bufLen, NULL, 6U, &checkStatus);   // PDU の長さ（DataLength = 7）と合わない
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_SAFETY_HARD_RUNTIMEERROR);
+    EXPECT_EQ(checkStatus, E2E_P05STATUS_ERROR);
+    EXPECT_EQ(FakeDetHw_LastErrorId, E2EXF_E_PARAM);
+}
+
+TEST_F(E2EXf_Inv_EngineInfo_Test, E2EXf_Inv_EngineInfo_NG_InputLengthAboveUint16)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    uint8  buf[7] = { 0U };
+    uint32 bufLen = sizeof(buf);
+    E2E_P05StatusType checkStatus = E2E_P05STATUS_OK;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    uint8 ret = E2EXf_Inv_EngineInfo(buf, &bufLen, NULL, 0x10000U + 7U, &checkStatus);   // 切り詰めると 7 に見える長さ
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_SAFETY_HARD_RUNTIMEERROR);
+    EXPECT_EQ(checkStatus, E2E_P05STATUS_ERROR);
+    EXPECT_EQ(FakeDetHw_LastErrorId, E2EXF_E_PARAM);
+}
+
+TEST_F(E2EXf_Inv_EngineInfo_Test, E2EXf_Inv_EngineInfo_OK_NoNewDataIsReportedAsNoNewData)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    E2EXf_PBCfg_Init();   // 状態機械と初回受信の待ちを初期状態へ戻す
+    uint32 bufLen = 99U;
+    E2E_P05StatusType checkStatus = E2E_P05STATUS_OK;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    uint8 ret = E2EXf_Inv_EngineInfo(NULL, &bufLen, NULL, 0U, &checkStatus);   // buffer が NULL で長さ 0: 新しいデータが無い（[SWS_E2EXf_00105]）
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_NE(ret, E_SAFETY_HARD_RUNTIMEERROR);
+    EXPECT_EQ(ret & 0x0FU, (uint8)E2E_P_NONEWDATA);   // 戻り値の下位ニブルが NONEWDATA（[SWS_E2EXf_00027]）
+    EXPECT_EQ(checkStatus, E2E_P05STATUS_NONEWDATA);
+    EXPECT_EQ(bufLen, 0U);                            // [SWS_E2EXf_00114]
 }
 
 }  // namespace
