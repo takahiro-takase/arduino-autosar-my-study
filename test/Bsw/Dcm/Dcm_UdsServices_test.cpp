@@ -178,7 +178,7 @@ TEST_F(Dcm_UdsServices_Test, Dcm_EcuReset_NG_UnsupportedSubFunctionIsRejected)
     /* ----------------------- */
     /* ---- 準備 (Arrange) --- */
     /* ----------------------- */
-    const uint8 req[2] = { DCM_SID_ECU_RESET, 0x02U };   // hardReset(0x01)・softReset(0x03) 以外（keyOffOnReset）
+    const uint8 req[2] = { DCM_SID_ECU_RESET, 0x04U };   // hardReset(0x01)・keyOffOnReset(0x02)・softReset(0x03) 以外（enableRapidPowerShutdown）
 
     /* ----------------------- */
     /* ---- 実行 (Act) ------- */

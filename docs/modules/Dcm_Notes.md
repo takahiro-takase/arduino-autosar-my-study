@@ -52,6 +52,7 @@ CAN 0x100（EngineInfo）・0x110（AbsInfo）・0x7E0（診断要求）は PduR
 | 0x10<br>DiagnosticSessionControl | ○ | ○ | 0x01<br>(Default) | `02 10 01 00 00 00 00 00` | — |
 |  |  |  | 0x03<br>(Extended) | `02 10 03 00 00 00 00 00` | S3タイマ起動 |
 | 0x11<br>ECUReset | ○ | ○ | 0x01<br>(hardReset) | `02 11 01 00 00 00 00 00` | — |
+|  |  |  | 0x02<br>(keyOffOnReset) | `02 11 02 00 00 00 00 00` | — |
 |  |  |  | 0x03<br>(softReset) | `02 11 03 00 00 00 00 00` | — |
 | 0x14<br>ClearDiagnosticInformation | × | ○ | — | `04 14 FF FF FF 00 00 00` | byte2-4=groupOfDTC<br>・0xFFFFFF=全クリア<br>・DTCコード指定=1件クリア<br>**SecurityAccess Level1 必須**（未認証は NRC 0x33） |
 | 0x19<br>ReadDTCInformation | ○ | ○ | 0x01<br>(件数取得) | `03 19 01 MM 00 00 00 00` | byte3=statusMask |
@@ -293,8 +294,8 @@ BSW/RTE が決める」という責務分離を、通信スタックだけでな
 
 ## ECUReset（SID 0x11）
 
-対応は 0x01（hardReset）と 0x03（softReset）で、`Mcu_PerformReset()` はリセット種別を区別しないため
-どちらも同じ扱いです。正応答 `[0x51, subFunc]` を送ってセッションを defaultSession に戻した後、
+対応は 0x01（hardReset）・0x02（keyOffOnReset）・0x03（softReset）で、`Mcu_PerformReset()` はリセット種別を区別しないため
+どれも同じ扱いです（[SWS_Dcm_00373]。0x04/0x05 の rapidPowerShutdown は未対応で NRC 0x12 です）。正応答 `[0x51, subFunc]` を送ってセッションを defaultSession に戻した後、
 `DCM_ECU_RESET_DELAY_MS`（50ms）待ってから `Mcu_PerformReset()` を呼んで MCU を実際にリセットします
 （正応答がテスターに届く前にリセットしてしまわないための猶予）。この待ちの前に `NvM_WriteAll()` で
 NvM の書き込み待ちを EEPROM へ書き切ります（`delay()` の間は Os が止まるため、これが無いと、直前に確定・消去した

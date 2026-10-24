@@ -54,6 +54,13 @@
 #define CANTP_E_INVALID_TX_ID   0x30U  /* TxSduId が本実装の固定チャネル ID と不一致 */
 #define CANTP_E_INVALID_RX_ID   0x40U  /* RxPduId が本実装の固定チャネル ID と不一致 */
 
+/** CAN フレーム（N-PDU）の長さ [バイト]。送受信とも常に 8 バイトへパディングする（受信パディング ON、[SWS_CanTp_00344] 他）。
+ *  CanIf の設定 DLC（CanIf_PBCfg.c）と同じ値にすること（CAN FD では 64 などに変わる）。 */
+#define CANTP_FRAME_LEN         8U
+
+/** ランタイムエラーコード（7.4.2 [SWS_CanTp_00352] 表）。Det_ReportRuntimeError() で報告する。 */
+#define CANTP_E_PADDING         0x70U  /* 長さが 8 バイト未満の PDU を受信した（パディング ON の前提に反する） */
+
 /** ApiId（各関数の Doxygen \ServiceID タグと一致させること。値は SWS 8.x 章の
  *  「Service ID[hex]」記載を実測して確認済み） */
 /* cppcheck-suppress misra-c2012-2.5 */

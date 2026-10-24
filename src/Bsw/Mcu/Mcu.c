@@ -105,6 +105,10 @@ void Mcu_Init(const Mcu_ConfigType* ConfigPtr)
     {
         Mcu_CachedRawReset |= MCU_RAW_RESET_POWERON_BIT;
     }
+    if ((hwReason.Software) != 0U)
+    {
+        Mcu_CachedRawReset |= MCU_RAW_RESET_SOFTWARE_BIT;
+    }
 
     /* ConfigPtr が NULL の場合は上記のキャッシュ更新までは行うが、モジュール
      * を「初期化済み」とはみなさない（現状唯一の呼び出し元 main.cpp は常に
@@ -138,6 +142,10 @@ Mcu_ResetType Mcu_GetResetReason(void)
     if ((Mcu_CachedRawReset & MCU_RAW_RESET_POWERON_BIT) != 0U)
     {
         return MCU_POWER_ON_RESET;
+    }
+    if ((Mcu_CachedRawReset & MCU_RAW_RESET_SOFTWARE_BIT) != 0U)
+    {
+        return MCU_SW_RESET;
     }
 
     /* BrownOut/External が単独で立っている場合を含む。Mcu_ResetType の

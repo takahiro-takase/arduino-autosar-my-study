@@ -255,6 +255,27 @@ TEST_F(CanTp_RxIndication_Test, CanTp_RxIndication_NG_SfFrameShorterThanDeclared
     EXPECT_EQ(CallCount_Dcm_StartOfReception, 0U);   // 判定で弾かれ、上位層（Dcm）へ受信の開始を通知しない
 }
 
+TEST_F(CanTp_RxIndication_Test, CanTp_RxIndication_NG_SfShorterThanEightBytesIsRejectedWithPaddingError)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    uint8 frame[8] = { 0x02U, 0x10U, 0x01U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U };
+    PduInfoType info = { frame, 3U };   // ペイロード長（2）とは合っているが、DLC が 8 未満（パディングされていない）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    CanTp_RxIndication(CANTP_RX_SDU_ID, &info);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(CallCount_Dcm_StartOfReception, 0U);   // 受け付けない（[SWS_CanTp_00345]）
+    EXPECT_EQ(FakeDetHw_LastApiId, CANTP_API_ID_RX_INDICATION);
+    EXPECT_EQ(FakeDetHw_LastErrorId, CANTP_E_PADDING);
+}
+
 TEST_F(CanTp_RxIndication_Test, CanTp_RxIndication_NG_FfMessageLengthFitsSingleFrame)
 {
     /* ----------------------- */
@@ -352,6 +373,8 @@ TEST_F(CanTp_RxIndication_Test, CanTp_RxIndication_NG_CfShorterThanEightBytesAbo
     EXPECT_EQ(CallCount_Dcm_CopyRxData, 1U);   // データを渡さない
     EXPECT_EQ(CallCount_Dcm_TpRxIndication, 1U);
     EXPECT_EQ(LastResult_Dcm_TpRxIndication, E_NOT_OK);
+    EXPECT_EQ(FakeDetHw_LastApiId, CANTP_API_ID_RX_INDICATION);
+    EXPECT_EQ(FakeDetHw_LastErrorId, CANTP_E_PADDING);   // [SWS_CanTp_00346]
 }
 
 TEST_F(CanTp_RxIndication_Test, CanTp_RxIndication_NG_CfWithWrongSequenceNumberAbortsReception)
@@ -416,7 +439,7 @@ TEST_F(CanTp_RxIndication_Test, CanTp_RxIndication_NG_FcWithoutWaitingIsIgnored)
     EXPECT_FALSE(CanTp_Test_IsTxBusy());
 }
 
-TEST_F(CanTp_RxIndication_Test, CanTp_RxIndication_NG_FcShorterThanEightBytesIsIgnored)
+TEST_F(CanTp_RxIndication_Test, CanTp_RxIndication_NG_FcShorterThanEightBytesAbortsTransmission)
 {
     /* ----------------------- */
     /* ---- 準備 (Arrange) --- */
@@ -435,6 +458,11 @@ TEST_F(CanTp_RxIndication_Test, CanTp_RxIndication_NG_FcShorterThanEightBytesIsI
     /* ---- 評価 (Assert) ---- */
     /* ----------------------- */
     EXPECT_EQ(CanTp_Test_GetTxStMin(), before);   // STmin（5）を取り込まない
+    EXPECT_EQ(CallCount_Dcm_TpTxConfirmation, 1U);   // 送信セッションを中断し、上位層へ失敗を伝える（[SWS_CanTp_00349]）
+    EXPECT_EQ(LastResult_Dcm_TpTxConfirmation, E_NOT_OK);
+    EXPECT_FALSE(CanTp_Test_IsTxBusy());
+    EXPECT_EQ(FakeDetHw_LastApiId, CANTP_API_ID_RX_INDICATION);
+    EXPECT_EQ(FakeDetHw_LastErrorId, CANTP_E_PADDING);
 }
 
 TEST_F(CanTp_RxIndication_Test, CanTp_RxIndication_NG_FcOverflowAbortsTransmission)

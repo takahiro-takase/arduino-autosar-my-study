@@ -501,8 +501,19 @@ void CanTp_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
     {
         uint8 udsLen = pci & 0x0FU;
 
-        if ((udsLen == 0U) || (udsLen > CANTP_SF_MAX_DATA)
-            || (PduInfoPtr->SduLength < (PduLengthType)((PduLengthType)udsLen + 1U)))
+        /* [SWS_CanTp_00344]/[SWS_CanTp_00345]: 受信パディングは常に ON（送信側テスターは 8 バイトへ
+         * パディングする前提）。DLC が 8 未満の SF は、PCI の内容にかかわらず受け付けず、ランタイム
+         * エラー CANTP_E_PADDING を報告する（宣言された長さの検査より先に行う）。なお実機の配線では、
+         * DLC が設定（8）と一致しないフレームは、ここへ届く前に CanIf が捨てる（二重の防御）。 */
+        if (PduInfoPtr->SduLength < CANTP_FRAME_LEN)
+        {
+            (void)Det_ReportRuntimeError(CANTP_MODULE_ID, 0U, CANTP_API_ID_RX_INDICATION, CANTP_E_PADDING);
+            break;
+        }
+
+        /* ペイロード長が 0、または 1 フレームに収まる最大値（7）を超える SF は不正。DLC は 8 以上と確認済みなので、
+         * 宣言された長さ（udsLen + 1 バイト）がフレームに収まるかの検査は不要。 */
+        if ((udsLen == 0U) || (udsLen > CANTP_SF_MAX_DATA))
         {
             break;
         }
@@ -545,7 +556,7 @@ void CanTp_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
         uint16 msgLen = (uint16)((((uint16)pci & 0x0FU) << 8U)
                                  | (uint16)data[1]);
 
-        if ((msgLen <= CANTP_SF_MAX_DATA) || (PduInfoPtr->SduLength < 8U))
+        if ((msgLen <= CANTP_SF_MAX_DATA) || (PduInfoPtr->SduLength < CANTP_FRAME_LEN))
         {
             break;
         }
@@ -597,9 +608,10 @@ void CanTp_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
          * 受信側もこれ未満は不正フレームとして破棄する（SF/FF と同様の防御。
          * これが無いと、短い CF で data[1..7] に古い/未初期化のバイトが
          * 混入したまま再組立バッファへコピーされてしまう）。 */
-        if (PduInfoPtr->SduLength < 8U)
+        if (PduInfoPtr->SduLength < CANTP_FRAME_LEN)
         {
             DET_LOGE(TAG, "RX CF too short len=%u", (unsigned)PduInfoPtr->SduLength);
+            (void)Det_ReportRuntimeError(CANTP_MODULE_ID, 0U, CANTP_API_ID_RX_INDICATION, CANTP_E_PADDING);   /* [SWS_CanTp_00346] */
             CanTp_RxAbort();
             break;
         }
@@ -651,10 +663,15 @@ void CanTp_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
         /* CanTp_SendFlowControl() は常に 8 バイトへパディングして送信する規約
          * のため、受信側もこれ未満は不正フレームとして破棄する（SF/FF/CF と
          * 同様の防御。これが無いと、短い FC で data[1](BS)/data[2](STmin) に
-         * 古い/未初期化のバイトが混入したまま採用されてしまう）。 */
-        if (PduInfoPtr->SduLength < 8U)
+         * 古い/未初期化のバイトが混入したまま採用されてしまう）。
+         * [SWS_CanTp_00349]: 送信中の FC が 8 バイト未満なら、送信セッションを E_NOT_OK で中断し、
+         * ランタイムエラー CANTP_E_PADDING を報告する（以前は無視していたため、N_Bs タイムアウトの
+         * 5 秒後にしか失敗が上位層へ伝わらなかった）。 */
+        if (PduInfoPtr->SduLength < CANTP_FRAME_LEN)
         {
             DET_LOGE(TAG, "RX FC too short len=%u", (unsigned)PduInfoPtr->SduLength);
+            (void)Det_ReportRuntimeError(CANTP_MODULE_ID, 0U, CANTP_API_ID_RX_INDICATION, CANTP_E_PADDING);
+            CanTp_TxFinish(E_NOT_OK);
             break;
         }
 
@@ -757,7 +774,7 @@ static Std_ReturnType CanTp_SendFrame(uint8* frame)
 {
     static PduInfoType pdu;
     pdu.SduDataPtr = frame;
-    pdu.SduLength  = 8U;
+    pdu.SduLength  = CANTP_FRAME_LEN;
     return PduR_CanTpTransmit(CANTP_PDUR_TX_SDU_ID, &pdu);
 }
 

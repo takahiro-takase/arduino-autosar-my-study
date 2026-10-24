@@ -109,6 +109,10 @@ static CanTSyn_RxStateType CanTSyn_RxState;
 static uint8 CanTSyn_RxLastSc;
 static uint8 CanTSyn_RxHaveSc;
 
+/** TIMEOUT の間に、SC の飛び幅の検査を省略する権利を既に使ったか（[SWS_CanTSyn_00079]。時間ベースが
+ *  TIMEOUT から復帰したら、また使えるようにする）。 */
+static boolean CanTSyn_RxTimeoutSkipUsed;
+
 /** 待っている FUP の対になる SYNC の SC、秒（T0）、受信時の仮想ローカル時間（T2raw）、受信時刻 [ms]。 */
 static uint8                 CanTSyn_RxSyncSc;
 static uint32                CanTSyn_RxSyncSec;
@@ -169,6 +173,7 @@ void CanTSyn_Init(const CanTSyn_ConfigType* ConfigPtr)
     CanTSyn_T0Raw         = 0U;
     CanTSyn_RxState       = CANTSYN_RX_STATE_IDLE;
     CanTSyn_RxHaveSc      = 0U;
+    CanTSyn_RxTimeoutSkipUsed = FALSE;
     CanTSyn_RxLastSc      = 0U;
     CanTSyn_RxSyncSc      = 0U;
     CanTSyn_RxSyncSec     = 0U;
@@ -463,7 +468,9 @@ void CanTSyn_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
  *
  * \details 設定で CRC を検証する場合は CRC（Byte2〜Byte7 + DataID）が合うことを確認する。
  *          SC の増分（直前に受け付けた SYNC との差）が 1〜CANTSYN_RX_SC_JUMP_WIDTH でなければ
- *          無視する（[SWS_CanTSyn_00078]）。直前の SC は、無視した SYNC でも更新する
+ *          無視する（[SWS_CanTSyn_00078]）。ただし起動直後と、時間ベース 1 が TIMEOUT の後の
+ *          最初の SYNC（1 回だけ。TIMEOUT から復帰するまでの 2 つ目以降は検査する）は検査しない
+ *          （[SWS_CanTSyn_00079]）。直前の SC は、無視した SYNC でも更新する
  *          （1 回取りこぼしても、次の SYNC から復帰できるようにするため）。
  *          受け付けたら、秒（T0）と、StbM の時間ベース 1 の仮想ローカル時間 T2raw を控える。
  *
@@ -479,8 +486,30 @@ static void CanTSyn_RxHandleSync(const uint8* data, unsigned long nowMs)
         return;
     }
 
+    /* [SWS_CanTSyn_00079]: 起動直後、または StbM の時間ベースが TIMEOUT（更新が途絶えた）の後の
+     * 最初の SYNC は、SC の飛び幅を検査しない（SC の再同期のため。途絶はタイムアウト監視で検出済み） */
+    StbM_TimeBaseStatusType syncStatus   = 0U;
+    StbM_TimeBaseStatusType offsetStatus = 0U;
+    boolean skipJumpCheck = (CanTSyn_RxHaveSc == 0U);
+    if (StbM_GetTimeBaseStatus(STBM_TIME_BASE_SLAVE, &syncStatus, &offsetStatus) == E_OK)
+    {
+        if ((syncStatus & STBM_TIMEBASE_STATUS_TIMEOUT) == 0U)
+        {
+            CanTSyn_RxTimeoutSkipUsed = FALSE;   /* TIMEOUT から復帰した。次の TIMEOUT でまた使える */
+        }
+        else if (!CanTSyn_RxTimeoutSkipUsed)
+        {
+            skipJumpCheck             = TRUE;    /* TIMEOUT 後の最初の SYNC だけ、検査を省略する */
+            CanTSyn_RxTimeoutSkipUsed = TRUE;
+        }
+        else
+        {
+            /* 省略は使い切った。FUP が揃わず TIMEOUT のままの間は、通常どおり検査する */
+        }
+    }
+
     uint8 jump = (uint8)((sc - CanTSyn_RxLastSc) & CANTSYN_SC_MASK);
-    boolean jumpOk = (CanTSyn_RxHaveSc == 0U) || ((jump >= 1U) && (jump <= CANTSYN_RX_SC_JUMP_WIDTH));
+    boolean jumpOk = skipJumpCheck || ((jump >= 1U) && (jump <= CANTSYN_RX_SC_JUMP_WIDTH));
 
     CanTSyn_RxLastSc = sc;
     CanTSyn_RxHaveSc = 1U;
@@ -505,7 +534,7 @@ static void CanTSyn_RxHandleSync(const uint8* data, unsigned long nowMs)
  * \brief   受信した FUP を検証し、全域時間を求めて StbM の時間ベース 1 へ反映する。
  *
  * \details SYNC を受けていない、CRC が合わない（設定で検証する場合）、SC が対の SYNC と
- *          違う、待ち時間を超えた、のいずれかなら捨てる（SC が違うときは、保留中の SYNC も捨てる、
+ *          違う、待ち時間を超えた、ナノ秒が 10^9 以上（範囲外）、のいずれかなら捨てる（SC が違うときは、保留中の SYNC も捨てる、
  *          [SWS_CanTSyn_00076]）。受け付けたら、
  *            全域時間 = T0（SYNC の秒）+ T4（OVS の秒 + FUP のナノ秒）+ T3diff（T2raw からの経過時間）
  *          を StbM_BusSetGlobalTime() で時間ベース 1 へ反映する（[SWS_CanTSyn_00073]/00075/00064）。
@@ -532,6 +561,12 @@ static void CanTSyn_RxHandleFup(const uint8* data, unsigned long nowMs)
 
     if ((sc != CanTSyn_RxSyncSc)
         || ((nowMs - CanTSyn_RxWaitStartMs) >= CANTSYN_RX_FOLLOW_UP_TIMEOUT_MS))
+    {
+        return;
+    }
+
+    /* [SWS_CanTSyn_00086] 項目 5: FUP のナノ秒は、StbM_TimeStampType.nanoseconds の範囲（10^9 未満）に収まること */
+    if (CanTSyn_ReadBe32(&data[4]) >= (uint32)CANTSYN_NS_PER_SEC)
     {
         return;
     }

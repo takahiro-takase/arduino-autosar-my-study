@@ -16,7 +16,7 @@
  *
  *          対応サービス:
  *            0x10 DiagnosticSessionControl — Default / Extended セッション切替
- *            0x11 ECUReset               — hardReset / softReset (応答後セッションリセット)
+ *            0x11 ECUReset               — hardReset / keyOffOnReset / softReset (応答後セッションリセット)
  *            0x14 ClearDiagnosticInformation — 全 DTC クリア／DTC 指定で 1 件クリア
  *                                              (SecurityAccess Level1 必須)
  *            0x19 ReadDTCInformation     — subFunc 0x01/0x02/0x04/0x06/0x0A/0x14
@@ -1499,7 +1499,7 @@ static void Dcm_HandleSessionControl(const uint8* uds, uint8 udsLen)
  *          subFunction バイトの bit7 (suppressPosRspMsgIndicationBit) が
  *          立っている場合は正応答を送信しない（[SWS_Dcm_00200]/
  *          [SWS_Dcm_00201]。2026-09 追加。以前は bit7 を一切マスクしておらず、
- *          テスターが本ビットを立てただけで hardReset/softReset いずれとも
+ *          テスターが本ビットを立てただけで hardReset/keyOffOnReset/softReset いずれとも
  *          不一致となり誤って NRC 0x12 subFunctionNotSupported を返す実害
  *          あるバグでもあった）。
  *
@@ -1516,12 +1516,12 @@ static void Dcm_HandleEcuReset(const uint8* uds, uint8 udsLen)
 
     /* bit7: suppressPosRspMsgIndicationBit（[SWS_Dcm_00200]/[SWS_Dcm_00201]。
      * 2026-09 是正: 以前は bit7 を一切マスクせず生バイトのまま subFunc として
-     * 比較していたため、テスターが本ビットを立てただけで hardReset/softReset
+     * 比較していたため、テスターが本ビットを立てただけで hardReset/keyOffOnReset/softReset
      * どちらの値とも一致せず誤って NRC 0x12 subFunctionNotSupported を返す
      * 実害あるバグでもあった。Dcm_HandleSessionControl 等と同じ方針へ統一）。 */
     uint8 subFunc = Dcm_ExtractSubFunc(uds[1]);
 
-    if ((subFunc != DCM_RESET_HARD) && (subFunc != DCM_RESET_SOFT))
+    if ((subFunc != DCM_RESET_HARD) && (subFunc != DCM_RESET_KEYONOFF) && (subFunc != DCM_RESET_SOFT))
     {
         Dcm_SendNegativeResponse(DCM_SID_ECU_RESET, DCM_NRC_SUB_FUNC_NOT_SUPPORTED);
         return;

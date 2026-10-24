@@ -87,6 +87,7 @@
           "payload": ["0x02", "0x11", "0x01"],
           "presets": [
               { "label": "Hard reset (0x01)", "payload": ["0x02", "0x11", "0x01"] },
+              { "label": "Key off/on reset (0x02)", "payload": ["0x02", "0x11", "0x02"] },
               { "label": "Soft reset (0x03)", "payload": ["0x02", "0x11", "0x03"] }
           ]
         },

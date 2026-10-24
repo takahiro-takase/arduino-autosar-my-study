@@ -420,6 +420,25 @@ TEST_F(CanTSyn_RxIndication_Test, CanTSyn_RxIndication_NG_ScNotIncrementedIgnore
     EXPECT_LT(ReadSlave().seconds, 200U);   // 秒 500 に更新されていない
 }
 
+TEST_F(CanTSyn_RxIndication_Test, CanTSyn_RxIndication_NG_FupNanosecondsOutOfRangeIgnored)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // ナノ秒が 10^9 以上（StbM_TimeStampType.nanoseconds の範囲外）。CRC は正しい。
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    ReceivePair(0U, 100U, 20U, 1000000000U);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    StbM_TimeStampType ts = ReadSlave();
+    EXPECT_EQ(ts.timeBaseStatus & STBM_TIMEBASE_STATUS_GLOBAL_TIME_BASE, 0U);   // 時間ベース 1 は更新されない（未同期のまま）
+}
+
 TEST_F(CanTSyn_RxIndication_Test, CanTSyn_RxIndication_OK_ValidPairSetsSlaveTime)
 {
     /* ----------------------- */
@@ -527,6 +546,54 @@ TEST_F(CanTSyn_RxIndication_Test, CanTSyn_RxIndication_OK_RecoversAfterIgnoredJu
     /* ---- 評価 (Assert) ---- */
     /* ----------------------- */
     EXPECT_EQ(ReadSlave().seconds, 700U);
+}
+
+TEST_F(CanTSyn_RxIndication_Test, CanTSyn_RxIndication_NG_SecondSyncDuringTimeoutIsChecked)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    ReceivePair(0U, 100U, 10U, 0U);                          // SC=0 を受け付けて同期する
+    FakeMillis_Value += STBM_SYNC_LOSS_TIMEOUT_MS_SLAVE + STBM_MAIN_FUNCTION_PERIOD_MS;
+    StbM_MainFunction();                                     // TIMEOUT になる
+    ASSERT_NE(ReadSlave().timeBaseStatus & STBM_TIMEBASE_STATUS_TIMEOUT, 0U);
+    Receive(MakeFrame(false, 5U, CANTSYN_RX_TIME_DOMAIN_ID, 0U, 500U));   // TIMEOUT 後の最初の SYNC（SC 0 → 5）。検査は省略されるが、対の FUP は届かない
+    FakeMillis_Value += 1000UL;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    ReceivePair(11U, 900U, 10U, 0U);                         // 2 つ目の SYNC（SC 5 → 11、増分 6 > 上限）。TIMEOUT のままでも、通常どおり検査され、捨てられる
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    StbM_TimeStampType ts = ReadSlave();
+    EXPECT_NE(ts.timeBaseStatus & STBM_TIMEBASE_STATUS_TIMEOUT, 0U);   // 更新されず、TIMEOUT のまま
+    EXPECT_LT(ts.seconds, 500U);
+}
+
+TEST_F(CanTSyn_RxIndication_Test, CanTSyn_RxIndication_OK_FirstSyncAfterTimeoutSkipsScJumpCheck)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    ReceivePair(0U, 100U, 10U, 0U);                          // SC=0 を受け付けて同期する
+    FakeMillis_Value += STBM_SYNC_LOSS_TIMEOUT_MS_SLAVE + STBM_MAIN_FUNCTION_PERIOD_MS;
+    StbM_MainFunction();                                     // 更新が途絶えて TIMEOUT になる
+    ASSERT_NE(ReadSlave().timeBaseStatus & STBM_TIMEBASE_STATUS_TIMEOUT, 0U);
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    ReceivePair(5U, 500U, 10U, 0U);                          // SC が 0 → 5（増分 5 > 上限）だが、TIMEOUT 後の最初の SYNC なので検査しない
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    StbM_TimeStampType ts = ReadSlave();
+    EXPECT_EQ(ts.seconds, 500U);                             // 受け付けられ、秒 500 に更新される
+    EXPECT_EQ(ts.timeBaseStatus & STBM_TIMEBASE_STATUS_TIMEOUT, 0U);   // TIMEOUT が下りる（[SWS_CanTSyn_00079]）
 }
 
 }  // namespace

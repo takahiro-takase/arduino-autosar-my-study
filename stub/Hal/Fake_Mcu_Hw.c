@@ -14,7 +14,7 @@
  * Global Variables
  * ====================================================================== */
 
-Mcu_Hw_ResetReasonType FakeMcuHw_ResetReason = { 0U, 0U, 0U, 0U };
+Mcu_Hw_ResetReasonType FakeMcuHw_ResetReason = { 0U, 0U, 0U, 0U, 0U };
 
 uint32 FakeMcuHw_ReadAndClearResetReasonCount = 0U;
 uint32 FakeMcuHw_DisableWatchdogAtBootCount   = 0U;
@@ -30,6 +30,7 @@ void FakeMcuHw_Reset(void)
     FakeMcuHw_ResetReason.BrownOut = 0U;
     FakeMcuHw_ResetReason.External = 0U;
     FakeMcuHw_ResetReason.PowerOn  = 0U;
+    FakeMcuHw_ResetReason.Software = 0U;
 
     FakeMcuHw_ReadAndClearResetReasonCount = 0U;
     FakeMcuHw_DisableWatchdogAtBootCount   = 0U;

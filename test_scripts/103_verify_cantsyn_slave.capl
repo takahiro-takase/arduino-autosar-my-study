@@ -17,7 +17,7 @@
 //   [5] 正しい SYNC/FUP                         -> synchronized が 1 回出る
 //   [6] 正しい SYNC/FUP をあと 3 組（1 秒おき）    -> 出ない（同期済みのため）
 //   [7] 何も送らずに 7 秒待つ                    -> sync loss timeout が 1 回出る
-//   [8] 正しい SYNC/FUP                         -> synchronized が再び 1 回出る
+//   [8] 正しい SYNC/FUP（SC を 5 飛ばす）         -> synchronized が再び 1 回出る（TIMEOUT 後の最初の SYNC は SC の飛び幅を検査しない）
 //
 // 前提:
 //   - can_tool に CAN 接続済み。ECU を起動（リセット）した直後に実行する（[1] の前に時間ベース 1 が
@@ -153,7 +153,8 @@ on start
     write("[7] 7 秒待つ -> 期待: 'base=1 sync loss timeout' が 1 回出る");
     wait(7);
 
-    write("[8] 正しい SYNC/FUP -> 期待: 'base=1 synchronized' が再び 1 回出る");
+    write("[8] 正しい SYNC/FUP（SC を 5 飛ばす）-> 期待: 'base=1 synchronized' が再び 1 回出る（TIMEOUT 後の最初の SYNC は SC の飛び幅を検査しない）");
+    sc = (sc + 4) & 0x0F;   // 直前の SC から +5（飛び幅の上限 1 を超える）。通常なら捨てられるが、TIMEOUT 後の最初の SYNC は受け付けられる
     SendPair(20, 0, 0);
     wait(1);
 

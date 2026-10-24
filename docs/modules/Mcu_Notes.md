@@ -8,14 +8,23 @@
 `Mcu_InitClock`/`Mcu_SetMode`/`Mcu_InitRamSection` 等は
 Arduino フレームワークがクロック初期化を担い複数電源モードもモデル化しないため
 未実装。`Mcu_GetResetReason()`（単一の `Mcu_ResetType`）に加え、複数要因の同時
-検出を診断できるよう `Mcu_GetResetRawValue()`（4 フラグをビット詰めした本
+検出を診断できるよう `Mcu_GetResetRawValue()`（5 フラグをビット詰めした本
 プロジェクト独自の生値）も提供する。`Mcu_PerformReset()` は実装済みで
 （`Mcu_Hw_PerformReset()` 経由でソフトウェアリセット）、UDS 0x11 ECUReset の
-hardReset / softReset から呼ばれます（[`Dcm_Notes.md`](./Dcm_Notes.md) 参照）。
+hardReset / keyOffOnReset / softReset から呼ばれます（[`Dcm_Notes.md`](./Dcm_Notes.md) 参照）。
 
 ## Mcu_Hw（下位ドライバ実装）
 
 リセット要因の読み取り（Renesas RA RSTSR0-1）・起動時ウォッチドッグ無効化。
+
+## ソフトウェアリセットの検出（2026-10 追加、実機未検証）
+
+`Mcu_Hw_ReadAndClearResetReason()` は、Renesas RA の `RSTSR1.SWRF`（ソフトウェアリセットの検出フラグ）も読んでクリアし、
+`Mcu_GetResetReason()` は `MCU_SW_RESET`（[SWS_Mcu_00252]）を返せるようになりました。`Mcu_GetResetRawValue()` では bit4 です。
+起動後のログ（`ResetReason WDT=%u BOR=%u EXT=%u POR=%u SW=%u`）の `SW=1` で、UDS 0x11 ECUReset（`Mcu_PerformReset()`
+→ `NVIC_SystemReset()`）による再起動と、リセットボタンなどの外部リセットを区別できます。
+Watchdog / PowerOn が同時に立っていれば、そちらを優先して返します。ブートローダが先にレジスタを消費している場合は、
+PORF と同様に検出できない可能性があります（実機のログで確認します）。
 
 ## 開発の経緯（実機で見つかった不具合・設計変更）
 
@@ -26,7 +35,7 @@ hardReset / softReset から呼ばれます（[`Dcm_Notes.md`](./Dcm_Notes.md) �
 
 Mcu モジュール導入（`Mcu_Init()`/`Mcu_GetResetRawValue()`）の実機検証中、
 USB ケーブルの抜き差し（真の電源断→再投入）を行っても、診断ログ
-（`ResetReason WDT=%u BOR=%u EXT=%u POR=%u`）の POR が常に 0 のままである
+（`ResetReason WDT=%u BOR=%u EXT=%u POR=%u SW=%u`）の POR が常に 0 のままである
 ことが判明した。この事象自体は Mcu モジュール導入以前から存在していた
 （本セッション最初期の検証ログの時点で既に `POR=0` だった）ため、
 Mcu.c/Mcu.h 側の新規ロジック（Mcu_Init() の呼び出し順序修正・
