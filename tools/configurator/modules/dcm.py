@@ -4,11 +4,12 @@ Dcm.json の dids[] に書く値: DID の名前・番号・データ長、対応
 0x2F で制御するランプ）、各項目の説明。読み出し・書き込みの関数の中身は Dcm.c に手書きする（名前だけを書く）。
 生成する値（並び順がそのまま表の順序）:
   - Dcm_Cfg.h: DID のマクロ（DCM_DID_<name>）、データ長のマクロ（lengthMacro を指定したものだけ）、DID の数、
-    読み出し対応の DID の最大データ長
+    読み出し対応の DID の最大データ長、0x22 の 1 要求あたりの DID の最大数（DCM_MAX_DID_TO_READ）
   - Dcm_PBCfg.h: データ関数（readFct / writeFct）の宣言
   - Dcm_PBCfg.c: DID の表（Dcm_DidTable）。Dcm.c は表を引いて 0x22 / 0x2E / 0x2F を処理する
   - SID ごとの許可セッションの表（Dcm_SidSessionTable、sidSessions[]）と、その行数（Dcm_Cfg.h の DCM_SID_SESSION_COUNT）
-検査: DID・名前・データ長マクロの重複、サービスが 1 つも無い DID。
+0x22 の DID ごとの条件は、readSessions（読めるセッション。省略は全セッション）と readSecurity（Level1 が要るか）。
+検査: DID・名前・データ長マクロの重複、サービスが 1 つも無い DID、readFct の無い DID の readSessions / readSecurity。
 """
 
 import pathlib
@@ -32,6 +33,8 @@ def validate(cfg):
             errors.append("dids %s: ioControlLamp は readFct / writeFct と併用しない（0x2F 専用の DID）" % d["name"])
         if ("readFct" in d or "writeFct" in d) and "lengthMacro" not in d and d["length"] > 8:
             errors.append("dids %s: 長いデータの DID は lengthMacro を指定し、手書きの関数と同じ値を使う" % d["name"])
+        if ("readSessions" in d or "readSecurity" in d) and "readFct" not in d:
+            errors.append("dids %s: readSessions / readSecurity は readFct と一緒に指定する" % d["name"])
         if "lengthDoc" in d and "lengthMacro" not in d:
             errors.append("dids %s: lengthDoc は lengthMacro を指定したときだけ書く" % d["name"])
     sids = [s["sid"] for s in cfg["sidSessions"]]
@@ -56,6 +59,7 @@ def render_cfg_dids(cfg, ctx):
     entries.append(("DCM_DID_COUNT", "%dU" % len(cfg["dids"]), ["Dcm_DidTable[] のエントリ数"]))
     entries.append(("DCM_DID_READ_MAX_LENGTH", "%dU" % read_max_length(cfg),
                     ["0x22 で読み出せる DID の最大データ長（応答用バッファの大きさ）"]))
+    entries.append(("DCM_MAX_DID_TO_READ", "%dU" % cfg["maxDidToRead"]["value"], cfg["maxDidToRead"]["doc"]))
     return "\n".join(define_block(entries))
 
 
@@ -106,9 +110,11 @@ def render_table(cfg, ctx):
         length = d["lengthMacro"] if "lengthMacro" in d else "%dU" % d["length"]
         comma = "," if i < n - 1 else ""
         out.append("    /* DCM_DID_%s */" % d["name"])
-        out.append("    { DCM_DID_%s, %s, %s, %s, %s }%s" % (
+        mask = " | ".join("DCM_SESSION_MASK_" + x for x in d["readSessions"]) if "readSessions" in d else "DCM_SESSION_MASK_ALL"
+        out.append("    { DCM_DID_%s, %s, %s, %s, %s, %s, %s }%s" % (
             d["name"], length, d.get("readFct", "NULL"), d.get("writeFct", "NULL"),
-            d.get("ioControlLamp", "DCM_DID_IOCONTROL_NONE"), comma))
+            d.get("ioControlLamp", "DCM_DID_IOCONTROL_NONE"), mask,
+            "1U" if d.get("readSecurity") else "0U", comma))
     out.append("};")
     return "\n".join(out)
 

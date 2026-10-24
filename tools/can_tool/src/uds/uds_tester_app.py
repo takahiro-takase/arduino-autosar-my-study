@@ -1881,8 +1881,7 @@ class UdsTesterFrame(ttk.Frame):
         sid = sent[1] if len(sent) > 1 else None
         raw = resp.raw
         if sid == 0x22 and len(raw) >= 3 and raw[0] == 0x62:
-            did = (raw[1] << 8) | raw[2]
-            return uds_link.decode_did_value(did, raw[3:])
+            return uds_link.decode_read_response(raw)
         if sid == 0x19 and len(raw) >= 2 and raw[0] == 0x59:
             return self._decode_dtc_response(raw)
         if sid == 0x2F and len(raw) >= 5 and raw[0] == 0x6F:
@@ -1967,8 +1966,8 @@ class UdsTesterFrame(ttk.Frame):
         if sid == 0x19 and len(uds) >= 2:
             return self._decode_dtc_request(uds)
         if sid == 0x22 and len(uds) >= 3:
-            did = (uds[1] << 8) | uds[2]
-            return f"{name}: {uds_link.DID_NAMES.get(did, f'DID 0x{did:04X}')}"
+            dids = [(uds[i] << 8) | uds[i + 1] for i in range(1, len(uds) - 1, 2)]
+            return f"{name}: " + ", ".join(uds_link.DID_NAMES.get(did, f"DID 0x{did:04X}") for did in dids)
         if sid == 0x27 and len(uds) >= 2:
             sub_names = {0x01: "requestSeed", 0x02: "sendKey"}
             sub_name = sub_names.get(uds[1], f"0x{uds[1]:02X}")

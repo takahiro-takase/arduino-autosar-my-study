@@ -6,6 +6,7 @@
   "additionalProperties": false,
   "required": [
     "module",
+    "maxDidToRead",
     "dids",
     "sidSessionDoc",
     "sidSessions"
@@ -16,6 +17,33 @@
     },
     "module": {
       "const": "Dcm"
+    },
+    "maxDidToRead": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "value",
+        "doc"
+      ],
+      "properties": {
+        "value": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 16,
+          "description": "0x22 の 1 回の要求に指定できる DID の最大数（DcmDspMaxDidToRead）"
+        },
+        "doc": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "not": {
+              "pattern": "\\*/"
+            }
+          },
+          "description": "DCM_MAX_DID_TO_READ のコメント"
+        }
+      }
     },
     "dids": {
       "type": "array",
@@ -67,6 +95,22 @@
             "type": "string",
             "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
             "description": "0x22 ReadDataByIdentifier のデータ読み出し関数（Dcm.c に手書き）。省略すると 0x22 非対応"
+          },
+          "readSessions": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {
+              "enum": [
+                "DEFAULT",
+                "EXTENDED"
+              ]
+            },
+            "description": "0x22 で読み出せるセッション（DcmDspDidReadSessionRef）。省略すると全セッション。readFct が必要"
+          },
+          "readSecurity": {
+            "type": "boolean",
+            "description": "true なら 0x22 に SecurityAccess Level1 のアンロックが要る（DcmDspDidReadSecurityLevelRef）。省略すると不要。readFct が必要"
           },
           "writeFct": {
             "type": "string",

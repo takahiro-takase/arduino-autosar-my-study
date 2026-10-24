@@ -268,7 +268,7 @@ NRC 0x7F で拒否します。送信フレームの詳細は [docs/modules/Dcm_N
 | 0x11 | ECUReset | ○ | ○ | 0x01 hardReset / 0x02 keyOffOnReset / 0x03 softReset |
 | 0x14 | ClearDiagnosticInformation | × | ○ | 全 DTC または 1 件を指定してクリア（SecurityAccess が必要） |
 | 0x19 | ReadDTCInformation | ○ | ○ | 0x01 件数 / 0x02 DTC 一覧 / 0x04 FreezeFrame / 0x06 ExtendedData / 0x0A サポート DTC 一覧 / 0x14 FaultDetectionCounter |
-| 0x22 | ReadDataByIdentifier | ○ | ○ | DID 0x0101 回転数 / 0x0102 冷却水温 / 0x0103 エンジン状態 / 0x0104 テストパターン / 0xF190 VIN |
+| 0x22 | ReadDataByIdentifier | ○ | ○ | DID 0x0101 回転数 / 0x0102 冷却水温 / 0x0103 エンジン状態 / 0x0104 テストパターン / 0x0109 SecureInfo（extendedSession + Level1） / 0xF190 VIN。1 要求に最大 4 DID |
 | 0x27 | SecurityAccess | × | ○ | 0x01 requestSeed / 0x02 sendKey |
 | 0x28 | CommunicationControl | × | ○ | controlType 0x00〜0x03 |
 | 0x2E | WriteDataByIdentifier | × | ○ | DID 0x0104 テストパターン / 0x0108 暗号鍵更新（SecurityAccess が必要） |

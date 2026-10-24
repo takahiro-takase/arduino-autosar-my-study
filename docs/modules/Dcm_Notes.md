@@ -61,7 +61,7 @@ CAN 0x100（EngineInfo）・0x110（AbsInfo）・0x7E0（診断要求）は PduR
 |  |  |  | 0x06<br>(ExtendedData取得) | `06 19 06 HH MM LL RR 00` | byte3-5=DTCコード<br>byte6=recordNumber（固定0x01） |
 |  |  |  | 0x0A<br>(サポートDTC一覧取得) | `02 19 0A 00 00 00 00 00` | 追加パラメータなし。statusMask による絞り込みを一切行わず、本 ECU が対応する DEM_EVENT_COUNT 件全てを返す（後述） |
 |  |  |  | 0x14<br>(FaultDetectionCounter取得) | `02 19 14 00 00 00 00 00` | 追加パラメータなし。DTC 候補一覧は 0x0A と同じ取得元だが「prefailed」(FDC値1〜0x7E)のみへ絞り込む点、応答に statusAvailMask を含まない点が 0x02/0x0A と異なる（後述） |
-| 0x22<br>ReadDataByIdentifier | ○ | ○ | — | `03 22 HH LL 00 00 00 00` | byte2-3=DID（0x0101/0x0102/0x0103/0x0104/0xF190=VIN） |
+| 0x22<br>ReadDataByIdentifier | ○ | ○ | — | `03 22 HH LL 00 00 00 00` | byte2-3=DID（0x0101/0x0102/0x0103/0x0104/0x0109=SecureInfo/0xF190=VIN）。複数 DID は `05 22 HH LL HH LL` のように続ける（最大 4 個） |
 | 0x27<br>SecurityAccess | × | ○ | 0x01<br>(requestSeed) | `02 27 01 00 00 00 00 00` | seed 2 バイト |
 |  |  |  | 0x02<br>(sendKey) | `04 27 02 HH LL 00 00 00` | byte2-3=key（big-endian） |
 | 0x2E<br>WriteDataByIdentifier | × | ○ | — | FF+CF（後述、SF 不可） | DID=0x0104 (TestPattern) 固定 8 バイト、DID=0x0108 (CryptoKeyUpdate) keyName(1)+key(16)=17バイトのみ対応<br>**SecurityAccess Level1 必須**（未認証は NRC 0x33） |
@@ -202,7 +202,26 @@ ISO15031-6、0x01 が ISO14229-1）と判明したため削除し、新設した
 | 0x0101 | EngineSpeed | uint16, big-endian                           | rpm  |
 | 0x0102 | CoolantTemp | uint8                                        | ℃   |
 | 0x0103 | EngineState | uint8（0=OFF / 1=STARTING / 2=RUNNING / 3=FAULT） | —  |
+| 0x0109 | SecureInfo  | uint8[4]（固定の ASCII "SEC!"）。extendedSession かつ Level1 アンロック後だけ | — |
 | 0xF190 | VIN         | uint8[17]（ASCII固定文字列、`Dcm_GetVin()`参照）    | —  |
+
+### 複数 DID の要求と、DID ごとの条件（2026-10 追加）
+
+1 回の要求に、DID を最大 `DCM_MAX_DID_TO_READ`（4 個、`Dcm.json` の `maxDidToRead`、DcmDspMaxDidToRead に相当）まで並べられます。
+応答は `62 (DID_H DID_L data...) × n` で、要求した順に並びます。同じ DID を重ねて指定すると、その回数だけ返ります。
+
+| 条件 | 結果 | 仕様 |
+| --- | --- | --- |
+| 要求の長さが `1 + 2 × n` でない、または DID が 5 個以上 | NRC 0x13 | SWS_Dcm_01335 |
+| 未対応、読み出しアクセスなし（0x2E/0x2F 専用の DID など）、現在のセッションで読めない DID | 応答に含めない。**全ての DID** がこれに当たるときだけ NRC 0x31 | SWS_Dcm_00438, 00433, 00434 |
+| 読める DID のうち、SecurityAccess Level1 が要る DID があり、ロック中 | 要求全体を NRC 0x33 | SWS_Dcm_00435 |
+
+DID ごとの「読めるセッション」と「Level1 が要るか」は、`Dcm.json` の DID ごとの `readSessions` / `readSecurity`
+（DcmDspDidReadSessionRef / DcmDspDidReadSecurityLevelRef に相当）で決めます。省略すると、全セッションで、アンロック不要です。
+学習用の DID 0x0109 だけが、`EXTENDED` と `readSecurity` を持っています。
+
+簡略化: モード条件（DcmDspDidReadModeRuleRef、SWS_Dcm_00819）、DID の範囲指定（DcmDspDidRange）、動的に定義する DID（0x2C）は対象外です。
+応答バッファ（`DCM_TX_BUF_SIZE`）は、最大長の DID を最大数まで読んでも収まる大きさを、生成した値から計算します。
 
 ## DID 一覧（0x2F InputOutputControlByIdentifier）
 

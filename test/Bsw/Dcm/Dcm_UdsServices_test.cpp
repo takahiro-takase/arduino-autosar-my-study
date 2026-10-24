@@ -227,6 +227,127 @@ TEST_F(Dcm_UdsServices_Test, Dcm_ReadDataById_NG_DidWithoutReadFunctionIsRejecte
     ExpectNegative(DCM_SID_READ_DATA, DCM_NRC_REQUEST_OUT_OF_RANGE);
 }
 
+// NG: DID の下位バイトが足りない（DID は 2 バイトずつ。長さが 1 + 2 × n でない）要求は NRC 0x13（[SWS_Dcm_01335]）。
+TEST_F(Dcm_UdsServices_Test, Dcm_ReadDataById_NG_OddLengthRequestIsRejected)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    const uint8 req[4] = { DCM_SID_READ_DATA, (uint8)(DCM_DID_ENGINE_SPEED >> 8U), (uint8)(DCM_DID_ENGINE_SPEED & 0xFFU), (uint8)(DCM_DID_COOLANT_TEMP >> 8U) };
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Send(req, sizeof(req));
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    ExpectNegative(DCM_SID_READ_DATA, DCM_NRC_INCORRECT_MESSAGE_LENGTH);
+}
+
+// NG: DID の数が DCM_MAX_DID_TO_READ を超える要求は NRC 0x13（[SWS_Dcm_01335]）。
+TEST_F(Dcm_UdsServices_Test, Dcm_ReadDataById_NG_TooManyDidsIsRejected)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    uint8 req[1U + (2U * (DCM_MAX_DID_TO_READ + 1U))] = { DCM_SID_READ_DATA };
+    for (uint8 i = 0U; i < (DCM_MAX_DID_TO_READ + 1U); i++)
+    {
+        req[1U + (2U * i)] = (uint8)(DCM_DID_COOLANT_TEMP >> 8U);
+        req[2U + (2U * i)] = (uint8)(DCM_DID_COOLANT_TEMP & 0xFFU);
+    }
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Send(req, sizeof(req));
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    ExpectNegative(DCM_SID_READ_DATA, DCM_NRC_INCORRECT_MESSAGE_LENGTH);
+}
+
+// NG: 要求した DID が全て未対応なら NRC 0x31（[SWS_Dcm_00438]）。
+TEST_F(Dcm_UdsServices_Test, Dcm_ReadDataById_NG_AllDidsUnsupportedIsRejected)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    const uint8 req[5] = { DCM_SID_READ_DATA, 0xFFU, 0xFFU, 0xFFU, 0xFEU };   // 表に無い DID が 2 つ
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Send(req, sizeof(req));
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    ExpectNegative(DCM_SID_READ_DATA, DCM_NRC_REQUEST_OUT_OF_RANGE);
+}
+
+// NG: defaultSession で読めない DID（SECURE_INFO は extendedSession 限定）だけを要求すると、NRC 0x31（[SWS_Dcm_00434]）。
+TEST_F(Dcm_UdsServices_Test, Dcm_ReadDataById_NG_DidNotReadableInCurrentSessionIsRejected)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    const uint8 req[3] = { DCM_SID_READ_DATA, (uint8)(DCM_DID_SECURE_INFO >> 8U), (uint8)(DCM_DID_SECURE_INFO & 0xFFU) };
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Send(req, sizeof(req));
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    ExpectNegative(DCM_SID_READ_DATA, DCM_NRC_REQUEST_OUT_OF_RANGE);
+}
+
+// NG: extendedSession でも、SecurityAccess がロック中なら SECURE_INFO は NRC 0x33（[SWS_Dcm_00435]）。
+TEST_F(Dcm_UdsServices_Test, Dcm_ReadDataById_NG_SecureDidWhileLockedIsRejected)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    EnterExtendedSession();
+    const uint8 req[3] = { DCM_SID_READ_DATA, (uint8)(DCM_DID_SECURE_INFO >> 8U), (uint8)(DCM_DID_SECURE_INFO & 0xFFU) };
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Send(req, sizeof(req));
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    ExpectNegative(DCM_SID_READ_DATA, DCM_NRC_SECURITY_ACCESS_DENIED);
+}
+
+// NG: ロック中の SECURE_INFO が 1 つでも含まれると、他の DID が読めても要求全体を NRC 0x33 で拒否する（[SWS_Dcm_00435]）。
+TEST_F(Dcm_UdsServices_Test, Dcm_ReadDataById_NG_LockedSecureDidRejectsWholeRequest)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    EnterExtendedSession();
+    const uint8 req[5] = { DCM_SID_READ_DATA, (uint8)(DCM_DID_ENGINE_SPEED >> 8U), (uint8)(DCM_DID_ENGINE_SPEED & 0xFFU), (uint8)(DCM_DID_SECURE_INFO >> 8U), (uint8)(DCM_DID_SECURE_INFO & 0xFFU) };
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Send(req, sizeof(req));
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    ExpectNegative(DCM_SID_READ_DATA, DCM_NRC_SECURITY_ACCESS_DENIED);
+}
+
 TEST_F(Dcm_UdsServices_Test, Dcm_WriteDataById_NG_DidWithoutWriteFunctionIsRejected)
 {
     /* ----------------------- */
@@ -1251,6 +1372,138 @@ TEST_F(Dcm_UdsServices_Test, Dcm_ReadDataById_OK_EngineStateIsReturned)
     EXPECT_EQ(LastLength_CanTp_Transmit, 4U);
     EXPECT_EQ(LastData_CanTp_Transmit[0], 0x62U);
     EXPECT_EQ(LastData_CanTp_Transmit[3], 0U);
+}
+
+// OK: 1 回の要求で複数の DID を読むと、要求の順に [0x62, (DID, データ) × n] を 1 つの応答で返す（EngineSpeed 2 バイト + CoolantTemp 1 バイト）。
+TEST_F(Dcm_UdsServices_Test, Dcm_ReadDataById_OK_MultipleDidsAreReturnedInRequestOrder)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    FakeRte_EngineSpeed = 0x1234U;
+    FakeRte_CoolantTemp = 85U;
+    const uint8 req[5] = { DCM_SID_READ_DATA, (uint8)(DCM_DID_ENGINE_SPEED >> 8U), (uint8)(DCM_DID_ENGINE_SPEED & 0xFFU), (uint8)(DCM_DID_COOLANT_TEMP >> 8U), (uint8)(DCM_DID_COOLANT_TEMP & 0xFFU) };
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Send(req, sizeof(req));
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    const uint8 expected[] = { 0x62U, 0x01U, 0x01U, 0x12U, 0x34U, 0x01U, 0x02U, 85U };
+    ASSERT_EQ(LastLength_CanTp_Transmit, sizeof(expected));
+    for (uint8 i = 0U; i < sizeof(expected); i++)
+    {
+        EXPECT_EQ(LastData_CanTp_Transmit[i], expected[i]) << "byte " << (unsigned)i;
+    }
+}
+
+// OK: 未対応の DID は応答に含めず、読める DID だけを返す（要求の DID が全て未対応のときだけ NRC 0x31。[SWS_Dcm_00438]）。
+TEST_F(Dcm_UdsServices_Test, Dcm_ReadDataById_OK_UnsupportedDidIsSkippedWhenAnotherIsReadable)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    FakeRte_CoolantTemp = 85U;
+    const uint8 req[5] = { DCM_SID_READ_DATA, 0xFFU, 0xFFU, (uint8)(DCM_DID_COOLANT_TEMP >> 8U), (uint8)(DCM_DID_COOLANT_TEMP & 0xFFU) };
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Send(req, sizeof(req));
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    const uint8 expected[] = { 0x62U, 0x01U, 0x02U, 85U };
+    ASSERT_EQ(LastLength_CanTp_Transmit, sizeof(expected));
+    for (uint8 i = 0U; i < sizeof(expected); i++)
+    {
+        EXPECT_EQ(LastData_CanTp_Transmit[i], expected[i]) << "byte " << (unsigned)i;
+    }
+}
+
+// OK: defaultSession で読めない SECURE_INFO は、他の DID が読めるなら応答に含めない（[SWS_Dcm_00434]）。
+TEST_F(Dcm_UdsServices_Test, Dcm_ReadDataById_OK_DidNotReadableInSessionIsSkippedWhenAnotherIsReadable)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    FakeRte_CoolantTemp = 85U;
+    const uint8 req[5] = { DCM_SID_READ_DATA, (uint8)(DCM_DID_SECURE_INFO >> 8U), (uint8)(DCM_DID_SECURE_INFO & 0xFFU), (uint8)(DCM_DID_COOLANT_TEMP >> 8U), (uint8)(DCM_DID_COOLANT_TEMP & 0xFFU) };
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Send(req, sizeof(req));
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    const uint8 expected[] = { 0x62U, 0x01U, 0x02U, 85U };
+    ASSERT_EQ(LastLength_CanTp_Transmit, sizeof(expected));
+    for (uint8 i = 0U; i < sizeof(expected); i++)
+    {
+        EXPECT_EQ(LastData_CanTp_Transmit[i], expected[i]) << "byte " << (unsigned)i;
+    }
+}
+
+// OK: extendedSession で SecurityAccess Level1 をアンロックすると、SECURE_INFO を読める（固定の 4 バイト "SEC!"）。
+TEST_F(Dcm_UdsServices_Test, Dcm_ReadDataById_OK_SecureDidIsReadableAfterUnlock)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    UnlockSecurityAccessLevel1();
+    const uint8 req[3] = { DCM_SID_READ_DATA, (uint8)(DCM_DID_SECURE_INFO >> 8U), (uint8)(DCM_DID_SECURE_INFO & 0xFFU) };
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Send(req, sizeof(req));
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    const uint8 expected[] = { 0x62U, 0x01U, 0x09U, 0x53U, 0x45U, 0x43U, 0x21U };
+    ASSERT_EQ(LastLength_CanTp_Transmit, sizeof(expected));
+    for (uint8 i = 0U; i < sizeof(expected); i++)
+    {
+        EXPECT_EQ(LastData_CanTp_Transmit[i], expected[i]) << "byte " << (unsigned)i;
+    }
+}
+
+// OK: 最大長の DID（VIN、17 バイト）を DCM_MAX_DID_TO_READ 個（同じ DID を重ねて指定）読んでも、応答バッファに収まり、指定した回数だけ返る。
+TEST_F(Dcm_UdsServices_Test, Dcm_ReadDataById_OK_MaxDidsOfMaxLengthFitResponseBuffer)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    uint8 req[1U + (2U * DCM_MAX_DID_TO_READ)] = { DCM_SID_READ_DATA };
+    for (uint8 i = 0U; i < DCM_MAX_DID_TO_READ; i++)
+    {
+        req[1U + (2U * i)] = (uint8)(DCM_DID_VIN >> 8U);
+        req[2U + (2U * i)] = (uint8)(DCM_DID_VIN & 0xFFU);
+    }
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Send(req, sizeof(req));
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    const uint8 unit = 2U + DCM_VIN_LENGTH;   // DID(2) + VIN
+    ASSERT_EQ(LastLength_CanTp_Transmit, 1U + (DCM_MAX_DID_TO_READ * unit));
+    EXPECT_EQ(LastData_CanTp_Transmit[0], 0x62U);
+    for (uint8 n = 0U; n < DCM_MAX_DID_TO_READ; n++)
+    {
+        EXPECT_EQ(LastData_CanTp_Transmit[1U + (n * unit)], 0xF1U) << "did " << (unsigned)n;
+        EXPECT_EQ(LastData_CanTp_Transmit[2U + (n * unit)], 0x90U) << "did " << (unsigned)n;
+    }
 }
 
 TEST_F(Dcm_UdsServices_Test, Dcm_SecurityAccess_OK_SeedIsGrantedAgainAfterLockoutDelay)

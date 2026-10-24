@@ -53,6 +53,8 @@ typedef struct
     Dcm_DidReadFctType  ReadFct;       /**< 0x22 の読み出し関数。NULL なら 0x22 非対応 */
     Dcm_DidWriteFctType WriteFct;      /**< 0x2E の書き込み関数。NULL なら 0x2E 非対応 */
     uint8               IoControlLamp; /**< 0x2F で制御するランプ (Rte_LampIdType)。DCM_DID_IOCONTROL_NONE なら 0x2F 非対応 */
+    uint8               ReadSessionMask;     /**< 0x22 で読めるセッション (DCM_SESSION_MASK_* の組み合わせ。DcmDspDidReadSessionRef) */
+    uint8               ReadSecurityRequired; /**< 1 なら 0x22 に SecurityAccess Level1 のアンロックが要る (DcmDspDidReadSecurityLevelRef) */
 } Dcm_DidConfigType;
 
 /* ======================================================================
@@ -77,6 +79,7 @@ Std_ReturnType Dcm_ReadDidEngineState(uint8* Data);
 Std_ReturnType Dcm_ReadDidTestPattern(uint8* Data);
 Std_ReturnType Dcm_WriteDidTestPattern(const uint8* Data);
 Std_ReturnType Dcm_WriteDidCryptoKeyUpdate(const uint8* Data);
+Std_ReturnType Dcm_ReadDidSecureInfo(uint8* Data);
 Std_ReturnType Dcm_ReadDidVin(uint8* Data);
 /* @@GEN-END dcm-did-functions */
 

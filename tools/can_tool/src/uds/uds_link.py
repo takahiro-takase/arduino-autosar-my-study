@@ -87,10 +87,22 @@ DID_NAMES = {
     0x0101: "EngineSpeed (rpm)",
     0x0102: "CoolantTemp (degC)",
     0x0103: "EngineState",
+    0x0104: "TestPattern",
     0x0105: "RunLamp",
     0x0106: "FaultLamp",
     0x0107: "AbsLamp",
+    0x0109: "SecureInfo",
     0xF190: "VIN",
+}
+
+# 0x22 で読める DID のデータ長 [byte]（Dcm.json の length と同じ）。複数 DID の応答を DID ごとに区切るのに使う。
+DID_READ_LENGTHS = {
+    0x0101: 2,
+    0x0102: 1,
+    0x0103: 1,
+    0x0104: 8,
+    0x0109: 4,
+    0xF190: 17,
 }
 
 ENGINE_STATE_NAMES = {0: "OFF", 1: "STARTING", 2: "RUNNING", 3: "FAULT"}
@@ -380,12 +392,26 @@ def decode_did_value(did: int, data: bytes) -> str:
         return f"{name} = {data[0]}"
     if did == 0x0103 and len(data) >= 1:
         return f"{name} = {data[0]} ({ENGINE_STATE_NAMES.get(data[0], '?')})"
-    if did == 0xF190 and len(data) >= 1:
+    if did in (0x0109, 0xF190) and len(data) >= 1:
         try:
             return f"{name} = {data.decode('ascii')}"
         except UnicodeDecodeError:
             pass
     return f"{name} = " + " ".join(f"{b:02X}" for b in data)
+
+
+def decode_read_response(raw: bytes) -> str:
+    """0x22 の正応答 [0x62, (DID_H, DID_L, data...) × n] を、DID ごとに区切ってデコードする。
+    長さの分からない DID（DID_READ_LENGTHS に無い）が出たら、残りを全部その DID のデータとして扱う。"""
+    parts = []
+    pos = 1
+    while pos + 2 <= len(raw):
+        did = (raw[pos] << 8) | raw[pos + 1]
+        length = DID_READ_LENGTHS.get(did, len(raw) - pos - 2)
+        data = raw[pos + 2 : pos + 2 + length]
+        parts.append(decode_did_value(did, data))
+        pos += 2 + length
+    return "; ".join(parts)
 
 
 def dtc_name(dtc: int) -> str:
