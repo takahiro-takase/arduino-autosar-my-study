@@ -61,6 +61,10 @@
  *               DCM_SECURITY_MAX_ATTEMPTS 回連続失敗で NRC 0x36 を返し
  *               DCM_SECURITY_DELAY_MS の間 requestSeed 自体を NRC 0x37 で拒否する
  *               (ブルートフォース対策、ISO 14229-1 準拠)。
+ *               連続失敗回数（AttemptCounter）は NvM（NVM_BLOCK_ID_DCM_SECURITY）で
+ *               保持する。変わるたびに書き（[SWS_Dcm_01155]）、Dcm_Init() が復元する
+ *               （[SWS_Dcm_01154]）ので、再起動してもロックアウトは解けない。回数は、
+ *               sendKey の成功、または待機時間の経過で 0 に戻る（[SWS_Dcm_01357]）。
  *            3. defaultSession へ遷移（明示要求または S3 タイムアウト）すると
  *               Level1 は再ロックされる。失敗回数・待機時間はセッションをまたいで
  *               維持する（再ロックでブルートフォース対策を回避できないようにする）。
@@ -232,7 +236,8 @@ static uint8 Dcm_SecuritySeedPending;
 /** 直前に発行した seed 値 (sendKey 受信時の期待 key 計算に使用) */
 static uint16 Dcm_SecuritySeed;
 
-/** sendKey の連続失敗回数 (DCM_SECURITY_MAX_ATTEMPTS でロックアウト) */
+/** sendKey の連続失敗回数 (AttemptCounter)。DCM_SECURITY_MAX_ATTEMPTS に達するとロックアウトし、
+ *  待機時間の経過か sendKey の成功で 0 に戻る。NvM（NVM_BLOCK_ID_DCM_SECURITY）に保持する。 */
 static uint8 Dcm_SecurityAttemptCount;
 
 /** ロックアウト中か (1=ロックアウト中)。(現在時刻 - Dcm_SecurityLockoutStartMs)
@@ -397,6 +402,8 @@ static void Dcm_NotifyActiveDiagnostic(void);
 static void Dcm_ProcessRequest(const uint8* uds, uint8 udsLen);
 static void Dcm_SetTxEnabled(uint8 networkId, uint8 enabled);
 static void Dcm_HandleSecurityAccess(const uint8* uds, uint8 udsLen);
+static void Dcm_SecuritySaveAttemptCount(void);
+static void Dcm_SecurityRestoreAttemptCount(void);
 static void Dcm_HandleSecurityRequestSeed(uint8 subFunc, uint8 udsLen);
 static void Dcm_HandleSecuritySendKey(uint8 subFunc, const uint8* uds, uint8 udsLen);
 static uint16 Dcm_ComputeSecurityKey(uint16 seed);
@@ -444,8 +451,7 @@ void Dcm_Init(const Dcm_ConfigType* ConfigPtr)
 
     Dcm_SecurityLevel         = 0U;
     Dcm_SecuritySeedPending   = 0U;
-    Dcm_SecurityAttemptCount  = 0U;
-    Dcm_SecurityLockoutActive = 0U;
+    Dcm_SecurityRestoreAttemptCount();   /* [SWS_Dcm_01154] */
 
     Dcm_RoutineState = DCM_ROUTINE_STATE_IDLE;
 
@@ -3018,6 +3024,74 @@ static uint16 Dcm_ComputeSecurityKey(uint16 seed)
 }
 
 /**
+ * \brief   sendKey の連続失敗回数（AttemptCounter）を NvM へ書く。
+ *
+ * \details 回数が変わるたびに呼ぶ（[SWS_Dcm_01155]）。NvM_WriteBlock() は RAM ミラーを更新して
+ *          書き込みを保留するだけなので、続けて NvM_WriteAll() で EEPROM へ書き切ってから戻る。
+ *          書き切る前に応答を送ると、応答の直後に電源を切られたとき、失敗が EEPROM に残らず、
+ *          ロックアウトを回避できてしまう（鍵を間違えたときだけ、およそ数十 ms 応答が遅れる）。
+ *          NvM_WriteAll() は保留中の全ブロックを書き切る（ECUReset の直前と同じ）。
+ *          回数が前回の書き込みと同じなら、NvM が CRC の比較で物理書き込みを省く（UseCrcCompMechanism）。
+ *          NvM_WriteBlock() が失敗したとき（NvM が未初期化、ブロックが書き込み保護中など）は、回数を保持できないので、
+ *          エラーを記録する。
+ */
+static void Dcm_SecuritySaveAttemptCount(void)
+{
+    if (NvM_WriteBlock(NVM_BLOCK_ID_DCM_SECURITY, &Dcm_SecurityAttemptCount) == E_OK)
+    {
+        NvM_WriteAll();
+    }
+    else
+    {
+        DET_LOGE(TAG, "27 attempt counter not persisted (NvM_WriteBlock failed)");
+    }
+}
+
+/**
+ * \brief   sendKey の連続失敗回数（AttemptCounter）を NvM から復元し、ロックアウト中なら再開する。
+ *
+ * \details Dcm_Init() から呼ぶ。NvM_ReadBlock() が失敗したときは、回数を読めなかったとして、
+ *          ロックアウトする値（DCM_SECURITY_MAX_ATTEMPTS）にする（[SWS_Dcm_01156]）。復元した回数が
+ *          DCM_SECURITY_MAX_ATTEMPTS 以上なら、起動時刻から DCM_SECURITY_DELAY_MS の間、requestSeed を
+ *          拒否する（[SWS_Dcm_01355]。実仕様は DcmDspSecurityDelayTimeOnBoot と DcmDspSecurityDelayTime の
+ *          大きい方。本実装は DCM_SECURITY_DELAY_MS だけを使い、OnBoot の値は持たない簡略化）。
+ *          消去済みの 0xFF（EEPROM が一度も書かれていない）だけは、失敗回数 0 から始める（1 バイトの 0xFF は、
+ *          NvM の CRC8 でも正しい組になり、NvM_Init() が既定値へ戻さないため、ここで判別する）。
+ *          それ以外の上限より大きい値は、想定外なので、ロックアウトする回数にする。
+ *          簡略化: 実仕様の Xxx_GetSecurityAttemptCounter は非同期（DCM_E_PENDING を返せる、[SWS_Dcm_01351]）
+ *          だが、NvM_ReadBlock() は RAM ミラーを返すだけの同期呼び出しなので、読み出しの待ち合わせは持たない。
+ */
+static void Dcm_SecurityRestoreAttemptCount(void)
+{
+    uint8 saved = 0U;
+
+    Dcm_SecurityLockoutActive = 0U;
+
+    if (NvM_ReadBlock(NVM_BLOCK_ID_DCM_SECURITY, &saved) != E_OK)
+    {
+        saved = DCM_SECURITY_MAX_ATTEMPTS;
+    }
+    if (saved == DCM_SECURITY_ATTEMPT_COUNTER_ERASED)
+    {
+        /* 一度も書かれていない（消去済み 0xFF の 1 バイトは、NvM の CRC8 でも正しい組になる）ので、失敗回数 0 から始める */
+        saved = 0U;
+    }
+    if (saved > DCM_SECURITY_MAX_ATTEMPTS)
+    {
+        /* 想定外の値（上限と消去済みのどちらでもない）。安全側に倒して、ロックアウトする回数にする */
+        saved = DCM_SECURITY_MAX_ATTEMPTS;
+    }
+    Dcm_SecurityAttemptCount = saved;
+
+    if (saved >= DCM_SECURITY_MAX_ATTEMPTS)
+    {
+        Dcm_SecurityLockoutActive  = 1U;
+        Dcm_SecurityLockoutStartMs = Dcm_GetNowMs();
+        DET_LOGW(TAG, "27 lockout restored (attempts=%u) %lums", (unsigned)saved, DCM_SECURITY_DELAY_MS);
+    }
+}
+
+/**
  * \brief   SecurityAccess Level1 を再ロックする。
  *
  * \details Dcm_ResetToDefaultSession()（defaultSessionへの遷移）と
@@ -3082,7 +3156,10 @@ static void Dcm_HandleSecurityRequestSeed(uint8 subFunc, uint8 udsLen)
             Dcm_SendNegativeResponse(DCM_SID_SECURITY_ACCESS, DCM_NRC_REQUIRED_TIME_DELAY_NOT_EXPIRED);
             return;
         }
-        Dcm_SecurityLockoutActive = 0U;  /* 待機時間経過、ロックアウト解除 */
+        /* 待機時間経過、ロックアウト解除。回数も 0 に戻す（[SWS_Dcm_01357]） */
+        Dcm_SecurityLockoutActive = 0U;
+        Dcm_SecurityAttemptCount  = 0U;
+        Dcm_SecuritySaveAttemptCount();
     }
 
     Dcm_SecuritySeed        = (uint16)Dcm_GetNowMs();
@@ -3138,13 +3215,14 @@ static void Dcm_HandleSecuritySendKey(uint8 subFunc, const uint8* uds, uint8 uds
     if (key != expected)
     {
         Dcm_SecurityAttemptCount++;
+        Dcm_SecuritySaveAttemptCount();   /* [SWS_Dcm_01155]: 再起動でロックアウトを回避されないよう、失敗のたびに保持する */
         DET_LOGW(TAG, "27/%02X invalid key attempt=%u", (unsigned)subFunc, (unsigned)Dcm_SecurityAttemptCount);
 
         if (Dcm_SecurityAttemptCount >= DCM_SECURITY_MAX_ATTEMPTS)
         {
+            /* 回数は 0 に戻さず、待機時間が経過するまで保つ（再起動してもロックアウトが続く） */
             Dcm_SecurityLockoutActive  = 1U;
             Dcm_SecurityLockoutStartMs = Dcm_GetNowMs();
-            Dcm_SecurityAttemptCount   = 0U;
             DET_LOGW(TAG, "27 lockout %lums", DCM_SECURITY_DELAY_MS);
             Dcm_SendNegativeResponse(DCM_SID_SECURITY_ACCESS, DCM_NRC_EXCEEDED_NUM_ATTEMPTS);
         }
@@ -3155,8 +3233,12 @@ static void Dcm_HandleSecuritySendKey(uint8 subFunc, const uint8* uds, uint8 uds
         return;
     }
 
-    Dcm_SecurityLevel        = 1U;
-    Dcm_SecurityAttemptCount = 0U;
+    Dcm_SecurityLevel = 1U;
+    if (Dcm_SecurityAttemptCount != 0U)
+    {
+        Dcm_SecurityAttemptCount = 0U;   /* [SWS_Dcm_01357]: sendKey の成功で回数を戻す */
+        Dcm_SecuritySaveAttemptCount();
+    }
     DET_LOGI(TAG, "27/%02X unlocked", (unsigned)subFunc);
 
     /* 正応答: [0x67, subFunc] */

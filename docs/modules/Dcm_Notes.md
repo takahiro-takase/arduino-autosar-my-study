@@ -597,12 +597,34 @@ SecurityAccess の Level1（subFunc 0x01/0x02）でアンロックしないと N
      3 回連続失敗 → NRC 0x36 (exceededNumberOfAttempts) を返し、
        以後 10 秒間 (DCM_SECURITY_DELAY_MS) requestSeed 自体を
        NRC 0x37 (requiredTimeDelayNotExpired) で拒否する（ブルートフォース対策）。
+       待機時間が経つと、ロックアウトが解け、失敗回数が 0 に戻る（[SWS_Dcm_01357]）。
 
 3. defaultSession へ遷移（明示要求・S3 タイムアウト・ECUReset のいずれも）すると
    Level1 は再ロックされる。ただし連続失敗回数・ロックアウト中フラグは
    セッションをまたいで保持する（セッション往復の繰り返しでロックアウトを
    回避できないようにするため）。
 ```
+
+### 失敗回数の永続化（2026-10 追加）
+
+連続失敗回数（AttemptCounter）は NvM のブロック `NVM_BLOCK_ID_DCM_SECURITY`（1 バイト）に保持します。
+以前は RAM だけで、ECUReset（0x11 は defaultSession・SecurityAccess 不要で送れる）のたびに回数とロックアウトが消えたので、
+リセットを挟めば何度でも鍵を試せました。
+
+| いつ | 動き | 仕様 |
+| --- | --- | --- |
+| sendKey が失敗したとき | 回数を 1 増やし、NvM へ書く | SWS_Dcm_01155 |
+| 回数が上限（3）に達したとき | NRC 0x36 とロックアウトの開始。回数は 0 に戻さず、待機時間が経つまで保つ | SWS_Dcm_01349 |
+| 待機時間が経ったとき（次の requestSeed） | ロックアウトを解き、回数を 0 に戻して NvM へ書く | SWS_Dcm_01357 |
+| sendKey が成功したとき | 回数が 0 でなければ、0 に戻して NvM へ書く | SWS_Dcm_01357 |
+| `Dcm_Init()`（起動時） | NvM から回数を復元する。上限以上なら、起動時刻から待機時間のあいだ、ロックアウトを再開する | SWS_Dcm_01154, 01355 |
+| 起動時に NvM から読めない（`NvM_ReadBlock()` が E_NOT_OK） | 回数を上限にして、ロックアウトする | SWS_Dcm_01156 |
+
+- 回数が変わらない書き込み（0 のまま 0 を書くなど）は、NvM が CRC を比べて物理書き込みを省きます（UseCrcCompMechanism）。EEPROM に書くのは、鍵を間違えたときと、その後に回数が戻るときだけです。
+- 回数を書くときは、`NvM_WriteBlock()` の後に `NvM_WriteAll()` で EEPROM へ書き切ってから応答を返します。応答の直後に電源を切られても、失敗が残ります（鍵を間違えたときだけ、応答が数十 ms 遅れます）。`NvM_WriteBlock()` が失敗したときは、エラーのログを出します。
+- 起動時に復元した値が、消去済みの 0xFF なら 0 から始めます。それ以外で上限（3）より大きい値は、想定外なので、安全側に倒してロックアウトします。
+- 簡略化: 実仕様の `Xxx_GetSecurityAttemptCounter` は非同期（`DCM_E_PENDING`、SWS_Dcm_01351）で、読み出しの待ち時間（SWS_Dcm_01352）もありますが、`NvM_ReadBlock()` は RAM ミラーを返すだけの同期呼び出しなので、待ち合わせは持ちません。`DcmDspSecurityDelayTimeOnBoot` も持たず、起動時のロックアウトの長さは `DCM_SECURITY_DELAY_MS` と同じです。
+- 一度も書かれていない（消去済みの）EEPROM の 1 バイト 0xFF は NvM の CRC8 でも正しい組になり、`NvM_Init()` が既定値（0）へ戻さないので、`Dcm_Init()` は 0xFF だけを「書かれていない」として、失敗回数 0 から始めます。
 
 **注意:** `key = seed XOR 固定マスク` は仕組みを学ぶための最小限の例です。
 量産 ECU は OEM 固有の非公開アルゴリズムや暗号学的アルゴリズムを使用するため、

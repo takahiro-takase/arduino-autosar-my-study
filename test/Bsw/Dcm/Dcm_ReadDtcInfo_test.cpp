@@ -34,6 +34,9 @@ extern "C" {
 #include "Dcm.h"
 #include "Dcm_Cfg.h"
 #include "Dem.h"
+#include "NvM_TestUtil.h"
+#include "NvM.h"
+#include "MemIf.h"
 #include "Wrap_CanTp.h"
 #include "Wrap_Dcm.h"
 #include "Fake_Millis.h"
@@ -76,6 +79,7 @@ protected:
         FakeDetHw_LogSuppressed = 1U;  // Init() のログはノイズになるため抑制
 
         CanTp_Init(NULL);
+        NvMTest_ColdBoot();   // 空の EEPROM から NvM を初期化する（Dcm_Init() が失敗回数を NvM から復元するため）
         Dem_Init(NULL);
         Dcm_Init(NULL);
 
@@ -84,6 +88,7 @@ protected:
 
     void TearDown() override
     {
+        NvMTest_Shutdown();   // 次のテストへ NvM の初期化状態を残さない
         FakeDetHw_LogSuppressed = 1U;
         WrapComM_Reset();  // 他のテストファイルへ影響を残さない
     }

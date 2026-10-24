@@ -1,0 +1,131 @@
+// 実機検証: SecurityAccess の連続失敗回数（AttemptCounter）が、再起動しても残ることの確認。
+//
+// 背景: 以前は、失敗回数とロックアウトが RAM だけにあり、ECUReset（0x11 は defaultSession・
+// SecurityAccess 不要で送れる）で消えたため、リセットを挟めば何度でもキーを試せた。
+// 今は、sendKey が失敗するたびに回数を NvM（NVM_BLOCK_ID_DCM_SECURITY）へ書き（[SWS_Dcm_01155]）、
+// Dcm_Init() が復元する（[SWS_Dcm_01154]）。回数は、sendKey の成功か、ロックアウトの待機時間
+// （DCM_SECURITY_DELAY_MS、10 秒）の経過で 0 に戻る（[SWS_Dcm_01357]）。
+//
+// 手順:
+//   [1] extendedSession で、間違った鍵を 2 回送る                -> どちらも NRC 0x35 (invalidKey)
+//   [2] 0x11 ECUReset で再起動する（リセット前に NvM_WriteAll() が書き切る）
+//   [3] extendedSession で、間違った鍵を送る                     -> NRC 0x36 (exceededNumberOfAttempts)
+//                                                                  （再起動をまたいで 3 回目）
+//   [4] requestSeed                                              -> NRC 0x37 (requiredTimeDelayNotExpired)
+//   [5] 0x11 ECUReset で再起動する（ロックアウト中に）
+//   [6] extendedSession で requestSeed                           -> NRC 0x37（ロックアウトは再起動で解けない）
+//   [7] 待機時間（約 11 秒）の後、requestSeed                    -> 正応答（シード）
+//   [8] 正しい鍵で解錠する                                       -> 正応答（保持した回数が 0 に戻る）
+//
+// 前提:
+//   - can_tool に CAN 接続済み。ECU の電源が入っていること。
+//   - 直前にこのスクリプトや鍵の失敗を繰り返していないこと（ロックアウト中だと [1] が NRC 0x37 になる。
+//     その場合は 11 秒以上待ってから実行する）。
+//   - 約 40 秒かかる。ECU を 2 回リセットする。
+//   - Serial 接続をしておくと、再起動後に "Dcm: 27 lockout restored (attempts=3)" が確認できる。
+//
+// 判定: 末尾の集計が FAIL=0 なら PASS。
+
+variables
+{
+    int passCount;
+    int failCount;
+}
+
+void reportOk(int ok)
+{
+    if (ok)
+    {
+        write("  -> PASS");
+        passCount = passCount + 1;
+    }
+    else
+    {
+        write("  -> FAIL (SID=0x%02x NRC=0x%02x)", respSid(), respNrc());
+        failCount = failCount + 1;
+    }
+}
+
+void expectPositive(int sid)
+{
+    reportOk(respSid() == sid + 0x40);
+}
+
+void expectNrc(int nrc)
+{
+    reportOk(respIsNegative() && (respNrc() == nrc));
+}
+
+// requestSeed を送り、返ってきたシードで、間違った鍵（正しい鍵のビット 0 を反転）を送る。応答は sendKey のもの。
+void sendWrongKey()
+{
+    int seed;
+    int key;
+
+    send(0x27, 0x01);
+    wait_response();
+    seed = (respByte(2) << 8) | respByte(3);
+    key = seed ^ 0xA55A ^ 0x0001;
+    send(0x27, 0x02, key >> 8, key & 0xFF);
+    wait_response();
+}
+
+// ECUReset して、再起動を待ち、extendedSession へ遷移する。
+void rebootAndEnterExtended()
+{
+    send(0x11, 0x01);
+    wait_response();
+    assert_positive();
+    wait(6.0);
+    send(0x10, 0x03);
+    wait_response();
+    assert_positive();
+}
+
+on start
+{
+    write("=== SecurityAccess の連続失敗回数の永続化 ===");
+
+    send(0x10, 0x03);
+    wait_response();
+    assert_positive();
+
+    write("[1a] 間違った鍵 1 回目 -> NRC 0x35");
+    sendWrongKey();
+    expectNrc(0x35);
+
+    write("[1b] 間違った鍵 2 回目 -> NRC 0x35");
+    sendWrongKey();
+    expectNrc(0x35);
+
+    write("[2] ECUReset（失敗回数は NvM に保持される）");
+    rebootAndEnterExtended();
+
+    write("[3] 再起動後の間違った鍵（3 回目） -> NRC 0x36");
+    sendWrongKey();
+    expectNrc(0x36);
+
+    write("[4] ロックアウト中の requestSeed -> NRC 0x37");
+    send(0x27, 0x01);
+    wait_response();
+    expectNrc(0x37);
+
+    write("[5] ロックアウト中に ECUReset");
+    rebootAndEnterExtended();
+
+    write("[6] 再起動後の requestSeed -> NRC 0x37（ロックアウトは再起動で解けない）");
+    send(0x27, 0x01);
+    wait_response();
+    expectNrc(0x37);
+
+    write("[7] 待機時間 (11 秒) の後の requestSeed -> 正応答");
+    wait(11.0);
+    send(0x27, 0x01);
+    wait_response();
+    expectPositive(0x27);
+
+    write("[8] 正しい鍵で解錠 -> 保持した回数が 0 に戻る");
+    security_unlock();
+
+    write("=== 集計: PASS=%d FAIL=%d ===", passCount, failCount);
+}
