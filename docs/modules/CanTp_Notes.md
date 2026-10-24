@@ -108,6 +108,23 @@ IDLE に戻ります（ログ: `TX FC OVFLW abort`）。FC(WAIT) を受け取っ
 （ログ: `reception rejected (response TX in progress)`。要求が届いたこと自体はテスターの生存の証拠として
 S3 タイマを更新します。[SWS_Dcm_00557]。`DcmStack_CanTpBusy_test.cpp` 参照）。
 
+## 受信フレームの長さ（パディング、CANTP_E_PADDING）
+
+受信側は、パディング ON（フレームは常に 8 バイト）を前提にしています（[SWS_CanTp_00344]〜[00349]）。
+CanTp が送る FC・CF も、常に 8 バイトへパディングします。DLC が 8 未満のフレームを受けたときの扱いは次のとおりです。
+いずれも、ランタイムエラー `CANTP_E_PADDING`（0x70、[SWS_CanTp_00352]）を `Det_ReportRuntimeError()` で報告します。
+
+| 受信したフレーム | 扱い |
+| --- | --- |
+| SF（Single Frame） | 受け付けない（上位層へ通知しない、[SWS_CanTp_00345]） |
+| CF（Consecutive Frame） | 受信中の N-SDU を中断し、上位層へ `E_NOT_OK` を通知する（[SWS_CanTp_00346]） |
+| FC（Flow Control、送信中） | 送信セッションを中断し、上位層へ `E_NOT_OK` を通知する（[SWS_CanTp_00349]。以前は無視していたため、失敗が分かるのは N_Bs タイムアウトの 5 秒後だった） |
+| FF（First Frame） | 受け付けない（`CANTP_E_PADDING` は報告しない） |
+
+CAN ツールの UDS 要求や `test_scripts/` のスクリプトは、8 バイトまで 0x00 でパディングして送るので、通常は影響しません。
+
+**実機の配線では、この CanTp の検査に到達しません**（2026-10 実機確認、`test_scripts/104_verify_cantp_padding.capl`）。DLC が設定（8）と一致しないフレームは、CanTp に届く前に CanIf（`CanIf_RxIndication()`）が捨てます（シリアルに `RX can=0x7E0 length mismatch got=3 exp=8`、DET は CanIf（モジュール 60）のエラー 0x3D）。CanTp の検査は、CanIf を通らない状況（ホストのユニットテスト）だけで働く、仕様どおりの二重の防御です。
+
 ## フロー制御パラメータ（BS / STmin）
 
 FC フレームの byte[1] が BS（Block Size）、byte[2] が STmin（Separation Time minimum）です。

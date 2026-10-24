@@ -93,11 +93,12 @@ void setup()
      * ビット割当は Mcu.h の MCU_RAW_RESET_*_BIT 参照（Mcu.c とこの呼び出し元
      * の両方が同じ定義を共有するため、ビット位置のハードコード複製はしない）。 */
     const Mcu_RawResetType rawReset = Mcu_GetResetRawValue();
-    DET_LOGI(TAG, "ResetReason WDT=%u BOR=%u EXT=%u POR=%u",
+    DET_LOGI(TAG, "ResetReason WDT=%u BOR=%u EXT=%u POR=%u SW=%u",
              (unsigned)((rawReset & MCU_RAW_RESET_WATCHDOG_BIT) != 0U),
              (unsigned)((rawReset & MCU_RAW_RESET_BROWNOUT_BIT) != 0U),
              (unsigned)((rawReset & MCU_RAW_RESET_EXTERNAL_BIT) != 0U),
-             (unsigned)((rawReset & MCU_RAW_RESET_POWERON_BIT) != 0U));
+             (unsigned)((rawReset & MCU_RAW_RESET_POWERON_BIT) != 0U),
+             (unsigned)((rawReset & MCU_RAW_RESET_SOFTWARE_BIT) != 0U));
 
     EcuM_Init();
 }

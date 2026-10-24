@@ -105,4 +105,24 @@ TEST_F(Mcu_GetResetRawValue_Test, Mcu_GetResetRawValue_OK_ReturnsBitPackedFlags)
     EXPECT_EQ(CallCount_Det_ReportError, 0U);
 }
 
+TEST_F(Mcu_GetResetRawValue_Test, Mcu_GetResetRawValue_OK_SoftwareFlagSetsBit4)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    FakeMcuHw_ResetReason.Software = 1U;
+    Mcu_Init(&Mcu_Config);
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Mcu_RawResetType ret = Mcu_GetResetRawValue();
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, static_cast<Mcu_RawResetType>(MCU_RAW_RESET_SOFTWARE_BIT));
+    EXPECT_EQ(ret, 0x10U);   // bit4
+}
+
 }  // namespace

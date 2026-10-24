@@ -123,6 +123,46 @@ TEST_F(Mcu_GetResetReason_Test, Mcu_GetResetReason_OK_ReturnsPowerOnReset)
     EXPECT_EQ(CallCount_Det_ReportError, 0U);
 }
 
+TEST_F(Mcu_GetResetReason_Test, Mcu_GetResetReason_OK_ReturnsSoftwareReset)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    FakeMcuHw_ResetReason.Software = 1U;
+    Mcu_Init(&Mcu_Config);
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Mcu_ResetType ret = Mcu_GetResetReason();
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, MCU_SW_RESET);
+    EXPECT_EQ(CallCount_Det_ReportError, 0U);
+}
+
+TEST_F(Mcu_GetResetReason_Test, Mcu_GetResetReason_OK_WatchdogTakesPriorityOverSoftware)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    FakeMcuHw_ResetReason.Watchdog = 1U;
+    FakeMcuHw_ResetReason.Software = 1U;
+    Mcu_Init(&Mcu_Config);
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Mcu_ResetType ret = Mcu_GetResetReason();
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, MCU_WATCHDOG_RESET);   // 要因が複数立っているときは、より重大な Watchdog を優先する
+}
+
 TEST_F(Mcu_GetResetReason_Test, Mcu_GetResetReason_OK_ReturnsUndefinedWhenNoRecognizedFlag)
 {
     /* ----------------------- */

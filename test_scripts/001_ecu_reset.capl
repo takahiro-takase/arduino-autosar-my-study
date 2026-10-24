@@ -10,7 +10,7 @@
 // も不要なため、他のサンプル（example_session_check.capl）と違い
 // send(0x10, ...) や security_unlock() は使わずいきなり送信できる。
 //
-// subFunction は 0x01=hardReset / 0x03=softReset のどちらでもよい
+// subFunction は 0x01=hardReset / 0x02=keyOffOnReset / 0x03=softReset のどれでもよい
 // （Mcu_PerformReset() 自体がリセット種別を区別しないため、本プロジェクトの
 // 実装ではどちらも同じ挙動になる。Dcm.h/Dcm_Cfg.h 参照）。
 //
@@ -18,6 +18,7 @@
 // 一時的に応答しなくなるだけ）。Serial 接続をしたまま実行すると、起動
 // シーケンスのログ（"Main: setup: ResetReason ..." 等）がそのまま
 // Serialログパネルへ流れてくるので、リブートしたことを確認できる。
+// ソフトウェアリセット（NVIC_SystemReset()）の後は、ResetReason の行に SW=1 が出る（2026-10 実機確認済み）。
 
 on start
 {

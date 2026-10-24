@@ -45,6 +45,7 @@ typedef struct
     uint8 BrownOut;  /**< 電源電圧低下 (LVD) によるリセット        */
     uint8 External;  /**< 外部リセット (RESET ピン/ボタン等)。検出不可な MCU では常に 0 */
     uint8 PowerOn;   /**< 電源投入リセット                          */
+    uint8 Software;  /**< ソフトウェアリセット（NVIC_SystemReset() 等）。検出不可な MCU では常に 0 */
 } Mcu_Hw_ResetReasonType;
 
 #ifdef __cplusplus

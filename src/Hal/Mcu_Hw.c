@@ -13,6 +13,9 @@
  *              先にレジスタを消費している可能性等。詳細は
  *              docs/modules/Mcu_Notes.md の「Power-On Reset フラグ (PORF)
  *              が実機で検出されない」参照）。
+ *            - ソフトウェアリセット（NVIC_SystemReset()）は RSTSR1.SWRF で検出する
+ *              （2026-10 追加、実機未検証。ブートローダが先にレジスタを消費して
+ *              いる場合は PORF と同様に検出できない可能性がある）。
  *            - 各フラグのクリア手順 (1 であることを確認して 0 を書く) は
  *              デバイスヘッダのレジスタコメントに基づく。PRCR (レジスタ
  *              保護) のロック対象にはリセットステータスレジスタは含まれて
@@ -62,6 +65,7 @@ Mcu_Hw_ResetReasonType Mcu_Hw_ReadAndClearResetReason(void)
                                | R_SYSTEM->RSTSR0_b.LVD2RF);
     reason.External = 0U;  /* RA4M1 に外部リセットピン専用の検出フラグは無い */
     reason.PowerOn  = R_SYSTEM->RSTSR0_b.PORF;
+    reason.Software = R_SYSTEM->RSTSR1_b.SWRF;   /* NVIC_SystemReset()（UDS 0x11 ECUReset 等）による再起動 */
 
     /* 各フラグは「1であることを確認してから0を書く」とクリアされる
      * (デバイスヘッダのレジスタコメントに基づく)。 */
@@ -71,6 +75,7 @@ Mcu_Hw_ResetReasonType Mcu_Hw_ReadAndClearResetReason(void)
     if (R_SYSTEM->RSTSR0_b.LVD1RF) R_SYSTEM->RSTSR0_b.LVD1RF = 0U;
     if (R_SYSTEM->RSTSR0_b.LVD2RF) R_SYSTEM->RSTSR0_b.LVD2RF = 0U;
     if (R_SYSTEM->RSTSR0_b.PORF)   R_SYSTEM->RSTSR0_b.PORF   = 0U;
+    if (R_SYSTEM->RSTSR1_b.SWRF)   R_SYSTEM->RSTSR1_b.SWRF   = 0U;
 
     return reason;
 }

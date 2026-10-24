@@ -38,11 +38,11 @@
  *            実 AUTOSAR は「HW のリセットステータスレジスタの生値」と
  *            規定するが（[SWS_Mcu_00235]）、Mcu_Hw は生レジスタ値を意図的に
  *            隠しデコード済みの Mcu_Hw_ResetReasonType（Watchdog/BrownOut/
- *            External/PowerOn の 4 フラグ）だけを返す設計のため（Mcu_Hw.h
- *            参照）、本実装ではこの 4 フラグを 1 バイトへビット詰めした値を
+ *            External/PowerOn/Software の 5 フラグ）だけを返す設計のため（Mcu_Hw.h
+ *            参照）、本実装ではこの 5 フラグを 1 バイトへビット詰めした値を
  *            「生値」として代用する:
- *              bit0 = Watchdog, bit1 = BrownOut, bit2 = External, bit3 = PowerOn
- *            （bit4-7 は常に 0）。Mcu_GetResetReason() が返す単一の
+ *              bit0 = Watchdog, bit1 = BrownOut, bit2 = External, bit3 = PowerOn,
+ *              bit4 = Software（bit5-7 は常に 0）。Mcu_GetResetReason() が返す単一の
  *            Mcu_ResetType では複数同時要因を表現できないため、複数要因が
  *            同時に立つケース（電源投入直後に BrownOut も同時検出される等）
  *            を診断したい場合は Mcu_GetResetRawValue() を使うこと。
@@ -77,6 +77,7 @@
 #define MCU_RAW_RESET_BROWNOUT_BIT  (1U << 1)
 #define MCU_RAW_RESET_EXTERNAL_BIT  (1U << 2)
 #define MCU_RAW_RESET_POWERON_BIT   (1U << 3)
+#define MCU_RAW_RESET_SOFTWARE_BIT  (1U << 4)
 
 /* ======================================================================
  * Type Definitions
@@ -85,21 +86,19 @@
 /**
  * \brief   リセット種別（[SWS_Mcu_00252] Mcu_ResetType の値域）。
  *
- * \details MCU_SW_RESET は本実装では返されない（Mcu_Hw がソフトウェア
- *          リセットを検出しないため。Mcu_Hw.h 参照）。Mcu_PerformReset()
- *          （NVIC_SystemReset() 発行）による再起動後も同様で、Renesas RA の
- *          RSTSR1.SWRF フラグを Mcu_Hw_ReadAndClearResetReason() が読んで
- *          いないため、次回起動時は他の要因（Watchdog/PowerOn 等）が
- *          立っていなければ MCU_RESET_UNDEFINED になる（UDS 0x11 ECUReset
- *          由来か物理リセットボタン由来かを起動後ログから区別したい場合は
- *          将来的な拡張が必要、現状は非対応）。BrownOut/External 単独検出時の
- *          扱いは Mcu_GetResetReason() のコメント参照。
+ * \details MCU_SW_RESET は、Mcu_Hw がソフトウェアリセット（Renesas RA の
+ *          RSTSR1.SWRF）を検出したときに返す。Mcu_PerformReset()
+ *          （NVIC_SystemReset() 発行）による再起動後、UDS 0x11 ECUReset 由来かを
+ *          起動後ログ（main.cpp の SW=）から区別できる（2026-10 追加、実機未検証）。
+ *          Watchdog / PowerOn が同時に立っていればそちらを優先する
+ *          （Mcu_GetResetReason() 参照）。BrownOut/External 単独検出時の扱いも
+ *          Mcu_GetResetReason() のコメント参照。
  */
 typedef enum
 {
     MCU_POWER_ON_RESET = 0,  /**< 電源投入リセット（既定） */
     MCU_WATCHDOG_RESET,      /**< ウォッチドッグタイムアウトによるリセット */
-    MCU_SW_RESET,            /**< ソフトウェアリセット（本実装では未使用） */
+    MCU_SW_RESET,            /**< ソフトウェアリセット（RSTSR1.SWRF で検出） */
     MCU_RESET_UNDEFINED      /**< リセット原因不明・未初期化 */
 } Mcu_ResetType;
 

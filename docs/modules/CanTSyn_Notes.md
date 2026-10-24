@@ -120,7 +120,8 @@ FUP 受信:   T4 = OVS の秒 + FUP のナノ秒、T3diff = StbM_GetCurrentTimeD
 | 時間領域 | `CANTSYN_RX_TIME_DOMAIN_ID`（1）と一致 |
 | DLC | 8 以上 |
 | Type と CRC | `CANTSYN_RX_CRC_VALIDATED`=1 なら Type 0x20/0x28 で CRC が正しいもの、0 なら 0x10/0x18 |
-| SC の増分（SYNC） | 直前に受けた SYNC との差が 1〜`CANTSYN_RX_SC_JUMP_WIDTH`。外れた SYNC は無視するが、SC は記録する（1 回取りこぼしても、次の SYNC から復帰できる） |
+| SC の増分（SYNC） | 直前に受けた SYNC との差が 1〜`CANTSYN_RX_SC_JUMP_WIDTH`。外れた SYNC は無視するが、SC は記録する（1 回取りこぼしても、次の SYNC から復帰できる）。ただし、起動直後と、StbM の時間ベース 1 が TIMEOUT の後の最初の SYNC は、検査しない（[SWS_CanTSyn_00079]） |
+| FUP のナノ秒 | 10^9 未満（`StbM_TimeStampType.nanoseconds` の範囲、[SWS_CanTSyn_00086] 項目 5）。範囲外の FUP は無視する |
 | SC の一致（FUP） | 対の SYNC と同じ。違えば、保留中の SYNC も捨てる |
 | FUP の待ち時間 | SYNC から `CANTSYN_RX_FOLLOW_UP_TIMEOUT_MS`（200ms）未満 |
 

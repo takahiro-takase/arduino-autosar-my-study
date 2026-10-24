@@ -409,8 +409,9 @@
 /* -----------------------------------------------------------------------
  * ECUReset サブ機能
  * ----------------------------------------------------------------------- */
-#define DCM_RESET_HARD  0x01U  /**< hardReset  */
-#define DCM_RESET_SOFT  0x03U  /**< softReset  */
+#define DCM_RESET_HARD       0x01U  /**< hardReset  */
+#define DCM_RESET_KEYONOFF   0x02U  /**< keyOffOnReset（[SWS_Dcm_00373] は KEYONOFF のモード切替。本実装は他と同じ扱い） */
+#define DCM_RESET_SOFT       0x03U  /**< softReset  */
 
 /* -----------------------------------------------------------------------
  * DiagnosticSessionControl 応答の P2 タイミングパラメータ

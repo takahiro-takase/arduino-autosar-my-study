@@ -1,0 +1,86 @@
+// 実機検証: DLC が 8 未満の診断フレームを受け付けないことの確認。
+//
+// 背景: 診断の受信は、パディング ON（フレームは常に 8 バイト）が前提（[SWS_CanTp_00344]/[00345]）。
+// 実機の配線では、DLC が設定（8）と一致しないフレームは、CanTp に届く前に CanIf が捨てる
+// （シリアルに「CanIf_RxIndication: RX can=0x7E0 length mismatch」と、CanIf（モジュール 60）の DET
+// エラー 0x3D が出る。2026-10 実機確認）。CanTp の DLC チェック（CANTP_E_PADDING、0x70）は、その内側の
+// 二重の防御で、CanIf を通らない状況（ホストのユニットテスト）だけで働く。
+// CAN ツールの「Tester Present」ボタン等の UDS 要求は 8 バイトへパディングして送るため、この確認には使えない
+// （DLC=8 のフレームになり、ECU は正常に応答する）。このスクリプトは send_can() で、DLC が実際のバイト数の
+// フレームを送る。
+//
+// 手順:
+//   [0] ECU を起こす: 8 バイトの TesterPresent（02 3E 00 + 0 パディング）を送り、応答 (0x7E8: 02 7E 00) を確認する
+//   [1] DLC=3 の TesterPresent（02 3E 00、パディングなし）を送る -> 応答が来ない（受け付けられない）
+//   [2] 再び 8 バイトの TesterPresent を送る -> 応答が来る（ECU が正常に動いている）
+//
+// 判定:
+//   [0] [2] 応答がある、[1] 応答がない  -> PASS
+// 加えて、ECU のシリアルログに、[1] の直後、CanIf の警告（length mismatch got=3 exp=8）と DET エラー
+// （M=60、ERR=0x3D）が出ることを目視で確認する。
+//
+// 前提:
+//   - can_tool に CAN 接続済み。ECU の電源が入っていること
+//   - 約 8 秒で終わる
+
+variables
+{
+    int respCount;     // 受信した TesterPresent の正応答の数
+    int base;
+    int passCount;
+    int failCount;
+}
+
+on message 0x7E8
+{
+    if (msgData(1) == 0x7E)
+    {
+        respCount++;
+    }
+}
+
+void Check(int ok, int line)
+{
+    if (ok)
+    {
+        passCount++;
+        write("  -> PASS [", line, "]");
+    }
+    else
+    {
+        failCount++;
+        write("  -> FAIL [", line, "]");
+    }
+}
+
+on start
+{
+    write("=== CanTp の受信パディング（DLC < 8 の SF を受け付けない）===");
+
+    write("[0] 8 バイトの TesterPresent -> 期待: 応答あり（ECU を起こす）");
+    send_can(0x7E0, 0x02, 0x3E, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00);
+    wait(1.5);
+    if (respCount == 0)
+    {
+        // スリープしていた場合は、最初のフレームが起床だけに使われる。もう一度送る
+        send_can(0x7E0, 0x02, 0x3E, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00);
+        wait(1.5);
+    }
+    Check(respCount > 0, 0);
+
+    write("[1] DLC=3 の TesterPresent（02 3E 00）-> 期待: 応答なし。ECU のログに CanIf の length mismatch（DET M=60 ERR=0x3D）");
+    base = respCount;
+    send_can(0x7E0, 0x02, 0x3E, 0x00);
+    wait(1.5);
+    Check(respCount == base, 1);
+
+    write("[2] 8 バイトの TesterPresent -> 期待: 応答あり（ECU は正常）");
+    base = respCount;
+    send_can(0x7E0, 0x02, 0x3E, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00);
+    wait(1.5);
+    Check(respCount > base, 2);
+
+    write("=== 結果: PASS ", passCount, " / FAIL ", failCount, " ===");
+    write("ECU のシリアルログで、[1] の直後に CanIf の length mismatch（DET M=60 ERR=0x3D）が出ていることも確認してください");
+    stop();
+}

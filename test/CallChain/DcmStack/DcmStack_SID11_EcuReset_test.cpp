@@ -185,6 +185,43 @@ protected:
  * ====================================================================== */
 
 // ------------------------------------------------------------
+// NG: 非対応の subFunc（[0x11, 0x04] enableRapidPowerShutdown）は
+// subFunctionNotSupported (NRC 0x12) になり、MCU はリセットされない。
+// ------------------------------------------------------------
+TEST_F(DcmStack_SID11_EcuReset_Test,
+       NG_UnsupportedSubFuncReturnsSubFunctionNotSupported)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // [0x11, 0x04] を 0x7E0 の受信バッファへセットする（SF: 02 11 04）。
+    FakeCanHw_RxId  = 0x7E0U;
+    FakeCanHw_RxDlc = 8U;
+    FakeCanHw_RxData[0] = 2U;
+    FakeCanHw_RxData[1] = DCM_SID_ECU_RESET;
+    FakeCanHw_RxData[2] = 0x04U;
+    for (uint8 i = 3U; i < 8U; i++)
+        FakeCanHw_RxData[i] = 0U;
+    FakeCanHw_RxPendingCount = 1U;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Can_MainFunction_Read();
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    // 否定応答 [0x7F, 0x11, 0x12] が Can_Hw まで到達し、リセットは呼ばれないこと。
+    ASSERT_EQ(FakeCanHw_SendCount, 1U);
+    EXPECT_EQ(FakeCanHw_LastSendData[0], 0x03U);
+    EXPECT_EQ(FakeCanHw_LastSendData[1], DCM_SID_NEGATIVE_RESP);
+    EXPECT_EQ(FakeCanHw_LastSendData[2], DCM_SID_ECU_RESET);
+    EXPECT_EQ(FakeCanHw_LastSendData[3], DCM_NRC_SUB_FUNC_NOT_SUPPORTED);
+    EXPECT_EQ(FakeMcuHw_PerformResetCount, 0U);
+}
+
+// ------------------------------------------------------------
 // OK: [0x11, 0x01] hardReset は extendedSession 中でも正応答
 // [0x51, 0x01] を返し、応答後にセッションが defaultSession へ自動的に
 // 戻り（Dcm_ResetToDefaultSession() 経由）、さらに実際に
@@ -290,6 +327,41 @@ TEST_F(DcmStack_SID11_EcuReset_Test,
     EXPECT_EQ(FakeCanHw_LastSendData[0], 0x02U);
     EXPECT_EQ(FakeCanHw_LastSendData[1], 0x51U);
     EXPECT_EQ(FakeCanHw_LastSendData[2], DCM_RESET_SOFT);
+}
+
+// ------------------------------------------------------------
+// OK: [0x11, 0x02] keyOffOnReset も正応答 [0x51, 0x02] を返し、MCU をリセットする
+// （[SWS_Dcm_00373]。hardReset / softReset とは異なる subFunc 値が echo されることの確認）。
+// ------------------------------------------------------------
+TEST_F(DcmStack_SID11_EcuReset_Test,
+       OK_KeyOffOnResetProducesPositiveResponseEchoingSubFunc)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // [0x11, 0x02] を 0x7E0 の受信バッファへセットする（SF: 02 11 02）。
+    FakeCanHw_RxId  = 0x7E0U;
+    FakeCanHw_RxDlc = 8U;
+    FakeCanHw_RxData[0] = 2U;
+    FakeCanHw_RxData[1] = DCM_SID_ECU_RESET;
+    FakeCanHw_RxData[2] = DCM_RESET_KEYONOFF;
+    for (uint8 i = 3U; i < 8U; i++)
+        FakeCanHw_RxData[i] = 0U;
+    FakeCanHw_RxPendingCount = 1U;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Can_MainFunction_Read();
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    ASSERT_EQ(FakeCanHw_SendCount, 1U);
+    EXPECT_EQ(FakeCanHw_LastSendData[0], 0x02U);
+    EXPECT_EQ(FakeCanHw_LastSendData[1], 0x51U);
+    EXPECT_EQ(FakeCanHw_LastSendData[2], DCM_RESET_KEYONOFF);
+    EXPECT_EQ(FakeMcuHw_PerformResetCount, 1U);
 }
 
 // ------------------------------------------------------------
