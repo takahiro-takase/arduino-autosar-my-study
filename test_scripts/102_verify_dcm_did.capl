@@ -5,7 +5,10 @@
 // 確認すること:
 //   - 0x22 : 読み出し対応の DID（0x0101-0x0104, 0xF190）が正応答になる。
 //            読み出し関数を持たない DID（0x0105 ランプ, 0x0108 鍵更新）や
-//            表に無い DID は NRC 0x31。
+//            表に無い DID は NRC 0x31。1 回の要求に複数の DID を指定できる（最大 4 個、
+//            未対応の DID は応答から外れる）。長さが 1 + 2 × n でない要求、5 個以上は NRC 0x13。
+//            DID 0x0109 SECURE_INFO は DID ごとの条件つき: defaultSession は NRC 0x31、
+//            extendedSession でもセキュリティ未解除は NRC 0x33、解除後は正応答。
 //   - 0x2E : 書き込み対応の DID（0x0104 TestPattern）に書き込み→読み戻しで
 //            同じ値が返る。セキュリティ未解除は NRC 0x33、長さ違いは NRC 0x13、
 //            書き込み関数を持たない DID は NRC 0x31。
@@ -62,6 +65,11 @@ on start
     wait_response();
     expectNrc(0x7F);
 
+    write("T01b defaultSession で 0x22 SECURE_INFO (DID 0x0109) -> NRC 0x31");
+    send(0x22, 0x01, 0x09);
+    wait_response();
+    expectNrc(0x31);
+
     send(0x10, 0x03);
     wait_response();
     assert_positive();
@@ -69,6 +77,11 @@ on start
 
     write("T02 セキュリティ未解除で 0x2E TestPattern 書き込み -> NRC 0x33");
     send(0x2E, 0x01, 0x04, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88);
+    wait_response();
+    expectNrc(0x33);
+
+    write("T02b extendedSession・セキュリティ未解除で 0x22 SECURE_INFO -> NRC 0x33");
+    send(0x22, 0x01, 0x09);
     wait_response();
     expectNrc(0x33);
 
@@ -116,10 +129,32 @@ on start
     wait_response();
     expectNrc(0x31);
 
-    write("T11 0x22 DID 2個指定 (長さ違い) -> NRC 0x13");
+    write("T11 0x22 DID 2個指定 (EngineSpeed + CoolantTemp) -> 62 01 01 d d 01 02 d");
     send(0x22, 0x01, 0x01, 0x01, 0x02);
     wait_response();
+    reportOk((respSid() == 0x62) && (respByte(1) == 0x01) && (respByte(2) == 0x01) &&
+             (respByte(5) == 0x01) && (respByte(6) == 0x02));
+
+    write("T11b 0x22 DID 2個指定 (未対応 0xFFFF + CoolantTemp) -> 未対応は外れて 62 01 02 d");
+    send(0x22, 0xFF, 0xFF, 0x01, 0x02);
+    wait_response();
+    reportOk((respSid() == 0x62) && (respByte(1) == 0x01) && (respByte(2) == 0x02));
+
+    write("T11c 0x22 DID の下位バイトが無い (長さが 1 + 2 x n でない) -> NRC 0x13");
+    send(0x22, 0x01, 0x01, 0x01);
+    wait_response();
     expectNrc(0x13);
+
+    write("T11d 0x22 DID 5個指定 (上限 4 個を超える) -> NRC 0x13");
+    send(0x22, 0x01, 0x02, 0x01, 0x02, 0x01, 0x02, 0x01, 0x02, 0x01, 0x02);
+    wait_response();
+    expectNrc(0x13);
+
+    write("T11e 0x22 SECURE_INFO (解除後) -> 62 01 09 53 45 43 21");
+    send(0x22, 0x01, 0x09);
+    wait_response();
+    reportOk((respSid() == 0x62) && (respByte(3) == 0x53) && (respByte(4) == 0x45) &&
+             (respByte(5) == 0x43) && (respByte(6) == 0x21));
 
     // ---- 0x2E WriteDataByIdentifier ----
     write("T12 0x2E DID 0x0104 TestPattern 書き込み (FF+CF)");

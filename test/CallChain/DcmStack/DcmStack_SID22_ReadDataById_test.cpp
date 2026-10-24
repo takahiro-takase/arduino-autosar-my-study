@@ -285,6 +285,96 @@ TEST_F(DcmStack_SID22_ReadDataById_Test,
 }
 
 // ------------------------------------------------------------
+// OK: 1 回の要求で 2 つの DID（EngineSpeed 0x0101 と CoolantTemp 0x0102）を読む（[0x22, 0x01,0x01, 0x01,0x02]、
+// SF: 05 22 01 01 01 02）。応答 [0x62, 0x01,0x01, d, d, 0x01,0x02, d] は 8 バイトで SF の 7 バイト制限を超え、
+// FF（6 バイト）+ CF 1 本（残り 2 バイト）になる。結合した内容が、Dcm の応答と一致する。
+// ------------------------------------------------------------
+TEST_F(DcmStack_SID22_ReadDataById_Test,
+       OK_MultipleDidResponseReassemblesToExpectedPayload)
+{
+    /* ------------------------- */
+    /* ---- 準備 (Arrange) ----- */
+    /* ------------------------- */
+    FakeCanHw_RxId  = 0x7E0U;
+    FakeCanHw_RxDlc = 8U;
+    FakeCanHw_RxData[0] = 5U;
+    FakeCanHw_RxData[1] = DCM_SID_READ_DATA;
+    FakeCanHw_RxData[2] = (uint8)(DCM_DID_ENGINE_SPEED >> 8U);
+    FakeCanHw_RxData[3] = (uint8)(DCM_DID_ENGINE_SPEED & 0xFFU);
+    FakeCanHw_RxData[4] = (uint8)(DCM_DID_COOLANT_TEMP >> 8U);
+    FakeCanHw_RxData[5] = (uint8)(DCM_DID_COOLANT_TEMP & 0xFFU);
+    FakeCanHw_RxData[6] = 0U;
+    FakeCanHw_RxData[7] = 0U;
+    FakeCanHw_RxPendingCount = 1U;
+
+    /* ------------------------- */
+    /* ---- 実行 (Act 1) ------- */
+    /* ------------------------- */
+    Can_MainFunction_Read();
+
+    /* ------------------------- */
+    /* ---- 評価 (Assert 1) ---- */
+    /* ------------------------- */
+    ASSERT_EQ(CallCount_CanTp_Transmit, 1U);
+    ASSERT_EQ(LastLength_CanTp_Transmit, 8U);
+    EXPECT_EQ(LastData_CanTp_Transmit[0], 0x62U);
+    EXPECT_EQ(LastData_CanTp_Transmit[1], (uint8)(DCM_DID_ENGINE_SPEED >> 8U));
+    EXPECT_EQ(LastData_CanTp_Transmit[2], (uint8)(DCM_DID_ENGINE_SPEED & 0xFFU));
+    EXPECT_EQ(LastData_CanTp_Transmit[5], (uint8)(DCM_DID_COOLANT_TEMP >> 8U));
+    EXPECT_EQ(LastData_CanTp_Transmit[6], (uint8)(DCM_DID_COOLANT_TEMP & 0xFFU));
+
+    ASSERT_EQ(FakeCanHw_SendCount, 1U);
+    EXPECT_EQ(FakeCanHw_LastSendId, 0x7E8U);
+    EXPECT_EQ(FakeCanHw_LastSendData[0], 0x10U);  // FF PCI
+    EXPECT_EQ(FakeCanHw_LastSendData[1], 8U);     // len 下位8bit
+
+    uint8 reassembled[8] = { 0U };
+    uint8 pos = 0U;
+    for (uint8 i = 0U; i < 6U; i++)
+        reassembled[pos++] = FakeCanHw_LastSendData[2U + i];
+
+    /* ------------------------- */
+    /* ---- 準備 (Arrange 2) --- */
+    /* ------------------------- */
+    // テスター役として Flow Control（CTS, BS=0, STmin=0）を受信させる
+    FakeCanHw_RxId  = 0x7E0U;
+    FakeCanHw_RxDlc = 8U;
+    FakeCanHw_RxData[0] = 0x30U;
+    FakeCanHw_RxData[1] = 0x00U;
+    FakeCanHw_RxData[2] = 0x00U;
+    for (uint8 i = 3U; i < 8U; i++)
+        FakeCanHw_RxData[i] = 0U;
+    FakeCanHw_RxPendingCount = 1U;
+
+    /* ------------------------- */
+    /* ---- 実行 (Act 2) ------- */
+    /* ------------------------- */
+    Can_MainFunction_Read();
+    ASSERT_EQ(FakeCanHw_SendCount, 1U);  // FC 受信自体は Can_Hw への送信を生まない
+
+    /* ------------------------- */
+    /* ---- 実行 (Act 3) ------- */
+    /* ------------------------- */
+    // 残り 2 バイトは Consecutive Frame 1 本で運びきれる
+    CanTp_MainFunction();
+    ASSERT_EQ(FakeCanHw_SendCount, 2U);
+    EXPECT_EQ(FakeCanHw_LastSendId, 0x7E8U);
+    EXPECT_EQ(FakeCanHw_LastSendData[0], 0x21U);   // CF PCI、SN=1
+    reassembled[pos++] = FakeCanHw_LastSendData[1];
+    reassembled[pos++] = FakeCanHw_LastSendData[2];
+
+    /* ------------------------- */
+    /* ---- 評価 (Assert 2) ---- */
+    /* ------------------------- */
+    ASSERT_EQ(pos, 8U);
+    EXPECT_EQ(CanTp_Test_IsTxBusy(), (boolean)0U);
+    for (uint8 i = 0U; i < 8U; i++)
+    {
+        EXPECT_EQ(reassembled[i], LastData_CanTp_Transmit[i]) << "byte " << (unsigned)i;
+    }
+}
+
+// ------------------------------------------------------------
 // NG: DID の下位バイトが無い（[0x22, 0xF1] のみ、2バイト。3バイト必須）
 // リクエストは incorrectMessageLength (NRC 0x13) になる。
 // ------------------------------------------------------------
@@ -321,25 +411,25 @@ TEST_F(DcmStack_SID22_ReadDataById_Test,
 }
 
 // ------------------------------------------------------------
-// NG: 2件目のDID（[0x22, 0xF1,0x90, 0xF1,0x90]、5バイト。本実装は単一DIDのみ
-// 対応）は incorrectMessageLength (NRC 0x13) になる。
+// NG: 2件目のDIDの下位バイトが無い（[0x22, 0xF1,0x90, 0xF1]、4バイト。DID は 2 バイトずつで、
+// 長さが 1 + 2 × n でない）は incorrectMessageLength (NRC 0x13) になる。
 // ------------------------------------------------------------
 TEST_F(DcmStack_SID22_ReadDataById_Test,
-       NG_IncorrectMessageLength_MultipleDidRequest)
+       NG_IncorrectMessageLength_OddLengthRequest)
 {
     /* ----------------------- */
     /* ---- 準備 (Arrange) --- */
     /* ----------------------- */
-    // [0x22, 0xF1,0x90, 0xF1,0x90] を 0x7E0 の受信バッファへ
-    // セットする（SF: 05 22 F1 90 F1）。
+    // [0x22, 0xF1,0x90, 0xF1] を 0x7E0 の受信バッファへ
+    // セットする（SF: 04 22 F1 90 F1）。
     FakeCanHw_RxId  = 0x7E0U;
     FakeCanHw_RxDlc = 8U;
-    FakeCanHw_RxData[0] = 5U;
+    FakeCanHw_RxData[0] = 4U;
     FakeCanHw_RxData[1] = DCM_SID_READ_DATA;
     FakeCanHw_RxData[2] = (uint8)(DCM_DID_VIN >> 8U);
     FakeCanHw_RxData[3] = (uint8)(DCM_DID_VIN & 0xFFU);
     FakeCanHw_RxData[4] = (uint8)(DCM_DID_VIN >> 8U);
-    FakeCanHw_RxData[5] = (uint8)(DCM_DID_VIN & 0xFFU);
+    FakeCanHw_RxData[5] = 0U;
     FakeCanHw_RxData[6] = 0U;
     FakeCanHw_RxData[7] = 0U;
     FakeCanHw_RxPendingCount = 1U;

@@ -20,7 +20,8 @@
  *            0x14 ClearDiagnosticInformation — 全 DTC クリア／DTC 指定で 1 件クリア
  *                                              (SecurityAccess Level1 必須)
  *            0x19 ReadDTCInformation     — subFunc 0x01/0x02/0x04/0x06/0x0A/0x14
- *            0x22 ReadDataByIdentifier   — DID 0x0101/0x0102/0x0103/0x0104
+ *            0x22 ReadDataByIdentifier   — DID 0x0101-0x0104/0x0109/0xF190、1 要求に複数 DID 可
+ *                                          (DCM_MAX_DID_TO_READ まで。DID ごとにセッション/SecurityAccess を判定)
  *            0x27 SecurityAccess         — subFunc 0x01 requestSeed / 0x02 sendKey
  *            0x2E WriteDataByIdentifier  — DID 0x0104 (TestPattern) のみ。
  *                                          SecurityAccess Level1 必須
@@ -295,13 +296,19 @@ static uint8 Dcm_TransferBlockCounter;
 /** 受信データの簡易チェックサム（全バイトの XOR）。実データは保持しない。 */
 static uint8 Dcm_TransferChecksum;
 
-/** UDS 応答バッファの最大サイズ。0x19/02 (reportDTCByStatusMask) が
- *  DEM_EVENT_COUNT 件全てに一致した場合が最大: [0x59,subFunc,availMask] (3)
- *  + DEM_EVENT_COUNT 件 × 4 バイト。
+/** 0x19/02 (reportDTCByStatusMask) の応答の最大サイズ。DEM_EVENT_COUNT 件全てに一致した場合が最大:
+ *  [0x59,subFunc,availMask] (3) + DEM_EVENT_COUNT 件 × 4 バイト。
  *  以前は固定値 32 で確保していたが、DEM_EVENT_COUNT が 6→8 に増えた際に
  *  追従しておらず 3+8×4=35 バイトが 32 バイトのバッファに収まらず
  *  オーバーフローしていた。DEM_EVENT_COUNT の変化に自動追従する数式に変更。 */
-#define DCM_TX_BUF_SIZE  (3U + (DEM_EVENT_COUNT * 4U))
+#define DCM_TX_SIZE_DTC_INFO  (3U + (DEM_EVENT_COUNT * 4U))
+
+/** 0x22 の応答の最大サイズ。DCM_MAX_DID_TO_READ 個の DID が全て最大長のとき:
+ *  [0x62] (1) + DCM_MAX_DID_TO_READ 個 × (DID(2) + データ DCM_DID_READ_MAX_LENGTH)。 */
+#define DCM_TX_SIZE_READ_DATA  (1U + (DCM_MAX_DID_TO_READ * (2U + DCM_DID_READ_MAX_LENGTH)))
+
+/** UDS 応答バッファの最大サイズ。上の 2 つのうち大きい方。 */
+#define DCM_TX_BUF_SIZE  ((DCM_TX_SIZE_DTC_INFO > DCM_TX_SIZE_READ_DATA) ? DCM_TX_SIZE_DTC_INFO : DCM_TX_SIZE_READ_DATA)
 
 /** UDS 応答バッファ (PCI バイトなし; CanTp がトランスポート層を付加する) */
 static uint8 Dcm_TxBuf[DCM_TX_BUF_SIZE];
@@ -396,6 +403,8 @@ static uint16 Dcm_ComputeSecurityKey(uint16 seed);
 static void Dcm_SecurityLock(void);
 static void Dcm_HandleTesterPresent(const uint8* uds, uint8 udsLen);
 static const Dcm_DidConfigType* Dcm_FindDid(uint16 did);
+static const Dcm_DidConfigType* Dcm_FindReadableDid(uint16 did, uint8 sessionMask);
+static uint8 Dcm_SessionToMask(uint8 session);
 static void Dcm_HandleRoutineControl(const uint8* uds, uint8 udsLen);
 static void Dcm_HandleRoutineStart(uint16 rid);
 static void Dcm_HandleRoutineStop(uint16 rid);
@@ -2212,6 +2221,43 @@ static const Dcm_DidConfigType* Dcm_FindDid(uint16 did)
 }
 
 /**
+ * \brief   セッションを、許可セッションのマスクのビット（DCM_SESSION_MASK_*）へ変換する。
+ *
+ * \param[in]  session  セッション (DCM_SESSION_DEFAULT / _EXTENDED)。
+ *
+ * \return  DCM_SESSION_MASK_EXTENDED（extendedSession のとき）。それ以外は DCM_SESSION_MASK_DEFAULT。
+ */
+static uint8 Dcm_SessionToMask(uint8 session)
+{
+    return (session == DCM_SESSION_EXTENDED) ? DCM_SESSION_MASK_EXTENDED : DCM_SESSION_MASK_DEFAULT;
+}
+
+/**
+ * \brief   DID の表から、現在のセッションで 0x22 により読み出せる DID の行を探す。
+ *
+ * \details 次のいずれかなら「読めない」として NULL を返す（[SWS_Dcm_00438]/[SWS_Dcm_00433]/[SWS_Dcm_00434]）。
+ *          - DID が表に無い（未対応）
+ *          - 読み出し関数が無い（0x22 の読み出しアクセスが無い。0x2E/0x2F 専用の DID など）
+ *          - 現在のセッションが、その DID の読めるセッション（ReadSessionMask）に含まれない
+ *          SecurityAccess の条件（[SWS_Dcm_00435]）は、ここでは見ない（NRC が異なるため、呼び出し側で判定する）。
+ *
+ * \param[in]  did          データ識別子 (DCM_DID_*)。
+ * \param[in]  sessionMask  現在のセッションのビット (DCM_SESSION_MASK_DEFAULT / _EXTENDED)。
+ *
+ * \return  読み出せる DID の行へのポインタ。読めなければ NULL。
+ */
+static const Dcm_DidConfigType* Dcm_FindReadableDid(uint16 did, uint8 sessionMask)
+{
+    const Dcm_DidConfigType* row = Dcm_FindDid(did);
+
+    if ((row != NULL) && ((row->ReadFct == NULL) || ((row->ReadSessionMask & sessionMask) == 0U)))
+    {
+        row = NULL;
+    }
+    return row;
+}
+
+/**
  * \brief   DCM_DID_ENGINE_SPEED (0x0101) の読み出し関数。
  *
  * \param[out]  Data  EngineSpeed (uint16, MSB first) の格納先。2 バイト。
@@ -2275,6 +2321,25 @@ Std_ReturnType Dcm_ReadDidTestPattern(uint8* Data)
 }
 
 /**
+ * \brief   DCM_DID_SECURE_INFO (0x0109) の読み出し関数。
+ *
+ * \details extendedSession かつ SecurityAccess Level1 のアンロック後だけ読める DID
+ *          （条件は Dcm.json の readSessions / readSecurity）。値は固定の 4 バイト（ASCII "SEC!"）。
+ *
+ * \param[out]  Data  固定値の格納先。4 バイト。
+ *
+ * \retval  E_OK  常に正常。
+ */
+Std_ReturnType Dcm_ReadDidSecureInfo(uint8* Data)
+{
+    Data[0] = 0x53U;   /* 'S' */
+    Data[1] = 0x45U;   /* 'E' */
+    Data[2] = 0x43U;   /* 'C' */
+    Data[3] = 0x21U;   /* '!' */
+    return E_OK;
+}
+
+/**
  * \brief   DCM_DID_VIN (0xF190) の読み出し関数。
  *
  * \param[out]  Data  起動時にキャッシュした VIN の格納先。DCM_VIN_LENGTH バイト。
@@ -2294,56 +2359,105 @@ Std_ReturnType Dcm_ReadDidVin(uint8* Data)
 /**
  * \brief   UDS 0x22 ReadDataByIdentifier を処理する。
  *
- * \details 要求フレームから DID を抽出し、対応するデータを読み出して
- *          正応答 [0x62, DID_H, DID_L, data...] を返す。
+ * \details 要求フレームから DID（1 つ以上）を取り出し、正応答 [0x62, (DID_H, DID_L, data...) × n] を返す。
+ *          要求の DID の数は、DCM_MAX_DID_TO_READ（DcmDspMaxDidToRead）まで。要求の長さが 1 + 2 × n でないとき、
+ *          または n が上限を超えるときは NRC 0x13 で拒否する（[SWS_Dcm_01335]）。
  *
- *          本実装は 1 要求で 1 つの DID しか扱えない設計のため、
- *          実質的に `DcmDspMaxDidToRead=1` に相当する。要求に2つ目以降の
- *          DID が付いている場合(udsLen>3)は NRC 0x13 で拒否する
- *          （[SWS_Dcm_01335]。2026-09 是正: 以前は下限のみ判定していたため、
- *          余分な DID バイトを黙って無視し要求と食い違う1件分だけの正応答を
- *          返してしまっていた）。
+ *          DID ごとに、次の順に調べる。
+ *            1. 未対応・読み出しアクセスなし・現在のセッションで読めない DID は、応答に含めない
+ *               （[SWS_Dcm_00438]/[SWS_Dcm_00433]/[SWS_Dcm_00434]）。要求の DID が全てこれに当たるときは NRC 0x31。
+ *            2. 読める DID のうち、SecurityAccess Level1 が要る DID が 1 つでもあり、ロック中なら NRC 0x33
+ *               （[SWS_Dcm_00435]。要求全体を拒否する）。
+ *          読める DID の読み出し関数が 1 つでも失敗したら NRC 0x31 とする（従来の単一 DID と同じ）。
+ *          同じ DID を重ねて指定したときは、指定した回数だけ返す。
+ *
+ *          簡略化: DcmDspDidReadModeRuleRef（[SWS_Dcm_00819]、モード条件）と、DID の範囲指定（DcmDspDidRange）、
+ *          動的に定義した DID（0x2C）は対象外。
  *
  * \param[in]  uds     UDS ペイロード先頭ポインタ。
  * \param[in]  udsLen  UDS ペイロード長。
  */
 static void Dcm_HandleReadDataById(const uint8* uds, uint8 udsLen)
 {
-    if (udsLen != 3U)
+    if ((udsLen < 3U) || (((udsLen - 1U) % 2U) != 0U) || (((udsLen - 1U) / 2U) > DCM_MAX_DID_TO_READ))
     {
         Dcm_SendNegativeResponse(DCM_SID_READ_DATA, DCM_NRC_INCORRECT_MESSAGE_LENGTH);
         return;
     }
 
-    uint16 did = ((uint16)uds[1] << 8U) | (uint16)uds[2];
+    const uint8 didCount = (uint8)((udsLen - 1U) / 2U);
+    const uint8 sessionMask = Dcm_SessionToMask(Dcm_CurrentSession);
+    const Dcm_DidConfigType* rows[DCM_MAX_DID_TO_READ];   /* 要求の DID ごとの行（読めない DID は NULL） */
+    uint8 readable       = 0U;
+    uint8 securityDenied = 0U;
+    uint8 n;
+
+    /* 1 周目: 読める DID の行と数、SecurityAccess の条件を調べる */
+    for (n = 0U; n < didCount; n++)
+    {
+        const uint16 did = (uint16)(((uint16)uds[1U + (2U * n)] << 8U) | (uint16)uds[2U + (2U * n)]);
+
+        rows[n] = Dcm_FindReadableDid(did, sessionMask);
+        if (rows[n] != NULL)
+        {
+            readable++;
+            if ((rows[n]->ReadSecurityRequired != 0U) && (Dcm_SecurityLevel == 0U))
+            {
+                securityDenied = 1U;
+            }
+        }
+    }
+
+    if (readable == 0U)
+    {
+        Dcm_SendNegativeResponse(DCM_SID_READ_DATA, DCM_NRC_REQUEST_OUT_OF_RANGE);
+        return;
+    }
+    if (securityDenied != 0U)
+    {
+        Dcm_SendNegativeResponse(DCM_SID_READ_DATA, DCM_NRC_SECURITY_ACCESS_DENIED);
+        return;
+    }
 
     /* 読み出し対応の DID の中で最大の長さに合わせる（Dcm_Cfg.h の DCM_DID_READ_MAX_LENGTH。
      * Dcm.json から生成）。短い長さで確保すると長い DID の読み出しでスタックバッファを溢れる。 */
     uint8 dataBuf[DCM_DID_READ_MAX_LENGTH];
 
-    const Dcm_DidConfigType* row = Dcm_FindDid(did);
-    if ((row == NULL) || (row->ReadFct == NULL) || (row->ReadFct(dataBuf) != E_OK))
+    /* 2 周目: 読み出して、応答 [0x62, (DID_H, DID_L, data...) × n] を組み立てる。
+     * 応答の長さは、DCM_TX_BUF_SIZE（DCM_MAX_DID_TO_READ 個が全て最大長でも収まる大きさ）を超えない。 */
+    PduLengthType pos = 0U;
+    Dcm_TxBuf[pos] = 0x62U;   /* SID + 0x40 */
+    pos++;
+
+    for (n = 0U; n < didCount; n++)
     {
-        Dcm_SendNegativeResponse(DCM_SID_READ_DATA, DCM_NRC_REQUEST_OUT_OF_RANGE);
-        return;
+        const Dcm_DidConfigType* row = rows[n];
+
+        if (row != NULL)
+        {
+            if (row->ReadFct(dataBuf) != E_OK)
+            {
+                Dcm_SendNegativeResponse(DCM_SID_READ_DATA, DCM_NRC_REQUEST_OUT_OF_RANGE);
+                return;
+            }
+
+            Dcm_TxBuf[pos] = (uint8)(row->Did >> 8U);
+            pos++;
+            Dcm_TxBuf[pos] = (uint8)(row->Did & 0xFFU);
+            pos++;
+
+            uint8 i;
+            for (i = 0U; i < row->Length; i++)
+            {
+                Dcm_TxBuf[pos] = dataBuf[i];
+                pos++;
+            }
+        }
     }
 
-    uint8 dataLen = row->Length;
+    DET_LOGI(TAG, "22 dids=%u/%u len=%u", (unsigned)readable, (unsigned)didCount, (unsigned)pos);
 
-    DET_LOGI(TAG, "22 did=0x%04X len=%u", (unsigned)did, (unsigned)dataLen);
-
-    /* 正応答: [0x62, DID_H, DID_L, data...] */
-    Dcm_TxBuf[0] = 0x62U;                      /* SID + 0x40 */
-    Dcm_TxBuf[1] = (uint8)(did >> 8U);
-    Dcm_TxBuf[2] = (uint8)(did & 0xFFU);
-
-    uint8 i;
-    for (i = 0U; i < dataLen; i++)
-    {
-        Dcm_TxBuf[3U + i] = dataBuf[i];
-    }
-
-    Dcm_TxPdu.SduLength = (PduLengthType)((PduLengthType)dataLen + 3U);
+    Dcm_TxPdu.SduLength = pos;
 
     Dcm_Transmit();
 }
@@ -3613,9 +3727,7 @@ static void Dcm_HandleTesterPresent(const uint8* uds, uint8 udsLen)
  */
 static uint8 Dcm_IsServiceAllowedInSession(uint8 sid, uint8 session)
 {
-    const uint8 sessionMask = (session == DCM_SESSION_EXTENDED)
-                               ? DCM_SESSION_MASK_EXTENDED
-                               : DCM_SESSION_MASK_DEFAULT;
+    const uint8 sessionMask = Dcm_SessionToMask(session);
     uint8 i;
 
     for (i = 0U; i < DCM_SID_SESSION_COUNT; i++)

@@ -1,6 +1,13 @@
 {
   "$schema": "../schema/Dcm.schema.json",
   "module": "Dcm",
+  "maxDidToRead": {
+    "value": 4,
+    "doc": [
+      "0x22 ReadDataByIdentifier で、1 回の要求に指定できる DID の最大数（DcmDspMaxDidToRead、SWS_Dcm_01335）。",
+      "超えると NRC 0x13。応答は 1 + 最大数 × (2 + DCM_DID_READ_MAX_LENGTH) バイトまで大きくなる。"
+    ]
+  },
   "dids": [
     {
       "name": "ENGINE_SPEED",
@@ -93,6 +100,22 @@
       ],
       "lengthDoc": [
         "keyName(1) + keyData(16, CRYPTO_AES128_KEY_SIZE と同値)"
+      ]
+    },
+    {
+      "name": "SECURE_INFO",
+      "did": "0x0109",
+      "length": 4,
+      "readFct": "Dcm_ReadDidSecureInfo",
+      "readSessions": [
+        "EXTENDED"
+      ],
+      "readSecurity": true,
+      "doc": [
+        "SecureInfo: uint8[4]、読み取り専用 (0x22 のみ)。0x22 の DID ごとの条件",
+        "（DcmDspDidReadSessionRef / DcmDspDidReadSecurityLevelRef、SWS_Dcm_00434/00435）を",
+        "確かめるための学習用 DID。extendedSession かつ SecurityAccess Level1 のアンロック後だけ読める",
+        "（defaultSession では未対応の DID として扱い、extendedSession でもロック中は NRC 0x33）。"
       ]
     },
     {

@@ -155,6 +155,7 @@
  * ----------------------------------------------------------------------- */
 #define DCM_SESSION_MASK_DEFAULT   0x01U  /**< bit0: defaultSession で許可            */
 #define DCM_SESSION_MASK_EXTENDED  0x02U  /**< bit1: extendedDiagnosticSession で許可 */
+#define DCM_SESSION_MASK_ALL       (DCM_SESSION_MASK_DEFAULT | DCM_SESSION_MASK_EXTENDED)  /**< 全セッションで許可 */
 /* @@GEN-BEGIN dcm-sid-session-count  生成元: config/data/Dcm.json  （自動生成: 手編集禁止） */
 #define DCM_SID_SESSION_COUNT  10U  /**< Dcm_SidSessionTable[] のエントリ数 */
 /* @@GEN-END dcm-sid-session-count */
@@ -309,14 +310,20 @@
                                                     *   要求ペイロードは SID(1)+DID(2)+keyName(1)+keyData(16)=20 バイトとなり
                                                     *   DCM_DID_TEST_PATTERN と同じく CanTp の複数フレーム受信を経由する。 */
 #define DCM_DID_CRYPTO_KEY_UPDATE_LENGTH  17U      /**< keyName(1) + keyData(16, CRYPTO_AES128_KEY_SIZE と同値) */
+#define DCM_DID_SECURE_INFO               0x0109U  /**< SecureInfo: uint8[4]、読み取り専用 (0x22 のみ)。0x22 の DID ごとの条件
+                                                    *   （DcmDspDidReadSessionRef / DcmDspDidReadSecurityLevelRef、SWS_Dcm_00434/00435）を
+                                                    *   確かめるための学習用 DID。extendedSession かつ SecurityAccess Level1 のアンロック後だけ読める
+                                                    *   （defaultSession では未対応の DID として扱い、extendedSession でもロック中は NRC 0x33）。 */
 #define DCM_DID_VIN                       0xF190U  /**< VIN (Vehicle Identification Number): uint8[DCM_VIN_LENGTH]、読み取り専用
                                                     *   (0x22 のみ)。ISO 14229-1 Annex F の標準化領域 (0xF180-0xF19F) に属する
                                                     *   固定 DID のため、製造者定義領域 (0x0100-0xFEFF) とは別枠。実仕様は
                                                     *   `Dcm_GetVin()`（Dcm.h 参照）が起動時に一度だけ取得した値を
                                                     *   キャッシュして返す。 */
 #define DCM_VIN_LENGTH                    17U      /**< VIN のデータ長 [byte] */
-#define DCM_DID_COUNT                     9U       /**< Dcm_DidTable[] のエントリ数 */
+#define DCM_DID_COUNT                     10U      /**< Dcm_DidTable[] のエントリ数 */
 #define DCM_DID_READ_MAX_LENGTH           17U      /**< 0x22 で読み出せる DID の最大データ長（応答用バッファの大きさ） */
+#define DCM_MAX_DID_TO_READ               4U       /**< 0x22 ReadDataByIdentifier で、1 回の要求に指定できる DID の最大数（DcmDspMaxDidToRead、SWS_Dcm_01335）。
+                                                    *   超えると NRC 0x13。応答は 1 + 最大数 × (2 + DCM_DID_READ_MAX_LENGTH) バイトまで大きくなる。 */
 /* @@GEN-END dcm-dids */
 
 /* -----------------------------------------------------------------------
