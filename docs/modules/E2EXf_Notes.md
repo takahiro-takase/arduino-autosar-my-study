@@ -150,6 +150,31 @@ E2E 違反が続く間の古い値保持は「E2E フェイルセーフ」（Rte
 > できない。そのため RxIndicationCbk はアプリ層の読み出し頻度とは独立に、
 > 物理フレーム到着のたびに呼ばれる。
 
+### 入力の長さと「新しいデータが無い」（2026-10 追加）
+
+`E2EXf_Inv_<transformerId>`（本プロジェクトでは `E2EXf_Inv_EngineInfo()` / `E2EXf_Inv_AbsInfo()`、
+どちらも内部の共通関数 `E2EXf_InvP05()` へ委ねる）は、仕様（[SWS_E2EXf_00105]・[00104]）の入力の規則に従います。
+以前は、`inputBuffer` と `inputBufferLength` を無視し（呼び出し元は `NULL`・`0` を渡していた）、長さの検査も、
+「新しいデータが無い」の扱いもありませんでした。
+
+| `buffer` | `inputBufferLength` | 動き |
+| --- | --- | --- |
+| 非 NULL | PDU 全体の長さ（= DataLength。EngineInfo は 7、AbsInfo は 6） | 通常の検証 |
+| 非 NULL | DataLength と違う | `E2E_P05Check()` が `E2E_E_INPUTERR_WRONG` を返し、`E_SAFETY_HARD_RUNTIMEERROR`（DET は `E2EXF_E_PARAM`） |
+| NULL | 0 以外 | `E_SAFETY_HARD_RUNTIMEERROR`（DET は `E2EXF_E_PARAM_POINTER`） |
+| NULL | 0 | 「新しいデータが無い」。`E2E_P05Check()` が `NONEWDATA` を返し、戻り値の下位ニブルが NONEWDATA、`*bufferLength` は 0。初回受信の特別扱い（`WaitForFirstData`）は消費しない |
+
+- E2E ヘッダ（CRC16・Counter）の領域は、PDU の中に最初から持つので、`inputBufferLength` は、ヘッダを含む PDU 全体の長さです。
+  仕様の `*bufferLength = inputBufferLength - ヘッダ長` は、ヘッダを取り除いて詰め直す実装の話なので、本プロジェクトは、
+  データがあるとき、ヘッダ込みの DataLength を返します（簡略化）。
+- 送信側（`E2EXf_E2EHealthStatus()`）も同じ考え方で、`inputBufferLength` は PDU 全体の長さです。
+  足りなければ、`E2E_P05Protect()` が `E2E_E_INPUTERR_WRONG` を返し、`E_SAFETY_HARD_RUNTIMEERROR` とします。
+  仕様は、「buffer が NULL で長さ 0」を、送信側でも有効な組み合わせとしますが、送信側にはその使い道が無いので、buffer が NULL ならエラーとします。
+- 本プロジェクトの `Rte` は、フレームを受信したときにだけ `E2EXf_Inv_*()` を呼びます。「新しいデータが無い」呼び出し（NULL・0）は
+  行いません。Com のタイムアウトは、`Rte_COMCbkRxTOut_*()` と、COMM_TIMEOUT の DTC の別経路で扱います。
+  NULL・0 の呼び出しを足すと、フレームの途絶が、E2E の状態機械にも INVALID として現れ、既存のタイムアウトの DTC に加えて、
+  E2E の DTC（`E2E_ENGINEINFO` など）も確定します。そうするかは、DTC の設計として決めることなので、今は行っていません。
+
 ### E2E 検証ステータスの Rte 経由での公開（`Rte_IStatusType`）
 
 上記の通り、E2E 違反時は Rte ミラーを更新しないことで「直前の正常値を使い続ける」

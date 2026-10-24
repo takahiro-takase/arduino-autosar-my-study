@@ -1717,7 +1717,7 @@ void Rte_COMRxInd_EngineInfo(void)
 
     E2E_P05StatusType checkStatus;
     uint32 bufferLength;
-    const uint8 ret = E2EXf_Inv_EngineInfo(buf, &bufferLength, NULL, 0U, &checkStatus);
+    const uint8 ret = E2EXf_Inv_EngineInfo(buf, &bufferLength, NULL, (uint32)sizeof(buf), &checkStatus);
     Rte_EngineInfoStatus = Rte_MapE2EStatusP05(checkStatus);
     E2EMon_NotifyCheckResultP05(checkStatus);
     /* ret==E_OK(0x00)は「SMState=VALID かつ今回のフレームも合格」を意味する
@@ -1771,7 +1771,7 @@ void Rte_COMRxInd_AbsInfo(void)
 
     E2E_P05StatusType checkStatus;
     uint32 bufferLength;
-    const uint8 ret = E2EXf_Inv_AbsInfo(buf, &bufferLength, NULL, 0U, &checkStatus);
+    const uint8 ret = E2EXf_Inv_AbsInfo(buf, &bufferLength, NULL, (uint32)sizeof(buf), &checkStatus);
     Rte_AbsInfoStatus = Rte_MapE2EStatusP05(checkStatus);
     E2EMon_NotifyCheckResultP05(checkStatus);
     /* Rte_COMRxInd_EngineInfo() と同じ理由（[SWS_E2EXf_00027]のニブルパック、
@@ -1857,7 +1857,6 @@ void Rte_COMRxInd_SecureCommand(void)
  */
 void Rte_COMTransform_E2EHealthStatus(uint8* Data, uint8 Length)
 {
-    (void)Length;  /* E2EXf_E2EHealthStatus() は固定長PDU用にDataLengthを内部で保持するため未使用 */
     /* E2EXf_E2EHealthStatus() の戻り値は現状の起動順序（EcuM_Init() が
      * E2EXf_PBCfg_Init() を Com_MainFunctionTx() 呼び出しより前に完了させる）
      * では E_SAFETY_HARD_RUNTIMEERROR を観測していないが、TxTransformCbk
@@ -1865,7 +1864,7 @@ void Rte_COMTransform_E2EHealthStatus(uint8* Data, uint8 Length)
      * ここで破棄する（/code-review 指摘: 起動順序が将来変わった場合の
      * 再検証はこの破棄では検知できない点に注意）。 */
     uint32 bufferLength;
-    (void)E2EXf_E2EHealthStatus(Data, &bufferLength, NULL, 0U);
+    (void)E2EXf_E2EHealthStatus(Data, &bufferLength, NULL, (uint32)Length);   /* PDU 全体の長さ（E2E ヘッダ込み）を渡す */
 }
 
 /* -----------------------------------------------------------------------

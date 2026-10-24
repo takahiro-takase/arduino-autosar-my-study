@@ -87,7 +87,7 @@ void TestRxIndication_EngineInfo(void)
 
     E2E_P05StatusType checkStatus = E2E_P05STATUS_ERROR;
     uint32 bufferLength;
-    (void)E2EXf_Inv_EngineInfo(buf, &bufferLength, NULL, 0U, &checkStatus);
+    (void)E2EXf_Inv_EngineInfo(buf, &bufferLength, NULL, 7U, &checkStatus);
     g_LastCheckStatus = checkStatus;
 }
 
