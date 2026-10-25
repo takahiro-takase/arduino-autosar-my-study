@@ -18,6 +18,9 @@ docs/autosar/4.4.0/*.*
 # MCP2515
 docs/mcp2515/*.*
 
+# MCP2518FD
+docs/mcp2518FD/*.*
+
 # 個人学習用の資料（著作権物を含むためコミットしない）
 docs/local_reference/
 

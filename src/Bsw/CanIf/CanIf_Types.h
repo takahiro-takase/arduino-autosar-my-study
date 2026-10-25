@@ -46,7 +46,7 @@ typedef struct
 {
     PduIdType                   UpperLayerTxPduId; // TxConfirmation で上位層に返す PDU ID
     Can_IdType                  CanId;             // 送出する CAN フレームの ID
-    uint8                       Dlc;               // 最大データ長（0〜8）
+    uint8                       Dlc;               // 最大データ長（0〜64。クラシック CAN は 8 まで、CAN FD は 64 まで）
     Can_HwHandleType            Hth;               // 使用する TX バッファ（HTH）
     CanIf_TxConfirmationFctType TxConfirmFct;      // 送信完了コールバック（不要なら NULL）
 } CanIf_TxPduConfigType;

@@ -226,7 +226,7 @@ static const Com_IPduConfigType Com_RxIPduConfigData[COM_RX_IPDU_COUNT] = {
         .TimeoutMs         = COM_TIMEOUT_ENGINE_INFO_MS,    /* DaVinci: ComRxDeadlineMonitoringPeriod（ComTimeout 相当）
                                                              *          初回受信後、以降のエンジン ECU からの受信が途絶えたと
                                                              *          判断するまでの時間 */
-        .UpdateBitPosition = 0xFFU,                         /* update-bit なし（Signal Group 専用機能のため未使用） */
+        .UpdateBitPosition = 0xFFFFU,                       /* update-bit なし（Signal Group 専用機能のため未使用） */
         .IpduGroupId       = COM_IPDU_GROUP_SENSOR_RX,      /* BswM が FULL_COM 到達で Start・NO_COMMUNICATION で Stop を呼ぶ */
         .RxIndicationCbk   = Rte_COMRxInd_EngineInfo        /* DaVinci: /ActiveEcuC/E2EXf/EngineInfo_Rx_E2EXf
                                                              *          （E2E Transformer 呼び出しは Rte 層が担う） */
@@ -239,7 +239,7 @@ static const Com_IPduConfigType Com_RxIPduConfigData[COM_RX_IPDU_COUNT] = {
          * の 3 シグナルを Com_ReceiveSignalGroup() 経由で一括して一貫したスナップ
          * ショットとして読む。Rte_COMRxInd_AbsInfo() が RxIndicationCbk として
          * フレーム受信の都度呼ばれ、その中で確定コピーする。
-         * UpdateBitPosition は未使用（0xFF）。Com は update-bit 機構
+         * UpdateBitPosition は未使用（0xFFFF）。Com は update-bit 機構
          * （SWS_Com_00324/00802、Com_ReceiveSignalGroup() 参照）自体を持つが、
          * 実車の ABS/車輪速フレームは常に高頻度・固定周期で新鮮なセンサ値を
          * 送り続けるのが通常で「今回は更新なし」という状況が起きにくいため、
@@ -257,7 +257,7 @@ static const Com_IPduConfigType Com_RxIPduConfigData[COM_RX_IPDU_COUNT] = {
         .TimeoutMs         = COM_TIMEOUT_ABS_INFO_MS,    /* DaVinci: ComRxDeadlineMonitoringPeriod（ComTimeout 相当）
                                                           *          初回受信後、ABS ECU からの受信が途絶えたと判断するまでの時間 */
         .IsSignalGroup     = 1U,                         /* RX Signal Group（Com_ReceiveSignalGroup で確定コピー） */
-        .UpdateBitPosition = 0xFFU,                      /* update-bit なし（本 I-PDU には適用しない。上記コメント参照） */
+        .UpdateBitPosition = 0xFFFFU,                    /* update-bit なし（本 I-PDU には適用しない。上記コメント参照） */
         .IpduGroupId       = COM_IPDU_GROUP_SENSOR_RX,   /* EngineInfo と同じ理由でグループへ移行（Com_Cfg.h 参照） */
         .RxIndicationCbk   = Rte_COMRxInd_AbsInfo,       /* DaVinci: /ActiveEcuC/E2EXf/AbsInfo_Rx_E2EXf
                                                           *          （E2E Transformer 呼び出しは Rte 層が担う） */
@@ -299,7 +299,7 @@ static const Com_IPduConfigType Com_RxIPduConfigData[COM_RX_IPDU_COUNT] = {
                                                                 *          Com_RxIndication() へ渡す ID
                                                                 *          (SecOC_PBCfg.c の ComRxPduId と一致させること) */
         .TimeoutMs         = 0U,                               /* 監視無効（上記コメント参照） */
-        .UpdateBitPosition = 0xFFU,                            /* update-bit なし（Signal Group 専用機能のため未使用） */
+        .UpdateBitPosition = 0xFFFFU,                          /* update-bit なし（Signal Group 専用機能のため未使用） */
         .IpduGroupId       = COM_IPDU_GROUP_NONE,              /* I-PDU Group に属さない（常に有効） */
         .RxIndicationCbk   = Rte_COMRxInd_SecureCommand,       /* ログ出力のみの最小デモ
                                                                 * （Rte_COMCbkInv_CoolantTemp と同じパターン） */
@@ -424,7 +424,7 @@ static const Com_IPduConfigType Com_TxIPduConfigData[COM_TX_IPDU_COUNT] = {
         .IsSignalGroup     = 0U,                                     /* 直接送信 */
         .TxModeMode        = COM_TX_MODE_PERIODIC,                   /* DaVinci: ComTxModeMode = PERIODIC */
         .TxPeriodMs        = COM_TX_PERIOD_E2EHEALTH_MS,             /* DaVinci: ComTxModeTimePeriodFactor */
-        .UpdateBitPosition = 0xFFU,                                  /* update-bit なし（Signal Group 専用機能のため未使用） */
+        .UpdateBitPosition = 0xFFFFU,                                /* update-bit なし（Signal Group 専用機能のため未使用） */
         .IpduGroupId       = COM_IPDU_GROUP_TELEMETRY,               /* I-PDU Group「テレメトリ」に所属。既定で
                                                                       * 停止状態（[SWS_Com_00444]）で初期化され、EcuM が
                                                                       * RUN へ遷移した際に BswM の Rule が
@@ -463,7 +463,7 @@ static const Com_IPduConfigType Com_TxIPduConfigData[COM_TX_IPDU_COUNT] = {
                                                                                *          （ComFilterAlgorithm を通過した変化を
                                                                                *          検知すると次回 Com_MainFunctionTx() で送信。
                                                                                *          周期フロアなし） */
-        .UpdateBitPosition   = 0xFFU,                                         /* update-bit なし（Signal Group 専用機能のため未使用） */
+        .UpdateBitPosition   = 0xFFFFU,                                       /* update-bit なし（Signal Group 専用機能のため未使用） */
         .IpduGroupId         = COM_IPDU_GROUP_NONE,                           /* I-PDU Group に属さない（常に有効） */
         .NumberOfRepetitions = 2U,                                            /* DaVinci: ComTxModeNumberOfRepetitions
                                                                                *          初回送信 + 再送2回 = 計3回（[SWS_Com_00305]） */
@@ -480,7 +480,7 @@ static const Com_IPduConfigType Com_TxIPduConfigData[COM_TX_IPDU_COUNT] = {
         .PduRId            = PduRConf_PduRSrcPdu_TestMsg_Tx,
         .TxModeMode        = COM_TX_MODE_PERIODIC,
         .TxPeriodMs        = COM_TX_PERIOD_TESTMSG_MS,
-        .UpdateBitPosition = 0xFFU,
+        .UpdateBitPosition = 0xFFFFU,
         .IpduGroupId       = COM_IPDU_GROUP_NONE
     }
 };

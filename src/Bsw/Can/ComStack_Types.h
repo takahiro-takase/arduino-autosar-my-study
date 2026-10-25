@@ -41,6 +41,11 @@ typedef uint16 PduIdType;
 // SDU（Service Data Unit）の長さ
 typedef uint16 PduLengthType;
 
+// 通信スタックが 1 つの PDU として扱うデータ長の上限 [byte]。CAN FD のフレームの最大データ長（64 byte）。
+// CanIf・Com などの、PDU の内容を保持するバッファの 1 エントリの大きさに使う。
+// 実際に送受信できる長さは、Can の設定（クラシック CAN は 8 byte、CAN FD は 64 byte まで）で決まる。
+#define COMSTACK_PDU_MAX_LENGTH  64U
+
 // PDU の情報（上位層への受信通知や送信要求で使用）
 // CanIf_RxIndication / CanIf_Transmit などの引数になる
 typedef struct

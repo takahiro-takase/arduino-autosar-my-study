@@ -459,7 +459,7 @@ BswM のルールは `perValue` で、値ごとに 1 本ずつ展開できる（
 | コールバック（`*Cbk`） | なし（NULL） | 同上 |
 | 列挙の項目（`filterAlgorithm`、`transferProperty`、`rxDataTimeoutAction`、`dataInvalidAction`） | 値が 0 の列挙値（`COM_FILTER_ALWAYS` など） | C の初期化子の省略と同じ |
 | `ipduGroupId` | `COM_IPDU_GROUP_NONE` | **C の省略（0）とは異なる。** 0 は `COM_IPDU_GROUP_TELEMETRY` |
-| `updateBitPosition` | 信号表の `(update-bit)` の位置。無ければ 255（なし） | **C の省略（0）とは異なる** |
+| `updateBitPosition` | 信号表の `(update-bit)` の位置。無ければ 65535（0xFFFF。なし） | **C の省略（0）とは異なる** |
 | `txModeMode`（TX の I-PDU のみ） | `COM_TX_MODE_DIRECT` | **C の省略（0）とは異なる。** 0 は `COM_TX_MODE_MIXED` |
 
 - 生成される C では、C の省略（0）と値が異なる上の 3 項目は、省略しても必ず明示して出力する。

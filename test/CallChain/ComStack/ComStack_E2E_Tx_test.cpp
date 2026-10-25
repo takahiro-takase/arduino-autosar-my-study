@@ -137,7 +137,7 @@ const Com_IPduConfigType kTestTxIPdu = {
     /* TxModeModeTrue */   COM_TX_MODE_DIRECT,
     /* TxPeriodMsTrue */   0U,
     /* MinDelayMs */       0U,
-    /* UpdateBitPosition */ 0xFFU,
+    /* UpdateBitPosition */ 0xFFFFU,
     /* IpduGroupId */      COM_IPDU_GROUP_NONE,
     /* RxIndicationCbk */  NULL,
     /* TxTransformCbk */   TestTxTransform_E2EHealthStatus

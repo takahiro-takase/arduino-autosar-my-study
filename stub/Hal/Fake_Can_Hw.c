@@ -30,7 +30,7 @@ uint32 FakeCanHw_EnableRxIsrCount     = 0U;
 
 uint32_t FakeCanHw_LastSendId     = 0U;
 uint8_t  FakeCanHw_LastSendDlc    = 0U;
-uint8_t  FakeCanHw_LastSendData[8] = { 0U };
+uint8_t  FakeCanHw_LastSendData[FAKECANHW_DATA_MAX] = { 0U };
 
 Can_Hw_Mode FakeCanHw_LastMode = CAN_HW_MODE_LISTEN_ONLY;
 
@@ -39,7 +39,7 @@ void (*FakeCanHw_AttachedIsr)(void) = NULL;
 uint32_t FakeCanHw_RxPendingCount = 0U;
 uint32_t FakeCanHw_RxId           = 0U;
 uint8_t  FakeCanHw_RxDlc          = 0U;
-uint8_t  FakeCanHw_RxData[8]      = { 0U };
+uint8_t  FakeCanHw_RxData[FAKECANHW_DATA_MAX]      = { 0U };
 
 Can_Hw_ReturnType FakeCanHw_InitReturn            = CAN_HW_OK;
 Can_Hw_ReturnType FakeCanHw_SendReturn            = CAN_HW_OK;
@@ -71,7 +71,7 @@ void FakeCanHw_Reset(void)
 
     FakeCanHw_LastSendId  = 0U;
     FakeCanHw_LastSendDlc = 0U;
-    for (uint8_t i = 0U; i < 8U; i++)
+    for (uint8_t i = 0U; i < FAKECANHW_DATA_MAX; i++)
         FakeCanHw_LastSendData[i] = 0U;
 
     FakeCanHw_LastMode    = CAN_HW_MODE_LISTEN_ONLY;
@@ -80,7 +80,7 @@ void FakeCanHw_Reset(void)
     FakeCanHw_RxPendingCount = 0U;
     FakeCanHw_RxId           = 0U;
     FakeCanHw_RxDlc          = 0U;
-    for (uint8_t i = 0U; i < 8U; i++)
+    for (uint8_t i = 0U; i < FAKECANHW_DATA_MAX; i++)
         FakeCanHw_RxData[i] = 0U;
 
     FakeCanHw_InitReturn            = CAN_HW_OK;
@@ -106,7 +106,7 @@ Can_Hw_ReturnType Can_Hw_Send(uint32_t id, uint8_t dlc, const uint8_t* data)
     FakeCanHw_SendCount++;
     FakeCanHw_LastSendId  = id;
     FakeCanHw_LastSendDlc = dlc;
-    for (uint8_t i = 0U; i < dlc && i < 8U; i++)
+    for (uint8_t i = 0U; i < dlc && i < FAKECANHW_DATA_MAX; i++)
         FakeCanHw_LastSendData[i] = data[i];
     return FakeCanHw_SendReturn;
 }
@@ -121,7 +121,7 @@ Can_Hw_ReturnType Can_Hw_Read(uint32_t* id, uint8_t* dlc, uint8_t* data)
     FakeCanHw_RxPendingCount--;
     *id  = FakeCanHw_RxId;
     *dlc = FakeCanHw_RxDlc;
-    for (uint8_t i = 0U; i < FakeCanHw_RxDlc && i < 8U; i++)
+    for (uint8_t i = 0U; i < FakeCanHw_RxDlc && i < FAKECANHW_DATA_MAX; i++)
         data[i] = FakeCanHw_RxData[i];
 
     return CAN_HW_OK;

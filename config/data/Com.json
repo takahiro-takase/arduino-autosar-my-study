@@ -227,7 +227,7 @@
       ],
       "firstTimeoutMs": "COM_TIMEOUT_ENGINE_INFO_MS",
       "timeoutMs": "COM_TIMEOUT_ENGINE_INFO_MS",
-      "updateBitPosition": 255,
+      "updateBitPosition": 65535,
       "ipduGroupId": "COM_IPDU_GROUP_SENSOR_RX",
       "rxIndicationCbk": "Rte_COMRxInd_EngineInfo",
       "comments": {
@@ -273,7 +273,7 @@
         "の 3 シグナルを Com_ReceiveSignalGroup() 経由で一括して一貫したスナップ",
         "ショットとして読む。Rte_COMRxInd_AbsInfo() が RxIndicationCbk として",
         "フレーム受信の都度呼ばれ、その中で確定コピーする。",
-        "UpdateBitPosition は未使用（0xFF）。Com は update-bit 機構",
+        "UpdateBitPosition は未使用（0xFFFF）。Com は update-bit 機構",
         "（SWS_Com_00324/00802、Com_ReceiveSignalGroup() 参照）自体を持つが、",
         "実車の ABS/車輪速フレームは常に高頻度・固定周期で新鮮なセンサ値を",
         "送り続けるのが通常で「今回は更新なし」という状況が起きにくいため、",
@@ -284,7 +284,7 @@
       "firstTimeoutMs": "COM_TIMEOUT_ABS_INFO_MS",
       "timeoutMs": "COM_TIMEOUT_ABS_INFO_MS",
       "isSignalGroup": 1,
-      "updateBitPosition": 255,
+      "updateBitPosition": 65535,
       "ipduGroupId": "COM_IPDU_GROUP_SENSOR_RX",
       "rxIndicationCbk": "Rte_COMRxInd_AbsInfo",
       "rxAckCbk": "Rte_COMCbk_AbsInfo",
@@ -359,7 +359,7 @@
         "業務レベルの妥当性（Reserved 予約領域が本当に 0 か）までは検証",
         "しないため、Com 側でこの層を担う。"
       ],
-      "updateBitPosition": 255,
+      "updateBitPosition": 65535,
       "rxIndicationCbk": "Rte_COMRxInd_SecureCommand",
       "rxIpduCalloutCbk": "Rte_COMRxIpduCallout_SecureCommand",
       "comments": {
@@ -565,7 +565,7 @@
         "以前は E2E P01+SecOC の二重保護だったが、SecOC は撤去し E2E Profile05",
         "単体（CRC16、DLC=5）に切り替えた（PduR_PBCfg.c パス3参照）。"
       ],
-      "updateBitPosition": 255,
+      "updateBitPosition": 65535,
       "ipduGroupId": "COM_IPDU_GROUP_TELEMETRY",
       "txModeMode": "COM_TX_MODE_PERIODIC",
       "txPeriodMs": "COM_TX_PERIOD_E2EHEALTH_MS",
@@ -631,7 +631,7 @@
         "ゲートウェイが他 ECU へ意味不明な値をブロードキャストしないよう、",
         "送信直前のこの層で最終防衛する（多層防御の一例）。"
       ],
-      "updateBitPosition": 255,
+      "updateBitPosition": 65535,
       "numberOfRepetitions": 2,
       "repetitionPeriodMs": "COM_TX_REPETITION_PERIOD_IMMOBILIZERSTATUS_MS",
       "txIpduCalloutCbk": "Rte_COMTxIpduCallout_ImmobilizerStatus",

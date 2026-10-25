@@ -49,6 +49,13 @@
 /** クラシック CAN フレームの最大データ長（バイト）。SWS_Can_00218 参照。 */
 #define CAN_FRAME_MAX_DLC       8U
 
+/** CAN FD フレームの最大データ長（バイト）。CAN FD を有効にした設定（fdEnabled=1）で、Can_Write() が受け付ける上限。 */
+#define CAN_FD_FRAME_MAX_DLC    64U
+
+/** CAN FD で、フレームの長さに満たない部分を埋める値（AUTOSAR の CanFdPaddingValue 相当）。
+ *  CAN FD の長さは 0〜8 と 12/16/20/24/32/48/64 byte のみ有効なので、これ以外の長さは上へ切り上げて埋める。 */
+#define CAN_FD_PADDING_VALUE    0xCCU
+
 /** ApiId（各関数の Doxygen \ServiceID タグと一致させること。値は SWS 8.x 章の
  *  「Service ID[hex]」記載を実測して確認済み） */
 #define CAN_API_ID_INIT                  0x00U

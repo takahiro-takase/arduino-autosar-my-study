@@ -131,7 +131,7 @@ const Com_IPduConfigType kTestRxGroupIPdu = {
     /* TxModeModeTrue */   COM_TX_MODE_DIRECT,
     /* TxPeriodMsTrue */   0U,
     /* MinDelayMs */       0U,
-    /* UpdateBitPosition */ 0xFFU,
+    /* UpdateBitPosition */ 0xFFFFU,
     /* IpduGroupId */      COM_IPDU_GROUP_NONE,
     /* RxIndicationCbk */  NULL,
     /* TxTransformCbk */   NULL,
@@ -193,7 +193,7 @@ const Com_IPduConfigType kTestRxTimeoutGroupIPdu = {
     /* TxModeModeTrue */   COM_TX_MODE_DIRECT,
     /* TxPeriodMsTrue */   0U,
     /* MinDelayMs */       0U,
-    /* UpdateBitPosition */ 0xFFU,
+    /* UpdateBitPosition */ 0xFFFFU,
     /* IpduGroupId */      COM_IPDU_GROUP_NONE,
     /* RxIndicationCbk */  NULL,
     /* TxTransformCbk */   NULL,
@@ -465,7 +465,7 @@ const Com_IPduConfigType kTestRxGroupedIPdu = {
     /* TxModeModeTrue */   COM_TX_MODE_DIRECT,
     /* TxPeriodMsTrue */   0U,
     /* MinDelayMs */       0U,
-    /* UpdateBitPosition */ 0xFFU,
+    /* UpdateBitPosition */ 0xFFFFU,
     /* IpduGroupId */      COM_IPDU_GROUP_SENSOR_RX,
     /* RxIndicationCbk */  NULL,
     /* TxTransformCbk */   NULL,
@@ -534,7 +534,7 @@ const Com_IPduConfigType kTestRxGroupedNonGroupIPdu = {
     /* TxModeModeTrue */   COM_TX_MODE_DIRECT,
     /* TxPeriodMsTrue */   0U,
     /* MinDelayMs */       0U,
-    /* UpdateBitPosition */ 0xFFU,
+    /* UpdateBitPosition */ 0xFFFFU,
     /* IpduGroupId */      COM_IPDU_GROUP_SENSOR_RX
 };
 
@@ -555,7 +555,7 @@ const Com_IPduConfigType kTestRxMixedGroupIPdu = {
     /* TxModeModeTrue */   COM_TX_MODE_DIRECT,
     /* TxPeriodMsTrue */   0U,
     /* MinDelayMs */       0U,
-    /* UpdateBitPosition */ 0xFFU,
+    /* UpdateBitPosition */ 0xFFFFU,
     /* IpduGroupId */      COM_IPDU_GROUP_NONE
 };
 
@@ -571,7 +571,7 @@ const Com_IPduConfigType kTestTxMixedGroupIPdu = {
     /* TxModeModeTrue */   COM_TX_MODE_DIRECT,
     /* TxPeriodMsTrue */   0U,
     /* MinDelayMs */       0U,
-    /* UpdateBitPosition */ 0xFFU,
+    /* UpdateBitPosition */ 0xFFFFU,
     /* IpduGroupId */      COM_IPDU_GROUP_NONE
 };
 

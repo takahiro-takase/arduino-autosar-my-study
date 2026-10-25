@@ -38,12 +38,12 @@ SIGNAL_FIELDS = [
     ("RxAckCbk", "rxAckCbk"), ("TxTOutCbk", "txTOutCbk"), ("InvalidValueConfigured", "invalidValueConfigured"),
 ]
 HEX_KEYS = {"mask", "filterX", "invalidValue", "timeoutSubstitutionValue", "updateBitPosition"}
-UPDATE_BIT_NONE = 255
+UPDATE_BIT_NONE = 65535
 
 # json で省略したときの既定値。ここに無い項目は、C の初期化子と同じく 0（コールバックは NULL）になる。
 # C の 0 では困る項目（0 が別の意味を持つもの）だけを、ここで明示して生成する。
 #   - ipduGroupId: 0 は COM_IPDU_GROUP_TELEMETRY。どのグループにも属さない値は COM_IPDU_GROUP_NONE（0xFF）
-#   - updateBitPosition: 0 は bit0。update-bit なしは 255（信号表に (update-bit) フィールドがあればその位置）
+#   - updateBitPosition: 0 は bit0。update-bit なしは 65535（0xFFFF。信号表に (update-bit) フィールドがあればその位置）
 #   - txModeMode（TX の I-PDU のみ）: 0 は COM_TX_MODE_MIXED。既定は COM_TX_MODE_DIRECT
 DEFAULT_IPDU_GROUP = "COM_IPDU_GROUP_NONE"
 DEFAULT_TX_MODE = "COM_TX_MODE_DIRECT"
