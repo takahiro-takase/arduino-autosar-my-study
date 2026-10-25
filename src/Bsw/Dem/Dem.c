@@ -328,13 +328,13 @@ Std_ReturnType Dem_ClearDTC(uint8 ClientId, uint32 DTC, Dem_DTCFormatType DTCFor
 
     if (DTCFormat != DEM_DTC_FORMAT_UDS)
     {
-        return DEM_E_NO_DTC_AVAILABLE;
+        return DEM_WRONG_DTC;   /* 要求した形式の DTC は構成されていない */
     }
 
     if (DTCOrigin != DEM_DTC_ORIGIN_PRIMARY_MEMORY)
     {
         (void)Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_CLEAR_DTC, DEM_E_WRONG_CONFIGURATION);
-        return E_NOT_OK;
+        return DEM_WRONG_DTCORIGIN;
     }
 
     if (DTC == DEM_GROUP_ALL_DTCS)
@@ -351,16 +351,26 @@ Std_ReturnType Dem_ClearDTC(uint8 ClientId, uint32 DTC, Dem_DTCFormatType DTCFor
 
         if (Dem_GetEventIdOfDTC(DTC, &eventId) != E_OK)
         {
-            return E_NOT_OK;
+            return DEM_WRONG_DTC;
         }
 
         Dem_ClearOne(eventId);
         DET_LOGI(TAG, "ClearDTC dtc=0x%06lX ok", (unsigned long)DTC);
     }
 
-    (void)NvM_WriteBlock(NVM_BLOCK_ID_DEM_STATUS,   Dem_StatusTable);
-    (void)NvM_WriteBlock(NVM_BLOCK_ID_DEM_AGING,    Dem_AgingCounter);
-    (void)NvM_WriteBlock(NVM_BLOCK_ID_DEM_EXTENDED, Dem_OccurrenceCounter);
+    /* 不揮発メモリへの書き込みを積む（DemClearDTCBehavior = DEM_CLRRESP_NONVOLATILE_TRIGGER 相当: 書き込みの完了は待たない、
+     * [SWS_Dem_00571]）。積めなかったとき（NvM が未初期化、ブロックが書き込み保護中など）は、RAM 上はクリア済み（巻き戻しはしない）
+     * だが、再起動すると復活しうるので、成功とは返さない（[SWS_Dem_01057] は完了を待つ設定の話だが、同じ値で失敗を知らせる）。
+     * 3 ブロックとも積むのは、失敗を見つけても、残りの積み忘れを作らないため。 */
+    const Std_ReturnType writeStatus   = NvM_WriteBlock(NVM_BLOCK_ID_DEM_STATUS,   Dem_StatusTable);
+    const Std_ReturnType writeAging    = NvM_WriteBlock(NVM_BLOCK_ID_DEM_AGING,    Dem_AgingCounter);
+    const Std_ReturnType writeExtended = NvM_WriteBlock(NVM_BLOCK_ID_DEM_EXTENDED, Dem_OccurrenceCounter);
+    if ((writeStatus != E_OK) || (writeAging != E_OK) || (writeExtended != E_OK))
+    {
+        DET_LOGE(TAG, "ClearDTC: NvM_WriteBlock failed (status=%u aging=%u ext=%u)",
+                 (unsigned)writeStatus, (unsigned)writeAging, (unsigned)writeExtended);
+        return DEM_CLEAR_MEMORY_ERROR;
+    }
     return E_OK;
 }
 

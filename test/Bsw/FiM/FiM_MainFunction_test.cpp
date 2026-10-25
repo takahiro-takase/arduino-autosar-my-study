@@ -26,6 +26,7 @@ extern "C" {
 #include "Dem_Cfg.h"
 #include "Fake_Millis.h"
 #include "Fake_Det_Hw.h"
+#include "NvM_TestUtil.h"
 }
 
 /* ======================================================================
@@ -58,7 +59,8 @@ protected:
         FakeMillis_Reset();
         FakeDetHw_LogSuppressed = 1U;  // Dem_Init() のログはノイズになるため抑制
 
-        Dem_Init(NULL);  // Fake_NvM.c により常に「初回起動」で確定的に再現
+        NvMTest_ColdBoot();   // 空の EEPROM から NvM を初期化する（Dem_ClearDTC() は不揮発メモリへの書き込みを積むため）
+        Dem_Init(NULL);       // 空の EEPROM なので、常に「初回起動」で確定的に再現される
 
         FakeDetHw_LogSuppressed = 0U;  // ここから各 TEST_F の実行(Act)区間
     }
@@ -67,6 +69,7 @@ protected:
     {
         FakeDetHw_LogSuppressed = 1U;
         FiM_Test_ResetInitState();
+        NvMTest_Shutdown();   // 次のテストへ NvM の初期化状態を残さない
     }
 
     static boolean GetPermission(FiM_FunctionIdType fid)

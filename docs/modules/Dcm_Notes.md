@@ -630,6 +630,25 @@ SecurityAccess の Level1（subFunc 0x01/0x02）でアンロックしないと N
 量産 ECU は OEM 固有の非公開アルゴリズムや暗号学的アルゴリズムを使用するため、
 本実装のロジックを実運用に転用しないでください。
 
+## ClearDiagnosticInformation（SID 0x14）の否定応答（2026-10 追加）
+
+`Dem_ClearDTC()` の戻り値を、仕様（[SWS_Dcm_00705]〜[00708]/[00966]/[01060]/[01408]）に従って、NRC へ対応付けます
+（`Dcm_ClearDtcResultToNrc()`）。以前は、E_OK 以外をすべて NRC 0x31 としていました。
+
+| `Dem_ClearDTC()` の戻り値 | NRC | 起きる場面 |
+| --- | --- | --- |
+| `E_OK` | 正応答 `54` | クリアでき、不揮発メモリへの書き込みも積めた |
+| `DEM_WRONG_DTC` | 0x31 requestOutOfRange | groupOfDTC が、どの DTC にも一致しない（実機で起こせる） |
+| `DEM_WRONG_DTCORIGIN` | 0x31 requestOutOfRange | DTCOrigin が非対応（Dcm は常に PRIMARY を渡すので、起きない） |
+| `DEM_CLEAR_MEMORY_ERROR` | 0x72 generalProgrammingFailure | 不揮発メモリへの書き込みを積めなかった（NvM が未初期化、ブロックが書き込み保護中） |
+| `DEM_CLEAR_FAILED` / `DEM_CLEAR_BUSY` | 0x22 conditionsNotCorrect | 本実装の Dem は返さない（`DemClearEventAllowed` も、複数クライアントも持たない） |
+| 上以外（`E_NOT_OK` など） | 0x22 conditionsNotCorrect | Dem の未初期化など。仕様に対応が無いので、「今は実行できない」の 0x22 にする（簡略化） |
+
+- 不揮発メモリへの書き込みは、`DemClearDTCBehavior = DEM_CLRRESP_NONVOLATILE_TRIGGER` 相当で、書き込みを積むだけで、完了は待ちません
+  （[SWS_Dem_00571]）。以前は、積めなかった場合も、成功（正応答）を返していて、再起動するとクリアした DTC が復活しえました。
+- 0x14 のセキュリティ（NRC 0x33）の検査は、長さの検査（NRC 0x13）より先です（この順序は、以前から変えていません）。仕様の DSD が、サービスごとの
+  セキュリティの検査（[SWS_Dcm_00217]）を、サービスの処理の前に行うのと同じ順序です。
+
 ## CanTp との受け渡し（TP のコールバック、2026-10）
 
 Dcm は、CanTp との間で、仕様の TP の関数（`Dcm_Cbk.h` で宣言）を実装しています。
