@@ -204,6 +204,17 @@ static unsigned long   EcuM_PostRunTimerMs = 0UL;
  *  毎回 `CanIf_CheckValidation()` で検証を問い合わせる。 */
 static EcuM_WakeupSourceType EcuM_PendingWakeupSources = 0U;
 
+/** 検証済み（VALIDATED）の起床要因のビットマスク（`EcuM_ValidateWakeupEvent()` が立てる、[SWS_EcuM_02496]）。 */
+static EcuM_WakeupSourceType EcuM_ValidatedWakeupSources = 0U;
+
+/** 期限切れ（EXPIRED）の起床要因のビットマスク。検証のタイムアウトで、`EcuM_MainFunction()` が立てる
+ *  （[SWS_EcuM_04081]）。 */
+static EcuM_WakeupSourceType EcuM_ExpiredWakeupSources = 0U;
+
+/** 検証のタイムアウトの起算時刻 (ms)。検証待ちが無い状態から、検証待ちになった時刻
+ *  （[SWS_EcuM_02709]。タイマは 1 つで、検証待ちの間の再通知では起算し直さない、[SWS_EcuM_02712]）。 */
+static unsigned long EcuM_ValidationStartMs = 0UL;
+
 /* ======================================================================
  * Function Prototypes
  * ====================================================================== */
@@ -357,6 +368,19 @@ void EcuM_MainFunction(void)
          * コールアウト経由だが、ウェイクアップソース管理を持たない本プロジェクトでは、
          * CAN の起床だけなので CanIf を直接呼ぶ。 */
         (void)CanIf_CheckValidation(EcuM_PendingWakeupSources);
+
+        /* 検証のタイムアウト（[SWS_EcuM_04081]）。上の問い合わせで検証されなかった要因は、期限切れにする。
+         * 簡略化: 実仕様は、続けて BswM_EcuM_CurrentWakeup(要因, EXPIRED)（[SWS_EcuM_04082]）で BswM へ通知し、
+         * EcuM_StopWakeupSources() を呼ぶが、本プロジェクトの EcuM は BswM への起床要因の通知を持たない
+         * （CanSM が、自分の検証の時間でコントローラをスリープへ戻す）。 */
+        if ((EcuM_PendingWakeupSources != 0U)
+            && ((EcuM_GetNowMs() - EcuM_ValidationStartMs) >= ECUM_VALIDATION_TIMEOUT_MS))
+        {
+            EcuM_ExpiredWakeupSources |= EcuM_PendingWakeupSources;
+            DET_LOGW(TAG, "wakeup validation expired (sources=0x%08lX, %lums)",
+                     (unsigned long)EcuM_PendingWakeupSources, (unsigned long)ECUM_VALIDATION_TIMEOUT_MS);
+            EcuM_PendingWakeupSources = 0U;
+        }
     }
 
     switch (EcuM_State)
@@ -615,10 +639,12 @@ Std_ReturnType EcuM_ReleasePOST_RUN(EcuM_UserType user)
  * \details 実仕様の `EcuM_CheckWakeup()` は EcuM 本体ではなく ECU 統合側が
  *          実装する「コールアウト」（EcuM 自身がポーリング時に、CAN
  *          ドライバの ISR/Can_MainFunction_Wakeup が割り込み時にそれぞれ
- *          呼ぶ）と位置づけられるが、本プロジェクトは単一 ECU 構成で EcuM の
- *          ウェイクアップソース管理（`EcuM_SetWakeupEvent`/
- *          `EcuM_ValidateWakeupEvent` 等の保留/検証状態機械、BswM への通知）
- *          自体を実装しないため、EcuM.c 内の通常関数として簡略実装する。
+ *          呼ぶ）と位置づけられるが、本プロジェクトは単一 ECU 構成で、EcuM の
+ *          ウェイクアップソース管理のうち、検証待ち（PENDING）・検証済み（VALIDATED）・
+ *          期限切れ（EXPIRED）の保持と、検証のタイムアウト（`ECUM_VALIDATION_TIMEOUT_MS`）だけを
+ *          持つ（`EcuM_SetWakeupEvent` の代わりに本関数が、検証待ちにして、タイムアウトを起算する。
+ *          BswM への通知 `BswM_EcuM_CurrentWakeup()` は持たない）ため、EcuM.c 内の通常関数として
+ *          簡略実装する。
  *
  *          本プロジェクトで実際にサポートするウェイクアップ要因は CAN バス
  *          起床（`ECUM_WKSOURCE_CAN`）のみである。実際の検証は、Listen-Only
@@ -653,6 +679,13 @@ void EcuM_CheckWakeup(EcuM_WakeupSourceType wakeupSource)
     }
 
     DET_LOGI(TAG, "CheckWakeup: CAN wakeup source confirmed");
+    if ((EcuM_PendingWakeupSources & ECUM_WKSOURCE_CAN) == 0U)
+    {
+        /* 新しい起床: 検証のタイムアウトを起算する（[SWS_EcuM_02709]）。同じ要因が検証待ちの間の再通知では、起算し直さない
+         * （[SWS_EcuM_02712]）。前回の検証済み・期限切れの記録は、新しい起床で消す。 */
+        EcuM_ValidationStartMs = EcuM_GetNowMs();
+        EcuM_ClearWakeupEvent(ECUM_WKSOURCE_CAN);   /* 検証待ちは、この分岐では立っていないので、消えるのは、検証済みと期限切れ */
+    }
     EcuM_PendingWakeupSources |= ECUM_WKSOURCE_CAN;   /* 検証待ち。EcuM_MainFunction() が検証を問い合わせる */
     CanSM_ControllerModeIndication(0U, CAN_CS_STOPPED);
 }
@@ -746,25 +779,41 @@ void EcuM_GetVersionInfo(Std_VersionInfoType* versioninfo)
  * EcuM_GetPendingWakeupEvents
  * ---------------------------------------------------------------------- */
 
-/* 未実装 */
+EcuM_WakeupSourceType EcuM_GetPendingWakeupEvents(void)
+{
+    return EcuM_PendingWakeupSources;
+}
 
 /* ----------------------------------------------------------------------
  * EcuM_ClearWakeupEvent
  * ---------------------------------------------------------------------- */
 
-/* 未実装 */
+void EcuM_ClearWakeupEvent(EcuM_WakeupSourceType sources)
+{
+    const EcuM_WakeupSourceType keep = (EcuM_WakeupSourceType)(~sources);
+
+    EcuM_PendingWakeupSources   &= keep;
+    EcuM_ValidatedWakeupSources &= keep;
+    EcuM_ExpiredWakeupSources   &= keep;
+}
 
 /* ----------------------------------------------------------------------
  * EcuM_GetValidatedWakeupEvents
  * ---------------------------------------------------------------------- */
 
-/* 未実装 */
+EcuM_WakeupSourceType EcuM_GetValidatedWakeupEvents(void)
+{
+    return EcuM_ValidatedWakeupSources;
+}
 
 /* ----------------------------------------------------------------------
  * EcuM_GetExpiredWakeupEvents
  * ---------------------------------------------------------------------- */
 
-/* 未実装 */
+EcuM_WakeupSourceType EcuM_GetExpiredWakeupEvents(void)
+{
+    return EcuM_ExpiredWakeupSources;
+}
 
 /* ----------------------------------------------------------------------
  * EcuM_SetRelWakeupAlarm
@@ -860,7 +909,9 @@ void EcuM_ValidateWakeupEvent(EcuM_WakeupSourceType sources)
         return;
     }
 
-    EcuM_PendingWakeupSources &= (EcuM_WakeupSourceType)(~sources);
+    EcuM_PendingWakeupSources   &= (EcuM_WakeupSourceType)(~sources);   /* 検証待ちが無くなれば、タイマは意味を失う（[SWS_EcuM_02710]） */
+    EcuM_ValidatedWakeupSources |= sources;                             /* [SWS_EcuM_02496] */
+    EcuM_ExpiredWakeupSources   &= (EcuM_WakeupSourceType)(~sources);   /* 期限切れの後に、遅れて検証された場合 */
 
     DET_LOGI(TAG, "ValidateWakeupEvent: CAN wakeup validated -> ComM_EcuM_WakeUpIndication");
     ComM_EcuM_WakeUpIndication(COMM_CHANNEL_0);
@@ -1043,6 +1094,9 @@ void EcuM_Test_ResetInitState(void)
     EcuM_PostRunUsers   = 0U;
     EcuM_PostRunTimerMs = 0UL;
     EcuM_PendingWakeupSources = 0U;
+    EcuM_ValidatedWakeupSources = 0U;
+    EcuM_ExpiredWakeupSources   = 0U;
+    EcuM_ValidationStartMs      = 0UL;
 }
 
 /**

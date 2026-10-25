@@ -1,6 +1,7 @@
 """EcuM（EcuM_Cfg.h）の RUN 要求ユーザ・POST_RUN タイムアウト・ウェイクアップ要因の定義の生成。
 
-EcuM.json に書く値: ECUM_USER_COUNT、ECUM_USER_*、ECUM_POST_RUN_TIMEOUT_MS、ECUM_WKSOURCE_*、それぞれの説明（形式は defines.py 参照）。
+EcuM.json に書く値: ECUM_USER_COUNT、ECUM_USER_*、ECUM_POST_RUN_TIMEOUT_MS、ECUM_VALIDATION_TIMEOUT_MS、ECUM_WKSOURCE_*、
+それぞれの説明（形式は defines.py 参照）。
 検査: ユーザの ID が ECUM_USER_COUNT 未満で、重複しない。ウェイクアップ要因が 1 ビットで、仕様で予約済みのビット 0〜4 を使わない。
 """
 
@@ -12,7 +13,7 @@ RESERVED_WAKEUP_BITS = 5  # [SWS_EcuM_04040] ビット 0〜4 は仕様で予約�
 def validate(cfg):
     errors = []
     vals = defines.values(cfg)
-    for need in ("ECUM_USER_COUNT", "ECUM_POST_RUN_TIMEOUT_MS"):
+    for need in ("ECUM_USER_COUNT", "ECUM_POST_RUN_TIMEOUT_MS", "ECUM_VALIDATION_TIMEOUT_MS"):
         if need not in vals:
             return ["%s が無い" % need]
     count = defines.number(vals["ECUM_USER_COUNT"])
@@ -24,6 +25,8 @@ def validate(cfg):
         errors.append("ECUM_USER_* の ID が重複している")
     if defines.number(vals["ECUM_POST_RUN_TIMEOUT_MS"]) <= 0:
         errors.append("ECUM_POST_RUN_TIMEOUT_MS は 0 より大きくする")
+    if defines.number(vals["ECUM_VALIDATION_TIMEOUT_MS"]) <= 0:
+        errors.append("ECUM_VALIDATION_TIMEOUT_MS は 0 より大きくする")
     for m, v in vals.items():
         if m.startswith("ECUM_WKSOURCE_"):
             n = defines.number(v)

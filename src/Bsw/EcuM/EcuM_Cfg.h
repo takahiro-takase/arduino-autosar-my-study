@@ -77,6 +77,12 @@
  *   この時間内に誰も RUN を要求しなければ SHUTDOWN へ遷移する。 */
 #define ECUM_POST_RUN_TIMEOUT_MS  5000UL
 
+/** ウェイクアップ検証のタイムアウト (ms)（EcuMValidationTimeout、[SWS_EcuM_02565]）
+ *   検証待ちの起床要因が、この時間内に検証されなければ、期限切れ（EXPIRED）にする。
+ *   CanSM の検証の時間（CANSM_WAKEUP_VALIDATION_MS）より長くする（CanSM が先に、コントローラを
+ *   スリープへ戻してから、EcuM が期限切れにする）。 */
+#define ECUM_VALIDATION_TIMEOUT_MS  3000UL
+
 /** [SWS_EcuM_04040] `EcuM_WakeupSourceType` のビット0〜4は仕様で予約済み
  *   （ECUM_WKSOURCE_POWER/RESET/INTERNAL_RESET/INTERNAL_WDG/EXTERNAL_WDG）。
  *   本プロジェクトが実際に持つウェイクアップ要因は CAN バス起床のみのため、

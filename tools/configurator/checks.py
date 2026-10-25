@@ -4,6 +4,7 @@
 エラーは errors、直せば足りる注意は warnings に入れて返す。
 """
 
+from modules import defines
 from modules.secoc import layout as secoc_layout
 
 
@@ -130,6 +131,7 @@ def check_all(ctx):
     _check_wdg_timeout(ctx, errors)
     _check_cantsyn(ctx, errors)
     _check_iohwab(ctx, errors)
+    _check_wakeup_validation(ctx, errors)
 
     return errors, warnings
 
@@ -515,6 +517,26 @@ def _check_wdg_timeout(ctx, errors):
     value = int(m.group(1), 0)
     if not 1 <= value <= 0xFFFF:
         errors.append("Wdg の defaultTimeout.macro '%s'=%d が 1〜65535（uint16）に収まらない" % (macro, value))
+
+
+def _check_wakeup_validation(ctx, errors):
+    """EcuM の起床要因の検証のタイムアウトが、CanSM の検証の時間より長いか。
+
+    CanSM が先に、コントローラをスリープへ戻してから、EcuM が期限切れ（EXPIRED）にする、という順序に依存している
+    （EcuM_Cfg.h の ECUM_VALIDATION_TIMEOUT_MS のコメント参照）。EcuM のほうが短いと、CanSM がまだ検証している間に、
+    EcuM が期限切れを報告してしまう。
+    """
+    ecum = ctx.configs.get("EcuM")
+    cansm = ctx.configs.get("CanSM")
+    if not ecum or not cansm:
+        return
+    ecum_value = defines.values(ecum).get("ECUM_VALIDATION_TIMEOUT_MS")
+    if ecum_value is None:
+        return  # 無いことは、EcuM 側の検査が報告する
+    ecum_ms = defines.number(ecum_value)
+    cansm_ms = cansm["wakeupValidationMs"]["value"]
+    if ecum_ms <= cansm_ms:
+        errors.append("EcuM の ECUM_VALIDATION_TIMEOUT_MS=%d は、CanSM の wakeupValidationMs=%d より長くする" % (ecum_ms, cansm_ms))
 
 
 def _check_iohwab(ctx, errors):

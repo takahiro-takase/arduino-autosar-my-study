@@ -248,10 +248,12 @@ Std_ReturnType EcuM_ReleasePOST_RUN(EcuM_UserType user);
  * \details 実仕様の `EcuM_CheckWakeup()` は EcuM 本体ではなく ECU 統合側が
  *          実装する「コールアウト」（EcuM 自身がポーリング時に、CAN
  *          ドライバの ISR/Can_MainFunction_Wakeup が割り込み時にそれぞれ
- *          呼ぶ）と位置づけられるが、本プロジェクトは単一 ECU 構成で EcuM の
- *          ウェイクアップソース管理（`EcuM_SetWakeupEvent`/
- *          `EcuM_ValidateWakeupEvent` 等の保留/検証状態機械、BswM への通知）
- *          自体を実装しないため、EcuM.c 内の通常関数として簡略実装する。
+ *          呼ぶ）と位置づけられるが、本プロジェクトは単一 ECU 構成で、EcuM の
+ *          ウェイクアップソース管理のうち、検証待ち（PENDING）・検証済み（VALIDATED）・
+ *          期限切れ（EXPIRED）の保持と、検証のタイムアウト（`ECUM_VALIDATION_TIMEOUT_MS`）だけを
+ *          持つ（`EcuM_SetWakeupEvent` の代わりに本関数が、検証待ちにして、タイムアウトを起算する。
+ *          BswM への通知 `BswM_EcuM_CurrentWakeup()` は持たない）ため、EcuM.c 内の通常関数として
+ *          簡略実装する。
  *
  *          本プロジェクトで実際にサポートするウェイクアップ要因は CAN バス
  *          起床（`ECUM_WKSOURCE_CAN`）のみである。実際の検証は、Listen-Only
@@ -289,10 +291,11 @@ void EcuM_CheckWakeup(EcuM_WakeupSourceType wakeupSource);
  *          （以前は CanIf_RxIndication() が独自 API の CanSM_RxIndication() を
  *          呼び、CanSM が自分で確定していた。2026-10 に置き換え）。
  *
- *          本プロジェクトの EcuM は、起床要因の管理（検証済み・期限切れの
- *          イベントの保持、`BswM_EcuM_CurrentWakeup()` の通知
- *          [SWS_EcuM_04078]/[SWS_EcuM_04079]）を持たない（`EcuM_CheckWakeup()`
- *          の説明参照）ため、保留中の起床要因の管理と ComM への通知のみを行う。
+ *          検証待ち（PENDING）から、検証済み（VALIDATED）へ移し、期限切れ（EXPIRED）に
+ *          なっていた要因は、そこから外す（遅れて検証された場合）。検証のタイムアウトの
+ *          タイマは、検証待ちが無くなると止まる（[SWS_EcuM_02710]）。本プロジェクトの EcuM は、
+ *          `BswM_EcuM_CurrentWakeup()` の通知（[SWS_EcuM_04078]/[SWS_EcuM_04079]）を
+ *          持たない（`EcuM_CheckWakeup()` の説明参照）。
  *
  * \param[in]  sources  検証された起床要因のビットマスク。`ECUM_WKSOURCE_CAN` 以外の
  *                       ビットを含む、または 0 の場合は、未知の要因として
@@ -305,6 +308,59 @@ void EcuM_CheckWakeup(EcuM_WakeupSourceType wakeupSource);
  * \Synchronicity  {Synchronous}
  */
 void EcuM_ValidateWakeupEvent(EcuM_WakeupSourceType sources);
+
+/**
+ * \brief   検証待ち（PENDING）の起床要因を返す（[SWS_EcuM_01156]）。
+ *
+ * \details 起床を検出（`EcuM_CheckWakeup()`）して、まだ検証されておらず、期限切れにもなっていない要因。
+ *
+ * \return  検証待ちの起床要因のビットマスク（無ければ 0）。
+ *
+ * \AUTOSARReq     {SWS_EcuM_01156, SWS_EcuM_03003}
+ * \ServiceID      {0x0d}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+EcuM_WakeupSourceType EcuM_GetPendingWakeupEvents(void);
+
+/**
+ * \brief   検証済み（VALIDATED）の起床要因を返す（[SWS_EcuM_02830]）。
+ *
+ * \return  検証済みの起床要因のビットマスク（無ければ 0）。
+ *
+ * \AUTOSARReq     {SWS_EcuM_02830}
+ * \ServiceID      {0x15}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+EcuM_WakeupSourceType EcuM_GetValidatedWakeupEvents(void);
+
+/**
+ * \brief   期限切れ（EXPIRED）の起床要因を返す（[SWS_EcuM_04076]）。
+ *
+ * \details 検証のタイムアウト（`ECUM_VALIDATION_TIMEOUT_MS`）までに検証されなかった要因
+ *          （[SWS_EcuM_04081]）。
+ *
+ * \return  期限切れの起床要因のビットマスク（無ければ 0）。
+ *
+ * \AUTOSARReq     {SWS_EcuM_04076, SWS_EcuM_04081}
+ * \ServiceID      {0x19}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+EcuM_WakeupSourceType EcuM_GetExpiredWakeupEvents(void);
+
+/**
+ * \brief   指定した起床要因を、検証待ち・検証済み・期限切れのすべてから消す（[SWS_EcuM_02683]）。
+ *
+ * \param[in]  sources  消す起床要因のビットマスク。
+ *
+ * \AUTOSARReq     {SWS_EcuM_02683}
+ * \ServiceID      {0x16}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void EcuM_ClearWakeupEvent(EcuM_WakeupSourceType sources);
 
 /**
  * \brief   EcuM モジュールのバージョン情報を取得する。
