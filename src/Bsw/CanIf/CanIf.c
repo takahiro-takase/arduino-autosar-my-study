@@ -1085,6 +1085,44 @@ void CanIf_TxConfirmation(PduIdType CanTxPduId)
 }
 
 /* ----------------------------------------------------------------------
+ * CanIf_IsValidFrameLength
+ * ---------------------------------------------------------------------- */
+
+/**
+ * \brief   受信したフレームのデータ長が、CAN（クラシック・CAN FD）で取りうる長さかを返す。
+ *
+ * \details 取りうる長さは、0〜8 byte と、CAN FD の 12/16/20/24/32/48/64 byte のみ。
+ *          それ以外（9〜11、13〜15、65 以上など）は、壊れたフレームとして扱う。
+ *
+ * \param[in]  length  受信したデータ長 [byte]。
+ *
+ * \retval  TRUE   取りうる長さ。
+ * \retval  FALSE  取りえない長さ。
+ */
+static boolean CanIf_IsValidFrameLength(PduLengthType length)
+{
+    static const uint8 fdLengths[] = { 12U, 16U, 20U, 24U, 32U, 48U, 64U };
+    boolean valid = FALSE;
+
+    if (length <= 8U)
+    {
+        valid = TRUE;
+    }
+    else
+    {
+        for (uint8 i = 0U; i < (uint8)(sizeof(fdLengths) / sizeof(fdLengths[0])); i++)
+        {
+            if (fdLengths[i] == length)
+            {
+                valid = TRUE;
+                break;
+            }
+        }
+    }
+    return valid;
+}
+
+/* ----------------------------------------------------------------------
  * CanIf_RxIndication
  * ---------------------------------------------------------------------- */
 
@@ -1173,8 +1211,9 @@ void CanIf_RxIndication(const Can_HwType* Mailbox, const PduInfoType* PduInfoPtr
          * 無効化できると規定するが（無効時は [SWS_CANIF_00830] により受信長を
          * そのまま上位層へ渡す）、本プロジェクトはその無効化コンフィグを
          * 持たず常時有効の簡略実装（自己spec-citation検証で確認済み）。 */
-        if (PduInfoPtr->SduLength < rxCfg->Dlc)
+        if ((PduInfoPtr->SduLength < rxCfg->Dlc) || (CanIf_IsValidFrameLength(PduInfoPtr->SduLength) == FALSE))
         {
+            /* 長さが CAN で取りえない値（例: 13 byte）のフレームも、同じ扱いで棄却する（CAN FD 対応）。 */
             DET_LOGW(TAG, "RX can=0x%lX length mismatch got=%u exp=%u",
                      (unsigned long)Mailbox->CanId,
                      (unsigned)PduInfoPtr->SduLength, (unsigned)rxCfg->Dlc);

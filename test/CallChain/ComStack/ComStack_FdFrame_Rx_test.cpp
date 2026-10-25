@@ -43,11 +43,25 @@ const CanIf_RxPduConfigType kFdRxPdu = {
     /* ReadRxPduDataEnabled */ 1U
 };
 
+/* 8 byte のフレームを期待する RX PDU（CanIfRxSduId=1、CAN ID=0x301、Dlc=8）。
+ * 長さが 8 を超えるフレームを受けたとき、CAN FD で有効な長さ（12 など）は受理し、取りえない長さ（13 など）は棄却することの確認用。 */
+const CanIf_RxPduConfigType kFdRxPdus[2] = {
+    kFdRxPdu,
+    {
+        /* CanId */                0x301U,
+        /* Hrh */                  0U,
+        /* UpperLayerRxPduId */    1U,
+        /* Dlc */                  8U,
+        /* RxIndicationFct */      NULL,
+        /* ReadRxPduDataEnabled */ 1U
+    }
+};
+
 const CanIf_ConfigType kFdRxConfig = {
     /* TxPduConfig */ NULL,
     /* TxPduCount */  0U,
-    /* RxPduConfig */ &kFdRxPdu,
-    /* RxPduCount */  1U
+    /* RxPduConfig */ kFdRxPdus,
+    /* RxPduCount */  2U
 };
 
 /* ======================================================================
@@ -125,4 +139,57 @@ TEST_F(ComStack_FdFrame_Rx_Test, OK_Step01_64ByteFrameIsReadBackFromCanIf)
     ASSERT_EQ(info.SduLength, 64U);
     EXPECT_EQ(buf[0], 0x40U);
     EXPECT_EQ(buf[63], 0x7FU);   // 先頭だけでなく末尾の byte まで届いている
+}
+
+TEST_F(ComStack_FdFrame_Rx_Test, OK_Step02_12ByteFrameIsAcceptedAsValidFdLength)
+{
+    /* ----------------------------------- */
+    /* ---- 準備 (Arrange) --------------- */
+    /* ----------------------------------- */
+    FakeCanHw_RxPendingCount = 1U;
+    FakeCanHw_RxId  = 0x301U;
+    FakeCanHw_RxDlc = 12U;   // CAN FD で有効な長さ（Dlc=8 の PDU に、それより長いフレーム）
+    for (uint8_t b = 0U; b < 12U; b++)
+        FakeCanHw_RxData[b] = (uint8_t)(0x50U + b);
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Can_MainFunction_Read();
+    uint8 buf[CANIF_MAX_DLC] = {0U};
+    PduInfoType info = { buf, 0U };
+    const Std_ReturnType ret = CanIf_ReadRxPduData(1U, &info);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_OK);
+    EXPECT_EQ(info.SduLength, 8U);   // 設定の Dlc(8) でクランプされる
+    EXPECT_EQ(buf[0], 0x50U);
+}
+
+TEST_F(ComStack_FdFrame_Rx_Test, NG_Step02_13ByteFrameIsRejectedAsInvalidLength)
+{
+    /* ----------------------------------- */
+    /* ---- 準備 (Arrange) --------------- */
+    /* ----------------------------------- */
+    FakeCanHw_RxPendingCount = 1U;
+    FakeCanHw_RxId  = 0x301U;
+    FakeCanHw_RxDlc = 13U;   // CAN で取りえない長さ（CAN FD は 12 の次が 16）
+    for (uint8_t b = 0U; b < 13U; b++)
+        FakeCanHw_RxData[b] = (uint8_t)(0x60U + b);
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Can_MainFunction_Read();
+    uint8 buf[CANIF_MAX_DLC] = {0U};
+    PduInfoType info = { buf, 0U };
+    const Std_ReturnType ret = CanIf_ReadRxPduData(1U, &info);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_NOT_OK);   // 棄却されたので、受信データは保存されていない
+    EXPECT_EQ(FakeDetHw_LastErrorId, CANIF_E_INVALID_DATA_LENGTH);
 }
