@@ -274,6 +274,7 @@
 #define DCM_NRC_TRANSFER_DATA_SUSPENDED    0x71U
 /** wrongBlockSequenceCounter。TransferData (0x36) の blockSequenceCounter が
  *  次に期待する値と一致しない場合に使用する。 */
+#define DCM_NRC_GENERAL_PROGRAMMING_FAILURE   0x72U  /**< generalProgrammingFailure（0x14 で、不揮発メモリへの書き込みに失敗） */
 #define DCM_NRC_WRONG_BLOCK_SEQUENCE_COUNTER  0x73U
 /** serviceNotSupportedInActiveSession。値は DCM_SID_NEGATIVE_RESP (0x7F) と
  *  たまたま同じ 0x7F だが、これは応答フレーム 3 バイト目の NRC であり、

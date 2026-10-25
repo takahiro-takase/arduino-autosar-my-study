@@ -42,6 +42,16 @@
  *  に渡す開発エラー ID）とは別の値域（本関数の戻り値そのもの）である点に注意。 */
 #define DEM_E_NO_DTC_AVAILABLE  0x0AU
 
+/** `Dem_ClearDTC()` の拡張戻り値（実仕様の Service Interface ClearDTC（値表、Table 8.175）に基づく数値。
+ *  Dcm は、これを UDS 0x14 の否定応答コードへ対応付ける [SWS_Dcm_00705]〜[00708]/[00966]/[01060]/[01408]）。
+ *  実仕様は、非同期（`DEM_PENDING`）・複数クライアント（`DEM_CLEAR_BUSY`）を前提とするが、本プロジェクトは単一クライアント・
+ *  常に同期処理なので、`DEM_PENDING` は定義せず、`DEM_CLEAR_BUSY` は返さない（値だけを定義する）。 */
+#define DEM_CLEAR_BUSY          5U   /**< 別のクライアントがクリア中（本実装は返さない） */
+#define DEM_CLEAR_MEMORY_ERROR  6U   /**< 不揮発メモリへの書き込みを積めなかった（NvM_WriteBlock() の失敗） */
+#define DEM_CLEAR_FAILED        7U   /**< クリアできなかった（本実装は返さない: DemClearEventAllowed を持たない） */
+#define DEM_WRONG_DTC           8U   /**< 指定した DTC（または、その形式）が存在しない */
+#define DEM_WRONG_DTCORIGIN     9U   /**< 指定した DTCOrigin が存在しない */
+
 /** [SWS_Dem_00215] Dem_GetNextFilteredDTC() 系の戻り値: フィルタ条件に一致する
  *  次の要素が無い。実仕様の Service Interface DiagnosticInfo（値表、
  *  DEM_NO_SUCH_ELEMENT = 48）に基づく数値。 */
@@ -346,11 +356,13 @@ Std_ReturnType Dem_GetDTCOfEvent(Dem_EventIdType EventId, Dem_DTCFormatType DTCF
  * \param[in]  DTCOrigin  クリア対象のイベントメモリ。本プロジェクトは
  *                        `DEM_DTC_ORIGIN_PRIMARY_MEMORY` のみ構成する。
  *
- * \retval  E_OK                   正常クリア。
- * \retval  E_NOT_OK               未初期化、DTCOrigin が非対応、または DTC
- *                                 に一致するイベントが無い。
- * \retval  DEM_E_NO_DTC_AVAILABLE DTCFormat が DEM_DTC_FORMAT_UDS 以外
- *                                 （要求フォーマットの DTC は構成されていない）。
+ * \retval  E_OK                    正常クリア（RAM の状態を戻し、不揮発メモリへの書き込みも積んだ）。
+ * \retval  E_NOT_OK                未初期化。
+ * \retval  DEM_WRONG_DTC           DTC に一致するイベントが無い、または DTCFormat が DEM_DTC_FORMAT_UDS 以外
+ *                                  （要求した形式の DTC は構成されていない）。
+ * \retval  DEM_WRONG_DTCORIGIN     DTCOrigin が非対応。
+ * \retval  DEM_CLEAR_MEMORY_ERROR  不揮発メモリへの書き込みを積めなかった（NvM_WriteBlock() が失敗。RAM 上は
+ *                                  クリア済み（巻き戻しはしない）だが、再起動すると、クリアした内容が復活しうる）。
  *
  * \AUTOSARReq     {SWS_Dem_00665, SWS_Dem_91016, SWS_Dem_01203}
  * \ServiceID      {0x23}

@@ -26,6 +26,7 @@ extern "C" {
 #include "KeyM_Cfg.h"
 #include "CanTp.h"
 #include "Wrap_CanTp.h"
+#include "Wrap_Dem.h"
 #include "Wrap_Dcm.h"
 #include "Wrap_ComM.h"
 #include "Fake_Rte.h"
@@ -65,6 +66,7 @@ protected:
     {
         FakeMillis_Reset();
         WrapCanTp_Reset();
+        WrapDem_Reset();                     // 他のテストの Dem の故障注入（Dem_ClearDTC の戻り値など）を残さない
         CaptureEnabled_CanTp_Transmit = 1U;  // 応答を LastData_CanTp_Transmit へ複製する
         Suppressed_ComM_DcmDiagnostic = 1U;  // 本テストは通信管理(ComM/CanSM/CanNm)が対象外
         FakeRte_Reset();
@@ -687,6 +689,116 @@ TEST_F(Dcm_UdsServices_Test, Dcm_ClearDtc_NG_UnknownDtcGroupIsRejected)
     /* ---- 評価 (Assert) ---- */
     /* ----------------------- */
     ExpectNegative(DCM_SID_CLEAR_DTC, DCM_NRC_REQUEST_OUT_OF_RANGE);
+}
+
+// NG: Dem_ClearDTC() が DEM_WRONG_DTCORIGIN を返したら、NRC 0x31（[SWS_Dcm_01408]）。
+TEST_F(Dcm_UdsServices_Test, Dcm_ClearDtc_NG_DemWrongDtcOriginIsRequestOutOfRange)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    UnlockSecurityAccessLevel1();
+    FailFromCallCount_Dem_ClearDTC = 1U;   // 最初の Dem_ClearDTC() から、指定した値を返させる
+    ForcedReturn_Dem_ClearDTC      = DEM_WRONG_DTCORIGIN;
+    const uint8 req[4] = { DCM_SID_CLEAR_DTC, 0xFFU, 0xFFU, 0xFFU };
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Send(req, sizeof(req));
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    ExpectNegative(DCM_SID_CLEAR_DTC, DCM_NRC_REQUEST_OUT_OF_RANGE);
+}
+
+// NG: Dem_ClearDTC() が DEM_CLEAR_FAILED を返したら、NRC 0x22（[SWS_Dcm_00707]）。
+TEST_F(Dcm_UdsServices_Test, Dcm_ClearDtc_NG_DemClearFailedIsConditionsNotCorrect)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    UnlockSecurityAccessLevel1();
+    FailFromCallCount_Dem_ClearDTC = 1U;   // 最初の Dem_ClearDTC() から、指定した値を返させる
+    ForcedReturn_Dem_ClearDTC      = DEM_CLEAR_FAILED;
+    const uint8 req[4] = { DCM_SID_CLEAR_DTC, 0xFFU, 0xFFU, 0xFFU };
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Send(req, sizeof(req));
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    ExpectNegative(DCM_SID_CLEAR_DTC, DCM_NRC_CONDITIONS_NOT_CORRECT);
+}
+
+// NG: Dem_ClearDTC() が DEM_CLEAR_BUSY を返したら、NRC 0x22（[SWS_Dcm_00966]）。
+TEST_F(Dcm_UdsServices_Test, Dcm_ClearDtc_NG_DemClearBusyIsConditionsNotCorrect)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    UnlockSecurityAccessLevel1();
+    FailFromCallCount_Dem_ClearDTC = 1U;   // 最初の Dem_ClearDTC() から、指定した値を返させる
+    ForcedReturn_Dem_ClearDTC      = DEM_CLEAR_BUSY;
+    const uint8 req[4] = { DCM_SID_CLEAR_DTC, 0xFFU, 0xFFU, 0xFFU };
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Send(req, sizeof(req));
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    ExpectNegative(DCM_SID_CLEAR_DTC, DCM_NRC_CONDITIONS_NOT_CORRECT);
+}
+
+// NG: Dem_ClearDTC() が DEM_CLEAR_MEMORY_ERROR を返したら、NRC 0x72（[SWS_Dcm_01060]）。
+TEST_F(Dcm_UdsServices_Test, Dcm_ClearDtc_NG_DemClearMemoryErrorIsGeneralProgrammingFailure)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    UnlockSecurityAccessLevel1();
+    FailFromCallCount_Dem_ClearDTC = 1U;   // 最初の Dem_ClearDTC() から、指定した値を返させる
+    ForcedReturn_Dem_ClearDTC      = DEM_CLEAR_MEMORY_ERROR;
+    const uint8 req[4] = { DCM_SID_CLEAR_DTC, 0xFFU, 0xFFU, 0xFFU };
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Send(req, sizeof(req));
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    ExpectNegative(DCM_SID_CLEAR_DTC, DCM_NRC_GENERAL_PROGRAMMING_FAILURE);
+}
+
+// NG: Dem_ClearDTC() が E_NOT_OK を返したら（Dem の未初期化など。仕様に対応が無い）、NRC 0x22（簡略化）。
+TEST_F(Dcm_UdsServices_Test, Dcm_ClearDtc_NG_DemNotOkIsConditionsNotCorrect)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    UnlockSecurityAccessLevel1();
+    FailFromCallCount_Dem_ClearDTC = 1U;   // 最初の Dem_ClearDTC() から、指定した値を返させる
+    ForcedReturn_Dem_ClearDTC      = E_NOT_OK;
+    const uint8 req[4] = { DCM_SID_CLEAR_DTC, 0xFFU, 0xFFU, 0xFFU };
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Send(req, sizeof(req));
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    ExpectNegative(DCM_SID_CLEAR_DTC, DCM_NRC_CONDITIONS_NOT_CORRECT);
 }
 
 TEST_F(Dcm_UdsServices_Test, Dcm_WriteDataById_NG_WithoutSecurityAccessIsRejected)

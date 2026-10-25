@@ -382,6 +382,7 @@ static void Dcm_HandleSessionControl(const uint8* uds, uint8 udsLen);
 static void Dcm_DispatchService(uint8 sid, const uint8* uds, uint8 udsLen);
 static void Dcm_HandleEcuReset(const uint8* uds, uint8 udsLen);
 static void Dcm_HandleClearDtc(const uint8* uds, uint8 udsLen);
+static uint8 Dcm_ClearDtcResultToNrc(Std_ReturnType clearRet);
 static void Dcm_HandleReadDtcInfo(const uint8* uds, uint8 udsLen);
 static void Dcm_HandleReadDtcCount(const uint8* uds, uint8 udsLen);
 static Std_ReturnType Dcm_CountFilteredDtcs(uint8 statusMask, uint16* count);
@@ -1588,6 +1589,43 @@ static void Dcm_HandleEcuReset(const uint8* uds, uint8 udsLen)
  * ----------------------------------------------------------------------- */
 
 /**
+ * \brief   Dem_ClearDTC() の戻り値を、UDS 0x14 の否定応答コード（NRC）へ対応付ける。
+ *
+ * \details 仕様の対応（[SWS_Dcm_00705]〜[00708]/[00966]/[01060]/[01408]）:
+ *            - DEM_WRONG_DTC / DEM_WRONG_DTCORIGIN → 0x31 requestOutOfRange
+ *            - DEM_CLEAR_FAILED / DEM_CLEAR_BUSY   → 0x22 conditionsNotCorrect
+ *            - DEM_CLEAR_MEMORY_ERROR              → 0x72 generalProgrammingFailure
+ *          仕様に対応が無い値（E_NOT_OK = Dem の未初期化など、DEM_PENDING を含む）は、「今は実行できない」を表す
+ *          0x22 conditionsNotCorrect にする（簡略化。本実装の Dem は DEM_PENDING を返さない）。
+ *
+ * \param[in]  clearRet  Dem_ClearDTC() の戻り値（E_OK 以外）。
+ *
+ * \return  否定応答コード。
+ */
+static uint8 Dcm_ClearDtcResultToNrc(Std_ReturnType clearRet)
+{
+    uint8 nrc = DCM_NRC_CONDITIONS_NOT_CORRECT;
+
+    if ((clearRet == DEM_WRONG_DTC) || (clearRet == DEM_WRONG_DTCORIGIN))
+    {
+        nrc = DCM_NRC_REQUEST_OUT_OF_RANGE;
+    }
+    else if (clearRet == DEM_CLEAR_MEMORY_ERROR)
+    {
+        nrc = DCM_NRC_GENERAL_PROGRAMMING_FAILURE;
+    }
+    else if ((clearRet == DEM_CLEAR_FAILED) || (clearRet == DEM_CLEAR_BUSY))
+    {
+        nrc = DCM_NRC_CONDITIONS_NOT_CORRECT;   /* [SWS_Dcm_00707]/[SWS_Dcm_00966] */
+    }
+    else
+    {
+        /* 仕様に対応が無い値（E_NOT_OK など）: 初期値の 0x22 のまま */
+    }
+    return nrc;
+}
+
+/**
  * \brief   UDS 0x14 ClearDiagnosticInformation を処理する。
  *
  * \details groupOfDTC をそのまま Dem_ClearDTC() の DTC 引数へ渡す。
@@ -1595,7 +1633,8 @@ static void Dcm_HandleEcuReset(const uint8* uds, uint8 udsLen)
  *          DTC コード 1 件をクリアする（内部での分岐は Dem_ClearDTC() 側が
  *          行う。2026-09-27 是正: 従来の Dem_ClearAllDTCs()/Dem_ClearOneDtc()
  *          2関数呼び分けを Dem_ClearDTC() 1関数へ統合。Dem.h 参照）。
- *          該当する DTC が無ければ NRC 0x31。いずれの場合も正応答 [0x54] を返す。
+ *          Dem_ClearDTC() が失敗したときの否定応答コードは、Dcm_ClearDtcResultToNrc() が決める
+ *          （[SWS_Dcm_00705]〜[00708]/[00966]/[01060]/[01408]）。成功なら正応答 [0x54] を返す。
  *          DTC 履歴の消去は誤操作・悪用の影響が大きいため二重に保護する:
  *            ・extendedSession 限定（Dcm_ProcessRequest の Dcm_SidSessionTable[] が判定、
  *              defaultSession では本関数に到達する前に NRC 0x7F で拒否される）
@@ -1624,10 +1663,10 @@ static void Dcm_HandleClearDtc(const uint8* uds, uint8 udsLen)
                  | ((uint32)uds[2] <<  8U)
                  | (uint32)uds[3];
 
-    if (Dem_ClearDTC(DCM_DEM_CLIENT_ID, group, DEM_DTC_FORMAT_UDS, DEM_DTC_ORIGIN_PRIMARY_MEMORY) != E_OK)
+    const Std_ReturnType clearRet = Dem_ClearDTC(DCM_DEM_CLIENT_ID, group, DEM_DTC_FORMAT_UDS, DEM_DTC_ORIGIN_PRIMARY_MEMORY);
+    if (clearRet != E_OK)
     {
-        /* 指定された DTC コードに一致するイベントがない */
-        Dcm_SendNegativeResponse(DCM_SID_CLEAR_DTC, DCM_NRC_REQUEST_OUT_OF_RANGE);
+        Dcm_SendNegativeResponse(DCM_SID_CLEAR_DTC, Dcm_ClearDtcResultToNrc(clearRet));
         return;
     }
 
