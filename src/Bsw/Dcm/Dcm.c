@@ -1297,11 +1297,14 @@ static unsigned long Dcm_GetNowMs(void)
  *          defaultSession の間は ComM_DCM_InactiveDiagnostic(0) で解除する。
  *          セッションが切り替わるすべての経路（明示的な 0x10 要求、S3 タイムアウト、
  *          0x11 ECUReset 後のリセット）から呼ばれる。
+ *          切り替え後のセッションを "session=0x%02X" でログに出す。
  *
  * \param[in]  session  現在のセッション (DCM_SESSION_DEFAULT / _EXTENDED)。
  */
 static void Dcm_UpdateComMRequest(uint8 session)
 {
+    DET_LOGI(TAG, "session=0x%02X", (unsigned)session);
+
     if (session == DCM_SESSION_EXTENDED)
     {
         Dcm_NotifyActiveDiagnostic();

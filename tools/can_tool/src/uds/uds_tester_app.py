@@ -1561,15 +1561,12 @@ class UdsTesterFrame(ttk.Frame):
     )
 
     # Dcm の診断セッション。Dcm.c の次のログから判定する（本プロジェクトは default と extended だけ）:
-    #   0x10 の要求   "10 session=0x01" / "10 session=0x03"
-    #   S3 の切れ     "S3 timeout -> session=Default"
-    #   0x11 の再起動  "11 session->Default"
+    #   セッションの切り替え  "session=0x01" / "session=0x03"
+    #                        （0x10 の要求・S3 の切れ・0x11 の再起動のすべてが、この形の 1 行を出す）
     #   Dcm の初期化  "Dcm_Init: Init ok"（ECU の起動・再起動。セッションは必ず default から始まる）
     _DCM_SESSION_RULES = (
-        ("10 session=0x03", "extended"),
-        ("10 session=0x01", "default"),
-        ("S3 timeout -> session=Default", "default"),
-        ("11 session->Default", "default"),
+        ("session=0x03", "extended"),
+        ("session=0x01", "default"),
         ("Dcm_Init: Init ok", "default"),
     )
 

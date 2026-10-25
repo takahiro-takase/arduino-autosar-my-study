@@ -6,6 +6,7 @@
   "additionalProperties": false,
   "required": [
     "module",
+    "s3TimeoutMs",
     "maxDidToRead",
     "dids",
     "sidSessionDoc",
@@ -17,6 +18,34 @@
     },
     "module": {
       "const": "Dcm"
+    },
+    "s3TimeoutMs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "value",
+        "doc"
+      ],
+      "properties": {
+        "value": {
+          "type": "integer",
+          "minimum": 1000,
+          "maximum": 3600000,
+          "multipleOf": 1000,
+          "description": "S3Server タイマの時間 [ms]（DCM_S3_TIMEOUT_MS）。Dcm_MainFunction の周期（1000 ms）より短くはできない。仕様の固定値は 5000"
+        },
+        "doc": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "not": {
+              "pattern": "\\*/"
+            }
+          },
+          "description": "DCM_S3_TIMEOUT_MS のコメント"
+        }
+      }
     },
     "maxDidToRead": {
       "type": "object",

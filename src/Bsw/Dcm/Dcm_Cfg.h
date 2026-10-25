@@ -137,11 +137,11 @@
 #define DCM_SESSION_DEFAULT   0x01U  /**< defaultSession          */
 #define DCM_SESSION_EXTENDED  0x03U  /**< extendedDiagnosticSession */
 
-/** S3 タイマ (ISO 14229-1): defaultSession 以外で、この時間内に診断要求が
- *  1 件も来なければ defaultSession へ自動遷移する。Dcm_MainFunction が監視する。
- *  SWS_Dcm_00143: S3Server = 5s は固定値として仕様に明記されている。
- *  しかし、Tester Present メッセージの受信ログが多くなるため、60s にする。 */
+/* @@GEN-BEGIN dcm-s3-timeout  生成元: config/data/Dcm.json  （自動生成: 手編集禁止） */
+/** S3Server タイマ（ISO 14229-1）: defaultSession 以外で、この時間内に診断要求が 1 件も来なければ、defaultSession へ自動で戻る（DcmDspSessionRow の S3Server に相当）。
+ *  SWS_Dcm_00143: S3Server は 5 秒が仕様の固定値。ただし、Tester Present の受信ログが多くなるため、本プロジェクトは 60 秒にしている。 */
 #define DCM_S3_TIMEOUT_MS  60000UL
+/* @@GEN-END dcm-s3-timeout */
 
 /** UDS 0x11 ECUReset: 正応答 [0x51, subFunc] 送信後、実際に Mcu_PerformReset()
  *  を呼ぶまでの遅延（Dcm_HandleEcuReset() 参照）。CAN コントローラの物理送信

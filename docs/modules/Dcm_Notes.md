@@ -556,7 +556,12 @@ ISO 14229-1 では、defaultSession 以外（本実装では ExtendedDiagnosticS
 ECU が自動的に defaultSession へ復帰します。SID 0x3E（TesterPresent）は、
 他に送るべき要求がないときにこの自動失効を防ぐためだけに存在するサービスです。
 S3 の時間は、仕様（[SWS_Dcm_00143]）では 5 秒固定ですが、TesterPresent の受信ログが
-増えすぎるため、本プロジェクトは `DCM_S3_TIMEOUT_MS`（`Dcm_Cfg.h`）を 60 秒にしています。
+増えすぎるため、本プロジェクトは 60 秒にしています。値は `config/data/Dcm.json` の `s3TimeoutMs.value`
+（1000 ms の倍数）で決めます。仕様どおりにするなら 5000 にします（TesterPresent を 5 秒より短い周期で送るテスターが必要です）。
+
+セッションが切り替わるたびに（0x10 の要求・S3 の切れ・0x11 の再起動のいずれも）、`Dcm_UpdateComMRequest()` が
+`session=0x01`（default）または `session=0x03`（extended）の 1 行をログに出します。CAN ツールの「ECU 状態」パネルの
+Session は、この行から表示します。
 
 ```
 Dcm_StartOfReception（要求の受信の開始。受け入れたとき）:
