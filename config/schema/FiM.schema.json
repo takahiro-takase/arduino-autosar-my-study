@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "FiM configuration",
-  "description": "FiM_Cfg.h の機能 ID と、FiM_PBCfg.c の FID × Dem イベント対応テーブルの生成元。機能の並び順がそのまま FID。Dem のイベント・ステータスのマクロは Dem_Cfg.h に実在する名前で書く。",
+  "description": "FiM_Cfg.h の機能 ID と、FiM_PBCfg.c の FID × Dem イベント対応テーブルの生成元。機能の並び順がそのまま FID。機能ごとに、抑止の条件（Dem イベントと、抑止するステータスのビット）を 1 つ以上書き、Dem のイベント・ステータスのマクロは、Dem_Cfg.h に実在する名前で書く。",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -25,8 +25,7 @@
         "required": [
           "name",
           "title",
-          "event",
-          "statusMask",
+          "inhibitions",
           "note"
         ],
         "properties": {
@@ -40,15 +39,30 @@
             "minLength": 1,
             "description": "機能の説明（FID マクロのコメントとテーブルの見出し）"
           },
-          "event": {
-            "type": "string",
-            "pattern": "^[A-Z][A-Z0-9_]*$",
-            "description": "監視する Dem イベントの名前（Dem.json の events[].name。生成物では DemConf_DemEventParameter_<name>）"
-          },
-          "statusMask": {
-            "type": "string",
-            "pattern": "^DEM_STATUS_[A-Z0-9_]+$",
-            "description": "抑止するステータスのビット（Dem_Cfg.h の DEM_STATUS_*）。いずれか 1 ビットでも立っていれば抑止する"
+          "inhibitions": {
+            "type": "array",
+            "minItems": 1,
+            "description": "この機能を抑止する条件（Dem イベントと、抑止するステータスのビット）。複数あれば、どれか 1 つでも成り立てば、機能を抑止する（OR、[SWS_Fim_00064]）",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "event",
+                "statusMask"
+              ],
+              "properties": {
+                "event": {
+                  "type": "string",
+                  "pattern": "^[A-Z][A-Z0-9_]*$",
+                  "description": "監視する Dem イベントの名前（Dem.json の events[].name。生成物では DemConf_DemEventParameter_<name>）"
+                },
+                "statusMask": {
+                  "type": "string",
+                  "pattern": "^DEM_STATUS_[A-Z0-9_]+$",
+                  "description": "抑止するステータスのビット（Dem_Cfg.h の DEM_STATUS_*）。いずれか 1 ビットでも立っていれば抑止する"
+                }
+              }
+            }
           },
           "note": {
             "type": "array",

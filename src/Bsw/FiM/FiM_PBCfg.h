@@ -30,11 +30,12 @@
  * ====================================================================== */
 
 /**
- * \brief   機能 (FID) 1 件分の設定。
+ * \brief   機能 (FID) の抑止の条件 1 件分の設定（FiMInhibitionConfiguration に相当）。
  *
- * \details AUTOSAR の FiMFunction コンテナを学習用に単純化したもの。
- *          実際の AUTOSAR では複数イベントの論理式 (FimEventGroup) を
- *          設定できるが、本実装は 1 FID : 1 イベントの組のみ対応する。
+ * \details 1 つの FID に、抑止の条件を複数持てる（同じ FunctionId の行を複数並べる）。
+ *          どれか 1 つの条件が成り立てば、その FID を抑止する（OR、[SWS_Fim_00064]）。
+ *          簡略化: 実仕様の FiMSummaryEvent（複数のイベントをまとめた名前）は持たず、同じ FID に、
+ *          イベントごとの行を並べる。
  */
 typedef struct
 {
@@ -50,8 +51,9 @@ typedef struct
  */
 typedef struct
 {
-    const FiM_FunctionCfgType* Functions;      /**< 機能設定配列の先頭 */
-    uint8                       FunctionCount;  /**< 機能数             */
+    const FiM_FunctionCfgType* Functions;        /**< 抑止の条件の配列の先頭（1 行が 1 つの条件） */
+    uint8                       InhibitionCount;  /**< 抑止の条件の数（Functions[] の行数）         */
+    uint8                       FunctionCount;    /**< 機能（FID）の数。FunctionId は 0 〜 この値 - 1 */
 } FiM_ConfigType;
 
 /* ======================================================================

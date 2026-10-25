@@ -5,11 +5,12 @@
  *          の実行許可を判定する。
  *
  *          判定アルゴリズム:
- *            1. FiM_MainFunction() (100 ms 周期) が FiM_Functions[] を
+ *            1. FiM_MainFunction() (100 ms 周期) が FiM_Functions[]（抑止の条件の配列）を
  *               先頭から走査する。
  *            2. 各行について Dem_GetEventUdsStatus(EventId) を取得し、
- *               InhibitStatusMask とのビット AND が非ゼロなら抑止、
- *               ゼロなら許可と判定する。
+ *               InhibitStatusMask とのビット AND が非ゼロなら、その条件は成り立つ。
+ *               FID は、成り立つ条件が 1 つでもあれば抑止、1 つも無ければ許可と判定する
+ *               （同じ FID の複数の行の OR、[SWS_Fim_00064]）。
  *            3. 判定結果が前回から変化した場合のみログを出力する
  *               (毎サイクルのログ過多を防ぐ、Can_Hw_IsBusOff と同様の方式)。
  *
@@ -69,18 +70,64 @@ static uint8 FiM_Available[FIM_FUNCTION_COUNT];
  * ---------------------------------------------------------------------- */
 
 /**
- * \brief   単一 FID の許可状態を Dem の現在のイベントステータスから評価する。
+ * \brief   設定が持つ機能（FID）の数を返す（内部状態の配列の大きさ FIM_FUNCTION_COUNT を上限とする）。
+ *
+ * \details 内部状態（FiM_Permitted[] / FiM_Available[]）は FIM_FUNCTION_COUNT 要素なので、設定の
+ *          FunctionCount が大きくても、それ以上は扱わない。設定の FunctionCount が小さければ、
+ *          その範囲だけを扱う（API の範囲検査 [FiM_GetFunctionPermission] と同じ範囲）。
+ *
+ * \return  扱う FID の数
+ */
+static uint8 FiM_FidCount(void)
+{
+    return (FiM_Cfg->FunctionCount < FIM_FUNCTION_COUNT) ? FiM_Cfg->FunctionCount : (uint8)FIM_FUNCTION_COUNT;
+}
+
+/**
+ * \brief   全 FID の許可状態を、Dem の現在のイベントステータスから評価する。
  *
  * \details FiM_Init() と FiM_MainFunction() の共通ロジック（2026-09 追加、
  *          自己/simplify 指摘: 両者が同一の判定式を重複して持っていたため
- *          抽出）。InhibitStatusMask のいずれかのビットが立っていれば抑止
- *          (0)、立っていなければ許可 (1) を返す。
+ *          抽出）。FiM_Functions[] の各行（抑止の条件）について、InhibitStatusMask の
+ *          いずれかのビットが立っていれば、その行の FID を抑止 (0) にする。
+ *          1 つの FID に複数の行があれば、どれか 1 つでも成り立てば抑止になる（OR、
+ *          [SWS_Fim_00064]）。1 つも成り立たない FID は許可 (1)。
+ *          Dem_GetEventUdsStatus() が失敗した行は、ステータス 0（その条件は成り立たない）として
+ *          扱う（[SWS_Fim_00097]: 失敗したイベントは、計算に含めない）。
+ *          FunctionId が FiM_FidCount() 以上の行は、無視する（配列の範囲外を書かないための防御。通常は、
+ *          コンフィギュレータが保証する）。
+ *
+ * \param[out]  permitted    FID ごとの許可状態の格納先（FIM_FUNCTION_COUNT 要素）。
+ * \param[out]  causeEvent   FID ごとの、最初に抑止した行の Dem イベント ID の格納先（ログ用。
+ *                          許可の FID は 0。FIM_FUNCTION_COUNT 要素）。
  */
-static uint8 FiM_EvaluatePermission(const FiM_FunctionCfgType* fn)
+static void FiM_EvaluateAll(uint8* permitted, uint8* causeEvent)
 {
-    Dem_UdsStatusByteType status = 0U;
-    (void)Dem_GetEventUdsStatus(fn->EventId, &status);
-    return ((status & fn->InhibitStatusMask) != 0U) ? 0U : 1U;
+    const uint8 fidCount = FiM_FidCount();
+
+    for (uint8 fid = 0U; fid < fidCount; fid++)
+    {
+        permitted[fid]  = 1U;
+        causeEvent[fid] = 0U;
+    }
+
+    for (uint8 i = 0U; i < FiM_Cfg->InhibitionCount; i++)
+    {
+        const FiM_FunctionCfgType* fn = &FiM_Cfg->Functions[i];
+        Dem_UdsStatusByteType status = 0U;
+
+        if ((fn->FunctionId >= fidCount) || (permitted[fn->FunctionId] == 0U))
+        {
+            continue;   /* 範囲外の行、または、すでに抑止と決まった FID の行は、Dem へ問い合わせない */
+        }
+
+        (void)Dem_GetEventUdsStatus(fn->EventId, &status);
+        if ((status & fn->InhibitStatusMask) != 0U)
+        {
+            permitted[fn->FunctionId]  = 0U;
+            causeEvent[fn->FunctionId] = fn->EventId;
+        }
+    }
 }
 
 /* ----------------------------------------------------------------------
@@ -123,22 +170,23 @@ void FiM_Init(const FiM_ConfigType* ConfigPtr)
 
     FiM_Cfg = ConfigPtr;
 
-    for (uint8 i = 0U; i < ConfigPtr->FunctionCount; i++)
+    uint8 causeEvent[FIM_FUNCTION_COUNT];
+    FiM_EvaluateAll(FiM_Permitted, causeEvent);
+
+    const uint8 fidCount = FiM_FidCount();
+
+    for (uint8 fid = 0U; fid < fidCount; fid++)
     {
-        const FiM_FunctionCfgType* fn = &ConfigPtr->Functions[i];
-        const uint8 permitted = FiM_EvaluatePermission(fn);
+        FiM_Available[fid] = 1U;
 
-        FiM_Permitted[fn->FunctionId] = permitted;
-        FiM_Available[fn->FunctionId] = 1U;
-
-        if (permitted == 0U)
+        if (FiM_Permitted[fid] == 0U)
         {
-            DET_LOGW(TAG, "FID%u inhibited at init (ev=%u)",
-                     (unsigned)fn->FunctionId, (unsigned)fn->EventId);
+            DET_LOGW(TAG, "FID%u inhibited at init (ev=%u)", (unsigned)fid, (unsigned)causeEvent[fid]);
         }
     }
 
-    DET_LOGI(TAG, "Init ok functions=%u", (unsigned)ConfigPtr->FunctionCount);
+    DET_LOGI(TAG, "Init ok functions=%u inhibitions=%u",
+             (unsigned)ConfigPtr->FunctionCount, (unsigned)ConfigPtr->InhibitionCount);
 }
 
 /* ----------------------------------------------------------------------
@@ -294,23 +342,25 @@ void FiM_MainFunction(void)
         return;
     }
 
-    for (uint8 i = 0U; i < FiM_Cfg->FunctionCount; i++)
+    uint8 newPermitted[FIM_FUNCTION_COUNT];
+    uint8 causeEvent[FIM_FUNCTION_COUNT];
+    FiM_EvaluateAll(newPermitted, causeEvent);
+
+    const uint8 fidCount = FiM_FidCount();
+
+    for (uint8 fid = 0U; fid < fidCount; fid++)
     {
-        const FiM_FunctionCfgType* fn = &FiM_Cfg->Functions[i];
-        const uint8 newPermitted = FiM_EvaluatePermission(fn);
-
-        if (newPermitted != FiM_Permitted[fn->FunctionId])
+        if (newPermitted[fid] != FiM_Permitted[fid])
         {
-            FiM_Permitted[fn->FunctionId] = newPermitted;
+            FiM_Permitted[fid] = newPermitted[fid];
 
-            if (newPermitted == 0U)
+            if (newPermitted[fid] == 0U)
             {
-                DET_LOGW(TAG, "FID%u inhibited (ev=%u)",
-                         (unsigned)fn->FunctionId, (unsigned)fn->EventId);
+                DET_LOGW(TAG, "FID%u inhibited (ev=%u)", (unsigned)fid, (unsigned)causeEvent[fid]);
             }
             else
             {
-                DET_LOGI(TAG, "FID%u permitted again", (unsigned)fn->FunctionId);
+                DET_LOGI(TAG, "FID%u permitted again", (unsigned)fid);
             }
         }
     }
