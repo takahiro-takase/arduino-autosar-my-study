@@ -3,6 +3,7 @@
 Dcm.json の dids[] に書く値: DID の名前・番号・データ長、対応するサービス（0x22 の読み出し関数、0x2E の書き込み関数、
 0x2F で制御するランプ）、各項目の説明。読み出し・書き込みの関数の中身は Dcm.c に手書きする（名前だけを書く）。
 生成する値（並び順がそのまま表の順序）:
+  - Dcm_Cfg.h: S3Server タイマの時間（DCM_S3_TIMEOUT_MS、s3TimeoutMs）
   - Dcm_Cfg.h: DID のマクロ（DCM_DID_<name>）、データ長のマクロ（lengthMacro を指定したものだけ）、DID の数、
     読み出し対応の DID の最大データ長、0x22 の 1 要求あたりの DID の最大数（DCM_MAX_DID_TO_READ）
   - Dcm_PBCfg.h: データ関数（readFct / writeFct）の宣言
@@ -15,6 +16,7 @@ Dcm.json の dids[] に書く値: DID の名前・番号・データ長、対応
 import pathlib
 import re
 
+from .defs import define
 from .dem import define_block
 
 
@@ -61,6 +63,10 @@ def render_cfg_dids(cfg, ctx):
                     ["0x22 で読み出せる DID の最大データ長（応答用バッファの大きさ）"]))
     entries.append(("DCM_MAX_DID_TO_READ", "%dU" % cfg["maxDidToRead"]["value"], cfg["maxDidToRead"]["doc"]))
     return "\n".join(define_block(entries))
+
+
+def render_cfg_s3_timeout(cfg, ctx):
+    return "\n".join(define("DCM_S3_TIMEOUT_MS", "%dUL" % cfg["s3TimeoutMs"]["value"], cfg["s3TimeoutMs"]["doc"]))
 
 
 def render_cfg_sid_count(cfg, ctx):
@@ -125,6 +131,7 @@ SPEC = {
     "validate": validate,
     "targets": [
         ("src/Bsw/Dcm/Dcm_Cfg.h", "dcm-dids", render_cfg_dids, None),
+        ("src/Bsw/Dcm/Dcm_Cfg.h", "dcm-s3-timeout", render_cfg_s3_timeout, None),
         ("src/Bsw/Dcm/Dcm_Cfg.h", "dcm-sid-session-count", render_cfg_sid_count, None),
         ("src/Bsw/Dcm/Dcm_PBCfg.c", "dcm-sid-session-table", render_sid_table, None),
         ("src/Bsw/Dcm/Dcm_PBCfg.h", "dcm-did-functions", render_cfg_prototypes, None),

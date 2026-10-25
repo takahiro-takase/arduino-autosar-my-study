@@ -181,6 +181,7 @@ UDS の DID（0x22 読み出し・0x2E 書き込み・0x2F 入出力制御）の
 | `length` / `lengthMacro` | 表のデータ長。`lengthMacro` があれば長さのマクロも生成（テストが使う `DCM_VIN_LENGTH` など） |
 | `readFct` / `writeFct` | 0x22 / 0x2E のデータ関数。宣言は `Dcm_PBCfg.h` に生成し、中身は `Dcm.c` に手書きする |
 | `ioControlLamp` | 0x2F で制御するランプ（`Rte_LampIdType`） |
+| `s3TimeoutMs.value` / `doc` | S3Server タイマの時間（`Dcm_Cfg.h` の `DCM_S3_TIMEOUT_MS`）。1000 ms の倍数 |
 
 - `Dcm.c` の 0x22 / 0x2E / 0x2F は、表を `Dcm_FindDid()` で引いて処理する汎用の形になり、DID ごとの `switch` はなくなりました。DID を足すには、`Dcm.json` に 1 件書き、データ関数を手書きして `gen_cfg.py` を実行します。
 - NRC の判定順は従来のままです。0x2E は 0x33（セキュリティ）→ 0x13（3 バイト未満）→ 0x31（表に無い、または書き込み関数が無い）→ 0x13（固定長と不一致）→ 0x31（書き込み失敗）。

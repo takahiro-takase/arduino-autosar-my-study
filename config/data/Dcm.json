@@ -1,6 +1,13 @@
 {
   "$schema": "../schema/Dcm.schema.json",
   "module": "Dcm",
+  "s3TimeoutMs": {
+    "value": 60000,
+    "doc": [
+      "S3Server タイマ（ISO 14229-1）: defaultSession 以外で、この時間内に診断要求が 1 件も来なければ、defaultSession へ自動で戻る（DcmDspSessionRow の S3Server に相当）。",
+      "SWS_Dcm_00143: S3Server は 5 秒が仕様の固定値。ただし、Tester Present の受信ログが多くなるため、本プロジェクトは 60 秒にしている。"
+    ]
+  },
   "maxDidToRead": {
     "value": 4,
     "doc": [
