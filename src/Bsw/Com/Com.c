@@ -43,7 +43,7 @@
 
 #define TAG "Com"
 
-#define COM_IPDU_MAX_DLC  8U
+#define COM_IPDU_MAX_DLC  COMSTACK_PDU_MAX_LENGTH  /* I-PDU のバッファ 1 エントリの大きさ（CAN FD の 64 byte） */
 #define COM_RX_IPDU_MAX   COM_RX_IPDU_COUNT  /* Com_Cfg.h の設定値に連動 */
 #define COM_TX_IPDU_MAX   COM_TX_IPDU_COUNT  /* Com_Cfg.h の設定値に連動 */
 

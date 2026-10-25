@@ -24,6 +24,9 @@
  * Definitions
  * ====================================================================== */
 
+/** 模擬するフレームのデータの最大長 [byte]（CAN FD の 64 byte）。 */
+#define FAKECANHW_DATA_MAX  64U
+
 /* ======================================================================
  * Type Definitions
  * ====================================================================== */
@@ -53,7 +56,7 @@ extern uint32 FakeCanHw_EnableRxIsrCount;
 /** 直近の Can_Hw_Send() の引数（送信内容の検証用）。 */
 extern uint32_t FakeCanHw_LastSendId;
 extern uint8_t  FakeCanHw_LastSendDlc;
-extern uint8_t  FakeCanHw_LastSendData[8];
+extern uint8_t  FakeCanHw_LastSendData[FAKECANHW_DATA_MAX];
 
 /** 直近の Can_Hw_SetMode() の引数。 */
 extern Can_Hw_Mode FakeCanHw_LastMode;
@@ -74,7 +77,7 @@ extern uint32_t FakeCanHw_RxPendingCount;
 /** Can_Hw_Read() が返すフレーム内容（受信フレームのシミュレート用、全件共通）。 */
 extern uint32_t FakeCanHw_RxId;
 extern uint8_t  FakeCanHw_RxDlc;
-extern uint8_t  FakeCanHw_RxData[8];
+extern uint8_t  FakeCanHw_RxData[FAKECANHW_DATA_MAX];
 
 /** 各関数の戻り値（既定 CAN_HW_OK）。失敗系のテストで CAN_HW_FAIL に変更する。
  *  CheckReceive/Read は上記 FakeCanHw_RxPendingCount で制御するため対象外。 */

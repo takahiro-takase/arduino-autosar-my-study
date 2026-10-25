@@ -21,6 +21,7 @@
  * ====================================================================== */
 
 #include "Platform_Types.h"
+#include "ComStack_Types.h"
 
 /* ======================================================================
  * Definitions
@@ -172,10 +173,9 @@
  *  参照）で、TxPduCount を直接使わずこの固定上限を用いる。 */
 #define CANIF_TX_PDU_MAX    CANIF_TX_PDU_COUNT
 
-/** CAN classic の最大データ長 [byte]（CAN FD は本プロジェクト未対応、
- *  project_can_fd_postponed 参照）。CanIf_ReadRxPduData() の内部バッファ
- *  1 エントリのサイズに使う。 */
-#define CANIF_MAX_DLC        8U
+/** PDU の最大データ長 [byte]（CAN FD の 64 byte。クラシック CAN は 8 byte まで）。
+ *  CanIf_ReadRxPduData() の内部バッファ 1 エントリのサイズに使う。 */
+#define CANIF_MAX_DLC        COMSTACK_PDU_MAX_LENGTH
 
 /** CanIf_SetPduMode()/CanIf_GetPduMode()（2026-08 追加）の内部状態配列
  *  CanIf_ControllerPduMode[] のサイズ。Can_Cfg.h の CAN_CONTROLLER_COUNT と

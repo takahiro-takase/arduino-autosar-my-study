@@ -68,6 +68,7 @@ protected:
         config.intPin          = 2U;
         config.baudrate        = 500000U;
         config.crystalFreq     = CAN_CRYSTAL_16MHZ;
+        config.fdEnabled       = 0U;  // 既定はクラシック CAN（CAN FD のテストは自分で 1 にする）
     }
     Can_ConfigType config;
 };
@@ -170,6 +171,121 @@ TEST_F(Can_Write_Test, Can_Write_NG_LengthExceeds)
     /* ----------------------- */
     EXPECT_EQ(ret, CAN_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, CAN_E_PARAM_DLC);
+}
+
+TEST_F(Can_Write_Test, Can_Write_OK_FdEnabledAcceptsUpTo64Bytes)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    config.fdEnabled = 1U;
+    Can_Init(&config);
+    Can_Test_SetControllerState(CAN_CS_STARTED);
+
+    Can_PduType pdu;
+    pdu.id = 0x123U;
+    pdu.length = 64U;  // CAN FD の最大データ長
+    uint8_t sdu[64] = {0};
+    pdu.sdu = sdu;
+    pdu.swPduHandle = 0U;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Can_ReturnType ret = Can_Write(0U, &pdu);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_NE(FakeDetHw_LastErrorId, CAN_E_PARAM_DLC);
+    EXPECT_EQ(ret, CAN_OK);
+}
+
+TEST_F(Can_Write_Test, Can_Write_NG_FdEnabledRejectsOver64Bytes)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    config.fdEnabled = 1U;
+    Can_Init(&config);
+
+    Can_PduType pdu;
+    pdu.id = 0x123U;
+    pdu.length = 65U;  // CAN FD の最大データ長を超える
+    uint8_t sdu[65] = {0};
+    pdu.sdu = sdu;
+    pdu.swPduHandle = 0U;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Can_ReturnType ret = Can_Write(0U, &pdu);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, CAN_NOT_OK);
+    EXPECT_EQ(FakeDetHw_LastErrorId, CAN_E_PARAM_DLC);
+}
+
+TEST_F(Can_Write_Test, Can_Write_OK_FdEnabledRoundsUpInvalidLengthAndPads)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    config.fdEnabled = 1U;
+    Can_Init(&config);
+    Can_Test_SetControllerState(CAN_CS_STARTED);
+
+    Can_PduType pdu;
+    pdu.id = 0x123U;
+    pdu.length = 13U;  // CAN FD で有効でない長さ（次の有効な長さは 16）
+    uint8_t sdu[13];
+    for (uint8_t b = 0U; b < 13U; b++)
+        sdu[b] = (uint8_t)(0x10U + b);
+    pdu.sdu = sdu;
+    pdu.swPduHandle = 0U;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Can_ReturnType ret = Can_Write(0U, &pdu);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, CAN_OK);
+    EXPECT_EQ(FakeCanHw_LastSendDlc, 16U);                 // 16 byte へ切り上げて送る
+    EXPECT_EQ(FakeCanHw_LastSendData[12], 0x1CU);          // 元のデータの末尾
+    EXPECT_EQ(FakeCanHw_LastSendData[13], CAN_FD_PADDING_VALUE);  // 足りない部分は埋める
+    EXPECT_EQ(FakeCanHw_LastSendData[15], CAN_FD_PADDING_VALUE);
+}
+
+TEST_F(Can_Write_Test, Can_Write_OK_FdDisabledDoesNotPad)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    Can_Init(&config);   // fdEnabled=0（クラシック CAN）
+    Can_Test_SetControllerState(CAN_CS_STARTED);
+
+    Can_PduType pdu;
+    pdu.id = 0x123U;
+    pdu.length = 5U;
+    uint8_t sdu[5] = {1, 2, 3, 4, 5};
+    pdu.sdu = sdu;
+    pdu.swPduHandle = 0U;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Can_ReturnType ret = Can_Write(0U, &pdu);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, CAN_OK);
+    EXPECT_EQ(FakeCanHw_LastSendDlc, 5U);   // クラシック CAN は、長さをそのまま送る
 }
 
 TEST_F(Can_Write_Test, Can_Write_NG_notStarted)

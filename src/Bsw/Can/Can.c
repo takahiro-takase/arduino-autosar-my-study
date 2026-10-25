@@ -532,6 +532,41 @@ void Can_EnableControllerInterrupts(uint8 Controller)
  * ====================================================================== */
 
 /* ----------------------------------------------------------------------
+ * Can_FdRoundUpLength
+ * ---------------------------------------------------------------------- */
+
+/**
+ * \brief   データ長を、CAN FD で有効な長さへ切り上げる。
+ *
+ * \details CAN FD のフレームの長さ（DLC）は、0〜8 byte と、12/16/20/24/32/48/64 byte のみ有効。
+ *          これ以外の長さ（9〜11、13〜15、17〜19 など）は、一つ上の有効な長さへ切り上げる。
+ *
+ * \param[in]  length  データ長 [byte]（0〜CAN_FD_FRAME_MAX_DLC）。
+ *
+ * \return  length 以上で最小の、CAN FD で有効な長さ [byte]
+ */
+static uint8 Can_FdRoundUpLength(uint8 length)
+{
+    static const uint8 validLengths[] = { 12U, 16U, 20U, 24U, 32U, 48U, 64U };
+
+    if (length <= CAN_FRAME_MAX_DLC)
+    {
+        return length;
+    }
+
+    uint8 rounded = CAN_FD_FRAME_MAX_DLC;
+    for (uint8 i = 0U; i < (uint8)(sizeof(validLengths) / sizeof(validLengths[0])); i++)
+    {
+        if (validLengths[i] >= length)
+        {
+            rounded = validLengths[i];
+            break;
+        }
+    }
+    return rounded;
+}
+
+/* ----------------------------------------------------------------------
  * Can_Write
  * ---------------------------------------------------------------------- */
 
@@ -581,16 +616,18 @@ Can_ReturnType Can_Write(Can_HwHandleType Hth, const Can_PduType* PduInfo)
         return CAN_NOT_OK;
     }
 
-    if (PduInfo->length > CAN_FRAME_MAX_DLC)
+    const uint8 maxLength = (Can_ConfigPtr->fdEnabled != 0U) ? CAN_FD_FRAME_MAX_DLC : CAN_FRAME_MAX_DLC;
+
+    if (PduInfo->length > maxLength)
     {
-        /* [SWS_Can_00218]: length が 8 バイトを超える場合は CAN_E_PARAM_DLC を
+        /* [SWS_Can_00218]: length が上限（クラシック CAN は 8 バイト、CAN FD 有効時は 64 バイト）を超える場合は CAN_E_PARAM_DLC を
          * 報告して拒否する。上位層（CanIf_Transmit）は設定 DLC（常に 8 以下）
          * で既に SduLength を検証しているため、現状この分岐は到達しないはず
          * だが、PduInfo->sdu は呼び出し元が length 分の実体を持つ保証がなく、
          * ここでチェックせず Can_Hw_Send() まで渡すと sdu バッファのオーバー
          * リードになりうる（2026-08 のスペック監査で指摘、安全網として追加）。 */
         DET_LOGE(TAG, "Write E: length=%u exceeds %u bytes",
-                 (unsigned)PduInfo->length, (unsigned)CAN_FRAME_MAX_DLC);
+                 (unsigned)PduInfo->length, (unsigned)maxLength);
         (void)Det_ReportError(CAN_MODULE_ID, 0U, CAN_API_ID_WRITE, CAN_E_PARAM_DLC);
         return CAN_NOT_OK;
     }
@@ -600,7 +637,26 @@ Can_ReturnType Can_Write(Can_HwHandleType Hth, const Can_PduType* PduInfo)
         return CAN_NOT_OK;
     }
 
-    if (Can_Hw_Send(PduInfo->id, PduInfo->length, PduInfo->sdu) != CAN_HW_OK)
+    /* CAN FD で有効でない長さ（9〜11 など）は、上へ切り上げ、足りない部分を CAN_FD_PADDING_VALUE で埋めて送る。 */
+    uint8        txBuf[CAN_FD_FRAME_MAX_DLC];
+    uint8        txLength = (uint8)PduInfo->length;
+    const uint8* txData   = PduInfo->sdu;
+
+    if (Can_ConfigPtr->fdEnabled != 0U)
+    {
+        const uint8 padded = Can_FdRoundUpLength(txLength);
+        if (padded != txLength)
+        {
+            for (uint8 i = 0U; i < padded; i++)
+            {
+                txBuf[i] = (i < txLength) ? PduInfo->sdu[i] : (uint8)CAN_FD_PADDING_VALUE;
+            }
+            txData   = txBuf;
+            txLength = padded;
+        }
+    }
+
+    if (Can_Hw_Send(PduInfo->id, txLength, txData) != CAN_HW_OK)
     {
         /* 一次検出（EFLG.TXBO）は Can_MainFunction_BusOff() のポーリングが担う。
          * 二次検出: mcp_can 環境で TXBO=1 が発生しない場合の補完。 */
@@ -735,7 +791,7 @@ void Can_MainFunction_Read(void)
     {
         uint32 rxId;
         uint8  len;
-        uint8  buf[8];
+        uint8  buf[CAN_FD_FRAME_MAX_DLC];
 
         if (Can_Hw_Read(&rxId, &len, buf) != CAN_HW_OK)
         {
