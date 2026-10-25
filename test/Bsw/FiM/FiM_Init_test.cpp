@@ -43,6 +43,14 @@ extern "C" {
 namespace
 {
 
+/* 1 つの FID（RUNNING_LED）に、2 つのイベント（CAN_BUSOFF、BUTTON_STUCK）の抑止の条件を並べた設定。
+ * どちらか 1 つが成り立てば、RUNNING_LED を抑止する（OR、[SWS_Fim_00064]）。BUTTON_ACK には条件が無い（常に許可）。 */
+const FiM_FunctionCfgType kTwoEventsRows[2] = {
+    { FIM_FID_RUNNING_LED, DemConf_DemEventParameter_CAN_BUSOFF,    DEM_STATUS_CONFIRMED },
+    { FIM_FID_RUNNING_LED, DemConf_DemEventParameter_BUTTON_STUCK,  DEM_STATUS_CONFIRMED }
+};
+const FiM_ConfigType kTwoEventsConfig = { kTwoEventsRows, 2U, FIM_FUNCTION_COUNT };
+
 /* ======================================================================
  * Test Fixture
  * ====================================================================== */
@@ -172,6 +180,48 @@ TEST_F(FiM_Init_Test, Init_OK_SetFunctionAvailableStillOverridesAfterInitEvaluat
     /* ----------------------- */
     ASSERT_EQ(ret, E_OK);
     EXPECT_EQ(GetPermission(FIM_FID_BUTTON_ACK), FALSE);
+}
+
+// OK: 1 つの FID に 2 つの条件があり、2 つ目のイベントが、初期化の前に確定済みなら、FiM_Init() の完了時に、その FID を抑止している。
+TEST_F(FiM_Init_Test, Init_OK_InhibitsFidWhenSecondOfTwoEventsIsAlreadyConfirmed)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    (void)Dem_SetEventStatus(DemConf_DemEventParameter_BUTTON_STUCK, DEM_EVENT_STATUS_FAILED);
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    FiM_Init(&kTwoEventsConfig);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(GetPermission(FIM_FID_RUNNING_LED), FALSE);
+    EXPECT_EQ(GetPermission(FIM_FID_BUTTON_ACK), TRUE);
+}
+
+// OK: 設定の FunctionCount が FIM_FUNCTION_COUNT より小さいとき、その範囲の FID だけを評価する。範囲外の FID は、API が E_NOT_OK を返す。
+TEST_F(FiM_Init_Test, Init_OK_EvaluatesOnlyFidsWithinConfigFunctionCount)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    const FiM_ConfigType oneFidConfig = { kTwoEventsRows, 2U, 1U };
+    (void)Dem_SetEventStatus(DemConf_DemEventParameter_CAN_BUSOFF, DEM_EVENT_STATUS_FAILED);
+    boolean permission = TRUE;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    FiM_Init(&oneFidConfig);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(GetPermission(FIM_FID_RUNNING_LED), FALSE);
+    EXPECT_EQ(FiM_GetFunctionPermission(FIM_FID_BUTTON_ACK, &permission), E_NOT_OK);
 }
 
 }  // namespace

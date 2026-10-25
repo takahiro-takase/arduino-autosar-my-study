@@ -44,6 +44,14 @@ extern "C" {
 namespace
 {
 
+/* 1 つの FID（RUNNING_LED）に、2 つのイベント（CAN_BUSOFF、BUTTON_STUCK）の抑止の条件を並べた設定。
+ * どちらか 1 つが成り立てば、RUNNING_LED を抑止する（OR、[SWS_Fim_00064]）。BUTTON_ACK には条件が無い（常に許可）。 */
+const FiM_FunctionCfgType kTwoEventsRows[2] = {
+    { FIM_FID_RUNNING_LED, DemConf_DemEventParameter_CAN_BUSOFF,    DEM_STATUS_CONFIRMED },
+    { FIM_FID_RUNNING_LED, DemConf_DemEventParameter_BUTTON_STUCK,  DEM_STATUS_CONFIRMED }
+};
+const FiM_ConfigType kTwoEventsConfig = { kTwoEventsRows, 2U, FIM_FUNCTION_COUNT };
+
 /* ======================================================================
  * Test Fixture
  * ====================================================================== */
@@ -148,6 +156,79 @@ TEST_F(FiM_MainFunction_Test, MainFunction_OK_PermitsFidAgainWhenDtcIsCleared)
     /* ---- 評価 (Assert) ---- */
     /* ----------------------- */
     EXPECT_EQ(GetPermission(FIM_FID_RUNNING_LED), TRUE);   // 確定していないので、再び許可される
+}
+
+// OK: 1 つの FID に 2 つの条件があるとき、1 つ目のイベントの確定で、その FID を抑止する。他の FID には、影響しない。
+TEST_F(FiM_MainFunction_Test, MainFunction_OK_InhibitsFidWhenFirstOfTwoEventsIsConfirmed)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    FiM_Init(&kTwoEventsConfig);
+    (void)Dem_SetEventStatus(DemConf_DemEventParameter_CAN_BUSOFF, DEM_EVENT_STATUS_FAILED);
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    FiM_MainFunction();
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(GetPermission(FIM_FID_RUNNING_LED), FALSE);
+    EXPECT_EQ(GetPermission(FIM_FID_BUTTON_ACK), TRUE);
+}
+
+// OK: 1 つの FID に 2 つの条件があるとき、2 つ目のイベントの確定でも、その FID を抑止する（以前は、最後の行だけが、FID の状態を決めていた）。
+TEST_F(FiM_MainFunction_Test, MainFunction_OK_InhibitsFidWhenSecondOfTwoEventsIsConfirmed)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    FiM_Init(&kTwoEventsConfig);
+    (void)Dem_SetEventStatus(DemConf_DemEventParameter_BUTTON_STUCK, DEM_EVENT_STATUS_FAILED);
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    FiM_MainFunction();
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(GetPermission(FIM_FID_RUNNING_LED), FALSE);
+}
+
+// OK: 2 つの条件が両方成り立っていて、片方だけが解除されても、もう片方が成り立つ間は、抑止のまま。両方が解除されると、許可に戻る（OR、[SWS_Fim_00064]）。
+TEST_F(FiM_MainFunction_Test, MainFunction_OK_StaysInhibitedWhileOneOfTwoEventsRemainsConfirmed)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    FiM_Init(&kTwoEventsConfig);
+    (void)Dem_SetEventStatus(DemConf_DemEventParameter_CAN_BUSOFF, DEM_EVENT_STATUS_FAILED);
+    (void)Dem_SetEventStatus(DemConf_DemEventParameter_BUTTON_STUCK, DEM_EVENT_STATUS_FAILED);
+    FiM_MainFunction();
+    ASSERT_EQ(GetPermission(FIM_FID_RUNNING_LED), FALSE);
+    uint32 dtcBusOff = 0U;
+    uint32 dtcStuck  = 0U;
+    ASSERT_EQ(Dem_GetDTCOfEvent(DemConf_DemEventParameter_CAN_BUSOFF, DEM_DTC_FORMAT_UDS, &dtcBusOff), E_OK);
+    ASSERT_EQ(Dem_GetDTCOfEvent(DemConf_DemEventParameter_BUTTON_STUCK, DEM_DTC_FORMAT_UDS, &dtcStuck), E_OK);
+    ASSERT_EQ(Dem_ClearDTC(0U, dtcBusOff, DEM_DTC_FORMAT_UDS, DEM_DTC_ORIGIN_PRIMARY_MEMORY), E_OK);   // 片方だけを解除する
+    FiM_MainFunction();
+    const boolean afterFirstCleared = GetPermission(FIM_FID_RUNNING_LED);
+    ASSERT_EQ(Dem_ClearDTC(0U, dtcStuck, DEM_DTC_FORMAT_UDS, DEM_DTC_ORIGIN_PRIMARY_MEMORY), E_OK);   // もう片方も解除する
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    FiM_MainFunction();
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(afterFirstCleared, FALSE);   // もう片方が成り立つ間は、抑止のまま
+    EXPECT_EQ(GetPermission(FIM_FID_RUNNING_LED), TRUE);
 }
 
 }  // namespace

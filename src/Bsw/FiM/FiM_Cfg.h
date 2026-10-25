@@ -62,11 +62,12 @@
  * 機能 ID (FID) 定義
  * ASW (App_EngineManager / App_WarningIndicator) が
  * Rte_Call_FiM_GetFunctionPermission() の引数として使用する。
- * FID と監視対象イベントの対応は FiM_PBCfg.c の FiM_Functions[] （FiM.json から生成）。
+ * FID と監視対象イベントの対応（抑止の条件）は FiM_PBCfg.c の FiM_Functions[] （FiM.json から生成）。
  * ----------------------------------------------------------------------- */
-#define FIM_FID_RUNNING_LED  0U  /**< RUNNING LED (D6) 点灯機能 */
-#define FIM_FID_BUTTON_ACK   1U  /**< 警告確認ボタンによる FAULT 解除 */
-#define FIM_FUNCTION_COUNT   2U  /**< 管理する機能の総数 */
+#define FIM_FID_RUNNING_LED   0U  /**< RUNNING LED (D6) 点灯機能 */
+#define FIM_FID_BUTTON_ACK    1U  /**< 警告確認ボタンによる FAULT 解除 */
+#define FIM_FUNCTION_COUNT    2U  /**< 管理する機能（FID）の総数 */
+#define FIM_INHIBITION_COUNT  2U  /**< 抑止の条件（FiM_Functions[] の行）の総数。1 つの FID に複数あってよい */
 /* @@GEN-END fim-functions */
 
 #endif /* FIM_CFG_H */

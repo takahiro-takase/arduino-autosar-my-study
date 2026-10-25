@@ -16,18 +16,36 @@ FID↔イベント対応表・判定フロー・フェールセーフ既定値�
 | `FIM_FID_RUNNING_LED` | RUNNING LED (D6) の点灯 | `DemConf_DemEventParameter_CAN_BUSOFF` が CONFIRMED | D6 を強制消灯（EngineState は CAN 受信由来のため、Bus-Off 確定中は信頼できない） |
 | `FIM_FID_BUTTON_ACK` | 警告確認ボタンによる FAULT 解除 | `DemConf_DemEventParameter_BUTTON_STUCK` が CONFIRMED | ボタン押下を無視（固着確定中の押下は物理的固着による偽信号の可能性がある） |
 
-対応表は `FiM_PBCfg.c` の `FiM_Functions[]` で定義する（AUTOSAR の `FiMFunction` コンテナに相当）。
-新しい FID を追加する場合は、ここに 1 行追加するだけで済む。
+対応表は `FiM_PBCfg.c` の `FiM_Functions[]`（抑止の条件の配列。`config/data/FiM.json` から生成）で定義する
+（AUTOSAR の `FiMInhibitionConfiguration` コンテナに相当）。1 行が 1 つの条件（FID・Dem イベント・抑止するステータスのビット）で、
+新しい FID を追加する場合は、`FiM.json` の `functions[]` に 1 件足すだけで済む。
+
+### 1 つの FID に複数の条件（2026-10 追加）
+
+`FiM.json` の機能ごとの `inhibitions[]` に、条件を複数書くと、同じ FID の行が複数になる。**どれか 1 つの条件が成り立てば、
+その FID を抑止し**、1 つも成り立たなければ許可する（OR、[SWS_Fim_00064]・仕様 7.2.2.4）。以前は、1 つの FID に、1 つのイベントの
+行しか持てず、同じ FID の行を並べても、最後の行の結果だけが、FID の状態になっていた。`FIM_FUNCTION_COUNT` は FID の数、
+`FIM_INHIBITION_COUNT` は条件（行）の数で、`FiM_ConfigType` の `FunctionCount`・`InhibitionCount` に対応する。
+簡略化: 実仕様の `FiMSummaryEvent`（複数のイベントをまとめた名前）は持たず、同じ FID に、イベントごとの行を並べる。
+
+### 抑止の条件の表し方（仕様との違い）
+
+実仕様の `FiMInhInhibitionMask` は、Dem のイベントステータスに対する4種類の列挙（`FIM_LAST_FAILED`: TF=1、`FIM_NOT_TESTED`:
+TNCTOC=1、`FIM_TESTED`: TNCTOC=0、`FIM_TESTED_AND_FAILED`: TF=1 かつ TNCTOC=0）です。本プロジェクトは、Dem のステータスバイトに対する
+ビットマスク（`InhibitStatusMask`）で表し、**いずれか 1 ビットでも立っていれば**成り立つ、とします。TF・TNCTOC のビットに加えて、
+DTC の確定（`DEM_STATUS_CONFIRMED`）も使えるので、実際の設定は、確定した DTC で機能を抑止する形にしています（単発の異常で
+抑止しないため）。ビットが「立っていないこと」を条件にする `FIM_TESTED` と、2 ビットが同時に成り立つ `FIM_TESTED_AND_FAILED` は、
+表せません（現在の設定では不要）。
 
 ## 判定の流れ
 
 ```
 FiM_MainFunction（100 ms 周期、Os Task 10）:
-  FiM_Functions[] を先頭から走査:
+  全 FID を「許可」にしてから、FiM_Functions[]（抑止の条件）を先頭から走査:
     status = Dem_GetEventUdsStatus(EventId)
     (status & InhibitStatusMask) != 0 ?
-      YES → 該当 FID を「抑止」
-      NO  → 該当 FID を「許可」
+      YES → 該当 FID を「抑止」（同じ FID の他の行が許可でも、抑止のまま）
+      NO  → その行では、何もしない
     （許可状態が変化した瞬間にのみログ出力）
 
 ASW (App_WarningIndicator_Run / App_EngineManager_Run):

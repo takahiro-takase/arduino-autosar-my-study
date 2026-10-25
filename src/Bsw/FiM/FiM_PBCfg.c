@@ -28,9 +28,9 @@
 
 /* @@GEN-BEGIN fim-table  生成元: config/data/FiM.json  （自動生成: 手編集禁止） */
 /* -----------------------------------------------------------------------
- * FID × Dem イベント対応テーブル
+ * FID × Dem イベント対応テーブル（抑止の条件 1 つが 1 行。同じ FID の行は、どれか 1 つが成り立てば抑止する）
  * ----------------------------------------------------------------------- */
-static const FiM_FunctionCfgType FiM_Functions[FIM_FUNCTION_COUNT] =
+static const FiM_FunctionCfgType FiM_Functions[FIM_INHIBITION_COUNT] =
 {
     /* FID 0: RUNNING LED (D6) 点灯機能
      * CAN Bus-Off 確定中は EngineState (CAN 受信由来) が信頼できないため、
@@ -50,5 +50,6 @@ static const FiM_FunctionCfgType FiM_Functions[FIM_FUNCTION_COUNT] =
 const FiM_ConfigType FiM_Config =
 {
     FiM_Functions,
+    FIM_INHIBITION_COUNT,
     FIM_FUNCTION_COUNT
 };
