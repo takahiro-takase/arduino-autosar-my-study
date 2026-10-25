@@ -43,7 +43,7 @@ const Com_IPduConfigType kFdRxIPdu = {
     /* IpduGroupId */       COM_IPDU_GROUP_NONE
 };
 
-/* 先頭（bit 0、8 bit）と、byte 50（bit 400、16 bit、ビッグエンディアン）の 2 つの RX シグナル。 */
+/* 先頭（bit 0、8 bit）と、byte 50（bit 400、16 bit、ビッグエンディアン）の 2 つの RX シグナル（SignalId=0、1）。 */
 const Com_SignalConfigType kFdRxSignals[2] = {
     {
         /* SignalId */  0U, COM_SIGNAL_DIRECTION_RX, 0U,
@@ -61,10 +61,40 @@ const Com_SignalConfigType kFdRxSignals[2] = {
     }
 };
 
+/* 64 byte の TX I-PDU（IPduId=0、PduRId=0）。update-bit なし。 */
+const Com_IPduConfigType kFdTxIPdu = {
+    /* IPduId */            0U,
+    /* DLC */               64U,
+    /* PduRId */            0U,
+    /* FirstTimeoutMs */    0U,
+    /* TimeoutMs */         0U,
+    /* IsSignalGroup */     0U,
+    /* TxModeMode */        COM_TX_MODE_DIRECT,
+    /* TxPeriodMs */        0U,
+    /* TxModeModeTrue */    COM_TX_MODE_DIRECT,
+    /* TxPeriodMsTrue */    0U,
+    /* MinDelayMs */        0U,
+    /* UpdateBitPosition */ COM_UPDATE_BIT_NONE,
+    /* IpduGroupId */       COM_IPDU_GROUP_NONE
+};
+
+/* RX の 2 つに、byte 50（bit 400、16 bit、ビッグエンディアン）の TX シグナル（SignalId=2。Com は SignalId を表の添字として引くため、RX の 2 つに続く番号にする）を加えた設定。 */
+const Com_SignalConfigType kFdSignals[3] = {
+    kFdRxSignals[0],
+    kFdRxSignals[1],
+    {
+        /* SignalId */  2U, COM_SIGNAL_DIRECTION_TX, 0U,
+        /* BitPosition, BitSize, Endian, InitValue */ 400U, 16U, COM_BIG_ENDIAN, 0U,
+        COM_FILTER_ALWAYS, 0xFFFFU, 0U, 0U, 0U, NULL,
+        0U, 0U, COM_TRANSFER_PROPERTY_PENDING, COM_RX_TIMEOUT_ACTION_NONE, 0U,
+        COM_DATA_INVALID_ACTION_NONE, 0U, NULL, 0U, 0U, NULL, NULL, NULL, NULL, NULL, 0U
+    }
+};
+
 const Com_ConfigType kFdConfig = {
     &kFdRxIPdu, 1U,
-    NULL, 0U,
-    kFdRxSignals, 2U,
+    &kFdTxIPdu, 1U,
+    kFdSignals, 3U,
     NULL, 0U
 };
 
@@ -126,4 +156,25 @@ TEST_F(Com_Fd64ByteIPdu_Test, Com_ReceiveSignal_OK_SignalBeyond8BitPositionRange
     EXPECT_EQ(retBeyond, E_OK);
     EXPECT_EQ(first, 0x11U);
     EXPECT_EQ(beyond, 0xABCDU);   // 以前は bit 400 が 8 bit に収まらず、別の位置を読んでいた
+}
+
+TEST_F(Com_Fd64ByteIPdu_Test, Com_SendSignal_OK_SignalBeyond8BitPositionRangeIsPackedIntoTxBuffer)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    const uint16 value = 0xABCDU;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    const uint8 ret = Com_SendSignal(2U, &value);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_OK);
+    EXPECT_EQ(Com_Test_GetTxBuffer(0U)[50], 0xABU);   // bit 400〜407
+    EXPECT_EQ(Com_Test_GetTxBuffer(0U)[51], 0xCDU);   // bit 408〜415
+    EXPECT_EQ(Com_Test_GetTxBuffer(0U)[0],  0x00U);   // 先頭の byte は、書き換わっていない（位置が折り返していない）
 }
