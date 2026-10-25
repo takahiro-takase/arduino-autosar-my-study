@@ -23,8 +23,12 @@
  * Definitions
  * ====================================================================== */
 
+/* update-bit を持たないことを示すセンチネル値（Com_IPduConfigType.UpdateBitPosition）。
+ * ビット位置は、64 byte の I-PDU（CAN FD）では 0〜511 なので、16 bit で表し、取りえない値 0xFFFF を使う。 */
+#define COM_UPDATE_BIT_NONE  0xFFFFU
+
 /* I-PDU が所属する I-PDU Group を持たないことを示すセンチネル値
- * （UpdateBitPosition の 0xFF センチネルと同じ規約）。
+ * （UpdateBitPosition の COM_UPDATE_BIT_NONE センチネルと同じ規約）。
  * [SWS_Com_00840]: I-PDU Group に属さない I-PDU は Com_Init() 時に常に
  * 開始済み（Started）として扱われ、Com_IpduGroupStart/Stop() の対象になる
  * ことも、Com_IpduGroupStop() で停止されることも一切ない（永久に有効）。
@@ -613,7 +617,7 @@ typedef struct
     Com_TxModeModeType TxModeModeTrue;
     uint16             TxPeriodMsTrue;
     uint16             MinDelayMs;
-    uint8              UpdateBitPosition;
+    uint16             UpdateBitPosition;
     Com_IpduGroupIdType IpduGroupId;
     void (*RxIndicationCbk)(void);
     void (*TxTransformCbk)(uint8* Data, uint8 Length);
@@ -665,7 +669,7 @@ typedef enum
 //   IPduId      : このシグナルが属する I-PDU の ID（Direction 側の値空間。
 //                 RX と TX で数値が重複しうるため、Direction とセットで
 //                 初めて一意に I-PDU を特定できる）
-//   BitPosition : I-PDU 内の先頭ビット位置
+//   BitPosition : I-PDU 内の先頭ビット位置（0〜511。64 byte の I-PDU まで）
 //                 big-endian  → MSB のビット番号
 //                 little-endian → LSB のビット番号
 //   BitSize     : シグナルのビット長（1〜32）
@@ -814,7 +818,7 @@ typedef struct
     Com_SignalIdType            SignalId;
     Com_SignalDirectionType     Direction;
     Com_IPduIdType              IPduId;
-    uint8                       BitPosition;
+    uint16                      BitPosition;
     uint8                       BitSize;
     Com_SignalEndianType        Endian;
     uint32                      InitValue;

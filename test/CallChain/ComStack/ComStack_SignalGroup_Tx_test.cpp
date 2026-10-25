@@ -160,7 +160,7 @@ const Com_IPduConfigType kTestErrGroupIPdu = {
     /* TxModeModeTrue */   COM_TX_MODE_DIRECT,
     /* TxPeriodMsTrue */   0U,
     /* MinDelayMs */       100U,  // Com_TriggerIPDUSend の MDT 尊重（SWS_Com_00388）検証用
-    /* UpdateBitPosition */ 0xFFU,
+    /* UpdateBitPosition */ 0xFFFFU,
     /* IpduGroupId */      kTestStoppableGroupId,
     /* RxIndicationCbk */  NULL,
     /* TxTransformCbk */   NULL,
@@ -260,7 +260,7 @@ const Com_IPduConfigType kTestTxIPdu = {
     /* TxModeModeTrue */   COM_TX_MODE_DIRECT,
     /* TxPeriodMsTrue */   0U,
     /* MinDelayMs */       0U,
-    /* UpdateBitPosition */ 0xFFU,
+    /* UpdateBitPosition */ 0xFFFFU,
     /* IpduGroupId */      COM_IPDU_GROUP_NONE,
     /* RxIndicationCbk */  NULL,
     /* TxTransformCbk */   NULL

@@ -274,11 +274,11 @@ static uint8 Com_GroupTriggerPending[COM_TX_IPDU_MAX];
 static unsigned long Com_GetNowMs(void);
 
 static uint32 Com_UnpackSignal(const uint8* buf,
-                                uint8 bitPos,
+                                uint16 bitPos,
                                 uint8 bitSize,
                                 Com_SignalEndianType endian);
 static void Com_PackSignal(uint8* buf,
-                            uint8 bitPos,
+                            uint16 bitPos,
                             uint8 bitSize,
                             Com_SignalEndianType endian,
                             uint32 value);
@@ -638,7 +638,7 @@ void Com_IpduGroupStart(Com_IpduGroupIdType IpduGroupId, boolean initialize)
         Com_TxUsingFirstTimeout[id]  = 1U;
 
         /* [SWS_Com_00787] 項目4: update-bit をクリアする。 */
-        if (ipdu->UpdateBitPosition != 0xFFU)
+        if (ipdu->UpdateBitPosition != COM_UPDATE_BIT_NONE)
         {
             Com_PackSignal(Com_TxBuffer[id], ipdu->UpdateBitPosition, 1U, COM_BIG_ENDIAN, 0U);
         }
@@ -1184,7 +1184,7 @@ uint8 Com_SendSignal(Com_SignalIdType SignalId, const void* SignalDataPtr)
          * EngineSpeed/RunLamp 等のミラーシグナルを追加した際、それらの
          * 変化だけで EngineState 用の update-bit が誤って立つ不具合が
          * 見つかり対応した）。 */
-        if (passesFilter && (ipdu->UpdateBitPosition != 0xFFU) && (sig->UpdateBitContributor == 1U))
+        if (passesFilter && (ipdu->UpdateBitPosition != COM_UPDATE_BIT_NONE) && (sig->UpdateBitContributor == 1U))
         {
             Com_PackSignal(Com_TxBuffer[sig->IPduId], ipdu->UpdateBitPosition, 1U, COM_BIG_ENDIAN, 1U);
         }
@@ -1560,7 +1560,7 @@ uint8 Com_SendSignalGroup(Com_SignalGroupIdType SignalGroupId)
      * 同種コメント・docs/modules/Com_Notes.md「Update Bit」節参照。TMS 遷移のみによる即時送信
      * （tmsChanged）はグループメンバーの値更新を意味しないため、update-bit
      * の条件には含めない（groupTriggered のみで判定する）。 */
-    if (groupTriggered && (ipdu->UpdateBitPosition != 0xFFU))
+    if (groupTriggered && (ipdu->UpdateBitPosition != COM_UPDATE_BIT_NONE))
     {
         Com_PackSignal(Com_TxBuffer[SignalGroupId], ipdu->UpdateBitPosition, 1U, COM_BIG_ENDIAN, 1U);
     }
@@ -1676,7 +1676,7 @@ uint8 Com_ReceiveSignalGroup(Com_SignalGroupIdType SignalGroupId)
      * 場合、受信データを破棄する。シャドウバッファ・タイムアウトスナップ
      * ショットとも直近の状態のまま更新しない（＝前回 update-bit=1 で確定
      * コピーした内容を Com_ReceiveSignal() が返し続ける）。 */
-    if (ipdu->UpdateBitPosition != 0xFFU)
+    if (ipdu->UpdateBitPosition != COM_UPDATE_BIT_NONE)
     {
         const uint32 updateBit = Com_UnpackSignal(Com_RxBuffer[SignalGroupId],
                                                     ipdu->UpdateBitPosition, 1U, COM_BIG_ENDIAN);
@@ -1831,7 +1831,7 @@ uint8 Com_SendSignalGroupArray(Com_SignalGroupIdType SignalGroupId, const uint8*
     (void)Com_RecalcTms(SignalGroupId);
     Com_RequestTxOnChange(ipdu);
 
-    if (ipdu->UpdateBitPosition != 0xFFU)
+    if (ipdu->UpdateBitPosition != COM_UPDATE_BIT_NONE)
     {
         Com_PackSignal(Com_TxBuffer[SignalGroupId], ipdu->UpdateBitPosition, 1U, COM_BIG_ENDIAN, 1U);
     }
@@ -2481,7 +2481,7 @@ void Com_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
                 continue;
             }
 
-            const uint8 lastByte = (uint8)((sig->BitPosition + sig->BitSize + 7U) / 8U);
+            const uint8 lastByte = (uint8)(((uint16)sig->BitPosition + sig->BitSize + 7U) / 8U);
             if (lastByte <= recvLen)
             {
                 Com_SigTimedOut[s] = 0U;
@@ -3202,14 +3202,14 @@ void Com_SetCommunicationEnabled(uint8 RxEnabled, uint8 TxEnabled)
  * \Synchronicity  {Synchronous}
  */
 static uint32 Com_UnpackSignal(const uint8* buf,
-                                uint8 bitPos,
+                                uint16 bitPos,
                                 uint8 bitSize,
                                 Com_SignalEndianType endian)
 {
     uint32 value = 0U;
     for (uint8 i = 0; i < bitSize; i++)
     {
-        const uint8 pos = bitPos + i;
+        const uint16 pos = (uint16)(bitPos + i);
         const uint8 bit = (buf[pos / 8U] >> (7U - (pos % 8U))) & 1U;
         if (endian == COM_BIG_ENDIAN)
         {
@@ -3245,7 +3245,7 @@ static uint32 Com_UnpackSignal(const uint8* buf,
  * \Synchronicity  {Synchronous}
  */
 static void Com_PackSignal(uint8* buf,
-                            uint8 bitPos,
+                            uint16 bitPos,
                             uint8 bitSize,
                             Com_SignalEndianType endian,
                             uint32 value)
@@ -3256,8 +3256,8 @@ static void Com_PackSignal(uint8* buf,
                             /* cppcheck-suppress misra-c2012-10.7 */
                             ? (uint8)((value >> (bitSize - 1U - i)) & 1U)
                             : (uint8)((value >> i) & 1U);
-        const uint8 pos   = bitPos + i;
-        const uint8 shift = 7U - (pos % 8U);
+        const uint16 pos  = (uint16)(bitPos + i);
+        const uint8 shift = (uint8)(7U - (pos % 8U));
         if ((bit) != 0U)
         {
             buf[pos / 8U] |=  (uint8)(1U << shift);
@@ -3669,7 +3669,7 @@ static Std_ReturnType Com_DoTransmit(const Com_IPduConfigType* ipdu, unsigned lo
      * `.UpdateBitPosition = 0xFFU` を明示設定する」という Com_PBCfg.c 側の
      * 規約が守られていることが前提（C の既定初期化 0 のまま放置すると、
      * その I-PDU のバッファ bit0 を毎回誤ってクリアし、シグナル値を破壊する）。 */
-    if (ret == E_OK && (ipdu->UpdateBitPosition != 0xFFU))
+    if (ret == E_OK && (ipdu->UpdateBitPosition != COM_UPDATE_BIT_NONE))
     {
         Com_PackSignal(Com_TxBuffer[ipdu->IPduId], ipdu->UpdateBitPosition, 1U, COM_BIG_ENDIAN, 0U);
     }
