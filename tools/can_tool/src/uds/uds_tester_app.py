@@ -1560,6 +1560,19 @@ class UdsTesterFrame(ttk.Frame):
         ("->mode=2", "FULL_COM"),
     )
 
+    # Dcm の診断セッション。Dcm.c の次のログから判定する（本プロジェクトは default と extended だけ）:
+    #   0x10 の要求   "10 session=0x01" / "10 session=0x03"
+    #   S3 の切れ     "S3 timeout -> session=Default"
+    #   0x11 の再起動  "11 session->Default"
+    #   Dcm の初期化  "Dcm_Init: Init ok"（ECU の起動・再起動。セッションは必ず default から始まる）
+    _DCM_SESSION_RULES = (
+        ("10 session=0x03", "extended"),
+        ("10 session=0x01", "default"),
+        ("S3 timeout -> session=Default", "default"),
+        ("11 session->Default", "default"),
+        ("Dcm_Init: Init ok", "default"),
+    )
+
     # 「ECU 状態」パネルの単一の情報源: (ログの TAG 文字列, 表示ラベル, 判定ルール)。
     # ウィジェットの並び順（EcuM → ComM → CanSM の、上位から下位への順）・表示
     # ラベル文字列・ログ判定ルールを、ここ1箇所にまとめる（以前は3つの辞書に
@@ -1573,6 +1586,7 @@ class UdsTesterFrame(ttk.Frame):
         ("EcuM", "ECU State", _ECUM_STATE_RULES),
         ("ComM", "Comm Mode", _COMM_STATE_RULES),
         ("CanSM", "CanSM", _CANSM_STATE_RULES),
+        ("Dcm", "Session", _DCM_SESSION_RULES),
     )
     _TAG_STATE_RULES = {tag: rules for tag, _label, rules in _STATE_DEFS}
     # 値の表示幅（文字数）。実行中に値が変わっても左右の他要素の位置が動かない

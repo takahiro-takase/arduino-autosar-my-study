@@ -368,6 +368,7 @@ static PduInfoType Dcm_TxPdu;
  * ====================================================================== */
 
 static unsigned long Dcm_GetNowMs(void);
+static void Dcm_RestartS3Timer(void);
 /* delay() is declared in Arduino wiring.c with C linkage. */
 extern void delay(unsigned long ms);
 
@@ -448,7 +449,7 @@ void Dcm_Init(const Dcm_ConfigType* ConfigPtr)
     Dcm_CurrentSession   = DCM_SESSION_DEFAULT;
     Dcm_TxPdu.SduDataPtr = Dcm_TxBuf;
     Dcm_TxPdu.SduLength  = 0U;   /* 各ハンドラで送信長を設定する */
-    Dcm_LastActivityMs   = Dcm_GetNowMs();
+    Dcm_RestartS3Timer();
 
     Dcm_SecurityLevel         = 0U;
     Dcm_SecuritySeedPending   = 0U;
@@ -794,7 +795,7 @@ BufReq_ReturnType Dcm_StartOfReception(PduIdType id, const PduInfoType* info, Pd
 
     if (Dcm_TxInProgress != 0U)
     {
-        Dcm_LastActivityMs = Dcm_GetNowMs();
+        Dcm_RestartS3Timer();
         DET_LOGW(TAG, "reception rejected (response TX in progress)");
         return BUFREQ_E_NOT_OK;
     }
@@ -804,6 +805,10 @@ BufReq_ReturnType Dcm_StartOfReception(PduIdType id, const PduInfoType* info, Pd
         DET_LOGW(TAG, "reception rejected (len=%u > %u)", (unsigned)TpSduLength, (unsigned)DCM_RX_BUF_SIZE);
         return BUFREQ_E_OVFL;
     }
+
+    /* [SWS_Dcm_00141]: 要求の受信の開始で、S3Server タイマは止まる。本実装は、タイマを止める代わりに、最終活動時刻を
+     * 更新して、受信の途中で S3 が切れないようにする（受信の終わり、または処理の開始で、再び更新する）。 */
+    Dcm_RestartS3Timer();
 
     Dcm_RxTotal    = TpSduLength;
     Dcm_RxLen      = 0U;
@@ -913,6 +918,7 @@ void Dcm_TpRxIndication(PduIdType id, Std_ReturnType result)
     {
         DET_LOGW(TAG, "reception discarded (result=%u len=%u/%u)",
                  (unsigned)result, (unsigned)Dcm_RxLen, (unsigned)Dcm_RxTotal);
+        Dcm_RestartS3Timer();   /* [SWS_Dcm_00141]: 受信の失敗で、S3Server タイマを再開する */
         return;
     }
 
@@ -1026,6 +1032,12 @@ void Dcm_TpTxConfirmation(PduIdType id, Std_ReturnType result)
     if (result != E_OK)
     {
         DET_LOGW(TAG, "response TX aborted");
+    }
+    if (Dcm_TxInProgress != 0U)
+    {
+        /* [SWS_Dcm_00141]: 最終応答の完了（失敗の通知を含む）で、S3Server タイマを再開する。送信が進行中でないとき
+         * （重複した通知や、遅れて届いた通知）は、応答が完了したわけではないので、再開しない。 */
+        Dcm_RestartS3Timer();
     }
     Dcm_TxInProgress = 0U;
 }
@@ -1227,7 +1239,7 @@ void Dcm_MainFunction(void)
          * タイマが進まない代わりとする（2026-09 追加。以前はこのチェックが無く、
          * 応答送信が長時間かかった場合（gs_usb の TX スタック不具合等）に、送信継続中でも
          * S3 タイムアウトが誤発火しうる状態だった）。 */
-        Dcm_LastActivityMs = Dcm_GetNowMs();
+        Dcm_RestartS3Timer();
         return;
     }
 
@@ -1241,6 +1253,24 @@ void Dcm_MainFunction(void)
 /* ======================================================================
  * Internal Functions
  * ====================================================================== */
+
+/* ----------------------------------------------------------------------
+ * Dcm_RestartS3Timer
+ * ---------------------------------------------------------------------- */
+
+/**
+ * \brief   S3Server タイマを最初から数え直す（[SWS_Dcm_00141] の「Start of S3Server」）。
+ *
+ * \details 本実装は、タイマの停止・再開を持たず、最終活動時刻（Dcm_LastActivityMs）を現在時刻へ更新する。
+ *          Dcm_MainFunction() は、非 default セッションで、この時刻から DCM_S3_TIMEOUT_MS 以上が経つと、default へ戻す。
+ *          仕様の「止める」（要求の受信の開始）も、この更新で代用する（受信が S3 を超えて続くことは、
+ *          CanTp のタイムアウトがあるので、想定しない）。呼ぶ場面は、Dcm_Init()、受信の開始、受信の失敗、
+ *          要求の処理の開始、最終応答の完了、および応答の送信が進行中の毎周期。
+ */
+static void Dcm_RestartS3Timer(void)
+{
+    Dcm_LastActivityMs = Dcm_GetNowMs();
+}
 
 /* ----------------------------------------------------------------------
  * Dcm_GetNowMs
@@ -3885,7 +3915,7 @@ static void Dcm_ProcessRequest(const uint8* uds, uint8 udsLen)
     Dcm_SuppressPosRsp = 0U;
 
     /* 診断要求を受信した時点で S3 タイマをリセットする（NRC になる要求も対象） */
-    Dcm_LastActivityMs = Dcm_GetNowMs();
+    Dcm_RestartS3Timer();
 
     DET_LOGI(TAG, "req SID=0x%02X", (unsigned)sid);
 
