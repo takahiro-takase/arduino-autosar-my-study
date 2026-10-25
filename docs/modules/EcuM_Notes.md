@@ -173,6 +173,27 @@ Bus-Off 回復中に SILENT_COM を何度挟んでも、EcuM への再通知は�
 `EcuM_RequestRUN()` が呼ばれて SHUTDOWN から RUN へ戻ります
 （詳細は [`CanSM_Notes.md`](./CanSM_Notes.md) と [can_stack.md](../can_stack.md#can-controller-sleep)）。
 
+### 起床要因の状態と検証のタイムアウト（2026-10 追加）
+
+EcuM は、起床要因を、仕様（[SWS_EcuM_04091]）の4つの状態で持ちます。以前は、検証待ちのビットだけで、検証されない起床
+（ノイズなど）では、検証待ちのビットが立ったままになり、`EcuM_MainFunction()` が、毎周期、`CanIf_CheckValidation()` を
+呼び続けていました。
+
+| 状態 | 意味 | 取得 | 遷移 |
+| --- | --- | --- | --- |
+| NONE | 起床が無い、または消した | — | `EcuM_ClearWakeupEvent()` |
+| PENDING | 起床を検出したが、まだ検証されていない | `EcuM_GetPendingWakeupEvents()` | `EcuM_CheckWakeup()` が立て、検証のタイムアウトを起算する（[SWS_EcuM_02709]）。検証待ちの間の再通知では、起算し直さない（[SWS_EcuM_02712]） |
+| VALIDATED | 検証された | `EcuM_GetValidatedWakeupEvents()` | `EcuM_ValidateWakeupEvent()`。検証待ちが無くなるので、タイムアウトは意味を失う（[SWS_EcuM_02710]） |
+| EXPIRED | 検証されないまま、タイムアウトした | `EcuM_GetExpiredWakeupEvents()` | `ECUM_VALIDATION_TIMEOUT_MS` が経つと、`EcuM_MainFunction()` が、検証待ちから外して、立てる（[SWS_EcuM_04081]） |
+
+- 新しく起床を検出（`EcuM_CheckWakeup()`）すると、前回の VALIDATED・EXPIRED の記録は消えます。期限切れの後に、遅れて検証された場合は、
+  EXPIRED を外して、VALIDATED にします。
+- `ECUM_VALIDATION_TIMEOUT_MS`（既定 3000 ms、`config/data/EcuM.json`）は、CanSM の検証の時間（`CANSM_WAKEUP_VALIDATION_MS`、2000 ms）より長くしてあります。
+  ノイズの起床では、CanSM が先に、コントローラをスリープへ戻し、1 秒後に、EcuM が EXPIRED にします。
+- 簡略化: 実仕様は、期限切れのとき、`BswM_EcuM_CurrentWakeup(要因, ECUM_WKSTATUS_EXPIRED)`（[SWS_EcuM_04082]）で BswM へ通知し、
+  `EcuM_StopWakeupSources()` を呼びますが、本プロジェクトは BswM への起床要因の通知を持たないので、`wakeup validation expired`
+  のログと、`EcuM_GetExpiredWakeupEvents()` だけです。起床要因は CAN だけで、1つのタイマーで足ります（[SWS_EcuM_04004]）。
+
 ## EcuM 設定（`EcuM_Cfg.h`）
 
 | 定数 | 既定値 | 意味 |
@@ -180,6 +201,7 @@ Bus-Off 回復中に SILENT_COM を何度挟んでも、EcuM への再通知は�
 | `ECUM_USER_COUNT` | 1 | RUN 要求できるユーザ数 |
 | `ECUM_USER_COMM` | 0 | ComM のユーザ ID |
 | `ECUM_POST_RUN_TIMEOUT_MS` | 5000 ms | POST_RUN タイムアウト |
+| `ECUM_VALIDATION_TIMEOUT_MS` | 3000 ms | 起床要因の検証のタイムアウト（`EcuMValidationTimeout`）。超えると EXPIRED |
 
 ## 開発の経緯（実機で見つかった不具合・設計変更）
 
