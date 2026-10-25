@@ -72,7 +72,9 @@ baud）を選んで Connect してください。CAN 接続とは完全に独立
 `ComM.c`の`ComM_BusSM_ModeIndication()`が出す`"ch%u ->mode=%u"`ログから数値を抽出し、
 `ComM_ModeType`（NO_COM/SILENT_COM/FULL_COM）へ変換）/CanSM（`->FULL_COM`等の
 ログ行から正規表現で抽出、`docs/modules/CanSM_Notes.md`「状態遷移」参照）の
-最新状態は「ECU 状態」パネルに左から EcuM・ComM・CanSM の順、値は表示位置が
+最新状態は「ECU 状態」パネルに左から EcuM・ComM・CanSM・Session（Dcm の診断セッション。
+`default` / `extended`。0x10 の要求と S3 タイムアウト、0x11 の再起動、Dcm の初期化の各ログから判定。
+接続の前から extended だった場合は、次に 0x10 の要求か S3 の切れのログが出るまで `?` のまま）の順、値は表示位置が
 ずれないよう固定幅で常時表示され、「ログ」チェックボックスでログパネルを
 開かなくても確認できます。CanSM 側の表示ラベルだけは、対応する AUTOSAR 公式型が
 ないため（`CanSM_InternalStateType`はこのプロジェクト独自の内部表現で、

@@ -559,15 +559,39 @@ S3 の時間は、仕様（[SWS_Dcm_00143]）では 5 秒固定ですが、Teste
 増えすぎるため、本プロジェクトは `DCM_S3_TIMEOUT_MS`（`Dcm_Cfg.h`）を 60 秒にしています。
 
 ```
+Dcm_StartOfReception（要求の受信の開始。受け入れたとき）:
+  Dcm_RestartS3Timer()                  ← S3 タイマをリセット（受信の途中で S3 が切れないようにする）
+
+Dcm_TpRxIndication（受信の失敗のとき）:
+  Dcm_RestartS3Timer()                  ← S3 タイマを再開
+
 Dcm_ProcessRequest（要求受信時、SID を問わず毎回。Dcm_TpRxIndication から呼ばれる）:
-  Dcm_LastActivityMs = Dcm_GetNowMs()   ← S3 タイマをリセット（Os のカウンタ値）
+  Dcm_RestartS3Timer()                  ← S3 タイマをリセット（Os のカウンタ値）
+
+Dcm_TpTxConfirmation（最終応答の送信の完了。失敗の通知も含む）:
+  Dcm_RestartS3Timer()                  ← S3 タイマを再開
 
 Dcm_MainFunction（1000ms 周期、Os Task 9）:
   session != Default かつ
   Dcm_GetNowMs() - Dcm_LastActivityMs >= DCM_S3_TIMEOUT_MS（既定 60000ms）?
     YES → session = Default
           INFO: "S3 timeout -> session=Default"
+  （応答の送信が進行中の間は、毎周期、Dcm_RestartS3Timer() を呼ぶ。Dcm_RestartS3Timer() は、最終活動時刻 Dcm_LastActivityMs を現在時刻へ更新する）
 ```
+
+仕様（[SWS_Dcm_00141]）は、S3Server タイマの止める時と再開する時を、次のように定めています。本実装は、タイマを
+止める代わりに、最終活動時刻を更新して、同じ効果を得ています。
+
+| 仕様 | 本実装 |
+| --- | --- |
+| 止める: 要求の受信の開始（`Dcm_StartOfReception`） | 最終活動時刻を更新する（受信の途中で S3 が切れない） |
+| 再開: 最終応答の完了（`Dcm_TpTxConfirmation`、失敗の通知を含む） | 最終活動時刻を更新する。送信が進行中の間は、毎周期の更新でも保つ |
+| 再開: 応答が不要・禁止の要求の処理の完了 | 要求の処理の開始時に更新済み（`Dcm_ProcessRequest`）。本実装の要求の処理は、すべて同期で、`Dcm_ProcessRequest` の中で終わる（0x31 のルーチンも、開始の要求の処理だけで終わり、実行は別）。処理の開始から完了までの差は、数 ms |
+| 再開: 複数フレームの要求の受信の失敗（`Dcm_TpRxIndication`） | 最終活動時刻を更新する |
+
+2026-10 までは、受信の開始と失敗、応答の完了では、時刻を更新していませんでした。S3 の切れる直前に受信が始まると、
+受信の途中でセッションが戻る可能性（60 秒に対して、受信は数 ms〜1 秒なので、極めて稀）と、応答の完了から数える
+はずの S3 が、要求の処理の開始から数えられる差（数 ms）がありました。
 
 ExtendedDiagnosticSession に切り替えた後、60 秒以上どの診断要求も送らずに放置すると、
 セッションが自動的に Default に戻ります。SID 0x22 等のセッション依存サービスは
