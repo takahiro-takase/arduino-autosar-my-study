@@ -72,6 +72,13 @@ typedef uint8 EcuM_UserType;
  *  本プロジェクトが実際に使う値は ECUM_WKSOURCE_CAN のみ（EcuM_Cfg.h 参照）。 */
 typedef uint32 EcuM_WakeupSourceType;
 
+/** EcuM ウェイクアップ要因の状態（[SWS_EcuM_04041]）。EcuM が BswM_EcuM_CurrentWakeup() で通知する。 */
+typedef uint8 EcuM_WakeupStatusType;
+#define ECUM_WKSTATUS_NONE       0U  /**< 検出された起床イベントは無い（保持していない） */
+#define ECUM_WKSTATUS_PENDING    1U  /**< 起床イベントを検出したが、まだ検証されていない */
+#define ECUM_WKSTATUS_VALIDATED  2U  /**< 起床イベントは有効（検証された） */
+#define ECUM_WKSTATUS_EXPIRED    3U  /**< 起床イベントは検証されないまま、期限が切れた */
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -251,9 +258,9 @@ Std_ReturnType EcuM_ReleasePOST_RUN(EcuM_UserType user);
  *          呼ぶ）と位置づけられるが、本プロジェクトは単一 ECU 構成で、EcuM の
  *          ウェイクアップソース管理のうち、検証待ち（PENDING）・検証済み（VALIDATED）・
  *          期限切れ（EXPIRED）の保持と、検証のタイムアウト（`ECUM_VALIDATION_TIMEOUT_MS`）だけを
- *          持つ（`EcuM_SetWakeupEvent` の代わりに本関数が、検証待ちにして、タイムアウトを起算する。
- *          BswM への通知 `BswM_EcuM_CurrentWakeup()` は持たない）ため、EcuM.c 内の通常関数として
- *          簡略実装する。
+ *          持つ（`EcuM_SetWakeupEvent` の代わりに本関数が、検証待ちにして、タイムアウトを起算し、
+ *          BswM へ `BswM_EcuM_CurrentWakeup(ECUM_WKSOURCE_CAN, ECUM_WKSTATUS_PENDING)` を通知する）ため、
+ *          EcuM.c 内の通常関数として簡略実装する。
  *
  *          本プロジェクトで実際にサポートするウェイクアップ要因は CAN バス
  *          起床（`ECUM_WKSOURCE_CAN`）のみである。実際の検証は、Listen-Only
@@ -293,9 +300,9 @@ void EcuM_CheckWakeup(EcuM_WakeupSourceType wakeupSource);
  *
  *          検証待ち（PENDING）から、検証済み（VALIDATED）へ移し、期限切れ（EXPIRED）に
  *          なっていた要因は、そこから外す（遅れて検証された場合）。検証のタイムアウトの
- *          タイマは、検証待ちが無くなると止まる（[SWS_EcuM_02710]）。本プロジェクトの EcuM は、
- *          `BswM_EcuM_CurrentWakeup()` の通知（[SWS_EcuM_04078]/[SWS_EcuM_04079]）を
- *          持たない（`EcuM_CheckWakeup()` の説明参照）。
+ *          タイマは、検証待ちが無くなると止まる（[SWS_EcuM_02710]）。検証済みの要因は、BswM へ
+ *          `BswM_EcuM_CurrentWakeup(sources, ECUM_WKSTATUS_VALIDATED)` で通知する
+ *          （[SWS_EcuM_04078]/[SWS_EcuM_04079]）。
  *
  * \param[in]  sources  検証された起床要因のビットマスク。`ECUM_WKSOURCE_CAN` 以外の
  *                       ビットを含む、または 0 の場合は、未知の要因として

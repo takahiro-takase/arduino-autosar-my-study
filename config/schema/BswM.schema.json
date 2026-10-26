@@ -260,7 +260,8 @@
                 "enum": [
                   "ECUM",
                   "COMM",
-                  "DCM_COMM"
+                  "DCM_COMM",
+                  "ECUM_WAKEUP"
                 ]
               },
               "value": {
@@ -283,7 +284,8 @@
               "enum": [
                 "ECUM",
                 "COMM",
-                "DCM_COMM"
+                "DCM_COMM",
+                "ECUM_WAKEUP"
               ]
             },
             "values": {

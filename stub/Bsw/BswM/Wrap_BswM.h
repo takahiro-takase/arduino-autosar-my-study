@@ -23,7 +23,7 @@
  *          動かす用途は対象外（呼びたいテストは各自 `BswM_Init()` を呼べば
  *          よい。その場合も wrap は素通しで実体へ届く）。
  *
- *          AUTOSAR 仕様（SWS_BswM）が定義する `BswM.h` の公開 IF 全6関数を
+ *          AUTOSAR 仕様（SWS_BswM）が定義する `BswM.h` の公開 IF 全7関数を
  *          対象とする。すべて戻り値を持たないため、回数閾値方式の故障注入は
  *          実装せず、呼び出し回数の記録のみ行う。
  *
@@ -32,7 +32,7 @@
  *          `FakeBswM_LastNetwork`/`FakeBswM_LastDcmCommunicationMode` 相当の
  *          直近引数キャプチャを追加する。
  *
- *          6関数すべて本ファイル1つが対象のため、他 wrap ファイルのような
+ *          7関数すべて本ファイル1つが対象のため、他 wrap ファイルのような
  *          関数ごとの個別 `Reset()` ではなく、全状態を一括で初期状態へ戻す
  *          `WrapBswM_Reset()` を1つだけ持つ。各テストケースは SetUp() で
  *          `WrapBswM_Reset()` を1回呼ぶこと。
@@ -64,18 +64,23 @@ extern "C" {
  * ====================================================================== */
 
 /* ----------------------------------------------------------------------
- * 呼び出し回数（AUTOSAR IF 全6関数共通）
+ * 呼び出し回数（AUTOSAR IF 全7関数共通）
  * ---------------------------------------------------------------------- */
 extern uint32 CallCount_BswM_Init;
 extern uint32 CallCount_BswM_Deinit;
 extern uint32 CallCount_BswM_GetVersionInfo;
 extern uint32 CallCount_BswM_EcuM_CurrentState;
+extern uint32 CallCount_BswM_EcuM_CurrentWakeup;
 extern uint32 CallCount_BswM_ComM_CurrentMode;
 extern uint32 CallCount_BswM_Dcm_CommunicationMode_CurrentState;
 
 /* ----------------------------------------------------------------------
  * 直近の呼び出し内容のキャプチャ
  * ---------------------------------------------------------------------- */
+/** 直近の `BswM_EcuM_CurrentWakeup()` 呼び出しの引数。 */
+extern EcuM_WakeupSourceType Last_source_BswM_EcuM_CurrentWakeup;
+extern EcuM_WakeupStatusType Last_state_BswM_EcuM_CurrentWakeup;
+
 /** 直近の `BswM_ComM_CurrentMode()` 呼び出しの引数。 */
 extern NetworkHandleType LastChannel_BswM_ComM_CurrentMode;
 extern ComM_ModeType     LastMode_BswM_ComM_CurrentMode;

@@ -448,4 +448,120 @@ TEST_F(EcuM_CheckWakeup_Test, EcuM_ClearWakeupEvent_OK_ClearsExpiredEvent)
     EXPECT_EQ(EcuM_GetExpiredWakeupEvents(), 0U);
 }
 
+// OK: 起床を検出して検証待ちになると、BswM へ PENDING を通知する。検証待ちの間の再通知では、重ねて通知しない（[SWS_EcuM_02712]）。
+TEST_F(EcuM_CheckWakeup_Test, EcuM_CheckWakeup_OK_NotifiesBswMPendingOnlyOnNewWakeup)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    EcuM_Test_SetState(ECUM_STATE_RUN);
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    EcuM_CheckWakeup(ECUM_WKSOURCE_CAN);
+    EcuM_CheckWakeup(ECUM_WKSOURCE_CAN);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(CallCount_BswM_EcuM_CurrentWakeup, 1U);
+    EXPECT_EQ(Last_source_BswM_EcuM_CurrentWakeup, ECUM_WKSOURCE_CAN);
+    EXPECT_EQ(Last_state_BswM_EcuM_CurrentWakeup, ECUM_WKSTATUS_PENDING);
+}
+
+// OK: 検証のタイムアウトで期限切れになると、BswM へ EXPIRED を通知する（[SWS_EcuM_04082]）。PENDING の通知に続く 2 回目。
+TEST_F(EcuM_CheckWakeup_Test, EcuM_MainFunction_OK_NotifiesBswMExpiredWhenValidationTimesOut)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    EcuM_Test_SetState(ECUM_STATE_RUN);
+    EcuM_CheckWakeup(ECUM_WKSOURCE_CAN);
+    ASSERT_EQ(CallCount_BswM_EcuM_CurrentWakeup, 1U);
+    Advance(ECUM_VALIDATION_TIMEOUT_MS + 1UL);
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    EcuM_MainFunction();
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(CallCount_BswM_EcuM_CurrentWakeup, 2U);
+    EXPECT_EQ(Last_source_BswM_EcuM_CurrentWakeup, ECUM_WKSOURCE_CAN);
+    EXPECT_EQ(Last_state_BswM_EcuM_CurrentWakeup, ECUM_WKSTATUS_EXPIRED);
+}
+
+// OK: 起床要因が検証されると、BswM へ、検証された要因と VALIDATED を通知する（[SWS_EcuM_04079]）。
+TEST_F(EcuM_CheckWakeup_Test, EcuM_ValidateWakeupEvent_OK_NotifiesBswMValidated)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    EcuM_Test_SetState(ECUM_STATE_RUN);
+    EcuM_CheckWakeup(ECUM_WKSOURCE_CAN);
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    EcuM_ValidateWakeupEvent(ECUM_WKSOURCE_CAN);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(CallCount_BswM_EcuM_CurrentWakeup, 2U);   // PENDING、VALIDATED
+    EXPECT_EQ(Last_source_BswM_EcuM_CurrentWakeup, ECUM_WKSOURCE_CAN);
+    EXPECT_EQ(Last_state_BswM_EcuM_CurrentWakeup, ECUM_WKSTATUS_VALIDATED);
+}
+
+// OK: 保持している起床要因を消すと、BswM へ NONE を通知する。何も保持していないときの消去では、通知しない。
+TEST_F(EcuM_CheckWakeup_Test, EcuM_ClearWakeupEvent_OK_NotifiesBswMNoneOnlyWhenSomethingWasHeld)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    EcuM_Test_SetState(ECUM_STATE_RUN);
+    EcuM_ClearWakeupEvent(ECUM_WKSOURCE_CAN);   // 何も保持していない
+    ASSERT_EQ(CallCount_BswM_EcuM_CurrentWakeup, 0U);
+    EcuM_CheckWakeup(ECUM_WKSOURCE_CAN);
+    ASSERT_EQ(CallCount_BswM_EcuM_CurrentWakeup, 1U);
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    EcuM_ClearWakeupEvent(ECUM_WKSOURCE_CAN);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(CallCount_BswM_EcuM_CurrentWakeup, 2U);
+    EXPECT_EQ(Last_source_BswM_EcuM_CurrentWakeup, ECUM_WKSOURCE_CAN);
+    EXPECT_EQ(Last_state_BswM_EcuM_CurrentWakeup, ECUM_WKSTATUS_NONE);
+}
+
+// OK: 前回の期限切れ（EXPIRED）が残っているときの新しい起床では、BswM へ PENDING だけを通知する（存在しなかった NONE は通知しない）。
+TEST_F(EcuM_CheckWakeup_Test, EcuM_CheckWakeup_OK_NewWakeupAfterExpiryNotifiesPendingWithoutNone)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    ExpireCanWakeup();   // PENDING、EXPIRED の 2 回を通知済み
+    ASSERT_EQ(CallCount_BswM_EcuM_CurrentWakeup, 2U);
+    ASSERT_EQ(EcuM_GetExpiredWakeupEvents(), ECUM_WKSOURCE_CAN);
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    EcuM_CheckWakeup(ECUM_WKSOURCE_CAN);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(CallCount_BswM_EcuM_CurrentWakeup, 3U);   // NONE を挟まず、PENDING の 1 回だけが増える
+    EXPECT_EQ(Last_state_BswM_EcuM_CurrentWakeup, ECUM_WKSTATUS_PENDING);
+    EXPECT_EQ(EcuM_GetExpiredWakeupEvents(), 0U);       // 前回の期限切れの記録は、消えている
+}
+
 }  // namespace

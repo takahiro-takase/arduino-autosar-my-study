@@ -114,6 +114,25 @@ void BswM_GetVersionInfo(Std_VersionInfoType* VersionInfo);
 void BswM_EcuM_CurrentState(EcuM_StateType state);
 
 /**
+ * \brief   EcuM からの起床要因の状態の通知コールバック。
+ *
+ * \details EcuM が、起床要因の状態が変わるたび（検出して検証待ち、検証済み、期限切れ、消去）に呼ぶ。
+ *          BswM は受け取った状態を `BSWM_MODE_SRC_ECUM_WAKEUP` のモードとして保持し、その状態を条件に含むルールを
+ *          評価する（`BswMEcuMWakeupSource` コンフィグ相当）。本プロジェクトの起床要因は CAN（`ECUM_WKSOURCE_CAN`）だけのため、
+ *          CAN のビットを含まない `source` は無視する。前回と同じ状態なら何もしない。
+ *
+ * \param[in]  source  状態が変わった起床要因のビットマスク。
+ * \param[in]  state   新しい状態（`ECUM_WKSTATUS_NONE`〜`ECUM_WKSTATUS_EXPIRED`）。範囲外は
+ *                      `BSWM_E_REQ_MODE_OUT_OF_RANGE` を報告して無視する。BswM_Init() 前は `BSWM_E_NO_INIT`。
+ *
+ * \AUTOSARReq     {SWS_BswM_00131, SWS_BswM_00132, SWS_BswM_00133}
+ * \ServiceID      {0x10}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void BswM_EcuM_CurrentWakeup(EcuM_WakeupSourceType source, EcuM_WakeupStatusType state);
+
+/**
  * \brief   ComM からの通信モード変化通知コールバック。
  *
  * \details ComM_BusSM_ModeIndication() が呼ぶ。
