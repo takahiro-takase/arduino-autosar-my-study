@@ -221,6 +221,7 @@ static unsigned long EcuM_ValidationStartMs = 0UL;
 
 static unsigned long EcuM_GetNowMs(void);
 static void EcuM_SetWdgMMode(WdgM_ModeType mode);
+static EcuM_WakeupSourceType EcuM_DropWakeupEvents(EcuM_WakeupSourceType sources);
 
 /* ======================================================================
  * Functions
@@ -369,17 +370,20 @@ void EcuM_MainFunction(void)
          * CAN の起床だけなので CanIf を直接呼ぶ。 */
         (void)CanIf_CheckValidation(EcuM_PendingWakeupSources);
 
-        /* 検証のタイムアウト（[SWS_EcuM_04081]）。上の問い合わせで検証されなかった要因は、期限切れにする。
-         * 簡略化: 実仕様は、続けて BswM_EcuM_CurrentWakeup(要因, EXPIRED)（[SWS_EcuM_04082]）で BswM へ通知し、
-         * EcuM_StopWakeupSources() を呼ぶが、本プロジェクトの EcuM は BswM への起床要因の通知を持たない
+        /* 検証のタイムアウト（[SWS_EcuM_04081]）。上の問い合わせで検証されなかった要因は、期限切れにし、
+         * BswM_EcuM_CurrentWakeup(要因, EXPIRED) で BswM へ通知する（[SWS_EcuM_04082]）。
+         * 簡略化: 実仕様は、続けて EcuM_StopWakeupSources() を呼ぶが、本プロジェクトは呼ばない
          * （CanSM が、自分の検証の時間でコントローラをスリープへ戻す）。 */
         if ((EcuM_PendingWakeupSources != 0U)
             && ((EcuM_GetNowMs() - EcuM_ValidationStartMs) >= ECUM_VALIDATION_TIMEOUT_MS))
         {
-            EcuM_ExpiredWakeupSources |= EcuM_PendingWakeupSources;
+            const EcuM_WakeupSourceType expired = EcuM_PendingWakeupSources;
+
+            EcuM_ExpiredWakeupSources |= expired;
             DET_LOGW(TAG, "wakeup validation expired (sources=0x%08lX, %lums)",
-                     (unsigned long)EcuM_PendingWakeupSources, (unsigned long)ECUM_VALIDATION_TIMEOUT_MS);
+                     (unsigned long)expired, (unsigned long)ECUM_VALIDATION_TIMEOUT_MS);
             EcuM_PendingWakeupSources = 0U;
+            BswM_EcuM_CurrentWakeup(expired, ECUM_WKSTATUS_EXPIRED);
         }
     }
 
@@ -642,9 +646,9 @@ Std_ReturnType EcuM_ReleasePOST_RUN(EcuM_UserType user)
  *          呼ぶ）と位置づけられるが、本プロジェクトは単一 ECU 構成で、EcuM の
  *          ウェイクアップソース管理のうち、検証待ち（PENDING）・検証済み（VALIDATED）・
  *          期限切れ（EXPIRED）の保持と、検証のタイムアウト（`ECUM_VALIDATION_TIMEOUT_MS`）だけを
- *          持つ（`EcuM_SetWakeupEvent` の代わりに本関数が、検証待ちにして、タイムアウトを起算する。
- *          BswM への通知 `BswM_EcuM_CurrentWakeup()` は持たない）ため、EcuM.c 内の通常関数として
- *          簡略実装する。
+ *          持つ（`EcuM_SetWakeupEvent` の代わりに本関数が、検証待ちにして、タイムアウトを起算し、
+ *          BswM へ `BswM_EcuM_CurrentWakeup(ECUM_WKSOURCE_CAN, ECUM_WKSTATUS_PENDING)` を通知する）ため、
+ *          EcuM.c 内の通常関数として簡略実装する。
  *
  *          本プロジェクトで実際にサポートするウェイクアップ要因は CAN バス
  *          起床（`ECUM_WKSOURCE_CAN`）のみである。実際の検証は、Listen-Only
@@ -681,12 +685,17 @@ void EcuM_CheckWakeup(EcuM_WakeupSourceType wakeupSource)
     DET_LOGI(TAG, "CheckWakeup: CAN wakeup source confirmed");
     if ((EcuM_PendingWakeupSources & ECUM_WKSOURCE_CAN) == 0U)
     {
-        /* 新しい起床: 検証のタイムアウトを起算する（[SWS_EcuM_02709]）。同じ要因が検証待ちの間の再通知では、起算し直さない
-         * （[SWS_EcuM_02712]）。前回の検証済み・期限切れの記録は、新しい起床で消す。 */
+        /* 新しい起床: 検証のタイムアウトを起算する（[SWS_EcuM_02709]）。同じ要因が検証待ちの間の再通知では、起算し直さず、
+         * BswM へも通知しない（[SWS_EcuM_02712]）。前回の検証済み・期限切れの記録は、新しい起床で消す。
+         * 消すときは、BswM へ NONE を通知しない（直後に PENDING を通知するので、存在しなかった NONE の状態で
+         * ルールが評価されるのを避ける）。 */
         EcuM_ValidationStartMs = EcuM_GetNowMs();
-        EcuM_ClearWakeupEvent(ECUM_WKSOURCE_CAN);   /* 検証待ちは、この分岐では立っていないので、消えるのは、検証済みと期限切れ */
+        (void)EcuM_DropWakeupEvents(ECUM_WKSOURCE_CAN);
+        EcuM_PendingWakeupSources |= ECUM_WKSOURCE_CAN;   /* 検証待ち。EcuM_MainFunction() が検証を問い合わせる */
+
+        /* 検証待ちになったことを、BswM へ通知する（検証を始める CanSM への通知より前。仕様の PENDING は、検出した時点の状態）。 */
+        BswM_EcuM_CurrentWakeup(ECUM_WKSOURCE_CAN, ECUM_WKSTATUS_PENDING);
     }
-    EcuM_PendingWakeupSources |= ECUM_WKSOURCE_CAN;   /* 検証待ち。EcuM_MainFunction() が検証を問い合わせる */
     CanSM_ControllerModeIndication(0U, CAN_CS_STOPPED);
 }
 
@@ -790,11 +799,12 @@ EcuM_WakeupSourceType EcuM_GetPendingWakeupEvents(void)
 
 void EcuM_ClearWakeupEvent(EcuM_WakeupSourceType sources)
 {
-    const EcuM_WakeupSourceType keep = (EcuM_WakeupSourceType)(~sources);
+    const EcuM_WakeupSourceType cleared = EcuM_DropWakeupEvents(sources);
 
-    EcuM_PendingWakeupSources   &= keep;
-    EcuM_ValidatedWakeupSources &= keep;
-    EcuM_ExpiredWakeupSources   &= keep;
+    if (cleared != 0U)
+    {
+        BswM_EcuM_CurrentWakeup(cleared, ECUM_WKSTATUS_NONE);   /* 状態が NONE に戻ったことを、BswM へ通知する */
+    }
 }
 
 /* ----------------------------------------------------------------------
@@ -885,10 +895,9 @@ EcuM_WakeupSourceType EcuM_GetExpiredWakeupEvents(void)
  *          （以前は CanIf_RxIndication() が独自 API の CanSM_RxIndication() を
  *          呼び、CanSM が自分で確定していた。2026-10 に置き換え）。
  *
- *          本プロジェクトの EcuM は、起床要因の管理（検証済み・期限切れの
- *          イベントの保持、`BswM_EcuM_CurrentWakeup()` の通知
- *          [SWS_EcuM_04078]/[SWS_EcuM_04079]）を持たない（`EcuM_CheckWakeup()`
- *          の説明参照）ため、保留中の起床要因の管理と ComM への通知のみを行う。
+ *          本関数は、検証済みの要因を保持し（[SWS_EcuM_04078]）、ComM へ通知したあと、
+ *          BswM へ `BswM_EcuM_CurrentWakeup(sources, ECUM_WKSTATUS_VALIDATED)` を通知する
+ *          （[SWS_EcuM_04079]）。
  *
  * \param[in]  sources  検証された起床要因のビットマスク。`ECUM_WKSOURCE_CAN` 以外の
  *                       ビットを含む、または 0 の場合は、未知の要因として
@@ -915,6 +924,7 @@ void EcuM_ValidateWakeupEvent(EcuM_WakeupSourceType sources)
 
     DET_LOGI(TAG, "ValidateWakeupEvent: CAN wakeup validated -> ComM_EcuM_WakeUpIndication");
     ComM_EcuM_WakeUpIndication(COMM_CHANNEL_0);
+    BswM_EcuM_CurrentWakeup(sources, ECUM_WKSTATUS_VALIDATED);   /* [SWS_EcuM_04079] */
 }
 
 /* ----------------------------------------------------------------------
@@ -1046,6 +1056,32 @@ void EcuM_ValidateWakeupEvent(EcuM_WakeupSourceType sources)
 /* ======================================================================
  * Internal Functions
  * ====================================================================== */
+
+/* ----------------------------------------------------------------------
+ * EcuM_DropWakeupEvents
+ * ---------------------------------------------------------------------- */
+
+/**
+ * \brief   指定した起床要因を、検証待ち・検証済み・期限切れのすべてから外す（BswM への通知は、しない）。
+ *
+ * \details EcuM_ClearWakeupEvent() の本体。EcuM_CheckWakeup() は、新しい起床で、前回の記録を消す直後に PENDING を
+ *          通知するため、通知を伴わない本関数を使う。
+ *
+ * \param[in]  sources  外す起床要因のビットマスク。
+ *
+ * \return  実際に保持していて、外した起床要因のビットマスク（何も保持していなければ 0）。
+ */
+static EcuM_WakeupSourceType EcuM_DropWakeupEvents(EcuM_WakeupSourceType sources)
+{
+    const EcuM_WakeupSourceType keep = (EcuM_WakeupSourceType)(~sources);
+    const EcuM_WakeupSourceType held = EcuM_PendingWakeupSources | EcuM_ValidatedWakeupSources | EcuM_ExpiredWakeupSources;
+
+    EcuM_PendingWakeupSources   &= keep;
+    EcuM_ValidatedWakeupSources &= keep;
+    EcuM_ExpiredWakeupSources   &= keep;
+
+    return sources & held;
+}
 
 /* ----------------------------------------------------------------------
  * EcuM_GetNowMs

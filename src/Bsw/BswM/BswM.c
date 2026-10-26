@@ -286,6 +286,7 @@ void BswM_Init(const BswM_ConfigType* ConfigPtr)
      * 通常通信・NM通信ともに有効（Com_SetCommunicationEnabled()/
      * Nm_EnableCommunication() の既定値と一致させる）。 */
     BswM_ModeSrcCache[BSWM_MODE_SRC_DCM_COMM] = (uint8)DCM_ENABLE_RX_TX_NORM_NM;
+    BswM_ModeSrcCache[BSWM_MODE_SRC_ECUM_WAKEUP] = (uint8)ECUM_WKSTATUS_NONE;
     for (uint8 i = 0U; i < ConfigPtr->RuleCount; i++)
     {
         BswM_RuleLastResult[i] = 0U;
@@ -357,6 +358,38 @@ void BswM_EcuM_CurrentState(EcuM_StateType state)
     }
 
     BswM_ExecuteRules(BSWM_MODE_SRC_ECUM, (uint8)state);
+}
+
+/* ----------------------------------------------------------------------
+ * BswM_EcuM_CurrentWakeup
+ * ---------------------------------------------------------------------- */
+
+void BswM_EcuM_CurrentWakeup(EcuM_WakeupSourceType source, EcuM_WakeupStatusType state)
+{
+    if (BswM_Cfg == NULL)
+    {
+        (void)Det_ReportError(BSWM_MODULE_ID, 0U, BSWM_API_ID_ECUM_CURRENT_WAKEUP, BSWM_E_NO_INIT);   /* [SWS_BswM_00132] */
+        return;
+    }
+
+    if (state > ECUM_WKSTATUS_EXPIRED)
+    {
+        (void)Det_ReportError(BSWM_MODULE_ID, 0U, BSWM_API_ID_ECUM_CURRENT_WAKEUP,
+                              BSWM_E_REQ_MODE_OUT_OF_RANGE);   /* [SWS_BswM_00133] */
+        return;
+    }
+
+    if ((source & ECUM_WKSOURCE_CAN) == 0U)
+    {
+        return;   /* 本プロジェクトの起床要因は CAN だけ（BswMEcuMWakeupSource は CAN の 1 つ） */
+    }
+
+    if (BswM_ModeSrcCache[BSWM_MODE_SRC_ECUM_WAKEUP] == (uint8)state)
+    {
+        return;
+    }
+
+    BswM_ExecuteRules(BSWM_MODE_SRC_ECUM_WAKEUP, (uint8)state);
 }
 
 /* ----------------------------------------------------------------------

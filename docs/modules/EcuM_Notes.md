@@ -190,9 +190,16 @@ EcuM は、起床要因を、仕様（[SWS_EcuM_04091]）の4つの状態で持�
   EXPIRED を外して、VALIDATED にします。
 - `ECUM_VALIDATION_TIMEOUT_MS`（既定 3000 ms、`config/data/EcuM.json`）は、CanSM の検証の時間（`CANSM_WAKEUP_VALIDATION_MS`、2000 ms）より長くしてあります。
   ノイズの起床では、CanSM が先に、コントローラをスリープへ戻し、1 秒後に、EcuM が EXPIRED にします。
-- 簡略化: 実仕様は、期限切れのとき、`BswM_EcuM_CurrentWakeup(要因, ECUM_WKSTATUS_EXPIRED)`（[SWS_EcuM_04082]）で BswM へ通知し、
-  `EcuM_StopWakeupSources()` を呼びますが、本プロジェクトは BswM への起床要因の通知を持たないので、`wakeup validation expired`
-  のログと、`EcuM_GetExpiredWakeupEvents()` だけです。起床要因は CAN だけで、1つのタイマーで足ります（[SWS_EcuM_04004]）。
+- 状態が変わるたびに、BswM へ `BswM_EcuM_CurrentWakeup(要因, 状態)` で通知します（2026-10 追加）。
+  検出して検証待ちになったとき PENDING（[SWS_EcuM_02709] の起算と同じ時点。検証待ちの間の再通知では通知しない）、
+  検証されたとき VALIDATED（[SWS_EcuM_04079]）、期限切れのとき EXPIRED（[SWS_EcuM_04082]）、
+  保持していた要因を `EcuM_ClearWakeupEvent()` で消したとき NONE（何も保持していないときの消去では通知しない）です。
+  BswM は、これを `BSWM_MODE_SRC_ECUM_WAKEUP` のモードとして持ち、ルールの条件（`source: "ECUM_WAKEUP"`、
+  値は `ECUM_WKSTATUS_*`）に使えます。本番のルール表には、この条件を使うルールはありません。
+- 簡略化: 実仕様は、期限切れのとき、続けて `EcuM_StopWakeupSources()` を呼びますが、本プロジェクトは呼びません
+  （`CanSM_StopWakeupSource()` も未実装で、CanSM が、自分の検証の時間でコントローラをスリープへ戻します）。
+  `EcuM_StartWakeupSources()` / `EcuM_CheckValidation()` も、同じ理由で持ちません（検証は `CanIf_CheckValidation()` の直接呼び出し）。
+  起床要因は CAN だけで、1つのタイマーで足ります（[SWS_EcuM_04004]）。
 
 ## EcuM 設定（`EcuM_Cfg.h`）
 

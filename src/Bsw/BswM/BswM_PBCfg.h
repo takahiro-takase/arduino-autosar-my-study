@@ -71,7 +71,8 @@ typedef enum
 {
     BSWM_MODE_SRC_ECUM,      /**< EcuM_CurrentState からの通知 */
     BSWM_MODE_SRC_COMM,      /**< ComM_CurrentMode からの通知  */
-    BSWM_MODE_SRC_DCM_COMM   /**< Dcm_CommunicationMode_CurrentState からの通知（UDS 0x28） */
+    BSWM_MODE_SRC_DCM_COMM,  /**< Dcm_CommunicationMode_CurrentState からの通知（UDS 0x28） */
+    BSWM_MODE_SRC_ECUM_WAKEUP  /**< BswM_EcuM_CurrentWakeup からの通知（CAN の起床要因の状態、EcuM_WakeupStatusType） */
 } BswM_ModeSrcType;
 
 /**

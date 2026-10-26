@@ -18,7 +18,7 @@ ACTIONS = {
     "DCM_COMM_APPLY": "BSWM_ACTION_DCM_COMM_APPLY",
 }
 # モードソースごとの値の書き方（EcuM / ComM の値は uint8 へキャストして渡す）
-SOURCE_CAST = {"ECUM": "(uint8)", "COMM": "(uint8)", "DCM_COMM": ""}
+SOURCE_CAST = {"ECUM": "(uint8)", "COMM": "(uint8)", "DCM_COMM": "", "ECUM_WAKEUP": ""}
 
 
 def validate(cfg):
@@ -42,7 +42,17 @@ def validate(cfg):
             errors.append("%s: ipduGroup は PDU_GROUP_START / PDU_GROUP_STOP のときだけ指定する" % where)
         if r["operator"] == "OR" and "perValue" in r:
             errors.append("%s: perValue のルールは operator=AND（単一条件）にする" % where)
+        errors += _check_wakeup_values(r, where)
     return errors
+
+
+def _check_wakeup_values(rule, where):
+    """source が ECUM_WAKEUP の条件の値は、起床要因の状態（ECUM_WKSTATUS_*）にする（他の状態の名前だと、数値が偶然一致して通ってしまう）。"""
+    pairs = [(c["source"], c["value"]) for c in rule.get("conditions", [])]
+    if "perValue" in rule:
+        pairs += [(rule["perValue"]["source"], v) for v in rule["perValue"]["values"]]
+    return ["%s: source=ECUM_WAKEUP の値は ECUM_WKSTATUS_* にする（%s）" % (where, v)
+            for s, v in pairs if s == "ECUM_WAKEUP" and not v.startswith("ECUM_WKSTATUS_")]
 
 
 def expand(cfg):

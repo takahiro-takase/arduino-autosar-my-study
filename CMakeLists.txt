@@ -421,11 +421,12 @@ target_link_options(native_chain_tests PRIVATE -static)
 
 # native_chain_tests がリンク時に故障注入する -Wl,--wrap= 対象シンボル一覧。
 set(NATIVE_CHAIN_WRAP_SYMBOLS
-    # BswM.h の AUTOSAR IF 全6関数（Wrap_BswM.h/.c 参照）。
+    # BswM.h の AUTOSAR IF 全7関数（Wrap_BswM.h/.c 参照）。
     BswM_Init
     BswM_Deinit
     BswM_GetVersionInfo
     BswM_EcuM_CurrentState
+    BswM_EcuM_CurrentWakeup
     BswM_ComM_CurrentMode
     BswM_Dcm_CommunicationMode_CurrentState
     # Can.c の AUTOSAR IF 全数（Wrap_Can.h/.c 参照）。

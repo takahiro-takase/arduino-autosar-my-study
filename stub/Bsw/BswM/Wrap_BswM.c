@@ -18,6 +18,10 @@ uint32 CallCount_BswM_GetVersionInfo                      = 0U;
 uint32 CallCount_BswM_EcuM_CurrentState                   = 0U;
 uint32 CallCount_BswM_ComM_CurrentMode                    = 0U;
 uint32 CallCount_BswM_Dcm_CommunicationMode_CurrentState  = 0U;
+uint32 CallCount_BswM_EcuM_CurrentWakeup                  = 0U;
+
+EcuM_WakeupSourceType Last_source_BswM_EcuM_CurrentWakeup = 0U;
+EcuM_WakeupStatusType Last_state_BswM_EcuM_CurrentWakeup  = ECUM_WKSTATUS_NONE;
 
 NetworkHandleType LastChannel_BswM_ComM_CurrentMode = 0U;
 ComM_ModeType     LastMode_BswM_ComM_CurrentMode    = COMM_NO_COMMUNICATION;
@@ -26,7 +30,7 @@ NetworkHandleType         LastNetwork_BswM_Dcm_CommunicationMode_CurrentState   
 Dcm_CommunicationModeType LastRequestedMode_BswM_Dcm_CommunicationMode_CurrentState = DCM_ENABLE_RX_TX_NORM_NM;
 
 /* ----------------------------------------------------------------------
- * WrapBswM_Reset — 6関数すべての状態を一括で初期化する（Wrap_BswM.h 参照）。
+ * WrapBswM_Reset — 7関数すべての状態を一括で初期化する（Wrap_BswM.h 参照）。
  * ---------------------------------------------------------------------- */
 void WrapBswM_Reset(void)
 {
@@ -36,6 +40,10 @@ void WrapBswM_Reset(void)
     CallCount_BswM_EcuM_CurrentState                  = 0U;
     CallCount_BswM_ComM_CurrentMode                   = 0U;
     CallCount_BswM_Dcm_CommunicationMode_CurrentState = 0U;
+    CallCount_BswM_EcuM_CurrentWakeup                 = 0U;
+
+    Last_source_BswM_EcuM_CurrentWakeup = 0U;
+    Last_state_BswM_EcuM_CurrentWakeup  = ECUM_WKSTATUS_NONE;
 
     LastChannel_BswM_ComM_CurrentMode = 0U;
     LastMode_BswM_ComM_CurrentMode    = COMM_NO_COMMUNICATION;
@@ -98,6 +106,21 @@ void __wrap_BswM_EcuM_CurrentState(EcuM_StateType state)
     Log_Write(LOG_T, TAG, "BswM_EcuM_CurrentState", "called %u times", CallCount_BswM_EcuM_CurrentState);
 
     __real_BswM_EcuM_CurrentState(state);
+}
+
+/* ----------------------------------------------------------------------
+ * BswM_EcuM_CurrentWakeup
+ * ---------------------------------------------------------------------- */
+extern
+void __real_BswM_EcuM_CurrentWakeup(EcuM_WakeupSourceType source, EcuM_WakeupStatusType state);
+void __wrap_BswM_EcuM_CurrentWakeup(EcuM_WakeupSourceType source, EcuM_WakeupStatusType state)
+{
+    CallCount_BswM_EcuM_CurrentWakeup++;
+    Last_source_BswM_EcuM_CurrentWakeup = source;
+    Last_state_BswM_EcuM_CurrentWakeup  = state;
+    Log_Write(LOG_T, TAG, "BswM_EcuM_CurrentWakeup", "called %u times", CallCount_BswM_EcuM_CurrentWakeup);
+
+    __real_BswM_EcuM_CurrentWakeup(source, state);
 }
 
 /* ----------------------------------------------------------------------

@@ -58,6 +58,7 @@
 #define BSWM_API_ID_GET_VERSION_INFO      0x01U
 #define BSWM_API_ID_DEINIT                0x04U
 #define BSWM_API_ID_ECUM_CURRENT_STATE    0x0FU
+#define BSWM_API_ID_ECUM_CURRENT_WAKEUP   0x10U
 #define BSWM_API_ID_COMM_CURRENT_MODE     0x0EU
 #define BSWM_API_ID_DCM_COMMUNICATION_MODE_CURRENT_STATE  0x06U
 
@@ -209,7 +210,7 @@
 
 /** モードソース数（BswM_ModeSrcType の列挙値数。複合条件ルール評価用の
  *  モードキャッシュ配列 BswM_ModeSrcCache[] のサイズに使う）。 */
-#define BSWM_MODE_SRC_COUNT  3U
+#define BSWM_MODE_SRC_COUNT  4U
 
 /** 1 ルールが持てる条件数の上限（BswMArgumentRef [ECUC_BswM_00820] は
  *  実 AUTOSAR では Multiplicity=1..* だが、本プロジェクトは AND/OR 2 条件までの
