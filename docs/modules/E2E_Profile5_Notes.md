@@ -133,7 +133,7 @@ Profile01 の `E2E_P01CheckStateType` は `WaitForFirstData`（初回受信の�
 | 値 | 名前 | 意味 |
 |---|---|---|
 | 0x00 | `E2E_P05STATUS_OK` | 正常受信、CRC 正、Counter が前回 +1 |
-| 0x01 | `E2E_P05STATUS_NONEWDATA` | 新規データなし（本実装の呼び出し方式では未使用） |
+| 0x01 | `E2E_P05STATUS_NONEWDATA` | 新規データなし（本実装の呼び出し方式では未使用。配線しない理由は [E2EXf_Notes.md](./E2EXf_Notes.md) 参照） |
 | 0x07 | `E2E_P05STATUS_ERROR` | CRC 不一致、または NULL ポインタ・DLC 不一致等の入力異常 |
 | 0x08 | `E2E_P05STATUS_REPEATED` | CRC 正だが Counter が前回と同一（反復） |
 | 0x20 | `E2E_P05STATUS_OKSOMELOST` | CRC 正、Counter が許容範囲内で飛んでいる（一部消失） |

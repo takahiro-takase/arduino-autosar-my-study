@@ -297,8 +297,8 @@ void E2EXf_DeInit(void);
  *          `inputBufferLength - ヘッダ長` だが、ヘッダを取り除かない簡略化のため、ヘッダ込みの長さ）を書き込む。
  *          本プロジェクトの Rte は、フレームを受信したときにだけ本関数を呼び、「新しいデータが無い」呼び出し
  *          （NULL・0）は行わない（Com のタイムアウトは、`Rte_COMCbkRxTOut_*()` の別経路で扱う）。
- *          NULL・0 の呼び出しを足すと、フレームの途絶が E2E の状態機械にも INVALID として現れ、
- *          既存のタイムアウトの DTC に加えて、E2E の DTC も確定する。
+ *          意図して配線していない（NULL・0 の呼び出しを足すと、フレームの途絶で、既存のタイムアウトの DTC に加えて、
+ *          E2E の DTC も確定する）。理由は、docs/modules/E2EXf_Notes.md の「NONEWDATA」を参照。
  *
  * \note    `CheckStatus` は仕様の Syntax には無い本プロジェクト独自の
  *          追加出力引数（2026-09、Rte.c が必要とする詳細な生ステータス

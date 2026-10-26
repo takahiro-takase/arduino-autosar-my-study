@@ -84,9 +84,21 @@ delta 計算にそのまま乗ります（`ProtectState`/`CheckState` とも初�
 誤ったDTCが確定してしまう問題があった。E2EXf層で補った対処は
 `E2EXf_RxConfigTypeP05.WaitForFirstData`（`E2EXf.h`/`E2EXf.c`）を参照）。
 
-※ 公式仕様にはこのほか `NONEWDATA`（前回呼び出し以降、新規データなし）がありますが、
-本実装は `Com_RxIndication()` からフレーム受信時にのみ `E2E_P05Check` を呼び出す設計のため、
-「呼ばれたが新規データがない」状況が発生せず、この状態は実装していません。
+※ 公式仕様にはこのほか `NONEWDATA`（前回呼び出し以降、新規データなし）があります。`E2EXf_Inv_*` は、NULL・0 の入力で
+NONEWDATA を返せますが（本ファイルの、`E2EXf_Inv_*` の入力の規則の表）、本実装の Rte は、フレームを受信したときにだけ呼び、NULL・0 の呼び出しは行いません
+（意図して配線していない）。理由は、次のとおりです。
+
+- NONEWDATA は、状態機械の窓の中で、OK にも ERROR にも数えられません。VALID の間に NONEWDATA が `WindowSize - MinOkStateValid + 1`
+  回続くと、窓の中の OK が `MinOkStateValid` を下回って、INVALID に落ちます（エラーが理由ではない）。現在の設定（`WindowSize=3`、
+  `MinOkStateValid=2`、`config/data/E2EXf.json` から生成した `E2EXf_PBCfg.c`）では、2 回です
+  （`E2E_Check_test.cpp` の `Check_OK_ValidDemotesWhenOkCountFallsBelowMinimumEvenWithoutErrors`、
+  `Check_OK_ProjectConfigValidDemotesAfterTwoNoNewData` で確認）。
+- INVALID に落ちると、`E2EXf` が Dem の `E2E_ENGINEINFO` / `E2E_ABSINFO` を報告します（`E2EXf_ReportSMVerdict`）。フレームの
+  途絶は、すでに Com の受信タイムアウト（`Rte_COMCbkRxTOut_*`、`COMM_TIMEOUT` など）で扱っています。NONEWDATA を配線すると、
+  途絶が続いて NONEWDATA の呼び出しが上の回数以上続いたときに（呼び出しの周期しだいで、受信タイムアウトの前後どちらでも起こりえる）、
+  タイムアウトと E2E の 2 つの DTC が確定します。受信の途絶は 1 つのイベントで足りるため、現状を維持します。
+- `Check_OK_ProjectConfigValidDemotesAfterTwoNoNewData` は、生成した設定を、テストから参照できないため、同じ値を直書きしています。
+  `config/data/E2EXf.json` の値を変えたときは、この理由とテストを見直してください（自動では失敗しません）。
 
 ### Com モジュールとの統合（E2E Transformer 方式）
 
