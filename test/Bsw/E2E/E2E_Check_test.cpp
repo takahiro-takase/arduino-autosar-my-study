@@ -333,6 +333,36 @@ TEST_F(E2E_Check_Test, Check_OK_ValidDemotesWhenOkCountFallsBelowMinimumEvenWith
     EXPECT_EQ(state.OkCount, 0U);
 }
 
+TEST_F(E2E_Check_Test, Check_OK_ProjectConfigValidDemotesAfterTwoNoNewData)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    /* 本プロジェクトの設定（E2EXf_PBCfg.c の E2EXf_SMConfigDefault）のうち、VALID の判定に効く値。根拠: E2EXf_Notes.md。 */
+    config.MinOkStateValid      = 2U;
+    config.MaxErrorStateValid   = 1U;
+    window[0] = static_cast<uint8_t>(E2E_P_OK);
+    window[1] = static_cast<uint8_t>(E2E_P_OK);
+    window[2] = static_cast<uint8_t>(E2E_P_OK);
+    state.WindowTopIndex = 0U;
+    state.SMState        = E2E_SM_VALID;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    ASSERT_EQ(E2E_SMCheck(E2E_P_NONEWDATA, &config, &state), E2E_E_OK);
+    const E2E_SMStateType afterFirst = state.SMState;   // 窓: OK 2 件、NONEWDATA 1 件
+    ASSERT_EQ(E2E_SMCheck(E2E_P_NONEWDATA, &config, &state), E2E_E_OK);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(afterFirst, E2E_SM_VALID);          // 1 回では、VALID のまま
+    EXPECT_EQ(state.SMState, E2E_SM_INVALID);     // 2 回続くと、OK が 1 件に減り、INVALID に落ちる
+    EXPECT_EQ(state.ErrorCount, 0U);              // エラーが理由ではない
+    EXPECT_EQ(state.OkCount, 1U);
+}
+
 TEST_F(E2E_Check_Test, Check_OK_InvalidStaysInvalidWhenOkCountBelowMinimumEvenWithoutErrors)
 {
     /* ----------------------- */
