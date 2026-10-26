@@ -84,16 +84,78 @@ static uint8 FiM_FidCount(void)
 }
 
 /**
+ * \brief   抑止の条件 1 行が、Dem のイベントの現在のステータスに対して成り立つかを調べる。
+ *
+ * \details 条件の種類ごとの判定は、FiM_InhibitionType の説明（FiM_PBCfg.h）と、[SWS_Fim_00012] を参照。
+ *          仕様の 4 つの条件（FIM_LAST_FAILED など）は、Dem_GetMonitorStatus() の監視ステータス
+ *          （TestFailed、TestNotCompletedThisOperationCycle）で判定する（UDS ステータスの bit6 は、
+ *          Dem_GetEventUdsStatus() では隠れて見えないため）。独自拡張の FIM_INH_STATUS_MASK は、
+ *          Dem_GetEventUdsStatus() の UDS ステータスで判定する。
+ *
+ * \param[in]   cond        抑止の条件の行。
+ * \param[out]  inhibiting  条件が成り立つとき TRUE（その行の FID は抑止される）。戻り値が E_NOT_OK のときは不定。
+ *
+ * \retval  E_OK      判定できた。
+ * \retval  E_NOT_OK  Dem からステータスを読めなかった、または条件の種類が未知（その行は、計算に含めない。[SWS_Fim_00097]）。
+ */
+static Std_ReturnType FiM_CheckCondition(const FiM_FunctionCfgType* cond, boolean* inhibiting)
+{
+    Std_ReturnType ret = E_NOT_OK;
+
+    if (cond->Inhibition == FIM_INH_STATUS_MASK)
+    {
+        Dem_UdsStatusByteType status = 0U;
+
+        ret = Dem_GetEventUdsStatus(cond->EventId, &status);
+        *inhibiting = ((status & cond->InhibitStatusMask) != 0U) ? TRUE : FALSE;
+    }
+    else
+    {
+        /* 仕様の 4 つの条件は、監視ステータスのビットが「立っているべき」ものと「立っていてはならない」ものの組で表せる。 */
+        Dem_MonitorStatusType mustBeSet   = 0U;
+        Dem_MonitorStatusType mustBeClear = 0U;
+
+        switch (cond->Inhibition)
+        {
+            case FIM_LAST_FAILED:
+                mustBeSet = DEM_MONITOR_STATUS_TF;
+                break;
+            case FIM_NOT_TESTED:
+                mustBeSet = DEM_MONITOR_STATUS_TNCTOC;
+                break;
+            case FIM_TESTED:
+                mustBeClear = DEM_MONITOR_STATUS_TNCTOC;
+                break;
+            case FIM_TESTED_AND_FAILED:
+                mustBeSet   = DEM_MONITOR_STATUS_TF;
+                mustBeClear = DEM_MONITOR_STATUS_TNCTOC;
+                break;
+            default:
+                break;   /* 未知の種類: 組が空のまま。下で、その行を計算に含めない */
+        }
+
+        if ((mustBeSet | mustBeClear) != 0U)
+        {
+            Dem_MonitorStatusType monitor = 0U;
+
+            ret = Dem_GetMonitorStatus(cond->EventId, &monitor);
+            *inhibiting = (((monitor & mustBeSet) == mustBeSet) && ((monitor & mustBeClear) == 0U)) ? TRUE : FALSE;
+        }
+    }
+    return ret;
+}
+
+/**
  * \brief   全 FID の許可状態を、Dem の現在のイベントステータスから評価する。
  *
  * \details FiM_Init() と FiM_MainFunction() の共通ロジック（2026-09 追加、
  *          自己/simplify 指摘: 両者が同一の判定式を重複して持っていたため
- *          抽出）。FiM_Functions[] の各行（抑止の条件）について、InhibitStatusMask の
- *          いずれかのビットが立っていれば、その行の FID を抑止 (0) にする。
+ *          抽出）。FiM_Functions[] の各行（抑止の条件）について、FiM_CheckCondition() が成り立てば、
+ *          その行の FID を抑止 (0) にする。
  *          1 つの FID に複数の行があれば、どれか 1 つでも成り立てば抑止になる（OR、
  *          [SWS_Fim_00064]）。1 つも成り立たない FID は許可 (1)。
- *          Dem_GetEventUdsStatus() が失敗した行は、ステータス 0（その条件は成り立たない）として
- *          扱う（[SWS_Fim_00097]: 失敗したイベントは、計算に含めない）。
+ *          Dem_GetEventUdsStatus() が失敗した行は、計算に含めない（[SWS_Fim_00097]。成り立たない条件として扱う）。
+ *          ステータスを 0 として判定すると、FIM_TESTED（bit6 が立っていない）が成り立って、誤って抑止するため。
  *          FunctionId が FiM_FidCount() 以上の行は、無視する（配列の範囲外を書かないための防御。通常は、
  *          コンフィギュレータが保証する）。
  *
@@ -114,18 +176,55 @@ static void FiM_EvaluateAll(uint8* permitted, uint8* causeEvent)
     for (uint8 i = 0U; i < FiM_Cfg->InhibitionCount; i++)
     {
         const FiM_FunctionCfgType* fn = &FiM_Cfg->Functions[i];
-        Dem_UdsStatusByteType status = 0U;
+        boolean inhibiting = FALSE;
 
         if ((fn->FunctionId >= fidCount) || (permitted[fn->FunctionId] == 0U))
         {
             continue;   /* 範囲外の行、または、すでに抑止と決まった FID の行は、Dem へ問い合わせない */
         }
 
-        (void)Dem_GetEventUdsStatus(fn->EventId, &status);
-        if ((status & fn->InhibitStatusMask) != 0U)
+        if (FiM_CheckCondition(fn, &inhibiting) != E_OK)
+        {
+            continue;
+        }
+
+        if (inhibiting == TRUE)
         {
             permitted[fn->FunctionId]  = 0U;
             causeEvent[fn->FunctionId] = fn->EventId;
+        }
+    }
+}
+
+/**
+ * \brief   全 FID の許可状態を再評価し、変わった FID をログに出して、内部状態へ反映する。
+ *
+ * \details FiM_MainFunction() と FiM_DemTriggerOnMonitorStatus() の共通の処理。
+ *
+ * \pre     FiM_Init() 済み（FiM_Cfg が NULL でない）。
+ */
+static void FiM_Refresh(void)
+{
+    uint8 newPermitted[FIM_FUNCTION_COUNT];
+    uint8 causeEvent[FIM_FUNCTION_COUNT];
+    FiM_EvaluateAll(newPermitted, causeEvent);
+
+    const uint8 fidCount = FiM_FidCount();
+
+    for (uint8 fid = 0U; fid < fidCount; fid++)
+    {
+        if (newPermitted[fid] != FiM_Permitted[fid])
+        {
+            FiM_Permitted[fid] = newPermitted[fid];
+
+            if (newPermitted[fid] == 0U)
+            {
+                DET_LOGW(TAG, "FID%u inhibited (ev=%u)", (unsigned)fid, (unsigned)causeEvent[fid]);
+            }
+            else
+            {
+                DET_LOGI(TAG, "FID%u permitted again", (unsigned)fid);
+            }
         }
     }
 }
@@ -342,26 +441,45 @@ void FiM_MainFunction(void)
         return;
     }
 
-    uint8 newPermitted[FIM_FUNCTION_COUNT];
-    uint8 causeEvent[FIM_FUNCTION_COUNT];
-    FiM_EvaluateAll(newPermitted, causeEvent);
+    FiM_Refresh();
+}
 
-    const uint8 fidCount = FiM_FidCount();
+/* ----------------------------------------------------------------------
+ * FiM_DemTriggerOnMonitorStatus
+ * ---------------------------------------------------------------------- */
 
-    for (uint8 fid = 0U; fid < fidCount; fid++)
+/**
+ * \brief   Dem から、イベントの監視ステータスが変わったことを知らされ、そのイベントを使う機能の許可状態を、すぐに更新する。
+ *
+ * \details [SWS_Fim_00021]、[SWS_Fim_00020]（機能の許可は、すぐに制御する）。Dem_SetEventStatus() が、ステータスが
+ *          変わったときに呼ぶ。EventId を条件に使う行が無ければ、何もしない（Dem への問い合わせもしない）。
+ *          あれば、FiM_MainFunction() と同じ再評価を、周期を待たずに行う。
+ *          実仕様は、抑止しているイベントの数（抑止カウンタ）を増減して許可状態を決めるが、本実装は、全行を
+ *          評価し直す方式（FiM_MainFunction() と同じ）で、結果は同じ。FiM_MainFunction() の周期の再評価も残す
+ *          （Dem_ClearDTC() など、本関数が呼ばれない経路での、ステータスの変化を拾うため）。
+ *          簡略化: FiM_Init() の前に呼ばれたときは、何もしない（DET も報告しない）。Dem は、FiM の初期化より前にも
+ *          イベントを報告するため。
+ *
+ * \param[in]  EventId  監視ステータスが変わった Dem イベントの ID。
+ *
+ * \AUTOSARReq     {SWS_Fim_00021, SWS_Fim_00020}
+ * \ServiceID      {0x02}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void FiM_DemTriggerOnMonitorStatus(Dem_EventIdType EventId)
+{
+    if (FiM_Cfg == NULL)
     {
-        if (newPermitted[fid] != FiM_Permitted[fid])
-        {
-            FiM_Permitted[fid] = newPermitted[fid];
+        return;
+    }
 
-            if (newPermitted[fid] == 0U)
-            {
-                DET_LOGW(TAG, "FID%u inhibited (ev=%u)", (unsigned)fid, (unsigned)causeEvent[fid]);
-            }
-            else
-            {
-                DET_LOGI(TAG, "FID%u permitted again", (unsigned)fid);
-            }
+    for (uint8 i = 0U; i < FiM_Cfg->InhibitionCount; i++)
+    {
+        if (FiM_Cfg->Functions[i].EventId == EventId)
+        {
+            FiM_Refresh();
+            return;
         }
     }
 }

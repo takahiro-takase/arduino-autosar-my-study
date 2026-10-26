@@ -278,9 +278,11 @@ NvM、WdgM と同じく、信号表とは関係なく、それぞれの JSON だ
 | FiM.json の項目 | 生成されるもの |
 |-----------------|----------------|
 | `functions[]` の並び順 | 機能 ID（`FIM_FID_<name>`）、機能数（`FIM_FUNCTION_COUNT`）、対応テーブルの添字 |
-| `event`、`statusMask` | 対応テーブル（`FiM_Functions[]`）。監視する Dem イベントと、抑止するステータスのビット |
+| `inhibitions[]` の `event`（または `summary`）と、`statusMask`（または `type`） | 対応テーブル（`FiM_Functions[]`）。1 つの条件が 1 行。監視する Dem イベントと、抑止の条件 |
+| `summaryEvents[]` | 複数のイベントをまとめた名前（`FiMSummaryEvent`）。`summary` で参照すると、まとめたイベントごとの行に展開される |
 
-- `event` は `Dem.json` のイベント名（例: `CAN_BUSOFF`）、`statusMask` は `Dem_Cfg.h` に実在するマクロでなければなりません（検査します）。
+- 対象は、`event`（Dem のイベント 1 つ）か `summary`（まとめたイベントすべて）のどちらか 1 つ。条件は、`statusMask`（独自拡張。Dem のステータスのビットの、いずれかが立っていれば抑止）か、`type`（仕様の条件 `FIM_LAST_FAILED` / `FIM_NOT_TESTED` / `FIM_TESTED` / `FIM_TESTED_AND_FAILED`）のどちらか 1 つです。
+- `event` は `Dem.json` のイベント名（例: `CAN_BUSOFF`）、`statusMask` は `Dem_Cfg.h` に実在するマクロでなければなりません（検査します）。同じ機能の中で、同じ（イベント、条件）の組は重複できません（`summary` の展開後も検査します）。
 
 **Can**（`config/data/Can.json`、`modules/can.py`）
 

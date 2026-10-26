@@ -52,6 +52,16 @@ const FiM_FunctionCfgType kTwoEventsRows[2] = {
 };
 const FiM_ConfigType kTwoEventsConfig = { kTwoEventsRows, 2U, FIM_FUNCTION_COUNT };
 
+/* 1 つの FID（RUNNING_LED）に、CAN_BUSOFF への抑止の条件 1 つ（種類を指定）を持つ設定。UseInhibitionType() が行を書き換えて、FiM を初期化する。 */
+FiM_FunctionCfgType gTypeRow[1];
+const FiM_ConfigType kTypeConfig = { gTypeRow, 1U, FIM_FUNCTION_COUNT };
+
+void UseInhibitionType(FiM_InhibitionType type, uint8 eventId = DemConf_DemEventParameter_CAN_BUSOFF)
+{
+    gTypeRow[0] = FiM_FunctionCfgType{ FIM_FID_RUNNING_LED, eventId, 0U, type };
+    FiM_Init(&kTypeConfig);
+}
+
 /* ======================================================================
  * Test Fixture
  * ====================================================================== */
@@ -228,6 +238,133 @@ TEST_F(FiM_MainFunction_Test, MainFunction_OK_StaysInhibitedWhileOneOfTwoEventsR
     /* ---- 評価 (Assert) ---- */
     /* ----------------------- */
     EXPECT_EQ(afterFirstCleared, FALSE);   // もう片方が成り立つ間は、抑止のまま
+    EXPECT_EQ(GetPermission(FIM_FID_RUNNING_LED), TRUE);
+}
+
+// OK: FIM_LAST_FAILED は、TestFailed（bit0）が立っている間だけ抑止する [SWS_Fim_00012]。
+TEST_F(FiM_MainFunction_Test, MainFunction_OK_LastFailedInhibitsWhileTestFailed)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    UseInhibitionType(FIM_LAST_FAILED);   // 初期化直後のイベントは、まだテストされていない（TF=0、TNCTOC=1）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    const boolean afterInit = GetPermission(FIM_FID_RUNNING_LED);
+    (void)Dem_SetEventStatus(DemConf_DemEventParameter_CAN_BUSOFF, DEM_EVENT_STATUS_FAILED);
+    FiM_MainFunction();
+    const boolean afterFailed = GetPermission(FIM_FID_RUNNING_LED);
+    (void)Dem_SetEventStatus(DemConf_DemEventParameter_CAN_BUSOFF, DEM_EVENT_STATUS_PASSED);
+    FiM_MainFunction();
+    const boolean afterPassed = GetPermission(FIM_FID_RUNNING_LED);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(afterInit, TRUE);     // 未テスト（TF=0、TNCTOC=1）
+    EXPECT_EQ(afterFailed, FALSE);   // テスト済みで失敗（TF=1、TNCTOC=0）
+    EXPECT_EQ(afterPassed, TRUE);   // テスト済みで成功（TF=0、TNCTOC=0）
+}
+
+// OK: FIM_NOT_TESTED は、今サイクルにテストされるまで（TNCTOC、bit6 が立っている間）抑止する [SWS_Fim_00012]。
+TEST_F(FiM_MainFunction_Test, MainFunction_OK_NotTestedInhibitsUntilTestedThisCycle)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    UseInhibitionType(FIM_NOT_TESTED);   // 初期化直後のイベントは、まだテストされていない（TF=0、TNCTOC=1）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    const boolean afterInit = GetPermission(FIM_FID_RUNNING_LED);
+    (void)Dem_SetEventStatus(DemConf_DemEventParameter_CAN_BUSOFF, DEM_EVENT_STATUS_FAILED);
+    FiM_MainFunction();
+    const boolean afterFailed = GetPermission(FIM_FID_RUNNING_LED);
+    (void)Dem_SetEventStatus(DemConf_DemEventParameter_CAN_BUSOFF, DEM_EVENT_STATUS_PASSED);
+    FiM_MainFunction();
+    const boolean afterPassed = GetPermission(FIM_FID_RUNNING_LED);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(afterInit, FALSE);     // 未テスト（TF=0、TNCTOC=1）
+    EXPECT_EQ(afterFailed, TRUE);   // テスト済みで失敗（TF=1、TNCTOC=0）
+    EXPECT_EQ(afterPassed, TRUE);   // テスト済みで成功（TF=0、TNCTOC=0）
+}
+
+// OK: FIM_TESTED は、今サイクルにテストされた（bit6 が立っていない）後に抑止する。成否は問わない [SWS_Fim_00012]。
+TEST_F(FiM_MainFunction_Test, MainFunction_OK_TestedInhibitsOnceTestedThisCycle)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    UseInhibitionType(FIM_TESTED);   // 初期化直後のイベントは、まだテストされていない（TF=0、TNCTOC=1）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    const boolean afterInit = GetPermission(FIM_FID_RUNNING_LED);
+    (void)Dem_SetEventStatus(DemConf_DemEventParameter_CAN_BUSOFF, DEM_EVENT_STATUS_FAILED);
+    FiM_MainFunction();
+    const boolean afterFailed = GetPermission(FIM_FID_RUNNING_LED);
+    (void)Dem_SetEventStatus(DemConf_DemEventParameter_CAN_BUSOFF, DEM_EVENT_STATUS_PASSED);
+    FiM_MainFunction();
+    const boolean afterPassed = GetPermission(FIM_FID_RUNNING_LED);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(afterInit, TRUE);     // 未テスト（TF=0、TNCTOC=1）
+    EXPECT_EQ(afterFailed, FALSE);   // テスト済みで失敗（TF=1、TNCTOC=0）
+    EXPECT_EQ(afterPassed, FALSE);   // テスト済みで成功（TF=0、TNCTOC=0）
+}
+
+// OK: FIM_TESTED_AND_FAILED は、テスト済みで、かつ失敗している（bit0 が立ち、bit6 が立っていない）ときだけ抑止する [SWS_Fim_00012]。
+TEST_F(FiM_MainFunction_Test, MainFunction_OK_TestedAndFailedInhibitsOnlyWhenTestedAndFailed)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    UseInhibitionType(FIM_TESTED_AND_FAILED);   // 初期化直後のイベントは、まだテストされていない（TF=0、TNCTOC=1）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    const boolean afterInit = GetPermission(FIM_FID_RUNNING_LED);
+    (void)Dem_SetEventStatus(DemConf_DemEventParameter_CAN_BUSOFF, DEM_EVENT_STATUS_FAILED);
+    FiM_MainFunction();
+    const boolean afterFailed = GetPermission(FIM_FID_RUNNING_LED);
+    (void)Dem_SetEventStatus(DemConf_DemEventParameter_CAN_BUSOFF, DEM_EVENT_STATUS_PASSED);
+    FiM_MainFunction();
+    const boolean afterPassed = GetPermission(FIM_FID_RUNNING_LED);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(afterInit, TRUE);     // 未テスト（TF=0、TNCTOC=1）
+    EXPECT_EQ(afterFailed, FALSE);   // テスト済みで失敗（TF=1、TNCTOC=0）
+    EXPECT_EQ(afterPassed, TRUE);   // テスト済みで成功（TF=0、TNCTOC=0）
+}
+
+// OK: Dem からステータスを読めないイベント（存在しない ID）の行は、計算に含めない [SWS_Fim_00097]。ステータスを 0 として判定すると、FIM_TESTED が成り立って、誤って抑止する。
+TEST_F(FiM_MainFunction_Test, MainFunction_OK_EventWhoseStatusCannotBeReadIsExcluded)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    UseInhibitionType(FIM_TESTED, DEM_EVENT_COUNT);   // 存在しないイベント ID
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    FiM_MainFunction();
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     EXPECT_EQ(GetPermission(FIM_FID_RUNNING_LED), TRUE);
 }
 

@@ -32,6 +32,7 @@
  * ====================================================================== */
 
 #include "Std_Types.h"
+#include "Dem.h"
 #include "FiM_Cfg.h"
 #include "FiM_PBCfg.h"
 
@@ -79,16 +80,33 @@ void FiM_Init(const FiM_ConfigType* ConfigPtr);
 /**
  * \brief   FiM 周期処理。各 FID の許可状態を再評価する。
  *
- * \details FiM_Functions[] の各行について Dem_GetEventUdsStatus() を確認し、
- *          InhibitStatusMask のいずれかのビットが立っていれば該当 FID を
- *          「抑止」、立っていなければ「許可」にする。許可状態が変化した
- *          瞬間にのみログを出力する。
+ * \details FiM_Functions[] の各行（抑止の条件）について、Dem のステータスを確認する。
+ *          条件の種類が FIM_INH_STATUS_MASK なら Dem_GetEventUdsStatus() の UDS ステータス、
+ *          仕様の 4 つの条件（FIM_LAST_FAILED など）なら Dem_GetMonitorStatus() の監視ステータスで、
+ *          条件が成り立てば該当 FID を「抑止」、1 つも成り立たなければ「許可」にする。
+ *          許可状態が変化した瞬間にのみログを出力する。
+ *          Dem からの通知（FiM_DemTriggerOnMonitorStatus()）でも、同じ再評価をする。
  *
  * \ServiceID      {0x05}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
  */
 void FiM_MainFunction(void);
+
+/**
+ * \brief   Dem から、イベントの監視ステータスが変わったことを知らされ、そのイベントを使う機能の許可状態を、すぐに更新する。
+ *
+ * \details Dem_SetEventStatus() が、ステータスが変わったときに呼ぶ。EventId を条件に使う行が無ければ、何もしない。
+ *          FiM_Init() の前に呼ばれたときも、何もしない（DET も報告しない）。
+ *
+ * \param[in]  EventId  監視ステータスが変わった Dem イベントの ID。
+ *
+ * \AUTOSARReq     {SWS_Fim_00021, SWS_Fim_00020}
+ * \ServiceID      {0x02}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void FiM_DemTriggerOnMonitorStatus(Dem_EventIdType EventId);
 
 /**
  * \brief   指定 FID が現在許可されているかを取得する。

@@ -71,6 +71,11 @@ typedef uint8 Dem_EventIdType;
  *  として定義される。本実装の `Dem_StatusTable[]` の要素と同じビット配置）。 */
 typedef uint8 Dem_UdsStatusByteType;
 
+/** イベントの監視ステータス型（[SWS_Dem_91005]、Bitfield/uint8）。FiM などが、テストの結果を見るために使う。 */
+typedef uint8 Dem_MonitorStatusType;
+#define DEM_MONITOR_STATUS_TF     0x01U  /**< bit0: TestFailed                            */
+#define DEM_MONITOR_STATUS_TNCTOC 0x02U  /**< bit1: TestNotCompletedThisOperationCycle    */
+
 /**
  * \brief   DTC 値のフォーマットを選択する型（[SWS_Dem_00933]）。
  * \details 本プロジェクトの `Dem_DtcTable[]`（Dem_PBCfg.c）は UDS 3-byte 形式の
@@ -296,6 +301,29 @@ Std_ReturnType Dem_GetDTCStatusAvailabilityMask(uint8 ClientId, Dem_UdsStatusByt
  * \Synchronicity  {Synchronous}
  */
 Std_ReturnType Dem_GetEventUdsStatus(Dem_EventIdType EventId, Dem_UdsStatusByteType* UDSStatusByte);
+
+/**
+ * \brief   指定イベントの監視ステータスを取得する（[SWS_Dem_91007]）。
+ *
+ * \details 実仕様の FiM は、抑止の条件（FIM_LAST_FAILED など）の判定に、UDS ステータスではなく、本関数の
+ *          監視ステータスを使う。UDS ステータスの bit6（TestNotCompletedThisOperationCycle）は、
+ *          `Dem_GetEventUdsStatus()` では statusAvailabilityMask で隠れるが、本関数では見える。
+ *          簡略化: 監視ステータスを別に持たず、内部のステータスの bit0（TestFailed）と
+ *          bit6（TestNotCompletedThisOperationCycle）から導く。
+ *
+ * \param[in]   EventId        イベント ID (DemConf_DemEventParameter_* 定数)。
+ * \param[out]  MonitorStatus  監視ステータス（DEM_MONITOR_STATUS_TF / DEM_MONITOR_STATUS_TNCTOC）の格納先。
+ *                             NULL 禁止。戻り値が E_NOT_OK の場合は不定。
+ *
+ * \retval  E_OK      正常取得 [SWS_Dem_01287]。
+ * \retval  E_NOT_OK  未初期化、EventId が範囲外 [SWS_Dem_01288]、または MonitorStatus が NULL。
+ *
+ * \AUTOSARReq     {SWS_Dem_91007, SWS_Dem_01287, SWS_Dem_01288}
+ * \ServiceID      {0xb5}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType Dem_GetMonitorStatus(Dem_EventIdType EventId, Dem_MonitorStatusType* MonitorStatus);
 
 /**
  * \brief   イベント ID から DTC コードを取得する（[SWS_Dem_00198]/[SWS_Dem_00269]）。
