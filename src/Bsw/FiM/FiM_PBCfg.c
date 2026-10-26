@@ -35,12 +35,12 @@ static const FiM_FunctionCfgType FiM_Functions[FIM_INHIBITION_COUNT] =
     /* FID 0: RUNNING LED (D6) 点灯機能
      * CAN Bus-Off 確定中は EngineState (CAN 受信由来) が信頼できないため、
      * 点灯機能そのものを抑止する。 */
-    { FIM_FID_RUNNING_LED, DemConf_DemEventParameter_CAN_BUSOFF, DEM_STATUS_CONFIRMED },
+    { FIM_FID_RUNNING_LED, DemConf_DemEventParameter_CAN_BUSOFF, DEM_STATUS_CONFIRMED, FIM_INH_STATUS_MASK },
 
     /* FID 1: 警告確認ボタンによる FAULT 解除
      * ボタン固着確定中の押下は物理的固着による偽信号の可能性があるため、
      * 確認操作を抑止する。 */
-    { FIM_FID_BUTTON_ACK, DemConf_DemEventParameter_BUTTON_STUCK, DEM_STATUS_CONFIRMED }
+    { FIM_FID_BUTTON_ACK, DemConf_DemEventParameter_BUTTON_STUCK, DEM_STATUS_CONFIRMED, FIM_INH_STATUS_MASK }
 };
 /* @@GEN-END fim-table */
 

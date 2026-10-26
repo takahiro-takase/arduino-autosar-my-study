@@ -26,26 +26,48 @@ FID↔イベント対応表・判定フロー・フェールセーフ既定値�
 その FID を抑止し**、1 つも成り立たなければ許可する（OR、[SWS_Fim_00064]・仕様 7.2.2.4）。以前は、1 つの FID に、1 つのイベントの
 行しか持てず、同じ FID の行を並べても、最後の行の結果だけが、FID の状態になっていた。`FIM_FUNCTION_COUNT` は FID の数、
 `FIM_INHIBITION_COUNT` は条件（行）の数で、`FiM_ConfigType` の `FunctionCount`・`InhibitionCount` に対応する。
-簡略化: 実仕様の `FiMSummaryEvent`（複数のイベントをまとめた名前）は持たず、同じ FID に、イベントごとの行を並べる。
+複数のイベントを同じ条件でまとめて使いたいときは、`FiM.json` の `summaryEvents[]`（実仕様の `FiMSummaryEvent`、[SWS_Fim_00061]）に名前を付けて、
+`inhibitions[]` の `summary` で参照する。コンフィギュレータが、まとめたイベントごとの行に展開する（実行時には、普通の行と同じ）。
 
 ### 抑止の条件の表し方（仕様との違い）
 
-実仕様の `FiMInhInhibitionMask` は、Dem のイベントステータスに対する4種類の列挙（`FIM_LAST_FAILED`: TF=1、`FIM_NOT_TESTED`:
-TNCTOC=1、`FIM_TESTED`: TNCTOC=0、`FIM_TESTED_AND_FAILED`: TF=1 かつ TNCTOC=0）です。本プロジェクトは、Dem のステータスバイトに対する
-ビットマスク（`InhibitStatusMask`）で表し、**いずれか 1 ビットでも立っていれば**成り立つ、とします。TF・TNCTOC のビットに加えて、
-DTC の確定（`DEM_STATUS_CONFIRMED`）も使えるので、実際の設定は、確定した DTC で機能を抑止する形にしています（単発の異常で
-抑止しないため）。ビットが「立っていないこと」を条件にする `FIM_TESTED` と、2 ビットが同時に成り立つ `FIM_TESTED_AND_FAILED` は、
-表せません（現在の設定では不要）。
+実仕様の `FiMInhInhibitionMask` は、4種類の列挙です。本プロジェクトは、その 4 つに、独自の 1 つを加えた 5 種類を、条件の種類
+（`FiM_InhibitionType`）として持ちます。`FiM.json` の `inhibitions[]` では、`type`（仕様の 4 つ）か `statusMask`（独自）のどちらかで書きます。
+
+| 種類（`type`） | 成り立つとき（FID を抑止する） | 用途（仕様） |
+|---|---|---|
+| `FIM_LAST_FAILED` | TestFailed（TF）が立っている | 再構成、連鎖するエラーの回避 |
+| `FIM_NOT_TESTED` | TestNotCompletedThisOperationCycle（TNCTOC）が立っている | 監視の順序づけ |
+| `FIM_TESTED` | TNCTOC が立っていない（今サイクルにテスト済み。成否は問わない） | 自己無効化 |
+| `FIM_TESTED_AND_FAILED` | TF が立ち、かつ TNCTOC が立っていない | デッドロックの回避 |
+| `statusMask`（独自拡張） | 指定した Dem のステータスビットの、**いずれか 1 ビットでも**立っている | 確定した DTC（`DEM_STATUS_CONFIRMED`）で抑止する |
+
+仕様の 4 つは、`Dem_GetMonitorStatus()` の監視ステータス（TF = bit0、TNCTOC = bit1）で判定します。UDS ステータスの bit6
+（TNCTOC）は、`Dem_GetEventUdsStatus()` では statusAvailabilityMask で隠れて見えないためです。`statusMask` は、
+`Dem_GetEventUdsStatus()` の UDS ステータスで判定します。現在の本番の設定は、すべて `statusMask`（`DEM_STATUS_CONFIRMED`）で、
+確定した DTC で機能を抑止します（単発の異常で抑止しないため）。
+
+Dem からステータスを読めなかった行（存在しないイベント ID など）は、計算に含めません（[SWS_Fim_00097]）。ステータスを 0 として
+判定すると、`FIM_TESTED`（TNCTOC が立っていない）が成り立って、誤って抑止してしまうためです。
+
+### Dem からの通知で、すぐに再評価する（`FiM_DemTriggerOnMonitorStatus`）
+
+`Dem_SetEventStatus()` が、イベントのステータスを変えたとき、`FiM_DemTriggerOnMonitorStatus(EventId)`（[SWS_Fim_00021]）で
+FiM へ知らせます。FiM は、そのイベントを抑止の条件に使っている行があれば、`FiM_MainFunction()`（100 ms 周期）を待たずに、全 FID を
+再評価します（[SWS_Fim_00020]）。使っていなければ、何もしません。`FiM_MainFunction()` の周期の再評価も残します
+（`Dem_ClearDTC()` など、通知が来ない経路での変化を拾うため）。仕様は、抑止しているイベントの数（抑止カウンタ）を増減して
+許可状態を決めますが、本実装は全行を評価し直す方式で、結果は同じです。`FiM_Init()` の前に呼ばれたときは、何もしません
+（Dem は FiM の初期化より前にもイベントを報告するため。DET も報告しません）。
 
 ## 判定の流れ
 
 ```
-FiM_MainFunction（100 ms 周期、Os Task 10）:
+FiM_MainFunction（100 ms 周期、Os Task 10）、または FiM_DemTriggerOnMonitorStatus（Dem のステータス変化の通知）:
   全 FID を「許可」にしてから、FiM_Functions[]（抑止の条件）を先頭から走査:
-    status = Dem_GetEventUdsStatus(EventId)
-    (status & InhibitStatusMask) != 0 ?
-      YES → 該当 FID を「抑止」（同じ FID の他の行が許可でも、抑止のまま）
-      NO  → その行では、何もしない
+    条件の種類が statusMask: status = Dem_GetEventUdsStatus(EventId) → (status & InhibitStatusMask) != 0 ?
+    条件の種類が仕様の 4 つ: monitor = Dem_GetMonitorStatus(EventId) → 種類ごとの TF / TNCTOC の判定
+      成り立つ → 該当 FID を「抑止」（同じ FID の他の行が許可でも、抑止のまま）
+      成り立たない、または Dem から読めない → その行では、何もしない
     （許可状態が変化した瞬間にのみログ出力）
 
 ASW (App_WarningIndicator_Run / App_EngineManager_Run):

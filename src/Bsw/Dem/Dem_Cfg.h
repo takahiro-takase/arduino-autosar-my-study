@@ -116,6 +116,7 @@
 #define DEM_API_ID_SET_EVENT_STATUS              0x04U
 #define DEM_API_ID_GET_DTC_STATUS_AVAILABILITY_MASK 0x16U
 #define DEM_API_ID_GET_EVENT_UDS_STATUS            0xB6U
+#define DEM_API_ID_GET_MONITOR_STATUS              0xB5U
 #define DEM_API_ID_GET_DTC_OF_EVENT                0x0DU
 /** 2026-09-06 是正: 以下3つの本プロジェクト独自関数（実 AUTOSAR に対応する
  *  関数が無く ApiId は任意）が、たまたま実在する別の Dem 関数の Service ID

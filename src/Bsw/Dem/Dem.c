@@ -95,6 +95,7 @@
 #include "Dem_PBCfg.h"
 #include "Det.h"
 #include "NvM.h"
+#include "FiM.h"
 
 /* ======================================================================
  * Definitions
@@ -453,7 +454,41 @@ Std_ReturnType Dem_GetEventUdsStatus(Dem_EventIdType EventId, Dem_UdsStatusByteT
  * Dem_GetMonitorStatus
  * ---------------------------------------------------------------------- */
 
-/* 未実装 */
+Std_ReturnType Dem_GetMonitorStatus(Dem_EventIdType EventId, Dem_MonitorStatusType* MonitorStatus)
+{
+    if (!Dem_Initialized)
+    {
+        (void)Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_GET_MONITOR_STATUS, DEM_E_UNINIT);
+        return E_NOT_OK;
+    }
+
+    if (EventId >= DEM_EVENT_COUNT)
+    {
+        (void)Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_GET_MONITOR_STATUS, DEM_E_WRONG_CONFIGURATION);
+        return E_NOT_OK;   /* [SWS_Dem_01288] */
+    }
+
+    if (MonitorStatus == NULL)
+    {
+        (void)Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_GET_MONITOR_STATUS, DEM_E_PARAM_POINTER);
+        return E_NOT_OK;
+    }
+
+    const uint8 status = Dem_StatusTable[EventId];   /* statusAvailabilityMask では隠さない（bit6 を見せる） */
+    Dem_MonitorStatusType monitor = 0U;
+
+    if ((status & DEM_STATUS_TEST_FAILED) != 0U)
+    {
+        monitor |= DEM_MONITOR_STATUS_TF;
+    }
+    if ((status & DEM_STATUS_NOT_COMPLETED_THIS_CYCLE) != 0U)
+    {
+        monitor |= DEM_MONITOR_STATUS_TNCTOC;
+    }
+
+    *MonitorStatus = monitor;   /* [SWS_Dem_01287] */
+    return E_OK;
+}
 
 /* ----------------------------------------------------------------------
  * Dem_GetDebouncingOfEvent
@@ -849,6 +884,10 @@ Std_ReturnType Dem_SetEventStatus(Dem_EventIdType EventId,
         }
 
         (void)NvM_WriteBlock(NVM_BLOCK_ID_DEM_STATUS, Dem_StatusTable);
+
+        /* 監視ステータスが変わったことを FiM へ知らせ、そのイベントを使う機能の許可状態を、すぐに更新させる
+         * （DemTriggerFiMReports 相当、[SWS_Fim_00021]）。FiM の初期化前は、FiM が黙って何もしない。 */
+        FiM_DemTriggerOnMonitorStatus(EventId);
     }
 
     return E_OK;

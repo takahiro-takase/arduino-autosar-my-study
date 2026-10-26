@@ -15,6 +15,33 @@
     "module": {
       "const": "FiM"
     },
+    "summaryEvents": {
+      "type": "array",
+      "description": "複数の Dem イベントをまとめた名前（FiMSummaryEvent に相当）。functions[].inhibitions[].summary から参照する",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "events"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "pattern": "^[A-Z][A-Z0-9_]*$"
+          },
+          "events": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "string",
+              "pattern": "^[A-Z][A-Z0-9_]*$",
+              "description": "Dem.json の events[].name"
+            }
+          }
+        }
+      }
+    },
     "functions": {
       "type": "array",
       "minItems": 1,
@@ -46,11 +73,21 @@
             "items": {
               "type": "object",
               "additionalProperties": false,
-              "required": [
-                "event",
-                "statusMask"
-              ],
               "properties": {
+                "summary": {
+                  "type": "string",
+                  "pattern": "^[A-Z][A-Z0-9_]*$",
+                  "description": "summaryEvents[].name（FiMInhSumRef に相当）。まとめたイベントごとに、同じ条件の行へ展開する"
+                },
+                "type": {
+                  "enum": [
+                    "FIM_LAST_FAILED",
+                    "FIM_NOT_TESTED",
+                    "FIM_TESTED",
+                    "FIM_TESTED_AND_FAILED"
+                  ],
+                  "description": "仕様の抑止の条件（FiMInhInhibitionMask）。LAST_FAILED=TestFailed（bit0）、NOT_TESTED=TestNotCompletedThisOperationCycle（bit6）、TESTED=bit6 が無い、TESTED_AND_FAILED=bit0 があり bit6 が無い"
+                },
                 "event": {
                   "type": "string",
                   "pattern": "^[A-Z][A-Z0-9_]*$",
@@ -61,7 +98,38 @@
                   "pattern": "^DEM_STATUS_[A-Z0-9_]+$",
                   "description": "抑止するステータスのビット（Dem_Cfg.h の DEM_STATUS_*）。いずれか 1 ビットでも立っていれば抑止する"
                 }
-              }
+              },
+              "description": "event か summary のどちらか 1 つ（対象）と、statusMask か type のどちらか 1 つ（条件）を書く",
+              "allOf": [
+                {
+                  "oneOf": [
+                    {
+                      "required": [
+                        "event"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "summary"
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "oneOf": [
+                    {
+                      "required": [
+                        "statusMask"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "type"
+                      ]
+                    }
+                  ]
+                }
+              ]
             }
           },
           "note": {

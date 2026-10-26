@@ -9,7 +9,7 @@
  *          [[reference_wrap_stub_naming_convention]] の標準テンプレートへ
  *          統一する（`<種類>_<Module>_<関数名>`）。
  *
- *          `Dem.h` が宣言する公開API全18関数を wrap 対象とする。
+ *          `Dem.h` が宣言する公開API全19関数を wrap 対象とする。
  *
  * \par Dem_SetEventStatus
  * 2026-09、`native_chain` を「Dem をフェイクにする」から「実体の `Dem.c` を
@@ -93,6 +93,7 @@ extern "C" {
 extern uint32 CallCount_Dem_GetVersionInfo;
 extern uint32 CallCount_Dem_Init;
 extern uint32 CallCount_Dem_GetEventUdsStatus;
+extern uint32 CallCount_Dem_GetMonitorStatus;
 extern uint32 CallCount_Dem_GetDTCOfEvent;
 extern uint32 CallCount_Dem_GetFaultDetectionCounter;
 extern uint32 CallCount_Dem_SetEventStatus;
@@ -128,6 +129,7 @@ extern Dem_EventStatusType LastStatusOfEvent_Dem_SetEventStatus[DEM_EVENT_COUNT]
  *  `CallCount_Dem_Xxx` がこの値に達した回から（以降ずっと）
  *  対応する `ForcedReturn_Dem_Xxx` を返す。 */
 extern uint32 FailFromCallCount_Dem_GetEventUdsStatus;
+extern uint32 FailFromCallCount_Dem_GetMonitorStatus;
 extern uint32 FailFromCallCount_Dem_GetDTCOfEvent;
 extern uint32 FailFromCallCount_Dem_GetFaultDetectionCounter;
 extern uint32 FailFromCallCount_Dem_GetDTCStatusAvailabilityMask;
@@ -146,6 +148,7 @@ extern uint32 FailFromCallCount_Dem_GetNextFilteredDTCAndFDC;
  * 閾値到達後の強制戻り値（戻り値を持つ15関数のみ）
  * ---------------------------------------------------------------------- */
 extern Std_ReturnType ForcedReturn_Dem_GetEventUdsStatus;              /**< 既定 E_NOT_OK */
+extern Std_ReturnType ForcedReturn_Dem_GetMonitorStatus;                /**< 既定 E_NOT_OK */
 extern Std_ReturnType ForcedReturn_Dem_GetDTCOfEvent;                  /**< 既定 E_NOT_OK */
 extern Std_ReturnType ForcedReturn_Dem_GetFaultDetectionCounter;       /**< 既定 E_NOT_OK */
 extern Std_ReturnType ForcedReturn_Dem_GetDTCStatusAvailabilityMask;   /**< 既定 E_NOT_OK */

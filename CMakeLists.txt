@@ -545,11 +545,12 @@ set(NATIVE_CHAIN_WRAP_SYMBOLS
     Dcm_TpRxIndication
     Dcm_CopyTxData
     Dcm_TpTxConfirmation
-    # Dem.h の公開API全18関数（Wrap_Dem.h/.c 参照）。
+    # Dem.h の公開API全19関数（Wrap_Dem.h/.c 参照）。
     Dem_Init
     Dem_SetEventStatus
     Dem_GetDTCStatusAvailabilityMask
     Dem_GetEventUdsStatus
+    Dem_GetMonitorStatus
     Dem_GetDTCOfEvent
     Dem_ClearDTC
     Dem_SetDTCFilter
