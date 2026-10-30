@@ -157,6 +157,11 @@
 #define NVM_MAX_BLOCK_LENGTH  15U
 /* @@GEN-END nvm-blocks */
 
+/** 保存する CRC を作る XOR マスク（理由は NvM.c の NvM_StoredCrc()）。設定したすべてのブロックの長さで、
+ *  消去済みが一致しない値でなければならない。この条件は、コンフィギュレータ（tools/configurator/modules/nvm.py）が
+ *  生成のときに検査する。 */
+#define NVM_CRC8_STORE_MASK  0xA5U
+
 /** 書き込みジョブ（NvM_WriteBlock）の最大リトライ回数
  *  （[SWS_NvM_00216]、ECUC の NvMMaxNumOfWriteRetries 相当。範囲 0..7）。
  *  MemIf が書き込みを拒否した、またはジョブが失敗するたびにカウンタを +1 し、

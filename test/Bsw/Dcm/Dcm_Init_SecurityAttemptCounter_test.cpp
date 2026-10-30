@@ -179,7 +179,7 @@ TEST_F(Dcm_Init_SecurityAttemptCounter_Test, Dcm_Init_NG_UnreadableAttemptCounte
 
 // ------------------------------------------------------------
 // 正常系: 一度も書かれていない（消去済みの）EEPROM からは、失敗回数 0 で始まり、ロックアウトしない。
-// （1 バイトの 0xFF は NvM の CRC8 でも正しい組になるため、NvM は既定値へ戻さない。）
+// （NvM が、既定値（0）で復元する。保存する CRC をマスクして是正済み。）
 // ------------------------------------------------------------
 
 TEST_F(Dcm_Init_SecurityAttemptCounter_Test, Dcm_Init_OK_ErasedEepromStartsWithZeroAttempts)
@@ -327,7 +327,7 @@ TEST_F(Dcm_Init_SecurityAttemptCounter_Test, Dcm_Init_OK_SuccessfulKeyResetsPers
 }
 
 // ------------------------------------------------------------
-// 正常系: 想定外の値（上限と消去済みのどちらでもない）が保持されていたときは、安全側に倒して、ロックアウトする。
+// 正常系: 想定外の値（上限より大きい）が保持されていたときは、安全側に倒して、ロックアウトする。
 // ------------------------------------------------------------
 
 TEST_F(Dcm_Init_SecurityAttemptCounter_Test, Dcm_Init_OK_UnexpectedStoredValueLocksOut)
@@ -335,7 +335,7 @@ TEST_F(Dcm_Init_SecurityAttemptCounter_Test, Dcm_Init_OK_UnexpectedStoredValueLo
     /* ----------------------- */
     /* ---- 準備 (Arrange) --- */
     /* ----------------------- */
-    const uint8 unexpected = 5U;   // DCM_SECURITY_MAX_ATTEMPTS（3）より大きく、0xFF（消去済み）ではない
+    const uint8 unexpected = 5U;   // DCM_SECURITY_MAX_ATTEMPTS（3）より大きい
     ASSERT_EQ(NvM_WriteBlock(NVM_BLOCK_ID_DCM_SECURITY, &unexpected), E_OK);
     NvM_WriteAll();
     Reboot();

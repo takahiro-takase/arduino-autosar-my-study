@@ -11,9 +11,30 @@ Dem のイベント数に長さを合わせるブロック（`demEventCount`）�
 ROM デフォルト値の各要素に、対応するイベント名の注釈（`event N: <name>`）を付ける。
 """
 
+import pathlib
+import re
+
 from .common import block_comment, doc_comment
 
+REPO_ROOT = pathlib.Path(__file__).resolve().parents[3]
 RULE = "-" * 71
+
+
+def crc8(data):
+    """NvM.c の NvM_CalcCrc8() と同じ CRC8（SAE J1850: 多項式 0x1D、初期値 0xFF、最終 XOR 0xFF）。"""
+    crc = 0xFF
+    for byte in data:
+        crc ^= byte
+        for _ in range(8):
+            crc = ((crc << 1) ^ 0x1D) & 0xFF if crc & 0x80 else (crc << 1) & 0xFF
+    return crc ^ 0xFF
+
+
+def store_mask():
+    """NvM_Cfg.h の NVM_CRC8_STORE_MASK（保存する CRC を作る XOR マスク）。"""
+    text = (REPO_ROOT / "src" / "Bsw" / "NvM" / "NvM_Cfg.h").read_bytes().decode("utf-8", errors="replace")
+    m = re.search(r"^#define\s+NVM_CRC8_STORE_MASK\s+(0x[0-9A-Fa-f]+|\d+)U?\b", text, re.M)
+    return int(m.group(1), 0) if m else None
 
 
 def validate(cfg):
@@ -35,6 +56,21 @@ def validate(cfg):
             errors.append("blocks %s: default.kind=%s には value が必要" % (b["name"], d["kind"]))
         if d["kind"] == "scalar" and b["length"] != 1:
             errors.append("blocks %s: default.kind=scalar は length=1 のブロックだけ" % b["name"])
+    errors += check_erased_never_valid(cfg)
+    return errors
+
+
+def check_erased_never_valid(cfg):
+    """消去済み（データも CRC も 0xFF）の EEPROM が、設定した全ブロックの長さで「CRC 一致」にならないことを検査する
+    （保存する CRC は CRC8 ^ NVM_CRC8_STORE_MASK。理由は NvM.c の NvM_StoredCrc()）。"""
+    mask = store_mask()
+    if mask is None:
+        return ["NvM_Cfg.h に NVM_CRC8_STORE_MASK が無い"]
+    errors = []
+    for length in sorted({b["length"] for b in cfg["blocks"]}):
+        if crc8([0xFF] * length) ^ mask == 0xFF:
+            errors.append("blocks: 長さ %d のブロックは、NVM_CRC8_STORE_MASK=0x%02X では、消去済みの EEPROM が「CRC 一致」になる"
+                          "（NvM_Cfg.h のマスクを変える）" % (length, mask))
     return errors
 
 

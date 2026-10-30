@@ -208,10 +208,6 @@
  *  requestSeed 自体を拒否する (NRC 0x37) ブルートフォース対策。 */
 #define DCM_SECURITY_MAX_ATTEMPTS   3U
 
-/** 失敗回数のブロック（NvM）が、一度も書かれていない（EEPROM が消去済みの）ときの値。
- *  1 バイトの 0xFF は NvM の CRC8 でも正しい組になるため、NvM は既定値（0）へ戻さない。 */
-#define DCM_SECURITY_ATTEMPT_COUNTER_ERASED  0xFFU
-
 /** 試行回数超過後、再度 requestSeed を受け付けるまでの待機時間 [ms]。 */
 #define DCM_SECURITY_DELAY_MS       10000UL
 

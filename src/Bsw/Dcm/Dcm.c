@@ -3127,9 +3127,8 @@ static void Dcm_SecuritySaveAttemptCount(void)
  *          DCM_SECURITY_MAX_ATTEMPTS 以上なら、起動時刻から DCM_SECURITY_DELAY_MS の間、requestSeed を
  *          拒否する（[SWS_Dcm_01355]。実仕様は DcmDspSecurityDelayTimeOnBoot と DcmDspSecurityDelayTime の
  *          大きい方。本実装は DCM_SECURITY_DELAY_MS だけを使い、OnBoot の値は持たない簡略化）。
- *          消去済みの 0xFF（EEPROM が一度も書かれていない）だけは、失敗回数 0 から始める（1 バイトの 0xFF は、
- *          NvM の CRC8 でも正しい組になり、NvM_Init() が既定値へ戻さないため、ここで判別する）。
- *          それ以外の上限より大きい値は、想定外なので、ロックアウトする回数にする。
+ *          一度も書かれていない EEPROM は、NvM が既定値（0）で復元するので、失敗回数 0 から始まる（NvM_Notes.md）。
+ *          上限より大きい値（0xFF を含む）は、想定外（破損など）なので、ロックアウトする回数にする。
  *          簡略化: 実仕様の Xxx_GetSecurityAttemptCounter は非同期（DCM_E_PENDING を返せる、[SWS_Dcm_01351]）
  *          だが、NvM_ReadBlock() は RAM ミラーを返すだけの同期呼び出しなので、読み出しの待ち合わせは持たない。
  */
@@ -3143,14 +3142,9 @@ static void Dcm_SecurityRestoreAttemptCount(void)
     {
         saved = DCM_SECURITY_MAX_ATTEMPTS;
     }
-    if (saved == DCM_SECURITY_ATTEMPT_COUNTER_ERASED)
-    {
-        /* 一度も書かれていない（消去済み 0xFF の 1 バイトは、NvM の CRC8 でも正しい組になる）ので、失敗回数 0 から始める */
-        saved = 0U;
-    }
     if (saved > DCM_SECURITY_MAX_ATTEMPTS)
     {
-        /* 想定外の値（上限と消去済みのどちらでもない）。安全側に倒して、ロックアウトする回数にする */
+        /* 想定外の値（上限より大きい）。安全側に倒して、ロックアウトする回数にする */
         saved = DCM_SECURITY_MAX_ATTEMPTS;
     }
     Dcm_SecurityAttemptCount = saved;

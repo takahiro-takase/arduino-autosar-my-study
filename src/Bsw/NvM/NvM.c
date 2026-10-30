@@ -16,6 +16,7 @@
  *            各ブロックのデータ本体直後の 1 バイトに AUTOSAR Crc8
  *            (SAE J1850: 多項式 0x1D, 初期値 0xFF, 最終 XOR 0xFF) を保存する。
  *            NvM_Init() は読み込み直後に CRC を再計算して検証し、
+ *            保存する値は、CRC をマスクした値（理由は NvM_StoredCrc() 参照）。
  *            不一致ならビット化けや書き込み中の電源断による破損とみなして
  *            ROM デフォルト値（未設定なら全 0）で復元し EEPROM へ書き戻す
  *            (起動時、Os スケジューラ開始前のため、MemIf_Write() で発行した
@@ -124,6 +125,7 @@ static uint8 NvM_BlockProtected[NVM_BLOCK_COUNT];
  *  不定のまま=未使用。専用の valid フラグを設けず「非冗長ブロックなら
  *  NvM_Init() 完了後に必ず有効」という限定した不変条件で足りる）。 */
 static uint8 NvM_LastCrc[NVM_BLOCK_COUNT];
+/* 注意: NvM_LastCrc[] は、素の CRC（NvM_CalcCrc8() の値）。EEPROM へ保存する値（NvM_StoredCrc()）ではない。 */
 
 /** 現在 NvM_MainFunction() が処理中のブロック ID。
  *  NVM_BLOCK_COUNT ならどのブロックも処理中でないことを示す。 */
@@ -140,11 +142,15 @@ typedef enum
 
 static NvM_JobPhaseType NvM_ActivePhase = NVM_PHASE_NONE;
 
-/** CRC フェーズで MemIf_Write() へ渡す 1 バイトの送信元。MemIf_Write() は
+/** 処理中ブロックの、素の CRC（NvM_LastCrc[] の更新に使う）。 */
+/* cppcheck-suppress misra-c2012-8.9 */
+static uint8 NvM_ActiveCrc = 0U;
+
+/** CRC フェーズで MemIf_Write() へ渡す 1 バイト（EEPROM へ保存する値、NvM_StoredCrc()）の送信元。MemIf_Write() は
  *  ジョブ完了までポインタを保持し続ける（Fee.h の Fee_Write() 説明
  *  参照）ため、スタック変数ではなく static でなければならない。 */
 /* cppcheck-suppress misra-c2012-8.9 */
-static uint8 NvM_ActiveCrc = 0U;
+static uint8 NvM_ActiveStoredCrc = 0U;
 
 /** 冗長ブロック（Redundant=1）処理中、現在どちらのコピーを書き込んでいるか。
  *  0 = プライマリ面、1 = ミラー面。非冗長ブロックでは未使用（常に 0）。
@@ -268,6 +274,27 @@ static uint8 NvM_CalcCrc8(const uint8* data, uint16 length)
 }
 
 /* ----------------------------------------------------------------------
+ * NvM_StoredCrc
+ * ---------------------------------------------------------------------- */
+
+/**
+ * \brief   計算した CRC から、EEPROM へ保存する値を作る。
+ *
+ * \details CRC を NVM_CRC8_STORE_MASK で XOR する（元に戻すのも同じ操作）。EEPROM が消去済み（データも CRC も
+ *          0xFF）のとき、素の CRC を保存していると、長さ 1 の 0xFF（CRC8 が 0xFF）は、データも CRC も正しく見え、
+ *          書かれていないのに有効と判定されていた。マスクすると、消去済みの CRC バイト 0xFF は、
+ *          設定したすべてのブロックの長さで、「データの CRC をマスクした値」と一致しない
+ *          （NVM_CRC8_STORE_MASK は NvM_Cfg.h。この条件は、コンフィギュレータが検査する）。
+ *
+ * \param[in]  crc  NvM_CalcCrc8() の戻り値。
+ * \return  EEPROM へ保存する（EEPROM から読んだ値と比べる）値
+ */
+static uint8 NvM_StoredCrc(uint8 crc)
+{
+    return (uint8)(crc ^ NVM_CRC8_STORE_MASK);
+}
+
+/* ----------------------------------------------------------------------
  * NvM_CrcAddressForBase
  * ---------------------------------------------------------------------- */
 
@@ -353,7 +380,7 @@ static void NvM_WriteCopySync(uint16 base, const void* data, uint16 length)
     /* cppcheck-suppress misra-c2012-11.5 */
     NvM_WriteJobSync(base, (const uint8*)data, length);
     /* cppcheck-suppress misra-c2012-11.5 */
-    uint8 crc = NvM_CalcCrc8((const uint8*)data, length);
+    uint8 crc = NvM_StoredCrc(NvM_CalcCrc8((const uint8*)data, length));
     NvM_WriteJobSync(NvM_CrcAddressForBase(base, length), &crc, 1U);
 }
 
@@ -489,14 +516,15 @@ static void NvM_LoadAndVerifyBlock(NvM_BlockIdType id, const NvM_BlockDescriptor
                       &storedCrcPrimary, 1U);
     /* cppcheck-suppress misra-c2012-11.5 */
     const uint8 calcCrcPrimary = NvM_CalcCrc8((const uint8*)blk->RamBlockDataAddress, blk->NvMNvBlockLength);
-    const uint8 primaryValid = (storedCrcPrimary == calcCrcPrimary) ? 1U : 0U;
+    const uint8 expectedCrcPrimary = NvM_StoredCrc(calcCrcPrimary);
+    const uint8 primaryValid = (storedCrcPrimary == expectedCrcPrimary) ? 1U : 0U;
 
     if (blk->Redundant == 0U)
     {
         if (!primaryValid)
         {
-            DET_LOGE(TAG, "block=%u CRC mismatch (stored=0x%02X calc=0x%02X)",
-                     (unsigned)id, (unsigned)storedCrcPrimary, (unsigned)calcCrcPrimary);
+            DET_LOGE(TAG, "block=%u CRC mismatch (stored=0x%02X expected=0x%02X)",
+                     (unsigned)id, (unsigned)storedCrcPrimary, (unsigned)expectedCrcPrimary);
             NvM_ApplyDefaultSync(id, blk);
             /* [SWS_NvM_00864]: 読み込みでCRC不整合を検出 → FAILED（遅延報告、
              * 本関数冒頭のコメント参照）。 */
@@ -524,7 +552,7 @@ static void NvM_LoadAndVerifyBlock(NvM_BlockIdType id, const NvM_BlockDescriptor
                       NvM_CrcAddressForBase(blk->NvMNvBlockBaseNumberMirror, blk->NvMNvBlockLength),
                       &storedCrcMirror, 1U);
     const uint8 calcCrcMirror = NvM_CalcCrc8(mirrorBuf, blk->NvMNvBlockLength);
-    const uint8 mirrorValid = (storedCrcMirror == calcCrcMirror) ? 1U : 0U;
+    const uint8 mirrorValid = (storedCrcMirror == NvM_StoredCrc(calcCrcMirror)) ? 1U : 0U;
 
     if ((primaryValid) != 0U)
     {
@@ -1384,8 +1412,9 @@ void NvM_MainFunction(void)
          * 再度到達できる）。 */
         /* cppcheck-suppress misra-c2012-11.5 */
         NvM_ActiveCrc = NvM_CalcCrc8((const uint8*)blk->RamBlockDataAddress, blk->NvMNvBlockLength);
+        NvM_ActiveStoredCrc = NvM_StoredCrc(NvM_ActiveCrc);
         if (MemIf_Write(MEMIF_DEVICE_0, NvM_CrcAddressForBase(activeBase, blk->NvMNvBlockLength),
-                         &NvM_ActiveCrc, 1U) == E_OK)
+                         &NvM_ActiveStoredCrc, 1U) == E_OK)
         {
             NvM_ActivePhase = NVM_PHASE_CRC;
         }
