@@ -17,14 +17,27 @@ EEPROM はビット化けや書き込み中の電源断で内容が壊れるこ�
 
 これを検出するため、各ブロックはデータ本体直後の 1 バイトに
 **AUTOSAR Crc8 (SAE J1850: 多項式 0x1D、初期値 0xFF、最終 XOR 0xFF)** を
-付加して保存します。
+付加して保存します。ただし、保存する値は、計算した CRC を `NVM_CRC8_STORE_MASK`（0xA5）で XOR した値です
+（`NvM_StoredCrc()`）。
+
+**なぜマスクするか**: 素の CRC を保存すると、長さ 1 のブロックは、一度も書かれていない（消去済みで、データも CRC も 0xFF）
+EEPROM が、CRC8 でも「一致」と判定されます（1 バイトの 0xFF の CRC8 が 0xFF のため）。書かれていないのに、既定値へ戻らず、
+`NvM_ReadBlock()` が 0xFF を返していました（SecurityAccess の失敗回数のブロック（長さ 1）で発覚）。マスクすると、消去済みの
+EEPROM は、長さ 1〜`NVM_MAX_BLOCK_LENGTH` のどれでも不一致になり、ROM の既定値で復元されます（マスクの値は、全長で確認済み）。
+
+**Fee の状態を使わない理由**: 仕様は、「書かれていない」「不整合」の判別を、メモリ抽象化層（Fee）の役目とします（[SWS_NvM_00174]）。
+本プロジェクトの Fee は、ブロックのヘッダを持たず、`MEMIF_BLOCK_INCONSISTENT` / `MEMIF_BLOCK_INVALID` に到達しないので、
+NvM が、保存する CRC の値で判別します（学習用の簡略化）。
+
+**保存形式が変わったことによる影響**: 保存する CRC の値が変わったため、この変更を入れる前に書き込まれた EEPROM は、
+全ブロックが CRC 不一致になり、最初の起動で、既定値へ復元されます（DTC の履歴、SecurityAccess の失敗回数などが、一度だけ初期化される）。
 
 ```
 NvM_Init()（起動時、各ブロックごとに）:
   MemIf_Read() 経由（実体は Fee）でデータ本体を RAM ミラーへロード
   storedCrc = MemIf_Read(BaseNumber + Length) から読み出し
   calcCrc   = RAM ミラーから再計算
-  storedCrc == calcCrc ?
+  storedCrc == calcCrc ^ NVM_CRC8_STORE_MASK ?
     YES → そのまま使用
     NO  → ERROR ログ + デフォルト値へ自動復元（後述）
 
@@ -68,7 +81,7 @@ CRC 不一致を検出すると、ブロックごとに設定された **ROM デ
 | DEM_STATUS | 全イベント `DEM_STATUS_NOT_COMPLETED_SINCE_CLEAR \| DEM_STATUS_NOT_COMPLETED_THIS_CYCLE` | Dem_Init() の初回起動時と同じ値。MAGIC は無事だが STATUS だけ破損したケースでも Dem が想定する初期状態と一致させる |
 | DEM_AGING | 未設定（NULL） | 経年回復カウンタの初回起動値はそもそも全イベント 0 であり、`NvM_Init()` 内部の全 0 フォールバックと一致するため専用テーブル不要。ただし `NvM_RestoreBlockDefaults(NVM_BLOCK_ID_DEM_AGING, ...)` を明示的に呼んでも E_NOT_OK が返るだけでリセットはされない点に注意 |
 | DEM_EXTENDED | 未設定（NULL） | 故障確定回数 (ExtendedData) の初回起動値も同様に全イベント 0。DEM_AGING と同じ注意点が当てはまる |
-| DCM_SECURITY | `0x00` | SecurityAccess の連続失敗回数。初回起動や復元からは、失敗回数 0（ロックアウトなし）から始める。ただし消去済みの EEPROM の 1 バイト 0xFF は CRC8 でも正しい組になるため、Dcm_Init() が 0xFF だけを「書かれていない」として 0 に直す（それ以外の上限より大きい値はロックアウトする） |
+| DCM_SECURITY | `0x00` | SecurityAccess の連続失敗回数。初回起動や復元からは、失敗回数 0（ロックアウトなし）から始める。消去済みの EEPROM は、NvM が既定値（0）で復元する。上限より大きい値（破損など）は、Dcm_Init() がロックアウトする |
 
 DEM_STATUS のデフォルト値定義に `Dem_Cfg.h` の定数を使っているのは
 `NvM_PBCfg.c` だけです。NvM 本体 (`NvM.c`) は Dem の存在を一切知りません
@@ -78,7 +91,7 @@ DEM_STATUS のデフォルト値定義に `Dem_Cfg.h` の定数を使ってい�
 ## ログ例（EEPROM を直接書き換えて DEM_AGING ブロックを破損させた場合）
 
 ```
-[19ms] ERROR NvM: block=2 CRC mismatch (stored=0xA3 calc=0x7F)
+[19ms] ERROR NvM: block=2 CRC mismatch (stored=0xA3 expected=0xDA)
 [19ms] WARN  NvM: block=2 zero-filled (no ROM default -> INTEGRITY_FAILED)
 [19ms] INFO  NvM: Init ok blocks=4
 ```

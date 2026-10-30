@@ -175,4 +175,30 @@ TEST_F(NvM_InitCrcRecovery_Test, NvM_Init_OK_RecoveredBlocksPassCrcOnNextInit)
     }
 }
 
+// OK: 空の EEPROM（全 0xFF）から起動したとき、長さ 1 のブロックも、「書かれていない」と判定されて、ROM の既定値で復元される。
+// 以前は、素の CRC を保存していたため、長さ 1 の 0xFF（CRC8 も 0xFF）が、書かれていないのに有効と判定され、
+// 既定値へ戻らず、NvM_ReadBlock() が 0xFF を返していた（保存する CRC をマスクして是正した）。
+TEST_F(NvM_InitCrcRecovery_Test, NvM_Init_OK_ErasedEepromRestoresOneByteBlockToRomDefault)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    static_assert(NVM_BLOCK_DCM_SECURITY_LENGTH == 1U, "このテストは、長さ 1 のブロックを使う");
+    uint8 value = 0xFFU;
+    NvM_RequestResultType result = NVM_REQ_OK;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    NvM_Init(NULL);   // 空の EEPROM
+    ASSERT_EQ(NvM_GetErrorStatus(NVM_BLOCK_ID_DCM_SECURITY, &result), E_OK);
+    ASSERT_EQ(NvM_ReadBlock(NVM_BLOCK_ID_DCM_SECURITY, &value), E_OK);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(result, NVM_REQ_RESTORED_FROM_ROM);   // 書かれていないと判定して、ROM の既定値で復元した
+    EXPECT_EQ(value, 0x00U);                        // 0xFF ではなく、既定値（失敗回数 0）
+}
+
 }  // namespace
