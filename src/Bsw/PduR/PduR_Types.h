@@ -46,6 +46,10 @@ typedef void (*PduR_TxConfirmationFctType)(PduIdType DestPduId, Std_ReturnType r
  * ポイント」をそのまま登録できる。 */
 typedef Std_ReturnType (*PduR_TxTransmitFctType)(PduIdType DestPduId, const PduInfoType* PduInfoPtr);
 
+/* 上位層の <Up>_TriggerTransmit（例: Com_TriggerTransmit）。下位層の TriggerTransmit 要求の転送先
+ * （SWS_PduR_00430）。 */
+typedef Std_ReturnType (*PduR_TxTriggerTransmitFctType)(PduIdType DestPduId, PduInfoType* PduInfoPtr);
+
 typedef struct
 {
     PduR_DestModuleType      Module;
@@ -77,6 +81,10 @@ typedef struct
      * 7.4.1 節の "ad-hoc transmission" フロー相当）。 */
     PduR_TxTransmitFctType    TransmitOverrideFct;
     PduIdType                 TransmitOverrideId;
+    /* 下位層（CanIf など）が PduR_CanIfTriggerTransmit() で送信データを要求してきたときの、上位層の
+     * <Up>_TriggerTransmit（SWS_PduR_00430）。引数の PDU ID は ConfDestPduId を使う。NULL（既定）なら、
+     * このパスはトリガ送信に対応しない（E_NOT_OK を返す）。末尾に追加したので、既存の初期化子は無変更。 */
+    PduR_TxTriggerTransmitFctType TriggerTransmitFct;
 } PduR_TxRoutingPathType;
 
 /* SWS_PduR_00771: PduR_GetConfigurationId() が返す、ポストビルド構成の識別子 */

@@ -1057,7 +1057,68 @@ CanIf_NotifStatusType CanIf_GetTxConfirmationState(uint8 ControllerId)
  * CanIf_TriggerTransmit
  * ---------------------------------------------------------------------- */
 
-/* 未実装 */
+/**
+ * \brief   CAN ドライバの送信データの要求（トリガ送信）を、上位層の <User_TriggerTransmit> へ転送する。
+ *
+ * \details TxPduId の TX PDU 設定の TriggerTransmitFct を、翻訳した PDU ID（UpperLayerTxPduId）付きで呼び、
+ *          その戻り値をそのまま返す（[SWS_CANIF_00885]）。TriggerTransmitFct を持たない TX PDU は、
+ *          トリガ送信に対応しないので、E_NOT_OK を返す（[SWS_CANIF_00888]）。
+ *
+ *          簡略化: 本プロジェクトの Can ドライバ（MCP2515）は、送信の直前にデータを取りに来ない。
+ *          Can_Write() に、データを渡さずに（SduDataPtr=NULL）送信を要求する経路も持たない
+ *          （[SWS_CANIF_00882] の、CanIf_Transmit() が NULL の SduDataPtr を受け付ける動作は未実装）。
+ *          そのため、本関数を呼ぶ元は、本番コードには無い。また、構成項目 CanIfTriggerTransmitSupport による
+ *          有効・無効の切り替えは持たず、TX PDU ごとの TriggerTransmitFct の有無だけで決める（[SWS_CANIF_00884]）。
+ *
+ * \param[in]     TxPduId     データを要求された TX PDU の ID。設定済み TxPduCount 未満であること。
+ * \param[in,out] PduInfoPtr  SduDataPtr=複製先のバッファ、SduLength=その大きさ。戻るとき、複製した長さ。
+ *                            NULL 禁止。SduDataPtr も NULL 禁止。
+ *
+ * \retval  E_OK      上位層がデータを複製した。
+ * \retval  E_NOT_OK  CanIf 未初期化、TxPduId 不正、NULL ポインタ、TX PDU がトリガ送信に対応しない、
+ *                    または上位層が E_NOT_OK を返した。TxPduId が不正なときは CANIF_E_INVALID_TXPDUID、
+ *                    NULL ポインタのときは CANIF_E_PARAM_POINTER を DET へ報告する。
+ *
+ * \pre        CanIf_Init() が正常に完了していること。
+ *
+ * \AUTOSARReq     {SWS_CANIF_00883, SWS_CANIF_00885, SWS_CANIF_00888, SWS_CANIF_00889}
+ * \ServiceID      {0x41}
+ * \Reentrancy     {Reentrant for different PduIds. Non reentrant for the same PduId.}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType CanIf_TriggerTransmit(PduIdType TxPduId, PduInfoType* PduInfoPtr)
+{
+    if (CanIf_ConfigPtr == NULL)
+    {
+        return E_NOT_OK;
+    }
+
+    if (TxPduId >= CanIf_ConfigPtr->TxPduCount)
+    {
+        DET_LOGE(TAG, "TriggerTransmit E: invalid TxPduId");
+        (void)Det_ReportError(CANIF_MODULE_ID, 0U, CANIF_API_ID_TRIGGER_TRANSMIT, CANIF_E_INVALID_TXPDUID);
+        return E_NOT_OK;
+    }
+
+    if ((PduInfoPtr == NULL) || (PduInfoPtr->SduDataPtr == NULL))
+    {
+        DET_LOGE(TAG, "TriggerTransmit E: PduInfoPtr NULL");
+        (void)Det_ReportError(CANIF_MODULE_ID, 0U, CANIF_API_ID_TRIGGER_TRANSMIT, CANIF_E_PARAM_POINTER);
+        return E_NOT_OK;
+    }
+
+    const CanIf_TxPduConfigType* txCfg = &CanIf_ConfigPtr->TxPduConfig[TxPduId];
+
+    if (txCfg->TriggerTransmitFct == NULL)
+    {
+        DET_LOGD(TAG, "TriggerTransmit iPdu=%u: not configured for trigger transmit", (unsigned)TxPduId);
+        return E_NOT_OK;
+    }
+
+    DET_LOGD(TAG, "TriggerTransmit id=%u -> upper=%u", (unsigned)TxPduId, (unsigned)txCfg->UpperLayerTxPduId);
+
+    return txCfg->TriggerTransmitFct(txCfg->UpperLayerTxPduId, PduInfoPtr);
+}
 
 /* ----------------------------------------------------------------------
  * CanIf_TxConfirmation

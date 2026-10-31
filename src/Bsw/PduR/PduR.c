@@ -666,10 +666,80 @@ void PduR_SecOCTxConfirmation(PduIdType SrcPduId, Std_ReturnType result)
 /* 未実装 */
 
 /* ----------------------------------------------------------------------
- * PduR_<User:Lo>TriggerTransmit
+ * PduR_CanIfTriggerTransmit
  * ---------------------------------------------------------------------- */
 
-/* 未実装 */
+/**
+ * \brief   CanIf からの送信データの要求（トリガ送信）を、上位層の <Up>_TriggerTransmit へ転送する。
+ *
+ * \details generic な PduR_<User:Lo>TriggerTransmit テンプレートの CanIf 向け実体化。
+ *          TxPduId に一致する TX ルーティングパスを検索し、そのパスの TriggerTransmitFct
+ *          （例: Com_TriggerTransmit）を、ConfDestPduId 付きで呼ぶ。上位層の戻り値は、そのまま
+ *          下位層へ返す（[SWS_PduR_00430]/[SWS_PduR_00661]）。
+ *          ルーティングパスグループが無効なときは、DET へ報告せず E_NOT_OK を返す（[SWS_PDUR_00805]）。
+ *          パスが TriggerTransmitFct を持たない（トリガ送信に対応しない）ときも、E_NOT_OK を返す。
+ *
+ *          簡略化: 仕様は、ゲートウェイ（受信した PDU を別のバスへ転送する）の送信先に対して、
+ *          FIFO やバッファの内容を返す動作も定める（[SWS_PduR_00666] など）。本実装は、ゲートウェイ用の
+ *          バッファも FIFO も持たない（PduR_DisableRouting() の簡略化と同じ）ので、上位層の送信データを
+ *          取りに行く経路だけを持つ。
+ *
+ * \param[in]     TxPduId     データを要求された PDU の ID（CanIf 名前空間。CanIf_TxPduConfigType.UpperLayerTxPduId）。
+ *                            TX ルーティングパスの検索に使用する（PduR_CanIfTxConfirmation() と同じ）。
+ * \param[in,out] PduInfoPtr  SduDataPtr=複製先のバッファ、SduLength=その大きさ。戻るとき、複製した長さ。NULL 禁止（SduDataPtr も NULL 禁止）。
+ *
+ * \retval  E_OK      上位層がデータを複製した。
+ * \retval  E_NOT_OK  PduR 未初期化、PduInfoPtr または SduDataPtr が NULL、一致するパスなし、パスのグループが無効、
+ *                    パスがトリガ送信に対応しない、または上位層が E_NOT_OK を返した。
+ *
+ * \pre        PduR_Init() が正常に完了していること。
+ *
+ * \AUTOSARReq     {SWS_PduR_00369, SWS_PduR_00430, SWS_PduR_00661, SWS_PDUR_00805}
+ * \ServiceID      {0x41}
+ * \Reentrancy     {Reentrant for different PduIds. Non reentrant for the same PduId.}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType PduR_CanIfTriggerTransmit(PduIdType TxPduId, PduInfoType* PduInfoPtr)
+{
+    if (PduR_ConfigPtr == NULL)
+    {
+        (void)Det_ReportError(PDUR_MODULE_ID, 0U, PDUR_API_ID_TRIGGER_TRANSMIT, PDUR_E_UNINIT);
+        return E_NOT_OK;
+    }
+
+    if ((PduInfoPtr == NULL) || (PduInfoPtr->SduDataPtr == NULL))
+    {
+        DET_LOGE(TAG, "TriggerTransmit E: PduInfoPtr/SduDataPtr NULL");
+        (void)Det_ReportError(PDUR_MODULE_ID, 0U, PDUR_API_ID_TRIGGER_TRANSMIT, PDUR_E_PARAM_POINTER);
+        return E_NOT_OK;
+    }
+
+    const PduR_TxRoutingPathType* path = PduR_FindTxPath(TxPduId);
+
+    if (path == NULL)
+    {
+        DET_LOGW(TAG, "TriggerTransmit no route src=%u", (unsigned)TxPduId);
+        (void)Det_ReportError(PDUR_MODULE_ID, 0U, PDUR_API_ID_TRIGGER_TRANSMIT, PDUR_E_PDU_ID_INVALID);
+        return E_NOT_OK;
+    }
+
+    if (!PduR_IsRoutingPathEnabled(FALSE, TxPduId))
+    {
+        /* [SWS_PDUR_00805]: 無効なルーティングパスグループは、DET へ報告せず、E_NOT_OK を返す。 */
+        DET_LOGD(TAG, "TriggerTransmit src=%u routing disabled", (unsigned)TxPduId);
+        return E_NOT_OK;
+    }
+
+    if (path->TriggerTransmitFct == NULL)
+    {
+        DET_LOGD(TAG, "TriggerTransmit src=%u: path does not support trigger transmit", (unsigned)TxPduId);
+        return E_NOT_OK;
+    }
+
+    DET_LOGD(TAG, "TriggerTransmit src=%u dst=%u", (unsigned)TxPduId, (unsigned)path->ConfDestPduId);
+
+    return path->TriggerTransmitFct(path->ConfDestPduId, PduInfoPtr);
+}
 
 /* ======================================================================
  * Configurable interfaces definitions for lower layer transport protocol module interaction

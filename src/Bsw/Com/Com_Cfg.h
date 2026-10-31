@@ -100,6 +100,8 @@
  * 値を使っていた（0x10 は Com_InvalidateSignal の実 ID と衝突していた）。 */
 #define COM_API_ID_TX_CONFIRMATION               0x40U
 #define COM_API_ID_RX_INDICATION                0x42U
+/* [SWS_Com_00001] Com_TriggerTransmit の実 Service ID。 */
+#define COM_API_ID_TRIGGER_TRANSMIT             0x41U
 #define COM_API_ID_DEINIT                       0x02U
 /* cppcheck-suppress misra-c2012-2.5 */
 #define COM_API_ID_GET_STATUS                   0x07U

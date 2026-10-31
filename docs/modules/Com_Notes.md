@@ -855,10 +855,13 @@ Signal Group 側（`Com_SendSignalGroup()`）も同種の問題を抱えてい�
 同じ判断軸）に条件づけました。非 Signal Group 側の `passesFilter` と対になる
 考え方です。
 
-**なぜ ComTxIPduClearUpdateBit=Transmit のみか**: 実 AUTOSAR は Transmit
-（`PduR_ComTransmit` 呼び出し直後にクリア）/ Confirmation（送信確認後にクリア）/
-TriggerTransmit（トリガ送信後にクリア）の 3 択ですが、本実装は Transmit のみ
-実装しています。本プロジェクトの送信経路は `Com_MainFunctionTx()` →
+**ComTxIPduClearUpdateBit は Transmit と TriggerTransmit のみ（Confirmation は無し）**:
+実 AUTOSAR は Transmit（`PduR_ComTransmit` 呼び出し直後にクリア）/ Confirmation
+（送信確認後にクリア）/ TriggerTransmit（トリガ送信後にクリア）の 3 択です。本実装は
+`Com_IPduConfigType.ClearUpdateBit`（`Com_TxClearUpdateBitType`、省略すると Transmit）で
+Transmit と TriggerTransmit を選べます（TriggerTransmit は、下の
+「Com_TriggerTransmit（トリガ送信）」の節）。Confirmation は実装していません。
+本プロジェクトの送信経路は `Com_MainFunctionTx()` →
 `Com_DoTransmit()` → `PduR_ComTransmit()` が同期的に SPI 送信まで完了する
 （実際の送信完了と `PduR_ComTransmit` 呼び出しの間に有意な時間差がない）ため、
 3 つのタイミングの違いを意味のある形で再現できないという判断です。
@@ -888,6 +891,39 @@ sent out via PduR_ComTransmit **and PduR_ComTransmit returned E_OK**" であり�
 
 この修正は `MeterStatus`（非 Signal Group）の送信経路でも共通に使われるため、
 Signal Group への適用有無に関わらず活きています。
+
+## Com_TriggerTransmit（トリガ送信、下位層が送信データを取りに来る経路）
+
+通常の送信は、Com が `Com_MainFunctionTx()` から `PduR_ComTransmit()` へデータを渡します。
+トリガ送信は逆向きで、下位層（CanIf など）が送信の直前に Com へデータを取りに来ます。
+`CanIf_TriggerTransmit()` → `PduR_CanIfTriggerTransmit()` → `Com_TriggerTransmit()` の順に呼ばれ、
+PDU ID は層ごとに読み替えます（CanIf の `UpperLayerTxPduId` → PduR の `ConfDestPduId` → Com の IPduId）。
+各層の動作は、[`CanIf_Notes.md`](./CanIf_Notes.md) と [`PduR_Notes.md`](./PduR_Notes.md) を参照してください。
+
+`Com_TriggerTransmit(TxPduId, PduInfoPtr)` の動作:
+
+- 呼び出し元のバッファが I-PDU の長さ（DLC）より小さいときは、何も複製せず `E_NOT_OK`
+  （`PduInfoPtr` も変えない。[SWS_Com_00869]）。収まるときは、TX バッファの内容を複製して、
+  `SduLength` を複製した長さへ更新します（[SWS_Com_00647]）。
+- 送信モードにも、最小遅延時間のタイマにも、保留中の送信の要求にも触れません（[SWS_Com_00475]）。
+  トリガ送信の後も、Com 自身の送信は、そのまま続きます。
+- `TriggerTransmitCalloutCbk`（ComIPduTriggerTransmitCallout）は、I-PDU が起動中のときだけ、複製した
+  バイト列を渡して呼びます。戻り値は無視します（[SWS_Com_00766]/[SWS_Com_00395]）。
+- `ClearUpdateBit=COM_CLEAR_UPDATE_BIT_TRIGGER_TRANSMIT` の I-PDU は、内容を渡した後に update-bit を
+  クリアします（[SWS_Com_00578]）。複製したフレームには、クリア前の update-bit が載ります。この設定の
+  I-PDU は、`Com_DoTransmit()` が `PduR_ComTransmit()` の直後には、クリアしません。
+- `TxPduId` が存在しないときは `COM_E_PARAM`、NULL のポインタは `COM_E_PARAM_POINTER`、未初期化は
+  `COM_E_UNINIT` を報告して `E_NOT_OK` です。
+
+**簡略化**: `TxTransformCbk`（E2E など、送信直前の変換）と `TxIpduCalloutCbk`（送信の拒否）は
+`Com_DoTransmit()` だけで適用し、`Com_TriggerTransmit()` では適用しません。変換の副作用（E2E のカウンタの
+増加など）を、TX バッファへ残さないためです。トリガ送信の I-PDU に変換や拒否が必要になったときに、見直します。
+
+**本番コードからは呼ばれません**: 本番の設定は、どの層もトリガ送信に対応しません
+（`CanIf_TxPduConfigType.TriggerTransmitFct`、`PduR_TxRoutingPathType.TriggerTransmitFct` とも NULL、
+`Com_IPduConfigType.ClearUpdateBit` は既定の Transmit）。本プロジェクトの Can ドライバ（MCP2515）は、
+送信の直前にデータを取りに来ないためです。3 層を実体で結んだ確認は、
+`test/CallChain/ComStack/ComStack_TriggerTransmit_test.cpp` にあります。
 
 ## RX Signal Group（複数シグナルの一貫したスナップショット読み出し）
 

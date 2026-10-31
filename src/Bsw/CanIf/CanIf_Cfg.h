@@ -78,6 +78,7 @@
 /* cppcheck-suppress misra-c2012-2.5 */
 #define CANIF_API_ID_DEINIT              0x02U
 #define CANIF_API_ID_TRANSMIT            0x49U
+#define CANIF_API_ID_TRIGGER_TRANSMIT    0x41U
 #define CANIF_API_ID_CANCEL_TRANSMIT     0x4AU
 #define CANIF_API_ID_TX_CONFIRMATION     0x13U
 #define CANIF_API_ID_RX_INDICATION       0x14U
