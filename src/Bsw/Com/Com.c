@@ -1009,8 +1009,8 @@ void Com_GetVersionInfo(Std_VersionInfoType* versioninfo)
  *                                    \AUTOSARReq 直前の説明参照）。バッファ
  *                                    更新自体は停止中でも行う。
  * \retval  E_NOT_OK                  COM 未初期化、SignalDataPtr が NULL、
- *                                    またはシグナル設定テーブルに SignalId
- *                                    が存在しない。
+ *                                    シグナル設定テーブルに SignalId が存在しない、
+ *                                    または TX シグナルでない（Direction が RX）。
  *
  * \details ComFilterAlgorithm:
  *          値をバッファへパックした後、シグナルの FilterAlgorithm を評価する。
@@ -1067,6 +1067,17 @@ uint8 Com_SendSignal(Com_SignalIdType SignalId, const void* SignalDataPtr)
     if (s < Com_ConfigPtr->SignalCount)
     {
         const Com_SignalConfigType* sig = &Com_ConfigPtr->Signals[s];
+
+        /* 方向チェック: RX と TX の IPduId は別々の配列だが同じ数値空間を共有するため、
+         * RX シグナルの IPduId が登録済みの TX I-PDU の IPduId と偶然一致すると、下の
+         * Com_FindTxIPdu() を素通りして、無関係な TX I-PDU のバッファへ書き込んでしまう
+         * （DET エラーなし）。Com_InvalidateSignal() と同じ検査を、ここでも行う。 */
+        if (sig->Direction != COM_SIGNAL_DIRECTION_TX)
+        {
+            DET_LOGE(TAG, "SendSignal E: sig=%u is not a TX signal", (unsigned)SignalId);
+            (void)Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_SEND_SIGNAL, COM_E_PARAM);
+            return E_NOT_OK;
+        }
 
         /* 範囲チェック + 登録確認: sig->IPduId をそのまま Com_TxBuffer[] 等の
          * 配列添字として使う前に、(1) 配列範囲内であること、
@@ -1241,8 +1252,8 @@ uint8 Com_SendSignal(Com_SignalIdType SignalId, const void* SignalDataPtr)
  *                    無効化されているため RxDataTimeoutAction の判定より
  *                    優先する。
  * \retval  E_NOT_OK  COM 未初期化、SignalDataPtr が NULL、
- *                    シグナル設定テーブルに SignalId が存在しない、
- *                    または（I-PDU Group が起動中で）当該 I-PDU が
+ *                    シグナル設定テーブルに SignalId が存在しない、RX シグナルでない
+ *                    （Direction が TX）、または（I-PDU Group が起動中で）当該 I-PDU が
  *                    タイムアウト中かつ RxDataTimeoutAction=NONE（既定）。
  *
  * \pre        Com_Init() が正常に完了していること。
@@ -1284,6 +1295,16 @@ uint8 Com_ReceiveSignal(Com_SignalIdType SignalId, void* SignalDataPtr)
     if (s < Com_ConfigPtr->SignalCount)
     {
         const Com_SignalConfigType* sig = &Com_ConfigPtr->Signals[s];
+
+        /* 方向チェック: Com_SendSignal() と対称（TX シグナルの IPduId が登録済みの RX I-PDU の
+         * IPduId と偶然一致すると、下の Com_FindRxIPdu() を素通りして、無関係な RX I-PDU の
+         * バッファを読んでしまう）。 */
+        if (sig->Direction != COM_SIGNAL_DIRECTION_RX)
+        {
+            DET_LOGE(TAG, "ReceiveSignal E: sig=%u is not an RX signal", (unsigned)SignalId);
+            (void)Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_RECEIVE_SIGNAL, COM_E_PARAM);
+            return E_NOT_OK;
+        }
 
         /* 範囲チェック: Signal 設定テーブルの IPduId をそのまま Com_RxBuffer[]
          * 等の配列添字として使うため、設定ミス（存在しない I-PDU を指す

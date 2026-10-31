@@ -355,6 +355,26 @@ TEST_F(Com_SendSignal_Test, Com_SendSignal_NG_SignalNotFound)
     EXPECT_EQ(FakeDetHw_LastErrorId, COM_E_PARAM);
 }
 
+TEST_F(Com_SendSignal_Test, Com_SendSignal_NG_NotTxSignal)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    uint8 data = 0x5AU;   // 書き込まれたら TX の予約が立つように、0 以外にする
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    uint8 ret = Com_SendSignal(1U, &data);  // kTestRxSignal（Direction=RX。IPduId 0 は登録済みの TX I-PDU と同じ番号）
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_NOT_OK);
+    EXPECT_EQ(FakeDetHw_LastErrorId, COM_E_PARAM);
+    EXPECT_EQ(Com_Test_GetTxPending(0U), 0U);   // 同じ番号の TX I-PDU へ、書き込んでいない（送信を予約していない）
+}
+
 TEST_F(Com_SendSignal_Test, Com_SendSignal_OK_RepeatedValueRejectedByFilterDoesNotRequestTransmit)
 {
     /* ----------------------- */
