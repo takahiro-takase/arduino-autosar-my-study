@@ -81,6 +81,21 @@ CAN ドライバがコントローラの遷移の完了を知らせるコール�
 （[`CanSM_Notes.md`](./CanSM_Notes.md)）。本関数は `CanIf_ControllerMode[]` を更新しません
 （`CanIf_SetControllerMode()` の側にある、起床時の通知・送信確認の状態などの付随処理と、ちぐはぐになるため）。
 
+## CanIf_TriggerTransmit（送信データの要求の転送）
+
+CAN ドライバが送信の直前にデータを取りに来たとき、TX PDU 設定（`CanIf_TxPduConfigType`）の
+`TriggerTransmitFct`（PduR 経由なら `PduR_CanIfTriggerTransmit()`）を、`UpperLayerTxPduId` へ読み替えた
+PDU ID 付きで呼び、その戻り値をそのまま返します（[SWS_CANIF_00885]）。`TriggerTransmitFct` が NULL の
+TX PDU は、トリガ送信に対応しないので `E_NOT_OK` です（[SWS_CANIF_00888]。DET へは報告しません）。
+`TxPduId` が範囲外なら `CANIF_E_INVALID_TXPDUID`、NULL のポインタは `CANIF_E_PARAM_POINTER` を報告します。
+未初期化は、他の API と同じく、DET へ報告せず `E_NOT_OK` です。
+
+**本番コードからは呼ばれません**: 本プロジェクトの Can ドライバ（MCP2515）は、送信の直前にデータを
+取りに来ません。`Can_Write()` へデータを渡さずに送信を要求する経路もないので、`CanIf_Transmit()` が
+NULL の `SduDataPtr` を受け付ける動作（[SWS_CANIF_00882]）も未実装です。構成項目
+`CanIfTriggerTransmitSupport` による有効・無効の切り替えは持たず、TX PDU ごとの `TriggerTransmitFct` の
+有無だけで決めます。全体の流れは、[`Com_Notes.md`](./Com_Notes.md) の「Com_TriggerTransmit」を参照してください。
+
 ## 通知状態の読み出し API
 
 `CanIf_ReadTxNotifStatus()` / `CanIf_ReadRxNotifStatus()` は、その PDU の送信確認・受信が

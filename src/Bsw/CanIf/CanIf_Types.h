@@ -35,6 +35,10 @@ typedef void (*CanIf_RxIndicationFctType)(PduIdType RxPduId, const PduInfoType* 
  * result: E_OK = transmitted successfully, E_NOT_OK = failed. */
 typedef void (*CanIf_TxConfirmationFctType)(PduIdType TxPduId, Std_ReturnType result);
 
+/* 上位層の <User_TriggerTransmit>（SWS_CANIF_00886。PduR 経由なら PduR_CanIfTriggerTransmit）。
+ * CanIf_TriggerTransmit() が、翻訳した PDU ID（UpperLayerTxPduId）付きで呼ぶ。 */
+typedef Std_ReturnType (*CanIf_TriggerTransmitFctType)(PduIdType TxPduId, PduInfoType* PduInfoPtr);
+
 // -------------------------------------------------------
 // TX PDU 設定エントリ（テーブルの 1 行）
 //
@@ -49,6 +53,9 @@ typedef struct
     uint8                       Dlc;               // 最大データ長（0〜64。クラシック CAN は 8 まで、CAN FD は 64 まで）
     Can_HwHandleType            Hth;               // 使用する TX バッファ（HTH）
     CanIf_TxConfirmationFctType TxConfirmFct;      // 送信完了コールバック（不要なら NULL）
+    /* 末尾に追加した（省略すると NULL。既存の位置初期化は無変更）。 */
+    CanIf_TriggerTransmitFctType TriggerTransmitFct; // CanIfTxPduTriggerTransmit=TRUE 相当（SWS_CANIF_00889）。
+                                                     // 非 NULL の TX PDU だけが、トリガ送信に対応する。不要なら NULL
 } CanIf_TxPduConfigType;
 
 /* RX PDU configuration entry (one row of the routing table).

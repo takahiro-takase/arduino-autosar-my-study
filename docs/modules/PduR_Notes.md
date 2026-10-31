@@ -55,12 +55,29 @@ Com と CanTp は同じ `SrcPduId` の空間を共有するため、衝突しな
 
 `PduR_GetConfigurationId()`（[SWS_PduR_00341]）は、`PduR_PBConfigType.PBConfigId`（既定は 0）を返します。ポストビルドで選択できる構成は 1 つだけです。
 
+## トリガ送信（`PduR_CanIfTriggerTransmit()`）
+
+下位層（CanIf）が送信の直前にデータを取りに来たとき（[SWS_PduR_00369]）、TX ルーティングパス
+（`PduR_TxRoutingPathType`）の `TriggerTransmitFct`（Com なら `Com_TriggerTransmit()`）を、パスの
+`ConfDestPduId`（上位層の PDU ID）付きで呼びます。上位層の戻り値は、そのまま下位層へ返します
+（[SWS_PduR_00430]/[SWS_PduR_00661]）。`PduR_CanIfTxConfirmation()` と同じ ID 空間で経路を引きます。
+
+- 無効なルーティングパスグループのパスは、DET へ報告せず `E_NOT_OK`（[SWS_PDUR_00805]）。
+- `TriggerTransmitFct` を持たないパスは、トリガ送信に対応しないので `E_NOT_OK`（DET へは報告しません）。
+- 一致するパスが無いときは `PDUR_E_PDU_ID_INVALID`、NULL のポインタは `PDUR_E_PARAM_POINTER`、
+  未初期化は `PDUR_E_UNINIT` を報告して `E_NOT_OK` です。
+
+本番の設定は、どのパスも `TriggerTransmitFct` を持たないので、本番コードからは呼ばれません。
+全体の流れは、[`Com_Notes.md`](./Com_Notes.md) の「Com_TriggerTransmit」を参照してください。
+
 ## エラーと簡略化
 
 - `PduR_Init()` と `PduR_GetVersionInfo()` 以外は、未初期化なら `PDUR_E_UNINIT` を報告します
   （[SWS_PduR_00338]）。NULL のポインタは `PDUR_E_PARAM_POINTER` です。
 - ゲートウェイ（PDU を別のバスへ中継する機能）、`PduR_*StartOfReception` / `CopyRxData` などの
-  トランスポートプロトコル用の段階受理 API、`PduR_*TriggerTransmit` は実装していません
+  トランスポートプロトコル用の段階受理 API は実装していません
   （CanTp との連携は、CanTp が組み立て済みの PDU を渡す簡略化した形）。
+  トリガ送信（`PduR_CanIfTriggerTransmit()`）は、上位層の送信データを取りに行く経路だけを持ちます
+  （ゲートウェイの FIFO やバッファを返す動作は、持ちません）。
 - 単体テストからだけ使える `PduR_Test_ResetInitState()`（`PDUR_UNIT_TEST`）で、未初期化状態へ
   戻せます（他の BSW モジュールと同じ設計）。

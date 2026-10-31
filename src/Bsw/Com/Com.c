@@ -2298,7 +2298,97 @@ void Com_SwitchIpduTxMode(Com_IPduIdType PduId, boolean Mode)
  * Com_TriggerTransmit
  * ---------------------------------------------------------------------- */
 
-/* 未実装 */
+/**
+ * \brief   下位層（PduR 経由で CanIf など）の要求に応じて、TX I-PDU の内容を呼び出し元のバッファへ複製する。
+ *
+ * \details 送信の要求を Com 側から出す Com_MainFunctionTx() 経路（PduR_ComTransmit()）とは逆向きに、
+ *          下位層が送信の直前に Com へデータを取りに来る（トリガ送信）。I-PDU の送信モードには依存しない。
+ *          I-PDU 送信の最小遅延時間のタイマにも、周期送信のタイマにも触れない（[SWS_Com_00475]）。
+ *
+ *          呼び出し元のバッファが I-PDU の長さ（DLC）より小さいときは、何もコピーせず E_NOT_OK を返し、
+ *          PduInfoPtr を変えない（[SWS_Com_00869]）。収まるときは、TX バッファの内容を複製して、
+ *          SduLength を複製した長さへ更新する（[SWS_Com_00647]）。
+ *
+ *          ComIPduTriggerTransmitCallout（TriggerTransmitCalloutCbk）は、I-PDU が起動中のときだけ、
+ *          複製したバイト列を渡して呼ぶ。戻り値は無視する（[SWS_Com_00766]/[SWS_Com_00395]）。
+ *          ClearUpdateBit が TRIGGER_TRANSMIT の I-PDU は、内容を渡した後に、update-bit をクリアする
+ *          （[SWS_Com_00578]。複製したフレームには、クリア前の update-bit が載る）。
+ *
+ *          簡略化: TxTransformCbk（E2E など、送信直前の変換）は、Com_DoTransmit() だけで適用し、本関数では
+ *          適用しない。TX バッファへ変換の副作用（E2E のカウンタの増加など）を残さないため。
+ *          TxIpduCalloutCbk（送信の拒否）も、同じ理由で呼ばない。トリガ送信の I-PDU に、変換や拒否が必要に
+ *          なったときに、見直す。
+ *
+ * \param[in]     TxPduId     データを要求された TX I-PDU の ID（Com の TX IPduId。Com_TxConfirmation() と同じ ID 空間）。
+ * \param[in,out] PduInfoPtr  SduDataPtr=複製先のバッファ、SduLength=その大きさ。戻るとき、SduLength=複製した長さ。
+ *                            NULL 禁止。SduDataPtr も NULL 禁止。
+ *
+ * \retval  E_OK      I-PDU の内容を複製した。SduLength が複製した長さを示す。
+ * \retval  E_NOT_OK  COM 未初期化、PduInfoPtr または SduDataPtr が NULL、TxPduId が存在しない、
+ *                    またはバッファが小さい。何も複製していない。
+ *
+ * \pre        Com_Init() が正常に完了していること。
+ *
+ * \AUTOSARReq     {SWS_Com_00001, SWS_Com_00647, SWS_Com_00869, SWS_Com_00475, SWS_Com_00766,
+ *                  SWS_Com_00395, SWS_Com_00578}
+ * \ServiceID      {0x41}
+ * \Reentrancy     {Reentrant for different PduIds. Non reentrant for the same PduId.}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType Com_TriggerTransmit(PduIdType TxPduId, PduInfoType* PduInfoPtr)
+{
+    if (Com_ConfigPtr == NULL)
+    {
+        (void)Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_TRIGGER_TRANSMIT, COM_E_UNINIT);
+        return E_NOT_OK;
+    }
+
+    if ((PduInfoPtr == NULL) || (PduInfoPtr->SduDataPtr == NULL))
+    {
+        (void)Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_TRIGGER_TRANSMIT, COM_E_PARAM_POINTER);
+        return E_NOT_OK;
+    }
+
+    /* TxPduId をそのまま Com_TxBuffer[] の添字に使うため、範囲と登録を確認する（Com_SendSignal() と同じ方針）。 */
+    const Com_IPduConfigType* ipdu = (TxPduId < COM_TX_IPDU_MAX) ? Com_FindTxIPdu((Com_IPduIdType)TxPduId) : NULL;
+    if (ipdu == NULL)
+    {
+        DET_LOGE(TAG, "TriggerTransmit E: TxPduId=%u not found", (unsigned)TxPduId);
+        (void)Det_ReportError(COM_MODULE_ID, 0U, COM_API_ID_TRIGGER_TRANSMIT, COM_E_PARAM);
+        return E_NOT_OK;
+    }
+
+    /* [SWS_Com_00869]: 収まらないときは、何もコピーしない。 */
+    if (PduInfoPtr->SduLength < ipdu->DLC)
+    {
+        DET_LOGW(TAG, "TriggerTransmit iPdu=%u: buffer too small (%u < %u)",
+                 (unsigned)TxPduId, (unsigned)PduInfoPtr->SduLength, (unsigned)ipdu->DLC);
+        return E_NOT_OK;
+    }
+
+    /* [SWS_Com_00647] */
+    for (uint8 b = 0U; b < ipdu->DLC; b++)
+    {
+        PduInfoPtr->SduDataPtr[b] = Com_TxBuffer[TxPduId][b];
+    }
+    PduInfoPtr->SduLength = ipdu->DLC;
+
+    /* [SWS_Com_00766]/[SWS_Com_00395]: 起動中のときだけ呼ぶ。戻り値は無視する。 */
+    if ((ipdu->TriggerTransmitCalloutCbk != NULL) && (Com_TxIPduStarted[TxPduId] != 0U))
+    {
+        (void)ipdu->TriggerTransmitCalloutCbk(PduInfoPtr->SduDataPtr, (uint8)PduInfoPtr->SduLength);
+    }
+
+    /* [SWS_Com_00578]: 内容を渡した後に、update-bit をクリアする。 */
+    if ((ipdu->UpdateBitPosition != COM_UPDATE_BIT_NONE)
+        && (ipdu->ClearUpdateBit == COM_CLEAR_UPDATE_BIT_TRIGGER_TRANSMIT))
+    {
+        Com_PackSignal(Com_TxBuffer[TxPduId], ipdu->UpdateBitPosition, 1U, COM_BIG_ENDIAN, 0U);
+    }
+
+    DET_LOGD(TAG, "TriggerTransmit iPdu=%u len=%u", (unsigned)TxPduId, (unsigned)PduInfoPtr->SduLength);
+    return E_OK;
+}
 
 /* ----------------------------------------------------------------------
  * Com_RxIndication
@@ -3690,7 +3780,7 @@ static Std_ReturnType Com_DoTransmit(const Com_IPduConfigType* ipdu, unsigned lo
     }
 
     /* update-bit クリア（SWS_Com_00062: ComTxIPduClearUpdateBit=Transmit 相当。
-     * Confirmation/TriggerTransmit の 2 択は未実装）。原文は "after this I-PDU
+     * TriggerTransmit は Com_TriggerTransmit() 側で処理する。Confirmation は未実装）。原文は "after this I-PDU
      * was sent out via PduR_ComTransmit and PduR_ComTransmit returned E_OK"
      * であり、ret==E_OK のときのみクリアする（ret を無視して無条件にクリア
      * していた過去の実装は誤り。失敗時にもクリアすると、update-bit だけが
@@ -3707,8 +3797,11 @@ static Std_ReturnType Com_DoTransmit(const Com_IPduConfigType* ipdu, unsigned lo
      * `.UpdateBitPosition = 0xFFU` を明示設定する」という Com_PBCfg.c 側の
      * 規約が守られていることが前提（C の既定初期化 0 のまま放置すると、
      * その I-PDU のバッファ bit0 を毎回誤ってクリアし、シグナル値を破壊する）。 */
-    if (ret == E_OK && (ipdu->UpdateBitPosition != COM_UPDATE_BIT_NONE))
+    if (ret == E_OK && (ipdu->UpdateBitPosition != COM_UPDATE_BIT_NONE)
+        && (ipdu->ClearUpdateBit == COM_CLEAR_UPDATE_BIT_TRANSMIT))
     {
+        /* ClearUpdateBit=TRIGGER_TRANSMIT の I-PDU は、ここではクリアしない
+         * （Com_TriggerTransmit() が内容を渡した後にクリアする。[SWS_Com_00578]）。 */
         Com_PackSignal(Com_TxBuffer[ipdu->IPduId], ipdu->UpdateBitPosition, 1U, COM_BIG_ENDIAN, 0U);
     }
 

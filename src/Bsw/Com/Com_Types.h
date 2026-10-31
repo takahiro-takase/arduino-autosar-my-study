@@ -347,6 +347,23 @@ typedef enum
 } Com_TxModeModeType;
 
 // -------------------------------------------------------
+// Com_TxClearUpdateBitType（DaVinci: ComTxIPduClearUpdateBit、ECUC_Com_00230 相当）
+//
+//   TX I-PDU の update-bit を、いつクリアするか。実 AUTOSAR は Transmit /
+//   Confirmation / TriggerTransmit の 3 択（本実装は Confirmation を持たない）。
+//   COM_CLEAR_UPDATE_BIT_TRANSMIT（0、既定）: PduR_ComTransmit() が E_OK を返した直後
+//     （SWS_Com_00062）。
+//   COM_CLEAR_UPDATE_BIT_TRIGGER_TRANSMIT: Com_TriggerTransmit() が I-PDU の内容を
+//     呼び出し元へ渡した後（SWS_Com_00578）。この設定の I-PDU は、Transmit 直後には
+//     クリアしない。
+// -------------------------------------------------------
+typedef enum
+{
+    COM_CLEAR_UPDATE_BIT_TRANSMIT         = 0,
+    COM_CLEAR_UPDATE_BIT_TRIGGER_TRANSMIT = 1
+} Com_TxClearUpdateBitType;
+
+// -------------------------------------------------------
 // I-PDU 設定（1エントリ = 1つの I-PDU）
 //
 //   IPduId    : COM 内の I-PDU インデックス（0始まり）
@@ -445,9 +462,12 @@ typedef enum
 //                   セットする（いずれも値が実際に変化したかどうかは問わない）。
 //                   クリアタイミングは実 AUTOSAR の ComTxIPduClearUpdateBit
 //                   （Transmit/Confirmation/TriggerTransmit の 3 択）のうち、
-//                   本実装は Transmit のみ実装する（SWS_Com_00062:
-//                   PduR_ComTransmit 呼び出し直後にクリア。Confirmation/
-//                   TriggerTransmit は未実装。詳細は Com_DoTransmit() 参照）。
+//                   本実装は Transmit と TriggerTransmit を実装する
+//                   （Com_TxClearUpdateBitType 参照。Transmit は SWS_Com_00062:
+//                   PduR_ComTransmit 呼び出し直後にクリア、TriggerTransmit は
+//                   SWS_Com_00578: Com_TriggerTransmit() が内容を渡した後に
+//                   クリア。Confirmation は未実装。詳細は Com_DoTransmit()/
+//                   Com_TriggerTransmit() 参照）。
 //                   クリア処理自体は Signal Group かどうかを区別しない。
 //                 RX（受信側、SWS_Com_00324/00802、Signal Group のみ）:
 //                   Com_ReceiveSignalGroup() はこのビットが 0 の場合、
@@ -564,6 +584,12 @@ typedef enum
 //               であることに注意。NULL 可（フィルタ不要なら未設定でよい）。
 //               TX I-PDU では未使用（TX 側の対になるフックは下記
 //               TxIpduCalloutCbk を参照）。
+//   ClearUpdateBit : TX のみ。update-bit のクリアのタイミング（Com_TxClearUpdateBitType）。
+//               省略すると TRANSMIT（従来どおり）。
+//   TriggerTransmitCalloutCbk : TX のみ。Com_TriggerTransmit() が I-PDU の内容を呼び出し元の
+//               バッファへ複製した後に、そのバイト列を渡して呼ぶ（[SWS_Com_00766]、
+//               ECUC_Com_00765 ComIPduTriggerTransmitCallout）。戻り値は無視する
+//               （[SWS_Com_00395]）。I-PDU が起動中のときだけ呼ぶ。NULL 可。
 //   TxIpduCalloutCbk : TX I-PDU 単位のフィルタリングフック（Com_TxIpduCallout、
 //               [SWS_Com_00346]: "The I-PDU callout on sender side can be
 //               configured ... to implement user-defined transmission
@@ -632,6 +658,9 @@ typedef struct
     void (*RxTOutCbk)(void);
     boolean (*RxIpduCalloutCbk)(const uint8* SduDataPtr, uint8 SduLength);
     boolean (*TxIpduCalloutCbk)(const uint8* SduDataPtr, uint8 SduLength);
+    /* 以下 2 項目は省略できる（省略すると 0 / NULL。既存の設定は無変更）。 */
+    Com_TxClearUpdateBitType ClearUpdateBit;   /* TX のみ。update-bit をクリアするタイミング */
+    boolean (*TriggerTransmitCalloutCbk)(const uint8* SduDataPtr, uint8 SduLength);   /* TX のみ。Com_TriggerTransmit() 内で呼ぶ I-PDU callout（戻り値は無視する） */
 } Com_IPduConfigType;
 
 // -------------------------------------------------------

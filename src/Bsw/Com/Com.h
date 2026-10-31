@@ -445,6 +445,9 @@ void Com_DisableReceptionDM(Com_IpduGroupIdType IpduGroupId);
  * Callback Functions and Notifications
  * ====================================================================== */
 
+/* SWS_Com_00001 */
+Std_ReturnType Com_TriggerTransmit(PduIdType TxPduId, PduInfoType* PduInfoPtr);
+
 /* SWS_Com_00123 */
 void Com_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr);
 

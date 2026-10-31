@@ -43,6 +43,7 @@ void           CanIf_Init(const CanIf_ConfigType* ConfigPtr);
 void           CanIf_DeInit(void);
 Std_ReturnType CanIf_Transmit(PduIdType TxPduId, const PduInfoType* PduInfoPtr);
 Std_ReturnType CanIf_CancelTransmit(PduIdType TxPduId);
+Std_ReturnType CanIf_TriggerTransmit(PduIdType TxPduId, PduInfoType* PduInfoPtr);
 Std_ReturnType CanIf_ReadRxPduData(PduIdType CanIfRxSduId, PduInfoType* CanIfRxInfoPtr);
 void           CanIf_GetVersionInfo(Std_VersionInfoType* versioninfo);
 Std_ReturnType CanIf_SetPduMode(uint8 ControllerId, CanIf_PduModeType PduModeRequest);

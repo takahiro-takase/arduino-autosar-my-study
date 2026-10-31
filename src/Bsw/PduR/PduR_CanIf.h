@@ -48,6 +48,9 @@ void PduR_CanIfRxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr);
 /* SWS_PduR_00365: CanIf->PduR transmit confirmation. */
 void PduR_CanIfTxConfirmation(PduIdType TxPduId, Std_ReturnType result);
 
+/* SWS_PduR_00369: CanIf->PduR trigger transmit（generic な PduR_<User:Lo>TriggerTransmit、Service ID 0x41）。 */
+Std_ReturnType PduR_CanIfTriggerTransmit(PduIdType TxPduId, PduInfoType* PduInfoPtr);
+
 /* ======================================================================
  * Callback Functions and Notifications
  * ====================================================================== */
