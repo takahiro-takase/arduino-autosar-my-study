@@ -3,7 +3,8 @@
  * \brief   Dcm_ComM_SilentComModeEntered() の後は応答を送信せず、Dcm_ComM_FullComModeEntered() で再開することの、フルコールチェーンテスト。
  *
  * \details [SWS_Dcm_00153]/[SWS_Dcm_00156]/[SWS_Dcm_00157]: SILENT_COM の間、Dcm は応答を送信しない
- *          （CanTp_Transmit() を呼ばない）。要求の処理は済んでおり、応答だけが破棄される。
+ *          （CanTp_Transmit() を呼ばない）。通知（ComM_DCM_ActiveDiagnostic）しても FULL_COM へ戻らないときは、
+ *          応答を送れないまま実行しないよう、要求も実行せずに破棄する（セッションの変更などが起きない）。
  *          FULL_COM の通知で送信が再開し、次の要求の応答が Can_Hw まで届く。
  */
 
@@ -223,6 +224,69 @@ TEST_F(DcmStack_ComMModeEntered_Silent_Test,
     /* ------------------------- */
     ASSERT_EQ(FakeCanHw_SendCount, 1U);              // 送信が再開する
     EXPECT_EQ(FakeCanHw_LastSendData[1], 0x7EU);
+}
+
+// 応答を送れない状態（ComM が FULL_COM へ戻さない）の要求は、実行されない。FULL_COM へ戻った後の同じ要求は、実行される。
+// enterNonFullCom: そのチャネルのモードを Dcm へ通知する関数（Dcm_ComM_SilentComModeEntered / Dcm_ComM_NoComModeEntered）。
+static void ExpectRequestDiscardedUntilFullCom(void (*enterNonFullCom)(uint8 networkId))
+{
+    /* ------------------------- */
+    /* ---- 準備 (Arrange 1) --- */
+    /* ------------------------- */
+    enterNonFullCom(COMM_CHANNEL_0);   // ComM は wrap のため、通知しても FULL_COM へは戻らない
+    FakeCanHw_RxId  = 0x7E0U;
+    FakeCanHw_RxDlc = 8U;
+    FakeCanHw_RxData[0] = 2U;
+    FakeCanHw_RxData[1] = DCM_SID_SESSION_CTRL;
+    FakeCanHw_RxData[2] = DCM_SESSION_EXTENDED;      // 拡張セッションへの切り替え要求
+    for (uint8 i = 3U; i < 8U; i++)
+        FakeCanHw_RxData[i] = 0U;
+    FakeCanHw_RxPendingCount = 1U;
+
+    /* ------------------------- */
+    /* ---- 実行 (Act 1) ------- */
+    /* ------------------------- */
+    Can_MainFunction_Read();
+    Dcm_SesCtrlType sessionWhileNonFullCom = DCM_SESSION_EXTENDED;
+    ASSERT_EQ(Dcm_GetSesCtrlType(&sessionWhileNonFullCom), E_OK);
+
+    /* ------------------------- */
+    /* ---- 評価 (Assert 1) ---- */
+    /* ------------------------- */
+    EXPECT_EQ(sessionWhileNonFullCom, DCM_SESSION_DEFAULT);   // 要求は実行されず、セッションは変わらない
+    EXPECT_EQ(FakeCanHw_SendCount, 0U);                   // 応答も送信されない
+
+    /* ------------------------- */
+    /* ---- 準備 (Arrange 2) --- */
+    /* ------------------------- */
+    Dcm_ComM_FullComModeEntered(COMM_CHANNEL_0);
+    FakeCanHw_RxPendingCount = 1U;   // 同じ要求（FakeCanHw_RxData は、そのまま）を、もう一度受信させる
+
+    /* ------------------------- */
+    /* ---- 実行 (Act 2) ------- */
+    /* ------------------------- */
+    Can_MainFunction_Read();
+    Dcm_SesCtrlType sessionAfterFull = DCM_SESSION_DEFAULT;
+    ASSERT_EQ(Dcm_GetSesCtrlType(&sessionAfterFull), E_OK);
+
+    /* ------------------------- */
+    /* ---- 評価 (Assert 2) ---- */
+    /* ------------------------- */
+    EXPECT_EQ(sessionAfterFull, DCM_SESSION_EXTENDED);    // 通信が戻った後は、実行される
+    EXPECT_EQ(FakeCanHw_SendCount, 1U);                   // 応答（正応答）が送信される
+}
+
+TEST_F(DcmStack_ComMModeEntered_Silent_Test,
+       OK_SilentDiscardsRequestWithoutExecutingIt)
+{
+    ExpectRequestDiscardedUntilFullCom(Dcm_ComM_SilentComModeEntered);
+}
+
+// NO_COM でも同様に、要求は実行されない（SILENT_COM と同じ判定）。
+TEST_F(DcmStack_ComMModeEntered_Silent_Test,
+       OK_NoComDiscardsRequestWithoutExecutingIt)
+{
+    ExpectRequestDiscardedUntilFullCom(Dcm_ComM_NoComModeEntered);
 }
 
 }  // namespace

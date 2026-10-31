@@ -750,8 +750,9 @@ Dcm と ComM は、双方向に通知し合います。
 | ComM → Dcm | `Dcm_ComM_NoComModeEntered()` / `Dcm_ComM_SilentComModeEntered()` / `Dcm_ComM_FullComModeEntered()` | チャネルのモード変化。NO_COM / SILENT_COM の間は応答を送信しない |
 
 - `ComM_BusSM_ModeIndication()` が、チャネルのモードを記録した直後に Dcm へ通知します。
-- NO_COM / SILENT_COM の間は、要求は処理しますが、応答は `CanTp_Transmit()` を呼ばずに破棄します（[SWS_Dcm_00148]/[SWS_Dcm_00153]）。FULL_COM の通知で送信が再開します。`Dcm_Init()` 直後は送信を許可しています（ComM からの通知があるまで）。
-- 診断要求は `Dcm_ProcessRequest()` の先頭で `ComM_DCM_ActiveDiagnostic()` を呼びます。SILENT_COM 中に届いた要求は、これでチャネルが FULL_COM へ戻り（協調スリープの取り消し）、応答が出ます。`Dcm_SetActiveDiagnostic(FALSE)` にすると、この「起こす」動作が止まり、SILENT_COM 中の応答は破棄されます。
+- NO_COM / SILENT_COM の間は、応答を `CanTp_Transmit()` を呼ばずに破棄します（[SWS_Dcm_00148]/[SWS_Dcm_00153]）。FULL_COM の通知で送信が再開します。`Dcm_Init()` 直後は送信を許可しています（ComM からの通知があるまで）。
+- 診断要求は `Dcm_ProcessRequest()` の先頭で `ComM_DCM_ActiveDiagnostic()` を呼びます。SILENT_COM 中に届いた要求は、これでチャネルが FULL_COM へ戻り（協調スリープの取り消し）、応答が出ます。
+- 通知しても、チャネルが FULL_COM へ戻らなかったときは、**要求を実行せずに破棄します**（ログ: `request SID=0x.. discarded`）。戻らないのは、`Dcm_SetActiveDiagnostic(FALSE)` の間と、CanSM が Bus-Off の回復中で FULL_COM の要求を断ったときです（実機ログで、相手のいないバスで、スリープに入りかけの ECU に ECU Reset を送ると、応答が捨てられて、ECU だけがリセットされ、テスターの再送で二重にリセットされた）。応答を送れないまま実行すると、セッションの変更、DTC の消去、リセットなどだけが済んで、テスターは応答を受け取れません。破棄すれば、テスターはタイムアウトして、通信が戻ってから再送できます。簡略化: 仕様は、SILENT_COM でも要求を受け付けます（送信だけを止める）。
 - Dcm が扱うチャネルは 1 つ（`COMM_CHANNEL_0`）です。それ以外の通知は何もせずに戻ります（[SWS_Dcm_01324]〜[SWS_Dcm_01326]）。
 - ResponseOnEvent と周期送信（ReadDataByPeriodicIdentifier）は未対応のため、止めるのは通常の応答だけです。
-- 注意: `Dcm_SetActiveDiagnostic(FALSE)` の状態で SILENT_COM 中に要求が届くと、チャネルを起こさないため応答だけが破棄されます。要求の処理（セッションの変更や DTC の消去など）は済んでいるので、テスタは応答を受け取れないまま ECU の状態が変わりうります。既定の設定（TRUE）では、要求がチャネルを起こしてから応答するので起きません。
+- `Dcm_SetActiveDiagnostic(FALSE)` の状態で SILENT_COM 中に要求が届くと、チャネルを起こさないため、要求は破棄されます（実行されません）。既定の設定（TRUE）では、要求がチャネルを起こしてから応答します。

@@ -1366,7 +1366,9 @@ static void Dcm_Transmit(void)
     if (Dcm_TxEnabled == 0U)
     {
         /* [SWS_Dcm_00148]/[SWS_Dcm_00153]: NO_COM / SILENT_COM の間は応答を送信しない
-         * （CanTp_Transmit() を呼ばない）。要求の処理自体は済んでおり、応答だけが破棄される。 */
+         * （CanTp_Transmit() を呼ばない）。通常は到達しない
+         * （Dcm_ProcessRequest() が、FULL_COM でないときは要求ごと破棄する）。到達するのは、要求の処理中に
+         * ComM が NO_COM / SILENT_COM へ移ったときだけで、そのときは要求の処理は済んでおり、応答だけが破棄される。 */
         DET_LOGW(TAG, "response dropped (ComM channel is not in FULL_COM)");
         return;
     }
@@ -3923,6 +3925,18 @@ static void Dcm_ProcessRequest(const uint8* uds, uint8 udsLen)
      * ComM が協調スリープを取り消して FULL_COM へ復帰させ、応答が送信できる。
      * CanTp 送信ビジーで無視する並行要求には呼ばない（[SWS_Dcm_01050]）。 */
     Dcm_NotifyActiveDiagnostic();
+
+    if (Dcm_TxEnabled == 0U)
+    {
+        /* 通知しても、通信が FULL_COM へ戻らなかった（Dcm_SetActiveDiagnostic(FALSE) の間、または CanSM が Bus-Off の
+         * 回復中で FULL_COM の要求を断ったとき）。応答を送れないまま要求を実行すると、セッションの変更や DTC の消去、
+         * ECU のリセットだけが済んで、テスターは応答を受け取れない。テスターの再送で、二重に実行もされる
+         * （ECU Reset の二重リセットなど）。実行せずに破棄すれば、テスターは、タイムアウトして、通信が戻ってから
+         * 再送できる。簡略化: 仕様は、SILENT_COM でも要求は受け付ける（[SWS_Dcm_00153]は送信だけを止める）。 */
+        DET_LOGW(TAG, "request SID=0x%02X discarded (response cannot be sent: ComM channel is not in FULL_COM)",
+                 (unsigned)sid);
+        return;
+    }
 
     /* SID × セッション許可チェック (Dcm_SidSessionTable[]) を全 SID 共通で先に行う。
      * 各ハンドラ個別の特例チェックに分散させず、ここで一元的に拒否する。 */

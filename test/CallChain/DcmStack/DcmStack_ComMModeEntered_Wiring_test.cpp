@@ -2,7 +2,7 @@
  * \file    DcmStack_ComMModeEntered_Wiring_test.cpp
  * \brief   ComM_BusSM_ModeIndication() が Dcm へチャネルのモードを通知し、応答の送信可否が追従することの、フルコールチェーンテスト。
  *
- * \details SILENT_COM の通知で応答は破棄され（診断要求でチャネルを起こさない設定 Dcm_SetActiveDiagnostic(FALSE) の下で）、
+ * \details SILENT_COM の通知で要求は破棄され、応答は送信されず（診断要求でチャネルを起こさない設定 Dcm_SetActiveDiagnostic(FALSE) の下で）、
  *          FULL_COM の通知で再開する。Dcm_ComM_*ModeEntered() を直接呼ぶテスト
  *          （DcmStack_ComMModeEntered_Silent_test.cpp）と違い、ComM_BusSM_ModeIndication() 経由の配線を確認する。
  *          要求は WrapDcm_InjectRequest() で Dcm へ直接渡す（応答要求のたびに ComM/CanSM が下位層の状態を変えるため、
@@ -198,7 +198,7 @@ TEST_F(DcmStack_ComMModeEntered_Wiring_Test,
     /* ------------------------- */
     /* ---- 評価 (Assert 1) ---- */
     /* ------------------------- */
-    EXPECT_EQ(CallCount_CanTp_Transmit, 0U);  // SILENT_COM の間は応答が破棄される
+    EXPECT_EQ(CallCount_CanTp_Transmit, 0U);  // SILENT_COM の間は要求が破棄され、応答は送信されない
 
     /* ------------------------- */
     /* ---- 準備 (Arrange 2) --- */
