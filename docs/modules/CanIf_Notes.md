@@ -60,6 +60,27 @@ CanSM が SILENT_COMMUNICATION で `CANIF_TX_OFFLINE`、FULL_COMMUNICATION で `
 実仕様の `CANIF_TX_OFFLINE_ACTIVE`（送信を偽装して確認コールバックだけ返すモード）は、Com の
 送信確認待ち管理と両立しないため実装していません。
 
+## CanIf_CancelTransmit（ダミー関数）
+
+仕様は本 API を、PduR がバスに依存しない動作をするためだけに呼ぶ「機能を持たない関数」と定めています
+（[SWS_CANIF_00520]）。TxPduId が範囲外なら `CANIF_E_INVALID_TXPDUID` を DET へ報告し（[SWS_CANIF_00652]）、
+それ以外は常に `E_NOT_OK`（取り消しの拒否）を返します。CAN ドライバへ取り消しを伝える手段は無く、
+送信済みのフレームを取り消すこともありません。構成項目 `CanIfPublicCancelTransmitSupport` による
+有効・無効の切り替えは持たず、常に有効です。上位（`PduR_<User:Up>CancelTransmit()`、`Com_CancelTransmit` 相当）は
+未実装で、本番コードからは呼ばれていません。
+
+## CanIf_ControllerModeIndication（コントローラのモード遷移の通知）
+
+CAN ドライバがコントローラの遷移の完了を知らせるコールバックで、CanIf は `CanSM_ControllerModeIndication()` へ
+そのまま渡します（[SWS_CANIF_00711]）。CanIf が未初期化なら通知せず（[SWS_CANIF_00702]）、
+`ControllerId` が範囲外なら `CANIF_E_PARAM_CONTROLLERID` を報告して通知しません（[SWS_CANIF_00700]）。
+
+**本番コードからは呼ばれません。** 本プロジェクトの `Can_SetControllerMode()` は要求の中で同期的に遷移を終え、
+`CanIf_SetControllerMode()` が成功の時点で状態を更新するので、Can が通知を返す必要がありません。
+起床の検出は、`EcuM_CheckWakeup()` が `CanSM_ControllerModeIndication()` を直接呼ぶ経路です
+（[`CanSM_Notes.md`](./CanSM_Notes.md)）。本関数は `CanIf_ControllerMode[]` を更新しません
+（`CanIf_SetControllerMode()` の側にある、起床時の通知・送信確認の状態などの付随処理と、ちぐはぐになるため）。
+
 ## 通知状態の読み出し API
 
 `CanIf_ReadTxNotifStatus()` / `CanIf_ReadRxNotifStatus()` は、その PDU の送信確認・受信が

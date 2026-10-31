@@ -486,7 +486,46 @@ Std_ReturnType CanIf_Transmit(PduIdType TxPduId, const PduInfoType* PduInfoPtr)
  * CanIf_CancelTransmit
  * ---------------------------------------------------------------------- */
 
-/* 未実装 */
+/**
+ * \brief   送信中の PDU の取り消しを要求する（仕様上の「ダミー関数」）。
+ *
+ * \details 仕様は、本 API を「PduR がバスに依存しない動作をするために呼ぶだけで、機能を持たない」と
+ *          定めている（[SWS_CANIF_00520] の Note）。CAN ドライバへ取り消しを伝える手段も無いので、
+ *          TxPduId を検査して、常に E_NOT_OK を返す（「取り消しを、送信先のモジュールが拒否した」）。
+ *
+ *          簡略化: 仕様は本 API を、構成項目 CanIfPublicCancelTransmitSupport（[SWS_CANIF_00521]）で
+ *          有効・無効にできると定める。本プロジェクトは、このようなプリコンパイルの切り替えを他の API でも
+ *          持たないので、常に有効とする。
+ *
+ * \param[in]  TxPduId  取り消す TX PDU の ID。設定済み TxPduCount 未満であること。
+ *
+ * \retval  E_NOT_OK  常に（CanIf 未初期化、TxPduId 不正、または仕様どおりのダミー動作）。
+ *                    TxPduId が不正なときは、CANIF_E_INVALID_TXPDUID を DET へ報告する
+ *                    （[SWS_CANIF_00652]）。
+ *
+ * \pre        CanIf_Init() が正常に完了していること。
+ *
+ * \AUTOSARReq     {SWS_CANIF_00520, SWS_CANIF_00652}
+ * \ServiceID      {0x4A}
+ * \Reentrancy     {Reentrant for different PduIds. Non reentrant for the same PduId.}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType CanIf_CancelTransmit(PduIdType TxPduId)
+{
+    if (CanIf_ConfigPtr == NULL)
+    {
+        return E_NOT_OK;
+    }
+
+    if (TxPduId >= CanIf_ConfigPtr->TxPduCount)
+    {
+        DET_LOGE(TAG, "CancelTransmit E: invalid TxPduId");
+        (void)Det_ReportError(CANIF_MODULE_ID, 0U, CANIF_API_ID_CANCEL_TRANSMIT, CANIF_E_INVALID_TXPDUID);
+        return E_NOT_OK;
+    }
+
+    return E_NOT_OK;
+}
 
 /* ----------------------------------------------------------------------
  * CanIf_ReadRxPduData
@@ -1322,7 +1361,53 @@ void CanIf_ControllerBusOff(uint8 ControllerId)
  * CanIf_ControllerModeIndication
  * ---------------------------------------------------------------------- */
 
-/* 未実装 */
+/**
+ * \brief   CAN コントローラのモード遷移の完了を、CanSM へ通知する（コールバック）。
+ *
+ * \details CAN ドライバが、コントローラの状態遷移の完了を知らせるために呼ぶ。
+ *          CanSM_ControllerModeIndication() へ、そのまま渡す（[SWS_CANIF_00711]）。
+ *          CanIf が未初期化のときは、通知しない（[SWS_CANIF_00702]）。
+ *          なお、仕様は別に、開発エラーの検出が有効なとき、未初期化の API 呼び出しを CANIF_E_UNINIT として
+ *          DET へ報告するよう求める（7.28 章）。本プロジェクトの CanIf は、CANIF_E_UNINIT の定義も含めて、
+ *          どの API でも未対応のため（CanIf_Transmit() など、未初期化では黙って戻る）、本関数も同じ扱いにする。
+ *          ControllerId が範囲外のときは、CANIF_E_PARAM_CONTROLLERID を報告し、通知しない
+ *          （[SWS_CANIF_00700]）。
+ *
+ *          簡略化: 本プロジェクトの Can_SetControllerMode() は、要求の中で同期的に遷移を終える。
+ *          CanIf_SetControllerMode() が、成功の時点で CanIf_ControllerMode[] を直接更新するので、
+ *          Can は、本関数を呼ばない（呼び出し元は無い）。本関数も CanIf_ControllerMode[] を更新しない
+ *          （起床時の通知・送信確認の状態などの付随処理が CanIf_SetControllerMode() の側にあるため、
+ *          更新だけを足すと、状態がちぐはぐになる）。
+ *          CanSM_ControllerModeIndication() は、NO_COM のときの起床の検出にだけ反応し、通知されたモードでは
+ *          分岐しない（CanSM.h 参照）。
+ *
+ * \param[in]  ControllerId    遷移したコントローラの ID。
+ * \param[in]  ControllerMode  遷移後のコントローラのモード。
+ *
+ * \pre        CanIf_Init() が正常に完了していること。
+ *
+ * \AUTOSARReq     {SWS_CANIF_00699, SWS_CANIF_00700, SWS_CANIF_00702, SWS_CANIF_00711}
+ * \ServiceID      {0x17}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void CanIf_ControllerModeIndication(uint8 ControllerId, Can_ControllerStateType ControllerMode)
+{
+    if (CanIf_ConfigPtr == NULL)
+    {
+        return;
+    }
+
+    if (ControllerId >= CANIF_CONTROLLER_MAX)
+    {
+        DET_LOGE(TAG, "ControllerModeIndication E: invalid ControllerId=%u", (unsigned)ControllerId);
+        (void)Det_ReportError(CANIF_MODULE_ID, 0U, CANIF_API_ID_CONTROLLER_MODE_INDICATION, CANIF_E_PARAM_CONTROLLERID);
+        return;
+    }
+
+    DET_LOGD(TAG, "ControllerModeIndication ch=%u mode=%u", (unsigned)ControllerId, (unsigned)ControllerMode);
+    CanSM_ControllerModeIndication(ControllerId, ControllerMode);
+}
 
 /* ----------------------------------------------------------------------
  * CanIf_TrcvModeIndication
