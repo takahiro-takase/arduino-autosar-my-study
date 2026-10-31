@@ -172,4 +172,38 @@ TEST_F(PduR_SecOCTransmit_Test, PduR_SecOCTransmit_OK_ForwardsToCanIfWithRoutedT
     EXPECT_EQ(CallCount_CanIf_Transmit, 1U);   // 経路に対応する CanIf の送信へ直接渡す
 }
 
+TEST_F(PduR_SecOCTransmit_Test, PduR_SecOCTransmit_NG_RoutingPathGroupDisabled)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    const PduIdType txMembers[] = { 10U };   // kTestTxPath（SrcPduId 10）が所属する
+    const PduR_RoutingPathGroupType group = { TRUE, NULL, 0U, txMembers, 1U };
+    PduR_PBConfigType config = kTestConfig;
+    config.RoutingPathGroups     = &group;
+    config.RoutingPathGroupCount = 1U;
+    FakeDetHw_LogSuppressed = 1U;
+    PduR_Init(&config);
+    FakeDetHw_Reset();
+    FakeDetHw_LogSuppressed = 0U;
+    PduR_DisableRouting(0U, FALSE);
+    FakeDetHw_Reset();
+    FailFromCallCount_CanIf_Transmit = 0U;   // ゲートが無ければ、CanIf への送信は成功する
+    ForcedReturn_CanIf_Transmit      = E_OK;
+    uint8 sdu[8] = { 0 };
+    PduInfoType info = { sdu, 1U };
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    const Std_ReturnType ret = PduR_SecOCTransmit(10U, &info);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_NOT_OK);                       // 無効なグループのパスへは、送らない
+    EXPECT_EQ(CallCount_CanIf_Transmit, 0U);        // CanIf へ渡さない
+    EXPECT_EQ(FakeDetHw_ReportCount, 0U);           // DET へは報告しない
+}
+
 }  // namespace

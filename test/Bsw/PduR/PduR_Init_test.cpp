@@ -32,6 +32,10 @@ extern "C" {
 namespace
 {
 
+// TransmitOverrideFct に指定するテスト用の関数（呼ばれた回数を数えて、成功を返す）。
+uint32 gOverrideCalls;
+Std_ReturnType OverrideTransmit(PduIdType, const PduInfoType*) { gOverrideCalls++; return E_OK; }
+
 const PduR_TxRoutingPathType kTestTxPath = {
     /* SrcPduId */             10U,
     /* CanIfTxPduId */         0U,
@@ -146,6 +150,127 @@ TEST_F(PduR_Init_Test, PduR_Init_NG_RxPathDestCountZero)
     /* ----------------------- */
     EXPECT_EQ(errAfterInit, PDUR_E_INIT_FAILED);
     EXPECT_EQ(FakeDetHw_LastErrorId, PDUR_E_UNINIT);
+}
+
+TEST_F(PduR_Init_Test, PduR_Init_NG_RoutingPathGroupCountExceedsMax)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    PduR_Test_ResetInitState();
+    const PduR_RoutingPathGroupType group = { TRUE, NULL, 0U, NULL, 0U };
+    PduR_PBConfigType badConfig = kTestConfig;
+    badConfig.RoutingPathGroups     = &group;
+    badConfig.RoutingPathGroupCount = (uint8)(PDUR_ROUTING_PATH_GROUP_MAX + 1U);   // 状態を持てる数を超える
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    PduR_Init(&badConfig);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(FakeDetHw_LastErrorId, PDUR_E_INIT_FAILED);
+}
+
+TEST_F(PduR_Init_Test, PduR_Init_NG_RoutingPathGroupsNullWithNonZeroCount)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    PduR_Test_ResetInitState();
+    PduR_PBConfigType badConfig = kTestConfig;
+    badConfig.RoutingPathGroups     = NULL;
+    badConfig.RoutingPathGroupCount = 1U;   // 配列が無いのに、グループが 1 つあると言っている
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    PduR_Init(&badConfig);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(FakeDetHw_LastErrorId, PDUR_E_INIT_FAILED);
+}
+
+TEST_F(PduR_Init_Test, PduR_Init_OK_GroupDisabledAtInitRejectsTransmit)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    gOverrideCalls = 0U;
+    const PduR_TxRoutingPathType txPath = { 10U, 0U, 20U, NULL, OverrideTransmit, 7U };   // 送信は、下位層の関数へ渡る
+    const PduIdType txMembers[] = { 10U };   // txPath（SrcPduId 10）が所属する
+    const PduR_RoutingPathGroupType group = { FALSE, NULL, 0U, txMembers, 1U };   // PduRIsEnabledAtInit=FALSE
+    PduR_PBConfigType config = kTestConfig;
+    config.TxPaths               = &txPath;
+    config.RoutingPathGroups     = &group;
+    config.RoutingPathGroupCount = 1U;
+    PduR_Test_ResetInitState();
+    FakeDetHw_LogSuppressed = 1U;
+    PduR_Init(&config);
+    FakeDetHw_Reset();
+    FakeDetHw_LogSuppressed = 0U;
+    uint8 sdu[8] = { 0 };
+    PduInfoType info = { sdu, 1U };
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    const Std_ReturnType ret = PduR_ComTransmit(10U, &info);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_NOT_OK);                       // 起動直後から、無効（[SWS_PDUR_00827]）
+    EXPECT_EQ(gOverrideCalls, 0U);                  // 下位層へ渡さない
+    EXPECT_EQ(FakeDetHw_ReportCount, 0U);           // 一致するパスが無い場合と違い、DET へは報告しない
+}
+
+TEST_F(PduR_Init_Test, PduR_Init_NG_GroupRxMemberIdsNullWithNonZeroCount)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    PduR_Test_ResetInitState();
+    const PduR_RoutingPathGroupType group = { TRUE, NULL, 1U, NULL, 0U };   // RX メンバー数 1 なのに ID 配列が無い
+    PduR_PBConfigType badConfig = kTestConfig;
+    badConfig.RoutingPathGroups     = &group;
+    badConfig.RoutingPathGroupCount = 1U;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    PduR_Init(&badConfig);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(FakeDetHw_LastErrorId, PDUR_E_INIT_FAILED);
+}
+
+TEST_F(PduR_Init_Test, PduR_Init_NG_GroupTxMemberIdsNullWithNonZeroCount)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    PduR_Test_ResetInitState();
+    const PduR_RoutingPathGroupType group = { TRUE, NULL, 0U, NULL, 1U };   // TX メンバー数 1 なのに ID 配列が無い
+    PduR_PBConfigType badConfig = kTestConfig;
+    badConfig.RoutingPathGroups     = &group;
+    badConfig.RoutingPathGroupCount = 1U;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    PduR_Init(&badConfig);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(FakeDetHw_LastErrorId, PDUR_E_INIT_FAILED);
 }
 
 }  // namespace

@@ -39,11 +39,16 @@
 
 static const PduR_PBConfigType* PduR_ConfigPtr = NULL;
 
+/** ルーティングパスグループごとの有効（1）・無効（0）の状態。PduR_Init() が PduRIsEnabledAtInit で設定し、
+ *  PduR_EnableRouting()/PduR_DisableRouting() が変える。添字は PduR_RoutingPathGroupIdType。 */
+static uint8 PduR_GroupEnabled[PDUR_ROUTING_PATH_GROUP_MAX];
+
 /* ======================================================================
  * Function Prototypes
  * ====================================================================== */
 
 static const PduR_TxRoutingPathType* PduR_FindTxPath(PduIdType SrcPduId);
+static boolean PduR_IsRoutingPathEnabled(boolean isRx, PduIdType srcPduId);
 
 /* ======================================================================
  * Functions
@@ -88,6 +93,34 @@ void PduR_Init(const PduR_PBConfigType* ConfigPtr)
         }
     }
 
+    if ((ConfigPtr->RoutingPathGroupCount > PDUR_ROUTING_PATH_GROUP_MAX)
+        || ((ConfigPtr->RoutingPathGroupCount > 0U) && (ConfigPtr->RoutingPathGroups == NULL)))
+    {
+        DET_LOGE(TAG, "Init E: routing path groups invalid (count=%u)", (unsigned)ConfigPtr->RoutingPathGroupCount);
+        (void)Det_ReportError(PDUR_MODULE_ID, 0U, PDUR_API_ID_INIT, PDUR_E_INIT_FAILED);
+        return;
+    }
+
+    for (uint8 g = 0U; g < ConfigPtr->RoutingPathGroupCount; g++)
+    {
+        const PduR_RoutingPathGroupType* group = &ConfigPtr->RoutingPathGroups[g];
+
+        /* メンバー数があるのに ID 配列が無い設定は、PduR_IsRoutingPathEnabled() が NULL を参照するため、ここで弾く。 */
+        if (((group->RxPathCount > 0U) && (group->RxSrcPduIds == NULL))
+            || ((group->TxPathCount > 0U) && (group->TxSrcPduIds == NULL)))
+        {
+            DET_LOGE(TAG, "Init E: group[%u] member ids NULL", (unsigned)g);
+            (void)Det_ReportError(PDUR_MODULE_ID, 0U, PDUR_API_ID_INIT, PDUR_E_INIT_FAILED);
+            return;
+        }
+    }
+
+    /* [SWS_PDUR_00827]: ルーティングパスグループの初期状態は、PduRIsEnabledAtInit で決まる。 */
+    for (uint8 g = 0U; g < ConfigPtr->RoutingPathGroupCount; g++)
+    {
+        PduR_GroupEnabled[g] = (ConfigPtr->RoutingPathGroups[g].IsEnabledAtInit != FALSE) ? 1U : 0U;
+    }
+
     PduR_ConfigPtr = ConfigPtr;
     DET_LOGI(TAG, "Init ok RX=%u TX=%u",
              (unsigned)ConfigPtr->RxPathCount, (unsigned)ConfigPtr->TxPathCount);
@@ -130,19 +163,120 @@ void PduR_GetVersionInfo(Std_VersionInfoType* versioninfo)
  * PduR_GetConfigurationId
  * ---------------------------------------------------------------------- */
 
-/* 未実装 */
+/**
+ * \brief   使用中のポストビルド構成の識別子を返す。
+ *
+ * \details 本プロジェクトは、ポストビルドで選択できる構成を 1 つしか持たない。
+ *          識別子は、PduR_PBConfigType.PBConfigId の値（既定は 0）。
+ *
+ * \return  ポストビルド構成の識別子（[SWS_PduR_00280]）。未初期化のときは、
+ *          PDUR_E_UNINIT を報告して 0 を返す。
+ *
+ * \pre        PduR_Init() が正常に完了していること。
+ *
+ * \AUTOSARReq     {SWS_PduR_00341, SWS_PduR_00280}
+ * \ServiceID      {0xF2}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+PduR_PBConfigIdType PduR_GetConfigurationId(void)
+{
+    if (PduR_ConfigPtr == NULL)
+    {
+        (void)Det_ReportError(PDUR_MODULE_ID, 0U, PDUR_API_ID_GET_CONFIGURATION_ID, PDUR_E_UNINIT);
+        return 0U;
+    }
+
+    return PduR_ConfigPtr->PBConfigId;
+}
 
 /* ----------------------------------------------------------------------
  * PduR_EnableRouting
  * ---------------------------------------------------------------------- */
 
-/* 未実装 */
+/**
+ * \brief   ルーティングパスグループを有効にする。
+ *
+ * \details 有効にしたグループに所属するルーティングパスは、すぐに（[SWS_PduR_00715]）、
+ *          送信要求・受信通知を処理する。既に有効なグループへの呼び出しは、何も変えない。
+ *          グループが存在しないときは、何もせず、DET へ報告する（[SWS_PduR_00647]/[SWS_PduR_00648]）。
+ *
+ * \param[in]  id  ルーティングパスグループの識別子（PduR_PBConfigType.RoutingPathGroups[] の添字）。
+ *
+ * \pre        PduR_Init() が正常に完了していること。
+ *
+ * \AUTOSARReq     {SWS_PduR_00615, SWS_PduR_00647, SWS_PduR_00648, SWS_PduR_00715}
+ * \ServiceID      {0xF3}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void PduR_EnableRouting(PduR_RoutingPathGroupIdType id)
+{
+    if (PduR_ConfigPtr == NULL)
+    {
+        (void)Det_ReportError(PDUR_MODULE_ID, 0U, PDUR_API_ID_ENABLE_ROUTING, PDUR_E_UNINIT);
+        return;
+    }
+
+    if (id >= PduR_ConfigPtr->RoutingPathGroupCount)
+    {
+        DET_LOGE(TAG, "EnableRouting E: group=%u not found", (unsigned)id);
+        (void)Det_ReportError(PDUR_MODULE_ID, 0U, PDUR_API_ID_ENABLE_ROUTING, PDUR_E_ROUTING_PATH_GROUP_ID_INVALID);
+        return;
+    }
+
+    PduR_GroupEnabled[id] = 1U;
+    DET_LOGI(TAG, "EnableRouting group=%u", (unsigned)id);
+}
 
 /* ----------------------------------------------------------------------
  * PduR_DisableRouting
  * ---------------------------------------------------------------------- */
 
-/* 未実装 */
+/**
+ * \brief   ルーティングパスグループを無効にする。
+ *
+ * \details 無効にしたグループにだけ所属するルーティングパスは、PduR_ComTransmit()/PduR_SecOCTransmit() が E_NOT_OK を、
+ *          PduR_ComRxIndication() が何もせずに戻る（[SWS_PDUR_00805]。DET へは報告しない。[SWS_PduR_00717]）。
+ *          送信の確認（PduR_CanIfTxConfirmation()）は、無効の間も上位層へ伝える。仕様の [SWS_PDUR_00805] の
+ *          一覧に無く、無効にする前に送った PDU の確認を失わないため。
+ *          グループが存在しないときは、何もせず、DET へ報告する（[SWS_PduR_00716]/[SWS_PduR_00649]）。
+ *
+ *          簡略化: 仕様は、無効にするとき、単一バッファの既定値への戻し（initialize が TRUE のとき。
+ *          [SWS_PDUR_00810]）と、FIFO の破棄（[SWS_PduR_00663]）を求める。本実装は、ゲートウェイ用の
+ *          バッファも FIFO も持たない（PDU は受信のたびに、その場で上位層へ渡す）ので、戻す対象が無く、
+ *          initialize は使わない。
+ *
+ * \param[in]  id          ルーティングパスグループの識別子（PduR_PBConfigType.RoutingPathGroups[] の添字）。
+ * \param[in]  initialize  TRUE=単一バッファを既定値へ戻す。FALSE=現在の値を保つ。本実装では無効（上記）。
+ *
+ * \pre        PduR_Init() が正常に完了していること。
+ *
+ * \AUTOSARReq     {SWS_PduR_00617, SWS_PduR_00716, SWS_PduR_00649, SWS_PDUR_00805}
+ * \ServiceID      {0xF4}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void PduR_DisableRouting(PduR_RoutingPathGroupIdType id, boolean initialize)
+{
+    (void)initialize;   /* バッファを持たないので、使わない（Doxygen の「簡略化」参照） */
+
+    if (PduR_ConfigPtr == NULL)
+    {
+        (void)Det_ReportError(PDUR_MODULE_ID, 0U, PDUR_API_ID_DISABLE_ROUTING, PDUR_E_UNINIT);
+        return;
+    }
+
+    if (id >= PduR_ConfigPtr->RoutingPathGroupCount)
+    {
+        DET_LOGE(TAG, "DisableRouting E: group=%u not found", (unsigned)id);
+        (void)Det_ReportError(PDUR_MODULE_ID, 0U, PDUR_API_ID_DISABLE_ROUTING, PDUR_E_ROUTING_PATH_GROUP_ID_INVALID);
+        return;
+    }
+
+    PduR_GroupEnabled[id] = 0U;
+    DET_LOGI(TAG, "DisableRouting group=%u", (unsigned)id);
+}
 
 /* ======================================================================
  * Configurable interfaces definitions for interaction with upper layer module
@@ -201,6 +335,12 @@ Std_ReturnType PduR_ComTransmit(PduIdType SrcPduId, const PduInfoType* PduInfoPt
     {
         DET_LOGW(TAG, "TX no route src=%u", (unsigned)SrcPduId);
         (void)Det_ReportError(PDUR_MODULE_ID, 0U, PDUR_API_ID_TRANSMIT, PDUR_E_PDU_ID_INVALID);
+        return E_NOT_OK;
+    }
+    if (!PduR_IsRoutingPathEnabled(FALSE, SrcPduId))
+    {
+        /* [SWS_PDUR_00805]/[SWS_PduR_00717]: 無効なルーティングパスグループの送信要求は、DET へ報告せず、E_NOT_OK を返す。 */
+        DET_LOGD(TAG, "TX src=%u routing disabled", (unsigned)SrcPduId);
         return E_NOT_OK;
     }
 
@@ -309,6 +449,12 @@ Std_ReturnType PduR_SecOCTransmit(PduIdType SrcPduId, const PduInfoType* PduInfo
         (void)Det_ReportError(PDUR_MODULE_ID, 0U, PDUR_API_ID_SECOC_TRANSMIT, PDUR_E_PDU_ID_INVALID);
         return E_NOT_OK;
     }
+    if (!PduR_IsRoutingPathEnabled(FALSE, SrcPduId))
+    {
+        /* PduR_ComTransmit() と同じ（SecOC が変換している間に、グループが無効になった場合）。 */
+        DET_LOGD(TAG, "TX(SecOC) src=%u routing disabled", (unsigned)SrcPduId);
+        return E_NOT_OK;
+    }
 
     DET_LOGD(TAG, "TX(SecOC) src=%u canif=%u",
              (unsigned)SrcPduId, (unsigned)path->CanIfTxPduId);
@@ -396,6 +542,13 @@ void PduR_ComRxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
         if (path->SrcPduId != RxPduId)
         {
             continue;
+        }
+
+        if (!PduR_IsRoutingPathEnabled(TRUE, RxPduId))
+        {
+            /* [SWS_PDUR_00805]/[SWS_PduR_00717]: 無効なルーティングパスグループの受信は、DET へ報告せず、捨てる。 */
+            DET_LOGD(TAG, "RxInd src=%u routing disabled", (unsigned)RxPduId);
+            return;
         }
 
         for (uint8 d = 0; d < path->DestCount; d++)
@@ -586,6 +739,49 @@ static const PduR_TxRoutingPathType* PduR_FindTxPath(PduIdType SrcPduId)
         }
     }
     return NULL;
+}
+
+/* ----------------------------------------------------------------------
+ * PduR_IsRoutingPathEnabled
+ * ---------------------------------------------------------------------- */
+
+/**
+ * \brief   ルーティングパスが、今、有効かを返す。
+ *
+ * \details どのルーティングパスグループにも所属しないパスは、常に有効。所属するパスは、所属するグループの
+ *          いずれかが有効なら、有効。すべてのグループが無効なら、無効。
+ *
+ * \param[in]  isRx       TRUE=RX パス（RxPaths[]）、FALSE=TX パス（TxPaths[]）。
+ * \param[in]  srcPduId   パスの SrcPduId。
+ *
+ * \return  TRUE=有効、FALSE=無効。
+ *
+ * \pre     PduR_ConfigPtr が NULL でないこと。
+ */
+static boolean PduR_IsRoutingPathEnabled(boolean isRx, PduIdType srcPduId)
+{
+    boolean member = FALSE;
+
+    for (uint8 g = 0U; g < PduR_ConfigPtr->RoutingPathGroupCount; g++)
+    {
+        const PduR_RoutingPathGroupType* group = &PduR_ConfigPtr->RoutingPathGroups[g];
+        const PduIdType* ids = (isRx != FALSE) ? group->RxSrcPduIds : group->TxSrcPduIds;
+        const uint8 count    = (isRx != FALSE) ? group->RxPathCount : group->TxPathCount;
+
+        for (uint8 i = 0U; i < count; i++)
+        {
+            if (ids[i] == srcPduId)
+            {
+                member = TRUE;
+                if (PduR_GroupEnabled[g] != 0U)
+                {
+                    return TRUE;
+                }
+            }
+        }
+    }
+
+    return (member == FALSE) ? TRUE : FALSE;
 }
 
 /* ======================================================================
