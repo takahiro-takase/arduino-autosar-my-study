@@ -362,6 +362,26 @@ TEST_F(Com_ReceiveSignal_Test, Com_ReceiveSignal_NG_SignalNotFound)
     EXPECT_EQ(FakeDetHw_LastErrorId, COM_E_PARAM);
 }
 
+TEST_F(Com_ReceiveSignal_Test, Com_ReceiveSignal_NG_NotRxSignal)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    uint8 data = 0xA5U;   // 呼び出し元の変数を、書き換えていないことを見る
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    uint8 ret = Com_ReceiveSignal(0U, &data);  // kTestTxSignal（Direction=TX。IPduId 0 は登録済みの RX I-PDU と同じ番号）
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_NOT_OK);
+    EXPECT_EQ(FakeDetHw_LastErrorId, COM_E_PARAM);
+    EXPECT_EQ(data, 0xA5U);   // 同じ番号の RX I-PDU の値を、読み出していない
+}
+
 TEST_F(Com_ReceiveSignal_Test, Com_ReceiveSignal_NG_TimedOutSignalWithoutActionFails)
 {
     /* ----------------------- */
