@@ -42,6 +42,7 @@ extern "C" {
 void           CanIf_Init(const CanIf_ConfigType* ConfigPtr);
 void           CanIf_DeInit(void);
 Std_ReturnType CanIf_Transmit(PduIdType TxPduId, const PduInfoType* PduInfoPtr);
+Std_ReturnType CanIf_CancelTransmit(PduIdType TxPduId);
 Std_ReturnType CanIf_ReadRxPduData(PduIdType CanIfRxSduId, PduInfoType* CanIfRxInfoPtr);
 void           CanIf_GetVersionInfo(Std_VersionInfoType* versioninfo);
 Std_ReturnType CanIf_SetPduMode(uint8 ControllerId, CanIf_PduModeType PduModeRequest);
@@ -192,6 +193,7 @@ CanIf_NotifStatusType CanIf_GetTxConfirmationState(uint8 ControllerId);
 void           CanIf_RxIndication(const Can_HwType* Mailbox, const PduInfoType* PduInfoPtr);
 void           CanIf_TxConfirmation(PduIdType CanTxPduId);
 void           CanIf_ControllerBusOff(uint8 ControllerId);
+void           CanIf_ControllerModeIndication(uint8 ControllerId, Can_ControllerStateType ControllerMode);
 
 /* ======================================================================
  * Test Functions
