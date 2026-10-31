@@ -15,6 +15,7 @@
 extern "C" {
 #include "Com.h"
 #include "Fake_Det_Hw.h"
+#include "Fake_Millis.h"
 }
 
 /* ======================================================================
@@ -184,6 +185,48 @@ const Com_ConfigType kTestConfig = {
     NULL, 0U
 };
 
+// 受信デッドライン（100 ms）を持つ RX I-PDU（IPduId 0、DLC 1、I-PDU Group 0）を 1 本だけ持つ設定を、各テストが組み立てる。
+// 設定テーブルは Com が参照し続けるため、テスト本体のローカル変数ではなく静的な領域に置く。
+// 初回の受信までも監視する（FirstTimeoutMs=100）ので、受信しなくても、起動（または再始動）から 100 ms でタイムアウトする。
+Com_IPduConfigType    gDmIPdu;
+Com_SignalConfigType  gDmSignal;
+Com_ConfigType        gDmConfig;
+
+const Com_SignalIdType   kDmSignalId  = 100U;
+const Com_IpduGroupIdType kDmGroupId  = 0U;
+const unsigned long      kDmTimeoutMs = 100UL;
+
+// I-PDU Group を起動して、時刻を 0 に戻す。Com_IpduGroupStart() が監視タイマを今の時刻で始める。
+void StartDmGroup()
+{
+    gDmIPdu = kTestRxIPdu;
+    gDmIPdu.TimeoutMs      = (uint16)kDmTimeoutMs;
+    gDmIPdu.FirstTimeoutMs = (uint16)kDmTimeoutMs;
+    gDmIPdu.IpduGroupId    = kDmGroupId;
+
+    gDmSignal = kTestRxSignal;
+    gDmSignal.SignalId       = kDmSignalId;
+    gDmSignal.TimeoutMs      = (uint16)kDmTimeoutMs;
+    gDmSignal.FirstTimeoutMs = (uint16)kDmTimeoutMs;
+
+    gDmConfig.RxIPdus        = &gDmIPdu;
+    gDmConfig.RxIPduCount    = 1U;
+    gDmConfig.TxIPdus        = NULL;
+    gDmConfig.TxIPduCount    = 0U;
+    gDmConfig.Signals        = &gDmSignal;
+    gDmConfig.SignalCount    = 1U;
+    gDmConfig.GwMappings     = NULL;
+    gDmConfig.GwMappingCount = 0U;
+
+    FakeMillis_Reset();
+    FakeDetHw_LogSuppressed = 1U;
+    Com_DeInit();
+    Com_Init(&gDmConfig);
+    Com_IpduGroupStart(kDmGroupId, FALSE);
+    FakeDetHw_Reset();
+    FakeDetHw_LogSuppressed = 0U;
+}
+
 /* ======================================================================
  * Test Fixture
  * ====================================================================== */
@@ -229,6 +272,53 @@ TEST_F(Com_EnableReceptionDM_Test, Com_EnableReceptionDM_NG_Uninit)
     /* ---- 評価 (Assert) ---- */
     /* ----------------------- */
     EXPECT_EQ(FakeDetHw_LastErrorId, COM_E_UNINIT);
+}
+
+TEST_F(Com_EnableReceptionDM_Test, Com_EnableReceptionDM_OK_ReenableAfterDisableRestartsDeadlineFromNow)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    StartDmGroup();
+    Com_DisableReceptionDM(kDmGroupId);
+    FakeMillis_Value += kDmTimeoutMs;   // 無効の間に、デッドラインの時間が過ぎる
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Com_EnableReceptionDM(kDmGroupId);
+    Com_MainFunctionRx();                // 有効に戻した直後の判定
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(Com_Test_GetRxDmEnabled(0U), 1U);
+    EXPECT_EQ(Com_Test_GetRxTimedOut(0U), 0U);   // 無効だった間の経過時間では、タイムアウトにならない（[SWS_Com_00224]）
+
+    FakeMillis_Value += kDmTimeoutMs;            // 有効に戻してから、デッドラインの時間が過ぎる
+    Com_MainFunctionRx();
+    EXPECT_EQ(Com_Test_GetRxTimedOut(0U), 1U);   // 再始動から数えて、タイムアウトになる
+}
+
+TEST_F(Com_EnableReceptionDM_Test, Com_EnableReceptionDM_OK_EnableWhileAlreadyEnabledKeepsRunningTimer)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    StartDmGroup();                       // 監視は、既定で有効
+    FakeMillis_Value += 60UL;             // デッドライン（100 ms）の途中
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Com_EnableReceptionDM(kDmGroupId);    // 既に有効なので、無視される（[SWS_Com_00486]）
+    FakeMillis_Value += 40UL;             // 起動から 100 ms
+    Com_MainFunctionRx();
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(Com_Test_GetRxTimedOut(0U), 1U);   // タイマは巻き戻らず、起動から数えてタイムアウトになる
 }
 
 }  // namespace

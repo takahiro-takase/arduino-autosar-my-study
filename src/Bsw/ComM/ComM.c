@@ -5,22 +5,22 @@
  *          ユーザからの要求を調停し、チャネルを
  *          NO_COM / SILENT_COM / FULL_COM の 3 状態間で遷移させる。
  *
- *          状態遷移図:
+ *          状態遷移図（CanSM が実際に行うことを、各状態の下に示す。ComM 自身はコントローラを操作しない）:
  *
- *            ┌──────────────────────────────────────────────────┐
- *            │           COMM_NO_COMMUNICATION                  │
- *            │  (CAN バス停止: Can_SetControllerMode(CAN_T_STOP)) │
- *            └────────────┬──────────────────────┬─────────────┘
- *             FULL_COM 要求↓                    ↑NO_COM 要求
- *            ┌────────────▼──────────────────────▼─────────────┐
- *            │          COMM_FULL_COMMUNICATION                 │
- *            │  (CAN バス起動: Can_SetControllerMode(CAN_T_START))│
- *            └────────────┬──────────────────────┬─────────────┘
- *           SILENT_COM 要求↓                    ↑FULL_COM 要求
- *            ┌────────────▼──────────────────────▼─────────────┐
- *            │        COMM_SILENT_COMMUNICATION                 │
- *            │  (受信専用: Can_SetControllerMode(CAN_T_STOP))    │
- *            └──────────────────────────────────────────────────┘
+ *            COMM_NO_COMMUNICATION
+ *              ・コントローラは CAN_CS_SLEEP（物理スリープ。ウェイクアップ割り込みを武装）
+ *                 ↑ NO_COM: CanNm が Bus-Sleep Mode に到達（ComM_Nm_BusSleepMode()）
+ *                 ↓ FULL_COM 要求（ユーザ、Dcm の診断要求、ウェイクアップの確定、NM フレーム受信）
+ *            COMM_FULL_COMMUNICATION
+ *              ・コントローラは CAN_CS_STARTED、CanIf は CANIF_ONLINE（送受信できる）
+ *                 ↓ SILENT_COM: CanNm が Prepare Bus-Sleep Mode に到達（ComM_Nm_PrepareBusSleepMode()）
+ *                 ↑ FULL_COM: 他ノードの NM フレームでスリープを取りやめた（ComM_Nm_NetworkMode()）、
+ *                            または診断要求（ComM_DCM_ActiveDiagnostic()）
+ *            COMM_SILENT_COMMUNICATION
+ *              ・コントローラは CAN_CS_STARTED のまま、CanIf が TX だけ止める（CANIF_TX_OFFLINE）。受信は続く
+ *
+ *            Bus-Off の間は、CanSM が ComM へ SILENT_COM を通知する（[SWS_CanSM_00521]）。
+ *            回復すると、Bus-Off の直前の状態（FULL_COM または SILENT_COM）へ戻る。
  *
  *          複数ユーザの調停 (SWS_ComM_00686: 複数ユーザの要求のうち最も高い
  *          Communication Mode を採用する "highest wins" 戦略。SWS_ComM_00500:

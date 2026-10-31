@@ -148,7 +148,10 @@ static uint8 Com_TxIPduStarted[COM_TX_IPDU_MAX];
 /* Com_EnableReceptionDM()/Com_DisableReceptionDM()（SRS_Com_00192、2026-08
  * 追加）用。Com_RxIPduStarted とは独立した軸で、I-PDU Group の起動/停止
  * （送受信処理そのもの）とは別に、受信デッドライン監視の評価だけを
- * 個別に止められるようにする。既定は 1（有効、Com_Init() 参照）。 */
+ * 個別に止められるようにする。既定は 1（有効、Com_Init() 参照）。
+ * Com_IpduGroupStart()/Com_IpduGroupStop() はこのフラグを変えない（[SWS_Com_00772]: 監視の有効・無効は、
+ * I-PDU Group の起動・停止とは別の状態）。Com_EnableReceptionDM() は、このフラグが 1 のときは何もしない
+ * （[SWS_Com_00486]）ので、起動・停止がこのフラグを変えるようにすると、有効化がタイマの再始動をしなくなる。 */
 static uint8 Com_RxDmEnabled[COM_RX_IPDU_MAX];
 
 /* Com_ConfigPtr->RxIPdus[].IsSignalGroup を IPduId 添字で引けるようにした
@@ -810,10 +813,12 @@ void Com_IpduGroupStop(Com_IpduGroupIdType IpduGroupId)
  *          であり、本 API は `Com_DisableReceptionDM()` で無効化した後に
  *          再度有効化する場合にのみ意味を持つ。
  *
- *          有効化すると、対象 I-PDU のデッドライン監視タイマを再始動する
- *          （`Com_ResetRxDeadlineMonitoring()`、`Com_IpduGroupStart()`の
+ *          無効だった I-PDU を有効化すると、デッドライン監視タイマを再始動する
+ *          （`Com_ResetRxDeadlineMonitoring()`、[SWS_Com_00224]、`Com_IpduGroupStart()`の
  *          [SWS_Com_00787]項目2と同じ理由: 無効化していた間の経過時間を
- *          理由に再開直後で即座にタイムアウト判定されるのを防ぐ）。
+ *          理由に再開直後で即座にタイムアウト判定されるのを防ぐ）。既に有効な
+ *          I-PDU への有効化は、何もしない（[SWS_Com_00486]。動いているタイマを
+ *          巻き戻さない）。
  *
  *          [SWS_Com_00534]: `IpduGroupId` が1本でも TX I-PDU を含む場合、
  *          要求全体を黙って無視する（RX 側も一切変更しない）。本プロジェクトの
@@ -822,7 +827,8 @@ void Com_IpduGroupStop(Com_IpduGroupIdType IpduGroupId)
  *
  * \param[in]  IpduGroupId  対象の I-PDU Group の ID。
  *
- * \AUTOSARReq     {SWS_Com_91001の対、SRS_Com_00192, SWS_Com_00534}
+ * \AUTOSARReq     {SWS_Com_91001の対、SRS_Com_00192, SWS_Com_00534, SWS_Com_00224,
+ *                  SWS_Com_00486}
  * \ServiceID      {0x06}
  * \Reentrancy     {Reentrant for different I-PDU groups. Non reentrant for the same I-PDU group.}
  * \Synchronicity  {Synchronous}
@@ -853,9 +859,17 @@ void Com_EnableReceptionDM(Com_IpduGroupIdType IpduGroupId)
             continue;
         }
 
+        if (Com_RxDmEnabled[ipdu->IPduId] != 0U)
+        {
+            /* [SWS_Com_00486]: 既に有効な I-PDU への有効化は、黙って無視する。
+             * タイマを再始動してはいけない（動いている監視の経過時間が巻き戻り、
+             * タイムアウトの検出が遅れる）。 */
+            continue;
+        }
+
         Com_RxDmEnabled[ipdu->IPduId] = 1U;
 
-        /* Com_IpduGroupStart() の [SWS_Com_00787] 項目2と同じ理由:
+        /* [SWS_Com_00224]、Com_IpduGroupStart() の [SWS_Com_00787] 項目2と同じ理由:
          * 無効化していた間の経過時間を理由に、再有効化した直後で即座に
          * タイムアウト判定されてしまうのを防ぐ。 */
         Com_ResetRxDeadlineMonitoring(ipdu->IPduId, now);
@@ -878,13 +892,14 @@ void Com_EnableReceptionDM(Com_IpduGroupIdType IpduGroupId)
  *          （`Com_RxTimedOut`/`Com_SigTimedOut`）は意図的にクリアしない
  *          （`Com_IpduGroupStop()` と同じ理由: 無効化中は
  *          `Com_MainFunctionRx()` 側の評価自体を止めるため値は参照されない）。
+ *          既に無効な I-PDU への無効化は、何もしない（[SWS_Com_00225]）。
  *
  *          [SWS_Com_00534]: `IpduGroupId` が1本でも TX I-PDU を含む場合、
  *          要求全体を黙って無視する（`Com_EnableReceptionDM()` 参照）。
  *
  * \param[in]  IpduGroupId  対象の I-PDU Group の ID。
  *
- * \AUTOSARReq     {SWS_Com_91003の対、SRS_Com_00192, SWS_Com_00534}
+ * \AUTOSARReq     {SWS_Com_91003の対、SRS_Com_00192, SWS_Com_00534, SWS_Com_00225}
  * \ServiceID      {0x05}
  * \Reentrancy     {Reentrant for different I-PDU groups. Non reentrant for the same I-PDU group.}
  * \Synchronicity  {Synchronous}
@@ -913,6 +928,8 @@ void Com_DisableReceptionDM(Com_IpduGroupIdType IpduGroupId)
             continue;
         }
 
+        /* [SWS_Com_00225]: 既に無効な I-PDU への無効化は、黙って無視する。無効化は、フラグを下ろすだけで、
+         * 他の状態を変えないので、特別な処理は要らない（何度呼んでも結果は同じ）。 */
         Com_RxDmEnabled[ipdu->IPduId] = 0U;
 
         DET_LOGI(TAG, "DisableReceptionDM grp=%u iPdu=%u",
