@@ -79,13 +79,37 @@ typedef struct
     PduIdType                 TransmitOverrideId;
 } PduR_TxRoutingPathType;
 
-/* SWS_PduR_00241: post-build configuration type (PduR_PBConfigType) */
+/* SWS_PduR_00771: PduR_GetConfigurationId() が返す、ポストビルド構成の識別子 */
+typedef uint16 PduR_PBConfigIdType;
+
+/* ルーティングパスグループの識別子（PduR_PBConfigType.RoutingPathGroups[] の添字）。
+ * PduR_EnableRouting()/PduR_DisableRouting() の引数（SWS_PduR_00615/00617）。 */
+typedef uint16 PduR_RoutingPathGroupIdType;
+
+/* ルーティングパスグループ 1 つ分の設定（PduRRoutingPathGroup）。
+ * 所属するルーティングパスは、送信元 PDU の ID（RX は RxPaths[].SrcPduId、TX は TxPaths[].SrcPduId）で参照する。
+ * どのグループにも所属しないルーティングパスは、常に有効である。
+ * 1 つのパスが複数のグループに所属するときは、いずれかのグループが有効なら、有効である。 */
+typedef struct
+{
+    boolean          IsEnabledAtInit;   /* PduRIsEnabledAtInit: PduR_Init() 直後の状態（TRUE=有効） */
+    const PduIdType* RxSrcPduIds;       /* 所属する RX パスの SrcPduId の配列。所属が無ければ NULL */
+    uint8            RxPathCount;
+    const PduIdType* TxSrcPduIds;       /* 所属する TX パスの SrcPduId の配列。所属が無ければ NULL */
+    uint8            TxPathCount;
+} PduR_RoutingPathGroupType;
+
+/* SWS_PduR_00241: post-build configuration type (PduR_PBConfigType)
+ * 末尾の 3 項目は省略できる（省略すると 0 / NULL。グループなし、構成 ID 0）。 */
 typedef struct
 {
     const PduR_RxRoutingPathType* RxPaths;
     uint8                         RxPathCount;
     const PduR_TxRoutingPathType* TxPaths;
     uint8                         TxPathCount;
+    PduR_PBConfigIdType               PBConfigId;            /* PduR_GetConfigurationId() が返す値（SWS_PduR_00280） */
+    const PduR_RoutingPathGroupType*  RoutingPathGroups;     /* ルーティングパスグループの配列。無ければ NULL */
+    uint8                             RoutingPathGroupCount; /* PDUR_ROUTING_PATH_GROUP_MAX 以下 */
 } PduR_PBConfigType;
 
 #endif

@@ -47,6 +47,12 @@ void           PduR_Init(const PduR_PBConfigType* ConfigPtr);
 /* SWS_PduR_00338: PduR_Init と並び PDUR_E_UNINIT 報告の対象外である唯一の例外 API
  * (SWS_PduR_00119)。 */
 void           PduR_GetVersionInfo(Std_VersionInfoType* versioninfo);
+/* SWS_PduR_00341 */
+PduR_PBConfigIdType PduR_GetConfigurationId(void);
+/* SWS_PduR_00615 */
+void           PduR_EnableRouting(PduR_RoutingPathGroupIdType id);
+/* SWS_PduR_00617 */
+void           PduR_DisableRouting(PduR_RoutingPathGroupIdType id, boolean initialize);
 
 /* ======================================================================
  * Callback Functions and Notifications

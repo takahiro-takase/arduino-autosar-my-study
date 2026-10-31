@@ -41,6 +41,20 @@ Com と CanTp は同じ `SrcPduId` の空間を共有するため、衝突しな
 - **送信確認**（`PduR_CanIfTxConfirmation()`）: `SrcPduId` の経路の `ConfFct` を、`ConfDestPduId`
   を添えて呼びます。SecOC 経由の送信確認は `PduR_SecOCTxConfirmation()` が元の送信元へ中継します。
 
+## ルーティングパスグループ（`PduR_EnableRouting()` / `PduR_DisableRouting()`）
+
+ルーティング経路をまとめて有効・無効にする仕組みです（[SWS_PduR_00615]、[SWS_PduR_00617]。実際の AUTOSAR では、BswM のルールが呼ぶ想定）。
+
+- **設定**: `PduR_PBConfigType.RoutingPathGroups[]`（`PduRRoutingPathGroup`）。グループの識別子は、配列の添字です。グループごとに、起動時の状態（`IsEnabledAtInit`、[SWS_PDUR_00827]）と、所属する RX・TX 経路の `SrcPduId` の一覧を持ちます。
+- **本番の設定は、グループを使いません**（`RoutingPathGroupCount` = 0）。どの経路も、常に有効です。コンフィギュレータ（`PduR.json`）も、まだグループを生成しません。
+- **どの経路が有効か**: どのグループにも属さない経路は、常に有効です。属する経路は、属するグループのいずれかが有効なら有効で、すべて無効なら無効です。
+- **無効な経路の扱い**（[SWS_PDUR_00805]、[SWS_PduR_00717]）: `PduR_ComTransmit()` / `PduR_SecOCTransmit()` は、DET へ報告せずに `E_NOT_OK` を返します。`PduR_ComRxIndication()` は、DET へ報告せず、PDU を捨てます。
+- **送信確認は、無効の間も上位層へ伝えます**。仕様の一覧にない処理で、無効にする前に送った PDU の確認を失わないためです。
+- **存在しないグループ**: 何もせず、`PDUR_E_ROUTING_PATH_GROUP_ID_INVALID` を DET へ報告します（[SWS_PduR_00647]〜[00649]）。
+- **簡略化**: 仕様は、無効にするとき、単一バッファの既定値への戻し（`initialize` が TRUE のとき。[SWS_PDUR_00810]）と、FIFO の破棄（[SWS_PduR_00663]）を求めます。本実装は、ゲートウェイ用のバッファも FIFO も持たないので、`initialize` は使いません。
+
+`PduR_GetConfigurationId()`（[SWS_PduR_00341]）は、`PduR_PBConfigType.PBConfigId`（既定は 0）を返します。ポストビルドで選択できる構成は 1 つだけです。
+
 ## エラーと簡略化
 
 - `PduR_Init()` と `PduR_GetVersionInfo()` 以外は、未初期化なら `PDUR_E_UNINIT` を報告します

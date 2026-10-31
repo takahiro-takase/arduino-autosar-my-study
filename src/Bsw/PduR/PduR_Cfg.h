@@ -45,6 +45,7 @@
 #define PDUR_E_INIT_FAILED  0x00U  /* 不正な設定ポインタ／設定内容 */
 #define PDUR_E_UNINIT       0x01U  /* [SWS_PduR_00119]: 未初期化時の API 呼び出し */
 #define PDUR_E_PDU_ID_INVALID 0x02U  /* [SWS_PduR_00221]: 一致するルーティングパスなし */
+#define PDUR_E_ROUTING_PATH_GROUP_ID_INVALID 0x08U  /* [SWS_PduR_00648]/[SWS_PduR_00649]: 存在しないルーティングパスグループ */
 #define PDUR_E_PARAM_POINTER  0x09U  /* NULL ポインタチェック */
 
 /** ApiId（各関数の Doxygen \ServiceID タグと一致させること。値は SWS 8.x 章の
@@ -61,6 +62,14 @@
  *  「未使用の隣接値」ではないため、以前の割り当ては誤りだった）。 */
 #define PDUR_API_ID_SECOC_TRANSMIT      PDUR_API_ID_TRANSMIT
 #define PDUR_API_ID_GET_VERSION_INFO    0xF1U
+#define PDUR_API_ID_GET_CONFIGURATION_ID 0xF2U
+#define PDUR_API_ID_ENABLE_ROUTING      0xF3U
+#define PDUR_API_ID_DISABLE_ROUTING     0xF4U
+
+/** ルーティングパスグループの最大数（PduR_PBConfigType.RoutingPathGroupCount の上限。
+ *  グループごとの有効・無効の状態を持つ静的配列の大きさ）。本番設定は、グループを使わない
+ *  （RoutingPathGroupCount=0。すべてのルーティングパスが常に有効）。 */
+#define PDUR_ROUTING_PATH_GROUP_MAX  4U
 
 /** バージョン情報（SWS_PduR_00338、Com/E2EXf 等の既存モジュールと同じ命名規則） */
 #define PDUR_VENDOR_ID          0U
