@@ -123,7 +123,11 @@ FUP 受信:   T4 = OVS の秒 + FUP のナノ秒、T3diff = StbM_GetCurrentTimeD
 | SC の増分（SYNC） | 直前に受けた SYNC との差が 1〜`CANTSYN_RX_SC_JUMP_WIDTH`。外れた SYNC は無視するが、SC は記録する（1 回取りこぼしても、次の SYNC から復帰できる）。ただし、起動直後と、StbM の時間ベース 1 が TIMEOUT の後の最初の SYNC は、検査しない（[SWS_CanTSyn_00079]） |
 | FUP のナノ秒 | 10^9 未満（`StbM_TimeStampType.nanoseconds` の範囲、[SWS_CanTSyn_00086] 項目 5）。範囲外の FUP は無視する |
 | SC の一致（FUP） | 対の SYNC と同じ。違えば、保留中の SYNC も捨てる |
-| FUP の待ち時間 | SYNC から `CANTSYN_RX_FOLLOW_UP_TIMEOUT_MS`（200ms）未満 |
+| FUP の待ち時間 | SYNC から `CANTSYN_RX_FOLLOW_UP_TIMEOUT_MS`（200ms）未満。超えると、その SYNC を捨てて、新しい SYNC を待つ（[SWS_CanTSyn_00063]。FUP が来たときの検査と、`CanTSyn_MainFunction()` の両方） |
+
+CanTSyn が見る時間は、SYNC と FUP の間の待ち時間だけです。SYNC が途絶えたこと（時間ベースの更新のタイムアウト）の監視は、
+仕様どおり StbM の役目です（[SWS_CanTSyn_00063] の注記）。時間ベース 1 が `STBM_SYNC_LOSS_TIMEOUT_MS_SLAVE`
+（5000ms）更新されないと、StbM が TIMEOUT ビットを立てます（[StbM_Notes.md](./StbM_Notes.md)）。
 
 ## 配線
 
