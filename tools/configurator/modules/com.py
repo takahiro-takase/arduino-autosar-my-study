@@ -24,6 +24,7 @@ IPDU_FIELDS = [
     ("RepetitionPeriodMs", "repetitionPeriodMs"), ("TxFirstTimeoutMs", "txFirstTimeoutMs"),
     ("TxTimeoutMs", "txTimeoutMs"), ("TxTOutCbk", "txTOutCbk"), ("RxTOutCbk", "rxTOutCbk"),
     ("RxIpduCalloutCbk", "rxIpduCalloutCbk"), ("TxIpduCalloutCbk", "txIpduCalloutCbk"),
+    ("ClearUpdateBit", "clearUpdateBit"), ("TriggerTransmitCalloutCbk", "triggerTransmitCalloutCbk"),
 ]
 SIGNAL_FIELDS = [
     ("SignalId", "signalId"), ("Direction", "direction"), ("IPduId", "ipduId"), ("BitPosition", "bitPosition"),
@@ -54,6 +55,7 @@ ENUM_ZERO = {
     "rxDataTimeoutAction": "COM_RX_TIMEOUT_ACTION_NONE",
     "dataInvalidAction": "COM_DATA_INVALID_ACTION_NONE",
     "txModeModeTrue": "COM_TX_MODE_MIXED",
+    "clearUpdateBit": "COM_CLEAR_UPDATE_BIT_TRANSMIT",
 }
 
 # 注釈が無いときの既定の注釈（信号の標準フィールド）
@@ -99,6 +101,11 @@ def validate(cfg):
         g = p.get("ipduGroupId")
         if g is not None and g != DEFAULT_IPDU_GROUP and g not in groups:
             errors.append("ipdus %s: ipduGroupId '%s' が ipduGroups に存在しない" % (p["name"], g))
+    # TX の I-PDU だけが持つ設定
+    for p in cfg["rxIpdus"]:
+        for k in ("clearUpdateBit", "triggerTransmitCalloutCbk"):
+            if k in p or k in p.get("comments", {}):
+                errors.append("rxIpdus %s: %s は TX の I-PDU だけが持つ設定（comments にも書けない）" % (p["name"], k))
     known = set(cm)
     for p in cfg["rxIpdus"] + cfg["txIpdus"] + cfg["signals"]:
         for k in TIME_KEYS:

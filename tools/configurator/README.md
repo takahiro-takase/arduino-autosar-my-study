@@ -464,10 +464,27 @@ BswM のルールは `perValue` で、値ごとに 1 本ずつ展開できる（
 | `ipduGroupId` | `COM_IPDU_GROUP_NONE` | **C の省略（0）とは異なる。** 0 は `COM_IPDU_GROUP_TELEMETRY` |
 | `updateBitPosition` | 信号表の `(update-bit)` の位置。無ければ 65535（0xFFFF。なし） | **C の省略（0）とは異なる** |
 | `txModeMode`（TX の I-PDU のみ） | `COM_TX_MODE_DIRECT` | **C の省略（0）とは異なる。** 0 は `COM_TX_MODE_MIXED` |
+| `clearUpdateBit`（TX の I-PDU のみ） | `COM_CLEAR_UPDATE_BIT_TRANSMIT` | C の省略（0）と同じ。`COM_CLEAR_UPDATE_BIT_TRIGGER_TRANSMIT` / `COM_CLEAR_UPDATE_BIT_CONFIRMATION` を選べる |
 
 - 生成される C では、C の省略（0）と値が異なる上の 3 項目は、省略しても必ず明示して出力する。
 - `comments` に注釈があるフィールドは、値を省略していても既定値で出力する（注釈と一緒に残す）。
 - `txModeModeTrue` は、TMS を使う I-PDU だけが持つ項目なので、既定値は置かない（省略すると 0 = `COM_TX_MODE_MIXED`）。
+
+### トリガ送信と update-bit のクリアの設定
+下位層が送信の直前にデータを取りに来る経路（トリガ送信。`Com_TriggerTransmit` → `PduR_CanIfTriggerTransmit` → `CanIf_TriggerTransmit`）は、
+3 つの設定 json で、1 本の経路ごとに有効にする。本番の設定は、どの経路も使わない。
+
+| json | 項目 | 生成される C |
+|------|------|-------------|
+| `Com.json` `txIpdus[]` | `clearUpdateBit`（`COM_CLEAR_UPDATE_BIT_*`） | `ClearUpdateBit`（`ComTxIPduClearUpdateBit`） |
+| `Com.json` `txIpdus[]` | `triggerTransmitCalloutCbk`（関数名） | `TriggerTransmitCalloutCbk`（`ComIPduTriggerTransmitCallout`） |
+| `PduR.json` `txPaths[]` | `triggerTransmit: true`（`confModule` が `COM` のとき） | `TriggerTransmitFct = Com_TriggerTransmit` |
+| `CanIf.json` `txPdus[]` | `triggerTransmit: true`（`txConfirm` が `PDUR` のとき） | `TriggerTransmitFct = PduR_CanIfTriggerTransmit`（`CanIfTxPduTriggerTransmit`） |
+
+整合性検査（`checks.py`）が、次の食い違いをエラーにする。
+- PduR の経路の `triggerTransmit` と、対応する CanIf の TX PDU の `triggerTransmit` が一致しない（片方だけ `true` だと、要求が途中で止まる、または使われない）。
+- Com の `clearUpdateBit` が `TRIGGER_TRANSMIT` なのに、PduR の経路の `triggerTransmit` が `true` でない（update-bit がクリアされない。上の検査と合わせて、CanIf も `true` になる）。
+- Com の RX の I-PDU に、`clearUpdateBit` や `triggerTransmitCalloutCbk` を書く（`comments` に書く場合も含む）。
 
 ### 移行で見つかった食い違い
 - `EngineInfo` / `AbsInfo` の受信タイムアウトは、信号表では 3000 ms だったが、Com の実際の値（`COM_TIMEOUT_*_MS`）は 5000 ms だった。

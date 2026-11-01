@@ -90,6 +90,12 @@ def check_all(ctx):
             if t["txConfirm"] != "PDUR":
                 errors.append("PduR %s: CanIf TX PDU '%s' の送信完了通知が PduR ではない" % (p["name"], t["name"]))
                 continue  # PduR 宛てでない PDU は upperLayerTxPduId を持たないため、以降の検査はしない
+            if bool(t.get("triggerTransmit")) != bool(p.get("triggerTransmit")):
+                errors.append(
+                    "PduR %s: triggerTransmit(%s) が、CanIf TX PDU '%s' の triggerTransmit(%s) と一致しない"
+                    "（トリガ送信の要求は、CanIf → PduR → Com の全部で有効にしないと、途中で止まる、または使われない）"
+                    % (p["name"], bool(p.get("triggerTransmit")), t["name"], bool(t.get("triggerTransmit")))
+                )
             if t["upperLayerTxPduId"] != p["srcPduId"]:
                 errors.append(
                     "PduR %s: srcPduId=%d と、CanIf '%s' の upperLayerTxPduId=%d が一致しない"
@@ -301,6 +307,13 @@ def _check_com_pdur(com, pdur, errors, secoc=None):
     for p in com["txIpdus"]:
         if "pduRId" not in p and p["name"] not in confs:
             errors.append("Com TX I-PDU '%s': PduR の経路がなく、pduRId も未指定" % p["name"])
+    # clearUpdateBit が TRIGGER_TRANSMIT の I-PDU は、トリガ送信の経路がないと、update-bit がクリアされない
+    for p in com["txIpdus"]:
+        if p.get("clearUpdateBit") == "COM_CLEAR_UPDATE_BIT_TRIGGER_TRANSMIT":
+            path = next((x for x in pdur["txPaths"] if x.get("confIpdu") == p["name"]), None)
+            if path is None or not path.get("triggerTransmit"):
+                errors.append("Com TX I-PDU '%s': clearUpdateBit が TRIGGER_TRANSMIT だが、PduR の経路の triggerTransmit が true でない"
+                              "（update-bit がクリアされない）" % p["name"])
 
 
 def _crc_counter(frame):

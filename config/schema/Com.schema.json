@@ -111,6 +111,11 @@
         "rxTOutCbk": { "$ref": "#/$defs/cName" },
         "rxIpduCalloutCbk": { "$ref": "#/$defs/cName" },
         "txIpduCalloutCbk": { "$ref": "#/$defs/cName" },
+        "clearUpdateBit": {
+          "enum": ["COM_CLEAR_UPDATE_BIT_TRANSMIT", "COM_CLEAR_UPDATE_BIT_TRIGGER_TRANSMIT", "COM_CLEAR_UPDATE_BIT_CONFIRMATION"],
+          "description": "TX の I-PDU のみ。ComTxIPduClearUpdateBit。update-bit をクリアするタイミング（省略すると Transmit）。TRIGGER_TRANSMIT は、PduR と CanIf の設定でも triggerTransmit を true にした経路でだけ、クリアされる"
+        },
+        "triggerTransmitCalloutCbk": { "$ref": "#/$defs/cName", "description": "TX の I-PDU のみ。ComIPduTriggerTransmitCallout。Com_TriggerTransmit() が内容を複製した後に呼ぶ（戻り値は無視する）" },
         "comments": { "$ref": "#/$defs/comments" }
       }
     },
