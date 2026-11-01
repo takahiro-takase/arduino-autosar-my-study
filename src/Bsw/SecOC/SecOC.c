@@ -167,6 +167,12 @@ static uint8 SecOC_TxSecuredValid[SECOC_TX_STATE_STORAGE_COUNT];
  *                     SecOC_Init()/SecOC_DeInit() で 0。 */
 static uint8 SecOC_TxTriggered[SECOC_TX_STATE_STORAGE_COUNT];
 
+/* SecOC_TxBuildAttempts : 送信要求ごとの、認証の組み立ての試行の回数（authentication build counter）。
+ *                         Csm_MacGenerate() が回復可能なエラーを返したときに増やす（[SWS_SecOC_00225]〜[SWS_SecOC_00227]）。
+ *                         新しい送信要求（SecOC_IfTransmit()）で 0（[SWS_SecOC_00226]）、認証の成功でも 0
+ *                         （成功の後の、トリガ送信の確認による再認証を、新しい送信要求として扱うため。[SWS_SecOC_00069]）。 */
+static uint16 SecOC_TxBuildAttempts[SECOC_TX_STATE_STORAGE_COUNT];
+
 /* ======================================================================
  * Function Prototypes
  * ====================================================================== */
@@ -332,6 +338,7 @@ void SecOC_Init(const SecOC_ConfigType* config)
         SecOC_TxFreshness[i]    = 0U;
         SecOC_TxSecuredValid[i] = 0U;
         SecOC_TxTriggered[i]    = 0U;
+        SecOC_TxBuildAttempts[i] = 0U;
     }
 
     DET_LOGI(TAG, "Init ok RX=%u TX=%u", (unsigned)config->RxPduCount, (unsigned)config->TxPduCount);
@@ -370,6 +377,7 @@ void SecOC_DeInit(void)
         SecOC_TxFreshness[i]    = 0U;
         SecOC_TxSecuredValid[i] = 0U;
         SecOC_TxTriggered[i]    = 0U;
+        SecOC_TxBuildAttempts[i] = 0U;
     }
     (void)memset(SecOC_TxAuthenticBuffer, 0, sizeof(SecOC_TxAuthenticBuffer));
     (void)memset(SecOC_TxSecuredBuffer, 0, sizeof(SecOC_TxSecuredBuffer));
@@ -712,6 +720,7 @@ Std_ReturnType SecOC_IfTransmit(PduIdType TxPduId, const PduInfoType* PduInfoPtr
         SecOC_TxAuthenticBuffer[tableIndex][b] = PduInfoPtr->SduDataPtr[b];
     }
     SecOC_TxPending[tableIndex] = 1U;
+    SecOC_TxBuildAttempts[tableIndex] = 0U;   /* [SWS_SecOC_00226]: 新しい送信要求の最初の処理で、試行の回数を 0 にする */
     /* 新しい Authentic I-PDU を受け取ったので、保持している古い Secured I-PDU は、次の SecOC_MainFunctionTx() が
      * 組み立て直すまで、下位層へ渡さない（SecOC_TriggerTransmit() は E_NOT_OK。[SWS_SecOC_00150]）。 */
     SecOC_TxSecuredValid[tableIndex] = 0U;
@@ -825,7 +834,9 @@ void SecOC_MainFunctionTx(void)
         /* Secured I-PDU = Authentic Payload | Freshness Value | 切り詰め MAC
          * （SecOC_RxPduConfigType の FreshnessOffset/MacOffset と同じレイアウト
          * 規約。Authentic のすぐ後ろに Freshness、その後ろに MAC が続く）。 */
-        uint8* secured = SecOC_TxSecuredBuffer[t];   /* SecOC_TriggerTransmit() が下位層へ複製できるよう、保持する */
+        /* 組み立て中の Secured I-PDU（作業用）。MAC の計算が成功してから、保持するバッファへ移す
+         * （保持するバッファには、MAC が付いた完全な Secured I-PDU だけを置く）。 */
+        uint8 secured[SECOC_TX_AUTH_BUF_MAX];
         for (uint8 b = 0U; b < cfg->AuthenticPduLength; b++)
         {
             secured[b] = SecOC_TxAuthenticBuffer[t][b];
@@ -839,11 +850,59 @@ void SecOC_MainFunctionTx(void)
          * secured[MacOffset..] へ直接書き込む（Csm/CryIf/Crypto レイヤ経由。
          * SecOC は鍵にも AES/CMAC の実装にも一切アクセスしない）。 */
         uint32 macLen = (uint32)cfg->MacTxLength;
-        (void)Csm_MacGenerate(cfg->CsmJobId, CRYPTO_OPERATIONMODE_SINGLECALL,
-                               authInput, authInputLen,
-                               &secured[cfg->MacOffset], &macLen);
+        const Std_ReturnType macRet = Csm_MacGenerate(cfg->CsmJobId, CRYPTO_OPERATIONMODE_SINGLECALL,
+                                                       authInput, authInputLen,
+                                                       &secured[cfg->MacOffset], &macLen);
+        if (macRet != E_OK)
+        {
+            /* MAC を作れなかった。MAC が未設定の Secured I-PDU を、送らず、保持もしない
+             * （下位層へ渡すと、受信側に不正なフレームとして棄却される）。Freshness Value も進めない。
+             * [SWS_SecOC_00227]: 回復可能なエラー（CRYPTO_E_BUSY、CRYPTO_E_QUEUE_FULL）なら、試行の回数を
+             * 増やす（E_NOT_OK は、回復可能なエラーではない）。 */
+            const uint8 recoverable = ((macRet == CRYPTO_E_BUSY) || (macRet == CRYPTO_E_QUEUE_FULL)) ? 1U : 0U;
+            if (recoverable != 0U)
+            {
+                SecOC_TxBuildAttempts[t]++;
+            }
 
+            /* SecOCAuthenticationBuildAttempts の値。0（省略）は 1 回だけ試す。 */
+            const uint16 limit = (cfg->AuthenticationBuildAttempts != 0U) ? cfg->AuthenticationBuildAttempts : 1U;
+
+            if ((recoverable != 0U) && (SecOC_TxBuildAttempts[t] < limit))
+            {
+                /* [SWS_SecOC_00228]: 試行の回数が上限に達していないので、次の SecOC_MainFunctionTx() で、
+                 * Freshness Value と MAC の計算をやり直す。 */
+                SecOC_TxPending[t] = 1U;
+                DET_LOGW(TAG, "MainFunction W: iPdu=%u Csm_MacGenerate() recoverable error %u (attempt %u/%u), retry",
+                         (unsigned)cfg->SecOCTxPduId, (unsigned)macRet,
+                         (unsigned)SecOC_TxBuildAttempts[t], (unsigned)limit);
+                continue;
+            }
+
+            /* [SWS_SecOC_00155]/[SWS_SecOC_00166]/[SWS_SecOC_00229]: 認証を作れないと確定した（E_NOT_OK、または、
+             * 試行の回数が上限に達した）。Authentic I-PDU を、内部のバッファから捨てて、送信要求を取り消し、
+             * SECOC_E_CRYPTO_FAILURE を報告する。上位層（Com 等）には、送信の失敗（E_NOT_OK）を、送信確認として
+             * 通知する（SecOC_TxConfirmation() が失敗の結果を中継するのと同じ経路。通知しないと、上位層は、
+             * 送信の確認を、タイムアウトまで待ち続ける）。 */
+            DET_LOGE(TAG, "MainFunction E: iPdu=%u Csm_MacGenerate() failed (ret=%u), authentic I-PDU dropped",
+                     (unsigned)cfg->SecOCTxPduId, (unsigned)macRet);
+            for (uint8 b = 0U; b < SECOC_TX_AUTH_BUF_MAX; b++)
+            {
+                SecOC_TxAuthenticBuffer[t][b] = 0U;
+            }
+            SecOC_TxSecuredValid[t]  = 0U;
+            SecOC_TxTriggered[t]     = 0U;
+            PduR_SecOCTxConfirmation(cfg->PduRSrcPduId, E_NOT_OK);
+            (void)Det_ReportError(SECOC_MODULE_ID, 0U, SECOC_API_ID_MAIN_FUNCTION_TX, SECOC_E_CRYPTO_FAILURE);
+            continue;
+        }
+
+        SecOC_TxBuildAttempts[t] = 0U;
         SecOC_TxFreshness[t] = (uint8)(freshness + 1U);
+        for (uint8 b = 0U; b < cfg->SecuredPduLength; b++)
+        {
+            SecOC_TxSecuredBuffer[t][b] = secured[b];
+        }
         SecOC_TxSecuredValid[t] = 1U;   /* 組み立て済みの Secured I-PDU を、保持する（[SWS_SecOC_00068]） */
 
         DET_LOGI(TAG, "MainFunction: iPdu=%u secured OK (freshness=%u)",

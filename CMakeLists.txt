@@ -278,6 +278,7 @@ set(NATIVE_CHAIN_INCLUDE_DIRS
     stub/Bsw/FiM
     stub/Bsw/Gpt
     stub/Bsw/KeyM
+    stub/Bsw/Csm
     stub/Bsw/Nm
     stub/Bsw/NvM
     stub/Bsw/MemIf
@@ -371,6 +372,7 @@ set(NATIVE_CHAIN_STUB_SOURCES
     stub/Bsw/FiM/Wrap_FiM.c
     stub/Bsw/Gpt/Wrap_Gpt.c
     stub/Bsw/MemIf/Wrap_MemIf.c
+    stub/Bsw/Csm/Wrap_Csm.c
     stub/Bsw/Nm/Wrap_Nm.c
     stub/Bsw/PduR/Wrap_PduR.c
     stub/Bsw/Port/Wrap_Port.c
@@ -631,6 +633,8 @@ set(NATIVE_CHAIN_WRAP_SYMBOLS
     Gpt_StopTimer
     Gpt_EnableNotification
     Gpt_DisableNotification
+    # Csm_MacGenerate（SecOC の TX の、Csm の失敗時の扱いの確認用。Wrap_Csm.h/.c 参照）。
+    Csm_MacGenerate
     # Nm.h の公開API全14関数（Wrap_Nm.h/.c 参照）。
     Nm_Init
     Nm_NetworkRequest

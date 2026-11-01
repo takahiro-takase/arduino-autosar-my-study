@@ -153,6 +153,12 @@ typedef struct
     uint8        SecuredPduLength;
     uint32       CsmJobId;
     PduIdType    PduRSrcPduId;
+    /* SecOCAuthenticationBuildAttempts（末尾に追加したので、既存の初期化子は無変更）。
+     * Csm_MacGenerate() が、回復可能なエラー（CRYPTO_E_BUSY、CRYPTO_E_QUEUE_FULL）を返したとき、次の
+     * SecOC_MainFunctionTx() で、認証の組み立てをやり直す、最大の試行回数（[SWS_SecOC_00227]/[SWS_SecOC_00228]）。
+     * 0（省略）は、1 回だけ試す（やり直さない）。試行の回数が、この値に達したら、Authentic I-PDU を捨てて、
+     * SECOC_E_CRYPTO_FAILURE を報告する（[SWS_SecOC_00155]）。 */
+    uint16       AuthenticationBuildAttempts;
 } SecOC_TxPduConfigType;
 
 typedef struct

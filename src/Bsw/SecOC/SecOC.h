@@ -274,9 +274,19 @@ Std_ReturnType SecOC_TriggerTransmit(PduIdType TxPduId, PduInfoType* PduInfoPtr)
  *          計算し、Secured I-PDU を組み立てて PduR_SecOCTransmit() で送信する。
  *          保留中の TX Secured I-PDU がなければ何もしない。
  *
+ *          Csm_MacGenerate() が失敗したとき（[SWS_SecOC_00155]/[SWS_SecOC_00166]/[SWS_SecOC_00225]〜[SWS_SecOC_00228]）:
+ *          MAC が未設定の Secured I-PDU は、送らず、保持もせず、Freshness Value も進めない。
+ *          - 回復可能なエラー（CRYPTO_E_BUSY、CRYPTO_E_QUEUE_FULL）: 認証の組み立ての試行の回数（送信要求ごと。
+ *            新しい送信要求で 0）を増やし、SecOC_TxPduConfigType.AuthenticationBuildAttempts（0 は 1 回だけ試す）に
+ *            達していなければ、次の周期で、Freshness Value と MAC の計算をやり直す。
+ *          - 上記以外の失敗（E_NOT_OK など。回復可能なエラーではない）、または、試行の回数が上限に達したとき:
+ *            Authentic I-PDU を内部のバッファから捨てて、送信要求を取り消し（[SWS_SecOC_00229]）、上位層へは送信の失敗
+ *            （PduR_SecOCTxConfirmation() の E_NOT_OK）を通知し、SECOC_E_CRYPTO_FAILURE を DET へ報告する。
+ *
  * \pre        SecOC_Init() が正常に完了していること。
  *
- * \AUTOSARReq     {SWS_SecOC_00176}
+ * \AUTOSARReq     {SWS_SecOC_00176, SWS_SecOC_00155, SWS_SecOC_00166, SWS_SecOC_00225, SWS_SecOC_00226,
+ *                  SWS_SecOC_00227, SWS_SecOC_00228, SWS_SecOC_00229}
  * \ServiceID      {0x03}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}

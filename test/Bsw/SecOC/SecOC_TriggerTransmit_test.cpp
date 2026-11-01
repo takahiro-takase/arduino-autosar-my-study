@@ -8,7 +8,8 @@
  *
  *          本番の設定は TX 方向で SecOC を使わない（SECOC_TX_PDU_COUNT=0）ので、本テストは、TX Secured I-PDU を
  *          1 件持つテスト専用の設定で SecOC を初期化する（CMakeLists.txt で、SecOC.c の SECOC_TX_PDU_MAX を 1 にしている）。
- *          Csm のジョブは、本番にある検証用のジョブ（MAC の生成には使えない）を指すだけで、MAC の値は確認しない。
+ *          本番の Csm のジョブは、MAC の検証用だけで、生成用を持たないので、Csm_MacGenerate() は、wrap で、実体を呼ばずに
+ *          成功を返す（MAC の値は確認しない）。
  */
 
 /* ======================================================================
@@ -25,6 +26,7 @@ extern "C" {
 #include "CryIf.h"
 #include "Crypto.h"
 #include "Fake_Det_Hw.h"
+#include "Wrap_Csm.h"
 #include "Wrap_PduR.h"
 }
 
@@ -86,6 +88,9 @@ protected:
         SecOC_Init(&cfg);
 
         WrapPduR_Reset();
+        WrapCsm_Reset();
+        FailFromCallCount_Csm_MacGenerate = 1U;   // Csm_MacGenerate() は、常に成功する
+        ForcedReturn_Csm_MacGenerate      = E_OK;
         FakeDetHw_Reset();
         FakeDetHw_LogSuppressed = 0U;
     }
@@ -98,6 +103,7 @@ protected:
         CryIf_Test_ResetInitState();
         Csm_Test_ResetInitState();
         WrapPduR_Reset();
+        WrapCsm_Reset();
     }
 
     void Authenticate()
