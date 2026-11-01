@@ -68,13 +68,18 @@ Dem_GetNextFilteredDTCAndFDC(ClientId, &dtc, &fdc)← 同上。FDC は Dem_GetFa
 
 各イベントは `Dem_Cfg.h` の `DEM_DEBOUNCE_LIMIT_*` で**イベントごとに個別設定**する
 デバウンスカウンタを持ちます（実車の `DemDebounceAlgorithmClass` — イベントごとに
-別アルゴリズム/閾値を持てる — に相当）。FAILED 報告でカウンタ +1、PASSED 報告で -1
+別アルゴリズム/閾値を持てる — に相当）。仕様どおり（[SWS_Dem_00418]〜[00425]）、
+モニタは 2 種類の報告ができます。PREFAILED 報告でカウンタ +1、PREPASSED 報告で -1
 し（上下限でクランプ）、カウンタが **±limit に達した瞬間にのみ** DTC ステータス
-（TF/PDTC/CDTC/TFSLC）を確定します。
+（TF/PDTC/CDTC/TFSLC）を確定します。FAILED / PASSED は「モニタ側で既に確定した結果」で、
+カウンタを ±limit へ直接ジャンプさせて、すぐに確定します（limit=1 のイベントは、
+PREFAILED と FAILED、PREPASSED と PASSED の効果が同じ）。
 
 ```
-FAILED 報告  → counter が負（確定 PASSED 側）なら 0 にリセットしてから ++  (上限 +limit でクランプ)
-PASSED 報告  → counter が正（確定 FAILED 側）なら 0 にリセットしてから --  (下限 -limit でクランプ)
+PREFAILED 報告 → counter が負（確定 PASSED 側）なら 0 にリセットしてから ++  (上限 +limit でクランプ)
+PREPASSED 報告 → counter が正（確定 FAILED 側）なら 0 にリセットしてから --  (下限 -limit でクランプ)
+FAILED 報告    → counter = +limit（すぐに確定 FAILED）
+PASSED 報告    → counter = -limit（すぐに確定 PASSED）
 
 counter == +limit に達した瞬間のみ → 確定 FAILED（TF/PDTC/CDTC/TFSLC セット・FreezeFrame 記録・NvM 書込）
 counter == -limit に達した瞬間のみ → 確定 PASSED（TF クリア。CDTC は SID 0x14 でのみクリア）
@@ -86,7 +91,7 @@ counter == -limit に達した瞬間のみ → 確定 PASSED（TF クリア。CD
 ```
 
 > **報告の方向が反転したら中立 (0) からやり直す理由**: 単純に counter++/-- だけだと、
-> 既に確定 PASSED（counter=-limit）の状態から FAILED を 1 回報告しても counter は
+> 既に確定 PASSED（counter=-limit）の状態から PREFAILED を 1 回報告しても counter は
 > -limit+1 にしかならず、+limit に届くまで実質 2×limit 回分の反対方向の報告が必要に
 > なってしまう。特に limit=1（BUTTON_STUCK / CAN_BUSOFF）ではこれが原因で確定に
 > 到達できない不具合があったため、IoHwAb のボタンデバウンス（生レベルが確定値と
@@ -100,8 +105,9 @@ counter == -limit に達した瞬間のみ → 確定 PASSED（TF クリア。CD
 
 | limit | 対象イベント | 理由 |
 |---|---|---|
-| 1（即確定） | BUTTON_STUCK, CAN_BUSOFF, E2E_ABSINFO, E2E_ENGINEINFO, WDGM_SUPERVISION, WDG_DISABLE_REJECTED, NVM_INTEGRITY_FAILED, NVM_LOSS_OF_REDUNDANCY, NVM_REQ_FAILED | IoHwAb の 5 秒固着判定／CanSM の 3 回リトライ後の断念は、それ自体が「十分粘った結果」。E2E は E2EXf が `E2E_SMCheck()` の窓判定（直近 3 回中の ERROR 件数）で通信路の異常を確定してから 1 回報告する。WdgM の STOPPED、Wdg の無効化拒否、NvM の CRC 不整合・書き込み失敗は決定論的な判定で、モジュール側で既に確定している。Dem 側で重ねてデバウンスすると二重チェックになり、確定が不必要に遅れる（または構造的に確定不可能になる） |
-| 2（複数回要求） | ENGINE_OVERHEAT, ENGINE_STALL, ENGINE_SPEED_NO_FLAG, STARTING_TIMEOUT, COMM_TIMEOUT, ADC_VOLT_LOW | モニタは瞬時のしきい値超え（temp≥100 等）をそのまま報告するだけで、持続性チェックを行っていない。単発の誤検出で確定させないために Dem 側でデバウンスする |
+| 1（即確定） | BUTTON_STUCK, E2E_ABSINFO, E2E_ENGINEINFO, WDGM_SUPERVISION, WDG_DISABLE_REJECTED, NVM_INTEGRITY_FAILED, NVM_LOSS_OF_REDUNDANCY, NVM_REQ_FAILED | IoHwAb の 5 秒固着判定は、それ自体が「十分粘った結果」で、FAILED / PASSED で確定した結果を報告する。E2E は E2EXf が `E2E_SMCheck()` の窓判定（直近 3 回中の ERROR 件数）で通信路の異常を確定してから 1 回報告する。WdgM の STOPPED、Wdg の無効化拒否、NvM の CRC 不整合・書き込み失敗は決定論的な判定で、モジュール側で既に確定している。Dem 側で重ねてデバウンスすると二重チェックになり、確定が不必要に遅れる（または構造的に確定不可能になる） |
+| 2（複数回要求） | ENGINE_OVERHEAT, ENGINE_STALL, ENGINE_SPEED_NO_FLAG, STARTING_TIMEOUT, COMM_TIMEOUT, ADC_VOLT_LOW | モニタは瞬時のしきい値超え（temp≥100 等）をそのまま PREFAILED / PREPASSED で報告するだけで、持続性チェックを行っていない。単発の誤検出で確定させないために Dem 側でデバウンスする |
+| 4（Bus-Off 4 回） | CAN_BUSOFF | CanSM が Bus-Off を検出するたびに PREFAILED を報告する（[SWS_CanSM_00522]/[00605]）。`CANSM_BUSOFF_L1_TO_L2_COUNT`（3）+ 1 回目、つまり L1 の回復を使い切った回の検出で確定する。回復が確定したとき（G_BUS_OFF_PASSIVE）の PASSED で、カウンタを戻す（[SWS_CanSM_00498]） |
 
 > イベントごとの閾値にした経緯（当初は全イベント共通の単一閾値だった）は
 > 後述の「[開発の経緯](#デバウンス閾値を単一値からイベントごとに変更した経緯)」を参照。
@@ -113,7 +119,8 @@ counter == -limit に達した瞬間のみ → 確定 PASSED（TF クリア。CD
 | ENGINE_OVERHEAT / STALL / SPEED_NO_FLAG / STARTING_TIMEOUT | 状態遷移の瞬間に単発報告（limit=2） | 同じ故障が**別々の機会に 2 回**発生する必要あり |
 | COMM_TIMEOUT | 故障継続中は毎 Runnable サイクル（3000ms）報告（limit=2） | 2 サイクル分＝約 3000〜6000ms 追加 |
 | ADC_VOLT_LOW | 故障継続中は毎 10ms サイクル報告（limit=2） | 数十 ms（実質的に即時） |
-| BUTTON_STUCK / CAN_BUSOFF | 持続性チェック後に 1 回だけ報告（limit=1） | 即時確定 |
+| BUTTON_STUCK | 持続性チェック後に 1 回だけ報告（limit=1） | 即時確定 |
+| CAN_BUSOFF | Bus-Off を検出するたびに PREFAILED（limit=4） | L1 の回復を使い切った回（4 回目）の Bus-Off 検出で確定（200ms×3 回のリトライ後） |
 
 ## 複数 DTC を発生させる手順
 

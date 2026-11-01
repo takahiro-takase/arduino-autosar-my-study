@@ -256,9 +256,8 @@ TEST_F(NmStack_Wakeup_WakeupValidation_Test, OK)
     EXPECT_EQ(FakeEcuM_RequestRUNCount, 1U);
     EXPECT_EQ(CallCount_BswM_ComM_CurrentMode, 1U);
     EXPECT_EQ(LastMode_BswM_ComM_CurrentMode, static_cast<ComM_ModeType>(COMM_FULL_COMMUNICATION));
-    // Bus-Off の TF クリア相当（PASSED）を Dem へ報告する
-    EXPECT_EQ(CallCount_Dem_SetEventStatus, 1U);
-    EXPECT_EQ(LastEventStatus_Dem_SetEventStatus, DEM_EVENT_STATUS_PASSED);
+    // FULL_COM へ入っただけでは、Bus-Off の PASSED は報告しない（[SWS_CanSM_00498]: 回復の確定のときだけ）
+    EXPECT_EQ(CallCount_Dem_SetEventStatus, 0U);
 }
 
 

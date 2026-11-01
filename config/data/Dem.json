@@ -131,7 +131,7 @@
     {
       "name": "CAN_BUSOFF",
       "dtc": "0x000108",
-      "debounceLimit": 1,
+      "debounceLimit": 4,
       "agingThreshold": 5,
       "idDoc": [
         "CAN Bus-Off 持続（L1→L2 降格）"
@@ -140,7 +140,7 @@
         "CAN Bus-Off 持続（L1→L2 降格）"
       ],
       "debounceDoc": [
-        "CanSM が L1 リトライ済み。二重チェック不要"
+        "Bus-Off 検出ごとに PREFAILED。CANSM_BUSOFF_L1_TO_L2_COUNT(3)+1 回で確定"
       ],
       "agingDoc": [
         "通信路の重大故障。誤って早期回復しないよう慎重に"

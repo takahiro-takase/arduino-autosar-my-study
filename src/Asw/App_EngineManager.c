@@ -218,22 +218,22 @@ void App_EngineManager_Run(void)
      * 別軸のフェイルセーフ（前回値保持）が既に効いているため、ここでの
      * COMM_TIMEOUT 判定には含めない（RTE_E_COM_STOPPED のみを見る）。
      * OFF/FAULT 中はボランタリ CAN スリープ等で通信不在が正常なため、
-     * Dem への FAILED 報告・FAULT 遷移のいずれも行わない（ここで報告して
+     * Dem への PREFAILED 報告・FAULT 遷移のいずれも行わない（ここで報告して
      * しまうと、エンジン OFF を放置するたびにボランタリスリープで
      * DemConf_DemEventParameter_COMM_TIMEOUT が確定してしまう）。 */
     if ((speedRet == RTE_E_COM_STOPPED) || (tempRet == RTE_E_COM_STOPPED) || (flagRet == RTE_E_COM_STOPPED))
     {
         if ((s_state == ENGINE_STATE_STARTING) || (s_state == ENGINE_STATE_RUNNING))
         {
-            (void)Dem_SetEventStatus(DemConf_DemEventParameter_COMM_TIMEOUT, DEM_EVENT_STATUS_FAILED);
+            (void)Dem_SetEventStatus(DemConf_DemEventParameter_COMM_TIMEOUT, DEM_EVENT_STATUS_PREFAILED);
             s_state = ENGINE_STATE_FAULT;
             DET_LOGW(TAG, "->FAULT comm timeout");
         }
     }
     else
     {
-        /* 正常受信 → COMM_TIMEOUT イベントを PASSED 報告 */
-        (void)Dem_SetEventStatus(DemConf_DemEventParameter_COMM_TIMEOUT, DEM_EVENT_STATUS_PASSED);
+        /* 正常受信 → COMM_TIMEOUT イベントを PREPASSED 報告 */
+        (void)Dem_SetEventStatus(DemConf_DemEventParameter_COMM_TIMEOUT, DEM_EVENT_STATUS_PREPASSED);
 
         switch (s_state)
         {
@@ -375,18 +375,18 @@ static void State_Off(EngineSpeed_t speed, CoolantTemp_t temp, EngineOnFlag_t fl
     {
         s_state           = ENGINE_STATE_STARTING;
         s_startingEnterMs = App_EngineManager_GetNowMs();
-        (void)Dem_SetEventStatus(DemConf_DemEventParameter_ENGINE_SPEED_NO_FLAG, DEM_EVENT_STATUS_PASSED);
+        (void)Dem_SetEventStatus(DemConf_DemEventParameter_ENGINE_SPEED_NO_FLAG, DEM_EVENT_STATUS_PREPASSED);
         DET_LOGI(TAG, "OFF->STARTING");
     }
     else if (speed > 0U)
     {
         s_state = ENGINE_STATE_FAULT;
-        (void)Dem_SetEventStatus(DemConf_DemEventParameter_ENGINE_SPEED_NO_FLAG, DEM_EVENT_STATUS_FAILED);
+        (void)Dem_SetEventStatus(DemConf_DemEventParameter_ENGINE_SPEED_NO_FLAG, DEM_EVENT_STATUS_PREFAILED);
         DET_LOGW(TAG, "OFF->FAULT spd_no_flag");
     }
     else
     {
-        (void)Dem_SetEventStatus(DemConf_DemEventParameter_ENGINE_SPEED_NO_FLAG, DEM_EVENT_STATUS_PASSED);
+        (void)Dem_SetEventStatus(DemConf_DemEventParameter_ENGINE_SPEED_NO_FLAG, DEM_EVENT_STATUS_PREPASSED);
     }
 }
 
@@ -419,14 +419,14 @@ static void State_Starting(EngineSpeed_t speed, CoolantTemp_t temp, EngineOnFlag
     if (speed >= ENGINE_SPEED_RUNNING_THRESHOLD)
     {
         s_state = ENGINE_STATE_RUNNING;
-        (void)Dem_SetEventStatus(DemConf_DemEventParameter_STARTING_TIMEOUT, DEM_EVENT_STATUS_PASSED);
+        (void)Dem_SetEventStatus(DemConf_DemEventParameter_STARTING_TIMEOUT, DEM_EVENT_STATUS_PREPASSED);
         DET_LOGI(TAG, "STARTING->RUNNING");
         return;
     }
     if ((App_EngineManager_GetNowMs() - s_startingEnterMs) >= STARTING_TIMEOUT_MS)
     {
         s_state = ENGINE_STATE_FAULT;
-        (void)Dem_SetEventStatus(DemConf_DemEventParameter_STARTING_TIMEOUT, DEM_EVENT_STATUS_FAILED);
+        (void)Dem_SetEventStatus(DemConf_DemEventParameter_STARTING_TIMEOUT, DEM_EVENT_STATUS_PREFAILED);
         DET_LOGW(TAG, "STARTING->FAULT timeout");
     }
 }
@@ -459,23 +459,23 @@ static void State_Running(EngineSpeed_t speed, CoolantTemp_t temp, EngineOnFlag_
     if (temp >= COOLANT_OVERHEAT_THRESHOLD)
     {
         s_state = ENGINE_STATE_FAULT;
-        (void)Dem_SetEventStatus(DemConf_DemEventParameter_ENGINE_OVERHEAT, DEM_EVENT_STATUS_FAILED);
-        (void)Dem_SetEventStatus(DemConf_DemEventParameter_ENGINE_STALL,    DEM_EVENT_STATUS_PASSED);
+        (void)Dem_SetEventStatus(DemConf_DemEventParameter_ENGINE_OVERHEAT, DEM_EVENT_STATUS_PREFAILED);
+        (void)Dem_SetEventStatus(DemConf_DemEventParameter_ENGINE_STALL,    DEM_EVENT_STATUS_PREPASSED);
         DET_LOGW(TAG, "RUNNING->FAULT overheat=%u", (unsigned)temp);
         return;
     }
     if (speed < ENGINE_SPEED_STALL_THRESHOLD)
     {
         s_state = ENGINE_STATE_FAULT;
-        (void)Dem_SetEventStatus(DemConf_DemEventParameter_ENGINE_STALL,    DEM_EVENT_STATUS_FAILED);
-        (void)Dem_SetEventStatus(DemConf_DemEventParameter_ENGINE_OVERHEAT, DEM_EVENT_STATUS_PASSED);
+        (void)Dem_SetEventStatus(DemConf_DemEventParameter_ENGINE_STALL,    DEM_EVENT_STATUS_PREFAILED);
+        (void)Dem_SetEventStatus(DemConf_DemEventParameter_ENGINE_OVERHEAT, DEM_EVENT_STATUS_PREPASSED);
         DET_LOGW(TAG, "RUNNING->FAULT stall=%u", (unsigned)speed);
         return;
     }
 
-    /* 正常 RUNNING: 両フォルト条件を PASSED 報告 */
-    (void)Dem_SetEventStatus(DemConf_DemEventParameter_ENGINE_OVERHEAT, DEM_EVENT_STATUS_PASSED);
-    (void)Dem_SetEventStatus(DemConf_DemEventParameter_ENGINE_STALL,    DEM_EVENT_STATUS_PASSED);
+    /* 正常 RUNNING: 両フォルト条件を PREPASSED 報告 */
+    (void)Dem_SetEventStatus(DemConf_DemEventParameter_ENGINE_OVERHEAT, DEM_EVENT_STATUS_PREPASSED);
+    (void)Dem_SetEventStatus(DemConf_DemEventParameter_ENGINE_STALL,    DEM_EVENT_STATUS_PREPASSED);
 
     DET_LOGV(TAG, "RUNNING spd=%u tmp=%u", (unsigned)speed, (unsigned)temp);
 }

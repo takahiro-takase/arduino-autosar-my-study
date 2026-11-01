@@ -180,4 +180,55 @@ TEST_F(CanSM_ControllerBusOff_Test, CanSM_ControllerBusOff_OK_ProceedsToBusOffEv
     EXPECT_NE(mode, COMM_FULL_COMMUNICATION);   // 停止の要求が失敗しても、BUS_OFF の状態（上位へは SILENT）へ移る
 }
 
+// [SWS_CanSM_00522]/[00605]: Bus-Off を検出するたびに、Dem へ CAN_BUSOFF の PREFAILED を報告する
+TEST_F(CanSM_ControllerBusOff_Test, CanSM_ControllerBusOff_OK_ReportsPreFailedToDemOnEachDetection)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    FailFromCallCount_CanIf_SetControllerMode = 0U;   // コントローラの状態変更は、常に成功する
+    ForcedReturn_CanIf_SetControllerMode      = E_OK;
+    FailFromCallCount_CanIf_SetPduMode = 0U;   // PDU モードの変更は、常に成功する
+    ForcedReturn_CanIf_SetPduMode      = E_OK;
+    ASSERT_EQ(CanSM_RequestComMode(0U, COMM_FULL_COMMUNICATION), E_OK);
+    WrapDem_Reset();
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    CanSM_ControllerBusOff(0U);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(CallCount_Dem_SetEventStatus, 1U);
+    EXPECT_EQ(LastEventId_Dem_SetEventStatus, DemConf_DemEventParameter_CAN_BUSOFF);
+    EXPECT_EQ(LastEventStatus_Dem_SetEventStatus, DEM_EVENT_STATUS_PREFAILED);
+}
+
+// 確定していない Bus-Off の検出中（BUS_OFF の状態）に、もう一度 Bus-Off が通知されても、報告を重ねない
+TEST_F(CanSM_ControllerBusOff_Test, CanSM_ControllerBusOff_OK_DoesNotReportAgainWhileAlreadyBusOff)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    FailFromCallCount_CanIf_SetControllerMode = 0U;
+    ForcedReturn_CanIf_SetControllerMode      = E_OK;
+    FailFromCallCount_CanIf_SetPduMode = 0U;
+    ForcedReturn_CanIf_SetPduMode      = E_OK;
+    ASSERT_EQ(CanSM_RequestComMode(0U, COMM_FULL_COMMUNICATION), E_OK);
+    CanSM_ControllerBusOff(0U);   // 1 回目（BUS_OFF の状態へ入る）
+    WrapDem_Reset();
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    CanSM_ControllerBusOff(0U);   // 2 回目（回復の途中。無視する）
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(CallCount_Dem_SetEventStatus, 0U);
+}
+
 }  // namespace

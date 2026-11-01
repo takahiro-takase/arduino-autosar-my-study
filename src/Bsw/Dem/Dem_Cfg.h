@@ -220,19 +220,20 @@
 
 /* -----------------------------------------------------------------------
  * デバウンス (counter-based debouncing)
- * イベントごとに確定 (FAILED/PASSED) に必要なカウンタ絶対値を個別設定する
+ * イベントごとに確定に必要なカウンタ絶対値を個別設定する
  * (実車の DemDebounceAlgorithmClass — イベントごとに別アルゴリズム/閾値を
- * 持てる — に相当)。FAILED 報告でカウンタ+1、PASSED 報告で-1 し、
- * ±閾値 に達した瞬間に DTC ステータスを確定する。
+ * 持てる — に相当)。PREFAILED 報告でカウンタ+1、PREPASSED 報告で-1 し、
+ * ±閾値 に達した瞬間に DTC ステータスを確定する。FAILED / PASSED の報告は、
+ * カウンタを ±閾値 へ直接ジャンプさせて、すぐに確定する（Dem.h の Dem_EventStatusType 参照）。
  *
  * 閾値の決め方:
- *   モニタ（報告元）が既に十分な持続性チェックを行ってから報告する場合は 1
- *   （例: IoHwAb の 5 秒固着判定、CanSM の L1 リトライ超過後の持続 Bus-Off
- *   確定報告—これらは報告そのものが「十分粘った結果」であり、Dem 側で
- *   重ねて debounce すると二重チェックになり確定が不必要に遅れる、
- *   あるいは確定不可能になる）。
- *   モニタが単発の閾値超えをそのまま報告する場合は 2 以上
- *   （例: エンジン系の温度/回転数の瞬時しきい値判定）。
+ *   モニタ（報告元）が既に十分な持続性チェックを行ってから、確定した結果として
+ *   FAILED / PASSED で報告する場合は 1（例: IoHwAb の 5 秒固着判定—報告そのものが
+ *   「十分粘った結果」であり、Dem 側で重ねて debounce すると二重チェックになり
+ *   確定が不必要に遅れる、あるいは確定不可能になる）。
+ *   モニタが単発の判定を PREFAILED / PREPASSED で報告し、Dem に回数で確定させる場合は
+ *   2 以上（例: エンジン系の温度/回転数の瞬時しきい値判定、CanSM の Bus-Off 検出ごとの
+ *   PREFAILED—L1 の回復で戻れる一時的な Bus-Off では確定させない）。
  * ----------------------------------------------------------------------- */
 /* @@GEN-BEGIN dem-debounce-limits  生成元: config/data/Dem.json  （自動生成: 手編集禁止） */
 #define DEM_DEBOUNCE_LIMIT_ENGINE_OVERHEAT         2  /**< 瞬時しきい値判定のため複数回要求 */
@@ -242,7 +243,7 @@
 #define DEM_DEBOUNCE_LIMIT_COMM_TIMEOUT            2  /**< 毎サイクル報告のため数百ms〜数秒で確定 */
 #define DEM_DEBOUNCE_LIMIT_BUTTON_STUCK            1  /**< IoHwAb が 5 秒固着判定済み。二重チェック不要 */
 #define DEM_DEBOUNCE_LIMIT_ADC_VOLT_LOW            2  /**< 毎サイクル報告のため数十 ms で確定 */
-#define DEM_DEBOUNCE_LIMIT_CAN_BUSOFF              1  /**< CanSM が L1 リトライ済み。二重チェック不要 */
+#define DEM_DEBOUNCE_LIMIT_CAN_BUSOFF              4  /**< Bus-Off 検出ごとに PREFAILED。CANSM_BUSOFF_L1_TO_L2_COUNT(3)+1 回で確定 */
 #define DEM_DEBOUNCE_LIMIT_E2E_ABSINFO             1  /**< E2EXf が E2E_SMCheck() で単発異常を
                                                        *   吸収済み(2026-09)。二重チェック不要 */
 #define DEM_DEBOUNCE_LIMIT_E2E_ENGINEINFO          1  /**< 同上(E2EXf_AbsInfoRxCfg 参照) */

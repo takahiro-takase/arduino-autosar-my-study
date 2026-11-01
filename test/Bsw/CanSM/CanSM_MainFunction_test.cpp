@@ -375,7 +375,7 @@ TEST_F(CanSM_MainFunction_Test, MainFunction_OK_DoesNothingWhileNotInBusOff)
     EXPECT_EQ(CallCount_CanIf_SetControllerMode, setModeBefore);   // 回復の処理は始めない
 }
 
-TEST_F(CanSM_MainFunction_Test, MainFunction_OK_DegradesToL2AndReportsDemAfterRepeatedFailedRecoveries)
+TEST_F(CanSM_MainFunction_Test, MainFunction_OK_DegradesToL2WithoutReportingDemItself)
 {
     /* ----------------------- */
     /* ---- 準備 (Arrange) --- */
@@ -401,10 +401,11 @@ TEST_F(CanSM_MainFunction_Test, MainFunction_OK_DegradesToL2AndReportsDemAfterRe
     /* ----------------------- */
     /* ---- 評価 (Assert) ---- */
     /* ----------------------- */
+    // DTC の確定は、Bus-Off 検出ごとの PREFAILED（CanSM_ControllerBusOff）が Dem のデバウンスで行う。
+    // 回復の試行（L1 → L2 の格下げを含む）は、Dem へ何も報告しない。
     EXPECT_EQ(demBeforeL2, 0U);
     EXPECT_EQ(demAtL1Interval, 0U);
-    EXPECT_EQ(CallCount_Dem_SetEventStatus, 1U);   // L1 を使い切って L2 へ格下げした回に、1 回だけ報告する
-    EXPECT_EQ(LastEventStatus_Dem_SetEventStatus, DEM_EVENT_STATUS_FAILED);
+    EXPECT_EQ(CallCount_Dem_SetEventStatus, 0U);
 }
 
 // ------------------------------------------------------------
@@ -442,8 +443,44 @@ TEST_F(CanSM_MainFunction_Test, MainFunction_OK_RetriesAccumulateWhenBusOffRepea
 }
 
 // ------------------------------------------------------------
+// 正常系: 回復を確定できないまま Bus-Off が繰り返されると、Bus-Off の検出ごとの PREFAILED が積み上がり、
+// L1 を使い切った回（CANSM_BUSOFF_L1_TO_L2_COUNT + 1 回目の検出）に Dem が DTC を確定する
+// （[SWS_CanSM_00522]/[00605]。確定の回数は DEM_DEBOUNCE_LIMIT_CAN_BUSOFF）。
+// ------------------------------------------------------------
+
+TEST_F(CanSM_MainFunction_Test, MainFunction_OK_DtcConfirmedAtBusOffDetectionAfterL1Exhausted)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    static_assert(DEM_DEBOUNCE_LIMIT_CAN_BUSOFF == CANSM_BUSOFF_L1_TO_L2_COUNT + 1U,
+                  "DTC の確定は、L1 を使い切った回の Bus-Off の検出");
+    for (unsigned i = 0U; i < CANSM_BUSOFF_L1_TO_L2_COUNT; i++)
+    {
+        CanSM_ControllerBusOff(0U);
+        FakeMillis_Value += static_cast<unsigned long>(CANSM_BUSOFF_RECOVERY_L1_MS) + 1UL;
+        CanSM_MainFunction();   // 再起動できる。TX 確認が無いので、回復は確定しない
+    }
+    Dem_MonitorStatusType beforeLast = 0U;
+    ASSERT_EQ(Dem_GetMonitorStatus(DemConf_DemEventParameter_CAN_BUSOFF, &beforeLast), E_OK);
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    CanSM_ControllerBusOff(0U);   // L1 を使い切った回の検出
+    Dem_MonitorStatusType afterLast = 0U;
+    ASSERT_EQ(Dem_GetMonitorStatus(DemConf_DemEventParameter_CAN_BUSOFF, &afterLast), E_OK);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(beforeLast & DEM_MONITOR_STATUS_TF, 0U);    // それまでは確定しない（一時的な Bus-Off）
+    EXPECT_NE(afterLast & DEM_MONITOR_STATUS_TF, 0U);     // 確定
+}
+
+// ------------------------------------------------------------
 // 正常系: 確定しないまま 255 回を超えて繰り返しても、回復試行回数は折り返さない。
-// 折り返すと L1 の間隔へ戻り、DTC の FAILED を重ねて報告してしまうため、L2 の間隔のまま、FAILED は 1 回だけ。
+// 折り返すと L1 の間隔へ戻ってしまうため、L2 の間隔のまま。回復の試行は、Dem へ何も報告しない（PREFAILED は Bus-Off の検出だけ）。
 // ------------------------------------------------------------
 
 TEST_F(CanSM_MainFunction_Test, MainFunction_OK_RetriesDoNotWrapAroundWhenNeverConfirmed)
@@ -459,6 +496,7 @@ TEST_F(CanSM_MainFunction_Test, MainFunction_OK_RetriesDoNotWrapAroundWhenNeverC
     }
     CanSM_ControllerBusOff(0U);
     const uint32 setModeAfterBusOff = CallCount_CanIf_SetControllerMode;
+    const uint32 demAfterBusOff     = CallCount_Dem_SetEventStatus;
 
     /* ----------------------- */
     /* ---- 実行 (Act) ------- */
@@ -470,8 +508,8 @@ TEST_F(CanSM_MainFunction_Test, MainFunction_OK_RetriesDoNotWrapAroundWhenNeverC
     /* ---- 評価 (Assert) ---- */
     /* ----------------------- */
     EXPECT_EQ(CallCount_CanIf_SetControllerMode, setModeAfterBusOff);   // L2 のまま。まだ再起動しない
-    EXPECT_EQ(CallCount_Dem_SetEventStatus, 1U);                         // FAILED は L1 → L2 の 1 回だけ
-    EXPECT_EQ(LastEventStatus_Dem_SetEventStatus, DEM_EVENT_STATUS_FAILED);
+    EXPECT_EQ(CallCount_Dem_SetEventStatus, demAfterBusOff);             // 回復の処理は、Dem へ何も報告しない
+    EXPECT_EQ(LastEventStatus_Dem_SetEventStatus, DEM_EVENT_STATUS_PREFAILED);   // 直近は Bus-Off 検出の PREFAILED
 }
 
 // ------------------------------------------------------------

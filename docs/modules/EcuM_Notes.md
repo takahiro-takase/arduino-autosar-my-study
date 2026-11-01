@@ -40,7 +40,7 @@ SHUTDOWN は CAN バスのウェイクアップにより常に RUN へ復帰で�
 継続するため、Bus-Off の検出・回復だけを理由に新たに RUN が解放されて SHUTDOWN へ
 向かうことはなく、SHUTDOWN は ComM の NO_COM 要求による正常系（ボランタリ）スリープ
 からのみ到達します（CanNm の協調スリープ待ち中に実際に Bus-Off が発生した場合、回復時に
-ComM が `ComM_RetryNmReleaseAfterBusOff()` で解放をやり直します。ComM は RUN 要求状態
+CanNm が Bus-Sleep Mode へ到達したときの NO_COM の要求を、CanSM が Bus-Off の回復中でも受け付けて、そのまま収束します。ComM は RUN 要求状態
 （`ComM_EcuMRunMode`）が実際に変化したときだけ `EcuM_RequestRUN()`/`EcuM_ReleaseRUN()` を
 呼ぶため、Bus-Off 回復によって `EcuM_ReleaseRUN()` が重複して呼ばれることはありません。
 詳細は ComM.c の `ComM_BusSM_ModeIndication()` 参照）。

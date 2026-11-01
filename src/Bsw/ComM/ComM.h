@@ -346,9 +346,8 @@ void ComM_EcuM_WakeUpIndication(NetworkHandleType Channel);
  *
  *          FULL_COM 通知時、`ComM_NmReleasePending[]` が立っていれば
  *          （CanNm 協調スリープ待ちの最中に Bus-Off が発生し、回復して CanSM が
- *          FULL_COM へ戻ってきたケース）CanNm_NetworkRequest() は呼ばず、
- *          代わりに CanSM_RequestComMode(NO_COM) を再度呼んで解放を
- *          仕切り直す（詳細は ComM.c の実装コメント参照）。
+ *          FULL_COM へ戻ってきたケース）CanNm_NetworkRequest() も EcuM_RequestRUN() も
+ *          呼ばず、CanNm の協調スリープをそのまま続けさせる（詳細は ComM.c の実装コメント参照）。
  *
  *          呼び出しタイミング:
  *            - CanSM_RequestComMode 成功後 (NO_COM -> FULL_COM 遷移時、および
@@ -425,13 +424,9 @@ void ComM_Nm_PrepareBusSleepMode(NetworkHandleType Network);
  *          望んでいないのに FULL_COM へ「復活」させてしまう
  *          （`BusOffDuringNmWinddown_OK_DoesNotResurrectNm` と同種の回帰）。
  *
- *          実仕様は `ComMNmVariant=FULL` 構成で `CanNm_PassiveStartup()` を要求
- *          するが（[SWS_ComM_00903]）、本 ECU は能動送信ノードでありこの API
- *          自体を実装しない（`CanNm_PassiveStartUp` は既知の対応除外）。
- *          `CanSM_RequestComMode(FULL_COM)` が成功する経路では
- *          `ComM_BusSM_ModeIndication()` が内部で `CanNm_NetworkRequest()` を
- *          呼び CanNm 自身を起こす（同関数の FULL_COM 分岐参照）ため、本関数は
- *          追加のアクションを取らない。
+ *          [SWS_ComM_00903]: Nm_PassiveStartUp() は、`CanSM_RequestComMode(FULL_COM)` が
+ *          成功する経路で、`ComM_BusSM_ModeIndication()` が呼ぶ（誰も通信を要求していなければ。
+ *          同関数の FULL_COM 分岐参照）ため、本関数は追加のアクションを取らない。
  *
  * \param[in]  Network  ネットワークハンドル（0 〜 COMM_CHANNEL_COUNT-1）。
  *

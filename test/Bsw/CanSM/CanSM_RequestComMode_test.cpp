@@ -257,4 +257,133 @@ TEST_F(CanSM_RequestComMode_Test, CanSM_RequestComMode_OK_FullThenSilentThenNoCo
     EXPECT_EQ(none, COMM_NO_COMMUNICATION);
 }
 
+TEST_F(CanSM_RequestComMode_Test, CanSM_RequestComMode_OK_NoComDuringBusOffIsAcceptedAndCancelsRecovery)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    FailFromCallCount_CanIf_SetControllerMode = 0U;   // コントローラの状態変更は、常に成功する
+    ForcedReturn_CanIf_SetControllerMode      = E_OK;
+    FailFromCallCount_CanIf_SetPduMode = 0U;          // PDU モードの変更は、常に成功する
+    ForcedReturn_CanIf_SetPduMode      = E_OK;
+    FakeMillis_Reset();
+    ASSERT_EQ(CanSM_RequestComMode(0U, COMM_FULL_COMMUNICATION), E_OK);
+    CanSM_ControllerBusOff(0U);   // Bus-Off の回復中になる
+    const uint32 controllerCallsBefore = CallCount_CanIf_SetControllerMode;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    const Std_ReturnType ret = CanSM_RequestComMode(0U, COMM_NO_COMMUNICATION);
+    FakeMillis_Value += static_cast<unsigned long>(CANSM_BUSOFF_RECOVERY_L1_MS) + 1UL;
+    CanSM_MainFunction();   // 回復のタイマが満了しても、回復しない
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    ComM_ModeType mode = COMM_FULL_COMMUNICATION;
+    ASSERT_EQ(CanSM_GetCurrentComMode(0U, &mode), E_OK);
+    EXPECT_EQ(ret, E_OK);                                        // 受理する（[SWS_CanSM_00369]）。以前は E_NOT_OK で捨てていた
+    EXPECT_EQ(mode, COMM_NO_COMMUNICATION);                      // すぐに、NO_COM へ移る
+    EXPECT_EQ(CallCount_CanIf_SetControllerMode, controllerCallsBefore + 1U);   // スリープの要求の 1 回だけ。回復の再起動はしない
+}
+
+TEST_F(CanSM_RequestComMode_Test, CanSM_RequestComMode_OK_FullComDuringBusOffReturnsToFullComAfterRecovery)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    FailFromCallCount_CanIf_SetControllerMode = 0U;   // コントローラの状態変更は、常に成功する
+    ForcedReturn_CanIf_SetControllerMode      = E_OK;
+    FailFromCallCount_CanIf_SetPduMode = 0U;          // PDU モードの変更は、常に成功する
+    ForcedReturn_CanIf_SetPduMode      = E_OK;
+    FakeMillis_Reset();
+    ASSERT_EQ(CanSM_RequestComMode(0U, COMM_FULL_COMMUNICATION), E_OK);
+    ASSERT_EQ(CanSM_RequestComMode(0U, COMM_SILENT_COMMUNICATION), E_OK);   // Bus-Off の前は SILENT_COM
+    CanSM_ControllerBusOff(0U);   // Bus-Off の回復中になる
+    const uint32 pduModeCallsBefore = CallCount_CanIf_SetPduMode;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    const Std_ReturnType ret = CanSM_RequestComMode(0U, COMM_FULL_COMMUNICATION);   // 回復の最中に、FULL_COM を要求する
+    FakeMillis_Value += static_cast<unsigned long>(CANSM_BUSOFF_RECOVERY_L1_MS) + 1UL;
+    CanSM_MainFunction();   // 回復する
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    ComM_ModeType mode = COMM_NO_COMMUNICATION;
+    ASSERT_EQ(CanSM_GetCurrentComMode(0U, &mode), E_OK);
+    EXPECT_EQ(ret, E_OK);
+    EXPECT_EQ(mode, COMM_FULL_COMMUNICATION);                    // 要求されたモード（FULL_COM）へ戻る（[SWS_CanSM_00182]）
+    EXPECT_EQ(CallCount_CanIf_SetPduMode, pduModeCallsBefore + 1U);   // PDU を ONLINE にする（1 回）
+}
+
+TEST_F(CanSM_RequestComMode_Test, CanSM_RequestComMode_OK_SilentComDuringBusOffReturnsToSilentComAfterRecovery)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    FailFromCallCount_CanIf_SetControllerMode = 0U;   // コントローラの状態変更は、常に成功する
+    ForcedReturn_CanIf_SetControllerMode      = E_OK;
+    FailFromCallCount_CanIf_SetPduMode = 0U;          // PDU モードの変更は、常に成功する
+    ForcedReturn_CanIf_SetPduMode      = E_OK;
+    FakeMillis_Reset();
+    ASSERT_EQ(CanSM_RequestComMode(0U, COMM_FULL_COMMUNICATION), E_OK);
+    CanSM_ControllerBusOff(0U);   // Bus-Off の回復中になる
+    const uint32 pduModeCallsBefore = CallCount_CanIf_SetPduMode;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    const Std_ReturnType ret = CanSM_RequestComMode(0U, COMM_SILENT_COMMUNICATION);   // 回復の最中に、SILENT_COM を要求する
+    const uint32 pduModeCallsAfterRequest = CallCount_CanIf_SetPduMode;               // TX を止める（1 回）
+    FakeMillis_Value += static_cast<unsigned long>(CANSM_BUSOFF_RECOVERY_L1_MS) + 1UL;
+    CanSM_MainFunction();   // 回復する
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    ComM_ModeType mode = COMM_NO_COMMUNICATION;
+    ASSERT_EQ(CanSM_GetCurrentComMode(0U, &mode), E_OK);
+    EXPECT_EQ(ret, E_OK);
+    EXPECT_EQ(pduModeCallsAfterRequest, pduModeCallsBefore + 1U);   // 要求の時点で、TX を止める
+    EXPECT_EQ(mode, COMM_SILENT_COMMUNICATION);                     // 要求されたモード（SILENT_COM）へ戻る
+    EXPECT_EQ(CallCount_CanIf_SetPduMode, pduModeCallsAfterRequest);   // 回復では、PDU モードを触らない
+}
+
+TEST_F(CanSM_RequestComMode_Test, CanSM_RequestComMode_NG_SilentComDuringBusOffIsDeniedWhenTxCannotBeSuppressed)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    FailFromCallCount_CanIf_SetControllerMode = 0U;   // コントローラの状態変更は、常に成功する
+    ForcedReturn_CanIf_SetControllerMode      = E_OK;
+    FailFromCallCount_CanIf_SetPduMode = 0U;          // PDU モードの変更は、常に成功する
+    ForcedReturn_CanIf_SetPduMode      = E_OK;
+    FakeMillis_Reset();
+    ASSERT_EQ(CanSM_RequestComMode(0U, COMM_FULL_COMMUNICATION), E_OK);
+    CanSM_ControllerBusOff(0U);   // Bus-Off の回復中になる
+    FailFromCallCount_CanIf_SetPduMode = 1U;   // これ以降の PDU モードの変更は、失敗する
+    ForcedReturn_CanIf_SetPduMode      = E_NOT_OK;
+    CallCount_CanIf_SetPduMode = 0U;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    const Std_ReturnType ret = CanSM_RequestComMode(0U, COMM_SILENT_COMMUNICATION);
+    ForcedReturn_CanIf_SetPduMode = E_OK;   // 回復の時の PDU モードの変更は、成功させる
+    FakeMillis_Value += static_cast<unsigned long>(CANSM_BUSOFF_RECOVERY_L1_MS) + 1UL;
+    CanSM_MainFunction();
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    ComM_ModeType mode = COMM_NO_COMMUNICATION;
+    ASSERT_EQ(CanSM_GetCurrentComMode(0U, &mode), E_OK);
+    EXPECT_EQ(ret, E_NOT_OK);                  // TX を止められないので、拒否する
+    EXPECT_EQ(mode, COMM_FULL_COMMUNICATION);  // 拒否したので、Bus-Off の前の FULL_COM へ戻る
+}
+
 }  // namespace

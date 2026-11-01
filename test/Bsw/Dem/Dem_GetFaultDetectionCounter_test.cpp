@@ -128,7 +128,7 @@ TEST_F(Dem_GetFaultDetectionCounter_Test, Dem_GetFaultDetectionCounter_OK_Negati
     /* ----------------------- */
     /* ---- 準備 (Arrange) --- */
     /* ----------------------- */
-    ASSERT_EQ(Dem_SetEventStatus(0U, DEM_EVENT_STATUS_PASSED), E_OK);   // デバウンスカウンタが -1（上限 2 の半分）になる
+    ASSERT_EQ(Dem_SetEventStatus(0U, DEM_EVENT_STATUS_PREPASSED), E_OK);   // デバウンスカウンタが -1（上限 2 の半分）になる
     sint8 fdc = 0;
 
     /* ----------------------- */

@@ -65,8 +65,15 @@ NM-Timeout Timer 満了そのものを再送信のトリガとしてしまって
 **対応除外**（実 AUTOSAR CanNm が持つが本プロジェクトでは実装しない機能）:
 Partial Networking（7.11章）、NM Coordinator Sync（7.9.7章。`CanNm_RequestBusSynchronization` / `CanNm_SetSleepReadyBit`）、User Data
 （7.9.2章。`CanNm_GetPduData`）、Remote Sleep Indication（`CanNm_CheckRemoteSleepIndication`、
-7.9.1章）、Passive Mode（7.9.3章。`CanNm_PassiveStartUp`）。これらの関数は `CanNm.c` に宣言も
+7.9.1章）、Passive Mode（7.9.3章。NM フレームを送らない受信専用ノード）。これらの関数は `CanNm.c` に宣言も
 実装も無く、「未実装」のコメントだけが残っています。
+
+**パッシブ起動**（`CanNm_PassiveStartUp()`、[SWS_CanNm_00211]/[SWS_CanNm_00128]/[SWS_CanNm_00147]、2026-11 実装）:
+Bus-Sleep Mode / Prepare Bus-Sleep Mode から、ネットワークを要求せずに Repeat Message State へ入ります。
+`CanNm_NetworkRequest()` と違い、`CanNm_NetworkRequested` を立てないので、Repeat Message Time が満了すると
+Normal Operation State ではなく Ready Sleep State へ進み、誰も通信を要求しなければ、そのままスリープへ向かいます。
+既に Network Mode のときは何もせず `E_NOT_OK` を返します。ComM が、起床（EcuM の起床の検証、他ノードの NM フレーム）の
+あと、ユーザが通信を要求していないときに、`Nm_PassiveStartUp()` 経由で呼びます（[ComM_Notes.md](ComM_Notes.md) 参照）。
 
 **ノード識別子 API**: `CanNm_GetNodeIdentifier()` は「最後に受信した NM フレームの Source Node ID」
 （他ノードの ID。受信前は 0）を返し、`CanNm_GetLocalNodeIdentifier()` は自ノードの

@@ -314,7 +314,10 @@ EcuM_Init → ComM_RequestComMode(FULL_COM)   ← EcuM が ComM へ要求（上�
               └→ CanSM_RequestComMode(FULL_COM)（→ CanIf_SetControllerMode(CAN_CS_STARTED)）
                    └→ ComM_BusSM_ModeIndication(FULL_COM)  ← CanSM が ComM へ通知（下→上）
                         ├→ EcuM_RequestRUN(ECUM_USER_COMM)
-                        └→ Nm_NetworkRequest() → CanNm_NetworkRequest()
+                        └→ Nm_NetworkRequest() → CanNm_NetworkRequest()   ← ユーザが FULL_COM を要求しているとき
+                           （起床のように、誰も要求していないときは Nm_PassiveStartUp() → CanNm_PassiveStartUp()。
+                             CanNm は Repeat Message → Ready Sleep へ進み、ユーザが後から FULL_COM を要求したら
+                             ComM が Nm_NetworkRequest() を呼ぶ）
 
 【Bus-Off 検出時（回復試行の前、SWS_CanSM_00521）】
 CanIf_ControllerBusOff → CanSM_ControllerBusOff
@@ -337,8 +340,9 @@ CanSM_MainFunction（10ms タスク）
           │         │  EcuM_RequestRUN() は呼ばない（RUN は Bus-Off 中も維持されたまま）
           │         └→ Nm_NetworkRequest() → CanNm_NetworkRequest()  ← 送信再開
           │            （Bus-Off 発生時に CanNm の協調スリープ待ち = ComM_NmReleasePending
-          │             だった場合は、CanNm を起こさず ComM_RetryNmReleaseAfterBusOff() で
-          │             解放をやり直す）
+          │             だった場合は、CanNm を起こさず、EcuM の RUN も触らない。CanNm の協調スリープは
+          │             そのまま続き、CanNm が Bus-Sleep Mode へ到達したときの NO_COM の要求は、
+          │             CanSM が Bus-Off の回復中でも受け付ける）
           └─ 発生時 SILENT_COM だった場合: CanSM state → SILENT_COM
                （PDU モードは Bus-Off 中も触っていないため CANIF_TX_OFFLINE のまま）
                └→ ComM_BusSM_ModeIndication(SILENT_COM)

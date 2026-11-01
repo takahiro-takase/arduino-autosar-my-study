@@ -465,9 +465,10 @@ set(NATIVE_CHAIN_WRAP_SYMBOLS
     CanIf_TxConfirmation
     CanIf_RxIndication
     CanIf_ControllerBusOff
-    # CanNm.h の AUTOSAR IF 全14関数（Wrap_CanNm.h/.c 参照）。
+    # CanNm.h の AUTOSAR IF 全15関数（Wrap_CanNm.h/.c 参照）。
     CanNm_Init
     CanNm_DeInit
+    CanNm_PassiveStartUp
     CanNm_NetworkRequest
     CanNm_NetworkRelease
     CanNm_RepeatMessageRequest
@@ -635,8 +636,9 @@ set(NATIVE_CHAIN_WRAP_SYMBOLS
     Gpt_DisableNotification
     # Csm_MacGenerate（SecOC の TX の、Csm の失敗時の扱いの確認用。Wrap_Csm.h/.c 参照）。
     Csm_MacGenerate
-    # Nm.h の公開API全14関数（Wrap_Nm.h/.c 参照）。
+    # Nm.h の公開API全15関数（Wrap_Nm.h/.c 参照）。
     Nm_Init
+    Nm_PassiveStartUp
     Nm_NetworkRequest
     Nm_NetworkRelease
     Nm_DisableCommunication

@@ -134,6 +134,26 @@ extern "C" {
 void Nm_Init(const Nm_ConfigType* ConfigPtr);
 
 /**
+ * \brief   パッシブ起動を Nm へ伝える（[SWS_Nm_00031]）。
+ *
+ * \details `CanNm_PassiveStartUp()` を呼ぶ。ComM が、他ノードの通信による起床
+ *          （EcuM の起床の検証、ComM_Nm_NetworkStartIndication()）のあと、自分では通信を
+ *          要求していないときに使う（[SWS_ComM_00665]/[SWS_ComM_00903]）。
+ *          Nm コーディネータは持たないので、[SWS_Nm_00245] の NetworkRequest への置き換えはしない。
+ *
+ * \param[in]  Channel  NM チャネルハンドル（NM_MAIN_NETWORK_HANDLE 以外は拒否）。
+ *
+ * \retval  E_OK      CanNm が Repeat Message State へ入った。
+ * \retval  E_NOT_OK  未初期化、Channel が不正、または CanNm 側が失敗した（既に Network Mode を含む）。
+ *
+ * \AUTOSARReq     {SWS_Nm_00031, SWS_Nm_00245}
+ * \ServiceID      {0x01}
+ * \Reentrancy     {Reentrant (but not for the same NM-channel)}
+ * \Synchronicity  {Asynchronous}
+ */
+Std_ReturnType Nm_PassiveStartUp(NetworkHandleType Channel);
+
+/**
  * \brief   通信が必要であることを Nm へ伝える（[SWS_Nm_00032]）。
  *
  * \details `CanNm_NetworkRequest()` を呼ぶ（8.3.1.3節 Description: "This
