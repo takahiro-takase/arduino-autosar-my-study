@@ -41,6 +41,8 @@ uint32 CallCount_Dem_GetTranslationType               = 0U;
 uint32 CallCount_Dem_GetDTCStatusAvailabilityMask     = 0U;
 uint32 CallCount_Dem_DisableDTCSetting                = 0U;
 uint32 CallCount_Dem_EnableDTCSetting                 = 0U;
+uint32 CallCount_Dem_SetOperationCycleState           = 0U;
+uint32 CallCount_Dem_GetOperationCycleState           = 0U;
 uint32 CallCount_Dem_ClearDTC                         = 0U;
 uint32 CallCount_Dem_SetDTCFilter                     = 0U;
 uint32 CallCount_Dem_GetNumberOfFilteredDTC           = 0U;
@@ -62,6 +64,8 @@ uint32 FailFromCallCount_Dem_GetFaultDetectionCounter      = WRAP_DEM_FAIL_FROM_
 uint32 FailFromCallCount_Dem_GetDTCStatusAvailabilityMask  = WRAP_DEM_FAIL_FROM_CALL_COUNT_DISABLED;
 uint32 FailFromCallCount_Dem_DisableDTCSetting             = WRAP_DEM_FAIL_FROM_CALL_COUNT_DISABLED;
 uint32 FailFromCallCount_Dem_EnableDTCSetting              = WRAP_DEM_FAIL_FROM_CALL_COUNT_DISABLED;
+uint32 FailFromCallCount_Dem_SetOperationCycleState        = WRAP_DEM_FAIL_FROM_CALL_COUNT_DISABLED;
+uint32 FailFromCallCount_Dem_GetOperationCycleState        = WRAP_DEM_FAIL_FROM_CALL_COUNT_DISABLED;
 uint32 FailFromCallCount_Dem_ClearDTC                      = WRAP_DEM_FAIL_FROM_CALL_COUNT_DISABLED;
 uint32 FailFromCallCount_Dem_GetFreezeFrameOfEvent         = WRAP_DEM_FAIL_FROM_CALL_COUNT_DISABLED;
 uint32 FailFromCallCount_Dem_GetEventIdOfDTC               = WRAP_DEM_FAIL_FROM_CALL_COUNT_DISABLED;
@@ -78,6 +82,8 @@ Std_ReturnType ForcedReturn_Dem_GetFaultDetectionCounter     = E_NOT_OK;
 Std_ReturnType ForcedReturn_Dem_GetDTCStatusAvailabilityMask = E_NOT_OK;
 Std_ReturnType ForcedReturn_Dem_DisableDTCSetting            = E_NOT_OK;
 Std_ReturnType ForcedReturn_Dem_EnableDTCSetting             = E_NOT_OK;
+Std_ReturnType ForcedReturn_Dem_SetOperationCycleState       = E_NOT_OK;
+Std_ReturnType ForcedReturn_Dem_GetOperationCycleState       = E_NOT_OK;
 Std_ReturnType ForcedReturn_Dem_ClearDTC                     = E_NOT_OK;
 Std_ReturnType ForcedReturn_Dem_GetFreezeFrameOfEvent        = E_NOT_OK;
 Std_ReturnType ForcedReturn_Dem_GetEventIdOfDTC              = E_NOT_OK;
@@ -88,7 +94,7 @@ Std_ReturnType ForcedReturn_Dem_GetNextFilteredDTC          = E_NOT_OK;
 Std_ReturnType ForcedReturn_Dem_GetNextFilteredDTCAndFDC    = E_NOT_OK;
 
 /* ----------------------------------------------------------------------
- * WrapDem_Reset — 19関数すべての状態を一括で初期化する（Wrap_Dem.h 参照）。
+ * WrapDem_Reset — 22関数すべての状態を一括で初期化する（Wrap_Dem.h 参照）。
  * ---------------------------------------------------------------------- */
 
 void WrapDem_Reset(void)
@@ -112,6 +118,8 @@ void WrapDem_Reset(void)
     CallCount_Dem_GetTranslationType           = 0U;
     CallCount_Dem_GetFaultDetectionCounter     = 0U;
     CallCount_Dem_EnableDTCSetting             = 0U;
+    CallCount_Dem_SetOperationCycleState       = 0U;
+    CallCount_Dem_GetOperationCycleState       = 0U;
     CallCount_Dem_DisableDTCSetting            = 0U;
     
     LastEventId_Dem_SetEventStatus     = 0xFFU;
@@ -136,6 +144,8 @@ void WrapDem_Reset(void)
     FailFromCallCount_Dem_GetFaultDetectionCounter     = WRAP_DEM_FAIL_FROM_CALL_COUNT_DISABLED;
     FailFromCallCount_Dem_EnableDTCSetting             = WRAP_DEM_FAIL_FROM_CALL_COUNT_DISABLED;
     FailFromCallCount_Dem_DisableDTCSetting            = WRAP_DEM_FAIL_FROM_CALL_COUNT_DISABLED;
+    FailFromCallCount_Dem_SetOperationCycleState       = WRAP_DEM_FAIL_FROM_CALL_COUNT_DISABLED;
+    FailFromCallCount_Dem_GetOperationCycleState       = WRAP_DEM_FAIL_FROM_CALL_COUNT_DISABLED;
 
     ForcedReturn_Dem_GetEventUdsStatus            = E_NOT_OK;
     ForcedReturn_Dem_GetMonitorStatus             = E_NOT_OK;
@@ -152,6 +162,8 @@ void WrapDem_Reset(void)
     ForcedReturn_Dem_GetFaultDetectionCounter     = E_NOT_OK;
     ForcedReturn_Dem_EnableDTCSetting             = E_NOT_OK;
     ForcedReturn_Dem_DisableDTCSetting            = E_NOT_OK;
+    ForcedReturn_Dem_SetOperationCycleState       = E_NOT_OK;
+    ForcedReturn_Dem_GetOperationCycleState       = E_NOT_OK;
 }
 
 /* ======================================================================
@@ -655,6 +667,44 @@ Std_ReturnType __wrap_Dem_EnableDTCSetting(uint8 ClientId)
     }
 
     return __real_Dem_EnableDTCSetting(ClientId);
+}
+
+/* ----------------------------------------------------------------------
+ * Dem_SetOperationCycleState
+ * ---------------------------------------------------------------------- */
+
+extern
+Std_ReturnType __real_Dem_SetOperationCycleState(uint8 OperationCycleId, Dem_OperationCycleStateType CycleState);
+Std_ReturnType __wrap_Dem_SetOperationCycleState(uint8 OperationCycleId, Dem_OperationCycleStateType CycleState)
+{
+    CallCount_Dem_SetOperationCycleState++;
+    Log_Write(LOG_T, TAG, "Dem_SetOperationCycleState", "called %u times", CallCount_Dem_SetOperationCycleState);
+
+    if (CallCount_Dem_SetOperationCycleState >= FailFromCallCount_Dem_SetOperationCycleState)
+    {
+        return ForcedReturn_Dem_SetOperationCycleState;
+    }
+
+    return __real_Dem_SetOperationCycleState(OperationCycleId, CycleState);
+}
+
+/* ----------------------------------------------------------------------
+ * Dem_GetOperationCycleState
+ * ---------------------------------------------------------------------- */
+
+extern
+Std_ReturnType __real_Dem_GetOperationCycleState(uint8 OperationCycleId, Dem_OperationCycleStateType* CycleState);
+Std_ReturnType __wrap_Dem_GetOperationCycleState(uint8 OperationCycleId, Dem_OperationCycleStateType* CycleState)
+{
+    CallCount_Dem_GetOperationCycleState++;
+    Log_Write(LOG_T, TAG, "Dem_GetOperationCycleState", "called %u times", CallCount_Dem_GetOperationCycleState);
+
+    if (CallCount_Dem_GetOperationCycleState >= FailFromCallCount_Dem_GetOperationCycleState)
+    {
+        return ForcedReturn_Dem_GetOperationCycleState;
+    }
+
+    return __real_Dem_GetOperationCycleState(OperationCycleId, CycleState);
 }
 
 /* ======================================================================

@@ -147,6 +147,15 @@ typedef enum
 } Dem_EventStatusType;
 
 /**
+ * \brief   操作サイクルの状態の型（[SWS_Dem_00194]、`Dem_SetOperationCycleState()` に渡す新しい状態）。
+ */
+typedef enum
+{
+    DEM_CYCLE_STATE_START = 0U,  /**< 操作サイクルを（再）開始する */
+    DEM_CYCLE_STATE_END   = 1U   /**< 操作サイクルを終了する       */
+} Dem_OperationCycleStateType;
+
+/**
  * \brief   FreezeFrame (故障時スナップショット) のデータ構造。
  *
  * \details DID 0x0101 (EngineSpeed) / 0x0102 (CoolantTemp) / 0x0103 (EngineState)
@@ -244,6 +253,52 @@ void Dem_Init(const Dem_ConfigType* ConfigPtr);
  * \Synchronicity  {Synchronous}
  */
 Std_ReturnType Dem_SetEventStatus(Dem_EventIdType EventId, Dem_EventStatusType EventStatus);
+
+/**
+ * \brief   操作サイクルの状態を設定する（[SWS_Dem_00194]）。
+ *
+ * \details START: 操作サイクルを（再）開始する。既に開始済みなら、再開始する（[SWS_Dem_00483]）。直前の操作サイクルの
+ *          最終ステータスで、経年回復（Aging）と PendingDTC の自動クリアを評価し、イベントごとに TestFailed・
+ *          TestFailedThisOperationCycle をクリア、TestNotCompletedThisOperationCycle を立て、デバウンスカウンタを
+ *          0 へ戻す。開始してから、`Dem_SetEventStatus()` の報告を、再び受け付ける（[SWS_Dem_00481]）。
+ *          END: 操作サイクルを終了する。終了している間、`Dem_SetEventStatus()` の報告は無視され、その報告による
+ *          UDS ステータスの変化は起きない（[SWS_Dem_00482]。`Dem_ClearDTC()` のような、明示的な操作は、サイクルの
+ *          状態に関係なく働く）。既に終了済みなら、何もしない（[SWS_Dem_00484]）。
+ *          `Dem_Init()` が、電源サイクルを開始する（[SWS_Dem_00853]）。
+ *
+ * \param[in]  OperationCycleId  操作サイクルの ID（`DemConf_DemOperationCycle_*`）。
+ * \param[in]  CycleState        新しい状態（START / END）。
+ *
+ * \retval  E_OK      受理した。
+ * \retval  E_NOT_OK  未初期化、操作サイクルが構成にない（DEM_E_WRONG_CONFIGURATION、[SWS_Dem_01223]）、
+ *                    または状態が START / END 以外。
+ *
+ * \note    仕様は、非同期の処理（モニタの `InitMonitorForEvent` コールバック。[SWS_Dem_00679]）と規定するが、
+ *          本実装は、同期で処理し、コールバックは呼ばない。従属サイクル（DemLeadingCycleRef）は持たない。
+ *          仕様は RTE 経由のみで、Dem.h には公開しないが、本プロジェクトは RTE を持たないので、ここで宣言する。
+ *
+ * \AUTOSARReq     {SWS_Dem_00194, SWS_Dem_00338, SWS_Dem_00481, SWS_Dem_00482, SWS_Dem_00483, SWS_Dem_00484, SWS_Dem_00853}
+ * \ServiceID      {0x08}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType Dem_SetOperationCycleState(uint8 OperationCycleId, Dem_OperationCycleStateType CycleState);
+
+/**
+ * \brief   操作サイクルの状態を取得する（[SWS_Dem_00729]）。
+ *
+ * \param[in]   OperationCycleId  操作サイクルの ID（`DemConf_DemOperationCycle_*`）。
+ * \param[out]  CycleState        現在の状態（START = 開始済み、END = 終了済み）。
+ *
+ * \retval  E_OK      取得した。
+ * \retval  E_NOT_OK  未初期化、NULL ポインタ、または操作サイクルが構成にない。
+ *
+ * \AUTOSARReq     {SWS_Dem_00729}
+ * \ServiceID      {0x9E}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType Dem_GetOperationCycleState(uint8 OperationCycleId, Dem_OperationCycleStateType* CycleState);
 
 /**
  * \brief   DTC ステータス availability mask（サポートするステータスビット）を取得する。

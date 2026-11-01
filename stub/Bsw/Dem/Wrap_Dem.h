@@ -9,7 +9,7 @@
  *          [[reference_wrap_stub_naming_convention]] の標準テンプレートへ
  *          統一する（`<種類>_<Module>_<関数名>`）。
  *
- *          `Dem.h` が宣言する公開API全19関数を wrap 対象とする。
+ *          `Dem.h` が宣言する公開API全22関数を wrap 対象とする。
  *
  * \par Dem_SetEventStatus
  * 2026-09、`native_chain` を「Dem をフェイクにする」から「実体の `Dem.c` を
@@ -23,7 +23,7 @@
  * `DEM_DEBOUNCE_LIMIT_WDGM_SUPERVISION`）のため、1 回の呼び出しで
  * 確定/回復する既存テストの構造はそのまま維持できる。呼び出し引数
  * （`LastEventId_Dem_SetEventStatus`/`LastEventStatus_Dem_SetEventStatus`）を
- * 個別に記録するのも本関数だけの特別扱い（他の19関数は呼び出し回数のみ）。
+ * 個別に記録するのも本関数だけの特別扱い（他の21関数は呼び出し回数のみ）。
  *
  * \par 2026-09、残り18関数を追加
  * 戻り値を持つ10関数（GetDTCStatusAvailabilityMask/GetEventUdsStatus/
@@ -88,7 +88,7 @@ extern "C" {
  * ====================================================================== */
 
 /* ----------------------------------------------------------------------
- * 呼び出し回数（公開API全19関数共通）
+ * 呼び出し回数（公開API全22関数共通）
  * ---------------------------------------------------------------------- */
 extern uint32 CallCount_Dem_GetVersionInfo;
 extern uint32 CallCount_Dem_Init;
@@ -101,6 +101,8 @@ extern uint32 CallCount_Dem_GetTranslationType;
 extern uint32 CallCount_Dem_GetDTCStatusAvailabilityMask;
 extern uint32 CallCount_Dem_DisableDTCSetting;
 extern uint32 CallCount_Dem_EnableDTCSetting;
+extern uint32 CallCount_Dem_SetOperationCycleState;
+extern uint32 CallCount_Dem_GetOperationCycleState;
 extern uint32 CallCount_Dem_ClearDTC;
 extern uint32 CallCount_Dem_SetDTCFilter;
 extern uint32 CallCount_Dem_GetNumberOfFilteredDTC;
@@ -135,6 +137,8 @@ extern uint32 FailFromCallCount_Dem_GetFaultDetectionCounter;
 extern uint32 FailFromCallCount_Dem_GetDTCStatusAvailabilityMask;
 extern uint32 FailFromCallCount_Dem_DisableDTCSetting;
 extern uint32 FailFromCallCount_Dem_EnableDTCSetting;
+extern uint32 FailFromCallCount_Dem_SetOperationCycleState;
+extern uint32 FailFromCallCount_Dem_GetOperationCycleState;
 extern uint32 FailFromCallCount_Dem_ClearDTC;
 extern uint32 FailFromCallCount_Dem_GetFreezeFrameOfEvent;
 extern uint32 FailFromCallCount_Dem_GetEventIdOfDTC;
@@ -154,6 +158,8 @@ extern Std_ReturnType ForcedReturn_Dem_GetFaultDetectionCounter;       /**< 既�
 extern Std_ReturnType ForcedReturn_Dem_GetDTCStatusAvailabilityMask;   /**< 既定 E_NOT_OK */
 extern Std_ReturnType ForcedReturn_Dem_DisableDTCSetting;              /**< 既定 E_NOT_OK */
 extern Std_ReturnType ForcedReturn_Dem_EnableDTCSetting;               /**< 既定 E_NOT_OK */
+extern Std_ReturnType ForcedReturn_Dem_SetOperationCycleState;         /**< 既定 E_NOT_OK */
+extern Std_ReturnType ForcedReturn_Dem_GetOperationCycleState;         /**< 既定 E_NOT_OK */
 extern Std_ReturnType ForcedReturn_Dem_ClearDTC;                       /**< 既定 E_NOT_OK */
 extern Std_ReturnType ForcedReturn_Dem_GetFreezeFrameOfEvent;          /**< 既定 E_NOT_OK */
 extern Std_ReturnType ForcedReturn_Dem_GetEventIdOfDTC;                /**< 既定 E_NOT_OK */

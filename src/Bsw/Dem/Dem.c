@@ -68,8 +68,9 @@
  *
  *          AUTOSAR 実装との主な違い (学習用簡略化):
  *            - デバウンスカウンタは RAM のみ保持 (電源 OFF でリセット)
- *            - 操作サイクルの境界判定は Dem_Init() (起動時) のみで行う
- *              (実車は明示的な OperationCycle Start/End API を持つ)
+ *            - 操作サイクルは、全イベントが属する電源サイクル 1 つだけ（Dem_Cfg.h の DemConf_DemOperationCycle_POWER）。
+ *              Dem_Init()（起動時、[SWS_Dem_00853]）と Dem_SetOperationCycleState(START) が、サイクルの境界を処理する。
+ *              従属サイクル（DemLeadingCycleRef）・状態の不揮発保存・InitMonitorForEvent コールバックは持たない
  *            - FreezeFrame は RAM のみに保持 (EEPROM 非永続化、電源 OFF で消去)
  *            - ExtendedData はカウンタ 1 種類のみ（実車は OperationCycle 情報等も持てる）
  *            - CONFIRMED (bit3) はデバウンス確定 FAILED の瞬間に即座に立てる。
@@ -143,6 +144,10 @@ static uint8 Dem_OccurrenceCounter[DEM_EVENT_COUNT];
  *  明示的に未初期化チェック対象外のため参照しない。 */
 static uint8 Dem_Initialized = 0U;
 
+/** 操作サイクル（電源サイクル 1 つ）の状態。Dem_Init() が START にする（[SWS_Dem_00853]）。
+ *  END の間、Dem_SetEventStatus() の報告は無視される（[SWS_Dem_00482]）。不揮発には保存しない。 */
+static Dem_OperationCycleStateType Dem_OperationCycleState[DEM_OPERATION_CYCLE_COUNT];
+
 /** DTC の記録が有効か（1=有効、0=無効）。Dem_EnableDTCSetting()/
  *  Dem_DisableDTCSetting()（Dcm UDS SID 0x85 ControlDTCSetting 用）で操作する。
  *  既定で有効。無効化中は Dem_SetEventStatus() を丸ごと無視する。 */
@@ -166,6 +171,7 @@ static sint8 Dem_MapDebounceCounterToFdc(sint8 counter, sint8 limit);
 static uint8 Dem_FilterMatches(Dem_EventIdType EventId);
 static void Dem_EvaluateAging(Dem_EventIdType EventId);
 static void Dem_EvaluatePendingClear(Dem_EventIdType EventId);
+static uint8 Dem_BeginOperationCycle(uint8 notifyFim);
 
 /* ======================================================================
  * Functions
@@ -237,22 +243,8 @@ void Dem_Init(const Dem_ConfigType* ConfigPtr)
         (void)NvM_ReadBlock(NVM_BLOCK_ID_DEM_AGING,    Dem_AgingCounter);
         (void)NvM_ReadBlock(NVM_BLOCK_ID_DEM_EXTENDED, Dem_OccurrenceCounter);
 
-        /* 経年回復・PendingDTC の判定は「前サイクルの最終結果」を見る必要があるため、
-         * TF/TFTOC/TNCTC を新サイクル用にリセットする前に行う */
-        for (uint8 i = 0U; i < DEM_EVENT_COUNT; i++)
-        {
-            Dem_EvaluateAging(i);
-            Dem_EvaluatePendingClear(i);
-        }
-
-        /* 新しい操作サイクルの開始: TF / TFTOC はリセット時に必ずクリア */
-        for (uint8 i = 0U; i < DEM_EVENT_COUNT; i++)
-        {
-            Dem_StatusTable[i] = (Dem_StatusTable[i]
-                                   & (uint8)(~DEM_STATUS_TEST_FAILED)
-                                   & (uint8)(~DEM_STATUS_TF_THIS_OP_CYCLE))
-                                  | DEM_STATUS_NOT_COMPLETED_THIS_CYCLE;
-        }
+        /* 新しい操作サイクルの開始（前サイクルの最終結果での経年回復・PendingDTC の判定を含む） */
+        (void)Dem_BeginOperationCycle(0U);   /* FiM は、Dem より後に初期化されるので、通知しない */
 
         /* 経年回復判定とサイクル開始処理で変化した内容を反映する */
         (void)NvM_WriteBlock(NVM_BLOCK_ID_DEM_STATUS, Dem_StatusTable);
@@ -270,6 +262,7 @@ void Dem_Init(const Dem_ConfigType* ConfigPtr)
             Dem_AgingCounter[i]     = 0U;
             Dem_OccurrenceCounter[i] = 0U;
         }
+        (void)Dem_BeginOperationCycle(0U);   /* 初期状態のまま変わらない。デバウンスの初期化を、復元時と共通にする */
         (void)NvM_WriteBlock(NVM_BLOCK_ID_DEM_STATUS,   Dem_StatusTable);
         (void)NvM_WriteBlock(NVM_BLOCK_ID_DEM_AGING,    Dem_AgingCounter);
         (void)NvM_WriteBlock(NVM_BLOCK_ID_DEM_EXTENDED, Dem_OccurrenceCounter);
@@ -278,12 +271,11 @@ void Dem_Init(const Dem_ConfigType* ConfigPtr)
         DET_LOGI(TAG, "Init first-run ev=%u", (unsigned)DEM_EVENT_COUNT);
     }
 
-    /* FreezeFrame・デバウンスカウンタは RAM のみで管理するため EEPROM 復元はなく、
-     * 常に未記録/中立 (0) から開始する */
+    /* FreezeFrame は RAM のみで管理するため EEPROM 復元はなく、常に未記録から開始する
+     * （デバウンスカウンタは、Dem_BeginOperationCycle() が 0 へ戻す） */
     for (uint8 i = 0U; i < DEM_EVENT_COUNT; i++)
     {
         Dem_FreezeFrameValid[i]  = 0U;
-        Dem_DebounceCounter[i]   = 0;
     }
     Dem_CurrentContext.EngineSpeed = 0U;
     Dem_CurrentContext.CoolantTemp = 0U;
@@ -291,6 +283,12 @@ void Dem_Init(const Dem_ConfigType* ConfigPtr)
 
     Dem_DTCSettingEnabled = 1U;
     Dem_FilterActive      = 0U;
+
+    /* [SWS_Dem_00853]: DemOperationCycleAutostart の操作サイクルは、Dem_Init() が開始する */
+    for (uint8 c = 0U; c < DEM_OPERATION_CYCLE_COUNT; c++)
+    {
+        Dem_OperationCycleState[c] = DEM_CYCLE_STATE_START;
+    }
 
     Dem_Initialized = 1U;
 }
@@ -747,6 +745,13 @@ Std_ReturnType Dem_SetEventStatus(Dem_EventIdType EventId,
         return E_NOT_OK;
     }
 
+    if (Dem_OperationCycleState[DemConf_DemOperationCycle_POWER] == DEM_CYCLE_STATE_END)
+    {
+        /* [SWS_Dem_00482]: 操作サイクルが終了している間の報告は、無視する（UDS ステータスもデバウンスも、変えない） */
+        DET_LOGD(TAG, "ev=%u report ignored: operation cycle ended", (unsigned)EventId);
+        return E_OK;
+    }
+
     if (!Dem_DTCSettingEnabled)
     {
         /* Dem_DisableDTCSetting() 中（Dcm UDS SID 0x85 ControlDTCSetting off）:
@@ -907,13 +912,111 @@ Std_ReturnType Dem_SetEventStatus(Dem_EventIdType EventId,
  * Dem_SetOperationCycleState
  * ---------------------------------------------------------------------- */
 
-/* 未実装 */
+/**
+ * \brief   操作サイクルの状態を設定する（[SWS_Dem_00194]、Dem.h 参照）。
+ *
+ * \details START: 操作サイクルを（再）開始する。既に開始済みなら、再開始する（[SWS_Dem_00483]）。直前の操作サイクルの
+ *          最終ステータスで、経年回復（Aging）と PendingDTC の自動クリアを評価し、イベントごとに TestFailed・
+ *          TestFailedThisOperationCycle をクリア、TestNotCompletedThisOperationCycle を立て、デバウンスカウンタを
+ *          0 へ戻す。開始してから、`Dem_SetEventStatus()` の報告を、再び受け付ける（[SWS_Dem_00481]）。
+ *          END: 操作サイクルを終了する。終了している間、`Dem_SetEventStatus()` の報告は無視され、その報告による
+ *          UDS ステータスの変化は起きない（[SWS_Dem_00482]。`Dem_ClearDTC()` のような、明示的な操作は、サイクルの
+ *          状態に関係なく働く）。既に終了済みなら、何もしない（[SWS_Dem_00484]）。
+ *
+ * \param[in]  OperationCycleId  操作サイクルの ID（`DemConf_DemOperationCycle_*`）。
+ * \param[in]  CycleState        新しい状態（START / END）。
+ *
+ * \retval  E_OK      受理した。
+ * \retval  E_NOT_OK  未初期化、操作サイクルが構成にない（DEM_E_WRONG_CONFIGURATION、[SWS_Dem_01223]）、
+ *                    または状態が START / END 以外。
+ *
+ * \AUTOSARReq     {SWS_Dem_00194, SWS_Dem_00338, SWS_Dem_00481, SWS_Dem_00482, SWS_Dem_00483, SWS_Dem_00484, SWS_Dem_00853}
+ * \ServiceID      {0x08}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType Dem_SetOperationCycleState(uint8 OperationCycleId, Dem_OperationCycleStateType CycleState)
+{
+    if (!Dem_Initialized)
+    {
+        (void)Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_SET_OPERATION_CYCLE_STATE, DEM_E_UNINIT);
+        return E_NOT_OK;
+    }
+    if (OperationCycleId >= DEM_OPERATION_CYCLE_COUNT)
+    {
+        (void)Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_SET_OPERATION_CYCLE_STATE, DEM_E_WRONG_CONFIGURATION);
+        return E_NOT_OK;
+    }
+    if ((CycleState != DEM_CYCLE_STATE_START) && (CycleState != DEM_CYCLE_STATE_END))
+    {
+        (void)Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_SET_OPERATION_CYCLE_STATE, DEM_E_PARAM_DATA);
+        return E_NOT_OK;
+    }
+
+    if (CycleState == DEM_CYCLE_STATE_END)
+    {
+        /* 既に終了済みなら、何もしない（[SWS_Dem_00484]） */
+        if (Dem_OperationCycleState[OperationCycleId] != DEM_CYCLE_STATE_END)
+        {
+            Dem_OperationCycleState[OperationCycleId] = DEM_CYCLE_STATE_END;
+            DET_LOGI(TAG, "operation cycle %u ended", (unsigned)OperationCycleId);
+        }
+        return E_OK;
+    }
+
+    /* START: 開始済みでも再開始する（[SWS_Dem_00483]）。全イベントが、この 1 つのサイクルに属する */
+    const uint8 changed = Dem_BeginOperationCycle(1U);
+    Dem_OperationCycleState[OperationCycleId] = DEM_CYCLE_STATE_START;
+
+    if (changed != 0U)
+    {
+        /* ステータス・経年回復カウンタが変わったときだけ、書き込む（変わらない再開始で、EEPROM を消耗させない） */
+        (void)NvM_WriteBlock(NVM_BLOCK_ID_DEM_STATUS, Dem_StatusTable);
+        (void)NvM_WriteBlock(NVM_BLOCK_ID_DEM_AGING,  Dem_AgingCounter);
+    }
+    DET_LOGI(TAG, "operation cycle %u started", (unsigned)OperationCycleId);
+    return E_OK;
+}
 
 /* ----------------------------------------------------------------------
  * Dem_GetOperationCycleState
  * ---------------------------------------------------------------------- */
 
-/* 未実装 */
+/**
+ * \brief   操作サイクルの状態を取得する（[SWS_Dem_00729]、Dem.h 参照）。
+ *
+ * \param[in]   OperationCycleId  操作サイクルの ID（`DemConf_DemOperationCycle_*`）。
+ * \param[out]  CycleState        現在の状態（START = 開始済み、END = 終了済み）。
+ *
+ * \retval  E_OK      取得した。
+ * \retval  E_NOT_OK  未初期化、NULL ポインタ、または操作サイクルが構成にない。
+ *
+ * \AUTOSARReq     {SWS_Dem_00729}
+ * \ServiceID      {0x9E}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType Dem_GetOperationCycleState(uint8 OperationCycleId, Dem_OperationCycleStateType* CycleState)
+{
+    if (!Dem_Initialized)
+    {
+        (void)Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_GET_OPERATION_CYCLE_STATE, DEM_E_UNINIT);
+        return E_NOT_OK;
+    }
+    if (CycleState == NULL)
+    {
+        (void)Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_GET_OPERATION_CYCLE_STATE, DEM_E_PARAM_POINTER);
+        return E_NOT_OK;
+    }
+    if (OperationCycleId >= DEM_OPERATION_CYCLE_COUNT)
+    {
+        (void)Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_GET_OPERATION_CYCLE_STATE, DEM_E_WRONG_CONFIGURATION);
+        return E_NOT_OK;
+    }
+
+    *CycleState = Dem_OperationCycleState[OperationCycleId];
+    return E_OK;
+}
 
 /* ----------------------------------------------------------------------
  * Dem_SetStorageCondition
@@ -1946,7 +2049,7 @@ static sint8 Dem_MapDebounceCounterToFdc(sint8 counter, sint8 limit)
  *          リセットされる前の値）を評価し、Dem_AgingCounter[EventId] を更新する。
  *          Dem_AgingThresholdTable[EventId]（イベントごとの閾値）に達したら
  *          CONFIRMED を自動解除する。
- *          Dem_Init() からのみ呼び出すこと（呼び出し順序に依存するため非公開）。
+ *          Dem_BeginOperationCycle() からのみ呼び出すこと（呼び出し順序に依存するため非公開）。
  *
  * \param[in]  EventId  イベント ID。範囲チェックは呼び出し元の責務。
  */
@@ -2007,7 +2110,7 @@ static void Dem_EvaluateAging(Dem_EventIdType EventId)
  *          1 回でもクリーン（そのサイクル中に FAILED 確定が無く、かつテスト済み）
  *          であれば即座にクリアする点が Dem_EvaluateAging() との違い。
  *          Dem_EvaluateAging() と同じく、TF/TFTOC/TNCTC が新サイクル用に
- *          リセットされる前の値を見る必要があるため、Dem_Init() からのみ、
+ *          リセットされる前の値を見る必要があるため、Dem_BeginOperationCycle() からのみ、
  *          かつそのリセットより前に呼び出すこと（呼び出し順序に依存するため非公開）。
  *
  * \param[in]  EventId  イベント ID。範囲チェックは呼び出し元の責務。
@@ -2029,6 +2132,54 @@ static void Dem_EvaluatePendingClear(Dem_EventIdType EventId)
         Dem_StatusTable[EventId] &= (uint8)(~DEM_STATUS_PENDING);
         DET_LOGI(TAG, "ev=%u pendingDTC cleared (clean operation cycle)", (unsigned)EventId);
     }
+}
+
+/* ----------------------------------------------------------------------
+ * Dem_BeginOperationCycle
+ * ---------------------------------------------------------------------- */
+
+/**
+ * \brief   新しい操作サイクルを始める（Dem_Init() と Dem_SetOperationCycleState(START) の共通処理）。
+ *
+ * \details イベントごとに、経年回復・PendingDTC の判定を、「前サイクルの最終結果」（TF / TFTOC / TNCTOC を新サイクル用に
+ *          リセットする前の値）で行い、そのあと、TF・TFTOC をクリアし、TNCTOC を立て、デバウンスカウンタを 0 へ戻す
+ *          （[SWS_Dem_00344]/[SWS_Dem_00438]）。サイクルの途中での再開始（[SWS_Dem_00483]）も、その時点までを前サイクルとして
+ *          評価する（仕様の、END と START を続けて行うのと同じ）。
+ *          NvM への書き込みは、呼び出し元の責務。
+ *
+ * \param[in]  notifyFim  1 のとき、監視ステータス（TNCTOC）や CONFIRMED が変わったイベントを、FiM へ通知する
+ *                        （Dem_Init() は FiM の初期化前のため 0）。
+ * \retval  1  ステータスまたは経年回復カウンタが、1 つでも変わった。0  変わらなかった。
+ */
+static uint8 Dem_BeginOperationCycle(uint8 notifyFim)
+{
+    uint8 changed = 0U;
+
+    for (uint8 i = 0U; i < DEM_EVENT_COUNT; i++)
+    {
+        const uint8 prevStatus = Dem_StatusTable[i];
+        const uint8 prevAging  = Dem_AgingCounter[i];
+
+        Dem_EvaluateAging(i);
+        Dem_EvaluatePendingClear(i);
+
+        Dem_StatusTable[i] = (Dem_StatusTable[i]
+                               & (uint8)(~DEM_STATUS_TEST_FAILED)
+                               & (uint8)(~DEM_STATUS_TF_THIS_OP_CYCLE))
+                              | DEM_STATUS_NOT_COMPLETED_THIS_CYCLE;
+        Dem_DebounceCounter[i] = 0;
+
+        if ((Dem_StatusTable[i] != prevStatus) || (Dem_AgingCounter[i] != prevAging))
+        {
+            changed = 1U;
+        }
+        if ((notifyFim != 0U) && (Dem_StatusTable[i] != prevStatus))
+        {
+            FiM_DemTriggerOnMonitorStatus(i);
+        }
+    }
+
+    return changed;
 }
 
 /* ======================================================================
