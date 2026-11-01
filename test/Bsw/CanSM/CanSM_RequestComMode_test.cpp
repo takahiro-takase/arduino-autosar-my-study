@@ -173,6 +173,7 @@ TEST_F(CanSM_RequestComMode_Test, CanSM_RequestComMode_OK_FullComRetriesAndGives
     FailFromCallCount_CanIf_SetControllerMode = 0U;   // コントローラの状態変更は、常に失敗する
     ForcedReturn_CanIf_SetControllerMode      = E_NOT_OK;
     FakeMillis_Reset();
+    WrapDem_Reset();
 
     /* ----------------------- */
     /* ---- 実行 (Act) ------- */
@@ -199,6 +200,9 @@ TEST_F(CanSM_RequestComMode_Test, CanSM_RequestComMode_OK_FullComRetriesAndGives
     EXPECT_EQ(ret, E_OK);                                             // 要求は受理する。結果は、完了通知が決める
     EXPECT_GT(callsAfterGivingUp, callsAtRequest);                    // 要求を繰り返した
     EXPECT_EQ(CallCount_CanIf_SetControllerMode, callsAfterGivingUp); // 上限を超えたら、それ以上は繰り返さない（T_REPEAT_MAX）
+    // T_REPEAT_MAX のたびに、タイムアウトの故障を PREFAILED で報告する（PRE_FULL_COM と PRE_NO_COM の 2 回分）
+    EXPECT_EQ(LastStatusOfEvent_Dem_SetEventStatus[DemConf_DemEventParameter_CANSM_MODE_REQUEST_TIMEOUT], DEM_EVENT_STATUS_PREFAILED);
+    EXPECT_GE(CallCount_Dem_SetEventStatus, 2U);
     ASSERT_EQ(retMode, E_OK);
     EXPECT_EQ(mode, COMM_NO_COMMUNICATION);                           // FULL_COM へは達しない
 }
@@ -213,6 +217,7 @@ TEST_F(CanSM_RequestComMode_Test, CanSM_RequestComMode_OK_FullComWaitsForControl
     FailFromCallCount_CanIf_SetPduMode = 0U;
     ForcedReturn_CanIf_SetPduMode      = E_OK;
     WrapComM_Reset();
+    WrapDem_Reset();
 
     /* ----------------------- */
     /* ---- 実行 (Act) ------- */
@@ -235,6 +240,45 @@ TEST_F(CanSM_RequestComMode_Test, CanSM_RequestComMode_OK_FullComWaitsForControl
     EXPECT_EQ(comMAfterStopped, 0U);                                    // STOPPED の完了だけでは、まだ通知しない
     EXPECT_EQ(modeAfter, COMM_FULL_COMMUNICATION);                      // STARTED の完了で、FULL_COM へ入り終える
     EXPECT_EQ(CallCount_ComM_BusSM_ModeIndication, comMBefore + 1U);    // ComM へは、そこで 1 回だけ通知する
+    // 最後の完了通知（STARTED）で FULL_COM へ入り終えたときに、1 回だけ、タイムアウトの故障を PREPASSED で戻す（[SWS_CanSM_00664]）。
+    // 途中の STOPPED の通知では、報告しない
+    EXPECT_EQ(LastStatusOfEvent_Dem_SetEventStatus[DemConf_DemEventParameter_CANSM_MODE_REQUEST_TIMEOUT], DEM_EVENT_STATUS_PREPASSED);
+    EXPECT_EQ(CallCount_Dem_SetEventStatus, 1U);
+}
+
+// T_REPEAT_MAX で出した PREFAILED は、そのあとの NO_COM へ戻る手順の完了通知で、打ち消されない
+TEST_F(CanSM_RequestComMode_Test, CanSM_RequestComMode_OK_PreFailedIsNotCancelledByNoComSequenceIndications)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    FailFromCallCount_CanIf_SetControllerMode = 0U;   // 要求は成功する（完了通知だけ、来ない）
+    ForcedReturn_CanIf_SetControllerMode      = E_OK;
+    FailFromCallCount_CanIf_SetPduMode = 0U;
+    ForcedReturn_CanIf_SetPduMode      = E_OK;
+    FakeMillis_Reset();
+    WrapDem_Reset();
+    ASSERT_EQ(CanSM_RequestComMode(0U, COMM_FULL_COMMUNICATION), E_OK);
+    CanSM_ControllerModeIndication(0U, CAN_CS_STOPPED);   // STARTED の完了通知は、来ないまま
+    for (unsigned i = 0U; i < CANSM_MODEREQ_REPEAT_MAX + 1U; i++)
+    {
+        FakeMillis_Value += CANSM_MODEREQ_REPEAT_TIME_MS + 1UL;
+        CanSM_MainFunction();   // T_REPEAT_MAX へ達して、PRE_NO_COM へ戻る
+    }
+    const uint32 demAtGiveUp = CallCount_Dem_SetEventStatus;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    CanSM_ControllerModeIndication(0U, CAN_CS_STOPPED);   // NO_COM へ戻る手順の完了通知（STOPPED → SLEEP）
+    CanSM_ControllerModeIndication(0U, CAN_CS_SLEEP);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(demAtGiveUp, 1U);                                     // PREFAILED が 1 回
+    EXPECT_EQ(CallCount_Dem_SetEventStatus, demAtGiveUp);           // NO_COM へ戻る手順では、PREPASSED を出さない
+    EXPECT_EQ(LastStatusOfEvent_Dem_SetEventStatus[DemConf_DemEventParameter_CANSM_MODE_REQUEST_TIMEOUT], DEM_EVENT_STATUS_PREFAILED);
 }
 
 TEST_F(CanSM_RequestComMode_Test, CanSM_RequestComMode_OK_NoComRequestedDuringPreFullComTurnsBack)

@@ -202,12 +202,14 @@ TEST_F(CanSM_ControllerModeIndication_Test, CanSM_ControllerModeIndication_OK_On
     FailFromCallCount_CanIf_SetPduMode = 0U;
     ForcedReturn_CanIf_SetPduMode      = E_OK;
     ASSERT_EQ(CanSM_RequestComMode(0U, COMM_FULL_COMMUNICATION), E_OK);   // 最初に待つのは STOPPED の完了
+    WrapDem_Reset();
 
     /* ----------------------- */
     /* ---- 実行 (Act) ------- */
     /* ----------------------- */
     CanSM_ControllerModeIndication(0U, CAN_CS_STARTED);   // 待っていないモード（2 回流しても、進まない）
     CanSM_ControllerModeIndication(0U, CAN_CS_STARTED);
+    const uint32 demAfterWrong = CallCount_Dem_SetEventStatus;   // 待っていない通知では、Dem へ何も報告しない
     ComM_ModeType afterWrong = COMM_FULL_COMMUNICATION;
     ASSERT_EQ(CanSM_GetCurrentComMode(0U, &afterWrong), E_OK);
     CanSM_ControllerModeIndication(0U, CAN_CS_STOPPED);
@@ -218,8 +220,10 @@ TEST_F(CanSM_ControllerModeIndication_Test, CanSM_ControllerModeIndication_OK_On
     /* ----------------------- */
     /* ---- 評価 (Assert) ---- */
     /* ----------------------- */
+    EXPECT_EQ(demAfterWrong, 0U);
     EXPECT_EQ(afterWrong, COMM_NO_COMMUNICATION);   // 進まない
     EXPECT_EQ(afterAll, COMM_FULL_COMMUNICATION);
+    EXPECT_EQ(CallCount_Dem_SetEventStatus, 1U);    // FULL_COM へ入り終えたときの PREPASSED だけ（途中の STOPPED では出さない）
 }
 
 // 手順の最中ではない（FULL_COM のまま）とき、完了通知は、何も起こさない

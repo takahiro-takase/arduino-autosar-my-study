@@ -258,7 +258,12 @@ TEST_F(NmStack_Wakeup_WakeupValidation_Test, OK)
     EXPECT_EQ(CallCount_BswM_ComM_CurrentMode, 1U);
     EXPECT_EQ(LastMode_BswM_ComM_CurrentMode, static_cast<ComM_ModeType>(COMM_FULL_COMMUNICATION));
     // FULL_COM へ入っただけでは、Bus-Off の PASSED は報告しない（[SWS_CanSM_00498]: 回復の確定のときだけ）
-    EXPECT_EQ(CallCount_Dem_SetEventStatus, 0U);
+    EXPECT_EQ(LastStatusOfEvent_Dem_SetEventStatus[DemConf_DemEventParameter_CAN_BUSOFF], 0xFF);   // 未報告
+    // FULL_COM へ入り終えたときに、1 回だけ、モード変更のタイムアウトの故障を PREPASSED で戻す（[SWS_CanSM_00664]）。
+    // Dem への報告は、この 1 回だけ
+    EXPECT_EQ(LastStatusOfEvent_Dem_SetEventStatus[DemConf_DemEventParameter_CANSM_MODE_REQUEST_TIMEOUT],
+              DEM_EVENT_STATUS_PREPASSED);
+    EXPECT_EQ(CallCount_Dem_SetEventStatus, 1U);
 }
 
 

@@ -28,6 +28,7 @@ FreezeFrame、ExtendedData、EEPROM レイアウトの詳細を以下にまと�
 | 12 | NVM_INTEGRITY_FAILED | `NvM_Init()` の読み込みで CRC 不整合を検出 | 0x00010D |
 | 13 | NVM_LOSS_OF_REDUNDANCY | 冗長ブロックの片面が破損し自己修復した | 0x00010E |
 | 14 | NVM_REQ_FAILED | `NvM_WriteBlock()` の書き込みがリトライ上限（`NVM_MAX_NUM_OF_WRITE_RETRIES`）を超えても成功しなかった | 0x00010F |
+| 15 | CANSM_MODE_REQUEST_TIMEOUT | CanSM が CAN コントローラのモード変更の完了通知を、繰り返しの上限（`CANSM_MODEREQ_REPEAT_MAX`）まで待っても得られなかった（T_REPEAT_MAX。[SWS_CanSM_00664]） | 0x000110 |
 
 <a id="dtc-filter"></a>
 ## DTC フィルタ API（UDS 0x19 の一覧取得）
@@ -107,6 +108,7 @@ counter == -limit に達した瞬間のみ → 確定 PASSED（TF クリア。CD
 |---|---|---|
 | 1（即確定） | BUTTON_STUCK, E2E_ABSINFO, E2E_ENGINEINFO, WDGM_SUPERVISION, WDG_DISABLE_REJECTED, NVM_INTEGRITY_FAILED, NVM_LOSS_OF_REDUNDANCY, NVM_REQ_FAILED | IoHwAb の 5 秒固着判定は、それ自体が「十分粘った結果」で、FAILED / PASSED で確定した結果を報告する。E2E は E2EXf が `E2E_SMCheck()` の窓判定（直近 3 回中の ERROR 件数）で通信路の異常を確定してから 1 回報告する。WdgM の STOPPED、Wdg の無効化拒否、NvM の CRC 不整合・書き込み失敗は決定論的な判定で、モジュール側で既に確定している。Dem 側で重ねてデバウンスすると二重チェックになり、確定が不必要に遅れる（または構造的に確定不可能になる） |
 | 2（複数回要求） | ENGINE_OVERHEAT, ENGINE_STALL, ENGINE_SPEED_NO_FLAG, STARTING_TIMEOUT, COMM_TIMEOUT, ADC_VOLT_LOW | モニタは瞬時のしきい値超え（temp≥100 等）をそのまま PREFAILED / PREPASSED で報告するだけで、持続性チェックを行っていない。単発の誤検出で確定させないために Dem 側でデバウンスする |
+| 2（繰り返しの失敗 2 回） | CANSM_MODE_REQUEST_TIMEOUT | CanSM が T_REPEAT_MAX（モード変更の要求を繰り返しても、完了通知が来ない）のたびに PREFAILED を報告し、FULL_COM へ入る手順が最後の完了通知まで届いたときに PREPASSED で戻す。一過性の失敗では確定せず、2 回の失敗で確定する |
 | 4（Bus-Off 4 回） | CAN_BUSOFF | CanSM が Bus-Off を検出するたびに PREFAILED を報告する（[SWS_CanSM_00522]/[00605]）。`CANSM_BUSOFF_L1_TO_L2_COUNT`（3）+ 1 回目、つまり L1 の回復を使い切った回の検出で確定する。回復が確定したとき（G_BUS_OFF_PASSIVE）の PASSED で、カウンタを戻す（[SWS_CanSM_00498]） |
 
 > イベントごとの閾値にした経緯（当初は全イベント共通の単一閾値だった）は
@@ -337,12 +339,12 @@ Dem_Init()（起動時、TF/TFTOC/TNCTC を新サイクル用にリセットす�
 
 ## EEPROM レイアウト
 
-Arduino UNO の内蔵 EEPROM 先頭 66 バイトを使用します（NvM の CRC バイトを含む。
+Arduino UNO の内蔵 EEPROM 先頭 72 バイトを使用します（NvM の CRC バイトを含む。
 詳細は [`NvM_Notes.md`](./NvM_Notes.md) 参照）。
 アドレス割り当ては NvM_Cfg.h (`NVM_BLOCK_DEM_*_EEPROM_ADDR`) で一元管理しています。
 Dem は NvM_BlockIdType (NVM_BLOCK_ID_DEM_MAGIC / _DEM_STATUS / _DEM_AGING / _DEM_EXTENDED)
-でのみアクセスします。STATUS/AGING/EXTENDED は、EventId 0〜14 を先頭から 1 バイトずつ
-並べた `DEM_EVENT_COUNT`（15）バイトのブロックです（イベント数が増えるとブロック長と
+でのみアクセスします。STATUS/AGING/EXTENDED は、EventId 0〜15 を先頭から 1 バイトずつ
+並べた `DEM_EVENT_COUNT`（16）バイトのブロックです（イベント数が増えるとブロック長と
 後続アドレスがずれるため、増減の際は NvM_Cfg.h の長さも合わせます。ずれた直後の起動では
 保存済みの内容が CRC 不一致になり、初期値で再構築されます）。
 
@@ -350,14 +352,15 @@ Dem は NvM_BlockIdType (NVM_BLOCK_ID_DEM_MAGIC / _DEM_STATUS / _DEM_AGING / _DE
 |---------|-------------|------|
 | 0x00 | NVM_BLOCK_ID_DEM_MAGIC (1 byte) | マジックバイト（0xDE = 有効データあり） |
 | 0x01 | 〃 CRC (1 byte) | MAGIC ブロックの CRC8 |
-| 0x02〜0x10 | NVM_BLOCK_ID_DEM_STATUS (15 bytes) | EventId 0〜14 のステータスバイト |
-| 0x11 | 〃 CRC (1 byte) | STATUS ブロックの CRC8 |
-| 0x12〜0x20 | NVM_BLOCK_ID_DEM_AGING (15 bytes) | EventId 0〜14 の経年回復カウンタ |
-| 0x21 | 〃 CRC (1 byte) | AGING ブロックの CRC8 |
-| 0x22〜0x30 | NVM_BLOCK_ID_DEM_EXTENDED (15 bytes) | EventId 0〜14 の故障確定回数（プライマリ面） |
-| 0x31 | 〃 CRC (1 byte) | EXTENDED ブロックの CRC8（プライマリ面） |
-| 0x32〜0x40 | NVM_BLOCK_ID_DEM_EXTENDED ミラー面 (15 bytes) | 故障確定回数（プライマリと同一内容の 2 面目、冗長ブロック） |
-| 0x41 | 〃 CRC (1 byte) | EXTENDED ブロックの CRC8（ミラー面） |
+| 0x02〜0x11 | NVM_BLOCK_ID_DEM_STATUS (16 bytes) | EventId 0〜15 のステータスバイト |
+| 0x12 | 〃 CRC (1 byte) | STATUS ブロックの CRC8 |
+| 0x13〜0x22 | NVM_BLOCK_ID_DEM_AGING (16 bytes) | EventId 0〜15 の経年回復カウンタ |
+| 0x23 | 〃 CRC (1 byte) | AGING ブロックの CRC8 |
+| 0x24〜0x33 | NVM_BLOCK_ID_DEM_EXTENDED (16 bytes) | EventId 0〜15 の故障確定回数（プライマリ面） |
+| 0x34 | 〃 CRC (1 byte) | EXTENDED ブロックの CRC8（プライマリ面） |
+| 0x35〜0x44 | NVM_BLOCK_ID_DEM_EXTENDED ミラー面 (16 bytes) | 故障確定回数（プライマリと同一内容の 2 面目、冗長ブロック） |
+| 0x45 | 〃 CRC (1 byte) | EXTENDED ブロックの CRC8（ミラー面） |
+| 0x46〜0x47 | NVM_BLOCK_ID_DCM_SECURITY (1 byte + CRC) | Dcm SecurityAccess の連続失敗回数 |
 
 DEM_EXTENDED のみ冗長ブロック（2 面化）にしています。理由・仕組みは
 [`NvM_Notes.md`](./NvM_Notes.md) の「冗長ブロック」参照。

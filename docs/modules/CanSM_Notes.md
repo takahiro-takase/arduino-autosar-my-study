@@ -119,7 +119,10 @@ FULL_COM へ入る、または NO_COM へ入るとき、CanSM は、コントロ
 - 待っているモードへ達した通知だけが、手順を進めます（待っていないモードの通知は、無視します）。
 - `CANSM_MODEREQ_REPEAT_TIME_MS`（300 ms）が過ぎても通知が来なければ、同じ要求を繰り返します。繰り返しが
   `CANSM_MODEREQ_REPEAT_MAX`（3 回）を超えたら T_REPEAT_MAX です。`PRE_FULL_COM` からは `PRE_NO_COM` へ戻り、
-  `PRE_NO_COM` からは、あきらめて NO_COM へ入ります（Dem へ CANSM_E_MODE_REQUEST_TIMEOUT を報告する処理は、今後の段階で入れます）。
+  `PRE_NO_COM` からは、あきらめて NO_COM へ入ります。T_REPEAT_MAX のたびに、Dem へ `CANSM_MODE_REQUEST_TIMEOUT`
+  （DTC 0x000110、[SWS_CanSM_00385]/[00664]）を PREFAILED で報告し、FULL_COM へ入る手順が最後の完了通知（STARTED）まで届いたときに、PREPASSED で戻します
+  （途中の通知や、NO_COM へ入る手順の通知では戻しません。PREFAILED を直後に打ち消さないため）。
+  デバウンスのしきい値は 2 です（2 回の失敗で確定）。
 - `PRE_NO_COM` の最中に FULL_COM が要求されたら、保留して、NO_COM へ入り終えたあとで、始めます。
   `PRE_FULL_COM` の最中に NO_COM が要求されたら、`PRE_NO_COM` へ向きを変えます。
 - SILENT_COM から FULL_COM へ戻るときは、コントローラが既に STARTED のため、この手順を経ずに、PDU を ONLINE にするだけです。

@@ -1263,6 +1263,10 @@ static void CanSM_AdvanceModeSequence(void)
         }
         else
         {
+            /* [SWS_CanSM_00664]: FULL_COM へ入る要求が、最後の完了通知（STARTED）まで届いたので、タイムアウトの故障を、
+             * PREPASSED で戻す。途中の通知（STOPPED）や、NO_COM へ入る手順の通知では、戻さない
+             * （T_REPEAT_MAX で出した PREFAILED を、直後の通知で打ち消してしまうため）。 */
+            (void)Dem_SetEventStatus(DemConf_DemEventParameter_CANSM_MODE_REQUEST_TIMEOUT, DEM_EVENT_STATUS_PREPASSED);
             CanSM_CompleteFullCom();
         }
     }
@@ -1288,8 +1292,10 @@ static void CanSM_AdvanceModeSequence(void)
  *
  * \details 要求の時刻から CANSM_MODEREQ_REPEAT_TIME_MS が過ぎたら、繰り返し回数を数えて、同じ要求をもう一度出す
  *          （[SWS_CanSM_00490]/[00494]/[00467]/[00471] の T_xxx_TIMEOUT）。回数が CANSM_MODEREQ_REPEAT_MAX を超えたら、
- *          T_REPEAT_MAX（[SWS_CanSM_00495]/[00480]）: S_PRE_FULLCOM からは、S_PRE_NOCOM へ戻り（E_PRE_NOCOM）、
- *          S_PRE_NOCOM からは、あきらめて NO_COM へ入り終える（E_NOCOM）。
+ *          T_REPEAT_MAX（[SWS_CanSM_00495]/[00480]）: Dem へ CANSM_E_MODE_REQUEST_TIMEOUT を PREFAILED で報告し
+ *          （[SWS_CanSM_00385]/[00664]）、S_PRE_FULLCOM からは、S_PRE_NOCOM へ戻り（E_PRE_NOCOM）、
+ *          S_PRE_NOCOM からは、あきらめて NO_COM へ入り終える（E_NOCOM）。FULL_COM へ入る手順が最後の完了通知まで届いたときに、PREPASSED で戻す
+ *          （CanSM_AdvanceModeSequence()）。
  */
 static void CanSM_ServiceModeRequest(void)
 {
@@ -1303,6 +1309,8 @@ static void CanSM_ServiceModeRequest(void)
     {
         DET_LOGE(TAG, "ModeRequest E: no controller mode indication after %u repeats (T_REPEAT_MAX, state=%u)",
                  (unsigned)CANSM_MODEREQ_REPEAT_MAX, (unsigned)CanSM_State);
+        /* [SWS_CanSM_00385]/[SWS_CanSM_00664]: T_REPEAT_MAX のとき、CANSM_E_MODE_REQUEST_TIMEOUT を PREFAILED で報告する */
+        (void)Dem_SetEventStatus(DemConf_DemEventParameter_CANSM_MODE_REQUEST_TIMEOUT, DEM_EVENT_STATUS_PREFAILED);
         if (CanSM_State == CANSM_STATE_PRE_FULL_COM)
         {
             CanSM_EnterPreNoCom();

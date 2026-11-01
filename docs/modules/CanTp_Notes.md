@@ -228,6 +228,9 @@ NVM_INTEGRITY_FAILED/NVM_LOSS_OF_REDUNDANCY 追加）した際、この値を
 C89 以降常に有効な性質を利用、AVR/native 両ビルドで動作）を追加し、
 `CANTP_TX_BUFFER_SIZE` 不足時はビルドエラーで機械的に検知できるようにした。
 
+2026-11 に `DEM_EVENT_COUNT` が 15→16（CANSM_MODE_REQUEST_TIMEOUT 追加）に増えたときも、この静的
+アサートを通過した（応答は 67 バイト、上限 76 バイト以内。CF の本数は、9 本のまま）。
+
 2026-10 に `DEM_EVENT_COUNT` が 14→15（NVM_REQ_FAILED 追加）に増えたときは、この静的
 アサートを通過し（`DCM_TX_BUF_SIZE` は 0x0A で 63 バイト、上限 76 バイト以内）、
 `CANTP_TX_BUFFER_SIZE` は据え置きとした。なお、63 バイトの応答を FF(6 バイト) + CF で運ぶ

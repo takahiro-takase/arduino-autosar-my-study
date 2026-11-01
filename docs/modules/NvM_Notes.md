@@ -163,10 +163,10 @@ MemIf_MainFunction()（10ms 周期、Os_PBCfg.c Task 18。実体は Fee_MainFunc
 
 Task 13（NvM）と Task 18（MemIf）はどちらも同じ 10ms 周期で、同一パス内を
 インデックス昇順で実行されるため、NvM がジョブを開始した tick のうちに
-MemIf 側の最初の 1 バイトも書かれます。最大 16 バイト（データ本体 15 バイト
-+ CRC 1 バイト。Dem の 3 ブロックはイベント数 `DEM_EVENT_COUNT`=15 と同じ長さ）のブロックでも、
+MemIf 側の最初の 1 バイトも書かれます。最大 17 バイト（データ本体 16 バイト
++ CRC 1 バイト。Dem の 3 ブロックはイベント数 `DEM_EVENT_COUNT`=16 と同じ長さ）のブロックでも、
 1 回の `MemIf_MainFunction()` 呼び出しでブロッキングするのは EEPROM 1 バイト分の
-書き込み時間のみです。DTC 確定から永続化完了までは 1 ブロックで最大 16 サイクル
+書き込み時間のみです。DTC 確定から永続化完了までは 1 ブロックで最大 17 サイクル
 （10ms 周期なので 160ms 程度、フェーズ切替待ちの分だけ数 tick 余分にかかることが
 あります。冗長ブロックの DEM_EXTENDED は 2 面を順に書くため約 2 倍）かかりますが、Dem や
 呼び出し元は結果を待たない fire-and-forget 設計（`(void)NvM_WriteBlock(...)`）
