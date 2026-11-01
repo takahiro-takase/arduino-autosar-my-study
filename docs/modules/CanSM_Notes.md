@@ -35,9 +35,10 @@ Protocol 相当）により有効な CAN フレーム受信を確認してから
 `SILENT_COM` はコントローラは稼働したまま PDU の TX だけを止めた状態です
 （CanNm の協調スリープ中、Prepare Bus-Sleep Mode に入ってから Bus-Sleep Mode へ
 到達するまでがこの状態。詳細は上記本文および [`CanNm_Notes.md`](./CanNm_Notes.md) 参照）。
-`BUS_OFF` 中は
-`CanSM_RequestComMode()` 冒頭のガードにより ComM からの要求を一切受け付けません
-（`RequestComMode` からの遷移元に `BUS_OFF` が登場しないのはそのため）。
+`BUS_OFF` 中の `CanSM_RequestComMode()` は、要求を受け付けます（`E_OK`。[SWS_CanSM_00369]/[SWS_CanSM_00182]。
+2026-11 変更。以前は `E_NOT_OK` で捨てていました）。`NO_COM` は、すぐに回復を取り消して、コントローラを
+スリープさせます（`BUS_OFF` から `NO_COM` へ直接遷移します）。`FULL_COM` と `SILENT_COM` は、回復の後に戻る
+状態（`CanSM_PreBusOffState`）を、要求されたモードに変えます（`SILENT_COM` への変更は、すぐに TX を止めます）。
 
 ```mermaid
 stateDiagram-v2

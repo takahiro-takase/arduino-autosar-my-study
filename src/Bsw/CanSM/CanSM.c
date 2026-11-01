@@ -182,8 +182,9 @@ static uint8                   CanSM_BorPassivePending;
 static unsigned long           CanSM_BorRestartMs;    /* 直近の回復の再起動の時刻（確定条件を時間で判定するときの起点） */
 static unsigned long           CanSM_ValidationTimerMs; /* ウェイクアップ検証開始時刻 */
 
-/** Bus-Off 検出直前の CanSM_State（CANSM_STATE_FULL_COM または
- *  CANSM_STATE_SILENT_COM のいずれか）。2026-08 追加: SILENT_COMMUNICATION
+/** Bus-Off の回復の後に戻る状態（CANSM_STATE_FULL_COM または CANSM_STATE_SILENT_COM のいずれか）。
+ *  Bus-Off 検出直前の CanSM_State で始まり、回復中に CanSM_RequestComMode() が FULL_COM / SILENT_COM を
+ *  要求されたら、そのモードへ変わる（[SWS_CanSM_00182]）。2026-08 追加: SILENT_COMMUNICATION
  *  が CanIf_SetPduMode(CANIF_TX_OFFLINE) ベースになりコントローラを
  *  CAN_CS_STARTED のまま維持するようになったため、SILENT_COM 中でも本当に
  *  Bus-Off しうるようになった。回復成功時にどちらへ戻すか
@@ -256,7 +257,13 @@ void CanSM_DeInit(void)
 /**
  * \brief   ネットワークの通信モード遷移を要求する。
  *
- * \details ComM から呼び出される。Bus-Off 回復中は E_NOT_OK を返す。
+ * \details ComM から呼び出される。ネットワークハンドルが正しければ、要求を受理し（E_OK）、状態機械が
+ *          考慮する（[SWS_CanSM_00369]/[SWS_CanSM_00182]）。Bus-Off 回復中の要求は、次のとおり扱う。
+ *          - NO_COM: すぐに受け付けて、回復を取り消し、コントローラをスリープさせる（Bus-Off の回復の途中でも、
+ *            S_FULLCOM と S_SILENTCOM_BOR のどちらからも、T_NO_COM_MODE_REQUEST で E_PRE_NOCOM へ遷移する）。
+ *          - FULL_COM / SILENT_COM: 回復の後に戻る状態（CanSM_PreBusOffState）を、要求されたモードへ変える
+ *            （回復の完了で、G_FULL_COM_MODE_REQUESTED / G_SILENT_COM_MODE_REQUESTED が、要求されたモードを選ぶ）。
+ *            SILENT_COM への変更は、回復を待たず、TX を止める（CanIf_SetPduMode(CANIF_TX_OFFLINE)）。
  *
  * \ServiceID      {0x02}
  * \Reentrancy     {Non Reentrant}
@@ -276,11 +283,36 @@ Std_ReturnType CanSM_RequestComMode(NetworkHandleType network, ComM_ModeType mod
         return E_NOT_OK;
     }
 
-    /* Bus-Off 回復中は上位からのモード変更を受け付けない */
-    if (CanSM_State == CANSM_STATE_BUS_OFF)
+    /* Bus-Off 回復中の要求（[SWS_CanSM_00369]/[SWS_CanSM_00182]: 受理して、状態機械が考慮する）。
+     * NO_COM は、下の通常の分岐が、すぐに処理する（CanSM_State が BUS_OFF でも動く）。
+     * FULL_COM / SILENT_COM は、回復の後に戻る状態を変えるだけで、回復の処理は止めない。 */
+    if ((CanSM_State == CANSM_STATE_BUS_OFF) && (mode != COMM_NO_COMMUNICATION))
     {
-        DET_LOGW(TAG, "RequestComMode ignored: BusOff recovery in progress");
-        return E_NOT_OK;
+        if (mode == COMM_FULL_COMMUNICATION)
+        {
+            CanSM_PreBusOffState = CANSM_STATE_FULL_COM;   /* 回復の完了で、PDU を ONLINE にして、FULL_COM へ戻る */
+        }
+        else if (mode == COMM_SILENT_COMMUNICATION)
+        {
+            if (CanSM_PreBusOffState == CANSM_STATE_FULL_COM)
+            {
+                /* Bus-Off の前は FULL_COM（PDU は ONLINE）。回復の完了で SILENT_COM へ戻すには、TX を止めておく
+                 * （SILENT_COM から戻る分岐は、PDU モードを触らない）。 */
+                if (CanIf_SetPduMode(0U, CANIF_TX_OFFLINE) != E_OK)
+                {
+                    DET_LOGE(TAG, "RequestComMode E: CanIf_SetPduMode(TX_OFFLINE) failed during BusOff, request denied");
+                    return E_NOT_OK;
+                }
+            }
+            CanSM_PreBusOffState = CANSM_STATE_SILENT_COM;
+        }
+        else
+        {
+            return E_NOT_OK;
+        }
+        DET_LOGI(TAG, "RequestComMode accepted during BusOff recovery: will return to %s",
+                 (mode == COMM_FULL_COMMUNICATION) ? "FULL_COM" : "SILENT_COM");
+        return E_OK;
     }
 
     switch (mode)
@@ -513,8 +545,10 @@ void CanSM_GetVersionInfo(Std_VersionInfoType* VersionInfo)
  *          しか CanSM へ NO_COM を伝えない）、上記の通常の FULL_COM 経路が
  *          そのまま処理する。回復成功時は常に FULL_COM へ戻すが、CanNm 自身は
  *          Bus-Off 中も独立したタイマで動作し続けているため、既に
- *          Bus-Sleep Mode へ到達済みの可能性がある。この場合に CanNm を誤って
- *          再起床させないためのガードは ComM 側
+ *          Bus-Sleep Mode へ到達済みの可能性がある。その場合の NO_COM の要求
+ *          （ComM_Nm_BusSleepMode() 経由）は、Bus-Off の回復中でも CanSM_RequestComMode() が
+ *          受け付けて、回復を取り消す（2026-11 変更）ので、取りこぼさない。回復が先に成功して
+ *          FULL_COM へ戻った場合に CanNm を誤って再起床させないためのガードは ComM 側
  *          （`ComM_BusSM_ModeIndication()` の FULL_COM 分岐）に実装している。
  *
  * \ServiceID      {0x04}
@@ -860,7 +894,8 @@ void CanSM_MainFunction(void)
      * 状態（CanSM_PreBusOffState）へ戻す。Bus-Off 発生時点で ComM が既に
      * CanNm へ解放を送信済み（ComM_NmReleasePending、ComM.c 参照）だった場合の
      * 「誤って CanNm を再起床させない」ためのガードは ComM 側
-     * （ComM_BusSM_ModeIndication() の FULL_COM 分岐）に実装している。 */
+     * （ComM_BusSM_ModeIndication() の FULL_COM 分岐。何もしないで、CanNm の協調スリープを
+     * そのまま続けさせる）に実装している。 */
     if (CanSM_PreBusOffState == CANSM_STATE_SILENT_COM)
     {
         /* CanIf の PDU モードは Bus-Off 中も CANIF_TX_OFFLINE のまま
@@ -878,8 +913,9 @@ void CanSM_MainFunction(void)
          * （SILENT_COM へ戻る分岐のログと対）。 */
         DET_LOGI(TAG, "BusOff recovered -> FULL_COM");
         /* 回復成功 → ComM に FULL_COM を通知 → EcuM_RequestRUN → RUN へ戻る
-         * （ただし上記の CanNm 解放ペンディング中だった場合は、ComM 側が代わりに
-         * CanSM_RequestComMode(NO_COM) を呼び返して仕切り直す）。 */
+         * （ただし上記の CanNm 解放ペンディング中だった場合は、ComM 側は EcuM の RUN も
+         * CanNm のネットワーク要求も触らず、CanNm の協調スリープを続けさせる。CanNm が
+         * Bus-Sleep Mode へ到達すれば、ComM_Nm_BusSleepMode() が CanSM_RequestComMode(NO_COM) を呼ぶ）。 */
         ComM_BusSM_ModeIndication(0U, COMM_FULL_COMMUNICATION);
     }
     /* 再度 Bus-Off が発生すれば CanIf → CanSM_ControllerBusOff() が呼ばれる */

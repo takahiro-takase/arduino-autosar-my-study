@@ -346,9 +346,8 @@ void ComM_EcuM_WakeUpIndication(NetworkHandleType Channel);
  *
  *          FULL_COM 通知時、`ComM_NmReleasePending[]` が立っていれば
  *          （CanNm 協調スリープ待ちの最中に Bus-Off が発生し、回復して CanSM が
- *          FULL_COM へ戻ってきたケース）CanNm_NetworkRequest() は呼ばず、
- *          代わりに CanSM_RequestComMode(NO_COM) を再度呼んで解放を
- *          仕切り直す（詳細は ComM.c の実装コメント参照）。
+ *          FULL_COM へ戻ってきたケース）CanNm_NetworkRequest() も EcuM_RequestRUN() も
+ *          呼ばず、CanNm の協調スリープをそのまま続けさせる（詳細は ComM.c の実装コメント参照）。
  *
  *          呼び出しタイミング:
  *            - CanSM_RequestComMode 成功後 (NO_COM -> FULL_COM 遷移時、および

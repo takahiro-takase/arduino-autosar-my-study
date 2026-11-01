@@ -337,8 +337,9 @@ CanSM_MainFunction（10ms タスク）
           │         │  EcuM_RequestRUN() は呼ばない（RUN は Bus-Off 中も維持されたまま）
           │         └→ Nm_NetworkRequest() → CanNm_NetworkRequest()  ← 送信再開
           │            （Bus-Off 発生時に CanNm の協調スリープ待ち = ComM_NmReleasePending
-          │             だった場合は、CanNm を起こさず ComM_RetryNmReleaseAfterBusOff() で
-          │             解放をやり直す）
+          │             だった場合は、CanNm を起こさず、EcuM の RUN も触らない。CanNm の協調スリープは
+          │             そのまま続き、CanNm が Bus-Sleep Mode へ到達したときの NO_COM の要求は、
+          │             CanSM が Bus-Off の回復中でも受け付ける）
           └─ 発生時 SILENT_COM だった場合: CanSM state → SILENT_COM
                （PDU モードは Bus-Off 中も触っていないため CANIF_TX_OFFLINE のまま）
                └→ ComM_BusSM_ModeIndication(SILENT_COM)

@@ -67,7 +67,7 @@ ComM は、`ComM_ChannelMode` として FULL_COM / SILENT_COM / NO_COM の 3 つ
 | 物理ウェイクアップの確定(`ComM_EcuM_WakeUpIndication`) | FULL_COM へ | `RequestComMode(FULL_COM)` |
 | CanSM から `ComM_BusSM_ModeIndication` | 結果を反映。FULL_COM なら EcuM の RUN を要求、NO_COM なら解放 | なし |
 
-CanSM が Bus-Off の間に出す SILENT_COM は、ComM から見ると、協調スリープの SILENT_COM と区別できません。そのため、Bus-Off の回復中は、CanSM が ComM の要求を断る(`E_NOT_OK`)ことと合わせて、特別な扱い(`ComM_RetryNmReleaseAfterBusOff`)があります。
+CanSM が Bus-Off の間に出す SILENT_COM は、ComM から見ると、協調スリープの SILENT_COM と区別できません。（2026-11 までは、Bus-Off の回復中は、CanSM が ComM の要求を断る(`E_NOT_OK`)ことと合わせて、特別な扱い(`ComM_RetryNmReleaseAfterBusOff`)がありました。今は、CanSM が回復中の要求を受け付ける([SWS_CanSM_00182])ので、この扱いは不要になり、削除しました。）
 
 ## 4. 受信デッドライン監視の開始と停止
 
@@ -128,7 +128,7 @@ BswM のルールは、RX のグループ(`SENSOR_RX`)を、**ComM が NO_COM �
 | 14:14:53.644 | `BusOff detected! retry=3 (L2) recovery in 5000ms` | 4 回目から L2(5000 ms ごと)。回復までの間、SILENT_COM |
 | 14:14:55.571 | `CanNm_EnterPrepareBusSleep` | 協調スリープの途中。ComM が SILENT_COM へ |
 | 14:14:57.190 | `RX timeout iPdu=0 (5000ms, first)` | 再始動(52.172)から 5000 ms、一度も受信せず、初回のタイムアウト |
-| 14:14:57.587 | `RequestComMode ignored: BusOff recovery in progress` | Bus-Off の回復中なので、CanSM が NO_COM の要求を断る |
+| 14:14:57.587 | `RequestComMode ignored: BusOff recovery in progress` | Bus-Off の回復中なので、CanSM が NO_COM の要求を断る(2026-11 の変更で、受け付けて、回復を取り消す動作に変わりました。このログの行は、変更前のものです) |
 | 14:14:58.662 | `BusOff recovered -> FULL_COM` | L2 の回復。Rule 6 が再び RX のグループを起動 |
 | 14:14:58.639〜 | `CAN: Rx 0x300 / 0x240 / 0x400` | テスターが接続され、受信が再開(`RxIndication` が、タイマを巻き戻す) |
 
@@ -149,5 +149,4 @@ BswM のルールは、RX のグループ(`SENSOR_RX`)を、**ComM が NO_COM �
 | `Com_IpduGroupStart()` を、起動中のグループへ呼ぶと、受信の監視を再始動する | 仕様は「停止中のグループを起動する」と書くだけで、起動中への呼び出しは定めていない。BswM の Rule 6 は、Bus-Off の回復のたびに、一度も止めていない RX のグループへ、起動を呼ぶ(上の 4.6 の 14:14:52.172 など) | 仕様が曖昧で、実機の動作が変わる。Bus-Off が短い間隔で続くと、再始動のたびにタイムアウトが遅れる点は、設計の選択として残す |
 | `BswM_CanSM_CurrentState()` が未実装 | 仕様の E_BUS_OFF / E_TX_ON の効果は、BswM への通知を求める。このプロジェクトでは、ComM 経由の通知で、同じルールを動かしている | 影響が小さく、規模が大きい(BswM の状態の入力元が増える) |
 | Bus-Off の検出で、Dem へ PRE_FAILED を報告しない([SWS_CanSM_00522]) | 実装は、回復の確定で PASSED、L1 超過で FAILED だけを報告する | Dem が PRE_FAILED / PRE_PASSED を外部入力として受けない設計(BswM.c のコメント参照) |
-| Bus-Off の回復中は、`CanSM_RequestComMode()` を断る | 仕様は、回復中の要求の扱いを、明示的には断っていない | 回復の途中の状態遷移を壊さないための、実装の設計。協調スリープとの兼ね合いは、ComM 側(`ComM_RetryNmReleaseAfterBusOff`)で扱う |
 | `CanSM_StartWakeupSource` / `CanSM_StopWakeupSource` が未実装 | EcuM の `Start/StopWakeupSources` の前提 | 既知の残件(EcuM の項目) |

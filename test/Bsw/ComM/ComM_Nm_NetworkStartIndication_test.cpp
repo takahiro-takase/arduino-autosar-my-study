@@ -15,6 +15,8 @@
 extern "C" {
 #include "ComM.h"
 #include "Fake_Det_Hw.h"
+#include "Wrap_CanSM.h"
+#include "Wrap_Nm.h"
 }
 
 /* ======================================================================
@@ -79,6 +81,12 @@ protected:
     {
         FakeDetHw_LogSuppressed = 1U;  // Init() のログはノイズになるため抑制
         ComM_Init(NULL);
+        WrapCanSM_Reset();
+        WrapNm_Reset();
+        FailFromCallCount_Nm_NetworkRequest = 1U;   // Nm への要求は、実体を呼ばずに成功する（CanNm へカスケードしない）
+        ForcedReturn_Nm_NetworkRequest      = E_OK;
+        FailFromCallCount_Nm_NetworkRelease = 1U;
+        ForcedReturn_Nm_NetworkRelease      = E_OK;
         FakeDetHw_Reset();              // Init 自体の記録を後続の検証対象から除く
         FakeDetHw_LogSuppressed = 0U;  // ここから各 TEST_F の実行(Act)区間
     }
@@ -87,6 +95,18 @@ protected:
     {
         FakeDetHw_LogSuppressed = 1U;
         ComM_DeInit();
+        WrapCanSM_Reset();
+        WrapNm_Reset();
+    }
+
+    // 協調スリープ待ちの最中に、チャネルが SILENT_COM になった状態（ComM_NmReleasePending が立っている）を用意する。
+    // 返り値: この時点までの Nm_NetworkRequest() の呼び出し回数。
+    uint32 ArrangeSilentComWithReleasePending()
+    {
+        ComM_BusSM_ModeIndication(0U, COMM_FULL_COMMUNICATION);                  // チャネルが FULL_COM になる
+        EXPECT_EQ(ComM_RequestComMode(COMM_USER_0, COMM_NO_COMMUNICATION), E_OK);   // 協調スリープを始める（CanNm へ解放を伝える）
+        ComM_BusSM_ModeIndication(0U, COMM_SILENT_COMMUNICATION);                // Bus-Off などで、SILENT_COM になる
+        return CallCount_Nm_NetworkRequest;
     }
 };
 
@@ -128,6 +148,50 @@ TEST_F(ComM_Nm_NetworkStartIndication_Test, ComM_Nm_NetworkStartIndication_NG_Wr
     /* ---- 評価 (Assert) ---- */
     /* ----------------------- */
     EXPECT_EQ(FakeDetHw_LastErrorId, COMM_E_WRONG_PARAMETERS);
+}
+
+TEST_F(ComM_Nm_NetworkStartIndication_Test, ComM_Nm_NetworkStartIndication_OK_RejectedByCanSmKeepsNmReleasePending)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    const uint32 requestsBefore = ArrangeSilentComWithReleasePending();
+    FailFromCallCount_CanSM_RequestComMode = 1U;   // CanSM が、FULL_COM の要求を、受け付けない
+    ForcedReturn_CanSM_RequestComMode      = E_NOT_OK;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    ComM_Nm_NetworkStartIndication(0U);
+    ComM_BusSM_ModeIndication(0U, COMM_FULL_COMMUNICATION);   // その後、CanSM が FULL_COM を通知してくる（回復など）
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(CallCount_CanSM_RequestComMode, 1U);
+    EXPECT_EQ(CallCount_Nm_NetworkRequest, requestsBefore);   // 要求が受け付けられなかったので、協調スリープ待ちは残り、CanNm を起こさない
+}
+
+TEST_F(ComM_Nm_NetworkStartIndication_Test, ComM_Nm_NetworkStartIndication_OK_AcceptedByCanSmClearsNmReleasePending)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    const uint32 requestsBefore = ArrangeSilentComWithReleasePending();
+    FailFromCallCount_CanSM_RequestComMode = 1U;   // CanSM が、FULL_COM の要求を、受け付ける
+    ForcedReturn_CanSM_RequestComMode      = E_OK;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    ComM_Nm_NetworkStartIndication(0U);
+    ComM_BusSM_ModeIndication(0U, COMM_FULL_COMMUNICATION);   // 受け付けられたので、CanSM が FULL_COM を通知する
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(CallCount_CanSM_RequestComMode, 1U);
+    EXPECT_EQ(CallCount_Nm_NetworkRequest, requestsBefore + 1U);   // 協調スリープ待ちが解除されたので、CanNm のネットワークを要求する
 }
 
 }  // namespace
